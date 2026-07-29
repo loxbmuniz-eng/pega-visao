@@ -34,11 +34,11 @@ TRAZEMOS = [
  ("Obra Pega Visão",
   "Obra tátil original cedida ao festival para exposição na galeria oficial do UP, durante todo o período do evento.",
   None, "Contrapartida"),
- ("Live painting — Badaró", "Cachê de execução.", 300, "Pega Visão"),
+ ("Live painting — Badaró", "Pintura ao vivo durante o festival. Cachê solicitado ao UP — ver bloco O QUE PEDIMOS.", None, "Contrapartida"),
  ("Cerâmica Às Cegas — Mickaela",
-  "Vivência guiada de olhos vendados, dias 28, 29 e 30/12. Cachê de execução.", 300, "Pega Visão"),
+  "Vivência guiada de olhos vendados, dias 28, 29 e 30/12. Cachê solicitado ao UP — ver bloco O QUE PEDIMOS.", None, "Contrapartida"),
  ("Cobertura audiovisual — Zambonini",
-  "Captação e produção de conteúdo documental do projeto no UP19, sem cachê.", 0, "Pega Visão"),
+  "Captação e produção de conteúdo documental do projeto no UP19. Cachê solicitado ao UP — ver bloco O QUE PEDIMOS.", None, "Contrapartida"),
  ("Equipamento audiovisual próprio",
   "Kit profissional do diretor: câmera Sony A7IV (33MP), lentes Sigma 24-70 Art e 70-200 GM, lapela Hollyland Lark Max 2, "
   "tripé, iluminação (tubo LED Sokani 25W, LED portátil 40W) e flash Godox V1. Garante padrão profissional de captação das "
@@ -63,6 +63,9 @@ TRAZEMOS = [
 ]
 
 PEDIMOS = [
+ ("Cachê — Live painting (Badaró)", "Cachê de execução do live painting durante o festival.", 300, "Custo a cobrir pelo UP"),
+ ("Cachê — Cerâmica Às Cegas (Mickaela)", "Cachê de execução da vivência guiada, dias 28, 29 e 30/12.", 300, "Custo a cobrir pelo UP"),
+ ("Cachê — Cobertura audiovisual (Zambonini)", "Cachê de execução da captação documental do projeto no UP19.", 300, "Custo a cobrir pelo UP"),
  ("Materiais — Live painting Badaró",
   "Tinta acrílica, suporte MDF 220×180, embalagem e proteção para transporte.", 980, "Custo a cobrir pelo UP"),
  ("Produção — Nova obra tátil (Cimática)",
@@ -91,7 +94,7 @@ APOIO = [
   "Local para a vivência guiada nos dias 28, 29 e 30/12 — Circulou, Espaço de Cura, ou área próxima ao Chill Out."),
  ("Suporte — Live painting",
   "MDF 220×180 cedido ou produzido localmente pelo UP (a confirmar); definição de fixação — cavalete ou lona/parede."),
- ("Slot — Chill Out", "Set de Ota Blind no Chill Out, em horário próximo à experiência Trust in Dance."),
+ ("Slot — Chill Out", "Set de Ota Blind no Chill Out, em horário próximo à experiência Trust in Dance — horário exato [A CONFIRMAR], conforme grade de shows de Fernanda Pistelli."),
  ("Slot — UP Club", "Set de Ota Blind no UP Club."),
  ("Credenciais — equipe", "3 credenciais: Badaró, Zambonini e 1 vaga de apoio operacional."),
  ("Credencial — artista", "Luis (Ota Blind): credencial de artista + 1 acompanhante."),

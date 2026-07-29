@@ -288,9 +288,9 @@ function card(s, x, y, w, h, accent) {
   head(s, "Aporte próprio do Pega Visão.", OLIVA, { w: 9, fontSize: 34, y: 0.82, h: 0.8 });
   const L = [
     ["Obra Pega Visão", "Cedida à galeria oficial, todo o período", "Contrapartida", "—"],
-    ["Live painting", "Cachê de execução · Luis Badaró", "Pega Visão", "R$ 300,00"],
-    ["Cerâmica Às Cegas", "Cachê de execução · Mickaela", "Pega Visão", "R$ 300,00"],
-    ["Cobertura audiovisual", "Captação documental · Zambonini, sem cachê", "Pega Visão", "R$ 0,00"],
+    ["Live painting", "Pintura ao vivo · Luis Badaró · cachê solicitado ao UP", "Contrapartida", "—"],
+    ["Cerâmica Às Cegas", "Vivência guiada · Mickaela · cachê solicitado ao UP", "Contrapartida", "—"],
+    ["Cobertura audiovisual", "Captação documental · Zambonini · cachê solicitado ao UP", "Contrapartida", "—"],
     ["Equipamento audiovisual", "Kit profissional próprio do diretor", "Qualidade técnica", "—"],
     ["Trust in Dance", "Participação artística · Fernanda Pistelli", "Contrapartida", "—"],
     ["Passagens aéreas", "3 pax, ida e volta · cotação de 27/07/2026", "Pega Visão", "R$ 7.583,00"],
@@ -318,7 +318,7 @@ function card(s, x, y, w, h, accent) {
   card(s, M, 6.02, CWD, 0.80, OLIVA);
   s.addText("TOTAL · APORTE PEGA VISÃO", { x: M + 0.34, y: 6.02, w: 7, h: 0.80, fontFace: SANS,
     fontSize: 13, bold: true, color: CREME, charSpacing: 1.4, margin: 0, valign: "middle" });
-  s.addText("R$ 16.113,00", { x: 8.4, y: 6.02, w: 4.0, h: 0.80, fontFace: SERIF, fontSize: 24,
+  s.addText("R$ 15.513,00", { x: 8.4, y: 6.02, w: 4.0, h: 0.80, fontFace: SERIF, fontSize: 24,
     bold: true, color: OLIVA, align: "right", margin: 0, valign: "middle" });
   pageno(s);
   s.addNotes("O kit audiovisual próprio entra como qualidade técnica, sem valor monetário — não compõe o total.");
@@ -328,30 +328,37 @@ function card(s, x, y, w, h, accent) {
 {
   const s = slide();
   kicker(s, "O QUE PEDIMOS · CUSTO A COBRIR PELO UP", MAGENTA);
-  head(s, "Materiais de produção.", MAGENTA, { w: 8, fontSize: 34 });
-  const P4 = [
-    ["Materiais · live painting", "Tinta acrílica, suporte MDF 220×180, embalagem e proteção para transporte.", "R$ 980,00"],
-    ["Materiais · vendas para os olhos", "25 metros de tecido para 300 vendas, higienizadas e personalizadas, usadas em todas as experiências.", "R$ 750,00"],
+  head(s, "Cachês de execução e materiais.", MAGENTA, { w: 9.5, fontSize: 30, y: 0.82, h: 0.75 });
+  const P7 = [
+    ["Cachê · live painting", "Execução · Luis Badaró", "R$ 300,00"],
+    ["Cachê · cerâmica às cegas", "Execução · Mickaela", "R$ 300,00"],
+    ["Cachê · cobertura audiovisual", "Execução · André Zambonini", "R$ 300,00"],
+    ["Materiais · live painting", "Tinta acrílica, suporte MDF 220×180, embalagem e proteção.", "R$ 980,00"],
+    ["Materiais · vendas para os olhos", "25 metros de tecido para 300 vendas, higienizadas e personalizadas.", "R$ 750,00"],
     ["Materiais · cerâmica às cegas", "Argila, lona e bacias.", "R$ 500,00"],
-    ["Produção · nova obra tátil cimática", "Materiais para a peça nova de Luis Badaró, produzida para a galeria do UP19.", "[A CONFIRMAR]"],
+    ["Produção · nova obra tátil cimática", "Materiais para a peça nova de Luis Badaró, para a galeria do UP19.", "[A CONFIRMAR]"],
   ];
-  P4.forEach(([t, d, v], i) => {
-    const y = 2.28 + i * 0.90;
-    card(s, M, y, 12.09, 0.80, i === 3 ? OURO : MAGENTA);
-    s.addText(t, { x: M + 0.3, y, w: 3.5, h: 0.80, fontFace: SANS, fontSize: 12, bold: true,
+  const Y0 = 1.86, RH = 0.564;
+  P7.forEach(([t, d, v], i) => {
+    const y = Y0 + i * RH;
+    const isCimatica = i === 6;
+    card(s, M, y, 12.09, RH - 0.08, isCimatica ? OURO : MAGENTA);
+    s.addText(t, { x: M + 0.28, y, w: 3.6, h: RH - 0.08, fontFace: SANS, fontSize: 11.5, bold: true,
       color: CREME, margin: 0, valign: "middle" });
-    body(s, d, { x: M + 3.9, y, w: 5.5, h: 0.80, fontSize: 11, valign: "middle", lineSpacing: 15 });
-    s.addText(v, { x: 9.7, y, w: 3.0, h: 0.80, fontFace: SERIF, fontSize: i === 3 ? 15 : 19,
-      bold: true, color: i === 3 ? OURO : CREME, align: "right", margin: 0, valign: "middle" });
+    body(s, d, { x: M + 3.9, y, w: 5.4, h: RH - 0.08, fontSize: 10.5, valign: "middle", lineSpacing: 14 });
+    s.addText(v, { x: 9.65, y, w: 3.05, h: RH - 0.08, fontFace: SERIF, fontSize: isCimatica ? 14 : 17,
+      bold: true, color: isCimatica ? OURO : CREME, align: "right", margin: 0, valign: "middle" });
   });
-  card(s, M, 6.02, 12.09, 0.80, MAGENTA);
-  s.addText("TOTAL · SOLICITADO AO UP", { x: M + 0.34, y: 6.02, w: 5.2, h: 0.80, fontFace: SANS,
-    fontSize: 13, bold: true, color: CREME, charSpacing: 1.4, margin: 0, valign: "middle" });
-  s.addText("+ valor da obra cimática, a definir", { x: 5.9, y: 6.02, w: 3.3, h: 0.80, fontFace: SANS,
-    fontSize: 10.5, color: MUDO, align: "right", margin: 0, valign: "middle" });
-  s.addText("R$ 2.230,00", { x: 9.35, y: 6.02, w: 3.36, h: 0.80, fontFace: SERIF, fontSize: 24,
+  const yt = Y0 + 7 * RH + 0.06;
+  card(s, M, yt, 12.09, 0.62, MAGENTA);
+  s.addText("TOTAL · SOLICITADO AO UP", { x: M + 0.3, y: yt, w: 4.6, h: 0.62, fontFace: SANS,
+    fontSize: 12, bold: true, color: CREME, charSpacing: 1.2, margin: 0, valign: "middle" });
+  s.addText("+ valor da obra cimática, a definir", { x: 5.3, y: yt, w: 3.9, h: 0.62, fontFace: SANS,
+    fontSize: 9.5, color: MUDO, align: "right", margin: 0, valign: "middle" });
+  s.addText("R$ 3.130,00", { x: 9.35, y: yt, w: 3.36, h: 0.62, fontFace: SERIF, fontSize: 21,
     bold: true, color: MAGENTA, align: "right", margin: 0, valign: "middle" });
   pageno(s);
+  s.addNotes("Os três cachês de execução (Badaró, Mickaela, Zambonini) ficam a cargo do UP — não compõem mais o aporte do Pega Visão.");
 }
 
 /* ─────────────────────────────────── 16 · APOIO INSTITUCIONAL */
@@ -365,7 +372,7 @@ function card(s, x, y, w, h, accent) {
     ["Cronograma da obra", "Dia de entrega na galeria e antecedência de montagem."],
     ["Espaço · cerâmica às cegas", "28, 29 e 30/12 — Circulou, Espaço de Cura ou próximo ao Chill Out."],
     ["Suporte · live painting", "MDF 220×180 cedido ou produzido localmente, a confirmar; fixação em cavalete ou lona."],
-    ["Slot · Chill Out", "Set de Ota Blind, próximo à experiência Trust in Dance."],
+    ["Slot · Chill Out", "Set de Ota Blind, próximo à experiência Trust in Dance — horário [A CONFIRMAR] conforme grade de Fernanda Pistelli."],
     ["Slot · UP Club", "Set de Ota Blind."],
     ["Credenciais · equipe", "3 credenciais: Badaró, Zambonini e 1 vaga de apoio operacional."],
     ["Credencial · artista", "Luis (Ota Blind): credencial de artista + 1 acompanhante."],
