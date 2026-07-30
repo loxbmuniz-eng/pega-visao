@@ -8,6 +8,8 @@ const SERIF = "Cambria", SANS = "Arial";
 const M = 0.62, CWD = 13.333 - 2 * M;
 const ilus = (n) => `${A}ilustras_png/ilustra-${String(n).padStart(2, "0")}.png`;
 const foto = (n) => `${A}fotos/${n}.jpg`;
+const wash = (n) => `${A}wash/${n}.jpg`;
+const frame = (n) => `${A}frames/${n}.png`;
 
 const pres = new P();
 pres.layout = "LAYOUT_WIDE";
@@ -15,9 +17,9 @@ pres.author = "Luis Otávio Muniz · Ota Blind";
 pres.title = "Pega Visão × Universo Paralello 19";
 
 let N = 0;
-function slide(accent) {
+function slide(washName) {
   const s = pres.addSlide();
-  s.background = { color: GRAF };
+  s.background = { path: wash(washName) };
   N++;
   return s;
 }
@@ -42,14 +44,19 @@ function bullets(s, items, o = {}) {
     Object.assign({ fontFace: SANS, fontSize: 13, color: BODY, margin: 0,
       valign: "top", lineSpacing: 19, paraSpaceAfter: 9 }, o));
 }
-function card(s, x, y, w, h, accent) {
-  s.addShape(pres.ShapeType.roundRect, { x, y, w, h, rectRadius: 0.06,
-    fill: { color: "1E1C1A" }, line: { color: accent, width: 1 } });
+// panel: dark fill + the real art-deco corner ornament (extracted from the client's
+// own reference deck, page 11) tinted per chapter accent, overlaid as a 9-slice frame.
+function card(s, x, y, w, h, frameName) {
+  s.addShape(pres.ShapeType.rect, { x, y, w, h, fill: { color: "1E1C1A" }, line: { type: "none" } });
+  s.addImage({ path: frame(frameName), x, y, w, h });
+}
+function photoFrame(s, x, y, w, h, frameName) {
+  s.addImage({ path: frame(frameName), x, y, w, h });
 }
 
 /* ─────────────────────────────────── 01 · CAPA */
 {
-  const s = slide();
+  const s = slide("dourado");
   s.addImage({ path: foto("obra_pegavisao"), x: 0, y: 0, w: 6.05, h: 7.5, sizing: { type: "cover", w: 6.05, h: 7.5 } });
   s.addShape(pres.ShapeType.rect, { x: 5.55, y: 0, w: 0.5, h: 7.5, fill: { color: GRAF }, line: { color: GRAF }, transparency: 45 });
   s.addImage({ path: `${A}logo/logo_pegavisao_creme.png`, x: 10.55, y: 0.42, w: 2.16, h: 0.78 });
@@ -73,12 +80,13 @@ function card(s, x, y, w, h, accent) {
 
 /* ─────────────────────────────────── 02 · A HISTÓRIA */
 {
-  const s = slide();
+  const s = slide("magenta");
   kicker(s, "A HISTÓRIA · VINTE ANOS COM O UP", MAGENTA);
   head(s, "Vinte anos depois,\nno lugar onde tudo começou.", MAGENTA, { w: 7.2, fontSize: 36, lineSpacing: 42 });
   body(s, "Em 2006, com 11 anos, meu pai me levou ao Universo Paralello pela primeira vez. Foi onde a música eletrônica começou pra mim. Voltei como artista em 2013, 2015 e 2017 — três edições no palco Tortuga.\n\nEntre julho de 2022 e setembro de 2024, minha visão ficou severamente comprometida por um descolamento de retina raro. Dois anos, dois meses e dois dias de cegueira. Voltei a enxergar e hoje sou pessoa com deficiência visual monocular.\n\nNo mesmo ano da recuperação, fundei em Cuiabá o Festival Pega Visão. Duas edições realizadas.\n\nO que proponho agora é a continuação natural: levar essa pesquisa de volta pro lugar onde tudo começou.",
     { x: M, y: 2.62, w: 7.1, h: 3.5, fontSize: 12.5, lineSpacing: 18.5 });
   s.addImage({ path: foto("ota_retrato"), x: 8.15, y: 1.02, w: 4.56, h: 4.66, sizing: { type: "cover", w: 4.56, h: 4.66 } });
+  photoFrame(s, 8.15, 1.02, 4.56, 4.66, "photo_ota");
   const anos = [["2006", "primeira vez"], ["2013/15/17", "palco Tortuga"], ["2022", "a travessia"],
                 ["2024", "volta a enxergar · nasce o festival"], ["2025", "segunda edição"], ["2026/27", "o retorno · UP"]];
   const WS = [1.55, 1.95, 1.55, 3.15, 1.75, 1.85];
@@ -95,7 +103,7 @@ function card(s, x, y, w, h, accent) {
 
 /* ─────────────────────────────────── 03 · QUEM SOMOS */
 {
-  const s = slide();
+  const s = slide("coral");
   kicker(s, "QUEM SOMOS · FESTIVAL PEGA VISÃO", CORAL);
   head(s, "Inclusão como linguagem,\nnão como pauta.", CORAL, { w: 7.0, fontSize: 36, lineSpacing: 42 });
   bullets(s, [
@@ -105,13 +113,14 @@ function card(s, x, y, w, h, accent) {
     "O lucro das edições foi revertido em ação filantrópica local.",
   ], { x: M, y: 2.72, w: 6.5, h: 2.7, fontSize: 13.5, color: BODY });
   s.addImage({ path: foto("palco_cantora"), x: 7.9, y: 1.02, w: 4.81, h: 5.42, sizing: { type: "cover", w: 4.81, h: 5.42 } });
+  photoFrame(s, 7.9, 1.02, 4.81, 5.42, "photo_palco");
   s.addImage({ path: ilus(2), x: M, y: 5.62, w: 1.5, h: 0.9 });
   pageno(s);
 }
 
 /* ─────────────────────────────────── 04 · A IDEIA */
 {
-  const s = slide();
+  const s = slide("oliva");
   kicker(s, "A IDEIA", OLIVA);
   s.addText("Uma sala onde quem entra\né convidado a fechar\nos olhos pra ver melhor.", { x: M, y: 1.24, w: 8.5, h: 2.85,
     fontFace: SERIF, fontSize: 35, bold: true, color: OLIVA, margin: 0, lineSpacing: 47, valign: "top" });
@@ -126,7 +135,7 @@ function card(s, x, y, w, h, accent) {
 
 /* ─────────────────────────────────── 05 · MANIFESTO */
 {
-  const s = slide();
+  const s = slide("dourado");
   s.addText("O escuro me ensinou\no que só o escuro ensina.", { x: 1.4, y: 0.9, w: 10.53, h: 1.7,
     fontFace: SERIF, fontSize: 36, bold: true, color: OURO, align: "center", margin: 0 });
   body(s, "Os olhos são a porta da alma porque é por eles que a alma alcança o outro.\n\nQuando eles falham, o ouvido cresce. O tato fala. O corpo lembra.\n\nVer não é a única forma de presença. E olhar com cuidado é um gesto que se ensina.\n\nA arte que proponho nasce daí: música, tato, escuta e empatia atravessando o mesmo corpo. Cura, inclusão e cuidado deixam de ser tema e viram experiência viva.",
@@ -136,7 +145,7 @@ function card(s, x, y, w, h, accent) {
 
 /* ─────────────────────────────────── 06 · A OBRA PEGA VISÃO */
 {
-  const s = slide();
+  const s = slide("dourado");
   s.addImage({ path: foto("obra_pegavisao"), x: 6.3, y: 0, w: 7.03, h: 7.5, sizing: { type: "cover", w: 7.03, h: 7.5 } });
   kicker(s, "A OBRA PEGA VISÃO", OURO);
   head(s, "Feita pra ser tocada\nantes de vista.", OURO, { w: 5.3, fontSize: 36, lineSpacing: 42 });
@@ -149,7 +158,7 @@ function card(s, x, y, w, h, accent) {
 
 /* ─────────────────────────────────── 07 · A NOVA OBRA · CIMÁTICA */
 {
-  const s = slide();
+  const s = slide("teal");
   kicker(s, "A NOVA OBRA · PRODUZIDA PARA O UP19", TEAL);
   s.addText("Cimática.", { x: M, y: 0.82, w: 5.6, h: 0.9, fontFace: SERIF, fontSize: 46, bold: true, color: TEAL, margin: 0 });
   s.addText("A forma que o som desenha\nna matéria — em relevo tátil.", { x: M, y: 1.78, w: 5.6, h: 0.95,
@@ -167,19 +176,19 @@ function card(s, x, y, w, h, accent) {
 
 /* ─────────────────────────────────── 08 · AS FRENTES */
 {
-  const s = slide();
+  const s = slide("lilas");
   kicker(s, "AS FRENTES NO UP19", LILAS);
   head(s, "Quatro coisas acontecendo, dentro da programação do UP.", LILAS, { w: 11.5, fontSize: 32, lineSpacing: 38 });
   const F = [
-    ["01 · GALERIA TÁTIL", OLIVA, "Obra Pega Visão cedida + nova obra cimática, produzida para o UP19. Vendas de pano para quem quiser percorrer primeiro pelo tato.", 5],
-    ["02 · LIVE PAINTING", CORAL, "Luis Badaró pinta ao vivo em área próxima à galeria. Uma obra nasce no processo, à vista do público.", 7],
-    ["03 · CERÂMICA ÀS CEGAS", MAGENTA, "Vivência guiada de olhos vendados com Mickaela, nos dias 28, 29 e 30/12. Argila, mãos e escuta.", 19],
-    ["04 · TRUST IN DANCE", LILAS, "Sessão de dance guidance com Fernanda Pistelli. O público dança de olhos vendados, navegando a música pelo corpo.", 3],
+    ["01 · GALERIA TÁTIL", OLIVA, "oliva", "Obra Pega Visão cedida + nova obra cimática, produzida para o UP19. Vendas de pano para quem quiser percorrer primeiro pelo tato.", 5],
+    ["02 · LIVE PAINTING", CORAL, "coral", "Luis Badaró pinta ao vivo em área próxima à galeria. Uma obra nasce no processo, à vista do público.", 7],
+    ["03 · CERÂMICA ÀS CEGAS", MAGENTA, "magenta", "Vivência guiada de olhos vendados com Mickaela, nos dias 28, 29 e 30/12. Argila, mãos e escuta.", 19],
+    ["04 · TRUST IN DANCE", LILAS, "lilas", "Sessão de dance guidance com Fernanda Pistelli. O público dança de olhos vendados, navegando a música pelo corpo.", 3],
   ];
-  F.forEach(([t, c, d, ic], i) => {
+  F.forEach(([t, c, ck, d, ic], i) => {
     const x = M + (i % 2) * (CWD / 2 + 0.16), y = 2.55 + Math.floor(i / 2) * 2.05;
     const w = CWD / 2 - 0.16;
-    card(s, x, y, w, 1.82, c);
+    card(s, x, y, w, 1.82, `card_frentes_${ck}`);
     s.addImage({ path: ilus(ic), x: x + 0.24, y: y + 0.26, w: 0.82, h: 0.62 });
     s.addText(t, { x: x + 1.24, y: y + 0.24, w: w - 1.5, h: 0.38, fontFace: SANS, fontSize: 13.5,
       bold: true, color: c, margin: 0, charSpacing: 0.8, valign: "middle" });
@@ -192,14 +201,14 @@ function card(s, x, y, w, h, accent) {
 
 /* ─────────────────────────────────── 09 · CERÂMICA ÀS CEGAS */
 {
-  const s = slide();
+  const s = slide("magenta");
   kicker(s, "CERÂMICA ÀS CEGAS · MICKAELA", MAGENTA);
   head(s, "Modelar sem ver é\ndeixar a mão pensar.", MAGENTA, { w: 6.4, fontSize: 36, lineSpacing: 42 });
   body(s, "Vivência guiada de olhos vendados, conduzida por Mickaela — ceramista e terapeuta. O participante recebe a argila já vendado: não há referência visual, só peso, temperatura e resistência do barro.\n\nO método já foi testado em edição anterior do festival, com participação de pessoas com deficiência visual. A peça que nasce nunca é a peça que se imaginou — e é esse o ponto.",
     { x: M, y: 2.72, w: 6.4, h: 2.6, fontSize: 13 });
   ["28 / 12", "29 / 12", "30 / 12"].forEach((d, i) => {
     const x = M + i * 2.2;
-    card(s, x, 5.5, 1.98, 0.92, MAGENTA);
+    card(s, x, 5.5, 1.98, 0.92, "card_date");
     s.addText(d, { x, y: 5.5, w: 1.98, h: 0.92, fontFace: SERIF, fontSize: 22, bold: true,
       color: CREME, align: "center", valign: "middle", margin: 0 });
   });
@@ -211,7 +220,7 @@ function card(s, x, y, w, h, accent) {
 
 /* ─────────────────────────────────── 10 · TRUST IN DANCE */
 {
-  const s = slide();
+  const s = slide("lilas");
   s.addImage({ path: foto("trust_principal"), x: 0, y: 0, w: 5.75, h: 7.5, sizing: { type: "cover", w: 5.75, h: 7.5 } });
   s.addText("TRUST IN DANCE · FERNANDA PISTELLI", { x: 6.2, y: 0.34, w: 6.5, h: 0.3,
     fontFace: SANS, fontSize: 10.5, bold: true, color: LILAS, charSpacing: 3.4, margin: 0, valign: "middle" });
@@ -219,7 +228,9 @@ function card(s, x, y, w, h, accent) {
   body(s, "Sessão de dance guidance conduzida por Fernanda Pistelli. O público dança vendado — uma experiência de escuta, confiança e presença total.\n\nPassagens por Boom Festival, Universo Paralello e residência DragonFruit (Brisbane / AUS). Sets entre Progressive House e Techno.",
     { x: 6.2, y: 3.5, w: 6.5, h: 2.0, fontSize: 13 });
   s.addImage({ path: foto("trust_grupo"), x: 6.2, y: 5.5, w: 3.1, h: 1.42, sizing: { type: "cover", w: 3.1, h: 1.42 } });
+  photoFrame(s, 6.2, 5.5, 3.1, 1.42, "photo_trust_a");
   s.addImage({ path: foto("trust_duo"), x: 9.5, y: 5.5, w: 3.21, h: 1.42, sizing: { type: "cover", w: 3.21, h: 1.42 } });
+  photoFrame(s, 9.5, 5.5, 3.21, 1.42, "photo_trust_b");
   s.addText("PARTICIPAÇÃO ARTÍSTICA · SEM CUSTO AO FESTIVAL", { x: 6.2, y: 2.86, w: 6.5, h: 0.32,
     fontFace: SANS, fontSize: 10, bold: true, color: LILAS, charSpacing: 1.2, margin: 0, valign: "middle" });
   pageno(s);
@@ -227,13 +238,14 @@ function card(s, x, y, w, h, accent) {
 
 /* ─────────────────────────────────── 11 · LIVE PAINTING */
 {
-  const s = slide();
+  const s = slide("coral");
   s.addImage({ path: foto("live_painting"), x: 8.0, y: 0, w: 5.33, h: 7.5, sizing: { type: "cover", w: 5.33, h: 7.5 } });
   kicker(s, "LIVE PAINTING · LUIS BADARÓ", CORAL);
   head(s, "Uma obra nascendo\nà vista de quem passa.", CORAL, { w: 6.9, fontSize: 36, lineSpacing: 42 });
   body(s, "Luis Badaró pinta ao vivo durante o festival, em área próxima à galeria de arte. Quem passa duas vezes encontra coisas diferentes.\n\nArtista visual, desenha desde a infância e há quase dez anos profissionalmente. Trocou a arquitetura pelas artes. Murais em Rondonópolis e Cuiabá (2022) e em Barcelona (2019). Assina a identidade visual tátil do Pega Visão desde a primeira edição.",
     { x: M, y: 2.72, w: 6.9, h: 2.6, fontSize: 13 });
   s.addImage({ path: foto("badaro_retrato"), x: M, y: 5.42, w: 1.38, h: 1.5, sizing: { type: "cover", w: 1.38, h: 1.5 } });
+  photoFrame(s, M, 5.42, 1.38, 1.5, "photo_badaro");
   s.addText("SUPORTE MDF 220×180\nTINTA ACRÍLICA · EMBALAGEM PARA TRANSPORTE", { x: 2.2, y: 5.72, w: 5.2, h: 0.8,
     fontFace: SANS, fontSize: 10, bold: true, color: CORAL, charSpacing: 1.1, margin: 0, lineSpacing: 15 });
   pageno(s);
@@ -241,7 +253,7 @@ function card(s, x, y, w, h, accent) {
 
 /* ─────────────────────────────────── 12 · SETS OTA BLIND */
 {
-  const s = slide();
+  const s = slide("oliva");
   kicker(s, "MÚSICA · OTA BLIND", OLIVA);
   head(s, "Um artista da casa\nvoltando ao palco.", OLIVA, { w: 6.6, fontSize: 36, lineSpacing: 42 });
   body(s, "DJ desde 2008, três passagens pelo palco Tortuga do UP em 2013, 2015 e 2017. Idealizador e curador do Festival Pega Visão. Pessoa com deficiência visual monocular desde setembro de 2024.\n\nDois sets autorais foram enviados para apreciação da curadoria.",
@@ -249,7 +261,7 @@ function card(s, x, y, w, h, accent) {
   [["CHILL OUT", "Em horário próximo à experiência Trust in Dance."],
    ["UP CLUB", "Set autoral."]].forEach(([t, d], i) => {
     const y = 4.86 + i * 1.06;
-    card(s, M, y, 6.6, 0.9, OLIVA);
+    card(s, M, y, 6.6, 0.9, "card_sets");
     s.addText(t, { x: M + 0.3, y, w: 2.1, h: 0.9, fontFace: SANS, fontSize: 13, bold: true,
       color: OLIVA, margin: 0, valign: "middle", charSpacing: 1 });
     body(s, d, { x: M + 2.3, y, w: 4.1, h: 0.9, fontSize: 11.5, valign: "middle" });
@@ -261,7 +273,7 @@ function card(s, x, y, w, h, accent) {
 
 /* ─────────────────────────────────── 13 · REGISTRO AUDIOVISUAL */
 {
-  const s = slide();
+  const s = slide("teal");
   kicker(s, "REGISTRO AUDIOVISUAL · ANDRÉ ZAMBONINI", TEAL);
   head(s, "Material que circula\njunto do nome do festival.", TEAL, { w: 7.2, fontSize: 34, lineSpacing: 40 });
   body(s, "Captação e produção de conteúdo documental do projeto no UP19, sem cachê. Diretor de fotografia, editor e piloto de drone, de Cuiabá. Registrou três edições do Festival Baguncinha e mais de cem live sessions.",
@@ -273,7 +285,7 @@ function card(s, x, y, w, h, accent) {
               "Lapela Hollyland Lark Max 2 e tripé",
               "Tubo LED Sokani 25W, LED portátil 40W e flash Godox V1"],
     { x: M, y: 4.42, w: 7.2, h: 1.7, fontSize: 12.5 });
-  card(s, 8.35, 2.55, 4.36, 3.6, TEAL);
+  card(s, 8.35, 2.55, 4.36, 3.6, "card_intercambio");
   s.addText("INTERCÂMBIO", { x: 8.63, y: 2.82, w: 3.8, h: 0.34, fontFace: SANS, fontSize: 11.5,
     bold: true, color: TEAL, charSpacing: 1.8, margin: 0, valign: "middle" });
   body(s, "Todo o material captado pelo Pega Visão fica disponível ao UP para uso institucional.\n\nEm troca, pedimos acesso ao material audiovisual captado pela produção oficial do festival.",
@@ -283,7 +295,7 @@ function card(s, x, y, w, h, accent) {
 
 /* ─────────────────────────────────── 14 · O QUE TRAZEMOS */
 {
-  const s = slide();
+  const s = slide("oliva");
   kicker(s, "O QUE TRAZEMOS", OLIVA);
   head(s, "Aporte próprio do Pega Visão.", OLIVA, { w: 9, fontSize: 34, y: 0.82, h: 0.8 });
   const L = [
@@ -305,7 +317,7 @@ function card(s, x, y, w, h, accent) {
   L.forEach(([it, de, ap, vl], i) => {
     const y = Y0 + 0.36 + i * RH;
     if (i % 2 === 0) s.addShape(pres.ShapeType.rect, { x: M - 0.12, y, w: CWD + 0.24, h: RH,
-      fill: { color: "1B1917" }, line: { color: "1B1917" } });
+      fill: { color: "1B1917" }, line: { type: "none" } });
     s.addText(it, { x: M, y, w: 3.5, h: RH, fontFace: SANS, fontSize: 11.5, bold: true,
       color: CREME, margin: 0, valign: "middle" });
     s.addText(de, { x: 4.2, y, w: 5.0, h: RH, fontFace: SANS, fontSize: 11, color: BODY,
@@ -315,7 +327,7 @@ function card(s, x, y, w, h, accent) {
     s.addText(vl, { x: 11.3, y, w: 1.41, h: RH, fontFace: SANS, fontSize: 12.5,
       bold: vl !== "—", color: vl === "—" ? MUDO : CREME, align: "right", margin: 0, valign: "middle" });
   });
-  card(s, M, 6.02, CWD, 0.80, OLIVA);
+  card(s, M, 6.02, CWD, 0.80, "card_total14");
   s.addText("TOTAL · APORTE PEGA VISÃO", { x: M + 0.34, y: 6.02, w: 7, h: 0.80, fontFace: SANS,
     fontSize: 13, bold: true, color: CREME, charSpacing: 1.4, margin: 0, valign: "middle" });
   s.addText("R$ 15.513,00", { x: 8.4, y: 6.02, w: 4.0, h: 0.80, fontFace: SERIF, fontSize: 24,
@@ -326,7 +338,7 @@ function card(s, x, y, w, h, accent) {
 
 /* ─────────────────────────────────── 15 · O QUE PEDIMOS */
 {
-  const s = slide();
+  const s = slide("magenta");
   kicker(s, "O QUE PEDIMOS · CUSTO A COBRIR PELO UP", MAGENTA);
   head(s, "Cachês de execução e materiais.", MAGENTA, { w: 9.5, fontSize: 30, y: 0.82, h: 0.75 });
   const P7 = [
@@ -342,7 +354,7 @@ function card(s, x, y, w, h, accent) {
   P7.forEach(([t, d, v], i) => {
     const y = Y0 + i * RH;
     const isCimatica = i === 6;
-    card(s, M, y, 12.09, RH - 0.08, isCimatica ? OURO : MAGENTA);
+    card(s, M, y, 12.09, RH - 0.08, isCimatica ? "card_row15_ouro" : "card_row15_magenta");
     s.addText(t, { x: M + 0.28, y, w: 3.6, h: RH - 0.08, fontFace: SANS, fontSize: 11.5, bold: true,
       color: CREME, margin: 0, valign: "middle" });
     body(s, d, { x: M + 3.9, y, w: 5.4, h: RH - 0.08, fontSize: 10.5, valign: "middle", lineSpacing: 14 });
@@ -350,7 +362,7 @@ function card(s, x, y, w, h, accent) {
       bold: true, color: isCimatica ? OURO : CREME, align: "right", margin: 0, valign: "middle" });
   });
   const yt = Y0 + 7 * RH + 0.06;
-  card(s, M, yt, 12.09, 0.62, MAGENTA);
+  card(s, M, yt, 12.09, 0.62, "card_total15");
   s.addText("TOTAL · SOLICITADO AO UP", { x: M + 0.3, y: yt, w: 4.6, h: 0.62, fontFace: SANS,
     fontSize: 12, bold: true, color: CREME, charSpacing: 1.2, margin: 0, valign: "middle" });
   s.addText("+ valor da obra cimática, a definir", { x: 5.3, y: yt, w: 3.9, h: 0.62, fontFace: SANS,
@@ -363,7 +375,7 @@ function card(s, x, y, w, h, accent) {
 
 /* ─────────────────────────────────── 16 · APOIO INSTITUCIONAL */
 {
-  const s = slide();
+  const s = slide("dourado");
   kicker(s, "O QUE PEDIMOS · APOIO INSTITUCIONAL, SEM VALOR MONETÁRIO", OURO);
   head(s, "Espaço, slots e credenciais.", OURO, { w: 8, fontSize: 34 });
   const items = [
@@ -389,19 +401,19 @@ function card(s, x, y, w, h, accent) {
 
 /* ─────────────────────────────────── 17 · QUEM ASSINA + FECHO */
 {
-  const s = slide();
+  const s = slide("oliva");
   kicker(s, "QUEM ASSINA", CREME);
   const eq = [
-    ["OTA BLIND", "Luis Otávio Muniz · Cuiabá / MT", "Curadoria geral, set autoral e coordenação. Idealizador do Festival Pega Visão.", OLIVA, 1],
-    ["LUIS BADARÓ", "Artista visual · Rondonópolis / MT", "Direção visual, obras táteis e live painting. Murais em Cuiabá, Rondonópolis e Barcelona.", CORAL, 4],
-    ["MICKAELA", "Ceramista e terapeuta", "Conduz a vivência Cerâmica Às Cegas, guiada de olhos vendados.", MAGENTA, 26],
-    ["FERNANDA PISTELLI", "DJ · São Paulo / SP", "Sessão Trust in Dance. Boom Festival, Universo Paralello e residência DragonFruit.", LILAS, 3],
-    ["ANDRÉ ZAMBONINI", "Diretor de fotografia · Cuiabá / MT", "Captação e produção do registro documental do projeto no UP19.", TEAL, 2],
+    ["OTA BLIND", "Luis Otávio Muniz · Cuiabá / MT", "Curadoria geral, set autoral e coordenação. Idealizador do Festival Pega Visão.", OLIVA, "oliva", 1],
+    ["LUIS BADARÓ", "Artista visual · Rondonópolis / MT", "Direção visual, obras táteis e live painting. Murais em Cuiabá, Rondonópolis e Barcelona.", CORAL, "coral", 4],
+    ["MICKAELA", "Ceramista e terapeuta", "Conduz a vivência Cerâmica Às Cegas, guiada de olhos vendados.", MAGENTA, "magenta", 26],
+    ["FERNANDA PISTELLI", "DJ · São Paulo / SP", "Sessão Trust in Dance. Boom Festival, Universo Paralello e residência DragonFruit.", LILAS, "lilas", 3],
+    ["ANDRÉ ZAMBONINI", "Diretor de fotografia · Cuiabá / MT", "Captação e produção do registro documental do projeto no UP19.", TEAL, "teal", 2],
   ];
   const cw = 2.34, gap = 0.11;
-  eq.forEach(([n, r, d, c, ic], i) => {
+  eq.forEach(([n, r, d, c, ck, ic], i) => {
     const x = M + i * (cw + gap);
-    card(s, x, 1.5, cw, 3.5, c);
+    card(s, x, 1.5, cw, 3.5, `card_signature_${ck}`);
     s.addImage({ path: ilus(ic), x: x + (cw - 1.0) / 2, y: 1.76, w: 1.0, h: 0.76 });
     s.addText(n, { x: x + 0.16, y: 2.68, w: cw - 0.32, h: 0.34, fontFace: SANS, fontSize: 11.5,
       bold: true, color: c, align: "center", margin: 0, charSpacing: 0.5, valign: "middle" });
