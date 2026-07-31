@@ -656,6 +656,48 @@ input,select,textarea{border-radius:5px}
   .legenda-status-item{ border:1.5px solid #111418 !important; }
 }
 
+/* ===== RELATÓRIO OPERACIONAL: CABER NA LARGURA DA FOLHA =====
+   Com 16 colunas, a tabela ultrapassava a largura do A4 deitado e o navegador
+   simplesmente cortava as últimas colunas na borda — a Qtd. Ganchos sumia da
+   folha impressa, apesar de estar correta na tela.
+
+   width:100% + table-layout:fixed obrigam a tabela a se ajustar à página em
+   vez de crescer conforme o conteúdo; a quebra de palavra evita que um nome
+   longo de transportadora volte a esticar a coluna. */
+@page{ size: A4 landscape; margin: 8mm; }
+
+@media print{
+  #print-operacional table{
+    width:100% !important;
+    table-layout:fixed !important;
+    font-size:7.6px !important;
+  }
+  #print-operacional th, #print-operacional td{
+    padding:4px 3px !important;
+    overflow-wrap:break-word; word-break:break-word; hyphens:auto;
+  }
+  /* O th da tabela nasce com white-space:nowrap (linha 201). Com a largura
+     agora fixa, isso fazia o título transbordar por cima da coluna vizinha —
+     "Status de Carregamento" cobria "Faturado". Aqui o cabeçalho quebra em
+     várias linhas, como já acontece na tabela de linha do tempo. */
+  #print-operacional th{
+    white-space:normal !important;
+    vertical-align:bottom; line-height:1.2; text-align:center;
+  }
+  /* Colunas de estado e as numéricas ficam estreitas e centralizadas; as de
+     texto livre (Destino, Rota, Transportadora) ficam com o espaço restante. */
+  #print-operacional th:nth-child(1),  #print-operacional td:nth-child(1),
+  #print-operacional th:nth-child(5),  #print-operacional td:nth-child(5){ width:2.6% }
+  #print-operacional th:nth-child(4),  #print-operacional td:nth-child(4){ width:5% }
+  #print-operacional th:nth-child(6),  #print-operacional td:nth-child(6){ width:4.6% }
+  #print-operacional th:nth-child(10), #print-operacional td:nth-child(10){ width:6% }
+  #print-operacional th:nth-child(12), #print-operacional td:nth-child(12){ width:6% }
+  #print-operacional th:nth-child(13), #print-operacional td:nth-child(13),
+  #print-operacional th:nth-child(14), #print-operacional td:nth-child(14),
+  #print-operacional th:nth-child(15), #print-operacional td:nth-child(15),
+  #print-operacional th:nth-child(16), #print-operacional td:nth-child(16){ width:5% }
+}
+
 </style>
 <!-- MSAL.js v2 — SSO Microsoft 365. Carrega da CDN da Microsoft; se não vier
      (aberto via file://, sem rede, ou bloqueado por política), o adaptador
@@ -2681,10 +2723,36 @@ function csvEscape(v){
   if(/[;"\n\r]/.test(s)) return '"'+s.replace(/"/g,'""')+'"';
   return s;
 }
-function toCsv(header, linhas){
-  const rows = [header, ...linhas];
-  return rows.map(r => r.map(csvEscape).join(';')).join('\r\n');
+
+/* Valores que o Excel converte em data sozinho ao abrir o CSV.
+   O caso real: TipoVeiculo "3/4" vira 04/03 (ou 03/04) e chega corrompido no
+   Power BI. Também cobre "1/2", "3-4" e afins, além de números com zero à
+   esquerda, que o Excel come ("007" -> 7).
+   A forma ="valor" é a maneira reconhecida de dizer ao Excel "isto é texto,
+   não interprete". Aplicada SÓ nos valores ambíguos: "Carreta" e "Truck" saem
+   limpos como sempre. */
+function ehAmbiguoParaExcel(s){
+  return /^\d{1,2}\s*[\/\-]\s*\d{1,4}$/.test(s)   // 3/4, 1/2, 3-4
+      || /^0\d+$/.test(s);                          // 007
 }
+function csvTexto(v){
+  const s = (v===null||v===undefined) ? '' : String(v);
+  if(!s) return '';
+  if(ehAmbiguoParaExcel(s)) return '="'+s.replace(/"/g,'""')+'"';
+  return csvEscape(s);
+}
+// `colunasTexto`: nomes de coluna cujo conteúdo deve ir como texto puro,
+// para o Excel não reinterpretar (ver csvTexto acima).
+function toCsv(header, linhas, colunasTexto){
+  const forcar = new Set(colunasTexto || []);
+  const idx = header.map((h,i)=> forcar.has(h) ? i : -1).filter(i=>i>=0);
+  const escaparLinha = r => r.map((v,i)=> idx.includes(i) ? csvTexto(v) : csvEscape(v)).join(';');
+  return [header.map(csvEscape).join(';'), ...linhas.map(escaparLinha)].join('\r\n');
+}
+// Colunas de texto livre que podem conter valores ambíguos (hoje: TipoVeiculo,
+// por causa do "3/4"). Declaradas em um lugar só para não divergirem entre os
+// vários CSVs que as exportam.
+const CSV_COLUNAS_TEXTO = ['TipoVeiculo','Placa','NumeroCarga','RotaCodigo'];
 function gerarCsvFactMovimentacoes(){
   const header = ['CargaId','Placa','Timestamp','StatusAnterior','StatusNovo','Operador','Setor','Cliente','Motorista','TipoVeiculo','QtdEntregas'];
   const linhas = DB.movimentacoes
@@ -2692,7 +2760,7 @@ function gerarCsvFactMovimentacoes(){
     .sort((a,b)=>new Date(a.timestamp)-new Date(b.timestamp))
     .map(m=>[m.cargaId, m.placa, m.timestamp, m.statusAnterior||'', m.statusNovo, m.operador, m.setor,
       m.cliente||'', m.motorista||'', m.tipoVeiculo||'', m.qtdEntregas ?? '']);
-  return toCsv(header, linhas);
+  return toCsv(header, linhas, CSV_COLUNAS_TEXTO);
 }
 function gerarCsvDimCarga(){
   const header = ['Id','NumeroCarga','Placa','Transportadora','TipoVeiculo','Motorista','Cliente','Destino','Produto',
@@ -2704,22 +2772,22 @@ function gerarCsvDimCarga(){
     c.sequencia ?? '', c.praOnde || '', compartilhadaDaCarga(c), c.qtdGanchos ?? 0, c.qtdEntregas ?? 1,
     c.status, c.criadoEm, c.atualizadoEm
   ]);
-  return toCsv(header, linhas);
+  return toCsv(header, linhas, CSV_COLUNAS_TEXTO);
 }
 function gerarCsvDimTransportadora(){
   const header = ['Id','Nome'];
   const linhas = listarTransportadoras().map(t=>[t.id, t.nome]);
-  return toCsv(header, linhas);
+  return toCsv(header, linhas, CSV_COLUNAS_TEXTO);
 }
 function gerarCsvDimFrota(){
   const header = ['Placa','Transportadora','TipoVeiculo','CapacidadeKg','UF','DataUltimaMovimentacao','PrecisaRevisao'];
   const linhas = DB.frota.map(f=>[f.placa, f.transportadora, f.tipoVeiculo, f.capacidadeKg ?? '', f.uf||'', f.dataUltimaMovimentacao||'', f.precisaRevisao ? 'Sim':'Não']);
-  return toCsv(header, linhas);
+  return toCsv(header, linhas, CSV_COLUNAS_TEXTO);
 }
 function gerarCsvDimStatus(){
   const header = ['Nome','OrdemNoFluxo','Cor'];
   const linhas = STATUS_ORDEM_EXPORT.map((s,i)=>[s, i, statusCarregamentoInfo(s).cor]);
-  return toCsv(header, linhas);
+  return toCsv(header, linhas, CSV_COLUNAS_TEXTO);
 }
 // Retorna os 5 arquivos prontos para download: [{nome, conteudo}, ...]
 function gerarArquivosCsvPowerBI(){
@@ -4044,6 +4112,14 @@ function imprimirContainer(el){
 // na fila de pendências da Programação, mas não fazem sentido numa
 // planilha de sequenciamento de carregamento ainda sem dados.
 const CORES_PRA_ONDE = { 'FROTA PROPRIA':'#16697a', 'CROSS-DOCKING':'#374a86', 'DEDICADA':'#8f1f26', 'RET FRIGO':'#b9903f' };
+// ORDEM DAS COLUNAS: os três campos de estado da carga vêm PRIMEIRO, na
+// ordem em que a linha do tempo acontece — Status (a etapa dos 6), depois
+// Status de Carregamento (a leitura do pátio) e por fim Faturado. Antes o
+// Status ficava no meio da tabela, entre "Tipo de Operação" e "Placa", e quem
+// lia a folha precisava caçar a informação mais importante no meio das
+// colunas de cadastro. Identificação e cadastro (Seq., Carga, Destino, Rota,
+// Placa, Transportadora...) vêm depois, porque respondem "qual carga é",
+// não "em que pé ela está".
 function exportarPdfOperacional(){
   const el = document.getElementById('print-operacional');
   // TODAS as cargas da programação do dia, INCLUSIVE as já concluídas
@@ -4067,14 +4143,14 @@ function exportarPdfOperacional(){
     const cs = corStatusRelatorio(c.status);
     return `<tr>
       <td>${i+1}</td>
+      <td style="background:${cs.fundo};color:${cs.texto};font-weight:800;text-align:center">${esc(c.status)}</td>
+      <td style="background:${sc.cor};color:${textoSobre(sc.cor)};font-weight:800">${esc(sc.texto)}</td>
+      <td ${faturado?`style="background:#3fa66a;color:${textoSobre('#3fa66a')};font-weight:800;text-align:center"`:'style="text-align:center"'}>${faturado?'FATURADO':'—'}</td>
       <td style="text-align:center">${c.sequencia ?? '—'}</td>
       <td>${esc(c.numeroCarga)||'—'}</td>
       <td>${esc(c.destino)||'—'}</td>
       <td>${esc(rotaCurta(c.rota))}</td>
       <td ${praOndeStyle}>${c.praOnde ? esc(PRA_ONDE_LABEL[c.praOnde]) : '—'}</td>
-      <td style="background:${cs.fundo};color:${cs.texto};font-weight:800;text-align:center">${esc(c.status)}</td>
-      <td ${faturado?`style="background:#3fa66a;color:${textoSobre('#3fa66a')};font-weight:800"`:''}>${faturado?'FATURADO':''}</td>
-      <td style="background:${sc.cor};color:${textoSobre(sc.cor)};font-weight:800">${esc(sc.texto)}</td>
       <td>${esc(c.placa)}</td>
       <td>${esc(c.transportadora)||'—'}</td>
       <td>${esc(c.tipoVeiculo)||'—'}</td>
@@ -4096,7 +4172,8 @@ function exportarPdfOperacional(){
       ${legendaStatusHtml()}
       <table>
         <thead><tr>
-          <th>Nº</th><th>Seq.</th><th>Carga</th><th>Destino</th><th>Rota</th><th>Tipo de Operação</th><th>Status</th><th>Faturado</th><th>Status de Carregamento</th>
+          <th>Nº</th><th>Status</th><th>Status de Carregamento</th><th>Faturado</th>
+          <th>Seq.</th><th>Carga</th><th>Destino</th><th>Rota</th><th>Tipo de Operação</th>
           <th>Placa</th><th>Transportadora</th><th>Tipo de Veículo</th><th>Peso(ton)</th><th>Compartilhada?</th><th>Qtd. Entregas</th><th>Qtd. Ganchos</th>
         </tr></thead>
         <tbody>${linhas || '<tr><td colspan="14" class="text-center text-dim">Nenhuma carga programada.</td></tr>'}</tbody>

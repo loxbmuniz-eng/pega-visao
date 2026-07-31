@@ -1305,6 +1305,14 @@ function imprimirContainer(el){
 // na fila de pendências da Programação, mas não fazem sentido numa
 // planilha de sequenciamento de carregamento ainda sem dados.
 const CORES_PRA_ONDE = { 'FROTA PROPRIA':'#16697a', 'CROSS-DOCKING':'#374a86', 'DEDICADA':'#8f1f26', 'RET FRIGO':'#b9903f' };
+// ORDEM DAS COLUNAS: os três campos de estado da carga vêm PRIMEIRO, na
+// ordem em que a linha do tempo acontece — Status (a etapa dos 6), depois
+// Status de Carregamento (a leitura do pátio) e por fim Faturado. Antes o
+// Status ficava no meio da tabela, entre "Tipo de Operação" e "Placa", e quem
+// lia a folha precisava caçar a informação mais importante no meio das
+// colunas de cadastro. Identificação e cadastro (Seq., Carga, Destino, Rota,
+// Placa, Transportadora...) vêm depois, porque respondem "qual carga é",
+// não "em que pé ela está".
 function exportarPdfOperacional(){
   const el = document.getElementById('print-operacional');
   // TODAS as cargas da programação do dia, INCLUSIVE as já concluídas
@@ -1328,14 +1336,14 @@ function exportarPdfOperacional(){
     const cs = corStatusRelatorio(c.status);
     return `<tr>
       <td>${i+1}</td>
+      <td style="background:${cs.fundo};color:${cs.texto};font-weight:800;text-align:center">${esc(c.status)}</td>
+      <td style="background:${sc.cor};color:${textoSobre(sc.cor)};font-weight:800">${esc(sc.texto)}</td>
+      <td ${faturado?`style="background:#3fa66a;color:${textoSobre('#3fa66a')};font-weight:800;text-align:center"`:'style="text-align:center"'}>${faturado?'FATURADO':'—'}</td>
       <td style="text-align:center">${c.sequencia ?? '—'}</td>
       <td>${esc(c.numeroCarga)||'—'}</td>
       <td>${esc(c.destino)||'—'}</td>
       <td>${esc(rotaCurta(c.rota))}</td>
       <td ${praOndeStyle}>${c.praOnde ? esc(PRA_ONDE_LABEL[c.praOnde]) : '—'}</td>
-      <td style="background:${cs.fundo};color:${cs.texto};font-weight:800;text-align:center">${esc(c.status)}</td>
-      <td ${faturado?`style="background:#3fa66a;color:${textoSobre('#3fa66a')};font-weight:800"`:''}>${faturado?'FATURADO':''}</td>
-      <td style="background:${sc.cor};color:${textoSobre(sc.cor)};font-weight:800">${esc(sc.texto)}</td>
       <td>${esc(c.placa)}</td>
       <td>${esc(c.transportadora)||'—'}</td>
       <td>${esc(c.tipoVeiculo)||'—'}</td>
@@ -1357,7 +1365,8 @@ function exportarPdfOperacional(){
       ${legendaStatusHtml()}
       <table>
         <thead><tr>
-          <th>Nº</th><th>Seq.</th><th>Carga</th><th>Destino</th><th>Rota</th><th>Tipo de Operação</th><th>Status</th><th>Faturado</th><th>Status de Carregamento</th>
+          <th>Nº</th><th>Status</th><th>Status de Carregamento</th><th>Faturado</th>
+          <th>Seq.</th><th>Carga</th><th>Destino</th><th>Rota</th><th>Tipo de Operação</th>
           <th>Placa</th><th>Transportadora</th><th>Tipo de Veículo</th><th>Peso(ton)</th><th>Compartilhada?</th><th>Qtd. Entregas</th><th>Qtd. Ganchos</th>
         </tr></thead>
         <tbody>${linhas || '<tr><td colspan="14" class="text-center text-dim">Nenhuma carga programada.</td></tr>'}</tbody>

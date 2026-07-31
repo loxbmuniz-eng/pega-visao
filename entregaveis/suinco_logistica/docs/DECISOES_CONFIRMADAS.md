@@ -572,3 +572,43 @@ A sequência de carregamento não se perdeu: virou **coluna própria (Seq.)**, a
 lado do Nº de ordem de leitura do relatório. Status desconhecido, vindo de
 registro antigo, vai para o fim da lista em vez de subir ao topo por conta do
 índice −1.
+
+## 21. Relatório operacional: status na frente e tabela cabendo na folha
+
+**Status na frente.** Os três campos de estado — Status (etapa dos 6), Status de
+Carregamento (leitura do pátio) e Faturado — passaram para as primeiras
+colunas, na ordem em que a linha do tempo acontece. Antes o Status ficava no
+meio da tabela, entre "Tipo de Operação" e "Placa", e era preciso caçar a
+informação mais importante no meio das colunas de cadastro. Identificação
+(Seq., Carga, Destino, Rota, Placa, Transportadora) vem depois, porque responde
+"qual carga é", não "em que pé ela está".
+
+**Tabela estourando a folha — defeito encontrado ao conferir o PDF gerado.**
+Com 16 colunas, a tabela ultrapassava a largura do A4 deitado e o navegador
+cortava as últimas colunas na borda: a **Qtd. Ganchos simplesmente não saía no
+papel**, apesar de estar correta na tela. Corrigido com `table-layout:fixed` e
+larguras por coluna, mais quebra de linha nos cabeçalhos — que herdavam
+`white-space:nowrap` e passavam por cima da coluna vizinha ("Status de
+Carregamento" cobria "Faturado").
+
+## 22. CSV do Power BI: colunas de texto protegidas do Excel
+
+**Problema relatado:** a coluna J (`TipoVeiculo`) traz "3/4", que o Excel
+converte sozinho em data ao abrir o CSV — e o valor chega corrompido no
+Power BI.
+
+**Correção:** os valores ambíguos passam a sair no formato `="3/4"`, a forma
+reconhecida de dizer ao Excel "isto é texto, não interprete". Aplicada apenas
+onde há ambiguidade real: "Carreta", "Truck" e "Toco" continuam saindo limpos.
+Cobre também `NumeroCarga` com zero à esquerda ("007", que o Excel reduzia a 7).
+
+As colunas protegidas estão declaradas em `CSV_COLUNAS_TEXTO` (data.js), em um
+lugar só, para não divergirem entre os cinco CSVs exportados.
+
+**Ressalva que precisa de confirmação do usuário:** a sintaxe `="..."` é
+específica do Excel. Ela resolve o caso de abrir o CSV no Excel antes de levar
+ao Power BI. Se, em vez disso, o Power BI ler o arquivo **direto**, sem passar
+pelo Excel, ele mostrará o literal `="3/4"` — e aí o certo seria manter o valor
+cru `3/4`, deixando o Power BI inferir texto (o que ele costuma fazer, já que a
+coluna mistura "Carreta", "Truck" e "3/4"). Vale confirmar por onde o arquivo
+entra antes de considerar esta decisão fechada.

@@ -1094,10 +1094,36 @@ function csvEscape(v){
   if(/[;"\n\r]/.test(s)) return '"'+s.replace(/"/g,'""')+'"';
   return s;
 }
-function toCsv(header, linhas){
-  const rows = [header, ...linhas];
-  return rows.map(r => r.map(csvEscape).join(';')).join('\r\n');
+
+/* Valores que o Excel converte em data sozinho ao abrir o CSV.
+   O caso real: TipoVeiculo "3/4" vira 04/03 (ou 03/04) e chega corrompido no
+   Power BI. Também cobre "1/2", "3-4" e afins, além de números com zero à
+   esquerda, que o Excel come ("007" -> 7).
+   A forma ="valor" é a maneira reconhecida de dizer ao Excel "isto é texto,
+   não interprete". Aplicada SÓ nos valores ambíguos: "Carreta" e "Truck" saem
+   limpos como sempre. */
+function ehAmbiguoParaExcel(s){
+  return /^\d{1,2}\s*[\/\-]\s*\d{1,4}$/.test(s)   // 3/4, 1/2, 3-4
+      || /^0\d+$/.test(s);                          // 007
 }
+function csvTexto(v){
+  const s = (v===null||v===undefined) ? '' : String(v);
+  if(!s) return '';
+  if(ehAmbiguoParaExcel(s)) return '="'+s.replace(/"/g,'""')+'"';
+  return csvEscape(s);
+}
+// `colunasTexto`: nomes de coluna cujo conteúdo deve ir como texto puro,
+// para o Excel não reinterpretar (ver csvTexto acima).
+function toCsv(header, linhas, colunasTexto){
+  const forcar = new Set(colunasTexto || []);
+  const idx = header.map((h,i)=> forcar.has(h) ? i : -1).filter(i=>i>=0);
+  const escaparLinha = r => r.map((v,i)=> idx.includes(i) ? csvTexto(v) : csvEscape(v)).join(';');
+  return [header.map(csvEscape).join(';'), ...linhas.map(escaparLinha)].join('\r\n');
+}
+// Colunas de texto livre que podem conter valores ambíguos (hoje: TipoVeiculo,
+// por causa do "3/4"). Declaradas em um lugar só para não divergirem entre os
+// vários CSVs que as exportam.
+const CSV_COLUNAS_TEXTO = ['TipoVeiculo','Placa','NumeroCarga','RotaCodigo'];
 function gerarCsvFactMovimentacoes(){
   const header = ['CargaId','Placa','Timestamp','StatusAnterior','StatusNovo','Operador','Setor','Cliente','Motorista','TipoVeiculo','QtdEntregas'];
   const linhas = DB.movimentacoes
@@ -1105,7 +1131,7 @@ function gerarCsvFactMovimentacoes(){
     .sort((a,b)=>new Date(a.timestamp)-new Date(b.timestamp))
     .map(m=>[m.cargaId, m.placa, m.timestamp, m.statusAnterior||'', m.statusNovo, m.operador, m.setor,
       m.cliente||'', m.motorista||'', m.tipoVeiculo||'', m.qtdEntregas ?? '']);
-  return toCsv(header, linhas);
+  return toCsv(header, linhas, CSV_COLUNAS_TEXTO);
 }
 function gerarCsvDimCarga(){
   const header = ['Id','NumeroCarga','Placa','Transportadora','TipoVeiculo','Motorista','Cliente','Destino','Produto',
@@ -1117,22 +1143,22 @@ function gerarCsvDimCarga(){
     c.sequencia ?? '', c.praOnde || '', compartilhadaDaCarga(c), c.qtdGanchos ?? 0, c.qtdEntregas ?? 1,
     c.status, c.criadoEm, c.atualizadoEm
   ]);
-  return toCsv(header, linhas);
+  return toCsv(header, linhas, CSV_COLUNAS_TEXTO);
 }
 function gerarCsvDimTransportadora(){
   const header = ['Id','Nome'];
   const linhas = listarTransportadoras().map(t=>[t.id, t.nome]);
-  return toCsv(header, linhas);
+  return toCsv(header, linhas, CSV_COLUNAS_TEXTO);
 }
 function gerarCsvDimFrota(){
   const header = ['Placa','Transportadora','TipoVeiculo','CapacidadeKg','UF','DataUltimaMovimentacao','PrecisaRevisao'];
   const linhas = DB.frota.map(f=>[f.placa, f.transportadora, f.tipoVeiculo, f.capacidadeKg ?? '', f.uf||'', f.dataUltimaMovimentacao||'', f.precisaRevisao ? 'Sim':'Não']);
-  return toCsv(header, linhas);
+  return toCsv(header, linhas, CSV_COLUNAS_TEXTO);
 }
 function gerarCsvDimStatus(){
   const header = ['Nome','OrdemNoFluxo','Cor'];
   const linhas = STATUS_ORDEM_EXPORT.map((s,i)=>[s, i, statusCarregamentoInfo(s).cor]);
-  return toCsv(header, linhas);
+  return toCsv(header, linhas, CSV_COLUNAS_TEXTO);
 }
 // Retorna os 5 arquivos prontos para download: [{nome, conteudo}, ...]
 function gerarArquivosCsvPowerBI(){

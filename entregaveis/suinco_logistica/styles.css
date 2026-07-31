@@ -647,3 +647,45 @@ input,select,textarea{border-radius:5px}
      fundos forem descartados: cada item ganha borda, que sempre imprime. */
   .legenda-status-item{ border:1.5px solid #111418 !important; }
 }
+
+/* ===== RELATÓRIO OPERACIONAL: CABER NA LARGURA DA FOLHA =====
+   Com 16 colunas, a tabela ultrapassava a largura do A4 deitado e o navegador
+   simplesmente cortava as últimas colunas na borda — a Qtd. Ganchos sumia da
+   folha impressa, apesar de estar correta na tela.
+
+   width:100% + table-layout:fixed obrigam a tabela a se ajustar à página em
+   vez de crescer conforme o conteúdo; a quebra de palavra evita que um nome
+   longo de transportadora volte a esticar a coluna. */
+@page{ size: A4 landscape; margin: 8mm; }
+
+@media print{
+  #print-operacional table{
+    width:100% !important;
+    table-layout:fixed !important;
+    font-size:7.6px !important;
+  }
+  #print-operacional th, #print-operacional td{
+    padding:4px 3px !important;
+    overflow-wrap:break-word; word-break:break-word; hyphens:auto;
+  }
+  /* O th da tabela nasce com white-space:nowrap (linha 201). Com a largura
+     agora fixa, isso fazia o título transbordar por cima da coluna vizinha —
+     "Status de Carregamento" cobria "Faturado". Aqui o cabeçalho quebra em
+     várias linhas, como já acontece na tabela de linha do tempo. */
+  #print-operacional th{
+    white-space:normal !important;
+    vertical-align:bottom; line-height:1.2; text-align:center;
+  }
+  /* Colunas de estado e as numéricas ficam estreitas e centralizadas; as de
+     texto livre (Destino, Rota, Transportadora) ficam com o espaço restante. */
+  #print-operacional th:nth-child(1),  #print-operacional td:nth-child(1),
+  #print-operacional th:nth-child(5),  #print-operacional td:nth-child(5){ width:2.6% }
+  #print-operacional th:nth-child(4),  #print-operacional td:nth-child(4){ width:5% }
+  #print-operacional th:nth-child(6),  #print-operacional td:nth-child(6){ width:4.6% }
+  #print-operacional th:nth-child(10), #print-operacional td:nth-child(10){ width:6% }
+  #print-operacional th:nth-child(12), #print-operacional td:nth-child(12){ width:6% }
+  #print-operacional th:nth-child(13), #print-operacional td:nth-child(13),
+  #print-operacional th:nth-child(14), #print-operacional td:nth-child(14),
+  #print-operacional th:nth-child(15), #print-operacional td:nth-child(15),
+  #print-operacional th:nth-child(16), #print-operacional td:nth-child(16){ width:5% }
+}
