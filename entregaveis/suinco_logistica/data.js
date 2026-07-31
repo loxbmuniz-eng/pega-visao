@@ -201,7 +201,8 @@ const SETORES = Object.keys(SETOR_PERMISSOES);
 
 /* ---------- estado em memória ---------- */
 let DB = {
-  frota: [],           // {placa, transportadora, tipoVeiculo}
+  frota: [],             // {placa, transportadora, tipoVeiculo, origem}
+  frotaSeedVersao: null,  // hash da base de frota já importada (ver carregarFrotaSeedSeVazia)
   transportadoras: [],  // {id, nome}
   cargas: [],            // ver criarCargaProgramada/registrarChegadaPortaria
   movimentacoes: [],      // log — nunca editado, só append
@@ -367,12 +368,14 @@ function upsertFrota(placa, transportadora, tipoVeiculo, extra){
   const uf = extra.uf ? String(extra.uf).toUpperCase().slice(0,2) : '';
   const dataUltimaMovimentacao = extra.dataUltimaMovimentacao || null;
   const precisaRevisao = !!extra.precisaRevisao;
+  const origem = extra.origem || 'manual';
   let f = indiceFrota().get(p);
   if(f){
     f.transportadora = transportadora; f.tipoVeiculo = tipoVeiculo;
     f.capacidadeKg = capacidadeKg; f.uf = uf; f.dataUltimaMovimentacao = dataUltimaMovimentacao; f.precisaRevisao = precisaRevisao;
+    f.origem = origem;
   } else {
-    const novo = { placa:p, transportadora, tipoVeiculo, capacidadeKg, uf, dataUltimaMovimentacao, precisaRevisao };
+    const novo = { placa:p, transportadora, tipoVeiculo, capacidadeKg, uf, dataUltimaMovimentacao, precisaRevisao, origem };
     DB.frota.push(novo);
     if(_frotaIndice) _frotaIndice.set(p, novo); // mantém o índice quente na importação em lote
   }
@@ -431,8 +434,8 @@ function parseCsvRfc4180(texto){
   return linhas.filter(l => l.length && l.some(c => c !== ''));
 }
 
-// Carrega a base real de Frota (frota_seed_2026.csv, 2.038 placas — ver
-// docs/NOTAS_BASE_FROTA.md) automaticamente na primeira execução do painel.
+// Carrega a base real de Frota (frota_seed_2026.csv — ver
+// docs/NOTAS_BASE_FROTA.md) na primeira execução E sempre que a base mudar.
 // Duas origens possíveis, nesta ordem:
 //   1. window.FROTA_SEED_CSV — o CSV embutido direto no HTML. É o que a
 //      versão de arquivo único (painel_suinco_completo.html) usa, porque
@@ -442,11 +445,24 @@ function parseCsvRfc4180(texto){
 //      SharePoint ou `python3 -m http.server`), com os arquivos separados.
 // Se as duas falharem, o painel segue vazio normalmente, caindo de volta no
 // cadastro/import em lote manual que já existia antes desta base chegar.
-// SÓ roda quando DB.frota ainda está vazio, pra nunca sobrescrever remoções/
-// edições feitas depois pelo Responsável pela Base de Frota — é seed
-// inicial, não sync.
+//
+// POR QUE ISTO É VERSIONADO (defeito corrigido em 31/07/2026):
+// antes, esta função só rodava com DB.frota vazio — "seed inicial, não sync".
+// O efeito prático foi grave: quando a base oficial substituiu a anterior, os
+// navegadores que já tinham a base velha NUNCA receberam a nova. Ficaram com
+// 1.289 placas fora de operação e 327 com a transportadora errada, sem
+// nenhum sinal na tela. O caso que revelou isso: a placa RMW1A91 aparecia
+// como "Bem Frios" (que é a operadora) em vez de "Coopertral".
+// Agora a versão da base é o hash do próprio CSV: trocar o arquivo muda o
+// hash e dispara a reimportação sozinho, sem depender de alguém lembrar de
+// incrementar um número.
+function hashSeed(texto){
+  let h = 5381;
+  for(let i=0;i<texto.length;i++){ h = ((h<<5)+h+texto.charCodeAt(i))|0; }
+  return 'v'+(h>>>0).toString(36)+'-'+texto.length;
+}
+
 async function carregarFrotaSeedSeVazia(){
-  if(DB.frota.length > 0) return { carregado:false, motivo:'Frota já tem dados' };
   try{
     let texto;
     if(typeof window !== 'undefined' && window.FROTA_SEED_CSV){
@@ -456,15 +472,46 @@ async function carregarFrotaSeedSeVazia(){
       if(!resp.ok) return { carregado:false, motivo:'HTTP '+resp.status };
       texto = await resp.text();
     }
+
+    const versao = hashSeed(texto);
+    if(DB.frotaSeedVersao === versao){
+      return { carregado:false, motivo:'Base de frota já está na versão atual' };
+    }
+    const primeiraCarga = !DB.frotaSeedVersao && DB.frota.length === 0;
+
     let linhas = parseCsvRfc4180(texto);
     if(linhas.length && linhas[0][0] === 'Placa') linhas = linhas.slice(1); // remove cabeçalho
+
+    // Placas cadastradas à mão pelo Responsável pela Base de Frota são
+    // preservadas; as que vieram de um seed anterior são substituídas pela
+    // base nova. Registros antigos, gravados antes de existir o campo
+    // `origem`, contam como seed — vieram todos da base anterior, que é
+    // justamente a que precisa sair.
+    const manuais = DB.frota.filter(f => f.origem && f.origem !== 'seed');
+    const antes = new Map(DB.frota.map(f => [normalizarPlaca(f.placa), f]));
+
+    DB.frota = manuais.slice();
+    invalidarIndiceFrota();
+
     linhas.forEach(l=>{
       const [placa, transportadora, tipoVeiculo, precisaRevisao] = l;
       if(!placa) return;
       upsertFrota(placa, transportadora||'', tipoVeiculo||'', {
-        precisaRevisao: /^sim$/i.test(precisaRevisao||'')
+        precisaRevisao: /^sim$/i.test(precisaRevisao||''),
+        origem: 'seed'
       });
     });
+
+    // Resumo do que mudou — a operação precisa saber que a base trocou
+    // debaixo dela, ainda mais quando uma placa muda de transportadora.
+    const depois = new Map(DB.frota.map(f => [normalizarPlaca(f.placa), f]));
+    let removidas = 0, alteradas = 0;
+    antes.forEach((f, placa)=>{
+      const nova = depois.get(placa);
+      if(!nova) removidas++;
+      else if((nova.transportadora||'') !== (f.transportadora||'')) alteradas++;
+    });
+    DB.frotaSeedVersao = versao;
     // Primeira carga da base: espelha dim_Veiculos no SharePoint. Vai pela
     // fila (local-first), então não trava a abertura do painel nem se perde
     // se a rede estiver fora — sobe quando a conexão voltar.
@@ -473,7 +520,9 @@ async function carregarFrotaSeedSeVazia(){
         SuincoStore.sincronizarVeiculo(f, DB.operador).catch(e=>console.warn('[Suinco] sync frota:', e));
       });
     }
-    return { carregado:true, total: linhas.length };
+    SuincoStore.save();
+    return { carregado:true, total: linhas.length, primeiraCarga, removidas, alteradas,
+             manuaisPreservadas: manuais.length };
   }catch(e){
     console.warn('Não foi possível carregar automaticamente a base real de Frota (frota_seed_2026.csv). Siga com cadastro manual ou import em lote em Cadastros → Frota.', e);
     return { carregado:false, motivo:String(e) };

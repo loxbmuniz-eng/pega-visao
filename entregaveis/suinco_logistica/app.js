@@ -177,12 +177,14 @@ function badgeHtml(status){
   const meta = STATUS_META[status] || {badge:''};
   return `<span class="badge ${meta.badge}">${esc(status)}</span>`;
 }
-function notify(msg, type){
+// `ms` opcional: avisos longos (ex: troca da base de frota) precisam de mais
+// tempo em tela do que a confirmação curta de uma ação.
+function notify(msg, type, ms){
   const el = document.createElement('div');
   el.className = 'notif-item' + (type ? ' ' + type : '');
   el.textContent = msg;
   document.getElementById('notif').appendChild(el);
-  setTimeout(()=>{ el.remove(); }, 5000);
+  setTimeout(()=>{ el.remove(); }, ms || 5000);
 }
 
 /* ---------- SOM DE CONFIRMAÇÃO ----------
@@ -1603,12 +1605,25 @@ function iniciarRelogio(){
 
 /* ---------- INIT ---------- */
 async function init(){
-  // Carrega a base real de Frota (2.038 placas) na primeira execução, antes
-  // de desenhar a tela — ver carregarFrotaSeedSeVazia em data.js. Nunca
-  // trava o painel se falhar (ex: aberto via file://): segue com Frota
-  // vazia, exigindo cadastro/import manual como já era antes desta base.
+  // Carrega a base real de Frota antes de desenhar a tela — ver
+  // carregarFrotaSeedSeVazia em data.js. Nunca trava o painel se falhar
+  // (ex: aberto via file://): segue com Frota vazia, exigindo cadastro/import
+  // manual como já era antes desta base.
   const seed = await carregarFrotaSeedSeVazia();
-  if(seed.carregado) notify(`Base de Frota carregada: ${seed.total} placa(s).`, 'success');
+  if(seed.carregado){
+    if(seed.primeiraCarga){
+      notify(`Base de Frota carregada: ${seed.total} placa(s).`, 'success');
+    } else {
+      // Atualização de base numa máquina que já tinha a anterior. Isso NÃO
+      // pode passar batido: se uma placa mudou de transportadora, quem
+      // programa carga precisa saber que o dado na tela mudou hoje.
+      const partes = [`Base de Frota atualizada: ${seed.total} placa(s)`];
+      if(seed.alteradas) partes.push(`${seed.alteradas} com transportadora corrigida`);
+      if(seed.removidas) partes.push(`${seed.removidas} fora de operação removida(s)`);
+      if(seed.manuaisPreservadas) partes.push(`${seed.manuaisPreservadas} cadastrada(s) à mão preservada(s)`);
+      notify(partes.join(' · ') + '.', 'warn', 9000);
+    }
+  }
   iniciarTema();            // antes de desenhar: evita piscar no tema errado
   // Conecta ao SharePoint se o TI já tiver configurado; caso contrário fica
   // em modo local e o rodapé diz isso. Nunca bloqueia a abertura do painel.
