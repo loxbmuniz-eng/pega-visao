@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Painel Logístico — Suinco</title>
+<link rel="icon" href="assets/logo_suinco.png">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- ===================== HEADER ===================== -->
+<div id="header">
+  <div id="logo-chip"><img src="assets/logo_suinco.png" alt="Suinco"></div>
+  <div id="header-title">
+    <strong>PAINEL LOGÍSTICO</strong>
+    <span>Programação · Portaria · Expedição · Faturamento</span>
+  </div>
+  <div id="header-mid">
+    <div id="clock-wrap">
+      <div id="clock">--:--</div>
+      <div id="date-display">—</div>
+    </div>
+    <span class="badge-setor" id="operator-name">—</span>
+  </div>
+  <div id="header-actions">
+    <button class="btn btn-sec btn-sm" onclick="trocarUsuario()">Trocar usuário</button>
+  </div>
+</div>
+
+<!-- ===================== NAV ===================== -->
+<div id="nav">
+  <div class="nav-tab active" data-tab="torre" onclick="abrirTab('torre')">🗼 Torre de Controle</div>
+  <div class="nav-tab" data-tab="programacao" onclick="abrirTab('programacao')">📋 Programação</div>
+  <div class="nav-tab" data-tab="portaria" onclick="abrirTab('portaria')">🚧 Portaria</div>
+  <div class="nav-tab" data-tab="expedicao" onclick="abrirTab('expedicao')">🚛 Expedição</div>
+  <div class="nav-tab" data-tab="faturamento" onclick="abrirTab('faturamento')">🧾 Faturamento</div>
+  <div class="nav-tab" data-tab="indicadores" onclick="abrirTab('indicadores')">📊 Indicadores</div>
+  <div class="nav-tab" data-tab="cadastros" onclick="abrirTab('cadastros')">🗂️ Cadastros</div>
+  <div class="nav-tab" data-tab="historico" onclick="abrirTab('historico')">🕓 Histórico</div>
+  <div class="nav-tab" data-tab="relatorios" onclick="abrirTab('relatorios')">📄 Relatórios</div>
+</div>
+
+<!-- ===================== MAIN ===================== -->
+<div id="main">
+
+  <!-- ===== TORRE DE CONTROLE ===== -->
+  <div class="tab-page active" id="tab-torre">
+    <div class="card">
+      <div class="card-title"><span class="icon">🗼</span> Torre de Controle — todas as cargas em aberto</div>
+      <div class="card-sub">Visão de leitura para todos os setores. Atualiza sempre que alguém registra uma movimentação.</div>
+      <div class="grid4" id="torre-stats" style="margin-bottom:16px"></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>Seq.</th><th>Nº Carga</th><th>Placa</th><th>Transportadora</th><th>Tipo Veículo</th>
+            <th>Cliente</th><th>Destino</th><th>Produto</th><th>Peso (kg)</th><th>Doca</th><th>Status</th><th>Atualizado em</th>
+          </tr></thead>
+          <tbody id="torre-tbody"></tbody>
+        </table>
+      </div>
+      <div class="empty-state" id="torre-empty" hidden>Nenhuma carga em aberto no momento.</div>
+    </div>
+  </div>
+
+  <!-- ===== PROGRAMAÇÃO ===== -->
+  <div class="tab-page" id="tab-programacao">
+    <div class="card">
+      <div class="card-title"><span class="icon">📋</span> Nova Carga Programada</div>
+      <div class="card-sub">Digite a placa — Transportadora e Tipo de Veículo são preenchidos automaticamente se a placa estiver cadastrada em Cadastros → Frota.</div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Placa</label>
+          <input type="text" id="prog-placa" placeholder="ABC1D23" oninput="atualizarPreviewFrotaPrograma()">
+        </div>
+        <div class="form-group">
+          <label>Transportadora</label>
+          <input type="text" id="prog-transportadora" list="lista-transportadoras" placeholder="Preenchido automaticamente…">
+        </div>
+        <div class="form-group">
+          <label>Tipo de Veículo</label>
+          <input type="text" id="prog-tipoveiculo" placeholder="Preenchido automaticamente…">
+        </div>
+      </div>
+      <div class="form-group" id="prog-frota-hint" style="margin-bottom:10px"></div>
+      <div class="form-row">
+        <div class="form-group"><label>Número de Carga</label><input type="text" id="prog-numero-carga" placeholder="Ex: 10245"></div>
+        <div class="form-group"><label>Cliente</label><input type="text" id="prog-cliente"></div>
+        <div class="form-group"><label>Destino</label><input type="text" id="prog-destino" placeholder="Cidade/UF"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Produto</label><input type="text" id="prog-produto"></div>
+        <div class="form-group"><label>Peso (kg)</label><input type="number" id="prog-peso" min="0"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Doca</label><input type="text" id="prog-doca" list="lista-docas"></div>
+        <div class="form-group">
+          <label>Sequência <span class="hint">(prioridade de montagem do dia)</span></label>
+          <input type="number" id="prog-sequencia" min="1">
+        </div>
+      </div>
+      <div class="form-group" style="margin-bottom:10px"><label>Observações</label><textarea id="prog-obs"></textarea></div>
+      <div class="flex-end"><button class="btn btn-primary" onclick="criarCargaProgramadaUI()">➕ Criar Carga (Programado)</button></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><span class="icon">⏳</span> Aguardando Carga <span id="prog-aguardando-count" class="pill-count" hidden>0</span></div>
+      <div class="card-sub">Veículos que a Portaria já registrou no pátio sem programação prévia. Complete os dados para liberar o fluxo — a carga vai direto para "Veículo em Pátio" (o caminhão já está lá).</div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Placa</th><th>Transportadora</th><th>Tipo Veículo</th><th>Chegou em</th><th class="no-print">Ação</th></tr></thead>
+          <tbody id="prog-aguardando-tbody"></tbody>
+        </table>
+      </div>
+      <div class="empty-state" id="prog-aguardando-empty" hidden>Nenhum veículo aguardando dados de carga.</div>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><span class="icon">🔢</span> Fila de Programados</div>
+      <div class="gap8" style="margin-bottom:12px">
+        <button class="btn btn-sec btn-sm" onclick="reordenarPorSequenciaUI()">↕️ Reordenar por Sequência</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Seq.</th><th>Nº Carga</th><th>Placa</th><th>Transportadora</th><th>Cliente</th><th>Destino</th><th>Doca</th><th class="no-print">Ação</th></tr></thead>
+          <tbody id="prog-fila-tbody"></tbody>
+        </table>
+      </div>
+      <div class="empty-state" id="prog-fila-empty" hidden>Nenhuma carga programada aguardando chegada.</div>
+    </div>
+  </div>
+
+  <!-- ===== PORTARIA ===== -->
+  <div class="tab-page" id="tab-portaria">
+    <div class="card">
+      <div class="card-title"><span class="icon">🚧</span> Registrar Movimento de Placa</div>
+      <div class="card-sub">Chegada e saída se aplicam a <strong>todas</strong> as cargas em aberto dessa placa ao mesmo tempo — é o mesmo caminhão, uma única vez. Se a placa não tiver programação, a chegada cria automaticamente uma entrada "Aguardando Carga".</div>
+      <div class="quick-box">
+        <div class="form-group"><label>Placa</label><input type="text" id="portaria-placa" placeholder="ABC1D23"></div>
+        <button class="btn btn-success" onclick="acaoChegadaUI()">🚚 Registrar Chegada</button>
+        <button class="btn btn-warn" onclick="acaoSaidaUI()">🏁 Registrar Saída</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><span class="icon">🅿️</span> Veículos no Pátio Agora</div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Placa</th><th>Transportadora</th><th>Cargas em aberto</th><th>Status das cargas</th><th>No pátio desde</th></tr></thead>
+          <tbody id="portaria-patio-tbody"></tbody>
+        </table>
+      </div>
+      <div class="empty-state" id="portaria-patio-empty" hidden>Nenhum veículo no pátio.</div>
+    </div>
+  </div>
+
+  <!-- ===== EXPEDIÇÃO ===== -->
+  <div class="tab-page" id="tab-expedicao">
+    <div class="card">
+      <div class="card-title"><span class="icon">🚛</span> Ação Rápida por Placa</div>
+      <div class="card-sub">Se a placa tiver mais de uma carga elegível para a mesma ação, o painel pergunta qual carga está sendo processada.</div>
+      <div class="quick-box">
+        <div class="form-group"><label>Placa</label><input type="text" id="exp-placa" placeholder="ABC1D23"></div>
+        <button class="btn btn-primary btn-sm" onclick="acaoRapidaPlaca('exp-placa','Veículo em Pátio','Liberado para Embarque','Expedição')">Liberar p/ Embarque</button>
+        <button class="btn btn-primary btn-sm" onclick="acaoRapidaPlaca('exp-placa','Liberado para Embarque','Embarque Iniciado','Expedição')">Iniciar Embarque</button>
+        <button class="btn btn-success btn-sm" onclick="acaoRapidaPlaca('exp-placa','Embarque Iniciado','Embarque Finalizado','Expedição')">Finalizar Embarque</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="icon">📦</span> Cargas em Andamento na Expedição</div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Seq.</th><th>Nº Carga</th><th>Placa</th><th>Transportadora</th><th>Destino</th><th>Produto</th><th>Status</th><th class="no-print">Ação</th></tr></thead>
+          <tbody id="exp-tbody"></tbody>
+        </table>
+      </div>
+      <div class="empty-state" id="exp-empty" hidden>Nenhuma carga em Veículo em Pátio, Liberado para Embarque ou Embarque Iniciado.</div>
+    </div>
+  </div>
+
+  <!-- ===== FATURAMENTO ===== -->
+  <div class="tab-page" id="tab-faturamento">
+    <div class="card">
+      <div class="card-title"><span class="icon">🧾</span> Ação Rápida por Placa</div>
+      <div class="quick-box">
+        <div class="form-group"><label>Placa</label><input type="text" id="fat-placa" placeholder="ABC1D23"></div>
+        <button class="btn btn-primary btn-sm" onclick="acaoRapidaPlaca('fat-placa','Embarque Finalizado','Faturado','Faturamento')">Faturar</button>
+        <button class="btn btn-success btn-sm" onclick="acaoRapidaPlaca('fat-placa','Faturado','Liberado para Saída','Faturamento')">Liberar p/ Saída</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="icon">📑</span> Cargas Aguardando Faturamento</div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Nº Carga</th><th>Placa</th><th>Transportadora</th><th>Destino</th><th>Produto</th><th>Peso (kg)</th><th>Status</th><th class="no-print">Ação</th></tr></thead>
+          <tbody id="fat-tbody"></tbody>
+        </table>
+      </div>
+      <div class="empty-state" id="fat-empty" hidden>Nenhuma carga em Embarque Finalizado ou Faturado.</div>
+    </div>
+  </div>
+
+  <!-- ===== INDICADORES ===== -->
+  <div class="tab-page" id="tab-indicadores">
+    <div class="card">
+      <div class="card-title"><span class="icon">📊</span> Tempos Médios (cargas concluídas — Seguiu Viagem)</div>
+      <div class="grid4" id="ind-stats"></div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="icon">⚠️</span> Sobre o OTIF</div>
+      <div class="card-sub" style="margin-bottom:0">
+        O OTIF (entregue no prazo) ainda não é calculado aqui de propósito: ele depende de uma data/hora prometida de referência
+        (ex: horário programado de carregamento, prazo combinado com o cliente, SLA por transportadora) que ainda não foi
+        confirmada como campo do modelo de dados. Assim que definirmos qual é essa referência, este indicador entra.
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="icon">🏆</span> Ranking de Transportadoras</div>
+      <div class="card-sub">Ordenado por lead time médio (menor primeiro). Considera só cargas já em "Seguiu Viagem".</div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Pos.</th><th>Transportadora</th><th>Cargas Concluídas</th><th>Lead Time Médio</th><th>Tempo Médio em Pátio</th></tr></thead>
+          <tbody id="ind-ranking-tbody"></tbody>
+        </table>
+      </div>
+      <div class="empty-state" id="ind-ranking-empty" hidden>Ainda não há cargas concluídas para gerar ranking.</div>
+    </div>
+  </div>
+
+  <!-- ===== CADASTROS ===== -->
+  <div class="tab-page" id="tab-cadastros">
+    <div class="card">
+      <div class="card-title"><span class="icon">🚚</span> Frota (Placa → Transportadora → Tipo de Veículo)</div>
+      <div class="form-row">
+        <div class="form-group"><label>Placa</label><input type="text" id="frota-placa"></div>
+        <div class="form-group"><label>Transportadora</label><input type="text" id="frota-transportadora" list="lista-transportadoras"></div>
+        <div class="form-group"><label>Tipo de Veículo</label><input type="text" id="frota-tipoveiculo" placeholder="Ex: Truck, Carreta, Toco…"></div>
+      </div>
+      <div class="flex-end" style="margin-top:0"><button class="btn btn-primary btn-sm" onclick="addFrotaUI()">➕ Cadastrar / Atualizar Placa</button></div>
+      <div class="sep"></div>
+      <div class="card-sub"><strong>Importação em lote</strong> — cole linhas do Excel no formato <code>Placa;Transportadora;TipoVeiculo</code> (aceita TAB ou <code>;</code> como separador — copiar e colar direto da planilha funciona).</div>
+      <textarea id="frota-lote" placeholder="ABC1D23;TransLog;Truck&#10;XYZ9K88;RápidoSul;Carreta"></textarea>
+      <div class="flex-end"><button class="btn btn-sec btn-sm" onclick="importarFrotaLoteUI()">📥 Importar Lote</button></div>
+      <div class="sep"></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Placa</th><th>Transportadora</th><th>Tipo de Veículo</th><th class="no-print">Ação</th></tr></thead>
+          <tbody id="frota-tbody"></tbody>
+        </table>
+      </div>
+      <div class="empty-state" id="frota-empty" hidden>Nenhuma placa cadastrada ainda.</div>
+    </div>
+
+    <div class="grid2">
+      <div class="card">
+        <div class="card-title"><span class="icon">🏢</span> Transportadoras</div>
+        <div class="form-row">
+          <div class="form-group"><label>Nome</label><input type="text" id="cad-transp-nome"></div>
+        </div>
+        <div class="flex-end" style="margin-top:0"><button class="btn btn-primary btn-sm" onclick="addTransportadoraUI()">➕ Adicionar</button></div>
+        <div class="sep"></div>
+        <div id="cad-transp-lista"></div>
+      </div>
+      <div class="card">
+        <div class="card-title"><span class="icon">🚪</span> Docas</div>
+        <div class="form-row">
+          <div class="form-group"><label>Nome / Número</label><input type="text" id="cad-doca-nome"></div>
+        </div>
+        <div class="flex-end" style="margin-top:0"><button class="btn btn-primary btn-sm" onclick="addDocaUI()">➕ Adicionar</button></div>
+        <div class="sep"></div>
+        <div id="cad-doca-lista"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== HISTÓRICO ===== -->
+  <div class="tab-page" id="tab-historico">
+    <div class="card">
+      <div class="card-title"><span class="icon">🕓</span> Histórico de Movimentações</div>
+      <div class="form-row">
+        <div class="form-group"><label>Filtrar por placa</label><input type="text" id="hist-filtro-placa" oninput="renderHistorico()"></div>
+        <div class="form-group">
+          <label>Filtrar por setor</label>
+          <select id="hist-filtro-setor" onchange="renderHistorico()">
+            <option value="">Todos</option>
+            <option>Logística</option><option>Portaria</option><option>Expedição</option><option>Faturamento</option>
+          </select>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Data/Hora</th><th>Placa</th><th>Status Anterior</th><th>Status Novo</th><th>Operador</th><th>Setor</th></tr></thead>
+          <tbody id="hist-tbody"></tbody>
+        </table>
+      </div>
+      <div class="empty-state" id="hist-empty" hidden>Nenhuma movimentação registrada ainda.</div>
+    </div>
+  </div>
+
+  <!-- ===== RELATÓRIOS ===== -->
+  <div class="tab-page" id="tab-relatorios">
+    <div class="card">
+      <div class="card-title"><span class="icon">📄</span> PDF Operacional</div>
+      <div class="card-sub">Detalhado: todas as cargas em aberto, placas, status e tempos por etapa.</div>
+      <button class="btn btn-primary" onclick="exportarPdfOperacional()">🖨️ Gerar PDF Operacional</button>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="icon">📄</span> PDF Executivo</div>
+      <div class="card-sub">Uma página, KPIs e visão de diretoria.</div>
+      <button class="btn btn-primary" onclick="exportarPdfExecutivo()">🖨️ Gerar PDF Executivo</button>
+    </div>
+  </div>
+
+</div>
+
+<datalist id="lista-transportadoras"></datalist>
+<datalist id="lista-docas"></datalist>
+
+<!-- ===================== MODAIS ===================== -->
+<div class="modal-overlay" id="modal-operador">
+  <div class="modal-box">
+    <h2>Identifique-se</h2>
+    <div class="form-group" style="margin-bottom:10px"><label>Nome</label><input type="text" id="login-nome" placeholder="Seu nome"></div>
+    <div class="form-group" style="margin-bottom:10px">
+      <label>Setor</label>
+      <select id="login-setor">
+        <option>Logística</option><option>Portaria</option><option>Expedição</option><option>Faturamento</option>
+      </select>
+    </div>
+    <div class="form-group" style="margin-bottom:10px">
+      <label>Turno</label>
+      <select id="login-turno">
+        <option>Manhã (06h–14h)</option><option>Tarde (14h–22h)</option><option>Noite (22h–06h)</option>
+      </select>
+    </div>
+    <div class="card-sub">Este login é um espaço reservado até o SSO da Microsoft 365 ser conectado — depois ele será automático.</div>
+    <div class="flex-end"><button class="btn btn-primary" onclick="confirmarOperador()">Entrar</button></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-picker">
+  <div class="modal-box">
+    <h2 id="picker-titulo">Selecionar carga</h2>
+    <div class="card-sub" id="picker-sub"></div>
+    <div id="picker-lista"></div>
+    <div class="flex-end"><button class="btn btn-sec" onclick="fecharModalPicker()">Cancelar</button></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-completar">
+  <div class="modal-box">
+    <h2>Completar dados da carga (Aguardando Carga)</h2>
+    <input type="hidden" id="completar-id">
+    <div class="card-sub" id="completar-placa-info"></div>
+    <div class="form-row">
+      <div class="form-group"><label>Número de Carga</label><input type="text" id="completar-numero-carga"></div>
+      <div class="form-group"><label>Cliente</label><input type="text" id="completar-cliente"></div>
+      <div class="form-group"><label>Destino</label><input type="text" id="completar-destino" placeholder="Cidade/UF"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Produto</label><input type="text" id="completar-produto"></div>
+      <div class="form-group"><label>Peso (kg)</label><input type="number" id="completar-peso" min="0"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Doca</label><input type="text" id="completar-doca" list="lista-docas"></div>
+      <div class="form-group"><label>Sequência</label><input type="number" id="completar-sequencia" min="1"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Transportadora</label><input type="text" id="completar-transportadora" list="lista-transportadoras"></div>
+      <div class="form-group"><label>Tipo de Veículo</label><input type="text" id="completar-tipoveiculo"></div>
+    </div>
+    <div class="form-group" style="margin-bottom:10px"><label>Observações</label><textarea id="completar-obs"></textarea></div>
+    <div class="flex-end">
+      <button class="btn btn-sec" onclick="fecharModalCompletar()">Cancelar</button>
+      <button class="btn btn-primary" onclick="salvarCompletarCarga()">Salvar — vai para "Veículo em Pátio"</button>
+    </div>
+  </div>
+</div>
+
+<div id="notif"></div>
+
+<!-- ===================== ÁREAS DE IMPRESSÃO (PDF) ===================== -->
+<div id="print-operacional" class="print-only"></div>
+<div id="print-executivo" class="print-only"></div>
+
+<script src="data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
