@@ -669,7 +669,7 @@ input,select,textarea{border-radius:5px}
         <table>
           <thead><tr>
             <th>Seq.</th><th>Nº Carga</th><th>Placa</th><th>Transportadora</th><th>Tipo Veículo</th><th>Motorista</th>
-            <th>Cliente</th><th>Destino</th><th>Peso (kg)</th><th>Doca</th>
+            <th>Cliente</th><th>Destino</th><th>Peso (kg)</th>
             <th>Pra onde?</th><th>Ganchos</th><th>Status</th><th>Atualizado em</th>
           </tr></thead>
           <tbody id="torre-tbody"></tbody>
@@ -710,7 +710,6 @@ input,select,textarea{border-radius:5px}
         <div class="form-group"><label>Peso (kg)</label><input type="number" id="prog-peso" min="0"></div>
       </div>
       <div class="form-row">
-        <div class="form-group"><label>Doca</label><input type="text" id="prog-doca" list="lista-docas"></div>
         <div class="form-group">
           <label>Sequência <span class="hint">(prioridade de montagem do dia)</span></label>
           <input type="number" id="prog-sequencia" min="1">
@@ -768,7 +767,7 @@ input,select,textarea{border-radius:5px}
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Seq.</th><th>Nº Carga</th><th>Placa</th><th>Transportadora</th><th>Cliente</th><th>Destino</th><th>Doca</th><th>Pra onde?</th><th>Ganchos</th><th class="no-print">Ação</th></tr></thead>
+          <thead><tr><th>Seq.</th><th>Nº Carga</th><th>Placa</th><th>Transportadora</th><th>Cliente</th><th>Destino</th><th>Pra onde?</th><th>Ganchos</th><th class="no-print">Ação</th></tr></thead>
           <tbody id="prog-fila-tbody"></tbody>
         </table>
       </div>
@@ -1017,15 +1016,6 @@ input,select,textarea{border-radius:5px}
         <div class="sep"></div>
         <div id="cad-transp-lista"></div>
       </div>
-      <div class="card">
-        <div class="card-title"><span class="icon">🚪</span> Docas</div>
-        <div class="form-row">
-          <div class="form-group"><label>Nome / Número</label><input type="text" id="cad-doca-nome"></div>
-        </div>
-        <div class="flex-end" style="margin-top:0"><button class="btn btn-primary btn-sm" onclick="addDocaUI()">➕ Adicionar</button></div>
-        <div class="sep"></div>
-        <div id="cad-doca-lista"></div>
-      </div>
     </div>
   </div>
 
@@ -1095,7 +1085,6 @@ input,select,textarea{border-radius:5px}
 </div>
 
 <datalist id="lista-transportadoras"></datalist>
-<datalist id="lista-docas"></datalist>
 
 <!-- ===================== MODAIS ===================== -->
 <div class="modal-overlay" id="modal-operador">
@@ -1143,7 +1132,6 @@ input,select,textarea{border-radius:5px}
       <div class="form-group"><label>Peso (kg)</label><input type="number" id="completar-peso" min="0"></div>
     </div>
     <div class="form-row">
-      <div class="form-group"><label>Doca</label><input type="text" id="completar-doca" list="lista-docas"></div>
       <div class="form-group"><label>Sequência</label><input type="number" id="completar-sequencia" min="1"></div>
     </div>
     <div class="form-row">
@@ -1708,7 +1696,7 @@ const TAB_FUNCAO = {
   expedicao:   { setor:'Expedição',    oque:'Controlar o carregamento do veículo, do início ao fim.',                                          move:'Aguardando Embarque → Embarque Iniciado → Embarque Finalizado.' },
   faturamento: { setor:'Faturamento',  oque:'Emitir a nota da carga já carregada, liberando o caminhão para sair.',                             move:'Embarque Finalizado → Faturado.' },
   indicadores: { setor:'Logística',    oque:'Analisar tempo médio por etapa, comparar períodos e ver o ranking de transportadoras.',            move:'Não altera nada — é somente leitura.' },
-  cadastros:   { setor:'Logística',    oque:'Manter a base de Frota (placa → transportadora → tipo), transportadoras e docas.',                 move:'Não altera cargas — alimenta a Programação.' },
+  cadastros:   { setor:'Logística',    oque:'Manter a base de Frota (placa → transportadora → tipo) e as transportadoras.',                 move:'Não altera cargas — alimenta a Programação.' },
   historico:   { setor:'Todos',        oque:'Consultar a trilha de auditoria: quem moveu qual carga, de qual status para qual, e quando.',      move:'Não altera nada — registro permanente.' },
   relatorios:  { setor:'Logística',    oque:'Gerar o PDF operacional (para o pátio) e o executivo (para a gestão).',                            move:'Não altera nada — exporta o que já existe.' }
 };
@@ -1719,7 +1707,6 @@ const SETORES = Object.keys(SETOR_PERMISSOES);
 let DB = {
   frota: [],           // {placa, transportadora, tipoVeiculo}
   transportadoras: [],  // {id, nome}
-  docas: [],            // {id, nome}
   cargas: [],            // ver criarCargaProgramada/registrarChegadaPortaria
   movimentacoes: [],      // log — nunca editado, só append
   operador: null,          // {nome, setor, turno} — placeholder até SSO
@@ -1995,7 +1982,11 @@ async function carregarFrotaSeedSeVazia(){
   }
 }
 
-/* ---------- TRANSPORTADORAS / DOCAS (cadastros simples) ---------- */
+/* ---------- TRANSPORTADORAS (cadastro simples) ----------
+   O cadastro de Docas foi removido junto com o campo Doca: ele existia
+   apenas para alimentar o datalist daquele campo. O campo `doca` continua
+   no modelo de dados e no export do Power BI para não invalidar registros
+   já gravados. */
 function listarTransportadoras(){ return DB.transportadoras.slice().sort((a,b)=>a.nome.localeCompare(b.nome)); }
 function addTransportadora(nome){
   if(!nome || !nome.trim()) throw new Error('Nome vazio');
@@ -2004,16 +1995,6 @@ function addTransportadora(nome){
 }
 function removerTransportadora(id){
   DB.transportadoras = DB.transportadoras.filter(t=>t.id!==id);
-  SuincoStore.save();
-}
-function listarDocas(){ return DB.docas.slice().sort((a,b)=>a.nome.localeCompare(b.nome)); }
-function addDoca(nome){
-  if(!nome || !nome.trim()) throw new Error('Nome vazio');
-  DB.docas.push({id:uid('doca'), nome:nome.trim()});
-  SuincoStore.save();
-}
-function removerDoca(id){
-  DB.docas = DB.docas.filter(d=>d.id!==id);
   SuincoStore.save();
 }
 
@@ -2939,7 +2920,7 @@ function renderTorre(){
     <tr>
       <td>${c.sequencia ?? '—'}</td><td>${esc(c.numeroCarga)||'—'}</td><td>${esc(c.placa)}</td><td>${esc(c.transportadora)||'—'}</td><td>${esc(c.tipoVeiculo)||'—'}</td>
       <td>${esc(c.motorista)||'—'}</td>
-      <td>${esc(c.cliente)||'—'}</td><td>${esc(c.destino)||'—'}</td><td>${c.peso||0}</td><td>${esc(c.doca)||'—'}</td>
+      <td>${esc(c.cliente)||'—'}</td><td>${esc(c.destino)||'—'}</td><td>${c.peso||0}</td>
       <td>${c.praOnde ? `<span class="chip-praonde">${esc(PRA_ONDE_LABEL[c.praOnde]||c.praOnde)}</span>` : '<span class="text-dim">—</span>'}</td>
       <td>${c.qtdGanchos ? c.qtdGanchos : '<span class="text-dim">Liso</span>'}</td>
       <td>${badgeHtml(c.status)}</td><td>${fmtDataHora(c.atualizadoEm)}</td>
@@ -2987,7 +2968,6 @@ function criarCargaProgramadaUI(){
       cliente: document.getElementById('prog-cliente').value,
       destino: document.getElementById('prog-destino').value,
       peso: document.getElementById('prog-peso').value,
-      doca: document.getElementById('prog-doca').value,
       sequencia: document.getElementById('prog-sequencia').value,
       observacoes: document.getElementById('prog-obs').value,
       praOnde: document.getElementById('prog-praonde').value,
@@ -2996,7 +2976,7 @@ function criarCargaProgramadaUI(){
       operador: nomeOperadorAtual()
     });
     notify(`Carga criada para a placa ${normalizarPlaca(placa)} — status Aguardando Veículo.`, 'success');
-    ['prog-placa','prog-transportadora','prog-tipoveiculo','prog-motorista','prog-numero-carga','prog-cliente','prog-destino','prog-peso','prog-doca','prog-sequencia','prog-obs']
+    ['prog-placa','prog-transportadora','prog-tipoveiculo','prog-motorista','prog-numero-carga','prog-cliente','prog-destino','prog-peso','prog-sequencia','prog-obs']
       .forEach(id=>document.getElementById(id).value='');
     document.getElementById('prog-praonde').value = '';
     document.getElementById('prog-ganchos').value = '0';
@@ -3013,7 +2993,7 @@ function renderProgFila(){
       <td><input type="number" class="seq-input" value="${c.sequencia ?? ''}" onchange="atualizarSequenciaUI('${c.id}',this.value)" title="Sequência livre — digite o número que quiser, a qualquer momento."></td>
       <td>${esc(c.numeroCarga)||'—'}</td>
       <td>${esc(c.placa)}</td><td>${esc(c.transportadora)||'—'}</td>
-      <td>${esc(c.cliente)||'—'}</td><td>${esc(c.destino)||'—'}</td><td>${esc(c.doca)||'—'}</td>
+      <td>${esc(c.cliente)||'—'}</td><td>${esc(c.destino)||'—'}</td>
       <td>${praOndeSelectHtml(c)}</td>
       <td><input type="number" class="ganchos-input" min="0" step="1" value="${c.qtdGanchos ?? 0}" onchange="atualizarGanchosUI('${c.id}',this.value)" title="0 = Liso"></td>
       <td class="no-print"><button class="btn btn-danger btn-sm" onclick="excluirCargaUI('${c.id}')">Excluir</button></td>
@@ -3081,7 +3061,6 @@ function abrirCompletar(id){
   document.getElementById('completar-cliente').value = '';
   document.getElementById('completar-destino').value = '';
   document.getElementById('completar-peso').value = '';
-  document.getElementById('completar-doca').value = '';
   document.getElementById('completar-sequencia').value = '';
   document.getElementById('completar-transportadora').value = c.transportadora || '';
   document.getElementById('completar-tipoveiculo').value = c.tipoVeiculo || '';
@@ -3102,7 +3081,6 @@ function salvarCompletarCarga(){
       cliente: document.getElementById('completar-cliente').value,
       destino: document.getElementById('completar-destino').value,
       peso: document.getElementById('completar-peso').value,
-      doca: document.getElementById('completar-doca').value,
       sequencia: document.getElementById('completar-sequencia').value,
       transportadora: document.getElementById('completar-transportadora').value,
       tipoVeiculo: document.getElementById('completar-tipoveiculo').value,
@@ -3580,7 +3558,6 @@ window.addEventListener('resize', ()=>{ if(TAB_ATUAL==='indicadores' && abasDesb
 function renderCadastros(){
   renderFrotaTabela();
   renderTranspLista();
-  renderDocaLista();
 }
 // Filtro de texto (placa ou transportadora) + "só precisa revisão" — a base
 // real tem 2.038 placas (ver docs/NOTAS_BASE_FROTA.md), então navegar a
@@ -3661,25 +3638,8 @@ function addTransportadoraUI(){
   }catch(e){ notify(e.message, 'danger'); }
 }
 function removerTransportadoraUI(id){ removerTransportadora(id); renderAll(); }
-function renderDocaLista(){
-  const lista = listarDocas();
-  document.getElementById('cad-doca-lista').innerHTML = lista.length ? lista.map(d=>`
-    <div class="modal-list-item"><span>${esc(d.nome)}</span>
-      <button class="btn btn-danger btn-sm no-print" onclick="removerDocaUI('${d.id}')">Remover</button></div>
-  `).join('') : '<div class="empty-state">Nenhuma doca cadastrada.</div>';
-}
-function addDocaUI(){
-  try{
-    addDoca(document.getElementById('cad-doca-nome').value);
-    document.getElementById('cad-doca-nome').value = '';
-    notify('Doca adicionada.', 'success');
-    renderAll();
-  }catch(e){ notify(e.message, 'danger'); }
-}
-function removerDocaUI(id){ removerDoca(id); renderAll(); }
 function atualizarDatalists(){
   document.getElementById('lista-transportadoras').innerHTML = DB.transportadoras.map(t=>`<option value="${esc(t.nome)}">`).join('');
-  document.getElementById('lista-docas').innerHTML = DB.docas.map(d=>`<option value="${esc(d.nome)}">`).join('');
 }
 
 /* ---------- HISTÓRICO — LINHA DO TEMPO POR CARGA (item 7 do briefing) ----

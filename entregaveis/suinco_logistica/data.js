@@ -166,7 +166,7 @@ const TAB_FUNCAO = {
   expedicao:   { setor:'Expedição',    oque:'Controlar o carregamento do veículo, do início ao fim.',                                          move:'Aguardando Embarque → Embarque Iniciado → Embarque Finalizado.' },
   faturamento: { setor:'Faturamento',  oque:'Emitir a nota da carga já carregada, liberando o caminhão para sair.',                             move:'Embarque Finalizado → Faturado.' },
   indicadores: { setor:'Logística',    oque:'Analisar tempo médio por etapa, comparar períodos e ver o ranking de transportadoras.',            move:'Não altera nada — é somente leitura.' },
-  cadastros:   { setor:'Logística',    oque:'Manter a base de Frota (placa → transportadora → tipo), transportadoras e docas.',                 move:'Não altera cargas — alimenta a Programação.' },
+  cadastros:   { setor:'Logística',    oque:'Manter a base de Frota (placa → transportadora → tipo) e as transportadoras.',                 move:'Não altera cargas — alimenta a Programação.' },
   historico:   { setor:'Todos',        oque:'Consultar a trilha de auditoria: quem moveu qual carga, de qual status para qual, e quando.',      move:'Não altera nada — registro permanente.' },
   relatorios:  { setor:'Logística',    oque:'Gerar o PDF operacional (para o pátio) e o executivo (para a gestão).',                            move:'Não altera nada — exporta o que já existe.' }
 };
@@ -177,7 +177,6 @@ const SETORES = Object.keys(SETOR_PERMISSOES);
 let DB = {
   frota: [],           // {placa, transportadora, tipoVeiculo}
   transportadoras: [],  // {id, nome}
-  docas: [],            // {id, nome}
   cargas: [],            // ver criarCargaProgramada/registrarChegadaPortaria
   movimentacoes: [],      // log — nunca editado, só append
   operador: null,          // {nome, setor, turno} — placeholder até SSO
@@ -453,7 +452,11 @@ async function carregarFrotaSeedSeVazia(){
   }
 }
 
-/* ---------- TRANSPORTADORAS / DOCAS (cadastros simples) ---------- */
+/* ---------- TRANSPORTADORAS (cadastro simples) ----------
+   O cadastro de Docas foi removido junto com o campo Doca: ele existia
+   apenas para alimentar o datalist daquele campo. O campo `doca` continua
+   no modelo de dados e no export do Power BI para não invalidar registros
+   já gravados. */
 function listarTransportadoras(){ return DB.transportadoras.slice().sort((a,b)=>a.nome.localeCompare(b.nome)); }
 function addTransportadora(nome){
   if(!nome || !nome.trim()) throw new Error('Nome vazio');
@@ -462,16 +465,6 @@ function addTransportadora(nome){
 }
 function removerTransportadora(id){
   DB.transportadoras = DB.transportadoras.filter(t=>t.id!==id);
-  SuincoStore.save();
-}
-function listarDocas(){ return DB.docas.slice().sort((a,b)=>a.nome.localeCompare(b.nome)); }
-function addDoca(nome){
-  if(!nome || !nome.trim()) throw new Error('Nome vazio');
-  DB.docas.push({id:uid('doca'), nome:nome.trim()});
-  SuincoStore.save();
-}
-function removerDoca(id){
-  DB.docas = DB.docas.filter(d=>d.id!==id);
   SuincoStore.save();
 }
 

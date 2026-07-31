@@ -388,7 +388,7 @@ function renderTorre(){
     <tr>
       <td>${c.sequencia ?? '—'}</td><td>${esc(c.numeroCarga)||'—'}</td><td>${esc(c.placa)}</td><td>${esc(c.transportadora)||'—'}</td><td>${esc(c.tipoVeiculo)||'—'}</td>
       <td>${esc(c.motorista)||'—'}</td>
-      <td>${esc(c.cliente)||'—'}</td><td>${esc(c.destino)||'—'}</td><td>${c.peso||0}</td><td>${esc(c.doca)||'—'}</td>
+      <td>${esc(c.cliente)||'—'}</td><td>${esc(c.destino)||'—'}</td><td>${c.peso||0}</td>
       <td>${c.praOnde ? `<span class="chip-praonde">${esc(PRA_ONDE_LABEL[c.praOnde]||c.praOnde)}</span>` : '<span class="text-dim">—</span>'}</td>
       <td>${c.qtdGanchos ? c.qtdGanchos : '<span class="text-dim">Liso</span>'}</td>
       <td>${badgeHtml(c.status)}</td><td>${fmtDataHora(c.atualizadoEm)}</td>
@@ -436,7 +436,6 @@ function criarCargaProgramadaUI(){
       cliente: document.getElementById('prog-cliente').value,
       destino: document.getElementById('prog-destino').value,
       peso: document.getElementById('prog-peso').value,
-      doca: document.getElementById('prog-doca').value,
       sequencia: document.getElementById('prog-sequencia').value,
       observacoes: document.getElementById('prog-obs').value,
       praOnde: document.getElementById('prog-praonde').value,
@@ -445,7 +444,7 @@ function criarCargaProgramadaUI(){
       operador: nomeOperadorAtual()
     });
     notify(`Carga criada para a placa ${normalizarPlaca(placa)} — status Aguardando Veículo.`, 'success');
-    ['prog-placa','prog-transportadora','prog-tipoveiculo','prog-motorista','prog-numero-carga','prog-cliente','prog-destino','prog-peso','prog-doca','prog-sequencia','prog-obs']
+    ['prog-placa','prog-transportadora','prog-tipoveiculo','prog-motorista','prog-numero-carga','prog-cliente','prog-destino','prog-peso','prog-sequencia','prog-obs']
       .forEach(id=>document.getElementById(id).value='');
     document.getElementById('prog-praonde').value = '';
     document.getElementById('prog-ganchos').value = '0';
@@ -462,7 +461,7 @@ function renderProgFila(){
       <td><input type="number" class="seq-input" value="${c.sequencia ?? ''}" onchange="atualizarSequenciaUI('${c.id}',this.value)" title="Sequência livre — digite o número que quiser, a qualquer momento."></td>
       <td>${esc(c.numeroCarga)||'—'}</td>
       <td>${esc(c.placa)}</td><td>${esc(c.transportadora)||'—'}</td>
-      <td>${esc(c.cliente)||'—'}</td><td>${esc(c.destino)||'—'}</td><td>${esc(c.doca)||'—'}</td>
+      <td>${esc(c.cliente)||'—'}</td><td>${esc(c.destino)||'—'}</td>
       <td>${praOndeSelectHtml(c)}</td>
       <td><input type="number" class="ganchos-input" min="0" step="1" value="${c.qtdGanchos ?? 0}" onchange="atualizarGanchosUI('${c.id}',this.value)" title="0 = Liso"></td>
       <td class="no-print"><button class="btn btn-danger btn-sm" onclick="excluirCargaUI('${c.id}')">Excluir</button></td>
@@ -530,7 +529,6 @@ function abrirCompletar(id){
   document.getElementById('completar-cliente').value = '';
   document.getElementById('completar-destino').value = '';
   document.getElementById('completar-peso').value = '';
-  document.getElementById('completar-doca').value = '';
   document.getElementById('completar-sequencia').value = '';
   document.getElementById('completar-transportadora').value = c.transportadora || '';
   document.getElementById('completar-tipoveiculo').value = c.tipoVeiculo || '';
@@ -551,7 +549,6 @@ function salvarCompletarCarga(){
       cliente: document.getElementById('completar-cliente').value,
       destino: document.getElementById('completar-destino').value,
       peso: document.getElementById('completar-peso').value,
-      doca: document.getElementById('completar-doca').value,
       sequencia: document.getElementById('completar-sequencia').value,
       transportadora: document.getElementById('completar-transportadora').value,
       tipoVeiculo: document.getElementById('completar-tipoveiculo').value,
@@ -1029,7 +1026,6 @@ window.addEventListener('resize', ()=>{ if(TAB_ATUAL==='indicadores' && abasDesb
 function renderCadastros(){
   renderFrotaTabela();
   renderTranspLista();
-  renderDocaLista();
 }
 // Filtro de texto (placa ou transportadora) + "só precisa revisão" — a base
 // real tem 2.038 placas (ver docs/NOTAS_BASE_FROTA.md), então navegar a
@@ -1110,25 +1106,8 @@ function addTransportadoraUI(){
   }catch(e){ notify(e.message, 'danger'); }
 }
 function removerTransportadoraUI(id){ removerTransportadora(id); renderAll(); }
-function renderDocaLista(){
-  const lista = listarDocas();
-  document.getElementById('cad-doca-lista').innerHTML = lista.length ? lista.map(d=>`
-    <div class="modal-list-item"><span>${esc(d.nome)}</span>
-      <button class="btn btn-danger btn-sm no-print" onclick="removerDocaUI('${d.id}')">Remover</button></div>
-  `).join('') : '<div class="empty-state">Nenhuma doca cadastrada.</div>';
-}
-function addDocaUI(){
-  try{
-    addDoca(document.getElementById('cad-doca-nome').value);
-    document.getElementById('cad-doca-nome').value = '';
-    notify('Doca adicionada.', 'success');
-    renderAll();
-  }catch(e){ notify(e.message, 'danger'); }
-}
-function removerDocaUI(id){ removerDoca(id); renderAll(); }
 function atualizarDatalists(){
   document.getElementById('lista-transportadoras').innerHTML = DB.transportadoras.map(t=>`<option value="${esc(t.nome)}">`).join('');
-  document.getElementById('lista-docas').innerHTML = DB.docas.map(d=>`<option value="${esc(d.nome)}">`).join('');
 }
 
 /* ---------- HISTÓRICO — LINHA DO TEMPO POR CARGA (item 7 do briefing) ----
