@@ -605,6 +605,57 @@ select option{background:var(--campo-bg);color:var(--text)}
 .card{border-radius:8px}
 input,select,textarea{border-radius:5px}
 
+/* ===== IMPRESSÃO DOS RELATÓRIOS — FOLHA BRANCA, TEXTO ESCURO =====
+   DEFEITO CORRIGIDO EM 31/07/2026: o relatório saía "em preto e branco" e, com
+   os gráficos de fundo desligados (o padrão da caixa de impressão do Chrome),
+   saía COMPLETAMENTE EM BRANCO.
+
+   Causa: o relatório herdava as cores do tema do painel. No tema escuro o
+   texto é quase branco — quando o navegador descarta os fundos, sobra texto
+   branco em papel branco e a folha fica vazia.
+
+   Correção: a impressão passa a ter identidade própria — papel branco, texto
+   escuro —, independente do tema em que o painel está. As cores sólidas dos 6
+   status continuam nas células (estilo inline, que vence estas regras), então
+   quem imprime COM gráficos de fundo continua vendo a escala de cores do
+   gestor; quem imprime SEM ainda recebe um relatório legível, em vez de uma
+   folha vazia. */
+@media print{
+  html, body{ background:#ffffff !important; color:#111418 !important; }
+  #main{ background:#ffffff !important; }
+
+  /* Estrutura do relatório: fundo branco e texto escuro. As células de status
+     não entram aqui porque carregam cor inline, de especificidade maior. */
+  .print-page, .print-page .card,
+  .print-secao, .print-vazio, .print-header{
+    background:#ffffff !important; color:#111418 !important;
+  }
+  .print-page table{ background:#ffffff !important; }
+  .print-page th{
+    background:#f2f4f8 !important; color:#111418 !important;
+    border-bottom:2px solid #8a94a6 !important;
+  }
+  /* Só as células SEM cor própria. :not([style*="background"]) preserva as
+     coloridas, que precisam manter o texto claro sobre o preenchimento. */
+  .print-page td:not([style*="background"]){
+    color:#111418 !important; background:transparent !important;
+  }
+  .print-page tr{ border-bottom:1px solid #c9d4e8 !important; }
+
+  /* Títulos e textos auxiliares: o dourado da marca não tem contraste
+     suficiente sobre papel branco. */
+  .print-header h1{ color:#111418 !important; }
+  .print-header .meta,
+  .print-secao-sub, .print-page .text-dim{ color:#3d4a5c !important; }
+  .print-secao-tit{
+    color:#111418 !important; border-bottom-color:#8a94a6 !important;
+  }
+
+  /* A legenda de status é o que permite ler a escala de cores mesmo se os
+     fundos forem descartados: cada item ganha borda, que sempre imprime. */
+  .legenda-status-item{ border:1.5px solid #111418 !important; }
+}
+
 </style>
 <!-- MSAL.js v2 — SSO Microsoft 365. Carrega da CDN da Microsoft; se não vier
      (aberto via file://, sem rede, ou bloqueado por política), o adaptador
@@ -670,7 +721,7 @@ input,select,textarea{border-radius:5px}
           <thead><tr>
             <th>Seq.</th><th>Nº Carga</th><th>Placa</th><th>Transportadora</th><th>Tipo Veículo</th><th>Motorista</th>
             <th>Cliente</th><th>Destino</th><th>Peso (kg)</th>
-            <th>Pra onde?</th><th>Ganchos</th><th>Status</th><th>Atualizado em</th>
+            <th>Tipo de Operação</th><th>Ganchos</th><th>Status</th><th>Atualizado em</th>
           </tr></thead>
           <tbody id="torre-tbody"></tbody>
         </table>
@@ -717,7 +768,7 @@ input,select,textarea{border-radius:5px}
       </div>
       <div class="form-row">
         <div class="form-group">
-          <label>Pra onde? <span class="hint">(modal/operação)</span></label>
+          <label>Tipo de Operação <span class="hint">(como a carga é operada — o destino vai no campo Destino)</span></label>
           <select id="prog-praonde" onchange="atualizarPreviewCompartilhada('prog-praonde','prog-compartilhada-preview')">
             <option value="FROTA PROPRIA">FROTA PRÓPRIA</option>
             <option value="CROSS-DOCKING">CROSS-DOCKING</option>
@@ -767,7 +818,7 @@ input,select,textarea{border-radius:5px}
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Seq.</th><th>Nº Carga</th><th>Placa</th><th>Transportadora</th><th>Cliente</th><th>Destino</th><th>Pra onde?</th><th>Ganchos</th><th class="no-print">Ação</th></tr></thead>
+          <thead><tr><th>Seq.</th><th>Nº Carga</th><th>Placa</th><th>Transportadora</th><th>Cliente</th><th>Destino</th><th>Tipo de Operação</th><th>Ganchos</th><th class="no-print">Ação</th></tr></thead>
           <tbody id="prog-fila-tbody"></tbody>
         </table>
       </div>
@@ -1061,7 +1112,7 @@ input,select,textarea{border-radius:5px}
     <div class="funcao-aba" data-tab="relatorios"></div>
     <div class="card">
       <div class="card-title"><span class="icon">📄</span> PDF Operacional</div>
-      <div class="card-sub">Sequenciamento de carregamento do dia — mesmo layout da planilha usada hoje: Nº, Carga, Rota, Pra onde?, Faturado, Status de Carregamento (célula colorida), Placa, Empresa, Perfil, Peso(ton), Compartilhada?, Entregas, Ganchos.</div>
+      <div class="card-sub">Sequenciamento de carregamento do dia — mesmo layout da planilha usada hoje: Nº, Carga, Rota, Tipo de Operação, Faturado, Status de Carregamento (célula colorida), Placa, Transportadora, Tipo de Veículo, Peso(ton), Compartilhada?, Entregas, Ganchos.</div>
       <button class="btn btn-primary" onclick="exportarPdfOperacional()">🖨️ Gerar PDF Operacional</button>
     </div>
     <div class="card">
@@ -1141,7 +1192,7 @@ input,select,textarea{border-radius:5px}
     </div>
     <div class="form-row">
       <div class="form-group">
-        <label>Pra onde?</label>
+        <label>Tipo de Operação</label>
         <select id="completar-praonde" onchange="atualizarPreviewCompartilhada('completar-praonde','completar-compartilhada-preview')">
           <option value="FROTA PROPRIA">FROTA PRÓPRIA</option>
           <option value="CROSS-DOCKING">CROSS-DOCKING</option>
@@ -3032,7 +3083,7 @@ function atualizarPreviewFrotaPrograma(){
     hint.innerHTML = '';
   }
 }
-// Calcula e mostra "Compartilhada?" (Sim/Não) a partir de "Pra onde?" —
+// Calcula e mostra "Compartilhada?" (Sim/Não) a partir do Tipo de Operação —
 // campo derivado, NUNCA editável manualmente (evita desalinhar do real).
 function atualizarPreviewCompartilhada(selectId, previewId){
   const val = document.getElementById(selectId).value;
@@ -3808,7 +3859,7 @@ function renderTimelineCarga(id){
     ['Transportadora', c.transportadora || '—'],
     ['Tipo de Veículo', c.tipoVeiculo || '—'],
     ['Motorista', c.motorista || '—'],
-    ['Pra onde?', PRA_ONDE_LABEL[c.praOnde] || c.praOnde || '—'],
+    ['Tipo de Operação', PRA_ONDE_LABEL[c.praOnde] || c.praOnde || '—'],
     ['Compartilhada?', compartilhadaDaCarga(c)],
     ['Qtd. Ganchos', (c.qtdGanchos ? c.qtdGanchos : 'Liso')],
     ['Qtd. Entregas', c.qtdEntregas ?? 1]
@@ -3910,7 +3961,7 @@ function exportarPdfOperacional(){
       <td>${pesoTon}</td>
       <td>${compartilhadaDaCarga(c)}</td>
       <td>${c.qtdEntregas ?? 1}</td>
-      <td>${c.qtdGanchos ? c.qtdGanchos : 'Liso'}</td>
+      <td style="text-align:center;font-weight:800">${c.qtdGanchos ? c.qtdGanchos : '<span style="font-weight:600">Liso</span>'}</td>
     </tr>`;
   }).join('');
   const agora = new Date();
@@ -3925,8 +3976,8 @@ function exportarPdfOperacional(){
       ${legendaStatusHtml()}
       <table>
         <thead><tr>
-          <th>Nº</th><th>Carga</th><th>Rota</th><th>Pra onde?</th><th>Status</th><th>Faturado</th><th>Status de Carregamento</th>
-          <th>Placa</th><th>Empresa</th><th>Perfil</th><th>Peso(ton)</th><th>Compartilhada?</th><th>Qtd. Entregas</th><th>Qtd. Ganchos</th>
+          <th>Nº</th><th>Carga</th><th>Destino</th><th>Tipo de Operação</th><th>Status</th><th>Faturado</th><th>Status de Carregamento</th>
+          <th>Placa</th><th>Transportadora</th><th>Tipo de Veículo</th><th>Peso(ton)</th><th>Compartilhada?</th><th>Qtd. Entregas</th><th>Qtd. Ganchos</th>
         </tr></thead>
         <tbody>${linhas || '<tr><td colspan="14" class="text-center text-dim">Nenhuma carga programada.</td></tr>'}</tbody>
       </table>

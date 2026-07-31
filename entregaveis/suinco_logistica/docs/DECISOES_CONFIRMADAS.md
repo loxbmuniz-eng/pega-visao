@@ -481,3 +481,47 @@ com exclusividade, basta dizer e o rótulo é ajustado.
 Cor no relatório operacional: FROTA PRÓPRIA recebeu `#16697a` (teal), distinta
 das três já existentes — azul para CROSS-DOCKING, vinho para DEDICADA, dourado
 para RET FRIGO.
+
+## 17. Relatórios: impressão em papel branco (correção de 31/07/2026)
+
+**Sintoma relatado:** "os relatórios estão saindo em preto e branco".
+
+**Causa:** o relatório herdava as cores do tema do painel. No tema escuro o
+texto é quase branco — quando o navegador descarta os fundos coloridos (o
+padrão da caixa de impressão do Chrome, na opção *Gráficos de segundo plano*),
+sobra texto claro em papel branco e o relatório fica ilegível.
+
+**Correção:** a impressão passou a ter identidade própria — papel branco, texto
+escuro — independente do tema em que o painel esteja. As cores sólidas dos 6
+status continuam nas células (estilo inline, de especificidade maior que as
+regras de impressão), então:
+
+- imprimindo **com** gráficos de fundo: a escala de cores do gestor sai
+  completa, como antes;
+- imprimindo **sem**: o relatório sai legível em preto sobre branco, em vez de
+  praticamente vazio.
+
+A legenda de status ganhou borda sólida, que imprime nos dois casos.
+
+**Observação de verificação:** a primeira medição sugeriu que a página saía
+totalmente em branco sem os gráficos de fundo. Isso era artefato do teste
+automatizado: `imprimirContainer()` esconde o container no evento `afterprint`,
+que a própria geração de PDF dispara — a segunda impressão da bateria pegava o
+container já oculto. O teste foi corrigido para reabrir o relatório antes de
+cada impressão.
+
+## 18. Nomes de coluna corrigidos nos relatórios e formulários
+
+Três rótulos descreviam mal o que a coluna carrega. Nenhum valor gravado mudou
+— só o rótulo —, então nada invalida registro existente nem o modelo do Power BI.
+
+| Antes | Agora | Motivo |
+|---|---|---|
+| "Pra onde?" | **Tipo de Operação** | O campo guarda FROTA PRÓPRIA / CROSS-DOCKING / DEDICADA / RET FRIGO, que é *como* a carga é operada, não para onde vai. O destino já tem campo próprio. |
+| "Rota" (relatório) | **Destino** | Mostrava `c.destino`; o rótulo "Rota" sugeria outra coisa. |
+| "Empresa" | **Transportadora** | Ambiguidade que originou a confusão da placa RMW1A91 — "empresa" podia ser lida como operadora/cliente. O dado sempre foi `c.transportadora`. |
+| "Perfil" | **Tipo de Veículo** | Mostrava `c.tipoVeiculo`. |
+
+**Qtd. Ganchos** no relatório operacional passou a exibir o número em negrito e
+centralizado, com "Liso" quando é zero — antes o número se perdia visualmente
+na última coluna.

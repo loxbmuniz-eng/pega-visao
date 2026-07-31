@@ -596,3 +596,54 @@ select option{background:var(--campo-bg);color:var(--text)}
 .status-pill,.legenda-status-item{border-radius:5px}
 .card{border-radius:8px}
 input,select,textarea{border-radius:5px}
+
+/* ===== IMPRESSÃO DOS RELATÓRIOS — FOLHA BRANCA, TEXTO ESCURO =====
+   DEFEITO CORRIGIDO EM 31/07/2026: o relatório saía "em preto e branco" e, com
+   os gráficos de fundo desligados (o padrão da caixa de impressão do Chrome),
+   saía COMPLETAMENTE EM BRANCO.
+
+   Causa: o relatório herdava as cores do tema do painel. No tema escuro o
+   texto é quase branco — quando o navegador descarta os fundos, sobra texto
+   branco em papel branco e a folha fica vazia.
+
+   Correção: a impressão passa a ter identidade própria — papel branco, texto
+   escuro —, independente do tema em que o painel está. As cores sólidas dos 6
+   status continuam nas células (estilo inline, que vence estas regras), então
+   quem imprime COM gráficos de fundo continua vendo a escala de cores do
+   gestor; quem imprime SEM ainda recebe um relatório legível, em vez de uma
+   folha vazia. */
+@media print{
+  html, body{ background:#ffffff !important; color:#111418 !important; }
+  #main{ background:#ffffff !important; }
+
+  /* Estrutura do relatório: fundo branco e texto escuro. As células de status
+     não entram aqui porque carregam cor inline, de especificidade maior. */
+  .print-page, .print-page .card,
+  .print-secao, .print-vazio, .print-header{
+    background:#ffffff !important; color:#111418 !important;
+  }
+  .print-page table{ background:#ffffff !important; }
+  .print-page th{
+    background:#f2f4f8 !important; color:#111418 !important;
+    border-bottom:2px solid #8a94a6 !important;
+  }
+  /* Só as células SEM cor própria. :not([style*="background"]) preserva as
+     coloridas, que precisam manter o texto claro sobre o preenchimento. */
+  .print-page td:not([style*="background"]){
+    color:#111418 !important; background:transparent !important;
+  }
+  .print-page tr{ border-bottom:1px solid #c9d4e8 !important; }
+
+  /* Títulos e textos auxiliares: o dourado da marca não tem contraste
+     suficiente sobre papel branco. */
+  .print-header h1{ color:#111418 !important; }
+  .print-header .meta,
+  .print-secao-sub, .print-page .text-dim{ color:#3d4a5c !important; }
+  .print-secao-tit{
+    color:#111418 !important; border-bottom-color:#8a94a6 !important;
+  }
+
+  /* A legenda de status é o que permite ler a escala de cores mesmo se os
+     fundos forem descartados: cada item ganha borda, que sempre imprime. */
+  .legenda-status-item{ border:1.5px solid #111418 !important; }
+}

@@ -70,7 +70,7 @@
           <thead><tr>
             <th>Seq.</th><th>Nº Carga</th><th>Placa</th><th>Transportadora</th><th>Tipo Veículo</th><th>Motorista</th>
             <th>Cliente</th><th>Destino</th><th>Peso (kg)</th>
-            <th>Pra onde?</th><th>Ganchos</th><th>Status</th><th>Atualizado em</th>
+            <th>Tipo de Operação</th><th>Ganchos</th><th>Status</th><th>Atualizado em</th>
           </tr></thead>
           <tbody id="torre-tbody"></tbody>
         </table>
@@ -117,7 +117,7 @@
       </div>
       <div class="form-row">
         <div class="form-group">
-          <label>Pra onde? <span class="hint">(modal/operação)</span></label>
+          <label>Tipo de Operação <span class="hint">(como a carga é operada — o destino vai no campo Destino)</span></label>
           <select id="prog-praonde" onchange="atualizarPreviewCompartilhada('prog-praonde','prog-compartilhada-preview')">
             <option value="FROTA PROPRIA">FROTA PRÓPRIA</option>
             <option value="CROSS-DOCKING">CROSS-DOCKING</option>
@@ -167,7 +167,7 @@
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Seq.</th><th>Nº Carga</th><th>Placa</th><th>Transportadora</th><th>Cliente</th><th>Destino</th><th>Pra onde?</th><th>Ganchos</th><th class="no-print">Ação</th></tr></thead>
+          <thead><tr><th>Seq.</th><th>Nº Carga</th><th>Placa</th><th>Transportadora</th><th>Cliente</th><th>Destino</th><th>Tipo de Operação</th><th>Ganchos</th><th class="no-print">Ação</th></tr></thead>
           <tbody id="prog-fila-tbody"></tbody>
         </table>
       </div>
@@ -461,7 +461,7 @@
     <div class="funcao-aba" data-tab="relatorios"></div>
     <div class="card">
       <div class="card-title"><span class="icon">📄</span> PDF Operacional</div>
-      <div class="card-sub">Sequenciamento de carregamento do dia — mesmo layout da planilha usada hoje: Nº, Carga, Rota, Pra onde?, Faturado, Status de Carregamento (célula colorida), Placa, Empresa, Perfil, Peso(ton), Compartilhada?, Entregas, Ganchos.</div>
+      <div class="card-sub">Sequenciamento de carregamento do dia — mesmo layout da planilha usada hoje: Nº, Carga, Rota, Tipo de Operação, Faturado, Status de Carregamento (célula colorida), Placa, Transportadora, Tipo de Veículo, Peso(ton), Compartilhada?, Entregas, Ganchos.</div>
       <button class="btn btn-primary" onclick="exportarPdfOperacional()">🖨️ Gerar PDF Operacional</button>
     </div>
     <div class="card">
@@ -541,7 +541,7 @@
     </div>
     <div class="form-row">
       <div class="form-group">
-        <label>Pra onde?</label>
+        <label>Tipo de Operação</label>
         <select id="completar-praonde" onchange="atualizarPreviewCompartilhada('completar-praonde','completar-compartilhada-preview')">
           <option value="FROTA PROPRIA">FROTA PRÓPRIA</option>
           <option value="CROSS-DOCKING">CROSS-DOCKING</option>

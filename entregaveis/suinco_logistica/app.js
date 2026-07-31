@@ -423,7 +423,7 @@ function atualizarPreviewFrotaPrograma(){
     hint.innerHTML = '';
   }
 }
-// Calcula e mostra "Compartilhada?" (Sim/Não) a partir de "Pra onde?" —
+// Calcula e mostra "Compartilhada?" (Sim/Não) a partir do Tipo de Operação —
 // campo derivado, NUNCA editável manualmente (evita desalinhar do real).
 function atualizarPreviewCompartilhada(selectId, previewId){
   const val = document.getElementById(selectId).value;
@@ -1199,7 +1199,7 @@ function renderTimelineCarga(id){
     ['Transportadora', c.transportadora || '—'],
     ['Tipo de Veículo', c.tipoVeiculo || '—'],
     ['Motorista', c.motorista || '—'],
-    ['Pra onde?', PRA_ONDE_LABEL[c.praOnde] || c.praOnde || '—'],
+    ['Tipo de Operação', PRA_ONDE_LABEL[c.praOnde] || c.praOnde || '—'],
     ['Compartilhada?', compartilhadaDaCarga(c)],
     ['Qtd. Ganchos', (c.qtdGanchos ? c.qtdGanchos : 'Liso')],
     ['Qtd. Entregas', c.qtdEntregas ?? 1]
@@ -1301,7 +1301,7 @@ function exportarPdfOperacional(){
       <td>${pesoTon}</td>
       <td>${compartilhadaDaCarga(c)}</td>
       <td>${c.qtdEntregas ?? 1}</td>
-      <td>${c.qtdGanchos ? c.qtdGanchos : 'Liso'}</td>
+      <td style="text-align:center;font-weight:800">${c.qtdGanchos ? c.qtdGanchos : '<span style="font-weight:600">Liso</span>'}</td>
     </tr>`;
   }).join('');
   const agora = new Date();
@@ -1316,8 +1316,8 @@ function exportarPdfOperacional(){
       ${legendaStatusHtml()}
       <table>
         <thead><tr>
-          <th>Nº</th><th>Carga</th><th>Rota</th><th>Pra onde?</th><th>Status</th><th>Faturado</th><th>Status de Carregamento</th>
-          <th>Placa</th><th>Empresa</th><th>Perfil</th><th>Peso(ton)</th><th>Compartilhada?</th><th>Qtd. Entregas</th><th>Qtd. Ganchos</th>
+          <th>Nº</th><th>Carga</th><th>Destino</th><th>Tipo de Operação</th><th>Status</th><th>Faturado</th><th>Status de Carregamento</th>
+          <th>Placa</th><th>Transportadora</th><th>Tipo de Veículo</th><th>Peso(ton)</th><th>Compartilhada?</th><th>Qtd. Entregas</th><th>Qtd. Ganchos</th>
         </tr></thead>
         <tbody>${linhas || '<tr><td colspan="14" class="text-center text-dim">Nenhuma carga programada.</td></tr>'}</tbody>
       </table>
