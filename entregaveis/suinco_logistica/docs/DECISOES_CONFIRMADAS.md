@@ -617,3 +617,17 @@ ao Power BI. É exatamente o caso que a sintaxe `="..."` resolve — ela é
 específica do Excel. (Se algum dia o Power BI passar a ler o arquivo direto, sem
 Excel no meio, o certo seria voltar ao valor cru `3/4` e deixar o BI inferir
 texto.)
+
+## 23. Senha removida da aba Relatórios (31/07/2026)
+
+A pedido do gestor, **Relatórios** deixa de exigir senha e abre direto. Faz
+sentido operacional: é a aba que a operação consulta e compartilha ao longo do
+dia, e a barreira atrapalhava mais do que protegia.
+
+Seguem com senha de interface: **Programação** e **Indicadores**.
+
+Vale repetir o registro da seção 9.4 do relatório do TI: isto nunca foi
+controle de acesso. A senha está em texto puro no código, visível com Ctrl+U.
+Tirá-la de Relatórios não reduz segurança real, porque não havia segurança real
+a reduzir — controle de acesso de verdade só passa a existir com a permissão
+por Lista do SharePoint mais o SSO.
