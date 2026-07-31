@@ -108,13 +108,38 @@ function atualizarHeaderOperador(){
   const el = document.getElementById('operator-name');
   el.textContent = DB.operador ? `${DB.operador.nome} · ${DB.operador.setor} · ${DB.operador.turno}` : '—';
 }
+// TODAS as abas ficam visíveis e utilizáveis para todos os setores — ver o
+// comentário de SETOR_PERMISSOES em data.js sobre por que a ocultação foi
+// removida. Aqui só marcamos, discretamente, quais abas são de outro setor,
+// pra pessoa saber que está agindo fora do posto dela (o registro na trilha
+// de auditoria continua saindo com o setor real de quem operou).
 function aplicarPermissoesSetor(){
   if(!DB.operador) return;
-  const permitido = SETOR_PERMISSOES[DB.operador.setor] || [];
+  const doSetor = SETOR_PERMISSOES[DB.operador.setor] || [];
   document.querySelectorAll('.nav-tab').forEach(el=>{
-    el.hidden = !permitido.includes(el.dataset.tab);
+    el.hidden = false;
+    el.classList.toggle('outro-setor', !doSetor.includes(el.dataset.tab));
   });
-  if(!permitido.includes(TAB_ATUAL)) abrirTab(permitido[0] || 'torre');
+  atualizarAvisoSetorAba();
+}
+
+// Preenche, no topo de cada aba, o box que explica a função dela — e acrescenta
+// o aviso "você é do setor X" quando a aba pertence a outro setor.
+function atualizarAvisoSetorAba(){
+  document.querySelectorAll('.funcao-aba').forEach(box=>{
+    const tab = box.dataset.tab;
+    const info = TAB_FUNCAO[tab];
+    if(!info) return;
+    const doSetor = DB.operador ? (SETOR_PERMISSOES[DB.operador.setor] || []) : [];
+    const fora = DB.operador && !doSetor.includes(tab);
+    box.innerHTML =
+      `<div class="funcao-linha">` +
+        `<span class="funcao-chip">${info.setor}</span>` +
+        `<span class="funcao-oque"><strong>O que se faz aqui:</strong> ${info.oque}</span>` +
+      `</div>` +
+      `<div class="funcao-move"><strong>Efeito no status:</strong> ${info.move}</div>` +
+      (fora ? `<div class="funcao-alerta">Você entrou como <strong>${DB.operador.setor}</strong> — esta etapa é normalmente da <strong>${info.setor}</strong>. Você pode registrar assim mesmo (cobertura de turno, por exemplo); o histórico vai gravar seu nome e seu setor.</div>` : '');
+  });
 }
 
 /* ---------- TRAVA DE SENHA (Indicadores / Relatórios) -----------------
@@ -173,6 +198,7 @@ function irParaTab(tab){
   if(page) page.classList.add('active');
   if(navBtn) navBtn.classList.add('active');
   TAB_ATUAL = tab;
+  atualizarAvisoSetorAba();
   renderTabAtual();
 }
 function renderTabAtual(){
@@ -1164,6 +1190,7 @@ async function init(){
   const seed = await carregarFrotaSeedSeVazia();
   if(seed.carregado) notify(`Base de Frota carregada: ${seed.total} placa(s).`, 'success');
   atualizarDatalists();
+  atualizarAvisoSetorAba(); // preenche o box "função da aba" já na 1ª pintura
   if(DB.operador){
     atualizarHeaderOperador();
     aplicarPermissoesSetor();

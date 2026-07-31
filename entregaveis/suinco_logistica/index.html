@@ -46,6 +46,7 @@
 
   <!-- ===== TORRE DE CONTROLE ===== -->
   <div class="tab-page active" id="tab-torre">
+    <div class="funcao-aba" data-tab="torre"></div>
     <div class="card">
       <div class="card-title"><span class="icon">🗼</span> Torre de Controle — todas as cargas em aberto</div>
       <div class="card-sub">Visão de leitura para todos os setores. Atualiza sempre que alguém registra uma movimentação.</div>
@@ -66,6 +67,7 @@
 
   <!-- ===== PROGRAMAÇÃO ===== -->
   <div class="tab-page" id="tab-programacao">
+    <div class="funcao-aba" data-tab="programacao"></div>
     <div class="card">
       <div class="card-title"><span class="icon">📋</span> Nova Carga Programada</div>
       <div class="card-sub">Digite a placa — Transportadora e Tipo de Veículo são preenchidos automaticamente se a placa estiver cadastrada em Cadastros → Frota. <strong>A placa precisa estar cadastrada na Frota</strong> para criar a carga — se não estiver, cadastre em Cadastros → Frota primeiro.</div>
@@ -157,6 +159,7 @@
 
   <!-- ===== PORTARIA ===== -->
   <div class="tab-page" id="tab-portaria">
+    <div class="funcao-aba" data-tab="portaria"></div>
     <div class="card">
       <div class="card-title"><span class="icon">🚧</span> Registrar Movimento de Placa</div>
       <div class="card-sub">Só 2 botões: <strong>Chegou</strong> (Aguardando Veículo → Aguardando Embarque) e <strong>Saiu</strong> (Faturado → Seguiu Viagem, aplicado a todas as cargas em aberto dessa placa ao mesmo tempo — é o mesmo caminhão, uma única vez). Se a placa não tiver programação, "Chegou" cria automaticamente uma entrada "Aguardando Carga".</div>
@@ -182,6 +185,7 @@
 
   <!-- ===== EXPEDIÇÃO ===== -->
   <div class="tab-page" id="tab-expedicao">
+    <div class="funcao-aba" data-tab="expedicao"></div>
     <div class="card">
       <div class="card-title"><span class="icon">🚛</span> Ação Rápida por Placa</div>
       <div class="card-sub">Se a placa tiver mais de uma carga elegível para a mesma ação, o painel pergunta qual carga está sendo processada.</div>
@@ -205,10 +209,12 @@
 
   <!-- ===== FATURAMENTO ===== -->
   <div class="tab-page" id="tab-faturamento">
+    <div class="funcao-aba" data-tab="faturamento"></div>
     <div class="card">
       <div class="card-title"><span class="icon">🧾</span> Ação Rápida por Placa</div>
+      <div class="card-sub">Digite a placa e clique em <strong>Faturar</strong> (<strong>Embarque Finalizado → Faturado</strong>). Só aparece aqui a carga que a Expedição já finalizou. Depois de faturada, a Portaria consegue registrar a saída do caminhão. Se a placa tiver mais de uma carga elegível, o painel pergunta qual está sendo faturada.</div>
       <div class="quick-box">
-        <div class="form-group"><label>Placa</label><input type="text" id="fat-placa" placeholder="ABC1D23"></div>
+        <div class="form-group"><label>Placa</label><input type="text" id="fat-placa" placeholder="ABC1D23" autocomplete="off" onkeydown="if(event.key==='Enter')acaoRapidaPlaca('fat-placa','Embarque Finalizado','Faturado','Faturamento')"></div>
         <button class="btn btn-primary btn-sm" onclick="acaoRapidaPlaca('fat-placa','Embarque Finalizado','Faturado','Faturamento')">Faturar</button>
       </div>
     </div>
@@ -226,6 +232,7 @@
 
   <!-- ===== INDICADORES ===== -->
   <div class="tab-page" id="tab-indicadores">
+    <div class="funcao-aba" data-tab="indicadores"></div>
     <div class="card">
       <div class="card-title"><span class="icon">📊</span> Tempos Médios — Histórico Completo (cargas concluídas — Seguiu Viagem)</div>
       <div class="grid4" id="ind-stats"></div>
@@ -325,6 +332,7 @@
 
   <!-- ===== CADASTROS ===== -->
   <div class="tab-page" id="tab-cadastros">
+    <div class="funcao-aba" data-tab="cadastros"></div>
     <div class="card">
       <div class="card-title"><span class="icon">🚚</span> Frota (Placa → Transportadora → Tipo de Veículo)</div>
       <div class="card-sub">A Programação só cria carga pra placa cadastrada aqui — cadastre antes de programar.</div>
@@ -386,6 +394,7 @@
 
   <!-- ===== HISTÓRICO ===== -->
   <div class="tab-page" id="tab-historico">
+    <div class="funcao-aba" data-tab="historico"></div>
     <div class="card">
       <div class="card-title"><span class="icon">🕓</span> Linha do Tempo de uma Carga</div>
       <div class="card-sub">Digite a placa ou o número de carga — a jornada completa aparece como uma linha do tempo, fácil de ler rápido.</div>
@@ -422,6 +431,7 @@
 
   <!-- ===== RELATÓRIOS ===== -->
   <div class="tab-page" id="tab-relatorios">
+    <div class="funcao-aba" data-tab="relatorios"></div>
     <div class="card">
       <div class="card-title"><span class="icon">📄</span> PDF Operacional</div>
       <div class="card-sub">Sequenciamento de carregamento do dia — mesmo layout da planilha usada hoje: Nº, Carga, Rota, Pra onde?, Faturado, Status de Carregamento (célula colorida), Placa, Empresa, Perfil, Peso(ton), Compartilhada?, Entregas, Ganchos.</div>

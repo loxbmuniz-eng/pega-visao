@@ -191,9 +191,13 @@ select option{background:var(--navy-deep);color:var(--text)}
 }
 
 /* ===== NOTIFICATIONS ===== */
+/* Avisos no RODAPÉ à direita, não no topo. Antes ficavam logo abaixo da
+   navegação e cobriam por 5s o box "função da aba" e o cabeçalho da primeira
+   tabela — justamente o que a pessoa precisa ler ao abrir a aba. No rodapé
+   eles continuam visíveis sem tapar conteúdo. */
 #notif{
-  position:fixed;top:calc(var(--header-h) + var(--nav-h) + 12px);right:16px;
-  z-index:4000;display:flex;flex-direction:column;gap:8px;max-width:340px;
+  position:fixed;bottom:16px;right:16px;
+  z-index:4000;display:flex;flex-direction:column-reverse;gap:8px;max-width:340px;
 }
 .notif-item{
   background:var(--navy-light);border:1px solid var(--border);color:var(--text);
@@ -321,3 +325,39 @@ select option{background:var(--navy-deep);color:var(--text)}
   .print-header .meta{font-size:12px;color:var(--text-dim)}
 }
 .icon-lg{font-size:34px}
+
+/* ---------- Box "função da aba" ----------
+   Fica no topo de toda aba explicando o que se faz ali e qual o efeito no
+   status da carga. Existe porque o painel é usado por 4 setores diferentes,
+   e quem abre uma aba pela primeira vez precisa entender a função dela sem
+   depender de treinamento verbal. Preenchido por atualizarAvisoSetorAba(). */
+.funcao-aba{
+  background:linear-gradient(180deg,rgba(42,58,108,.55),rgba(30,42,82,.45));
+  border:1px solid var(--border-soft);
+  border-left:3px solid var(--gold);
+  border-radius:var(--radius);
+  padding:11px 14px;
+  margin-bottom:16px;
+}
+.funcao-linha{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.funcao-chip{
+  flex:none;
+  background:var(--gold);color:#2a2007;
+  font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;
+  padding:3px 9px;border-radius:999px;white-space:nowrap;
+}
+.funcao-oque{font-size:13.5px;color:var(--text);line-height:1.5}
+.funcao-move{font-size:12px;color:var(--text-dim);margin-top:6px;line-height:1.5}
+.funcao-oque strong,.funcao-move strong{color:var(--gold);font-weight:700}
+.funcao-alerta{
+  margin-top:9px;padding:8px 11px;
+  background:rgba(217,154,43,.14);
+  border:1px solid rgba(217,154,43,.4);
+  border-radius:6px;
+  font-size:12px;color:#f0d9a8;line-height:1.5;
+}
+.funcao-alerta strong{color:var(--gold)}
+/* Aba de outro setor: sinalização discreta na navegação, sem bloquear nada. */
+.nav-tab.outro-setor{opacity:.72}
+.nav-tab.outro-setor.active{opacity:1}
+@media print{.funcao-aba{display:none}}

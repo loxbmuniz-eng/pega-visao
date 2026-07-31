@@ -199,9 +199,13 @@ select option{background:var(--navy-deep);color:var(--text)}
 }
 
 /* ===== NOTIFICATIONS ===== */
+/* Avisos no RODAPÉ à direita, não no topo. Antes ficavam logo abaixo da
+   navegação e cobriam por 5s o box "função da aba" e o cabeçalho da primeira
+   tabela — justamente o que a pessoa precisa ler ao abrir a aba. No rodapé
+   eles continuam visíveis sem tapar conteúdo. */
 #notif{
-  position:fixed;top:calc(var(--header-h) + var(--nav-h) + 12px);right:16px;
-  z-index:4000;display:flex;flex-direction:column;gap:8px;max-width:340px;
+  position:fixed;bottom:16px;right:16px;
+  z-index:4000;display:flex;flex-direction:column-reverse;gap:8px;max-width:340px;
 }
 .notif-item{
   background:var(--navy-light);border:1px solid var(--border);color:var(--text);
@@ -330,6 +334,42 @@ select option{background:var(--navy-deep);color:var(--text)}
 }
 .icon-lg{font-size:34px}
 
+/* ---------- Box "função da aba" ----------
+   Fica no topo de toda aba explicando o que se faz ali e qual o efeito no
+   status da carga. Existe porque o painel é usado por 4 setores diferentes,
+   e quem abre uma aba pela primeira vez precisa entender a função dela sem
+   depender de treinamento verbal. Preenchido por atualizarAvisoSetorAba(). */
+.funcao-aba{
+  background:linear-gradient(180deg,rgba(42,58,108,.55),rgba(30,42,82,.45));
+  border:1px solid var(--border-soft);
+  border-left:3px solid var(--gold);
+  border-radius:var(--radius);
+  padding:11px 14px;
+  margin-bottom:16px;
+}
+.funcao-linha{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.funcao-chip{
+  flex:none;
+  background:var(--gold);color:#2a2007;
+  font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;
+  padding:3px 9px;border-radius:999px;white-space:nowrap;
+}
+.funcao-oque{font-size:13.5px;color:var(--text);line-height:1.5}
+.funcao-move{font-size:12px;color:var(--text-dim);margin-top:6px;line-height:1.5}
+.funcao-oque strong,.funcao-move strong{color:var(--gold);font-weight:700}
+.funcao-alerta{
+  margin-top:9px;padding:8px 11px;
+  background:rgba(217,154,43,.14);
+  border:1px solid rgba(217,154,43,.4);
+  border-radius:6px;
+  font-size:12px;color:#f0d9a8;line-height:1.5;
+}
+.funcao-alerta strong{color:var(--gold)}
+/* Aba de outro setor: sinalização discreta na navegação, sem bloquear nada. */
+.nav-tab.outro-setor{opacity:.72}
+.nav-tab.outro-setor.active{opacity:1}
+@media print{.funcao-aba{display:none}}
+
 </style>
 </head>
 <body>
@@ -371,6 +411,7 @@ select option{background:var(--navy-deep);color:var(--text)}
 
   <!-- ===== TORRE DE CONTROLE ===== -->
   <div class="tab-page active" id="tab-torre">
+    <div class="funcao-aba" data-tab="torre"></div>
     <div class="card">
       <div class="card-title"><span class="icon">🗼</span> Torre de Controle — todas as cargas em aberto</div>
       <div class="card-sub">Visão de leitura para todos os setores. Atualiza sempre que alguém registra uma movimentação.</div>
@@ -391,6 +432,7 @@ select option{background:var(--navy-deep);color:var(--text)}
 
   <!-- ===== PROGRAMAÇÃO ===== -->
   <div class="tab-page" id="tab-programacao">
+    <div class="funcao-aba" data-tab="programacao"></div>
     <div class="card">
       <div class="card-title"><span class="icon">📋</span> Nova Carga Programada</div>
       <div class="card-sub">Digite a placa — Transportadora e Tipo de Veículo são preenchidos automaticamente se a placa estiver cadastrada em Cadastros → Frota. <strong>A placa precisa estar cadastrada na Frota</strong> para criar a carga — se não estiver, cadastre em Cadastros → Frota primeiro.</div>
@@ -482,6 +524,7 @@ select option{background:var(--navy-deep);color:var(--text)}
 
   <!-- ===== PORTARIA ===== -->
   <div class="tab-page" id="tab-portaria">
+    <div class="funcao-aba" data-tab="portaria"></div>
     <div class="card">
       <div class="card-title"><span class="icon">🚧</span> Registrar Movimento de Placa</div>
       <div class="card-sub">Só 2 botões: <strong>Chegou</strong> (Aguardando Veículo → Aguardando Embarque) e <strong>Saiu</strong> (Faturado → Seguiu Viagem, aplicado a todas as cargas em aberto dessa placa ao mesmo tempo — é o mesmo caminhão, uma única vez). Se a placa não tiver programação, "Chegou" cria automaticamente uma entrada "Aguardando Carga".</div>
@@ -507,6 +550,7 @@ select option{background:var(--navy-deep);color:var(--text)}
 
   <!-- ===== EXPEDIÇÃO ===== -->
   <div class="tab-page" id="tab-expedicao">
+    <div class="funcao-aba" data-tab="expedicao"></div>
     <div class="card">
       <div class="card-title"><span class="icon">🚛</span> Ação Rápida por Placa</div>
       <div class="card-sub">Se a placa tiver mais de uma carga elegível para a mesma ação, o painel pergunta qual carga está sendo processada.</div>
@@ -530,10 +574,12 @@ select option{background:var(--navy-deep);color:var(--text)}
 
   <!-- ===== FATURAMENTO ===== -->
   <div class="tab-page" id="tab-faturamento">
+    <div class="funcao-aba" data-tab="faturamento"></div>
     <div class="card">
       <div class="card-title"><span class="icon">🧾</span> Ação Rápida por Placa</div>
+      <div class="card-sub">Digite a placa e clique em <strong>Faturar</strong> (<strong>Embarque Finalizado → Faturado</strong>). Só aparece aqui a carga que a Expedição já finalizou. Depois de faturada, a Portaria consegue registrar a saída do caminhão. Se a placa tiver mais de uma carga elegível, o painel pergunta qual está sendo faturada.</div>
       <div class="quick-box">
-        <div class="form-group"><label>Placa</label><input type="text" id="fat-placa" placeholder="ABC1D23"></div>
+        <div class="form-group"><label>Placa</label><input type="text" id="fat-placa" placeholder="ABC1D23" autocomplete="off" onkeydown="if(event.key==='Enter')acaoRapidaPlaca('fat-placa','Embarque Finalizado','Faturado','Faturamento')"></div>
         <button class="btn btn-primary btn-sm" onclick="acaoRapidaPlaca('fat-placa','Embarque Finalizado','Faturado','Faturamento')">Faturar</button>
       </div>
     </div>
@@ -551,6 +597,7 @@ select option{background:var(--navy-deep);color:var(--text)}
 
   <!-- ===== INDICADORES ===== -->
   <div class="tab-page" id="tab-indicadores">
+    <div class="funcao-aba" data-tab="indicadores"></div>
     <div class="card">
       <div class="card-title"><span class="icon">📊</span> Tempos Médios — Histórico Completo (cargas concluídas — Seguiu Viagem)</div>
       <div class="grid4" id="ind-stats"></div>
@@ -650,6 +697,7 @@ select option{background:var(--navy-deep);color:var(--text)}
 
   <!-- ===== CADASTROS ===== -->
   <div class="tab-page" id="tab-cadastros">
+    <div class="funcao-aba" data-tab="cadastros"></div>
     <div class="card">
       <div class="card-title"><span class="icon">🚚</span> Frota (Placa → Transportadora → Tipo de Veículo)</div>
       <div class="card-sub">A Programação só cria carga pra placa cadastrada aqui — cadastre antes de programar.</div>
@@ -711,6 +759,7 @@ select option{background:var(--navy-deep);color:var(--text)}
 
   <!-- ===== HISTÓRICO ===== -->
   <div class="tab-page" id="tab-historico">
+    <div class="funcao-aba" data-tab="historico"></div>
     <div class="card">
       <div class="card-title"><span class="icon">🕓</span> Linha do Tempo de uma Carga</div>
       <div class="card-sub">Digite a placa ou o número de carga — a jornada completa aparece como uma linha do tempo, fácil de ler rápido.</div>
@@ -747,6 +796,7 @@ select option{background:var(--navy-deep);color:var(--text)}
 
   <!-- ===== RELATÓRIOS ===== -->
   <div class="tab-page" id="tab-relatorios">
+    <div class="funcao-aba" data-tab="relatorios"></div>
     <div class="card">
       <div class="card-title"><span class="icon">📄</span> PDF Operacional</div>
       <div class="card-sub">Sequenciamento de carregamento do dia — mesmo layout da planilha usada hoje: Nº, Carga, Rota, Pra onde?, Faturado, Status de Carregamento (célula colorida), Placa, Empresa, Perfil, Peso(ton), Compartilhada?, Entregas, Ganchos.</div>
@@ -973,13 +1023,39 @@ function estaFaturado(carga){
 // fica no campo Número da Carga até a Logística completar os dados).
 const STATUS_ORDEM_EXPORT = STATUS_FLOW.slice();
 
-// Quais abas cada setor enxerga. 'Torre' (visão geral) e 'Historico' são
-// leitura liberada pra todos — é o que dá a visão de torre de controle.
+// Qual setor é o DONO de cada aba — quem normalmente executa aquela etapa.
+// ATENÇÃO: isto não esconde mais nada. Até a rodada anterior, as abas fora do
+// setor do operador ficavam ocultas (hidden), e o efeito prático era ruim:
+// quem entrava como Logística simplesmente não via Portaria nem Faturamento e
+// concluía que as telas não existiam. Além disso, na operação real a mesma
+// pessoa cobre mais de um posto (turno da noite, cobertura de férias), e
+// esconder a aba impedia o trabalho em vez de proteger o dado.
+// Hoje TODAS as abas ficam visíveis e utilizáveis para todos os setores; este
+// mapa passou a servir só para (a) rotular a aba com o setor dono e (b)
+// sinalizar discretamente quando alguém age fora do próprio setor. O que
+// realmente importa continua garantido: toda movimentação grava operador e
+// setor na trilha de auditoria (ver registrarMovimentacao).
+// Controle de acesso de verdade só existe com SharePoint + SSO — ver
+// RELATORIO_TI_HOSPEDAGEM.md.
 const SETOR_PERMISSOES = {
   'Logística':    ['torre','programacao','expedicao','indicadores','cadastros','historico','relatorios'],
   'Portaria':     ['torre','portaria','historico'],
   'Expedição':    ['torre','expedicao','historico'],
   'Faturamento':  ['torre','faturamento','historico']
+};
+
+// Função de cada aba, exibida no topo dela. Serve para quem abre o painel pela
+// primeira vez saber o que fazer ali sem depender de treinamento verbal.
+const TAB_FUNCAO = {
+  torre:       { setor:'Todos',        oque:'Acompanhar todas as cargas em aberto, de todos os setores, em uma tela só.',                     move:'Não altera nada — é somente leitura.' },
+  programacao: { setor:'Logística',    oque:'Cadastrar a carga do dia antes do caminhão chegar e definir a ordem de carregamento.',           move:'Cria a carga em Aguardando Veículo.' },
+  portaria:    { setor:'Portaria',     oque:'Registrar a entrada e a saída física do caminhão no pátio.',                                      move:'Chegou: Aguardando Veículo → Aguardando Embarque. Saiu: Faturado → Seguiu Viagem.' },
+  expedicao:   { setor:'Expedição',    oque:'Controlar o carregamento do veículo, do início ao fim.',                                          move:'Aguardando Embarque → Embarque Iniciado → Embarque Finalizado.' },
+  faturamento: { setor:'Faturamento',  oque:'Emitir a nota da carga já carregada, liberando o caminhão para sair.',                             move:'Embarque Finalizado → Faturado.' },
+  indicadores: { setor:'Logística',    oque:'Analisar tempo médio por etapa, comparar períodos e ver o ranking de transportadoras.',            move:'Não altera nada — é somente leitura.' },
+  cadastros:   { setor:'Logística',    oque:'Manter a base de Frota (placa → transportadora → tipo), transportadoras e docas.',                 move:'Não altera cargas — alimenta a Programação.' },
+  historico:   { setor:'Todos',        oque:'Consultar a trilha de auditoria: quem moveu qual carga, de qual status para qual, e quando.',      move:'Não altera nada — registro permanente.' },
+  relatorios:  { setor:'Logística',    oque:'Gerar o PDF operacional (para o pátio) e o executivo (para a gestão).',                            move:'Não altera nada — exporta o que já existe.' }
 };
 
 const SETORES = Object.keys(SETOR_PERMISSOES);
@@ -1752,13 +1828,38 @@ function atualizarHeaderOperador(){
   const el = document.getElementById('operator-name');
   el.textContent = DB.operador ? `${DB.operador.nome} · ${DB.operador.setor} · ${DB.operador.turno}` : '—';
 }
+// TODAS as abas ficam visíveis e utilizáveis para todos os setores — ver o
+// comentário de SETOR_PERMISSOES em data.js sobre por que a ocultação foi
+// removida. Aqui só marcamos, discretamente, quais abas são de outro setor,
+// pra pessoa saber que está agindo fora do posto dela (o registro na trilha
+// de auditoria continua saindo com o setor real de quem operou).
 function aplicarPermissoesSetor(){
   if(!DB.operador) return;
-  const permitido = SETOR_PERMISSOES[DB.operador.setor] || [];
+  const doSetor = SETOR_PERMISSOES[DB.operador.setor] || [];
   document.querySelectorAll('.nav-tab').forEach(el=>{
-    el.hidden = !permitido.includes(el.dataset.tab);
+    el.hidden = false;
+    el.classList.toggle('outro-setor', !doSetor.includes(el.dataset.tab));
   });
-  if(!permitido.includes(TAB_ATUAL)) abrirTab(permitido[0] || 'torre');
+  atualizarAvisoSetorAba();
+}
+
+// Preenche, no topo de cada aba, o box que explica a função dela — e acrescenta
+// o aviso "você é do setor X" quando a aba pertence a outro setor.
+function atualizarAvisoSetorAba(){
+  document.querySelectorAll('.funcao-aba').forEach(box=>{
+    const tab = box.dataset.tab;
+    const info = TAB_FUNCAO[tab];
+    if(!info) return;
+    const doSetor = DB.operador ? (SETOR_PERMISSOES[DB.operador.setor] || []) : [];
+    const fora = DB.operador && !doSetor.includes(tab);
+    box.innerHTML =
+      `<div class="funcao-linha">` +
+        `<span class="funcao-chip">${info.setor}</span>` +
+        `<span class="funcao-oque"><strong>O que se faz aqui:</strong> ${info.oque}</span>` +
+      `</div>` +
+      `<div class="funcao-move"><strong>Efeito no status:</strong> ${info.move}</div>` +
+      (fora ? `<div class="funcao-alerta">Você entrou como <strong>${DB.operador.setor}</strong> — esta etapa é normalmente da <strong>${info.setor}</strong>. Você pode registrar assim mesmo (cobertura de turno, por exemplo); o histórico vai gravar seu nome e seu setor.</div>` : '');
+  });
 }
 
 /* ---------- TRAVA DE SENHA (Indicadores / Relatórios) -----------------
@@ -1817,6 +1918,7 @@ function irParaTab(tab){
   if(page) page.classList.add('active');
   if(navBtn) navBtn.classList.add('active');
   TAB_ATUAL = tab;
+  atualizarAvisoSetorAba();
   renderTabAtual();
 }
 function renderTabAtual(){
@@ -2808,6 +2910,7 @@ async function init(){
   const seed = await carregarFrotaSeedSeVazia();
   if(seed.carregado) notify(`Base de Frota carregada: ${seed.total} placa(s).`, 'success');
   atualizarDatalists();
+  atualizarAvisoSetorAba(); // preenche o box "função da aba" já na 1ª pintura
   if(DB.operador){
     atualizarHeaderOperador();
     aplicarPermissoesSetor();

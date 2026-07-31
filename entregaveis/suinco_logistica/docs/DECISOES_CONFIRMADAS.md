@@ -175,3 +175,53 @@ import em lote que já existia. A tela Cadastros → Frota ganhou busca por
 Placa/Transportadora e filtro "Só Precisa Revisão" porque 2.038 linhas sem
 filtro não são navegáveis — exibe até 300 resultados por vez com contagem
 do total, sem limitar os dados em si (só a renderização).
+
+## 12. Todas as abas visíveis para todos os setores (revoga a ocultação por setor)
+
+**Problema relatado pelo usuário:** "está faltando a parte da Portaria e
+Faturamento, não consigo fazer o input da placa que chegou, saiu, nem aba do
+Faturamento". As telas existiam e funcionavam — o que faltava era poder
+**vê-las**.
+
+**Causa:** `aplicarPermissoesSetor()` (app.js) aplicava `hidden` em toda aba
+fora do setor do operador, conforme `SETOR_PERMISSOES` (data.js). Entrando
+como **Logística** — o setor padrão do formulário de login — as abas
+Portaria e Faturamento simplesmente não apareciam na navegação. Para quem
+abre o painel, o efeito prático não é "acesso restrito", é "a tela não
+existe".
+
+**Decisão:** todas as abas passam a ficar **visíveis e utilizáveis para todos
+os setores**. Três razões:
+
+1. Esconder induzia ao erro de leitura acima, inclusive em demonstração para
+   a gestão.
+2. Na operação real a mesma pessoa cobre mais de um posto (turno da noite,
+   cobertura de férias, feriado). Ocultar a aba impedia o trabalho em vez de
+   proteger o dado.
+3. A restrição nunca foi segurança de verdade — está registrado desde a
+   seção 7 que controle de acesso real só existe com SharePoint + SSO. Era
+   apenas conveniência de interface, e estava atrapalhando mais do que
+   ajudando.
+
+**O que substituiu a ocultação:** `SETOR_PERMISSOES` continua no código, mas
+agora só indica o **setor dono** de cada aba, servindo para (a) rotular a aba
+e (b) exibir um aviso quando alguém age fora do próprio setor — *"Você entrou
+como Logística — esta etapa é normalmente da Portaria. Você pode registrar
+assim mesmo; o histórico vai gravar seu nome e seu setor."* Não bloqueia.
+O que importa continua garantido: **toda movimentação grava operador e setor
+na trilha de auditoria**, então a rastreabilidade não depende de esconder
+botão.
+
+**Adicionado junto (pedido do usuário: "traga em cada aba sua função"):** um
+box no topo de cada uma das 9 abas com o setor dono, o que se faz ali e o
+efeito no status da carga (mapa `TAB_FUNCAO` em data.js, renderizado por
+`atualizarAvisoSetorAba()` em app.js). Objetivo é que quem abre uma aba pela
+primeira vez entenda a função dela sem depender de treinamento verbal.
+
+**Correções de interface na mesma rodada:**
+- A aba Faturamento não tinha texto explicativo algum (só o título "Ação
+  Rápida por Placa") e seu campo de placa não aceitava **Enter** — as demais
+  telas aceitavam. Ambos corrigidos, por consistência.
+- Os avisos (toasts) ficavam fixos logo abaixo da navegação e cobriam por 5
+  segundos justamente o novo box de função e o cabeçalho da primeira tabela.
+  Movidos para o **rodapé à direita**.

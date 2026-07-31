@@ -89,13 +89,39 @@ function estaFaturado(carga){
 // fica no campo Número da Carga até a Logística completar os dados).
 const STATUS_ORDEM_EXPORT = STATUS_FLOW.slice();
 
-// Quais abas cada setor enxerga. 'Torre' (visão geral) e 'Historico' são
-// leitura liberada pra todos — é o que dá a visão de torre de controle.
+// Qual setor é o DONO de cada aba — quem normalmente executa aquela etapa.
+// ATENÇÃO: isto não esconde mais nada. Até a rodada anterior, as abas fora do
+// setor do operador ficavam ocultas (hidden), e o efeito prático era ruim:
+// quem entrava como Logística simplesmente não via Portaria nem Faturamento e
+// concluía que as telas não existiam. Além disso, na operação real a mesma
+// pessoa cobre mais de um posto (turno da noite, cobertura de férias), e
+// esconder a aba impedia o trabalho em vez de proteger o dado.
+// Hoje TODAS as abas ficam visíveis e utilizáveis para todos os setores; este
+// mapa passou a servir só para (a) rotular a aba com o setor dono e (b)
+// sinalizar discretamente quando alguém age fora do próprio setor. O que
+// realmente importa continua garantido: toda movimentação grava operador e
+// setor na trilha de auditoria (ver registrarMovimentacao).
+// Controle de acesso de verdade só existe com SharePoint + SSO — ver
+// RELATORIO_TI_HOSPEDAGEM.md.
 const SETOR_PERMISSOES = {
   'Logística':    ['torre','programacao','expedicao','indicadores','cadastros','historico','relatorios'],
   'Portaria':     ['torre','portaria','historico'],
   'Expedição':    ['torre','expedicao','historico'],
   'Faturamento':  ['torre','faturamento','historico']
+};
+
+// Função de cada aba, exibida no topo dela. Serve para quem abre o painel pela
+// primeira vez saber o que fazer ali sem depender de treinamento verbal.
+const TAB_FUNCAO = {
+  torre:       { setor:'Todos',        oque:'Acompanhar todas as cargas em aberto, de todos os setores, em uma tela só.',                     move:'Não altera nada — é somente leitura.' },
+  programacao: { setor:'Logística',    oque:'Cadastrar a carga do dia antes do caminhão chegar e definir a ordem de carregamento.',           move:'Cria a carga em Aguardando Veículo.' },
+  portaria:    { setor:'Portaria',     oque:'Registrar a entrada e a saída física do caminhão no pátio.',                                      move:'Chegou: Aguardando Veículo → Aguardando Embarque. Saiu: Faturado → Seguiu Viagem.' },
+  expedicao:   { setor:'Expedição',    oque:'Controlar o carregamento do veículo, do início ao fim.',                                          move:'Aguardando Embarque → Embarque Iniciado → Embarque Finalizado.' },
+  faturamento: { setor:'Faturamento',  oque:'Emitir a nota da carga já carregada, liberando o caminhão para sair.',                             move:'Embarque Finalizado → Faturado.' },
+  indicadores: { setor:'Logística',    oque:'Analisar tempo médio por etapa, comparar períodos e ver o ranking de transportadoras.',            move:'Não altera nada — é somente leitura.' },
+  cadastros:   { setor:'Logística',    oque:'Manter a base de Frota (placa → transportadora → tipo), transportadoras e docas.',                 move:'Não altera cargas — alimenta a Programação.' },
+  historico:   { setor:'Todos',        oque:'Consultar a trilha de auditoria: quem moveu qual carga, de qual status para qual, e quando.',      move:'Não altera nada — registro permanente.' },
+  relatorios:  { setor:'Logística',    oque:'Gerar o PDF operacional (para o pátio) e o executivo (para a gestão).',                            move:'Não altera nada — exporta o que já existe.' }
 };
 
 const SETORES = Object.keys(SETOR_PERMISSOES);
