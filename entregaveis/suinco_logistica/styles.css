@@ -1,8 +1,14 @@
 /* =====================================================================
    PAINEL LOGÍSTICO SUINCO — design system
-   Paleta fixa da marca. Tema escuro por padrão (não há alternância clara/escura
-   proposital: a diretriz do projeto é fundo escuro sempre, em tela e em PDF).
+   Paleta fixa da marca, em DOIS temas: escuro (padrão) e claro, alternados
+   pelo botão do cabeçalho (data-tema="claro" no <html> — ver alternarTema em
+   app.js). Toda cor sai de variável CSS, inclusive as dos 6 status, para que
+   trocar de tema repinte também badges, relatórios e gráficos sem nenhuma
+   tabela paralela de cores. O PDF sai no tema ativo (a diretriz anterior era
+   escuro sempre; com o claro disponível isso vira escolha de quem imprime).
    Contraste alto e alvos de toque maiores por padrão — uso monocular/zoom.
+   Contraste verificado nos dois temas: texto/fundo, badge e título de card
+   todos acima de 6:1 (mínimo WCAG AA para texto normal é 4.5:1).
 ===================================================================== */
 :root{
   --navy-deep:#101625;
@@ -11,6 +17,12 @@
   --navy-lighter:#374a86;
   --gold:#e9b954;
   --gold-dim:#b9903f;
+  /* --gold-text é o dourado usado como COR DE TEXTO (títulos, links, números).
+     No escuro é o mesmo dourado da marca; no claro precisa escurecer, senão
+     dourado claro sobre fundo branco fica ilegível. --gold continua sendo o
+     dourado de PREENCHIMENTO (fundo de botão, chip), que funciona nos dois
+     temas porque leva texto escuro por cima. */
+  --gold-text:#e9b954;
   --wine:#8f1f26;
   --wine-light:#b3363f;
   --ok:#3fa66a;
@@ -20,9 +32,60 @@
   --border:rgba(233,185,84,.28);
   --border-soft:rgba(233,185,84,.14);
   --shadow:0 2px 10px rgba(0,0,0,.5);
+  --campo-bg:#101625;      /* fundo de input/select */
+  --placeholder:#5b6785;
+  --logo-chip-bg:#fff;     /* a logo tem fundo branco próprio, nos 2 temas */
   --radius:10px;
   --header-h:72px;
   --nav-h:52px;
+
+  /* ---- Cores dos 6 status ----
+     Fonte ÚNICA de verdade das cores de status: badges da tela, pílulas e
+     células de linha do tempo dos relatórios, e os gráficos em canvas (que
+     leem estes valores por getComputedStyle) usam todos as variáveis abaixo.
+     Assim trocar de tema nunca deixa uma cor de status desalinhada. */
+  --st-aguardando-veiculo-bg:#3a1418;   --st-aguardando-veiculo-fg:#ff9096;   --st-aguardando-veiculo-br:#8f1f26;
+  --st-aguardando-embarque-bg:#3a2a10;  --st-aguardando-embarque-fg:#d99a2b;  --st-aguardando-embarque-br:#d99a2b;
+  --st-embarque-iniciado-bg:#3a2f10;    --st-embarque-iniciado-fg:#e9b954;    --st-embarque-iniciado-br:#b9903f;
+  --st-embarque-finalizado-bg:#173a2c;  --st-embarque-finalizado-fg:#7dd8a0;  --st-embarque-finalizado-br:#7dd8a0;
+  --st-faturado-bg:#123626;             --st-faturado-fg:#3fa66a;             --st-faturado-br:#3fa66a;
+  --st-seguiu-viagem-bg:#0d2419;        --st-seguiu-viagem-fg:#5fae7f;        --st-seguiu-viagem-br:#1f6b46;
+  --st-neutro-bg:#1e2a52;               --st-neutro-fg:#b7c0d4;               --st-neutro-br:#374a86;
+}
+
+/* ===== TEMA CLARO =====
+   Ativado por data-tema="claro" no <html> (ver alternarTema em app.js).
+   Mantém a mesma identidade — azul-marinho, dourado e vinho da Suinco — só
+   invertendo as superfícies. As cores de status viram tinta clara com texto
+   escuro, preservando a MESMA leitura semântica (vermelho→verde) do escuro. */
+:root[data-tema="claro"]{
+  --navy-deep:#eef1f6;
+  --navy:#ffffff;
+  --navy-light:#e2e8f3;
+  --navy-lighter:#c9d4e8;
+  --gold:#e9b954;
+  --gold-dim:#a67f22;
+  --gold-text:#7a5c0d;
+  --wine:#8f1f26;
+  --wine-light:#b3363f;
+  --ok:#1d7a47;
+  --warn:#9a6a08;
+  --text:#161a22;
+  --text-dim:#5a6474;
+  --border:rgba(26,32,45,.22);
+  --border-soft:rgba(26,32,45,.12);
+  --shadow:0 1px 4px rgba(16,22,37,.14);
+  --campo-bg:#ffffff;
+  --placeholder:#8a94a6;
+  --logo-chip-bg:#fff;
+
+  --st-aguardando-veiculo-bg:#fde8ea;   --st-aguardando-veiculo-fg:#9d141d;   --st-aguardando-veiculo-br:#d9646c;
+  --st-aguardando-embarque-bg:#fdf0dc;  --st-aguardando-embarque-fg:#845605;  --st-aguardando-embarque-br:#d99a2b;
+  --st-embarque-iniciado-bg:#fdf7dd;    --st-embarque-iniciado-fg:#75590c;    --st-embarque-iniciado-br:#b9903f;
+  --st-embarque-finalizado-bg:#e2f6ea;  --st-embarque-finalizado-fg:#1a6e40;  --st-embarque-finalizado-br:#6cc191;
+  --st-faturado-bg:#d9f2e3;             --st-faturado-fg:#136036;             --st-faturado-br:#3fa66a;
+  --st-seguiu-viagem-bg:#cde8d9;        --st-seguiu-viagem-fg:#0e4a29;        --st-seguiu-viagem-br:#1f6b46;
+  --st-neutro-bg:#eef1f6;               --st-neutro-fg:#5a6474;               --st-neutro-br:#c9d4e8;
 }
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{
@@ -35,7 +98,7 @@ body{
   font-size:15px;
   line-height:1.45;
 }
-a{color:var(--gold)}
+a{color:var(--gold-text)}
 :focus-visible{outline:3px solid var(--gold);outline-offset:2px}
 
 /* ===== HEADER ===== */
@@ -46,12 +109,12 @@ a{color:var(--gold)}
   z-index:1000;box-shadow:var(--shadow);
 }
 #logo-chip{
-  background:#fff;border-radius:8px;padding:4px 8px;flex-shrink:0;
+  background:var(--logo-chip-bg);border-radius:8px;padding:4px 8px;flex-shrink:0;
   display:flex;align-items:center;height:52px;
 }
 #logo-chip img{height:44px;width:auto;display:block}
 #header-title{display:flex;flex-direction:column;flex-shrink:0}
-#header-title strong{font-size:16px;font-weight:800;letter-spacing:.5px;color:var(--gold)}
+#header-title strong{font-size:16px;font-weight:800;letter-spacing:.5px;color:var(--gold-text)}
 #header-title span{font-size:11px;color:var(--text-dim)}
 #header-mid{flex:1;display:flex;align-items:center;gap:18px;flex-wrap:wrap;min-width:0}
 #clock-wrap{text-align:center}
@@ -59,7 +122,7 @@ a{color:var(--gold)}
 #date-display{font-size:11px;color:var(--text-dim)}
 .badge-setor{
   background:var(--navy-light);border:1px solid var(--border);
-  padding:6px 14px;border-radius:20px;font-size:13px;font-weight:700;color:var(--gold);
+  padding:6px 14px;border-radius:20px;font-size:13px;font-weight:700;color:var(--gold-text);
 }
 #header-actions{display:flex;gap:8px;align-items:center;flex-shrink:0}
 
@@ -91,8 +154,8 @@ a{color:var(--gold)}
   color:var(--text-dim);cursor:pointer;font-size:14px;font-weight:600;
   border-bottom:3px solid transparent;transition:all .15s;white-space:nowrap;
 }
-.nav-tab:hover{color:var(--text);background:rgba(255,255,255,.06)}
-.nav-tab.active{color:var(--gold);border-bottom-color:var(--gold);background:rgba(233,185,84,.08)}
+.nav-tab:hover{color:var(--text);background:var(--navy-lighter)}
+.nav-tab.active{color:var(--gold-text);border-bottom-color:var(--gold-dim);background:rgba(233,185,84,.12)}
 .nav-tab[hidden]{display:none}
 
 /* ===== MAIN ===== */
@@ -109,7 +172,7 @@ a{color:var(--gold)}
   border-radius:var(--radius);box-shadow:var(--shadow);padding:18px;margin-bottom:18px;
 }
 .card-title{
-  font-size:16px;font-weight:800;color:var(--gold);margin-bottom:14px;
+  font-size:16px;font-weight:800;color:var(--gold-text);margin-bottom:14px;
   display:flex;align-items:center;gap:9px;flex-wrap:wrap;
 }
 .card-title .icon{font-size:19px}
@@ -124,7 +187,7 @@ a{color:var(--gold)}
 .table-wrap{overflow-x:auto}
 table{width:100%;border-collapse:collapse;font-size:13.5px}
 th{
-  background:var(--navy-deep);color:var(--gold);padding:10px 12px;text-align:left;
+  background:var(--navy-deep);color:var(--gold-text);padding:10px 12px;text-align:left;
   font-weight:700;white-space:nowrap;border-bottom:2px solid var(--gold-dim);
 }
 td{padding:9px 12px;border-bottom:1px solid var(--border-soft);vertical-align:middle}
@@ -141,13 +204,13 @@ td input,td select{padding:5px 7px;font-size:13px}
 /* Modelo de 6 status — progressão vermelho → laranja → amarelo →
    verde-clara → verde → verde-escura, do jeito que o gestor pediu, sempre
    com o texto do status junto (nunca só a cor carrega a informação). */
-.badge-aguardando-veiculo{background:#3a1418;color:#ff9096;border-color:var(--wine)}            /* vermelha */
-.badge-aguardando-embarque{background:#3a2a10;color:var(--warn);border-color:var(--warn)}        /* laranja */
-.badge-embarque-iniciado{background:#3a2f10;color:var(--gold);border-color:var(--gold-dim)}      /* amarela */
-.badge-embarque-finalizado{background:#173a2c;color:#7dd8a0;border-color:#7dd8a0}                 /* verde-clara */
-.badge-faturado{background:#123626;color:var(--ok);border-color:var(--ok)}                        /* verde */
-.badge-seguiu-viagem{background:#0d2419;color:#5fae7f;border-color:#1f6b46}                       /* verde-escura */
-.badge-critico{background:#3a1418;color:#ff9096;border-color:var(--wine)}
+.badge-aguardando-veiculo{background:var(--st-aguardando-veiculo-bg);color:var(--st-aguardando-veiculo-fg);border-color:var(--st-aguardando-veiculo-br)}
+.badge-aguardando-embarque{background:var(--st-aguardando-embarque-bg);color:var(--st-aguardando-embarque-fg);border-color:var(--st-aguardando-embarque-br)}
+.badge-embarque-iniciado{background:var(--st-embarque-iniciado-bg);color:var(--st-embarque-iniciado-fg);border-color:var(--st-embarque-iniciado-br)}
+.badge-embarque-finalizado{background:var(--st-embarque-finalizado-bg);color:var(--st-embarque-finalizado-fg);border-color:var(--st-embarque-finalizado-br)}
+.badge-faturado{background:var(--st-faturado-bg);color:var(--st-faturado-fg);border-color:var(--st-faturado-br)}
+.badge-seguiu-viagem{background:var(--st-seguiu-viagem-bg);color:var(--st-seguiu-viagem-fg);border-color:var(--st-seguiu-viagem-br)}
+.badge-critico{background:var(--st-aguardando-veiculo-bg);color:var(--st-aguardando-veiculo-fg);border-color:var(--st-aguardando-veiculo-br)}
 
 /* ===== FORMS ===== */
 .form-row{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px}
@@ -156,19 +219,19 @@ td input,td select{padding:5px 7px;font-size:13px}
 .form-group .hint{font-size:11px;color:var(--text-dim);font-weight:400}
 input,select,textarea{
   width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:var(--radius);
-  font-size:14px;background:var(--navy-deep);color:var(--text);transition:border .15s;
+  font-size:14px;background:var(--campo-bg);color:var(--text);transition:border .15s;
 }
-input::placeholder{color:#5b6785}
+input::placeholder{color:var(--placeholder)}
 input:focus,select:focus,textarea:focus{outline:none;border-color:var(--gold)}
 textarea{resize:vertical;min-height:70px}
-select option{background:var(--navy-deep);color:var(--text)}
+select option{background:var(--campo-bg);color:var(--text)}
 
 /* ===== STAT BOXES ===== */
 .stat-box{
   background:var(--navy);border:1px solid var(--border-soft);border-radius:var(--radius);
   box-shadow:var(--shadow);padding:16px;text-align:center;border-top:4px solid var(--gold);
 }
-.stat-num{font-size:30px;font-weight:800;color:var(--gold)}
+.stat-num{font-size:30px;font-weight:800;color:var(--gold-text)}
 .stat-label{font-size:12px;color:var(--text-dim);margin-top:3px}
 .stat-note{font-size:10.5px;color:var(--text-dim);margin-top:2px;font-style:italic}
 
@@ -204,9 +267,9 @@ select option{background:var(--navy-deep);color:var(--text)}
   padding:12px 16px;border-radius:var(--radius);box-shadow:var(--shadow);
   animation:slideIn .25s ease;font-size:13.5px;
 }
-.notif-item.danger{background:#3a1418;border-color:var(--wine)}
-.notif-item.success{background:#123626;border-color:var(--ok)}
-.notif-item.warn{background:#3a2a10;border-color:var(--warn)}
+.notif-item.danger{background:var(--st-aguardando-veiculo-bg);color:var(--text);border-color:var(--wine)}
+.notif-item.success{background:var(--st-faturado-bg);color:var(--text);border-color:var(--ok)}
+.notif-item.warn{background:var(--st-aguardando-embarque-bg);color:var(--text);border-color:var(--warn)}
 @keyframes slideIn{from{transform:translateX(120%);opacity:0}to{transform:translateX(0);opacity:1}}
 
 /* ===== SEQUÊNCIA ===== */
@@ -328,7 +391,7 @@ select option{background:var(--navy-deep);color:var(--text)}
    e quem abre uma aba pela primeira vez precisa entender a função dela sem
    depender de treinamento verbal. Preenchido por atualizarAvisoSetorAba(). */
 .funcao-aba{
-  background:linear-gradient(180deg,rgba(42,58,108,.55),rgba(30,42,82,.45));
+  background:var(--navy-light);
   border:1px solid var(--border-soft);
   border-left:3px solid var(--gold);
   border-radius:var(--radius);
@@ -344,7 +407,7 @@ select option{background:var(--navy-deep);color:var(--text)}
 }
 .funcao-oque{font-size:13.5px;color:var(--text);line-height:1.5}
 .funcao-move{font-size:12px;color:var(--text-dim);margin-top:6px;line-height:1.5}
-.funcao-oque strong,.funcao-move strong{color:var(--gold);font-weight:700}
+.funcao-oque strong,.funcao-move strong{color:var(--gold-text);font-weight:700}
 @media print{.funcao-aba{display:none}}
 
 
@@ -358,7 +421,7 @@ select option{background:var(--navy-deep);color:var(--text)}
   height:56px;width:auto;flex:none;
   background:#fff;border-radius:6px;padding:4px 8px;
 }
-.print-header h1{color:var(--gold);font-size:20px;line-height:1.25}
+.print-header h1{color:var(--gold-text);font-size:20px;line-height:1.25}
 .print-header .meta{font-size:12px;color:var(--text-dim)}
 
 /* ===== RELATÓRIO EXECUTIVO (impressão) =====
@@ -369,7 +432,7 @@ select option{background:var(--navy-deep);color:var(--text)}
    — sem ele, o Chrome imprime tudo sem cor de fundo e a leitura se perde. */
 .print-secao{margin:22px 0 10px}
 .print-secao-tit{
-  font-size:15px;font-weight:800;color:var(--gold);
+  font-size:15px;font-weight:800;color:var(--gold-text);
   border-bottom:1px solid var(--gold-dim);padding-bottom:5px;
 }
 .print-secao-sub{font-size:11.5px;color:var(--text-dim);margin-top:5px;line-height:1.5}
@@ -404,9 +467,9 @@ select option{background:var(--navy-deep);color:var(--text)}
   display:inline-block;padding:3px 9px;border-radius:10px;
   font-size:10.5px;font-weight:800;letter-spacing:.4px;
 }
-.extremo-menor{background:#123626;color:#5fd08c;border:1px solid var(--ok)}
-.extremo-maior{background:#3a1418;color:#ff9096;border:1px solid var(--wine)}
-.extremo-tempo{font-weight:800;font-size:14.5px;color:var(--gold);font-variant-numeric:tabular-nums}
+.extremo-menor{background:var(--st-faturado-bg);color:var(--st-faturado-fg);border:1px solid var(--ok)}
+.extremo-maior{background:var(--st-aguardando-veiculo-bg);color:var(--st-aguardando-veiculo-fg);border:1px solid var(--wine)}
+.extremo-tempo{font-weight:800;font-size:14.5px;color:var(--gold-text);font-variant-numeric:tabular-nums}
 
 /* Matriz da linha do tempo: cargas nas linhas, etapas do fluxo nas colunas. */
 .tabela-timeline{font-size:10.5px;table-layout:fixed}
@@ -415,15 +478,15 @@ select option{background:var(--navy-deep);color:var(--text)}
 .tabela-timeline td{padding:5px;vertical-align:top}
 .tl-carga{width:15%}
 .tl-placa{display:block;font-weight:800;color:var(--text);font-size:12px}
-.tl-num{display:block;color:var(--gold);font-size:10px}
+.tl-num{display:block;color:var(--gold-text);font-size:10px}
 .tl-transp{display:block;color:var(--text-dim);font-size:9.5px;line-height:1.3}
 .tl-cel{text-align:center;border-radius:4px}
 .tl-hora{display:block;font-weight:800;font-size:11.5px;font-variant-numeric:tabular-nums}
 .tl-quem{display:block;color:var(--text);font-size:9.5px;line-height:1.3}
 .tl-setor{display:block;color:var(--text-dim);font-size:9px}
-.tl-pendente{text-align:center;color:#5b6785;font-size:13px}
-.tl-na{text-align:center;color:#4a556e;font-size:9.5px;font-style:italic}
-.tl-total{text-align:center;font-weight:800;color:var(--gold);font-variant-numeric:tabular-nums;width:8%}
+.tl-pendente{text-align:center;color:var(--placeholder);font-size:13px}
+.tl-na{text-align:center;color:var(--placeholder);font-size:9.5px;font-style:italic}
+.tl-total{text-align:center;font-weight:800;color:var(--gold-text);font-variant-numeric:tabular-nums;width:8%}
 
 @media print{
   /* Não quebrar uma seção do relatório no meio de uma página. */
@@ -437,7 +500,7 @@ select option{background:var(--navy-deep);color:var(--text)}
    que lê melhor em monitor e não força rolagem horizontal). */
 .extremo-bloco{margin-bottom:16px}
 .extremo-bloco:last-child{margin-bottom:0}
-.extremo-titulo{font-size:13.5px;font-weight:800;color:var(--gold);margin-bottom:9px}
+.extremo-titulo{font-size:13.5px;font-weight:800;color:var(--gold-text);margin-bottom:9px}
 .extremo-par{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 @media(max-width:640px){.extremo-par{grid-template-columns:1fr}}
 .extremo-card{

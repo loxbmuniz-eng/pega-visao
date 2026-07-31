@@ -17,6 +17,63 @@ const NEXT_ACAO = {
   'Embarque Finalizado':  { label:'Faturar',            destino:'Faturado' }
 };
 
+/* ---------- TEMA CLARO / ESCURO ----------------------------------------
+   O tema vive num atributo data-tema no <html>; todas as cores saem de
+   variáveis CSS (ver :root e :root[data-tema="claro"] em styles.css), então
+   trocar o atributo repinta o painel inteiro, incluindo badges, relatórios e
+   gráficos.
+
+   Onde é guardado: numa chave PRÓPRIA do localStorage, separada do DB. É
+   preferência do dispositivo (o monitor da Portaria pode querer claro e o do
+   escritório escuro), não dado operacional — se fosse pro DB, iria junto pro
+   SharePoint um dia e passaria a forçar o mesmo tema pra todo mundo.
+
+   Primeira abertura: segue a preferência do sistema operacional
+   (prefers-color-scheme). A partir da primeira troca manual, a escolha do
+   usuário manda e é lembrada.
+
+   Impressão: o PDF sai no tema ATIVO. A diretriz antiga era "fundo escuro
+   sempre, inclusive em PDF"; com o modo claro disponível isso passa a ser
+   escolha de quem imprime — e imprimir no claro economiza toner. */
+const TEMA_STORAGE_KEY = 'suinco_tema';
+
+function temaAtual(){
+  return document.documentElement.getAttribute('data-tema') === 'claro' ? 'claro' : 'escuro';
+}
+function aplicarTema(tema){
+  const claro = tema === 'claro';
+  document.documentElement.setAttribute('data-tema', claro ? 'claro' : 'escuro');
+  const btn = document.getElementById('btn-tema');
+  // O botão mostra o tema ATUAL, não o que vai acontecer ao clicar — foi o
+  // que se mostrou menos ambíguo em uso.
+  if(btn) btn.textContent = claro ? '☀️ Claro' : '🌙 Escuro';
+  // Gráficos são desenhados em canvas: pixels já pintados não reagem a CSS,
+  // então precisam ser redesenhados na cor nova.
+  if(typeof TAB_ATUAL !== 'undefined' && TAB_ATUAL === 'indicadores'){
+    try{ renderIndicadores(); }catch(e){ /* aba ainda não montada */ }
+  }
+}
+function alternarTema(){
+  const novo = temaAtual() === 'claro' ? 'escuro' : 'claro';
+  try{ localStorage.setItem(TEMA_STORAGE_KEY, novo); }catch(e){ /* modo privado */ }
+  aplicarTema(novo);
+}
+function iniciarTema(){
+  let salvo = null;
+  try{ salvo = localStorage.getItem(TEMA_STORAGE_KEY); }catch(e){ /* modo privado */ }
+  if(salvo === 'claro' || salvo === 'escuro'){ aplicarTema(salvo); return; }
+  const sistemaClaro = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches;
+  aplicarTema(sistemaClaro ? 'claro' : 'escuro');
+}
+
+/* Lê uma variável CSS do tema atual. Serve para o que NÃO consegue usar
+   var(--x) diretamente: o canvas dos gráficos e as cores montadas em string
+   nos relatórios. Mantém o CSS como fonte única das cores nos dois temas. */
+function corTema(nome, alternativa){
+  const v = getComputedStyle(document.documentElement).getPropertyValue(nome).trim();
+  return v || alternativa || '#888';
+}
+
 /* ---------- utilitários de UI ---------- */
 function esc(s){
   return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -733,7 +790,7 @@ function prepararCanvas(canvas){
 }
 function limparCanvasMsg(canvas, msg){
   const { ctx, w, h } = prepararCanvas(canvas);
-  ctx.fillStyle = '#b7c0d4';
+  ctx.fillStyle = corTema('--text-dim');
   ctx.font = '14px Segoe UI, sans-serif';
   ctx.textAlign = 'center';
   ctx.fillText(msg, w/2, h/2);
@@ -755,14 +812,14 @@ function drawBarChart(canvas, itens){
     const valor = it.valor ?? 0;
     const altura = it.valor===null ? 0 : Math.max(3, (valor/max) * areaH);
     const y = padTop + areaH - altura;
-    ctx.fillStyle = it.valor===null ? '#374a86' : it.cor;
+    ctx.fillStyle = it.valor===null ? corTema('--navy-lighter') : it.cor;
     ctx.fillRect(cx - larguraBarra/2, y, larguraBarra, altura || 2);
     // valor em texto, sempre acima da barra — nunca só a cor/altura carrega a informação
-    ctx.fillStyle = '#f2f4f8';
+    ctx.fillStyle = corTema('--text');
     ctx.textAlign = 'center';
     ctx.fillText(it.valor===null ? 'sem dado' : fmtDuracao(it.valor), cx, y - 6 < 12 ? 12 : y - 6);
     // rótulo da etapa, embaixo
-    ctx.fillStyle = '#b7c0d4';
+    ctx.fillStyle = corTema('--text-dim');
     wrapTextCanvas(ctx, it.label, cx, padTop + areaH + 16, espaco - 6, 13);
   });
 }
@@ -789,10 +846,10 @@ function drawLineChart(canvas, pontos){
   const passoX = pontos.length>1 ? areaW/(pontos.length-1) : 0;
   const coordY = q => padTop + areaH - (q/max)*areaH;
   // eixo
-  ctx.strokeStyle = 'rgba(233,185,84,.28)';
+  ctx.strokeStyle = corTema('--border');
   ctx.beginPath(); ctx.moveTo(padL, padTop); ctx.lineTo(padL, padTop+areaH); ctx.lineTo(padL+areaW, padTop+areaH); ctx.stroke();
   // linha
-  ctx.strokeStyle = '#e9b954'; ctx.lineWidth = 2.5; ctx.beginPath();
+  ctx.strokeStyle = corTema('--gold-dim'); ctx.lineWidth = 2.5; ctx.beginPath();
   pontos.forEach((p,i)=>{
     const x = padL + passoX*i, y = coordY(p.quantidade);
     if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
@@ -802,12 +859,12 @@ function drawLineChart(canvas, pontos){
   ctx.font = '12px Segoe UI, sans-serif'; ctx.textAlign = 'center';
   pontos.forEach((p,i)=>{
     const x = padL + passoX*i, y = coordY(p.quantidade);
-    ctx.fillStyle = '#e9b954';
+    ctx.fillStyle = corTema('--gold-dim');
     ctx.beginPath(); ctx.arc(x,y,4,0,Math.PI*2); ctx.fill();
-    ctx.fillStyle = '#f2f4f8';
+    ctx.fillStyle = corTema('--text');
     ctx.fillText(String(p.quantidade), x, y-10 < 10 ? 10 : y-10);
     if(pontos.length <= 14 || i%Math.ceil(pontos.length/14)===0){
-      ctx.fillStyle = '#b7c0d4';
+      ctx.fillStyle = corTema('--text-dim');
       ctx.fillText(p.dia.slice(0,5), x, padTop+areaH+16);
     }
   });
@@ -1148,8 +1205,8 @@ function exportarPdfOperacional(){
       <td>${esc(c.numeroCarga)||'—'}</td>
       <td>${esc(c.destino)||'—'}</td>
       <td ${praOndeStyle}>${c.praOnde ? esc(PRA_ONDE_LABEL[c.praOnde]) : '—'}</td>
-      <td ${faturado?'style="background:#3fa66a;color:#06210f;font-weight:800"':''}>${faturado?'FATURADO':''}</td>
-      <td style="background:${sc.cor};color:#06210f;font-weight:800">${esc(sc.texto)}</td>
+      <td ${faturado?`style="background:#3fa66a;color:${textoSobre('#3fa66a')};font-weight:800"`:''}>${faturado?'FATURADO':''}</td>
+      <td style="background:${sc.cor};color:${textoSobre(sc.cor)};font-weight:800">${esc(sc.texto)}</td>
       <td>${esc(c.placa)}</td>
       <td>${esc(c.transportadora)||'—'}</td>
       <td>${esc(c.tipoVeiculo)||'—'}</td>
@@ -1445,6 +1502,7 @@ async function init(){
   // vazia, exigindo cadastro/import manual como já era antes desta base.
   const seed = await carregarFrotaSeedSeVazia();
   if(seed.carregado) notify(`Base de Frota carregada: ${seed.total} placa(s).`, 'success');
+  iniciarTema();            // antes de desenhar: evita piscar no tema errado
   atualizarDatalists();
   atualizarAvisoSetorAba(); // preenche o box "função da aba" já na 1ª pintura
   if(DB.operador){

@@ -79,6 +79,20 @@ const STATUS_CARREGAMENTO_META = {
 function statusCarregamentoInfo(status){
   return STATUS_CARREGAMENTO_META[status] || { texto: status||'—', cor:'#374a86', classe:'' };
 }
+// Cor de texto legível sobre um fundo colorido, escolhida pelo brilho do
+// fundo (luminância relativa, fórmula do WCAG). Necessário porque as células
+// coloridas do PDF Operacional usavam texto quase preto fixo: sobre o amarelo
+// e o verde funcionava, mas sobre o vinho de "NÃO ESTÁ NA SUINCO" o texto
+// praticamente sumia — e cor de status em relatório impresso é informação,
+// então precisa ser legível em todas as faixas.
+function textoSobre(corHex){
+  const m = /^#?([0-9a-f]{6})$/i.exec(String(corHex||'').trim());
+  if(!m) return '#06210f';
+  const n = parseInt(m[1], 16);
+  const canal = v => { const c = v/255; return c <= .03928 ? c/12.92 : Math.pow((c+.055)/1.055, 2.4); };
+  const L = .2126*canal((n>>16)&255) + .7152*canal((n>>8)&255) + .0722*canal(n&255);
+  return L > .45 ? '#06210f' : '#ffffff';
+}
 
 /* ---------- CORES DOS 6 STATUS PARA OS RELATÓRIOS ----------
    STATUS_CARREGAMENTO_META acima colapsa 3 status em "CARREGADO" verde —
@@ -90,16 +104,31 @@ function statusCarregamentoInfo(status){
    status é informação, não decoração, e precisa ser consistente entre tela e
    papel. O `print-color-adjust:exact` em html/body garante que o navegador
    não descarte esses fundos ao gerar o PDF. */
-const STATUS_COR_RELATORIO = {
-  'Aguardando Veículo':  { fundo:'#3a1418', texto:'#ff9096', borda:'#8f1f26' },
-  'Aguardando Embarque': { fundo:'#3a2a10', texto:'#d99a2b', borda:'#d99a2b' },
-  'Embarque Iniciado':   { fundo:'#3a2f10', texto:'#e9b954', borda:'#b9903f' },
-  'Embarque Finalizado': { fundo:'#173a2c', texto:'#7dd8a0', borda:'#7dd8a0' },
-  'Faturado':            { fundo:'#123626', texto:'#3fa66a', borda:'#3fa66a' },
-  'Seguiu Viagem':       { fundo:'#0d2419', texto:'#5fae7f', borda:'#1f6b46' }
-};
+// Sufixo CSS de cada status — liga o status às variáveis --st-<slug>-bg/fg/br
+// definidas em styles.css. Vem do nome da badge, pra não existir uma segunda
+// lista de nomes que possa divergir da primeira.
+function statusSlug(status){
+  const meta = STATUS_META[status];
+  return meta && meta.badge ? meta.badge.replace(/^badge-/, '') : 'neutro';
+}
+// Cores do status no tema ATIVO. Os valores vêm do CSS (fonte única, definida
+// para os dois temas), lidos aqui via getComputedStyle porque relatórios
+// montam estilo em string e canvas não entende var(). Com isso, alternar
+// claro/escuro repinta relatórios e gráficos sem nenhuma tabela paralela de
+// cores para manter em sincronia.
 function corStatusRelatorio(status){
-  return STATUS_COR_RELATORIO[status] || { fundo:'#1e2a52', texto:'#b7c0d4', borda:'#374a86' };
+  const slug = statusSlug(status);
+  const ler = (sufixo, alt) => {
+    if(typeof getComputedStyle === 'undefined') return alt;
+    const v = getComputedStyle(document.documentElement)
+      .getPropertyValue(`--st-${slug}-${sufixo}`).trim();
+    return v || alt;
+  };
+  return {
+    fundo: ler('bg', '#1e2a52'),
+    texto: ler('fg', '#b7c0d4'),
+    borda: ler('br', '#374a86')
+  };
 }
 // "Faturado" ou além no fluxo (Faturado, Seguiu Viagem) -> célula verde no PDF.
 function estaFaturado(carga){

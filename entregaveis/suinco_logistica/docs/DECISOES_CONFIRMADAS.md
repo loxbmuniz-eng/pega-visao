@@ -278,3 +278,58 @@ evita.
 **Correção de layout junto:** as regras de `.print-header` viviam só dentro de
 `@media print`, então em qualquer visualização fora da impressão a logo saía no
 tamanho natural (enorme). Movidas para a base do CSS.
+
+## 14. Modo claro e modo escuro
+
+**Pedido:** "quero modo claro e modo escuro". Revoga a diretriz original de
+"fundo escuro sempre, em tela e em PDF" (seção de design do `styles.css`).
+
+**Como funciona:** um atributo `data-tema` no `<html>` — sem valor ou
+`"escuro"` para o tema escuro, `"claro"` para o claro. Botão no cabeçalho
+alterna. O botão mostra o tema **atual** (🌙 Escuro / ☀️ Claro), não o que
+acontece ao clicar, por ser menos ambíguo em uso.
+
+**Cor vira variável, sempre.** O trabalho de verdade não foi o botão, foi
+tirar as cores fixas do caminho: badges, notificações, extremos, células de
+linha do tempo, campos de formulário e os gráficos em canvas tinham hexadecimal
+escrito à mão, que ficaria ilegível em fundo claro. Agora tudo sai de variável
+CSS, com dois blocos: `:root` (escuro) e `:root[data-tema="claro"]`.
+
+Três decisões que valem registro:
+
+1. **`--gold` foi dividido em dois.** O dourado da marca funciona como
+   *preenchimento* nos dois temas (fundo de botão e chip, sempre com texto
+   escuro por cima), mas como *cor de texto* ele some sobre branco. Criou-se
+   `--gold-text`, que no escuro é o mesmo dourado e no claro escurece para
+   `#7a5c0d`. Títulos, links, números e cabeçalhos de tabela usam `--gold-text`;
+   fundos continuam com `--gold`.
+
+2. **As cores dos 6 status passaram a ser variáveis** (`--st-<slug>-bg/fg/br`),
+   e o CSS virou a **fonte única** delas. `corStatusRelatorio()` (data.js), que
+   antes tinha uma tabela própria de hexadecimais, agora lê essas variáveis por
+   `getComputedStyle` — assim relatórios e gráficos, que montam cor em string
+   ou pintam em canvas e não conseguem usar `var()`, seguem o tema sem manter
+   uma segunda lista de cores que sairia de sincronia. No tema claro os status
+   viram tinta clara com texto escuro, preservando a mesma leitura semântica
+   (vermelho → verde).
+
+3. **A preferência é guardada numa chave própria do localStorage
+   (`suinco_tema`), fora do `DB`.** Tema é preferência do dispositivo — o
+   monitor da Portaria pode querer claro e o do escritório escuro. Se fosse
+   para o `DB`, iria junto para o SharePoint um dia e passaria a impor o mesmo
+   tema a todos. Na primeira abertura o painel segue o
+   `prefers-color-scheme` do sistema operacional; a partir da primeira troca
+   manual, a escolha do usuário manda.
+
+**Impressão:** o PDF sai no tema ativo — quem está no claro imprime claro (e
+economiza toner), quem está no escuro mantém o PDF escuro de antes.
+
+**Correção de legibilidade encontrada no caminho:** as células coloridas do PDF
+Operacional usavam texto quase preto fixo (`#06210f`). Sobre o amarelo e o
+verde funcionava, mas sobre o vinho de "NÃO ESTÁ NA SUINCO" o texto sumia.
+Criou-se `textoSobre(cor)` (data.js), que escolhe texto claro ou escuro pela
+luminância do fundo (fórmula do WCAG) — cor de status em relatório impresso é
+informação e precisa ser legível em todas as faixas.
+
+**Verificação:** contraste medido nos dois temas para texto/fundo, badge e
+título sobre card — todos acima de 6:1, com folga sobre o mínimo AA de 4.5:1.
