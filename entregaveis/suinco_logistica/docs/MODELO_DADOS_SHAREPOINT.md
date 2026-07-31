@@ -8,6 +8,26 @@ armazenamento em `data.js` (`SuincoStore`) seja mecânica — trocar
 `localStorage.getItem/setItem` por chamadas à API REST do SharePoint ou
 Microsoft Graph, sem mudar o resto do painel.
 
+
+> ## ⚠️ Revisão de 31/07/2026 — leia antes de provisionar
+>
+> Este documento descreve o schema **conceitual** em 6 Listas. A implementação
+> efetiva (`suinco-sharepoint.js`) usa **4 Listas**, com a nomenclatura já
+> adotada no modelo do Power BI, para que o conector leia sem renomear nada:
+>
+> | Aqui | Na implementação | Observação |
+> |---|---|---|
+> | `ProgramacaoEmbarque` | **`fact_Viagens`** | as cargas |
+> | `Movimentacoes` | **`fact_StatusFrota`** | cada mudança de status |
+> | `Movimentacoes` (auditoria) | **`LOG_EVENTOS`** | trilha imutável, gravada em paralelo |
+> | `Frota` | **`dim_Veiculos`** | cadastro placa → transportadora |
+> | `Usuarios` | — | substituída pelo SSO do Entra ID |
+> | `Transportadoras` | — | derivada de `dim_Veiculos`; não precisa de Lista própria |
+> | `Docas` | — | **removida**: o campo Doca saiu do produto |
+>
+> **Ao provisionar, use os nomes da coluna do meio** — são os que o código
+> procura. Os nomes desta página ficam como registro do desenho original.
+
 ## 1. Lista `Frota`
 Cadastro de placa → transportadora → tipo de veículo, usado para o
 preenchimento automático na Programação.
