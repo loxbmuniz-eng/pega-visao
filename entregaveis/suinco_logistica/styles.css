@@ -44,20 +44,34 @@
      células de linha do tempo dos relatórios, e os gráficos em canvas (que
      leem estes valores por getComputedStyle) usam todos as variáveis abaixo.
      Assim trocar de tema nunca deixa uma cor de status desalinhada. */
-  --st-aguardando-veiculo-bg:#3a1418;   --st-aguardando-veiculo-fg:#ff9096;   --st-aguardando-veiculo-br:#8f1f26;
-  --st-aguardando-embarque-bg:#3a2a10;  --st-aguardando-embarque-fg:#d99a2b;  --st-aguardando-embarque-br:#d99a2b;
-  --st-embarque-iniciado-bg:#3a2f10;    --st-embarque-iniciado-fg:#e9b954;    --st-embarque-iniciado-br:#b9903f;
-  --st-embarque-finalizado-bg:#173a2c;  --st-embarque-finalizado-fg:#7dd8a0;  --st-embarque-finalizado-br:#7dd8a0;
-  --st-faturado-bg:#123626;             --st-faturado-fg:#3fa66a;             --st-faturado-br:#3fa66a;
-  --st-seguiu-viagem-bg:#0d2419;        --st-seguiu-viagem-fg:#5fae7f;        --st-seguiu-viagem-br:#1f6b46;
-  --st-neutro-bg:#1e2a52;               --st-neutro-fg:#b7c0d4;               --st-neutro-br:#374a86;
+  /* Preenchimento SÓLIDO e saturado, igual nos dois temas — pedido: as cores
+     de cada status precisam ficar DESTACADAS, na tela e nos relatórios.
+     A escala é a definida pelo gestor e não deve ser alterada sem novo aval:
+       Aguardando Veículo  -> VERMELHO
+       Aguardando Embarque -> LARANJA
+       Embarque Iniciado   -> AMARELO
+       Embarque Finalizado -> VERDE CLARO
+       Faturado            -> VERDE MÉDIO
+       Seguiu Viagem       -> VERDE ESCURO
+     Cor sólida foi escolhida no lugar do fundo esmaecido anterior porque o
+     relatório operacional é fotografado/compartilhado em grupo de WhatsApp:
+     precisa ser legível em tela pequena e depois de recompressão de imagem.
+     O texto (-fg) é branco ou quase-preto conforme a luminância do
+     preenchimento, garantindo contraste em qualquer um dos seis. */
+  --st-aguardando-veiculo-bg:#c62828;   --st-aguardando-veiculo-fg:#ffffff;   --st-aguardando-veiculo-br:#8f1f26;
+  --st-aguardando-embarque-bg:#e07b1a;  --st-aguardando-embarque-fg:#1a1200;  --st-aguardando-embarque-br:#a85c10;
+  --st-embarque-iniciado-bg:#f0c33c;    --st-embarque-iniciado-fg:#1a1200;    --st-embarque-iniciado-br:#b9903f;
+  --st-embarque-finalizado-bg:#7fd4a2;  --st-embarque-finalizado-fg:#06210f;  --st-embarque-finalizado-br:#3fa66a;
+  --st-faturado-bg:#34a862;             --st-faturado-fg:#06210f;             --st-faturado-br:#1d7a47;
+  --st-seguiu-viagem-bg:#14603a;        --st-seguiu-viagem-fg:#ffffff;        --st-seguiu-viagem-br:#0d3f26;
+  --st-neutro-bg:#5b6785;               --st-neutro-fg:#ffffff;               --st-neutro-br:#374a86;
 }
 
 /* ===== TEMA CLARO =====
    Ativado por data-tema="claro" no <html> (ver alternarTema em app.js).
    Mantém a mesma identidade — azul-marinho, dourado e vinho da Suinco — só
-   invertendo as superfícies. As cores de status viram tinta clara com texto
-   escuro, preservando a MESMA leitura semântica (vermelho→verde) do escuro. */
+   invertendo as superfícies. As cores dos 6 status ficam de fora da inversão
+   de propósito: são sólidas e valem igual nos dois temas (ver bloco acima). */
 :root[data-tema="claro"]{
   --navy-deep:#eef1f6;
   --navy:#ffffff;
@@ -79,13 +93,9 @@
   --placeholder:#8a94a6;
   --logo-chip-bg:#fff;
 
-  --st-aguardando-veiculo-bg:#fde8ea;   --st-aguardando-veiculo-fg:#9d141d;   --st-aguardando-veiculo-br:#d9646c;
-  --st-aguardando-embarque-bg:#fdf0dc;  --st-aguardando-embarque-fg:#845605;  --st-aguardando-embarque-br:#d99a2b;
-  --st-embarque-iniciado-bg:#fdf7dd;    --st-embarque-iniciado-fg:#75590c;    --st-embarque-iniciado-br:#b9903f;
-  --st-embarque-finalizado-bg:#e2f6ea;  --st-embarque-finalizado-fg:#1a6e40;  --st-embarque-finalizado-br:#6cc191;
-  --st-faturado-bg:#d9f2e3;             --st-faturado-fg:#136036;             --st-faturado-br:#3fa66a;
-  --st-seguiu-viagem-bg:#cde8d9;        --st-seguiu-viagem-fg:#0e4a29;        --st-seguiu-viagem-br:#1f6b46;
-  --st-neutro-bg:#eef1f6;               --st-neutro-fg:#5a6474;               --st-neutro-br:#c9d4e8;
+  /* As cores de status NÃO mudam entre temas: são sólidas e já legíveis sobre
+     claro e escuro. Manter uma escala só evita que a mesma carga apareça
+     vermelha no monitor da Portaria e rosa-claro no do escritório. */
 }
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{
@@ -267,9 +277,9 @@ select option{background:var(--campo-bg);color:var(--text)}
   padding:12px 16px;border-radius:var(--radius);box-shadow:var(--shadow);
   animation:slideIn .25s ease;font-size:13.5px;
 }
-.notif-item.danger{background:var(--st-aguardando-veiculo-bg);color:var(--text);border-color:var(--wine)}
-.notif-item.success{background:var(--st-faturado-bg);color:var(--text);border-color:var(--ok)}
-.notif-item.warn{background:var(--st-aguardando-embarque-bg);color:var(--text);border-color:var(--warn)}
+.notif-item.danger{background:var(--st-aguardando-veiculo-bg);color:var(--st-aguardando-veiculo-fg);border-color:var(--st-aguardando-veiculo-br)}
+.notif-item.success{background:var(--st-faturado-bg);color:var(--st-faturado-fg);border-color:var(--st-faturado-br)}
+.notif-item.warn{background:var(--st-aguardando-embarque-bg);color:var(--st-aguardando-embarque-fg);border-color:var(--st-aguardando-embarque-br)}
 @keyframes slideIn{from{transform:translateX(120%);opacity:0}to{transform:translateX(0);opacity:1}}
 
 /* ===== SEQUÊNCIA ===== */
@@ -512,3 +522,12 @@ select option{background:var(--campo-bg);color:var(--text)}
 .extremo-card-top{display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap}
 .extremo-carga{font-size:14px;color:var(--text)}
 .extremo-det{font-size:12px;color:var(--text-dim);margin-top:3px;line-height:1.45}
+
+/* Legenda das 6 cores de status nos relatórios. Quem recebe a foto do
+   relatório no grupo do WhatsApp nem sempre tem o painel aberto do lado. */
+.legenda-status{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 14px}
+.legenda-status-item{
+  padding:4px 11px;border-radius:12px;border:1px solid transparent;
+  font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.3px;
+  white-space:nowrap;
+}

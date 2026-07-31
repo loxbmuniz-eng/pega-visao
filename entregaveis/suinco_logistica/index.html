@@ -56,7 +56,7 @@
         <table>
           <thead><tr>
             <th>Seq.</th><th>Nº Carga</th><th>Placa</th><th>Transportadora</th><th>Tipo Veículo</th><th>Motorista</th>
-            <th>Cliente</th><th>Destino</th><th>Produto</th><th>Peso (kg)</th><th>Doca</th>
+            <th>Cliente</th><th>Destino</th><th>Peso (kg)</th><th>Doca</th>
             <th>Pra onde?</th><th>Ganchos</th><th>Status</th><th>Atualizado em</th>
           </tr></thead>
           <tbody id="torre-tbody"></tbody>
@@ -94,7 +94,6 @@
         <div class="form-group"><label>Destino</label><input type="text" id="prog-destino" placeholder="Cidade/UF"></div>
       </div>
       <div class="form-row">
-        <div class="form-group"><label>Produto</label><input type="text" id="prog-produto"></div>
         <div class="form-group"><label>Peso (kg)</label><input type="number" id="prog-peso" min="0"></div>
       </div>
       <div class="form-row">
@@ -200,7 +199,7 @@
       <div class="card-title"><span class="icon">📦</span> Cargas em Andamento na Expedição</div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Seq.</th><th>Nº Carga</th><th>Placa</th><th>Transportadora</th><th>Destino</th><th>Produto</th><th>Status</th><th class="no-print">Ação</th></tr></thead>
+          <thead><tr><th>Seq.</th><th>Nº Carga</th><th>Placa</th><th>Transportadora</th><th>Destino</th><th>Status</th><th class="no-print">Ação</th></tr></thead>
           <tbody id="exp-tbody"></tbody>
         </table>
       </div>
@@ -223,7 +222,7 @@
       <div class="card-title"><span class="icon">📑</span> Cargas Aguardando Faturamento</div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Nº Carga</th><th>Placa</th><th>Transportadora</th><th>Destino</th><th>Produto</th><th>Peso (kg)</th><th>Status</th><th class="no-print">Ação</th></tr></thead>
+          <thead><tr><th>Nº Carga</th><th>Placa</th><th>Transportadora</th><th>Destino</th><th>Peso (kg)</th><th>Status</th><th class="no-print">Ação</th></tr></thead>
           <tbody id="fat-tbody"></tbody>
         </table>
       </div>
@@ -522,7 +521,6 @@
       <div class="form-group"><label>Destino</label><input type="text" id="completar-destino" placeholder="Cidade/UF"></div>
     </div>
     <div class="form-row">
-      <div class="form-group"><label>Produto</label><input type="text" id="completar-produto"></div>
       <div class="form-group"><label>Peso (kg)</label><input type="number" id="completar-peso" min="0"></div>
     </div>
     <div class="form-row">

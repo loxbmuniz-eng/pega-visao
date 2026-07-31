@@ -295,7 +295,7 @@ function renderTorre(){
     <tr>
       <td>${c.sequencia ?? '—'}</td><td>${esc(c.numeroCarga)||'—'}</td><td>${esc(c.placa)}</td><td>${esc(c.transportadora)||'—'}</td><td>${esc(c.tipoVeiculo)||'—'}</td>
       <td>${esc(c.motorista)||'—'}</td>
-      <td>${esc(c.cliente)||'—'}</td><td>${esc(c.destino)||'—'}</td><td>${esc(c.produto)||'—'}</td><td>${c.peso||0}</td><td>${esc(c.doca)||'—'}</td>
+      <td>${esc(c.cliente)||'—'}</td><td>${esc(c.destino)||'—'}</td><td>${c.peso||0}</td><td>${esc(c.doca)||'—'}</td>
       <td>${c.praOnde ? `<span class="chip-praonde">${esc(PRA_ONDE_LABEL[c.praOnde]||c.praOnde)}</span>` : '<span class="text-dim">—</span>'}</td>
       <td>${c.qtdGanchos ? c.qtdGanchos : '<span class="text-dim">Liso</span>'}</td>
       <td>${badgeHtml(c.status)}</td><td>${fmtDataHora(c.atualizadoEm)}</td>
@@ -342,7 +342,6 @@ function criarCargaProgramadaUI(){
       numeroCarga: document.getElementById('prog-numero-carga').value,
       cliente: document.getElementById('prog-cliente').value,
       destino: document.getElementById('prog-destino').value,
-      produto: document.getElementById('prog-produto').value,
       peso: document.getElementById('prog-peso').value,
       doca: document.getElementById('prog-doca').value,
       sequencia: document.getElementById('prog-sequencia').value,
@@ -353,7 +352,7 @@ function criarCargaProgramadaUI(){
       operador: nomeOperadorAtual()
     });
     notify(`Carga criada para a placa ${normalizarPlaca(placa)} — status Aguardando Veículo.`, 'success');
-    ['prog-placa','prog-transportadora','prog-tipoveiculo','prog-motorista','prog-numero-carga','prog-cliente','prog-destino','prog-produto','prog-peso','prog-doca','prog-sequencia','prog-obs']
+    ['prog-placa','prog-transportadora','prog-tipoveiculo','prog-motorista','prog-numero-carga','prog-cliente','prog-destino','prog-peso','prog-doca','prog-sequencia','prog-obs']
       .forEach(id=>document.getElementById(id).value='');
     document.getElementById('prog-praonde').value = '';
     document.getElementById('prog-ganchos').value = '0';
@@ -437,7 +436,6 @@ function abrirCompletar(id){
   document.getElementById('completar-numero-carga').value = '';
   document.getElementById('completar-cliente').value = '';
   document.getElementById('completar-destino').value = '';
-  document.getElementById('completar-produto').value = '';
   document.getElementById('completar-peso').value = '';
   document.getElementById('completar-doca').value = '';
   document.getElementById('completar-sequencia').value = '';
@@ -459,7 +457,6 @@ function salvarCompletarCarga(){
       numeroCarga: document.getElementById('completar-numero-carga').value,
       cliente: document.getElementById('completar-cliente').value,
       destino: document.getElementById('completar-destino').value,
-      produto: document.getElementById('completar-produto').value,
       peso: document.getElementById('completar-peso').value,
       doca: document.getElementById('completar-doca').value,
       sequencia: document.getElementById('completar-sequencia').value,
@@ -571,7 +568,7 @@ function abrirModalPicker(cargas, statusDestino, aoConfirmar){
   document.getElementById('picker-lista').innerHTML = cargas.map(c=>`
     <div class="modal-list-item">
       <div><strong>Nº ${esc(c.numeroCarga)||'(sem número)'} — Destino: ${esc(c.destino)||'—'}</strong><br>
-        <span class="text-dim">${esc(c.cliente)||'sem cliente'} · ${esc(c.produto)||'—'} · ${c.peso||0}kg · ${badgeHtml(c.status)}</span></div>
+        <span class="text-dim">${esc(c.cliente)||'sem cliente'} · ${c.peso||0}kg · ${badgeHtml(c.status)}</span></div>
       <button class="btn btn-primary btn-sm" onclick="confirmarPicker('${c.id}')">Selecionar</button>
     </div>`).join('');
   document.getElementById('modal-picker').classList.add('open');
@@ -594,7 +591,7 @@ function renderExpedicao(){
     const acao = NEXT_ACAO[c.status];
     return `<tr>
       <td>${c.sequencia ?? '—'}</td><td>${esc(c.numeroCarga)||'—'}</td><td>${esc(c.placa)}</td><td>${esc(c.transportadora)||'—'}</td>
-      <td>${esc(c.destino)||'—'}</td><td>${esc(c.produto)||'—'}</td><td>${badgeHtml(c.status)}</td>
+      <td>${esc(c.destino)||'—'}</td><td>${badgeHtml(c.status)}</td>
       <td class="no-print">${acao?`<button class="btn btn-primary btn-sm" onclick="avancarStatusUI('${c.id}')">${acao.label}</button>`:'—'}</td>
     </tr>`;
   }).join('');
@@ -608,7 +605,7 @@ function renderFaturamento(){
   document.getElementById('fat-tbody').innerHTML = lista.map(c=>{
     const acao = NEXT_ACAO[c.status];
     return `<tr>
-      <td>${esc(c.numeroCarga)||'—'}</td><td>${esc(c.placa)}</td><td>${esc(c.transportadora)||'—'}</td><td>${esc(c.destino)||'—'}</td><td>${esc(c.produto)||'—'}</td>
+      <td>${esc(c.numeroCarga)||'—'}</td><td>${esc(c.placa)}</td><td>${esc(c.transportadora)||'—'}</td><td>${esc(c.destino)||'—'}</td>
       <td>${c.peso||0}</td><td>${badgeHtml(c.status)}</td>
       <td class="no-print">${acao?`<button class="btn btn-primary btn-sm" onclick="avancarStatusUI('${c.id}')">${acao.label}</button>`:'—'}</td>
     </tr>`;
@@ -1121,7 +1118,6 @@ function renderTimelineCarga(id){
     ['Nº Carga', c.numeroCarga || '—'],
     ['Cliente', c.cliente || '—'],
     ['Destino', c.destino || '—'],
-    ['Produto', c.produto || '—'],
     ['Transportadora', c.transportadora || '—'],
     ['Tipo de Veículo', c.tipoVeiculo || '—'],
     ['Motorista', c.motorista || '—'],
@@ -1194,17 +1190,31 @@ function imprimirContainer(el){
 const CORES_PRA_ONDE = { 'CROSS':'#374a86', 'DEDICADA':'#8f1f26', 'RET FRIGO':'#b9903f' };
 function exportarPdfOperacional(){
   const el = document.getElementById('print-operacional');
-  const lista = cargasAbertas().filter(c=>!c.aguardandoCarga).slice().sort(ordenarPorSequenciaEAtualizacao);
+  // TODAS as cargas da programação do dia, INCLUSIVE as já concluídas
+  // ("Seguiu Viagem"). Antes usava cargasAbertas(), que exclui as concluídas,
+  // e a carga sumia do relatório justamente quando o processo terminava.
+  // Esse relatório é atualizado num grupo de WhatsApp ao longo do dia inteiro,
+  // acompanhando o fluxo de carregamento: a linha precisa continuar visível,
+  // mudando de cor conforme avança, até o fim do dia. Some só quando a carga
+  // deixa de existir.
+  // Segue de fora apenas o que a Portaria registrou sem programação prévia
+  // (aguardandoCarga), que ainda não tem dados para sequenciar.
+  const lista = DB.cargas.filter(c=>!c.aguardandoCarga).slice().sort(ordenarPorSequenciaEAtualizacao);
   const linhas = lista.map((c,i)=>{
     const sc = statusCarregamentoInfo(c.status);
     const faturado = estaFaturado(c);
     const pesoTon = ((c.peso||0)/1000).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:2});
     const praOndeStyle = c.praOnde ? `style="background:${CORES_PRA_ONDE[c.praOnde]||'#e9b954'};color:#fff;font-weight:800"` : '';
+    // Status real da carga (os 6), com o preenchimento sólido da escala do
+    // gestor — é o que permite ler o andamento do dia de relance na foto
+    // mandada no grupo.
+    const cs = corStatusRelatorio(c.status);
     return `<tr>
       <td>${i+1}</td>
       <td>${esc(c.numeroCarga)||'—'}</td>
       <td>${esc(c.destino)||'—'}</td>
       <td ${praOndeStyle}>${c.praOnde ? esc(PRA_ONDE_LABEL[c.praOnde]) : '—'}</td>
+      <td style="background:${cs.fundo};color:${cs.texto};font-weight:800;text-align:center">${esc(c.status)}</td>
       <td ${faturado?`style="background:#3fa66a;color:${textoSobre('#3fa66a')};font-weight:800"`:''}>${faturado?'FATURADO':''}</td>
       <td style="background:${sc.cor};color:${textoSobre(sc.cor)};font-weight:800">${esc(sc.texto)}</td>
       <td>${esc(c.placa)}</td>
@@ -1217,20 +1227,28 @@ function exportarPdfOperacional(){
     </tr>`;
   }).join('');
   const agora = new Date();
+  const concluidas = lista.filter(c=>c.status==='Seguiu Viagem').length;
   el.innerHTML = `
     <div class="print-page">
       <div class="print-header">
         <img src="assets/logo_suinco.png" alt="Suinco">
         <div><h1>PDF Operacional — Sequenciamento de Carregamento</h1>
-        <div class="meta">Gerado em ${fmtDataHora(agora.toISOString())} · ${lista.length} carga(s)</div></div>
+        <div class="meta">Gerado em ${fmtDataHora(agora.toISOString())} · ${lista.length} carga(s) · ${concluidas} concluída(s)</div></div>
       </div>
+      ${legendaStatusHtml()}
       <table>
         <thead><tr>
-          <th>Nº</th><th>Carga</th><th>Rota</th><th>Pra onde?</th><th>Faturado</th><th>Status de Carregamento</th>
+          <th>Nº</th><th>Carga</th><th>Rota</th><th>Pra onde?</th><th>Status</th><th>Faturado</th><th>Status de Carregamento</th>
           <th>Placa</th><th>Empresa</th><th>Perfil</th><th>Peso(ton)</th><th>Compartilhada?</th><th>Qtd. Entregas</th><th>Qtd. Ganchos</th>
         </tr></thead>
-        <tbody>${linhas || '<tr><td colspan="13" class="text-center text-dim">Nenhuma carga pronta para sequenciamento.</td></tr>'}</tbody>
+        <tbody>${linhas || '<tr><td colspan="14" class="text-center text-dim">Nenhuma carga programada.</td></tr>'}</tbody>
       </table>
+      <div class="print-legenda">
+        Este relatório mostra <strong>todas as cargas da programação, em qualquer status</strong> —
+        as concluídas continuam na lista, em verde escuro, para o acompanhamento do dia inteiro.
+        A coluna <strong>Status</strong> traz a etapa real da carga; <strong>Status de Carregamento</strong>
+        é a leitura do pátio (se o caminhão está ou não carregado).
+      </div>
     </div>`;
   imprimirContainer(el);
 }
@@ -1256,6 +1274,18 @@ function exportarCsvPowerBI(){
   });
   notify(`Exportando ${arquivos.length} arquivos CSV (fato/dimensão) para Power BI…`, 'success');
 }
+/* Legenda das 6 cores de status, na ordem do fluxo.
+   Vai nos relatórios impressos porque quem recebe a foto no grupo do WhatsApp
+   nem sempre tem o painel aberto do lado para saber o que cada cor significa. */
+function legendaStatusHtml(){
+  return `<div class="legenda-status">
+    ${STATUS_FLOW.map(s=>{
+      const c = corStatusRelatorio(s);
+      return `<span class="legenda-status-item" style="background:${c.fundo};color:${c.texto};border-color:${c.borda}">${esc(s)}</span>`;
+    }).join('')}
+  </div>`;
+}
+
 /* Título de seção do PDF — mesma marcação repetida várias vezes no executivo. */
 function tituloSecaoPdf(texto, sub){
   return `<div class="print-secao">
@@ -1414,6 +1444,7 @@ function exportarPdfExecutivo(){
         <div><h1>Relatório Executivo — Painel Logístico</h1>
         <div class="meta">${dataExt} · gerado às ${agora.toLocaleTimeString('pt-BR')}</div></div>
       </div>
+      ${legendaStatusHtml()}
 
       <div class="grid4" style="margin-bottom:18px">
         <div class="stat-box"><div class="stat-num">${abertas.length}</div><div class="stat-label">Cargas em Aberto</div></div>
