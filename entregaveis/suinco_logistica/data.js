@@ -23,32 +23,28 @@
 
 const STORAGE_KEY = 'suinco_painel_v1';
 
-/* ---------- máquina de estados (8 status confirmados) ---------- */
-// 'Aguardando Carga' é um estado inicial alternativo, não faz parte da
-// sequência linear — ele SEMPRE pula direto para 'Veículo em Pátio'
-// quando a Logística completa os dados (o caminhão já está no pátio,
-// não faz sentido "voltar" para Programado).
+/* ---------- máquina de estados (6 status — modelo real do VBA, REVERTIDO
+   a partir do modelo de 8 status que tinha sido sugerido antes) ----------
+   CORREÇÃO OFICIAL: "Liberado para Embarque" e "Liberado para Saída" NÃO
+   EXISTEM. Expedição vai direto de "Aguardando Embarque" pra "Embarque
+   Iniciado". Faturamento vai direto de "Embarque Finalizado" pra
+   "Faturado", sem etapa de liberação intermediária. */
 const STATUS_FLOW = [
-  'Programado',
-  'Veículo em Pátio',
-  'Liberado para Embarque',
-  'Embarque Iniciado',
-  'Embarque Finalizado',
-  'Faturado',
-  'Liberado para Saída',
-  'Seguiu Viagem'
+  'Aguardando Veículo',   // 1 — padrão ao criar a carga na Programação (Logística). Ninguém aciona via botão.
+  'Aguardando Embarque',  // 2 — Portaria, botão "Chegou" (1→2)
+  'Embarque Iniciado',    // 3 — Expedição
+  'Embarque Finalizado',  // 4 — Expedição
+  'Faturado',             // 5 — Faturamento
+  'Seguiu Viagem'         // 6 — Portaria, botão "Saiu" (Faturado→6, todas as cargas em aberto da placa de uma vez)
 ];
 
 const STATUS_META = {
-  'Aguardando Carga':      { badge:'badge-aguardando-carga',    setor:'Portaria' },
-  'Programado':            { badge:'badge-programado',         setor:'Logística' },
-  'Veículo em Pátio':      { badge:'badge-patio',               setor:'Portaria' },
-  'Liberado para Embarque':{ badge:'badge-liberado-embarque',  setor:'Logística / Expedição' },
-  'Embarque Iniciado':     { badge:'badge-embarque-iniciado',  setor:'Expedição' },
-  'Embarque Finalizado':   { badge:'badge-embarque-finalizado',setor:'Expedição' },
-  'Faturado':              { badge:'badge-faturado',            setor:'Faturamento' },
-  'Liberado para Saída':   { badge:'badge-liberado-saida',      setor:'Faturamento' },
-  'Seguiu Viagem':         { badge:'badge-seguiu-viagem',       setor:'Portaria' }
+  'Aguardando Veículo':   { badge:'badge-aguardando-veiculo',  setor:'Logística',  cor:'vermelha' },
+  'Aguardando Embarque':  { badge:'badge-aguardando-embarque', setor:'Portaria',   cor:'laranja' },
+  'Embarque Iniciado':    { badge:'badge-embarque-iniciado',   setor:'Expedição',  cor:'amarela' },
+  'Embarque Finalizado':  { badge:'badge-embarque-finalizado', setor:'Expedição',  cor:'verde-clara' },
+  'Faturado':             { badge:'badge-faturado',            setor:'Faturamento',cor:'verde' },
+  'Seguiu Viagem':        { badge:'badge-seguiu-viagem',       setor:'Portaria',   cor:'verde-escura' }
 };
 
 /* ---------- "Pra onde?" (classificador de modal/operação) ----------
@@ -64,38 +60,34 @@ function compartilhadaDaCarga(carga){
 
 /* ---------- mapeamento de cor/rótulo para o PDF Operacional e para
    Dim_Status (export Power BI) ----------
-   Mapeamento de "Status de Carregamento" confirmado no briefing:
-     Programado                -> "NÃO ESTÁ NA SUINCO" (vinho)
-     Veículo em Pátio          -> "PÁTIO" (amarelo)
-     Embarque Iniciado         -> "CARREGANDO" (laranja)
-     Embarque Finalizado (ou além) -> "CARREGADO" (verde)
-   DECISÃO DE PREENCHIMENTO DE LACUNA (não estava 100% especificado):
-   "Liberado para Embarque" foi tratado como "PÁTIO" (o veículo ainda está
-   fisicamente parado, só liberado pra fila de carregamento — ainda não
-   começou a carregar) e "Aguardando Carga" foi tratado como "PÁTIO" com
-   texto próprio ("SEM DADOS") já que fisicamente o veículo já está na
-   Suinco. Ver docs/DECISOES_CONFIRMADAS.md item 9. */
+   Mapeamento de "Status de Carregamento" no PDF Operacional (planilha de
+   sequenciamento), agora direto para os 6 status reais — sem lacuna pra
+   preencher, porque "Liberado para Embarque"/"Liberado para Saída" não
+   existem mais:
+     Aguardando Veículo             -> "NÃO ESTÁ NA SUINCO" (vinho)
+     Aguardando Embarque            -> "PÁTIO" (amarelo)
+     Embarque Iniciado              -> "CARREGANDO" (laranja)
+     Embarque Finalizado (ou além)  -> "CARREGADO" (verde) */
 const STATUS_CARREGAMENTO_META = {
-  'Aguardando Carga':       { texto:'SEM DADOS',          cor:'#d99a2b', classe:'cell-patio' },
-  'Programado':              { texto:'NÃO ESTÁ NA SUINCO', cor:'#8f1f26', classe:'cell-fora' },
-  'Veículo em Pátio':        { texto:'PÁTIO',              cor:'#e9b954', classe:'cell-patio' },
-  'Liberado para Embarque':  { texto:'PÁTIO',              cor:'#e9b954', classe:'cell-patio' },
-  'Embarque Iniciado':       { texto:'CARREGANDO',         cor:'#d99a2b', classe:'cell-carregando' },
-  'Embarque Finalizado':     { texto:'CARREGADO',          cor:'#3fa66a', classe:'cell-carregado' },
-  'Faturado':                { texto:'CARREGADO',          cor:'#3fa66a', classe:'cell-carregado' },
-  'Liberado para Saída':     { texto:'CARREGADO',          cor:'#3fa66a', classe:'cell-carregado' },
-  'Seguiu Viagem':           { texto:'CARREGADO',          cor:'#3fa66a', classe:'cell-carregado' }
+  'Aguardando Veículo':   { texto:'NÃO ESTÁ NA SUINCO', cor:'#8f1f26', classe:'cell-fora' },
+  'Aguardando Embarque':  { texto:'PÁTIO',              cor:'#e9b954', classe:'cell-patio' },
+  'Embarque Iniciado':    { texto:'CARREGANDO',         cor:'#d99a2b', classe:'cell-carregando' },
+  'Embarque Finalizado':  { texto:'CARREGADO',          cor:'#3fa66a', classe:'cell-carregado' },
+  'Faturado':             { texto:'CARREGADO',          cor:'#3fa66a', classe:'cell-carregado' },
+  'Seguiu Viagem':        { texto:'CARREGADO',          cor:'#3fa66a', classe:'cell-carregado' }
 };
 function statusCarregamentoInfo(status){
   return STATUS_CARREGAMENTO_META[status] || { texto: status||'—', cor:'#374a86', classe:'' };
 }
-// "Faturado" ou além no fluxo (Faturado, Liberado para Saída, Seguiu Viagem) -> célula verde no PDF.
+// "Faturado" ou além no fluxo (Faturado, Seguiu Viagem) -> célula verde no PDF.
 function estaFaturado(carga){
   const idx = STATUS_FLOW.indexOf(carga.status);
   return idx >= STATUS_FLOW.indexOf('Faturado');
 }
-// Ordem "estendida" (Aguardando Carga primeiro) — usada pelo export Dim_Status.
-const STATUS_ORDEM_EXPORT = ['Aguardando Carga', ...STATUS_FLOW];
+// Ordem do fluxo — usada pelo export Dim_Status. Só os 6 status reais (sem
+// "Aguardando Carga", que não é mais um valor de status, é só o texto que
+// fica no campo Número da Carga até a Logística completar os dados).
+const STATUS_ORDEM_EXPORT = STATUS_FLOW.slice();
 
 // Quais abas cada setor enxerga. 'Torre' (visão geral) e 'Historico' são
 // leitura liberada pra todos — é o que dá a visão de torre de controle.
@@ -159,17 +151,29 @@ function fmtDuracao(min){
   return h+'h'+String(m).padStart(2,'0')+'min';
 }
 
-/* ---------- FROTA (cadastro Placa → Transportadora / Tipo de Veículo) ---------- */
+/* ---------- FROTA (cadastro Placa → Transportadora / Tipo de Veículo) ----------
+   Campos novos (schema pronto pro dia em que o dado real vier de um
+   ERP/Sisatak com histórico dessas placas — hoje ficam opcionais/vazios):
+   capacidadeKg, uf, dataUltimaMovimentacao, precisaRevisao. */
 function buscarFrota(placa){
   const p = normalizarPlaca(placa);
   return DB.frota.find(f => normalizarPlaca(f.placa) === p) || null;
 }
-function upsertFrota(placa, transportadora, tipoVeiculo){
+function upsertFrota(placa, transportadora, tipoVeiculo, extra){
   const p = normalizarPlaca(placa);
   if(!p) throw new Error('Placa vazia');
+  extra = extra || {};
+  const capacidadeKg = extra.capacidadeKg!==undefined && extra.capacidadeKg!=='' ? Number(extra.capacidadeKg)||0 : null;
+  const uf = extra.uf ? String(extra.uf).toUpperCase().slice(0,2) : '';
+  const dataUltimaMovimentacao = extra.dataUltimaMovimentacao || null;
+  const precisaRevisao = !!extra.precisaRevisao;
   let f = DB.frota.find(x => normalizarPlaca(x.placa) === p);
-  if(f){ f.transportadora = transportadora; f.tipoVeiculo = tipoVeiculo; }
-  else{ DB.frota.push({placa:p, transportadora, tipoVeiculo}); }
+  if(f){
+    f.transportadora = transportadora; f.tipoVeiculo = tipoVeiculo;
+    f.capacidadeKg = capacidadeKg; f.uf = uf; f.dataUltimaMovimentacao = dataUltimaMovimentacao; f.precisaRevisao = precisaRevisao;
+  } else {
+    DB.frota.push({ placa:p, transportadora, tipoVeiculo, capacidadeKg, uf, dataUltimaMovimentacao, precisaRevisao });
+  }
   SuincoStore.save();
 }
 function removerFrota(placa){
@@ -178,18 +182,80 @@ function removerFrota(placa){
   SuincoStore.save();
 }
 // Importação em lote: cola linhas "Placa;Transportadora;TipoVeiculo" (aceita
-// ; ou TAB como separador, útil pra colar direto do Excel). Ignora linhas
-// vazias ou incompletas. Retorna {ok, ignoradas}.
+// ; ou TAB como separador, útil pra colar direto do Excel). Colunas extras
+// opcionais na mesma ordem dos campos novos (CapacidadeKg;UF;DataUltimaMov;
+// PrecisaRevisao) — se não vierem, ficam vazias/nulas, sem problema. Ignora
+// linhas vazias ou incompletas. Retorna {ok, ignoradas}.
 function importarFrotaLote(texto){
   const linhas = (texto||'').split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
   let ok = 0, ignoradas = 0;
   linhas.forEach(linha=>{
     const partes = linha.split(/\t|;/).map(s=>s.trim());
     if(partes.length < 3 || !partes[0]){ ignoradas++; return; }
-    upsertFrota(partes[0], partes[1]||'', partes[2]||'');
+    upsertFrota(partes[0], partes[1]||'', partes[2]||'', {
+      capacidadeKg: partes[3]||'', uf: partes[4]||'', dataUltimaMovimentacao: partes[5]||'',
+      precisaRevisao: /^(sim|true|1)$/i.test(partes[6]||'')
+    });
     ok++;
   });
   return {ok, ignoradas};
+}
+
+// Parser CSV padrão (RFC4180-lite): trata vírgula dentro de campo entre
+// aspas (ex: razão social com vírgula) e aspas duplas escapadas (""). Usado
+// só pela carga da base real de Frota abaixo — a colagem manual do Excel
+// (importarFrotaLote) continua usando o parser simples de ;/TAB de sempre.
+function parseCsvRfc4180(texto){
+  const linhas = [];
+  let campo = '', linha = [], dentroAspas = false;
+  const txt = texto || '';
+  for(let i=0; i<txt.length; i++){
+    const ch = txt[i];
+    if(dentroAspas){
+      if(ch === '"'){
+        if(txt[i+1] === '"'){ campo += '"'; i++; }
+        else dentroAspas = false;
+      } else campo += ch;
+    } else {
+      if(ch === '"') dentroAspas = true;
+      else if(ch === ','){ linha.push(campo); campo = ''; }
+      else if(ch === '\n'){ linha.push(campo); linhas.push(linha); campo=''; linha=[]; }
+      else if(ch === '\r'){ /* ignora — \n cuida da quebra de linha */ }
+      else campo += ch;
+    }
+  }
+  if(campo !== '' || linha.length){ linha.push(campo); linhas.push(linha); }
+  return linhas.filter(l => l.length && l.some(c => c !== ''));
+}
+
+// Carrega a base real de Frota (frota_seed_2026.csv, 2.038 placas — ver
+// docs/NOTAS_BASE_FROTA.md) automaticamente na primeira execução do painel,
+// via fetch relativo ao HTML (funciona quando servido por HTTP — Teams/
+// SharePoint ou `python3 -m http.server`; em file:// o fetch falha por CORS
+// e o painel segue vazio normalmente, caindo de volta no cadastro/import em
+// lote manual que já existia antes desta base chegar). SÓ roda quando
+// DB.frota ainda está vazio, pra nunca sobrescrever remoções/edições feitas
+// depois pelo Responsável pela Base de Frota — é seed inicial, não sync.
+async function carregarFrotaSeedSeVazia(){
+  if(DB.frota.length > 0) return { carregado:false, motivo:'Frota já tem dados' };
+  try{
+    const resp = await fetch('frota_seed_2026.csv');
+    if(!resp.ok) return { carregado:false, motivo:'HTTP '+resp.status };
+    const texto = await resp.text();
+    let linhas = parseCsvRfc4180(texto);
+    if(linhas.length && linhas[0][0] === 'Placa') linhas = linhas.slice(1); // remove cabeçalho
+    linhas.forEach(l=>{
+      const [placa, transportadora, tipoVeiculo, precisaRevisao] = l;
+      if(!placa) return;
+      upsertFrota(placa, transportadora||'', tipoVeiculo||'', {
+        precisaRevisao: /^sim$/i.test(precisaRevisao||'')
+      });
+    });
+    return { carregado:true, total: linhas.length };
+  }catch(e){
+    console.warn('Não foi possível carregar automaticamente a base real de Frota (frota_seed_2026.csv). Siga com cadastro manual ou import em lote em Cadastros → Frota.', e);
+    return { carregado:false, motivo:String(e) };
+  }
 }
 
 /* ---------- TRANSPORTADORAS / DOCAS (cadastros simples) ---------- */
@@ -214,8 +280,14 @@ function removerDoca(id){
   SuincoStore.save();
 }
 
-/* ---------- LOG / MOVIMENTAÇÕES (histórico — nunca editado, só append) ---------- */
-function registrarMovimentacao({cargaId, placa, statusAnterior, statusNovo, operador, setor}){
+/* ---------- LOG / MOVIMENTAÇÕES (histórico — nunca editado, só append) ----------
+   Só é gravado quando o STATUS muda de verdade — nunca ao só editar/criar
+   dados de uma carga sem mudar o status (ex: completar dados de uma
+   "Aguardando Carga" não gera linha aqui, porque o status já nasceu certo).
+   Cada linha carrega um SNAPSHOT de cliente/motorista/tipoVeiculo/
+   qtdEntregas no momento da mudança — útil pro Fact_Movimentacoes do Power
+   BI mesmo que esses campos mudem depois na carga. */
+function registrarMovimentacao({cargaId, placa, statusAnterior, statusNovo, operador, setor, cliente, motorista, tipoVeiculo, qtdEntregas}){
   DB.movimentacoes.push({
     id: uid('mov'),
     timestamp: nowISO(),
@@ -224,8 +296,17 @@ function registrarMovimentacao({cargaId, placa, statusAnterior, statusNovo, oper
     placa: normalizarPlaca(placa),
     cargaId,
     statusAnterior: statusAnterior || null,
-    statusNovo
+    statusNovo,
+    cliente: cliente || '',
+    motorista: motorista || '',
+    tipoVeiculo: tipoVeiculo || '',
+    qtdEntregas: qtdEntregas ?? null
   });
+}
+// Monta o snapshot padrão a partir do objeto de carga corrente — evita
+// repetir os mesmos 4 campos em toda chamada de registrarMovimentacao.
+function snapshotCarga(c){
+  return { cliente: c.cliente, motorista: c.motorista, tipoVeiculo: c.tipoVeiculo, qtdEntregas: c.qtdEntregas };
 }
 function historicoDaCarga(cargaId){
   return DB.movimentacoes.filter(m=>m.cargaId===cargaId).sort((a,b)=>new Date(a.timestamp)-new Date(b.timestamp));
@@ -247,41 +328,51 @@ function cargasAbertasPorPlaca(placa){
 function getCarga(id){ return DB.cargas.find(c=>c.id===id) || null; }
 
 // Criada pela Logística na tela Programação — já com dados completos,
-// veículo ainda não chegou fisicamente. transportadora/tipoVeiculo só
-// precisam ser passados se a placa não estiver na Frota (ou pra sobrepor
-// manualmente); do contrário são resolvidos automaticamente pela placa.
-function criarCargaProgramada({placa, transportadora, tipoVeiculo, numeroCarga, cliente, destino, produto, peso, doca, sequencia, observacoes, praOnde, qtdGanchos, qtdEntregas, operador}){
+// veículo ainda não chegou fisicamente (nasce em "Aguardando Veículo").
+// TRAVA DE FROTA (correção oficial — antes era só aviso, agora BLOQUEIA):
+// se a placa não estiver cadastrada em Frota, a criação é recusada. A
+// Portaria continua podendo registrar a chegada de QUALQUER placa (mesmo
+// não cadastrada) via "Aguardando Carga" — a trava é só na Programação.
+function criarCargaProgramada({placa, transportadora, tipoVeiculo, numeroCarga, cliente, destino, produto, peso, doca, sequencia, observacoes, motorista, praOnde, qtdGanchos, qtdEntregas, operador}){
   const p = normalizarPlaca(placa);
   if(!p) throw new Error('Placa é obrigatória');
   const frota = buscarFrota(p);
+  if(!frota){
+    throw new Error(`Placa ${p} não está cadastrada na Frota. Cadastre em Cadastros → Frota antes de programar esta carga.`);
+  }
   const carga = {
     id: uid('carga'),
     numeroCarga: numeroCarga||'',
     placa: p,
-    transportadora: transportadora || (frota ? frota.transportadora : ''),
-    tipoVeiculo: tipoVeiculo || (frota ? frota.tipoVeiculo : ''),
+    transportadora: transportadora || frota.transportadora,
+    tipoVeiculo: tipoVeiculo || frota.tipoVeiculo,
+    motorista: motorista||'',
     cliente: cliente||'', destino: destino||'', produto: produto||'', peso: Number(peso)||0,
     doca: doca||'', sequencia: sequencia!==undefined && sequencia!=='' ? Number(sequencia) : null,
     observacoes: observacoes||'',
     praOnde: PRA_ONDE_OPCOES.includes(praOnde) ? praOnde : '',
     qtdGanchos: qtdGanchos!==undefined && qtdGanchos!=='' ? Math.max(0, Number(qtdGanchos)||0) : 0,
     qtdEntregas: qtdEntregas!==undefined && qtdEntregas!=='' ? Math.max(1, Number(qtdEntregas)||1) : 1,
-    status: 'Programado',
+    status: 'Aguardando Veículo',
     aguardandoCarga: false,
     criadoEm: nowISO(), criadoPor: operador||'(não identificado)',
     atualizadoEm: nowISO()
   };
   DB.cargas.push(carga);
-  registrarMovimentacao({cargaId:carga.id, placa:p, statusAnterior:null, statusNovo:'Programado', operador, setor:'Logística'});
+  registrarMovimentacao({cargaId:carga.id, placa:p, statusAnterior:null, statusNovo:'Aguardando Veículo', operador, setor:'Logística', ...snapshotCarga(carga)});
   SuincoStore.save();
   return carga;
 }
 
-// Portaria: chegada física de uma placa. Regra especial — aplica a TODAS
-// as cargas em aberto daquela placa de uma vez (é o mesmo caminhão chegando
-// fisicamente uma única vez). Se não existir NENHUMA carga programada pra
-// essa placa, cria uma entrada "Aguardando Carga" — dá visão de torre de
-// controle mesmo sem programação prévia (inclusive frota própria).
+// Portaria — botão "Chegou": chegada física de uma placa. Regra especial —
+// aplica a TODAS as cargas em aberto daquela placa de uma vez (é o mesmo
+// caminhão chegando fisicamente uma única vez). Se não existir NENHUMA
+// carga programada pra essa placa, cria uma linha que nasce DIRETO em
+// "Aguardando Embarque" (o veículo já está fisicamente aqui — não faz
+// sentido "esperar o veículo"), com o texto "Aguardando Carga" no campo do
+// Número da Carga até a Logística completar os dados reais. `aguardandoCarga`
+// (booleano) continua marcando essa linha pra aparecer na fila de
+// pendências da Programação — não é mais um valor de status.
 function registrarChegadaPortaria(placa, operador){
   const p = normalizarPlaca(placa);
   if(!p) throw new Error('Placa é obrigatória');
@@ -290,57 +381,61 @@ function registrarChegadaPortaria(placa, operador){
   if(abertas.length === 0){
     const frota = buscarFrota(p);
     const carga = {
-      id: uid('carga'), numeroCarga:'', placa: p,
+      id: uid('carga'), numeroCarga:'Aguardando Carga', placa: p,
       transportadora: frota ? frota.transportadora : '',
       tipoVeiculo: frota ? frota.tipoVeiculo : '',
+      motorista:'',
       cliente:'', destino:'', produto:'', peso:0, doca:'', sequencia:null, observacoes:'',
       praOnde:'', qtdGanchos:0, qtdEntregas:1,
-      status: 'Aguardando Carga', aguardandoCarga: true,
+      status: 'Aguardando Embarque', aguardandoCarga: true,
       criadoEm: nowISO(), criadoPor: operador||'(não identificado)',
       atualizadoEm: nowISO()
     };
     DB.cargas.push(carga);
-    registrarMovimentacao({cargaId:carga.id, placa:p, statusAnterior:null, statusNovo:'Aguardando Carga', operador, setor:'Portaria'});
+    registrarMovimentacao({cargaId:carga.id, placa:p, statusAnterior:null, statusNovo:'Aguardando Embarque', operador, setor:'Portaria', ...snapshotCarga(carga)});
     SuincoStore.save();
     return {criadas:[carga], atualizadas:[], jaNoPatio:[]};
   }
 
-  const paraAtualizar = abertas.filter(c => c.status === 'Programado');
-  const jaNoPatio = abertas.filter(c => c.status !== 'Programado');
+  const paraAtualizar = abertas.filter(c => c.status === 'Aguardando Veículo');
+  const jaNoPatio = abertas.filter(c => c.status !== 'Aguardando Veículo');
   paraAtualizar.forEach(c=>{
-    registrarMovimentacao({cargaId:c.id, placa:p, statusAnterior:c.status, statusNovo:'Veículo em Pátio', operador, setor:'Portaria'});
-    c.status = 'Veículo em Pátio';
+    registrarMovimentacao({cargaId:c.id, placa:p, statusAnterior:c.status, statusNovo:'Aguardando Embarque', operador, setor:'Portaria', ...snapshotCarga(c)});
+    c.status = 'Aguardando Embarque';
     c.atualizadoEm = nowISO();
   });
   if(paraAtualizar.length) SuincoStore.save();
   return {criadas:[], atualizadas:paraAtualizar, jaNoPatio};
 }
 
-// Logística completa os dados de uma carga que nasceu "Aguardando Carga".
-// Vai direto pra 'Veículo em Pátio' — o caminhão já está fisicamente lá.
-function completarCargaAguardando(cargaId, {numeroCarga, cliente, destino, produto, peso, doca, sequencia, observacoes, transportadora, tipoVeiculo, praOnde, qtdGanchos, qtdEntregas, operador}){
+// Logística completa os dados de uma carga que nasceu "Aguardando Carga"
+// (identificada pela flag `aguardandoCarga`, não mais por um status
+// específico). O status NÃO muda aqui — ela já nasceu em "Aguardando
+// Embarque" (o caminhão já está fisicamente no pátio) — então isto é só
+// edição de dados, e por isso NÃO gera linha no log de movimentações
+// (log só registra mudança de STATUS).
+function completarCargaAguardando(cargaId, {numeroCarga, cliente, destino, produto, peso, doca, sequencia, observacoes, transportadora, tipoVeiculo, motorista, praOnde, qtdGanchos, qtdEntregas, operador}){
   const c = getCarga(cargaId);
   if(!c) throw new Error('Carga não encontrada');
-  if(c.status !== 'Aguardando Carga') throw new Error('Esta carga não está em Aguardando Carga');
+  if(!c.aguardandoCarga) throw new Error('Esta carga não está aguardando dados (Aguardando Carga).');
   c.numeroCarga = numeroCarga||''; c.cliente = cliente||''; c.destino = destino||''; c.produto = produto||''; c.peso = Number(peso)||0;
   c.doca = doca||''; c.sequencia = sequencia!==undefined && sequencia!=='' ? Number(sequencia) : null;
   c.observacoes = observacoes||'';
+  c.motorista = motorista||'';
   c.praOnde = PRA_ONDE_OPCOES.includes(praOnde) ? praOnde : '';
   c.qtdGanchos = qtdGanchos!==undefined && qtdGanchos!=='' ? Math.max(0, Number(qtdGanchos)||0) : 0;
   c.qtdEntregas = qtdEntregas!==undefined && qtdEntregas!=='' ? Math.max(1, Number(qtdEntregas)||1) : 1;
   if(transportadora) c.transportadora = transportadora;
   if(tipoVeiculo) c.tipoVeiculo = tipoVeiculo;
-  registrarMovimentacao({cargaId:c.id, placa:c.placa, statusAnterior:'Aguardando Carga', statusNovo:'Veículo em Pátio', operador, setor:'Logística'});
-  c.status = 'Veículo em Pátio';
   c.aguardandoCarga = false;
   c.atualizadoEm = nowISO();
   SuincoStore.save();
   return c;
 }
 
-// Transição genérica no meio do fluxo (Liberado p/ Embarque, Embarque
-// Iniciado/Finalizado, Faturado, Liberado p/ Saída). Valida que a carga
-// está no status imediatamente anterior da STATUS_FLOW.
+// Transição genérica no meio do fluxo (Embarque Iniciado/Finalizado,
+// Faturado). Valida que a carga está no status imediatamente anterior da
+// STATUS_FLOW.
 function avancarStatusCarga(cargaId, statusNovo, operador, setor){
   const c = getCarga(cargaId);
   if(!c) throw new Error('Carga não encontrada');
@@ -350,24 +445,25 @@ function avancarStatusCarga(cargaId, statusNovo, operador, setor){
   if(idxAtual === -1 || idxNovo !== idxAtual+1){
     throw new Error(`Não é possível ir de "${c.status}" direto para "${statusNovo}".`);
   }
-  registrarMovimentacao({cargaId:c.id, placa:c.placa, statusAnterior:c.status, statusNovo, operador, setor});
+  registrarMovimentacao({cargaId:c.id, placa:c.placa, statusAnterior:c.status, statusNovo, operador, setor, ...snapshotCarga(c)});
   c.status = statusNovo;
   c.atualizadoEm = nowISO();
   SuincoStore.save();
   return c;
 }
 
-// Portaria: saída física de uma placa — aplica a todas as cargas dessa
-// placa que já estiverem "Liberado para Saída" (mesmo caminhão saindo uma
-// única vez). Cargas que ainda não chegaram lá ficam intactas e o retorno
-// informa quais são, pra Portaria entender por que não liberou.
+// Portaria — botão "Saiu": saída física de uma placa — aplica a TODAS as
+// cargas dessa placa que já estiverem "Faturado" (mesmo caminhão saindo
+// uma única vez, sem perguntar qual carga — igual já era antes). Cargas
+// que ainda não chegaram lá ficam intactas e o retorno informa quais são,
+// pra Portaria entender por que não liberou.
 function registrarSaidaPortaria(placa, operador){
   const p = normalizarPlaca(placa);
   const abertas = cargasAbertasPorPlaca(p);
-  const elegiveis = abertas.filter(c => c.status === 'Liberado para Saída');
-  const pendentes = abertas.filter(c => c.status !== 'Liberado para Saída');
+  const elegiveis = abertas.filter(c => c.status === 'Faturado');
+  const pendentes = abertas.filter(c => c.status !== 'Faturado');
   elegiveis.forEach(c=>{
-    registrarMovimentacao({cargaId:c.id, placa:p, statusAnterior:c.status, statusNovo:'Seguiu Viagem', operador, setor:'Portaria'});
+    registrarMovimentacao({cargaId:c.id, placa:p, statusAnterior:c.status, statusNovo:'Seguiu Viagem', operador, setor:'Portaria', ...snapshotCarga(c)});
     c.status = 'Seguiu Viagem';
     c.atualizadoEm = nowISO();
   });
@@ -379,18 +475,28 @@ function registrarSaidaPortaria(placa, operador){
    Tudo aqui vem só do histórico (movimentacoes). OTIF fica de fora de
    propósito: calcular "no prazo" exige uma data/hora prometida que ainda
    não foi confirmada como campo do modelo de dados — ver
-   docs/DECISOES_CONFIRMADAS.md. Não inventamos esse critério. */
+   docs/DECISOES_CONFIRMADAS.md. Não inventamos esse critério.
+   AJUSTE PARA O MODELO DE 6 STATUS: com "Liberado para Embarque" e
+   "Liberado para Saída" removidos, as etapas mudam de encaixe:
+     - tempoAguardandoEmbarque: chegada (Aguardando Embarque) até início
+       do carregamento (Embarque Iniciado) — antes ia só até a liberação.
+     - tempoCarregamento: igual antes (Iniciado → Finalizado).
+     - tempoFaturamento: Finalizado → Faturado (antes ia até a liberação
+       de saída, que não existe mais).
+     - tempoAguardandoSaida (NOVO): Faturado → Seguiu Viagem — preenche o
+       intervalo que antes era coberto por "Liberado para Saída → Saída",
+       mesma granularidade de antes, só reencaixada nos checkpoints reais. */
 function indicadoresDaCarga(cargaId){
-  const tChegada = primeiroTimestamp(cargaId,'Veículo em Pátio');
-  const tLibEmbarque = primeiroTimestamp(cargaId,'Liberado para Embarque');
+  const tChegada = primeiroTimestamp(cargaId,'Aguardando Embarque');
   const tIniciado = primeiroTimestamp(cargaId,'Embarque Iniciado');
   const tFinalizado = primeiroTimestamp(cargaId,'Embarque Finalizado');
-  const tLibSaida = primeiroTimestamp(cargaId,'Liberado para Saída');
+  const tFaturado = primeiroTimestamp(cargaId,'Faturado');
   const tSaida = primeiroTimestamp(cargaId,'Seguiu Viagem');
   return {
-    tempoAguardandoEmbarque: minutosEntre(tChegada, tLibEmbarque),
+    tempoAguardandoEmbarque: minutosEntre(tChegada, tIniciado),
     tempoCarregamento: minutosEntre(tIniciado, tFinalizado),
-    tempoFaturamento: minutosEntre(tFinalizado, tLibSaida),
+    tempoFaturamento: minutosEntre(tFinalizado, tFaturado),
+    tempoAguardandoSaida: minutosEntre(tFaturado, tSaida),
     tempoPatioTotal: minutosEntre(tChegada, tSaida),
     leadTimeTotal: minutosEntre(getCarga(cargaId)?.criadoEm, tSaida)
   };
@@ -469,7 +575,7 @@ function cargasConcluidasNoPeriodo(periodoKey){
 // dados suficientes" de "0 minutos" (que seria enganoso).
 function indicadoresPorPeriodo(periodoKey){
   const concluidas = cargasConcluidasNoPeriodo(periodoKey);
-  const campos = ['tempoAguardandoEmbarque','tempoCarregamento','tempoFaturamento','tempoPatioTotal'];
+  const campos = ['tempoAguardandoEmbarque','tempoCarregamento','tempoFaturamento','tempoAguardandoSaida','tempoPatioTotal'];
   const somas = {}, contagens = {};
   campos.forEach(f=>{ somas[f]=0; contagens[f]=0; });
   let somaLead=0, nLead=0;
@@ -482,6 +588,98 @@ function indicadoresPorPeriodo(periodoKey){
   campos.forEach(f=>{ medias[f] = contagens[f] ? Math.round(somas[f]/contagens[f]) : null; });
   medias.leadTimeTotal = nLead ? Math.round(somaLead/nLead) : null;
   return { periodo: periodoKey, totalCargas: concluidas.length, medias };
+}
+
+/* ---------- GRÁFICOS (Painel do Gestor) — filtros combináveis -----------
+   Placa (contém), Transportadora (igual) e Período (mesmas 5 janelas
+   acima) filtram o conjunto de cargas usado por TODOS os gráficos. Setor
+   só faz sentido pra alguns deles — cada gráfico documenta na própria UI
+   se e como aplica o filtro de Setor, em vez de fingir uma granularidade
+   que os dados não têm. Tudo recalculado do zero a cada render, sem
+   cache — sempre reflete o estado atual do DB (mesma sessão/navegador). */
+function aplicarFiltrosCargas(lista, filtros){
+  filtros = filtros || {};
+  let r = lista;
+  if(filtros.placa){
+    const p = normalizarPlaca(filtros.placa);
+    r = r.filter(c => normalizarPlaca(c.placa).includes(p));
+  }
+  if(filtros.transportadora){
+    r = r.filter(c => c.transportadora === filtros.transportadora);
+  }
+  return r;
+}
+function cargasConcluidasNoPeriodoFiltrado(periodoKey, filtros){
+  return aplicarFiltrosCargas(cargasConcluidasNoPeriodo(periodoKey), filtros);
+}
+// Distribuição de cargas EM ABERTO por status atual (snapshot de agora,
+// não depende de período) — filtra por placa/transportadora e, se setor
+// for informado, só mostra os status cujo setor responsável
+// (STATUS_META[status].setor) é aquele setor escolhido.
+function distribuicaoStatusAtual(filtros){
+  filtros = filtros || {};
+  const abertas = aplicarFiltrosCargas(cargasAbertas(), filtros);
+  return STATUS_FLOW.filter(s => s !== 'Seguiu Viagem')
+    .filter(s => !filtros.setor || STATUS_META[s].setor === filtros.setor)
+    .map(s => ({
+      status: s,
+      quantidade: abertas.filter(c=>c.status===s).length,
+      cor: statusCarregamentoInfo(s).cor
+    }));
+}
+// Cargas concluídas por dia dentro da janela do período — usado no
+// gráfico de tendência. Preenche dias sem movimento com zero, pra não
+// sumir datas e deixar a tendência legível.
+function cargasConcluidasPorDia(periodoKey, filtros){
+  const { inicio, fim } = janelaPeriodo(periodoKey);
+  const concluidas = cargasConcluidasNoPeriodoFiltrado(periodoKey, filtros);
+  const porDia = {};
+  concluidas.forEach(c=>{
+    const t = new Date(primeiroTimestamp(c.id,'Seguiu Viagem'));
+    const chave = t.toLocaleDateString('pt-BR');
+    porDia[chave] = (porDia[chave]||0) + 1;
+  });
+  const dias = [];
+  const cursor = new Date(inicio.getFullYear(), inicio.getMonth(), inicio.getDate());
+  const limite = new Date(fim.getFullYear(), fim.getMonth(), fim.getDate());
+  while(cursor <= limite){
+    const chave = cursor.toLocaleDateString('pt-BR');
+    dias.push({ dia: chave, quantidade: porDia[chave]||0 });
+    cursor.setDate(cursor.getDate()+1);
+  }
+  return dias;
+}
+// Cada etapa (tempo médio) tem um setor "dono" fixo — usado pra decidir
+// quais barras aparecem quando o filtro de Setor está ativo no gráfico de
+// tempo médio por etapa (não filtra CARGAS aqui, filtra BARRAS).
+const ETAPA_SETOR = {
+  tempoAguardandoEmbarque: 'Expedição',
+  tempoCarregamento: 'Expedição',
+  tempoFaturamento: 'Faturamento',
+  tempoAguardandoSaida: 'Portaria'
+};
+const ETAPA_LABEL = {
+  tempoAguardandoEmbarque: 'Aguardando Embarque',
+  tempoCarregamento: 'Carregamento',
+  tempoFaturamento: 'Faturamento',
+  tempoAguardandoSaida: 'Aguardando Saída'
+};
+function temposMediosPorEtapaFiltrado(periodoKey, filtros){
+  const concluidas = cargasConcluidasNoPeriodoFiltrado(periodoKey, filtros);
+  const campos = Object.keys(ETAPA_SETOR);
+  const somas = {}, contagens = {};
+  campos.forEach(f=>{ somas[f]=0; contagens[f]=0; });
+  concluidas.forEach(c=>{
+    const ind = indicadoresDaCarga(c.id);
+    campos.forEach(f=>{ if(ind[f]!==null){ somas[f]+=ind[f]; contagens[f]++; } });
+  });
+  return campos
+    .filter(f => !(filtros && filtros.setor) || ETAPA_SETOR[f] === filtros.setor)
+    .map(f=>({
+      campo:f, label:ETAPA_LABEL[f], setor:ETAPA_SETOR[f],
+      media: contagens[f] ? Math.round(somas[f]/contagens[f]) : null,
+      n: contagens[f]
+    }));
 }
 
 /* ---------- EXPORT POWER BI (CSV fato/dimensão) -----------------------
@@ -500,18 +698,19 @@ function toCsv(header, linhas){
   return rows.map(r => r.map(csvEscape).join(';')).join('\r\n');
 }
 function gerarCsvFactMovimentacoes(){
-  const header = ['CargaId','Placa','Timestamp','StatusAnterior','StatusNovo','Operador','Setor'];
+  const header = ['CargaId','Placa','Timestamp','StatusAnterior','StatusNovo','Operador','Setor','Cliente','Motorista','TipoVeiculo','QtdEntregas'];
   const linhas = DB.movimentacoes
     .slice()
     .sort((a,b)=>new Date(a.timestamp)-new Date(b.timestamp))
-    .map(m=>[m.cargaId, m.placa, m.timestamp, m.statusAnterior||'', m.statusNovo, m.operador, m.setor]);
+    .map(m=>[m.cargaId, m.placa, m.timestamp, m.statusAnterior||'', m.statusNovo, m.operador, m.setor,
+      m.cliente||'', m.motorista||'', m.tipoVeiculo||'', m.qtdEntregas ?? '']);
   return toCsv(header, linhas);
 }
 function gerarCsvDimCarga(){
-  const header = ['Id','NumeroCarga','Placa','Transportadora','TipoVeiculo','Cliente','Destino','Produto',
+  const header = ['Id','NumeroCarga','Placa','Transportadora','TipoVeiculo','Motorista','Cliente','Destino','Produto',
     'PesoKg','Doca','Sequencia','PraOnde','Compartilhada','QtdGanchos','QtdEntregas','StatusAtual','CriadoEm','AtualizadoEm'];
   const linhas = DB.cargas.map(c=>[
-    c.id, c.numeroCarga, c.placa, c.transportadora, c.tipoVeiculo, c.cliente, c.destino, c.produto,
+    c.id, c.numeroCarga, c.placa, c.transportadora, c.tipoVeiculo, c.motorista||'', c.cliente, c.destino, c.produto,
     c.peso, c.doca, c.sequencia ?? '', c.praOnde || '', compartilhadaDaCarga(c), c.qtdGanchos ?? 0, c.qtdEntregas ?? 1,
     c.status, c.criadoEm, c.atualizadoEm
   ]);
@@ -523,8 +722,8 @@ function gerarCsvDimTransportadora(){
   return toCsv(header, linhas);
 }
 function gerarCsvDimFrota(){
-  const header = ['Placa','Transportadora','TipoVeiculo'];
-  const linhas = DB.frota.map(f=>[f.placa, f.transportadora, f.tipoVeiculo]);
+  const header = ['Placa','Transportadora','TipoVeiculo','CapacidadeKg','UF','DataUltimaMovimentacao','PrecisaRevisao'];
+  const linhas = DB.frota.map(f=>[f.placa, f.transportadora, f.tipoVeiculo, f.capacidadeKg ?? '', f.uf||'', f.dataUltimaMovimentacao||'', f.precisaRevisao ? 'Sim':'Não']);
   return toCsv(header, linhas);
 }
 function gerarCsvDimStatus(){

@@ -10,12 +10,11 @@ let currentPickerCallback = null;
 // Próxima ação disponível a partir de cada status (usada nos botões de
 // linha das tabelas de Expedição/Faturamento — cada linha já é uma carga
 // específica, então não há ambiguidade de "qual carga" aqui).
+// Modelo de 6 status: sem "Liberado para Embarque"/"Liberado para Saída".
 const NEXT_ACAO = {
-  'Veículo em Pátio':       { label:'Liberar p/ Embarque', destino:'Liberado para Embarque' },
-  'Liberado para Embarque': { label:'Iniciar Embarque',    destino:'Embarque Iniciado' },
-  'Embarque Iniciado':      { label:'Finalizar Embarque',  destino:'Embarque Finalizado' },
-  'Embarque Finalizado':    { label:'Faturar',             destino:'Faturado' },
-  'Faturado':               { label:'Liberar p/ Saída',    destino:'Liberado para Saída' }
+  'Aguardando Embarque':  { label:'Iniciar Embarque',   destino:'Embarque Iniciado' },
+  'Embarque Iniciado':    { label:'Finalizar Embarque', destino:'Embarque Finalizado' },
+  'Embarque Finalizado':  { label:'Faturar',            destino:'Faturado' }
 };
 
 /* ---------- utilitários de UI ---------- */
@@ -199,16 +198,23 @@ function renderTorre(){
   const abertas = cargasAbertas();
   const porStatus = {};
   abertas.forEach(c=>{ porStatus[c.status] = (porStatus[c.status]||0) + 1; });
-  const ordemExibicao = ['Aguardando Carga', ...STATUS_FLOW.slice(0,-1)];
-  document.getElementById('torre-stats').innerHTML = ordemExibicao.map(s=>`
-    <div class="stat-box"><div class="stat-num">${porStatus[s]||0}</div><div class="stat-label">${esc(s)}</div></div>
-  `).join('');
+  // "Aguardando Carga" não é mais um valor de status — é a flag
+  // `aguardandoCarga` (o texto fica no campo Número da Carga). Mostrado
+  // como uma caixa extra informativa, não como um dos 6 status oficiais.
+  const statusVisiveis = STATUS_FLOW.slice(0,-1); // sem "Seguiu Viagem" (não fica em aberto)
+  const aguardandoCargaCount = abertas.filter(c=>c.aguardandoCarga).length;
+  document.getElementById('torre-stats').innerHTML =
+    statusVisiveis.map(s=>`
+      <div class="stat-box"><div class="stat-num">${porStatus[s]||0}</div><div class="stat-label">${esc(s)}</div></div>
+    `).join('') +
+    `<div class="stat-box"><div class="stat-num">${aguardandoCargaCount}</div><div class="stat-label">Aguardando Carga (dados incompletos)</div></div>`;
 
   const lista = abertas.slice().sort(ordenarPorSequenciaEAtualizacao);
   const tbody = document.getElementById('torre-tbody');
   tbody.innerHTML = lista.map(c=>`
     <tr>
       <td>${c.sequencia ?? '—'}</td><td>${esc(c.numeroCarga)||'—'}</td><td>${esc(c.placa)}</td><td>${esc(c.transportadora)||'—'}</td><td>${esc(c.tipoVeiculo)||'—'}</td>
+      <td>${esc(c.motorista)||'—'}</td>
       <td>${esc(c.cliente)||'—'}</td><td>${esc(c.destino)||'—'}</td><td>${esc(c.produto)||'—'}</td><td>${c.peso||0}</td><td>${esc(c.doca)||'—'}</td>
       <td>${c.praOnde ? `<span class="chip-praonde">${esc(PRA_ONDE_LABEL[c.praOnde]||c.praOnde)}</span>` : '<span class="text-dim">—</span>'}</td>
       <td>${c.qtdGanchos ? c.qtdGanchos : '<span class="text-dim">Liso</span>'}</td>
@@ -233,7 +239,7 @@ function atualizarPreviewFrotaPrograma(){
     document.getElementById('prog-tipoveiculo').value = f.tipoVeiculo;
     hint.innerHTML = '<span class="text-dim">✅ Placa encontrada na Frota — Transportadora e Tipo de Veículo preenchidos automaticamente.</span>';
   } else if(normalizarPlaca(placa)){
-    hint.innerHTML = '<span style="color:var(--warn)">⚠️ Placa não cadastrada na Frota. Preencha Transportadora/Tipo de Veículo manualmente ou cadastre em Cadastros → Frota.</span>';
+    hint.innerHTML = '<span style="color:var(--wine-light)">⛔ Placa não cadastrada na Frota — a criação da carga será BLOQUEADA. Cadastre esta placa em Cadastros → Frota primeiro.</span>';
   } else {
     hint.innerHTML = '';
   }
@@ -252,6 +258,7 @@ function criarCargaProgramadaUI(){
       placa,
       transportadora: document.getElementById('prog-transportadora').value,
       tipoVeiculo: document.getElementById('prog-tipoveiculo').value,
+      motorista: document.getElementById('prog-motorista').value,
       numeroCarga: document.getElementById('prog-numero-carga').value,
       cliente: document.getElementById('prog-cliente').value,
       destino: document.getElementById('prog-destino').value,
@@ -265,8 +272,8 @@ function criarCargaProgramadaUI(){
       qtdEntregas: document.getElementById('prog-entregas').value,
       operador: nomeOperadorAtual()
     });
-    notify(`Carga criada para a placa ${normalizarPlaca(placa)} — status Programado.`, 'success');
-    ['prog-placa','prog-transportadora','prog-tipoveiculo','prog-numero-carga','prog-cliente','prog-destino','prog-produto','prog-peso','prog-doca','prog-sequencia','prog-obs']
+    notify(`Carga criada para a placa ${normalizarPlaca(placa)} — status Aguardando Veículo.`, 'success');
+    ['prog-placa','prog-transportadora','prog-tipoveiculo','prog-motorista','prog-numero-carga','prog-cliente','prog-destino','prog-produto','prog-peso','prog-doca','prog-sequencia','prog-obs']
       .forEach(id=>document.getElementById(id).value='');
     document.getElementById('prog-praonde').value = '';
     document.getElementById('prog-ganchos').value = '0';
@@ -277,7 +284,7 @@ function criarCargaProgramadaUI(){
   }catch(e){ notify(e.message, 'danger'); }
 }
 function renderProgFila(){
-  const lista = DB.cargas.filter(c=>c.status==='Programado').sort(ordenarPorSequenciaEAtualizacao);
+  const lista = DB.cargas.filter(c=>c.status==='Aguardando Veículo').sort(ordenarPorSequenciaEAtualizacao);
   document.getElementById('prog-fila-tbody').innerHTML = lista.map(c=>`
     <tr>
       <td><input type="number" class="seq-input" value="${c.sequencia ?? ''}" onchange="atualizarSequenciaUI('${c.id}',this.value)" title="Sequência livre — digite o número que quiser, a qualquer momento."></td>
@@ -323,7 +330,7 @@ function reordenarPorSequenciaUI(){
 }
 function excluirCargaUI(id){
   const c = getCarga(id); if(!c) return;
-  if(c.status !== 'Programado'){ notify('Só é possível excluir cargas ainda em Programado — o resto já tem histórico operacional.', 'warn'); return; }
+  if(c.status !== 'Aguardando Veículo'){ notify('Só é possível excluir cargas ainda em Aguardando Veículo — o resto já tem histórico operacional.', 'warn'); return; }
   if(!confirm(`Excluir a carga programada da placa ${c.placa}? Essa ação não pode ser desfeita.`)) return;
   DB.cargas = DB.cargas.filter(x=>x.id!==id);
   DB.movimentacoes = DB.movimentacoes.filter(m=>m.cargaId!==id);
@@ -332,7 +339,7 @@ function excluirCargaUI(id){
   renderAll();
 }
 function renderProgAguardando(){
-  const lista = DB.cargas.filter(c=>c.status==='Aguardando Carga');
+  const lista = DB.cargas.filter(c=>c.aguardandoCarga);
   const pill = document.getElementById('prog-aguardando-count');
   pill.hidden = lista.length===0; pill.textContent = lista.length;
   document.getElementById('prog-aguardando-tbody').innerHTML = lista.map(c=>`
@@ -356,6 +363,7 @@ function abrirCompletar(id){
   document.getElementById('completar-sequencia').value = '';
   document.getElementById('completar-transportadora').value = c.transportadora || '';
   document.getElementById('completar-tipoveiculo').value = c.tipoVeiculo || '';
+  document.getElementById('completar-motorista').value = '';
   document.getElementById('completar-obs').value = '';
   document.getElementById('completar-praonde').value = '';
   document.getElementById('completar-ganchos').value = '0';
@@ -377,6 +385,7 @@ function salvarCompletarCarga(){
       sequencia: document.getElementById('completar-sequencia').value,
       transportadora: document.getElementById('completar-transportadora').value,
       tipoVeiculo: document.getElementById('completar-tipoveiculo').value,
+      motorista: document.getElementById('completar-motorista').value,
       observacoes: document.getElementById('completar-obs').value,
       praOnde: document.getElementById('completar-praonde').value,
       qtdGanchos: document.getElementById('completar-ganchos').value,
@@ -384,8 +393,10 @@ function salvarCompletarCarga(){
       operador: nomeOperadorAtual()
     });
     fecharModalCompletar();
-    notify('Dados completados — carga agora em "Veículo em Pátio".', 'success');
-    tocarBeepConfirmacao();
+    // Sem beep aqui de propósito: o status NÃO muda nesta ação (a carga já
+    // nasceu em "Aguardando Embarque" quando a Portaria registrou a
+    // chegada) — o som é só pra mudanças de status, não pra edição de dados.
+    notify('Dados completados com sucesso.', 'success');
     renderAll();
   }catch(e){ notify(e.message, 'danger'); }
 }
@@ -397,10 +408,10 @@ function acaoChegadaUI(){
   if(!normalizarPlaca(placa)){ notify('Informe a placa.','warn'); return; }
   const r = registrarChegadaPortaria(placa, nomeOperadorAtual());
   if(r.criadas.length){
-    notify(`${normalizarPlaca(placa)}: nenhuma programação encontrada — criada entrada "Aguardando Carga". Avise a Logística para completar os dados.`, 'warn');
+    notify(`${normalizarPlaca(placa)}: nenhuma programação encontrada — criada entrada "Aguardando Carga" (status Aguardando Embarque). Avise a Logística para completar os dados.`, 'warn');
     tocarBeepConfirmacao();
   } else if(r.atualizadas.length){
-    notify(`${normalizarPlaca(placa)}: ${r.atualizadas.length} carga(s) agora em "Veículo em Pátio".`, 'success');
+    notify(`${normalizarPlaca(placa)}: ${r.atualizadas.length} carga(s) agora em "Aguardando Embarque".`, 'success');
     tocarBeepConfirmacao();
   } else if(r.jaNoPatio.length){
     notify(`${normalizarPlaca(placa)} já está no pátio (${r.jaNoPatio.map(c=>c.status).join(', ')}).`, '');
@@ -422,14 +433,14 @@ function acaoSaidaUI(){
   renderAll();
 }
 function renderPortariaPatio(){
-  const noPatio = cargasAbertas().filter(c=>c.status!=='Programado');
+  const noPatio = cargasAbertas().filter(c=>c.status!=='Aguardando Veículo');
   const porPlaca = {};
   noPatio.forEach(c=>{ (porPlaca[c.placa] = porPlaca[c.placa]||[]).push(c); });
   const placas = Object.keys(porPlaca);
   document.getElementById('portaria-patio-tbody').innerHTML = placas.map(p=>{
     const cargas = porPlaca[p];
     const transp = cargas[0].transportadora || '—';
-    const chegada = cargas.map(c=>primeiroTimestamp(c.id,'Veículo em Pátio')||primeiroTimestamp(c.id,'Aguardando Carga')||c.criadoEm).sort()[0];
+    const chegada = cargas.map(c=>primeiroTimestamp(c.id,'Aguardando Embarque')||c.criadoEm).sort()[0];
     return `<tr>
       <td>${esc(p)}</td><td>${esc(transp)}</td><td>${cargas.length}</td>
       <td>${cargas.map(c=>badgeHtml(c.status)).join(' ')}</td><td>${fmtDataHora(chegada)}</td>
@@ -497,7 +508,7 @@ function fecharModalPicker(){
 
 /* ---------- EXPEDIÇÃO ---------- */
 function renderExpedicao(){
-  const alvo = ['Veículo em Pátio','Liberado para Embarque','Embarque Iniciado'];
+  const alvo = ['Aguardando Embarque','Embarque Iniciado'];
   const lista = cargasAbertas().filter(c=>alvo.includes(c.status)).sort(ordenarPorSequenciaEAtualizacao);
   document.getElementById('exp-tbody').innerHTML = lista.map(c=>{
     const acao = NEXT_ACAO[c.status];
@@ -530,11 +541,12 @@ let indRankingPeriodoAtivo = 'hoje';
 function renderIndicadores(){
   // ---- Bloco 1: histórico completo (mantém o comportamento original) ----
   const concluidas = DB.cargas.filter(c=>c.status==='Seguiu Viagem');
-  const campos = ['tempoAguardandoEmbarque','tempoCarregamento','tempoFaturamento','tempoPatioTotal'];
+  const campos = ['tempoAguardandoEmbarque','tempoCarregamento','tempoFaturamento','tempoAguardandoSaida','tempoPatioTotal'];
   const labels = {
     tempoAguardandoEmbarque:'Tempo Aguardando Embarque',
     tempoCarregamento:'Tempo de Carregamento',
     tempoFaturamento:'Tempo de Faturamento',
+    tempoAguardandoSaida:'Tempo Aguardando Saída',
     tempoPatioTotal:'Tempo em Pátio (total)'
   };
   const somas = {}, contagens = {};
@@ -555,6 +567,7 @@ function renderIndicadores(){
   // ---- Bloco 2: Painel do Gestor — comparação por período (novo) ----
   renderComparacaoPeriodos();
   renderRankingPeriodos();
+  renderGraficosIndicadores();
 }
 // Tabela indicador × período, todos visíveis ao mesmo tempo — sem clique
 // pra comparar 6h vs 12h vs Hoje vs Semana vs Mês.
@@ -564,6 +577,7 @@ function renderComparacaoPeriodos(){
     { key:'tempoAguardandoEmbarque',  label:'Tempo Aguardando Embarque' },
     { key:'tempoCarregamento',        label:'Tempo de Carregamento' },
     { key:'tempoFaturamento',         label:'Tempo de Faturamento' },
+    { key:'tempoAguardandoSaida',     label:'Tempo Aguardando Saída' },
     { key:'tempoPatioTotal',          label:'Tempo em Pátio (total)' },
     { key:'leadTimeTotal',            label:'Lead Time Total' }
   ];
@@ -604,26 +618,231 @@ function selecionarRankingPeriodo(key){
   renderRankingPeriodos();
 }
 
+/* ---------- GRÁFICOS (Painel do Gestor) ----------
+   Canvas 2D puro, sem biblioteca externa. Cada gráfico sempre desenha o
+   valor como TEXTO junto (nunca só cor/posição) — requisito de
+   acessibilidade do painel (usuário monocular, zoom, alto contraste): uma
+   pizza sozinha seria ilegível pra esse público, por isso ela sempre vem
+   acompanhada de uma legenda em lista com números explícitos ao lado. */
+function corTextoSobre(corFundo){
+  // Preto ou branco conforme o brilho do fundo, pra garantir contraste de
+  // texto em qualquer cor de barra/fatia (mesmo requisito de acessibilidade).
+  const c = corFundo.replace('#','');
+  const r = parseInt(c.substr(0,2),16), g = parseInt(c.substr(2,2),16), b = parseInt(c.substr(4,2),16);
+  const luminancia = (0.299*r + 0.587*g + 0.114*b);
+  return luminancia > 150 ? '#101625' : '#f2f4f8';
+}
+function prepararCanvas(canvas){
+  const dpr = window.devicePixelRatio || 1;
+  const cssW = canvas.clientWidth || canvas.parentElement.clientWidth || 400;
+  const cssH = canvas.height || 220;
+  canvas.style.width = '100%';
+  canvas.style.height = cssH + 'px';
+  canvas.width = Math.round(cssW * dpr);
+  canvas.height = Math.round(cssH * dpr);
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  return { ctx, w: cssW, h: cssH };
+}
+function limparCanvasMsg(canvas, msg){
+  const { ctx, w, h } = prepararCanvas(canvas);
+  ctx.fillStyle = '#b7c0d4';
+  ctx.font = '14px Segoe UI, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(msg, w/2, h/2);
+}
+function drawBarChart(canvas, itens){
+  // itens: [{label, valor, cor}], valor em minutos (ou null = sem dado)
+  if(!itens.length){ limparCanvasMsg(canvas, 'Nenhuma barra pra mostrar com este filtro.'); return; }
+  const { ctx, w, h } = prepararCanvas(canvas);
+  ctx.clearRect(0,0,w,h);
+  const comDado = itens.filter(i=>i.valor!==null);
+  const max = Math.max(1, ...comDado.map(i=>i.valor));
+  const padBottom = 46, padTop = 14;
+  const areaH = h - padBottom - padTop;
+  const larguraBarra = Math.min(90, (w / itens.length) * 0.55);
+  const espaco = w / itens.length;
+  ctx.font = '13px Segoe UI, sans-serif';
+  itens.forEach((it,i)=>{
+    const cx = espaco*i + espaco/2;
+    const valor = it.valor ?? 0;
+    const altura = it.valor===null ? 0 : Math.max(3, (valor/max) * areaH);
+    const y = padTop + areaH - altura;
+    ctx.fillStyle = it.valor===null ? '#374a86' : it.cor;
+    ctx.fillRect(cx - larguraBarra/2, y, larguraBarra, altura || 2);
+    // valor em texto, sempre acima da barra — nunca só a cor/altura carrega a informação
+    ctx.fillStyle = '#f2f4f8';
+    ctx.textAlign = 'center';
+    ctx.fillText(it.valor===null ? 'sem dado' : fmtDuracao(it.valor), cx, y - 6 < 12 ? 12 : y - 6);
+    // rótulo da etapa, embaixo
+    ctx.fillStyle = '#b7c0d4';
+    wrapTextCanvas(ctx, it.label, cx, padTop + areaH + 16, espaco - 6, 13);
+  });
+}
+function wrapTextCanvas(ctx, texto, cx, y, maxWidth, lineHeight){
+  const palavras = texto.split(' ');
+  let linha = '';
+  const linhas = [];
+  palavras.forEach(p=>{
+    const teste = linha ? linha+' '+p : p;
+    if(ctx.measureText(teste).width > maxWidth && linha){ linhas.push(linha); linha = p; }
+    else linha = teste;
+  });
+  if(linha) linhas.push(linha);
+  linhas.slice(0,2).forEach((l,i)=> ctx.fillText(l, cx, y + i*lineHeight));
+}
+function drawLineChart(canvas, pontos){
+  // pontos: [{dia, quantidade}]
+  if(!pontos.length){ limparCanvasMsg(canvas, 'Sem dados para este período.'); return; }
+  const { ctx, w, h } = prepararCanvas(canvas);
+  ctx.clearRect(0,0,w,h);
+  const padL = 30, padR = 14, padTop = 16, padBottom = 34;
+  const areaW = w - padL - padR, areaH = h - padTop - padBottom;
+  const max = Math.max(1, ...pontos.map(p=>p.quantidade));
+  const passoX = pontos.length>1 ? areaW/(pontos.length-1) : 0;
+  const coordY = q => padTop + areaH - (q/max)*areaH;
+  // eixo
+  ctx.strokeStyle = 'rgba(233,185,84,.28)';
+  ctx.beginPath(); ctx.moveTo(padL, padTop); ctx.lineTo(padL, padTop+areaH); ctx.lineTo(padL+areaW, padTop+areaH); ctx.stroke();
+  // linha
+  ctx.strokeStyle = '#e9b954'; ctx.lineWidth = 2.5; ctx.beginPath();
+  pontos.forEach((p,i)=>{
+    const x = padL + passoX*i, y = coordY(p.quantidade);
+    if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+  });
+  ctx.stroke();
+  // pontos + valor em texto (nunca só a posição do ponto carrega a info)
+  ctx.font = '12px Segoe UI, sans-serif'; ctx.textAlign = 'center';
+  pontos.forEach((p,i)=>{
+    const x = padL + passoX*i, y = coordY(p.quantidade);
+    ctx.fillStyle = '#e9b954';
+    ctx.beginPath(); ctx.arc(x,y,4,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#f2f4f8';
+    ctx.fillText(String(p.quantidade), x, y-10 < 10 ? 10 : y-10);
+    if(pontos.length <= 14 || i%Math.ceil(pontos.length/14)===0){
+      ctx.fillStyle = '#b7c0d4';
+      ctx.fillText(p.dia.slice(0,5), x, padTop+areaH+16);
+    }
+  });
+}
+function drawPieChart(canvas, fatias){
+  // fatias: [{status, quantidade, cor}]
+  const total = fatias.reduce((s,f)=>s+f.quantidade,0);
+  if(!fatias.length || total===0){ limparCanvasMsg(canvas, 'Nenhuma carga em aberto com este filtro.'); return; }
+  const { ctx, w, h } = prepararCanvas(canvas);
+  ctx.clearRect(0,0,w,h);
+  const cx = w*0.32, cy = h/2, raio = Math.min(cx, h/2) - 10;
+  let anguloAtual = -Math.PI/2;
+  fatias.filter(f=>f.quantidade>0).forEach(f=>{
+    const fatiaAngulo = (f.quantidade/total) * Math.PI*2;
+    ctx.beginPath();
+    ctx.moveTo(cx,cy);
+    ctx.arc(cx,cy,raio, anguloAtual, anguloAtual+fatiaAngulo);
+    ctx.closePath();
+    ctx.fillStyle = f.cor;
+    ctx.fill();
+    anguloAtual += fatiaAngulo;
+  });
+  // Legenda em lista textual ao lado — ver comentário no topo da seção:
+  // pizza sozinha não é acessível o bastante pra este público.
+  document.getElementById('grafico-pizza-legenda').innerHTML = fatias.filter(f=>f.quantidade>0).map(f=>{
+    const pct = Math.round((f.quantidade/total)*100);
+    return `<div class="legenda-item"><span class="legenda-chip" style="background:${f.cor}"></span>${esc(f.status)}: <strong>${f.quantidade}</strong> (${pct}%)</div>`;
+  }).join('') || '<div class="text-dim">Nenhuma carga em aberto.</div>';
+}
+function popularSelectTransportadoraGraficos(){
+  const sel = document.getElementById('graf-filtro-transportadora');
+  if(!sel) return;
+  const atual = sel.value;
+  const nomes = listarTransportadoras().map(t=>t.nome);
+  sel.innerHTML = '<option value="">Todas</option>' + nomes.map(n=>`<option value="${esc(n)}" ${n===atual?'selected':''}>${esc(n)}</option>`).join('');
+}
+function limparFiltrosGraficos(){
+  document.getElementById('graf-filtro-placa').value = '';
+  document.getElementById('graf-filtro-transportadora').value = '';
+  document.getElementById('graf-filtro-setor').value = '';
+  document.getElementById('graf-filtro-periodo').value = 'hoje';
+  renderGraficosIndicadores();
+}
+function renderGraficosIndicadores(){
+  const canvasBarras = document.getElementById('grafico-barras');
+  if(!canvasBarras) return; // aba ainda não renderizada
+  popularSelectTransportadoraGraficos();
+  const filtros = {
+    placa: document.getElementById('graf-filtro-placa').value,
+    transportadora: document.getElementById('graf-filtro-transportadora').value,
+    setor: document.getElementById('graf-filtro-setor').value
+  };
+  const periodo = document.getElementById('graf-filtro-periodo').value;
+
+  // 1) Barras — tempo médio por etapa (cor única/dourada: aqui a cor NÃO
+  // representa status, representa "duração" — evita usar a mesma cor com
+  // dois significados diferentes na mesma tela)
+  const etapas = temposMediosPorEtapaFiltrado(periodo, filtros);
+  drawBarChart(canvasBarras, etapas.map(e=>({ label:e.label, valor:e.media, cor:'#e9b954' })));
+
+  // 2) Linha — cargas concluídas por dia
+  const dias = cargasConcluidasPorDia(periodo, filtros);
+  drawLineChart(document.getElementById('grafico-linha'), dias);
+
+  // 3) Pizza — distribuição por status atual
+  const distrib = distribuicaoStatusAtual(filtros);
+  drawPieChart(document.getElementById('grafico-pizza'), distrib);
+}
+window.addEventListener('resize', ()=>{ if(TAB_ATUAL==='indicadores' && abasDesbloqueadasNestaSessao.has('indicadores')) renderGraficosIndicadores(); });
+
 /* ---------- CADASTROS ---------- */
 function renderCadastros(){
   renderFrotaTabela();
   renderTranspLista();
   renderDocaLista();
 }
+// Filtro de texto (placa ou transportadora) + "só precisa revisão" — a base
+// real tem 2.038 placas (ver docs/NOTAS_BASE_FROTA.md), então navegar a
+// tabela inteira sem busca não é viável na prática. A busca não mexe em
+// DB.frota, só no que é exibido.
 function renderFrotaTabela(){
-  const lista = DB.frota.slice().sort((a,b)=>a.placa.localeCompare(b.placa));
-  document.getElementById('frota-tbody').innerHTML = lista.map(f=>`
+  const buscaEl = document.getElementById('frota-busca');
+  const soRevisaoEl = document.getElementById('frota-so-revisao');
+  const buscaPlaca = buscaEl ? normalizarPlaca(buscaEl.value) : '';
+  const buscaTexto = buscaEl ? buscaEl.value.trim().toLowerCase() : '';
+  const soRevisao = soRevisaoEl ? soRevisaoEl.checked : false;
+  const todos = DB.frota.slice().sort((a,b)=>a.placa.localeCompare(b.placa));
+  const lista = todos.filter(f=>{
+    if(soRevisao && !f.precisaRevisao) return false;
+    if(!buscaTexto) return true;
+    return normalizarPlaca(f.placa).includes(buscaPlaca) || (f.transportadora||'').toLowerCase().includes(buscaTexto);
+  });
+  const LIMITE = 300;
+  const exibidos = lista.slice(0, LIMITE);
+  document.getElementById('frota-tbody').innerHTML = exibidos.map(f=>`
     <tr>
       <td>${esc(f.placa)}</td><td>${esc(f.transportadora)||'—'}</td><td>${esc(f.tipoVeiculo)||'—'}</td>
+      <td>${f.capacidadeKg ? f.capacidadeKg.toLocaleString('pt-BR') : '—'}</td>
+      <td>${esc(f.uf)||'—'}</td>
+      <td>${f.dataUltimaMovimentacao ? new Date(f.dataUltimaMovimentacao+'T00:00:00').toLocaleDateString('pt-BR') : '—'}</td>
+      <td>${f.precisaRevisao ? '<span class="badge badge-aguardando-veiculo">SIM</span>' : '<span class="text-dim">Não</span>'}</td>
       <td class="no-print"><button class="btn btn-danger btn-sm" onclick="removerFrotaUI('${esc(f.placa)}')">Remover</button></td>
     </tr>`).join('');
-  document.getElementById('frota-empty').hidden = lista.length>0;
+  document.getElementById('frota-empty').hidden = todos.length>0;
+  const contagemEl = document.getElementById('frota-contagem');
+  if(contagemEl){
+    contagemEl.textContent = lista.length > LIMITE
+      ? `Mostrando ${LIMITE} de ${lista.length} (de ${todos.length} no total) — refine a busca pra ver outras.`
+      : `${lista.length} de ${todos.length} placa(s) cadastrada(s).`;
+  }
 }
 function addFrotaUI(){
   const placa = document.getElementById('frota-placa').value;
   if(!normalizarPlaca(placa)){ notify('Informe a placa.','warn'); return; }
-  upsertFrota(placa, document.getElementById('frota-transportadora').value, document.getElementById('frota-tipoveiculo').value);
-  ['frota-placa','frota-transportadora','frota-tipoveiculo'].forEach(id=>document.getElementById(id).value='');
+  upsertFrota(placa, document.getElementById('frota-transportadora').value, document.getElementById('frota-tipoveiculo').value, {
+    capacidadeKg: document.getElementById('frota-capacidade').value,
+    uf: document.getElementById('frota-uf').value,
+    dataUltimaMovimentacao: document.getElementById('frota-ultima-mov').value,
+    precisaRevisao: document.getElementById('frota-revisao').checked
+  });
+  ['frota-placa','frota-transportadora','frota-tipoveiculo','frota-capacidade','frota-uf','frota-ultima-mov'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('frota-revisao').checked = false;
   notify('Placa cadastrada na Frota.', 'success');
   renderAll();
 }
@@ -731,8 +950,13 @@ function selecionarCargaTimeline(id){
   renderTimelineCarga(id);
 }
 function sequenciaDeStatusDaCarga(historico){
-  const comecouAguardando = historico.length && historico[0].statusNovo === 'Aguardando Carga';
-  return comecouAguardando ? ['Aguardando Carga', ...STATUS_FLOW] : STATUS_FLOW;
+  // Fluxo normal sempre passa por "Aguardando Veículo" primeiro. Uma carga
+  // que nasceu como "Aguardando Carga" (Portaria registrou chegada sem
+  // programação prévia) pula direto pra "Aguardando Embarque" — nunca teve
+  // essa etapa, então ela nem aparece na linha do tempo (não fingimos uma
+  // etapa que não existiu).
+  const teveAguardandoVeiculo = historico.some(m=>m.statusNovo==='Aguardando Veículo');
+  return teveAguardandoVeiculo ? STATUS_FLOW : STATUS_FLOW.slice(1);
 }
 function renderTimelineCarga(id){
   const c = getCarga(id);
@@ -756,6 +980,7 @@ function renderTimelineCarga(id){
     ['Produto', c.produto || '—'],
     ['Transportadora', c.transportadora || '—'],
     ['Tipo de Veículo', c.tipoVeiculo || '—'],
+    ['Motorista', c.motorista || '—'],
     ['Pra onde?', c.praOnde ? (PRA_ONDE_LABEL[c.praOnde]||c.praOnde) : '(Direto Suinco)'],
     ['Compartilhada?', compartilhadaDaCarga(c)],
     ['Qtd. Ganchos', (c.qtdGanchos ? c.qtdGanchos : 'Liso')],
@@ -817,14 +1042,15 @@ function imprimirContainer(el){
 }
 // PDF Operacional — sequenciamento de carregamento do dia, redesenhado pra
 // bater visualmente com a planilha real que a operação usa hoje.
-// DECISÃO: cargas ainda em "Aguardando Carga" (dados incompletos, sem
-// Rota/Nº de Carga) ficam de fora desta lista — elas aparecem na Torre de
-// Controle e na fila de "Aguardando Carga" da Programação, mas não fazem
-// sentido numa planilha de sequenciamento de carregamento ainda sem dados.
+// DECISÃO: cargas ainda com a flag "Aguardando Carga" (dados incompletos,
+// sem Rota/Nº de Carga — texto "Aguardando Carga" no campo Número da
+// Carga) ficam de fora desta lista — elas aparecem na Torre de Controle e
+// na fila de pendências da Programação, mas não fazem sentido numa
+// planilha de sequenciamento de carregamento ainda sem dados.
 const CORES_PRA_ONDE = { 'CROSS':'#374a86', 'DEDICADA':'#8f1f26', 'RET FRIGO':'#b9903f' };
 function exportarPdfOperacional(){
   const el = document.getElementById('print-operacional');
-  const lista = cargasAbertas().filter(c=>c.status!=='Aguardando Carga').slice().sort(ordenarPorSequenciaEAtualizacao);
+  const lista = cargasAbertas().filter(c=>!c.aguardandoCarga).slice().sort(ordenarPorSequenciaEAtualizacao);
   const linhas = lista.map((c,i)=>{
     const sc = statusCarregamentoInfo(c.status);
     const faturado = estaFaturado(c);
@@ -907,7 +1133,7 @@ function exportarPdfExecutivo(){
         <div class="stat-box"><div class="stat-num">${abertas.length}</div><div class="stat-label">Cargas em Aberto</div></div>
         <div class="stat-box"><div class="stat-num">${concluidas.length}</div><div class="stat-label">Concluídas (Seguiu Viagem)</div></div>
         <div class="stat-box"><div class="stat-num">${fmtDuracao(nLead?Math.round(somaLead/nLead):null)}</div><div class="stat-label">Lead Time Médio</div></div>
-        <div class="stat-box"><div class="stat-num">${porStatus['Aguardando Carga']||0}</div><div class="stat-label">Aguardando Carga</div></div>
+        <div class="stat-box"><div class="stat-num">${abertas.filter(c=>c.aguardandoCarga).length}</div><div class="stat-label">Aguardando Carga</div></div>
       </div>
       <div class="card-title" style="color:var(--gold);font-weight:800;margin-bottom:8px">Top Transportadoras (lead time médio)</div>
       <table>
@@ -930,7 +1156,13 @@ function iniciarRelogio(){
 }
 
 /* ---------- INIT ---------- */
-function init(){
+async function init(){
+  // Carrega a base real de Frota (2.038 placas) na primeira execução, antes
+  // de desenhar a tela — ver carregarFrotaSeedSeVazia em data.js. Nunca
+  // trava o painel se falhar (ex: aberto via file://): segue com Frota
+  // vazia, exigindo cadastro/import manual como já era antes desta base.
+  const seed = await carregarFrotaSeedSeVazia();
+  if(seed.carregado) notify(`Base de Frota carregada: ${seed.total} placa(s).`, 'success');
   atualizarDatalists();
   if(DB.operador){
     atualizarHeaderOperador();

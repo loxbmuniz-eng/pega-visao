@@ -131,3 +131,47 @@ endpoint do SharePoint foi inventado — isso fica documentado em
 - **Export Power BI (CSV)**: ponte temporária — ver
   `docs/POWERBI_EXPORT.md`. Quando o SharePoint estiver provisionado, o
   Power BI deve conectar direto nas Listas, não depender deste CSV manual.
+
+## 10. Correção: volta para os 6 status originais do VBA (revoga a seção 2)
+Depois da rodada de evolução da seção 9, veio a correção oficial: o modelo
+de 8 status sugerido pelo Copilot (seção 2) estava **errado** —
+"Liberado para Embarque" e "Liberado para Saída" não existem no processo
+real. Expedição vai direto de "Aguardando Embarque" pra "Embarque
+Iniciado"; Faturamento vai direto de "Embarque Finalizado" pra "Faturado".
+O modelo vigente (implementado em `data.js`/`STATUS_FLOW`, com o comentário
+"CORREÇÃO OFICIAL" no código) é:
+
+| # | Status | Setor que aciona |
+|---|---|---|
+| 1 | Aguardando Veículo | Logística (padrão ao criar a carga — ninguém aciona por botão) |
+| 2 | Aguardando Embarque | Portaria, botão "Chegou" |
+| 3 | Embarque Iniciado | Expedição |
+| 4 | Embarque Finalizado | Expedição |
+| 5 | Faturado | Faturamento |
+| 6 | Seguiu Viagem | Portaria, botão "Saiu" (todas as cargas em aberto da placa de uma vez) |
+
+"Aguardando Carga" continua existindo, mas não como status — é a flag
+`aguardandoCarga`/texto no campo Número da Carga para a chegada sem
+programação prévia (seção 3), que nasce direto em "Aguardando Embarque".
+Os indicadores de tempo (seção 9) foram reencaixados nos checkpoints reais
+deste modelo de 6 (ver comentário em `indicadoresDaCarga`, `data.js`).
+
+## 11. Base de Frota real recebida — pendência da seção 8 resolvida
+A base real de Frota chegou (`FROTA_Base_Final_2026.xlsx`, depois ampliada
+com o extrato de 2 anos `Consulta_Veiculos_4.xlsx`) e está em
+`frota_seed_2026.csv` (2.038 placas: Placa, Transportadora, TipoVeiculo,
+PrecisaRevisao). Decisões de normalização/mesclagem documentadas em
+`docs/NOTAS_BASE_FROTA.md` — não repetidas aqui para não divergir das duas
+fontes.
+
+**Decisão de implementação** (carregamento, não regra de negócio nova): o
+painel carrega esse CSV automaticamente no primeiro uso (`data.js`,
+`carregarFrotaSeedSeVazia`, chamada no `init()` de `app.js`) via `fetch`
+relativo, só quando `DB.frota` ainda está vazio — nunca sobrescreve
+cadastro/remoções feitas depois. Funciona quando o painel é servido por
+HTTP (Teams/SharePoint ou `python3 -m http.server`); em `file://` o fetch
+falha por CORS e o painel segue vazio, caindo de volta no cadastro manual/
+import em lote que já existia. A tela Cadastros → Frota ganhou busca por
+Placa/Transportadora e filtro "Só Precisa Revisão" porque 2.038 linhas sem
+filtro não são navegáveis — exibe até 300 resultados por vez com contagem
+do total, sem limitar os dados em si (só a renderização).

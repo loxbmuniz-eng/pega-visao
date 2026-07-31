@@ -138,15 +138,15 @@ td input,td select{padding:5px 7px;font-size:13px}
   font-weight:800;text-transform:uppercase;letter-spacing:.3px;white-space:nowrap;
   border:1px solid transparent;
 }
-.badge-aguardando-carga{background:#3a2a10;color:var(--warn);border-color:var(--warn)}
-.badge-programado{background:#1b2440;color:#9fb0e0;border-color:#4a5fa8}
-.badge-patio{background:#3a2f10;color:var(--gold);border-color:var(--gold-dim)}
-.badge-liberado-embarque{background:#3a2f10;color:var(--gold);border-color:var(--gold-dim)}
-.badge-embarque-iniciado{background:#123626;color:var(--ok);border-color:var(--ok)}
-.badge-embarque-finalizado{background:#123626;color:var(--ok);border-color:var(--ok)}
-.badge-faturado{background:#123626;color:var(--ok);border-color:var(--ok)}
-.badge-liberado-saida{background:#3a2f10;color:var(--gold);border-color:var(--gold-dim)}
-.badge-seguiu-viagem{background:#242c3d;color:var(--text-dim);border-color:var(--border-soft)}
+/* Modelo de 6 status — progressão vermelho → laranja → amarelo →
+   verde-clara → verde → verde-escura, do jeito que o gestor pediu, sempre
+   com o texto do status junto (nunca só a cor carrega a informação). */
+.badge-aguardando-veiculo{background:#3a1418;color:#ff9096;border-color:var(--wine)}            /* vermelha */
+.badge-aguardando-embarque{background:#3a2a10;color:var(--warn);border-color:var(--warn)}        /* laranja */
+.badge-embarque-iniciado{background:#3a2f10;color:var(--gold);border-color:var(--gold-dim)}      /* amarela */
+.badge-embarque-finalizado{background:#173a2c;color:#7dd8a0;border-color:#7dd8a0}                 /* verde-clara */
+.badge-faturado{background:#123626;color:var(--ok);border-color:var(--ok)}                        /* verde */
+.badge-seguiu-viagem{background:#0d2419;color:#5fae7f;border-color:#1f6b46}                       /* verde-escura */
 .badge-critico{background:#3a1418;color:#ff9096;border-color:var(--wine)}
 
 /* ===== FORMS ===== */
@@ -263,6 +263,20 @@ select option{background:var(--navy-deep);color:var(--text)}
 .timeline-step.pending .timeline-status{color:var(--text-dim)}
 .timeline-quando{font-size:13.5px;color:var(--text-dim);margin-top:2px;font-weight:600}
 .timeline-quem{font-size:13px;color:var(--text-dim);margin-top:1px}
+
+/* ===== GRÁFICOS (Painel do Gestor) ===== */
+.grafico-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:18px;margin-top:14px}
+@media(max-width:1100px){.grafico-grid{grid-template-columns:1fr}}
+.grafico-box{
+  background:var(--navy-deep);border:1px solid var(--border-soft);border-radius:var(--radius);
+  padding:14px;display:flex;flex-direction:column;
+}
+.grafico-titulo{font-size:14px;font-weight:800;color:var(--gold);margin-bottom:8px}
+.grafico-box canvas{width:100%;display:block}
+.grafico-legenda{font-size:11px;margin-top:8px;margin-bottom:0}
+.grafico-legenda-lista{margin-top:10px;display:flex;flex-direction:column;gap:5px}
+.legenda-item{font-size:13px;color:var(--text);display:flex;align-items:center;gap:8px}
+.legenda-chip{width:12px;height:12px;border-radius:3px;flex-shrink:0;display:inline-block}
 
 /* ===== MISC ===== */
 .sep{height:1px;background:var(--border-soft);margin:14px 0}
