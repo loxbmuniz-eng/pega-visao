@@ -1120,10 +1120,13 @@ function toCsv(header, linhas, colunasTexto){
   const escaparLinha = r => r.map((v,i)=> idx.includes(i) ? csvTexto(v) : csvEscape(v)).join(';');
   return [header.map(csvEscape).join(';'), ...linhas.map(escaparLinha)].join('\r\n');
 }
-// Colunas de texto livre que podem conter valores ambíguos (hoje: TipoVeiculo,
-// por causa do "3/4"). Declaradas em um lugar só para não divergirem entre os
-// vários CSVs que as exportam.
-const CSV_COLUNAS_TEXTO = ['TipoVeiculo','Placa','NumeroCarga','RotaCodigo'];
+// SOMENTE TipoVeiculo. É a única coluna com problema real — o "3/4", que o
+// Excel converte em data. Todas as demais saem exatamente como sempre saíram.
+// Uma versão anterior desta lista incluía Placa, NumeroCarga e RotaCodigo, o
+// que alterava o formato de colunas que estavam corretas (o número de carga
+// "007", por exemplo, passava a sair como ="007"). Não ampliar esta lista sem
+// um caso concreto de corrupção.
+const CSV_COLUNAS_TEXTO = ['TipoVeiculo'];
 function gerarCsvFactMovimentacoes(){
   const header = ['CargaId','Placa','Timestamp','StatusAnterior','StatusNovo','Operador','Setor','Cliente','Motorista','TipoVeiculo','QtdEntregas'];
   const linhas = DB.movimentacoes

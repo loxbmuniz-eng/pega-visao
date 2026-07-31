@@ -602,13 +602,18 @@ reconhecida de dizer ao Excel "isto é texto, não interprete". Aplicada apenas
 onde há ambiguidade real: "Carreta", "Truck" e "Toco" continuam saindo limpos.
 Cobre também `NumeroCarga` com zero à esquerda ("007", que o Excel reduzia a 7).
 
-As colunas protegidas estão declaradas em `CSV_COLUNAS_TEXTO` (data.js), em um
-lugar só, para não divergirem entre os cinco CSVs exportados.
+**Escopo: SOMENTE a coluna `TipoVeiculo`.** A primeira versão desta correção
+protegia também `Placa`, `NumeroCarga` e `RotaCodigo` — o que alterava o formato
+de colunas que estavam corretas (o número de carga `007` passava a sair como
+`="007"`). O gestor apontou o excesso e a lista foi reduzida à única coluna com
+problema real. `CSV_COLUNAS_TEXTO` (data.js) não deve ser ampliada sem um caso
+concreto de corrupção.
 
-**Ressalva que precisa de confirmação do usuário:** a sintaxe `="..."` é
-específica do Excel. Ela resolve o caso de abrir o CSV no Excel antes de levar
-ao Power BI. Se, em vez disso, o Power BI ler o arquivo **direto**, sem passar
-pelo Excel, ele mostrará o literal `="3/4"` — e aí o certo seria manter o valor
-cru `3/4`, deixando o Power BI inferir texto (o que ele costuma fazer, já que a
-coluna mistura "Carreta", "Truck" e "3/4"). Vale confirmar por onde o arquivo
-entra antes de considerar esta decisão fechada.
+Cabeçalhos e demais colunas de todos os CSVs foram conferidos contra a versão
+anterior à correção: **idênticos**.
+
+**Fluxo confirmado pelo gestor:** o CSV exportado é aberto no Excel antes de ir
+ao Power BI. É exatamente o caso que a sintaxe `="..."` resolve — ela é
+específica do Excel. (Se algum dia o Power BI passar a ler o arquivo direto, sem
+Excel no meio, o certo seria voltar ao valor cru `3/4` e deixar o BI inferir
+texto.)

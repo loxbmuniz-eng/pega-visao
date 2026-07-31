@@ -3,11 +3,51 @@
 
 - **Destinatário:** Tecnologia da Informação — Suinco
 - **Assunto:** Definição de arquitetura de hospedagem e persistência de dados
-- **Versão:** 2 — revisada em 31/07/2026
+- **Versão:** 3 — revisada em 31/07/2026 (fim do dia)
 - **Status:** Código de integração **escrito e testado**. Aguardando apenas três
   parâmetros de provisionamento (seção 9.3) para conectar.
 - **Documentos relacionados:** `GUIA_TI_IMPLANTACAO.md` (roteiro operacional passo a passo),
   `MODELO_DADOS_SHAREPOINT.md` (schema das listas), `DECISOES_CONFIRMADAS.md` (histórico de decisões)
+
+> ### O que mudou na versão 3 (mesmo dia, após rodada de homologação com o gestor)
+>
+> A versão 2 já registrava a integração pronta. Esta versão incorpora as
+> correções levantadas na conferência com a área de Logística. Uma delas tem
+> impacto direto sobre o TI e vale leitura atenta: **a base de frota não estava
+> se atualizando nos navegadores que já tinham a versão anterior.**
+>
+> | Área | O que mudou |
+> |---|---|
+> | **Base de frota** | Versionada pelo hash do arquivo. Trocar o CSV agora dispara a reimportação sozinho. Antes, só importava se a frota estivesse vazia. |
+> | **Modelo de dados** | Novos campos `rota` e `origem` (na frota); campo `doca` descontinuado na interface; `praOnde` com valores renomeados e migração automática. |
+> | **Export Power BI** | Três colunas novas de rota; colunas de texto protegidas do autoformato do Excel. |
+> | **Segurança** | Aba Programação passa a exigir senha de interface (**não** é controle de acesso — ver 9.4, item 4). |
+> | **Relatórios** | Impressão com identidade própria (papel branco), independente do tema. |
+>
+> #### 3.1.1. Alerta operacional: versionamento da base de frota
+>
+> **O que aconteceu.** A base oficial de frota substituiu a anterior (2.038 →
+> 749 placas). O arquivo estava correto, mas a rotina de carga só importava
+> quando a frota local estava vazia — era tratada como *seed inicial*, não como
+> sincronização. Resultado: todo navegador que já tinha aberto o painel
+> continuou com **1.289 placas fora de operação** e **327 com a transportadora
+> errada**, sem qualquer sinal na tela. O caso que revelou o problema foi uma
+> placa exibindo a operadora no lugar da transportadora.
+>
+> **Correção.** A versão da base passou a ser o hash do próprio arquivo CSV.
+> Trocar o arquivo muda o hash e dispara a reimportação automaticamente, sem
+> depender de alguém lembrar de incrementar um número de versão. Placas
+> cadastradas manualmente são preservadas (campo `origem`); as originadas de
+> seed anterior são substituídas. A troca é anunciada ao operador, com a
+> contagem do que mudou.
+>
+> **Por que isto importa para o TI.** Quando a persistência migrar para o
+> SharePoint, `dim_Veiculos` passa a ser a fonte de verdade e este mecanismo
+> deixa de ser o caminho principal. Até lá — e nos terminais que operarem
+> offline —, ele é o que garante que uma correção de cadastro chegue a quem
+> está no pátio. **Vale incluir na rotina de publicação:** ao atualizar a base
+> de frota, basta substituir o CSV e republicar; nenhuma ação é necessária nas
+> estações.
 
 > ### O que mudou desde a versão 1
 >
@@ -411,6 +451,35 @@ provável de falha na primeira tentativa de conexão.
 A alternativa seria `Sites.ReadWrite.All`, que concede escrita em **todos** os sites do
 tenant. Foi descartada deliberadamente: o painel precisa de um site apenas, e permissão
 tenant-wide para uma aplicação de logística dificilmente passa em revisão de segurança.
+
+#### 9.2.1-b. Colunas novas nas Listas (alteração da versão 3)
+
+O provisionamento das Listas precisa contemplar os campos abaixo, criados
+depois da versão 2 deste relatório. **Provisionar sem eles faz a gravação
+falhar silenciosamente para esses campos.**
+
+| Lista | Coluna | Tipo | Observação |
+|---|---|---|---|
+| `fact_Viagens` | `Rota_Codigo` | Texto (linha única) | Código oficial da rota (ex: `510`). É o valor que a operação usa. |
+| `fact_Viagens` | `Rota_Nome` | Texto (linha única) | Praça (ex: `Belo Horizonte`). |
+| `fact_Viagens` | `Rota_Operador` | Texto (linha única) | Operador logístico, quando houver (ex: `RP Logística`). |
+| `fact_Viagens` | `Pra_Onde` | Escolha | **Valores mudaram**: `FROTA PROPRIA`, `CROSS-DOCKING`, `DEDICADA`, `RET FRIGO`. Não existe mais valor em branco. |
+| `dim_Veiculos` | `Precisa_Revisao` | Sim/Não | Placa que exige conferência humana. |
+| Todas | `Operador_ID` | Texto | UPN do Entra ID quando autenticado. |
+| Todas | `Operador_Nome` | Texto | Nome digitado na tela. |
+| Todas | `Operador_Setor` | Texto | Setor declarado. |
+| Todas | `Operador_Verificado` | Sim/Não | Distingue identidade autenticada de auto-declarada. |
+| Todas | `Timestamp_Sincronia` | Data e Hora | Instante da gravação. |
+
+**Campo descontinuado:** `Doca` saiu da interface a pedido da operação. O
+campo permanece no modelo de dados e no export para não invalidar registros já
+gravados, mas **não precisa ser provisionado** em Lista nova.
+
+**Sobre `Operador_Verificado`:** é o campo que separa "o sistema sabe quem foi"
+de "alguém digitou um nome". Enquanto o SSO não estiver ligado, todo registro
+sai com `false` e o `Operador_ID` prefixado com `(auto-declarado)`. É
+deliberado: uma trilha de auditoria que não distingue os dois casos não serve
+para auditoria.
 
 #### 9.2.2. Fluxo do Power Automate (encerramento de ciclo)
 
