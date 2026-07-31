@@ -414,3 +414,31 @@ A limpeza da lista operacional é do fluxo no servidor, **depois** de o
 arquivamento ter dado certo. Sem URL de fluxo configurada, a função avisa que
 não arquivou e não apaga nada. Encerrar o dia é irreversível; apagar antes de
 confirmar o arquivamento seria a forma mais fácil de perder um dia de operação.
+
+### Revisão do adaptador (2ª versão recebida): o que foi aproveitado
+
+A segunda versão do `suincoadaptersharepoint.js` acrescentou Microsoft Graph e
+os metadados `Timestamp_Sincronia` / `Operador_ID` — ambos já presentes na
+implementação. Os oito defeitos listados acima **permanecem** nela, incluindo
+os dois que impedem o sistema de funcionar (segundo `const SuincoStore` e o
+`arquivarDia()` filtrando `'Faturado' || 'Concluído'`). Seguem corrigidos.
+
+Duas melhorias reais dela **foram adotadas**:
+
+1. **`Operador_ID` passa a usar a identidade autenticada** (UPN/e-mail vindo
+   do MSAL) em vez do nome digitado na tela de login. Diferença que importa:
+   nome digitado é auto-declarado — qualquer pessoa digita qualquer nome —,
+   enquanto o UPN é verificado pelo Entra ID. Numa pergunta como "quem
+   autorizou a saída da placa X às 14h?", a resposta precisa se sustentar.
+   Sem autenticação, o campo cai no nome digitado com o prefixo
+   `(auto-declarado)`, e o booleano `Operador_Verificado` deixa a diferença
+   explícita para quem consultar a Lista.
+2. **`storeAuthStateInCookie: true`**, necessário quando o painel roda dentro
+   do iframe do Teams, onde o retorno do redirect nem sempre enxerga o storage
+   da janela.
+
+Uma **não** foi adotada: `cacheLocation: "localStorage"` para os tokens.
+Mantido `sessionStorage`. Nos terminais compartilhados do pátio, token em
+localStorage sobrevive ao fechamento do navegador, e o próximo operador
+herdaria a sessão do anterior — arruinando exatamente a trilha de auditoria
+que esta integração existe para garantir.

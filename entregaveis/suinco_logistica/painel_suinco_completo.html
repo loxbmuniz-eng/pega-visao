@@ -1317,7 +1317,15 @@ const SuincoSharePoint = (function(){
           authority: `https://login.microsoftonline.com/${SP_CONFIG.tenantId}`,
           redirectUri: SP_CONFIG.redirectUri
         },
-        cache: { cacheLocation: 'sessionStorage', storeAuthStateInCookie: false }
+        // storeAuthStateInCookie:true — necessário quando o painel roda
+        // dentro do iframe do Teams, onde o retorno do redirect nem sempre
+        // enxerga o storage da janela.
+        // cacheLocation permanece 'sessionStorage', NÃO 'localStorage': nos
+        // terminais compartilhados do pátio, token em localStorage sobrevive
+        // ao fechamento do navegador e o próximo operador herdaria a sessão
+        // do anterior — o que arruinaria justamente a trilha de auditoria que
+        // esta integração existe para garantir.
+        cache: { cacheLocation: 'sessionStorage', storeAuthStateInCookie: true }
       });
       await msalApp.initialize();
       const resp = await msalApp.handleRedirectPromise();
@@ -1388,9 +1396,20 @@ const SuincoSharePoint = (function(){
      "quem autorizou a saída da placa X às 14h?" — todo registro gravado
      leva o operador e o instante da sincronia. */
   function carimbar(registro, operador){
+    // Operador_ID prioriza a identidade AUTENTICADA (UPN/e-mail vindo do
+    // MSAL) sobre o nome digitado na tela de login. Diferença que importa
+    // para auditoria: o nome digitado é auto-declarado — qualquer pessoa
+    // digita qualquer nome —, enquanto o UPN é verificado pelo Entra ID.
+    // Numa pergunta como "quem autorizou a saída da placa X às 14h?", a
+    // resposta precisa se sustentar. Sem autenticação, cai no nome digitado
+    // e fica explícito que é auto-declarado.
+    const autenticado = conta && (conta.username || conta.homeAccountId);
     return Object.assign({}, registro, {
-      Operador_ID: (operador && (operador.email || operador.nome)) || 'não identificado',
+      Operador_ID: autenticado
+        || (operador && (operador.email || operador.nome) ? `(auto-declarado) ${operador.email || operador.nome}` : 'não identificado'),
+      Operador_Nome: (operador && operador.nome) || '',
       Operador_Setor: (operador && operador.setor) || '—',
+      Operador_Verificado: !!autenticado,
       Timestamp_Sincronia: new Date().toISOString()
     });
   }
