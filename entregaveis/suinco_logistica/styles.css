@@ -531,3 +531,68 @@ select option{background:var(--campo-bg);color:var(--text)}
   font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.3px;
   white-space:nowrap;
 }
+
+/* ===== INTEGRAÇÃO SHAREPOINT — overlay, badges e rodapé de status ===== */
+
+/* Overlay de sincronia. Só aparece em operação que realmente fala com a
+   nuvem (arquivamento de ciclo, drenagem de fila) — nunca em cada clique:
+   a gravação do dia a dia é local-first e retorna na hora. */
+.sync-overlay{
+  position:fixed;inset:0;z-index:6000;
+  background:rgba(6,9,18,.66);backdrop-filter:blur(2px);
+  display:flex;align-items:center;justify-content:center;
+}
+/* OBRIGATÓRIO: sem esta regra o display:flex acima vence o atributo hidden,
+   e o overlay — invisível — intercepta todos os cliques do painel. */
+.sync-overlay[hidden]{display:none}
+.sync-box{
+  background:var(--navy);border:1px solid var(--border);
+  border-radius:var(--radius);box-shadow:0 12px 44px rgba(0,0,0,.5);
+  padding:28px 34px;text-align:center;max-width:340px;
+}
+.sync-spinner{
+  width:38px;height:38px;margin:0 auto 14px;
+  border:3px solid var(--border-soft);border-top-color:var(--gold);
+  border-radius:50%;animation:sync-gira .8s linear infinite;
+}
+@keyframes sync-gira{to{transform:rotate(360deg)}}
+.sync-texto{font-size:15px;font-weight:700;color:var(--text)}
+.sync-sub{font-size:12px;color:var(--text-dim);margin-top:6px;line-height:1.45}
+
+/* Badge de conexão no cabeçalho */
+.badge-conexao{
+  padding:5px 12px;border-radius:14px;font-size:12px;font-weight:700;
+  border:1px solid transparent;white-space:nowrap;
+}
+.badge-conexao.offline{background:var(--st-aguardando-embarque-bg);color:var(--st-aguardando-embarque-fg);border-color:var(--st-aguardando-embarque-br)}
+.badge-conexao.local{background:var(--navy-light);color:var(--text-dim);border-color:var(--border)}
+
+/* Rodapé fixo de status da conexão */
+.rodape-conexao{
+  position:fixed;left:0;right:0;bottom:0;z-index:3500;
+  padding:7px 16px;font-size:12px;font-weight:600;text-align:center;
+  border-top:1px solid var(--border-soft);
+}
+.rodape-conexao.online{background:var(--st-faturado-bg);color:var(--st-faturado-fg)}
+.rodape-conexao.offline{background:var(--st-aguardando-embarque-bg);color:var(--st-aguardando-embarque-fg)}
+.rodape-conexao.local{background:var(--navy-light);color:var(--text-dim)}
+/* O rodapé é fixo: reserva espaço para não cobrir o fim do conteúdo. */
+#main{padding-bottom:64px}
+#notif{bottom:46px}
+@media print{.rodape-conexao,.badge-conexao,.sync-overlay{display:none!important}}
+
+/* ===== Acabamento no padrão Fluent (Microsoft Teams) =====
+   Cantos menos arredondados, elevação sutil no hover e foco visível — as
+   convenções do Fluent — sem trocar a paleta da Suinco por azul Microsoft:
+   a identidade da marca continua sendo a do cliente. */
+.btn{
+  border-radius:6px;
+  box-shadow:0 1px 2px rgba(0,0,0,.18);
+  transition:opacity .15s, transform .1s, box-shadow .15s, filter .15s;
+}
+.btn:hover{opacity:1;filter:brightness(1.07);box-shadow:0 3px 8px rgba(0,0,0,.26)}
+.btn:active{transform:translateY(1px);box-shadow:0 1px 2px rgba(0,0,0,.2)}
+.badge{border-radius:5px;letter-spacing:.4px}
+.status-pill,.legenda-status-item{border-radius:5px}
+.card{border-radius:8px}
+input,select,textarea{border-radius:5px}

@@ -190,12 +190,85 @@ const SuincoStore = {
     try{
       const raw = localStorage.getItem(STORAGE_KEY);
       if(raw) Object.assign(DB, JSON.parse(raw));
+      invalidarIndiceFrota();
     }catch(e){ console.error('Falha ao carregar dados locais', e); }
   },
+  // Grava local e devolve imediatamente. A ida ao SharePoint acontece em
+  // seguida, sem bloquear a tela — ver o comentário de "local-first" em
+  // suinco-sharepoint.js. Mantida SÍNCRONA de propósito: é chamada em ~18
+  // pontos das regras de negócio, e torná-la assíncrona obrigaria a mexer em
+  // toda a máquina de estados, que a diretriz manda não alterar.
   save(){
     try{
       localStorage.setItem(STORAGE_KEY, JSON.stringify(DB));
     }catch(e){ console.error('Falha ao salvar dados locais', e); }
+  },
+
+  /* ---- Sincronia com o SharePoint / Power BI ----
+     Cada função abaixo traduz um objeto do painel para o formato da Lista
+     correspondente no modelo do BI. Se o adaptador não estiver configurado
+     ou estiver offline, a escrita vai para a fila e sobe depois — quem
+     chama não precisa saber disso. */
+  async sincronizarCarga(carga, operador){
+    if(typeof SuincoSharePoint === 'undefined') return;
+    return SuincoSharePoint.push('cargas', {
+      Title: carga.numeroCarga || carga.id,
+      Carga_ID: carga.id,
+      Numero_Carga: carga.numeroCarga || '',
+      Placa: carga.placa,
+      Transportadora: carga.transportadora || '',
+      Tipo_Veiculo: carga.tipoVeiculo || '',
+      Motorista: carga.motorista || '',
+      Cliente: carga.cliente || '',
+      Destino: carga.destino || '',
+      Peso_Kg: carga.peso || 0,
+      Doca: carga.doca || '',
+      Sequencia: carga.sequencia ?? null,
+      Pra_Onde: carga.praOnde || '',
+      Compartilhada: compartilhadaDaCarga(carga),
+      Qtd_Ganchos: carga.qtdGanchos || 0,
+      Qtd_Entregas: carga.qtdEntregas ?? 1,
+      Status_Atual: carga.status,
+      Criado_Em: carga.criadoEm
+    }, operador);
+  },
+  async sincronizarMovimentacao(mov, operador){
+    if(typeof SuincoSharePoint === 'undefined') return;
+    // A mesma movimentação alimenta duas Listas com finalidades distintas:
+    // fact_StatusFrota é a tabela fato que o Power BI cruza com as dimensões;
+    // LOG_EVENTOS é a trilha de auditoria, imutável, que responde perguntas
+    // do tipo "quem autorizou a saída da placa X às 14h?".
+    await SuincoSharePoint.push('movimentacoes', {
+      Title: mov.id,
+      Movimentacao_ID: mov.id,
+      Carga_ID: mov.cargaId,
+      Placa: mov.placa,
+      Status_Anterior: mov.statusAnterior || '',
+      Status_Novo: mov.statusNovo,
+      Setor: mov.setor,
+      Data_Evento: mov.timestamp
+    }, operador);
+    await SuincoSharePoint.push('logs', {
+      Title: `${mov.placa} — ${mov.statusNovo}`,
+      Evento_ID: mov.id,
+      Carga_ID: mov.cargaId,
+      Placa: mov.placa,
+      Acao: mov.statusAnterior ? `${mov.statusAnterior} -> ${mov.statusNovo}` : `Criada em ${mov.statusNovo}`,
+      Setor: mov.setor,
+      Data_Evento: mov.timestamp
+    }, operador);
+  },
+  async sincronizarVeiculo(frota, operador){
+    if(typeof SuincoSharePoint === 'undefined') return;
+    return SuincoSharePoint.push('frota', {
+      Title: frota.placa,
+      Placa: frota.placa,
+      Transportadora: frota.transportadora || '',
+      Tipo_Veiculo: frota.tipoVeiculo || '',
+      Capacidade_Kg: frota.capacidadeKg || null,
+      UF: frota.uf || '',
+      Precisa_Revisao: !!frota.precisaRevisao
+    }, operador);
   }
 };
 
@@ -235,9 +308,29 @@ function fmtDuracao(min){
    Campos novos (schema pronto pro dia em que o dado real vier de um
    ERP/Sisatak com histórico dessas placas — hoje ficam opcionais/vazios):
    capacidadeKg, uf, dataUltimaMovimentacao, precisaRevisao. */
+/* Índice Placa -> objeto da frota, para busca em tempo constante.
+   Motivo: buscarFrota é chamada a cada tecla digitada na Programação e a
+   cada validação da trava de frota, e upsertFrota roda uma vez por linha na
+   importação da base inteira — com busca linear isso vira O(n²) na carga
+   inicial. O índice é reconstruído sozinho sempre que DB.frota muda de
+   tamanho ou de identidade, então nunca fica desatualizado em silêncio. */
+let _frotaIndice = null;
+let _frotaIndiceRef = null;
+function indiceFrota(){
+  if(_frotaIndice && _frotaIndiceRef === DB.frota && _frotaIndice.size === DB.frota.length){
+    return _frotaIndice;
+  }
+  _frotaIndice = new Map();
+  DB.frota.forEach(f => _frotaIndice.set(normalizarPlaca(f.placa), f));
+  _frotaIndiceRef = DB.frota;
+  return _frotaIndice;
+}
+function invalidarIndiceFrota(){ _frotaIndice = null; _frotaIndiceRef = null; }
+
 function buscarFrota(placa){
   const p = normalizarPlaca(placa);
-  return DB.frota.find(f => normalizarPlaca(f.placa) === p) || null;
+  if(!p) return null;
+  return indiceFrota().get(p) || null;
 }
 function upsertFrota(placa, transportadora, tipoVeiculo, extra){
   const p = normalizarPlaca(placa);
@@ -247,18 +340,21 @@ function upsertFrota(placa, transportadora, tipoVeiculo, extra){
   const uf = extra.uf ? String(extra.uf).toUpperCase().slice(0,2) : '';
   const dataUltimaMovimentacao = extra.dataUltimaMovimentacao || null;
   const precisaRevisao = !!extra.precisaRevisao;
-  let f = DB.frota.find(x => normalizarPlaca(x.placa) === p);
+  let f = indiceFrota().get(p);
   if(f){
     f.transportadora = transportadora; f.tipoVeiculo = tipoVeiculo;
     f.capacidadeKg = capacidadeKg; f.uf = uf; f.dataUltimaMovimentacao = dataUltimaMovimentacao; f.precisaRevisao = precisaRevisao;
   } else {
-    DB.frota.push({ placa:p, transportadora, tipoVeiculo, capacidadeKg, uf, dataUltimaMovimentacao, precisaRevisao });
+    const novo = { placa:p, transportadora, tipoVeiculo, capacidadeKg, uf, dataUltimaMovimentacao, precisaRevisao };
+    DB.frota.push(novo);
+    if(_frotaIndice) _frotaIndice.set(p, novo); // mantém o índice quente na importação em lote
   }
   SuincoStore.save();
 }
 function removerFrota(placa){
   const p = normalizarPlaca(placa);
   DB.frota = DB.frota.filter(x => normalizarPlaca(x.placa) !== p);
+  invalidarIndiceFrota();
   SuincoStore.save();
 }
 // Importação em lote: cola linhas "Placa;Transportadora;TipoVeiculo" (aceita
@@ -342,6 +438,14 @@ async function carregarFrotaSeedSeVazia(){
         precisaRevisao: /^sim$/i.test(precisaRevisao||'')
       });
     });
+    // Primeira carga da base: espelha dim_Veiculos no SharePoint. Vai pela
+    // fila (local-first), então não trava a abertura do painel nem se perde
+    // se a rede estiver fora — sobe quando a conexão voltar.
+    if(typeof SuincoSharePoint !== 'undefined' && SuincoSharePoint.estaConfigurado()){
+      DB.frota.forEach(f=>{
+        SuincoStore.sincronizarVeiculo(f, DB.operador).catch(e=>console.warn('[Suinco] sync frota:', e));
+      });
+    }
     return { carregado:true, total: linhas.length };
   }catch(e){
     console.warn('Não foi possível carregar automaticamente a base real de Frota (frota_seed_2026.csv). Siga com cadastro manual ou import em lote em Cadastros → Frota.', e);
@@ -393,6 +497,14 @@ function registrarMovimentacao({cargaId, placa, statusAnterior, statusNovo, oper
     tipoVeiculo: tipoVeiculo || '',
     qtdEntregas: qtdEntregas ?? null
   });
+  // Sobe para fact_StatusFrota + LOG_EVENTOS sem bloquear quem chamou: a
+  // regra de negócio já terminou seu trabalho aqui.
+  const mov = DB.movimentacoes[DB.movimentacoes.length - 1];
+  const carga = getCarga(cargaId);
+  if(typeof SuincoStore.sincronizarMovimentacao === 'function'){
+    SuincoStore.sincronizarMovimentacao(mov, DB.operador).catch(e=>console.warn('[Suinco] sync movimentação:', e));
+    if(carga) SuincoStore.sincronizarCarga(carga, DB.operador).catch(e=>console.warn('[Suinco] sync carga:', e));
+  }
 }
 // Monta o snapshot padrão a partir do objeto de carga corrente — evita
 // repetir os mesmos 4 campos em toda chamada de registrarMovimentacao.

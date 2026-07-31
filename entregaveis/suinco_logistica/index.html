@@ -6,6 +6,18 @@
 <title>Painel Logístico — Suinco</title>
 <link rel="icon" href="assets/logo_suinco.png">
 <link rel="stylesheet" href="styles.css">
+<!-- MSAL.js v2 — SSO Microsoft 365. Carrega da CDN da Microsoft; se não vier
+     (aberto via file://, sem rede, ou bloqueado por política), o adaptador
+     detecta a ausência e segue em modo local, sem quebrar o painel. -->
+<!-- NOTA PARA O TI: sem atributo integrity porque o hash SRI precisa ser
+     gerado a partir do arquivo real da versão que voces forem fixar. Antes de
+     ir a producao, rodem:
+       curl -s https://alcdn.msauth.net/browser/2.38.3/js/msal-browser.min.js | openssl dgst -sha384 -binary | openssl base64 -A
+     e colem o resultado como integrity="sha384-<hash>". Alternativa preferida
+     pela maioria das politicas de seguranca: baixar o msal-browser.min.js e
+     servi-lo do proprio tenant, eliminando a dependencia de CDN externa. -->
+<script src="https://alcdn.msauth.net/browser/2.38.3/js/msal-browser.min.js"
+        crossorigin="anonymous" onerror="window.__msalFalhou=true"></script>
 </head>
 <body>
 
@@ -24,6 +36,7 @@
     <span class="badge-setor" id="operator-name">—</span>
   </div>
   <div id="header-actions">
+    <span id="badge-conexao" class="badge-conexao" hidden></span>
     <button class="btn btn-sec btn-sm" id="btn-tema" onclick="alternarTema()" title="Alternar entre modo claro e escuro" aria-label="Alternar tema">🌙 Escuro</button>
     <button class="btn btn-sec btn-sm" onclick="trocarUsuario()">Trocar usuário</button>
   </div>
@@ -128,6 +141,12 @@
       </div>
       <div class="form-group" style="margin-bottom:10px"><label>Observações</label><textarea id="prog-obs"></textarea></div>
       <div class="flex-end"><button class="btn btn-primary" onclick="criarCargaProgramadaUI()">➕ Criar Carga (Aguardando Veículo)</button></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><span class="icon">🚀</span> Encerramento do Ciclo</div>
+      <div class="card-sub">Fecha o dia: dispara o fluxo do Power Automate que cria as pastas <code>/Ano/Mês/Dia/</code>, arquiva o movimento e prepara a lista operacional para o próximo turno. <strong>Ação irreversível</strong> — pede confirmação antes, e nada é apagado do painel se o arquivamento falhar.</div>
+      <div class="flex-end"><button class="btn btn-danger" onclick="encerrarCicloUI()">🚀 Encerrar e Arquivar Ciclo</button></div>
     </div>
 
     <div class="card">
@@ -583,6 +602,21 @@
 <div id="print-operacional" class="print-only"></div>
 <div id="print-executivo" class="print-only"></div>
 
+<!-- Overlay exibido enquanto há escrita indo para o SharePoint -->
+<div id="sync-overlay" class="sync-overlay" hidden>
+  <div class="sync-box">
+    <div class="sync-spinner"></div>
+    <div class="sync-texto">Sincronizando com a Nuvem Suinco…</div>
+    <div class="sync-sub" id="sync-sub"></div>
+  </div>
+</div>
+
+<!-- Rodapé de status. O texto NÃO é fixo: reflete o estado real da conexão
+     (ver atualizarRodapeConexao em app.js). Afirmar "Conectado ao SharePoint"
+     sem conexão seria justamente o que o TI vai checar primeiro. -->
+<div id="rodape-conexao" class="rodape-conexao"></div>
+
+<script src="suinco-sharepoint.js"></script>
 <script src="data.js"></script>
 <script src="app.js"></script>
 </body>

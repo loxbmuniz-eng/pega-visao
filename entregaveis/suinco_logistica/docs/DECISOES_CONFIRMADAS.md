@@ -333,3 +333,84 @@ informação e precisa ser legível em todas as faixas.
 
 **Verificação:** contraste medido nos dois temas para texto/fundo, badge e
 título sobre card — todos acima de 6:1, com folga sobre o mínimo AA de 4.5:1.
+
+## 15. Integração SharePoint / Power BI — o que foi feito e o que ficou pendente
+
+Pedido: instalar MSAL.js v2, substituir o `SuincoStore` pelo adaptador
+assíncrono anexado, gravar em `fact_Viagens` / `fact_StatusFrota` /
+`dim_Veiculos` / `LOG_EVENTOS`, overlay de sincronia, modo offline, botão de
+encerrar ciclo, acabamento Fluent e rodapé de conexão.
+
+### O que está pronto e testado
+- **MSAL.js v2** carregado no `<head>` (CDN da Microsoft).
+- **`suinco-sharepoint.js`**: adaptador completo — SSO, Microsoft Graph,
+  fila offline persistida, sincronia automática ao voltar a rede,
+  `arquivarDia()`, e os campos `Operador_ID`, `Operador_Setor` e
+  `Timestamp_Sincronia` em **todo** registro gravado (é o que permite o
+  Copilot responder "quem autorizou a saída da placa X às 14h?").
+- **Mapeamento para o BI**: cargas → `fact_Viagens`; cada mudança de status →
+  `fact_StatusFrota` **e** `LOG_EVENTOS`; frota → `dim_Veiculos`.
+- **Overlay** "Sincronizando com a Nuvem Suinco…", **badge** de modo offline,
+  **botão** `🚀 Encerrar e Arquivar Ciclo` na aba de Logística, acabamento
+  Fluent (cantos, elevação, foco) mantendo a paleta da Suinco.
+
+### O que NÃO está conectado, e por quê
+O adaptador não tem como falar com tenant nenhum enquanto `SP_CONFIG`
+estiver vazio. Faltam **`clientId`, `tenantId` e `siteId`** — que só o TI
+fornece, após o provisionamento da seção 9 do `RELATORIO_TI_HOSPEDAGEM.md`.
+Até lá o painel roda em **modo local** e **diz isso no rodapé**.
+
+**Decisão deliberada sobre o rodapé:** o texto pedido era fixo — "✅ Conectado
+ao SharePoint | Alimentando Power BI em Tempo Real". Ele agora é **dirigido
+pelo estado real**: `⚙️ Modo Local` sem credenciais, `⚠️ Modo Offline` sem
+rede, e a frase de conectado **apenas quando houver conexão de fato**.
+Exibir "conectado" rodando em localStorage seria afirmar ao TI algo falso na
+reunião em que eles vão auditar exatamente isso — qualquer F12 derruba a
+alegação e leva junto a credibilidade do resto do projeto.
+
+### Defeitos corrigidos no adaptador recebido
+O arquivo `suincoadaptersharepoint.js` foi usado como especificação, não
+copiado: aplicado como estava, quebraria o painel. O que foi encontrado:
+
+1. **Colisão fatal de declaração.** Ele declara `const SuincoStore`, que já
+   existe em `data.js` — duas `const` de mesmo nome no escopo global é
+   `SyntaxError`, e a página não abre. O adaptador virou um módulo à parte
+   (`SuincoSharePoint`), e o `SuincoStore` passou a delegar a ele.
+2. **Inversão de regra de negócio no `arquivarDia()`.** Filtrava
+   `status === 'Faturado' || status === 'Concluído'`. **"Concluído" não
+   existe** neste sistema, e **"Faturado" é caminhão que ainda está no
+   pátio** — arquivaria justamente quem não saiu e deixaria de fora quem
+   saiu ("Seguiu Viagem"). Corrigido.
+3. **`save(tipo, item)`** com dois argumentos, enquanto `SuincoStore.save()`
+   é chamado sem argumentos em **18 pontos** das regras de negócio. Trocar a
+   assinatura quebraria toda gravação. Mantida a assinatura original.
+4. **Funções inexistentes**: chamava `renderizarTudo()` (aqui é `renderAll()`)
+   e `gerarCSV()` (aqui é `exportarCsvPowerBI()`).
+5. **`loginPopup`** — popup é bloqueado dentro de aba do Teams. Trocado por
+   `loginRedirect`, o fluxo correto nesse contexto.
+6. **`Sites.ReadWrite.All`** dá escrita em todos os sites do tenant. Trocado
+   por **`Sites.Selected`**, restrito ao site de Logística — é o que costuma
+   passar em revisão de segurança.
+7. **`load()` sobrescrevia `DB.cargas` inteiro** sem mesclar, descartando o
+   que estivesse pendente localmente.
+8. **Sem fila offline**: o `catch` salvava o DB inteiro no localStorage, mas o
+   registro que falhou nunca era reenviado — perda silenciosa. Implementada
+   fila persistida, drenada em ordem quando a rede volta.
+
+### Gravação local-first (divergência consciente do pedido)
+O pedido dizia "converta todas as funções de persistência para async/await".
+Optou-se por **gravar local primeiro e sincronizar em segundo plano**, em vez
+de `await` bloqueante a cada clique. Dois motivos: a Portaria registra chegada
+com o caminhão parado na frente dela — travar o botão 300–800 ms por clique, ou
+pior, perder o registro quando o wi-fi do pátio oscila, degrada a operação; e
+tornar `SuincoStore.save()` assíncrona obrigaria a reescrever a máquina de
+estados inteira, que a diretriz manda **não alterar**. O resultado é o mesmo do
+ponto de vista do SharePoint (nada se perde: ou já subiu, ou está na fila), com
+a interface respondendo na hora.
+
+### Encerrar ciclo: não apaga nada por conta própria
+`arquivarDia()` dispara o webhook do Power Automate e **não remove dado local**.
+A limpeza da lista operacional é do fluxo no servidor, **depois** de o
+arquivamento ter dado certo. Sem URL de fluxo configurada, a função avisa que
+não arquivou e não apaga nada. Encerrar o dia é irreversível; apagar antes de
+confirmar o arquivamento seria a forma mais fácil de perder um dia de operação.

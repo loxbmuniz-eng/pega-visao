@@ -36,6 +36,7 @@ def ler(nome):
 def main():
     html = ler('index.html')
     css = ler('styles.css')
+    adapter_js = ler('suinco-sharepoint.js')
     data_js = ler('data.js')
     app_js = ler('app.js')
     csv = ler('frota_seed_2026.csv')
@@ -71,7 +72,19 @@ def main():
     seed = ('<script>window.FROTA_SEED_CSV = ' + json.dumps(csv, ensure_ascii=False)
             + ';</script>')
 
-    # 4. <script src="data.js"> e <script src="app.js"> viram código inline.
+    # 4. O adaptador do SharePoint também entra inline. O <script> do MSAL
+    #    continua apontando para a CDN da Microsoft: não dá para embutir uma
+    #    biblioteca de autenticação que precisa de rede de qualquer forma, e
+    #    o adaptador já trata a ausência dela caindo em modo local.
+    html, n_ad = re.subn(
+        r'<script src="suinco-sharepoint\.js"></script>',
+        lambda _: '<script>\n' + adapter_js + '\n</script>',
+        html,
+    )
+    if n_ad != 1:
+        sys.exit(f'ERRO: esperava 1 script para suinco-sharepoint.js, encontrei {n_ad}')
+
+    # 5. <script src="data.js"> e <script src="app.js"> viram código inline.
     #    A ordem original (data.js antes de app.js) é preservada.
     html, n_data = re.subn(
         r'<script src="data\.js"></script>',

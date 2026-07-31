@@ -139,3 +139,49 @@ dentro do próprio extrato de 2 anos (`PrecisaRevisao = Sim`); as demais têm
 transportadora única e consistente nas duas consultas (`Nao`). 30 placas
 novas ficaram com `TipoVeiculo` vazio por falta do dado na origem — não
 inventado.
+
+## Atualização 2026-07-31 (2ª): substituição total por `FROTA_Base_Consolidada_2026.xlsx`
+
+O usuário informou que a base anterior **estava puxando errado** e enviou
+`FROTA_Base_Consolidada_2026.xlsx` como base **oficial e consolidada**.
+Aplicada **substituição total**, conforme pedido: `frota_seed_2026.csv` foi
+regravado do zero a partir desse arquivo. A base de 2.038 placas construída a
+partir do extrato de 2 anos (`Consulta_Veiculos_4.xlsx`) foi **descartada**.
+
+**Por que a contagem caiu de 2.038 para 749 — e por que isso é o correto:**
+o extrato de 2 anos continha toda placa que passou pela Suinco no período,
+incluindo veículos de terceiros que fizeram uma viagem única e placas já fora
+de operação. Não era um cadastro de frota, era um histórico de movimentação.
+A base consolidada é o cadastro de verdade. Menos linhas, porém corretas — e
+a trava de Frota depende justamente disso: se a base tem placa que não
+opera mais, a trava deixa de significar alguma coisa.
+
+**Qualidade do arquivo recebido (conferida, não presumida):**
+- 749 placas, **zero duplicadas**, **zero conflitos** (nenhuma placa com duas
+  transportadoras ou dois tipos diferentes), **nenhum campo vazio**.
+- 134 transportadoras distintas.
+- Tipos: Carreta 477, 3/4 85, Bitruck 80, Truck 61, Toco 33, Container 13.
+- Estrutura: sem cabeçalho, dados a partir da linha 3, colunas Placa /
+  Transportadora / Tipo de Veículo.
+
+**Sanitização aplicada na importação** (pedido explícito): placa forçada para
+MAIÚSCULA e sem caracteres não alfanuméricos (traço, ponto, espaço). A mesma
+normalização já era aplicada na busca, então digitar `aak-8958` encontra
+`AAK8958`.
+
+**Uma placa exige confirmação humana — `SIYOG36` (Suinco, 3/4).** Não bate com
+o formato brasileiro (3 letras + dígito + alfanumérico + 2 dígitos). Quase
+certamente é `SIY0G36`, com o algarismo **zero** no lugar da letra **O** —
+confusão clássica de digitação. **Não foi corrigida automaticamente**: alterar
+uma placa num sistema de registro por inferência é o tipo de "conserto" que
+vira problema depois. Ficou na base com `PrecisaRevisao = Sim`, visível no
+filtro "Só Precisa Revisão" em Cadastros → Frota.
+**Atenção operacional:** enquanto não for confirmada, se o caminhão chegar com
+a placa real `SIY0G36`, a trava de Frota vai **recusar** a criação da carga,
+porque o que está cadastrado é `SIYOG36`. Vale confirmar na origem.
+
+**Performance:** com a base indexada num `Map` (`indiceFrota()` em data.js), a
+busca por placa passou de varredura linear para tempo constante — 20.000
+buscas em ~5 ms na verificação automatizada. Importa porque `buscarFrota()` é
+chamada a cada tecla digitada na Programação e uma vez por linha durante a
+importação da base inteira.

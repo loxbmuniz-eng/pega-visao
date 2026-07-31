@@ -17,6 +17,99 @@ const NEXT_ACAO = {
   'Embarque Finalizado':  { label:'Faturar',            destino:'Faturado' }
 };
 
+/* ---------- CONEXÃO COM O SHAREPOINT (estado real, sem fingir) ----------
+   O rodapé e o badge do cabeçalho mostram o estado VERDADEIRO da conexão.
+   O texto "Conectado ao SharePoint | Alimentando Power BI em Tempo Real" só
+   aparece quando existe conexão de fato; enquanto o TI não provisionar o
+   ambiente, o rodapé diz que está aguardando configuração. Exibir conexão
+   inexistente seria exatamente o que o TI checa primeiro numa auditoria. */
+let _syncPendentes = 0;
+
+function mostrarSyncOverlay(sub){
+  const ov = document.getElementById('sync-overlay');
+  if(!ov) return;
+  const s = document.getElementById('sync-sub');
+  if(s) s.textContent = sub || '';
+  ov.hidden = false;
+}
+function esconderSyncOverlay(){
+  const ov = document.getElementById('sync-overlay');
+  if(ov) ov.hidden = true;
+}
+
+/* Envolve uma operação de sincronia mostrando o overlay enquanto ela roda.
+   Usa contador para o overlay não sumir no meio quando há duas em paralelo. */
+async function comOverlaySync(sub, tarefa){
+  _syncPendentes++;
+  mostrarSyncOverlay(sub);
+  try{ return await tarefa(); }
+  finally{
+    _syncPendentes--;
+    if(_syncPendentes <= 0){ _syncPendentes = 0; esconderSyncOverlay(); }
+  }
+}
+
+function atualizarRodapeConexao(estado, detalhe){
+  const rod = document.getElementById('rodape-conexao');
+  const badge = document.getElementById('badge-conexao');
+  if(!rod) return;
+  const fila = (typeof SuincoSharePoint !== 'undefined') ? SuincoSharePoint.pendentes() : 0;
+  const sufixoFila = fila ? ` · ${fila} registro(s) na fila` : '';
+
+  if(estado === 'online'){
+    rod.className = 'rodape-conexao online';
+    rod.innerHTML = `✅ Conectado ao SharePoint | Alimentando Power BI em Tempo Real${esc(sufixoFila)}`;
+    if(badge){ badge.hidden = true; }
+  } else if(estado === 'offline'){
+    rod.className = 'rodape-conexao offline';
+    rod.innerHTML = `⚠️ Modo Offline — gravando no aparelho e sincronizando assim que a rede voltar${esc(sufixoFila)}`;
+    if(badge){ badge.hidden = false; badge.className = 'badge-conexao offline'; badge.textContent = '⚠️ Modo Offline'; }
+  } else {
+    // 'local': sem configuração de tenant. Estado honesto, não erro.
+    rod.className = 'rodape-conexao local';
+    rod.innerHTML = '⚙️ Modo Local — aguardando o TI provisionar o SharePoint (ver docs/RELATORIO_TI_HOSPEDAGEM.md). Os dados ficam neste navegador.';
+    if(badge){ badge.hidden = false; badge.className = 'badge-conexao local'; badge.textContent = '⚙️ Local'; }
+  }
+}
+
+/* ---------- ENCERRAR E ARQUIVAR CICLO ----------
+   Dispara o fluxo do Power Automate que cria /Ano/Mês/Dia/ e prepara o
+   próximo turno. Pede confirmação porque encerrar o dia é irreversível, e
+   nunca apaga nada localmente por conta própria: a limpeza da lista
+   operacional é responsabilidade do fluxo no lado do servidor, depois de o
+   arquivamento ter dado certo. */
+async function encerrarCicloUI(){
+  const total = DB.cargas.length;
+  const concluidas = DB.cargas.filter(c=>c.status==='Seguiu Viagem').length;
+  const emAberto = total - concluidas;
+
+  let aviso = `Encerrar e arquivar o ciclo de hoje?\n\n` +
+              `Total de cargas: ${total}\n` +
+              `Concluídas (Seguiu Viagem): ${concluidas}\n` +
+              `Ainda em aberto: ${emAberto}\n\n`;
+  if(emAberto > 0){
+    aviso += `ATENÇÃO: ${emAberto} carga(s) ainda não saíram. Elas entram no arquivo do dia assim mesmo.\n\n`;
+  }
+  aviso += `O arquivamento é irreversível.`;
+  if(!confirm(aviso)) return;
+
+  if(typeof SuincoSharePoint === 'undefined'){
+    notify('Adaptador do SharePoint não carregado.', 'danger');
+    return;
+  }
+  try{
+    const r = await comOverlaySync('Arquivando o ciclo do dia…',
+      ()=>SuincoSharePoint.arquivarDia({total, concluidas, emAberto}, DB.operador));
+    if(r.disparado){
+      notify('Ciclo encerrado — o Power Automate está criando as pastas do dia.', 'success');
+    }else{
+      notify(`Ciclo NÃO arquivado: ${r.motivo}. Nada foi apagado.`, 'warn');
+    }
+  }catch(e){
+    notify('Falha ao arquivar: ' + e.message + '. Nada foi apagado.', 'danger');
+  }
+}
+
 /* ---------- TEMA CLARO / ESCURO ----------------------------------------
    O tema vive num atributo data-tema no <html>; todas as cores saem de
    variáveis CSS (ver :root e :root[data-tema="claro"] em styles.css), então
@@ -1534,6 +1627,14 @@ async function init(){
   const seed = await carregarFrotaSeedSeVazia();
   if(seed.carregado) notify(`Base de Frota carregada: ${seed.total} placa(s).`, 'success');
   iniciarTema();            // antes de desenhar: evita piscar no tema errado
+  // Conecta ao SharePoint se o TI já tiver configurado; caso contrário fica
+  // em modo local e o rodapé diz isso. Nunca bloqueia a abertura do painel.
+  if(typeof SuincoSharePoint !== 'undefined'){
+    SuincoSharePoint.aoMudarEstado(atualizarRodapeConexao);
+    SuincoSharePoint.iniciar()
+      .then(()=>atualizarRodapeConexao(SuincoSharePoint.estado()))
+      .catch(e=>{ console.warn('[Suinco] init SharePoint:', e); atualizarRodapeConexao('local'); });
+  }
   atualizarDatalists();
   atualizarAvisoSetorAba(); // preenche o box "função da aba" já na 1ª pintura
   if(DB.operador){
