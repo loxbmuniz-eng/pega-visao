@@ -229,19 +229,30 @@ function parseCsvRfc4180(texto){
 }
 
 // Carrega a base real de Frota (frota_seed_2026.csv, 2.038 placas — ver
-// docs/NOTAS_BASE_FROTA.md) automaticamente na primeira execução do painel,
-// via fetch relativo ao HTML (funciona quando servido por HTTP — Teams/
-// SharePoint ou `python3 -m http.server`; em file:// o fetch falha por CORS
-// e o painel segue vazio normalmente, caindo de volta no cadastro/import em
-// lote manual que já existia antes desta base chegar). SÓ roda quando
-// DB.frota ainda está vazio, pra nunca sobrescrever remoções/edições feitas
-// depois pelo Responsável pela Base de Frota — é seed inicial, não sync.
+// docs/NOTAS_BASE_FROTA.md) automaticamente na primeira execução do painel.
+// Duas origens possíveis, nesta ordem:
+//   1. window.FROTA_SEED_CSV — o CSV embutido direto no HTML. É o que a
+//      versão de arquivo único (painel_suinco_completo.html) usa, porque
+//      em file:// o navegador bloqueia fetch de arquivo local por CORS e
+//      o painel abriria sem nenhuma placa.
+//   2. fetch('frota_seed_2026.csv') — quando servido por HTTP (Teams/
+//      SharePoint ou `python3 -m http.server`), com os arquivos separados.
+// Se as duas falharem, o painel segue vazio normalmente, caindo de volta no
+// cadastro/import em lote manual que já existia antes desta base chegar.
+// SÓ roda quando DB.frota ainda está vazio, pra nunca sobrescrever remoções/
+// edições feitas depois pelo Responsável pela Base de Frota — é seed
+// inicial, não sync.
 async function carregarFrotaSeedSeVazia(){
   if(DB.frota.length > 0) return { carregado:false, motivo:'Frota já tem dados' };
   try{
-    const resp = await fetch('frota_seed_2026.csv');
-    if(!resp.ok) return { carregado:false, motivo:'HTTP '+resp.status };
-    const texto = await resp.text();
+    let texto;
+    if(typeof window !== 'undefined' && window.FROTA_SEED_CSV){
+      texto = window.FROTA_SEED_CSV;
+    }else{
+      const resp = await fetch('frota_seed_2026.csv');
+      if(!resp.ok) return { carregado:false, motivo:'HTTP '+resp.status };
+      texto = await resp.text();
+    }
     let linhas = parseCsvRfc4180(texto);
     if(linhas.length && linhas[0][0] === 'Placa') linhas = linhas.slice(1); // remove cabeçalho
     linhas.forEach(l=>{
