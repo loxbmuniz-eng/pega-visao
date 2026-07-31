@@ -720,7 +720,7 @@ input,select,textarea{border-radius:5px}
         <table>
           <thead><tr>
             <th>Seq.</th><th>Nº Carga</th><th>Placa</th><th>Transportadora</th><th>Tipo Veículo</th><th>Motorista</th>
-            <th>Cliente</th><th>Destino</th><th>Peso (kg)</th>
+            <th>Cliente</th><th>Destino</th><th>Rota</th><th>Peso (kg)</th>
             <th>Tipo de Operação</th><th>Ganchos</th><th>Status</th><th>Atualizado em</th>
           </tr></thead>
           <tbody id="torre-tbody"></tbody>
@@ -756,6 +756,10 @@ input,select,textarea{border-radius:5px}
         <div class="form-group"><label>Motorista</label><input type="text" id="prog-motorista" placeholder="Nome do motorista"></div>
         <div class="form-group"><label>Cliente</label><input type="text" id="prog-cliente"></div>
         <div class="form-group"><label>Destino</label><input type="text" id="prog-destino" placeholder="Cidade/UF"></div>
+        <div class="form-group">
+          <label>Rota <span class="hint">(código oficial)</span></label>
+          <select id="prog-rota"></select>
+        </div>
       </div>
       <div class="form-row">
         <div class="form-group"><label>Peso (kg)</label><input type="number" id="prog-peso" min="0"></div>
@@ -818,7 +822,7 @@ input,select,textarea{border-radius:5px}
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Seq.</th><th>Nº Carga</th><th>Placa</th><th>Transportadora</th><th>Cliente</th><th>Destino</th><th>Tipo de Operação</th><th>Ganchos</th><th class="no-print">Ação</th></tr></thead>
+          <thead><tr><th>Seq.</th><th>Nº Carga</th><th>Placa</th><th>Transportadora</th><th>Cliente</th><th>Destino</th><th>Rota</th><th>Tipo de Operação</th><th>Ganchos</th><th class="no-print">Ação</th></tr></thead>
           <tbody id="prog-fila-tbody"></tbody>
         </table>
       </div>
@@ -1192,6 +1196,8 @@ input,select,textarea{border-radius:5px}
     </div>
     <div class="form-row">
       <div class="form-group">
+        <label>Rota</label>
+        <select id="completar-rota" style="margin-bottom:10px"></select>
         <label>Tipo de Operação</label>
         <select id="completar-praonde" onchange="atualizarPreviewCompartilhada('completar-praonde','completar-compartilhada-preview')">
           <option value="FROTA PROPRIA">FROTA PRÓPRIA</option>
@@ -1665,6 +1671,70 @@ function migrarPraOnde(){
   return n;
 }
 
+/* ---------- ROTAS (código + praça + operador logístico) ----------
+   Lista oficial passada pelo gestor em 31/07/2026. O código é o que a
+   operação usa no dia a dia ("carga da 510"), então ele é o valor gravado —
+   o nome vem junto só para quem não decorou o número ainda.
+
+   ATENÇÃO: esta lista está INCOMPLETA por definição. Faltam 511, 514, 515,
+   526, 527, 528, 530, 531, 533, 535, 537 e 539, que o gestor enviará depois.
+   Por isso "(rota não informada)" continua sendo uma opção válida: obrigar a
+   escolher uma rota faria a Programação travar justamente nas praças que
+   ainda não foram cadastradas. Para acrescentar as que faltam, basta incluir
+   a linha aqui — nada mais no painel precisa mudar. */
+const ROTAS = [
+  { codigo:'500', nome:'Patos de Minas',                     operador:'' },
+  { codigo:'501', nome:'São Gotardo',                        operador:'' },
+  { codigo:'502', nome:'Araxá',                              operador:'' },
+  { codigo:'503', nome:'Patrocínio / Coromandel',            operador:'' },
+  { codigo:'504', nome:'Alto Paranaíba',                     detalhe:'Paracatu, Unaí, João Pinheiro, Arinos e Buritis', operador:'' },
+  { codigo:'505', nome:'Triângulo Mineiro',                  detalhe:'Uberlândia', operador:'' },
+  { codigo:'506', nome:'Uberaba',                            operador:'' },
+  { codigo:'507', nome:'Araguari',                           operador:'' },
+  { codigo:'508', nome:'Iturama',                            operador:'Total Service ou FrigoCargo' },
+  { codigo:'509', nome:'Centro-Oeste',                       operador:'' },
+  { codigo:'510', nome:'Belo Horizonte',                     operador:'RP Logística' },
+  { codigo:'512', nome:'Varginha',                           detalhe:'Sul de Minas', operador:'Brasfrios' },
+  { codigo:'513', nome:'Passos',                             detalhe:'Sul de Minas', operador:'MaxFrios' },
+  { codigo:'516', nome:'Norte de Minas',                     detalhe:'Montes Claros', operador:'Total Services' },
+  { codigo:'517', nome:'Rio de Janeiro (Varejo)',            detalhe:'São João de Meriti', operador:'OmegaX' },
+  { codigo:'518', nome:'Rio de Janeiro (Redes)',             detalhe:'Canejo', operador:'' },
+  { codigo:'519', nome:'Brasília (Varejo)',                  operador:'RN Logística' },
+  { codigo:'520', nome:'Goiás (Varejo)',                     operador:'AG Sestini' },
+  { codigo:'521', nome:'SP Ribeirão Preto',                  operador:'CargoFrio' },
+  { codigo:'522', nome:'SP Capital',                         detalhe:'Osasco', operador:'SPM LOG' },
+  { codigo:'523', nome:'Vale do Aço',                        detalhe:'Governador Valadares', operador:'SSLog' },
+  { codigo:'524', nome:'Zona da Mata',                       detalhe:'Juiz de Fora', operador:'BSF Logística' },
+  { codigo:'525', nome:'Bahia Capital',                      operador:'LogMaster' },
+  { codigo:'529', nome:'Espírito Santo',                     detalhe:'Serra-ES', operador:'Nacional Log' },
+  { codigo:'532', nome:'Bahia Interior',                     detalhe:'Vitória da Conquista', operador:'ConquistaLog' },
+  { codigo:'534', nome:'Salvador',                           operador:'LogMaster' },
+  { codigo:'536', nome:'Goiás',                              operador:'AG Sestini' },
+  { codigo:'538', nome:'SP Interior',                        detalhe:'Marília', operador:'CargoFrio' },
+  { codigo:'540', nome:'Salvador',                           operador:'LogMaster' },
+  { codigo:'541', nome:'Brasília (Redes)',                   operador:'Versatto Logística' }
+];
+const ROTA_POR_CODIGO = new Map(ROTAS.map(r => [r.codigo, r]));
+function rotaInfo(codigo){ return ROTA_POR_CODIGO.get(String(codigo||'').trim()) || null; }
+// "510 — Belo Horizonte (RP Logística)". Usado na tela e nos relatórios, para
+// que o mesmo rótulo apareça em todo lugar.
+// Rótulo COMPLETO — usado no <select> e na ficha da carga, onde há espaço:
+// "504 — Alto Paranaíba · Paracatu, Unaí... (Operador)"
+function rotaLabel(codigo){
+  const r = rotaInfo(codigo);
+  if(!r) return codigo ? String(codigo) : '';
+  return `${r.codigo} — ${r.nome}`
+       + (r.detalhe ? ` · ${r.detalhe}` : '')
+       + (r.operador ? ` (${r.operador})` : '');
+}
+// Rótulo CURTO — usado nas tabelas e no relatório impresso. Sem o detalhe de
+// cidades: a rota 504 sozinha tem cinco municípios, e o nome completo esticava
+// a linha inteira do relatório para caber numa única célula.
+function rotaCurta(codigo){
+  const r = rotaInfo(codigo);
+  return r ? `${r.codigo} — ${r.nome}` : (codigo ? String(codigo) : '—');
+}
+
 /* ---------- mapeamento de cor/rótulo para o PDF Operacional e para
    Dim_Status (export Power BI) ----------
    Mapeamento de "Status de Carregamento" no PDF Operacional (planilha de
@@ -1832,6 +1902,9 @@ const SuincoStore = {
       Destino: carga.destino || '',
       Peso_Kg: carga.peso || 0,
       Doca: carga.doca || '',
+      Rota_Codigo: carga.rota || '',
+      Rota_Nome: (rotaInfo(carga.rota)||{}).nome || '',
+      Rota_Operador: (rotaInfo(carga.rota)||{}).operador || '',
       Sequencia: carga.sequencia ?? null,
       Pra_Onde: carga.praOnde || '',
       Compartilhada: compartilhadaDaCarga(carga),
@@ -2187,7 +2260,7 @@ function getCarga(id){ return DB.cargas.find(c=>c.id===id) || null; }
 // se a placa não estiver cadastrada em Frota, a criação é recusada. A
 // Portaria continua podendo registrar a chegada de QUALQUER placa (mesmo
 // não cadastrada) via "Aguardando Carga" — a trava é só na Programação.
-function criarCargaProgramada({placa, transportadora, tipoVeiculo, numeroCarga, cliente, destino, produto, peso, doca, sequencia, observacoes, motorista, praOnde, qtdGanchos, qtdEntregas, operador}){
+function criarCargaProgramada({placa, transportadora, tipoVeiculo, numeroCarga, cliente, destino, produto, peso, doca, rota, sequencia, observacoes, motorista, praOnde, qtdGanchos, qtdEntregas, operador}){
   const p = normalizarPlaca(placa);
   if(!p) throw new Error('Placa é obrigatória');
   const frota = buscarFrota(p);
@@ -2205,6 +2278,9 @@ function criarCargaProgramada({placa, transportadora, tipoVeiculo, numeroCarga, 
     doca: doca||'', sequencia: sequencia!==undefined && sequencia!=='' ? Number(sequencia) : null,
     observacoes: observacoes||'',
     praOnde: PRA_ONDE_OPCOES.includes(praOnde) ? praOnde : PRA_ONDE_PADRAO,
+    // Só aceita código de rota conhecido. Vazio é válido de propósito: a
+    // lista oficial ainda está incompleta (ver comentário em ROTAS).
+    rota: rotaInfo(rota) ? String(rota).trim() : '',
     qtdGanchos: qtdGanchos!==undefined && qtdGanchos!=='' ? Math.max(0, Number(qtdGanchos)||0) : 0,
     qtdEntregas: qtdEntregas!==undefined && qtdEntregas!=='' ? Math.max(1, Number(qtdEntregas)||1) : 1,
     status: 'Aguardando Veículo',
@@ -2240,7 +2316,7 @@ function registrarChegadaPortaria(placa, operador){
       tipoVeiculo: frota ? frota.tipoVeiculo : '',
       motorista:'',
       cliente:'', destino:'', produto:'', peso:0, doca:'', sequencia:null, observacoes:'',
-      praOnde: PRA_ONDE_PADRAO, qtdGanchos:0, qtdEntregas:1,
+      praOnde: PRA_ONDE_PADRAO, rota:'', qtdGanchos:0, qtdEntregas:1,
       status: 'Aguardando Embarque', aguardandoCarga: true,
       criadoEm: nowISO(), criadoPor: operador||'(não identificado)',
       atualizadoEm: nowISO()
@@ -2268,7 +2344,7 @@ function registrarChegadaPortaria(placa, operador){
 // Embarque" (o caminhão já está fisicamente no pátio) — então isto é só
 // edição de dados, e por isso NÃO gera linha no log de movimentações
 // (log só registra mudança de STATUS).
-function completarCargaAguardando(cargaId, {numeroCarga, cliente, destino, produto, peso, doca, sequencia, observacoes, transportadora, tipoVeiculo, motorista, praOnde, qtdGanchos, qtdEntregas, operador}){
+function completarCargaAguardando(cargaId, {numeroCarga, cliente, destino, produto, peso, doca, rota, sequencia, observacoes, transportadora, tipoVeiculo, motorista, praOnde, qtdGanchos, qtdEntregas, operador}){
   const c = getCarga(cargaId);
   if(!c) throw new Error('Carga não encontrada');
   if(!c.aguardandoCarga) throw new Error('Esta carga não está aguardando dados (Aguardando Carga).');
@@ -2277,6 +2353,7 @@ function completarCargaAguardando(cargaId, {numeroCarga, cliente, destino, produ
   c.observacoes = observacoes||'';
   c.motorista = motorista||'';
   c.praOnde = PRA_ONDE_OPCOES.includes(praOnde) ? praOnde : PRA_ONDE_PADRAO;
+  c.rota = rotaInfo(rota) ? String(rota).trim() : '';
   c.qtdGanchos = qtdGanchos!==undefined && qtdGanchos!=='' ? Math.max(0, Number(qtdGanchos)||0) : 0;
   c.qtdEntregas = qtdEntregas!==undefined && qtdEntregas!=='' ? Math.max(1, Number(qtdEntregas)||1) : 1;
   if(transportadora) c.transportadora = transportadora;
@@ -2619,10 +2696,12 @@ function gerarCsvFactMovimentacoes(){
 }
 function gerarCsvDimCarga(){
   const header = ['Id','NumeroCarga','Placa','Transportadora','TipoVeiculo','Motorista','Cliente','Destino','Produto',
-    'PesoKg','Doca','Sequencia','PraOnde','Compartilhada','QtdGanchos','QtdEntregas','StatusAtual','CriadoEm','AtualizadoEm'];
+    'PesoKg','Doca','RotaCodigo','RotaNome','RotaOperador','Sequencia','PraOnde','Compartilhada','QtdGanchos','QtdEntregas','StatusAtual','CriadoEm','AtualizadoEm'];
   const linhas = DB.cargas.map(c=>[
     c.id, c.numeroCarga, c.placa, c.transportadora, c.tipoVeiculo, c.motorista||'', c.cliente, c.destino, c.produto,
-    c.peso, c.doca, c.sequencia ?? '', c.praOnde || '', compartilhadaDaCarga(c), c.qtdGanchos ?? 0, c.qtdEntregas ?? 1,
+    c.peso, c.doca,
+    c.rota || '', (rotaInfo(c.rota)||{}).nome || '', (rotaInfo(c.rota)||{}).operador || '',
+    c.sequencia ?? '', c.praOnde || '', compartilhadaDaCarga(c), c.qtdGanchos ?? 0, c.qtdEntregas ?? 1,
     c.status, c.criadoEm, c.atualizadoEm
   ]);
   return toCsv(header, linhas);
@@ -3054,7 +3133,7 @@ function renderTorre(){
     <tr>
       <td>${c.sequencia ?? '—'}</td><td>${esc(c.numeroCarga)||'—'}</td><td>${esc(c.placa)}</td><td>${esc(c.transportadora)||'—'}</td><td>${esc(c.tipoVeiculo)||'—'}</td>
       <td>${esc(c.motorista)||'—'}</td>
-      <td>${esc(c.cliente)||'—'}</td><td>${esc(c.destino)||'—'}</td><td>${c.peso||0}</td>
+      <td>${esc(c.cliente)||'—'}</td><td>${esc(c.destino)||'—'}</td><td>${esc(rotaCurta(c.rota))}</td><td>${c.peso||0}</td>
       <td>${c.praOnde ? `<span class="chip-praonde">${esc(PRA_ONDE_LABEL[c.praOnde]||c.praOnde)}</span>` : '<span class="text-dim">—</span>'}</td>
       <td>${c.qtdGanchos ? c.qtdGanchos : '<span class="text-dim">Liso</span>'}</td>
       <td>${badgeHtml(c.status)}</td><td>${fmtDataHora(c.atualizadoEm)}</td>
@@ -3066,6 +3145,29 @@ function ordenarPorSequenciaEAtualizacao(a,b){
   const sb = (b.sequencia===null||b.sequencia===undefined) ? Infinity : b.sequencia;
   if(sa!==sb) return sa-sb;
   return new Date(a.atualizadoEm) - new Date(b.atualizadoEm);
+}
+
+/* Ordenação do RELATÓRIO OPERACIONAL: primeiro pela etapa da carga na linha
+   do tempo dos 6 status, depois pela sequência de carregamento.
+
+   Antes ordenava só por sequência, e o resultado embaralhava as etapas — uma
+   carga que já "Seguiu Viagem" aparecia acima de outra ainda "Faturado" ou
+   "Carregado" só por ter sequência menor. Como este relatório é acompanhado
+   ao longo do dia inteiro, o que importa na leitura de relance é onde cada
+   carga está no processo.
+
+   A ordem segue a própria linha do tempo: o que ainda não chegou fica no
+   topo, o que já saiu fica no fim. Assim a parte que ainda exige ação está
+   sempre na parte de cima da folha. */
+function ordenarPorEtapaDaTimeline(a,b){
+  const ia = STATUS_FLOW.indexOf(a.status);
+  const ib = STATUS_FLOW.indexOf(b.status);
+  // Status desconhecido (dado antigo) vai para o fim, em vez de virar -1 e
+  // subir para o topo por engano.
+  const pa = ia === -1 ? STATUS_FLOW.length : ia;
+  const pb = ib === -1 ? STATUS_FLOW.length : ib;
+  if(pa !== pb) return pa - pb;
+  return ordenarPorSequenciaEAtualizacao(a,b);
 }
 
 /* ---------- PROGRAMAÇÃO ---------- */
@@ -3105,6 +3207,7 @@ function criarCargaProgramadaUI(){
       sequencia: document.getElementById('prog-sequencia').value,
       observacoes: document.getElementById('prog-obs').value,
       praOnde: document.getElementById('prog-praonde').value,
+      rota: document.getElementById('prog-rota').value,
       qtdGanchos: document.getElementById('prog-ganchos').value,
       qtdEntregas: document.getElementById('prog-entregas').value,
       operador: nomeOperadorAtual()
@@ -3113,6 +3216,7 @@ function criarCargaProgramadaUI(){
     ['prog-placa','prog-transportadora','prog-tipoveiculo','prog-motorista','prog-numero-carga','prog-cliente','prog-destino','prog-peso','prog-sequencia','prog-obs']
       .forEach(id=>document.getElementById(id).value='');
     document.getElementById('prog-praonde').value = PRA_ONDE_PADRAO;
+  document.getElementById('prog-rota').value = '';
     document.getElementById('prog-ganchos').value = '0';
     document.getElementById('prog-entregas').value = '1';
     atualizarPreviewCompartilhada('prog-praonde','prog-compartilhada-preview');
@@ -3127,7 +3231,7 @@ function renderProgFila(){
       <td><input type="number" class="seq-input" value="${c.sequencia ?? ''}" onchange="atualizarSequenciaUI('${c.id}',this.value)" title="Sequência livre — digite o número que quiser, a qualquer momento."></td>
       <td>${esc(c.numeroCarga)||'—'}</td>
       <td>${esc(c.placa)}</td><td>${esc(c.transportadora)||'—'}</td>
-      <td>${esc(c.cliente)||'—'}</td><td>${esc(c.destino)||'—'}</td>
+      <td>${esc(c.cliente)||'—'}</td><td>${esc(c.destino)||'—'}</td><td>${esc(rotaCurta(c.rota))}</td>
       <td>${praOndeSelectHtml(c)}</td>
       <td><input type="number" class="ganchos-input" min="0" step="1" value="${c.qtdGanchos ?? 0}" onchange="atualizarGanchosUI('${c.id}',this.value)" title="0 = Liso"></td>
       <td class="no-print"><button class="btn btn-danger btn-sm" onclick="excluirCargaUI('${c.id}')">Excluir</button></td>
@@ -3143,6 +3247,17 @@ function atualizarSequenciaUI(id, val){
   SuincoStore.save();
   renderProgFila();
 }
+// Popula os selects de Rota. Uma função só, alimentada por ROTAS em data.js —
+// acrescentar uma rota lá aparece nos dois formulários sem tocar aqui.
+function preencherSelectsRota(){
+  const opcoes = '<option value="">(rota não informada)</option>' +
+    ROTAS.map(r=>`<option value="${esc(r.codigo)}">${esc(rotaLabel(r.codigo))}</option>`).join('');
+  ['prog-rota','completar-rota'].forEach(id=>{
+    const el = document.getElementById(id);
+    if(el && el.dataset.preenchido !== '1'){ el.innerHTML = opcoes; el.dataset.preenchido = '1'; }
+  });
+}
+
 function praOndeSelectHtml(c){
   return `<select class="praonde-inline" onchange="atualizarPraOndeUI('${c.id}',this.value)">
     ${PRA_ONDE_OPCOES.map(op=>`<option value="${op}" ${c.praOnde===op?'selected':''}>${esc(PRA_ONDE_LABEL[op])}</option>`).join('')}
@@ -3201,6 +3316,7 @@ function abrirCompletar(id){
   document.getElementById('completar-motorista').value = '';
   document.getElementById('completar-obs').value = '';
   document.getElementById('completar-praonde').value = PRA_ONDE_PADRAO;
+  document.getElementById('completar-rota').value = '';
   document.getElementById('completar-ganchos').value = '0';
   document.getElementById('completar-entregas').value = '1';
   atualizarPreviewCompartilhada('completar-praonde','completar-compartilhada-preview');
@@ -3221,6 +3337,7 @@ function salvarCompletarCarga(){
       motorista: document.getElementById('completar-motorista').value,
       observacoes: document.getElementById('completar-obs').value,
       praOnde: document.getElementById('completar-praonde').value,
+      rota: document.getElementById('completar-rota').value,
       qtdGanchos: document.getElementById('completar-ganchos').value,
       qtdEntregas: document.getElementById('completar-entregas').value,
       operador: nomeOperadorAtual()
@@ -3859,6 +3976,7 @@ function renderTimelineCarga(id){
     ['Transportadora', c.transportadora || '—'],
     ['Tipo de Veículo', c.tipoVeiculo || '—'],
     ['Motorista', c.motorista || '—'],
+    ['Rota', rotaLabel(c.rota) || '(não informada)'],
     ['Tipo de Operação', PRA_ONDE_LABEL[c.praOnde] || c.praOnde || '—'],
     ['Compartilhada?', compartilhadaDaCarga(c)],
     ['Qtd. Ganchos', (c.qtdGanchos ? c.qtdGanchos : 'Liso')],
@@ -3937,7 +4055,7 @@ function exportarPdfOperacional(){
   // deixa de existir.
   // Segue de fora apenas o que a Portaria registrou sem programação prévia
   // (aguardandoCarga), que ainda não tem dados para sequenciar.
-  const lista = DB.cargas.filter(c=>!c.aguardandoCarga).slice().sort(ordenarPorSequenciaEAtualizacao);
+  const lista = DB.cargas.filter(c=>!c.aguardandoCarga).slice().sort(ordenarPorEtapaDaTimeline);
   const linhas = lista.map((c,i)=>{
     const sc = statusCarregamentoInfo(c.status);
     const faturado = estaFaturado(c);
@@ -3949,8 +4067,10 @@ function exportarPdfOperacional(){
     const cs = corStatusRelatorio(c.status);
     return `<tr>
       <td>${i+1}</td>
+      <td style="text-align:center">${c.sequencia ?? '—'}</td>
       <td>${esc(c.numeroCarga)||'—'}</td>
       <td>${esc(c.destino)||'—'}</td>
+      <td>${esc(rotaCurta(c.rota))}</td>
       <td ${praOndeStyle}>${c.praOnde ? esc(PRA_ONDE_LABEL[c.praOnde]) : '—'}</td>
       <td style="background:${cs.fundo};color:${cs.texto};font-weight:800;text-align:center">${esc(c.status)}</td>
       <td ${faturado?`style="background:#3fa66a;color:${textoSobre('#3fa66a')};font-weight:800"`:''}>${faturado?'FATURADO':''}</td>
@@ -3976,7 +4096,7 @@ function exportarPdfOperacional(){
       ${legendaStatusHtml()}
       <table>
         <thead><tr>
-          <th>Nº</th><th>Carga</th><th>Destino</th><th>Tipo de Operação</th><th>Status</th><th>Faturado</th><th>Status de Carregamento</th>
+          <th>Nº</th><th>Seq.</th><th>Carga</th><th>Destino</th><th>Rota</th><th>Tipo de Operação</th><th>Status</th><th>Faturado</th><th>Status de Carregamento</th>
           <th>Placa</th><th>Transportadora</th><th>Tipo de Veículo</th><th>Peso(ton)</th><th>Compartilhada?</th><th>Qtd. Entregas</th><th>Qtd. Ganchos</th>
         </tr></thead>
         <tbody>${linhas || '<tr><td colspan="14" class="text-center text-dim">Nenhuma carga programada.</td></tr>'}</tbody>
@@ -4284,6 +4404,7 @@ async function init(){
       notify(partes.join(' · ') + '.', 'warn', 9000);
     }
   }
+  preencherSelectsRota();   // alimenta os selects de Rota a partir de ROTAS
   iniciarTema();            // antes de desenhar: evita piscar no tema errado
   // Conecta ao SharePoint se o TI já tiver configurado; caso contrário fica
   // em modo local e o rodapé diz isso. Nunca bloqueia a abertura do painel.

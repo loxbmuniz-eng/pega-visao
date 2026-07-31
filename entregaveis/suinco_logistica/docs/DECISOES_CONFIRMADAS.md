@@ -525,3 +525,50 @@ Três rótulos descreviam mal o que a coluna carrega. Nenhum valor gravado mudou
 **Qtd. Ganchos** no relatório operacional passou a exibir o número em negrito e
 centralizado, com "Liso" quando é zero — antes o número se perdia visualmente
 na última coluna.
+
+## 19. Campo Rota (31/07/2026)
+
+Lista oficial de rotas passada pelo gestor, com código, praça e — quando há —
+o operador logístico responsável. **30 rotas cadastradas**, sem duplicatas.
+
+O **código é o valor gravado**, porque é o que a operação usa no dia a dia
+("carga da 510"); o nome acompanha para quem ainda não decorou o número.
+
+**A lista está incompleta de propósito.** Faltam os códigos **511, 514, 515,
+526, 527, 528, 530, 531, 533, 535, 537 e 539**, que o gestor informou que
+enviaria depois. Por isso **"(rota não informada)" segue sendo opção válida**:
+tornar a rota obrigatória travaria a Programação exatamente nas praças que
+ainda não foram cadastradas. Para incluir as que faltam, basta acrescentar a
+linha em `ROTAS` (data.js) — os dois formulários, as tabelas, o relatório e o
+export do Power BI se atualizam sozinhos.
+
+**Dois níveis de rótulo, por uma razão prática:** a rota 504 sozinha lista
+cinco municípios (Paracatu, Unaí, João Pinheiro, Arinos e Buritis). O nome
+completo esticava a linha inteira do relatório impresso para caber numa célula.
+Então: `rotaLabel()` (completo, com cidades e operador) no formulário e na
+ficha da carga, onde há espaço; `rotaCurta()` (só código + praça) nas tabelas
+e no relatório.
+
+Rota entra também no export do Power BI, em três colunas separadas —
+`RotaCodigo`, `RotaNome`, `RotaOperador` — para permitir agrupar por praça ou
+por operador logístico sem precisar quebrar texto no BI.
+
+## 20. Ordenação do relatório operacional pela linha do tempo
+
+**Sintoma relatado:** "está meio confuso, o Seguiu Viagem antes do Faturado e
+Carregado".
+
+**Causa:** o relatório ordenava apenas pela sequência de carregamento. Uma
+carga que já saiu aparecia acima de outra ainda em faturamento só por ter
+sequência menor, embaralhando as etapas.
+
+**Correção:** a ordenação passa a ser, primeiro, a etapa da carga na linha do
+tempo dos 6 status e, dentro de cada etapa, a sequência de carregamento. A
+ordem segue a própria linha do tempo — o que ainda não chegou fica no topo, o
+que já saiu fica no fim —, de modo que a parte que ainda exige ação está sempre
+na parte de cima da folha.
+
+A sequência de carregamento não se perdeu: virou **coluna própria (Seq.)**, ao
+lado do Nº de ordem de leitura do relatório. Status desconhecido, vindo de
+registro antigo, vai para o fim da lista em vez de subir ao topo por conta do
+índice −1.

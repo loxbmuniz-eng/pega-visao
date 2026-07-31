@@ -69,7 +69,7 @@
         <table>
           <thead><tr>
             <th>Seq.</th><th>Nº Carga</th><th>Placa</th><th>Transportadora</th><th>Tipo Veículo</th><th>Motorista</th>
-            <th>Cliente</th><th>Destino</th><th>Peso (kg)</th>
+            <th>Cliente</th><th>Destino</th><th>Rota</th><th>Peso (kg)</th>
             <th>Tipo de Operação</th><th>Ganchos</th><th>Status</th><th>Atualizado em</th>
           </tr></thead>
           <tbody id="torre-tbody"></tbody>
@@ -105,6 +105,10 @@
         <div class="form-group"><label>Motorista</label><input type="text" id="prog-motorista" placeholder="Nome do motorista"></div>
         <div class="form-group"><label>Cliente</label><input type="text" id="prog-cliente"></div>
         <div class="form-group"><label>Destino</label><input type="text" id="prog-destino" placeholder="Cidade/UF"></div>
+        <div class="form-group">
+          <label>Rota <span class="hint">(código oficial)</span></label>
+          <select id="prog-rota"></select>
+        </div>
       </div>
       <div class="form-row">
         <div class="form-group"><label>Peso (kg)</label><input type="number" id="prog-peso" min="0"></div>
@@ -167,7 +171,7 @@
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Seq.</th><th>Nº Carga</th><th>Placa</th><th>Transportadora</th><th>Cliente</th><th>Destino</th><th>Tipo de Operação</th><th>Ganchos</th><th class="no-print">Ação</th></tr></thead>
+          <thead><tr><th>Seq.</th><th>Nº Carga</th><th>Placa</th><th>Transportadora</th><th>Cliente</th><th>Destino</th><th>Rota</th><th>Tipo de Operação</th><th>Ganchos</th><th class="no-print">Ação</th></tr></thead>
           <tbody id="prog-fila-tbody"></tbody>
         </table>
       </div>
@@ -541,6 +545,8 @@
     </div>
     <div class="form-row">
       <div class="form-group">
+        <label>Rota</label>
+        <select id="completar-rota" style="margin-bottom:10px"></select>
         <label>Tipo de Operação</label>
         <select id="completar-praonde" onchange="atualizarPreviewCompartilhada('completar-praonde','completar-compartilhada-preview')">
           <option value="FROTA PROPRIA">FROTA PRÓPRIA</option>

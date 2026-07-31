@@ -84,6 +84,70 @@ function migrarPraOnde(){
   return n;
 }
 
+/* ---------- ROTAS (código + praça + operador logístico) ----------
+   Lista oficial passada pelo gestor em 31/07/2026. O código é o que a
+   operação usa no dia a dia ("carga da 510"), então ele é o valor gravado —
+   o nome vem junto só para quem não decorou o número ainda.
+
+   ATENÇÃO: esta lista está INCOMPLETA por definição. Faltam 511, 514, 515,
+   526, 527, 528, 530, 531, 533, 535, 537 e 539, que o gestor enviará depois.
+   Por isso "(rota não informada)" continua sendo uma opção válida: obrigar a
+   escolher uma rota faria a Programação travar justamente nas praças que
+   ainda não foram cadastradas. Para acrescentar as que faltam, basta incluir
+   a linha aqui — nada mais no painel precisa mudar. */
+const ROTAS = [
+  { codigo:'500', nome:'Patos de Minas',                     operador:'' },
+  { codigo:'501', nome:'São Gotardo',                        operador:'' },
+  { codigo:'502', nome:'Araxá',                              operador:'' },
+  { codigo:'503', nome:'Patrocínio / Coromandel',            operador:'' },
+  { codigo:'504', nome:'Alto Paranaíba',                     detalhe:'Paracatu, Unaí, João Pinheiro, Arinos e Buritis', operador:'' },
+  { codigo:'505', nome:'Triângulo Mineiro',                  detalhe:'Uberlândia', operador:'' },
+  { codigo:'506', nome:'Uberaba',                            operador:'' },
+  { codigo:'507', nome:'Araguari',                           operador:'' },
+  { codigo:'508', nome:'Iturama',                            operador:'Total Service ou FrigoCargo' },
+  { codigo:'509', nome:'Centro-Oeste',                       operador:'' },
+  { codigo:'510', nome:'Belo Horizonte',                     operador:'RP Logística' },
+  { codigo:'512', nome:'Varginha',                           detalhe:'Sul de Minas', operador:'Brasfrios' },
+  { codigo:'513', nome:'Passos',                             detalhe:'Sul de Minas', operador:'MaxFrios' },
+  { codigo:'516', nome:'Norte de Minas',                     detalhe:'Montes Claros', operador:'Total Services' },
+  { codigo:'517', nome:'Rio de Janeiro (Varejo)',            detalhe:'São João de Meriti', operador:'OmegaX' },
+  { codigo:'518', nome:'Rio de Janeiro (Redes)',             detalhe:'Canejo', operador:'' },
+  { codigo:'519', nome:'Brasília (Varejo)',                  operador:'RN Logística' },
+  { codigo:'520', nome:'Goiás (Varejo)',                     operador:'AG Sestini' },
+  { codigo:'521', nome:'SP Ribeirão Preto',                  operador:'CargoFrio' },
+  { codigo:'522', nome:'SP Capital',                         detalhe:'Osasco', operador:'SPM LOG' },
+  { codigo:'523', nome:'Vale do Aço',                        detalhe:'Governador Valadares', operador:'SSLog' },
+  { codigo:'524', nome:'Zona da Mata',                       detalhe:'Juiz de Fora', operador:'BSF Logística' },
+  { codigo:'525', nome:'Bahia Capital',                      operador:'LogMaster' },
+  { codigo:'529', nome:'Espírito Santo',                     detalhe:'Serra-ES', operador:'Nacional Log' },
+  { codigo:'532', nome:'Bahia Interior',                     detalhe:'Vitória da Conquista', operador:'ConquistaLog' },
+  { codigo:'534', nome:'Salvador',                           operador:'LogMaster' },
+  { codigo:'536', nome:'Goiás',                              operador:'AG Sestini' },
+  { codigo:'538', nome:'SP Interior',                        detalhe:'Marília', operador:'CargoFrio' },
+  { codigo:'540', nome:'Salvador',                           operador:'LogMaster' },
+  { codigo:'541', nome:'Brasília (Redes)',                   operador:'Versatto Logística' }
+];
+const ROTA_POR_CODIGO = new Map(ROTAS.map(r => [r.codigo, r]));
+function rotaInfo(codigo){ return ROTA_POR_CODIGO.get(String(codigo||'').trim()) || null; }
+// "510 — Belo Horizonte (RP Logística)". Usado na tela e nos relatórios, para
+// que o mesmo rótulo apareça em todo lugar.
+// Rótulo COMPLETO — usado no <select> e na ficha da carga, onde há espaço:
+// "504 — Alto Paranaíba · Paracatu, Unaí... (Operador)"
+function rotaLabel(codigo){
+  const r = rotaInfo(codigo);
+  if(!r) return codigo ? String(codigo) : '';
+  return `${r.codigo} — ${r.nome}`
+       + (r.detalhe ? ` · ${r.detalhe}` : '')
+       + (r.operador ? ` (${r.operador})` : '');
+}
+// Rótulo CURTO — usado nas tabelas e no relatório impresso. Sem o detalhe de
+// cidades: a rota 504 sozinha tem cinco municípios, e o nome completo esticava
+// a linha inteira do relatório para caber numa única célula.
+function rotaCurta(codigo){
+  const r = rotaInfo(codigo);
+  return r ? `${r.codigo} — ${r.nome}` : (codigo ? String(codigo) : '—');
+}
+
 /* ---------- mapeamento de cor/rótulo para o PDF Operacional e para
    Dim_Status (export Power BI) ----------
    Mapeamento de "Status de Carregamento" no PDF Operacional (planilha de
@@ -251,6 +315,9 @@ const SuincoStore = {
       Destino: carga.destino || '',
       Peso_Kg: carga.peso || 0,
       Doca: carga.doca || '',
+      Rota_Codigo: carga.rota || '',
+      Rota_Nome: (rotaInfo(carga.rota)||{}).nome || '',
+      Rota_Operador: (rotaInfo(carga.rota)||{}).operador || '',
       Sequencia: carga.sequencia ?? null,
       Pra_Onde: carga.praOnde || '',
       Compartilhada: compartilhadaDaCarga(carga),
@@ -606,7 +673,7 @@ function getCarga(id){ return DB.cargas.find(c=>c.id===id) || null; }
 // se a placa não estiver cadastrada em Frota, a criação é recusada. A
 // Portaria continua podendo registrar a chegada de QUALQUER placa (mesmo
 // não cadastrada) via "Aguardando Carga" — a trava é só na Programação.
-function criarCargaProgramada({placa, transportadora, tipoVeiculo, numeroCarga, cliente, destino, produto, peso, doca, sequencia, observacoes, motorista, praOnde, qtdGanchos, qtdEntregas, operador}){
+function criarCargaProgramada({placa, transportadora, tipoVeiculo, numeroCarga, cliente, destino, produto, peso, doca, rota, sequencia, observacoes, motorista, praOnde, qtdGanchos, qtdEntregas, operador}){
   const p = normalizarPlaca(placa);
   if(!p) throw new Error('Placa é obrigatória');
   const frota = buscarFrota(p);
@@ -624,6 +691,9 @@ function criarCargaProgramada({placa, transportadora, tipoVeiculo, numeroCarga, 
     doca: doca||'', sequencia: sequencia!==undefined && sequencia!=='' ? Number(sequencia) : null,
     observacoes: observacoes||'',
     praOnde: PRA_ONDE_OPCOES.includes(praOnde) ? praOnde : PRA_ONDE_PADRAO,
+    // Só aceita código de rota conhecido. Vazio é válido de propósito: a
+    // lista oficial ainda está incompleta (ver comentário em ROTAS).
+    rota: rotaInfo(rota) ? String(rota).trim() : '',
     qtdGanchos: qtdGanchos!==undefined && qtdGanchos!=='' ? Math.max(0, Number(qtdGanchos)||0) : 0,
     qtdEntregas: qtdEntregas!==undefined && qtdEntregas!=='' ? Math.max(1, Number(qtdEntregas)||1) : 1,
     status: 'Aguardando Veículo',
@@ -659,7 +729,7 @@ function registrarChegadaPortaria(placa, operador){
       tipoVeiculo: frota ? frota.tipoVeiculo : '',
       motorista:'',
       cliente:'', destino:'', produto:'', peso:0, doca:'', sequencia:null, observacoes:'',
-      praOnde: PRA_ONDE_PADRAO, qtdGanchos:0, qtdEntregas:1,
+      praOnde: PRA_ONDE_PADRAO, rota:'', qtdGanchos:0, qtdEntregas:1,
       status: 'Aguardando Embarque', aguardandoCarga: true,
       criadoEm: nowISO(), criadoPor: operador||'(não identificado)',
       atualizadoEm: nowISO()
@@ -687,7 +757,7 @@ function registrarChegadaPortaria(placa, operador){
 // Embarque" (o caminhão já está fisicamente no pátio) — então isto é só
 // edição de dados, e por isso NÃO gera linha no log de movimentações
 // (log só registra mudança de STATUS).
-function completarCargaAguardando(cargaId, {numeroCarga, cliente, destino, produto, peso, doca, sequencia, observacoes, transportadora, tipoVeiculo, motorista, praOnde, qtdGanchos, qtdEntregas, operador}){
+function completarCargaAguardando(cargaId, {numeroCarga, cliente, destino, produto, peso, doca, rota, sequencia, observacoes, transportadora, tipoVeiculo, motorista, praOnde, qtdGanchos, qtdEntregas, operador}){
   const c = getCarga(cargaId);
   if(!c) throw new Error('Carga não encontrada');
   if(!c.aguardandoCarga) throw new Error('Esta carga não está aguardando dados (Aguardando Carga).');
@@ -696,6 +766,7 @@ function completarCargaAguardando(cargaId, {numeroCarga, cliente, destino, produ
   c.observacoes = observacoes||'';
   c.motorista = motorista||'';
   c.praOnde = PRA_ONDE_OPCOES.includes(praOnde) ? praOnde : PRA_ONDE_PADRAO;
+  c.rota = rotaInfo(rota) ? String(rota).trim() : '';
   c.qtdGanchos = qtdGanchos!==undefined && qtdGanchos!=='' ? Math.max(0, Number(qtdGanchos)||0) : 0;
   c.qtdEntregas = qtdEntregas!==undefined && qtdEntregas!=='' ? Math.max(1, Number(qtdEntregas)||1) : 1;
   if(transportadora) c.transportadora = transportadora;
@@ -1038,10 +1109,12 @@ function gerarCsvFactMovimentacoes(){
 }
 function gerarCsvDimCarga(){
   const header = ['Id','NumeroCarga','Placa','Transportadora','TipoVeiculo','Motorista','Cliente','Destino','Produto',
-    'PesoKg','Doca','Sequencia','PraOnde','Compartilhada','QtdGanchos','QtdEntregas','StatusAtual','CriadoEm','AtualizadoEm'];
+    'PesoKg','Doca','RotaCodigo','RotaNome','RotaOperador','Sequencia','PraOnde','Compartilhada','QtdGanchos','QtdEntregas','StatusAtual','CriadoEm','AtualizadoEm'];
   const linhas = DB.cargas.map(c=>[
     c.id, c.numeroCarga, c.placa, c.transportadora, c.tipoVeiculo, c.motorista||'', c.cliente, c.destino, c.produto,
-    c.peso, c.doca, c.sequencia ?? '', c.praOnde || '', compartilhadaDaCarga(c), c.qtdGanchos ?? 0, c.qtdEntregas ?? 1,
+    c.peso, c.doca,
+    c.rota || '', (rotaInfo(c.rota)||{}).nome || '', (rotaInfo(c.rota)||{}).operador || '',
+    c.sequencia ?? '', c.praOnde || '', compartilhadaDaCarga(c), c.qtdGanchos ?? 0, c.qtdEntregas ?? 1,
     c.status, c.criadoEm, c.atualizadoEm
   ]);
   return toCsv(header, linhas);

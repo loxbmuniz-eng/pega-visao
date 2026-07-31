@@ -394,7 +394,7 @@ function renderTorre(){
     <tr>
       <td>${c.sequencia ?? '—'}</td><td>${esc(c.numeroCarga)||'—'}</td><td>${esc(c.placa)}</td><td>${esc(c.transportadora)||'—'}</td><td>${esc(c.tipoVeiculo)||'—'}</td>
       <td>${esc(c.motorista)||'—'}</td>
-      <td>${esc(c.cliente)||'—'}</td><td>${esc(c.destino)||'—'}</td><td>${c.peso||0}</td>
+      <td>${esc(c.cliente)||'—'}</td><td>${esc(c.destino)||'—'}</td><td>${esc(rotaCurta(c.rota))}</td><td>${c.peso||0}</td>
       <td>${c.praOnde ? `<span class="chip-praonde">${esc(PRA_ONDE_LABEL[c.praOnde]||c.praOnde)}</span>` : '<span class="text-dim">—</span>'}</td>
       <td>${c.qtdGanchos ? c.qtdGanchos : '<span class="text-dim">Liso</span>'}</td>
       <td>${badgeHtml(c.status)}</td><td>${fmtDataHora(c.atualizadoEm)}</td>
@@ -406,6 +406,29 @@ function ordenarPorSequenciaEAtualizacao(a,b){
   const sb = (b.sequencia===null||b.sequencia===undefined) ? Infinity : b.sequencia;
   if(sa!==sb) return sa-sb;
   return new Date(a.atualizadoEm) - new Date(b.atualizadoEm);
+}
+
+/* Ordenação do RELATÓRIO OPERACIONAL: primeiro pela etapa da carga na linha
+   do tempo dos 6 status, depois pela sequência de carregamento.
+
+   Antes ordenava só por sequência, e o resultado embaralhava as etapas — uma
+   carga que já "Seguiu Viagem" aparecia acima de outra ainda "Faturado" ou
+   "Carregado" só por ter sequência menor. Como este relatório é acompanhado
+   ao longo do dia inteiro, o que importa na leitura de relance é onde cada
+   carga está no processo.
+
+   A ordem segue a própria linha do tempo: o que ainda não chegou fica no
+   topo, o que já saiu fica no fim. Assim a parte que ainda exige ação está
+   sempre na parte de cima da folha. */
+function ordenarPorEtapaDaTimeline(a,b){
+  const ia = STATUS_FLOW.indexOf(a.status);
+  const ib = STATUS_FLOW.indexOf(b.status);
+  // Status desconhecido (dado antigo) vai para o fim, em vez de virar -1 e
+  // subir para o topo por engano.
+  const pa = ia === -1 ? STATUS_FLOW.length : ia;
+  const pb = ib === -1 ? STATUS_FLOW.length : ib;
+  if(pa !== pb) return pa - pb;
+  return ordenarPorSequenciaEAtualizacao(a,b);
 }
 
 /* ---------- PROGRAMAÇÃO ---------- */
@@ -445,6 +468,7 @@ function criarCargaProgramadaUI(){
       sequencia: document.getElementById('prog-sequencia').value,
       observacoes: document.getElementById('prog-obs').value,
       praOnde: document.getElementById('prog-praonde').value,
+      rota: document.getElementById('prog-rota').value,
       qtdGanchos: document.getElementById('prog-ganchos').value,
       qtdEntregas: document.getElementById('prog-entregas').value,
       operador: nomeOperadorAtual()
@@ -453,6 +477,7 @@ function criarCargaProgramadaUI(){
     ['prog-placa','prog-transportadora','prog-tipoveiculo','prog-motorista','prog-numero-carga','prog-cliente','prog-destino','prog-peso','prog-sequencia','prog-obs']
       .forEach(id=>document.getElementById(id).value='');
     document.getElementById('prog-praonde').value = PRA_ONDE_PADRAO;
+  document.getElementById('prog-rota').value = '';
     document.getElementById('prog-ganchos').value = '0';
     document.getElementById('prog-entregas').value = '1';
     atualizarPreviewCompartilhada('prog-praonde','prog-compartilhada-preview');
@@ -467,7 +492,7 @@ function renderProgFila(){
       <td><input type="number" class="seq-input" value="${c.sequencia ?? ''}" onchange="atualizarSequenciaUI('${c.id}',this.value)" title="Sequência livre — digite o número que quiser, a qualquer momento."></td>
       <td>${esc(c.numeroCarga)||'—'}</td>
       <td>${esc(c.placa)}</td><td>${esc(c.transportadora)||'—'}</td>
-      <td>${esc(c.cliente)||'—'}</td><td>${esc(c.destino)||'—'}</td>
+      <td>${esc(c.cliente)||'—'}</td><td>${esc(c.destino)||'—'}</td><td>${esc(rotaCurta(c.rota))}</td>
       <td>${praOndeSelectHtml(c)}</td>
       <td><input type="number" class="ganchos-input" min="0" step="1" value="${c.qtdGanchos ?? 0}" onchange="atualizarGanchosUI('${c.id}',this.value)" title="0 = Liso"></td>
       <td class="no-print"><button class="btn btn-danger btn-sm" onclick="excluirCargaUI('${c.id}')">Excluir</button></td>
@@ -483,6 +508,17 @@ function atualizarSequenciaUI(id, val){
   SuincoStore.save();
   renderProgFila();
 }
+// Popula os selects de Rota. Uma função só, alimentada por ROTAS em data.js —
+// acrescentar uma rota lá aparece nos dois formulários sem tocar aqui.
+function preencherSelectsRota(){
+  const opcoes = '<option value="">(rota não informada)</option>' +
+    ROTAS.map(r=>`<option value="${esc(r.codigo)}">${esc(rotaLabel(r.codigo))}</option>`).join('');
+  ['prog-rota','completar-rota'].forEach(id=>{
+    const el = document.getElementById(id);
+    if(el && el.dataset.preenchido !== '1'){ el.innerHTML = opcoes; el.dataset.preenchido = '1'; }
+  });
+}
+
 function praOndeSelectHtml(c){
   return `<select class="praonde-inline" onchange="atualizarPraOndeUI('${c.id}',this.value)">
     ${PRA_ONDE_OPCOES.map(op=>`<option value="${op}" ${c.praOnde===op?'selected':''}>${esc(PRA_ONDE_LABEL[op])}</option>`).join('')}
@@ -541,6 +577,7 @@ function abrirCompletar(id){
   document.getElementById('completar-motorista').value = '';
   document.getElementById('completar-obs').value = '';
   document.getElementById('completar-praonde').value = PRA_ONDE_PADRAO;
+  document.getElementById('completar-rota').value = '';
   document.getElementById('completar-ganchos').value = '0';
   document.getElementById('completar-entregas').value = '1';
   atualizarPreviewCompartilhada('completar-praonde','completar-compartilhada-preview');
@@ -561,6 +598,7 @@ function salvarCompletarCarga(){
       motorista: document.getElementById('completar-motorista').value,
       observacoes: document.getElementById('completar-obs').value,
       praOnde: document.getElementById('completar-praonde').value,
+      rota: document.getElementById('completar-rota').value,
       qtdGanchos: document.getElementById('completar-ganchos').value,
       qtdEntregas: document.getElementById('completar-entregas').value,
       operador: nomeOperadorAtual()
@@ -1199,6 +1237,7 @@ function renderTimelineCarga(id){
     ['Transportadora', c.transportadora || '—'],
     ['Tipo de Veículo', c.tipoVeiculo || '—'],
     ['Motorista', c.motorista || '—'],
+    ['Rota', rotaLabel(c.rota) || '(não informada)'],
     ['Tipo de Operação', PRA_ONDE_LABEL[c.praOnde] || c.praOnde || '—'],
     ['Compartilhada?', compartilhadaDaCarga(c)],
     ['Qtd. Ganchos', (c.qtdGanchos ? c.qtdGanchos : 'Liso')],
@@ -1277,7 +1316,7 @@ function exportarPdfOperacional(){
   // deixa de existir.
   // Segue de fora apenas o que a Portaria registrou sem programação prévia
   // (aguardandoCarga), que ainda não tem dados para sequenciar.
-  const lista = DB.cargas.filter(c=>!c.aguardandoCarga).slice().sort(ordenarPorSequenciaEAtualizacao);
+  const lista = DB.cargas.filter(c=>!c.aguardandoCarga).slice().sort(ordenarPorEtapaDaTimeline);
   const linhas = lista.map((c,i)=>{
     const sc = statusCarregamentoInfo(c.status);
     const faturado = estaFaturado(c);
@@ -1289,8 +1328,10 @@ function exportarPdfOperacional(){
     const cs = corStatusRelatorio(c.status);
     return `<tr>
       <td>${i+1}</td>
+      <td style="text-align:center">${c.sequencia ?? '—'}</td>
       <td>${esc(c.numeroCarga)||'—'}</td>
       <td>${esc(c.destino)||'—'}</td>
+      <td>${esc(rotaCurta(c.rota))}</td>
       <td ${praOndeStyle}>${c.praOnde ? esc(PRA_ONDE_LABEL[c.praOnde]) : '—'}</td>
       <td style="background:${cs.fundo};color:${cs.texto};font-weight:800;text-align:center">${esc(c.status)}</td>
       <td ${faturado?`style="background:#3fa66a;color:${textoSobre('#3fa66a')};font-weight:800"`:''}>${faturado?'FATURADO':''}</td>
@@ -1316,7 +1357,7 @@ function exportarPdfOperacional(){
       ${legendaStatusHtml()}
       <table>
         <thead><tr>
-          <th>Nº</th><th>Carga</th><th>Destino</th><th>Tipo de Operação</th><th>Status</th><th>Faturado</th><th>Status de Carregamento</th>
+          <th>Nº</th><th>Seq.</th><th>Carga</th><th>Destino</th><th>Rota</th><th>Tipo de Operação</th><th>Status</th><th>Faturado</th><th>Status de Carregamento</th>
           <th>Placa</th><th>Transportadora</th><th>Tipo de Veículo</th><th>Peso(ton)</th><th>Compartilhada?</th><th>Qtd. Entregas</th><th>Qtd. Ganchos</th>
         </tr></thead>
         <tbody>${linhas || '<tr><td colspan="14" class="text-center text-dim">Nenhuma carga programada.</td></tr>'}</tbody>
@@ -1624,6 +1665,7 @@ async function init(){
       notify(partes.join(' · ') + '.', 'warn', 9000);
     }
   }
+  preencherSelectsRota();   // alimenta os selects de Rota a partir de ROTAS
   iniciarTema();            // antes de desenhar: evita piscar no tema errado
   // Conecta ao SharePoint se o TI já tiver configurado; caso contrário fica
   // em modo local e o rodapé diz isso. Nunca bloqueia a abertura do painel.
