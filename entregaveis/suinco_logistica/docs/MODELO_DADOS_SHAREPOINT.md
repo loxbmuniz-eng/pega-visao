@@ -34,8 +34,12 @@ Uma linha por carga — nasce em `Programado` (Logística) ou `Aguardando Carga`
 | Produto | Uma linha de texto | |
 | Peso | Número | kg |
 | Doca | Uma linha de texto | |
-| Sequencia | Número | Prioridade de montagem do dia, manual |
+| Sequencia | Número | Prioridade de montagem do dia — **100% manual**, digitada livremente pelo Programador de Embarque, sem geração automática nem trava de duplicidade, editável a qualquer momento |
 | Observacoes | Várias linhas de texto | |
+| PraOnde | Escolha | vazio (Direto Suinco) / CROSS / DEDICADA / RET FRIGO |
+| Compartilhada | Sim/Não (calculado) | **Não é gravado como escolha livre** — a Lista/formulário deve recalcular a partir de PraOnde (Sim quando CROSS ou RET FRIGO). No painel isto é uma função pura, nunca um campo editado diretamente. |
+| QtdGanchos | Número (inteiro) | 0 = "Liso" (carga sem gancheira) |
+| QtdEntregas | Número (inteiro) | Quantidade de entregas da carga |
 | Status | Escolha | Ver lista de 9 valores abaixo |
 | AguardandoCarga | Sim/Não | true enquanto o status é "Aguardando Carga" |
 | CriadoEm | Data e Hora | |

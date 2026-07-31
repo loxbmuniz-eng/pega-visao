@@ -54,7 +54,8 @@
         <table>
           <thead><tr>
             <th>Seq.</th><th>Nº Carga</th><th>Placa</th><th>Transportadora</th><th>Tipo Veículo</th>
-            <th>Cliente</th><th>Destino</th><th>Produto</th><th>Peso (kg)</th><th>Doca</th><th>Status</th><th>Atualizado em</th>
+            <th>Cliente</th><th>Destino</th><th>Produto</th><th>Peso (kg)</th><th>Doca</th>
+            <th>Pra onde?</th><th>Ganchos</th><th>Status</th><th>Atualizado em</th>
           </tr></thead>
           <tbody id="torre-tbody"></tbody>
         </table>
@@ -99,6 +100,29 @@
           <input type="number" id="prog-sequencia" min="1">
         </div>
       </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Pra onde? <span class="hint">(modal/operação)</span></label>
+          <select id="prog-praonde" onchange="atualizarPreviewCompartilhada('prog-praonde','prog-compartilhada-preview')">
+            <option value="">(vazio = Direto Suinco)</option>
+            <option value="CROSS">CROSS (cross-docking)</option>
+            <option value="DEDICADA">DEDICADA (frota própria)</option>
+            <option value="RET FRIGO">RET FRIGO (retirada no frigorífico)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Compartilhada? <span class="hint">(calculado automaticamente)</span></label>
+          <div class="readonly-pill" id="prog-compartilhada-preview">Não</div>
+        </div>
+        <div class="form-group">
+          <label>Qtd. Ganchos (Gancheira) <span class="hint">0 = Liso</span></label>
+          <input type="number" id="prog-ganchos" min="0" step="1" value="0">
+        </div>
+        <div class="form-group">
+          <label>Qtd. Entregas</label>
+          <input type="number" id="prog-entregas" min="1" step="1" value="1">
+        </div>
+      </div>
       <div class="form-group" style="margin-bottom:10px"><label>Observações</label><textarea id="prog-obs"></textarea></div>
       <div class="flex-end"><button class="btn btn-primary" onclick="criarCargaProgramadaUI()">➕ Criar Carga (Programado)</button></div>
     </div>
@@ -122,7 +146,7 @@
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Seq.</th><th>Nº Carga</th><th>Placa</th><th>Transportadora</th><th>Cliente</th><th>Destino</th><th>Doca</th><th class="no-print">Ação</th></tr></thead>
+          <thead><tr><th>Seq.</th><th>Nº Carga</th><th>Placa</th><th>Transportadora</th><th>Cliente</th><th>Destino</th><th>Doca</th><th>Pra onde?</th><th>Ganchos</th><th class="no-print">Ação</th></tr></thead>
           <tbody id="prog-fila-tbody"></tbody>
         </table>
       </div>
@@ -136,10 +160,11 @@
       <div class="card-title"><span class="icon">🚧</span> Registrar Movimento de Placa</div>
       <div class="card-sub">Chegada e saída se aplicam a <strong>todas</strong> as cargas em aberto dessa placa ao mesmo tempo — é o mesmo caminhão, uma única vez. Se a placa não tiver programação, a chegada cria automaticamente uma entrada "Aguardando Carga".</div>
       <div class="quick-box">
-        <div class="form-group"><label>Placa</label><input type="text" id="portaria-placa" placeholder="ABC1D23"></div>
-        <button class="btn btn-success" onclick="acaoChegadaUI()">🚚 Registrar Chegada</button>
-        <button class="btn btn-warn" onclick="acaoSaidaUI()">🏁 Registrar Saída</button>
+        <div class="form-group"><label>Placa</label><input type="text" id="portaria-placa" placeholder="ABC1D23" autocomplete="off" onkeydown="if(event.key==='Enter')acaoChegadaUI()"></div>
+        <button class="btn btn-success btn-lg" onclick="acaoChegadaUI()">🚚 Registrar Chegada</button>
+        <button class="btn btn-warn btn-lg" onclick="acaoSaidaUI()">🏁 Registrar Saída</button>
       </div>
+      <div class="card-sub" style="margin-top:-6px">Dica: digite a placa e aperte <strong>Enter</strong> para registrar a chegada mais rápido.</div>
     </div>
 
     <div class="card">
@@ -160,7 +185,7 @@
       <div class="card-title"><span class="icon">🚛</span> Ação Rápida por Placa</div>
       <div class="card-sub">Se a placa tiver mais de uma carga elegível para a mesma ação, o painel pergunta qual carga está sendo processada.</div>
       <div class="quick-box">
-        <div class="form-group"><label>Placa</label><input type="text" id="exp-placa" placeholder="ABC1D23"></div>
+        <div class="form-group"><label>Placa</label><input type="text" id="exp-placa" placeholder="ABC1D23" autocomplete="off"></div>
         <button class="btn btn-primary btn-sm" onclick="acaoRapidaPlaca('exp-placa','Veículo em Pátio','Liberado para Embarque','Expedição')">Liberar p/ Embarque</button>
         <button class="btn btn-primary btn-sm" onclick="acaoRapidaPlaca('exp-placa','Liberado para Embarque','Embarque Iniciado','Expedição')">Iniciar Embarque</button>
         <button class="btn btn-success btn-sm" onclick="acaoRapidaPlaca('exp-placa','Embarque Iniciado','Embarque Finalizado','Expedição')">Finalizar Embarque</button>
@@ -203,9 +228,25 @@
   <!-- ===== INDICADORES ===== -->
   <div class="tab-page" id="tab-indicadores">
     <div class="card">
-      <div class="card-title"><span class="icon">📊</span> Tempos Médios (cargas concluídas — Seguiu Viagem)</div>
+      <div class="card-title"><span class="icon">📊</span> Tempos Médios — Histórico Completo (cargas concluídas — Seguiu Viagem)</div>
       <div class="grid4" id="ind-stats"></div>
     </div>
+
+    <div class="card">
+      <div class="card-title"><span class="icon">🔍</span> Painel do Gestor — comparação por período</div>
+      <div class="card-sub">
+        Pente fino: cada indicador quebrado nas mesmas 5 janelas de tempo, lado a lado, sem precisar clicar pra comparar.
+        <strong>Semana</strong> = últimos 7 dias corridos. <strong>Mês</strong> = mês calendário atual. Quando não houver
+        cargas concluídas suficientes num período, a célula diz isso claramente em vez de mostrar "0" ou um traço ambíguo.
+      </div>
+      <div class="table-wrap">
+        <table class="table-periodos">
+          <thead><tr><th>Indicador</th><th>Últimas 6h</th><th>Últimas 12h</th><th>Hoje</th><th>Semana (7d)</th><th>Mês</th></tr></thead>
+          <tbody id="ind-periodos-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
     <div class="card">
       <div class="card-title"><span class="icon">⚠️</span> Sobre o OTIF</div>
       <div class="card-sub" style="margin-bottom:0">
@@ -214,16 +255,18 @@
         confirmada como campo do modelo de dados. Assim que definirmos qual é essa referência, este indicador entra.
       </div>
     </div>
+
     <div class="card">
       <div class="card-title"><span class="icon">🏆</span> Ranking de Transportadoras</div>
-      <div class="card-sub">Ordenado por lead time médio (menor primeiro). Considera só cargas já em "Seguiu Viagem".</div>
+      <div class="card-sub">Ordenado por lead time médio (menor primeiro). Escolha o período — considera só cargas em "Seguiu Viagem" dentro dele.</div>
+      <div class="gap8" id="ind-ranking-periodos" style="margin-bottom:14px"></div>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Pos.</th><th>Transportadora</th><th>Cargas Concluídas</th><th>Lead Time Médio</th><th>Tempo Médio em Pátio</th></tr></thead>
           <tbody id="ind-ranking-tbody"></tbody>
         </table>
       </div>
-      <div class="empty-state" id="ind-ranking-empty" hidden>Ainda não há cargas concluídas para gerar ranking.</div>
+      <div class="empty-state" id="ind-ranking-empty" hidden>Nenhuma carga concluída nesse período.</div>
     </div>
   </div>
 
@@ -276,7 +319,19 @@
   <!-- ===== HISTÓRICO ===== -->
   <div class="tab-page" id="tab-historico">
     <div class="card">
-      <div class="card-title"><span class="icon">🕓</span> Histórico de Movimentações</div>
+      <div class="card-title"><span class="icon">🕓</span> Linha do Tempo de uma Carga</div>
+      <div class="card-sub">Digite a placa ou o número de carga — a jornada completa aparece como uma linha do tempo, fácil de ler rápido.</div>
+      <div class="form-group" style="max-width:420px;margin-bottom:6px">
+        <label>Placa ou Nº de Carga</label>
+        <input type="text" id="hist-busca-carga" placeholder="Ex: ABC1D23 ou 10245" oninput="renderBuscaTimeline()">
+      </div>
+      <div id="hist-busca-resultados"></div>
+      <div id="hist-timeline-wrap"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><span class="icon">📜</span> Log Completo de Movimentações</div>
+      <div class="card-sub">Registro bruto, para auditoria — todas as mudanças de status de todas as cargas.</div>
       <div class="form-row">
         <div class="form-group"><label>Filtrar por placa</label><input type="text" id="hist-filtro-placa" oninput="renderHistorico()"></div>
         <div class="form-group">
@@ -301,13 +356,24 @@
   <div class="tab-page" id="tab-relatorios">
     <div class="card">
       <div class="card-title"><span class="icon">📄</span> PDF Operacional</div>
-      <div class="card-sub">Detalhado: todas as cargas em aberto, placas, status e tempos por etapa.</div>
+      <div class="card-sub">Sequenciamento de carregamento do dia — mesmo layout da planilha usada hoje: Nº, Carga, Rota, Pra onde?, Faturado, Status de Carregamento (célula colorida), Placa, Empresa, Perfil, Peso(ton), Compartilhada?, Entregas, Ganchos.</div>
       <button class="btn btn-primary" onclick="exportarPdfOperacional()">🖨️ Gerar PDF Operacional</button>
     </div>
     <div class="card">
       <div class="card-title"><span class="icon">📄</span> PDF Executivo</div>
       <div class="card-sub">Uma página, KPIs e visão de diretoria.</div>
       <button class="btn btn-primary" onclick="exportarPdfExecutivo()">🖨️ Gerar PDF Executivo</button>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="icon">📊</span> Exportar Dados (CSV) — Power BI</div>
+      <div class="card-sub">
+        Gera 5 arquivos CSV (formato fato/dimensão): <code>Fact_Movimentacoes</code>, <code>Dim_Carga</code>,
+        <code>Dim_Transportadora</code>, <code>Dim_Frota</code>, <code>Dim_Status</code>. Isto é uma
+        <strong>ponte temporária</strong> — quando as Listas do SharePoint estiverem provisionadas, o certo é o
+        Power BI conectar direto nelas (Obter Dados → Lista do SharePoint), sem depender de exportar/importar
+        manualmente. Ver <code>docs/POWERBI_EXPORT.md</code>.
+      </div>
+      <button class="btn btn-primary" onclick="exportarCsvPowerBI()">📊 Exportar Dados (CSV) — Power BI</button>
     </div>
   </div>
 
@@ -369,10 +435,47 @@
       <div class="form-group"><label>Transportadora</label><input type="text" id="completar-transportadora" list="lista-transportadoras"></div>
       <div class="form-group"><label>Tipo de Veículo</label><input type="text" id="completar-tipoveiculo"></div>
     </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Pra onde?</label>
+        <select id="completar-praonde" onchange="atualizarPreviewCompartilhada('completar-praonde','completar-compartilhada-preview')">
+          <option value="">(vazio = Direto Suinco)</option>
+          <option value="CROSS">CROSS (cross-docking)</option>
+          <option value="DEDICADA">DEDICADA (frota própria)</option>
+          <option value="RET FRIGO">RET FRIGO (retirada no frigorífico)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Compartilhada? <span class="hint">(calculado)</span></label>
+        <div class="readonly-pill" id="completar-compartilhada-preview">Não</div>
+      </div>
+      <div class="form-group"><label>Qtd. Ganchos <span class="hint">0 = Liso</span></label><input type="number" id="completar-ganchos" min="0" step="1" value="0"></div>
+      <div class="form-group"><label>Qtd. Entregas</label><input type="number" id="completar-entregas" min="1" step="1" value="1"></div>
+    </div>
     <div class="form-group" style="margin-bottom:10px"><label>Observações</label><textarea id="completar-obs"></textarea></div>
     <div class="flex-end">
       <button class="btn btn-sec" onclick="fecharModalCompletar()">Cancelar</button>
       <button class="btn btn-primary" onclick="salvarCompletarCarga()">Salvar — vai para "Veículo em Pátio"</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- Trava de senha das abas Indicadores/Relatórios — ver comentário grande
+     em app.js (função pedirSenhaAba): isto NÃO é segurança real, é só uma
+     barreira de UX. Qualquer pessoa com o código-fonte consegue ver a senha
+     ou simplesmente pular a checagem. -->
+<div class="modal-overlay" id="modal-senha">
+  <div class="modal-box">
+    <h2 id="senha-titulo">Área restrita</h2>
+    <div class="card-sub" id="senha-sub">Esta aba pede uma senha simples de UX — não é controle de acesso real.</div>
+    <div class="form-group" style="margin-bottom:14px">
+      <label>Senha</label>
+      <input type="password" id="senha-input" placeholder="Digite a senha" onkeydown="if(event.key==='Enter')confirmarSenhaAba()">
+    </div>
+    <div class="flex-end">
+      <button class="btn btn-sec" onclick="cancelarSenhaAba()">Cancelar</button>
+      <button class="btn btn-primary" onclick="confirmarSenhaAba()">Entrar</button>
     </div>
   </div>
 </div>

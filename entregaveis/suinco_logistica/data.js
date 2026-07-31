@@ -51,6 +51,52 @@ const STATUS_META = {
   'Seguiu Viagem':         { badge:'badge-seguiu-viagem',       setor:'Portaria' }
 };
 
+/* ---------- "Pra onde?" (classificador de modal/operação) ----------
+   Confirmado no briefing: vazio = Direto Suinco, CROSS = cross-docking,
+   DEDICADA = frota própria, RET FRIGO = retirada no frigorífico.
+   "Compartilhada?" é SEMPRE calculada a partir disto — nunca editável
+   manualmente, pra não desalinhar do valor real de Pra onde?. */
+const PRA_ONDE_OPCOES = ['', 'CROSS', 'DEDICADA', 'RET FRIGO'];
+const PRA_ONDE_LABEL = { '': '(Direto Suinco)', 'CROSS':'CROSS', 'DEDICADA':'DEDICADA', 'RET FRIGO':'RET FRIGO' };
+function compartilhadaDaCarga(carga){
+  return (carga && (carga.praOnde === 'CROSS' || carga.praOnde === 'RET FRIGO')) ? 'Sim' : 'Não';
+}
+
+/* ---------- mapeamento de cor/rótulo para o PDF Operacional e para
+   Dim_Status (export Power BI) ----------
+   Mapeamento de "Status de Carregamento" confirmado no briefing:
+     Programado                -> "NÃO ESTÁ NA SUINCO" (vinho)
+     Veículo em Pátio          -> "PÁTIO" (amarelo)
+     Embarque Iniciado         -> "CARREGANDO" (laranja)
+     Embarque Finalizado (ou além) -> "CARREGADO" (verde)
+   DECISÃO DE PREENCHIMENTO DE LACUNA (não estava 100% especificado):
+   "Liberado para Embarque" foi tratado como "PÁTIO" (o veículo ainda está
+   fisicamente parado, só liberado pra fila de carregamento — ainda não
+   começou a carregar) e "Aguardando Carga" foi tratado como "PÁTIO" com
+   texto próprio ("SEM DADOS") já que fisicamente o veículo já está na
+   Suinco. Ver docs/DECISOES_CONFIRMADAS.md item 9. */
+const STATUS_CARREGAMENTO_META = {
+  'Aguardando Carga':       { texto:'SEM DADOS',          cor:'#d99a2b', classe:'cell-patio' },
+  'Programado':              { texto:'NÃO ESTÁ NA SUINCO', cor:'#8f1f26', classe:'cell-fora' },
+  'Veículo em Pátio':        { texto:'PÁTIO',              cor:'#e9b954', classe:'cell-patio' },
+  'Liberado para Embarque':  { texto:'PÁTIO',              cor:'#e9b954', classe:'cell-patio' },
+  'Embarque Iniciado':       { texto:'CARREGANDO',         cor:'#d99a2b', classe:'cell-carregando' },
+  'Embarque Finalizado':     { texto:'CARREGADO',          cor:'#3fa66a', classe:'cell-carregado' },
+  'Faturado':                { texto:'CARREGADO',          cor:'#3fa66a', classe:'cell-carregado' },
+  'Liberado para Saída':     { texto:'CARREGADO',          cor:'#3fa66a', classe:'cell-carregado' },
+  'Seguiu Viagem':           { texto:'CARREGADO',          cor:'#3fa66a', classe:'cell-carregado' }
+};
+function statusCarregamentoInfo(status){
+  return STATUS_CARREGAMENTO_META[status] || { texto: status||'—', cor:'#374a86', classe:'' };
+}
+// "Faturado" ou além no fluxo (Faturado, Liberado para Saída, Seguiu Viagem) -> célula verde no PDF.
+function estaFaturado(carga){
+  const idx = STATUS_FLOW.indexOf(carga.status);
+  return idx >= STATUS_FLOW.indexOf('Faturado');
+}
+// Ordem "estendida" (Aguardando Carga primeiro) — usada pelo export Dim_Status.
+const STATUS_ORDEM_EXPORT = ['Aguardando Carga', ...STATUS_FLOW];
+
 // Quais abas cada setor enxerga. 'Torre' (visão geral) e 'Historico' são
 // leitura liberada pra todos — é o que dá a visão de torre de controle.
 const SETOR_PERMISSOES = {
@@ -204,7 +250,7 @@ function getCarga(id){ return DB.cargas.find(c=>c.id===id) || null; }
 // veículo ainda não chegou fisicamente. transportadora/tipoVeiculo só
 // precisam ser passados se a placa não estiver na Frota (ou pra sobrepor
 // manualmente); do contrário são resolvidos automaticamente pela placa.
-function criarCargaProgramada({placa, transportadora, tipoVeiculo, numeroCarga, cliente, destino, produto, peso, doca, sequencia, observacoes, operador}){
+function criarCargaProgramada({placa, transportadora, tipoVeiculo, numeroCarga, cliente, destino, produto, peso, doca, sequencia, observacoes, praOnde, qtdGanchos, qtdEntregas, operador}){
   const p = normalizarPlaca(placa);
   if(!p) throw new Error('Placa é obrigatória');
   const frota = buscarFrota(p);
@@ -217,6 +263,9 @@ function criarCargaProgramada({placa, transportadora, tipoVeiculo, numeroCarga, 
     cliente: cliente||'', destino: destino||'', produto: produto||'', peso: Number(peso)||0,
     doca: doca||'', sequencia: sequencia!==undefined && sequencia!=='' ? Number(sequencia) : null,
     observacoes: observacoes||'',
+    praOnde: PRA_ONDE_OPCOES.includes(praOnde) ? praOnde : '',
+    qtdGanchos: qtdGanchos!==undefined && qtdGanchos!=='' ? Math.max(0, Number(qtdGanchos)||0) : 0,
+    qtdEntregas: qtdEntregas!==undefined && qtdEntregas!=='' ? Math.max(1, Number(qtdEntregas)||1) : 1,
     status: 'Programado',
     aguardandoCarga: false,
     criadoEm: nowISO(), criadoPor: operador||'(não identificado)',
@@ -245,6 +294,7 @@ function registrarChegadaPortaria(placa, operador){
       transportadora: frota ? frota.transportadora : '',
       tipoVeiculo: frota ? frota.tipoVeiculo : '',
       cliente:'', destino:'', produto:'', peso:0, doca:'', sequencia:null, observacoes:'',
+      praOnde:'', qtdGanchos:0, qtdEntregas:1,
       status: 'Aguardando Carga', aguardandoCarga: true,
       criadoEm: nowISO(), criadoPor: operador||'(não identificado)',
       atualizadoEm: nowISO()
@@ -268,13 +318,16 @@ function registrarChegadaPortaria(placa, operador){
 
 // Logística completa os dados de uma carga que nasceu "Aguardando Carga".
 // Vai direto pra 'Veículo em Pátio' — o caminhão já está fisicamente lá.
-function completarCargaAguardando(cargaId, {numeroCarga, cliente, destino, produto, peso, doca, sequencia, observacoes, transportadora, tipoVeiculo, operador}){
+function completarCargaAguardando(cargaId, {numeroCarga, cliente, destino, produto, peso, doca, sequencia, observacoes, transportadora, tipoVeiculo, praOnde, qtdGanchos, qtdEntregas, operador}){
   const c = getCarga(cargaId);
   if(!c) throw new Error('Carga não encontrada');
   if(c.status !== 'Aguardando Carga') throw new Error('Esta carga não está em Aguardando Carga');
   c.numeroCarga = numeroCarga||''; c.cliente = cliente||''; c.destino = destino||''; c.produto = produto||''; c.peso = Number(peso)||0;
   c.doca = doca||''; c.sequencia = sequencia!==undefined && sequencia!=='' ? Number(sequencia) : null;
   c.observacoes = observacoes||'';
+  c.praOnde = PRA_ONDE_OPCOES.includes(praOnde) ? praOnde : '';
+  c.qtdGanchos = qtdGanchos!==undefined && qtdGanchos!=='' ? Math.max(0, Number(qtdGanchos)||0) : 0;
+  c.qtdEntregas = qtdEntregas!==undefined && qtdEntregas!=='' ? Math.max(1, Number(qtdEntregas)||1) : 1;
   if(transportadora) c.transportadora = transportadora;
   if(tipoVeiculo) c.tipoVeiculo = tipoVeiculo;
   registrarMovimentacao({cargaId:c.id, placa:c.placa, statusAnterior:'Aguardando Carga', statusNovo:'Veículo em Pátio', operador, setor:'Logística'});
@@ -342,9 +395,13 @@ function indicadoresDaCarga(cargaId){
     leadTimeTotal: minutosEntre(getCarga(cargaId)?.criadoEm, tSaida)
   };
 }
-function rankingTransportadoras(){
+// cargas: lista opcional de cargas já concluídas a considerar (usada pela
+// quebra por período abaixo). Sem argumento, mantém o comportamento
+// histórico original: todas as cargas "Seguiu Viagem" de sempre.
+function rankingTransportadoras(cargas){
+  const base = cargas || DB.cargas.filter(c=>c.status==='Seguiu Viagem');
   const porTransp = {};
-  DB.cargas.filter(c=>c.status==='Seguiu Viagem' && c.transportadora).forEach(c=>{
+  base.filter(c=>c.transportadora).forEach(c=>{
     const t = c.transportadora;
     if(!porTransp[t]) porTransp[t] = {transportadora:t, cargas:0, somaLead:0, nLead:0, somaPatio:0, nPatio:0};
     const ind = indicadoresDaCarga(c.id);
@@ -362,6 +419,128 @@ function rankingTransportadoras(){
     if(b.leadTimeMedio===null) return -1;
     return a.leadTimeMedio - b.leadTimeMedio;
   });
+}
+
+/* ---------- PAINEL DO GESTOR — quebra de indicadores por período ----------
+   Pedido explícito: não basta uma média geral, o gestor quer comparar
+   6h vs 12h vs Hoje vs Semana vs Mês lado a lado, "pente fino".
+   Definições de janela (documentado — não há ambiguidade escondida):
+     - Últimas 6h / Últimas 12h: janela ROLANTE a partir de agora.
+     - Hoje: dia CALENDÁRIO (00:00 local até agora).
+     - Semana: últimos 7 DIAS CORRIDOS (janela rolante), não semana
+       calendário — escolhido por consistência com as janelas de 6h/12h e
+       porque não reseta abruptamente toda segunda-feira. Fica documentado
+       aqui e em docs/DECISOES_CONFIRMADAS.md.
+     - Mês: mês CALENDÁRIO atual (dia 1 00:00 local até agora).
+   Tudo em horário local do navegador (sem tratamento extra de fuso). */
+const PERIODOS_INDICADOR = [
+  { key:'6h',     label:'Últimas 6h' },
+  { key:'12h',    label:'Últimas 12h' },
+  { key:'hoje',   label:'Hoje' },
+  { key:'semana', label:'Semana (7d)' },
+  { key:'mes',    label:'Mês' }
+];
+function janelaPeriodo(periodoKey){
+  const agora = new Date();
+  let inicio;
+  switch(periodoKey){
+    case '6h':     inicio = new Date(agora.getTime() - 6*3600*1000); break;
+    case '12h':    inicio = new Date(agora.getTime() - 12*3600*1000); break;
+    case 'hoje':   inicio = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate(), 0,0,0,0); break;
+    case 'semana': inicio = new Date(agora.getTime() - 7*24*3600*1000); break;
+    case 'mes':    inicio = new Date(agora.getFullYear(), agora.getMonth(), 1, 0,0,0,0); break;
+    default:       inicio = new Date(0); // 'todos' / histórico completo
+  }
+  return { inicio, fim: agora };
+}
+// Cargas concluídas (Seguiu Viagem) cujo instante de saída caiu dentro da janela do período.
+function cargasConcluidasNoPeriodo(periodoKey){
+  const { inicio, fim } = janelaPeriodo(periodoKey);
+  return DB.cargas.filter(c=>{
+    if(c.status !== 'Seguiu Viagem') return false;
+    const tSaida = primeiroTimestamp(c.id, 'Seguiu Viagem');
+    if(!tSaida) return false;
+    const t = new Date(tSaida);
+    return t >= inicio && t <= fim;
+  });
+}
+// Médias dos indicadores de tempo dentro de um período, mais a contagem de
+// cargas concluídas nele — a UI usa totalCargas===0 pra distinguir "sem
+// dados suficientes" de "0 minutos" (que seria enganoso).
+function indicadoresPorPeriodo(periodoKey){
+  const concluidas = cargasConcluidasNoPeriodo(periodoKey);
+  const campos = ['tempoAguardandoEmbarque','tempoCarregamento','tempoFaturamento','tempoPatioTotal'];
+  const somas = {}, contagens = {};
+  campos.forEach(f=>{ somas[f]=0; contagens[f]=0; });
+  let somaLead=0, nLead=0;
+  concluidas.forEach(c=>{
+    const ind = indicadoresDaCarga(c.id);
+    campos.forEach(f=>{ if(ind[f]!==null){ somas[f]+=ind[f]; contagens[f]++; } });
+    if(ind.leadTimeTotal!==null){ somaLead+=ind.leadTimeTotal; nLead++; }
+  });
+  const medias = {};
+  campos.forEach(f=>{ medias[f] = contagens[f] ? Math.round(somas[f]/contagens[f]) : null; });
+  medias.leadTimeTotal = nLead ? Math.round(somaLead/nLead) : null;
+  return { periodo: periodoKey, totalCargas: concluidas.length, medias };
+}
+
+/* ---------- EXPORT POWER BI (CSV fato/dimensão) -----------------------
+   Ponte TEMPORÁRIA. Quando as Listas do SharePoint estiverem provisionadas
+   (ver docs/MODELO_DADOS_SHAREPOINT.md), o certo é o Power BI conectar
+   DIRETO nas Listas via "Obter Dados → Lista do SharePoint" — atualização
+   automática, sem depender de alguém lembrar de exportar e importar este
+   CSV manualmente. Ver docs/POWERBI_EXPORT.md. */
+function csvEscape(v){
+  const s = (v===null||v===undefined) ? '' : String(v);
+  if(/[;"\n\r]/.test(s)) return '"'+s.replace(/"/g,'""')+'"';
+  return s;
+}
+function toCsv(header, linhas){
+  const rows = [header, ...linhas];
+  return rows.map(r => r.map(csvEscape).join(';')).join('\r\n');
+}
+function gerarCsvFactMovimentacoes(){
+  const header = ['CargaId','Placa','Timestamp','StatusAnterior','StatusNovo','Operador','Setor'];
+  const linhas = DB.movimentacoes
+    .slice()
+    .sort((a,b)=>new Date(a.timestamp)-new Date(b.timestamp))
+    .map(m=>[m.cargaId, m.placa, m.timestamp, m.statusAnterior||'', m.statusNovo, m.operador, m.setor]);
+  return toCsv(header, linhas);
+}
+function gerarCsvDimCarga(){
+  const header = ['Id','NumeroCarga','Placa','Transportadora','TipoVeiculo','Cliente','Destino','Produto',
+    'PesoKg','Doca','Sequencia','PraOnde','Compartilhada','QtdGanchos','QtdEntregas','StatusAtual','CriadoEm','AtualizadoEm'];
+  const linhas = DB.cargas.map(c=>[
+    c.id, c.numeroCarga, c.placa, c.transportadora, c.tipoVeiculo, c.cliente, c.destino, c.produto,
+    c.peso, c.doca, c.sequencia ?? '', c.praOnde || '', compartilhadaDaCarga(c), c.qtdGanchos ?? 0, c.qtdEntregas ?? 1,
+    c.status, c.criadoEm, c.atualizadoEm
+  ]);
+  return toCsv(header, linhas);
+}
+function gerarCsvDimTransportadora(){
+  const header = ['Id','Nome'];
+  const linhas = listarTransportadoras().map(t=>[t.id, t.nome]);
+  return toCsv(header, linhas);
+}
+function gerarCsvDimFrota(){
+  const header = ['Placa','Transportadora','TipoVeiculo'];
+  const linhas = DB.frota.map(f=>[f.placa, f.transportadora, f.tipoVeiculo]);
+  return toCsv(header, linhas);
+}
+function gerarCsvDimStatus(){
+  const header = ['Nome','OrdemNoFluxo','Cor'];
+  const linhas = STATUS_ORDEM_EXPORT.map((s,i)=>[s, i, statusCarregamentoInfo(s).cor]);
+  return toCsv(header, linhas);
+}
+// Retorna os 5 arquivos prontos para download: [{nome, conteudo}, ...]
+function gerarArquivosCsvPowerBI(){
+  return [
+    { nome:'Fact_Movimentacoes.csv', conteudo:gerarCsvFactMovimentacoes() },
+    { nome:'Dim_Carga.csv',          conteudo:gerarCsvDimCarga() },
+    { nome:'Dim_Transportadora.csv', conteudo:gerarCsvDimTransportadora() },
+    { nome:'Dim_Frota.csv',          conteudo:gerarCsvDimFrota() },
+    { nome:'Dim_Status.csv',         conteudo:gerarCsvDimStatus() }
+  ];
 }
 
 /* ---------- INIT ---------- */

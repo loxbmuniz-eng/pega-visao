@@ -36,6 +36,43 @@ function notify(msg, type){
   setTimeout(()=>{ el.remove(); }, 5000);
 }
 
+/* ---------- SOM DE CONFIRMAÇÃO ----------
+   Replica o padrão do HTML original do usuário: 3 tons de 880Hz espaçados
+   por 200ms, via Web Audio API. Toca em toda ação que MUDA STATUS de carga
+   com sucesso (chegada, saída, avanço de status, completar Aguardando
+   Carga) — nunca em digitação, só em confirmações de ação. Falha em
+   silêncio se o navegador bloquear áudio sem interação do usuário (não
+   deve nunca quebrar o fluxo operacional por causa do som). */
+let _audioCtx = null;
+function tocarBeepConfirmacao(){
+  try{
+    if(!_audioCtx){
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if(!Ctx) return;
+      _audioCtx = new Ctx();
+    }
+    if(_audioCtx.state === 'suspended') _audioCtx.resume();
+    const atrasos = [0, 200, 400]; // ms — 3 tons espaçados por 200ms
+    atrasos.forEach(atrasoMs=>{
+      setTimeout(()=>{
+        try{
+          const osc = _audioCtx.createOscillator();
+          const gain = _audioCtx.createGain();
+          osc.type = 'sine';
+          osc.frequency.value = 880; // Hz — mesmo tom do padrão original
+          gain.gain.setValueAtTime(0.0001, _audioCtx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.22, _audioCtx.currentTime + 0.01);
+          gain.gain.exponentialRampToValueAtTime(0.0001, _audioCtx.currentTime + 0.12);
+          osc.connect(gain);
+          gain.connect(_audioCtx.destination);
+          osc.start();
+          osc.stop(_audioCtx.currentTime + 0.13);
+        }catch(e){ /* silencioso — som nunca deve travar o fluxo operacional */ }
+      }, atrasoMs);
+    });
+  }catch(e){ console.warn('Som de confirmação indisponível:', e); }
+}
+
 /* ---------- login / operador (placeholder até SSO) ---------- */
 function detectarTurnoPorHora(){
   const h = new Date().getHours();
@@ -81,8 +118,55 @@ function aplicarPermissoesSetor(){
   if(!permitido.includes(TAB_ATUAL)) abrirTab(permitido[0] || 'torre');
 }
 
+/* ---------- TRAVA DE SENHA (Indicadores / Relatórios) -----------------
+   ATENÇÃO — LEIA ANTES DE CONFIAR NISSO PRA QUALQUER COISA SÉRIA:
+   Isto NÃO É segurança de verdade. É só uma barreira de UX pra evitar que
+   alguém abra essas duas abas sem querer / por curiosidade casual. A senha
+   fica em texto puro aqui embaixo, visível pra qualquer pessoa que abra o
+   código-fonte da página (Ctrl+U no navegador) ou o F12. Não protege nada
+   contra alguém com o mínimo de intenção de contornar. Controle de acesso
+   de verdade só existe quando a permissão REAL da Lista do SharePoint
+   estiver configurada por coluna/item e o SSO (Microsoft 365) estiver
+   ligado — ver docs/MODELO_DADOS_SHAREPOINT.md. Até lá, isto é só uma
+   cortina, não uma porta trancada. */
+const SENHA_UX_ABAS_RESTRITAS = 'suinco2026';
+const ABAS_COM_SENHA = ['indicadores','relatorios'];
+let abasDesbloqueadasNestaSessao = new Set();
+let _tabPendenteSenha = null;
+function abaPrecisaSenha(tab){
+  return ABAS_COM_SENHA.includes(tab) && !abasDesbloqueadasNestaSessao.has(tab);
+}
+function pedirSenhaAba(tab){
+  _tabPendenteSenha = tab;
+  document.getElementById('senha-titulo').textContent = 'Área restrita — ' + (tab==='indicadores' ? 'Indicadores' : 'Relatórios');
+  document.getElementById('senha-input').value = '';
+  document.getElementById('modal-senha').classList.add('open');
+  setTimeout(()=>document.getElementById('senha-input').focus(), 50);
+}
+function confirmarSenhaAba(){
+  const val = document.getElementById('senha-input').value;
+  const tab = _tabPendenteSenha;
+  document.getElementById('modal-senha').classList.remove('open');
+  if(val === SENHA_UX_ABAS_RESTRITAS){
+    abasDesbloqueadasNestaSessao.add(tab);
+    _tabPendenteSenha = null;
+    irParaTab(tab);
+  } else {
+    notify('Senha incorreta.', 'danger');
+    _tabPendenteSenha = null;
+  }
+}
+function cancelarSenhaAba(){
+  document.getElementById('modal-senha').classList.remove('open');
+  _tabPendenteSenha = null;
+}
+
 /* ---------- navegação ---------- */
 function abrirTab(tab){
+  if(abaPrecisaSenha(tab)){ pedirSenhaAba(tab); return; }
+  irParaTab(tab);
+}
+function irParaTab(tab){
   document.querySelectorAll('.tab-page').forEach(el=>el.classList.remove('active'));
   document.querySelectorAll('.nav-tab').forEach(el=>el.classList.remove('active'));
   const page = document.getElementById('tab-'+tab);
@@ -97,12 +181,15 @@ function renderTabAtual(){
   switch(TAB_ATUAL){
     case 'torre': renderTorre(); break;
     case 'programacao': renderProgFila(); renderProgAguardando(); break;
-    case 'portaria': renderPortariaPatio(); break;
+    case 'portaria':
+      renderPortariaPatio();
+      { const el = document.getElementById('portaria-placa'); if(el) setTimeout(()=>el.focus(), 30); }
+      break;
     case 'expedicao': renderExpedicao(); break;
     case 'faturamento': renderFaturamento(); break;
     case 'indicadores': renderIndicadores(); break;
     case 'cadastros': renderCadastros(); break;
-    case 'historico': renderHistorico(); break;
+    case 'historico': renderHistorico(); renderBuscaTimeline(); break;
   }
 }
 function renderAll(){ renderTabAtual(); }
@@ -123,6 +210,8 @@ function renderTorre(){
     <tr>
       <td>${c.sequencia ?? '—'}</td><td>${esc(c.numeroCarga)||'—'}</td><td>${esc(c.placa)}</td><td>${esc(c.transportadora)||'—'}</td><td>${esc(c.tipoVeiculo)||'—'}</td>
       <td>${esc(c.cliente)||'—'}</td><td>${esc(c.destino)||'—'}</td><td>${esc(c.produto)||'—'}</td><td>${c.peso||0}</td><td>${esc(c.doca)||'—'}</td>
+      <td>${c.praOnde ? `<span class="chip-praonde">${esc(PRA_ONDE_LABEL[c.praOnde]||c.praOnde)}</span>` : '<span class="text-dim">—</span>'}</td>
+      <td>${c.qtdGanchos ? c.qtdGanchos : '<span class="text-dim">Liso</span>'}</td>
       <td>${badgeHtml(c.status)}</td><td>${fmtDataHora(c.atualizadoEm)}</td>
     </tr>`).join('');
   document.getElementById('torre-empty').hidden = lista.length>0;
@@ -149,6 +238,12 @@ function atualizarPreviewFrotaPrograma(){
     hint.innerHTML = '';
   }
 }
+// Calcula e mostra "Compartilhada?" (Sim/Não) a partir de "Pra onde?" —
+// campo derivado, NUNCA editável manualmente (evita desalinhar do real).
+function atualizarPreviewCompartilhada(selectId, previewId){
+  const val = document.getElementById(selectId).value;
+  document.getElementById(previewId).textContent = compartilhadaDaCarga({praOnde:val});
+}
 function criarCargaProgramadaUI(){
   const placa = document.getElementById('prog-placa').value;
   if(!normalizarPlaca(placa)){ notify('Informe a placa.','warn'); return; }
@@ -165,11 +260,18 @@ function criarCargaProgramadaUI(){
       doca: document.getElementById('prog-doca').value,
       sequencia: document.getElementById('prog-sequencia').value,
       observacoes: document.getElementById('prog-obs').value,
+      praOnde: document.getElementById('prog-praonde').value,
+      qtdGanchos: document.getElementById('prog-ganchos').value,
+      qtdEntregas: document.getElementById('prog-entregas').value,
       operador: nomeOperadorAtual()
     });
     notify(`Carga criada para a placa ${normalizarPlaca(placa)} — status Programado.`, 'success');
     ['prog-placa','prog-transportadora','prog-tipoveiculo','prog-numero-carga','prog-cliente','prog-destino','prog-produto','prog-peso','prog-doca','prog-sequencia','prog-obs']
       .forEach(id=>document.getElementById(id).value='');
+    document.getElementById('prog-praonde').value = '';
+    document.getElementById('prog-ganchos').value = '0';
+    document.getElementById('prog-entregas').value = '1';
+    atualizarPreviewCompartilhada('prog-praonde','prog-compartilhada-preview');
     document.getElementById('prog-frota-hint').innerHTML = '';
     renderAll();
   }catch(e){ notify(e.message, 'danger'); }
@@ -178,17 +280,40 @@ function renderProgFila(){
   const lista = DB.cargas.filter(c=>c.status==='Programado').sort(ordenarPorSequenciaEAtualizacao);
   document.getElementById('prog-fila-tbody').innerHTML = lista.map(c=>`
     <tr>
-      <td><input type="number" class="seq-input" value="${c.sequencia ?? ''}" onchange="atualizarSequenciaUI('${c.id}',this.value)"></td>
+      <td><input type="number" class="seq-input" value="${c.sequencia ?? ''}" onchange="atualizarSequenciaUI('${c.id}',this.value)" title="Sequência livre — digite o número que quiser, a qualquer momento."></td>
       <td>${esc(c.numeroCarga)||'—'}</td>
       <td>${esc(c.placa)}</td><td>${esc(c.transportadora)||'—'}</td>
       <td>${esc(c.cliente)||'—'}</td><td>${esc(c.destino)||'—'}</td><td>${esc(c.doca)||'—'}</td>
+      <td>${praOndeSelectHtml(c)}</td>
+      <td><input type="number" class="ganchos-input" min="0" step="1" value="${c.qtdGanchos ?? 0}" onchange="atualizarGanchosUI('${c.id}',this.value)" title="0 = Liso"></td>
       <td class="no-print"><button class="btn btn-danger btn-sm" onclick="excluirCargaUI('${c.id}')">Excluir</button></td>
     </tr>`).join('');
   document.getElementById('prog-fila-empty').hidden = lista.length>0;
 }
+// Sequência continua 100% livre: número manual do Programador de Embarque,
+// sem geração automática nem trava de duplicidade — regra confirmada,
+// não mexer nisso (docs/DECISOES_CONFIRMADAS.md item 2).
 function atualizarSequenciaUI(id, val){
   const c = getCarga(id); if(!c) return;
   c.sequencia = val==='' ? null : Number(val);
+  SuincoStore.save();
+  renderProgFila();
+}
+function praOndeSelectHtml(c){
+  return `<select class="praonde-inline" onchange="atualizarPraOndeUI('${c.id}',this.value)">
+    ${PRA_ONDE_OPCOES.map(op=>`<option value="${op}" ${c.praOnde===op?'selected':''}>${esc(PRA_ONDE_LABEL[op])}</option>`).join('')}
+  </select>`;
+}
+function atualizarPraOndeUI(id, val){
+  const c = getCarga(id); if(!c) return;
+  c.praOnde = PRA_ONDE_OPCOES.includes(val) ? val : '';
+  c.atualizadoEm = nowISO();
+  SuincoStore.save();
+  renderAll();
+}
+function atualizarGanchosUI(id, val){
+  const c = getCarga(id); if(!c) return;
+  c.qtdGanchos = val==='' ? 0 : Math.max(0, Number(val)||0);
   SuincoStore.save();
   renderProgFila();
 }
@@ -232,6 +357,10 @@ function abrirCompletar(id){
   document.getElementById('completar-transportadora').value = c.transportadora || '';
   document.getElementById('completar-tipoveiculo').value = c.tipoVeiculo || '';
   document.getElementById('completar-obs').value = '';
+  document.getElementById('completar-praonde').value = '';
+  document.getElementById('completar-ganchos').value = '0';
+  document.getElementById('completar-entregas').value = '1';
+  atualizarPreviewCompartilhada('completar-praonde','completar-compartilhada-preview');
   document.getElementById('modal-completar').classList.add('open');
 }
 function fecharModalCompletar(){ document.getElementById('modal-completar').classList.remove('open'); }
@@ -249,10 +378,14 @@ function salvarCompletarCarga(){
       transportadora: document.getElementById('completar-transportadora').value,
       tipoVeiculo: document.getElementById('completar-tipoveiculo').value,
       observacoes: document.getElementById('completar-obs').value,
+      praOnde: document.getElementById('completar-praonde').value,
+      qtdGanchos: document.getElementById('completar-ganchos').value,
+      qtdEntregas: document.getElementById('completar-entregas').value,
       operador: nomeOperadorAtual()
     });
     fecharModalCompletar();
     notify('Dados completados — carga agora em "Veículo em Pátio".', 'success');
+    tocarBeepConfirmacao();
     renderAll();
   }catch(e){ notify(e.message, 'danger'); }
 }
@@ -265,12 +398,15 @@ function acaoChegadaUI(){
   const r = registrarChegadaPortaria(placa, nomeOperadorAtual());
   if(r.criadas.length){
     notify(`${normalizarPlaca(placa)}: nenhuma programação encontrada — criada entrada "Aguardando Carga". Avise a Logística para completar os dados.`, 'warn');
+    tocarBeepConfirmacao();
   } else if(r.atualizadas.length){
     notify(`${normalizarPlaca(placa)}: ${r.atualizadas.length} carga(s) agora em "Veículo em Pátio".`, 'success');
+    tocarBeepConfirmacao();
   } else if(r.jaNoPatio.length){
     notify(`${normalizarPlaca(placa)} já está no pátio (${r.jaNoPatio.map(c=>c.status).join(', ')}).`, '');
   }
   input.value = '';
+  input.focus();
   renderAll();
 }
 function acaoSaidaUI(){
@@ -278,10 +414,11 @@ function acaoSaidaUI(){
   const placa = input.value;
   if(!normalizarPlaca(placa)){ notify('Informe a placa.','warn'); return; }
   const r = registrarSaidaPortaria(placa, nomeOperadorAtual());
-  if(r.liberadas.length) notify(`${normalizarPlaca(placa)}: saída registrada para ${r.liberadas.length} carga(s) — Seguiu Viagem.`, 'success');
+  if(r.liberadas.length){ notify(`${normalizarPlaca(placa)}: saída registrada para ${r.liberadas.length} carga(s) — Seguiu Viagem.`, 'success'); tocarBeepConfirmacao(); }
   if(r.pendentes.length) notify(`${normalizarPlaca(placa)}: ${r.pendentes.length} carga(s) ainda não liberada(s) para saída (status atual: ${r.pendentes.map(c=>c.status).join(', ')}).`, 'warn');
   if(!r.liberadas.length && !r.pendentes.length) notify(`Nenhuma carga em aberto encontrada para a placa ${normalizarPlaca(placa)}.`, 'warn');
   input.value = '';
+  input.focus();
   renderAll();
 }
 function renderPortariaPatio(){
@@ -326,6 +463,7 @@ function executarAvanco(cargaId, statusDestino){
     const c = getCarga(cargaId);
     avancarStatusCarga(cargaId, statusDestino, nomeOperadorAtual(), setorOperadorAtual());
     notify(`${c.placa}: agora em "${statusDestino}".`, 'success');
+    tocarBeepConfirmacao();
     renderAll();
   }catch(e){ notify(e.message, 'danger'); }
 }
@@ -387,8 +525,10 @@ function renderFaturamento(){
   document.getElementById('fat-empty').hidden = lista.length>0;
 }
 
-/* ---------- INDICADORES ---------- */
+/* ---------- INDICADORES / PAINEL DO GESTOR ---------- */
+let indRankingPeriodoAtivo = 'hoje';
 function renderIndicadores(){
+  // ---- Bloco 1: histórico completo (mantém o comportamento original) ----
   const concluidas = DB.cargas.filter(c=>c.status==='Seguiu Viagem');
   const campos = ['tempoAguardandoEmbarque','tempoCarregamento','tempoFaturamento','tempoPatioTotal'];
   const labels = {
@@ -412,11 +552,56 @@ function renderIndicadores(){
   html += `<div class="stat-box"><div class="stat-num">${fmtDuracao(nLead?Math.round(somaLead/nLead):null)}</div><div class="stat-label">Lead Time Total</div><div class="stat-note">criação da carga → Seguiu Viagem</div></div>`;
   document.getElementById('ind-stats').innerHTML = html;
 
-  const rk = rankingTransportadoras();
+  // ---- Bloco 2: Painel do Gestor — comparação por período (novo) ----
+  renderComparacaoPeriodos();
+  renderRankingPeriodos();
+}
+// Tabela indicador × período, todos visíveis ao mesmo tempo — sem clique
+// pra comparar 6h vs 12h vs Hoje vs Semana vs Mês.
+function renderComparacaoPeriodos(){
+  const linhasDef = [
+    { key:'cargas',                   label:'Cargas Concluídas' },
+    { key:'tempoAguardandoEmbarque',  label:'Tempo Aguardando Embarque' },
+    { key:'tempoCarregamento',        label:'Tempo de Carregamento' },
+    { key:'tempoFaturamento',         label:'Tempo de Faturamento' },
+    { key:'tempoPatioTotal',          label:'Tempo em Pátio (total)' },
+    { key:'leadTimeTotal',            label:'Lead Time Total' }
+  ];
+  const porPeriodo = PERIODOS_INDICADOR.map(p => ({ periodo:p, dados: indicadoresPorPeriodo(p.key) }));
+  const tbody = document.getElementById('ind-periodos-tbody');
+  tbody.innerHTML = linhasDef.map(linha=>{
+    const celulas = porPeriodo.map(({dados})=>{
+      if(linha.key==='cargas'){
+        if(dados.totalCargas===0) return `<td class="cel-sem-dados">Sem dados suficientes</td>`;
+        return `<td class="cel-num">${dados.totalCargas}</td>`;
+      }
+      if(dados.totalCargas===0) return `<td class="cel-sem-dados">Sem dados suficientes</td>`;
+      const v = dados.medias[linha.key];
+      return v===null ? `<td class="cel-sem-dados">Sem dados suficientes</td>` : `<td class="cel-num">${fmtDuracao(v)}</td>`;
+    }).join('');
+    return `<tr><th class="row-label">${esc(linha.label)}</th>${celulas}</tr>`;
+  }).join('');
+}
+// Ranking de transportadoras com seletor de período (pílulas). Mantido
+// separado da tabela de comparação acima de propósito: o número de
+// transportadoras é variável, então uma matriz gigante indicador×período
+// ficaria densa demais — aqui um clique troca o período, mas a tabela em
+// si já mostra todas as transportadoras daquele período de uma vez.
+function renderRankingPeriodos(){
+  const tabs = [...PERIODOS_INDICADOR, { key:'todos', label:'Histórico completo' }];
+  document.getElementById('ind-ranking-periodos').innerHTML = tabs.map(p=>`
+    <button class="btn btn-sm ${p.key===indRankingPeriodoAtivo ? 'btn-primary' : 'btn-sec'}" onclick="selecionarRankingPeriodo('${p.key}')">${esc(p.label)}</button>
+  `).join('');
+  const cargasPeriodo = indRankingPeriodoAtivo==='todos' ? undefined : cargasConcluidasNoPeriodo(indRankingPeriodoAtivo);
+  const rk = rankingTransportadoras(cargasPeriodo);
   document.getElementById('ind-ranking-tbody').innerHTML = rk.map((r,i)=>`
     <tr><td>${i+1}º</td><td>${esc(r.transportadora)}</td><td>${r.cargas}</td><td>${fmtDuracao(r.leadTimeMedio)}</td><td>${fmtDuracao(r.tempoPatioMedio)}</td></tr>
   `).join('');
   document.getElementById('ind-ranking-empty').hidden = rk.length>0;
+}
+function selecionarRankingPeriodo(key){
+  indRankingPeriodoAtivo = key;
+  renderRankingPeriodos();
 }
 
 /* ---------- CADASTROS ---------- */
@@ -493,6 +678,119 @@ function atualizarDatalists(){
   document.getElementById('lista-docas').innerHTML = DB.docas.map(d=>`<option value="${esc(d.nome)}">`).join('');
 }
 
+/* ---------- HISTÓRICO — LINHA DO TEMPO POR CARGA (item 7 do briefing) ----
+   Carro-chefe de usabilidade: em vez de vasculhar uma tabela crua, quem
+   quiser saber "cadê essa carga / o que já aconteceu com ela" digita a
+   placa ou o número de carga e vê uma linha do tempo visual, com hora,
+   quem fez e o setor em cada etapa — textos grandes, feito pra ler rápido
+   com zoom/alto contraste. */
+let _timelineCargaAtual = null;
+function renderBuscaTimeline(){
+  const termoBruto = (document.getElementById('hist-busca-carga').value || '').trim();
+  const resultadosEl = document.getElementById('hist-busca-resultados');
+  const wrap = document.getElementById('hist-timeline-wrap');
+
+  if(!termoBruto){
+    // Sem busca: mostra atalho pras cargas mais recentemente atualizadas.
+    const recentes = DB.cargas.slice().sort((a,b)=>new Date(b.atualizadoEm)-new Date(a.atualizadoEm)).slice(0,5);
+    resultadosEl.innerHTML = recentes.length ? `
+      <div class="text-dim" style="font-size:12px;margin-bottom:8px">Ou escolha uma das mais recentes:</div>
+      <div class="gap8">${recentes.map(c=>cardResultadoBusca(c)).join('')}</div>
+    ` : '';
+    if(!_timelineCargaAtual) wrap.innerHTML = '';
+    return;
+  }
+
+  const termo = normalizarPlaca(termoBruto);
+  const termoNum = termoBruto.toLowerCase();
+  const achadas = DB.cargas.filter(c=>
+    (termo && normalizarPlaca(c.placa).includes(termo)) ||
+    (c.numeroCarga && c.numeroCarga.toLowerCase().includes(termoNum))
+  ).sort((a,b)=>new Date(b.atualizadoEm)-new Date(a.atualizadoEm));
+
+  if(achadas.length === 0){
+    resultadosEl.innerHTML = `<div class="empty-state">Nenhuma carga encontrada para "${esc(termoBruto)}".</div>`;
+    wrap.innerHTML = '';
+    return;
+  }
+  if(achadas.length === 1){
+    // Só uma opção — pula direto pra timeline, sem exigir clique extra.
+    resultadosEl.innerHTML = '';
+    selecionarCargaTimeline(achadas[0].id);
+    return;
+  }
+  resultadosEl.innerHTML = `<div class="gap8">${achadas.slice(0,12).map(c=>cardResultadoBusca(c)).join('')}</div>`;
+}
+function cardResultadoBusca(c){
+  return `<button class="btn btn-sec btn-sm" onclick="selecionarCargaTimeline('${c.id}')">
+    ${esc(c.placa)} ${c.numeroCarga?('· Nº '+esc(c.numeroCarga)):''} ${c.destino?('· '+esc(c.destino)):''}
+  </button>`;
+}
+function selecionarCargaTimeline(id){
+  _timelineCargaAtual = id;
+  renderTimelineCarga(id);
+}
+function sequenciaDeStatusDaCarga(historico){
+  const comecouAguardando = historico.length && historico[0].statusNovo === 'Aguardando Carga';
+  return comecouAguardando ? ['Aguardando Carga', ...STATUS_FLOW] : STATUS_FLOW;
+}
+function renderTimelineCarga(id){
+  const c = getCarga(id);
+  const wrap = document.getElementById('hist-timeline-wrap');
+  if(!c){ wrap.innerHTML = ''; return; }
+  const historico = historicoDaCarga(id);
+  const sequencia = sequenciaDeStatusDaCarga(historico);
+
+  const passos = sequencia.map(status=>{
+    const mov = historico.find(m=>m.statusNovo===status);
+    return { status, feito: !!mov, mov };
+  });
+  // Último passo concluído = etapa atual (destaque especial).
+  let idxAtual = -1;
+  passos.forEach((p,i)=>{ if(p.feito) idxAtual = i; });
+
+  const infoLinhas = [
+    ['Nº Carga', c.numeroCarga || '—'],
+    ['Cliente', c.cliente || '—'],
+    ['Destino', c.destino || '—'],
+    ['Produto', c.produto || '—'],
+    ['Transportadora', c.transportadora || '—'],
+    ['Tipo de Veículo', c.tipoVeiculo || '—'],
+    ['Pra onde?', c.praOnde ? (PRA_ONDE_LABEL[c.praOnde]||c.praOnde) : '(Direto Suinco)'],
+    ['Compartilhada?', compartilhadaDaCarga(c)],
+    ['Qtd. Ganchos', (c.qtdGanchos ? c.qtdGanchos : 'Liso')],
+    ['Qtd. Entregas', c.qtdEntregas ?? 1]
+  ];
+
+  wrap.innerHTML = `
+    <div class="timeline-card">
+      <div class="timeline-head">
+        <div class="timeline-placa">🚚 ${esc(c.placa)} <span class="text-dim" style="font-size:14px;font-weight:600">status atual:</span> ${badgeHtml(c.status)}</div>
+      </div>
+      <div class="timeline-info-grid">
+        ${infoLinhas.map(([k,v])=>`<div class="timeline-info-item"><span class="k">${esc(k)}</span><span class="v">${esc(v)}</span></div>`).join('')}
+      </div>
+      <div class="timeline">
+        ${passos.map((p,i)=>{
+          const meta = STATUS_META[p.status] || {};
+          const cls = p.feito ? (i===idxAtual ? 'done current' : 'done') : 'pending';
+          const detalhe = p.feito
+            ? `<div class="timeline-quando">${fmtDataHora(p.mov.timestamp)}</div>
+               <div class="timeline-quem">${esc(p.mov.operador)} · ${esc(p.mov.setor)}</div>`
+            : `<div class="timeline-quem text-dim">Ainda não ocorreu</div>`;
+          return `<div class="timeline-step ${cls}">
+            <div class="timeline-dot">${p.feito ? '✓' : ''}</div>
+            <div class="timeline-content">
+              <div class="timeline-status">${esc(p.status)}</div>
+              ${detalhe}
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>
+  `;
+}
+
 /* ---------- HISTÓRICO ---------- */
 function renderHistorico(){
   const filtroPlaca = normalizarPlaca(document.getElementById('hist-filtro-placa')?.value || '');
@@ -517,16 +815,35 @@ function imprimirContainer(el){
   window.addEventListener('afterprint', limpar);
   window.print();
 }
+// PDF Operacional — sequenciamento de carregamento do dia, redesenhado pra
+// bater visualmente com a planilha real que a operação usa hoje.
+// DECISÃO: cargas ainda em "Aguardando Carga" (dados incompletos, sem
+// Rota/Nº de Carga) ficam de fora desta lista — elas aparecem na Torre de
+// Controle e na fila de "Aguardando Carga" da Programação, mas não fazem
+// sentido numa planilha de sequenciamento de carregamento ainda sem dados.
+const CORES_PRA_ONDE = { 'CROSS':'#374a86', 'DEDICADA':'#8f1f26', 'RET FRIGO':'#b9903f' };
 function exportarPdfOperacional(){
   const el = document.getElementById('print-operacional');
-  const abertas = cargasAbertas().slice().sort(ordenarPorSequenciaEAtualizacao);
-  const linhas = abertas.map(c=>{
-    const ind = indicadoresDaCarga(c.id);
+  const lista = cargasAbertas().filter(c=>c.status!=='Aguardando Carga').slice().sort(ordenarPorSequenciaEAtualizacao);
+  const linhas = lista.map((c,i)=>{
+    const sc = statusCarregamentoInfo(c.status);
+    const faturado = estaFaturado(c);
+    const pesoTon = ((c.peso||0)/1000).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:2});
+    const praOndeStyle = c.praOnde ? `style="background:${CORES_PRA_ONDE[c.praOnde]||'#e9b954'};color:#fff;font-weight:800"` : '';
     return `<tr>
-      <td>${c.sequencia ?? '—'}</td><td>${esc(c.numeroCarga)||'—'}</td><td>${esc(c.placa)}</td><td>${esc(c.transportadora)||'—'}</td><td>${esc(c.tipoVeiculo)||'—'}</td>
-      <td>${esc(c.cliente)||'—'}</td><td>${esc(c.destino)||'—'}</td><td>${esc(c.produto)||'—'}</td><td>${c.peso||0}</td><td>${esc(c.doca)||'—'}</td>
-      <td>${badgeHtml(c.status)}</td>
-      <td>${fmtDuracao(ind.tempoAguardandoEmbarque)}</td><td>${fmtDuracao(ind.tempoCarregamento)}</td><td>${fmtDuracao(ind.tempoFaturamento)}</td>
+      <td>${i+1}</td>
+      <td>${esc(c.numeroCarga)||'—'}</td>
+      <td>${esc(c.destino)||'—'}</td>
+      <td ${praOndeStyle}>${c.praOnde ? esc(PRA_ONDE_LABEL[c.praOnde]) : '—'}</td>
+      <td ${faturado?'style="background:#3fa66a;color:#06210f;font-weight:800"':''}>${faturado?'FATURADO':''}</td>
+      <td style="background:${sc.cor};color:#06210f;font-weight:800">${esc(sc.texto)}</td>
+      <td>${esc(c.placa)}</td>
+      <td>${esc(c.transportadora)||'—'}</td>
+      <td>${esc(c.tipoVeiculo)||'—'}</td>
+      <td>${pesoTon}</td>
+      <td>${compartilhadaDaCarga(c)}</td>
+      <td>${c.qtdEntregas ?? 1}</td>
+      <td>${c.qtdGanchos ? c.qtdGanchos : 'Liso'}</td>
     </tr>`;
   }).join('');
   const agora = new Date();
@@ -534,18 +851,40 @@ function exportarPdfOperacional(){
     <div class="print-page">
       <div class="print-header">
         <img src="assets/logo_suinco.png" alt="Suinco">
-        <div><h1>PDF Operacional — Painel Logístico</h1>
-        <div class="meta">Gerado em ${fmtDataHora(agora.toISOString())} · ${abertas.length} carga(s) em aberto</div></div>
+        <div><h1>PDF Operacional — Sequenciamento de Carregamento</h1>
+        <div class="meta">Gerado em ${fmtDataHora(agora.toISOString())} · ${lista.length} carga(s)</div></div>
       </div>
       <table>
         <thead><tr>
-          <th>Seq.</th><th>Nº Carga</th><th>Placa</th><th>Transp.</th><th>Tipo Veíc.</th><th>Cliente</th><th>Destino</th><th>Produto</th><th>Peso(kg)</th><th>Doca</th><th>Status</th>
-          <th>Aguard. Embarque</th><th>Carregamento</th><th>Faturamento</th>
+          <th>Nº</th><th>Carga</th><th>Rota</th><th>Pra onde?</th><th>Faturado</th><th>Status de Carregamento</th>
+          <th>Placa</th><th>Empresa</th><th>Perfil</th><th>Peso(ton)</th><th>Compartilhada?</th><th>Qtd. Entregas</th><th>Qtd. Ganchos</th>
         </tr></thead>
-        <tbody>${linhas || '<tr><td colspan="14" class="text-center text-dim">Nenhuma carga em aberto.</td></tr>'}</tbody>
+        <tbody>${linhas || '<tr><td colspan="13" class="text-center text-dim">Nenhuma carga pronta para sequenciamento.</td></tr>'}</tbody>
       </table>
     </div>`;
   imprimirContainer(el);
+}
+
+/* ---------- EXPORT POWER BI (CSV) ----------
+   Dispara o download dos 5 CSVs (fato/dimensão) gerados em data.js.
+   Ponte temporária — ver docs/POWERBI_EXPORT.md. */
+function baixarArquivoTexto(nome, conteudo){
+  const BOM = '﻿'; // BOM UTF-8 — Excel PT-BR abre acentuação corretamente
+  const blob = new Blob([BOM + conteudo], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = nome;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 4000);
+}
+function exportarCsvPowerBI(){
+  const arquivos = gerarArquivosCsvPowerBI();
+  arquivos.forEach((f,i)=>{
+    setTimeout(()=>baixarArquivoTexto(f.nome, f.conteudo), i*250);
+  });
+  notify(`Exportando ${arquivos.length} arquivos CSV (fato/dimensão) para Power BI…`, 'success');
 }
 function exportarPdfExecutivo(){
   const el = document.getElementById('print-executivo');
