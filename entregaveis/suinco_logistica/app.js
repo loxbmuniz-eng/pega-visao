@@ -108,18 +108,18 @@ function atualizarHeaderOperador(){
   const el = document.getElementById('operator-name');
   el.textContent = DB.operador ? `${DB.operador.nome} · ${DB.operador.setor} · ${DB.operador.turno}` : '—';
 }
-// TODAS as abas ficam visíveis e utilizáveis para todos os setores — ver o
-// comentário de SETOR_PERMISSOES em data.js sobre por que a ocultação foi
-// removida. Aqui só marcamos, discretamente, quais abas são de outro setor,
-// pra pessoa saber que está agindo fora do posto dela (o registro na trilha
-// de auditoria continua saindo com o setor real de quem operou).
+// Cada setor vê apenas as próprias abas (SETOR_PERMISSOES em data.js).
+// Decisão confirmada pelo usuário: manter a ocultação, não liberar tudo.
+// Para operar outro posto — cobertura de turno, por exemplo — usa-se
+// "Trocar usuário" no cabeçalho e entra-se com o setor correspondente; o
+// modal de login explica isso, para ninguém concluir que a tela não existe.
 function aplicarPermissoesSetor(){
   if(!DB.operador) return;
   const doSetor = SETOR_PERMISSOES[DB.operador.setor] || [];
   document.querySelectorAll('.nav-tab').forEach(el=>{
-    el.hidden = false;
-    el.classList.toggle('outro-setor', !doSetor.includes(el.dataset.tab));
+    el.hidden = !doSetor.includes(el.dataset.tab);
   });
+  if(!doSetor.includes(TAB_ATUAL)) irParaTab(doSetor[0] || 'torre');
   atualizarAvisoSetorAba();
 }
 
@@ -130,15 +130,12 @@ function atualizarAvisoSetorAba(){
     const tab = box.dataset.tab;
     const info = TAB_FUNCAO[tab];
     if(!info) return;
-    const doSetor = DB.operador ? (SETOR_PERMISSOES[DB.operador.setor] || []) : [];
-    const fora = DB.operador && !doSetor.includes(tab);
     box.innerHTML =
       `<div class="funcao-linha">` +
         `<span class="funcao-chip">${info.setor}</span>` +
         `<span class="funcao-oque"><strong>O que se faz aqui:</strong> ${info.oque}</span>` +
       `</div>` +
-      `<div class="funcao-move"><strong>Efeito no status:</strong> ${info.move}</div>` +
-      (fora ? `<div class="funcao-alerta">Você entrou como <strong>${DB.operador.setor}</strong> — esta etapa é normalmente da <strong>${info.setor}</strong>. Você pode registrar assim mesmo (cobertura de turno, por exemplo); o histórico vai gravar seu nome e seu setor.</div>` : '');
+      `<div class="funcao-move"><strong>Efeito no status:</strong> ${info.move}</div>`;
   });
 }
 
@@ -564,7 +561,71 @@ function renderFaturamento(){
 
 /* ---------- INDICADORES / PAINEL DO GESTOR ---------- */
 let indRankingPeriodoAtivo = 'hoje';
+/* Distribuição das cargas em aberto por status, na tela — mesma leitura e as
+   MESMAS cores do relatório executivo em PDF, para o gestor não precisar
+   reaprender o código de cores ao trocar de mídia. */
+function renderDistribuicaoStatus(){
+  const tbody = document.getElementById('ind-status-tbody');
+  if(!tbody) return;
+  const abertas = cargasAbertas();
+  const dist = distribuicaoPorStatus(abertas);
+  tbody.innerHTML = dist.map(d=>`
+    <tr>
+      <td>${badgeHtml(d.status)}</td>
+      <td class="text-dim">${esc(d.setor)}</td>
+      <td class="num-forte">${d.qtd}</td>
+      <td>${abertas.length ? d.pct + '%' : '—'}</td>
+      <td class="barra-cel">
+        <span class="barra-trilho"><span class="barra-preenche" style="width:${d.pct}%;background:${d.cor.texto}"></span></span>
+      </td>
+    </tr>`).join('');
+  document.getElementById('ind-status-total').textContent = abertas.length;
+  document.getElementById('ind-status-pct').textContent = abertas.length ? '100%' : '—';
+}
+
+/* Menor e maior tempo do dia, nas duas métricas. Sem cargas concluídas hoje,
+   diz isso explicitamente em vez de exibir 0 min — que seria lido como
+   "tudo instantâneo" e é justamente o tipo de número enganoso a evitar. */
+function renderExtremosHoje(){
+  const wrap = document.getElementById('ind-extremos-wrap');
+  if(!wrap) return;
+  const concluidasHoje = cargasConcluidasNoPeriodo('hoje');
+
+  const bloco = (ext, titulo) => {
+    if(!ext.amostra){
+      return `<div class="extremo-bloco">
+          <div class="extremo-titulo">${titulo}</div>
+          <div class="empty-state" style="padding:14px">Nenhuma carga concluída hoje com esse tempo calculável.</div>
+        </div>`;
+    }
+    const card = (rot, item, classe) => `
+      <div class="extremo-card ${classe}">
+        <div class="extremo-card-top">
+          <span class="extremo-tag ${classe}">${rot}</span>
+          <span class="extremo-tempo">${fmtDuracao(item.minutos)}</span>
+        </div>
+        <div class="extremo-carga">
+          <strong>${esc(item.placa || '—')}</strong> · Carga ${esc(item.numeroCarga || '—')}
+        </div>
+        <div class="extremo-det">${esc(item.transportadora || '—')}${item.destino ? ' · destino ' + esc(item.destino) : ''}</div>
+      </div>`;
+    return `<div class="extremo-bloco">
+        <div class="extremo-titulo">${titulo} <span class="text-dim" style="font-weight:600;font-size:11.5px">— base: ${ext.amostra} carga(s)</span></div>
+        <div class="extremo-par">
+          ${card('MENOR', ext.menor, 'extremo-menor')}
+          ${card('MAIOR', ext.maior, 'extremo-maior')}
+        </div>
+      </div>`;
+  };
+
+  wrap.innerHTML =
+    bloco(extremosTempo(concluidasHoje, 'leadTimeTotal'), 'Lead Time') +
+    bloco(extremosTempo(concluidasHoje, 'tempoPatioTotal'), 'Permanência no pátio');
+}
+
 function renderIndicadores(){
+  renderDistribuicaoStatus();
+  renderExtremosHoje();
   // ---- Bloco 1: histórico completo (mantém o comportamento original) ----
   const concluidas = DB.cargas.filter(c=>c.status==='Seguiu Viagem');
   const campos = ['tempoAguardandoEmbarque','tempoCarregamento','tempoFaturamento','tempoAguardandoSaida','tempoPatioTotal'];
@@ -1138,34 +1199,229 @@ function exportarCsvPowerBI(){
   });
   notify(`Exportando ${arquivos.length} arquivos CSV (fato/dimensão) para Power BI…`, 'success');
 }
+/* Título de seção do PDF — mesma marcação repetida várias vezes no executivo. */
+function tituloSecaoPdf(texto, sub){
+  return `<div class="print-secao">
+      <div class="print-secao-tit">${texto}</div>
+      ${sub ? `<div class="print-secao-sub">${sub}</div>` : ''}
+    </div>`;
+}
+
+/* Bloco "menor tempo / maior tempo" — usado duas vezes (lead time e pátio).
+   Mostra a carga inteira, não só o número: sem placa/transportadora/destino o
+   gestor não consegue agir sobre o caso extremo, que é o objetivo do dado. */
+function blocoExtremos(ext, titulo, explicacao){
+  if(!ext.amostra){
+    return tituloSecaoPdf(titulo, explicacao) +
+      `<div class="print-vazio">Nenhuma carga concluída com esse tempo calculável no período.</div>`;
+  }
+  const linha = (rot, item, classe) => `
+    <tr>
+      <td><span class="extremo-tag ${classe}">${rot}</span></td>
+      <td class="extremo-tempo">${fmtDuracao(item.minutos)}</td>
+      <td>${esc(item.numeroCarga || '—')}</td>
+      <td>${esc(item.placa || '—')}</td>
+      <td>${esc(item.transportadora || '—')}</td>
+      <td>${esc(item.destino || '—')}</td>
+    </tr>`;
+  return tituloSecaoPdf(titulo, `${explicacao} Base: ${ext.amostra} carga(s).`) +
+    `<table>
+      <thead><tr><th></th><th>Tempo</th><th>Nº Carga</th><th>Placa</th><th>Transportadora</th><th>Destino</th></tr></thead>
+      <tbody>
+        ${linha('MENOR', ext.menor, 'extremo-menor')}
+        ${linha('MAIOR', ext.maior, 'extremo-maior')}
+      </tbody>
+    </table>`;
+}
+
+/* Tabela de distribuição por status, com a cor de cada status.
+   A cor é a MESMA da badge da tela (STATUS_COR_RELATORIO em data.js) — o
+   gestor lê o PDF com o mesmo código de cores do painel. */
+function blocoDistribuicaoStatus(dist, total, titulo, explicacao){
+  return tituloSecaoPdf(titulo, explicacao) +
+    `<table>
+      <thead><tr><th>Status</th><th>Setor responsável</th><th>Cargas</th><th>% do total</th><th>Distribuição</th></tr></thead>
+      <tbody>
+        ${dist.map(d=>`
+          <tr>
+            <td><span class="status-pill" style="background:${d.cor.fundo};color:${d.cor.texto};border-color:${d.cor.borda}">${esc(d.status)}</span></td>
+            <td class="text-dim">${esc(d.setor)}</td>
+            <td class="num-forte">${d.qtd}</td>
+            <td>${total ? d.pct + '%' : '—'}</td>
+            <td class="barra-cel">
+              <span class="barra-trilho"><span class="barra-preenche" style="width:${d.pct}%;background:${d.cor.texto}"></span></span>
+            </td>
+          </tr>`).join('')}
+      </tbody>
+      <tfoot><tr><th>Total</th><th></th><th class="num-forte">${total}</th><th>${total ? '100%' : '—'}</th><th></th></tr></tfoot>
+    </table>`;
+}
+
+/* Linha do tempo das cargas no relatório executivo.
+   Formato de matriz — uma linha por carga, uma coluna por etapa do fluxo —
+   em vez de repetir a timeline vertical da tela para cada carga: assim o
+   gestor compara as cargas entre si e enxerga de imediato onde uma delas
+   travou. Cada célula traz a HORA e o OPERADOR que registrou aquele passo
+   (pedido explícito: "qual operador fez o input"), com a cor do status.
+   Etapa não ocorrida fica visivelmente vazia — é o que denuncia o gargalo. */
+function blocoTimelineCargas(cargas, titulo, explicacao){
+  if(!cargas.length){
+    return tituloSecaoPdf(titulo, explicacao) +
+      `<div class="print-vazio">Nenhuma carga no recorte deste relatório.</div>`;
+  }
+  const linhas = cargas.map(c=>{
+    const historico = historicoDaCarga(c.id);
+    const sequencia = sequenciaDeStatusDaCarga(historico);
+    const ind = indicadoresDaCarga(c.id);
+    const celulas = STATUS_FLOW.map(status=>{
+      // Carga que nasceu em "Aguardando Carga" nunca teve "Aguardando
+      // Veículo" — marcamos como não aplicável em vez de fingir atraso.
+      if(!sequencia.includes(status)){
+        return `<td class="tl-cel tl-na" title="Etapa não aplicável a esta carga">n/a</td>`;
+      }
+      const mov = historico.find(m=>m.statusNovo===status);
+      if(!mov) return `<td class="tl-cel tl-pendente">—</td>`;
+      const cor = corStatusRelatorio(status);
+      return `<td class="tl-cel" style="background:${cor.fundo};border-left:3px solid ${cor.borda}">
+          <span class="tl-hora" style="color:${cor.texto}">${fmtHora(mov.timestamp)}</span>
+          <span class="tl-quem">${esc(mov.operador)}</span>
+          <span class="tl-setor">${esc(mov.setor)}</span>
+        </td>`;
+    }).join('');
+    return `<tr>
+        <td class="tl-carga">
+          <span class="tl-placa">${esc(c.placa)}</span>
+          <span class="tl-num">${esc(c.numeroCarga || '—')}</span>
+          <span class="tl-transp">${esc(c.transportadora || '—')}</span>
+        </td>
+        ${celulas}
+        <td class="tl-total">${fmtDuracao(ind.tempoPatioTotal)}</td>
+      </tr>`;
+  }).join('');
+
+  return tituloSecaoPdf(titulo, explicacao) +
+    `<table class="tabela-timeline">
+      <thead>
+        <tr>
+          <th>Carga</th>
+          ${STATUS_FLOW.map(s=>{
+            const cor = corStatusRelatorio(s);
+            return `<th><span class="tl-th" style="color:${cor.texto}">${esc(s)}</span></th>`;
+          }).join('')}
+          <th>Pátio</th>
+        </tr>
+      </thead>
+      <tbody>${linhas}</tbody>
+    </table>
+    <div class="print-legenda">
+      Cada célula mostra a <strong>hora</strong> e o <strong>operador</strong> que registrou a etapa, com o setor abaixo.
+      <strong>—</strong> = etapa ainda não ocorrida · <strong>n/a</strong> = etapa não aplicável (carga registrada direto no pátio, sem programação prévia).
+      <strong>Pátio</strong> = tempo entre a chegada física e a saída.
+    </div>`;
+}
+
 function exportarPdfExecutivo(){
   const el = document.getElementById('print-executivo');
-  const abertas = cargasAbertas();
-  const concluidas = DB.cargas.filter(c=>c.status==='Seguiu Viagem');
-  const porStatus = {};
-  abertas.forEach(c=>{ porStatus[c.status] = (porStatus[c.status]||0) + 1; });
-  let somaLead=0, nLead=0;
-  concluidas.forEach(c=>{ const ind = indicadoresDaCarga(c.id); if(ind.leadTimeTotal!==null){ somaLead+=ind.leadTimeTotal; nLead++; } });
-  const rk = rankingTransportadoras().slice(0,5);
   const agora = new Date();
+
+  const abertas = cargasAbertas();
+  const concluidasTodas = DB.cargas.filter(c=>c.status==='Seguiu Viagem');
+  const concluidasHoje = cargasConcluidasNoPeriodo('hoje');
+
+  // Lead time médio do histórico completo (mesma conta da versão anterior).
+  let somaLead=0, nLead=0;
+  concluidasTodas.forEach(c=>{
+    const ind = indicadoresDaCarga(c.id);
+    if(ind.leadTimeTotal!==null){ somaLead+=ind.leadTimeTotal; nLead++; }
+  });
+  // Lead time médio só do dia — é o número que o gestor cobra na reunião.
+  let somaHoje=0, nHoje=0;
+  concluidasHoje.forEach(c=>{
+    const ind = indicadoresDaCarga(c.id);
+    if(ind.leadTimeTotal!==null){ somaHoje+=ind.leadTimeTotal; nHoje++; }
+  });
+
+  const distAbertas = distribuicaoPorStatus(abertas);
+  const distHoje = distribuicaoPorStatus(concluidasHoje);
+  const rkDia = rankingDoDia();
+  const rkHist = rankingTransportadoras().slice(0,5);
+  const extLead = extremosTempo(concluidasHoje, 'leadTimeTotal');
+  const extPatio = extremosTempo(concluidasHoje, 'tempoPatioTotal');
+
+  const dataExt = agora.toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long',year:'numeric'});
+
   el.innerHTML = `
     <div class="print-page">
       <div class="print-header">
         <img src="assets/logo_suinco.png" alt="Suinco">
-        <div><h1>PDF Executivo — Painel Logístico</h1>
-        <div class="meta">${agora.toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long',year:'numeric'})} · ${agora.toLocaleTimeString('pt-BR')}</div></div>
+        <div><h1>Relatório Executivo — Painel Logístico</h1>
+        <div class="meta">${dataExt} · gerado às ${agora.toLocaleTimeString('pt-BR')}</div></div>
       </div>
+
       <div class="grid4" style="margin-bottom:18px">
         <div class="stat-box"><div class="stat-num">${abertas.length}</div><div class="stat-label">Cargas em Aberto</div></div>
-        <div class="stat-box"><div class="stat-num">${concluidas.length}</div><div class="stat-label">Concluídas (Seguiu Viagem)</div></div>
-        <div class="stat-box"><div class="stat-num">${fmtDuracao(nLead?Math.round(somaLead/nLead):null)}</div><div class="stat-label">Lead Time Médio</div></div>
+        <div class="stat-box"><div class="stat-num">${concluidasHoje.length}</div><div class="stat-label">Concluídas Hoje</div></div>
+        <div class="stat-box"><div class="stat-num">${fmtDuracao(nHoje?Math.round(somaHoje/nHoje):null)}</div><div class="stat-label">Lead Time Médio (hoje)</div></div>
         <div class="stat-box"><div class="stat-num">${abertas.filter(c=>c.aguardandoCarga).length}</div><div class="stat-label">Aguardando Carga</div></div>
       </div>
-      <div class="card-title" style="color:var(--gold);font-weight:800;margin-bottom:8px">Top Transportadoras (lead time médio)</div>
+
+      ${blocoDistribuicaoStatus(distAbertas, abertas.length,
+        'Cargas em aberto por status',
+        'Onde está parada, agora, cada carga que ainda não saiu. Os 6 status aparecem sempre — inclusive os zerados, porque etapa vazia também é informação.')}
+
+      ${blocoDistribuicaoStatus(distHoje, concluidasHoje.length,
+        'Cargas concluídas hoje por status',
+        'Cargas que chegaram a "Seguiu Viagem" no dia de hoje. Por definição concentram-se no último status — a linha serve de confirmação do volume encerrado.')}
+
+      ${blocoExtremos(extLead,
+        'Menor e maior tempo — Lead Time (hoje)',
+        'Da criação da carga na Programação até a saída do caminhão. Visão de planejamento.')}
+
+      ${blocoExtremos(extPatio,
+        'Menor e maior tempo — Permanência no pátio (hoje)',
+        'Da chegada física do caminhão até a saída. É o tempo que a operação e o motorista sentem.')}
+
+      ${tituloSecaoPdf('Ranking do dia — transportadoras',
+        'Somente cargas concluídas hoje, ordenadas do menor para o maior lead time médio.')}
       <table>
-        <thead><tr><th>Transportadora</th><th>Cargas</th><th>Lead Time Médio</th></tr></thead>
-        <tbody>${rk.map(r=>`<tr><td>${esc(r.transportadora)}</td><td>${r.cargas}</td><td>${fmtDuracao(r.leadTimeMedio)}</td></tr>`).join('') || '<tr><td colspan="3" class="text-center text-dim">Sem dados suficientes.</td></tr>'}</tbody>
+        <thead><tr><th>#</th><th>Transportadora</th><th>Cargas</th><th>Lead Time Médio</th><th>Tempo de Pátio Médio</th></tr></thead>
+        <tbody>${
+          rkDia.length
+            ? rkDia.map((r,i)=>`<tr>
+                <td class="num-forte">${i+1}º</td>
+                <td>${esc(r.transportadora)}</td>
+                <td>${r.cargas}</td>
+                <td>${fmtDuracao(r.leadTimeMedio)}</td>
+                <td>${fmtDuracao(r.tempoPatioMedio)}</td>
+              </tr>`).join('')
+            : '<tr><td colspan="5" class="text-center text-dim">Nenhuma carga concluída hoje.</td></tr>'
+        }</tbody>
       </table>
+
+      ${blocoTimelineCargas(concluidasHoje,
+        'Linha do tempo — cargas concluídas hoje',
+        'Hora e operador de cada etapa, carga a carga, para rastrear onde o tempo foi consumido.')}
+
+      ${blocoTimelineCargas(abertas,
+        'Linha do tempo — cargas ainda em aberto',
+        'Mesma leitura para o que ainda não saiu: as colunas vazias à direita mostram em qual etapa cada carga está parada agora.')}
+
+      ${tituloSecaoPdf('Ranking histórico — top 5 transportadoras',
+        'Todas as cargas já concluídas, para comparar o desempenho de hoje com o padrão.')}
+      <table>
+        <thead><tr><th>#</th><th>Transportadora</th><th>Cargas</th><th>Lead Time Médio</th></tr></thead>
+        <tbody>${
+          rkHist.length
+            ? rkHist.map((r,i)=>`<tr><td class="num-forte">${i+1}º</td><td>${esc(r.transportadora)}</td><td>${r.cargas}</td><td>${fmtDuracao(r.leadTimeMedio)}</td></tr>`).join('')
+            : '<tr><td colspan="4" class="text-center text-dim">Sem dados suficientes.</td></tr>'
+        }</tbody>
+      </table>
+
+      <div class="print-rodape">
+        Lead Time = da criação da carga até a saída. Tempo de Pátio = da chegada física até a saída.
+        "Hoje" = dia calendário, das 00:00 até a geração deste relatório.
+        Cargas em aberto: ${abertas.length} · Concluídas no histórico: ${concluidasTodas.length} · Lead time médio histórico: ${fmtDuracao(nLead?Math.round(somaLead/nLead):null)}.
+      </div>
     </div>`;
   imprimirContainer(el);
 }

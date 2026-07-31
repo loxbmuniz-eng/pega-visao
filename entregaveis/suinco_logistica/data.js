@@ -79,6 +79,28 @@ const STATUS_CARREGAMENTO_META = {
 function statusCarregamentoInfo(status){
   return STATUS_CARREGAMENTO_META[status] || { texto: status||'—', cor:'#374a86', classe:'' };
 }
+
+/* ---------- CORES DOS 6 STATUS PARA OS RELATÓRIOS ----------
+   STATUS_CARREGAMENTO_META acima colapsa 3 status em "CARREGADO" verde —
+   correto para a planilha de sequenciamento do pátio, onde só importa se o
+   caminhão está carregado ou não. Mas nos relatórios executivos precisamos
+   distinguir os 6 status, então aqui vai a cor própria de cada um.
+   Os valores são os MESMOS das badges da tela (ver styles.css), para que o
+   PDF saia com a mesma leitura de cor que o gestor já tem no painel — cor de
+   status é informação, não decoração, e precisa ser consistente entre tela e
+   papel. O `print-color-adjust:exact` em html/body garante que o navegador
+   não descarte esses fundos ao gerar o PDF. */
+const STATUS_COR_RELATORIO = {
+  'Aguardando Veículo':  { fundo:'#3a1418', texto:'#ff9096', borda:'#8f1f26' },
+  'Aguardando Embarque': { fundo:'#3a2a10', texto:'#d99a2b', borda:'#d99a2b' },
+  'Embarque Iniciado':   { fundo:'#3a2f10', texto:'#e9b954', borda:'#b9903f' },
+  'Embarque Finalizado': { fundo:'#173a2c', texto:'#7dd8a0', borda:'#7dd8a0' },
+  'Faturado':            { fundo:'#123626', texto:'#3fa66a', borda:'#3fa66a' },
+  'Seguiu Viagem':       { fundo:'#0d2419', texto:'#5fae7f', borda:'#1f6b46' }
+};
+function corStatusRelatorio(status){
+  return STATUS_COR_RELATORIO[status] || { fundo:'#1e2a52', texto:'#b7c0d4', borda:'#374a86' };
+}
 // "Faturado" ou além no fluxo (Faturado, Seguiu Viagem) -> célula verde no PDF.
 function estaFaturado(carga){
   const idx = STATUS_FLOW.indexOf(carga.status);
@@ -89,20 +111,16 @@ function estaFaturado(carga){
 // fica no campo Número da Carga até a Logística completar os dados).
 const STATUS_ORDEM_EXPORT = STATUS_FLOW.slice();
 
-// Qual setor é o DONO de cada aba — quem normalmente executa aquela etapa.
-// ATENÇÃO: isto não esconde mais nada. Até a rodada anterior, as abas fora do
-// setor do operador ficavam ocultas (hidden), e o efeito prático era ruim:
-// quem entrava como Logística simplesmente não via Portaria nem Faturamento e
-// concluía que as telas não existiam. Além disso, na operação real a mesma
-// pessoa cobre mais de um posto (turno da noite, cobertura de férias), e
-// esconder a aba impedia o trabalho em vez de proteger o dado.
-// Hoje TODAS as abas ficam visíveis e utilizáveis para todos os setores; este
-// mapa passou a servir só para (a) rotular a aba com o setor dono e (b)
-// sinalizar discretamente quando alguém age fora do próprio setor. O que
-// realmente importa continua garantido: toda movimentação grava operador e
-// setor na trilha de auditoria (ver registrarMovimentacao).
-// Controle de acesso de verdade só existe com SharePoint + SSO — ver
-// RELATORIO_TI_HOSPEDAGEM.md.
+// Quais abas cada setor enxerga. 'torre' (visão geral) e 'historico' são
+// leitura liberada pra todos — é o que dá a visão de torre de controle.
+// Decisão confirmada: a ocultação por setor FICA. Quem precisa operar outro
+// posto (cobertura de turno, por exemplo) usa "Trocar usuário" e entra com o
+// setor correspondente — o modal de login explica isso, para ninguém concluir
+// que a tela não existe.
+// Isto é conveniência de interface, não segurança: qualquer pessoa com o
+// arquivo pode contornar. Controle de acesso real só existe com SharePoint +
+// SSO — ver RELATORIO_TI_HOSPEDAGEM.md. O que garante rastreabilidade é a
+// trilha de auditoria: toda movimentação grava operador e setor.
 const SETOR_PERMISSOES = {
   'Logística':    ['torre','programacao','expedicao','indicadores','cadastros','historico','relatorios'],
   'Portaria':     ['torre','portaria','historico'],
@@ -162,6 +180,13 @@ function fmtDataHora(iso){
   if(!iso) return '—';
   const d = new Date(iso);
   return d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+}
+// Só a hora (HH:MM), sem a data — usado na matriz de linha do tempo do
+// relatório executivo, onde a data já está no cabeçalho e repetir em toda
+// célula só tiraria espaço da informação que importa.
+function fmtHora(iso){
+  if(!iso) return '—';
+  return new Date(iso).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
 }
 function normalizarPlaca(p){
   return (p||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
@@ -562,6 +587,63 @@ function rankingTransportadoras(cargas){
     if(b.leadTimeMedio===null) return -1;
     return a.leadTimeMedio - b.leadTimeMedio;
   });
+}
+
+/* ---------- ANÁLISES DOS RELATÓRIOS EXECUTIVOS ----------
+   Pedido do usuário: o executivo precisa detalhar por status de carga,
+   ranking do dia, menor tempo e maior tempo. As funções abaixo são a camada
+   de dados disso — a formatação (tela e PDF) fica em app.js. */
+
+// Quantas cargas em cada um dos 6 status, na ordem do fluxo, já com a cor de
+// relatório. Recebe a lista de cargas para o chamador decidir o recorte (em
+// aberto, do dia, do período...). Retorna sempre os 6 status, inclusive os
+// zerados: num relatório executivo, "zero em Embarque Iniciado" é
+// informação — omitir a linha esconderia que a etapa está parada.
+function distribuicaoPorStatus(cargas){
+  const total = cargas.length;
+  const cont = {};
+  cargas.forEach(c=>{ cont[c.status] = (cont[c.status]||0) + 1; });
+  return STATUS_FLOW.map(s=>({
+    status: s,
+    qtd: cont[s] || 0,
+    pct: total ? Math.round(((cont[s]||0) / total) * 100) : 0,
+    cor: corStatusRelatorio(s),
+    setor: (STATUS_META[s] || {}).setor || '—'
+  }));
+}
+
+// Ranking de transportadoras considerando SÓ as cargas concluídas hoje (dia
+// calendário) — é o "ranking do dia" pedido, diferente do ranking histórico
+// que rankingTransportadoras() devolve quando chamado sem argumento.
+function rankingDoDia(){
+  return rankingTransportadoras(cargasConcluidasNoPeriodo('hoje'));
+}
+
+// Menor e maior tempo entre as cargas concluídas informadas.
+// `metrica` escolhe o que medir: 'leadTimeTotal' (da criação da carga até a
+// saída — visão de planejamento) ou 'tempoPatioTotal' (da chegada física até
+// a saída — visão de pátio, que é a que a operação sente). Retorna menor e
+// maior nulos quando nenhuma carga tem a métrica calculável, para a UI dizer
+// "sem dados" em vez de exibir 0 min, que seria enganoso.
+function extremosTempo(cargas, metrica){
+  const m = metrica || 'leadTimeTotal';
+  const comTempo = cargas
+    .map(c=>({ carga:c, ind: indicadoresDaCarga(c.id) }))
+    .filter(x=>x.ind[m] !== null && x.ind[m] !== undefined);
+  if(!comTempo.length) return { menor:null, maior:null, amostra:0 };
+  const ordenado = comTempo.slice().sort((a,b)=>a.ind[m] - b.ind[m]);
+  const monta = x => ({
+    numeroCarga: x.carga.numeroCarga,
+    placa: x.carga.placa,
+    transportadora: x.carga.transportadora,
+    destino: x.carga.destino,
+    minutos: x.ind[m]
+  });
+  return {
+    menor: monta(ordenado[0]),
+    maior: monta(ordenado[ordenado.length - 1]),
+    amostra: comTempo.length
+  };
 }
 
 /* ---------- PAINEL DO GESTOR — quebra de indicadores por período ----------

@@ -317,6 +317,24 @@
     </div>
 
     <div class="card">
+      <div class="card-title"><span class="icon">🚦</span> Cargas em aberto por status</div>
+      <div class="card-sub">Onde está parada, agora, cada carga que ainda não saiu. Os 6 status aparecem sempre — inclusive os zerados, porque etapa vazia também é informação. As cores são as mesmas usadas no relatório executivo em PDF.</div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Status</th><th>Setor responsável</th><th>Cargas</th><th>% do total</th><th>Distribuição</th></tr></thead>
+          <tbody id="ind-status-tbody"></tbody>
+          <tfoot><tr><th>Total</th><th></th><th id="ind-status-total">0</th><th id="ind-status-pct">—</th><th></th></tr></tfoot>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><span class="icon">⏱️</span> Menor e maior tempo — hoje</div>
+      <div class="card-sub">Os dois casos extremos entre as cargas concluídas hoje, com a carga inteira identificada para o gestor conseguir agir sobre o caso. <strong>Lead Time</strong> = da criação da carga na Programação até a saída (visão de planejamento). <strong>Permanência no pátio</strong> = da chegada física até a saída (o tempo que a operação e o motorista sentem).</div>
+      <div id="ind-extremos-wrap"></div>
+    </div>
+
+    <div class="card">
       <div class="card-title"><span class="icon">🏆</span> Ranking de Transportadoras</div>
       <div class="card-sub">Ordenado por lead time médio (menor primeiro). Escolha o período — considera só cargas em "Seguiu Viagem" dentro dele.</div>
       <div class="gap8" id="ind-ranking-periodos" style="margin-bottom:14px"></div>
@@ -477,6 +495,7 @@
         <option>Manhã (06h–14h)</option><option>Tarde (14h–22h)</option><option>Noite (22h–06h)</option>
       </select>
     </div>
+    <div class="card-sub"><strong>Você verá apenas as abas do setor escolhido.</strong> Logística abre Programação, Expedição, Indicadores, Cadastros e Relatórios; Portaria abre Portaria; Expedição abre Expedição; Faturamento abre Faturamento. Torre de Controle e Histórico ficam liberados para todos. Para operar outro posto (cobertura de turno, por exemplo), use <strong>Trocar usuário</strong> no topo e entre com o setor correspondente.</div>
     <div class="card-sub">Este login é um espaço reservado até o SSO da Microsoft 365 ser conectado — depois ele será automático.</div>
     <div class="flex-end"><button class="btn btn-primary" onclick="confirmarOperador()">Entrar</button></div>
   </div>

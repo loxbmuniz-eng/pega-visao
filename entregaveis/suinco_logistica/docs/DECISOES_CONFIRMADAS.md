@@ -176,52 +176,105 @@ Placa/Transportadora e filtro "Só Precisa Revisão" porque 2.038 linhas sem
 filtro não são navegáveis — exibe até 300 resultados por vez com contagem
 do total, sem limitar os dados em si (só a renderização).
 
-## 12. Todas as abas visíveis para todos os setores (revoga a ocultação por setor)
+## 12. Ocultação de abas por setor: mantida (com o problema de descoberta resolvido)
 
-**Problema relatado pelo usuário:** "está faltando a parte da Portaria e
-Faturamento, não consigo fazer o input da placa que chegou, saiu, nem aba do
-Faturamento". As telas existiam e funcionavam — o que faltava era poder
-**vê-las**.
+**Problema relatado:** "está faltando a parte da Portaria e Faturamento, não
+consigo fazer o input da placa que chegou, saiu, nem aba do Faturamento". As
+telas existiam e funcionavam — o que faltava era poder **vê-las**.
 
-**Causa:** `aplicarPermissoesSetor()` (app.js) aplicava `hidden` em toda aba
-fora do setor do operador, conforme `SETOR_PERMISSOES` (data.js). Entrando
-como **Logística** — o setor padrão do formulário de login — as abas
-Portaria e Faturamento simplesmente não apareciam na navegação. Para quem
-abre o painel, o efeito prático não é "acesso restrito", é "a tela não
-existe".
+**Causa:** `aplicarPermissoesSetor()` (app.js) aplica `hidden` em toda aba fora
+do setor do operador, conforme `SETOR_PERMISSOES` (data.js). Entrando como
+**Logística** — o setor que vem selecionado por padrão no formulário de login —
+Portaria e Faturamento não aparecem na navegação. Para quem abre o painel, o
+efeito não é "acesso restrito", é "a tela não existe".
 
-**Decisão:** todas as abas passam a ficar **visíveis e utilizáveis para todos
-os setores**. Três razões:
+**Decisão do usuário: a ocultação FICA como está.** Chegou-se a liberar todas
+as abas para todos os setores, e o usuário revisou e pediu para voltar ao
+comportamento anterior. Cada setor continua vendo apenas as próprias abas
+(Torre de Controle e Histórico seguem liberados para todos).
 
-1. Esconder induzia ao erro de leitura acima, inclusive em demonstração para
-   a gestão.
-2. Na operação real a mesma pessoa cobre mais de um posto (turno da noite,
-   cobertura de férias, feriado). Ocultar a aba impedia o trabalho em vez de
-   proteger o dado.
-3. A restrição nunca foi segurança de verdade — está registrado desde a
-   seção 7 que controle de acesso real só existe com SharePoint + SSO. Era
-   apenas conveniência de interface, e estava atrapalhando mais do que
-   ajudando.
+**O que foi corrigido, então, já que a causa raiz não era a regra e sim a
+descoberta:** o modal de login passa a dizer explicitamente quais abas cada
+setor abre e que, para operar outro posto (cobertura de turno, por exemplo),
+usa-se **Trocar usuário** no topo e entra-se com o setor correspondente.
+Assim ninguém repete a conclusão de que a funcionalidade não existe.
 
-**O que substituiu a ocultação:** `SETOR_PERMISSOES` continua no código, mas
-agora só indica o **setor dono** de cada aba, servindo para (a) rotular a aba
-e (b) exibir um aviso quando alguém age fora do próprio setor — *"Você entrou
-como Logística — esta etapa é normalmente da Portaria. Você pode registrar
-assim mesmo; o histórico vai gravar seu nome e seu setor."* Não bloqueia.
-O que importa continua garantido: **toda movimentação grava operador e setor
-na trilha de auditoria**, então a rastreabilidade não depende de esconder
-botão.
+Vale registrar que isto continua sendo conveniência de interface, não
+segurança: quem tem o arquivo consegue contornar. Controle de acesso real só
+existe com SharePoint + SSO (ver `RELATORIO_TI_HOSPEDAGEM.md`). O que garante
+rastreabilidade é a trilha de auditoria — toda movimentação grava operador e
+setor.
 
-**Adicionado junto (pedido do usuário: "traga em cada aba sua função"):** um
-box no topo de cada uma das 9 abas com o setor dono, o que se faz ali e o
-efeito no status da carga (mapa `TAB_FUNCAO` em data.js, renderizado por
-`atualizarAvisoSetorAba()` em app.js). Objetivo é que quem abre uma aba pela
-primeira vez entenda a função dela sem depender de treinamento verbal.
+**Adicionado junto (pedido: "traga em cada aba sua função"):** um box no topo
+de cada uma das 9 abas com o setor dono, o que se faz ali e o efeito no status
+da carga (mapa `TAB_FUNCAO` em data.js, renderizado por
+`atualizarAvisoSetorAba()` em app.js).
 
 **Correções de interface na mesma rodada:**
 - A aba Faturamento não tinha texto explicativo algum (só o título "Ação
-  Rápida por Placa") e seu campo de placa não aceitava **Enter** — as demais
-  telas aceitavam. Ambos corrigidos, por consistência.
+  Rápida por Placa") e seu campo de placa não aceitava **Enter**, ao contrário
+  das outras telas. Ambos corrigidos, por consistência.
 - Os avisos (toasts) ficavam fixos logo abaixo da navegação e cobriam por 5
-  segundos justamente o novo box de função e o cabeçalho da primeira tabela.
-  Movidos para o **rodapé à direita**.
+  segundos o box de função e o cabeçalho da primeira tabela. Movidos para o
+  **rodapé à direita**.
+
+## 13. Relatório e dashboard executivos detalhados
+
+**Pedido:** "as cores dos status nos relatórios gerados são importantes, e
+preciso que o dashboard executivo e os relatórios executivos sejam mais
+detalhados por status de carga, ranking do dia, menor tempo maior tempo" —
+mais, depois: "timeline pode aparecer no relatório executivo" e "e qual
+operador fez o input".
+
+**Cor de status é informação, não decoração.** Criado `STATUS_COR_RELATORIO`
+(data.js) com a cor própria de cada um dos 6 status, usando exatamente os
+mesmos valores das badges da tela (styles.css) — quem lê o PDF usa o mesmo
+código de cores do painel, sem reaprender nada. Isso é diferente de
+`STATUS_CARREGAMENTO_META`, que colapsa 3 status em "CARREGADO" verde: aquele
+mapa é correto para a planilha de sequenciamento do pátio (onde só importa se
+o caminhão está carregado), mas insuficiente para o executivo, que precisa
+distinguir os 6. Os dois coexistem, cada um no seu lugar.
+O `print-color-adjust:exact` já declarado em `html,body` é o que impede o
+navegador de descartar esses fundos ao gerar o PDF.
+
+**O relatório executivo (`exportarPdfExecutivo`) passou de 2 blocos para 8:**
+1. Indicadores do topo, agora com **Concluídas Hoje** e **Lead Time Médio do
+   dia** (antes só havia número histórico, que não é o que se cobra na
+   reunião).
+2. **Cargas em aberto por status** — tabela colorida, com % e barra de
+   proporção. Os 6 status aparecem sempre, inclusive os zerados: etapa vazia
+   também é informação, e omitir a linha esconderia que a etapa está parada.
+3. **Cargas concluídas hoje por status.**
+4. **Menor e maior tempo — Lead Time (hoje)**, com a carga inteira
+   identificada (placa, nº, transportadora, destino) — sem isso o gestor não
+   consegue agir sobre o caso extremo, que é o objetivo do dado.
+5. **Menor e maior tempo — Permanência no pátio (hoje).**
+6. **Ranking do dia** — só cargas concluídas hoje (`rankingDoDia()`),
+   separado do ranking histórico.
+7. **Linha do tempo das cargas** (concluídas hoje e ainda em aberto), em
+   formato de **matriz**: uma linha por carga, uma coluna por etapa do fluxo.
+   Cada célula traz a **hora** e o **operador** que registrou o passo, com o
+   setor abaixo e a cor do status. Escolheu-se matriz em vez de repetir a
+   timeline vertical da tela para cada carga porque assim o gestor compara as
+   cargas entre si e enxerga de imediato onde uma delas travou. Etapa não
+   ocorrida fica visivelmente vazia (`—`); etapa não aplicável — carga
+   registrada direto no pátio, sem programação prévia, que nunca teve
+   "Aguardando Veículo" — aparece como `n/a`, para não ser lida como atraso.
+8. **Ranking histórico (top 5)** e rodapé com as definições de Lead Time,
+   Tempo de Pátio e do recorte "hoje".
+
+**O dashboard na tela (aba Indicadores) recebeu os mesmos dois blocos novos**
+— distribuição por status colorida e menor/maior tempo do dia — para tela e
+PDF contarem a mesma história. Na tela os extremos viram cartões (leem melhor
+em monitor); no PDF, tabela.
+
+**Funções novas na camada de dados (data.js):** `distribuicaoPorStatus()`,
+`rankingDoDia()`, `extremosTempo(cargas, metrica)` e `fmtHora()`. `extremosTempo`
+devolve `amostra: 0` quando nenhuma carga tem a métrica calculável, para a
+interface dizer "sem dados" em vez de exibir `0 min` — que seria lido como
+"tudo instantâneo" e é exatamente o tipo de número enganoso que este projeto
+evita.
+
+**Correção de layout junto:** as regras de `.print-header` viviam só dentro de
+`@media print`, então em qualquer visualização fora da impressão a logo saía no
+tamanho natural (enorme). Movidas para a base do CSS.
