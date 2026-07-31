@@ -48,14 +48,40 @@ const STATUS_META = {
 };
 
 /* ---------- "Pra onde?" (classificador de modal/operação) ----------
-   Confirmado no briefing: vazio = Direto Suinco, CROSS = cross-docking,
-   DEDICADA = frota própria, RET FRIGO = retirada no frigorífico.
-   "Compartilhada?" é SEMPRE calculada a partir disto — nunca editável
+   Quatro opções, todas explícitas — não existe mais valor vazio. Antes, o
+   vazio significava "Direto Suinco"; agora isso se chama FROTA PROPRIA e tem
+   valor próprio. Vazio como portador de significado é armadilha: some no
+   relatório, some no filtro do Power BI, e ninguém sabe se a carga é frota
+   própria ou se o campo não foi preenchido.
+
+   "Compartilhada?" é SEMPRE calculada a partir daqui — nunca editável
    manualmente, pra não desalinhar do valor real de Pra onde?. */
-const PRA_ONDE_OPCOES = ['', 'CROSS', 'DEDICADA', 'RET FRIGO'];
-const PRA_ONDE_LABEL = { '': '(Direto Suinco)', 'CROSS':'CROSS', 'DEDICADA':'DEDICADA', 'RET FRIGO':'RET FRIGO' };
+const PRA_ONDE_OPCOES = ['FROTA PROPRIA', 'CROSS-DOCKING', 'DEDICADA', 'RET FRIGO'];
+const PRA_ONDE_LABEL = {
+  'FROTA PROPRIA':'FROTA PRÓPRIA',
+  'CROSS-DOCKING':'CROSS-DOCKING',
+  'DEDICADA':'DEDICADA',
+  'RET FRIGO':'RET FRIGO'
+};
+const PRA_ONDE_PADRAO = 'FROTA PROPRIA';
 function compartilhadaDaCarga(carga){
-  return (carga && (carga.praOnde === 'CROSS' || carga.praOnde === 'RET FRIGO')) ? 'Sim' : 'Não';
+  return (carga && (carga.praOnde === 'CROSS-DOCKING' || carga.praOnde === 'RET FRIGO')) ? 'Sim' : 'Não';
+}
+
+/* Migração dos registros gravados antes desta renomeação. Sem isto, uma carga
+   antiga com praOnde='CROSS' deixaria de ser contada como Compartilhada, o que
+   mudaria indicador e relatório em silêncio. */
+const PRA_ONDE_MIGRACAO = { '': 'FROTA PROPRIA', 'CROSS': 'CROSS-DOCKING' };
+function migrarPraOnde(){
+  let n = 0;
+  (DB.cargas || []).forEach(c => {
+    if(Object.prototype.hasOwnProperty.call(PRA_ONDE_MIGRACAO, c.praOnde)){
+      c.praOnde = PRA_ONDE_MIGRACAO[c.praOnde]; n++;
+    } else if(!PRA_ONDE_OPCOES.includes(c.praOnde)){
+      c.praOnde = PRA_ONDE_PADRAO; n++;   // valor desconhecido: cai no padrão
+    }
+  });
+  return n;
 }
 
 /* ---------- mapeamento de cor/rótulo para o PDF Operacional e para
@@ -190,6 +216,8 @@ const SuincoStore = {
       const raw = localStorage.getItem(STORAGE_KEY);
       if(raw) Object.assign(DB, JSON.parse(raw));
       invalidarIndiceFrota();
+      const migradas = migrarPraOnde();
+      if(migradas) console.info(`[Suinco] "Pra onde?" migrado em ${migradas} carga(s).`);
     }catch(e){ console.error('Falha ao carregar dados locais', e); }
   },
   // Grava local e devolve imediatamente. A ida ao SharePoint acontece em
@@ -546,7 +574,7 @@ function criarCargaProgramada({placa, transportadora, tipoVeiculo, numeroCarga, 
     cliente: cliente||'', destino: destino||'', produto: produto||'', peso: Number(peso)||0,
     doca: doca||'', sequencia: sequencia!==undefined && sequencia!=='' ? Number(sequencia) : null,
     observacoes: observacoes||'',
-    praOnde: PRA_ONDE_OPCOES.includes(praOnde) ? praOnde : '',
+    praOnde: PRA_ONDE_OPCOES.includes(praOnde) ? praOnde : PRA_ONDE_PADRAO,
     qtdGanchos: qtdGanchos!==undefined && qtdGanchos!=='' ? Math.max(0, Number(qtdGanchos)||0) : 0,
     qtdEntregas: qtdEntregas!==undefined && qtdEntregas!=='' ? Math.max(1, Number(qtdEntregas)||1) : 1,
     status: 'Aguardando Veículo',
@@ -582,7 +610,7 @@ function registrarChegadaPortaria(placa, operador){
       tipoVeiculo: frota ? frota.tipoVeiculo : '',
       motorista:'',
       cliente:'', destino:'', produto:'', peso:0, doca:'', sequencia:null, observacoes:'',
-      praOnde:'', qtdGanchos:0, qtdEntregas:1,
+      praOnde: PRA_ONDE_PADRAO, qtdGanchos:0, qtdEntregas:1,
       status: 'Aguardando Embarque', aguardandoCarga: true,
       criadoEm: nowISO(), criadoPor: operador||'(não identificado)',
       atualizadoEm: nowISO()
@@ -618,7 +646,7 @@ function completarCargaAguardando(cargaId, {numeroCarga, cliente, destino, produ
   c.doca = doca||''; c.sequencia = sequencia!==undefined && sequencia!=='' ? Number(sequencia) : null;
   c.observacoes = observacoes||'';
   c.motorista = motorista||'';
-  c.praOnde = PRA_ONDE_OPCOES.includes(praOnde) ? praOnde : '';
+  c.praOnde = PRA_ONDE_OPCOES.includes(praOnde) ? praOnde : PRA_ONDE_PADRAO;
   c.qtdGanchos = qtdGanchos!==undefined && qtdGanchos!=='' ? Math.max(0, Number(qtdGanchos)||0) : 0;
   c.qtdEntregas = qtdEntregas!==undefined && qtdEntregas!=='' ? Math.max(1, Number(qtdEntregas)||1) : 1;
   if(transportadora) c.transportadora = transportadora;

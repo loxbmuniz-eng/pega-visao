@@ -442,3 +442,42 @@ Mantido `sessionStorage`. Nos terminais compartilhados do pátio, token em
 localStorage sobrevive ao fechamento do navegador, e o próximo operador
 herdaria a sessão do anterior — arruinando exatamente a trilha de auditoria
 que esta integração existe para garantir.
+
+## 16. "Pra onde?" — quatro opções explícitas (correção de 31/07/2026)
+
+Lista corrigida pelo gestor para: **FROTA PRÓPRIA, CROSS-DOCKING, DEDICADA,
+RET FRIGO**. Duas mudanças em relação ao que estava:
+
+- `CROSS` passou a **`CROSS-DOCKING`** (nome por extenso).
+- O valor **vazio**, que significava "Direto Suinco", virou **`FROTA PROPRIA`**
+  com valor próprio. Não existe mais opção em branco.
+
+**Por que acabar com o valor vazio importa:** vazio carregando significado é
+armadilha. Ele some no filtro do Power BI, aparece como célula em branco no
+relatório, e ninguém distingue "é frota própria" de "o campo não foi
+preenchido". Com valor explícito, as duas coisas passam a ser distinguíveis —
+e, se um dia aparecer carga sem classificação, isso vira um erro visível em vez
+de se confundir com frota própria.
+
+**Regra de "Compartilhada?" mantida, com os nomes novos:** `CROSS-DOCKING` e
+`RET FRIGO` continuam sendo as duas que resultam em `Compartilhada = Sim`.
+`FROTA PROPRIA` e `DEDICADA` resultam em `Não`. A regra segue calculada, nunca
+editável à mão.
+
+**Migração dos dados já gravados** (`migrarPraOnde()` em data.js): `''` vira
+`FROTA PROPRIA` e `CROSS` vira `CROSS-DOCKING`, ao carregar. Qualquer valor
+desconhecido cai no padrão. Sem isso, uma carga antiga gravada como `CROSS`
+deixaria silenciosamente de contar como Compartilhada — mudando indicador e
+relatório sem ninguém perceber. Testado com os cinco casos, inclusive valor
+inválido.
+
+**Ponto que ficou em aberto — vale confirmar:** o rótulo antigo descrevia
+`DEDICADA` como "frota própria". Agora que FROTA PRÓPRIA é uma opção separada,
+os dois não podem significar a mesma coisa. Não foi inventada uma definição
+nova para DEDICADA: a descrição entre parênteses foi apenas removida, e a opção
+segue funcionando. Se DEDICADA for, por exemplo, frota de terceiro contratada
+com exclusividade, basta dizer e o rótulo é ajustado.
+
+Cor no relatório operacional: FROTA PRÓPRIA recebeu `#16697a` (teal), distinta
+das três já existentes — azul para CROSS-DOCKING, vinho para DEDICADA, dourado
+para RET FRIGO.

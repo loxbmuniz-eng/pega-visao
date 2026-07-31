@@ -450,7 +450,7 @@ function criarCargaProgramadaUI(){
     notify(`Carga criada para a placa ${normalizarPlaca(placa)} — status Aguardando Veículo.`, 'success');
     ['prog-placa','prog-transportadora','prog-tipoveiculo','prog-motorista','prog-numero-carga','prog-cliente','prog-destino','prog-peso','prog-sequencia','prog-obs']
       .forEach(id=>document.getElementById(id).value='');
-    document.getElementById('prog-praonde').value = '';
+    document.getElementById('prog-praonde').value = PRA_ONDE_PADRAO;
     document.getElementById('prog-ganchos').value = '0';
     document.getElementById('prog-entregas').value = '1';
     atualizarPreviewCompartilhada('prog-praonde','prog-compartilhada-preview');
@@ -488,7 +488,7 @@ function praOndeSelectHtml(c){
 }
 function atualizarPraOndeUI(id, val){
   const c = getCarga(id); if(!c) return;
-  c.praOnde = PRA_ONDE_OPCOES.includes(val) ? val : '';
+  c.praOnde = PRA_ONDE_OPCOES.includes(val) ? val : PRA_ONDE_PADRAO;
   c.atualizadoEm = nowISO();
   SuincoStore.save();
   renderAll();
@@ -538,7 +538,7 @@ function abrirCompletar(id){
   document.getElementById('completar-tipoveiculo').value = c.tipoVeiculo || '';
   document.getElementById('completar-motorista').value = '';
   document.getElementById('completar-obs').value = '';
-  document.getElementById('completar-praonde').value = '';
+  document.getElementById('completar-praonde').value = PRA_ONDE_PADRAO;
   document.getElementById('completar-ganchos').value = '0';
   document.getElementById('completar-entregas').value = '1';
   atualizarPreviewCompartilhada('completar-praonde','completar-compartilhada-preview');
@@ -1197,7 +1197,7 @@ function renderTimelineCarga(id){
     ['Transportadora', c.transportadora || '—'],
     ['Tipo de Veículo', c.tipoVeiculo || '—'],
     ['Motorista', c.motorista || '—'],
-    ['Pra onde?', c.praOnde ? (PRA_ONDE_LABEL[c.praOnde]||c.praOnde) : '(Direto Suinco)'],
+    ['Pra onde?', PRA_ONDE_LABEL[c.praOnde] || c.praOnde || '—'],
     ['Compartilhada?', compartilhadaDaCarga(c)],
     ['Qtd. Ganchos', (c.qtdGanchos ? c.qtdGanchos : 'Liso')],
     ['Qtd. Entregas', c.qtdEntregas ?? 1]
@@ -1263,7 +1263,7 @@ function imprimirContainer(el){
 // Carga) ficam de fora desta lista — elas aparecem na Torre de Controle e
 // na fila de pendências da Programação, mas não fazem sentido numa
 // planilha de sequenciamento de carregamento ainda sem dados.
-const CORES_PRA_ONDE = { 'CROSS':'#374a86', 'DEDICADA':'#8f1f26', 'RET FRIGO':'#b9903f' };
+const CORES_PRA_ONDE = { 'FROTA PROPRIA':'#16697a', 'CROSS-DOCKING':'#374a86', 'DEDICADA':'#8f1f26', 'RET FRIGO':'#b9903f' };
 function exportarPdfOperacional(){
   const el = document.getElementById('print-operacional');
   // TODAS as cargas da programação do dia, INCLUSIVE as já concluídas
