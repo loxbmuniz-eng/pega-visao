@@ -301,7 +301,7 @@ function atualizarAvisoSetorAba(){
    ligado — ver docs/MODELO_DADOS_SHAREPOINT.md. Até lá, isto é só uma
    cortina, não uma porta trancada. */
 const SENHA_UX_ABAS_RESTRITAS = 'suinco2026';
-const ABAS_COM_SENHA = ['indicadores','relatorios'];
+const ABAS_COM_SENHA = ['programacao','indicadores','relatorios'];
 let abasDesbloqueadasNestaSessao = new Set();
 let _tabPendenteSenha = null;
 function abaPrecisaSenha(tab){
@@ -309,7 +309,11 @@ function abaPrecisaSenha(tab){
 }
 function pedirSenhaAba(tab){
   _tabPendenteSenha = tab;
-  document.getElementById('senha-titulo').textContent = 'Área restrita — ' + (tab==='indicadores' ? 'Indicadores' : 'Relatórios');
+  // Nome da aba vem da própria navegação (sem o emoji), pra não existir uma
+  // segunda lista de rótulos que saia de sincronia ao incluir mais uma aba.
+  const nav = document.querySelector(`.nav-tab[data-tab="${tab}"]`);
+  const nome = nav ? nav.textContent.replace(/^[^\p{L}]+/u, '').trim() : tab;
+  document.getElementById('senha-titulo').textContent = 'Área restrita — ' + nome;
   document.getElementById('senha-input').value = '';
   document.getElementById('modal-senha').classList.add('open');
   setTimeout(()=>document.getElementById('senha-input').focus(), 50);
