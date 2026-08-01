@@ -193,7 +193,47 @@ As cinco baterias anteriores (fluxo de status, senha, tipo de operação, base d
 frota, CSV) seguem sem falhas — a sincronização não alterou nenhuma regra de
 negócio.
 
-### 5.3. Sobre o servidor de simulação
+### 5.3. Filas visíveis na tela (`testes/test_filas_tela.py`)
+
+Os testes anteriores conferem o **dado**. Este confere o que o operador **vê**,
+com cada setor na sua aba, sem ninguém recarregar a página:
+
+```
+[OK] Torre da Logística mostra a carga
+[OK] pátio da Portaria ainda não tem o caminhão
+[OK] caminhão ENTRA na fila do pátio da Portaria
+[OK] Expedição vê o veículo disponível para embarque
+[OK] status na linha do porteiro vira "Embarque Iniciado" (0ms)
+[OK]    caminhão SEGUE no pátio (correto: ainda está fisicamente lá)
+[OK] Logística vê "Embarque Iniciado" na Torre (0ms)
+[OK] os três seguiram logados o tempo todo
+```
+
+**Esclarecimento operacional que este teste tornou explícito.** A lista da
+Portaria é *"Veículos no Pátio Agora"* — quem está fisicamente dentro. Quando a
+Expedição inicia o embarque, o caminhão **não some** da tela do porteiro: ele
+continua no pátio e é o porteiro quem vai liberar a saída depois. O que muda em
+tempo real é o **status na linha**. Sumir dali seria perder o controle de quem
+está dentro da fábrica.
+
+### 5.4. Defeito de corrida encontrado por este teste
+
+Com três navegadores simultâneos apareceu uma falha que os testes de dois não
+pegavam: a Logística parava de receber atualizações depois da primeira.
+
+**Causa.** A marca do "até quando já li" era gravada **depois** da consulta.
+Qualquer escrita que chegasse entre a consulta e a marcação ficava com
+`Timestamp_Sincronia` menor que a marca e o filtro `gt` a excluía **para
+sempre** — a alteração daquele setor nunca mais apareceria naquele terminal.
+
+**Correção.** A marca passou a ser tomada **antes** da consulta, com margem de 5
+segundos para diferença de relógio entre a estação e o servidor. Reler alguns
+registros é inofensivo, porque a fusão é idempotente; perder um é permanente.
+
+Vale registrar o método: o defeito não apareceu por inspeção do código nem com
+dois usuários. Só com três atores concorrentes — que é a operação real.
+
+### 5.5. Sobre o servidor de simulação
 
 Ele prova que **a camada de sincronização do painel está correta**. Não
 substitui um teste contra o tenant real, que continua sendo necessário na

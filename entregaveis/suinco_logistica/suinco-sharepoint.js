@@ -368,6 +368,19 @@ const SuincoSharePoint = (function(){
   function aoReceberDados(fn){ ouvintesDados.push(fn); }
 
   async function pullTudo(incremental){
+    /* A marca do "até quando já li" é tomada ANTES de consultar, não depois.
+       Fazendo depois abre-se uma janela de corrida: uma escrita que chega
+       entre a consulta e a marcação fica com Timestamp_Sincronia menor que a
+       marca, e o filtro `gt` a exclui PARA SEMPRE — a alteração daquele setor
+       nunca mais apareceria neste terminal. O defeito só se manifesta com
+       vários operadores agindo ao mesmo tempo, que é justamente a operação
+       real; foi encontrado na simulação com três navegadores.
+
+       A MARGEM existe pelo mesmo motivo, contra diferença de relógio entre a
+       estação e o servidor. Reler alguns registros é inofensivo — a fusão é
+       idempotente —, enquanto perder um é permanente. Na dúvida, sobrepor. */
+    const MARGEM_MS = 5000;
+    const marcaDestaLeitura = new Date(Date.now() - MARGEM_MS).toISOString();
     const filtro = (incremental && ultimaSincronia)
       ? `fields/Timestamp_Sincronia gt '${ultimaSincronia}'` : null;
     const [cargas, movimentacoes, frota] = await Promise.all([
@@ -377,7 +390,7 @@ const SuincoSharePoint = (function(){
       incremental ? Promise.resolve(null) : pull('frota', null).catch(()=>null)
     ]);
     if(cargas === null && movimentacoes === null) throw new Error('Falha ao ler do SharePoint');
-    ultimaSincronia = new Date().toISOString();
+    ultimaSincronia = marcaDestaLeitura;
     return { cargas: cargas||[], movimentacoes: movimentacoes||[], frota, incremental: !!incremental };
   }
 
