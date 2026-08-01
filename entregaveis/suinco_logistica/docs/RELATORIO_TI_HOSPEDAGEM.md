@@ -170,9 +170,26 @@ Item novo nesta versão do relatório. O arquivo `suinco-sharepoint.js` contém:
 - **Encerramento de ciclo** (`arquivarDia()`), que aciona o fluxo do Power Automate
   responsável por criar `/Ano/Mês/Dia/` e arquivar o movimento.
 
-**Esforço restante para integração:** aproximadamente **1 hora** — preencher três valores
-em `SP_CONFIG` e validar em ambiente de homologação. Não há mais desenvolvimento pendente
-do lado da aplicação.
+**Esforço restante para ligar a ESCRITA:** aproximadamente **1 hora** — preencher três
+valores em `SP_CONFIG` e validar em homologação.
+
+> ⚠️ **CORREÇÃO desta versão — leia antes de estimar prazo.** A frase anterior ("não há
+> mais desenvolvimento pendente do lado da aplicação") estava **errada** e foi retirada.
+> O que está pronto é o caminho de **escrita**: o painel grava nas Listas e alimenta o
+> Power BI. O caminho de **leitura não foi implementado** — a função `pull()` existe no
+> adaptador mas não é chamada por nenhuma tela, e não há atualização periódica nem
+> resolução de conflito.
+>
+> Consequência prática: conectar o ambiente hoje entrega o **repositório e o BI**, mas
+> **não** a operação compartilhada entre os setores. A Portaria continuaria sem enxergar
+> a carga criada pela Logística em outra máquina.
+>
+> **Falta implementar** (lado da aplicação, não do TI): leitura inicial a partir das
+> Listas, atualização periódica (20–30 s) e tratamento de escrita concorrente sobre a
+> mesma carga. **Estimativa: 2 a 3 dias úteis** após o provisionamento.
+>
+> Detalhamento e respostas para as perguntas prováveis em
+> `CAPACIDADE_E_PERGUNTAS_FREQUENTES.md`.
 
 ---
 
@@ -578,7 +595,8 @@ validação em homologação.
 |---|---|---|---|
 | 1 | Decisão de arquitetura pelo TI | Este relatório | — |
 | 2 | Provisionamento do ambiente | Fase 1 | A definir pelo TI |
-| 3 | Preencher `SP_CONFIG` e validar em homologação | Parâmetros da seção 9.3 | ~1 hora |
+| 3 | Preencher `SP_CONFIG` e validar em homologação (liga a **escrita**) | Parâmetros da seção 9.3 | ~1 hora |
+| 3b | Implementar leitura compartilhada, atualização periódica e conflito | Fase 3 | 2 a 3 dias úteis |
 | 4 | Carga da base de frota (749 placas) | Fase 3 + posição do DPO | 1 dia |
 | 5 | Piloto com 1 usuário de cada setor, simultâneo | Fase 4 | 1 semana |
 | 6 | Ajustes do piloto | Fase 5 | 2 a 3 dias |
