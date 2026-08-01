@@ -59,10 +59,36 @@ const SuincoSharePoint = (function(){
 
     // Opcional: URL do fluxo do Power Automate que cria /Ano/Mês/Dia/ e
     // arquiva o ciclo. Vazio = o encerramento não apaga nem move nada.
-    powerAutomateArquivamento: ''
+    powerAutomateArquivamento: '',
+
+    // De quanto em quanto tempo o painel busca as mudanças dos outros setores.
+    // 15 s é o equilíbrio entre "parece tempo real" e não castigar o tenant:
+    // com ~20 pessoas dá cerca de 80 leituras/minuto, muito abaixo do limite.
+    intervaloSincroniaMs: 15000,
+
+    // Base da API. Só mude para apontar a um proxy corporativo ou ao servidor
+    // de simulação usado nos testes automatizados (ver modoSimulacao).
+    graphBaseUrl: 'https://graph.microsoft.com/v1.0',
+
+    /* modoSimulacao — EXCLUSIVO PARA TESTE.
+       Quando true, o adaptador NÃO autentica via MSAL e fala direto com
+       graphBaseUrl. Existe para provar a operação compartilhada sem depender
+       de um tenant real (ver docs/SIMULACAO_MULTIUSUARIO.md).
+       Trava de segurança: só tem efeito se graphBaseUrl apontar para
+       localhost/127.0.0.1. Apontando para o Graph real, é ignorado e a
+       autenticação normal acontece — não há como desligar o SSO em produção
+       mexendo nesta chave. */
+    modoSimulacao: false
   };
 
+  // A trava de segurança do modoSimulacao, num lugar só.
+  function simulando(){
+    return SP_CONFIG.modoSimulacao === true
+        && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?\//.test(SP_CONFIG.graphBaseUrl + '/');
+  }
+
   function estaConfigurado(){
+    if(simulando()) return !!SP_CONFIG.siteId;
     return !!(SP_CONFIG.clientId && SP_CONFIG.tenantId && SP_CONFIG.siteId);
   }
 
@@ -86,6 +112,11 @@ const SuincoSharePoint = (function(){
   /* ================== 3. AUTENTICAÇÃO (MSAL v2 / SSO) ================== */
   async function autenticar(){
     if(!estaConfigurado()) { setEstado('local'); return false; }
+    if(simulando()){
+      conta = { username: 'simulacao@local', homeAccountId: 'sim' };
+      setEstado('online');
+      return true;
+    }
     if(typeof msal === 'undefined'){
       console.warn('[Suinco] MSAL.js não carregou (sem rede ou aberto via file://). Seguindo em modo local.');
       setEstado('local', 'MSAL indisponível');
@@ -141,6 +172,7 @@ const SuincoSharePoint = (function(){
   }
 
   async function token(){
+    if(simulando()) return 'token-de-simulacao';
     if(!msalApp || !conta) throw new Error('Não autenticado');
     try{
       const r = await msalApp.acquireTokenSilent({ scopes: escopos(), account: conta });
@@ -154,11 +186,9 @@ const SuincoSharePoint = (function(){
   }
 
   /* ================== 4. CHAMADAS À API DO SHAREPOINT ================== */
-  const GRAPH = 'https://graph.microsoft.com/v1.0';
-
   async function api(caminho, opcoes){
     const t = await token();
-    const resp = await fetch(`${GRAPH}/sites/${SP_CONFIG.siteId}/${caminho}`, Object.assign({
+    const resp = await fetch(`${SP_CONFIG.graphBaseUrl}/sites/${SP_CONFIG.siteId}/${caminho}`, Object.assign({
       headers: {
         'Authorization': `Bearer ${t}`,
         'Accept': 'application/json',
@@ -208,26 +238,37 @@ const SuincoSharePoint = (function(){
   function gravarFila(f){
     try{ localStorage.setItem(FILA_KEY, JSON.stringify(f)); }catch(e){}
   }
-  function enfileirar(lista, registro){
+  function enfileirar(lista, registro, campoChave){
     const f = lerFila();
-    f.push({ lista, registro, em: new Date().toISOString() });
+    f.push({ lista, registro, campoChave: campoChave || null, em: new Date().toISOString() });
     gravarFila(f);
   }
   function pendentes(){ return lerFila().length; }
 
   async function drenarFila(){
-    if(estado !== 'online') return { enviados:0, restantes:pendentes() };
+    // Não exige estado 'online': quem chama já decidiu que vale tentar. Se a
+    // rede continuar fora, a primeira tentativa falha e a fila fica intacta.
+    if(estado === 'local') return { enviados:0, restantes:pendentes() };
     let f = lerFila(), enviados = 0;
     while(f.length){
       const item = f[0];
       try{
-        await api(itens(item.lista), { method:'POST', body: JSON.stringify({ fields: item.registro }) });
+        if(item.campoChave){
+          // Reenvio de upsert: pode ser que outro terminal já tenha criado a
+          // linha enquanto este estava offline — por isso procura antes.
+          const id = await acharItemId(item.lista, item.campoChave, item.registro[item.campoChave]);
+          if(id) await api(`${itens(item.lista)}/${id}`, { method:'PATCH', body: JSON.stringify({ fields: item.registro }) });
+          else   await api(itens(item.lista), { method:'POST', body: JSON.stringify({ fields: item.registro }) });
+        }else{
+          await api(itens(item.lista), { method:'POST', body: JSON.stringify({ fields: item.registro }) });
+        }
         f.shift(); gravarFila(f); enviados++;
       }catch(e){
         console.warn('[Suinco] Fila interrompida, tentará de novo:', e.message);
         break;
       }
     }
+    if(f.length === 0 && typeof liberarPendencias === 'function') liberarPendencias();
     return { enviados, restantes: f.length };
   }
 
@@ -255,6 +296,52 @@ const SuincoSharePoint = (function(){
     }
   }
 
+  /* ================== 6-b. UPSERT (uma linha por carga) ==================
+     A gravação anterior era sempre POST, então cada mudança de status criava
+     uma linha NOVA em fact_Viagens — uma carga que percorre os 6 status virava
+     6 linhas. Isso quebrava a leitura compartilhada (qual linha é a carga?) e
+     obrigaria o Power BI a desduplicar.
+
+     Agora: procura a linha pela chave de negócio, faz PATCH se existir e POST
+     se não. O id do item no SharePoint fica em cache para as próximas
+     gravações não precisarem procurar de novo. */
+  const idsRemotos = new Map();   // "lista::chave" -> id do item no SharePoint
+
+  async function acharItemId(lista, campoChave, valorChave){
+    const cacheKey = lista + '::' + valorChave;
+    if(idsRemotos.has(cacheKey)) return idsRemotos.get(cacheKey);
+    const q = `?$filter=fields/${campoChave} eq '${String(valorChave).replace(/'/g,"''")}'&$top=1`;
+    const r = await api(itens(lista) + q);
+    const item = r && r.value && r.value[0];
+    if(item){ idsRemotos.set(cacheKey, item.id); return item.id; }
+    return null;
+  }
+
+  async function upsert(listaLogica, campoChave, registro, operador){
+    const lista = SP_CONFIG.listIds[listaLogica];
+    if(!lista) throw new Error('Lista desconhecida: ' + listaLogica);
+    const carimbado = carimbar(registro, operador);
+    const valorChave = carimbado[campoChave];
+    if(estado !== 'online' || !valorChave){
+      enfileirar(lista, carimbado, campoChave);
+      return { enfileirado:true };
+    }
+    try{
+      const id = await acharItemId(lista, campoChave, valorChave);
+      if(id){
+        await api(`${itens(lista)}/${id}`, { method:'PATCH', body: JSON.stringify({ fields: carimbado }) });
+      }else{
+        const criado = await api(itens(lista), { method:'POST', body: JSON.stringify({ fields: carimbado }) });
+        if(criado && criado.id) idsRemotos.set(lista + '::' + valorChave, criado.id);
+      }
+      return { enfileirado:false };
+    }catch(e){
+      enfileirar(lista, carimbado, campoChave);
+      setEstado('offline', e.message);
+      return { enfileirado:true, erro:e.message };
+    }
+  }
+
   /* ================== 7. LEITURA ================== */
   async function pull(listaLogica, filtroOData){
     const lista = SP_CONFIG.listIds[listaLogica];
@@ -263,6 +350,71 @@ const SuincoSharePoint = (function(){
     const r = await api(itens(lista) + q);
     return ((r && r.value) || []).map(i => i.fields || i);
   }
+
+  /* ================== 7-b. SINCRONIA COMPARTILHADA ==================
+     É isto que torna o painel multiusuário: a cada ciclo, busca o estado das
+     Listas e entrega a quem chamou. O SharePoint não empurra mudanças para o
+     navegador, então a atualização é por consulta periódica — 15 s por padrão.
+     Para a operação isso é indistinguível de tempo real: o intervalo é menor
+     que o tempo de qualquer ação física no pátio.
+
+     A consulta pede só o que mudou desde a última vez (`Timestamp_Sincronia`),
+     o que mantém o tráfego pequeno mesmo com a Lista crescendo — e evita
+     esbarrar no limite de 5.000 itens por consulta. */
+  let ultimaSincronia = null;
+  let timerSincronia = null;
+  const ouvintesDados = [];
+
+  function aoReceberDados(fn){ ouvintesDados.push(fn); }
+
+  async function pullTudo(incremental){
+    const filtro = (incremental && ultimaSincronia)
+      ? `fields/Timestamp_Sincronia gt '${ultimaSincronia}'` : null;
+    const [cargas, movimentacoes, frota] = await Promise.all([
+      pull('cargas', filtro).catch(e=>{ console.warn('[Suinco] pull cargas:', e.message); return null; }),
+      pull('movimentacoes', filtro).catch(e=>{ console.warn('[Suinco] pull movimentações:', e.message); return null; }),
+      // A frota muda raramente: só é buscada na carga inicial.
+      incremental ? Promise.resolve(null) : pull('frota', null).catch(()=>null)
+    ]);
+    if(cargas === null && movimentacoes === null) throw new Error('Falha ao ler do SharePoint');
+    ultimaSincronia = new Date().toISOString();
+    return { cargas: cargas||[], movimentacoes: movimentacoes||[], frota, incremental: !!incremental };
+  }
+
+  async function sincronizarAgora(incremental){
+    // Roda TAMBÉM quando o estado é 'offline'. Este é o caminho de recuperação:
+    // o evento 'online' do navegador só dispara quando a placa de rede volta,
+    // e não cobre o caso mais comum — o servidor recusou ou expirou enquanto a
+    // rede seguia de pé. Sem isto, um único erro deixava o terminal offline
+    // até alguém recarregar a página, com a fila parada.
+    if(estado === 'local') return null;
+    const estavaOffline = (estado === 'offline');
+    try{
+      // Offline: uma leitura curta primeiro, para confirmar que voltou antes
+      // de despejar a fila inteira contra um servidor possivelmente fora.
+      if(estavaOffline) await api(itens(SP_CONFIG.listIds.cargas) + '?$top=1');
+      await drenarFila();
+      const dados = await pullTudo(incremental);
+      if(estado !== 'online') setEstado('online');
+      ouvintesDados.forEach(fn=>{ try{ fn(dados); }catch(e){ console.error(e); } });
+      return dados;
+    }catch(e){
+      console.warn('[Suinco] sincronia:', e.message);
+      setEstado('offline', e.message);
+      return null;
+    }
+  }
+
+  function iniciarSincroniaPeriodica(){
+    if(timerSincronia) clearInterval(timerSincronia);
+    timerSincronia = setInterval(()=>{ sincronizarAgora(true); }, SP_CONFIG.intervaloSincroniaMs);
+    // Voltar para a aba é o momento em que a informação desatualizada mais
+    // incomoda: força uma leitura imediata em vez de esperar o próximo ciclo.
+    document.addEventListener('visibilitychange', ()=>{
+      if(!document.hidden) sincronizarAgora(true);
+    });
+  }
+  function pararSincronia(){ if(timerSincronia){ clearInterval(timerSincronia); timerSincronia = null; } }
 
   /* ================== 8. ENCERRAR E ARQUIVAR CICLO ==================
      Dispara o fluxo do Power Automate que cria /Ano/Mês/Dia/ e arquiva a
@@ -305,8 +457,11 @@ const SuincoSharePoint = (function(){
     monitorarRede();
     if(!estaConfigurado()){ setEstado('local'); return { modo:'local' }; }
     const ok = await autenticar();
-    if(ok) await drenarFila();
-    return { modo: estado };
+    if(!ok) return { modo: estado };
+    await drenarFila();
+    const dados = await sincronizarAgora(false);   // carga inicial completa
+    iniciarSincroniaPeriodica();
+    return { modo: estado, dados };
   }
 
   return {
@@ -314,6 +469,8 @@ const SuincoSharePoint = (function(){
     estado: ()=>estado,
     conta: ()=>conta,
     aoMudarEstado,
-    push, pull, drenarFila, pendentes, arquivarDia
+    push, upsert, pull, pullTudo, drenarFila, pendentes, arquivarDia,
+    aoReceberDados, sincronizarAgora, iniciarSincroniaPeriodica, pararSincronia,
+    ultimaSincronia: ()=>ultimaSincronia
   };
 })();

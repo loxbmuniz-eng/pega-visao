@@ -57,8 +57,11 @@ function atualizarRodapeConexao(estado, detalhe){
   const sufixoFila = fila ? ` · ${fila} registro(s) na fila` : '';
 
   if(estado === 'online'){
+    const u = (typeof SuincoSharePoint !== 'undefined') ? SuincoSharePoint.ultimaSincronia() : null;
+    const seg = u ? Math.round((Date.now() - Date.parse(u))/1000) : null;
+    const quando = seg === null ? '' : (seg < 5 ? ' · sincronizado agora' : ` · sincronizado há ${seg}s`);
     rod.className = 'rodape-conexao online';
-    rod.innerHTML = `✅ Conectado ao SharePoint | Alimentando Power BI em Tempo Real${esc(sufixoFila)}`;
+    rod.innerHTML = `✅ Conectado ao SharePoint | Compartilhado entre os setores${esc(quando)}${esc(sufixoFila)}`;
     if(badge){ badge.hidden = true; }
   } else if(estado === 'offline'){
     rod.className = 'rodape-conexao offline';
@@ -1680,8 +1683,25 @@ async function init(){
   // em modo local e o rodapé diz isso. Nunca bloqueia a abertura do painel.
   if(typeof SuincoSharePoint !== 'undefined'){
     SuincoSharePoint.aoMudarEstado(atualizarRodapeConexao);
+    // Toda leitura das Listas cai aqui: funde no DB e redesenha se algo mudou.
+    // É o que faz a Portaria enxergar a carga que a Logística acabou de criar.
+    SuincoSharePoint.aoReceberDados(dados => {
+      const r = fundirEstadoRemoto(dados);
+      if(r.cargasNovas || r.cargasAtualizadas || r.movimentacoesNovas){
+        renderAll();
+        // Aviso discreto: a tela mudou por ação de outro setor, e o operador
+        // precisa saber disso — tela que se altera sozinha sem explicação
+        // destrói a confiança no painel.
+        if(!dados.incremental) return;   // carga inicial não é "novidade"
+        const partes = [];
+        if(r.cargasNovas)       partes.push(`${r.cargasNovas} carga(s) nova(s)`);
+        if(r.cargasAtualizadas) partes.push(`${r.cargasAtualizadas} atualizada(s)`);
+        if(partes.length) notify('Atualizado por outro setor: ' + partes.join(' · ') + '.', 'success');
+      }
+      atualizarRodapeConexao(SuincoSharePoint.estado());
+    });
     SuincoSharePoint.iniciar()
-      .then(()=>atualizarRodapeConexao(SuincoSharePoint.estado()))
+      .then(()=>{ atualizarRodapeConexao(SuincoSharePoint.estado()); renderAll(); })
       .catch(e=>{ console.warn('[Suinco] init SharePoint:', e); atualizarRodapeConexao('local'); });
   }
   atualizarDatalists();

@@ -294,6 +294,23 @@ const SuincoStore = {
     try{
       localStorage.setItem(STORAGE_KEY, JSON.stringify(DB));
     }catch(e){ console.error('Falha ao salvar dados locais', e); }
+    // Ponto único de saída para o SharePoint. Roda depois de a regra de
+    // negócio ter aplicado a mudança, que é justamente o que faltava.
+    this.sincronizarCargasAlteradas();
+  },
+
+  // Marca de quando cada carga foi sincronizada pela última vez. Só sobe o
+  // que mudou de fato — save() é chamado com frequência e reenviar tudo a
+  // cada clique geraria tráfego inútil contra o tenant.
+  _ultimoSync: new Map(),
+  sincronizarCargasAlteradas(){
+    if(typeof SuincoSharePoint === 'undefined' || !SuincoSharePoint.estaConfigurado()) return;
+    DB.cargas.forEach(c => {
+      const marca = c.atualizadoEm || c.criadoEm || '';
+      if(this._ultimoSync.get(c.id) === marca) return;      // nada mudou nesta
+      this._ultimoSync.set(c.id, marca);
+      this.sincronizarCarga(c, DB.operador).catch(e=>console.warn('[Suinco] sync carga:', e));
+    });
   },
 
   /* ---- Sincronia com o SharePoint / Power BI ----
@@ -303,7 +320,10 @@ const SuincoStore = {
      chama não precisa saber disso. */
   async sincronizarCarga(carga, operador){
     if(typeof SuincoSharePoint === 'undefined') return;
-    return SuincoSharePoint.push('cargas', {
+    // `_pendente` protege esta carga de ser sobrescrita pela sincronia
+    // enquanto a gravação não confirmar. Ver regra 3 de fundirEstadoRemoto.
+    carga._pendente = true;
+    const r = await SuincoSharePoint.upsert('cargas', 'Carga_ID', {
       Title: carga.numeroCarga || carga.id,
       Carga_ID: carga.id,
       Numero_Carga: carga.numeroCarga || '',
@@ -324,8 +344,17 @@ const SuincoStore = {
       Qtd_Ganchos: carga.qtdGanchos || 0,
       Qtd_Entregas: carga.qtdEntregas ?? 1,
       Status_Atual: carga.status,
-      Criado_Em: carga.criadoEm
+      Aguardando_Carga: !!carga.aguardandoCarga,
+      Criado_Em: carga.criadoEm,
+      // Atualizado_Em é o que decide quem vence quando dois setores mexem na
+      // mesma carga. Sem ele a fusão não teria como comparar as versões.
+      Atualizado_Em: carga.atualizadoEm || nowISO()
     }, operador);
+    // Só libera quando a gravação foi de fato aceita. Se ficou na fila, a
+    // carga segue protegida até drenar — senão a próxima leitura apagaria da
+    // tela a alteração que o operador acabou de fazer.
+    if(r && r.enfileirado === false) delete carga._pendente;
+    return r;
   },
   async sincronizarMovimentacao(mov, operador){
     if(typeof SuincoSharePoint === 'undefined') return;
@@ -355,7 +384,7 @@ const SuincoStore = {
   },
   async sincronizarVeiculo(frota, operador){
     if(typeof SuincoSharePoint === 'undefined') return;
-    return SuincoSharePoint.push('frota', {
+    return SuincoSharePoint.upsert('frota', 'Placa', {
       Title: frota.placa,
       Placa: frota.placa,
       Transportadora: frota.transportadora || '',
@@ -366,6 +395,127 @@ const SuincoStore = {
     }, operador);
   }
 };
+
+// Chamado quando a fila sobe por completo: nenhuma carga segue protegida.
+function liberarPendencias(){
+  DB.cargas.forEach(c => { if(c._pendente) delete c._pendente; });
+}
+
+/* ---------- FUSÃO DO ESTADO REMOTO (operação compartilhada) ----------
+   Recebe o que veio das Listas e mescla no DB local. É o ponto mais delicado
+   do multiusuário: mesclar errado significa apagar o trabalho de outro setor.
+
+   Regras, em ordem:
+
+   1. CARGA QUE SÓ EXISTE NO SERVIDOR entra como está. É o caso normal: a
+      Logística criou e a Portaria está vendo pela primeira vez.
+
+   2. CARGA QUE EXISTE NOS DOIS LADOS: vence a mais recente por
+      `atualizadoEm`. Empate mantém a local (não faz diferença prática e evita
+      redesenho desnecessário da tela).
+
+   3. CARGA COM ALTERAÇÃO LOCAL AINDA NÃO SINCRONIZADA nunca é sobrescrita.
+      A marca é `_pendente`, posta ao gravar e retirada quando a fila drena.
+      Sem isto, o ciclo de 15 s apagaria da tela uma mudança que o operador
+      acabou de fazer e que ainda não subiu — o pior erro possível aqui.
+
+   4. MOVIMENTAÇÕES são só acrescentadas, nunca alteradas: é log. A
+      deduplicação é por `id`.
+
+   O retorno diz o que mudou, para a interface avisar o operador em vez de a
+   tela se alterar sozinha sem explicação. */
+function fundirEstadoRemoto(dados){
+  const res = { cargasNovas:0, cargasAtualizadas:0, movimentacoesNovas:0, ignoradasPorPendencia:0 };
+  if(!dados) return res;
+
+  // ---- cargas ----
+  const locais = new Map(DB.cargas.map(c => [c.id, c]));
+  (dados.cargas || []).forEach(r => {
+    const carga = cargaDeLinhaRemota(r);
+    if(!carga || !carga.id) return;
+    const local = locais.get(carga.id);
+    if(!local){
+      DB.cargas.push(carga); locais.set(carga.id, carga); res.cargasNovas++; return;
+    }
+    if(local._pendente){ res.ignoradasPorPendencia++; return; }          // regra 3
+    const tLocal  = Date.parse(local.atualizadoEm || 0) || 0;
+    const tRemoto = Date.parse(carga.atualizadoEm || 0) || 0;
+    if(tRemoto > tLocal){
+      Object.assign(local, carga); res.cargasAtualizadas++;
+    }
+  });
+
+  // ---- movimentações (log: só acrescenta) ----
+  const vistas = new Set(DB.movimentacoes.map(m => m.id));
+  (dados.movimentacoes || []).forEach(r => {
+    const mov = movimentacaoDeLinhaRemota(r);
+    if(!mov || !mov.id || vistas.has(mov.id)) return;
+    DB.movimentacoes.push(mov); vistas.add(mov.id); res.movimentacoesNovas++;
+  });
+
+  // ---- frota (só na carga inicial; dimensão de leitura) ----
+  if(Array.isArray(dados.frota) && dados.frota.length){
+    dados.frota.forEach(r => {
+      const placa = normalizarPlaca(r.Placa || '');
+      if(!placa) return;
+      upsertFrota(placa, r.Transportadora || '', r.Tipo_Veiculo || '', {
+        precisaRevisao: r.Precisa_Revisao === true || r.Precisa_Revisao === 'Sim',
+        origem: 'sharepoint'
+      });
+    });
+  }
+
+  if(res.cargasNovas || res.cargasAtualizadas || res.movimentacoesNovas){
+    // Marca como já sincronizado o que acabou de VIR do servidor, senão o
+    // save() abaixo devolveria tudo de volta — um eco infinito entre os
+    // terminais, cada leitura gerando uma escrita.
+    DB.cargas.forEach(c => SuincoStore._ultimoSync.set(c.id, c.atualizadoEm || c.criadoEm || ''));
+    SuincoStore.save();
+  }
+  return res;
+}
+
+// Tradução das colunas da Lista de volta para o formato interno. Espelha o
+// mapeamento de SuincoStore.sincronizarCarga — se um lado mudar, o outro
+// precisa mudar junto.
+function cargaDeLinhaRemota(r){
+  if(!r || !r.Carga_ID) return null;
+  return {
+    id: r.Carga_ID,
+    numeroCarga: r.Numero_Carga || '',
+    placa: normalizarPlaca(r.Placa || ''),
+    transportadora: r.Transportadora || '',
+    tipoVeiculo: r.Tipo_Veiculo || '',
+    motorista: r.Motorista || '',
+    cliente: r.Cliente || '',
+    destino: r.Destino || '',
+    peso: Number(r.Peso_Kg) || 0,
+    doca: r.Doca || '',
+    rota: r.Rota_Codigo || '',
+    sequencia: (r.Sequencia === '' || r.Sequencia === null || r.Sequencia === undefined) ? null : Number(r.Sequencia),
+    praOnde: PRA_ONDE_OPCOES.includes(r.Pra_Onde) ? r.Pra_Onde : PRA_ONDE_PADRAO,
+    qtdGanchos: Number(r.Qtd_Ganchos) || 0,
+    qtdEntregas: r.Qtd_Entregas === undefined ? 1 : (Number(r.Qtd_Entregas) || 1),
+    status: STATUS_FLOW.includes(r.Status_Atual) ? r.Status_Atual : STATUS_FLOW[0],
+    aguardandoCarga: r.Aguardando_Carga === true || r.Aguardando_Carga === 'Sim',
+    criadoEm: r.Criado_Em || nowISO(),
+    atualizadoEm: r.Atualizado_Em || r.Timestamp_Sincronia || nowISO()
+  };
+}
+function movimentacaoDeLinhaRemota(r){
+  if(!r || !r.Movimentacao_ID) return null;
+  return {
+    id: r.Movimentacao_ID,
+    cargaId: r.Carga_ID || '',
+    placa: normalizarPlaca(r.Placa || ''),
+    timestamp: r.Data_Evento || r.Timestamp_Sincronia || nowISO(),
+    operador: r.Operador_Nome || r.Operador_ID || '(não identificado)',
+    setor: r.Setor || r.Operador_Setor || '—',
+    statusAnterior: r.Status_Anterior || null,
+    statusNovo: r.Status_Novo || '',
+    cliente: '', motorista: '', tipoVeiculo: '', qtdEntregas: null
+  };
+}
 
 /* ---------- helpers ---------- */
 function uid(prefix){
@@ -634,13 +784,20 @@ function registrarMovimentacao({cargaId, placa, statusAnterior, statusNovo, oper
     tipoVeiculo: tipoVeiculo || '',
     qtdEntregas: qtdEntregas ?? null
   });
-  // Sobe para fact_StatusFrota + LOG_EVENTOS sem bloquear quem chamou: a
-  // regra de negócio já terminou seu trabalho aqui.
+  // Sobe a MOVIMENTAÇÃO (log append-only) sem bloquear quem chamou.
+  //
+  // A CARGA deliberadamente NÃO é sincronizada aqui. Motivo: as regras de
+  // negócio chamam registrarMovimentacao ANTES de aplicar a mudança no objeto
+  // (ver registrarChegadaPortaria, que registra e só então faz
+  // `c.status = 'Aguardando Embarque'`). Sincronizar deste ponto subia o
+  // estado ANTERIOR da carga — o servidor recebia PATCH com o status velho e a
+  // mudança nunca chegava aos outros setores.
+  // A carga sobe a partir de SuincoStore.save(), que por construção roda
+  // depois de a mutação estar aplicada. Assim nenhuma regra de negócio
+  // precisou ser reordenada.
   const mov = DB.movimentacoes[DB.movimentacoes.length - 1];
-  const carga = getCarga(cargaId);
   if(typeof SuincoStore.sincronizarMovimentacao === 'function'){
     SuincoStore.sincronizarMovimentacao(mov, DB.operador).catch(e=>console.warn('[Suinco] sync movimentação:', e));
-    if(carga) SuincoStore.sincronizarCarga(carga, DB.operador).catch(e=>console.warn('[Suinco] sync carga:', e));
   }
 }
 // Monta o snapshot padrão a partir do objeto de carga corrente — evita
