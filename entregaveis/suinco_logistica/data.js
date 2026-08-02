@@ -475,13 +475,33 @@ function fundirEstadoRemoto(dados){
   return res;
 }
 
+/* Identificadores são gerados por uid() e têm forma conhecida:
+   prefixo_uuid, só letras, dígitos, hífen e sublinhado. Qualquer coisa fora
+   disso vindo do repositório é rejeitada.
+
+   Por quê: com a operação compartilhada, o id deixou de ser gerado só aqui —
+   passa a vir de uma fonte que outras pessoas escrevem. E ele é interpolado
+   dentro de atributos onclick nas tabelas. Um id contendo aspas quebraria o
+   atributo e injetaria código no navegador de TODOS os setores. Auditoria de
+   segurança confirmou o vetor com um payload real antes desta correção.
+
+   Validar na fronteira protege todo uso do id de uma vez, em vez de depender
+   de lembrar de escapar em cada ponto de renderização. */
+const ID_SEGURO = /^[A-Za-z0-9_-]{1,64}$/;
+function idSeguro(v){
+  const s = String(v ?? '');
+  return ID_SEGURO.test(s) ? s : null;
+}
+
 // Tradução das colunas da Lista de volta para o formato interno. Espelha o
 // mapeamento de SuincoStore.sincronizarCarga — se um lado mudar, o outro
 // precisa mudar junto.
 function cargaDeLinhaRemota(r){
   if(!r || !r.Carga_ID) return null;
+  const id = idSeguro(r.Carga_ID);
+  if(!id){ console.warn('[Suinco] registro descartado: Carga_ID fora do formato', r.Carga_ID); return null; }
   return {
-    id: r.Carga_ID,
+    id,
     numeroCarga: r.Numero_Carga || '',
     placa: normalizarPlaca(r.Placa || ''),
     transportadora: r.Transportadora || '',
@@ -504,9 +524,11 @@ function cargaDeLinhaRemota(r){
 }
 function movimentacaoDeLinhaRemota(r){
   if(!r || !r.Movimentacao_ID) return null;
+  const id = idSeguro(r.Movimentacao_ID);
+  if(!id){ console.warn('[Suinco] evento descartado: Movimentacao_ID fora do formato', r.Movimentacao_ID); return null; }
   return {
-    id: r.Movimentacao_ID,
-    cargaId: r.Carga_ID || '',
+    id,
+    cargaId: idSeguro(r.Carga_ID) || '',
     placa: normalizarPlaca(r.Placa || ''),
     timestamp: r.Data_Evento || r.Timestamp_Sincronia || nowISO(),
     operador: r.Operador_Nome || r.Operador_ID || '(não identificado)',

@@ -174,6 +174,17 @@ function corTema(nome, alternativa){
 function esc(s){
   return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
+/* Escape para valor que vai virar STRING JAVASCRIPT DENTRO DE ATRIBUTO HTML,
+   como em onclick="f('AQUI')".
+
+   esc() sozinho NÃO serve neste caso: ele transforma ' em &#39;, e o
+   analisador de HTML decodifica a entidade de volta para ' ANTES de o
+   JavaScript ser lido — a aspa reaparece e o atributo quebra do mesmo jeito.
+   Aqui a aspa é neutralizada com barra invertida, no nível do JavaScript, e só
+   então o resultado é escapado para o nível do HTML. */
+function escJs(s){
+  return esc(String(s ?? '').replace(/\\/g, '\\\\').replace(/'/g, "\\'"));
+}
 function nomeOperadorAtual(){ return DB.operador ? DB.operador.nome : '(não identificado)'; }
 function setorOperadorAtual(){ return DB.operador ? DB.operador.setor : '—'; }
 function badgeHtml(status){
@@ -498,7 +509,7 @@ function renderProgFila(){
       <td>${esc(c.cliente)||'—'}</td><td>${esc(c.destino)||'—'}</td><td>${esc(rotaCurta(c.rota))}</td>
       <td>${praOndeSelectHtml(c)}</td>
       <td><input type="number" class="ganchos-input" min="0" step="1" value="${c.qtdGanchos ?? 0}" onchange="atualizarGanchosUI('${c.id}',this.value)" title="0 = Liso"></td>
-      <td class="no-print"><button class="btn btn-danger btn-sm" onclick="excluirCargaUI('${c.id}')">Excluir</button></td>
+      <td class="no-print"><button class="btn btn-danger btn-sm" onclick="excluirCargaUI('${escJs(c.id)}')">Excluir</button></td>
     </tr>`).join('');
   document.getElementById('prog-fila-empty').hidden = lista.length>0;
 }
@@ -562,7 +573,7 @@ function renderProgAguardando(){
     <tr>
       <td>${esc(c.placa)}</td><td>${esc(c.transportadora)||'—'}</td><td>${esc(c.tipoVeiculo)||'—'}</td>
       <td>${fmtDataHora(c.criadoEm)}</td>
-      <td class="no-print"><button class="btn btn-primary btn-sm" onclick="abrirCompletar('${c.id}')">Completar dados</button></td>
+      <td class="no-print"><button class="btn btn-primary btn-sm" onclick="abrirCompletar('${escJs(c.id)}')">Completar dados</button></td>
     </tr>`).join('');
   document.getElementById('prog-aguardando-empty').hidden = lista.length>0;
 }
@@ -706,7 +717,7 @@ function abrirModalPicker(cargas, statusDestino, aoConfirmar){
     <div class="modal-list-item">
       <div><strong>Nº ${esc(c.numeroCarga)||'(sem número)'} — Destino: ${esc(c.destino)||'—'}</strong><br>
         <span class="text-dim">${esc(c.cliente)||'sem cliente'} · ${c.peso||0}kg · ${badgeHtml(c.status)}</span></div>
-      <button class="btn btn-primary btn-sm" onclick="confirmarPicker('${c.id}')">Selecionar</button>
+      <button class="btn btn-primary btn-sm" onclick="confirmarPicker('${escJs(c.id)}')">Selecionar</button>
     </div>`).join('');
   document.getElementById('modal-picker').classList.add('open');
 }
@@ -729,7 +740,7 @@ function renderExpedicao(){
     return `<tr>
       <td>${c.sequencia ?? '—'}</td><td>${esc(c.numeroCarga)||'—'}</td><td>${esc(c.placa)}</td><td>${esc(c.transportadora)||'—'}</td>
       <td>${esc(c.destino)||'—'}</td><td>${badgeHtml(c.status)}</td>
-      <td class="no-print">${acao?`<button class="btn btn-primary btn-sm" onclick="avancarStatusUI('${c.id}')">${acao.label}</button>`:'—'}</td>
+      <td class="no-print">${acao?`<button class="btn btn-primary btn-sm" onclick="avancarStatusUI('${escJs(c.id)}')">${acao.label}</button>`:'—'}</td>
     </tr>`;
   }).join('');
   document.getElementById('exp-empty').hidden = lista.length>0;
@@ -744,7 +755,7 @@ function renderFaturamento(){
     return `<tr>
       <td>${esc(c.numeroCarga)||'—'}</td><td>${esc(c.placa)}</td><td>${esc(c.transportadora)||'—'}</td><td>${esc(c.destino)||'—'}</td>
       <td>${c.peso||0}</td><td>${badgeHtml(c.status)}</td>
-      <td class="no-print">${acao?`<button class="btn btn-primary btn-sm" onclick="avancarStatusUI('${c.id}')">${acao.label}</button>`:'—'}</td>
+      <td class="no-print">${acao?`<button class="btn btn-primary btn-sm" onclick="avancarStatusUI('${escJs(c.id)}')">${acao.label}</button>`:'—'}</td>
     </tr>`;
   }).join('');
   document.getElementById('fat-empty').hidden = lista.length>0;
@@ -882,7 +893,7 @@ function renderComparacaoPeriodos(){
 function renderRankingPeriodos(){
   const tabs = [...PERIODOS_INDICADOR, { key:'todos', label:'Histórico completo' }];
   document.getElementById('ind-ranking-periodos').innerHTML = tabs.map(p=>`
-    <button class="btn btn-sm ${p.key===indRankingPeriodoAtivo ? 'btn-primary' : 'btn-sec'}" onclick="selecionarRankingPeriodo('${p.key}')">${esc(p.label)}</button>
+    <button class="btn btn-sm ${p.key===indRankingPeriodoAtivo ? 'btn-primary' : 'btn-sec'}" onclick="selecionarRankingPeriodo('${escJs(p.key)}')">${esc(p.label)}</button>
   `).join('');
   const cargasPeriodo = indRankingPeriodoAtivo==='todos' ? undefined : cargasConcluidasNoPeriodo(indRankingPeriodoAtivo);
   const rk = rankingTransportadoras(cargasPeriodo);
@@ -1099,7 +1110,7 @@ function renderFrotaTabela(){
       <td>${esc(f.uf)||'—'}</td>
       <td>${f.dataUltimaMovimentacao ? new Date(f.dataUltimaMovimentacao+'T00:00:00').toLocaleDateString('pt-BR') : '—'}</td>
       <td>${f.precisaRevisao ? '<span class="badge badge-aguardando-veiculo">SIM</span>' : '<span class="text-dim">Não</span>'}</td>
-      <td class="no-print"><button class="btn btn-danger btn-sm" onclick="removerFrotaUI('${esc(f.placa)}')">Remover</button></td>
+      <td class="no-print"><button class="btn btn-danger btn-sm" onclick="removerFrotaUI('${escJs(f.placa)}')">Remover</button></td>
     </tr>`).join('');
   document.getElementById('frota-empty').hidden = todos.length>0;
   const contagemEl = document.getElementById('frota-contagem');
@@ -1141,7 +1152,7 @@ function renderTranspLista(){
   const lista = listarTransportadoras();
   document.getElementById('cad-transp-lista').innerHTML = lista.length ? lista.map(t=>`
     <div class="modal-list-item"><span>${esc(t.nome)}</span>
-      <button class="btn btn-danger btn-sm no-print" onclick="removerTransportadoraUI('${t.id}')">Remover</button></div>
+      <button class="btn btn-danger btn-sm no-print" onclick="removerTransportadoraUI('${escJs(t.id)}')">Remover</button></div>
   `).join('') : '<div class="empty-state">Nenhuma transportadora cadastrada.</div>';
 }
 function addTransportadoraUI(){
@@ -1201,7 +1212,7 @@ function renderBuscaTimeline(){
   resultadosEl.innerHTML = `<div class="gap8">${achadas.slice(0,12).map(c=>cardResultadoBusca(c)).join('')}</div>`;
 }
 function cardResultadoBusca(c){
-  return `<button class="btn btn-sec btn-sm" onclick="selecionarCargaTimeline('${c.id}')">
+  return `<button class="btn btn-sec btn-sm" onclick="selecionarCargaTimeline('${escJs(c.id)}')">
     ${esc(c.placa)} ${c.numeroCarga?('· Nº '+esc(c.numeroCarga)):''} ${c.destino?('· '+esc(c.destino)):''}
   </button>`;
 }
