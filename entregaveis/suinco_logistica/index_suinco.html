@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Painel Logístico — Suinco</title>
+<link rel="icon" href="assets/logo_suinco.png">
+<link rel="stylesheet" href="styles.css">
+<!-- MSAL.js v2 — SSO Microsoft 365. Carrega da CDN da Microsoft; se não vier
+     (aberto via file://, sem rede, ou bloqueado por política), o adaptador
+     detecta a ausência e segue em modo local, sem quebrar o painel. -->
+<!-- NOTA PARA O TI: sem atributo integrity porque o hash SRI precisa ser
+     gerado a partir do arquivo real da versão que voces forem fixar. Antes de
+     ir a producao, rodem:
+       curl -s https://alcdn.msauth.net/browser/2.38.3/js/msal-browser.min.js | openssl dgst -sha384 -binary | openssl base64 -A
+     e colem o resultado como integrity="sha384-<hash>". Alternativa preferida
+     pela maioria das politicas de seguranca: baixar o msal-browser.min.js e
+     servi-lo do proprio tenant, eliminando a dependencia de CDN externa. -->
+<script src="https://alcdn.msauth.net/browser/2.38.3/js/msal-browser.min.js"
+        crossorigin="anonymous" onerror="window.__msalFalhou=true"></script>
+</head>
+<body>
+
+<!-- ===================== HEADER ===================== -->
+<div id="header">
+  <div id="logo-chip"><img src="assets/logo_suinco.png" alt="Suinco"></div>
+  <div id="header-title">
+    <strong>PAINEL LOGÍSTICO</strong>
+    <span>Programação · Portaria · Expedição · Faturamento</span>
+  </div>
+  <div id="header-mid">
+    <div id="clock-wrap">
+      <div id="clock">--:--</div>
+      <div id="date-display">—</div>
+    </div>
+    <span class="badge-setor" id="operator-name">—</span>
+  </div>
+  <div id="header-actions">
+    <span id="badge-conexao" class="badge-conexao" hidden></span>
+    <button class="btn btn-sec btn-sm" id="btn-tema" onclick="alternarTema()" title="Alternar entre modo claro e escuro" aria-label="Alternar tema">🌙 Escuro</button>
+    <button class="btn btn-sec btn-sm" onclick="trocarUsuario()">Trocar usuário</button>
+  </div>
+</div>
+
+<!-- ===================== NAV ===================== -->
+<div id="nav">
+  <div class="nav-tab active" data-tab="torre" onclick="abrirTab('torre')">🗼 Torre de Controle</div>
+  <div class="nav-tab" data-tab="programacao" onclick="abrirTab('programacao')">📋 Programação</div>
+  <div class="nav-tab" data-tab="portaria" onclick="abrirTab('portaria')">🚧 Portaria</div>
+  <div class="nav-tab" data-tab="expedicao" onclick="abrirTab('expedicao')">🚛 Expedição</div>
+  <div class="nav-tab" data-tab="faturamento" onclick="abrirTab('faturamento')">🧾 Faturamento</div>
+  <div class="nav-tab" data-tab="indicadores" onclick="abrirTab('indicadores')">📊 Indicadores</div>
+  <div class="nav-tab" data-tab="cadastros" onclick="abrirTab('cadastros')">🗂️ Cadastros</div>
+  <div class="nav-tab" data-tab="historico" onclick="abrirTab('historico')">🕓 Histórico</div>
+  <div class="nav-tab" data-tab="relatorios" onclick="abrirTab('relatorios')">📄 Relatórios</div>
+</div>
+
+<!-- ===================== MAIN ===================== -->
+<div id="main">
+
+  <!-- ===== TORRE DE CONTROLE ===== -->
+  <div class="tab-page active" id="tab-torre">
+    <div class="funcao-aba" data-tab="torre"></div>
+    <div class="card">
+      <div class="card-title"><span class="icon">🗼</span> Torre de Controle — todas as cargas em aberto</div>
+      <div class="card-sub">Visão de leitura para todos os setores. Atualiza sempre que alguém registra uma movimentação.</div>
+      <div class="grid4" id="torre-stats" style="margin-bottom:16px"></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>Seq.</th><th>Nº Carga</th><th>Placa</th><th>Transportadora</th><th>Tipo Veículo</th><th>Motorista</th>
+            <th>Cliente</th><th>Destino</th><th>Rota</th><th>Peso (kg)</th>
+            <th>Tipo de Operação</th><th>Ganchos</th><th>Status</th><th>Atualizado em</th>
+          </tr></thead>
+          <tbody id="torre-tbody"></tbody>
+        </table>
+      </div>
+      <div class="empty-state" id="torre-empty" hidden>Nenhuma carga em aberto no momento.</div>
+    </div>
+  </div>
+
+  <!-- ===== PROGRAMAÇÃO ===== -->
+  <div class="tab-page" id="tab-programacao">
+    <div class="funcao-aba" data-tab="programacao"></div>
+    <div class="card">
+      <div class="card-title"><span class="icon">📋</span> Nova Carga Programada</div>
+      <div class="card-sub">Digite a placa — Transportadora e Tipo de Veículo são preenchidos automaticamente se a placa estiver cadastrada em Cadastros → Frota. <strong>A placa precisa estar cadastrada na Frota</strong> para criar a carga — se não estiver, cadastre em Cadastros → Frota primeiro.</div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Placa</label>
+          <input type="text" id="prog-placa" placeholder="ABC1D23" oninput="atualizarPreviewFrotaPrograma()">
+        </div>
+        <div class="form-group">
+          <label>Transportadora</label>
+          <input type="text" id="prog-transportadora" list="lista-transportadoras" placeholder="Preenchido automaticamente…">
+        </div>
+        <div class="form-group">
+          <label>Tipo de Veículo</label>
+          <input type="text" id="prog-tipoveiculo" placeholder="Preenchido automaticamente…">
+        </div>
+      </div>
+      <div class="form-group" id="prog-frota-hint" style="margin-bottom:10px"></div>
+      <div class="form-row">
+        <div class="form-group"><label>Número de Carga</label><input type="text" id="prog-numero-carga" placeholder="Ex: 10245"></div>
+        <div class="form-group"><label>Motorista</label><input type="text" id="prog-motorista" placeholder="Nome do motorista"></div>
+        <div class="form-group"><label>Cliente</label><input type="text" id="prog-cliente"></div>
+        <div class="form-group"><label>Destino</label><input type="text" id="prog-destino" placeholder="Cidade/UF"></div>
+        <div class="form-group">
+          <label>Rota <span class="hint">(código oficial)</span></label>
+          <select id="prog-rota"></select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Peso (kg)</label><input type="number" id="prog-peso" min="0"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Sequência <span class="hint">(prioridade de montagem do dia)</span></label>
+          <input type="number" id="prog-sequencia" min="1">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Tipo de Operação <span class="hint">(como a carga é operada — o destino vai no campo Destino)</span></label>
+          <select id="prog-praonde" onchange="atualizarPreviewCompartilhada('prog-praonde','prog-compartilhada-preview')">
+            <option value="FROTA PROPRIA">FROTA PRÓPRIA</option>
+            <option value="CROSS-DOCKING">CROSS-DOCKING</option>
+            <option value="DEDICADA">DEDICADA</option>
+            <option value="RET FRIGO">RET FRIGO (retirada no frigorífico)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Compartilhada? <span class="hint">(calculado automaticamente)</span></label>
+          <div class="readonly-pill" id="prog-compartilhada-preview">Não</div>
+        </div>
+        <div class="form-group">
+          <label>Qtd. Ganchos (Gancheira) <span class="hint">0 = Liso</span></label>
+          <input type="number" id="prog-ganchos" min="0" step="1" value="0">
+        </div>
+        <div class="form-group">
+          <label>Qtd. Entregas</label>
+          <input type="number" id="prog-entregas" min="1" step="1" value="1">
+        </div>
+      </div>
+      <div class="form-group" style="margin-bottom:10px"><label>Observações</label><textarea id="prog-obs"></textarea></div>
+      <div class="flex-end"><button class="btn btn-primary" onclick="criarCargaProgramadaUI()">➕ Criar Carga (Aguardando Veículo)</button></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><span class="icon">🚀</span> Encerramento do Ciclo</div>
+      <div class="card-sub">Fecha o dia: dispara o fluxo do Power Automate que cria as pastas <code>/Ano/Mês/Dia/</code>, arquiva o movimento e prepara a lista operacional para o próximo turno. <strong>Ação irreversível</strong> — pede confirmação antes, e nada é apagado do painel se o arquivamento falhar.</div>
+      <div class="flex-end"><button class="btn btn-danger" onclick="encerrarCicloUI()">🚀 Encerrar e Arquivar Ciclo</button></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><span class="icon">⏳</span> Aguardando Carga <span id="prog-aguardando-count" class="pill-count" hidden>0</span></div>
+      <div class="card-sub">Veículos que a Portaria já registrou no pátio sem programação prévia (status "Aguardando Embarque", com "Aguardando Carga" no campo Número da Carga). Complete os dados reais abaixo — o status não muda, o caminhão já está fisicamente aqui.</div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Placa</th><th>Transportadora</th><th>Tipo Veículo</th><th>Chegou em</th><th class="no-print">Ação</th></tr></thead>
+          <tbody id="prog-aguardando-tbody"></tbody>
+        </table>
+      </div>
+      <div class="empty-state" id="prog-aguardando-empty" hidden>Nenhum veículo aguardando dados de carga.</div>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><span class="icon">🔢</span> Fila de Programados</div>
+      <div class="gap8" style="margin-bottom:12px">
+        <button class="btn btn-sec btn-sm" onclick="reordenarPorSequenciaUI()">↕️ Reordenar por Sequência</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Seq.</th><th>Nº Carga</th><th>Placa</th><th>Transportadora</th><th>Cliente</th><th>Destino</th><th>Rota</th><th>Tipo de Operação</th><th>Ganchos</th><th class="no-print">Ação</th></tr></thead>
+          <tbody id="prog-fila-tbody"></tbody>
+        </table>
+      </div>
+      <div class="empty-state" id="prog-fila-empty" hidden>Nenhuma carga programada aguardando chegada.</div>
+    </div>
+  </div>
+
+  <!-- ===== PORTARIA ===== -->
+  <div class="tab-page" id="tab-portaria">
+    <div class="funcao-aba" data-tab="portaria"></div>
+    <div class="card">
+      <div class="card-title"><span class="icon">🚧</span> Registrar Movimento de Placa</div>
+      <div class="card-sub">Só 2 botões: <strong>Chegou</strong> (Aguardando Veículo → Aguardando Embarque) e <strong>Saiu</strong> (Faturado → Seguiu Viagem, aplicado a todas as cargas em aberto dessa placa ao mesmo tempo — é o mesmo caminhão, uma única vez). Se a placa não tiver programação, "Chegou" cria automaticamente uma entrada "Aguardando Carga".</div>
+      <div class="quick-box">
+        <div class="form-group"><label>Placa</label><input type="text" id="portaria-placa" placeholder="ABC1D23" autocomplete="off" onkeydown="if(event.key==='Enter')acaoChegadaUI()"></div>
+        <button class="btn btn-success btn-lg" onclick="acaoChegadaUI()">🚚 Chegou</button>
+        <button class="btn btn-warn btn-lg" onclick="acaoSaidaUI()">🏁 Saiu</button>
+      </div>
+      <div class="card-sub" style="margin-top:-6px">Dica: digite a placa e aperte <strong>Enter</strong> para registrar "Chegou" mais rápido.</div>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><span class="icon">🅿️</span> Veículos no Pátio Agora</div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Placa</th><th>Transportadora</th><th>Cargas em aberto</th><th>Status das cargas</th><th>No pátio desde</th></tr></thead>
+          <tbody id="portaria-patio-tbody"></tbody>
+        </table>
+      </div>
+      <div class="empty-state" id="portaria-patio-empty" hidden>Nenhum veículo no pátio.</div>
+    </div>
+  </div>
+
+  <!-- ===== EXPEDIÇÃO ===== -->
+  <div class="tab-page" id="tab-expedicao">
+    <div class="funcao-aba" data-tab="expedicao"></div>
+    <div class="card">
+      <div class="card-title"><span class="icon">🚛</span> Ação Rápida por Placa</div>
+      <div class="card-sub">Se a placa tiver mais de uma carga elegível para a mesma ação, o painel pergunta qual carga está sendo processada.</div>
+      <div class="quick-box">
+        <div class="form-group"><label>Placa</label><input type="text" id="exp-placa" placeholder="ABC1D23" autocomplete="off"></div>
+        <button class="btn btn-primary btn-sm" onclick="acaoRapidaPlaca('exp-placa','Aguardando Embarque','Embarque Iniciado','Expedição')">Iniciar Embarque</button>
+        <button class="btn btn-success btn-sm" onclick="acaoRapidaPlaca('exp-placa','Embarque Iniciado','Embarque Finalizado','Expedição')">Finalizar Embarque</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="icon">📦</span> Cargas em Andamento na Expedição</div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Seq.</th><th>Nº Carga</th><th>Placa</th><th>Transportadora</th><th>Destino</th><th>Status</th><th class="no-print">Ação</th></tr></thead>
+          <tbody id="exp-tbody"></tbody>
+        </table>
+      </div>
+      <div class="empty-state" id="exp-empty" hidden>Nenhuma carga em Aguardando Embarque ou Embarque Iniciado.</div>
+    </div>
+  </div>
+
+  <!-- ===== FATURAMENTO ===== -->
+  <div class="tab-page" id="tab-faturamento">
+    <div class="funcao-aba" data-tab="faturamento"></div>
+    <div class="card">
+      <div class="card-title"><span class="icon">🧾</span> Ação Rápida por Placa</div>
+      <div class="card-sub">Digite a placa e clique em <strong>Faturar</strong> (<strong>Embarque Finalizado → Faturado</strong>). Só aparece aqui a carga que a Expedição já finalizou. Depois de faturada, a Portaria consegue registrar a saída do caminhão. Se a placa tiver mais de uma carga elegível, o painel pergunta qual está sendo faturada.</div>
+      <div class="quick-box">
+        <div class="form-group"><label>Placa</label><input type="text" id="fat-placa" placeholder="ABC1D23" autocomplete="off" onkeydown="if(event.key==='Enter')acaoRapidaPlaca('fat-placa','Embarque Finalizado','Faturado','Faturamento')"></div>
+        <button class="btn btn-primary btn-sm" onclick="acaoRapidaPlaca('fat-placa','Embarque Finalizado','Faturado','Faturamento')">Faturar</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="icon">📑</span> Cargas Aguardando Faturamento</div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Nº Carga</th><th>Placa</th><th>Transportadora</th><th>Destino</th><th>Peso (kg)</th><th>Status</th><th class="no-print">Ação</th></tr></thead>
+          <tbody id="fat-tbody"></tbody>
+        </table>
+      </div>
+      <div class="empty-state" id="fat-empty" hidden>Nenhuma carga em Embarque Finalizado ou Faturado.</div>
+    </div>
+  </div>
+
+  <!-- ===== INDICADORES ===== -->
+  <div class="tab-page" id="tab-indicadores">
+    <div class="funcao-aba" data-tab="indicadores"></div>
+    <div class="card">
+      <div class="card-title"><span class="icon">📊</span> Tempos Médios — Histórico Completo (cargas concluídas — Seguiu Viagem)</div>
+      <div class="grid4" id="ind-stats"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><span class="icon">🔍</span> Painel do Gestor — comparação por período</div>
+      <div class="card-sub">
+        Pente fino: cada indicador quebrado nas mesmas 5 janelas de tempo, lado a lado, sem precisar clicar pra comparar.
+        <strong>Semana</strong> = últimos 7 dias corridos. <strong>Mês</strong> = mês calendário atual. Quando não houver
+        cargas concluídas suficientes num período, a célula diz isso claramente em vez de mostrar "0" ou um traço ambíguo.
+      </div>
+      <div class="table-wrap">
+        <table class="table-periodos">
+          <thead><tr><th>Indicador</th><th>Últimas 6h</th><th>Últimas 12h</th><th>Hoje</th><th>Semana (7d)</th><th>Mês</th></tr></thead>
+          <tbody id="ind-periodos-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><span class="icon">📈</span> Gráficos — filtros combináveis</div>
+      <div class="card-sub">
+        Filtre por Placa, Transportadora, Setor e Período — os 3 gráficos abaixo reagem juntos ao filtro, sem precisar
+        recarregar a página. Atualiza sozinho nesta sessão a cada ação registrada no painel (chegada, avanço de status,
+        faturamento etc.). <strong>Isso não é tempo real entre pessoas diferentes</strong> — hoje os dados vivem só no
+        localStorage deste navegador; tempo real de verdade entre setores só existe quando o SharePoint estiver
+        provisionado e todo mundo estiver lendo da mesma Lista (ver docs/MODELO_DADOS_SHAREPOINT.md).
+      </div>
+      <div class="form-row" style="align-items:flex-end">
+        <div class="form-group"><label>Placa <span class="hint">(contém)</span></label><input type="text" id="graf-filtro-placa" placeholder="Ex: ABC1D23" oninput="renderGraficosIndicadores()"></div>
+        <div class="form-group">
+          <label>Transportadora</label>
+          <select id="graf-filtro-transportadora" onchange="renderGraficosIndicadores()"><option value="">Todas</option></select>
+        </div>
+        <div class="form-group">
+          <label>Setor <span class="hint">(só afeta onde faz sentido — ver legendas)</span></label>
+          <select id="graf-filtro-setor" onchange="renderGraficosIndicadores()">
+            <option value="">Todos</option>
+            <option>Logística</option><option>Portaria</option><option>Expedição</option><option>Faturamento</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Período</label>
+          <select id="graf-filtro-periodo" onchange="renderGraficosIndicadores()">
+            <option value="6h">Últimas 6h</option>
+            <option value="12h">Últimas 12h</option>
+            <option value="hoje" selected>Hoje</option>
+            <option value="semana">Semana (7d)</option>
+            <option value="mes">Mês</option>
+          </select>
+        </div>
+        <div class="form-group" style="flex:0"><button class="btn btn-sec btn-sm" onclick="limparFiltrosGraficos()">Limpar filtros</button></div>
+      </div>
+      <div class="grafico-grid">
+        <div class="grafico-box">
+          <div class="grafico-titulo">Tempo médio por etapa (min)</div>
+          <canvas id="grafico-barras" height="220"></canvas>
+          <div class="card-sub grafico-legenda" id="grafico-barras-legenda">Respeita Placa/Transportadora/Período. Setor aqui esconde/mostra barras — cada etapa tem um setor "dono" fixo (Expedição, Faturamento ou Portaria).</div>
+        </div>
+        <div class="grafico-box">
+          <div class="grafico-titulo">Cargas concluídas por dia</div>
+          <canvas id="grafico-linha" height="220"></canvas>
+          <div class="card-sub grafico-legenda">Respeita Placa/Transportadora/Período. Setor não se aplica aqui (toda carga concluída passou pela Portaria).</div>
+        </div>
+        <div class="grafico-box">
+          <div class="grafico-titulo">Distribuição por status atual (cargas em aberto)</div>
+          <canvas id="grafico-pizza" height="220"></canvas>
+          <div id="grafico-pizza-legenda" class="grafico-legenda-lista"></div>
+          <div class="card-sub grafico-legenda">Foto de agora — não depende do período. Respeita Placa/Transportadora/Setor (Setor filtra pra só os status daquele setor).</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><span class="icon">⚠️</span> Sobre o OTIF</div>
+      <div class="card-sub" style="margin-bottom:0">
+        O OTIF (entregue no prazo) ainda não é calculado aqui de propósito: ele depende de uma data/hora prometida de referência
+        (ex: horário programado de carregamento, prazo combinado com o cliente, SLA por transportadora) que ainda não foi
+        confirmada como campo do modelo de dados. Assim que definirmos qual é essa referência, este indicador entra.
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><span class="icon">🚦</span> Cargas em aberto por status</div>
+      <div class="card-sub">Onde está parada, agora, cada carga que ainda não saiu. Os 6 status aparecem sempre — inclusive os zerados, porque etapa vazia também é informação. As cores são as mesmas usadas no relatório executivo em PDF.</div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Status</th><th>Setor responsável</th><th>Cargas</th><th>% do total</th><th>Distribuição</th></tr></thead>
+          <tbody id="ind-status-tbody"></tbody>
+          <tfoot><tr><th>Total</th><th></th><th id="ind-status-total">0</th><th id="ind-status-pct">—</th><th></th></tr></tfoot>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><span class="icon">⏱️</span> Menor e maior tempo — hoje</div>
+      <div class="card-sub">Os dois casos extremos entre as cargas concluídas hoje, com a carga inteira identificada para o gestor conseguir agir sobre o caso. <strong>Lead Time</strong> = da criação da carga na Programação até a saída (visão de planejamento). <strong>Permanência no pátio</strong> = da chegada física até a saída (o tempo que a operação e o motorista sentem).</div>
+      <div id="ind-extremos-wrap"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><span class="icon">🏆</span> Ranking de Transportadoras</div>
+      <div class="card-sub">Ordenado por lead time médio (menor primeiro). Escolha o período — considera só cargas em "Seguiu Viagem" dentro dele.</div>
+      <div class="gap8" id="ind-ranking-periodos" style="margin-bottom:14px"></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Pos.</th><th>Transportadora</th><th>Cargas Concluídas</th><th>Lead Time Médio</th><th>Tempo Médio em Pátio</th></tr></thead>
+          <tbody id="ind-ranking-tbody"></tbody>
+        </table>
+      </div>
+      <div class="empty-state" id="ind-ranking-empty" hidden>Nenhuma carga concluída nesse período.</div>
+    </div>
+  </div>
+
+  <!-- ===== CADASTROS ===== -->
+  <div class="tab-page" id="tab-cadastros">
+    <div class="funcao-aba" data-tab="cadastros"></div>
+    <div class="card">
+      <div class="card-title"><span class="icon">🚚</span> Frota (Placa → Transportadora → Tipo de Veículo)</div>
+      <div class="card-sub">A Programação só cria carga pra placa cadastrada aqui — cadastre antes de programar.</div>
+      <div class="form-row">
+        <div class="form-group"><label>Placa</label><input type="text" id="frota-placa"></div>
+        <div class="form-group"><label>Transportadora</label><input type="text" id="frota-transportadora" list="lista-transportadoras"></div>
+        <div class="form-group"><label>Tipo de Veículo</label><input type="text" id="frota-tipoveiculo" placeholder="Ex: Truck, Carreta, Toco…"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Capacidade (kg) <span class="hint">opcional</span></label><input type="number" id="frota-capacidade" min="0"></div>
+        <div class="form-group"><label>UF <span class="hint">opcional</span></label><input type="text" id="frota-uf" maxlength="2" placeholder="Ex: PR"></div>
+        <div class="form-group"><label>Última Movimentação <span class="hint">opcional</span></label><input type="date" id="frota-ultima-mov"></div>
+        <div class="form-group">
+          <label><input type="checkbox" id="frota-revisao" style="width:auto;margin-right:6px"> Precisa Revisão</label>
+        </div>
+      </div>
+      <div class="card-sub" style="margin-top:-6px">Capacidade/UF/Última Movimentação/Revisão: schema pronto pro dia em que esse histórico vier de um ERP/Sisatak — hoje ficam opcionais.</div>
+      <div class="flex-end" style="margin-top:0"><button class="btn btn-primary btn-sm" onclick="addFrotaUI()">➕ Cadastrar / Atualizar Placa</button></div>
+      <div class="sep"></div>
+      <div class="card-sub"><strong>Importação em lote</strong> — cole linhas do Excel no formato <code>Placa;Transportadora;TipoVeiculo</code> (aceita TAB ou <code>;</code> como separador). Colunas extras opcionais na mesma ordem: <code>;CapacidadeKg;UF;DataUltimaMovimentacao;PrecisaRevisao(Sim/Não)</code>.</div>
+      <textarea id="frota-lote" placeholder="ABC1D23;TransLog;Truck&#10;XYZ9K88;RápidoSul;Carreta;12000;PR;2026-06-01;Não"></textarea>
+      <div class="flex-end"><button class="btn btn-sec btn-sm" onclick="importarFrotaLoteUI()">📥 Importar Lote</button></div>
+      <div class="sep"></div>
+      <div class="form-row" style="align-items:flex-end">
+        <div class="form-group" style="flex:2"><label>Buscar (Placa ou Transportadora)</label><input type="text" id="frota-busca" placeholder="Digite pra filtrar…" oninput="renderFrotaTabela()"></div>
+        <div class="form-group"><label><input type="checkbox" id="frota-so-revisao" style="width:auto;margin-right:6px" onchange="renderFrotaTabela()"> Só Precisa Revisão</label></div>
+        <div class="form-group text-dim" id="frota-contagem" style="flex:1;text-align:right"></div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Placa</th><th>Transportadora</th><th>Tipo de Veículo</th><th>Capacidade (kg)</th><th>UF</th><th>Última Mov.</th><th>Precisa Revisão</th><th class="no-print">Ação</th></tr></thead>
+          <tbody id="frota-tbody"></tbody>
+        </table>
+      </div>
+      <div class="empty-state" id="frota-empty" hidden>Nenhuma placa cadastrada ainda.</div>
+    </div>
+
+    <div class="grid2">
+      <div class="card">
+        <div class="card-title"><span class="icon">🏢</span> Transportadoras</div>
+        <div class="form-row">
+          <div class="form-group"><label>Nome</label><input type="text" id="cad-transp-nome"></div>
+        </div>
+        <div class="flex-end" style="margin-top:0"><button class="btn btn-primary btn-sm" onclick="addTransportadoraUI()">➕ Adicionar</button></div>
+        <div class="sep"></div>
+        <div id="cad-transp-lista"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== HISTÓRICO ===== -->
+  <div class="tab-page" id="tab-historico">
+    <div class="funcao-aba" data-tab="historico"></div>
+    <div class="card">
+      <div class="card-title"><span class="icon">🕓</span> Linha do Tempo de uma Carga</div>
+      <div class="card-sub">Digite a placa ou o número de carga — a jornada completa aparece como uma linha do tempo, fácil de ler rápido.</div>
+      <div class="form-group" style="max-width:420px;margin-bottom:6px">
+        <label>Placa ou Nº de Carga</label>
+        <input type="text" id="hist-busca-carga" placeholder="Ex: ABC1D23 ou 10245" oninput="renderBuscaTimeline()">
+      </div>
+      <div id="hist-busca-resultados"></div>
+      <div id="hist-timeline-wrap"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><span class="icon">📜</span> Log Completo de Movimentações</div>
+      <div class="card-sub">Registro bruto, para auditoria — todas as mudanças de status de todas as cargas.</div>
+      <div class="form-row">
+        <div class="form-group"><label>Filtrar por placa</label><input type="text" id="hist-filtro-placa" oninput="renderHistorico()"></div>
+        <div class="form-group">
+          <label>Filtrar por setor</label>
+          <select id="hist-filtro-setor" onchange="renderHistorico()">
+            <option value="">Todos</option>
+            <option>Logística</option><option>Portaria</option><option>Expedição</option><option>Faturamento</option>
+          </select>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Data/Hora</th><th>Placa</th><th>Status Anterior</th><th>Status Novo</th><th>Operador</th><th>Setor</th></tr></thead>
+          <tbody id="hist-tbody"></tbody>
+        </table>
+      </div>
+      <div class="empty-state" id="hist-empty" hidden>Nenhuma movimentação registrada ainda.</div>
+    </div>
+  </div>
+
+  <!-- ===== RELATÓRIOS ===== -->
+  <div class="tab-page" id="tab-relatorios">
+    <div class="funcao-aba" data-tab="relatorios"></div>
+    <div class="card">
+      <div class="card-title"><span class="icon">📄</span> PDF Operacional</div>
+      <div class="card-sub">Sequenciamento de carregamento do dia — mesmo layout da planilha usada hoje: Nº, Carga, Rota, Tipo de Operação, Faturado, Status de Carregamento (célula colorida), Placa, Transportadora, Tipo de Veículo, Peso(ton), Compartilhada?, Entregas, Ganchos.</div>
+      <button class="btn btn-primary" onclick="exportarPdfOperacional()">🖨️ Gerar PDF Operacional</button>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="icon">📄</span> PDF Executivo</div>
+      <div class="card-sub">Uma página, KPIs e visão de diretoria.</div>
+      <button class="btn btn-primary" onclick="exportarPdfExecutivo()">🖨️ Gerar PDF Executivo</button>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="icon">📊</span> Exportar Dados (CSV) — Power BI</div>
+      <div class="card-sub">
+        Gera 5 arquivos CSV (formato fato/dimensão): <code>Fact_Movimentacoes</code>, <code>Dim_Carga</code>,
+        <code>Dim_Transportadora</code>, <code>Dim_Frota</code>, <code>Dim_Status</code>. Isto é uma
+        <strong>ponte temporária</strong> — quando as Listas do SharePoint estiverem provisionadas, o certo é o
+        Power BI conectar direto nelas (Obter Dados → Lista do SharePoint), sem depender de exportar/importar
+        manualmente. Ver <code>docs/POWERBI_EXPORT.md</code>.
+      </div>
+      <button class="btn btn-primary" onclick="exportarCsvPowerBI()">📊 Exportar Dados (CSV) — Power BI</button>
+    </div>
+  </div>
+
+</div>
+
+<datalist id="lista-transportadoras"></datalist>
+
+<!-- ===================== MODAIS ===================== -->
+<div class="modal-overlay" id="modal-operador">
+  <div class="modal-box">
+    <h2>Identifique-se</h2>
+    <div class="form-group" style="margin-bottom:10px"><label>Nome</label><input type="text" id="login-nome" placeholder="Seu nome"></div>
+    <div class="form-group" style="margin-bottom:10px">
+      <label>Setor</label>
+      <select id="login-setor">
+        <option>Logística</option><option>Portaria</option><option>Expedição</option><option>Faturamento</option>
+      </select>
+    </div>
+    <div class="form-group" style="margin-bottom:10px">
+      <label>Turno</label>
+      <select id="login-turno">
+        <option>Manhã (06h–14h)</option><option>Tarde (14h–22h)</option><option>Noite (22h–06h)</option>
+      </select>
+    </div>
+    <div class="card-sub"><strong>Você verá apenas as abas do setor escolhido.</strong> Logística abre Programação, Expedição, Indicadores, Cadastros e Relatórios; Portaria abre Portaria; Expedição abre Expedição; Faturamento abre Faturamento. Torre de Controle e Histórico ficam liberados para todos. Para operar outro posto (cobertura de turno, por exemplo), use <strong>Trocar usuário</strong> no topo e entre com o setor correspondente.</div>
+    <div class="card-sub">Este login é um espaço reservado até o SSO da Microsoft 365 ser conectado — depois ele será automático.</div>
+    <div class="flex-end"><button class="btn btn-primary" onclick="confirmarOperador()">Entrar</button></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-picker">
+  <div class="modal-box">
+    <h2 id="picker-titulo">Selecionar carga</h2>
+    <div class="card-sub" id="picker-sub"></div>
+    <div id="picker-lista"></div>
+    <div class="flex-end"><button class="btn btn-sec" onclick="fecharModalPicker()">Cancelar</button></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-completar">
+  <div class="modal-box">
+    <h2>Completar dados da carga (Aguardando Carga)</h2>
+    <input type="hidden" id="completar-id">
+    <div class="card-sub" id="completar-placa-info"></div>
+    <div class="form-row">
+      <div class="form-group"><label>Número de Carga</label><input type="text" id="completar-numero-carga"></div>
+      <div class="form-group"><label>Cliente</label><input type="text" id="completar-cliente"></div>
+      <div class="form-group"><label>Destino</label><input type="text" id="completar-destino" placeholder="Cidade/UF"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Peso (kg)</label><input type="number" id="completar-peso" min="0"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Sequência</label><input type="number" id="completar-sequencia" min="1"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Transportadora</label><input type="text" id="completar-transportadora" list="lista-transportadoras"></div>
+      <div class="form-group"><label>Tipo de Veículo</label><input type="text" id="completar-tipoveiculo"></div>
+      <div class="form-group"><label>Motorista</label><input type="text" id="completar-motorista" placeholder="Nome do motorista"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Rota</label>
+        <select id="completar-rota" style="margin-bottom:10px"></select>
+        <label>Tipo de Operação</label>
+        <select id="completar-praonde" onchange="atualizarPreviewCompartilhada('completar-praonde','completar-compartilhada-preview')">
+          <option value="FROTA PROPRIA">FROTA PRÓPRIA</option>
+          <option value="CROSS-DOCKING">CROSS-DOCKING</option>
+          <option value="DEDICADA">DEDICADA</option>
+          <option value="RET FRIGO">RET FRIGO (retirada no frigorífico)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Compartilhada? <span class="hint">(calculado)</span></label>
+        <div class="readonly-pill" id="completar-compartilhada-preview">Não</div>
+      </div>
+      <div class="form-group"><label>Qtd. Ganchos <span class="hint">0 = Liso</span></label><input type="number" id="completar-ganchos" min="0" step="1" value="0"></div>
+      <div class="form-group"><label>Qtd. Entregas</label><input type="number" id="completar-entregas" min="1" step="1" value="1"></div>
+    </div>
+    <div class="form-group" style="margin-bottom:10px"><label>Observações</label><textarea id="completar-obs"></textarea></div>
+    <div class="flex-end">
+      <button class="btn btn-sec" onclick="fecharModalCompletar()">Cancelar</button>
+      <button class="btn btn-primary" onclick="salvarCompletarCarga()">Salvar dados</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- Trava de senha das abas Indicadores/Relatórios — ver comentário grande
+     em app.js (função pedirSenhaAba): isto NÃO é segurança real, é só uma
+     barreira de UX. Qualquer pessoa com o código-fonte consegue ver a senha
+     ou simplesmente pular a checagem. -->
+<div class="modal-overlay" id="modal-senha">
+  <div class="modal-box">
+    <h2 id="senha-titulo">Área restrita</h2>
+    <div class="card-sub" id="senha-sub">Esta aba pede uma senha simples de UX — não é controle de acesso real.</div>
+    <div class="form-group" style="margin-bottom:14px">
+      <label>Senha</label>
+      <input type="password" id="senha-input" placeholder="Digite a senha" onkeydown="if(event.key==='Enter')confirmarSenhaAba()">
+    </div>
+    <div class="flex-end">
+      <button class="btn btn-sec" onclick="cancelarSenhaAba()">Cancelar</button>
+      <button class="btn btn-primary" onclick="confirmarSenhaAba()">Entrar</button>
+    </div>
+  </div>
+</div>
+
+<div id="notif"></div>
+
+<!-- ===================== ÁREAS DE IMPRESSÃO (PDF) ===================== -->
+<div id="print-operacional" class="print-only"></div>
+<div id="print-executivo" class="print-only"></div>
+
+<!-- Overlay exibido enquanto há escrita indo para o SharePoint -->
+<div id="sync-overlay" class="sync-overlay" hidden>
+  <div class="sync-box">
+    <div class="sync-spinner"></div>
+    <div class="sync-texto">Sincronizando com a Nuvem Suinco…</div>
+    <div class="sync-sub" id="sync-sub"></div>
+  </div>
+</div>
+
+<!-- Rodapé de status. O texto NÃO é fixo: reflete o estado real da conexão
+     (ver atualizarRodapeConexao em app.js). Afirmar "Conectado ao SharePoint"
+     sem conexão seria justamente o que o TI vai checar primeiro. -->
+<div id="rodape-conexao" class="rodape-conexao"></div>
+
+<script src="suinco-sharepoint.js"></script>
+<script src="data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

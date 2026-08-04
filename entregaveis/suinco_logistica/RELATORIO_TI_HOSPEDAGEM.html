@@ -1,0 +1,695 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Relatório Técnico — Hospedagem do Painel Logístico Suinco</title>
+<style>
+:root { --tinta:#1a1d23; --suave:#5b6472; --linha:#dfe3e9; --destaque:#8b1520;
+        --fundo-caixa:#f6f7f9; --aviso:#fff8e6; --aviso-borda:#e8c56a; }
+* { box-sizing:border-box; }
+body { margin:0; padding:0; background:#eef0f3; color:var(--tinta);
+       font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+       font-size:15px; line-height:1.65; }
+.folha { max-width:900px; margin:32px auto; background:#fff; padding:56px 64px;
+         box-shadow:0 1px 4px rgba(0,0,0,.12); }
+h1 { font-size:26px; line-height:1.25; margin:0 0 4px; color:var(--destaque);
+     font-weight:700; letter-spacing:-.01em; }
+h2 { font-size:19px; margin:38px 0 12px; padding-bottom:7px;
+     border-bottom:2px solid var(--linha); font-weight:700; }
+h3 { font-size:16px; margin:26px 0 8px; font-weight:700; color:#2b3038; }
+h1 + h2 { margin-top:8px; border:0; font-size:17px; color:var(--suave);
+          font-weight:600; padding:0; }
+p { margin:10px 0; }
+strong { font-weight:650; }
+code { background:var(--fundo-caixa); padding:1px 5px; border-radius:3px;
+       font-family:"SF Mono",Consolas,Monaco,monospace; font-size:.88em;
+       border:1px solid var(--linha); }
+pre { background:var(--fundo-caixa); border:1px solid var(--linha);
+      border-left:3px solid var(--destaque); padding:14px 16px; border-radius:4px;
+      overflow-x:auto; font-size:13px; line-height:1.5; }
+pre code { background:none; border:0; padding:0; }
+table { border-collapse:collapse; width:100%; margin:16px 0; font-size:13.5px; }
+th { background:var(--fundo-caixa); text-align:left; font-weight:650;
+     border-bottom:2px solid var(--linha); }
+th, td { padding:8px 11px; border-bottom:1px solid var(--linha);
+         vertical-align:top; }
+tr:last-child td { border-bottom:0; }
+blockquote { margin:16px 0; padding:12px 18px; background:var(--aviso);
+             border-left:4px solid var(--aviso-borda); border-radius:0 4px 4px 0; }
+blockquote p { margin:4px 0; }
+hr { border:0; border-top:1px solid var(--linha); margin:32px 0; }
+ul, ol { padding-left:24px; margin:10px 0; }
+li { margin:5px 0; }
+a { color:var(--destaque); }
+.rodape { max-width:900px; margin:0 auto 40px; padding:0 64px; font-size:12px;
+          color:var(--suave); }
+@media print {
+  body { background:#fff; font-size:11pt; }
+  .folha { box-shadow:none; margin:0; padding:0; max-width:100%; }
+  .rodape { padding:0; }
+  h2 { page-break-after:avoid; }
+  table, pre, blockquote { page-break-inside:avoid; }
+}
+@media (max-width:720px) {
+  .folha { padding:28px 20px; margin:0; }
+  .rodape { padding:0 20px; }
+  table { font-size:12px; }
+}
+</style>
+</head>
+<body>
+<div class="folha">
+<h1>Relatório Técnico — Hospedagem e Armazenamento Compartilhado</h1>
+<h2>Painel Logístico Suinco (substituição do controle atual em Excel/VBA)</h2>
+<ul>
+<li><strong>Destinatário:</strong> Tecnologia da Informação — Suinco</li>
+<li><strong>Assunto:</strong> Definição de arquitetura de hospedagem e persistência de dados</li>
+<li><strong>Status:</strong> Aguardando decisão de TI sobre onde hospedar</li>
+<li><strong>Documentos relacionados:</strong> <code>GUIA_TI_IMPLANTACAO.md</code> (roteiro operacional passo a passo),
+  <code>MODELO_DADOS_SHAREPOINT.md</code> (schema das listas), <code>DECISOES_CONFIRMADAS.md</code> (histórico de decisões)</li>
+</ul>
+<hr />
+<h2>1. Sumário executivo</h2>
+<p>O setor de Logística desenvolveu um painel web que substitui o controle de expedição feito
+hoje em planilha Excel com macros VBA. O painel está <strong>funcionalmente completo e testado</strong>:
+cobre o fluxo dos quatro setores (Logística, Portaria, Expedição, Faturamento), os seis
+status operacionais de uma carga, cadastro de frota com 2.038 placas reais já carregadas,
+indicadores gerenciais, exportação para PDF e exportação para Power BI.</p>
+<p><strong>O que falta é exclusivamente decisão de infraestrutura.</strong> Hoje o painel grava os dados no
+navegador de cada usuário (<code>localStorage</code>). Isso significa que <strong>cada setor enxerga apenas os
+próprios dados</strong> — o que é suficiente para demonstração, mas inviável para operação real,
+onde Portaria, Expedição e Faturamento precisam ver e alterar a mesma carga.</p>
+<p>Este documento apresenta as opções de hospedagem, o comparativo técnico entre elas, os
+requisitos de segurança e governança, e o que precisa ser provisionado em cada cenário.
+A recomendação está na seção 6.</p>
+<p><strong>Decisão solicitada ao TI:</strong> escolher uma das quatro opções de arquitetura da seção 5 e
+provisionar os itens listados na seção 9.</p>
+<hr />
+<h2>2. Contexto e justificativa</h2>
+<h3>2.1. Situação atual (o problema)</h3>
+<p>O controle de expedição é feito hoje em uma planilha Excel com macros VBA, com os seguintes
+problemas operacionais já observados:</p>
+<table>
+<thead>
+<tr>
+<th>Problema atual</th>
+<th>Consequência operacional</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Arquivo único aberto por uma pessoa de cada vez</td>
+<td>Setores esperam a planilha "desocupar"; informação chega atrasada à Portaria</td>
+</tr>
+<tr>
+<td>Cópias divergentes do arquivo circulando</td>
+<td>Duas versões da verdade; retrabalho de conciliação</td>
+</tr>
+<tr>
+<td>Sem trilha de auditoria</td>
+<td>Não se sabe quem alterou um status, nem quando</td>
+</tr>
+<tr>
+<td>Macros VBA sem controle de versão</td>
+<td>Alteração quebra a planilha sem possibilidade de rollback</td>
+</tr>
+<tr>
+<td>Dependência de Excel instalado e macros habilitadas</td>
+<td>Bloqueio por política de segurança; não funciona em celular</td>
+</tr>
+<tr>
+<td>Sem integração nativa com Power BI</td>
+<td>Indicadores gerenciais dependem de exportação manual</td>
+</tr>
+</tbody>
+</table>
+<h3>2.2. Situação desejada</h3>
+<p>Um sistema onde os quatro setores operam sobre a <strong>mesma base de dados, ao mesmo tempo</strong>,
+com trilha de auditoria completa, controle de acesso por setor, e conexão direta com Power BI —
+dentro das políticas de segurança e das ferramentas já licenciadas pela empresa.</p>
+<h3>2.3. Por que não resolver com "salvar o arquivo em pasta compartilhada"</h3>
+<p>Esta alternativa costuma ser sugerida e precisa ser descartada com fundamento técnico:
+um arquivo HTML em pasta de rede ou OneDrive <strong>não compartilha dados entre usuários</strong>.
+Cada navegador que abre o arquivo mantém seu próprio <code>localStorage</code>, isolado por origem.
+Compartilhar o arquivo compartilha o <em>programa</em>, não os <em>dados</em> — dois usuários abrindo o
+mesmo arquivo continuam vendo bases separadas.</p>
+<p>Armazenamento compartilhado exige, obrigatoriamente, <strong>um serviço que receba e sirva os dados</strong>
+(banco de dados ou API). Não existe arranjo de pastas que substitua isso. É por essa razão
+específica que este documento existe.</p>
+<hr />
+<h2>3. O que já está pronto (não depende do TI)</h2>
+<p>Para dimensionar corretamente o esforço restante, segue o que já está entregue e testado:</p>
+<ul>
+<li><strong>Aplicação completa</strong> em HTML/CSS/JavaScript, sem framework e sem processo de build —
+  são arquivos estáticos, servidos por qualquer hospedagem web.</li>
+<li><strong>Máquina de estados dos 6 status</strong> com validação de transição (impede pular etapa).</li>
+<li><strong>Trava de frota</strong>: bloqueia criação de carga com placa não cadastrada.</li>
+<li><strong>Base real de frota</strong>: 2.038 placas normalizadas a partir de extrato de 2 anos do ERP.</li>
+<li><strong>Trilha de movimentações</strong>: todo evento gera registro com operador, setor e horário.</li>
+<li><strong>Indicadores gerenciais</strong> com comparação por período e gráficos.</li>
+<li><strong>Exportação PDF</strong> (operacional e executivo) e <strong>exportação para Power BI</strong>.</li>
+<li><strong>Camada de dados isolada</strong> (<code>SuincoStore</code> em <code>data.js</code>) — ver seção 7.</li>
+<li><strong>Versionamento em Git</strong>, com histórico de decisões documentado.</li>
+</ul>
+<p><strong>Esforço restante estimado para integração:</strong> 3 a 5 dias úteis de desenvolvimento após o
+ambiente estar provisionado, independentemente da opção escolhida.</p>
+<hr />
+<h2>4. Requisitos</h2>
+<h3>4.1. Requisitos funcionais</h3>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>Requisito</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>RF-01</td>
+<td>Múltiplos usuários leem e gravam a mesma base simultaneamente</td>
+</tr>
+<tr>
+<td>RF-02</td>
+<td>Alteração feita por um setor fica visível aos demais sem reabrir a aplicação</td>
+</tr>
+<tr>
+<td>RF-03</td>
+<td>Trilha de auditoria imutável (registros de movimentação não podem ser apagados)</td>
+</tr>
+<tr>
+<td>RF-04</td>
+<td>Controle de acesso por setor</td>
+</tr>
+<tr>
+<td>RF-05</td>
+<td>Acesso via navegador, incluindo dispositivos móveis (Portaria opera no pátio)</td>
+</tr>
+<tr>
+<td>RF-06</td>
+<td>Conexão com Power BI para indicadores gerenciais</td>
+</tr>
+</tbody>
+</table>
+<h3>4.2. Requisitos não funcionais</h3>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>Requisito</th>
+<th>Parâmetro</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>RNF-01</td>
+<td>Usuários simultâneos</td>
+<td>10 a 15 (pico de troca de turno)</td>
+</tr>
+<tr>
+<td>RNF-02</td>
+<td>Volume de dados</td>
+<td>~50 cargas/dia; ~300 movimentações/dia; ~110 mil registros/ano</td>
+</tr>
+<tr>
+<td>RNF-03</td>
+<td>Disponibilidade</td>
+<td>Horário de operação (turnos); indisponibilidade breve tolerável com plano de contingência</td>
+</tr>
+<tr>
+<td>RNF-04</td>
+<td>Tempo de resposta</td>
+<td>Registro de movimentação em até 2 segundos</td>
+</tr>
+<tr>
+<td>RNF-05</td>
+<td>Retenção</td>
+<td>Mínimo 5 anos (trilha de auditoria)</td>
+</tr>
+<tr>
+<td>RNF-06</td>
+<td>Autenticação</td>
+<td>Preferencialmente SSO corporativo (Microsoft 365)</td>
+</tr>
+</tbody>
+</table>
+<h3>4.3. Classificação da informação</h3>
+<p>Os dados tratados são <strong>operacionais internos</strong>: placas de veículos, nomes de
+transportadoras, números de carga, destinos, pesos e horários de movimentação.</p>
+<p><strong>Ponto de atenção para LGPD — achado concreto, não hipotético:</strong> o campo <em>Motorista</em> e
+parte dos registros de transportadora correspondem a <strong>pessoas físicas</strong> (transportadores
+autônomos). Na conferência da base extraída do ERP foram identificados <strong>23 registros de
+placa, correspondentes a 6 transportadores distintos, cujo nome cadastrado inclui o CPF</strong>,
+no formato herdado do ERP (exemplo real, com o número omitido aqui:
+<code>Bruno Sergio Ferreira CPF ###########</code>).</p>
+<p>Isso caracteriza tratamento de dado pessoal e traz duas implicações que pedem posição
+formal do TI/DPO:</p>
+<ol>
+<li>A hospedagem deve permanecer em ambiente sob controle da empresa ou de fornecedor com
+   contrato de tratamento de dados adequado — o que, na prática, <strong>desqualifica a Opção D</strong>
+   (seção 5) para produção.</li>
+<li>O painel <strong>não utiliza o CPF para nenhuma funcionalidade</strong>: ele veio junto no campo de
+   nome da transportadora, por como o ERP cadastra autônomos. <strong>Recomendação:</strong> remover ou
+   mascarar esses identificadores antes da carga em produção, aplicando minimização de
+   dados. O ajuste é simples e pode ser feito antes da fase 4 do plano (seção 11).</li>
+</ol>
+<hr />
+<h2>5. Opções de arquitetura</h2>
+<p>Quatro caminhos viáveis, apresentados com o critério técnico de cada um.</p>
+<h3>Opção A — SharePoint Online (Listas) + aba no Teams</h3>
+<p>Aplicação hospedada no próprio tenant Microsoft 365; dados em Listas do SharePoint;
+autenticação por SSO corporativo; acesso pela aba do Teams.</p>
+<p><strong>Arquitetura:</strong></p>
+<pre><code>Usuário → Teams (aba) → SSO Entra ID → API REST SharePoint → Listas → Power BI
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Aspecto</th>
+<th>Avaliação</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Licenciamento</td>
+<td>Já contemplado no Microsoft 365 existente — sem custo adicional</td>
+</tr>
+<tr>
+<td>Dados</td>
+<td>Permanecem no tenant da empresa, sob políticas de retenção e DLP já vigentes</td>
+</tr>
+<tr>
+<td>Autenticação</td>
+<td>SSO nativo; usuário já logado no Teams não digita senha</td>
+</tr>
+<tr>
+<td>Power BI</td>
+<td>Conector nativo para Listas do SharePoint</td>
+</tr>
+<tr>
+<td>Governança</td>
+<td>Aderente às diretrizes corporativas; auditoria unificada no M365</td>
+</tr>
+<tr>
+<td>Limitação técnica</td>
+<td>Limite de 5.000 itens por visualização (contornável com indexação e arquivamento — ver 8.3)</td>
+</tr>
+<tr>
+<td>Esforço de TI</td>
+<td>Alto: site, 6 listas, App Registration, permissões, manifesto do Teams</td>
+</tr>
+<tr>
+<td>Dependência</td>
+<td>Requer administrador do Entra ID e do SharePoint</td>
+</tr>
+</tbody>
+</table>
+<h3>Opção B — Azure (Static Web Apps + banco gerenciado)</h3>
+<p>Aplicação em Azure Static Web Apps; dados em Azure SQL ou Cosmos DB; autenticação Entra ID.</p>
+<table>
+<thead>
+<tr>
+<th>Aspecto</th>
+<th>Avaliação</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Licenciamento</td>
+<td>Custo mensal (estimativa na seção 10), normalmente dentro de crédito Azure existente</td>
+</tr>
+<tr>
+<td>Dados</td>
+<td>Tenant Azure da empresa; região configurável (Brasil Sul)</td>
+</tr>
+<tr>
+<td>Autenticação</td>
+<td>SSO nativo via Entra ID</td>
+</tr>
+<tr>
+<td>Power BI</td>
+<td>Conector nativo para Azure SQL — mais robusto que Listas</td>
+</tr>
+<tr>
+<td>Governança</td>
+<td>Aderente; integra com Azure Monitor, backup automatizado</td>
+</tr>
+<tr>
+<td>Limitação técnica</td>
+<td>Nenhuma relevante nesta escala</td>
+</tr>
+<tr>
+<td>Esforço de TI</td>
+<td>Médio: assinatura, resource group, banco, App Registration</td>
+</tr>
+<tr>
+<td>Dependência</td>
+<td>Requer assinatura Azure e administrador do Entra ID</td>
+</tr>
+</tbody>
+</table>
+<h3>Opção C — Servidor interno (on-premises)</h3>
+<p>Aplicação e banco (PostgreSQL ou SQL Server) em servidor próprio da empresa.</p>
+<table>
+<thead>
+<tr>
+<th>Aspecto</th>
+<th>Avaliação</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Licenciamento</td>
+<td>Sem custo de nuvem; usa infraestrutura existente</td>
+</tr>
+<tr>
+<td>Dados</td>
+<td>Totalmente on-premises — máximo controle</td>
+</tr>
+<tr>
+<td>Autenticação</td>
+<td>Integrável ao Active Directory local</td>
+</tr>
+<tr>
+<td>Power BI</td>
+<td>Requer gateway de dados local</td>
+</tr>
+<tr>
+<td>Governança</td>
+<td>Sob políticas de servidor já existentes</td>
+</tr>
+<tr>
+<td>Limitação técnica</td>
+<td>Acesso externo (celular no pátio) exige VPN ou publicação com certificado</td>
+</tr>
+<tr>
+<td>Esforço de TI</td>
+<td>Médio a alto: provisionamento, certificado TLS, backup, rotina de atualização</td>
+</tr>
+<tr>
+<td>Dependência</td>
+<td>Requer servidor disponível e equipe de infraestrutura</td>
+</tr>
+</tbody>
+</table>
+<h3>Opção D — Plataforma externa (Supabase, Render, Fly.io e similares)</h3>
+<p>Aplicação e banco em provedor externo de baixo custo.</p>
+<table>
+<thead>
+<tr>
+<th>Aspecto</th>
+<th>Avaliação</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Licenciamento</td>
+<td>Gratuito ou baixo custo nesta escala</td>
+</tr>
+<tr>
+<td>Dados</td>
+<td><strong>Fora do controle corporativo</strong> — provável conflito com política de dados</td>
+</tr>
+<tr>
+<td>Autenticação</td>
+<td>Própria da plataforma; sem SSO corporativo nativo</td>
+</tr>
+<tr>
+<td>Power BI</td>
+<td>Via conector PostgreSQL, com exposição de credencial</td>
+</tr>
+<tr>
+<td>Governança</td>
+<td><strong>Não aderente</strong> sem avaliação formal de fornecedor e contrato de tratamento de dados</td>
+</tr>
+<tr>
+<td>Esforço de TI</td>
+<td>Baixo</td>
+</tr>
+<tr>
+<td>Dependência</td>
+<td>Nenhuma interna — mas exige aprovação formal de segurança</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>Observação honesta:</strong> a Opção D é a mais rápida de executar e a única que não depende do
+TI para sair do papel, mas é apresentada aqui <strong>como opção não recomendada para produção</strong>,
+justamente por não atender aos requisitos de governança. Só faria sentido como piloto
+temporário e com dados fictícios, se houver aprovação formal para isso.</p>
+</blockquote>
+<hr />
+<h2>6. Recomendação</h2>
+<p><strong>Recomendação primária: Opção A (SharePoint Online + Teams).</strong></p>
+<p>Justificativa:</p>
+<ol>
+<li><strong>Custo incremental zero</strong> — usa licenciamento Microsoft 365 já contratado.</li>
+<li><strong>Aderência a governança</strong> — os dados nunca saem do tenant; herdam retenção, DLP,
+   auditoria e políticas de acesso já aprovadas pela empresa.</li>
+<li><strong>Melhor experiência para o usuário final</strong> — o painel aparece como aba dentro do Teams,
+   que os setores já usam; sem nova senha, sem novo aplicativo para instalar.</li>
+<li><strong>Integração nativa com Power BI</strong>, atendendo à demanda de indicadores gerenciais.</li>
+<li><strong>Decisão já registrada</strong> — a hospedagem como aba do Teams foi definida anteriormente
+   (ver <code>DECISOES_CONFIRMADAS.md</code>, seção 6) e este relatório a mantém.</li>
+</ol>
+<p><strong>Recomendação alternativa: Opção B (Azure)</strong> — indicada caso o TI julgue que o limite de
+5.000 itens por visualização do SharePoint representa risco de médio prazo, ou caso já
+exista padrão corporativo de hospedar aplicações internas em Azure. Tecnicamente superior
+em performance e em modelagem de dados; o contraponto é o custo mensal e o esforço um pouco
+maior de provisionamento inicial.</p>
+<p>Ambas atendem plenamente aos requisitos. <strong>A escolha entre A e B é de política de
+infraestrutura, não de viabilidade técnica</strong> — o desenvolvimento se adapta a qualquer uma
+das duas sem reescrita da aplicação (ver seção 7).</p>
+<hr />
+<h2>7. Por que a troca de backend é de baixo risco</h2>
+<p>A aplicação foi construída desde o início com a persistência isolada em um único módulo,
+o <code>SuincoStore</code>, em <code>data.js</code>:</p>
+<pre><code class="language-javascript">/* ---------- storage adapter (trocar aqui quando vier o SharePoint) ---------- */
+const SuincoStore = {
+  load() { /* hoje: localStorage.getItem(...) */ },
+  save() { /* hoje: localStorage.setItem(...) */ }
+};
+</code></pre>
+<p>Toda a lógica de negócio — máquina de estados, validação de transição, trava de frota,
+cálculo de indicadores — consome esse adaptador e <strong>não conhece a origem dos dados</strong>.
+Trocar o backend significa reescrever as funções <code>load</code>/<code>save</code>/<code>query</code> desse módulo para
+chamar a API escolhida. As telas, as regras e os relatórios permanecem intactos.</p>
+<p>Consequência prática para a decisão do TI: <strong>não há aprisionamento</strong>. Se a Opção A for
+escolhida agora e no futuro a empresa migrar para Azure, a troca é novamente localizada no
+mesmo módulo.</p>
+<hr />
+<h2>8. Riscos técnicos e mitigações</h2>
+<p>Não existe sistema multiusuário sem esta classe de problema. Cada item abaixo tem solução
+definida e testável.</p>
+<h3>8.1. Escrita simultânea sobre a mesma carga</h3>
+<p><strong>Cenário:</strong> Portaria e Expedição alteram a mesma placa no mesmo instante.
+<strong>Mitigação:</strong> concorrência otimista via ETag (<code>If-Match</code>). Recebendo <code>412 Precondition
+Failed</code>, o painel recarrega o registro e avisa o usuário em vez de sobrescrever.</p>
+<h3>8.2. Expiração de sessão durante o turno</h3>
+<p><strong>Cenário:</strong> aba aberta por 8 horas.
+<strong>Mitigação:</strong> renovação silenciosa de token (MSAL.js). Falhando, o painel exibe "sessão
+expirada, entre novamente" — nunca falha em silêncio.</p>
+<h3>8.3. Limite de 5.000 itens por visualização (específico da Opção A)</h3>
+<p><strong>Cenário:</strong> a lista <code>Movimentacoes</code> cresce continuamente (~110 mil registros/ano).
+<strong>Mitigação:</strong> (a) indexar as colunas usadas em filtro; (b) rotina mensal de arquivamento
+das cargas encerradas há mais de 90 dias para lista de histórico separada. Com isso a lista
+operacional permanece na casa das centenas de itens.</p>
+<h3>8.4. Alteração de dados fora do painel</h3>
+<p><strong>Cenário:</strong> alguém edita a Lista direto pelo SharePoint ou Excel e quebra a sequência de status.
+<strong>Mitigação:</strong> coluna <code>Status</code> como tipo Escolha (impede valor inválido) e fluxo do Power
+Automate replicando a validação de transição no servidor. Sem isso, a regra vale apenas
+para quem usa o painel.</p>
+<h3>8.5. Operação sem rede no pátio</h3>
+<p><strong>Cenário:</strong> instabilidade de rede na Portaria.
+<strong>Mitigação atual:</strong> nenhuma — é limitação real e está declarada como tal.
+<strong>Evolução possível:</strong> fila local de ações pendentes, reenviadas quando a conexão retorna.
+Não foi implementada para não criar falsa sensação de segurança.</p>
+<h3>8.6. Perda de dados</h3>
+<p><strong>Mitigação:</strong> Opção A — retenção e versionamento nativos do SharePoint; Opção B — backup
+automatizado do Azure SQL (point-in-time restore); Opção C — rotina de backup a definir com
+a equipe de infraestrutura.</p>
+<hr />
+<h2>9. O que se solicita ao TI</h2>
+<h3>9.1. Decisão</h3>
+<p>Escolha entre Opção A e Opção B (seção 5).</p>
+<h3>9.2. Provisionamento — Opção A (SharePoint + Teams)</h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Item</th>
+<th>Responsável</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Site do SharePoint tipo Team Site dedicado à Logística</td>
+<td>Admin SharePoint</td>
+</tr>
+<tr>
+<td>2</td>
+<td>6 Listas conforme <code>MODELO_DADOS_SHAREPOINT.md</code>, com <code>Status</code> do tipo Escolha</td>
+<td>Admin SharePoint</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Indexação de <code>Frota.Placa</code> e <code>Movimentacoes.CargaId</code>/<code>Timestamp</code></td>
+<td>Admin SharePoint</td>
+</tr>
+<tr>
+<td>4</td>
+<td>App Registration (SPA) no Entra ID com permissão <code>Sites.Selected</code> + <code>User.Read</code>, com consentimento de administrador</td>
+<td>Admin Entra ID</td>
+</tr>
+<tr>
+<td>5</td>
+<td>Definição da URL de hospedagem dos arquivos estáticos (HTTPS)</td>
+<td>TI</td>
+</tr>
+<tr>
+<td>6</td>
+<td>Permissão dos 4 setores nas Listas; <code>Movimentacoes</code> como <em>Colaborar sem exclusão</em></td>
+<td>Admin SharePoint</td>
+</tr>
+<tr>
+<td>7</td>
+<td>Publicação do app no catálogo interno do Teams</td>
+<td>Admin Teams</td>
+</tr>
+</tbody>
+</table>
+<h3>9.3. Parâmetros a devolver para o desenvolvimento</h3>
+<p>Para substituir o <code>SuincoStore</code> pelas chamadas reais, são necessários:</p>
+<ul>
+<li>URL do site do SharePoint</li>
+<li>Nomes/IDs internos das 6 Listas</li>
+<li><em>Application (client) ID</em> e <em>Directory (tenant) ID</em> do App Registration</li>
+<li>URL final de hospedagem do painel</li>
+</ul>
+<p>Sem esses quatro parâmetros não é possível escrever a integração real. Valores de exemplo
+não serão inventados para simular funcionamento.</p>
+<h3>9.4. Posições formais solicitadas</h3>
+<ul>
+<li><strong>DPO / Segurança:</strong> tratamento dos identificadores de pessoa física na base de frota
+  (seção 4.3) — manter, mascarar ou remover.</li>
+<li><strong>Segurança:</strong> aprovação do modelo de permissão proposto (seção 9.2, item 6).</li>
+</ul>
+<hr />
+<h2>10. Estimativa de custos</h2>
+<table>
+<thead>
+<tr>
+<th>Opção</th>
+<th>Custo de licença</th>
+<th>Custo de infraestrutura</th>
+<th>Observação</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A — SharePoint/Teams</td>
+<td>R$ 0</td>
+<td>R$ 0</td>
+<td>Coberto pelo M365 existente</td>
+</tr>
+<tr>
+<td>B — Azure</td>
+<td>R$ 0</td>
+<td>Faixa de R$ 50 a R$ 250/mês</td>
+<td>Azure SQL Basic/S0 + Static Web Apps; normalmente absorvido por crédito existente</td>
+</tr>
+<tr>
+<td>C — On-premises</td>
+<td>R$ 0</td>
+<td>Custo interno de servidor</td>
+<td>Depende de capacidade ociosa disponível</td>
+</tr>
+<tr>
+<td>D — Externa</td>
+<td>R$ 0 a R$ 150/mês</td>
+<td>—</td>
+<td>Não recomendada (seção 5)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Custo de desenvolvimento da integração:</strong> 3 a 5 dias úteis, já contemplado no escopo do
+projeto — sem custo adicional em qualquer das opções.</p>
+<hr />
+<h2>11. Plano de implantação</h2>
+<table>
+<thead>
+<tr>
+<th>Fase</th>
+<th>Descrição</th>
+<th>Pré-requisito</th>
+<th>Duração</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Decisão de arquitetura pelo TI</td>
+<td>Este relatório</td>
+<td>—</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Provisionamento do ambiente</td>
+<td>Fase 1</td>
+<td>A definir pelo TI</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Integração do <code>SuincoStore</code> com a API real</td>
+<td>Parâmetros da seção 9.3</td>
+<td>3 a 5 dias úteis</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Carga da base de frota (2.038 placas)</td>
+<td>Fase 3 + posição do DPO</td>
+<td>1 dia</td>
+</tr>
+<tr>
+<td>5</td>
+<td>Piloto com 1 usuário de cada setor, simultâneo</td>
+<td>Fase 4</td>
+<td>1 semana</td>
+</tr>
+<tr>
+<td>6</td>
+<td>Ajustes do piloto</td>
+<td>Fase 5</td>
+<td>2 a 3 dias</td>
+</tr>
+<tr>
+<td>7</td>
+<td>Publicação para os 4 setores</td>
+<td>Fase 6</td>
+<td>1 dia</td>
+</tr>
+<tr>
+<td>8</td>
+<td>Operação assistida (Excel/VBA mantido como contingência)</td>
+<td>Fase 7</td>
+<td>2 semanas</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Contingência:</strong> o controle atual em Excel/VBA permanece disponível até o fim da fase 8.
+Não há descontinuação do processo atual antes da validação em produção.</p>
+<hr />
+<h2>12. Conclusão</h2>
+<p>O painel está pronto e testado; a lacuna é exclusivamente de infraestrutura. A recomendação
+é a <strong>Opção A (SharePoint Online + Teams)</strong> por custo incremental zero, aderência às
+diretrizes corporativas e melhor experiência para o usuário final — com a <strong>Opção B (Azure)</strong>
+como alternativa igualmente válida caso haja padrão corporativo nesse sentido.</p>
+<p>A arquitetura da aplicação isola a persistência em um único módulo, o que torna a escolha
+reversível e de baixo risco.</p>
+<p><strong>Próximo passo:</strong> decisão do TI quanto à opção de arquitetura e início do provisionamento
+descrito na seção 9.</p>
+</div>
+<div class="rodape">Documento gerado a partir de docs/RELATORIO_TI_HOSPEDAGEM.md — para imprimir em PDF use Ctrl+P → Salvar como PDF.</div>
+</body>
+</html>

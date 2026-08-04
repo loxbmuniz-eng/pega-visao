@@ -1,0 +1,691 @@
+/* =====================================================================
+   PAINEL LOGÍSTICO SUINCO — design system
+   Paleta fixa da marca, em DOIS temas: escuro (padrão) e claro, alternados
+   pelo botão do cabeçalho (data-tema="claro" no <html> — ver alternarTema em
+   app.js). Toda cor sai de variável CSS, inclusive as dos 6 status, para que
+   trocar de tema repinte também badges, relatórios e gráficos sem nenhuma
+   tabela paralela de cores. O PDF sai no tema ativo (a diretriz anterior era
+   escuro sempre; com o claro disponível isso vira escolha de quem imprime).
+   Contraste alto e alvos de toque maiores por padrão — uso monocular/zoom.
+   Contraste verificado nos dois temas: texto/fundo, badge e título de card
+   todos acima de 6:1 (mínimo WCAG AA para texto normal é 4.5:1).
+===================================================================== */
+:root{
+  --navy-deep:#101625;
+  --navy:#1e2a52;
+  --navy-light:#2a3a6c;
+  --navy-lighter:#374a86;
+  --gold:#e9b954;
+  --gold-dim:#b9903f;
+  /* --gold-text é o dourado usado como COR DE TEXTO (títulos, links, números).
+     No escuro é o mesmo dourado da marca; no claro precisa escurecer, senão
+     dourado claro sobre fundo branco fica ilegível. --gold continua sendo o
+     dourado de PREENCHIMENTO (fundo de botão, chip), que funciona nos dois
+     temas porque leva texto escuro por cima. */
+  --gold-text:#e9b954;
+  --wine:#8f1f26;
+  --wine-light:#b3363f;
+  --ok:#3fa66a;
+  --warn:#d99a2b;
+  --text:#f2f4f8;
+  --text-dim:#b7c0d4;
+  --border:rgba(233,185,84,.28);
+  --border-soft:rgba(233,185,84,.14);
+  --shadow:0 2px 10px rgba(0,0,0,.5);
+  --campo-bg:#101625;      /* fundo de input/select */
+  --placeholder:#5b6785;
+  --logo-chip-bg:#fff;     /* a logo tem fundo branco próprio, nos 2 temas */
+  --radius:10px;
+  --header-h:72px;
+  --nav-h:52px;
+
+  /* ---- Cores dos 6 status ----
+     Fonte ÚNICA de verdade das cores de status: badges da tela, pílulas e
+     células de linha do tempo dos relatórios, e os gráficos em canvas (que
+     leem estes valores por getComputedStyle) usam todos as variáveis abaixo.
+     Assim trocar de tema nunca deixa uma cor de status desalinhada. */
+  /* Preenchimento SÓLIDO e saturado, igual nos dois temas — pedido: as cores
+     de cada status precisam ficar DESTACADAS, na tela e nos relatórios.
+     A escala é a definida pelo gestor e não deve ser alterada sem novo aval:
+       Aguardando Veículo  -> VERMELHO
+       Aguardando Embarque -> LARANJA
+       Embarque Iniciado   -> AMARELO
+       Embarque Finalizado -> VERDE CLARO
+       Faturado            -> VERDE MÉDIO
+       Seguiu Viagem       -> VERDE ESCURO
+     Cor sólida foi escolhida no lugar do fundo esmaecido anterior porque o
+     relatório operacional é fotografado/compartilhado em grupo de WhatsApp:
+     precisa ser legível em tela pequena e depois de recompressão de imagem.
+     O texto (-fg) é branco ou quase-preto conforme a luminância do
+     preenchimento, garantindo contraste em qualquer um dos seis. */
+  --st-aguardando-veiculo-bg:#c62828;   --st-aguardando-veiculo-fg:#ffffff;   --st-aguardando-veiculo-br:#8f1f26;
+  --st-aguardando-embarque-bg:#e07b1a;  --st-aguardando-embarque-fg:#1a1200;  --st-aguardando-embarque-br:#a85c10;
+  --st-embarque-iniciado-bg:#f0c33c;    --st-embarque-iniciado-fg:#1a1200;    --st-embarque-iniciado-br:#b9903f;
+  --st-embarque-finalizado-bg:#7fd4a2;  --st-embarque-finalizado-fg:#06210f;  --st-embarque-finalizado-br:#3fa66a;
+  --st-faturado-bg:#34a862;             --st-faturado-fg:#06210f;             --st-faturado-br:#1d7a47;
+  --st-seguiu-viagem-bg:#14603a;        --st-seguiu-viagem-fg:#ffffff;        --st-seguiu-viagem-br:#0d3f26;
+  --st-neutro-bg:#5b6785;               --st-neutro-fg:#ffffff;               --st-neutro-br:#374a86;
+}
+
+/* ===== TEMA CLARO =====
+   Ativado por data-tema="claro" no <html> (ver alternarTema em app.js).
+   Mantém a mesma identidade — azul-marinho, dourado e vinho da Suinco — só
+   invertendo as superfícies. As cores dos 6 status ficam de fora da inversão
+   de propósito: são sólidas e valem igual nos dois temas (ver bloco acima). */
+:root[data-tema="claro"]{
+  --navy-deep:#eef1f6;
+  --navy:#ffffff;
+  --navy-light:#e2e8f3;
+  --navy-lighter:#c9d4e8;
+  --gold:#e9b954;
+  --gold-dim:#a67f22;
+  --gold-text:#7a5c0d;
+  --wine:#8f1f26;
+  --wine-light:#b3363f;
+  --ok:#1d7a47;
+  --warn:#9a6a08;
+  --text:#161a22;
+  --text-dim:#5a6474;
+  --border:rgba(26,32,45,.22);
+  --border-soft:rgba(26,32,45,.12);
+  --shadow:0 1px 4px rgba(16,22,37,.14);
+  --campo-bg:#ffffff;
+  --placeholder:#8a94a6;
+  --logo-chip-bg:#fff;
+
+  /* As cores de status NÃO mudam entre temas: são sólidas e já legíveis sobre
+     claro e escuro. Manter uma escala só evita que a mesma carga apareça
+     vermelha no monitor da Portaria e rosa-claro no do escritório. */
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:var(--navy-deep);
+  color:var(--text);
+  -webkit-print-color-adjust:exact;print-color-adjust:exact;color-adjust:exact;
+}
+body{
+  font-family:'Segoe UI',Inter,system-ui,sans-serif;
+  font-size:15px;
+  line-height:1.45;
+}
+a{color:var(--gold-text)}
+:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
+
+/* ===== HEADER ===== */
+#header{
+  position:fixed;top:0;left:0;right:0;height:var(--header-h);
+  background:var(--navy);border-bottom:2px solid var(--gold-dim);
+  color:var(--text);display:flex;align-items:center;padding:0 18px;gap:16px;
+  z-index:1000;box-shadow:var(--shadow);
+}
+#logo-chip{
+  background:var(--logo-chip-bg);border-radius:8px;padding:4px 8px;flex-shrink:0;
+  display:flex;align-items:center;height:52px;
+}
+#logo-chip img{height:44px;width:auto;display:block}
+#header-title{display:flex;flex-direction:column;flex-shrink:0}
+#header-title strong{font-size:16px;font-weight:800;letter-spacing:.5px;color:var(--gold-text)}
+#header-title span{font-size:11px;color:var(--text-dim)}
+#header-mid{flex:1;display:flex;align-items:center;gap:18px;flex-wrap:wrap;min-width:0}
+#clock-wrap{text-align:center}
+#clock{font-size:20px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--text)}
+#date-display{font-size:11px;color:var(--text-dim)}
+.badge-setor{
+  background:var(--navy-light);border:1px solid var(--border);
+  padding:6px 14px;border-radius:20px;font-size:13px;font-weight:700;color:var(--gold-text);
+}
+#header-actions{display:flex;gap:8px;align-items:center;flex-shrink:0}
+
+/* ===== BUTTONS ===== */
+.btn{
+  padding:9px 16px;border:none;border-radius:var(--radius);cursor:pointer;
+  font-size:14px;font-weight:700;transition:opacity .15s,transform .1s;
+  min-height:40px;
+}
+.btn:active{transform:scale(.97)}
+.btn:hover{opacity:.85}
+.btn-primary{background:var(--gold);color:#1a1200}
+.btn-success{background:var(--ok);color:#fff}
+.btn-danger{background:var(--wine);color:#fff}
+.btn-warn{background:var(--warn);color:#1a1200}
+.btn-sec{background:var(--navy-light);color:var(--text);border:1px solid var(--border)}
+.btn-sm{padding:6px 12px;font-size:13px;min-height:32px}
+.btn-lg{padding:14px 26px;font-size:16.5px;min-height:52px}
+.btn[disabled]{opacity:.4;cursor:not-allowed}
+
+/* ===== NAV ===== */
+#nav{
+  position:fixed;top:var(--header-h);left:0;right:0;height:var(--nav-h);
+  background:var(--navy-light);display:flex;overflow-x:auto;z-index:999;
+  scrollbar-width:thin;border-bottom:1px solid var(--border-soft);
+}
+.nav-tab{
+  flex-shrink:0;padding:0 18px;height:100%;display:flex;align-items:center;gap:7px;
+  color:var(--text-dim);cursor:pointer;font-size:14px;font-weight:600;
+  border-bottom:3px solid transparent;transition:all .15s;white-space:nowrap;
+}
+.nav-tab:hover{color:var(--text);background:var(--navy-lighter)}
+.nav-tab.active{color:var(--gold-text);border-bottom-color:var(--gold-dim);background:rgba(233,185,84,.12)}
+.nav-tab[hidden]{display:none}
+
+/* ===== MAIN ===== */
+#main{
+  margin-top:calc(var(--header-h) + var(--nav-h) + 14px);
+  padding:0 18px 40px;max-width:1440px;margin-left:auto;margin-right:auto;
+}
+.tab-page{display:none}
+.tab-page.active{display:block}
+
+/* ===== CARDS / GRID ===== */
+.card{
+  background:var(--navy);border:1px solid var(--border-soft);
+  border-radius:var(--radius);box-shadow:var(--shadow);padding:18px;margin-bottom:18px;
+}
+.card-title{
+  font-size:16px;font-weight:800;color:var(--gold-text);margin-bottom:14px;
+  display:flex;align-items:center;gap:9px;flex-wrap:wrap;
+}
+.card-title .icon{font-size:19px}
+.card-sub{font-size:12px;color:var(--text-dim);margin-top:-8px;margin-bottom:12px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:18px}
+.grid4{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:18px}
+@media(max-width:900px){.grid3,.grid4{grid-template-columns:1fr 1fr}}
+@media(max-width:640px){.grid2,.grid3,.grid4{grid-template-columns:1fr}}
+
+/* ===== TABLES ===== */
+.table-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th{
+  background:var(--navy-deep);color:var(--gold-text);padding:10px 12px;text-align:left;
+  font-weight:700;white-space:nowrap;border-bottom:2px solid var(--gold-dim);
+}
+td{padding:9px 12px;border-bottom:1px solid var(--border-soft);vertical-align:middle}
+tr:hover td{background:rgba(233,185,84,.06)}
+td input,td select{padding:5px 7px;font-size:13px}
+.row-highlight td{background:rgba(233,185,84,.10)}
+
+/* ===== BADGES (sempre com texto, nunca só cor) ===== */
+.badge{
+  display:inline-block;padding:4px 11px;border-radius:14px;font-size:11.5px;
+  font-weight:800;text-transform:uppercase;letter-spacing:.3px;white-space:nowrap;
+  border:1px solid transparent;
+}
+/* Modelo de 6 status — progressão vermelho → laranja → amarelo →
+   verde-clara → verde → verde-escura, do jeito que o gestor pediu, sempre
+   com o texto do status junto (nunca só a cor carrega a informação). */
+.badge-aguardando-veiculo{background:var(--st-aguardando-veiculo-bg);color:var(--st-aguardando-veiculo-fg);border-color:var(--st-aguardando-veiculo-br)}
+.badge-aguardando-embarque{background:var(--st-aguardando-embarque-bg);color:var(--st-aguardando-embarque-fg);border-color:var(--st-aguardando-embarque-br)}
+.badge-embarque-iniciado{background:var(--st-embarque-iniciado-bg);color:var(--st-embarque-iniciado-fg);border-color:var(--st-embarque-iniciado-br)}
+.badge-embarque-finalizado{background:var(--st-embarque-finalizado-bg);color:var(--st-embarque-finalizado-fg);border-color:var(--st-embarque-finalizado-br)}
+.badge-faturado{background:var(--st-faturado-bg);color:var(--st-faturado-fg);border-color:var(--st-faturado-br)}
+.badge-seguiu-viagem{background:var(--st-seguiu-viagem-bg);color:var(--st-seguiu-viagem-fg);border-color:var(--st-seguiu-viagem-br)}
+.badge-critico{background:var(--st-aguardando-veiculo-bg);color:var(--st-aguardando-veiculo-fg);border-color:var(--st-aguardando-veiculo-br)}
+
+/* ===== FORMS ===== */
+.form-row{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+.form-group{display:flex;flex-direction:column;gap:5px;flex:1;min-width:140px}
+.form-group label{font-size:12.5px;font-weight:700;color:var(--text-dim)}
+.form-group .hint{font-size:11px;color:var(--text-dim);font-weight:400}
+input,select,textarea{
+  width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:var(--radius);
+  font-size:14px;background:var(--campo-bg);color:var(--text);transition:border .15s;
+}
+input::placeholder{color:var(--placeholder)}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--gold)}
+textarea{resize:vertical;min-height:70px}
+select option{background:var(--campo-bg);color:var(--text)}
+
+/* ===== STAT BOXES ===== */
+.stat-box{
+  background:var(--navy);border:1px solid var(--border-soft);border-radius:var(--radius);
+  box-shadow:var(--shadow);padding:16px;text-align:center;border-top:4px solid var(--gold);
+}
+.stat-num{font-size:30px;font-weight:800;color:var(--gold-text)}
+.stat-label{font-size:12px;color:var(--text-dim);margin-top:3px}
+.stat-note{font-size:10.5px;color:var(--text-dim);margin-top:2px;font-style:italic}
+
+/* ===== MODAL ===== */
+.modal-overlay{
+  position:fixed;inset:0;background:rgba(6,9,18,.72);display:none;
+  align-items:center;justify-content:center;z-index:3000;padding:20px;
+}
+.modal-overlay.open{display:flex}
+.modal-box{
+  background:var(--navy);border:1px solid var(--border);border-radius:var(--radius);
+  box-shadow:0 10px 40px rgba(0,0,0,.6);max-width:560px;width:100%;
+  max-height:88vh;overflow-y:auto;padding:22px;
+}
+.modal-box h2{color:var(--gold);font-size:18px;margin-bottom:14px}
+.modal-list-item{
+  display:flex;justify-content:space-between;align-items:center;gap:10px;
+  padding:12px 14px;border:1px solid var(--border-soft);border-radius:var(--radius);
+  margin-bottom:8px;background:var(--navy-deep);
+}
+
+/* ===== NOTIFICATIONS ===== */
+/* Avisos no RODAPÉ à direita, não no topo. Antes ficavam logo abaixo da
+   navegação e cobriam por 5s o box "função da aba" e o cabeçalho da primeira
+   tabela — justamente o que a pessoa precisa ler ao abrir a aba. No rodapé
+   eles continuam visíveis sem tapar conteúdo. */
+#notif{
+  position:fixed;bottom:16px;right:16px;
+  z-index:4000;display:flex;flex-direction:column-reverse;gap:8px;max-width:340px;
+}
+.notif-item{
+  background:var(--navy-light);border:1px solid var(--border);color:var(--text);
+  padding:12px 16px;border-radius:var(--radius);box-shadow:var(--shadow);
+  animation:slideIn .25s ease;font-size:13.5px;
+}
+.notif-item.danger{background:var(--st-aguardando-veiculo-bg);color:var(--st-aguardando-veiculo-fg);border-color:var(--st-aguardando-veiculo-br)}
+.notif-item.success{background:var(--st-faturado-bg);color:var(--st-faturado-fg);border-color:var(--st-faturado-br)}
+.notif-item.warn{background:var(--st-aguardando-embarque-bg);color:var(--st-aguardando-embarque-fg);border-color:var(--st-aguardando-embarque-br)}
+@keyframes slideIn{from{transform:translateX(120%);opacity:0}to{transform:translateX(0);opacity:1}}
+
+/* ===== SEQUÊNCIA ===== */
+.seq-input{width:56px;text-align:center;font-weight:800;color:var(--gold)}
+.ganchos-input{width:70px;text-align:center}
+.praonde-inline{min-width:150px}
+.readonly-pill{
+  background:var(--navy-deep);border:1px solid var(--border-soft);border-radius:var(--radius);
+  padding:9px 11px;font-size:14px;font-weight:700;color:var(--text-dim);
+}
+.chip-praonde{
+  display:inline-block;padding:3px 10px;border-radius:12px;font-size:11.5px;font-weight:800;
+  background:var(--navy-light);color:var(--gold);border:1px solid var(--gold-dim);white-space:nowrap;
+}
+
+/* ===== PAINEL DO GESTOR — comparação por período ===== */
+.table-periodos th, .table-periodos td{text-align:center}
+.table-periodos thead th:first-child, .table-periodos td.row-label{text-align:left}
+.table-periodos td.row-label{
+  background:var(--navy-deep);color:var(--gold);font-weight:700;white-space:nowrap;
+  border-bottom:1px solid var(--border-soft);
+}
+.table-periodos .cel-num{font-weight:800;font-size:15px;color:var(--text)}
+.table-periodos .cel-sem-dados{color:var(--text-dim);font-size:12px;font-style:italic}
+
+/* ===== LINHA DO TEMPO POR CARGA (Histórico) ===== */
+.timeline-card{
+  background:var(--navy-deep);border:1px solid var(--border);border-radius:var(--radius);
+  padding:18px;margin-top:14px;
+}
+.timeline-head{margin-bottom:12px}
+.timeline-placa{font-size:22px;font-weight:800;color:var(--text);display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.timeline-info-grid{
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px 18px;
+  margin-bottom:22px;padding-bottom:16px;border-bottom:1px solid var(--border-soft);
+}
+.timeline-info-item{display:flex;flex-direction:column;gap:2px}
+.timeline-info-item .k{font-size:11px;color:var(--text-dim);font-weight:700;text-transform:uppercase;letter-spacing:.3px}
+.timeline-info-item .v{font-size:15px;color:var(--text);font-weight:700}
+.timeline{position:relative;padding-left:6px}
+.timeline-step{position:relative;display:flex;gap:16px;padding-bottom:26px;align-items:flex-start}
+.timeline-step:last-child{padding-bottom:0}
+.timeline-step::before{
+  content:'';position:absolute;left:15px;top:32px;bottom:-4px;width:3px;background:var(--border-soft);
+}
+.timeline-step:last-child::before{display:none}
+.timeline-step.done::before{background:var(--ok)}
+.timeline-dot{
+  width:32px;height:32px;border-radius:50%;flex:0 0 32px;position:relative;z-index:1;
+  display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px;
+  background:var(--navy);border:3px solid var(--border);color:var(--text-dim);
+}
+.timeline-step.done .timeline-dot{background:var(--ok);border-color:var(--ok);color:#06210f}
+.timeline-step.current .timeline-dot{background:var(--gold);border-color:var(--gold);color:#1a1200;box-shadow:0 0 0 5px rgba(233,185,84,.22)}
+.timeline-content{padding-top:3px;min-width:0;flex:1}
+.timeline-status{font-size:17px;font-weight:800;color:var(--text)}
+.timeline-step.current .timeline-status{color:var(--gold)}
+.timeline-step.pending .timeline-status{color:var(--text-dim)}
+.timeline-quando{font-size:13.5px;color:var(--text-dim);margin-top:2px;font-weight:600}
+.timeline-quem{font-size:13px;color:var(--text-dim);margin-top:1px}
+
+/* ===== GRÁFICOS (Painel do Gestor) ===== */
+.grafico-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:18px;margin-top:14px}
+@media(max-width:1100px){.grafico-grid{grid-template-columns:1fr}}
+.grafico-box{
+  background:var(--navy-deep);border:1px solid var(--border-soft);border-radius:var(--radius);
+  padding:14px;display:flex;flex-direction:column;
+}
+.grafico-titulo{font-size:14px;font-weight:800;color:var(--gold);margin-bottom:8px}
+.grafico-box canvas{width:100%;display:block}
+.grafico-legenda{font-size:11px;margin-top:8px;margin-bottom:0}
+.grafico-legenda-lista{margin-top:10px;display:flex;flex-direction:column;gap:5px}
+.legenda-item{font-size:13px;color:var(--text);display:flex;align-items:center;gap:8px}
+.legenda-chip{width:12px;height:12px;border-radius:3px;flex-shrink:0;display:inline-block}
+
+/* ===== MISC ===== */
+.sep{height:1px;background:var(--border-soft);margin:14px 0}
+.text-right{text-align:right}
+.text-center{text-align:center}
+.text-dim{color:var(--text-dim)}
+.mt8{margin-top:8px}
+.mt16{margin-top:16px}
+.gap8{display:flex;gap:8px;flex-wrap:wrap}
+.flex-end{display:flex;justify-content:flex-end;gap:8px;margin-top:12px;flex-wrap:wrap}
+.last-update{font-size:11.5px;color:var(--text-dim);margin-top:5px}
+.empty-state{padding:26px;text-align:center;color:var(--text-dim);font-size:13.5px}
+.pill-count{
+  background:var(--wine);color:#fff;border-radius:20px;padding:1px 8px;
+  font-size:11px;font-weight:800;margin-left:4px;
+}
+.quick-box{
+  display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;padding:16px;
+  background:var(--navy-deep);border:1px dashed var(--border);border-radius:var(--radius);
+  margin-bottom:16px;
+}
+.quick-box .form-group{min-width:160px}
+
+/* ===== PRINT (PDF Operacional / Executivo) =====
+   Mantém o tema escuro no PDF — não usar fundo branco.
+   print-color-adjust:exact já setado em html/body acima força o browser
+   a preservar as cores de fundo/gradiente na impressão.
+   Os relatórios vivem em containers próprios (.print-only), escondidos na
+   tela normal e só exibidos (via JS, logo antes de window.print()) na hora
+   de gerar o PDF — por isso não são .tab-page e não entram na regra abaixo. */
+.print-only{display:none}
+@media print{
+  #header,#nav,#notif,.btn,.no-print,.quick-box,.modal-overlay,.tab-page{display:none!important}
+  body{background:var(--navy-deep)!important}
+  #main{margin-top:0!important;padding:12px!important;max-width:100%!important}
+  .card{box-shadow:none;break-inside:avoid}
+  table{font-size:11.5px}
+  .print-page{padding:16px}
+}
+.icon-lg{font-size:34px}
+
+/* ---------- Box "função da aba" ----------
+   Fica no topo de toda aba explicando o que se faz ali e qual o efeito no
+   status da carga. Existe porque o painel é usado por 4 setores diferentes,
+   e quem abre uma aba pela primeira vez precisa entender a função dela sem
+   depender de treinamento verbal. Preenchido por atualizarAvisoSetorAba(). */
+.funcao-aba{
+  background:var(--navy-light);
+  border:1px solid var(--border-soft);
+  border-left:3px solid var(--gold);
+  border-radius:var(--radius);
+  padding:11px 14px;
+  margin-bottom:16px;
+}
+.funcao-linha{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.funcao-chip{
+  flex:none;
+  background:var(--gold);color:#2a2007;
+  font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;
+  padding:3px 9px;border-radius:999px;white-space:nowrap;
+}
+.funcao-oque{font-size:13.5px;color:var(--text);line-height:1.5}
+.funcao-move{font-size:12px;color:var(--text-dim);margin-top:6px;line-height:1.5}
+.funcao-oque strong,.funcao-move strong{color:var(--gold-text);font-weight:700}
+@media print{.funcao-aba{display:none}}
+
+
+/* Cabeçalho dos relatórios (Operacional / Executivo).
+   Fica na BASE do CSS, não dentro de @media print: estas regras também valem
+   quando o relatório é pré-visualizado em tela. Estavam só no @media print e
+   o resultado era a logo saindo em tamanho natural (enorme) em qualquer
+   visualização fora da impressão. */
+.print-header{display:flex;align-items:center;gap:14px;margin-bottom:18px}
+.print-header img{
+  height:56px;width:auto;flex:none;
+  background:#fff;border-radius:6px;padding:4px 8px;
+}
+.print-header h1{color:var(--gold-text);font-size:20px;line-height:1.25}
+.print-header .meta{font-size:12px;color:var(--text-dim)}
+
+/* ===== RELATÓRIO EXECUTIVO (impressão) =====
+   Cor de status aqui é INFORMAÇÃO, não enfeite: são as mesmas cores das
+   badges da tela (STATUS_COR_RELATORIO em data.js), pra quem lê o PDF usar o
+   mesmo código de cores do painel. O print-color-adjust:exact declarado em
+   html/body garante que o navegador não descarte esses fundos ao gerar o PDF
+   — sem ele, o Chrome imprime tudo sem cor de fundo e a leitura se perde. */
+.print-secao{margin:22px 0 10px}
+.print-secao-tit{
+  font-size:15px;font-weight:800;color:var(--gold-text);
+  border-bottom:1px solid var(--gold-dim);padding-bottom:5px;
+}
+.print-secao-sub{font-size:11.5px;color:var(--text-dim);margin-top:5px;line-height:1.5}
+.print-vazio{
+  font-size:12px;color:var(--text-dim);font-style:italic;
+  padding:10px 12px;background:var(--navy);border-radius:var(--radius);
+}
+.print-rodape{
+  margin-top:22px;padding-top:10px;border-top:1px solid var(--border-soft);
+  font-size:10.5px;color:var(--text-dim);line-height:1.6;
+}
+.print-legenda{margin-top:7px;font-size:10.5px;color:var(--text-dim);line-height:1.6}
+.num-forte{font-weight:800;color:var(--text);font-variant-numeric:tabular-nums}
+
+/* Pílula de status na tabela de distribuição — mesma leitura da badge. */
+.status-pill{
+  display:inline-block;padding:3px 10px;border-radius:12px;
+  font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.3px;
+  border:1px solid transparent;white-space:nowrap;
+}
+/* Barra de proporção: reforça o número, nunca substitui — a coluna "%" ao
+   lado continua trazendo o valor exato, pra não depender só do comprimento. */
+.barra-cel{width:34%;min-width:120px}
+.barra-trilho{
+  display:block;height:9px;width:100%;
+  background:var(--navy-deep);border:1px solid var(--border-soft);border-radius:5px;overflow:hidden;
+}
+.barra-preenche{display:block;height:100%;border-radius:4px}
+
+/* Menor / maior tempo */
+.extremo-tag{
+  display:inline-block;padding:3px 9px;border-radius:10px;
+  font-size:10.5px;font-weight:800;letter-spacing:.4px;
+}
+.extremo-menor{background:var(--st-faturado-bg);color:var(--st-faturado-fg);border:1px solid var(--ok)}
+.extremo-maior{background:var(--st-aguardando-veiculo-bg);color:var(--st-aguardando-veiculo-fg);border:1px solid var(--wine)}
+.extremo-tempo{font-weight:800;font-size:14.5px;color:var(--gold-text);font-variant-numeric:tabular-nums}
+
+/* Matriz da linha do tempo: cargas nas linhas, etapas do fluxo nas colunas. */
+.tabela-timeline{font-size:10.5px;table-layout:fixed}
+.tabela-timeline th{padding:7px 5px;font-size:10px;white-space:normal;text-align:center}
+.tabela-timeline .tl-th{display:block;line-height:1.25;font-weight:800}
+.tabela-timeline td{padding:5px;vertical-align:top}
+.tl-carga{width:15%}
+.tl-placa{display:block;font-weight:800;color:var(--text);font-size:12px}
+.tl-num{display:block;color:var(--gold-text);font-size:10px}
+.tl-transp{display:block;color:var(--text-dim);font-size:9.5px;line-height:1.3}
+.tl-cel{text-align:center;border-radius:4px}
+.tl-hora{display:block;font-weight:800;font-size:11.5px;font-variant-numeric:tabular-nums}
+.tl-quem{display:block;color:var(--text);font-size:9.5px;line-height:1.3}
+.tl-setor{display:block;color:var(--text-dim);font-size:9px}
+.tl-pendente{text-align:center;color:var(--placeholder);font-size:13px}
+.tl-na{text-align:center;color:var(--placeholder);font-size:9.5px;font-style:italic}
+.tl-total{text-align:center;font-weight:800;color:var(--gold-text);font-variant-numeric:tabular-nums;width:8%}
+
+@media print{
+  /* Não quebrar uma seção do relatório no meio de uma página. */
+  .print-secao{break-after:avoid;page-break-after:avoid}
+  .tabela-timeline{font-size:9.5px}
+  .tabela-timeline tr{break-inside:avoid;page-break-inside:avoid}
+  thead{display:table-header-group}  /* repete cabeçalho a cada página */
+}
+
+/* Menor/maior tempo na tela de Indicadores (o PDF usa tabela; aqui cartão,
+   que lê melhor em monitor e não força rolagem horizontal). */
+.extremo-bloco{margin-bottom:16px}
+.extremo-bloco:last-child{margin-bottom:0}
+.extremo-titulo{font-size:13.5px;font-weight:800;color:var(--gold-text);margin-bottom:9px}
+.extremo-par{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:640px){.extremo-par{grid-template-columns:1fr}}
+.extremo-card{
+  background:var(--navy-deep);border:1px solid var(--border-soft);
+  border-radius:var(--radius);padding:12px 14px;
+}
+.extremo-card.extremo-menor{border-left:4px solid var(--ok)}
+.extremo-card.extremo-maior{border-left:4px solid var(--wine)}
+.extremo-card-top{display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap}
+.extremo-carga{font-size:14px;color:var(--text)}
+.extremo-det{font-size:12px;color:var(--text-dim);margin-top:3px;line-height:1.45}
+
+/* Legenda das 6 cores de status nos relatórios. Quem recebe a foto do
+   relatório no grupo do WhatsApp nem sempre tem o painel aberto do lado. */
+.legenda-status{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 14px}
+.legenda-status-item{
+  padding:4px 11px;border-radius:12px;border:1px solid transparent;
+  font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.3px;
+  white-space:nowrap;
+}
+
+/* ===== INTEGRAÇÃO SHAREPOINT — overlay, badges e rodapé de status ===== */
+
+/* Overlay de sincronia. Só aparece em operação que realmente fala com a
+   nuvem (arquivamento de ciclo, drenagem de fila) — nunca em cada clique:
+   a gravação do dia a dia é local-first e retorna na hora. */
+.sync-overlay{
+  position:fixed;inset:0;z-index:6000;
+  background:rgba(6,9,18,.66);backdrop-filter:blur(2px);
+  display:flex;align-items:center;justify-content:center;
+}
+/* OBRIGATÓRIO: sem esta regra o display:flex acima vence o atributo hidden,
+   e o overlay — invisível — intercepta todos os cliques do painel. */
+.sync-overlay[hidden]{display:none}
+.sync-box{
+  background:var(--navy);border:1px solid var(--border);
+  border-radius:var(--radius);box-shadow:0 12px 44px rgba(0,0,0,.5);
+  padding:28px 34px;text-align:center;max-width:340px;
+}
+.sync-spinner{
+  width:38px;height:38px;margin:0 auto 14px;
+  border:3px solid var(--border-soft);border-top-color:var(--gold);
+  border-radius:50%;animation:sync-gira .8s linear infinite;
+}
+@keyframes sync-gira{to{transform:rotate(360deg)}}
+.sync-texto{font-size:15px;font-weight:700;color:var(--text)}
+.sync-sub{font-size:12px;color:var(--text-dim);margin-top:6px;line-height:1.45}
+
+/* Badge de conexão no cabeçalho */
+.badge-conexao{
+  padding:5px 12px;border-radius:14px;font-size:12px;font-weight:700;
+  border:1px solid transparent;white-space:nowrap;
+}
+.badge-conexao.offline{background:var(--st-aguardando-embarque-bg);color:var(--st-aguardando-embarque-fg);border-color:var(--st-aguardando-embarque-br)}
+.badge-conexao.local{background:var(--navy-light);color:var(--text-dim);border-color:var(--border)}
+
+/* Rodapé fixo de status da conexão */
+.rodape-conexao{
+  position:fixed;left:0;right:0;bottom:0;z-index:3500;
+  padding:7px 16px;font-size:12px;font-weight:600;text-align:center;
+  border-top:1px solid var(--border-soft);
+}
+.rodape-conexao.online{background:var(--st-faturado-bg);color:var(--st-faturado-fg)}
+.rodape-conexao.offline{background:var(--st-aguardando-embarque-bg);color:var(--st-aguardando-embarque-fg)}
+.rodape-conexao.local{background:var(--navy-light);color:var(--text-dim)}
+/* O rodapé é fixo: reserva espaço para não cobrir o fim do conteúdo. */
+#main{padding-bottom:64px}
+#notif{bottom:46px}
+@media print{.rodape-conexao,.badge-conexao,.sync-overlay{display:none!important}}
+
+/* ===== Acabamento no padrão Fluent (Microsoft Teams) =====
+   Cantos menos arredondados, elevação sutil no hover e foco visível — as
+   convenções do Fluent — sem trocar a paleta da Suinco por azul Microsoft:
+   a identidade da marca continua sendo a do cliente. */
+.btn{
+  border-radius:6px;
+  box-shadow:0 1px 2px rgba(0,0,0,.18);
+  transition:opacity .15s, transform .1s, box-shadow .15s, filter .15s;
+}
+.btn:hover{opacity:1;filter:brightness(1.07);box-shadow:0 3px 8px rgba(0,0,0,.26)}
+.btn:active{transform:translateY(1px);box-shadow:0 1px 2px rgba(0,0,0,.2)}
+.badge{border-radius:5px;letter-spacing:.4px}
+.status-pill,.legenda-status-item{border-radius:5px}
+.card{border-radius:8px}
+input,select,textarea{border-radius:5px}
+
+/* ===== IMPRESSÃO DOS RELATÓRIOS — FOLHA BRANCA, TEXTO ESCURO =====
+   DEFEITO CORRIGIDO EM 31/07/2026: o relatório saía "em preto e branco" e, com
+   os gráficos de fundo desligados (o padrão da caixa de impressão do Chrome),
+   saía COMPLETAMENTE EM BRANCO.
+
+   Causa: o relatório herdava as cores do tema do painel. No tema escuro o
+   texto é quase branco — quando o navegador descarta os fundos, sobra texto
+   branco em papel branco e a folha fica vazia.
+
+   Correção: a impressão passa a ter identidade própria — papel branco, texto
+   escuro —, independente do tema em que o painel está. As cores sólidas dos 6
+   status continuam nas células (estilo inline, que vence estas regras), então
+   quem imprime COM gráficos de fundo continua vendo a escala de cores do
+   gestor; quem imprime SEM ainda recebe um relatório legível, em vez de uma
+   folha vazia. */
+@media print{
+  html, body{ background:#ffffff !important; color:#111418 !important; }
+  #main{ background:#ffffff !important; }
+
+  /* Estrutura do relatório: fundo branco e texto escuro. As células de status
+     não entram aqui porque carregam cor inline, de especificidade maior. */
+  .print-page, .print-page .card,
+  .print-secao, .print-vazio, .print-header{
+    background:#ffffff !important; color:#111418 !important;
+  }
+  .print-page table{ background:#ffffff !important; }
+  .print-page th{
+    background:#f2f4f8 !important; color:#111418 !important;
+    border-bottom:2px solid #8a94a6 !important;
+  }
+  /* Só as células SEM cor própria. :not([style*="background"]) preserva as
+     coloridas, que precisam manter o texto claro sobre o preenchimento. */
+  .print-page td:not([style*="background"]){
+    color:#111418 !important; background:transparent !important;
+  }
+  .print-page tr{ border-bottom:1px solid #c9d4e8 !important; }
+
+  /* Títulos e textos auxiliares: o dourado da marca não tem contraste
+     suficiente sobre papel branco. */
+  .print-header h1{ color:#111418 !important; }
+  .print-header .meta,
+  .print-secao-sub, .print-page .text-dim{ color:#3d4a5c !important; }
+  .print-secao-tit{
+    color:#111418 !important; border-bottom-color:#8a94a6 !important;
+  }
+
+  /* A legenda de status é o que permite ler a escala de cores mesmo se os
+     fundos forem descartados: cada item ganha borda, que sempre imprime. */
+  .legenda-status-item{ border:1.5px solid #111418 !important; }
+}
+
+/* ===== RELATÓRIO OPERACIONAL: CABER NA LARGURA DA FOLHA =====
+   Com 16 colunas, a tabela ultrapassava a largura do A4 deitado e o navegador
+   simplesmente cortava as últimas colunas na borda — a Qtd. Ganchos sumia da
+   folha impressa, apesar de estar correta na tela.
+
+   width:100% + table-layout:fixed obrigam a tabela a se ajustar à página em
+   vez de crescer conforme o conteúdo; a quebra de palavra evita que um nome
+   longo de transportadora volte a esticar a coluna. */
+@page{ size: A4 landscape; margin: 8mm; }
+
+@media print{
+  #print-operacional table{
+    width:100% !important;
+    table-layout:fixed !important;
+    font-size:7.6px !important;
+  }
+  #print-operacional th, #print-operacional td{
+    padding:4px 3px !important;
+    overflow-wrap:break-word; word-break:break-word; hyphens:auto;
+  }
+  /* O th da tabela nasce com white-space:nowrap (linha 201). Com a largura
+     agora fixa, isso fazia o título transbordar por cima da coluna vizinha —
+     "Status de Carregamento" cobria "Faturado". Aqui o cabeçalho quebra em
+     várias linhas, como já acontece na tabela de linha do tempo. */
+  #print-operacional th{
+    white-space:normal !important;
+    vertical-align:bottom; line-height:1.2; text-align:center;
+  }
+  /* Colunas de estado e as numéricas ficam estreitas e centralizadas; as de
+     texto livre (Destino, Rota, Transportadora) ficam com o espaço restante. */
+  #print-operacional th:nth-child(1),  #print-operacional td:nth-child(1),
+  #print-operacional th:nth-child(5),  #print-operacional td:nth-child(5){ width:2.6% }
+  #print-operacional th:nth-child(4),  #print-operacional td:nth-child(4){ width:5% }
+  #print-operacional th:nth-child(6),  #print-operacional td:nth-child(6){ width:4.6% }
+  #print-operacional th:nth-child(10), #print-operacional td:nth-child(10){ width:6% }
+  #print-operacional th:nth-child(12), #print-operacional td:nth-child(12){ width:6% }
+  #print-operacional th:nth-child(13), #print-operacional td:nth-child(13),
+  #print-operacional th:nth-child(14), #print-operacional td:nth-child(14),
+  #print-operacional th:nth-child(15), #print-operacional td:nth-child(15),
+  #print-operacional th:nth-child(16), #print-operacional td:nth-child(16){ width:5% }
+}
