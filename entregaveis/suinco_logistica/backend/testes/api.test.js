@@ -592,6 +592,62 @@ describe('8. Superfície de ataque', () => {
     assert.equal(r.status, 200);
   });
 
+  /* A recusa precisa ser LEGÍVEL, não opaca.
+
+     Quando o CORS só falha, o navegador esconde o motivo e o painel mostra
+     algo indistinguível de Wi-Fi caído — foi o que deixou um operador sem
+     entrar, com o servidor no ar, porque tinha aberto o painel em www. */
+  test('a recusa por origem diz qual endereço foi barrado e qual é o certo', async () => {
+    const r = await req('/auth/login', {
+      metodo: 'POST',
+      cabecalhos: { origin: 'https://www.endereco-errado.com.br' },
+      corpo: { email: 'ana@teste.local', senha: SENHA },
+    });
+    assert.equal(r.status, 403);
+    assert.equal(r.json.codigo, 'ORIGEM_NAO_AUTORIZADA');
+    assert.match(r.json.erro, /www\.endereco-errado\.com\.br/);
+    assert.match(r.json.erro, /embarquesuinco\.com\.br/);
+    // Sem este cabeçalho o navegador descarta o corpo e o operador continua
+    // sem saber de nada — a mensagem existiria só no log.
+    assert.equal(r.headers.get('access-control-allow-origin'),
+                 'https://www.endereco-errado.com.br');
+    // Credencial NÃO é liberada: a origem barrada pode ler o erro, nunca
+    // enviar cookie de sessão.
+    assert.equal(r.headers.get('access-control-allow-credentials'), null);
+  });
+
+  test('origem barrada não chega na rota — nenhuma senha é conferida', async () => {
+    const r = await req('/auth/login', {
+      metodo: 'POST',
+      cabecalhos: { origin: 'https://site-do-atacante.com' },
+      corpo: { email: 'ana@teste.local', senha: 'senha-errada-de-proposito' },
+    });
+    // 403 de origem, não 401 de credencial: a requisição parou antes.
+    assert.equal(r.status, 403);
+    assert.equal(r.json.codigo, 'ORIGEM_NAO_AUTORIZADA');
+  });
+
+  test('preflight de origem barrada passa, para o 403 poder ser lido', async () => {
+    const r = await req('/auth/login', {
+      metodo: 'OPTIONS',
+      cabecalhos: {
+        origin: 'https://www.endereco-errado.com.br',
+        'access-control-request-method': 'POST',
+        'access-control-request-headers': 'content-type',
+      },
+    });
+    assert.equal(r.status, 204);
+    assert.equal(r.headers.get('access-control-allow-origin'),
+                 'https://www.endereco-errado.com.br');
+  });
+
+  test('o painel abre pelo endereço com www', async () => {
+    const r = await req('/health', {
+      cabecalhos: { origin: 'https://www.embarquesuinco.com.br' },
+    });
+    assert.equal(r.status, 200);
+  });
+
   test('id com payload de XSS é recusado antes de tocar no banco', async () => {
     const r = await req(`/api/cargas/${encodeURIComponent("x');alert(1)//")}/status`, {
       metodo: 'POST', token: tokens['Portaria'], corpo: { status: 'Aguardando Embarque' },

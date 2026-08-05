@@ -166,6 +166,35 @@ EOF
 else
   ok ".env já existia — preservado"
 fi
+
+# Reconcilia as chaves NÃO secretas de um .env antigo.
+#
+# O .env é preservado entre instalações, e isso é certo: regerar segredo
+# derruba a sessão de todo mundo e quebra a conexão com o banco. Mas o
+# efeito colateral é que uma configuração corrigida depois da primeira
+# instalação nunca chega ao servidor.
+#
+# Foi assim que um operador ficou sem entrar: o painel abria em
+# www.embarquesuinco.com.br, endereço que só passou a constar do modelo
+# depois — o .env em uso ainda listava a versão sem www, e a API recusava.
+# Segredo nenhum é tocado aqui.
+adicionar_origem() {
+  local nova="$1"
+  local atual
+  atual="$(grep -E '^ORIGENS_PERMITIDAS=' "$ENV_FILE" | cut -d= -f2-)"
+  if [[ ",$atual," != *",$nova,"* ]]; then
+    sed -i "s|^ORIGENS_PERMITIDAS=.*|ORIGENS_PERMITIDAS=${atual:+$atual,}$nova|" "$ENV_FILE"
+    aviso "endereço $nova faltava na lista autorizada — adicionado"
+  fi
+}
+if grep -qE '^ORIGENS_PERMITIDAS=' "$ENV_FILE"; then
+  adicionar_origem "$DOMINIO_PAINEL"
+  adicionar_origem "https://www.${DOMINIO_PAINEL#https://}"
+else
+  echo "ORIGENS_PERMITIDAS=$DOMINIO_PAINEL,https://www.${DOMINIO_PAINEL#https://}" >> "$ENV_FILE"
+  aviso "ORIGENS_PERMITIDAS não existia no .env — criada"
+fi
+ok "endereços autorizados: $(grep -E '^ORIGENS_PERMITIDAS=' "$ENV_FILE" | cut -d= -f2-)"
 # Só o dono lê. Este arquivo é o único lugar com segredo no servidor.
 chown "$APP_USER:$APP_USER" "$ENV_FILE"
 chmod 600 "$ENV_FILE"
