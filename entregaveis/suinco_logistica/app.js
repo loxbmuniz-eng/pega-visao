@@ -17,9 +17,9 @@ const NEXT_ACAO = {
   'Embarque Finalizado':  { label:'Faturar',            destino:'Faturado' }
 };
 
-/* ---------- CONEXÃO COM O SHAREPOINT (estado real, sem fingir) ----------
+/* ---------- CONEXÃO COM O SERVIDOR (estado real, sem fingir) ----------
    O rodapé e o badge do cabeçalho mostram o estado VERDADEIRO da conexão.
-   O texto "Conectado ao SharePoint | Alimentando Power BI em Tempo Real" só
+   O texto "Conectado | Compartilhado entre os setores" só
    aparece quando existe conexão de fato; enquanto o TI não provisionar o
    ambiente, o rodapé diz que está aguardando configuração. Exibir conexão
    inexistente seria exatamente o que o TI checa primeiro numa auditoria. */
@@ -71,7 +71,7 @@ function atualizarRodapeConexao(estado, detalhe){
     const seg = u ? Math.round((Date.now() - Date.parse(u))/1000) : null;
     const quando = seg === null ? '' : (seg < 5 ? ' · sincronizado agora' : ` · sincronizado há ${seg}s`);
     rod.className = 'rodape-conexao online';
-    rod.innerHTML = `✅ Conectado ao SharePoint | Compartilhado entre os setores${esc(quando)}${esc(sufixoFila)}${esc(carimbo)}`;
+    rod.innerHTML = `✅ Conectado | Compartilhado entre os setores${esc(quando)}${esc(sufixoFila)}${esc(carimbo)}`;
     if(badge){ badge.hidden = true; }
   } else if(estado === 'offline'){
     rod.className = 'rodape-conexao offline';
@@ -80,49 +80,20 @@ function atualizarRodapeConexao(estado, detalhe){
   } else {
     // 'local': sem configuração de tenant. Estado honesto, não erro.
     rod.className = 'rodape-conexao local';
-    rod.innerHTML = '⚙️ Modo Local — aguardando o TI provisionar o SharePoint (ver docs/RELATORIO_TI_HOSPEDAGEM.md). Os dados ficam neste navegador.' + esc(carimbo);
+    rod.innerHTML = '⚠️ Modo Local — sem conexão com o servidor. Os dados ficam SÓ neste navegador e não são vistos pelos outros setores.' + esc(carimbo);
     if(badge){ badge.hidden = false; badge.className = 'badge-conexao local'; badge.textContent = '⚙️ Local'; }
   }
 }
 
-/* ---------- ENCERRAR E ARQUIVAR CICLO ----------
-   Dispara o fluxo do Power Automate que cria /Ano/Mês/Dia/ e prepara o
-   próximo turno. Pede confirmação porque encerrar o dia é irreversível, e
-   nunca apaga nada localmente por conta própria: a limpeza da lista
-   operacional é responsabilidade do fluxo no lado do servidor, depois de o
-   arquivamento ter dado certo. */
-async function encerrarCicloUI(){
-  const total = DB.cargas.length;
-  const concluidas = DB.cargas.filter(c=>c.status==='Seguiu Viagem').length;
-  const emAberto = total - concluidas;
+/* O ENCERRAR E ARQUIVAR CICLO foi removido em 05/08/2026.
 
-  let aviso = `Encerrar e arquivar o ciclo de hoje?\n\n` +
-              `Total de cargas: ${total}\n` +
-              `Concluídas (Seguiu Viagem): ${concluidas}\n` +
-              `Ainda em aberto: ${emAberto}\n\n`;
-  if(emAberto > 0){
-    aviso += `ATENÇÃO: ${emAberto} carga(s) ainda não saíram. Elas entram no arquivo do dia assim mesmo.\n\n`;
-  }
-  aviso += `O arquivamento é irreversível.`;
-  if(!confirm(aviso)) return;
+   Ele disparava um fluxo do Power Automate que criava pastas /Ano/Mês/Dia/
+   no SharePoint. Com o PostgreSQL o histórico é permanente e consultável
+   por período a qualquer momento — não há mais o que arquivar, e um botão
+   irreversível que não faz nada é a pior combinação possível.
 
-  if(typeof SuincoSharePoint === 'undefined'){
-    notify('Adaptador do SharePoint não carregado.', 'danger');
-    return;
-  }
-  try{
-    const r = await comOverlaySync('Arquivando o ciclo do dia…',
-      ()=>SuincoSharePoint.arquivarDia({total, concluidas, emAberto}, DB.operador));
-    if(r.disparado){
-      notify('Ciclo encerrado — o Power Automate está criando as pastas do dia.', 'success');
-    }else{
-      notify(`Ciclo NÃO arquivado: ${r.motivo}. Nada foi apagado.`, 'warn');
-    }
-  }catch(e){
-    notify('Falha ao arquivar: ' + e.message + '. Nada foi apagado.', 'danger');
-  }
-}
-
+   Se um dia a operação precisar de um fechamento formal de dia (travar
+   edição retroativa, por exemplo), isso é regra de servidor, não de tela. */
 /* ---------- TEMA CLARO / ESCURO ----------------------------------------
    O tema vive num atributo data-tema no <html>; todas as cores saem de
    variáveis CSS (ver :root e :root[data-tema="claro"] em styles.css), então
@@ -132,7 +103,7 @@ async function encerrarCicloUI(){
    Onde é guardado: numa chave PRÓPRIA do localStorage, separada do DB. É
    preferência do dispositivo (o monitor da Portaria pode querer claro e o do
    escritório escuro), não dado operacional — se fosse pro DB, iria junto pro
-   SharePoint um dia e passaria a forçar o mesmo tema pra todo mundo.
+   servidor um dia e passaria a forçar o mesmo tema pra todo mundo.
 
    Primeira abertura: segue a preferência do sistema operacional
    (prefers-color-scheme). A partir da primeira troca manual, a escolha do
@@ -406,17 +377,19 @@ function atualizarAvisoSetorAba(){
   });
 }
 
-/* ---------- TRAVA DE SENHA (Indicadores / Relatórios) -----------------
+/* ---------- TRAVA DE SENHA (Programação / Indicadores) ----------------
    ATENÇÃO — LEIA ANTES DE CONFIAR NISSO PRA QUALQUER COISA SÉRIA:
-   Isto NÃO É segurança de verdade. É só uma barreira de UX pra evitar que
-   alguém abra essas duas abas sem querer / por curiosidade casual. A senha
-   fica em texto puro aqui embaixo, visível pra qualquer pessoa que abra o
-   código-fonte da página (Ctrl+U no navegador) ou o F12. Não protege nada
-   contra alguém com o mínimo de intenção de contornar. Controle de acesso
-   de verdade só existe quando a permissão REAL da Lista do SharePoint
-   estiver configurada por coluna/item e o SSO (Microsoft 365) estiver
-   ligado — ver docs/MODELO_DADOS_SHAREPOINT.md. Até lá, isto é só uma
-   cortina, não uma porta trancada. */
+
+   Isto NÃO é segurança. É uma barreira de UX, para evitar que alguém abra
+   essas abas sem querer ou por curiosidade casual. A senha fica em texto
+   puro logo abaixo, visível com Ctrl+U ou pelo F12, e não resiste a
+   ninguém com o mínimo de intenção de contornar.
+
+   O controle de acesso de verdade está no SERVIDOR: o setor vem do token
+   assinado e a API recusa a gravação que não é daquele setor. Adulterar
+   qualquer coisa aqui muda o desenho da tela, não o que o servidor aceita.
+
+   É uma cortina, não uma porta trancada. */
 const SENHA_UX_ABAS_RESTRITAS = 'suinco2026';
 const ABAS_COM_SENHA = ['programacao','indicadores'];
 let abasDesbloqueadasNestaSessao = new Set();
@@ -1899,8 +1872,8 @@ async function init(){
   }
   preencherSelectsRota();   // alimenta os selects de Rota a partir de ROTAS
   iniciarTema();            // antes de desenhar: evita piscar no tema errado
-  // Conecta ao SharePoint se o TI já tiver configurado; caso contrário fica
-  // em modo local e o rodapé diz isso. Nunca bloqueia a abertura do painel.
+  // Conecta ao servidor se houver sessão; caso contrário fica em modo
+  // local e o rodapé diz isso. Nunca bloqueia a abertura do painel.
   if(typeof SuincoSharePoint !== 'undefined'){
     SuincoSharePoint.aoMudarEstado(atualizarRodapeConexao);
     // Toda leitura das Listas cai aqui: funde no DB e redesenha se algo mudou.
@@ -1922,7 +1895,7 @@ async function init(){
     });
     SuincoSharePoint.iniciar()
       .then(()=>{ atualizarRodapeConexao(SuincoSharePoint.estado()); renderAll(); })
-      .catch(e=>{ console.warn('[Suinco] init SharePoint:', e); atualizarRodapeConexao('local'); });
+      .catch(e=>{ console.warn('[Suinco] init:', e); atualizarRodapeConexao('local'); });
   }
   atualizarDatalists();
   atualizarResumoFiltroRelatorio();  // resumo do filtro já na 1ª pintura

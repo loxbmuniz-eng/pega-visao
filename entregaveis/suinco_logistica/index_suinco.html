@@ -179,11 +179,14 @@
       <div class="empty-state" id="prog-aguardando-empty" hidden>Nenhum veículo aguardando dados de carga.</div>
     </div>
 
-    <div class="card">
-      <div class="card-title"><span class="icon">🚀</span> Encerramento do Ciclo</div>
-      <div class="card-sub">Fecha o dia: dispara o fluxo do Power Automate que cria as pastas <code>/Ano/Mês/Dia/</code>, arquiva o movimento e prepara a lista operacional para o próximo turno. <strong>Ação irreversível</strong> — pede confirmação antes, e nada é apagado do painel se o arquivamento falhar.</div>
-      <div class="flex-end"><button class="btn btn-danger" onclick="encerrarCicloUI()">🚀 Encerrar e Arquivar Ciclo</button></div>
-    </div>
+    <!-- O Encerramento do Ciclo saiu daqui (05/08/2026).
+
+         Ele existia para disparar um fluxo do Power Automate que criava
+         pastas /Ano/Mês/Dia/ no SharePoint e "fechava o dia". Com o banco
+         PostgreSQL isso perdeu o sentido: o histórico é permanente e
+         consultável por período a qualquer momento, sem precisar arquivar
+         nada. Não havia mais o que o botão fizesse -- e botão irreversível
+         que não faz nada é a pior combinação possível. -->
   </div>
 
   <!-- ===== PORTARIA ===== -->
@@ -298,10 +301,8 @@
       <div class="card-title"><span class="icon">📈</span> Gráficos — filtros combináveis</div>
       <div class="card-sub">
         Filtre por Placa, Transportadora, Setor e Período — os 3 gráficos abaixo reagem juntos ao filtro, sem precisar
-        recarregar a página. Atualiza sozinho nesta sessão a cada ação registrada no painel (chegada, avanço de status,
-        faturamento etc.). <strong>Isso não é tempo real entre pessoas diferentes</strong> — hoje os dados vivem só no
-        localStorage deste navegador; tempo real de verdade entre setores só existe quando o SharePoint estiver
-        provisionado e todo mundo estiver lendo da mesma Lista (ver docs/MODELO_DADOS_SHAREPOINT.md).
+        recarregar a página. Atualiza a cada ação registrada por <strong>qualquer setor</strong> — os dados vêm do
+        servidor, não deste navegador.
       </div>
       <div class="form-row" style="align-items:flex-end">
         <div class="form-group"><label>Placa <span class="hint">(contém)</span></label><input type="text" id="graf-filtro-placa" placeholder="Ex: ABC1D23" oninput="renderGraficosIndicadores()"></div>
@@ -533,10 +534,10 @@
       <div class="card-title"><span class="icon">📊</span> Exportar Dados (CSV) — Power BI</div>
       <div class="card-sub">
         Gera 5 arquivos CSV (formato fato/dimensão): <code>Fact_Movimentacoes</code>, <code>Dim_Carga</code>,
-        <code>Dim_Transportadora</code>, <code>Dim_Frota</code>, <code>Dim_Status</code>. Isto é uma
-        <strong>ponte temporária</strong> — quando as Listas do SharePoint estiverem provisionadas, o certo é o
-        Power BI conectar direto nelas (Obter Dados → Lista do SharePoint), sem depender de exportar/importar
-        manualmente. Ver <code>docs/POWERBI_EXPORT.md</code>.
+        <code>Dim_Transportadora</code>, <code>Dim_Frota</code>, <code>Dim_Status</code>.
+        <strong>Para uso pontual</strong> — o caminho recomendado é o Power BI conectar direto na API
+        (<code>api.embarquesuinco.com.br/bi/…</code>), com os mesmos cabeçalhos e sem exportar nada à mão.
+        Ver <code>docs/POWERBI_EXPORT.md</code>.
       </div>
       <button class="btn btn-primary" onclick="exportarCsvPowerBI()">📊 Exportar Dados (CSV) — Power BI</button>
     </div>
@@ -696,18 +697,18 @@
 <div id="print-operacional" class="print-only"></div>
 <div id="print-executivo" class="print-only"></div>
 
-<!-- Overlay exibido enquanto há escrita indo para o SharePoint -->
+<!-- Overlay exibido enquanto há escrita indo para o servidor -->
 <div id="sync-overlay" class="sync-overlay" hidden>
   <div class="sync-box">
     <div class="sync-spinner"></div>
-    <div class="sync-texto">Sincronizando com a Nuvem Suinco…</div>
+    <div class="sync-texto">Sincronizando…</div>
     <div class="sync-sub" id="sync-sub"></div>
   </div>
 </div>
 
 <!-- Rodapé de status. O texto NÃO é fixo: reflete o estado real da conexão
-     (ver atualizarRodapeConexao em app.js). Afirmar "Conectado ao SharePoint"
-     sem conexão seria justamente o que o TI vai checar primeiro. -->
+     (ver atualizarRodapeConexao em app.js). Afirmar "Conectado" sem conexão
+     seria justamente o que o TI vai checar primeiro. -->
 <div id="rodape-conexao" class="rodape-conexao"></div>
 
 <script>
