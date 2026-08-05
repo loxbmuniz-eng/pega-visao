@@ -296,6 +296,11 @@ async function explicarFalhaDeLogin(e){
     return `O servidor recebeu o pedido mas falhou (erro ${e.status}). `
          + 'Isso é do servidor, não da sua senha. Avise a Logística. [HTTP'+e.status+']';
   }
+  if(e && e.codigo === 'ORIGEM_NAO_AUTORIZADA'){
+    // O servidor sabe qual endereço foi barrado e qual é o certo. Repassar a
+    // frase dele é melhor do que reescrever aqui uma versão mais vaga.
+    return (e.message || 'Endereço não autorizado.') + ' [ENDEREÇO]';
+  }
   if(e && e.status === 401){
     return 'E-mail ou senha incorretos. Confira maiúsculas e espaços. [SENHA]';
   }

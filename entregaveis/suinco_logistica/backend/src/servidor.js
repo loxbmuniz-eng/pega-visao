@@ -32,13 +32,56 @@ export function criarApp() {
     crossOriginResourcePolicy: { policy: 'cross-origin' },
   }));
 
+  /* Origem recusada precisa de resposta LEGÍVEL, não de erro opaco.
+
+     Quando o CORS simplesmente falha, o navegador esconde o motivo: o painel
+     recebe um erro de rede genérico, idêntico a Wi-Fi caído. Um operador
+     ficou sem entrar por isso — tinha aberto o painel de um endereço que a
+     API não conhece (www., ou o arquivo salvo pelo WhatsApp), e a tela dizia
+     que o servidor não respondia, com o servidor no ar.
+
+     Aqui a recusa vira 403 com corpo lido pelo navegador, dizendo QUAL
+     endereço foi barrado e qual é o certo. Para o corpo ser legível, o
+     preflight desta origem barrada precisa passar — e passa, sem
+     Allow-Credentials.
+
+     Isso não abre nada: a requisição para aqui, nenhuma rota roda, nenhum
+     dado sai. O que um site hostil consegue ler é a frase "seu endereço não
+     está autorizado", que ele já saberia pelo erro de CORS. Cookie continua
+     impossível (sem Allow-Credentials) e o token nunca é enviado sozinho —
+     vai no cabeçalho Authorization, que só o painel legítimo monta. */
+  app.use((req, res, next) => {
+    const origem = req.headers.origin;
+    if (!origem || config.origens.includes(origem)) return next();
+
+    res.setHeader('Access-Control-Allow-Origin', origem);
+    res.setHeader('Access-Control-Allow-Headers', 'content-type, authorization');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, OPTIONS');
+    res.setHeader('Vary', 'Origin');
+
+    if (req.method === 'OPTIONS') return res.sendStatus(204);
+
+    // 'null' é o que o navegador manda quando a página veio de um arquivo
+    // aberto do disco — caso comum quando o painel circula por WhatsApp.
+    const doArquivo = origem === 'null';
+    return res.status(403).json({
+      codigo: 'ORIGEM_NAO_AUTORIZADA',
+      erro: doArquivo
+        ? `Este painel foi aberto de um arquivo salvo no aparelho, e não do `
+          + `endereço oficial. Abra ${config.origens[0]} no navegador.`
+        : `O painel foi aberto em ${origem}, que não está autorizado. `
+          + `O endereço correto é ${config.origens[0]}.`,
+    });
+  });
+
   /* CORS restrito às origens do .env. O painel roda em outro domínio (Vercel),
      então CORS é obrigatório — mas `origin: '*'` junto com Authorization
-     deixaria qualquer site chamar a API com o token do operador logado. */
+     deixaria qualquer site chamar a API com o token do operador logado.
+
+     Neste ponto, origem desconhecida já foi respondida acima; o que chega
+     aqui é origem conhecida ou chamada sem navegador (curl, Power BI). */
   app.use(cors({
     origin(origem, cb) {
-      // Sem Origin = chamada de servidor, curl, Power BI. Não é navegador,
-      // então não há sessão de outro site para roubar.
       if (!origem) return cb(null, true);
       if (config.origens.includes(origem)) return cb(null, true);
       return cb(new Error(`Origem não autorizada: ${origem}`));

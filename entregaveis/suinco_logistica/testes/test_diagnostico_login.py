@@ -8,7 +8,7 @@ para Wi-Fi ruim e para erro interno. Com um relato indistinguível, o
 diagnóstico remoto vira adivinhação.
 
 Cada falha agora carrega um código curto entre colchetes, feito para ser
-lido em voz alta ou fotografado no grupo. Este teste força as cinco
+lido em voz alta ou fotografado no grupo. Este teste força as seis
 situações e confere que cada uma produz o código certo.
 
 Não precisa do backend no ar: todas as respostas são simuladas pelo próprio
@@ -125,13 +125,28 @@ async def main():
         await pagina.unroute('**/auth/login')
         await pagina.unroute('**/health')
 
-        print('\n=== 6. OS CÓDIGOS SÃO TODOS DIFERENTES ===')
+        print('\n=== 6. PAINEL ABERTO NO ENDEREÇO ERRADO ===')
+        # O servidor agora recusa a origem com um 403 legível em vez de deixar
+        # o navegador esconder o motivo. A tela repassa a frase dele, que diz
+        # QUAL endereço foi barrado e qual é o certo — é a diferença entre
+        # "não entra" e "abre o site pelo endereço sem www".
+        await pagina.route('**/auth/login', responder_login(
+            403, '{"codigo":"ORIGEM_NAO_AUTORIZADA",'
+                 '"erro":"O painel foi aberto em https://www.embarquesuinco.com.br, '
+                 'que não está autorizado. O endereço correto é https://embarquesuinco.com.br."}'))
+        txt = await tentar_login(pagina)
+        ck('mostra [ENDEREÇO]', '[ENDEREÇO]' in txt, txt)
+        ck('nomeia o endereço barrado', 'www.embarquesuinco.com.br' in txt, txt)
+        ck('nomeia o endereço certo', 'O endereço correto' in txt, txt)
+        await pagina.unroute('**/auth/login')
+
+        print('\n=== 7. OS CÓDIGOS SÃO TODOS DIFERENTES ===')
         # Se dois casos compartilhassem código, voltaríamos ao problema que
         # este trabalho existe para resolver.
-        codigos = ['[SENHA]', '[LIMITE]', '[HTTP500]', '[REDE]', '[BLOQUEIO]']
-        ck('cinco códigos distintos', len(set(codigos)) == 5)
+        codigos = ['[SENHA]', '[LIMITE]', '[HTTP500]', '[REDE]', '[BLOQUEIO]', '[ENDEREÇO]']
+        ck('seis códigos distintos', len(set(codigos)) == 6)
 
-        print('\n=== 7. CONSOLE ===')
+        print('\n=== 8. CONSOLE ===')
         ck('sem erros de página', not erros, str(erros))
 
         await navegador.close()
