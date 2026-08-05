@@ -6,6 +6,17 @@
 <title>Painel Logístico — Suinco</title>
 <link rel="icon" href="assets/logo_suinco.png">
 <link rel="stylesheet" href="styles.css">
+<!-- PWA: instalável no Android e no iPhone, com ícone na tela inicial.
+     Os dois arquivos são opcionais por construção — abrindo o painel por
+     file:// ou sem eles no servidor, nada quebra: o navegador ignora o
+     manifest e o registro do service worker falha em silêncio. -->
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0f1826">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Embarque">
+<link rel="apple-touch-icon" href="assets/logo_suinco.png">
 <!-- MSAL.js v2 — SSO Microsoft 365. Carrega da CDN da Microsoft; se não vier
      (aberto via file://, sem rede, ou bloqueado por política), o adaptador
      detecta a ausência e segue em modo local, sem quebrar o painel. -->
@@ -669,6 +680,18 @@
      sem conexão seria justamente o que o TI vai checar primeiro. -->
 <div id="rodape-conexao" class="rodape-conexao"></div>
 
+<script>
+/* Registro do service worker. Envolvido em try/catch e condicionado ao
+   protocolo: em file:// a API existe mas lança SecurityError, e um erro
+   aqui apareceria no console de quem só abriu o arquivo por duplo clique. */
+if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+  window.addEventListener('load', function () {
+    navigator.serviceWorker.register('sw.js').catch(function (e) {
+      console.info('[Suinco] service worker não registrado:', e.message);
+    });
+  });
+}
+</script>
 <script src="suinco-sharepoint.js"></script>
 <script src="data.js"></script>
 <script src="app.js"></script>

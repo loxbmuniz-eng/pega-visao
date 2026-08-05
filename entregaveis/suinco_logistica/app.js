@@ -401,6 +401,9 @@ function renderTabAtual(){
     // a página abriu, que já mudou.
     case 'relatorios': atualizarResumoFiltroRelatorio(); break;
   }
+  // Depois de pintar, e não antes: os rótulos são derivados das células
+  // que acabaram de ser criadas.
+  prepararTabelasMobile();
 }
 function renderAll(){ renderTabAtual(); }
 
@@ -2086,4 +2089,46 @@ function exportarPdfFretes(){
       </div>
     </div>`;
   imprimirContainer(el);
+}
+
+/* =====================================================================
+   MOBILE — tabela vira cartão
+   =====================================================================
+
+   No celular, tabela de 14 colunas com rolagem lateral é inutilizável: o
+   usuário perde a referência da linha no primeiro deslize. O CSS resolve
+   isso transformando cada linha num cartão, mas para isso precisa saber o
+   rótulo de cada célula — que só existe no <thead>.
+
+   Esta função deriva o rótulo do próprio cabeçalho, em vez de exigir que
+   cada `<td>` no código carregue um data-rotulo escrito à mão. É a
+   diferença entre a marcação continuar certa sozinha quando alguém
+   acrescentar uma coluna, e ela silenciosamente sair do ar.
+
+   Roda depois de cada render. Custo: um passe pelas células visíveis da
+   aba atual, uma vez por pintura. */
+function prepararTabelasMobile(raiz){
+  const escopo = raiz || document.querySelector('.tab-page.active') || document;
+  escopo.querySelectorAll('table').forEach(tab=>{
+    // Tabela de relatório impresso fica de fora: no PDF ela precisa
+    // continuar tabela, e o cartão quebraria o layout de página.
+    if(tab.closest('.print-page')) return;
+
+    const cabecalhos = [...tab.querySelectorAll('thead th')].map(th=>th.textContent.trim());
+    if(!cabecalhos.length) return;
+    tab.classList.add('mobile-cartao');
+
+    tab.querySelectorAll('tbody tr').forEach(tr=>{
+      [...tr.children].forEach((td, i)=>{
+        const rotulo = cabecalhos[i];
+        // Coluna de ação não recebe rótulo: no cartão ela vira um botão de
+        // largura inteira, e "AÇÃO: [Chegou]" só ocuparia espaço.
+        if(!rotulo || /^(ação|acao|ações|acoes)$/i.test(rotulo)){
+          td.removeAttribute('data-rotulo');
+        } else {
+          td.setAttribute('data-rotulo', rotulo);
+        }
+      });
+    });
+  });
 }
