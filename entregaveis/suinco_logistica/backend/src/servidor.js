@@ -94,6 +94,26 @@ export function criarApp() {
   // de serviço barata.
   app.use(express.json({ limit: '1mb' }));
 
+  /* Corpo em text/plain, aceito e convertido para JSON.
+
+     Não é capricho de formato: é a diferença entre passar e não passar por
+     uma rede corporativa. Um POST com `content-type: application/json`
+     obriga o navegador a mandar antes um pedido de permissão (OPTIONS), e
+     proxy de empresa costuma descartar OPTIONS silenciosamente. Com
+     text/plain a requisição vira "simples" pelas regras de CORS e vai
+     direto, sem pergunta prévia.
+
+     O conteúdo continua sendo JSON e passa pelas mesmas validações — só o
+     rótulo do envelope muda. Corpo malformado não derruba o servidor: vira
+     objeto vazio e a rota responde "campos faltando", como já responderia. */
+  app.use(express.text({ type: 'text/plain', limit: '1mb' }));
+  app.use((req, res, next) => {
+    if (typeof req.body === 'string' && req.body.length) {
+      try { req.body = JSON.parse(req.body); } catch (e) { req.body = {}; }
+    }
+    next();
+  });
+
   app.use(rateLimit({
     windowMs: config.limites.janelaMs,
     limit: config.limites.porJanela,

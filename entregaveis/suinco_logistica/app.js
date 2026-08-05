@@ -448,6 +448,105 @@ async function explicarFalhaDeLogin(e){
        + 'os dados móveis; se a internet estiver boa, avise a Logística. [REDE]';
 }
 
+/* ---------- TESTE DE CONEXÃO ----------
+   Roda no navegador de quem não consegue entrar e mostra em qual etapa a
+   requisição morre. Existe porque duas máquinas Windows da mesma empresa
+   falharam igual enquanto celulares no 4G entravam normalmente — e a essa
+   altura o diagnóstico à distância já tinha virado adivinhação.
+
+   As quatro sondas não são arbitrárias: cada uma remove uma camada.
+
+   1. Alcance bruto (no-cors) — o pacote sai deste aparelho e chega em
+      algum lugar? Falhou aqui, é rede, DNS ou o servidor fora.
+   2. Leitura permitida (CORS) — o navegador conseguiu LER a resposta?
+      Falhou só aqui, o endereço não está autorizado no servidor.
+   3. Pedido de permissão (preflight) — o POST com content-type JSON exige
+      um OPTIONS antes. Proxy corporativo costuma descartar OPTIONS em
+      silêncio. Falhou só aqui, é a rede da empresa filtrando.
+   4. Envio simples — o mesmo POST em text/plain não exige OPTIONS. Se esta
+      passa e a 3 falha, está provado que o problema é o preflight, e existe
+      contorno sem depender da TI.
+
+   Nenhuma sonda envia senha: a 3 e a 4 mandam corpo vazio de propósito, e
+   a resposta esperada é justamente a recusa por falta de campos. */
+async function sondarConexao(nome, executar){
+  const inicio = Date.now();
+  try{
+    const detalhe = await executar();
+    return { nome, ok:true, detalhe, ms: Date.now()-inicio };
+  }catch(e){
+    return { nome, ok:false, detalhe: (e && e.name ? e.name+': ' : '') + (e && e.message || 'falhou'),
+             ms: Date.now()-inicio };
+  }
+}
+
+async function rodarTesteDeConexao(){
+  const caixa = document.getElementById('teste-conexao');
+  if(!caixa) return;
+  const api = (typeof SuincoSharePoint !== 'undefined' && SuincoSharePoint.SP_CONFIG.api) || '';
+  caixa.hidden = false;
+  caixa.innerHTML = '<div class="teste-titulo">Testando…</div>';
+
+  const resultados = [];
+
+  resultados.push(await sondarConexao('1. Alcance até o servidor', async ()=>{
+    await fetch(api + '/health', { mode:'no-cors' });
+    return 'o pacote chegou';
+  }));
+
+  resultados.push(await sondarConexao('2. Leitura permitida (endereço autorizado)', async ()=>{
+    const r = await fetch(api + '/health');
+    const j = await r.json();
+    return 'servidor respondeu · banco ' + (j.banco || '?');
+  }));
+
+  resultados.push(await sondarConexao('3. Pedido de permissão (OPTIONS)', async ()=>{
+    const r = await fetch(api + '/auth/login', {
+      method:'POST', headers:{'content-type':'application/json'}, body:'{}'
+    });
+    return 'passou · servidor respondeu ' + r.status;
+  }));
+
+  resultados.push(await sondarConexao('4. Envio simples (sem OPTIONS)', async ()=>{
+    const r = await fetch(api + '/auth/login', {
+      method:'POST', headers:{'content-type':'text/plain'}, body:'{}'
+    });
+    return 'passou · servidor respondeu ' + r.status;
+  }));
+
+  const ok = resultados.map(r=>r.ok);
+  let conclusao;
+  if(!ok[0]){
+    conclusao = 'Este aparelho não alcança o servidor. É a internet daqui, '
+              + 'o DNS da rede, ou o servidor está fora.';
+  } else if(!ok[1]){
+    conclusao = 'O servidor responde mas recusa este endereço. É configuração '
+              + 'do servidor — me mande esta tela.';
+  } else if(!ok[2] && ok[3]){
+    conclusao = 'A rede desta empresa está descartando o pedido de permissão '
+              + '(OPTIONS). O envio simples passou — dá para contornar sem '
+              + 'depender da TI. Me mande esta tela.';
+  } else if(!ok[2] && !ok[3]){
+    conclusao = 'A rede alcança o servidor mas bloqueia o envio do login. '
+              + 'Firewall ou antivírus da empresa. Precisa liberar '
+              + (api || 'o endereço da API') + ' na porta 443.';
+  } else {
+    conclusao = 'Todas as etapas passaram. Se ainda não entra, o problema é '
+              + 'o e-mail ou a senha — não a conexão.';
+  }
+
+  const linhas = resultados.map(r=>
+    `<div class="teste-linha ${r.ok?'passou':'falhou'}">`
+    + `<span class="teste-marca">${r.ok?'✓':'✕'}</span>`
+    + `<span class="teste-nome">${esc(r.nome)}</span>`
+    + `<span class="teste-detalhe">${esc(r.detalhe)} · ${r.ms}ms</span></div>`).join('');
+
+  caixa.innerHTML = `<div class="teste-titulo">Teste de conexão</div>${linhas}`
+    + `<div class="teste-conclusao">${esc(conclusao)}</div>`
+    + `<div class="teste-rodape">${esc(api)} · ${esc(location.origin)} · `
+    + `${new Date().toLocaleString('pt-BR')}</div>`;
+}
+
 /* Login contra o servidor.
 
    O setor NÃO é enviado nem escolhido: vem no token que o servidor assina, a
