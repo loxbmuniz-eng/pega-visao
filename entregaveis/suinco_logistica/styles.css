@@ -897,3 +897,46 @@ input,select,textarea{border-radius:5px}
   border:1px solid var(--border, #d5d9e0);
   background:var(--input-bg, transparent); color:inherit;
 }
+
+/* ===== PAINEL DE STATUS HORIZONTAL (relatório executivo) =================
+   Um status por coluna, o número embaixo. Substitui a tabela vertical que
+   gastava meia página para mostrar seis números.
+
+   A ordem é a do fluxo, não a do volume: ler da esquerda para a direita é
+   percorrer o caminho do caminhão pelo pátio, e um acúmulo numa coluna
+   mostra em que etapa a fila está se formando. */
+.painel-status{ table-layout:fixed; width:100%; margin-bottom:16px }
+
+.painel-status .ps-th{
+  padding:7px 4px; font-size:9.5px; font-weight:800; text-align:center;
+  text-transform:uppercase; letter-spacing:.3px; line-height:1.25;
+  border:none; white-space:normal;
+}
+.painel-status .ps-total-th{ background:#2a3a6c; color:#f2f4f8 }
+
+.painel-status .ps-cel{
+  text-align:center; padding:12px 4px 10px; border:none;
+  background:rgba(127,127,127,.06);
+}
+.painel-status .ps-num{
+  font-size:30px; font-weight:800; line-height:1;
+  font-variant-numeric:tabular-nums;
+}
+.painel-status .ps-pct{ font-size:10.5px; margin-top:3px; opacity:.7 }
+
+/* Coluna zerada em cinza claro: some do campo de visão sem sumir da
+   tabela. Etapa vazia é informação, mas não deve competir com onde há
+   carga parada. */
+.painel-status .ps-vazio .ps-num{ opacity:.28; font-weight:600 }
+
+.painel-status .ps-total-cel{ background:rgba(127,127,127,.14) }
+.painel-status .ps-total-cel .ps-num{ font-size:30px }
+
+@media print{
+  /* A faixa de cor no topo de cada coluna é o que sobrevive à impressão em
+     preto e branco: vira um traço mais escuro ou mais claro, e a ordem
+     continua legível. O número nunca depende de cor para ser lido. */
+  .painel-status .ps-cel{ background:#f4f5f7 !important }
+  .painel-status .ps-num{ color:#111418 !important }
+  .painel-status .ps-total-cel{ background:#e4e6ea !important }
+}

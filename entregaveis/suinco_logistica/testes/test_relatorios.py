@@ -105,6 +105,37 @@ async def main():
         ck('linha de totais alinhada com as colunas',
            coerente['nTot'] == coerente['nTh'], str(coerente))
 
+        print('\n=== PAINEL DE STATUS NA HORIZONTAL ===')
+        await pg.evaluate("()=>exportarPdfExecutivo()")
+        await pg.wait_for_timeout(400)
+        ph = await pg.evaluate('''() => {
+          const t = document.querySelector('#print-executivo .painel-status');
+          if(!t) return {achou:false};
+          const th = [...t.querySelectorAll('thead th')].map(x=>x.innerText.trim());
+          const td = [...t.querySelectorAll('tbody .ps-num')].map(x=>x.innerText.trim());
+          return {
+            achou:true, th, td,
+            colunas: th.length, celulas: td.length,
+            temSeguiuViagem: th.some(x=>/SEGUIU/i.test(x)),
+            temTotal: th.some(x=>/TOTAL/i.test(x)),
+            cabe: t.getBoundingClientRect().width <= t.parentElement.getBoundingClientRect().width + 1
+          };
+        }''')
+        ck('painel horizontal substituiu a tabela vertical', ph.get('achou'))
+        if ph.get('achou'):
+            ck('um número por coluna', ph['colunas'] == ph['celulas'],
+               f"{ph['colunas']} colunas, {ph['celulas']} números")
+            ck('"Seguiu Viagem" fora (nunca está em aberto)', not ph['temSeguiuViagem'],
+               str(ph['th']))
+            ck('coluna de Total presente', ph['temTotal'])
+            ck('não estoura a largura da página', ph['cabe'])
+            # A soma das colunas tem que bater com o total: painel bonito
+            # com número errado é pior que tabela feia.
+            nums = [int(x) for x in ph['td'] if x.isdigit()]
+            ck('a soma das colunas bate com o total',
+               len(nums) >= 2 and sum(nums[:-1]) == nums[-1],
+               f"{nums[:-1]} soma {sum(nums[:-1])}, total {nums[-1] if nums else '?'}")
+
         print('\n=== CONCLUÍDAS: SEM STATUS ZERADO ===')
         z = await pg.evaluate("""() => {
           const secs = [...document.querySelectorAll('#print-executivo .print-secao-tit')];
