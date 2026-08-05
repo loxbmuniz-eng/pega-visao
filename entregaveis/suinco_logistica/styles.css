@@ -660,7 +660,6 @@ input,select,textarea{border-radius:5px}
   #print-operacional table{
     width:100% !important;
     table-layout:fixed !important;
-    font-size:7.6px !important;
   }
   #print-operacional th, #print-operacional td{
     padding:4px 3px !important;
@@ -939,4 +938,95 @@ input,select,textarea{border-radius:5px}
   .painel-status .ps-cel{ background:#f4f5f7 !important }
   .painel-status .ps-num{ color:#111418 !important }
   .painel-status .ps-total-cel{ background:#e4e6ea !important }
+}
+
+/* =======================================================================
+   PADRÃO DE DOCUMENTO DOS RELATÓRIOS
+   =======================================================================
+
+   Os três relatórios compartilham cabeçalho, metadados e rodapé. Documento
+   logístico circula fora do sistema — vai para o grupo, para o e-mail da
+   transportadora, para a pasta do faturamento. Quem recebe uma folha solta
+   precisa saber o que é, de quando, de que recorte e quem emitiu, sem ter
+   que perguntar.
+
+   A DENSIDADE MUDA POR RELATÓRIO. O Operacional tem 13 colunas e só cabe
+   em A4 deitado com letra pequena; o de Fretes tem 3 e sobra papel. Aplicar
+   a mesma densidade nos dois — que era o caso — deixava o de Fretes
+   ilegível para economizar espaço que ninguém usava.
+   ===================================================================== */
+
+.doc-cabecalho{
+  display:flex; align-items:center; gap:16px;
+  padding-bottom:12px; border-bottom:3px solid var(--gold-dim);
+}
+.doc-logo{
+  height:54px; width:auto; flex:none;
+  background:#fff; border-radius:6px; padding:4px 8px;
+}
+.doc-identidade{ min-width:0 }
+.doc-empresa{
+  font-size:10.5px; font-weight:800; letter-spacing:.09em;
+  text-transform:uppercase; color:var(--text-dim);
+}
+.doc-titulo{
+  font-size:21px; line-height:1.2; font-weight:800;
+  color:var(--gold-text); margin:1px 0 0;
+}
+.doc-subtitulo{ font-size:12px; color:var(--text-dim); margin-top:3px; line-height:1.4 }
+
+/* Metadados em faixa, não em parágrafo: cada dado tem um rótulo e um lugar
+   fixo, então o olho acha "Período" sempre no mesmo canto. */
+.doc-meta{
+  display:flex; flex-wrap:wrap; gap:4px 22px;
+  padding:9px 0 0; margin-bottom:16px;
+  font-size:11px; line-height:1.6; color:var(--text-dim);
+}
+.doc-meta strong{ color:var(--text); font-weight:700 }
+
+.doc-rodape{
+  margin-top:20px; padding-top:9px;
+  border-top:1px solid var(--border-soft);
+  font-size:10.5px; color:var(--text-dim); line-height:1.6;
+}
+.doc-nota{ margin-bottom:6px }
+.doc-nota strong{ color:var(--text) }
+.doc-assinatura{ font-size:9.5px; opacity:.75; letter-spacing:.02em }
+
+/* ---- Relatório de Fretes: três colunas, papel em pé ---- */
+.tab-fretes .col-carga{ width:20%; font-weight:800; font-variant-numeric:tabular-nums }
+.tab-fretes .col-rota{ width:28% }
+.tab-fretes .col-obs{ white-space:normal; line-height:1.5 }
+.obs-pendente{
+  font-style:italic; opacity:.55; font-size:.92em;
+  text-transform:uppercase; letter-spacing:.05em;
+}
+
+@media print{
+  .doc-cabecalho{ border-bottom-color:#8a94a6 !important }
+  .doc-titulo{ color:#111418 !important }
+  .doc-empresa, .doc-subtitulo, .doc-meta, .doc-rodape{ color:#3d4a5c !important }
+  .doc-meta strong, .doc-nota strong{ color:#111418 !important }
+  .doc-rodape{ border-top-color:#c9d4e8 !important }
+
+  /* ---- Densidade por documento ----
+     A regra antiga marcava #print-operacional inteiro, e o relatório de
+     Fretes usava esse mesmo container: herdava 7,6px com três colunas. */
+  .doc-denso table{ font-size:7.6px !important }
+  .doc-denso th, .doc-denso td{ padding:2px 3px !important }
+
+  .doc-normal table{ font-size:9.5px !important }
+  .doc-normal th, .doc-normal td{ padding:4px 5px !important }
+
+  /* Fretes: A4 em pé e fonte de leitura. Com três colunas há espaço de
+     sobra, e este relatório é lido com calma pela administração, não de
+     relance no pátio. */
+  @page retrato{ size: A4 portrait; margin: 12mm }
+  .doc-amplo{ page: retrato }
+  .doc-amplo table{ font-size:12px !important; table-layout:fixed }
+  .doc-amplo th, .doc-amplo td{ padding:8px 9px !important; vertical-align:top }
+  .doc-amplo th{ font-size:10.5px !important; letter-spacing:.04em }
+  /* Zebra: com linhas altas e três colunas largas, o olho perde a linha ao
+     atravessar a página. */
+  .doc-amplo tbody tr:nth-child(even) td{ background:#f4f5f7 !important }
 }

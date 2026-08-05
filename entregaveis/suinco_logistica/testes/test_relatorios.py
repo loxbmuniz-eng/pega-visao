@@ -70,13 +70,65 @@ async def main():
         ck('Gargalos e Pontos Críticos presente', r['gargalos'])
         print('  seções:', r['secoes'])
 
+        print('\n=== PADRÃO DE DOCUMENTO ===')
+        alvos = [('exportarPdfOperacional','print-operacional','doc-denso','Operacional'),
+                 ('exportarPdfExecutivo','print-executivo','doc-normal','Executivo'),
+                 ('exportarPdfFretes','print-fretes','doc-amplo','Fretes')]
+        for fn, cid, classe, rot in alvos:
+            await pg.evaluate(f"()=>{fn}()")
+            await pg.wait_for_timeout(300)
+            d = await pg.evaluate(f'''() => {{
+              const c = document.getElementById('{cid}');
+              const pag = c.querySelector('.print-page');
+              const img = c.querySelector('.doc-logo');
+              const meta = (c.querySelector('.doc-meta')||{{}}).innerText || '';
+              return {{
+                classe: pag ? pag.className : '',
+                titulo: (c.querySelector('.doc-titulo')||{{}}).innerText || '',
+                empresa: (c.querySelector('.doc-empresa')||{{}}).innerText || '',
+                logo: !!img && img.complete && img.naturalWidth > 0,
+                temPeriodo: /Período/.test(meta),
+                temEmitidoPor: /Emitido por/.test(meta),
+                temEmitidoEm: /Emitido em/.test(meta),
+                rodape: !!c.querySelector('.doc-assinatura')
+              }};
+            }}''')
+            ck(f'{rot}: densidade {classe}', classe in d['classe'], d['classe'])
+            ck(f'{rot}: identificação da empresa', 'SUINCO' in d['empresa'], d['empresa'])
+            ck(f'{rot}: logo carregou', d['logo'])
+            ck(f'{rot}: metadados completos',
+               d['temPeriodo'] and d['temEmitidoEm'] and d['temEmitidoPor'],
+               'período, emitido em, emitido por')
+            ck(f'{rot}: rodapé de identificação', d['rodape'])
+
+        print('\n=== FRETES: FONTE LEGÍVEL ===')
+        # O motivo desta bateria existir: o de Fretes dividia container com o
+        # Operacional e herdava a fonte de 7,6px calibrada para 13 colunas.
+        await pg.evaluate("()=>exportarPdfFretes()")
+        await pg.wait_for_timeout(300)
+        f = await pg.evaluate('''() => {
+          const c = document.getElementById('print-fretes');
+          const td = c.querySelector('tbody td');
+          const ths = [...c.querySelectorAll('thead th')].map(x=>x.innerText.trim());
+          return {
+            colunas: ths,
+            fonteTela: td ? parseFloat(getComputedStyle(td).fontSize) : 0,
+            containerProprio: !document.getElementById('print-operacional').innerHTML.includes('Administração de Fretes')
+          };
+        }''')
+        ck('Fretes tem container próprio', f['containerProprio'],
+           'compartilhar com o Operacional era a causa da fonte minúscula')
+        ck('três colunas, como pedido', f['colunas'] == ['Número da Carga','Rota','Observações'],
+           str(f['colunas']))
+        ck('fonte de leitura na tela', f['fonteTela'] >= 12, f"{f['fonteTela']}px")
+
         print('\n=== OPERACIONAL: MESMA LIMPEZA ===')
         await pg.evaluate("()=>exportarPdfOperacional()")
         await pg.wait_for_timeout(400)
         o = await pg.evaluate('''() => {
           const cont = document.getElementById('print-operacional');
           const ths = [...cont.querySelectorAll('thead th')].map(t=>t.innerText);
-          const rodape = (cont.querySelector('.print-legenda')||{}).innerText || '';
+          const rodape = (cont.querySelector('.doc-nota')||{}).innerText || '';
           return {
             legenda: !!cont.querySelector('.legenda-status'),
             colunas: ths,
