@@ -14,13 +14,36 @@
    Se o terminal não for interativo (script automatizado), o script gera uma
    senha aleatória forte e a imprime uma vez. */
 
-import readline from 'node:readline';
 import crypto from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import { pool } from '../src/banco.js';
 import { SETORES } from '../src/config.js';
 
 const CUSTO_BCRYPT = 12; // ~250 ms por hash: caro para ataque, imperceptível no login.
+
+/* Lê a senha sem eco.
+
+   A primeira versão disto usava readline e "apagava" o que fora digitado
+   movendo o cursor para trás. Não desligava o eco de verdade e, pior,
+   deixava o terminal num estado quebrado: depois de criar um operador, o
+   usuário não conseguia mais digitar nada.
+
+   Esta versão desliga o eco do jeito certo (modo bruto), lê caractere a
+   caractere e RESTAURA o terminal em todos os caminhos de saída —
+   inclusive Ctrl+C e erro inesperado. */
+function restaurarTerminal() {
+  try {
+    if (process.stdin.isTTY && process.stdin.isRaw) process.stdin.setRawMode(false);
+  } catch (e) { /* terminal já foi embora */ }
+}
+
+// Rede de segurança: aconteça o que acontecer, o terminal volta ao normal.
+process.on('exit', restaurarTerminal);
+process.on('uncaughtException', (e) => {
+  restaurarTerminal();
+  console.error('\nERRO:', e.message);
+  process.exit(1);
+});
 
 function perguntarSenha(rotulo) {
   return new Promise((resolve) => {
@@ -30,11 +53,35 @@ function perguntarSenha(rotulo) {
       console.log('  Anote agora. Ela não será mostrada de novo.\n');
       return resolve(gerada);
     }
-    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+
     process.stdout.write(rotulo);
-    // Eco desligado: a senha não aparece na tela nem fica no scrollback.
-    rl.input.on('data', () => readline.moveCursor(process.stdout, -100, 0));
-    rl.question('', (v) => { rl.close(); process.stdout.write('\n'); resolve(v); });
+    const stdin = process.stdin;
+    stdin.setRawMode(true);
+    stdin.resume();
+    stdin.setEncoding('utf8');
+
+    let senha = '';
+    const aoDigitar = (ch) => {
+      if (ch === '\r' || ch === '\n' || ch === '\u0004') {          // Enter
+        stdin.removeListener('data', aoDigitar);
+        restaurarTerminal();
+        stdin.pause();
+        process.stdout.write('\n');
+        resolve(senha);
+      } else if (ch === '\u0003') {                                  // Ctrl+C
+        stdin.removeListener('data', aoDigitar);
+        restaurarTerminal();
+        process.stdout.write('\n');
+        process.exit(130);
+      } else if (ch === '\u007f' || ch === '\b') {                   // Backspace
+        senha = senha.slice(0, -1);
+      } else if (ch >= ' ') {
+        // Colar traz vários caracteres de uma vez — por isso concatena o
+        // pedaço inteiro em vez de assumir uma tecla por evento.
+        senha += ch;
+      }
+    };
+    stdin.on('data', aoDigitar);
   });
 }
 
