@@ -18,7 +18,7 @@ async def main():
 
         print('\n=== 1. LOGIN NO CELULAR ===')
         cx = await pg.evaluate("""() => {
-          const i = document.getElementById('login-nome');
+          const i = document.getElementById('login-email');
           const r = i.getBoundingClientRect();
           return {alt: Math.round(r.height), fonte: getComputedStyle(i).fontSize};
         }""")
@@ -26,8 +26,9 @@ async def main():
         ck('fonte >= 16px (evita zoom automático do iOS)',
            float(cx['fonte'].replace('px','')) >= 16, cx['fonte'])
 
+        await pg.evaluate("() => mostrarLoginLocal()")
         await pg.fill('#login-nome','Bruno'); await pg.select_option('#login-setor','Portaria')
-        await pg.click('#modal-operador .btn-primary'); await pg.wait_for_timeout(500)
+        await pg.click('button:has-text("Entrar sem servidor")'); await pg.wait_for_timeout(500)
 
         print('\n=== 2. SEM ROLAGEM HORIZONTAL NA PÁGINA ===')
         for aba in ['torre','portaria']:
@@ -79,8 +80,9 @@ async def main():
         pg2 = await (await b.new_context(viewport={'width':1440,'height':900})).new_page()
         e2=[]; pg2.on('pageerror', lambda e: e2.append(str(e)))
         await pg2.goto(PAINEL); await pg2.wait_for_timeout(900)
+        await pg2.evaluate("() => mostrarLoginLocal()")
         await pg2.fill('#login-nome','Ana'); await pg2.select_option('#login-setor','Logística')
-        await pg2.click('#modal-operador .btn-primary'); await pg2.wait_for_timeout(400)
+        await pg2.click('button:has-text("Entrar sem servidor")'); await pg2.wait_for_timeout(400)
         d = await pg2.evaluate("""() => {
           const thead = document.querySelector('#tab-torre thead');
           const td = document.querySelector('#torre-tbody td');

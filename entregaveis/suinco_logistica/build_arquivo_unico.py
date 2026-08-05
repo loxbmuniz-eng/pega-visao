@@ -17,8 +17,8 @@ nunca a fonte.
 Uso:  python3 build_arquivo_unico.py
 
 Rode de novo sempre que mexer em index_suinco.html, styles.css, data.js,
-app.js, suinco-sharepoint.js ou frota_seed_2026.csv — o arquivo único é uma
-cópia derivada, não a fonte.
+app.js, suinco-api.js ou frota_seed_2026.csv — o arquivo único é uma cópia
+derivada, não a fonte.
 """
 
 import base64
@@ -70,7 +70,7 @@ def main():
     # se alimentar da própria saída — o CSS e o JS entrariam duas vezes.
     html = ler(FONTE)
     css = ler('styles.css')
-    adapter_js = ler('suinco-sharepoint.js')
+    adapter_js = ler('suinco-api.js')
     data_js = ler('data.js')
     app_js = ler('app.js')
     csv = ler('frota_seed_2026.csv')
@@ -111,17 +111,17 @@ def main():
     seed += ('\n<script>window.SUINCO_BUILD = '
              + json.dumps(carimbo_do_build(), ensure_ascii=False) + ';</script>')
 
-    # 4. O adaptador do SharePoint também entra inline. O <script> do MSAL
-    #    continua apontando para a CDN da Microsoft: não dá para embutir uma
-    #    biblioteca de autenticação que precisa de rede de qualquer forma, e
-    #    o adaptador já trata a ausência dela caindo em modo local.
+    # 4. O adaptador da API entra inline. O <script> do Socket.IO continua
+    #    apontando para o próprio backend: é uma biblioteca que só faz
+    #    sentido com rede, e o adaptador já trata a ausência dela caindo na
+    #    consulta periódica.
     html, n_ad = re.subn(
-        r'<script src="suinco-sharepoint\.js"></script>',
+        r'<script src="suinco-api\.js"></script>',
         lambda _: '<script>\n' + adapter_js + '\n</script>',
         html,
     )
     if n_ad != 1:
-        sys.exit(f'ERRO: esperava 1 script para suinco-sharepoint.js, encontrei {n_ad}')
+        sys.exit(f'ERRO: esperava 1 script para suinco-api.js, encontrei {n_ad}')
 
     # 5. <script src="data.js"> e <script src="app.js"> viram código inline.
     #    A ordem original (data.js antes de app.js) é preservada.
