@@ -689,3 +689,43 @@ input,select,textarea{border-radius:5px}
   #print-operacional th:nth-child(15), #print-operacional td:nth-child(15),
   #print-operacional th:nth-child(16), #print-operacional td:nth-child(16){ width:5% }
 }
+
+/* ===== LINHA DE TOTAIS (estilo Excel) =====================================
+   Rodapé somatório das tabelas dos relatórios. Precisa se destacar da última
+   linha de dados sem parecer mais uma carga — daí a borda superior grossa e
+   o fundo próprio. */
+.linha-total td{
+  border-top:2px solid var(--text, #222);
+  font-weight:800;
+  background:var(--navy-light, #f0f2f5);
+}
+.linha-total .tot-rotulo{ text-align:right; letter-spacing:.3px }
+.linha-total .tot-num{ text-align:right; font-variant-numeric:tabular-nums }
+
+/* No papel o tema escuro não vale: fundo escuro sai como mancha de tinta e
+   o texto claro some. Mesma correção já aplicada ao resto do impresso. */
+@media print{
+  .linha-total td{ background:#e8e8e8 !important; color:#111 !important; border-top:2px solid #111 !important }
+}
+
+/* ===== GARGALOS E PONTOS CRÍTICOS ======================================== */
+.gargalo-bloco{ margin-bottom:22px }
+.gargalo-bloco:last-child{ margin-bottom:0 }
+.gargalo-titulo{ font-weight:800; font-size:14px; margin-bottom:2px }
+.gargalo-sub{ font-size:12px; color:var(--text-dim, #7a8290); margin-bottom:8px; line-height:1.45 }
+.cel-num{ text-align:right; font-variant-numeric:tabular-nums }
+
+/* Tabela do relatório de fretes: Observações é o campo que interessa, então
+   recebe o espaço; as outras duas colunas ficam estreitas. */
+.tab-fretes td:last-child{ white-space:normal; line-height:1.5 }
+
+/* Campo de placa editável na fila da Programação. Monoespaçado e em caixa
+   alta porque placa é código, não nome — e ler "0" contra "O" errado aqui
+   custa uma carga associada à transportadora errada. */
+.placa-input{
+  width:100px; padding:5px 7px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+  font-weight:700; letter-spacing:.5px; text-transform:uppercase;
+  border:1px solid var(--border, #d5d9e0); border-radius:6px;
+  background:var(--input-bg, transparent); color:inherit;
+}
+.placa-input:focus{ outline:2px solid var(--accent, #e9b954); outline-offset:1px }

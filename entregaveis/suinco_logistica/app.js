@@ -396,6 +396,10 @@ function renderTabAtual(){
     case 'indicadores': renderIndicadores(); break;
     case 'cadastros': renderCadastros(); break;
     case 'historico': renderHistorico(); renderBuscaTimeline(); break;
+    // A aba Relatórios é só de botões, mas o resumo do filtro tem que
+    // refletir o estado atual do pátio — senão mostra a contagem de quando
+    // a página abriu, que já mudou.
+    case 'relatorios': atualizarResumoFiltroRelatorio(); break;
   }
 }
 function renderAll(){ renderTabAtual(); }
@@ -514,7 +518,8 @@ function renderProgFila(){
     <tr>
       <td><input type="number" class="seq-input" value="${c.sequencia ?? ''}" onchange="atualizarSequenciaUI('${c.id}',this.value)" title="Sequência livre — digite o número que quiser, a qualquer momento."></td>
       <td>${esc(c.numeroCarga)||'—'}</td>
-      <td>${esc(c.placa)}</td><td>${esc(c.transportadora)||'—'}</td>
+      <td><input type="text" class="placa-input" value="${esc(c.placa)}" onchange="atualizarPlacaUI('${escJs(c.id)}',this.value)" title="Trocar a placa — a transportadora e o tipo de veículo são buscados na Frota automaticamente."></td>
+      <td id="transp-${esc(c.id)}">${esc(c.transportadora)||'—'}</td>
       <td>${esc(c.cliente)||'—'}</td><td>${esc(c.destino)||'—'}</td><td>${esc(rotaCurta(c.rota))}</td>
       <td>${praOndeSelectHtml(c)}</td>
       <td><input type="number" class="ganchos-input" min="0" step="1" value="${c.qtdGanchos ?? 0}" onchange="atualizarGanchosUI('${c.id}',this.value)" title="0 = Liso"></td>
@@ -554,6 +559,59 @@ function atualizarPraOndeUI(id, val){
   SuincoStore.save();
   renderAll();
 }
+/* Troca de placa numa carga já criada.
+
+   Segue EXATAMENTE a mesma regra do lançamento novo, e isso é intencional:
+   se a placa nova não estiver na Frota, a troca é recusada e o campo volta
+   ao valor anterior. Aceitar aqui o que o formulário de criação recusa
+   abriria uma porta lateral para furar a trava de frota — bastaria criar a
+   carga com uma placa válida e trocar depois.
+
+   A transportadora e o tipo de veículo vêm da base, não do que estava na
+   carga: trocar a placa e manter a transportadora antiga produziria um
+   registro que não bate com a realidade, e ninguém perceberia. */
+function atualizarPlacaUI(id, val){
+  const c = getCarga(id);
+  if(!c) return;
+  const nova = normalizarPlaca(val);
+
+  if(!nova){
+    notify('Placa não pode ficar em branco.', 'warn');
+    renderProgFila();
+    return;
+  }
+  if(nova === c.placa){ renderProgFila(); return; }
+
+  const frota = buscarFrota(nova);
+  if(!frota){
+    notify(`Placa ${nova} não está cadastrada na Frota. Cadastre em Cadastros → Frota antes de usá-la.`, 'warn');
+    renderProgFila();   // devolve o campo ao valor anterior
+    return;
+  }
+
+  const anterior = c.placa;
+  c.placa = nova;
+  c.transportadora = frota.transportadora || '';
+  c.tipoVeiculo = frota.tipoVeiculo || '';
+  c.atualizadoEm = nowISO();
+
+  // Troca de placa é alteração de dado operacional, não mudança de status:
+  // entra no log de auditoria sem gerar movimentação na linha do tempo, que
+  // ficaria poluída com evento que não é etapa do fluxo.
+  registrarAlteracao({
+    cargaId: c.id, placa: nova,
+    campo: 'Placa',
+    de: anterior,
+    para: `${nova} (transportadora: ${c.transportadora || '—'})`,
+    setor: (DB.operador && DB.operador.setor) || 'Logística',
+    operador: (DB.operador && DB.operador.nome) || '(não identificado)'
+  });
+
+  SuincoStore.save();
+  notify(`Placa alterada para ${nova} — transportadora ${c.transportadora || 'não informada'}.`, 'success');
+  renderAll();
+}
+
 function atualizarGanchosUI(id, val){
   const c = getCarga(id); if(!c) return;
   c.qtdGanchos = val==='' ? 0 : Math.max(0, Number(val)||0);
@@ -881,7 +939,8 @@ function renderExtremosHoje(){
 
 function renderIndicadores(){
   renderDistribuicaoStatus();
-  renderExtremosHoje();
+  renderTempoMedioPatio();
+  renderGargalos();
   // ---- Bloco 1: histórico completo (mantém o comportamento original) ----
   const concluidas = DB.cargas.filter(c=>c.status==='Seguiu Viagem');
   const campos = ['tempoAguardandoEmbarque','tempoCarregamento','tempoFaturamento','tempoAguardandoSaida','tempoPatioTotal'];
@@ -950,9 +1009,16 @@ function renderRankingPeriodos(){
     <button class="btn btn-sm ${p.key===indRankingPeriodoAtivo ? 'btn-primary' : 'btn-sec'}" onclick="selecionarRankingPeriodo('${escJs(p.key)}')">${esc(p.label)}</button>
   `).join('');
   const cargasPeriodo = indRankingPeriodoAtivo==='todos' ? undefined : cargasConcluidasNoPeriodo(indRankingPeriodoAtivo);
-  const rk = rankingTransportadoras(cargasPeriodo);
+  const rk = rankingVeiculosAtraso(cargasPeriodo);
   document.getElementById('ind-ranking-tbody').innerHTML = rk.map((r,i)=>`
-    <tr><td>${i+1}º</td><td>${esc(r.transportadora)}</td><td>${r.cargas}</td><td>${fmtDuracao(r.leadTimeMedio)}</td><td>${fmtDuracao(r.tempoPatioMedio)}</td></tr>
+    <tr>
+      <td>${i+1}º</td>
+      <td><strong>${esc(r.placa)}</strong></td>
+      <td>${esc(r.transportadora)}</td>
+      <td class="cel-num">${r.atrasos} de ${r.totalCargas}</td>
+      <td class="cel-num">${fmtDuracao(r.tempoMedioAtraso)}</td>
+      <td>${r.ultimoAtraso ? esc(fmtDataHora(r.ultimoAtraso)) : '—'}</td>
+    </tr>
   `).join('');
   document.getElementById('ind-ranking-empty').hidden = rk.length>0;
 }
@@ -1392,10 +1458,9 @@ function exportarPdfOperacional(){
   // deixa de existir.
   // Segue de fora apenas o que a Portaria registrou sem programação prévia
   // (aguardandoCarga), que ainda não tem dados para sequenciar.
-  const lista = DB.cargas.filter(c=>!c.aguardandoCarga).slice().sort(ordenarPorEtapaDaTimeline);
+  // Respeita o filtro de Data da Programação da aba Relatórios.
+  const lista = cargasDoRelatorio().slice().sort(ordenarPorEtapaDaTimeline);
   const linhas = lista.map((c,i)=>{
-    const sc = statusCarregamentoInfo(c.status);
-    const faturado = estaFaturado(c);
     const pesoTon = ((c.peso||0)/1000).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:2});
     const praOndeStyle = c.praOnde ? `style="background:${CORES_PRA_ONDE[c.praOnde]||'#e9b954'};color:#fff;font-weight:800"` : '';
     // Status real da carga (os 6), com o preenchimento sólido da escala do
@@ -1404,11 +1469,9 @@ function exportarPdfOperacional(){
     const cs = corStatusRelatorio(c.status);
     return `<tr>
       <td>${i+1}</td>
-      <td style="background:${cs.fundo};color:${cs.texto};font-weight:800;text-align:center">${esc(c.status)}</td>
-      <td style="background:${sc.cor};color:${textoSobre(sc.cor)};font-weight:800">${esc(sc.texto)}</td>
-      <td ${faturado?`style="background:#3fa66a;color:${textoSobre('#3fa66a')};font-weight:800;text-align:center"`:'style="text-align:center"'}>${faturado?'FATURADO':'—'}</td>
       <td style="text-align:center">${c.sequencia ?? '—'}</td>
       <td>${esc(c.numeroCarga)||'—'}</td>
+      <td style="background:${cs.fundo};color:${cs.texto};font-weight:800;text-align:center">${esc(c.status)}</td>
       <td>${esc(c.destino)||'—'}</td>
       <td>${esc(rotaCurta(c.rota))}</td>
       <td ${praOndeStyle}>${c.praOnde ? esc(PRA_ONDE_LABEL[c.praOnde]) : '—'}</td>
@@ -1428,22 +1491,23 @@ function exportarPdfOperacional(){
       <div class="print-header">
         <img src="assets/logo_suinco.png" alt="Suinco">
         <div><h1>PDF Operacional — Sequenciamento de Carregamento</h1>
-        <div class="meta">Gerado em ${fmtDataHora(agora.toISOString())} · ${lista.length} carga(s) · ${concluidas} concluída(s)</div></div>
+        <div class="meta">Gerado em ${fmtDataHora(agora.toISOString())} · ${rotuloPeriodoRelatorio()} · ${lista.length} carga(s) · ${concluidas} concluída(s)</div></div>
       </div>
       ${legendaStatusHtml()}
       <table>
         <thead><tr>
-          <th>Nº</th><th>Status</th><th>Status de Carregamento</th><th>Faturado</th>
-          <th>Seq.</th><th>Carga</th><th>Destino</th><th>Rota</th><th>Tipo de Operação</th>
+          <th>Nº</th><th>Seq.</th><th>Carga</th><th>Status</th><th>Destino</th><th>Rota</th><th>Tipo de Operação</th>
           <th>Placa</th><th>Transportadora</th><th>Tipo de Veículo</th><th>Peso(ton)</th><th>Paletizada</th><th>Qtd. Entregas</th><th>Qtd. Ganchos</th>
         </tr></thead>
-        <tbody>${linhas || '<tr><td colspan="14" class="text-center text-dim">Nenhuma carga programada.</td></tr>'}</tbody>
+        <tbody>${linhas || '<tr><td colspan="14" class="text-center text-dim">Nenhuma carga no período selecionado.</td></tr>'}</tbody>
+        ${lista.length ? `<tfoot>${rodapeSomatorios(lista, 10, ['peso','', 'entregas','ganchos'])}</tfoot>` : ''}
       </table>
       <div class="print-legenda">
         Este relatório mostra <strong>todas as cargas da programação, em qualquer status</strong> —
         as concluídas continuam na lista, em verde escuro, para o acompanhamento do dia inteiro.
-        A coluna <strong>Status</strong> traz a etapa real da carga; <strong>Status de Carregamento</strong>
-        é a leitura do pátio (se o caminhão está ou não carregado).
+        A coluna <strong>Status</strong> traz a etapa real da carga, logo depois do número, com a
+        cor da escala. As colunas "Status de Carregamento" e "Faturado" saíram: repetiam o que o
+        Status já diz, ocupando espaço que faltava para o resto da linha.
       </div>
     </div>`;
   imprimirContainer(el);
@@ -1770,6 +1834,13 @@ async function init(){
       .catch(e=>{ console.warn('[Suinco] init SharePoint:', e); atualizarRodapeConexao('local'); });
   }
   atualizarDatalists();
+  atualizarResumoFiltroRelatorio();  // resumo do filtro já na 1ª pintura
+  // Mudar a data tem que refletir no resumo na hora: filtro cujo efeito só
+  // aparece depois de gerar o PDF faz o gestor mandar o relatório errado.
+  ['rel-data-de','rel-data-ate'].forEach(id=>{
+    const el = document.getElementById(id);
+    if(el) el.addEventListener('change', atualizarResumoFiltroRelatorio);
+  });
   atualizarAvisoSetorAba(); // preenche o box "função da aba" já na 1ª pintura
   if(DB.operador){
     atualizarHeaderOperador();
@@ -1781,3 +1852,238 @@ async function init(){
   renderAll();
 }
 document.addEventListener('DOMContentLoaded', init);
+
+/* =====================================================================
+   TEMPO MÉDIO DE PÁTIO, GARGALOS E RELATÓRIOS FILTRADOS
+   =====================================================================
+   Bloco novo (05/08/2026). Substitui os extremos maior/menor por média
+   contra meta, e acrescenta a leitura automática de gargalos. */
+
+function renderTempoMedioPatio(){
+  const wrap = document.getElementById('ind-patio-medio');
+  if(!wrap) return;
+  const t = tempoMedioPatio(cargasConcluidasNoPeriodo('hoje'));
+  const geral = tempoMedioPatio(DB.cargas.filter(c=>c.status==='Seguiu Viagem'));
+
+  if(!t.amostra && !geral.amostra){
+    wrap.innerHTML = `<div class="empty-state">Nenhuma carga concluída com tempo de pátio calculável ainda.</div>`;
+    return;
+  }
+
+  // Dentro ou fora da meta muda a cor. É o dado que o gestor lê primeiro,
+  // e número sem referência não diz se está bom ou ruim.
+  const caixa = (dados, rotulo, nota) => {
+    if(!dados.amostra){
+      return `<div class="stat-box"><div class="stat-num">—</div>
+        <div class="stat-label">${rotulo}</div>
+        <div class="stat-note">Sem dados suficientes</div></div>`;
+    }
+    const dentro = dados.media <= dados.meta;
+    const cor = dentro ? 'var(--st-faturado-fg, #3fa66a)' : 'var(--st-aguardando-veiculo-fg, #d9534f)';
+    return `<div class="stat-box">
+        <div class="stat-num" style="color:${cor}">${fmtDuracao(dados.media)}</div>
+        <div class="stat-label">${rotulo}</div>
+        <div class="stat-note">${nota} · base: ${dados.amostra} carga(s)<br>
+          ${dados.acimaDaMeta} acima da meta de ${fmtDuracao(dados.meta)} (${dados.percentualAcima}%)</div>
+      </div>`;
+  };
+
+  wrap.innerHTML = `<div class="grid4">
+      ${caixa(t, 'Tempo Médio de Pátio — hoje', 'Chegada até a saída')}
+      ${caixa(geral, 'Tempo Médio de Pátio — histórico', 'Todas as cargas concluídas')}
+    </div>`;
+}
+
+/* Leitura automática de gargalos. Cada bloco só aparece se tiver conteúdo:
+   seção cheia de "sem dados" treina o gestor a ignorar a seção inteira. */
+function renderGargalos(){
+  const wrap = document.getElementById('ind-gargalos');
+  if(!wrap) return;
+  const g = analiseGargalos(DB.cargas);
+  const blocos = [];
+
+  const tabela = (titulo, explicacao, cabecalhos, linhas) => {
+    if(!linhas.length) return '';
+    return `<div class="gargalo-bloco">
+        <div class="gargalo-titulo">${esc(titulo)}</div>
+        <div class="gargalo-sub">${explicacao}</div>
+        <div class="table-wrap"><table>
+          <thead><tr>${cabecalhos.map(h=>`<th>${esc(h)}</th>`).join('')}</tr></thead>
+          <tbody>${linhas.join('')}</tbody>
+        </table></div>
+      </div>`;
+  };
+
+  blocos.push(tabela(
+    '🔁 Veículos com atraso recorrente',
+    'Dois ou mais atrasos. Um atraso é acaso; dois viram padrão.',
+    ['Placa','Transportadora','Atrasos','Atraso Médio'],
+    g.veiculosRecorrentes.map(v=>`<tr>
+      <td><strong>${esc(v.placa)}</strong></td><td>${esc(v.transportadora)}</td>
+      <td class="cel-num">${v.atrasos} de ${v.totalCargas}</td>
+      <td class="cel-num">${fmtDuracao(v.tempoMedioAtraso)}</td></tr>`)
+  ));
+
+  blocos.push(tabela(
+    '⏳ Operações com maior permanência no pátio',
+    'Tempo médio da chegada até a saída, por tipo de operação.',
+    ['Tipo de Operação','Tempo Médio','Cargas'],
+    g.operacoesMaiorPermanencia.map(o=>`<tr>
+      <td>${esc(PRA_ONDE_LABEL[o.operacao] || o.operacao)}</td>
+      <td class="cel-num">${fmtDuracao(o.media)}</td>
+      <td class="cel-num">${o.amostra}</td></tr>`)
+  ));
+
+  blocos.push(tabela(
+    '🚚 Transportadoras com concentração de atraso',
+    'Informativo, sem ranking principal — parte do atraso é do pátio, não da transportadora.',
+    ['Transportadora','Cargas Atrasadas','% do Total'],
+    g.transportadorasAtraso.map(t=>`<tr>
+      <td>${esc(t.transportadora)}</td>
+      <td class="cel-num">${t.atrasadas} de ${t.total}</td>
+      <td class="cel-num">${t.percentual}%</td></tr>`)
+  ));
+
+  blocos.push(tabela(
+    '🕐 Horários de maior congestionamento',
+    'Pela hora de CHEGADA do caminhão — o congestionamento é físico, não da digitação.',
+    ['Hora','Chegadas','Tempo Médio de Pátio'],
+    g.horariosCongestionamento.map(h=>`<tr>
+      <td>${String(h.hora).padStart(2,'0')}:00 — ${String(h.hora).padStart(2,'0')}:59</td>
+      <td class="cel-num">${h.chegadas}</td>
+      <td class="cel-num">${fmtDuracao(h.tempoMedioPatio)}</td></tr>`)
+  ));
+
+  blocos.push(tabela(
+    '🛣️ Rotas com maior incidência de atraso',
+    'Rota que atrasa sempre costuma ser problema de janela ou de sequenciamento.',
+    ['Rota','Cargas Atrasadas','Atraso Médio'],
+    g.rotasAtraso.map(r=>`<tr>
+      <td>${esc(r.rotulo || r.rota)}</td>
+      <td class="cel-num">${r.atrasadas} de ${r.total}</td>
+      <td class="cel-num">${fmtDuracao(r.atrasoMedio)}</td></tr>`)
+  ));
+
+  blocos.push(tabela(
+    '⚠️ Cargas paradas há mais tempo',
+    'O bloco mais acionável: cada linha é um caminhão esperando alguém destravar.',
+    ['Nº Carga','Placa','Transportadora','Status','Parada há'],
+    g.pendentesAntigas.map(c=>`<tr>
+      <td>${esc(c.numeroCarga)}</td><td><strong>${esc(c.placa)}</strong></td>
+      <td>${esc(c.transportadora)}</td>
+      <td>${badgeHtml(c.status)}</td>
+      <td class="cel-num">${fmtDuracao(c.paradaHaMin)}</td></tr>`)
+  ));
+
+  const conteudo = blocos.filter(Boolean).join('');
+  wrap.innerHTML = conteudo || `<div class="empty-state">
+      Nenhum gargalo detectado — nenhuma carga passou da meta de ${fmtDuracao(g.meta)} em pátio.
+    </div>`;
+}
+
+/* ---------- FILTRO DE PERÍODO DOS RELATÓRIOS ----------
+   Um filtro só, compartilhado pelos três relatórios. Ler os campos na hora
+   de gerar (em vez de guardar em variável) evita o clássico "mudei o filtro
+   e o PDF saiu com o período antigo". */
+function periodoRelatorio(){
+  const de = (document.getElementById('rel-data-de') || {}).value || '';
+  const ate = (document.getElementById('rel-data-ate') || {}).value || '';
+  return { de, ate };
+}
+
+function cargasDoRelatorio(){
+  const { de, ate } = periodoRelatorio();
+  return filtrarPorDataProgramacao(DB.cargas.filter(c=>!c.aguardandoCarga), de, ate);
+}
+
+function rotuloPeriodoRelatorio(){
+  const { de, ate } = periodoRelatorio();
+  if(!de && !ate) return 'Todas as cargas';
+  if(de && ate) return `Programadas de ${fmtData(de)} a ${fmtData(ate)}`;
+  if(de) return `Programadas a partir de ${fmtData(de)}`;
+  return `Programadas até ${fmtData(ate)}`;
+}
+
+function fmtData(iso){
+  if(!iso) return '—';
+  const [a,m,d] = String(iso).slice(0,10).split('-');
+  return `${d}/${m}/${a}`;
+}
+
+function filtroRelatorioAtalho(qual){
+  const de = document.getElementById('rel-data-de');
+  const ate = document.getElementById('rel-data-ate');
+  if(!de || !ate) return;
+  const hoje = new Date();
+  const iso = d => d.toISOString().slice(0,10);
+  if(qual === 'limpar'){ de.value = ''; ate.value = ''; }
+  else if(qual === 'hoje'){ de.value = iso(hoje); ate.value = iso(hoje); }
+  else {
+    const dias = qual === 'semana' ? 6 : 29;
+    const inicio = new Date(hoje); inicio.setDate(inicio.getDate() - dias);
+    de.value = iso(inicio); ate.value = iso(hoje);
+  }
+  atualizarResumoFiltroRelatorio();
+}
+
+function atualizarResumoFiltroRelatorio(){
+  const el = document.getElementById('rel-resumo-filtro');
+  if(!el) return;
+  const lista = cargasDoRelatorio();
+  const s = somatoriosDaLista(lista);
+  el.innerHTML = `<strong>${rotuloPeriodoRelatorio()}</strong> — ${s.cargas} carga(s) · ` +
+    `${(s.pesoKg/1000).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:2})} ton · ` +
+    `${s.entregas} entrega(s)`;
+}
+
+/* Linha de rodapé com os somatórios, no estilo do Excel. Respeita o filtro
+   porque é montada a partir da mesma lista que gerou as linhas acima. */
+function rodapeSomatorios(lista, colspanAntes, colunas){
+  const s = somatoriosDaLista(lista);
+  const pesoTon = (s.pesoKg/1000).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:2});
+  const celulas = colunas.map(c=>{
+    if(c === 'peso') return `<td class="tot-num">${pesoTon}</td>`;
+    if(c === 'entregas') return `<td class="tot-num">${s.entregas}</td>`;
+    if(c === 'ganchos') return `<td class="tot-num">${s.ganchos}</td>`;
+    return '<td></td>';
+  }).join('');
+  return `<tr class="linha-total">
+      <td colspan="${colspanAntes}" class="tot-rotulo">TOTAL — ${s.cargas} carga(s)</td>
+      ${celulas}
+    </tr>`;
+}
+
+/* ---------- RELATÓRIO ADMINISTRAÇÃO DE FRETES ----------
+   Independente dos demais de propósito: quem usa é a administração, e
+   misturar controle de frete com acompanhamento de pátio produziria um
+   relatório que não serve bem para nenhum dos dois. */
+function exportarPdfFretes(){
+  const el = document.getElementById('print-operacional');
+  const lista = cargasDoRelatorio();
+  const dados = dadosAdministracaoFretes(lista);
+
+  const linhas = dados.map(d=>`<tr>
+      <td><strong>${esc(d.numeroCarga)}</strong></td>
+      <td>${esc(d.rota)}</td>
+      <td>${esc(d.observacoes) || '<span style="color:#999">—</span>'}</td>
+    </tr>`).join('');
+
+  el.innerHTML = `
+    <div class="print-page">
+      <div class="print-header">
+        <img src="assets/logo_suinco.png" alt="Suinco">
+        <div><h1>Administração de Fretes</h1>
+        <div class="meta">Gerado em ${fmtDataHora(new Date().toISOString())} · ${rotuloPeriodoRelatorio()} · ${dados.length} carga(s)</div></div>
+      </div>
+      <table class="tab-fretes">
+        <thead><tr><th style="width:18%">Número da Carga</th><th style="width:27%">Rota</th><th>Observações</th></tr></thead>
+        <tbody>${linhas || '<tr><td colspan="3" class="text-center text-dim">Nenhuma carga no período selecionado.</td></tr>'}</tbody>
+      </table>
+      <div class="print-legenda">
+        O campo <strong>Observações</strong> é onde a administração registra valor do frete,
+        negociação e instruções. Linha em branco é carga sem registro administrativo — é ela
+        que precisa ser preenchida.
+      </div>
+    </div>`;
+  imprimirContainer(el);
+}
