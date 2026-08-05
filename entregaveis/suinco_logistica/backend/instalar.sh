@@ -313,13 +313,37 @@ if ! getent hosts "$DOMINIO_API" >/dev/null; then
   aviso "Crie o registro A no Registro.br apontando para o IP deste servidor"
   aviso "e rode:  certbot --nginx -d $DOMINIO_API"
 else
+  # O certbot roda SEMPRE, mesmo com o certificado já emitido.
+  #
+  # Motivo, aprendido do jeito difícil: a etapa 8 reescreve a configuração
+  # do Nginx do zero a cada execução. Quem coloca o bloco de HTTPS lá
+  # dentro é o certbot. Pular esta etapa porque "o certificado já existe"
+  # deixava a configuração recém-escrita SEM HTTPS nenhum — e o site saía
+  # do ar a cada atualização, silenciosamente.
+  #
+  # Pior: a verificação final testa /health direto no Node, sem passar pelo
+  # Nginx, então ela passava e o script anunciava sucesso com o painel
+  # inacessível.
+  #
+  # --reinstall reaplica o certificado existente na configuração nova sem
+  # pedir emissão nova à Let's Encrypt, então não consome cota nem depende
+  # de a validação passar de novo.
+  ARGS_CERTBOT=(--nginx -d "$DOMINIO_API" --non-interactive --agree-tos
+                --register-unsafely-without-email --redirect)
   if [[ -d "/etc/letsencrypt/live/$DOMINIO_API" ]]; then
-    ok "certificado já existe (renovação é automática)"
+    ARGS_CERTBOT+=(--reinstall)
+  fi
+  if certbot "${ARGS_CERTBOT[@]}" >/dev/null 2>&1; then
+    ok "HTTPS ativo, com redirecionamento de http para https"
   else
-    certbot --nginx -d "$DOMINIO_API" --non-interactive --agree-tos \
-            --register-unsafely-without-email --redirect >/dev/null 2>&1 \
-      && ok "HTTPS ativo, com redirecionamento de http para https" \
-      || aviso "certbot falhou. Rode manualmente: certbot --nginx -d $DOMINIO_API"
+    aviso "certbot falhou. Rode manualmente: certbot --nginx -d $DOMINIO_API"
+  fi
+
+  # Confere que o bloco de HTTPS ficou mesmo na configuração. Sem isto o
+  # script pode anunciar sucesso com o site fora do ar, que foi exatamente
+  # o que aconteceu.
+  if ! grep -q "listen 443" /etc/nginx/sites-available/embarque-suinco; then
+    erro "o Nginx ficou sem o bloco de HTTPS. Rode: certbot --nginx -d $DOMINIO_API --reinstall"
   fi
 fi
 systemctl enable certbot.timer >/dev/null 2>&1 || true
@@ -343,9 +367,44 @@ chmod +x /etc/cron.daily/backup-embarque-suinco
 
 # --- 12. Verificação final -------------------------------------------
 azul "12. Verificação"
+# 12a. O Node responde? (direto, sem Nginx)
 SAUDE="$(curl -s --max-time 10 "http://127.0.0.1:$PORTA_APP/health" || true)"
 echo "$SAUDE" | grep -q '"ok":true' || { journalctl -u embarque-suinco -n 20 --no-pager; erro "/health não respondeu ok"; }
 ok "/health respondeu: $SAUDE"
+
+# 12b. E pelo caminho que o NAVEGADOR usa?
+#
+# Esta parte existe porque a verificação anterior sozinha dava falsa
+# confiança: ela fala direto com o Node, então passa mesmo com o Nginx
+# quebrado e o painel inacessível. Foi assim que uma atualização derrubou
+# o HTTPS e o script ainda anunciou "instalação concluída".
+#
+# Aqui vai pelo endereço público, com HTTPS de verdade. Se o certificado,
+# o Nginx ou o DNS estiverem errados, falha aqui — que é onde deve falhar.
+if getent hosts "$DOMINIO_API" >/dev/null; then
+  CODIGO="$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "https://$DOMINIO_API/health" || echo 000)"
+  if [[ "$CODIGO" == "200" ]]; then
+    ok "https://$DOMINIO_API/health respondeu 200 (o caminho do navegador)"
+  else
+    erro "https://$DOMINIO_API/health devolveu '$CODIGO'. O Node está de pé, mas o Nginx ou o certificado não. Rode: certbot --nginx -d $DOMINIO_API --reinstall"
+  fi
+
+  # O preflight é o que o navegador faz ANTES de qualquer login. Se ele
+  # falhar, a tela mostra "servidor não respondeu" com o servidor no ar —
+  # o erro mais difícil de diagnosticar que apareceu nesta implantação.
+  PREFLIGHT="$(curl -s -D- -o /dev/null --max-time 15 -X OPTIONS \
+    -H "Origin: $DOMINIO_PAINEL" \
+    -H "Access-Control-Request-Method: POST" \
+    -H "Access-Control-Request-Headers: content-type" \
+    "https://$DOMINIO_API/auth/login" 2>/dev/null || true)"
+  if grep -qi 'access-control-allow-origin' <<<"$PREFLIGHT"; then
+    ok "preflight do login liberado para $DOMINIO_PAINEL"
+  else
+    erro "o preflight do login não devolveu CORS. O painel não vai conseguir entrar."
+  fi
+else
+  aviso "$DOMINIO_API não resolve — não deu para testar o caminho do navegador"
+fi
 
 PLACAS="$(su - postgres -c "psql -tAd $DB_NAME -c 'SELECT count(*) FROM dim_veiculos'")"
 ROTAS="$(su - postgres -c "psql -tAd $DB_NAME -c 'SELECT count(*) FROM dim_rotas'")"
