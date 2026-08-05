@@ -106,10 +106,20 @@ async def main():
         ck('aponta a internet do aparelho', 'não alcança o servidor' in txt, txt[:160])
         ck('não culpa o servidor', 'configuração do servidor' not in txt)
 
-        print('\n=== 3. SERVIDOR RECUSANDO O ENDEREÇO ===')
+        print('\n=== 3. CHEGA MAS NENHUMA RESPOSTA PODE SER LIDA ===')
+        # Foi o resultado real das duas máquinas Windows. Duas causas
+        # produzem exatamente isto e a diferença não é visível do navegador:
+        # endereço não autorizado no servidor, ou algo no meio do caminho
+        # removendo as respostas.
+        #
+        # A tela não pode escolher uma e culpar errado. Ela dá o desempate
+        # que qualquer pessoa faz sozinha: testar no 4G do celular.
         txt = await rodar_teste(pagina, 'origem_recusada')
         ck('alcance passa, leitura falha', '✓' in txt and '✕' in txt, txt[:160])
-        ck('aponta configuração do servidor', 'recusa este endereço' in txt, txt[:200])
+        ck('manda testar no 4G para desempatar', '4G' in txt, txt[-300:])
+        ck('diz o que a TI precisa liberar', 'porta 443' in txt, txt[-300:])
+        ck('assume a culpa se falhar no 4G também',
+           'o problema é meu' in txt.lower(), txt[-300:])
 
         print('\n=== 4. REDE DA EMPRESA DESCARTANDO O OPTIONS ===')
         # O caso das duas máquinas Windows. A quarta sonda passando enquanto

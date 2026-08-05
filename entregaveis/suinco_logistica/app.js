@@ -519,6 +519,24 @@ async function rodarTesteDeConexao(){
   if(!ok[0]){
     conclusao = 'Este aparelho não alcança o servidor. É a internet daqui, '
               + 'o DNS da rede, ou o servidor está fora.';
+  } else if(!ok[1] && !ok[2] && !ok[3]){
+    /* O pacote chega e NENHUMA resposta pode ser lida.
+
+       Duas causas produzem exatamente isto, e a diferença não está visível
+       daqui: ou o endereço deste painel não está autorizado no servidor, ou
+       algo entre este aparelho e o servidor está removendo as respostas —
+       proxy da empresa, antivírus que inspeciona HTTPS, filtro de rede.
+
+       O desempate é de graça e não precisa de ninguém técnico: se o MESMO
+       endereço abre e entra num celular pelo 4G, o servidor está correto e
+       o problema é a rede daqui. Foi assim que este caso se resolveu. */
+    conclusao = 'O servidor recebe, mas nenhuma resposta consegue chegar '
+              + 'inteira neste navegador. Teste o mesmo endereço num celular '
+              + 'usando 4G (sem o Wi-Fi da empresa): se lá funcionar, quem '
+              + 'está bloqueando é a rede daqui, e a TI precisa liberar '
+              + (api || 'o endereço da API') + ' na porta 443 sem inspeção de '
+              + 'HTTPS. Se falhar também no 4G, o problema é meu — me mande '
+              + 'esta tela.';
   } else if(!ok[1]){
     conclusao = 'O servidor responde mas recusa este endereço. É configuração '
               + 'do servidor — me mande esta tela.';
