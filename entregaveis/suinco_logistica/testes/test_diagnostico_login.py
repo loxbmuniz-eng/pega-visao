@@ -7,9 +7,15 @@ Faturamento não conseguiu entrar e a tela disse "servidor não respondeu"
 para Wi-Fi ruim e para erro interno. Com um relato indistinguível, o
 diagnóstico remoto vira adivinhação.
 
-Cada falha agora carrega um código curto entre colchetes, feito para ser
-lido em voz alta ou fotografado no grupo. Este teste força as seis
-situações e confere que cada uma produz o código certo.
+Cada falha carrega um código curto entre colchetes, feito para ser lido em
+voz alta ou fotografado no grupo. Este teste força as sete situações e
+confere que cada uma produz o código certo.
+
+O painel é servido de uma origem DIFERENTE da API, como em produção
+(painel na Vercel, API no VPS). Sem isso o CORS nunca entra em jogo e os
+dois casos que dependem dele — rede filtrando o login × servidor recusando
+o endereço — ficariam indistinguíveis no teste, que é exatamente o defeito
+que ele existe para impedir.
 
 Não precisa do backend no ar: todas as respostas são simuladas pelo próprio
 navegador. É de propósito — o teste mede a tradução do erro, não a API.
@@ -19,7 +25,8 @@ import sys
 from playwright.async_api import async_playwright
 
 PAINEL = '/home/user/pega-visao/entregaveis/suinco_logistica/index.html'
-ORIGEM = 'https://api.exemplo.local'
+ORIGEM_PAINEL = 'https://painel.exemplo.local'
+ORIGEM_API = 'https://api.exemplo.local'
 
 falhas = []
 
@@ -30,12 +37,19 @@ def ck(nome, ok, detalhe=''):
         falhas.append(nome)
 
 
+CABECALHOS_CORS = {
+    'access-control-allow-origin': ORIGEM_PAINEL,
+    'access-control-allow-headers': 'content-type, authorization',
+    'access-control-allow-methods': 'GET, POST, PATCH, OPTIONS',
+}
+
+
 async def abrir(ctx):
     pagina = await ctx.new_page()
     html = open(PAINEL, encoding='utf-8').read()
-    html = html.replace("api: 'https://api.embarquesuinco.com.br'", f"api: '{ORIGEM}'")
+    html = html.replace("api: 'https://api.embarquesuinco.com.br'", f"api: '{ORIGEM_API}'")
 
-    url = ORIGEM + '/__painel_teste'
+    url = ORIGEM_PAINEL + '/__painel_teste'
     await pagina.route(url, lambda rota: asyncio.ensure_future(
         rota.fulfill(status=200, content_type='text/html; charset=utf-8', body=html)))
     await pagina.route('**/socket.io/socket.io.js', lambda rota: asyncio.ensure_future(
@@ -50,9 +64,9 @@ async def tentar_login(pagina):
     await pagina.fill('#login-email', 'joao@teste.local')
     await pagina.fill('#login-senha', 'qualquer-senha')
     await pagina.click('#btn-entrar')
-    # A sonda de conexão tem 6 s de teto; nos casos que a acionam o texto
-    # demora mais para assentar que nos que respondem na hora.
-    await pagina.wait_for_selector('#login-erro:not([hidden])', timeout=15000)
+    # As sondas de conexão têm 6 s de teto cada; nos casos que as acionam o
+    # texto demora mais para assentar que nos que respondem na hora.
+    await pagina.wait_for_selector('#login-erro:not([hidden])', timeout=20000)
     await pagina.wait_for_timeout(300)
     return (await pagina.inner_text('#login-erro')).strip()
 
@@ -67,14 +81,29 @@ async def main():
         pagina.on('pageerror', lambda e: erros.append(str(e)))
 
         def responder_login(status, corpo):
-            """Faz /auth/login responder com um status escolhido."""
+            """Faz /auth/login responder com um status escolhido.
+
+            O preflight precisa passar, senão o navegador nunca chega a
+            enviar o POST e o painel veria falha de transporte em vez do
+            status — mediria o caso errado.
+            """
             async def h(rota):
-                await rota.fulfill(status=status, content_type='application/json',
-                                   body=corpo)
+                if rota.request.method == 'OPTIONS':
+                    await rota.fulfill(status=204, headers=CABECALHOS_CORS)
+                    return
+                await rota.fulfill(status=status, body=corpo,
+                                   headers={**CABECALHOS_CORS,
+                                            'content-type': 'application/json'})
             return lambda rota: asyncio.ensure_future(h(rota))
 
         def recusar(rota):
             return asyncio.ensure_future(rota.abort('connectionrefused'))
+
+        def health_ok(rota):
+            """Servidor no ar E autorizando esta origem."""
+            return asyncio.ensure_future(rota.fulfill(
+                status=200, body='{"ok":true}',
+                headers={**CABECALHOS_CORS, 'content-type': 'application/json'}))
 
         print('\n=== 1. SENHA ERRADA — o operador resolve sozinho ===')
         await pagina.route('**/auth/login', responder_login(
@@ -101,7 +130,7 @@ async def main():
         await pagina.unroute('**/auth/login')
 
         print('\n=== 4. APARELHO SEM CAMINHO ATÉ A API — Wi-Fi/dados da pessoa ===')
-        # Login e sonda recusados: nada deste aparelho alcança o servidor.
+        # Login e sondas recusados: nada deste aparelho alcança o servidor.
         await pagina.route('**/auth/login', recusar)
         await pagina.route('**/health', recusar)
         txt = await tentar_login(pagina)
@@ -111,23 +140,61 @@ async def main():
         await pagina.unroute('**/auth/login')
         await pagina.unroute('**/health')
 
-        print('\n=== 5. SERVIDOR NO AR MAS RECUSANDO A ORIGEM (CORS) ===')
-        # É o caso que mais custou tempo em produção: para o navegador, um
-        # preflight recusado é indistinguível de rede caída. A sonda em
-        # no-cors passa (o pacote chega), o login não — e só essa diferença
-        # separa "chama a TI" de "troca de Wi-Fi".
+        print('\n=== 5. REDE DA EMPRESA FILTRANDO O LOGIN ===')
+        # O caso do computador que falha enquanto o mesmo usuário entra pelo
+        # 4G do celular. O GET simples passa e é lido — logo a origem está
+        # autorizada e o servidor está no ar. O POST do login não passa:
+        # firewall corporativo e antivírus com inspeção de HTTPS derrubam o
+        # preflight OPTIONS e deixam o GET simples passar.
+        #
+        # Dizer "avise a Logística" aqui seria mandar a pessoa errada
+        # procurar o problema no lugar errado.
         await pagina.route('**/auth/login', recusar)
-        await pagina.route('**/health', lambda rota: asyncio.ensure_future(
-            rota.fulfill(status=200, content_type='application/json', body='{"ok":true}')))
+        await pagina.route('**/health', health_ok)
         txt = await tentar_login(pagina)
-        ck('mostra [BLOQUEIO], não [REDE]', '[BLOQUEIO]' in txt, txt)
-        ck('avisa que tentar de novo não resolve', 'não adianta' in txt.lower(), txt)
+        ck('mostra [FILTRADO]', '[FILTRADO]' in txt, txt)
+        ck('aponta firewall/antivírus/extensão',
+           'firewall' in txt.lower() and 'antivírus' in txt.lower(), txt)
+        ck('dá um teste que a pessoa consegue fazer sozinha',
+           'anônima' in txt.lower() or 'celular' in txt.lower(), txt)
         await pagina.unroute('**/auth/login')
         await pagina.unroute('**/health')
 
+        print('\n=== 5b. SERVIDOR RECUSANDO A ORIGEM (resposta opaca) ===')
+        # Aqui o /health chega mas o navegador NÃO pode ler a resposta, por
+        # falta do cabeçalho de origem. A sonda com CORS falha, a sonda
+        # no-cors passa — e só essa diferença separa "a empresa está
+        # filtrando" de "o servidor não conhece este endereço".
+        #
+        # Este caso não pode ser montado com route.fulfill: o Playwright
+        # entrega a resposta interceptada sem passar pela checagem de CORS do
+        # navegador, então qualquer cabeçalho que eu omitisse seria ignorado
+        # e o teste mediria o cenário oposto — passando, e mentindo. Por isso
+        # aqui o `fetch` é substituído: é a forma honesta de reproduzir o que
+        # o navegador faz com uma resposta que ele decide não deixar ler.
+        await pagina.evaluate("""() => {
+            window.__fetchReal = window.fetch;
+            window.fetch = (url, opcoes) => {
+                const u = String(url && url.url ? url.url : url);
+                const o = opcoes || {};
+                if (u.includes('/health')) {
+                    // no-cors: o pacote chega, a resposta é opaca — resolve.
+                    if (o.mode === 'no-cors') return Promise.resolve(new Response(null, {status: 200}));
+                    // com CORS: sem Allow-Origin, o navegador rejeita a leitura.
+                    return Promise.reject(new TypeError('Failed to fetch'));
+                }
+                if (u.includes('/auth/login')) return Promise.reject(new TypeError('Failed to fetch'));
+                return window.__fetchReal(url, opcoes);
+            };
+        }""")
+        txt = await tentar_login(pagina)
+        ck('mostra [BLOQUEIO], não [FILTRADO]', '[BLOQUEIO]' in txt, txt)
+        ck('avisa que tentar de novo não resolve', 'não adianta' in txt.lower(), txt)
+        await pagina.evaluate("() => { window.fetch = window.__fetchReal; }")
+
         print('\n=== 6. PAINEL ABERTO NO ENDEREÇO ERRADO ===')
-        # O servidor agora recusa a origem com um 403 legível em vez de deixar
-        # o navegador esconder o motivo. A tela repassa a frase dele, que diz
+        # O servidor recusa a origem com um 403 legível em vez de deixar o
+        # navegador esconder o motivo. A tela repassa a frase dele, que diz
         # QUAL endereço foi barrado e qual é o certo — é a diferença entre
         # "não entra" e "abre o site pelo endereço sem www".
         await pagina.route('**/auth/login', responder_login(
@@ -143,8 +210,9 @@ async def main():
         print('\n=== 7. OS CÓDIGOS SÃO TODOS DIFERENTES ===')
         # Se dois casos compartilhassem código, voltaríamos ao problema que
         # este trabalho existe para resolver.
-        codigos = ['[SENHA]', '[LIMITE]', '[HTTP500]', '[REDE]', '[BLOQUEIO]', '[ENDEREÇO]']
-        ck('seis códigos distintos', len(set(codigos)) == 6)
+        codigos = ['[SENHA]', '[LIMITE]', '[HTTP500]', '[REDE]',
+                   '[FILTRADO]', '[BLOQUEIO]', '[ENDEREÇO]']
+        ck('sete códigos distintos', len(set(codigos)) == 7)
 
         print('\n=== 8. CONSOLE ===')
         ck('sem erros de página', not erros, str(erros))

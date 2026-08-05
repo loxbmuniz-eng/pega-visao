@@ -403,6 +403,16 @@ async function explicarFalhaDeLogin(e){
     }
   }catch(err){ /* a sonda nunca deve derrubar a mensagem de erro */ }
 
+  if(alcance === 'filtrado'){
+    // A sonda com CORS passou: o servidor aceita este endereço e respondeu.
+    // O que caiu foi o envio do login — algo no meio do caminho está
+    // barrando. Mandar avisar a Logística aqui seria conselho errado: o
+    // problema está na rede ou no computador de quem tenta entrar.
+    return 'Este computador alcança o servidor, mas algo está bloqueando o '
+         + 'envio do login — normalmente firewall da empresa, antivírus ou '
+         + 'extensão do navegador. Teste numa janela anônima ou usando os '
+         + 'dados do celular. [FILTRADO]';
+  }
   if(alcance === 'alcancavel'){
     return 'O servidor está no ar, mas recusou a entrada vinda deste aparelho. '
          + 'Avise a Logística — não adianta tentar de novo. [BLOQUEIO]';
