@@ -276,6 +276,54 @@ function esconderErroLogin(){
   if(el) el.hidden = true;
 }
 
+/* Traduz a falha de login para uma frase que diz o que fazer.
+
+   "Servidor não respondeu" era a resposta para quatro problemas diferentes:
+   senha certa mas serviço fora, muitas tentativas no mesmo minuto, aparelho
+   sem caminho até a API e erro interno do servidor. Quem está no pátio não
+   tem como distinguir, e o relato que chega no WhatsApp é sempre o mesmo —
+   o que torna o diagnóstico remoto impossível.
+
+   Cada retorno carrega um código curto entre colchetes. Não é decoração: é
+   o que o operador fotografa e manda, e o que permite responder sem pedir
+   para abrir o console do navegador. */
+async function explicarFalhaDeLogin(e){
+  if(e && e.status === 429){
+    return 'Muitas tentativas de entrada deste local no último minuto. '
+         + 'Espere 1 minuto e tente de novo. [LIMITE]';
+  }
+  if(e && e.status >= 500){
+    return `O servidor recebeu o pedido mas falhou (erro ${e.status}). `
+         + 'Isso é do servidor, não da sua senha. Avise a Logística. [HTTP'+e.status+']';
+  }
+  if(e && e.status === 401){
+    return 'E-mail ou senha incorretos. Confira maiúsculas e espaços. [SENHA]';
+  }
+  if(e && e.status){
+    return (e.message || `Erro ${e.status}.`) + ` [HTTP${e.status}]`;
+  }
+
+  // Sem status: o pedido não chegou a virar resposta. A sonda separa
+  // "seu aparelho não alcança o servidor" de "alcança, mas foi barrado".
+  let alcance = 'inalcancavel';
+  try{
+    if(typeof SuincoSharePoint !== 'undefined' && SuincoSharePoint.diagnosticarConexao){
+      alcance = await SuincoSharePoint.diagnosticarConexao();
+    }
+  }catch(err){ /* a sonda nunca deve derrubar a mensagem de erro */ }
+
+  if(alcance === 'alcancavel'){
+    return 'O servidor está no ar, mas recusou a entrada vinda deste aparelho. '
+         + 'Avise a Logística — não adianta tentar de novo. [BLOQUEIO]';
+  }
+  if(e && e.motivo === 'timeout'){
+    return 'O servidor demorou demais para responder. Verifique a internet '
+         + 'deste aparelho e tente de novo. [TEMPO]';
+  }
+  return 'Este aparelho não está alcançando o servidor. Verifique o Wi-Fi ou '
+       + 'os dados móveis; se a internet estiver boa, avise a Logística. [REDE]';
+}
+
 /* Login contra o servidor.
 
    O setor NÃO é enviado nem escolhido: vem no token que o servidor assina, a
@@ -312,12 +360,7 @@ async function entrarNoServidor(){
     renderAll();
     notify(`Bem-vindo, ${op.nome}! Setor: ${op.setor}`, 'success');
   }catch(e){
-    // 401 é credencial errada; o resto é rede ou servidor fora. A distinção
-    // importa: uma o operador resolve digitando de novo, a outra não.
-    const rede = !e.status || e.status >= 500;
-    mostrarErroLogin(rede
-      ? 'Servidor não respondeu. Verifique a rede ou entre só neste aparelho.'
-      : (e.message || 'E-mail ou senha incorretos.'));
+    mostrarErroLogin(await explicarFalhaDeLogin(e));
   }finally{
     botao.disabled = false;
     botao.textContent = 'Entrar';

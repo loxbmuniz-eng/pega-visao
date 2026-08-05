@@ -151,6 +151,19 @@ const SuincoSharePoint = (function () {
         body: opcoes.corpo === undefined ? undefined : JSON.stringify(opcoes.corpo),
         signal: tempo.signal,
       });
+    } catch (e) {
+      /* O fetch falhou antes de existir resposta. Sem etiqueta, tudo isso
+         chega na tela como "servidor não respondeu" — que é o que estamos
+         tentando parar de fazer. Aqui separamos o que dá para separar:
+         estouro de tempo tem nome próprio (AbortError), o resto é falha de
+         transporte (DNS, TLS, CORS, rede do celular). */
+      const abortou = e && (e.name === 'AbortError' || e.name === 'TimeoutError');
+      const err = new Error(abortou
+        ? 'O servidor não respondeu no tempo limite.'
+        : 'Não foi possível alcançar o servidor.');
+      err.motivo = abortou ? 'timeout' : 'transporte';
+      err.causaOriginal = e;
+      throw err;
     } finally {
       // Sem isto o temporizador segura o navegador acordado por 20 s a
       // cada chamada, e são muitas ao longo de um turno.
@@ -199,6 +212,33 @@ const SuincoSharePoint = (function () {
   function eFalhaDeRede(e) {
     if (e && e.status) return e.status >= 500 || e.status === 429;
     return true; // TypeError de fetch, AbortError, DNS — tudo isso é rede
+  }
+
+  /* Segunda pergunta ao servidor, feita SÓ quando a primeira falhou.
+
+     "Failed to fetch" é a mesma frase para DNS fora, certificado inválido,
+     CORS recusado, Wi-Fi caído e servidor parado — o navegador esconde o
+     motivo de propósito. Mas dá para reduzir o campo com uma sonda em
+     `mode:'no-cors'`: ela não lê a resposta (e por isso não depende de
+     CORS), só diz se o pacote chegou em algum lugar.
+
+     - sonda passa  → a rede alcança o servidor; o que quebrou foi a
+       permissão de origem (CORS/preflight) ou a rota de login;
+     - sonda falha  → não há caminho até api.embarquesuinco.com.br a partir
+       deste aparelho: rede, DNS, certificado ou serviço fora.
+
+     É a diferença entre "chama a TI" e "troca de Wi-Fi", e o operador do
+     pátio consegue relatar isso pelo WhatsApp sem abrir o console. */
+  async function diagnosticarConexao() {
+    const tempo = sinalDeTimeout(6000);
+    try {
+      await fetch(SP_CONFIG.api + '/health', { mode: 'no-cors', signal: tempo.signal });
+      return 'alcancavel';
+    } catch (e) {
+      return 'inalcancavel';
+    } finally {
+      tempo.cancelar();
+    }
   }
 
   /* ---------------------------------------------------------------
@@ -631,7 +671,7 @@ const SuincoSharePoint = (function () {
     SP_CONFIG,
     iniciar, estaConfigurado, estado, conta, aoMudarEstado, aoReceberDados,
     aoDescartarDaFila,
-    login, sair,
+    login, sair, diagnosticarConexao,
     push, upsert, mudarStatus,
     pull, pullTudo, drenarFila, pendentes,
     listarOperadores, criarOperador, atualizarOperador,

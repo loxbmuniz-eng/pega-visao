@@ -13,7 +13,7 @@
     "migrar": "node scripts/migrar.js",
     "seed:frota": "node scripts/seed_frota.js",
     "operador": "node scripts/criar_operador.js",
-    "teste": "node --test testes/"
+    "teste": "node --test testes/*.test.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
