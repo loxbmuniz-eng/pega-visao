@@ -68,7 +68,18 @@ export const config = {
     // existe para conter script, não para atrapalhar operador.
     janelaMs: 60_000,
     porJanela: Number(process.env.RATE_LIMIT || 300),
-    loginPorJanela: Number(process.env.RATE_LIMIT_LOGIN || 10),
+
+    /* Login: 30 por minuto, não 10.
+    
+       O limite é POR IP, e o pátio inteiro sai pelo mesmo IP. Com 10, uma
+       troca de turno com cinco pessoas entrando junto já estoura, e as
+       últimas veem "muitas tentativas" achando que erraram a senha —
+       exatamente na hora em que o caminhão está esperando.
+    
+       30 continua barrando força bruta com folga: cada tentativa custa
+       ~250 ms de bcrypt no servidor, então 30/min é uma taxa que não
+       quebra senha nenhuma e não atrapalha ninguém. */
+    loginPorJanela: Number(process.env.RATE_LIMIT_LOGIN || 30),
   },
 };
 

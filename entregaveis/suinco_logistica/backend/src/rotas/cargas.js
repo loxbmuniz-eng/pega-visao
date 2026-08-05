@@ -7,7 +7,7 @@ import {
   normalizarPlaca, idSeguro,
 } from '../dominio/cargas.js';
 import {
-  validarTransicao, podeCriarCarga, camposEditaveisPor,
+  validarTransicao, podeCriarCarga, camposEditaveisPor, podeRegistrarSaida,
   ErroDeFluxo, ErroDePermissao, STATUS_INICIAL,
 } from '../dominio/fluxo.js';
 
@@ -278,7 +278,7 @@ rotasCargas.post('/cargas/:id/status', exigirLogin, async (req, res, next) => {
 rotasCargas.post('/portaria/saida', exigirLogin, async (req, res, next) => {
   try {
     const op = req.operador;
-    if (op.setor !== 'Portaria' && op.setor !== 'Administração') {
+    if (!podeRegistrarSaida(op.setor)) {
       throw new ErroDePermissao('A saída do pátio é registrada pela Portaria.');
     }
     const placa = normalizarPlaca(req.body?.placa);

@@ -473,6 +473,7 @@ function renderTabAtual(){
     // refletir o estado atual do pátio — senão mostra a contagem de quando
     // a página abriu, que já mudou.
     case 'relatorios': atualizarResumoFiltroRelatorio(); break;
+    case 'usuarios': renderUsuarios(); break;
   }
   // Depois de pintar, e não antes: os rótulos são derivados das células
   // que acabaram de ser criadas.
@@ -2204,4 +2205,153 @@ function prepararTabelasMobile(raiz){
       });
     });
   });
+}
+
+/* =====================================================================
+   USUÁRIOS — administração pela interface
+   =====================================================================
+
+   Existe para tirar o cadastro de operador do SSH. Enquanto criar um
+   porteiro exigia abrir terminal, a operação dependia de alguém com acesso
+   ao servidor toda vez que entrasse gente nova — e essa fricção é o que
+   faz nascer senha compartilhada.
+
+   Toda a validação de verdade está no servidor (rotas/operadores.js). Aqui
+   é conveniência: a tela não decide nada que o servidor não confirme. */
+
+let _usuarios = [];
+
+async function renderUsuarios(){
+  const tbody = document.getElementById('usr-tbody');
+  const vazio = document.getElementById('usr-empty');
+  if(!tbody) return;
+
+  if(typeof SuincoSharePoint === 'undefined' || !SuincoSharePoint.estaConfigurado()){
+    tbody.innerHTML = '';
+    vazio.hidden = false;
+    vazio.textContent = 'Esta tela precisa de conexão com o servidor. Faça login para usá-la.';
+    return;
+  }
+
+  try{
+    _usuarios = await SuincoSharePoint.listarOperadores();
+  }catch(e){
+    tbody.innerHTML = '';
+    vazio.hidden = false;
+    vazio.textContent = e.status === 403
+      ? 'Só a Administração acessa esta tela.'
+      : 'Não consegui carregar os usuários: ' + e.message;
+    return;
+  }
+
+  vazio.hidden = _usuarios.length > 0;
+  vazio.textContent = 'Nenhum usuário cadastrado.';
+
+  const euMesmo = (DB.operador && DB.operador.email) || '';
+
+  tbody.innerHTML = _usuarios.map(u=>{
+    const sou = u.email === euMesmo;
+    const acesso = u.ultimoAcesso ? fmtDataHora(u.ultimoAcesso)
+      : '<span class="text-dim">nunca acessou</span>';
+    return `<tr${u.ativo ? '' : ' class="linha-inativa"'}>
+      <td><strong>${esc(u.nome)}</strong>${sou ? ' <span class="chip-voce">você</span>' : ''}</td>
+      <td>${esc(u.email)}</td>
+      <td>
+        <select class="setor-inline" onchange="alterarSetorUsuarioUI('${escJs(u.id)}', this.value)"
+                ${sou ? 'title="Você não pode mudar o próprio setor — perderia o acesso a esta tela"' : ''}>
+          ${SETORES.map(st=>`<option value="${esc(st)}" ${u.setor===st?'selected':''}>${esc(st)}</option>`).join('')}
+        </select>
+      </td>
+      <td>${u.ativo ? '<span class="sit-ativo">Ativo</span>' : '<span class="sit-inativo">Bloqueado</span>'}</td>
+      <td>${acesso}</td>
+      <td class="no-print">
+        <div class="gap8">
+          <button class="btn btn-sec btn-sm" onclick="redefinirSenhaUsuarioUI('${escJs(u.id)}')">🔑 Senha</button>
+          ${u.ativo
+            ? `<button class="btn btn-danger btn-sm" onclick="bloquearUsuarioUI('${escJs(u.id)}', false)" ${sou?'disabled title="Você não pode bloquear a si mesmo"':''}>🚫 Bloquear</button>`
+            : `<button class="btn btn-success btn-sm" onclick="bloquearUsuarioUI('${escJs(u.id)}', true)">✅ Reativar</button>`}
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+
+  prepararTabelasMobile(document.getElementById('tab-usuarios'));
+}
+
+function _usuarioPorId(id){
+  return _usuarios.find(u => String(u.id) === String(id));
+}
+
+async function criarUsuarioUI(){
+  const email = (document.getElementById('usr-email').value || '').trim();
+  const nome = (document.getElementById('usr-nome').value || '').trim();
+  const setor = document.getElementById('usr-setor').value;
+  const senhaEl = document.getElementById('usr-senha');
+  const senha = senhaEl.value || '';
+
+  if(!email || !nome){ notify('Informe e-mail e nome.', 'warn'); return; }
+  if(senha.length < 8){ notify('A senha precisa de pelo menos 8 caracteres.', 'warn'); return; }
+
+  try{
+    await SuincoSharePoint.criarOperador({ email, nome, setor, senha });
+    // Limpa a senha do DOM imediatamente. Esta tela é usada num terminal
+    // que pode ficar aberto, e campo de senha preenchido é o que o
+    // próximo a sentar ali encontra.
+    senhaEl.value = '';
+    document.getElementById('usr-email').value = '';
+    document.getElementById('usr-nome').value = '';
+    notify(`Usuário ${nome} criado no setor ${setor}.`, 'success');
+    renderUsuarios();
+  }catch(e){
+    notify('Não criou: ' + e.message, 'danger');
+  }
+}
+
+async function alterarSetorUsuarioUI(id, setor){
+  const u = _usuarioPorId(id);
+  if(!u) return;
+  if(!confirm(`Mudar ${u.nome} para o setor ${setor}?\n\nIsso muda o que essa pessoa vê e o que consegue registrar.`)){
+    renderUsuarios();   // devolve o select ao valor anterior
+    return;
+  }
+  try{
+    await SuincoSharePoint.atualizarOperador(id, { setor });
+    notify(`${u.nome} agora é ${setor}.`, 'success');
+  }catch(e){
+    notify('Não alterou: ' + e.message, 'danger');
+  }
+  renderUsuarios();
+}
+
+async function bloquearUsuarioUI(id, ativar){
+  const u = _usuarioPorId(id);
+  if(!u) return;
+  const acao = ativar ? 'Reativar' : 'Bloquear';
+  const aviso = ativar
+    ? `Reativar ${u.nome}? A pessoa volta a conseguir entrar.`
+    : `Bloquear ${u.nome}?\n\nEla perde o acesso na hora. O histórico do que ela registrou é preservado.`;
+  if(!confirm(aviso)) return;
+  try{
+    await SuincoSharePoint.atualizarOperador(id, { ativo: ativar });
+    notify(`${u.nome} ${ativar ? 'reativado' : 'bloqueado'}.`, 'success');
+  }catch(e){
+    notify(`Não conseguiu ${acao.toLowerCase()}: ` + e.message, 'danger');
+  }
+  renderUsuarios();
+}
+
+async function redefinirSenhaUsuarioUI(id){
+  const u = _usuarioPorId(id);
+  if(!u) return;
+  // prompt() em vez de campo na tabela: a senha não fica escrita no DOM
+  // depois, e o navegador não a guarda no autofill de formulário.
+  const senha = prompt(`Nova senha para ${u.nome} (${u.email}).\n\nMínimo 8 caracteres. Anote e entregue pessoalmente — ela não aparece de novo.`);
+  if(senha === null) return;
+  if(senha.length < 8){ notify('A senha precisa de pelo menos 8 caracteres.', 'warn'); return; }
+  try{
+    await SuincoSharePoint.atualizarOperador(id, { senha });
+    notify(`Senha de ${u.nome} redefinida.`, 'success');
+  }catch(e){
+    notify('Não redefiniu: ' + e.message, 'danger');
+  }
 }

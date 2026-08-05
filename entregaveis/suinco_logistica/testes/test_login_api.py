@@ -99,8 +99,14 @@ async def main():
         print('\n=== 4. AS ABAS DO SETOR ===')
         visiveis = await pagina.evaluate(
             "() => [...document.querySelectorAll('.nav-tab')].filter(t=>!t.hidden).map(t=>t.dataset.tab)")
+        # A Logística passou a ter acesso total à operação (decisão do
+        # gestor): cobre qualquer posto quando falta gente. O que ela NÃO
+        # tem é a aba Usuários — criar acesso não é operar o pátio.
         ck('Logística vê Programação', 'programacao' in visiveis, str(visiveis))
-        ck('Logística NÃO vê Portaria', 'portaria' not in visiveis, str(visiveis))
+        ck('Logística vê Portaria (cobre o posto)', 'portaria' in visiveis, str(visiveis))
+        ck('Logística vê Faturamento (cobre o posto)', 'faturamento' in visiveis, str(visiveis))
+        ck('Logística NÃO vê Usuários', 'usuarios' not in visiveis,
+           'criar acesso é da Administração')
 
         print('\n=== 5. A BASE DE FROTA VEIO DO SERVIDOR ===')
         await pagina.wait_for_timeout(1500)
@@ -202,6 +208,54 @@ async def main():
                 break
         ck('a Logística vê o ciclo encerrado sem recarregar a página',
            visto == 'Seguiu Viagem', str(visto))
+
+        print('\n=== 7c. TELA DE USUÁRIOS (só Administração) ===')
+        pg_admin = await abrir_painel(await navegador.new_context(), API)
+        pg_admin.on('pageerror', lambda e: erros2.append(str(e)))
+        await pg_admin.fill('#login-email', 'chefe@teste.local')
+        await pg_admin.fill('#login-senha', SENHA)
+        await pg_admin.click('#btn-entrar')
+        await pg_admin.wait_for_timeout(2500)
+
+        setor_admin = await pg_admin.evaluate("() => DB.operador && DB.operador.setor")
+        ck('administrador entrou', setor_admin == 'Administração', str(setor_admin))
+
+        abas_admin = await pg_admin.evaluate(
+            "() => [...document.querySelectorAll('.nav-tab')].filter(t=>!t.hidden).map(t=>t.dataset.tab)")
+        ck('Administração vê a aba Usuários', 'usuarios' in abas_admin, str(abas_admin))
+
+        await pg_admin.evaluate("() => abrirTab('usuarios')")
+        await pg_admin.wait_for_timeout(2000)
+        linhas = await pg_admin.evaluate("() => document.querySelectorAll('#usr-tbody tr').length")
+        ck('a lista de usuários carregou do servidor', linhas > 0, f'{linhas} linha(s)')
+
+        marcado = await pg_admin.evaluate("() => !!document.querySelector('#usr-tbody .chip-voce')")
+        ck('o próprio usuário aparece marcado como "você"', marcado,
+           'evita bloquear a si mesmo por engano')
+
+        # Criar pela tela, e provar que a pessoa consegue entrar depois.
+        novo = f'tela_{RODADA}@teste.local'
+        await pg_admin.fill('#usr-email', novo)
+        await pg_admin.fill('#usr-nome', 'Criado Pela Tela')
+        await pg_admin.select_option('#usr-setor', 'Expedição')
+        await pg_admin.fill('#usr-senha', 'senha-da-tela-1')
+        await pg_admin.click("button:has-text('Criar Usuário')")
+        await pg_admin.wait_for_timeout(2500)
+
+        ck('a senha foi apagada do campo depois de criar',
+           await pg_admin.input_value('#usr-senha') == '',
+           'terminal compartilhado não pode ficar com senha na tela')
+
+        entrou = await pg_admin.evaluate(
+            "async ([e,s,api]) => {"
+            "  const r = await fetch(api + '/auth/login', {"
+            "    method:'POST', headers:{'content-type':'application/json'},"
+            "    body: JSON.stringify({email:e, senha:s}) });"
+            "  const d = await r.json();"
+            "  return r.ok ? d.operador.setor : null; }",
+            [novo, 'senha-da-tela-1', API])
+        ck('o usuário criado PELA TELA consegue entrar', entrou == 'Expedição',
+           'de nada adianta cadastrar se a pessoa não entra')
 
         print('\n=== 8. TROCAR USUÁRIO ENCERRA A SESSÃO ===')
         await pagina2.evaluate("() => trocarUsuario()")

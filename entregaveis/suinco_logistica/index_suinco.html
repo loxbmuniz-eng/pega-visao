@@ -52,6 +52,7 @@
   <div class="nav-tab" data-tab="cadastros" onclick="abrirTab('cadastros')">🗂️ Cadastros</div>
   <div class="nav-tab" data-tab="historico" onclick="abrirTab('historico')">🕓 Histórico</div>
   <div class="nav-tab" data-tab="relatorios" onclick="abrirTab('relatorios')">📄 Relatórios</div>
+  <div class="nav-tab" data-tab="usuarios" onclick="abrirTab('usuarios')">👥 Usuários</div>
 </div>
 
 <!-- ===================== MAIN ===================== -->
@@ -548,6 +549,52 @@
       <div class="card-title"><span class="icon">💰</span> Administração de Fretes</div>
       <div class="card-sub">Número da Carga, Rota e Observações. É no campo Observações que a administração registra valor do frete, negociação e instruções — a linha em branco é justamente a que falta preencher.</div>
       <button class="btn btn-primary" onclick="exportarPdfFretes()">🖨️ Gerar Administração de Fretes</button>
+    </div>
+  </div>
+
+  <!-- ===== USUÁRIOS (só Administração) =====
+       Existe para tirar o cadastro de operador do SSH. Enquanto criar um
+       porteiro exigia terminal, a operação dependia de alguém com acesso
+       ao servidor toda vez que entrasse gente nova — e isso acaba virando
+       senha compartilhada. -->
+  <div class="tab-page" id="tab-usuarios">
+    <div class="funcao-aba" data-tab="usuarios"></div>
+
+    <div class="card">
+      <div class="card-title"><span class="icon">➕</span> Novo Usuário</div>
+      <div class="card-sub">O setor define o que a pessoa vê e o que consegue registrar. Isso é validado no servidor — não dá para contornar pela tela.</div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>E-mail <span class="hint">(é o login)</span></label>
+          <input type="email" id="usr-email" placeholder="nome@suinco.com.br" autocapitalize="off" spellcheck="false">
+        </div>
+        <div class="form-group"><label>Nome</label><input type="text" id="usr-nome" placeholder="Nome completo"></div>
+        <div class="form-group">
+          <label>Setor</label>
+          <select id="usr-setor">
+            <option>Logística</option><option>Portaria</option><option>Expedição</option>
+            <option>Faturamento</option><option>Administração</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Senha <span class="hint">(mínimo 8)</span></label>
+          <input type="password" id="usr-senha" placeholder="Senha inicial" autocomplete="new-password">
+        </div>
+      </div>
+      <div class="card-sub">A pessoa consegue trocar a senha depois? <strong>Ainda não</strong> — quem troca é a Administração, por esta tela. Escolha uma senha inicial e entregue pessoalmente.</div>
+      <div class="flex-end"><button class="btn btn-primary" onclick="criarUsuarioUI()">➕ Criar Usuário</button></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><span class="icon">👥</span> Usuários Cadastrados</div>
+      <div class="card-sub">Último acesso mostra quem está usando de verdade. Usuário que nunca acessou costuma ser cadastro esquecido — e cadastro esquecido é porta aberta.</div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Nome</th><th>E-mail</th><th>Setor</th><th>Situação</th><th>Último acesso</th><th class="no-print">Ação</th></tr></thead>
+          <tbody id="usr-tbody"></tbody>
+        </table>
+      </div>
+      <div class="empty-state" id="usr-empty" hidden>Nenhum usuário cadastrado.</div>
     </div>
   </div>
 

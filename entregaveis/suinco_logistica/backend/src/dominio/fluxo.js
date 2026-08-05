@@ -31,16 +31,25 @@ export const SETORES = [
 
 /* Quem pode executar cada passo.
 
-   Logística aparece nos passos da Expedição de propósito: no painel ela tem
-   acesso à aba `expedicao` (SETOR_PERMISSOES em data.js). Não é permissão
-   extra inventada aqui — é a que a operação já usa, porque a Logística cobre
-   a Expedição em troca de turno. */
+   A Logística aparece em TODOS os passos por decisão do gestor: ela cobre
+   qualquer posto quando falta gente — troca de turno, almoço, alguém que
+   faltou. Não é permissão inventada aqui; é a autoridade que a pessoa já
+   tem na operação.
+
+   Deixá-la de fora produziria o pior desfecho possível: o painel recusaria
+   uma ação que a Logística tem autoridade para fazer, e a saída prática
+   seria pedir a senha do porteiro emprestada. Permissão que a operação
+   contorna não é permissão, é fricção — e destrói a trilha de auditoria,
+   porque o log passaria a dizer "Portaria" quando foi a Logística.
+
+   Cada passo continua tendo um DONO, e é ele que aparece na mensagem de
+   erro quando outro setor tenta. O dono é o primeiro da lista. */
 const TRANSICOES = [
-  { de: 'Aguardando Veículo',  para: 'Aguardando Embarque', setores: ['Portaria'] },
+  { de: 'Aguardando Veículo',  para: 'Aguardando Embarque', setores: ['Portaria', 'Logística'] },
   { de: 'Aguardando Embarque', para: 'Embarque Iniciado',   setores: ['Expedição', 'Logística'] },
   { de: 'Embarque Iniciado',   para: 'Embarque Finalizado', setores: ['Expedição', 'Logística'] },
-  { de: 'Embarque Finalizado', para: 'Faturado',            setores: ['Faturamento'] },
-  { de: 'Faturado',            para: 'Seguiu Viagem',       setores: ['Portaria'] },
+  { de: 'Embarque Finalizado', para: 'Faturado',            setores: ['Faturamento', 'Logística'] },
+  { de: 'Faturado',            para: 'Seguiu Viagem',       setores: ['Portaria', 'Logística'] },
 ];
 
 // Administração existe para destravar operação parada às 2h da manhã sem
@@ -113,6 +122,12 @@ export function podeCriarCarga(setor) {
 }
 
 export function podeRegistrarChegadaSemProgramacao(setor) {
+  return setor === 'Portaria' || setor === 'Logística' || setor === SETOR_IRRESTRITO;
+}
+
+/* Saída física do pátio. Mesma lógica das transições: a Logística cobre a
+   Portaria, e recusar aqui empurraria para a senha emprestada. */
+export function podeRegistrarSaida(setor) {
   return setor === 'Portaria' || setor === 'Logística' || setor === SETOR_IRRESTRITO;
 }
 
