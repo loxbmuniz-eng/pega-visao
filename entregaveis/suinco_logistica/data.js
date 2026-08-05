@@ -468,6 +468,23 @@ function fundirEstadoRemoto(dados){
     const carga = cargaDeLinhaRemota(r);
     if(!carga || !carga.id) return;
     const local = locais.get(carga.id);
+
+    /* Carga excluída no servidor sai daqui, e das movimentações junto.
+
+       Ela chega pela leitura incremental justamente para isso: é o único
+       jeito de um terminal que estava aberto (ou sem rede) descobrir que a
+       carga saiu. Sem este trecho, a linha ficaria na tela do colega até
+       alguém recarregar a página inteira. */
+    if(carga.excluida){
+      if(local){
+        DB.cargas = DB.cargas.filter(x => x.id !== carga.id);
+        DB.movimentacoes = DB.movimentacoes.filter(m => m.cargaId !== carga.id);
+        locais.delete(carga.id);
+        res.cargasAtualizadas++;
+      }
+      return;
+    }
+
     if(!local){
       DB.cargas.push(carga); locais.set(carga.id, carga); res.cargasNovas++; return;
     }
@@ -554,7 +571,8 @@ function cargaDeLinhaRemota(r){
     status: STATUS_FLOW.includes(r.Status_Atual) ? r.Status_Atual : STATUS_FLOW[0],
     aguardandoCarga: r.Aguardando_Carga === true || r.Aguardando_Carga === 'Sim',
     criadoEm: r.Criado_Em || nowISO(),
-    atualizadoEm: r.Atualizado_Em || r.Timestamp_Sincronia || nowISO()
+    atualizadoEm: r.Atualizado_Em || r.Timestamp_Sincronia || nowISO(),
+    excluida: r.Excluida === true
   };
 }
 function movimentacaoDeLinhaRemota(r){

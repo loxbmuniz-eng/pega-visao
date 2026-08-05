@@ -59,6 +59,7 @@ const SuincoSharePoint = (function () {
   let ouvintesDados = [];
   let ouvintesDescarte = [];
   let ouvintesEdicao = [];
+  let ouvintesExclusao = [];
 
   /* ---------------------------------------------------------------
      Sessão
@@ -346,6 +347,7 @@ const SuincoSharePoint = (function () {
       Aguardando_Carga: c.aguardandoCarga,
       Criado_Em: c.criadoEm,
       Atualizado_Em: c.atualizadoEm,
+      Excluida: c.excluida === true,
     };
   }
 
@@ -407,6 +409,32 @@ const SuincoSharePoint = (function () {
         return { enfileirado: false, recusado: true, erro: e.message };
       }
       if (eFalhaDeRede(e)) return enfileirar({ tipo: 'carga', corpo });
+      throw e;
+    }
+  }
+
+  /* Exclusão de carga programada.
+
+     Antes ela não existia: o painel apagava a linha do próprio navegador e
+     pronto. O servidor nunca sabia, a leitura seguinte trazia a carga de
+     volta, e o operador via reaparecer o que tinha acabado de excluir.
+
+     Recusa definitiva (carga já em operação, setor sem permissão) NÃO vai
+     para a fila — seria insistir para sempre em algo que nunca será aceito.
+     Falha de rede vai, porque a exclusão precisa acontecer mesmo que a rede
+     tenha caído no instante do clique. */
+  async function excluir(id) {
+    if (!estaConfigurado()) return { enfileirado: false };
+    try {
+      const r = await chamar('/api/cargas/' + encodeURIComponent(id), { metodo: 'DELETE' });
+      mudarEstado('online');
+      return { enfileirado: false, item: r };
+    } catch (e) {
+      if (e.status === 404) return { enfileirado: false, item: null };  // já não existe
+      if (e.status === 409 || e.status === 422 || e.status === 403) {
+        return { enfileirado: false, recusado: true, erro: e.message };
+      }
+      if (eFalhaDeRede(e)) return enfileirar({ tipo: 'exclusao', cargaId: id });
       throw e;
     }
   }
@@ -492,6 +520,15 @@ const SuincoSharePoint = (function () {
             } catch (e2) {
               if (e2.codigo !== 'SEM_CAMPOS_PERMITIDOS') throw e2;
             }
+          }
+        } else if (item.tipo === 'exclusao') {
+          try {
+            await chamar('/api/cargas/' + encodeURIComponent(item.cargaId), { metodo: 'DELETE' });
+          } catch (e2) {
+            // Carga que já não existe é exclusão bem-sucedida por outro
+            // caminho, não falha. Insistir aqui travaria a fila inteira,
+            // que precisa subir em ordem.
+            if (e2.status !== 404) throw e2;
           }
         } else if (item.tipo === 'status') {
           await chamar(`/api/cargas/${encodeURIComponent(item.cargaId)}/status`, {
@@ -661,6 +698,15 @@ const SuincoSharePoint = (function () {
        para a pessoa. O adaptador não decide como mostrar (isso é da tela),
        só entrega — inclusive quem editou, para o painel não avisar a própria
        pessoa do que ela acabou de fazer. */
+    socket.on('carga:excluida', (aviso) => {
+      // Chega como aviso, mas também precisa mexer nos dados: a carga tem
+      // que sair da tela agora, não na próxima consulta.
+      sincronizarAgora();
+      ouvintesExclusao.forEach((fn) => {
+        try { fn(aviso); } catch (e) { console.warn('[Suinco] aviso de exclusão:', e); }
+      });
+    });
+
     socket.on('carga:editada', (aviso) => {
       ouvintesEdicao.forEach((fn) => {
         try { fn(aviso); } catch (e) { console.warn('[Suinco] aviso de edição:', e); }
@@ -693,6 +739,9 @@ const SuincoSharePoint = (function () {
   /* Avisa que OUTRO operador editou uma carga já programada. Chega pelo
      socket, com o que mudou e quem mudou. */
   function aoEditarCarga(fn) { if (typeof fn === 'function') ouvintesEdicao.push(fn); }
+
+  /* Avisa que OUTRO operador excluiu uma carga programada. */
+  function aoExcluirCarga(fn) { if (typeof fn === 'function') ouvintesExclusao.push(fn); }
 
   /* ---------------------------------------------------------------
      Início
@@ -754,9 +803,9 @@ const SuincoSharePoint = (function () {
   return {
     SP_CONFIG,
     iniciar, estaConfigurado, estado, conta, aoMudarEstado, aoReceberDados,
-    aoDescartarDaFila, aoEditarCarga,
+    aoDescartarDaFila, aoEditarCarga, aoExcluirCarga,
     login, sair, diagnosticarConexao,
-    push, upsert, mudarStatus,
+    push, upsert, excluir, mudarStatus,
     pull, pullTudo, drenarFila, pendentes,
     listarOperadores, criarOperador, atualizarOperador,
     sincronizarAgora, iniciarSincroniaPeriodica, pararSincronia, ultimaSincronia,

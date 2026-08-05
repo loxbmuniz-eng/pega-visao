@@ -27,7 +27,20 @@ rotasEstado.get('/estado', exigirLogin, async (req, res, next) => {
     const marca = new Date(Date.now() - MARGEM_MS).toISOString();
 
     const params = desdeValido ? [desdeValido] : [];
-    const filtro = desdeValido ? 'WHERE atualizado_em > $1' : '';
+
+    /* Carga excluída aparece na leitura INCREMENTAL e some da COMPLETA.
+
+       Parece contraditório, mas as duas leituras respondem perguntas
+       diferentes. A completa é "qual é o pátio agora" — excluída não faz
+       parte. A incremental é "o que mudou desde que eu vi" — e a exclusão é
+       exatamente uma das mudanças que o terminal precisa receber, senão a
+       carga fica na tela do colega até alguém recarregar a página inteira.
+
+       Vale inclusive para quem estava sem rede na hora: ao voltar, a carga
+       excluída chega na primeira leitura e sai da tela. */
+    const filtro = desdeValido
+      ? 'WHERE atualizado_em > $1'
+      : 'WHERE excluida_em IS NULL';
     const filtroEvento = desdeValido ? 'WHERE data_evento > $1' : '';
 
     const [cargas, movimentacoes, log] = await Promise.all([

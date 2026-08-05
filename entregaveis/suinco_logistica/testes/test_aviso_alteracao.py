@@ -180,7 +180,50 @@ async def main():
         ck('mudar ganchos avisa em silêncio', tocou == 0,
            'só a placa toca — alarme para tudo vira ruído e ninguém escuta')
 
-        print('\n=== 7. CONSOLE ===')
+        print('\n=== 7. EXCLUSÃO SOME DA TELA DE TODO MUNDO ===')
+        # Antes, excluir apagava a linha só no navegador de quem clicou. O
+        # servidor não sabia, e a sincronia seguinte trazia a carga de volta:
+        # o operador excluía e via reaparecer.
+        await p_fat.evaluate("() => { document.getElementById('notif').innerHTML=''; window.__tocou=0; }")
+        visivel_antes = await p_fat.evaluate(
+            "id => DB.cargas.some(c=>c.id===id)", carga_id)
+        ck('o Faturamento estava enxergando a carga', visivel_antes)
+
+        await p_log.evaluate("""([id]) => {
+            // confirm() bloqueia o navegador de teste; a decisão do operador
+            // já está coberta pelo fluxo real, o que importa aqui é o efeito.
+            window.confirm = () => true;
+            return excluirCargaUI(id);
+        }""", [carga_id])
+        await p_log.wait_for_timeout(3000)
+
+        sumiu_local = await p_log.evaluate("id => !DB.cargas.some(c=>c.id===id)", carga_id)
+        ck('sumiu da tela de quem excluiu', sumiu_local)
+
+        no_servidor = await p_log.evaluate("""async ([id]) => {
+            const d = await SuincoSharePoint.pullTudo();
+            return (d.cargas || []).some(c => c.Carga_ID === id);
+        }""", [carga_id])
+        ck('e sumiu do SERVIDOR', not no_servidor,
+           'sem isto a carga voltaria na próxima sincronia')
+
+        try:
+            await p_fat.wait_for_selector('.aviso-alteracao', timeout=8000)
+            avisou = True
+        except Exception:
+            avisou = False
+        ck('o Faturamento foi avisado', avisou)
+        if avisou:
+            txt = await p_fat.inner_text('.aviso-alteracao')
+            ck('o aviso diz EXCLUÍDA', 'EXCLU' in txt.upper(), txt.replace('\n', ' · '))
+            ck('diz quem excluiu', 'Ana' in txt, txt.replace('\n', ' · '))
+            ck('exclusão também toca', await p_fat.evaluate("() => window.__tocou") >= 1)
+
+        sumiu_remoto = await p_fat.evaluate("id => !DB.cargas.some(c=>c.id===id)", carga_id)
+        ck('a carga saiu da tela do Faturamento sem recarregar', sumiu_remoto,
+           'aviso sem sumir da lista deixaria o pátio operando uma carga que não existe')
+
+        print('\n=== 8. CONSOLE ===')
         ck('sem erros de página', not erros, str(erros))
 
         await navegador.close()

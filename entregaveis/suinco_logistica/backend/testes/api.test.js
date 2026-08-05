@@ -581,6 +581,97 @@ describe('7c. Logística cobre todos os postos', () => {
 });
 
 /* ------------------------------------------------------------------ */
+describe('7d. Exclusão de carga programada', () => {
+  let cargaId;
+  let placa;
+
+  before(async () => {
+    const { rows } = await pool.query('SELECT placa FROM dim_veiculos OFFSET 40 LIMIT 1');
+    placa = rows[0].placa;
+    const r = await req('/api/cargas', {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { placa, numeroCarga: '96000' },
+    });
+    cargaId = r.json.id;
+  });
+
+  test('a Portaria não exclui carga programada', async () => {
+    const r = await req(`/api/cargas/${cargaId}`, {
+      metodo: 'DELETE', token: tokens['Portaria'],
+    });
+    assert.equal(r.status, 403);
+  });
+
+  test('a Logística exclui, e a carga some da leitura completa', async () => {
+    const r = await req(`/api/cargas/${cargaId}`, {
+      metodo: 'DELETE', token: tokens['Logística'],
+    });
+    assert.equal(r.status, 200, r.texto);
+    assert.equal(r.json.excluida, true);
+
+    const estado = await req('/api/estado', { token: tokens['Portaria'] });
+    assert.ok(!estado.json.cargas.some((c) => c.id === cargaId),
+      'carga excluída não pode aparecer no estado atual do pátio');
+  });
+
+  /* O ponto central. A leitura incremental é "o que mudou desde X" — e uma
+     linha apagada de verdade não apareceria em consulta nenhuma, então o
+     terminal do colega ficaria com a carga na tela até recarregar a página.
+     Por isso a exclusão é marcada, não apagada. */
+  test('mas APARECE na leitura incremental, marcada como excluída', async () => {
+    const antes = new Date(Date.now() - 60_000).toISOString();
+    const inc = await req(`/api/estado?desde=${encodeURIComponent(antes)}`, {
+      token: tokens['Portaria'],
+    });
+    const achada = inc.json.cargas.find((c) => c.id === cargaId);
+    assert.ok(achada, 'sem isto, nenhum outro terminal descobre que a carga saiu');
+    assert.equal(achada.excluida, true);
+  });
+
+  test('a trilha de auditoria guarda quem excluiu', async () => {
+    const { rows } = await pool.query(
+      "SELECT operador_nome, setor FROM log_eventos WHERE carga_id = $1 AND acao = 'Carga programada excluída'",
+      [cargaId]
+    );
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].setor, 'Logística');
+  });
+
+  test('excluir de novo não é erro', async () => {
+    // A fila offline reenvia o que não confirmou, e duas pessoas podem
+    // clicar em Excluir na mesma carga. Falhar aqui faria o painel insistir
+    // para sempre em algo que já está feito.
+    const r = await req(`/api/cargas/${cargaId}`, {
+      metodo: 'DELETE', token: tokens['Logística'],
+    });
+    assert.equal(r.status, 200);
+    assert.equal(r.json.excluida, true);
+  });
+
+  test('carga com histórico operacional NÃO pode ser excluída', async () => {
+    const { rows } = await pool.query('SELECT placa FROM dim_veiculos OFFSET 41 LIMIT 1');
+    const criada = await req('/api/cargas', {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { placa: rows[0].placa, numeroCarga: '96001' },
+    });
+    await req(`/api/cargas/${criada.json.id}/status`, {
+      metodo: 'POST', token: tokens['Portaria'],
+      corpo: { status: 'Aguardando Embarque' },
+    });
+    const r = await req(`/api/cargas/${criada.json.id}`, {
+      metodo: 'DELETE', token: tokens['Logística'],
+    });
+    assert.equal(r.status, 409, 'apagar histórico é o começo de um relatório inexplicável');
+    assert.equal(r.json.codigo, 'CARGA_COM_HISTORICO');
+  });
+
+  test('o Power BI não enxerga a carga excluída', async () => {
+    const { rows } = await pool.query('SELECT "Id" FROM vw_dim_carga WHERE "Id" = $1', [cargaId]);
+    assert.equal(rows.length, 0);
+  });
+});
+
+/* ------------------------------------------------------------------ */
 describe('8. Superfície de ataque', () => {
   test('origem não autorizada é barrada no CORS', async () => {
     const r = await req('/health', { cabecalhos: { origin: 'https://site-do-atacante.com' } });
