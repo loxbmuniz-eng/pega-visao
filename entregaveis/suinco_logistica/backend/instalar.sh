@@ -99,10 +99,12 @@ azul "3. PostgreSQL"
 systemctl enable --now postgresql >/dev/null 2>&1
 ENV_FILE="$APP_DIR/.env"
 
+ENV_JA_EXISTIA=0
 if [[ -f "$ENV_FILE" ]]; then
   # Reinstalação: reaproveita a senha que já está em uso. Gerar outra aqui
   # deixaria o serviço sem conseguir conectar no próprio banco.
   DB_PASS="$(grep -E '^PGPASSWORD=' "$ENV_FILE" | cut -d= -f2-)"
+  ENV_JA_EXISTIA=1
   aviso "reaproveitando as credenciais do .env existente"
 else
   DB_PASS="$(openssl rand -base64 32 | tr -d '/+=' | head -c 32)"
@@ -349,7 +351,6 @@ PLACAS="$(su - postgres -c "psql -tAd $DB_NAME -c 'SELECT count(*) FROM dim_veic
 ROTAS="$(su - postgres -c "psql -tAd $DB_NAME -c 'SELECT count(*) FROM dim_rotas'")"
 ok "base carregada: $PLACAS placas, $ROTAS rotas"
 
-BI_TOKEN_ATUAL="$(grep -E '^BI_TOKEN=' "$ENV_FILE" | cut -d= -f2-)"
 
 cat <<FIM
 
@@ -373,13 +374,26 @@ cat <<FIM
    ... criar faturamento@suinco.com.br "Faturamento" Faturamento
    ... criar logistica@suinco.com.br   "Logística"   Logística
 
- TOKEN DO POWER BI (anote — é o que o BI usa para ler as views):
+ As senhas do banco, o segredo do JWT e o token do Power BI ficam em
+ $ENV_FILE, legível só pelo usuário $APP_USER.
+ Não precisa anotar nem enviar para ninguém.
 
-   $BI_TOKEN_ATUAL
-
- As senhas do banco e o segredo do JWT ficam em $ENV_FILE,
- legível só pelo usuário $APP_USER. Não precisa anotar nem enviar
- para ninguém.
+ Para ler o token do Power BI quando for configurá-lo:
+   grep BI_TOKEN $ENV_FILE
 
 =====================================================================
 FIM
+
+# Impressão do token só na PRIMEIRA instalação.
+#
+# Antes ele era impresso a cada execução — e o script é feito para rodar de
+# novo a cada atualização. Resultado: um segredo aparecendo na tela toda
+# vez, indo parar em print, em rolagem de terminal e em conversa. Segredo
+# que se repete é segredo que vaza.
+#
+# Numa instalação nova faz sentido mostrar uma vez, porque ninguém sabe que
+# ele existe ainda. Depois disso, quem precisar lê do .env.
+if [[ "$ENV_JA_EXISTIA" -eq 0 ]]; then
+  printf '\n TOKEN DO POWER BI (aparece só nesta primeira instalação):\n\n   %s\n\n' \
+    "$(grep -E '^BI_TOKEN=' "$ENV_FILE" | cut -d= -f2-)"
+fi
