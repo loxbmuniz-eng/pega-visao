@@ -43,12 +43,36 @@ command -v apt-get >/dev/null || erro "este script é para Ubuntu/Debian. Me dig
 ok "sistema: $PRETTY_NAME"
 ok "domínio da API: $DOMINIO_API"
 
+# Porta 80/443 já ocupada é o tropeço mais provável neste servidor: o
+# template da Hostinger vem com Docker, e um container publicando a 80
+# impede o Nginx de subir. Melhor descobrir agora, com o servidor intacto,
+# do que no meio da instalação com metade das coisas configuradas.
+for porta in 80 443; do
+  QUEM="$(ss -lptnH "sport = :$porta" 2>/dev/null | head -1 || true)"
+  if [[ -n "$QUEM" ]] && ! grep -q nginx <<<"$QUEM"; then
+    printf '\n\033[0;31mPORTA %s JÁ OCUPADA\033[0m\n' "$porta" >&2
+    printf '  %s\n\n' "$QUEM" >&2
+    if command -v docker >/dev/null && docker ps --format '{{.Names}}\t{{.Ports}}' 2>/dev/null | grep -q ":$porta->"; then
+      printf 'Há um container Docker publicando a porta %s:\n\n' "$porta" >&2
+      docker ps --format '  {{.Names}}  ->  {{.Ports}}' 2>/dev/null >&2
+      printf '\nPare o container (docker stop NOME) ou remapeie a porta dele,\n' >&2
+      printf 'e rode este script de novo.\n\n' >&2
+    else
+      printf 'Descubra o que é com:  ss -lptn "sport = :%s"\n' "$porta" >&2
+      printf 'Pare o serviço e rode este script de novo.\n\n' >&2
+    fi
+    exit 1
+  fi
+done
+ok "portas 80 e 443 livres"
+
 # --- 1. Pacotes do sistema -------------------------------------------
 azul "1. Pacotes do sistema"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
-apt-get install -y -qq curl ca-certificates gnupg git ufw nginx postgresql \
-                       postgresql-contrib certbot python3-certbot-nginx >/dev/null
+# rsync e iproute2 (ss) são usados pelo script e nem sempre vêm no template.
+apt-get install -y -qq curl ca-certificates gnupg git ufw rsync iproute2 nginx \
+                       postgresql postgresql-contrib certbot python3-certbot-nginx >/dev/null
 ok "nginx, postgresql, certbot, ufw"
 
 # Node 20+ pelo repositório oficial. O do Ubuntu costuma ser antigo demais

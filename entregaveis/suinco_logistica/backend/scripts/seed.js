@@ -15,7 +15,22 @@ import { fileURLToPath } from 'node:url';
 import { pool } from '../src/banco.js';
 
 const AQUI = path.dirname(fileURLToPath(import.meta.url));
-const CSV = path.join(AQUI, '..', '..', 'frota_seed_2026.csv');
+
+/* Dois lugares possíveis, e os dois são legítimos:
+
+   - No repositório, o CSV mora ao lado do painel (../../).
+   - No servidor, o instalador copia só a pasta backend para /opt/embarque-suinco,
+     e o CSV vai para o nível de cima ou para dentro dela, dependendo das
+     permissões do destino.
+
+   Procurar nos dois evita o modo de falha mais chato possível: instalação
+   que termina "com sucesso" e um banco sem nenhuma placa, que só aparece
+   quando a Logística tenta programar a primeira carga. */
+const CAMINHOS_CSV = [
+  path.join(AQUI, '..', '..', 'frota_seed_2026.csv'),
+  path.join(AQUI, '..', 'frota_seed_2026.csv'),
+];
+const CSV = CAMINHOS_CSV.find((c) => fs.existsSync(c)) || CAMINHOS_CSV[0];
 
 const ROTAS = [
   ['500', 'Patos de Minas', '', ''],
@@ -100,7 +115,8 @@ async function main() {
   console.log(`  ${ROTAS.length} rotas.`);
 
   if (!fs.existsSync(CSV)) {
-    console.error(`\nERRO: não encontrei ${CSV}`);
+    console.error('\nERRO: não encontrei o frota_seed_2026.csv. Procurei em:');
+    CAMINHOS_CSV.forEach((c) => console.error('  ' + c));
     process.exit(1);
   }
 
