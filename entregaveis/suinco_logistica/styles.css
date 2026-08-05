@@ -646,14 +646,22 @@ input,select,textarea{border-radius:5px}
 
 }
 
-/* ===== RELATÓRIO OPERACIONAL: CABER NA LARGURA DA FOLHA =====
-   Com 16 colunas, a tabela ultrapassava a largura do A4 deitado e o navegador
-   simplesmente cortava as últimas colunas na borda — a Qtd. Ganchos sumia da
-   folha impressa, apesar de estar correta na tela.
+/* ===== RELATÓRIO OPERACIONAL: A FOLHA QUE VAI PARA O GRUPO =====
 
-   width:100% + table-layout:fixed obrigam a tabela a se ajustar à página em
-   vez de crescer conforme o conteúdo; a quebra de palavra evita que um nome
-   longo de transportadora volte a esticar a coluna. */
+   Este relatório é fotografado e mandado no grupo de WhatsApp ao longo do
+   dia. Isso define tudo aqui: precisa ser legível em tela de celular,
+   depois de a foto passar por recompressão. Densidade não pode ganhar de
+   clareza.
+
+   LARGURA POR CLASSE, NÃO POR POSIÇÃO. As larguras eram definidas com
+   nth-child, calibradas quando a tabela tinha 16 colunas. Ao remover três,
+   cada largura passou a cair na coluna errada — o Status ficou com os 5%
+   que eram do "Faturado" e espremia "Aguardando Embarque" em duas linhas,
+   enquanto sobrava folha. Com classe, mover ou remover coluna não
+   desalinha mais nada.
+
+   O ORÇAMENTO DE LARGURA soma 100%. Status e Transportadora levam a maior
+   parte porque são os dois campos de texto longo que não podem quebrar. */
 @page{ size: A4 landscape; margin: 8mm; }
 
 @media print{
@@ -662,30 +670,75 @@ input,select,textarea{border-radius:5px}
     table-layout:fixed !important;
   }
   #print-operacional th, #print-operacional td{
-    padding:4px 3px !important;
+    padding:5px 4px !important;
     overflow-wrap:break-word; word-break:break-word; hyphens:auto;
+    vertical-align:middle;
   }
-  /* O th da tabela nasce com white-space:nowrap (linha 201). Com a largura
-     agora fixa, isso fazia o título transbordar por cima da coluna vizinha —
-     "Status de Carregamento" cobria "Faturado". Aqui o cabeçalho quebra em
-     várias linhas, como já acontece na tabela de linha do tempo. */
+  /* O th nasce com white-space:nowrap. Com largura fixa isso fazia o título
+     transbordar por cima da coluna vizinha. */
   #print-operacional th{
     white-space:normal !important;
     vertical-align:bottom; line-height:1.2; text-align:center;
+    font-size:8.5px !important; letter-spacing:.02em;
   }
-  /* Colunas de estado e as numéricas ficam estreitas e centralizadas; as de
-     texto livre (Destino, Rota, Transportadora) ficam com o espaço restante. */
-  #print-operacional th:nth-child(1),  #print-operacional td:nth-child(1),
-  #print-operacional th:nth-child(5),  #print-operacional td:nth-child(5){ width:2.6% }
-  #print-operacional th:nth-child(4),  #print-operacional td:nth-child(4){ width:5% }
-  #print-operacional th:nth-child(6),  #print-operacional td:nth-child(6){ width:4.6% }
-  #print-operacional th:nth-child(10), #print-operacional td:nth-child(10){ width:6% }
-  #print-operacional th:nth-child(12), #print-operacional td:nth-child(12){ width:6% }
-  #print-operacional th:nth-child(13), #print-operacional td:nth-child(13),
-  #print-operacional th:nth-child(14), #print-operacional td:nth-child(14),
-  #print-operacional th:nth-child(15), #print-operacional td:nth-child(15),
-  #print-operacional th:nth-child(16), #print-operacional td:nth-child(16){ width:5% }
+
+  /* ---- Orçamento de largura (soma 100%) ---- */
+  #print-operacional .c-num{ width:3% }
+  #print-operacional .c-seq{ width:3.5% }
+  #print-operacional .c-carga{ width:7% }
+  #print-operacional .c-status{ width:15% }     /* "AGUARDANDO EMBARQUE" */
+  #print-operacional .c-rota{ width:11% }
+  #print-operacional .c-operacao{ width:9% }
+  #print-operacional .c-placa{ width:7.5% }
+  #print-operacional .c-transp{ width:15.5% }   /* nomes longos de empresa */
+  #print-operacional .c-veiculo{ width:8% }
+  #print-operacional .c-peso{ width:5.5% }
+  #print-operacional .c-palet{ width:5% }
+  #print-operacional .c-entregas{ width:4.5% }
+  #print-operacional .c-ganchos{ width:5% }
 }
+
+/* ---- Leitura dos dados: o que precisa saltar aos olhos ----
+   Fora do @media print de propósito: a pré-visualização em tela tem que
+   mostrar o mesmo que sai no papel. */
+#print-operacional .c-carga{
+  font-weight:800; text-transform:uppercase; letter-spacing:.03em;
+  font-variant-numeric:tabular-nums; text-align:center;
+}
+#print-operacional .c-placa{
+  font-weight:800; text-transform:uppercase; letter-spacing:.06em;
+  text-align:center; white-space:nowrap;
+}
+/* O status quebra ENTRE palavras, nunca no meio.
+
+   A regra geral da tabela usa break-word, que existe para nome comprido de
+   transportadora não esticar a coluna. Aplicada ao status, ela partia
+   "EMBARQUE" ao meio e o rótulo saía em três linhas — ilegível na foto do
+   grupo, que é onde este documento é lido. */
+#print-operacional .c-status{
+  font-weight:800; text-align:center; text-transform:uppercase;
+  letter-spacing:.02em; line-height:1.15;
+  word-break:normal !important; overflow-wrap:normal !important; hyphens:none !important;
+}
+/* Placa e número de carga nunca quebram: são códigos, e um código partido
+   em duas linhas deixa de ser reconhecível de relance. */
+#print-operacional .c-placa,
+#print-operacional .c-carga{
+  word-break:normal !important; overflow-wrap:normal !important; hyphens:none !important;
+}
+#print-operacional .c-operacao{ font-weight:800; text-align:center }
+#print-operacional .c-transp{ font-weight:600 }
+#print-operacional .c-num,
+#print-operacional .c-seq,
+#print-operacional .c-palet,
+#print-operacional .c-entregas,
+#print-operacional .c-ganchos{ text-align:center; font-variant-numeric:tabular-nums }
+#print-operacional .c-seq,
+#print-operacional .c-ganchos{ font-weight:800 }
+#print-operacional .c-peso{
+  text-align:right; font-weight:700; font-variant-numeric:tabular-nums;
+}
+#print-operacional .liso{ font-weight:600; opacity:.7 }
 
 /* ===== LINHA DE TOTAIS (estilo Excel) =====================================
    Rodapé somatório das tabelas dos relatórios. Precisa se destacar da última
@@ -1012,8 +1065,12 @@ input,select,textarea{border-radius:5px}
   /* ---- Densidade por documento ----
      A regra antiga marcava #print-operacional inteiro, e o relatório de
      Fretes usava esse mesmo container: herdava 7,6px com três colunas. */
-  .doc-denso table{ font-size:7.6px !important }
-  .doc-denso th, .doc-denso td{ padding:2px 3px !important }
+  /* 9,2px, não 7,6px. A calibragem antiga era para 16 colunas; com 13 há
+     folga na folha, e este documento é lido numa foto de WhatsApp — cada
+     décimo de milímetro de altura de letra conta mais que o espaço em
+     branco economizado. */
+  .doc-denso table{ font-size:9.2px !important }
+  .doc-denso th, .doc-denso td{ padding:5px 4px !important }
 
   .doc-normal table{ font-size:9.5px !important }
   .doc-normal th, .doc-normal td{ padding:4px 5px !important }

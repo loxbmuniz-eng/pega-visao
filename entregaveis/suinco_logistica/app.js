@@ -1575,20 +1575,27 @@ function exportarPdfOperacional(){
     // gestor — é o que permite ler o andamento do dia de relance na foto
     // mandada no grupo.
     const cs = corStatusRelatorio(c.status);
+    /* Classe por coluna, não posição.
+
+       As larguras eram definidas por nth-child, calibradas quando a tabela
+       tinha 16 colunas. Ao remover três, toda largura passou a cair na
+       coluna errada — o Status ficou com os 5% que eram do "Faturado" e
+       espremia "Aguardando Embarque" em duas linhas. Com classe, mover ou
+       remover coluna não desalinha mais nada. */
     return `<tr>
-      <td>${i+1}</td>
-      <td style="text-align:center">${c.sequencia ?? '—'}</td>
-      <td>${esc(c.numeroCarga)||'—'}</td>
-      <td style="background:${cs.fundo};color:${cs.texto};font-weight:800;text-align:center">${esc(c.status)}</td>
-      <td>${esc(rotaCurta(c.rota))}</td>
-      <td ${praOndeStyle}>${c.praOnde ? esc(PRA_ONDE_LABEL[c.praOnde]) : '—'}</td>
-      <td>${esc(c.placa)}</td>
-      <td>${esc(c.transportadora)||'—'}</td>
-      <td>${esc(c.tipoVeiculo)||'—'}</td>
-      <td>${pesoTon}</td>
-      <td>${paletizadaDaCarga(c)}</td>
-      <td>${c.qtdEntregas ?? 1}</td>
-      <td style="text-align:center;font-weight:800">${c.qtdGanchos ? c.qtdGanchos : '<span style="font-weight:600">Liso</span>'}</td>
+      <td class="c-num">${i+1}</td>
+      <td class="c-seq">${c.sequencia ?? '—'}</td>
+      <td class="c-carga">${esc(c.numeroCarga).toUpperCase()||'—'}</td>
+      <td class="c-status" style="background:${cs.fundo};color:${cs.texto}">${esc(c.status)}</td>
+      <td class="c-rota">${esc(rotaCurta(c.rota))}</td>
+      <td class="c-operacao" ${praOndeStyle}>${c.praOnde ? esc(PRA_ONDE_LABEL[c.praOnde]) : '—'}</td>
+      <td class="c-placa">${esc(c.placa).toUpperCase()}</td>
+      <td class="c-transp">${esc(c.transportadora)||'—'}</td>
+      <td class="c-veiculo">${esc(c.tipoVeiculo)||'—'}</td>
+      <td class="c-peso">${pesoTon}</td>
+      <td class="c-palet">${paletizadaDaCarga(c)}</td>
+      <td class="c-entregas">${c.qtdEntregas ?? 1}</td>
+      <td class="c-ganchos">${c.qtdGanchos ? c.qtdGanchos : '<span class="liso">Liso</span>'}</td>
     </tr>`;
   }).join('');
   const agora = new Date();
@@ -1611,8 +1618,19 @@ function exportarPdfOperacional(){
            algo que já estava escrito. -->
       <table>
         <thead><tr>
-          <th>Nº</th><th>Seq.</th><th>Carga</th><th>Status</th><th>Rota</th><th>Tipo de Operação</th>
-          <th>Placa</th><th>Transportadora</th><th>Tipo de Veículo</th><th>Peso(ton)</th><th>Paletizada</th><th>Qtd. Entregas</th><th>Qtd. Ganchos</th>
+          <th class="c-num">Nº</th>
+          <th class="c-seq">Seq.</th>
+          <th class="c-carga">Nº Carga</th>
+          <th class="c-status">Status</th>
+          <th class="c-rota">Rota</th>
+          <th class="c-operacao">Tipo de Operação</th>
+          <th class="c-placa">Placa</th>
+          <th class="c-transp">Transportadora</th>
+          <th class="c-veiculo">Tipo de Veículo</th>
+          <th class="c-peso">Peso (ton)</th>
+          <th class="c-palet">Paletizada</th>
+          <th class="c-entregas">Entregas</th>
+          <th class="c-ganchos">Ganchos</th>
         </tr></thead>
         <tbody>${linhas || '<tr><td colspan="13" class="text-center text-dim">Nenhuma carga no período selecionado.</td></tr>'}</tbody>
         ${lista.length ? `<tfoot>${rodapeSomatorios(lista, 9, ['peso','', 'entregas','ganchos'])}</tfoot>` : ''}

@@ -9,7 +9,7 @@ def ck(n,ok,d=''):
 async def main():
     async with async_playwright() as p:
         b = await p.chromium.launch(executable_path='/opt/pw-browsers/chromium', headless=True)
-        pg = await b.new_page(); erros=[]
+        pg = await b.new_page(viewport={'width':1063,'height':750}); erros=[]
         pg.on('pageerror', lambda e: erros.append(str(e)))
         await pg.goto(PAINEL); await pg.wait_for_timeout(900)
         await pg.evaluate("() => mostrarLoginLocal()")
@@ -156,6 +156,55 @@ async def main():
            coerente['nTh'] == coerente['nTd'], str(coerente))
         ck('linha de totais alinhada com as colunas',
            coerente['nTot'] == coerente['nTh'], str(coerente))
+
+        print('\n=== OPERACIONAL: CLAREZA NA FOLHA (foto do WhatsApp) ===')
+        # Espalha as cargas pelos status para o teste ver os rótulos longos.
+        await pg.evaluate('''() => {
+          const abertas = DB.cargas.filter(c=>c.status==='Aguardando Veículo');
+          const op = 'Teste';
+          if(abertas[1]) avancarStatusCarga(abertas[1].id,'Aguardando Embarque',op,'Portaria');
+          if(abertas[2]){ avancarStatusCarga(abertas[2].id,'Aguardando Embarque',op,'Portaria');
+                          avancarStatusCarga(abertas[2].id,'Embarque Iniciado',op,'Expedição'); }
+        }''')
+        await pg.evaluate("()=>exportarPdfOperacional()")
+        await pg.wait_for_timeout(300)
+        await pg.emulate_media(media='print')
+        await pg.wait_for_timeout(400)
+        cl = await pg.evaluate('''() => {
+          // Uma Range sobre o texto devolve UMA caixa por linha visual —
+          // a altura da célula não serve, porque é a da linha inteira.
+          const linhasDe = (el) => {
+            const r = document.createRange(); r.selectNodeContents(el);
+            return r.getClientRects().length;
+          };
+          const c = document.getElementById('print-operacional');
+          const tab = c.querySelector('table');
+          const st = [...c.querySelectorAll('tbody .c-status')];
+          const carga = c.querySelector('tbody .c-carga');
+          const placa = c.querySelector('tbody .c-placa');
+          const cs = carga ? getComputedStyle(carga) : {};
+          const ps = placa ? getComputedStyle(placa) : {};
+          return {
+            fonte: parseFloat(getComputedStyle(tab).fontSize),
+            statusMaxLinhas: st.length ? Math.max(...st.map(linhasDe)) : 0,
+            statusLargura: st[0] ? Math.round(st[0].getBoundingClientRect().width) : 0,
+            statusTextos: st.map(x=>x.innerText.replace(/\s+/g,' ')),
+            cargaPeso: cs.fontWeight, cargaCaixa: cs.textTransform, cargaTexto: carga ? carga.innerText : '',
+            placaPeso: ps.fontWeight, placaCaixa: ps.textTransform, placaTexto: placa ? placa.innerText : '',
+            cabe: tab.getBoundingClientRect().width <= tab.parentElement.getBoundingClientRect().width + 1
+          };
+        }''')
+        ck('fonte maior que a antiga de 7,6px', cl['fonte'] >= 9, f"{cl['fonte']}px")
+        ck('todo status cabe em UMA linha', cl['statusMaxLinhas'] <= 1,
+           f"máx {cl['statusMaxLinhas']} linha(s) em {cl['statusLargura']}px · {cl['statusTextos']}")
+        ck('Nº da carga em negrito e maiúsculo',
+           cl['cargaPeso'] in ('800','bold') and cl['cargaCaixa'] == 'uppercase',
+           f"{cl['cargaPeso']} / {cl['cargaCaixa']} / {cl['cargaTexto']}")
+        ck('placa em negrito e maiúscula',
+           cl['placaPeso'] in ('800','bold') and cl['placaCaixa'] == 'uppercase',
+           f"{cl['placaPeso']} / {cl['placaCaixa']} / {cl['placaTexto']}")
+        ck('a tabela continua cabendo na folha', cl['cabe'])
+        await pg.emulate_media(media='screen')
 
         print('\n=== PAINEL DE STATUS NA HORIZONTAL ===')
         await pg.evaluate("()=>exportarPdfExecutivo()")
