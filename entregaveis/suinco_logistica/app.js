@@ -1501,10 +1501,41 @@ function renderHistorico(){
 }
 
 /* ---------- RELATÓRIOS (PDF via impressão do navegador) ---------- */
-function imprimirContainer(el){
+/* Imprime um container, dando ao arquivo um nome que se entende sozinho.
+
+   O navegador usa o <title> da página como nome sugerido do PDF. Sem mexer
+   nele, TODO relatório salvava como "Painel Logístico — Suinco" — e depois
+   de três downloads o gestor tem três arquivos idênticos no nome, sem saber
+   qual é qual nem de que dia.
+
+   O título volta ao original no afterprint. Deixá-lo trocado mudaria a aba
+   do navegador para sempre. */
+function imprimirContainer(el, nomeDoRelatorio){
   document.querySelectorAll('.print-only').forEach(x=>x.style.display='none');
   el.style.display = 'block';
-  const limpar = ()=>{ el.style.display='none'; window.removeEventListener('afterprint', limpar); };
+
+  const tituloOriginal = document.title;
+  if(nomeDoRelatorio){
+    const d = new Date();
+    const carimbo = [
+      d.getFullYear(),
+      String(d.getMonth()+1).padStart(2,'0'),
+      String(d.getDate()).padStart(2,'0')
+    ].join('-') + '_' + String(d.getHours()).padStart(2,'0') + 'h' + String(d.getMinutes()).padStart(2,'0');
+    // Sem acento, espaço ou barra: o nome vira arquivo, e cada sistema
+    // operacional estraga esses caracteres de um jeito diferente.
+    const limpo = nomeDoRelatorio
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^A-Za-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '');
+    document.title = `Suinco_${limpo}_${carimbo}`;
+  }
+
+  const limpar = ()=>{
+    el.style.display='none';
+    document.title = tituloOriginal;
+    window.removeEventListener('afterprint', limpar);
+  };
   window.addEventListener('afterprint', limpar);
   window.print();
 }
@@ -1587,7 +1618,7 @@ function exportarPdfOperacional(){
         Status já diz, ocupando espaço que faltava para o resto da linha.
       </div>
     </div>`;
-  imprimirContainer(el);
+  imprimirContainer(el, 'Relatorio-Operacional');
 }
 
 /* ---------- EXPORT POWER BI (CSV) ----------
@@ -1661,7 +1692,18 @@ function blocoExtremos(ext, titulo, explicacao){
 /* Tabela de distribuição por status, com a cor de cada status.
    A cor é a MESMA da badge da tela (STATUS_COR_RELATORIO em data.js) — o
    gestor lê o PDF com o mesmo código de cores do painel. */
-function blocoDistribuicaoStatus(dist, total, titulo, explicacao){
+/* `ocultarZerados` existe para o bloco de concluídas.
+
+   Nas cargas EM ABERTO, etapa vazia é informação: "nenhuma carga parada em
+   Faturamento" diz algo ao gestor. Nas CONCLUÍDAS não: por definição elas
+   estão todas em "Seguiu Viagem", então os outros cinco status saem sempre
+   zerados e enchem meia página com linhas que não dizem nada. */
+function blocoDistribuicaoStatus(dist, total, titulo, explicacao, ocultarZerados){
+  if(ocultarZerados) dist = dist.filter(d => d.qtd > 0);
+  if(ocultarZerados && !dist.length){
+    return tituloSecaoPdf(titulo, explicacao) +
+      `<div class="print-vazio">Nenhuma carga concluída no período.</div>`;
+  }
   return tituloSecaoPdf(titulo, explicacao) +
     `<table>
       <thead><tr><th>Status</th><th>Setor responsável</th><th>Cargas</th><th>% do total</th><th>Distribuição</th></tr></thead>
@@ -1748,9 +1790,14 @@ function exportarPdfExecutivo(){
   const el = document.getElementById('print-executivo');
   const agora = new Date();
 
-  const abertas = cargasAbertas();
-  const concluidasTodas = DB.cargas.filter(c=>c.status==='Seguiu Viagem');
-  const concluidasHoje = cargasConcluidasNoPeriodo('hoje');
+  /* Respeita o mesmo filtro de Data da Programação dos outros relatórios.
+     Antes o executivo ignorava o filtro e saía sempre com tudo — o gestor
+     recortava o período, gerava, e recebia um relatório de outro recorte
+     sem nenhum aviso. */
+  const doPeriodo = cargasDoRelatorio();
+  const abertas = doPeriodo.filter(c=>c.status!=='Seguiu Viagem');
+  const concluidasTodas = doPeriodo.filter(c=>c.status==='Seguiu Viagem');
+  const concluidasHoje = concluidasTodas;
 
   // Lead time médio do histórico completo (mesma conta da versão anterior).
   let somaLead=0, nLead=0;
@@ -1767,10 +1814,6 @@ function exportarPdfExecutivo(){
 
   const distAbertas = distribuicaoPorStatus(abertas);
   const distHoje = distribuicaoPorStatus(concluidasHoje);
-  const rkDia = rankingDoDia();
-  const rkHist = rankingTransportadoras().slice(0,5);
-  const extLead = extremosTempo(concluidasHoje, 'leadTimeTotal');
-  const extPatio = extremosTempo(concluidasHoje, 'tempoPatioTotal');
 
   const dataExt = agora.toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long',year:'numeric'});
 
@@ -1779,9 +1822,19 @@ function exportarPdfExecutivo(){
       <div class="print-header">
         <img src="assets/logo_suinco.png" alt="Suinco">
         <div><h1>Relatório Executivo — Painel Logístico</h1>
-        <div class="meta">${dataExt} · gerado às ${agora.toLocaleTimeString('pt-BR')}</div></div>
+        <div class="meta">${dataExt} · gerado às ${agora.toLocaleTimeString('pt-BR')} · ${rotuloPeriodoRelatorio()}</div></div>
       </div>
-      ${legendaStatusHtml()}
+
+      <!-- A legenda de cores saiu daqui (05/08/2026).
+
+           Ela faz sentido no relatório OPERACIONAL, que vira foto no grupo
+           do WhatsApp para quem está no pátio sem o painel aberto e precisa
+           saber o que cada cor significa.
+
+           No executivo é ruído: o leitor é a diretoria, que olha número, e
+           os chips coloridos logo abaixo do cabeçalho pareciam botões de
+           filtro. A distribuição por status vem logo abaixo, com o nome do
+           status escrito por extenso em cada linha. -->
 
       <div class="grid4" style="margin-bottom:18px">
         <div class="stat-box"><div class="stat-num">${abertas.length}</div><div class="stat-label">Cargas em Aberto</div></div>
@@ -1795,33 +1848,15 @@ function exportarPdfExecutivo(){
         'Onde está parada, agora, cada carga que ainda não saiu. Os 6 status aparecem sempre — inclusive os zerados, porque etapa vazia também é informação.')}
 
       ${blocoDistribuicaoStatus(distHoje, concluidasHoje.length,
-        'Cargas concluídas hoje por status',
-        'Cargas que chegaram a "Seguiu Viagem" no dia de hoje. Por definição concentram-se no último status — a linha serve de confirmação do volume encerrado.')}
+        'Cargas concluídas',
+        'Cargas que chegaram a "Seguiu Viagem" — o caminhão saiu do pátio. Só esse status conta como concluída.',
+        true)}
 
-      ${blocoExtremos(extLead,
-        'Menor e maior tempo — Lead Time (hoje)',
-        'Da criação da carga na Programação até a saída do caminhão. Visão de planejamento.')}
+      ${blocoTempoMedioPatioPdf(concluidasTodas)}
 
-      ${blocoExtremos(extPatio,
-        'Menor e maior tempo — Permanência no pátio (hoje)',
-        'Da chegada física do caminhão até a saída. É o tempo que a operação e o motorista sentem.')}
+      ${blocoRankingAtrasoPdf(doPeriodo)}
 
-      ${tituloSecaoPdf('Ranking do dia — transportadoras',
-        'Somente cargas concluídas hoje, ordenadas do menor para o maior lead time médio.')}
-      <table>
-        <thead><tr><th>#</th><th>Transportadora</th><th>Cargas</th><th>Lead Time Médio</th><th>Tempo de Pátio Médio</th></tr></thead>
-        <tbody>${
-          rkDia.length
-            ? rkDia.map((r,i)=>`<tr>
-                <td class="num-forte">${i+1}º</td>
-                <td>${esc(r.transportadora)}</td>
-                <td>${r.cargas}</td>
-                <td>${fmtDuracao(r.leadTimeMedio)}</td>
-                <td>${fmtDuracao(r.tempoPatioMedio)}</td>
-              </tr>`).join('')
-            : '<tr><td colspan="5" class="text-center text-dim">Nenhuma carga concluída hoje.</td></tr>'
-        }</tbody>
-      </table>
+      ${blocoGargalosPdf(doPeriodo)}
 
       ${blocoTimelineCargas(concluidasHoje,
         'Linha do tempo — cargas concluídas hoje',
@@ -1831,24 +1866,14 @@ function exportarPdfExecutivo(){
         'Linha do tempo — cargas ainda em aberto',
         'Mesma leitura para o que ainda não saiu: as colunas vazias à direita mostram em qual etapa cada carga está parada agora.')}
 
-      ${tituloSecaoPdf('Ranking histórico — top 5 transportadoras',
-        'Todas as cargas já concluídas, para comparar o desempenho de hoje com o padrão.')}
-      <table>
-        <thead><tr><th>#</th><th>Transportadora</th><th>Cargas</th><th>Lead Time Médio</th></tr></thead>
-        <tbody>${
-          rkHist.length
-            ? rkHist.map((r,i)=>`<tr><td class="num-forte">${i+1}º</td><td>${esc(r.transportadora)}</td><td>${r.cargas}</td><td>${fmtDuracao(r.leadTimeMedio)}</td></tr>`).join('')
-            : '<tr><td colspan="4" class="text-center text-dim">Sem dados suficientes.</td></tr>'
-        }</tbody>
-      </table>
 
       <div class="print-rodape">
         Lead Time = da criação da carga até a saída. Tempo de Pátio = da chegada física até a saída.
         "Hoje" = dia calendário, das 00:00 até a geração deste relatório.
-        Cargas em aberto: ${abertas.length} · Concluídas no histórico: ${concluidasTodas.length} · Lead time médio histórico: ${fmtDuracao(nLead?Math.round(somaLead/nLead):null)}.
+        Cargas em aberto: ${abertas.length} · Concluídas: ${concluidasTodas.length} · Lead time médio: ${fmtDuracao(nLead?Math.round(somaLead/nLead):null)}.
       </div>
     </div>`;
-  imprimirContainer(el);
+  imprimirContainer(el, 'Relatorio-Executivo');
 }
 
 /* ---------- RELÓGIO ---------- */
@@ -2162,7 +2187,7 @@ function exportarPdfFretes(){
         que precisa ser preenchida.
       </div>
     </div>`;
-  imprimirContainer(el);
+  imprimirContainer(el, 'Administracao-de-Fretes');
 }
 
 /* =====================================================================
@@ -2354,4 +2379,105 @@ async function redefinirSenhaUsuarioUI(id){
   }catch(e){
     notify('Não redefiniu: ' + e.message, 'danger');
   }
+}
+
+/* =====================================================================
+   BLOCOS NOVOS DO RELATÓRIO EXECUTIVO
+   =====================================================================
+   Mesmos indicadores da aba Indicadores, no formato do papel. Existem
+   separados porque o PDF não tem interação: nada de select de período nem
+   de linha que expande — o que está impresso é o que o leitor tem. */
+
+function blocoTempoMedioPatioPdf(cargas){
+  const t = tempoMedioPatio(cargas);
+  if(!t.amostra){
+    return tituloSecaoPdf('Tempo Médio de Pátio',
+      'Da chegada física do caminhão até a saída.') +
+      `<div class="print-vazio">Nenhuma carga concluída com tempo calculável no período.</div>`;
+  }
+  const dentro = t.media <= t.meta;
+  // No papel a cor sozinha não basta: impressão em preto e branco existe,
+  // e daltonismo também. O texto diz o mesmo que a cor.
+  const veredito = dentro
+    ? `Dentro da meta de ${fmtDuracao(t.meta)}.`
+    : `ACIMA da meta de ${fmtDuracao(t.meta)}.`;
+  return tituloSecaoPdf('Tempo Médio de Pátio',
+      'Da chegada física do caminhão até a saída — o tempo que a operação e o motorista sentem.') +
+    `<table>
+      <thead><tr><th>Tempo Médio</th><th>Meta</th><th>Situação</th><th>Acima da Meta</th><th>Base</th></tr></thead>
+      <tbody><tr>
+        <td class="num-forte" style="color:${dentro ? '#2f7d4f' : '#a3271f'}">${fmtDuracao(t.media)}</td>
+        <td>${fmtDuracao(t.meta)}</td>
+        <td>${esc(veredito)}</td>
+        <td>${t.acimaDaMeta} carga(s) — ${t.percentualAcima}%</td>
+        <td>${t.amostra} carga(s)</td>
+      </tr></tbody>
+    </table>`;
+}
+
+function blocoRankingAtrasoPdf(cargas){
+  const rk = rankingVeiculosAtraso(cargas).slice(0, 10);
+  const cabecalho = tituloSecaoPdf('Veículos com Maior Atraso',
+    'Do maior para o menor atraso médio. Atraso = tempo em pátio acima da meta de 3 h. ' +
+    'Veículo sem atraso não aparece — a lista existe para mostrar onde agir.');
+  if(!rk.length){
+    return cabecalho + `<div class="print-vazio">Nenhum veículo passou da meta no período. É o resultado que se quer.</div>`;
+  }
+  return cabecalho + `<table>
+      <thead><tr><th>#</th><th>Placa</th><th>Transportadora</th><th>Atrasos</th><th>Atraso Médio</th><th>Último Atraso</th></tr></thead>
+      <tbody>${rk.map((r,i)=>`<tr>
+        <td class="num-forte">${i+1}º</td>
+        <td><strong>${esc(r.placa)}</strong></td>
+        <td>${esc(r.transportadora)}</td>
+        <td>${r.atrasos} de ${r.totalCargas}</td>
+        <td>${fmtDuracao(r.tempoMedioAtraso)}</td>
+        <td>${r.ultimoAtraso ? esc(fmtDataHora(r.ultimoAtraso)) : '—'}</td>
+      </tr>`).join('')}</tbody>
+    </table>`;
+}
+
+function blocoGargalosPdf(cargas){
+  const g = analiseGargalos(cargas);
+  const partes = [];
+
+  const tabela = (titulo, explicacao, cabecalhos, linhas) => {
+    if(!linhas.length) return '';
+    return tituloSecaoPdf(titulo, explicacao) + `<table>
+      <thead><tr>${cabecalhos.map(h=>`<th>${esc(h)}</th>`).join('')}</tr></thead>
+      <tbody>${linhas.join('')}</tbody></table>`;
+  };
+
+  partes.push(tabela('Gargalos — veículos com atraso recorrente',
+    'Dois ou mais atrasos no período. Um atraso é acaso; dois viram padrão.',
+    ['Placa','Transportadora','Atrasos','Atraso Médio'],
+    g.veiculosRecorrentes.map(v=>`<tr>
+      <td><strong>${esc(v.placa)}</strong></td><td>${esc(v.transportadora)}</td>
+      <td>${v.atrasos} de ${v.totalCargas}</td><td>${fmtDuracao(v.tempoMedioAtraso)}</td></tr>`)));
+
+  partes.push(tabela('Gargalos — horários de maior congestionamento',
+    'Pela hora de CHEGADA do caminhão. O congestionamento é físico, não da digitação.',
+    ['Hora','Chegadas','Tempo Médio de Pátio'],
+    g.horariosCongestionamento.map(h=>`<tr>
+      <td>${String(h.hora).padStart(2,'0')}:00 — ${String(h.hora).padStart(2,'0')}:59</td>
+      <td>${h.chegadas}</td><td>${fmtDuracao(h.tempoMedioPatio)}</td></tr>`)));
+
+  partes.push(tabela('Gargalos — rotas com maior incidência de atraso',
+    'Rota que atrasa sempre costuma ser problema de janela ou de sequenciamento.',
+    ['Rota','Cargas Atrasadas','Atraso Médio'],
+    g.rotasAtraso.map(r=>`<tr>
+      <td>${esc(r.rotulo || r.rota)}</td>
+      <td>${r.atrasadas} de ${r.total}</td><td>${fmtDuracao(r.atrasoMedio)}</td></tr>`)));
+
+  partes.push(tabela('Pontos críticos — cargas paradas há mais tempo',
+    'O bloco mais acionável: cada linha é um caminhão esperando alguém destravar.',
+    ['Nº Carga','Placa','Transportadora','Status','Parada há'],
+    g.pendentesAntigas.map(c=>`<tr>
+      <td>${esc(c.numeroCarga)}</td><td><strong>${esc(c.placa)}</strong></td>
+      <td>${esc(c.transportadora)}</td><td>${esc(c.status)}</td>
+      <td>${fmtDuracao(c.paradaHaMin)}</td></tr>`)));
+
+  const conteudo = partes.filter(Boolean).join('');
+  return conteudo || (tituloSecaoPdf('Gargalos e Pontos Críticos',
+    'Leitura automática do período.') +
+    `<div class="print-vazio">Nenhum gargalo detectado — nenhuma carga passou da meta de ${fmtDuracao(g.meta)} em pátio.</div>`);
 }
