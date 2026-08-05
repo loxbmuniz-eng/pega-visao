@@ -257,6 +257,88 @@ function detectarTurnoPorHora(){
 }
 function abrirLogin(){
   document.getElementById('modal-operador').classList.add('open');
+  // Qual formulário aparece não é escolha do usuário: se o servidor está
+  // configurado, é e-mail e senha. O modo local fica atrás de um link, para
+  // ninguém cair nele por acidente e achar que está compartilhando dados
+  // quando não está.
+  mostrarLoginServidor();
+  const email = document.getElementById('login-email');
+  if(email) setTimeout(()=>email.focus(), 60);
+}
+
+function mostrarLoginServidor(){
+  const srv = document.getElementById('login-servidor');
+  const loc = document.getElementById('login-local');
+  if(srv) srv.hidden = false;
+  if(loc) loc.hidden = true;
+  esconderErroLogin();
+}
+
+function mostrarLoginLocal(){
+  const srv = document.getElementById('login-servidor');
+  const loc = document.getElementById('login-local');
+  if(srv) srv.hidden = true;
+  if(loc) loc.hidden = false;
+}
+
+function mostrarErroLogin(msg){
+  const el = document.getElementById('login-erro');
+  if(!el) { notify(msg, 'warn'); return; }
+  el.textContent = msg;
+  el.hidden = false;
+}
+
+function esconderErroLogin(){
+  const el = document.getElementById('login-erro');
+  if(el) el.hidden = true;
+}
+
+/* Login contra o servidor.
+
+   O setor NÃO é enviado nem escolhido: vem no token que o servidor assina, a
+   partir do cadastro do operador. É o que fecha o furo de a permissão de
+   setor ser decidida pelo cliente. */
+async function entrarNoServidor(){
+  const email = (document.getElementById('login-email').value || '').trim();
+  const senha = document.getElementById('login-senha').value || '';
+  const botao = document.getElementById('btn-entrar');
+
+  if(!email || !senha){ mostrarErroLogin('Informe e-mail e senha.'); return; }
+  if(typeof SuincoSharePoint === 'undefined'){
+    mostrarErroLogin('Painel sem conexão configurada. Use "Entrar só neste aparelho".');
+    return;
+  }
+
+  esconderErroLogin();
+  botao.disabled = true;
+  botao.textContent = 'Entrando…';
+
+  try{
+    const op = await SuincoSharePoint.login(email, senha);
+    DB.operador = { nome: op.nome, setor: op.setor, email: op.email, turno: detectarTurnoPorHora() };
+    SuincoStore.save();
+
+    // Limpa a senha do DOM assim que ela deixa de ser necessária. Terminal de
+    // pátio é compartilhado, e campo preenchido é o tipo de coisa que o
+    // próximo turno encontra.
+    document.getElementById('login-senha').value = '';
+
+    document.getElementById('modal-operador').classList.remove('open');
+    atualizarHeaderOperador();
+    aplicarPermissoesSetor();
+    renderAll();
+    notify(`Bem-vindo, ${op.nome}! Setor: ${op.setor}`, 'success');
+  }catch(e){
+    // 401 é credencial errada; o resto é rede ou servidor fora. A distinção
+    // importa: uma o operador resolve digitando de novo, a outra não.
+    const rede = !e.status || e.status >= 500;
+    mostrarErroLogin(rede
+      ? 'Servidor não respondeu. Verifique a rede ou entre só neste aparelho.'
+      : (e.message || 'E-mail ou senha incorretos.'));
+  }finally{
+    botao.disabled = false;
+    botao.textContent = 'Entrar';
+  }
 }
 function confirmarOperador(){
   const nome = document.getElementById('login-nome').value.trim();
@@ -280,6 +362,12 @@ function confirmarOperador(){
 function trocarUsuario(){
   DB.operador = null;
   SuincoStore.save();
+  // Encerra a sessão no adaptador também. Sem isto o token continuaria
+  // válido no aparelho e o próximo operador herdaria a sessão de quem saiu
+  // — justamente o problema que terminal compartilhado cria.
+  if(typeof SuincoSharePoint !== 'undefined' && SuincoSharePoint.sair){
+    try{ SuincoSharePoint.sair(); }catch(e){ console.warn('[Suinco] sair:', e); }
+  }
   atualizarHeaderOperador();
   abrirLogin();
 }

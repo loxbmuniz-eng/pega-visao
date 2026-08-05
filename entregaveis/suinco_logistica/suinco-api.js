@@ -129,9 +129,18 @@ const SuincoSharePoint = (function () {
       signal: AbortSignal.timeout(opcoes.timeoutMs || 20000),
     });
 
-    if (resposta.status === 401) {
-      // Sessão morreu. Limpar aqui evita o painel insistir com um token
-      // vencido e encher a tela de erro a cada 15 s.
+    /* 401 tem DOIS significados, e tratá-los igual confunde o operador.
+
+       No /auth/login quer dizer "e-mail ou senha errados" — não havia sessão
+       para expirar, e dizer "sessão expirada" faz quem errou a senha ficar
+       procurando o que expirou em vez de reconferir o que digitou.
+
+       Em qualquer outra rota quer dizer que o token venceu ou foi revogado,
+       e aí limpar a sessão é o certo: sem isso o painel insiste com um token
+       morto e enche a tela de erro a cada 15 s. */
+    const eLogin = caminho.startsWith('/auth/login');
+
+    if (resposta.status === 401 && !eLogin) {
       limparToken();
       mudarEstado('local');
       const e = new Error('Sessão expirada. Faça login de novo.');

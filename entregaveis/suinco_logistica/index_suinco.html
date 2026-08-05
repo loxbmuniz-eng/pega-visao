@@ -17,18 +17,6 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Embarque">
 <link rel="apple-touch-icon" href="assets/logo_suinco.png">
-<!-- MSAL.js v2 — SSO Microsoft 365. Carrega da CDN da Microsoft; se não vier
-     (aberto via file://, sem rede, ou bloqueado por política), o adaptador
-     detecta a ausência e segue em modo local, sem quebrar o painel. -->
-<!-- NOTA PARA O TI: sem atributo integrity porque o hash SRI precisa ser
-     gerado a partir do arquivo real da versão que voces forem fixar. Antes de
-     ir a producao, rodem:
-       curl -s https://alcdn.msauth.net/browser/2.38.3/js/msal-browser.min.js | openssl dgst -sha384 -binary | openssl base64 -A
-     e colem o resultado como integrity="sha384-<hash>". Alternativa preferida
-     pela maioria das politicas de seguranca: baixar o msal-browser.min.js e
-     servi-lo do proprio tenant, eliminando a dependencia de CDN externa. -->
-<script src="https://alcdn.msauth.net/browser/2.38.3/js/msal-browser.min.js"
-        crossorigin="anonymous" onerror="window.__msalFalhou=true"></script>
 </head>
 <body>
 
@@ -567,19 +555,61 @@
 <datalist id="lista-transportadoras"></datalist>
 
 <!-- ===================== MODAIS ===================== -->
+<!-- Login. Duas formas, e qual delas aparece NÃO é escolha do usuário: é o
+     app.js que decide, pelo que o servidor responde.
+
+     Com a API no ar: e-mail e senha. O setor vem do servidor, assinado no
+     token — o operador não escolhe, e não consegue mudar mexendo no
+     navegador. Era o furo que a auditoria apontou.
+
+     Sem a API: volta o nome + setor, gravando só neste aparelho. Não é
+     "modo degradado por preguiça" — é o painel continuar funcionando quando
+     a rede do pátio cai, que acontece várias vezes por turno. -->
 <div class="modal-overlay" id="modal-operador">
   <div class="modal-box">
-    <h2>Identifique-se</h2>
-    <div class="form-group" style="margin-bottom:10px"><label>Nome</label><input type="text" id="login-nome" placeholder="Seu nome"></div>
-    <div class="form-group" style="margin-bottom:10px">
-      <label>Setor</label>
-      <select id="login-setor">
-        <option>Logística</option><option>Portaria</option><option>Expedição</option><option>Faturamento</option>
-      </select>
+    <h2>Entrar</h2>
+
+    <div id="login-servidor">
+      <div class="form-group" style="margin-bottom:10px">
+        <label>E-mail</label>
+        <input type="email" id="login-email" placeholder="voce@suinco.com.br"
+               autocomplete="username" inputmode="email" autocapitalize="off" spellcheck="false">
+      </div>
+      <div class="form-group" style="margin-bottom:10px">
+        <label>Senha</label>
+        <input type="password" id="login-senha" placeholder="Sua senha"
+               autocomplete="current-password" onkeydown="if(event.key==='Enter') entrarNoServidor()">
+      </div>
+      <div class="card-sub">Seu setor e suas permissões vêm do servidor. Se errou de setor, fale com a Administração — não é escolha da tela.</div>
+      <div id="login-erro" class="login-erro" hidden></div>
+      <div class="flex-end">
+        <button class="btn btn-primary btn-lg" id="btn-entrar" onclick="entrarNoServidor()">Entrar</button>
+      </div>
+      <div class="card-sub" style="margin-top:10px">
+        Sem conexão com o servidor?
+        <a href="#" onclick="mostrarLoginLocal(); return false;">Entrar só neste aparelho</a>
+      </div>
     </div>
-    <div class="card-sub"><strong>Você verá apenas as abas do setor escolhido.</strong> Logística abre Programação, Expedição, Indicadores, Cadastros e Relatórios; Portaria abre Portaria; Expedição abre Expedição; Faturamento abre Faturamento. Torre de Controle e Histórico ficam liberados para todos. Para operar outro posto (cobertura de turno, por exemplo), use <strong>Trocar usuário</strong> no topo e entre com o setor correspondente.</div>
-    <div class="card-sub">Este login é um espaço reservado até o SSO da Microsoft 365 ser conectado — depois ele será automático.</div>
-    <div class="flex-end"><button class="btn btn-primary" onclick="confirmarOperador()">Entrar</button></div>
+
+    <div id="login-local" hidden>
+      <div class="aviso-local">
+        <strong>Modo local.</strong> Os dados ficam <em>só neste aparelho</em> e
+        não são compartilhados com os outros setores. Use apenas se o servidor
+        estiver fora do ar.
+      </div>
+      <div class="form-group" style="margin-bottom:10px"><label>Nome</label><input type="text" id="login-nome" placeholder="Seu nome"></div>
+      <div class="form-group" style="margin-bottom:10px">
+        <label>Setor</label>
+        <select id="login-setor">
+          <option>Logística</option><option>Portaria</option><option>Expedição</option><option>Faturamento</option>
+        </select>
+      </div>
+      <div class="card-sub"><strong>Você verá apenas as abas do setor escolhido.</strong> Torre de Controle e Histórico ficam liberados para todos.</div>
+      <div class="flex-end gap8">
+        <button class="btn btn-sec" onclick="mostrarLoginServidor()">Voltar</button>
+        <button class="btn btn-warn" onclick="confirmarOperador()">Entrar sem servidor</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -692,7 +722,13 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
   });
 }
 </script>
-<script src="suinco-sharepoint.js"></script>
+<!-- Cliente do Socket.IO, servido pelo PRÓPRIO backend (não por CDN):
+     uma dependência a menos fora do nosso controle, e funciona mesmo com a
+     rede da empresa bloqueando CDN. Se não carregar, o adaptador cai na
+     consulta periódica e nada quebra. -->
+<script src="https://api.embarquesuinco.com.br/socket.io/socket.io.js"
+        crossorigin="anonymous" onerror="window.__socketIoFalhou=true"></script>
+<script src="suinco-api.js"></script>
 <script src="data.js"></script>
 <script src="app.js"></script>
 </body>

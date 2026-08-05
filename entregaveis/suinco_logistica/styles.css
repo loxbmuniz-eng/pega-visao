@@ -854,3 +854,28 @@ input,select,textarea{border-radius:5px}
   :root{ --header-h:44px; --nav-h:40px }
   #logo-chip,#clock-wrap{ display:none }
 }
+
+/* ===== LOGIN =============================================================
+   Erro de login precisa aparecer DENTRO do modal, não como notificação no
+   canto: o operador está olhando para o campo que errou, não para a borda
+   da tela. */
+.login-erro{
+  background:var(--st-aguardando-veiculo-bg, #fdecea);
+  color:var(--st-aguardando-veiculo-fg, #a3271f);
+  border:1px solid currentColor;
+  border-radius:8px; padding:9px 12px; margin-bottom:10px;
+  font-size:13px; font-weight:600; line-height:1.4;
+}
+
+/* O modo local grava só no aparelho. Se o operador entrar por aqui achando
+   que está compartilhando com os outros setores, ele registra o dia inteiro
+   num navegador e ninguém vê. O aviso é deliberadamente difícil de ignorar. */
+.aviso-local{
+  background:var(--st-aguardando-embarque-bg, #fff4e0);
+  color:var(--st-aguardando-embarque-fg, #8a5a00);
+  border:1px solid currentColor;
+  border-radius:8px; padding:11px 13px; margin-bottom:14px;
+  font-size:13px; line-height:1.5;
+}
+
+#login-servidor a{ color:var(--gold-text, #b8860b); text-decoration:underline }

@@ -16,8 +16,9 @@ async def main():
 
         print('\n=== 1. LOGIN SEM TURNO ===')
         ck('campo Turno removido', not await pg.evaluate("()=>!!document.getElementById('login-turno')"))
+        await pg.evaluate("() => mostrarLoginLocal()")  # modo local: o login principal agora é e-mail e senha contra o servidor
         await pg.fill('#login-nome','Ana'); await pg.select_option('#login-setor','Portaria')
-        await pg.click('button.btn-primary:has-text("Entrar")'); await pg.wait_for_timeout(700)
+        await pg.click('button:has-text("Entrar sem servidor")'); await pg.wait_for_timeout(700)
         ck('login funciona sem o campo', await pg.evaluate("()=>!!(DB.operador&&DB.operador.nome)"))
         ck('turno ainda gravado (derivado da hora)',
            bool(await pg.evaluate("()=>DB.operador&&DB.operador.turno")),
