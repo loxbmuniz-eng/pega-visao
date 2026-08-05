@@ -246,9 +246,19 @@ select option{background:var(--campo-bg);color:var(--text)}
 .stat-note{font-size:10.5px;color:var(--text-dim);margin-top:2px;font-style:italic}
 
 /* ===== MODAL ===== */
+/* z-index 3600: ACIMA do rodapé de conexão (3500).
+
+   Estava em 3000, e o rodapé cobria a parte de baixo do modal — numa
+   janela baixa, o botão Entrar do login ficava atrás dele e não recebia o
+   clique. Foi um teste que pegou isso; um operador teria descoberto
+   tentando entrar e achando que o painel estava travado.
+
+   Ordem das camadas, de baixo para cima:
+   header/nav (1000) · rodapé (3500) · modais (3600) · avisos (4000) ·
+   overlay de sincronia (6000). */
 .modal-overlay{
   position:fixed;inset:0;background:rgba(6,9,18,.72);display:none;
-  align-items:center;justify-content:center;z-index:3000;padding:20px;
+  align-items:center;justify-content:center;z-index:3600;padding:20px;
 }
 .modal-overlay.open{display:flex}
 .modal-box{

@@ -78,9 +78,21 @@ function atualizarRodapeConexao(estado, detalhe){
     rod.innerHTML = `⚠️ Modo Offline — gravando no aparelho e sincronizando assim que a rede voltar${esc(sufixoFila)}${esc(carimbo)}`;
     if(badge){ badge.hidden = false; badge.className = 'badge-conexao offline'; badge.textContent = '⚠️ Modo Offline'; }
   } else {
-    // 'local': sem configuração de tenant. Estado honesto, não erro.
+    /* 'local' cobre TRÊS situações diferentes, e mostrá-las com o mesmo
+       texto engana. "Sem conexão com o servidor" antes de alguém fazer
+       login faz o operador achar que a API caiu, quando ela só não foi
+       chamada ainda. */
     rod.className = 'rodape-conexao local';
-    rod.innerHTML = '⚠️ Modo Local — sem conexão com o servidor. Os dados ficam SÓ neste navegador e não são vistos pelos outros setores.' + esc(carimbo);
+    if(!DB.operador){
+      rod.innerHTML = '🔒 Faça login para conectar aos outros setores.' + esc(carimbo);
+    } else if(DB.operador.email){
+      // Tem e-mail: entrou pelo servidor, mas a sessão caiu ou a rede foi
+      // embora. Aqui "sem conexão" é a descrição correta.
+      rod.innerHTML = '⚠️ Sem conexão com o servidor — entre de novo para voltar a compartilhar.' + esc(carimbo);
+    } else {
+      // Sem e-mail: escolheu o modo local de propósito.
+      rod.innerHTML = '⚠️ Modo Local — os dados ficam SÓ neste navegador e não são vistos pelos outros setores.' + esc(carimbo);
+    }
     if(badge){ badge.hidden = false; badge.className = 'badge-conexao local'; badge.textContent = '⚙️ Local'; }
   }
 }
