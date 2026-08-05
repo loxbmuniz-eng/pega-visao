@@ -116,18 +116,46 @@ const SuincoSharePoint = (function () {
   /* ---------------------------------------------------------------
      HTTP
      --------------------------------------------------------------- */
+  /* Timeout de requisição, com queda para o método antigo.
+
+     `AbortSignal.timeout()` é limpo, mas só existe a partir do Safari 16 e
+     do Chrome 103. Num Mac com Safari mais antigo ele nem chega a tentar a
+     rede: lança TypeError na hora de montar a chamada, e o painel reporta
+     "servidor não respondeu" quando o servidor está perfeitamente no ar.
+
+     Difícil de diagnosticar justamente porque a mensagem aponta para o
+     lugar errado. O AbortController existe desde 2017 e resolve igual. */
+  function sinalDeTimeout(ms) {
+    if (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') {
+      return { signal: AbortSignal.timeout(ms), cancelar: () => {} };
+    }
+    if (typeof AbortController === 'undefined') {
+      return { signal: undefined, cancelar: () => {} };   // sem timeout, mas funciona
+    }
+    const ctrl = new AbortController();
+    const id = setTimeout(() => ctrl.abort(), ms);
+    return { signal: ctrl.signal, cancelar: () => clearTimeout(id) };
+  }
+
   async function chamar(caminho, opcoes = {}) {
     const t = lerToken();
-    const resposta = await fetch(SP_CONFIG.api + caminho, {
-      method: opcoes.metodo || 'GET',
-      headers: {
-        'content-type': 'application/json',
-        ...(t ? { authorization: 'Bearer ' + t } : {}),
-      },
-      body: opcoes.corpo === undefined ? undefined : JSON.stringify(opcoes.corpo),
-      // Sem timeout o painel fica pendurado numa rede ruim sem dar sinal.
-      signal: AbortSignal.timeout(opcoes.timeoutMs || 20000),
-    });
+    const tempo = sinalDeTimeout(opcoes.timeoutMs || 20000);
+    let resposta;
+    try {
+      resposta = await fetch(SP_CONFIG.api + caminho, {
+        method: opcoes.metodo || 'GET',
+        headers: {
+          'content-type': 'application/json',
+          ...(t ? { authorization: 'Bearer ' + t } : {}),
+        },
+        body: opcoes.corpo === undefined ? undefined : JSON.stringify(opcoes.corpo),
+        signal: tempo.signal,
+      });
+    } finally {
+      // Sem isto o temporizador segura o navegador acordado por 20 s a
+      // cada chamada, e são muitas ao longo de um turno.
+      tempo.cancelar();
+    }
 
     /* 401 tem DOIS significados, e tratá-los igual confunde o operador.
 
