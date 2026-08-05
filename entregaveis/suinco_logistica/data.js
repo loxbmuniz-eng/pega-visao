@@ -54,8 +54,11 @@ const STATUS_META = {
    relatório, some no filtro do Power BI, e ninguém sabe se a carga é frota
    própria ou se o campo não foi preenchido.
 
-   "Compartilhada?" é SEMPRE calculada a partir daqui — nunca editável
-   manualmente, pra não desalinhar do valor real de Pra onde?. */
+   NOTA: até 02/08/2026 existia aqui um campo "Compartilhada?", DERIVADO deste.
+   Foi substituído por "Paletizada", que é informação independente e EDITÁVEL —
+   não dá para inferir do tipo de operação se a carga é paletizada. A função
+   compartilhadaDaCarga() foi mantida apenas para ler registros antigos e
+   converter o export; nenhuma tela nova a usa. */
 const PRA_ONDE_OPCOES = ['FROTA PROPRIA', 'CROSS-DOCKING', 'DEDICADA', 'RET FRIGO'];
 const PRA_ONDE_LABEL = {
   'FROTA PROPRIA':'FROTA PRÓPRIA',
@@ -64,6 +67,10 @@ const PRA_ONDE_LABEL = {
   'RET FRIGO':'RET FRIGO'
 };
 const PRA_ONDE_PADRAO = 'FROTA PROPRIA';
+// Leitura de Paletizada, tolerante a registros antigos que não têm o campo.
+function paletizadaDaCarga(carga){
+  return (carga && carga.paletizada === 'Sim') ? 'Sim' : 'Não';
+}
 function compartilhadaDaCarga(carga){
   return (carga && (carga.praOnde === 'CROSS-DOCKING' || carga.praOnde === 'RET FRIGO')) ? 'Sim' : 'Não';
 }
@@ -90,7 +97,7 @@ function migrarPraOnde(){
    o nome vem junto só para quem não decorou o número ainda.
 
    ATENÇÃO: esta lista está INCOMPLETA por definição. Faltam 511, 514, 515,
-   526, 527, 528, 530, 531, 533, 535, 537 e 539, que o gestor enviará depois.
+   526, 528, 530, 533, 535, 537 e 539, que o gestor enviará depois.
    Por isso "(rota não informada)" continua sendo uma opção válida: obrigar a
    escolher uma rota faria a Programação travar justamente nas praças que
    ainda não foram cadastradas. Para acrescentar as que faltam, basta incluir
@@ -119,7 +126,9 @@ const ROTAS = [
   { codigo:'523', nome:'Vale do Aço',                        detalhe:'Governador Valadares', operador:'SSLog' },
   { codigo:'524', nome:'Zona da Mata',                       detalhe:'Juiz de Fora', operador:'BSF Logística' },
   { codigo:'525', nome:'Bahia Capital',                      operador:'LogMaster' },
+  { codigo:'527', nome:'Nordeste',                            operador:'' },
   { codigo:'529', nome:'Espírito Santo',                     detalhe:'Serra-ES', operador:'Nacional Log' },
+  { codigo:'531', nome:'Paraná',                              operador:'' },
   { codigo:'532', nome:'Bahia Interior',                     detalhe:'Vitória da Conquista', operador:'ConquistaLog' },
   { codigo:'534', nome:'Salvador',                           operador:'LogMaster' },
   { codigo:'536', nome:'Goiás',                              operador:'AG Sestini' },
@@ -340,7 +349,7 @@ const SuincoStore = {
       Rota_Operador: (rotaInfo(carga.rota)||{}).operador || '',
       Sequencia: carga.sequencia ?? null,
       Pra_Onde: carga.praOnde || '',
-      Compartilhada: compartilhadaDaCarga(carga),
+      Paletizada: paletizadaDaCarga(carga),
       Qtd_Ganchos: carga.qtdGanchos || 0,
       Qtd_Entregas: carga.qtdEntregas ?? 1,
       Status_Atual: carga.status,
@@ -514,6 +523,7 @@ function cargaDeLinhaRemota(r){
     rota: r.Rota_Codigo || '',
     sequencia: (r.Sequencia === '' || r.Sequencia === null || r.Sequencia === undefined) ? null : Number(r.Sequencia),
     praOnde: PRA_ONDE_OPCOES.includes(r.Pra_Onde) ? r.Pra_Onde : PRA_ONDE_PADRAO,
+    paletizada: r.Paletizada === 'Sim' ? 'Sim' : 'Não',
     qtdGanchos: Number(r.Qtd_Ganchos) || 0,
     qtdEntregas: r.Qtd_Entregas === undefined ? 1 : (Number(r.Qtd_Entregas) || 1),
     status: STATUS_FLOW.includes(r.Status_Atual) ? r.Status_Atual : STATUS_FLOW[0],
@@ -852,7 +862,7 @@ function getCarga(id){ return DB.cargas.find(c=>c.id===id) || null; }
 // se a placa não estiver cadastrada em Frota, a criação é recusada. A
 // Portaria continua podendo registrar a chegada de QUALQUER placa (mesmo
 // não cadastrada) via "Aguardando Carga" — a trava é só na Programação.
-function criarCargaProgramada({placa, transportadora, tipoVeiculo, numeroCarga, cliente, destino, produto, peso, doca, rota, sequencia, observacoes, motorista, praOnde, qtdGanchos, qtdEntregas, operador}){
+function criarCargaProgramada({placa, transportadora, tipoVeiculo, numeroCarga, cliente, destino, produto, peso, doca, rota, sequencia, observacoes, motorista, praOnde, paletizada, qtdGanchos, qtdEntregas, operador}){
   const p = normalizarPlaca(placa);
   if(!p) throw new Error('Placa é obrigatória');
   const frota = buscarFrota(p);
@@ -873,6 +883,8 @@ function criarCargaProgramada({placa, transportadora, tipoVeiculo, numeroCarga, 
     // Só aceita código de rota conhecido. Vazio é válido de propósito: a
     // lista oficial ainda está incompleta (ver comentário em ROTAS).
     rota: rotaInfo(rota) ? String(rota).trim() : '',
+    // Paletizada é declarada pelo operador, não calculada. Padrão 'Não'.
+    paletizada: paletizada === 'Sim' || paletizada === true ? 'Sim' : 'Não',
     qtdGanchos: qtdGanchos!==undefined && qtdGanchos!=='' ? Math.max(0, Number(qtdGanchos)||0) : 0,
     qtdEntregas: qtdEntregas!==undefined && qtdEntregas!=='' ? Math.max(1, Number(qtdEntregas)||1) : 1,
     status: 'Aguardando Veículo',
@@ -908,7 +920,7 @@ function registrarChegadaPortaria(placa, operador){
       tipoVeiculo: frota ? frota.tipoVeiculo : '',
       motorista:'',
       cliente:'', destino:'', produto:'', peso:0, doca:'', sequencia:null, observacoes:'',
-      praOnde: PRA_ONDE_PADRAO, rota:'', qtdGanchos:0, qtdEntregas:1,
+      praOnde: PRA_ONDE_PADRAO, rota:'', paletizada:'Não', qtdGanchos:0, qtdEntregas:1,
       status: 'Aguardando Embarque', aguardandoCarga: true,
       criadoEm: nowISO(), criadoPor: operador||'(não identificado)',
       atualizadoEm: nowISO()
@@ -936,7 +948,7 @@ function registrarChegadaPortaria(placa, operador){
 // Embarque" (o caminhão já está fisicamente no pátio) — então isto é só
 // edição de dados, e por isso NÃO gera linha no log de movimentações
 // (log só registra mudança de STATUS).
-function completarCargaAguardando(cargaId, {numeroCarga, cliente, destino, produto, peso, doca, rota, sequencia, observacoes, transportadora, tipoVeiculo, motorista, praOnde, qtdGanchos, qtdEntregas, operador}){
+function completarCargaAguardando(cargaId, {numeroCarga, cliente, destino, produto, peso, doca, rota, sequencia, observacoes, transportadora, tipoVeiculo, motorista, praOnde, paletizada, qtdGanchos, qtdEntregas, operador}){
   const c = getCarga(cargaId);
   if(!c) throw new Error('Carga não encontrada');
   if(!c.aguardandoCarga) throw new Error('Esta carga não está aguardando dados (Aguardando Carga).');
@@ -946,6 +958,7 @@ function completarCargaAguardando(cargaId, {numeroCarga, cliente, destino, produ
   c.motorista = motorista||'';
   c.praOnde = PRA_ONDE_OPCOES.includes(praOnde) ? praOnde : PRA_ONDE_PADRAO;
   c.rota = rotaInfo(rota) ? String(rota).trim() : '';
+  c.paletizada = paletizada === 'Sim' || paletizada === true ? 'Sim' : 'Não';
   c.qtdGanchos = qtdGanchos!==undefined && qtdGanchos!=='' ? Math.max(0, Number(qtdGanchos)||0) : 0;
   c.qtdEntregas = qtdEntregas!==undefined && qtdEntregas!=='' ? Math.max(1, Number(qtdEntregas)||1) : 1;
   if(transportadora) c.transportadora = transportadora;
@@ -1317,12 +1330,12 @@ function gerarCsvFactMovimentacoes(){
 }
 function gerarCsvDimCarga(){
   const header = ['Id','NumeroCarga','Placa','Transportadora','TipoVeiculo','Motorista','Cliente','Destino','Produto',
-    'PesoKg','Doca','RotaCodigo','RotaNome','RotaOperador','Sequencia','PraOnde','Compartilhada','QtdGanchos','QtdEntregas','StatusAtual','CriadoEm','AtualizadoEm'];
+    'PesoKg','Doca','RotaCodigo','RotaNome','RotaOperador','Sequencia','PraOnde','Paletizada','QtdGanchos','QtdEntregas','StatusAtual','CriadoEm','AtualizadoEm'];
   const linhas = DB.cargas.map(c=>[
     c.id, c.numeroCarga, c.placa, c.transportadora, c.tipoVeiculo, c.motorista||'', c.cliente, c.destino, c.produto,
     c.peso, c.doca,
     c.rota || '', (rotaInfo(c.rota)||{}).nome || '', (rotaInfo(c.rota)||{}).operador || '',
-    c.sequencia ?? '', c.praOnde || '', compartilhadaDaCarga(c), c.qtdGanchos ?? 0, c.qtdEntregas ?? 1,
+    c.sequencia ?? '', c.praOnde || '', paletizadaDaCarga(c), c.qtdGanchos ?? 0, c.qtdEntregas ?? 1,
     c.status, c.criadoEm, c.atualizadoEm
   ]);
   return toCsv(header, linhas, CSV_COLUNAS_TEXTO);

@@ -103,12 +103,25 @@
       <div class="form-row">
         <div class="form-group"><label>Número de Carga</label><input type="text" id="prog-numero-carga" placeholder="Ex: 10245"></div>
         <div class="form-group"><label>Motorista</label><input type="text" id="prog-motorista" placeholder="Nome do motorista"></div>
-        <div class="form-group"><label>Cliente</label><input type="text" id="prog-cliente"></div>
-        <div class="form-group"><label>Destino</label><input type="text" id="prog-destino" placeholder="Cidade/UF"></div>
         <div class="form-group">
           <label>Rota <span class="hint">(código oficial)</span></label>
           <select id="prog-rota"></select>
         </div>
+        <div class="form-group">
+          <label>Tipo de Operação</label>
+          <select id="prog-praonde">
+            <option value="FROTA PROPRIA">FROTA PRÓPRIA</option>
+            <option value="CROSS-DOCKING">CROSS-DOCKING</option>
+            <option value="DEDICADA">DEDICADA</option>
+            <option value="RET FRIGO">RET FRIGO</option>
+          </select>
+        </div>
+        <!-- Cliente e Destino saíram da linha principal a pedido do gestor.
+             Continuam EXISTINDO como campos ocultos: registros antigos os têm,
+             o Destino ainda é exibido nos relatórios, e removê-los do modelo
+             apagaria dado já gravado. Ficam disponíveis para reativação. -->
+        <input type="hidden" id="prog-cliente" value="">
+        <input type="hidden" id="prog-destino" value="">
       </div>
       <div class="form-row">
         <div class="form-group"><label>Peso (kg)</label><input type="number" id="prog-peso" min="0"></div>
@@ -121,17 +134,8 @@
       </div>
       <div class="form-row">
         <div class="form-group">
-          <label>Tipo de Operação <span class="hint">(como a carga é operada — o destino vai no campo Destino)</span></label>
-          <select id="prog-praonde" onchange="atualizarPreviewCompartilhada('prog-praonde','prog-compartilhada-preview')">
-            <option value="FROTA PROPRIA">FROTA PRÓPRIA</option>
-            <option value="CROSS-DOCKING">CROSS-DOCKING</option>
-            <option value="DEDICADA">DEDICADA</option>
-            <option value="RET FRIGO">RET FRIGO (retirada no frigorífico)</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>Compartilhada? <span class="hint">(calculado automaticamente)</span></label>
-          <div class="readonly-pill" id="prog-compartilhada-preview">Não</div>
+          <label>Paletizada?</label>
+          <select id="prog-paletizada"><option>Não</option><option>Sim</option></select>
         </div>
         <div class="form-group">
           <label>Qtd. Ganchos (Gancheira) <span class="hint">0 = Liso</span></label>
@@ -191,6 +195,18 @@
         <button class="btn btn-warn btn-lg" onclick="acaoSaidaUI()">🏁 Saiu</button>
       </div>
       <div class="card-sub" style="margin-top:-6px">Dica: digite a placa e aperte <strong>Enter</strong> para registrar "Chegou" mais rápido.</div>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><span class="icon">📋</span> Cargas Programadas — ação em um clique</div>
+      <div class="card-sub">Sem digitar placa: o botão aparece só quando a ação é válida para o status atual da carga.</div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Placa</th><th>Nº Carga</th><th>Transportadora</th><th>Rota</th><th>Status</th><th class="no-print">Ação</th></tr></thead>
+          <tbody id="portaria-prog-tbody"></tbody>
+        </table>
+      </div>
+      <div class="empty-state" id="portaria-prog-empty" hidden>Nenhuma carga em aberto.</div>
     </div>
 
     <div class="card">
@@ -465,7 +481,7 @@
     <div class="funcao-aba" data-tab="relatorios"></div>
     <div class="card">
       <div class="card-title"><span class="icon">📄</span> PDF Operacional</div>
-      <div class="card-sub">Sequenciamento de carregamento do dia — mesmo layout da planilha usada hoje: Nº, Carga, Rota, Tipo de Operação, Faturado, Status de Carregamento (célula colorida), Placa, Transportadora, Tipo de Veículo, Peso(ton), Compartilhada?, Entregas, Ganchos.</div>
+      <div class="card-sub">Sequenciamento de carregamento do dia — mesmo layout da planilha usada hoje: Nº, Carga, Rota, Tipo de Operação, Faturado, Status de Carregamento (célula colorida), Placa, Transportadora, Tipo de Veículo, Peso(ton), Paletizada, Entregas, Ganchos.</div>
       <button class="btn btn-primary" onclick="exportarPdfOperacional()">🖨️ Gerar PDF Operacional</button>
     </div>
     <div class="card">
@@ -499,12 +515,6 @@
       <label>Setor</label>
       <select id="login-setor">
         <option>Logística</option><option>Portaria</option><option>Expedição</option><option>Faturamento</option>
-      </select>
-    </div>
-    <div class="form-group" style="margin-bottom:10px">
-      <label>Turno</label>
-      <select id="login-turno">
-        <option>Manhã (06h–14h)</option><option>Tarde (14h–22h)</option><option>Noite (22h–06h)</option>
       </select>
     </div>
     <div class="card-sub"><strong>Você verá apenas as abas do setor escolhido.</strong> Logística abre Programação, Expedição, Indicadores, Cadastros e Relatórios; Portaria abre Portaria; Expedição abre Expedição; Faturamento abre Faturamento. Torre de Controle e Histórico ficam liberados para todos. Para operar outro posto (cobertura de turno, por exemplo), use <strong>Trocar usuário</strong> no topo e entre com o setor correspondente.</div>
@@ -548,7 +558,7 @@
         <label>Rota</label>
         <select id="completar-rota" style="margin-bottom:10px"></select>
         <label>Tipo de Operação</label>
-        <select id="completar-praonde" onchange="atualizarPreviewCompartilhada('completar-praonde','completar-compartilhada-preview')">
+        <select id="completar-praonde">
           <option value="FROTA PROPRIA">FROTA PRÓPRIA</option>
           <option value="CROSS-DOCKING">CROSS-DOCKING</option>
           <option value="DEDICADA">DEDICADA</option>
@@ -556,8 +566,8 @@
         </select>
       </div>
       <div class="form-group">
-        <label>Compartilhada? <span class="hint">(calculado)</span></label>
-        <div class="readonly-pill" id="completar-compartilhada-preview">Não</div>
+        <label>Paletizada?</label>
+        <select id="completar-paletizada" style="margin-bottom:10px"><option>Não</option><option>Sim</option></select>
       </div>
       <div class="form-group"><label>Qtd. Ganchos <span class="hint">0 = Liso</span></label><input type="number" id="completar-ganchos" min="0" step="1" value="0"></div>
       <div class="form-group"><label>Qtd. Entregas</label><input type="number" id="completar-entregas" min="1" step="1" value="1"></div>
