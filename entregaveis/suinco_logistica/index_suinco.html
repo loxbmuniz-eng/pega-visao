@@ -150,10 +150,22 @@
       <div class="flex-end"><button class="btn btn-primary" onclick="criarCargaProgramadaUI()">➕ Criar Carga (Aguardando Veículo)</button></div>
     </div>
 
+    <!-- A Fila de Programados vem antes: é o que a Logística consulta o dia
+         inteiro. O Encerramento do Ciclo desceu para o fim da aba — é ação
+         irreversível e de uma vez por dia, não merece disputar espaço com a
+         fila no alto da tela. -->
     <div class="card">
-      <div class="card-title"><span class="icon">🚀</span> Encerramento do Ciclo</div>
-      <div class="card-sub">Fecha o dia: dispara o fluxo do Power Automate que cria as pastas <code>/Ano/Mês/Dia/</code>, arquiva o movimento e prepara a lista operacional para o próximo turno. <strong>Ação irreversível</strong> — pede confirmação antes, e nada é apagado do painel se o arquivamento falhar.</div>
-      <div class="flex-end"><button class="btn btn-danger" onclick="encerrarCicloUI()">🚀 Encerrar e Arquivar Ciclo</button></div>
+      <div class="card-title"><span class="icon">🔢</span> Fila de Programados</div>
+      <div class="gap8" style="margin-bottom:12px">
+        <button class="btn btn-sec btn-sm" onclick="reordenarPorSequenciaUI()">↕️ Reordenar por Sequência</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Seq.</th><th>Nº Carga</th><th>Placa</th><th>Transportadora</th><th>Cliente</th><th>Destino</th><th>Rota</th><th>Tipo de Operação</th><th>Ganchos</th><th class="no-print">Ação</th></tr></thead>
+          <tbody id="prog-fila-tbody"></tbody>
+        </table>
+      </div>
+      <div class="empty-state" id="prog-fila-empty" hidden>Nenhuma carga programada aguardando chegada.</div>
     </div>
 
     <div class="card">
@@ -169,17 +181,9 @@
     </div>
 
     <div class="card">
-      <div class="card-title"><span class="icon">🔢</span> Fila de Programados</div>
-      <div class="gap8" style="margin-bottom:12px">
-        <button class="btn btn-sec btn-sm" onclick="reordenarPorSequenciaUI()">↕️ Reordenar por Sequência</button>
-      </div>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>Seq.</th><th>Nº Carga</th><th>Placa</th><th>Transportadora</th><th>Cliente</th><th>Destino</th><th>Rota</th><th>Tipo de Operação</th><th>Ganchos</th><th class="no-print">Ação</th></tr></thead>
-          <tbody id="prog-fila-tbody"></tbody>
-        </table>
-      </div>
-      <div class="empty-state" id="prog-fila-empty" hidden>Nenhuma carga programada aguardando chegada.</div>
+      <div class="card-title"><span class="icon">🚀</span> Encerramento do Ciclo</div>
+      <div class="card-sub">Fecha o dia: dispara o fluxo do Power Automate que cria as pastas <code>/Ano/Mês/Dia/</code>, arquiva o movimento e prepara a lista operacional para o próximo turno. <strong>Ação irreversível</strong> — pede confirmação antes, e nada é apagado do painel se o arquivamento falhar.</div>
+      <div class="flex-end"><button class="btn btn-danger" onclick="encerrarCicloUI()">🚀 Encerrar e Arquivar Ciclo</button></div>
     </div>
   </div>
 
