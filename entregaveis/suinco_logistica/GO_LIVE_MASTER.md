@@ -12,8 +12,9 @@ Playbook de implantação e manutenção. Atualizado a cada etapa.
 | Fase | Estado |
 |---|---|
 | 1 — Análise do projeto existente | ✅ concluída |
-| 2 — Revisão de arquitetura | ⏳ aguardando confirmação |
-| 3 a 27 | ⬜ |
+| 2 — Revisão de arquitetura + schema | ✅ concluída e **validada em PostgreSQL 16** |
+| 3 — Revisão de frontend | ⏳ em andamento |
+| 4 a 27 | ⬜ |
 
 ---
 
@@ -213,3 +214,131 @@ vocês e eu adapto.
 estratégia de autenticação e desenho das tabelas. Começa assim que os itens 1 a
 4 acima estiverem respondidos — exceto o item 1, que só bloqueia a FASE 5
 (banco), então dá para adiantar a FASE 2 sem ele.
+
+
+---
+
+# FASE 2 — Arquitetura e schema do banco
+
+## 2.1. O conflito do Power BI, resolvido sem depender de resposta
+
+Havia duas nomenclaturas para os mesmos dados e escolher errado quebraria o
+relatório. A solução não é escolher:
+
+- **Tabelas** usam a nomenclatura das Listas: `fact_viagens`,
+  `fact_statusfrota`, `dim_veiculos`, `log_eventos`.
+- **Views** reproduzem **exatamente** os cabeçalhos do export CSV atual:
+  `vw_dim_carga`, `vw_fact_movimentacoes`, `vw_dim_frota`,
+  `vw_dim_transportadora`, `vw_dim_status`.
+
+O Power BI conecta direto no PostgreSQL e lê **qualquer uma das duas**. Nenhuma
+medida existente precisa ser refeita, e a decisão pode ser tomada depois sem
+custo.
+
+Duas views novas, que antes não existiam em lugar nenhum:
+
+- **`vw_dim_rota`** — as 32 rotas viram dimensão consultável.
+- **`vw_tempos_por_etapa`** — minutos que cada carga passou em cada etapa,
+  calculado no banco com função de janela. É a **base dos indicadores de
+  gargalo**: antes esse cálculo só existia dentro do navegador e não estava
+  disponível para o BI.
+
+## 2.2. Decisões de schema — e o porquê de cada uma
+
+**Identificador de negócio em TEXTO, não `SERIAL`.** O painel grava offline e
+sincroniza depois; o id precisa existir **antes** de o servidor ver o registro.
+Um `SERIAL` impediria a fila offline de funcionar.
+
+**Coluna `versao` com gatilho.** Incrementa a cada gravação. Permite **bloqueio
+otimista**: o cliente envia a versão que leu e o servidor recusa se já mudou.
+Isso substitui o "última escrita vence" da versão SharePoint, onde não havia
+como sequer *detectar* o conflito. É um ganho concreto da migração.
+
+**`CHECK` replicando a máquina de estados.** Não valida a transição — isso é da
+aplicação — mas garante que nenhum status inventado entre na tabela, inclusive
+por script ou carga manual. Defesa em profundidade.
+
+**Setor validado no servidor.** Na versão anterior o setor vinha do
+`localStorage` e o operador podia assumir qualquer um editando o navegador
+(achado MÉDIA da auditoria). Aqui ele vive em `operadores` e a API decide.
+**Este é o achado de segurança que a migração resolve de graça.**
+
+**Índice parcial para cargas em aberto.** É a consulta de toda tela do painel;
+o índice cobre só as não concluídas, que são centenas, não o histórico inteiro.
+
+**`log_eventos` sem FK para `carga_id`.** Deliberado: o log precisa sobreviver
+mesmo que a carga seja removida. Log que desaparece junto com o registro não
+serve para auditoria.
+
+## 2.3. Validação executada
+
+O schema **não foi só escrito — foi aplicado e testado** em PostgreSQL 16:
+
+```
+✅ migration aplica limpa, em transação única
+✅ gatilho incrementa versao de 1 → 2 e atualiza o timestamp no UPDATE
+✅ CHECK recusa status inventado
+     ERROR: violates check constraint "fact_viagens_status_atual_check"
+✅ FK recusa rota inexistente
+     ERROR: Key (rota_codigo)=(999) is not present in table "dim_rotas"
+✅ vw_dim_carga devolve os cabeçalhos que o Power BI já consome
+✅ vw_tempos_por_etapa calcula corretamente (35 min por etapa no cenário)
+```
+
+## 2.4. Contrato da API
+
+Endpoints, todos sob `api.embarquesuinco.com.br`:
+
+| Método | Rota | Papel |
+|---|---|---|
+| `POST` | `/auth/login` | Devolve JWT com id, nome e **setor** |
+| `GET` | `/api/estado?desde=` | Carga inicial e leitura incremental |
+| `POST` | `/api/cargas` | Cria carga (aplica a trava de frota) |
+| `PATCH` | `/api/cargas/:id` | Atualiza — exige `versao` para o bloqueio otimista |
+| `POST` | `/api/movimentacoes` | Registra mudança de status (append) |
+| `GET` | `/api/frota` | Cadastro de frota |
+| `GET` | `/api/rotas` | Rotas |
+| `GET` | `/bi/:view` | Export para o Power BI |
+| `GET` | `/health` | Monitoramento |
+
+**Regra que não pode ser afrouxada:** a transição de status é validada **no
+servidor**, não só no cliente. Hoje a máquina de estados vive no navegador; com
+API pública, quem tiver o token pode chamar direto.
+
+## 2.5. Eventos Socket.IO
+
+| Evento | Direção | Conteúdo |
+|---|---|---|
+| `carga:criada` | servidor → clientes | a carga inteira |
+| `carga:atualizada` | servidor → clientes | a carga inteira |
+| `movimentacao:nova` | servidor → clientes | o evento de status |
+| `frota:atualizada` | servidor → clientes | aviso de recarregar |
+
+**Socket.IO é otimização, não a fonte da verdade.** Se a conexão cair, o painel
+volta para a consulta periódica — o mesmo mecanismo já testado com 10 usuários.
+Nenhum dado depende do socket estar de pé; ele só reduz a latência de 15 s para
+imediata.
+
+## 2.6. O que a migração resolve dos achados anteriores
+
+| Achado | Antes | Com o backend |
+|---|---|---|
+| Setor forjável pelo cliente | MÉDIA, sem solução | ✅ validado no servidor |
+| Senha em texto puro | MÉDIA, sem solução | ✅ hash no banco |
+| Conflito sem detecção | "última escrita vence" | ✅ bloqueio otimista por versão |
+| Limite de 5.000 itens | mitigado por projeto | ✅ deixa de existir |
+| Latência de 15 s | limite da plataforma | ✅ imediata |
+
+## O que eu fiz nesta fase
+
+- Schema completo em `backend/migrations/001_schema.sql`, aplicado e testado.
+- Resolução do conflito de nomenclatura via views — sem depender de resposta.
+- Duas views novas: dimensão de rotas e tempos por etapa.
+- Contrato de API e eventos de tempo real definidos.
+- Bloqueio otimista projetado, resolvendo limitação conhecida.
+
+## Próxima etapa
+
+**FASE 3 — Frontend.** Escrever `suinco-api.js` substituindo
+`suinco-sharepoint.js`, preservando os 7 comportamentos do contrato (§1.3), e
+adaptar as 10 baterias de teste para apontar ao backend novo.
