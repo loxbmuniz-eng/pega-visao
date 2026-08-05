@@ -1842,9 +1842,9 @@ function exportarPdfExecutivo(){
         <div class="stat-box"><div class="stat-num">${abertas.filter(c=>c.aguardandoCarga).length}</div><div class="stat-label">Aguardando Carga</div></div>
       </div>
 
-      ${blocoDistribuicaoStatus(distAbertas, abertas.length,
+      ${painelStatusHorizontal(distAbertas, abertas.length,
         'Cargas em aberto por status',
-        'Onde está parada, agora, cada carga que ainda não saiu. Os 6 status aparecem sempre — inclusive os zerados, porque etapa vazia também é informação.')}
+        'Onde está parada, agora, cada carga que ainda não saiu. Leia da esquerda para a direita: é o caminho do caminhão pelo pátio, e um acúmulo mostra onde a fila está se formando.')}
 
       ${blocoDistribuicaoStatus(distHoje, concluidasHoje.length,
         'Cargas concluídas',
@@ -2479,4 +2479,46 @@ function blocoGargalosPdf(cargas){
   return conteudo || (tituloSecaoPdf('Gargalos e Pontos Críticos',
     'Leitura automática do período.') +
     `<div class="print-vazio">Nenhum gargalo detectado — nenhuma carga passou da meta de ${fmtDuracao(g.meta)} em pátio.</div>`);
+}
+
+/* Painel de status na horizontal: um status por coluna, o número embaixo.
+
+   Substitui a tabela vertical de 5 colunas (Status, Setor, Cargas, %,
+   barra) que ocupava meia página para dizer seis números. O gestor lê "onde
+   está parado o quê" de uma olhada, sem percorrer linha a linha.
+
+   A ordem é a do fluxo, não a do volume: ler da esquerda para a direita é
+   percorrer o caminho do caminhão pelo pátio, e um acúmulo numa coluna
+   mostra em que etapa a fila está se formando. */
+function painelStatusHorizontal(dist, total, titulo, explicacao){
+  /* "Seguiu Viagem" fora: é o status de saída, então uma carga EM ABERTO
+     nunca está nele. A coluna ficaria zerada para sempre — o mesmo ruído
+     que acabamos de remover do resto do relatório. */
+  dist = dist.filter(d => d.status !== 'Seguiu Viagem');
+
+  const colunas = dist.map(d=>{
+    const vazio = d.qtd === 0;
+    return `
+      <td class="ps-cel${vazio ? ' ps-vazio' : ''}"
+          style="border-top:4px solid ${d.cor.fundo}">
+        <div class="ps-num">${d.qtd}</div>
+        <div class="ps-pct">${total && !vazio ? d.pct + '%' : '&nbsp;'}</div>
+      </td>`;
+  }).join('');
+
+  const cabecalhos = dist.map(d=>`
+      <th class="ps-th" style="background:${d.cor.fundo};color:${d.cor.texto}">
+        ${esc(d.status)}
+      </th>`).join('');
+
+  return tituloSecaoPdf(titulo, explicacao) +
+    `<table class="painel-status">
+      <thead><tr>${cabecalhos}<th class="ps-th ps-total-th">Total</th></tr></thead>
+      <tbody><tr>${colunas}
+        <td class="ps-cel ps-total-cel">
+          <div class="ps-num">${total}</div>
+          <div class="ps-pct">${total ? '100%' : '&nbsp;'}</div>
+        </td>
+      </tr></tbody>
+    </table>`;
 }
