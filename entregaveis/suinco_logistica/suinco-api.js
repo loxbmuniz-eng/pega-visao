@@ -573,6 +573,26 @@ const SuincoSharePoint = (function () {
     window.addEventListener('offline', () => mudarEstado('offline'));
   }
 
+  /* ---------------------------------------------------------------
+     Operadores — usado só pela aba Usuários (Administração)
+     ---------------------------------------------------------------
+     Estas quatro funções NÃO passam pela fila offline de propósito.
+     Criar usuário sem confirmação do servidor daria a impressão de que a
+     pessoa já pode entrar, e ela não poderia — pior que falhar na hora. */
+  function listarOperadores() {
+    return chamar('/api/operadores');
+  }
+
+  function criarOperador(dados) {
+    return chamar('/api/operadores', { metodo: 'POST', corpo: dados });
+  }
+
+  function atualizarOperador(id, campos) {
+    return chamar(`/api/operadores/${encodeURIComponent(id)}`, {
+      metodo: 'PATCH', corpo: campos,
+    });
+  }
+
   /* O encerramento do ciclo virou responsabilidade do servidor (o histórico
      fica no banco, não em pastas). A função continua para app.js não quebrar. */
   async function arquivarDia(resumo, operador) {
@@ -586,6 +606,7 @@ const SuincoSharePoint = (function () {
     login, sair,
     push, upsert, mudarStatus,
     pull, pullTudo, drenarFila, pendentes,
+    listarOperadores, criarOperador, atualizarOperador,
     sincronizarAgora, iniciarSincroniaPeriodica, pararSincronia, ultimaSincronia,
     arquivarDia,
   };

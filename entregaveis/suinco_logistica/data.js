@@ -249,11 +249,27 @@ const STATUS_ORDEM_EXPORT = STATUS_FLOW.slice();
 // arquivo pode contornar. Controle de acesso real só existe com SharePoint +
 // SSO — ver RELATORIO_TI_HOSPEDAGEM.md. O que garante rastreabilidade é a
 // trilha de auditoria: toda movimentação grava operador e setor.
+/* Logística e Administração são papéis de ACESSO TOTAL à operação.
+
+   A Logística cobre qualquer posto quando falta gente — troca de turno,
+   almoço, alguém que faltou. Escondendo a aba da Portaria dela, o painel
+   obrigava a "trocar usuário" para fazer algo que a pessoa já tem
+   autoridade para fazer, e isso empurra para o pior desfecho possível:
+   compartilhar a senha do porteiro.
+
+   A diferença entre as duas está numa coisa só: a aba Usuários. Criar
+   acesso não é operar o pátio — é decidir quem entra. Fica com a
+   Administração, como definido desde o início. */
+const ABAS_OPERACIONAIS = ['torre','programacao','portaria','expedicao',
+                           'faturamento','indicadores','cadastros',
+                           'historico','relatorios'];
+
 const SETOR_PERMISSOES = {
-  'Logística':    ['torre','programacao','expedicao','indicadores','cadastros','historico','relatorios'],
+  'Logística':    ABAS_OPERACIONAIS.slice(),
   'Portaria':     ['torre','portaria','historico'],
   'Expedição':    ['torre','expedicao','historico'],
-  'Faturamento':  ['torre','faturamento','historico']
+  'Faturamento':  ['torre','faturamento','historico'],
+  'Administração':ABAS_OPERACIONAIS.concat(['usuarios'])
 };
 
 // Função de cada aba, exibida no topo dela. Serve para quem abre o painel pela
@@ -267,7 +283,8 @@ const TAB_FUNCAO = {
   indicadores: { setor:'Logística',    oque:'Analisar tempo médio por etapa, comparar períodos e ver o ranking de transportadoras.',            move:'Não altera nada — é somente leitura.' },
   cadastros:   { setor:'Logística',    oque:'Manter a base de Frota (placa → transportadora → tipo) e as transportadoras.',                 move:'Não altera cargas — alimenta a Programação.' },
   historico:   { setor:'Todos',        oque:'Consultar a trilha de auditoria: quem moveu qual carga, de qual status para qual, e quando.',      move:'Não altera nada — registro permanente.' },
-  relatorios:  { setor:'Logística',    oque:'Gerar o PDF operacional (para o pátio) e o executivo (para a gestão).',                            move:'Não altera nada — exporta o que já existe.' }
+  relatorios:  { setor:'Logística',    oque:'Gerar o PDF operacional (para o pátio) e o executivo (para a gestão).',                            move:'Não altera nada — exporta o que já existe.' },
+  usuarios:    { setor:'Administração', oque:'Criar, bloquear e redefinir senha dos operadores de todos os setores.',                            move:'Não altera cargas — define quem entra e o que cada um pode registrar.' }
 };
 
 const SETORES = Object.keys(SETOR_PERMISSOES);

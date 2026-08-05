@@ -412,6 +412,175 @@ describe('7. Export para o Power BI', () => {
 });
 
 /* ------------------------------------------------------------------ */
+describe('7b. Gestão de operadores (só Administração)', () => {
+  let tokenAdmin;
+  let idCriado;
+  const emailNovo = `novo_${Date.now()}@teste.local`;
+
+  before(async () => {
+    const hash = await bcrypt.hash(SENHA, 4);
+    await pool.query(
+      `INSERT INTO operadores (email, nome, setor, senha_hash) VALUES ($1,$2,$3,$4)
+       ON CONFLICT (email) DO UPDATE SET setor = EXCLUDED.setor, ativo = TRUE`,
+      ['chefe@teste.local', 'Chefe', 'Administração', hash]
+    );
+    const r = await req('/auth/login', {
+      metodo: 'POST', corpo: { email: 'chefe@teste.local', senha: SENHA },
+    });
+    tokenAdmin = r.json.token;
+  });
+
+  test('Logística NÃO lista operadores', async () => {
+    const r = await req('/api/operadores', { token: tokens['Logística'] });
+    assert.equal(r.status, 403, 'criar acesso não é operar o pátio');
+  });
+
+  test('Administração lista', async () => {
+    const r = await req('/api/operadores', { token: tokenAdmin });
+    assert.equal(r.status, 200);
+    assert.ok(Array.isArray(r.json));
+  });
+
+  test('a listagem NUNCA devolve o hash da senha', async () => {
+    const r = await req('/api/operadores', { token: tokenAdmin });
+    // Mesmo sendo hash, exportá-lo permite ataque de dicionário offline.
+    assert.ok(!/senha|hash|\$2[aby]\$/i.test(r.texto), 'vazou material de senha');
+  });
+
+  test('cria operador e ele consegue entrar', async () => {
+    const r = await req('/api/operadores', {
+      metodo: 'POST', token: tokenAdmin,
+      corpo: { email: emailNovo, nome: 'Novo Porteiro', setor: 'Portaria', senha: 'senha-inicial-1' },
+    });
+    assert.equal(r.status, 201, r.texto);
+    idCriado = r.json.id;
+
+    const login = await req('/auth/login', {
+      metodo: 'POST', corpo: { email: emailNovo, senha: 'senha-inicial-1' },
+    });
+    assert.equal(login.status, 200, 'de nada adianta criar se a pessoa não entra');
+    assert.equal(login.json.operador.setor, 'Portaria');
+  });
+
+  test('e-mail duplicado é recusado', async () => {
+    const r = await req('/api/operadores', {
+      metodo: 'POST', token: tokenAdmin,
+      corpo: { email: emailNovo, nome: 'Outro', setor: 'Portaria', senha: 'senha-inicial-1' },
+    });
+    assert.equal(r.status, 409);
+    assert.equal(r.json.codigo, 'EMAIL_DUPLICADO');
+  });
+
+  test('senha curta é recusada', async () => {
+    const r = await req('/api/operadores', {
+      metodo: 'POST', token: tokenAdmin,
+      corpo: { email: `curta_${Date.now()}@teste.local`, nome: 'X', setor: 'Portaria', senha: '123' },
+    });
+    assert.equal(r.status, 400);
+    assert.equal(r.json.codigo, 'SENHA_CURTA');
+  });
+
+  test('bloquear impede o login na hora', async () => {
+    const r = await req(`/api/operadores/${idCriado}`, {
+      metodo: 'PATCH', token: tokenAdmin, corpo: { ativo: false },
+    });
+    assert.equal(r.status, 200);
+    const login = await req('/auth/login', {
+      metodo: 'POST', corpo: { email: emailNovo, senha: 'senha-inicial-1' },
+    });
+    assert.equal(login.status, 401);
+  });
+
+  test('reativar devolve o acesso', async () => {
+    await req(`/api/operadores/${idCriado}`, {
+      metodo: 'PATCH', token: tokenAdmin, corpo: { ativo: true },
+    });
+    const login = await req('/auth/login', {
+      metodo: 'POST', corpo: { email: emailNovo, senha: 'senha-inicial-1' },
+    });
+    assert.equal(login.status, 200);
+  });
+
+  test('redefinir senha invalida a anterior', async () => {
+    await req(`/api/operadores/${idCriado}`, {
+      metodo: 'PATCH', token: tokenAdmin, corpo: { senha: 'outra-senha-999' },
+    });
+    const velha = await req('/auth/login', {
+      metodo: 'POST', corpo: { email: emailNovo, senha: 'senha-inicial-1' },
+    });
+    const nova = await req('/auth/login', {
+      metodo: 'POST', corpo: { email: emailNovo, senha: 'outra-senha-999' },
+    });
+    assert.equal(velha.status, 401);
+    assert.equal(nova.status, 200);
+  });
+
+  test('o admin não consegue desativar a si mesmo', async () => {
+    const eu = await req('/auth/eu', { token: tokenAdmin });
+    const r = await req(`/api/operadores/${eu.json.operador.id}`, {
+      metodo: 'PATCH', token: tokenAdmin, corpo: { ativo: false },
+    });
+    // Sem esta trava o erro é irreversível pela própria interface: só
+    // voltaria por SSH, que é o que esta tela existe para evitar.
+    assert.equal(r.status, 409);
+    assert.equal(r.json.codigo, 'AUTO_DESATIVACAO');
+  });
+
+  test('o admin não consegue tirar a si mesmo da Administração', async () => {
+    const eu = await req('/auth/eu', { token: tokenAdmin });
+    const r = await req(`/api/operadores/${eu.json.operador.id}`, {
+      metodo: 'PATCH', token: tokenAdmin, corpo: { setor: 'Portaria' },
+    });
+    assert.equal(r.status, 409);
+    assert.equal(r.json.codigo, 'AUTO_REBAIXAMENTO');
+  });
+});
+
+/* ------------------------------------------------------------------ */
+describe('7c. Logística cobre todos os postos', () => {
+  let cargaId;
+
+  before(async () => {
+    const { rows } = await pool.query('SELECT placa FROM dim_veiculos OFFSET 30 LIMIT 1');
+    const r = await req('/api/cargas', {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { placa: rows[0].placa, numeroCarga: '95000' },
+    });
+    cargaId = r.json.id;
+  });
+
+  test('a Logística registra o fluxo inteiro sozinha', async () => {
+    /* Decisão do gestor: a Logística cobre qualquer posto quando falta
+       gente. Recusar aqui empurraria para pedir a senha do porteiro
+       emprestada — e aí o log diria "Portaria" quando foi a Logística. */
+    for (const status of ['Aguardando Embarque', 'Embarque Iniciado',
+      'Embarque Finalizado', 'Faturado', 'Seguiu Viagem']) {
+      const r = await req(`/api/cargas/${cargaId}/status`, {
+        metodo: 'POST', token: tokens['Logística'], corpo: { status },
+      });
+      assert.equal(r.status, 200, `Logística → ${status}: ${r.texto}`);
+    }
+  });
+
+  test('e o log registra Logística, não o setor dono do passo', async () => {
+    const { rows } = await pool.query(
+      'SELECT DISTINCT setor FROM fact_statusfrota WHERE carga_id = $1', [cargaId]
+    );
+    assert.deepEqual(rows.map((r) => r.setor), ['Logística'],
+      'a rastreabilidade tem que dizer quem fez de verdade');
+  });
+
+  test('a Portaria continua SEM poder programar carga', async () => {
+    const { rows } = await pool.query('SELECT placa FROM dim_veiculos OFFSET 31 LIMIT 1');
+    const r = await req('/api/cargas', {
+      metodo: 'POST', token: tokens['Portaria'],
+      corpo: { placa: rows[0].placa, numeroCarga: '95001' },
+    });
+    assert.equal(r.status, 403, 'acesso total é da Logística, não de todo mundo');
+  });
+});
+
+/* ------------------------------------------------------------------ */
 describe('8. Superfície de ataque', () => {
   test('origem não autorizada é barrada no CORS', async () => {
     const r = await req('/health', { cabecalhos: { origin: 'https://site-do-atacante.com' } });

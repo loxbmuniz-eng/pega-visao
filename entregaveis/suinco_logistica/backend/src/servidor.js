@@ -14,6 +14,7 @@ import { rotasAuth } from './rotas/auth.js';
 import { rotasEstado } from './rotas/estado.js';
 import { rotasCargas } from './rotas/cargas.js';
 import { rotasCadastros } from './rotas/cadastros.js';
+import { rotasOperadores } from './rotas/operadores.js';
 import { rotasBI } from './rotas/bi.js';
 
 export function criarApp() {
@@ -74,6 +75,7 @@ export function criarApp() {
   app.use('/api', rotasEstado);
   app.use('/api', rotasCargas);
   app.use('/api', rotasCadastros);
+  app.use('/api', rotasOperadores);
   app.use('/bi', rotasBI);
 
   app.use((req, res) => {
