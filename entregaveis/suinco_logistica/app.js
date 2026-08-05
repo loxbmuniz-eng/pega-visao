@@ -1594,12 +1594,13 @@ function exportarPdfOperacional(){
   const agora = new Date();
   const concluidas = lista.filter(c=>c.status==='Seguiu Viagem').length;
   el.innerHTML = `
-    <div class="print-page">
-      <div class="print-header">
-        <img src="assets/logo_suinco.png" alt="Suinco">
-        <div><h1>PDF Operacional — Sequenciamento de Carregamento</h1>
-        <div class="meta">Gerado em ${fmtDataHora(agora.toISOString())} · ${rotuloPeriodoRelatorio()} · ${lista.length} carga(s) · ${concluidas} concluída(s)</div></div>
-      </div>
+    <div class="print-page doc-denso">
+      ${cabecalhoDocumento({
+        titulo: 'Sequenciamento de Carregamento',
+        subtitulo: 'Programação do dia — ordem de montagem e acompanhamento no pátio',
+        contagem: lista.length,
+        extra: `<strong>Concluídas:</strong> ${concluidas} de ${lista.length}`,
+      })}
       <!-- A legenda de cores saiu daqui também (05/08/2026).
 
            Eu tinha defendido mantê-la, porque a foto vai para o grupo do
@@ -1623,10 +1624,9 @@ function exportarPdfOperacional(){
            quem mantém o sistema, não a quem lê a folha no pátio. O que
            sobra é a única coisa que o leitor precisa saber e não consegue
            deduzir olhando a tabela. -->
-      <div class="print-legenda">
-        Todas as cargas da programação aparecem, em qualquer status — as concluídas
-        continuam na lista para o acompanhamento do dia inteiro.
-      </div>
+      ${rodapeDocumento(
+        'Todas as cargas da programação aparecem, em qualquer status — as concluídas ' +
+        'continuam na lista para o acompanhamento do dia inteiro.')}
     </div>`;
   imprimirContainer(el, 'Relatorio-Operacional');
 }
@@ -1651,6 +1651,61 @@ function exportarCsvPowerBI(){
     setTimeout(()=>baixarArquivoTexto(f.nome, f.conteudo), i*250);
   });
   notify(`Exportando ${arquivos.length} arquivos CSV (fato/dimensão) para Power BI…`, 'success');
+}
+
+/* =====================================================================
+   PADRÃO DE DOCUMENTO DOS RELATÓRIOS
+   =====================================================================
+
+   Os três relatórios passam a ter o mesmo cabeçalho e o mesmo rodapé. Isso
+   não é estética: documento logístico circula fora do sistema — vai para o
+   grupo, para o e-mail da transportadora, para a pasta do faturamento — e
+   precisa se identificar sozinho. Quem recebe uma folha solta tem que
+   saber o que é, de quando, de que recorte e quem gerou, sem perguntar.
+
+   DENSIDADE POR RELATÓRIO. O Operacional tem 13 colunas e só cabe em A4
+   deitado com letra pequena; o de Fretes tem 3 e sobra papel. Usar a mesma
+   densidade nos dois — que era o caso — deixa o de Fretes ilegível para
+   economizar espaço que ninguém estava usando.
+
+     doc-denso   → Operacional: A4 deitado, 13 colunas
+     doc-normal  → Executivo: A4 deitado, blocos e tabelas médias
+     doc-amplo   → Fretes: A4 em pé, 3 colunas, leitura confortável
+*/
+function cabecalhoDocumento({ titulo, subtitulo, contagem, extra }) {
+  const agora = new Date();
+  const operador = (DB.operador && DB.operador.nome) || '—';
+  const setor = (DB.operador && DB.operador.setor) || '';
+
+  const meta = [
+    `<strong>Período:</strong> ${esc(rotuloPeriodoRelatorio())}`,
+    contagem !== undefined ? `<strong>Registros:</strong> ${contagem}` : null,
+    `<strong>Emitido em:</strong> ${esc(fmtDataHora(agora.toISOString()))}`,
+    // Quem gerou entra por rastreabilidade: se dois relatórios do mesmo dia
+    // divergirem, é a primeira pergunta que alguém faz.
+    `<strong>Emitido por:</strong> ${esc(operador)}${setor ? ' · ' + esc(setor) : ''}`,
+    extra || null,
+  ].filter(Boolean);
+
+  return `
+    <div class="doc-cabecalho">
+      <img src="assets/logo_suinco.png" alt="Suinco" class="doc-logo">
+      <div class="doc-identidade">
+        <div class="doc-empresa">SUINCO — Cooperativa Agroindustrial</div>
+        <h1 class="doc-titulo">${esc(titulo)}</h1>
+        ${subtitulo ? `<div class="doc-subtitulo">${esc(subtitulo)}</div>` : ''}
+      </div>
+    </div>
+    <div class="doc-meta">${meta.map(m=>`<span>${m}</span>`).join('')}</div>`;
+}
+
+function rodapeDocumento(nota){
+  return `<div class="doc-rodape">
+      ${nota ? `<div class="doc-nota">${nota}</div>` : ''}
+      <div class="doc-assinatura">
+        Documento gerado pelo Painel Logístico Suinco · embarquesuinco.com.br
+      </div>
+    </div>`;
 }
 
 /* Título de seção do PDF — mesma marcação repetida várias vezes no executivo. */
@@ -1814,15 +1869,14 @@ function exportarPdfExecutivo(){
   const distAbertas = distribuicaoPorStatus(abertas);
   const distHoje = distribuicaoPorStatus(concluidasHoje);
 
-  const dataExt = agora.toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long',year:'numeric'});
-
   el.innerHTML = `
-    <div class="print-page">
-      <div class="print-header">
-        <img src="assets/logo_suinco.png" alt="Suinco">
-        <div><h1>Relatório Executivo — Painel Logístico</h1>
-        <div class="meta">${dataExt} · gerado às ${agora.toLocaleTimeString('pt-BR')} · ${rotuloPeriodoRelatorio()}</div></div>
-      </div>
+    <div class="print-page doc-normal">
+      ${cabecalhoDocumento({
+        titulo: 'Relatório Executivo',
+        subtitulo: 'Controle de pátio — indicadores, gargalos e pontos críticos',
+        contagem: doPeriodo.length,
+        extra: `<strong>Em aberto:</strong> ${abertas.length} · <strong>Concluídas:</strong> ${concluidasTodas.length}`,
+      })}
 
       <!-- A legenda de cores saiu daqui (05/08/2026).
 
@@ -1866,11 +1920,10 @@ function exportarPdfExecutivo(){
         'Mesma leitura para o que ainda não saiu: as colunas vazias à direita mostram em qual etapa cada carga está parada agora.')}
 
 
-      <div class="print-rodape">
-        Lead Time = da criação da carga até a saída. Tempo de Pátio = da chegada física até a saída.
-        "Hoje" = dia calendário, das 00:00 até a geração deste relatório.
-        Cargas em aberto: ${abertas.length} · Concluídas: ${concluidasTodas.length} · Lead time médio: ${fmtDuracao(nLead?Math.round(somaLead/nLead):null)}.
-      </div>
+      ${rodapeDocumento(
+        '<strong>Lead Time</strong> = da criação da carga até a saída do caminhão. ' +
+        '<strong>Tempo de Pátio</strong> = da chegada física até a saída. ' +
+        `Lead time médio no período: ${fmtDuracao(nLead?Math.round(somaLead/nLead):null)}.`)}
     </div>`;
   imprimirContainer(el, 'Relatorio-Executivo');
 }
@@ -2159,32 +2212,46 @@ function rodapeSomatorios(lista, colspanAntes, colunas){
    misturar controle de frete com acompanhamento de pátio produziria um
    relatório que não serve bem para nenhum dos dois. */
 function exportarPdfFretes(){
-  const el = document.getElementById('print-operacional');
+  /* Container PRÓPRIO, não o do Operacional.
+
+     Enquanto os dois dividiam o mesmo `#print-operacional`, este relatório
+     herdava a regra de impressão calibrada para 13 colunas em A4 deitado:
+     fonte de 7,6px. Com três colunas isso vira letra de bula, para
+     economizar um espaço que ninguém estava usando. */
+  const el = document.getElementById('print-fretes');
   const lista = cargasDoRelatorio();
   const dados = dadosAdministracaoFretes(lista);
 
+  const semObs = dados.filter(d=>!d.observacoes).length;
+
   const linhas = dados.map(d=>`<tr>
-      <td><strong>${esc(d.numeroCarga)}</strong></td>
-      <td>${esc(d.rota)}</td>
-      <td>${esc(d.observacoes) || '<span style="color:#999">—</span>'}</td>
+      <td class="col-carga">${esc(d.numeroCarga)}</td>
+      <td class="col-rota">${esc(d.rota)}</td>
+      <td class="col-obs">${d.observacoes
+        ? esc(d.observacoes)
+        : '<span class="obs-pendente">a preencher</span>'}</td>
     </tr>`).join('');
 
   el.innerHTML = `
-    <div class="print-page">
-      <div class="print-header">
-        <img src="assets/logo_suinco.png" alt="Suinco">
-        <div><h1>Administração de Fretes</h1>
-        <div class="meta">Gerado em ${fmtDataHora(new Date().toISOString())} · ${rotuloPeriodoRelatorio()} · ${dados.length} carga(s)</div></div>
-      </div>
+    <div class="print-page doc-amplo">
+      ${cabecalhoDocumento({
+        titulo: 'Administração de Fretes',
+        subtitulo: 'Controle administrativo — valor, negociação e instruções por carga',
+        contagem: dados.length,
+        extra: semObs ? `<strong>Sem registro:</strong> ${semObs} de ${dados.length}` : null,
+      })}
       <table class="tab-fretes">
-        <thead><tr><th style="width:18%">Número da Carga</th><th style="width:27%">Rota</th><th>Observações</th></tr></thead>
+        <thead><tr>
+          <th class="col-carga">Número da Carga</th>
+          <th class="col-rota">Rota</th>
+          <th class="col-obs">Observações</th>
+        </tr></thead>
         <tbody>${linhas || '<tr><td colspan="3" class="text-center text-dim">Nenhuma carga no período selecionado.</td></tr>'}</tbody>
       </table>
-      <div class="print-legenda">
-        O campo <strong>Observações</strong> é onde a administração registra valor do frete,
-        negociação e instruções. Linha em branco é carga sem registro administrativo — é ela
-        que precisa ser preenchida.
-      </div>
+      ${rodapeDocumento(
+        'O campo <strong>Observações</strong> é onde a administração registra valor do frete, ' +
+        'negociação e instruções. As linhas marcadas como <strong>a preencher</strong> são as ' +
+        'cargas ainda sem registro administrativo.')}
     </div>`;
   imprimirContainer(el, 'Administracao-de-Fretes');
 }
