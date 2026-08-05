@@ -142,7 +142,18 @@ def main():
         sys.exit(f'ERRO: esperava 1 script para app.js, encontrei {n_app}')
 
     # Nada pode sobrar apontando para arquivo externo, senão quebra offline.
-    sobras = re.findall(r'(?:src|href)="(?!data:|https?://|#)([^"]+)"', html)
+    #
+    # Exceção única: o manifest do PWA. Ele não pode ser embutido — o
+    # navegador exige um arquivo próprio para oferecer a instalação — e é
+    # opcional por construção: sem ele o painel funciona igual, só não vira
+    # ícone na tela inicial. Quem abre por duplo clique recebe um 404 que o
+    # navegador ignora em silêncio.
+    #
+    # O sw.js não aparece nesta checagem porque é registrado por JavaScript,
+    # não por src/href. Mesma lógica: opcional, e o registro está protegido.
+    OPCIONAIS = {'manifest.webmanifest'}
+    sobras = [s for s in re.findall(r'(?:src|href)="(?!data:|https?://|#)([^"]+)"', html)
+              if s not in OPCIONAIS]
     if sobras:
         sys.exit(f'ERRO: ainda há referências a arquivos externos: {sobras}')
 

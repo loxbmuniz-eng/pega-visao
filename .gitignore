@@ -1,3 +1,7 @@
 entregaveis/PEGA_VISAO_x_UP19_PROVISIONAMENTO.pdf
 __pycache__/
 .claude/worktrees/
+
+# Segredos do backend — nunca versionar
+entregaveis/suinco_logistica/backend/.env
+entregaveis/suinco_logistica/backend/node_modules/

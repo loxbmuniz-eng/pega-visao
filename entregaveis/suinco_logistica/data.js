@@ -279,6 +279,14 @@ let DB = {
   transportadoras: [],  // {id, nome}
   cargas: [],            // ver criarCargaProgramada/registrarChegadaPortaria
   movimentacoes: [],      // log — nunca editado, só append
+  /* Alterações de dado que NÃO são mudança de status (troca de placa, por
+     exemplo). Ficam separadas de `movimentacoes` de propósito: a linha do
+     tempo da carga mostra as 6 etapas do fluxo, e misturar "trocou a placa"
+     ali faria a timeline mentir sobre o que aconteceu com o caminhão.
+
+     Espelha a separação que o banco já faz entre fact_StatusFrota (etapas)
+     e LOG_EVENTOS (auditoria). Append-only, como o outro. */
+  alteracoes: [],
   operador: null,          // {nome, setor, turno} — placeholder até SSO
   dark: true
 };
@@ -801,6 +809,25 @@ function removerTransportadora(id){
    Cada linha carrega um SNAPSHOT de cliente/motorista/tipoVeiculo/
    qtdEntregas no momento da mudança — útil pro Fact_Movimentacoes do Power
    BI mesmo que esses campos mudem depois na carga. */
+/* Registra uma alteração de dado na trilha de auditoria. Responde perguntas
+   do tipo "quem trocou a placa dessa carga, e quando?" — que o histórico de
+   status sozinho não responde. */
+function registrarAlteracao({cargaId, placa, campo, de, para, operador, setor}){
+  if(!Array.isArray(DB.alteracoes)) DB.alteracoes = [];   // base antiga
+  DB.alteracoes.push({
+    id: uid('alt'),
+    timestamp: nowISO(),
+    cargaId, placa: normalizarPlaca(placa),
+    campo,
+    de: de ?? '',
+    para: para ?? '',
+    operador: operador || '(não identificado)',
+    setor: setor || '—'
+  });
+  // Sem save() aqui: quem chama grava junto com o resto da alteração, numa
+  // gravação só. Salvar duas vezes dispararia dois ciclos de sincronia.
+}
+
 function registrarMovimentacao({cargaId, placa, statusAnterior, statusNovo, operador, setor, cliente, motorista, tipoVeiculo, qtdEntregas}){
   DB.movimentacoes.push({
     id: uid('mov'),
@@ -1368,3 +1395,267 @@ function gerarArquivosCsvPowerBI(){
 
 /* ---------- INIT ---------- */
 SuincoStore.load();
+
+/* =====================================================================
+   ANÁLISE OPERACIONAL — metas, atrasos e gargalos
+   =====================================================================
+
+   Bloco novo (05/08/2026). Substitui o Ranking de Transportadoras e os
+   extremos "maior/menor tempo de pátio" por indicadores acionáveis: quem
+   está atrasando, quanto, e onde está o gargalo.
+
+   O QUE É "ATRASO" — decisão que precisou ser tomada
+   --------------------------------------------------
+   O sistema não tinha nenhuma noção de prazo: não havia hora prometida,
+   nem SLA por rota, nem janela de carregamento. Sem definir isso, "veículo
+   com maior atraso" não tem como ser calculado.
+
+   Definição adotada: uma carga está ATRASADA quando o tempo total em pátio
+   (chegada → saída) passa da META. A meta padrão é 3 horas — o número que
+   o gestor citou como objetivo. O atraso é o quanto passou disso.
+
+   É uma definição honesta e verificável com os dados que já existem, e é
+   configurável. Quando houver hora prometida por rota, esta é a única
+   função que muda. */
+
+const META_TEMPO_PATIO_MIN = 180;   // 3 h
+
+function metaTempoPatio(){
+  const salvo = Number(DB.config && DB.config.metaTempoPatioMin);
+  return Number.isFinite(salvo) && salvo > 0 ? salvo : META_TEMPO_PATIO_MIN;
+}
+
+/* Minutos acima da meta. Devolve null quando o tempo não é calculável
+   (carga ainda em andamento, ou sem registro de chegada) — null é
+   diferente de zero, e tratá-los igual inflaria a amostra com cargas que
+   simplesmente ainda não terminaram. */
+function atrasoDaCarga(carga){
+  const ind = indicadoresDaCarga(carga.id);
+  if(ind.tempoPatioTotal === null) return null;
+  const excesso = ind.tempoPatioTotal - metaTempoPatio();
+  return excesso > 0 ? excesso : 0;
+}
+
+/* ---------- FILTRO POR DATA DA PROGRAMAÇÃO ----------
+   "Data da programação" é quando a carga foi inserida no sistema
+   (criadoEm), não quando o caminhão chegou. É o que o gestor usa para
+   fechar o relatório de um dia específico. */
+function filtrarPorDataProgramacao(cargas, de, ate){
+  if(!de && !ate) return cargas.slice();
+  // A data final vira o fim do dia: quem digita 05/08 quer o dia 05
+  // inteiro, não até 00:00 dele.
+  const ini = de ? new Date(de + 'T00:00:00').getTime() : -Infinity;
+  const fim = ate ? new Date(ate + 'T23:59:59.999').getTime() : Infinity;
+  return cargas.filter(c=>{
+    const t = Date.parse(c.criadoEm || 0) || 0;
+    return t >= ini && t <= fim;
+  });
+}
+
+/* ---------- SOMATÓRIOS DE RODAPÉ (estilo Excel) ---------- */
+function somatoriosDaLista(cargas){
+  return cargas.reduce((acc,c)=>({
+    cargas: acc.cargas + 1,
+    pesoKg: acc.pesoKg + (Number(c.peso)||0),
+    entregas: acc.entregas + (c.qtdEntregas ?? 1),
+    ganchos: acc.ganchos + (Number(c.qtdGanchos)||0)
+  }), {cargas:0, pesoKg:0, entregas:0, ganchos:0});
+}
+
+/* ---------- RANKING DE VEÍCULOS COM MAIOR ATRASO ----------
+   Ordenado do maior para o menor tempo médio de atraso. Veículo sem
+   nenhum atraso não entra: a lista existe para mostrar onde agir, e
+   encher de linhas zeradas esconde justamente o que importa. */
+function rankingVeiculosAtraso(cargas){
+  const base = (cargas || DB.cargas).filter(c => c.placa);
+  const porPlaca = {};
+  base.forEach(c=>{
+    const atraso = atrasoDaCarga(c);
+    if(atraso === null) return;
+    const p = c.placa;
+    if(!porPlaca[p]) porPlaca[p] = {
+      placa:p, transportadora:c.transportadora || '—',
+      atrasos:0, somaAtraso:0, ultimoAtraso:null, totalCargas:0
+    };
+    const r = porPlaca[p];
+    r.totalCargas++;
+    if(atraso > 0){
+      r.atrasos++;
+      r.somaAtraso += atraso;
+      // "Seguiu Viagem" acontece uma vez por carga, então o primeiro
+      // registro é o único — não existe "último" diferente aqui.
+      const quando = primeiroTimestamp(c.id,'Seguiu Viagem') || c.atualizadoEm;
+      if(!r.ultimoAtraso || Date.parse(quando) > Date.parse(r.ultimoAtraso)) r.ultimoAtraso = quando;
+    }
+  });
+  return Object.values(porPlaca)
+    .filter(r => r.atrasos > 0)
+    .map(r => ({
+      placa: r.placa,
+      transportadora: r.transportadora,
+      atrasos: r.atrasos,
+      totalCargas: r.totalCargas,
+      tempoMedioAtraso: Math.round(r.somaAtraso / r.atrasos),
+      ultimoAtraso: r.ultimoAtraso
+    }))
+    .sort((a,b)=> b.tempoMedioAtraso - a.tempoMedioAtraso);
+}
+
+/* ---------- TEMPO MÉDIO DE PÁTIO ----------
+   Substitui os indicadores de maior/menor tempo. O extremo é anedota; a
+   média move decisão. Devolve também a amostra, porque média de duas
+   cargas não é média — e quem lê precisa saber disso. */
+function tempoMedioPatio(cargas){
+  const base = cargas || DB.cargas;
+  let soma = 0, n = 0, acimaDaMeta = 0;
+  base.forEach(c=>{
+    const ind = indicadoresDaCarga(c.id);
+    if(ind.tempoPatioTotal === null) return;
+    soma += ind.tempoPatioTotal;
+    n++;
+    if(ind.tempoPatioTotal > metaTempoPatio()) acimaDaMeta++;
+  });
+  return {
+    media: n ? Math.round(soma/n) : null,
+    amostra: n,
+    acimaDaMeta,
+    meta: metaTempoPatio(),
+    percentualAcima: n ? Math.round((acimaDaMeta/n)*100) : null
+  };
+}
+
+/* ---------- GARGALOS E PONTOS CRÍTICOS ----------
+   Uma função só, devolvendo tudo que a seção precisa. Cada item responde
+   uma pergunta que o gestor faz de manhã, e nada entra aqui sem responder
+   alguma — indicador que não muda decisão é ruído. */
+function analiseGargalos(cargas){
+  const base = cargas || DB.cargas;
+
+  // 1. Veículos com recorrência de atraso (2+ ocorrências).
+  //    Um atraso é acaso; dois viram padrão.
+  const veiculosRecorrentes = rankingVeiculosAtraso(base)
+    .filter(v => v.atrasos >= 2)
+    .slice(0, 10);
+
+  // 2. Tipo de operação com maior permanência média em pátio.
+  const porOperacao = {};
+  base.forEach(c=>{
+    const ind = indicadoresDaCarga(c.id);
+    if(ind.tempoPatioTotal === null) return;
+    const k = c.praOnde || '—';
+    if(!porOperacao[k]) porOperacao[k] = {operacao:k, soma:0, n:0};
+    porOperacao[k].soma += ind.tempoPatioTotal;
+    porOperacao[k].n++;
+  });
+  const operacoesMaiorPermanencia = Object.values(porOperacao)
+    .map(o => ({operacao:o.operacao, media: Math.round(o.soma/o.n), amostra:o.n}))
+    .sort((a,b)=> b.media - a.media);
+
+  // 3. Transportadoras com concentração de atraso. Informativo, sem
+  //    ranking principal — foi pedido explicitamente assim, e faz sentido:
+  //    culpar transportadora por atraso que é do pátio seria injusto.
+  const porTransp = {};
+  base.forEach(c=>{
+    const atraso = atrasoDaCarga(c);
+    if(atraso === null || !c.transportadora) return;
+    const k = c.transportadora;
+    if(!porTransp[k]) porTransp[k] = {transportadora:k, atrasadas:0, total:0};
+    porTransp[k].total++;
+    if(atraso > 0) porTransp[k].atrasadas++;
+  });
+  const transportadorasAtraso = Object.values(porTransp)
+    .filter(t => t.atrasadas > 0)
+    .map(t => ({...t, percentual: Math.round((t.atrasadas/t.total)*100)}))
+    .sort((a,b)=> b.atrasadas - a.atrasadas)
+    .slice(0, 8);
+
+  // 4. Horários de maior congestionamento — pela HORA DA CHEGADA, não da
+  //    programação. O congestionamento é físico: acontece quando os
+  //    caminhões entram no pátio, não quando alguém digitou a carga.
+  const porHora = {};
+  base.forEach(c=>{
+    const chegada = primeiroTimestamp(c.id,'Aguardando Embarque');
+    if(!chegada) return;
+    const h = new Date(chegada).getHours();
+    if(!porHora[h]) porHora[h] = {hora:h, chegadas:0, somaPatio:0, nPatio:0};
+    porHora[h].chegadas++;
+    const ind = indicadoresDaCarga(c.id);
+    if(ind.tempoPatioTotal !== null){ porHora[h].somaPatio += ind.tempoPatioTotal; porHora[h].nPatio++; }
+  });
+  const horariosCongestionamento = Object.values(porHora)
+    .map(h => ({
+      hora: h.hora,
+      chegadas: h.chegadas,
+      tempoMedioPatio: h.nPatio ? Math.round(h.somaPatio/h.nPatio) : null
+    }))
+    .sort((a,b)=> b.chegadas - a.chegadas)
+    .slice(0, 5);
+
+  // 5. Rotas com maior incidência de atraso.
+  const porRota = {};
+  base.forEach(c=>{
+    const atraso = atrasoDaCarga(c);
+    if(atraso === null || !c.rota) return;
+    if(!porRota[c.rota]) porRota[c.rota] = {rota:c.rota, atrasadas:0, total:0, soma:0};
+    porRota[c.rota].total++;
+    if(atraso > 0){ porRota[c.rota].atrasadas++; porRota[c.rota].soma += atraso; }
+  });
+  const rotasAtraso = Object.values(porRota)
+    .filter(r => r.atrasadas > 0)
+    .map(r => ({
+      rota: r.rota,
+      rotulo: rotaCurta(r.rota),
+      atrasadas: r.atrasadas,
+      total: r.total,
+      atrasoMedio: Math.round(r.soma/r.atrasadas)
+    }))
+    .sort((a,b)=> b.atrasadas - a.atrasadas)
+    .slice(0, 8);
+
+  // 6. Cargas paradas há mais tempo, ainda em aberto. É o item mais
+  //    acionável da seção: cada linha é um caminhão que alguém precisa
+  //    destravar agora.
+  const agora = Date.now();
+  const pendentesAntigas = base
+    .filter(c => c.status !== 'Seguiu Viagem')
+    .map(c => ({
+      id: c.id,
+      numeroCarga: c.numeroCarga || '—',
+      placa: c.placa,
+      transportadora: c.transportadora || '—',
+      status: c.status,
+      paradaHaMin: Math.round((agora - (Date.parse(c.atualizadoEm || c.criadoEm) || agora))/60000)
+    }))
+    .sort((a,b)=> b.paradaHaMin - a.paradaHaMin)
+    .slice(0, 10);
+
+  return {
+    meta: metaTempoPatio(),
+    veiculosRecorrentes,
+    operacoesMaiorPermanencia,
+    transportadorasAtraso,
+    horariosCongestionamento,
+    rotasAtraso,
+    pendentesAntigas
+  };
+}
+
+/* ---------- RELATÓRIO ADMINISTRAÇÃO DE FRETES ----------
+   Independente dos demais, com três colunas só. As observações são onde a
+   administração registra valor de frete, negociação e instruções — por
+   isso a carga entra na lista mesmo sem observação nenhuma: é justamente
+   a linha em branco que precisa ser preenchida. */
+function dadosAdministracaoFretes(cargas){
+  return (cargas || DB.cargas)
+    .filter(c => !c.aguardandoCarga)
+    .slice()
+    .sort((a,b)=>{
+      const na = String(a.numeroCarga||''), nb = String(b.numeroCarga||'');
+      return na.localeCompare(nb, 'pt-BR', {numeric:true});
+    })
+    .map(c => ({
+      numeroCarga: c.numeroCarga || '—',
+      rota: rotaCurta(c.rota) || '—',
+      observacoes: c.observacoes || ''
+    }));
+}

@@ -6,6 +6,17 @@
 <title>Painel Logístico — Suinco</title>
 <link rel="icon" href="assets/logo_suinco.png">
 <link rel="stylesheet" href="styles.css">
+<!-- PWA: instalável no Android e no iPhone, com ícone na tela inicial.
+     Os dois arquivos são opcionais por construção — abrindo o painel por
+     file:// ou sem eles no servidor, nada quebra: o navegador ignora o
+     manifest e o registro do service worker falha em silêncio. -->
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0f1826">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Embarque">
+<link rel="apple-touch-icon" href="assets/logo_suinco.png">
 <!-- MSAL.js v2 — SSO Microsoft 365. Carrega da CDN da Microsoft; se não vier
      (aberto via file://, sem rede, ou bloqueado por política), o adaptador
      detecta a ausência e segue em modo local, sem quebrar o painel. -->
@@ -370,23 +381,36 @@
       </div>
     </div>
 
+    <!-- Tempo MÉDIO no lugar dos extremos. O caso extremo é anedota; a
+         média move decisão, e o percentual acima da meta diz se o problema
+         é pontual ou estrutural. -->
     <div class="card">
-      <div class="card-title"><span class="icon">⏱️</span> Menor e maior tempo — hoje</div>
-      <div class="card-sub">Os dois casos extremos entre as cargas concluídas hoje, com a carga inteira identificada para o gestor conseguir agir sobre o caso. <strong>Lead Time</strong> = da criação da carga na Programação até a saída (visão de planejamento). <strong>Permanência no pátio</strong> = da chegada física até a saída (o tempo que a operação e o motorista sentem).</div>
-      <div id="ind-extremos-wrap"></div>
+      <div class="card-title"><span class="icon">⏱️</span> Tempo Médio de Pátio</div>
+      <div class="card-sub">Da chegada física até a saída — o tempo que a operação e o motorista sentem. Comparado com a meta de 3 horas.</div>
+      <div id="ind-patio-medio"></div>
     </div>
 
+    <!-- Ranking por ATRASO, não por volume. Quem move mais carga não é
+         necessariamente quem precisa de atenção. -->
     <div class="card">
-      <div class="card-title"><span class="icon">🏆</span> Ranking de Transportadoras</div>
-      <div class="card-sub">Ordenado por lead time médio (menor primeiro). Escolha o período — considera só cargas em "Seguiu Viagem" dentro dele.</div>
+      <div class="card-title"><span class="icon">🚨</span> Ranking de Veículos com Maior Atraso</div>
+      <div class="card-sub">Do maior para o menor atraso médio. <strong>Atraso</strong> = tempo em pátio acima da meta de 3 h. Veículo sem atraso não aparece — a lista existe para mostrar onde agir.</div>
       <div class="gap8" id="ind-ranking-periodos" style="margin-bottom:14px"></div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Pos.</th><th>Transportadora</th><th>Cargas Concluídas</th><th>Lead Time Médio</th><th>Tempo Médio em Pátio</th></tr></thead>
+          <thead><tr><th>Pos.</th><th>Placa</th><th>Transportadora</th><th>Qtd. Atrasos</th><th>Atraso Médio</th><th>Último Atraso</th></tr></thead>
           <tbody id="ind-ranking-tbody"></tbody>
         </table>
       </div>
-      <div class="empty-state" id="ind-ranking-empty" hidden>Nenhuma carga concluída nesse período.</div>
+      <div class="empty-state" id="ind-ranking-empty" hidden>Nenhum veículo com atraso nesse período.</div>
+    </div>
+
+    <!-- Seção automática: o sistema aponta onde olhar, em vez de deixar o
+         gestor procurar. -->
+    <div class="card">
+      <div class="card-title"><span class="icon">🔎</span> Gargalos e Pontos Críticos de Atenção</div>
+      <div class="card-sub">Leitura automática do período selecionado acima. Cada bloco responde uma pergunta que a operação faz de manhã.</div>
+      <div id="ind-gargalos"></div>
     </div>
   </div>
 
@@ -483,6 +507,30 @@
   <!-- ===== RELATÓRIOS ===== -->
   <div class="tab-page" id="tab-relatorios">
     <div class="funcao-aba" data-tab="relatorios"></div>
+
+    <!-- Filtro compartilhado pelos três relatórios. Fica no topo porque
+         define o recorte de tudo que vem abaixo — filtro escondido embaixo
+         do botão faz o gestor gerar o relatório errado e só descobrir
+         depois de mandar no grupo. -->
+    <div class="card">
+      <div class="card-title"><span class="icon">🗓️</span> Período — Data da Programação</div>
+      <div class="card-sub">Recorta os relatórios pela data em que a carga foi <strong>inserida no sistema</strong>, não pela chegada do caminhão. Em branco = todas as cargas.</div>
+      <div class="form-grid">
+        <div class="form-group"><label>De</label><input type="date" id="rel-data-de"></div>
+        <div class="form-group"><label>Até</label><input type="date" id="rel-data-ate"></div>
+        <div class="form-group">
+          <label>Atalhos</label>
+          <div class="gap8">
+            <button class="btn btn-sec btn-sm" onclick="filtroRelatorioAtalho('hoje')">Hoje</button>
+            <button class="btn btn-sec btn-sm" onclick="filtroRelatorioAtalho('semana')">7 dias</button>
+            <button class="btn btn-sec btn-sm" onclick="filtroRelatorioAtalho('mes')">30 dias</button>
+            <button class="btn btn-sec btn-sm" onclick="filtroRelatorioAtalho('limpar')">Limpar</button>
+          </div>
+        </div>
+      </div>
+      <div id="rel-resumo-filtro" class="card-sub" style="margin:6px 0 0"></div>
+    </div>
+
     <div class="card">
       <div class="card-title"><span class="icon">📄</span> PDF Operacional</div>
       <div class="card-sub">Sequenciamento de carregamento do dia — mesmo layout da planilha usada hoje: Nº, Carga, Rota, Tipo de Operação, Faturado, Status de Carregamento (célula colorida), Placa, Transportadora, Tipo de Veículo, Peso(ton), Paletizada, Entregas, Ganchos.</div>
@@ -503,6 +551,14 @@
         manualmente. Ver <code>docs/POWERBI_EXPORT.md</code>.
       </div>
       <button class="btn btn-primary" onclick="exportarCsvPowerBI()">📊 Exportar Dados (CSV) — Power BI</button>
+    </div>
+
+    <!-- Relatório independente, para o setor administrativo. Três colunas
+         só: é controle de frete, não acompanhamento de pátio. -->
+    <div class="card">
+      <div class="card-title"><span class="icon">💰</span> Administração de Fretes</div>
+      <div class="card-sub">Número da Carga, Rota e Observações. É no campo Observações que a administração registra valor do frete, negociação e instruções — a linha em branco é justamente a que falta preencher.</div>
+      <button class="btn btn-primary" onclick="exportarPdfFretes()">🖨️ Gerar Administração de Fretes</button>
     </div>
   </div>
 
@@ -624,6 +680,18 @@
      sem conexão seria justamente o que o TI vai checar primeiro. -->
 <div id="rodape-conexao" class="rodape-conexao"></div>
 
+<script>
+/* Registro do service worker. Envolvido em try/catch e condicionado ao
+   protocolo: em file:// a API existe mas lança SecurityError, e um erro
+   aqui apareceria no console de quem só abriu o arquivo por duplo clique. */
+if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+  window.addEventListener('load', function () {
+    navigator.serviceWorker.register('sw.js').catch(function (e) {
+      console.info('[Suinco] service worker não registrado:', e.message);
+    });
+  });
+}
+</script>
 <script src="suinco-sharepoint.js"></script>
 <script src="data.js"></script>
 <script src="app.js"></script>

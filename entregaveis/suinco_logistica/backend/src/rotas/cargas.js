@@ -1,0 +1,333 @@
+import { Router } from 'express';
+import { consultar, emTransacao } from '../banco.js';
+import { exigirLogin } from '../middleware/auth.js';
+import { emitir } from '../tempo-real.js';
+import {
+  COLUNAS_CARGA, paraPainel, saneiarCriacao, saneiarEdicao,
+  normalizarPlaca, idSeguro,
+} from '../dominio/cargas.js';
+import {
+  validarTransicao, podeCriarCarga, camposEditaveisPor,
+  ErroDeFluxo, ErroDePermissao, STATUS_INICIAL,
+} from '../dominio/fluxo.js';
+
+export const rotasCargas = Router();
+
+function novoId(prefixo) {
+  return `${prefixo}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+/* Grava a movimentação e o log na MESMA transação da mudança da carga.
+   Se qualquer um falhar, nada é gravado — o Power BI nunca vê uma carga que
+   mudou de status sem o evento correspondente. */
+async function gravarEvento(cli, { cargaId, placa, de, para, operador, acao }) {
+  const movId = novoId('mov');
+  await cli.query(
+    `INSERT INTO fact_statusfrota
+       (movimentacao_id, carga_id, placa, status_anterior, status_novo, setor,
+        operador_id, operador_nome)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+    [movId, cargaId, placa, de, para, operador.setor, operador.id, operador.nome]
+  );
+  await cli.query(
+    `INSERT INTO log_eventos
+       (evento_id, carga_id, placa, acao, setor, operador_id, operador_nome,
+        operador_verificado)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,TRUE)`,
+    [novoId('log'), cargaId, placa, acao, operador.setor, operador.id, operador.nome]
+  );
+  return movId;
+}
+
+/* ---------------------------------------------------------------------
+   POST /api/cargas — cria carga programada
+   --------------------------------------------------------------------- */
+rotasCargas.post('/cargas', exigirLogin, async (req, res, next) => {
+  try {
+    const op = req.operador;
+    if (!podeCriarCarga(op.setor)) {
+      throw new ErroDePermissao('Só a Logística programa carga.');
+    }
+
+    const placa = normalizarPlaca(req.body?.placa);
+    if (!placa) {
+      return res.status(400).json({ erro: 'Placa é obrigatória.', codigo: 'PLACA_FALTANDO' });
+    }
+
+    /* A TRAVA DE FROTA. Regra de negócio inegociável: placa que não está na
+       base oficial não vira carga. Ela existia só no navegador; aqui passa a
+       valer também para quem chamar a API direto. */
+    const { rows: frotaRows } = await consultar(
+      'SELECT placa, transportadora, tipo_veiculo FROM dim_veiculos WHERE placa = $1',
+      [placa]
+    );
+    if (!frotaRows[0]) {
+      return res.status(422).json({
+        erro: `Placa ${placa} não está cadastrada na Frota. ` +
+              `Cadastre em Cadastros → Frota antes de programar esta carga.`,
+        codigo: 'PLACA_FORA_DA_FROTA',
+      });
+    }
+
+    const dados = saneiarCriacao(req.body, frotaRows[0]);
+
+    const carga = await emTransacao(async (cli) => {
+      const cols = Object.keys(dados);
+      const vals = Object.values(dados);
+      const marcadores = cols.map((_, i) => `$${i + 1}`);
+
+      /* ON CONFLICT DO NOTHING + RETURNING vazio significa "já existe".
+         Isso não é erro: é a fila offline reenviando algo que já subiu, e
+         tratar como erro faria o painel repetir para sempre. */
+      const ins = await cli.query(
+        `INSERT INTO fact_viagens (${cols.join(',')}, operador_id, operador_nome, operador_setor)
+         VALUES (${marcadores.join(',')}, $${cols.length + 1}, $${cols.length + 2}, $${cols.length + 3})
+         ON CONFLICT (carga_id) DO NOTHING
+         RETURNING ${COLUNAS_CARGA}`,
+        [...vals, op.id, op.nome, op.setor]
+      );
+
+      if (!ins.rows[0]) {
+        const jaExiste = await cli.query(
+          `SELECT ${COLUNAS_CARGA} FROM fact_viagens WHERE carga_id = $1`,
+          [dados.carga_id]
+        );
+        return { linha: jaExiste.rows[0], nova: false };
+      }
+
+      await gravarEvento(cli, {
+        cargaId: dados.carga_id,
+        placa,
+        de: null,
+        para: dados.status_atual || STATUS_INICIAL,
+        operador: op,
+        acao: 'Carga programada',
+      });
+      return { linha: ins.rows[0], nova: true };
+    });
+
+    const payload = paraPainel(carga.linha);
+    if (carga.nova) emitir('carga:criada', payload);
+    return res.status(carga.nova ? 201 : 200).json(payload);
+  } catch (e) {
+    return next(e);
+  }
+});
+
+/* ---------------------------------------------------------------------
+   PATCH /api/cargas/:id — edita campos de negócio (não muda status)
+   --------------------------------------------------------------------- */
+rotasCargas.patch('/cargas/:id', exigirLogin, async (req, res, next) => {
+  try {
+    const op = req.operador;
+    const id = idSeguro(req.params.id);
+    if (!id) return res.status(400).json({ erro: 'Id inválido.', codigo: 'ID_INVALIDO' });
+
+    const permitidos = camposEditaveisPor(op.setor);
+    const mudancas = saneiarEdicao(req.body, permitidos);
+    if (Object.keys(mudancas).length === 0) {
+      return res.status(400).json({
+        erro: `Nada a alterar. O setor ${op.setor} pode editar: ${permitidos.join(', ') || 'nenhum campo'}.`,
+        codigo: 'SEM_CAMPOS_PERMITIDOS',
+      });
+    }
+
+    // Trocar a placa revalida a trava de frota e puxa a transportadora nova.
+    if (mudancas.placa) {
+      const { rows } = await consultar(
+        'SELECT transportadora, tipo_veiculo FROM dim_veiculos WHERE placa = $1',
+        [mudancas.placa]
+      );
+      if (!rows[0]) {
+        return res.status(422).json({
+          erro: `Placa ${mudancas.placa} não está cadastrada na Frota.`,
+          codigo: 'PLACA_FORA_DA_FROTA',
+        });
+      }
+      if (mudancas.transportadora === undefined) mudancas.transportadora = rows[0].transportadora;
+      if (mudancas.tipo_veiculo === undefined) mudancas.tipo_veiculo = rows[0].tipo_veiculo;
+    }
+
+    const cols = Object.keys(mudancas);
+    const sets = cols.map((c, i) => `${c} = $${i + 1}`);
+    const params = Object.values(mudancas);
+
+    /* BLOQUEIO OTIMISTA. Se o cliente informar a versão que leu, a gravação
+       só passa se ninguém tiver mexido no meio. É o que substitui o "última
+       escrita vence" da versão anterior, onde dois setores editando a mesma
+       carga faziam um sobrescrever o outro em silêncio.
+
+       Sem `versao` no corpo, grava sem checar — a fila offline não tem como
+       saber a versão atual depois de horas sem rede, e recusá-la ali seria
+       transformar a proteção em perda de dado. */
+    const versaoEsperada = Number(req.body?.versao);
+    let filtroVersao = '';
+    if (Number.isFinite(versaoEsperada)) {
+      params.push(versaoEsperada);
+      filtroVersao = ` AND versao = $${params.length}`;
+    }
+    params.push(id);
+
+    const { rows } = await consultar(
+      `UPDATE fact_viagens SET ${sets.join(', ')}
+        WHERE carga_id = $${params.length}${filtroVersao}
+        RETURNING ${COLUNAS_CARGA}`,
+      params
+    );
+
+    if (!rows[0]) {
+      const atual = await consultar(
+        `SELECT ${COLUNAS_CARGA} FROM fact_viagens WHERE carga_id = $1`, [id]
+      );
+      if (!atual.rows[0]) {
+        return res.status(404).json({ erro: 'Carga não encontrada.', codigo: 'CARGA_NAO_ENCONTRADA' });
+      }
+      // Existe, mas a versão mudou: outro operador gravou primeiro. Devolve
+      // o estado atual para o painel mostrar o que aconteceu em vez de só
+      // dizer "erro".
+      return res.status(409).json({
+        erro: 'Outro operador alterou esta carga enquanto você editava.',
+        codigo: 'CONFLITO_DE_VERSAO',
+        atual: paraPainel(atual.rows[0]),
+      });
+    }
+
+    const payload = paraPainel(rows[0]);
+    emitir('carga:atualizada', payload);
+    return res.json(payload);
+  } catch (e) {
+    return next(e);
+  }
+});
+
+/* ---------------------------------------------------------------------
+   POST /api/cargas/:id/status — avança a carga no fluxo
+   --------------------------------------------------------------------- */
+rotasCargas.post('/cargas/:id/status', exigirLogin, async (req, res, next) => {
+  try {
+    const op = req.operador;
+    const id = idSeguro(req.params.id);
+    if (!id) return res.status(400).json({ erro: 'Id inválido.', codigo: 'ID_INVALIDO' });
+
+    const statusNovo = String(req.body?.status ?? '');
+
+    const resultado = await emTransacao(async (cli) => {
+      /* FOR UPDATE trava a linha até o fim da transação. Sem isso, dois
+         cliques simultâneos no mesmo botão leem o mesmo status, os dois
+         passam na validação e a carga registra a etapa duas vezes. */
+      const { rows } = await cli.query(
+        `SELECT ${COLUNAS_CARGA} FROM fact_viagens WHERE carga_id = $1 FOR UPDATE`,
+        [id]
+      );
+      const carga = rows[0];
+      if (!carga) return { naoEncontrada: true };
+
+      // Lança ErroDeFluxo (409) ou ErroDePermissao (403). O rollback é
+      // automático — nada fica gravado pela metade.
+      validarTransicao(carga.status_atual, statusNovo, op.setor);
+
+      const atualizada = await cli.query(
+        `UPDATE fact_viagens
+            SET status_atual = $1, operador_id = $2, operador_nome = $3, operador_setor = $4
+          WHERE carga_id = $5
+          RETURNING ${COLUNAS_CARGA}`,
+        [statusNovo, op.id, op.nome, op.setor, id]
+      );
+
+      const movId = await gravarEvento(cli, {
+        cargaId: id,
+        placa: carga.placa,
+        de: carga.status_atual,
+        para: statusNovo,
+        operador: op,
+        acao: `Status: ${carga.status_atual} → ${statusNovo}`,
+      });
+
+      return { linha: atualizada.rows[0], movId, de: carga.status_atual };
+    });
+
+    if (resultado.naoEncontrada) {
+      return res.status(404).json({ erro: 'Carga não encontrada.', codigo: 'CARGA_NAO_ENCONTRADA' });
+    }
+
+    const payload = paraPainel(resultado.linha);
+    emitir('carga:atualizada', payload);
+    emitir('movimentacao:nova', {
+      id: resultado.movId,
+      cargaId: payload.id,
+      placa: payload.placa,
+      statusAnterior: resultado.de,
+      statusNovo: payload.status,
+      setor: op.setor,
+      operador: op.nome,
+      data: payload.atualizadoEm,
+    });
+    return res.json(payload);
+  } catch (e) {
+    return next(e);
+  }
+});
+
+/* ---------------------------------------------------------------------
+   POST /api/portaria/saida — o caminhão saiu do pátio
+   ---------------------------------------------------------------------
+   Uma placa pode carregar mais de uma carga. O caminhão sai uma vez só, e
+   a Portaria não deveria ter que escolher qual carga está saindo. Então a
+   saída vale para TODAS as cargas Faturadas daquela placa — e devolve as
+   que não estavam faturadas, para o porteiro entender por que ficaram. */
+rotasCargas.post('/portaria/saida', exigirLogin, async (req, res, next) => {
+  try {
+    const op = req.operador;
+    if (op.setor !== 'Portaria' && op.setor !== 'Administração') {
+      throw new ErroDePermissao('A saída do pátio é registrada pela Portaria.');
+    }
+    const placa = normalizarPlaca(req.body?.placa);
+    if (!placa) return res.status(400).json({ erro: 'Placa é obrigatória.', codigo: 'PLACA_FALTANDO' });
+
+    const saida = await emTransacao(async (cli) => {
+      const { rows: abertas } = await cli.query(
+        `SELECT ${COLUNAS_CARGA} FROM fact_viagens
+          WHERE placa = $1 AND status_atual <> 'Seguiu Viagem'
+          FOR UPDATE`,
+        [placa]
+      );
+      const elegiveis = abertas.filter((c) => c.status_atual === 'Faturado');
+      const pendentes = abertas.filter((c) => c.status_atual !== 'Faturado');
+
+      const liberadas = [];
+      for (const c of elegiveis) {
+        const upd = await cli.query(
+          `UPDATE fact_viagens
+              SET status_atual = 'Seguiu Viagem', operador_id = $1,
+                  operador_nome = $2, operador_setor = $3
+            WHERE carga_id = $4
+            RETURNING ${COLUNAS_CARGA}`,
+          [op.id, op.nome, op.setor, c.carga_id]
+        );
+        await gravarEvento(cli, {
+          cargaId: c.carga_id, placa, de: 'Faturado', para: 'Seguiu Viagem',
+          operador: op, acao: 'Saída do pátio registrada',
+        });
+        liberadas.push(upd.rows[0]);
+      }
+      return { liberadas, pendentes };
+    });
+
+    const liberadas = saida.liberadas.map(paraPainel);
+    liberadas.forEach((c) => emitir('carga:atualizada', c));
+
+    return res.json({
+      placa,
+      liberadas,
+      pendentes: saida.pendentes.map((c) => ({
+        id: c.carga_id, numeroCarga: c.numero_carga, status: c.status_atual,
+      })),
+    });
+  } catch (e) {
+    return next(e);
+  }
+});
+
+/* Erros de domínio já carregam status e código; o handler global em
+   servidor.js só precisa repassá-los. */
+export { ErroDeFluxo, ErroDePermissao };

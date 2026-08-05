@@ -1,0 +1,32 @@
+{
+  "name": "embarque-suinco-api",
+  "version": "1.0.0",
+  "description": "API do Painel Logístico Suinco — controle de pátio em tempo real",
+  "type": "module",
+  "main": "src/servidor.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/servidor.js",
+    "dev": "node --watch src/servidor.js",
+    "migrar": "node scripts/migrar.js",
+    "seed:frota": "node scripts/seed_frota.js",
+    "operador": "node scripts/criar_operador.js",
+    "teste": "node --test testes/"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "compression": "^1.7.4",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-rate-limit": "^7.4.0",
+    "helmet": "^7.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "pg": "^8.12.0",
+    "socket.io": "^4.7.5"
+  },
+  "license": "UNLICENSED",
+  "private": true
+}
