@@ -34,7 +34,11 @@ def ler(nome):
 
 
 def main():
-    html = ler('index.html')
+    # O arquivo-fonte foi renomeado para index_suinco.html no repositório.
+    # Aceita os dois nomes para não quebrar quem tiver a cópia antiga.
+    import os
+    fonte = 'index_suinco.html' if os.path.exists('index_suinco.html') else 'index.html'
+    html = ler(fonte)
     css = ler('styles.css')
     adapter_js = ler('suinco-sharepoint.js')
     data_js = ler('data.js')
