@@ -117,21 +117,43 @@ async def main():
             " Status_Atual:'Aguardando Veículo'})", [placa, CARGA_FLUXO])
         ck('placa da frota é aceita', r.get('enfileirado') is False and not r.get('recusado'), str(r))
 
-        print('\n=== 7. MÁQUINA DE ESTADOS: SÓ A PORTARIA REGISTRA CHEGADA ===')
+        print('\n=== 7. MÁQUINA DE ESTADOS: QUEM PODE MOVER CADA ETAPA ===')
+        # A regra vigente, decidida pela operação: Logística e Administração
+        # movem qualquer etapa (são quem destrava o pátio quando um setor
+        # falta); os demais setores movem só a etapa que é deles. Este teste
+        # cobra os dois lados — o acesso amplo e o limite de quem é restrito.
+        #
+        # A checagem vale porque roda no SERVIDOR: o setor vem do token
+        # assinado, não do que o navegador diz ser.
         r = await pagina.evaluate(
             "([id]) => SuincoSharePoint.mudarStatus(id,'Aguardando Embarque')", [CARGA_FLUXO])
-        ck('Logística é recusada nesse passo (é da Portaria)',
-           r.get('recusado') is True, str(r.get('erro') or r))
+        ck('Logística move a etapa da Portaria (acesso total)',
+           r.get('enfileirado') is False and not r.get('recusado'), str(r.get('erro') or r))
+        ck('o status voltou aplicado',
+           (r.get('item') or {}).get('status') == 'Aguardando Embarque')
 
+        # Expedição tentando a etapa do Faturamento: setor restrito, etapa
+        # que não é dele. É aqui que a autorização de servidor prova valor.
         await pagina.evaluate("() => SuincoSharePoint.sair()")
         op2 = await pagina.evaluate(
-            "async ([e,s]) => SuincoSharePoint.login(e,s)", ['bruno@teste.local', SENHA])
-        ck('Portaria logou', op2.get('setor') == 'Portaria', str(op2.get('setor')))
+            "async ([e,s]) => SuincoSharePoint.login(e,s)", ['carla@teste.local', SENHA])
+        ck('Expedição logou', op2.get('setor') == 'Expedição', str(op2.get('setor')))
         r = await pagina.evaluate(
-            "([id]) => SuincoSharePoint.mudarStatus(id,'Aguardando Embarque')", [CARGA_FLUXO])
-        ck('Portaria consegue registrar a chegada',
-           r.get('enfileirado') is False and not r.get('recusado'), str(r))
-        ck('o status voltou aplicado', (r.get('item') or {}).get('status') == 'Aguardando Embarque')
+            "([id]) => SuincoSharePoint.mudarStatus(id,'Embarque Iniciado')", [CARGA_FLUXO])
+        ck('Expedição move a etapa que é dela',
+           r.get('enfileirado') is False and not r.get('recusado'), str(r.get('erro') or r))
+        # Leva até Embarque Finalizado antes de tentar faturar. Sem isso, a
+        # recusa viria por transição inválida e o teste passaria sem provar
+        # nada sobre setor — mediria a coisa errada e daria confiança falsa.
+        await pagina.evaluate(
+            "([id]) => SuincoSharePoint.mudarStatus(id,'Embarque Finalizado')", [CARGA_FLUXO])
+        r = await pagina.evaluate(
+            "([id]) => SuincoSharePoint.mudarStatus(id,'Faturado')", [CARGA_FLUXO])
+        ck('Expedição é recusada na etapa do Faturamento',
+           r.get('recusado') is True, str(r.get('erro') or r))
+        ck('recusa NÃO vai para a fila',
+           r.get('enfileirado') is False,
+           'enfileirar uma recusa faria o painel repetir para sempre algo que nunca é aceito')
 
         print('\n=== 8. FILA OFFLINE ===')
         # Volta para a Logística antes de enfileirar: criar carga é ação dela.
