@@ -233,14 +233,39 @@ const SuincoSharePoint = (function () {
      É a diferença entre "chama a TI" e "troca de Wi-Fi", e o operador do
      pátio consegue relatar isso pelo WhatsApp sem abrir o console. */
   async function diagnosticarConexao() {
+    /* Duas sondas, porque uma só confunde dois problemas muito diferentes.
+
+       A primeira é um GET normal, com CORS. Se ela passa, o navegador
+       conseguiu falar com a API E leu a resposta — ou seja, o endereço deste
+       painel ESTÁ autorizado. Se mesmo assim o login falhou no transporte, o
+       que quebrou foi o pedido do login em si: o POST usa cabeçalho
+       Authorization e content-type, e por isso passa antes por um OPTIONS
+       (preflight). Firewall corporativo, antivírus com inspeção de HTTPS e
+       extensão de navegador derrubam exatamente esse OPTIONS, deixando o GET
+       simples passar. É o caso do computador que falha enquanto o mesmo
+       usuário entra pelo 4G do celular.
+
+       A segunda é a sonda em `mode:'no-cors'`, que não lê a resposta e por
+       isso não depende de autorização de origem. Ela só diz se o pacote
+       chegou a algum lugar.
+
+       Três respostas, três ações diferentes — e nenhuma delas é "avise a
+       Logística" quando o problema está na rede de quem tenta entrar. */
     const tempo = sinalDeTimeout(6000);
     try {
-      await fetch(SP_CONFIG.api + '/health', { mode: 'no-cors', signal: tempo.signal });
-      return 'alcancavel';
+      const r = await fetch(SP_CONFIG.api + '/health', { signal: tempo.signal });
+      if (r.ok) return 'filtrado';   // alcança e é autorizado: sobrou o preflight
+    } catch (e) { /* segue para a segunda sonda */ }
+    finally { tempo.cancelar(); }
+
+    const tempo2 = sinalDeTimeout(6000);
+    try {
+      await fetch(SP_CONFIG.api + '/health', { mode: 'no-cors', signal: tempo2.signal });
+      return 'alcancavel';           // chega, mas a resposta não pôde ser lida
     } catch (e) {
-      return 'inalcancavel';
+      return 'inalcancavel';         // não há caminho até a API deste aparelho
     } finally {
-      tempo.cancelar();
+      tempo2.cancelar();
     }
   }
 
