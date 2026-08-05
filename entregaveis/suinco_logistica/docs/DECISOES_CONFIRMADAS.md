@@ -103,11 +103,13 @@ endpoint do SharePoint foi inventado — isso fica documentado em
   parado na Suinco em ambos os casos. Cargas em "Aguardando Carga" (dados
   incompletos, sem Rota/Nº de Carga) não aparecem na lista do PDF
   Operacional — só depois que a Logística completa os dados.
-- **Senha das abas Indicadores/Relatórios**: é só uma barreira de UX
-  (`suinco2026`, visível no código-fonte) — não é controle de acesso real.
-  Comentário explícito no código (`app.js`, função `pedirSenhaAba`) reforça
-  isso. Controle de acesso de verdade só existe com permissão real de Lista
-  do SharePoint + SSO.
+- **Senha das abas Programação/Indicadores — REMOVIDA.** Era uma senha fixa,
+  compartilhada e em texto puro no arquivo entregue, criada quando o painel
+  não tinha login nenhum. Com a autenticação individual e o setor vindo do
+  token assinado, ela só atrasava quem tem direito de entrar e ensinava a
+  operação a digitar uma senha coletiva que qualquer um lê no código-fonte.
+  O controle real é o servidor: a aba só aparece para o setor certo e a API
+  recusa a gravação de quem não tem permissão.
 - **Linha do tempo por carga** (Histórico): busca por placa ou Nº de carga,
   mostra os 8 (ou 9, se nasceu "Aguardando Carga") passos do fluxo como uma
   linha do tempo vertical — feitos com hora/operador/setor, pendentes

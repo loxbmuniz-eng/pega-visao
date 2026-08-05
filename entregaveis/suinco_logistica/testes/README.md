@@ -52,6 +52,12 @@ cinco mensagens diferentes, cada uma com seu código: `[SENHA]`, `[LIMITE]`,
 `[HTTP500]`, `[REDE]`, `[BLOQUEIO]`. Existe porque "servidor não respondeu"
 para tudo tornava o diagnóstico remoto impossível.
 
+**`test_aviso_alteracao.py`** — dois operadores logados ao mesmo tempo, um
+deles num celular: a troca de placa numa carga já programada grava no
+servidor e vira aviso na tela do outro, com o valor antigo, o novo, quem
+alterou e som. Cobre também o que NÃO deve acontecer: quem editou não é
+avisado da própria ação, e campo sem importância não toca alarme.
+
 **`test_relatorios.py`** — os documentos gerados: cabeçalho, nome do arquivo
 com data, largura de coluna e número real de linhas de texto por célula.
 

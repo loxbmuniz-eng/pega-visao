@@ -194,9 +194,14 @@ async def main():
         print('\n=== 6. SEGREDOS NO CÓDIGO ENTREGUE ===')
         conteudo = open('/home/user/pega-visao/entregaveis/suinco_logistica/index.html',
                         encoding='utf-8').read()
+        # A senha fixa de aba foi removida: era barreira de interface, ficava
+        # em texto puro no arquivo entregue e o controle real passou a ser o
+        # login individual com setor vindo do servidor. Se voltar, é achado.
         if 'suinco2026' in conteudo:
             vuln('MÉDIA','Senha das abas em texto puro no arquivo entregue',
                  'Visível com Ctrl+U. É barreira de interface, não controle de acesso.')
+        else:
+            ok('nenhuma senha fixa de aba no arquivo entregue')
         for chave in ['clientId','tenantId','siteId']:
             import re
             m = re.search(chave + r"\s*:\s*'([^']+)'", conteudo)

@@ -719,25 +719,6 @@
 </div>
 
 
-<!-- Trava de senha das abas Indicadores/Relatórios — ver comentário grande
-     em app.js (função pedirSenhaAba): isto NÃO é segurança real, é só uma
-     barreira de UX. Qualquer pessoa com o código-fonte consegue ver a senha
-     ou simplesmente pular a checagem. -->
-<div class="modal-overlay" id="modal-senha">
-  <div class="modal-box">
-    <h2 id="senha-titulo">Área restrita</h2>
-    <div class="card-sub" id="senha-sub">Esta aba pede uma senha simples de UX — não é controle de acesso real.</div>
-    <div class="form-group" style="margin-bottom:14px">
-      <label>Senha</label>
-      <input type="password" id="senha-input" placeholder="Digite a senha" onkeydown="if(event.key==='Enter')confirmarSenhaAba()">
-    </div>
-    <div class="flex-end">
-      <button class="btn btn-sec" onclick="cancelarSenhaAba()">Cancelar</button>
-      <button class="btn btn-primary" onclick="confirmarSenhaAba()">Entrar</button>
-    </div>
-  </div>
-</div>
-
 <div id="notif"></div>
 
 <!-- ===================== ÁREAS DE IMPRESSÃO (PDF) ===================== -->

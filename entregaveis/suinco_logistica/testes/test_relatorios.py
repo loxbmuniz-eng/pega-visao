@@ -256,14 +256,6 @@ async def main():
 
         print('\n=== FILTRO VALE PARA O EXECUTIVO ===')
         await pg.evaluate("() => abrirTab('relatorios')")
-        # Relatórios não tem senha; o query_selector encontra o input do
-        # modal fechado. Confere se está aberto de verdade.
-        aberto = await pg.evaluate(
-            "() => document.getElementById('modal-senha').classList.contains('open')")
-        if aberto:
-            await pg.fill('#senha-input', 'suinco2026')
-            await pg.keyboard.press('Enter')
-            await pg.wait_for_timeout(400)
         await pg.fill('#rel-data-de', '2020-01-01')
         await pg.fill('#rel-data-ate', '2020-01-02')
         await pg.evaluate("()=>exportarPdfExecutivo()")
