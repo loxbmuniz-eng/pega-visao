@@ -13,7 +13,7 @@ localStorage; agora ele renderiza dados vindos de uma fonte compartilhada.
 import asyncio, json, urllib.request
 from playwright.async_api import async_playwright
 
-PAINEL = 'file:///home/user/pega-visao/entregaveis/suinco_logistica/painel_suinco_completo.html'
+PAINEL = 'file:///home/user/pega-visao/entregaveis/suinco_logistica/index.html'
 GRAPH  = 'http://127.0.0.1:8899/v1.0'
 SITE   = 'SITE_SEC'
 
@@ -140,7 +140,7 @@ async def main():
             ok('modoSimulacao ignorado fora de localhost — SSO não pode ser desligado por config')
 
         print('\n=== 6. SEGREDOS NO CÓDIGO ENTREGUE ===')
-        conteudo = open('/home/user/pega-visao/entregaveis/suinco_logistica/painel_suinco_completo.html',
+        conteudo = open('/home/user/pega-visao/entregaveis/suinco_logistica/index.html',
                         encoding='utf-8').read()
         if 'suinco2026' in conteudo:
             vuln('MÉDIA','Senha das abas em texto puro no arquivo entregue',

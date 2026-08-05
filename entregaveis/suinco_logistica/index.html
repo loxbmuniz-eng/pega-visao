@@ -796,12 +796,25 @@ input,select,textarea{border-radius:5px}
       <div class="form-row">
         <div class="form-group"><label>Número de Carga</label><input type="text" id="prog-numero-carga" placeholder="Ex: 10245"></div>
         <div class="form-group"><label>Motorista</label><input type="text" id="prog-motorista" placeholder="Nome do motorista"></div>
-        <div class="form-group"><label>Cliente</label><input type="text" id="prog-cliente"></div>
-        <div class="form-group"><label>Destino</label><input type="text" id="prog-destino" placeholder="Cidade/UF"></div>
         <div class="form-group">
           <label>Rota <span class="hint">(código oficial)</span></label>
           <select id="prog-rota"></select>
         </div>
+        <div class="form-group">
+          <label>Tipo de Operação</label>
+          <select id="prog-praonde">
+            <option value="FROTA PROPRIA">FROTA PRÓPRIA</option>
+            <option value="CROSS-DOCKING">CROSS-DOCKING</option>
+            <option value="DEDICADA">DEDICADA</option>
+            <option value="RET FRIGO">RET FRIGO</option>
+          </select>
+        </div>
+        <!-- Cliente e Destino saíram da linha principal a pedido do gestor.
+             Continuam EXISTINDO como campos ocultos: registros antigos os têm,
+             o Destino ainda é exibido nos relatórios, e removê-los do modelo
+             apagaria dado já gravado. Ficam disponíveis para reativação. -->
+        <input type="hidden" id="prog-cliente" value="">
+        <input type="hidden" id="prog-destino" value="">
       </div>
       <div class="form-row">
         <div class="form-group"><label>Peso (kg)</label><input type="number" id="prog-peso" min="0"></div>
@@ -814,17 +827,8 @@ input,select,textarea{border-radius:5px}
       </div>
       <div class="form-row">
         <div class="form-group">
-          <label>Tipo de Operação <span class="hint">(como a carga é operada — o destino vai no campo Destino)</span></label>
-          <select id="prog-praonde" onchange="atualizarPreviewCompartilhada('prog-praonde','prog-compartilhada-preview')">
-            <option value="FROTA PROPRIA">FROTA PRÓPRIA</option>
-            <option value="CROSS-DOCKING">CROSS-DOCKING</option>
-            <option value="DEDICADA">DEDICADA</option>
-            <option value="RET FRIGO">RET FRIGO (retirada no frigorífico)</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>Compartilhada? <span class="hint">(calculado automaticamente)</span></label>
-          <div class="readonly-pill" id="prog-compartilhada-preview">Não</div>
+          <label>Paletizada?</label>
+          <select id="prog-paletizada"><option>Não</option><option>Sim</option></select>
         </div>
         <div class="form-group">
           <label>Qtd. Ganchos (Gancheira) <span class="hint">0 = Liso</span></label>
@@ -884,6 +888,18 @@ input,select,textarea{border-radius:5px}
         <button class="btn btn-warn btn-lg" onclick="acaoSaidaUI()">🏁 Saiu</button>
       </div>
       <div class="card-sub" style="margin-top:-6px">Dica: digite a placa e aperte <strong>Enter</strong> para registrar "Chegou" mais rápido.</div>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><span class="icon">📋</span> Cargas Programadas — ação em um clique</div>
+      <div class="card-sub">Sem digitar placa: o botão aparece só quando a ação é válida para o status atual da carga.</div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Placa</th><th>Nº Carga</th><th>Transportadora</th><th>Rota</th><th>Status</th><th class="no-print">Ação</th></tr></thead>
+          <tbody id="portaria-prog-tbody"></tbody>
+        </table>
+      </div>
+      <div class="empty-state" id="portaria-prog-empty" hidden>Nenhuma carga em aberto.</div>
     </div>
 
     <div class="card">
@@ -1158,7 +1174,7 @@ input,select,textarea{border-radius:5px}
     <div class="funcao-aba" data-tab="relatorios"></div>
     <div class="card">
       <div class="card-title"><span class="icon">📄</span> PDF Operacional</div>
-      <div class="card-sub">Sequenciamento de carregamento do dia — mesmo layout da planilha usada hoje: Nº, Carga, Rota, Tipo de Operação, Faturado, Status de Carregamento (célula colorida), Placa, Transportadora, Tipo de Veículo, Peso(ton), Compartilhada?, Entregas, Ganchos.</div>
+      <div class="card-sub">Sequenciamento de carregamento do dia — mesmo layout da planilha usada hoje: Nº, Carga, Rota, Tipo de Operação, Faturado, Status de Carregamento (célula colorida), Placa, Transportadora, Tipo de Veículo, Peso(ton), Paletizada, Entregas, Ganchos.</div>
       <button class="btn btn-primary" onclick="exportarPdfOperacional()">🖨️ Gerar PDF Operacional</button>
     </div>
     <div class="card">
@@ -1192,12 +1208,6 @@ input,select,textarea{border-radius:5px}
       <label>Setor</label>
       <select id="login-setor">
         <option>Logística</option><option>Portaria</option><option>Expedição</option><option>Faturamento</option>
-      </select>
-    </div>
-    <div class="form-group" style="margin-bottom:10px">
-      <label>Turno</label>
-      <select id="login-turno">
-        <option>Manhã (06h–14h)</option><option>Tarde (14h–22h)</option><option>Noite (22h–06h)</option>
       </select>
     </div>
     <div class="card-sub"><strong>Você verá apenas as abas do setor escolhido.</strong> Logística abre Programação, Expedição, Indicadores, Cadastros e Relatórios; Portaria abre Portaria; Expedição abre Expedição; Faturamento abre Faturamento. Torre de Controle e Histórico ficam liberados para todos. Para operar outro posto (cobertura de turno, por exemplo), use <strong>Trocar usuário</strong> no topo e entre com o setor correspondente.</div>
@@ -1241,7 +1251,7 @@ input,select,textarea{border-radius:5px}
         <label>Rota</label>
         <select id="completar-rota" style="margin-bottom:10px"></select>
         <label>Tipo de Operação</label>
-        <select id="completar-praonde" onchange="atualizarPreviewCompartilhada('completar-praonde','completar-compartilhada-preview')">
+        <select id="completar-praonde">
           <option value="FROTA PROPRIA">FROTA PRÓPRIA</option>
           <option value="CROSS-DOCKING">CROSS-DOCKING</option>
           <option value="DEDICADA">DEDICADA</option>
@@ -1249,8 +1259,8 @@ input,select,textarea{border-radius:5px}
         </select>
       </div>
       <div class="form-group">
-        <label>Compartilhada? <span class="hint">(calculado)</span></label>
-        <div class="readonly-pill" id="completar-compartilhada-preview">Não</div>
+        <label>Paletizada?</label>
+        <select id="completar-paletizada" style="margin-bottom:10px"><option>Não</option><option>Sim</option></select>
       </div>
       <div class="form-group"><label>Qtd. Ganchos <span class="hint">0 = Liso</span></label><input type="number" id="completar-ganchos" min="0" step="1" value="0"></div>
       <div class="form-group"><label>Qtd. Entregas</label><input type="number" id="completar-entregas" min="1" step="1" value="1"></div>
@@ -1853,8 +1863,11 @@ const STATUS_META = {
    relatório, some no filtro do Power BI, e ninguém sabe se a carga é frota
    própria ou se o campo não foi preenchido.
 
-   "Compartilhada?" é SEMPRE calculada a partir daqui — nunca editável
-   manualmente, pra não desalinhar do valor real de Pra onde?. */
+   NOTA: até 02/08/2026 existia aqui um campo "Compartilhada?", DERIVADO deste.
+   Foi substituído por "Paletizada", que é informação independente e EDITÁVEL —
+   não dá para inferir do tipo de operação se a carga é paletizada. A função
+   compartilhadaDaCarga() foi mantida apenas para ler registros antigos e
+   converter o export; nenhuma tela nova a usa. */
 const PRA_ONDE_OPCOES = ['FROTA PROPRIA', 'CROSS-DOCKING', 'DEDICADA', 'RET FRIGO'];
 const PRA_ONDE_LABEL = {
   'FROTA PROPRIA':'FROTA PRÓPRIA',
@@ -1863,6 +1876,10 @@ const PRA_ONDE_LABEL = {
   'RET FRIGO':'RET FRIGO'
 };
 const PRA_ONDE_PADRAO = 'FROTA PROPRIA';
+// Leitura de Paletizada, tolerante a registros antigos que não têm o campo.
+function paletizadaDaCarga(carga){
+  return (carga && carga.paletizada === 'Sim') ? 'Sim' : 'Não';
+}
 function compartilhadaDaCarga(carga){
   return (carga && (carga.praOnde === 'CROSS-DOCKING' || carga.praOnde === 'RET FRIGO')) ? 'Sim' : 'Não';
 }
@@ -1889,7 +1906,7 @@ function migrarPraOnde(){
    o nome vem junto só para quem não decorou o número ainda.
 
    ATENÇÃO: esta lista está INCOMPLETA por definição. Faltam 511, 514, 515,
-   526, 527, 528, 530, 531, 533, 535, 537 e 539, que o gestor enviará depois.
+   526, 528, 530, 533, 535, 537 e 539, que o gestor enviará depois.
    Por isso "(rota não informada)" continua sendo uma opção válida: obrigar a
    escolher uma rota faria a Programação travar justamente nas praças que
    ainda não foram cadastradas. Para acrescentar as que faltam, basta incluir
@@ -1918,7 +1935,9 @@ const ROTAS = [
   { codigo:'523', nome:'Vale do Aço',                        detalhe:'Governador Valadares', operador:'SSLog' },
   { codigo:'524', nome:'Zona da Mata',                       detalhe:'Juiz de Fora', operador:'BSF Logística' },
   { codigo:'525', nome:'Bahia Capital',                      operador:'LogMaster' },
+  { codigo:'527', nome:'Nordeste',                            operador:'' },
   { codigo:'529', nome:'Espírito Santo',                     detalhe:'Serra-ES', operador:'Nacional Log' },
+  { codigo:'531', nome:'Paraná',                              operador:'' },
   { codigo:'532', nome:'Bahia Interior',                     detalhe:'Vitória da Conquista', operador:'ConquistaLog' },
   { codigo:'534', nome:'Salvador',                           operador:'LogMaster' },
   { codigo:'536', nome:'Goiás',                              operador:'AG Sestini' },
@@ -2139,7 +2158,7 @@ const SuincoStore = {
       Rota_Operador: (rotaInfo(carga.rota)||{}).operador || '',
       Sequencia: carga.sequencia ?? null,
       Pra_Onde: carga.praOnde || '',
-      Compartilhada: compartilhadaDaCarga(carga),
+      Paletizada: paletizadaDaCarga(carga),
       Qtd_Ganchos: carga.qtdGanchos || 0,
       Qtd_Entregas: carga.qtdEntregas ?? 1,
       Status_Atual: carga.status,
@@ -2313,6 +2332,7 @@ function cargaDeLinhaRemota(r){
     rota: r.Rota_Codigo || '',
     sequencia: (r.Sequencia === '' || r.Sequencia === null || r.Sequencia === undefined) ? null : Number(r.Sequencia),
     praOnde: PRA_ONDE_OPCOES.includes(r.Pra_Onde) ? r.Pra_Onde : PRA_ONDE_PADRAO,
+    paletizada: r.Paletizada === 'Sim' ? 'Sim' : 'Não',
     qtdGanchos: Number(r.Qtd_Ganchos) || 0,
     qtdEntregas: r.Qtd_Entregas === undefined ? 1 : (Number(r.Qtd_Entregas) || 1),
     status: STATUS_FLOW.includes(r.Status_Atual) ? r.Status_Atual : STATUS_FLOW[0],
@@ -2476,7 +2496,7 @@ function parseCsvRfc4180(texto){
 // docs/NOTAS_BASE_FROTA.md) na primeira execução E sempre que a base mudar.
 // Duas origens possíveis, nesta ordem:
 //   1. window.FROTA_SEED_CSV — o CSV embutido direto no HTML. É o que a
-//      versão de arquivo único (painel_suinco_completo.html) usa, porque
+//      versão de arquivo único (index.html) usa, porque
 //      em file:// o navegador bloqueia fetch de arquivo local por CORS e
 //      o painel abriria sem nenhuma placa.
 //   2. fetch('frota_seed_2026.csv') — quando servido por HTTP (Teams/
@@ -2651,7 +2671,7 @@ function getCarga(id){ return DB.cargas.find(c=>c.id===id) || null; }
 // se a placa não estiver cadastrada em Frota, a criação é recusada. A
 // Portaria continua podendo registrar a chegada de QUALQUER placa (mesmo
 // não cadastrada) via "Aguardando Carga" — a trava é só na Programação.
-function criarCargaProgramada({placa, transportadora, tipoVeiculo, numeroCarga, cliente, destino, produto, peso, doca, rota, sequencia, observacoes, motorista, praOnde, qtdGanchos, qtdEntregas, operador}){
+function criarCargaProgramada({placa, transportadora, tipoVeiculo, numeroCarga, cliente, destino, produto, peso, doca, rota, sequencia, observacoes, motorista, praOnde, paletizada, qtdGanchos, qtdEntregas, operador}){
   const p = normalizarPlaca(placa);
   if(!p) throw new Error('Placa é obrigatória');
   const frota = buscarFrota(p);
@@ -2672,6 +2692,8 @@ function criarCargaProgramada({placa, transportadora, tipoVeiculo, numeroCarga, 
     // Só aceita código de rota conhecido. Vazio é válido de propósito: a
     // lista oficial ainda está incompleta (ver comentário em ROTAS).
     rota: rotaInfo(rota) ? String(rota).trim() : '',
+    // Paletizada é declarada pelo operador, não calculada. Padrão 'Não'.
+    paletizada: paletizada === 'Sim' || paletizada === true ? 'Sim' : 'Não',
     qtdGanchos: qtdGanchos!==undefined && qtdGanchos!=='' ? Math.max(0, Number(qtdGanchos)||0) : 0,
     qtdEntregas: qtdEntregas!==undefined && qtdEntregas!=='' ? Math.max(1, Number(qtdEntregas)||1) : 1,
     status: 'Aguardando Veículo',
@@ -2707,7 +2729,7 @@ function registrarChegadaPortaria(placa, operador){
       tipoVeiculo: frota ? frota.tipoVeiculo : '',
       motorista:'',
       cliente:'', destino:'', produto:'', peso:0, doca:'', sequencia:null, observacoes:'',
-      praOnde: PRA_ONDE_PADRAO, rota:'', qtdGanchos:0, qtdEntregas:1,
+      praOnde: PRA_ONDE_PADRAO, rota:'', paletizada:'Não', qtdGanchos:0, qtdEntregas:1,
       status: 'Aguardando Embarque', aguardandoCarga: true,
       criadoEm: nowISO(), criadoPor: operador||'(não identificado)',
       atualizadoEm: nowISO()
@@ -2735,7 +2757,7 @@ function registrarChegadaPortaria(placa, operador){
 // Embarque" (o caminhão já está fisicamente no pátio) — então isto é só
 // edição de dados, e por isso NÃO gera linha no log de movimentações
 // (log só registra mudança de STATUS).
-function completarCargaAguardando(cargaId, {numeroCarga, cliente, destino, produto, peso, doca, rota, sequencia, observacoes, transportadora, tipoVeiculo, motorista, praOnde, qtdGanchos, qtdEntregas, operador}){
+function completarCargaAguardando(cargaId, {numeroCarga, cliente, destino, produto, peso, doca, rota, sequencia, observacoes, transportadora, tipoVeiculo, motorista, praOnde, paletizada, qtdGanchos, qtdEntregas, operador}){
   const c = getCarga(cargaId);
   if(!c) throw new Error('Carga não encontrada');
   if(!c.aguardandoCarga) throw new Error('Esta carga não está aguardando dados (Aguardando Carga).');
@@ -2745,6 +2767,7 @@ function completarCargaAguardando(cargaId, {numeroCarga, cliente, destino, produ
   c.motorista = motorista||'';
   c.praOnde = PRA_ONDE_OPCOES.includes(praOnde) ? praOnde : PRA_ONDE_PADRAO;
   c.rota = rotaInfo(rota) ? String(rota).trim() : '';
+  c.paletizada = paletizada === 'Sim' || paletizada === true ? 'Sim' : 'Não';
   c.qtdGanchos = qtdGanchos!==undefined && qtdGanchos!=='' ? Math.max(0, Number(qtdGanchos)||0) : 0;
   c.qtdEntregas = qtdEntregas!==undefined && qtdEntregas!=='' ? Math.max(1, Number(qtdEntregas)||1) : 1;
   if(transportadora) c.transportadora = transportadora;
@@ -3116,12 +3139,12 @@ function gerarCsvFactMovimentacoes(){
 }
 function gerarCsvDimCarga(){
   const header = ['Id','NumeroCarga','Placa','Transportadora','TipoVeiculo','Motorista','Cliente','Destino','Produto',
-    'PesoKg','Doca','RotaCodigo','RotaNome','RotaOperador','Sequencia','PraOnde','Compartilhada','QtdGanchos','QtdEntregas','StatusAtual','CriadoEm','AtualizadoEm'];
+    'PesoKg','Doca','RotaCodigo','RotaNome','RotaOperador','Sequencia','PraOnde','Paletizada','QtdGanchos','QtdEntregas','StatusAtual','CriadoEm','AtualizadoEm'];
   const linhas = DB.cargas.map(c=>[
     c.id, c.numeroCarga, c.placa, c.transportadora, c.tipoVeiculo, c.motorista||'', c.cliente, c.destino, c.produto,
     c.peso, c.doca,
     c.rota || '', (rotaInfo(c.rota)||{}).nome || '', (rotaInfo(c.rota)||{}).operador || '',
-    c.sequencia ?? '', c.praOnde || '', compartilhadaDaCarga(c), c.qtdGanchos ?? 0, c.qtdEntregas ?? 1,
+    c.sequencia ?? '', c.praOnde || '', paletizadaDaCarga(c), c.qtdGanchos ?? 0, c.qtdEntregas ?? 1,
     c.status, c.criadoEm, c.atualizadoEm
   ]);
   return toCsv(header, linhas, CSV_COLUNAS_TEXTO);
@@ -3405,7 +3428,6 @@ function detectarTurnoPorHora(){
   return 'Noite (22h–06h)';
 }
 function abrirLogin(){
-  document.getElementById('login-turno').value = detectarTurnoPorHora();
   document.getElementById('modal-operador').classList.add('open');
 }
 function confirmarOperador(){
@@ -3414,7 +3436,11 @@ function confirmarOperador(){
   DB.operador = {
     nome,
     setor: document.getElementById('login-setor').value,
-    turno: document.getElementById('login-turno').value
+    // Turno deixou de ser perguntado no login (pedido do gestor: menos
+    // campos). Continua sendo gravado, agora derivado da hora — o histórico
+    // precisa saber em que turno o registro aconteceu, e perguntar isso ao
+    // operador nunca acrescentou informação que o relógio já não tivesse.
+    turno: detectarTurnoPorHora()
   };
   SuincoStore.save();
   document.getElementById('modal-operador').classList.remove('open');
@@ -3431,7 +3457,7 @@ function trocarUsuario(){
 }
 function atualizarHeaderOperador(){
   const el = document.getElementById('operator-name');
-  el.textContent = DB.operador ? `${DB.operador.nome} · ${DB.operador.setor} · ${DB.operador.turno}` : '—';
+  el.textContent = DB.operador ? `${DB.operador.nome} · ${DB.operador.setor}` : '—';
 }
 // Cada setor vê apenas as próprias abas (SETOR_PERMISSOES em data.js).
 // Decisão confirmada pelo usuário: manter a ocultação, não liberar tudo.
@@ -3533,7 +3559,8 @@ function renderTabAtual(){
     case 'torre': renderTorre(); break;
     case 'programacao': renderProgFila(); renderProgAguardando(); break;
     case 'portaria':
-      renderPortariaPatio();
+      renderPortariaProgramadas();
+  renderPortariaPatio();
       { const el = document.getElementById('portaria-placa'); if(el) setTimeout(()=>el.focus(), 30); }
       break;
     case 'expedicao': renderExpedicao(); break;
@@ -3619,12 +3646,6 @@ function atualizarPreviewFrotaPrograma(){
     hint.innerHTML = '';
   }
 }
-// Calcula e mostra "Compartilhada?" (Sim/Não) a partir do Tipo de Operação —
-// campo derivado, NUNCA editável manualmente (evita desalinhar do real).
-function atualizarPreviewCompartilhada(selectId, previewId){
-  const val = document.getElementById(selectId).value;
-  document.getElementById(previewId).textContent = compartilhadaDaCarga({praOnde:val});
-}
 function criarCargaProgramadaUI(){
   const placa = document.getElementById('prog-placa').value;
   if(!normalizarPlaca(placa)){ notify('Informe a placa.','warn'); return; }
@@ -3642,6 +3663,7 @@ function criarCargaProgramadaUI(){
       observacoes: document.getElementById('prog-obs').value,
       praOnde: document.getElementById('prog-praonde').value,
       rota: document.getElementById('prog-rota').value,
+      paletizada: document.getElementById('prog-paletizada').value,
       qtdGanchos: document.getElementById('prog-ganchos').value,
       qtdEntregas: document.getElementById('prog-entregas').value,
       operador: nomeOperadorAtual()
@@ -3651,9 +3673,9 @@ function criarCargaProgramadaUI(){
       .forEach(id=>document.getElementById(id).value='');
     document.getElementById('prog-praonde').value = PRA_ONDE_PADRAO;
   document.getElementById('prog-rota').value = '';
+  document.getElementById('prog-paletizada').value = 'Não';
     document.getElementById('prog-ganchos').value = '0';
     document.getElementById('prog-entregas').value = '1';
-    atualizarPreviewCompartilhada('prog-praonde','prog-compartilhada-preview');
     document.getElementById('prog-frota-hint').innerHTML = '';
     renderAll();
   }catch(e){ notify(e.message, 'danger'); }
@@ -3751,9 +3773,9 @@ function abrirCompletar(id){
   document.getElementById('completar-obs').value = '';
   document.getElementById('completar-praonde').value = PRA_ONDE_PADRAO;
   document.getElementById('completar-rota').value = '';
+  document.getElementById('completar-paletizada').value = 'Não';
   document.getElementById('completar-ganchos').value = '0';
   document.getElementById('completar-entregas').value = '1';
-  atualizarPreviewCompartilhada('completar-praonde','completar-compartilhada-preview');
   document.getElementById('modal-completar').classList.add('open');
 }
 function fecharModalCompletar(){ document.getElementById('modal-completar').classList.remove('open'); }
@@ -3772,6 +3794,7 @@ function salvarCompletarCarga(){
       observacoes: document.getElementById('completar-obs').value,
       praOnde: document.getElementById('completar-praonde').value,
       rota: document.getElementById('completar-rota').value,
+      paletizada: document.getElementById('completar-paletizada').value,
       qtdGanchos: document.getElementById('completar-ganchos').value,
       qtdEntregas: document.getElementById('completar-entregas').value,
       operador: nomeOperadorAtual()
@@ -3816,6 +3839,50 @@ function acaoSaidaUI(){
   input.focus();
   renderAll();
 }
+/* Fila da Portaria com ação direta por linha.
+
+   Motivo: o registro por digitação de placa continua existindo (é mais rápido
+   para quem já decorou a placa e está com o caminhão na frente), mas obriga a
+   digitar certo. O botão por linha elimina o erro de digitação, que era a
+   principal fonte de retrabalho na portaria.
+
+   O botão só aparece quando a ação é VÁLIDA para o status atual — a máquina de
+   estados não é contornada aqui, apenas exposta. Carga em "Aguardando Veículo"
+   mostra Chegou; em "Faturado" mostra Saiu; nas etapas intermediárias não
+   mostra nada, porque a ação é de outro setor. */
+function renderPortariaProgramadas(){
+  const lista = cargasAbertas().slice().sort(ordenarPorSequenciaEAtualizacao);
+  const tb = document.getElementById('portaria-prog-tbody');
+  if(!tb) return;
+  tb.innerHTML = lista.map(c=>{
+    let acao = '<span class="text-dim">—</span>';
+    if(c.status === 'Aguardando Veículo'){
+      acao = `<button class="btn btn-success btn-sm" onclick="portariaChegouCarga('${escJs(c.placa)}')">🚚 Chegou</button>`;
+    } else if(c.status === 'Faturado'){
+      acao = `<button class="btn btn-warn btn-sm" onclick="portariaSaiuCarga('${escJs(c.placa)}')">🏁 Saiu</button>`;
+    }
+    return `<tr>
+      <td><strong>${esc(c.placa)}</strong></td>
+      <td>${esc(c.numeroCarga)||'—'}</td>
+      <td>${esc(c.transportadora)||'—'}</td>
+      <td>${esc(rotaCurta(c.rota))}</td>
+      <td>${badgeHtml(c.status)}</td>
+      <td class="no-print">${acao}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('portaria-prog-empty').hidden = lista.length>0;
+}
+// Reaproveitam exatamente o mesmo caminho da digitação por placa — inclusive o
+// tratamento em lote da saída, já que o caminhão sai uma vez só.
+function portariaChegouCarga(placa){
+  document.getElementById('portaria-placa').value = placa;
+  acaoChegadaUI();
+}
+function portariaSaiuCarga(placa){
+  document.getElementById('portaria-placa').value = placa;
+  acaoSaidaUI();
+}
+
 function renderPortariaPatio(){
   const noPatio = cargasAbertas().filter(c=>c.status!=='Aguardando Veículo');
   const porPlaca = {};
@@ -4412,7 +4479,7 @@ function renderTimelineCarga(id){
     ['Motorista', c.motorista || '—'],
     ['Rota', rotaLabel(c.rota) || '(não informada)'],
     ['Tipo de Operação', PRA_ONDE_LABEL[c.praOnde] || c.praOnde || '—'],
-    ['Compartilhada?', compartilhadaDaCarga(c)],
+    ['Paletizada', paletizadaDaCarga(c)],
     ['Qtd. Ganchos', (c.qtdGanchos ? c.qtdGanchos : 'Liso')],
     ['Qtd. Entregas', c.qtdEntregas ?? 1]
   ];
@@ -4521,7 +4588,7 @@ function exportarPdfOperacional(){
       <td>${esc(c.transportadora)||'—'}</td>
       <td>${esc(c.tipoVeiculo)||'—'}</td>
       <td>${pesoTon}</td>
-      <td>${compartilhadaDaCarga(c)}</td>
+      <td>${paletizadaDaCarga(c)}</td>
       <td>${c.qtdEntregas ?? 1}</td>
       <td style="text-align:center;font-weight:800">${c.qtdGanchos ? c.qtdGanchos : '<span style="font-weight:600">Liso</span>'}</td>
     </tr>`;
@@ -4540,7 +4607,7 @@ function exportarPdfOperacional(){
         <thead><tr>
           <th>Nº</th><th>Status</th><th>Status de Carregamento</th><th>Faturado</th>
           <th>Seq.</th><th>Carga</th><th>Destino</th><th>Rota</th><th>Tipo de Operação</th>
-          <th>Placa</th><th>Transportadora</th><th>Tipo de Veículo</th><th>Peso(ton)</th><th>Compartilhada?</th><th>Qtd. Entregas</th><th>Qtd. Ganchos</th>
+          <th>Placa</th><th>Transportadora</th><th>Tipo de Veículo</th><th>Peso(ton)</th><th>Paletizada</th><th>Qtd. Entregas</th><th>Qtd. Ganchos</th>
         </tr></thead>
         <tbody>${linhas || '<tr><td colspan="14" class="text-center text-dim">Nenhuma carga programada.</td></tr>'}</tbody>
       </table>
