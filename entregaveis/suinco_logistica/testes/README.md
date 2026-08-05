@@ -21,6 +21,8 @@ cd .. && python3 build_arquivo_unico.py
 python3 testes/test_login_api.py         # painel inteiro contra a API
 python3 testes/test_adaptador_api.py     # adaptador: fluxo, fila, permissão
 python3 testes/test_diagnostico_login.py # a tela diz QUAL foi o problema
+python3 testes/test_teste_conexao.py     # a tela "Testar conexão"
+python3 testes/test_aviso_alteracao.py   # tempo real: alteração e exclusão
 python3 testes/test_relatorios.py        # relatórios impressos
 python3 testes/test_mobile.py            # celular e tablet
 python3 testes/test_refino.py            # filtros, somatórios, indicadores
@@ -57,6 +59,12 @@ deles num celular: a troca de placa numa carga já programada grava no
 servidor e vira aviso na tela do outro, com o valor antigo, o novo, quem
 alterou e som. Cobre também o que NÃO deve acontecer: quem editou não é
 avisado da própria ação, e campo sem importância não toca alarme.
+
+**`test_teste_conexao.py`** — a tela "Testar conexão" do modal de login,
+nos cinco cenários que importam: aparelho sem rede, servidor recusando o
+endereço, rede da empresa descartando o OPTIONS, firewall bloqueando o
+login inteiro e tudo funcionando. Cada um tem que produzir uma conclusão
+diferente, dizendo de quem é o problema.
 
 **`test_relatorios.py`** — os documentos gerados: cabeçalho, nome do arquivo
 com data, largura de coluna e número real de linhas de texto por célula.

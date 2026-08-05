@@ -636,7 +636,14 @@
       <div class="card-sub" style="margin-top:10px">
         Sem conexão com o servidor?
         <a href="#" onclick="mostrarLoginLocal(); return false;">Entrar só neste aparelho</a>
+        ·
+        <a href="#" onclick="rodarTesteDeConexao(); return false;">Testar conexão</a>
       </div>
+      <!-- Resultado do teste de conexão. Existe para quem não consegue
+           entrar poder mostrar EXATAMENTE onde a requisição morre, sem
+           precisar abrir o console do navegador nem descrever o problema
+           por telefone. -->
+      <div id="teste-conexao" hidden></div>
     </div>
 
     <div id="login-local" hidden>

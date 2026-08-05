@@ -292,6 +292,29 @@ select option{background:var(--campo-bg);color:var(--text)}
 .notif-item.warn{background:var(--st-aguardando-embarque-bg);color:var(--st-aguardando-embarque-fg);border-color:var(--st-aguardando-embarque-br)}
 @keyframes slideIn{from{transform:translateX(120%);opacity:0}to{transform:translateX(0);opacity:1}}
 
+/* ---- Teste de conexão (dentro do modal de login) ----
+   Feito para ser fotografado: contraste alto, uma linha por etapa, e a
+   conclusão em destaque. Quem está travado manda a foto e o diagnóstico
+   acaba ali — sem console, sem telefone, sem descrever o problema. */
+#teste-conexao{
+  margin-top:12px;padding:12px;border-radius:var(--radius);
+  background:var(--navy-deep);border:1px solid var(--border-soft);
+  font-size:12.5px;line-height:1.45;
+}
+.teste-titulo{font-weight:800;color:var(--gold);margin-bottom:8px;font-size:13px}
+.teste-linha{display:flex;gap:8px;align-items:baseline;padding:3px 0;flex-wrap:wrap}
+.teste-marca{font-weight:900;width:14px;flex:none}
+.teste-linha.passou .teste-marca{color:var(--st-faturado-fg)}
+.teste-linha.falhou .teste-marca{color:var(--st-aguardando-veiculo-fg)}
+.teste-linha.falhou .teste-nome{font-weight:800}
+.teste-nome{flex:1 1 180px}
+.teste-detalhe{opacity:.72;font-size:11.5px;flex:1 1 100%;padding-left:22px}
+.teste-conclusao{
+  margin-top:10px;padding:9px 10px;border-radius:8px;font-weight:700;
+  background:var(--st-aguardando-embarque-bg);color:var(--st-aguardando-embarque-fg);
+}
+.teste-rodape{margin-top:8px;font-size:11px;opacity:.6;word-break:break-all}
+
 /* ---- Aviso de alteração em carga já programada ----
    Não é a notificação comum: traz o campo, o valor antigo e o novo, e quem
    fez. Precisa ser lido de relance por quem está de pé, com o caminhão
