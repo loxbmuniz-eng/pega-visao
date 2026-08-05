@@ -11,7 +11,7 @@ Cada setor fica com a sua aba aberta o tempo todo, como aconteceria de verdade.
 import asyncio, urllib.request
 from playwright.async_api import async_playwright
 
-PAINEL = 'file:///home/user/pega-visao/entregaveis/suinco_logistica/painel_suinco_completo.html'
+PAINEL = 'file:///home/user/pega-visao/entregaveis/suinco_logistica/index.html'
 GRAPH  = 'http://127.0.0.1:8899/v1.0'
 CICLO  = 1500
 PLACA, NUM = 'AHG5900', '88001'
@@ -90,8 +90,9 @@ async def main():
             await LOG.wait_for_timeout(500)
         await LOG.fill('#prog-placa', PLACA)
         await LOG.fill('#prog-numero-carga', NUM)
-        await LOG.fill('#prog-cliente', 'Cliente A')
-        await LOG.fill('#prog-destino', 'Patos de Minas/MG')
+        # Cliente e Destino saíram do formulário (viraram campos ocultos no
+        # refino de agosto). Não preencher: o Playwright não digita em campo
+        # invisível, e o negócio não exige mais esses dados na programação.
         await LOG.fill('#prog-peso', '9800')
         await LOG.select_option('#prog-rota', '500')
         await LOG.fill('#prog-sequencia', '1')

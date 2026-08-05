@@ -1,6 +1,6 @@
 import asyncio
 from playwright.async_api import async_playwright
-PATH='file:///home/user/pega-visao/entregaveis/suinco_logistica/painel_suinco_completo.html'
+PATH='file:///home/user/pega-visao/entregaveis/suinco_logistica/index.html'
 falhas=[]
 def ck(d,ok,x=''):
     print(f"  [{'OK ' if ok else 'FALHA'}] {d}{(' — '+str(x)) if x else ''}")

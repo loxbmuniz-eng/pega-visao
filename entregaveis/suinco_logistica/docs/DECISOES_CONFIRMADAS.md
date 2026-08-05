@@ -631,3 +631,32 @@ controle de acesso. A senha está em texto puro no código, visível com Ctrl+U.
 Tirá-la de Relatórios não reduz segurança real, porque não havia segurança real
 a reduzir — controle de acesso de verdade só passa a existir com a permissão
 por Lista do SharePoint mais o SSO.
+
+## 24. `index.html` passa a ser o arquivo único publicado (05/08/2026)
+
+Havia duas branches divergindo sobre o mesmo nome de arquivo. A branch que a
+Vercel publica renomeou `painel_suinco_completo.html` → `index.html`; a branch
+de trabalho tinha renomeado `index.html` → `index_suinco.html`. As duas
+estavam certas isoladamente e incompatíveis juntas.
+
+**Decisão:** um nome só, com papéis separados.
+
+| Arquivo | Papel |
+|---|---|
+| `index_suinco.html` | **Fonte.** Referencia styles.css, data.js, app.js e o logo como arquivos separados. É o que se edita. |
+| `index.html` | **Build.** Arquivo único gerado, com tudo embutido. É o que a Vercel publica em embarquesuinco.com.br e o que se manda por e-mail/WhatsApp. |
+
+Consequências práticas:
+
+1. `build_arquivo_unico.py` agora grava em `index.html`. O fallback que aceitava
+   `index.html` como fonte foi removido — com a saída tendo esse nome, o
+   fallback faria o build se alimentar da própria saída e embutir CSS e JS duas
+   vezes.
+2. **`index.html` não se edita à mão.** Qualquer alteração se faz na fonte e
+   depois `python3 build_arquivo_unico.py`. Editar o build direto funciona até o
+   próximo build, que apaga a alteração sem avisar.
+3. Os testes em `testes/` apontam para `index.html` — passam a exercitar
+   exatamente o arquivo que vai ao ar, não uma cópia parecida.
+
+`painel_suinco_completo.html` deixa de existir. Quem tiver o link antigo salvo
+precisa trocar pelo domínio: **embarquesuinco.com.br**.

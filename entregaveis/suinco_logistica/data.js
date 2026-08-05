@@ -687,7 +687,7 @@ function parseCsvRfc4180(texto){
 // docs/NOTAS_BASE_FROTA.md) na primeira execução E sempre que a base mudar.
 // Duas origens possíveis, nesta ordem:
 //   1. window.FROTA_SEED_CSV — o CSV embutido direto no HTML. É o que a
-//      versão de arquivo único (painel_suinco_completo.html) usa, porque
+//      versão de arquivo único (index.html) usa, porque
 //      em file:// o navegador bloqueia fetch de arquivo local por CORS e
 //      o painel abriria sem nenhuma placa.
 //   2. fetch('frota_seed_2026.csv') — quando servido por HTTP (Teams/

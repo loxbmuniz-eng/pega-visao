@@ -1,19 +1,24 @@
 #!/usr/bin/env python3
 """
-Gera `painel_suinco_completo.html`: uma versão de ARQUIVO ÚNICO do painel,
-com CSS, JavaScript, logo e a base de Frota todos embutidos no próprio HTML.
+Gera `index.html`: uma versão de ARQUIVO ÚNICO do painel, com CSS,
+JavaScript, logo e a base de Frota todos embutidos no próprio HTML.
 
-Por que isso existe: `index.html` referencia styles.css/data.js/app.js/logo
-como arquivos separados. Isso é o certo para a versão hospedada (Teams/
-SharePoint), mas quem recebe só o index.html por e-mail/WhatsApp e dá duplo
-clique vê a página crua, sem layout nenhum — o navegador não carrega os
-arquivos vizinhos. Esta versão de arquivo único resolve isso: um .html só,
-que funciona offline, com duplo clique, sem servidor.
+Por que isso existe: a fonte `index_suinco.html` referencia styles.css/
+data.js/app.js/logo como arquivos separados. Isso é o certo para editar,
+mas quem recebe só o HTML por e-mail/WhatsApp e dá duplo clique vê a página
+crua, sem layout nenhum — o navegador não carrega os arquivos vizinhos.
+Esta versão de arquivo único resolve isso: um .html só, que funciona
+offline, com duplo clique, sem servidor.
+
+O nome de saída é `index.html` porque é esse o arquivo que a Vercel publica
+em embarquesuinco.com.br. Ou seja: o que roda em produção é sempre o build,
+nunca a fonte.
 
 Uso:  python3 build_arquivo_unico.py
 
-Rode de novo sempre que mexer em index.html, styles.css, data.js, app.js ou
-frota_seed_2026.csv — o arquivo único é uma cópia derivada, não a fonte.
+Rode de novo sempre que mexer em index_suinco.html, styles.css, data.js,
+app.js, suinco-sharepoint.js ou frota_seed_2026.csv — o arquivo único é uma
+cópia derivada, não a fonte.
 """
 
 import base64
@@ -23,7 +28,8 @@ import re
 import sys
 
 BASE = pathlib.Path(__file__).parent
-SAIDA = BASE / 'painel_suinco_completo.html'
+FONTE = 'index_suinco.html'
+SAIDA = BASE / 'index.html'
 
 
 def ler(nome):
@@ -34,11 +40,10 @@ def ler(nome):
 
 
 def main():
-    # O arquivo-fonte foi renomeado para index_suinco.html no repositório.
-    # Aceita os dois nomes para não quebrar quem tiver a cópia antiga.
-    import os
-    fonte = 'index_suinco.html' if os.path.exists('index_suinco.html') else 'index.html'
-    html = ler(fonte)
+    # A fonte é sempre index_suinco.html. Não existe fallback para
+    # index.html: esse é o ARQUIVO GERADO, e lê-lo como fonte faria o build
+    # se alimentar da própria saída — o CSS e o JS entrariam duas vezes.
+    html = ler(FONTE)
     css = ler('styles.css')
     adapter_js = ler('suinco-sharepoint.js')
     data_js = ler('data.js')

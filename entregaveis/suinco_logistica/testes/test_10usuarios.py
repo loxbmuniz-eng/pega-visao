@@ -15,7 +15,7 @@ Cenários:
 import asyncio, json, time, urllib.request
 from playwright.async_api import async_playwright
 
-PAINEL = 'file:///home/user/pega-visao/entregaveis/suinco_logistica/painel_suinco_completo.html'
+PAINEL = 'file:///home/user/pega-visao/entregaveis/suinco_logistica/index.html'
 GRAPH  = 'http://127.0.0.1:8899/v1.0'
 SITE   = 'SITE_10U'
 CICLO  = 2000
