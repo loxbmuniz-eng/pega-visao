@@ -308,6 +308,95 @@ rotasCargas.post('/cargas/:id/status', exigirLogin, async (req, res, next) => {
 });
 
 /* ---------------------------------------------------------------------
+   DELETE /api/cargas/:id — exclui carga que ainda não virou operação
+   ---------------------------------------------------------------------
+   A exclusão MARCA em vez de apagar. A leitura incremental do painel busca
+   "o que mudou desde X": uma linha apagada não aparece em consulta nenhuma,
+   então nenhum outro terminal saberia que ela sumiu — o operador excluiria
+   e a carga continuaria na tela dos colegas até alguém recarregar tudo.
+
+   A regra de negócio é a mesma que o painel mostra, e precisa valer aqui
+   também: só sai o que ainda está em Aguardando Veículo. Depois disso a
+   carga já tem histórico operacional, e apagar histórico é o começo de um
+   relatório que ninguém consegue explicar. */
+rotasCargas.delete('/cargas/:id', exigirLogin, async (req, res, next) => {
+  try {
+    const op = req.operador;
+    if (!podeCriarCarga(op.setor)) {
+      throw new ErroDePermissao('Só a Logística exclui carga programada.');
+    }
+    const id = idSeguro(req.params.id);
+    if (!id) return res.status(400).json({ erro: 'Id inválido.', codigo: 'ID_INVALIDO' });
+
+    const resultado = await emTransacao(async (cli) => {
+      const { rows } = await cli.query(
+        `SELECT ${COLUNAS_CARGA} FROM fact_viagens WHERE carga_id = $1 FOR UPDATE`,
+        [id]
+      );
+      const carga = rows[0];
+      if (!carga) return { ausente: true };
+
+      /* Excluir de novo não é erro.
+
+         A fila offline reenvia o que não confirmou, e duas pessoas podem
+         clicar em Excluir na mesma carga. Tratar a segunda como falha faria
+         o painel insistir para sempre em algo que já está feito. */
+      if (carga.excluida_em) return { jaExcluida: true, carga };
+
+      if (carga.status_atual !== STATUS_INICIAL) {
+        return { comHistorico: true, carga };
+      }
+
+      await cli.query(
+        `INSERT INTO log_eventos
+           (evento_id, carga_id, placa, acao, setor, operador_id, operador_nome,
+            operador_verificado)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,TRUE)`,
+        [novoId('log'), id, carga.placa, 'Carga programada excluída',
+         op.setor, op.id, op.nome]
+      );
+
+      const { rows: upd } = await cli.query(
+        `UPDATE fact_viagens
+            SET excluida_em = now(), excluida_por = $1
+          WHERE carga_id = $2
+          RETURNING ${COLUNAS_CARGA}`,
+        [op.nome, id]
+      );
+      return { excluida: upd[0] };
+    });
+
+    if (resultado.ausente) {
+      return res.status(404).json({ erro: 'Carga não encontrada.', codigo: 'CARGA_NAO_ENCONTRADA' });
+    }
+    if (resultado.comHistorico) {
+      return res.status(409).json({
+        erro: `A carga já está em "${resultado.carga.status_atual}" e tem histórico `
+            + 'operacional. Só é possível excluir enquanto está em '
+            + `"${STATUS_INICIAL}".`,
+        codigo: 'CARGA_COM_HISTORICO',
+      });
+    }
+    if (resultado.jaExcluida) {
+      return res.json({ ...paraPainel(resultado.carga), excluida: true });
+    }
+
+    const payload = { ...paraPainel(resultado.excluida), excluida: true };
+    emitir('carga:atualizada', payload);
+    emitir('carga:excluida', {
+      cargaId: payload.id,
+      numeroCarga: payload.numeroCarga || '',
+      placa: payload.placa,
+      operador: { id: op.id, nome: op.nome, setor: op.setor },
+      em: new Date().toISOString(),
+    });
+    return res.json(payload);
+  } catch (e) {
+    return next(e);
+  }
+});
+
+/* ---------------------------------------------------------------------
    POST /api/portaria/saida — o caminhão saiu do pátio
    ---------------------------------------------------------------------
    Uma placa pode carregar mais de uma carga. O caminhão sai uma vez só, e

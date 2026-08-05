@@ -317,6 +317,29 @@ function receberEdicaoRemota(aviso){
   if(aviso.sonoro) tocarAlertaAlteracao();
 }
 
+/* Carga excluída por outro operador.
+
+   Toca junto com a troca de placa, e pelo mesmo motivo: quem está com a
+   lista impressa na mão ou com o caminhão na doca precisa saber que aquela
+   carga deixou de existir. Descobrir isso quando o motorista já encostou é
+   tarde demais. */
+function receberExclusaoRemota(aviso){
+  if(!aviso || !aviso.cargaId) return;
+  if(souEu(aviso.operador)) return;
+
+  const carga = aviso.numeroCarga ? `Carga ${aviso.numeroCarga}` : `Placa ${aviso.placa}`;
+  const quem = aviso.operador ? `${aviso.operador.nome} (${aviso.operador.setor})` : 'outro operador';
+
+  const el = document.createElement('div');
+  el.className = 'notif-item aviso-alteracao forte';
+  el.innerHTML = `<div class="aviso-titulo">${esc(carga)} EXCLUÍDA</div>`
+    + `<div class="aviso-linha">Placa <b>${esc(aviso.placa || '—')}</b> saiu da programação.</div>`
+    + `<div class="aviso-quem">por ${esc(quem)} · ${horaCurta(aviso.em)}</div>`;
+  document.getElementById('notif').appendChild(el);
+  setTimeout(()=>el.remove(), 20000);
+  tocarAlertaAlteracao();
+}
+
 /* ---------- login / operador (placeholder até SSO) ---------- */
 function detectarTurnoPorHora(){
   const h = new Date().getHours();
@@ -812,15 +835,52 @@ function reordenarPorSequenciaUI(){
   renderProgFila();
   notify('Fila reordenada por Sequência.', 'success');
 }
-function excluirCargaUI(id){
+/* Excluir carga programada.
+
+   A ordem aqui é deliberada: apaga da tela primeiro, avisa o servidor
+   depois. É a mesma regra que vale para o resto do painel — quem clicou
+   está com o caminhão na frente e não pode esperar a rede. Se o servidor
+   recusar (carga já em operação, setor sem permissão), a carga volta na
+   sincronia seguinte, com aviso do motivo.
+
+   Sem rede, a exclusão entra na fila e sobe depois. */
+async function excluirCargaUI(id){
   const c = getCarga(id); if(!c) return;
   if(c.status !== 'Aguardando Veículo'){ notify('Só é possível excluir cargas ainda em Aguardando Veículo — o resto já tem histórico operacional.', 'warn'); return; }
   if(!confirm(`Excluir a carga programada da placa ${c.placa}? Essa ação não pode ser desfeita.`)) return;
+
+  const numero = c.numeroCarga || '';
+  const placa = c.placa;
+
   DB.cargas = DB.cargas.filter(x=>x.id!==id);
   DB.movimentacoes = DB.movimentacoes.filter(m=>m.cargaId!==id);
+  registrarAlteracao({
+    cargaId: id, placa,
+    campo: 'Carga excluída',
+    de: numero ? `Carga ${numero}` : `Placa ${placa}`,
+    para: '(excluída)',
+    setor: (DB.operador && DB.operador.setor) || 'Logística',
+    operador: (DB.operador && DB.operador.nome) || '(não identificado)'
+  });
   SuincoStore.save();
-  notify('Carga excluída.', 'success');
   renderAll();
+
+  if(typeof SuincoSharePoint === 'undefined' || !SuincoSharePoint.excluir){
+    notify('Carga excluída.', 'success');
+    return;
+  }
+  try{
+    const r = await SuincoSharePoint.excluir(id);
+    if(r && r.recusado){
+      notify(`O servidor recusou a exclusão: ${r.erro} A carga volta na próxima sincronia.`, 'danger', 12000);
+      return;
+    }
+    notify(r && r.enfileirado
+      ? 'Carga excluída aqui. Sem rede no momento — sobe assim que voltar.'
+      : 'Carga excluída. Os outros setores já foram avisados.', 'success');
+  }catch(e){
+    notify('Carga excluída aqui, mas o servidor não confirmou. Ela pode voltar na próxima sincronia.', 'warn', 12000);
+  }
 }
 function renderProgAguardando(){
   const lista = DB.cargas.filter(c=>c.aguardandoCarga);
@@ -2117,6 +2177,7 @@ async function init(){
     // Alteração em carga já programada: aviso detalhado, com som quando é a
     // placa. Chega por fora da sincronia porque é notícia, não dado.
     if(SuincoSharePoint.aoEditarCarga) SuincoSharePoint.aoEditarCarga(receberEdicaoRemota);
+    if(SuincoSharePoint.aoExcluirCarga) SuincoSharePoint.aoExcluirCarga(receberExclusaoRemota);
     SuincoSharePoint.iniciar()
       .then(()=>{ atualizarRodapeConexao(SuincoSharePoint.estado()); renderAll(); })
       .catch(e=>{ console.warn('[Suinco] init:', e); atualizarRodapeConexao('local'); });

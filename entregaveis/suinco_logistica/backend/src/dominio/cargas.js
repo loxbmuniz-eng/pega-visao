@@ -63,6 +63,11 @@ export function paraPainel(linha) {
     criadoPor: linha.operador_nome,
     atualizadoEm: linha.atualizado_em,
     versao: linha.versao,
+    // Carga excluída continua sendo devolvida na leitura incremental: é
+    // assim que os outros terminais descobrem que ela saiu. Sem esta
+    // marca, uma linha apagada simplesmente não apareceria em consulta
+    // nenhuma e a carga ficaria na tela dos colegas até alguém recarregar.
+    excluida: !!linha.excluida_em,
   };
 }
 
@@ -192,4 +197,4 @@ export const COLUNAS_CARGA = `
   cliente, destino, peso_kg, doca, rota_codigo, sequencia, pra_onde,
   paletizada, qtd_ganchos, qtd_entregas, observacoes, status_atual,
   aguardando_carga, criado_em, atualizado_em, operador_id, operador_nome,
-  operador_setor, versao`;
+  operador_setor, versao, excluida_em, excluida_por`;
