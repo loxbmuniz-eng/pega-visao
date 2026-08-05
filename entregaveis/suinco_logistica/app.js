@@ -49,28 +49,38 @@ async function comOverlaySync(sub, tarefa){
   }
 }
 
+/* Carimbo do build, mostrado no rodapé. O build_arquivo_unico.py injeta
+   window.SUINCO_BUILD com data e commit ao gerar o arquivo único.
+
+   Existe por um motivo prático: depois de publicar, a pergunta é sempre "o
+   navegador pegou a versão nova ou está com a antiga em cache?". Sem carimbo
+   visível, a única resposta é caçar um campo que mudou. Com ele, é um olhar
+   no rodapé. Quando se abre a fonte direto (sem build), fica 'fonte'. */
+const BUILD_ID = (typeof window !== 'undefined' && window.SUINCO_BUILD) || 'fonte';
+
 function atualizarRodapeConexao(estado, detalhe){
   const rod = document.getElementById('rodape-conexao');
   const badge = document.getElementById('badge-conexao');
   if(!rod) return;
   const fila = (typeof SuincoSharePoint !== 'undefined') ? SuincoSharePoint.pendentes() : 0;
   const sufixoFila = fila ? ` · ${fila} registro(s) na fila` : '';
+  const carimbo = ` · versão ${BUILD_ID}`;
 
   if(estado === 'online'){
     const u = (typeof SuincoSharePoint !== 'undefined') ? SuincoSharePoint.ultimaSincronia() : null;
     const seg = u ? Math.round((Date.now() - Date.parse(u))/1000) : null;
     const quando = seg === null ? '' : (seg < 5 ? ' · sincronizado agora' : ` · sincronizado há ${seg}s`);
     rod.className = 'rodape-conexao online';
-    rod.innerHTML = `✅ Conectado ao SharePoint | Compartilhado entre os setores${esc(quando)}${esc(sufixoFila)}`;
+    rod.innerHTML = `✅ Conectado ao SharePoint | Compartilhado entre os setores${esc(quando)}${esc(sufixoFila)}${esc(carimbo)}`;
     if(badge){ badge.hidden = true; }
   } else if(estado === 'offline'){
     rod.className = 'rodape-conexao offline';
-    rod.innerHTML = `⚠️ Modo Offline — gravando no aparelho e sincronizando assim que a rede voltar${esc(sufixoFila)}`;
+    rod.innerHTML = `⚠️ Modo Offline — gravando no aparelho e sincronizando assim que a rede voltar${esc(sufixoFila)}${esc(carimbo)}`;
     if(badge){ badge.hidden = false; badge.className = 'badge-conexao offline'; badge.textContent = '⚠️ Modo Offline'; }
   } else {
     // 'local': sem configuração de tenant. Estado honesto, não erro.
     rod.className = 'rodape-conexao local';
-    rod.innerHTML = '⚙️ Modo Local — aguardando o TI provisionar o SharePoint (ver docs/RELATORIO_TI_HOSPEDAGEM.md). Os dados ficam neste navegador.';
+    rod.innerHTML = '⚙️ Modo Local — aguardando o TI provisionar o SharePoint (ver docs/RELATORIO_TI_HOSPEDAGEM.md). Os dados ficam neste navegador.' + esc(carimbo);
     if(badge){ badge.hidden = false; badge.className = 'badge-conexao local'; badge.textContent = '⚙️ Local'; }
   }
 }

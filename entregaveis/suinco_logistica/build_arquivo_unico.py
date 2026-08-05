@@ -22,14 +22,39 @@ cópia derivada, não a fonte.
 """
 
 import base64
+import datetime
 import json
 import pathlib
 import re
+import subprocess
 import sys
 
 BASE = pathlib.Path(__file__).parent
 FONTE = 'index_suinco.html'
 SAIDA = BASE / 'index.html'
+
+
+def carimbo_do_build():
+    """Identifica esta build: data + commit curto (ex.: '05/08 f515508').
+
+    É o que aparece no rodapé do painel. Sem isso, depois de publicar não há
+    como saber pela tela se o navegador pegou a versão nova ou serviu a
+    antiga do cache — e essa dúvida já custou uma rodada inteira.
+
+    Se o git não estiver disponível (alguém rodando o build a partir de um
+    .zip), cai só na data. Não é motivo para falhar o build.
+    """
+    data = datetime.datetime.now().strftime('%d/%m %H:%M')
+    try:
+        sha = subprocess.run(
+            ['git', 'rev-parse', '--short', 'HEAD'],
+            cwd=BASE, capture_output=True, text=True, timeout=10,
+        )
+        if sha.returncode == 0 and sha.stdout.strip():
+            return f'{data} · {sha.stdout.strip()}'
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return data
 
 
 def ler(nome):
@@ -80,6 +105,11 @@ def main():
     #    é bloqueado por CORS, então data.js lê window.FROTA_SEED_CSV.
     seed = ('<script>window.FROTA_SEED_CSV = ' + json.dumps(csv, ensure_ascii=False)
             + ';</script>')
+
+    # 3b. Carimbo do build. app.js lê window.SUINCO_BUILD e mostra no rodapé,
+    #     para dar para responder "atualizou?" olhando a tela.
+    seed += ('\n<script>window.SUINCO_BUILD = '
+             + json.dumps(carimbo_do_build(), ensure_ascii=False) + ';</script>')
 
     # 4. O adaptador do SharePoint também entra inline. O <script> do MSAL
     #    continua apontando para a CDN da Microsoft: não dá para embutir uma
