@@ -70,6 +70,41 @@ async def main():
         ck('Gargalos e Pontos Críticos presente', r['gargalos'])
         print('  seções:', r['secoes'])
 
+        print('\n=== OPERACIONAL: MESMA LIMPEZA ===')
+        await pg.evaluate("()=>exportarPdfOperacional()")
+        await pg.wait_for_timeout(400)
+        o = await pg.evaluate('''() => {
+          const cont = document.getElementById('print-operacional');
+          const ths = [...cont.querySelectorAll('thead th')].map(t=>t.innerText);
+          const rodape = (cont.querySelector('.print-legenda')||{}).innerText || '';
+          return {
+            legenda: !!cont.querySelector('.legenda-status'),
+            colunas: ths,
+            temDestino: ths.includes('Destino'),
+            linhasRodape: rodape.split('\\n').filter(x=>x.trim()).length,
+            total: !!cont.querySelector('.linha-total')
+          };
+        }''')
+        ck('legenda de cores removida do operacional', not o['legenda'])
+        ck('coluna Destino removida (o campo saiu do formulário)', not o['temDestino'],
+           str(o['colunas']))
+        ck('linha de totais preservada', o['total'])
+        ck('nota de rodapé enxuta', o['linhasRodape'] <= 3, f"{o['linhasRodape']} linha(s)")
+        # A tabela precisa continuar coerente: cabeçalho e células no mesmo número.
+        coerente = await pg.evaluate('''() => {
+          const cont = document.getElementById('print-operacional');
+          const nTh = cont.querySelectorAll('thead th').length;
+          const tr = cont.querySelector('tbody tr');
+          const nTd = tr ? tr.children.length : nTh;
+          const tot = cont.querySelector('.linha-total');
+          const nTot = tot ? [...tot.children].reduce((a,c)=>a+(c.colSpan||1),0) : nTh;
+          return {nTh, nTd, nTot};
+        }''')
+        ck('cabeçalho e linhas com o mesmo número de colunas',
+           coerente['nTh'] == coerente['nTd'], str(coerente))
+        ck('linha de totais alinhada com as colunas',
+           coerente['nTot'] == coerente['nTh'], str(coerente))
+
         print('\n=== CONCLUÍDAS: SEM STATUS ZERADO ===')
         z = await pg.evaluate("""() => {
           const secs = [...document.querySelectorAll('#print-executivo .print-secao-tit')];

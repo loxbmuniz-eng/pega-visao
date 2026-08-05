@@ -1580,7 +1580,6 @@ function exportarPdfOperacional(){
       <td style="text-align:center">${c.sequencia ?? '—'}</td>
       <td>${esc(c.numeroCarga)||'—'}</td>
       <td style="background:${cs.fundo};color:${cs.texto};font-weight:800;text-align:center">${esc(c.status)}</td>
-      <td>${esc(c.destino)||'—'}</td>
       <td>${esc(rotaCurta(c.rota))}</td>
       <td ${praOndeStyle}>${c.praOnde ? esc(PRA_ONDE_LABEL[c.praOnde]) : '—'}</td>
       <td>${esc(c.placa)}</td>
@@ -1601,21 +1600,32 @@ function exportarPdfOperacional(){
         <div><h1>PDF Operacional — Sequenciamento de Carregamento</h1>
         <div class="meta">Gerado em ${fmtDataHora(agora.toISOString())} · ${rotuloPeriodoRelatorio()} · ${lista.length} carga(s) · ${concluidas} concluída(s)</div></div>
       </div>
-      ${legendaStatusHtml()}
+      <!-- A legenda de cores saiu daqui também (05/08/2026).
+
+           Eu tinha defendido mantê-la, porque a foto vai para o grupo do
+           WhatsApp e quem recebe não teria como saber o que cada cor
+           significa. O gestor decidiu pela remoção, e o argumento dele é
+           melhor: a coluna Status traz o nome da etapa POR EXTENSO em cada
+           linha. A cor é reforço, não a informação — a legenda explicava
+           algo que já estava escrito. -->
       <table>
         <thead><tr>
-          <th>Nº</th><th>Seq.</th><th>Carga</th><th>Status</th><th>Destino</th><th>Rota</th><th>Tipo de Operação</th>
+          <th>Nº</th><th>Seq.</th><th>Carga</th><th>Status</th><th>Rota</th><th>Tipo de Operação</th>
           <th>Placa</th><th>Transportadora</th><th>Tipo de Veículo</th><th>Peso(ton)</th><th>Paletizada</th><th>Qtd. Entregas</th><th>Qtd. Ganchos</th>
         </tr></thead>
-        <tbody>${linhas || '<tr><td colspan="14" class="text-center text-dim">Nenhuma carga no período selecionado.</td></tr>'}</tbody>
-        ${lista.length ? `<tfoot>${rodapeSomatorios(lista, 10, ['peso','', 'entregas','ganchos'])}</tfoot>` : ''}
+        <tbody>${linhas || '<tr><td colspan="13" class="text-center text-dim">Nenhuma carga no período selecionado.</td></tr>'}</tbody>
+        ${lista.length ? `<tfoot>${rodapeSomatorios(lista, 9, ['peso','', 'entregas','ganchos'])}</tfoot>` : ''}
       </table>
+      <!-- Nota de rodapé enxugada.
+
+           A anterior tinha cinco linhas explicando decisões de projeto —
+           por que tal coluna saiu, o que a cor significa. Isso interessa a
+           quem mantém o sistema, não a quem lê a folha no pátio. O que
+           sobra é a única coisa que o leitor precisa saber e não consegue
+           deduzir olhando a tabela. -->
       <div class="print-legenda">
-        Este relatório mostra <strong>todas as cargas da programação, em qualquer status</strong> —
-        as concluídas continuam na lista, em verde escuro, para o acompanhamento do dia inteiro.
-        A coluna <strong>Status</strong> traz a etapa real da carga, logo depois do número, com a
-        cor da escala. As colunas "Status de Carregamento" e "Faturado" saíram: repetiam o que o
-        Status já diz, ocupando espaço que faltava para o resto da linha.
+        Todas as cargas da programação aparecem, em qualquer status — as concluídas
+        continuam na lista para o acompanhamento do dia inteiro.
       </div>
     </div>`;
   imprimirContainer(el, 'Relatorio-Operacional');
@@ -1641,17 +1651,6 @@ function exportarCsvPowerBI(){
     setTimeout(()=>baixarArquivoTexto(f.nome, f.conteudo), i*250);
   });
   notify(`Exportando ${arquivos.length} arquivos CSV (fato/dimensão) para Power BI…`, 'success');
-}
-/* Legenda das 6 cores de status, na ordem do fluxo.
-   Vai nos relatórios impressos porque quem recebe a foto no grupo do WhatsApp
-   nem sempre tem o painel aberto do lado para saber o que cada cor significa. */
-function legendaStatusHtml(){
-  return `<div class="legenda-status">
-    ${STATUS_FLOW.map(s=>{
-      const c = corStatusRelatorio(s);
-      return `<span class="legenda-status-item" style="background:${c.fundo};color:${c.texto};border-color:${c.borda}">${esc(s)}</span>`;
-    }).join('')}
-  </div>`;
 }
 
 /* Título de seção do PDF — mesma marcação repetida várias vezes no executivo. */
