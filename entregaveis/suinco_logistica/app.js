@@ -231,6 +231,92 @@ function tocarBeepConfirmacao(){
   }catch(e){ console.warn('Som de confirmação indisponível:', e); }
 }
 
+/* ---------- SOM DE ALERTA (edição em carga já programada) ----------
+   Diferente do beep de confirmação de propósito. Confirmação é aguda e
+   curta, para quem apertou o botão. Isto é um alerta para quem NÃO fez
+   nada e precisa levantar a cabeça: dois tons descendentes, mais graves e
+   mais longos, que atravessam o barulho do pátio sem virar susto.
+
+   Se os dois sons fossem iguais, o operador não saberia se o que ouviu foi
+   a própria ação ou um aviso de que a carga dele mudou. */
+function tocarAlertaAlteracao(){
+  try{
+    if(!_audioCtx){
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if(!Ctx) return;
+      _audioCtx = new Ctx();
+    }
+    if(_audioCtx.state === 'suspended') _audioCtx.resume();
+    [[0, 660], [260, 495]].forEach(([atrasoMs, hz])=>{
+      setTimeout(()=>{
+        try{
+          const osc = _audioCtx.createOscillator();
+          const gain = _audioCtx.createGain();
+          osc.type = 'triangle';   // menos estridente que a senoide pura
+          osc.frequency.value = hz;
+          gain.gain.setValueAtTime(0.0001, _audioCtx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.3, _audioCtx.currentTime + 0.015);
+          gain.gain.exponentialRampToValueAtTime(0.0001, _audioCtx.currentTime + 0.26);
+          osc.connect(gain);
+          gain.connect(_audioCtx.destination);
+          osc.start();
+          osc.stop(_audioCtx.currentTime + 0.27);
+        }catch(e){ /* som nunca trava o fluxo */ }
+      }, atrasoMs);
+    });
+  }catch(e){ console.warn('Alerta sonoro indisponível:', e); }
+}
+
+/* ---------- AVISO DE ALTERAÇÃO EM CARGA JÁ PROGRAMADA ----------
+   Chega pelo servidor, por socket, para TODO MUNDO que estiver logado.
+
+   Por que o servidor e não o navegador de quem editou: só o servidor sabe
+   o estado anterior com certeza e alcança os outros terminais. E o aviso
+   sai depois da gravação confirmada — avisar antes seria anunciar uma
+   mudança que ainda pode ser recusada.
+
+   Quem editou NÃO é avisado: ele acabou de ver a confirmação da própria
+   ação, e repetir a informação treina a operação a ignorar o aviso. */
+function souEu(operador){
+  if(!operador || !DB.operador) return false;
+  if(operador.id && DB.operador.id) return operador.id === DB.operador.id;
+  return operador.nome === DB.operador.nome && operador.setor === DB.operador.setor;
+}
+
+function avisoDeEdicaoHtml(aviso){
+  const carga = aviso.numeroCarga ? `Carga ${aviso.numeroCarga}` : `Placa ${aviso.placa}`;
+  const quem = aviso.operador ? `${aviso.operador.nome} (${aviso.operador.setor})` : 'outro operador';
+  const linhas = aviso.alteracoes
+    .map(a=>`<div class="aviso-linha"><b>${esc(a.campo)}:</b> <s>${esc(a.de)}</s> → <b>${esc(a.para)}</b></div>`)
+    .join('');
+  return `<div class="aviso-titulo">${esc(carga)} alterada</div>${linhas}`
+       + `<div class="aviso-quem">por ${esc(quem)} · ${horaCurta(aviso.em)}</div>`;
+}
+
+function horaCurta(iso){
+  const d = iso ? new Date(iso) : new Date();
+  return isNaN(d) ? '' : d.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
+}
+
+function receberEdicaoRemota(aviso){
+  if(!aviso || !Array.isArray(aviso.alteracoes) || !aviso.alteracoes.length) return;
+  if(souEu(aviso.operador)) return;
+
+  const el = document.createElement('div');
+  el.className = 'notif-item aviso-alteracao' + (aviso.sonoro ? ' forte' : '');
+  el.innerHTML = avisoDeEdicaoHtml(aviso);
+  document.getElementById('notif').appendChild(el);
+
+  /* Troca de placa fica 20 s; o resto, 9 s.
+
+     Não é exagero: é o tempo de alguém que está com as mãos ocupadas
+     terminar o que faz e olhar para a tela. O aviso some sozinho porque
+     um que exige clique acumularia na tela do terminal compartilhado. */
+  setTimeout(()=>el.remove(), aviso.sonoro ? 20000 : 9000);
+
+  if(aviso.sonoro) tocarAlertaAlteracao();
+}
+
 /* ---------- login / operador (placeholder até SSO) ---------- */
 function detectarTurnoPorHora(){
   const h = new Date().getHours();
@@ -351,7 +437,9 @@ async function entrarNoServidor(){
 
   try{
     const op = await SuincoSharePoint.login(email, senha);
-    DB.operador = { nome: op.nome, setor: op.setor, email: op.email, turno: detectarTurnoPorHora() };
+    // O id vem junto para o painel saber distinguir "eu editei" de "outro
+    // editou" — dois operadores podem ter o mesmo primeiro nome.
+    DB.operador = { id: op.id, nome: op.nome, setor: op.setor, email: op.email, turno: detectarTurnoPorHora() };
     SuincoStore.save();
 
     // Limpa a senha do DOM assim que ela deixa de ser necessária. Terminal de
@@ -437,58 +525,25 @@ function atualizarAvisoSetorAba(){
   });
 }
 
-/* ---------- TRAVA DE SENHA (Programação / Indicadores) ----------------
-   ATENÇÃO — LEIA ANTES DE CONFIAR NISSO PRA QUALQUER COISA SÉRIA:
+/* ---------- A senha de aba foi REMOVIDA ------------------------------
+   Programação e Indicadores pediam uma senha fixa, escrita em texto puro
+   no próprio arquivo e visível com Ctrl+U. Ela nasceu quando o painel não
+   tinha login nenhum e era a única barreira existente.
 
-   Isto NÃO é segurança. É uma barreira de UX, para evitar que alguém abra
-   essas abas sem querer ou por curiosidade casual. A senha fica em texto
-   puro logo abaixo, visível com Ctrl+U ou pelo F12, e não resiste a
-   ninguém com o mínimo de intenção de contornar.
+   Hoje ela só atrapalha. Quem abre essas abas já entrou com e-mail e senha
+   individuais, e o setor vem do token assinado pelo servidor: a Programação
+   só aparece para quem tem direito a ela, e a API recusa a gravação de quem
+   não tem — independentemente do que a tela mostre.
 
-   O controle de acesso de verdade está no SERVIDOR: o setor vem do token
-   assinado e a API recusa a gravação que não é daquele setor. Adulterar
-   qualquer coisa aqui muda o desenho da tela, não o que o servidor aceita.
+   Manter uma senha compartilhada ao lado disso tinha dois custos e nenhum
+   ganho: atrasava quem tem direito de entrar, e ensinava a operação a
+   digitar uma senha coletiva que qualquer um lê no código-fonte.
 
-   É uma cortina, não uma porta trancada. */
-const SENHA_UX_ABAS_RESTRITAS = 'suinco2026';
-const ABAS_COM_SENHA = ['programacao','indicadores'];
-let abasDesbloqueadasNestaSessao = new Set();
-let _tabPendenteSenha = null;
-function abaPrecisaSenha(tab){
-  return ABAS_COM_SENHA.includes(tab) && !abasDesbloqueadasNestaSessao.has(tab);
-}
-function pedirSenhaAba(tab){
-  _tabPendenteSenha = tab;
-  // Nome da aba vem da própria navegação (sem o emoji), pra não existir uma
-  // segunda lista de rótulos que saia de sincronia ao incluir mais uma aba.
-  const nav = document.querySelector(`.nav-tab[data-tab="${tab}"]`);
-  const nome = nav ? nav.textContent.replace(/^[^\p{L}]+/u, '').trim() : tab;
-  document.getElementById('senha-titulo').textContent = 'Área restrita — ' + nome;
-  document.getElementById('senha-input').value = '';
-  document.getElementById('modal-senha').classList.add('open');
-  setTimeout(()=>document.getElementById('senha-input').focus(), 50);
-}
-function confirmarSenhaAba(){
-  const val = document.getElementById('senha-input').value;
-  const tab = _tabPendenteSenha;
-  document.getElementById('modal-senha').classList.remove('open');
-  if(val === SENHA_UX_ABAS_RESTRITAS){
-    abasDesbloqueadasNestaSessao.add(tab);
-    _tabPendenteSenha = null;
-    irParaTab(tab);
-  } else {
-    notify('Senha incorreta.', 'danger');
-    _tabPendenteSenha = null;
-  }
-}
-function cancelarSenhaAba(){
-  document.getElementById('modal-senha').classList.remove('open');
-  _tabPendenteSenha = null;
-}
+   As funções foram apagadas em vez de esvaziadas para que ninguém volte a
+   chamá-las achando que protegem alguma coisa. */
 
 /* ---------- navegação ---------- */
 function abrirTab(tab){
-  if(abaPrecisaSenha(tab)){ pedirSenhaAba(tab); return; }
   irParaTab(tab);
 }
 function irParaTab(tab){
@@ -1323,7 +1378,7 @@ function renderGraficosIndicadores(){
   const distrib = distribuicaoStatusAtual(filtros);
   drawPieChart(document.getElementById('grafico-pizza'), distrib);
 }
-window.addEventListener('resize', ()=>{ if(TAB_ATUAL==='indicadores' && abasDesbloqueadasNestaSessao.has('indicadores')) renderGraficosIndicadores(); });
+window.addEventListener('resize', ()=>{ if(TAB_ATUAL==='indicadores') renderGraficosIndicadores(); });
 
 /* ---------- CADASTROS ---------- */
 function renderCadastros(){
@@ -2049,6 +2104,9 @@ async function init(){
       }
       atualizarRodapeConexao(SuincoSharePoint.estado());
     });
+    // Alteração em carga já programada: aviso detalhado, com som quando é a
+    // placa. Chega por fora da sincronia porque é notícia, não dado.
+    if(SuincoSharePoint.aoEditarCarga) SuincoSharePoint.aoEditarCarga(receberEdicaoRemota);
     SuincoSharePoint.iniciar()
       .then(()=>{ atualizarRodapeConexao(SuincoSharePoint.estado()); renderAll(); })
       .catch(e=>{ console.warn('[Suinco] init:', e); atualizarRodapeConexao('local'); });

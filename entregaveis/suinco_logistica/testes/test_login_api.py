@@ -118,12 +118,6 @@ async def main():
         placa = await pagina.evaluate("() => DB.frota[3].placa")
         await pagina.evaluate("t => abrirTab(t)", 'programacao')
         await pagina.wait_for_timeout(400)
-        senha_aba = await pagina.query_selector('#modal-senha input')
-        if senha_aba:
-            await senha_aba.fill('suinco2026')
-            await pagina.click('#modal-senha .btn-primary')
-            await pagina.wait_for_timeout(400)
-
         await pagina.fill('#prog-placa', placa)
         await pagina.fill('#prog-numero-carga', numero)
         await pagina.fill('#prog-peso', '12000')

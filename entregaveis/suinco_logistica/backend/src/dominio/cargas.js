@@ -139,6 +139,54 @@ export function saneiarEdicao(corpo, camposPermitidos) {
   return saida;
 }
 
+/* O que, ao mudar numa carga já programada, o pátio inteiro precisa saber.
+
+   A lista é curta de propósito. Observação e doca ficam de fora: mudam com
+   frequência, raramente alteram a decisão de quem está carregando, e um
+   aviso que aparece o tempo todo deixa de ser lido — inclusive no dia em
+   que a placa mudar de verdade.
+
+   O rótulo é o nome que o operador vê na tela, não o da coluna. */
+const CAMPOS_AVISADOS = [
+  ['placa', 'Placa'],
+  ['numero_carga', 'Número da carga'],
+  ['rota_codigo', 'Rota'],
+  ['sequencia', 'Sequência'],
+  ['cliente', 'Cliente'],
+  ['destino', 'Destino'],
+  ['motorista', 'Motorista'],
+  ['peso_kg', 'Peso (kg)'],
+  ['pra_onde', 'Pra onde'],
+  ['qtd_ganchos', 'Ganchos'],
+  ['qtd_entregas', 'Entregas'],
+  ['paletizada', 'Paletizada'],
+  ['transportadora', 'Transportadora'],
+  ['tipo_veiculo', 'Tipo de veículo'],
+];
+
+function paraTexto(v) {
+  if (v === null || v === undefined || v === '') return '—';
+  if (v === true) return 'Sim';
+  if (v === false) return 'Não';
+  return String(v);
+}
+
+/* Diferença entre o antes e o depois, já em linguagem de operador.
+
+   Compara como texto porque é assim que a diferença vai ser exibida: o
+   banco devolve `peso_kg` ora como número, ora como string, dependendo do
+   driver, e comparar tipos crus acusaria mudança onde não houve. */
+export function camposDeAviso(antes, depois) {
+  if (!antes || !depois) return [];
+  const saida = [];
+  for (const [coluna, rotulo] of CAMPOS_AVISADOS) {
+    const de = paraTexto(antes[coluna]);
+    const para = paraTexto(depois[coluna]);
+    if (de !== para) saida.push({ campo: rotulo, de, para });
+  }
+  return saida;
+}
+
 export const COLUNAS_CARGA = `
   carga_id, numero_carga, placa, transportadora, tipo_veiculo, motorista,
   cliente, destino, peso_kg, doca, rota_codigo, sequencia, pra_onde,

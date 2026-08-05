@@ -4,7 +4,7 @@ import { exigirLogin } from '../middleware/auth.js';
 import { emitir } from '../tempo-real.js';
 import {
   COLUNAS_CARGA, paraPainel, saneiarCriacao, saneiarEdicao,
-  normalizarPlaca, idSeguro,
+  normalizarPlaca, idSeguro, camposDeAviso,
 } from '../dominio/cargas.js';
 import {
   validarTransicao, podeCriarCarga, camposEditaveisPor, podeRegistrarSaida,
@@ -148,6 +148,19 @@ rotasCargas.patch('/cargas/:id', exigirLogin, async (req, res, next) => {
       if (mudancas.tipo_veiculo === undefined) mudancas.tipo_veiculo = rows[0].tipo_veiculo;
     }
 
+    /* Estado antes da gravação, para saber o que de fato mudou.
+
+       Sem isto o aviso em tempo real só conseguiria dizer "a carga 12345
+       mudou", que não ajuda ninguém no pátio: o que importa é "a placa saiu
+       de ABC1D23 para XYZ4E56". O SELECT é barato e roda uma vez por edição,
+       que é evento raro perto da leitura. */
+    const antes = await consultar(
+      `SELECT ${COLUNAS_CARGA} FROM fact_viagens WHERE carga_id = $1`, [id]
+    );
+    if (!antes.rows[0]) {
+      return res.status(404).json({ erro: 'Carga não encontrada.', codigo: 'CARGA_NAO_ENCONTRADA' });
+    }
+
     const cols = Object.keys(mudancas);
     const sets = cols.map((c, i) => `${c} = $${i + 1}`);
     const params = Object.values(mudancas);
@@ -194,6 +207,32 @@ rotasCargas.patch('/cargas/:id', exigirLogin, async (req, res, next) => {
 
     const payload = paraPainel(rows[0]);
     emitir('carga:atualizada', payload);
+
+    /* Aviso legível, separado do dado.
+
+       São dois eventos de propósito: `carga:atualizada` diz ao painel para
+       recarregar, `carga:editada` diz à PESSOA o que aconteceu. Misturar os
+       dois obrigaria cada tela a decidir sozinha o que merece aviso, e a
+       decisão sairia diferente em cada lugar.
+
+       Só entram os campos que mudaram de verdade — regravar a mesma placa
+       não é notícia. E só os campos que o pátio precisa saber: mexer na
+       observação de uma carga não pode disparar alerta em cinco terminais. */
+    const alteracoes = camposDeAviso(antes.rows[0], rows[0]);
+    if (alteracoes.length) {
+      emitir('carga:editada', {
+        cargaId: payload.id,
+        numeroCarga: payload.numeroCarga || '',
+        placa: payload.placa,
+        alteracoes,
+        operador: { id: op.id, nome: op.nome, setor: op.setor },
+        // A placa é o que faz o caminhão errado entrar na doca. Ela toca;
+        // o resto avisa em silêncio. Alerta que soa para tudo vira ruído,
+        // e ruído é ignorado exatamente no dia em que importava.
+        sonoro: alteracoes.some((a) => a.campo === 'Placa'),
+        em: new Date().toISOString(),
+      });
+    }
     return res.json(payload);
   } catch (e) {
     return next(e);

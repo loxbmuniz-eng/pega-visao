@@ -58,6 +58,7 @@ const SuincoSharePoint = (function () {
   let ouvintesEstado = [];
   let ouvintesDados = [];
   let ouvintesDescarte = [];
+  let ouvintesEdicao = [];
 
   /* ---------------------------------------------------------------
      Sessão
@@ -200,7 +201,9 @@ const SuincoSharePoint = (function () {
       e.dados = dados;
       throw e;
     }
-    return dados;
+    // 201 e 200 significam coisas diferentes no POST de carga: criada agora
+    // ou já existia. Quem precisa dessa distinção pede o status junto.
+    return opcoes.comStatus ? { status: resposta.status, dados } : dados;
   }
 
   /* Distingue "a rede caiu" de "o servidor recusou".
@@ -343,11 +346,35 @@ const SuincoSharePoint = (function () {
 
     const corpo = deLinhaParaApi(campos);
     try {
-      // O status muda por rota própria (é lá que a máquina de estados do
-      // servidor valida a transição). Aqui vai só o resto.
-      const salva = await chamar('/api/cargas', { metodo: 'POST', corpo });
+      /* Criar e editar são rotas diferentes, e por muito tempo só a
+         primeira era usada.
+
+         O POST de carga usa ON CONFLICT DO NOTHING — o que é certo para a
+         fila offline reenviar sem duplicar, mas significa que editar uma
+         carga que já existe não gravava NADA no servidor. A troca de placa
+         aparecia no navegador de quem editou e em nenhum outro: some ao
+         recarregar, o Power BI nunca vê, e o pátio segue com a placa antiga.
+
+         Status 200 no POST quer dizer "já existia". Aí a edição vai pelo
+         PATCH, que é onde o servidor valida campo por campo e anuncia a
+         mudança para todo mundo. */
+      const r = await chamar('/api/cargas', { metodo: 'POST', corpo, comStatus: true });
       mudarEstado('online');
-      return { enfileirado: false, item: salva };
+      if (r.status !== 200) return { enfileirado: false, item: r.dados };
+
+      try {
+        const salva = await chamar('/api/cargas/' + encodeURIComponent(corpo.id), {
+          metodo: 'PATCH', corpo,
+        });
+        return { enfileirado: false, item: salva };
+      } catch (e2) {
+        /* Nada que este setor possa editar mudou. Não é erro: acontece toda
+           vez que a Portaria grava uma carga por causa de outro campo. */
+        if (e2.codigo === 'SEM_CAMPOS_PERMITIDOS') {
+          return { enfileirado: false, item: r.dados };
+        }
+        throw e2;
+      }
     } catch (e) {
       if (e.status === 409 || e.status === 422 || e.status === 403) {
         // Recusa legítima do servidor. Enfileirar seria insistir para sempre.
@@ -424,7 +451,23 @@ const SuincoSharePoint = (function () {
       const item = fila[i];
       try {
         if (item.tipo === 'carga') {
-          await chamar('/api/cargas', { metodo: 'POST', corpo: item.corpo });
+          // Mesmo caminho do upsert: se a carga já existe, o POST não grava
+          // nada e a edição precisa ir pelo PATCH. Sem isto, tudo o que foi
+          // editado offline subia e era descartado em silêncio pelo
+          // ON CONFLICT DO NOTHING — o pior tipo de perda, a que parece
+          // sucesso.
+          const r = await chamar('/api/cargas', {
+            metodo: 'POST', corpo: item.corpo, comStatus: true,
+          });
+          if (r.status === 200) {
+            try {
+              await chamar('/api/cargas/' + encodeURIComponent(item.corpo.id), {
+                metodo: 'PATCH', corpo: item.corpo,
+              });
+            } catch (e2) {
+              if (e2.codigo !== 'SEM_CAMPOS_PERMITIDOS') throw e2;
+            }
+          }
         } else if (item.tipo === 'status') {
           await chamar(`/api/cargas/${encodeURIComponent(item.cargaId)}/status`, {
             metodo: 'POST', corpo: { status: item.status },
@@ -586,6 +629,18 @@ const SuincoSharePoint = (function () {
     socket.on('carga:criada', aplicar);
     socket.on('carga:atualizada', aplicar);
     socket.on('movimentacao:nova', aplicar);
+
+    /* Aviso de edição — separado do dado de propósito.
+
+       `carga:atualizada` manda recarregar; `carga:editada` conta a notícia
+       para a pessoa. O adaptador não decide como mostrar (isso é da tela),
+       só entrega — inclusive quem editou, para o painel não avisar a própria
+       pessoa do que ela acabou de fazer. */
+    socket.on('carga:editada', (aviso) => {
+      ouvintesEdicao.forEach((fn) => {
+        try { fn(aviso); } catch (e) { console.warn('[Suinco] aviso de edição:', e); }
+      });
+    });
     socket.on('frota:atualizada', () => pullTudo().catch(() => {}));
     socket.on('connect_error', (e) => {
       console.info('[Suinco] tempo real indisponível:', e.message);
@@ -609,6 +664,10 @@ const SuincoSharePoint = (function () {
      precisa disto para dizer ao operador que aquela gravação NÃO subiu —
      silêncio aqui é perda de dado disfarçada de sucesso. */
   function aoDescartarDaFila(fn) { if (typeof fn === 'function') ouvintesDescarte.push(fn); }
+
+  /* Avisa que OUTRO operador editou uma carga já programada. Chega pelo
+     socket, com o que mudou e quem mudou. */
+  function aoEditarCarga(fn) { if (typeof fn === 'function') ouvintesEdicao.push(fn); }
 
   /* ---------------------------------------------------------------
      Início
@@ -670,7 +729,7 @@ const SuincoSharePoint = (function () {
   return {
     SP_CONFIG,
     iniciar, estaConfigurado, estado, conta, aoMudarEstado, aoReceberDados,
-    aoDescartarDaFila,
+    aoDescartarDaFila, aoEditarCarga,
     login, sair, diagnosticarConexao,
     push, upsert, mudarStatus,
     pull, pullTudo, drenarFila, pendentes,
