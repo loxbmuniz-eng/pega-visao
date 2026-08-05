@@ -770,12 +770,22 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
   });
 }
 </script>
-<!-- Cliente do Socket.IO, servido pelo PRÓPRIO backend (não por CDN):
-     uma dependência a menos fora do nosso controle, e funciona mesmo com a
-     rede da empresa bloqueando CDN. Se não carregar, o adaptador cai na
-     consulta periódica e nada quebra. -->
+<!-- Cliente do Socket.IO, servido pelo PRÓPRIO backend.
+
+     `defer` NÃO é detalhe de desempenho: é o que impede o painel de ficar
+     refém da API para simplesmente ABRIR. Sem ele, este script bloqueia a
+     análise do HTML, e uma API lenta ou pendurada trava a página no meio
+     do carregamento — foi exatamente o que aconteceu, com a barra de
+     progresso parando antes da metade.
+
+     O painel tem que abrir mesmo com o servidor fora do ar. Tempo real é
+     conforto; abrir é obrigação. Se este arquivo não vier, o adaptador cai
+     na consulta periódica e nada quebra.
+
+     Com `defer` o script executa depois da análise e antes do
+     DOMContentLoaded, então `io` está pronto quando o app.js inicia. -->
 <script src="https://api.embarquesuinco.com.br/socket.io/socket.io.js"
-        crossorigin="anonymous" onerror="window.__socketIoFalhou=true"></script>
+        defer crossorigin="anonymous" onerror="window.__socketIoFalhou=true"></script>
 <script src="suinco-api.js"></script>
 <script src="data.js"></script>
 <script src="app.js"></script>

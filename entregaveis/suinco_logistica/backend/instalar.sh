@@ -158,7 +158,7 @@ JWT_VALIDADE=12h
 ORIGENS_PERMITIDAS=$DOMINIO_PAINEL,https://www.embarquesuinco.com.br
 BI_TOKEN=$BI
 RATE_LIMIT=300
-RATE_LIMIT_LOGIN=10
+RATE_LIMIT_LOGIN=30
 EOF
   ok ".env gerado com segredos aleatórios"
 else
@@ -243,6 +243,19 @@ ok "serviço ativo e configurado para subir no boot"
 # --- 8. Nginx ---------------------------------------------------------
 azul "8. Nginx"
 cat > /etc/nginx/sites-available/embarque-suinco <<EOF
+# O cabeçalho Connection só pode valer "upgrade" quando o cliente PEDIU
+# upgrade. Fixá-lo em "upgrade" para toda requisição — que era como estava —
+# quebra o HTTP comum: o navegador fica esperando uma troca de protocolo que
+# nunca vem, e a página trava no meio do carregamento.
+#
+# Foi exatamente o que aconteceu: o <script> do socket.io.js pendurava e a
+# barra de progresso parava antes da metade. O curl não pegou porque não
+# mantém a conexão viva do mesmo jeito.
+map \$http_upgrade \$connection_upgrade {
+    default upgrade;
+    ''      close;
+}
+
 server {
     listen 80;
     listen [::]:80;
@@ -261,7 +274,7 @@ server {
         # do proxy. Sem eles, o painel cai para consulta periódica e ninguém
         # entende por que "o tempo real parou".
         proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection "upgrade";
+        proxy_set_header Connection \$connection_upgrade;
         proxy_set_header Host \$host;
 
         # Sem X-Forwarded-For, o rate limit enxerga todo mundo como um IP só.
