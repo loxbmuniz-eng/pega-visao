@@ -440,6 +440,13 @@ ROTAS="$(su - postgres -c "psql -tAd $DB_NAME -c 'SELECT count(*) FROM dim_rotas
 ok "base carregada: $PLACAS placas, $ROTAS rotas"
 
 
+# Quantos operadores já existem. O bloco "crie o primeiro operador" só faz
+# sentido quando NÃO existe nenhum — e este script roda a cada atualização.
+# Repetir a instrução com o pátio inteiro já cadastrado fez o gestor achar
+# que precisava recriar todo mundo pelo terminal. Instrução que não se
+# aplica é instrução que atrapalha.
+OPERADORES="$(su - postgres -c "psql -tAd $DB_NAME -c 'SELECT count(*) FROM operadores'" 2>/dev/null | tr -d ' ')"
+
 cat <<FIM
 
 =====================================================================
@@ -447,20 +454,40 @@ cat <<FIM
 =====================================================================
 
  API           https://$DOMINIO_API
+ Painel        $DOMINIO_PAINEL
  Serviço       systemctl status embarque-suinco
  Logs          journalctl -u embarque-suinco -f
+ Diagnóstico   sudo bash $FONTE/diagnostico.sh
  Backup        /var/backups/embarque-suinco (diário, 14 dias)
+
+ Endereços autorizados a abrir o painel:
+   $(grep -E '^ORIGENS_PERMITIDAS=' "$ENV_FILE" | cut -d= -f2-)
+FIM
+
+if [[ "${OPERADORES:-0}" -eq 0 ]]; then
+  cat <<FIM
 
  FALTA UM PASSO: criar o primeiro operador.
 
+ Só o primeiro é por aqui. A tela de usuários fica DENTRO do painel, então
+ alguém precisa existir antes de conseguir entrar. Depois deste, todos os
+ outros saem pela tela — Administração → Usuários.
+
    cd $APP_DIR
    sudo -u $APP_USER node scripts/operador.js criar seu@email.com "Seu Nome" Administração
+FIM
+else
+  cat <<FIM
 
- Depois, um por setor:
-   ... criar portaria@suinco.com.br    "Portaria"    Portaria
-   ... criar expedicao@suinco.com.br   "Expedição"   Expedição
-   ... criar faturamento@suinco.com.br "Faturamento" Faturamento
-   ... criar logistica@suinco.com.br   "Logística"   Logística
+ Operadores cadastrados: $OPERADORES
+
+ Para criar, desativar ou trocar o setor de alguém, use a tela do painel:
+ entre como Administração e abra a aba Usuários. Mesma tabela, mesma
+ criptografia de senha — o terminal não faz nada que a tela não faça.
+FIM
+fi
+
+cat <<FIM
 
  As senhas do banco, o segredo do JWT e o token do Power BI ficam em
  $ENV_FILE, legível só pelo usuário $APP_USER.
