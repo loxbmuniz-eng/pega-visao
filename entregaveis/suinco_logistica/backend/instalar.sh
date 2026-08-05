@@ -209,7 +209,22 @@ ProtectControlGroups=true
 RestrictSUIDSGID=true
 RestrictNamespaces=true
 LockPersonality=true
-MemoryDenyWriteExecute=true
+
+# MemoryDenyWriteExecute NÃO pode entrar aqui.
+#
+# Ela impede o processo de tornar memória executável — ótima prática para
+# quase tudo, e incompatível com Node por construção: o V8 compila
+# JavaScript para código de máquina em tempo de execução e precisa
+# exatamente dessa transição.
+#
+# Com ela ligada o serviço morre com core dump logo no primeiro trecho de
+# código que fica "quente" o bastante para ser compilado:
+#   v8::base::OS::SetPermissions -> Check failed: 12 == errno   (12 = ENOMEM)
+#
+# Não é ajustável nem contornável com flag do Node. A única alternativa
+# seria rodar com --jitless, que derruba o desempenho a um patamar
+# inaceitável para um servidor. Fica de fora, e as linhas acima cobrem o
+# resto da superfície.
 
 [Install]
 WantedBy=multi-user.target
