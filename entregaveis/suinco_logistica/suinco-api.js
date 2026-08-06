@@ -425,10 +425,14 @@ const SuincoSharePoint = (function () {
      para a fila — seria insistir para sempre em algo que nunca será aceito.
      Falha de rede vai, porque a exclusão precisa acontecer mesmo que a rede
      tenha caído no instante do clique. */
-  async function excluir(id) {
+  async function excluir(id, motivo) {
     if (!estaConfigurado()) return { enfileirado: false };
     try {
-      const r = await chamar('/api/cargas/' + encodeURIComponent(id), { metodo: 'DELETE' });
+      // O motivo vai no corpo. Carga que já andou só sai como cancelamento,
+      // e o servidor recusa cancelamento sem justificativa.
+      const r = await chamar('/api/cargas/' + encodeURIComponent(id), {
+        metodo: 'DELETE', corpo: motivo ? { motivo } : undefined,
+      });
       mudarEstado('online');
       return { enfileirado: false, item: r };
     } catch (e) {
@@ -436,7 +440,7 @@ const SuincoSharePoint = (function () {
       if (e.status === 409 || e.status === 422 || e.status === 403) {
         return { enfileirado: false, recusado: true, erro: e.message };
       }
-      if (eFalhaDeRede(e)) return enfileirar({ tipo: 'exclusao', cargaId: id });
+      if (eFalhaDeRede(e)) return enfileirar({ tipo: 'exclusao', cargaId: id, motivo });
       throw e;
     }
   }
@@ -525,7 +529,9 @@ const SuincoSharePoint = (function () {
           }
         } else if (item.tipo === 'exclusao') {
           try {
-            await chamar('/api/cargas/' + encodeURIComponent(item.cargaId), { metodo: 'DELETE' });
+            await chamar('/api/cargas/' + encodeURIComponent(item.cargaId), {
+              metodo: 'DELETE', corpo: item.motivo ? { motivo: item.motivo } : undefined,
+            });
           } catch (e2) {
             // Carga que já não existe é exclusão bem-sucedida por outro
             // caminho, não falha. Insistir aqui travaria a fila inteira,

@@ -170,6 +170,62 @@ async def main():
             "() => document.documentElement.scrollWidth <= window.innerWidth + 1")
         ck('a página não rola horizontalmente', rolagem)
 
+        print('\n=== 8b. CARGA TRAVADA PODE SER CANCELADA DE ONDE APARECE ===')
+        # O bug relatado: uma carga em "Aguardando Embarque" ficava presa.
+        # Sumia da tela de Programação ao sair de "Aguardando Veículo", e a
+        # única tela onde aparecia — a Torre — não tinha como agir sobre ela.
+        await pagina.set_viewport_size({'width': 1280, 'height': 900})
+        await entrar(pagina, 'Logística')
+        travada = await pagina.evaluate("""() => {
+            const placa = DB.frota[7].placa;
+            criarCargaProgramada({placa, numeroCarga:'VP900', peso:9000, rota:'500',
+                praOnde:'FROTA PROPRIA', paletizada:'Não', qtdGanchos:0,
+                qtdEntregas:1, operador:'Log'});
+            registrarChegadaPortaria(placa, 'Porteiro');
+            abrirTab('torre'); renderAll();
+            const c = DB.cargas.find(x => x.numeroCarga === 'VP900');
+            return {id: c.id, status: c.status};
+        }""")
+        ck('a carga está travada em Aguardando Embarque',
+           travada['status'] == 'Aguardando Embarque', str(travada))
+
+        tem_botao = await pagina.evaluate("""() => {
+            const linhas = [...document.querySelectorAll('#torre-tbody tr')];
+            const alvo = linhas.find(tr => tr.textContent.includes('VP900'));
+            const b = alvo && alvo.querySelector('button');
+            return b ? b.textContent.trim() : null;
+        }""")
+        ck('a Torre oferece a ação na própria linha', tem_botao == 'Cancelar', str(tem_botao))
+
+        # Cancelar carga que já andou pede motivo — e desistir não apaga nada.
+        await pagina.evaluate("() => { window.prompt = () => ''; }")
+        await pagina.evaluate("id => excluirCargaUI(id)", travada['id'])
+        await pagina.wait_for_timeout(400)
+        ck('sem motivo, a carga continua lá',
+           await pagina.evaluate("id => !!getCarga(id)", travada['id']))
+
+        await pagina.evaluate("() => { window.prompt = () => 'Caminhão foi embora sem carregar'; }")
+        await pagina.evaluate("id => excluirCargaUI(id)", travada['id'])
+        await pagina.wait_for_timeout(500)
+        ck('com motivo, a carga sai do pátio',
+           await pagina.evaluate("id => !getCarga(id)", travada['id']))
+
+        registrado = await pagina.evaluate("""() => (DB.alteracoes||[])
+            .some(a => (a.campo||'').includes('cancelada')
+                    && (a.para||'').includes('Caminhão foi embora'))""")
+        ck('o motivo ficou registrado', registrado)
+
+        print('\n=== 8c. SETOR RESTRITO NÃO VÊ A AÇÃO ===')
+        # A hierarquia vale na tela também: quem programa é quem cancela.
+        await entrar(pagina, 'Expedição')
+        await pagina.evaluate("() => { abrirTab('expedicao'); renderAll(); }")
+        await pagina.wait_for_timeout(300)
+        sem_acao = await pagina.evaluate("""() => {
+            const th = [...document.querySelectorAll('#tab-expedicao .tabela-patio thead th')];
+            return !th.some(h => h.textContent.trim() === 'Ação');
+        }""")
+        ck('Expedição não vê coluna de Ação na Visão do Pátio', sem_acao)
+
         print('\n=== 9. CONSOLE ===')
         ck('sem erros de página', not erros, str(erros))
 
