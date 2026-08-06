@@ -81,10 +81,16 @@ async def main():
               const c = document.getElementById('{cid}');
               const pag = c.querySelector('.print-page');
               const img = c.querySelector('.doc-logo');
-              // A identificação (.doc-identificacao) é uma LINHA só abaixo do
-              // cabeçalho. Já foi tabela de duas colunas por seis linhas e
-              // custava um quinto da primeira folha antes do primeiro dado.
-              const meta = (c.querySelector('.doc-identificacao')||{{}}).innerText || '';
+              // A identificação DESCEU PARA O RODAPÉ (.doc-ficha). Já foi
+              // tabela abaixo do cabeçalho, depois linha corrida no mesmo
+              // lugar; agora sai do caminho do título. Referência, período e
+              // registros são dados de conferência — quem confere lê uma
+              // vez, quem decide não lê nunca.
+              const ficha = c.querySelector('.doc-ficha');
+              const meta = ficha ? ficha.innerText : '';
+              // O cabeçalho tem de estar LIMPO: se a ficha voltar para o
+              // alto, este teste precisa acusar.
+              const cab = (c.querySelector('.doc-cabecalho')||{{}}).innerText || '';
               return {{
                 classe: pag ? pag.className : '',
                 titulo: (c.querySelector('.doc-titulo')||{{}}).innerText || '',
@@ -93,9 +99,16 @@ async def main():
                 // Os rótulos saem em maiúsculas por CSS, e innerText devolve
                 // o texto já transformado. Comparar sem caixa mede o
                 // conteúdo, não o estilo.
+                fichaNoRodape: !!(ficha && ficha.closest('.doc-rodape')),
                 temPeriodo: /Período/i.test(meta),
-                temEmitidoPor: /Emitido por/i.test(meta),
-                temEmitidoEm: /Emitido em/i.test(meta),
+                // "Emitido em" e "Emitido por" perderam os RÓTULOS de
+                // propósito: data com hora e nome de pessoa se identificam
+                // sozinhos. O que precisa continuar existindo é o DADO.
+                temQuando: /\d{{2}}\/\d{{2}}\/\d{{4}}/.test(
+                  (c.querySelector('.doc-ficha-quando')||{{}}).innerText || ''),
+                temQuem: ((c.querySelector('.doc-ficha-quem')||{{}}).innerText || '').trim().length > 2,
+                rotuloEmitidoSumiu: !/Emitido (em|por)/i.test(c.innerText),
+                cabecalhoLimpo: !/Referência|Registros/i.test(cab),
                 rodape: !!c.querySelector('.doc-assinatura'),
                 // Peças do padrão de documento de auditoria.
                 temRef: /SUI-(OPE|EXE|ADM)-\\d{{8}}-\\d{{4}}/.test(c.innerText),
@@ -113,9 +126,15 @@ async def main():
                'diz o que exatamente foi contado')
             ck(f'{rot}: alcance e limitações no rodapé', d['temLimitacoes'])
             ck(f'{rot}: classificação de uso', d['temClassificacao'])
-            ck(f'{rot}: metadados completos',
-               d['temPeriodo'] and d['temEmitidoEm'] and d['temEmitidoPor'],
-               'período, emitido em, emitido por')
+            ck(f'{rot}: ficha de identificação no RODAPÉ', d['fichaNoRodape'],
+               'referência e período são conferência, não abertura')
+            ck(f'{rot}: cabeçalho sem metadados', d['cabecalhoLimpo'],
+               'no alto ficam só marca, título, subtítulo e classificação')
+            ck(f'{rot}: período, data/hora e operador presentes',
+               d['temPeriodo'] and d['temQuando'] and d['temQuem'],
+               f"período={d['temPeriodo']} quando={d['temQuando']} quem={d['temQuem']}")
+            ck(f'{rot}: sem os rótulos "Emitido em/por"', d['rotuloEmitidoSumiu'],
+               'data e nome se identificam sozinhos')
             ck(f'{rot}: rodapé de identificação', d['rodape'])
 
         print('\n=== FRETES: FONTE LEGÍVEL ===')

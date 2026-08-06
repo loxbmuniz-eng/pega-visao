@@ -2471,8 +2471,6 @@ function exportarPdfOperacional(){
       ${cabecalhoDocumento({
         titulo: 'Relatório Operacional',
         subtitulo: 'Logística — ordem de montagem e acompanhamento no pátio',
-        contagem: lista.length,
-        extra: `<strong>Concluídas:</strong> ${concluidas} de ${lista.length}`,
       })}
       <!-- A legenda de cores saiu daqui também (05/08/2026).
 
@@ -2520,7 +2518,12 @@ function exportarPdfOperacional(){
         'entregas · <strong>Liso</strong> = sem gancheira.',
         'Todas as cargas do período selecionado, ordenadas pela etapa em que '
         + 'se encontram e, dentro de cada etapa, pela sequência de carregamento '
-        + 'definida pela Logística. Cargas excluídas ou canceladas não entram.')}
+        + 'definida pela Logística. Cargas excluídas ou canceladas não entram.',
+        fichaDocumento({
+          titulo: 'Relatório Operacional',
+          contagem: lista.length,
+          extra: `<strong>Concluídas:</strong> ${concluidas} de ${lista.length}`,
+        }))}
     </div>`;
   imprimirContainer(el, 'Relatorio-Operacional');
 }
@@ -2605,30 +2608,19 @@ function referenciaDocumento(titulo){
 
 /* Identificação do documento em UMA LINHA, logo abaixo do cabeçalho.
 
-   Já foi tabela de duas colunas com seis linhas. Era correta e custava um
-   quinto da primeira folha — antes de qualquer dado. Num documento que
-   circula em foto de WhatsApp, a primeira dobra é o espaço mais caro que
-   existe: quem abre precisa ver o número, não a procedência dele.
+   PERCURSO ATÉ AQUI, porque a peça foi de tabela a nada em três passos:
 
-   A procedência continua toda aqui, na mesma ordem, só que corrida. Quem
-   confere um documento lê essa linha uma vez; quem decide, nenhuma.
+   1. Tabela de duas colunas por seis linhas, abaixo do cabeçalho. Correta
+      e custando um quinto da primeira folha antes de qualquer dado.
+   2. Uma linha corrida no mesmo lugar. Melhor, mas ainda entre o título e
+      o primeiro número.
+   3. Fora do cabeçalho. Referência, período, registros e observação são
+      dados de CONFERÊNCIA — quem confere lê uma vez, quem decide não lê
+      nunca. Ficam no rodapé, com o resto da procedência.
 
-   "Entidade" saiu: dizia "Suinco — Cooperativa Agroindustrial" três
-   centímetros abaixo do cabeçalho, que diz exatamente isso. Repetir dado
-   não acrescenta rigor, só ocupa linha. */
-function cabecalhoDocumento({ titulo, subtitulo, contagem, extra }) {
-  const agora = new Date();
-  const operador = (DB.operador && DB.operador.nome) || '—';
-  const setor = (DB.operador && DB.operador.setor) || '';
-
-  const campos = [
-    ['Referência',   referenciaDocumento(titulo)],
-    ['Período',      rotuloPeriodoRelatorio()],
-    contagem !== undefined ? ['Registros', String(contagem)] : null,
-    ['Emitido em',   fmtDataHora(agora.toISOString())],
-    ['Emitido por',  operador + (setor ? ' · ' + setor : '')],
-  ].filter(Boolean);
-
+   O que sobra no alto é o que identifica o documento numa foto: marca,
+   título, subtítulo e classificação. Nada mais. */
+function cabecalhoDocumento({ titulo, subtitulo }) {
   return `
     <div class="doc-cabecalho">
       <img src="assets/logo_suinco.png" alt="Suinco" class="doc-logo">
@@ -2638,10 +2630,45 @@ function cabecalhoDocumento({ titulo, subtitulo, contagem, extra }) {
         ${subtitulo ? `<div class="doc-subtitulo">${esc(subtitulo)}</div>` : ''}
       </div>
       <div class="doc-classificacao">Uso interno</div>
-    </div>
-    <div class="doc-identificacao">
-      ${campos.map(([r,v])=>`<span><b>${esc(r)}</b>${esc(v)}</span>`).join('')}
-      ${extra ? `<span class="doc-id-obs">${extra}</span>` : ''}
+    </div>`;
+}
+
+/* Ficha de identificação, no pé do documento.
+
+   "Emitido em" e "Emitido por" perderam os rótulos: uma data com hora e um
+   nome de pessoa não precisam de etiqueta para serem reconhecidos. O que
+   os rótulos faziam era ocupar duas larguras de coluna para dizer o óbvio.
+
+   Os que ficaram — Entidade, Referência, Período, Registros — nomeiam
+   coisas que NÃO se identificam sozinhas: "SUI-EXE-20260806-1744" sem a
+   palavra "Referência" é ruído, e um número solto não diz se são cargas,
+   dias ou quilos. */
+function fichaDocumento({ titulo, contagem, extra }) {
+  const agora = new Date();
+  const operador = (DB.operador && DB.operador.nome) || '—';
+  const setor = (DB.operador && DB.operador.setor) || '';
+
+  const campos = [
+    ['Entidade',   'Suinco — Cooperativa Agroindustrial'],
+    ['Referência',  referenciaDocumento(titulo)],
+    ['Período',     rotuloPeriodoRelatorio()],
+    contagem !== undefined ? ['Registros', String(contagem)] : null,
+  ].filter(Boolean);
+
+  return `
+    <div class="doc-ficha">
+      <div class="doc-ficha-campos">
+        ${campos.map(([r,v])=>`
+          <div class="doc-ficha-campo">
+            <span class="doc-ficha-rot">${esc(r)}</span>
+            <span class="doc-ficha-val">${esc(v)}</span>
+          </div>`).join('')}
+      </div>
+      <div class="doc-ficha-emissao">
+        <span class="doc-ficha-quando">${esc(fmtDataHora(agora.toISOString()))}</span>
+        <span class="doc-ficha-quem">${esc(operador)}${setor ? ' · ' + esc(setor) : ''}</span>
+      </div>
+      ${extra ? `<div class="doc-ficha-obs">${extra}</div>` : ''}
     </div>`;
 }
 
@@ -2664,16 +2691,18 @@ function fonteDocumento(texto){
    Estava entre o cabeçalho e o primeiro dado, empurrando o conteúdo folha
    abaixo em todos os três relatórios. No rodapé cumpre a mesma função, ao
    lado da nota de alcance e limitações, que é a seção do mesmo assunto. */
-function rodapeDocumento(nota, base){
+function rodapeDocumento(nota, base, ficha){
   return `<div class="doc-rodape">
       ${nota ? `<div class="doc-nota">${nota}</div>` : ''}
+      ${ficha || ''}
       ${base ? `<div class="doc-base"><strong>Base de preparação.</strong> ${base}</div>` : ''}
       <div class="doc-limitacoes">
         <strong>Alcance e limitações.</strong> Documento gerado automaticamente a
-        partir dos registros operacionais do pátio, na data e hora indicadas no
-        cabeçalho. Reflete o que foi registrado pelos setores até aquele instante;
-        registros feitos sem conexão sobem quando a rede retorna e podem alterar
-        números de emissões anteriores. Não constitui documento fiscal nem contábil.
+        partir dos registros operacionais do pátio, na data e hora de emissão
+        indicadas acima. Reflete o que foi registrado pelos setores até aquele
+        instante; registros feitos sem conexão sobem quando a rede retorna e podem
+        alterar números de emissões anteriores. Não constitui documento fiscal
+        nem contábil.
       </div>
       <div class="doc-assinatura">
         Programação de Embarque Suinco · embarquesuinco.com.br
@@ -2880,8 +2909,6 @@ function exportarPdfExecutivo(){
       ${cabecalhoDocumento({
         titulo: 'Relatório Executivo',
         subtitulo: 'Logística — indicadores, gargalos e pontos críticos do pátio',
-        contagem: doPeriodo.length,
-        extra: `<strong>Em aberto:</strong> ${abertas.length} · <strong>Concluídas:</strong> ${concluidasTodas.length}`,
       })}
 
       <!-- A legenda de cores saiu daqui (05/08/2026).
@@ -2960,7 +2987,12 @@ function exportarPdfExecutivo(){
         'Indicadores calculados sobre as cargas CONCLUÍDAS no período — as que '
         + 'percorreram as seis etapas até "Seguiu Viagem". Carga ainda em '
         + 'andamento não entra em média de tempo: etapa sem fim não tem duração, '
-        + 'e contá-la como zero puxaria a média para baixo.')}
+        + 'e contá-la como zero puxaria a média para baixo.',
+        fichaDocumento({
+          titulo: 'Relatório Executivo',
+          contagem: doPeriodo.length,
+          extra: `<strong>Em aberto:</strong> ${abertas.length} · <strong>Concluídas:</strong> ${concluidasTodas.length}`,
+        }))}
     </div>`;
   imprimirContainer(el, 'Relatorio-Executivo');
 }
@@ -3281,8 +3313,6 @@ function exportarPdfFretes(){
       ${cabecalhoDocumento({
         titulo: 'Administração de Fretes',
         subtitulo: 'Logística — valor, negociação e instruções por carga',
-        contagem: dados.length,
-        extra: semObs ? `<strong>Sem registro:</strong> ${semObs} de ${dados.length}` : null,
       })}
       <table class="tab-fretes">
         <thead><tr>
@@ -3298,7 +3328,12 @@ function exportarPdfFretes(){
         'cargas ainda sem registro administrativo.',
         'Uma linha por carga do período, com os campos administrativos '
         + 'registrados até o momento da emissão. Campos em branco significam '
-        + 'não preenchido, e não zero.')}
+        + 'não preenchido, e não zero.',
+        fichaDocumento({
+          titulo: 'Administração de Fretes',
+          contagem: dados.length,
+          extra: semObs ? `<strong>Sem registro:</strong> ${semObs} de ${dados.length}` : null,
+        }))}
     </div>`;
   imprimirContainer(el, 'Administracao-de-Fretes');
 }

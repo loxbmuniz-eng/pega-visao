@@ -168,10 +168,18 @@
      não cinza neutro de sistema) e o card é branco translúcido por cima
      dele. A diferença de valor é real, o card ganha a borda de luz, e o
      ambiente da marca aparece por baixo em vez de sumir. */
-  --navy-deep:#dfe4ee;     /* base da página — cinza com o azul da marca */
-  --navy:#ffffff;          /* superfície opaca, onde translucidez atrapalha */
-  --navy-light:#e7ecf5;
-  --navy-lighter:#cdd7e9;
+  /* CLAREOU DEMAIS na primeira versão: card a 94% de luminância é papel
+     retroiluminado, e num galpão com luz alta o gestor lê o dia inteiro
+     nisso. Baixou para 84% — a página vai a #c6cfe0 e o card fica em
+     #e7ecf4 depois de achatado.
+
+     Não é só conforto: a SEPARAÇÃO entre card e fundo melhorou junto, de
+     1,20 para 1,32, porque os dois desceram em proporções diferentes. E o
+     texto continua com folga — 14,7 para o principal, 5,0 para o de apoio. */
+  --navy-deep:#c6cfe0;     /* base da página — cinza com o azul da marca */
+  --navy:#eff3f9;          /* superfície opaca, onde translucidez atrapalha */
+  --navy-light:#dde4f0;
+  --navy-lighter:#c2ccdf;
   --gold:#e9b954;
   --gold-dim:#a67f22;
   --gold-text:#7a5c0d;
@@ -183,12 +191,19 @@
      quem tem de clarear é o TEXTO. Com #1a1200 por cima dava 3,93. */
   --warn-fg:#ffffff;
   --text:#161a22;
-  --text-dim:#5a6474;
+  /* #5a6474 servia quando a página era quase branca. Com o fundo em
+     #c6cfe0 ele caiu para 3,82 — e rótulo de campo, estado vazio e
+     subtítulo de card ficam justamente SOBRE a página, não sobre o card.
+     #4b5565 passa nas duas superfícies: 4,81 na página, 6,35 no card. */
+  --text-dim:#4b5565;
   --border:rgba(26,32,45,.22);
   --border-soft:rgba(26,32,45,.12);
   --shadow:0 1px 4px rgba(16,22,37,.14);
-  --campo-bg:#ffffff;
-  --placeholder:#8a94a6;
+  /* O campo é a única superfície que continua quase branca, e de
+     propósito: é o convite para escrever. Branco puro sobre card cinza é o
+     que diz "aqui você digita" sem precisar de contorno grosso. */
+  --campo-bg:#fbfcfe;
+  --placeholder:#78839a;
   --logo-chip-bg:#fff;
 
   /* O status como cor de TEXTO, versão clara: os mesmos seis, escurecidos
@@ -204,8 +219,8 @@
   /* Vidro claro: branco alto, borda escura fininha em vez de dourada — no
      claro a borda dourada sobre branco quase não aparece e o card volta a
      não ter contorno. */
-  --vidro-bg:rgba(255,255,255,.74);
-  --vidro-bg-forte:rgba(255,255,255,.92);
+  --vidro-bg:rgba(239,243,249,.80);
+  --vidro-bg-forte:rgba(246,249,252,.92);
   --vidro-borda:rgba(26,32,45,.10);
   --vidro-brilho:rgba(255,255,255,.9);
   --vidro-sombra:0 8px 22px rgba(30,42,82,.11);
@@ -1388,9 +1403,35 @@ input,select,textarea{border-radius:5px}
     background:#ffffff !important; color:#111418 !important;
   }
   .print-page table{ background:#ffffff !important; }
+  /* Cabeçalho de coluna em versalete: corpo menor, caixa alta, entreletra
+     aberta e uma régua escura embaixo. É a diferença entre uma planilha
+     impressa e um documento — o rótulo deixa de competir com o dado e
+     passa a emoldurá-lo. */
   .print-page th{
-    background:#f2f4f8 !important; color:#111418 !important;
-    border-bottom:2px solid #8a94a6 !important;
+    background:#eef1f6 !important; color:#2a3446 !important;
+    /* max() e não .82em puro: no Operacional a tabela roda a 9,2px, e 82%
+       disso é 7,5px — abaixo do piso de 8px que o simulador cobra. O piso
+       vence onde a tabela é densa; a proporção vale onde há folga. */
+    font-size:max(8.2px, .82em) !important; font-weight:800 !important;
+    letter-spacing:.08em; text-transform:uppercase;
+    border-bottom:1.5px solid #2a3446 !important;
+  }
+  /* Coluna numérica alinhada à direita e com algarismos de largura fixa.
+     Sem isso, "12,00" e "9,50" não empilham pela vírgula e o olho não
+     consegue comparar duas linhas sem ler dígito por dígito. */
+  .print-page td.c-peso, .print-page td.c-entregas, .print-page td.c-ganchos,
+  .print-page td.c-num, .print-page td.cel-num, .print-page td.num-forte,
+  .print-page .tot-num{
+    text-align:right !important; font-variant-numeric:tabular-nums;
+  }
+  .print-page th.c-peso, .print-page th.c-entregas, .print-page th.c-ganchos{
+    text-align:right !important;
+  }
+  /* Linha de totais fechando a tabela, como em balanço. */
+  .print-page .linha-total td{
+    border-top:1.5px solid #2a3446 !important;
+    border-bottom:none !important;
+    font-weight:800 !important; background:#f7f8fb !important;
   }
   /* Só as células SEM cor própria. :not([style*="background"]) preserva as
      coloridas, que precisam manter o texto claro sobre o preenchimento. */
@@ -1404,8 +1445,17 @@ input,select,textarea{border-radius:5px}
   .print-header h1{ color:#111418 !important; }
   .print-header .meta,
   .print-secao-sub, .print-page .text-dim{ color:#3d4a5c !important; }
+  .print-secao-sub{ font-size:.95em }
+  /* Título de seção com barra dourada à esquerda em vez de sublinhado de
+     ponta a ponta: a barra marca onde o bloco COMEÇA, o sublinhado só
+     riscava a folha. Num relatório com quatro blocos e nove seções, achar
+     o começo importa mais do que separar. */
   .print-secao-tit{
-    color:#111418 !important; border-bottom-color:#8a94a6 !important;
+    color:#111418 !important;
+    border-bottom:none !important;
+    border-left:3px solid #b9903f;
+    padding:1px 0 1px 9px;
+    letter-spacing:-.01em;
   }
 
 }
@@ -1838,24 +1888,76 @@ input,select,textarea{border-radius:5px}
    ilegível para economizar espaço que ninguém usava.
    ===================================================================== */
 
+/* O cabeçalho ficou com QUATRO coisas: marca, título, subtítulo e
+   classificação. Referência, período, registros e emissão desceram para a
+   ficha do rodapé — são dados de conferência, e conferência não disputa a
+   primeira dobra com o título.
+
+   Com menos elementos, o título pode crescer. Foi de 21px para 26px, com
+   entreletra negativa: em documento impresso, título grande e apertado lê
+   como peça editorial; título médio e solto lê como formulário. */
 .doc-cabecalho{
-  display:flex; align-items:center; gap:16px;
-  padding-bottom:12px; border-bottom:3px solid var(--gold-dim);
+  display:flex; align-items:center; gap:18px;
+  padding-bottom:14px; margin-bottom:18px;
+  border-bottom:2px solid var(--gold-dim);
+  position:relative;
+}
+/* Segunda régua, fina e recuada sob a primeira. Duas linhas de espessuras
+   diferentes é o truque mais barato de papelaria que existe: custa 3px de
+   altura e o documento deixa de parecer uma tabela com um título em cima. */
+.doc-cabecalho::after{
+  content:''; position:absolute; left:0; right:0; bottom:-4px; height:1px;
+  background:var(--gold-dim); opacity:.45;
 }
 .doc-logo{
-  height:54px; width:auto; flex:none;
+  height:56px; width:auto; flex:none;
   background:#fff; border-radius:6px; padding:4px 8px;
 }
-.doc-identidade{ min-width:0 }
+.doc-identidade{ min-width:0; flex:1 }
 .doc-empresa{
-  font-size:10.5px; font-weight:800; letter-spacing:.09em;
+  font-size:10px; font-weight:800; letter-spacing:.14em;
   text-transform:uppercase; color:var(--text-dim);
 }
 .doc-titulo{
-  font-size:21px; line-height:1.2; font-weight:800;
-  color:var(--gold-text); margin:1px 0 0;
+  font-size:26px; line-height:1.12; font-weight:800; letter-spacing:-.015em;
+  color:var(--gold-text); margin:2px 0 0;
 }
-.doc-subtitulo{ font-size:12px; color:var(--text-dim); margin-top:3px; line-height:1.4 }
+.doc-subtitulo{
+  font-size:12px; color:var(--text-dim); margin-top:4px; line-height:1.4;
+}
+
+/* ===== FICHA DE IDENTIFICAÇÃO — rodapé =====
+   Campos rotulados de um lado, emissão do outro. Os rótulos "Emitido em" e
+   "Emitido por" saíram: uma data com hora e um nome de pessoa se
+   identificam sozinhos, e as etiquetas gastavam duas larguras de coluna
+   para dizer o óbvio. */
+.doc-ficha{
+  display:flex; flex-wrap:wrap; align-items:flex-start; gap:10px 26px;
+  justify-content:space-between;
+  padding:9px 0; margin:8px 0;
+  border-top:1px solid var(--border-soft);
+  border-bottom:1px solid var(--border-soft);
+}
+.doc-ficha-campos{ display:flex; flex-wrap:wrap; gap:8px 26px }
+.doc-ficha-campo{ display:flex; flex-direction:column; gap:1px }
+.doc-ficha-rot{
+  font-size:8.5px; font-weight:800; letter-spacing:.13em;
+  text-transform:uppercase; color:var(--text-dim);
+}
+.doc-ficha-val{
+  font-size:11px; font-weight:700; color:var(--text);
+  font-variant-numeric:tabular-nums;
+}
+.doc-ficha-emissao{ text-align:right; margin-left:auto }
+.doc-ficha-quando{
+  display:block; font-size:11px; font-weight:700; color:var(--text);
+  font-variant-numeric:tabular-nums;
+}
+.doc-ficha-quem{ display:block; font-size:10px; color:var(--text-dim); margin-top:1px }
+.doc-ficha-obs{
+  flex-basis:100%; font-size:10px; color:var(--text-dim); line-height:1.5;
+  padding-top:2px;
+}
 
 /* Metadados em faixa, não em parágrafo: cada dado tem um rótulo e um lugar
    fixo, então o olho acha "Período" sempre no mesmo canto. */
