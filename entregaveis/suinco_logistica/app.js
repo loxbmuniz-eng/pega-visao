@@ -349,6 +349,49 @@ function receberEdicaoRemota(aviso){
   if(aviso.sonoro) tocarAlertaAlteracao();
 }
 
+/* O servidor recusou a mudança de status.
+
+   Acontece quando a transição não é válida a partir do status REAL do
+   servidor (outro terminal já moveu a carga) ou quando o setor não tem
+   permissão para aquela etapa.
+
+   Aqui a tela DESFAZ a mudança local. Manter na tela um status que o banco
+   não aceitou é o pior desfecho: o operador seguiria trabalhando em cima de
+   uma carga que, para todos os outros terminais, não saiu do lugar — e a
+   divergência só apareceria na doca.
+
+   Com som, porque o operador já virou as costas para a tela achando que
+   registrou. */
+function receberRecusaDeStatus(carga, alvo, motivo){
+  const anterior = statusAnteriorDe(carga.id, alvo);
+  if(anterior){
+    carga.status = anterior;
+    carga.atualizadoEm = nowISO();
+  }
+  // A movimentação otimista sai do log: ela não aconteceu.
+  DB.movimentacoes = DB.movimentacoes.filter(
+    m => !(m.cargaId === carga.id && m.statusNovo === alvo && m.timestamp >= (carga.atualizadoEm || '')));
+  SuincoStore.save();
+  notify(
+    `${carga.placa}: o servidor NÃO aceitou "${alvo}". ${motivo || ''} `
+    + `A carga voltou para "${carga.status}". Confira antes de liberar o caminhão.`,
+    'danger', 20000);
+  tocarAlertaAlteracao();
+  renderAll();
+}
+
+/* Status imediatamente anterior a `alvo` no log desta carga.
+   Usa o log em vez de STATUS_FLOW.indexOf(alvo)-1 porque a carga pode ter
+   nascido no meio do fluxo (entrada "Aguardando Carga" da Portaria). */
+function statusAnteriorDe(cargaId, alvo){
+  const doLog = DB.movimentacoes
+    .filter(m => m.cargaId === cargaId && m.statusNovo === alvo)
+    .sort((a,b)=> String(b.timestamp).localeCompare(String(a.timestamp)))[0];
+  if(doLog && doLog.statusAnterior) return doLog.statusAnterior;
+  const i = STATUS_FLOW.indexOf(alvo);
+  return i > 0 ? STATUS_FLOW[i-1] : null;
+}
+
 /* Carga excluída por outro operador.
 
    Toca junto com a troca de placa, e pelo mesmo motivo: quem está com a
@@ -881,8 +924,19 @@ function renderVisaoPatio(prefixo){
       '<th class="vp-carga">Nº Carga</th><th class="vp-placa">Placa</th>'
       + '<th class="vp-transp">Transportadora</th><th class="vp-rota">Rota</th>'
       + STATUS_FLOW.map(st=>`<th class="et-cab" title="${esc(st)}">${esc(abreviarEtapa(st))}</th>`).join('')
-      + '<th class="vp-tempo">No pátio</th>'
-      + (podeCancelarCarga() ? '<th class="no-print">Ação</th>' : '');
+      + '<th class="vp-tempo">No pátio</th>';
+    /* SEM coluna de Ação aqui, e é decisão de operação, não de espaço.
+
+       A Visão do Pátio aparece nas abas de Portaria, Expedição e
+       Faturamento. Excluir e cancelar carga é da Programação — só ela sabe
+       se aquela carga foi desmarcada pelo cliente ou se está só atrasada, e
+       o servidor recusa a exclusão vinda de qualquer outro setor
+       (podeCriarCarga, em rotas/cargas.js).
+
+       Enquanto o botão aparecia para quem tem permissão de Logística, ele
+       aparecia TAMBÉM quando essa pessoa estava olhando a aba da Expedição
+       — a ação certa no lugar errado. Aqui a visão é de leitura: o setor
+       acompanha o pátio e age pelo botão da própria etapa. */
   }
 
   tbody.innerHTML = lista.map(c=>{
@@ -894,7 +948,6 @@ function renderVisaoPatio(prefixo){
       <td class="vp-rota">${esc(rotaCurta(c.rota))}</td>
       ${etapas.map(celulaEtapa).join('')}
       <td class="vp-tempo">${tempoNoPatioTexto(c)}</td>
-      ${podeCancelarCarga() ? `<td class="no-print">${botaoCancelarHtml(c)}</td>` : ''}
     </tr>`;
   }).join('');
 
@@ -3056,6 +3109,7 @@ async function init(){
     // placa. Chega por fora da sincronia porque é notícia, não dado.
     if(SuincoSharePoint.aoEditarCarga) SuincoSharePoint.aoEditarCarga(receberEdicaoRemota);
     if(SuincoSharePoint.aoExcluirCarga) SuincoSharePoint.aoExcluirCarga(receberExclusaoRemota);
+    if(typeof aoRecusarStatus === 'function') aoRecusarStatus(receberRecusaDeStatus);
     SuincoSharePoint.iniciar()
       .then(()=>{ atualizarRodapeConexao(SuincoSharePoint.estado()); renderAll(); })
       .catch(e=>{ console.warn('[Suinco] init:', e); atualizarRodapeConexao('local'); });
