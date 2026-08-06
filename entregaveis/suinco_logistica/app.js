@@ -789,6 +789,28 @@ function celulaEtapa(e){
   return `<td class="et et-pendente" title="${esc(e.status)} — ainda não"><span class="et-marca">·</span></td>`;
 }
 
+/* Quem pode tirar uma carga do pátio.
+
+   O mesmo setor que programa é o que cancela — e é ele que responde por
+   isso. Portaria, Expedição e Faturamento veem a coluna? Não: para eles a
+   carga travada é problema a relatar, não a resolver sozinho. */
+function podeCancelarCarga(){
+  const setor = (DB.operador||{}).setor;
+  return setor === 'Logística' || setor === 'Administração';
+}
+
+/* O botão muda de nome conforme a etapa, porque as duas ações são
+   diferentes de verdade: excluir some com algo que nunca aconteceu;
+   cancelar encerra algo que começou, e por isso pede motivo. */
+function botaoCancelarHtml(c){
+  if(c.status === 'Seguiu Viagem') return '<span class="text-dim">—</span>';
+  const cancelar = c.status !== 'Aguardando Veículo';
+  return `<button class="btn btn-danger btn-sm" onclick="excluirCargaUI('${escJs(c.id)}')"
+            title="${cancelar ? 'Cancelar esta carga (pede motivo e fica no log)'
+                              : 'Excluir esta carga programada'}">`
+       + (cancelar ? 'Cancelar' : 'Excluir') + '</button>';
+}
+
 function limparPeriodoVisaoPatio(prefixo){
   ['de','ate','busca'].forEach(campo=>{
     const el = document.getElementById(`${prefixo}-vp-${campo}`);
@@ -830,7 +852,8 @@ function renderVisaoPatio(prefixo){
       '<th class="vp-carga">Nº Carga</th><th class="vp-placa">Placa</th>'
       + '<th class="vp-transp">Transportadora</th><th class="vp-rota">Rota</th>'
       + STATUS_FLOW.map(st=>`<th class="et-cab" title="${esc(st)}">${esc(abreviarEtapa(st))}</th>`).join('')
-      + '<th class="vp-tempo">No pátio</th>';
+      + '<th class="vp-tempo">No pátio</th>'
+      + (podeCancelarCarga() ? '<th class="no-print">Ação</th>' : '');
   }
 
   tbody.innerHTML = lista.map(c=>{
@@ -842,6 +865,7 @@ function renderVisaoPatio(prefixo){
       <td class="vp-rota">${esc(rotaCurta(c.rota))}</td>
       ${etapas.map(celulaEtapa).join('')}
       <td class="vp-tempo">${tempoNoPatioTexto(c)}</td>
+      ${podeCancelarCarga() ? `<td class="no-print">${botaoCancelarHtml(c)}</td>` : ''}
     </tr>`;
   }).join('');
 
@@ -911,6 +935,16 @@ function renderTorre(){
     `<div class="stat-box"><div class="stat-num">${aguardandoCargaCount}</div><div class="stat-label">Aguardando Carga (dados incompletos)</div></div>`;
 
   const lista = abertas.slice().sort(ordenarPorSequenciaEAtualizacao);
+  const thead = document.getElementById('torre-thead');
+  if(thead){
+    thead.innerHTML =
+      '<th>Seq.</th><th>Nº Carga</th><th>Placa</th><th>Transportadora</th>'
+      + '<th>Tipo Veículo</th><th>Motorista</th><th>Rota</th><th>Peso (kg)</th>'
+      + '<th>Palet.</th><th>Tipo de Operação</th><th>Ganchos</th><th>Status</th>'
+      + '<th>Atualizado em</th>'
+      + (podeCancelarCarga() ? '<th class="no-print">Ação</th>' : '');
+  }
+
   const tbody = document.getElementById('torre-tbody');
   tbody.innerHTML = lista.map(c=>`
     <tr>
@@ -921,6 +955,7 @@ function renderTorre(){
       <td>${c.praOnde ? `<span class="chip-praonde">${esc(PRA_ONDE_LABEL[c.praOnde]||c.praOnde)}</span>` : '<span class="text-dim">—</span>'}</td>
       <td>${c.qtdGanchos ? c.qtdGanchos : '<span class="text-dim">Liso</span>'}</td>
       <td>${badgeHtml(c.status)}</td><td>${fmtDataHora(c.atualizadoEm)}</td>
+      ${podeCancelarCarga() ? `<td class="no-print">${botaoCancelarHtml(c)}</td>` : ''}
     </tr>`).join('');
   document.getElementById('torre-empty').hidden = lista.length>0;
 }
@@ -1127,8 +1162,37 @@ function reordenarPorSequenciaUI(){
    Sem rede, a exclusão entra na fila e sobe depois. */
 async function excluirCargaUI(id){
   const c = getCarga(id); if(!c) return;
-  if(c.status !== 'Aguardando Veículo'){ notify('Só é possível excluir cargas ainda em Aguardando Veículo — o resto já tem histórico operacional.', 'warn'); return; }
-  if(!confirm(`Excluir a carga programada da placa ${c.placa}? Essa ação não pode ser desfeita.`)) return;
+
+  /* Carga que já seguiu viagem não sai: o caminhão passou pela portaria, a
+     nota existe. Apagar isso é apagar o que aconteceu, e o mês deixa de
+     fechar. */
+  if(c.status === 'Seguiu Viagem'){
+    notify('Esta carga já seguiu viagem e não pode ser removida. O histórico do pátio não se apaga.', 'warn', 9000);
+    return;
+  }
+
+  /* Carga que JÁ ANDOU é cancelamento, não exclusão — e cancelamento pede
+     motivo. Antes, sair de "Aguardando Veículo" tornava a carga impossível
+     de remover: ela sumia da tela de Programação e não havia mais como agir
+     sobre ela em lugar nenhum. Um caminhão que encostou e foi embora sem
+     carregar travava a fila do pátio até alguém mexer no banco.
+
+     O motivo não é burocracia: é a diferença entre "a carga sumiu" e "o
+     cliente desmarcou". Daqui a três meses, só ele responde. */
+  const jaAndou = c.status !== 'Aguardando Veículo';
+  let motivo = '';
+  if(jaAndou){
+    motivo = (prompt(
+      `A carga da placa ${c.placa} está em "${c.status}" e já tem histórico.\n\n`
+      + 'Descreva o motivo do cancelamento (fica registrado no log):') || '').trim();
+    if(!motivo) return;                       // desistiu
+    if(motivo.length < 3){
+      notify('Escreva um motivo com pelo menos 3 letras.', 'warn');
+      return;
+    }
+  } else if(!confirm(`Excluir a carga programada da placa ${c.placa}? Essa ação não pode ser desfeita.`)){
+    return;
+  }
 
   const numero = c.numeroCarga || '';
   const placa = c.placa;
@@ -1137,9 +1201,9 @@ async function excluirCargaUI(id){
   DB.movimentacoes = DB.movimentacoes.filter(m=>m.cargaId!==id);
   registrarAlteracao({
     cargaId: id, placa,
-    campo: 'Carga excluída',
+    campo: jaAndou ? 'Carga cancelada' : 'Carga excluída',
     de: numero ? `Carga ${numero}` : `Placa ${placa}`,
-    para: '(excluída)',
+    para: jaAndou ? `(cancelada em ${c.status}) — ${motivo}` : '(excluída)',
     setor: (DB.operador && DB.operador.setor) || 'Logística',
     operador: (DB.operador && DB.operador.nome) || '(não identificado)'
   });
@@ -1151,7 +1215,7 @@ async function excluirCargaUI(id){
     return;
   }
   try{
-    const r = await SuincoSharePoint.excluir(id);
+    const r = await SuincoSharePoint.excluir(id, motivo);
     if(r && r.recusado){
       notify(`O servidor recusou a exclusão: ${r.erro} A carga volta na próxima sincronia.`, 'danger', 12000);
       return;

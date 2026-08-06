@@ -67,11 +67,10 @@
       <div class="grid4" id="torre-stats" style="margin-bottom:16px"></div>
       <div class="table-wrap">
         <table>
-          <thead><tr>
-            <th>Seq.</th><th>Nº Carga</th><th>Placa</th><th>Transportadora</th><th>Tipo Veículo</th><th>Motorista</th>
-            <th>Rota</th><th>Peso (kg)</th><th>Palet.</th>
-            <th>Tipo de Operação</th><th>Ganchos</th><th>Status</th><th>Atualizado em</th>
-          </tr></thead>
+          <!-- O cabeçalho é montado por renderTorre(): a coluna de ação só
+               existe para quem pode cancelar carga, e cabeçalho fixo com
+               linha variável desalinha a tabela inteira em silêncio. -->
+          <thead><tr id="torre-thead"></tr></thead>
           <tbody id="torre-tbody"></tbody>
         </table>
       </div>

@@ -710,7 +710,11 @@ describe('7d. Exclusão de carga programada', () => {
     assert.equal(r.json.excluida, true);
   });
 
-  test('carga com histórico operacional NÃO pode ser excluída', async () => {
+  /* O caminhão encostou, a Portaria registrou a chegada, e a carga não vai
+     carregar. Antes disso aqui, ela ficava presa: sumia da tela de
+     Programação ao sair de "Aguardando Veículo" e não havia como agir sobre
+     ela em lugar nenhum — travava a fila do pátio até alguém mexer no banco. */
+  test('carga que já andou é CANCELADA, com motivo', async () => {
     const { rows } = await pool.query('SELECT placa FROM dim_veiculos OFFSET 41 LIMIT 1');
     const criada = await req('/api/cargas', {
       metodo: 'POST', token: tokens['Logística'],
@@ -720,11 +724,78 @@ describe('7d. Exclusão de carga programada', () => {
       metodo: 'POST', token: tokens['Portaria'],
       corpo: { status: 'Aguardando Embarque' },
     });
-    const r = await req(`/api/cargas/${criada.json.id}`, {
+
+    // Sem motivo, não sai: "sumiu" e "cliente desmarcou" não podem virar a
+    // mesma linha no histórico.
+    const semMotivo = await req(`/api/cargas/${criada.json.id}`, {
       metodo: 'DELETE', token: tokens['Logística'],
     });
-    assert.equal(r.status, 409, 'apagar histórico é o começo de um relatório inexplicável');
-    assert.equal(r.json.codigo, 'CARGA_COM_HISTORICO');
+    assert.equal(semMotivo.status, 400);
+    assert.equal(semMotivo.json.codigo, 'MOTIVO_OBRIGATORIO');
+
+    const r = await req(`/api/cargas/${criada.json.id}`, {
+      metodo: 'DELETE', token: tokens['Logística'],
+      corpo: { motivo: 'Cliente desmarcou o pedido' },
+    });
+    assert.equal(r.status, 200, r.texto);
+    assert.equal(r.json.excluida, true);
+
+    const { rows: log } = await pool.query(
+      "SELECT acao FROM log_eventos WHERE carga_id = $1 AND acao LIKE 'Carga cancelada%'",
+      [criada.json.id]
+    );
+    assert.equal(log.length, 1);
+    assert.match(log[0].acao, /Aguardando Embarque/);
+    assert.match(log[0].acao, /Cliente desmarcou o pedido/);
+  });
+
+  /* A permissão é conferida ANTES do status. Sem isso, a Portaria
+     descobriria pela mensagem de erro que a carga existe e em que etapa
+     está — e, pior, um dia alguém trocaria a ordem das checagens e a
+     Expedição passaria a cancelar carga alheia. */
+  test('setor restrito não cancela, nem carga que já andou', async () => {
+    const { rows } = await pool.query('SELECT placa FROM dim_veiculos OFFSET 43 LIMIT 1');
+    const criada = await req('/api/cargas', {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { placa: rows[0].placa, numeroCarga: '96003' },
+    });
+    await req(`/api/cargas/${criada.json.id}/status`, {
+      metodo: 'POST', token: tokens['Portaria'],
+      corpo: { status: 'Aguardando Embarque' },
+    });
+    for (const setor of ['Portaria', 'Expedição', 'Faturamento']) {
+      const r = await req(`/api/cargas/${criada.json.id}`, {
+        metodo: 'DELETE', token: tokens[setor],
+        corpo: { motivo: 'não deveria passar' },
+      });
+      assert.equal(r.status, 403, `${setor} não pode cancelar carga`);
+    }
+    // E continua lá, intacta.
+    const { rows: viva } = await pool.query(
+      'SELECT excluida_em FROM fact_viagens WHERE carga_id = $1', [criada.json.id]);
+    assert.equal(viva[0].excluida_em, null);
+  });
+
+  /* O limite é a saída do pátio. Ali o caminhão passou pela portaria e a
+     nota existe — apagar é apagar o que aconteceu de verdade. */
+  test('carga que já seguiu viagem NÃO sai de jeito nenhum', async () => {
+    const { rows } = await pool.query('SELECT placa FROM dim_veiculos OFFSET 42 LIMIT 1');
+    const criada = await req('/api/cargas', {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { placa: rows[0].placa, numeroCarga: '96002' },
+    });
+    for (const status of ['Aguardando Embarque', 'Embarque Iniciado',
+      'Embarque Finalizado', 'Faturado', 'Seguiu Viagem']) {
+      await req(`/api/cargas/${criada.json.id}/status`, {
+        metodo: 'POST', token: tokens['Logística'], corpo: { status },
+      });
+    }
+    const r = await req(`/api/cargas/${criada.json.id}`, {
+      metodo: 'DELETE', token: tokens['Logística'],
+      corpo: { motivo: 'tentativa indevida' },
+    });
+    assert.equal(r.status, 409);
+    assert.equal(r.json.codigo, 'CARGA_JA_SAIU');
   });
 
   test('o Power BI não enxerga a carga excluída', async () => {

@@ -343,8 +343,26 @@ rotasCargas.delete('/cargas/:id', exigirLogin, async (req, res, next) => {
          o painel insistir para sempre em algo que já está feito. */
       if (carga.excluida_em) return { jaExcluida: true, carga };
 
-      if (carga.status_atual !== STATUS_INICIAL) {
-        return { comHistorico: true, carga };
+      /* Carga que JÁ SEGUIU VIAGEM não sai. Ali o caminhão passou pela
+         portaria, a nota existe e o cliente recebeu — apagar isso é apagar
+         o que aconteceu de verdade, e o relatório do mês deixa de fechar.
+
+         Qualquer etapa antes disso pode ser cancelada, e precisa poder: um
+         caminhão que encostou e foi embora sem carregar trava a fila do
+         pátio até alguém tirar. Antes só dava para excluir enquanto a carga
+         estava em "Aguardando Veículo" — depois disso ela sumia da tela de
+         Programação e não havia mais como agir sobre ela por lugar nenhum. */
+      if (carga.status_atual === 'Seguiu Viagem') {
+        return { jaSaiu: true, carga };
+      }
+
+      /* Cancelar carga que já andou exige MOTIVO. Não é burocracia: é a
+         diferença entre "a carga sumiu" e "a carga foi cancelada porque o
+         cliente desmarcou". Daqui a três meses, só o motivo responde. */
+      const comHistorico = carga.status_atual !== STATUS_INICIAL;
+      const motivo = String(req.body?.motivo ?? '').trim().slice(0, 300);
+      if (comHistorico && motivo.length < 3) {
+        return { motivoFaltando: true, carga };
       }
 
       await cli.query(
@@ -352,7 +370,10 @@ rotasCargas.delete('/cargas/:id', exigirLogin, async (req, res, next) => {
            (evento_id, carga_id, placa, acao, setor, operador_id, operador_nome,
             operador_verificado)
          VALUES ($1,$2,$3,$4,$5,$6,$7,TRUE)`,
-        [novoId('log'), id, carga.placa, 'Carga programada excluída',
+        [novoId('log'), id, carga.placa,
+         comHistorico
+           ? `Carga cancelada em "${carga.status_atual}" — motivo: ${motivo}`
+           : 'Carga programada excluída',
          op.setor, op.id, op.nome]
       );
 
@@ -369,12 +390,19 @@ rotasCargas.delete('/cargas/:id', exigirLogin, async (req, res, next) => {
     if (resultado.ausente) {
       return res.status(404).json({ erro: 'Carga não encontrada.', codigo: 'CARGA_NAO_ENCONTRADA' });
     }
-    if (resultado.comHistorico) {
+    if (resultado.jaSaiu) {
       return res.status(409).json({
-        erro: `A carga já está em "${resultado.carga.status_atual}" e tem histórico `
-            + 'operacional. Só é possível excluir enquanto está em '
-            + `"${STATUS_INICIAL}".`,
-        codigo: 'CARGA_COM_HISTORICO',
+        erro: 'Esta carga já seguiu viagem. O que já aconteceu no pátio não '
+            + 'pode ser apagado — se houve erro, registre a correção no '
+            + 'histórico.',
+        codigo: 'CARGA_JA_SAIU',
+      });
+    }
+    if (resultado.motivoFaltando) {
+      return res.status(400).json({
+        erro: `A carga está em "${resultado.carga.status_atual}" e já tem `
+            + 'histórico. Informe o motivo do cancelamento.',
+        codigo: 'MOTIVO_OBRIGATORIO',
       });
     }
     if (resultado.jaExcluida) {
