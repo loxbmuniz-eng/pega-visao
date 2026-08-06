@@ -27,6 +27,7 @@
   --wine-light:#b3363f;
   --ok:#3fa66a;
   --warn:#d99a2b;
+  --warn-fg:#1a1200;   /* âmbar claro no escuro: texto escuro por cima */
   --text:#f2f4f8;
   --text-dim:#b7c0d4;
   --border:rgba(233,185,84,.28);
@@ -91,6 +92,31 @@
   --st-seguiu-viagem-bg:#14603a;        --st-seguiu-viagem-fg:#ffffff;        --st-seguiu-viagem-br:#0d3f26;
   --st-neutro-bg:#5b6785;               --st-neutro-fg:#ffffff;               --st-neutro-br:#374a86;
 
+  /* ---- O status como COR DE TEXTO (-txt) ----
+     Terceira variante de cada status, e ela existe por causa de um defeito
+     que já apareceu duas vezes em superfícies diferentes.
+
+     `-fg` é a cor do texto DENTRO do status: escrita em cima do
+     preenchimento colorido. Em "Aguardando Embarque" vale #1a1200, quase
+     preto — perfeito sobre a badge laranja. Usado como cor de texto solto
+     no card azul-escuro, some: razão de contraste 1,14.
+
+     `-bg` também não serve: é saturado para virar preenchimento, e alguns
+     são escuros ("Seguiu Viagem" é #14603a). Sobre card escuro, some
+     igual.
+
+     Daí `-txt`: o status escrito COMO TEXTO sobre a superfície do painel.
+     Cada valor foi medido contra o card do respectivo tema — mínimo
+     aferido 4,99, todos os outros acima de 6. Quem for mexer aqui mede
+     antes: testes/test_contraste.py varre as dez abas nos dois temas. */
+  --st-aguardando-veiculo-txt:#ff8a80;
+  --st-aguardando-embarque-txt:#f0a35a;
+  --st-embarque-iniciado-txt:#f0c33c;
+  --st-embarque-finalizado-txt:#7fd4a2;
+  --st-faturado-txt:#4cc281;
+  --st-seguiu-viagem-txt:#3fb87c;
+  --st-neutro-txt:#9aa6c4;
+
   /* ---- Vidro ----
      As superfícies do painel deixaram de ser blocos de cor chapada e
      passaram a ser vidro: translúcidas, com o ambiente da marca aparecendo
@@ -153,6 +179,9 @@
   --wine-light:#b3363f;
   --ok:#1d7a47;
   --warn:#9a6a08;
+  /* No claro o âmbar precisa ser escuro para não sumir no branco — e aí
+     quem tem de clarear é o TEXTO. Com #1a1200 por cima dava 3,93. */
+  --warn-fg:#ffffff;
   --text:#161a22;
   --text-dim:#5a6474;
   --border:rgba(26,32,45,.22);
@@ -161,6 +190,16 @@
   --campo-bg:#ffffff;
   --placeholder:#8a94a6;
   --logo-chip-bg:#fff;
+
+  /* O status como cor de TEXTO, versão clara: os mesmos seis, escurecidos
+     para o card branco. Medidos contra #f6f7fa — mínimo 4,99. */
+  --st-aguardando-veiculo-txt:#a3271f;
+  --st-aguardando-embarque-txt:#8a4a06;
+  --st-embarque-iniciado-txt:#6b5200;
+  --st-embarque-finalizado-txt:#1d7a47;
+  --st-faturado-txt:#14603a;
+  --st-seguiu-viagem-txt:#0d3f26;
+  --st-neutro-txt:#4a5570;
 
   /* Vidro claro: branco alto, borda escura fininha em vez de dourada — no
      claro a borda dourada sobre branco quase não aparece e o card volta a
@@ -297,8 +336,13 @@ body::before{
 .btn:hover{opacity:.85}
 .btn-primary{background:var(--gold);color:#1a1200}
 .btn-success{background:var(--ok);color:#fff}
+/* O verde do --ok é claro demais para carregar texto branco: 2,74 de
+   contraste no tema escuro. O botão escurece para segurar o #fff, em vez
+   de o texto escurecer — "Chegou" e "Finalizar Embarque" precisam de peso
+   visual, e texto escuro sobre verde os deixaria apagados. */
+.btn-success{background:#1d7a47}
 .btn-danger{background:var(--wine);color:#fff}
-.btn-warn{background:var(--warn);color:#1a1200}
+.btn-warn{background:var(--warn);color:var(--warn-fg)}
 .btn-sec{background:var(--navy-light);color:var(--text);border:1px solid var(--border)}
 .btn-sm{padding:6px 12px;font-size:13px;min-height:32px}
 .btn-lg{padding:14px 26px;font-size:16.5px;min-height:52px}
@@ -600,12 +644,21 @@ select option{background:var(--campo-bg);color:var(--text)}
   font-size:11.5px;line-height:1.25;white-space:normal;
   border-bottom:3px solid var(--gold-dim);padding:8px var(--sp-1);
 }
+/* O setor responsável é rótulo secundário, mas secundário não é invisível.
+   Era dourado a 10px com opacity .65: 4,17 no escuro e 2,92 no claro, os
+   dois abaixo do mínimo. --text-dim é a cor que o painel já usa para texto
+   de apoio e passa nos dois temas; a hierarquia vem do corpo menor e do
+   peso, não de apagar a cor. */
 .tabela-status-h .st-setor{
-  display:block;font-size:10px;font-weight:600;opacity:.65;margin-top:2px;
+  display:block;font-size:10px;font-weight:600;margin-top:2px;
+  color:var(--text-dim);
 }
 .tabela-status-h .st-valor{ padding:var(--sp-3) var(--sp-1) }
 .st-num{ display:block;font-size:30px;font-weight:800;line-height:1 }
-.st-pct{ display:block;font-size:11px;opacity:.7;margin-top:3px }
+/* Sem opacity. A cor do número já vem de --st-*-txt, medida contra o card;
+   esmaecer por cima desfazia a calibragem e devolvia 3,8 de contraste. A
+   percentagem já é secundária pelo corpo (11px contra 30px do número). */
+.st-pct{ display:block;font-size:11px;margin-top:3px }
 /* Etapa vazia continua aparecendo — etapa zerada é informação — mas sem
    competir por atenção com as que têm carga parada. */
 .tabela-status-h .st-zero{ opacity:.4 }
@@ -829,7 +882,7 @@ tbody tr{ transition:background-color var(--t-rapida) ease }
 .filtro-periodo .filtro-acoes{min-width:auto;display:flex;align-items:flex-end}
 
 .vp-resumo{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
-.vp-total{font-weight:800;font-size:14px;color:var(--gold)}
+.vp-total{font-weight:800;font-size:14px;color:var(--gold-text)}
 .vp-periodo{font-size:12px;opacity:.7;margin-right:4px}
 .vp-chip{font-size:11.5px}
 
@@ -861,11 +914,20 @@ code{
 .tabela-patio .et{text-align:center;width:8.5%;line-height:1.15;padding:6px var(--sp-1)}
 .et-marca{display:block;font-size:15px;font-weight:900}
 .et-hora{display:block;font-size:11px;opacity:.75;font-variant-numeric:tabular-nums}
-.et-ok .et-marca{color:var(--st-faturado-fg)}
-.et-pendente .et-marca{color:var(--border);opacity:.6}
+.et-ok .et-marca{color:var(--st-faturado-txt)}
+/* O ponto de etapa NÃO OCORRIDA. Era var(--border) com opacity .6: razão
+   1,42. Sumia, e célula sem marca nenhuma parece célula vazia — o operador
+   perdia a diferença entre "ainda não aconteceu" (·) e "não se aplica"
+   (n/a). Continua a marca mais discreta da linha, mas visível. */
+.et-pendente .et-marca{color:var(--text-dim);opacity:.75}
 .et-pendente{background:transparent}
 /* A etapa ATUAL é a informação principal da linha. Fundo próprio, não só
    cor de texto: em tabela longa, cor de texto some no meio das outras. */
+/* A etapa ATUAL é a única com preenchimento colorido — e por isso é a
+   única onde -fg está certo: aqui o texto fica DENTRO do laranja. Corrigi
+   isto para -txt numa primeira passada e piorei (1,44 de contraste); a
+   medição pegou. Regra do arquivo: -fg quando há `background:` do mesmo
+   status na mesma regra, -txt quando não há. */
 .et-atual{background:var(--st-aguardando-embarque-bg);border-radius:var(--radius-sm)}
 .et-atual .et-marca{color:var(--st-aguardando-embarque-fg)}
 .et-atual .et-hora{color:var(--st-aguardando-embarque-fg);opacity:.9}
@@ -880,7 +942,12 @@ code{
 
 @media print{
   .filtro-periodo{display:none}
+  /* No celular o preenchimento sai (economiza tinta na tela pequena) — e
+     com ele sai o motivo de usar -fg. Sem esta troca, a marca e a hora da
+     etapa atual ficariam quase pretas sobre o card. */
   .et-atual{background:transparent;border:1px solid var(--border)}
+  .et-atual .et-marca{color:var(--st-aguardando-embarque-txt)}
+  .et-atual .et-hora{color:var(--text-dim);opacity:1}
 }
 
 /* ---- Teste de conexão (dentro do modal de login) ----
@@ -953,7 +1020,7 @@ code{
 }
 .chip-praonde{
   display:inline-block;padding:3px 10px;border-radius:12px;font-size:11.5px;font-weight:800;
-  background:var(--navy-light);color:var(--gold);border:1px solid var(--gold-dim);white-space:nowrap;
+  background:var(--navy-light);color:var(--gold-text);border:1px solid var(--gold-dim);white-space:nowrap;
 }
 
 /* ===== PAINEL DO GESTOR — comparação por período ===== */
@@ -1009,7 +1076,7 @@ code{
   background:var(--navy-deep);border:1px solid var(--border-soft);border-radius:var(--radius);
   padding:14px;display:flex;flex-direction:column;
 }
-.grafico-titulo{font-size:14px;font-weight:800;color:var(--gold);margin-bottom:8px}
+.grafico-titulo{font-size:14px;font-weight:800;color:var(--gold-text);margin-bottom:8px}
 .grafico-box canvas{width:100%;display:block}
 .grafico-legenda{font-size:11px;margin-top:8px;margin-bottom:0}
 .grafico-legenda-lista{margin-top:10px;display:flex;flex-direction:column;gap:5px}
@@ -1275,7 +1342,7 @@ code{
    ele competia em peso com os secundários; com o gradiente lê como o botão
    da tela sem precisar ficar maior. */
 .btn-primary{ background:linear-gradient(180deg, #f2c766, var(--gold) 55%, var(--gold-dim)) }
-.btn-success{ background:linear-gradient(180deg, #49b978, var(--ok)) }
+.btn-success{ background:linear-gradient(180deg, #24905a, #17683c) }
 .btn-danger{  background:linear-gradient(180deg, #a82a32, var(--wine)) }
 .badge{border-radius:5px;letter-spacing:.4px}
 .status-pill{border-radius:5px}

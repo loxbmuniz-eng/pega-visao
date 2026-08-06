@@ -226,7 +226,19 @@ function corStatusRelatorio(status){
   return {
     fundo: ler('bg', '#1e2a52'),
     texto: ler('fg', '#b7c0d4'),
-    borda: ler('br', '#374a86')
+    borda: ler('br', '#374a86'),
+    /* `destaque` é o status escrito COMO TEXTO sobre a superfície do
+       painel — e é diferente de `texto`, que é a cor do texto DENTRO do
+       preenchimento colorido.
+
+       A confusão entre os dois já produziu o mesmo defeito duas vezes: o
+       painel "Cargas em aberto por status" pintava o número com `texto`, e
+       em "Aguardando Embarque" isso é #1a1200 (quase preto) sobre card
+       azul-escuro — razão 1,14, invisível.
+
+       Regra prática: se a cor vai junto com `background:` do mesmo status,
+       use `texto`. Se vai sozinha, use `destaque`. */
+    destaque: ler('txt', ler('bg', '#b7c0d4'))
   };
 }
 // "Faturado" ou além no fluxo (Faturado, Seguiu Viagem) -> célula verde no PDF.

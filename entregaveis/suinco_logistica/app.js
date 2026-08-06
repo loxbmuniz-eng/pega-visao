@@ -1655,13 +1655,13 @@ function renderDistribuicaoStatus(){
   const thead = document.getElementById('ind-status-thead');
   if(thead){
     thead.innerHTML = dist.map(d=>
-      `<th class="st-col" style="border-bottom-color:${d.cor.texto}" title="${esc(d.setor)}">
+      `<th class="st-col" style="border-bottom-color:${d.cor.destaque}" title="${esc(d.setor)}">
          ${esc(d.status)}<span class="st-setor">${esc(d.setor)}</span>
        </th>`).join('');
   }
 
   tbody.innerHTML = '<tr>' + dist.map(d=>
-    `<td class="st-col st-valor${d.qtd ? '' : ' st-zero'}" style="color:${d.cor.texto}">
+    `<td class="st-col st-valor${d.qtd ? '' : ' st-zero'}" style="color:${d.cor.destaque}">
        <span class="st-num">${d.qtd}</span>
        <span class="st-pct">${abertas.length ? d.pct + '%' : '—'}</span>
      </td>`).join('') + '</tr>';
@@ -2743,7 +2743,7 @@ function blocoDistribuicaoStatus(dist, total, titulo, explicacao, ocultarZerados
             <td class="num-forte">${d.qtd}</td>
             <td>${total ? d.pct + '%' : '—'}</td>
             <td class="barra-cel">
-              <span class="barra-trilho"><span class="barra-preenche" style="width:${d.pct}%;background:${d.cor.texto}"></span></span>
+              <span class="barra-trilho"><span class="barra-preenche" style="width:${d.pct}%;background:${d.cor.destaque}"></span></span>
             </td>
           </tr>`).join('')}
       </tbody>
@@ -3074,7 +3074,10 @@ function renderTempoMedioPatio(){
         <div class="stat-note">Sem dados suficientes</div></div>`;
     }
     const dentro = dados.media <= dados.meta;
-    const cor = dentro ? 'var(--st-faturado-fg, #3fa66a)' : 'var(--st-aguardando-veiculo-fg, #d9534f)';
+    // -txt, e não -fg: este número fica solto no card, não dentro de um
+    // preenchimento colorido. Com -fg saía #06210f (quase preto) sobre o
+    // card escuro — razão 1,16.
+    const cor = dentro ? 'var(--st-faturado-txt, #4cc281)' : 'var(--st-aguardando-veiculo-txt, #ff8a80)';
     return `<div class="stat-box">
         <div class="stat-num" style="color:${cor}">${fmtDuracao(dados.media)}</div>
         <div class="stat-label">${rotulo}</div>
