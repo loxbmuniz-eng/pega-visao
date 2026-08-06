@@ -262,6 +262,44 @@ textarea{resize:vertical;min-height:70px}
 select option{background:var(--campo-bg);color:var(--text)}
 
 /* ===== STAT BOXES ===== */
+/* ===== PAINEL DE STATUS HORIZONTAL =====
+   Uma coluna por etapa, o número embaixo. A versão vertical obrigava a
+   percorrer seis linhas para montar o quadro do pátio na cabeça; aqui o
+   quadro inteiro cabe num olhar. É a mesma forma do relatório executivo —
+   quem lê o PDF e quem lê a tela não reaprendem nada. */
+.tabela-status-h{ table-layout:fixed;width:100% }
+.tabela-status-h .st-col{ text-align:center;width:16.66% }
+.tabela-status-h thead .st-col{
+  font-size:11.5px;line-height:1.25;white-space:normal;
+  border-bottom:3px solid var(--gold-dim);padding:8px var(--sp-1);
+}
+.tabela-status-h .st-setor{
+  display:block;font-size:10px;font-weight:600;opacity:.65;margin-top:2px;
+}
+.tabela-status-h .st-valor{ padding:var(--sp-3) var(--sp-1) }
+.st-num{ display:block;font-size:30px;font-weight:800;line-height:1 }
+.st-pct{ display:block;font-size:11px;opacity:.7;margin-top:3px }
+/* Etapa vazia continua aparecendo — etapa zerada é informação — mas sem
+   competir por atenção com as que têm carga parada. */
+.tabela-status-h .st-zero{ opacity:.4 }
+.status-h-total{ margin-top:var(--sp-2);font-size:13px }
+
+/* Nota de filtro ativo. Número filtrado sem aviso é a forma mais
+   silenciosa de tirar conclusão errada — ainda mais num painel que alguém
+   abre no meio do dia e fotografa para o grupo. */
+.filtro-nota{
+  margin:-4px 0 var(--sp-3);padding:8px 12px;border-radius:var(--radius-sm);
+  background:var(--st-aguardando-embarque-bg);color:var(--st-aguardando-embarque-fg);
+  font-size:12.5px;border-left:3px solid var(--st-aguardando-embarque-br);
+}
+
+@media(max-width:640px){
+  /* Seis colunas de 16% viram ilegíveis em 390px. Aqui a tabela rola
+     dentro da caixa, como as outras — a página nunca rola de lado. */
+  .tabela-status-h{ min-width:520px }
+  .st-num{ font-size:24px }
+}
+
 /* Coluna de tendência: o canvas ocupa a célula inteira e não força
    largura na tabela — em tela estreita ele encolhe junto. */
 .cel-spark{ width:130px;padding:4px 8px;vertical-align:middle }

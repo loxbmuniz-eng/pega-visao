@@ -1514,20 +1514,38 @@ let indRankingPeriodoAtivo = 'hoje';
 function renderDistribuicaoStatus(){
   const tbody = document.getElementById('ind-status-tbody');
   if(!tbody) return;
-  const abertas = cargasAbertas();
+
+  /* Leitura HORIZONTAL: uma coluna por etapa, o número embaixo.
+
+     A versão vertical obrigava a percorrer seis linhas para montar o quadro
+     do pátio na cabeça. Na horizontal o quadro inteiro cabe num olhar, e é
+     a mesma forma já usada no relatório executivo — quem lê o PDF e quem
+     lê a tela não precisam reaprender nada.
+
+     A distribuição vem de distribuicaoPorStatus(), como antes. Só a
+     apresentação mudou. */
+  const abertas = filtrarPorFiltroIndicadores(cargasAbertas());
   const dist = distribuicaoPorStatus(abertas);
-  tbody.innerHTML = dist.map(d=>`
-    <tr>
-      <td>${badgeHtml(d.status)}</td>
-      <td class="text-dim">${esc(d.setor)}</td>
-      <td class="num-forte">${d.qtd}</td>
-      <td>${abertas.length ? d.pct + '%' : '—'}</td>
-      <td class="barra-cel">
-        <span class="barra-trilho"><span class="barra-preenche" style="width:${d.pct}%;background:${d.cor.texto}"></span></span>
-      </td>
-    </tr>`).join('');
-  document.getElementById('ind-status-total').textContent = abertas.length;
-  document.getElementById('ind-status-pct').textContent = abertas.length ? '100%' : '—';
+
+  const thead = document.getElementById('ind-status-thead');
+  if(thead){
+    thead.innerHTML = dist.map(d=>
+      `<th class="st-col" style="border-bottom-color:${d.cor.texto}" title="${esc(d.setor)}">
+         ${esc(d.status)}<span class="st-setor">${esc(d.setor)}</span>
+       </th>`).join('');
+  }
+
+  tbody.innerHTML = '<tr>' + dist.map(d=>
+    `<td class="st-col st-valor${d.qtd ? '' : ' st-zero'}" style="color:${d.cor.texto}">
+       <span class="st-num">${d.qtd}</span>
+       <span class="st-pct">${abertas.length ? d.pct + '%' : '—'}</span>
+     </td>`).join('') + '</tr>';
+
+  const total = document.getElementById('ind-status-total-linha');
+  if(total){
+    total.innerHTML = `<strong>${abertas.length}</strong> carga(s) em aberto`
+      + (filtroIndicadoresAtivo() ? ' <span class="text-dim">— com o filtro aplicado</span>' : '');
+  }
 }
 
 /* Menor e maior tempo do dia, nas duas métricas. Sem cargas concluídas hoje,
@@ -1570,12 +1588,96 @@ function renderExtremosHoje(){
     bloco(extremosTempo(concluidasHoje, 'tempoPatioTotal'), 'Permanência no pátio');
 }
 
+/* ====================================================================
+   FILTROS DOS INDICADORES — um estado, todos os blocos
+   ====================================================================
+   Emprestado do painel de despesas de frete: o recorte vive num lugar só e
+   TUDO recalcula junto. Sem isso, o gestor filtra num bloco, compara com
+   número de outro recorte e tira conclusão errada sem perceber que os dois
+   não falavam do mesmo conjunto.
+
+   Nada aqui calcula indicador: só decide QUAIS cargas entram. Os cálculos
+   continuam todos em data.js, intocados. */
+const FILTRO_IND = { transportadora:'', rota:'', operacao:'', busca:'' };
+
+function filtroIndicadoresAtivo(){
+  return !!(FILTRO_IND.transportadora || FILTRO_IND.rota || FILTRO_IND.operacao || FILTRO_IND.busca);
+}
+
+function filtrarPorFiltroIndicadores(cargas){
+  if(!filtroIndicadoresAtivo()) return cargas;
+  const busca = FILTRO_IND.busca.trim().toLowerCase();
+  const placa = normalizarPlaca(FILTRO_IND.busca);
+  return cargas.filter(c=>{
+    if(FILTRO_IND.transportadora && c.transportadora !== FILTRO_IND.transportadora) return false;
+    if(FILTRO_IND.rota && (c.rota||'') !== FILTRO_IND.rota) return false;
+    if(FILTRO_IND.operacao && (c.praOnde||'') !== FILTRO_IND.operacao) return false;
+    if(busca){
+      const bate = normalizarPlaca(c.placa).includes(placa)
+                || String(c.numeroCarga||'').toLowerCase().includes(busca);
+      if(!bate) return false;
+    }
+    return true;
+  });
+}
+
+/* Preenche os seletores com o que EXISTE nos dados, não com uma lista
+   fixa: opção que não filtra nada é convite a clicar e achar que quebrou. */
+function preencherFiltrosIndicadores(){
+  const alvo = (id, valores, rotulo) => {
+    const el = document.getElementById(id);
+    if(!el) return;
+    const atual = el.value;
+    el.innerHTML = `<option value="">${rotulo}</option>`
+      + valores.map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join('');
+    el.value = atual;                       // não perde a escolha ao redesenhar
+  };
+  const uniq = f => [...new Set(DB.cargas.map(f).filter(Boolean))].sort();
+  alvo('ind-f-transp', uniq(c=>c.transportadora), 'Todas');
+  alvo('ind-f-rota', uniq(c=>c.rota).map(String), 'Todas');
+  alvo('ind-f-operacao', uniq(c=>c.praOnde), 'Todos');
+}
+
+function aplicarFiltroIndicadores(){
+  const ler = id => (document.getElementById(id)||{}).value || '';
+  FILTRO_IND.transportadora = ler('ind-f-transp');
+  FILTRO_IND.rota           = ler('ind-f-rota');
+  FILTRO_IND.operacao       = ler('ind-f-operacao');
+  FILTRO_IND.busca          = ler('ind-f-busca');
+
+  /* A nota diz, em texto, o que está sendo mostrado. Número filtrado sem
+     aviso é a forma mais silenciosa de tirar conclusão errada — ainda mais
+     num painel que alguém abre no meio do dia e fotografa. */
+  const nota = document.getElementById('ind-filtro-nota');
+  if(nota){
+    const partes = [];
+    if(FILTRO_IND.transportadora) partes.push(FILTRO_IND.transportadora);
+    if(FILTRO_IND.rota)           partes.push('Rota ' + FILTRO_IND.rota);
+    if(FILTRO_IND.operacao)       partes.push(FILTRO_IND.operacao);
+    if(FILTRO_IND.busca)          partes.push('"' + FILTRO_IND.busca + '"');
+    nota.hidden = partes.length === 0;
+    nota.innerHTML = partes.length
+      ? `<strong>Filtro ativo:</strong> ${esc(partes.join(' · '))}`
+        + ' — os números abaixo consideram só este recorte.'
+      : '';
+  }
+  renderIndicadores();
+}
+
+function limparFiltroIndicadores(){
+  ['ind-f-transp','ind-f-rota','ind-f-operacao','ind-f-busca'].forEach(id=>{
+    const el = document.getElementById(id); if(el) el.value = '';
+  });
+  aplicarFiltroIndicadores();
+}
+
 function renderIndicadores(){
+  preencherFiltrosIndicadores();
   renderDistribuicaoStatus();
   renderTempoMedioPatio();
   renderGargalos();
   // ---- Bloco 1: histórico completo (mantém o comportamento original) ----
-  const concluidas = DB.cargas.filter(c=>c.status==='Seguiu Viagem');
+  const concluidas = filtrarPorFiltroIndicadores(DB.cargas.filter(c=>c.status==='Seguiu Viagem'));
   const campos = ['tempoAguardandoEmbarque','tempoCarregamento','tempoFaturamento','tempoAguardandoSaida','tempoPatioTotal'];
   const labels = {
     tempoAguardandoEmbarque:'Tempo Aguardando Embarque',
@@ -1725,7 +1827,7 @@ function renderRankingPeriodos(){
     <button class="btn btn-sm ${p.key===indRankingPeriodoAtivo ? 'btn-primary' : 'btn-sec'}" onclick="selecionarRankingPeriodo('${escJs(p.key)}')">${esc(p.label)}</button>
   `).join('');
   const cargasPeriodo = indRankingPeriodoAtivo==='todos' ? undefined : cargasConcluidasNoPeriodo(indRankingPeriodoAtivo);
-  const rk = rankingVeiculosAtraso(cargasPeriodo);
+  const rk = rankingVeiculosAtraso(filtrarPorFiltroIndicadores(cargasPeriodo || DB.cargas));
   document.getElementById('ind-ranking-tbody').innerHTML = rk.map((r,i)=>`
     <tr>
       <td>${i+1}º</td>

@@ -66,6 +66,71 @@ async def main():
                return c && c.type==='hidden';}"""))
         ck('select Paletizada existe', await pg.evaluate("()=>!!document.getElementById('prog-paletizada')"))
 
+        print('\n=== 5a. FILTROS DOS INDICADORES ===')
+        # Arquitetura emprestada do painel de despesas de frete: um estado
+        # central, e TUDO recalcula junto. Sem isso o gestor filtra num
+        # bloco e compara com número de outro recorte sem perceber.
+        await pg.evaluate("""() => {
+            const f = DB.frota;
+            for (let i = 0; i < 4; i++) {
+                criarCargaProgramada({placa:f[i].placa, numeroCarga:'IF'+i, peso:10000,
+                    rota: i < 2 ? '500' : '501',
+                    praOnde: i < 2 ? 'FROTA PROPRIA' : 'CROSS-DOCKING',
+                    paletizada:'Sim', qtdGanchos:5, qtdEntregas:1, operador:'A'});
+                registrarChegadaPortaria(f[i].placa, 'P');
+            }
+            abrirTab('indicadores'); renderAll();
+        }""")
+        await pg.wait_for_timeout(500)
+
+        # Medir contra o estado real, e não contra número fixo: seções
+        # anteriores deste mesmo teste já criaram carga, e constante mágica
+        # aqui reprovaria por ordem de execução, não por defeito.
+        base = await pg.evaluate("""() => ({
+            colunas: document.querySelectorAll('#ind-status-thead th').length,
+            valores: [...document.querySelectorAll('#ind-status-tbody .st-num')].map(e => +e.textContent),
+            total: document.getElementById('ind-status-total-linha').textContent,
+            opcoes: document.getElementById('ind-f-rota').options.length,
+            abertas: cargasAbertas().length,
+            rotasEmUso: new Set(DB.cargas.map(c => c.rota).filter(Boolean)).size
+        })""")
+        ck('status em 6 colunas, uma por etapa', base['colunas'] == 6, str(base['colunas']))
+        ck('a soma das colunas bate com as cargas em aberto',
+           sum(base['valores']) == base['abertas'],
+           f"colunas={base['valores']} soma={sum(base['valores'])} abertas={base['abertas']}")
+        # Seletor montado a partir do que EXISTE: opção que não filtra nada
+        # é convite a clicar e achar que quebrou.
+        ck('seletor de rota traz só as rotas em uso',
+           base['opcoes'] == base['rotasEmUso'] + 1,
+           f"{base['opcoes']} opções para {base['rotasEmUso']} rotas + 'Todas'")
+
+        await pg.select_option('#ind-f-rota', '501')
+        await pg.wait_for_timeout(400)
+        filtrado = await pg.evaluate("""() => ({
+            valores: [...document.querySelectorAll('#ind-status-tbody .st-num')].map(e => +e.textContent),
+            total: document.getElementById('ind-status-total-linha').textContent,
+            nota: document.getElementById('ind-filtro-nota').hidden ? '' :
+                  document.getElementById('ind-filtro-nota').textContent
+        })""")
+        ck('o filtro recalcula os números',
+           0 < sum(filtrado['valores']) < sum(base['valores']),
+           f"antes={sum(base['valores'])} depois={sum(filtrado['valores'])}")
+        ck('a nota declara o recorte ativo', 'Rota 501' in filtrado['nota'],
+           filtrado['nota'].strip())
+        ck('o total avisa que está filtrado', 'filtro aplicado' in filtrado['total'],
+           filtrado['total'].strip())
+
+        await pg.evaluate("() => limparFiltroIndicadores()")
+        await pg.wait_for_timeout(400)
+        limpo = await pg.evaluate("""() => ({
+            valores: [...document.querySelectorAll('#ind-status-tbody .st-num')].map(e => +e.textContent),
+            nota: document.getElementById('ind-filtro-nota').hidden
+        })""")
+        ck('limpar volta ao conjunto inteiro',
+           sum(limpo['valores']) == base['abertas'],
+           f"{sum(limpo['valores'])} de {base['abertas']}")
+        ck('e some com a nota', limpo['nota'] is True)
+
         print('\n=== 5b. SPARKLINE DA TENDÊNCIA ===')
         # A tabela de períodos JÁ é uma série temporal: cinco janelas do
         # mesmo indicador. Lida célula a célula, a tendência exige comparar
