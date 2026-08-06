@@ -226,7 +226,19 @@ function corStatusRelatorio(status){
   return {
     fundo: ler('bg', '#1e2a52'),
     texto: ler('fg', '#b7c0d4'),
-    borda: ler('br', '#374a86')
+    borda: ler('br', '#374a86'),
+    /* `destaque` é o status escrito COMO TEXTO sobre a superfície do
+       painel — e é diferente de `texto`, que é a cor do texto DENTRO do
+       preenchimento colorido.
+
+       A confusão entre os dois já produziu o mesmo defeito duas vezes: o
+       painel "Cargas em aberto por status" pintava o número com `texto`, e
+       em "Aguardando Embarque" isso é #1a1200 (quase preto) sobre card
+       azul-escuro — razão 1,14, invisível.
+
+       Regra prática: se a cor vai junto com `background:` do mesmo status,
+       use `texto`. Se vai sozinha, use `destaque`. */
+    destaque: ler('txt', ler('bg', '#b7c0d4'))
   };
 }
 // "Faturado" ou além no fluxo (Faturado, Seguiu Viagem) -> célula verde no PDF.
@@ -276,7 +288,19 @@ const ABAS_OPERACIONAIS = ['torre','programacao','portaria','expedicao',
 const SETOR_PERMISSOES = {
   'Logística':    ABAS_OPERACIONAIS.slice(),
   'Portaria':     ['portaria','historico'],
-  'Expedição':    ['expedicao','historico'],
+  /* Expedição é o único setor operacional com Indicadores.
+
+     Não é exceção arbitrária: é onde o tempo do pátio efetivamente se
+     forma. Portaria registra chegada e saída — dois carimbos que ela não
+     controla. Faturamento emite. A Expedição é quem opera as duas etapas
+     mais longas do fluxo (Embarque Iniciado e Embarque Finalizado), e é o
+     único posto que pode olhar "tempo médio de carregamento" e mudar
+     alguma coisa no mesmo turno: remanejar doca, cobrar um conferente,
+     reordenar a fila.
+
+     Indicador sem poder de ação vira placar; com poder de ação, vira
+     ferramenta. Por isso aqui sim, e nos outros dois não. */
+  'Expedição':    ['expedicao','indicadores','historico'],
   'Faturamento':  ['faturamento','historico'],
   'Administração':ABAS_OPERACIONAIS.concat(['usuarios'])
 };
@@ -289,7 +313,7 @@ const TAB_FUNCAO = {
   portaria:    { setor:'Portaria',     oque:'Registrar a entrada e a saída física do caminhão no pátio.',                                      move:'Chegou: Aguardando Veículo → Aguardando Embarque. Saiu: Faturado → Seguiu Viagem.' },
   expedicao:   { setor:'Expedição',    oque:'Controlar o carregamento do veículo, do início ao fim.',                                          move:'Aguardando Embarque → Embarque Iniciado → Embarque Finalizado.' },
   faturamento: { setor:'Faturamento',  oque:'Emitir a nota da carga já carregada, liberando o caminhão para sair.',                             move:'Embarque Finalizado → Faturado.' },
-  indicadores: { setor:'Logística',    oque:'Analisar tempo médio por etapa, comparar períodos e ver o ranking de transportadoras.',            move:'Não altera nada — é somente leitura.' },
+  indicadores: { setor:'Logística e Expedição', oque:'Analisar tempo médio por etapa, comparar períodos e ver o ranking de transportadoras.', move:'Não altera nada — é somente leitura.' },
   cadastros:   { setor:'Logística',    oque:'Manter a base de Frota (placa → transportadora → tipo) e as transportadoras.',                 move:'Não altera cargas — alimenta a Programação.' },
   historico:   { setor:'Todos',        oque:'Consultar a trilha de auditoria: quem moveu qual carga, de qual status para qual, e quando.',      move:'Não altera nada — registro permanente.' },
   relatorios:  { setor:'Logística',    oque:'Gerar o PDF operacional (para o pátio) e o executivo (para a gestão).',                            move:'Não altera nada — exporta o que já existe.' },

@@ -36,8 +36,12 @@
   </div>
   <div id="header-actions">
     <span id="badge-conexao" class="badge-conexao" hidden></span>
-    <button class="btn btn-sec btn-sm" id="btn-tema" onclick="alternarTema()" title="Alternar entre modo claro e escuro" aria-label="Alternar tema">🌙 Escuro</button>
-    <button class="btn btn-sec btn-sm" onclick="trocarUsuario()">Trocar usuário</button>
+    <button class="btn btn-sec btn-sm" id="btn-tema" onclick="alternarTema()" title="Alternar entre modo claro e escuro" aria-label="Alternar tema">🌙<span class="rot-btn">Escuro</span></button>
+    <!-- O rótulo dos botões do cabeçalho fica em <span class="rot-btn">
+         para que o celular estreito possa esconder só a palavra e manter o
+         ícone. O aria-label carrega o nome inteiro nos dois casos: quem usa
+         leitor de tela não perde nada quando a palavra some. -->
+    <button class="btn btn-sec btn-sm" onclick="trocarUsuario()" title="Trocar de usuário" aria-label="Trocar usuário">👤<span class="rot-btn">Trocar usuário</span></button>
   </div>
 </div>
 
@@ -203,7 +207,11 @@
       <div class="card-sub" style="margin-top:-6px">Dica: digite a placa e aperte <strong>Enter</strong> para registrar "Chegou" mais rápido.</div>
     </div>
 
-           O conteúdo é montado por renderVisaoPatio() — uma função só,
+    <!-- Havia aqui uma linha solta de comentário, sem abertura nem
+         fechamento: sobra de quando os blocos desta aba foram reordenados.
+         Sem os delimitadores o navegador a tratava como TEXTO, e ela
+         aparecia na tela entre o card de registro e o do pátio — uma frase
+         sobre função interna, à vista do porteiro. Removida. -->
 
     <div class="card">
       <div class="card-title"><span class="icon">🅿️</span> Veículos no Pátio Agora</div>
@@ -227,6 +235,16 @@
       </div>
       <div class="empty-state" id="portaria-prog-empty" data-icone="🚧" hidden>Nenhuma carga em aberto.</div>
     </div>
+
+      <!-- VISÃO DO PÁTIO — mesma peça nas três abas de setor.
+
+           Substitui a aba Torre de Controle para quem opera um posto só:
+           em vez de trocar de aba para ver o pátio e voltar para agir, o
+           setor tem as duas coisas na mesma tela. Logística e Administração
+           continuam com a Torre separada, porque para elas a Torre é a
+           visão de comando, não um apoio ao próprio posto.
+
+           O conteúdo é montado por renderVisaoPatio() — uma função só,
            alimentando as três abas. Duas cópias divergiriam na primeira
            correção feita com pressa. -->
       <div class="card">

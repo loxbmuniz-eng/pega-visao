@@ -30,7 +30,9 @@ APARELHOS = [
 
 SETORES = {
     'Portaria':      ['portaria', 'historico'],
-    'Expedição':     ['expedicao', 'historico'],
+    # Indicadores entrou para a Expedição: é o posto que opera as duas
+    # etapas mais longas do fluxo e pode agir sobre o número no mesmo turno.
+    'Expedição':     ['expedicao', 'indicadores', 'historico'],
     'Faturamento':   ['faturamento', 'historico'],
     'Logística':     ['torre', 'programacao', 'portaria', 'expedicao', 'faturamento',
                       'indicadores', 'cadastros', 'historico', 'relatorios'],
@@ -131,6 +133,35 @@ async def main():
             pagina.on('pageerror', lambda e: erros.append(f'{nome_ap}: {e}'))
             await pagina.goto(PAINEL)
             await pagina.wait_for_timeout(1000)
+
+            # O cabeçalho é medido UMA vez por aparelho, fora do laço de
+            # abas: ele é fixo e não muda de aba para aba.
+            #
+            # Existe porque estourou: em 390px o conteúdo somava 588px. O
+            # título recusava encolher (flex-shrink:0, herdado do desktop) e
+            # empurrava o crachá do operador e os botões para fora da tela;
+            # o relógio, com flex-wrap herdado, passava para uma segunda
+            # linha e saía POR CIMA da caixa de altura fixa. Nada disso
+            # aparecia nas outras conferências — elas mediam #main.
+            await preparar(pagina, 'Portaria')
+            cab = await pagina.evaluate("""() => {
+                const h = document.getElementById('header');
+                const fora = [...h.children]
+                    .filter(e => e.getBoundingClientRect().right > h.clientWidth + 1)
+                    .map(e => e.id || e.className);
+                return { transbordaLargura: h.scrollWidth - h.clientWidth,
+                         transbordaAltura: h.scrollHeight - h.clientHeight,
+                         fora,
+                         crachaVisivel: (document.getElementById('operator-name')
+                                           .getBoundingClientRect().width) > 20 };
+            }""")
+            ck('cabeçalho não transborda a largura da tela',
+               cab['transbordaLargura'] <= 1,
+               f"{cab['transbordaLargura']}px · fora: {cab['fora']}")
+            ck('cabeçalho não transborda a própria altura',
+               cab['transbordaAltura'] <= 1, f"{cab['transbordaAltura']}px")
+            ck('o crachá do operador continua visível', cab['crachaVisivel'],
+               'é a única coisa que diz em nome de quem o registro vai ser gravado')
 
             for setor, abas in SETORES.items():
                 await preparar(pagina, setor)

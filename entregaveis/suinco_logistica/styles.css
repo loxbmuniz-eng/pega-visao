@@ -27,6 +27,7 @@
   --wine-light:#b3363f;
   --ok:#3fa66a;
   --warn:#d99a2b;
+  --warn-fg:#1a1200;   /* âmbar claro no escuro: texto escuro por cima */
   --text:#f2f4f8;
   --text-dim:#b7c0d4;
   --border:rgba(233,185,84,.28);
@@ -90,6 +91,67 @@
   --st-faturado-bg:#34a862;             --st-faturado-fg:#06210f;             --st-faturado-br:#1d7a47;
   --st-seguiu-viagem-bg:#14603a;        --st-seguiu-viagem-fg:#ffffff;        --st-seguiu-viagem-br:#0d3f26;
   --st-neutro-bg:#5b6785;               --st-neutro-fg:#ffffff;               --st-neutro-br:#374a86;
+
+  /* ---- O status como COR DE TEXTO (-txt) ----
+     Terceira variante de cada status, e ela existe por causa de um defeito
+     que já apareceu duas vezes em superfícies diferentes.
+
+     `-fg` é a cor do texto DENTRO do status: escrita em cima do
+     preenchimento colorido. Em "Aguardando Embarque" vale #1a1200, quase
+     preto — perfeito sobre a badge laranja. Usado como cor de texto solto
+     no card azul-escuro, some: razão de contraste 1,14.
+
+     `-bg` também não serve: é saturado para virar preenchimento, e alguns
+     são escuros ("Seguiu Viagem" é #14603a). Sobre card escuro, some
+     igual.
+
+     Daí `-txt`: o status escrito COMO TEXTO sobre a superfície do painel.
+     Cada valor foi medido contra o card do respectivo tema — mínimo
+     aferido 4,99, todos os outros acima de 6. Quem for mexer aqui mede
+     antes: testes/test_contraste.py varre as dez abas nos dois temas. */
+  --st-aguardando-veiculo-txt:#ff8a80;
+  --st-aguardando-embarque-txt:#f0a35a;
+  --st-embarque-iniciado-txt:#f0c33c;
+  --st-embarque-finalizado-txt:#7fd4a2;
+  --st-faturado-txt:#4cc281;
+  --st-seguiu-viagem-txt:#3fb87c;
+  --st-neutro-txt:#9aa6c4;
+
+  /* ---- Vidro ----
+     As superfícies do painel deixaram de ser blocos de cor chapada e
+     passaram a ser vidro: translúcidas, com o ambiente da marca aparecendo
+     por trás e um fio de luz na borda de cima.
+
+     DUAS categorias, e a diferença entre elas é decisão de desempenho, não
+     de estilo:
+
+     - VIDRO REAL (--vidro-borrao, com backdrop-filter) fica só no que é
+       FIXO e único na tela: cabeçalho, navegação, sobreposição de modal.
+       São três elementos, sempre os mesmos, e o navegador compõe a camada
+       uma vez.
+
+     - VIDRO PINTADO (só alpha + brilho) fica em tudo que se REPETE: card,
+       caixa de indicador, linha de tabela. Um painel com trinta cargas tem
+       dezenas dessas caixas, e backdrop-filter em cada uma custa uma
+       recomposição por quadro. Nos terminais do pátio — máquinas de
+       escritório, não estações gráficas — isso é a diferença entre rolar a
+       lista liso e rolar aos trancos.
+
+     No olho o resultado é o mesmo, porque o que dá a impressão de vidro é o
+     fundo aparecendo por baixo e o brilho na borda, não o desfoque. */
+  --vidro-bg:rgba(30,42,82,.58);
+  --vidro-bg-forte:rgba(30,42,82,.82);
+  --vidro-borda:rgba(233,185,84,.22);
+  --vidro-brilho:rgba(255,255,255,.07);
+  --vidro-sombra:0 10px 28px rgba(4,8,18,.42);
+  --vidro-borrao:blur(18px) saturate(1.25);
+
+  /* Ambiente: o brilho que aparece POR TRÁS do vidro. Sem ele o vidro não
+     tem o que mostrar e vira só uma cor mais clara. São três halos da
+     paleta — dourado, azul e vinho — em opacidade baixa. */
+  --amb-ouro:rgba(233,185,84,.13);
+  --amb-azul:rgba(55,74,134,.34);
+  --amb-vinho:rgba(143,31,38,.11);
 }
 
 /* ===== TEMA CLARO =====
@@ -98,10 +160,26 @@
    invertendo as superfícies. As cores dos 6 status ficam de fora da inversão
    de propósito: são sólidas e valem igual nos dois temas (ver bloco acima). */
 :root[data-tema="claro"]{
-  --navy-deep:#eef1f6;
-  --navy:#ffffff;
-  --navy-light:#e2e8f3;
-  --navy-lighter:#c9d4e8;
+  /* O claro era BRANCO EM CIMA DE BRANCO: fundo #eef1f6, card #ffffff. Dois
+     tons a cinco por cento de distância, sem sombra que os separasse — a
+     tela virava uma folha só e não se enxergava onde um card começava.
+
+     Agora o fundo é um cinza da própria marca (azul-marinho dessaturado,
+     não cinza neutro de sistema) e o card é branco translúcido por cima
+     dele. A diferença de valor é real, o card ganha a borda de luz, e o
+     ambiente da marca aparece por baixo em vez de sumir. */
+  /* CLAREOU DEMAIS na primeira versão: card a 94% de luminância é papel
+     retroiluminado, e num galpão com luz alta o gestor lê o dia inteiro
+     nisso. Baixou para 84% — a página vai a #c6cfe0 e o card fica em
+     #e7ecf4 depois de achatado.
+
+     Não é só conforto: a SEPARAÇÃO entre card e fundo melhorou junto, de
+     1,20 para 1,32, porque os dois desceram em proporções diferentes. E o
+     texto continua com folga — 14,7 para o principal, 5,0 para o de apoio. */
+  --navy-deep:#c6cfe0;     /* base da página — cinza com o azul da marca */
+  --navy:#eff3f9;          /* superfície opaca, onde translucidez atrapalha */
+  --navy-light:#dde4f0;
+  --navy-lighter:#c2ccdf;
   --gold:#e9b954;
   --gold-dim:#a67f22;
   --gold-text:#7a5c0d;
@@ -109,14 +187,51 @@
   --wine-light:#b3363f;
   --ok:#1d7a47;
   --warn:#9a6a08;
+  /* No claro o âmbar precisa ser escuro para não sumir no branco — e aí
+     quem tem de clarear é o TEXTO. Com #1a1200 por cima dava 3,93. */
+  --warn-fg:#ffffff;
   --text:#161a22;
-  --text-dim:#5a6474;
+  /* #5a6474 servia quando a página era quase branca. Com o fundo em
+     #c6cfe0 ele caiu para 3,82 — e rótulo de campo, estado vazio e
+     subtítulo de card ficam justamente SOBRE a página, não sobre o card.
+     #4b5565 passa nas duas superfícies: 4,81 na página, 6,35 no card. */
+  --text-dim:#4b5565;
   --border:rgba(26,32,45,.22);
   --border-soft:rgba(26,32,45,.12);
   --shadow:0 1px 4px rgba(16,22,37,.14);
-  --campo-bg:#ffffff;
-  --placeholder:#8a94a6;
+  /* O campo é a única superfície que continua quase branca, e de
+     propósito: é o convite para escrever. Branco puro sobre card cinza é o
+     que diz "aqui você digita" sem precisar de contorno grosso. */
+  --campo-bg:#fbfcfe;
+  --placeholder:#78839a;
   --logo-chip-bg:#fff;
+
+  /* O status como cor de TEXTO, versão clara: os mesmos seis, escurecidos
+     para o card branco. Medidos contra #f6f7fa — mínimo 4,99. */
+  --st-aguardando-veiculo-txt:#a3271f;
+  --st-aguardando-embarque-txt:#8a4a06;
+  --st-embarque-iniciado-txt:#6b5200;
+  --st-embarque-finalizado-txt:#1d7a47;
+  --st-faturado-txt:#14603a;
+  --st-seguiu-viagem-txt:#0d3f26;
+  --st-neutro-txt:#4a5570;
+
+  /* Vidro claro: branco alto, borda escura fininha em vez de dourada — no
+     claro a borda dourada sobre branco quase não aparece e o card volta a
+     não ter contorno. */
+  --vidro-bg:rgba(239,243,249,.80);
+  --vidro-bg-forte:rgba(246,249,252,.92);
+  --vidro-borda:rgba(26,32,45,.10);
+  --vidro-brilho:rgba(255,255,255,.9);
+  --vidro-sombra:0 8px 22px rgba(30,42,82,.11);
+
+  /* Bem mais fracos que no escuro. Sobre base clara, halo com a mesma
+     opacidade do tema escuro tinge a página inteira — o cinza vira creme e
+     o painel parece envelhecido em vez de sóbrio. O ambiente aqui é sopro,
+     não cor. */
+  --amb-ouro:rgba(233,185,84,.11);
+  --amb-azul:rgba(55,74,134,.10);
+  --amb-vinho:rgba(143,31,38,.045);
 
   /* As cores de status NÃO mudam entre temas: são sólidas e já legíveis sobre
      claro e escuro. Manter uma escala só evita que a mesma carga apareça
@@ -136,12 +251,77 @@ body{
 a{color:var(--gold-text)}
 :focus-visible{outline:3px solid var(--gold);outline-offset:2px}
 
+/* ===== AMBIENTE — o que aparece POR TRÁS do vidro =====
+   Três halos da paleta da Suinco, em opacidade baixa: dourado no alto à
+   esquerda (o lado da logo), azul à direita, vinho embaixo. Sem esta
+   camada o vidro não tem o que mostrar e vira só uma cor mais clara.
+
+   `position:fixed` e não `background-attachment:fixed`: attachment fixo
+   força o navegador a repintar o fundo inteiro a cada rolagem, e em
+   máquina de escritório isso aparece como arrasto na lista. Uma camada
+   fixa e isolada é composta uma vez e só.
+
+   `pointer-events:none` e z-index negativo: é decoração, não pode
+   interceptar clique nem entrar na ordem de foco. */
+body::before{
+  content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;
+  background:
+    radial-gradient(1100px 620px at 8% -8%,  var(--amb-ouro),  transparent 62%),
+    radial-gradient(1000px 700px at 96% 4%,  var(--amb-azul),  transparent 60%),
+    radial-gradient(900px 560px at 50% 108%, var(--amb-vinho), transparent 64%);
+}
+
+/* ===== VIDRO =====
+   Duas classes utilitárias, aplicadas às superfícies mais abaixo. Ficam
+   aqui juntas para que a receita do vidro exista em UM lugar: mexer no
+   brilho ou na borda repinta o painel inteiro, sem caçar regra solta. */
+
+/* Vidro REAL — desfoca o que está atrás. Só no que é fixo e único. */
+.vidro-real{
+  -webkit-backdrop-filter:var(--vidro-borrao);
+  backdrop-filter:var(--vidro-borrao);
+}
+
+/* O fio de luz na borda de cima é o que faz o olho ler "vidro" e não
+   "retângulo transparente": é o reflexo da quina de uma placa real. Vai em
+   ::after para não gastar o ::before dos elementos que já o usam. */
+.vidro-brilho{ position:relative }
+.vidro-brilho::after{
+  content:'';position:absolute;left:0;right:0;top:0;height:1px;
+  pointer-events:none;border-radius:inherit;
+  background:linear-gradient(90deg,
+    transparent, var(--vidro-brilho) 18%, var(--vidro-brilho) 82%, transparent);
+}
+
+/* Navegador sem backdrop-filter (Chrome antigo de terminal do pátio):
+   as superfícies voltam a ser opacas. Vidro translúcido SEM desfoque nem
+   ambiente por trás não é um efeito degradado — é texto sobre textura, e
+   ilegível. Melhor perder o efeito inteiro do que perder a leitura. */
+@supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
+  #header,#nav{ background:var(--navy) }
+}
+
 /* ===== HEADER ===== */
+/* Cabeçalho e navegação são as duas superfícies que ficam SEMPRE na tela,
+   por cima do conteúdo que rola. É exatamente onde o vidro real vale o
+   custo: o desfeito do conteúdo passando por baixo é o efeito, e são só
+   dois elementos para o navegador compor. */
 #header{
   position:fixed;top:0;left:0;right:0;height:var(--header-h);
-  background:var(--navy);border-bottom:2px solid var(--gold-dim);
+  background:linear-gradient(180deg, var(--vidro-bg-forte), var(--vidro-bg));
+  -webkit-backdrop-filter:var(--vidro-borrao);
+  backdrop-filter:var(--vidro-borrao);
   color:var(--text);display:flex;align-items:center;padding:0 18px;gap:16px;
-  z-index:1000;box-shadow:var(--shadow);
+  z-index:1000;box-shadow:var(--vidro-sombra);
+  /* A régua dourada virou gradiente: cheia sob a logo, esmaecendo para a
+     direita. Uma linha de 2px chapada de ponta a ponta é um traço; esta
+     lê como luz descendo da marca. */
+  border-bottom:1px solid var(--vidro-borda);
+}
+#header::after{
+  content:'';position:absolute;left:0;right:0;bottom:-1px;height:2px;
+  background:linear-gradient(90deg, var(--gold) 0%, var(--gold-dim) 34%, transparent 78%);
+  pointer-events:none;
 }
 #logo-chip{
   background:var(--logo-chip-bg);border-radius:8px;padding:4px 8px;flex-shrink:0;
@@ -171,8 +351,13 @@ a{color:var(--gold-text)}
 .btn:hover{opacity:.85}
 .btn-primary{background:var(--gold);color:#1a1200}
 .btn-success{background:var(--ok);color:#fff}
+/* O verde do --ok é claro demais para carregar texto branco: 2,74 de
+   contraste no tema escuro. O botão escurece para segurar o #fff, em vez
+   de o texto escurecer — "Chegou" e "Finalizar Embarque" precisam de peso
+   visual, e texto escuro sobre verde os deixaria apagados. */
+.btn-success{background:#1d7a47}
 .btn-danger{background:var(--wine);color:#fff}
-.btn-warn{background:var(--warn);color:#1a1200}
+.btn-warn{background:var(--warn);color:var(--warn-fg)}
 .btn-sec{background:var(--navy-light);color:var(--text);border:1px solid var(--border)}
 .btn-sm{padding:6px 12px;font-size:13px;min-height:32px}
 .btn-lg{padding:14px 26px;font-size:16.5px;min-height:52px}
@@ -181,8 +366,11 @@ a{color:var(--gold-text)}
 /* ===== NAV ===== */
 #nav{
   position:fixed;top:var(--header-h);left:0;right:0;height:var(--nav-h);
-  background:var(--navy-light);display:flex;overflow-x:auto;z-index:999;
-  scrollbar-width:thin;border-bottom:1px solid var(--border-soft);
+  background:var(--vidro-bg);
+  -webkit-backdrop-filter:var(--vidro-borrao);
+  backdrop-filter:var(--vidro-borrao);
+  display:flex;overflow-x:auto;z-index:999;
+  scrollbar-width:thin;border-bottom:1px solid var(--vidro-borda);
 }
 .nav-tab{
   flex-shrink:0;padding:0 18px;height:100%;display:flex;align-items:center;gap:7px;
@@ -190,7 +378,14 @@ a{color:var(--gold-text)}
   border-bottom:3px solid transparent;transition:all .15s;white-space:nowrap;
 }
 .nav-tab:hover{color:var(--text);background:var(--navy-lighter)}
-.nav-tab.active{color:var(--gold-text);border-bottom-color:var(--gold-dim);background:rgba(233,185,84,.12)}
+/* A aba ativa ganhou um halo dourado subindo do sublinhado, em vez do
+   retângulo de cor chapada. Diz a mesma coisa e não desenha uma caixa
+   dentro da barra. */
+.nav-tab.active{
+  color:var(--gold-text);border-bottom-color:var(--gold);
+  background:linear-gradient(180deg, transparent, rgba(233,185,84,.16));
+  box-shadow:0 -1px 12px rgba(233,185,84,.20) inset;
+}
 .nav-tab[hidden]{display:none}
 
 /* ===== MAIN ===== */
@@ -201,14 +396,36 @@ a{color:var(--gold-text)}
 .tab-page{display:none}
 .tab-page.active{display:block}
 
-/* ===== CARDS / GRID ===== */
+/* ===== CARDS / GRID =====
+   Vidro PINTADO: alpha + brilho na borda de cima, sem backdrop-filter. Uma
+   aba de Programação carregada tem dezenas destas superfícies somando card,
+   caixa de indicador e linha destacada — desfocar cada uma custaria uma
+   recomposição por quadro nos terminais do pátio. O ambiente por trás
+   (body::before) dá a profundidade; o desfoque não faria falta no olho. */
 .card{
-  background:var(--navy);border:1px solid var(--border-soft);
-  border-radius:var(--radius);box-shadow:var(--shadow);padding:18px;margin-bottom:18px;
+  position:relative;
+  background:var(--vidro-bg);
+  border:1px solid var(--vidro-borda);
+  border-radius:var(--radius);box-shadow:var(--vidro-sombra);
+  padding:18px;margin-bottom:18px;
 }
+.card::after{
+  content:'';position:absolute;left:0;right:0;top:0;height:1px;
+  pointer-events:none;
+  background:linear-gradient(90deg,
+    transparent, var(--vidro-brilho) 18%, var(--vidro-brilho) 82%, transparent);
+}
+/* Título de card com um traço dourado à esquerda, no lugar do texto solto.
+   Com muitos cards empilhados, o olho precisa de uma âncora para achar
+   onde cada bloco começa ao rolar — o ícone sozinho não segura isso. */
 .card-title{
   font-size:16px;font-weight:800;color:var(--gold-text);margin-bottom:14px;
   display:flex;align-items:center;gap:9px;flex-wrap:wrap;
+  padding-left:11px;position:relative;
+}
+.card-title::before{
+  content:'';position:absolute;left:0;top:2px;bottom:2px;width:3px;border-radius:2px;
+  background:linear-gradient(180deg, var(--gold), var(--gold-dim));
 }
 .card-title .icon{font-size:19px}
 .card-sub{font-size:12px;color:var(--text-dim);margin-top:-8px;margin-bottom:12px}
@@ -221,8 +438,12 @@ a{color:var(--gold-text)}
 /* ===== TABLES ===== */
 .table-wrap{overflow-x:auto}
 table{width:100%;border-collapse:collapse;font-size:13.5px}
+/* O cabeçalho da tabela usava --navy-deep, que agora é a cor da PÁGINA.
+   Dentro de um card translúcido isso o fazia sumir no fundo. Passa a ter
+   preenchimento próprio, em gradiente, e a régua dourada de sempre. */
 th{
-  background:var(--navy-deep);color:var(--gold-text);padding:10px 12px;text-align:left;
+  background:linear-gradient(180deg, var(--vidro-bg-forte), var(--vidro-bg));
+  color:var(--gold-text);padding:10px 12px;text-align:left;
   font-weight:700;white-space:nowrap;border-bottom:2px solid var(--gold-dim);
 }
 td{padding:9px 12px;border-bottom:1px solid var(--border-soft);vertical-align:middle}
@@ -246,6 +467,76 @@ td input,td select{padding:5px 7px;font-size:13px}
 .badge-faturado{background:var(--st-faturado-bg);color:var(--st-faturado-fg);border-color:var(--st-faturado-br)}
 .badge-seguiu-viagem{background:var(--st-seguiu-viagem-bg);color:var(--st-seguiu-viagem-fg);border-color:var(--st-seguiu-viagem-br)}
 .badge-critico{background:var(--st-aguardando-veiculo-bg);color:var(--st-aguardando-veiculo-fg);border-color:var(--st-aguardando-veiculo-br)}
+
+/* ===== MESMA PLACA, MAIS DE UMA CARGA =====
+   Acontece pouco e por isso é perigoso: quem vê duas linhas iguais na fila
+   supõe engano. As duas peças abaixo existem para tirar essa dúvida antes
+   que alguém "corrija" uma carga de verdade. */
+
+/* Marca "1 de 2" ao lado da placa. Discreta de propósito — é confirmação,
+   não alerta: o caso é legítimo. */
+.marca-multi{
+  display:inline-block;margin-left:6px;padding:1px 7px;border-radius:10px;
+  font-size:10px;font-weight:800;letter-spacing:.04em;white-space:nowrap;
+  background:rgba(233,185,84,.14);color:var(--gold-text,var(--gold));
+  border:1px solid var(--gold-dim);
+  vertical-align:middle;
+  /* A coluna de placa da visão do pátio é caixa alta por CSS, e a marca
+     herdava: saía "1 DE 2" ali e "1 de 2" na fila. Marca que muda de forma
+     conforme a tabela em que está parece coisa diferente. */
+  text-transform:none;
+}
+
+/* Aviso no formulário, quando a placa digitada já tem carga em aberto.
+   Cor de atenção, não de erro: não está errado, só precisa ser conferido. */
+.aviso-placa-repetida{
+  margin-top:8px;padding:9px 12px;border-radius:var(--radius);
+  border:1px solid var(--gold-dim);border-left:3px solid var(--gold);
+  background:rgba(233,185,84,.10);font-size:12.5px;line-height:1.5;
+}
+.aviso-placa-repetida strong{ color:var(--gold-text,var(--gold)) }
+
+/* ===== BOTÃO DE AVANÇO — a cor do status que ele PRODUZ =====
+   "Finalizar Embarque" era dourado e produzia um status verde-claro: o
+   operador apertava uma cor e recebia outra. Agora cada botão veste a cor
+   do seu destino, tirada das MESMAS variáveis --st-* das badges — a escala
+   de seis cores definida pelo gestor vale no botão, na badge, na linha do
+   tempo e no relatório, sem lista paralela para manter em sincronia.
+
+   O preenchimento é sólido e o texto é o -fg do próprio status (branco ou
+   quase-preto conforme a luminância), então o contraste vem calibrado de
+   graça, nos dois temas. */
+.btn-avanco{
+  color:var(--st-neutro-fg);
+  background:var(--st-neutro-bg);
+  border:1px solid var(--st-neutro-br);
+  font-weight:800;
+}
+.btn-avanco-embarque-iniciado{
+  background:var(--st-embarque-iniciado-bg);
+  color:var(--st-embarque-iniciado-fg);
+  border-color:var(--st-embarque-iniciado-br);
+}
+.btn-avanco-embarque-finalizado{
+  background:var(--st-embarque-finalizado-bg);
+  color:var(--st-embarque-finalizado-fg);
+  border-color:var(--st-embarque-finalizado-br);
+}
+.btn-avanco-faturado{
+  background:var(--st-faturado-bg);
+  color:var(--st-faturado-fg);
+  border-color:var(--st-faturado-br);
+}
+.btn-avanco-seguiu-viagem{
+  background:var(--st-seguiu-viagem-bg);
+  color:var(--st-seguiu-viagem-fg);
+  border-color:var(--st-seguiu-viagem-br);
+}
+.btn-avanco-aguardando-embarque{
+  background:var(--st-aguardando-embarque-bg);
+  color:var(--st-aguardando-embarque-fg);
+  border-color:var(--st-aguardando-embarque-br);
+}
 
 /* ===== FORMS ===== */
 .form-row{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px}
@@ -275,28 +566,47 @@ select option{background:var(--campo-bg);color:var(--text)}
   letter-spacing:.14em;text-transform:uppercase;color:var(--text-dim);
 }
 
-/* Identificação em tabela de duas colunas, e não em linha corrida: quem
-   confere um documento PROCURA o campo, e procurar em frase obriga a
-   varrer tudo. */
+/* Identificação em UMA LINHA. Já foi tabela de duas colunas por seis
+   linhas: correta, e custava um quinto da primeira folha antes do primeiro
+   dado. A procedência continua inteira — rótulo em versalete, valor em
+   seguida — mas deitada, ocupando uma linha em vez de um bloco.
+
+   Rótulo e valor não se separam (o par vira uma unidade que não quebra no
+   fim da linha); a linha inteira, sim, quebra para a de baixo quando não
+   couber. */
 .doc-identificacao{
-  width:100%;border-collapse:collapse;margin:10px 0 12px;font-size:10.5px;
+  display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 16px;
+  margin:8px 0 12px;padding-bottom:6px;
+  border-bottom:1px solid var(--border-soft);
+  font-size:10.5px;line-height:1.5;
 }
-.doc-identificacao th{
-  width:110px;text-align:left;padding:3px 10px 3px 0;font-weight:700;
-  color:var(--text-dim);background:transparent;border:0;white-space:nowrap;
+.doc-identificacao span{ font-weight:600;white-space:nowrap }
+.doc-identificacao b{
+  font-weight:700;color:var(--text-dim);margin-right:5px;
   text-transform:uppercase;letter-spacing:.06em;font-size:9px;
 }
-.doc-identificacao td{
-  padding:3px 0;border:0;border-bottom:1px solid var(--border-soft);
-  font-weight:600;
-}
+/* A observação carrega contagens ("Em aberto: 12 · Concluídas: 8") e pode
+   ser longa — é a única que tem licença para quebrar. */
+.doc-identificacao .doc-id-obs{ white-space:normal }
 
 /* Base de preparação: o que exatamente foi contado. É a diferença entre
-   "o número está errado" e "o número responde outra pergunta". */
+   "o número está errado" e "o número responde outra pergunta".
+   Mora no RODAPÉ desde 06/08/2026 — ver rodapeDocumento() em app.js. */
 .doc-base{
-  font-size:10px;line-height:1.5;color:var(--text-dim);
-  border-left:2px solid var(--gold-dim);padding:6px 0 6px 10px;margin-bottom:12px;
+  font-size:9.5px;line-height:1.5;color:var(--text-dim);
+  border-left:2px solid var(--gold-dim);padding:4px 0 4px 10px;margin:8px 0;
 }
+
+/* Divisor de bloco do relatório executivo ("1 · O que exige ação agora").
+   O documento passou a ser ordenado por decisão, e sem uma marca clara de
+   bloco o leitor não percebe que mudou de assunto — acha que a seção
+   seguinte ainda é detalhe da anterior. */
+.print-bloco-tit{
+  margin:20px 0 10px;padding:5px 0 5px 10px;
+  border-left:4px solid var(--gold);
+  font-size:12.5px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;
+}
+.print-bloco-tit:first-of-type{ margin-top:12px }
 
 /* Nota de fonte, no pé de cada tabela. */
 /* Cabeçalho de coluna não quebra no meio da palavra.
@@ -328,9 +638,14 @@ select option{background:var(--campo-bg);color:var(--text)}
      do navegador, em "Cabeçalhos e rodapés". */
   .doc-pagina{ display:none }
   .doc-classificacao{ color:#000;border-color:#000 }
-  /* O bloco de identificação não pode ser partido entre duas folhas: é a
+  /* A identificação não pode ser partida entre duas folhas: é a
      procedência do documento e precisa vir inteira na primeira. */
   .doc-identificacao,.doc-base{ break-inside:avoid;page-break-inside:avoid }
+  /* Título de bloco não fica órfão no pé da folha, sem o conteúdo dele. */
+  .print-bloco-tit{
+    break-after:avoid;page-break-after:avoid;
+    border-left-color:#111418 !important;color:#111418 !important;
+  }
 }
 
 /* ===== PAINEL DE STATUS HORIZONTAL =====
@@ -344,12 +659,21 @@ select option{background:var(--campo-bg);color:var(--text)}
   font-size:11.5px;line-height:1.25;white-space:normal;
   border-bottom:3px solid var(--gold-dim);padding:8px var(--sp-1);
 }
+/* O setor responsável é rótulo secundário, mas secundário não é invisível.
+   Era dourado a 10px com opacity .65: 4,17 no escuro e 2,92 no claro, os
+   dois abaixo do mínimo. --text-dim é a cor que o painel já usa para texto
+   de apoio e passa nos dois temas; a hierarquia vem do corpo menor e do
+   peso, não de apagar a cor. */
 .tabela-status-h .st-setor{
-  display:block;font-size:10px;font-weight:600;opacity:.65;margin-top:2px;
+  display:block;font-size:10px;font-weight:600;margin-top:2px;
+  color:var(--text-dim);
 }
 .tabela-status-h .st-valor{ padding:var(--sp-3) var(--sp-1) }
 .st-num{ display:block;font-size:30px;font-weight:800;line-height:1 }
-.st-pct{ display:block;font-size:11px;opacity:.7;margin-top:3px }
+/* Sem opacity. A cor do número já vem de --st-*-txt, medida contra o card;
+   esmaecer por cima desfazia a calibragem e devolvia 3,8 de contraste. A
+   percentagem já é secundária pelo corpo (11px contra 30px do número). */
+.st-pct{ display:block;font-size:11px;margin-top:3px }
 /* Etapa vazia continua aparecendo — etapa zerada é informação — mas sem
    competir por atenção com as que têm carga parada. */
 .tabela-status-h .st-zero{ opacity:.4 }
@@ -454,10 +778,30 @@ tbody tr{ transition:background-color var(--t-rapida) ease }
 }
 
 .stat-box{
-  background:var(--navy);border:1px solid var(--border-soft);border-radius:var(--radius);
-  box-shadow:var(--shadow);padding:16px;text-align:center;border-top:4px solid var(--gold);
+  position:relative;overflow:hidden;
+  background:var(--vidro-bg);border:1px solid var(--vidro-borda);
+  border-radius:var(--radius);box-shadow:var(--vidro-sombra);
+  padding:16px;text-align:center;border-top:4px solid var(--gold);
 }
-.stat-num{font-size:30px;font-weight:800;color:var(--gold-text)}
+/* Luz descendo da régua dourada de cima — é o que separa "quadrado com um
+   número" de uma peça que parece ter luz própria, e é o primeiro elemento
+   que a diretoria olha.
+
+   Ampla e rasa de propósito. A primeira versão era um halo de 70% de
+   largura por 56px de altura: concentrado no meio, lia como mancha atrás
+   do número, não como reflexo da quina. */
+.stat-box::before{
+  content:'';position:absolute;left:0;right:0;top:0;height:38px;
+  pointer-events:none;
+  background:linear-gradient(180deg, rgba(233,185,84,.16), transparent);
+}
+/* No claro a mesma luz pousa sobre branco e vira uma faixa amarela cobrindo
+   o terço de cima da caixa — o número passa a disputar com ela. Sobre fundo
+   escuro a mesma opacidade é só um véu. */
+:root[data-tema="claro"] .stat-box::before{
+  background:linear-gradient(180deg, rgba(233,185,84,.09), transparent);
+}
+.stat-num{position:relative;font-size:30px;font-weight:800;color:var(--gold-text)}
 .stat-label{font-size:12px;color:var(--text-dim);margin-top:3px}
 .stat-note{font-size:10.5px;color:var(--text-dim);margin-top:2px;font-style:italic}
 
@@ -472,17 +816,25 @@ tbody tr{ transition:background-color var(--t-rapida) ease }
    Ordem das camadas, de baixo para cima:
    header/nav (1000) · rodapé (3500) · modais (3600) · avisos (4000) ·
    overlay de sincronia (6000). */
+/* Terceira e última superfície com vidro real: existe uma por vez na tela,
+   cobre tudo, e é justamente onde o desfoque tem função além do estilo —
+   apaga a informação de trás e obriga o olho a ficar na caixa. */
 .modal-overlay{
-  position:fixed;inset:0;background:rgba(6,9,18,.72);display:none;
+  position:fixed;inset:0;background:rgba(6,9,18,.62);display:none;
+  -webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);
   align-items:center;justify-content:center;z-index:3600;padding:20px;
 }
 .modal-overlay.open{display:flex}
+/* A caixa em si fica OPACA. Modal translúcido deixa a tabela de trás
+   aparecendo através do formulário — vira ruído exatamente onde alguém
+   está digitando placa e senha. */
 .modal-box{
+  position:relative;
   background:var(--navy);border:1px solid var(--border);border-radius:var(--radius);
-  box-shadow:0 10px 40px rgba(0,0,0,.6);max-width:560px;width:100%;
+  box-shadow:0 24px 60px rgba(0,0,0,.55);max-width:560px;width:100%;
   max-height:88vh;overflow-y:auto;padding:22px;
 }
-.modal-box h2{color:var(--gold);font-size:18px;margin-bottom:14px}
+.modal-box h2{color:var(--gold-text);font-size:18px;margin-bottom:14px}
 .modal-list-item{
   display:flex;justify-content:space-between;align-items:center;gap:10px;
   padding:12px 14px;border:1px solid var(--border-soft);border-radius:var(--radius);
@@ -545,7 +897,7 @@ tbody tr{ transition:background-color var(--t-rapida) ease }
 .filtro-periodo .filtro-acoes{min-width:auto;display:flex;align-items:flex-end}
 
 .vp-resumo{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
-.vp-total{font-weight:800;font-size:14px;color:var(--gold)}
+.vp-total{font-weight:800;font-size:14px;color:var(--gold-text)}
 .vp-periodo{font-size:12px;opacity:.7;margin-right:4px}
 .vp-chip{font-size:11.5px}
 
@@ -577,11 +929,20 @@ code{
 .tabela-patio .et{text-align:center;width:8.5%;line-height:1.15;padding:6px var(--sp-1)}
 .et-marca{display:block;font-size:15px;font-weight:900}
 .et-hora{display:block;font-size:11px;opacity:.75;font-variant-numeric:tabular-nums}
-.et-ok .et-marca{color:var(--st-faturado-fg)}
-.et-pendente .et-marca{color:var(--border);opacity:.6}
+.et-ok .et-marca{color:var(--st-faturado-txt)}
+/* O ponto de etapa NÃO OCORRIDA. Era var(--border) com opacity .6: razão
+   1,42. Sumia, e célula sem marca nenhuma parece célula vazia — o operador
+   perdia a diferença entre "ainda não aconteceu" (·) e "não se aplica"
+   (n/a). Continua a marca mais discreta da linha, mas visível. */
+.et-pendente .et-marca{color:var(--text-dim);opacity:.75}
 .et-pendente{background:transparent}
 /* A etapa ATUAL é a informação principal da linha. Fundo próprio, não só
    cor de texto: em tabela longa, cor de texto some no meio das outras. */
+/* A etapa ATUAL é a única com preenchimento colorido — e por isso é a
+   única onde -fg está certo: aqui o texto fica DENTRO do laranja. Corrigi
+   isto para -txt numa primeira passada e piorei (1,44 de contraste); a
+   medição pegou. Regra do arquivo: -fg quando há `background:` do mesmo
+   status na mesma regra, -txt quando não há. */
 .et-atual{background:var(--st-aguardando-embarque-bg);border-radius:var(--radius-sm)}
 .et-atual .et-marca{color:var(--st-aguardando-embarque-fg)}
 .et-atual .et-hora{color:var(--st-aguardando-embarque-fg);opacity:.9}
@@ -596,7 +957,12 @@ code{
 
 @media print{
   .filtro-periodo{display:none}
+  /* No celular o preenchimento sai (economiza tinta na tela pequena) — e
+     com ele sai o motivo de usar -fg. Sem esta troca, a marca e a hora da
+     etapa atual ficariam quase pretas sobre o card. */
   .et-atual{background:transparent;border:1px solid var(--border)}
+  .et-atual .et-marca{color:var(--st-aguardando-embarque-txt)}
+  .et-atual .et-hora{color:var(--text-dim);opacity:1}
 }
 
 /* ---- Teste de conexão (dentro do modal de login) ----
@@ -669,7 +1035,7 @@ code{
 }
 .chip-praonde{
   display:inline-block;padding:3px 10px;border-radius:12px;font-size:11.5px;font-weight:800;
-  background:var(--navy-light);color:var(--gold);border:1px solid var(--gold-dim);white-space:nowrap;
+  background:var(--navy-light);color:var(--gold-text);border:1px solid var(--gold-dim);white-space:nowrap;
 }
 
 /* ===== PAINEL DO GESTOR — comparação por período ===== */
@@ -725,7 +1091,7 @@ code{
   background:var(--navy-deep);border:1px solid var(--border-soft);border-radius:var(--radius);
   padding:14px;display:flex;flex-direction:column;
 }
-.grafico-titulo{font-size:14px;font-weight:800;color:var(--gold);margin-bottom:8px}
+.grafico-titulo{font-size:14px;font-weight:800;color:var(--gold-text);margin-bottom:8px}
 .grafico-box canvas{width:100%;display:block}
 .grafico-legenda{font-size:11px;margin-top:8px;margin-bottom:0}
 .grafico-legenda-lista{margin-top:10px;display:flex;flex-direction:column;gap:5px}
@@ -978,11 +1344,21 @@ code{
    a identidade da marca continua sendo a do cliente. */
 .btn{
   border-radius:6px;
-  box-shadow:0 1px 2px rgba(0,0,0,.18);
+  /* Duas sombras: a de contato (curta, embaixo) e o fio de luz na quina de
+     cima, por dentro. É o mesmo par que dá volume às superfícies de vidro —
+     o botão deixa de ser retângulo pintado e passa a ter espessura. */
+  box-shadow:0 1px 2px rgba(0,0,0,.18), 0 1px 0 rgba(255,255,255,.16) inset;
   transition:opacity .15s, transform .1s, box-shadow .15s, filter .15s;
 }
-.btn:hover{opacity:1;filter:brightness(1.07);box-shadow:0 3px 8px rgba(0,0,0,.26)}
+.btn:hover{opacity:1;filter:brightness(1.07);
+  box-shadow:0 4px 12px rgba(0,0,0,.28), 0 1px 0 rgba(255,255,255,.2) inset}
 .btn:active{transform:translateY(1px);box-shadow:0 1px 2px rgba(0,0,0,.2)}
+/* O botão de ação principal ganha profundidade no próprio dourado. Chapado
+   ele competia em peso com os secundários; com o gradiente lê como o botão
+   da tela sem precisar ficar maior. */
+.btn-primary{ background:linear-gradient(180deg, #f2c766, var(--gold) 55%, var(--gold-dim)) }
+.btn-success{ background:linear-gradient(180deg, #24905a, #17683c) }
+.btn-danger{  background:linear-gradient(180deg, #a82a32, var(--wine)) }
 .badge{border-radius:5px;letter-spacing:.4px}
 .status-pill{border-radius:5px}
 .card{border-radius:8px}
@@ -1007,6 +1383,19 @@ input,select,textarea{border-radius:5px}
   html, body{ background:#ffffff !important; color:#111418 !important; }
   #main{ background:#ffffff !important; }
 
+  /* NADA de vidro no papel. Superfície translúcida vira cinza chapado na
+     impressora, o desfoque não existe fora da tela, e o ambiente colorido
+     do fundo é tinta gasta em decoração. O relatório é o documento — a
+     estética do painel para na borda da folha. */
+  body::before{ display:none !important }
+  *{
+    -webkit-backdrop-filter:none !important;
+    backdrop-filter:none !important;
+  }
+  .card::after, .stat-box::before, #header::after, .vidro-brilho::after{
+    display:none !important;
+  }
+
   /* Estrutura do relatório: fundo branco e texto escuro. As células de status
      não entram aqui porque carregam cor inline, de especificidade maior. */
   .print-page, .print-page .card,
@@ -1014,9 +1403,35 @@ input,select,textarea{border-radius:5px}
     background:#ffffff !important; color:#111418 !important;
   }
   .print-page table{ background:#ffffff !important; }
+  /* Cabeçalho de coluna em versalete: corpo menor, caixa alta, entreletra
+     aberta e uma régua escura embaixo. É a diferença entre uma planilha
+     impressa e um documento — o rótulo deixa de competir com o dado e
+     passa a emoldurá-lo. */
   .print-page th{
-    background:#f2f4f8 !important; color:#111418 !important;
-    border-bottom:2px solid #8a94a6 !important;
+    background:#eef1f6 !important; color:#2a3446 !important;
+    /* max() e não .82em puro: no Operacional a tabela roda a 9,2px, e 82%
+       disso é 7,5px — abaixo do piso de 8px que o simulador cobra. O piso
+       vence onde a tabela é densa; a proporção vale onde há folga. */
+    font-size:max(8.2px, .82em) !important; font-weight:800 !important;
+    letter-spacing:.08em; text-transform:uppercase;
+    border-bottom:1.5px solid #2a3446 !important;
+  }
+  /* Coluna numérica alinhada à direita e com algarismos de largura fixa.
+     Sem isso, "12,00" e "9,50" não empilham pela vírgula e o olho não
+     consegue comparar duas linhas sem ler dígito por dígito. */
+  .print-page td.c-peso, .print-page td.c-entregas, .print-page td.c-ganchos,
+  .print-page td.c-num, .print-page td.cel-num, .print-page td.num-forte,
+  .print-page .tot-num{
+    text-align:right !important; font-variant-numeric:tabular-nums;
+  }
+  .print-page th.c-peso, .print-page th.c-entregas, .print-page th.c-ganchos{
+    text-align:right !important;
+  }
+  /* Linha de totais fechando a tabela, como em balanço. */
+  .print-page .linha-total td{
+    border-top:1.5px solid #2a3446 !important;
+    border-bottom:none !important;
+    font-weight:800 !important; background:#f7f8fb !important;
   }
   /* Só as células SEM cor própria. :not([style*="background"]) preserva as
      coloridas, que precisam manter o texto claro sobre o preenchimento. */
@@ -1030,8 +1445,17 @@ input,select,textarea{border-radius:5px}
   .print-header h1{ color:#111418 !important; }
   .print-header .meta,
   .print-secao-sub, .print-page .text-dim{ color:#3d4a5c !important; }
+  .print-secao-sub{ font-size:.95em }
+  /* Título de seção com barra dourada à esquerda em vez de sublinhado de
+     ponta a ponta: a barra marca onde o bloco COMEÇA, o sublinhado só
+     riscava a folha. Num relatório com quatro blocos e nove seções, achar
+     o começo importa mais do que separar. */
   .print-secao-tit{
-    color:#111418 !important; border-bottom-color:#8a94a6 !important;
+    color:#111418 !important;
+    border-bottom:none !important;
+    border-left:3px solid #b9903f;
+    padding:1px 0 1px 9px;
+    letter-spacing:-.01em;
   }
 
 }
@@ -1221,13 +1645,64 @@ input,select,textarea{border-radius:5px}
   #logo-chip img{ height:32px }
   #header-title span{ display:none }          /* subtítulo é decoração aqui */
   #header-title strong{ font-size:13px }
-  #header-mid{ gap:8px; justify-content:flex-end }
   #date-display{ display:none }
   #clock{ font-size:15px }
   #header-actions .btn{ padding:6px 9px; font-size:12px }
 
+  /* O cabeçalho TRANSBORDAVA a própria altura no celular.
+
+     #header-mid tem flex-wrap:wrap, herdado do desktop, onde sobra largura.
+     Em 390px nada disso cabe numa linha: o relógio passava para uma segunda
+     linha, e como o cabeçalho tem altura fixa (56px) ele saía POR CIMA da
+     caixa — o horário aparecia cortado acima da logo e o crachá do operador
+     cobria o título do painel.
+
+     Sem quebra, o excesso é cortado no fim da linha em vez de subir. */
+  #header-mid{ gap:8px; justify-content:flex-end; flex-wrap:nowrap; overflow:hidden }
+  /* flex-shrink:0 no #header-title vem do desktop, onde sobra largura e o
+     título não deve encolher. No celular é o que fazia o cabeçalho estourar:
+     o título recusava ceder um pixel e empurrava crachá e botões para fora
+     da tela. Aqui ele cede, e o que não couber vira reticências. */
+  #header-title{ min-width:0; flex-shrink:1 }
+  #header-title strong{ overflow:hidden;text-overflow:ellipsis;white-space:nowrap }
+  .badge-setor{ padding:5px 10px;font-size:12px;white-space:nowrap }
+
   /* ---- Navegação: rolagem horizontal com pistas de que há mais ---- */
   #nav{ -webkit-overflow-scrolling:touch; scroll-snap-type:x proximity }
+}
+
+/* Celular estreito: o relógio sai do cabeçalho.
+
+   Nem tudo que cabe no monitor do escritório precisa caber aqui, e a
+   escolha do que cortar não é por tamanho — é por redundância. O horário
+   já está na barra de status do próprio aparelho, três centímetros acima.
+   O crachá do operador fica: é a única coisa na tela que diz em nome de
+   quem o registro vai ser gravado. */
+@media (max-width:560px){
+  #clock-wrap{ display:none }
+
+  /* Botões do cabeçalho ficam só com o ícone. Medido: com os rótulos, o
+     conteúdo do cabeçalho somava 588px numa tela de 390px — o crachá do
+     operador e os próprios botões saíam pela direita, cortados.
+
+     O aria-label continua com o nome completo, então o botão não perde
+     significado para leitor de tela; perde só a palavra na tela, onde o
+     ícone já basta para quem aperta o mesmo botão todo dia. */
+  .rot-btn{ display:none }
+  #header-actions{ gap:6px }
+  #header-actions .btn{ padding:6px 10px; font-size:15px; min-width:40px }
+
+  /* O TÍTULO sai; o CRACHÁ DO OPERADOR fica.
+
+     Espremido em 390px o título virava "PROGRAMAÇÃ…", que não informa nada
+     que a logo ao lado já não diga — e comia a largura do crachá, que
+     sumia. Entre uma palavra cortada e saber em nome de quem o registro vai
+     ser gravado, a segunda ganha: é a única informação do cabeçalho que
+     muda de pessoa para pessoa e que o operador precisa conferir antes de
+     apertar "Chegou". */
+  #header-title{ display:none }
+  #header-mid{ flex:0 1 auto; justify-content:flex-start }
+  .badge-setor{ flex-shrink:0 }
   .nav-tab{ padding:0 13px; font-size:13px; scroll-snap-align:start }
 
   #main{ padding:0 10px 32px }
@@ -1413,24 +1888,76 @@ input,select,textarea{border-radius:5px}
    ilegível para economizar espaço que ninguém usava.
    ===================================================================== */
 
+/* O cabeçalho ficou com QUATRO coisas: marca, título, subtítulo e
+   classificação. Referência, período, registros e emissão desceram para a
+   ficha do rodapé — são dados de conferência, e conferência não disputa a
+   primeira dobra com o título.
+
+   Com menos elementos, o título pode crescer. Foi de 21px para 26px, com
+   entreletra negativa: em documento impresso, título grande e apertado lê
+   como peça editorial; título médio e solto lê como formulário. */
 .doc-cabecalho{
-  display:flex; align-items:center; gap:16px;
-  padding-bottom:12px; border-bottom:3px solid var(--gold-dim);
+  display:flex; align-items:center; gap:18px;
+  padding-bottom:14px; margin-bottom:18px;
+  border-bottom:2px solid var(--gold-dim);
+  position:relative;
+}
+/* Segunda régua, fina e recuada sob a primeira. Duas linhas de espessuras
+   diferentes é o truque mais barato de papelaria que existe: custa 3px de
+   altura e o documento deixa de parecer uma tabela com um título em cima. */
+.doc-cabecalho::after{
+  content:''; position:absolute; left:0; right:0; bottom:-4px; height:1px;
+  background:var(--gold-dim); opacity:.45;
 }
 .doc-logo{
-  height:54px; width:auto; flex:none;
+  height:56px; width:auto; flex:none;
   background:#fff; border-radius:6px; padding:4px 8px;
 }
-.doc-identidade{ min-width:0 }
+.doc-identidade{ min-width:0; flex:1 }
 .doc-empresa{
-  font-size:10.5px; font-weight:800; letter-spacing:.09em;
+  font-size:10px; font-weight:800; letter-spacing:.14em;
   text-transform:uppercase; color:var(--text-dim);
 }
 .doc-titulo{
-  font-size:21px; line-height:1.2; font-weight:800;
-  color:var(--gold-text); margin:1px 0 0;
+  font-size:26px; line-height:1.12; font-weight:800; letter-spacing:-.015em;
+  color:var(--gold-text); margin:2px 0 0;
 }
-.doc-subtitulo{ font-size:12px; color:var(--text-dim); margin-top:3px; line-height:1.4 }
+.doc-subtitulo{
+  font-size:12px; color:var(--text-dim); margin-top:4px; line-height:1.4;
+}
+
+/* ===== FICHA DE IDENTIFICAÇÃO — rodapé =====
+   Campos rotulados de um lado, emissão do outro. Os rótulos "Emitido em" e
+   "Emitido por" saíram: uma data com hora e um nome de pessoa se
+   identificam sozinhos, e as etiquetas gastavam duas larguras de coluna
+   para dizer o óbvio. */
+.doc-ficha{
+  display:flex; flex-wrap:wrap; align-items:flex-start; gap:10px 26px;
+  justify-content:space-between;
+  padding:9px 0; margin:8px 0;
+  border-top:1px solid var(--border-soft);
+  border-bottom:1px solid var(--border-soft);
+}
+.doc-ficha-campos{ display:flex; flex-wrap:wrap; gap:8px 26px }
+.doc-ficha-campo{ display:flex; flex-direction:column; gap:1px }
+.doc-ficha-rot{
+  font-size:8.5px; font-weight:800; letter-spacing:.13em;
+  text-transform:uppercase; color:var(--text-dim);
+}
+.doc-ficha-val{
+  font-size:11px; font-weight:700; color:var(--text);
+  font-variant-numeric:tabular-nums;
+}
+.doc-ficha-emissao{ text-align:right; margin-left:auto }
+.doc-ficha-quando{
+  display:block; font-size:11px; font-weight:700; color:var(--text);
+  font-variant-numeric:tabular-nums;
+}
+.doc-ficha-quem{ display:block; font-size:10px; color:var(--text-dim); margin-top:1px }
+.doc-ficha-obs{
+  flex-basis:100%; font-size:10px; color:var(--text-dim); line-height:1.5;
+  padding-top:2px;
+}
 
 /* Metadados em faixa, não em parágrafo: cada dado tem um rótulo e um lugar
    fixo, então o olho acha "Período" sempre no mesmo canto. */
@@ -1479,11 +2006,24 @@ input,select,textarea{border-radius:5px}
   .doc-normal table{ font-size:9.5px !important }
   .doc-normal th, .doc-normal td{ padding:4px 5px !important }
 
-  /* Fretes: A4 em pé e fonte de leitura. Com três colunas há espaço de
-     sobra, e este relatório é lido com calma pela administração, não de
-     relance no pátio. */
-  @page retrato{ size: A4 portrait; margin: 12mm }
-  .doc-amplo{ page: retrato }
+  /* Fretes: MESMA folha dos outros dois (A4 deitado), e é preciso registrar
+     por quê — a versão anterior usava página nomeada:
+
+         @page retrato{ size: A4 portrait; margin: 12mm }
+         .doc-amplo{ page: retrato }
+
+     Trocar de página nomeada no meio do documento obriga o navegador a
+     quebrar a folha ANTES do elemento. Como o container fica depois dos
+     outros dois blocos de impressão no corpo, o Chrome fechava a página
+     corrente — vazia — e só então começava o relatório. Resultado: primeira
+     folha em branco e o documento começando na página 2.
+
+     Não é defeito de conteúdo, é o modelo de páginas nomeadas do CSS
+     funcionando como especificado. A correção é não trocar de página: os
+     três relatórios saem na mesma orientação, que era o padrão pedido.
+
+     A leitura não perde nada — em A4 deitado a coluna de Observações fica
+     MAIS larga do que era em pé, e é a coluna que carrega o texto. */
   .doc-amplo table{ font-size:12px !important; table-layout:fixed }
   .doc-amplo th, .doc-amplo td{ padding:8px 9px !important; vertical-align:top }
   .doc-amplo th{ font-size:10.5px !important; letter-spacing:.04em }

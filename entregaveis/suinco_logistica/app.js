@@ -138,7 +138,14 @@ function aplicarTema(tema){
   const btn = document.getElementById('btn-tema');
   // O botão mostra o tema ATUAL, não o que vai acontecer ao clicar — foi o
   // que se mostrou menos ambíguo em uso.
-  if(btn) btn.textContent = claro ? '☀️ Claro' : '🌙 Escuro';
+  //
+  // O rótulo vai em <span class="rot-btn"> e não solto: no celular estreito
+  // o CSS esconde só o rótulo e mantém o ícone, e para isso o texto precisa
+  // ser um elemento próprio. Escrito como textContent, não havia como
+  // separar um do outro sem apagar o botão inteiro.
+  if(btn) btn.innerHTML = claro
+    ? '☀️<span class="rot-btn">Claro</span>'
+    : '🌙<span class="rot-btn">Escuro</span>';
   // Gráficos são desenhados em canvas: pixels já pintados não reagem a CSS,
   // então precisam ser redesenhados na cor nova.
   if(typeof TAB_ATUAL !== 'undefined' && TAB_ATUAL === 'indicadores'){
@@ -186,6 +193,28 @@ function setorOperadorAtual(){ return DB.operador ? DB.operador.setor : '—'; }
 function badgeHtml(status){
   const meta = STATUS_META[status] || {badge:''};
   return `<span class="badge ${meta.badge}">${esc(status)}</span>`;
+}
+
+/* Botão de avanço com a cor do status que ele PRODUZ.
+
+   Os botões de Expedição e Faturamento eram todos btn-primary — dourados.
+   "Finalizar Embarque" saía amarelo e produzia um status verde-claro; o
+   operador apertava uma cor e recebia outra.
+
+   A escala de seis cores é a linguagem do painel: o gestor a definiu, ela
+   está na badge, na linha do tempo e no relatório impresso. Um botão que
+   ignora essa escala obriga o operador a decorar uma segunda convenção
+   ("dourado = avançar") em vez de simplesmente ler a cor de destino.
+
+   Agora a cor sai das MESMAS variáveis --st-* da badge. Trocar de tema ou
+   ajustar uma cor de status repinta o botão junto, sem lista paralela. */
+function botaoAvancoHtml(carga){
+  const acao = NEXT_ACAO[carga.status];
+  if(!acao) return '—';
+  const slug = statusSlug(acao.destino);
+  return `<button class="btn btn-sm btn-avanco btn-avanco-${slug}"
+      onclick="avancarStatusUI('${escJs(carga.id)}')"
+      title="Registrar ${esc(acao.destino)}">${esc(acao.label)}</button>`;
 }
 // `ms` opcional: avisos longos (ex: troca da base de frota) precisam de mais
 // tempo em tela do que a confirmação curta de uma ação.
@@ -860,7 +889,7 @@ function renderVisaoPatio(prefixo){
     const etapas = etapasDaCarga(c);
     return `<tr class="linha-status-${esc((STATUS_META[c.status]||{}).cor || '')}">
       <td class="vp-carga">${esc(c.numeroCarga)||'—'}</td>
-      <td class="vp-placa">${esc(c.placa)}</td>
+      <td class="vp-placa">${esc(c.placa)}${marcaCargaDaPlaca(c, lista)}</td>
       <td class="vp-transp">${esc(c.transportadora)||'—'}</td>
       <td class="vp-rota">${esc(rotaCurta(c.rota))}</td>
       ${etapas.map(celulaEtapa).join('')}
@@ -1035,12 +1064,45 @@ function atualizarPreviewFrotaPrograma(){
   if(f){
     document.getElementById('prog-transportadora').value = f.transportadora;
     document.getElementById('prog-tipoveiculo').value = f.tipoVeiculo;
-    hint.innerHTML = '<span class="text-dim">✅ Placa encontrada na Frota — Transportadora e Tipo de Veículo preenchidos automaticamente.</span>';
+    hint.innerHTML = '<span class="text-dim">✅ Placa encontrada na Frota — Transportadora e Tipo de Veículo preenchidos automaticamente.</span>'
+                   + avisoPlacaJaProgramada(placa);
   } else if(normalizarPlaca(placa)){
     hint.innerHTML = '<span style="color:var(--wine-light)">⛔ Placa não cadastrada na Frota — a criação da carga será BLOQUEADA. Cadastre esta placa em Cadastros → Frota primeiro.</span>';
   } else {
     hint.innerHTML = '';
   }
+}
+
+/* Aviso de placa que já tem carga em aberto.
+
+   Um caminhão levar duas cargas é raro, mas acontece — e o sistema sempre
+   permitiu, porque a Portaria já trata a chegada da placa aplicando o
+   "Chegou" a todas as cargas dela de uma vez.
+
+   O problema nunca foi permitir: foi não DIZER. Digitar a mesma placa duas
+   vezes parece igual nos dois casos — o dia em que são de fato duas cargas
+   e o dia em que alguém programou em duplicidade sem perceber. Sem aviso,
+   o segundo caso só aparece na doca.
+
+   Por isso avisa e NÃO bloqueia. Bloquear resolveria o engano e quebraria
+   o caso legítimo; avisar resolve o engano e deixa o caso legítimo passar
+   com um clique. Quem sabe o que está fazendo lê e segue. */
+function avisoPlacaJaProgramada(placa){
+  const p = normalizarPlaca(placa);
+  if(!p) return '';
+  const abertas = cargasAbertasPorPlaca(p);
+  if(!abertas.length) return '';
+
+  const numeros = abertas
+    .map(c => c.aguardandoCarga ? 'sem número ainda' : (c.numeroCarga || 'sem número'))
+    .join(' · ');
+
+  return `<div class="aviso-placa-repetida">
+      <strong>${p} já tem ${abertas.length} carga${abertas.length>1?'s':''} em aberto</strong>
+      (${esc(numeros)}).
+      Criar mais uma é permitido — é o mesmo caminhão levando duas cargas.
+      Se não for isso, confira antes: pode ser programação em duplicidade.
+    </div>`;
 }
 function criarCargaProgramadaUI(){
   const placa = document.getElementById('prog-placa').value;
@@ -1082,7 +1144,10 @@ function renderProgFila(){
     <tr>
       <td><input type="number" class="seq-input" value="${c.sequencia ?? ''}" onchange="atualizarSequenciaUI('${c.id}',this.value)" title="Sequência livre — digite o número que quiser, a qualquer momento."></td>
       <td>${esc(c.numeroCarga)||'—'}</td>
-      <td><input type="text" class="placa-input" value="${esc(c.placa)}" onchange="atualizarPlacaUI('${escJs(c.id)}',this.value)" title="Trocar a placa — a transportadora e o tipo de veículo são buscados na Frota automaticamente."></td>
+      <td>
+        <input type="text" class="placa-input" value="${esc(c.placa)}" onchange="atualizarPlacaUI('${escJs(c.id)}',this.value)" title="Trocar a placa — a transportadora e o tipo de veículo são buscados na Frota automaticamente.">
+        ${marcaCargaDaPlaca(c, lista)}
+      </td>
       <td id="transp-${esc(c.id)}">${esc(c.transportadora)||'—'}</td>
       <td>${esc(rotaCurta(c.rota))}</td>
       <td>${praOndeSelectHtml(c)}</td>
@@ -1090,9 +1155,73 @@ function renderProgFila(){
       <td>${paletizadaDaCarga(c)}</td>
       <td><input type="number" class="ganchos-input" min="0" step="1" value="${c.qtdGanchos ?? 0}" onchange="atualizarGanchosUI('${c.id}',this.value)" title="0 = Liso"></td>
       <td>${c.qtdEntregas ?? 1}</td>
-      <td class="no-print"><button class="btn btn-danger btn-sm" onclick="excluirCargaUI('${escJs(c.id)}')">Excluir</button></td>
+      <td class="no-print gap8">
+        <button class="btn btn-sec btn-sm" onclick="adicionarOutraCargaNaPlacaUI('${escJs(c.id)}')"
+                title="Programar OUTRA carga para este mesmo caminhão — o formulário já vem com placa, transportadora, motorista e rota preenchidos.">➕ Outra carga</button>
+        <button class="btn btn-danger btn-sm" onclick="excluirCargaUI('${escJs(c.id)}')">Excluir</button>
+      </td>
     </tr>`).join('');
   document.getElementById('prog-fila-empty').hidden = lista.length>0;
+}
+
+/* Contagem de cargas por placa na fila, para a marca "1 de 2".
+
+   Duas linhas com a mesma placa e sem marca nenhuma são indistinguíveis de
+   um erro de digitação. Quem olha a fila precisa saber, sem contar linha,
+   que aquilo é o mesmo caminhão com duas cargas — senão alguém "corrige" a
+   duplicidade que não existe e apaga uma carga de verdade. */
+function marcaCargaDaPlaca(carga, lista){
+  const p = normalizarPlaca(carga.placa);
+  const irmas = lista.filter(c => normalizarPlaca(c.placa) === p);
+  if(irmas.length < 2) return '';
+  const posicao = irmas.findIndex(c => c.id === carga.id) + 1;
+  return `<span class="marca-multi" title="Este caminhão leva ${irmas.length} cargas nesta programação.">${posicao} de ${irmas.length}</span>`;
+}
+
+/* Programar outra carga para o mesmo caminhão.
+
+   Sem isto, o caminho é redigitar placa, transportadora, tipo de veículo,
+   motorista, rota e tipo de operação — seis campos que já estão na tela,
+   logo acima, na linha da primeira carga. Redigitar dá errado: troca-se um
+   dígito da placa e nascem duas cargas em caminhões diferentes.
+
+   O que se REPETE é o veículo e o roteiro. O que MUDA é a carga: número,
+   peso, sequência, ganchos, entregas, observações. O formulário vem
+   preenchido com o primeiro grupo e limpo no segundo — é exatamente a
+   diferença entre as duas cargas, e é só isso que sobra para digitar. */
+function adicionarOutraCargaNaPlacaUI(id){
+  const c = getCarga(id);
+  if(!c){ notify('Carga não encontrada.', 'warn'); return; }
+
+  const v = (campo, valor) => { const e = document.getElementById(campo); if(e) e.value = valor; };
+
+  // Repete: o caminhão e para onde ele vai.
+  v('prog-placa', c.placa);
+  v('prog-transportadora', c.transportadora || '');
+  v('prog-tipoveiculo', c.tipoVeiculo || '');
+  v('prog-motorista', c.motorista || '');
+  v('prog-rota', c.rota || '');
+  v('prog-praonde', c.praOnde || PRA_ONDE_PADRAO);
+
+  // Zera: tudo que é da CARGA, não do veículo. Herdar o número da carga
+  // anterior seria a forma mais rápida de gravar duas cargas com o mesmo
+  // número — o erro que este botão existe para evitar.
+  v('prog-numero-carga', '');
+  v('prog-peso', '');
+  v('prog-sequencia', '');
+  v('prog-obs', '');
+  v('prog-paletizada', 'Não');
+  v('prog-ganchos', '0');
+  v('prog-entregas', '1');
+
+  atualizarPreviewFrotaPrograma();
+
+  const campoNumero = document.getElementById('prog-numero-carga');
+  if(campoNumero){
+    campoNumero.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    campoNumero.focus();
+  }
+  notify(`Formulário preparado para outra carga da placa ${c.placa}. Informe o número da nova carga.`, 'info');
 }
 // Sequência continua 100% livre: número manual do Programador de Embarque,
 // sem geração automática nem trava de duplicidade — regra confirmada,
@@ -1381,7 +1510,7 @@ function renderPortariaProgramadas(){
       acao = `<button class="btn btn-warn btn-sm" onclick="portariaSaiuCarga('${escJs(c.placa)}')">🏁 Saiu</button>`;
     }
     return `<tr>
-      <td><strong>${esc(c.placa)}</strong></td>
+      <td><strong>${esc(c.placa)}</strong>${marcaCargaDaPlaca(c, lista)}</td>
       <td>${esc(c.numeroCarga)||'—'}</td>
       <td>${esc(c.transportadora)||'—'}</td>
       <td>${esc(rotaCurta(c.rota))}</td>
@@ -1480,14 +1609,12 @@ function fecharModalPicker(){
 function renderExpedicao(){
   const alvo = ['Aguardando Embarque','Embarque Iniciado'];
   const lista = cargasAbertas().filter(c=>alvo.includes(c.status)).sort(ordenarPorSequenciaEAtualizacao);
-  document.getElementById('exp-tbody').innerHTML = lista.map(c=>{
-    const acao = NEXT_ACAO[c.status];
-    return `<tr>
+  document.getElementById('exp-tbody').innerHTML = lista.map(c=>`
+    <tr>
       <td>${c.sequencia ?? '—'}</td><td>${esc(c.numeroCarga)||'—'}</td><td>${esc(c.placa)}</td><td>${esc(c.transportadora)||'—'}</td>
       <td>${esc(c.destino)||'—'}</td><td>${badgeHtml(c.status)}</td>
-      <td class="no-print">${acao?`<button class="btn btn-primary btn-sm" onclick="avancarStatusUI('${escJs(c.id)}')">${acao.label}</button>`:'—'}</td>
-    </tr>`;
-  }).join('');
+      <td class="no-print">${botaoAvancoHtml(c)}</td>
+    </tr>`).join('');
   document.getElementById('exp-empty').hidden = lista.length>0;
 }
 
@@ -1495,14 +1622,12 @@ function renderExpedicao(){
 function renderFaturamento(){
   const alvo = ['Embarque Finalizado','Faturado'];
   const lista = cargasAbertas().filter(c=>alvo.includes(c.status));
-  document.getElementById('fat-tbody').innerHTML = lista.map(c=>{
-    const acao = NEXT_ACAO[c.status];
-    return `<tr>
+  document.getElementById('fat-tbody').innerHTML = lista.map(c=>`
+    <tr>
       <td>${esc(c.numeroCarga)||'—'}</td><td>${esc(c.placa)}</td><td>${esc(c.transportadora)||'—'}</td><td>${esc(c.destino)||'—'}</td>
       <td>${c.peso||0}</td><td>${badgeHtml(c.status)}</td>
-      <td class="no-print">${acao?`<button class="btn btn-primary btn-sm" onclick="avancarStatusUI('${escJs(c.id)}')">${acao.label}</button>`:'—'}</td>
-    </tr>`;
-  }).join('');
+      <td class="no-print">${botaoAvancoHtml(c)}</td>
+    </tr>`).join('');
   document.getElementById('fat-empty').hidden = lista.length>0;
 }
 
@@ -1530,13 +1655,13 @@ function renderDistribuicaoStatus(){
   const thead = document.getElementById('ind-status-thead');
   if(thead){
     thead.innerHTML = dist.map(d=>
-      `<th class="st-col" style="border-bottom-color:${d.cor.texto}" title="${esc(d.setor)}">
+      `<th class="st-col" style="border-bottom-color:${d.cor.destaque}" title="${esc(d.setor)}">
          ${esc(d.status)}<span class="st-setor">${esc(d.setor)}</span>
        </th>`).join('');
   }
 
   tbody.innerHTML = '<tr>' + dist.map(d=>
-    `<td class="st-col st-valor${d.qtd ? '' : ' st-zero'}" style="color:${d.cor.texto}">
+    `<td class="st-col st-valor${d.qtd ? '' : ' st-zero'}" style="color:${d.cor.destaque}">
        <span class="st-num">${d.qtd}</span>
        <span class="st-pct">${abertas.length ? d.pct + '%' : '—'}</span>
      </td>`).join('') + '</tr>';
@@ -2346,11 +2471,6 @@ function exportarPdfOperacional(){
       ${cabecalhoDocumento({
         titulo: 'Relatório Operacional',
         subtitulo: 'Logística — ordem de montagem e acompanhamento no pátio',
-        base: 'Todas as cargas do período selecionado, ordenadas pela etapa em que '
-            + 'se encontram e, dentro de cada etapa, pela sequência de carregamento '
-            + 'definida pela Logística. Cargas excluídas ou canceladas não entram.',
-        contagem: lista.length,
-        extra: `<strong>Concluídas:</strong> ${concluidas} de ${lista.length}`,
       })}
       <!-- A legenda de cores saiu daqui também (05/08/2026).
 
@@ -2395,7 +2515,15 @@ function exportarPdfOperacional(){
         'Todas as cargas da programação aparecem, em qualquer status — as concluídas ' +
         'continuam na lista para o acompanhamento do dia inteiro.<br>' +
         '<strong>Palet.</strong> = carga paletizada · <strong>Entr.</strong> = quantidade de ' +
-        'entregas · <strong>Liso</strong> = sem gancheira.')}
+        'entregas · <strong>Liso</strong> = sem gancheira.',
+        'Todas as cargas do período selecionado, ordenadas pela etapa em que '
+        + 'se encontram e, dentro de cada etapa, pela sequência de carregamento '
+        + 'definida pela Logística. Cargas excluídas ou canceladas não entram.',
+        fichaDocumento({
+          titulo: 'Relatório Operacional',
+          contagem: lista.length,
+          extra: `<strong>Concluídas:</strong> ${concluidas} de ${lista.length}`,
+        }))}
     </div>`;
   imprimirContainer(el, 'Relatorio-Operacional');
 }
@@ -2478,24 +2606,21 @@ function referenciaDocumento(titulo){
        + `-${p(d.getHours())}${p(d.getMinutes())}`;
 }
 
-function cabecalhoDocumento({ titulo, subtitulo, contagem, extra, base }) {
-  const agora = new Date();
-  const operador = (DB.operador && DB.operador.nome) || '—';
-  const setor = (DB.operador && DB.operador.setor) || '';
-  const ref = referenciaDocumento(titulo);
+/* Identificação do documento em UMA LINHA, logo abaixo do cabeçalho.
 
-  /* Tabela de identificação em duas colunas, no lugar da linha corrida de
-     antes. Quem confere um documento procura o campo, não lê a frase — e
-     procurar em linha corrida obriga a varrer tudo. */
-  const campos = [
-    ['Entidade',    'Suinco — Cooperativa Agroindustrial'],
-    ['Referência',   ref],
-    ['Período',      rotuloPeriodoRelatorio()],
-    contagem !== undefined ? ['Registros', String(contagem)] : null,
-    ['Emitido em',   fmtDataHora(agora.toISOString())],
-    ['Emitido por',  operador + (setor ? ' · ' + setor : '')],
-  ].filter(Boolean);
+   PERCURSO ATÉ AQUI, porque a peça foi de tabela a nada em três passos:
 
+   1. Tabela de duas colunas por seis linhas, abaixo do cabeçalho. Correta
+      e custando um quinto da primeira folha antes de qualquer dado.
+   2. Uma linha corrida no mesmo lugar. Melhor, mas ainda entre o título e
+      o primeiro número.
+   3. Fora do cabeçalho. Referência, período, registros e observação são
+      dados de CONFERÊNCIA — quem confere lê uma vez, quem decide não lê
+      nunca. Ficam no rodapé, com o resto da procedência.
+
+   O que sobra no alto é o que identifica o documento numa foto: marca,
+   título, subtítulo e classificação. Nada mais. */
+function cabecalhoDocumento({ titulo, subtitulo }) {
   return `
     <div class="doc-cabecalho">
       <img src="assets/logo_suinco.png" alt="Suinco" class="doc-logo">
@@ -2505,12 +2630,46 @@ function cabecalhoDocumento({ titulo, subtitulo, contagem, extra, base }) {
         ${subtitulo ? `<div class="doc-subtitulo">${esc(subtitulo)}</div>` : ''}
       </div>
       <div class="doc-classificacao">Uso interno</div>
-    </div>
-    <table class="doc-identificacao"><tbody>
-      ${campos.map(([r,v])=>`<tr><th>${esc(r)}</th><td>${esc(v)}</td></tr>`).join('')}
-      ${extra ? `<tr><th>Observação</th><td>${extra}</td></tr>` : ''}
-    </tbody></table>
-    ${base ? `<div class="doc-base"><strong>Base de preparação.</strong> ${base}</div>` : ''}`;
+    </div>`;
+}
+
+/* Ficha de identificação, no pé do documento.
+
+   "Emitido em" e "Emitido por" perderam os rótulos: uma data com hora e um
+   nome de pessoa não precisam de etiqueta para serem reconhecidos. O que
+   os rótulos faziam era ocupar duas larguras de coluna para dizer o óbvio.
+
+   Os que ficaram — Entidade, Referência, Período, Registros — nomeiam
+   coisas que NÃO se identificam sozinhas: "SUI-EXE-20260806-1744" sem a
+   palavra "Referência" é ruído, e um número solto não diz se são cargas,
+   dias ou quilos. */
+function fichaDocumento({ titulo, contagem, extra }) {
+  const agora = new Date();
+  const operador = (DB.operador && DB.operador.nome) || '—';
+  const setor = (DB.operador && DB.operador.setor) || '';
+
+  const campos = [
+    ['Entidade',   'Suinco — Cooperativa Agroindustrial'],
+    ['Referência',  referenciaDocumento(titulo)],
+    ['Período',     rotuloPeriodoRelatorio()],
+    contagem !== undefined ? ['Registros', String(contagem)] : null,
+  ].filter(Boolean);
+
+  return `
+    <div class="doc-ficha">
+      <div class="doc-ficha-campos">
+        ${campos.map(([r,v])=>`
+          <div class="doc-ficha-campo">
+            <span class="doc-ficha-rot">${esc(r)}</span>
+            <span class="doc-ficha-val">${esc(v)}</span>
+          </div>`).join('')}
+      </div>
+      <div class="doc-ficha-emissao">
+        <span class="doc-ficha-quando">${esc(fmtDataHora(agora.toISOString()))}</span>
+        <span class="doc-ficha-quem">${esc(operador)}${setor ? ' · ' + esc(setor) : ''}</span>
+      </div>
+      ${extra ? `<div class="doc-ficha-obs">${extra}</div>` : ''}
+    </div>`;
 }
 
 /* Nota de fonte, no pé de cada tabela.
@@ -2522,15 +2681,28 @@ function fonteDocumento(texto){
   return `<div class="doc-fonte">Fonte: ${texto}</div>`;
 }
 
-function rodapeDocumento(nota){
+/* A "Base de preparação" desceu para cá (06/08/2026).
+
+   É um parágrafo de três linhas explicando O QUE FOI CONTADO. Informação
+   necessária — é a diferença entre "o número está errado" e "o número
+   responde outra pergunta" — mas ninguém a lê ANTES do número; lê depois,
+   quando o número desagrada.
+
+   Estava entre o cabeçalho e o primeiro dado, empurrando o conteúdo folha
+   abaixo em todos os três relatórios. No rodapé cumpre a mesma função, ao
+   lado da nota de alcance e limitações, que é a seção do mesmo assunto. */
+function rodapeDocumento(nota, base, ficha){
   return `<div class="doc-rodape">
       ${nota ? `<div class="doc-nota">${nota}</div>` : ''}
+      ${ficha || ''}
+      ${base ? `<div class="doc-base"><strong>Base de preparação.</strong> ${base}</div>` : ''}
       <div class="doc-limitacoes">
         <strong>Alcance e limitações.</strong> Documento gerado automaticamente a
-        partir dos registros operacionais do pátio, na data e hora indicadas no
-        cabeçalho. Reflete o que foi registrado pelos setores até aquele instante;
-        registros feitos sem conexão sobem quando a rede retorna e podem alterar
-        números de emissões anteriores. Não constitui documento fiscal nem contábil.
+        partir dos registros operacionais do pátio, na data e hora de emissão
+        indicadas acima. Reflete o que foi registrado pelos setores até aquele
+        instante; registros feitos sem conexão sobem quando a rede retorna e podem
+        alterar números de emissões anteriores. Não constitui documento fiscal
+        nem contábil.
       </div>
       <div class="doc-assinatura">
         Programação de Embarque Suinco · embarquesuinco.com.br
@@ -2600,7 +2772,7 @@ function blocoDistribuicaoStatus(dist, total, titulo, explicacao, ocultarZerados
             <td class="num-forte">${d.qtd}</td>
             <td>${total ? d.pct + '%' : '—'}</td>
             <td class="barra-cel">
-              <span class="barra-trilho"><span class="barra-preenche" style="width:${d.pct}%;background:${d.cor.texto}"></span></span>
+              <span class="barra-trilho"><span class="barra-preenche" style="width:${d.pct}%;background:${d.cor.destaque}"></span></span>
             </td>
           </tr>`).join('')}
       </tbody>
@@ -2716,17 +2888,27 @@ function exportarPdfExecutivo(){
   const distAbertas = distribuicaoPorStatus(abertas);
   const distHoje = distribuicaoPorStatus(concluidasHoje);
 
+  /* Quantas cargas AINDA ABERTAS já passaram da meta de pátio.
+     É o número que decide a manhã do gestor, e por isso ocupa a primeira
+     casa do painel. Conta sobre a mesma meta usada no resto do relatório
+     (metaTempoPatio), para que dois números do mesmo documento não
+     discordem entre si.
+
+     Conta sobre TODAS as abertas, e não sobre analiseGargalos().pendentesAntigas
+     — essa lista é cortada em dez para caber na folha, e um indicador que
+     empaca em "10" quando há quinze cargas travadas engana justamente no
+     dia em que o gestor mais precisa dele. */
+  const metaPatio = metaTempoPatio();
+  const agoraMs = Date.now();
+  const paradasAlemDaMeta = abertas.filter(c =>
+    (agoraMs - (Date.parse(c.atualizadoEm || c.criadoEm) || agoraMs)) / 60000 > metaPatio
+  ).length;
+
   el.innerHTML = `
     <div class="print-page doc-normal">
       ${cabecalhoDocumento({
         titulo: 'Relatório Executivo',
         subtitulo: 'Logística — indicadores, gargalos e pontos críticos do pátio',
-        base: 'Indicadores calculados sobre as cargas CONCLUÍDAS no período — as que '
-            + 'percorreram as seis etapas até "Seguiu Viagem". Carga ainda em '
-            + 'andamento não entra em média de tempo: etapa sem fim não tem duração, '
-            + 'e contá-la como zero puxaria a média para baixo.',
-        contagem: doPeriodo.length,
-        extra: `<strong>Em aberto:</strong> ${abertas.length} · <strong>Concluídas:</strong> ${concluidasTodas.length}`,
       })}
 
       <!-- A legenda de cores saiu daqui (05/08/2026).
@@ -2740,21 +2922,46 @@ function exportarPdfExecutivo(){
            filtro. A distribuição por status vem logo abaixo, com o nome do
            status escrito por extenso em cada linha. -->
 
+      <!-- ORDEM DO DOCUMENTO: por decisão, não por tema.
+
+           A versão anterior seguia a ordem natural de quem escreve um
+           relatório: volume, depois médias, depois análise, e o que exige
+           ação hoje aparecia na página três, no meio dos gargalos.
+
+           Gestor de logística lê de cima para baixo e decide nos primeiros
+           trinta segundos. A pergunta dele é "o que falta terminar?", não
+           "como foi ontem?". A ordem agora responde nessa sequência:
+
+             1. O QUE EXIGE AÇÃO AGORA — o que está travado e há quanto tempo
+             2. ONDE ESTÁ A FILA      — em que etapa o pátio acumulou
+             3. ONDE O TEMPO SE PERDE — média de pátio e gargalos do período
+             4. HISTÓRICO             — o que já saiu, para conferência
+
+           Concluída não some do relatório: desce. Ela serve para conferir e
+           para fechar o dia, não para decidir. -->
+
+      <div class="print-bloco-tit">1 · O que exige ação agora</div>
+
       <div class="grid4" style="margin-bottom:18px">
+        <div class="stat-box"><div class="stat-num">${paradasAlemDaMeta}</div><div class="stat-label">Paradas Além da Meta</div></div>
+        <div class="stat-box"><div class="stat-num">${abertas.filter(c=>c.aguardandoCarga).length}</div><div class="stat-label">Aguardando Dados da Carga</div></div>
         <div class="stat-box"><div class="stat-num">${abertas.length}</div><div class="stat-label">Cargas em Aberto</div></div>
-        <div class="stat-box"><div class="stat-num">${concluidasHoje.length}</div><div class="stat-label">Concluídas Hoje</div></div>
-        <div class="stat-box"><div class="stat-num">${fmtDuracao(nHoje?Math.round(somaHoje/nHoje):null)}</div><div class="stat-label">Lead Time Médio (hoje)</div></div>
-        <div class="stat-box"><div class="stat-num">${abertas.filter(c=>c.aguardandoCarga).length}</div><div class="stat-label">Aguardando Carga</div></div>
+        <div class="stat-box"><div class="stat-num">${fmtDuracao(nHoje?Math.round(somaHoje/nHoje):null)}</div><div class="stat-label">Lead Time Médio (período)</div></div>
       </div>
+
+      ${blocoPendentesAntigasPdf(doPeriodo)}
+
+      <div class="print-bloco-tit">2 · Onde está a fila</div>
 
       ${painelStatusHorizontal(distAbertas, abertas.length,
         'Cargas em aberto por status',
         'Onde está parada, agora, cada carga que ainda não saiu. Leia da esquerda para a direita: é o caminho do caminhão pelo pátio, e um acúmulo mostra onde a fila está se formando.')}
 
-      ${blocoDistribuicaoStatus(distHoje, concluidasHoje.length,
-        'Cargas concluídas',
-        'Cargas que chegaram a "Seguiu Viagem" — o caminhão saiu do pátio. Só esse status conta como concluída.',
-        true)}
+      ${blocoTimelineCargas(abertas,
+        'Linha do tempo — cargas ainda em aberto',
+        'Carga a carga: as colunas vazias à direita mostram em qual etapa cada uma está parada agora, e quem registrou a última.')}
+
+      <div class="print-bloco-tit">3 · Onde o tempo se perde</div>
 
       ${blocoTempoMedioPatioPdf(concluidasTodas)}
 
@@ -2762,19 +2969,30 @@ function exportarPdfExecutivo(){
 
       ${blocoGargalosPdf(doPeriodo)}
 
+      <div class="print-bloco-tit">4 · Histórico do período — para conferência</div>
+
+      ${blocoDistribuicaoStatus(distHoje, concluidasHoje.length,
+        'Cargas concluídas',
+        'Cargas que chegaram a "Seguiu Viagem" — o caminhão saiu do pátio. Só esse status conta como concluída.',
+        true)}
+
       ${blocoTimelineCargas(concluidasHoje,
-        'Linha do tempo — cargas concluídas hoje',
+        'Linha do tempo — cargas concluídas',
         'Hora e operador de cada etapa, carga a carga, para rastrear onde o tempo foi consumido.')}
-
-      ${blocoTimelineCargas(abertas,
-        'Linha do tempo — cargas ainda em aberto',
-        'Mesma leitura para o que ainda não saiu: as colunas vazias à direita mostram em qual etapa cada carga está parada agora.')}
-
 
       ${rodapeDocumento(
         '<strong>Lead Time</strong> = da criação da carga até a saída do caminhão. ' +
         '<strong>Tempo de Pátio</strong> = da chegada física até a saída. ' +
-        `Lead time médio no período: ${fmtDuracao(nLead?Math.round(somaLead/nLead):null)}.`)}
+        `Lead time médio no período: ${fmtDuracao(nLead?Math.round(somaLead/nLead):null)}.`,
+        'Indicadores calculados sobre as cargas CONCLUÍDAS no período — as que '
+        + 'percorreram as seis etapas até "Seguiu Viagem". Carga ainda em '
+        + 'andamento não entra em média de tempo: etapa sem fim não tem duração, '
+        + 'e contá-la como zero puxaria a média para baixo.',
+        fichaDocumento({
+          titulo: 'Relatório Executivo',
+          contagem: doPeriodo.length,
+          extra: `<strong>Em aberto:</strong> ${abertas.length} · <strong>Concluídas:</strong> ${concluidasTodas.length}`,
+        }))}
     </div>`;
   imprimirContainer(el, 'Relatorio-Executivo');
 }
@@ -2888,7 +3106,10 @@ function renderTempoMedioPatio(){
         <div class="stat-note">Sem dados suficientes</div></div>`;
     }
     const dentro = dados.media <= dados.meta;
-    const cor = dentro ? 'var(--st-faturado-fg, #3fa66a)' : 'var(--st-aguardando-veiculo-fg, #d9534f)';
+    // -txt, e não -fg: este número fica solto no card, não dentro de um
+    // preenchimento colorido. Com -fg saía #06210f (quase preto) sobre o
+    // card escuro — razão 1,16.
+    const cor = dentro ? 'var(--st-faturado-txt, #4cc281)' : 'var(--st-aguardando-veiculo-txt, #ff8a80)';
     return `<div class="stat-box">
         <div class="stat-num" style="color:${cor}">${fmtDuracao(dados.media)}</div>
         <div class="stat-label">${rotulo}</div>
@@ -3092,11 +3313,6 @@ function exportarPdfFretes(){
       ${cabecalhoDocumento({
         titulo: 'Administração de Fretes',
         subtitulo: 'Logística — valor, negociação e instruções por carga',
-        base: 'Uma linha por carga do período, com os campos administrativos '
-            + 'registrados até o momento da emissão. Campos em branco significam '
-            + 'não preenchido, e não zero.',
-        contagem: dados.length,
-        extra: semObs ? `<strong>Sem registro:</strong> ${semObs} de ${dados.length}` : null,
       })}
       <table class="tab-fretes">
         <thead><tr>
@@ -3109,7 +3325,15 @@ function exportarPdfFretes(){
       ${rodapeDocumento(
         'O campo <strong>Observações</strong> é onde a administração registra valor do frete, ' +
         'negociação e instruções. As linhas marcadas como <strong>a preencher</strong> são as ' +
-        'cargas ainda sem registro administrativo.')}
+        'cargas ainda sem registro administrativo.',
+        'Uma linha por carga do período, com os campos administrativos '
+        + 'registrados até o momento da emissão. Campos em branco significam '
+        + 'não preenchido, e não zero.',
+        fichaDocumento({
+          titulo: 'Administração de Fretes',
+          contagem: dados.length,
+          extra: semObs ? `<strong>Sem registro:</strong> ${semObs} de ${dados.length}` : null,
+        }))}
     </div>`;
   imprimirContainer(el, 'Administracao-de-Fretes');
 }
@@ -3360,6 +3584,47 @@ function blocoRankingAtrasoPdf(cargas){
     </table>`;
 }
 
+/* Pontos críticos — o primeiro bloco de dado do relatório executivo.
+
+   Cada linha é um caminhão parado esperando alguém destravar. Estava
+   dentro de blocoGargalosPdf, atrás de três tabelas de análise histórica:
+   o item mais acionável do documento chegava depois do que só explica o
+   passado. Virou bloco próprio para poder subir.
+
+   A coluna "Parada há" é o tempo desde o último registro da carga — não é
+   o tempo de pátio. Uma carga pode ter chegado há uma hora e estar parada
+   há cinquenta minutos porque ninguém mexeu nela desde a portaria. É esse
+   silêncio que o gestor precisa enxergar. */
+function blocoPendentesAntigasPdf(cargas){
+  const g = analiseGargalos(cargas);
+  const cabecalho = tituloSecaoPdf('Pontos críticos — cargas paradas há mais tempo',
+    'Cargas ainda em aberto, da mais parada para a menos. "Parada há" = tempo desde o '
+    + 'último registro em qualquer setor. Até dez linhas — se houver mais, são as dez piores.');
+
+  if(!g.pendentesAntigas.length){
+    return cabecalho + `<div class="print-vazio">Nenhuma carga em aberto no período. Nada travado.</div>`;
+  }
+
+  return cabecalho + `<table>
+      <thead><tr>
+        <th>Nº Carga</th><th>Placa</th><th>Transportadora</th><th>Status</th><th>Parada há</th>
+      </tr></thead>
+      <tbody>${g.pendentesAntigas.map(c=>{
+        // Acima da meta ganha marca no texto, e não só na cor: este
+        // documento é impresso em preto e branco com frequência.
+        const critica = c.paradaHaMin > g.meta;
+        return `<tr>
+          <td>${esc(c.numeroCarga)}</td>
+          <td><strong>${esc(c.placa)}</strong></td>
+          <td>${esc(c.transportadora)}</td>
+          <td>${esc(c.status)}</td>
+          <td class="num-forte"${critica ? ' style="color:#a3271f"' : ''}>${fmtDuracao(c.paradaHaMin)}${critica ? ' ⚠' : ''}</td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>` +
+    fonteDocumento(`registros de movimentação do pátio · ⚠ = acima da meta de ${fmtDuracao(g.meta)}`);
+}
+
 function blocoGargalosPdf(cargas){
   const g = analiseGargalos(cargas);
   const partes = [];
@@ -3392,13 +3657,15 @@ function blocoGargalosPdf(cargas){
       <td>${esc(r.rotulo || r.rota)}</td>
       <td>${r.atrasadas} de ${r.total}</td><td>${fmtDuracao(r.atrasoMedio)}</td></tr>`)));
 
-  partes.push(tabela('Pontos críticos — cargas paradas há mais tempo',
-    'O bloco mais acionável: cada linha é um caminhão esperando alguém destravar.',
-    ['Nº Carga','Placa','Transportadora','Status','Parada há'],
-    g.pendentesAntigas.map(c=>`<tr>
-      <td>${esc(c.numeroCarga)}</td><td><strong>${esc(c.placa)}</strong></td>
-      <td>${esc(c.transportadora)}</td><td>${esc(c.status)}</td>
-      <td>${fmtDuracao(c.paradaHaMin)}</td></tr>`)));
+  /* "Pontos críticos" NÃO fica aqui.
+
+     É o bloco mais acionável do relatório e estava no meio dos gargalos,
+     depois de três tabelas de análise histórica. Gestor lê de cima para
+     baixo e decide nos primeiros trinta segundos: o que exige ação hoje
+     precisa vir antes do que explica o passado.
+
+     Virou bloco próprio (blocoPendentesAntigasPdf) e subiu para o começo
+     do documento. */
 
   const conteudo = partes.filter(Boolean).join('');
   return conteudo || (tituloSecaoPdf('Gargalos e Pontos Críticos',

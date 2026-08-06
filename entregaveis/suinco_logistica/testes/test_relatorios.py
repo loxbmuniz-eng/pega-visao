@@ -81,10 +81,16 @@ async def main():
               const c = document.getElementById('{cid}');
               const pag = c.querySelector('.print-page');
               const img = c.querySelector('.doc-logo');
-              // A identificação virou tabela de duas colunas (.doc-identificacao)
-              // no lugar da linha corrida (.doc-meta): quem confere um documento
-              // PROCURA o campo, e procurar em frase obriga a varrer tudo.
-              const meta = (c.querySelector('.doc-identificacao')||{{}}).innerText || '';
+              // A identificação DESCEU PARA O RODAPÉ (.doc-ficha). Já foi
+              // tabela abaixo do cabeçalho, depois linha corrida no mesmo
+              // lugar; agora sai do caminho do título. Referência, período e
+              // registros são dados de conferência — quem confere lê uma
+              // vez, quem decide não lê nunca.
+              const ficha = c.querySelector('.doc-ficha');
+              const meta = ficha ? ficha.innerText : '';
+              // O cabeçalho tem de estar LIMPO: se a ficha voltar para o
+              // alto, este teste precisa acusar.
+              const cab = (c.querySelector('.doc-cabecalho')||{{}}).innerText || '';
               return {{
                 classe: pag ? pag.className : '',
                 titulo: (c.querySelector('.doc-titulo')||{{}}).innerText || '',
@@ -93,9 +99,16 @@ async def main():
                 // Os rótulos saem em maiúsculas por CSS, e innerText devolve
                 // o texto já transformado. Comparar sem caixa mede o
                 // conteúdo, não o estilo.
+                fichaNoRodape: !!(ficha && ficha.closest('.doc-rodape')),
                 temPeriodo: /Período/i.test(meta),
-                temEmitidoPor: /Emitido por/i.test(meta),
-                temEmitidoEm: /Emitido em/i.test(meta),
+                // "Emitido em" e "Emitido por" perderam os RÓTULOS de
+                // propósito: data com hora e nome de pessoa se identificam
+                // sozinhos. O que precisa continuar existindo é o DADO.
+                temQuando: /\d{{2}}\/\d{{2}}\/\d{{4}}/.test(
+                  (c.querySelector('.doc-ficha-quando')||{{}}).innerText || ''),
+                temQuem: ((c.querySelector('.doc-ficha-quem')||{{}}).innerText || '').trim().length > 2,
+                rotuloEmitidoSumiu: !/Emitido (em|por)/i.test(c.innerText),
+                cabecalhoLimpo: !/Referência|Registros/i.test(cab),
                 rodape: !!c.querySelector('.doc-assinatura'),
                 // Peças do padrão de documento de auditoria.
                 temRef: /SUI-(OPE|EXE|ADM)-\\d{{8}}-\\d{{4}}/.test(c.innerText),
@@ -113,9 +126,15 @@ async def main():
                'diz o que exatamente foi contado')
             ck(f'{rot}: alcance e limitações no rodapé', d['temLimitacoes'])
             ck(f'{rot}: classificação de uso', d['temClassificacao'])
-            ck(f'{rot}: metadados completos',
-               d['temPeriodo'] and d['temEmitidoEm'] and d['temEmitidoPor'],
-               'período, emitido em, emitido por')
+            ck(f'{rot}: ficha de identificação no RODAPÉ', d['fichaNoRodape'],
+               'referência e período são conferência, não abertura')
+            ck(f'{rot}: cabeçalho sem metadados', d['cabecalhoLimpo'],
+               'no alto ficam só marca, título, subtítulo e classificação')
+            ck(f'{rot}: período, data/hora e operador presentes',
+               d['temPeriodo'] and d['temQuando'] and d['temQuem'],
+               f"período={d['temPeriodo']} quando={d['temQuando']} quem={d['temQuem']}")
+            ck(f'{rot}: sem os rótulos "Emitido em/por"', d['rotuloEmitidoSumiu'],
+               'data e nome se identificam sozinhos')
             ck(f'{rot}: rodapé de identificação', d['rodape'])
 
         print('\n=== FRETES: FONTE LEGÍVEL ===')
@@ -125,9 +144,9 @@ async def main():
         await pg.wait_for_timeout(300)
         f = await pg.evaluate('''() => {
           const c = document.getElementById('print-fretes');
-          // Escopo na tabela de DADOS. A de identificação do documento é a
-          // primeira do container agora, e ela tem corpo menor de propósito —
-          // medir a primeira <td> solta mediria o cabeçalho, não o relatório.
+          // Escopo na tabela de DADOS. O filtro por .doc-identificacao segue
+          // aqui de propósito: ela já foi tabela, e se algum dia voltar a ser
+          // o teste continua medindo o relatório, não o cabeçalho.
           const dados = [...c.querySelectorAll('table')]
                           .find(t => !t.classList.contains('doc-identificacao'));
           const td = dados ? dados.querySelector('tbody td') : null;
@@ -167,9 +186,9 @@ async def main():
         # A tabela precisa continuar coerente: cabeçalho e células no mesmo número.
         coerente = await pg.evaluate('''() => {
           const cont = document.getElementById('print-operacional');
-          // Escopo na tabela de DADOS. A de identificação do documento é a
-          // primeira do container e tem duas colunas — contar th de uma e td
-          // de outra acusaria desalinhamento onde não há.
+          // Escopo na tabela de DADOS, pelo mesmo motivo da seção anterior:
+          // contar th de uma tabela e td de outra acusa desalinhamento onde
+          // não há.
           const dados = [...cont.querySelectorAll('table')]
                           .find(t => !t.classList.contains('doc-identificacao'));
           const nTh = dados.querySelectorAll('thead th').length;
