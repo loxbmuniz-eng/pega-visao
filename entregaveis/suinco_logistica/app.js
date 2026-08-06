@@ -1628,8 +1628,91 @@ function renderComparacaoPeriodos(){
       const v = dados.medias[linha.key];
       return v===null ? `<td class="cel-sem-dados">Sem dados suficientes</td>` : `<td class="cel-num">${fmtDuracao(v)}</td>`;
     }).join('');
-    return `<tr><th class="row-label">${esc(linha.label)}</th>${celulas}</tr>`;
+    /* Sparkline da própria linha.
+
+       A tabela já É uma série temporal: as cinco colunas são janelas de
+       tempo do mesmo indicador, da mais recente para a mais antiga. Lida
+       célula a célula, a tendência exige comparar cinco números de cabeça.
+       Desenhada, aparece de relance.
+
+       Nenhum cálculo novo: os valores são exatamente os que já estão
+       impressos nas células ao lado. */
+    const serie = porPeriodo.map(({dados})=>{
+      if(dados.totalCargas === 0) return null;
+      if(linha.key === 'cargas') return dados.totalCargas;
+      return dados.medias[linha.key];
+    }).reverse();          // esquerda = mais antigo, como todo gráfico de tempo
+
+    return `<tr><th class="row-label">${esc(linha.label)}</th>${celulas}`
+         + `<td class="cel-spark"><canvas class="spark" width="120" height="26"`
+         + ` data-serie="${esc(JSON.stringify(serie))}"`
+         + ` data-menor-melhor="${linha.key !== 'cargas'}"></canvas></td></tr>`;
   }).join('');
+
+  desenharSparklines(tbody);
+}
+
+/* Sparkline em canvas, no mesmo padrão dos outros gráficos do painel.
+
+   Sem biblioteca: o painel roda offline, com CSP restrita, e trazer uma
+   dependência só para desenhar cinco pontos seria caro pelo motivo errado.
+
+   Buracos na série (período sem dados) NÃO viram zero. Zero diria "o tempo
+   caiu para nada", que é o oposto de "não houve carga para medir" — e é
+   assim que um gráfico mente sem ninguém perceber. A linha simplesmente se
+   interrompe ali. */
+function desenharSparklines(raiz){
+  raiz.querySelectorAll('canvas.spark').forEach(canvas=>{
+    let serie;
+    try { serie = JSON.parse(canvas.dataset.serie || '[]'); } catch(e){ return; }
+    const validos = serie.filter(v=>typeof v === 'number' && isFinite(v));
+    // prepararCanvas devolve { ctx, w, h } já com a escala de tela retina
+    // aplicada — usar o contrato existente evita sparkline borrada no
+    // celular, que é onde ela mais precisa ser nítida.
+    const { ctx, w: L, h: A } = prepararCanvas(canvas);
+    ctx.clearRect(0,0,L,A);
+
+    if(validos.length < 2){
+      ctx.fillStyle = corTema('--text-dim');
+      ctx.font = '10px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('sem série', L/2, A/2 + 3);
+      return;
+    }
+
+    const min = Math.min(...validos), max = Math.max(...validos);
+    const faixa = (max - min) || 1;
+    const pad = 3;
+    const x = i => pad + (i * (L - pad*2)) / (serie.length - 1);
+    const y = v => A - pad - ((v - min) / faixa) * (A - pad*2);
+
+    // Cor pela direção do último trecho, e o que é "bom" depende do
+    // indicador: menos minutos de pátio é melhora; menos cargas, não.
+    const primeiro = validos[0], ultimo = validos[validos.length - 1];
+    const menorMelhor = canvas.dataset.menorMelhor === 'true';
+    const melhorou = menorMelhor ? ultimo < primeiro : ultimo > primeiro;
+    const cor = ultimo === primeiro ? corTema('--text-dim')
+              : corTema(melhorou ? '--st-faturado-fg' : '--st-aguardando-veiculo-fg');
+
+    ctx.strokeStyle = cor; ctx.lineWidth = 1.8;
+    ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    ctx.beginPath();
+    let caneta = false;
+    serie.forEach((v,i)=>{
+      if(typeof v !== 'number' || !isFinite(v)){ caneta = false; return; }
+      if(caneta) ctx.lineTo(x(i), y(v)); else ctx.moveTo(x(i), y(v));
+      caneta = true;
+    });
+    ctx.stroke();
+
+    // Ponto no valor mais recente: é o que a pessoa procura primeiro.
+    const iUltimo = serie.length - 1 - [...serie].reverse()
+      .findIndex(v=>typeof v === 'number' && isFinite(v));
+    ctx.fillStyle = cor;
+    ctx.beginPath();
+    ctx.arc(x(iUltimo), y(serie[iUltimo]), 2.6, 0, Math.PI*2);
+    ctx.fill();
+  });
 }
 // Ranking de transportadoras com seletor de período (pílulas). Mantido
 // separado da tabela de comparação acima de propósito: o número de

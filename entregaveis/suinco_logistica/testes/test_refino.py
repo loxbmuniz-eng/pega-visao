@@ -66,6 +66,38 @@ async def main():
                return c && c.type==='hidden';}"""))
         ck('select Paletizada existe', await pg.evaluate("()=>!!document.getElementById('prog-paletizada')"))
 
+        print('\n=== 5b. SPARKLINE DA TENDÊNCIA ===')
+        # A tabela de períodos JÁ é uma série temporal: cinco janelas do
+        # mesmo indicador. Lida célula a célula, a tendência exige comparar
+        # cinco números de cabeça; desenhada, aparece de relance.
+        await pg.evaluate("() => { abrirTab('indicadores'); renderAll(); }")
+        await pg.wait_for_timeout(600)
+        r = await pg.evaluate("""() => {
+            const cs = [...document.querySelectorAll('#ind-periodos-tbody canvas.spark')];
+            const th = document.querySelectorAll('.table-periodos thead th').length;
+            const td = document.querySelector('#ind-periodos-tbody tr').children.length;
+            const pintados = cs.map(c => {
+                const d = c.getContext('2d').getImageData(0,0,c.width,c.height).data;
+                let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 0) n++;
+                return n;
+            });
+            const series = cs.map(c => JSON.parse(c.dataset.serie));
+            return {n: cs.length, th, td, pintados, series};
+        }""")
+        ck('uma sparkline por linha de indicador', r['n'] >= 1, str(r['n']))
+        ck('cabeçalho e linha com o mesmo número de colunas',
+           r['th'] == r['td'], f"th={r['th']} td={r['td']}")
+        ck('todas desenharam alguma coisa', all(p > 0 for p in r['pintados']),
+           str(r['pintados']))
+        # A série vai do período mais antigo para o mais recente — ao
+        # contrário das colunas, que começam nas últimas 6h. Invertida, a
+        # linha contaria a história de trás para frente.
+        ck('série tem os 5 períodos', all(len(x) == 5 for x in r['series']),
+           str(r['series'][:2]))
+        ck('a série usa os valores já calculados, sem inventar',
+           all(all(v is None or isinstance(v, (int, float)) for v in x) for x in r['series']),
+           str(r['series'][:2]))
+
         print('\n=== 6. CONSOLE ===')
         reais=[e for e in errs if 'ERR_TUNNEL' not in e]
         ck('sem erros', not reais, reais[:2])
