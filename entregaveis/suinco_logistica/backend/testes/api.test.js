@@ -110,6 +110,68 @@ describe('1. Autenticação', () => {
 });
 
 /* ------------------------------------------------------------------ */
+describe('1b. Renovação de sessão', () => {
+  /* O que precisa ser verdade é que a validade ANDA PARA FRENTE, não que o
+     texto do token mude. Emitido dentro do mesmo segundo, o JWT sai byte a
+     byte idêntico — mesma carga, mesmo `iat`. Comparar os textos mediria o
+     relógio, não a renovação. Por isso a espera de pouco mais de um
+     segundo: é o que torna a diferença observável. */
+  test('renova empurrando a validade para frente', async () => {
+    const validade = (jwt) =>
+      JSON.parse(Buffer.from(jwt.split('.')[1], 'base64url').toString()).exp;
+
+    const antes = validade(tokens['Portaria']);
+    await new Promise((r) => setTimeout(r, 1100));
+
+    const r = await req('/auth/renovar', { metodo: 'POST', token: tokens['Portaria'] });
+    assert.equal(r.status, 200, r.texto);
+    assert.ok(validade(r.json.token) > antes,
+      'a renovação tem que estender a sessão, não devolver a mesma validade');
+
+    const usa = await req('/auth/eu', { token: r.json.token });
+    assert.equal(usa.status, 200);
+    assert.equal(usa.json.operador.setor, 'Portaria');
+  });
+
+  test('sem token não renova', async () => {
+    const r = await req('/auth/renovar', { metodo: 'POST' });
+    assert.equal(r.status, 401);
+  });
+
+  /* A renovação relê o operador no BANCO. Sem isso, desativar alguém só
+     teria efeito quando o token dele vencesse — até 12 horas depois, com a
+     pessoa operando o pátio nesse meio tempo. */
+  test('operador desativado NÃO renova, mesmo com token ainda válido', async () => {
+    const login = await req('/auth/login', {
+      metodo: 'POST', corpo: { email: 'carla@teste.local', senha: SENHA },
+    });
+    const tk = login.json.token;
+    await pool.query("UPDATE operadores SET ativo = FALSE WHERE email = 'carla@teste.local'");
+    try {
+      const r = await req('/auth/renovar', { metodo: 'POST', token: tk });
+      assert.equal(r.status, 401);
+      assert.equal(r.json.codigo, 'OPERADOR_INATIVO');
+    } finally {
+      await pool.query("UPDATE operadores SET ativo = TRUE WHERE email = 'carla@teste.local'");
+    }
+  });
+
+  test('mudança de setor passa a valer na renovação', async () => {
+    const login = await req('/auth/login', {
+      metodo: 'POST', corpo: { email: 'diego@teste.local', senha: SENHA },
+    });
+    await pool.query("UPDATE operadores SET setor = 'Expedição' WHERE email = 'diego@teste.local'");
+    try {
+      const r = await req('/auth/renovar', { metodo: 'POST', token: login.json.token });
+      assert.equal(r.json.operador.setor, 'Expedição',
+        'o setor tem que vir do banco, não do token antigo');
+    } finally {
+      await pool.query("UPDATE operadores SET setor = 'Faturamento' WHERE email = 'diego@teste.local'");
+    }
+  });
+});
+
+/* ------------------------------------------------------------------ */
 describe('2. Trava de frota', () => {
   test('placa fora da base não vira carga', async () => {
     const r = await req('/api/cargas', {

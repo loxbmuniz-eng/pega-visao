@@ -60,6 +60,8 @@ const SuincoSharePoint = (function () {
   let ouvintesDescarte = [];
   let ouvintesEdicao = [];
   let ouvintesExclusao = [];
+  let timerRenovacao = null;
+  let ultimaInteracao = Date.now();
 
   /* ---------------------------------------------------------------
      Sessão
@@ -640,6 +642,64 @@ const SuincoSharePoint = (function () {
     }
   }
 
+  /* ---------------------------------------------------------------
+     Renovação de sessão
+     ---------------------------------------------------------------
+     O token vale 12 h. Num terminal de pátio que fica aberto o expediente
+     inteiro, isso significa pedir senha no meio do turno — muitas vezes com
+     o caminhão parado na doca esperando o registro.
+
+     Renovar sem critério resolveria isso e criaria outro pior: sessão que
+     nunca vence faz o turno da noite operar com a identidade de quem sentou
+     ali de manhã, e o log de auditoria passa a mentir sobre quem fez o quê.
+
+     Então a renovação segue o TRABALHO, não o relógio: só renova se alguém
+     tocou na tela dentro da janela de inatividade. Terminal em uso continua
+     vivo indefinidamente; terminal esquecido aberto vence sozinho e a
+     próxima pessoa precisa se identificar. */
+  const INTERVALO_RENOVACAO = 3 * 60 * 60 * 1000;   // 3 h — folga larga sobre as 12 h
+  const JANELA_INATIVIDADE  = 4 * 60 * 60 * 1000;   // 4 h sem ninguém = deixa vencer
+
+  function registrarInteracao() {
+    ultimaInteracao = Date.now();
+  }
+
+  function ouvirInteracao() {
+    if (typeof document === 'undefined') return;
+    ['pointerdown', 'keydown', 'visibilitychange'].forEach((evento) => {
+      document.addEventListener(evento, registrarInteracao, { passive: true });
+    });
+  }
+
+  async function renovarSessao() {
+    if (!estaConfigurado()) return { renovado: false, motivo: 'sem sessão' };
+    if (Date.now() - ultimaInteracao > JANELA_INATIVIDADE) {
+      return { renovado: false, motivo: 'sem uso' };
+    }
+    try {
+      const r = await chamar('/auth/renovar', { metodo: 'POST' });
+      guardarToken(r.token, r.operador);
+      // O socket carrega o token no aperto de mão. Com token novo, a conexão
+      // antiga segue válida até cair — e, ao cair, reconectaria com um token
+      // já vencido. Reconectar agora evita esse buraco.
+      conectarTempoReal();
+      return { renovado: true, operador: r.operador };
+    } catch (e) {
+      // 401 aqui já limpou a sessão em chamar(); o painel avisa pelo rodapé.
+      console.info('[Suinco] renovação de sessão não completou:', e.message);
+      return { renovado: false, motivo: e.message };
+    }
+  }
+
+  function iniciarRenovacaoPeriodica() {
+    pararRenovacao();
+    timerRenovacao = setInterval(renovarSessao, INTERVALO_RENOVACAO);
+  }
+
+  function pararRenovacao() {
+    if (timerRenovacao) { clearInterval(timerRenovacao); timerRenovacao = null; }
+  }
+
   function iniciarSincroniaPeriodica() {
     pararSincronia();
     timerSincronia = setInterval(sincronizarAgora, SP_CONFIG.intervaloSincronia);
@@ -647,6 +707,7 @@ const SuincoSharePoint = (function () {
 
   function pararSincronia() {
     if (timerSincronia) { clearInterval(timerSincronia); timerSincronia = null; }
+    pararRenovacao();
   }
 
   function ultimaSincronia() {
@@ -765,6 +826,8 @@ const SuincoSharePoint = (function () {
 
     conectarTempoReal();
     iniciarSincroniaPeriodica();
+    ouvirInteracao();
+    iniciarRenovacaoPeriodica();
 
     try { await sincronizarAgora(); } catch (e) { /* já tratado dentro */ }
 
@@ -809,6 +872,7 @@ const SuincoSharePoint = (function () {
     pull, pullTudo, drenarFila, pendentes,
     listarOperadores, criarOperador, atualizarOperador,
     sincronizarAgora, iniciarSincroniaPeriodica, pararSincronia, ultimaSincronia,
+    renovarSessao, registrarInteracao,
     arquivarDia,
   };
 })();

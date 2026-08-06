@@ -251,6 +251,33 @@ async def main():
         ck('o usuário criado PELA TELA consegue entrar', entrou == 'Expedição',
            'de nada adianta cadastrar se a pessoa não entra')
 
+        print('\n=== 7d. SESSÃO SE RENOVA SOZINHA EM TERMINAL EM USO ===')
+        # O token vale 12 h. Terminal de pátio fica aberto o expediente
+        # inteiro, e pedir senha no meio do turno — com caminhão na doca —
+        # não é opção. A renovação segue o TRABALHO: só acontece se alguém
+        # mexeu na tela dentro da janela de inatividade.
+        r = await pagina.evaluate("() => SuincoSharePoint.renovarSessao()")
+        ck('renovou com o terminal em uso', r.get('renovado') is True, str(r))
+        ck('continua o mesmo operador',
+           (r.get('operador') or {}).get('setor') == 'Logística', str(r))
+
+        ainda = await pagina.evaluate("""async () => {
+            const d = await SuincoSharePoint.pullTudo();
+            return Array.isArray(d.cargas);
+        }""")
+        ck('o token novo continua valendo para ler dados', ainda)
+
+        # Terminal esquecido aberto tem que vencer. Simula quatro horas sem
+        # ninguém encostar: a renovação se recusa e a sessão morre no prazo.
+        sem_uso = await pagina.evaluate("""async () => {
+            const original = Date.now;
+            Date.now = () => original() + 5 * 60 * 60 * 1000;   // 5 h à frente
+            try { return await SuincoSharePoint.renovarSessao(); }
+            finally { Date.now = original; }
+        }""")
+        ck('terminal sem uso NÃO renova', sem_uso.get('renovado') is False, str(sem_uso))
+        ck('e diz o motivo', sem_uso.get('motivo') == 'sem uso', str(sem_uso))
+
         print('\n=== 8. TROCAR USUÁRIO ENCERRA A SESSÃO ===')
         await pagina2.evaluate("() => trocarUsuario()")
         await pagina2.wait_for_timeout(600)
