@@ -262,6 +262,67 @@ textarea{resize:vertical;min-height:70px}
 select option{background:var(--campo-bg);color:var(--text)}
 
 /* ===== STAT BOXES ===== */
+/* ===== PADRÃO DE DOCUMENTO — estrutura de relatório de auditoria =====
+   Os três relatórios circulam fora do pátio. Cada peça abaixo responde a
+   uma pergunta que sempre aparece quando o número desagrada. */
+
+/* Classificação, no canto do cabeçalho: responde "posso encaminhar isto?"
+   antes de alguém encaminhar e perguntar depois. */
+.doc-classificacao{
+  margin-left:auto;align-self:flex-start;
+  border:1px solid var(--border);border-radius:3px;
+  padding:3px 9px;font-size:9px;font-weight:800;
+  letter-spacing:.14em;text-transform:uppercase;color:var(--text-dim);
+}
+
+/* Identificação em tabela de duas colunas, e não em linha corrida: quem
+   confere um documento PROCURA o campo, e procurar em frase obriga a
+   varrer tudo. */
+.doc-identificacao{
+  width:100%;border-collapse:collapse;margin:10px 0 12px;font-size:10.5px;
+}
+.doc-identificacao th{
+  width:110px;text-align:left;padding:3px 10px 3px 0;font-weight:700;
+  color:var(--text-dim);background:transparent;border:0;white-space:nowrap;
+  text-transform:uppercase;letter-spacing:.06em;font-size:9px;
+}
+.doc-identificacao td{
+  padding:3px 0;border:0;border-bottom:1px solid var(--border-soft);
+  font-weight:600;
+}
+
+/* Base de preparação: o que exatamente foi contado. É a diferença entre
+   "o número está errado" e "o número responde outra pergunta". */
+.doc-base{
+  font-size:10px;line-height:1.5;color:var(--text-dim);
+  border-left:2px solid var(--gold-dim);padding:6px 0 6px 10px;margin-bottom:12px;
+}
+
+/* Nota de fonte, no pé de cada tabela. */
+.doc-fonte{
+  font-size:9px;color:var(--text-dim);margin-top:5px;font-style:italic;
+}
+
+/* Alcance e limitações, no rodapé. Declara o que o documento NÃO é —
+   inclusive que registros feitos offline podem mudar emissões anteriores. */
+.doc-limitacoes{
+  font-size:8.8px;line-height:1.5;color:var(--text-dim);
+  border-top:1px solid var(--border-soft);padding-top:6px;margin-top:8px;text-align:justify;
+}
+
+@media print{
+  /* Numeração de página. O contador é do CSS de impressão: o navegador
+     resolve quantas páginas existem, coisa que o JavaScript não sabe antes
+     de imprimir. Sem isso, folha perdida no meio do caminho passa
+     despercebida. */
+  @page{ counter-increment:pagina }
+  .doc-pagina::after{ content:" · Página " counter(page) " de " counter(pages) }
+  .doc-classificacao{ color:#000;border-color:#000 }
+  /* O bloco de identificação não pode ser partido entre duas folhas: é a
+     procedência do documento e precisa vir inteira na primeira. */
+  .doc-identificacao,.doc-base{ break-inside:avoid;page-break-inside:avoid }
+}
+
 /* ===== PAINEL DE STATUS HORIZONTAL =====
    Uma coluna por etapa, o número embaixo. A versão vertical obrigava a
    percorrer seis linhas para montar o quadro do pátio na cabeça; aqui o

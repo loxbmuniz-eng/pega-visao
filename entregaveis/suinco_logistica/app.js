@@ -2345,7 +2345,10 @@ function exportarPdfOperacional(){
     <div class="print-page doc-denso">
       ${cabecalhoDocumento({
         titulo: 'Relatório Operacional',
-        subtitulo: 'Programação do dia — ordem de montagem e acompanhamento no pátio',
+        subtitulo: 'Logística — ordem de montagem e acompanhamento no pátio',
+        base: 'Todas as cargas do período selecionado, ordenadas pela etapa em que '
+            + 'se encontram e, dentro de cada etapa, pela sequência de carregamento '
+            + 'definida pela Logística. Cargas excluídas ou canceladas não entram.',
         contagem: lista.length,
         extra: `<strong>Concluídas:</strong> ${concluidas} de ${lista.length}`,
       })}
@@ -2431,19 +2434,59 @@ function exportarCsvPowerBI(){
      doc-normal  → Executivo: A4 deitado, blocos e tabelas médias
      doc-amplo   → Fretes: A4 em pé, 3 colunas, leitura confortável
 */
-function cabecalhoDocumento({ titulo, subtitulo, contagem, extra }) {
+/* ====================================================================
+   PADRÃO DE DOCUMENTO — estrutura de relatório de auditoria
+   ====================================================================
+   Os três relatórios circulam fora do pátio: vão para a diretoria, para
+   reunião com transportadora e para grupo de WhatsApp. Documento sem
+   procedência é documento que alguém contesta na primeira divergência.
+
+   A estrutura segue o que firmas de auditoria usam, e cada peça responde
+   a uma pergunta que sempre aparece:
+
+     Referência        "de qual emissão estamos falando?"
+     Base de preparação "o que exatamente foi contado?"
+     Fonte              "de onde veio esse número?"
+     Emitido por        "quem gerou?"
+     Classificação      "posso encaminhar isto?"
+     Página X de Y      "está faltando folha?"
+
+   Nada aqui muda cálculo. É procedência. */
+
+/* Referência do documento: SUI-OPE-20260806-1432.
+
+   Serve para citar uma emissão específica em e-mail ou ata. Dois relatórios
+   do mesmo dia, com números diferentes, deixam de ser "aquele relatório" e
+   passam a ter nome — que é a diferença entre resolver a divergência e
+   discutir sobre ela. */
+function referenciaDocumento(titulo){
+  const d = new Date();
+  const p = n => String(n).padStart(2,'0');
+  const sigla = {
+    'Relatório Operacional': 'OPE',
+    'Relatório Executivo':   'EXE',
+    'Administração de Fretes':'ADM',
+  }[titulo] || 'DOC';
+  return `SUI-${sigla}-${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}`
+       + `-${p(d.getHours())}${p(d.getMinutes())}`;
+}
+
+function cabecalhoDocumento({ titulo, subtitulo, contagem, extra, base }) {
   const agora = new Date();
   const operador = (DB.operador && DB.operador.nome) || '—';
   const setor = (DB.operador && DB.operador.setor) || '';
+  const ref = referenciaDocumento(titulo);
 
-  const meta = [
-    `<strong>Período:</strong> ${esc(rotuloPeriodoRelatorio())}`,
-    contagem !== undefined ? `<strong>Registros:</strong> ${contagem}` : null,
-    `<strong>Emitido em:</strong> ${esc(fmtDataHora(agora.toISOString()))}`,
-    // Quem gerou entra por rastreabilidade: se dois relatórios do mesmo dia
-    // divergirem, é a primeira pergunta que alguém faz.
-    `<strong>Emitido por:</strong> ${esc(operador)}${setor ? ' · ' + esc(setor) : ''}`,
-    extra || null,
+  /* Tabela de identificação em duas colunas, no lugar da linha corrida de
+     antes. Quem confere um documento procura o campo, não lê a frase — e
+     procurar em linha corrida obriga a varrer tudo. */
+  const campos = [
+    ['Entidade',    'Suinco — Cooperativa Agroindustrial'],
+    ['Referência',   ref],
+    ['Período',      rotuloPeriodoRelatorio()],
+    contagem !== undefined ? ['Registros', String(contagem)] : null,
+    ['Emitido em',   fmtDataHora(agora.toISOString())],
+    ['Emitido por',  operador + (setor ? ' · ' + setor : '')],
   ].filter(Boolean);
 
   return `
@@ -2454,15 +2497,37 @@ function cabecalhoDocumento({ titulo, subtitulo, contagem, extra }) {
         <h1 class="doc-titulo">${esc(titulo)}</h1>
         ${subtitulo ? `<div class="doc-subtitulo">${esc(subtitulo)}</div>` : ''}
       </div>
+      <div class="doc-classificacao">Uso interno</div>
     </div>
-    <div class="doc-meta">${meta.map(m=>`<span>${m}</span>`).join('')}</div>`;
+    <table class="doc-identificacao"><tbody>
+      ${campos.map(([r,v])=>`<tr><th>${esc(r)}</th><td>${esc(v)}</td></tr>`).join('')}
+      ${extra ? `<tr><th>Observação</th><td>${extra}</td></tr>` : ''}
+    </tbody></table>
+    ${base ? `<div class="doc-base"><strong>Base de preparação.</strong> ${base}</div>` : ''}`;
+}
+
+/* Nota de fonte, no pé de cada tabela.
+
+   "De onde veio esse número?" é a primeira pergunta em qualquer reunião
+   onde o número desagrada. Respondida no próprio documento, a discussão
+   passa direto para o que fazer a respeito. */
+function fonteDocumento(texto){
+  return `<div class="doc-fonte">Fonte: ${texto}</div>`;
 }
 
 function rodapeDocumento(nota){
   return `<div class="doc-rodape">
       ${nota ? `<div class="doc-nota">${nota}</div>` : ''}
+      <div class="doc-limitacoes">
+        <strong>Alcance e limitações.</strong> Documento gerado automaticamente a
+        partir dos registros operacionais do pátio, na data e hora indicadas no
+        cabeçalho. Reflete o que foi registrado pelos setores até aquele instante;
+        registros feitos sem conexão sobem quando a rede retorna e podem alterar
+        números de emissões anteriores. Não constitui documento fiscal nem contábil.
+      </div>
       <div class="doc-assinatura">
-        Documento gerado pela Programação de Embarque Suinco · embarquesuinco.com.br
+        Programação de Embarque Suinco · embarquesuinco.com.br
+        <span class="doc-pagina"></span>
       </div>
     </div>`;
 }
@@ -2632,7 +2697,11 @@ function exportarPdfExecutivo(){
     <div class="print-page doc-normal">
       ${cabecalhoDocumento({
         titulo: 'Relatório Executivo',
-        subtitulo: 'Controle de pátio — indicadores, gargalos e pontos críticos',
+        subtitulo: 'Logística — indicadores, gargalos e pontos críticos do pátio',
+        base: 'Indicadores calculados sobre as cargas CONCLUÍDAS no período — as que '
+            + 'percorreram as seis etapas até "Seguiu Viagem". Carga ainda em '
+            + 'andamento não entra em média de tempo: etapa sem fim não tem duração, '
+            + 'e contá-la como zero puxaria a média para baixo.',
         contagem: doPeriodo.length,
         extra: `<strong>Em aberto:</strong> ${abertas.length} · <strong>Concluídas:</strong> ${concluidasTodas.length}`,
       })}
@@ -2999,7 +3068,10 @@ function exportarPdfFretes(){
     <div class="print-page doc-amplo">
       ${cabecalhoDocumento({
         titulo: 'Administração de Fretes',
-        subtitulo: 'Controle administrativo — valor, negociação e instruções por carga',
+        subtitulo: 'Logística — valor, negociação e instruções por carga',
+        base: 'Uma linha por carga do período, com os campos administrativos '
+            + 'registrados até o momento da emissão. Campos em branco significam '
+            + 'não preenchido, e não zero.',
         contagem: dados.length,
         extra: semObs ? `<strong>Sem registro:</strong> ${semObs} de ${dados.length}` : null,
       })}
