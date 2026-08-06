@@ -397,6 +397,38 @@
     <div class="funcao-aba" data-tab="indicadores"></div>
     <div class="card">
       <div class="card-title"><span class="icon">📊</span> Tempos Médios — Histórico Completo (cargas concluídas — Seguiu Viagem)</div>
+      <!-- FILTROS DOS INDICADORES
+
+           Mesma ideia do painel de despesas: um estado central, vários
+           recortes, e TUDO abaixo recalcula junto — indicadores, tabelas,
+           status e gráficos. Sem isso o gestor filtra num lugar e compara
+           com número de outro recorte sem perceber.
+
+           A nota de filtro ativo existe pelo mesmo motivo: número filtrado
+           sem aviso é a forma mais silenciosa de tirar conclusão errada. -->
+      <div class="filtro-periodo" id="ind-filtros">
+        <div class="form-group">
+          <label>Transportadora</label>
+          <select id="ind-f-transp" onchange="aplicarFiltroIndicadores()"><option value="">Todas</option></select>
+        </div>
+        <div class="form-group">
+          <label>Rota</label>
+          <select id="ind-f-rota" onchange="aplicarFiltroIndicadores()"><option value="">Todas</option></select>
+        </div>
+        <div class="form-group">
+          <label>Tipo de operação</label>
+          <select id="ind-f-operacao" onchange="aplicarFiltroIndicadores()"><option value="">Todos</option></select>
+        </div>
+        <div class="form-group">
+          <label>Placa ou Nº de carga</label>
+          <input type="text" id="ind-f-busca" placeholder="Ex: ABC1D23" oninput="aplicarFiltroIndicadores()">
+        </div>
+        <div class="form-group filtro-acoes">
+          <button class="btn btn-sec btn-sm" onclick="limparFiltroIndicadores()">Limpar filtros</button>
+        </div>
+      </div>
+      <div class="filtro-nota" id="ind-filtro-nota" hidden></div>
+
       <div class="grid4" id="ind-stats"></div>
     </div>
 
@@ -478,14 +510,16 @@
 
     <div class="card">
       <div class="card-title"><span class="icon">🚦</span> Cargas em aberto por status</div>
-      <div class="card-sub">Onde está parada, agora, cada carga que ainda não saiu. Os 6 status aparecem sempre — inclusive os zerados, porque etapa vazia também é informação. As cores são as mesmas usadas no relatório executivo em PDF.</div>
+      <div class="card-sub">Uma coluna por etapa, o número embaixo. Os 6 status aparecem sempre — inclusive os zerados, porque etapa vazia também é informação. As cores são as mesmas do relatório executivo.</div>
       <div class="table-wrap">
-        <table>
-          <thead><tr><th>Status</th><th>Setor responsável</th><th>Cargas</th><th>% do total</th><th>Distribuição</th></tr></thead>
+        <!-- Cabeçalho e corpo montados por renderStatusAberto(): a leitura
+             é horizontal, uma coluna por etapa, como no relatório executivo. -->
+        <table class="tabela-status-h">
+          <thead><tr id="ind-status-thead"></tr></thead>
           <tbody id="ind-status-tbody"></tbody>
-          <tfoot><tr><th>Total</th><th></th><th id="ind-status-total">0</th><th id="ind-status-pct">—</th><th></th></tr></tfoot>
         </table>
       </div>
+      <div class="status-h-total" id="ind-status-total-linha"></div>
     </div>
 
     <!-- Tempo MÉDIO no lugar dos extremos. O caso extremo é anedota; a
