@@ -1,6 +1,9 @@
 /* Ponto de entrada da API do Embarque Suinco. */
 
 import http from 'node:http';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import express from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
@@ -8,7 +11,7 @@ import compression from 'compression';
 import rateLimit from 'express-rate-limit';
 
 import { config } from './config.js';
-import { verificarConexao, encerrar } from './banco.js';
+import { verificarConexao, encerrar, consultar } from './banco.js';
 import { iniciarTempoReal, conectados } from './tempo-real.js';
 import { rotasAuth } from './rotas/auth.js';
 import { rotasEstado } from './rotas/estado.js';
@@ -171,13 +174,62 @@ export function criarServidor() {
   return servidor;
 }
 
+/* Recusa subir com o banco atrás do código.
+
+   Falha silenciosa e cara: o código novo consulta colunas que só existem
+   depois da migração. Se o serviço sobe sem migrar, o login funciona, a
+   tela abre, e TODA operação com carga devolve erro 500 — inclusive mudar
+   status. Para quem está no pátio parece que "o painel parou", e a causa
+   real fica escondida três camadas abaixo.
+
+   Pior: o painel trata 500 como falha de rede e enfileira a gravação, então
+   o operador vê o registro na tela dele e acha que subiu. Ninguém percebe
+   até alguém comparar duas telas.
+
+   Serviço fora do ar é ruim; serviço no ar mentindo é pior. Por isso ele
+   morre aqui, com a mensagem dizendo exatamente o que rodar. */
+async function exigirBancoNaVersaoDoCodigo() {
+  const pasta = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'migrations');
+  let arquivos = [];
+  try {
+    arquivos = (await fs.readdir(pasta)).filter((a) => a.endsWith('.sql')).sort();
+  } catch (e) {
+    return;   // sem pasta de migrations não há o que conferir
+  }
+  if (!arquivos.length) return;
+
+  let aplicadas = new Set();
+  try {
+    const { rows } = await consultar('SELECT arquivo FROM _migrations');
+    aplicadas = new Set(rows.map((r) => r.arquivo));
+  } catch (e) {
+    // Tabela ainda não existe: banco nunca migrado.
+  }
+
+  const pendentes = arquivos.filter((a) => !aplicadas.has(a));
+  if (!pendentes.length) return;
+
+  console.error(
+    `\nNÃO SUBIU: o banco está atrás do código.\n\n` +
+    `  Migração(ões) pendente(s): ${pendentes.join(', ')}\n\n` +
+    `  Rode, nesta ordem:\n` +
+    `    cd /opt/embarque-suinco\n` +
+    `    sudo -u suinco node scripts/migrar.js\n` +
+    `    sudo systemctl restart embarque-suinco\n\n` +
+    `  Subir assim faria o login funcionar e toda operação com carga\n` +
+    `  falhar em silêncio. Melhor parar aqui.\n`
+  );
+  process.exit(1);
+}
+
 /* Só sobe sozinho quando executado direto. Importado pelos testes, não. */
 const executadoDireto = process.argv[1] && import.meta.url.endsWith(process.argv[1].split('/').pop());
 if (executadoDireto) {
   const servidor = criarServidor();
 
   verificarConexao()
-    .then((agora) => {
+    .then(async (agora) => {
+      await exigirBancoNaVersaoDoCodigo();
       servidor.listen(config.porta, '127.0.0.1', () => {
         console.log(`Embarque Suinco API · porta ${config.porta} · banco OK (${agora})`);
         console.log(`Origens permitidas: ${config.origens.join(', ')}`);
