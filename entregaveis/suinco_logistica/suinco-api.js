@@ -436,6 +436,31 @@ const SuincoSharePoint = (function () {
       mudarEstado('online');
       return { enfileirado: false, item: r };
     } catch (e) {
+      /* 404 tem DOIS significados aqui, e confundi-los apaga carga de
+         verdade sem apagar nada no banco.
+
+         - CARGA_NAO_ENCONTRADA: a carga já não existe. Tratar como sucesso
+           é certo — o objetivo era removê-la e ela não está lá.
+
+         - ROTA_INEXISTENTE: o SERVIDOR é que não tem a rota DELETE, porque
+           está numa versão anterior à migração de exclusão. Aqui tratar
+           como sucesso é o pior caminho possível: a carga some da tela de
+           quem apagou, continua no banco, continua aparecendo para os
+           outros setores e volta na próxima leitura completa. Divergência
+           silenciosa entre dois terminais é o defeito mais caro que este
+           painel pode ter.
+
+         O código vem do corpo JSON — o servidor identifica os dois casos
+         (rotas/cargas.js e o catch-all de servidor.js). */
+      if (e.status === 404 && e.codigo === 'ROTA_INEXISTENTE') {
+        const desatualizado = new Error(
+          'Este painel foi atualizado, mas o servidor ainda não: a rota de exclusão '
+          + 'não existe lá. A carga NÃO foi excluída. Avise a TI para rodar a '
+          + 'atualização do servidor antes de tentar de novo.');
+        desatualizado.status = 404;
+        desatualizado.codigo = 'SERVIDOR_DESATUALIZADO';
+        throw desatualizado;
+      }
       if (e.status === 404) return { enfileirado: false, item: null };  // já não existe
       if (e.status === 409 || e.status === 422 || e.status === 403) {
         return { enfileirado: false, recusado: true, erro: e.message };
