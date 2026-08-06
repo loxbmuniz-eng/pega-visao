@@ -237,6 +237,46 @@ textarea{resize:vertical;min-height:70px}
 select option{background:var(--campo-bg);color:var(--text)}
 
 /* ===== STAT BOXES ===== */
+/* ===== MICRO-INTERAÇÕES =====
+   Teto de 180ms, e por um motivo operacional: quem está com o caminhão na
+   doca não espera animação. Movimento aqui serve para confirmar que o
+   clique foi registrado — passou disso, atrapalha.
+
+   Nada de animar `top`, `height` ou `width`: essas propriedades obrigam o
+   navegador a recalcular o layout a cada quadro e engasgam no celular
+   antigo do pátio. Só `transform` e `opacity`, que a placa de vídeo
+   resolve sozinha. */
+.stat-box{ transition:transform .16s ease, box-shadow .16s ease, border-color .16s ease }
+.stat-box:hover{ transform:translateY(-2px);box-shadow:0 8px 20px rgba(0,0,0,.28) }
+
+.card{ transition:border-color .16s ease }
+
+/* A aba que entra aparece com um leve deslize. Sem isso, trocar de aba
+   troca a tela inteira de uma vez e o olho perde onde estava. */
+.tab-page.active{ animation:abaEntra .18s ease both }
+@keyframes abaEntra{ from{ opacity:0;transform:translateY(4px) } to{ opacity:1;transform:none } }
+
+/* Realimentação de toque: no celular não existe hover, e sem resposta
+   visual o operador aperta duas vezes achando que não pegou. */
+.btn{ transition:transform .12s ease, filter .12s ease }
+.btn:active{ transform:scale(.97) }
+
+.nav-tab{ transition:background-color .16s ease, color .16s ease }
+
+/* Linha da tabela sob o cursor: ajuda a seguir a linha até a coluna de
+   ação em tabela larga. */
+tbody tr{ transition:background-color .12s ease }
+
+/* Quem pediu menos movimento, recebe menos movimento. Não é detalhe de
+   acessibilidade distante: enjoo com animação é real, e o painel fica
+   aberto o turno inteiro na frente da pessoa. */
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{
+    animation-duration:.001ms !important;animation-iteration-count:1 !important;
+    transition-duration:.001ms !important;scroll-behavior:auto !important;
+  }
+}
+
 /* ===== BENTO — grade por importância, não por igualdade =====
    Grade uniforme trata "cargas paradas há 3h" e "total faturado" como se
    pesassem o mesmo. Não pesam: o primeiro exige alguém levantar da
@@ -332,11 +372,35 @@ select option{background:var(--campo-bg);color:var(--text)}
    Lida de relance por quem está de pé, com o caminhão na frente. A leitura
    é da esquerda para a direita: cada coluna é uma etapa, e o olho encontra
    onde a carga parou sem precisar ler texto. */
+/* O filtro acompanha a rolagem.
+
+   A tabela do pátio é longa; ao descer, o filtro sai da tela e o operador
+   perde a referência do que está vendo — se é o dia todo, se é uma placa,
+   se é o pátio agora. Grudado no topo, a resposta fica sempre visível.
+
+   O deslocamento soma cabeçalho e navegação, que são fixos: sem isso o
+   filtro gruda ATRÁS deles e some. Fundo opaco pelo mesmo motivo — sobre
+   fundo translúcido, as linhas da tabela passam por baixo e ficam
+   ilegíveis. */
 .filtro-periodo{
   display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;
   margin-bottom:12px;padding:12px;border-radius:var(--radius);
   background:var(--navy-deep);border:1px solid var(--border-soft);
+  position:sticky;top:calc(var(--header-h) + var(--nav-h) + 8px);z-index:5;
 }
+
+/* No celular a tela é curta: um filtro de três campos grudado no topo
+   come metade dela. Aqui ele vira um resumo de uma linha que abre ao
+   toque — usa <details>, que funciona sem JavaScript e não some se um
+   script falhar. */
+@media (max-width:820px){
+  .filtro-periodo{
+    position:static;         /* volta a rolar junto: espaço vale mais que fixação */
+    padding:10px;gap:8px;
+  }
+}
+
+@media print{ .filtro-periodo{ position:static } }
 .filtro-periodo .form-group{margin-bottom:0;min-width:140px}
 .filtro-periodo .filtro-acoes{min-width:auto;display:flex;align-items:flex-end}
 
@@ -385,7 +449,6 @@ code{
 @media (max-width:820px){
   /* No celular a matriz de seis colunas não cabe. A tabela rola dentro da
      própria caixa — a página nunca rola de lado. */
-  .filtro-periodo{padding:10px;gap:8px}
   .filtro-periodo .form-group{min-width:calc(50% - 8px)}
   .tabela-patio{min-width:640px}
   .vp-resumo{font-size:12px}
