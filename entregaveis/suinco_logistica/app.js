@@ -2310,7 +2310,7 @@ function exportarPdfOperacional(){
   // Respeita o filtro de Data da Programação da aba Relatórios.
   const lista = cargasDoRelatorio().slice().sort(ordenarPorEtapaDaTimeline);
   const linhas = lista.map((c,i)=>{
-    const pesoTon = ((c.peso||0)/1000).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:2});
+    const pesoTon = ((c.peso||0)/1000).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
     const praOndeStyle = c.praOnde ? `style="background:${CORES_PRA_ONDE[c.praOnde]||'#e9b954'};color:#fff;font-weight:800"` : '';
     // Status real da carga (os 6), com o preenchimento sólido da escala do
     // gestor — é o que permite ler o andamento do dia de relance na foto
@@ -2372,8 +2372,13 @@ function exportarPdfOperacional(){
           <th class="c-transp">Transportadora</th>
           <th class="c-veiculo">Tipo de Veículo</th>
           <th class="c-peso">Peso (ton)</th>
-          <th class="c-palet">Paletizada</th>
-          <th class="c-entregas">Entregas</th>
+          <!-- Rótulos abreviados, e não por economia de espaço: nesta
+               largura o navegador quebrava a palavra ao meio e saía
+               "Paletizad a" e "Entrega s" na folha. Rótulo partido parece
+               erro de digitação num documento que vai para reunião.
+               O significado vai no rodapé. -->
+          <th class="c-palet">Palet.</th>
+          <th class="c-entregas">Entr.</th>
           <th class="c-ganchos">Ganchos</th>
         </tr></thead>
         <tbody>${linhas || '<tr><td colspan="13" class="text-center text-dim">Nenhuma carga no período selecionado.</td></tr>'}</tbody>
@@ -2388,7 +2393,9 @@ function exportarPdfOperacional(){
            deduzir olhando a tabela. -->
       ${rodapeDocumento(
         'Todas as cargas da programação aparecem, em qualquer status — as concluídas ' +
-        'continuam na lista para o acompanhamento do dia inteiro.')}
+        'continuam na lista para o acompanhamento do dia inteiro.<br>' +
+        '<strong>Palet.</strong> = carga paletizada · <strong>Entr.</strong> = quantidade de ' +
+        'entregas · <strong>Liso</strong> = sem gancheira.')}
     </div>`;
   imprimirContainer(el, 'Relatorio-Operacional');
 }
@@ -2626,8 +2633,14 @@ function blocoTimelineCargas(cargas, titulo, explicacao){
       const mov = historico.find(m=>m.statusNovo===status);
       if(!mov) return `<td class="tl-cel tl-pendente">—</td>`;
       const cor = corStatusRelatorio(status);
-      return `<td class="tl-cel" style="background:${cor.fundo};border-left:3px solid ${cor.borda}">
-          <span class="tl-hora" style="color:${cor.texto}">${fmtHora(mov.timestamp)}</span>
+      /* A cor do texto vai na CÉLULA, não só na hora.
+
+         O operador e o setor usavam cor fixa do tema e sumiam sobre as
+         células escuras — "Seguiu Viagem" é verde-escuro, e nome do
+         operador em cor de texto claro do tema desaparecia na folha. Com a
+         cor no `td`, as três linhas herdam o par certo de fundo e texto. */
+      return `<td class="tl-cel" style="background:${cor.fundo};color:${cor.texto};border-left:3px solid ${cor.borda}">
+          <span class="tl-hora">${fmtHora(mov.timestamp)}</span>
           <span class="tl-quem">${esc(mov.operador)}</span>
           <span class="tl-setor">${esc(mov.setor)}</span>
         </td>`;
@@ -2650,7 +2663,17 @@ function blocoTimelineCargas(cargas, titulo, explicacao){
           <th>Carga</th>
           ${STATUS_FLOW.map(s=>{
             const cor = corStatusRelatorio(s);
-            return `<th><span class="tl-th" style="color:${cor.texto}">${esc(s)}</span></th>`;
+            /* A cor do status vira SUBLINHADO, não cor do texto.
+
+               No papel o cabeçalho tem fundo claro, e `cor.texto` é a cor
+               feita para ir SOBRE o fundo colorido do status — clara. Clara
+               sobre claro é texto invisível, e foi exatamente o que saiu na
+               folha: "Aguardando Veículo" e "Seguiu Viagem" sumiram.
+
+               Com o sublinhado, a coluna continua codificada por cor e o
+               texto fica legível nos dois fundos. */
+            return `<th style="border-bottom:3px solid ${cor.fundo}">`
+                 + `<span class="tl-th">${esc(s)}</span></th>`;
           }).join('')}
           <th>Pátio</th>
         </tr>
@@ -3018,7 +3041,7 @@ function atualizarResumoFiltroRelatorio(){
   const lista = cargasDoRelatorio();
   const s = somatoriosDaLista(lista);
   el.innerHTML = `<strong>${rotuloPeriodoRelatorio()}</strong> — ${s.cargas} carga(s) · ` +
-    `${(s.pesoKg/1000).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:2})} ton · ` +
+    `${(s.pesoKg/1000).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})} ton · ` +
     `${s.entregas} entrega(s)`;
 }
 
@@ -3026,7 +3049,7 @@ function atualizarResumoFiltroRelatorio(){
    porque é montada a partir da mesma lista que gerou as linhas acima. */
 function rodapeSomatorios(lista, colspanAntes, colunas){
   const s = somatoriosDaLista(lista);
-  const pesoTon = (s.pesoKg/1000).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:2});
+  const pesoTon = (s.pesoKg/1000).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
   const celulas = colunas.map(c=>{
     if(c === 'peso') return `<td class="tot-num">${pesoTon}</td>`;
     if(c === 'entregas') return `<td class="tot-num">${s.entregas}</td>`;

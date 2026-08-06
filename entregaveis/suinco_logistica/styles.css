@@ -299,6 +299,13 @@ select option{background:var(--campo-bg);color:var(--text)}
 }
 
 /* Nota de fonte, no pé de cada tabela. */
+/* Cabeçalho de coluna não quebra no meio da palavra.
+
+   Saía "Paletizad a" e "Entrega s" na folha — o navegador quebra em
+   qualquer ponto quando a coluna é estreita. Rótulo partido ao meio num
+   documento que vai para reunião parece erro de digitação. */
+.print-page th{ word-break:keep-all;overflow-wrap:normal;hyphens:none }
+
 .doc-fonte{
   font-size:9px;color:var(--text-dim);margin-top:5px;font-style:italic;
 }
@@ -311,12 +318,15 @@ select option{background:var(--campo-bg);color:var(--text)}
 }
 
 @media print{
-  /* Numeração de página. O contador é do CSS de impressão: o navegador
-     resolve quantas páginas existem, coisa que o JavaScript não sabe antes
-     de imprimir. Sem isso, folha perdida no meio do caminho passa
-     despercebida. */
-  @page{ counter-increment:pagina }
-  .doc-pagina::after{ content:" · Página " counter(page) " de " counter(pages) }
+  /* A numeração de página FOI REMOVIDA daqui, e é preciso registrar por quê:
+     `counter(page)` só é resolvido dentro das caixas de margem de `@page`.
+     Usado em conteúdo comum, o Chrome imprime literalmente "Página 0 de 0",
+     que é pior do que não numerar — parece defeito, e num documento que
+     circula em reunião defeito visível custa credibilidade.
+
+     Quem precisar de numeração pode ligá-la na própria caixa de impressão
+     do navegador, em "Cabeçalhos e rodapés". */
+  .doc-pagina{ display:none }
   .doc-classificacao{ color:#000;border-color:#000 }
   /* O bloco de identificação não pode ser partido entre duas folhas: é a
      procedência do documento e precisa vir inteira na primeira. */
@@ -881,8 +891,9 @@ code{
 .tl-transp{display:block;color:var(--text-dim);font-size:9.5px;line-height:1.3}
 .tl-cel{text-align:center;border-radius:4px}
 .tl-hora{display:block;font-weight:800;font-size:11.5px;font-variant-numeric:tabular-nums}
-.tl-quem{display:block;color:var(--text);font-size:9.5px;line-height:1.3}
-.tl-setor{display:block;color:var(--text-dim);font-size:9px}
+/* Herdam a cor da célula: cor própria some sobre fundo escuro. */
+.tl-quem{display:block;color:inherit;opacity:.92;font-size:9.5px;line-height:1.3}
+.tl-setor{display:block;color:inherit;opacity:.8;font-size:9px}
 .tl-pendente{text-align:center;color:var(--placeholder);font-size:13px}
 .tl-na{text-align:center;color:var(--placeholder);font-size:9.5px;font-style:italic}
 .tl-total{text-align:center;font-weight:800;color:var(--gold-text);font-variant-numeric:tabular-nums;width:8%}
