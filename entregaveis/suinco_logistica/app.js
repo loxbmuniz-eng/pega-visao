@@ -138,7 +138,14 @@ function aplicarTema(tema){
   const btn = document.getElementById('btn-tema');
   // O botão mostra o tema ATUAL, não o que vai acontecer ao clicar — foi o
   // que se mostrou menos ambíguo em uso.
-  if(btn) btn.textContent = claro ? '☀️ Claro' : '🌙 Escuro';
+  //
+  // O rótulo vai em <span class="rot-btn"> e não solto: no celular estreito
+  // o CSS esconde só o rótulo e mantém o ícone, e para isso o texto precisa
+  // ser um elemento próprio. Escrito como textContent, não havia como
+  // separar um do outro sem apagar o botão inteiro.
+  if(btn) btn.innerHTML = claro
+    ? '☀️<span class="rot-btn">Claro</span>'
+    : '🌙<span class="rot-btn">Escuro</span>';
   // Gráficos são desenhados em canvas: pixels já pintados não reagem a CSS,
   // então precisam ser redesenhados na cor nova.
   if(typeof TAB_ATUAL !== 'undefined' && TAB_ATUAL === 'indicadores'){
