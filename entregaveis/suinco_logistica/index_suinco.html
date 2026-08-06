@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Painel Logístico — Suinco</title>
+<title>Programação de Embarque — Suinco</title>
 <link rel="icon" href="assets/logo_suinco.png">
 <link rel="stylesheet" href="styles.css">
 <!-- PWA: instalável no Android e no iPhone, com ícone na tela inicial.
@@ -24,7 +24,7 @@
 <div id="header">
   <div id="logo-chip"><img src="assets/logo_suinco.png" alt="Suinco"></div>
   <div id="header-title">
-    <strong>PAINEL LOGÍSTICO</strong>
+    <strong>PROGRAMAÇÃO DE EMBARQUE</strong>
     <span>Programação · Portaria · Expedição · Faturamento</span>
   </div>
   <div id="header-mid">
@@ -226,6 +226,48 @@
       </div>
       <div class="empty-state" id="portaria-patio-empty" hidden>Nenhum veículo no pátio.</div>
     </div>
+
+      <!-- VISÃO DO PÁTIO — mesma peça nas três abas de setor.
+
+           Substitui a aba Torre de Controle para quem opera um posto só:
+           em vez de trocar de aba para ver o pátio e voltar para agir, o
+           setor tem as duas coisas na mesma tela. Logística e Administração
+           continuam com a Torre separada, porque para elas a Torre é a
+           visão de comando, não um apoio ao próprio posto.
+
+           O conteúdo é montado por renderVisaoPatio() — uma função só,
+           alimentando as três abas. Duas cópias divergiriam na primeira
+           correção feita com pressa. -->
+      <div class="card">
+        <div class="card-title"><span class="icon">🗼</span> Visão do Pátio</div>
+        <div class="card-sub">Onde cada carga está agora, na linha do tempo das seis etapas. Use o período para revisitar uma carga ou um caminhão de outro dia.</div>
+        <div class="filtro-periodo">
+          <div class="form-group">
+            <label>De</label>
+            <input type="date" id="portaria-vp-de" onchange="renderVisaoPatio('portaria')">
+          </div>
+          <div class="form-group">
+            <label>Até</label>
+            <input type="date" id="portaria-vp-ate" onchange="renderVisaoPatio('portaria')">
+          </div>
+          <div class="form-group">
+            <label>Placa ou Nº de Carga</label>
+            <input type="text" id="portaria-vp-busca" placeholder="Ex: ABC1D23 ou 10245" oninput="renderVisaoPatio('portaria')">
+          </div>
+          <div class="form-group filtro-acoes">
+            <button class="btn btn-sec btn-sm" onclick="limparPeriodoVisaoPatio('portaria')">Hoje</button>
+          </div>
+        </div>
+        <div class="vp-resumo" id="portaria-vp-resumo"></div>
+        <div class="table-wrap">
+          <table class="tabela-timeline">
+            <thead><tr id="portaria-vp-thead"></tr></thead>
+            <tbody id="portaria-vp-tbody"></tbody>
+          </table>
+        </div>
+        <div class="empty-state" id="portaria-vp-empty" hidden>Nenhuma carga no período escolhido.</div>
+      </div>
+
   </div>
 
   <!-- ===== EXPEDIÇÃO ===== -->
@@ -250,6 +292,48 @@
       </div>
       <div class="empty-state" id="exp-empty" hidden>Nenhuma carga em Aguardando Embarque ou Embarque Iniciado.</div>
     </div>
+
+      <!-- VISÃO DO PÁTIO — mesma peça nas três abas de setor.
+
+           Substitui a aba Torre de Controle para quem opera um posto só:
+           em vez de trocar de aba para ver o pátio e voltar para agir, o
+           setor tem as duas coisas na mesma tela. Logística e Administração
+           continuam com a Torre separada, porque para elas a Torre é a
+           visão de comando, não um apoio ao próprio posto.
+
+           O conteúdo é montado por renderVisaoPatio() — uma função só,
+           alimentando as três abas. Duas cópias divergiriam na primeira
+           correção feita com pressa. -->
+      <div class="card">
+        <div class="card-title"><span class="icon">🗼</span> Visão do Pátio</div>
+        <div class="card-sub">Onde cada carga está agora, na linha do tempo das seis etapas. Use o período para revisitar uma carga ou um caminhão de outro dia.</div>
+        <div class="filtro-periodo">
+          <div class="form-group">
+            <label>De</label>
+            <input type="date" id="expedicao-vp-de" onchange="renderVisaoPatio('expedicao')">
+          </div>
+          <div class="form-group">
+            <label>Até</label>
+            <input type="date" id="expedicao-vp-ate" onchange="renderVisaoPatio('expedicao')">
+          </div>
+          <div class="form-group">
+            <label>Placa ou Nº de Carga</label>
+            <input type="text" id="expedicao-vp-busca" placeholder="Ex: ABC1D23 ou 10245" oninput="renderVisaoPatio('expedicao')">
+          </div>
+          <div class="form-group filtro-acoes">
+            <button class="btn btn-sec btn-sm" onclick="limparPeriodoVisaoPatio('expedicao')">Hoje</button>
+          </div>
+        </div>
+        <div class="vp-resumo" id="expedicao-vp-resumo"></div>
+        <div class="table-wrap">
+          <table class="tabela-timeline">
+            <thead><tr id="expedicao-vp-thead"></tr></thead>
+            <tbody id="expedicao-vp-tbody"></tbody>
+          </table>
+        </div>
+        <div class="empty-state" id="expedicao-vp-empty" hidden>Nenhuma carga no período escolhido.</div>
+      </div>
+
   </div>
 
   <!-- ===== FATURAMENTO ===== -->
@@ -257,10 +341,10 @@
     <div class="funcao-aba" data-tab="faturamento"></div>
     <div class="card">
       <div class="card-title"><span class="icon">🧾</span> Ação Rápida por Placa</div>
-      <div class="card-sub">Digite a placa e clique em <strong>Faturar</strong> (<strong>Embarque Finalizado → Faturado</strong>). Só aparece aqui a carga que a Expedição já finalizou. Depois de faturada, a Portaria consegue registrar a saída do caminhão. Se a placa tiver mais de uma carga elegível, o painel pergunta qual está sendo faturada.</div>
+      <div class="card-sub">Digite a placa e marque como <strong>FATURADO</strong> (<strong>Embarque Finalizado → Faturado</strong>). Só aparece aqui a carga que a Expedição já finalizou. Depois de faturada, a Portaria consegue registrar a saída do caminhão. Se a placa tiver mais de uma carga elegível, o painel pergunta qual está sendo faturada.</div>
       <div class="quick-box">
         <div class="form-group"><label>Placa</label><input type="text" id="fat-placa" placeholder="ABC1D23" autocomplete="off" onkeydown="if(event.key==='Enter')acaoRapidaPlaca('fat-placa','Embarque Finalizado','Faturado','Faturamento')"></div>
-        <button class="btn btn-primary btn-sm" onclick="acaoRapidaPlaca('fat-placa','Embarque Finalizado','Faturado','Faturamento')">Faturar</button>
+        <button class="btn btn-primary btn-sm" onclick="acaoRapidaPlaca('fat-placa','Embarque Finalizado','Faturado','Faturamento')">FATURADO</button>
       </div>
     </div>
     <div class="card">
@@ -273,6 +357,48 @@
       </div>
       <div class="empty-state" id="fat-empty" hidden>Nenhuma carga em Embarque Finalizado ou Faturado.</div>
     </div>
+
+      <!-- VISÃO DO PÁTIO — mesma peça nas três abas de setor.
+
+           Substitui a aba Torre de Controle para quem opera um posto só:
+           em vez de trocar de aba para ver o pátio e voltar para agir, o
+           setor tem as duas coisas na mesma tela. Logística e Administração
+           continuam com a Torre separada, porque para elas a Torre é a
+           visão de comando, não um apoio ao próprio posto.
+
+           O conteúdo é montado por renderVisaoPatio() — uma função só,
+           alimentando as três abas. Duas cópias divergiriam na primeira
+           correção feita com pressa. -->
+      <div class="card">
+        <div class="card-title"><span class="icon">🗼</span> Visão do Pátio</div>
+        <div class="card-sub">Onde cada carga está agora, na linha do tempo das seis etapas. Use o período para revisitar uma carga ou um caminhão de outro dia.</div>
+        <div class="filtro-periodo">
+          <div class="form-group">
+            <label>De</label>
+            <input type="date" id="faturamento-vp-de" onchange="renderVisaoPatio('faturamento')">
+          </div>
+          <div class="form-group">
+            <label>Até</label>
+            <input type="date" id="faturamento-vp-ate" onchange="renderVisaoPatio('faturamento')">
+          </div>
+          <div class="form-group">
+            <label>Placa ou Nº de Carga</label>
+            <input type="text" id="faturamento-vp-busca" placeholder="Ex: ABC1D23 ou 10245" oninput="renderVisaoPatio('faturamento')">
+          </div>
+          <div class="form-group filtro-acoes">
+            <button class="btn btn-sec btn-sm" onclick="limparPeriodoVisaoPatio('faturamento')">Hoje</button>
+          </div>
+        </div>
+        <div class="vp-resumo" id="faturamento-vp-resumo"></div>
+        <div class="table-wrap">
+          <table class="tabela-timeline">
+            <thead><tr id="faturamento-vp-thead"></tr></thead>
+            <tbody id="faturamento-vp-tbody"></tbody>
+          </table>
+        </div>
+        <div class="empty-state" id="faturamento-vp-empty" hidden>Nenhuma carga no período escolhido.</div>
+      </div>
+
   </div>
 
   <!-- ===== INDICADORES ===== -->
