@@ -275,28 +275,47 @@ select option{background:var(--campo-bg);color:var(--text)}
   letter-spacing:.14em;text-transform:uppercase;color:var(--text-dim);
 }
 
-/* Identificação em tabela de duas colunas, e não em linha corrida: quem
-   confere um documento PROCURA o campo, e procurar em frase obriga a
-   varrer tudo. */
+/* Identificação em UMA LINHA. Já foi tabela de duas colunas por seis
+   linhas: correta, e custava um quinto da primeira folha antes do primeiro
+   dado. A procedência continua inteira — rótulo em versalete, valor em
+   seguida — mas deitada, ocupando uma linha em vez de um bloco.
+
+   Rótulo e valor não se separam (o par vira uma unidade que não quebra no
+   fim da linha); a linha inteira, sim, quebra para a de baixo quando não
+   couber. */
 .doc-identificacao{
-  width:100%;border-collapse:collapse;margin:10px 0 12px;font-size:10.5px;
+  display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 16px;
+  margin:8px 0 12px;padding-bottom:6px;
+  border-bottom:1px solid var(--border-soft);
+  font-size:10.5px;line-height:1.5;
 }
-.doc-identificacao th{
-  width:110px;text-align:left;padding:3px 10px 3px 0;font-weight:700;
-  color:var(--text-dim);background:transparent;border:0;white-space:nowrap;
+.doc-identificacao span{ font-weight:600;white-space:nowrap }
+.doc-identificacao b{
+  font-weight:700;color:var(--text-dim);margin-right:5px;
   text-transform:uppercase;letter-spacing:.06em;font-size:9px;
 }
-.doc-identificacao td{
-  padding:3px 0;border:0;border-bottom:1px solid var(--border-soft);
-  font-weight:600;
-}
+/* A observação carrega contagens ("Em aberto: 12 · Concluídas: 8") e pode
+   ser longa — é a única que tem licença para quebrar. */
+.doc-identificacao .doc-id-obs{ white-space:normal }
 
 /* Base de preparação: o que exatamente foi contado. É a diferença entre
-   "o número está errado" e "o número responde outra pergunta". */
+   "o número está errado" e "o número responde outra pergunta".
+   Mora no RODAPÉ desde 06/08/2026 — ver rodapeDocumento() em app.js. */
 .doc-base{
-  font-size:10px;line-height:1.5;color:var(--text-dim);
-  border-left:2px solid var(--gold-dim);padding:6px 0 6px 10px;margin-bottom:12px;
+  font-size:9.5px;line-height:1.5;color:var(--text-dim);
+  border-left:2px solid var(--gold-dim);padding:4px 0 4px 10px;margin:8px 0;
 }
+
+/* Divisor de bloco do relatório executivo ("1 · O que exige ação agora").
+   O documento passou a ser ordenado por decisão, e sem uma marca clara de
+   bloco o leitor não percebe que mudou de assunto — acha que a seção
+   seguinte ainda é detalhe da anterior. */
+.print-bloco-tit{
+  margin:20px 0 10px;padding:5px 0 5px 10px;
+  border-left:4px solid var(--gold);
+  font-size:12.5px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;
+}
+.print-bloco-tit:first-of-type{ margin-top:12px }
 
 /* Nota de fonte, no pé de cada tabela. */
 /* Cabeçalho de coluna não quebra no meio da palavra.
@@ -328,9 +347,14 @@ select option{background:var(--campo-bg);color:var(--text)}
      do navegador, em "Cabeçalhos e rodapés". */
   .doc-pagina{ display:none }
   .doc-classificacao{ color:#000;border-color:#000 }
-  /* O bloco de identificação não pode ser partido entre duas folhas: é a
+  /* A identificação não pode ser partida entre duas folhas: é a
      procedência do documento e precisa vir inteira na primeira. */
   .doc-identificacao,.doc-base{ break-inside:avoid;page-break-inside:avoid }
+  /* Título de bloco não fica órfão no pé da folha, sem o conteúdo dele. */
+  .print-bloco-tit{
+    break-after:avoid;page-break-after:avoid;
+    border-left-color:#111418 !important;color:#111418 !important;
+  }
 }
 
 /* ===== PAINEL DE STATUS HORIZONTAL =====
@@ -1479,11 +1503,24 @@ input,select,textarea{border-radius:5px}
   .doc-normal table{ font-size:9.5px !important }
   .doc-normal th, .doc-normal td{ padding:4px 5px !important }
 
-  /* Fretes: A4 em pé e fonte de leitura. Com três colunas há espaço de
-     sobra, e este relatório é lido com calma pela administração, não de
-     relance no pátio. */
-  @page retrato{ size: A4 portrait; margin: 12mm }
-  .doc-amplo{ page: retrato }
+  /* Fretes: MESMA folha dos outros dois (A4 deitado), e é preciso registrar
+     por quê — a versão anterior usava página nomeada:
+
+         @page retrato{ size: A4 portrait; margin: 12mm }
+         .doc-amplo{ page: retrato }
+
+     Trocar de página nomeada no meio do documento obriga o navegador a
+     quebrar a folha ANTES do elemento. Como o container fica depois dos
+     outros dois blocos de impressão no corpo, o Chrome fechava a página
+     corrente — vazia — e só então começava o relatório. Resultado: primeira
+     folha em branco e o documento começando na página 2.
+
+     Não é defeito de conteúdo, é o modelo de páginas nomeadas do CSS
+     funcionando como especificado. A correção é não trocar de página: os
+     três relatórios saem na mesma orientação, que era o padrão pedido.
+
+     A leitura não perde nada — em A4 deitado a coluna de Observações fica
+     MAIS larga do que era em pé, e é a coluna que carrega o texto. */
   .doc-amplo table{ font-size:12px !important; table-layout:fixed }
   .doc-amplo th, .doc-amplo td{ padding:8px 9px !important; vertical-align:top }
   .doc-amplo th{ font-size:10.5px !important; letter-spacing:.04em }

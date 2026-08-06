@@ -81,9 +81,9 @@ async def main():
               const c = document.getElementById('{cid}');
               const pag = c.querySelector('.print-page');
               const img = c.querySelector('.doc-logo');
-              // A identificação virou tabela de duas colunas (.doc-identificacao)
-              // no lugar da linha corrida (.doc-meta): quem confere um documento
-              // PROCURA o campo, e procurar em frase obriga a varrer tudo.
+              // A identificação (.doc-identificacao) é uma LINHA só abaixo do
+              // cabeçalho. Já foi tabela de duas colunas por seis linhas e
+              // custava um quinto da primeira folha antes do primeiro dado.
               const meta = (c.querySelector('.doc-identificacao')||{{}}).innerText || '';
               return {{
                 classe: pag ? pag.className : '',
@@ -125,9 +125,9 @@ async def main():
         await pg.wait_for_timeout(300)
         f = await pg.evaluate('''() => {
           const c = document.getElementById('print-fretes');
-          // Escopo na tabela de DADOS. A de identificação do documento é a
-          // primeira do container agora, e ela tem corpo menor de propósito —
-          // medir a primeira <td> solta mediria o cabeçalho, não o relatório.
+          // Escopo na tabela de DADOS. O filtro por .doc-identificacao segue
+          // aqui de propósito: ela já foi tabela, e se algum dia voltar a ser
+          // o teste continua medindo o relatório, não o cabeçalho.
           const dados = [...c.querySelectorAll('table')]
                           .find(t => !t.classList.contains('doc-identificacao'));
           const td = dados ? dados.querySelector('tbody td') : null;
@@ -167,9 +167,9 @@ async def main():
         # A tabela precisa continuar coerente: cabeçalho e células no mesmo número.
         coerente = await pg.evaluate('''() => {
           const cont = document.getElementById('print-operacional');
-          // Escopo na tabela de DADOS. A de identificação do documento é a
-          // primeira do container e tem duas colunas — contar th de uma e td
-          // de outra acusaria desalinhamento onde não há.
+          // Escopo na tabela de DADOS, pelo mesmo motivo da seção anterior:
+          // contar th de uma tabela e td de outra acusa desalinhamento onde
+          // não há.
           const dados = [...cont.querySelectorAll('table')]
                           .find(t => !t.classList.contains('doc-identificacao'));
           const nTh = dados.querySelectorAll('thead th').length;

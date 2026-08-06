@@ -2346,9 +2346,6 @@ function exportarPdfOperacional(){
       ${cabecalhoDocumento({
         titulo: 'Relatório Operacional',
         subtitulo: 'Logística — ordem de montagem e acompanhamento no pátio',
-        base: 'Todas as cargas do período selecionado, ordenadas pela etapa em que '
-            + 'se encontram e, dentro de cada etapa, pela sequência de carregamento '
-            + 'definida pela Logística. Cargas excluídas ou canceladas não entram.',
         contagem: lista.length,
         extra: `<strong>Concluídas:</strong> ${concluidas} de ${lista.length}`,
       })}
@@ -2395,7 +2392,10 @@ function exportarPdfOperacional(){
         'Todas as cargas da programação aparecem, em qualquer status — as concluídas ' +
         'continuam na lista para o acompanhamento do dia inteiro.<br>' +
         '<strong>Palet.</strong> = carga paletizada · <strong>Entr.</strong> = quantidade de ' +
-        'entregas · <strong>Liso</strong> = sem gancheira.')}
+        'entregas · <strong>Liso</strong> = sem gancheira.',
+        'Todas as cargas do período selecionado, ordenadas pela etapa em que '
+        + 'se encontram e, dentro de cada etapa, pela sequência de carregamento '
+        + 'definida pela Logística. Cargas excluídas ou canceladas não entram.')}
     </div>`;
   imprimirContainer(el, 'Relatorio-Operacional');
 }
@@ -2478,18 +2478,26 @@ function referenciaDocumento(titulo){
        + `-${p(d.getHours())}${p(d.getMinutes())}`;
 }
 
-function cabecalhoDocumento({ titulo, subtitulo, contagem, extra, base }) {
+/* Identificação do documento em UMA LINHA, logo abaixo do cabeçalho.
+
+   Já foi tabela de duas colunas com seis linhas. Era correta e custava um
+   quinto da primeira folha — antes de qualquer dado. Num documento que
+   circula em foto de WhatsApp, a primeira dobra é o espaço mais caro que
+   existe: quem abre precisa ver o número, não a procedência dele.
+
+   A procedência continua toda aqui, na mesma ordem, só que corrida. Quem
+   confere um documento lê essa linha uma vez; quem decide, nenhuma.
+
+   "Entidade" saiu: dizia "Suinco — Cooperativa Agroindustrial" três
+   centímetros abaixo do cabeçalho, que diz exatamente isso. Repetir dado
+   não acrescenta rigor, só ocupa linha. */
+function cabecalhoDocumento({ titulo, subtitulo, contagem, extra }) {
   const agora = new Date();
   const operador = (DB.operador && DB.operador.nome) || '—';
   const setor = (DB.operador && DB.operador.setor) || '';
-  const ref = referenciaDocumento(titulo);
 
-  /* Tabela de identificação em duas colunas, no lugar da linha corrida de
-     antes. Quem confere um documento procura o campo, não lê a frase — e
-     procurar em linha corrida obriga a varrer tudo. */
   const campos = [
-    ['Entidade',    'Suinco — Cooperativa Agroindustrial'],
-    ['Referência',   ref],
+    ['Referência',   referenciaDocumento(titulo)],
     ['Período',      rotuloPeriodoRelatorio()],
     contagem !== undefined ? ['Registros', String(contagem)] : null,
     ['Emitido em',   fmtDataHora(agora.toISOString())],
@@ -2506,11 +2514,10 @@ function cabecalhoDocumento({ titulo, subtitulo, contagem, extra, base }) {
       </div>
       <div class="doc-classificacao">Uso interno</div>
     </div>
-    <table class="doc-identificacao"><tbody>
-      ${campos.map(([r,v])=>`<tr><th>${esc(r)}</th><td>${esc(v)}</td></tr>`).join('')}
-      ${extra ? `<tr><th>Observação</th><td>${extra}</td></tr>` : ''}
-    </tbody></table>
-    ${base ? `<div class="doc-base"><strong>Base de preparação.</strong> ${base}</div>` : ''}`;
+    <div class="doc-identificacao">
+      ${campos.map(([r,v])=>`<span><b>${esc(r)}</b>${esc(v)}</span>`).join('')}
+      ${extra ? `<span class="doc-id-obs">${extra}</span>` : ''}
+    </div>`;
 }
 
 /* Nota de fonte, no pé de cada tabela.
@@ -2522,9 +2529,20 @@ function fonteDocumento(texto){
   return `<div class="doc-fonte">Fonte: ${texto}</div>`;
 }
 
-function rodapeDocumento(nota){
+/* A "Base de preparação" desceu para cá (06/08/2026).
+
+   É um parágrafo de três linhas explicando O QUE FOI CONTADO. Informação
+   necessária — é a diferença entre "o número está errado" e "o número
+   responde outra pergunta" — mas ninguém a lê ANTES do número; lê depois,
+   quando o número desagrada.
+
+   Estava entre o cabeçalho e o primeiro dado, empurrando o conteúdo folha
+   abaixo em todos os três relatórios. No rodapé cumpre a mesma função, ao
+   lado da nota de alcance e limitações, que é a seção do mesmo assunto. */
+function rodapeDocumento(nota, base){
   return `<div class="doc-rodape">
       ${nota ? `<div class="doc-nota">${nota}</div>` : ''}
+      ${base ? `<div class="doc-base"><strong>Base de preparação.</strong> ${base}</div>` : ''}
       <div class="doc-limitacoes">
         <strong>Alcance e limitações.</strong> Documento gerado automaticamente a
         partir dos registros operacionais do pátio, na data e hora indicadas no
@@ -2716,15 +2734,27 @@ function exportarPdfExecutivo(){
   const distAbertas = distribuicaoPorStatus(abertas);
   const distHoje = distribuicaoPorStatus(concluidasHoje);
 
+  /* Quantas cargas AINDA ABERTAS já passaram da meta de pátio.
+     É o número que decide a manhã do gestor, e por isso ocupa a primeira
+     casa do painel. Conta sobre a mesma meta usada no resto do relatório
+     (metaTempoPatio), para que dois números do mesmo documento não
+     discordem entre si.
+
+     Conta sobre TODAS as abertas, e não sobre analiseGargalos().pendentesAntigas
+     — essa lista é cortada em dez para caber na folha, e um indicador que
+     empaca em "10" quando há quinze cargas travadas engana justamente no
+     dia em que o gestor mais precisa dele. */
+  const metaPatio = metaTempoPatio();
+  const agoraMs = Date.now();
+  const paradasAlemDaMeta = abertas.filter(c =>
+    (agoraMs - (Date.parse(c.atualizadoEm || c.criadoEm) || agoraMs)) / 60000 > metaPatio
+  ).length;
+
   el.innerHTML = `
     <div class="print-page doc-normal">
       ${cabecalhoDocumento({
         titulo: 'Relatório Executivo',
         subtitulo: 'Logística — indicadores, gargalos e pontos críticos do pátio',
-        base: 'Indicadores calculados sobre as cargas CONCLUÍDAS no período — as que '
-            + 'percorreram as seis etapas até "Seguiu Viagem". Carga ainda em '
-            + 'andamento não entra em média de tempo: etapa sem fim não tem duração, '
-            + 'e contá-la como zero puxaria a média para baixo.',
         contagem: doPeriodo.length,
         extra: `<strong>Em aberto:</strong> ${abertas.length} · <strong>Concluídas:</strong> ${concluidasTodas.length}`,
       })}
@@ -2740,21 +2770,46 @@ function exportarPdfExecutivo(){
            filtro. A distribuição por status vem logo abaixo, com o nome do
            status escrito por extenso em cada linha. -->
 
+      <!-- ORDEM DO DOCUMENTO: por decisão, não por tema.
+
+           A versão anterior seguia a ordem natural de quem escreve um
+           relatório: volume, depois médias, depois análise, e o que exige
+           ação hoje aparecia na página três, no meio dos gargalos.
+
+           Gestor de logística lê de cima para baixo e decide nos primeiros
+           trinta segundos. A pergunta dele é "o que falta terminar?", não
+           "como foi ontem?". A ordem agora responde nessa sequência:
+
+             1. O QUE EXIGE AÇÃO AGORA — o que está travado e há quanto tempo
+             2. ONDE ESTÁ A FILA      — em que etapa o pátio acumulou
+             3. ONDE O TEMPO SE PERDE — média de pátio e gargalos do período
+             4. HISTÓRICO             — o que já saiu, para conferência
+
+           Concluída não some do relatório: desce. Ela serve para conferir e
+           para fechar o dia, não para decidir. -->
+
+      <div class="print-bloco-tit">1 · O que exige ação agora</div>
+
       <div class="grid4" style="margin-bottom:18px">
+        <div class="stat-box"><div class="stat-num">${paradasAlemDaMeta}</div><div class="stat-label">Paradas Além da Meta</div></div>
+        <div class="stat-box"><div class="stat-num">${abertas.filter(c=>c.aguardandoCarga).length}</div><div class="stat-label">Aguardando Dados da Carga</div></div>
         <div class="stat-box"><div class="stat-num">${abertas.length}</div><div class="stat-label">Cargas em Aberto</div></div>
-        <div class="stat-box"><div class="stat-num">${concluidasHoje.length}</div><div class="stat-label">Concluídas Hoje</div></div>
-        <div class="stat-box"><div class="stat-num">${fmtDuracao(nHoje?Math.round(somaHoje/nHoje):null)}</div><div class="stat-label">Lead Time Médio (hoje)</div></div>
-        <div class="stat-box"><div class="stat-num">${abertas.filter(c=>c.aguardandoCarga).length}</div><div class="stat-label">Aguardando Carga</div></div>
+        <div class="stat-box"><div class="stat-num">${fmtDuracao(nHoje?Math.round(somaHoje/nHoje):null)}</div><div class="stat-label">Lead Time Médio (período)</div></div>
       </div>
+
+      ${blocoPendentesAntigasPdf(doPeriodo)}
+
+      <div class="print-bloco-tit">2 · Onde está a fila</div>
 
       ${painelStatusHorizontal(distAbertas, abertas.length,
         'Cargas em aberto por status',
         'Onde está parada, agora, cada carga que ainda não saiu. Leia da esquerda para a direita: é o caminho do caminhão pelo pátio, e um acúmulo mostra onde a fila está se formando.')}
 
-      ${blocoDistribuicaoStatus(distHoje, concluidasHoje.length,
-        'Cargas concluídas',
-        'Cargas que chegaram a "Seguiu Viagem" — o caminhão saiu do pátio. Só esse status conta como concluída.',
-        true)}
+      ${blocoTimelineCargas(abertas,
+        'Linha do tempo — cargas ainda em aberto',
+        'Carga a carga: as colunas vazias à direita mostram em qual etapa cada uma está parada agora, e quem registrou a última.')}
+
+      <div class="print-bloco-tit">3 · Onde o tempo se perde</div>
 
       ${blocoTempoMedioPatioPdf(concluidasTodas)}
 
@@ -2762,19 +2817,25 @@ function exportarPdfExecutivo(){
 
       ${blocoGargalosPdf(doPeriodo)}
 
+      <div class="print-bloco-tit">4 · Histórico do período — para conferência</div>
+
+      ${blocoDistribuicaoStatus(distHoje, concluidasHoje.length,
+        'Cargas concluídas',
+        'Cargas que chegaram a "Seguiu Viagem" — o caminhão saiu do pátio. Só esse status conta como concluída.',
+        true)}
+
       ${blocoTimelineCargas(concluidasHoje,
-        'Linha do tempo — cargas concluídas hoje',
+        'Linha do tempo — cargas concluídas',
         'Hora e operador de cada etapa, carga a carga, para rastrear onde o tempo foi consumido.')}
-
-      ${blocoTimelineCargas(abertas,
-        'Linha do tempo — cargas ainda em aberto',
-        'Mesma leitura para o que ainda não saiu: as colunas vazias à direita mostram em qual etapa cada carga está parada agora.')}
-
 
       ${rodapeDocumento(
         '<strong>Lead Time</strong> = da criação da carga até a saída do caminhão. ' +
         '<strong>Tempo de Pátio</strong> = da chegada física até a saída. ' +
-        `Lead time médio no período: ${fmtDuracao(nLead?Math.round(somaLead/nLead):null)}.`)}
+        `Lead time médio no período: ${fmtDuracao(nLead?Math.round(somaLead/nLead):null)}.`,
+        'Indicadores calculados sobre as cargas CONCLUÍDAS no período — as que '
+        + 'percorreram as seis etapas até "Seguiu Viagem". Carga ainda em '
+        + 'andamento não entra em média de tempo: etapa sem fim não tem duração, '
+        + 'e contá-la como zero puxaria a média para baixo.')}
     </div>`;
   imprimirContainer(el, 'Relatorio-Executivo');
 }
@@ -3092,9 +3153,6 @@ function exportarPdfFretes(){
       ${cabecalhoDocumento({
         titulo: 'Administração de Fretes',
         subtitulo: 'Logística — valor, negociação e instruções por carga',
-        base: 'Uma linha por carga do período, com os campos administrativos '
-            + 'registrados até o momento da emissão. Campos em branco significam '
-            + 'não preenchido, e não zero.',
         contagem: dados.length,
         extra: semObs ? `<strong>Sem registro:</strong> ${semObs} de ${dados.length}` : null,
       })}
@@ -3109,7 +3167,10 @@ function exportarPdfFretes(){
       ${rodapeDocumento(
         'O campo <strong>Observações</strong> é onde a administração registra valor do frete, ' +
         'negociação e instruções. As linhas marcadas como <strong>a preencher</strong> são as ' +
-        'cargas ainda sem registro administrativo.')}
+        'cargas ainda sem registro administrativo.',
+        'Uma linha por carga do período, com os campos administrativos '
+        + 'registrados até o momento da emissão. Campos em branco significam '
+        + 'não preenchido, e não zero.')}
     </div>`;
   imprimirContainer(el, 'Administracao-de-Fretes');
 }
@@ -3360,6 +3421,47 @@ function blocoRankingAtrasoPdf(cargas){
     </table>`;
 }
 
+/* Pontos críticos — o primeiro bloco de dado do relatório executivo.
+
+   Cada linha é um caminhão parado esperando alguém destravar. Estava
+   dentro de blocoGargalosPdf, atrás de três tabelas de análise histórica:
+   o item mais acionável do documento chegava depois do que só explica o
+   passado. Virou bloco próprio para poder subir.
+
+   A coluna "Parada há" é o tempo desde o último registro da carga — não é
+   o tempo de pátio. Uma carga pode ter chegado há uma hora e estar parada
+   há cinquenta minutos porque ninguém mexeu nela desde a portaria. É esse
+   silêncio que o gestor precisa enxergar. */
+function blocoPendentesAntigasPdf(cargas){
+  const g = analiseGargalos(cargas);
+  const cabecalho = tituloSecaoPdf('Pontos críticos — cargas paradas há mais tempo',
+    'Cargas ainda em aberto, da mais parada para a menos. "Parada há" = tempo desde o '
+    + 'último registro em qualquer setor. Até dez linhas — se houver mais, são as dez piores.');
+
+  if(!g.pendentesAntigas.length){
+    return cabecalho + `<div class="print-vazio">Nenhuma carga em aberto no período. Nada travado.</div>`;
+  }
+
+  return cabecalho + `<table>
+      <thead><tr>
+        <th>Nº Carga</th><th>Placa</th><th>Transportadora</th><th>Status</th><th>Parada há</th>
+      </tr></thead>
+      <tbody>${g.pendentesAntigas.map(c=>{
+        // Acima da meta ganha marca no texto, e não só na cor: este
+        // documento é impresso em preto e branco com frequência.
+        const critica = c.paradaHaMin > g.meta;
+        return `<tr>
+          <td>${esc(c.numeroCarga)}</td>
+          <td><strong>${esc(c.placa)}</strong></td>
+          <td>${esc(c.transportadora)}</td>
+          <td>${esc(c.status)}</td>
+          <td class="num-forte"${critica ? ' style="color:#a3271f"' : ''}>${fmtDuracao(c.paradaHaMin)}${critica ? ' ⚠' : ''}</td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>` +
+    fonteDocumento(`registros de movimentação do pátio · ⚠ = acima da meta de ${fmtDuracao(g.meta)}`);
+}
+
 function blocoGargalosPdf(cargas){
   const g = analiseGargalos(cargas);
   const partes = [];
@@ -3392,13 +3494,15 @@ function blocoGargalosPdf(cargas){
       <td>${esc(r.rotulo || r.rota)}</td>
       <td>${r.atrasadas} de ${r.total}</td><td>${fmtDuracao(r.atrasoMedio)}</td></tr>`)));
 
-  partes.push(tabela('Pontos críticos — cargas paradas há mais tempo',
-    'O bloco mais acionável: cada linha é um caminhão esperando alguém destravar.',
-    ['Nº Carga','Placa','Transportadora','Status','Parada há'],
-    g.pendentesAntigas.map(c=>`<tr>
-      <td>${esc(c.numeroCarga)}</td><td><strong>${esc(c.placa)}</strong></td>
-      <td>${esc(c.transportadora)}</td><td>${esc(c.status)}</td>
-      <td>${fmtDuracao(c.paradaHaMin)}</td></tr>`)));
+  /* "Pontos críticos" NÃO fica aqui.
+
+     É o bloco mais acionável do relatório e estava no meio dos gargalos,
+     depois de três tabelas de análise histórica. Gestor lê de cima para
+     baixo e decide nos primeiros trinta segundos: o que exige ação hoje
+     precisa vir antes do que explica o passado.
+
+     Virou bloco próprio (blocoPendentesAntigasPdf) e subiu para o começo
+     do documento. */
 
   const conteudo = partes.filter(Boolean).join('');
   return conteudo || (tituloSecaoPdf('Gargalos e Pontos Críticos',

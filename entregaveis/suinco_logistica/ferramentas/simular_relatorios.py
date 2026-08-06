@@ -37,7 +37,10 @@ DISTRIBUICAO = [
 RELATORIOS = [
     ('exportarPdfOperacional', 'print-operacional', 'Relatório Operacional', 'landscape'),
     ('exportarPdfExecutivo',   'print-executivo',   'Relatório Executivo',   'landscape'),
-    ('exportarPdfFretes',      'print-fretes',      'Administração de Fretes', 'portrait'),
+    # Fretes saía em A4 em pé, via @page nomeada. A página nomeada forçava
+    # uma quebra antes do container e o PDF abria com uma folha em branco.
+    # Os três relatórios usam a mesma folha agora.
+    ('exportarPdfFretes',      'print-fretes',      'Administração de Fretes', 'landscape'),
 ]
 
 problemas = []
@@ -47,6 +50,29 @@ def ck(nome, ok, detalhe=''):
     print(f"  [{'OK ' if ok else 'PROBLEMA'}] {nome}" + (f" — {detalhe}" if detalhe else ''))
     if not ok:
         problemas.append(f'{nome}: {detalhe}')
+
+
+def conferir_folhas_do_pdf(caminho):
+    """Nenhuma folha em branco no PDF.
+
+    Existe porque o defeito aconteceu: o relatório de Fretes usava uma
+    @page nomeada (A4 em pé) diferente da folha padrão, e o navegador
+    quebra a página ANTES de trocar de página nomeada — o PDF abria com
+    uma folha inteira em branco e o relatório começava na segunda.
+
+    A prévia em PNG não mostra isso: a folha em branco só existe depois
+    da paginação. Só o PDF denuncia, então a conferência é aqui.
+    """
+    try:
+        import pypdf
+    except ImportError:
+        print('  [pular] conferência de folha em branco (pip install pypdf)')
+        return
+    paginas = pypdf.PdfReader(caminho).pages
+    vazias = [i + 1 for i, p in enumerate(paginas)
+              if len((p.extract_text() or '').strip()) < 40]
+    ck('nenhuma folha em branco no PDF', not vazias,
+       f"{len(paginas)} folha(s) · em branco: {vazias}")
 
 
 async def main():
@@ -174,6 +200,7 @@ async def main():
                              print_background=True,
                              margin={'top':'8mm','bottom':'8mm','left':'8mm','right':'8mm'})
             print(f'  pdf: {pdf.name}')
+            conferir_folhas_do_pdf(pdf)
 
             await pagina.emulate_media(media='screen')
             await pagina.evaluate("(cid) => { document.getElementById(cid).style.cssText = ''; }", cid)
