@@ -860,7 +860,7 @@ function renderVisaoPatio(prefixo){
     const etapas = etapasDaCarga(c);
     return `<tr class="linha-status-${esc((STATUS_META[c.status]||{}).cor || '')}">
       <td class="vp-carga">${esc(c.numeroCarga)||'—'}</td>
-      <td class="vp-placa">${esc(c.placa)}</td>
+      <td class="vp-placa">${esc(c.placa)}${marcaCargaDaPlaca(c, lista)}</td>
       <td class="vp-transp">${esc(c.transportadora)||'—'}</td>
       <td class="vp-rota">${esc(rotaCurta(c.rota))}</td>
       ${etapas.map(celulaEtapa).join('')}
@@ -1035,12 +1035,45 @@ function atualizarPreviewFrotaPrograma(){
   if(f){
     document.getElementById('prog-transportadora').value = f.transportadora;
     document.getElementById('prog-tipoveiculo').value = f.tipoVeiculo;
-    hint.innerHTML = '<span class="text-dim">✅ Placa encontrada na Frota — Transportadora e Tipo de Veículo preenchidos automaticamente.</span>';
+    hint.innerHTML = '<span class="text-dim">✅ Placa encontrada na Frota — Transportadora e Tipo de Veículo preenchidos automaticamente.</span>'
+                   + avisoPlacaJaProgramada(placa);
   } else if(normalizarPlaca(placa)){
     hint.innerHTML = '<span style="color:var(--wine-light)">⛔ Placa não cadastrada na Frota — a criação da carga será BLOQUEADA. Cadastre esta placa em Cadastros → Frota primeiro.</span>';
   } else {
     hint.innerHTML = '';
   }
+}
+
+/* Aviso de placa que já tem carga em aberto.
+
+   Um caminhão levar duas cargas é raro, mas acontece — e o sistema sempre
+   permitiu, porque a Portaria já trata a chegada da placa aplicando o
+   "Chegou" a todas as cargas dela de uma vez.
+
+   O problema nunca foi permitir: foi não DIZER. Digitar a mesma placa duas
+   vezes parece igual nos dois casos — o dia em que são de fato duas cargas
+   e o dia em que alguém programou em duplicidade sem perceber. Sem aviso,
+   o segundo caso só aparece na doca.
+
+   Por isso avisa e NÃO bloqueia. Bloquear resolveria o engano e quebraria
+   o caso legítimo; avisar resolve o engano e deixa o caso legítimo passar
+   com um clique. Quem sabe o que está fazendo lê e segue. */
+function avisoPlacaJaProgramada(placa){
+  const p = normalizarPlaca(placa);
+  if(!p) return '';
+  const abertas = cargasAbertasPorPlaca(p);
+  if(!abertas.length) return '';
+
+  const numeros = abertas
+    .map(c => c.aguardandoCarga ? 'sem número ainda' : (c.numeroCarga || 'sem número'))
+    .join(' · ');
+
+  return `<div class="aviso-placa-repetida">
+      <strong>${p} já tem ${abertas.length} carga${abertas.length>1?'s':''} em aberto</strong>
+      (${esc(numeros)}).
+      Criar mais uma é permitido — é o mesmo caminhão levando duas cargas.
+      Se não for isso, confira antes: pode ser programação em duplicidade.
+    </div>`;
 }
 function criarCargaProgramadaUI(){
   const placa = document.getElementById('prog-placa').value;
@@ -1082,7 +1115,10 @@ function renderProgFila(){
     <tr>
       <td><input type="number" class="seq-input" value="${c.sequencia ?? ''}" onchange="atualizarSequenciaUI('${c.id}',this.value)" title="Sequência livre — digite o número que quiser, a qualquer momento."></td>
       <td>${esc(c.numeroCarga)||'—'}</td>
-      <td><input type="text" class="placa-input" value="${esc(c.placa)}" onchange="atualizarPlacaUI('${escJs(c.id)}',this.value)" title="Trocar a placa — a transportadora e o tipo de veículo são buscados na Frota automaticamente."></td>
+      <td>
+        <input type="text" class="placa-input" value="${esc(c.placa)}" onchange="atualizarPlacaUI('${escJs(c.id)}',this.value)" title="Trocar a placa — a transportadora e o tipo de veículo são buscados na Frota automaticamente.">
+        ${marcaCargaDaPlaca(c, lista)}
+      </td>
       <td id="transp-${esc(c.id)}">${esc(c.transportadora)||'—'}</td>
       <td>${esc(rotaCurta(c.rota))}</td>
       <td>${praOndeSelectHtml(c)}</td>
@@ -1090,9 +1126,73 @@ function renderProgFila(){
       <td>${paletizadaDaCarga(c)}</td>
       <td><input type="number" class="ganchos-input" min="0" step="1" value="${c.qtdGanchos ?? 0}" onchange="atualizarGanchosUI('${c.id}',this.value)" title="0 = Liso"></td>
       <td>${c.qtdEntregas ?? 1}</td>
-      <td class="no-print"><button class="btn btn-danger btn-sm" onclick="excluirCargaUI('${escJs(c.id)}')">Excluir</button></td>
+      <td class="no-print gap8">
+        <button class="btn btn-sec btn-sm" onclick="adicionarOutraCargaNaPlacaUI('${escJs(c.id)}')"
+                title="Programar OUTRA carga para este mesmo caminhão — o formulário já vem com placa, transportadora, motorista e rota preenchidos.">➕ Outra carga</button>
+        <button class="btn btn-danger btn-sm" onclick="excluirCargaUI('${escJs(c.id)}')">Excluir</button>
+      </td>
     </tr>`).join('');
   document.getElementById('prog-fila-empty').hidden = lista.length>0;
+}
+
+/* Contagem de cargas por placa na fila, para a marca "1 de 2".
+
+   Duas linhas com a mesma placa e sem marca nenhuma são indistinguíveis de
+   um erro de digitação. Quem olha a fila precisa saber, sem contar linha,
+   que aquilo é o mesmo caminhão com duas cargas — senão alguém "corrige" a
+   duplicidade que não existe e apaga uma carga de verdade. */
+function marcaCargaDaPlaca(carga, lista){
+  const p = normalizarPlaca(carga.placa);
+  const irmas = lista.filter(c => normalizarPlaca(c.placa) === p);
+  if(irmas.length < 2) return '';
+  const posicao = irmas.findIndex(c => c.id === carga.id) + 1;
+  return `<span class="marca-multi" title="Este caminhão leva ${irmas.length} cargas nesta programação.">${posicao} de ${irmas.length}</span>`;
+}
+
+/* Programar outra carga para o mesmo caminhão.
+
+   Sem isto, o caminho é redigitar placa, transportadora, tipo de veículo,
+   motorista, rota e tipo de operação — seis campos que já estão na tela,
+   logo acima, na linha da primeira carga. Redigitar dá errado: troca-se um
+   dígito da placa e nascem duas cargas em caminhões diferentes.
+
+   O que se REPETE é o veículo e o roteiro. O que MUDA é a carga: número,
+   peso, sequência, ganchos, entregas, observações. O formulário vem
+   preenchido com o primeiro grupo e limpo no segundo — é exatamente a
+   diferença entre as duas cargas, e é só isso que sobra para digitar. */
+function adicionarOutraCargaNaPlacaUI(id){
+  const c = getCarga(id);
+  if(!c){ notify('Carga não encontrada.', 'warn'); return; }
+
+  const v = (campo, valor) => { const e = document.getElementById(campo); if(e) e.value = valor; };
+
+  // Repete: o caminhão e para onde ele vai.
+  v('prog-placa', c.placa);
+  v('prog-transportadora', c.transportadora || '');
+  v('prog-tipoveiculo', c.tipoVeiculo || '');
+  v('prog-motorista', c.motorista || '');
+  v('prog-rota', c.rota || '');
+  v('prog-praonde', c.praOnde || PRA_ONDE_PADRAO);
+
+  // Zera: tudo que é da CARGA, não do veículo. Herdar o número da carga
+  // anterior seria a forma mais rápida de gravar duas cargas com o mesmo
+  // número — o erro que este botão existe para evitar.
+  v('prog-numero-carga', '');
+  v('prog-peso', '');
+  v('prog-sequencia', '');
+  v('prog-obs', '');
+  v('prog-paletizada', 'Não');
+  v('prog-ganchos', '0');
+  v('prog-entregas', '1');
+
+  atualizarPreviewFrotaPrograma();
+
+  const campoNumero = document.getElementById('prog-numero-carga');
+  if(campoNumero){
+    campoNumero.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    campoNumero.focus();
+  }
+  notify(`Formulário preparado para outra carga da placa ${c.placa}. Informe o número da nova carga.`, 'info');
 }
 // Sequência continua 100% livre: número manual do Programador de Embarque,
 // sem geração automática nem trava de duplicidade — regra confirmada,
@@ -1381,7 +1481,7 @@ function renderPortariaProgramadas(){
       acao = `<button class="btn btn-warn btn-sm" onclick="portariaSaiuCarga('${escJs(c.placa)}')">🏁 Saiu</button>`;
     }
     return `<tr>
-      <td><strong>${esc(c.placa)}</strong></td>
+      <td><strong>${esc(c.placa)}</strong>${marcaCargaDaPlaca(c, lista)}</td>
       <td>${esc(c.numeroCarga)||'—'}</td>
       <td>${esc(c.transportadora)||'—'}</td>
       <td>${esc(rotaCurta(c.rota))}</td>

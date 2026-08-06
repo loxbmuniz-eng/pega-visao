@@ -247,6 +247,34 @@ td input,td select{padding:5px 7px;font-size:13px}
 .badge-seguiu-viagem{background:var(--st-seguiu-viagem-bg);color:var(--st-seguiu-viagem-fg);border-color:var(--st-seguiu-viagem-br)}
 .badge-critico{background:var(--st-aguardando-veiculo-bg);color:var(--st-aguardando-veiculo-fg);border-color:var(--st-aguardando-veiculo-br)}
 
+/* ===== MESMA PLACA, MAIS DE UMA CARGA =====
+   Acontece pouco e por isso é perigoso: quem vê duas linhas iguais na fila
+   supõe engano. As duas peças abaixo existem para tirar essa dúvida antes
+   que alguém "corrija" uma carga de verdade. */
+
+/* Marca "1 de 2" ao lado da placa. Discreta de propósito — é confirmação,
+   não alerta: o caso é legítimo. */
+.marca-multi{
+  display:inline-block;margin-left:6px;padding:1px 7px;border-radius:10px;
+  font-size:10px;font-weight:800;letter-spacing:.04em;white-space:nowrap;
+  background:rgba(233,185,84,.14);color:var(--gold-text,var(--gold));
+  border:1px solid var(--gold-dim);
+  vertical-align:middle;
+  /* A coluna de placa da visão do pátio é caixa alta por CSS, e a marca
+     herdava: saía "1 DE 2" ali e "1 de 2" na fila. Marca que muda de forma
+     conforme a tabela em que está parece coisa diferente. */
+  text-transform:none;
+}
+
+/* Aviso no formulário, quando a placa digitada já tem carga em aberto.
+   Cor de atenção, não de erro: não está errado, só precisa ser conferido. */
+.aviso-placa-repetida{
+  margin-top:8px;padding:9px 12px;border-radius:var(--radius);
+  border:1px solid var(--gold-dim);border-left:3px solid var(--gold);
+  background:rgba(233,185,84,.10);font-size:12.5px;line-height:1.5;
+}
+.aviso-placa-repetida strong{ color:var(--gold-text,var(--gold)) }
+
 /* ===== FORMS ===== */
 .form-row{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px}
 .form-group{display:flex;flex-direction:column;gap:5px;flex:1;min-width:140px}
