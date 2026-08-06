@@ -204,17 +204,7 @@
       <div class="card-sub" style="margin-top:-6px">Dica: digite a placa e aperte <strong>Enter</strong> para registrar "Chegou" mais rápido.</div>
     </div>
 
-    <div class="card">
-      <div class="card-title"><span class="icon">📋</span> Cargas Programadas — ação em um clique</div>
-      <div class="card-sub">Sem digitar placa: o botão aparece só quando a ação é válida para o status atual da carga.</div>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>Placa</th><th>Nº Carga</th><th>Transportadora</th><th>Rota</th><th>Status</th><th class="no-print">Ação</th></tr></thead>
-          <tbody id="portaria-prog-tbody"></tbody>
-        </table>
-      </div>
-      <div class="empty-state" id="portaria-prog-empty" hidden>Nenhuma carga em aberto.</div>
-    </div>
+           O conteúdo é montado por renderVisaoPatio() — uma função só,
 
     <div class="card">
       <div class="card-title"><span class="icon">🅿️</span> Veículos no Pátio Agora</div>
@@ -227,15 +217,17 @@
       <div class="empty-state" id="portaria-patio-empty" hidden>Nenhum veículo no pátio.</div>
     </div>
 
-      <!-- VISÃO DO PÁTIO — mesma peça nas três abas de setor.
-
-           Substitui a aba Torre de Controle para quem opera um posto só:
-           em vez de trocar de aba para ver o pátio e voltar para agir, o
-           setor tem as duas coisas na mesma tela. Logística e Administração
-           continuam com a Torre separada, porque para elas a Torre é a
-           visão de comando, não um apoio ao próprio posto.
-
-           O conteúdo é montado por renderVisaoPatio() — uma função só,
+    <div class="card">
+      <div class="card-title"><span class="icon">📋</span> Cargas Programadas — ação em um clique</div>
+      <div class="card-sub">Sem digitar placa: o botão aparece só quando a ação é válida para o status atual da carga.</div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Placa</th><th>Nº Carga</th><th>Transportadora</th><th>Rota</th><th>Status</th><th class="no-print">Ação</th></tr></thead>
+          <tbody id="portaria-prog-tbody"></tbody>
+        </table>
+      </div>
+      <div class="empty-state" id="portaria-prog-empty" hidden>Nenhuma carga em aberto.</div>
+    </div>
            alimentando as três abas. Duas cópias divergiriam na primeira
            correção feita com pressa. -->
       <div class="card">
@@ -260,7 +252,7 @@
         </div>
         <div class="vp-resumo" id="portaria-vp-resumo"></div>
         <div class="table-wrap">
-          <table class="tabela-timeline">
+          <table class="tabela-patio">
             <thead><tr id="portaria-vp-thead"></tr></thead>
             <tbody id="portaria-vp-tbody"></tbody>
           </table>
@@ -326,7 +318,7 @@
         </div>
         <div class="vp-resumo" id="expedicao-vp-resumo"></div>
         <div class="table-wrap">
-          <table class="tabela-timeline">
+          <table class="tabela-patio">
             <thead><tr id="expedicao-vp-thead"></tr></thead>
             <tbody id="expedicao-vp-tbody"></tbody>
           </table>
@@ -391,7 +383,7 @@
         </div>
         <div class="vp-resumo" id="faturamento-vp-resumo"></div>
         <div class="table-wrap">
-          <table class="tabela-timeline">
+          <table class="tabela-patio">
             <thead><tr id="faturamento-vp-thead"></tr></thead>
             <tbody id="faturamento-vp-tbody"></tbody>
           </table>
