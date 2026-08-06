@@ -53,6 +53,34 @@ else
   mal "PostgreSQL não respondeu — o login falha com erro 500"
 fi
 
+# --- 2b. O banco está na mesma versão do código? ----------------------
+# Falha silenciosa e cara: o código novo consulta colunas que só existem
+# depois da migração. Se o serviço subiu sem migrar, TODA operação com
+# carga passa a devolver erro 500 — inclusive mudar status — enquanto o
+# login e a tela continuam funcionando normalmente. O sintoma parece "o
+# painel parou", e a causa está aqui.
+azul "2b. Migrações do banco"
+if [[ -d "$APP_DIR/migrations" ]]; then
+  APLICADAS="$(sudo -u postgres psql -d "$DB_NAME" -tAc \
+    'SELECT arquivo FROM _migrations' 2>/dev/null | sort)"
+  PENDENTES=()
+  for arq in "$APP_DIR"/migrations/*.sql; do
+    [[ -e "$arq" ]] || continue
+    nome="$(basename "$arq")"
+    grep -qx "$nome" <<<"$APLICADAS" || PENDENTES+=("$nome")
+  done
+  if [[ ${#PENDENTES[@]} -eq 0 ]]; then
+    ok "banco atualizado ($(wc -l <<<"$APLICADAS") migração(ões) aplicada(s))"
+  else
+    mal "${#PENDENTES[@]} migração(ões) PENDENTE(S): ${PENDENTES[*]}"
+    info "isso quebra toda operação com carga. Corrija com:"
+    info "  cd $APP_DIR && sudo -u $APP_USER node scripts/migrar.js"
+    info "  sudo systemctl restart embarque-suinco"
+  fi
+else
+  aviso "não achei $APP_DIR/migrations"
+fi
+
 # --- 3. A API responde localmente? -----------------------------------
 azul "3. API local (127.0.0.1:$PORTA_APP)"
 SAIDA_LOCAL="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 \
