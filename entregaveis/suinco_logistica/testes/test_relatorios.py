@@ -81,21 +81,38 @@ async def main():
               const c = document.getElementById('{cid}');
               const pag = c.querySelector('.print-page');
               const img = c.querySelector('.doc-logo');
-              const meta = (c.querySelector('.doc-meta')||{{}}).innerText || '';
+              // A identificação virou tabela de duas colunas (.doc-identificacao)
+              // no lugar da linha corrida (.doc-meta): quem confere um documento
+              // PROCURA o campo, e procurar em frase obriga a varrer tudo.
+              const meta = (c.querySelector('.doc-identificacao')||{{}}).innerText || '';
               return {{
                 classe: pag ? pag.className : '',
                 titulo: (c.querySelector('.doc-titulo')||{{}}).innerText || '',
                 empresa: (c.querySelector('.doc-empresa')||{{}}).innerText || '',
                 logo: !!img && img.complete && img.naturalWidth > 0,
-                temPeriodo: /Período/.test(meta),
-                temEmitidoPor: /Emitido por/.test(meta),
-                temEmitidoEm: /Emitido em/.test(meta),
-                rodape: !!c.querySelector('.doc-assinatura')
+                // Os rótulos saem em maiúsculas por CSS, e innerText devolve
+                // o texto já transformado. Comparar sem caixa mede o
+                // conteúdo, não o estilo.
+                temPeriodo: /Período/i.test(meta),
+                temEmitidoPor: /Emitido por/i.test(meta),
+                temEmitidoEm: /Emitido em/i.test(meta),
+                rodape: !!c.querySelector('.doc-assinatura'),
+                // Peças do padrão de documento de auditoria.
+                temRef: /SUI-(OPE|EXE|ADM)-\\d{{8}}-\\d{{4}}/.test(c.innerText),
+                temBase: !!c.querySelector('.doc-base'),
+                temLimitacoes: !!c.querySelector('.doc-limitacoes'),
+                temClassificacao: !!c.querySelector('.doc-classificacao')
               }};
             }}''')
             ck(f'{rot}: densidade {classe}', classe in d['classe'], d['classe'])
             ck(f'{rot}: identificação da empresa', 'SUINCO' in d['empresa'], d['empresa'])
             ck(f'{rot}: logo carregou', d['logo'])
+            ck(f'{rot}: referência citável do documento', d['temRef'],
+               'sem ela, dois relatórios do mesmo dia viram "aquele relatório"')
+            ck(f'{rot}: base de preparação declarada', d['temBase'],
+               'diz o que exatamente foi contado')
+            ck(f'{rot}: alcance e limitações no rodapé', d['temLimitacoes'])
+            ck(f'{rot}: classificação de uso', d['temClassificacao'])
             ck(f'{rot}: metadados completos',
                d['temPeriodo'] and d['temEmitidoEm'] and d['temEmitidoPor'],
                'período, emitido em, emitido por')
@@ -108,8 +125,13 @@ async def main():
         await pg.wait_for_timeout(300)
         f = await pg.evaluate('''() => {
           const c = document.getElementById('print-fretes');
-          const td = c.querySelector('tbody td');
-          const ths = [...c.querySelectorAll('thead th')].map(x=>x.innerText.trim());
+          // Escopo na tabela de DADOS. A de identificação do documento é a
+          // primeira do container agora, e ela tem corpo menor de propósito —
+          // medir a primeira <td> solta mediria o cabeçalho, não o relatório.
+          const dados = [...c.querySelectorAll('table')]
+                          .find(t => !t.classList.contains('doc-identificacao'));
+          const td = dados ? dados.querySelector('tbody td') : null;
+          const ths = dados ? [...dados.querySelectorAll('thead th')].map(x=>x.innerText.trim()) : [];
           return {
             colunas: ths,
             fonteTela: td ? parseFloat(getComputedStyle(td).fontSize) : 0,
@@ -145,10 +167,15 @@ async def main():
         # A tabela precisa continuar coerente: cabeçalho e células no mesmo número.
         coerente = await pg.evaluate('''() => {
           const cont = document.getElementById('print-operacional');
-          const nTh = cont.querySelectorAll('thead th').length;
-          const tr = cont.querySelector('tbody tr');
+          // Escopo na tabela de DADOS. A de identificação do documento é a
+          // primeira do container e tem duas colunas — contar th de uma e td
+          // de outra acusaria desalinhamento onde não há.
+          const dados = [...cont.querySelectorAll('table')]
+                          .find(t => !t.classList.contains('doc-identificacao'));
+          const nTh = dados.querySelectorAll('thead th').length;
+          const tr = dados.querySelector('tbody tr');
           const nTd = tr ? tr.children.length : nTh;
-          const tot = cont.querySelector('.linha-total');
+          const tot = dados.querySelector('.linha-total');
           const nTot = tot ? [...tot.children].reduce((a,c)=>a+(c.colSpan||1),0) : nTh;
           return {nTh, nTd, nTot};
         }''')
