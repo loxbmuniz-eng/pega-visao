@@ -58,3 +58,43 @@ rotasAuth.post('/login', limiteLogin, async (req, res, next) => {
 rotasAuth.get('/eu', exigirLogin, (req, res) => {
   res.json({ operador: req.operador });
 });
+
+/* Renova a sessão de quem está trabalhando.
+
+   O token vale 12 horas. Isso protege o terminal compartilhado do pátio —
+   sessão eterna faria o turno da noite operar com a identidade de quem
+   sentou ali de manhã, e a auditoria passaria a mentir sobre quem fez o
+   quê. Mas 12 horas fixas derrubam o terminal no meio do expediente, e
+   painel que pede senha com o caminhão na doca é painel que atrapalha.
+
+   A saída é renovar enquanto HOUVER trabalho acontecendo. O painel só
+   chama esta rota quando alguém mexeu na tela nas últimas horas; parado,
+   ele deixa vencer. Terminal em uso segue vivo, terminal esquecido aberto
+   morre sozinho.
+
+   A renovação relê o operador no BANCO, não no token. Isso é de propósito
+   e vale mais que a conveniência: quem foi desativado perde o acesso na
+   renovação seguinte, e quem mudou de setor passa a valer no setor novo
+   sem precisar sair e entrar. Sem esta releitura, desativar alguém só teria
+   efeito 12 horas depois. */
+rotasAuth.post('/renovar', exigirLogin, async (req, res, next) => {
+  try {
+    const { rows } = await consultar(
+      'SELECT id, email, nome, setor, ativo FROM operadores WHERE id = $1',
+      [req.operador.id]
+    );
+    const op = rows[0];
+    if (!op || !op.ativo) {
+      return res.status(401).json({
+        erro: 'Seu acesso foi desativado. Fale com a Administração.',
+        codigo: 'OPERADOR_INATIVO',
+      });
+    }
+    return res.json({
+      token: assinarToken(op),
+      operador: { id: String(op.id), nome: op.nome, email: op.email, setor: op.setor },
+    });
+  } catch (e) {
+    return next(e);
+  }
+});

@@ -69,7 +69,7 @@
         <table>
           <thead><tr>
             <th>Seq.</th><th>Nº Carga</th><th>Placa</th><th>Transportadora</th><th>Tipo Veículo</th><th>Motorista</th>
-            <th>Cliente</th><th>Destino</th><th>Rota</th><th>Peso (kg)</th>
+            <th>Rota</th><th>Peso (kg)</th><th>Palet.</th>
             <th>Tipo de Operação</th><th>Ganchos</th><th>Status</th><th>Atualizado em</th>
           </tr></thead>
           <tbody id="torre-tbody"></tbody>
@@ -161,7 +161,7 @@
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Seq.</th><th>Nº Carga</th><th>Placa</th><th>Transportadora</th><th>Cliente</th><th>Destino</th><th>Rota</th><th>Tipo de Operação</th><th>Ganchos</th><th class="no-print">Ação</th></tr></thead>
+          <thead><tr><th>Seq.</th><th>Nº Carga</th><th>Placa</th><th>Transportadora</th><th>Rota</th><th>Tipo de Operação</th><th>Peso (kg)</th><th>Palet.</th><th>Ganchos</th><th>Entregas</th><th class="no-print">Ação</th></tr></thead>
           <tbody id="prog-fila-tbody"></tbody>
         </table>
       </div>
@@ -682,40 +682,61 @@
     <h2>Completar dados da carga (Aguardando Carga)</h2>
     <input type="hidden" id="completar-id">
     <div class="card-sub" id="completar-placa-info"></div>
+    <!-- ORDEM E CAMPOS IDÊNTICOS À ABA PROGRAMAÇÃO.
+
+         Não é preferência estética: é a mesma pessoa preenchendo a mesma
+         carga, e duas telas com ordem diferente para o mesmo trabalho geram
+         erro de digitação em campo trocado. Cliente e Destino saíram da
+         Programação a pedido do gestor e por isso saem daqui também —
+         continuam como campos ocultos, para não apagar o que já foi gravado.
+
+         Quem mexer numa das duas telas mexe na outra. Existe teste que
+         reprova se elas divergirem. -->
     <div class="form-row">
-      <div class="form-group"><label>Número de Carga</label><input type="text" id="completar-numero-carga"></div>
-      <div class="form-group"><label>Cliente</label><input type="text" id="completar-cliente"></div>
-      <div class="form-group"><label>Destino</label><input type="text" id="completar-destino" placeholder="Cidade/UF"></div>
+      <div class="form-group"><label>Transportadora</label><input type="text" id="completar-transportadora" list="lista-transportadoras" placeholder="Preenchido automaticamente…"></div>
+      <div class="form-group"><label>Tipo de Veículo</label><input type="text" id="completar-tipoveiculo" placeholder="Preenchido automaticamente…"></div>
     </div>
     <div class="form-row">
-      <div class="form-group"><label>Peso (kg)</label><input type="number" id="completar-peso" min="0"></div>
-    </div>
-    <div class="form-row">
-      <div class="form-group"><label>Sequência</label><input type="number" id="completar-sequencia" min="1"></div>
-    </div>
-    <div class="form-row">
-      <div class="form-group"><label>Transportadora</label><input type="text" id="completar-transportadora" list="lista-transportadoras"></div>
-      <div class="form-group"><label>Tipo de Veículo</label><input type="text" id="completar-tipoveiculo"></div>
+      <div class="form-group"><label>Número de Carga</label><input type="text" id="completar-numero-carga" placeholder="Ex: 10245"></div>
       <div class="form-group"><label>Motorista</label><input type="text" id="completar-motorista" placeholder="Nome do motorista"></div>
-    </div>
-    <div class="form-row">
       <div class="form-group">
-        <label>Rota</label>
-        <select id="completar-rota" style="margin-bottom:10px"></select>
+        <label>Rota <span class="hint">(código oficial)</span></label>
+        <select id="completar-rota"></select>
+      </div>
+      <div class="form-group">
         <label>Tipo de Operação</label>
         <select id="completar-praonde">
           <option value="FROTA PROPRIA">FROTA PRÓPRIA</option>
           <option value="CROSS-DOCKING">CROSS-DOCKING</option>
           <option value="DEDICADA">DEDICADA</option>
-          <option value="RET FRIGO">RET FRIGO (retirada no frigorífico)</option>
+          <option value="RET FRIGO">RET FRIGO</option>
         </select>
       </div>
+      <input type="hidden" id="completar-cliente" value="">
+      <input type="hidden" id="completar-destino" value="">
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Peso (kg)</label><input type="number" id="completar-peso" min="0"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Sequência <span class="hint">(prioridade de montagem do dia)</span></label>
+        <input type="number" id="completar-sequencia" min="1">
+      </div>
+    </div>
+    <div class="form-row">
       <div class="form-group">
         <label>Paletizada?</label>
-        <select id="completar-paletizada" style="margin-bottom:10px"><option>Não</option><option>Sim</option></select>
+        <select id="completar-paletizada"><option>Não</option><option>Sim</option></select>
       </div>
-      <div class="form-group"><label>Qtd. Ganchos <span class="hint">0 = Liso</span></label><input type="number" id="completar-ganchos" min="0" step="1" value="0"></div>
-      <div class="form-group"><label>Qtd. Entregas</label><input type="number" id="completar-entregas" min="1" step="1" value="1"></div>
+      <div class="form-group">
+        <label>Qtd. Ganchos (Gancheira) <span class="hint">0 = Liso</span></label>
+        <input type="number" id="completar-ganchos" min="0" step="1" value="0">
+      </div>
+      <div class="form-group">
+        <label>Qtd. Entregas</label>
+        <input type="number" id="completar-entregas" min="1" step="1" value="1">
+      </div>
     </div>
     <div class="form-group" style="margin-bottom:10px"><label>Observações</label><textarea id="completar-obs"></textarea></div>
     <div class="flex-end">

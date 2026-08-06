@@ -22,6 +22,7 @@ python3 testes/test_login_api.py         # painel inteiro contra a API
 python3 testes/test_adaptador_api.py     # adaptador: fluxo, fila, permissão
 python3 testes/test_diagnostico_login.py # a tela diz QUAL foi o problema
 python3 testes/test_teste_conexao.py     # a tela "Testar conexão"
+python3 testes/test_auditoria_refino.py  # as telas da mesma carga combinam
 python3 testes/test_aviso_alteracao.py   # tempo real: alteração e exclusão
 python3 testes/test_relatorios.py        # relatórios impressos
 python3 testes/test_mobile.py            # celular e tablet
@@ -59,6 +60,13 @@ deles num celular: a troca de placa numa carga já programada grava no
 servidor e vira aviso na tela do outro, com o valor antigo, o novo, quem
 alterou e som. Cobre também o que NÃO deve acontecer: quem editou não é
 avisado da própria ação, e campo sem importância não toca alarme.
+
+**`test_auditoria_refino.py`** — as telas que tratam da mesma carga têm que
+combinar: mesmos campos, mesma ordem, mesmas colunas. Existe porque Cliente e
+Destino saíram da Programação e continuaram no modal que a Portaria abre
+quando o caminhão chega sem carga programada. Confere também que cabeçalho e
+linha têm o mesmo número de colunas — tirar um `<th>` e esquecer o `<td>`
+desalinha a tabela inteira sem o navegador reclamar.
 
 **`test_teste_conexao.py`** — a tela "Testar conexão" do modal de login,
 nos cinco cenários que importam: aparelho sem rede, servidor recusando o
