@@ -276,7 +276,19 @@ const ABAS_OPERACIONAIS = ['torre','programacao','portaria','expedicao',
 const SETOR_PERMISSOES = {
   'Logística':    ABAS_OPERACIONAIS.slice(),
   'Portaria':     ['portaria','historico'],
-  'Expedição':    ['expedicao','historico'],
+  /* Expedição é o único setor operacional com Indicadores.
+
+     Não é exceção arbitrária: é onde o tempo do pátio efetivamente se
+     forma. Portaria registra chegada e saída — dois carimbos que ela não
+     controla. Faturamento emite. A Expedição é quem opera as duas etapas
+     mais longas do fluxo (Embarque Iniciado e Embarque Finalizado), e é o
+     único posto que pode olhar "tempo médio de carregamento" e mudar
+     alguma coisa no mesmo turno: remanejar doca, cobrar um conferente,
+     reordenar a fila.
+
+     Indicador sem poder de ação vira placar; com poder de ação, vira
+     ferramenta. Por isso aqui sim, e nos outros dois não. */
+  'Expedição':    ['expedicao','indicadores','historico'],
   'Faturamento':  ['faturamento','historico'],
   'Administração':ABAS_OPERACIONAIS.concat(['usuarios'])
 };
@@ -289,7 +301,7 @@ const TAB_FUNCAO = {
   portaria:    { setor:'Portaria',     oque:'Registrar a entrada e a saída física do caminhão no pátio.',                                      move:'Chegou: Aguardando Veículo → Aguardando Embarque. Saiu: Faturado → Seguiu Viagem.' },
   expedicao:   { setor:'Expedição',    oque:'Controlar o carregamento do veículo, do início ao fim.',                                          move:'Aguardando Embarque → Embarque Iniciado → Embarque Finalizado.' },
   faturamento: { setor:'Faturamento',  oque:'Emitir a nota da carga já carregada, liberando o caminhão para sair.',                             move:'Embarque Finalizado → Faturado.' },
-  indicadores: { setor:'Logística',    oque:'Analisar tempo médio por etapa, comparar períodos e ver o ranking de transportadoras.',            move:'Não altera nada — é somente leitura.' },
+  indicadores: { setor:'Logística e Expedição', oque:'Analisar tempo médio por etapa, comparar períodos e ver o ranking de transportadoras.', move:'Não altera nada — é somente leitura.' },
   cadastros:   { setor:'Logística',    oque:'Manter a base de Frota (placa → transportadora → tipo) e as transportadoras.',                 move:'Não altera cargas — alimenta a Programação.' },
   historico:   { setor:'Todos',        oque:'Consultar a trilha de auditoria: quem moveu qual carga, de qual status para qual, e quando.',      move:'Não altera nada — registro permanente.' },
   relatorios:  { setor:'Logística',    oque:'Gerar o PDF operacional (para o pátio) e o executivo (para a gestão).',                            move:'Não altera nada — exporta o que já existe.' },

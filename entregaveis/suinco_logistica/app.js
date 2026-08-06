@@ -194,6 +194,28 @@ function badgeHtml(status){
   const meta = STATUS_META[status] || {badge:''};
   return `<span class="badge ${meta.badge}">${esc(status)}</span>`;
 }
+
+/* Botão de avanço com a cor do status que ele PRODUZ.
+
+   Os botões de Expedição e Faturamento eram todos btn-primary — dourados.
+   "Finalizar Embarque" saía amarelo e produzia um status verde-claro; o
+   operador apertava uma cor e recebia outra.
+
+   A escala de seis cores é a linguagem do painel: o gestor a definiu, ela
+   está na badge, na linha do tempo e no relatório impresso. Um botão que
+   ignora essa escala obriga o operador a decorar uma segunda convenção
+   ("dourado = avançar") em vez de simplesmente ler a cor de destino.
+
+   Agora a cor sai das MESMAS variáveis --st-* da badge. Trocar de tema ou
+   ajustar uma cor de status repinta o botão junto, sem lista paralela. */
+function botaoAvancoHtml(carga){
+  const acao = NEXT_ACAO[carga.status];
+  if(!acao) return '—';
+  const slug = statusSlug(acao.destino);
+  return `<button class="btn btn-sm btn-avanco btn-avanco-${slug}"
+      onclick="avancarStatusUI('${escJs(carga.id)}')"
+      title="Registrar ${esc(acao.destino)}">${esc(acao.label)}</button>`;
+}
 // `ms` opcional: avisos longos (ex: troca da base de frota) precisam de mais
 // tempo em tela do que a confirmação curta de uma ação.
 function notify(msg, type, ms){
@@ -1587,14 +1609,12 @@ function fecharModalPicker(){
 function renderExpedicao(){
   const alvo = ['Aguardando Embarque','Embarque Iniciado'];
   const lista = cargasAbertas().filter(c=>alvo.includes(c.status)).sort(ordenarPorSequenciaEAtualizacao);
-  document.getElementById('exp-tbody').innerHTML = lista.map(c=>{
-    const acao = NEXT_ACAO[c.status];
-    return `<tr>
+  document.getElementById('exp-tbody').innerHTML = lista.map(c=>`
+    <tr>
       <td>${c.sequencia ?? '—'}</td><td>${esc(c.numeroCarga)||'—'}</td><td>${esc(c.placa)}</td><td>${esc(c.transportadora)||'—'}</td>
       <td>${esc(c.destino)||'—'}</td><td>${badgeHtml(c.status)}</td>
-      <td class="no-print">${acao?`<button class="btn btn-primary btn-sm" onclick="avancarStatusUI('${escJs(c.id)}')">${acao.label}</button>`:'—'}</td>
-    </tr>`;
-  }).join('');
+      <td class="no-print">${botaoAvancoHtml(c)}</td>
+    </tr>`).join('');
   document.getElementById('exp-empty').hidden = lista.length>0;
 }
 
@@ -1602,14 +1622,12 @@ function renderExpedicao(){
 function renderFaturamento(){
   const alvo = ['Embarque Finalizado','Faturado'];
   const lista = cargasAbertas().filter(c=>alvo.includes(c.status));
-  document.getElementById('fat-tbody').innerHTML = lista.map(c=>{
-    const acao = NEXT_ACAO[c.status];
-    return `<tr>
+  document.getElementById('fat-tbody').innerHTML = lista.map(c=>`
+    <tr>
       <td>${esc(c.numeroCarga)||'—'}</td><td>${esc(c.placa)}</td><td>${esc(c.transportadora)||'—'}</td><td>${esc(c.destino)||'—'}</td>
       <td>${c.peso||0}</td><td>${badgeHtml(c.status)}</td>
-      <td class="no-print">${acao?`<button class="btn btn-primary btn-sm" onclick="avancarStatusUI('${escJs(c.id)}')">${acao.label}</button>`:'—'}</td>
-    </tr>`;
-  }).join('');
+      <td class="no-print">${botaoAvancoHtml(c)}</td>
+    </tr>`).join('');
   document.getElementById('fat-empty').hidden = lista.length>0;
 }
 

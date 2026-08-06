@@ -437,6 +437,48 @@ td input,td select{padding:5px 7px;font-size:13px}
 }
 .aviso-placa-repetida strong{ color:var(--gold-text,var(--gold)) }
 
+/* ===== BOTÃO DE AVANÇO — a cor do status que ele PRODUZ =====
+   "Finalizar Embarque" era dourado e produzia um status verde-claro: o
+   operador apertava uma cor e recebia outra. Agora cada botão veste a cor
+   do seu destino, tirada das MESMAS variáveis --st-* das badges — a escala
+   de seis cores definida pelo gestor vale no botão, na badge, na linha do
+   tempo e no relatório, sem lista paralela para manter em sincronia.
+
+   O preenchimento é sólido e o texto é o -fg do próprio status (branco ou
+   quase-preto conforme a luminância), então o contraste vem calibrado de
+   graça, nos dois temas. */
+.btn-avanco{
+  color:var(--st-neutro-fg);
+  background:var(--st-neutro-bg);
+  border:1px solid var(--st-neutro-br);
+  font-weight:800;
+}
+.btn-avanco-embarque-iniciado{
+  background:var(--st-embarque-iniciado-bg);
+  color:var(--st-embarque-iniciado-fg);
+  border-color:var(--st-embarque-iniciado-br);
+}
+.btn-avanco-embarque-finalizado{
+  background:var(--st-embarque-finalizado-bg);
+  color:var(--st-embarque-finalizado-fg);
+  border-color:var(--st-embarque-finalizado-br);
+}
+.btn-avanco-faturado{
+  background:var(--st-faturado-bg);
+  color:var(--st-faturado-fg);
+  border-color:var(--st-faturado-br);
+}
+.btn-avanco-seguiu-viagem{
+  background:var(--st-seguiu-viagem-bg);
+  color:var(--st-seguiu-viagem-fg);
+  border-color:var(--st-seguiu-viagem-br);
+}
+.btn-avanco-aguardando-embarque{
+  background:var(--st-aguardando-embarque-bg);
+  color:var(--st-aguardando-embarque-fg);
+  border-color:var(--st-aguardando-embarque-br);
+}
+
 /* ===== FORMS ===== */
 .form-row{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px}
 .form-group{display:flex;flex-direction:column;gap:5px;flex:1;min-width:140px}

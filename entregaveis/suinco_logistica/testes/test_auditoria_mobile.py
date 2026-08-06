@@ -30,7 +30,9 @@ APARELHOS = [
 
 SETORES = {
     'Portaria':      ['portaria', 'historico'],
-    'Expedição':     ['expedicao', 'historico'],
+    # Indicadores entrou para a Expedição: é o posto que opera as duas
+    # etapas mais longas do fluxo e pode agir sobre o número no mesmo turno.
+    'Expedição':     ['expedicao', 'indicadores', 'historico'],
     'Faturamento':   ['faturamento', 'historico'],
     'Logística':     ['torre', 'programacao', 'portaria', 'expedicao', 'faturamento',
                       'indicadores', 'cadastros', 'historico', 'relatorios'],
