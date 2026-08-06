@@ -148,6 +148,45 @@ async def main():
             ck(f'{setor}: {"vê" if deve_ver else "NÃO vê"} Indicadores',
                tem == deve_ver, str(visiveis))
 
+        print('\n=== EXCLUIR/CANCELAR SÓ NA PROGRAMAÇÃO ===')
+        # Excluir e cancelar é da Programação: só ela sabe se a carga foi
+        # desmarcada pelo cliente ou se está só atrasada, e o servidor recusa
+        # a exclusão vinda de qualquer outro setor (podeCriarCarga, em
+        # rotas/cargas.js). Antes o botão aparecia na Visão do Pátio, que é a
+        # mesma peça nas abas de Portaria, Expedição e Faturamento — a ação
+        # certa no lugar errado.
+        for setor, aba in (('Portaria', 'portaria'),
+                           ('Expedição', 'expedicao'),
+                           ('Faturamento', 'faturamento')):
+            n = await pg.evaluate("""([setor, aba]) => {
+                DB.operador = { nome:'Teste', setor, turno:'Manhã' };
+                aplicarPermissoesSetor();
+                abrirTab(aba); renderAll();
+                const el = document.getElementById('tab-' + aba);
+                const botoes = [...el.querySelectorAll('button')]
+                    .map(b => b.textContent.trim())
+                    .filter(t => /excluir|cancelar/i.test(t));
+                return botoes;
+            }""", [setor, aba])
+            ck(f'{setor}: nenhum botão de excluir/cancelar na aba',
+               n == [], str(n))
+
+        # Do outro lado: a Programação continua tendo o botão. Um teste que
+        # só prova a ausência passaria também se a função tivesse sumido.
+        temNaProgramacao = await pg.evaluate("""() => {
+            DB.operador = { nome:'Ana', setor:'Logística', turno:'Manhã' };
+            aplicarPermissoesSetor();
+            DB.cargas = []; DB.movimentacoes = [];
+            criarCargaProgramada({ placa: DB.frota[0].placa, numeroCarga:'99001',
+                                   peso:10000, rota:'500', operador:'Ana' });
+            abrirTab('programacao'); renderAll();
+            return [...document.querySelectorAll('#prog-fila-tbody button')]
+                     .map(b => b.textContent.trim())
+                     .filter(t => /excluir/i.test(t)).length;
+        }""")
+        ck('Programação continua podendo excluir', temNaProgramacao >= 1,
+           f'{temNaProgramacao} botão(ões)')
+
         print('\n=== CONSOLE ===')
         ck('sem erros de página', not erros, str(erros[:2]))
         await nav.close()

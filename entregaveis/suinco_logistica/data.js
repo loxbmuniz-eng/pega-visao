@@ -370,6 +370,26 @@ const SuincoStore = {
   // que mudou de fato — save() é chamado com frequência e reenviar tudo a
   // cada clique geraria tráfego inútil contra o tenant.
   _ultimoSync: new Map(),
+
+  /* Último status que o SERVIDOR confirmou para cada carga.
+
+     Existe porque mudança de status NÃO viaja pelo mesmo caminho dos outros
+     campos, e confundir os dois deixou o painel travado em produção: o
+     operador clicava "Chegou", a linha voltava para "Aguardando Veículo"
+     dois segundos depois e ninguém entendia por quê.
+
+     A rota PATCH /api/cargas/:id só aceita os campos que o setor pode
+     editar (fluxo.js, CAMPOS_EDITAVEIS) — e `status_atual` não está na
+     lista de NENHUM setor, de propósito: status é máquina de estados, não
+     campo de formulário. Quem move a carga é POST /api/cargas/:id/status,
+     que valida a transição e o setor.
+
+     Sem esta marca, o painel mandava o status dentro do PATCH, o servidor o
+     descartava em silêncio, gravava só `atualizado_em`, e devolvia a carga
+     com o status ANTIGO e a data NOVA. Na fusão seguinte o remoto vencia por
+     ser mais recente e desfazia o clique. */
+  _ultimoStatusSync: new Map(),
+
   sincronizarCargasAlteradas(){
     if(typeof SuincoSharePoint === 'undefined' || !SuincoSharePoint.estaConfigurado()) return;
     DB.cargas.forEach(c => {
@@ -417,10 +437,85 @@ const SuincoStore = {
       // mesma carga. Sem ele a fusão não teria como comparar as versões.
       Atualizado_Em: carga.atualizadoEm || nowISO()
     }, operador);
+    /* MUDANÇA DE STATUS VAI POR ROTA PRÓPRIA, e este bloco é a correção de
+       um defeito que fazia o clique "voltar sozinho".
+
+       O upsert acima grava CAMPOS DE NEGÓCIO por PATCH, e o servidor filtra
+       o PATCH pelo setor: a Portaria só pode editar `motorista` e
+       `observacoes` (CAMPOS_EDITAVEIS em dominio/fluxo.js). O `status_atual`
+       era descartado no caminho — sempre, em silêncio.
+
+       O estrago vinha do gatilho `tg_viagem_update`: o PATCH regravava
+       motorista/observações com os MESMOS valores, o gatilho carimbava
+       `atualizado_em = now()`, e a linha do servidor ficava mais NOVA que a
+       local — com o status ANTIGO. Quinze segundos depois a sincronia
+       comparava os carimbos, o remoto vencia pela regra 2 de
+       fundirEstadoRemoto, e o status voltava para onde estava.
+
+       Da Portaria se via exatamente isto: aperta "Chegou", a linha muda, e
+       pouco depois ela volta para "Aguardando Veículo".
+
+       `mudarStatus` usa POST /api/cargas/:id/status, que valida a transição
+       e o setor no servidor. A função existia desde o começo e NUNCA tinha
+       sido chamada por ninguém — foi escrita e não ligada.
+
+       Vai DEPOIS do upsert de propósito: garante que a carga já exista no
+       servidor antes de tentar movê-la. */
+    /* FILA POR CARGA, e NÃO uma marca só. Duas razões, ambas descobertas
+       medindo:
+
+       ORDEM. O servidor valida transição a transição: não dá para pular de
+       "Aguardando Veículo" direto para "Embarque Iniciado". Se a Expedição
+       avança duas etapas em poucos segundos, as duas precisam subir na
+       sequência em que aconteceram.
+
+       CONCORRÊNCIA. `sincronizarCarga` é disparada a cada save() e não
+       espera a anterior terminar. Com uma marca única, duas execuções liam
+       o mesmo valor e mandavam o MESMO status duas vezes — a segunda o
+       servidor recusaria por transição inválida, e a recusa desfaria na
+       tela um avanço que estava correto. O defeito original voltaria pela
+       porta dos fundos.
+
+       `_enviandoStatus` garante um drenador por carga; o `while` garante a
+       ordem. */
+    let statusSubiu = true;
+    const pendentes = carga._statusPendentes;
+    if(pendentes && pendentes.length && !carga._enviandoStatus){
+      carga._enviandoStatus = true;
+      try{
+        while(carga._statusPendentes.length){
+          const alvo = carga._statusPendentes[0];
+          const rs = await SuincoSharePoint.mudarStatus(carga.id, alvo);
+          if(rs && rs.recusado){
+            /* O servidor recusou. Manter a tela mostrando um status que o
+               banco não aceitou é pior do que desfazer: o operador seguiria
+               trabalhando em cima de uma carga que, para todos os outros
+               terminais, nunca saiu do lugar. Descarta a fila inteira — o
+               que vinha depois dependia desta etapa. */
+            carga._statusPendentes = [];
+            statusSubiu = false;
+            if(_aoRecusarStatus) _aoRecusarStatus(carga, alvo, rs.erro);
+            break;
+          }
+          if(!rs || rs.enfileirado !== false){
+            // Sem rede: já está na fila offline, que sobe em ordem depois.
+            statusSubiu = false;
+            break;
+          }
+          carga._statusPendentes.shift();
+        }
+      } finally {
+        delete carga._enviandoStatus;
+      }
+    } else if(pendentes && pendentes.length){
+      // Outro drenador está em voo para esta carga: não libera a proteção.
+      statusSubiu = false;
+    }
+
     // Só libera quando a gravação foi de fato aceita. Se ficou na fila, a
     // carga segue protegida até drenar — senão a próxima leitura apagaria da
     // tela a alteração que o operador acabou de fazer.
-    if(r && r.enfileirado === false) delete carga._pendente;
+    if(r && r.enfileirado === false && statusSubiu) delete carga._pendente;
     return r;
   },
   async sincronizarMovimentacao(mov, operador){
@@ -464,9 +559,22 @@ const SuincoStore = {
 };
 
 // Chamado quando a fila sobe por completo: nenhuma carga segue protegida.
+// A fila de status sai junto — se a fila offline drenou, os POST de status
+// subiram nela, em ordem.
 function liberarPendencias(){
-  DB.cargas.forEach(c => { if(c._pendente) delete c._pendente; });
+  DB.cargas.forEach(c => {
+    if(c._pendente) delete c._pendente;
+    if(c._statusPendentes) delete c._statusPendentes;
+  });
 }
+
+/* Aviso de status recusado pelo servidor.
+
+   Mora aqui, e não em app.js, porque quem descobre a recusa é a camada de
+   sincronia. A tela registra a função e decide como mostrar — data.js não
+   conhece notify() nem deve conhecer. */
+let _aoRecusarStatus = null;
+function aoRecusarStatus(fn){ _aoRecusarStatus = fn; }
 
 /* ---------- FUSÃO DO ESTADO REMOTO (operação compartilhada) ----------
    Recebe o que veio das Listas e mescla no DB local. É o ponto mais delicado
@@ -1031,6 +1139,10 @@ function registrarChegadaPortaria(placa, operador){
   paraAtualizar.forEach(c=>{
     registrarMovimentacao({cargaId:c.id, placa:p, statusAnterior:c.status, statusNovo:'Aguardando Embarque', operador, setor:'Portaria', ...snapshotCarga(c)});
     c.status = 'Aguardando Embarque';
+    // Enfileira para a sincronia mandar o status pela rota que o valida.
+    // Sem isto o PATCH descarta o status e o clique "volta sozinho" — ver o
+    // comentário longo em SuincoStore.sincronizarCarga.
+    c._statusPendentes = (c._statusPendentes || []).concat('Aguardando Embarque');
     c.atualizadoEm = nowISO();
   });
   if(paraAtualizar.length) SuincoStore.save();
@@ -1078,6 +1190,7 @@ function avancarStatusCarga(cargaId, statusNovo, operador, setor){
   }
   registrarMovimentacao({cargaId:c.id, placa:c.placa, statusAnterior:c.status, statusNovo, operador, setor, ...snapshotCarga(c)});
   c.status = statusNovo;
+  c._statusPendentes = (c._statusPendentes || []).concat(statusNovo);  // ver sincronizarCarga
   c.atualizadoEm = nowISO();
   SuincoStore.save();
   return c;
@@ -1096,6 +1209,7 @@ function registrarSaidaPortaria(placa, operador){
   elegiveis.forEach(c=>{
     registrarMovimentacao({cargaId:c.id, placa:p, statusAnterior:c.status, statusNovo:'Seguiu Viagem', operador, setor:'Portaria', ...snapshotCarga(c)});
     c.status = 'Seguiu Viagem';
+    c._statusPendentes = (c._statusPendentes || []).concat('Seguiu Viagem');  // ver sincronizarCarga
     c.atualizadoEm = nowISO();
   });
   if(elegiveis.length) SuincoStore.save();
