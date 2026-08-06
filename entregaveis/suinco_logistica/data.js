@@ -264,11 +264,20 @@ const ABAS_OPERACIONAIS = ['torre','programacao','portaria','expedicao',
                            'faturamento','indicadores','cadastros',
                            'historico','relatorios'];
 
+/* A Torre saiu das abas de quem opera um posto só.
+
+   Não é perda de acesso: a visão do pátio passou para DENTRO da aba do
+   setor, com linha do tempo e filtro de período. Antes era preciso trocar
+   de aba para ver o pátio e voltar para agir — duas abas para uma tarefa
+   só, dezenas de vezes por turno.
+
+   Logística e Administração mantêm a Torre separada, porque para elas ela
+   é a visão de comando sobre todos os postos, não um apoio ao próprio. */
 const SETOR_PERMISSOES = {
   'Logística':    ABAS_OPERACIONAIS.slice(),
-  'Portaria':     ['torre','portaria','historico'],
-  'Expedição':    ['torre','expedicao','historico'],
-  'Faturamento':  ['torre','faturamento','historico'],
+  'Portaria':     ['portaria','historico'],
+  'Expedição':    ['expedicao','historico'],
+  'Faturamento':  ['faturamento','historico'],
   'Administração':ABAS_OPERACIONAIS.concat(['usuarios'])
 };
 

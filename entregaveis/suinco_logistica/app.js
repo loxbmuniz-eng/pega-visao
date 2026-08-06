@@ -14,7 +14,10 @@ let currentPickerCallback = null;
 const NEXT_ACAO = {
   'Aguardando Embarque':  { label:'Iniciar Embarque',   destino:'Embarque Iniciado' },
   'Embarque Iniciado':    { label:'Finalizar Embarque', destino:'Embarque Finalizado' },
-  'Embarque Finalizado':  { label:'Faturar',            destino:'Faturado' }
+  // O rótulo é o STATUS que o clique produz, não o verbo da ação. Assim o
+  // botão, a coluna Status e o relatório falam a mesma língua — quem está
+  // aprendendo o painel não precisa traduzir "faturar" para "Faturado".
+  'Embarque Finalizado':  { label:'FATURADO',           destino:'Faturado' }
 };
 
 /* ---------- CONEXÃO COM O SERVIDOR (estado real, sem fingir) ----------
@@ -714,11 +717,12 @@ function renderTabAtual(){
     case 'programacao': renderProgFila(); renderProgAguardando(); break;
     case 'portaria':
       renderPortariaProgramadas();
-  renderPortariaPatio();
+      renderPortariaPatio();
+      renderVisaoPatio('portaria');
       { const el = document.getElementById('portaria-placa'); if(el) setTimeout(()=>el.focus(), 30); }
       break;
-    case 'expedicao': renderExpedicao(); break;
-    case 'faturamento': renderFaturamento(); break;
+    case 'expedicao': renderExpedicao(); renderVisaoPatio('expedicao'); break;
+    case 'faturamento': renderFaturamento(); renderVisaoPatio('faturamento'); break;
     case 'indicadores': renderIndicadores(); break;
     case 'cadastros': renderCadastros(); break;
     case 'historico': renderHistorico(); renderBuscaTimeline(); break;
@@ -735,6 +739,162 @@ function renderTabAtual(){
 function renderAll(){ renderTabAtual(); }
 
 /* ---------- TORRE DE CONTROLE ---------- */
+/* ====================================================================
+   VISÃO DO PÁTIO — linha do tempo dentro da aba de cada setor
+   ====================================================================
+
+   Por que existe: quem opera um posto só (Portaria, Expedição,
+   Faturamento) precisava trocar de aba para ver o pátio e voltar para
+   agir. Duas abas para uma tarefa só, dezenas de vezes por turno.
+
+   Por que em linha do tempo: a tabela de status dizia onde a carga está,
+   mas não o que já aconteceu com ela. Numa fila de pátio, "está em
+   Embarque Iniciado" vale menos do que "chegou 07:12, começou 09:40, e
+   ainda não terminou" — a segunda leitura mostra onde o tempo foi embora.
+
+   Uma função só alimenta as três abas. Duas cópias divergiriam na
+   primeira correção feita com pressa, que foi exatamente o que aconteceu
+   com o formulário de completar carga.
+   ==================================================================== */
+
+/* Marca de cada etapa para uma carga: quando passou, se é a etapa atual,
+   ou se ainda não chegou lá. */
+function etapasDaCarga(carga){
+  const eventos = historicoDaCarga(carga.id);
+  const atual = STATUS_FLOW.indexOf(carga.status);
+  return STATUS_FLOW.map((status, i)=>{
+    const ev = eventos.find(m=>m.statusNovo===status);
+    // A primeira etapa não gera movimentação: a carga NASCE nela. Sem este
+    // caso, "Aguardando Veículo" apareceria como pendente numa carga que
+    // já andou metade do fluxo.
+    const quando = ev ? ev.timestamp : (i===0 ? carga.criadoEm : null);
+    return {
+      status,
+      quando,
+      cumprida: i < atual,
+      atual: i === atual,
+      pendente: i > atual,
+      operador: ev ? ev.operador : (i===0 ? (carga.criadoPor||'') : ''),
+    };
+  });
+}
+
+function celulaEtapa(e){
+  if(e.atual)    return `<td class="et et-atual" title="${esc(e.status)} — agora">
+                           <span class="et-marca">●</span>
+                           <span class="et-hora">${e.quando ? fmtHora(e.quando) : 'agora'}</span></td>`;
+  if(e.cumprida) return `<td class="et et-ok" title="${esc(e.status)}${e.operador?' — '+esc(e.operador):''}">
+                           <span class="et-marca">✓</span>
+                           <span class="et-hora">${e.quando ? fmtHora(e.quando) : '—'}</span></td>`;
+  return `<td class="et et-pendente" title="${esc(e.status)} — ainda não"><span class="et-marca">·</span></td>`;
+}
+
+function limparPeriodoVisaoPatio(prefixo){
+  ['de','ate','busca'].forEach(campo=>{
+    const el = document.getElementById(`${prefixo}-vp-${campo}`);
+    if(el) el.value = '';
+  });
+  renderVisaoPatio(prefixo);
+}
+
+function renderVisaoPatio(prefixo){
+  const tbody = document.getElementById(`${prefixo}-vp-tbody`);
+  if(!tbody) return;                       // aba sem a visão (Logística usa a Torre)
+
+  const de     = (document.getElementById(`${prefixo}-vp-de`)   || {}).value || '';
+  const ate    = (document.getElementById(`${prefixo}-vp-ate`)  || {}).value || '';
+  const buscaEl= document.getElementById(`${prefixo}-vp-busca`);
+  const busca  = normalizarPlaca(buscaEl ? buscaEl.value : '');
+  const textoBusca = (buscaEl ? buscaEl.value : '').trim().toLowerCase();
+
+  /* Sem período escolhido, mostra o pátio de agora — as cargas em aberto.
+     Com período, mostra tudo daquele intervalo, inclusive o que já seguiu
+     viagem: é justamente para revisitar carga encerrada que o filtro
+     existe. */
+  const houvePeriodo = !!(de || ate);
+  let lista = houvePeriodo
+    ? filtrarPorDataProgramacao(DB.cargas, de, ate)
+    : DB.cargas.filter(c=>c.status !== 'Seguiu Viagem');
+
+  if(textoBusca){
+    lista = lista.filter(c =>
+      normalizarPlaca(c.placa).includes(busca) ||
+      String(c.numeroCarga||'').toLowerCase().includes(textoBusca));
+  }
+
+  lista = lista.slice().sort(ordenarPorSequenciaEAtualizacao);
+
+  const thead = document.getElementById(`${prefixo}-vp-thead`);
+  if(thead){
+    thead.innerHTML =
+      '<th class="vp-carga">Nº Carga</th><th class="vp-placa">Placa</th>'
+      + '<th class="vp-transp">Transportadora</th><th class="vp-rota">Rota</th>'
+      + STATUS_FLOW.map(st=>`<th class="et-cab" title="${esc(st)}">${esc(abreviarEtapa(st))}</th>`).join('')
+      + '<th class="vp-tempo">No pátio</th>';
+  }
+
+  tbody.innerHTML = lista.map(c=>{
+    const etapas = etapasDaCarga(c);
+    return `<tr class="linha-status-${esc((STATUS_META[c.status]||{}).cor || '')}">
+      <td class="vp-carga">${esc(c.numeroCarga)||'—'}</td>
+      <td class="vp-placa">${esc(c.placa)}</td>
+      <td class="vp-transp">${esc(c.transportadora)||'—'}</td>
+      <td class="vp-rota">${esc(rotaCurta(c.rota))}</td>
+      ${etapas.map(celulaEtapa).join('')}
+      <td class="vp-tempo">${tempoNoPatioTexto(c)}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById(`${prefixo}-vp-empty`).hidden = lista.length > 0;
+
+  const resumo = document.getElementById(`${prefixo}-vp-resumo`);
+  if(resumo){
+    const porStatus = STATUS_FLOW.map(st=>({
+      status: st, n: lista.filter(c=>c.status===st).length
+    })).filter(x=>x.n > 0);
+    resumo.innerHTML =
+      `<span class="vp-total">${lista.length} carga(s)</span>`
+      + (houvePeriodo ? '<span class="vp-periodo">no período escolhido</span>'
+                      : '<span class="vp-periodo">em aberto agora</span>')
+      + porStatus.map(x=>`<span class="vp-chip badge ${esc((STATUS_META[x.status]||{}).badge||'')}">${esc(x.status)}: <b>${x.n}</b></span>`).join('');
+  }
+}
+
+/* Rótulo curto para o cabeçalho das seis colunas de etapa. O nome inteiro
+   não cabe, e cortar no meio ("Aguardando Emb…") é pior que abreviar com
+   critério — o título completo continua no `title` de cada coluna. */
+function abreviarEtapa(status){
+  return ({
+    'Aguardando Veículo':  'Programada',
+    'Aguardando Embarque': 'Chegou',
+    'Embarque Iniciado':   'Iniciou',
+    'Embarque Finalizado': 'Finalizou',
+    'Faturado':            'Faturou',
+    'Seguiu Viagem':       'Saiu',
+  })[status] || status;
+}
+
+/* Há quanto tempo a carga está no pátio. Conta da CHEGADA, não da
+   programação: carga programada na véspera não passou a noite no pátio, e
+   contar assim inflaria o número que o gestor usa para cobrar. */
+function tempoNoPatioTexto(carga){
+  const chegada = primeiroTimestamp(carga.id, 'Aguardando Embarque');
+  if(!chegada) return '<span class="text-dim">—</span>';
+  const saida = primeiroTimestamp(carga.id, 'Seguiu Viagem');
+  const fim = saida ? new Date(saida) : new Date();
+  const min = Math.max(0, Math.round((fim - new Date(chegada)) / 60000));
+  const h = Math.floor(min/60), m = min%60;
+  const texto = h ? `${h}h${String(m).padStart(2,'0')}` : `${m}min`;
+  // Acima da meta, destaca. É o número que faz alguém levantar da cadeira.
+  const acima = !saida && min > META_TEMPO_PATIO_MIN;
+  return acima ? `<b class="vp-atrasado">${texto}</b>` : texto;
+}
+
+function fmtHora(iso){
+  const d = new Date(iso);
+  return isNaN(d) ? '—' : d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+}
+
 function renderTorre(){
   const abertas = cargasAbertas();
   const porStatus = {};
@@ -1897,7 +2057,7 @@ function exportarPdfOperacional(){
   el.innerHTML = `
     <div class="print-page doc-denso">
       ${cabecalhoDocumento({
-        titulo: 'Sequenciamento de Carregamento',
+        titulo: 'Relatório Operacional',
         subtitulo: 'Programação do dia — ordem de montagem e acompanhamento no pátio',
         contagem: lista.length,
         extra: `<strong>Concluídas:</strong> ${concluidas} de ${lista.length}`,
@@ -2015,7 +2175,7 @@ function rodapeDocumento(nota){
   return `<div class="doc-rodape">
       ${nota ? `<div class="doc-nota">${nota}</div>` : ''}
       <div class="doc-assinatura">
-        Documento gerado pelo Painel Logístico Suinco · embarquesuinco.com.br
+        Documento gerado pela Programação de Embarque Suinco · embarquesuinco.com.br
       </div>
     </div>`;
 }
