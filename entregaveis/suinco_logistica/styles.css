@@ -539,7 +539,29 @@ code{
 .gap8{display:flex;gap:8px;flex-wrap:wrap}
 .flex-end{display:flex;justify-content:flex-end;gap:8px;margin-top:12px;flex-wrap:wrap}
 .last-update{font-size:11.5px;color:var(--text-dim);margin-top:5px}
-.empty-state{padding:26px;text-align:center;color:var(--text-dim);font-size:13.5px}
+/* Estado vazio: informação, não silêncio.
+
+   Texto solto no meio do card deixa a dúvida "está vazio ou quebrou?" —
+   e essa dúvida, no pátio, vira ligação para a Logística. Com moldura
+   tracejada e ícone, a tela diz "aqui não há nada AGORA", que é diferente
+   de "aqui deveria ter algo".
+
+   O ícone vem por CSS, do atributo data-icone, para o HTML seguir contendo
+   só o texto — que é o que os testes leem. */
+.empty-state{
+  padding:24px 18px;text-align:center;color:var(--text-dim);font-size:13.5px;
+  border:1px dashed var(--border-soft);border-radius:var(--radius);
+  background:var(--navy-deep);
+}
+.empty-state::before{
+  content:attr(data-icone);display:block;font-size:26px;line-height:1;
+  margin-bottom:8px;opacity:.65;
+}
+.empty-state:not([data-icone])::before{ content:'—' }
+.empty-state .empty-acao{ display:block;margin-top:12px }
+/* O botão dentro do estado vazio é a saída do beco: filtro que não achou
+   nada oferece o botão que limpa o filtro. */
+.empty-state .btn{ margin-top:4px }
 .pill-count{
   background:var(--wine);color:#fff;border-radius:20px;padding:1px 8px;
   font-size:11px;font-weight:800;margin-left:4px;

@@ -869,7 +869,21 @@ function renderVisaoPatio(prefixo){
     </tr>`;
   }).join('');
 
-  document.getElementById(`${prefixo}-vp-empty`).hidden = lista.length > 0;
+  /* Estado vazio que oferece a saída.
+
+     Filtro que não encontrou nada e só diz "nenhuma carga" deixa o operador
+     preso: ele não sabe se o pátio está vazio ou se o filtro é que está
+     estreito. Aqui a mensagem diz qual é o caso e, quando há filtro, traz o
+     botão que o limpa. */
+  const vazio = document.getElementById(`${prefixo}-vp-empty`);
+  vazio.hidden = lista.length > 0;
+  if(!vazio.hidden){
+    const filtrando = houvePeriodo || !!textoBusca;
+    vazio.innerHTML = filtrando
+      ? 'Nenhuma carga encontrada com esse filtro.'
+        + `<span class="empty-acao"><button class="btn btn-sec btn-sm" onclick="limparPeriodoVisaoPatio('${prefixo}')">Ver o pátio de agora</button></span>`
+      : 'Nenhuma carga em aberto no pátio neste momento.';
+  }
 
   const resumo = document.getElementById(`${prefixo}-vp-resumo`);
   if(resumo){
