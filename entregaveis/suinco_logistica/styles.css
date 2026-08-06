@@ -237,6 +237,42 @@ textarea{resize:vertical;min-height:70px}
 select option{background:var(--campo-bg);color:var(--text)}
 
 /* ===== STAT BOXES ===== */
+/* ===== BENTO — grade por importância, não por igualdade =====
+   Grade uniforme trata "cargas paradas há 3h" e "total faturado" como se
+   pesassem o mesmo. Não pesam: o primeiro exige alguém levantar da
+   cadeira, o segundo é acompanhamento. Aqui o que exige ação ocupa mais
+   área, e o olho encontra sem ler os seis rótulos.
+
+   `auto-fit` com mínimo de 150px resolve os tamanhos intermediários
+   sozinho: em telas estreitas as caixas viram uma coluna sem media query
+   nova, e o destaque deixa de ocupar duas colunas porque não há duas. */
+.bento{
+  display:grid;gap:14px;
+  grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+}
+.bento .stat-destaque{ grid-column:span 2 }
+.bento .stat-destaque .stat-num{ font-size:40px;line-height:1.05 }
+.bento .stat-destaque .stat-label{ font-size:13px;font-weight:700 }
+
+/* Alerta só acende com número maior que zero — a classe é aplicada em
+   app.js sob essa condição. Caixa vermelha marcando zero seria alarme
+   falso, e alarme falso ensina a ignorar o alarme. */
+.bento .stat-alerta{
+  border-top-color:var(--st-aguardando-veiculo-br);
+  background:var(--st-aguardando-veiculo-bg);
+}
+.bento .stat-alerta .stat-num,
+.bento .stat-alerta .stat-label{ color:var(--st-aguardando-veiculo-fg) }
+
+@media(max-width:640px){
+  /* Numa coluna só, "ocupar duas colunas" não existe — e sem isto o
+     destaque desaparece justamente onde a tela é menor. Ele continua
+     maior pelo corpo do número. */
+  .bento{ grid-template-columns:1fr }
+  .bento .stat-destaque{ grid-column:auto }
+  .bento .stat-destaque .stat-num{ font-size:34px }
+}
+
 .stat-box{
   background:var(--navy);border:1px solid var(--border-soft);border-radius:var(--radius);
   box-shadow:var(--shadow);padding:16px;text-align:center;border-top:4px solid var(--gold);

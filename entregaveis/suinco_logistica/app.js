@@ -928,11 +928,35 @@ function renderTorre(){
   // como uma caixa extra informativa, não como um dos 6 status oficiais.
   const statusVisiveis = STATUS_FLOW.slice(0,-1); // sem "Seguiu Viagem" (não fica em aberto)
   const aguardandoCargaCount = abertas.filter(c=>c.aguardandoCarga).length;
+  /* Hierarquia visual, não grade uniforme.
+
+     Antes as seis caixas tinham exatamente o mesmo peso, e isso não é
+     verdade no pátio: carga parada além da meta é o que faz alguém
+     levantar da cadeira; "Faturado" é informação de acompanhamento. Grade
+     igual obriga o olho a ler as seis para achar a que importa.
+
+     A conta é a mesma de sempre — só o tamanho da caixa muda. */
+  const paradas = abertas.filter(c=>{
+    const chegada = primeiroTimestamp(c.id, 'Aguardando Embarque');
+    if(!chegada) return false;
+    return (Date.now() - new Date(chegada)) / 60000 > META_TEMPO_PATIO_MIN;
+  }).length;
+
+  const caixa = (num, rotulo, {destaque=false, alerta=false, nota=''} = {}) =>
+    `<div class="stat-box${destaque?' stat-destaque':''}${alerta && num>0?' stat-alerta':''}">
+       <div class="stat-num">${num}</div>
+       <div class="stat-label">${esc(rotulo)}</div>
+       ${nota ? `<div class="stat-note">${esc(nota)}</div>` : ''}
+     </div>`;
+
   document.getElementById('torre-stats').innerHTML =
-    statusVisiveis.map(s=>`
-      <div class="stat-box"><div class="stat-num">${porStatus[s]||0}</div><div class="stat-label">${esc(s)}</div></div>
-    `).join('') +
-    `<div class="stat-box"><div class="stat-num">${aguardandoCargaCount}</div><div class="stat-label">Aguardando Carga (dados incompletos)</div></div>`;
+    // Primeiro e maior: o número que exige ação agora.
+    caixa(paradas, `Paradas há mais de ${Math.round(META_TEMPO_PATIO_MIN/60)}h`,
+          {destaque:true, alerta:true, nota:'contado desde a chegada ao pátio'})
+    + caixa(abertas.length, 'Cargas em aberto', {destaque:true})
+    + statusVisiveis.map(s=>caixa(porStatus[s]||0, s)).join('')
+    + caixa(aguardandoCargaCount, 'Aguardando Carga',
+            {nota:'dados incompletos'});
 
   const lista = abertas.slice().sort(ordenarPorSequenciaEAtualizacao);
   const thead = document.getElementById('torre-thead');
