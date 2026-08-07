@@ -3675,7 +3675,7 @@ function blocoRankingAtrasoPdf(cargas){
       <thead><tr><th>#</th><th>Placa</th><th>Transportadora</th><th>Atrasos</th><th>Atraso Médio</th><th>Último Atraso</th></tr></thead>
       <tbody>${rk.map((r,i)=>`<tr>
         <td class="num-forte">${i+1}º</td>
-        <td><strong>${esc(r.placa)}</strong></td>
+        <td class="id-cel">${esc(r.placa)}</td>
         <td>${esc(r.transportadora)}</td>
         <td>${r.atrasos} de ${r.totalCargas}</td>
         <td>${fmtDuracao(r.tempoMedioAtraso)}</td>
@@ -3714,8 +3714,8 @@ function blocoPendentesAntigasPdf(cargas){
         // documento é impresso em preto e branco com frequência.
         const critica = c.paradaHaMin > g.meta;
         return `<tr>
-          <td>${esc(c.numeroCarga)}</td>
-          <td><strong>${esc(c.placa)}</strong></td>
+          <td class="id-cel">${esc(c.numeroCarga)}</td>
+          <td class="id-cel">${esc(c.placa)}</td>
           <td>${esc(c.transportadora)}</td>
           <td>${esc(c.status)}</td>
           <td class="num-forte"${critica ? ' style="color:#a3271f"' : ''}>${fmtDuracao(c.paradaHaMin)}${critica ? ' ⚠' : ''}</td>
@@ -3740,7 +3740,7 @@ function blocoGargalosPdf(cargas){
     'Dois ou mais atrasos no período. Um atraso é acaso; dois viram padrão.',
     ['Placa','Transportadora','Atrasos','Atraso Médio'],
     g.veiculosRecorrentes.map(v=>`<tr>
-      <td><strong>${esc(v.placa)}</strong></td><td>${esc(v.transportadora)}</td>
+      <td class="id-cel">${esc(v.placa)}</td><td>${esc(v.transportadora)}</td>
       <td>${v.atrasos} de ${v.totalCargas}</td><td>${fmtDuracao(v.tempoMedioAtraso)}</td></tr>`)));
 
   partes.push(tabela('Gargalos — horários de maior congestionamento',
