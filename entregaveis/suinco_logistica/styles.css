@@ -1578,6 +1578,35 @@ input,select,textarea{border-radius:5px}
    parte porque são os dois campos de texto longo que não podem quebrar. */
 @page{ size: A4 landscape; margin: 8mm; }
 
+/* MOBILE: alguns navegadores/apps de PDF do celular (confirmado pelo
+   usuário em Android e iPhone, 07/08/2026) ignoram o pedido `size:
+   landscape` acima e imprimem na orientação em pé escolhida no próprio
+   app de compartilhar. A tabela de 13 colunas foi calibrada para a
+   largura da folha DEITADA (~281mm = 297mm - 2×8mm de margem); sem esta
+   regra, a mesma tabela cai numa folha de ~194mm de largura (A4 em pé) e
+   cada rótulo de status ("AGUARDANDO EMBARQUE" etc.) quebra em 2-3 linhas
+   — o relatório de 1 página vira 4-5 páginas ilegíveis.
+
+   NÃO faz `transform:rotate()` de propósito: girar o conteúdo depende de
+   como cada motor de impressão (Chrome Android, Safari/AirPrint no
+   iPhone) combina rotação com paginação, e isso varia entre eles de um
+   jeito que não dá pra confirmar sem testar em cada aparelho real — o que
+   não é possível neste ambiente de desenvolvimento. Encolher pela mesma
+   proporção (194/281) é seguro em qualquer motor: o pior resultado
+   possível é a MESMA tabela, só menor e com margem sobrando ao redor —
+   nunca corta coluna nem gira texto de cabeça pra baixo.
+
+   Ainda depende de confirmação num aparelho real — se o resultado não
+   ficar bom o bastante, o próximo passo é medir a largura real que cada
+   app de PDF está usando e ajustar o fator abaixo. */
+@media print and (orientation: portrait){
+  .print-page{
+    width: 281mm;
+    transform: scale(0.69);
+    transform-origin: top left;
+  }
+}
+
 @media print{
   #print-operacional table{
     width:100% !important;
