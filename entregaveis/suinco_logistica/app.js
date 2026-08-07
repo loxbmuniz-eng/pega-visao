@@ -1087,7 +1087,7 @@ function renderTorre(){
   const tbody = document.getElementById('torre-tbody');
   tbody.innerHTML = lista.map(c=>`
     <tr>
-      <td>${c.sequencia ?? '—'}</td><td>${esc(c.numeroCarga)||'—'}</td><td>${esc(c.placa)}</td><td>${esc(c.transportadora)||'—'}</td><td>${esc(c.tipoVeiculo)||'—'}</td>
+      <td>${c.sequencia ?? '—'}</td><td class="col-identificacao">${esc(c.numeroCarga)||'—'}</td><td class="col-identificacao">${esc(c.placa)}</td><td>${esc(c.transportadora)||'—'}</td><td>${esc(c.tipoVeiculo)||'—'}</td>
       <td>${esc(c.motorista)||'—'}</td>
       <td>${esc(rotaCurta(c.rota))}</td><td class="c-peso">${c.peso ? c.peso.toLocaleString('pt-BR') : '—'}</td>
       <td>${paletizadaDaCarga(c)}</td>
@@ -1215,7 +1215,7 @@ function renderProgFila(){
   document.getElementById('prog-fila-tbody').innerHTML = lista.map(c=>`
     <tr>
       <td><input type="number" class="seq-input" value="${c.sequencia ?? ''}" onchange="atualizarSequenciaUI('${c.id}',this.value)" title="Sequência livre — digite o número que quiser, a qualquer momento."></td>
-      <td>${esc(c.numeroCarga)||'—'}</td>
+      <td class="col-identificacao">${esc(c.numeroCarga)||'—'}</td>
       <td>
         <input type="text" class="placa-input" value="${esc(c.placa)}" onchange="atualizarPlacaUI('${escJs(c.id)}',this.value)" title="Trocar a placa — a transportadora e o tipo de veículo são buscados na Frota automaticamente.">
         ${marcaCargaDaPlaca(c, lista)}
@@ -1582,8 +1582,8 @@ function renderPortariaProgramadas(){
       acao = `<button class="btn btn-warn btn-sm" onclick="portariaSaiuCarga('${escJs(c.placa)}')">🏁 Saiu</button>`;
     }
     return `<tr>
-      <td><strong>${esc(c.placa)}</strong>${marcaCargaDaPlaca(c, lista)}</td>
-      <td>${esc(c.numeroCarga)||'—'}</td>
+      <td class="col-identificacao">${esc(c.placa)}${marcaCargaDaPlaca(c, lista)}</td>
+      <td class="col-identificacao">${esc(c.numeroCarga)||'—'}</td>
       <td>${esc(c.transportadora)||'—'}</td>
       <td>${esc(rotaCurta(c.rota))}</td>
       <td>${badgeHtml(c.status)}</td>
@@ -1683,7 +1683,7 @@ function renderExpedicao(){
   const lista = cargasAbertas().filter(c=>alvo.includes(c.status)).sort(ordenarPorSequenciaEAtualizacao);
   document.getElementById('exp-tbody').innerHTML = lista.map(c=>`
     <tr>
-      <td>${c.sequencia ?? '—'}</td><td>${esc(c.numeroCarga)||'—'}</td><td>${esc(c.placa)}</td><td>${esc(c.transportadora)||'—'}</td>
+      <td>${c.sequencia ?? '—'}</td><td class="col-identificacao">${esc(c.numeroCarga)||'—'}</td><td class="col-identificacao">${esc(c.placa)}</td><td>${esc(c.transportadora)||'—'}</td>
       <td>${esc(c.destino)||'—'}</td><td>${badgeHtml(c.status)}</td>
       <td class="no-print">${botaoAvancoHtml(c)}</td>
     </tr>`).join('');
@@ -1696,7 +1696,7 @@ function renderFaturamento(){
   const lista = cargasAbertas().filter(c=>alvo.includes(c.status));
   document.getElementById('fat-tbody').innerHTML = lista.map(c=>`
     <tr>
-      <td>${esc(c.numeroCarga)||'—'}</td><td>${esc(c.placa)}</td><td>${esc(c.transportadora)||'—'}</td><td>${esc(c.destino)||'—'}</td>
+      <td class="col-identificacao">${esc(c.numeroCarga)||'—'}</td><td class="col-identificacao">${esc(c.placa)}</td><td>${esc(c.transportadora)||'—'}</td><td>${esc(c.destino)||'—'}</td>
       <td>${c.peso||0}</td><td>${badgeHtml(c.status)}</td>
       <td class="no-print">${botaoAvancoHtml(c)}</td>
     </tr>`).join('');
