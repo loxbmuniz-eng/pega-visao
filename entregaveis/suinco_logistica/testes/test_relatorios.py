@@ -31,9 +31,9 @@ async def main():
         for fn, rot in [('exportarPdfOperacional','Operacional'),
                         ('exportarPdfExecutivo','Executivo'),
                         ('exportarPdfFretes','Fretes')]:
-            t = await pg.evaluate(f"""() => {{
+            t = await pg.evaluate(f"""async () => {{
               const antes = document.title;
-              {fn}();
+              await {fn}();
               const durante = document.title;
               window.dispatchEvent(new Event('afterprint'));
               return {{durante, depois: document.title, antes}};

@@ -942,11 +942,40 @@
 <script>
 /* Registro do service worker. Envolvido em try/catch e condicionado ao
    protocolo: em file:// a API existe mas lança SecurityError, e um erro
-   aqui apareceria no console de quem só abriu o arquivo por duplo clique. */
+   aqui apareceria no console de quem só abriu o arquivo por duplo clique.
+
+   AUTO-ATUALIZAÇÃO: o navegador sozinho só confere se o sw.js mudou 1x por
+   navegação (às vezes só 1x a cada 24h), e este painel fica com a aba
+   aberta por turnos inteiros no pátio — foi exatamente por isso que um
+   deploy novo não aparecia sem o operador saber apagar cache manualmente
+   (F12/limpar dados). Duas medidas cobrem isso:
+   1) pede pro navegador reconferir o sw.js com frequência (a cada troca de
+      aba visível e a cada poucos minutos com a aba aberta);
+   2) quando uma versão nova assume o controle da página (skipWaiting +
+      clients.claim já rodam em sw.js), recarrega a aba sozinho — o estado
+      da tela é local (DB em localStorage) e sobrevive ao reload, então
+      isto é seguro mesmo com a fila offline em andamento. */
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
   window.addEventListener('load', function () {
-    navigator.serviceWorker.register('sw.js').catch(function (e) {
+    navigator.serviceWorker.register('sw.js').then(function (registro) {
+      setInterval(function () { registro.update().catch(function () {}); }, 3 * 60 * 1000);
+      document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'visible') registro.update().catch(function () {});
+      });
+    }).catch(function (e) {
       console.info('[Suinco] service worker não registrado:', e.message);
+    });
+
+    var jaRecarregando = false;
+    navigator.serviceWorker.addEventListener('controllerchange', function () {
+      if (jaRecarregando) return;
+      jaRecarregando = true;
+      if (typeof notify === 'function') {
+        notify('Nova versão do painel disponível — atualizando…', 'info', 1400);
+        setTimeout(function () { location.reload(); }, 900);
+      } else {
+        location.reload();
+      }
     });
   });
 }
