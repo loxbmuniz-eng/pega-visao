@@ -103,6 +103,9 @@ function migrarPraOnde(){
    ainda não foram cadastradas. Para acrescentar as que faltam, basta incluir
    a linha aqui — nada mais no painel precisa mudar. */
 const ROTAS = [
+  // Única rota internacional da lista — fora da faixa 500 usada pelas
+  // praças nacionais, de propósito: não é numeração da mesma série.
+  { codigo:'171', nome:'Buenos Aires',                       detalhe:'Argentina', operador:'' },
   { codigo:'500', nome:'Patos de Minas',                     operador:'' },
   { codigo:'501', nome:'São Gotardo',                        operador:'' },
   { codigo:'502', nome:'Araxá',                              operador:'' },
