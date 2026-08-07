@@ -623,14 +623,30 @@ select option{background:var(--campo-bg);color:var(--text)}
    Os três relatórios circulam fora do pátio. Cada peça abaixo responde a
    uma pergunta que sempre aparece quando o número desagrada. */
 
-/* Classificação, no canto do cabeçalho: responde "posso encaminhar isto?"
-   antes de alguém encaminhar e perguntar depois. */
+/* Bloco da direita do cabeçalho: classificação + quando/por quem foi
+   gerado. Empilhados e alinhados à direita — é onde o olho já procura essa
+   informação em qualquer memorando, sem precisar rolar até o rodapé
+   (pedido direto: "Uso interno" sozinho não bastava, faltava dizer quando
+   e por quem). */
+.doc-cabecalho-meta{
+  margin-left:auto;flex:none;
+  display:flex;flex-direction:column;align-items:flex-end;gap:6px;
+}
 .doc-classificacao{
-  margin-left:auto;align-self:flex-start;
+  align-self:flex-end;
   border:1px solid var(--border);border-radius:3px;
   padding:3px 9px;font-size:9px;font-weight:800;
   letter-spacing:.14em;text-transform:uppercase;color:var(--text-dim);
 }
+.doc-gerado-em{
+  display:flex;flex-direction:column;align-items:flex-end;text-align:right;
+  line-height:1.35;
+}
+.doc-gerado-quando{
+  font-size:13px;font-weight:800;color:var(--gold-text);
+  font-variant-numeric:tabular-nums;
+}
+.doc-gerado-quem{ font-size:11px;color:var(--text-dim) }
 
 /* Identificação em UMA LINHA. Já foi tabela de duas colunas por seis
    linhas: correta, e custava um quinto da primeira folha antes do primeiro
@@ -704,6 +720,8 @@ select option{background:var(--campo-bg);color:var(--text)}
      do navegador, em "Cabeçalhos e rodapés". */
   .doc-pagina{ display:none }
   .doc-classificacao{ color:#000;border-color:#000 }
+  .doc-gerado-quando{ color:#111418 !important }
+  .doc-gerado-quem{ color:#3d4a5c !important }
   /* A identificação não pode ser partida entre duas folhas: é a
      procedência do documento e precisa vir inteira na primeira. */
   .doc-identificacao,.doc-base{ break-inside:avoid;page-break-inside:avoid }

@@ -2781,7 +2781,18 @@ function referenciaDocumento(titulo){
 
    O que sobra no alto é o que identifica o documento numa foto: marca,
    título, subtítulo e classificação. Nada mais. */
+/* Quando e por quem — em destaque no cabeçalho, não só no rodapé.
+
+   A ficha do rodapé (fichaDocumento) já tinha essa informação, mas em
+   corpo pequeno, embaixo de tudo — quem abre o PDF pra conferir "isso é de
+   agora ou é o de ontem?" precisa rolar a folha inteira pra achar. Pedido
+   direto: precisa estar claro no nível do relatório, não escondido no
+   rodapé. Repete o mesmo dado (não substitui a ficha, que também tem
+   Referência/Período/Registros), no canto onde o olho já procura em
+   qualquer memorando — ao lado do título, junto do selo "Uso interno". */
 function cabecalhoDocumento({ titulo, subtitulo }) {
+  const operador = (DB.operador && DB.operador.nome) || '—';
+  const setor = (DB.operador && DB.operador.setor) || '';
   return `
     <div class="doc-cabecalho">
       <img src="assets/logo_suinco.png" alt="Suinco" class="doc-logo">
@@ -2790,7 +2801,13 @@ function cabecalhoDocumento({ titulo, subtitulo }) {
         <h1 class="doc-titulo">${esc(titulo)}</h1>
         ${subtitulo ? `<div class="doc-subtitulo">${esc(subtitulo)}</div>` : ''}
       </div>
-      <div class="doc-classificacao">Uso interno</div>
+      <div class="doc-cabecalho-meta">
+        <div class="doc-classificacao">Uso interno</div>
+        <div class="doc-gerado-em">
+          <span class="doc-gerado-quando">${esc(fmtDataHora(new Date().toISOString()))}</span>
+          <span class="doc-gerado-quem">${esc(operador)}${setor ? ' · ' + esc(setor) : ''}</span>
+        </div>
+      </div>
     </div>`;
 }
 
