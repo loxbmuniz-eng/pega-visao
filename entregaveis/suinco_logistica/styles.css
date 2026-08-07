@@ -1288,6 +1288,14 @@ code{
 }
 .print-legenda{margin-top:7px;font-size:10.5px;color:var(--text-dim);line-height:1.6}
 .num-forte{font-weight:800;color:var(--text);font-variant-numeric:tabular-nums}
+/* Mesma trilha de destaque das tabelas de identificação (Operacional,
+   Fretes, linha do tempo), aplicada às tabelas de análise do Executivo
+   (Pontos Críticos, Ranking de Atraso, Gargalos) — Nº Carga e Placa
+   recebem o par negrito + fundo onde quer que apareçam num relatório. */
+.id-cel{font-weight:800;background:rgba(185,144,63,.16)}
+@media print{
+  #print-executivo .id-cel{background:rgba(185,144,63,.22) !important}
+}
 
 /* Pílula de status na tabela de distribuição — mesma leitura da badge. */
 .status-pill{
@@ -1314,13 +1322,16 @@ code{
 .extremo-tempo{font-weight:800;font-size:14.5px;color:var(--gold-text);font-variant-numeric:tabular-nums}
 
 /* Matriz da linha do tempo: cargas nas linhas, etapas do fluxo nas colunas. */
-.tabela-timeline{font-size:10.5px;table-layout:fixed}
-.tabela-timeline th{padding:7px 5px;font-size:10px;white-space:normal;text-align:center}
+.tabela-timeline{font-size:11.5px;table-layout:fixed}
+.tabela-timeline th{padding:8px 6px;font-size:10.5px;white-space:normal;text-align:center}
 .tabela-timeline .tl-th{display:block;line-height:1.25;font-weight:800}
-.tabela-timeline td{padding:5px;vertical-align:top}
-.tl-carga{width:15%}
-.tl-placa{display:block;font-weight:800;color:var(--text);font-size:12px}
-.tl-num{display:block;color:var(--gold-text);font-size:10px}
+.tabela-timeline td{padding:6px;vertical-align:top}
+/* Mesma trilha de destaque do Operacional e do Fretes: placa e número de
+   carga são o par que identifica a linha, e a célula inteira carrega o
+   fundo — não só o texto — pra guiar o olho pela coluna certa. */
+.tl-carga{width:15%;background:rgba(185,144,63,.16)}
+.tl-placa{display:block;font-weight:800;color:var(--text);font-size:13px}
+.tl-num{display:block;font-weight:800;color:var(--gold-text);font-size:11px}
 .tl-transp{display:block;color:var(--text-dim);font-size:9.5px;line-height:1.3}
 .tl-cel{text-align:center;border-radius:4px}
 .tl-hora{display:block;font-weight:800;font-size:11.5px;font-variant-numeric:tabular-nums}
@@ -1334,8 +1345,12 @@ code{
 @media print{
   /* Não quebrar uma seção do relatório no meio de uma página. */
   .print-secao{break-after:avoid;page-break-after:avoid}
-  .tabela-timeline{font-size:9.5px}
+  .tabela-timeline{font-size:10.5px}
   .tabela-timeline tr{break-inside:avoid;page-break-inside:avoid}
+  /* Mesmo empate de especificidade do Operacional: td sem estilo inline
+     perde o fundo para a regra geral de impressão, então o seletor aqui
+     precisa ganhar por especificidade (id do container), não por ordem. */
+  #print-executivo .tl-carga{ background:rgba(185,144,63,.22) !important }
   thead{display:table-header-group}  /* repete cabeçalho a cada página */
 }
 
@@ -1564,14 +1579,27 @@ input,select,textarea{border-radius:5px}
   }
 
   /* ---- Orçamento de largura (soma 100%) ---- */
+  /* A regra geral de impressão zera o fundo de qualquer td SEM estilo
+     inline (`:not([style*="background"])`) para não sobrar cor de tema
+     escuro no papel. A trilha de destaque acima é CSS de classe, não
+     inline — cai nessa rede e sumiria sem este empate por especificidade
+     (seletor prefixado por id vence o `.print-page td:not(...)`). */
+  #print-operacional .c-carga, #print-operacional .c-placa{
+    background:rgba(185,144,63,.22) !important;
+  }
   #print-operacional .c-num{ width:3% }
   #print-operacional .c-seq{ width:3.5% }
   #print-operacional .c-carga{ width:7% }
-  #print-operacional .c-status{ width:15% }     /* "AGUARDANDO EMBARQUE" */
+  /* 17%, não 15%: a fonte deste documento subiu de 9,2 para 9,8px (pedido
+     de legibilidade), e "AGUARDANDO EMBARQUE" — o rótulo mais longo dos
+     seis status — passou a quebrar em duas linhas na largura antiga. Os
+     2 pontos vêm de Transportadora, que quebra sem problema (já é campo
+     de texto livre, com nomes que já ocupavam 2-3 linhas antes disso). */
+  #print-operacional .c-status{ width:17% }     /* "AGUARDANDO EMBARQUE" */
   #print-operacional .c-rota{ width:11% }
   #print-operacional .c-operacao{ width:9% }
   #print-operacional .c-placa{ width:7.5% }
-  #print-operacional .c-transp{ width:15.5% }   /* nomes longos de empresa */
+  #print-operacional .c-transp{ width:13.5% }   /* nomes longos de empresa */
   #print-operacional .c-veiculo{ width:8% }
   #print-operacional .c-peso{ width:5.5% }
   #print-operacional .c-palet{ width:5% }
@@ -1581,14 +1609,23 @@ input,select,textarea{border-radius:5px}
 
 /* ---- Leitura dos dados: o que precisa saltar aos olhos ----
    Fora do @media print de propósito: a pré-visualização em tela tem que
-   mostrar o mesmo que sai no papel. */
+   mostrar o mesmo que sai no papel.
+
+   Nº da Carga e Placa são o par que a pessoa procura primeiro numa folha
+   com quinze linhas parecidas — negrito sozinho já ajudava, mas o olho
+   ainda precisa ler para achar a coluna certa. Uma trilha de fundo cor de
+   ouro (bem clara — o texto continua escuro, contraste não muda) corre
+   pelas duas colunas o documento inteiro: dá para "escanear" achando a
+   faixa antes mesmo de ler o número. */
 #print-operacional .c-carga{
   font-weight:800; text-transform:uppercase; letter-spacing:.03em;
   font-variant-numeric:tabular-nums; text-align:center;
+  background:rgba(185,144,63,.16);
 }
 #print-operacional .c-placa{
   font-weight:800; text-transform:uppercase; letter-spacing:.06em;
   text-align:center; white-space:nowrap;
+  background:rgba(185,144,63,.16);
 }
 /* O status quebra ENTRE palavras, nunca no meio.
 
@@ -2045,7 +2082,10 @@ input,select,textarea{border-radius:5px}
 .doc-assinatura{ font-size:9.5px; opacity:.75; letter-spacing:.02em }
 
 /* ---- Relatório de Fretes: três colunas, papel em pé ---- */
-.tab-fretes .col-carga{ width:20%; font-weight:800; font-variant-numeric:tabular-nums }
+.tab-fretes .col-carga{
+  width:20%; font-weight:800; font-variant-numeric:tabular-nums;
+  background:rgba(185,144,63,.16);
+}
 .tab-fretes .col-rota{ width:28% }
 .tab-fretes .col-obs{ white-space:normal; line-height:1.5 }
 .obs-pendente{
@@ -2067,11 +2107,14 @@ input,select,textarea{border-radius:5px}
      folga na folha, e este documento é lido numa foto de WhatsApp — cada
      décimo de milímetro de altura de letra conta mais que o espaço em
      branco economizado. */
-  .doc-denso table{ font-size:9.2px !important }
-  .doc-denso th, .doc-denso td{ padding:5px 4px !important }
+  /* 9,8px, não 9,2px — subiu de novo depois de conferir com o simulador
+     que a folha de 13 colunas ainda cabe sem quebrar linha nem estourar
+     largura (ferramentas/simular_relatorios.py). */
+  .doc-denso table{ font-size:9.8px !important }
+  .doc-denso th, .doc-denso td{ padding:6px 5px !important }
 
-  .doc-normal table{ font-size:9.5px !important }
-  .doc-normal th, .doc-normal td{ padding:4px 5px !important }
+  .doc-normal table{ font-size:10.5px !important }
+  .doc-normal th, .doc-normal td{ padding:5px 6px !important }
 
   /* Fretes: MESMA folha dos outros dois (A4 deitado), e é preciso registrar
      por quê — a versão anterior usava página nomeada:
@@ -2091,10 +2134,14 @@ input,select,textarea{border-radius:5px}
 
      A leitura não perde nada — em A4 deitado a coluna de Observações fica
      MAIS larga do que era em pé, e é a coluna que carrega o texto. */
-  .doc-amplo table{ font-size:12px !important; table-layout:fixed }
-  .doc-amplo th, .doc-amplo td{ padding:8px 9px !important; vertical-align:top }
-  .doc-amplo th{ font-size:10.5px !important; letter-spacing:.04em }
+  .doc-amplo table{ font-size:13px !important; table-layout:fixed }
+  .doc-amplo th, .doc-amplo td{ padding:9px 10px !important; vertical-align:top }
+  .doc-amplo th{ font-size:11px !important; letter-spacing:.04em }
   /* Zebra: com linhas altas e três colunas largas, o olho perde a linha ao
      atravessar a página. */
   .doc-amplo tbody tr:nth-child(even) td{ background:#f4f5f7 !important }
+  /* Nº da Carga é a única coluna curta e fixa desta folha — mesma trilha
+     de destaque do Operacional, pela mesma razão: é o que a pessoa
+     procura primeiro. */
+  #print-fretes .col-carga{ background:rgba(185,144,63,.22) !important }
 }
