@@ -244,9 +244,48 @@ html,body{
   -webkit-print-color-adjust:exact;print-color-adjust:exact;color-adjust:exact;
 }
 body{
-  font-family:'Segoe UI',Inter,system-ui,sans-serif;
+  /* A pilha era 'Segoe UI', Inter, system-ui — Inter não vem instalada em
+     nenhum sistema por padrão, então na prática todo Mac (e boa parte do
+     Linux) pulava direto para a fonte genérica do navegador, nunca a
+     "Segoe UI" que dava o acabamento pretendido.
+
+     Sem baixar fonte nenhuma (o painel é um arquivo único, offline-first —
+     puxar de um Google Fonts quebraria essa garantia e abriria a mesma
+     dependência externa que acabamos de decidir NÃO adicionar para o
+     Socket.IO), a pilha agora pede a fonte de sistema de CADA plataforma
+     pelo nome certo: -apple-system/BlinkMacSystemFont é a San Francisco no
+     Mac, 'Segoe UI' no Windows, 'Roboto' já cobre a maioria do Android via
+     system-ui. Cada SO mostra a própria fonte nativa de interface — que é
+     desenhada exatamente para isto: telas densas de dado em corpo pequeno. */
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Roboto',
+              system-ui,sans-serif;
   font-size:15px;
   line-height:1.45;
+  /* Ajuste fino de peso e espaçamento entre letras — sem isso, textos com
+     pesos variados (a escala abaixo introduz mais deles) saem com o
+     contorno "sujo" em telas sem antialiasing subpixel. */
+  -webkit-font-smoothing:antialiased;
+  text-rendering:optimizeLegibility;
+}
+
+/* ---- Escala tipográfica ----
+   Antes: um corpo só (15px) para tudo, e cada card definia o próprio
+   tamanho de número/rótulo por conta própria — o mesmo problema que o
+   bloco de --sp-* já resolveu para espaçamento, só que para tipo. Nomeada,
+   não numerada (--fs-numero, não --fs-3): quem escreve CSS novo lê o nome
+   e sabe o que carrega, sem abrir este arquivo para conferir.
+
+   Números de indicador (KPI, célula de peso/tempo) usam a MESMA fonte da
+   interface, só que com font-variant-numeric:tabular-nums — dígitos de
+   largura igual, para colunas de número alinharem verticalmente sem
+   precisar de fonte monoespaçada. */
+:root{
+  --fs-rotulo:11px;      /* legenda de indicador, cabeçalho de coluna miúdo */
+  --fs-corpo:13.5px;     /* padrão de tabela e formulário — já era este valor */
+  --fs-destaque:15px;    /* corpo do texto corrido — o que já era body */
+  --fs-numero:30px;      /* número de indicador — já era este valor no .stat-num */
+  --fs-numero-grande:40px; /* indicador em destaque — já era este valor no .bento */
+  --lh-numero:1.05;      /* números grandes ficam mais legíveis com linha justa */
 }
 a{color:var(--gold-text)}
 :focus-visible{outline:3px solid var(--gold);outline-offset:2px}
@@ -447,8 +486,35 @@ th{
   font-weight:700;white-space:nowrap;border-bottom:2px solid var(--gold-dim);
 }
 td{padding:9px 12px;border-bottom:1px solid var(--border-soft);vertical-align:middle}
+
+/* Zebra na tela. Só o relatório de Fretes impresso tinha (doc-amplo,
+   nth-child(even), mais abaixo neste arquivo) — nenhuma tabela de tela
+   tinha, e é exatamente onde falta mais: Torre e Programação chegam a 13
+   colunas, e sem listra o olho perde a linha ao atravessar a tela inteira
+   voltando para conferir o próximo dado. Opacidade baixa de propósito —
+   listra forte compete com a cor do status, que é a informação que
+   realmente importa na linha. */
+/* No `tr`, e não no `td`. Uma célula com cor própria (a linha do tempo de
+   etapas, badge de status dentro de célula) pinta o PRÓPRIO fundo, e esse
+   fundo tem que vencer a listra. Zebra no `td` genérico tinha especificidade
+   MAIOR que `.et-atual` (a cor da etapa atual, uma classe só) e apagava a
+   cor do status nas linhas pares — achado pelo próprio test_contraste.py:
+   texto quase invisível sobre o navy da listra em vez da cor da etapa.
+   No `tr` a listra só aparece onde a célula não pinta nada por conta
+   própria — é assim que fundo de linha sempre funcionou em tabela HTML. */
+tbody tr:nth-child(even){ background:rgba(233,185,84,.045) }
 tr:hover td{background:rgba(233,185,84,.06)}
 td input,td select{padding:5px 7px;font-size:13px}
+
+/* Coluna de IDENTIFICAÇÃO da linha — Nº da Carga e Placa — mais escura e
+   com peso maior que o resto da linha. É a coluna que a pessoa usa para
+   achar "aquela carga" entre quinze parecidas; o resto (transportadora,
+   motorista, tipo de veículo) é contexto, e contexto não precisa competir
+   visualmente com identificador. Mesma lógica que `.tabela-patio
+   .vp-carga,.vp-placa` já aplicava só na Visão do Pátio — agora vale nas
+   tabelas de tela em geral (Torre, filas de Programação/Portaria) que
+   mostram a mesma dupla de colunas. */
+.col-identificacao{ font-weight:800;color:var(--text);letter-spacing:.02em }
 .row-highlight td{background:rgba(233,185,84,.10)}
 
 /* ===== BADGES (sempre com texto, nunca só cor) ===== */
@@ -755,7 +821,7 @@ tbody tr{ transition:background-color var(--t-rapida) ease }
   grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
 }
 .bento .stat-destaque{ grid-column:span 2 }
-.bento .stat-destaque .stat-num{ font-size:40px;line-height:1.05 }
+.bento .stat-destaque .stat-num{ font-size:var(--fs-numero-grande);line-height:var(--lh-numero) }
 .bento .stat-destaque .stat-label{ font-size:13px;font-weight:700 }
 
 /* Alerta só acende com número maior que zero — a classe é aplicada em
@@ -801,7 +867,8 @@ tbody tr{ transition:background-color var(--t-rapida) ease }
 :root[data-tema="claro"] .stat-box::before{
   background:linear-gradient(180deg, rgba(233,185,84,.09), transparent);
 }
-.stat-num{position:relative;font-size:30px;font-weight:800;color:var(--gold-text)}
+.stat-num{position:relative;font-size:var(--fs-numero);font-weight:800;color:var(--gold-text);
+  font-variant-numeric:tabular-nums;letter-spacing:-.01em}
 .stat-label{font-size:12px;color:var(--text-dim);margin-top:3px}
 .stat-note{font-size:10.5px;color:var(--text-dim);margin-top:2px;font-style:italic}
 
