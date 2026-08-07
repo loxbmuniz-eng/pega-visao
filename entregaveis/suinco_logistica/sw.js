@@ -60,7 +60,8 @@ self.addEventListener('fetch', (evento) => {
     return;
   }
 
-  // Outra origem (CDN do MSAL, por exemplo): não é nossa para gerenciar.
+  // Outra origem: não é nossa para gerenciar (o painel não carrega mais
+  // script de CDN de terceiro desde a saída do MSAL/SharePoint).
   if (url.origin !== self.location.origin) return;
 
   evento.respondWith(

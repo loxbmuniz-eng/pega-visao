@@ -5,6 +5,20 @@
 - **Resultado:** todas as baterias sem falha; 1 vulnerabilidade ALTA encontrada e corrigida
 - **Como reproduzir:** `testes/README.md`
 
+> **NOTA (adicionada na auditoria de 07/08/2026 — não altera o relatório
+> original abaixo).** Este documento fotografa o sistema em 02/08/2026,
+> quando ele ainda usava SharePoint/Microsoft Graph/MSAL como backend. Em
+> 05/08/2026 (commits `c4730d2`, `4d7d5e5`) essa arquitetura foi removida e
+> substituída pelo backend Node/Express/PostgreSQL atual — login passou a
+> ser e-mail e senha própria, sem MSAL, sem SharePoint, sem Graph.
+>
+> Os itens deste relatório que mencionam MSAL, CDN da Microsoft ou
+> SharePoint (tabela da seção 5, item 5 da seção 6, comando de reprodução
+> da seção 7) descrevem uma superfície que **não existe mais no sistema em
+> produção**. Preservados aqui como registro histórico do que foi testado
+> naquela data — não como lista de pendências atuais. A situação real de
+> cada item está anotada entre colchetes onde aparece.
+
 ---
 
 ## 1. Resumo
@@ -161,7 +175,7 @@ nos navegadores dos outros?
 | 4 | Poluição de protótipo | ✅ | ✅ |
 | 5 | Burla do modo de simulação | ✅ | ✅ |
 | 6 | Segredos no pacote | ⚠️ senha | ⚠️ conhecido |
-| 7 | Integridade do script externo | ⚠️ CDN | ⚠️ conhecido |
+| 7 | Integridade do script externo | ⚠️ CDN | ⚠️ conhecido [MSAL não existe mais — ver nota no topo] |
 | 8 | Adulteração do armazenamento | ⚠️ setor | ⚠️ conhecido |
 | 9 | Erros durante ataque | ✅ | ✅ |
 
@@ -202,9 +216,13 @@ Igualmente importante:
    responde.
 4. **Sem teste de rede degradada** (alta latência, perda de pacote). Só queda
    total e recuperação.
-5. **Sem varredura de dependências.** O MSAL vem da CDN da Microsoft, sem
-   verificação de integridade — ver recomendação em `ARQUITETURA_E_OPERACAO.md`
-   §6.4.
+5. **Sem varredura de dependências.** *[Corrigido pela migração de
+   05/08/2026 — ver nota no topo do documento.]* Na data deste relatório, o
+   MSAL vinha da CDN da Microsoft sem verificação de integridade. O MSAL
+   saiu do sistema junto com o SharePoint. O único script externo carregado
+   hoje é o cliente Socket.IO, servido pela própria infraestrutura do
+   projeto (`api.embarquesuinco.com.br`), não por CDN de terceiro — ver
+   `ARQUITETURA_E_OPERACAO.md` §6.4 para a situação atual dessa dependência.
 
 ---
 

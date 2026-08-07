@@ -3,11 +3,12 @@ import { consultar, emTransacao } from '../banco.js';
 import { exigirLogin } from '../middleware/auth.js';
 import { emitir } from '../tempo-real.js';
 import {
-  COLUNAS_CARGA, paraPainel, saneiarCriacao, saneiarEdicao,
-  normalizarPlaca, idSeguro, camposDeAviso,
+  COLUNAS_CARGA, paraPainel, saneiarCriacao, saneiarCriacaoChegadaSemProgramacao,
+  saneiarEdicao, normalizarPlaca, idSeguro, camposDeAviso,
 } from '../dominio/cargas.js';
 import {
-  validarTransicao, podeCriarCarga, camposEditaveisPor, podeRegistrarSaida,
+  validarTransicao, podeCriarCarga, podeRegistrarChegadaSemProgramacao,
+  camposEditaveisPor, podeRegistrarSaida,
   ErroDeFluxo, ErroDePermissao, STATUS_INICIAL,
 } from '../dominio/fluxo.js';
 
@@ -45,7 +46,31 @@ async function gravarEvento(cli, { cargaId, placa, de, para, operador, acao }) {
 rotasCargas.post('/cargas', exigirLogin, async (req, res, next) => {
   try {
     const op = req.operador;
-    if (!podeCriarCarga(op.setor)) {
+
+    /* Dois caminhos sob a mesma rota, e a diferença é decisão de produto,
+       não só de permissão:
+
+       PROGRAMAÇÃO (Logística) — a carga inteira vem do corpo, e placa fora
+       da Frota é bloqueada: a base de Frota é quem manda no que vira carga
+       programada.
+
+       CHEGADA SEM PROGRAMAÇÃO (Portaria) — um caminhão que apareceu no
+       pátio sem programação prévia. O corpo do cliente não decide nada além
+       da placa (saneiarCriacaoChegadaSemProgramacao ignora o resto de
+       propósito — ver o comentário lá), e a trava de frota NÃO vale: a
+       Portaria precisa registrar a presença do caminhão mesmo que ele nunca
+       tenha sido cadastrado. A Logística corrige o cadastro depois.
+
+       `aguardandoCarga:true` é o que escolhe o caminho. Não é o cliente
+       quem decide se PODE usá-lo — isso é podeRegistrarChegadaSemProgramacao,
+       validado no servidor como tudo mais nesta rota. */
+    const chegadaSemProgramacao = req.body?.aguardandoCarga === true;
+
+    if (chegadaSemProgramacao) {
+      if (!podeRegistrarChegadaSemProgramacao(op.setor)) {
+        throw new ErroDePermissao('Registrar chegada sem programação é da Portaria ou da Logística.');
+      }
+    } else if (!podeCriarCarga(op.setor)) {
       throw new ErroDePermissao('Só a Logística programa carga.');
     }
 
@@ -54,14 +79,16 @@ rotasCargas.post('/cargas', exigirLogin, async (req, res, next) => {
       return res.status(400).json({ erro: 'Placa é obrigatória.', codigo: 'PLACA_FALTANDO' });
     }
 
-    /* A TRAVA DE FROTA. Regra de negócio inegociável: placa que não está na
-       base oficial não vira carga. Ela existia só no navegador; aqui passa a
-       valer também para quem chamar a API direto. */
+    /* A TRAVA DE FROTA. Regra de negócio inegociável PARA A PROGRAMAÇÃO:
+       placa que não está na base oficial não vira carga programada. Ela
+       existia só no navegador; aqui passa a valer também para quem chamar a
+       API direto. Não vale para chegadaSemProgramacao — ver o comentário
+       acima. */
     const { rows: frotaRows } = await consultar(
       'SELECT placa, transportadora, tipo_veiculo FROM dim_veiculos WHERE placa = $1',
       [placa]
     );
-    if (!frotaRows[0]) {
+    if (!frotaRows[0] && !chegadaSemProgramacao) {
       return res.status(422).json({
         erro: `Placa ${placa} não está cadastrada na Frota. ` +
               `Cadastre em Cadastros → Frota antes de programar esta carga.`,
@@ -69,7 +96,9 @@ rotasCargas.post('/cargas', exigirLogin, async (req, res, next) => {
       });
     }
 
-    const dados = saneiarCriacao(req.body, frotaRows[0]);
+    const dados = chegadaSemProgramacao
+      ? saneiarCriacaoChegadaSemProgramacao(req.body, frotaRows[0])
+      : saneiarCriacao(req.body, frotaRows[0]);
 
     const carga = await emTransacao(async (cli) => {
       const cols = Object.keys(dados);
@@ -101,7 +130,7 @@ rotasCargas.post('/cargas', exigirLogin, async (req, res, next) => {
         de: null,
         para: dados.status_atual || STATUS_INICIAL,
         operador: op,
-        acao: 'Carga programada',
+        acao: chegadaSemProgramacao ? 'Chegada sem programação registrada' : 'Carga programada',
       });
       return { linha: ins.rows[0], nova: true };
     });

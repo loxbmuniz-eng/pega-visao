@@ -35,6 +35,13 @@ rotasCadastros.post('/frota', exigirLogin, exigirSetor('Logística'), async (req
     const placa = normalizarPlaca(req.body?.placa);
     if (!placa) return res.status(400).json({ erro: 'Placa é obrigatória.', codigo: 'PLACA_FALTANDO' });
 
+    /* `|| null` colapsava capacidadeKg:0 para null — Number(0) é falsy.
+       0 é dado real (achado da auditoria "superpowers"); só a AUSÊNCIA do
+       campo deveria virar null. */
+    const capacidadeKg = Number.isFinite(Number(req.body?.capacidadeKg))
+      && req.body?.capacidadeKg !== '' && req.body?.capacidadeKg != null
+      ? Number(req.body.capacidadeKg) : null;
+
     const { rows } = await consultar(
       `INSERT INTO dim_veiculos (placa, transportadora, tipo_veiculo, capacidade_kg, uf, origem)
        VALUES ($1,$2,$3,$4,$5,'manual')
@@ -49,7 +56,7 @@ rotasCadastros.post('/frota', exigirLogin, exigirSetor('Logística'), async (req
         placa,
         String(req.body?.transportadora ?? '').slice(0, 200),
         String(req.body?.tipoVeiculo ?? '').slice(0, 100),
-        Number(req.body?.capacidadeKg) || null,
+        capacidadeKg,
         String(req.body?.uf ?? '').slice(0, 2).toUpperCase() || null,
       ]
     );

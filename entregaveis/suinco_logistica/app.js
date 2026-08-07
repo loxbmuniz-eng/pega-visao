@@ -380,6 +380,25 @@ function receberRecusaDeStatus(carga, alvo, motivo){
   renderAll();
 }
 
+/* Criação ou edição de carga recusada pelo servidor.
+
+   Generalização do que corrigiu a chegada sem programação da Portaria:
+   qualquer recusa de POST/PATCH em /api/cargas (placa fora da frota, setor
+   sem permissão, conflito de versão) chega aqui em vez de morrer no
+   console. Não tenta desfazer nada sozinho — ao contrário da recusa de
+   status, aqui não dá para saber com segurança se a carga já existia no
+   servidor antes (edição) ou nunca chegou a existir (criação), e chutar
+   errado apagaria dado de verdade. O aviso é alto e diz pra conferir. */
+function receberRecusaDeCarga(carga, motivo){
+  const rotulo = carga.numeroCarga && carga.numeroCarga !== 'Aguardando Carga'
+    ? carga.numeroCarga : (carga.placa || carga.id);
+  notify(
+    `${rotulo}: o servidor recusou a gravação. ${motivo || ''} `
+    + 'A informação pode não estar salva — confira e refaça se precisar.',
+    'danger', 20000);
+  tocarAlertaAlteracao();
+}
+
 /* Status imediatamente anterior a `alvo` no log desta carga.
    Usa o log em vez de STATUS_FLOW.indexOf(alvo)-1 porque a carga pode ter
    nascido no meio do fluxo (entrada "Aguardando Carga" da Portaria). */
@@ -3092,6 +3111,32 @@ async function init(){
     // É o que faz a Portaria enxergar a carga que a Logística acabou de criar.
     SuincoSharePoint.aoReceberDados(dados => {
       const r = fundirEstadoRemoto(dados);
+
+      /* liberarPendencias() estava escrita desde sempre e NUNCA era chamada
+         de lugar nenhum — achado da auditoria "superpowers". O comentário
+         dela já dizia quando deveria rodar: "quando a fila sobe por
+         completo". Este callback dispara toda vez que sincronizarAgora()
+         faz uma leitura — e sincronizarAgora() SEMPRE drena a fila de
+         escrita antes de ler (drenarFila() → pull()). "Fila vazia agora" é
+         exatamente o sinal de "subiu por completo".
+
+         Sem isto, uma carga que passou pela fila offline (rede caiu no meio
+         do registro) ficava com `_pendente`/`_statusPendentes` travados PARA
+         SEMPRE, mesmo depois de a gravação ter subido com sucesso — e como
+         essas marcas vão para o localStorage inteiro, o bloqueio sobrevivia
+         a fechar a aba. A regra 3 de fundirEstadoRemoto (mais abaixo)
+         recusa qualquer atualização remota de uma carga marcada assim: o
+         terminal ficava permanentemente cego para o que os outros setores
+         faziam naquela carga específica.
+
+         `SuincoSharePoint.pendentes` é checado antes de chamar porque
+         painéis muito antigos em cache podem não ter a versão do adaptador
+         que exporta essa função — mesma cautela já usada para
+         aoEditarCarga/aoExcluirCarga logo abaixo. */
+      if(typeof SuincoSharePoint.pendentes === 'function' && SuincoSharePoint.pendentes() === 0){
+        liberarPendencias();
+      }
+
       if(r.cargasNovas || r.cargasAtualizadas || r.movimentacoesNovas){
         renderAll();
         // Aviso discreto: a tela mudou por ação de outro setor, e o operador
@@ -3110,6 +3155,7 @@ async function init(){
     if(SuincoSharePoint.aoEditarCarga) SuincoSharePoint.aoEditarCarga(receberEdicaoRemota);
     if(SuincoSharePoint.aoExcluirCarga) SuincoSharePoint.aoExcluirCarga(receberExclusaoRemota);
     if(typeof aoRecusarStatus === 'function') aoRecusarStatus(receberRecusaDeStatus);
+    if(typeof aoRecusarCarga === 'function') aoRecusarCarga(receberRecusaDeCarga);
     SuincoSharePoint.iniciar()
       .then(()=>{ atualizarRodapeConexao(SuincoSharePoint.estado()); renderAll(); })
       .catch(e=>{ console.warn('[Suinco] init:', e); atualizarRodapeConexao('local'); });
