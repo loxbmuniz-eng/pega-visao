@@ -338,6 +338,17 @@ título sobre card — todos acima de 6:1, com folga sobre o mínimo AA de 4.5:1
 
 ## 15. Integração SharePoint / Power BI — o que foi feito e o que ficou pendente
 
+> **NOTA (auditoria de 07/08/2026).** A seção abaixo registra o que existia
+> em 02/08/2026. Em 05/08/2026 (commits `c4730d2`, `4d7d5e5`) o adaptador
+> `suinco-sharepoint.js` e a arquitetura SharePoint/MSAL/Graph inteira foram
+> **removidos** — não é mais "pendente de credencial", é código que não
+> existe mais no projeto. O painel hoje fala com o backend Node/Express/
+> PostgreSQL próprio (`suinco-api.js`), login por e-mail e senha validados
+> no servidor. Quem procurar aqui pensando "só falta o TI liberar
+> `clientId`/`tenantId`/`siteId` para ligar" vai se enganar: não há mais o
+> que ligar por esse caminho. Seção preservada como registro histórico da
+> decisão original, não como pendência ativa.
+
 Pedido: instalar MSAL.js v2, substituir o `SuincoStore` pelo adaptador
 assíncrono anexado, gravar em `fact_Viagens` / `fact_StatusFrota` /
 `dim_Veiculos` / `LOG_EVENTOS`, overlay de sincronia, modo offline, botão de
@@ -662,3 +673,76 @@ Consequências práticas:
 
 `painel_suinco_completo.html` deixa de existir. Quem tiver o link antigo salvo
 precisa trocar pelo domínio: **embarquesuinco.com.br**.
+
+## 25. Auditoria "superpowers" (07/08/2026) — dois bugs de dado, corrigidos; lista para depois
+
+Pedido: aplicar as skills de depuração sistemática e revisão de código do
+plugin `superpowers` para caçar bugs do mesmo formato do que travava o
+"Chegou" naquela sessão (mudança local otimista, servidor recusa, ninguém
+avisa) — e fechar duas lacunas concretas já mapeadas.
+
+### Corrigidos nesta sessão, cada um com teste de regressão
+
+1. **Chegada sem programação da Portaria era rejeitada em silêncio.**
+   `registrarChegadaPortaria()` cria a carga localmente e sobe pelo mesmo
+   `POST /api/cargas` da Programação — que só aceitava Logística/
+   Administração. A rejeição (403) nem lançava exceção (`upsert()` retorna
+   `{recusado:true}`), e `sincronizarCargasAlteradas()` só tratava exceção
+   lançada. Efeito real: caminhão chega sem programação, a Portaria
+   registra, a tela mostra sucesso, e a carga nunca existe no banco — some
+   de todos os outros terminais. Existia até uma função pronta para esse
+   caso (`podeRegistrarChegadaSemProgramacao`, em `dominio/fluxo.js`) —
+   escrita e nunca chamada por rota nenhuma. Corrigido: `POST /api/cargas`
+   agora aceita dois caminhos (programação normal vs. `aguardandoCarga:true`
+   sem trava de frota, com o servidor ignorando qualquer campo de negócio
+   que o corpo tente mandar nesse segundo caso — só a placa é do cliente).
+2. **`liberarPendencias()` nunca era chamada.** `_pendente`/
+   `_statusPendentes` só eram limpos no sucesso imediato; uma carga que
+   passasse pela fila offline ficava marcada como pendente PARA SEMPRE,
+   mesmo depois de a gravação subir — e como a marca vai para o
+   `localStorage` inteiro, o bloqueio sobrevivia a fechar a aba. A regra 3
+   de `fundirEstadoRemoto` recusava qualquer atualização remota daquela
+   carga a partir daí. Corrigido: `liberarPendencias()` liga no callback
+   `aoReceberDados` já existente, quando `SuincoSharePoint.pendentes()===0`.
+3. **Generalização do item 1**: qualquer recusa de criação/edição de carga
+   (não só a chegada sem programação) ficava só no console. Adicionado
+   `aoRecusarCarga`/`receberRecusaDeCarga`, espelhando o par
+   `aoRecusarStatus`/`receberRecusaDeStatus` que já existia para status.
+4. **`capacidadeKg:0` virava `null`** em `POST /api/frota`
+   (`Number(x) || null` — falsy collapse). Corrigido para
+   `Number.isFinite`.
+5. **`backend/src/rotas/cadastros.js` tinha zero teste** — as oito outras
+   baterias de `api.test.js` nunca batiam em `/api/frota` nem `/api/rotas`.
+   Fechado: `describe('9. Cadastros — Frota e Rotas', ...)`, 16 casos.
+6. **Documentação órfã do SharePoint/MSAL** — `RELATORIO_DE_TESTES.md`,
+   `ARQUITETURA_E_OPERACAO.md` e a seção 15 deste documento descreviam a
+   arquitetura MSAL/SharePoint (removida em 05/08/2026, ver seção 24) como
+   se ainda estivesse pendente de credencial. Anotado com nota de correção
+   em cada um, sem apagar o texto original — preservado como registro
+   histórico.
+
+### Achados a triar — não implementar sem antes ler o contexto
+
+Mesma varredura mecânica (função exportada/definida com zero chamadas)
+achou mais candidatos. Nenhum é bug confirmado — cada um precisa de leitura
+antes de decidir "excluir" vs "ligar" vs "deixar":
+
+- **Frontend** (`app.js`/`data.js`): `blocoExtremos`, `comOverlaySync`,
+  `corTextoSobre`, `estaFaturado`, `rankingDoDia`, `renderExtremosHoje`,
+  `textoSobre`.
+- **Backend** (`backend/src/dominio/fluxo.js`): `podeEditarCadastros`
+  (`rotas/cadastros.js` usa `exigirSetor('Logística')` direto em vez desta
+  função — risco de divergência se um dia decidirem coisas diferentes, não
+  bug ativo hoje); `proximoStatus` (documentada como auxiliar para o painel
+  desenhar botões — possivelmente duplicada em `app.js`, checar antes de
+  decidir).
+
+### Decisão pendente com a gestão, não técnica
+
+O único script externo que o painel carrega hoje é o cliente Socket.IO
+(`index_suinco.html`, infraestrutura própria — `api.embarquesuinco.com.br`
+— não CDN de terceiro), sem verificação de integridade. Duas opções, sem
+uma claramente melhor sem saber a preferência de quem opera o deploy:
+embutir o cliente no build único (`build_arquivo_unico.py`), ou manter
+externo com um passo documentado de regenerar o hash SRI a cada deploy do
+backend. Registrado em `ARQUITETURA_E_OPERACAO.md` §6.4.

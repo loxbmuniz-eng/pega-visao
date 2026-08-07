@@ -216,6 +216,87 @@ describe('3. Permissão por setor — validada no SERVIDOR', () => {
   });
 });
 
+/* ------------------------------------------------------------------
+   3b. Chegada sem programação (Portaria)
+   ---------------------------------------------------------------------
+   Achado da auditoria "superpowers": a Portaria registra a chegada de um
+   caminhão sem programação prévia clicando "Chegou" — o painel cria a
+   carga localmente (aguardandoCarga:true) e sobe pelo MESMO POST /api/cargas
+   que a Logística usa para programar. Antes desta correção, esse POST só
+   aceitava Logística/Administração (podeCriarCarga): a Portaria recebia
+   403, o painel engolia a recusa em silêncio (upsert() devolve
+   {recusado:true} em vez de lançar exceção, e sincronizarCargasAlteradas()
+   só trata exceção lançada), e o caminhão nunca virava carga no banco —
+   sumia de todos os outros terminais.
+
+   Existia uma função pronta para exatamente este caso —
+   podeRegistrarChegadaSemProgramacao(), em dominio/fluxo.js — escrita e
+   nunca chamada por nenhuma rota. ------------------------------------ */
+describe('3b. Chegada sem programação (Portaria)', () => {
+  test('Portaria registra chegada sem programação — nasce em Aguardando Embarque', async () => {
+    const { rows } = await pool.query('SELECT placa FROM dim_veiculos LIMIT 1');
+    const r = await req('/api/cargas', {
+      metodo: 'POST', token: tokens['Portaria'],
+      corpo: { id: 'chegada_1', placa: rows[0].placa, aguardandoCarga: true },
+    });
+    assert.equal(r.status, 201);
+    assert.equal(r.json.status, 'Aguardando Embarque');
+    assert.equal(r.json.numeroCarga, 'Aguardando Carga');
+    assert.equal(r.json.aguardandoCarga, true);
+  });
+
+  test('placa FORA da frota é aceita quando é chegada sem programação', async () => {
+    // Diferente da Programação: um caminhão pode chegar fisicamente sem
+    // nunca ter sido cadastrado, e a Portaria precisa registrar a presença
+    // dele mesmo assim — a Logística corrige o cadastro depois.
+    const r = await req('/api/cargas', {
+      metodo: 'POST', token: tokens['Portaria'],
+      corpo: { id: 'chegada_2', placa: 'ZZZ0001', aguardandoCarga: true },
+    });
+    assert.equal(r.status, 201, 'a trava de frota não deveria valer aqui');
+    assert.equal(r.json.status, 'Aguardando Embarque');
+  });
+
+  test('campos de negócio enviados pela Portaria são ignorados — servidor força a forma restrita', async () => {
+    // Sem isto, "aguardandoCarga:true" viraria um jeito de driblar a
+    // permissão e criar carga com peso/motorista/número arbitrários.
+    const { rows } = await pool.query('SELECT placa FROM dim_veiculos LIMIT 1');
+    const r = await req('/api/cargas', {
+      metodo: 'POST', token: tokens['Portaria'],
+      corpo: {
+        id: 'chegada_3', placa: rows[0].placa, aguardandoCarga: true,
+        numeroCarga: '99999', peso: 50000, motorista: 'Forjado',
+        destino: 'Lugar Nenhum', status: 'Faturado',
+      },
+    });
+    assert.equal(r.status, 201);
+    assert.equal(r.json.numeroCarga, 'Aguardando Carga', 'número não pode vir do corpo');
+    assert.equal(r.json.peso, 0, 'peso não pode vir do corpo');
+    assert.equal(r.json.motorista, '', 'motorista não pode vir do corpo');
+    assert.equal(r.json.status, 'Aguardando Embarque', 'status não pode vir do corpo');
+  });
+
+  test('Logística também pode usar este caminho', async () => {
+    const { rows } = await pool.query('SELECT placa FROM dim_veiculos LIMIT 1');
+    const r = await req('/api/cargas', {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { id: 'chegada_4', placa: rows[0].placa, aguardandoCarga: true },
+    });
+    assert.equal(r.status, 201);
+  });
+
+  test('Expedição e Faturamento continuam sem poder criar carga, mesmo com aguardandoCarga:true', async () => {
+    const { rows } = await pool.query('SELECT placa FROM dim_veiculos LIMIT 1');
+    for (const setor of ['Expedição', 'Faturamento']) {
+      const r = await req('/api/cargas', {
+        metodo: 'POST', token: tokens[setor],
+        corpo: { id: `chegada_neg_${setor}`, placa: rows[0].placa, aguardandoCarga: true },
+      });
+      assert.equal(r.status, 403, `${setor} não deveria conseguir`);
+    }
+  });
+});
+
 /* ------------------------------------------------------------------ */
 describe('4. Máquina de estados', () => {
   let cargaId;
@@ -913,5 +994,177 @@ describe('8. Superfície de ataque', () => {
     assert.equal(r.json.codigo, 'SEM_CAMPOS_PERMITIDOS');
     const depois = await pool.query('SELECT peso_kg FROM fact_viagens WHERE carga_id = $1', [rows[0].carga_id]);
     assert.equal(depois.rows[0].peso_kg, rows[0].peso_kg);
+  });
+});
+
+/* ------------------------------------------------------------------
+   9. Cadastros — Frota e Rotas
+   ---------------------------------------------------------------------
+   Achado da auditoria "superpowers": rotas/cadastros.js tinha ZERO
+   cobertura — os oito blocos acima passam por autenticação, máquina de
+   estados, concorrência, export do BI, mas nenhum bate em /api/frota nem
+   /api/rotas. Placas e códigos usados aqui são prefixados para não
+   colidir com o que os outros blocos já inseriram (o before() global só
+   limpa log_eventos/fact_statusfrota/fact_viagens/operadores — NÃO
+   dim_veiculos nem dim_rotas). ------------------------------------ */
+describe('9. Cadastros — Frota e Rotas', () => {
+  const PLACA_TESTE = 'TST9001';
+  const CODIGO_TESTE = 'ZZ901';
+
+  after(async () => {
+    // Estas duas tabelas não são limpas pelo before() global — sem isto,
+    // rodar a suíte de novo colidiria com o próprio ON CONFLICT dos testes.
+    await pool.query('DELETE FROM dim_veiculos WHERE placa = $1', [PLACA_TESTE]);
+    await pool.query('DELETE FROM dim_rotas WHERE codigo = $1', [CODIGO_TESTE]);
+  });
+
+  test('GET /api/frota sem token → 401', async () => {
+    const r = await req('/api/frota');
+    assert.equal(r.status, 401);
+  });
+
+  test('GET /api/frota com token → 200, formato da linha', async () => {
+    const r = await req('/api/frota', { token: tokens['Logística'] });
+    assert.equal(r.status, 200);
+    assert.ok(Array.isArray(r.json));
+    assert.ok(r.json.length > 0);
+    const linha = r.json[0];
+    for (const campo of ['placa', 'transportadora', 'tipoVeiculo', 'capacidadeKg',
+      'uf', 'precisaRevisao', 'atualizadoEm']) {
+      assert.ok(campo in linha, `faltou o campo ${campo}`);
+    }
+  });
+
+  test('POST /api/frota sem token → 401', async () => {
+    const r = await req('/api/frota', { metodo: 'POST', corpo: { placa: PLACA_TESTE } });
+    assert.equal(r.status, 401);
+  });
+
+  test('POST /api/frota por setor sem permissão → 403', async () => {
+    const r = await req('/api/frota', {
+      metodo: 'POST', token: tokens['Portaria'],
+      corpo: { placa: PLACA_TESTE, transportadora: 'Teste Transp' },
+    });
+    assert.equal(r.status, 403);
+    assert.equal(r.json.codigo, 'SETOR_SEM_PERMISSAO');
+  });
+
+  test('POST /api/frota por Logística sem placa → 400', async () => {
+    const r = await req('/api/frota', {
+      metodo: 'POST', token: tokens['Logística'], corpo: { transportadora: 'Teste' },
+    });
+    assert.equal(r.status, 400);
+    assert.equal(r.json.codigo, 'PLACA_FALTANDO');
+  });
+
+  test('POST /api/frota por Logística, placa nova → 201, grava em dim_veiculos', async () => {
+    const r = await req('/api/frota', {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { placa: PLACA_TESTE, transportadora: 'Teste Transportes', tipoVeiculo: 'Carreta', uf: 'MG' },
+    });
+    assert.equal(r.status, 201);
+    assert.equal(r.json.placa, PLACA_TESTE);
+    const { rows } = await pool.query('SELECT * FROM dim_veiculos WHERE placa = $1', [PLACA_TESTE]);
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].transportadora, 'Teste Transportes');
+  });
+
+  test('POST /api/frota, placa existente (ON CONFLICT) → atualiza no lugar, sem duplicar', async () => {
+    const antes = await pool.query('SELECT atualizado_em FROM dim_veiculos WHERE placa = $1', [PLACA_TESTE]);
+    await new Promise((r) => setTimeout(r, 20));   // garante atualizado_em diferente
+    const r = await req('/api/frota', {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { placa: PLACA_TESTE, transportadora: 'Nova Transportadora', tipoVeiculo: 'Bitrem' },
+    });
+    assert.equal(r.status, 201);
+    const { rows } = await pool.query('SELECT * FROM dim_veiculos WHERE placa = $1', [PLACA_TESTE]);
+    assert.equal(rows.length, 1, 'não pode duplicar a linha');
+    assert.equal(rows[0].transportadora, 'Nova Transportadora');
+    assert.ok(new Date(rows[0].atualizado_em) > new Date(antes.rows[0].atualizado_em));
+  });
+
+  test('POST /api/frota por Administração → 201', async () => {
+    let tokenAdmin = tokens['Administração'];
+    if (!tokenAdmin) {
+      const login = await req('/auth/login', {
+        metodo: 'POST', corpo: { email: 'chefe@teste.local', senha: SENHA },
+      });
+      tokenAdmin = login.json?.token;
+    }
+    if (!tokenAdmin) return;   // bloco 7b pode não ter rodado nesta execução isolada
+    const r = await req('/api/frota', {
+      metodo: 'POST', token: tokenAdmin,
+      corpo: { placa: PLACA_TESTE, transportadora: 'Via Administração' },
+    });
+    assert.equal(r.status, 201);
+  });
+
+  test('POST /api/frota com capacidadeKg:0 preserva o zero — não vira null', async () => {
+    /* Achado da auditoria: `Number(req.body?.capacidadeKg) || null` em
+       rotas/cadastros.js colapsa um 0 legítimo para null, porque
+       Number(0) é falsy. Este teste escreve a EXPECTATIVA primeiro — TDD
+       contra o bug, não contra um design ainda a decidir. */
+    const r = await req('/api/frota', {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { placa: PLACA_TESTE, transportadora: 'Teste', capacidadeKg: 0 },
+    });
+    assert.equal(r.status, 201);
+    const { rows } = await pool.query('SELECT capacidade_kg FROM dim_veiculos WHERE placa = $1', [PLACA_TESTE]);
+    assert.equal(rows[0].capacidade_kg, 0, 'capacidadeKg:0 é dado real — carreta sem capacidade cadastrada é null, não zero');
+  });
+
+  test('GET /api/rotas sem token → 401', async () => {
+    const r = await req('/api/rotas');
+    assert.equal(r.status, 401);
+  });
+
+  test('GET /api/rotas com token → 200', async () => {
+    const r = await req('/api/rotas', { token: tokens['Logística'] });
+    assert.equal(r.status, 200);
+    assert.ok(Array.isArray(r.json));
+  });
+
+  test('POST /api/rotas sem token → 401', async () => {
+    const r = await req('/api/rotas', { metodo: 'POST', corpo: { codigo: CODIGO_TESTE } });
+    assert.equal(r.status, 401);
+  });
+
+  test('POST /api/rotas por setor sem permissão → 403', async () => {
+    const r = await req('/api/rotas', {
+      metodo: 'POST', token: tokens['Expedição'], corpo: { codigo: CODIGO_TESTE, nome: 'Teste' },
+    });
+    assert.equal(r.status, 403);
+    assert.equal(r.json.codigo, 'SETOR_SEM_PERMISSAO');
+  });
+
+  test('POST /api/rotas sem codigo → 400', async () => {
+    const r = await req('/api/rotas', {
+      metodo: 'POST', token: tokens['Logística'], corpo: { nome: 'Sem código' },
+    });
+    assert.equal(r.status, 400);
+    assert.equal(r.json.codigo, 'CODIGO_FALTANDO');
+  });
+
+  test('POST /api/rotas, código novo → 201, grava em dim_rotas', async () => {
+    const r = await req('/api/rotas', {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { codigo: CODIGO_TESTE, nome: 'Rota de Teste', operador: 'Teste Log' },
+    });
+    assert.equal(r.status, 201);
+    const { rows } = await pool.query('SELECT * FROM dim_rotas WHERE codigo = $1', [CODIGO_TESTE]);
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].nome, 'Rota de Teste');
+  });
+
+  test('POST /api/rotas, código existente (ON CONFLICT) → atualiza no lugar', async () => {
+    const r = await req('/api/rotas', {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { codigo: CODIGO_TESTE, nome: 'Nome Atualizado', detalhe: 'Detalhe novo', operador: 'Outro' },
+    });
+    assert.equal(r.status, 201);
+    const { rows } = await pool.query('SELECT * FROM dim_rotas WHERE codigo = $1', [CODIGO_TESTE]);
+    assert.equal(rows.length, 1, 'não pode duplicar a linha');
+    assert.equal(rows[0].nome, 'Nome Atualizado');
+    assert.equal(rows[0].detalhe, 'Detalhe novo');
   });
 });

@@ -7,6 +7,21 @@
   `RELATORIO_DE_TESTES.md`, `AUDITORIA_SEGURANCA.md`,
   `RELATORIO_TI_HOSPEDAGEM.md` (v3)
 
+> **NOTA (adicionada na auditoria de 07/08/2026 — não altera o documento
+> original abaixo).** Este documento descreve o sistema em 02/08/2026,
+> quando o backend era SharePoint/Microsoft Graph com login via MSAL. Em
+> 05/08/2026 (commits `c4730d2`, `4d7d5e5`) essa arquitetura foi substituída
+> pelo backend Node/Express/PostgreSQL atual, hospedado em VPS própria —
+> sem SharePoint, sem Graph, sem MSAL. Login passou a ser e-mail e senha,
+> validados no servidor.
+>
+> Praticamente tudo neste documento que descreve SharePoint/Graph/MSAL como
+> a arquitetura ATUAL está desatualizado — preservado como registro
+> histórico do desenho original, não como estado do sistema em produção.
+> A arquitetura atual está documentada em `MANUAL_DO_SERVIDOR.md` e
+> `RELATORIO_EXECUTIVO_SISTEMA.md`. A situação real dos itens de segurança
+> da seção 6 está anotada entre colchetes onde aparece.
+
 ---
 
 ## 1. Visão geral em uma tela
@@ -318,11 +333,32 @@ o que são.
 
 ### 6.4. Recomendações à Segurança
 
-1. Servir o `msal-browser.min.js` do próprio tenant, eliminando a CDN externa.
-2. Definir `LOG_EVENTOS` como *Colaborar sem exclusão* — log não se apaga.
-3. Revisar quem tem escrita nas Listas: com a operação compartilhada, escrita na
-   Lista é escrita na tela de todos.
-4. Habilitar retenção/versionamento nativo do SharePoint nas 4 Listas.
+1. ~~Servir o `msal-browser.min.js` do próprio tenant, eliminando a CDN
+   externa.~~ *[Não se aplica mais — o MSAL saiu do sistema na migração de
+   05/08/2026, ver nota no topo do documento.]* O único script externo
+   carregado hoje é o cliente Socket.IO
+   (`https://api.embarquesuinco.com.br/socket.io/socket.io.js`) — servido
+   pela própria infraestrutura do projeto, não por CDN de terceiro, mas
+   ainda um carregamento cross-origin sem verificação de integridade.
+   Decisão pendente com a gestão do projeto: embutir o cliente Socket.IO no
+   build único (`build_arquivo_unico.py`), cobrindo-o pela mesma garantia
+   de integridade do resto do pacote, ou manter carregamento externo com um
+   passo documentado de regenerar o hash SRI a cada deploy do backend (o
+   arquivo muda a cada deploy — SRI com hash fixo quebraria o carregamento
+   sem esse passo).
+2. ~~Definir `LOG_EVENTOS` como *Colaborar sem exclusão* — log não se
+   apaga.~~ *[Não se aplica — `LOG_EVENTOS` era Lista do SharePoint. O
+   backend atual grava em `log_eventos` no PostgreSQL, tabela de auditoria
+   append-only por desenho: nenhuma rota da API expõe UPDATE/DELETE nela.]*
+3. ~~Revisar quem tem escrita nas Listas: com a operação compartilhada,
+   escrita na Lista é escrita na tela de todos.~~ *[Não se aplica — não há
+   mais Listas do SharePoint. O equivalente atual é a permissão por setor
+   validada no servidor, `CAMPOS_EDITAVEIS` em
+   `backend/src/dominio/fluxo.js`.]*
+4. ~~Habilitar retenção/versionamento nativo do SharePoint nas 4 Listas.~~
+   *[Não se aplica — sem SharePoint. O backend atual usa bloqueio otimista
+   por versão (`versao` em `fact_viagens`) e soft delete (`excluida_em`)
+   para o equivalente funcional.]*
 
 ---
 

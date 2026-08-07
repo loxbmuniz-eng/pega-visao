@@ -102,6 +102,44 @@ export function saneiarCriacao(corpo, frota) {
   };
 }
 
+/* Painel → banco, para CHEGADA SEM PROGRAMAÇÃO — a Portaria registrando um
+   caminhão que apareceu sem carga cadastrada.
+
+   Ignora TODO campo de negócio do corpo, exceto `id` e `placa`. Não é
+   descuido: `aguardandoCarga:true` destrava esta rota para a Portaria (ver
+   podeRegistrarChegadaSemProgramacao em dominio/fluxo.js), e se essa mesma
+   flag também liberasse peso/motorista/número arbitrários do corpo, viraria
+   um jeito de contornar a permissão normal de criação de carga — a Portaria
+   poderia programar uma carga completa só marcando essa flag. O servidor
+   decide a forma inteira; o cliente só escolhe a placa.
+
+   Isso também é o que explica não reusar a trava de frota aqui: um caminhão
+   pode chegar fisicamente sem nunca ter sido cadastrado, e a Portaria
+   precisa registrar a presença dele mesmo assim — a Logística corrige o
+   cadastro depois. A trava continua valendo para saneiarCriacao(). */
+export function saneiarCriacaoChegadaSemProgramacao(corpo, frota) {
+  return {
+    carga_id: idSeguro(corpo.id) || `carga_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    numero_carga: 'Aguardando Carga',
+    placa: normalizarPlaca(corpo.placa),
+    transportadora: texto(frota?.transportadora, 200),
+    tipo_veiculo: texto(frota?.tipo_veiculo, 100),
+    motorista: '',
+    cliente: '', destino: '',
+    peso_kg: 0,
+    doca: '',
+    rota_codigo: null,
+    sequencia: null,
+    pra_onde: PRA_ONDE_PADRAO,
+    paletizada: false,
+    qtd_ganchos: 0,
+    qtd_entregas: 1,
+    observacoes: '',
+    status_atual: 'Aguardando Embarque',
+    aguardando_carga: true,
+  };
+}
+
 /* Painel → banco, para atualização parcial. Só devolve as chaves realmente
    enviadas E permitidas ao setor: mandar `undefined` para o SQL apagaria o
    valor que já está lá. */

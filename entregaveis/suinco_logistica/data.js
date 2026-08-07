@@ -437,6 +437,24 @@ const SuincoStore = {
       // mesma carga. Sem ele a fusão não teria como comparar as versões.
       Atualizado_Em: carga.atualizadoEm || nowISO()
     }, operador);
+
+    /* Recusa de criação/edição avisada — generalização do achado da
+       chegada sem programação (achado #1 da auditoria "superpowers").
+
+       `upsert()` RETORNA `{recusado:true, erro}` quando o servidor recusa
+       (403/409/422) — não lança exceção. `sincronizarCargasAlteradas()`,
+       que chama esta função, só tem `.catch(e=>console.warn(...))`: isso só
+       pega exceção lançada, nunca inspeciona o valor resolvido. Sem este
+       aviso, qualquer recusa de criação ou edição ficava só no console —
+       a tela do operador continuava mostrando sucesso.
+
+       Compare com o caminho de exclusão (excluirCargaUI, app.js), que já
+       checava `r.recusado` e avisava — criação/edição não tinha o
+       equivalente. */
+    if(r && r.recusado){
+      if(_aoRecusarCarga) _aoRecusarCarga(carga, r.erro);
+    }
+
     /* MUDANÇA DE STATUS VAI POR ROTA PRÓPRIA, e este bloco é a correção de
        um defeito que fazia o clique "voltar sozinho".
 
@@ -575,6 +593,12 @@ function liberarPendencias(){
    conhece notify() nem deve conhecer. */
 let _aoRecusarStatus = null;
 function aoRecusarStatus(fn){ _aoRecusarStatus = fn; }
+
+/* Aviso de criação/edição de carga recusada pelo servidor. Mesmo motivo do
+   par acima: quem descobre é sincronizarCarga(), quem decide como mostrar
+   é a tela. */
+let _aoRecusarCarga = null;
+function aoRecusarCarga(fn){ _aoRecusarCarga = fn; }
 
 /* ---------- FUSÃO DO ESTADO REMOTO (operação compartilhada) ----------
    Recebe o que veio das Listas e mescla no DB local. É o ponto mais delicado
