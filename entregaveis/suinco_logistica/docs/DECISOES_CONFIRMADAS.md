@@ -737,12 +737,22 @@ antes de decidir "excluir" vs "ligar" vs "deixar":
   desenhar botões — possivelmente duplicada em `app.js`, checar antes de
   decidir).
 
-### Decisão pendente com a gestão, não técnica
+### Decisão sobre o cliente Socket.IO — fechada em 07/08/2026
 
 O único script externo que o painel carrega hoje é o cliente Socket.IO
 (`index_suinco.html`, infraestrutura própria — `api.embarquesuinco.com.br`
-— não CDN de terceiro), sem verificação de integridade. Duas opções, sem
-uma claramente melhor sem saber a preferência de quem opera o deploy:
-embutir o cliente no build único (`build_arquivo_unico.py`), ou manter
-externo com um passo documentado de regenerar o hash SRI a cada deploy do
-backend. Registrado em `ARQUITETURA_E_OPERACAO.md` §6.4.
+— não CDN de terceiro), sem verificação de integridade. Avaliadas as duas
+alternativas (fixar hash SRI; embutir cópia estática no build único) e as
+duas trocam o risco atual por um pior: as duas dependem de alguém lembrar
+de atualizar manualmente a cada vez que o backend mudar de versão do
+pacote `socket.io`, e a versão embutida pode degradar em SILÊNCIO (cai
+para a consulta periódica sem avisar) em vez de travar visivelmente como o
+SRI travaria.
+
+**Decisão: manter como está.** Buscar o cliente do próprio servidor a cada
+carga nunca desalinha por construção — o `socket.io` do servidor sempre
+serve o cliente correspondente à sua própria versão, sem passo manual
+nenhum. O que a integridade protegeria (um MITM alterando o script em
+trânsito) já é coberto pelo HTTPS; o que sobraria (o próprio servidor
+comprometido) já dá a um atacante acesso a tudo o resto do sistema.
+Raciocínio completo em `ARQUITETURA_E_OPERACAO.md` §6.4.

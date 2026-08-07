@@ -335,17 +335,40 @@ o que são.
 
 1. ~~Servir o `msal-browser.min.js` do próprio tenant, eliminando a CDN
    externa.~~ *[Não se aplica mais — o MSAL saiu do sistema na migração de
-   05/08/2026, ver nota no topo do documento.]* O único script externo
-   carregado hoje é o cliente Socket.IO
-   (`https://api.embarquesuinco.com.br/socket.io/socket.io.js`) — servido
-   pela própria infraestrutura do projeto, não por CDN de terceiro, mas
-   ainda um carregamento cross-origin sem verificação de integridade.
-   Decisão pendente com a gestão do projeto: embutir o cliente Socket.IO no
-   build único (`build_arquivo_unico.py`), cobrindo-o pela mesma garantia
-   de integridade do resto do pacote, ou manter carregamento externo com um
-   passo documentado de regenerar o hash SRI a cada deploy do backend (o
-   arquivo muda a cada deploy — SRI com hash fixo quebraria o carregamento
-   sem esse passo).
+   05/08/2026, ver nota no topo do documento.]*
+
+   **Decisão sobre o cliente Socket.IO (07/08/2026): manter como está,
+   decisão revisitada e fechada, não mais pendente.** O único script
+   externo carregado hoje é
+   `https://api.embarquesuinco.com.br/socket.io/socket.io.js` — servido
+   pela própria infraestrutura do projeto, não por CDN de terceiro, sem
+   verificação de integridade. Duas alternativas foram avaliadas e as duas
+   pioram a situação em vez de melhorar:
+
+   - **Fixar o hash SRI** exige lembrar de regenerá-lo a cada deploy do
+     backend (o servidor reescreve esse arquivo sozinho, a cada versão do
+     pacote `socket.io`). Esquecer não degrada silenciosamente — TRAVA o
+     carregamento até alguém perceber e corrigir. É o pior tipo de
+     dependência manual: quieta até o dia em que quebra a operação inteira.
+   - **Embutir uma cópia estática no build único** parece resolver, mas
+     troca um risco por outro pior: o arquivo embutido fica congelado na
+     versão do dia em que foi gerado, e o backend pode atualizar o pacote
+     `socket.io` (`^4.7.5` no `package.json` já aceita variação de
+     versão) sem que ninguém lembre de regenerar o embutido. Diferente do
+     hash SRI, uma incompatibilidade de versão do protocolo Socket.IO nem
+     sempre falha alto — pode degradar em silêncio para a consulta
+     periódica (o próprio painel já tem esse retrocesso, ver
+     `suinco-api.js`), e ninguém percebe que o tempo real parou de
+     funcionar.
+
+   A ligação atual — buscar o cliente do PRÓPRIO servidor a cada carga —
+   nunca desalinha por construção: o `socket.io` do servidor sempre serve
+   o cliente correspondente à sua própria versão. É a única das três opções
+   sem risco de versão esquecida. E o que a integridade de verdade
+   protegeria — um MITM alterando o script em trânsito — já é coberto pelo
+   HTTPS; o que sobra (o próprio servidor comprometido) já dá ao atacante
+   acesso a tudo o resto, tornando o script do Socket.IO o menor dos
+   problemas nesse cenário. Mantém como está.
 2. ~~Definir `LOG_EVENTOS` como *Colaborar sem exclusão* — log não se
    apaga.~~ *[Não se aplica — `LOG_EVENTOS` era Lista do SharePoint. O
    backend atual grava em `log_eventos` no PostgreSQL, tabela de auditoria
