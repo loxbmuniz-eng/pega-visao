@@ -26,7 +26,7 @@ async def main():
 
         print('\n=== 2. ROTAS NOVAS ===')
         r=await pg.evaluate("()=>({t:ROTAS.length,r527:rotaInfo('527'),r531:rotaInfo('531')})")
-        ck('32 rotas', r['t']==32, r['t'])
+        ck('33 rotas (32 + 171 Buenos Aires)', r['t']==33, r['t'])
         ck('527 Nordeste', r['r527'] and r['r527']['nome']=='Nordeste', r['r527'])
         ck('531 Paraná', r['r531'] and r['r531']['nome']=='Paraná', r['r531'])
 

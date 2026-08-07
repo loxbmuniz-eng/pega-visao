@@ -1304,7 +1304,9 @@ function renderProgFila(){
   document.getElementById('prog-fila-tbody').innerHTML = lista.map(c=>`
     <tr>
       <td><input type="number" class="seq-input" value="${c.sequencia ?? ''}" onchange="atualizarSequenciaUI('${c.id}',this.value)" title="Sequência livre — digite o número que quiser, a qualquer momento."></td>
-      <td class="col-identificacao">${esc(c.numeroCarga)||'—'}</td>
+      <td class="col-identificacao">
+        <input type="text" class="numero-carga-input" value="${esc(c.numeroCarga)}" onchange="atualizarNumeroCargaUI('${escJs(c.id)}',this.value)" title="Alterar o número desta carga.">
+      </td>
       <td>
         <input type="text" class="placa-input" value="${esc(c.placa)}" onchange="atualizarPlacaUI('${escJs(c.id)}',this.value)" title="Trocar a placa — a transportadora e o tipo de veículo são buscados na Frota automaticamente.">
         ${marcaCargaDaPlaca(c, lista)}
@@ -1469,6 +1471,35 @@ function atualizarPlacaUI(id, val){
   renderAll();
 }
 
+function atualizarNumeroCargaUI(id, val){
+  const c = getCarga(id);
+  if(!c) return;
+  const novo = (val||'').trim();
+
+  if(!novo){
+    notify('Número da carga não pode ficar em branco.', 'warn');
+    renderProgFila();   // devolve o campo ao valor anterior
+    return;
+  }
+  if(novo === c.numeroCarga){ renderProgFila(); return; }
+
+  const anterior = c.numeroCarga;
+  c.numeroCarga = novo;
+  c.atualizadoEm = nowISO();
+
+  registrarAlteracao({
+    cargaId: c.id, placa: c.placa,
+    campo: 'Número da Carga',
+    de: anterior || '—',
+    para: novo,
+    setor: (DB.operador && DB.operador.setor) || 'Logística',
+    operador: (DB.operador && DB.operador.nome) || '(não identificado)'
+  });
+
+  SuincoStore.save();
+  notify(`Número da carga alterado para ${novo}.`, 'success');
+  renderAll();
+}
 function atualizarGanchosUI(id, val){
   const c = getCarga(id); if(!c) return;
   c.qtdGanchos = val==='' ? 0 : Math.max(0, Number(val)||0);
@@ -2574,6 +2605,36 @@ function imprimirContainer(el, nomeDoRelatorio){
 // na fila de pendências da Programação, mas não fazem sentido numa
 // planilha de sequenciamento de carregamento ainda sem dados.
 const CORES_PRA_ONDE = { 'FROTA PROPRIA':'#16697a', 'CROSS-DOCKING':'#374a86', 'DEDICADA':'#8f1f26', 'RET FRIGO':'#b9903f' };
+
+/* Busca o estado mais recente do servidor ANTES de montar qualquer
+   relatório — pedido direto: "os relatórios são nossa fonte de verdade
+   absoluta", e até aqui eles montavam a folha com o que já estava na
+   MEMÓRIA do navegador no instante do clique, sem forçar nada novo. Isso
+   é normalmente o dado certo (o painel sincroniza sozinho o tempo todo),
+   mas "normalmente" não é "sempre": aba de celular em segundo plano,
+   rede instável por alguns minutos, terminal que ficou aberto sem uso —
+   qualquer um desses atrasa a sincronia, e o relatório saía com o
+   resíduo de antes de uma exclusão/edição/criação que já tinha
+   acontecido em outro lugar.
+
+   pullTudo() é leitura completa (não incremental) — não é o ciclo de 15s
+   de sempre, é forçado, aqui, agora, antes de montar a folha. Falha de
+   rede não trava o relatório: o operador com o caminhão esperando não
+   pode ficar sem o documento por causa de uma rede ruim por dois
+   segundos — ele recebe o aviso e o relatório sai com o melhor dado que
+   o terminal já tinha. */
+async function atualizarDadosAntesDoRelatorio(){
+  if(typeof SuincoSharePoint === 'undefined' || !SuincoSharePoint.estaConfigurado()) return;
+  try{
+    notify('Buscando os dados mais recentes do servidor…', 'info', 2500);
+    await SuincoSharePoint.pullTudo();
+  }catch(e){
+    console.warn('[Suinco] não foi possível atualizar antes do relatório:', e);
+    notify('Não consegui confirmar com o servidor agora — o relatório sai com os dados '
+         + 'mais recentes que este aparelho já tinha. Confira a conexão e gere de novo se puder.',
+           'warn', 9000);
+  }
+}
 // ORDEM DAS COLUNAS: os três campos de estado da carga vêm PRIMEIRO, na
 // ordem em que a linha do tempo acontece — Status (a etapa dos 6), depois
 // Status de Carregamento (a leitura do pátio) e por fim Faturado. Antes o
@@ -2582,7 +2643,8 @@ const CORES_PRA_ONDE = { 'FROTA PROPRIA':'#16697a', 'CROSS-DOCKING':'#374a86', '
 // colunas de cadastro. Identificação e cadastro (Seq., Carga, Destino, Rota,
 // Placa, Transportadora...) vêm depois, porque respondem "qual carga é",
 // não "em que pé ela está".
-function exportarPdfOperacional(){
+async function exportarPdfOperacional(){
+  await atualizarDadosAntesDoRelatorio();
   const el = document.getElementById('print-operacional');
   // TODAS as cargas da programação do dia, INCLUSIVE as já concluídas
   // ("Seguiu Viagem"). Antes usava cargasAbertas(), que exclui as concluídas,
@@ -3037,7 +3099,8 @@ function blocoTimelineCargas(cargas, titulo, explicacao){
     </div>`;
 }
 
-function exportarPdfExecutivo(){
+async function exportarPdfExecutivo(){
+  await atualizarDadosAntesDoRelatorio();
   const el = document.getElementById('print-executivo');
   const agora = new Date();
 
@@ -3494,7 +3557,8 @@ function rodapeSomatorios(lista, colspanAntes, colunas){
    Independente dos demais de propósito: quem usa é a administração, e
    misturar controle de frete com acompanhamento de pátio produziria um
    relatório que não serve bem para nenhum dos dois. */
-function exportarPdfFretes(){
+async function exportarPdfFretes(){
+  await atualizarDadosAntesDoRelatorio();
   /* Container PRÓPRIO, não o do Operacional.
 
      Enquanto os dois dividiam o mesmo `#print-operacional`, este relatório

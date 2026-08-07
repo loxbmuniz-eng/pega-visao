@@ -64,8 +64,14 @@ self.addEventListener('fetch', (evento) => {
   // script de CDN de terceiro desde a saída do MSAL/SharePoint).
   if (url.origin !== self.location.origin) return;
 
+  // Navegação (abrir/recarregar a página) ignora o cache HTTP do próprio
+  // navegador, não só o Cache Storage: sem isso, "network-first" podia
+  // devolver uma cópia do disco que o navegador considerava "fresca" pelos
+  // headers padrão, e o deploy novo só aparecia depois de um F12 manual.
+  const opcoesFetch = req.mode === 'navigate' ? { cache: 'no-store' } : undefined;
+
   evento.respondWith(
-    fetch(req)
+    fetch(req, opcoesFetch)
       .then((resposta) => {
         // Guarda uma cópia para o próximo acesso sem rede. `clone()` é
         // obrigatório: o corpo da resposta só pode ser lido uma vez.
