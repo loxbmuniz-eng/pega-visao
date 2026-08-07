@@ -463,7 +463,22 @@ const SuincoStore = {
        checava `r.recusado` e avisava — criação/edição não tinha o
        equivalente. */
     if(r && r.recusado){
-      if(_aoRecusarCarga) _aoRecusarCarga(carga, r.erro);
+      /* Carga NUNCA confirmada pelo servidor (_nuncaConfirmada, marcada na
+         criação) pode ser removida com segurança: ao contrário de uma
+         edição — onde o servidor já tinha uma versão válida da carga antes
+         desta tentativa, e chutar "não existia" apagaria dado de verdade —
+         aqui não existe versão anterior nenhuma para perder. Sem isto, uma
+         carga recusada na criação (placa fora da frota, setor sem
+         permissão) ficava como fantasma na tela de quem criou: "Aguardando
+         Veículo", com aviso, mas invisível em qualquer outro terminal —
+         achado em produção em 07/08/2026. */
+      const eraCriacaoNuncaConfirmada = !!carga._nuncaConfirmada;
+      if(eraCriacaoNuncaConfirmada){
+        DB.cargas = DB.cargas.filter(c => c.id !== carga.id);
+      }
+      if(_aoRecusarCarga) _aoRecusarCarga(carga, r.erro, eraCriacaoNuncaConfirmada);
+    } else if(r && r.enfileirado === false){
+      delete carga._nuncaConfirmada;
     }
 
     /* MUDANÇA DE STATUS VAI POR ROTA PRÓPRIA, e este bloco é a correção de
@@ -610,6 +625,11 @@ function aoRecusarStatus(fn){ _aoRecusarStatus = fn; }
    é a tela. */
 let _aoRecusarCarga = null;
 function aoRecusarCarga(fn){ _aoRecusarCarga = fn; }
+
+/* Aviso de placa recusada pelo servidor ao cadastrar/atualizar Frota. Mesmo
+   motivo dos dois pares acima. */
+let _aoRecusarFrota = null;
+function aoRecusarFrota(fn){ _aoRecusarFrota = fn; }
 
 /* ---------- FUSÃO DO ESTADO REMOTO (operação compartilhada) ----------
    Recebe o que veio das Listas e mescla no DB local. É o ponto mais delicado
@@ -838,16 +858,44 @@ function upsertFrota(placa, transportadora, tipoVeiculo, extra){
   const precisaRevisao = !!extra.precisaRevisao;
   const origem = extra.origem || 'manual';
   let f = indiceFrota().get(p);
+  let entrada;
   if(f){
     f.transportadora = transportadora; f.tipoVeiculo = tipoVeiculo;
     f.capacidadeKg = capacidadeKg; f.uf = uf; f.dataUltimaMovimentacao = dataUltimaMovimentacao; f.precisaRevisao = precisaRevisao;
     f.origem = origem;
+    entrada = f;
   } else {
     const novo = { placa:p, transportadora, tipoVeiculo, capacidadeKg, uf, dataUltimaMovimentacao, precisaRevisao, origem };
     DB.frota.push(novo);
     if(_frotaIndice) _frotaIndice.set(p, novo); // mantém o índice quente na importação em lote
+    entrada = novo;
   }
   SuincoStore.save();
+
+  /* Sobe ao servidor. Achado em produção (07/08/2026): esta chamada nunca
+     existia aqui — só a carga ÚNICA da base semente (carregarFrotaReal())
+     chamava sincronizarVeiculo(), num laço explícito depois de importar
+     tudo. Cadastro manual pela tela (este caminho, o do dia a dia) e
+     importação em lote gravavam só localStorage e devolviam "sucesso" sem
+     UMA chamada de rede sequer. A placa existia só no navegador de quem
+     cadastrou; a Programação usa a cópia local (buscarFrota) pra liberar o
+     formulário, então a carga nascia lá, e só o servidor — que nunca tinha
+     a placa — recusava, tarde demais, sem ninguém mais no pátio nunca ter
+     visto nada.
+
+     EXCETO quando `origem === 'sharepoint'`: aí a placa não é dado novo,
+     é o que ACABOU de vir do servidor em fundirEstadoRemoto() — "frota é
+     dimensão só de LEITURA", como o comentário de lá já dizia. Sem esta
+     exceção, todo pull cheio (login, reconexão) reenviava as 749 placas
+     de volta pro servidor que tinha acabado de mandá-las — eco a cada
+     sincronia completa, e rate limit estourado em segundos. Achado
+     rodando a bateria de teste antes de publicar esta correção. */
+  if(origem !== 'sharepoint'
+     && typeof SuincoSharePoint !== 'undefined' && SuincoSharePoint.estaConfigurado()){
+    SuincoStore.sincronizarVeiculo(entrada, DB.operador).then(r=>{
+      if(r && r.recusado && _aoRecusarFrota) _aoRecusarFrota(entrada, r.erro);
+    }).catch(e=>console.warn('[Suinco] sync frota:', e));
+  }
 }
 function removerFrota(placa){
   const p = normalizarPlaca(placa);
@@ -980,14 +1028,10 @@ async function carregarFrotaSeedSeVazia(){
       else if((nova.transportadora||'') !== (f.transportadora||'')) alteradas++;
     });
     DB.frotaSeedVersao = versao;
-    // Primeira carga da base: espelha dim_Veiculos no SharePoint. Vai pela
-    // fila (local-first), então não trava a abertura do painel nem se perde
-    // se a rede estiver fora — sobe quando a conexão voltar.
-    if(typeof SuincoSharePoint !== 'undefined' && SuincoSharePoint.estaConfigurado()){
-      DB.frota.forEach(f=>{
-        SuincoStore.sincronizarVeiculo(f, DB.operador).catch(e=>console.warn('[Suinco] sync frota:', e));
-      });
-    }
+    // A sincronia de cada placa com o servidor já aconteceu dentro do laço
+    // acima — upsertFrota() sincroniza por linha desde a correção do
+    // achado de 07/08/2026 (ver comentário lá). Repetir aqui duplicaria
+    // 749 chamadas de rede na primeira carga da base.
     SuincoStore.save();
     return { carregado:true, total: linhas.length, primeiraCarga, removidas, alteradas,
              manuaisPreservadas: manuais.length };
@@ -1128,7 +1172,11 @@ function criarCargaProgramada({placa, transportadora, tipoVeiculo, numeroCarga, 
     status: 'Aguardando Veículo',
     aguardandoCarga: false,
     criadoEm: nowISO(), criadoPor: operador||'(não identificado)',
-    atualizadoEm: nowISO()
+    atualizadoEm: nowISO(),
+    // Marca a carga como "ainda não existe no servidor" — permite que uma
+    // recusa na primeira sincronia remova a carga localmente em vez de só
+    // avisar (ver sincronizarCarga). Some assim que o servidor confirmar.
+    _nuncaConfirmada: true
   };
   DB.cargas.push(carga);
   registrarMovimentacao({cargaId:carga.id, placa:p, statusAnterior:null, statusNovo:'Aguardando Veículo', operador, setor:'Logística', ...snapshotCarga(carga)});
@@ -1161,7 +1209,8 @@ function registrarChegadaPortaria(placa, operador){
       praOnde: PRA_ONDE_PADRAO, rota:'', paletizada:'Não', qtdGanchos:0, qtdEntregas:1,
       status: 'Aguardando Embarque', aguardandoCarga: true,
       criadoEm: nowISO(), criadoPor: operador||'(não identificado)',
-      atualizadoEm: nowISO()
+      atualizadoEm: nowISO(),
+      _nuncaConfirmada: true
     };
     DB.cargas.push(carga);
     registrarMovimentacao({cargaId:carga.id, placa:p, statusAnterior:null, statusNovo:'Aguardando Embarque', operador, setor:'Portaria', ...snapshotCarga(carga)});
