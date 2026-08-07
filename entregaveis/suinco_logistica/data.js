@@ -160,6 +160,51 @@ function rotaCurta(codigo){
   return r ? `${r.codigo} — ${r.nome}` : (codigo ? String(codigo) : '—');
 }
 
+/* Cadastra ou atualiza uma rota (Cadastros → Cadastrar Rota, só
+   Administração). Espelha upsertFrota: muta ROTAS/ROTA_POR_CODIGO NA HORA
+   — os seletores lêem esses dois direto, então a rota nova aparece no
+   formulário sem esperar reload nem versão nova do painel — e guarda uma
+   cópia em DB.rotasExtras, que É persistida (ROTAS não é: é uma constante
+   de código, recriada do zero a cada carga de página). extra.origem ===
+   'sharepoint' identifica "isto já veio confirmado do servidor" (carga
+   inicial ou reaplicação no load()) e pula o re-envio — do contrário,
+   toda leitura completa reenviaria as mesmas rotas de volta ao servidor. */
+function upsertRota(codigo, nome, detalhe, operador, extra){
+  extra = extra || {};
+  codigo = String(codigo||'').trim();
+  if(!codigo) return null;
+  const rota = {
+    codigo,
+    nome: (nome||'').trim(),
+    detalhe: (detalhe||'').trim(),
+    operador: (operador||'').trim(),
+  };
+
+  const existente = ROTA_POR_CODIGO.get(codigo);
+  if(existente){
+    Object.assign(existente, rota);
+  }else{
+    ROTAS.push(rota);
+    ROTAS.sort((a,b)=> a.codigo.localeCompare(b.codigo, 'pt-BR', {numeric:true}));
+    ROTA_POR_CODIGO.set(codigo, rota);
+  }
+
+  if(!Array.isArray(DB.rotasExtras)) DB.rotasExtras = [];
+  const idx = DB.rotasExtras.findIndex(r => r.codigo === codigo);
+  if(idx >= 0) DB.rotasExtras[idx] = rota; else DB.rotasExtras.push(rota);
+  SuincoStore.save();
+
+  if(extra.origem !== 'sharepoint'
+     && typeof SuincoSharePoint !== 'undefined' && SuincoSharePoint.estaConfigurado()){
+    SuincoSharePoint.upsert('rotas', 'codigo', {
+      Codigo: rota.codigo, Nome: rota.nome, Detalhe: rota.detalhe, Operador: rota.operador
+    }, DB.operador).then(r=>{
+      if(r && r.recusado && _aoRecusarRota) _aoRecusarRota(rota, r.erro);
+    }).catch(e=>console.warn('[Suinco] sync rota:', e));
+  }
+  return rota;
+}
+
 /* ---------- mapeamento de cor/rótulo para o PDF Operacional e para
    Dim_Status (export Power BI) ----------
    Mapeamento de "Status de Carregamento" no PDF Operacional (planilha de
@@ -340,6 +385,12 @@ const SETORES = Object.keys(SETOR_PERMISSOES);
 let DB = {
   frota: [],             // {placa, transportadora, tipoVeiculo, origem}
   frotaSeedVersao: null,  // hash da base de frota já importada (ver carregarFrotaSeedSeVazia)
+  // Rotas cadastradas pela tela (Administração), fora das 33 do seed
+  // estático ROTAS. Persistidas aqui — não dentro de ROTAS — porque ROTAS é
+  // uma constante de código, recriada do zero a cada carga da página; sem
+  // isto, uma rota cadastrada offline sumiria no primeiro reload antes de a
+  // sincronização terminar. Reaplicadas em ROTAS no load() (ver upsertRota).
+  rotasExtras: [],
   transportadoras: [],  // {id, nome}
   cargas: [],            // ver criarCargaProgramada/registrarChegadaPortaria
   movimentacoes: [],      // log — nunca editado, só append
@@ -362,6 +413,14 @@ const SuincoStore = {
       const raw = localStorage.getItem(STORAGE_KEY);
       if(raw) Object.assign(DB, JSON.parse(raw));
       invalidarIndiceFrota();
+      // ROTAS é constante de código: recomeça do zero (só as 33 do seed) a
+      // cada carga de página. As cadastradas pela tela ficam salvas em
+      // DB.rotasExtras — reaplicar aqui é o que faz uma rota nova
+      // sobreviver ao F5 mesmo antes de a sincronização com o servidor
+      // terminar. origem:'sharepoint' porque isto é reidratação de dado já
+      // gravado, não uma gravação nova — sincronizar de novo aqui reenviaria
+      // a mesma rota ao servidor a cada abertura do painel.
+      (DB.rotasExtras||[]).forEach(r => upsertRota(r.codigo, r.nome, r.detalhe, r.operador, {origem:'sharepoint'}));
       const migradas = migrarPraOnde();
       if(migradas) console.info(`[Suinco] "Pra onde?" migrado em ${migradas} carga(s).`);
     }catch(e){ console.error('Falha ao carregar dados locais', e); }
@@ -634,6 +693,10 @@ function aoRecusarCarga(fn){ _aoRecusarCarga = fn; }
 let _aoRecusarFrota = null;
 function aoRecusarFrota(fn){ _aoRecusarFrota = fn; }
 
+/* Mesmo par, para o cadastro de Rota (Cadastros → só Administração). */
+let _aoRecusarRota = null;
+function aoRecusarRota(fn){ _aoRecusarRota = fn; }
+
 /* ---------- FUSÃO DO ESTADO REMOTO (operação compartilhada) ----------
    Recebe o que veio das Listas e mescla no DB local. É o ponto mais delicado
    do multiusuário: mesclar errado significa apagar o trabalho de outro setor.
@@ -712,6 +775,17 @@ function fundirEstadoRemoto(dados){
         precisaRevisao: r.Precisa_Revisao === true || r.Precisa_Revisao === 'Sim',
         origem: 'sharepoint'
       });
+    });
+  }
+
+  // ---- rotas (só na carga inicial) — traz pro terminal as rotas que
+  // OUTRO operador cadastrou pela tela, sem esperar uma versão nova do
+  // painel. origem:'sharepoint' porque isto já é confirmado pelo servidor. ----
+  if(Array.isArray(dados.rotas) && dados.rotas.length){
+    dados.rotas.forEach(r => {
+      const codigo = String(r.Codigo||'').trim();
+      if(!codigo) return;
+      upsertRota(codigo, r.Nome || '', r.Detalhe || '', r.Operador || '', { origem:'sharepoint' });
     });
   }
 

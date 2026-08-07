@@ -623,6 +623,31 @@
         <div class="sep"></div>
         <div id="cad-transp-lista"></div>
       </div>
+
+      <!-- Só Administração vê este card (renderCadastros() alterna o
+           `hidden`). O backend também aceita de Logística (exigirSetor
+           sempre libera Administração), mas o pedido foi explícito:
+           cadastro de rota é ação só do administrador. -->
+      <div class="card" id="card-cadastrar-rota" hidden>
+        <div class="card-title"><span class="icon">🗺️</span> Cadastrar Rota</div>
+        <div class="card-sub">Só Administração. A rota cadastrada aqui entra na hora no seletor de Rota da Programação — sem esperar versão nova do painel.</div>
+        <div class="form-row">
+          <div class="form-group"><label>Código</label><input type="text" id="rota-codigo" placeholder="Ex: 542"></div>
+          <div class="form-group"><label>Nome</label><input type="text" id="rota-nome" placeholder="Ex: Santa Catarina"></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>Detalhe <span class="hint">opcional</span></label><input type="text" id="rota-detalhe" placeholder="Ex: Florianópolis"></div>
+          <div class="form-group"><label>Operador/Transportadora <span class="hint">opcional</span></label><input type="text" id="rota-operador"></div>
+        </div>
+        <div class="flex-end" style="margin-top:0"><button class="btn btn-primary btn-sm" onclick="addRotaUI()">➕ Cadastrar / Atualizar Rota</button></div>
+        <div class="sep"></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Código</th><th>Nome</th><th>Detalhe</th><th>Operador</th></tr></thead>
+            <tbody id="rotas-tbody"></tbody>
+          </table>
+        </div>
+      </div>
     </div>
   </div>
 
