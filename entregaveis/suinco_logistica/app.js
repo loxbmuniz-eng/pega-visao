@@ -1058,6 +1058,41 @@ function fmtHora(iso){
   return isNaN(d) ? '—' : d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
 }
 
+/* Contagem crescente nos números da Torre de Controle — só quando o valor
+   MUDA de um render pro outro, nunca na primeira pintura da tela nem em
+   re-render sem mudança real (a Torre redesenha a cada sincronia, a cada
+   ~15s; animar todo redesenho seria decoração, não informação — a mesma
+   distinção que a esteira de UX chama de "motion precisa comunicar algo").
+
+   Guardado por RÓTULO (não pelo nó do DOM, que é recriado a cada render
+   via innerHTML) — funciona porque os rótulos das caixas da Torre são
+   fixos ("Cargas em aberto", os 5 nomes de status etc.). */
+let _ultimoValorTorre = {};
+function animarContadoresTorre(){
+  const reduzido = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  document.querySelectorAll('#torre-stats [data-contador]').forEach(el=>{
+    const chave = el.dataset.contador;
+    const alvo = Number(el.textContent);
+    if(!Number.isFinite(alvo)) return; // nunca deveria acontecer aqui, mas não trava se acontecer
+    const anterior = _ultimoValorTorre[chave];
+    _ultimoValorTorre[chave] = alvo;
+    if(reduzido || anterior === undefined || anterior === alvo){
+      el.textContent = alvo; // primeira pintura ou sem mudança: direto, sem show
+      return;
+    }
+    const inicio = anterior, duracao = 500, t0 = performance.now();
+    const passo = (agora)=>{
+      const p = Math.min(1, (agora - t0) / duracao);
+      // ease-out: rápido no começo, assenta no fim — número que "acelera"
+      // no meio do pátio parece erro de leitura, não destaque.
+      const suavizado = 1 - Math.pow(1 - p, 3);
+      el.textContent = Math.round(inicio + (alvo - inicio) * suavizado);
+      if(p < 1) requestAnimationFrame(passo);
+    };
+    requestAnimationFrame(passo);
+  });
+}
+
 function renderTorre(){
   const abertas = cargasAbertas();
   const porStatus = {};
@@ -1083,7 +1118,7 @@ function renderTorre(){
 
   const caixa = (num, rotulo, {destaque=false, alerta=false, nota=''} = {}) =>
     `<div class="stat-box${destaque?' stat-destaque':''}${alerta && num>0?' stat-alerta':''}">
-       <div class="stat-num">${num}</div>
+       <div class="stat-num" data-contador="${esc(rotulo)}">${num}</div>
        <div class="stat-label">${esc(rotulo)}</div>
        ${nota ? `<div class="stat-note">${esc(nota)}</div>` : ''}
      </div>`;
@@ -1096,6 +1131,7 @@ function renderTorre(){
     + statusVisiveis.map(s=>caixa(porStatus[s]||0, s)).join('')
     + caixa(aguardandoCargaCount, 'Aguardando Carga',
             {nota:'dados incompletos'});
+  animarContadoresTorre();
 
   const lista = abertas.slice().sort(ordenarPorSequenciaEAtualizacao);
   const thead = document.getElementById('torre-thead');
