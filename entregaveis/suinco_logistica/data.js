@@ -300,8 +300,15 @@ const SETOR_PERMISSOES = {
 
      Indicador sem poder de ação vira placar; com poder de ação, vira
      ferramenta. Por isso aqui sim, e nos outros dois não. */
-  'Expedição':    ['expedicao','indicadores','historico'],
-  'Faturamento':  ['faturamento','historico'],
+  'Expedição':    ['expedicao','indicadores','historico','relatorios'],
+  /* Relatórios abriu para os dois — pedido direto, não decisão minha: os
+     dois setores precisam do mesmo PDF Operacional que já circula no
+     grupo, sem depender da Logística gerar e mandar. A aba é tudo ou nada
+     (não existe hoje permissão por cartão dentro dela), então junto do
+     Operacional/Executivo eles também passam a ver Administração de
+     Fretes (valor negociado do frete) e a exportação CSV — decisão
+     tomada de propósito, não efeito colateral não notado. */
+  'Faturamento':  ['faturamento','historico','relatorios'],
   'Administração':ABAS_OPERACIONAIS.concat(['usuarios'])
 };
 
@@ -316,7 +323,11 @@ const TAB_FUNCAO = {
   indicadores: { setor:'Logística e Expedição', oque:'Analisar tempo médio por etapa, comparar períodos e ver o ranking de transportadoras.', move:'Não altera nada — é somente leitura.' },
   cadastros:   { setor:'Logística',    oque:'Manter a base de Frota (placa → transportadora → tipo) e as transportadoras.',                 move:'Não altera cargas — alimenta a Programação.' },
   historico:   { setor:'Todos',        oque:'Consultar a trilha de auditoria: quem moveu qual carga, de qual status para qual, e quando.',      move:'Não altera nada — registro permanente.' },
-  relatorios:  { setor:'Logística',    oque:'Gerar o PDF operacional (para o pátio) e o executivo (para a gestão).',                            move:'Não altera nada — exporta o que já existe.' },
+  /* Rótulo do chip precisa ficar CURTO — .funcao-chip é white-space:nowrap
+     de propósito (é uma pílula, não um parágrafo) e a frase completa dos
+     quatro setores estourava a página em celular de 320-390px. "Todos,
+     exceto Portaria" diz a mesma coisa em menos caracteres. */
+  relatorios:  { setor:'Todos, exceto Portaria', oque:'Gerar o PDF operacional (para o pátio) e o executivo (para a gestão).', move:'Não altera nada — exporta o que já existe.' },
   usuarios:    { setor:'Administração', oque:'Criar, bloquear e redefinir senha dos operadores de todos os setores.',                            move:'Não altera cargas — define quem entra e o que cada um pode registrar.' }
 };
 
