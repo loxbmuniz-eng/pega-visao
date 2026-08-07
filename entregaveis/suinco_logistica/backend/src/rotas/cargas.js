@@ -66,12 +66,32 @@ rotasCargas.post('/cargas', exigirLogin, async (req, res, next) => {
        validado no servidor como tudo mais nesta rota. */
     const chegadaSemProgramacao = req.body?.aguardandoCarga === true;
 
-    if (chegadaSemProgramacao) {
-      if (!podeRegistrarChegadaSemProgramacao(op.setor)) {
-        throw new ErroDePermissao('Registrar chegada sem programação é da Portaria ou da Logística.');
+    /* A trava de setor é para impedir CRIAÇÃO nova por quem não pode —
+       não faz sentido aplicá-la a uma carga que já existe.
+
+       O painel reenvia a carga por este mesmo POST a CADA save() (data.js,
+       sincronizarCarga), inclusive quando a única mudança foi status —
+       que sobe por rota própria, à parte. Isso é o eco normal de
+       sincronização (o servidor responde 200 e o cliente cai no PATCH),
+       não uma tentativa de criar. Sem este desvio, checar a permissão
+       ANTES de saber se a carga já existia rejeitava com "Só a Logística
+       programa carga" qualquer sincronização vinda de Portaria/Expedição/
+       Faturamento — achado em produção em 07/08/2026: Faturamento
+       marcando "Faturado" recebia esse erro em toda gravação, mesmo a
+       mudança de status em si tendo sido aceita pela rota própria. */
+    const idCliente = idSeguro(req.body?.id);
+    const jaExistia = idCliente
+      ? !!(await consultar('SELECT 1 FROM fact_viagens WHERE carga_id = $1', [idCliente])).rows[0]
+      : false;
+
+    if (!jaExistia) {
+      if (chegadaSemProgramacao) {
+        if (!podeRegistrarChegadaSemProgramacao(op.setor)) {
+          throw new ErroDePermissao('Registrar chegada sem programação é da Portaria ou da Logística.');
+        }
+      } else if (!podeCriarCarga(op.setor)) {
+        throw new ErroDePermissao('Só a Logística programa carga.');
       }
-    } else if (!podeCriarCarga(op.setor)) {
-      throw new ErroDePermissao('Só a Logística programa carga.');
     }
 
     const placa = normalizarPlaca(req.body?.placa);
@@ -351,9 +371,6 @@ rotasCargas.post('/cargas/:id/status', exigirLogin, async (req, res, next) => {
 rotasCargas.delete('/cargas/:id', exigirLogin, async (req, res, next) => {
   try {
     const op = req.operador;
-    if (!podeCriarCarga(op.setor)) {
-      throw new ErroDePermissao('Só a Logística exclui carga programada.');
-    }
     const id = idSeguro(req.params.id);
     if (!id) return res.status(400).json({ erro: 'Id inválido.', codigo: 'ID_INVALIDO' });
 
@@ -371,6 +388,19 @@ rotasCargas.delete('/cargas/:id', exigirLogin, async (req, res, next) => {
          clicar em Excluir na mesma carga. Tratar a segunda como falha faria
          o painel insistir para sempre em algo que já está feito. */
       if (carga.excluida_em) return { jaExcluida: true, carga };
+
+      /* Permissão só é checada quando existe exclusão de verdade a fazer.
+         Reenvio de uma carga já excluída (comentário acima) já retornou
+         antes de chegar aqui, sem olhar setor — mesmo raciocínio da
+         correção do POST /api/cargas (07/08/2026): checar permissão de
+         criar/excluir ANTES de saber se ainda há o que fazer transforma
+         todo eco de sincronização num 403 sem necessidade. Hoje só
+         Logística/Administração têm o botão na tela (podeCancelarCarga,
+         app.js), então isto ainda não gera 403 pra ninguém — é reforço
+         preventivo, feito junto por ser a mesma causa. */
+      if (!podeCriarCarga(op.setor)) {
+        throw new ErroDePermissao('Só a Logística exclui carga programada.');
+      }
 
       /* Carga que JÁ SEGUIU VIAGEM não sai. Ali o caminhão passou pela
          portaria, a nota existe e o cliente recebeu — apagar isso é apagar

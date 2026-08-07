@@ -214,6 +214,40 @@ describe('3. Permissão por setor — validada no SERVIDOR', () => {
     });
     assert.equal(r.status, 403, 'o setor tem que vir do token, não do corpo');
   });
+
+  /* Achado em produção em 07/08/2026: Faturamento clicou "Faturado" em duas
+     placas e recebeu "Só a Logística programa carga" nas duas.
+
+     O painel (sincronizarCarga, data.js) reenvia a carga por POST /api/cargas
+     a CADA save() — inclusive quando a única mudança foi status, que sobe
+     por rota própria (POST /api/cargas/:id/status, chamada à parte). Esse
+     reenvio é o eco de sincronização normal (o servidor responde 200 e o
+     cliente cai no PATCH), não uma tentativa real de criar carga nova.
+
+     A recusa acontecia porque a trava de setor (podeCriarCarga) era
+     checada ANTES de olhar se aquele carga_id já existia — qualquer setor
+     sem permissão de CRIAR levava 403 mesmo reenviando uma carga que já
+     existia e que ele tinha todo o direito de estar sincronizando. */
+  test('reenviar POST de uma carga que JÁ EXISTE não é bloqueado pela trava de criação',
+    async () => {
+      const { rows } = await pool.query('SELECT placa FROM dim_veiculos LIMIT 1 OFFSET 1');
+      const criar = await req('/api/cargas', {
+        metodo: 'POST', token: tokens['Logística'],
+        corpo: { placa: rows[0].placa, numeroCarga: '90005' },
+      });
+      assert.equal(criar.status, 201, criar.texto);
+      const id = criar.json.id;
+
+      // Faturamento não pode CRIAR carga — mas reenviar essa MESMA carga
+      // (o eco de sincronização do painel) tem que ser aceito como "já
+      // existia", não recusado como se fosse uma criação nova.
+      const reenvio = await req('/api/cargas', {
+        metodo: 'POST', token: tokens['Faturamento'],
+        corpo: { id, placa: rows[0].placa, numeroCarga: '90005' },
+      });
+      assert.equal(reenvio.status, 200,
+        `esperado 200 ("já existia"), veio ${reenvio.status}: ${reenvio.texto}`);
+    });
 });
 
 /* ------------------------------------------------------------------
@@ -770,6 +804,21 @@ describe('7d. Exclusão de carga programada', () => {
     assert.ok(achada, 'sem isto, nenhum outro terminal descobre que a carga saiu');
     assert.equal(achada.excluida, true);
   });
+
+  /* Mesmo raciocínio da correção do POST /api/cargas (07/08/2026): checar
+     permissão ANTES de saber se ainda há o que fazer transforma um reenvio
+     de algo já resolvido num 403 desnecessário. Reenviar DELETE de uma
+     carga JÁ excluída é reenvio (fila offline, duplo clique) — precisa
+     continuar OK mesmo vindo de um setor que não teria permissão para
+     excluir uma carga ainda ativa. */
+  test('reenviar DELETE de uma carga JÁ excluída não é bloqueado pela trava de exclusão',
+    async () => {
+      const r = await req(`/api/cargas/${cargaId}`, {
+        metodo: 'DELETE', token: tokens['Portaria'],
+      });
+      assert.equal(r.status, 200, `esperado 200 (já excluída), veio ${r.status}: ${r.texto}`);
+      assert.equal(r.json.excluida, true);
+    });
 
   test('a trilha de auditoria guarda quem excluiu', async () => {
     const { rows } = await pool.query(
