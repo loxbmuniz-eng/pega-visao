@@ -370,6 +370,7 @@ const SuincoSharePoint = (function () {
      isso pelo id, então o painel não precisa saber qual dos dois é. */
   async function upsert(lista, chave, campos, operador) {
     if (lista === 'frota') return gravarFrota(campos);
+    if (lista === 'rotas') return gravarRota(campos);
     if (lista !== 'cargas') return { enfileirado: false };
     if (!estaConfigurado()) return { enfileirado: false };
 
@@ -496,6 +497,25 @@ const SuincoSharePoint = (function () {
     }
   }
 
+  async function gravarRota(campos) {
+    if (!estaConfigurado()) return { enfileirado: false };
+    try {
+      await chamar('/api/rotas', {
+        metodo: 'POST',
+        corpo: {
+          codigo: campos.Codigo,
+          nome: campos.Nome,
+          detalhe: campos.Detalhe,
+          operador: campos.Operador,
+        },
+      });
+      return { enfileirado: false };
+    } catch (e) {
+      if (eFalhaDeRede(e)) return enfileirar({ tipo: 'rota', corpo: campos });
+      return { enfileirado: false, recusado: true, erro: e.message };
+    }
+  }
+
   /* Muda o status pela rota que valida a transição no servidor. É por aqui
      que o painel deve mover a carga — e é o que impede alguém com o token de
      marcar "Faturado" num caminhão que nunca chegou. */
@@ -569,6 +589,8 @@ const SuincoSharePoint = (function () {
           });
         } else if (item.tipo === 'frota') {
           await gravarFrota(item.corpo);
+        } else if (item.tipo === 'rota') {
+          await gravarRota(item.corpo);
         }
         enviados++;
       } catch (e) {
@@ -637,10 +659,11 @@ const SuincoSharePoint = (function () {
       cargas: (r.cargas || []).map(daApiParaLinha),
       movimentacoes: (r.movimentacoes || []).map(movDaApiParaLinha),
       frota: [],
+      rotas: [],
     };
 
-    // A frota é dimensão: pesada (749 placas) e quase estática. Baixar a
-    // cada ciclo de 15 s seria desperdício — só vem na carga inicial.
+    // Frota e rotas são dimensão: pesadas ou quase estáticas. Baixar a
+    // cada ciclo de 15 s seria desperdício — só vêm na carga inicial.
     if (r.completo) {
       try {
         const frota = await chamar('/api/frota');
@@ -652,6 +675,17 @@ const SuincoSharePoint = (function () {
         }));
       } catch (e) {
         console.warn('[Suinco] frota não carregou:', e.message);
+      }
+      try {
+        const rotas = await chamar('/api/rotas');
+        dados.rotas = (rotas || []).map((rt) => ({
+          Codigo: rt.codigo,
+          Nome: rt.nome,
+          Detalhe: rt.detalhe,
+          Operador: rt.operador,
+        }));
+      } catch (e) {
+        console.warn('[Suinco] rotas não carregaram:', e.message);
       }
     }
 

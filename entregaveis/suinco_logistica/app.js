@@ -423,6 +423,17 @@ function receberRecusaDeFrota(frota, motivo){
   tocarAlertaAlteracao();
 }
 
+/* Mesmo aviso, para o cadastro de Rota. A rota continua no seletor deste
+   aparelho — só não chegou ao servidor, então outros terminais ainda não
+   vão vê-la. */
+function receberRecusaDeRota(rota, motivo){
+  notify(
+    `Rota ${rota.codigo}: o servidor recusou o cadastro. ${motivo || ''} `
+    + 'Ficou salva só neste aparelho — outros terminais ainda não vão ver esta rota.',
+    'danger', 20000);
+  tocarAlertaAlteracao();
+}
+
 /* Status imediatamente anterior a `alvo` no log desta carga.
    Usa o log em vez de STATUS_FLOW.indexOf(alvo)-1 porque a carga pode ter
    nascido no meio do fluxo (entrada "Aguardando Carga" da Portaria). */
@@ -1400,9 +1411,16 @@ function atualizarSequenciaUI(id, val){
 function preencherSelectsRota(){
   const opcoes = '<option value="">(rota não informada)</option>' +
     ROTAS.map(r=>`<option value="${esc(r.codigo)}">${esc(rotaLabel(r.codigo))}</option>`).join('');
+  // Sempre reconstrói (não só na primeira vez): uma rota cadastrada em
+  // Cadastros → Cadastrar Rota precisa aparecer aqui na hora, sem esperar
+  // reload. Preserva o valor selecionado — chamar isto não pode limpar uma
+  // rota que o Programador já tinha escolhido no formulário.
   ['prog-rota','completar-rota'].forEach(id=>{
     const el = document.getElementById(id);
-    if(el && el.dataset.preenchido !== '1'){ el.innerHTML = opcoes; el.dataset.preenchido = '1'; }
+    if(!el) return;
+    const valorAtual = el.value;
+    el.innerHTML = opcoes;
+    if(valorAtual) el.value = valorAtual;
   });
 }
 
@@ -2339,6 +2357,32 @@ window.addEventListener('resize', ()=>{ if(TAB_ATUAL==='indicadores') renderGraf
 function renderCadastros(){
   renderFrotaTabela();
   renderTranspLista();
+  const cardRota = document.getElementById('card-cadastrar-rota');
+  if(cardRota){
+    cardRota.hidden = !(DB.operador && DB.operador.setor === 'Administração');
+    if(!cardRota.hidden) renderRotasCadastro();
+  }
+}
+function renderRotasCadastro(){
+  const tbody = document.getElementById('rotas-tbody');
+  if(!tbody) return;
+  tbody.innerHTML = ROTAS.slice()
+    .sort((a,b)=> a.codigo.localeCompare(b.codigo, 'pt-BR', {numeric:true}))
+    .map(r=>`<tr><td>${esc(r.codigo)}</td><td>${esc(r.nome)||'—'}</td><td>${esc(r.detalhe)||'—'}</td><td>${esc(r.operador)||'—'}</td></tr>`)
+    .join('');
+}
+function addRotaUI(){
+  const codigo = document.getElementById('rota-codigo').value.trim();
+  const nome = document.getElementById('rota-nome').value.trim();
+  if(!codigo){ notify('Informe o código da rota.', 'warn'); return; }
+  if(!nome){ notify('Informe o nome da rota.', 'warn'); return; }
+  const jaExistia = !!rotaInfo(codigo);
+  upsertRota(codigo, nome, document.getElementById('rota-detalhe').value,
+             document.getElementById('rota-operador').value);
+  ['rota-codigo','rota-nome','rota-detalhe','rota-operador'].forEach(id=>document.getElementById(id).value='');
+  preencherSelectsRota();   // dropdowns de Rota atualizados na hora
+  notify(jaExistia ? `Rota ${codigo} atualizada.` : `Rota ${codigo} — ${nome} cadastrada. Já aparece no seletor de Rota.`, 'success');
+  renderAll();
 }
 // Filtro de texto (placa ou transportadora) + "só precisa revisão" — a base
 // real tem 2.038 placas (ver docs/NOTAS_BASE_FROTA.md), então navegar a
@@ -3326,6 +3370,7 @@ async function init(){
     if(typeof aoRecusarStatus === 'function') aoRecusarStatus(receberRecusaDeStatus);
     if(typeof aoRecusarCarga === 'function') aoRecusarCarga(receberRecusaDeCarga);
     if(typeof aoRecusarFrota === 'function') aoRecusarFrota(receberRecusaDeFrota);
+    if(typeof aoRecusarRota === 'function') aoRecusarRota(receberRecusaDeRota);
     SuincoSharePoint.iniciar()
       .then(()=>{ atualizarRodapeConexao(SuincoSharePoint.estado()); renderAll(); })
       .catch(e=>{ console.warn('[Suinco] init:', e); atualizarRodapeConexao('local'); });
