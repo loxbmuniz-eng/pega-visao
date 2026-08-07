@@ -389,12 +389,36 @@ function receberRecusaDeStatus(carga, alvo, motivo){
    status, aqui não dá para saber com segurança se a carga já existia no
    servidor antes (edição) ou nunca chegou a existir (criação), e chutar
    errado apagaria dado de verdade. O aviso é alto e diz pra conferir. */
-function receberRecusaDeCarga(carga, motivo){
+function receberRecusaDeCarga(carga, motivo, removida){
   const rotulo = carga.numeroCarga && carga.numeroCarga !== 'Aguardando Carga'
     ? carga.numeroCarga : (carga.placa || carga.id);
   notify(
-    `${rotulo}: o servidor recusou a gravação. ${motivo || ''} `
-    + 'A informação pode não estar salva — confira e refaça se precisar.',
+    removida
+      ? `${rotulo}: o servidor recusou a criação desta carga. ${motivo || ''} `
+        + 'Ela foi removida da tela — nunca existiu no banco. Corrija o motivo '
+        + '(placa cadastrada na Frota? setor com permissão?) e refaça.'
+      : `${rotulo}: o servidor recusou a gravação. ${motivo || ''} `
+        + 'A informação pode não estar salva — confira e refaça se precisar.',
+    'danger', 20000);
+  tocarAlertaAlteracao();
+  if(removida) renderAll();
+}
+
+/* Cadastro de placa na Frota recusado pelo servidor.
+
+   Achado em produção (07/08/2026): cadastro manual de placa nunca subia ao
+   servidor — "Placa cadastrada na Frota." aparecia sem nenhuma chamada de
+   rede (ver upsertFrota em data.js). Corrigido para sincronizar de
+   verdade; este é o aviso para quando a sincronia sobe e o servidor
+   recusa (setor sem permissão, placa mal formada). A placa CONTINUA na
+   Frota local — avisar loud em vez de desfazer, porque o operador pode
+   estar sem rede e a fila reenviar sozinha depois; apagar aqui apagaria
+   um cadastro que ainda vai vingar. */
+function receberRecusaDeFrota(frota, motivo){
+  notify(
+    `Placa ${frota.placa}: o servidor recusou o cadastro na Frota. ${motivo || ''} `
+    + 'Ficou salva só neste aparelho — carga programada com ela será recusada '
+    + 'em outros terminais até isto ser corrigido.',
     'danger', 20000);
   tocarAlertaAlteracao();
 }
@@ -1139,10 +1163,39 @@ function atualizarPreviewFrotaPrograma(){
     hint.innerHTML = '<span class="text-dim">✅ Placa encontrada na Frota — Transportadora e Tipo de Veículo preenchidos automaticamente.</span>'
                    + avisoPlacaJaProgramada(placa);
   } else if(normalizarPlaca(placa)){
-    hint.innerHTML = '<span style="color:var(--wine-light)">⛔ Placa não cadastrada na Frota — a criação da carga será BLOQUEADA. Cadastre esta placa em Cadastros → Frota primeiro.</span>';
+    // Cadastrar sem sair da tela: antes disso, o único caminho era ir em
+    // Cadastros → Frota, perder o que já estava digitado aqui, cadastrar,
+    // voltar e preencher tudo de novo — no pátio, com o caminhão esperando,
+    // isso é tempo que ninguém tem. Reaproveita Transportadora/Tipo de
+    // Veículo que o operador já digitou nesta mesma tela.
+    hint.innerHTML = '<span style="color:var(--wine-light)">⛔ Placa não cadastrada na Frota — a criação da carga será BLOQUEADA.</span>'
+      + '<div class="gap8" style="margin-top:6px">'
+      + '<button type="button" class="btn btn-sec btn-sm" onclick="cadastrarPlacaInlineUI()">➕ Cadastrar esta placa na Frota agora</button>'
+      + '</div>';
   } else {
     hint.innerHTML = '';
   }
+}
+
+/* Cadastra a placa na Frota sem sair da tela de Programação, usando o que
+   o operador já digitou em Transportadora/Tipo de Veículo — e sem esperar
+   confirmação do servidor pra liberar o próximo passo, porque
+   upsertFrota() já dispara a sincronia real em segundo plano (corrigido em
+   07/08/2026: antes o cadastro pela tela nunca chegava ao servidor —
+   ver comentário em upsertFrota, data.js). Se o servidor recusar, o aviso
+   de aoRecusarFrota chega do mesmo jeito, sozinho, poucos segundos depois. */
+function cadastrarPlacaInlineUI(){
+  const placa = document.getElementById('prog-placa').value;
+  const transportadora = document.getElementById('prog-transportadora').value.trim();
+  const tipoVeiculo = document.getElementById('prog-tipoveiculo').value.trim();
+  if(!normalizarPlaca(placa)){ notify('Informe a placa antes de cadastrar.', 'warn'); return; }
+  if(!transportadora || !tipoVeiculo){
+    notify('Preencha Transportadora e Tipo de Veículo para cadastrar a placa.', 'warn');
+    return;
+  }
+  upsertFrota(placa, transportadora, tipoVeiculo, {});
+  notify(`Placa ${normalizarPlaca(placa)} cadastrada na Frota. Pode criar a carga agora.`, 'success');
+  atualizarPreviewFrotaPrograma();
 }
 
 /* Aviso de placa que já tem carga em aberto.
@@ -3156,6 +3209,7 @@ async function init(){
     if(SuincoSharePoint.aoExcluirCarga) SuincoSharePoint.aoExcluirCarga(receberExclusaoRemota);
     if(typeof aoRecusarStatus === 'function') aoRecusarStatus(receberRecusaDeStatus);
     if(typeof aoRecusarCarga === 'function') aoRecusarCarga(receberRecusaDeCarga);
+    if(typeof aoRecusarFrota === 'function') aoRecusarFrota(receberRecusaDeFrota);
     SuincoSharePoint.iniciar()
       .then(()=>{ atualizarRodapeConexao(SuincoSharePoint.estado()); renderAll(); })
       .catch(e=>{ console.warn('[Suinco] init:', e); atualizarRodapeConexao('local'); });
