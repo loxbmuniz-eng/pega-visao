@@ -80,6 +80,41 @@
       </div>
       <div class="empty-state" id="torre-empty" data-icone="🗼" hidden>Nenhuma carga em aberto no momento.</div>
     </div>
+
+    <!-- VISÃO DO PÁTIO — mesma peça já usada em Portaria/Expedição/Faturamento
+         (renderVisaoPatio(), app.js). Pedido do usuário (07/08/2026): a Torre
+         tinha só a tabela de status; a linha do tempo das seis etapas, que
+         os outros setores já enxergavam nas próprias abas, não aparecia
+         aqui — mesmo a Torre sendo a tela liberada para todo mundo. -->
+    <div class="card">
+      <div class="card-title"><span class="icon">🗼</span> Visão do Pátio — linha do tempo</div>
+      <div class="card-sub">Onde cada carga está agora, na linha do tempo das seis etapas. Use o período para revisitar uma carga ou um caminhão de outro dia.</div>
+      <div class="filtro-periodo">
+        <div class="form-group">
+          <label>De</label>
+          <input type="date" id="torre-vp-de" onchange="renderVisaoPatio('torre')">
+        </div>
+        <div class="form-group">
+          <label>Até</label>
+          <input type="date" id="torre-vp-ate" onchange="renderVisaoPatio('torre')">
+        </div>
+        <div class="form-group">
+          <label>Placa ou Nº de Carga</label>
+          <input type="text" id="torre-vp-busca" placeholder="Ex: ABC1D23 ou 10245" oninput="renderVisaoPatio('torre')">
+        </div>
+        <div class="form-group filtro-acoes">
+          <button class="btn btn-sec btn-sm" onclick="limparPeriodoVisaoPatio('torre')">Hoje</button>
+        </div>
+      </div>
+      <div class="vp-resumo" id="torre-vp-resumo"></div>
+      <div class="table-wrap">
+        <table class="tabela-patio">
+          <thead><tr id="torre-vp-thead"></tr></thead>
+          <tbody id="torre-vp-tbody"></tbody>
+        </table>
+      </div>
+      <div class="empty-state" id="torre-vp-empty" data-icone="🔎" hidden>Nenhuma carga no período escolhido.</div>
+    </div>
   </div>
 
   <!-- ===== PROGRAMAÇÃO ===== -->

@@ -839,7 +839,7 @@ function irParaTab(tab){
 function renderTabAtual(){
   atualizarDatalists();
   switch(TAB_ATUAL){
-    case 'torre': renderTorre(); break;
+    case 'torre': renderTorre(); renderVisaoPatio('torre'); break;
     case 'programacao': renderProgFila(); renderProgAguardando(); break;
     case 'portaria':
       renderPortariaProgramadas();
