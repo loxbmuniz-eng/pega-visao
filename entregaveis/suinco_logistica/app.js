@@ -851,7 +851,14 @@ function renderTabAtual(){
     case 'faturamento': renderFaturamento(); renderVisaoPatio('faturamento'); break;
     case 'indicadores': renderIndicadores(); break;
     case 'cadastros': renderCadastros(); break;
-    case 'historico': renderHistorico(); renderBuscaTimeline(); break;
+    case 'historico':
+      renderHistorico(); renderBuscaTimeline();
+      // Se a carga aberta na timeline acabou de ser cancelada por aqui
+      // mesmo, isto garante que a tela reflita o sumiço dela mesmo se a
+      // busca ainda estiver vazia (sem isso o painel podia deixar a
+      // timeline de uma carga já excluída na tela até o próximo F5).
+      if(_timelineCargaAtual) renderTimelineCarga(_timelineCargaAtual);
+      break;
     // A aba Relatórios é só de botões, mas o resumo do filtro tem que
     // refletir o estado atual do pátio — senão mostra a contagem de quando
     // a página abriu, que já mudou.
@@ -2561,6 +2568,11 @@ function renderTimelineCarga(id){
     <div class="timeline-card">
       <div class="timeline-head">
         <div class="timeline-placa">🚚 ${esc(c.placa)} <span class="text-dim" style="font-size:14px;font-weight:600">status atual:</span> ${badgeHtml(c.status)}</div>
+        <div class="no-print">
+          ${c.status === 'Seguiu Viagem'
+            ? '<span class="text-dim" style="font-size:12px" title="Carga já concluída: o histórico do pátio não se apaga por aqui — precisa de correção direta no banco.">Não é possível cancelar (já concluída)</span>'
+            : botaoCancelarHtml(c)}
+        </div>
       </div>
       <div class="timeline-info-grid">
         ${infoLinhas.map(([k,v])=>`<div class="timeline-info-item"><span class="k">${esc(k)}</span><span class="v">${esc(v)}</span></div>`).join('')}

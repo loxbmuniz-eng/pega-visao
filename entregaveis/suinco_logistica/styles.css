@@ -1138,7 +1138,10 @@ code{
   background:var(--navy-deep);border:1px solid var(--border);border-radius:var(--radius);
   padding:18px;margin-top:14px;
 }
-.timeline-head{margin-bottom:12px}
+.timeline-head{
+  margin-bottom:12px; display:flex; align-items:center; justify-content:space-between;
+  gap:12px; flex-wrap:wrap;
+}
 .timeline-placa{font-size:22px;font-weight:800;color:var(--text);display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .timeline-info-grid{
   display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px 18px;
