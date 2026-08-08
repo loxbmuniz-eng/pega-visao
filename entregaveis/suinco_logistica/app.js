@@ -1120,6 +1120,21 @@ function renderTorre(){
   // como uma caixa extra informativa, não como um dos 6 status oficiais.
   const statusVisiveis = STATUS_FLOW.slice(0,-1); // sem "Seguiu Viagem" (não fica em aberto)
   const aguardandoCargaCount = abertas.filter(c=>c.aguardandoCarga).length;
+  /* "Quantos já seguiram viagem" — pedido direto do usuário (08/08/2026):
+     "na torre de controle nao aparece quantos seguiram viagem". Fica de
+     fora de `abertas` de propósito (Seguiu Viagem não é mais pátio em
+     aberto), então precisa de conta própria. Contado por HOJE, não
+     total histórico — DB.cargas guarda tudo desde sempre, e "quantos
+     saíram" só responde a pergunta de acompanhamento do dia se for do
+     dia. Usa o instante real da saída (primeiroTimestamp), não a data de
+     criação da carga: um caminhão programado ontem que só saiu hoje
+     conta em hoje. */
+  const hoje = new Date(); hoje.setHours(0,0,0,0);
+  const seguiuViagemHojeCount = DB.cargas.filter(c=>{
+    if(c.status !== 'Seguiu Viagem') return false;
+    const saida = primeiroTimestamp(c.id, 'Seguiu Viagem');
+    return saida && new Date(saida) >= hoje;
+  }).length;
   /* Hierarquia visual, não grade uniforme.
 
      Antes as seis caixas tinham exatamente o mesmo peso, e isso não é
@@ -1147,6 +1162,7 @@ function renderTorre(){
           {destaque:true, alerta:true, nota:'contado desde a chegada ao pátio'})
     + caixa(abertas.length, 'Cargas em aberto', {destaque:true})
     + statusVisiveis.map(s=>caixa(porStatus[s]||0, s)).join('')
+    + caixa(seguiuViagemHojeCount, 'Seguiu Viagem hoje', {destaque:true})
     + caixa(aguardandoCargaCount, 'Aguardando Carga',
             {nota:'dados incompletos'});
   animarContadoresTorre();
