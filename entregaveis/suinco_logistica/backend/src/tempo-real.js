@@ -15,6 +15,23 @@ import { config } from './config.js';
 
 let io = null;
 
+/* Quem está online agora, por operador — não por conexão.
+
+   Uma pessoa pode ter duas abas abertas (o pátio troca de turno sem trocar
+   de terminal); contar conexão faria ela "sair" da lista assim que fechasse
+   UMA aba, mesmo com a outra ainda aberta. A contagem por operador só marca
+   "offline" quando a ÚLTIMA conexão dele cai. */
+const conexoesPorOperador = new Map(); // id do operador (string) -> nº de conexões abertas
+
+export function operadoresOnlineIds() {
+  return [...conexoesPorOperador.keys()];
+}
+
+function emitirPresenca() {
+  if (!io) return;
+  io.to('patio').emit('presenca:atualizada', { online: operadoresOnlineIds() });
+}
+
 export function iniciarTempoReal(servidorHttp) {
   io = new Server(servidorHttp, {
     cors: { origin: config.origens, credentials: true },
@@ -45,8 +62,25 @@ export function iniciarTempoReal(servidorHttp) {
     console.log(`[tempo-real] ${op.nome} (${op.setor}) conectou · ${io.engine.clientsCount} online`);
     socket.emit('conectado', { operador: op, online: io.engine.clientsCount });
 
+    // Snapshot imediato para quem acabou de conectar — sem isto, uma aba de
+    // Usuários recém-aberta ficaria "sem ninguém online" até a próxima vez
+    // que alguém mais entrasse ou saísse.
+    socket.emit('presenca:atualizada', { online: operadoresOnlineIds() });
+
+    const idOp = String(op.id);
+    const antes = conexoesPorOperador.get(idOp) || 0;
+    conexoesPorOperador.set(idOp, antes + 1);
+    if (antes === 0) emitirPresenca(); // primeira conexão desta pessoa: ela estava offline
+
     socket.on('disconnect', (motivo) => {
       console.log(`[tempo-real] ${op.nome} saiu (${motivo}) · ${io.engine.clientsCount} online`);
+      const atual = conexoesPorOperador.get(idOp) || 0;
+      if (atual <= 1) {
+        conexoesPorOperador.delete(idOp);
+        emitirPresenca(); // última conexão desta pessoa: ela fica offline
+      } else {
+        conexoesPorOperador.set(idOp, atual - 1);
+      }
     });
   });
 

@@ -60,6 +60,7 @@ const SuincoSharePoint = (function () {
   let ouvintesDescarte = [];
   let ouvintesEdicao = [];
   let ouvintesExclusao = [];
+  let ouvintesPresenca = [];
   let timerRenovacao = null;
   let ultimaInteracao = Date.now();
 
@@ -895,6 +896,17 @@ const SuincoSharePoint = (function () {
       });
     });
     socket.on('frota:atualizada', () => pullTudo().catch(() => {}));
+
+    // Quem está online agora, por operador. Chega sozinho quando alguém
+    // conecta/desconecta em qualquer terminal — e também assim que ESTA aba
+    // conecta, com o retrato do momento (o servidor manda de propósito).
+    socket.on('presenca:atualizada', (dados) => {
+      const online = Array.isArray(dados?.online) ? dados.online : [];
+      ouvintesPresenca.forEach((fn) => {
+        try { fn(online); } catch (e) { console.warn('[Suinco] presença:', e); }
+      });
+    });
+
     socket.on('connect_error', (e) => {
       console.info('[Suinco] tempo real indisponível:', e.message);
     });
@@ -924,6 +936,11 @@ const SuincoSharePoint = (function () {
 
   /* Avisa que OUTRO operador excluiu uma carga programada. */
   function aoExcluirCarga(fn) { if (typeof fn === 'function') ouvintesExclusao.push(fn); }
+
+  /* Avisa quem está online agora (lista de ids de operador). Dispara sozinho
+     quando alguém conecta/desconecta em qualquer terminal, e uma vez ao
+     conectar esta aba, com o retrato do momento. */
+  function aoAtualizarPresenca(fn) { if (typeof fn === 'function') ouvintesPresenca.push(fn); }
 
   /* ---------------------------------------------------------------
      Início
@@ -987,7 +1004,7 @@ const SuincoSharePoint = (function () {
   return {
     SP_CONFIG,
     iniciar, estaConfigurado, estado, conta, aoMudarEstado, aoReceberDados,
-    aoDescartarDaFila, aoEditarCarga, aoExcluirCarga,
+    aoDescartarDaFila, aoEditarCarga, aoExcluirCarga, aoAtualizarPresenca,
     login, sair, diagnosticarConexao,
     push, upsert, excluir, mudarStatus,
     pull, pullTudo, drenarFila, pendentes,
