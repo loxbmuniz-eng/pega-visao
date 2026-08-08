@@ -85,19 +85,24 @@ async def main():
         await pagina.evaluate("() => { abrirTab('expedicao'); renderAll(); }")
         await pagina.wait_for_timeout(300)
 
+        # A linha do tempo virou uma célula só (seis selos lado a lado, não
+        # seis colunas separadas) — pedido do usuário (08/08/2026): a Visão
+        # do Pátio tinha ficado alta demais no celular, empurrada tela
+        # abaixo. linhaDoTempoCompacta() (app.js) junta os seis em
+        # <span class="et-mini ...">, dentro de um único <td class="et-linha">.
         etapas = await pagina.evaluate("""() => {
             const tr = document.querySelector('#expedicao-vp-tbody tr');
-            return [...tr.querySelectorAll('td.et')].map(td => ({
-                classe: td.className,
-                marca: (td.querySelector('.et-marca')||{}).textContent || '',
-                hora:  (td.querySelector('.et-hora') ||{}).textContent || ''
+            return [...tr.querySelectorAll('td.et-linha .et-mini')].map(sp => ({
+                classe: sp.className,
+                marca: (sp.querySelector('b')||{}).textContent || '',
+                hora:  (sp.querySelector('i')||{}).textContent || ''
             }));
         }""")
-        ck('seis colunas de etapa', len(etapas) == 6, str(len(etapas)))
-        ck('Programada aparece cumprida', 'et-ok' in etapas[0]['classe'], str(etapas[0]))
-        ck('Chegou aparece cumprida', 'et-ok' in etapas[1]['classe'], str(etapas[1]))
-        ck('Iniciou é a etapa ATUAL', 'et-atual' in etapas[2]['classe'], str(etapas[2]))
-        ck('Finalizou ainda pendente', 'et-pendente' in etapas[3]['classe'], str(etapas[3]))
+        ck('seis selos de etapa', len(etapas) == 6, str(len(etapas)))
+        ck('Programada aparece cumprida', 'et-mini-ok' in etapas[0]['classe'], str(etapas[0]))
+        ck('Chegou aparece cumprida', 'et-mini-ok' in etapas[1]['classe'], str(etapas[1]))
+        ck('Iniciou é a etapa ATUAL', 'et-mini-atual' in etapas[2]['classe'], str(etapas[2]))
+        ck('Finalizou ainda pendente', 'et-mini-pendente' in etapas[3]['classe'], str(etapas[3]))
         # A hora é o que transforma "está em Embarque Iniciado" em "chegou
         # 07:12 e começou 09:40" — é onde o tempo perdido fica visível.
         ck('etapa cumprida mostra a hora', ':' in etapas[1]['hora'], str(etapas[1]))
@@ -136,8 +141,8 @@ async def main():
 
         todas_ok = await pagina.evaluate("""() => {
             const tr = document.querySelector('#expedicao-vp-tbody tr');
-            return [...tr.querySelectorAll('td.et')].every(td => td.className.includes('et-ok')
-                    || td.className.includes('et-atual'));
+            return [...tr.querySelectorAll('td.et-linha .et-mini')].every(sp => sp.className.includes('et-mini-ok')
+                    || sp.className.includes('et-mini-atual'));
         }""")
         ck('carga encerrada mostra as seis etapas percorridas', todas_ok)
 

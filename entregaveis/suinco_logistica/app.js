@@ -1054,6 +1054,32 @@ function celulaEtapa(e){
   return `<td class="et et-pendente" title="${esc(e.status)} — ainda não"><span class="et-marca">·</span></td>`;
 }
 
+/* Linha do tempo COMPACTA — uma célula só, não seis.
+   Pedido do usuário (08/08/2026, depois de reportar que a Visão do Pátio
+   "não aparece mais" no celular): as seis colunas de etapa (uma por
+   status) empilhavam em seis blocos rótulo+valor no cartão mobile —
+   ~250-300px só para a sequência de status de UMA carga, empurrando o
+   resto da lista tela abaixo. As seis etapas SÃO uma sequência por
+   natureza (é literalmente "a carga passou por aqui, está aqui agora,
+   ainda não chegou aqui"); o pedido foi "de forma mais compacta... usando
+   sequência e organização" — junta as seis num só selo horizontal, na
+   ordem em que acontecem, em vez de seis campos empilhados.
+   Mesma marca (●/✓/·) e o mesmo `title` com o nome completo do status de
+   antes — nada de informação depende só da cor (acessibilidade já
+   estabelecida no restante do painel). */
+function linhaDoTempoCompacta(etapas){
+  const passos = etapas.map(e=>{
+    const classe = e.atual ? 'et-mini-atual' : e.cumprida ? 'et-mini-ok' : 'et-mini-pendente';
+    const marca = e.atual ? '●' : e.cumprida ? '✓' : '·';
+    const titulo = e.atual ? `${e.status} — agora`
+      : e.cumprida ? `${e.status}${e.operador ? ' — '+e.operador : ''}`
+      : `${e.status} — ainda não`;
+    const hora = e.atual ? (e.quando ? fmtHora(e.quando) : '') : (e.cumprida && e.quando ? fmtHora(e.quando) : '');
+    return `<span class="et-mini ${classe}" title="${esc(titulo)}"><b>${marca}</b>${hora ? `<i>${esc(hora)}</i>` : ''}</span>`;
+  }).join('');
+  return `<td class="et-linha" data-rotulo="Linha do tempo">${passos}</td>`;
+}
+
 /* Quem pode tirar uma carga do pátio.
 
    O mesmo setor que programa é o que cancela — e é ele que responde por
@@ -1138,7 +1164,7 @@ function renderVisaoPatio(prefixo){
     thead.innerHTML =
       '<th class="vp-carga">Nº Carga</th><th class="vp-placa">Placa</th>'
       + '<th class="vp-transp">Transportadora</th><th class="vp-rota">Rota</th>'
-      + STATUS_FLOW.map(st=>`<th class="et-cab" title="${esc(st)}">${esc(abreviarEtapa(st))}</th>`).join('')
+      + '<th class="et-cab-linha">Linha do tempo</th>'
       + '<th class="vp-tempo">No pátio</th>';
     /* SEM coluna de Ação aqui, e é decisão de operação, não de espaço.
 
@@ -1161,7 +1187,7 @@ function renderVisaoPatio(prefixo){
       <td class="vp-placa">${esc(c.placa)}${marcaCargaDaPlaca(c, lista)}</td>
       <td class="vp-transp">${esc(c.transportadora)||'—'}</td>
       <td class="vp-rota">${esc(rotaCurta(c.rota))}</td>
-      ${etapas.map(celulaEtapa).join('')}
+      ${linhaDoTempoCompacta(etapas)}
       <td class="vp-tempo">${tempoNoPatioTexto(c)}</td>
     </tr>`;
   }).join('');
