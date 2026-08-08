@@ -893,13 +893,23 @@ function aplicarPermissoesSetor(){
   atualizarAvisoSetorAba();
 }
 
-// Preenche, no topo de cada aba, o box que explica a função dela — e acrescenta
-// o aviso "você é do setor X" quando a aba pertence a outro setor.
+// Abas onde o box "o que se faz aqui" aparece — pedido do usuário
+// (08/08/2026): "que essas explicacoes... se apliquem somente aos
+// setores portaria expedicao e faturamento relatorio, historico pois
+// isso toma um puta espaco". Torre, Programação, Indicadores, Cadastros
+// e Usuários perdem o box: são telas que já se explicam pelo próprio
+// conteúdo (uma tabela, um formulário, um painel de números), diferente
+// de Portaria/Expedição/Faturamento, onde a ação de status não é óbvia
+// só olhando a tela.
+const ABAS_COM_FUNCAO = new Set(['portaria', 'expedicao', 'faturamento', 'relatorios', 'historico']);
+
+// Preenche, no topo de cada aba permitida, o box que explica a função dela.
 function atualizarAvisoSetorAba(){
   document.querySelectorAll('.funcao-aba').forEach(box=>{
     const tab = box.dataset.tab;
     const info = TAB_FUNCAO[tab];
-    if(!info) return;
+    if(!info || !ABAS_COM_FUNCAO.has(tab)){ box.hidden = true; box.innerHTML = ''; return; }
+    box.hidden = false;
     box.innerHTML =
       `<div class="funcao-linha">` +
         `<span class="funcao-chip">${info.setor}</span>` +

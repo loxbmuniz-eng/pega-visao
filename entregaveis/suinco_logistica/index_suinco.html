@@ -495,7 +495,11 @@
       </div>
       <div class="filtro-nota" id="ind-filtro-nota" hidden></div>
 
-      <div class="grid4" id="ind-stats"></div>
+      <!-- Mesma grade compacta da Torre de Controle (.bento) — pedido do
+           usuário (08/08/2026): "que crie icones abaixo do cabecalho como
+           na torre de controle". Antes era .grid4, que no celular empilhava
+           os 6 números em coluna única, um cartão de tela inteira cada. -->
+      <div class="bento" id="ind-stats"></div>
     </div>
 
     <div class="card">
@@ -548,17 +552,17 @@
       <div class="grafico-grid">
         <div class="grafico-box">
           <div class="grafico-titulo">Tempo médio por etapa (min)</div>
-          <canvas id="grafico-barras" height="220"></canvas>
+          <canvas id="grafico-barras" height="160"></canvas>
           <div class="card-sub grafico-legenda" id="grafico-barras-legenda">Respeita Placa/Transportadora/Período. Setor aqui esconde/mostra barras — cada etapa tem um setor "dono" fixo (Expedição, Faturamento ou Portaria).</div>
         </div>
         <div class="grafico-box">
           <div class="grafico-titulo">Cargas concluídas por dia</div>
-          <canvas id="grafico-linha" height="220"></canvas>
+          <canvas id="grafico-linha" height="160"></canvas>
           <div class="card-sub grafico-legenda">Respeita Placa/Transportadora/Período. Setor não se aplica aqui (toda carga concluída passou pela Portaria).</div>
         </div>
         <div class="grafico-box">
           <div class="grafico-titulo">Distribuição por status atual (cargas em aberto)</div>
-          <canvas id="grafico-pizza" height="220"></canvas>
+          <canvas id="grafico-pizza" height="160"></canvas>
           <div id="grafico-pizza-legenda" class="grafico-legenda-lista"></div>
           <div class="card-sub grafico-legenda">Foto de agora — não depende do período. Respeita Placa/Transportadora/Setor (Setor filtra pra só os status daquele setor).</div>
         </div>
