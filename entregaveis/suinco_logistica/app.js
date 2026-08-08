@@ -2625,7 +2625,16 @@ function renderFrotaTabela(){
     if(!buscaTexto) return true;
     return normalizarPlaca(f.placa).includes(buscaPlaca) || (f.transportadora||'').toLowerCase().includes(buscaTexto);
   });
-  const LIMITE = 300;
+  /* 300 já era alto demais pra navegar sem busca (ver comentário acima) —
+     mas no CELULAR virou rolagem quase infinita depois que a tabela passou
+     a sair em cartão de 2 colunas (08/08/2026): cada linha, que numa tabela
+     comum ocupa ~40px, vira um cartão de ~250-300px. 300 cartões = a
+     mesma altura de ~300 telas de celular empilhadas — medido: 98.676px de
+     scroll numa Frota de 749 placas. Auditoria pedida pelo usuário
+     ("refinamento em TODAS AS ABAS") depois de eu ter corrigido só a
+     Torre/Indicadores. Mesmo breakpoint que ativa o cartão (560px). */
+  const mobile = window.matchMedia && window.matchMedia('(max-width:560px)').matches;
+  const LIMITE = mobile ? 30 : 300;
   const exibidos = lista.slice(0, LIMITE);
   document.getElementById('frota-tbody').innerHTML = exibidos.map(f=>`
     <tr>
@@ -2818,19 +2827,37 @@ function renderTimelineCarga(id){
 }
 
 /* ---------- HISTÓRICO ---------- */
+/* Log SEM tamanho máximo: cada mudança de status de cada carga, pra sempre.
+   Diferente da Frota (importação parada em 749 placas), este array só
+   cresce — todo dia de operação soma mais linhas. Não tinha limite nenhum
+   (nem no desktop): a mesma classe de bug do estouro achado na Frota
+   (auditoria "refinamento em TODAS AS ABAS", 08/08/2026), só que sem teto —
+   ia piorar sozinho com o tempo, mesmo sem nenhuma mudança de código.
+   Ordenado do mais recente pro mais antigo, então cortar em N mantém
+   exatamente o que a auditoria (a busca de verdade) serve: o mais relevante
+   primeiro; procurar mais fundo é o que o filtro por placa/setor é para. */
 function renderHistorico(){
   const filtroPlaca = normalizarPlaca(document.getElementById('hist-filtro-placa')?.value || '');
   const filtroSetor = document.getElementById('hist-filtro-setor')?.value || '';
   let lista = DB.movimentacoes.slice().sort((a,b)=>new Date(b.timestamp)-new Date(a.timestamp));
   if(filtroPlaca) lista = lista.filter(m=>m.placa.includes(filtroPlaca));
   if(filtroSetor) lista = lista.filter(m=>m.setor===filtroSetor);
-  document.getElementById('hist-tbody').innerHTML = lista.map(m=>`
+  const mobile = window.matchMedia && window.matchMedia('(max-width:560px)').matches;
+  const LIMITE = mobile ? 40 : 500;
+  const exibidos = lista.slice(0, LIMITE);
+  document.getElementById('hist-tbody').innerHTML = exibidos.map(m=>`
     <tr>
       <td>${fmtDataHora(m.timestamp)}</td><td>${esc(m.placa)}</td>
       <td>${m.statusAnterior ? badgeHtml(m.statusAnterior) : '—'}</td><td>${badgeHtml(m.statusNovo)}</td>
       <td>${esc(m.operador)}</td><td>${esc(m.setor)}</td>
     </tr>`).join('');
   document.getElementById('hist-empty').hidden = lista.length>0;
+  const contagemEl = document.getElementById('hist-contagem');
+  if(contagemEl){
+    contagemEl.textContent = lista.length > LIMITE
+      ? `Mostrando as ${LIMITE} mais recentes de ${lista.length} — use os filtros pra ver outras.`
+      : (lista.length ? `${lista.length} movimentação(ões).` : '');
+  }
 }
 
 /* ---------- RELATÓRIOS (PDF via impressão do navegador) ---------- */
@@ -3521,16 +3548,31 @@ async function exportarPdfExecutivo(){
 
       ${blocoGargalosPdf(doPeriodo)}
 
-      <div class="print-bloco-tit">4 · Histórico do período — para conferência</div>
+      <!-- A linha do tempo carga-a-carga das CONCLUÍDAS saiu daqui (08/08/2026).
+
+           Pedido do usuário: "tem muita informação ali" — ele chegou a sugerir
+           fundir esta tabela com a das cargas em aberto (seção 2), depois
+           recuou e pediu pra eu achar a melhor solução usando a queixa real,
+           não a sugestão literal.
+
+           A tabela em matriz (uma linha por carga, uma coluna por etapa, com
+           hora+operador em cada célula) é o formato certo pra decidir sobre
+           cargas ABERTAS — é o que aparece na seção 2. Repeti-la aqui pras
+           concluídas duplicava esse mesmo nível de detalhe operacional pra
+           cargas que, pela própria lógica do documento (comentário "ORDEM DO
+           DOCUMENTO" acima), servem só pra "conferir e fechar o dia, não pra
+           decidir". Era a seção mais pesada do relatório (uma tabela inteira
+           de 8 colunas) resolvendo a pergunta de menor prioridade.
+
+           Ficou só blocoDistribuicaoStatus: quantas cargas saíram e quando —
+           a pergunta que "conferência" realmente faz. Quem precisa do
+           carga-a-carga de uma concluída específica busca ela no Histórico
+           (que já tem timeline vertical por carga, sob demanda). -->
 
       ${blocoDistribuicaoStatus(distHoje, concluidasHoje.length,
         'Cargas concluídas',
         'Cargas que chegaram a "Seguiu Viagem" — o caminhão saiu do pátio. Só esse status conta como concluída.',
         true)}
-
-      ${blocoTimelineCargas(concluidasHoje,
-        'Linha do tempo — cargas concluídas',
-        'Hora e operador de cada etapa, carga a carga, para rastrear onde o tempo foi consumido.')}
 
       ${rodapeDocumento(
         '<strong>Lead Time</strong> = da criação da carga até a saída do caminhão. ' +

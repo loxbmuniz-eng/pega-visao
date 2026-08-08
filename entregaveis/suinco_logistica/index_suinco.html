@@ -719,7 +719,7 @@
 
     <div class="card">
       <div class="card-title"><span class="icon">📜</span> Log Completo de Movimentações</div>
-      <div class="card-sub">Registro bruto, para auditoria — todas as mudanças de status de todas as cargas.</div>
+      <div class="card-sub">Registro bruto, para auditoria — todas as mudanças de status de todas as cargas. Mais recente primeiro.</div>
       <div class="form-row">
         <div class="form-group"><label>Filtrar por placa</label><input type="text" id="hist-filtro-placa" oninput="renderHistorico()"></div>
         <div class="form-group">
@@ -737,6 +737,7 @@
         </table>
       </div>
       <div class="empty-state" id="hist-empty" data-icone="🕓" hidden>Nenhuma movimentação registrada ainda.</div>
+      <div class="card-sub" id="hist-contagem" style="text-align:right;margin-top:6px"></div>
     </div>
   </div>
 
