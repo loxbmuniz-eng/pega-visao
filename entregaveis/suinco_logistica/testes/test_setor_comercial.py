@@ -112,6 +112,28 @@ async def main():
             "() => !!document.querySelector(\"button[onclick*='exportarPdfOperacional']\")")
         ck('botão de PDF Operacional existe (exportar não é alterar dado)', tem_botao_pdf)
 
+        print('\n=== 6. ADMINISTRAÇÃO: "COMERCIAL" APARECE AO CRIAR UM NOVO USUÁRIO ===')
+        # Achado real (08/08/2026): existem DOIS seletores de setor na tela de
+        # Usuários — um pra criar (usr-setor, opções escritas direto no HTML)
+        # e outro pra trocar o setor de alguém já cadastrado (gerado a partir
+        # de SETORES, em app.js). Só o segundo foi atualizado da primeira vez;
+        # o formulário de criação continuou sem Comercial na lista, e não
+        # dava pra cadastrar ninguém no setor novo pela tela.
+        # Contexto PRÓPRIO — não o mesmo `ctx` do Comercial. DB.operador vive
+        # em localStorage (data.js), compartilhado entre páginas do mesmo
+        # contexto; reusar `ctx` faria esta página herdar a sessão do
+        # Comercial já logado e o modal de login nunca abriria.
+        ctx3 = await nav.new_context()
+        pg3 = await abrir_painel(ctx3)
+        pg3.on('pageerror', lambda e: erros.append('admin: ' + str(e)))
+        ck('chefe entrou como Administração', await entrar(pg3, 'chefe@teste.local') == 'Administração')
+        await pg3.evaluate("() => abrirTab('usuarios')")
+        await pg3.wait_for_timeout(300)
+        opcoes_criar = await pg3.evaluate(
+            "() => [...document.querySelectorAll('#usr-setor option')].map(o => o.textContent.trim())")
+        ck('"Comercial" está nas opções do formulário de Novo Usuário',
+           'Comercial' in opcoes_criar, str(opcoes_criar))
+
         print('\n=== CONSOLE ===')
         ck('sem erros de página', not erros, str(erros[:3]))
         await nav.close()

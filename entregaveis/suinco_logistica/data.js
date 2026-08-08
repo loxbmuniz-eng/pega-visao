@@ -752,8 +752,22 @@ function aoRecusarRota(fn){ _aoRecusarRota = fn; }
    O retorno diz o que mudou, para a interface avisar o operador em vez de a
    tela se alterar sozinha sem explicação. */
 function fundirEstadoRemoto(dados){
-  const res = { cargasNovas:0, cargasAtualizadas:0, movimentacoesNovas:0, ignoradasPorPendencia:0 };
+  // `detalhes` alimenta a notificação de "atualizado por outro setor" com
+  // o que mudou de verdade, em vez de só uma contagem — pedido do usuário
+  // (08/08/2026): "que diga exatamente o que foi feito, ou indique o
+  // setor e ação". Capado (não é a lista completa) porque essa mesma
+  // sincronia pode trazer dezenas de cargas de uma vez (reconexão depois
+  // de um tempo offline) — listar cada uma tornaria a notificação maior
+  // que o problema que ela resolve.
+  const DETALHES_MAX = 4;
+  const res = { cargasNovas:0, cargasAtualizadas:0, movimentacoesNovas:0, ignoradasPorPendencia:0, detalhes:[] };
   if(!dados) return res;
+
+  const registrarDetalhe = (carga, acao) => {
+    if(res.detalhes.length >= DETALHES_MAX) return;
+    const setor = (STATUS_META[carga.status] || {}).setor || null;
+    res.detalhes.push({ placa: carga.placa, numeroCarga: carga.numeroCarga, status: carga.status, setor, acao });
+  };
 
   // ---- cargas ----
   const locais = new Map(DB.cargas.map(c => [c.id, c]));
@@ -774,18 +788,23 @@ function fundirEstadoRemoto(dados){
         DB.movimentacoes = DB.movimentacoes.filter(m => m.cargaId !== carga.id);
         locais.delete(carga.id);
         res.cargasAtualizadas++;
+        registrarDetalhe(carga, 'excluída');
       }
       return;
     }
 
     if(!local){
-      DB.cargas.push(carga); locais.set(carga.id, carga); res.cargasNovas++; return;
+      DB.cargas.push(carga); locais.set(carga.id, carga); res.cargasNovas++;
+      registrarDetalhe(carga, 'programada');
+      return;
     }
     if(local._pendente){ res.ignoradasPorPendencia++; return; }          // regra 3
     const tLocal  = Date.parse(local.atualizadoEm || 0) || 0;
     const tRemoto = Date.parse(carga.atualizadoEm || 0) || 0;
     if(tRemoto > tLocal){
+      const statusMudou = local.status !== carga.status;
       Object.assign(local, carga); res.cargasAtualizadas++;
+      registrarDetalhe(local, statusMudou ? 'mudou de status' : 'foi editada');
     }
   });
 

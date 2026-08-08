@@ -11,6 +11,14 @@ let currentPickerCallback = null;
 // depende de saber quem mais está online.
 let _operadoresOnline = new Set();
 
+// Fila de notificações — pedido direto do usuário (08/08/2026): "essa
+// notificacao de atualizacoes... quase tampa a tela inteira se tiver 5
+// atualizacoes". Nenhum aviso é descartado (o de troca de placa é
+// segurança, não decoração) — só um número limitado fica visível ao
+// mesmo tempo; o resto espera a vez, e um contador avisa que tem mais.
+const NOTIF_MAX_VISIVEL = 3;
+let _notifFila = [];
+
 // Próxima ação disponível a partir de cada status (usada nos botões de
 // linha das tabelas de Expedição/Faturamento — cada linha já é uma carga
 // específica, então não há ambiguidade de "qual carga" aqui).
@@ -220,14 +228,108 @@ function botaoAvancoHtml(carga){
       onclick="avancarStatusUI('${escJs(carga.id)}')"
       title="Registrar ${esc(acao.destino)}">${esc(acao.label)}</button>`;
 }
+/* Mostra um aviso já pronto (elemento DOM), respeitando o limite de
+   NOTIF_MAX_VISIVEL na tela ao mesmo tempo. Além do limite, entra numa
+   fila — nada é descartado, só espera a vez. Quando um aviso sai (por
+   tempo ou por clique no X), o próximo da fila entra sozinho.
+
+   Pedido do usuário (08/08/2026): "essa notificacao de atualizacoes tao
+   saindo muito grandes... quase tampa a tela inteira se tiver 5
+   atualizacoes". O aviso de troca de placa é segurança (o caminhão errado
+   entra na doca por causa dele) — não é candidato a "descartar os mais
+   antigos", só a esperar um pouco. */
+function _exibirNotif(el, ms){
+  const container = document.getElementById('notif');
+  if(container.querySelectorAll('.notif-item').length >= NOTIF_MAX_VISIVEL){
+    _notifFila.push({el, ms});
+    _atualizarContadorFila();
+    return;
+  }
+  _mostrarNotifAgora(el, ms);
+}
+// Separado de _exibirNotif de propósito: um item que passa pela fila só
+// pode ganhar o botão de fechar e o temporizador UMA vez, na hora em que
+// realmente aparece — não na hora em que só foi posto na fila (achado
+// escrevendo o teste desta função: um item que esperou a vez ganhava
+// DOIS botões de fechar, um deles com temporizador que nunca chegava a
+// existir de verdade). */
+function _mostrarNotifAgora(el, ms){
+  const container = document.getElementById('notif');
+  const botaoFechar = document.createElement('button');
+  botaoFechar.className = 'notif-fechar';
+  botaoFechar.setAttribute('aria-label', 'Fechar aviso');
+  botaoFechar.textContent = '×';
+  el.prepend(botaoFechar);
+
+  const remover = () => {
+    clearTimeout(temporizador);
+    el.remove();
+    const proximo = _notifFila.shift();   // tira da fila ANTES de contar — o contador reflete o que sobra
+    _atualizarContadorFila();
+    if(proximo) _mostrarNotifAgora(proximo.el, proximo.ms);
+  };
+  botaoFechar.onclick = remover;
+
+  container.appendChild(el);
+  const temporizador = setTimeout(remover, ms || 5000);
+}
+// Pílula "+N aguardando" no topo da pilha — só existe quando a fila não
+// está vazia, e sempre é o ÚLTIMO elemento (o rodapé visual da pilha,
+// já que a pilha cresce de baixo pra cima — column-reverse).
+function _atualizarContadorFila(){
+  const container = document.getElementById('notif');
+  let pill = document.getElementById('notif-fila-contador');
+  if(!_notifFila.length){ if(pill) pill.remove(); return; }
+  if(!pill){
+    pill = document.createElement('div');
+    pill.id = 'notif-fila-contador';
+    container.appendChild(pill);
+  }
+  pill.textContent = `+ ${_notifFila.length} aviso(s) aguardando`;
+}
 // `ms` opcional: avisos longos (ex: troca da base de frota) precisam de mais
 // tempo em tela do que a confirmação curta de uma ação.
 function notify(msg, type, ms){
   const el = document.createElement('div');
   el.className = 'notif-item' + (type ? ' ' + type : '');
-  el.textContent = msg;
-  document.getElementById('notif').appendChild(el);
-  setTimeout(()=>{ el.remove(); }, ms || 5000);
+  const texto = document.createElement('span');
+  texto.textContent = msg;
+  el.appendChild(texto);
+  _exibirNotif(el, ms);
+}
+
+/* Monta a mensagem de "outro setor mexeu em alguma coisa" a partir do que
+   REALMENTE mudou (r.detalhes, preenchido por fundirEstadoRemoto em
+   data.js) — não mais só uma contagem. Pedido do usuário (08/08/2026):
+   "que diga exatamente o que foi feito, ou indique o setor e ação".
+
+   `detalhes` vem capado (não é a lista inteira quando a sincronia traz
+   dezenas de cargas de uma vez); por isso o total continua vindo das
+   contagens (r.cargasNovas/cargasAtualizadas), não do tamanho da lista. */
+function mensagemAtualizacaoRemota(r){
+  const total = (r.cargasNovas||0) + (r.cargasAtualizadas||0);
+  if(!r.detalhes || !r.detalhes.length){
+    // Sem detalhe (não deveria acontecer, mas o painel não pode travar
+    // numa notificação por causa disso) — volta pro resumo por contagem.
+    const partes = [];
+    if(r.cargasNovas)       partes.push(`${r.cargasNovas} carga(s) nova(s)`);
+    if(r.cargasAtualizadas) partes.push(`${r.cargasAtualizadas} atualizada(s)`);
+    return 'Atualizado por outro setor: ' + partes.join(' · ') + '.';
+  }
+  const AVISO_ACAO = { programada:'entrou', 'mudou de status':'mudou pra', 'foi editada':'foi editada', excluída:'saiu' };
+  const linhas = r.detalhes.map(d=>{
+    const identificacao = d.numeroCarga && d.numeroCarga !== 'Aguardando Carga'
+      ? `Carga ${d.numeroCarga}` : `Placa ${d.placa || '—'}`;
+    const setor = d.setor ? ` (${d.setor})` : '';
+    if(d.acao === 'mudou de status') return `${identificacao} mudou pra "${d.status}"${setor}`;
+    if(d.acao === 'programada')      return `${identificacao} entrou na programação`;
+    if(d.acao === 'excluída')        return `${identificacao} saiu da programação`;
+    return `${identificacao} foi editada${setor}`;
+  });
+  const mostrar = linhas.slice(0, 2);
+  const resto = total - mostrar.length;
+  return 'Atualizado por outro setor: ' + mostrar.join(' · ')
+    + (resto > 0 ? ` · e mais ${resto}` : '') + '.';
 }
 
 /* ---------- SOM DE CONFIRMAÇÃO ----------
@@ -341,14 +443,14 @@ function receberEdicaoRemota(aviso){
   const el = document.createElement('div');
   el.className = 'notif-item aviso-alteracao' + (aviso.sonoro ? ' forte' : '');
   el.innerHTML = avisoDeEdicaoHtml(aviso);
-  document.getElementById('notif').appendChild(el);
-
   /* Troca de placa fica 20 s; o resto, 9 s.
 
      Não é exagero: é o tempo de alguém que está com as mãos ocupadas
      terminar o que faz e olhar para a tela. O aviso some sozinho porque
-     um que exige clique acumularia na tela do terminal compartilhado. */
-  setTimeout(()=>el.remove(), aviso.sonoro ? 20000 : 9000);
+     um que exige clique acumularia na tela do terminal compartilhado —
+     mas quem já leu pode fechar na hora pelo X, e libera a vez pro
+     próximo da fila sem esperar o tempo passar. */
+  _exibirNotif(el, aviso.sonoro ? 20000 : 9000);
 
   if(aviso.sonoro) tocarAlertaAlteracao();
 }
@@ -468,8 +570,7 @@ function receberExclusaoRemota(aviso){
   el.innerHTML = `<div class="aviso-titulo">${esc(carga)} EXCLUÍDA</div>`
     + `<div class="aviso-linha">Placa <b>${esc(aviso.placa || '—')}</b> saiu da programação.</div>`
     + `<div class="aviso-quem">por ${esc(quem)} · ${horaCurta(aviso.em)}</div>`;
-  document.getElementById('notif').appendChild(el);
-  setTimeout(()=>el.remove(), 20000);
+  _exibirNotif(el, 20000);
   tocarAlertaAlteracao();
 }
 
@@ -3507,10 +3608,7 @@ async function init(){
         // precisa saber disso — tela que se altera sozinha sem explicação
         // destrói a confiança no painel.
         if(!dados.incremental) return;   // carga inicial não é "novidade"
-        const partes = [];
-        if(r.cargasNovas)       partes.push(`${r.cargasNovas} carga(s) nova(s)`);
-        if(r.cargasAtualizadas) partes.push(`${r.cargasAtualizadas} atualizada(s)`);
-        if(partes.length) notify('Atualizado por outro setor: ' + partes.join(' · ') + '.', 'success');
+        if(r.cargasNovas || r.cargasAtualizadas) notify(mensagemAtualizacaoRemota(r), 'success');
       }
       atualizarRodapeConexao(SuincoSharePoint.estado());
     });
