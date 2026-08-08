@@ -1343,15 +1343,6 @@ code{
 }
 .barra-preenche{display:block;height:100%;border-radius:4px}
 
-/* Menor / maior tempo */
-.extremo-tag{
-  display:inline-block;padding:3px 9px;border-radius:10px;
-  font-size:10.5px;font-weight:800;letter-spacing:.4px;
-}
-.extremo-menor{background:var(--st-faturado-bg);color:var(--st-faturado-fg);border:1px solid var(--ok)}
-.extremo-maior{background:var(--st-aguardando-veiculo-bg);color:var(--st-aguardando-veiculo-fg);border:1px solid var(--wine)}
-.extremo-tempo{font-weight:800;font-size:14.5px;color:var(--gold-text);font-variant-numeric:tabular-nums}
-
 /* Matriz da linha do tempo: cargas nas linhas, etapas do fluxo nas colunas. */
 .tabela-timeline{font-size:11.5px;table-layout:fixed}
 .tabela-timeline th{padding:8px 6px;font-size:10.5px;white-space:normal;text-align:center}
@@ -1384,23 +1375,6 @@ code{
   #print-executivo .tl-carga{ background:rgba(185,144,63,.22) !important }
   thead{display:table-header-group}  /* repete cabeçalho a cada página */
 }
-
-/* Menor/maior tempo na tela de Indicadores (o PDF usa tabela; aqui cartão,
-   que lê melhor em monitor e não força rolagem horizontal). */
-.extremo-bloco{margin-bottom:16px}
-.extremo-bloco:last-child{margin-bottom:0}
-.extremo-titulo{font-size:13.5px;font-weight:800;color:var(--gold-text);margin-bottom:9px}
-.extremo-par{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-@media(max-width:640px){.extremo-par{grid-template-columns:1fr}}
-.extremo-card{
-  background:var(--navy-deep);border:1px solid var(--border-soft);
-  border-radius:var(--radius);padding:12px 14px;
-}
-.extremo-card.extremo-menor{border-left:4px solid var(--ok)}
-.extremo-card.extremo-maior{border-left:4px solid var(--wine)}
-.extremo-card-top{display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap}
-.extremo-carga{font-size:14px;color:var(--text)}
-.extremo-det{font-size:12px;color:var(--text-dim);margin-top:3px;line-height:1.45}
 
 /* ===== INTEGRAÇÃO SHAREPOINT — overlay, badges e rodapé de status ===== */
 

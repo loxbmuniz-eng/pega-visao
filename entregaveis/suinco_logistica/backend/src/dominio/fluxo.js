@@ -107,13 +107,6 @@ export function validarTransicao(statusAtual, statusNovo, setor) {
   return true;
 }
 
-/* Qual é o próximo passo natural a partir de um status — usado pelo painel
-   para desenhar o botão certo em cada linha. Devolve null no fim do fluxo. */
-export function proximoStatus(statusAtual) {
-  const i = STATUS_FLOW.indexOf(statusAtual);
-  return i >= 0 && i < STATUS_FLOW.length - 1 ? STATUS_FLOW[i + 1] : null;
-}
-
 /* Só quem programa cria carga. Portaria também cria, mas por outro caminho:
    o veículo que chega sem programação entra como "Aguardando Carga" e a
    Logística completa depois. Esse caso tem rota própria. */
@@ -129,10 +122,6 @@ export function podeRegistrarChegadaSemProgramacao(setor) {
    Portaria, e recusar aqui empurraria para a senha emprestada. */
 export function podeRegistrarSaida(setor) {
   return setor === 'Portaria' || setor === 'Logística' || setor === SETOR_IRRESTRITO;
-}
-
-export function podeEditarCadastros(setor) {
-  return setor === 'Logística' || setor === SETOR_IRRESTRITO;
 }
 
 /* Campos de negócio que cada setor pode alterar numa carga já existente,
