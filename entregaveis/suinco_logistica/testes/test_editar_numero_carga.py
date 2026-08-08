@@ -51,21 +51,21 @@ async def main():
 
         print('\n=== CAMPO EDITÁVEL APARECE NA FILA ===')
         input_existe = await pg.evaluate(
-            "() => !!document.querySelector('.numero-carga-input')")
+            "() => !!document.querySelector('#prog-fila-tbody .numero-carga-input')")
         ck('a célula de número virou um campo editável', input_existe)
         valor_inicial = await pg.evaluate(
-            "() => document.querySelector('.numero-carga-input').value")
+            "() => document.querySelector('#prog-fila-tbody .numero-carga-input').value")
         ck('o campo nasce com o número atual', valor_inicial == 'R1', valor_inicial)
 
         print('\n=== EDIÇÃO GRAVA E ATUALIZA A TELA ===')
-        await pg.fill('.numero-carga-input', 'R1-CORRIGIDA')
-        await pg.evaluate("() => document.querySelector('.numero-carga-input')"
+        await pg.fill('#prog-fila-tbody .numero-carga-input', 'R1-CORRIGIDA')
+        await pg.evaluate("() => document.querySelector('#prog-fila-tbody .numero-carga-input')"
                            ".dispatchEvent(new Event('change'))")
         await pg.wait_for_timeout(200)
         d = await pg.evaluate("""(id) => ({
             numeroCarga: (DB.cargas.find(c=>c.id===id)||{}).numeroCarga,
-            campoNaTela: document.querySelector('.numero-carga-input') ?
-              document.querySelector('.numero-carga-input').value : null,
+            campoNaTela: document.querySelector('#prog-fila-tbody .numero-carga-input') ?
+              document.querySelector('#prog-fila-tbody .numero-carga-input').value : null,
         })""", idc)
         ck('DB.cargas foi atualizado', d['numeroCarga'] == 'R1-CORRIGIDA', str(d))
         ck('a fila continua mostrando o novo número', d['campoNaTela'] == 'R1-CORRIGIDA', str(d))
@@ -79,8 +79,8 @@ async def main():
            log_ok and log_ok['de'] == 'R1' and log_ok['para'] == 'R1-CORRIGIDA', str(log_ok))
 
         print('\n=== CAMPO EM BRANCO É RECUSADO (não apaga o número) ===')
-        await pg.fill('.numero-carga-input', '')
-        await pg.evaluate("() => document.querySelector('.numero-carga-input')"
+        await pg.fill('#prog-fila-tbody .numero-carga-input', '')
+        await pg.evaluate("() => document.querySelector('#prog-fila-tbody .numero-carga-input')"
                            ".dispatchEvent(new Event('change'))")
         await pg.wait_for_timeout(200)
         d2 = await pg.evaluate("""(id) => ({

@@ -936,7 +936,15 @@ function podeCancelarCarga(){
    diferentes de verdade: excluir some com algo que nunca aconteceu;
    cancelar encerra algo que começou, e por isso pede motivo. */
 function botaoCancelarHtml(c){
-  if(c.status === 'Seguiu Viagem') return '<span class="text-dim">—</span>';
+  /* Carga em "Seguiu Viagem" tem proteção a mais (pede confirmação
+     digitando a placa, ver excluirCargaSeguiuViagemUI) — mas não é mais
+     intocável. Pedido direto do usuário (08/08/2026): dado de teste que
+     passou pelo fluxo inteiro (ex.: DJF8527) ficava preso na Torre pra
+     sempre, sem nenhuma ação disponível pra tirar de lá. */
+  if(c.status === 'Seguiu Viagem'){
+    return `<button class="btn btn-danger btn-sm" onclick="excluirCargaSeguiuViagemUI('${escJs(c.id)}')"
+              title="Excluir mesmo já tendo seguido viagem — pede confirmação, some do histórico/relatórios.">Excluir</button>`;
+  }
   const cancelar = c.status !== 'Aguardando Veículo';
   return `<button class="btn btn-danger btn-sm" onclick="excluirCargaUI('${escJs(c.id)}')"
             title="${cancelar ? 'Cancelar esta carga (pede motivo e fica no log)'
@@ -1216,16 +1224,36 @@ function renderTorre(){
   }
 
   const tbody = document.getElementById('torre-tbody');
+  // Torre editável (pedido direto do usuário, 08/08/2026): "eu quero
+  // conseguir excluir ou alterar qualquer coisa direto da torre de
+  // controle como administrador ou logistica". Reaproveita EXATAMENTE as
+  // mesmas funções já testadas da Fila de Programados (atualizarXUI) —
+  // não é lógica nova, é o mesmo campo editável aparecendo num segundo
+  // lugar. Só quem já podia cancelar/excluir (Logística/Administração)
+  // ganha os campos editáveis; os demais setores continuam com texto.
+  const editavel = podeCancelarCarga();
   tbody.innerHTML = lista.map(c=>`
     <tr>
-      <td>${c.sequencia ?? '—'}</td><td class="col-identificacao">${esc(c.numeroCarga)||'—'}</td><td class="col-identificacao">${esc(c.placa)}</td><td>${esc(c.transportadora)||'—'}</td><td>${esc(c.tipoVeiculo)||'—'}</td>
+      <td>${editavel
+        ? `<input type="number" class="seq-input" value="${c.sequencia ?? ''}" onchange="atualizarSequenciaUI('${escJs(c.id)}',this.value)" title="Sequência livre.">`
+        : (c.sequencia ?? '—')}</td>
+      <td class="col-identificacao">${editavel
+        ? `<input type="text" class="numero-carga-input" value="${esc(c.numeroCarga)}" onchange="atualizarNumeroCargaUI('${escJs(c.id)}',this.value)" title="Alterar o número desta carga.">`
+        : (esc(c.numeroCarga)||'—')}</td>
+      <td class="col-identificacao">${editavel
+        ? `<input type="text" class="placa-input" value="${esc(c.placa)}" onchange="atualizarPlacaUI('${escJs(c.id)}',this.value)" title="Trocar a placa.">`
+        : esc(c.placa)}</td>
+      <td>${esc(c.transportadora)||'—'}</td><td>${esc(c.tipoVeiculo)||'—'}</td>
       <td>${esc(c.motorista)||'—'}</td>
       <td>${esc(rotaCurta(c.rota))}</td><td class="c-peso">${c.peso ? c.peso.toLocaleString('pt-BR') : '—'}</td>
       <td>${paletizadaDaCarga(c)}</td>
-      <td>${c.praOnde ? `<span class="chip-praonde">${esc(PRA_ONDE_LABEL[c.praOnde]||c.praOnde)}</span>` : '<span class="text-dim">—</span>'}</td>
-      <td>${c.qtdGanchos ? c.qtdGanchos : '<span class="text-dim">Liso</span>'}</td>
+      <td>${editavel ? praOndeSelectHtml(c)
+        : (c.praOnde ? `<span class="chip-praonde">${esc(PRA_ONDE_LABEL[c.praOnde]||c.praOnde)}</span>` : '<span class="text-dim">—</span>')}</td>
+      <td>${editavel
+        ? `<input type="number" class="ganchos-input" min="0" step="1" value="${c.qtdGanchos ?? 0}" onchange="atualizarGanchosUI('${escJs(c.id)}',this.value)" title="0 = Liso">`
+        : (c.qtdGanchos ? c.qtdGanchos : '<span class="text-dim">Liso</span>')}</td>
       <td>${badgeHtml(c.status)}</td><td>${fmtDataHora(c.atualizadoEm)}</td>
-      ${podeCancelarCarga() ? `<td class="no-print">${botaoCancelarHtml(c)}</td>` : ''}
+      ${editavel ? `<td class="no-print">${botaoCancelarHtml(c)}</td>` : ''}
     </tr>`).join('');
   const vazio = document.getElementById('torre-empty');
   vazio.hidden = lista.length>0;
@@ -1471,7 +1499,7 @@ function atualizarSequenciaUI(id, val){
   const c = getCarga(id); if(!c) return;
   c.sequencia = val==='' ? null : Number(val);
   SuincoStore.save();
-  renderProgFila();
+  renderAll();   // campo aparece na Fila de Programados E na Torre editável
 }
 // Popula os selects de Rota. Uma função só, alimentada por ROTAS em data.js —
 // acrescentar uma rota lá aparece nos dois formulários sem tocar aqui.
@@ -1521,15 +1549,15 @@ function atualizarPlacaUI(id, val){
 
   if(!nova){
     notify('Placa não pode ficar em branco.', 'warn');
-    renderProgFila();
+    renderAll();
     return;
   }
-  if(nova === c.placa){ renderProgFila(); return; }
+  if(nova === c.placa){ renderAll(); return; }
 
   const frota = buscarFrota(nova);
   if(!frota){
     notify(`Placa ${nova} não está cadastrada na Frota. Cadastre em Cadastros → Frota antes de usá-la.`, 'warn');
-    renderProgFila();   // devolve o campo ao valor anterior
+    renderAll();   // devolve o campo ao valor anterior
     return;
   }
 
@@ -1563,10 +1591,10 @@ function atualizarNumeroCargaUI(id, val){
 
   if(!novo){
     notify('Número da carga não pode ficar em branco.', 'warn');
-    renderProgFila();   // devolve o campo ao valor anterior
+    renderAll();   // devolve o campo ao valor anterior
     return;
   }
-  if(novo === c.numeroCarga){ renderProgFila(); return; }
+  if(novo === c.numeroCarga){ renderAll(); return; }
 
   const anterior = c.numeroCarga;
   c.numeroCarga = novo;
@@ -1589,7 +1617,7 @@ function atualizarGanchosUI(id, val){
   const c = getCarga(id); if(!c) return;
   c.qtdGanchos = val==='' ? 0 : Math.max(0, Number(val)||0);
   SuincoStore.save();
-  renderProgFila();
+  renderAll();   // campo aparece na Fila de Programados E na Torre editável
 }
 function reordenarPorSequenciaUI(){
   renderProgFila();
@@ -1638,6 +1666,13 @@ async function excluirCargaUI(id){
     return;
   }
 
+  await _efetivarExclusaoCarga(id, c, motivo, jaAndou);
+}
+
+/* Miolo comum de "excluir/cancelar", compartilhado por excluirCargaUI e
+   excluirCargaSeguiuViagemUI — a diferença entre os dois está inteira na
+   confirmação exigida antes de chegar aqui, não no efeito. */
+async function _efetivarExclusaoCarga(id, c, motivo, jaAndou, forcarSeguiuViagem){
   const numero = c.numeroCarga || '';
   const placa = c.placa;
 
@@ -1659,7 +1694,7 @@ async function excluirCargaUI(id){
     return;
   }
   try{
-    const r = await SuincoSharePoint.excluir(id, motivo);
+    const r = await SuincoSharePoint.excluir(id, motivo, forcarSeguiuViagem ? { forcarSeguiuViagem: true } : undefined);
     if(r && r.recusado){
       notify(`O servidor recusou a exclusão: ${r.erro} A carga volta na próxima sincronia.`, 'danger', 12000);
       return;
@@ -1670,6 +1705,30 @@ async function excluirCargaUI(id){
   }catch(e){
     notify('Carga excluída aqui, mas o servidor não confirmou. Ela pode voltar na próxima sincronia.', 'warn', 12000);
   }
+}
+
+/* Excluir uma carga que JÁ seguiu viagem — caminho deliberadamente mais
+   pesado que excluirCargaUI. A proteção original (carga com nota fiscal
+   emitida não deveria sumir, ou o mês não fecha) continua valendo por
+   padrão; isto aqui é a válvula de escape para quando a carga não é uma
+   viagem real — dado de teste que passou pelo fluxo inteiro (ex.:
+   DJF8527), placa cadastrada errada, etc. Por isso pede a placa digitada
+   de próprio punho: clique errado num botão "Excluir" não é o bastante
+   pra apagar histórico de verdade. */
+async function excluirCargaSeguiuViagemUI(id){
+  const c = getCarga(id); if(!c) return;
+  const digitado = (prompt(
+    `Esta carga (placa ${c.placa}, nº ${c.numeroCarga || '—'}) já SEGUIU VIAGEM. `
+    + 'Excluir agora apaga o histórico dela dos relatórios e do faturamento — '
+    + 'só faça isso se for dado de teste ou cadastro errado, não uma viagem real.\n\n'
+    + `Para confirmar, digite a placa exatamente: ${c.placa}`) || '').trim();
+  if(!digitado) return;
+  if(normalizarPlaca(digitado) !== c.placa){
+    notify('Placa digitada não confere. Nada foi excluído.', 'warn');
+    return;
+  }
+  const motivo = `Exclusão de carga já finalizada (Seguiu Viagem), confirmada digitando a placa — ${(DB.operador && DB.operador.nome) || '(não identificado)'}`;
+  await _efetivarExclusaoCarga(id, c, motivo, true, true);
 }
 function renderProgAguardando(){
   const lista = DB.cargas.filter(c=>c.aguardandoCarga);

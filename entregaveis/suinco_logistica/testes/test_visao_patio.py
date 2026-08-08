@@ -190,8 +190,13 @@ async def main():
            travada['status'] == 'Aguardando Embarque', str(travada))
 
         tem_botao = await pagina.evaluate("""() => {
+            // Nº da carga pode estar dentro de um <input> (Torre editável
+            // pra Logística/Administração) — textContent não pega value.
             const linhas = [...document.querySelectorAll('#torre-tbody tr')];
-            const alvo = linhas.find(tr => tr.textContent.includes('VP900'));
+            const alvo = linhas.find(tr => {
+                const inp = tr.querySelector('.numero-carga-input');
+                return tr.textContent.includes('VP900') || (inp && inp.value === 'VP900');
+            });
             const b = alvo && alvo.querySelector('button');
             return b ? b.textContent.trim() : null;
         }""")

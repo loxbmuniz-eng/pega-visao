@@ -66,7 +66,8 @@ async def main():
         d1 = await pg.evaluate("""() => ({
             linhas: document.getElementById('torre-tbody').querySelectorAll('tr').length,
             numerosNaTela: [...document.querySelectorAll('#torre-tbody .col-identificacao')]
-                .map(td => td.textContent.trim()).filter(t => t.startsWith('AV')),
+                .map(td => { const inp = td.querySelector('input'); return inp ? inp.value.trim() : td.textContent.trim(); })
+                .filter(t => t.startsWith('AV')),
             caixaAtiva: document.querySelector('.stat-ativo .stat-label')?.textContent.trim(),
         })""")
         ck('só as 2 de Aguardando Veículo aparecem', d1['linhas'] == 2, str(d1))
@@ -91,7 +92,7 @@ async def main():
         await pg.wait_for_timeout(150)
         d2 = await pg.evaluate("""() => {
             const tds = [...document.querySelectorAll('#torre-tbody .col-identificacao')]
-                .map(td => td.textContent.trim());
+                .map(td => { const inp = td.querySelector('input'); return inp ? inp.value.trim() : td.textContent.trim(); });
             return { linhas: document.getElementById('torre-tbody').querySelectorAll('tr').length, tds };
         }""")
         ck('a carga que já seguiu viagem aparece (normalmente ficaria escondida)',
