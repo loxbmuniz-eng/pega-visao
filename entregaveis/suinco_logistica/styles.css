@@ -890,6 +890,16 @@ tbody tr{ transition:background-color var(--t-rapida) ease }
 .stat-label{font-size:12px;color:var(--text-dim);margin-top:3px}
 .stat-note{font-size:10.5px;color:var(--text-dim);margin-top:2px;font-style:italic}
 
+/* Caixas da Torre de Controle que filtram a tabela ao clicar — pedido do
+   usuário (08/08/2026): "clique nos quadrados... e faça um filtro
+   instantâneo apontando pra aquelas cargas de cada status". */
+.stat-clicavel{ cursor:pointer }
+.stat-clicavel:hover{ border-top-color:var(--gold-text) }
+.stat-ativo{
+  border-top-color:var(--gold-text);
+  box-shadow:0 0 0 2px var(--gold-text) inset, var(--vidro-sombra);
+}
+
 /* ===== MODAL ===== */
 /* z-index 3600: ACIMA do rodapé de conexão (3500).
 
@@ -1523,7 +1533,7 @@ input,select,textarea{border-radius:5px}
      Sem isso, "12,00" e "9,50" não empilham pela vírgula e o olho não
      consegue comparar duas linhas sem ler dígito por dígito. */
   .print-page td.c-peso, .print-page td.c-entregas, .print-page td.c-ganchos,
-  .print-page td.c-num, .print-page td.cel-num, .print-page td.num-forte,
+  .print-page td.cel-num, .print-page td.num-forte,
   .print-page .tot-num{
     text-align:right !important; font-variant-numeric:tabular-nums;
   }
@@ -1637,19 +1647,28 @@ input,select,textarea{border-radius:5px}
   #print-operacional .c-carga, #print-operacional .c-placa{
     background:rgba(185,144,63,.22) !important;
   }
-  #print-operacional .c-num{ width:3% }
-  #print-operacional .c-seq{ width:3.5% }
+  /* Coluna "Nº" (posição na lista) saiu — pedido do usuário (08/08/2026):
+     "apague primeira coluna do relatorio operacional que diz numero Nº,
+     manter apenas o numero da sequencia". Sequência já é o identificador
+     de ordem que a Logística usa de verdade (o Nº era só a posição na
+     linha, redundante com ela). Os 3% que eram do Nº foram pro que
+     precisava: Seq. (agora a primeira coluna, precisa ler bem), Rota e
+     Transportadora — e Status encolheu 1%, também a pedido ("pode
+     diminuir um pouco a célula do status"). */
+  #print-operacional .c-seq{ width:5% }
   #print-operacional .c-carga{ width:7% }
-  /* 17%, não 15%: a fonte deste documento subiu de 9,2 para 9,8px (pedido
-     de legibilidade), e "AGUARDANDO EMBARQUE" — o rótulo mais longo dos
-     seis status — passou a quebrar em duas linhas na largura antiga. Os
-     2 pontos vêm de Transportadora, que quebra sem problema (já é campo
-     de texto livre, com nomes que já ocupavam 2-3 linhas antes disso). */
-  #print-operacional .c-status{ width:17% }     /* "AGUARDANDO EMBARQUE" */
-  #print-operacional .c-rota{ width:11% }
+  /* 16%, não 17%: encolhida 1% a pedido do usuário — ainda a maior
+     coluna de texto fixo da folha, de propósito. A fonte deste documento
+     subiu de 9,2 para 9,8px (pedido de legibilidade anterior), e
+     "AGUARDANDO EMBARQUE" — o rótulo mais longo dos seis status —
+     quebrava em duas linhas em larguras menores que isso; testado contra
+     testes/test_relatorios.py ("todo status cabe em UMA linha") antes de
+     fixar o valor. */
+  #print-operacional .c-status{ width:16% }     /* "AGUARDANDO EMBARQUE" */
+  #print-operacional .c-rota{ width:12% }
   #print-operacional .c-operacao{ width:9% }
   #print-operacional .c-placa{ width:7.5% }
-  #print-operacional .c-transp{ width:13.5% }   /* nomes longos de empresa */
+  #print-operacional .c-transp{ width:14.5% }   /* nomes longos de empresa */
   #print-operacional .c-veiculo{ width:8% }
   #print-operacional .c-peso{ width:5.5% }
   #print-operacional .c-palet{ width:5% }
@@ -1696,7 +1715,6 @@ input,select,textarea{border-radius:5px}
 }
 #print-operacional .c-operacao{ font-weight:800; text-align:center }
 #print-operacional .c-transp{ font-weight:600 }
-#print-operacional .c-num,
 #print-operacional .c-seq,
 #print-operacional .c-palet,
 #print-operacional .c-entregas,
