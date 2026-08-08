@@ -67,6 +67,29 @@ const PRA_ONDE_LABEL = {
   'RET FRIGO':'RET FRIGO'
 };
 const PRA_ONDE_PADRAO = 'FROTA PROPRIA';
+/* Sugere o Tipo de Operação a partir da transportadora já conhecida na
+   Frota, em vez de sempre cravar FROTA PRÓPRIA — achado do gestor em
+   produção (07/08/2026): "vários carros constando como frota própria e
+   não são". Acontecia porque a chegada sem programação (Portaria clica
+   "Chegou" numa placa nova) grava FROTA PRÓPRIA de cara, mesmo já sabendo
+   pela Frota que a transportadora é terceirizada — e o formulário de
+   "Completar dados" que a Logística usa depois vinha com o mesmo valor
+   pré-marcado, fácil de não notar que estava errado.
+
+   "Suinco" é a única transportadora que é frota própria de verdade.
+   Qualquer outra CONHECIDA vira DEDICADA — é a categoria que a própria
+   Logística já usa pra transportadora terceirizada em toda carga
+   programada manualmente (conferido no Relatório Operacional de
+   07/08/2026: Baixotes Transportes, Marques e Silva, AJB Transportes
+   etc. saem como DEDICADA). Transportadora ainda desconhecida (placa fora
+   da Frota) cai no padrão de sempre — não tem base pra sugerir nada
+   melhor. Continua sendo só uma SUGESTÃO: quem completa o cadastro pode
+   trocar. */
+function praOndeSugerido(transportadora){
+  const t = (transportadora || '').trim().toLowerCase();
+  if(!t) return PRA_ONDE_PADRAO;
+  return t === 'suinco' ? 'FROTA PROPRIA' : 'DEDICADA';
+}
 // Leitura de Paletizada, tolerante a registros antigos que não têm o campo.
 function paletizadaDaCarga(carga){
   return (carga && carga.paletizada === 'Sim') ? 'Sim' : 'Não';
@@ -1283,7 +1306,7 @@ function registrarChegadaPortaria(placa, operador){
       tipoVeiculo: frota ? frota.tipoVeiculo : '',
       motorista:'',
       cliente:'', destino:'', produto:'', peso:0, doca:'', sequencia:null, observacoes:'',
-      praOnde: PRA_ONDE_PADRAO, rota:'', paletizada:'Não', qtdGanchos:0, qtdEntregas:1,
+      praOnde: praOndeSugerido(frota ? frota.transportadora : ''), rota:'', paletizada:'Não', qtdGanchos:0, qtdEntregas:1,
       status: 'Aguardando Embarque', aguardandoCarga: true,
       criadoEm: nowISO(), criadoPor: operador||'(não identificado)',
       atualizadoEm: nowISO(),

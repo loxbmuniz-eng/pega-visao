@@ -1636,7 +1636,7 @@ function abrirCompletar(id){
   document.getElementById('completar-tipoveiculo').value = c.tipoVeiculo || '';
   document.getElementById('completar-motorista').value = '';
   document.getElementById('completar-obs').value = '';
-  document.getElementById('completar-praonde').value = PRA_ONDE_PADRAO;
+  document.getElementById('completar-praonde').value = praOndeSugerido(c.transportadora);
   document.getElementById('completar-rota').value = '';
   document.getElementById('completar-paletizada').value = 'Não';
   document.getElementById('completar-ganchos').value = '0';
