@@ -85,6 +85,15 @@ def main():
     css = css.replace('assets/logo_suinco.png', logo_uri)
     app_js = app_js.replace('assets/logo_suinco.png', logo_uri)
 
+    # 1b. Fonte dos relatórios (@font-face em styles.css) — mesmo tratamento
+    #     do logo: vira data URI, zero requisição em tempo de uso. Existe
+    #     pra garantir que o Operacional/Executivo/Fretes saiam com a MESMA
+    #     tipografia em computador, Android e iPhone (pedido de 08/08/2026)
+    #     — sem ela, cada SO substitui pela própria fonte de sistema.
+    fonte_bytes = (BASE / 'assets' / 'inter-variable-latin.woff2').read_bytes()
+    fonte_uri = 'data:font/woff2;base64,' + base64.b64encode(fonte_bytes).decode('ascii')
+    css = css.replace('assets/inter-variable-latin.woff2', fonte_uri)
+
     # NOTA: todas as substituições abaixo passam o conteúdo via `lambda _: ...`
     # em vez de string literal. Isso é obrigatório: re.sub() interpreta
     # sequências de escape no texto de substituição, e o JS está cheio delas
