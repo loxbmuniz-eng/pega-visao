@@ -1119,6 +1119,20 @@ function renderVisaoPatio(prefixo){
 
   lista = lista.slice().sort(ordenarPorSequenciaEAtualizacao);
 
+  /* Sem período, `lista` já é só o pátio aberto agora — naturalmente
+     pequeno. COM período (pedido para "revisitar carga encerrada", ver
+     comentário acima), não tinha limite NENHUM — a mesma classe de bug
+     achada e corrigida na Frota e no Histórico (auditoria "refinamento em
+     TODAS AS ABAS", 08/08/2026): um período de meses reais de operação
+     vira centenas de linhas, e no celular (cartão de 2 colunas) isso é
+     rolagem de dezenas de milhares de pixels — medido: 400 cargas =
+     188.217px de altura de página. Esta função alimenta Torre, Portaria,
+     Expedição e Faturamento — a correção vale pras quatro de uma vez. */
+  const mobile = window.matchMedia && window.matchMedia('(max-width:560px)').matches;
+  const LIMITE = mobile ? 40 : 300;
+  const listaCompleta = lista;
+  lista = lista.slice(0, LIMITE);
+
   const thead = document.getElementById(`${prefixo}-vp-thead`);
   if(thead){
     thead.innerHTML =
@@ -1159,7 +1173,7 @@ function renderVisaoPatio(prefixo){
      estreito. Aqui a mensagem diz qual é o caso e, quando há filtro, traz o
      botão que o limpa. */
   const vazio = document.getElementById(`${prefixo}-vp-empty`);
-  vazio.hidden = lista.length > 0;
+  vazio.hidden = listaCompleta.length > 0;
   if(!vazio.hidden){
     const filtrando = houvePeriodo || !!textoBusca;
     vazio.innerHTML = filtrando
@@ -1170,14 +1184,20 @@ function renderVisaoPatio(prefixo){
 
   const resumo = document.getElementById(`${prefixo}-vp-resumo`);
   if(resumo){
+    // Contagem e distribuição por status usam a lista COMPLETA (antes do
+    // corte de exibição) — o resumo tem que responder pela busca inteira,
+    // mesmo quando a tabela abaixo mostra só as primeiras LIMITE linhas.
     const porStatus = STATUS_FLOW.map(st=>({
-      status: st, n: lista.filter(c=>c.status===st).length
+      status: st, n: listaCompleta.filter(c=>c.status===st).length
     })).filter(x=>x.n > 0);
     resumo.innerHTML =
-      `<span class="vp-total">${lista.length} carga(s)</span>`
+      `<span class="vp-total">${listaCompleta.length} carga(s)</span>`
       + (houvePeriodo ? '<span class="vp-periodo">no período escolhido</span>'
                       : '<span class="vp-periodo">em aberto agora</span>')
-      + porStatus.map(x=>`<span class="vp-chip badge ${esc((STATUS_META[x.status]||{}).badge||'')}">${esc(x.status)}: <b>${x.n}</b></span>`).join('');
+      + porStatus.map(x=>`<span class="vp-chip badge ${esc((STATUS_META[x.status]||{}).badge||'')}">${esc(x.status)}: <b>${x.n}</b></span>`).join('')
+      + (listaCompleta.length > LIMITE
+          ? `<span class="vp-periodo">— mostrando as ${LIMITE} mais recentes; refine o período ou a busca pra ver outras</span>`
+          : '');
   }
 }
 
