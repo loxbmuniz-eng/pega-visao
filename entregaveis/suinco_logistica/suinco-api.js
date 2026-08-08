@@ -61,6 +61,7 @@ const SuincoSharePoint = (function () {
   let ouvintesEdicao = [];
   let ouvintesExclusao = [];
   let ouvintesPresenca = [];
+  let ouvintesFechamentoPrograma = [];
   let timerRenovacao = null;
   let ultimaInteracao = Date.now();
 
@@ -907,6 +908,15 @@ const SuincoSharePoint = (function () {
       });
     });
 
+    // Alguém (Logística/Administração) fechou a programação atual — avisa
+    // todo mundo conectado, pra ninguém perguntar pelo WhatsApp "já posso
+    // programar de novo?". Ver POST /api/programacao/fechar no servidor.
+    socket.on('programacao:fechada', (dados) => {
+      ouvintesFechamentoPrograma.forEach((fn) => {
+        try { fn(dados); } catch (e) { console.warn('[Suinco] fechamento de programação:', e); }
+      });
+    });
+
     socket.on('connect_error', (e) => {
       console.info('[Suinco] tempo real indisponível:', e.message);
     });
@@ -941,6 +951,9 @@ const SuincoSharePoint = (function () {
      quando alguém conecta/desconecta em qualquer terminal, e uma vez ao
      conectar esta aba, com o retrato do momento. */
   function aoAtualizarPresenca(fn) { if (typeof fn === 'function') ouvintesPresenca.push(fn); }
+
+  /* Avisa que alguém fechou a programação atual (POST /api/programacao/fechar). */
+  function aoFecharPrograma(fn) { if (typeof fn === 'function') ouvintesFechamentoPrograma.push(fn); }
 
   /* ---------------------------------------------------------------
      Início
@@ -1001,16 +1014,24 @@ const SuincoSharePoint = (function () {
     return { ok: true, observacao: 'O histórico fica no banco — não há mais arquivamento em pastas.' };
   }
 
+  /* Fecha a programação atual — só Logística/Administração (o servidor
+     confere de novo; isto aqui não é a proteção real). Recusa (409) se
+     existir carga em andamento; o erro traz a lista em `e.dados.cargas`. */
+  async function fecharPrograma() {
+    return chamar('/api/programacao/fechar', { metodo: 'POST' });
+  }
+
   return {
     SP_CONFIG,
     iniciar, estaConfigurado, estado, conta, aoMudarEstado, aoReceberDados,
     aoDescartarDaFila, aoEditarCarga, aoExcluirCarga, aoAtualizarPresenca,
+    aoFecharPrograma,
     login, sair, diagnosticarConexao,
     push, upsert, excluir, mudarStatus,
     pull, pullTudo, drenarFila, pendentes,
     listarOperadores, criarOperador, atualizarOperador,
     sincronizarAgora, iniciarSincroniaPeriodica, pararSincronia, ultimaSincronia,
     renovarSessao, registrarInteracao,
-    arquivarDia,
+    arquivarDia, fecharPrograma,
   };
 })();

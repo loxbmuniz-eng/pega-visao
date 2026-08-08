@@ -1481,3 +1481,87 @@ describe('11. Setor Comercial — só leitura', () => {
     assert.equal(r.status, 403);
   });
 });
+
+describe('12. Fechamento de Programação — só Logística/Administração, só com pátio limpo', () => {
+  before(async () => {
+    // Este bloco roda depois de 11 outras suítes, que deixam cargas suas
+    // abertas em fact_viagens (o before() global só limpa uma vez, no
+    // início do arquivo inteiro). Pra testar "fecha quando o pátio está
+    // limpo" de forma determinística, força esse estado aqui — não é
+    // fluxo de negócio sendo testado, é só a base limpa que este bloco
+    // precisa pra não depender da ordem/conteúdo das suítes anteriores.
+    await pool.query("UPDATE fact_viagens SET status_atual = 'Seguiu Viagem' WHERE status_atual <> 'Seguiu Viagem'");
+  });
+
+  test('sem token → 401', async () => {
+    const r = await req('/api/programacao/fechar', { metodo: 'POST' });
+    assert.equal(r.status, 401);
+  });
+
+  test('Portaria não pode fechar', async () => {
+    const r = await req('/api/programacao/fechar', { metodo: 'POST', token: tokens['Portaria'] });
+    assert.equal(r.status, 403);
+  });
+
+  test('Expedição não pode fechar', async () => {
+    const r = await req('/api/programacao/fechar', { metodo: 'POST', token: tokens['Expedição'] });
+    assert.equal(r.status, 403);
+  });
+
+  test('Logística: recusa se existe carga em andamento (nunca esconde caminhão real)', async () => {
+    const { rows } = await pool.query('SELECT placa FROM dim_veiculos LIMIT 1 OFFSET 5');
+    const criar = await req('/api/cargas', {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { placa: rows[0].placa, numeroCarga: '90200' },
+    });
+    assert.equal(criar.status, 201, criar.texto);
+
+    const r = await req('/api/programacao/fechar', { metodo: 'POST', token: tokens['Logística'] });
+    assert.equal(r.status, 409);
+    assert.equal(r.json.codigo, 'CARGAS_EM_ABERTO');
+    assert.ok(r.json.cargas.some((c) => c.numeroCarga === '90200'), JSON.stringify(r.json.cargas));
+
+    // limpa pro próximo teste — Faturado é o único caminho até "Seguiu Viagem"
+    // que uma única chamada de status alcança a partir de Aguardando Veículo
+    // é preciso passar pelas etapas.
+    for (const status of ['Aguardando Embarque', 'Embarque Iniciado', 'Embarque Finalizado', 'Faturado', 'Seguiu Viagem']) {
+      const passo = await req(`/api/cargas/${criar.json.id}/status`, {
+        metodo: 'POST', token: tokens['Logística'], corpo: { status },
+      });
+      assert.equal(passo.status, 200, `${status}: ${passo.texto}`);
+    }
+  });
+
+  test('Logística: fecha quando o pátio está limpo, registra no log, avisa quem foi', async () => {
+    const abertas = await pool.query("SELECT 1 FROM fact_viagens WHERE status_atual <> 'Seguiu Viagem'");
+    assert.equal(abertas.rows.length, 0, 'pré-condição: pátio devia estar limpo pelo teste anterior');
+
+    const r = await req('/api/programacao/fechar', { metodo: 'POST', token: tokens['Logística'] });
+    assert.equal(r.status, 200, r.texto);
+    assert.equal(r.json.operador, 'Ana');
+    assert.ok(r.json.quando);
+
+    const log = await pool.query(
+      "SELECT * FROM log_eventos WHERE acao = 'Fechamento de Programação' ORDER BY data_evento DESC LIMIT 1"
+    );
+    assert.equal(log.rows.length, 1);
+    assert.equal(log.rows[0].operador_nome, 'Ana');
+    assert.equal(log.rows[0].setor, 'Logística');
+  });
+
+  test('Administração também pode fechar (exigirSetor sempre libera Administração)', async () => {
+    // tokens['Administração'] não é global (ver o mesmo padrão defensivo
+    // em "POST /api/frota por Administração → 201", bloco 7c) — relogá
+    // com a conta que o bloco 7b criou.
+    let tokenAdmin = tokens['Administração'];
+    if (!tokenAdmin) {
+      const login = await req('/auth/login', {
+        metodo: 'POST', corpo: { email: 'chefe@teste.local', senha: SENHA },
+      });
+      tokenAdmin = login.json?.token;
+    }
+    if (!tokenAdmin) return;   // bloco 7b pode não ter rodado nesta execução isolada
+    const r = await req('/api/programacao/fechar', { metodo: 'POST', token: tokenAdmin });
+    assert.equal(r.status, 200, r.texto);
+  });
+});
