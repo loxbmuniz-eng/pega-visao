@@ -1217,6 +1217,32 @@ code{
 .et-atual .et-marca{color:var(--st-aguardando-embarque-fg)}
 .et-atual .et-hora{color:var(--st-aguardando-embarque-fg);opacity:.9}
 
+/* Linha do tempo COMPACTA — as seis colunas de etapa viraram uma célula
+   só (linhaDoTempoCompacta(), app.js). Pedido do usuário (08/08/2026): a
+   Visão do Pátio tinha ficado tão alta no celular (seis blocos
+   rótulo+valor empilhados por carga) que "não aparecia mais" — na
+   prática, empurrada tela abaixo por cima do que cabia rolar. Junta os
+   seis selos numa faixa horizontal, na mesma ordem em que a carga passa
+   por eles: mais compacto E mais fácil de ler de relance (a sequência
+   inteira num golpe de vista, não seis parênteses separados). */
+.et-cab-linha{text-align:left;font-size:11px;letter-spacing:.3px}
+.et-linha{display:flex;flex-wrap:nowrap;gap:3px;align-items:center;padding:6px var(--sp-1)}
+.et-mini{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  min-width:26px;padding:2px 3px;border-radius:6px;line-height:1.1;
+}
+.et-mini b{font-size:13px;font-weight:900}
+.et-mini i{font-style:normal;font-size:8.5px;opacity:.75;font-variant-numeric:tabular-nums}
+.et-mini-ok b{color:var(--st-faturado-txt)}
+.et-mini-pendente b{color:var(--text-dim);opacity:.6}
+.et-mini-atual{background:var(--st-aguardando-embarque-bg)}
+.et-mini-atual b,.et-mini-atual i{color:var(--st-aguardando-embarque-fg)}
+@media print{
+  .et-mini-atual{background:transparent;border:1px solid var(--border)}
+  .et-mini-atual b{color:var(--st-aguardando-embarque-txt)}
+  .et-mini-atual i{color:var(--text-dim)}
+}
+
 @media (max-width:820px){
   /* No celular a matriz de seis colunas não cabe. A tabela rola dentro da
      própria caixa — a página nunca rola de lado. */
@@ -2147,10 +2173,21 @@ input,select,textarea{border-radius:5px}
   .table-wrap table.mobile-cartao td[data-rotulo="Observações"],
   .table-wrap table.mobile-cartao td[data-rotulo="Nome"],
   .table-wrap table.mobile-cartao td[data-rotulo="E-mail"],
-  .table-wrap table.mobile-cartao td[data-rotulo="Atualizado em"]{
+  .table-wrap table.mobile-cartao td[data-rotulo="Atualizado em"],
+  .table-wrap table.mobile-cartao td[data-rotulo="Linha do tempo"]{
     grid-column:1 / -1;
   }
   .table-wrap table.mobile-cartao td .btn{ width:100% }
+  /* A linha do tempo compacta (linhaDoTempoCompacta(), app.js) precisa
+     continuar em LINHA (seis selos lado a lado) mesmo dentro do cartão —
+     a regra geral acima força todo td a virar coluna (rótulo em cima,
+     valor embaixo), o que aqui empilharia os seis selos um debaixo do
+     outro e devolveria a altura gigante que essa mudança existe pra
+     eliminar. Mais específico que a regra geral (id de tabela + classe de
+     td), então vence o empate. */
+  .table-wrap table.mobile-cartao td.et-linha{
+    display:flex;flex-direction:row;flex-wrap:wrap;gap:4px;padding-top:6px;
+  }
   .table-wrap table.mobile-cartao td:not([data-rotulo]) .btn{ margin-top:4px }
 
   /* Campo editável DENTRO do cartão (Seq., Nº Carga, Placa, Ganchos, Tipo

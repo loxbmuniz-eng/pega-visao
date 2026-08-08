@@ -58,11 +58,19 @@ async def main():
         })""")
         ck('elementos da Visão do Pátio existem em #tab-torre', all(existe.values()), str(existe))
 
-        print('\n=== 2. CABEÇALHO TEM AS 6 ETAPAS (linha do tempo, não status único) ===')
-        colunas = await pg.evaluate(
-            "() => document.getElementById('torre-vp-thead').querySelectorAll('th').length")
-        ck('cabeçalho com colunas por etapa (mais que Nº/Placa/Transp/Rota/Tempo)',
-           colunas >= 4 + 6, colunas)
+        print('\n=== 2. CABEÇALHO TEM A LINHA DO TEMPO (não status único) ===')
+        # As seis colunas de etapa viraram uma célula compacta só
+        # (linhaDoTempoCompacta(), app.js, 08/08/2026 — pedido do usuário
+        # depois de reportar a Visão do Pátio "sumindo" no celular por
+        # causa da altura). O cabeçalho continua com uma coluna própria
+        # pra isso, só que uma, não seis.
+        info = await pg.evaluate("""() => {
+            const ths = [...document.getElementById('torre-vp-thead').querySelectorAll('th')];
+            return { total: ths.length, temLinhaDoTempo: ths.some(th => th.textContent.trim() === 'Linha do tempo') };
+        }""")
+        ck('cabeçalho tem a coluna "Linha do tempo"', info['temLinhaDoTempo'], info)
+        ck('cabeçalho não voltou a ter uma coluna por etapa (Nº/Placa/Transp/Rota/LinhaDoTempo/Tempo = 6)',
+           info['total'] == 6, info)
 
         print('\n=== 3. AS DUAS CARGAS APARECEM NA LISTA ===')
         linhas = await pg.evaluate(
