@@ -2009,46 +2009,6 @@ function renderDistribuicaoStatus(){
   }
 }
 
-/* Menor e maior tempo do dia, nas duas métricas. Sem cargas concluídas hoje,
-   diz isso explicitamente em vez de exibir 0 min — que seria lido como
-   "tudo instantâneo" e é justamente o tipo de número enganoso a evitar. */
-function renderExtremosHoje(){
-  const wrap = document.getElementById('ind-extremos-wrap');
-  if(!wrap) return;
-  const concluidasHoje = cargasConcluidasNoPeriodo('hoje');
-
-  const bloco = (ext, titulo) => {
-    if(!ext.amostra){
-      return `<div class="extremo-bloco">
-          <div class="extremo-titulo">${titulo}</div>
-          <div class="empty-state" style="padding:14px">Nenhuma carga concluída hoje com esse tempo calculável.</div>
-        </div>`;
-    }
-    const card = (rot, item, classe) => `
-      <div class="extremo-card ${classe}">
-        <div class="extremo-card-top">
-          <span class="extremo-tag ${classe}">${rot}</span>
-          <span class="extremo-tempo">${fmtDuracao(item.minutos)}</span>
-        </div>
-        <div class="extremo-carga">
-          <strong>${esc(item.placa || '—')}</strong> · Carga ${esc(item.numeroCarga || '—')}
-        </div>
-        <div class="extremo-det">${esc(item.transportadora || '—')}${item.destino ? ' · destino ' + esc(item.destino) : ''}</div>
-      </div>`;
-    return `<div class="extremo-bloco">
-        <div class="extremo-titulo">${titulo} <span class="text-dim" style="font-weight:600;font-size:11.5px">— base: ${ext.amostra} carga(s)</span></div>
-        <div class="extremo-par">
-          ${card('MENOR', ext.menor, 'extremo-menor')}
-          ${card('MAIOR', ext.maior, 'extremo-maior')}
-        </div>
-      </div>`;
-  };
-
-  wrap.innerHTML =
-    bloco(extremosTempo(concluidasHoje, 'leadTimeTotal'), 'Lead Time') +
-    bloco(extremosTempo(concluidasHoje, 'tempoPatioTotal'), 'Permanência no pátio');
-}
-
 /* ====================================================================
    FILTROS DOS INDICADORES — um estado, todos os blocos
    ====================================================================
@@ -3190,33 +3150,6 @@ function tituloSecaoPdf(texto, sub){
       <div class="print-secao-tit">${texto}</div>
       ${sub ? `<div class="print-secao-sub">${sub}</div>` : ''}
     </div>`;
-}
-
-/* Bloco "menor tempo / maior tempo" — usado duas vezes (lead time e pátio).
-   Mostra a carga inteira, não só o número: sem placa/transportadora/destino o
-   gestor não consegue agir sobre o caso extremo, que é o objetivo do dado. */
-function blocoExtremos(ext, titulo, explicacao){
-  if(!ext.amostra){
-    return tituloSecaoPdf(titulo, explicacao) +
-      `<div class="print-vazio">Nenhuma carga concluída com esse tempo calculável no período.</div>`;
-  }
-  const linha = (rot, item, classe) => `
-    <tr>
-      <td><span class="extremo-tag ${classe}">${rot}</span></td>
-      <td class="extremo-tempo">${fmtDuracao(item.minutos)}</td>
-      <td>${esc(item.numeroCarga || '—')}</td>
-      <td>${esc(item.placa || '—')}</td>
-      <td>${esc(item.transportadora || '—')}</td>
-      <td>${esc(item.destino || '—')}</td>
-    </tr>`;
-  return tituloSecaoPdf(titulo, `${explicacao} Base: ${ext.amostra} carga(s).`) +
-    `<table>
-      <thead><tr><th></th><th>Tempo</th><th>Nº Carga</th><th>Placa</th><th>Transportadora</th><th>Destino</th></tr></thead>
-      <tbody>
-        ${linha('MENOR', ext.menor, 'extremo-menor')}
-        ${linha('MAIOR', ext.maior, 'extremo-maior')}
-      </tbody>
-    </table>`;
 }
 
 /* Tabela de distribuição por status, com a cor de cada status.

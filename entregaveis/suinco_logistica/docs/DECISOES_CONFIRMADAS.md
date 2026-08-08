@@ -721,21 +721,56 @@ avisa) — e fechar duas lacunas concretas já mapeadas.
    em cada um, sem apagar o texto original — preservado como registro
    histórico.
 
-### Achados a triar — não implementar sem antes ler o contexto
+### Achados a triar — resolvidos em 08/08/2026
 
-Mesma varredura mecânica (função exportada/definida com zero chamadas)
-achou mais candidatos. Nenhum é bug confirmado — cada um precisa de leitura
-antes de decidir "excluir" vs "ligar" vs "deixar":
+A lista de candidatos (função exportada/definida com zero chamadas) foi
+lida um a um e decidida — nenhum ficou em aberto:
 
-- **Frontend** (`app.js`/`data.js`): `blocoExtremos`, `comOverlaySync`,
-  `corTextoSobre`, `estaFaturado`, `rankingDoDia`, `renderExtremosHoje`,
-  `textoSobre`.
-- **Backend** (`backend/src/dominio/fluxo.js`): `podeEditarCadastros`
-  (`rotas/cadastros.js` usa `exigirSetor('Logística')` direto em vez desta
-  função — risco de divergência se um dia decidirem coisas diferentes, não
-  bug ativo hoje); `proximoStatus` (documentada como auxiliar para o painel
-  desenhar botões — possivelmente duplicada em `app.js`, checar antes de
-  decidir).
+**Excluídos (comprovadamente mortos, com evidência, não só ausência de
+chamada):**
+- `blocoExtremos` + `renderExtremosHoje` (`app.js`) + `extremosTempo`
+  (`data.js`): formavam o bloco "menor/maior tempo" do PDF e da tela de
+  Indicadores. O próprio código já documentava a substituição — comentário
+  em `app.js` (bloco de 05/08/2026): *"Substitui os extremos maior/menor
+  por média contra meta"* — e o alvo de `renderExtremosHoje`
+  (`#ind-extremos-wrap`) não existe mais no HTML. CSS órfão correspondente
+  (`.extremo-bloco`, `.extremo-card` etc., os que só essas duas funções
+  usavam) removido junto.
+- `podeEditarCadastros` (`backend/src/dominio/fluxo.js`): a preocupação
+  registrada aqui era risco de divergência com `exigirSetor('Logística')`,
+  usado de fato em `rotas/cadastros.js`. Não existe divergência: o
+  middleware `exigirSetor` (`middleware/auth.js`) já inclui
+  `'Administração'` automaticamente em QUALQUER chamada, sempre — a mesma
+  regra que `podeEditarCadastros` reimplementava. A função nunca teve
+  propósito próprio; só duplicava uma garantia que já existe num lugar só.
+- `proximoStatus` (`backend/src/dominio/fluxo.js`): comentário dizia "usado
+  pelo painel para desenhar o botão certo", mas é função de backend — o
+  painel (frontend) não a chama nem poderia. Confirmado sem chamador em
+  nenhuma rota. Cada tela desenha seu próprio botão de avanço
+  explicitamente; nunca existiu um "próximo status genérico" no frontend
+  para esta função alimentar.
+
+**Mantidos, decisão registrada (não é esquecimento, é escolha):**
+- `comOverlaySync` + `mostrarSyncOverlay`/`esconderSyncOverlay` (`app.js`):
+  infraestrutura pronta para mostrar um overlay de "sincronizando" durante
+  uma operação — nunca foi ligada a nenhuma chamada real. Diferente do
+  cluster de extremos, não há evidência de que foi substituída por outra
+  coisa; é uma capacidade construída e não adotada, não uma sobra. Mantida:
+  custo de existir é zero, e é candidata natural a entrar quando o
+  redesenho visual (pendente, ver pedido do usuário em 08/08/2026) decidir
+  dar feedback visual de sincronia.
+- `corTextoSobre` (`app.js`) e `textoSobre` (`data.js`): duas implementações
+  do mesmo utilitário de acessibilidade (cor de texto que contrasta com um
+  fundo), nenhuma chamada hoje porque os gráficos atuais sempre acompanham
+  legenda numérica em vez de depender só de cor. Mantidas por serem
+  utilitários de acessibilidade prontos — descartar agora só para
+  reescrever igual durante o redesenho visual não compensa. Ao entrar no
+  redesenho, decidir ali se as duas convergem numa só (a de `data.js` usa a
+  fórmula de luminância relativa do WCAG, mais correta; a de `app.js` é uma
+  aproximação mais simples).
+- `estaFaturado` (`data.js`) e `rankingDoDia` (`data.js`): utilitários
+  pequenos, corretos, sem custo de manutenção. Mantidos — não há sinal de
+  que foram substituídos, só ainda não usados.
 
 ### Decisão sobre o cliente Socket.IO — fechada em 07/08/2026
 

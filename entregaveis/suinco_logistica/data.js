@@ -1480,33 +1480,6 @@ function rankingDoDia(){
   return rankingTransportadoras(cargasConcluidasNoPeriodo('hoje'));
 }
 
-// Menor e maior tempo entre as cargas concluídas informadas.
-// `metrica` escolhe o que medir: 'leadTimeTotal' (da criação da carga até a
-// saída — visão de planejamento) ou 'tempoPatioTotal' (da chegada física até
-// a saída — visão de pátio, que é a que a operação sente). Retorna menor e
-// maior nulos quando nenhuma carga tem a métrica calculável, para a UI dizer
-// "sem dados" em vez de exibir 0 min, que seria enganoso.
-function extremosTempo(cargas, metrica){
-  const m = metrica || 'leadTimeTotal';
-  const comTempo = cargas
-    .map(c=>({ carga:c, ind: indicadoresDaCarga(c.id) }))
-    .filter(x=>x.ind[m] !== null && x.ind[m] !== undefined);
-  if(!comTempo.length) return { menor:null, maior:null, amostra:0 };
-  const ordenado = comTempo.slice().sort((a,b)=>a.ind[m] - b.ind[m]);
-  const monta = x => ({
-    numeroCarga: x.carga.numeroCarga,
-    placa: x.carga.placa,
-    transportadora: x.carga.transportadora,
-    destino: x.carga.destino,
-    minutos: x.ind[m]
-  });
-  return {
-    menor: monta(ordenado[0]),
-    maior: monta(ordenado[ordenado.length - 1]),
-    amostra: comTempo.length
-  };
-}
-
 /* ---------- PAINEL DO GESTOR — quebra de indicadores por período ----------
    Pedido explícito: não basta uma média geral, o gestor quer comparar
    6h vs 12h vs Hoje vs Semana vs Mês lado a lado, "pente fino".
