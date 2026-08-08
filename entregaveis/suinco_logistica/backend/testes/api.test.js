@@ -522,6 +522,36 @@ describe('6. Leitura incremental', () => {
     assert.equal(r.status, 200);
     assert.equal(r.json.completo, true);
   });
+
+  /* Bug real encontrado em produção (08/08/2026): a leitura COMPLETA tem
+     LIMIT (5000 cargas, 5000 movimentações). Com o histórico ordenado do
+     mais ANTIGO pro mais NOVO, um sistema em operação real eventualmente
+     passa da cota — e é o dado de HOJE, o mais novo, que fica de fora,
+     sobrando só lixo histórico. Depois de uma tela recarregada do zero,
+     "Seguiu Viagem hoje" mostrou 0 mesmo com viagens reais no dia. A
+     correção troca ASC por DESC só na leitura completa — o merge no
+     terminal (fundirEstadoRemoto, data.js) não depende de ordem, então
+     isto é seguro. Este teste prova a ordem, não o corte em si (inserir
+     5000 linhas deixaria a suíte lenta demais). */
+  test('leitura completa vem do mais NOVO pro mais ANTIGO (prioriza o LIMIT certo)', async () => {
+    const { rows } = await pool.query('SELECT placa FROM dim_veiculos OFFSET 30 LIMIT 3');
+    const criadas = [];
+    for (const [i, row] of rows.entries()) {
+      const r = await req('/api/cargas', {
+        metodo: 'POST', token: tokens['Logística'],
+        corpo: { placa: row.placa, numeroCarga: `95${i}00` },
+      });
+      criadas.push(r.json.id);
+      await new Promise((res) => setTimeout(res, 20));
+    }
+    const estado = await req('/api/estado', { token: tokens['Logística'] });
+    assert.equal(estado.json.completo, true);
+    const posicoes = criadas.map((id) => estado.json.cargas.findIndex((c) => c.id === id));
+    assert.ok(posicoes.every((p) => p !== -1), 'as 3 cargas recém-criadas aparecem na leitura completa');
+    // A última criada (mais nova) tem que vir ANTES das outras duas no array.
+    assert.ok(posicoes[2] < posicoes[0] && posicoes[2] < posicoes[1],
+      `esperava a mais nova primeiro — posições: ${posicoes}`);
+  });
 });
 
 /* ------------------------------------------------------------------ */
