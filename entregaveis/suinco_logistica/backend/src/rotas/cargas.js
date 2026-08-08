@@ -402,16 +402,25 @@ rotasCargas.delete('/cargas/:id', exigirLogin, async (req, res, next) => {
         throw new ErroDePermissao('Só a Logística exclui carga programada.');
       }
 
-      /* Carga que JÁ SEGUIU VIAGEM não sai. Ali o caminhão passou pela
-         portaria, a nota existe e o cliente recebeu — apagar isso é apagar
-         o que aconteceu de verdade, e o relatório do mês deixa de fechar.
+      /* Carga que JÁ SEGUIU VIAGEM não sai por padrão. Ali o caminhão passou
+         pela portaria, a nota existe e o cliente recebeu — apagar isso é
+         apagar o que aconteceu de verdade, e o relatório do mês deixa de
+         fechar.
 
          Qualquer etapa antes disso pode ser cancelada, e precisa poder: um
          caminhão que encostou e foi embora sem carregar trava a fila do
          pátio até alguém tirar. Antes só dava para excluir enquanto a carga
          estava em "Aguardando Veículo" — depois disso ela sumia da tela de
-         Programação e não havia mais como agir sobre ela por lugar nenhum. */
-      if (carga.status_atual === 'Seguiu Viagem') {
+         Programação e não havia mais como agir sobre ela por lugar nenhum.
+
+         `forcarSeguiuViagem` (pedido direto do usuário, 08/08/2026) é a
+         válvula de escape: dado de teste que passou pelo fluxo inteiro
+         (ex.: DJF8527) ficava preso pra sempre, sem nenhuma ação possível.
+         O painel só manda essa flag depois que o operador digita a placa de
+         próprio punho (excluirCargaSeguiuViagemUI, app.js) — a proteção não
+         sai, só ganha uma porta que exige confirmação forte. */
+      const forcarSeguiuViagem = req.body?.forcarSeguiuViagem === true;
+      if (carga.status_atual === 'Seguiu Viagem' && !forcarSeguiuViagem) {
         return { jaSaiu: true, carga };
       }
 

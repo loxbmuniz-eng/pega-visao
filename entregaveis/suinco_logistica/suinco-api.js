@@ -426,13 +426,20 @@ const SuincoSharePoint = (function () {
      para a fila — seria insistir para sempre em algo que nunca será aceito.
      Falha de rede vai, porque a exclusão precisa acontecer mesmo que a rede
      tenha caído no instante do clique. */
-  async function excluir(id, motivo) {
+  async function excluir(id, motivo, opcoes) {
     if (!estaConfigurado()) return { enfileirado: false };
+    // forcarSeguiuViagem: exclusão de carga já finalizada, só depois que o
+    // operador confirmou digitando a placa (excluirCargaSeguiuViagemUI,
+    // app.js). Sem isso o servidor recusa com CARGA_JA_SAIU (cargas.js).
+    const forcarSeguiuViagem = !!(opcoes && opcoes.forcarSeguiuViagem);
     try {
       // O motivo vai no corpo. Carga que já andou só sai como cancelamento,
       // e o servidor recusa cancelamento sem justificativa.
+      const corpo = motivo || forcarSeguiuViagem
+        ? { ...(motivo ? { motivo } : {}), ...(forcarSeguiuViagem ? { forcarSeguiuViagem: true } : {}) }
+        : undefined;
       const r = await chamar('/api/cargas/' + encodeURIComponent(id), {
-        metodo: 'DELETE', corpo: motivo ? { motivo } : undefined,
+        metodo: 'DELETE', corpo,
       });
       mudarEstado('online');
       return { enfileirado: false, item: r };
@@ -466,7 +473,7 @@ const SuincoSharePoint = (function () {
       if (e.status === 409 || e.status === 422 || e.status === 403) {
         return { enfileirado: false, recusado: true, erro: e.message };
       }
-      if (eFalhaDeRede(e)) return enfileirar({ tipo: 'exclusao', cargaId: id, motivo });
+      if (eFalhaDeRede(e)) return enfileirar({ tipo: 'exclusao', cargaId: id, motivo, forcarSeguiuViagem });
       throw e;
     }
   }
@@ -574,8 +581,11 @@ const SuincoSharePoint = (function () {
           }
         } else if (item.tipo === 'exclusao') {
           try {
+            const corpo = item.motivo || item.forcarSeguiuViagem
+              ? { ...(item.motivo ? { motivo: item.motivo } : {}), ...(item.forcarSeguiuViagem ? { forcarSeguiuViagem: true } : {}) }
+              : undefined;
             await chamar('/api/cargas/' + encodeURIComponent(item.cargaId), {
-              metodo: 'DELETE', corpo: item.motivo ? { motivo: item.motivo } : undefined,
+              metodo: 'DELETE', corpo,
             });
           } catch (e2) {
             // Carga que já não existe é exclusão bem-sucedida por outro

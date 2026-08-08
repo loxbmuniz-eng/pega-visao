@@ -906,9 +906,10 @@ describe('7d. Exclusão de carga programada', () => {
     assert.equal(viva[0].excluida_em, null);
   });
 
-  /* O limite é a saída do pátio. Ali o caminhão passou pela portaria e a
-     nota existe — apagar é apagar o que aconteceu de verdade. */
-  test('carga que já seguiu viagem NÃO sai de jeito nenhum', async () => {
+  /* O limite é a saída do pátio, por padrão. Ali o caminhão passou pela
+     portaria e a nota existe — apagar é apagar o que aconteceu de
+     verdade. Sem a flag explícita de confirmação, a recusa é firme. */
+  test('carga que já seguiu viagem NÃO sai sem confirmação explícita', async () => {
     const { rows } = await pool.query('SELECT placa FROM dim_veiculos OFFSET 42 LIMIT 1');
     const criada = await req('/api/cargas', {
       metodo: 'POST', token: tokens['Logística'],
@@ -926,6 +927,60 @@ describe('7d. Exclusão de carga programada', () => {
     });
     assert.equal(r.status, 409);
     assert.equal(r.json.codigo, 'CARGA_JA_SAIU');
+  });
+
+  /* Válvula de escape pedida pelo usuário (08/08/2026): dado de teste que
+     passou pelo fluxo inteiro (ex.: DJF8527) ficava preso na Torre pra
+     sempre. `forcarSeguiuViagem` libera — mas só quem já tinha permissão
+     de excluir (Logística/Administração), e ainda exige motivo, porque a
+     carga tem histórico. */
+  test('carga que já seguiu viagem SAI com forcarSeguiuViagem + motivo', async () => {
+    const { rows } = await pool.query('SELECT placa FROM dim_veiculos OFFSET 43 LIMIT 1');
+    const criada = await req('/api/cargas', {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { placa: rows[0].placa, numeroCarga: '96004' },
+    });
+    for (const status of ['Aguardando Embarque', 'Embarque Iniciado',
+      'Embarque Finalizado', 'Faturado', 'Seguiu Viagem']) {
+      await req(`/api/cargas/${criada.json.id}/status`, {
+        metodo: 'POST', token: tokens['Logística'], corpo: { status },
+      });
+    }
+    const semMotivo = await req(`/api/cargas/${criada.json.id}`, {
+      metodo: 'DELETE', token: tokens['Logística'],
+      corpo: { forcarSeguiuViagem: true },
+    });
+    assert.equal(semMotivo.status, 400, 'ainda exige motivo mesmo forçando');
+    assert.equal(semMotivo.json.codigo, 'MOTIVO_OBRIGATORIO');
+
+    const r = await req(`/api/cargas/${criada.json.id}`, {
+      metodo: 'DELETE', token: tokens['Logística'],
+      corpo: { forcarSeguiuViagem: true, motivo: 'dado de teste, confirmado pela placa' },
+    });
+    assert.equal(r.status, 200);
+    assert.equal(r.json.excluida, true);
+    const { rows: sumiu } = await pool.query(
+      'SELECT excluida_em FROM fact_viagens WHERE carga_id = $1', [criada.json.id]);
+    assert.ok(sumiu[0].excluida_em, 'carga foi marcada como excluída');
+  });
+
+  test('forcarSeguiuViagem continua bloqueado para setor sem permissão', async () => {
+    const { rows } = await pool.query('SELECT placa FROM dim_veiculos OFFSET 44 LIMIT 1');
+    const criada = await req('/api/cargas', {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { placa: rows[0].placa, numeroCarga: '96005' },
+    });
+    for (const status of ['Aguardando Embarque', 'Embarque Iniciado',
+      'Embarque Finalizado', 'Faturado', 'Seguiu Viagem']) {
+      await req(`/api/cargas/${criada.json.id}/status`, {
+        metodo: 'POST', token: tokens['Logística'], corpo: { status },
+      });
+    }
+    const r = await req(`/api/cargas/${criada.json.id}`, {
+      metodo: 'DELETE', token: tokens['Portaria'],
+      corpo: { forcarSeguiuViagem: true, motivo: 'tentativa indevida' },
+    });
+    assert.equal(r.status, 403);
   });
 
   test('o Power BI não enxerga a carga excluída', async () => {
