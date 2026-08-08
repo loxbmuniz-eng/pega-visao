@@ -43,15 +43,31 @@ rotasEstado.get('/estado', exigirLogin, async (req, res, next) => {
       : 'WHERE excluida_em IS NULL';
     const filtroEvento = desdeValido ? 'WHERE data_evento > $1' : '';
 
+    /* A leitura INCREMENTAL é um delta pequeno e recente — ordem ASC (na
+       ordem em que aconteceu) é natural e nunca esbarra no LIMIT.
+
+       A leitura COMPLETA é outra história: representa "o pátio agora", e o
+       histórico de um sistema em operação passa de 5000/2000 linhas mais
+       cedo ou mais tarde. ASC + LIMIT nesse caso corta os registros MAIS
+       RECENTES fora — os mais antigos enchem a cota e o que aconteceu hoje
+       simplesmente não chega no terminal que acabou de recarregar do zero.
+       Foi isso que fez "Seguiu Viagem hoje" mostrar 0 depois de uma
+       recarga completa (08/08/2026). DESC + LIMIT traz o que importa: as
+       linhas mais recentes primeiro. A ordem do array não importa para
+       quem consome (fundirEstadoRemoto em data.js mescla por id, sem
+       depender de sequência). */
+    const ordemCargas = desdeValido ? 'ASC' : 'DESC';
+    const ordemEvento = desdeValido ? 'ASC' : 'DESC';
+
     const [cargas, movimentacoes, log] = await Promise.all([
       consultar(
-        `SELECT ${COLUNAS_CARGA} FROM fact_viagens ${filtro} ORDER BY atualizado_em ASC LIMIT 5000`,
+        `SELECT ${COLUNAS_CARGA} FROM fact_viagens ${filtro} ORDER BY atualizado_em ${ordemCargas} LIMIT 5000`,
         params
       ),
       consultar(
         `SELECT movimentacao_id, carga_id, placa, status_anterior, status_novo,
                 setor, data_evento, operador_id, operador_nome
-           FROM fact_statusfrota ${filtroEvento} ORDER BY data_evento ASC LIMIT 5000`,
+           FROM fact_statusfrota ${filtroEvento} ORDER BY data_evento ${ordemEvento} LIMIT 5000`,
         params
       ),
       consultar(
