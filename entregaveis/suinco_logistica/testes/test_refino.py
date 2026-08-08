@@ -34,7 +34,7 @@ async def main():
         await pg.evaluate("()=>{DB.cargas=[];DB.movimentacoes=[];SuincoStore.save();}")
         await pg.evaluate("""()=>{criarCargaProgramada({placa:'AAK8958',transportadora:'Coopertral',
           tipoVeiculo:'Truck',numeroCarga:'55001',cliente:'',destino:'',peso:9000,rota:'527',
-          sequencia:1,praOnde:'FROTA PROPRIA',paletizada:'Sim',qtdGanchos:0,qtdEntregas:2,
+          sequencia:1,praOnde:'ENTREGA DIRETA',paletizada:'Sim',qtdGanchos:0,qtdEntregas:2,
           motorista:'M',observacoes:'',operador:DB.operador}); renderAll();}""")
         ck('paletizada gravada', await pg.evaluate("()=>DB.cargas[0].paletizada")=='Sim')
         ck('helper de leitura', await pg.evaluate("()=>paletizadaDaCarga(DB.cargas[0])")=='Sim')
@@ -75,7 +75,7 @@ async def main():
             for (let i = 0; i < 4; i++) {
                 criarCargaProgramada({placa:f[i].placa, numeroCarga:'IF'+i, peso:10000,
                     rota: i < 2 ? '500' : '501',
-                    praOnde: i < 2 ? 'FROTA PROPRIA' : 'CROSS-DOCKING',
+                    praOnde: i < 2 ? 'ENTREGA DIRETA' : 'CROSS-DOCKING',
                     paletizada:'Sim', qtdGanchos:5, qtdEntregas:1, operador:'A'});
                 registrarChegadaPortaria(f[i].placa, 'P');
             }

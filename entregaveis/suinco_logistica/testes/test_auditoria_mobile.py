@@ -61,7 +61,7 @@ async def preparar(pagina, setor):
             [0,1,2].forEach((i, n) => {
                 criarCargaProgramada({
                     placa: f[i].placa, numeroCarga: '9900' + n, peso: 14250, rota:'500',
-                    praOnde:'FROTA PROPRIA', paletizada:'Sim', qtdGanchos:30,
+                    praOnde:'ENTREGA DIRETA', paletizada:'Sim', qtdGanchos:30,
                     qtdEntregas:2, operador:'Auditor'
                 });
             });

@@ -8,8 +8,12 @@
 
 import { STATUS_FLOW, STATUS_INICIAL } from './fluxo.js';
 
-const PRA_ONDE_OPCOES = ['FROTA PROPRIA', 'CROSS-DOCKING', 'DEDICADA', 'RET FRIGO'];
-const PRA_ONDE_PADRAO = 'FROTA PROPRIA';
+/* 3 categorias, não 4. Pedido do gestor (08/08/2026, migração
+   003_tipo_operacao.sql): FROTA PROPRIA saiu (caminhão próprio fazendo
+   entrega direta é a mesma coisa que terceiro dedicado fazendo entrega
+   direta) e DEDICADA virou ENTREGA DIRETA. */
+const PRA_ONDE_OPCOES = ['CROSS-DOCKING', 'ENTREGA DIRETA', 'RET FRIGO'];
+const PRA_ONDE_PADRAO = 'ENTREGA DIRETA';
 
 /* Placa: maiúscula, só letra e número. A mesma normalização do painel — se
    divergirem, a mesma placa vira dois cadastros e a trava de frota fura. */

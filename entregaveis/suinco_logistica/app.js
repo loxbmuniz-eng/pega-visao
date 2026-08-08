@@ -2660,7 +2660,7 @@ function imprimirContainer(el, nomeDoRelatorio){
 // Carga) ficam de fora desta lista — elas aparecem na Torre de Controle e
 // na fila de pendências da Programação, mas não fazem sentido numa
 // planilha de sequenciamento de carregamento ainda sem dados.
-const CORES_PRA_ONDE = { 'FROTA PROPRIA':'#16697a', 'CROSS-DOCKING':'#374a86', 'DEDICADA':'#8f1f26', 'RET FRIGO':'#b9903f' };
+const CORES_PRA_ONDE = { 'CROSS-DOCKING':'#374a86', 'ENTREGA DIRETA':'#8f1f26', 'RET FRIGO':'#b9903f' };
 
 /* Busca o estado mais recente do servidor ANTES de montar qualquer
    relatório — pedido direto: "os relatórios são nossa fonte de verdade

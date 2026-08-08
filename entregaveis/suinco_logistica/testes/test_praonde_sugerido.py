@@ -1,20 +1,26 @@
 #!/usr/bin/env python3
-"""Chegada sem programação sugere o Tipo de Operação certo, não sempre FROTA PRÓPRIA.
+"""Tipo de Operação: 3 categorias, FROTA PRÓPRIA não existe mais.
 
-Achado do gestor em produção (08/08/2026), a partir do relatório do dia
-anterior: "vários carros constando como frota própria e não são". A causa
-— registrarChegadaPortaria() (Portaria clica "Chegou" numa placa sem
-programação prévia) gravava praOnde:'FROTA PROPRIA' sempre, mesmo já
-sabendo pela Frota que a transportadora era terceirizada (AC Transportes,
-AJB Transportes, Denia Transportes...). O formulário "Completar dados"
-que a Logística usa depois vinha com o mesmo valor errado pré-marcado,
-fácil de não notar.
+Histórico em duas partes:
 
-Corrigido com praOndeSugerido(transportadora): "Suinco" continua sendo
-FROTA PRÓPRIA; qualquer outra transportadora CONHECIDA vira DEDICADA — a
-categoria que a própria Logística já usa pra terceirizada em toda carga
-programada manualmente. Transportadora desconhecida (placa fora da Frota)
-mantém o padrão de sempre.
+1. (07/08/2026) Achado do gestor em produção: "vários carros constando
+   como frota própria e não são". A causa — registrarChegadaPortaria()
+   (Portaria clica "Chegou" numa placa sem programação prévia) gravava
+   praOnde:'FROTA PROPRIA' sempre, mesmo já sabendo pela Frota que a
+   transportadora era terceirizada. Corrigido com praOndeSugerido(),
+   derivando o valor da transportadora conhecida.
+
+2. (08/08/2026) Pedido direto do gestor (Alysson, via WhatsApp): "Exclua
+   esse frota propria. E altere o dedicada para entrega direta. E deixe
+   somente esses tres: Cross / Entrega Direta / Ret Frigo." FROTA PRÓPRIA
+   e DEDICADA colapsam numa categoria só (ENTREGA DIRETA) — caminhão da
+   própria Suinco fazendo entrega direta é operacionalmente a mesma coisa
+   que terceiro dedicado fazendo entrega direta. praOndeSugerido() não
+   tem mais distinção nenhuma pra fazer (as duas antigas viram a mesma),
+   então sempre devolve o padrão agora — mantida como função, não inline,
+   pra quem chama não precisar saber dessa mudança de regra.
+
+   Migração do dado já gravado: backend/migrations/003_tipo_operacao.sql.
 
     python3 testes/test_praonde_sugerido.py
 """
@@ -46,27 +52,32 @@ async def main():
         await pg.click('button:has-text("Entrar sem servidor")')
         await pg.wait_for_timeout(400)
 
-        print('\n=== 1. FUNÇÃO praOndeSugerido() ISOLADA ===')
+        print('\n=== 1. SÓ 3 OPÇÕES, EM TODA PARTE ===')
+        opcoes = await pg.evaluate("() => PRA_ONDE_OPCOES")
+        ck('exatamente 3 categorias', len(opcoes) == 3, opcoes)
+        ck('FROTA PROPRIA não existe mais', 'FROTA PROPRIA' not in opcoes, opcoes)
+        ck('DEDICADA não existe mais (virou ENTREGA DIRETA)', 'DEDICADA' not in opcoes, opcoes)
+        ck('as 3 são Cross-Docking/Entrega Direta/Ret Frigo',
+           set(opcoes) == {'CROSS-DOCKING', 'ENTREGA DIRETA', 'RET FRIGO'}, opcoes)
+
+        await pg.evaluate("() => abrirTab('programacao')")
+        await pg.wait_for_timeout(200)
+        select_prog = await pg.evaluate(
+            "() => [...document.getElementById('prog-praonde').options].map(o => o.value)")
+        ck('<select> da Programação também só tem as 3',
+           set(select_prog) == {'CROSS-DOCKING', 'ENTREGA DIRETA', 'RET FRIGO'}, select_prog)
+
+        print('\n=== 2. praOndeSugerido() SEMPRE DEVOLVE O PADRÃO AGORA ===')
         casos = await pg.evaluate("""() => ({
             suinco: praOndeSugerido('Suinco'),
-            suincoMinusculo: praOndeSugerido('suinco'),
-            suincoComEspaco: praOndeSugerido('  Suinco  '),
             terceirizada: praOndeSugerido('AC Transportes'),
             vazia: praOndeSugerido(''),
             nula: praOndeSugerido(null),
         })""")
-        ck('Suinco → FROTA PROPRIA', casos['suinco'] == 'FROTA PROPRIA', casos['suinco'])
-        ck('suinco minúsculo → FROTA PROPRIA (case-insensitive)',
-           casos['suincoMinusculo'] == 'FROTA PROPRIA', casos['suincoMinusculo'])
-        ck('"  Suinco  " com espaços → FROTA PROPRIA (trim)',
-           casos['suincoComEspaco'] == 'FROTA PROPRIA', casos['suincoComEspaco'])
-        ck('transportadora terceirizada conhecida → DEDICADA',
-           casos['terceirizada'] == 'DEDICADA', casos['terceirizada'])
-        ck('transportadora vazia (desconhecida) → padrão de sempre',
-           casos['vazia'] == 'FROTA PROPRIA', casos['vazia'])
-        ck('transportadora nula → padrão de sempre', casos['nula'] == 'FROTA PROPRIA', casos['nula'])
+        for chave, valor in casos.items():
+            ck(f'{chave} → ENTREGA DIRETA (padrão único agora)', valor == 'ENTREGA DIRETA', valor)
 
-        print('\n=== 2. CHEGADA SEM PROGRAMAÇÃO: PLACA COM TRANSPORTADORA TERCEIRIZADA ===')
+        print('\n=== 3. CHEGADA SEM PROGRAMAÇÃO NUNCA MAIS CRIA FROTA PRÓPRIA ===')
         d = await pg.evaluate("""() => {
             DB.cargas = []; DB.movimentacoes = [];
             const alvo = DB.frota.find(f => (f.transportadora||'').trim().toLowerCase() !== 'suinco');
@@ -74,37 +85,33 @@ async def main():
             const c = DB.cargas.find(c => c.placa === alvo.placa);
             return { transportadora: alvo.transportadora, praOnde: c.praOnde };
         }""")
-        ck('carga criada NÃO fica marcada como FROTA PRÓPRIA',
-           d['praOnde'] != 'FROTA PROPRIA', str(d))
-        ck('vira DEDICADA (a transportadora era terceirizada, não Suinco)',
-           d['praOnde'] == 'DEDICADA', str(d))
+        ck('carga criada vem como ENTREGA DIRETA', d['praOnde'] == 'ENTREGA DIRETA', str(d))
 
-        print('\n=== 3. CHEGADA SEM PROGRAMAÇÃO: PLACA DA FROTA PRÓPRIA (Suinco) ===')
-        d2 = await pg.evaluate("""() => {
-            DB.cargas = []; DB.movimentacoes = [];
-            const alvo = DB.frota.find(f => (f.transportadora||'').trim().toLowerCase() === 'suinco');
-            if (!alvo) return { semExemplo: true };
-            registrarChegadaPortaria(alvo.placa, 'Bruno');
-            const c = DB.cargas.find(c => c.placa === alvo.placa);
-            return { transportadora: alvo.transportadora, praOnde: c.praOnde };
-        }""")
-        if d2.get('semExemplo'):
-            print('  (pulado: nenhuma placa da Frota tem transportadora "Suinco" nesta base de teste)')
-        else:
-            ck('placa de frota própria de verdade continua FROTA PRÓPRIA',
-               d2['praOnde'] == 'FROTA PROPRIA', str(d2))
-
-        print('\n=== 4. FORMULÁRIO "COMPLETAR DADOS" JÁ ABRE COM A SUGESTÃO CERTA ===')
+        print('\n=== 4. FORMULÁRIO "COMPLETAR DADOS" TAMBÉM SÓ OFERECE AS 3 ===')
         d3 = await pg.evaluate("""() => {
-            DB.cargas = []; DB.movimentacoes = [];
-            const alvo = DB.frota.find(f => (f.transportadora||'').trim().toLowerCase() !== 'suinco');
-            registrarChegadaPortaria(alvo.placa, 'Bruno');
-            const c = DB.cargas.find(c => c.placa === alvo.placa);
+            const c = DB.cargas[0];
             abrirCompletar(c.id);
-            return document.getElementById('completar-praonde').value;
+            return {
+                valorAtual: document.getElementById('completar-praonde').value,
+                opcoes: [...document.getElementById('completar-praonde').options].map(o => o.value),
+            };
         }""")
-        ck('modal de completar dados já sugere DEDICADA, não FROTA PRÓPRIA',
-           d3 == 'DEDICADA', d3)
+        ck('sugestão pré-marcada é ENTREGA DIRETA', d3['valorAtual'] == 'ENTREGA DIRETA', d3)
+        ck('<select> de completar dados só tem as 3 categorias',
+           set(d3['opcoes']) == {'CROSS-DOCKING', 'ENTREGA DIRETA', 'RET FRIGO'}, d3)
+
+        print('\n=== 5. DADO ANTIGO (localStorage com valor extinto) É AUTOCORRIGIDO NO LOAD ===')
+        d4 = await pg.evaluate("""() => {
+            DB.cargas = [{
+                id: 'carga_teste_antigo', placa: 'ABC1D23', numeroCarga: 'X1',
+                status: 'Aguardando Veículo', praOnde: 'FROTA PROPRIA',
+                criadoEm: new Date().toISOString(), atualizadoEm: new Date().toISOString(),
+            }];
+            const n = migrarPraOnde();
+            return { praOndeDepois: DB.cargas[0].praOnde, quantasMigradas: n };
+        }""")
+        ck('valor extinto FROTA PROPRIA vira ENTREGA DIRETA sozinho ao carregar',
+           d4['praOndeDepois'] == 'ENTREGA DIRETA', str(d4))
 
         print('\n=== CONSOLE ===')
         ck('sem erros de página', not erros, str(erros[:2]))
