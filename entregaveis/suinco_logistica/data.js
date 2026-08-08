@@ -374,7 +374,21 @@ const SETOR_PERMISSOES = {
      Fretes (valor negociado do frete) e a exportação CSV — decisão
      tomada de propósito, não efeito colateral não notado. */
   'Faturamento':  ['faturamento','historico','relatorios'],
-  'Administração':ABAS_OPERACIONAIS.concat(['usuarios'])
+  'Administração':ABAS_OPERACIONAIS.concat(['usuarios']),
+  /* Comercial — só leitura, pedido do usuário (08/08/2026): "acesso a
+     visualizacao de tudo que a logistica e administração ve mas sem
+     alterar nada... relatorios, historico, busca de cargas no historico,
+     visao de patio... torre de controle... para minimizar comunicacoes
+     desnecessarias atras de informacoes". Torre já traz a Visão do Pátio
+     embutida (ver comentário de ABAS_OPERACIONAIS acima) e a busca de
+     cargas mora dentro de Histórico — as três abas cobrem o pedido
+     inteiro sem duplicar nada. Nenhuma aba de ação (Programação, Portaria,
+     Expedição, Faturamento, Cadastros, Usuários) entra aqui — e mesmo que
+     entrasse na tela, o servidor recusaria qualquer escrita: Comercial não
+     está em nenhuma função de permissão de dominio/fluxo.js. Indicadores
+     ficou de fora por não ter sido pedido — cabe entrar depois se fizer
+     falta, é mudança de uma linha. */
+  'Comercial':    ['torre','historico','relatorios'],
 };
 
 // Função de cada aba, exibida no topo dela. Serve para quem abre o painel pela
