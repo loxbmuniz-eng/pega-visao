@@ -417,6 +417,25 @@ body::before{
 .btn-lg{padding:14px 26px;font-size:16.5px;min-height:52px}
 .btn[disabled]{opacity:.4;cursor:not-allowed}
 
+/* Botão da gaveta — só existe visualmente no celular (a regra que mostra
+   fica no @media abaixo). display:none aqui é o estado de desktop. */
+#btn-menu{
+  display:none;flex-shrink:0;
+  width:44px;height:44px;align-items:center;justify-content:center;
+  background:transparent;border:1px solid var(--border-soft);border-radius:8px;
+  color:var(--text);font-size:20px;cursor:pointer;
+}
+#btn-menu:hover{background:var(--navy-lighter)}
+
+/* Fundo escurecido atrás da gaveta aberta — toca fora pra fechar. Some
+   por padrão (opacity 0 + pointer-events:none, não display:none: precisa
+   da transição suave de entrada/saída, que display não anima). */
+#menu-overlay{
+  position:fixed;inset:0;background:rgba(6,9,16,.55);
+  opacity:0;pointer-events:none;transition:opacity .2s;z-index:1400;
+}
+#menu-overlay.visivel{opacity:1;pointer-events:auto}
+
 /* ===== NAV ===== */
 #nav{
   position:fixed;top:var(--header-h);left:0;right:0;height:var(--nav-h);
@@ -441,6 +460,59 @@ body::before{
   box-shadow:0 -1px 12px rgba(233,185,84,.20) inset;
 }
 .nav-tab[hidden]{display:none}
+
+/* ===== NAV NO CELULAR: GAVETA, NÃO BARRA DE ROLAGEM =====
+   Pedido direto do usuário (08/08/2026): "ao inves de ser uma barra de
+   rolagem pro lado na tela que seja um atalho na esquerda que abre um
+   menu para ir para cada pagina dentro do que cada setor propoe" —
+   prioridade maior pra Administração/Logística/Comercial, que são os
+   setores com mais abas (a Portaria, com só 2, sentia menos o problema,
+   mas a gaveta vale pra todo mundo por consistência).
+
+   As MESMAS divs .nav-tab (nenhuma lista duplicada) trocam de barra
+   horizontal pra painel vertical fixo, fora da tela por padrão
+   (translateX -100%) e deslizando pra dentro com a classe .nav-aberto
+   (alternarMenuMobile(), app.js). #main perde a margem reservada pra
+   barra (--nav-h) porque a gaveta não ocupa espaço fixo na tela — só
+   aparece por cima de tudo quando aberta. */
+@media(max-width:820px){
+  #btn-menu{display:flex}
+  /* A margem do #main que remove o vão da barra antiga fica no OUTRO
+     bloco @media(max-width:820px) deste arquivo (mais abaixo, perto de
+     `:root{--header-h:56px}`) — de propósito: a regra base de #main
+     (sem media query, mais abaixo neste mesmo arquivo) tem a MESMA
+     especificidade que uma declaração aqui, e em empate quem vem depois
+     no arquivo vence. Uma cópia desta regra aqui seria sempre perdedora,
+     silenciosamente. */
+
+  #nav{
+    top:0;left:0;right:auto;bottom:0;height:100vh;width:min(78vw,300px);
+    flex-direction:column;overflow-x:hidden;overflow-y:auto;
+    padding-top:calc(var(--header-h) + 10px);
+    border-bottom:none;border-right:1px solid var(--vidro-borda);
+    box-shadow:4px 0 24px rgba(0,0,0,.35);
+    transform:translateX(-100%);transition:transform .22s ease;
+    z-index:1500;
+    /* No vidro-bg translúcido a gaveta ficaria lendo o conteúdo por
+       trás dela (a própria tela que ela está cobrindo) — confuso e sem
+       contraste. Fundo sólido só aqui, exceção deliberada ao padrão de
+       vidro do resto do painel. */
+    background:var(--navy);
+    -webkit-backdrop-filter:none;backdrop-filter:none;
+  }
+  #nav.nav-aberto{transform:translateX(0)}
+
+  .nav-tab{
+    height:auto;min-height:52px;padding:0 20px;
+    border-bottom:1px solid var(--border-soft);
+    border-left:3px solid transparent;   /* troca a régua embaixo por uma à esquerda — combina com painel vertical */
+  }
+  .nav-tab.active{
+    border-bottom-color:var(--border-soft);border-left-color:var(--gold);
+    background:linear-gradient(90deg, rgba(233,185,84,.16), transparent);
+    box-shadow:none;
+  }
+}
 
 /* ===== MAIN ===== */
 #main{
@@ -1857,6 +1929,12 @@ input,select,textarea{border-radius:5px}
 
   /* ---- Cabeçalho: só o essencial ---- */
   :root{ --header-h:56px; --nav-h:46px }
+  /* Sem a barra horizontal (virou gaveta, ver o outro bloco
+     max-width:820px acima), não sobra vão reservado pra ela — o
+     conteúdo começa logo abaixo do cabeçalho. Precisa vir DEPOIS da
+     regra base de #main (não tem media query, mais acima no arquivo)
+     pra vencer o empate de especificidade. */
+  #main{ margin-top:calc(var(--header-h) + 14px) }
   #header{ padding:0 10px; gap:10px }
   #logo-chip{ height:40px; padding:3px 6px }
   #logo-chip img{ height:32px }
@@ -1935,28 +2013,63 @@ input,select,textarea{border-radius:5px}
      Rolagem lateral em tabela de 14 colunas é inutilizável no celular: o
      usuário perde a referência da linha no primeiro deslize. Cada linha
      vira um cartão, e o cabeçalho da coluna vira rótulo dentro dele
-     (via data-rotulo, preenchido no render). */
+     (via data-rotulo, preenchido no render).
+
+     GRADE DE 2 COLUNAS, não uma linha por campo. A primeira versão fazia
+     cada td virar sua própria linha "rótulo à esquerda, valor à direita"
+     — um cartão de 12 campos virava 12 linhas empilhadas, ~300-400px só
+     PARA UMA carga. Pedido direto do usuário (08/08/2026): "o tamanho ta
+     gigante nas outras abas... quero que o mibile seja por completo com
+     a melhor experiencia". Campo com rótulo curto e valor curto (Seq.,
+     Placa, Peso, Palet., Ganchos, Entregas, Status) cabe em meia largura;
+     texto que pode ser longo (Transportadora, Rota, Motorista, Cliente,
+     Destino, Observações, Nome, E-mail) continua ocupando a linha
+     inteira — a lista abaixo é curada, não adivinhada por tamanho de
+     tela, porque o mesmo rótulo precisa do mesmo tratamento em toda
+     tabela do painel. */
   .table-wrap table.mobile-cartao thead{ display:none }
   .table-wrap table.mobile-cartao,
-  .table-wrap table.mobile-cartao tbody,
-  .table-wrap table.mobile-cartao tr,
-  .table-wrap table.mobile-cartao td{ display:block; width:100% }
+  .table-wrap table.mobile-cartao tbody{ display:block; width:100% }
   .table-wrap table.mobile-cartao tr{
+    display:grid;grid-template-columns:1fr 1fr;gap:0 12px;
     border:1px solid var(--border-soft);border-radius:10px;
-    margin-bottom:10px;padding:10px;background:var(--navy-light);
+    margin-bottom:10px;padding:10px 12px;background:var(--navy-light);
   }
   .table-wrap table.mobile-cartao td{
-    display:flex;justify-content:space-between;align-items:center;gap:12px;
-    border:none;padding:6px 0;text-align:right;
+    display:flex;flex-direction:column;gap:1px;
+    border:none;padding:5px 0;
   }
   .table-wrap table.mobile-cartao td::before{
     content:attr(data-rotulo);
-    font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;
-    color:var(--text-dim);text-align:left;flex-shrink:0;
+    font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.35px;
+    color:var(--text-dim);
   }
-  /* Célula sem rótulo (ações) ocupa a linha inteira. */
-  .table-wrap table.mobile-cartao td:not([data-rotulo]){ justify-content:stretch }
+  /* Célula sem rótulo (ações) e os campos de texto longo ocupam as duas
+     colunas — a lista é a mesma em qualquer tabela do painel. */
+  .table-wrap table.mobile-cartao td:not([data-rotulo]),
+  .table-wrap table.mobile-cartao td[data-rotulo="Transportadora"],
+  .table-wrap table.mobile-cartao td[data-rotulo="Rota"],
+  .table-wrap table.mobile-cartao td[data-rotulo="Motorista"],
+  .table-wrap table.mobile-cartao td[data-rotulo="Cliente"],
+  .table-wrap table.mobile-cartao td[data-rotulo="Destino"],
+  .table-wrap table.mobile-cartao td[data-rotulo="Observações"],
+  .table-wrap table.mobile-cartao td[data-rotulo="Nome"],
+  .table-wrap table.mobile-cartao td[data-rotulo="E-mail"],
+  .table-wrap table.mobile-cartao td[data-rotulo="Atualizado em"]{
+    grid-column:1 / -1;
+  }
   .table-wrap table.mobile-cartao td .btn{ width:100% }
+  .table-wrap table.mobile-cartao td:not([data-rotulo]) .btn{ margin-top:4px }
+
+  /* Campo editável DENTRO do cartão (Seq., Nº Carga, Placa, Ganchos, Tipo
+     de Operação) — o input/select de formulário é sempre mais alto que
+     texto puro, e isso já é o maior peso de cada cartão. 16px de fonte
+     fica (evita o zoom automático do iOS ao focar — não é negociável),
+     só o respiro em volta encolhe. */
+  .table-wrap table.mobile-cartao td input,
+  .table-wrap table.mobile-cartao td select{
+    padding:5px 7px;
+  }
 
   /* Tabelas que continuam tabela mantêm rolagem, mas com aviso visual. */
   .table-wrap{ -webkit-overflow-scrolling:touch }
