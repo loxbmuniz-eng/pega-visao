@@ -1232,9 +1232,18 @@ code{
   min-width:26px;padding:2px 3px;border-radius:6px;line-height:1.1;
 }
 .et-mini b{font-size:13px;font-weight:900}
-.et-mini i{font-style:normal;font-size:8.5px;opacity:.75;font-variant-numeric:tabular-nums}
+/* Sem opacity aqui — mesmo achado do .et-mini-pendente logo abaixo: numa
+   fonte de 8,5px a folga de contraste é pequena, e opacity < 1 empilhada
+   em cima da cor já escolhida derruba abaixo do mínimo AA num dos dois
+   temas dependendo do fundo (a etapa ATUAL pinta fundo colorido). */
+.et-mini i{font-style:normal;font-size:8.5px;font-variant-numeric:tabular-nums}
 .et-mini-ok b{color:var(--st-faturado-txt)}
-.et-mini-pendente b{color:var(--text-dim);opacity:.6}
+/* Achado pelo teste de contraste (test_contraste.py): --text-dim JÁ é
+   calibrado pra 4,5:1 contra o fundo — a opacity:.6 extra que existia
+   aqui empilhava em cima e derrubava pra abaixo do mínimo AA. --text-dim
+   sozinho já é visivelmente mais discreto que os selos cumpridos/atual;
+   não precisa de mais esmaecimento. */
+.et-mini-pendente b{color:var(--text-dim)}
 .et-mini-atual{background:var(--st-aguardando-embarque-bg)}
 .et-mini-atual b,.et-mini-atual i{color:var(--st-aguardando-embarque-fg)}
 @media print{
