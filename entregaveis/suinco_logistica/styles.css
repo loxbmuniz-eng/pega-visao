@@ -1247,7 +1247,32 @@ code{
    Os relatórios vivem em containers próprios (.print-only), escondidos na
    tela normal e só exibidos (via JS, logo antes de window.print()) na hora
    de gerar o PDF — por isso não são .tab-page e não entram na regra abaixo. */
-.print-only{display:none}
+
+/* Fonte própria SÓ dos relatórios — embutida no arquivo (build_arquivo_unico.py
+   troca a url() abaixo por um data: URI), não buscada de rede nenhuma hora
+   nenhuma. Isso NÃO contradiz a decisão de usar fonte de sistema no resto do
+   painel (ver comentário lá em cima sobre offline-first): aquela decisão
+   evita DEPENDÊNCIA DE REDE em tempo de uso, e este arquivo já vem dentro do
+   HTML — zero requisição, painel continua funcionando sem internet igual.
+
+   O motivo de existir É a pedido direto (08/08/2026): "mesmo padrão de
+   relatórios sejam exportados pelo computador, celular android ou ios".
+   Com a pilha de fontes de sistema, o MESMO relatório sai com a San
+   Francisco no iPhone, Segoe UI no Windows e Roboto no Android — três
+   larguras de coluna e três quebras de linha diferentes para o mesmo PDF.
+   Uma fonte embutida elimina essa variação pela raiz: o navegador não tem
+   fonte de sistema nenhuma para escolher, só a que veio no arquivo. */
+@font-face{
+  font-family:'Suinco Relatorio';
+  font-style:normal;
+  font-weight:100 900;   /* variável — cobre os pesos 400/600/700/800 usados abaixo com um arquivo só */
+  font-display:block;    /* relatório só é impresso depois de pronto — nunca deve trocar de fonte no meio */
+  src:url('assets/inter-variable-latin.woff2') format('woff2');
+}
+.print-only{
+  display:none;
+  font-family:'Suinco Relatorio', -apple-system,BlinkMacSystemFont,'Segoe UI','Roboto',system-ui,sans-serif;
+}
 @media print{
   #header,#nav,#notif,.btn,.no-print,.quick-box,.modal-overlay,.tab-page{display:none!important}
   body{background:var(--navy-deep)!important}
