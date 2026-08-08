@@ -1439,8 +1439,24 @@ describe('11. Setor Comercial — só leitura', () => {
   });
 
   test('NÃO muda status de carga', async () => {
-    const { rows } = await pool.query('SELECT carga_id FROM fact_viagens LIMIT 1');
-    const r = await req(`/api/cargas/${rows[0].carga_id}/status`, {
+    /* Achado nesta sessão: pegava uma linha QUALQUER de fact_viagens
+       (LIMIT 1 sem ORDER BY não garante qual — Postgres pode devolver
+       linhas diferentes entre execuções). validarTransicao() checa a
+       transição de fluxo ANTES da permissão de setor — se a linha
+       sorteada já estivesse além de "Aguardando Embarque" (sem transição
+       de volta), a rota respondia 409 (fluxo inválido) em vez de 403
+       (setor sem permissão), e o teste falhava de forma intermitente,
+       sem nenhuma mudança de código real. Cria a própria carga aqui,
+       igual ao teste "NÃO exclui carga" logo acima — status nasce em
+       "Aguardando Veículo", e esse SEMPRE tem transição válida para
+       "Aguardando Embarque", então é a permissão do Comercial que barra,
+       de forma determinística. */
+    const criar = await req('/api/cargas', {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { placa: (await pool.query('SELECT placa FROM dim_veiculos LIMIT 1 OFFSET 4')).rows[0].placa, numeroCarga: '90092' },
+    });
+    assert.equal(criar.status, 201, criar.texto);
+    const r = await req(`/api/cargas/${criar.json.id}/status`, {
       metodo: 'POST', token: tokenComercial, corpo: { status: 'Aguardando Embarque' },
     });
     assert.equal(r.status, 403);
