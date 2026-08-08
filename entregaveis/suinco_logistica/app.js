@@ -2950,27 +2950,35 @@ function ajustarParaCaberEmUmaPagina(el){
        que o transform NÃO muda. Uma .print-page com 500mm de altura
        original, escalada pra caber visualmente em 1 página de 287mm,
        continua "ocupando" 500mm no fluxo do documento pra fins de
-       paginação — o motor fatia esse excedente em páginas extras, cada
-       uma mostrando um pedaço reescalado do mesmo conteúdo (quando ainda
-       sobra conteúdo real) ou nada (quando já pintou tudo antes) — as
-       "páginas em branco" do relato.
+       paginação — o motor fatia esse excedente em páginas extras.
 
-       Confirmado isolado, fora deste arquivo, antes de aplicar aqui: uma
-       caixa de teste com 600mm de altura, escalada por 0,333 pra caber em
-       200mm, gerava 3 páginas (não 1) até travar a altura do container
-       pai na altura JÁ ESCALADA com overflow:hidden — só então virou 1.
+       A CORREÇÃO (travar a altura do container pai na altura já escalada,
+       com overflow:hidden) só é SEGURA quando o conteúdo escalado cabe
+       INTEIRO numa página. Testado à parte, fora deste arquivo, antes de
+       decidir isso: quando o container precisa mesmo de 2+ páginas (o
+       piso de 50% de legibilidade não bastou pra caber tudo numa só), a
+       MESMA técnica — container com altura fixa + overflow:hidden sendo
+       fatiado pelo motor de impressão em mais de uma página — perde
+       conteúdo de verdade (não só sobra branco: o motor de impressão
+       não repagina corretamente um container com overflow:hidden cortado
+       ao meio; testei com marcadores de texto em posições conhecidas e o
+       do meio simplesmente sumiu, em nenhuma das páginas geradas).
 
-       Trava aqui a altura do CONTAINER (`el`, o `.print-only` pai — não a
-       `.print-page` em si, que continua com a altura original por baixo,
-       só clipada) na altura visual já reduzida: agora ele ocupa, no fluxo
-       do documento, exatamente o espaço da página que sobrou depois do
-       encolhimento — nada sobra pra páginas seguintes. Quando o piso de
-       50% não é suficiente pra caber tudo numa página (conteúdo realmente
-       denso), o excesso ainda vira página 2 — mas com conteúdo de
-       verdade, nunca em branco, porque a altura travada aqui já reflete
-       exatamente o que foi desenhado. */
-    el.style.height = (pagina.scrollHeight * escala) + 'px';
-    el.style.overflow = 'hidden';
+       Por isso o travamento só entra quando cabe tudo numa página só
+       (com pequena folga de arredondamento). Quando não cabe, o relatório
+       volta ao comportamento anterior — algumas páginas podem sobrar
+       quase em branco no fim, mas ISSO é preferível a perder uma linha
+       real do relatório. Sem dado perdido é inegociável; página sobrando
+       num caso raro e denso é o mal menor, e já era o comportamento
+       aceito antes desta sessão (ver o comentário do piso de 50% acima:
+       "a prioridade muda de 'cabe numa página' pra 'dá pra ler alguma
+       coisa'" — nunca foi "a qualquer custo, mesmo perdendo dado"). */
+    const alturaEscaladaPx = pagina.scrollHeight * escala;
+    const folgaPx = 1; // arredondamento de sub-pixel, não estouro de verdade
+    if(alturaEscaladaPx <= alturaFolhaMm*PX_POR_MM + folgaPx){
+      el.style.height = alturaEscaladaPx + 'px';
+      el.style.overflow = 'hidden';
+    }
   }
 }
 window.addEventListener('beforeprint', () => {
