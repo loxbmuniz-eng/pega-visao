@@ -707,13 +707,59 @@ const SuincoSharePoint = (function () {
     return pull(false);
   }
 
+  /* Toda troca em tempo real (carga:criada, carga:atualizada,
+     movimentacao:nova, connect — ver conectarTempoReal) chama esta função
+     de novo, sem esperar a anterior terminar. Numa oscilação de rede
+     normal isso é barato; mas se o SERVIDOR está recusando (429, "muitas
+     requisições"), cada evento vira mais uma tentativa imediata — e como
+     os eventos continuam chegando (ou o socket reconecta em loop), o
+     próprio painel martela o limite que está recusando, numa espiral que
+     nunca se resolve sozinha (encontrado em produção, 08/08/2026).
+
+     Duas travas cobrem isso:
+     - `sincronizando` impede duas chamadas rodando ao mesmo tempo — a
+       que chegou durante a anterior só marca "roda mais uma vez ao
+       terminar", não empilha.
+     - `bloqueadoAte` é o recuo de verdade: depois de um 429, a próxima
+       tentativa espera um tempo que DOBRA a cada novo 429 (até um teto),
+       e volta ao mínimo assim que uma sincronia der certo. */
+  let sincronizando = false;
+  let reexecutarAoTerminar = false;
+  let bloqueadoAte = 0;
+  const BACKOFF_INICIAL_MS = 5000;
+  const BACKOFF_MAXIMO_MS = 60000;
+  let backoffAtualMs = BACKOFF_INICIAL_MS;
+
   async function sincronizarAgora() {
+    if (Date.now() < bloqueadoAte) return;
+    if (sincronizando) { reexecutarAoTerminar = true; return; }
+    sincronizando = true;
     try {
-      await drenarFila();
+      // drenarFila() NUNCA lança — ela mesma decide entre "falha de rede,
+      // guarda e tenta depois" e "recusa definitiva, descarta avisando"
+      // (ver comentário lá dentro). Um 429 no meio da fila cai no primeiro
+      // caso e volta como item ainda pendente, não como exceção — por isso
+      // o recuo também olha `restantes`, não só o catch abaixo.
+      const resultadoFila = await drenarFila();
       await pull(true);
+      backoffAtualMs = BACKOFF_INICIAL_MS;
+      if (resultadoFila && resultadoFila.restantes > 0) {
+        bloqueadoAte = Date.now() + backoffAtualMs;
+        backoffAtualMs = Math.min(backoffAtualMs * 2, BACKOFF_MAXIMO_MS);
+      }
     } catch (e) {
       if (eFalhaDeRede(e)) mudarEstado('offline');
       else console.warn('[Suinco] sincronia:', e.message);
+      if (e && e.status === 429) {
+        bloqueadoAte = Date.now() + backoffAtualMs;
+        backoffAtualMs = Math.min(backoffAtualMs * 2, BACKOFF_MAXIMO_MS);
+      }
+    } finally {
+      sincronizando = false;
+      if (reexecutarAoTerminar) {
+        reexecutarAoTerminar = false;
+        sincronizarAgora();
+      }
     }
   }
 
