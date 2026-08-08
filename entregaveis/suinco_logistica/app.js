@@ -2659,9 +2659,10 @@ function renderTimelineCarga(id){
       <div class="timeline-head">
         <div class="timeline-placa">🚚 ${esc(c.placa)} <span class="text-dim" style="font-size:14px;font-weight:600">status atual:</span> ${badgeHtml(c.status)}</div>
         <div class="no-print">
-          ${c.status === 'Seguiu Viagem'
-            ? '<span class="text-dim" style="font-size:12px" title="Carga já concluída: o histórico do pátio não se apaga por aqui — precisa de correção direta no banco.">Não é possível cancelar (já concluída)</span>'
-            : botaoCancelarHtml(c)}
+          ${!podeCancelarCarga() ? ''
+            : c.status === 'Seguiu Viagem'
+              ? '<span class="text-dim" style="font-size:12px" title="Carga já concluída: o histórico do pátio não se apaga por aqui — precisa de correção direta no banco.">Não é possível cancelar (já concluída)</span>'
+              : botaoCancelarHtml(c)}
         </div>
       </div>
       <div class="timeline-info-grid">

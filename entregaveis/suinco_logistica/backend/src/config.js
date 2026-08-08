@@ -89,4 +89,14 @@ export const SETORES = [
   'Expedição',
   'Faturamento',
   'Administração',
+  /* Comercial: só leitura — pedido do usuário (08/08/2026), pra tirar da
+     Logística/Administração o trabalho de responder pergunta de cliente
+     sobre onde a carga está. Não aparece em NENHUMA função de permissão de
+     escrita deste arquivo nem de dominio/fluxo.js (podeCriarCarga,
+     podeRegistrarChegadaSemProgramacao, podeRegistrarSaida,
+     camposEditaveisPor) de propósito — todas são allowlist, então "não
+     estar na lista" já barra por padrão. Não precisa de exceção nenhuma
+     pra ser bloqueado; precisaria de uma linha a mais em cada uma pra
+     ganhar poder de escrita, e essa linha não existe. */
+  'Comercial',
 ];

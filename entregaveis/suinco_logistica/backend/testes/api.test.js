@@ -1368,3 +1368,100 @@ describe('10. Limite geral por operador, não por IP compartilhado', () => {
     }
   });
 });
+
+/* ------------------------------------------------------------------
+   11. Setor Comercial — só leitura
+   ---------------------------------------------------------------------
+   Pedido do usuário (08/08/2026): visão de tudo que Logística/Administração
+   vê (torre, histórico, relatórios), sem poder alterar nada. O setor foi
+   adicionado a SETORES sem entrar em NENHUMA função de permissão de
+   escrita (podeCriarCarga, podeRegistrarSaida, exigirSetor(...) etc.) —
+   allowlist por padrão nega quem não está na lista. Esta bateria prova
+   que a leitura funciona e que cada rota de escrita recusa, uma por uma —
+   não é suposição sobre como allowlist deveria se comportar, é o servidor
+   respondendo de verdade. ------------------------------------------ */
+describe('11. Setor Comercial — só leitura', () => {
+  let tokenComercial;
+
+  before(async () => {
+    const hash = await bcrypt.hash(SENHA, 4);
+    await pool.query(
+      `INSERT INTO operadores (email, nome, setor, senha_hash) VALUES ($1,$2,$3,$4)
+       ON CONFLICT (email) DO UPDATE SET setor = EXCLUDED.setor, ativo = TRUE`,
+      ['comercial@teste.local', 'Comercial Teste', 'Comercial', hash]
+    );
+    const r = await req('/auth/login', {
+      metodo: 'POST', corpo: { email: 'comercial@teste.local', senha: SENHA },
+    });
+    assert.equal(r.status, 200, r.texto);
+    tokenComercial = r.json.token;
+  });
+
+  test('loga e o setor vem do servidor como Comercial', async () => {
+    const r = await req('/auth/login', {
+      metodo: 'POST', corpo: { email: 'comercial@teste.local', senha: SENHA },
+    });
+    assert.equal(r.json.operador.setor, 'Comercial');
+  });
+
+  test('lê /api/estado normalmente — mesma leitura de qualquer setor autenticado', async () => {
+    const r = await req('/api/estado', { token: tokenComercial });
+    assert.equal(r.status, 200);
+    assert.ok(Array.isArray(r.json.cargas));
+  });
+
+  test('NÃO cria carga', async () => {
+    const { rows } = await pool.query('SELECT placa FROM dim_veiculos LIMIT 1');
+    const r = await req('/api/cargas', {
+      metodo: 'POST', token: tokenComercial,
+      corpo: { placa: rows[0].placa, numeroCarga: '90090' },
+    });
+    assert.equal(r.status, 403);
+  });
+
+  test('NÃO registra chegada sem programação', async () => {
+    const { rows } = await pool.query('SELECT placa FROM dim_veiculos LIMIT 1 OFFSET 2');
+    const r = await req('/api/cargas', {
+      metodo: 'POST', token: tokenComercial,
+      corpo: { placa: rows[0].placa, aguardandoCarga: true },
+    });
+    assert.equal(r.status, 403);
+  });
+
+  test('NÃO exclui carga', async () => {
+    const criar = await req('/api/cargas', {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { placa: (await pool.query('SELECT placa FROM dim_veiculos LIMIT 1 OFFSET 3')).rows[0].placa, numeroCarga: '90091' },
+    });
+    assert.equal(criar.status, 201, criar.texto);
+    const r = await req(`/api/cargas/${criar.json.id}`, { metodo: 'DELETE', token: tokenComercial });
+    assert.equal(r.status, 403);
+  });
+
+  test('NÃO muda status de carga', async () => {
+    const { rows } = await pool.query('SELECT carga_id FROM fact_viagens LIMIT 1');
+    const r = await req(`/api/cargas/${rows[0].carga_id}/status`, {
+      metodo: 'POST', token: tokenComercial, corpo: { status: 'Aguardando Embarque' },
+    });
+    assert.equal(r.status, 403);
+  });
+
+  test('NÃO cadastra frota', async () => {
+    const r = await req('/api/frota', {
+      metodo: 'POST', token: tokenComercial, corpo: { placa: 'COM1234' },
+    });
+    assert.equal(r.status, 403);
+  });
+
+  test('NÃO cadastra rota', async () => {
+    const r = await req('/api/rotas', {
+      metodo: 'POST', token: tokenComercial, corpo: { codigo: '999', nome: 'Teste' },
+    });
+    assert.equal(r.status, 403);
+  });
+
+  test('NÃO gerencia operadores', async () => {
+    const r = await req('/api/operadores', { token: tokenComercial });
+    assert.equal(r.status, 403);
+  });
+});
