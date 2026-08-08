@@ -11,9 +11,15 @@
 import { test, before, after, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
 
-import { criarServidor } from '../src/servidor.js';
+import { criarServidor, chaveDoLimiteGeral } from '../src/servidor.js';
 import { pool } from '../src/banco.js';
+import { config } from '../src/config.js';
+
+function jwtAssinar(payload) {
+  return jwt.sign(payload, config.jwtSegredo, { expiresIn: '1h' });
+}
 
 let servidor;
 let base;
@@ -1308,5 +1314,57 @@ describe('9. Cadastros — Frota e Rotas', () => {
     assert.equal(rows.length, 1, 'não pode duplicar a linha');
     assert.equal(rows[0].nome, 'Nome Atualizado');
     assert.equal(rows[0].detalhe, 'Detalhe novo');
+  });
+});
+
+/* ------------------------------------------------------------------ */
+describe('10. Limite geral por operador, não por IP compartilhado', () => {
+  // Achado no teste de carga de 30 usuários (08/08/2026): o pátio inteiro
+  // sai do mesmo IP (NAT do escritório). Contando por IP, 30 pessoas
+  // DIFERENTES dividiam um único orçamento — a 30ª pessoa a agir num
+  // minuto tomava 429 mesmo com tudo saudável. A chave do limite geral
+  // precisa ser o operador autenticado, não o endereço de rede.
+
+  test('chaveDoLimiteGeral: token válido vira chave por operador', () => {
+    const token = jwtAssinar({ sub: 'op-123', nome: 'Teste', setor: 'Logística' });
+    const chave = chaveDoLimiteGeral({ headers: { authorization: `Bearer ${token}` }, ip: '10.0.0.5' });
+    assert.equal(chave, 'op:op-123');
+  });
+
+  test('chaveDoLimiteGeral: sem token, ou token inválido, cai para o IP', () => {
+    assert.equal(chaveDoLimiteGeral({ headers: {}, ip: '10.0.0.5' }), '10.0.0.5');
+    assert.equal(
+      chaveDoLimiteGeral({ headers: { authorization: 'Bearer lixo-nao-e-jwt' }, ip: '10.0.0.5' }),
+      '10.0.0.5'
+    );
+  });
+
+  test('dois operadores no MESMO IP não dividem o orçamento (integração, limite baixo)', async () => {
+    // Servidor isolado com limite de 3/janela, só para este teste — não
+    // interfere no `servidor` principal (o valor é lido na criação do app,
+    // não ao vivo a cada requisição).
+    const original = config.limites.porJanela;
+    config.limites.porJanela = 3;
+    let s, b;
+    try {
+      s = criarServidor();
+      await new Promise((r) => s.listen(0, '127.0.0.1', r));
+      b = `http://127.0.0.1:${s.address().port}`;
+
+      const chamar = (token) => fetch(`${b}/api/estado`, { headers: { authorization: `Bearer ${token}` } });
+
+      // Operador A esgota o próprio limite de 3.
+      const respostasA = [];
+      for (let i = 0; i < 4; i++) respostasA.push((await chamar(tokens['Logística'])).status);
+      assert.deepEqual(respostasA, [200, 200, 200, 429], 'A deveria ser barrado na 4ª');
+
+      // Operador B, MESMO IP (127.0.0.1, mesmo processo de teste), ainda
+      // tem seu próprio orçamento intacto — não herdou o bloqueio de A.
+      const respostaB = await chamar(tokens['Portaria']);
+      assert.equal(respostaB.status, 200, 'B não pode ser afetado pelo limite de A');
+    } finally {
+      config.limites.porJanela = original;
+      if (s) await new Promise((r) => s.close(r));
+    }
   });
 });

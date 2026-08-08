@@ -9,6 +9,7 @@ import helmet from 'helmet';
 import cors from 'cors';
 import compression from 'compression';
 import rateLimit from 'express-rate-limit';
+import jwt from 'jsonwebtoken';
 
 import { config } from './config.js';
 import { verificarConexao, encerrar, consultar } from './banco.js';
@@ -19,6 +20,34 @@ import { rotasCargas } from './rotas/cargas.js';
 import { rotasCadastros } from './rotas/cadastros.js';
 import { rotasOperadores } from './rotas/operadores.js';
 import { rotasBI } from './rotas/bi.js';
+
+/* Chave do limite geral: por OPERADOR autenticado, não por IP.
+
+   Achado no incidente de 08/08/2026, confirmado num teste de carga com 30
+   usuários simultâneos: o pátio inteiro sai pelo mesmo IP (NAT do
+   escritório), então contar por IP faz 30 pessoas DIFERENTES dividirem o
+   orçamento de UMA só — a 30ª pessoa a clicar num minuto tomava 429 mesmo
+   com o limite alto, mesmo estando tudo saudável. O limite deveria estar
+   protegendo contra script abusivo, não contra "muita gente de verdade
+   trabalhando ao mesmo tempo".
+
+   Corrigido pela raiz: quando a requisição chega com um token válido, a
+   chave passa a ser o operador (uma pessoa = um orçamento de 2000/min,
+   nunca dividido com os colegas). Sem token válido (não logado, ou rota
+   de login antes de autenticar), cai para IP — que continua sendo a
+   defesa certa contra quem ainda não provou quem é. */
+export function chaveDoLimiteGeral(req) {
+  const auth = req.headers?.authorization;
+  if (auth && auth.startsWith('Bearer ')) {
+    try {
+      const payload = jwt.verify(auth.slice(7), config.jwtSegredo);
+      if (payload?.sub) return `op:${payload.sub}`;
+    } catch {
+      // Token ausente, expirado ou inválido: cai para IP abaixo.
+    }
+  }
+  return req.ip;
+}
 
 export function criarApp() {
   const app = express();
@@ -123,6 +152,7 @@ export function criarApp() {
     standardHeaders: true,
     legacyHeaders: false,
     skip: (req) => req.path === '/health',
+    keyGenerator: chaveDoLimiteGeral,
     message: { erro: 'Muitas requisições. Espere um minuto.', codigo: 'LIMITE_EXCEDIDO' },
   }));
 
