@@ -1113,6 +1113,14 @@ describe('8. Superfície de ataque', () => {
     assert.ok(!/senha|secret|token|password/i.test(r.texto));
   });
 
+  test('/health devolve os limites de requisição em vigor', async () => {
+    const r = await req('/health');
+    assert.equal(r.status, 200);
+    assert.equal(typeof r.json.limites.porJanela, 'number');
+    assert.equal(typeof r.json.limites.loginPorJanela, 'number');
+    assert.equal(typeof r.json.limites.janelaMs, 'number');
+  });
+
   test('rota inexistente devolve 404 em JSON', async () => {
     const r = await req('/api/rota-que-nao-existe', { token: tokens['Logística'] });
     assert.equal(r.status, 404);
