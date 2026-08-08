@@ -1178,8 +1178,15 @@ function renderTorre(){
     const ehLimpar = filtro === '__TODAS__';
     const ativo = filtro !== null && (ehLimpar ? _torreFiltroStatus === null : _torreFiltroStatus === filtro);
     const clicavel = filtro !== null;
+    // No celular a nota some da grade compacta (.stat-note{display:none} —
+    // ver styles.css) pra caber em três colunas; o title garante que a
+    // informação continua acessível, só muda de "sempre visível" pra
+    // "sob demanda", como o próprio aviso de clique já era.
+    const dicaClique = 'Clique para filtrar a tabela por esta caixa — clique de novo para limpar.';
+    const titulo = [nota, clicavel ? dicaClique : ''].filter(Boolean).join(' — ');
     return `<div class="stat-box${destaque?' stat-destaque':''}${alerta && num>0?' stat-alerta':''}${clicavel?' stat-clicavel':''}${ativo?' stat-ativo':''}"
-       ${clicavel ? `onclick="filtrarTorrePorStatus('${escJs(filtro)}')" title="Clique para filtrar a tabela por esta caixa — clique de novo para limpar."` : ''}>
+       ${clicavel ? `onclick="filtrarTorrePorStatus('${escJs(filtro)}')"` : ''}
+       ${titulo ? `title="${esc(titulo)}"` : ''}>
        <div class="stat-num" data-contador="${esc(rotulo)}">${num}</div>
        <div class="stat-label">${esc(rotulo)}</div>
        ${nota ? `<div class="stat-note">${esc(nota)}</div>` : ''}

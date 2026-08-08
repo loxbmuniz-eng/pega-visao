@@ -852,13 +852,33 @@ tbody tr{ transition:background-color var(--t-rapida) ease }
 .bento .stat-alerta .stat-num,
 .bento .stat-alerta .stat-label{ color:var(--st-aguardando-veiculo-fg) }
 
+/* No celular, uma coluna só empilhava as 9 caixas em ~800px de rolagem
+   antes da tabela — cada uma do tamanho de um cartão de desktop, o
+   oposto de como um app de verdade mostra contador. Pedido direto do
+   usuário (08/08/2026): "no painel de controle do mobile... nao precisa
+   ser com esses icones gigantes, pode ser algo formatado pro tamanho do
+   celular mesmo como um app".
+
+   Grade compacta de 3 colunas — do tamanho de um chip de app, não de um
+   card. A hierarquia (o que exige ação vs. o que é acompanhamento)
+   continua: os destaques ocupam a largura toda, maiores que os outros,
+   só que agora "maior" quer dizer duas linhas de chip, não uma tela
+   inteira de rolagem. Alvo de toque continua ≥44px (min-height) — a
+   grade fica densa, não pequena demais pra tocar com o dedo. */
 @media(max-width:640px){
-  /* Numa coluna só, "ocupar duas colunas" não existe — e sem isto o
-     destaque desaparece justamente onde a tela é menor. Ele continua
-     maior pelo corpo do número. */
-  .bento{ grid-template-columns:1fr }
-  .bento .stat-destaque{ grid-column:auto }
-  .bento .stat-destaque .stat-num{ font-size:34px }
+  .bento{ grid-template-columns:repeat(3,1fr); gap:var(--sp-2) }
+  .bento .stat-box{ padding:8px 6px; min-height:44px }
+  .bento .stat-box::before{ height:20px }
+  .bento .stat-num{ font-size:20px }
+  .bento .stat-label{ font-size:9.5px; line-height:1.2; margin-top:2px }
+  /* A nota ("contado desde a chegada", "dados incompletos") é reforço, não
+     a informação principal — no chip compacto ela só rouba espaço da
+     grade; continua disponível no title do próprio quadrado. */
+  .bento .stat-note{ display:none }
+
+  .bento .stat-destaque{ grid-column:1 / -1 }
+  .bento .stat-destaque .stat-num{ font-size:26px }
+  .bento .stat-destaque .stat-label{ font-size:11.5px }
 }
 
 .stat-box{
