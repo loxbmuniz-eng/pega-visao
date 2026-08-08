@@ -2914,6 +2914,8 @@ function ajustarParaCaberEmUmaPagina(el){
   if(!pagina) return;
   pagina.style.transform = '';
   pagina.style.transformOrigin = '';
+  el.style.height = '';
+  el.style.overflow = '';
 
   const PX_POR_MM = 96 / 25.4;
   const MARGEM_MM = 5; // @page{margin:5mm} em styles.css
@@ -2941,6 +2943,34 @@ function ajustarParaCaberEmUmaPagina(el){
   if(escala < 0.995){
     pagina.style.transform = `scale(${escala})`;
     pagina.style.transformOrigin = 'top left';
+
+    /* PÁGINAS EM BRANCO SOBRANDO (achado pelo usuário, 08/08/2026, PDF
+       real de celular): "transform:scale()" só encolhe o DESENHO — o
+       motor de impressão pagina com base na altura de LAYOUT da caixa,
+       que o transform NÃO muda. Uma .print-page com 500mm de altura
+       original, escalada pra caber visualmente em 1 página de 287mm,
+       continua "ocupando" 500mm no fluxo do documento pra fins de
+       paginação — o motor fatia esse excedente em páginas extras, cada
+       uma mostrando um pedaço reescalado do mesmo conteúdo (quando ainda
+       sobra conteúdo real) ou nada (quando já pintou tudo antes) — as
+       "páginas em branco" do relato.
+
+       Confirmado isolado, fora deste arquivo, antes de aplicar aqui: uma
+       caixa de teste com 600mm de altura, escalada por 0,333 pra caber em
+       200mm, gerava 3 páginas (não 1) até travar a altura do container
+       pai na altura JÁ ESCALADA com overflow:hidden — só então virou 1.
+
+       Trava aqui a altura do CONTAINER (`el`, o `.print-only` pai — não a
+       `.print-page` em si, que continua com a altura original por baixo,
+       só clipada) na altura visual já reduzida: agora ele ocupa, no fluxo
+       do documento, exatamente o espaço da página que sobrou depois do
+       encolhimento — nada sobra pra páginas seguintes. Quando o piso de
+       50% não é suficiente pra caber tudo numa página (conteúdo realmente
+       denso), o excesso ainda vira página 2 — mas com conteúdo de
+       verdade, nunca em branco, porque a altura travada aqui já reflete
+       exatamente o que foi desenhado. */
+    el.style.height = (pagina.scrollHeight * escala) + 'px';
+    el.style.overflow = 'hidden';
   }
 }
 window.addEventListener('beforeprint', () => {
