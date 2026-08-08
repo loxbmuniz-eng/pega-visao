@@ -170,6 +170,15 @@ else
   ok "nenhum bloqueio por excesso de tentativas"
 fi
 
+# Os dois limites vivem só no .env — sem isto, "qual valor está valendo
+# agora" só se responde abrindo o arquivo na mão. Mostrado aqui porque foi
+# exatamente essa pergunta, sem resposta rápida, que custou tempo no
+# incidente de 08/08/2026.
+RL_GERAL="$(grep -E '^RATE_LIMIT=' "$APP_DIR/.env" 2>/dev/null | cut -d= -f2)"
+RL_LOGIN="$(grep -E '^RATE_LIMIT_LOGIN=' "$APP_DIR/.env" 2>/dev/null | cut -d= -f2)"
+info "limite geral (RATE_LIMIT): ${RL_GERAL:-300 (padrão, não definido no .env)} por minuto/IP"
+info "limite de login (RATE_LIMIT_LOGIN): ${RL_LOGIN:-30 (padrão, não definido no .env)} por minuto/IP"
+
 # Login recusado por senha é 401 — não é falha de servidor, mas explica
 # um relato de "não consigo entrar" que não tem nada a ver com rede.
 RECUSAS="$(journalctl -u embarque-suinco --since "$JANELA" --no-pager 2>/dev/null \

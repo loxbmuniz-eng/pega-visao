@@ -127,11 +127,27 @@ export function criarApp() {
   }));
 
   /* /health não exige token de propósito: monitoramento externo precisa
-     alcançá-lo. Não devolve nada sensível — só se o banco responde. */
+     alcançá-lo. Não devolve nada sensível — só se o banco responde.
+
+     `limites` devolve os valores de RATE_LIMIT/RATE_LIMIT_LOGIN em vigor.
+     Não é segredo (não autentica nada, não identifica ninguém) e economiza
+     um SSH inteiro na próxima vez que alguém perguntar "o limite que
+     subimos ainda está valendo?" — foi exatamente essa pergunta, sem
+     resposta rápida, que custou tempo no incidente de 08/08/2026. */
   app.get('/health', async (req, res) => {
     try {
       const agora = await verificarConexao();
-      res.json({ ok: true, banco: 'conectado', agora, conectados: conectados() });
+      res.json({
+        ok: true,
+        banco: 'conectado',
+        agora,
+        conectados: conectados(),
+        limites: {
+          porJanela: config.limites.porJanela,
+          loginPorJanela: config.limites.loginPorJanela,
+          janelaMs: config.limites.janelaMs,
+        },
+      });
     } catch (e) {
       res.status(503).json({ ok: false, banco: 'inacessível', erro: e.message });
     }
