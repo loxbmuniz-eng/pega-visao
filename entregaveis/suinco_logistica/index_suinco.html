@@ -82,6 +82,18 @@
     <div class="card">
       <div class="card-title"><span class="icon">🗼</span> Torre de Controle — todas as cargas em aberto</div>
       <div class="card-sub">Visão de leitura para todos os setores. Atualiza sempre que alguém registra uma movimentação.</div>
+      <!-- Só Logística/Administração (podeFecharProgramacao(), app.js).
+           Pedido do usuário (08/08/2026): fechar a programação atual e
+           começar uma nova — só possível com o pátio limpo (nenhuma carga
+           em andamento), pra nunca esconder um caminhão de verdade das
+           telas operacionais. Nada é apagado: o Histórico continua com
+           tudo. -->
+      <div class="flex-end" id="btn-fechar-programacao-wrap" hidden style="margin-bottom:12px">
+        <button class="btn btn-sec btn-sm" onclick="fecharProgramacaoUI()"
+                title="Só funciona quando não há nenhuma carga em andamento.">
+          🔒 Fechar Programação e Iniciar Nova
+        </button>
+      </div>
       <div class="bento" id="torre-stats" style="margin-bottom:16px"></div>
       <div class="table-wrap">
         <table>

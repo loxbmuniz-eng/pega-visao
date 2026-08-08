@@ -20,6 +20,7 @@ import { rotasCargas } from './rotas/cargas.js';
 import { rotasCadastros } from './rotas/cadastros.js';
 import { rotasOperadores } from './rotas/operadores.js';
 import { rotasBI } from './rotas/bi.js';
+import { rotasProgramacao } from './rotas/programacao.js';
 
 /* Chave do limite geral: por OPERADOR autenticado, não por IP.
 
@@ -188,6 +189,7 @@ export function criarApp() {
   app.use('/api', rotasCargas);
   app.use('/api', rotasCadastros);
   app.use('/api', rotasOperadores);
+  app.use('/api', rotasProgramacao);
   app.use('/bi', rotasBI);
 
   app.use((req, res) => {

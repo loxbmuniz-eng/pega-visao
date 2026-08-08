@@ -1090,6 +1090,38 @@ function podeCancelarCarga(){
   return setor === 'Logística' || setor === 'Administração';
 }
 
+/* Fechamento de Programação — pedido do usuário (08/08/2026): "permitir
+   que faça fechamento da programação e começar nova programação somente
+   pela logística ou administração, resetando os painéis de todos os
+   setores mantendo somente o histórico". A mesma regra de quem pode
+   cancelar carga (Logística/Administração) vale aqui — o servidor confere
+   de novo (POST /api/programacao/fechar), isto é só a tela. */
+function podeFecharProgramacao(){ return podeCancelarCarga(); }
+
+async function fecharProgramacaoUI(){
+  if(!SuincoSharePoint || !SuincoSharePoint.estaConfigurado || !SuincoSharePoint.estaConfigurado()){
+    notify('Fechar a programação exige conexão com o servidor.', 'warn');
+    return;
+  }
+  if(!confirm('Fechar a programação atual? Só é possível quando não há nenhuma carga em andamento. Nada é apagado — tudo continua no Histórico.')) return;
+  try{
+    const r = await SuincoSharePoint.fecharPrograma();
+    notify(`Programação fechada às ${fmtHora(r.quando)}. Pronto para uma nova.`, 'success', 5000);
+    renderAll();
+  }catch(e){
+    if(e && e.codigo === 'CARGAS_EM_ABERTO'){
+      const lista = (e.dados && e.dados.cargas || [])
+        .map(c => `• ${c.placa} — ${c.numeroCarga || 'sem nº'} (${c.status})`)
+        .join('\n');
+      alert(`Ainda há ${e.dados.cargas.length} carga(s) em andamento — feche ou cancele todas antes:\n\n${lista}`);
+    } else if(e && e.status === 403){
+      notify('Só Logística ou Administração fecham a programação.', 'danger');
+    } else {
+      notify('Não consegui fechar a programação: ' + (e && e.message || 'erro desconhecido'), 'danger');
+    }
+  }
+}
+
 /* O botão muda de nome conforme a etapa, porque as duas ações são
    diferentes de verdade: excluir some com algo que nunca aconteceu;
    cancelar encerra algo que começou, e por isso pede motivo. */
@@ -1311,6 +1343,9 @@ function animarContadoresTorre(){
 }
 
 function renderTorre(){
+  const btnFechar = document.getElementById('btn-fechar-programacao-wrap');
+  if(btnFechar) btnFechar.hidden = !podeFecharProgramacao();
+
   const abertas = cargasAbertas();
   const porStatus = {};
   abertas.forEach(c=>{ porStatus[c.status] = (porStatus[c.status]||0) + 1; });
@@ -3782,6 +3817,13 @@ async function init(){
     if(SuincoSharePoint.aoAtualizarPresenca) SuincoSharePoint.aoAtualizarPresenca(online => {
       _operadoresOnline = new Set((online || []).map(String));
       if(TAB_ATUAL === 'usuarios') renderUsuarios();
+    });
+    // Alguém (Logística/Administração) fechou a programação atual — todo
+    // mundo conectado precisa saber, não só quem clicou. Pedido do usuário
+    // (08/08/2026): "resetando os paineis de todos os setores".
+    if(SuincoSharePoint.aoFecharPrograma) SuincoSharePoint.aoFecharPrograma(dados => {
+      notify(`Programação fechada por ${dados.operador} (${dados.setor}) — pronto para uma nova.`, 'info', 6000);
+      renderAll();
     });
     if(typeof aoRecusarStatus === 'function') aoRecusarStatus(receberRecusaDeStatus);
     if(typeof aoRecusarCarga === 'function') aoRecusarCarga(receberRecusaDeCarga);
