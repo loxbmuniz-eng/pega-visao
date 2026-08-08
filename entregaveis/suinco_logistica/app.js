@@ -2422,7 +2422,26 @@ function corTextoSobre(corFundo){
 function prepararCanvas(canvas){
   const dpr = window.devicePixelRatio || 1;
   const cssW = canvas.clientWidth || canvas.parentElement.clientWidth || 400;
-  const cssH = canvas.height || 220;
+  /* BUG DE PRODUÇÃO (achado pelo usuário em iPhone real, 08/08/2026,
+     screenshot com barras saindo do celular — "1h42min" de barra pra um
+     gráfico de 160px): esta função lia a altura pretendida em
+     `canvas.height`, mas TAMBÉM escreve `canvas.height` embaixo (a
+     imagem de fundo em pixels de dispositivo). Na segunda chamada
+     (redimensionar a janela, mudar filtro, atualização ao vivo de
+     qualquer setor — todas chamam renderGraficosIndicadores() de novo),
+     `canvas.height` já não é mais 160: é `160 * dpr` da chamada anterior.
+     Ler esse valor de volta multiplica por dpr outra vez — e nem toda
+     chamada seguinte. Num desktop com dpr=1 isso nunca aparece (1×1×1…
+     continua 1); num iPhone com dpr≈3 vira 160 → 480 → 1440px em duas ou
+     três chamadas, exatamente a explosão das fotos. Não reproduzia no
+     Chromium headless usado nos testes desta sessão porque o dpr padrão
+     ali é 1.
+
+     `canvas.style.height`, ao contrário, é estável: esta função a
+     ESCREVE com o mesmo valor pretendido toda vez (idempotente), nunca
+     com o valor em pixels de dispositivo — por isso é a fonte confiável
+     da altura pretendida a partir da segunda chamada em diante. */
+  const cssH = parseFloat(canvas.style.height) || canvas.height || 220;
   canvas.style.width = '100%';
   canvas.style.height = cssH + 'px';
   canvas.width = Math.round(cssW * dpr);
