@@ -300,6 +300,34 @@ async def main():
             ck('nenhum status zerado listado', z['zerados'] == 0,
                f"{z['n']} linha(s), {z['zerados']} zerada(s)")
 
+        print('\n=== EXECUTIVO: MENOS INFORMAÇÃO NA SEÇÃO 4 (pedido do usuário, 08/08) ===')
+        # "tem muita informação ali" — a timeline carga-a-carga das CONCLUÍDAS
+        # (a mesma matriz pesada de 8 colunas usada pras cargas em ABERTO,
+        # onde ela decide algo) saiu do executivo. Fica só o resumo
+        # (blocoDistribuicaoStatus). A das ABERTAS continua — é a seção que
+        # decide a manhã do gestor.
+        await pg.evaluate("() => abrirTab('relatorios')")
+        await pg.fill('#rel-data-de', '2000-01-01')
+        await pg.fill('#rel-data-ate', '2035-12-31')
+        await pg.evaluate("()=>exportarPdfExecutivo()")
+        await pg.wait_for_timeout(400)
+        secoes4 = await pg.evaluate("""() => {
+          const titulos = [...document.querySelectorAll('#print-executivo .print-secao-tit')]
+            .map(t => t.innerText.trim());
+          return {
+            titulos,
+            temTimelineAbertas: titulos.includes('Linha do tempo — cargas ainda em aberto'),
+            temTimelineConcluidas: titulos.includes('Linha do tempo — cargas concluídas'),
+            temResumoConcluidas: titulos.includes('Cargas concluídas'),
+          };
+        }""")
+        ck('timeline carga-a-carga das ABERTAS continua (decide o dia)',
+           secoes4['temTimelineAbertas'])
+        ck('resumo de status das CONCLUÍDAS continua (é a "conferência")',
+           secoes4['temResumoConcluidas'])
+        ck('timeline carga-a-carga das CONCLUÍDAS saiu (duplicava a das abertas)',
+           not secoes4['temTimelineConcluidas'], str(secoes4['titulos']))
+
         print('\n=== FILTRO VALE PARA O EXECUTIVO ===')
         await pg.evaluate("() => abrirTab('relatorios')")
         await pg.fill('#rel-data-de', '2020-01-01')

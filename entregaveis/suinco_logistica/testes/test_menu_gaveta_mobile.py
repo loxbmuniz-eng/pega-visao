@@ -90,7 +90,13 @@ async def main():
         ck('o conteúdo começa logo abaixo do cabeçalho, sem vão da barra antiga',
            topo_conteudo < altura_cabecalho + 30, f'topo={topo_conteudo}, cabeçalho={altura_cabecalho}')
 
-        print('\n=== 5. DESKTOP: BARRA HORIZONTAL DE SEMPRE, SEM GAVETA ===')
+        print('\n=== 5. DESKTOP: BARRA LATERAL FIXA (referência Hostinger), SEM GAVETA NEM HAMBÚRGUER ===')
+        # Pedido do usuário (08/08/2026), depois de já ter a gaveta no
+        # celular: "quero que se aplique ao desktop tambem... pode usar
+        # como referencia o site da hostinger painel, pode usar o leyout
+        # com o menu tambem no desktop". A barra horizontal antiga saiu do
+        # desktop — mesmas divs .nav-tab, agora em coluna fixa à esquerda,
+        # sempre visível (não é gaveta: não abre/fecha, não tem overlay).
         ctx2 = await nav.new_context(viewport={'width': 1280, 'height': 900})
         pg2 = await ctx2.new_page()
         pg2.on('pageerror', lambda e: erros.append('desktop: ' + str(e)))
@@ -99,8 +105,36 @@ async def main():
         display_btn_desktop = await pg2.evaluate(
             "() => getComputedStyle(document.getElementById('btn-menu')).display")
         ck('botão hambúrguer NÃO aparece no desktop', display_btn_desktop == 'none', display_btn_desktop)
-        nav_display = await pg2.evaluate("() => getComputedStyle(document.getElementById('nav')).flexDirection")
-        ck('barra continua em linha (não em coluna de gaveta) no desktop', nav_display == 'row', nav_display)
+        info = await pg2.evaluate("""() => {
+            const navEl = document.getElementById('nav');
+            const mainEl = document.getElementById('main');
+            const navR = navEl.getBoundingClientRect();
+            const mainR = mainEl.getBoundingClientRect();
+            const cs = getComputedStyle(navEl);
+            return {
+                flexDirection: cs.flexDirection,
+                transform: cs.transform,
+                navLeft: navR.left, navWidth: navR.width, navHeight: navR.height,
+                mainLeft: mainR.left,
+                janelaAltura: window.innerHeight,
+            };
+        }""")
+        ck('barra fica em COLUNA (sidebar), não mais em linha horizontal',
+           info['flexDirection'] == 'column', info['flexDirection'])
+        ck('barra sempre visível — sem transform de gaveta escondida',
+           info['transform'] in ('none', 'matrix(1, 0, 0, 1, 0, 0)'), info['transform'])
+        ck('barra encostada na borda esquerda da tela', info['navLeft'] == 0, info['navLeft'])
+        ck('barra ocupa a altura inteira abaixo do cabeçalho (não só uma faixa)',
+           info['navHeight'] > info['janelaAltura'] * 0.7, f"{info['navHeight']}px de {info['janelaAltura']}px")
+        ck('conteúdo (#main) começa depois da barra, sem sobrepor',
+           info['mainLeft'] >= info['navLeft'] + info['navWidth'] - 1,
+           f"main={info['mainLeft']}, nav termina em {info['navLeft']+info['navWidth']}")
+
+        print('\n=== 6. DESKTOP: TROCAR DE ABA CLICANDO NA BARRA LATERAL FUNCIONA ===')
+        await pg2.evaluate("() => abrirTab('historico')")
+        aba_ativa = await pg2.evaluate("() => TAB_ATUAL")
+        ck('abrirTab ainda funciona clicando/chamando a partir da barra lateral',
+           aba_ativa == 'historico', aba_ativa)
 
         print('\n=== CONSOLE ===')
         ck('sem erros de página', not erros, str(erros[:3]))
