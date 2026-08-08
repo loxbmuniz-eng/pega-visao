@@ -1722,14 +1722,21 @@ input,select,textarea{border-radius:5px}
 
    O ORÇAMENTO DE LARGURA soma 100%. Status e Transportadora levam a maior
    parte porque são os dois campos de texto longo que não podem quebrar. */
-@page{ size: A4 landscape; margin: 8mm; }
+/* Margem reduzida de 8mm pra 5mm — pedido do usuário (08/08/2026): "pode
+   usar a pagina inteira e nao deixar margem sobrando". 5mm ainda folga
+   acima da margem física mínima da maioria das impressoras/exportadores
+   de PDF (tipicamente ~4mm); ir mais apertado que isso arrisca cortar
+   conteúdo em vez de só encolher a moldura branca. Qualquer mudança
+   aqui precisa espelhar MARGEM_MM em app.js (ajustarParaCaberEmUmaPagina)
+   — as duas descrevem a MESMA folha física. */
+@page{ size: A4 landscape; margin: 5mm; }
 
 /* MOBILE: alguns navegadores/apps de PDF do celular (confirmado pelo
    usuário em Android e iPhone, 07/08/2026) ignoram o pedido `size:
    landscape` acima e imprimem na orientação em pé escolhida no próprio
    app de compartilhar. A tabela de 13 colunas foi calibrada para a
-   largura da folha DEITADA (~281mm = 297mm - 2×8mm de margem); sem esta
-   regra, a mesma tabela cai numa folha de ~194mm de largura (A4 em pé) e
+   largura da folha DEITADA (~287mm = 297mm - 2×5mm de margem); sem esta
+   regra, a mesma tabela cai numa folha de ~200mm de largura (A4 em pé) e
    cada rótulo de status ("AGUARDANDO EMBARQUE" etc.) quebra em 2-3 linhas
    — o relatório de 1 página vira 4-5 páginas ilegíveis.
 
@@ -1738,7 +1745,7 @@ input,select,textarea{border-radius:5px}
    iPhone) combina rotação com paginação, e isso varia entre eles de um
    jeito que não dá pra confirmar sem testar em cada aparelho real — o que
    não é possível neste ambiente de desenvolvimento. Encolher pela mesma
-   proporção (194/281) é seguro em qualquer motor: o pior resultado
+   proporção (200/287) é seguro em qualquer motor: o pior resultado
    possível é a MESMA tabela, só menor e com margem sobrando ao redor —
    nunca corta coluna nem gira texto de cabeça pra baixo.
 
@@ -1747,8 +1754,8 @@ input,select,textarea{border-radius:5px}
    app de PDF está usando e ajustar o fator abaixo. */
 @media print and (orientation: portrait){
   .print-page{
-    width: 281mm;
-    transform: scale(0.69);
+    width: 287mm;
+    transform: scale(0.697);
     transform-origin: top left;
   }
 }

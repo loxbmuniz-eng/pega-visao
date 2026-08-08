@@ -98,8 +98,8 @@ async def main():
         ck('em folha em pé, a regra de encolhimento entra (transform != none)',
            d2['transform'] not in ('none', 'matrix(1, 0, 0, 1, 0, 0)'), d2['transform'])
         # getComputedStyle resolve width em px (1mm = 96/25.4 px), não mm.
-        ck('largura de referência continua a da folha deitada (281mm)',
-           abs(_px_para_mm(d2['width']) - 281) < 1, d2['width'])
+        ck('largura de referência continua a da folha deitada (287mm)',
+           abs(_px_para_mm(d2['width']) - 287) < 1, d2['width'])
         ck('origem da transformação é o canto superior esquerdo (não distorce nem desloca fora da folha)',
            'left' in d2['origin'] and 'top' in d2['origin'] or d2['origin'].startswith('0px 0px'),
            d2['origin'])

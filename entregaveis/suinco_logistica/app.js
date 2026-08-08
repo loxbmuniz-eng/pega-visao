@@ -2870,7 +2870,7 @@ function ajustarParaCaberEmUmaPagina(el){
   pagina.style.transformOrigin = '';
 
   const PX_POR_MM = 96 / 25.4;
-  const MARGEM_MM = 8; // @page{margin:8mm} em styles.css
+  const MARGEM_MM = 5; // @page{margin:5mm} em styles.css
   const emPe = window.matchMedia && window.matchMedia('print and (orientation: portrait)').matches;
   // A4: 297×210mm. Deitado de verdade, a largura útil é a maior; em pé
   // (celular que ignorou o pedido de orientação), a largura útil é a
@@ -2878,16 +2878,21 @@ function ajustarParaCaberEmUmaPagina(el){
   const larguraFolhaMm = (emPe ? 210 : 297) - MARGEM_MM*2;
   const alturaFolhaMm  = (emPe ? 297 : 210) - MARGEM_MM*2;
 
-  // A largura do relatório é sempre calibrada pra folha deitada (281mm) —
-  // trava isso explicitamente, pra não depender de o navegador ter
-  // resolvido a folha deitada ou em pé antes desta medição.
-  pagina.style.width = '281mm';
+  // A largura do relatório é sempre calibrada pra folha deitada (287mm =
+  // 297mm - 2×5mm de margem) — trava isso explicitamente, pra não
+  // depender de o navegador ter resolvido a folha deitada ou em pé antes
+  // desta medição.
+  pagina.style.width = '287mm';
 
   const escalaLargura = Math.min(1, (larguraFolhaMm*PX_POR_MM) / pagina.scrollWidth);
   const escalaAltura  = Math.min(1, (alturaFolhaMm*PX_POR_MM) / pagina.scrollHeight);
   const escala = Math.max(0.5, Math.min(escalaLargura, escalaAltura));
 
-  if(escala < 1){
+  // Abaixo de 0,5% de diferença é arredondamento de sub-pixel, não
+  // conteúdo estourando de verdade — sem este piso, uma carga que cabe
+  // por pouco ganhava um scale(0.9997...) tecnicamente correto mas sem
+  // efeito visível nenhum, só ruído no teste e no DOM.
+  if(escala < 0.995){
     pagina.style.transform = `scale(${escala})`;
     pagina.style.transformOrigin = 'top left';
   }
