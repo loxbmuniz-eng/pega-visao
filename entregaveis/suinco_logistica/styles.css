@@ -1311,7 +1311,14 @@ code{
 
 /* ===== GRÁFICOS (Painel do Gestor) ===== */
 .grafico-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:18px;margin-top:14px}
-@media(max-width:1100px){.grafico-grid{grid-template-columns:1fr}}
+/* Antes ia direto de 3 colunas pra 1 já em 1100px — um tablet ou notebook
+   comum caía em 3 gráficos empilhados de tela inteira cada. Um passo
+   intermediário de 2 colunas cobre essa faixa; só telefone de verdade
+   (abaixo de 640px) empilha em coluna única. Pedido do usuário
+   (08/08/2026): gráficos "num tamanho que caiba na tela, como os
+   gráficos da Binance" — compactos, não um por rolagem inteira. */
+@media(max-width:1100px){.grafico-grid{grid-template-columns:1fr 1fr}}
+@media(max-width:640px){.grafico-grid{grid-template-columns:1fr}}
 .grafico-box{
   background:var(--navy-deep);border:1px solid var(--border-soft);border-radius:var(--radius);
   padding:14px;display:flex;flex-direction:column;
