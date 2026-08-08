@@ -48,47 +48,41 @@ const STATUS_META = {
 };
 
 /* ---------- "Pra onde?" (classificador de modal/operação) ----------
-   Quatro opções, todas explícitas — não existe mais valor vazio. Antes, o
-   vazio significava "Direto Suinco"; agora isso se chama FROTA PROPRIA e tem
-   valor próprio. Vazio como portador de significado é armadilha: some no
-   relatório, some no filtro do Power BI, e ninguém sabe se a carga é frota
-   própria ou se o campo não foi preenchido.
+   Três opções, todas explícitas — não existe valor vazio. Vazio como
+   portador de significado é armadilha: some no relatório, some no filtro
+   do Power BI, e ninguém sabe se o campo não foi preenchido.
+
+   FROTA PROPRIA saiu e DEDICADA virou ENTREGA DIRETA — pedido direto do
+   gestor (Alysson, via WhatsApp, 08/08/2026): "Exclua esse frota propria.
+   E altere o dedicada para entrega direta. E deixe somente esses tres:
+   Cross / Entrega Direta / Ret Frigo." Caminhão da própria Suinco fazendo
+   entrega direta é operacionalmente a mesma coisa que terceiro dedicado
+   fazendo entrega direta — por isso as duas categorias antigas viram uma
+   só. Migração dos dados já gravados: backend/migrations/003_tipo_operacao.sql.
 
    NOTA: até 02/08/2026 existia aqui um campo "Compartilhada?", DERIVADO deste.
    Foi substituído por "Paletizada", que é informação independente e EDITÁVEL —
    não dá para inferir do tipo de operação se a carga é paletizada. A função
    compartilhadaDaCarga() foi mantida apenas para ler registros antigos e
    converter o export; nenhuma tela nova a usa. */
-const PRA_ONDE_OPCOES = ['FROTA PROPRIA', 'CROSS-DOCKING', 'DEDICADA', 'RET FRIGO'];
+const PRA_ONDE_OPCOES = ['CROSS-DOCKING', 'ENTREGA DIRETA', 'RET FRIGO'];
 const PRA_ONDE_LABEL = {
-  'FROTA PROPRIA':'FROTA PRÓPRIA',
   'CROSS-DOCKING':'CROSS-DOCKING',
-  'DEDICADA':'DEDICADA',
+  'ENTREGA DIRETA':'ENTREGA DIRETA',
   'RET FRIGO':'RET FRIGO'
 };
-const PRA_ONDE_PADRAO = 'FROTA PROPRIA';
-/* Sugere o Tipo de Operação a partir da transportadora já conhecida na
-   Frota, em vez de sempre cravar FROTA PRÓPRIA — achado do gestor em
-   produção (07/08/2026): "vários carros constando como frota própria e
-   não são". Acontecia porque a chegada sem programação (Portaria clica
-   "Chegou" numa placa nova) grava FROTA PRÓPRIA de cara, mesmo já sabendo
-   pela Frota que a transportadora é terceirizada — e o formulário de
-   "Completar dados" que a Logística usa depois vinha com o mesmo valor
-   pré-marcado, fácil de não notar que estava errado.
-
-   "Suinco" é a única transportadora que é frota própria de verdade.
-   Qualquer outra CONHECIDA vira DEDICADA — é a categoria que a própria
-   Logística já usa pra transportadora terceirizada em toda carga
-   programada manualmente (conferido no Relatório Operacional de
-   07/08/2026: Baixotes Transportes, Marques e Silva, AJB Transportes
-   etc. saem como DEDICADA). Transportadora ainda desconhecida (placa fora
-   da Frota) cai no padrão de sempre — não tem base pra sugerir nada
-   melhor. Continua sendo só uma SUGESTÃO: quem completa o cadastro pode
-   trocar. */
+const PRA_ONDE_PADRAO = 'ENTREGA DIRETA';
+/* Sugestão de Tipo de Operação pra chegada sem programação (Portaria
+   clica "Chegou" numa placa nova). Antes distinguia Suinco (FROTA
+   PRÓPRIA) de transportadora terceirizada (DEDICADA) — achado do gestor
+   em produção em 07/08/2026, "vários carros constando como frota própria
+   e não são". Com FROTA PRÓPRIA removida (08/08/2026), as duas
+   categorias antigas colapsaram numa só (ENTREGA DIRETA), então não há
+   mais distinção a fazer a partir da transportadora — a função continua
+   existindo, e retornando o padrão, para não obrigar quem chama a saber
+   dessa mudança de regra. */
 function praOndeSugerido(transportadora){
-  const t = (transportadora || '').trim().toLowerCase();
-  if(!t) return PRA_ONDE_PADRAO;
-  return t === 'suinco' ? 'FROTA PROPRIA' : 'DEDICADA';
+  return PRA_ONDE_PADRAO;
 }
 // Leitura de Paletizada, tolerante a registros antigos que não têm o campo.
 function paletizadaDaCarga(carga){
@@ -101,7 +95,7 @@ function compartilhadaDaCarga(carga){
 /* Migração dos registros gravados antes desta renomeação. Sem isto, uma carga
    antiga com praOnde='CROSS' deixaria de ser contada como Compartilhada, o que
    mudaria indicador e relatório em silêncio. */
-const PRA_ONDE_MIGRACAO = { '': 'FROTA PROPRIA', 'CROSS': 'CROSS-DOCKING' };
+const PRA_ONDE_MIGRACAO = { '': 'ENTREGA DIRETA', 'CROSS': 'CROSS-DOCKING' };
 function migrarPraOnde(){
   let n = 0;
   (DB.cargas || []).forEach(c => {

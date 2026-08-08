@@ -55,7 +55,7 @@ async def main():
         dados = await pagina.evaluate("""() => {
             const placa = DB.frota[5].placa;
             criarCargaProgramada({placa, numeroCarga:'VP001', peso:14000, rota:'500',
-                praOnde:'FROTA PROPRIA', paletizada:'Sim', qtdGanchos:20,
+                praOnde:'ENTREGA DIRETA', paletizada:'Sim', qtdGanchos:20,
                 qtdEntregas:1, operador:'Logística Teste'});
             registrarChegadaPortaria(placa, 'Porteiro');
             const c = DB.cargas.find(x => x.numeroCarga === 'VP001');
@@ -179,7 +179,7 @@ async def main():
         travada = await pagina.evaluate("""() => {
             const placa = DB.frota[7].placa;
             criarCargaProgramada({placa, numeroCarga:'VP900', peso:9000, rota:'500',
-                praOnde:'FROTA PROPRIA', paletizada:'Não', qtdGanchos:0,
+                praOnde:'ENTREGA DIRETA', paletizada:'Não', qtdGanchos:0,
                 qtdEntregas:1, operador:'Log'});
             registrarChegadaPortaria(placa, 'Porteiro');
             abrirTab('torre'); renderAll();

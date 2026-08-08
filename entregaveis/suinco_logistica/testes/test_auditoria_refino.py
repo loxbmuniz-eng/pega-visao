@@ -120,7 +120,7 @@ async def main():
             const placa = (DB.frota[0] || {}).placa || 'AAA0A00';
             criarCargaProgramada({
                 placa, numeroCarga:'AUD1', peso:12000, rota:'500',
-                praOnde:'FROTA PROPRIA', paletizada:'Sim', qtdGanchos:30,
+                praOnde:'ENTREGA DIRETA', paletizada:'Sim', qtdGanchos:30,
                 qtdEntregas:2, operador:'Auditor'
             });
             // renderAll() desenha só a aba ativa. Sem abrir a Programação, a
