@@ -826,10 +826,27 @@ function atualizarAvisoSetorAba(){
    chamá-las achando que protegem alguma coisa. */
 
 /* ---------- navegação ---------- */
+/* Gaveta de navegação do celular — pedido direto do usuário (08/08/2026):
+   "ao inves de ser uma barra de rolagem pro lado... um atalho na
+   esquerda que abre um menu". No desktop #nav continua barra horizontal
+   sempre visível (ver @media em styles.css); estas duas funções só têm
+   efeito visual abaixo do ponto de corte onde #nav vira gaveta. */
+function alternarMenuMobile(){
+  const nav = document.getElementById('nav');
+  const aberto = nav.classList.toggle('nav-aberto');
+  document.getElementById('menu-overlay').classList.toggle('visivel', aberto);
+  document.getElementById('btn-menu').setAttribute('aria-expanded', aberto ? 'true' : 'false');
+}
+function fecharMenuMobile(){
+  document.getElementById('nav').classList.remove('nav-aberto');
+  document.getElementById('menu-overlay').classList.remove('visivel');
+  document.getElementById('btn-menu').setAttribute('aria-expanded', 'false');
+}
 function abrirTab(tab){
   irParaTab(tab);
 }
 function irParaTab(tab){
+  fecharMenuMobile();   // tocar num item da gaveta navega E fecha — não some sozinha
   document.querySelectorAll('.tab-page').forEach(el=>el.classList.remove('active'));
   document.querySelectorAll('.nav-tab').forEach(el=>el.classList.remove('active'));
   const page = document.getElementById('tab-'+tab);

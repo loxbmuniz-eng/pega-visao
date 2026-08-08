@@ -22,6 +22,11 @@
 
 <!-- ===================== HEADER ===================== -->
 <div id="header">
+  <!-- Só existe (visualmente) no celular — ver #btn-menu em @media no
+       styles.css. No desktop a barra de abas continua horizontal, sempre
+       visível, sem gaveta nenhuma: o problema que a gaveta resolve
+       (rolagem lateral difícil de usar com o dedo) não existe lá. -->
+  <button id="btn-menu" onclick="alternarMenuMobile()" title="Abrir menu" aria-label="Abrir menu de navegação" aria-expanded="false">☰</button>
   <div id="logo-chip"><img src="assets/logo_suinco.png" alt="Suinco"></div>
   <div id="header-title">
     <strong>PROGRAMAÇÃO DE EMBARQUE</strong>
@@ -45,7 +50,16 @@
   </div>
 </div>
 
-<!-- ===================== NAV ===================== -->
+<!-- ===================== NAV =====================
+     Um elemento só, dois comportamentos por tamanho de tela (ver
+     styles.css): barra horizontal fixa no desktop, gaveta que desliza da
+     esquerda no celular. As mesmas divs .nav-tab servem os dois — sem
+     lista duplicada, sem risco de uma ficar desatualizada quando um setor
+     ganha ou perde aba (a ocultação por setor já roda em cima destas
+     mesmas divs, ver aplicarPermissoesSetor em app.js). Pedido direto do
+     usuário (08/08/2026): "ao inves de ser uma barra de rolagem pro lado
+     na tela que seja um atalho na esquerda que abre um menu". -->
+<div id="menu-overlay" onclick="fecharMenuMobile()"></div>
 <div id="nav">
   <div class="nav-tab active" data-tab="torre" onclick="abrirTab('torre')">🗼 Torre de Controle</div>
   <div class="nav-tab" data-tab="programacao" onclick="abrirTab('programacao')">📋 Programação</div>
