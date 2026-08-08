@@ -1086,6 +1086,19 @@ function fmtHora(iso){
    via innerHTML) — funciona porque os rótulos das caixas da Torre são
    fixos ("Cargas em aberto", os 5 nomes de status etc.). */
 let _ultimoValorTorre = {};
+/* Filtro por clique nas caixas da Torre — pedido do usuário (08/08/2026):
+   "clique nos quadrados... aguardando embarque, aguardando veiculo... e
+   faça um filtro instantâneo apontando pra aquelas cargas de cada
+   status". null = sem filtro (mostra as cargas em aberto, comportamento
+   de sempre). Duas chaves especiais além dos 6 nomes de status reais:
+   '__SEGUIU_HOJE__' (a caixa "Seguiu Viagem hoje" não é um status
+   presente em cargasAbertas()) e '__AGUARDANDO_CARGA__' (a flag
+   aguardandoCarga, não um valor de status). */
+let _torreFiltroStatus = null;
+function filtrarTorrePorStatus(chave){
+  _torreFiltroStatus = (chave === '__TODAS__' || _torreFiltroStatus === chave) ? null : chave;
+  renderTorre();
+}
 function animarContadoresTorre(){
   const reduzido = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   document.querySelectorAll('#torre-stats [data-contador]').forEach(el=>{
@@ -1149,25 +1162,49 @@ function renderTorre(){
     return (Date.now() - new Date(chegada)) / 60000 > META_TEMPO_PATIO_MIN;
   }).length;
 
-  const caixa = (num, rotulo, {destaque=false, alerta=false, nota=''} = {}) =>
-    `<div class="stat-box${destaque?' stat-destaque':''}${alerta && num>0?' stat-alerta':''}">
+  const caixa = (num, rotulo, {destaque=false, alerta=false, nota='', filtro=null} = {}) => {
+    const ehLimpar = filtro === '__TODAS__';
+    const ativo = filtro !== null && (ehLimpar ? _torreFiltroStatus === null : _torreFiltroStatus === filtro);
+    const clicavel = filtro !== null;
+    return `<div class="stat-box${destaque?' stat-destaque':''}${alerta && num>0?' stat-alerta':''}${clicavel?' stat-clicavel':''}${ativo?' stat-ativo':''}"
+       ${clicavel ? `onclick="filtrarTorrePorStatus('${escJs(filtro)}')" title="Clique para filtrar a tabela por esta caixa — clique de novo para limpar."` : ''}>
        <div class="stat-num" data-contador="${esc(rotulo)}">${num}</div>
        <div class="stat-label">${esc(rotulo)}</div>
        ${nota ? `<div class="stat-note">${esc(nota)}</div>` : ''}
      </div>`;
+  };
 
   document.getElementById('torre-stats').innerHTML =
     // Primeiro e maior: o número que exige ação agora.
     caixa(paradas, `Paradas há mais de ${Math.round(META_TEMPO_PATIO_MIN/60)}h`,
           {destaque:true, alerta:true, nota:'contado desde a chegada ao pátio'})
-    + caixa(abertas.length, 'Cargas em aberto', {destaque:true})
-    + statusVisiveis.map(s=>caixa(porStatus[s]||0, s)).join('')
-    + caixa(seguiuViagemHojeCount, 'Seguiu Viagem hoje', {destaque:true})
+    + caixa(abertas.length, 'Cargas em aberto', {destaque:true, filtro:'__TODAS__'})
+    + statusVisiveis.map(s=>caixa(porStatus[s]||0, s, {filtro:s})).join('')
+    + caixa(seguiuViagemHojeCount, 'Seguiu Viagem hoje', {destaque:true, filtro:'__SEGUIU_HOJE__'})
     + caixa(aguardandoCargaCount, 'Aguardando Carga',
-            {nota:'dados incompletos'});
+            {nota:'dados incompletos', filtro:'__AGUARDANDO_CARGA__'});
   animarContadoresTorre();
 
-  const lista = abertas.slice().sort(ordenarPorSequenciaEAtualizacao);
+  // A tabela mostra as cargas do filtro clicado — ou as em aberto de
+  // sempre, sem filtro nenhum. Os NÚMEROS das caixas acima nunca mudam
+  // com o clique (continuam contando o total real de cada status); só a
+  // lista abaixo é que aponta pras cargas daquele status específico.
+  let lista;
+  if(_torreFiltroStatus === '__SEGUIU_HOJE__'){
+    lista = DB.cargas.filter(c=>{
+      if(c.status !== 'Seguiu Viagem') return false;
+      const saida = primeiroTimestamp(c.id, 'Seguiu Viagem');
+      return saida && new Date(saida) >= hoje;
+    });
+  } else if(_torreFiltroStatus === '__AGUARDANDO_CARGA__'){
+    lista = abertas.filter(c=>c.aguardandoCarga);
+  } else if(_torreFiltroStatus){
+    lista = abertas.filter(c=>c.status === _torreFiltroStatus);
+  } else {
+    lista = abertas;
+  }
+  lista = lista.slice().sort(ordenarPorSequenciaEAtualizacao);
+
   const thead = document.getElementById('torre-thead');
   if(thead){
     thead.innerHTML =
@@ -1190,7 +1227,14 @@ function renderTorre(){
       <td>${badgeHtml(c.status)}</td><td>${fmtDataHora(c.atualizadoEm)}</td>
       ${podeCancelarCarga() ? `<td class="no-print">${botaoCancelarHtml(c)}</td>` : ''}
     </tr>`).join('');
-  document.getElementById('torre-empty').hidden = lista.length>0;
+  const vazio = document.getElementById('torre-empty');
+  vazio.hidden = lista.length>0;
+  if(!vazio.hidden){
+    vazio.innerHTML = _torreFiltroStatus
+      ? 'Nenhuma carga com esse status agora.'
+        + '<span class="empty-acao"><button class="btn btn-sec btn-sm" onclick="filtrarTorrePorStatus(\'__TODAS__\')">Ver todas em aberto</button></span>'
+      : 'Nenhuma carga em aberto no momento.';
+  }
 }
 function ordenarPorSequenciaEAtualizacao(a,b){
   const sa = (a.sequencia===null||a.sequencia===undefined) ? Infinity : a.sequencia;
@@ -2640,6 +2684,61 @@ function renderHistorico(){
 
    O título volta ao original no afterprint. Deixá-lo trocado mudaria a aba
    do navegador para sempre. */
+/* Encolhe o relatório pra caber numa página só, em vez de estourar pra
+   uma segunda página quase vazia. Pedido direto do usuário (08/08/2026):
+   "quero que os relatorios sejam one pagers... coloca tudo dentro de uma
+   pagina só".
+
+   SÓ funciona chamada durante beforeprint/print de verdade — é o único
+   instante em que `@media print` (a fonte compacta de cada densidade,
+   .doc-denso/.doc-normal/.doc-amplo) está de fato ativo. Medida antes
+   disso mediria o tamanho da pré-visualização em tela, que é maior — por
+   isso não é chamada direto em imprimirContainer(), e sim no listener de
+   'beforeprint' logo abaixo.
+
+   Cobre as DUAS razões de estourar a página, com a mesma conta:
+   1) muitas cargas — a altura do conteúdo passa da altura útil da folha;
+   2) celular que ignora `@page{size:landscape}` e imprime em pé (mesmo
+      achado de 07/08/2026) — a LARGURA útil da folha física fica menor
+      que a largura fixa do relatório (calibrado pra folha deitada).
+   Usa a menor das duas escalas necessárias, com piso de 50%: abaixo
+   disso o texto vira ilegível, e nesse ponto a prioridade muda de "cabe
+   numa página" pra "dá pra ler alguma coisa". */
+function ajustarParaCaberEmUmaPagina(el){
+  const pagina = el.querySelector('.print-page');
+  if(!pagina) return;
+  pagina.style.transform = '';
+  pagina.style.transformOrigin = '';
+
+  const PX_POR_MM = 96 / 25.4;
+  const MARGEM_MM = 8; // @page{margin:8mm} em styles.css
+  const emPe = window.matchMedia && window.matchMedia('print and (orientation: portrait)').matches;
+  // A4: 297×210mm. Deitado de verdade, a largura útil é a maior; em pé
+  // (celular que ignorou o pedido de orientação), a largura útil é a
+  // menor — e é exatamente o motivo do relatório estourar coluna.
+  const larguraFolhaMm = (emPe ? 210 : 297) - MARGEM_MM*2;
+  const alturaFolhaMm  = (emPe ? 297 : 210) - MARGEM_MM*2;
+
+  // A largura do relatório é sempre calibrada pra folha deitada (281mm) —
+  // trava isso explicitamente, pra não depender de o navegador ter
+  // resolvido a folha deitada ou em pé antes desta medição.
+  pagina.style.width = '281mm';
+
+  const escalaLargura = Math.min(1, (larguraFolhaMm*PX_POR_MM) / pagina.scrollWidth);
+  const escalaAltura  = Math.min(1, (alturaFolhaMm*PX_POR_MM) / pagina.scrollHeight);
+  const escala = Math.max(0.5, Math.min(escalaLargura, escalaAltura));
+
+  if(escala < 1){
+    pagina.style.transform = `scale(${escala})`;
+    pagina.style.transformOrigin = 'top left';
+  }
+}
+window.addEventListener('beforeprint', () => {
+  document.querySelectorAll('.print-only').forEach(el=>{
+    if(el.style.display !== 'none') ajustarParaCaberEmUmaPagina(el);
+  });
+});
+
 function imprimirContainer(el, nomeDoRelatorio){
   document.querySelectorAll('.print-only').forEach(x=>x.style.display='none');
   el.style.display = 'block';
@@ -2664,6 +2763,11 @@ function imprimirContainer(el, nomeDoRelatorio){
   const limpar = ()=>{
     el.style.display='none';
     document.title = tituloOriginal;
+    // Desfaz o encolhimento de ajustarParaCaberEmUmaPagina — o container
+    // é reaproveitado na próxima exportação, e a pré-visualização em tela
+    // (se alguém abrir de novo) não deve ficar menor por causa disso.
+    const pagina = el.querySelector('.print-page');
+    if(pagina){ pagina.style.transform=''; pagina.style.transformOrigin=''; pagina.style.width=''; }
     window.removeEventListener('afterprint', limpar);
   };
   window.addEventListener('afterprint', limpar);
@@ -2729,7 +2833,7 @@ async function exportarPdfOperacional(){
   // (aguardandoCarga), que ainda não tem dados para sequenciar.
   // Respeita o filtro de Data da Programação da aba Relatórios.
   const lista = cargasDoRelatorio().slice().sort(ordenarPorEtapaDaTimeline);
-  const linhas = lista.map((c,i)=>{
+  const linhas = lista.map((c)=>{
     const pesoTon = ((c.peso||0)/1000).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
     const praOndeStyle = c.praOnde ? `style="background:${CORES_PRA_ONDE[c.praOnde]||'#e9b954'};color:#fff;font-weight:800"` : '';
     // Status real da carga (os 6), com o preenchimento sólido da escala do
@@ -2744,7 +2848,6 @@ async function exportarPdfOperacional(){
        espremia "Aguardando Embarque" em duas linhas. Com classe, mover ou
        remover coluna não desalinha mais nada. */
     return `<tr>
-      <td class="c-num">${i+1}</td>
       <td class="c-seq">${c.sequencia ?? '—'}</td>
       <td class="c-carga">${esc(c.numeroCarga).toUpperCase()||'—'}</td>
       <td class="c-status" style="background:${cs.fundo};color:${cs.texto}">${esc(c.status)}</td>
@@ -2777,7 +2880,6 @@ async function exportarPdfOperacional(){
            algo que já estava escrito. -->
       <table>
         <thead><tr>
-          <th class="c-num">Nº</th>
           <th class="c-seq">Seq.</th>
           <th class="c-carga">Nº Carga</th>
           <th class="c-status">Status</th>
@@ -2797,7 +2899,7 @@ async function exportarPdfOperacional(){
           <th class="c-ganchos">Ganchos</th>
         </tr></thead>
         <tbody>${linhas || '<tr><td colspan="13" class="text-center text-dim">Nenhuma carga no período selecionado.</td></tr>'}</tbody>
-        ${lista.length ? `<tfoot>${rodapeSomatorios(lista, 9, ['peso','', 'entregas','ganchos'])}</tfoot>` : ''}
+        ${lista.length ? `<tfoot>${rodapeSomatorios(lista, 8, ['peso','', 'entregas','ganchos'])}</tfoot>` : ''}
       </table>
       <!-- Nota de rodapé enxugada.
 
