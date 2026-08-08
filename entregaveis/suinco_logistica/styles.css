@@ -1980,6 +1980,19 @@ input,select,textarea{border-radius:5px}
   letter-spacing:.4px; text-transform:uppercase; vertical-align:middle;
 }
 
+/* Presença — aba Usuários. Cinza por padrão (offline); verde só quando o
+   evento de socket confirma uma conexão aberta agora. Tamanho fixo pra não
+   deslocar o texto do nome quando o estado muda ao vivo. */
+.presenca-dot{
+  display:inline-block; width:9px; height:9px; border-radius:50%;
+  background:var(--placeholder, #8892a6); vertical-align:middle;
+  margin-right:2px; flex:none;
+}
+.presenca-dot.online{
+  background:var(--ok, #3fa66a);
+  box-shadow:0 0 0 3px rgba(63,166,106,.22);
+}
+
 .setor-inline{
   padding:5px 7px; border-radius:6px; font-size:13px;
   border:1px solid var(--border, #d5d9e0);

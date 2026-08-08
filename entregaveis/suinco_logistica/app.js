@@ -6,6 +6,10 @@
 
 let TAB_ATUAL = 'torre';
 let currentPickerCallback = null;
+// Ids (string) dos operadores conectados agora, mantido pelo evento de
+// presença do socket. Só usado pela aba Usuários — o resto do painel não
+// depende de saber quem mais está online.
+let _operadoresOnline = new Set();
 
 // Próxima ação disponível a partir de cada status (usada nos botões de
 // linha das tabelas de Expedição/Faturamento — cada linha já é uma carga
@@ -3489,6 +3493,13 @@ async function init(){
     // placa. Chega por fora da sincronia porque é notícia, não dado.
     if(SuincoSharePoint.aoEditarCarga) SuincoSharePoint.aoEditarCarga(receberEdicaoRemota);
     if(SuincoSharePoint.aoExcluirCarga) SuincoSharePoint.aoExcluirCarga(receberExclusaoRemota);
+    // Quem está online, pra aba Usuários. Só redesenha se a aba estiver
+    // aberta agora — nas outras telas a lista fica guardada e some vale na
+    // próxima vez que a Administração abrir Usuários.
+    if(SuincoSharePoint.aoAtualizarPresenca) SuincoSharePoint.aoAtualizarPresenca(online => {
+      _operadoresOnline = new Set((online || []).map(String));
+      if(TAB_ATUAL === 'usuarios') renderUsuarios();
+    });
     if(typeof aoRecusarStatus === 'function') aoRecusarStatus(receberRecusaDeStatus);
     if(typeof aoRecusarCarga === 'function') aoRecusarCarga(receberRecusaDeCarga);
     if(typeof aoRecusarFrota === 'function') aoRecusarFrota(receberRecusaDeFrota);
@@ -3862,10 +3873,11 @@ async function renderUsuarios(){
 
   tbody.innerHTML = _usuarios.map(u=>{
     const sou = u.email === euMesmo;
+    const online = _operadoresOnline.has(String(u.id));
     const acesso = u.ultimoAcesso ? fmtDataHora(u.ultimoAcesso)
       : '<span class="text-dim">nunca acessou</span>';
     return `<tr${u.ativo ? '' : ' class="linha-inativa"'}>
-      <td><strong>${esc(u.nome)}</strong>${sou ? ' <span class="chip-voce">você</span>' : ''}</td>
+      <td><span class="presenca-dot${online ? ' online' : ''}" title="${online ? 'Online agora' : 'Offline'}" aria-label="${online ? 'Online agora' : 'Offline'}"></span> <strong>${esc(u.nome)}</strong>${sou ? ' <span class="chip-voce">você</span>' : ''}</td>
       <td>${esc(u.email)}</td>
       <td>
         <select class="setor-inline" onchange="alterarSetorUsuarioUI('${escJs(u.id)}', this.value)"
