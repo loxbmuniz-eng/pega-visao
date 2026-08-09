@@ -1377,11 +1377,6 @@ function renderTorre(){
      igual obriga o olho a ler as seis para achar a que importa.
 
      A conta é a mesma de sempre — só o tamanho da caixa muda. */
-  const paradas = abertas.filter(c=>{
-    const chegada = primeiroTimestamp(c.id, 'Aguardando Embarque');
-    if(!chegada) return false;
-    return (Date.now() - new Date(chegada)) / 60000 > META_TEMPO_PATIO_MIN;
-  }).length;
 
   const caixa = (num, rotulo, {destaque=false, alerta=false, nota='', filtro=null} = {}) => {
     const ehLimpar = filtro === '__TODAS__';
@@ -1403,10 +1398,9 @@ function renderTorre(){
   };
 
   document.getElementById('torre-stats').innerHTML =
-    // Primeiro e maior: o número que exige ação agora.
-    caixa(paradas, `Paradas há mais de ${Math.round(META_TEMPO_PATIO_MIN/60)}h`,
-          {destaque:true, alerta:true, nota:'contado desde a chegada ao pátio'})
-    + caixa(abertas.length, 'Cargas em aberto', {destaque:true, filtro:'__TODAS__'})
+    // "Paradas há mais de Xh" foi removida a pedido do usuário
+    // (08/08/2026): ícone considerado inútil na Torre.
+    caixa(abertas.length, 'Cargas em aberto', {destaque:true, filtro:'__TODAS__'})
     + statusVisiveis.map(s=>caixa(porStatus[s]||0, s, {filtro:s})).join('')
     + caixa(seguiuViagemHojeCount, 'Seguiu Viagem hoje', {destaque:true, filtro:'__SEGUIU_HOJE__'})
     + caixa(aguardandoCargaCount, 'Aguardando Carga',
