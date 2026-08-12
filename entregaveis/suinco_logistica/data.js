@@ -387,8 +387,16 @@ const SETOR_PERMISSOES = {
      entrasse na tela, o servidor recusaria qualquer escrita: Comercial não
      está em nenhuma função de permissão de dominio/fluxo.js. Indicadores
      ficou de fora por não ter sido pedido — cabe entrar depois se fizer
-     falta, é mudança de uma linha. */
-  'Comercial':    ['torre','historico','relatorios'],
+     falta, é mudança de uma linha.
+
+     REDUZIDO em 11/08/2026, a pedido do usuário: "a visão do comercial,
+     só visão de pátio e histórico". Relatórios saiu — o Comercial
+     consulta onde a carga está, não emite documento. A Visão do Pátio
+     mora dentro da Torre (ver ABAS_OPERACIONAIS acima), por isso 'torre'
+     continua: é o caminho para ela, não acesso a mais poder (a Torre é
+     leitura pura, e os campos editáveis dela só aparecem para quem pode
+     cancelar carga — Logística/Administração). */
+  'Comercial':    ['torre','historico'],
 };
 
 // Função de cada aba, exibida no topo dela. Serve para quem abre o painel pela

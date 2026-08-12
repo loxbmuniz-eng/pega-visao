@@ -2089,7 +2089,18 @@ function renderProgAguardando(){
     <tr>
       <td>${esc(c.placa)}</td><td>${esc(c.transportadora)||'—'}</td><td>${esc(c.tipoVeiculo)||'—'}</td>
       <td>${fmtDataHora(c.criadoEm)}</td>
-      <td class="no-print"><button class="btn btn-primary btn-sm" onclick="abrirCompletar('${escJs(c.id)}')">Completar dados</button></td>
+      <td class="no-print gap8">
+        <button class="btn btn-primary btn-sm" onclick="abrirCompletar('${escJs(c.id)}')">Completar dados</button>
+        <!-- Excluir aqui — pedido do usuário (11/08/2026): "ADICIONAR UM
+             BOTAO DE EXCLUIR NO AGUARDANDO CARGA". Caminhão que a Portaria
+             registrou por engano (placa errada, veículo que só passou)
+             ficava preso nesta lista para sempre: sem número de carga não
+             dá pra completar, e não havia como tirar. Usa a MESMA função
+             de exclusão do resto do painel, com as mesmas travas de
+             permissão e o mesmo registro no Histórico. -->
+        <button class="btn btn-danger btn-sm" onclick="excluirCargaUI('${escJs(c.id)}')"
+                title="Remover este registro — use quando a chegada foi lançada por engano.">Excluir</button>
+      </td>
     </tr>`).join('');
   document.getElementById('prog-aguardando-empty').hidden = lista.length>0;
 }
