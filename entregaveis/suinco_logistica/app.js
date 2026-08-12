@@ -1553,6 +1553,46 @@ function ordenarPorEtapaDaTimeline(a,b){
   return ordenarPorSequenciaEAtualizacao(a,b);
 }
 
+/* Fila de cada setor: primeiro o que espera a AÇÃO daquele setor.
+
+   Pedido do usuário (12/08/2026): "no painel de cada setor, na fila...
+   eu quero que fique organizado e apareca nas primeiras linhas de cima
+   pra baixo as cargas que foram faturadas, e nao fique desorganizado e
+   baguncado... para a expedicao tambem, e para o faturamento tambem".
+
+   O princípio por trás dos três casos é o mesmo: quem abre a tela quer
+   ver primeiro o que DEPENDE DELE agora. A Portaria libera quem já foi
+   faturado; a Expedição carrega quem já chegou; o Faturamento fatura quem
+   já terminou de embarcar. Tudo isso ficava misturado com carga que ainda
+   não é da vez — e no Faturamento nem ordenação existia: saía na ordem
+   bruta do array, que muda a cada sincronia.
+
+   Dentro de cada grupo a ordem continua sendo a sequência de
+   carregamento, que é a regra que a Logística define. */
+const ACAO_DO_SETOR = {
+  /* A Portaria age nas duas pontas do fluxo. "Faturado" vem primeiro por
+     pedido explícito: é o caminhão pronto pra sair, ocupando pátio. */
+  'Portaria':    ['Faturado', 'Aguardando Veículo'],
+  /* Expedição: o que chegou e espera doca, depois o que já está na doca
+     e precisa ser fechado. */
+  'Expedição':   ['Aguardando Embarque', 'Embarque Iniciado'],
+  'Faturamento': ['Embarque Finalizado'],
+};
+
+function ordenarPorAcaoDoSetor(setor){
+  const prioridade = ACAO_DO_SETOR[setor] || [];
+  return (a, b) => {
+    // Quem não está na lista de ação do setor vai para depois de todos os
+    // que estão — sem sumir da tela: continua consultável abaixo.
+    const pa = prioridade.indexOf(a.status);
+    const pb = prioridade.indexOf(b.status);
+    const ra = pa === -1 ? prioridade.length : pa;
+    const rb = pb === -1 ? prioridade.length : pb;
+    if(ra !== rb) return ra - rb;
+    return ordenarPorSequenciaEAtualizacao(a, b);
+  };
+}
+
 /* ---------- PROGRAMAÇÃO ---------- */
 function atualizarPreviewFrotaPrograma(){
   const placa = document.getElementById('prog-placa').value;
@@ -2274,7 +2314,7 @@ function acaoSaidaUI(){
    mostra Chegou; em "Faturado" mostra Saiu; nas etapas intermediárias não
    mostra nada, porque a ação é de outro setor. */
 function renderPortariaProgramadas(){
-  const lista = cargasAbertas().slice().sort(ordenarPorSequenciaEAtualizacao);
+  const lista = cargasAbertas().slice().sort(ordenarPorAcaoDoSetor('Portaria'));
   const tb = document.getElementById('portaria-prog-tbody');
   if(!tb) return;
   tb.innerHTML = lista.map(c=>{
@@ -2383,7 +2423,7 @@ function fecharModalPicker(){
 /* ---------- EXPEDIÇÃO ---------- */
 function renderExpedicao(){
   const alvo = ['Aguardando Embarque','Embarque Iniciado'];
-  const lista = cargasAbertas().filter(c=>alvo.includes(c.status)).sort(ordenarPorSequenciaEAtualizacao);
+  const lista = cargasAbertas().filter(c=>alvo.includes(c.status)).sort(ordenarPorAcaoDoSetor('Expedição'));
   document.getElementById('exp-tbody').innerHTML = lista.map(c=>`
     <tr>
       <td>${c.sequencia ?? '—'}</td><td class="col-identificacao">${esc(c.numeroCarga)||'—'}</td><td class="col-identificacao">${esc(c.placa)}</td><td>${esc(c.transportadora)||'—'}</td>
@@ -2396,7 +2436,7 @@ function renderExpedicao(){
 /* ---------- FATURAMENTO ---------- */
 function renderFaturamento(){
   const alvo = ['Embarque Finalizado','Faturado'];
-  const lista = cargasAbertas().filter(c=>alvo.includes(c.status));
+  const lista = cargasAbertas().filter(c=>alvo.includes(c.status)).sort(ordenarPorAcaoDoSetor('Faturamento'));
   document.getElementById('fat-tbody').innerHTML = lista.map(c=>`
     <tr>
       <td class="col-identificacao">${esc(c.numeroCarga)||'—'}</td><td class="col-identificacao">${esc(c.placa)}</td><td>${esc(c.transportadora)||'—'}</td><td>${esc(c.destino)||'—'}</td>
