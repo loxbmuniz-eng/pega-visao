@@ -1521,7 +1521,7 @@ code{
   #main{margin-top:0!important;padding:12px!important;max-width:100%!important}
   .card{box-shadow:none;break-inside:avoid}
   table{font-size:11.5px}
-  .print-page{padding:16px}
+  .print-page{padding:0}
 }
 .icon-lg{font-size:34px}
 
@@ -1837,7 +1837,32 @@ input,select,textarea{border-radius:5px}
    conteúdo em vez de só encolher a moldura branca. Qualquer mudança
    aqui precisa espelhar MARGEM_MM em app.js (ajustarParaCaberEmUmaPagina)
    — as duas descrevem a MESMA folha física. */
-@page{ size: A4 landscape; margin: 5mm; }
+/* A4 VERTICAL — pedido do usuário (11/08/2026): "prefiro que seja na
+   vertical mesmo, no formato a4... eu quero que voce utilize as paginas
+   completas".
+
+   Margem de 6mm: folga acima do mínimo físico da maioria das impressoras
+   (~4mm) e ainda deixa 198mm úteis de largura, que é o que a tabela usa
+   inteiro. Qualquer mudança aqui precisa espelhar LARGURA_FOLHA_MM na
+   .print-page abaixo — as duas descrevem a MESMA folha. */
+@page{ size: A4 portrait; margin: 6mm; }
+
+/* A folha útil da A4 vertical com margem de 6mm: 210 - 2×6 = 198mm.
+
+   A largura vem daqui, do CSS, e não mais do JS. Antes ela era escrita
+   por ajustarParaCaberEmUmaPagina() como '287mm' (folha deitada) junto
+   com um transform:scale() — a combinação que produzia o relatório
+   miniaturizado no canto e as páginas em branco. Com o servidor
+   controlando a folha, o certo é o conteúdo já NASCER na largura certa e
+   deixar a paginação acontecer sozinha. */
+@media print{
+  .print-page{
+    width: 198mm !important;
+    max-width: 198mm !important;
+    margin: 0 !important;
+    transform: none !important;   /* nunca mais encolher: enche a folha */
+  }
+}
 
 /* MOBILE: alguns navegadores/apps de PDF do celular (confirmado pelo
    usuário em Android e iPhone, 07/08/2026) ignoram o pedido `size:
@@ -1892,6 +1917,29 @@ input,select,textarea{border-radius:5px}
   }
   /* O th nasce com white-space:nowrap. Com largura fixa isso fazia o título
      transbordar por cima da coluna vizinha. */
+  /* Número partido ao meio ("189,4 9") é dado ilegível, não estética.
+     Vale para toda célula numérica de todos os relatórios, inclusive as
+     linhas de total, que é onde o estrago é maior. */
+  .print-page td.c-peso, .print-page td.c-entregas, .print-page td.c-ganchos,
+  .print-page td.c-seq, .print-page td.c-carga, .print-page td.c-placa,
+  .print-page td.cel-num, .print-page td.num-forte, .print-page .tot-num,
+  .print-page .linha-total td{
+    white-space:nowrap !important;
+  }
+  /* Cabeçalho curto não deve partir ("ENTR." / "GANCHOS" / "PALET.").
+     Os de texto longo (Transportadora, Tipo de Operação) continuam
+     podendo quebrar — ali a quebra é natural e não confunde. */
+  /* Cabeçalho um ponto menor que o corpo: ele é rótulo fixo e curto,
+     lido uma vez. Sem isto, "PESO (TON)" com nowrap TRANSBORDAVA a
+     coluna e saía cortado como "PESO (TON" — rótulo truncado é pior que
+     rótulo pequeno. */
+  #print-operacional th{ font-size:7.4px !important; letter-spacing:0 !important }
+  #print-operacional th.c-seq, #print-operacional th.c-carga,
+  #print-operacional th.c-placa, #print-operacional th.c-peso,
+  #print-operacional th.c-palet, #print-operacional th.c-entregas,
+  #print-operacional th.c-ganchos{
+    white-space:nowrap !important;
+  }
   #print-operacional th{
     white-space:normal !important;
     vertical-align:bottom; line-height:1.2; text-align:center;
@@ -1915,7 +1963,19 @@ input,select,textarea{border-radius:5px}
      precisava: Seq. (agora a primeira coluna, precisa ler bem), Rota e
      Transportadora — e Status encolheu 1%, também a pedido ("pode
      diminuir um pouco a célula do status"). */
-  #print-operacional .c-seq{ width:5% }
+  /* ORÇAMENTO DE LARGURA RECALIBRADO PARA A4 VERTICAL (11/08/2026).
+
+     Os valores anteriores foram calculados para a folha DEITADA (287mm
+     úteis). Ao virar para vertical (198mm úteis), cada coluna passou a
+     receber ~69% da largura de antes — e o resultado foi exatamente o que
+     o usuário reclamou: cabeçalho partido ao meio ("ENTR ." / "GANC HOS")
+     e, o pior, o total do peso quebrando NO MEIO DO NÚMERO ("189,4 9").
+
+     Número partido não é feiura: é dado ilegível. Um total de frete lido
+     errado numa reunião é decisão errada. Por isso, além de refazer o
+     orçamento, toda célula numérica ganhou white-space:nowrap abaixo —
+     largura pode faltar, número quebrado não pode existir. */
+  #print-operacional .c-seq{ width:3.5% }
   #print-operacional .c-carga{ width:7% }
   /* 16%, não 17%: encolhida 1% a pedido do usuário — ainda a maior
      coluna de texto fixo da folha, de propósito. A fonte deste documento
@@ -1925,15 +1985,15 @@ input,select,textarea{border-radius:5px}
      testes/test_relatorios.py ("todo status cabe em UMA linha") antes de
      fixar o valor. */
   #print-operacional .c-status{ width:16% }     /* "AGUARDANDO EMBARQUE" */
-  #print-operacional .c-rota{ width:12% }
-  #print-operacional .c-operacao{ width:9% }
+  #print-operacional .c-rota{ width:14.5% }
+  #print-operacional .c-operacao{ width:10% }
   #print-operacional .c-placa{ width:7.5% }
-  #print-operacional .c-transp{ width:14.5% }   /* nomes longos de empresa */
-  #print-operacional .c-veiculo{ width:8% }
-  #print-operacional .c-peso{ width:5.5% }
-  #print-operacional .c-palet{ width:5% }
+  #print-operacional .c-transp{ width:13.5% }   /* nomes longos de empresa */
+  #print-operacional .c-veiculo{ width:6.5% }
+  #print-operacional .c-peso{ width:8% }
+  #print-operacional .c-palet{ width:4.5% }
   #print-operacional .c-entregas{ width:4.5% }
-  #print-operacional .c-ganchos{ width:5% }
+  #print-operacional .c-ganchos{ width:4.5% }
 }
 
 /* ---- Leitura dos dados: o que precisa saltar aos olhos ----
@@ -2493,6 +2553,37 @@ input,select,textarea{border-radius:5px}
   font-size:10.5px; color:var(--text-dim); line-height:1.6;
 }
 .doc-nota{ margin-bottom:6px }
+
+/* RODAPÉ COMPACTO NA IMPRESSÃO (11/08/2026).
+
+   Medido, não estimado: numa A4 vertical cabem 1077px úteis; com 24
+   cargas o conteúdo dava 1405px, e o rodapé sozinho ocupava 247px desse
+   excedente. O resultado era a página 2 do usuário: uma folha inteira
+   contendo APENAS o rodapé — o "espaço sobrando em branco" que ele
+   reclamou, na forma mais cara possível (uma folha por documento).
+
+   Na tela o rodapé continua com o respiro de sempre. Só no papel ele
+   encolhe, porque ali cada milímetro é uma folha a mais. */
+@media print{
+  .doc-rodape{
+    margin-top:8px !important; padding-top:5px !important;
+    font-size:7.6px !important; line-height:1.35 !important;
+  }
+  .doc-nota{ margin-bottom:2px !important }
+  .doc-assinatura{ font-size:7px !important }
+  .doc-ficha{ padding:4px 7px !important; margin-bottom:4px !important }
+  .doc-ficha-campos{ gap:1px 16px !important }
+  .doc-ficha-rot{ font-size:6.2px !important; line-height:1.1 !important }
+  .doc-ficha-val{ font-size:7.6px !important; line-height:1.15 !important }
+  /* As notas de conformidade (base de preparação, alcance e limitações)
+     precisam existir — é o que impede alguém tratar o documento como
+     fiscal. Mas em papel elas são leitura de uma vez só, não de consulta:
+     ficam no menor corpo ainda legível, em bloco corrido. */
+  .doc-base, .doc-limitacoes{
+    font-size:6.6px !important; line-height:1.25 !important;
+    margin:2px 0 !important; padding:3px 6px !important;
+  }
+}
 .doc-nota strong{ color:var(--text) }
 .doc-assinatura{ font-size:9.5px; opacity:.75; letter-spacing:.02em }
 
@@ -2509,9 +2600,83 @@ input,select,textarea{border-radius:5px}
 }
 
 @media print{
-  .doc-cabecalho{ border-bottom-color:#8a94a6 !important }
+  /* Cabeçalho compacto no papel: o bloco de identificação é o mesmo,
+     só perde o respiro que faz sentido na tela. Cada 20px aqui é uma
+     linha de carga a mais que cabe na folha. */
+  .doc-cabecalho{
+    border-bottom-color:#8a94a6 !important;
+    padding-bottom:6px !important; margin-bottom:8px !important; gap:12px !important;
+  }
   .doc-titulo{ color:#111418 !important }
   .doc-empresa, .doc-subtitulo, .doc-meta, .doc-rodape{ color:#3d4a5c !important }
+  /* A ficha do documento usava var(--text)/var(--text-dim), que no tema
+     escuro são claríssimas — no papel branco saíam quase invisíveis
+     (achado ao inspecionar o PDF gerado, 11/08/2026). Rodapé apagado num
+     documento que circula em reunião é o mesmo que rodapé ausente: o
+     leitor não confere período nem quem emitiu. Cores fixas de papel. */
+  /* CAIXAS DE INDICADOR NO PAPEL (achado ao inspecionar o PDF do
+     Executivo, 11/08/2026): elas saíam com o fundo ESCURO do tema e o
+     rótulo em cinza claro — ilegível no papel branco, além de encharcar
+     a folha de tinta. E ocupavam ~250px para mostrar quatro números.
+
+     Vira cartão de papel: fundo branco, borda fina, número forte,
+     rótulo escuro, e altura proporcional ao que de fato carregam. */
+  .print-page .stat-box{
+    background:#ffffff !important;
+    border:1px solid #c9d4e8 !important;
+    box-shadow:none !important;
+    padding:6px 8px !important;
+    min-height:0 !important;
+  }
+  .print-page .stat-num{ color:#111418 !important; font-size:16px !important; line-height:1.1 !important }
+  .print-page .stat-label{ color:#3d4a5c !important; font-size:7.4px !important; line-height:1.2 !important }
+  .print-page .stat-note{ color:#4a5668 !important; font-size:6.6px !important }
+  .print-page .bento{ gap:6px !important; margin-bottom:8px !important }
+
+  /* Respiro entre seções: na tela ajuda a separar assunto; no papel,
+     multiplicado por seis seções, vira uma folha inteira de nada. */
+  .print-page .sec-titulo, .print-page .bloco-titulo{
+    margin-top:8px !important; margin-bottom:4px !important;
+  }
+  .print-page .sec-sub, .print-page .bloco-sub{
+    margin-bottom:4px !important; font-size:7.4px !important; line-height:1.3 !important;
+  }
+  .print-page table{ margin-bottom:6px !important }
+
+  /* Tabela longa PODE atravessar a quebra de página.
+
+     Achado ao inspecionar o PDF (11/08/2026): a tabela da linha do tempo
+     era empurrada inteira para a folha seguinte, deixando ~180px em
+     branco no pé da anterior. Uma tabela de 24 linhas não "cabe inteira"
+     em lugar nenhum — insistir nisso é fabricar espaço vazio.
+
+     A LINHA continua indivisível (tabela-timeline tr, mais acima): quebrar
+     no meio de uma carga é que seria ilegível. O cabeçalho se repete
+     sozinho no topo de cada folha via thead. */
+  .print-page table{ break-inside:auto !important; page-break-inside:auto !important }
+  .print-page thead{ display:table-header-group }
+  .print-page tr{ break-inside:avoid !important; page-break-inside:avoid !important }
+  /* Título de seção nunca fica órfão no pé da folha, separado do que
+     ele anuncia. */
+  .print-page .print-bloco-tit{ break-after:avoid !important; page-break-after:avoid !important }
+
+  .doc-ficha-rot{ color:#4a5668 !important }
+  .doc-ficha-val, .doc-ficha-quando{ color:#111418 !important }
+  .doc-ficha-quem{ color:#3d4a5c !important }
+  /* Mesmo problema das caixas: notas e resumos herdavam a cor clara do
+     tema escuro e saíam quase invisíveis no papel. Nota de conformidade
+     ilegível é nota inexistente — e é justamente ela que diz que o
+     documento não é fiscal. */
+  .print-page .doc-base, .print-page .doc-limitacoes,
+  .print-page .doc-identificacao, .print-page .doc-nota{
+    color:#3d4a5c !important;
+  }
+  .print-page .doc-base strong, .print-page .doc-limitacoes strong,
+  .print-page .doc-identificacao strong, .print-page .doc-nota strong{
+    color:#111418 !important;
+  }
+  .print-page .doc-assinatura{ color:#4a5668 !important; opacity:1 !important }
+  .doc-ficha{ border-color:#c9d4e8 !important }
   .doc-meta strong, .doc-nota strong{ color:#111418 !important }
   .doc-rodape{ border-top-color:#c9d4e8 !important }
 
@@ -2525,8 +2690,16 @@ input,select,textarea{border-radius:5px}
   /* 9,8px, não 9,2px — subiu de novo depois de conferir com o simulador
      que a folha de 13 colunas ainda cabe sem quebrar linha nem estourar
      largura (ferramentas/simular_relatorios.py). */
-  .doc-denso table{ font-size:9.8px !important }
-  .doc-denso th, .doc-denso td{ padding:6px 5px !important }
+  /* 8,4px, não 9,8px: a folha virou VERTICAL (11/08/2026), e 198mm de
+     largura útil contra os 287mm de antes. Manter o corpo anterior fazia
+     Status e Rota quebrarem em duas linhas em quase toda carga — o
+     "sem quebra de linha" que o usuário pediu. 8,4px continua acima do
+     piso de legibilidade em papel (testado contra test_relatorios.py) e
+     é o maior valor em que "AGUARDANDO EMBARQUE" cabe numa linha só. */
+  .doc-denso table{ font-size:8.4px !important }
+  /* 2,5px de respiro vertical, não 4px: com 24 cargas isso são ~72px
+     economizados — a diferença entre caber numa folha e gastar duas. */
+  .doc-denso th, .doc-denso td{ padding:1px 3px !important; line-height:1.08 !important }
 
   .doc-normal table{ font-size:10.5px !important }
   .doc-normal th, .doc-normal td{ padding:5px 6px !important }

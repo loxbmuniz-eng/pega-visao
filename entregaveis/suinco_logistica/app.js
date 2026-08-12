@@ -3277,7 +3277,20 @@ async function exportarViaServidor(el, nomeDoRelatorio){
 
   document.querySelectorAll('.print-only').forEach(x=>x.style.display='none');
   el.style.display = 'block';
-  ajustarParaCaberEmUmaPagina(el);
+  /* NÃO encolhe mais (11/08/2026). `ajustarParaCaberEmUmaPagina` existia
+     para o tempo em que o navegador do operador imprimia: ela aplicava
+     transform:scale() para tentar caber na folha.
+
+     Com o servidor gerando o PDF, isso passou a ESTRAGAR o resultado, e o
+     usuário mandou o PDF provando: transform só encolhe o DESENHO — a
+     altura de LAYOUT continua a original. O conteúdo saía miniaturizado
+     no canto superior esquerdo (ancorado em transform-origin:top left) e
+     o motor de impressão AINDA quebrava nas páginas da altura não
+     escalada. Daí "1/4 da página e 3 folhas em branco".
+
+     Agora o conteúdo é montado na largura real da folha e o servidor
+     pagina naturalmente: enche a página, quebra quando precisa, sem
+     miniatura e sem folha vazia. */
 
   const d = new Date();
   const carimbo = [
@@ -3312,7 +3325,7 @@ async function exportarViaServidor(el, nomeDoRelatorio){
     // sem risco de as duas cópias ficarem desalinhadas com o tempo.
     const css = (document.querySelector('style') || {}).textContent || '';
     const html = el.outerHTML;
-    const blob = await SuincoSharePoint.gerarRelatorioPdf({ html, css, orientacao: 'paisagem', nomeArquivo });
+    const blob = await SuincoSharePoint.gerarRelatorioPdf({ html, css, orientacao: 'retrato', nomeArquivo });
 
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
