@@ -159,8 +159,17 @@ async def main():
         # aberta depois do laço acima (Relatórios, que não lista carga).
         await pg.evaluate("()=>abrirTab('torre')")
         await pg.wait_for_timeout(500)
-        visivel = await pg.evaluate(
-            "()=>(document.getElementById('torre-tbody')||{}).innerText||''")
+        # Desde 11/08/2026 vários campos da Torre são <input> editáveis
+        # (Nº da carga, motorista, peso, rota...). innerText NÃO lê valor de
+        # campo, então ler só ele daria "o payload sumiu" com o payload
+        # ali, inteiro, dentro do value — e mascararia justamente a
+        # superfície nova que precisa ser conferida.
+        visivel = await pg.evaluate("""()=>{
+            const tb = document.getElementById('torre-tbody');
+            if(!tb) return '';
+            const campos = [...tb.querySelectorAll('input')].map(i=>i.value).join(' ');
+            return (tb.innerText || '') + ' ' + campos;
+        }""")
         if 'onerror' in visivel:
             ok('payload renderizado como TEXTO literal',
                'inerte é o comportamento correto — o navegador não interpreta')

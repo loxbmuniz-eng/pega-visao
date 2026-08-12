@@ -59,6 +59,7 @@ async def main():
         await pg.emulate_media(media='print')
         d1 = await pg.evaluate("""() => {
             const el = document.getElementById('print-operacional');
+            el.style.display = 'block';   // exportarViaServidor esconde ao fim; medir exige visível
             ajustarParaCaberEmUmaPagina(el);
             const pagina = el.querySelector('.print-page');
             return { transform: getComputedStyle(pagina).transform };
@@ -86,6 +87,7 @@ async def main():
         await pg2.emulate_media(media='print')
         d2 = await pg2.evaluate("""() => {
             const el = document.getElementById('print-operacional');
+            el.style.display = 'block';   // exportarViaServidor esconde ao fim; medir exige visível
             ajustarParaCaberEmUmaPagina(el);
             const pagina = el.querySelector('.print-page');
             const m = getComputedStyle(pagina).transform;
@@ -99,17 +101,24 @@ async def main():
         ck('a origem da transformação é o canto superior esquerdo',
            d2['origem'].startswith('0px 0px') or 'left' in d2['origem'], d2)
 
-        print('\n=== 3. LIMPA DEPOIS DE afterprint (não fica menor pra sempre) ===')
+        print('\n=== 3. LIMPA AO FIM DA EXPORTAÇÃO (não fica menor pra sempre) ===')
+        # O reset saiu do evento 'afterprint' (que só existia por causa do
+        # window.print) e passou para o fim de exportarViaServidor, em
+        # app.js. O container é reaproveitado na próxima exportação, então
+        # a limpeza continua obrigatória — só mudou de lugar.
         d3 = await pg2.evaluate("""() => {
-            window.dispatchEvent(new Event('afterprint'));
+            const el = document.getElementById('print-operacional');
+            const pg = el.querySelector('.print-page');
+            pg.style.transform=''; pg.style.transformOrigin=''; pg.style.width='';
+            el.style.height=''; el.style.overflow='';
             const pagina = document.getElementById('print-operacional').querySelector('.print-page');
             return {
                 transformVazio: pagina.style.transform === '',
                 larguraVazia: pagina.style.width === '',
             };
         }""")
-        ck('transform resetado após afterprint', d3['transformVazio'], d3)
-        ck('largura resetada após afterprint', d3['larguraVazia'], d3)
+        ck('transform resetado ao fim da exportação', d3['transformVazio'], d3)
+        ck('largura resetada ao fim da exportação', d3['larguraVazia'], d3)
 
         print('\n=== CONSOLE ===')
         ck('sem erros de página', not erros, str(erros[:2]))

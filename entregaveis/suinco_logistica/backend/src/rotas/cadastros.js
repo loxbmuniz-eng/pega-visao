@@ -15,7 +15,7 @@ rotasCadastros.get('/frota', exigirLogin, async (req, res, next) => {
   try {
     const { rows } = await consultar(
       `SELECT placa, transportadora, tipo_veiculo, capacidade_kg, uf,
-              precisa_revisao, atualizado_em
+              motorista, precisa_revisao, atualizado_em
          FROM dim_veiculos ORDER BY placa`
     );
     res.json(rows.map((v) => ({
@@ -24,6 +24,7 @@ rotasCadastros.get('/frota', exigirLogin, async (req, res, next) => {
       tipoVeiculo: v.tipo_veiculo,
       capacidadeKg: v.capacidade_kg,
       uf: v.uf,
+      motorista: v.motorista,
       precisaRevisao: v.precisa_revisao,
       atualizadoEm: v.atualizado_em,
     })));
@@ -43,21 +44,23 @@ rotasCadastros.post('/frota', exigirLogin, exigirSetor('Logística'), async (req
       ? Number(req.body.capacidadeKg) : null;
 
     const { rows } = await consultar(
-      `INSERT INTO dim_veiculos (placa, transportadora, tipo_veiculo, capacidade_kg, uf, origem)
-       VALUES ($1,$2,$3,$4,$5,'manual')
+      `INSERT INTO dim_veiculos (placa, transportadora, tipo_veiculo, capacidade_kg, uf, motorista, origem)
+       VALUES ($1,$2,$3,$4,$5,$6,'manual')
        ON CONFLICT (placa) DO UPDATE
          SET transportadora = EXCLUDED.transportadora,
              tipo_veiculo   = EXCLUDED.tipo_veiculo,
              capacidade_kg  = EXCLUDED.capacidade_kg,
              uf             = EXCLUDED.uf,
+             motorista      = EXCLUDED.motorista,
              atualizado_em  = now()
-       RETURNING placa, transportadora, tipo_veiculo`,
+       RETURNING placa, transportadora, tipo_veiculo, motorista`,
       [
         placa,
         String(req.body?.transportadora ?? '').slice(0, 200),
         String(req.body?.tipoVeiculo ?? '').slice(0, 100),
         capacidadeKg,
         String(req.body?.uf ?? '').slice(0, 2).toUpperCase() || null,
+        String(req.body?.motorista ?? '').slice(0, 200),
       ]
     );
     emitir('frota:atualizada', { placa });

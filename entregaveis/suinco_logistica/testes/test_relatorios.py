@@ -27,25 +27,45 @@ async def main():
         await pg.evaluate("()=>{ window.print = ()=>{}; }")
 
         print('\n=== NOME DO ARQUIVO ===')
-        titulos = {}
-        for fn, rot in [('exportarPdfOperacional','Operacional'),
-                        ('exportarPdfExecutivo','Executivo'),
-                        ('exportarPdfFretes','Fretes')]:
-            t = await pg.evaluate(f"""async () => {{
-              const antes = document.title;
-              await {fn}();
-              const durante = document.title;
-              window.dispatchEvent(new Event('afterprint'));
-              return {{durante, depois: document.title, antes}};
-            }}""")
-            titulos[rot] = t
-            print(f'  {rot:12} -> {t["durante"]}')
-        ck('os três nomes são diferentes',
-           len({v['durante'] for v in titulos.values()}) == 3)
-        ck('o nome tem data', '2026-' in titulos['Operacional']['durante'])
-        ck('o título da aba volta ao normal depois',
-           titulos['Operacional']['depois'] == titulos['Operacional']['antes'],
-           titulos['Operacional']['depois'])
+        # O nome do PDF deixou de vir do document.title (gambiarra que o
+        # window.print() exigia) e passou a vir do atributo `download` do
+        # link + Content-Disposition do servidor, desde que a geração do
+        # PDF virou responsabilidade do backend (09/08/2026). O que
+        # importa continua igual: três relatórios, três nomes distintos,
+        # todos datados — senão o gestor junta três arquivos iguais na
+        # pasta de downloads e não sabe qual é qual.
+        nomes = await pg.evaluate("""async () => {
+          const capturados = [];
+          const clickOriginal = HTMLAnchorElement.prototype.click;
+          HTMLAnchorElement.prototype.click = function(){
+            if(this.download) capturados.push(this.download);
+          };
+          // Sem servidor configurado a exportação para antes de baixar;
+          // finge o adaptador só para chegar até a montagem do nome.
+          const origConfig = SuincoSharePoint.estaConfigurado;
+          const origGerar = SuincoSharePoint.gerarRelatorioPdf;
+          SuincoSharePoint.estaConfigurado = () => true;
+          SuincoSharePoint.gerarRelatorioPdf = async () =>
+            new Blob(['%PDF-1.4'], {type:'application/pdf'});
+          try{
+            await exportarPdfOperacional();
+            await exportarPdfExecutivo();
+            await exportarPdfFretes();
+          } finally {
+            HTMLAnchorElement.prototype.click = clickOriginal;
+            SuincoSharePoint.estaConfigurado = origConfig;
+            SuincoSharePoint.gerarRelatorioPdf = origGerar;
+          }
+          return capturados;
+        }""")
+        for n in nomes:
+            print(f'  {n}')
+        ck('os três relatórios geraram nome de arquivo', len(nomes) == 3, str(nomes))
+        ck('os três nomes são diferentes', len(set(nomes)) == 3, str(nomes))
+        ck('o nome tem data', any('2026-' in n for n in nomes), str(nomes))
+        ck('o título da aba não é mais sequestrado',
+           (await pg.title()) == 'Programação de Embarque — Suinco',
+           await pg.title())
 
         print('\n=== EXECUTIVO: LIMPEZA ===')
         await pg.evaluate("()=>exportarPdfExecutivo()")

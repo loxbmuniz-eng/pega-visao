@@ -491,12 +491,24 @@ const SuincoSharePoint = (function () {
   async function gravarFrota(campos) {
     if (!estaConfigurado()) return { enfileirado: false };
     try {
+      /* Manda TODOS os campos, não só três.
+
+         Bug achado em 11/08/2026, ao adicionar o motorista: só placa,
+         transportadora e tipoVeiculo eram enviados. Como o backend faz
+         `ON CONFLICT DO UPDATE SET capacidade_kg = EXCLUDED.capacidade_kg`
+         (e o mesmo para uf), os campos ausentes chegavam nulos e cada
+         edição de placa pelo painel APAGAVA capacidade e UF no servidor —
+         silenciosamente, porque a cópia local continuava certa e ninguém
+         via a diferença até comparar com outro terminal. */
       await chamar('/api/frota', {
         metodo: 'POST',
         corpo: {
           placa: campos.Placa,
           transportadora: campos.Transportadora,
           tipoVeiculo: campos.Tipo_Veiculo,
+          capacidadeKg: campos.Capacidade_Kg,
+          uf: campos.UF,
+          motorista: campos.Motorista,
         },
       });
       return { enfileirado: false };
@@ -1017,8 +1029,68 @@ const SuincoSharePoint = (function () {
   /* Fecha a programação atual — só Logística/Administração (o servidor
      confere de novo; isto aqui não é a proteção real). Recusa (409) se
      existir carga em andamento; o erro traz a lista em `e.dados.cargas`. */
-  async function fecharPrograma() {
-    return chamar('/api/programacao/fechar', { metodo: 'POST' });
+  async function fecharPrograma(senha) {
+    return chamar('/api/programacao/fechar', {
+      metodo: 'POST',
+      corpo: senha === undefined ? {} : { senha },
+    });
+  }
+
+  /* Histórico de ciclos de programação (o "arquivo" que o fechamento
+     alimenta). Não passa pela fila offline: é consulta, e mostrar uma
+     lista velha de ciclos seria pior que dizer que não deu pra carregar. */
+  function listarProgramacoes() {
+    return chamar('/api/programacoes');
+  }
+
+  /* Gera o PDF do relatório NO SERVIDOR — pedido do usuário (09/08/2026):
+     "eu quero que saia no modo paisagem, e saiam iguais os relatorios que
+     forem exportados tanto no ios ou android ou desktop". `window.print()`
+     deixa cada aparelho decidir sozinho o tamanho final da página (provado
+     nesta mesma investigação: sem o motor de impressão respeitar
+     `@page{size:A4}`, o PDF sai em Carta americana e quebra em páginas a
+     mais). Aqui o servidor renderiza com um Chromium que ele mesmo
+     controla e PEDE A4/paisagem como parâmetro direto — não como sugestão
+     de CSS que o aparelho do operador pode ignorar.
+
+     Não usa `chamar()` porque a resposta é o PDF em si (bytes), não JSON —
+     precisa do Blob puro, e um erro do servidor (403/409/500) ainda vem em
+     JSON, então os dois formatos de resposta precisam de tratamento
+     próprio aqui. */
+  async function gerarRelatorioPdf({ html, css, orientacao = 'paisagem', nomeArquivo }) {
+    const t = lerToken();
+    const tempo = sinalDeTimeout(45000); // Chromium subindo + renderizando: mais generoso que o timeout padrão de 20s
+    let resposta;
+    try {
+      resposta = await fetch(SP_CONFIG.api + '/api/relatorios/pdf', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          ...(t ? { authorization: 'Bearer ' + t } : {}),
+        },
+        body: JSON.stringify({ html, css, orientacao, nomeArquivo }),
+        signal: tempo.signal,
+      });
+    } catch (e) {
+      const abortou = e && (e.name === 'AbortError' || e.name === 'TimeoutError');
+      const err = new Error(abortou
+        ? 'O servidor não respondeu no tempo limite ao gerar o relatório.'
+        : 'Não foi possível alcançar o servidor para gerar o relatório.');
+      err.motivo = abortou ? 'timeout' : 'transporte';
+      throw err;
+    } finally {
+      tempo.cancelar();
+    }
+
+    if (!resposta.ok) {
+      let dados = null;
+      try { dados = await resposta.json(); } catch (e) { /* corpo não era JSON */ }
+      const e = new Error((dados && dados.erro) || `Erro ${resposta.status} ao gerar o relatório.`);
+      e.status = resposta.status;
+      e.codigo = dados && dados.codigo;
+      throw e;
+    }
+    return resposta.blob();
   }
 
   return {
@@ -1033,5 +1105,6 @@ const SuincoSharePoint = (function () {
     sincronizarAgora, iniciarSincroniaPeriodica, pararSincronia, ultimaSincronia,
     renovarSessao, registrarInteracao,
     arquivarDia, fecharPrograma,
+    gerarRelatorioPdf, listarProgramacoes,
   };
 })();

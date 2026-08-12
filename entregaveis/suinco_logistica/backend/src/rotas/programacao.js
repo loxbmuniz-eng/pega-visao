@@ -1,7 +1,9 @@
 import { Router } from 'express';
-import { consultar } from '../banco.js';
+import { consultar, emTransacao } from '../banco.js';
 import { exigirLogin, exigirSetor } from '../middleware/auth.js';
 import { emitir } from '../tempo-real.js';
+import { config } from '../config.js';
+import { programacaoAtual, abrirProgramacao } from '../dominio/programacoes.js';
 
 export const rotasProgramacao = Router();
 
@@ -9,25 +11,44 @@ function novoId(prefixo) {
   return `${prefixo}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
-/* Fechamento de programação — pedido do usuário (08/08/2026): "permitir
-   que faça fechamento da programação e começar nova programação somente
-   pela logística ou administração, resetando os painéis de todos os
-   setores mantendo somente o histórico, para melhor controle de tudo".
+/* Comparação em tempo constante.
 
-   Decisão confirmada com o usuário antes de implementar: se existe carga
-   ainda em andamento (qualquer status diferente de "Seguiu Viagem") no
-   momento do pedido, a rota RECUSA — nunca esconde um caminhão que ainda
-   está fisicamente no pátio das telas operacionais. Só fecha quando o
-   pátio já está genuinamente limpo.
+   A senha de fechamento é curta e digitada por humano; comparar com `===`
+   permite, em tese, medir o tempo de resposta e descobrir o prefixo certo
+   caractere a caractere. É barato defender e não custa nada. */
+function senhaConfere(informada, esperada) {
+  const a = String(informada ?? '');
+  const b = String(esperada ?? '');
+  if (!b) return false;
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i += 1) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
 
-   Não apaga nem arquiva nenhuma carga: como só fecha com o pátio vazio,
-   as telas "em aberto" (Torre/Portaria/Expedição/Faturamento) já ficam
-   vazias sozinhas, sem precisar tocar em dado nenhum — o "reset" é
-   consequência de não haver mais nada aberto, não uma ação destrutiva.
-   O que esta rota faz de fato é registrar o CHECKPOINT (quem fechou e
-   quando, em log_eventos — permanece no Histórico) e avisar ao vivo
-   todo mundo conectado, pra não vir a pergunta "já posso programar de
-   novo?" pelo WhatsApp. */
+/* Fechamento de programação — encerra o ciclo atual e abre um novo.
+
+   HISTÓRICO DA DECISÃO, registrado porque ela MUDOU:
+
+   Em 08/08/2026 o usuário confirmou "bloqueia o fechamento" quando
+   houvesse carga em andamento — para nunca esconder das telas
+   operacionais um caminhão fisicamente no pátio.
+
+   Em 11/08/2026 ele reverteu, conscientemente: "COLOCAR UMA SENHA AO
+   INVES DE BLOQUEAR"; "da pra fechar programacao mesmo com carga em
+   aberto mas essa carga fica em aberto na torre de controle e vai pro
+   historico de programacoes... precisamos ter esse controle e tomada de
+   decisao em nossas maos e nao depender de qualquer limitacao que seja
+   imposta por uma falta de informacao que eu possa ter esquecido de
+   passar".
+
+   O risco original continua endereçado, por outro caminho: a carga em
+   aberto NÃO some da Torre de Controle. Ela apenas passa a pertencer à
+   programação arquivada — some da fila do dia, não da tela de quem opera.
+   Fechar nunca apaga nem esconde carga; só troca o ciclo.
+
+   Pátio limpo → fecha direto. Carga em aberto → exige a senha mestre, e o
+   fechamento fica marcado como `forcado` para auditoria posterior. */
 rotasProgramacao.post('/programacao/fechar', exigirLogin, exigirSetor('Logística'), async (req, res, next) => {
   try {
     const { rows: abertas } = await consultar(
@@ -36,29 +57,101 @@ rotasProgramacao.post('/programacao/fechar', exigirLogin, exigirSetor('Logístic
         WHERE status_atual <> 'Seguiu Viagem'
         ORDER BY placa`
     );
-    if (abertas.length > 0) {
-      return res.status(409).json({
-        erro: `Ainda há ${abertas.length} carga(s) em andamento. ` +
-          'Feche (Seguiu Viagem) ou cancele todas antes de fechar a programação.',
-        codigo: 'CARGAS_EM_ABERTO',
-        cargas: abertas.map((c) => ({
-          placa: c.placa, numeroCarga: c.numero_carga, status: c.status_atual,
-        })),
-      });
+
+    const forcado = abertas.length > 0;
+    if (forcado) {
+      if (!config.senhaFechamento) {
+        return res.status(409).json({
+          erro: `Há ${abertas.length} carga(s) em andamento e a senha de fechamento `
+            + 'não está configurada no servidor. Fale com a TI (SENHA_FECHAMENTO no .env).',
+          codigo: 'SENHA_NAO_CONFIGURADA',
+          cargas: abertas.map((c) => ({
+            placa: c.placa, numeroCarga: c.numero_carga, status: c.status_atual,
+          })),
+        });
+      }
+      if (!senhaConfere(req.body?.senha, config.senhaFechamento)) {
+        return res.status(req.body?.senha ? 403 : 409).json({
+          erro: req.body?.senha
+            ? 'Senha de fechamento incorreta.'
+            : `Há ${abertas.length} carga(s) em andamento. Informe a senha de fechamento para continuar.`,
+          codigo: req.body?.senha ? 'SENHA_INCORRETA' : 'SENHA_NECESSARIA',
+          cargas: abertas.map((c) => ({
+            placa: c.placa, numeroCarga: c.numero_carga, status: c.status_atual,
+          })),
+        });
+      }
     }
 
     const op = req.operador;
-    await consultar(
-      `INSERT INTO log_eventos
-         (evento_id, carga_id, placa, acao, setor, operador_id, operador_nome, operador_verificado)
-       VALUES ($1, NULL, '', 'Fechamento de Programação', $2, $3, $4, TRUE)`,
-      [novoId('log'), op.setor, op.id, op.nome]
-    );
+    const resultado = await emTransacao(async (cli) => {
+      const atual = await programacaoAtual();
+      await cli.query(
+        `UPDATE programacoes
+            SET fechada_em = now(), fechada_por = $2, fechada_setor = $3,
+                forcado = $4, cargas_em_aberto = $5
+          WHERE programacao_id = $1`,
+        [atual, op.nome, op.setor, forcado, abertas.length]
+      );
+      const nova = await abrirProgramacao();
+
+      await cli.query(
+        `INSERT INTO log_eventos
+           (evento_id, carga_id, placa, acao, setor, operador_id, operador_nome, operador_verificado)
+         VALUES ($1, NULL, '', $2, $3, $4, $5, TRUE)`,
+        [
+          novoId('log'),
+          forcado
+            ? `Fechamento de Programação FORÇADO (${abertas.length} carga(s) em aberto)`
+            : 'Fechamento de Programação',
+          op.setor, op.id, op.nome,
+        ]
+      );
+      return { fechada: atual, nova };
+    });
 
     const quando = new Date().toISOString();
-    emitir('programacao:fechada', { operador: op.nome, setor: op.setor, quando });
-    return res.json({ ok: true, quando, operador: op.nome });
+    emitir('programacao:fechada', {
+      operador: op.nome, setor: op.setor, quando, forcado, emAberto: abertas.length,
+    });
+    return res.json({
+      ok: true, quando, operador: op.nome, forcado,
+      emAberto: abertas.length,
+      programacaoFechada: resultado.fechada,
+      programacaoNova: resultado.nova,
+    });
   } catch (e) {
     return next(e);
   }
+});
+
+/* Histórico de programações — o "arquivo" que o fechamento alimenta.
+
+   Traz também quantas cargas ficaram em aberto no momento do fechamento,
+   que é o número que interessa quando alguém for revisar uma decisão de
+   fechar com caminhão no pátio. */
+rotasProgramacao.get('/programacoes', exigirLogin, async (req, res, next) => {
+  try {
+    const { rows } = await consultar(
+      `SELECT p.programacao_id, p.aberta_em, p.fechada_em, p.fechada_por,
+              p.fechada_setor, p.forcado, p.cargas_em_aberto,
+              COUNT(v.carga_id)::int AS total_cargas
+         FROM programacoes p
+         LEFT JOIN fact_viagens v ON v.programacao_id = p.programacao_id
+        GROUP BY p.programacao_id
+        ORDER BY p.aberta_em DESC
+        LIMIT 100`
+    );
+    res.json(rows.map((p) => ({
+      id: p.programacao_id,
+      abertaEm: p.aberta_em,
+      fechadaEm: p.fechada_em,
+      fechadaPor: p.fechada_por,
+      fechadaSetor: p.fechada_setor,
+      forcado: p.forcado,
+      cargasEmAberto: p.cargas_em_aberto,
+      totalCargas: p.total_cargas,
+      aberta: !p.fechada_em,
+    })));
+  } catch (e) { next(e); }
 });

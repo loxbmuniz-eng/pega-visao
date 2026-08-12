@@ -63,6 +63,26 @@ export const config = {
   // views, sem permissão de escrever nada.
   biToken: (process.env.BI_TOKEN || '').trim(),
 
+  // Caminho do binário do Chromium usado pra gerar PDF de relatório
+  // (backend/src/rotas/relatorios.js). Em produção fica vazio: o
+  // Playwright usa o Chromium que `npx playwright install chromium`
+  // instalou (ver instalar.sh). Só é preciso preencher em ambiente de
+  // desenvolvimento/teste onde a revisão exata que o Playwright espera
+  // não bate com a já instalada na máquina.
+  playwrightChromiumPath: (process.env.PLAYWRIGHT_CHROMIUM_PATH || '').trim() || undefined,
+
+  /* Senha mestre para FECHAR a programação havendo carga em aberto.
+
+     Não é login: é a confirmação de uma decisão de operação (encerrar o
+     ciclo com caminhão ainda no pátio). Escolha do usuário em 11/08/2026,
+     ciente de que uma senha compartilhada circula pelo grupo — o log
+     registra quem estava logado no momento, e o fechamento fica marcado
+     como `forcado` na tabela `programacoes`.
+
+     Vazia = ninguém consegue forçar; nesse caso o fechamento com carga em
+     aberto é recusado com uma mensagem dizendo o que configurar. */
+  senhaFechamento: (process.env.SENHA_FECHAMENTO || '').trim(),
+
   limites: {
     // O pátio inteiro em hora de pico faz muito menos que isso. O teto
     // existe para conter script, não para atrapalhar operador.

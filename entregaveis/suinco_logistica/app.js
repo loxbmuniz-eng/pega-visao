@@ -1098,27 +1098,53 @@ function podeCancelarCarga(){
    de novo (POST /api/programacao/fechar), isto é só a tela. */
 function podeFecharProgramacao(){ return podeCancelarCarga(); }
 
-async function fecharProgramacaoUI(){
+async function fecharProgramacaoUI(senhaJaInformada){
   if(!SuincoSharePoint || !SuincoSharePoint.estaConfigurado || !SuincoSharePoint.estaConfigurado()){
     notify('Fechar a programação exige conexão com o servidor.', 'warn');
     return;
   }
-  if(!confirm('Fechar a programação atual? Só é possível quando não há nenhuma carga em andamento. Nada é apagado — tudo continua no Histórico.')) return;
+  if(senhaJaInformada === undefined
+     && !confirm('Fechar a programação atual e começar uma nova?\n\nNada é apagado: as cargas ficam arquivadas na programação atual e continuam no Histórico.')) return;
   try{
-    const r = await SuincoSharePoint.fecharPrograma();
-    notify(`Programação fechada às ${fmtHora(r.quando)}. Pronto para uma nova.`, 'success', 5000);
+    const r = await SuincoSharePoint.fecharPrograma(senhaJaInformada);
+    notify(r.forcado
+      ? `Programação fechada às ${fmtHora(r.quando)} com ${r.emAberto} carga(s) ainda em aberto — elas seguem visíveis na Torre.`
+      : `Programação fechada às ${fmtHora(r.quando)}. Pronto para uma nova.`,
+      r.forcado ? 'warn' : 'success', 7000);
     renderAll();
   }catch(e){
-    if(e && e.codigo === 'CARGAS_EM_ABERTO'){
-      const lista = (e.dados && e.dados.cargas || [])
-        .map(c => `• ${c.placa} — ${c.numeroCarga || 'sem nº'} (${c.status})`)
-        .join('\n');
-      alert(`Ainda há ${e.dados.cargas.length} carga(s) em andamento — feche ou cancele todas antes:\n\n${lista}`);
-    } else if(e && e.status === 403){
-      notify('Só Logística ou Administração fecham a programação.', 'danger');
-    } else {
-      notify('Não consegui fechar a programação: ' + (e && e.message || 'erro desconhecido'), 'danger');
+    const cod = e && e.codigo;
+
+    /* Carga em aberto não bloqueia mais — pede a senha de fechamento
+       (mudança pedida pelo usuário em 11/08/2026). Antes de pedir a senha,
+       mostra QUAIS cargas ficarão em aberto: quem vai digitar a senha
+       precisa saber o que está assumindo, senão a senha vira carimbo. */
+    if(cod === 'SENHA_NECESSARIA'){
+      const cargas = (e.dados && e.dados.cargas) || [];
+      const lista = cargas.map(c => `• ${c.placa} — ${c.numeroCarga || 'sem nº'} (${c.status})`).join('\n');
+      const senha = prompt(
+        `${cargas.length} carga(s) ainda em andamento:\n\n${lista}\n\n`
+        + 'Elas NÃO serão apagadas: continuam aparecendo na Torre de Controle, '
+        + 'com a data em que foram programadas, e ficam arquivadas nesta programação.\n\n'
+        + 'Digite a senha de fechamento para encerrar mesmo assim:');
+      if(senha === null) return;                   // desistiu
+      if(!senha.trim()){ notify('Fechamento cancelado — senha não informada.', 'warn'); return; }
+      return fecharProgramacaoUI(senha);
     }
+    if(cod === 'SENHA_INCORRETA'){
+      notify('Senha de fechamento incorreta. A programação NÃO foi fechada.', 'danger', 7000);
+      return;
+    }
+    if(cod === 'SENHA_NAO_CONFIGURADA'){
+      alert('Há carga em andamento e a senha de fechamento ainda não foi configurada no servidor.\n\n'
+            + 'Peça à TI para preencher SENHA_FECHAMENTO no .env do servidor.');
+      return;
+    }
+    if(e && e.status === 403){
+      notify('Só Logística ou Administração fecham a programação.', 'danger');
+      return;
+    }
+    notify('Não consegui fechar a programação: ' + (e && e.message || 'erro desconhecido'), 'danger');
   }
 }
 
@@ -1433,7 +1459,7 @@ function renderTorre(){
       '<th>Seq.</th><th>Nº Carga</th><th>Placa</th><th>Transportadora</th>'
       + '<th>Tipo Veículo</th><th>Motorista</th><th>Rota</th><th>Peso (kg)</th>'
       + '<th>Palet.</th><th>Tipo de Operação</th><th>Ganchos</th><th>Status</th>'
-      + '<th>Atualizado em</th>'
+      + '<th>Programada em</th><th>Atualizado em</th>'
       + (podeCancelarCarga() ? '<th class="no-print">Ação</th>' : '');
   }
 
@@ -1458,15 +1484,22 @@ function renderTorre(){
         ? `<input type="text" class="placa-input" value="${esc(c.placa)}" onchange="atualizarPlacaUI('${escJs(c.id)}',this.value)" title="Trocar a placa.">`
         : esc(c.placa)}</td>
       <td>${esc(c.transportadora)||'—'}</td><td>${esc(c.tipoVeiculo)||'—'}</td>
-      <td>${esc(c.motorista)||'—'}</td>
-      <td>${esc(rotaCurta(c.rota))}</td><td class="c-peso">${c.peso ? c.peso.toLocaleString('pt-BR') : '—'}</td>
-      <td>${paletizadaDaCarga(c)}</td>
+      <td>${editavel
+        ? `<input type="text" class="motorista-input" value="${esc(c.motorista||'')}" onchange="atualizarMotoristaUI('${escJs(c.id)}',this.value)" title="Trocar o motorista desta carga.">`
+        : (esc(c.motorista)||'—')}</td>
+      <td>${editavel ? rotaSelectHtml(c) : esc(rotaCurta(c.rota))}</td>
+      <td class="c-peso">${editavel
+        ? `<input type="number" class="peso-input" min="0" step="1" value="${c.peso ?? ''}" onchange="atualizarPesoUI('${escJs(c.id)}',this.value)" title="Peso em kg.">`
+        : (c.peso ? c.peso.toLocaleString('pt-BR') : '—')}</td>
+      <td>${editavel ? paletizadaSelectHtml(c) : paletizadaDaCarga(c)}</td>
       <td>${editavel ? praOndeSelectHtml(c)
         : (c.praOnde ? `<span class="chip-praonde">${esc(PRA_ONDE_LABEL[c.praOnde]||c.praOnde)}</span>` : '<span class="text-dim">—</span>')}</td>
       <td>${editavel
         ? `<input type="number" class="ganchos-input" min="0" step="1" value="${c.qtdGanchos ?? 0}" onchange="atualizarGanchosUI('${escJs(c.id)}',this.value)" title="0 = Liso">`
         : (c.qtdGanchos ? c.qtdGanchos : '<span class="text-dim">Liso</span>')}</td>
-      <td>${badgeHtml(c.status)}</td><td>${fmtDataHora(c.atualizadoEm)}</td>
+      <td>${badgeHtml(c.status)}</td>
+      <td>${dataProgramacaoHtml(c)}</td>
+      <td>${fmtDataHora(c.atualizadoEm)}</td>
       ${editavel ? `<td class="no-print">${botaoCancelarHtml(c)}</td>` : ''}
     </tr>`).join('');
   const vazio = document.getElementById('torre-empty');
@@ -1516,7 +1549,21 @@ function atualizarPreviewFrotaPrograma(){
   if(f){
     document.getElementById('prog-transportadora').value = f.transportadora;
     document.getElementById('prog-tipoveiculo').value = f.tipoVeiculo;
-    hint.innerHTML = '<span class="text-dim">✅ Placa encontrada na Frota — Transportadora e Tipo de Veículo preenchidos automaticamente.</span>'
+    /* Motorista habitual da placa — pedido do usuário (11/08/2026): "DA
+       MESMA FORMA QUE QUANDO O INPUT DA PLACA É FEITO, E ALTERA
+       AUTOMATICAMENTE A TRANSPORTADORA, ALTERAR O NOME DO MOTORISTA CASO
+       JA TENHA NOME CADASTRADO NA PLACA".
+
+       Só preenche se o campo estiver VAZIO: se o operador já digitou um
+       nome (motorista de folga, substituto, freteiro do dia), sobrescrever
+       apagaria o que ele acabou de informar — e o motorista real daquela
+       viagem importa mais que o habitual do cadastro. */
+    const elMot = document.getElementById('prog-motorista');
+    if(elMot && !elMot.value.trim() && f.motorista) elMot.value = f.motorista;
+    const oQue = f.motorista
+      ? 'Transportadora, Tipo de Veículo e Motorista preenchidos'
+      : 'Transportadora e Tipo de Veículo preenchidos';
+    hint.innerHTML = `<span class="text-dim">✅ Placa encontrada na Frota — ${oQue} automaticamente.</span>`
                    + avisoPlacaJaProgramada(placa);
   } else if(normalizarPlaca(placa)){
     // Cadastrar sem sair da tela: antes disso, o único caminho era ir em
@@ -1585,9 +1632,39 @@ function avisoPlacaJaProgramada(placa){
       Se não for isso, confira antes: pode ser programação em duplicidade.
     </div>`;
 }
+/* Placa liberada para receber uma SEGUNDA carga nesta programação, por
+   escolha explícita do operador (botão "➕ Outra carga"). Vale para uma
+   criação só: some assim que a carga é criada, para não deixar a porta
+   aberta sem querer. */
+let _placaMultiCargaAutorizada = null;
+
 function criarCargaProgramadaUI(){
   const placa = document.getElementById('prog-placa').value;
   if(!normalizarPlaca(placa)){ notify('Informe a placa.','warn'); return; }
+
+  /* Duplicidade de placa na mesma programação — pedido do usuário
+     (11/08/2026): "IMPEDIR DUPLICIDADE DE PLACAS DENTRO DA MESMA
+     PROGRAMACAO DE EMBARQUE SOMENTE APÓS O VEICULO SAIR E RETORNAR PARA
+     NOVO INPUT".
+
+     A trava é sobre o ACIDENTE, não sobre o caso real de um caminhão
+     levar duas cargas: quem quiser a segunda carga usa "➕ Outra carga"
+     na linha da placa, que é uma decisão consciente e já herda os dados
+     do veículo. Depois que o caminhão sai (Seguiu Viagem), a placa fica
+     livre de novo sem precisar de nada. */
+  const pNorm = normalizarPlaca(placa);
+  const abertas = cargasAbertasPorPlaca(pNorm);
+  if(abertas.length && _placaMultiCargaAutorizada !== pNorm){
+    const numeros = abertas
+      .map(c => c.aguardandoCarga ? 'sem número ainda' : (c.numeroCarga || 'sem número'))
+      .join(', ');
+    notify(
+      `${pNorm} já está nesta programação (${numeros}) e ainda não seguiu viagem. `
+      + 'Para lançar outra carga no mesmo caminhão, use "➕ Outra carga" na linha dela.',
+      'warn', 9000);
+    return;
+  }
+
   try{
     criarCargaProgramada({
       placa,
@@ -1607,6 +1684,7 @@ function criarCargaProgramadaUI(){
       qtdEntregas: document.getElementById('prog-entregas').value,
       operador: nomeOperadorAtual()
     });
+    _placaMultiCargaAutorizada = null;   // vale uma vez só
     notify(`Carga criada para a placa ${normalizarPlaca(placa)} — status Aguardando Veículo.`, 'success');
     ['prog-placa','prog-transportadora','prog-tipoveiculo','prog-motorista','prog-numero-carga','prog-cliente','prog-destino','prog-peso','prog-sequencia','prog-obs']
       .forEach(id=>document.getElementById(id).value='');
@@ -1620,7 +1698,29 @@ function criarCargaProgramadaUI(){
   }catch(e){ notify(e.message, 'danger'); }
 }
 function renderProgFila(){
-  const lista = DB.cargas.filter(c=>c.status==='Aguardando Veículo').sort(ordenarPorSequenciaEAtualizacao);
+  /* Só os programados DE HOJE — pedido do usuário (11/08/2026): "no campo
+     fila de programados na programacao manter somente os programados NO
+     DIA".
+
+     A fila é a lista de trabalho do dia: carga programada ontem que
+     ninguém encostou não é tarefa de hoje, é pendência a resolver na
+     Torre (onde ela continua visível, com a data da programação à
+     mostra). Misturar as duas coisas fazia a fila crescer sem parar e
+     perder a função de "o que embarca hoje".
+
+     A carga NÃO é escondida do sistema: continua na Torre de Controle, no
+     Histórico e nos relatórios. Só sai desta fila específica. */
+  const hoje = new Date(); hoje.setHours(0,0,0,0);
+  const doDia = (c)=>{
+    const base = c.criadoEm || c.atualizadoEm;
+    if(!base) return true;   // sem data conhecida, melhor mostrar que sumir
+    const d = new Date(base); d.setHours(0,0,0,0);
+    return d.getTime() === hoje.getTime();
+  };
+  const todosAguardando = DB.cargas.filter(c=>c.status==='Aguardando Veículo');
+  const lista = todosAguardando.filter(doDia).sort(ordenarPorSequenciaEAtualizacao);
+  const deOutrosDias = todosAguardando.length - lista.length;
+
   document.getElementById('prog-fila-tbody').innerHTML = lista.map(c=>`
     <tr>
       <td><input type="number" class="seq-input" value="${c.sequencia ?? ''}" onchange="atualizarSequenciaUI('${c.id}',this.value)" title="Sequência livre — digite o número que quiser, a qualquer momento."></td>
@@ -1632,12 +1732,12 @@ function renderProgFila(){
         ${marcaCargaDaPlaca(c, lista)}
       </td>
       <td id="transp-${esc(c.id)}">${esc(c.transportadora)||'—'}</td>
-      <td>${esc(rotaCurta(c.rota))}</td>
+      <td>${rotaSelectHtml(c)}</td>
       <td>${praOndeSelectHtml(c)}</td>
-      <td class="c-peso">${c.peso ? c.peso.toLocaleString('pt-BR') : '—'}</td>
-      <td>${paletizadaDaCarga(c)}</td>
+      <td class="c-peso"><input type="number" class="peso-input" min="0" step="1" value="${c.peso ?? ''}" onchange="atualizarPesoUI('${escJs(c.id)}',this.value)" title="Peso em kg."></td>
+      <td>${paletizadaSelectHtml(c)}</td>
       <td><input type="number" class="ganchos-input" min="0" step="1" value="${c.qtdGanchos ?? 0}" onchange="atualizarGanchosUI('${c.id}',this.value)" title="0 = Liso"></td>
-      <td>${c.qtdEntregas ?? 1}</td>
+      <td><input type="number" class="entregas-input" min="0" step="1" value="${c.qtdEntregas ?? 1}" onchange="atualizarEntregasUI('${escJs(c.id)}',this.value)" title="Quantidade de entregas."></td>
       <td class="no-print gap8">
         <button class="btn btn-sec btn-sm" onclick="adicionarOutraCargaNaPlacaUI('${escJs(c.id)}')"
                 title="Programar OUTRA carga para este mesmo caminhão — o formulário já vem com placa, transportadora, motorista e rota preenchidos.">➕ Outra carga</button>
@@ -1645,6 +1745,100 @@ function renderProgFila(){
       </td>
     </tr>`).join('');
   document.getElementById('prog-fila-empty').hidden = lista.length>0;
+
+  // Some sem explicação é pior que não sumir: quem programou ontem
+  // precisa saber PARA ONDE a carga foi, não descobrir que "sumiu".
+  const aviso = document.getElementById('prog-fila-outros-dias');
+  if(aviso){
+    aviso.hidden = deOutrosDias === 0;
+    aviso.textContent = deOutrosDias === 1
+      ? '1 carga programada em outro dia continua aguardando veículo — veja na Torre de Controle.'
+      : `${deOutrosDias} cargas programadas em outros dias continuam aguardando veículo — veja na Torre de Controle.`;
+  }
+}
+
+/* Rota e Paletizada viram campo editável na fila — pedido do usuário
+   (11/08/2026): "DEIXAR TODOS OS CAMPOS DE PLACA PROGRAMADA EDITAVEIS,
+   PESO, ROTA, PALETIZADA, ENTREGAS". Mesmo padrão já usado em
+   praOndeSelectHtml. */
+function rotaSelectHtml(c){
+  return `<select class="rota-inline" onchange="atualizarRotaUI('${escJs(c.id)}',this.value)">
+    <option value="">—</option>
+    ${ROTAS.map(r=>`<option value="${esc(r.codigo)}" ${c.rota===r.codigo?'selected':''}>${esc(rotaCurta(r.codigo))}</option>`).join('')}
+  </select>`;
+}
+function paletizadaSelectHtml(c){
+  const atual = paletizadaDaCarga(c);
+  return `<select class="palet-inline" onchange="atualizarPaletizadaUI('${escJs(c.id)}',this.value)">
+    ${['Não','Sim'].map(op=>`<option value="${op}" ${atual===op?'selected':''}>${op}</option>`).join('')}
+  </select>`;
+}
+function atualizarRotaUI(id, val){
+  const c = getCarga(id); if(!c) return;
+  c.rota = val || '';
+  c.atualizadoEm = nowISO();
+  SuincoStore.save();
+  renderAll();
+}
+function atualizarPaletizadaUI(id, val){
+  const c = getCarga(id); if(!c) return;
+  c.paletizada = val === 'Sim' ? 'Sim' : 'Não';
+  c.atualizadoEm = nowISO();
+  SuincoStore.save();
+  renderAll();
+}
+function atualizarPesoUI(id, val){
+  const c = getCarga(id); if(!c) return;
+  c.peso = val === '' ? null : Math.max(0, Number(val)||0);
+  c.atualizadoEm = nowISO();
+  SuincoStore.save();
+  renderAll();
+}
+function atualizarEntregasUI(id, val){
+  const c = getCarga(id); if(!c) return;
+  c.qtdEntregas = val === '' ? 1 : Math.max(0, Number(val)||0);
+  c.atualizadoEm = nowISO();
+  SuincoStore.save();
+  renderAll();
+}
+function atualizarMotoristaUI(id, val){
+  const c = getCarga(id); if(!c) return;
+  /* Só a carga muda — o cadastro da placa na Frota fica como está. São
+     coisas diferentes: aqui é quem dirige ESTA viagem (substituto, folga,
+     freteiro), lá é o habitual do veículo. */
+  c.motorista = String(val || '').trim();
+  c.atualizadoEm = nowISO();
+  SuincoStore.save();
+  renderAll();
+}
+
+/* Data em que a carga foi PROGRAMADA — pedido do usuário (11/08/2026):
+   "NA TORRE DE CONTROLE MOSTRAR A DATA DA PROGRAMACAO DAS CARGAS QUE NAO
+   TIVEREM FINALIZADO E SAIDO AINDA".
+
+   Serve pra enxergar carga encalhada: uma linha programada há três dias
+   ainda em "Aguardando Veículo" é um problema que a coluna "Atualizado
+   em" não denuncia (ela mexe a cada toque, mesmo sem a carga andar).
+   Carga de HOJE aparece só como hora, pra não poluir a coluna com a data
+   repetida em toda linha no dia normal. */
+function dataProgramacaoHtml(c){
+  const base = c.criadoEm || c.atualizadoEm;
+  if(!base) return '<span class="text-dim">—</span>';
+  const d = new Date(base);
+  if(isNaN(d)) return '<span class="text-dim">—</span>';
+  const hoje = new Date(); hoje.setHours(0,0,0,0);
+  const dia = new Date(d); dia.setHours(0,0,0,0);
+  const diasAtras = Math.round((hoje - dia) / 86400000);
+  if(diasAtras <= 0){
+    return `<span class="text-dim">hoje ${d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</span>`;
+  }
+  // Destaque cresce com o atraso: 1 dia é normal (virada de turno),
+  // 2+ dias é carga esquecida.
+  const classe = diasAtras >= 2 ? 'prog-atrasada' : '';
+  const rotulo = diasAtras === 1 ? 'ontem' : `há ${diasAtras} dias`;
+  return `<span class="${classe}" title="Programada em ${fmtDataHora(base)}">`
+       + `${d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})} `
+       + `<small>(${rotulo})</small></span>`;
 }
 
 /* Contagem de cargas por placa na fila, para a marca "1 de 2".
@@ -1696,6 +1890,14 @@ function adicionarOutraCargaNaPlacaUI(id){
   v('prog-paletizada', 'Não');
   v('prog-ganchos', '0');
   v('prog-entregas', '1');
+
+  /* Marca que ESTA próxima criação é multi-carga deliberada, e não um
+     lançamento repetido por engano. É o que diferencia os dois pedidos do
+     usuário (11/08/2026), que só parecem se contradizer: "não duplicar
+     placas na mesma programação" (acidente) versus "podendo somente
+     duplicar cargas na mesma placa, e poder ter rotas diferentes se
+     necessário" (intenção). O caminho deliberado é este botão. */
+  _placaMultiCargaAutorizada = c.placa;
 
   atualizarPreviewFrotaPrograma();
 
@@ -1952,7 +2154,18 @@ function renderProgAguardando(){
     <tr>
       <td>${esc(c.placa)}</td><td>${esc(c.transportadora)||'—'}</td><td>${esc(c.tipoVeiculo)||'—'}</td>
       <td>${fmtDataHora(c.criadoEm)}</td>
-      <td class="no-print"><button class="btn btn-primary btn-sm" onclick="abrirCompletar('${escJs(c.id)}')">Completar dados</button></td>
+      <td class="no-print gap8">
+        <button class="btn btn-primary btn-sm" onclick="abrirCompletar('${escJs(c.id)}')">Completar dados</button>
+        <!-- Excluir aqui — pedido do usuário (11/08/2026): "ADICIONAR UM
+             BOTAO DE EXCLUIR NO AGUARDANDO CARGA". Caminhão que a Portaria
+             registrou por engano (placa errada, veículo que só passou)
+             ficava preso nesta lista para sempre: sem número de carga não
+             dá pra completar, e não havia como tirar. Usa a MESMA função
+             de exclusão do resto do painel, com as mesmas travas de
+             permissão e o mesmo registro no Histórico. -->
+        <button class="btn btn-danger btn-sm" onclick="excluirCargaUI('${escJs(c.id)}')"
+                title="Remover este registro — use quando a chegada foi lançada por engano.">Excluir</button>
+      </td>
     </tr>`).join('');
   document.getElementById('prog-aguardando-empty').hidden = lista.length>0;
 }
@@ -2753,10 +2966,11 @@ function addFrotaUI(){
   upsertFrota(placa, document.getElementById('frota-transportadora').value, document.getElementById('frota-tipoveiculo').value, {
     capacidadeKg: document.getElementById('frota-capacidade').value,
     uf: document.getElementById('frota-uf').value,
+    motorista: document.getElementById('frota-motorista').value,
     dataUltimaMovimentacao: document.getElementById('frota-ultima-mov').value,
     precisaRevisao: document.getElementById('frota-revisao').checked
   });
-  ['frota-placa','frota-transportadora','frota-tipoveiculo','frota-capacidade','frota-uf','frota-ultima-mov'].forEach(id=>document.getElementById(id).value='');
+  ['frota-placa','frota-transportadora','frota-tipoveiculo','frota-motorista','frota-capacidade','frota-uf','frota-ultima-mov'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('frota-revisao').checked = false;
   notify('Placa cadastrada na Frota.', 'success');
   renderAll();
@@ -2954,36 +3168,29 @@ function renderHistorico(){
   }
 }
 
-/* ---------- RELATÓRIOS (PDF via impressão do navegador) ---------- */
-/* Imprime um container, dando ao arquivo um nome que se entende sozinho.
+/* ---------- RELATÓRIOS (PDF gerado pelo servidor) ---------- */
+/* Até 09/08/2026 o PDF saía via `window.print()` — cada aparelho decidia
+   sozinho o tamanho final da página. Provado nesta mesma investigação (com
+   PDFs reais, medidos byte a byte) que isso quebra: sem o motor de
+   impressão do usuário respeitar `@page{size:A4 landscape}`, o relatório
+   sai em Carta americana e quebra em páginas a mais — e cada aparelho
+   (Chrome desktop, Safari/AirPrint no iPhone, apps de PDF no Android) pode
+   decidir diferente. Pedido do usuário: "eu quero que saia no modo
+   paisagem, e saiam iguais os relatorios que forem exportados tanto no ios
+   ou android ou desktop".
 
-   O navegador usa o <title> da página como nome sugerido do PDF. Sem mexer
-   nele, TODO relatório salvava como "Painel Logístico — Suinco" — e depois
-   de três downloads o gestor tem três arquivos idênticos no nome, sem saber
-   qual é qual nem de que dia.
-
-   O título volta ao original no afterprint. Deixá-lo trocado mudaria a aba
-   do navegador para sempre. */
+   A correção: o SERVIDOR renderiza o PDF (backend/src/rotas/relatorios.js)
+   com um Chromium que ele mesmo controla, pedindo A4 paisagem como
+   PARÂMETRO da chamada — não mais uma sugestão de CSS que o aparelho do
+   operador pode ignorar. O HTML/CSS enviado é exatamente o que este
+   arquivo já construía para `window.print()`; só o "vira arquivo" que
+   mudou de lugar. Isso também elimina de vez a necessidade de detectar
+   "celular ignorou a orientação pedida" (a antiga variável `emPe`): a
+   orientação agora é decidida por nós, sempre, não pelo aparelho. */
 /* Encolhe o relatório pra caber numa página só, em vez de estourar pra
    uma segunda página quase vazia. Pedido direto do usuário (08/08/2026):
    "quero que os relatorios sejam one pagers... coloca tudo dentro de uma
-   pagina só".
-
-   SÓ funciona chamada durante beforeprint/print de verdade — é o único
-   instante em que `@media print` (a fonte compacta de cada densidade,
-   .doc-denso/.doc-normal/.doc-amplo) está de fato ativo. Medida antes
-   disso mediria o tamanho da pré-visualização em tela, que é maior — por
-   isso não é chamada direto em imprimirContainer(), e sim no listener de
-   'beforeprint' logo abaixo.
-
-   Cobre as DUAS razões de estourar a página, com a mesma conta:
-   1) muitas cargas — a altura do conteúdo passa da altura útil da folha;
-   2) celular que ignora `@page{size:landscape}` e imprime em pé (mesmo
-      achado de 07/08/2026) — a LARGURA útil da folha física fica menor
-      que a largura fixa do relatório (calibrado pra folha deitada).
-   Usa a menor das duas escalas necessárias, com piso de 50%: abaixo
-   disso o texto vira ilegível, e nesse ponto a prioridade muda de "cabe
-   numa página" pra "dá pra ler alguma coisa". */
+   pagina só". */
 function ajustarParaCaberEmUmaPagina(el){
   const pagina = el.querySelector('.print-page');
   if(!pagina) return;
@@ -2994,12 +3201,11 @@ function ajustarParaCaberEmUmaPagina(el){
 
   const PX_POR_MM = 96 / 25.4;
   const MARGEM_MM = 5; // @page{margin:5mm} em styles.css
-  const emPe = window.matchMedia && window.matchMedia('print and (orientation: portrait)').matches;
-  // A4: 297×210mm. Deitado de verdade, a largura útil é a maior; em pé
-  // (celular que ignorou o pedido de orientação), a largura útil é a
-  // menor — e é exatamente o motivo do relatório estourar coluna.
-  const larguraFolhaMm = (emPe ? 210 : 297) - MARGEM_MM*2;
-  const alturaFolhaMm  = (emPe ? 297 : 210) - MARGEM_MM*2;
+  // A4 SEMPRE paisagem (297×210mm) — o servidor é quem gera o PDF agora e
+  // sempre pede paisagem explicitamente (ver relatorios.js), então não há
+  // mais "celular que imprime em pé" a compensar aqui.
+  const larguraFolhaMm = 297 - MARGEM_MM*2;
+  const alturaFolhaMm  = 210 - MARGEM_MM*2;
 
   // A largura do relatório é sempre calibrada pra folha deitada (287mm =
   // 297mm - 2×5mm de margem) — trava isso explicitamente, pra não
@@ -3056,45 +3262,69 @@ function ajustarParaCaberEmUmaPagina(el){
     }
   }
 }
-window.addEventListener('beforeprint', () => {
-  document.querySelectorAll('.print-only').forEach(el=>{
-    if(el.style.display !== 'none') ajustarParaCaberEmUmaPagina(el);
-  });
-});
+/* Já não existe window.print() neste fluxo (ver exportarViaServidor logo
+   abaixo) — ajustarParaCaberEmUmaPagina() agora é chamada direto, sem
+   depender do evento 'beforeprint'. */
 
-function imprimirContainer(el, nomeDoRelatorio){
+/* Substitui window.print(): monta o mesmo HTML que sempre foi montado,
+   manda pro servidor gerar o PDF de verdade (A4 paisagem garantido) e
+   baixa o arquivo pronto. */
+async function exportarViaServidor(el, nomeDoRelatorio){
+  if(!SuincoSharePoint || !SuincoSharePoint.estaConfigurado || !SuincoSharePoint.estaConfigurado()){
+    notify('Exportar relatório exige conexão com o servidor — é o que garante que o PDF sai sempre igual, em qualquer aparelho.', 'warn', 6000);
+    return;
+  }
+
   document.querySelectorAll('.print-only').forEach(x=>x.style.display='none');
   el.style.display = 'block';
+  ajustarParaCaberEmUmaPagina(el);
 
-  const tituloOriginal = document.title;
-  if(nomeDoRelatorio){
-    const d = new Date();
-    const carimbo = [
-      d.getFullYear(),
-      String(d.getMonth()+1).padStart(2,'0'),
-      String(d.getDate()).padStart(2,'0')
-    ].join('-') + '_' + String(d.getHours()).padStart(2,'0') + 'h' + String(d.getMinutes()).padStart(2,'0');
-    // Sem acento, espaço ou barra: o nome vira arquivo, e cada sistema
-    // operacional estraga esses caracteres de um jeito diferente.
-    const limpo = nomeDoRelatorio
-      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-      .replace(/[^A-Za-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '');
-    document.title = `Suinco_${limpo}_${carimbo}`;
-  }
+  const d = new Date();
+  const carimbo = [
+    d.getFullYear(),
+    String(d.getMonth()+1).padStart(2,'0'),
+    String(d.getDate()).padStart(2,'0')
+  ].join('-') + '_' + String(d.getHours()).padStart(2,'0') + 'h' + String(d.getMinutes()).padStart(2,'0');
+  // Sem acento, espaço ou barra: o nome vira arquivo, e cada sistema
+  // operacional estraga esses caracteres de um jeito diferente.
+  const limpo = (nomeDoRelatorio || 'Relatorio')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^A-Za-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
+  const nomeArquivo = `Suinco_${limpo}_${carimbo}`;
 
   const limpar = ()=>{
     el.style.display='none';
-    document.title = tituloOriginal;
-    // Desfaz o encolhimento de ajustarParaCaberEmUmaPagina — o container
-    // é reaproveitado na próxima exportação, e a pré-visualização em tela
+    // Desfaz o encolhimento de ajustarParaCaberEmUmaPagina — o container é
+    // reaproveitado na próxima exportação, e a pré-visualização em tela
     // (se alguém abrir de novo) não deve ficar menor por causa disso.
     const pagina = el.querySelector('.print-page');
     if(pagina){ pagina.style.transform=''; pagina.style.transformOrigin=''; pagina.style.width=''; }
-    window.removeEventListener('afterprint', limpar);
+    el.style.height=''; el.style.overflow='';
   };
-  window.addEventListener('afterprint', limpar);
-  window.print();
+
+  notify('Gerando relatório em PDF…', 'info', 4000);
+  try{
+    // A folha de estilo é o único <style> do arquivo (build_arquivo_unico.py
+    // embute tudo — CSS do painel inteiro + a fonte dos relatórios em
+    // base64). Mandar o texto inteiro garante que o servidor desenha com
+    // EXATAMENTE o mesmo CSS que o operador está vendo na pré-visualização,
+    // sem risco de as duas cópias ficarem desalinhadas com o tempo.
+    const css = (document.querySelector('style') || {}).textContent || '';
+    const html = el.outerHTML;
+    const blob = await SuincoSharePoint.gerarRelatorioPdf({ html, css, orientacao: 'paisagem', nomeArquivo });
+
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `${nomeArquivo}.pdf`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    notify('Relatório baixado.', 'success');
+  }catch(e){
+    notify('Não consegui gerar o relatório: ' + (e && e.message || 'erro desconhecido'), 'danger', 7000);
+  }finally{
+    limpar();
+  }
 }
 // PDF Operacional — sequenciamento de carregamento do dia, redesenhado pra
 // bater visualmente com a planilha real que a operação usa hoje.
@@ -3245,7 +3475,7 @@ async function exportarPdfOperacional(){
           extra: `<strong>Concluídas:</strong> ${concluidas} de ${lista.length}`,
         }))}
     </div>`;
-  imprimirContainer(el, 'Relatorio-Operacional');
+  await exportarViaServidor(el, 'Relatorio-Operacional');
 }
 
 /* ---------- EXPORT POWER BI (CSV) ----------
@@ -3720,7 +3950,7 @@ async function exportarPdfExecutivo(){
           extra: `<strong>Em aberto:</strong> ${abertas.length} · <strong>Concluídas:</strong> ${concluidasTodas.length}`,
         }))}
     </div>`;
-  imprimirContainer(el, 'Relatorio-Executivo');
+  await exportarViaServidor(el, 'Relatorio-Executivo');
 }
 
 /* ---------- RELÓGIO ---------- */
@@ -4103,7 +4333,7 @@ async function exportarPdfFretes(){
           extra: semObs ? `<strong>Sem registro:</strong> ${semObs} de ${dados.length}` : null,
         }))}
     </div>`;
-  imprimirContainer(el, 'Administracao-de-Fretes');
+  await exportarViaServidor(el, 'Administracao-de-Fretes');
 }
 
 /* =====================================================================

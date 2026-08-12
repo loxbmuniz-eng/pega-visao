@@ -219,9 +219,11 @@
          fila no alto da tela. -->
     <div class="card">
       <div class="card-title"><span class="icon">🔢</span> Fila de Programados</div>
+      <div class="card-sub">Só as cargas programadas hoje. As de outros dias seguem na Torre de Controle.</div>
       <div class="gap8" style="margin-bottom:12px">
         <button class="btn btn-sec btn-sm" onclick="reordenarPorSequenciaUI()">↕️ Reordenar por Sequência</button>
       </div>
+      <div class="aviso-inline no-print" id="prog-fila-outros-dias" hidden></div>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Seq.</th><th>Nº Carga</th><th>Placa</th><th>Transportadora</th><th>Rota</th><th>Tipo de Operação</th><th>Peso (kg)</th><th>Palet.</th><th>Ganchos</th><th>Entregas</th><th class="no-print">Ação</th></tr></thead>
@@ -649,6 +651,7 @@
         <div class="form-group"><label>Tipo de Veículo</label><input type="text" id="frota-tipoveiculo" placeholder="Ex: Truck, Carreta, Toco…"></div>
       </div>
       <div class="form-row">
+        <div class="form-group"><label>Motorista <span class="hint">opcional</span></label><input type="text" id="frota-motorista" placeholder="Preenche sozinho ao programar esta placa"></div>
         <div class="form-group"><label>Capacidade (kg) <span class="hint">opcional</span></label><input type="number" id="frota-capacidade" min="0"></div>
         <div class="form-group"><label>UF <span class="hint">opcional</span></label><input type="text" id="frota-uf" maxlength="2" placeholder="Ex: PR"></div>
         <div class="form-group"><label>Última Movimentação <span class="hint">opcional</span></label><input type="date" id="frota-ultima-mov"></div>

@@ -75,9 +75,12 @@ async def main():
             const els = [...document.querySelectorAll('.nav-tab')];
             return Object.fromEntries(els.map(el => [el.dataset.tab, !el.hidden]));
         }""")
-        esperado_visivel = {'torre', 'historico', 'relatorios'}
+        # REDUZIDO em 11/08/2026, a pedido do usuário: "a visão do
+        # comercial, só visão de pátio e histórico". Relatórios saiu — o
+        # Comercial consulta onde a carga está, não emite documento.
+        esperado_visivel = {'torre', 'historico'}
         visiveis = {k for k, v in abas.items() if v}
-        ck('exatamente torre + historico + relatorios visíveis',
+        ck('exatamente torre + historico visíveis',
            visiveis == esperado_visivel, str(abas))
 
         print('\n=== 3. TORRE: SEM COLUNA DE AÇÃO, SEM CAMPO EDITÁVEL ===')
@@ -105,12 +108,14 @@ async def main():
         else:
             ck('(sem carga no DB pra testar a timeline — pulado)', True)
 
-        print('\n=== 5. RELATÓRIOS: AS ABAS DE GERAR PDF ESTÃO DISPONÍVEIS (SÓ LEITURA) ===')
-        await pg2.evaluate("() => abrirTab('relatorios')")
-        await pg2.wait_for_timeout(300)
-        tem_botao_pdf = await pg2.evaluate(
-            "() => !!document.querySelector(\"button[onclick*='exportarPdfOperacional']\")")
-        ck('botão de PDF Operacional existe (exportar não é alterar dado)', tem_botao_pdf)
+        print('\n=== 5. RELATÓRIOS SAÍRAM DA VISÃO DO COMERCIAL ===')
+        # Mudou em 11/08/2026: antes o Comercial tinha a aba Relatórios
+        # (exportar não altera dado, então fazia sentido). O usuário
+        # reduziu o escopo para "só visão de pátio e histórico".
+        aba_relatorios_visivel = await pg2.evaluate(
+            "() => { const e = document.querySelector('.nav-tab[data-tab=\"relatorios\"]');"
+            "        return !!e && !e.hidden; }")
+        ck('aba Relatórios não aparece para o Comercial', not aba_relatorios_visivel)
 
         print('\n=== 6. ADMINISTRAÇÃO: "COMERCIAL" APARECE AO CRIAR UM NOVO USUÁRIO ===')
         # Achado real (08/08/2026): existem DOIS seletores de setor na tela de
