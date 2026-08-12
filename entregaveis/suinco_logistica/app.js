@@ -3342,6 +3342,37 @@ function ajustarParaCaberEmUmaPagina(el){
    abaixo) — ajustarParaCaberEmUmaPagina() agora é chamada direto, sem
    depender do evento 'beforeprint'. */
 
+/* Carimbo de data do NOME DO ARQUIVO — o período filtrado, não a hora
+   em que alguém clicou.
+
+   Pedido do usuário (11/08/2026): "os relatorios filtrados por data,
+   precisam sair com a data exata que foi filtrada no nome do arquivo...
+   se foi do mes passado, preciso que saia com data do mes passado".
+
+   Antes o nome sempre trazia `new Date()` — a emissão. Quem gerava hoje o
+   relatório de julho recebia um arquivo carimbado com a data de hoje, e
+   na pasta de downloads três relatórios de meses diferentes ficavam com
+   nomes praticamente iguais, distinguíveis só abrindo um por um.
+
+   Sem filtro nenhum não existe período a carimbar, e aí a emissão volta a
+   ser a informação certa — mas marcada como `emitido-`, para ninguém
+   confundir com recorte de data. */
+function carimboDoPeriodo(){
+  const { de, ate } = periodoRelatorio();
+
+  if(de && ate) return de === ate ? de : `${de}_a_${ate}`;
+  if(de) return `desde_${de}`;
+  if(ate) return `ate_${ate}`;
+
+  const d = new Date();
+  const dia = [
+    d.getFullYear(),
+    String(d.getMonth()+1).padStart(2,'0'),
+    String(d.getDate()).padStart(2,'0')
+  ].join('-');
+  return `emitido-${dia}_${String(d.getHours()).padStart(2,'0')}h${String(d.getMinutes()).padStart(2,'0')}`;
+}
+
 /* Substitui window.print(): monta o mesmo HTML que sempre foi montado,
    manda pro servidor gerar o PDF de verdade (A4 paisagem garantido) e
    baixa o arquivo pronto. */
@@ -3368,19 +3399,13 @@ async function exportarViaServidor(el, nomeDoRelatorio){
      pagina naturalmente: enche a página, quebra quando precisa, sem
      miniatura e sem folha vazia. */
 
-  const d = new Date();
-  const carimbo = [
-    d.getFullYear(),
-    String(d.getMonth()+1).padStart(2,'0'),
-    String(d.getDate()).padStart(2,'0')
-  ].join('-') + '_' + String(d.getHours()).padStart(2,'0') + 'h' + String(d.getMinutes()).padStart(2,'0');
   // Sem acento, espaço ou barra: o nome vira arquivo, e cada sistema
   // operacional estraga esses caracteres de um jeito diferente.
   const limpo = (nomeDoRelatorio || 'Relatorio')
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .replace(/[^A-Za-z0-9]+/g, '-')
     .replace(/^-|-$/g, '');
-  const nomeArquivo = `Suinco_${limpo}_${carimbo}`;
+  const nomeArquivo = `Suinco_${limpo}_${carimboDoPeriodo()}`;
 
   const limpar = ()=>{
     el.style.display='none';
