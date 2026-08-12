@@ -1516,7 +1516,21 @@ function atualizarPreviewFrotaPrograma(){
   if(f){
     document.getElementById('prog-transportadora').value = f.transportadora;
     document.getElementById('prog-tipoveiculo').value = f.tipoVeiculo;
-    hint.innerHTML = '<span class="text-dim">✅ Placa encontrada na Frota — Transportadora e Tipo de Veículo preenchidos automaticamente.</span>'
+    /* Motorista habitual da placa — pedido do usuário (11/08/2026): "DA
+       MESMA FORMA QUE QUANDO O INPUT DA PLACA É FEITO, E ALTERA
+       AUTOMATICAMENTE A TRANSPORTADORA, ALTERAR O NOME DO MOTORISTA CASO
+       JA TENHA NOME CADASTRADO NA PLACA".
+
+       Só preenche se o campo estiver VAZIO: se o operador já digitou um
+       nome (motorista de folga, substituto, freteiro do dia), sobrescrever
+       apagaria o que ele acabou de informar — e o motorista real daquela
+       viagem importa mais que o habitual do cadastro. */
+    const elMot = document.getElementById('prog-motorista');
+    if(elMot && !elMot.value.trim() && f.motorista) elMot.value = f.motorista;
+    const oQue = f.motorista
+      ? 'Transportadora, Tipo de Veículo e Motorista preenchidos'
+      : 'Transportadora e Tipo de Veículo preenchidos';
+    hint.innerHTML = `<span class="text-dim">✅ Placa encontrada na Frota — ${oQue} automaticamente.</span>`
                    + avisoPlacaJaProgramada(placa);
   } else if(normalizarPlaca(placa)){
     // Cadastrar sem sair da tela: antes disso, o único caminho era ir em
@@ -2753,10 +2767,11 @@ function addFrotaUI(){
   upsertFrota(placa, document.getElementById('frota-transportadora').value, document.getElementById('frota-tipoveiculo').value, {
     capacidadeKg: document.getElementById('frota-capacidade').value,
     uf: document.getElementById('frota-uf').value,
+    motorista: document.getElementById('frota-motorista').value,
     dataUltimaMovimentacao: document.getElementById('frota-ultima-mov').value,
     precisaRevisao: document.getElementById('frota-revisao').checked
   });
-  ['frota-placa','frota-transportadora','frota-tipoveiculo','frota-capacidade','frota-uf','frota-ultima-mov'].forEach(id=>document.getElementById(id).value='');
+  ['frota-placa','frota-transportadora','frota-tipoveiculo','frota-motorista','frota-capacidade','frota-uf','frota-ultima-mov'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('frota-revisao').checked = false;
   notify('Placa cadastrada na Frota.', 'success');
   renderAll();

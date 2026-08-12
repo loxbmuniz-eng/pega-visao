@@ -1679,3 +1679,67 @@ describe('13. Relatório em PDF gerado pelo SERVIDOR (A4 paisagem sempre)', () =
     assert.match(disp, /filename="etc-Relatorio-Operacional\.pdf"/);
   });
 });
+
+/* ------------------------------------------------------------------ */
+describe('14. Motorista habitual da placa (dim_veiculos.motorista)', () => {
+  /* Pedido do usuário (11/08/2026): "adicionar campo motorista ao
+     cadastro de placas" + preencher sozinho ao programar, do mesmo jeito
+     que a transportadora já faz. */
+  const PLACA = 'MOT9X88';
+
+  after(async () => {
+    await pool.query('DELETE FROM dim_veiculos WHERE placa = $1', [PLACA]);
+  });
+
+  test('POST /api/frota grava o motorista e o GET devolve', async () => {
+    const criar = await req('/api/frota', {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { placa: PLACA, transportadora: 'Transp X', tipoVeiculo: 'Truck', motorista: 'João da Silva' },
+    });
+    assert.equal(criar.status, 201, criar.texto);
+    assert.equal(criar.json.motorista, 'João da Silva');
+
+    const lista = await req('/api/frota', { token: tokens['Logística'] });
+    const v = lista.json.find((x) => x.placa === PLACA);
+    assert.ok(v, 'placa não voltou no GET');
+    assert.equal(v.motorista, 'João da Silva');
+  });
+
+  test('sem motorista informado a placa continua válida (campo é opcional)', async () => {
+    const r = await req('/api/frota', {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { placa: PLACA, transportadora: 'Transp X', tipoVeiculo: 'Truck' },
+    });
+    assert.equal(r.status, 201, r.texto);
+    assert.equal(r.json.motorista, '');
+  });
+
+  test('capacidade e UF sobrevivem ao upsert (não são apagadas por omissão no painel)', async () => {
+    /* Bug real achado em 11/08/2026: o painel só enviava placa,
+       transportadora e tipoVeiculo, e o ON CONFLICT zerava capacidade_kg
+       e uf a cada edição. Este teste fixa o contrato do lado do servidor:
+       mandando os campos, eles têm que ficar. */
+    const r = await req('/api/frota', {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: {
+        placa: PLACA, transportadora: 'Transp X', tipoVeiculo: 'Carreta',
+        capacidadeKg: 27000, uf: 'MG', motorista: 'Maria Souza',
+      },
+    });
+    assert.equal(r.status, 201, r.texto);
+
+    const lista = await req('/api/frota', { token: tokens['Logística'] });
+    const v = lista.json.find((x) => x.placa === PLACA);
+    assert.equal(v.capacidadeKg, 27000);
+    assert.equal(v.uf, 'MG');
+    assert.equal(v.motorista, 'Maria Souza');
+  });
+
+  test('Portaria não cadastra placa (permissão continua valendo com o campo novo)', async () => {
+    const r = await req('/api/frota', {
+      metodo: 'POST', token: tokens['Portaria'],
+      corpo: { placa: 'MOT0X00', motorista: 'Quem Quer Que Seja' },
+    });
+    assert.equal(r.status, 403);
+  });
+});

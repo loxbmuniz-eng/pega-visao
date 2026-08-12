@@ -690,6 +690,7 @@ const SuincoStore = {
       Tipo_Veiculo: frota.tipoVeiculo || '',
       Capacidade_Kg: frota.capacidadeKg || null,
       UF: frota.uf || '',
+      Motorista: frota.motorista || '',
       Precisa_Revisao: !!frota.precisaRevisao
     }, operador);
   }
@@ -983,16 +984,22 @@ function upsertFrota(placa, transportadora, tipoVeiculo, extra){
   const uf = extra.uf ? String(extra.uf).toUpperCase().slice(0,2) : '';
   const dataUltimaMovimentacao = extra.dataUltimaMovimentacao || null;
   const precisaRevisao = !!extra.precisaRevisao;
+  // Motorista habitual da placa (só sugestão ao programar). `undefined`
+  // preserva o que já estava cadastrado — importante porque a sincronia
+  // remota e a importação em lote chamam esta função sem o campo, e
+  // sobrescrever com '' apagaria o motorista de toda a frota.
+  const motorista = extra.motorista !== undefined ? String(extra.motorista).trim() : undefined;
   const origem = extra.origem || 'manual';
   let f = indiceFrota().get(p);
   let entrada;
   if(f){
     f.transportadora = transportadora; f.tipoVeiculo = tipoVeiculo;
     f.capacidadeKg = capacidadeKg; f.uf = uf; f.dataUltimaMovimentacao = dataUltimaMovimentacao; f.precisaRevisao = precisaRevisao;
+    if(motorista !== undefined) f.motorista = motorista;
     f.origem = origem;
     entrada = f;
   } else {
-    const novo = { placa:p, transportadora, tipoVeiculo, capacidadeKg, uf, dataUltimaMovimentacao, precisaRevisao, origem };
+    const novo = { placa:p, transportadora, tipoVeiculo, capacidadeKg, uf, motorista: motorista || '', dataUltimaMovimentacao, precisaRevisao, origem };
     DB.frota.push(novo);
     if(_frotaIndice) _frotaIndice.set(p, novo); // mantém o índice quente na importação em lote
     entrada = novo;

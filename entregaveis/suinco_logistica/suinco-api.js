@@ -491,12 +491,24 @@ const SuincoSharePoint = (function () {
   async function gravarFrota(campos) {
     if (!estaConfigurado()) return { enfileirado: false };
     try {
+      /* Manda TODOS os campos, não só três.
+
+         Bug achado em 11/08/2026, ao adicionar o motorista: só placa,
+         transportadora e tipoVeiculo eram enviados. Como o backend faz
+         `ON CONFLICT DO UPDATE SET capacidade_kg = EXCLUDED.capacidade_kg`
+         (e o mesmo para uf), os campos ausentes chegavam nulos e cada
+         edição de placa pelo painel APAGAVA capacidade e UF no servidor —
+         silenciosamente, porque a cópia local continuava certa e ninguém
+         via a diferença até comparar com outro terminal. */
       await chamar('/api/frota', {
         metodo: 'POST',
         corpo: {
           placa: campos.Placa,
           transportadora: campos.Transportadora,
           tipoVeiculo: campos.Tipo_Veiculo,
+          capacidadeKg: campos.Capacidade_Kg,
+          uf: campos.UF,
+          motorista: campos.Motorista,
         },
       });
       return { enfileirado: false };
