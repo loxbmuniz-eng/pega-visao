@@ -20,12 +20,18 @@ import asyncio
 import os
 import subprocess
 import sys
+import uuid
 from playwright.async_api import async_playwright
 
 API = os.environ.get('SUINCO_API', 'http://127.0.0.1:3010')
 SENHA = os.environ.get('SUINCO_SENHA', 'senha-de-teste-123')
 SENHA_FECHAR = os.environ.get('SUINCO_SENHA_FECHAR', 'senha-teste-fechar')
 PAINEL = '/home/user/pega-visao/entregaveis/suinco_logistica/index.html'
+# Número único por execução: a base local é compartilhada entre rodadas e
+# entre testes, e um 'SENHA-1' de ontem faria o find() pegar a carga
+# errada — já encerrada — dando "a carga não está mais em aberto" sem
+# nenhum bug real por trás.
+NUM = f'SENHA-{uuid.uuid4().hex[:6]}'
 falhas = []
 
 
@@ -81,10 +87,10 @@ async def main():
 
         print('\n=== 2. COM CARGA EM ABERTO: PEDE A SENHA ===')
         placa = await pg.evaluate("() => DB.frota[0].placa")
-        await pg.evaluate("""(placa) => {
-            criarCargaProgramada({placa, numeroCarga:'SENHA-1', peso:9000,
+        await pg.evaluate("""([placa, num]) => {
+            criarCargaProgramada({placa, numeroCarga: num, peso:9000,
                 rota:'500', operador:'Ana'});
-        }""", placa)
+        }""", [placa, NUM])
         await pg.wait_for_timeout(1500)
 
         pedidos.clear()
@@ -93,7 +99,7 @@ async def main():
         await pg.evaluate("() => fecharProgramacaoUI()")
         await pg.wait_for_timeout(1800)
         ainda_aberta = await pg.evaluate(
-            "() => DB.cargas.some(c=>c.numeroCarga==='SENHA-1' && c.status!=='Seguiu Viagem')")
+            "(n) => DB.cargas.some(c=>c.numeroCarga===n && c.status!=='Seguiu Viagem')", NUM)
         ck('carga continua em aberto depois de desistir da senha', ainda_aberta)
 
         print('\n=== 3. SENHA ERRADA NÃO FECHA ===')
@@ -109,10 +115,10 @@ async def main():
         await pg.evaluate("() => fecharProgramacaoUI()")
         await pg.wait_for_timeout(2500)
 
-        estado = await pg.evaluate("""() => {
-            const c = DB.cargas.find(x=>x.numeroCarga==='SENHA-1');
+        estado = await pg.evaluate("""(n) => {
+            const c = DB.cargas.find(x=>x.numeroCarga===n);
             return {existe: !!c, status: c && c.status};
-        }""")
+        }""", NUM)
         ck('a carga NÃO foi apagada', estado['existe'], str(estado))
         ck('a carga continua EM ABERTO', estado['status'] != 'Seguiu Viagem', str(estado))
 
@@ -120,7 +126,7 @@ async def main():
         await pg.wait_for_timeout(800)
         nums = await pg.eval_on_selector_all(
             '#torre-tbody .numero-carga-input', 'els => els.map(e=>e.value)')
-        ck('a carga continua VISÍVEL na Torre de Controle', 'SENHA-1' in nums, str(nums))
+        ck('a carga continua VISÍVEL na Torre de Controle', NUM in nums, str(nums))
         ck('a Torre mostra a data em que foi programada',
            'Programada em' in (await pg.inner_text('#torre-thead')))
 

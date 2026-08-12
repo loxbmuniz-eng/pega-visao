@@ -1860,13 +1860,25 @@ input,select,textarea{border-radius:5px}
    Ainda depende de confirmação num aparelho real — se o resultado não
    ficar bom o bastante, o próximo passo é medir a largura real que cada
    app de PDF está usando e ajustar o fator abaixo. */
-@media print and (orientation: portrait){
-  .print-page{
-    width: 287mm;
-    transform: scale(0.697);
-    transform-origin: top left;
-  }
-}
+/* A regra `@media print and (orientation: portrait)` foi REMOVIDA em
+   11/08/2026, e é preciso registrar por quê.
+
+   Ela existia para o celular que ignorava `@page{size:landscape}` e
+   imprimia em pé: encolhia a tabela pela proporção 200/287 para ela não
+   estourar a folha estreita. Era um remendo para uma decisão que estava
+   nas mãos do aparelho de cada operador.
+
+   Desde 09/08/2026 quem gera o PDF é o SERVIDOR
+   (backend/src/rotas/relatorios.js), pedindo A4 paisagem como parâmetro
+   da chamada — a folha deixou de depender do aparelho, que era a causa
+   raiz. Com paisagem garantida, a regra nunca mais casa.
+
+   Manter a regra não era neutro: ela virou risco. Se alguém pedir
+   `orientacao:'retrato'` na rota, o @page do servidor passa a ser
+   portrait, a media query casa, e o scale(0.697) entra POR CIMA do
+   encolhimento que ajustarParaCaberEmUmaPagina() já aplicou — dois
+   encolhimentos somados, texto ilegível. Remédio de um problema que não
+   existe mais, capaz de causar um novo. */
 
 @media print{
   #print-operacional table{
@@ -2065,7 +2077,7 @@ input,select,textarea{border-radius:5px}
      O !important existe porque a regra específica vem depois no arquivo, e
      inverter a ordem quebraria a largura calibrada de cada um. */
   .seq-input,.ganchos-input,.placa-input,.numero-carga-input,.praonde-inline,
-  .peso-input,.entregas-input,.rota-inline,.palet-inline{ font-size:16px !important }
+  .peso-input,.entregas-input,.rota-inline,.palet-inline,.motorista-input{ font-size:16px !important }
 }
 
 /* Continuação do bloco "NAV NO DESKTOP: BARRA LATERAL FIXA" (mais acima,

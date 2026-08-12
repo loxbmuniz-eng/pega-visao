@@ -1632,9 +1632,39 @@ function avisoPlacaJaProgramada(placa){
       Se não for isso, confira antes: pode ser programação em duplicidade.
     </div>`;
 }
+/* Placa liberada para receber uma SEGUNDA carga nesta programação, por
+   escolha explícita do operador (botão "➕ Outra carga"). Vale para uma
+   criação só: some assim que a carga é criada, para não deixar a porta
+   aberta sem querer. */
+let _placaMultiCargaAutorizada = null;
+
 function criarCargaProgramadaUI(){
   const placa = document.getElementById('prog-placa').value;
   if(!normalizarPlaca(placa)){ notify('Informe a placa.','warn'); return; }
+
+  /* Duplicidade de placa na mesma programação — pedido do usuário
+     (11/08/2026): "IMPEDIR DUPLICIDADE DE PLACAS DENTRO DA MESMA
+     PROGRAMACAO DE EMBARQUE SOMENTE APÓS O VEICULO SAIR E RETORNAR PARA
+     NOVO INPUT".
+
+     A trava é sobre o ACIDENTE, não sobre o caso real de um caminhão
+     levar duas cargas: quem quiser a segunda carga usa "➕ Outra carga"
+     na linha da placa, que é uma decisão consciente e já herda os dados
+     do veículo. Depois que o caminhão sai (Seguiu Viagem), a placa fica
+     livre de novo sem precisar de nada. */
+  const pNorm = normalizarPlaca(placa);
+  const abertas = cargasAbertasPorPlaca(pNorm);
+  if(abertas.length && _placaMultiCargaAutorizada !== pNorm){
+    const numeros = abertas
+      .map(c => c.aguardandoCarga ? 'sem número ainda' : (c.numeroCarga || 'sem número'))
+      .join(', ');
+    notify(
+      `${pNorm} já está nesta programação (${numeros}) e ainda não seguiu viagem. `
+      + 'Para lançar outra carga no mesmo caminhão, use "➕ Outra carga" na linha dela.',
+      'warn', 9000);
+    return;
+  }
+
   try{
     criarCargaProgramada({
       placa,
@@ -1654,6 +1684,7 @@ function criarCargaProgramadaUI(){
       qtdEntregas: document.getElementById('prog-entregas').value,
       operador: nomeOperadorAtual()
     });
+    _placaMultiCargaAutorizada = null;   // vale uma vez só
     notify(`Carga criada para a placa ${normalizarPlaca(placa)} — status Aguardando Veículo.`, 'success');
     ['prog-placa','prog-transportadora','prog-tipoveiculo','prog-motorista','prog-numero-carga','prog-cliente','prog-destino','prog-peso','prog-sequencia','prog-obs']
       .forEach(id=>document.getElementById(id).value='');
@@ -1859,6 +1890,14 @@ function adicionarOutraCargaNaPlacaUI(id){
   v('prog-paletizada', 'Não');
   v('prog-ganchos', '0');
   v('prog-entregas', '1');
+
+  /* Marca que ESTA próxima criação é multi-carga deliberada, e não um
+     lançamento repetido por engano. É o que diferencia os dois pedidos do
+     usuário (11/08/2026), que só parecem se contradizer: "não duplicar
+     placas na mesma programação" (acidente) versus "podendo somente
+     duplicar cargas na mesma placa, e poder ter rotas diferentes se
+     necessário" (intenção). O caminho deliberado é este botão. */
+  _placaMultiCargaAutorizada = c.placa;
 
   atualizarPreviewFrotaPrograma();
 
