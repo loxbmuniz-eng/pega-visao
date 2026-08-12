@@ -1456,10 +1456,20 @@ function renderTorre(){
   const thead = document.getElementById('torre-thead');
   if(thead){
     thead.innerHTML =
-      '<th>Seq.</th><th>Nº Carga</th><th>Placa</th><th>Transportadora</th>'
-      + '<th>Tipo Veículo</th><th>Motorista</th><th>Rota</th><th>Peso (kg)</th>'
+      /* 15 colunas não cabiam: a tabela media 1870px numa área de 1162px,
+         e o operador tinha que rolar pro lado pra ver status e botões —
+         justamente o que ele precisa pra agir. Pedido do usuário
+         (11/08/2026): "otimize para que tudo apareca por completo sem
+         precisar de rolagem".
+
+         Nada foi removido: colunas que descrevem A MESMA coisa foram
+         empilhadas numa célula só. Veículo reúne placa, transportadora e
+         tipo (são o caminhão); Datas reúne quando foi programada e quando
+         mexeram nela pela última vez. 15 colunas viram 11. */
+      '<th>Seq.</th><th>Nº Carga</th><th>Veículo</th>'
+      + '<th>Motorista</th><th>Rota</th><th>Peso (kg)</th>'
       + '<th>Palet.</th><th>Tipo de Operação</th><th>Ganchos</th><th>Status</th>'
-      + '<th>Programada em</th><th>Atualizado em</th>'
+      + '<th>Datas</th>'
       + (podeCancelarCarga() ? '<th class="no-print">Ação</th>' : '');
   }
 
@@ -1480,10 +1490,11 @@ function renderTorre(){
       <td class="col-identificacao">${editavel
         ? `<input type="text" class="numero-carga-input" value="${esc(c.numeroCarga)}" onchange="atualizarNumeroCargaUI('${escJs(c.id)}',this.value)" title="Alterar o número desta carga.">`
         : (esc(c.numeroCarga)||'—')}</td>
-      <td class="col-identificacao">${editavel
+      <td class="col-identificacao cel-veiculo">${editavel
         ? `<input type="text" class="placa-input" value="${esc(c.placa)}" onchange="atualizarPlacaUI('${escJs(c.id)}',this.value)" title="Trocar a placa.">`
-        : esc(c.placa)}</td>
-      <td>${esc(c.transportadora)||'—'}</td><td>${esc(c.tipoVeiculo)||'—'}</td>
+        : `<span class="veic-placa">${esc(c.placa)}</span>`}
+        <span class="veic-transp">${esc(c.transportadora)||'—'}</span>
+        <span class="veic-tipo">${esc(c.tipoVeiculo)||'—'}</span></td>
       <td>${editavel
         ? `<input type="text" class="motorista-input" value="${esc(c.motorista||'')}" onchange="atualizarMotoristaUI('${escJs(c.id)}',this.value)" title="Trocar o motorista desta carga.">`
         : (esc(c.motorista)||'—')}</td>
@@ -1498,8 +1509,9 @@ function renderTorre(){
         ? `<input type="number" class="ganchos-input" min="0" step="1" value="${c.qtdGanchos ?? 0}" onchange="atualizarGanchosUI('${escJs(c.id)}',this.value)" title="0 = Liso">`
         : (c.qtdGanchos ? c.qtdGanchos : '<span class="text-dim">Liso</span>')}</td>
       <td>${badgeHtml(c.status)}</td>
-      <td>${dataProgramacaoHtml(c)}</td>
-      <td>${fmtDataHora(c.atualizadoEm)}</td>
+      <td class="cel-datas">
+        <span class="dt-prog">${dataProgramacaoHtml(c)}</span>
+        <span class="dt-atu" title="Última movimentação registrada">${fmtDataHora(c.atualizadoEm)}</span></td>
       ${editavel ? `<td class="no-print">${botaoCancelarHtml(c)}</td>` : ''}
     </tr>`).join('');
   const vazio = document.getElementById('torre-empty');
@@ -3144,12 +3156,42 @@ function renderTimelineCarga(id){
    Ordenado do mais recente pro mais antigo, então cortar em N mantém
    exatamente o que a auditoria (a busca de verdade) serve: o mais relevante
    primeiro; procurar mais fundo é o que o filtro por placa/setor é para. */
+/* Limpa os quatro filtros do Histórico de uma vez.
+
+   Com filtro de data entrando, "por que o log está vazio?" passa a ter
+   mais de uma causa possível — e o operador não deve ter que caçar qual
+   campo esqueceu preenchido. */
+function limparFiltroHistorico(){
+  ['hist-filtro-placa','hist-filtro-setor','hist-data-de','hist-data-ate']
+    .forEach(id=>{ const e = document.getElementById(id); if(e) e.value = ''; });
+  renderHistorico();
+}
+
 function renderHistorico(){
   const filtroPlaca = normalizarPlaca(document.getElementById('hist-filtro-placa')?.value || '');
   const filtroSetor = document.getElementById('hist-filtro-setor')?.value || '';
+  /* Filtro por data — pedido do usuário (11/08/2026). Filtra pelo
+     TIMESTAMP da movimentação (quando o registro aconteceu), não pela
+     data de criação da carga: este log é auditoria de "o que foi feito e
+     quando", então a pergunta que ele responde é "o que aconteceu no dia
+     X", mesmo que a carga seja de antes.
+
+     A data final vira o fim do dia: quem digita 05/08 quer o dia 05
+     inteiro, não até 00:00 dele — mesma regra de
+     filtrarPorDataProgramacao, em data.js. */
+  const dDe = document.getElementById('hist-data-de')?.value || '';
+  const dAte = document.getElementById('hist-data-ate')?.value || '';
   let lista = DB.movimentacoes.slice().sort((a,b)=>new Date(b.timestamp)-new Date(a.timestamp));
   if(filtroPlaca) lista = lista.filter(m=>m.placa.includes(filtroPlaca));
   if(filtroSetor) lista = lista.filter(m=>m.setor===filtroSetor);
+  if(dDe || dAte){
+    const ini = dDe ? new Date(dDe + 'T00:00:00').getTime() : -Infinity;
+    const fim = dAte ? new Date(dAte + 'T23:59:59.999').getTime() : Infinity;
+    lista = lista.filter(m=>{
+      const t = Date.parse(m.timestamp) || 0;
+      return t >= ini && t <= fim;
+    });
+  }
   const mobile = window.matchMedia && window.matchMedia('(max-width:560px)').matches;
   const LIMITE = mobile ? 40 : 500;
   const exibidos = lista.slice(0, LIMITE);
@@ -3241,7 +3283,11 @@ function ajustarParaCaberEmUmaPagina(el){
   // 297mm - 2×5mm de margem) — trava isso explicitamente, pra não
   // depender de o navegador ter resolvido a folha deitada ou em pé antes
   // desta medição.
-  pagina.style.width = '287mm';
+  /* NÃO escreve mais largura aqui. Ela virou responsabilidade do CSS
+     (@media print: .print-page{width:198mm}), junto com a folha A4
+     vertical. Deixar o '287mm' da folha deitada nesta função — que já não
+     é chamada na exportação — era uma contradição esperando alguém
+     reativá-la e reintroduzir o bug do relatório miniaturizado. */
 
   const escalaLargura = Math.min(1, (larguraFolhaMm*PX_POR_MM) / pagina.scrollWidth);
   const escalaAltura  = Math.min(1, (alturaFolhaMm*PX_POR_MM) / pagina.scrollHeight);

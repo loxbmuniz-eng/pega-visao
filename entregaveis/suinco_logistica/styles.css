@@ -1387,7 +1387,46 @@ code{
 .entregas-input{width:70px;text-align:center}
 .rota-inline{min-width:120px}
 .palet-inline{width:80px}
-.motorista-input{min-width:130px}
+.motorista-input{min-width:90px}
+
+/* TORRE SEM ROLAGEM LATERAL (11/08/2026).
+
+   Colunas que descrevem a mesma coisa passaram a dividir uma célula, em
+   linhas empilhadas: o olho lê de cima pra baixo dentro da célula, em vez
+   de percorrer a folha pro lado. Placa continua sendo o que salta —
+   transportadora e tipo ficam como apoio, menores e mais claros. */
+.cel-veiculo{ line-height:1.25 }
+.cel-veiculo .veic-placa{ display:block; font-weight:800; letter-spacing:.02em }
+.cel-veiculo .veic-transp{
+  display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;
+  overflow:hidden; font-size:11px; color:var(--text-dim);
+}
+.cel-veiculo .veic-tipo{ display:block; font-size:10.5px; color:var(--text-dim); opacity:.9 }
+.cel-datas{ line-height:1.25; white-space:nowrap }
+.cel-datas .dt-prog{ display:block }
+.cel-datas .dt-atu{ display:block; font-size:10.5px; color:var(--text-dim) }
+
+/* Campos da Torre apertados o suficiente para a tabela caber inteira.
+   Não é economia estética: com a tabela mais larga que a tela, Status e
+   os botões de ação ficavam fora do campo de visão — a informação que
+   faz alguém agir. */
+#torre-tbody .placa-input{ min-width:86px; width:100% }
+#torre-tbody .motorista-input{ min-width:80px; width:100% }
+#torre-tbody .rota-inline{ min-width:92px; width:100% }
+#torre-tbody .peso-input{ width:72px }
+#torre-tbody .ganchos-input{ width:54px }
+#torre-tbody .seq-input{ width:48px }
+#torre-tbody .numero-carga-input{ min-width:76px; width:100% }
+#torre-tbody .praonde-inline{ min-width:112px; width:100% }
+#torre-tbody .palet-inline{ width:60px }
+
+/* Últimos 159px: padding das células e o corpo da tabela. A Torre é uma
+   tela de leitura rápida em monitor, não um documento — respiro generoso
+   ali custa o Status e os botões saírem da tela. */
+#torre-tbody td, #torre-thead th{ padding-left:5px !important; padding-right:5px !important }
+#torre-thead th{ font-size:11px; white-space:normal; line-height:1.2 }
+#torre-tbody td{ font-size:12.5px }
+#torre-tbody .badge{ font-size:10.5px; padding:3px 6px; white-space:nowrap }
 /* Carga programada há 2+ dias e ainda parada. Não é erro do sistema — é
    uma carga que o pátio esqueceu, e a cor existe pra ela ser achada sem
    ler linha por linha. */

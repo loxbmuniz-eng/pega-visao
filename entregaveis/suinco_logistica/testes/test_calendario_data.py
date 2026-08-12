@@ -88,15 +88,62 @@ async def main():
         ck('campo de data da Visão do Pátio abre o calendário',
            'torre-vp-de' in abriu, str(abriu))
 
+        print('\n=== 3b. HISTÓRICO: FILTRO DE DATA COM CALENDÁRIO ===')
+        await pg.evaluate("() => { window.__aberturas = []; irParaTab('historico'); }")
+        await pg.wait_for_timeout(500)
+        ck('Histórico tem campo De', await pg.is_visible('#hist-data-de'))
+        ck('Histórico tem campo Até', await pg.is_visible('#hist-data-ate'))
+        await pg.click('#hist-data-de')
+        await pg.wait_for_timeout(300)
+        abriu = await pg.evaluate("() => window.__aberturas")
+        ck('campo de data do Histórico abre o calendário',
+           'hist-data-de' in abriu, str(abriu))
+
+        # O filtro precisa FILTRAR de verdade, não só existir.
+        await pg.evaluate("""() => {
+            const hoje = new Date();
+            const velho = new Date(Date.now() - 10*86400000);
+            DB.movimentacoes = [
+                {id:'m1', placa:'AAA1A11', statusAnterior:null, statusNovo:'Aguardando Veículo',
+                 operador:'Ana', setor:'Logística', timestamp: hoje.toISOString()},
+                {id:'m2', placa:'BBB2B22', statusAnterior:null, statusNovo:'Aguardando Veículo',
+                 operador:'Ana', setor:'Logística', timestamp: velho.toISOString()},
+            ];
+            SuincoStore.save(); renderHistorico();
+        }""")
+        await pg.wait_for_timeout(400)
+        todos = await pg.inner_text('#hist-tbody')
+        ck('sem filtro, as duas movimentações aparecem',
+           'AAA1A11' in todos and 'BBB2B22' in todos)
+
+        hoje_iso = await pg.evaluate("() => new Date().toISOString().slice(0,10)")
+        await pg.fill('#hist-data-de', hoje_iso)
+        await pg.wait_for_timeout(400)
+        filtrado = await pg.inner_text('#hist-tbody')
+        ck('filtrando a partir de hoje, a antiga some',
+           'AAA1A11' in filtrado and 'BBB2B22' not in filtrado, filtrado[:120])
+
+        # Existem três botões "Limpar filtros" no painel (Indicadores,
+        # Histórico, ...). Mira o do Histórico pelo onclick, não pelo texto.
+        await pg.click('button[onclick="limparFiltroHistorico()"]')
+        await pg.wait_for_timeout(400)
+        limpo = await pg.inner_text('#hist-tbody')
+        ck('"Limpar filtros" traz tudo de volta',
+           'AAA1A11' in limpo and 'BBB2B22' in limpo)
+
         print('\n=== 4. O CAMPO CONTINUA ACEITANDO DIGITAÇÃO ===')
-        # O atalho não pode tirar de quem prefere digitar.
+        # O atalho não pode tirar de quem prefere digitar. Volta à Torre:
+        # a seção anterior terminou no Histórico, e campo de aba escondida
+        # não é preenchível.
+        await pg.evaluate("() => irParaTab('torre')")
+        await pg.wait_for_timeout(500)
         await pg.fill('#torre-vp-de', '2026-08-05')
         ck('digitar a data continua funcionando',
            (await pg.input_value('#torre-vp-de')) == '2026-08-05')
 
         print('\n=== 5. TODOS OS CAMPOS DE DATA SÃO type=date ===')
         n = await pg.evaluate("() => document.querySelectorAll('input[type=\"date\"]').length")
-        ck('há campos de data no painel', n >= 10, str(n))
+        ck('há campos de data no painel', n >= 12, str(n))
 
         print('\n=== CONSOLE ===')
         ck('sem erros de página', not erros, str(erros[:3]))
