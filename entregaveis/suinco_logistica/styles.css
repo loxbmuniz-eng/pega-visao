@@ -1640,6 +1640,26 @@ code{
      perde o fundo para a regra geral de impressão, então o seletor aqui
      precisa ganhar por especificidade (id do container), não por ordem. */
   #print-executivo .tl-carga{ background:rgba(185,144,63,.22) !important }
+
+  /* COLUNA "CARGA" — o defeito mais grave achado nesta rodada
+     (11/08/2026), apontado pelo usuário: "esta quase impossível ler,
+     péssimo contraste na informação mais importante do relatório".
+
+     Placa, número da carga e transportadora identificam a LINHA inteira.
+     Elas usavam var(--text) e var(--gold-text), que no tema escuro são
+     branco e dourado claro — sobre o fundo bege da própria coluna, no
+     papel, o resultado era texto quase invisível. Sem essa coluna, a
+     linha do tempo não diz de QUAL caminhão está falando: vira uma grade
+     de horários sem dono.
+
+     Cores fixas de papel, com o contraste na ordem da hierarquia: placa
+     é o mais forte (quase preto), número logo abaixo, transportadora em
+     cinza legível. */
+  #print-executivo .tl-placa{ color:#111418 !important; font-weight:800 !important }
+  #print-executivo .tl-num{ color:#6b4d12 !important; font-weight:800 !important }
+  #print-executivo .tl-transp{ color:#3d4a5c !important }
+  #print-executivo .tl-total{ color:#6b4d12 !important }
+  #print-executivo .tl-pendente, #print-executivo .tl-na{ color:#6b7688 !important }
   thead{display:table-header-group}  /* repete cabeçalho a cada página */
 }
 
