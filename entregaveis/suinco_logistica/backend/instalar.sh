@@ -208,6 +208,27 @@ ok "dependências instaladas"
 su -s /bin/bash "$APP_USER" -c "cd '$APP_DIR' && node scripts/migrar.js"
 su -s /bin/bash "$APP_USER" -c "cd '$APP_DIR' && node scripts/seed.js"
 
+# --- 6b. Chromium para gerar PDF de relatório --------------------------
+# Pedido do usuário (09/08/2026): o relatório precisa sair SEMPRE A4
+# paisagem, igual em iOS/Android/desktop — o único jeito de garantir isso
+# é o SERVIDOR renderizar o PDF (ver backend/src/rotas/relatorios.js), não
+# mais o navegador de cada operador. Isso exige um Chromium instalado
+# aqui no VPS.
+#
+# PLAYWRIGHT_BROWSERS_PATH aponta pra dentro de $APP_DIR de propósito: o
+# serviço roda com ProtectSystem=strict (só $APP_DIR é gravável) e com um
+# usuário próprio sem home real — o cache padrão do Playwright
+# (~/.cache/ms-playwright) não seria alcançável nem gravável por ele.
+azul "6b. Chromium para relatórios em PDF"
+PW_BROWSERS_DIR="$APP_DIR/.playwright-browsers"
+su -s /bin/bash "$APP_USER" -c \
+  "cd '$APP_DIR' && PLAYWRIGHT_BROWSERS_PATH='$PW_BROWSERS_DIR' npx playwright install chromium" \
+  >/dev/null
+# As bibliotecas de sistema do Chromium (fontes, libs gráficas) exigem
+# root pra instalar via apt — é por isso que esta parte NÃO roda com su.
+(cd "$APP_DIR" && npx playwright install-deps chromium) >/dev/null 2>&1 || true
+ok "Chromium pronto em $PW_BROWSERS_DIR"
+
 # --- 7. Serviço -------------------------------------------------------
 azul "7. Serviço systemd"
 cat > /etc/systemd/system/embarque-suinco.service <<EOF
@@ -221,6 +242,7 @@ Requires=postgresql.service
 Type=simple
 User=$APP_USER
 WorkingDirectory=$APP_DIR
+Environment=PLAYWRIGHT_BROWSERS_PATH=$APP_DIR/.playwright-browsers
 ExecStart=/usr/bin/node src/servidor.js
 Restart=always
 RestartSec=5

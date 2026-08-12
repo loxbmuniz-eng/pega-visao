@@ -21,6 +21,7 @@ import { rotasCadastros } from './rotas/cadastros.js';
 import { rotasOperadores } from './rotas/operadores.js';
 import { rotasBI } from './rotas/bi.js';
 import { rotasProgramacao } from './rotas/programacao.js';
+import { rotasRelatorios } from './rotas/relatorios.js';
 
 /* Chave do limite geral: por OPERADOR autenticado, não por IP.
 
@@ -190,6 +191,7 @@ export function criarApp() {
   app.use('/api', rotasCadastros);
   app.use('/api', rotasOperadores);
   app.use('/api', rotasProgramacao);
+  app.use('/api', rotasRelatorios);
   app.use('/bi', rotasBI);
 
   app.use((req, res) => {
@@ -207,6 +209,18 @@ export function criarApp() {
     }
     if (err?.message?.startsWith('Origem não autorizada')) {
       return res.status(403).json({ erro: err.message, codigo: 'ORIGEM_NAO_AUTORIZADA' });
+    }
+    /* Corpo maior que o limite do express.json/express.text. O
+       body-parser lança com `status` mas sem `codigo`, então caía no 500
+       genérico logo abaixo — que diz "erro interno no servidor" para uma
+       requisição que o servidor recusou de propósito, e manda o painel
+       tratar como falha de rede (enfileirando pra tentar de novo uma
+       coisa que nunca vai ser aceita). */
+    if (err?.type === 'entity.too.large') {
+      return res.status(413).json({
+        erro: 'Conteúdo grande demais para o servidor aceitar.',
+        codigo: 'CONTEUDO_GRANDE_DEMAIS',
+      });
     }
     console.error('[erro]', req.method, req.path, '—', err?.stack || err);
     return res.status(500).json({ erro: 'Erro interno no servidor.', codigo: 'ERRO_INTERNO' });

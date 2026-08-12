@@ -1565,3 +1565,117 @@ describe('12. Fechamento de Programação — só Logística/Administração, s�
     assert.equal(r.status, 200, r.texto);
   });
 });
+
+/* ------------------------------------------------------------------ */
+describe('13. Relatório em PDF gerado pelo SERVIDOR (A4 paisagem sempre)', () => {
+  /* Existe porque o PDF saía com tamanho de página diferente conforme o
+     aparelho do operador — provado com PDFs reais medidos byte a byte:
+     sem o motor de impressão respeitar `@page{size:A4}`, o mesmo
+     relatório sai em Carta americana (279×216mm) em vez de A4
+     (297×210mm). Pedido do usuário (09/08/2026): "eu quero que saia no
+     modo paisagem, e saiam iguais os relatorios que forem exportados
+     tanto no ios ou android ou desktop".
+
+     O que estes testes provam é justamente o que o `window.print()` NÃO
+     conseguia garantir: o tamanho da página vem do servidor, não do
+     aparelho de quem clicou. */
+
+  const HTML = '<div class="print-page"><h1>Relatório de teste</h1><p>ABC1D23</p></div>';
+  const CSS = '@page{size:A4 landscape;margin:5mm} body{font-family:sans-serif}';
+
+  test('sem token → 401', async () => {
+    const r = await req('/api/relatorios/pdf', {
+      metodo: 'POST', corpo: { html: HTML, css: CSS },
+    });
+    assert.equal(r.status, 401);
+  });
+
+  test('sem html → 400', async () => {
+    const r = await req('/api/relatorios/pdf', {
+      metodo: 'POST', token: tokens['Logística'], corpo: { css: CSS },
+    });
+    assert.equal(r.status, 400);
+    assert.equal(r.json.codigo, 'HTML_FALTANDO');
+  });
+
+  test('sem css → 400', async () => {
+    const r = await req('/api/relatorios/pdf', {
+      metodo: 'POST', token: tokens['Logística'], corpo: { html: HTML },
+    });
+    assert.equal(r.status, 400);
+    assert.equal(r.json.codigo, 'CSS_FALTANDO');
+  });
+
+  test('conteúdo absurdamente grande → 413 (não derruba o servidor gerando)', async () => {
+    const r = await req('/api/relatorios/pdf', {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { html: 'x'.repeat(3_000_001), css: CSS },
+    });
+    assert.equal(r.status, 413);
+    assert.equal(r.json.codigo, 'CONTEUDO_GRANDE_DEMAIS');
+  });
+
+  test('qualquer setor logado consegue gerar (relatório é leitura, não muda estado)', async () => {
+    const r = await fetch(base + '/api/relatorios/pdf', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${tokens['Portaria']}` },
+      body: JSON.stringify({ html: HTML, css: CSS }),
+    });
+    assert.equal(r.status, 200, await r.text());
+  });
+
+  test('devolve PDF de verdade, em A4 PAISAGEM — medido nos bytes, não no CSS', async () => {
+    const r = await fetch(base + '/api/relatorios/pdf', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${tokens['Logística']}` },
+      body: JSON.stringify({ html: HTML, css: CSS, nomeArquivo: 'Teste' }),
+    });
+    // O corpo só pode ser lido UMA vez: ler aqui, antes de qualquer
+    // assert que pudesse consumi-lo na mensagem de erro.
+    const bytes = Buffer.from(await r.arrayBuffer());
+    assert.equal(r.status, 200, bytes.toString('utf8').slice(0, 300));
+    assert.equal(r.headers.get('content-type'), 'application/pdf');
+    assert.match(r.headers.get('content-disposition') || '', /filename="Teste\.pdf"/);
+
+    assert.equal(bytes.subarray(0, 5).toString(), '%PDF-', 'não começa com a assinatura de PDF');
+
+    /* Mede a página direto do MediaBox do PDF. É a única prova real de
+       tamanho: qualquer coisa medida no CSS/DOM só diria o que foi
+       PEDIDO, e o bug original era exatamente o pedido ser ignorado.
+       A4 paisagem = 841,89 × 595,28 pt. */
+    const texto = bytes.toString('latin1');
+    const m = texto.match(/MediaBox\s*\[\s*0\s+0\s+([\d.]+)\s+([\d.]+)\s*\]/);
+    assert.ok(m, 'não achei MediaBox no PDF gerado');
+    const larguraPt = parseFloat(m[1]);
+    const alturaPt = parseFloat(m[2]);
+    assert.ok(Math.abs(larguraPt - 841.89) < 2, `largura ${larguraPt}pt (esperava 841,89 = A4 deitado)`);
+    assert.ok(Math.abs(alturaPt - 595.28) < 2, `altura ${alturaPt}pt (esperava 595,28 = A4 deitado)`);
+    assert.ok(larguraPt > alturaPt, 'PDF não saiu em paisagem');
+  });
+
+  test('orientacao:"retrato" muda a folha — e continua sendo A4 de verdade', async () => {
+    const r = await fetch(base + '/api/relatorios/pdf', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${tokens['Logística']}` },
+      body: JSON.stringify({ html: HTML, css: CSS, orientacao: 'retrato' }),
+    });
+    assert.equal(r.status, 200);
+    const texto = Buffer.from(await r.arrayBuffer()).toString('latin1');
+    const m = texto.match(/MediaBox\s*\[\s*0\s+0\s+([\d.]+)\s+([\d.]+)\s*\]/);
+    assert.ok(m);
+    assert.ok(parseFloat(m[1]) < parseFloat(m[2]), 'pedi retrato e veio deitado');
+  });
+
+  test('nome de arquivo com acento/barra não vira caminho nem quebra o cabeçalho', async () => {
+    const r = await fetch(base + '/api/relatorios/pdf', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${tokens['Logística']}` },
+      body: JSON.stringify({ html: HTML, css: CSS, nomeArquivo: '../../etc/Relatório Operacional' }),
+    });
+    assert.equal(r.status, 200);
+    const disp = r.headers.get('content-disposition') || '';
+    assert.ok(!disp.includes('..'), disp);
+    assert.ok(!disp.includes('/'), disp);
+    assert.match(disp, /filename="etc-Relatorio-Operacional\.pdf"/);
+  });
+});

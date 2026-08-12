@@ -2954,36 +2954,29 @@ function renderHistorico(){
   }
 }
 
-/* ---------- RELATÓRIOS (PDF via impressão do navegador) ---------- */
-/* Imprime um container, dando ao arquivo um nome que se entende sozinho.
+/* ---------- RELATÓRIOS (PDF gerado pelo servidor) ---------- */
+/* Até 09/08/2026 o PDF saía via `window.print()` — cada aparelho decidia
+   sozinho o tamanho final da página. Provado nesta mesma investigação (com
+   PDFs reais, medidos byte a byte) que isso quebra: sem o motor de
+   impressão do usuário respeitar `@page{size:A4 landscape}`, o relatório
+   sai em Carta americana e quebra em páginas a mais — e cada aparelho
+   (Chrome desktop, Safari/AirPrint no iPhone, apps de PDF no Android) pode
+   decidir diferente. Pedido do usuário: "eu quero que saia no modo
+   paisagem, e saiam iguais os relatorios que forem exportados tanto no ios
+   ou android ou desktop".
 
-   O navegador usa o <title> da página como nome sugerido do PDF. Sem mexer
-   nele, TODO relatório salvava como "Painel Logístico — Suinco" — e depois
-   de três downloads o gestor tem três arquivos idênticos no nome, sem saber
-   qual é qual nem de que dia.
-
-   O título volta ao original no afterprint. Deixá-lo trocado mudaria a aba
-   do navegador para sempre. */
+   A correção: o SERVIDOR renderiza o PDF (backend/src/rotas/relatorios.js)
+   com um Chromium que ele mesmo controla, pedindo A4 paisagem como
+   PARÂMETRO da chamada — não mais uma sugestão de CSS que o aparelho do
+   operador pode ignorar. O HTML/CSS enviado é exatamente o que este
+   arquivo já construía para `window.print()`; só o "vira arquivo" que
+   mudou de lugar. Isso também elimina de vez a necessidade de detectar
+   "celular ignorou a orientação pedida" (a antiga variável `emPe`): a
+   orientação agora é decidida por nós, sempre, não pelo aparelho. */
 /* Encolhe o relatório pra caber numa página só, em vez de estourar pra
    uma segunda página quase vazia. Pedido direto do usuário (08/08/2026):
    "quero que os relatorios sejam one pagers... coloca tudo dentro de uma
-   pagina só".
-
-   SÓ funciona chamada durante beforeprint/print de verdade — é o único
-   instante em que `@media print` (a fonte compacta de cada densidade,
-   .doc-denso/.doc-normal/.doc-amplo) está de fato ativo. Medida antes
-   disso mediria o tamanho da pré-visualização em tela, que é maior — por
-   isso não é chamada direto em imprimirContainer(), e sim no listener de
-   'beforeprint' logo abaixo.
-
-   Cobre as DUAS razões de estourar a página, com a mesma conta:
-   1) muitas cargas — a altura do conteúdo passa da altura útil da folha;
-   2) celular que ignora `@page{size:landscape}` e imprime em pé (mesmo
-      achado de 07/08/2026) — a LARGURA útil da folha física fica menor
-      que a largura fixa do relatório (calibrado pra folha deitada).
-   Usa a menor das duas escalas necessárias, com piso de 50%: abaixo
-   disso o texto vira ilegível, e nesse ponto a prioridade muda de "cabe
-   numa página" pra "dá pra ler alguma coisa". */
+   pagina só". */
 function ajustarParaCaberEmUmaPagina(el){
   const pagina = el.querySelector('.print-page');
   if(!pagina) return;
@@ -2994,12 +2987,11 @@ function ajustarParaCaberEmUmaPagina(el){
 
   const PX_POR_MM = 96 / 25.4;
   const MARGEM_MM = 5; // @page{margin:5mm} em styles.css
-  const emPe = window.matchMedia && window.matchMedia('print and (orientation: portrait)').matches;
-  // A4: 297×210mm. Deitado de verdade, a largura útil é a maior; em pé
-  // (celular que ignorou o pedido de orientação), a largura útil é a
-  // menor — e é exatamente o motivo do relatório estourar coluna.
-  const larguraFolhaMm = (emPe ? 210 : 297) - MARGEM_MM*2;
-  const alturaFolhaMm  = (emPe ? 297 : 210) - MARGEM_MM*2;
+  // A4 SEMPRE paisagem (297×210mm) — o servidor é quem gera o PDF agora e
+  // sempre pede paisagem explicitamente (ver relatorios.js), então não há
+  // mais "celular que imprime em pé" a compensar aqui.
+  const larguraFolhaMm = 297 - MARGEM_MM*2;
+  const alturaFolhaMm  = 210 - MARGEM_MM*2;
 
   // A largura do relatório é sempre calibrada pra folha deitada (287mm =
   // 297mm - 2×5mm de margem) — trava isso explicitamente, pra não
@@ -3056,45 +3048,69 @@ function ajustarParaCaberEmUmaPagina(el){
     }
   }
 }
-window.addEventListener('beforeprint', () => {
-  document.querySelectorAll('.print-only').forEach(el=>{
-    if(el.style.display !== 'none') ajustarParaCaberEmUmaPagina(el);
-  });
-});
+/* Já não existe window.print() neste fluxo (ver exportarViaServidor logo
+   abaixo) — ajustarParaCaberEmUmaPagina() agora é chamada direto, sem
+   depender do evento 'beforeprint'. */
 
-function imprimirContainer(el, nomeDoRelatorio){
+/* Substitui window.print(): monta o mesmo HTML que sempre foi montado,
+   manda pro servidor gerar o PDF de verdade (A4 paisagem garantido) e
+   baixa o arquivo pronto. */
+async function exportarViaServidor(el, nomeDoRelatorio){
+  if(!SuincoSharePoint || !SuincoSharePoint.estaConfigurado || !SuincoSharePoint.estaConfigurado()){
+    notify('Exportar relatório exige conexão com o servidor — é o que garante que o PDF sai sempre igual, em qualquer aparelho.', 'warn', 6000);
+    return;
+  }
+
   document.querySelectorAll('.print-only').forEach(x=>x.style.display='none');
   el.style.display = 'block';
+  ajustarParaCaberEmUmaPagina(el);
 
-  const tituloOriginal = document.title;
-  if(nomeDoRelatorio){
-    const d = new Date();
-    const carimbo = [
-      d.getFullYear(),
-      String(d.getMonth()+1).padStart(2,'0'),
-      String(d.getDate()).padStart(2,'0')
-    ].join('-') + '_' + String(d.getHours()).padStart(2,'0') + 'h' + String(d.getMinutes()).padStart(2,'0');
-    // Sem acento, espaço ou barra: o nome vira arquivo, e cada sistema
-    // operacional estraga esses caracteres de um jeito diferente.
-    const limpo = nomeDoRelatorio
-      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-      .replace(/[^A-Za-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '');
-    document.title = `Suinco_${limpo}_${carimbo}`;
-  }
+  const d = new Date();
+  const carimbo = [
+    d.getFullYear(),
+    String(d.getMonth()+1).padStart(2,'0'),
+    String(d.getDate()).padStart(2,'0')
+  ].join('-') + '_' + String(d.getHours()).padStart(2,'0') + 'h' + String(d.getMinutes()).padStart(2,'0');
+  // Sem acento, espaço ou barra: o nome vira arquivo, e cada sistema
+  // operacional estraga esses caracteres de um jeito diferente.
+  const limpo = (nomeDoRelatorio || 'Relatorio')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^A-Za-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
+  const nomeArquivo = `Suinco_${limpo}_${carimbo}`;
 
   const limpar = ()=>{
     el.style.display='none';
-    document.title = tituloOriginal;
-    // Desfaz o encolhimento de ajustarParaCaberEmUmaPagina — o container
-    // é reaproveitado na próxima exportação, e a pré-visualização em tela
+    // Desfaz o encolhimento de ajustarParaCaberEmUmaPagina — o container é
+    // reaproveitado na próxima exportação, e a pré-visualização em tela
     // (se alguém abrir de novo) não deve ficar menor por causa disso.
     const pagina = el.querySelector('.print-page');
     if(pagina){ pagina.style.transform=''; pagina.style.transformOrigin=''; pagina.style.width=''; }
-    window.removeEventListener('afterprint', limpar);
+    el.style.height=''; el.style.overflow='';
   };
-  window.addEventListener('afterprint', limpar);
-  window.print();
+
+  notify('Gerando relatório em PDF…', 'info', 4000);
+  try{
+    // A folha de estilo é o único <style> do arquivo (build_arquivo_unico.py
+    // embute tudo — CSS do painel inteiro + a fonte dos relatórios em
+    // base64). Mandar o texto inteiro garante que o servidor desenha com
+    // EXATAMENTE o mesmo CSS que o operador está vendo na pré-visualização,
+    // sem risco de as duas cópias ficarem desalinhadas com o tempo.
+    const css = (document.querySelector('style') || {}).textContent || '';
+    const html = el.outerHTML;
+    const blob = await SuincoSharePoint.gerarRelatorioPdf({ html, css, orientacao: 'paisagem', nomeArquivo });
+
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `${nomeArquivo}.pdf`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    notify('Relatório baixado.', 'success');
+  }catch(e){
+    notify('Não consegui gerar o relatório: ' + (e && e.message || 'erro desconhecido'), 'danger', 7000);
+  }finally{
+    limpar();
+  }
 }
 // PDF Operacional — sequenciamento de carregamento do dia, redesenhado pra
 // bater visualmente com a planilha real que a operação usa hoje.
@@ -3245,7 +3261,7 @@ async function exportarPdfOperacional(){
           extra: `<strong>Concluídas:</strong> ${concluidas} de ${lista.length}`,
         }))}
     </div>`;
-  imprimirContainer(el, 'Relatorio-Operacional');
+  await exportarViaServidor(el, 'Relatorio-Operacional');
 }
 
 /* ---------- EXPORT POWER BI (CSV) ----------
@@ -3720,7 +3736,7 @@ async function exportarPdfExecutivo(){
           extra: `<strong>Em aberto:</strong> ${abertas.length} · <strong>Concluídas:</strong> ${concluidasTodas.length}`,
         }))}
     </div>`;
-  imprimirContainer(el, 'Relatorio-Executivo');
+  await exportarViaServidor(el, 'Relatorio-Executivo');
 }
 
 /* ---------- RELÓGIO ---------- */
@@ -4103,7 +4119,7 @@ async function exportarPdfFretes(){
           extra: semObs ? `<strong>Sem registro:</strong> ${semObs} de ${dados.length}` : null,
         }))}
     </div>`;
-  imprimirContainer(el, 'Administracao-de-Fretes');
+  await exportarViaServidor(el, 'Administracao-de-Fretes');
 }
 
 /* =====================================================================
