@@ -4391,9 +4391,42 @@ function periodoRelatorio(){
   return { de, ate };
 }
 
+/* O relatório precisa ser FIEL AO PAINEL no instante do clique.
+
+   Bug relatado pelo usuário (12/08/2026): ele limpou a programação, deixou
+   no pátio só os caminhões do dia, e mesmo assim o Executivo trouxe uma
+   placa que havia seguido viagem ANTEONTEM. "ainda temos resquicios da
+   programacao passadas e do reboot que dei no sistema... tudo precisa ser
+   referente ao momento exato que clica em exportar relatorios".
+
+   RAIZ: o painel (Torre, Portaria, Expedição, Faturamento) mostra
+   `cargasAbertas()` — tudo que ainda não seguiu viagem. O relatório, sem
+   filtro de data, varria `DB.cargas` INTEIRO: toda carga que já existiu
+   naquele navegador, de qualquer dia, inclusive as encerradas há semanas.
+   As duas telas liam bases diferentes e ninguém percebia enquanto a base
+   era nova.
+
+   Regra agora:
+   - SEM filtro de data → espelha o painel: o que está em aberto AGORA,
+     mais o que foi concluído HOJE (o Operacional acompanha o dia inteiro,
+     então o caminhão que saiu de manhã ainda precisa constar).
+   - COM filtro → respeita o filtro, que é justamente o caminho para
+     consultar período passado de propósito.
+
+   Carga concluída em dia anterior só aparece se alguém PEDIR aquele
+   período. Nunca por sobra. */
 function cargasDoRelatorio(){
   const { de, ate } = periodoRelatorio();
-  return filtrarPorDataProgramacao(DB.cargas.filter(c=>!c.aguardandoCarga), de, ate);
+  const semRascunho = DB.cargas.filter(c=>!c.aguardandoCarga);
+
+  if(de || ate) return filtrarPorDataProgramacao(semRascunho, de, ate);
+
+  const hoje = new Date(); hoje.setHours(0,0,0,0);
+  return semRascunho.filter(c=>{
+    if(c.status !== 'Seguiu Viagem') return true;      // está no painel agora
+    const saida = primeiroTimestamp(c.id, 'Seguiu Viagem');
+    return saida && new Date(saida) >= hoje;           // saiu hoje: conta no dia
+  });
 }
 
 function rotuloPeriodoRelatorio(){
