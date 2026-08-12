@@ -1098,27 +1098,53 @@ function podeCancelarCarga(){
    de novo (POST /api/programacao/fechar), isto é só a tela. */
 function podeFecharProgramacao(){ return podeCancelarCarga(); }
 
-async function fecharProgramacaoUI(){
+async function fecharProgramacaoUI(senhaJaInformada){
   if(!SuincoSharePoint || !SuincoSharePoint.estaConfigurado || !SuincoSharePoint.estaConfigurado()){
     notify('Fechar a programação exige conexão com o servidor.', 'warn');
     return;
   }
-  if(!confirm('Fechar a programação atual? Só é possível quando não há nenhuma carga em andamento. Nada é apagado — tudo continua no Histórico.')) return;
+  if(senhaJaInformada === undefined
+     && !confirm('Fechar a programação atual e começar uma nova?\n\nNada é apagado: as cargas ficam arquivadas na programação atual e continuam no Histórico.')) return;
   try{
-    const r = await SuincoSharePoint.fecharPrograma();
-    notify(`Programação fechada às ${fmtHora(r.quando)}. Pronto para uma nova.`, 'success', 5000);
+    const r = await SuincoSharePoint.fecharPrograma(senhaJaInformada);
+    notify(r.forcado
+      ? `Programação fechada às ${fmtHora(r.quando)} com ${r.emAberto} carga(s) ainda em aberto — elas seguem visíveis na Torre.`
+      : `Programação fechada às ${fmtHora(r.quando)}. Pronto para uma nova.`,
+      r.forcado ? 'warn' : 'success', 7000);
     renderAll();
   }catch(e){
-    if(e && e.codigo === 'CARGAS_EM_ABERTO'){
-      const lista = (e.dados && e.dados.cargas || [])
-        .map(c => `• ${c.placa} — ${c.numeroCarga || 'sem nº'} (${c.status})`)
-        .join('\n');
-      alert(`Ainda há ${e.dados.cargas.length} carga(s) em andamento — feche ou cancele todas antes:\n\n${lista}`);
-    } else if(e && e.status === 403){
-      notify('Só Logística ou Administração fecham a programação.', 'danger');
-    } else {
-      notify('Não consegui fechar a programação: ' + (e && e.message || 'erro desconhecido'), 'danger');
+    const cod = e && e.codigo;
+
+    /* Carga em aberto não bloqueia mais — pede a senha de fechamento
+       (mudança pedida pelo usuário em 11/08/2026). Antes de pedir a senha,
+       mostra QUAIS cargas ficarão em aberto: quem vai digitar a senha
+       precisa saber o que está assumindo, senão a senha vira carimbo. */
+    if(cod === 'SENHA_NECESSARIA'){
+      const cargas = (e.dados && e.dados.cargas) || [];
+      const lista = cargas.map(c => `• ${c.placa} — ${c.numeroCarga || 'sem nº'} (${c.status})`).join('\n');
+      const senha = prompt(
+        `${cargas.length} carga(s) ainda em andamento:\n\n${lista}\n\n`
+        + 'Elas NÃO serão apagadas: continuam aparecendo na Torre de Controle, '
+        + 'com a data em que foram programadas, e ficam arquivadas nesta programação.\n\n'
+        + 'Digite a senha de fechamento para encerrar mesmo assim:');
+      if(senha === null) return;                   // desistiu
+      if(!senha.trim()){ notify('Fechamento cancelado — senha não informada.', 'warn'); return; }
+      return fecharProgramacaoUI(senha);
     }
+    if(cod === 'SENHA_INCORRETA'){
+      notify('Senha de fechamento incorreta. A programação NÃO foi fechada.', 'danger', 7000);
+      return;
+    }
+    if(cod === 'SENHA_NAO_CONFIGURADA'){
+      alert('Há carga em andamento e a senha de fechamento ainda não foi configurada no servidor.\n\n'
+            + 'Peça à TI para preencher SENHA_FECHAMENTO no .env do servidor.');
+      return;
+    }
+    if(e && e.status === 403){
+      notify('Só Logística ou Administração fecham a programação.', 'danger');
+      return;
+    }
+    notify('Não consegui fechar a programação: ' + (e && e.message || 'erro desconhecido'), 'danger');
   }
 }
 

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { consultar, emTransacao } from '../banco.js';
 import { exigirLogin } from '../middleware/auth.js';
 import { emitir } from '../tempo-real.js';
+import { programacaoAtual } from '../dominio/programacoes.js';
 import {
   COLUNAS_CARGA, paraPainel, saneiarCriacao, saneiarCriacaoChegadaSemProgramacao,
   saneiarEdicao, normalizarPlaca, idSeguro, camposDeAviso,
@@ -119,6 +120,11 @@ rotasCargas.post('/cargas', exigirLogin, async (req, res, next) => {
     const dados = chegadaSemProgramacao
       ? saneiarCriacaoChegadaSemProgramacao(req.body, frotaRows[0])
       : saneiarCriacao(req.body, frotaRows[0]);
+
+    /* Toda carga nasce dentro do ciclo de programação ABERTO. É o que faz
+       o histórico de programações existir sem mover nem copiar carga: ela
+       continua uma só, e o ciclo é só mais um recorte sobre ela. */
+    dados.programacao_id = await programacaoAtual();
 
     const carga = await emTransacao(async (cli) => {
       const cols = Object.keys(dados);

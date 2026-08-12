@@ -1029,8 +1029,18 @@ const SuincoSharePoint = (function () {
   /* Fecha a programação atual — só Logística/Administração (o servidor
      confere de novo; isto aqui não é a proteção real). Recusa (409) se
      existir carga em andamento; o erro traz a lista em `e.dados.cargas`. */
-  async function fecharPrograma() {
-    return chamar('/api/programacao/fechar', { metodo: 'POST' });
+  async function fecharPrograma(senha) {
+    return chamar('/api/programacao/fechar', {
+      metodo: 'POST',
+      corpo: senha === undefined ? {} : { senha },
+    });
+  }
+
+  /* Histórico de ciclos de programação (o "arquivo" que o fechamento
+     alimenta). Não passa pela fila offline: é consulta, e mostrar uma
+     lista velha de ciclos seria pior que dizer que não deu pra carregar. */
+  function listarProgramacoes() {
+    return chamar('/api/programacoes');
   }
 
   /* Gera o PDF do relatório NO SERVIDOR — pedido do usuário (09/08/2026):
@@ -1095,6 +1105,6 @@ const SuincoSharePoint = (function () {
     sincronizarAgora, iniciarSincroniaPeriodica, pararSincronia, ultimaSincronia,
     renovarSessao, registrarInteracao,
     arquivarDia, fecharPrograma,
-    gerarRelatorioPdf,
+    gerarRelatorioPdf, listarProgramacoes,
   };
 })();

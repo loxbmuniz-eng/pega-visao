@@ -1482,7 +1482,7 @@ describe('11. Setor Comercial — só leitura', () => {
   });
 });
 
-describe('12. Fechamento de Programação — só Logística/Administração, só com pátio limpo', () => {
+describe('12. Fechamento de Programação — senha mestre libera com carga em aberto', () => {
   before(async () => {
     // Este bloco roda depois de 11 outras suítes, que deixam cargas suas
     // abertas em fact_viagens (o before() global só limpa uma vez, no
@@ -1508,7 +1508,14 @@ describe('12. Fechamento de Programação — só Logística/Administração, s�
     assert.equal(r.status, 403);
   });
 
-  test('Logística: recusa se existe carga em andamento (nunca esconde caminhão real)', async () => {
+  /* Este bloco mudou de significado em 11/08/2026, e a mudança é o
+     ponto: antes o fechamento era BLOQUEADO havendo carga em andamento;
+     agora ele é LIBERADO por senha mestre, e o ciclo fica marcado como
+     forçado. O usuário reverteu a decisão de propósito ("precisamos ter
+     esse controle e tomada de decisao em nossas maos"). A garantia que
+     resta — e que estes testes fixam — é que fechar NÃO apaga nem
+     esconde carga: ela continua em fact_viagens, em aberto. */
+  test('sem senha, carga em andamento pede a senha (não fecha em silêncio)', async () => {
     const { rows } = await pool.query('SELECT placa FROM dim_veiculos LIMIT 1 OFFSET 5');
     const criar = await req('/api/cargas', {
       metodo: 'POST', token: tokens['Logística'],
@@ -1518,18 +1525,60 @@ describe('12. Fechamento de Programação — só Logística/Administração, s�
 
     const r = await req('/api/programacao/fechar', { metodo: 'POST', token: tokens['Logística'] });
     assert.equal(r.status, 409);
-    assert.equal(r.json.codigo, 'CARGAS_EM_ABERTO');
+    assert.equal(r.json.codigo, 'SENHA_NECESSARIA');
     assert.ok(r.json.cargas.some((c) => c.numeroCarga === '90200'), JSON.stringify(r.json.cargas));
+  });
 
-    // limpa pro próximo teste — Faturado é o único caminho até "Seguiu Viagem"
-    // que uma única chamada de status alcança a partir de Aguardando Veículo
-    // é preciso passar pelas etapas.
+  test('senha errada não fecha', async () => {
+    const r = await req('/api/programacao/fechar', {
+      metodo: 'POST', token: tokens['Logística'], corpo: { senha: 'chute-errado' },
+    });
+    assert.equal(r.status, 403);
+    assert.equal(r.json.codigo, 'SENHA_INCORRETA');
+  });
+
+  test('senha certa FECHA com carga em aberto, marca como forçado e NÃO apaga a carga', async () => {
+    const r = await req('/api/programacao/fechar', {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { senha: config.senhaFechamento },
+    });
+    assert.equal(r.status, 200, r.texto);
+    assert.equal(r.forcado ?? r.json.forcado, true);
+    assert.ok(r.json.emAberto > 0, 'devia relatar quantas ficaram em aberto');
+
+    // A garantia que substituiu o bloqueio: a carga continua existindo e
+    // continua EM ABERTO — o caminhão não sumiu da tela de ninguém.
+    const ainda = await pool.query(
+      "SELECT status_atual, programacao_id FROM fact_viagens WHERE numero_carga = '90200'"
+    );
+    assert.equal(ainda.rows.length, 1, 'a carga sumiu do banco ao fechar — isso nunca pode acontecer');
+    assert.notEqual(ainda.rows[0].status_atual, 'Seguiu Viagem');
+
+    // E ficou ligada à programação ARQUIVADA, não à nova.
+    assert.equal(ainda.rows[0].programacao_id, r.json.programacaoFechada);
+
+    const fechada = await pool.query(
+      'SELECT forcado, cargas_em_aberto FROM programacoes WHERE programacao_id = $1',
+      [r.json.programacaoFechada]
+    );
+    assert.equal(fechada.rows[0].forcado, true);
+    assert.ok(fechada.rows[0].cargas_em_aberto > 0);
+
+    // limpa pro próximo teste
+    const { rows: cid } = await pool.query("SELECT carga_id FROM fact_viagens WHERE numero_carga = '90200'");
     for (const status of ['Aguardando Embarque', 'Embarque Iniciado', 'Embarque Finalizado', 'Faturado', 'Seguiu Viagem']) {
-      const passo = await req(`/api/cargas/${criar.json.id}/status`, {
+      await req(`/api/cargas/${cid[0].carga_id}/status`, {
         metodo: 'POST', token: tokens['Logística'], corpo: { status },
       });
-      assert.equal(passo.status, 200, `${status}: ${passo.texto}`);
     }
+  });
+
+  test('GET /api/programacoes lista o histórico, com o ciclo forçado marcado', async () => {
+    const r = await req('/api/programacoes', { token: tokens['Logística'] });
+    assert.equal(r.status, 200, r.texto);
+    assert.ok(Array.isArray(r.json));
+    assert.ok(r.json.some((p) => p.forcado), 'nenhum ciclo forçado no histórico');
+    assert.ok(r.json.some((p) => p.aberta), 'devia existir um ciclo aberto agora');
   });
 
   test('Logística: fecha quando o pátio está limpo, registra no log, avisa quem foi', async () => {
