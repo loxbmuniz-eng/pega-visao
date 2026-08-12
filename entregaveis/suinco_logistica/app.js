@@ -1433,7 +1433,7 @@ function renderTorre(){
       '<th>Seq.</th><th>Nº Carga</th><th>Placa</th><th>Transportadora</th>'
       + '<th>Tipo Veículo</th><th>Motorista</th><th>Rota</th><th>Peso (kg)</th>'
       + '<th>Palet.</th><th>Tipo de Operação</th><th>Ganchos</th><th>Status</th>'
-      + '<th>Atualizado em</th>'
+      + '<th>Programada em</th><th>Atualizado em</th>'
       + (podeCancelarCarga() ? '<th class="no-print">Ação</th>' : '');
   }
 
@@ -1458,15 +1458,22 @@ function renderTorre(){
         ? `<input type="text" class="placa-input" value="${esc(c.placa)}" onchange="atualizarPlacaUI('${escJs(c.id)}',this.value)" title="Trocar a placa.">`
         : esc(c.placa)}</td>
       <td>${esc(c.transportadora)||'—'}</td><td>${esc(c.tipoVeiculo)||'—'}</td>
-      <td>${esc(c.motorista)||'—'}</td>
-      <td>${esc(rotaCurta(c.rota))}</td><td class="c-peso">${c.peso ? c.peso.toLocaleString('pt-BR') : '—'}</td>
-      <td>${paletizadaDaCarga(c)}</td>
+      <td>${editavel
+        ? `<input type="text" class="motorista-input" value="${esc(c.motorista||'')}" onchange="atualizarMotoristaUI('${escJs(c.id)}',this.value)" title="Trocar o motorista desta carga.">`
+        : (esc(c.motorista)||'—')}</td>
+      <td>${editavel ? rotaSelectHtml(c) : esc(rotaCurta(c.rota))}</td>
+      <td class="c-peso">${editavel
+        ? `<input type="number" class="peso-input" min="0" step="1" value="${c.peso ?? ''}" onchange="atualizarPesoUI('${escJs(c.id)}',this.value)" title="Peso em kg.">`
+        : (c.peso ? c.peso.toLocaleString('pt-BR') : '—')}</td>
+      <td>${editavel ? paletizadaSelectHtml(c) : paletizadaDaCarga(c)}</td>
       <td>${editavel ? praOndeSelectHtml(c)
         : (c.praOnde ? `<span class="chip-praonde">${esc(PRA_ONDE_LABEL[c.praOnde]||c.praOnde)}</span>` : '<span class="text-dim">—</span>')}</td>
       <td>${editavel
         ? `<input type="number" class="ganchos-input" min="0" step="1" value="${c.qtdGanchos ?? 0}" onchange="atualizarGanchosUI('${escJs(c.id)}',this.value)" title="0 = Liso">`
         : (c.qtdGanchos ? c.qtdGanchos : '<span class="text-dim">Liso</span>')}</td>
-      <td>${badgeHtml(c.status)}</td><td>${fmtDataHora(c.atualizadoEm)}</td>
+      <td>${badgeHtml(c.status)}</td>
+      <td>${dataProgramacaoHtml(c)}</td>
+      <td>${fmtDataHora(c.atualizadoEm)}</td>
       ${editavel ? `<td class="no-print">${botaoCancelarHtml(c)}</td>` : ''}
     </tr>`).join('');
   const vazio = document.getElementById('torre-empty');
@@ -1634,7 +1641,29 @@ function criarCargaProgramadaUI(){
   }catch(e){ notify(e.message, 'danger'); }
 }
 function renderProgFila(){
-  const lista = DB.cargas.filter(c=>c.status==='Aguardando Veículo').sort(ordenarPorSequenciaEAtualizacao);
+  /* Só os programados DE HOJE — pedido do usuário (11/08/2026): "no campo
+     fila de programados na programacao manter somente os programados NO
+     DIA".
+
+     A fila é a lista de trabalho do dia: carga programada ontem que
+     ninguém encostou não é tarefa de hoje, é pendência a resolver na
+     Torre (onde ela continua visível, com a data da programação à
+     mostra). Misturar as duas coisas fazia a fila crescer sem parar e
+     perder a função de "o que embarca hoje".
+
+     A carga NÃO é escondida do sistema: continua na Torre de Controle, no
+     Histórico e nos relatórios. Só sai desta fila específica. */
+  const hoje = new Date(); hoje.setHours(0,0,0,0);
+  const doDia = (c)=>{
+    const base = c.criadoEm || c.atualizadoEm;
+    if(!base) return true;   // sem data conhecida, melhor mostrar que sumir
+    const d = new Date(base); d.setHours(0,0,0,0);
+    return d.getTime() === hoje.getTime();
+  };
+  const todosAguardando = DB.cargas.filter(c=>c.status==='Aguardando Veículo');
+  const lista = todosAguardando.filter(doDia).sort(ordenarPorSequenciaEAtualizacao);
+  const deOutrosDias = todosAguardando.length - lista.length;
+
   document.getElementById('prog-fila-tbody').innerHTML = lista.map(c=>`
     <tr>
       <td><input type="number" class="seq-input" value="${c.sequencia ?? ''}" onchange="atualizarSequenciaUI('${c.id}',this.value)" title="Sequência livre — digite o número que quiser, a qualquer momento."></td>
@@ -1646,12 +1675,12 @@ function renderProgFila(){
         ${marcaCargaDaPlaca(c, lista)}
       </td>
       <td id="transp-${esc(c.id)}">${esc(c.transportadora)||'—'}</td>
-      <td>${esc(rotaCurta(c.rota))}</td>
+      <td>${rotaSelectHtml(c)}</td>
       <td>${praOndeSelectHtml(c)}</td>
-      <td class="c-peso">${c.peso ? c.peso.toLocaleString('pt-BR') : '—'}</td>
-      <td>${paletizadaDaCarga(c)}</td>
+      <td class="c-peso"><input type="number" class="peso-input" min="0" step="1" value="${c.peso ?? ''}" onchange="atualizarPesoUI('${escJs(c.id)}',this.value)" title="Peso em kg."></td>
+      <td>${paletizadaSelectHtml(c)}</td>
       <td><input type="number" class="ganchos-input" min="0" step="1" value="${c.qtdGanchos ?? 0}" onchange="atualizarGanchosUI('${c.id}',this.value)" title="0 = Liso"></td>
-      <td>${c.qtdEntregas ?? 1}</td>
+      <td><input type="number" class="entregas-input" min="0" step="1" value="${c.qtdEntregas ?? 1}" onchange="atualizarEntregasUI('${escJs(c.id)}',this.value)" title="Quantidade de entregas."></td>
       <td class="no-print gap8">
         <button class="btn btn-sec btn-sm" onclick="adicionarOutraCargaNaPlacaUI('${escJs(c.id)}')"
                 title="Programar OUTRA carga para este mesmo caminhão — o formulário já vem com placa, transportadora, motorista e rota preenchidos.">➕ Outra carga</button>
@@ -1659,6 +1688,100 @@ function renderProgFila(){
       </td>
     </tr>`).join('');
   document.getElementById('prog-fila-empty').hidden = lista.length>0;
+
+  // Some sem explicação é pior que não sumir: quem programou ontem
+  // precisa saber PARA ONDE a carga foi, não descobrir que "sumiu".
+  const aviso = document.getElementById('prog-fila-outros-dias');
+  if(aviso){
+    aviso.hidden = deOutrosDias === 0;
+    aviso.textContent = deOutrosDias === 1
+      ? '1 carga programada em outro dia continua aguardando veículo — veja na Torre de Controle.'
+      : `${deOutrosDias} cargas programadas em outros dias continuam aguardando veículo — veja na Torre de Controle.`;
+  }
+}
+
+/* Rota e Paletizada viram campo editável na fila — pedido do usuário
+   (11/08/2026): "DEIXAR TODOS OS CAMPOS DE PLACA PROGRAMADA EDITAVEIS,
+   PESO, ROTA, PALETIZADA, ENTREGAS". Mesmo padrão já usado em
+   praOndeSelectHtml. */
+function rotaSelectHtml(c){
+  return `<select class="rota-inline" onchange="atualizarRotaUI('${escJs(c.id)}',this.value)">
+    <option value="">—</option>
+    ${ROTAS.map(r=>`<option value="${esc(r.codigo)}" ${c.rota===r.codigo?'selected':''}>${esc(rotaCurta(r.codigo))}</option>`).join('')}
+  </select>`;
+}
+function paletizadaSelectHtml(c){
+  const atual = paletizadaDaCarga(c);
+  return `<select class="palet-inline" onchange="atualizarPaletizadaUI('${escJs(c.id)}',this.value)">
+    ${['Não','Sim'].map(op=>`<option value="${op}" ${atual===op?'selected':''}>${op}</option>`).join('')}
+  </select>`;
+}
+function atualizarRotaUI(id, val){
+  const c = getCarga(id); if(!c) return;
+  c.rota = val || '';
+  c.atualizadoEm = nowISO();
+  SuincoStore.save();
+  renderAll();
+}
+function atualizarPaletizadaUI(id, val){
+  const c = getCarga(id); if(!c) return;
+  c.paletizada = val === 'Sim' ? 'Sim' : 'Não';
+  c.atualizadoEm = nowISO();
+  SuincoStore.save();
+  renderAll();
+}
+function atualizarPesoUI(id, val){
+  const c = getCarga(id); if(!c) return;
+  c.peso = val === '' ? null : Math.max(0, Number(val)||0);
+  c.atualizadoEm = nowISO();
+  SuincoStore.save();
+  renderAll();
+}
+function atualizarEntregasUI(id, val){
+  const c = getCarga(id); if(!c) return;
+  c.qtdEntregas = val === '' ? 1 : Math.max(0, Number(val)||0);
+  c.atualizadoEm = nowISO();
+  SuincoStore.save();
+  renderAll();
+}
+function atualizarMotoristaUI(id, val){
+  const c = getCarga(id); if(!c) return;
+  /* Só a carga muda — o cadastro da placa na Frota fica como está. São
+     coisas diferentes: aqui é quem dirige ESTA viagem (substituto, folga,
+     freteiro), lá é o habitual do veículo. */
+  c.motorista = String(val || '').trim();
+  c.atualizadoEm = nowISO();
+  SuincoStore.save();
+  renderAll();
+}
+
+/* Data em que a carga foi PROGRAMADA — pedido do usuário (11/08/2026):
+   "NA TORRE DE CONTROLE MOSTRAR A DATA DA PROGRAMACAO DAS CARGAS QUE NAO
+   TIVEREM FINALIZADO E SAIDO AINDA".
+
+   Serve pra enxergar carga encalhada: uma linha programada há três dias
+   ainda em "Aguardando Veículo" é um problema que a coluna "Atualizado
+   em" não denuncia (ela mexe a cada toque, mesmo sem a carga andar).
+   Carga de HOJE aparece só como hora, pra não poluir a coluna com a data
+   repetida em toda linha no dia normal. */
+function dataProgramacaoHtml(c){
+  const base = c.criadoEm || c.atualizadoEm;
+  if(!base) return '<span class="text-dim">—</span>';
+  const d = new Date(base);
+  if(isNaN(d)) return '<span class="text-dim">—</span>';
+  const hoje = new Date(); hoje.setHours(0,0,0,0);
+  const dia = new Date(d); dia.setHours(0,0,0,0);
+  const diasAtras = Math.round((hoje - dia) / 86400000);
+  if(diasAtras <= 0){
+    return `<span class="text-dim">hoje ${d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</span>`;
+  }
+  // Destaque cresce com o atraso: 1 dia é normal (virada de turno),
+  // 2+ dias é carga esquecida.
+  const classe = diasAtras >= 2 ? 'prog-atrasada' : '';
+  const rotulo = diasAtras === 1 ? 'ontem' : `há ${diasAtras} dias`;
+  return `<span class="${classe}" title="Programada em ${fmtDataHora(base)}">`
+       + `${d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})} `
+       + `<small>(${rotulo})</small></span>`;
 }
 
 /* Contagem de cargas por placa na fila, para a marca "1 de 2".

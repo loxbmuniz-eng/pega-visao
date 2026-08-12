@@ -1334,6 +1334,31 @@ code{
 .seq-input{width:56px;text-align:center;font-weight:800;color:var(--gold)}
 .ganchos-input{width:70px;text-align:center}
 .praonde-inline{min-width:150px}
+/* Campos que viraram editáveis na Fila de Programados (11/08/2026):
+   "DEIXAR TODOS OS CAMPOS DE PLACA PROGRAMADA EDITAVEIS, PESO, ROTA,
+   PALETIZADA, ENTREGAS". Larguras seguem o mesmo critério dos que já
+   existiam: caber o conteúdo real sem esticar a linha. */
+.peso-input{width:90px;text-align:right}
+.entregas-input{width:70px;text-align:center}
+.rota-inline{min-width:120px}
+.palet-inline{width:80px}
+.motorista-input{min-width:130px}
+/* Carga programada há 2+ dias e ainda parada. Não é erro do sistema — é
+   uma carga que o pátio esqueceu, e a cor existe pra ela ser achada sem
+   ler linha por linha. */
+.prog-atrasada{color:var(--warn);font-weight:700}
+.prog-atrasada small{font-weight:400}
+/* Aviso de que existem cargas de OUTROS dias fora desta fila. Não é erro
+   nem alerta: é orientação de para onde olhar. */
+.aviso-inline{
+  background:var(--campo-bg);
+  border-left:3px solid var(--gold-dim);
+  border-radius:6px;
+  padding:8px 12px;
+  margin-bottom:12px;
+  font-size:13px;
+  color:var(--text-dim);
+}
 .readonly-pill{
   background:var(--navy-deep);border:1px solid var(--border-soft);border-radius:var(--radius);
   padding:9px 11px;font-size:14px;font-weight:700;color:var(--text-dim);
@@ -2039,7 +2064,8 @@ input,select,textarea{border-radius:5px}
      escapavam desta — sequência, ganchos e placa na fila da Programação.
      O !important existe porque a regra específica vem depois no arquivo, e
      inverter a ordem quebraria a largura calibrada de cada um. */
-  .seq-input,.ganchos-input,.placa-input,.numero-carga-input,.praonde-inline{ font-size:16px !important }
+  .seq-input,.ganchos-input,.placa-input,.numero-carga-input,.praonde-inline,
+  .peso-input,.entregas-input,.rota-inline,.palet-inline{ font-size:16px !important }
 }
 
 /* Continuação do bloco "NAV NO DESKTOP: BARRA LATERAL FIXA" (mais acima,
