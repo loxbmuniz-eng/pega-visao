@@ -1,0 +1,233 @@
+<title>Handoff — Painel Suinco</title>
+<style>
+:root{
+  --bg:#f6f7f9; --surface:#fff; --surface-2:#eef1f5; --border:#dce1e8;
+  --text:#151b26; --dim:#5c6779;
+  --navy:#1e2a52; --navy-ink:#16345e; --gold:#a8791f; --gold-bg:#fbf3e2;
+  --crit:#a5293a; --crit-bg:#fbe8ea; --ok:#1a7a4c; --ok-bg:#e6f5ec;
+  --code-bg:#141b2b; --code-fg:#d8e2f2;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0c1119; --surface:#131a26; --surface-2:#1a2331; --border:#28323f;
+  --text:#e8edf4; --dim:#95a1b3;
+  --navy:#9fc1ef; --navy-ink:#c4d8f5; --gold:#e0ac5c; --gold-bg:#2a2312;
+  --crit:#f0798a; --crit-bg:#331319; --ok:#4fd399; --ok-bg:#0f2c22;
+  --code-bg:#060b13; --code-fg:#bccee8;
+}}
+:root[data-theme="dark"]{
+  --bg:#0c1119; --surface:#131a26; --surface-2:#1a2331; --border:#28323f;
+  --text:#e8edf4; --dim:#95a1b3;
+  --navy:#9fc1ef; --navy-ink:#c4d8f5; --gold:#e0ac5c; --gold-bg:#2a2312;
+  --crit:#f0798a; --crit-bg:#331319; --ok:#4fd399; --ok-bg:#0f2c22;
+  --code-bg:#060b13; --code-fg:#bccee8;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);
+     font-size:16px;line-height:1.62;-webkit-font-smoothing:antialiased}
+.wrap{max-width:860px;margin:0 auto;padding:0 24px 90px}
+header{padding:56px 0 32px;border-bottom:3px solid var(--navy);margin-bottom:36px}
+.eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;
+         color:var(--gold);font-weight:700;margin:0 0 12px}
+h1{font-size:clamp(27px,5vw,38px);line-height:1.15;margin:0 0 10px;font-weight:800;text-wrap:balance}
+.sub{font-size:17px;color:var(--dim);margin:0;max-width:62ch}
+.meta{display:flex;flex-wrap:wrap;gap:20px;margin-top:22px;font-size:13px;color:var(--dim)}
+.meta b{display:block;color:var(--text);font-size:14px}
+h2{font-size:22px;margin:44px 0 16px;padding-bottom:9px;border-bottom:2px solid var(--border);
+   display:flex;gap:10px;align-items:baseline}
+h2 .n{font-family:var(--mono);color:var(--gold);font-size:15px;font-weight:700}
+h3{font-size:16px;margin:26px 0 8px;font-weight:700}
+p{margin:0 0 13px;max-width:72ch}
+ul,ol{margin:0 0 13px;padding-left:22px}li{margin-bottom:6px}
+code{font-family:var(--mono);font-size:.87em;background:var(--surface-2);
+     border:1px solid var(--border);padding:1px 5px;border-radius:4px;color:var(--navy-ink)}
+pre{background:var(--code-bg);color:var(--code-fg);border-radius:8px;padding:14px 16px;
+    overflow-x:auto;font-family:var(--mono);font-size:12.5px;line-height:1.55;margin:12px 0}
+pre code{background:none;border:none;color:inherit;padding:0}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:18px 22px;margin:14px 0}
+.table-scroll{overflow-x:auto;border:1px solid var(--border);border-radius:8px;margin:14px 0}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--border);vertical-align:top}
+th{background:var(--surface-2);font-size:11.5px;text-transform:uppercase;letter-spacing:.05em;
+   color:var(--dim);font-weight:700;white-space:nowrap}
+tr:last-child td{border-bottom:none}
+td.mono{font-family:var(--mono);font-size:12.5px}
+.trap{background:var(--surface);border:1px solid var(--border);border-left:4px solid var(--crit);
+      border-radius:8px;padding:15px 19px;margin:14px 0}
+.trap h4{margin:0 0 7px;font-size:15px}
+.trap .campo{margin-top:9px}
+.trap .campo b{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.05em;
+               color:var(--dim);margin-bottom:2px}
+.aviso{background:var(--gold-bg);border:1px solid var(--gold);border-radius:8px;
+       padding:14px 18px;margin:14px 0;font-size:14.5px}
+.aviso b{color:var(--gold)}
+.pill{display:inline-block;font-family:var(--mono);font-size:11px;font-weight:700;
+      padding:2px 8px;border-radius:999px;white-space:nowrap}
+.p-ok{background:var(--ok-bg);color:var(--ok)}
+.p-crit{background:var(--crit-bg);color:var(--crit)}
+.p-info{background:var(--surface-2);color:var(--dim);border:1px solid var(--border)}
+footer{margin-top:56px;padding-top:20px;border-top:1px solid var(--border);
+       font-size:13px;color:var(--dim)}
+@media(max-width:600px){header{padding:36px 0 24px}}
+</style>
+
+<div class="wrap">
+<header>
+  <p class="eyebrow">Handoff Técnico</p>
+  <h1>Painel de Logística Suinco</h1>
+  <p class="sub">O que outra pessoa precisa saber para evoluir este sistema sem quebrar o que já funciona em produção.</p>
+  <div class="meta">
+    <div><b>12/08/2026</b>data deste handoff</div>
+    <div><b>Em produção</b>uso diário, 6 setores</div>
+    <div><b>128 + 59</b>testes backend + suítes de tela</div>
+    <div><b>164</b>commits</div>
+  </div>
+</header>
+
+<h2><span class="n">1</span> O que é</h2>
+<p>Controle de pátio para embarque de cargas. Seis setores usam ao vivo, do celular e do desktop: <strong>Logística</strong> (programa e coordena), <strong>Portaria</strong> (entrada e saída física), <strong>Expedição</strong> (carregamento), <strong>Faturamento</strong>, <strong>Comercial</strong> (só consulta) e <strong>Administração</strong> (acesso total).</p>
+<p>Toda carga percorre uma máquina de estados linear, e cada transição é validada <em>no servidor</em> contra uma tabela de permissão por setor:</p>
+<pre><code>Aguardando Veículo → Aguardando Embarque → Embarque Iniciado
+                   → Embarque Finalizado → Faturado → Seguiu Viagem</code></pre>
+<p>Logística e Administração podem agir em qualquer etapa. Os demais só na sua.</p>
+
+<h2><span class="n">2</span> Arquitetura</h2>
+<div class="table-scroll"><table>
+<thead><tr><th>Camada</th><th>Onde</th><th>Como sobe</th></tr></thead>
+<tbody>
+<tr><td><strong>Painel</strong></td><td class="mono">app.js · data.js · suinco-api.js · styles.css · index_suinco.html</td><td>Vercel, automático ao dar push na branch de entrega</td></tr>
+<tr><td><strong>API</strong></td><td class="mono">backend/src/</td><td>VPS, manual por SSH (ver §4)</td></tr>
+<tr><td><strong>Banco</strong></td><td class="mono">PostgreSQL na mesma VPS</td><td>migrations numeradas em <code>backend/migrations/</code></td></tr>
+</tbody></table></div>
+
+<div class="aviso">
+<b>O detalhe mais importante da arquitetura:</b> o painel é <strong>um arquivo só</strong>. Você edita os fontes (<code>app.js</code>, <code>styles.css</code>…), mas quem vai pro ar é o <code>index.html</code> gerado. <strong>Depois de qualquer alteração, rode <code>python3 build_arquivo_unico.py</code></strong> — esquecer disso é o erro mais comum: você testa, funciona, publica, e nada muda em produção.
+</div>
+
+<h3>Offline em primeiro lugar</h3>
+<p>O porteiro registra a chegada com o caminhão parado na frente dele — esperar rede não é opção. Então: <strong>grava local primeiro, sincroniza depois</strong>. Existe fila persistida em <code>localStorage</code>, drenada quando a rede volta. Ao mexer em gravação, preserve isso.</p>
+
+<h2><span class="n">3</span> Como desenvolver</h2>
+<pre><code># banco local descartável (NÃO é produção)
+pg_ctlcluster 16 main start
+
+# API local na porta 3010
+cd backend && npm start
+
+# testes de backend (contra Postgres real, sem mock)
+cd backend && npm run teste
+
+# testes de tela (Playwright)
+python3 testes/test_algum_teste.py
+
+# SEMPRE depois de editar os fontes do painel
+python3 build_arquivo_unico.py</code></pre>
+
+<h3>Publicação: duas branches</h3>
+<p>Trabalho em <code>claude/suinco-logistics-migration-z0k521</code>; a Vercel observa <code>claude/pega-visao-up19-deliverables-6cqhjb</code>. Publicar é levar uma na outra:</p>
+<pre><code>git push -u origin claude/suinco-logistics-migration-z0k521
+git checkout claude/pega-visao-up19-deliverables-6cqhjb
+git merge origin/claude/suinco-logistics-migration-z0k521 --no-edit
+git push origin claude/pega-visao-up19-deliverables-6cqhjb
+git checkout claude/suinco-logistics-migration-z0k521</code></pre>
+
+<h2><span class="n">4</span> Atualizar o servidor</h2>
+<p>Só é necessário quando mudar algo dentro de <code>backend/</code>. Mudança de CSS ou de tela <strong>não exige</strong> (ver a armadilha do CSS em §5).</p>
+<pre><code>cd /opt/suinco-src && git pull
+sudo bash entregaveis/suinco_logistica/backend/instalar.sh</code></pre>
+<p>O script é seguro de rodar de novo: confere cada etapa antes de fazer. Ele aplica migrations pendentes e reinicia o serviço.</p>
+<p>Há uma senha de operação no <code>.env</code> do servidor (<code>SENHA_FECHAMENTO</code>), usada para encerrar a programação quando ainda existe carga em aberto. O <code>instalar.sh</code> não a define — é configuração manual.</p>
+
+<h2><span class="n">5</span> Armadilhas que já custaram caro</h2>
+<p>Cada uma abaixo foi um bug real em produção. Estão documentadas no código, mas valem o aviso antecipado.</p>
+
+<div class="trap">
+<h4>CSS do PDF vem do painel, não do servidor <span class="pill p-info">economiza deploy</span></h4>
+<div class="campo"><b>O que é</b>Ao exportar, o painel envia o próprio CSS no corpo da requisição; o servidor só renderiza. Mudança de layout de relatório <strong>não precisa</strong> de deploy na VPS.</div>
+<div class="campo"><b>Por que importa</b>Eu mesmo mandei o usuário atualizar o servidor por engano achando que precisava. Confira antes de pedir deploy.</div>
+</div>
+
+<div class="trap">
+<h4><code>transform: scale()</code> não encolhe página impressa <span class="pill p-crit">perdeu dado</span></h4>
+<div class="campo"><b>O que é</b>Transform afeta só o desenho. A altura de <em>layout</em> — que é o que pagina o documento — continua a original.</div>
+<div class="campo"><b>O estrago</b>O relatório saía miniaturizado no canto superior esquerdo com 3 folhas em branco atrás. Uma tentativa de correção (travar altura + <code>overflow:hidden</code>) chegou a <strong>sumir com 9 de 20 placas</strong> do PDF.</div>
+<div class="campo"><b>Como está hoje</b>Não há encolhimento nenhum. O conteúdo nasce na largura da folha (198mm, A4 vertical) e o servidor pagina. <strong>Não reintroduza scale no fluxo de impressão.</strong></div>
+</div>
+
+<div class="trap">
+<h4>Painel e relatório liam bases diferentes <span class="pill p-crit">dado errado</span></h4>
+<div class="campo"><b>O que era</b>O painel mostra as cargas em aberto; o relatório sem filtro varria <code>DB.cargas</code> inteiro — toda carga que já existiu naquele navegador. Um caminhão que saiu há dois dias aparecia no relatório de hoje.</div>
+<div class="campo"><b>Regra atual</b>Sem filtro, o relatório espelha o painel (em aberto + concluídas hoje). Com filtro, respeita o período. Se criar tela nova, use a mesma fonte de dados das existentes.</div>
+</div>
+
+<div class="trap">
+<h4><code>exigirLogin</code> antes de <code>exigirSetor</code> <span class="pill p-crit">401 em tudo</span></h4>
+<div class="campo"><b>O que é</b><code>exigirSetor</code> apenas <em>lê</em> <code>req.operador</code> — quem preenche é <code>exigirLogin</code>. Invertido ou faltando, toda requisição dá 401 mesmo com token válido.</div>
+<div class="campo"><b>Padrão</b><code>router.post(caminho, exigirLogin, exigirSetor('Logística'), handler)</code></div>
+</div>
+
+<div class="trap">
+<h4>Densidade de tela alta quebra canvas <span class="pill p-crit">invisível no desktop</span></h4>
+<div class="campo"><b>O que era</b>A função de preparar o canvas lia <code>canvas.height</code> (buffer de pixels) e também escrevia nele — a cada render multiplicava pela densidade de novo. Em desktop (1×) não aparece; em celular (3×) os gráficos explodiam em duas renderizações.</div>
+<div class="campo"><b>Ao testar gráficos</b>use <code>device_scale_factor=3</code> no Playwright. O padrão 1 esconde essa classe de bug.</div>
+</div>
+
+<div class="trap">
+<h4>Cores do tema escuro no papel <span class="pill p-crit">ilegível</span></h4>
+<div class="campo"><b>O que é</b>O painel é escuro por padrão. Qualquer elemento que use <code>var(--text)</code> e apareça em relatório sai quase branco sobre papel branco.</div>
+<div class="campo"><b>Ao mexer em relatório</b>defina cor fixa de papel dentro de <code>@media print</code>. Já aconteceu com a coluna principal do Executivo, com o rodapé inteiro e com as caixas de indicador.</div>
+</div>
+
+<div class="trap">
+<h4>Testes: <code>inner_text</code> não lê campo <span class="pill p-info">teste mente</span></h4>
+<div class="campo"><b>O que é</b>Vários campos viraram <code>&lt;input&gt;</code> editáveis. <code>inner_text</code> devolve vazio para eles — o teste passa a dizer "o dado sumiu" com o dado ali, inteiro, no <code>value</code>.</div>
+<div class="campo"><b>Use</b><code>eval_on_selector_all(sel, 'els =&gt; els.map(e=&gt;e.value)')</code>.</div>
+</div>
+
+<h2><span class="n">6</span> Decisões que não devem ser desfeitas sem conversa</h2>
+<ul>
+<li><strong>Fechar programação nunca esconde caminhão.</strong> É possível fechar com carga em aberto (mediante senha), mas essa carga <em>continua na Torre</em>, com a data em que foi programada. Some da fila do dia, não da tela de quem opera.</li>
+<li><strong>A trava de placa barra o acidente, não o caso real.</strong> A mesma placa não pode ser lançada duas vezes pelo formulário, mas o botão "Outra carga" libera multi-carga deliberada, com rotas diferentes. Depois que o caminhão sai, a placa libera sozinha.</li>
+<li><strong>Motorista da carga ≠ motorista da frota.</strong> Um é quem dirigiu aquela viagem; o outro é o habitual do veículo, usado só como sugestão. Editar um não pode reescrever o outro.</li>
+<li><strong>Comercial é só leitura</strong>, e isso é garantido no servidor por allowlist — ele não aparece em nenhuma função de permissão de escrita. Não basta esconder na tela.</li>
+<li><strong>Sequência de carregamento é livre.</strong> Número manual, sem geração automática nem trava de duplicidade. Regra confirmada com o cliente.</li>
+</ul>
+
+<h2><span class="n">7</span> Testes</h2>
+<p>Backend roda contra <strong>PostgreSQL real, sem mock</strong> — o que precisa ser provado ali (bloqueio otimista, concorrência, chave estrangeira) um mock aprovaria sem provar nada.</p>
+<p>Os testes de tela são scripts Playwright independentes: cada um imprime <code>FALHAS: NENHUMA</code> ou lista o que quebrou. Não há runner central; rode o arquivo relevante à sua mudança e, antes de publicar, a pasta inteira.</p>
+<div class="aviso">
+<b>Lição cara desta rodada:</b> os relatórios foram validados por código e testes por dias, e continuavam saindo errados. Só melhoraram quando passei a <strong>gerar o PDF e olhar cada página renderizada</strong>. Para mudança visual, teste automatizado não substitui ver o resultado — há um script de apoio que gera o PDF pelo mesmo caminho do servidor e exporta as páginas em imagem.
+</div>
+
+<h2><span class="n">8</span> Aberto neste momento</h2>
+<div class="table-scroll"><table>
+<thead><tr><th>Item</th><th>Situação</th></tr></thead>
+<tbody>
+<tr><td><strong>Ordenação do Relatório Operacional</strong></td><td>Hoje agrupa por etapa, depois por sequência. O cliente avalia trocar para sequência pura (vira roteiro de carregamento). Aguarda definição interna: a Logística preenche a sequência sempre? Quem usa a folha impressa?</td></tr>
+<tr><td><strong>Limpeza de registros antigos</strong></td><td>Não executada, de propósito. Limpar só o navegador é inútil (a sincronia rebaixa tudo); limpar o banco é irreversível. Falta o cliente decidir entre arquivar por ciclo e apagar de vez.</td></tr>
+<tr><td><strong>Margem do PDF</strong></td><td>Divergência pequena: servidor injeta 5mm, o CSS assume 6mm. Não quebra, desperdiça 2mm de largura. Alinhar exige deploy.</td></tr>
+<tr><td><strong>Redesenho visual completo</strong></td><td>Adiado pelo cliente em favor de ajustes pontuais.</td></tr>
+</tbody></table></div>
+
+<h2><span class="n">9</span> Onde procurar</h2>
+<div class="table-scroll"><table>
+<thead><tr><th>Assunto</th><th>Arquivo</th></tr></thead>
+<tbody>
+<tr><td>Telas, render, relatórios</td><td class="mono">app.js <span style="color:var(--dim)">(~4.900 linhas)</span></td></tr>
+<tr><td>Regras de negócio, estado, sincronia</td><td class="mono">data.js <span style="color:var(--dim)">(~2.000)</span></td></tr>
+<tr><td>Cliente HTTP e WebSocket</td><td class="mono">suinco-api.js</td></tr>
+<tr><td>Permissões e transições</td><td class="mono">backend/src/dominio/fluxo.js</td></tr>
+<tr><td>Rotas da API</td><td class="mono">backend/src/rotas/</td></tr>
+<tr><td>Instalação e deploy do servidor</td><td class="mono">backend/instalar.sh</td></tr>
+<tr><td>Decisões já fechadas com o cliente</td><td class="mono">docs/DECISOES_CONFIRMADAS.md</td></tr>
+<tr><td>Incidente de produção e protocolo</td><td class="mono">docs/POSMORTEM_2026-08-08.md</td></tr>
+</tbody></table></div>
+
+<div class="card">
+<p style="margin:0"><strong>Uma orientação sobre o código:</strong> os comentários explicam <em>por que</em> algo está assim, muitas vezes citando o bug que a decisão evitou. Antes de "limpar" um trecho que pareça estranho, leia o comentário acima dele — boa parte das esquisitices é cicatriz de problema real em produção.</p>
+</div>
+
+<footer>Handoff do Painel de Logística Suinco · estado em 12/08/2026</footer>
+</div>
