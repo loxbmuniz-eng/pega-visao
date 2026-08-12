@@ -93,13 +93,29 @@ async def main():
             const m = getComputedStyle(pagina).transform;
             // matrix(a, b, c, d, tx, ty) — 'a' é o fator de escala em X.
             const escala = m.startsWith('matrix') ? parseFloat(m.split('(')[1].split(',')[0]) : 1;
-            return { transform: m, escala, origem: getComputedStyle(pagina).transformOrigin };
+            return { transform: m, escala, largura: pagina.style.width,
+                     origem: getComputedStyle(pagina).transformOrigin };
         }""")
-        ck('80 cargas força o encolhimento (transform != none)',
-           d2['transform'] not in ('none', 'matrix(1, 0, 0, 1, 0, 0)'), d2)
-        ck('a escala fica entre 0.5 (piso de legibilidade) e 1', 0.5 <= d2['escala'] < 1, d2)
-        ck('a origem da transformação é o canto superior esquerdo',
-           d2['origem'].startswith('0px 0px') or 'left' in d2['origem'], d2)
+        # PREMISSA INVERTIDA em 11/08/2026, e é o ponto deste teste hoje.
+        #
+        # Ele nasceu guardando o encolhimento (transform:scale) que tentava
+        # espremer o relatório numa folha só, quando quem imprimia era o
+        # navegador do operador. Com o servidor gerando o PDF, esse mesmo
+        # encolhimento passou a ESTRAGAR o resultado — o usuário mandou o
+        # PDF provando: conteúdo miniaturizado no canto superior esquerdo
+        # e três folhas em branco atrás, porque transform encolhe o
+        # desenho mas não a altura de layout que pagina o documento.
+        #
+        # A garantia agora é a oposta: o conteúdo NÃO é encolhido, nasce na
+        # largura da folha e o servidor pagina naturalmente.
+        ck('80 cargas NÃO são encolhidas (enche a folha e pagina normal)',
+           d2['escala'] >= 0.999,
+           f"escala={d2['escala']} — encolher aqui recria o bug das folhas em branco")
+        # A largura agora vem do CSS (@media print: .print-page{198mm}), não
+        # mais escrita pelo JS — por isso pagina.style.width fica vazio, e é
+        # exatamente o que se quer conferir: o JS não mexe mais nisso.
+        ck('o JS não escreve mais largura inline (quem manda é o CSS da folha)',
+           not d2.get('largura'), repr(d2.get('largura')))
 
         print('\n=== 3. LIMPA AO FIM DA EXPORTAÇÃO (não fica menor pra sempre) ===')
         # O reset saiu do evento 'afterprint' (que só existia por causa do

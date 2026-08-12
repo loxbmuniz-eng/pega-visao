@@ -86,8 +86,17 @@ async def main():
         ck('carga de hoje também aparece na Torre', 'HOJE1' in torre_nums, str(torre_nums))
 
         print('\n=== 3. DATA DA PROGRAMAÇÃO NA TORRE ===')
-        ck('coluna "Programada em" existe',
-           'Programada em' in (await pg.inner_text('#torre-thead')))
+        # A coluna virou "Datas" em 11/08/2026: a Torre tinha 15 colunas e
+        # 1870px numa área de 1162px, obrigando a rolar pro lado pra ver
+        # Status e os botões. "Programada em" e "Atualizado em" descrevem a
+        # mesma coisa (quando), então passaram a dividir uma célula
+        # empilhada. Nada foi removido — o dado continua na tela.
+        ck('coluna de datas existe na Torre',
+           'Datas' in (await pg.inner_text('#torre-thead')))
+        ck('a data da programação continua visível',
+           await pg.is_visible('#torre-tbody .dt-prog'))
+        ck('a última atualização continua visível',
+           await pg.is_visible('#torre-tbody .dt-atu'))
         ck('carga de 3 dias atrás é marcada como atrasada',
            await pg.is_visible('.prog-atrasada'))
         ck('mostra há quantos dias', 'há 3 dias' in torre)

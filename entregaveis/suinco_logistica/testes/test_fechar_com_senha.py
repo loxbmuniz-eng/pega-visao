@@ -127,8 +127,13 @@ async def main():
         nums = await pg.eval_on_selector_all(
             '#torre-tbody .numero-carga-input', 'els => els.map(e=>e.value)')
         ck('a carga continua VISÍVEL na Torre de Controle', NUM in nums, str(nums))
+        # A coluna "Programada em" foi fundida com "Atualizado em" numa
+        # coluna "Datas" (11/08/2026), para a Torre caber na tela sem
+        # rolagem lateral. O dado continua lá, empilhado na mesma célula —
+        # e é ele que importa aqui: a carga deixada em aberto pelo
+        # fechamento mostra desde quando está esperando.
         ck('a Torre mostra a data em que foi programada',
-           'Programada em' in (await pg.inner_text('#torre-thead')))
+           await pg.is_visible('#torre-tbody .dt-prog'))
 
         print('\n=== 5. O CICLO FECHADO ENTROU NO HISTÓRICO DE PROGRAMAÇÕES ===')
         progs = await pg.evaluate("async () => await SuincoSharePoint.listarProgramacoes()")

@@ -260,7 +260,13 @@ async def main():
             cabe: tab.getBoundingClientRect().width <= tab.parentElement.getBoundingClientRect().width + 1
           };
         }''')
-        ck('fonte maior que a antiga de 7,6px', cl['fonte'] >= 9, f"{cl['fonte']}px")
+        # A folha virou A4 VERTICAL em 11/08/2026 (pedido do usuário): 198mm
+        # úteis contra os 287mm da deitada. A fonte caiu de 9,8 para 8,4px
+        # porque nessa largura o corpo anterior fazia Status e Rota
+        # quebrarem em duas linhas em quase toda carga — e "sem quebra de
+        # linha" foi exigência explícita. 8 é o piso: abaixo disso a
+        # legibilidade em papel deixa de ser confiável.
+        ck('fonte ainda legível em papel (>= 8px)', cl['fonte'] >= 8, f"{cl['fonte']}px")
         ck('todo status cabe em UMA linha', cl['statusMaxLinhas'] <= 1,
            f"máx {cl['statusMaxLinhas']} linha(s) em {cl['statusLargura']}px · {cl['statusTextos']}")
         ck('Nº da carga em negrito e maiúsculo',

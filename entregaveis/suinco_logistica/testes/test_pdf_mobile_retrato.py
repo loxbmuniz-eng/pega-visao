@@ -75,11 +75,15 @@ async def main():
             r'@media\s+print\s+and\s*\(\s*orientation:\s*portrait\s*\)\s*\{', css))
         ck('regra de encolhimento por orientação foi removida', not tem_regra)
 
-        print('\n=== 2. O PAINEL SEMPRE PEDE PAISAGEM AO SERVIDOR ===')
+        print('\n=== 2. O PAINEL SEMPRE DECIDE A ORIENTAÇÃO (não o aparelho) ===')
         app = open('/home/user/pega-visao/entregaveis/suinco_logistica/app.js',
                    encoding='utf-8').read()
-        ck("exportarViaServidor envia orientacao:'paisagem'",
-           "orientacao: 'paisagem'" in app)
+        # Virou RETRATO em 11/08/2026, a pedido do usuário: "prefiro que
+        # seja na vertical mesmo, no formato a4". O que este teste guarda
+        # não é a orientação em si — é que ela seja decidida por NÓS, no
+        # código, e não pelo aparelho de quem exporta.
+        ck("exportarViaServidor envia orientacao:'retrato'",
+           "orientacao: 'retrato'" in app)
 
         print('\n=== 3. CELULAR: O RELATÓRIO MONTA IGUAL, SEM DEPENDER DA FOLHA ===')
         pg = await nav.new_page(viewport={'width': 390, 'height': 844},
@@ -106,9 +110,14 @@ async def main():
         }""")
         await pg2.close()
 
-        ck('celular e desktop montam a MESMA largura de folha',
-           largura_mobile == largura_desktop and largura_mobile == '287mm',
-           f'celular={largura_mobile} desktop={largura_desktop}')
+        # A largura passou a vir do CSS (@media print: .print-page{198mm},
+        # A4 vertical) e não mais escrita pelo JS — daí style.width vazio
+        # nos dois. O que importa continua igual, e é o ponto do teste:
+        # celular e desktop chegam ao MESMO resultado, porque nenhum dos
+        # dois decide a folha.
+        ck('celular e desktop montam a MESMA folha (nenhum dos dois decide)',
+           largura_mobile == largura_desktop,
+           f'celular={largura_mobile!r} desktop={largura_desktop!r}')
 
         print('\n=== CONSOLE ===')
         ck('sem erros de página', not erros, str(erros[:3]))
