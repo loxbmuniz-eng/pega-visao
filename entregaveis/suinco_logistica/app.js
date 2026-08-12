@@ -3810,6 +3810,24 @@ async function exportarPdfExecutivo(){
      sem nenhum aviso. */
   const doPeriodo = cargasDoRelatorio();
   const abertas = doPeriodo.filter(c=>c.status!=='Seguiu Viagem');
+
+  /* Caminhões que a Portaria registrou SEM programação prévia
+     (aguardandoCarga) precisam de conta própria, e o motivo é um bug real
+     achado na auditoria de 11/08/2026: o indicador "Aguardando Dados da
+     Carga" era calculado sobre `abertas`, que vem de cargasDoRelatorio()
+     — e essa função exclui aguardandoCarga de propósito. O número era,
+     por construção, SEMPRE ZERO.
+
+     Pior que um número errado: um número que parece tranquilizador. O
+     gestor lia "0 aguardando dados" com dois caminhões parados no pátio
+     sem nota, ocupando doca, esperando alguém completar o cadastro.
+
+     Ficam fora da LISTA do relatório (não há o que sequenciar sem número
+     de carga, peso nem rota — esse critério continua certo), mas entram
+     na CONTAGEM, que é o que responde "o que está me travando agora". */
+  const { de: _relDe, ate: _relAte } = periodoRelatorio();
+  const aguardandoDados = filtrarPorDataProgramacao(
+    DB.cargas.filter(c=>c.aguardandoCarga), _relDe, _relAte);
   const concluidasTodas = doPeriodo.filter(c=>c.status==='Seguiu Viagem');
   const concluidasHoje = concluidasTodas;
 
@@ -3885,7 +3903,7 @@ async function exportarPdfExecutivo(){
 
       <div class="grid4" style="margin-bottom:18px">
         <div class="stat-box"><div class="stat-num">${paradasAlemDaMeta}</div><div class="stat-label">Paradas Além da Meta</div></div>
-        <div class="stat-box"><div class="stat-num">${abertas.filter(c=>c.aguardandoCarga).length}</div><div class="stat-label">Aguardando Dados da Carga</div></div>
+        <div class="stat-box"><div class="stat-num">${aguardandoDados.length}</div><div class="stat-label">Aguardando Dados da Carga</div></div>
         <div class="stat-box"><div class="stat-num">${abertas.length}</div><div class="stat-label">Cargas em Aberto</div></div>
         <div class="stat-box"><div class="stat-num">${fmtDuracao(nHoje?Math.round(somaHoje/nHoje):null)}</div><div class="stat-label">Lead Time Médio (período)</div></div>
       </div>
