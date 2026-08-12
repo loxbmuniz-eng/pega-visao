@@ -749,6 +749,51 @@ input,select,textarea{
   font-size:14px;background:var(--campo-bg);color:var(--text);transition:border .15s;
 }
 input::placeholder{color:var(--placeholder)}
+
+/* CALENDÁRIO VISÍVEL NOS CAMPOS DE DATA — pedido do usuário
+   (11/08/2026): "quero que apareca um calendariozinho nas abas de
+   filtragem por data".
+
+   O seletor nativo SEMPRE existiu em <input type="date">, mas era
+   invisível: o navegador desenha o ícone em preto, e o painel é escuro
+   por padrão — preto sobre #101625 não aparece. Quem não sabia que dava
+   pra clicar ali digitava a data à mão.
+
+   `color-scheme` é o que resolve de verdade: diz ao navegador em que
+   tema ele deve desenhar os controles nativos, e com isso o ícone (e o
+   próprio calendário que abre) vem claro no tema escuro e escuro no
+   claro. O filtro invert() abaixo é a rede de segurança para motores que
+   ignoram color-scheme, e o cursor/opacidade deixam claro que é
+   clicável. */
+input[type="date"]{ color-scheme:dark }
+[data-tema="claro"] input[type="date"]{ color-scheme:light }
+
+input[type="date"]::-webkit-calendar-picker-indicator{
+  cursor:pointer;
+  opacity:.85;
+  filter:invert(1) brightness(1.6) sepia(1) saturate(4) hue-rotate(5deg);
+  padding:2px;
+  border-radius:4px;
+  transition:opacity var(--t-rapida) ease, background var(--t-rapida) ease;
+}
+input[type="date"]::-webkit-calendar-picker-indicator:hover{
+  opacity:1;
+  background:rgba(233,185,84,.18);
+}
+[data-tema="claro"] input[type="date"]::-webkit-calendar-picker-indicator{
+  filter:none;
+  opacity:.7;
+}
+[data-tema="claro"] input[type="date"]::-webkit-calendar-picker-indicator:hover{
+  opacity:1;
+}
+/* Alvo de toque: 44px é o mínimo confortável no celular, e o ícone
+   nativo vem bem menor que isso. */
+@media (max-width:820px){
+  input[type="date"]::-webkit-calendar-picker-indicator{
+    min-width:24px; min-height:24px; padding:4px;
+  }
+}
 input:focus,select:focus,textarea:focus{outline:none;border-color:var(--gold)}
 textarea{resize:vertical;min-height:70px}
 select option{background:var(--campo-bg);color:var(--text)}

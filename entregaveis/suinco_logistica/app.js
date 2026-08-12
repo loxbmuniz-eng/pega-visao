@@ -3168,6 +3168,36 @@ function renderHistorico(){
   }
 }
 
+/* Calendário: clicar em QUALQUER ponto do campo abre a janelinha.
+
+   Pedido do usuário (11/08/2026): "quero que apareca um calendariozinho
+   nas abas de filtragem por data... como uma janelinha de calendario
+   onde a pessoa pode navegar por dia mes ano".
+
+   A janelinha sempre existiu — é o seletor nativo do <input type="date">,
+   com navegação por dia, mês e ano. O que faltava era chegar até ela:
+   o ícone era desenhado em preto sobre o painel escuro (invisível, ver
+   styles.css) e só ele abria o calendário. Quem não sabia digitava a
+   data à mão, campo a campo.
+
+   `showPicker()` é a API que abre o seletor nativo por código. Onde ela
+   não existe (Safari mais antigo), o clique no ícone continua
+   funcionando como sempre — por isso o try/catch silencioso: nada
+   quebra, só não ganha o atalho.
+
+   Usa captura no documento, e não um listener por campo, porque a
+   maioria dos campos de data nasce e morre com o re-render das abas —
+   um listener por elemento teria que ser reinstalado a cada render. */
+function ligarCalendarioNosCamposDeData(){
+  document.addEventListener('click', (ev)=>{
+    const campo = ev.target.closest && ev.target.closest('input[type="date"]');
+    if(!campo || campo.disabled || campo.readOnly) return;
+    if(typeof campo.showPicker !== 'function') return;
+    try{ campo.showPicker(); }
+    catch(e){ /* alguns navegadores exigem gesto direto no ícone; segue o nativo */ }
+  });
+}
+
 /* ---------- RELATÓRIOS (PDF gerado pelo servidor) ---------- */
 /* Até 09/08/2026 o PDF saía via `window.print()` — cada aparelho decidia
    sozinho o tamanho final da página. Provado nesta mesma investigação (com
@@ -4018,6 +4048,7 @@ async function init(){
   }
   preencherSelectsRota();   // alimenta os selects de Rota a partir de ROTAS
   iniciarTema();            // antes de desenhar: evita piscar no tema errado
+  ligarCalendarioNosCamposDeData();   // clique no campo abre a janelinha do calendário
   // Conecta ao servidor se houver sessão; caso contrário fica em modo
   // local e o rodapé diz isso. Nunca bloqueia a abertura do painel.
   if(typeof SuincoSharePoint !== 'undefined'){
