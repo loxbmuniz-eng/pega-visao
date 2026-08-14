@@ -222,7 +222,30 @@ rotasCargas.patch('/cargas/:id', exigirLogin, async (req, res, next) => {
     }
 
     const cols = Object.keys(mudancas);
-    const sets = cols.map((c, i) => `${c} = $${i + 1}`);
+    /* `programado_em` é GRAVÁVEL UMA VEZ SÓ — COALESCE, não atribuição.
+
+       Descoberto em produção em 14/08/2026, olhando o banco depois da
+       atualização: 109 cargas apareceram com `atualizado_em` nos MESMOS dois
+       instantes (21:12 e 21:18), logo após o serviço reiniciar. Não foi
+       ninguém editando: foram os painéis reconectando e reenviando as cargas
+       que tinham em memória.
+
+       O problema é que cada painel reenvia a carga INTEIRA a cada gravação,
+       com a data de programação que ele tem localmente. Um terminal que
+       ainda não recebeu o valor novo manda o antigo de volta — e a data
+       correta, gravada quando a Logística lançou a carga, era desfeita por
+       um colega que só tinha o painel aberto. O relatório voltava a errar
+       sozinho, sem ninguém ter feito nada.
+
+       Com COALESCE a data só entra quando ainda não existe: quem lança a
+       carga define, e eco de sincronização não move mais. Corrigir de
+       propósito continua possível direto no banco, que é operação rara e
+       consciente. */
+    const sets = cols.map((c, i) => (
+      c === 'programado_em'
+        ? `programado_em = COALESCE(programado_em, $${i + 1})`
+        : `${c} = $${i + 1}`
+    ));
     const params = Object.values(mudancas);
 
     /* BLOQUEIO OTIMISTA. Se o cliente informar a versão que leu, a gravação
