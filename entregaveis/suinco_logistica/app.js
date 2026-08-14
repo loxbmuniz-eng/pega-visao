@@ -2253,7 +2253,24 @@ async function excluirCargaSeguiuViagemUI(id){
   await _efetivarExclusaoCarga(id, c, motivo, true, true);
 }
 function renderProgAguardando(){
-  const lista = DB.cargas.filter(c=>c.aguardandoCarga);
+  /* `cargasAbertas()`, não `DB.cargas` — relato de 14/08/2026: "não consigo
+     excluir essas duas cargas que ficaram como resíduo".
+
+     O caminho que gera o resíduo: um caminhão chega sem programação (nasce
+     um registro `aguardandoCarga`), a carga dele nunca é lançada, e depois
+     ele vai embora — a Portaria registra a saída e o registro vira "Seguiu
+     Viagem", mas continua com a marca `aguardandoCarga`.
+
+     Esta lista usava a lista CRUA, sem tirar quem já saiu, então o registro
+     ficava aqui para sempre: não dá para lançar carga de um caminhão que já
+     foi embora, e o botão Excluir se recusa — com razão — a apagar quem já
+     viajou. O contador ao lado desta mesma tabela já usava `cargasAbertas()`
+     (linha do `aguardandoCargaCount`), então os dois discordavam na tela.
+
+     A correção não é liberar a exclusão: histórico do pátio não se apaga
+     mesmo. É parar de chamar de "aguardando carga" um caminhão que já saiu.
+     Ele continua no Histórico e nos relatórios, onde deve estar. */
+  const lista = cargasAbertas().filter(c=>c.aguardandoCarga);
   const pill = document.getElementById('prog-aguardando-count');
   pill.hidden = lista.length===0; pill.textContent = lista.length;
   document.getElementById('prog-aguardando-tbody').innerHTML = lista.map(c=>`
