@@ -289,6 +289,45 @@ function _atualizarContadorFila(){
 }
 // `ms` opcional: avisos longos (ex: troca da base de frota) precisam de mais
 // tempo em tela do que a confirmação curta de uma ação.
+/* Aviso de gravação: nunca diz "pronto" quando o dado ainda não subiu.
+
+   Incidente real relatado pelo gestor (12/08/2026): o programador lançou
+   cargas por um tempo sem perceber que o painel estava DESCONECTADO. Elas
+   não apareciam pra ninguém, e ele teve que lançar tudo de novo.
+
+   O diagnóstico de "falta de cultura — as pessoas precisam olhar a luz
+   verde" não se sustenta olhando o código: ao criar uma carga offline, o
+   sistema respondia "Carga criada" em VERDE, com cara de sucesso. O aviso
+   de conexão existia, mas passivo, no rodapé — enquanto a confirmação da
+   ação, que é onde o olho está, dizia que tinha dado certo.
+
+   Ninguém precisa lembrar de conferir nada se a própria confirmação for
+   honesta. Aqui: gravou local e ainda não subiu, o aviso muda de cor, de
+   ícone e de texto, e diz o que falta acontecer. */
+function estadoDaConexao(){
+  if(typeof SuincoSharePoint === 'undefined' || !SuincoSharePoint.estado) return 'local';
+  return SuincoSharePoint.estado();
+}
+
+function notifyGravacao(msgSucesso, msObrigatorio){
+  const estado = estadoDaConexao();
+  if(estado === 'online'){ notify(msgSucesso, 'success', msObrigatorio); return; }
+
+  if(estado === 'offline'){
+    const fila = (typeof SuincoSharePoint !== 'undefined' && SuincoSharePoint.pendentes)
+      ? SuincoSharePoint.pendentes() : 0;
+    notify(`⚠️ SEM CONEXÃO — ${msgSucesso} Está gravado só neste aparelho`
+      + (fila ? ` (${fila} na fila)` : '')
+      + ' e sobe sozinho quando a rede voltar. Os outros setores ainda NÃO veem.',
+      'warn', 10000);
+    return;
+  }
+  // 'local': nem sessão de servidor existe. Aqui não sobe nunca sozinho.
+  notify(`⚠️ MODO LOCAL — ${msgSucesso} Fica SÓ neste navegador: `
+    + 'nenhum outro setor vai ver, e não sobe sozinho. Entre com seu e-mail para compartilhar.',
+    'danger', 12000);
+}
+
 function notify(msg, type, ms){
   const el = document.createElement('div');
   el.className = 'notif-item' + (type ? ' ' + type : '');
@@ -1737,7 +1776,7 @@ function criarCargaProgramadaUI(){
       operador: nomeOperadorAtual()
     });
     _placaMultiCargaAutorizada = null;   // vale uma vez só
-    notify(`Carga criada para a placa ${normalizarPlaca(placa)} — status Aguardando Veículo.`, 'success');
+    notifyGravacao(`Carga criada para a placa ${normalizarPlaca(placa)} — status Aguardando Veículo.`);
     ['prog-placa','prog-transportadora','prog-tipoveiculo','prog-motorista','prog-numero-carga','prog-cliente','prog-destino','prog-peso','prog-sequencia','prog-obs']
       .forEach(id=>document.getElementById(id).value='');
     document.getElementById('prog-praonde').value = PRA_ONDE_PADRAO;
@@ -2266,7 +2305,7 @@ function salvarCompletarCarga(){
     // Sem beep aqui de propósito: o status NÃO muda nesta ação (a carga já
     // nasceu em "Aguardando Embarque" quando a Portaria registrou a
     // chegada) — o som é só pra mudanças de status, não pra edição de dados.
-    notify('Dados completados com sucesso.', 'success');
+    notifyGravacao('Dados completados com sucesso.');
     renderAll();
   }catch(e){ notify(e.message, 'danger'); }
 }
@@ -2281,7 +2320,7 @@ function acaoChegadaUI(){
     notify(`${normalizarPlaca(placa)}: nenhuma programação encontrada — criada entrada "Aguardando Carga" (status Aguardando Embarque). Avise a Logística para completar os dados.`, 'warn');
     tocarBeepConfirmacao();
   } else if(r.atualizadas.length){
-    notify(`${normalizarPlaca(placa)}: ${r.atualizadas.length} carga(s) agora em "Aguardando Embarque".`, 'success');
+    notifyGravacao(`${normalizarPlaca(placa)}: ${r.atualizadas.length} carga(s) agora em "Aguardando Embarque".`);
     tocarBeepConfirmacao();
   } else if(r.jaNoPatio.length){
     notify(`${normalizarPlaca(placa)} já está no pátio (${r.jaNoPatio.map(c=>c.status).join(', ')}).`, '');
@@ -2295,7 +2334,7 @@ function acaoSaidaUI(){
   const placa = input.value;
   if(!normalizarPlaca(placa)){ notify('Informe a placa.','warn'); return; }
   const r = registrarSaidaPortaria(placa, nomeOperadorAtual());
-  if(r.liberadas.length){ notify(`${normalizarPlaca(placa)}: saída registrada para ${r.liberadas.length} carga(s) — Seguiu Viagem.`, 'success'); tocarBeepConfirmacao(); }
+  if(r.liberadas.length){ notifyGravacao(`${normalizarPlaca(placa)}: saída registrada para ${r.liberadas.length} carga(s) — Seguiu Viagem.`); tocarBeepConfirmacao(); }
   if(r.pendentes.length) notify(`${normalizarPlaca(placa)}: ${r.pendentes.length} carga(s) ainda não liberada(s) para saída (status atual: ${r.pendentes.map(c=>c.status).join(', ')}).`, 'warn');
   if(!r.liberadas.length && !r.pendentes.length) notify(`Nenhuma carga em aberto encontrada para a placa ${normalizarPlaca(placa)}.`, 'warn');
   input.value = '';
@@ -2387,7 +2426,7 @@ function executarAvanco(cargaId, statusDestino){
   try{
     const c = getCarga(cargaId);
     avancarStatusCarga(cargaId, statusDestino, nomeOperadorAtual(), setorOperadorAtual());
-    notify(`${c.placa}: agora em "${statusDestino}".`, 'success');
+    notifyGravacao(`${c.placa}: agora em "${statusDestino}".`);
     tocarBeepConfirmacao();
     renderAll();
   }catch(e){ notify(e.message, 'danger'); }
