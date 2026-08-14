@@ -39,6 +39,18 @@ function inteiro(v, padrao = 0, minimo = 0) {
   return Number.isFinite(n) ? Math.max(minimo, Math.trunc(n)) : padrao;
 }
 
+/* Data vinda do painel, com o agora como reserva.
+
+   Aceitar a data do cliente aqui é deliberado: a gravação pode ter ficado
+   na fila offline por horas, e carimbar `now` no servidor registraria a
+   hora em que a rede voltou, não a hora em que a carga foi lançada — que é
+   exatamente o que o relatório precisa acertar. Data inválida ou ausente
+   cai no agora, para nunca gravar nulo por engano do cliente. */
+function dataOuAgora(v) {
+  const t = Date.parse(v);
+  return Number.isFinite(t) ? new Date(t) : new Date();
+}
+
 /* Banco → painel. */
 export function paraPainel(linha) {
   if (!linha) return null;
@@ -64,6 +76,10 @@ export function paraPainel(linha) {
     status: linha.status_atual,
     aguardandoCarga: linha.aguardando_carga,
     criadoEm: linha.criado_em,
+    /* Data em que a CARGA foi lançada — diferente de criado_em quando o
+       caminhão chegou sem programação e a carga só foi lançada depois.
+       O relatório do gestor filtra por esta. Ver migration 007. */
+    programadoEm: linha.programado_em || linha.criado_em,
     criadoPor: linha.operador_nome,
     atualizadoEm: linha.atualizado_em,
     versao: linha.versao,
@@ -101,6 +117,10 @@ export function saneiarCriacao(corpo, frota) {
     qtd_ganchos: inteiro(corpo.qtdGanchos, 0),
     qtd_entregas: Math.max(1, inteiro(corpo.qtdEntregas, 1, 1)),
     observacoes: texto(corpo.observacoes, 2000),
+    /* Data em que a CARGA foi lançada. Vem do painel porque ele pode estar
+       subindo algo que ficou na fila offline — usar `now` aqui carimbaria a
+       hora da sincronização, não a do lançamento. Ver migration 007. */
+    programado_em: dataOuAgora(corpo.programadoEm),
     status_atual: STATUS_FLOW.includes(corpo.status) ? corpo.status : STATUS_INICIAL,
     aguardando_carga: corpo.aguardandoCarga === true,
   };
@@ -165,6 +185,7 @@ export function saneiarEdicao(corpo, camposPermitidos) {
     qtd_ganchos: () => inteiro(corpo.qtdGanchos, 0),
     qtd_entregas: () => Math.max(1, inteiro(corpo.qtdEntregas, 1, 1)),
     observacoes: () => texto(corpo.observacoes, 2000),
+    programado_em: () => dataOuAgora(corpo.programadoEm),
     aguardando_carga: () => corpo.aguardandoCarga === true,
   };
   const chaveDoPainel = {
@@ -174,6 +195,7 @@ export function saneiarEdicao(corpo, camposPermitidos) {
     sequencia: 'sequencia', pra_onde: 'praOnde', paletizada: 'paletizada',
     qtd_ganchos: 'qtdGanchos', qtd_entregas: 'qtdEntregas',
     observacoes: 'observacoes', aguardando_carga: 'aguardandoCarga',
+    programado_em: 'programadoEm',
   };
 
   const saida = {};
@@ -238,5 +260,5 @@ export const COLUNAS_CARGA = `
   carga_id, numero_carga, placa, transportadora, tipo_veiculo, motorista,
   cliente, destino, peso_kg, doca, rota_codigo, sequencia, pra_onde,
   paletizada, qtd_ganchos, qtd_entregas, observacoes, status_atual,
-  aguardando_carga, criado_em, atualizado_em, operador_id, operador_nome,
+  aguardando_carga, criado_em, programado_em, atualizado_em, operador_id, operador_nome,
   operador_setor, versao, excluida_em, excluida_por`;

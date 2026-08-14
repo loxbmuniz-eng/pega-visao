@@ -44,9 +44,18 @@ PREPARAR = """() => {
 
     const antiga = nova('QXY-ANTEONTEM', 0);
     anda(antiga, 'Seguiu Viagem');
-    // Empurra a saída (e a criação) para anteontem.
+    /* Empurra a saída (e a criação) para anteontem.
+
+       `programadoEm` entrou junto em 14/08/2026: o relatório passou a
+       filtrar pela data em que a CARGA foi lançada, não pela data em que o
+       registro nasceu — porque caminhão que chega sem programação num dia e
+       tem a carga lançada no outro estava saindo no relatório do dia
+       errado. Aqui a carga foi PROGRAMADA anteontem, então as duas datas
+       andam juntas; deixar só `criadoEm` no passado descreveria outra
+       situação (a que a correção justamente separou). */
     const doisDias = new Date(Date.now() - 2*86400000).toISOString();
     antiga.criadoEm = doisDias; antiga.atualizadoEm = doisDias;
+    antiga.programadoEm = doisDias;
     DB.movimentacoes.filter(m => m.cargaId === antiga.id)
         .forEach(m => { m.timestamp = doisDias; });
 

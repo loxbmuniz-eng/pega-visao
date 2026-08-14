@@ -324,6 +324,7 @@ const SuincoSharePoint = (function () {
       qtdGanchos: campos.Qtd_Ganchos || 0,
       qtdEntregas: campos.Qtd_Entregas,
       observacoes: campos.Observacoes || '',
+      programadoEm: campos.Programado_Em,
       status: campos.Status_Atual,
       aguardandoCarga: campos.Aguardando_Carga === true || campos.Aguardando_Carga === 'Sim',
     };
@@ -357,6 +358,7 @@ const SuincoSharePoint = (function () {
       Status_Atual: c.status,
       Aguardando_Carga: c.aguardandoCarga,
       Criado_Em: c.criadoEm,
+      Programado_Em: c.programadoEm,
       Atualizado_Em: c.atualizadoEm,
       Excluida: c.excluida === true,
     };

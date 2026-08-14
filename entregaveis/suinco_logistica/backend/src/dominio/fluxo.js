@@ -132,6 +132,9 @@ const CAMPOS_EDITAVEIS = {
     'numero_carga', 'placa', 'transportadora', 'tipo_veiculo', 'motorista',
     'cliente', 'destino', 'peso_kg', 'rota_codigo', 'sequencia', 'pra_onde',
     'paletizada', 'qtd_ganchos', 'qtd_entregas', 'observacoes', 'aguardando_carga',
+    // A data de programação nasce quando a Logística lança a carga de um
+    // caminhão que já estava no pátio — por isso precisa ser editável.
+    'programado_em',
   ],
   'Portaria': ['motorista', 'observacoes'],
   'Expedição': ['qtd_ganchos', 'observacoes'],
