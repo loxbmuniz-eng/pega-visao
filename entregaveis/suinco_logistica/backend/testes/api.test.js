@@ -1872,3 +1872,67 @@ describe('15. Data de programação é gravável uma vez só', () => {
     );
   });
 });
+
+/* ------------------------------------------------------------------ */
+describe('16. Observação não é apagada por eco de sincronização', () => {
+  /* Mesma família do achado da data de programação (suíte 15), e mais grave:
+     `observacoes` é editável por TODOS os setores, então qualquer terminal
+     com cópia velha pode zerar o que a Administração acabou de escrever.
+
+     Como o painel reenvia a carga INTEIRA a cada gravação, um colega que só
+     tem a tela aberta manda `observacoes: ''` de volta e apaga o texto —
+     sem ninguém ter editado nada. É o que fazia o relatório de Fretes
+     continuar mostrando "a preencher" mesmo depois de preenchido.
+
+     Regra: texto vazio não sobrescreve texto existente. Trocar por outro
+     texto continua funcionando normalmente. */
+  let idCarga;
+
+  before(async () => {
+    const { rows } = await pool.query('SELECT placa FROM dim_veiculos LIMIT 1');
+    idCarga = `obs_eco_${Date.now()}`;
+    await pool.query(
+      `INSERT INTO fact_viagens (carga_id, numero_carga, placa, status_atual, observacoes)
+       VALUES ($1,'900888',$2,'Aguardando Veículo','')`,
+      [idCarga, rows[0].placa]
+    );
+  });
+
+  after(async () => {
+    await pool.query('DELETE FROM fact_viagens WHERE carga_id = $1', [idCarga]);
+  });
+
+  const leObs = async () => (await pool.query(
+    'SELECT observacoes FROM fact_viagens WHERE carga_id = $1', [idCarga]
+  )).rows[0].observacoes;
+
+  test('a Administração escreve a observação', async () => {
+    const r = await req(`/api/cargas/${idCarga}`, {
+      metodo: 'PATCH', token: tokens['Logística'],
+      corpo: { observacoes: 'Frete R$ 2.480 — cobrar pedágio à parte' },
+    });
+    assert.equal(r.status, 200);
+    assert.equal(await leObs(), 'Frete R$ 2.480 — cobrar pedágio à parte');
+  });
+
+  test('eco de sincronia com texto vazio NÃO apaga', async () => {
+    const r = await req(`/api/cargas/${idCarga}`, {
+      metodo: 'PATCH', token: tokens['Portaria'],
+      corpo: { observacoes: '', motorista: 'Fulano' },
+    });
+    assert.equal(r.status, 200);
+    assert.equal(
+      await leObs(), 'Frete R$ 2.480 — cobrar pedágio à parte',
+      'observação existente não pode ser zerada por reenvio de sincronização'
+    );
+  });
+
+  test('trocar por outro texto continua funcionando', async () => {
+    const r = await req(`/api/cargas/${idCarga}`, {
+      metodo: 'PATCH', token: tokens['Faturamento'],
+      corpo: { observacoes: 'Frete revisado R$ 2.600' },
+    });
+    assert.equal(r.status, 200);
+    assert.equal(await leObs(), 'Frete revisado R$ 2.600');
+  });
+});

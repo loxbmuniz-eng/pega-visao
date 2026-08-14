@@ -241,11 +241,32 @@ rotasCargas.patch('/cargas/:id', exigirLogin, async (req, res, next) => {
        carga define, e eco de sincronização não move mais. Corrigir de
        propósito continua possível direto no banco, que é operação rara e
        consciente. */
-    const sets = cols.map((c, i) => (
-      c === 'programado_em'
-        ? `programado_em = COALESCE(programado_em, $${i + 1})`
-        : `${c} = $${i + 1}`
-    ));
+    const sets = cols.map((c, i) => {
+      if (c === 'programado_em') {
+        return `programado_em = COALESCE(programado_em, $${i + 1})`;
+      }
+      /* `observacoes`: texto VAZIO não apaga texto existente.
+
+         Mesma origem do caso acima, e mais grave, porque observação é
+         editável por todos os setores: o eco de sincronização de um
+         terminal com cópia velha chegava com '' e zerava o que a
+         Administração tinha acabado de escrever. Era o que fazia o
+         relatório de Fretes voltar a mostrar "a preencher" depois de
+         preenchido.
+
+         A causa de fundo (painel reenviando o cache inteiro após um F5)
+         foi corrigida em data.js. Isto aqui é a segunda linha de defesa,
+         que vale enquanto existir terminal em versão antiga na operação —
+         e no dia a dia sempre existe.
+
+         O custo é não dar para ESVAZIAR uma observação pela tela; para
+         trocar, basta escrever outro texto. Perder a possibilidade de
+         apagar é muito menor que perder o texto sozinho. */
+      if (c === 'observacoes') {
+        return `observacoes = COALESCE(NULLIF($${i + 1}, ''), observacoes)`;
+      }
+      return `${c} = $${i + 1}`;
+    });
     const params = Object.values(mudancas);
 
     /* BLOQUEIO OTIMISTA. Se o cliente informar a versão que leu, a gravação
