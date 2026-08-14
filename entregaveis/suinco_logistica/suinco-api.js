@@ -347,6 +347,13 @@ const SuincoSharePoint = (function () {
       Paletizada: c.paletizada,
       Qtd_Ganchos: c.qtdGanchos,
       Qtd_Entregas: c.qtdEntregas,
+      /* Observacoes faltava aqui e na ida (data.js, sincronizarCarga) —
+         incidente de 14/08/2026: "a Administração de Fretes não está
+         puxando as observações, nem de ontem nem de hoje". O servidor
+         sempre soube guardar o campo; o painel é que não o mandava nem o
+         lia de volta, então a observação vivia só no navegador de quem
+         digitou e o relatório saía em branco para todo mundo. */
+      Observacoes: c.observacoes,
       Status_Atual: c.status,
       Aguardando_Carga: c.aguardandoCarga,
       Criado_Em: c.criadoEm,
