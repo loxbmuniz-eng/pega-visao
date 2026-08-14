@@ -566,6 +566,9 @@ const SuincoStore = {
       Status_Atual: carga.status,
       Aguardando_Carga: !!carga.aguardandoCarga,
       Criado_Em: carga.criadoEm,
+      // Data em que a CARGA foi lançada (≠ chegada do caminhão). O
+      // relatório filtra por ela — ver filtrarPorDataProgramacao.
+      Programado_Em: carga.programadoEm || carga.criadoEm,
       // Atualizado_Em é o que decide quem vence quando dois setores mexem na
       // mesma carga. Sem ele a fusão não teria como comparar as versões.
       Atualizado_Em: carga.atualizadoEm || nowISO()
@@ -934,6 +937,7 @@ function cargaDeLinhaRemota(r){
     status: STATUS_FLOW.includes(r.Status_Atual) ? r.Status_Atual : STATUS_FLOW[0],
     aguardandoCarga: r.Aguardando_Carga === true || r.Aguardando_Carga === 'Sim',
     criadoEm: r.Criado_Em || nowISO(),
+    programadoEm: r.Programado_Em || r.Criado_Em || nowISO(),
     atualizadoEm: r.Atualizado_Em || r.Timestamp_Sincronia || nowISO(),
     excluida: r.Excluida === true
   };
@@ -1345,6 +1349,10 @@ function criarCargaProgramada({placa, transportadora, tipoVeiculo, numeroCarga, 
     status: 'Aguardando Veículo',
     aguardandoCarga: false,
     criadoEm: nowISO(), criadoPor: operador||'(não identificado)',
+    // Programada agora: aqui as duas datas coincidem. Elas só se separam
+    // quando o caminhão chegou ANTES de a carga existir — ver
+    // completarCargaAguardando.
+    programadoEm: nowISO(),
     atualizadoEm: nowISO(),
     // Marca a carga como "ainda não existe no servidor" — permite que uma
     // recusa na primeira sincronia remova a carga localmente em vez de só
@@ -1448,6 +1456,22 @@ function completarCargaAguardando(cargaId, {numeroCarga, cliente, destino, produ
   if(transportadora) c.transportadora = transportadora;
   if(tipoVeiculo) c.tipoVeiculo = tipoVeiculo;
   c.aguardandoCarga = false;
+  /* A CARGA FOI PROGRAMADA AGORA — e é esta a data que o relatório usa.
+
+     Pedido do gestor (14/08/2026): "se a portaria dá entrada no veículo
+     ontem e a gente lança a carga dela hoje, o relatório considera a data
+     de entrada e não a data que ela foi programada. O relatório tem que
+     considerar sempre a data de programação".
+
+     Antes só existia `criadoEm`, que para um caminhão que chegou sem
+     programação é a hora em que ele ENTROU no pátio. Filtrando o relatório
+     por hoje, a carga lançada hoje num caminhão de ontem ficava de fora.
+
+     `criadoEm` continua intocado de propósito: é o histórico de quando o
+     carro chegou de verdade, e o gestor foi explícito em não perdê-lo
+     ("a gente não perde o histórico da hora e do dia que o carro realmente
+     chegou"). São duas datas diferentes porque são dois fatos diferentes. */
+  c.programadoEm = nowISO();
   c.atualizadoEm = nowISO();
   SuincoStore.save();
   return c;
@@ -1869,9 +1893,20 @@ function atrasoDaCarga(carga){
 }
 
 /* ---------- FILTRO POR DATA DA PROGRAMAÇÃO ----------
-   "Data da programação" é quando a carga foi inserida no sistema
-   (criadoEm), não quando o caminhão chegou. É o que o gestor usa para
-   fechar o relatório de um dia específico. */
+   "Data da programação" é quando a CARGA foi lançada — não quando o
+   caminhão entrou no pátio. É o que o gestor usa para fechar o relatório
+   de um dia.
+
+   As duas datas são iguais na maioria dos casos e se separam num caso que
+   acontece todo dia: o caminhão chega sem programação (a Portaria registra
+   a entrada, nasce `criadoEm`), fica no pátio, e a carga dele só é lançada
+   no dia seguinte. Até 14/08/2026 o filtro usava `criadoEm` e essa carga
+   sumia do relatório do dia em que foi realmente programada — relatado pelo
+   gestor: "puxa somente as cargas que chegaram hoje... tem que considerar
+   sempre a data de programação".
+
+   `programadoEm` é a data certa; `criadoEm` fica de reserva para as cargas
+   anteriores a esta mudança, que não têm o campo. */
 function filtrarPorDataProgramacao(cargas, de, ate){
   if(!de && !ate) return cargas.slice();
   // A data final vira o fim do dia: quem digita 05/08 quer o dia 05
@@ -1879,7 +1914,7 @@ function filtrarPorDataProgramacao(cargas, de, ate){
   const ini = de ? new Date(de + 'T00:00:00').getTime() : -Infinity;
   const fim = ate ? new Date(ate + 'T23:59:59.999').getTime() : Infinity;
   return cargas.filter(c=>{
-    const t = Date.parse(c.criadoEm || 0) || 0;
+    const t = Date.parse(c.programadoEm || c.criadoEm || 0) || 0;
     return t >= ini && t <= fim;
   });
 }
