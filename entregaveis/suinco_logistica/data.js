@@ -217,6 +217,12 @@ function upsertRota(codigo, nome, detalhe, operador, extra){
       Codigo: rota.codigo, Nome: rota.nome, Detalhe: rota.detalhe, Operador: rota.operador
     }, DB.operador).then(r=>{
       if(r && r.recusado && _aoRecusarRota) _aoRecusarRota(rota, r.erro);
+      /* Enfileirada = gravou aqui e AINDA não subiu. Precisa de aviso
+         próprio: o estado geral da conexão pode estar "online" e mesmo
+         assim esta gravação específica ter caído na fila (foi o caso do
+         incidente da rota 537 em 14/08/2026). Sem isto, quem cadastra vê
+         "cadastrada" e conclui que os outros setores já receberam. */
+      else if(r && r.enfileirado && _aoEnfileirarRota) _aoEnfileirarRota(rota);
     }).catch(e=>console.warn('[Suinco] sync rota:', e));
   }
   return rota;
@@ -736,6 +742,8 @@ function aoRecusarFrota(fn){ _aoRecusarFrota = fn; }
 /* Mesmo par, para o cadastro de Rota (Cadastros → só Administração). */
 let _aoRecusarRota = null;
 function aoRecusarRota(fn){ _aoRecusarRota = fn; }
+let _aoEnfileirarRota = null;
+function aoEnfileirarRota(fn){ _aoEnfileirarRota = fn; }
 
 /* ---------- FUSÃO DO ESTADO REMOTO (operação compartilhada) ----------
    Recebe o que veio das Listas e mescla no DB local. É o ponto mais delicado

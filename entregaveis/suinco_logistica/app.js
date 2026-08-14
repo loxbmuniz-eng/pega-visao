@@ -571,6 +571,21 @@ function receberRecusaDeFrota(frota, motivo){
 /* Mesmo aviso, para o cadastro de Rota. A rota continua no seletor deste
    aparelho — só não chegou ao servidor, então outros terminais ainda não
    vão vê-la. */
+/* A rota foi gravada aqui mas ainda não subiu — está na fila. É o aviso que
+   faltava no incidente de 14/08/2026: o gestor cadastrou a 537, viu verde, e
+   o programador nunca a recebeu. */
+function receberEnfileiramentoDeRota(rota){
+  const fila = (typeof SuincoSharePoint !== 'undefined' && SuincoSharePoint.pendentes)
+    ? SuincoSharePoint.pendentes() : 0;
+  notify(
+    `⚠️ Rota ${rota.codigo} ainda NÃO subiu ao servidor`
+    + (fila ? ` (${fila} na fila)` : '')
+    + '. Está salva neste aparelho e sobe sozinha quando a conexão voltar — '
+    + 'até lá os outros setores NÃO veem esta rota.',
+    'warn', 15000);
+  tocarAlertaAlteracao();
+}
+
 function receberRecusaDeRota(rota, motivo){
   notify(
     `Rota ${rota.codigo}: o servidor recusou o cadastro. ${motivo || ''} `
@@ -3022,7 +3037,25 @@ function addRotaUI(){
              document.getElementById('rota-operador').value);
   ['rota-codigo','rota-nome','rota-detalhe','rota-operador'].forEach(id=>document.getElementById(id).value='');
   preencherSelectsRota();   // dropdowns de Rota atualizados na hora
-  notify(jaExistia ? `Rota ${codigo} atualizada.` : `Rota ${codigo} — ${nome} cadastrada. Já aparece no seletor de Rota.`, 'success');
+  /* notifyGravacao, não notify('success') — incidente de 14/08/2026: o
+     gestor cadastrou a rota 537, viu "cadastrada" em verde, e ela não
+     apareceu para o programador nem depois de sair e entrar de novo.
+
+     A sincronização estava certa (reproduzido: quem loga do zero recebe a
+     rota do servidor). O que enganava era o aviso: cadastrando sem
+     conexão, a rota vai só para o localStorage e para a fila, e mesmo
+     assim a tela dizia "cadastrada. Já aparece no seletor de Rota" — em
+     verde, com cara de compartilhado. Quem cadastra vê a rota (verdade
+     local) e conclui que está feito para todos.
+
+     É exatamente o padrão do incidente das cargas, corrigido lá e que
+     tinha ficado de fora aqui. Agora o aviso conta o estado real: verde só
+     quando subiu; amarelo "SEM CONEXÃO … os outros setores ainda NÃO
+     veem" quando ficou na fila. A recusa do servidor já tinha aviso
+     próprio (receberRecusaDeRota) e continua valendo. */
+  notifyGravacao(jaExistia
+    ? `Rota ${codigo} atualizada.`
+    : `Rota ${codigo} — ${nome} cadastrada.`);
   renderAll();
 }
 // Filtro de texto (placa ou transportadora) + "só precisa revisão" — a base
@@ -4330,6 +4363,7 @@ async function init(){
     if(typeof aoRecusarCarga === 'function') aoRecusarCarga(receberRecusaDeCarga);
     if(typeof aoRecusarFrota === 'function') aoRecusarFrota(receberRecusaDeFrota);
     if(typeof aoRecusarRota === 'function') aoRecusarRota(receberRecusaDeRota);
+    if(typeof aoEnfileirarRota === 'function') aoEnfileirarRota(receberEnfileiramentoDeRota);
     SuincoSharePoint.iniciar()
       .then(()=>{ atualizarRodapeConexao(SuincoSharePoint.estado()); renderAll(); })
       .catch(e=>{ console.warn('[Suinco] init:', e); atualizarRodapeConexao('local'); });
