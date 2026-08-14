@@ -1338,6 +1338,26 @@ function criarCargaProgramada({placa, transportadora, tipoVeiculo, numeroCarga, 
 function registrarChegadaPortaria(placa, operador){
   const p = normalizarPlaca(placa);
   if(!p) throw new Error('Placa é obrigatória');
+
+  /* TRAVA DE FROTA NA PORTARIA — decisão do gestor em 14/08/2026:
+     "só vamos aceitar placas que estejam cadastradas, vinculadas a uma
+     transportadora no cadastro".
+
+     Até aqui a chegada sem programação era EXCEÇÃO à trava, de propósito:
+     a ideia era deixar o porteiro registrar a presença do caminhão mesmo
+     sem cadastro, e a Logística acertar depois. O gestor decidiu o
+     contrário — a placa é o vínculo com a transportadora, e caminhão sem
+     cadastro não deve gerar movimento nenhum no sistema.
+
+     A checagem fica ANTES dos dois caminhos (criar e atualizar) porque o
+     pedido foi justamente que nenhum movimento aconteça com placa fora da
+     base. E a mensagem precisa ensinar a saída: travar sem dizer o que
+     fazer só transfere o problema para o portão. */
+  if(!buscarFrota(p)){
+    throw new Error(`Placa ${p} não está cadastrada na Frota. `
+      + `Cadastre em Cadastros → Frota (com a transportadora) antes de registrar a chegada.`);
+  }
+
   const abertas = cargasAbertasPorPlaca(p);
 
   if(abertas.length === 0){

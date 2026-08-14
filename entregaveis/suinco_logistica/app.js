@@ -2321,7 +2321,19 @@ function acaoChegadaUI(){
   const input = document.getElementById('portaria-placa');
   const placa = input.value;
   if(!normalizarPlaca(placa)){ notify('Informe a placa.','warn'); return; }
-  const r = registrarChegadaPortaria(placa, nomeOperadorAtual());
+  let r;
+  try{
+    r = registrarChegadaPortaria(placa, nomeOperadorAtual());
+  }catch(e){
+    // A trava de frota na chegada (14/08/2026) passou a RECUSAR placa fora
+    // do cadastro. Sem este try/catch o erro subia sem tratamento e o
+    // porteiro não via aviso nenhum — a tela ficava muda, que é o pior
+    // resultado possível para quem está com o caminhão parado no portão.
+    notify(e.message, 'danger', 9000);
+    input.focus();
+    input.select();
+    return;
+  }
   if(r.criadas.length){
     notify(`${normalizarPlaca(placa)}: nenhuma programação encontrada — criada entrada "Aguardando Carga" (status Aguardando Embarque). Avise a Logística para completar os dados.`, 'warn');
     tocarBeepConfirmacao();
@@ -3458,6 +3470,47 @@ function carimboDoPeriodo(){
   return `emitido-${dia}_${String(d.getHours()).padStart(2,'0')}h${String(d.getMinutes()).padStart(2,'0')}`;
 }
 
+/* Junta a folha de estilo do painel para mandar junto com o relatório.
+
+   Por que não é `document.querySelector('style')`, que era o que estava
+   aqui até 14/08/2026: `querySelector` devolve o PRIMEIRO <style> do
+   documento, e o código assumia que o primeiro é o do build (o
+   build_arquivo_unico.py embute o CSS inteiro num <style> só). Basta
+   QUALQUER outro <style> nascer antes dele — extensão de navegador,
+   bloqueador de conteúdo, tema escuro de terceiro, tradutor de página —
+   para o painel mandar o conteúdo do intruso, quase sempre vazio, e o
+   servidor recusar com "Faltou o estilo do relatório (css)".
+
+   Foi o incidente relatado pelo dono do projeto no Safari: o painel na
+   tela estava perfeitamente estilizado (ou seja, a folha existia e tinha
+   conteúdo) e mesmo assim o relatório saía sem css. Nada tinha mudado no
+   código do relatório — mudou o que havia na frente dele no navegador.
+
+   Agora junta TODOS os <style>, e ainda varre as folhas ligadas por
+   <link> (caso alguém abra a fonte `index_suinco.html` em vez do arquivo
+   único, onde o CSS não está embutido). Folha de outra origem lança ao ler
+   `cssRules` por segurança do navegador — daí o try/catch: ignorar a que
+   não dá pra ler é melhor que derrubar a exportação inteira. */
+function coletarCssDoPainel(){
+  const partes = [];
+
+  document.querySelectorAll('style').forEach(s=>{
+    const t = s.textContent || '';
+    if(t.trim()) partes.push(t);
+  });
+
+  document.querySelectorAll('link[rel~="stylesheet"]').forEach(l=>{
+    try{
+      const regras = l.sheet && l.sheet.cssRules;
+      if(!regras) return;
+      const texto = [...regras].map(r=>r.cssText).join('\n');
+      if(texto.trim()) partes.push(texto);
+    }catch(e){ /* folha de outra origem: o navegador não deixa ler */ }
+  });
+
+  return partes.join('\n');
+}
+
 /* Substitui window.print(): monta o mesmo HTML que sempre foi montado,
    manda pro servidor gerar o PDF de verdade (A4 paisagem garantido) e
    baixa o arquivo pronto. */
@@ -3504,12 +3557,18 @@ async function exportarViaServidor(el, nomeDoRelatorio){
 
   notify('Gerando relatório em PDF…', 'info', 4000);
   try{
-    // A folha de estilo é o único <style> do arquivo (build_arquivo_unico.py
-    // embute tudo — CSS do painel inteiro + a fonte dos relatórios em
-    // base64). Mandar o texto inteiro garante que o servidor desenha com
-    // EXATAMENTE o mesmo CSS que o operador está vendo na pré-visualização,
-    // sem risco de as duas cópias ficarem desalinhadas com o tempo.
-    const css = (document.querySelector('style') || {}).textContent || '';
+    const css = coletarCssDoPainel();
+    if(!css.trim()){
+      // Melhor parar aqui e dizer o que houve do que gastar a viagem até o
+      // servidor pra ele responder "faltou o css" — que foi exatamente o
+      // que o operador viu no incidente de 14/08/2026, sem pista nenhuma
+      // do que fazer a respeito.
+      notify('Não achei a folha de estilo do painel para montar o relatório. '
+        + 'Recarregue a página (ou abra numa aba anônima, sem extensões) e tente de novo.',
+        'danger', 9000);
+      limpar();
+      return;
+    }
     const html = el.outerHTML;
     const blob = await SuincoSharePoint.gerarRelatorioPdf({ html, css, orientacao: 'retrato', nomeArquivo });
 

@@ -285,16 +285,34 @@ describe('3b. Chegada sem programação (Portaria)', () => {
     assert.equal(r.json.aguardandoCarga, true);
   });
 
-  test('placa FORA da frota é aceita quando é chegada sem programação', async () => {
-    // Diferente da Programação: um caminhão pode chegar fisicamente sem
-    // nunca ter sido cadastrado, e a Portaria precisa registrar a presença
-    // dele mesmo assim — a Logística corrige o cadastro depois.
+  test('placa FORA da frota é RECUSADA também na chegada sem programação', async () => {
+    /* ESTE TESTE INVERTEU DE PREMISSA EM 14/08/2026 — e o registro importa.
+
+       Ele nasceu afirmando o contrário: "placa FORA da frota é aceita
+       quando é chegada sem programação". A ideia era que um caminhão pode
+       chegar fisicamente sem nunca ter sido cadastrado, e a Portaria
+       precisava registrar a presença dele mesmo assim, com a Logística
+       corrigindo o cadastro depois.
+
+       O gestor decidiu o oposto: "só vamos aceitar placas que estejam
+       cadastradas, vinculadas a uma transportadora no cadastro". A placa é
+       o vínculo com a transportadora — sem cadastro, não há a quem
+       atribuir o veículo, e o movimento não deve existir.
+
+       Não é o teste que foi afrouxado para acompanhar o código: é a regra
+       de negócio que mudou, por decisão de quem opera. */
     const r = await req('/api/cargas', {
       metodo: 'POST', token: tokens['Portaria'],
       corpo: { id: 'chegada_2', placa: 'ZZZ0001', aguardandoCarga: true },
     });
-    assert.equal(r.status, 201, 'a trava de frota não deveria valer aqui');
-    assert.equal(r.json.status, 'Aguardando Embarque');
+    assert.equal(r.status, 422, 'a trava de frota vale para os dois caminhos');
+    assert.equal(r.json.codigo, 'PLACA_FORA_DA_FROTA');
+
+    // E não pode ter deixado carga fantasma no banco.
+    const { rows } = await pool.query(
+      'SELECT 1 FROM fact_viagens WHERE carga_id = $1', ['chegada_2']
+    );
+    assert.equal(rows.length, 0, 'placa recusada não pode gravar carga');
   });
 
   test('campos de negócio enviados pela Portaria são ignorados — servidor força a forma restrita', async () => {
