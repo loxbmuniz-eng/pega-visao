@@ -64,10 +64,54 @@ def ler(nome):
     return caminho.read_text(encoding='utf-8')
 
 
+def carimbar_service_worker(carimbo):
+    """Grava o carimbo do build dentro do sw.js.
+
+    Sem isto a auto-atualização do painel não funciona. O navegador só troca
+    o service worker quando os BYTES do sw.js mudam; se o arquivo é sempre
+    igual, `skipWaiting`/`clients.claim` nunca rodam de novo e a aba aberta
+    no pátio continua servindo a versão antiga. Carimbar aqui faz cada
+    deploy virar um SW novo — que é o gatilho da recarga automática.
+
+    O sw.js é registrado por JavaScript, então ele não passa pelo processo de
+    embutir tudo no arquivo único: continua sendo um arquivo próprio,
+    publicado ao lado do index.html. Por isso é reescrito no lugar.
+    """
+    caminho = BASE / 'sw.js'
+    if not caminho.exists():
+        # O painel funciona sem service worker (o registro é protegido por
+        # try/catch). Não é motivo para derrubar o build.
+        print('AVISO: sw.js não encontrado — build segue sem carimbá-lo')
+        return
+    texto = caminho.read_text(encoding='utf-8')
+    # Aceita aspas simples E duplas: a fonte versionada usa simples, mas o
+    # próprio build grava com json.dumps (duplas). Casar só com simples fazia
+    # o SEGUNDO build seguido abortar — encontrado rodando duas vezes.
+    novo, n = re.subn(
+        r"""^const BUILD = (?:'[^']*'|"[^"]*");$""",
+        lambda _: "const BUILD = " + json.dumps(carimbo, ensure_ascii=False) + ";",
+        texto,
+        flags=re.MULTILINE,
+    )
+    if n != 1:
+        sys.exit(f"ERRO: esperava 1 linha `const BUILD = '...';` em sw.js, "
+                 f"encontrei {n}. Sem ela a auto-atualização do painel para "
+                 f"de funcionar em silêncio — corrija antes de publicar.")
+    if novo != texto:
+        caminho.write_text(novo, encoding='utf-8')
+
+
 def main():
     # A fonte é sempre index_suinco.html. Não existe fallback para
     # index.html: esse é o ARQUIVO GERADO, e lê-lo como fonte faria o build
     # se alimentar da própria saída — o CSS e o JS entrariam duas vezes.
+    carimbo = carimbo_do_build()
+
+    # Mesmo carimbo no rodapé do painel e dentro do sw.js: quando alguém
+    # pergunta "atualizou?", a resposta é um olhar no rodapé, e o número que
+    # está lá é o mesmo que decidiu a troca do service worker.
+    carimbar_service_worker(carimbo)
+
     html = ler(FONTE)
     css = ler('styles.css')
     adapter_js = ler('suinco-api.js')
@@ -118,7 +162,7 @@ def main():
     # 3b. Carimbo do build. app.js lê window.SUINCO_BUILD e mostra no rodapé,
     #     para dar para responder "atualizou?" olhando a tela.
     seed += ('\n<script>window.SUINCO_BUILD = '
-             + json.dumps(carimbo_do_build(), ensure_ascii=False) + ';</script>')
+             + json.dumps(carimbo, ensure_ascii=False) + ';</script>')
 
     # 4. O adaptador da API entra inline. O <script> do Socket.IO continua
     #    apontando para o próprio backend: é uma biblioteca que só faz
