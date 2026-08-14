@@ -88,6 +88,21 @@ async def painel(nav, modo, rotulo):
 
     await pg.goto(url)
     await pg.wait_for_timeout(1000)
+
+    # Grava TODA mensagem que o painel mostra, em vez de ler a caixa de
+    # avisos no fim. A caixa é rotativa: uma sincronização que traga várias
+    # cargas ("atualizado por outro setor") empurra o aviso da rota para
+    # fora, e o teste falharia por causa do estado do banco, não do código
+    # — foi o que aconteceu ao rodar a suíte inteira em sequência.
+    await pg.evaluate("""() => {
+        window.__avisos = [];
+        const orig = window.notify;
+        window.notify = function(msg, tipo, ms){
+            window.__avisos.push(String(msg));
+            return orig.apply(this, arguments);
+        };
+    }""")
+
     await pg.fill('#login-email', EMAIL)
     await pg.fill('#login-senha', SENHA)
     await pg.click('#btn-entrar')
@@ -97,9 +112,7 @@ async def painel(nav, modo, rotulo):
 
 
 async def avisos(pg):
-    return ' | '.join(await pg.evaluate(
-        "() => [...document.querySelectorAll('#notif *')]"
-        ".map(e=>e.textContent.trim()).filter(Boolean)"))
+    return ' | '.join(await pg.evaluate("() => window.__avisos || []"))
 
 
 async def cadastrar(pg, codigo):

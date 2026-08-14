@@ -548,6 +548,21 @@ const SuincoStore = {
       Paletizada: paletizadaDaCarga(carga),
       Qtd_Ganchos: carga.qtdGanchos || 0,
       Qtd_Entregas: carga.qtdEntregas ?? 1,
+      /* A observação é o campo do relatório Administração de Fretes (valor
+         de frete, negociação, instruções). Ela ficou de fora deste pacote
+         até 14/08/2026 e o gestor relatou o efeito: "a Administração de
+         Fretes não está puxando as observações, nem de ontem nem de hoje".
+
+         O servidor sempre teve a coluna e sempre aceitou o campo
+         (dominio/cargas.js, CAMPOS_EDITAVEIS em fluxo.js) — quem não
+         mandava era o painel, e o adaptador lia `campos.Observacoes`, que
+         chegava sempre undefined. A observação vivia só no navegador de
+         quem digitou; para todos os outros o relatório saía em branco.
+
+         Mesma família do bug do cadastro de Frota, que mandava 3 campos e
+         zerava capacidade e UF: campo esquecido no pacote de ida, sem erro
+         nenhum na tela. */
+      Observacoes: carga.observacoes || '',
       Status_Atual: carga.status,
       Aguardando_Carga: !!carga.aguardandoCarga,
       Criado_Em: carga.criadoEm,
@@ -908,6 +923,14 @@ function cargaDeLinhaRemota(r){
     paletizada: r.Paletizada === 'Sim' ? 'Sim' : 'Não',
     qtdGanchos: Number(r.Qtd_Ganchos) || 0,
     qtdEntregas: r.Qtd_Entregas === undefined ? 1 : (Number(r.Qtd_Entregas) || 1),
+    /* Terceiro e último ponto onde a observação se perdia (14/08/2026).
+       Ela precisava ser adicionada nos TRÊS: no pacote de ida
+       (SuincoStore.sincronizarCarga), na tradução de volta do adaptador
+       (daApiParaLinha) e aqui, que é onde a carga do servidor vira carga
+       do painel. Faltando em qualquer um dos três, o campo some sem erro
+       nenhum — foi o que deixou o relatório Administração de Fretes em
+       branco para todo mundo. */
+    observacoes: r.Observacoes || '',
     status: STATUS_FLOW.includes(r.Status_Atual) ? r.Status_Atual : STATUS_FLOW[0],
     aguardandoCarga: r.Aguardando_Carga === true || r.Aguardando_Carga === 'Sim',
     criadoEm: r.Criado_Em || nowISO(),
