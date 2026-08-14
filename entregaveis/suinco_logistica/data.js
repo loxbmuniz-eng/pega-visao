@@ -447,6 +447,9 @@ let DB = {
      Espelha a separação que o banco já faz entre fact_StatusFrota (etapas)
      e LOG_EVENTOS (auditoria). Append-only, como o outro. */
   alteracoes: [],
+  /* Marca de "esta versão da carga já subiu", por id. Persistida de
+     propósito: ver o comentário em SuincoStore._ultimoSync. */
+  _sincronizado: {},
   operador: null,          // {nome, setor, turno} — placeholder até SSO
   dark: true
 };
@@ -458,6 +461,12 @@ const SuincoStore = {
       const raw = localStorage.getItem(STORAGE_KEY);
       if(raw) Object.assign(DB, JSON.parse(raw));
       invalidarIndiceFrota();
+      if(!DB._sincronizado || typeof DB._sincronizado !== 'object') DB._sincronizado = {};
+      // Poda: sem isto a marca cresceria para sempre, guardando id de carga
+      // que já saiu do painel.
+      const vivas = new Set(DB.cargas.map(c => c.id));
+      Object.keys(DB._sincronizado).forEach(id => { if(!vivas.has(id)) delete DB._sincronizado[id]; });
+      SuincoStore._ultimoSync = new Map(Object.entries(DB._sincronizado));
       // ROTAS é constante de código: recomeça do zero (só as 33 do seed) a
       // cada carga de página. As cadastradas pela tela ficam salvas em
       // DB.rotasExtras — reaplicar aqui é o que faz uma rota nova
@@ -487,6 +496,23 @@ const SuincoStore = {
   // Marca de quando cada carga foi sincronizada pela última vez. Só sobe o
   // que mudou de fato — save() é chamado com frequência e reenviar tudo a
   // cada clique geraria tráfego inútil contra o tenant.
+  /* O QUE JÁ SUBIU AO SERVIDOR — precisa sobreviver ao recarregamento.
+
+     Era só um Map em memória, e isso causou perda de dado em produção
+     (14/08/2026): a cada F5 ele nascia vazio, e a primeira gravação
+     reenviava TODAS as cargas do cache local com os valores daquele
+     navegador. Um terminal que estava só com a tela aberta desfazia o que
+     outro setor tinha acabado de gravar — observação apagada, data de
+     programação voltando para a data de chegada — sem ninguém ter editado
+     nada.
+
+     Ficou visível no banco: 109 cargas com `atualizado_em` nos mesmos dois
+     instantes, logo depois de o serviço reiniciar e os painéis recarregarem.
+     A auto-atualização (que recarrega a aba sozinha) tornou isso frequente.
+
+     Agora a marca vive em DB._sincronizado, que é persistido junto com o
+     resto. Depois de um F5 o painel sabe o que já subiu e só envia o que
+     ele mesmo mudou. */
   _ultimoSync: new Map(),
 
   /* Último status que o SERVIDOR confirmou para cada carga.
@@ -514,6 +540,8 @@ const SuincoStore = {
       const marca = c.atualizadoEm || c.criadoEm || '';
       if(this._ultimoSync.get(c.id) === marca) return;      // nada mudou nesta
       this._ultimoSync.set(c.id, marca);
+      if(!DB._sincronizado) DB._sincronizado = {};
+      DB._sincronizado[c.id] = marca;                       // sobrevive ao F5
       this.sincronizarCarga(c, DB.operador).catch(e=>console.warn('[Suinco] sync carga:', e));
     });
   },
@@ -878,7 +906,12 @@ function fundirEstadoRemoto(dados){
     // Marca como já sincronizado o que acabou de VIR do servidor, senão o
     // save() abaixo devolveria tudo de volta — um eco infinito entre os
     // terminais, cada leitura gerando uma escrita.
-    DB.cargas.forEach(c => SuincoStore._ultimoSync.set(c.id, c.atualizadoEm || c.criadoEm || ''));
+    if(!DB._sincronizado) DB._sincronizado = {};
+    DB.cargas.forEach(c => {
+      const marca = c.atualizadoEm || c.criadoEm || '';
+      SuincoStore._ultimoSync.set(c.id, marca);
+      DB._sincronizado[c.id] = marca;
+    });
     SuincoStore.save();
   }
   return res;
