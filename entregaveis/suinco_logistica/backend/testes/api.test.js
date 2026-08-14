@@ -1810,3 +1810,65 @@ describe('14. Motorista habitual da placa (dim_veiculos.motorista)', () => {
     assert.equal(r.status, 403);
   });
 });
+
+/* ------------------------------------------------------------------ */
+describe('15. Data de programação é gravável uma vez só', () => {
+  /* Achado de produção (14/08/2026): depois de reiniciar o serviço, 109
+     cargas apareceram com `atualizado_em` nos mesmos dois instantes — eram
+     os painéis reconectando e reenviando o que tinham em memória.
+
+     Como cada painel reenvia a carga inteira, um terminal com cópia velha
+     mandava a data de programação antiga de volta e desfazia a data correta
+     gravada por quem lançou a carga. O relatório voltava a errar sozinho.
+
+     Por isso a coluna é COALESCE e não atribuição: quem lança define, eco
+     de sincronia não move. */
+  let idCarga;
+
+  before(async () => {
+    const { rows } = await pool.query('SELECT placa FROM dim_veiculos LIMIT 1');
+    idCarga = `prog_em_${Date.now()}`;
+    // Nasce como chegada sem programação: sem data de programação ainda.
+    await pool.query(
+      `INSERT INTO fact_viagens (carga_id, numero_carga, placa, aguardando_carga,
+                                 status_atual, programado_em)
+       VALUES ($1,'Aguardando Carga',$2,TRUE,'Aguardando Embarque',NULL)`,
+      [idCarga, rows[0].placa]
+    );
+  });
+
+  after(async () => {
+    await pool.query('DELETE FROM fact_viagens WHERE carga_id = $1', [idCarga]);
+  });
+
+  test('a primeira gravação define a data', async () => {
+    const quando = '2026-08-14T18:30:00.000Z';
+    const r = await req(`/api/cargas/${idCarga}`, {
+      metodo: 'PATCH', token: tokens['Logística'],
+      corpo: { numeroCarga: '900777', aguardandoCarga: false, programadoEm: quando },
+    });
+    assert.equal(r.status, 200);
+    const { rows } = await pool.query(
+      'SELECT programado_em FROM fact_viagens WHERE carga_id = $1', [idCarga]
+    );
+    assert.equal(new Date(rows[0].programado_em).toISOString(), quando);
+  });
+
+  test('eco de sincronia NÃO move a data já definida', async () => {
+    // É exatamente o que o painel de um colega faz ao reconectar: reenvia a
+    // carga com a data que ele tinha — no caso, a da chegada.
+    const dataDaChegada = '2026-08-13T10:00:00.000Z';
+    const r = await req(`/api/cargas/${idCarga}`, {
+      metodo: 'PATCH', token: tokens['Logística'],
+      corpo: { observacoes: 'eco de sincronia', programadoEm: dataDaChegada },
+    });
+    assert.equal(r.status, 200);
+    const { rows } = await pool.query(
+      'SELECT programado_em FROM fact_viagens WHERE carga_id = $1', [idCarga]
+    );
+    assert.equal(
+      new Date(rows[0].programado_em).toISOString(), '2026-08-14T18:30:00.000Z',
+      'a data de quem lançou a carga não pode ser desfeita por sincronização'
+    );
+  });
+});
