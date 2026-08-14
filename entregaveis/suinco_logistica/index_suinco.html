@@ -235,7 +235,7 @@
 
     <div class="card">
       <div class="card-title"><span class="icon">⏳</span> Aguardando Carga <span id="prog-aguardando-count" class="pill-count" hidden>0</span></div>
-      <div class="card-sub">Veículos que a Portaria já registrou no pátio sem programação prévia (status "Aguardando Embarque", com "Aguardando Carga" no campo Número da Carga). Complete os dados reais abaixo — o status não muda, o caminhão já está fisicamente aqui.</div>
+      <div class="card-sub">Veículos que a Portaria registrou no pátio sem programação prévia. Use <strong>Criar carga</strong> na linha do veículo para lançar a carga dele — o caminhão já está aqui, então o status não volta atrás.</div>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Placa</th><th>Transportadora</th><th>Tipo Veículo</th><th>Chegou em</th><th class="no-print">Ação</th></tr></thead>
@@ -949,7 +949,7 @@
 
 <div class="modal-overlay" id="modal-completar">
   <div class="modal-box">
-    <h2>Completar dados da carga (Aguardando Carga)</h2>
+    <h2>Criar carga do veículo que já está no pátio</h2>
     <input type="hidden" id="completar-id">
     <div class="card-sub" id="completar-placa-info"></div>
     <!-- ORDEM E CAMPOS IDÊNTICOS À ABA PROGRAMAÇÃO.

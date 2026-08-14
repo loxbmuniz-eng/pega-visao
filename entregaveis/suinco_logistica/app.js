@@ -2246,7 +2246,13 @@ function renderProgAguardando(){
       <td>${esc(c.placa)}</td><td>${esc(c.transportadora)||'—'}</td><td>${esc(c.tipoVeiculo)||'—'}</td>
       <td>${fmtDataHora(c.criadoEm)}</td>
       <td class="no-print gap8">
-        <button class="btn btn-primary btn-sm" onclick="abrirCompletar('${escJs(c.id)}')">Completar dados</button>
+        <!-- "Criar carga", não "Completar dados" — pedido do programador
+             de cargas (12/08/2026), e a palavra dele descreve melhor o que
+             acontece: o caminhão chegou sem programação, então ele está
+             CRIANDO a carga daquele veículo, não preenchendo lacunas de
+             algo que já existia. O botão é o mesmo, o fluxo é o mesmo; o
+             nome é que estava contando outra história. -->
+        <button class="btn btn-primary btn-sm" onclick="abrirCompletar('${escJs(c.id)}')">➕ Criar carga</button>
         <!-- Excluir aqui — pedido do usuário (11/08/2026): "ADICIONAR UM
              BOTAO DE EXCLUIR NO AGUARDANDO CARGA". Caminhão que a Portaria
              registrou por engano (placa errada, veículo que só passou)
