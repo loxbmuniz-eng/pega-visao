@@ -58,9 +58,14 @@ rotasCargas.post('/cargas', exigirLogin, async (req, res, next) => {
        CHEGADA SEM PROGRAMAÇÃO (Portaria) — um caminhão que apareceu no
        pátio sem programação prévia. O corpo do cliente não decide nada além
        da placa (saneiarCriacaoChegadaSemProgramacao ignora o resto de
-       propósito — ver o comentário lá), e a trava de frota NÃO vale: a
-       Portaria precisa registrar a presença do caminhão mesmo que ele nunca
-       tenha sido cadastrado. A Logística corrige o cadastro depois.
+       propósito — ver o comentário lá).
+
+       A trava de frota vale para OS DOIS caminhos desde 14/08/2026. Até
+       então a chegada sem programação era exceção — a Portaria registrava
+       a presença mesmo de placa nunca cadastrada, e a Logística acertava o
+       cadastro depois. O gestor decidiu o contrário: a placa é o vínculo
+       com a transportadora, e caminhão sem cadastro não gera movimento
+       nenhum. Quem chega sem cadastro precisa ser cadastrado primeiro.
 
        `aguardandoCarga:true` é o que escolhe o caminho. Não é o cliente
        quem decide se PODE usá-lo — isso é podeRegistrarChegadaSemProgramacao,
@@ -109,7 +114,7 @@ rotasCargas.post('/cargas', exigirLogin, async (req, res, next) => {
       'SELECT placa, transportadora, tipo_veiculo FROM dim_veiculos WHERE placa = $1',
       [placa]
     );
-    if (!frotaRows[0] && !chegadaSemProgramacao) {
+    if (!frotaRows[0]) {
       return res.status(422).json({
         erro: `Placa ${placa} não está cadastrada na Frota. ` +
               `Cadastre em Cadastros → Frota antes de programar esta carga.`,
