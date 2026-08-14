@@ -18,7 +18,24 @@
    usuário precisa ter aberto pelo menos uma vez com rede. Depois disso, a
    tela abre offline e a fila cuida das gravações. */
 
-const VERSAO = 'suinco-v1';
+/* CARIMBO DO BUILD — reescrito por build_arquivo_unico.py a cada geração.
+
+   Existe por um motivo específico e já observado em produção: o navegador
+   só instala um service worker novo se os BYTES do sw.js mudarem. Enquanto
+   esta linha era fixa ('suinco-v1'), 44 deploys seguidos de index.html não
+   mexeram em nada aqui — então nenhum SW novo era instalado, `skipWaiting`
+   e `clients.claim` nunca rodavam, `controllerchange` nunca disparava, e a
+   recarga automática descrita em index_suinco.html simplesmente não
+   acontecia. Quem ficava com a aba aberta o turno inteiro (o caso normal no
+   pátio) seguia na versão velha sem nenhum sinal disso.
+
+   Com o carimbo aqui dentro, todo build muda este arquivo, o navegador
+   instala o SW novo e a auto-atualização funciona como está documentada.
+   Trocar o nome do cache junto é de propósito: o `activate` apaga os caches
+   de versões anteriores, e com isso a cópia velha do index.html sai de cena
+   em vez de sobreviver a um deploy. */
+const BUILD = "14/08 14:59 · ec89ff1";
+const VERSAO = 'suinco-' + BUILD;
 const ESSENCIAIS = [
   './',
   './index.html',
