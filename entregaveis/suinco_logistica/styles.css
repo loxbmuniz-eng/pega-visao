@@ -2837,3 +2837,32 @@ input,select,textarea{border-radius:5px}
      procura primeiro. */
   #print-fretes .col-carga{ background:rgba(185,144,63,.22) !important }
 }
+
+/* Aviso de conferência dos números da carga, dentro do relatório.
+
+   Amarelo de atenção e não vermelho de erro: o relatório continua válido,
+   o que muda é que o total pode estar somando carga repetida. Quem lê
+   precisa reparar, não se assustar.
+
+   Cores fixas (não tokens do tema): isto é impresso em papel, e os tokens
+   do painel escuro saem quase invisíveis na folha branca. */
+.doc-aviso-numeracao{
+  margin: 6px 0 0;
+  padding: 6px 8px;
+  border: 1px solid #b8860b;
+  border-left: 3px solid #b8860b;
+  background: #fdf6e3;
+  color: #4a3b00;
+  font-size: 8.6px;
+  line-height: 1.35;
+  border-radius: 3px;
+}
+.doc-aviso-numeracao strong{ color: #6b4e00; }
+@media print{
+  .doc-aviso-numeracao{
+    background: #fdf6e3 !important;
+    color: #4a3b00 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
