@@ -221,6 +221,26 @@ rotasCargas.patch('/cargas/:id', exigirLogin, async (req, res, next) => {
       return res.status(404).json({ erro: 'Carga não encontrada.', codigo: 'CARGA_NAO_ENCONTRADA' });
     }
 
+    /* REDE DE SEGURANÇA: lançar a carga carimba a data de programação AQUI,
+       mesmo que o painel não a mande.
+
+       Sair de `aguardando_carga: true` para `false` é, por definição, o
+       momento em que a carga de um caminhão que já estava no pátio foi
+       lançada. O painel atualizado manda `programadoEm` junto; um painel em
+       versão antiga não manda campo nenhum, e aí a carga ficava sem data de
+       programação e caía na data de CHEGADA na leitura — voltando a sumir do
+       relatório do dia em que foi lançada.
+
+       Depender de todo terminal estar atualizado no mesmo minuto não
+       funciona numa operação com seis setores e turnos diferentes. O
+       servidor sabe o suficiente para decidir sozinho, então decide.
+
+       Combina com o COALESCE abaixo: só entra se ainda não houver data, e
+       nunca sobrescreve o que o painel informou. */
+    if (mudancas.aguardando_carga === false && mudancas.programado_em === undefined) {
+      mudancas.programado_em = new Date();
+    }
+
     const cols = Object.keys(mudancas);
     /* `programado_em` é GRAVÁVEL UMA VEZ SÓ — COALESCE, não atribuição.
 
