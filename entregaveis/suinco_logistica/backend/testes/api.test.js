@@ -1936,3 +1936,71 @@ describe('16. Observação não é apagada por eco de sincronização', () => {
     assert.equal(await leObs(), 'Frete revisado R$ 2.600');
   });
 });
+
+/* ------------------------------------------------------------------ */
+describe('17. Lançar a carga carimba a data mesmo com painel antigo', () => {
+  /* Relato do gestor (14/08/2026, terceira rodada): "tem mais duas placas
+     que deram entrada ontem, fez o lançamento hoje e não está puxando".
+
+     O painel atualizado manda `programadoEm` ao lançar a carga. Um painel em
+     versão ANTIGA não manda campo nenhum — e a carga ficava sem data de
+     programação, caindo na data de CHEGADA na leitura. Ou seja: sumia do
+     relatório do dia em que foi lançada, exatamente como antes.
+
+     Numa operação com seis setores e turnos diferentes não dá para exigir
+     que todo terminal esteja atualizado no mesmo minuto. Sair de
+     `aguardando_carga` é, por definição, o momento do lançamento — o
+     servidor tem essa informação e passa a carimbar sozinho. */
+  let idCarga;
+
+  before(async () => {
+    const { rows } = await pool.query('SELECT placa FROM dim_veiculos LIMIT 1');
+    idCarga = `sem_prog_${Date.now()}`;
+    // Chegada de ontem, ainda sem carga lançada e sem data de programação —
+    // o estado em que a migration 008 deixa quem está no pátio.
+    await pool.query(
+      `INSERT INTO fact_viagens (carga_id, numero_carga, placa, aguardando_carga,
+                                 status_atual, criado_em, programado_em)
+       VALUES ($1,'Aguardando Carga',$2,TRUE,'Aguardando Embarque',
+               now() - interval '1 day', NULL)`,
+      [idCarga, rows[0].placa]
+    );
+  });
+
+  after(async () => {
+    await pool.query('DELETE FROM fact_viagens WHERE carga_id = $1', [idCarga]);
+  });
+
+  test('painel ANTIGO lança a carga sem mandar a data — servidor carimba hoje', async () => {
+    const r = await req(`/api/cargas/${idCarga}`, {
+      metodo: 'PATCH', token: tokens['Logística'],
+      // Repare: nenhum `programadoEm` no corpo, como faz a versão antiga.
+      corpo: { numeroCarga: '901234', aguardandoCarga: false, peso: 21000 },
+    });
+    assert.equal(r.status, 200);
+
+    const { rows } = await pool.query(
+      `SELECT programado_em::date = CURRENT_DATE AS eh_hoje,
+              criado_em::date < CURRENT_DATE   AS chegou_antes
+         FROM fact_viagens WHERE carga_id = $1`, [idCarga]
+    );
+    assert.equal(rows[0].eh_hoje, true, 'a data de programação tem que ser hoje');
+    assert.equal(rows[0].chegou_antes, true, 'a data de chegada não pode ser mexida');
+  });
+
+  test('a data carimbada não é movida por sincronização posterior', async () => {
+    const antes = (await pool.query(
+      'SELECT programado_em FROM fact_viagens WHERE carga_id = $1', [idCarga]
+    )).rows[0].programado_em;
+
+    await req(`/api/cargas/${idCarga}`, {
+      metodo: 'PATCH', token: tokens['Portaria'],
+      corpo: { motorista: 'Eco de sincronia', programadoEm: '2026-08-01T00:00:00.000Z' },
+    });
+
+    const depois = (await pool.query(
+      'SELECT programado_em FROM fact_viagens WHERE carga_id = $1', [idCarga]
+    )).rows[0].programado_em;
+    assert.equal(String(antes), String(depois));
+  });
+});
