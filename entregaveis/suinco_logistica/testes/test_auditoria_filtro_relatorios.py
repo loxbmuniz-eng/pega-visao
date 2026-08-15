@@ -52,7 +52,13 @@ async def main():
                         numeroCarga: `D${d}-${k}`, peso: 9000, rota:'500',
                         operador:'Ana'});
                     const t = new Date(Date.now() - d*86400000).toISOString();
-                    c.criadoEm = t; c.atualizadoEm = t;
+                    /* `programadoEm` entrou em 14/08/2026 e passou a ser o
+                       campo que o relatório recorta. Antes disso a data de
+                       programação ERA `criadoEm`, e este teste envelhecia só
+                       ele — o que agora descreveria outra situação (carga
+                       que chegou há dias e foi lançada hoje), não "carga
+                       programada há dias" que é o cenário daqui. */
+                    c.criadoEm = t; c.atualizadoEm = t; c.programadoEm = t;
                 }
             });
             SuincoStore.save(); renderAll();

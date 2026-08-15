@@ -96,6 +96,34 @@ async def main():
         ck('carga da manhã do dia 14 ENTRA no dia 14', r['manha14'], str(r))
         ck('carga das 23:00 do dia 13 NÃO entra no dia 14', not r['noite13'], str(r))
 
+        print('\n=== O BOTÃO "HOJE" USA O DIA DO PÁTIO, NÃO O DO SERVIDOR ===')
+        # Relatado ao vivo em 15/08/2026, às 23h32 locais: "ainda são 11 e 32
+        # e o relatório já está falando dia 15". O atalho montava a data com
+        # toISOString(), que é sempre UTC — das 21h à meia-noite ele pulava
+        # para o dia seguinte e o dia inteiro de trabalho sumia do relatório.
+        # É justamente o fim do turno, quando o relatório do dia é fechado.
+        atalho = await pg.evaluate("""() => {
+            // Congela o relógio às 23h32 do dia 14 em Patos de Minas.
+            const Real = Date;
+            const fixo = new Real('2026-08-15T02:32:00.000Z');   // = 14/08 23:32 local
+            // eslint-disable-next-line no-global-assign
+            Date = class extends Real {
+                constructor(...a){ return a.length ? new Real(...a) : new Real(fixo); }
+                static now(){ return fixo.getTime(); }
+            };
+            try {
+                filtroRelatorioAtalho('hoje');
+                return {
+                    de: document.getElementById('rel-data-de').value,
+                    ate: document.getElementById('rel-data-ate').value,
+                    hora_local: new Real(fixo).toLocaleString('pt-BR', {timeZone: 'America/Sao_Paulo'}),
+                };
+            } finally { Date = Real; }
+        }""")
+        ck('às 23h32 do dia 14, o atalho "Hoje" preenche 14/08 (não 15/08)',
+           atalho['de'] == '2026-08-14' and atalho['ate'] == '2026-08-14',
+           f"de={atalho['de']} ate={atalho['ate']} · relógio do pátio: {atalho['hora_local']}")
+
         print('\n=== O NOME DO ARQUIVO USA O DIA LOCAL ===')
         # Se o carimbo do arquivo virar antes da meia-noite do pátio, dois
         # relatórios do mesmo turno saem com nomes de dias diferentes.
