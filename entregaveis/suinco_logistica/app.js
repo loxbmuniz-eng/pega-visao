@@ -1596,6 +1596,37 @@ function ordenarPorSequenciaEAtualizacao(a,b){
    A ordem segue a própria linha do tempo: o que ainda não chegou fica no
    topo, o que já saiu fica no fim. Assim a parte que ainda exige ação está
    sempre na parte de cima da folha. */
+/* Ordem do Relatório Operacional: a SEQUÊNCIA DE CARREGAMENTO manda.
+
+   Pedido do gestor (15/08/2026), com a planilha dele na mão: "o relatório
+   operacional precisa seguir a sequência de carga colocada no painel".
+
+   Antes a folha era ordenada pela etapa do processo (todos os "Aguardando
+   Embarque" juntos, depois os "Faturado"...) e a sequência só desempatava
+   dentro de cada etapa. Isso faz sentido para acompanhar o andamento, mas
+   não para MONTAR a fila: quem está no pátio precisa da ordem 1, 2, 3, e
+   com a ordenação por etapa a carga 3 podia aparecer dez linhas abaixo da
+   30 só porque avançou de status antes.
+
+   O status continua na folha, com a cor — o que muda é só a ordem das
+   linhas, que passa a ser a mesma da tela e a mesma da planilha que a
+   operação já usava.
+
+   Sem sequência preenchida vai para o fim: é carga que ainda não entrou na
+   fila, e jogá-la para o meio empurraria a numeração de quem já está. */
+function ordenarPorSequenciaDeCarregamento(a, b){
+  const sa = (a.sequencia === null || a.sequencia === undefined || a.sequencia === '')
+    ? Infinity : Number(a.sequencia);
+  const sb = (b.sequencia === null || b.sequencia === undefined || b.sequencia === '')
+    ? Infinity : Number(b.sequencia);
+  if(sa !== sb) return sa - sb;
+  // Empate real (duas cargas com a mesma sequência digitada): mantém a
+  // ordem estável pelo número da carga, para a folha não trocar de ordem a
+  // cada geração e confundir quem compara duas impressões.
+  return String(a.numeroCarga || '').localeCompare(
+    String(b.numeroCarga || ''), 'pt-BR', {numeric: true});
+}
+
 function ordenarPorEtapaDaTimeline(a,b){
   const ia = STATUS_FLOW.indexOf(a.status);
   const ib = STATUS_FLOW.indexOf(b.status);
@@ -2118,7 +2149,10 @@ function atualizarPlacaUI(id, val){
 function atualizarNumeroCargaUI(id, val){
   const c = getCarga(id);
   if(!c) return;
-  const novo = (val||'').trim();
+  /* Limpa aspas e espaços que vieram da digitação. O caso real que motivou
+     isto: `118176'` entrou no sistema com uma aspa no fim e não casava com
+     nada — nem na busca, nem na conferência do relatório. */
+  const novo = normalizarNumeroCarga(val);
 
   if(!novo){
     notify('Número da carga não pode ficar em branco.', 'warn');
@@ -3703,7 +3737,7 @@ async function exportarPdfOperacional(){
   // Segue de fora apenas o que a Portaria registrou sem programação prévia
   // (aguardandoCarga), que ainda não tem dados para sequenciar.
   // Respeita o filtro de Data da Programação da aba Relatórios.
-  const lista = cargasDoRelatorio().slice().sort(ordenarPorEtapaDaTimeline);
+  const lista = cargasDoRelatorio().slice().sort(ordenarPorSequenciaDeCarregamento);
   const linhas = lista.map((c)=>{
     const pesoTon = ((c.peso||0)/1000).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
     const praOndeStyle = c.praOnde ? `style="background:${CORES_PRA_ONDE[c.praOnde]||'#e9b954'};color:#fff;font-weight:800"` : '';
@@ -3779,14 +3813,15 @@ async function exportarPdfOperacional(){
            quem mantém o sistema, não a quem lê a folha no pátio. O que
            sobra é a única coisa que o leitor precisa saber e não consegue
            deduzir olhando a tabela. -->
+      ${avisoDeNumeracao(lista)}
       ${rodapeDocumento(
         'Todas as cargas da programação aparecem, em qualquer status — as concluídas ' +
         'continuam na lista para o acompanhamento do dia inteiro.<br>' +
         '<strong>Palet.</strong> = carga paletizada · <strong>Entr.</strong> = quantidade de ' +
         'entregas · <strong>Liso</strong> = sem gancheira.',
-        'Todas as cargas do período selecionado, ordenadas pela etapa em que '
-        + 'se encontram e, dentro de cada etapa, pela sequência de carregamento '
-        + 'definida pela Logística. Cargas excluídas ou canceladas não entram.',
+        'Todas as cargas do período selecionado, na SEQUÊNCIA DE CARREGAMENTO '
+        + 'definida pela Logística — a mesma ordem da tela. Cargas sem sequência '
+        + 'aparecem no fim. Cargas excluídas ou canceladas não entram.',
         fichaDocumento({
           titulo: 'Relatório Operacional',
           contagem: lista.length,
@@ -3976,6 +4011,48 @@ function fonteDocumento(texto){
    Estava entre o cabeçalho e o primeiro dado, empurrando o conteúdo folha
    abaixo em todos os três relatórios. No rodapé cumpre a mesma função, ao
    lado da nota de alcance e limitações, que é a seção do mesmo assunto. */
+/* Aviso de conferência dos números da carga, impresso no próprio relatório.
+
+   Pedido do gestor (15/08/2026): "o relatório precisa ser muito fiel aos
+   números das cargas, não pode existir erro nesse relatório".
+
+   O sistema não tem como adivinhar que `118713` era pra ser `118173`, nem
+   escolher qual das duas cargas `118105` é a verdadeira. O que ele PODE
+   fazer — e não fazia — é parar de imprimir um total como se estivesse
+   tudo certo. Número repetido soma a mesma carga duas vezes no rodapé, que
+   é exatamente a conferência de tonelagem que não fechava.
+
+   Fica junto do total, não no fim da folha: quem confere olha o total, e é
+   ali que a dúvida precisa aparecer. Não bloqueia nada — o relatório sai
+   igual, só deixa de esconder. */
+function avisoDeNumeracao(lista){
+  const p = problemasDeNumeracao(lista);
+  if(!p.total) return '';
+
+  const partes = [];
+  if(p.duplicados.length){
+    const itens = p.duplicados.map(d =>
+      `<strong>${esc(d.numero)}</strong> (${d.quantidade}× — ${esc(d.placas.join(', '))}` +
+      `${d.pesoSomado ? ` · ${(d.pesoSomado/1000).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})} t somadas` : ''})`
+    ).join(' · ');
+    partes.push(`<strong>${p.duplicados.length} número(s) repetido(s):</strong> ${itens}. `
+      + 'O total acima soma essas cargas mais de uma vez.');
+  }
+  if(p.foraDoPadrao.length){
+    const itens = p.foraDoPadrao.map(f =>
+      `<strong>${esc(f.numero)}</strong> (${esc(f.carga.placa)})`).join(' · ');
+    partes.push(`<strong>${p.foraDoPadrao.length} número(s) fora do padrão:</strong> ${itens}.`);
+  }
+  if(p.semNumero.length){
+    const itens = p.semNumero.map(c => esc(c.placa)).join(' · ');
+    partes.push(`<strong>${p.semNumero.length} carga(s) sem número:</strong> ${itens}.`);
+  }
+
+  return `<div class="doc-aviso-numeracao">
+    <strong>⚠ Conferir antes de usar este relatório</strong><br>${partes.join('<br>')}
+  </div>`;
+}
+
 function rodapeDocumento(nota, base, ficha){
   return `<div class="doc-rodape">
       ${nota ? `<div class="doc-nota">${nota}</div>` : ''}

@@ -944,7 +944,7 @@ function cargaDeLinhaRemota(r){
   if(!id){ console.warn('[Suinco] registro descartado: Carga_ID fora do formato', r.Carga_ID); return null; }
   return {
     id,
-    numeroCarga: r.Numero_Carga || '',
+    numeroCarga: normalizarNumeroCarga(r.Numero_Carga),
     placa: normalizarPlaca(r.Placa || ''),
     transportadora: r.Transportadora || '',
     tipoVeiculo: r.Tipo_Veiculo || '',
@@ -1363,7 +1363,7 @@ function criarCargaProgramada({placa, transportadora, tipoVeiculo, numeroCarga, 
   }
   const carga = {
     id: uid('carga'),
-    numeroCarga: numeroCarga||'',
+    numeroCarga: normalizarNumeroCarga(numeroCarga),
     placa: p,
     transportadora: transportadora || frota.transportadora,
     tipoVeiculo: tipoVeiculo || frota.tipoVeiculo,
@@ -1477,7 +1477,7 @@ function completarCargaAguardando(cargaId, {numeroCarga, cliente, destino, produ
   const c = getCarga(cargaId);
   if(!c) throw new Error('Carga não encontrada');
   if(!c.aguardandoCarga) throw new Error('Esta carga não está aguardando dados (Aguardando Carga).');
-  c.numeroCarga = numeroCarga||''; c.cliente = cliente||''; c.destino = destino||''; c.produto = produto||''; c.peso = Number(peso)||0;
+  c.numeroCarga = normalizarNumeroCarga(numeroCarga); c.cliente = cliente||''; c.destino = destino||''; c.produto = produto||''; c.peso = Number(peso)||0;
   c.doca = doca||''; c.sequencia = sequencia!==undefined && sequencia!=='' ? Number(sequencia) : null;
   c.observacoes = observacoes||'';
   c.motorista = motorista||'';
