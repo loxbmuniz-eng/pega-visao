@@ -2020,6 +2020,15 @@ function adicionarOutraCargaNaPlacaUI(id){
 function atualizarSequenciaUI(id, val){
   const c = getCarga(id); if(!c) return;
   c.sequencia = val==='' ? null : Number(val);
+  /* Sem este carimbo a alteração NÃO SOBE ao servidor.
+
+     `sincronizarCargasAlteradas` decide o que enviar comparando
+     `atualizadoEm` com a marca do que já subiu — sem carimbo novo, a carga
+     é lida como "nada mudou" e nunca é enviada. A sequência ficava só na
+     tela de quem editou e voltava ao valor do servidor no sincronismo
+     seguinte. Relato do programador de embarque em 14/08/2026: "já alterei
+     três vezes e ela não se mantém na torre de controle". */
+  c.atualizadoEm = nowISO();
   SuincoStore.save();
   renderAll();   // campo aparece na Fila de Programados E na Torre editável
 }
@@ -2138,6 +2147,7 @@ function atualizarNumeroCargaUI(id, val){
 function atualizarGanchosUI(id, val){
   const c = getCarga(id); if(!c) return;
   c.qtdGanchos = val==='' ? 0 : Math.max(0, Number(val)||0);
+  c.atualizadoEm = nowISO();   // sem isto a mudança não sobe — ver atualizarSequenciaUI
   SuincoStore.save();
   renderAll();   // campo aparece na Fila de Programados E na Torre editável
 }
