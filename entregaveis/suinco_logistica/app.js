@@ -4613,7 +4613,20 @@ function filtroRelatorioAtalho(qual){
   const ate = document.getElementById('rel-data-ate');
   if(!de || !ate) return;
   const hoje = new Date();
-  const iso = d => d.toISOString().slice(0,10);
+  /* Data do DIA LOCAL, nunca `toISOString()`.
+
+     `toISOString()` devolve sempre UTC. Patos de Minas é UTC−3, então das
+     21h à meia-noite o UTC já está no dia seguinte: às 23h32 do dia 14 no
+     pátio, o botão "Hoje" preenchia o filtro com 15/08 e o dia inteiro de
+     trabalho sumia do relatório. Relatado ao vivo em 15/08/2026 — "ainda
+     são 11 e 32 e o relatório já está falando dia 15".
+
+     É o fim do turno, exatamente quando o relatório do dia é fechado. */
+  const iso = d => [
+    d.getFullYear(),
+    String(d.getMonth() + 1).padStart(2, '0'),
+    String(d.getDate()).padStart(2, '0'),
+  ].join('-');
   if(qual === 'limpar'){ de.value = ''; ate.value = ''; }
   else if(qual === 'hoje'){ de.value = iso(hoje); ate.value = iso(hoje); }
   else {

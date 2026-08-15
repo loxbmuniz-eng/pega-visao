@@ -1925,6 +1925,65 @@ function atrasoDaCarga(carga){
   return excesso > 0 ? excesso : 0;
 }
 
+
+/* ---------- NÚMERO DA CARGA: LIMPEZA E CONFERÊNCIA ----------
+   Motivo (15/08/2026): o gestor cobrou que "o relatório precisa ser muito
+   fiel aos números das cargas, não pode existir erro". Olhando a base de
+   produção, três defeitos apareceram juntos:
+
+     - `118176'` — sobrou uma aspa da digitação. `trim()` não tira aspa, só
+       espaço, então o número entrou torto e não casava com nada.
+     - `118713` no lugar de `118173` — dígitos trocados. Não dá para o
+       sistema adivinhar, mas dá para ele PARAR DE ESCONDER.
+     - `118042`, `118105`, `118063`, `118011`, `118035`, `118111` repetidos
+       em cargas diferentes — e `118105` em DUAS PLACAS. Número repetido faz
+       o total do relatório somar a mesma carga duas vezes, que é
+       exatamente a conferência de tonelagem que não fechava.
+
+   A regra aqui é deliberadamente NÃO bloquear: o número é livre por decisão
+   registrada (docs/DECISOES_CONFIRMADAS.md item 2), e travar a digitação no
+   meio do turno é pior que aceitar e avisar. O sistema limpa o que é
+   claramente lixo de digitação, e o relatório passa a mostrar o que está
+   duvidoso em vez de imprimir um total errado com cara de certo. */
+function normalizarNumeroCarga(v){
+  return String(v ?? '')
+    .replace(/[\u2018\u2019\u201C\u201D'"`]/g, '')  // aspas de todo tipo
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/* Cargas cujo número não dá para confiar, dentro do conjunto que o
+   relatório vai imprimir. Devolve listas, não booleano: o relatório mostra
+   QUAIS são, senão o aviso não ajuda ninguém a corrigir. */
+function problemasDeNumeracao(cargas){
+  const porNumero = new Map();
+  const semNumero = [];
+  const foraDoPadrao = [];
+
+  (cargas || []).forEach(c => {
+    const n = normalizarNumeroCarga(c.numeroCarga);
+    if(!n || n === 'Aguardando Carga'){ semNumero.push(c); return; }
+    // O padrão da operação é numérico. Qualquer outra coisa é digitação.
+    if(!/^[0-9]+$/.test(n)) foraDoPadrao.push({carga: c, numero: n});
+    if(!porNumero.has(n)) porNumero.set(n, []);
+    porNumero.get(n).push(c);
+  });
+
+  const duplicados = [...porNumero.entries()]
+    .filter(([, lista]) => lista.length > 1)
+    .map(([numero, lista]) => ({
+      numero,
+      quantidade: lista.length,
+      placas: [...new Set(lista.map(c => c.placa))],
+      pesoSomado: lista.reduce((s, c) => s + (Number(c.peso) || 0), 0),
+    }));
+
+  return {
+    duplicados, semNumero, foraDoPadrao,
+    total: duplicados.length + semNumero.length + foraDoPadrao.length,
+  };
+}
+
 /* ---------- FILTRO POR DATA DA PROGRAMAÇÃO ----------
    "Data da programação" é quando a CARGA foi lançada — não quando o
    caminhão entrou no pátio. É o que o gestor usa para fechar o relatório
