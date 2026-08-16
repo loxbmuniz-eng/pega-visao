@@ -2866,3 +2866,100 @@ input,select,textarea{border-radius:5px}
     print-color-adjust: exact;
   }
 }
+
+/* =====================================================================
+   TELA DE ENTRADA (pré-login) — 16/08/2026
+   =====================================================================
+   O login deixou de ser um modal translúcido sobre o painel montado: quem
+   ainda não entrou via cabeçalho, abas e cargas ao fundo (pedido do dono:
+   "quando abre a página do login mostra o fundo do painel, isso não pode
+   acontecer"). Num terminal de pátio ligado o dia todo, isso era dado de
+   operação exposto a qualquer pessoa na frente da tela.
+
+   body.pre-login esconde TUDO que não é a tela de entrada — por seletor de
+   exclusão, para não depender de listar cada pedaço do painel (um id novo
+   esquecido na lista reabriria o vazamento). #notif fica de fora porque os
+   erros de login aparecem por ele. */
+body.pre-login > :not(#modal-operador):not(#notif){ display:none !important; }
+
+/* Em pré-login o overlay é a PRÓPRIA página: fundo opaco com a identidade
+   navy — gradiente sutil, sem imagem externa (o build é arquivo único). */
+body.pre-login #modal-operador{
+  /* Cor-base OPACA além do gradiente: o overlay genérico usa rgba
+     translúcido, e herdá-lo deixaria o painel vazar se o gradiente falhar
+     (ou num navegador antigo). Opacidade aqui é requisito, não estética.
+
+     Cores FIXAS, não tokens do tema, de propósito: a entrada é a cara da
+     marca e sai igual no tema claro e no escuro. Com tokens, o tema claro
+     pintava a entrada de prata (visto em screenshot antes de publicar). */
+  background-color: #101625;
+  background-image:
+    radial-gradient(1100px 500px at 85% -10%, rgba(233,185,84,.10), transparent 60%),
+    radial-gradient(900px 600px at -10% 110%, rgba(55,74,134,.45), transparent 55%),
+    linear-gradient(160deg, #182342 0%, #0b101d 100%);
+  flex-direction: column;
+  gap: 22px;
+  padding: 24px 16px;
+  overflow-y: auto;
+}
+
+#login-marca{ display:none; }
+body.pre-login #login-marca{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:8px;
+  text-align:center;
+  animation: login-desce .5s ease both;
+}
+#login-marca img{
+  width:92px; height:auto;
+  border-radius:14px;
+  box-shadow: 0 8px 28px rgba(0,0,0,.45);
+}
+#login-marca strong{
+  font-size:20px;
+  letter-spacing:2.5px;
+  color:#e9b954;   /* fixo: está sempre sobre o navy da entrada */
+}
+#login-marca span{
+  font-size:12px;
+  letter-spacing:.6px;
+  color:#aeb8d4;
+}
+
+body.pre-login .modal-box{
+  animation: login-desce .5s ease .08s both;
+  box-shadow: 0 18px 50px rgba(0,0,0,.5);
+}
+/* O logo duplicado dentro da caixa sai de cena quando a marca está acima. */
+body.pre-login #login-logo{ display:none; }
+
+#login-versao{ display:none; }
+body.pre-login #login-versao{
+  display:block;
+  font-size:11px;
+  color:#8b96b5;
+  letter-spacing:.4px;
+}
+
+@keyframes login-desce{
+  from{ opacity:0; transform: translateY(10px); }
+  to{ opacity:1; transform: none; }
+}
+
+/* Entrada do painel após o login: um fade curto, uma vez só (a classe é
+   removida pelo app.js depois do efeito — não re-anima a cada render). */
+body.painel-entrando > :not(#modal-operador):not(#notif){
+  animation: painel-surge .35s ease both;
+}
+@keyframes painel-surge{
+  from{ opacity:0; }
+  to{ opacity:1; }
+}
+
+@media (prefers-reduced-motion: reduce){
+  body.pre-login #login-marca,
+  body.pre-login .modal-box,
+  body.painel-entrando > :not(#modal-operador):not(#notif){ animation:none; }
+}

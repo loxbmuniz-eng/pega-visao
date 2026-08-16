@@ -45,6 +45,9 @@ async def main():
         await pg.evaluate("""() => {
             DB.operador = {nome:'Chefe', setor:'Administração'};
             document.getElementById('modal-operador')?.classList.remove('open');
+            // Tela de entrada própria (16/08/2026): o painel só aparece
+            // após um render com operador — como todo login real faz.
+            renderAll();
         }""")
         await pg.wait_for_timeout(400)
 

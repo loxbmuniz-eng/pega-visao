@@ -636,6 +636,13 @@ function detectarTurnoPorHora(){
   return 'Noite (22h–06h)';
 }
 function abrirLogin(){
+  /* Pré-login: o painel some por inteiro (body.pre-login esconde tudo que
+     não é a tela de entrada — ver styles.css). Não é só estética: terminal
+     de pátio fica ligado o dia todo, e quem ainda não se identificou não
+     deve ver carga, placa nem status ao fundo. */
+  document.body.classList.add('pre-login');
+  const v = document.getElementById('login-versao');
+  if(v) v.textContent = 'versão ' + BUILD_ID;
   document.getElementById('modal-operador').classList.add('open');
   // Qual formulário aparece não é escolha do usuário: se o servidor está
   // configurado, é e-mail e senha. O modo local fica atrás de um link, para
@@ -886,6 +893,7 @@ async function entrarNoServidor(){
     document.getElementById('login-senha').value = '';
 
     document.getElementById('modal-operador').classList.remove('open');
+    revelarPainel();
     atualizarHeaderOperador();
     aplicarPermissoesSetor();
     renderAll();
@@ -911,6 +919,7 @@ function confirmarOperador(){
   };
   SuincoStore.save();
   document.getElementById('modal-operador').classList.remove('open');
+  revelarPainel();
   atualizarHeaderOperador();
   aplicarPermissoesSetor();
   renderAll();
@@ -928,6 +937,15 @@ function trocarUsuario(){
   atualizarHeaderOperador();
   abrirLogin();
 }
+/* Tira o corpo do pré-login e dá uma entrada suave ao painel. A classe de
+   animação é temporária de propósito: fica só o tempo do efeito, para não
+   re-animar a cada render. `prefers-reduced-motion` é respeitado no CSS. */
+function revelarPainel(){
+  document.body.classList.remove('pre-login');
+  document.body.classList.add('painel-entrando');
+  setTimeout(()=>document.body.classList.remove('painel-entrando'), 600);
+}
+
 function atualizarHeaderOperador(){
   const el = document.getElementById('operator-name');
   el.textContent = DB.operador ? `${DB.operador.nome} · ${DB.operador.setor}` : '—';
@@ -1055,7 +1073,21 @@ function renderTabAtual(){
   // que acabaram de ser criadas.
   prepararTabelasMobile();
 }
-function renderAll(){ renderTabAtual(); }
+function renderAll(){
+  /* Guardião do pré-login: qualquer caminho que resulte em operador logado
+     (botões de login, restauração de sessão por token, teste automatizado
+     que grava DB.operador direto) revela o painel — e qualquer caminho que
+     o deslogue esconde. Concentrar aqui evita a classe presa: foi
+     exatamente o que a primeira versão desta tela causou nos fluxos que
+     não passavam pelos botões. */
+  if(DB.operador && document.body.classList.contains('pre-login')){
+    revelarPainel();
+  } else if(!DB.operador && !document.body.classList.contains('pre-login')
+            && document.getElementById('modal-operador').classList.contains('open')){
+    document.body.classList.add('pre-login');
+  }
+  renderTabAtual();
+}
 
 /* ---------- TORRE DE CONTROLE ---------- */
 /* ====================================================================
@@ -4482,6 +4514,7 @@ async function init(){
   });
   atualizarAvisoSetorAba(); // preenche o box "função da aba" já na 1ª pintura
   if(DB.operador){
+    document.body.classList.remove('pre-login');
     atualizarHeaderOperador();
     aplicarPermissoesSetor();
   } else {

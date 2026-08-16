@@ -39,6 +39,11 @@ async def main():
         await pg.evaluate("""() => {
             DB.operador = {nome:'Chefe', setor:'Administração'};
             document.getElementById('modal-operador')?.classList.remove('open');
+            // Desde a tela de entrada própria (16/08/2026) o painel só
+            // aparece depois de um render com operador — todo login real
+            // passa por renderAll(). Definir DB.operador na mão sem
+            // renderizar era um estado impossível na prática.
+            renderAll();
         }""")
         await pg.wait_for_timeout(300)
 
@@ -102,6 +107,14 @@ async def main():
         pg2.on('pageerror', lambda e: erros.append('desktop: ' + str(e)))
         await pg2.goto(PAINEL)
         await pg2.wait_for_timeout(600)
+        # Tela de entrada própria (16/08/2026): o painel só existe na tela
+        # depois de logar — a medição da sidebar exige operador presente.
+        await pg2.evaluate("""() => {
+            DB.operador = {nome:'Chefe', setor:'Administração'};
+            document.getElementById('modal-operador')?.classList.remove('open');
+            renderAll();
+        }""")
+        await pg2.wait_for_timeout(300)
         display_btn_desktop = await pg2.evaluate(
             "() => getComputedStyle(document.getElementById('btn-menu')).display")
         ck('botão hambúrguer NÃO aparece no desktop', display_btn_desktop == 'none', display_btn_desktop)

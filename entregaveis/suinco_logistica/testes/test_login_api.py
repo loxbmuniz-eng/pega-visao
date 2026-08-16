@@ -69,7 +69,11 @@ async def main():
         ck('modo local escondido atrás de um link',
            await pagina.is_hidden('#login-local'),
            'ninguém pode cair no modo local por acidente')
-        ck('o painel carregou mesmo sem sessão', await pagina.is_visible('#nav'))
+        # INVERTIDO em 16/08/2026: antes o painel carregava atrás do modal
+        # de login e este teste documentava isso como normal. Virou tela de
+        # entrada própria — quem não se identificou não vê NADA do painel
+        # (terminal de pátio fica ligado o dia todo, exposto).
+        ck('o painel NÃO aparece sem sessão', await pagina.is_hidden('#nav'))
 
         print('\n=== 2. CREDENCIAL ERRADA NÃO ENTRA ===')
         await pagina.fill('#login-email', 'ana@teste.local')

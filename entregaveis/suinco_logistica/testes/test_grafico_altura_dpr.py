@@ -53,6 +53,7 @@ async def main():
         await pg.evaluate("""() => {
             DB.operador = {nome:'Chefe', setor:'Administração'};
             document.getElementById('modal-operador')?.classList.remove('open');
+            renderAll();  // tela de entrada própria (16/08): painel só aparece após render com operador
             abrirTab('indicadores');
         }""")
         await pg.wait_for_timeout(400)

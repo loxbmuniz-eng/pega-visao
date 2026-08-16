@@ -18,7 +18,7 @@
 <meta name="apple-mobile-web-app-title" content="Embarque">
 <link rel="apple-touch-icon" href="assets/logo_suinco.png">
 </head>
-<body>
+<body class="pre-login">
 
 <!-- ===================== HEADER ===================== -->
 <div id="header">
@@ -883,8 +883,16 @@
      "modo degradado por preguiça" — é o painel continuar funcionando quando
      a rede do pátio cai, que acontece várias vezes por turno. -->
 <div class="modal-overlay" id="modal-operador">
+  <!-- Em pré-login isto é uma TELA, não um modal: fundo opaco com a marca,
+       nada do painel por trás (pedido do dono, 16/08/2026 — antes o painel
+       inteiro vazava atrás do formulário, expondo dados de operação a quem
+       ainda não se identificou, num terminal que fica ligado o dia todo). -->
+  <div id="login-marca">
+    <img src="assets/logo_suinco.png" alt="Suinco">
+    <strong>PROGRAMAÇÃO DE EMBARQUE</strong>
+    <span>Suinco — Cooperativa Agroindustrial</span>
+  </div>
   <div class="modal-box">
-    <div id="login-logo"><img src="assets/logo_suinco.png" alt="Suinco"></div>
     <h2>Entrar</h2>
 
     <div id="login-servidor">
@@ -936,6 +944,9 @@
       </div>
     </div>
   </div>
+  <!-- Versão do build na entrada: responde "atualizou?" antes mesmo de
+       logar — útil quando o suporte pergunta qual versão o terminal tem. -->
+  <div id="login-versao"></div>
 </div>
 
 <div class="modal-overlay" id="modal-picker">

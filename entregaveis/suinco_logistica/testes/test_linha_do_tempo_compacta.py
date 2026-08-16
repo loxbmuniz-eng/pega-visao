@@ -46,6 +46,7 @@ async def main():
         await pg.evaluate("""() => {
             DB.operador = {nome:'Chefe', setor:'Logística'};
             document.getElementById('modal-operador')?.classList.remove('open');
+            renderAll();  // tela de entrada própria (16/08): painel só aparece após render com operador
         }""")
         await pg.wait_for_timeout(300)
         await pg.evaluate("""() => {
@@ -88,6 +89,7 @@ async def main():
         await pg2.evaluate("""() => {
             DB.operador = {nome:'Chefe', setor:'Logística'};
             document.getElementById('modal-operador')?.classList.remove('open');
+            renderAll();  // tela de entrada própria (16/08): painel só aparece após render com operador
         }""")
         await pg2.wait_for_timeout(300)
         await pg2.evaluate("""() => {
