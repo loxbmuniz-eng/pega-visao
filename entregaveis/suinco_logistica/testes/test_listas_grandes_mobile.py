@@ -46,6 +46,7 @@ async def preparar(pg, n_placas=60, n_movs=0):
     await pg.evaluate("""() => {
         DB.operador = {nome:'Ana', setor:'Administração'};
         document.getElementById('modal-operador')?.classList.remove('open');
+            renderAll();  // tela de entrada própria (16/08): painel só aparece após render com operador
     }""")
     await pg.wait_for_timeout(400)
     await pg.evaluate(f"""(n) => {{
