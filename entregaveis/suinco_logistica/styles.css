@@ -2975,7 +2975,77 @@ body.painel-entrando > :not(#modal-operador):not(#notif){
   background: rgba(255,255,255,.03);
 }
 .revisao-cab{ display:flex; justify-content:space-between; gap:8px; flex-wrap:wrap; }
-.revisao-cab span{ font-size:12px; color:var(--texto-suave, #aeb8d4); }
+.revisao-cab span{ font-size:12px; color:var(--text-dim); }
 .revisao-campos{ display:flex; gap:12px; flex-wrap:wrap; font-size:13px; }
 .revisao-item .btn{ align-self:flex-end; }
 .btn-revisoes{ margin-right:6px; }
+
+/* =====================================================================
+   CAMADA DE POLIMENTO — Bloco C do upgrade (16/08/2026)
+   =====================================================================
+   Refinamento guiado pelo ui-ux-pro-max, RESPEITANDO a identidade
+   navy/dourado (não é redesign: os operadores acabaram de estabilizar
+   hábitos, e trocar a cara do sistema em produção viva gera erro de
+   pátio). Quatro frentes: foco visível, resposta ao toque, números
+   tabulares e transições curtas — todas com prefers-reduced-motion. */
+
+/* 1. FOCO VISÍVEL (teclado e leitores). O anel dourado só aparece em
+   :focus-visible — navegação por Tab ganha o anel; clique de mouse não
+   ganha poluição. Diretriz de acessibilidade nº 1 do banco consultado. */
+:focus-visible{
+  outline: 2px solid var(--gold, #e9b954);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+.btn:focus-visible, .nav-tab:focus-visible{
+  outline-offset: 1px;
+}
+
+/* 2. RESPOSTA AO TOQUE/CLIQUE. Botão que não responde parece quebrado no
+   pátio (luvas, tela molhada). 150ms: dentro da janela recomendada de
+   150–300ms; mais que isso vira lentidão percebida. */
+.btn{
+  transition: transform .15s ease, box-shadow .15s ease, filter .15s ease;
+}
+.btn:active{
+  transform: scale(.97);
+  filter: brightness(.92);
+}
+.nav-tab{ transition: background-color .15s ease, color .15s ease; }
+
+/* 3. NÚMEROS TABULARES onde dígito alinha com dígito: pesos, contagens e
+   sequências deixam de "dançar" quando o valor muda de largura. */
+.seq-input, .peso-input, .ganchos-input, .entregas-input,
+.cel-datas, td, .stat-box, #clock{
+  font-variant-numeric: tabular-nums;
+}
+
+/* 4. CARTÕES E TABELAS — leve profundidade no hover de linhas editáveis,
+   para o operador enxergar ONDE está antes de digitar. Sem animação de
+   entrada em tabela: re-render frequente + animação = tela piscando. */
+tbody tr{ transition: background-color .15s ease; }
+tbody tr:hover{ background-color: rgba(233,185,84,.05); }
+
+/* 5. BARRA DE ROLAGEM discreta em listas internas (revisões, picker,
+   gaveta): a barra nativa clara berrava no tema escuro. */
+#revisoes-lista::-webkit-scrollbar,
+#picker-lista::-webkit-scrollbar{ width: 8px; }
+#revisoes-lista::-webkit-scrollbar-thumb,
+#picker-lista::-webkit-scrollbar-thumb{
+  background: rgba(233,185,84,.28);
+  border-radius: 4px;
+}
+
+/* 6. ESTADOS VAZIOS com orientação — já existem (#torre-empty etc.);
+   aqui só ganham respiro e hierarquia consistentes. */
+.empty, [id$="-empty"]{
+  padding: 28px 16px;
+  text-align: center;
+  color: var(--text-dim);
+  line-height: 1.6;
+}
+
+@media (prefers-reduced-motion: reduce){
+  .btn, .nav-tab, tbody tr{ transition: none; }
+  .btn:active{ transform: none; }
+}
