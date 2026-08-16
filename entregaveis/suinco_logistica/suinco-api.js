@@ -1052,6 +1052,18 @@ const SuincoSharePoint = (function () {
     return chamar('/api/programacoes');
   }
 
+  /* Revisões de carga (Bloco B, 16/08/2026). Só a Administração — o
+     servidor é quem barra, isto aqui só transporta. Não passa pela fila
+     offline: restaurar sem servidor não existe (o histórico mora lá). */
+  function listarRevisoes(cargaId) {
+    return chamar('/api/cargas/' + encodeURIComponent(cargaId) + '/revisoes');
+  }
+  function restaurarRevisao(cargaId, revisaoId) {
+    return chamar('/api/cargas/' + encodeURIComponent(cargaId) + '/restaurar', {
+      metodo: 'POST', corpo: { revisaoId },
+    });
+  }
+
   /* Gera o PDF do relatório NO SERVIDOR — pedido do usuário (09/08/2026):
      "eu quero que saia no modo paisagem, e saiam iguais os relatorios que
      forem exportados tanto no ios ou android ou desktop". `window.print()`
@@ -1115,5 +1127,6 @@ const SuincoSharePoint = (function () {
     renovarSessao, registrarInteracao,
     arquivarDia, fecharPrograma,
     gerarRelatorioPdf, listarProgramacoes,
+    listarRevisoes, restaurarRevisao,
   };
 })();

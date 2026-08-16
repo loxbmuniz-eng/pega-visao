@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { consultar, emTransacao } from '../banco.js';
-import { exigirLogin } from '../middleware/auth.js';
+import { exigirLogin, exigirSetor } from '../middleware/auth.js';
 import { emitir } from '../tempo-real.js';
 import { programacaoAtual } from '../dominio/programacoes.js';
 import {
@@ -649,6 +649,111 @@ rotasCargas.post('/portaria/saida', exigirLogin, async (req, res, next) => {
   } catch (e) {
     return next(e);
   }
+});
+
+
+/* =====================================================================
+   REVISÕES E RESTAURAR — Administração (16/08/2026)
+   =====================================================================
+   O trigger da migration 009 guarda o estado ANTERIOR de toda mudança
+   real. Estas rotas expõem esse histórico e permitem voltar uma carga a
+   um ponto anterior — o que na semana de 14–15/08 precisou ser feito no
+   braço, a partir de um PDF.
+
+   `exigirSetor()` sem argumento = só Administração (o middleware sempre
+   inclui Administração no conjunto permitido). Restaurar é ação de
+   gestão, não de operação. */
+
+rotasCargas.get('/cargas/:id/revisoes', exigirLogin, exigirSetor(), async (req, res, next) => {
+  try {
+    const id = idSeguro(req.params.id);
+    if (!id) return res.status(400).json({ erro: 'Id inválido.', codigo: 'ID_INVALIDO' });
+    const { rows } = await consultar(
+      `SELECT revisao_id, dados, gravada_em, mudada_por, mudada_setor
+         FROM carga_revisoes WHERE carga_id = $1
+        ORDER BY revisao_id DESC LIMIT 50`,
+      [id]
+    );
+    res.json(rows.map((r) => ({
+      revisaoId: Number(r.revisao_id),
+      gravadaEm: r.gravada_em,
+      mudadaPor: r.mudada_por,
+      mudadaSetor: r.mudada_setor,
+      // O snapshot vai no formato do painel, para a tela mostrar os campos
+      // com os mesmos nomes e formatações de sempre.
+      carga: paraPainel(r.dados),
+    })));
+  } catch (e) { next(e); }
+});
+
+rotasCargas.post('/cargas/:id/restaurar', exigirLogin, exigirSetor(), async (req, res, next) => {
+  try {
+    const id = idSeguro(req.params.id);
+    const revisaoId = Number(req.body?.revisaoId);
+    if (!id || !Number.isFinite(revisaoId)) {
+      return res.status(400).json({ erro: 'Informe a revisão a restaurar.', codigo: 'REVISAO_FALTANDO' });
+    }
+    const op = req.operador;
+
+    const { linha } = await emTransacao(async (cli) => {
+      const rev = await cli.query(
+        'SELECT dados FROM carga_revisoes WHERE revisao_id = $1 AND carga_id = $2',
+        [revisaoId, id]
+      );
+      if (!rev.rows[0]) {
+        const e = new Error('Revisão não encontrada para esta carga.');
+        e.status = 404; e.codigo = 'REVISAO_NAO_ENCONTRADA';
+        throw e;
+      }
+      const d = rev.rows[0].dados;
+
+      /* Restaura os campos de NEGÓCIO do snapshot. Escrita direta, sem as
+         travas de sentido único do PATCH, de propósito: as travas existem
+         para barrar ECO de sincronização; isto aqui é decisão humana da
+         Administração, auditada logo abaixo. criado_em fica intocado (é o
+         histórico da chegada); excluida_em/excluida_por ficam como estão —
+         restaurar conteúdo não é des-excluir. */
+      const upd = await cli.query(
+        `UPDATE fact_viagens SET
+           numero_carga = $1, placa = $2, transportadora = $3, tipo_veiculo = $4,
+           motorista = $5, cliente = $6, destino = $7, peso_kg = $8, doca = $9,
+           rota_codigo = $10, sequencia = $11, pra_onde = $12, paletizada = $13,
+           qtd_ganchos = $14, qtd_entregas = $15, observacoes = $16,
+           status_atual = $17, aguardando_carga = $18, programado_em = $19,
+           atualizado_em = now(),
+           operador_id = $20, operador_nome = $21, operador_setor = $22
+         WHERE carga_id = $23
+         RETURNING ${COLUNAS_CARGA}`,
+        [d.numero_carga, d.placa, d.transportadora, d.tipo_veiculo, d.motorista,
+         d.cliente, d.destino, d.peso_kg, d.doca, d.rota_codigo, d.sequencia,
+         d.pra_onde, d.paletizada, d.qtd_ganchos, d.qtd_entregas, d.observacoes,
+         d.status_atual, d.aguardando_carga, d.programado_em,
+         op.id, op.nome, op.setor, id]
+      );
+      if (!upd.rows[0]) {
+        const e = new Error('Carga não encontrada.');
+        e.status = 404; e.codigo = 'CARGA_NAO_ENCONTRADA';
+        throw e;
+      }
+
+      // Auditoria: restaurar é exatamente o tipo de ação que precisa de
+      // trilha — responde "quem voltou a carga X e para qual estado".
+      await cli.query(
+        `INSERT INTO log_eventos
+           (evento_id, carga_id, placa, acao, setor, operador_id, operador_nome,
+            operador_verificado)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,TRUE)`,
+        [novoId('log'), id, upd.rows[0].placa,
+         `Carga restaurada para o estado de ${new Date(d.atualizado_em || d.criado_em).toISOString()} (revisão ${revisaoId})`,
+         op.setor, op.id, op.nome]
+      );
+      return { linha: upd.rows[0] };
+    });
+
+    const payload = paraPainel(linha);
+    emitir('carga:atualizada', payload);
+    res.json(payload);
+  } catch (e) { next(e); }
 });
 
 /* Erros de domínio já carregam status e código; o handler global em

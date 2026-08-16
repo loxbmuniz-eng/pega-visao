@@ -2077,3 +2077,101 @@ describe('18. Carga lançada não volta para "Aguardando Carga"', () => {
     }
   });
 });
+
+/* ------------------------------------------------------------------ */
+describe('19. Revisões e Restaurar (Administração)', () => {
+  /* Bloco B do upgrade de 16/08/2026. Na semana anterior, dado sobrescrito
+     por eco de sincronização teve que ser restaurado A PARTIR DE UM PDF —
+     nenhum log guardava os valores antigos completos. Agora um trigger
+     (migration 009) guarda o estado anterior de toda mudança real, e a
+     Administração restaura pela API, com auditoria. */
+  let idCarga;
+  let tokenAdmin;
+
+  before(async () => {
+    const bcrypt = (await import('bcryptjs')).default;
+    const hash = await bcrypt.hash(SENHA, 4);
+    await pool.query(
+      `INSERT INTO operadores (email, nome, setor, senha_hash) VALUES ($1,$2,$3,$4)
+       ON CONFLICT (email) DO UPDATE SET setor = EXCLUDED.setor, ativo = TRUE`,
+      ['chefe@teste.local', 'Chefe', 'Administração', hash]
+    );
+    const r = await req('/auth/login', {
+      metodo: 'POST', corpo: { email: 'chefe@teste.local', senha: SENHA },
+    });
+    tokenAdmin = r.json.token;
+
+    const { rows } = await pool.query('SELECT placa FROM dim_veiculos LIMIT 1');
+    idCarga = `rev_${Date.now()}`;
+    await pool.query(
+      `INSERT INTO fact_viagens (carga_id, numero_carga, placa, status_atual,
+                                 peso_kg, rota_codigo, qtd_entregas)
+       VALUES ($1,'700100',$2,'Aguardando Veículo',20500,'500',30)`,
+      [idCarga, rows[0].placa]
+    );
+  });
+
+  after(async () => {
+    await pool.query('DELETE FROM carga_revisoes WHERE carga_id = $1', [idCarga]);
+    await pool.query('DELETE FROM fact_viagens WHERE carga_id = $1', [idCarga]);
+  });
+
+  test('mudança real gera revisão com o estado ANTERIOR', async () => {
+    const r = await req(`/api/cargas/${idCarga}`, {
+      metodo: 'PATCH', token: tokens['Logística'],
+      corpo: { peso: 999, rota: '' },
+    });
+    assert.equal(r.status, 200);
+    const { rows } = await pool.query(
+      'SELECT dados FROM carga_revisoes WHERE carga_id = $1 ORDER BY revisao_id DESC', [idCarga]
+    );
+    assert.ok(rows.length >= 1, 'o trigger precisa ter gravado a revisão');
+    assert.equal(Number(rows[0].dados.peso_kg), 20500, 'a revisão guarda o valor ANTES da mudança');
+  });
+
+  test('eco que só toca atualizado_em NÃO gera revisão (anti-ruído)', async () => {
+    const antes = (await pool.query(
+      'SELECT count(*) n FROM carga_revisoes WHERE carga_id = $1', [idCarga])).rows[0].n;
+    await pool.query(
+      'UPDATE fact_viagens SET atualizado_em = now() WHERE carga_id = $1', [idCarga]);
+    const depois = (await pool.query(
+      'SELECT count(*) n FROM carga_revisoes WHERE carga_id = $1', [idCarga])).rows[0].n;
+    assert.equal(antes, depois, 'eco de sincronização não pode virar revisão');
+  });
+
+  test('listar revisões é só da Administração', async () => {
+    const r = await req(`/api/cargas/${idCarga}/revisoes`, { token: tokens['Logística'] });
+    assert.equal(r.status, 403, 'restaurar é gestão, não operação');
+  });
+
+  test('Administração lista as revisões no formato do painel', async () => {
+    const r = await req(`/api/cargas/${idCarga}/revisoes`, { token: tokenAdmin });
+    assert.equal(r.status, 200);
+    assert.ok(Array.isArray(r.json) && r.json.length >= 1);
+    assert.equal(r.json[0].carga.peso, 20500, 'snapshot vem traduzido para o painel');
+    assert.ok(r.json[0].revisaoId > 0);
+  });
+
+  test('restaurar volta os campos e deixa trilha de auditoria', async () => {
+    const lista = await req(`/api/cargas/${idCarga}/revisoes`, { token: tokenAdmin });
+    const alvo = lista.json[0].revisaoId;
+    const r = await req(`/api/cargas/${idCarga}/restaurar`, {
+      metodo: 'POST', token: tokenAdmin, corpo: { revisaoId: alvo },
+    });
+    assert.equal(r.status, 200);
+    assert.equal(r.json.peso, 20500, 'o peso voltou ao valor da revisão');
+    assert.equal(r.json.rota, '500', 'a rota voltou');
+
+    const { rows } = await pool.query(
+      `SELECT acao FROM log_eventos WHERE carga_id = $1
+        AND acao LIKE 'Carga restaurada%' ORDER BY data_evento DESC LIMIT 1`, [idCarga]);
+    assert.ok(rows[0], 'restaurar sem trilha seria o mesmo buraco de antes');
+  });
+
+  test('Logística NÃO restaura', async () => {
+    const r = await req(`/api/cargas/${idCarga}/restaurar`, {
+      metodo: 'POST', token: tokens['Logística'], corpo: { revisaoId: 1 },
+    });
+    assert.equal(r.status, 403);
+  });
+});

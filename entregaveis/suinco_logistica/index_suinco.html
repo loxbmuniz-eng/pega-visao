@@ -949,6 +949,18 @@
   <div id="login-versao"></div>
 </div>
 
+<!-- Revisões de carga (Bloco B, 16/08/2026): linha do tempo vinda do
+     servidor + Restaurar. Só a Administração vê o botão que abre isto. -->
+<div class="modal-overlay" id="modal-revisoes">
+  <div class="modal-box modal-box-larga">
+    <h2 id="revisoes-titulo">Alterações da carga</h2>
+    <div class="card-sub">Cada item é o estado ANTES de uma mudança. Restaurar volta a carga
+      exatamente àquele estado, em todos os aparelhos, e fica registrado no log.</div>
+    <div id="revisoes-lista"></div>
+    <div class="flex-end"><button class="btn btn-sec" onclick="fecharRevisoesUI()">Fechar</button></div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="modal-picker">
   <div class="modal-box">
     <h2 id="picker-titulo">Selecionar carga</h2>
