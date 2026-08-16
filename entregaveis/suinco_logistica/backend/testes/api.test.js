@@ -2004,3 +2004,76 @@ describe('17. Lançar a carga carimba a data mesmo com painel antigo', () => {
     assert.equal(String(antes), String(depois));
   });
 });
+
+/* ------------------------------------------------------------------ */
+describe('18. Carga lançada não volta para "Aguardando Carga"', () => {
+  /* INCIDENTE 15/08/2026: cinco cargas já lançadas — com peso, rota e
+     status até "Seguiu Viagem" e "Faturado" — voltaram sozinhas para a
+     lista "Aguardando Carga" e sumiram do relatório. 62 toneladas a menos
+     entre duas emissões com poucas horas de diferença.
+
+     A auditoria mostrou que nenhum fluxo do painel religa essa marca: ela
+     nasce true na chegada pela Portaria e vira false no lançamento. Não
+     existe "desprogramar". Quem a religava era eco de sincronização de um
+     terminal com a cópia do dia da chegada — e junto voltava o peso zerado
+     e a rota vazia daquela versão.
+
+     Por isso a marca passou a andar em um sentido só. */
+  let idCarga;
+
+  before(async () => {
+    const { rows } = await pool.query('SELECT placa FROM dim_veiculos LIMIT 1');
+    idCarga = `volta_aguard_${Date.now()}`;
+    // Carga JÁ LANÇADA: tem peso, rota e não está aguardando dados.
+    await pool.query(
+      `INSERT INTO fact_viagens (carga_id, numero_carga, placa, aguardando_carga,
+                                 status_atual, peso_kg, rota_codigo)
+       VALUES ($1,'118176',$2,FALSE,'Embarque Iniciado',21700,'523')`,
+      [idCarga, rows[0].placa]
+    );
+  });
+
+  after(async () => {
+    await pool.query('DELETE FROM fact_viagens WHERE carga_id = $1', [idCarga]);
+  });
+
+  test('eco com aguardandoCarga:true NÃO desfaz o lançamento', async () => {
+    // É a cópia do dia em que o caminhão chegou: aguardando, sem peso e sem
+    // rota. Exatamente o que o terminal desatualizado reenviou.
+    const r = await req(`/api/cargas/${idCarga}`, {
+      metodo: 'PATCH', token: tokens['Logística'],
+      corpo: { aguardandoCarga: true, peso: 0, rota: '' },
+    });
+    assert.equal(r.status, 200);
+
+    const { rows } = await pool.query(
+      'SELECT aguardando_carga FROM fact_viagens WHERE carga_id = $1', [idCarga]
+    );
+    assert.equal(rows[0].aguardando_carga, false,
+      'carga lançada não pode voltar a "aguardando dados" por sincronização');
+  });
+
+  test('o caminho normal (lançar a carga) continua funcionando', async () => {
+    const id2 = `lanca_ok_${Date.now()}`;
+    const { rows: v } = await pool.query('SELECT placa FROM dim_veiculos LIMIT 1');
+    await pool.query(
+      `INSERT INTO fact_viagens (carga_id, numero_carga, placa, aguardando_carga, status_atual)
+       VALUES ($1,'Aguardando Carga',$2,TRUE,'Aguardando Embarque')`,
+      [id2, v[0].placa]
+    );
+    try {
+      const r = await req(`/api/cargas/${id2}`, {
+        metodo: 'PATCH', token: tokens['Logística'],
+        corpo: { numeroCarga: '118999', aguardandoCarga: false, peso: 12000 },
+      });
+      assert.equal(r.status, 200);
+      const { rows } = await pool.query(
+        'SELECT aguardando_carga, peso_kg FROM fact_viagens WHERE carga_id = $1', [id2]
+      );
+      assert.equal(rows[0].aguardando_carga, false, 'lançar a carga precisa funcionar');
+      assert.equal(Number(rows[0].peso_kg), 12000);
+    } finally {
+      await pool.query('DELETE FROM fact_viagens WHERE carga_id = $1', [id2]);
+    }
+  });
+});
