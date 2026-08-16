@@ -285,6 +285,30 @@ rotasCargas.patch('/cargas/:id', exigirLogin, async (req, res, next) => {
       if (c === 'observacoes') {
         return `observacoes = COALESCE(NULLIF($${i + 1}, ''), observacoes)`;
       }
+      /* `aguardando_carga` anda em UM SENTIDO SÓ: true → false.
+
+         Incidente de 15/08/2026: cinco cargas já lançadas (com peso, rota,
+         e status até "Seguiu Viagem" e "Faturado") voltaram sozinhas para a
+         lista "Aguardando Carga" e sumiram do relatório — 62 toneladas a
+         menos entre duas emissões com poucas horas de diferença.
+
+         A auditoria do código mostrou que NENHUM fluxo do painel liga essa
+         marca de volta: ela nasce `true` só na chegada pela Portaria
+         (registrarChegadaPortaria) e vira `false` quando a carga é lançada
+         (completarCargaAguardando). Não existe "desprogramar".
+
+         Como o campo é editável por PATCH, quem a religou foi eco de
+         sincronização: um terminal que ainda tinha a cópia do dia em que o
+         caminhão chegou — quando a carga de fato estava aguardando dados —
+         reenviou essa cópia e desfez o lançamento. Junto com a marca voltava
+         o peso zerado e a rota vazia daquela versão.
+
+         `AND` resolve pela álgebra, sem exceção a manter: já lançada
+         (false) com eco true continua false; aguardando (true) com o
+         lançamento de verdade (false) vira false, que é o caminho normal. */
+      if (c === 'aguardando_carga') {
+        return `aguardando_carga = (aguardando_carga AND $${i + 1})`;
+      }
       return `${c} = $${i + 1}`;
     });
     const params = Object.values(mudancas);
