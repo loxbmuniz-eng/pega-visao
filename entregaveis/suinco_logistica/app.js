@@ -1237,6 +1237,101 @@ async function fecharProgramacaoUI(senhaJaInformada){
 /* O botão muda de nome conforme a etapa, porque as duas ações são
    diferentes de verdade: excluir some com algo que nunca aconteceu;
    cancelar encerra algo que começou, e por isso pede motivo. */
+/* Botão de revisões (Bloco B, 16/08/2026) — só Administração.
+
+   Abre a linha do tempo da carga vinda do SERVIDOR (trigger da migration
+   009): quem mudou o quê, quando, e o botão Restaurar. Na semana de
+   14–15/08, restaurar dado sobrescrito exigiu reconstruir valores a partir
+   de um PDF; agora é um clique auditado. */
+function botaoRevisoesHtml(c){
+  if(!DB.operador || DB.operador.setor !== 'Administração') return '';
+  return `<button class="btn btn-sec btn-sm btn-revisoes" onclick="abrirRevisoesUI('${escJs(c.id)}')"
+            title="Ver alterações desta carga e restaurar uma versão anterior">↩</button>`;
+}
+
+async function abrirRevisoesUI(id){
+  const c = getCarga(id);
+  if(!c) return;
+  if(!SuincoSharePoint.estaConfigurado || !SuincoSharePoint.estaConfigurado()){
+    notify('O histórico de alterações mora no servidor — sem conexão não há o que listar.', 'warn');
+    return;
+  }
+  const modal = document.getElementById('modal-revisoes');
+  document.getElementById('revisoes-titulo').textContent =
+    `Alterações — carga ${c.numeroCarga || '(sem número)'} · ${c.placa}`;
+  const lista = document.getElementById('revisoes-lista');
+  lista.innerHTML = '<div class="card-sub">Buscando no servidor…</div>';
+  modal.classList.add('open');
+  try{
+    const revs = await SuincoSharePoint.listarRevisoes(id);
+    if(!revs.length){
+      lista.innerHTML = '<div class="card-sub">Nenhuma alteração registrada ainda — '
+        + 'o histórico começa a valer a partir da ativação das revisões no servidor.</div>';
+      return;
+    }
+    lista.innerHTML = revs.map(r=>{
+      const s = r.carga || {};
+      const peso = ((s.peso||0)/1000).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+      return `<div class="revisao-item">
+        <div class="revisao-cab">
+          <strong>${fmtDataHora(r.gravadaEm)}</strong>
+          <span>alterada por ${esc(r.mudadaPor)||'—'}${r.mudadaSetor ? ' · '+esc(r.mudadaSetor) : ''}</span>
+        </div>
+        <div class="revisao-campos">
+          <span>Nº <strong>${esc(s.numeroCarga)||'—'}</strong></span>
+          <span>${esc(s.placa)||'—'}</span>
+          <span>${peso} t</span>
+          <span>rota ${esc(s.rota)||'—'}</span>
+          <span>${esc(s.status)||'—'}${s.aguardandoCarga ? ' · aguardando dados' : ''}</span>
+        </div>
+        <button class="btn btn-warn btn-sm" onclick="restaurarRevisaoUI('${escJs(id)}', ${Number(r.revisaoId)})">
+          Restaurar esta versão</button>
+      </div>`;
+    }).join('');
+  }catch(e){
+    lista.innerHTML = `<div class="aviso-local">Não consegui buscar: ${esc(e.message)}</div>`;
+  }
+}
+
+async function restaurarRevisaoUI(id, revisaoId){
+  if(!confirm('Restaurar esta versão? A carga volta EXATAMENTE ao estado mostrado, '
+    + 'em todos os aparelhos. A ação fica registrada no seu nome.')) return;
+  try{
+    const restaurada = await SuincoSharePoint.restaurarRevisao(id, revisaoId);
+    // O servidor é a fonte da verdade da restauração: aplica a resposta
+    // localmente na hora, sem esperar o próximo ciclo de sincronização.
+    const local = getCarga(id);
+    if(local && restaurada){
+      Object.assign(local, {
+        numeroCarga: restaurada.numeroCarga, placa: restaurada.placa,
+        transportadora: restaurada.transportadora, tipoVeiculo: restaurada.tipoVeiculo,
+        motorista: restaurada.motorista, cliente: restaurada.cliente,
+        destino: restaurada.destino, peso: restaurada.peso, doca: restaurada.doca,
+        rota: restaurada.rota, sequencia: restaurada.sequencia,
+        praOnde: restaurada.praOnde, paletizada: restaurada.paletizada,
+        qtdGanchos: restaurada.qtdGanchos, qtdEntregas: restaurada.qtdEntregas,
+        observacoes: restaurada.observacoes, status: restaurada.status,
+        aguardandoCarga: restaurada.aguardandoCarga,
+        programadoEm: restaurada.programadoEm, atualizadoEm: restaurada.atualizadoEm,
+      });
+      // Marca como já sincronizada: o que acabou de vir do servidor não
+      // pode ser devolvido a ele como se fosse edição nossa.
+      SuincoStore._ultimoSync.set(local.id, local.atualizadoEm || '');
+      if(DB._sincronizado) DB._sincronizado[local.id] = local.atualizadoEm || '';
+      SuincoStore.save();
+    }
+    document.getElementById('modal-revisoes').classList.remove('open');
+    notify('Versão restaurada. Todos os aparelhos recebem em instantes.', 'success');
+    renderAll();
+  }catch(e){
+    notify('Não consegui restaurar: ' + (e.message || 'erro desconhecido'), 'danger', 8000);
+  }
+}
+
+function fecharRevisoesUI(){
+  document.getElementById('modal-revisoes').classList.remove('open');
+}
+
 function botaoCancelarHtml(c){
   /* Carga em "Seguiu Viagem" tem proteção a mais (pede confirmação
      digitando a placa, ver excluirCargaSeguiuViagemUI) — mas não é mais
@@ -1598,7 +1693,7 @@ function renderTorre(){
       <td class="cel-datas">
         <span class="dt-prog">${dataProgramacaoHtml(c)}</span>
         <span class="dt-atu" title="Última movimentação registrada">${fmtDataHora(c.atualizadoEm)}</span></td>
-      ${editavel ? `<td class="no-print">${botaoCancelarHtml(c)}</td>` : ''}
+      ${editavel ? `<td class="no-print">${botaoRevisoesHtml(c)}${botaoCancelarHtml(c)}</td>` : ''}
     </tr>`).join('');
   const vazio = document.getElementById('torre-empty');
   vazio.hidden = lista.length>0;

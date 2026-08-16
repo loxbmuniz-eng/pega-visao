@@ -2963,3 +2963,19 @@ body.painel-entrando > :not(#modal-operador):not(#notif){
   body.pre-login .modal-box,
   body.painel-entrando > :not(#modal-operador):not(#notif){ animation:none; }
 }
+
+/* Revisões de carga (Bloco B, 16/08/2026) */
+.modal-box-larga{ max-width: 560px; }
+#revisoes-lista{ display:flex; flex-direction:column; gap:10px; max-height:52vh; overflow-y:auto; margin:10px 0; }
+.revisao-item{
+  border:1px solid var(--borda, rgba(255,255,255,.12));
+  border-radius:10px;
+  padding:10px 12px;
+  display:flex; flex-direction:column; gap:6px;
+  background: rgba(255,255,255,.03);
+}
+.revisao-cab{ display:flex; justify-content:space-between; gap:8px; flex-wrap:wrap; }
+.revisao-cab span{ font-size:12px; color:var(--texto-suave, #aeb8d4); }
+.revisao-campos{ display:flex; gap:12px; flex-wrap:wrap; font-size:13px; }
+.revisao-item .btn{ align-self:flex-end; }
+.btn-revisoes{ margin-right:6px; }
