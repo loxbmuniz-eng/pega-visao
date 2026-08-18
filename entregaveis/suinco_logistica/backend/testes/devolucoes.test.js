@@ -368,6 +368,50 @@ describe('4. Conferência: falta calculada, divergência não apaga falta', () =
     assert.equal(nao.status, 403);
   });
 
+  test('alinhamento da capa: pesagem é do Faturamento, tick de nota final é da Central de Notas', async () => {
+    // Pesagem por item — a confirmação de que passou pela balança.
+    const pesa = await req(`/api/devolucoes/${id}/itens/${itemId}`, {
+      metodo: 'PATCH', token: tokens['Faturamento'], corpo: { pesoFaturamento: 15.5 },
+    });
+    assert.equal(pesa.status, 200, pesa.texto);
+    assert.equal(pesa.json.pesoFaturamento, 15.5);
+    const naoFat = await req(`/api/devolucoes/${id}/itens/${itemId}`, {
+      metodo: 'PATCH', token: tokens['Faturamento'], corpo: { cx: 99 },
+    });
+    assert.equal(naoFat.status, 403, 'Faturamento só pesa');
+
+    // NOTA FINAL — o tick da Central de Notas por item.
+    const tick = await req(`/api/devolucoes/${id}/itens/${itemId}`, {
+      metodo: 'PATCH', token: tokens['Central de Notas'], corpo: { notaFinal: true },
+    });
+    assert.equal(tick.status, 200, tick.texto);
+    assert.equal(tick.json.notaFinal, true);
+    const naoNotas = await req(`/api/devolucoes/${id}/itens/${itemId}`, {
+      metodo: 'PATCH', token: tokens['Central de Notas'], corpo: { motivo: 'x' },
+    });
+    assert.equal(naoNotas.status, 403, 'Central de Notas só dá o tick');
+  });
+
+  test('cód. do operador (monitoramento) no cabeçalho; Portaria imputa placa e motorista', async () => {
+    const cab = await req(`/api/devolucoes/${id}`, {
+      metodo: 'PATCH', token: tokens['Logística'], corpo: { operadorCodigo: '102345' },
+    });
+    assert.equal(cab.status, 200, cab.texto);
+    assert.equal(cab.json.operadorCodigo, '102345');
+
+    const nova = await req('/api/devolucoes', {
+      metodo: 'POST', token: tokens['Logística'], corpo: novoChecklist({ itens: [] }),
+    });
+    const rec = await req(`/api/devolucoes/${nova.json.id}/etapa`, {
+      metodo: 'POST', token: tokens['Portaria'],
+      corpo: { para: 'Recebida na Portaria', placa: 'gfr8a80', motorista: 'Lucas' },
+    });
+    assert.equal(rec.status, 200, rec.texto);
+    assert.equal(rec.json.placa, 'GFR8A80', 'placa normalizada, imputada pela Portaria');
+    assert.equal(rec.json.motorista, 'Lucas');
+    assert.equal(rec.json.carimbos.portaria.por, 'Bruno Dev');
+  });
+
   test('destinação aceita só os três destinos reais', async () => {
     const r = await req(`/api/devolucoes/${id}/itens/${itemId}`, {
       metodo: 'PATCH', token: tokens['Logística'], corpo: { destinacao: 'Estoque' },

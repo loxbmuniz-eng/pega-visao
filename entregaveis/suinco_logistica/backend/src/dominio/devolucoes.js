@@ -124,6 +124,9 @@ export function devolucaoParaPainel(linha, itens = [], divergencias = [], rotas 
        precisar conhecer as duas eras. */
     rotas: rotas.length ? rotas : (linha.rota_codigo ? [linha.rota_codigo] : []),
     regiao: linha.regiao,
+    // Código do operador, informado pelo MONITORAMENTO (18/08/2026) — é
+    // sob ele que as devoluções são lançadas.
+    operadorCodigo: linha.operador_codigo || '',
     transportadora: linha.transportadora,
     notaTransferencia: linha.nota_transferencia,
     placa: linha.placa,
@@ -175,6 +178,11 @@ export function itemParaPainel(i) {
        que é diferente de "chegou tudo". */
     falta: recebida === null ? null : Math.max(0, cx - recebida),
     destinacao: i.destinacao || null,
+    // Pesagem do Faturamento — a confirmação de que passou pela balança.
+    pesoFaturamento: i.peso_faturamento === null || i.peso_faturamento === undefined
+      ? null : Number(i.peso_faturamento),
+    // Tick da Central de Notas: item com a nota finalizada.
+    notaFinal: !!i.nota_final,
   };
 }
 
@@ -196,6 +204,14 @@ export function camposCabecalho(corpo) {
   const m = {};
   if (corpo.dataDev !== undefined) m.data_dev = texto(corpo.dataDev, 10);
   if (corpo.regiao !== undefined) m.regiao = texto(corpo.regiao, 100);
+  if (corpo.operadorCodigo !== undefined) m.operador_codigo = texto(corpo.operadorCodigo, 50);
+  /* Lacres e nº da carga viraram campos do cabeçalho editável (a Portaria
+     passou a imputar só placa e motorista no recebimento — alinhamento de
+     18/08/2026; os lacres seguem existindo na capa e alguém precisa poder
+     escrevê-los). */
+  if (corpo.lacre1 !== undefined) m.lacre1 = texto(corpo.lacre1, 50);
+  if (corpo.lacre2 !== undefined) m.lacre2 = texto(corpo.lacre2, 50);
+  if (corpo.cargaNumero !== undefined) m.carga_numero = texto(corpo.cargaNumero, 50);
   if (corpo.transportadora !== undefined) m.transportadora = texto(corpo.transportadora, 200);
   if (corpo.notaTransferencia !== undefined) m.nota_transferencia = texto(corpo.notaTransferencia, 50);
   if (corpo.placa !== undefined) m.placa = texto(corpo.placa, 10).toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -226,5 +242,10 @@ export function camposItem(corpo) {
   if (corpo.destinacao !== undefined) {
     m.destinacao = DESTINACOES.includes(corpo.destinacao) ? corpo.destinacao : null;
   }
+  if (corpo.pesoFaturamento !== undefined) {
+    const n = numeroOuNull(corpo.pesoFaturamento);
+    m.peso_faturamento = n === null ? null : Math.max(0, n);
+  }
+  if (corpo.notaFinal !== undefined) m.nota_final = !!corpo.notaFinal;
   return m;
 }

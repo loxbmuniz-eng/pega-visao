@@ -347,6 +347,14 @@ rotasDevolucoes.post('/devolucoes/:id/etapa', exigirLogin, async (req, res, next
       const põe = (coluna, valor) => { vals.push(valor); extras.push(`${coluna} = $${vals.length}`); };
 
       if (regra.carimbo === 'portaria') {
+        /* Alinhamento de 18/08/2026: a Portaria imputa PLACA e MOTORISTA
+           no recebimento (o que ela vê no caminhão que voltou). Lacres e
+           nº da carga continuam aceitos por compatibilidade — hoje são do
+           cabeçalho editável da Logística. */
+        if (req.body?.placa !== undefined) {
+          põe('placa', String(req.body.placa).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10));
+        }
+        if (req.body?.motorista !== undefined) põe('motorista', String(req.body.motorista).slice(0, 200));
         if (req.body?.lacre1 !== undefined) põe('lacre1', String(req.body.lacre1).slice(0, 50));
         if (req.body?.lacre2 !== undefined) põe('lacre2', String(req.body.lacre2).slice(0, 50));
         if (req.body?.cargaNumero !== undefined) põe('carga_numero', String(req.body.cargaNumero).slice(0, 50));
@@ -419,15 +427,22 @@ rotasDevolucoes.patch('/devolucoes/:id/itens/:itemId', exigirLogin, async (req, 
       return res.status(400).json({ erro: 'Nada para alterar.', codigo: 'SEM_CAMPOS' });
     }
 
-    /* Fase 1: Logística/Administração mexem em tudo. Fase 2 (já pronta):
-       Expedição só confere (qtd_recebida), Controles Internos só destina. */
+    /* Fase 1: Logística/Administração mexem em tudo. Cada setor da fase 2
+       enxerga só a própria coluna: Expedição confere (qtd_recebida),
+       Faturamento pesa (peso_faturamento — a confirmação de que passou
+       pela balança), Controles Internos destina, Central de Notas dá o
+       tick de nota final. */
     const SO_CONFERENCIA = new Set(['qtd_recebida']);
+    const SO_PESAGEM = new Set(['peso_faturamento']);
     const SO_DESTINACAO = new Set(['destinacao']);
+    const SO_NOTA_FINAL = new Set(['nota_final']);
     const chaves = Object.keys(it);
     const permitido =
       op.setor === 'Logística' || op.setor === 'Administração'
       || (op.setor === 'Expedição' && chaves.every((c) => SO_CONFERENCIA.has(c)))
-      || (op.setor === 'Controles Internos' && chaves.every((c) => SO_DESTINACAO.has(c)));
+      || (op.setor === 'Faturamento' && chaves.every((c) => SO_PESAGEM.has(c)))
+      || (op.setor === 'Controles Internos' && chaves.every((c) => SO_DESTINACAO.has(c)))
+      || (op.setor === 'Central de Notas' && chaves.every((c) => SO_NOTA_FINAL.has(c)));
     if (!permitido) {
       return res.status(403).json({
         erro: `O setor ${op.setor} não altera esses campos do checklist.`,
@@ -557,6 +572,7 @@ rotasDevolucoes.post('/devolucoes/:id/restaurar', exigirLogin, exigirSetor(), as
             nota_transferencia = $4, placa = $5, motorista = $6, carga_numero = $7,
             lacre1 = $8, lacre2 = $9, peso_final = $10, status = $11,
             obs_controles = $12, observacoes = $13,
+            operador_codigo = COALESCE($27, operador_codigo),
             portaria_por = $14, portaria_em = $15,
             faturamento_por = $16, faturamento_em = $17,
             expedicao_por = $18, expedicao_em = $19,
@@ -575,7 +591,10 @@ rotasDevolucoes.post('/devolucoes/:id/restaurar', exigirLogin, exigirSetor(), as
          d.expedicao_por, d.expedicao_em,
          d.controles_por, d.controles_em,
          d.notas_por, d.notas_em,
-         op.nome, op.setor, req.params.id]
+         op.nome, op.setor, req.params.id,
+         // Revisões antigas (pré-018) não têm operador_codigo: o COALESCE
+         // mantém o valor atual em vez de apagar com null.
+         d.operador_codigo ?? null]
       );
       if (!upd.rows[0]) {
         const e = new Error('Devolução não encontrada.');
