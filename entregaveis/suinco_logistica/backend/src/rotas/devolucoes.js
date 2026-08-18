@@ -1,0 +1,554 @@
+/* Rotas de Devoluções — o checklist digital.
+
+   Fase 1 (18/08/2026): criação, edição e TODAS as etapas ficam com
+   Logística/Administração (eles alimentam e auditam o processo antes de
+   abrir para os setores). A máquina de estados em dominio/devolucoes.js já
+   conhece os setores da fase 2 — abrir depois é só existirem operadores
+   desses setores, nenhuma rota muda.
+
+   Toda escrita carimba operador_nome/operador_setor na linha ANTES do
+   trigger de revisão disparar, para a revisão saber quem aposentou o
+   estado anterior (mesmo desenho das cargas). */
+
+import { Router } from 'express';
+import { consultar, emTransacao } from '../banco.js';
+import { exigirLogin, exigirSetor } from '../middleware/auth.js';
+import { emitir } from '../tempo-real.js';
+import {
+  DEV_STATUS_INICIAL,
+  validarTransicaoDevolucao,
+  podeCriarDevolucao,
+  devolucaoParaPainel,
+  itemParaPainel,
+  divergenciaParaPainel,
+  camposCabecalho,
+  camposItem,
+} from '../dominio/devolucoes.js';
+
+export const rotasDevolucoes = Router();
+
+function novoId(prefixo) {
+  return `${prefixo}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+async function logDevolucao(cli, { devolucaoId, acao, operador }) {
+  await cli.query(
+    `INSERT INTO log_eventos
+       (evento_id, carga_id, placa, acao, setor, operador_id, operador_nome,
+        operador_verificado)
+     VALUES ($1,$2,'',$3,$4,$5,$6,TRUE)`,
+    [novoId('log'), devolucaoId, acao, operador.setor, operador.id, operador.nome]
+  );
+}
+
+/* Devolução completa (cabeçalho + itens + divergências) num objeto só —
+   é a unidade que o painel desenha. */
+async function buscarCompleta(executor, id) {
+  const { rows } = await executor.query(
+    'SELECT * FROM devolucoes WHERE devolucao_id = $1 AND excluida_em IS NULL', [id]
+  );
+  if (!rows[0]) return null;
+  const itens = await executor.query(
+    'SELECT * FROM devolucao_itens WHERE devolucao_id = $1 ORDER BY item_id', [id]
+  );
+  const divs = await executor.query(
+    'SELECT * FROM devolucao_divergencias WHERE devolucao_id = $1 ORDER BY divergencia_id', [id]
+  );
+  return devolucaoParaPainel(rows[0], itens.rows, divs.rows);
+}
+
+function emitirAtualizada(id) {
+  emitir('devolucao:atualizada', { id });
+}
+
+/* Lista por período de DATA DA DEVOLUÇÃO (o dia do checklist, não o dia do
+   clique — mesma lição do relatório de cargas). Sem período: últimos 30
+   dias, o suficiente para a tela do dia e o histórico recente. */
+rotasDevolucoes.get('/devolucoes', exigirLogin, async (req, res, next) => {
+  try {
+    const de = String(req.query.de || '').slice(0, 10);
+    const ate = String(req.query.ate || '').slice(0, 10);
+    const params = [];
+    let filtro = 'excluida_em IS NULL';
+    if (/^\d{4}-\d{2}-\d{2}$/.test(de)) { params.push(de); filtro += ` AND data_dev >= $${params.length}`; }
+    else { filtro += " AND data_dev >= (now() AT TIME ZONE 'America/Sao_Paulo')::date - 30"; }
+    if (/^\d{4}-\d{2}-\d{2}$/.test(ate)) { params.push(ate); filtro += ` AND data_dev <= $${params.length}`; }
+
+    const { rows } = await consultar(
+      `SELECT * FROM devolucoes WHERE ${filtro} ORDER BY data_dev DESC, numero DESC`, params
+    );
+    const ids = rows.map((r) => r.devolucao_id);
+    let itens = [], divs = [];
+    if (ids.length) {
+      itens = (await consultar(
+        'SELECT * FROM devolucao_itens WHERE devolucao_id = ANY($1) ORDER BY item_id', [ids]
+      )).rows;
+      divs = (await consultar(
+        'SELECT * FROM devolucao_divergencias WHERE devolucao_id = ANY($1) ORDER BY divergencia_id', [ids]
+      )).rows;
+    }
+    res.json(rows.map((r) => devolucaoParaPainel(
+      r,
+      itens.filter((i) => i.devolucao_id === r.devolucao_id),
+      divs.filter((d) => d.devolucao_id === r.devolucao_id)
+    )));
+  } catch (e) { next(e); }
+});
+
+rotasDevolucoes.post('/devolucoes', exigirLogin, async (req, res, next) => {
+  try {
+    const op = req.operador;
+    if (!podeCriarDevolucao(op.setor)) {
+      return res.status(403).json({
+        erro: 'Criar checklist de devolução é da Logística.',
+        codigo: 'SETOR_SEM_PERMISSAO',
+      });
+    }
+    const cab = camposCabecalho(req.body || {});
+    if (!cab.rota_codigo) {
+      return res.status(400).json({
+        erro: 'A rota é obrigatória — é ela que identifica o checklist na conferência.',
+        codigo: 'ROTA_FALTANDO',
+      });
+    }
+    if (!cab.data_dev || !/^\d{4}-\d{2}-\d{2}$/.test(cab.data_dev)) {
+      return res.status(400).json({ erro: 'Informe a data da devolução (AAAA-MM-DD).', codigo: 'DATA_FALTANDO' });
+    }
+    const rota = await consultar('SELECT codigo FROM dim_rotas WHERE codigo = $1', [cab.rota_codigo]);
+    if (!rota.rows[0]) {
+      return res.status(422).json({
+        erro: `A rota ${cab.rota_codigo} não está cadastrada. Cadastre em Cadastros → Rotas antes.`,
+        codigo: 'ROTA_DESCONHECIDA',
+      });
+    }
+
+    const id = novoId('dev');
+    const itensCorpo = Array.isArray(req.body?.itens) ? req.body.itens.slice(0, 200) : [];
+
+    const devolucao = await emTransacao(async (cli) => {
+      const colunas = ['devolucao_id', 'status', 'criada_por', 'criada_setor',
+        'operador_nome', 'operador_setor', ...Object.keys(cab)];
+      const valores = [id, DEV_STATUS_INICIAL, op.nome, op.setor,
+        op.nome, op.setor, ...Object.values(cab)];
+      await cli.query(
+        `INSERT INTO devolucoes (${colunas.join(', ')})
+         VALUES (${colunas.map((_, i) => `$${i + 1}`).join(', ')})`,
+        valores
+      );
+      for (const itemCorpo of itensCorpo) {
+        const it = camposItem(itemCorpo);
+        const cols = ['devolucao_id', 'operador_nome', 'operador_setor', ...Object.keys(it)];
+        const vals = [id, op.nome, op.setor, ...Object.values(it)];
+        await cli.query(
+          `INSERT INTO devolucao_itens (${cols.join(', ')})
+           VALUES (${cols.map((_, i) => `$${i + 1}`).join(', ')})`,
+          vals
+        );
+      }
+      await logDevolucao(cli, {
+        devolucaoId: id, operador: op,
+        acao: `Checklist de devolução criado (rota ${cab.rota_codigo}, ${itensCorpo.length} item(ns))`,
+      });
+      return buscarCompleta(cli, id);
+    });
+
+    emitirAtualizada(id);
+    res.status(201).json(devolucao);
+  } catch (e) { next(e); }
+});
+
+rotasDevolucoes.get('/devolucoes/:id', exigirLogin, async (req, res, next) => {
+  try {
+    const d = await buscarCompleta({ query: consultar }, req.params.id);
+    if (!d) return res.status(404).json({ erro: 'Devolução não encontrada.', codigo: 'NAO_ENCONTRADA' });
+    res.json(d);
+  } catch (e) { next(e); }
+});
+
+/* Edição do cabeçalho — controle total da Logística. Carimbos e status NÃO
+   passam por aqui (têm rota própria com a máquina de estados). */
+rotasDevolucoes.patch('/devolucoes/:id', exigirLogin, exigirSetor('Logística'), async (req, res, next) => {
+  try {
+    const op = req.operador;
+    const cab = camposCabecalho(req.body || {});
+    if (!Object.keys(cab).length) {
+      return res.status(400).json({ erro: 'Nada para alterar.', codigo: 'SEM_CAMPOS' });
+    }
+    if (cab.data_dev !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(cab.data_dev)) {
+      return res.status(400).json({ erro: 'Data da devolução inválida (use AAAA-MM-DD).', codigo: 'DATA_INVALIDA' });
+    }
+    if (cab.rota_codigo !== undefined) {
+      if (!cab.rota_codigo) {
+        return res.status(400).json({ erro: 'A rota é obrigatória.', codigo: 'ROTA_FALTANDO' });
+      }
+      const rota = await consultar('SELECT codigo FROM dim_rotas WHERE codigo = $1', [cab.rota_codigo]);
+      if (!rota.rows[0]) {
+        return res.status(422).json({
+          erro: `A rota ${cab.rota_codigo} não está cadastrada.`,
+          codigo: 'ROTA_DESCONHECIDA',
+        });
+      }
+    }
+    const sets = Object.keys(cab).map((c, i) => `${c} = $${i + 1}`);
+    const vals = Object.values(cab);
+    vals.push(op.nome, op.setor, req.params.id);
+    const upd = await consultar(
+      `UPDATE devolucoes
+          SET ${sets.join(', ')},
+              operador_nome = $${vals.length - 2}, operador_setor = $${vals.length - 1},
+              atualizado_em = now(), versao = versao + 1
+        WHERE devolucao_id = $${vals.length} AND excluida_em IS NULL
+        RETURNING devolucao_id`,
+      vals
+    );
+    if (!upd.rows[0]) return res.status(404).json({ erro: 'Devolução não encontrada.', codigo: 'NAO_ENCONTRADA' });
+    const d = await buscarCompleta({ query: consultar }, req.params.id);
+    emitirAtualizada(req.params.id);
+    res.json(d);
+  } catch (e) { next(e); }
+});
+
+/* Exclusão é soft (excluida_em) — some do painel e dos relatórios, mas o
+   dado e as revisões ficam. */
+rotasDevolucoes.delete('/devolucoes/:id', exigirLogin, exigirSetor('Logística'), async (req, res, next) => {
+  try {
+    const op = req.operador;
+    await emTransacao(async (cli) => {
+      const upd = await cli.query(
+        `UPDATE devolucoes
+            SET excluida_em = now(), operador_nome = $1, operador_setor = $2,
+                atualizado_em = now(), versao = versao + 1
+          WHERE devolucao_id = $3 AND excluida_em IS NULL
+          RETURNING numero`,
+        [op.nome, op.setor, req.params.id]
+      );
+      if (!upd.rows[0]) {
+        const e = new Error('Devolução não encontrada.');
+        e.status = 404; e.codigo = 'NAO_ENCONTRADA';
+        throw e;
+      }
+      await logDevolucao(cli, {
+        devolucaoId: req.params.id, operador: op,
+        acao: `Checklist de devolução nº ${upd.rows[0].numero} excluído`,
+      });
+    });
+    emitirAtualizada(req.params.id);
+    res.json({ ok: true });
+  } catch (e) { next(e); }
+});
+
+/* Avanço de etapa — as "assinaturas" do papel. O corpo pode trazer os
+   campos que aquela etapa imputa (Portaria: lacres e nº da carga;
+   Faturamento: peso final; Controles Internos: observações). */
+rotasDevolucoes.post('/devolucoes/:id/etapa', exigirLogin, async (req, res, next) => {
+  try {
+    const op = req.operador;
+    const para = String(req.body?.para ?? '');
+
+    const resultado = await emTransacao(async (cli) => {
+      const { rows } = await cli.query(
+        'SELECT * FROM devolucoes WHERE devolucao_id = $1 AND excluida_em IS NULL FOR UPDATE',
+        [req.params.id]
+      );
+      if (!rows[0]) {
+        const e = new Error('Devolução não encontrada.');
+        e.status = 404; e.codigo = 'NAO_ENCONTRADA';
+        throw e;
+      }
+      const regra = validarTransicaoDevolucao(rows[0].status, para, op.setor);
+
+      const extras = [];
+      const vals = [];
+      const põe = (coluna, valor) => { vals.push(valor); extras.push(`${coluna} = $${vals.length}`); };
+
+      if (regra.carimbo === 'portaria') {
+        if (req.body?.lacre1 !== undefined) põe('lacre1', String(req.body.lacre1).slice(0, 50));
+        if (req.body?.lacre2 !== undefined) põe('lacre2', String(req.body.lacre2).slice(0, 50));
+        if (req.body?.cargaNumero !== undefined) põe('carga_numero', String(req.body.cargaNumero).slice(0, 50));
+      }
+      if (regra.carimbo === 'faturamento' && req.body?.pesoFinal !== undefined) {
+        const n = Number(req.body.pesoFinal);
+        põe('peso_final', req.body.pesoFinal === '' || req.body.pesoFinal === null
+          ? null : (Number.isFinite(n) ? n : null));
+      }
+      if (regra.carimbo === 'controles' && req.body?.obsControles !== undefined) {
+        põe('obs_controles', String(req.body.obsControles).slice(0, 2000));
+      }
+
+      põe('status', para);
+      põe(`${regra.carimbo}_por`, op.nome);
+      vals.push(op.nome, op.setor, req.params.id);
+      await cli.query(
+        `UPDATE devolucoes
+            SET ${extras.join(', ')}, ${regra.carimbo}_em = now(),
+                operador_nome = $${vals.length - 2}, operador_setor = $${vals.length - 1},
+                atualizado_em = now(), versao = versao + 1
+          WHERE devolucao_id = $${vals.length}`,
+        vals
+      );
+      await logDevolucao(cli, {
+        devolucaoId: req.params.id, operador: op,
+        acao: `Devolução nº ${rows[0].numero}: ${rows[0].status} → ${para}`,
+      });
+      return buscarCompleta(cli, req.params.id);
+    });
+
+    emitirAtualizada(req.params.id);
+    res.json(resultado);
+  } catch (e) { next(e); }
+});
+
+/* ---------- Itens do checklist ---------- */
+
+rotasDevolucoes.post('/devolucoes/:id/itens', exigirLogin, exigirSetor('Logística'), async (req, res, next) => {
+  try {
+    const op = req.operador;
+    const dev = await consultar(
+      'SELECT devolucao_id FROM devolucoes WHERE devolucao_id = $1 AND excluida_em IS NULL',
+      [req.params.id]
+    );
+    if (!dev.rows[0]) return res.status(404).json({ erro: 'Devolução não encontrada.', codigo: 'NAO_ENCONTRADA' });
+    const it = camposItem(req.body || {});
+    const cols = ['devolucao_id', 'operador_nome', 'operador_setor', ...Object.keys(it)];
+    const vals = [req.params.id, op.nome, op.setor, ...Object.values(it)];
+    const ins = await consultar(
+      `INSERT INTO devolucao_itens (${cols.join(', ')})
+       VALUES (${cols.map((_, i) => `$${i + 1}`).join(', ')})
+       RETURNING *`,
+      vals
+    );
+    emitirAtualizada(req.params.id);
+    res.status(201).json(itemParaPainel(ins.rows[0]));
+  } catch (e) { next(e); }
+});
+
+/* Edição de item. A conferência (qtdRecebida) e a destinação também entram
+   por aqui — na fase 2 os setores donos dessas colunas ganham passagem, e
+   a checagem por setor abaixo já separa os dois casos. */
+rotasDevolucoes.patch('/devolucoes/:id/itens/:itemId', exigirLogin, async (req, res, next) => {
+  try {
+    const op = req.operador;
+    const it = camposItem(req.body || {});
+    if (!Object.keys(it).length) {
+      return res.status(400).json({ erro: 'Nada para alterar.', codigo: 'SEM_CAMPOS' });
+    }
+
+    /* Fase 1: Logística/Administração mexem em tudo. Fase 2 (já pronta):
+       Expedição só confere (qtd_recebida), Controles Internos só destina. */
+    const SO_CONFERENCIA = new Set(['qtd_recebida']);
+    const SO_DESTINACAO = new Set(['destinacao']);
+    const chaves = Object.keys(it);
+    const permitido =
+      op.setor === 'Logística' || op.setor === 'Administração'
+      || (op.setor === 'Expedição' && chaves.every((c) => SO_CONFERENCIA.has(c)))
+      || (op.setor === 'Controles Internos' && chaves.every((c) => SO_DESTINACAO.has(c)));
+    if (!permitido) {
+      return res.status(403).json({
+        erro: `O setor ${op.setor} não altera esses campos do checklist.`,
+        codigo: 'SETOR_SEM_PERMISSAO',
+      });
+    }
+
+    const sets = chaves.map((c, i) => `${c} = $${i + 1}`);
+    const vals = Object.values(it);
+    vals.push(op.nome, op.setor, req.params.id, Number(req.params.itemId) || 0);
+    const upd = await consultar(
+      `UPDATE devolucao_itens
+          SET ${sets.join(', ')},
+              operador_nome = $${vals.length - 3}, operador_setor = $${vals.length - 2},
+              atualizado_em = now()
+        WHERE devolucao_id = $${vals.length - 1} AND item_id = $${vals.length}
+        RETURNING *`,
+      vals
+    );
+    if (!upd.rows[0]) return res.status(404).json({ erro: 'Item não encontrado.', codigo: 'NAO_ENCONTRADO' });
+    emitirAtualizada(req.params.id);
+    res.json(itemParaPainel(upd.rows[0]));
+  } catch (e) { next(e); }
+});
+
+rotasDevolucoes.delete('/devolucoes/:id/itens/:itemId', exigirLogin, exigirSetor('Logística'), async (req, res, next) => {
+  try {
+    const del = await consultar(
+      'DELETE FROM devolucao_itens WHERE devolucao_id = $1 AND item_id = $2 RETURNING item_id',
+      [req.params.id, Number(req.params.itemId) || 0]
+    );
+    if (!del.rows[0]) return res.status(404).json({ erro: 'Item não encontrado.', codigo: 'NAO_ENCONTRADO' });
+    emitirAtualizada(req.params.id);
+    res.json({ ok: true });
+  } catch (e) { next(e); }
+});
+
+/* ---------- Divergências (o que chegou fora do checklist) ---------- */
+
+rotasDevolucoes.post('/devolucoes/:id/divergencias', exigirLogin, exigirSetor('Logística', 'Expedição'), async (req, res, next) => {
+  try {
+    const op = req.operador;
+    const codProduto = String(req.body?.codProduto ?? '').trim().slice(0, 50);
+    if (!codProduto) {
+      return res.status(400).json({ erro: 'Informe o código do produto que chegou fora do checklist.', codigo: 'PRODUTO_FALTANDO' });
+    }
+    const dev = await consultar(
+      'SELECT devolucao_id FROM devolucoes WHERE devolucao_id = $1 AND excluida_em IS NULL',
+      [req.params.id]
+    );
+    if (!dev.rows[0]) return res.status(404).json({ erro: 'Devolução não encontrada.', codigo: 'NAO_ENCONTRADA' });
+    const cx = Number(req.body?.cx);
+    const ins = await consultar(
+      `INSERT INTO devolucao_divergencias
+         (devolucao_id, cod_produto, produto_nome, cx, observacao, lancada_por)
+       VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+      [req.params.id, codProduto,
+       String(req.body?.produtoNome ?? '').slice(0, 200),
+       Number.isFinite(cx) ? Math.max(0, cx) : 0,
+       String(req.body?.observacao ?? '').slice(0, 500),
+       op.nome]
+    );
+    emitirAtualizada(req.params.id);
+    res.status(201).json(divergenciaParaPainel(ins.rows[0]));
+  } catch (e) { next(e); }
+});
+
+rotasDevolucoes.delete('/devolucoes/:id/divergencias/:divId', exigirLogin, exigirSetor('Logística', 'Expedição'), async (req, res, next) => {
+  try {
+    const del = await consultar(
+      'DELETE FROM devolucao_divergencias WHERE devolucao_id = $1 AND divergencia_id = $2 RETURNING divergencia_id',
+      [req.params.id, Number(req.params.divId) || 0]
+    );
+    if (!del.rows[0]) return res.status(404).json({ erro: 'Divergência não encontrada.', codigo: 'NAO_ENCONTRADA' });
+    emitirAtualizada(req.params.id);
+    res.json({ ok: true });
+  } catch (e) { next(e); }
+});
+
+/* ---------- Revisões (mesmo padrão das cargas: Administração) ---------- */
+
+rotasDevolucoes.get('/devolucoes/:id/revisoes', exigirLogin, exigirSetor(), async (req, res, next) => {
+  try {
+    const { rows } = await consultar(
+      `SELECT revisao_id, tabela, dados, gravada_em, mudada_por, mudada_setor
+         FROM devolucao_revisoes
+        WHERE devolucao_id = $1 AND tabela = 'devolucoes'
+        ORDER BY revisao_id DESC LIMIT 100`,
+      [req.params.id]
+    );
+    res.json(rows.map((r) => ({
+      revisaoId: Number(r.revisao_id),
+      gravadaEm: r.gravada_em,
+      mudadaPor: r.mudada_por,
+      mudadaSetor: r.mudada_setor,
+      devolucao: devolucaoParaPainel(r.dados),
+    })));
+  } catch (e) { next(e); }
+});
+
+rotasDevolucoes.post('/devolucoes/:id/restaurar', exigirLogin, exigirSetor(), async (req, res, next) => {
+  try {
+    const op = req.operador;
+    const revisaoId = Number(req.body?.revisaoId) || 0;
+    const resultado = await emTransacao(async (cli) => {
+      const rev = await cli.query(
+        `SELECT dados FROM devolucao_revisoes
+          WHERE devolucao_id = $1 AND revisao_id = $2 AND tabela = 'devolucoes'`,
+        [req.params.id, revisaoId]
+      );
+      if (!rev.rows[0]) {
+        const e = new Error('Revisão não encontrada.');
+        e.status = 404; e.codigo = 'NAO_ENCONTRADA';
+        throw e;
+      }
+      const d = rev.rows[0].dados;
+      /* Os carimbos voltam JUNTO com o status — restaurar "Lançada"
+         deixando o carimbo da Portaria na linha criaria um documento que
+         diz duas coisas ao mesmo tempo. */
+      const upd = await cli.query(
+        `UPDATE devolucoes SET
+            data_dev = $1, rota_codigo = $2, regiao = $3, transportadora = $4,
+            nota_transferencia = $5, placa = $6, motorista = $7, carga_numero = $8,
+            lacre1 = $9, lacre2 = $10, peso_final = $11, status = $12,
+            obs_controles = $13, observacoes = $14,
+            portaria_por = $15, portaria_em = $16,
+            faturamento_por = $17, faturamento_em = $18,
+            expedicao_por = $19, expedicao_em = $20,
+            controles_por = $21, controles_em = $22,
+            notas_por = $23, notas_em = $24,
+            operador_nome = $25, operador_setor = $26,
+            atualizado_em = now(), versao = versao + 1
+          WHERE devolucao_id = $27 AND excluida_em IS NULL
+          RETURNING devolucao_id`,
+        [d.data_dev, d.rota_codigo, d.regiao, d.transportadora,
+         d.nota_transferencia, d.placa, d.motorista, d.carga_numero,
+         d.lacre1, d.lacre2, d.peso_final, d.status,
+         d.obs_controles, d.observacoes,
+         d.portaria_por, d.portaria_em,
+         d.faturamento_por, d.faturamento_em,
+         d.expedicao_por, d.expedicao_em,
+         d.controles_por, d.controles_em,
+         d.notas_por, d.notas_em,
+         op.nome, op.setor, req.params.id]
+      );
+      if (!upd.rows[0]) {
+        const e = new Error('Devolução não encontrada.');
+        e.status = 404; e.codigo = 'NAO_ENCONTRADA';
+        throw e;
+      }
+      await logDevolucao(cli, {
+        devolucaoId: req.params.id, operador: op,
+        acao: `Devolução restaurada para o estado de ${new Date(d.atualizado_em || d.criado_em).toISOString()} (revisão ${revisaoId})`,
+      });
+      return buscarCompleta(cli, req.params.id);
+    });
+    emitirAtualizada(req.params.id);
+    res.json(resultado);
+  } catch (e) { next(e); }
+});
+
+/* ---------- Cadastros de apoio (supervisores, produtos, motivos) ---------- */
+
+rotasDevolucoes.get('/devolucoes-cadastros', exigirLogin, async (req, res, next) => {
+  try {
+    const [sup, prod, mot] = await Promise.all([
+      consultar('SELECT nome FROM dim_supervisores ORDER BY nome'),
+      consultar('SELECT codigo, nome FROM dim_produtos ORDER BY codigo'),
+      consultar('SELECT motivo FROM dim_motivos_devolucao ORDER BY motivo'),
+    ]);
+    res.json({
+      supervisores: sup.rows.map((r) => r.nome),
+      produtos: prod.rows,
+      motivos: mot.rows.map((r) => r.motivo),
+    });
+  } catch (e) { next(e); }
+});
+
+rotasDevolucoes.post('/devolucoes-cadastros/supervisores', exigirLogin, exigirSetor('Logística'), async (req, res, next) => {
+  try {
+    const nome = String(req.body?.nome ?? '').trim().slice(0, 100);
+    if (!nome) return res.status(400).json({ erro: 'Informe o nome do supervisor.', codigo: 'NOME_FALTANDO' });
+    await consultar('INSERT INTO dim_supervisores (nome) VALUES ($1) ON CONFLICT (nome) DO NOTHING', [nome]);
+    res.status(201).json({ nome });
+  } catch (e) { next(e); }
+});
+
+rotasDevolucoes.post('/devolucoes-cadastros/produtos', exigirLogin, exigirSetor('Logística'), async (req, res, next) => {
+  try {
+    const codigo = String(req.body?.codigo ?? '').trim().slice(0, 50);
+    if (!codigo) return res.status(400).json({ erro: 'Informe o código do produto.', codigo: 'CODIGO_FALTANDO' });
+    const nome = String(req.body?.nome ?? '').trim().slice(0, 200);
+    const { rows } = await consultar(
+      `INSERT INTO dim_produtos (codigo, nome) VALUES ($1,$2)
+       ON CONFLICT (codigo) DO UPDATE SET nome = EXCLUDED.nome, atualizado_em = now()
+       RETURNING codigo, nome`,
+      [codigo, nome]
+    );
+    res.status(201).json(rows[0]);
+  } catch (e) { next(e); }
+});
+
+rotasDevolucoes.post('/devolucoes-cadastros/motivos', exigirLogin, exigirSetor('Logística'), async (req, res, next) => {
+  try {
+    const motivo = String(req.body?.motivo ?? '').trim().slice(0, 300);
+    if (!motivo) return res.status(400).json({ erro: 'Informe o motivo.', codigo: 'MOTIVO_FALTANDO' });
+    await consultar('INSERT INTO dim_motivos_devolucao (motivo) VALUES ($1) ON CONFLICT (motivo) DO NOTHING', [motivo]);
+    res.status(201).json({ motivo });
+  } catch (e) { next(e); }
+});
