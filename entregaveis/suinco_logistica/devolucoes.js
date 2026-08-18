@@ -1437,3 +1437,91 @@ async function cadastrarClienteDevUI() {
     notify((e && e.message) || 'O servidor recusou o cadastro.', 'danger', 6000);
   }
 }
+
+/* ------------------------------------------------------------------
+   RELATÓRIO PARA O OPERADOR (pedido da Bruna, 18/08/2026)
+
+   Diferente do relatório de conferência: aqui é a LISTA CORRIDA das
+   linhas devolvidas no dia, com as colunas que o operador do
+   monitoramento precisa para lançar do lado dele — nota, parcial/total,
+   supervisor, RCA, cliente, caixa, peso, produto, Nº DEV, data DEV e
+   motivo. Sem pesagem, sem falta, sem destinação, sem carimbo: nada do
+   controle interno vai junto.
+
+   Sai no mesmo formato do Relatório Operacional (cabeçalho institucional,
+   A4 pelo servidor) e é gerado pelas próprias meninas para mandar. */
+async function relatorioOperadorDevolucoesUI(diaParam) {
+  if (!devServidorOk()) {
+    notify('O relatório vem do servidor — entre com login de servidor.', 'warn', 6000);
+    return;
+  }
+  const dia = (typeof diaParam === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(diaParam))
+    ? diaParam
+    : ((document.getElementById('dev-filtro-dia') || {}).value || diaLocalDev());
+  let lista;
+  try {
+    lista = await SuincoSharePoint.devolucoes.listar(dia, dia);
+  } catch (e) {
+    notify('Não consegui buscar as devoluções: ' + (e.message || 'erro'), 'danger', 6000);
+    return;
+  }
+  const el = document.getElementById('print-devolucoes-operador');
+  if (!el) return;
+
+  /* Uma linha por ITEM, na ordem em que a devolução foi lançada — é como
+     a capa de papel chega na mão do operador. A identificação do
+     checklist (região/rotas e Nº) viaja em cada linha, senão o operador
+     não sabe de qual capa veio. */
+  const linhas = [];
+  for (const d of lista) {
+    for (const i of d.itens) {
+      linhas.push({ d, i });
+    }
+  }
+  const diaBR = String(dia).split('-').reverse().join('/');
+  const totalCx = linhas.reduce((s, { i }) => s + (Number(i.cx) || 0), 0);
+  const totalPeso = linhas.reduce((s, { i }) => s + (Number(i.peso) || 0), 0);
+  const operadores = Array.from(new Set(lista.map((d) => d.operadorCodigo).filter(Boolean)));
+
+  el.innerHTML = `
+    <div class="print-page doc-normal">
+      ${cabecalhoDocumento({
+        titulo: 'Devoluções do Dia — Relação para o Operador',
+        subtitulo: `Dia ${diaBR} · ${linhas.length} linha(s) · ${totalCx.toLocaleString('pt-BR')} cx · `
+          + `${totalPeso.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} kg`
+          + `${operadores.length ? ' · Operador(es): ' + operadores.join(', ') : ''}`,
+      })}
+      ${linhas.length ? `
+      <table class="doc-tabela dev-doc-tabela">
+        <thead><tr>
+          <th>Nota</th><th>P/T</th><th>Supervisor</th><th title="Vendedor">RCA</th>
+          <th>Cliente</th><th>CX</th><th>Peso</th><th>Produto</th>
+          <th>Nº DEV</th><th>Data DEV</th><th>Motivo</th>
+          <th title="Checklist de origem">Checklist</th>
+        </tr></thead>
+        <tbody>${linhas.map(({ d, i }) => `
+          <tr>
+            <td>${esc(i.nota)}</td>
+            <td>${i.parcial ? ('P' + (i.parcialDesc ? ' ' + esc(i.parcialDesc) : '')) : 'T'}</td>
+            <td>${esc(i.supervisor)}</td>
+            <td>${esc(i.vendedor)}</td>
+            <td>${esc(i.codCliente)}</td>
+            <td class="c-peso">${(Number(i.cx) || 0).toLocaleString('pt-BR')}</td>
+            <td class="c-peso">${i.peso !== null ? Number(i.peso).toLocaleString('pt-BR') : '—'}</td>
+            <td>${esc(i.codProduto)}${i.produtoNome ? '-' + esc(i.produtoNome) : ''}</td>
+            <td>${esc(i.numDev)}</td>
+            <td>${i.dataItem ? esc(String(i.dataItem).slice(0, 10).split('-').reverse().join('/')) : '—'}</td>
+            <td>${esc(i.motivo)}</td>
+            <td>${esc(devRotulo(d))}${d.tipo === 'SOBRA' ? ' (SOBRA)' : ''} · Nº ${d.numero}</td>
+          </tr>`).join('')}</tbody>
+      </table>` : '<div class="card-sub">Nenhuma devolução lançada neste dia.</div>'}
+      ${rodapeDocumento(
+        'Relação das linhas devolvidas no dia, para lançamento pelo operador do '
+        + 'monitoramento. Conferência de descarga, pesagem e destinação não entram '
+        + 'aqui — elas ficam no Relatório de Devoluções.',
+        `Devoluções do dia ${diaBR}, gravadas no servidor pelo painel.`,
+        '')}
+    </div>`;
+
+  await exportarViaServidor(el, `Devolucoes-Operador-${dia}`);
+}

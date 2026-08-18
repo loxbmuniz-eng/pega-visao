@@ -347,6 +347,8 @@
             <button class="btn btn-sec btn-sm" onclick="filtroDevolucoesHoje()">Hoje</button>
             <button class="btn btn-sec btn-sm" onclick="carregarDevolucoes()">↻ Atualizar</button>
             <button class="btn btn-sec btn-sm" onclick="relatorioDevolucoesUI()">📄 Relatório do dia</button>
+            <button class="btn btn-sec btn-sm" onclick="relatorioOperadorDevolucoesUI()"
+              title="Relação corrida das linhas do dia (nota, parcial, supervisor, RCA, cliente, caixa, peso, produto, Nº DEV, data e motivo) — o PDF que vai para o operador do monitoramento.">📤 Relação para o operador</button>
           </div>
         </div>
         <div id="dev-lista"></div>
@@ -365,6 +367,7 @@
 
     <!-- Relatório (preenchido na hora da exportação; nunca visível na tela) -->
     <div id="print-devolucoes" class="print-only" style="display:none"></div>
+    <div id="print-devolucoes-operador" class="print-only" style="display:none"></div>
   </div>
 
   <!-- ===== PORTARIA ===== -->
@@ -998,7 +1001,15 @@
           <button class="btn btn-primary btn-sm"
             onclick="relatorioDevolucoesUI((document.getElementById('rel-dev-dia')||{}).value)">📄 Gerar PDF</button>
         </div>
+        <div class="form-group">
+          <button class="btn btn-sec btn-sm"
+            title="Relação corrida das linhas do dia para o operador do monitoramento lançar do lado dele."
+            onclick="relatorioOperadorDevolucoesUI((document.getElementById('rel-dev-dia')||{}).value)">📤 Relação para o operador</button>
+        </div>
       </div>
+      <div class="card-sub" style="margin-top:-2px">A <strong>relação para o operador</strong> traz só o que
+        ele precisa para lançar: nota, parcial ou total, supervisor, RCA, cliente, caixa, peso, produto,
+        Nº da DEV, data da DEV e motivo.</div>
     </div>
 
     <!-- Filtro compartilhado pelos três relatórios. Fica no topo porque
