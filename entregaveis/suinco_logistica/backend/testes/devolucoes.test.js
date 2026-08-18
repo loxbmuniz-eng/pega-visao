@@ -334,8 +334,15 @@ describe('4. Conferência: falta calculada, divergência não apaga falta', () =
   });
 
   test('produto fora do checklist entra como divergência — e a falta continua', async () => {
-    const div = await req(`/api/devolucoes/${id}/divergencias`, {
+    // Divergentes: escopo EXCLUSIVO dos Controles Internos (18/08/2026) —
+    // nem a Logística lança por eles.
+    const negado = await req(`/api/devolucoes/${id}/divergencias`, {
       metodo: 'POST', token: tokens['Logística'],
+      corpo: { codProduto: 'X', cx: 1 },
+    });
+    assert.equal(negado.status, 403, 'Logística não lança divergente');
+    const div = await req(`/api/devolucoes/${id}/divergencias`, {
+      metodo: 'POST', token: tokens['Controles Internos'],
       corpo: { codProduto: '30063', produtoNome: 'SUBSTITUTO', cx: 1, observacao: 'veio no lugar do 30110' },
     });
     assert.equal(div.status, 201, div.texto);
@@ -410,6 +417,17 @@ describe('4. Conferência: falta calculada, divergência não apaga falta', () =
     assert.equal(rec.json.placa, 'GFR8A80', 'placa normalizada, imputada pela Portaria');
     assert.equal(rec.json.motorista, 'Lucas');
     assert.equal(rec.json.carimbos.portaria.por, 'Bruno Dev');
+  });
+
+  test('destinação MÚLTIPLA: 3 caixas viram 1 Estoque + 2 Descarte', async () => {
+    const r = await req(`/api/devolucoes/${id}/itens/${itemId}`, {
+      metodo: 'PATCH', token: tokens['Controles Internos'],
+      corpo: { destEstoque: 1, destDescarte: 2 },
+    });
+    assert.equal(r.status, 200, r.texto);
+    assert.equal(r.json.destEstoque, 1);
+    assert.equal(r.json.destDescarte, 2);
+    assert.equal(r.json.destReprocesso, null);
   });
 
   test('destinação aceita só os três destinos reais', async () => {

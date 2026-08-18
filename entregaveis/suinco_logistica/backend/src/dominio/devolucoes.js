@@ -178,6 +178,11 @@ export function itemParaPainel(i) {
        que é diferente de "chegou tudo". */
     falta: recebida === null ? null : Math.max(0, cx - recebida),
     destinacao: i.destinacao || null,
+    /* Destinação múltipla (migração 020): caixas por destino — 3 caixas
+       podem virar 1 Estoque + 2 Descarte. */
+    destEstoque: i.dest_estoque === null || i.dest_estoque === undefined ? null : Number(i.dest_estoque),
+    destDescarte: i.dest_descarte === null || i.dest_descarte === undefined ? null : Number(i.dest_descarte),
+    destReprocesso: i.dest_reprocesso === null || i.dest_reprocesso === undefined ? null : Number(i.dest_reprocesso),
     // Pesagem do Faturamento — a confirmação de que passou pela balança.
     pesoFaturamento: i.peso_faturamento === null || i.peso_faturamento === undefined
       ? null : Number(i.peso_faturamento),
@@ -241,6 +246,13 @@ export function camposItem(corpo) {
   }
   if (corpo.destinacao !== undefined) {
     m.destinacao = DESTINACOES.includes(corpo.destinacao) ? corpo.destinacao : null;
+  }
+  for (const [chave, coluna] of [['destEstoque', 'dest_estoque'],
+    ['destDescarte', 'dest_descarte'], ['destReprocesso', 'dest_reprocesso']]) {
+    if (corpo[chave] !== undefined) {
+      const n = numeroOuNull(corpo[chave]);
+      m[coluna] = n === null ? null : Math.max(0, n);
+    }
   }
   if (corpo.pesoFaturamento !== undefined) {
     const n = numeroOuNull(corpo.pesoFaturamento);
