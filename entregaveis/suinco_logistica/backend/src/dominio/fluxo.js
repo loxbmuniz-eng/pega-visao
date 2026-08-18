@@ -135,8 +135,11 @@ const CAMPOS_EDITAVEIS = {
     // A data de programação nasce quando a Logística lança a carga de um
     // caminhão que já estava no pátio — por isso precisa ser editável.
     'programado_em',
+    'lacre', 'lacre_retido',
   ],
-  'Portaria': ['motorista', 'observacoes'],
+  // Lacres (18/08/2026): é a Portaria quem coloca o lacre na saída e quem
+  // o retém quando a carga está incorreta — os dois números são dela.
+  'Portaria': ['motorista', 'observacoes', 'lacre', 'lacre_retido'],
   'Expedição': ['qtd_ganchos', 'observacoes'],
   'Faturamento': ['observacoes'],
 };

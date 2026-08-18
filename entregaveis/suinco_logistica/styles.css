@@ -3162,3 +3162,8 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
 .dev-comp-linha:last-child{ border-bottom:none; }
 .dev-comp-rot{ font-size:11pt; font-weight:700; color:#444; letter-spacing:.05em; }
 .dev-comp-val{ font-size:20pt; font-weight:800; color:#111; font-variant-numeric:tabular-nums; text-align:right; }
+
+/* Torre: Ganchos e Entregas empilhados numa coluna só (18/08/2026) —
+   coluna nova alargaria a tabela e voltaria a rolagem lateral. */
+.cel-gan-ent{ white-space:nowrap; }
+.cel-gan-ent input{ display:block; width:64px; margin:2px 0; }

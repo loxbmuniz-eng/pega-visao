@@ -602,6 +602,11 @@ const SuincoStore = {
          zerava capacidade e UF: campo esquecido no pacote de ida, sem erro
          nenhum na tela. */
       Observacoes: carga.observacoes || '',
+      // Lacres da saída (18/08/2026) — nos TRÊS pontos, como manda o
+      // guardião nº 1: aqui (ida), daApiParaLinha (volta) e
+      // cargaDeLinhaRemota (conversão).
+      Lacre: carga.lacre || '',
+      Lacre_Retido: carga.lacreRetido || '',
       Status_Atual: carga.status,
       Aguardando_Carga: !!carga.aguardandoCarga,
       Criado_Em: carga.criadoEm,
@@ -978,6 +983,8 @@ function cargaDeLinhaRemota(r){
        nenhum — foi o que deixou o relatório Administração de Fretes em
        branco para todo mundo. */
     observacoes: r.Observacoes || '',
+    lacre: r.Lacre || '',
+    lacreRetido: r.Lacre_Retido || '',
     status: STATUS_FLOW.includes(r.Status_Atual) ? r.Status_Atual : STATUS_FLOW[0],
     aguardandoCarga: r.Aguardando_Carga === true || r.Aguardando_Carga === 'Sim',
     criadoEm: r.Criado_Em || nowISO(),
@@ -1546,19 +1553,53 @@ function avancarStatusCarga(cargaId, statusNovo, operador, setor){
 // uma única vez, sem perguntar qual carga — igual já era antes). Cargas
 // que ainda não chegaram lá ficam intactas e o retorno informa quais são,
 // pra Portaria entender por que não liberou.
-function registrarSaidaPortaria(placa, operador){
+function registrarSaidaPortaria(placa, operador, lacre){
   const p = normalizarPlaca(placa);
   const abertas = cargasAbertasPorPlaca(p);
   const elegiveis = abertas.filter(c => c.status === 'Faturado');
   const pendentes = abertas.filter(c => c.status !== 'Faturado');
+  const lacreLimpo = String(lacre || '').trim().slice(0, 50);
   elegiveis.forEach(c=>{
     registrarMovimentacao({cargaId:c.id, placa:p, statusAnterior:c.status, statusNovo:'Seguiu Viagem', operador, setor:'Portaria', ...snapshotCarga(c)});
     c.status = 'Seguiu Viagem';
+    // Lacre da saída (18/08/2026): o caminhão sai para inspeção com um
+    // lacre numerado — fica em TODAS as cargas da placa que saíram, pois
+    // o lacre é do caminhão, não de uma carga só.
+    if(lacreLimpo) c.lacre = lacreLimpo;
     c._statusPendentes = (c._statusPendentes || []).concat('Seguiu Viagem');  // ver sincronizarCarga
     c.atualizadoEm = nowISO();
   });
   if(elegiveis.length) SuincoStore.save();
   return {liberadas:elegiveis, pendentes};
+}
+
+/* Lacre RETIDO na inspeção (pedido do gestor, 18/08/2026): carga
+   incorreta ou outro motivo — o número retido fica guardado, o novo lacre
+   (se emitido) vira o vigente, e o motivo entra nas observações, que já
+   são protegidas contra apagamento por eco. Vale para as cargas da placa
+   que SAÍRAM HOJE (a retenção acontece na inspeção da saída) — se nenhuma
+   saiu hoje, cai nas cargas em aberto da placa. */
+function registrarLacreRetido(placa, {lacreRetido, novoLacre, motivo, operador}){
+  const p = normalizarPlaca(placa);
+  const hoje = new Date(); hoje.setHours(0,0,0,0);
+  const sairamHoje = DB.cargas.filter(c => normalizarPlaca(c.placa) === p
+    && c.status === 'Seguiu Viagem'
+    && new Date(c.atualizadoEm || c.criadoEm) >= hoje);
+  const alvo = sairamHoje.length ? sairamHoje : cargasAbertasPorPlaca(p);
+  const retido = String(lacreRetido || '').trim().slice(0, 50);
+  const novo = String(novoLacre || '').trim().slice(0, 50);
+  const nota = `Lacre ${retido || '(sem número)'} RETIDO`
+    + (motivo ? ` — ${String(motivo).trim()}` : '')
+    + (novo ? ` — novo lacre ${novo}` : '')
+    + (operador ? ` (${operador})` : '');
+  alvo.forEach(c=>{
+    c.lacreRetido = retido || c.lacre || '';
+    if(novo) c.lacre = novo;
+    c.observacoes = c.observacoes ? `${c.observacoes} | ${nota}` : nota;
+    c.atualizadoEm = nowISO();
+  });
+  if(alvo.length) SuincoStore.save();
+  return {atingidas: alvo};
 }
 
 /* ---------- INDICADORES ----------

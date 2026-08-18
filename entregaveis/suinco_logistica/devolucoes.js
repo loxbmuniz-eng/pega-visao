@@ -135,12 +135,18 @@ async function carregarCadastrosDev() {
       if (dl) dl.innerHTML = valores.map((v) => `<option value="${esc(v)}">`).join('');
     };
     põe('dl-dev-supervisores', DEV_CADASTROS.supervisores || []);
+    põe('dl-dev-rcas', DEV_CADASTROS.representantes || []);
     põe('dl-dev-motivos', DEV_CADASTROS.motivos || []);
     const dlProd = document.getElementById('dl-dev-produtos');
     if (dlProd) {
+      // Só produto ATIVO vira sugestão de lançamento; os inativos ficam na
+      // tabela de Cadastros, marcados, para consulta de histórico.
       dlProd.innerHTML = (DEV_CADASTROS.produtos || [])
+        .filter((p) => p.ativo !== false)
         .map((p) => `<option value="${esc(p.codigo)}">${esc(p.nome)}${p.pesoCaixaKg ? ' · ' + p.pesoCaixaKg + ' kg/cx' : ''}</option>`).join('');
     }
+    if (typeof renderProdutosDevUI === 'function') renderProdutosDevUI();
+    if (typeof atualizarResumoCadDev === 'function') atualizarResumoCadDev();
   } catch (e) {
     console.warn('[Devoluções] cadastros:', e);
   }
@@ -323,7 +329,7 @@ function renderDevolucaoAberta(d, editavel) {
              <option value="" ${i.parcial ? '' : 'selected'}>Total</option></select>`
         : (i.parcial ? 'Parcial' : 'Total')}</td>
       <td>${cel('supervisor', i.supervisor, 'text', 'list="dl-dev-supervisores"')}</td>
-      <td>${cel('vendedor', i.vendedor)}</td>
+      <td>${cel('vendedor', i.vendedor, 'text', 'list="dl-dev-rcas"')}</td>
       <td>${cel('codCliente', i.codCliente)}</td>
       <td class="c-peso">${cel('cx', i.cx, 'number', 'min="0" step="1"')}</td>
       <td class="c-peso">${cel('peso', i.peso, 'number', 'min="0" step="0.01"')}</td>
@@ -352,7 +358,7 @@ function renderDevolucaoAberta(d, editavel) {
       <td><input type="text" id="dev-ni-${esc(d.id)}-nota" placeholder="Nota"></td>
       <td><select id="dev-ni-${esc(d.id)}-parcial"><option value="1">Parcial</option><option value="">Total</option></select></td>
       <td><input type="text" id="dev-ni-${esc(d.id)}-supervisor" list="dl-dev-supervisores" placeholder="Supervisor"></td>
-      <td><input type="text" id="dev-ni-${esc(d.id)}-vendedor" placeholder="RCA" title="RCA / vendedor — como na capa real"></td>
+      <td><input type="text" id="dev-ni-${esc(d.id)}-vendedor" list="dl-dev-rcas" placeholder="RCA" title="RCA / vendedor — como na capa real"></td>
       <td><input type="text" id="dev-ni-${esc(d.id)}-cliente" placeholder="Cód. cliente"></td>
       <td class="c-peso"><input type="number" min="0" step="1" id="dev-ni-${esc(d.id)}-cx" placeholder="CX"></td>
       <td class="c-peso"><input type="number" min="0" step="0.01" id="dev-ni-${esc(d.id)}-peso" placeholder="Peso"></td>
@@ -837,5 +843,35 @@ async function cadastrarMotivoDevUI() {
     atualizarResumoCadDev();
   } catch (e) {
     notify((e && e.message) || 'O servidor recusou o cadastro.', 'danger', 6000);
+  }
+}
+
+/* ---------- tabela de produtos na aba Cadastros ----------
+   A base oficial (INFORMAÇÕES DE PRODUTOS, 18/08/2026) inteira, com
+   busca — mesma pegada da tabela de Frota. Produto INATIVO aparece
+   marcado, mas não entra nas sugestões de lançamento. */
+function renderProdutosDevUI() {
+  const tbody = document.getElementById('cad-dev-prod-tbody');
+  if (!tbody) return;
+  const termo = ((document.getElementById('cad-dev-prod-busca') || {}).value || '')
+    .trim().toLowerCase();
+  const todos = DEV_CADASTROS.produtos || [];
+  const lista = (termo
+    ? todos.filter((p) => `${p.codigo} ${p.nome} ${p.categoria || ''}`.toLowerCase().includes(termo))
+    : todos).slice(0, 200);
+  tbody.innerHTML = lista.map((p) => `<tr${p.ativo === false ? ' class="text-dim"' : ''}>
+      <td>${esc(p.codigo)}</td>
+      <td>${esc(p.nome)}</td>
+      <td>${esc(p.categoria || '—')}</td>
+      <td>${esc(p.temperatura || '—')}</td>
+      <td>${esc(p.validade || '—')}</td>
+      <td class="c-peso">${p.pesoCaixaKg ?? (p.pesoLiquidoTxt || '—')}</td>
+      <td>${p.ativo === false ? 'Inativo' : 'Sim'}</td>
+    </tr>`).join('');
+  const cont = document.getElementById('cad-dev-prod-contagem');
+  if (cont) {
+    cont.textContent = `${todos.length} produto(s) na base`
+      + (termo ? ` · ${lista.length} na busca` : '')
+      + (lista.length === 200 ? ' · mostrando os 200 primeiros — refine a busca' : '');
   }
 }
