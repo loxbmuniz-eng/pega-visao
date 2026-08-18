@@ -151,11 +151,11 @@ rotasDevolucoes.post('/devolucoes', exigirLogin, async (req, res, next) => {
       });
     }
     const cab = camposCabecalho(req.body || {});
-    /* Um checklist pode juntar VÁRIAS rotas da mesma região (18/08/2026).
-       Aceita `rotas` (array ou "519, 542") e o `rota` antigo por
-       compatibilidade — pelo menos uma, todas cadastradas. */
-    const rotas = normalizarRotas(req.body?.rotas ?? req.body?.rota);
-    if (!rotas.length) {
+    /* SOBRA (18/08/2026): sem vínculo com carga e SEM rota — só entra.
+       Devolução normal continua exigindo pelo menos uma rota cadastrada. */
+    const tipo = req.body?.tipo === 'SOBRA' ? 'SOBRA' : 'DEVOLUCAO';
+    const rotas = tipo === 'SOBRA' ? [] : normalizarRotas(req.body?.rotas ?? req.body?.rota);
+    if (tipo !== 'SOBRA' && !rotas.length) {
       return res.status(400).json({
         erro: 'Informe pelo menos uma rota — região + rotas identificam o checklist na conferência.',
         codigo: 'ROTA_FALTANDO',
@@ -176,9 +176,9 @@ rotasDevolucoes.post('/devolucoes', exigirLogin, async (req, res, next) => {
     const itensCorpo = Array.isArray(req.body?.itens) ? req.body.itens.slice(0, 200) : [];
 
     const devolucao = await emTransacao(async (cli) => {
-      const colunas = ['devolucao_id', 'status', 'criada_por', 'criada_setor',
+      const colunas = ['devolucao_id', 'tipo', 'status', 'criada_por', 'criada_setor',
         'operador_nome', 'operador_setor', ...Object.keys(cab)];
-      const valores = [id, DEV_STATUS_INICIAL, op.nome, op.setor,
+      const valores = [id, tipo, DEV_STATUS_INICIAL, op.nome, op.setor,
         op.nome, op.setor, ...Object.values(cab)];
       await cli.query(
         `INSERT INTO devolucoes (${colunas.join(', ')})
@@ -204,7 +204,9 @@ rotasDevolucoes.post('/devolucoes', exigirLogin, async (req, res, next) => {
       }
       await logDevolucao(cli, {
         devolucaoId: id, operador: op,
-        acao: `Checklist de devolução criado (${cab.regiao ? 'região ' + cab.regiao + ', ' : ''}rota(s) ${rotas.join(', ')}, ${itensCorpo.length} item(ns))`,
+        acao: tipo === 'SOBRA'
+          ? `Checklist de SOBRA criado (${itensCorpo.length} item(ns))`
+          : `Checklist de devolução criado (${cab.regiao ? 'região ' + cab.regiao + ', ' : ''}rota(s) ${rotas.join(', ')}, ${itensCorpo.length} item(ns))`,
       });
       return buscarCompleta(cli, id);
     });
@@ -222,15 +224,40 @@ rotasDevolucoes.get('/devolucoes/:id', exigirLogin, async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-/* Edição do cabeçalho — controle total da Logística. Carimbos e status NÃO
-   passam por aqui (têm rota própria com a máquina de estados). */
-rotasDevolucoes.patch('/devolucoes/:id', exigirLogin, exigirSetor('Logística'), async (req, res, next) => {
+/* Edição do cabeçalho — controle total da Logística/Administração. A
+   PORTARIA também edita, mas SÓ os campos do posto dela (teste do usuário,
+   18/08/2026: "carga, lacre, nota de transferência, placa, motorista,
+   transportadora" precisam estar disponíveis para a Portaria). Carimbos e
+   status NÃO passam por aqui (têm rota própria com a máquina de estados). */
+const CAMPOS_CABECALHO_PORTARIA = new Set([
+  'placa', 'transportadora', 'motorista', 'carga_numero',
+  'lacre1', 'lacre2', 'nota_transferencia',
+]);
+
+rotasDevolucoes.patch('/devolucoes/:id', exigirLogin, async (req, res, next) => {
   try {
     const op = req.operador;
     const cab = camposCabecalho(req.body || {});
     const trocaRotas = req.body?.rotas !== undefined || req.body?.rota !== undefined;
     if (!Object.keys(cab).length && !trocaRotas) {
       return res.status(400).json({ erro: 'Nada para alterar.', codigo: 'SEM_CAMPOS' });
+    }
+    const ehGestor = op.setor === 'Logística' || op.setor === 'Administração';
+    if (!ehGestor) {
+      const chavesCab = Object.keys(cab);
+      const permitido = !trocaRotas && (
+        (op.setor === 'Portaria' && chavesCab.every((c) => CAMPOS_CABECALHO_PORTARIA.has(c)))
+        // Peso final é o campo do Faturamento no cabeçalho (18/08/2026).
+        || (op.setor === 'Faturamento' && chavesCab.every((c) => c === 'peso_final'))
+        // RDC/Romaneio é o campo dos Controles Internos (18/08/2026).
+        || (op.setor === 'Controles Internos' && chavesCab.every((c) => c === 'gerou_rdc'))
+      );
+      if (!permitido) {
+        return res.status(403).json({
+          erro: 'Esses campos do checklist são da Logística — a Portaria edita placa/transportadora/motorista/carga/lacres/NT; o Faturamento edita o peso final; os Controles Internos, o RDC.',
+          codigo: 'SETOR_SEM_PERMISSAO',
+        });
+      }
     }
     if (cab.data_dev !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(cab.data_dev)) {
       return res.status(400).json({ erro: 'Data da devolução inválida (use AAAA-MM-DD).', codigo: 'DATA_INVALIDA' });
@@ -340,7 +367,7 @@ rotasDevolucoes.post('/devolucoes/:id/etapa', exigirLogin, async (req, res, next
         e.status = 404; e.codigo = 'NAO_ENCONTRADA';
         throw e;
       }
-      const regra = validarTransicaoDevolucao(rows[0].status, para, op.setor);
+      const regra = validarTransicaoDevolucao(rows[0].status, para, op.setor, rows[0].tipo);
 
       const extras = [];
       const vals = [];
@@ -367,6 +394,11 @@ rotasDevolucoes.post('/devolucoes/:id/etapa', exigirLogin, async (req, res, next
       }
       if (regra.carimbo === 'controles' && req.body?.obsControles !== undefined) {
         põe('obs_controles', String(req.body.obsControles).slice(0, 2000));
+      }
+      if (regra.carimbo === 'controles' && req.body?.gerouRdc !== undefined) {
+        // "Gerou RDC (romaneio)?" — informado junto com a destinação.
+        põe('gerou_rdc', req.body.gerouRdc === null || req.body.gerouRdc === ''
+          ? null : (req.body.gerouRdc === false || req.body.gerouRdc === 'false' ? false : true));
       }
 
       põe('status', para);
@@ -577,6 +609,7 @@ rotasDevolucoes.post('/devolucoes/:id/restaurar', exigirLogin, exigirSetor(), as
             lacre1 = $8, lacre2 = $9, peso_final = $10, status = $11,
             obs_controles = $12, observacoes = $13,
             operador_codigo = COALESCE($27, operador_codigo),
+            gerou_rdc = $28,
             portaria_por = $14, portaria_em = $15,
             faturamento_por = $16, faturamento_em = $17,
             expedicao_por = $18, expedicao_em = $19,
@@ -598,7 +631,10 @@ rotasDevolucoes.post('/devolucoes/:id/restaurar', exigirLogin, exigirSetor(), as
          op.nome, op.setor, req.params.id,
          // Revisões antigas (pré-018) não têm operador_codigo: o COALESCE
          // mantém o valor atual em vez de apagar com null.
-         d.operador_codigo ?? null]
+         d.operador_codigo ?? null,
+         // gerou_rdc restaura direto (pré-022 volta a "não informado", que
+         // é o retrato fiel daquela época).
+         d.gerou_rdc ?? null]
       );
       if (!upd.rows[0]) {
         const e = new Error('Devolução não encontrada.');

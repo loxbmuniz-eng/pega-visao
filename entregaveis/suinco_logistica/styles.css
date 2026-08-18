@@ -3181,3 +3181,16 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
 /* Destinação múltipla: três contadores de caixas (E/D/R) numa célula. */
 .dev-dest-grupo{ display:flex; gap:4px; }
 .dev-dest-grupo input{ width:52px; min-width:52px; text-align:center; }
+
+/* Nº da PARCIAL — na capa de papel é uma coluna de número ao lado da NOTA.
+   Aparece embaixo do seletor P/T, estreito como na folha. */
+.dev-parcial-desc{ width:88px; min-width:88px; margin-top:4px; }
+
+/* Motivo por extenso embaixo da caixa de seleção — a coluna é estreita e o
+   texto precisa quebrar em vez de sumir. */
+.dev-motivo-desc{ display:block; margin-top:3px; line-height:1.25; white-space:normal;
+  max-width:170px; font-size:.72rem; }
+.dev-cel-acoes{ white-space:nowrap; display:flex; gap:4px; align-items:center; }
+
+/* Chip de SOBRA — o checklist enxuto que só entra. */
+.dev-chip-sobra{ background:var(--navy-light); color:var(--text); border-color:var(--navy-lighter); }

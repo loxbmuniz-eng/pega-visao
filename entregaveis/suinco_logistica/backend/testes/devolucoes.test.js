@@ -207,9 +207,12 @@ describe('2. Edição: controle total da Logística, e de mais ninguém', () => 
     assert.equal(r.json.motorista, 'Lucas');
   });
 
-  test('Portaria não edita o cabeçalho → 403', async () => {
+  test('Expedição não edita o cabeçalho → 403', async () => {
+    // A Portaria e o Faturamento ganharam os campos do próprio posto em
+    // 18/08/2026 (bloco 8 prova os limites) — quem segue de fora é a
+    // Expedição, que só confere quantidade nos itens.
     const r = await req(`/api/devolucoes/${id}`, {
-      metodo: 'PATCH', token: tokens['Portaria'], corpo: { transportadora: 'X' },
+      metodo: 'PATCH', token: tokens['Expedição'], corpo: { transportadora: 'X' },
     });
     assert.equal(r.status, 403);
   });
@@ -574,5 +577,229 @@ describe('6. Cadastros de apoio e exclusão', () => {
     assert.ok(!lista.json.some((d) => d.id === c.json.id), 'não aparece mais na lista');
     const { rows } = await pool.query('SELECT excluida_em FROM devolucoes WHERE devolucao_id = $1', [c.json.id]);
     assert.ok(rows[0].excluida_em, 'linha continua no banco, marcada');
+  });
+});
+
+/* ------------------------------------------------------------------ */
+describe('7. Sobras: ciclo curto — entra, três OKs, acabou (18/08/2026)', () => {
+  let id;
+
+  test('sobra nasce sem rota e sem carga — só caixa/peso/produto/motivo', async () => {
+    const r = await req('/api/devolucoes', {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: {
+        tipo: 'SOBRA', dataDev: HOJE,
+        itens: [{ cx: 3, peso: 12.5, codProduto: '30110',
+                  produtoNome: 'LINGUIÇA', motivo: '652 — Sobras' }],
+      },
+    });
+    assert.equal(r.status, 201, r.texto);
+    assert.equal(r.json.tipo, 'SOBRA');
+    assert.deepEqual(r.json.rotas, [], 'sobra não tem rota');
+    assert.equal(r.json.itens[0].motivo, '652 — Sobras');
+    id = r.json.id;
+  });
+
+  test('o motivo 652 — Sobras está no cadastro oficial de motivos', async () => {
+    const r = await req('/api/devolucoes-cadastros', { token: tokens['Logística'] });
+    assert.equal(r.status, 200);
+    assert.ok(r.json.motivos.includes('652 — Sobras'), 'motivo 652 semeado');
+  });
+
+  test('Portaria OK → Faturamento OK → Expedição OK, e a sobra encerra aí', async () => {
+    const a = await req(`/api/devolucoes/${id}/etapa`, {
+      metodo: 'POST', token: tokens['Portaria'], corpo: { para: 'Recebida na Portaria' },
+    });
+    assert.equal(a.status, 200, a.texto);
+    const b = await req(`/api/devolucoes/${id}/etapa`, {
+      metodo: 'POST', token: tokens['Faturamento'], corpo: { para: 'Conferida no Faturamento' },
+    });
+    assert.equal(b.status, 200, b.texto);
+    const c = await req(`/api/devolucoes/${id}/etapa`, {
+      metodo: 'POST', token: tokens['Expedição'], corpo: { para: 'Descarga Conferida' },
+    });
+    assert.equal(c.status, 200, c.texto);
+    assert.equal(c.json.status, 'Descarga Conferida');
+  });
+
+  test('sobra não passa por Controles Internos nem Central de Notas', async () => {
+    const r = await req(`/api/devolucoes/${id}/etapa`, {
+      metodo: 'POST', token: tokens['Controles Internos'], corpo: { para: 'Destinada' },
+    });
+    assert.equal(r.status, 409);
+    assert.equal(r.json.codigo, 'ETAPA_NAO_EXISTE_PARA_SOBRA');
+    // Nem a Administração fura o ciclo curto — a etapa não existe pra sobra.
+    const adm = await req(`/api/devolucoes/${id}/etapa`, {
+      metodo: 'POST', token: tokens['Administração'], corpo: { para: 'Nota Finalizada' },
+    });
+    assert.equal(adm.status, 409);
+    assert.equal(adm.json.codigo, 'ETAPA_NAO_EXISTE_PARA_SOBRA');
+  });
+
+  test('devolução comum continua exigindo rota — sobra é a única exceção', async () => {
+    const r = await req('/api/devolucoes', {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { ...novoChecklist(), rotas: [] },
+    });
+    assert.equal(r.status, 400);
+    assert.equal(r.json.codigo, 'ROTA_FALTANDO');
+  });
+});
+
+/* ------------------------------------------------------------------ */
+describe('8. Cabeçalho por posto: Portaria e Faturamento editam SÓ o que é deles', () => {
+  let id;
+  before(async () => {
+    const r = await req('/api/devolucoes', { metodo: 'POST', token: tokens['Logística'], corpo: novoChecklist() });
+    id = r.json.id;
+  });
+
+  test('Portaria edita placa/motorista/transportadora/carga/lacres/NT', async () => {
+    const r = await req(`/api/devolucoes/${id}`, {
+      metodo: 'PATCH', token: tokens['Portaria'],
+      corpo: { placa: 'rrp-5f95', motorista: 'GILMAR', transportadora: '83369',
+               cargaNumero: '2490', lacre1: '133480', lacre2: '133481',
+               notaTransferencia: '171300' },
+    });
+    assert.equal(r.status, 200, r.texto);
+    assert.equal(r.json.placa, 'RRP5F95');
+    assert.equal(r.json.motorista, 'GILMAR');
+    assert.equal(r.json.cargaNumero, '2490');
+    assert.equal(r.json.lacre1, '133480');
+    assert.equal(r.json.notaTransferencia, '171300');
+  });
+
+  test('Portaria NÃO mexe em campo da Logística (região, data, rotas)', async () => {
+    const a = await req(`/api/devolucoes/${id}`, {
+      metodo: 'PATCH', token: tokens['Portaria'], corpo: { regiao: 'MG' },
+    });
+    assert.equal(a.status, 403);
+    const b = await req(`/api/devolucoes/${id}`, {
+      metodo: 'PATCH', token: tokens['Portaria'], corpo: { placa: 'AAA1234', rotas: [ROTA2] },
+    });
+    assert.equal(b.status, 403, 'juntar campo permitido com rota não fura a regra');
+  });
+
+  test('Faturamento edita o peso final — e SÓ ele nesse cabeçalho', async () => {
+    const ok = await req(`/api/devolucoes/${id}`, {
+      metodo: 'PATCH', token: tokens['Faturamento'], corpo: { pesoFinal: 47.5 },
+    });
+    assert.equal(ok.status, 200, ok.texto);
+    assert.equal(Number(ok.json.pesoFinal), 47.5);
+    const nao = await req(`/api/devolucoes/${id}`, {
+      metodo: 'PATCH', token: tokens['Faturamento'], corpo: { transportadora: 'OUTRA' },
+    });
+    assert.equal(nao.status, 403);
+  });
+
+  test('Expedição segue sem editar cabeçalho nenhum', async () => {
+    const r = await req(`/api/devolucoes/${id}`, {
+      metodo: 'PATCH', token: tokens['Expedição'], corpo: { placa: 'BBB2C34' },
+    });
+    assert.equal(r.status, 403);
+  });
+
+  test('Controles Internos informam o RDC (romaneio) — e SÓ o RDC', async () => {
+    const sim = await req(`/api/devolucoes/${id}`, {
+      metodo: 'PATCH', token: tokens['Controles Internos'], corpo: { gerouRdc: true },
+    });
+    assert.equal(sim.status, 200, sim.texto);
+    assert.equal(sim.json.gerouRdc, true);
+    // "Não gerou" é resposta de verdade, diferente de "não informado".
+    const nao = await req(`/api/devolucoes/${id}`, {
+      metodo: 'PATCH', token: tokens['Controles Internos'], corpo: { gerouRdc: 'false' },
+    });
+    assert.equal(nao.status, 200, nao.texto);
+    assert.equal(nao.json.gerouRdc, false);
+    const fora = await req(`/api/devolucoes/${id}`, {
+      metodo: 'PATCH', token: tokens['Controles Internos'], corpo: { regiao: 'MG' },
+    });
+    assert.equal(fora.status, 403);
+    // E o RDC não é da Portaria nem do Faturamento.
+    const port = await req(`/api/devolucoes/${id}`, {
+      metodo: 'PATCH', token: tokens['Portaria'], corpo: { gerouRdc: true },
+    });
+    assert.equal(port.status, 403);
+  });
+
+  test('o RDC também entra junto com a assinatura da Destinada', async () => {
+    const c = await req('/api/devolucoes', { metodo: 'POST', token: tokens['Logística'], corpo: novoChecklist() });
+    const did = c.json.id;
+    for (const [token, para] of [
+      [tokens['Portaria'], 'Recebida na Portaria'],
+      [tokens['Faturamento'], 'Conferida no Faturamento'],
+      [tokens['Expedição'], 'Descarga Conferida'],
+    ]) {
+      const r = await req(`/api/devolucoes/${did}/etapa`, { metodo: 'POST', token, corpo: { para } });
+      assert.equal(r.status, 200, r.texto);
+    }
+    const dest = await req(`/api/devolucoes/${did}/etapa`, {
+      metodo: 'POST', token: tokens['Controles Internos'],
+      corpo: { para: 'Destinada', obsControles: 'Tudo para estoque', gerouRdc: 'true' },
+    });
+    assert.equal(dest.status, 200, dest.texto);
+    assert.equal(dest.json.gerouRdc, true);
+    assert.equal(dest.json.carimbos.controles.por, 'Controle Dev');
+  });
+});
+
+/* ------------------------------------------------------------------ */
+describe('9. A mesma nota em duas parciais (caso real de 18/08/2026)', () => {
+  /* O cliente recebe 2 caixas do mesmo produto: uma fora de temperatura,
+     outra avariada. Emite DUAS parciais na MESMA nota fiscal, cada uma com
+     seu motivo e seu Nº DEV. É o número da parcial — coluna PARCIAL da capa
+     de papel — que amarra cada DEV à caixa certa. */
+  let id;
+  before(async () => {
+    const r = await req('/api/devolucoes', { metodo: 'POST', token: tokens['Logística'], corpo: novoChecklist() });
+    id = r.json.id;
+  });
+
+  test('duas linhas com a mesma nota e o mesmo produto convivem', async () => {
+    const base = {
+      nota: '678283', parcial: true, codCliente: 'AREAL',
+      codProduto: '10719', produtoNome: 'LINGUIÇA DE PERNIL C/ PIMENTA', cx: 1,
+    };
+    const a = await req(`/api/devolucoes/${id}/itens`, {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { ...base, parcialDesc: '118274', numDev: '52140', motivo: 'TEMPERATURA' },
+    });
+    const b = await req(`/api/devolucoes/${id}/itens`, {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { ...base, parcialDesc: '383303', numDev: '52111', motivo: 'AVARIA' },
+    });
+    assert.equal(a.status, 201, a.texto);
+    assert.equal(b.status, 201, b.texto);
+
+    const dev = await req(`/api/devolucoes/${id}`, { token: tokens['Logística'] });
+    const mesmaNota = dev.json.itens.filter((i) => i.nota === '678283');
+    assert.equal(mesmaNota.length, 2, 'as duas parciais ficam na mesma nota');
+    const porParcial = Object.fromEntries(mesmaNota.map((i) => [i.parcialDesc, i]));
+    assert.equal(porParcial['118274'].numDev, '52140');
+    assert.equal(porParcial['118274'].motivo, 'TEMPERATURA');
+    assert.equal(porParcial['383303'].numDev, '52111');
+    assert.equal(porParcial['383303'].motivo, 'AVARIA');
+    assert.equal(porParcial['118274'].codProduto, porParcial['383303'].codProduto,
+      'mesmo produto nas duas — o que separa é a parcial');
+  });
+
+  test('o nº da parcial é editável depois, como qualquer campo da linha', async () => {
+    const dev = await req(`/api/devolucoes/${id}`, { token: tokens['Logística'] });
+    const alvo = dev.json.itens.find((i) => i.parcialDesc === '383303');
+    const r = await req(`/api/devolucoes/${id}/itens/${alvo.itemId}`, {
+      metodo: 'PATCH', token: tokens['Logística'], corpo: { parcialDesc: '383304' },
+    });
+    assert.equal(r.status, 200, r.texto);
+    const depois = await req(`/api/devolucoes/${id}`, { token: tokens['Logística'] });
+    assert.ok(depois.json.itens.some((i) => i.parcialDesc === '383304'));
+  });
+
+  test('o nº da parcial é campo da Logística — Expedição não escreve nele', async () => {
+    const dev = await req(`/api/devolucoes/${id}`, { token: tokens['Logística'] });
+    const alvo = dev.json.itens[0];
+    const r = await req(`/api/devolucoes/${id}/itens/${alvo.itemId}`, {
+      metodo: 'PATCH', token: tokens['Expedição'], corpo: { parcialDesc: '999' },
+    });
+    assert.equal(r.status, 403);
   });
 });

@@ -56,9 +56,18 @@ export class ErroDePermissaoDevolucao extends Error {
    para saber qual coluna estampar). Sentido único, um passo por vez —
    pular etapa no checklist é exatamente o que o papel permitia e o
    digital não deve permitir. */
-export function validarTransicaoDevolucao(statusAtual, statusNovo, setor) {
+export function validarTransicaoDevolucao(statusAtual, statusNovo, setor, tipo) {
   if (!DEV_STATUS_FLOW.includes(statusNovo)) {
     throw new ErroDeFluxoDevolucao(`Etapa desconhecida: "${statusNovo}".`, 'STATUS_DESCONHECIDO');
+  }
+  /* SOBRA (18/08/2026): ciclo curto — Portaria OK, Faturamento OK,
+     Expedição OK, acabou. Não passa por Controles Internos nem Central
+     de Notas. */
+  if (tipo === 'SOBRA' && ['Destinada', 'Nota Finalizada'].includes(statusNovo)) {
+    throw new ErroDeFluxoDevolucao(
+      'Sobra encerra no OK da Expedição — não passa por Controles Internos nem Central de Notas.',
+      'ETAPA_NAO_EXISTE_PARA_SOBRA'
+    );
   }
   if (statusAtual === statusNovo) {
     throw new ErroDeFluxoDevolucao(`A devolução já está em "${statusNovo}".`, 'SEM_MUDANCA');
@@ -122,6 +131,7 @@ export function devolucaoParaPainel(linha, itens = [], divergencias = [], rotas 
        sempre array. `linha.rota_codigo` só existe em revisões gravadas
        antes da migração 012; vira array de um item para o painel não
        precisar conhecer as duas eras. */
+    tipo: linha.tipo || 'DEVOLUCAO',
     rotas: rotas.length ? rotas : (linha.rota_codigo ? [linha.rota_codigo] : []),
     regiao: linha.regiao,
     // Código do operador, informado pelo MONITORAMENTO (18/08/2026) — é
@@ -139,6 +149,11 @@ export function devolucaoParaPainel(linha, itens = [], divergencias = [], rotas 
     criadaPor: linha.criada_por,
     criadaSetor: linha.criada_setor,
     obsControles: linha.obs_controles,
+    /* RDC/Romaneio (18/08/2026): os Controles Internos informam na
+       destinação se o romaneio foi gerado. Três estados — null (ainda não
+       informado), true (gerou) e false (não gerou) — porque "não informado"
+       e "não gerou" são respostas diferentes na auditoria. */
+    gerouRdc: linha.gerou_rdc === null || linha.gerou_rdc === undefined ? null : !!linha.gerou_rdc,
     observacoes: linha.observacoes,
     carimbos: {
       portaria:    linha.portaria_em    ? { por: linha.portaria_por,    em: linha.portaria_em }    : null,
@@ -162,6 +177,10 @@ export function itemParaPainel(i) {
     itemId: Number(i.item_id),
     nota: i.nota,
     parcial: !!i.parcial,
+    /* Qual parcial é esta linha (18/08/2026): a mesma nota pode ter duas —
+       uma que retorna e outra que não, ou as duas retornando. O texto vem
+       da capa, escrito por quem lança. */
+    parcialDesc: i.parcial_desc || '',
     supervisor: i.supervisor,
     vendedor: i.vendedor,
     codCliente: i.cod_cliente,
@@ -217,11 +236,22 @@ export function camposCabecalho(corpo) {
   if (corpo.lacre1 !== undefined) m.lacre1 = texto(corpo.lacre1, 50);
   if (corpo.lacre2 !== undefined) m.lacre2 = texto(corpo.lacre2, 50);
   if (corpo.cargaNumero !== undefined) m.carga_numero = texto(corpo.cargaNumero, 50);
+  // Peso final editável no cabeçalho — campo do Faturamento (18/08/2026).
+  if (corpo.pesoFinal !== undefined) {
+    const n = numeroOuNull(corpo.pesoFinal);
+    m.peso_final = n === null ? null : Math.max(0, n);
+  }
   if (corpo.transportadora !== undefined) m.transportadora = texto(corpo.transportadora, 200);
   if (corpo.notaTransferencia !== undefined) m.nota_transferencia = texto(corpo.notaTransferencia, 50);
   if (corpo.placa !== undefined) m.placa = texto(corpo.placa, 10).toUpperCase().replace(/[^A-Z0-9]/g, '');
   if (corpo.motorista !== undefined) m.motorista = texto(corpo.motorista, 200);
   if (corpo.observacoes !== undefined) m.observacoes = texto(corpo.observacoes, 2000);
+  // RDC/Romaneio — campo dos Controles Internos (18/08/2026). Vazio/null
+  // volta a "não informado"; qualquer outra coisa vira sim/não de verdade.
+  if (corpo.gerouRdc !== undefined) {
+    m.gerou_rdc = corpo.gerouRdc === null || corpo.gerouRdc === '' ? null
+      : (corpo.gerouRdc === false || corpo.gerouRdc === 'false' ? false : true);
+  }
   return m;
 }
 
@@ -230,6 +260,10 @@ export function camposItem(corpo) {
   const m = {};
   if (corpo.nota !== undefined) m.nota = texto(corpo.nota, 50);
   if (corpo.parcial !== undefined) m.parcial = !!corpo.parcial;
+  // Descrição da parcial — só faz sentido com parcial marcada, mas guardar
+  // o texto mesmo em Total não estraga nada e evita perder o que a pessoa
+  // digitou ao trocar de opção sem querer.
+  if (corpo.parcialDesc !== undefined) m.parcial_desc = texto(corpo.parcialDesc, 300);
   if (corpo.supervisor !== undefined) m.supervisor = texto(corpo.supervisor, 100);
   if (corpo.vendedor !== undefined) m.vendedor = texto(corpo.vendedor, 100);
   if (corpo.codCliente !== undefined) m.cod_cliente = texto(corpo.codCliente, 100);
