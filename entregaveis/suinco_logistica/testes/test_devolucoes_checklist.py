@@ -182,18 +182,30 @@ async def main():
         ck('divergente lançado', pos['divergencias'] == 1, str(pos))
         ck('a falta CONTINUA depois do divergente', pos['falta'] == 2, str(pos))
 
-        print('\n=== 6. ETAPAS CARIMBAM (LACRE E Nº DA CARGA NA PORTARIA) ===')
-        await pgA.fill(f'#dev-et-{dev_id}-lacre1', '133476')
-        await pgA.fill(f'#dev-et-{dev_id}-carga', '2484')
+        print('\n=== 6. ETAPAS CARIMBAM (PORTARIA IMPUTA PLACA E MOTORISTA) ===')
+        # Alinhamento de 18/08: os inputs da Portaria são placa + motorista.
+        # Lacres e nº da carga passaram ao cabeçalho editável da Logística.
+        await pgA.fill(f'#dev-et-{dev_id}-motorista', 'Lucas Motorista')
         await pgA.click('button:has-text("Receber na Portaria")')
+        await pgA.wait_for_timeout(2000)
+        await pgA.evaluate("""(id) => {
+            editarDevolucaoCampoUI(id, 'lacre1', '133476');
+        }""", dev_id)
+        await pgA.wait_for_timeout(1500)
+        await pgA.evaluate("""(id) => {
+            editarDevolucaoCampoUI(id, 'cargaNumero', '2484');
+        }""", dev_id)
         await pgA.wait_for_timeout(2000)
         et = await pgA.evaluate("""(id) => {
             const d = DEVOLUCOES.find(x=>x.id===id);
-            return { status: d.status, lacre1: d.lacre1, carga: d.cargaNumero,
+            return { status: d.status, motorista: d.motorista,
+                     lacre1: d.lacre1, carga: d.cargaNumero,
                      carimbo: d.carimbos.portaria };
         }""", dev_id)
         ck('status avançou para Recebida na Portaria', et['status'] == 'Recebida na Portaria', str(et))
-        ck('lacre e nº da carga gravados', et['lacre1'] == '133476' and et['carga'] == '2484')
+        ck('motorista imputado pela Portaria', et['motorista'] == 'Lucas Motorista', str(et['motorista']))
+        ck('lacre e nº da carga pelo cabeçalho editável',
+           et['lacre1'] == '133476' and et['carga'] == '2484', str(et))
         ck('carimbo com operador', et['carimbo'] and et['carimbo']['por'] == 'Chefe', str(et['carimbo']))
 
         # Observação da Bruna: o porteiro escrevia carga+placa num papel

@@ -89,6 +89,17 @@ function podeDestinarDev() {
   const setor = (DB.operador || {}).setor;
   return podeEditarDevolucao() || setor === 'Controles Internos';
 }
+/* Alinhamento de 18/08/2026: a pesagem por item é do Faturamento (é a
+   confirmação de que passou pela balança) e o tick de NOTA FINAL é da
+   Central de Notas. */
+function podePesarItemDev() {
+  const setor = (DB.operador || {}).setor;
+  return podeEditarDevolucao() || setor === 'Faturamento';
+}
+function podeNotaFinalDev() {
+  const setor = (DB.operador || {}).setor;
+  return podeEditarDevolucao() || setor === 'Central de Notas';
+}
 
 function getDevolucao(id) {
   return DEVOLUCOES.find((d) => d.id === id) || null;
@@ -267,8 +278,11 @@ function cabecalhoEditavelDev(d, editavel) {
       ${campo('Nota de transferência', 'notaTransferencia', d.notaTransferencia)}
       ${campo('Placa', 'placa', d.placa)}
       ${campo('Motorista', 'motorista', d.motorista)}
-      <div><label>Nº carga (Portaria)</label><div class="dev-ro">${esc(d.cargaNumero) || '—'}</div></div>
-      <div><label>Lacres (Portaria)</label><div class="dev-ro">${esc([d.lacre1, d.lacre2].filter(Boolean).join(' · ')) || '—'}</div></div>
+      ${campo('Cód. operador (monitoramento)', 'operadorCodigo', d.operadorCodigo,
+        'title="Número informado pelo monitoramento — é sob ele que as devoluções são lançadas."')}
+      ${campo('Nº carga', 'cargaNumero', d.cargaNumero)}
+      ${campo('Lacre 1', 'lacre1', d.lacre1)}
+      ${campo('Lacre 2', 'lacre2', d.lacre2)}
       <div><label>Peso final (Faturamento)</label><div class="dev-ro">${d.pesoFinal !== null ? d.pesoFinal.toLocaleString('pt-BR') + ' kg' : '—'}</div></div>
     </div>`;
 }
@@ -299,10 +313,12 @@ function acaoEtapaDev(d) {
   const id = escJs(d.id);
   let extras = '';
   if (etapa.pede === 'portaria') {
+    /* Alinhamento de 18/08/2026: a Portaria imputa a PLACA que voltou com
+       a devolução e o NOME DO MOTORISTA — só isso. Lacres e nº da carga
+       ficaram no cabeçalho editável da Logística. */
     extras = `
-      <input type="text" id="dev-et-${esc(d.id)}-lacre1" placeholder="Lacre 1" value="${esc(d.lacre1)}">
-      <input type="text" id="dev-et-${esc(d.id)}-lacre2" placeholder="Lacre 2 (se houver)" value="${esc(d.lacre2)}">
-      <input type="text" id="dev-et-${esc(d.id)}-carga" placeholder="Nº da carga" value="${esc(d.cargaNumero)}">`;
+      <input type="text" id="dev-et-${esc(d.id)}-placa" placeholder="Placa que voltou" value="${esc(d.placa)}">
+      <input type="text" id="dev-et-${esc(d.id)}-motorista" placeholder="Nome do motorista" value="${esc(d.motorista)}">`;
   } else if (etapa.pede === 'faturamento') {
     extras = `<input type="number" min="0" step="1" id="dev-et-${esc(d.id)}-peso"
       placeholder="Peso final em kg (opcional)" value="${d.pesoFinal ?? ''}">`;
@@ -343,9 +359,14 @@ function renderDevolucaoAberta(d, editavel) {
           ${i.produtoNome ? `<small class="text-dim">${esc(i.produtoNome)}</small>` : ''}</td>
       <td>${cel('numDev', i.numDev)}</td>
       <td>${cel('motivo', i.motivo, 'text', 'list="dl-dev-motivos"')}</td>
+      <td class="c-peso">${podePesarItemDev()
+        ? `<input type="number" min="0" step="0.01" value="${i.pesoFaturamento ?? ''}" placeholder="—"
+             title="Pesagem do Faturamento — é a confirmação de que a devolução passou pela balança."
+             onchange="editarItemDevolucaoUI('${escJs(d.id)}',${i.itemId},'pesoFaturamento',this.value)">`
+        : (i.pesoFaturamento ?? '—')}</td>
       <td class="c-peso">${podeConferirQtdDev()
         ? `<input type="number" min="0" step="1" value="${i.qtdRecebida ?? ''}" placeholder="—"
-             title="Quantidade que CHEGOU na descarga. A falta é apontada sozinha."
+             title="Conferência da Expedição: quantidade que CHEGOU na descarga. A falta é apontada sozinha."
              onchange="editarItemDevolucaoUI('${escJs(d.id)}',${i.itemId},'qtdRecebida',this.value)">`
         : (i.qtdRecebida ?? '—')}</td>
       <td>${faltaHtml}</td>
@@ -355,6 +376,11 @@ function renderDevolucaoAberta(d, editavel) {
              ${['Estoque', 'Descarte', 'Reprocesso'].map((x) => `<option ${i.destinacao === x ? 'selected' : ''}>${x}</option>`).join('')}
            </select>`
         : (esc(i.destinacao) || '—')}</td>
+      <td class="dev-cel-notafinal">${podeNotaFinalDev()
+        ? `<input type="checkbox" ${i.notaFinal ? 'checked' : ''}
+             title="NOTA FINAL — marque quando a nota deste item estiver finalizada (Central de Notas)."
+             onchange="editarItemDevolucaoUI('${escJs(d.id)}',${i.itemId},'notaFinal',this.checked)">`
+        : (i.notaFinal ? '✔' : '—')}</td>
       ${editavel ? `<td class="no-print"><button class="btn btn-danger btn-sm"
         onclick="excluirItemDevolucaoUI('${escJs(d.id)}',${i.itemId})">✕</button></td>` : ''}
     </tr>`;
@@ -372,7 +398,7 @@ function renderDevolucaoAberta(d, editavel) {
       <td><input type="text" id="dev-ni-${esc(d.id)}-produto" list="dl-dev-produtos" placeholder="Cód. produto"></td>
       <td><input type="text" id="dev-ni-${esc(d.id)}-numdev" placeholder="Nº DEV"></td>
       <td><input type="text" id="dev-ni-${esc(d.id)}-motivo" list="dl-dev-motivos" placeholder="Motivo"></td>
-      <td colspan="3"></td>
+      <td colspan="5"></td>
       <td class="no-print"><button class="btn btn-sm" onclick="adicionarItemDevolucaoUI('${escJs(d.id)}')"
         title="Acrescentar esta linha ao checklist">➕</button></td>
     </tr>`;
@@ -407,8 +433,12 @@ function renderDevolucaoAberta(d, editavel) {
           <thead><tr>
             <th>Nota</th><th>P/T</th><th>Supervisor</th><th title="Vendedor">RCA</th>
             <th>Cód. Cliente</th><th>CX</th><th>Peso</th><th>Cód. Produto</th>
-            <th>Nº DEV</th><th>Motivo</th><th>Recebido</th><th>Falta</th>
-            <th>Destinação</th>${editavel ? '<th class="no-print"></th>' : ''}
+            <th>Nº DEV</th><th>Motivo</th>
+            <th title="Pesagem do Faturamento — confirma que passou pela balança">Pesagem</th>
+            <th title="Conferência da descarga: quantidade recebida">Expedição</th><th>Falta</th>
+            <th>Destinação</th>
+            <th title="Tick da Central de Notas: nota finalizada">Nota final</th>
+            ${editavel ? '<th class="no-print"></th>' : ''}
           </tr></thead>
           <tbody>${d.itens.map(linhaItem).join('')}${novaLinha}</tbody>
         </table>
@@ -479,6 +509,7 @@ async function criarDevolucaoUI() {
     notaTransferencia: v('dev-nota-transf'),
     placa: v('dev-placa'),
     motorista: v('dev-motorista'),
+    operadorCodigo: v('dev-operador-cod'),
     itens: [],
   };
   try {
@@ -550,9 +581,8 @@ function avancarEtapaDevolucaoUI(id) {
   const v = (sufixo) => (document.getElementById(`dev-et-${id}-${sufixo}`) || {}).value;
   const corpo = { para: etapa.proxima };
   if (etapa.pede === 'portaria') {
-    corpo.lacre1 = v('lacre1') || '';
-    corpo.lacre2 = v('lacre2') || '';
-    corpo.cargaNumero = v('carga') || '';
+    corpo.placa = v('placa') || '';
+    corpo.motorista = v('motorista') || '';
   } else if (etapa.pede === 'faturamento') {
     corpo.pesoFinal = v('peso') || '';
   } else if (etapa.pede === 'controles') {
@@ -747,13 +777,14 @@ async function relatorioDevolucoesUI() {
         + `${d.notaTransferencia ? ' · NT ' + esc(d.notaTransferencia) : ''}`
         + `${d.placa ? ' · Placa ' + esc(d.placa) : ''}`
         + `${d.cargaNumero ? ' · Carga ' + esc(d.cargaNumero) : ''}`
+        + `${d.operadorCodigo ? ' · Cód. operador ' + esc(d.operadorCodigo) : ''}`
         + `${d.lacre1 ? ' · Lacre ' + esc([d.lacre1, d.lacre2].filter(Boolean).join('/')) : ''}`
         + `${d.pesoFinal !== null ? ' · Peso final ' + d.pesoFinal.toLocaleString('pt-BR') + ' kg' : ''}`)}
       <table class="dev-doc-tabela">
         <thead><tr>
           <th>Nota</th><th>P/T</th><th>Supervisor</th><th title="Vendedor">RCA</th><th>Cód. Cliente</th>
           <th>CX</th><th>Peso</th><th>Produto</th><th>Nº DEV</th><th>Motivo</th>
-          <th>Recebido</th><th>Falta</th><th>Destinação</th>
+          <th>Pesagem</th><th>Expedição</th><th>Falta</th><th>Destinação</th><th>Nota final</th>
         </tr></thead>
         <tbody>${d.itens.map((i) => `<tr${i.falta > 0 ? ' class="dev-doc-falta"' : ''}>
             <td>${esc(i.nota)}</td><td>${i.parcial ? 'P' : 'T'}</td>
@@ -762,9 +793,11 @@ async function relatorioDevolucoesUI() {
             <td class="c-peso">${i.peso !== null ? i.peso.toLocaleString('pt-BR') : '—'}</td>
             <td>${esc(i.codProduto)}${i.produtoNome ? '-' + esc(i.produtoNome) : ''}</td>
             <td>${esc(i.numDev)}</td><td>${esc(i.motivo)}</td>
+            <td class="c-peso">${i.pesoFaturamento !== null ? i.pesoFaturamento.toLocaleString('pt-BR') : '—'}</td>
             <td class="c-peso">${i.qtdRecebida ?? '—'}</td>
             <td class="c-peso">${i.falta === null ? '—' : (i.falta > 0 ? 'FALTA ' + i.falta.toLocaleString('pt-BR') : 'OK')}</td>
             <td>${esc(i.destinacao) || '—'}</td>
+            <td>${i.notaFinal ? '✔' : '—'}</td>
           </tr>`).join('')}</tbody>
       </table>
       ${d.divergencias.length ? `<div class="dev-doc-diverg">
