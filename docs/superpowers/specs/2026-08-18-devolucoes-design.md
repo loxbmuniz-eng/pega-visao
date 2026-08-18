@@ -165,3 +165,23 @@ viram carimbos automáticos (operador logado + hora) a cada transição.
    branco só o que muda entre as caixas. O motivo passa a aparecer por
    extenso embaixo da caixa de seleção, porque a coluna é estreita e o
    código sozinho não diz nada a quem confere.
+9. **Lacre: informação, não bloqueio** (migração 024, decisão de
+   18/08/2026: "por enquanto não vamos fazer com que o lacre da expedição
+   seja confirmado pela portaria como um bloqueio, vamos só informar").
+   Duas frentes: (a) na SAÍDA dos caminhões, a Portaria informa o número do
+   lacre junto com a placa — a carga segue viagem mesmo sem ele, mas o
+   painel avisa na hora que saiu sem número registrado; (b) na DEVOLUÇÃO, a
+   Portaria responde "chegou lacrado?" no recebimento — Sim (com o número)
+   ou Não (chegou sem lacre). São três estados no banco, porque campo vazio
+   é ambíguo: null = não informado, true = lacrado, false = veio sem lacre.
+   Nenhuma resposta trava a etapa. "Chegou sem lacre" sai no cartão, no
+   relatório e no comprovante do motorista.
+10. **Relação para o Operador** (pedido da Bruna, 18/08/2026): segundo
+    relatório da aba Devoluções, no formato do Relatório Operacional, com a
+    lista corrida das linhas do dia — nota, parcial/total (com o nº da
+    parcial), supervisor, RCA, cliente, caixa, peso, produto, Nº DEV, data
+    da DEV e motivo, mais o checklist de origem. É o PDF que as meninas
+    geram e mandam para o operador do monitoramento lançar do lado dele:
+    conferência de descarga, pesagem, destinação e carimbos ficam de fora,
+    porque não são assunto dele. Botão na aba Devoluções e na aba
+    Relatórios (com escolha de dia).

@@ -398,6 +398,16 @@ function cabecalhoEditavelDev(d, editavel) {
       ${campo('Cód. operador (monitoramento)', 'operadorCodigo', d.operadorCodigo,
         'title="Número informado pelo monitoramento — é sob ele que as devoluções são lançadas."')}
       ${campo('Nº carga', 'cargaNumero', d.cargaNumero, '', true)}
+      <div><label>Chegou lacrado?</label>
+        ${(editavel || portariaEdita)
+          ? `<select title="Resposta da Portaria no recebimento — informação, não trava nada."
+               onchange="editarDevolucaoCampoUI('${escJs(d.id)}','chegouLacrado',this.value)">
+               <option value=""${d.chegouLacrado === null || d.chegouLacrado === undefined ? ' selected' : ''}>(não informado)</option>
+               <option value="true"${d.chegouLacrado === true ? ' selected' : ''}>Sim — chegou lacrado</option>
+               <option value="false"${d.chegouLacrado === false ? ' selected' : ''}>Não — chegou sem lacre</option>
+             </select>`
+          : `<div class="dev-ro">${d.chegouLacrado === true ? 'Sim — lacrado' : d.chegouLacrado === false ? 'Não — sem lacre' : '—'}</div>`}
+      </div>
       ${campo('Lacre 1', 'lacre1', d.lacre1, '', true)}
       ${campo('Lacre 2', 'lacre2', d.lacre2, '', true)}
       <div><label>Peso final (Faturamento)</label>
@@ -459,6 +469,12 @@ function acaoEtapaDev(d) {
        e saiu do campo, transportadora e motorista preenchem sozinhos
        (mesma lógica da Programação; continuam editáveis). */
     extras = `
+      <select id="dev-et-${esc(d.id)}-lacrado" title="O caminhão chegou lacrado?"
+        onchange="mostrarLacreDevUI('${escJs(d.id)}')">
+        <option value=""${d.chegouLacrado === null || d.chegouLacrado === undefined ? ' selected' : ''}>Chegou lacrado? (informar)</option>
+        <option value="true"${d.chegouLacrado === true ? ' selected' : ''}>Sim — chegou LACRADO</option>
+        <option value="false"${d.chegouLacrado === false ? ' selected' : ''}>Não — chegou SEM lacre</option>
+      </select>
       <input type="text" id="dev-et-${esc(d.id)}-placa" placeholder="Placa que voltou" value="${esc(d.placa)}"
         onchange="frotaNaEtapaDevUI('${escJs(d.id)}')">
       <input type="text" id="dev-et-${esc(d.id)}-transportadora" placeholder="Transportadora" value="${esc(d.transportadora)}">
@@ -632,6 +648,11 @@ function renderDevolucaoAberta(d, editavel) {
       ${d.obsControles ? `<div class="card-sub"><strong>Obs. Controles Internos:</strong> ${esc(d.obsControles)}</div>` : ''}
       ${d.gerouRdc !== null && d.gerouRdc !== undefined
         ? `<div class="card-sub"><strong>RDC (romaneio):</strong> ${d.gerouRdc ? 'Sim — gerado' : 'Não gerado'}</div>` : ''}
+      ${d.chegouLacrado === false
+        ? '<div class="card-sub"><strong>Lacre:</strong> chegou SEM lacre (informado pela Portaria).</div>'
+        : (d.chegouLacrado === true
+          ? `<div class="card-sub"><strong>Lacre:</strong> chegou lacrado${d.lacre1 ? ' — nº ' + esc(d.lacre1) : ''}${d.lacre2 ? ' e ' + esc(d.lacre2) : ''}.</div>`
+          : '')}
       ${divergencias}
       <div class="flex-end gap8 no-print" style="margin-top:10px">
         ${d.carimbos.portaria ? `<button class="btn btn-sec btn-sm" onclick="comprovantePortariaUI('${escJs(d.id)}')"
@@ -767,6 +788,7 @@ function editarDevolucaoCampoUI(id, campo, valor) {
   /* RDC vem de um select sim/não — vazio significa "ainda não informado",
      não "não gerou". */
   if (campo === 'gerouRdc') corpo = { gerouRdc: valor === '' ? null : valor === 'true' };
+  if (campo === 'chegouLacrado') corpo = { chegouLacrado: valor === '' ? null : valor === 'true' };
   /* Trocar a PLACA num checklist já criado também puxa a Frota — mesma
      regra do formulário: transportadora e motorista vêm do cadastro, não
      da memória de quem digita (e continuam editáveis depois). */
@@ -806,6 +828,11 @@ function avancarEtapaDevolucaoUI(id) {
     põeSe('motorista', v('motorista'));
     põeSe('lacre1', v('lacre1'));
     põeSe('lacre2', v('lacre2'));
+    /* "Chegou lacrado?" vai mesmo quando a resposta é NÃO — é o ponto do
+       campo: "sem lacre" precisa ser dito, não deduzido de campo vazio.
+       Nada disso trava a devolução; é informação. */
+    const lacrado = v('lacrado');
+    if (lacrado !== '' && lacrado !== undefined) corpo.chegouLacrado = lacrado === 'true';
   } else if (etapa.pede === 'faturamento') {
     corpo.pesoFinal = v('peso') || '';
   } else if (etapa.pede === 'controles') {
@@ -895,6 +922,20 @@ function repetirNotaDevolucaoUI(id, itemId) {
     }),
     `Outra parcial da nota ${base.nota || '—'} criada — preencha o Nº DEV, o motivo, as caixas e o nº da parcial.`
   );
+}
+
+/* Chegou lacrado? Sim mostra os números; Não esconde (e o que estiver
+   digitado não é enviado — a resposta já diz tudo). */
+function mostrarLacreDevUI(id) {
+  const sel = document.getElementById(`dev-et-${id}-lacrado`);
+  if (!sel) return;
+  const semLacre = sel.value === 'false';
+  for (const suf of ['lacre1', 'lacre2']) {
+    const campo = document.getElementById(`dev-et-${id}-${suf}`);
+    if (!campo) continue;
+    campo.style.display = semLacre ? 'none' : '';
+    if (semLacre) campo.value = '';
+  }
 }
 
 /* O motivo escolhido na linha nova aparece por extenso embaixo da caixa,
@@ -1013,7 +1054,9 @@ async function comprovantePortariaUI(id) {
         ${linha('MOTORISTA', d.motorista)}
         ${linha('TRANSPORTADORA', d.transportadora)}
         ${linha('REGIÃO / ROTAS', `${d.regiao ? d.regiao + ' — ' : ''}${(d.rotas || []).join(' · ')}`)}
-        ${linha('LACRE(S)', [d.lacre1, d.lacre2].filter(Boolean).join(' · '))}
+        ${linha('LACRE(S)', d.chegouLacrado === false
+          ? 'CHEGOU SEM LACRE'
+          : [d.lacre1, d.lacre2].filter(Boolean).join(' · '))}
         ${linha('RECEBIDO POR', c ? `${c.por} · ${fmtDataHora(c.em)}` : '—')}
       </div>
       ${rodapeDocumento(
@@ -1093,6 +1136,11 @@ async function relatorioDevolucoesUI(diaParam) {
             <td>${esc(devDestinoResumo(i)) || '—'}</td>
             <td>${i.notaFinal ? '✔' : '—'}</td>
           </tr>`).join('')}</tbody>
+        ${/* Somatório no pé da tabela, no padrão do Relatório Operacional
+              (pedido de 18/08/2026): as colunas CX e PESO fecham a conta do
+              checklist, e a pesagem do Faturamento fecha a dela ao lado —
+              é o número que a conferência procura primeiro. */''}
+        <tfoot>${somatorioItensDev(d.itens, 5)}</tfoot>
       </table>
       ${d.divergencias.length ? `<div class="dev-doc-diverg">
           <strong>Divergentes (fora do checklist):</strong>
@@ -1101,6 +1149,11 @@ async function relatorioDevolucoesUI(diaParam) {
       ${d.obsControles ? `<div class="dev-doc-diverg"><strong>Obs. Controles Internos:</strong> ${esc(d.obsControles)}</div>` : ''}
       ${d.gerouRdc !== null && d.gerouRdc !== undefined
         ? `<div class="dev-doc-diverg"><strong>RDC (romaneio):</strong> ${d.gerouRdc ? 'Sim — gerado' : 'Não gerado'}</div>` : ''}
+      ${d.chegouLacrado === false
+        ? '<div class="dev-doc-diverg"><strong>Lacre:</strong> chegou SEM lacre (informado pela Portaria).</div>'
+        : (d.chegouLacrado === true
+          ? `<div class="dev-doc-diverg"><strong>Lacre:</strong> chegou lacrado${d.lacre1 ? ' — nº ' + esc(d.lacre1) : ''}${d.lacre2 ? ' e ' + esc(d.lacre2) : ''}.</div>`
+          : '')}
       <div class="dev-doc-carimbos">
         ${Object.entries(DEV_ETAPA_ROTULO).map(([chave, rotulo]) => {
           const c = d.carimbos[chave];
@@ -1388,4 +1441,130 @@ async function cadastrarClienteDevUI() {
   } catch (e) {
     notify((e && e.message) || 'O servidor recusou o cadastro.', 'danger', 6000);
   }
+}
+
+/* Rodapé de somatórios das tabelas de devolução — mesmo desenho do
+   Relatório Operacional (linha-total, rótulo à esquerda, números à
+   direita). Some o que é somável e deixe o resto em branco: coluna que
+   não é quantidade não ganha total só para preencher espaço. */
+function somatorioItensDev(itens, colspanAntes) {
+  const num = (v) => (v === null || v === undefined ? 0 : Number(v) || 0);
+  const cx = itens.reduce((s, i) => s + num(i.cx), 0);
+  const peso = itens.reduce((s, i) => s + num(i.peso), 0);
+  const pesagem = itens.reduce((s, i) => s + num(i.pesoFaturamento), 0);
+  const recebidas = itens.reduce((s, i) => s + num(i.qtdRecebida), 0);
+  const falta = itens.reduce((s, i) => s + num(i.falta), 0);
+  const fmt = (n, casas) => n.toLocaleString('pt-BR', { maximumFractionDigits: casas });
+  return `<tr class="linha-total">
+      <td colspan="${colspanAntes}" class="tot-rotulo">TOTAL — ${itens.length} linha(s)</td>
+      <td class="tot-num">${fmt(cx, 0)}</td>
+      <td class="tot-num">${fmt(peso, 2)}</td>
+      <td colspan="3"></td>
+      <td class="tot-num">${pesagem ? fmt(pesagem, 2) : ''}</td>
+      <td class="tot-num">${recebidas ? fmt(recebidas, 0) : ''}</td>
+      <td class="tot-num">${falta ? 'FALTA ' + fmt(falta, 0) : ''}</td>
+      <td colspan="2"></td>
+    </tr>`;
+}
+
+function somatorioLinhasOperadorDev(linhas) {
+  const num = (v) => (v === null || v === undefined ? 0 : Number(v) || 0);
+  const cx = linhas.reduce((s, { i }) => s + num(i.cx), 0);
+  const peso = linhas.reduce((s, { i }) => s + num(i.peso), 0);
+  const fmt = (n, casas) => n.toLocaleString('pt-BR', { maximumFractionDigits: casas });
+  return `<tr class="linha-total">
+      <td colspan="5" class="tot-rotulo">TOTAL — ${linhas.length} linha(s)</td>
+      <td class="tot-num">${fmt(cx, 0)}</td>
+      <td class="tot-num">${fmt(peso, 2)}</td>
+      <td colspan="5"></td>
+    </tr>`;
+}
+
+/* ------------------------------------------------------------------
+   RELATÓRIO PARA O OPERADOR (pedido da Bruna, 18/08/2026)
+
+   Diferente do relatório de conferência: aqui é a LISTA CORRIDA das
+   linhas devolvidas no dia, com as colunas que o operador do
+   monitoramento precisa para lançar do lado dele — nota, parcial/total,
+   supervisor, RCA, cliente, caixa, peso, produto, Nº DEV, data DEV e
+   motivo. Sem pesagem, sem falta, sem destinação, sem carimbo: nada do
+   controle interno vai junto.
+
+   Sai no mesmo formato do Relatório Operacional (cabeçalho institucional,
+   A4 pelo servidor) e é gerado pelas próprias meninas para mandar. */
+async function relatorioOperadorDevolucoesUI(diaParam) {
+  if (!devServidorOk()) {
+    notify('O relatório vem do servidor — entre com login de servidor.', 'warn', 6000);
+    return;
+  }
+  const dia = (typeof diaParam === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(diaParam))
+    ? diaParam
+    : ((document.getElementById('dev-filtro-dia') || {}).value || diaLocalDev());
+  let lista;
+  try {
+    lista = await SuincoSharePoint.devolucoes.listar(dia, dia);
+  } catch (e) {
+    notify('Não consegui buscar as devoluções: ' + (e.message || 'erro'), 'danger', 6000);
+    return;
+  }
+  const el = document.getElementById('print-devolucoes-operador');
+  if (!el) return;
+
+  /* Uma linha por ITEM, na ordem em que a devolução foi lançada — é como
+     a capa de papel chega na mão do operador. A identificação do
+     checklist (região/rotas e Nº) viaja em cada linha, senão o operador
+     não sabe de qual capa veio. */
+  const linhas = [];
+  for (const d of lista) {
+    for (const i of d.itens) {
+      linhas.push({ d, i });
+    }
+  }
+  const diaBR = String(dia).split('-').reverse().join('/');
+  const totalCx = linhas.reduce((s, { i }) => s + (Number(i.cx) || 0), 0);
+  const totalPeso = linhas.reduce((s, { i }) => s + (Number(i.peso) || 0), 0);
+  const operadores = Array.from(new Set(lista.map((d) => d.operadorCodigo).filter(Boolean)));
+
+  el.innerHTML = `
+    <div class="print-page doc-normal">
+      ${cabecalhoDocumento({
+        titulo: 'Devoluções do Dia — Relação para o Operador',
+        subtitulo: `Dia ${diaBR} · ${linhas.length} linha(s) · ${totalCx.toLocaleString('pt-BR')} cx · `
+          + `${totalPeso.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} kg`
+          + `${operadores.length ? ' · Operador(es): ' + operadores.join(', ') : ''}`,
+      })}
+      ${linhas.length ? `
+      <table class="doc-tabela dev-doc-tabela">
+        <thead><tr>
+          <th>Nota</th><th>P/T</th><th>Supervisor</th><th title="Vendedor">RCA</th>
+          <th>Cliente</th><th>CX</th><th>Peso</th><th>Produto</th>
+          <th>Nº DEV</th><th>Data DEV</th><th>Motivo</th>
+          <th title="Checklist de origem">Checklist</th>
+        </tr></thead>
+        <tbody>${linhas.map(({ d, i }) => `
+          <tr>
+            <td>${esc(i.nota)}</td>
+            <td>${i.parcial ? ('P' + (i.parcialDesc ? ' ' + esc(i.parcialDesc) : '')) : 'T'}</td>
+            <td>${esc(i.supervisor)}</td>
+            <td>${esc(i.vendedor)}</td>
+            <td>${esc(i.codCliente)}</td>
+            <td class="c-peso">${(Number(i.cx) || 0).toLocaleString('pt-BR')}</td>
+            <td class="c-peso">${i.peso !== null ? Number(i.peso).toLocaleString('pt-BR') : '—'}</td>
+            <td>${esc(i.codProduto)}${i.produtoNome ? '-' + esc(i.produtoNome) : ''}</td>
+            <td>${esc(i.numDev)}</td>
+            <td>${i.dataItem ? esc(String(i.dataItem).slice(0, 10).split('-').reverse().join('/')) : '—'}</td>
+            <td>${esc(i.motivo)}</td>
+            <td>${esc(devRotulo(d))}${d.tipo === 'SOBRA' ? ' (SOBRA)' : ''} · Nº ${d.numero}</td>
+          </tr>`).join('')}</tbody>
+        <tfoot>${somatorioLinhasOperadorDev(linhas)}</tfoot>
+      </table>` : '<div class="card-sub">Nenhuma devolução lançada neste dia.</div>'}
+      ${rodapeDocumento(
+        'Relação das linhas devolvidas no dia, para lançamento pelo operador do '
+        + 'monitoramento. Conferência de descarga, pesagem e destinação não entram '
+        + 'aqui — elas ficam no Relatório de Devoluções.',
+        `Devoluções do dia ${diaBR}, gravadas no servidor pelo painel.`,
+        '')}
+    </div>`;
+
+  await exportarViaServidor(el, `Devolucoes-Operador-${dia}`);
 }

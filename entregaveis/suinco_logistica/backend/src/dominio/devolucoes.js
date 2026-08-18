@@ -154,6 +154,11 @@ export function devolucaoParaPainel(linha, itens = [], divergencias = [], rotas 
        informado), true (gerou) e false (não gerou) — porque "não informado"
        e "não gerou" são respostas diferentes na auditoria. */
     gerouRdc: linha.gerou_rdc === null || linha.gerou_rdc === undefined ? null : !!linha.gerou_rdc,
+    /* Chegou lacrado? (18/08/2026) — null = não informado, true = veio
+       lacrado (número em lacre1/lacre2), false = veio SEM lacre, dito de
+       propósito. É informação, não trava. */
+    chegouLacrado: linha.chegou_lacrado === null || linha.chegou_lacrado === undefined
+      ? null : !!linha.chegou_lacrado,
     observacoes: linha.observacoes,
     carimbos: {
       portaria:    linha.portaria_em    ? { por: linha.portaria_por,    em: linha.portaria_em }    : null,
@@ -248,6 +253,12 @@ export function camposCabecalho(corpo) {
   if (corpo.observacoes !== undefined) m.observacoes = texto(corpo.observacoes, 2000);
   // RDC/Romaneio — campo dos Controles Internos (18/08/2026). Vazio/null
   // volta a "não informado"; qualquer outra coisa vira sim/não de verdade.
+  // "Chegou lacrado?" — informado pela PORTARIA no recebimento. Vazio
+  // volta a "não informado"; false é resposta de verdade ("veio sem lacre").
+  if (corpo.chegouLacrado !== undefined) {
+    m.chegou_lacrado = corpo.chegouLacrado === null || corpo.chegouLacrado === '' ? null
+      : (corpo.chegouLacrado === false || corpo.chegouLacrado === 'false' ? false : true);
+  }
   if (corpo.gerouRdc !== undefined) {
     m.gerou_rdc = corpo.gerouRdc === null || corpo.gerouRdc === '' ? null
       : (corpo.gerouRdc === false || corpo.gerouRdc === 'false' ? false : true);
