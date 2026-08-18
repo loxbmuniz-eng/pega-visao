@@ -3167,3 +3167,13 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
    coluna nova alargaria a tabela e voltaria a rolagem lateral. */
 .cel-gan-ent{ white-space:nowrap; }
 .cel-gan-ent input{ display:block; width:64px; margin:2px 0; }
+
+/* Fila "SUA VEZ" da esteira de devoluções (fase 2, 18/08/2026). */
+.dev-chip-suavez{
+  background:var(--gold); color:var(--navy-deep); border-color:var(--gold);
+  animation: suavez-pulsa 2.2s ease-in-out infinite;
+}
+.dev-card:has(.dev-chip-suavez){ border-color:var(--gold-dim); }
+#dev-pipeline{ margin-bottom:8px; }
+@keyframes suavez-pulsa{ 0%,100%{opacity:1} 50%{opacity:.72} }
+@media (prefers-reduced-motion: reduce){ .dev-chip-suavez{ animation:none; } }

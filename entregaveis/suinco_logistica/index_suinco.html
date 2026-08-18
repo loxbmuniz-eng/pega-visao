@@ -274,7 +274,18 @@
     </div>
 
     <div id="dev-conteudo">
+      <!-- A esteira: quantos checklists em cada etapa do ciclo, no dia do
+           filtro. Clique filtra a lista — mesma pegada das caixas da
+           Torre. É o que deixa TODOS os setores na mesma página. -->
       <div class="card">
+        <div class="card-title"><span class="icon">🔄</span> Esteira de Devoluções</div>
+        <div class="card-sub">Cada caixa é uma etapa do ciclo. O checklist anda sozinho:
+          terminou uma etapa, ele entra na fila do próximo setor — em tempo real, em todas as telas.</div>
+        <div class="bento" id="dev-pipeline"></div>
+        <div class="card-sub" id="dev-sua-vez-aviso" hidden></div>
+      </div>
+
+      <div class="card" id="dev-card-novo">
         <div class="card-title"><span class="icon">📦</span> Novo checklist de devolução</div>
         <div class="card-sub">O número do checklist é gerado sozinho. <strong>Região + rotas</strong>
           identificam o checklist na conferência — e um checklist pode juntar VÁRIAS rotas da mesma
