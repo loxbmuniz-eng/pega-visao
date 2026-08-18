@@ -875,3 +875,37 @@ function renderProdutosDevUI() {
       + (lista.length === 200 ? ' · mostrando os 200 primeiros — refine a busca' : '');
   }
 }
+
+/* ---------- exportação CSV dos cadastros de devoluções ----------
+   Servidor-first: garante a lista ATUALIZADA antes de gerar (pedido de
+   18/08/2026: "todo o registro de cadastro, atualizado"). */
+async function exportarCadastroDevCsv(qual) {
+  if (!devServidorOk()) {
+    notify('Exportar cadastros exige conexão com o servidor.', 'warn');
+    return;
+  }
+  try {
+    DEV_CADASTROS = await SuincoSharePoint.devolucoes.cadastros();
+    _devCadastrosCarregados = true;
+  } catch (e) {
+    notify('Não consegui atualizar o cadastro antes de exportar: ' + (e.message || 'erro'), 'danger', 6000);
+    return;
+  }
+  if (qual === 'produtos') {
+    baixarCsvCadastro('Produtos',
+      ['Código', 'Produto', 'Categoria', 'Temperatura', 'Validade', 'EAN',
+       'Peso líquido (planilha)', 'kg por caixa', 'Ativo'],
+      (DEV_CADASTROS.produtos || []).map((p) => [p.codigo, p.nome, p.categoria || '',
+        p.temperatura || '', p.validade || '', p.ean || '',
+        p.pesoLiquidoTxt || '', p.pesoCaixaKg ?? '', p.ativo === false ? 'Não' : 'Sim']));
+  } else if (qual === 'supervisores') {
+    baixarCsvCadastro('Supervisores', ['Supervisor'],
+      (DEV_CADASTROS.supervisores || []).map((s) => [s]));
+  } else if (qual === 'representantes') {
+    baixarCsvCadastro('Representantes', ['Representante (RCA)'],
+      (DEV_CADASTROS.representantes || []).map((s) => [s]));
+  } else if (qual === 'motivos') {
+    baixarCsvCadastro('Motivos', ['Motivo de devolução'],
+      (DEV_CADASTROS.motivos || []).map((s) => [s]));
+  }
+}

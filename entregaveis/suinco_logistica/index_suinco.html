@@ -773,6 +773,10 @@
       <div class="form-row" style="align-items:flex-end">
         <div class="form-group" style="flex:2"><label>Buscar (Placa ou Transportadora)</label><input type="text" id="frota-busca" placeholder="Digite pra filtrar…" oninput="renderFrotaTabela()"></div>
         <div class="form-group"><label><input type="checkbox" id="frota-so-revisao" style="width:auto;margin-right:6px" onchange="renderFrotaTabela()"> Só Precisa Revisão</label></div>
+        <div class="form-group" style="align-self:end">
+          <button class="btn btn-sec btn-sm" onclick="exportarFrotaCsv()"
+            title="Baixa a relação COMPLETA e atualizada da Frota em CSV — abre direto no Excel.">⬇ Exportar CSV</button>
+        </div>
         <div class="form-group text-dim" id="frota-contagem" style="flex:1;text-align:right"></div>
       </div>
       <div class="table-wrap">
@@ -786,7 +790,9 @@
 
     <div class="grid2">
       <div class="card">
-        <div class="card-title"><span class="icon">🏢</span> Transportadoras</div>
+        <div class="card-title"><span class="icon">🏢</span> Transportadoras
+          <button class="btn btn-sec btn-sm" style="float:right" onclick="exportarTransportadorasCsv()"
+            title="Baixa as transportadoras da Frota (com a contagem de placas de cada uma) em CSV.">⬇ CSV</button></div>
         <div class="form-row">
           <div class="form-group"><label>Nome</label><input type="text" id="cad-transp-nome"></div>
         </div>
@@ -810,7 +816,10 @@
           <div class="form-group"><label>Detalhe <span class="hint">opcional</span></label><input type="text" id="rota-detalhe" placeholder="Ex: Florianópolis"></div>
           <div class="form-group"><label>Operador/Transportadora <span class="hint">opcional</span></label><input type="text" id="rota-operador"></div>
         </div>
-        <div class="flex-end" style="margin-top:0"><button class="btn btn-primary btn-sm" onclick="addRotaUI()">➕ Cadastrar / Atualizar Rota</button></div>
+        <div class="flex-end" style="margin-top:0">
+          <button class="btn btn-sec btn-sm" onclick="exportarRotasCsv()"
+            title="Baixa todas as rotas cadastradas em CSV.">⬇ Exportar CSV</button>
+          <button class="btn btn-primary btn-sm" onclick="addRotaUI()">➕ Cadastrar / Atualizar Rota</button></div>
         <div class="sep"></div>
         <div class="table-wrap">
           <table>
@@ -851,6 +860,13 @@
             <button class="btn btn-sec btn-sm" onclick="cadastrarMotivoDevUI()">➕ Motivo</button></div>
         </div>
         <div class="card-sub" id="cad-dev-resumo"></div>
+        <div class="gap8">
+          <button class="btn btn-sec btn-sm" onclick="exportarCadastroDevCsv('produtos')"
+            title="Relação completa e atualizada de produtos (com categoria, validade, EAN e kg/caixa).">⬇ Produtos CSV</button>
+          <button class="btn btn-sec btn-sm" onclick="exportarCadastroDevCsv('supervisores')">⬇ Supervisores CSV</button>
+          <button class="btn btn-sec btn-sm" onclick="exportarCadastroDevCsv('representantes')">⬇ Representantes CSV</button>
+          <button class="btn btn-sec btn-sm" onclick="exportarCadastroDevCsv('motivos')">⬇ Motivos CSV</button>
+        </div>
         <div class="sep"></div>
         <!-- Base oficial de produtos (INFORMAÇÕES DE PRODUTOS, 18/08/2026) —
              mesma pegada da tabela de Frota: lista completa com busca. -->

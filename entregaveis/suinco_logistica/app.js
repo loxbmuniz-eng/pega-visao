@@ -3811,6 +3811,60 @@ function coletarCssDoPainel(){
 /* Substitui window.print(): monta o mesmo HTML que sempre foi montado,
    manda pro servidor gerar o PDF de verdade (A4 paisagem garantido) e
    baixa o arquivo pronto. */
+/* ---------- Exportação de cadastros em CSV ----------
+   Pedido do usuário (18/08/2026): "exportar qualquer relação de cadastros
+   completa... por exemplo todo o registro de cadastro de Frota,
+   atualizado". CSV e não XLSX de propósito: sai do próprio navegador, sem
+   biblioteca externa (a CSP barra CDN), e com BOM + ponto-e-vírgula o
+   Excel em português abre com acento e coluna certos num duplo clique. */
+function baixarCsvCadastro(nome, cabecalhos, linhas){
+  const escapa = (v) => {
+    const s = String(v ?? '');
+    return /[";\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  };
+  const corpo = [cabecalhos, ...linhas]
+    .map((l) => l.map(escapa).join(';')).join('\r\n');
+  // BOM: sem ele o Excel pt-BR abre "Ç" como lixo — visto em campo.
+  const blob = new Blob(['﻿' + corpo], { type: 'text/csv;charset=utf-8' });
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  const carimbo = `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}_${pad(d.getHours())}h${pad(d.getMinutes())}`;
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `Suinco_Cadastro_${nome}_${carimbo}.csv`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(a.href);
+  notifyGravacao(`Cadastro de ${nome} exportado: ${linhas.length} registro(s).`);
+}
+
+function exportarFrotaCsv(){
+  baixarCsvCadastro('Frota',
+    ['Placa','Transportadora','Tipo de Veículo','Motorista','Capacidade (kg)','UF','Última Movimentação','Precisa Revisão'],
+    DB.frota.map((f) => [f.placa, f.transportadora || '', f.tipoVeiculo || '',
+      f.motorista || '', f.capacidadeKg ?? '', f.uf || '',
+      f.dataUltimaMovimentacao || '', f.precisaRevisao ? 'Sim' : 'Não']));
+}
+
+function exportarRotasCsv(){
+  baixarCsvCadastro('Rotas',
+    ['Código','Nome','Detalhe','Operador'],
+    ROTAS.map((r) => [r.codigo, r.nome || '', r.detalhe || '', r.operador || '']));
+}
+
+function exportarTransportadorasCsv(){
+  // Derivada da Frota (fonte viva): cada transportadora com quantas placas
+  // tem hoje — mais útil que a lista solta de nomes.
+  const porNome = new Map();
+  DB.frota.forEach((f) => {
+    const nome = (f.transportadora || '').trim();
+    if (!nome) return;
+    porNome.set(nome, (porNome.get(nome) || 0) + 1);
+  });
+  baixarCsvCadastro('Transportadoras',
+    ['Transportadora','Placas cadastradas'],
+    [...porNome.entries()].sort((a, b) => a[0].localeCompare(b[0])));
+}
+
 async function exportarViaServidor(el, nomeDoRelatorio){
   if(!SuincoSharePoint || !SuincoSharePoint.estaConfigurado || !SuincoSharePoint.estaConfigurado()){
     notify('Exportar relatório exige conexão com o servidor — é o que garante que o PDF sai sempre igual, em qualquer aparelho.', 'warn', 6000);
