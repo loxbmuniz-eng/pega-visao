@@ -634,7 +634,7 @@ function renderDevolucaoAberta(d, editavel) {
         <table class="dev-tabela">
           <thead><tr>
             <th>Nota</th><th>P/T</th><th>Supervisor</th><th title="Vendedor">RCA</th>
-            <th>Cód. Cliente</th><th>CX</th><th>Peso</th><th>Cód. Produto</th>
+            <th>Cód. Cliente</th><th>CX</th><th title="Peso em QUILOS (kg)">Peso (kg)</th><th>Cód. Produto</th>
             <th>Nº DEV</th><th title="Coluna DATA-DEV da capa">Data DEV</th><th>Motivo</th>
             <th title="Pesagem do Faturamento — confirma que passou pela balança">Pesagem</th>
             <th title="Conferência da descarga: quantidade recebida">Expedição</th><th>Falta</th>
@@ -1095,6 +1095,8 @@ async function relatorioDevolucoesUI(diaParam) {
   const [ano, mes, diaN] = dia.split('-');
   const diaBR = `${diaN}/${mes}/${ano}`;
   const totalCx = lista.reduce((s, d) => s + d.itens.reduce((x, i) => x + (i.cx || 0), 0), 0);
+  const totalPesoDia = lista.reduce(
+    (s, d) => s + d.itens.reduce((x, i) => x + (Number(i.peso) || 0), 0), 0);
   const totalFalta = lista.reduce((s, d) => s
     + d.itens.reduce((x, i) => x + (i.falta || 0), 0), 0);
   const totalDiverg = lista.reduce((s, d) => s + d.divergencias.length, 0);
@@ -1117,8 +1119,8 @@ async function relatorioDevolucoesUI(diaParam) {
       <table class="dev-doc-tabela">
         <thead><tr>
           <th>Nota</th><th>P/T</th><th>Supervisor</th><th title="Vendedor">RCA</th><th>Cód. Cliente</th>
-          <th>CX</th><th>Peso</th><th>Produto</th><th>Nº DEV</th><th>Data DEV</th><th>Motivo</th>
-          <th>Pesagem</th><th>Expedição</th><th>Falta</th><th>Destinação</th><th>Nota final</th>
+          <th>CX</th><th title="Peso em QUILOS (kg)">Peso (kg)</th><th>Produto</th><th>Nº DEV</th><th>Data DEV</th><th>Motivo</th>
+          <th title="Pesagem do Faturamento, em QUILOS (kg)">Pesagem (kg)</th><th>Expedição</th><th>Falta</th><th>Destinação</th><th>Nota final</th>
         </tr></thead>
         <tbody>${d.itens.map((i) => `<tr${i.falta > 0 ? ' class="dev-doc-falta"' : ''}>
             <td>${esc(i.nota)}</td>
@@ -1167,14 +1169,19 @@ async function relatorioDevolucoesUI(diaParam) {
       ${cabecalhoDocumento({
         titulo: 'Relatório de Devoluções',
         subtitulo: `Checklists do dia ${diaBR} · ${lista.length} checklist(s) · `
-          + `${totalCx.toLocaleString('pt-BR')} cx`
+          + `${totalCx.toLocaleString('pt-BR')} cx · `
+          /* Peso das devoluções é sempre em QUILOS — o Relatório Operacional
+             das cargas usa tonelada, e a troca de unidade entre um documento
+             e outro já confundiu quem confere. Aqui vai escrito. */
+          + `${totalPesoDia.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} kg (quilos)`
           + `${totalFalta > 0 ? ' · FALTAS: ' + totalFalta.toLocaleString('pt-BR') + ' cx' : ''}`
           + `${totalDiverg > 0 ? ' · ' + totalDiverg + ' divergente(s)' : ''}`,
       })}
       ${lista.length ? lista.map(bloco).join('')
         : '<div class="card-sub">Nenhum checklist de devolução neste dia.</div>'}
       ${rodapeDocumento(
-        'Cada checklist identifica quem o gerou. A coluna FALTA é calculada '
+        'Todos os pesos deste relatório estão em QUILOS (kg) — não em toneladas. '
+        + 'Cada checklist identifica quem o gerou. A coluna FALTA é calculada '
         + 'pelo sistema (caixas do checklist menos caixas recebidas na descarga); '
         + 'produtos divergentes não abatem falta.',
         `Checklists de devolução do dia ${diaBR}, gravados no servidor pelo painel.`,
@@ -1458,9 +1465,9 @@ function somatorioItensDev(itens, colspanAntes) {
   return `<tr class="linha-total">
       <td colspan="${colspanAntes}" class="tot-rotulo">TOTAL — ${itens.length} linha(s)</td>
       <td class="tot-num">${fmt(cx, 0)}</td>
-      <td class="tot-num">${fmt(peso, 2)}</td>
+      <td class="tot-num">${fmt(peso, 2)} kg</td>
       <td colspan="3"></td>
-      <td class="tot-num">${pesagem ? fmt(pesagem, 2) : ''}</td>
+      <td class="tot-num">${pesagem ? fmt(pesagem, 2) + ' kg' : ''}</td>
       <td class="tot-num">${recebidas ? fmt(recebidas, 0) : ''}</td>
       <td class="tot-num">${falta ? 'FALTA ' + fmt(falta, 0) : ''}</td>
       <td colspan="2"></td>
@@ -1475,7 +1482,7 @@ function somatorioLinhasOperadorDev(linhas) {
   return `<tr class="linha-total">
       <td colspan="5" class="tot-rotulo">TOTAL — ${linhas.length} linha(s)</td>
       <td class="tot-num">${fmt(cx, 0)}</td>
-      <td class="tot-num">${fmt(peso, 2)}</td>
+      <td class="tot-num">${fmt(peso, 2)} kg</td>
       <td colspan="5"></td>
     </tr>`;
 }
@@ -1537,7 +1544,7 @@ async function relatorioOperadorDevolucoesUI(diaParam) {
       <table class="doc-tabela dev-doc-tabela">
         <thead><tr>
           <th>Nota</th><th>P/T</th><th>Supervisor</th><th title="Vendedor">RCA</th>
-          <th>Cliente</th><th>CX</th><th>Peso</th><th>Produto</th>
+          <th>Cliente</th><th>CX</th><th title="Peso em QUILOS (kg)">Peso (kg)</th><th>Produto</th>
           <th>Nº DEV</th><th>Data DEV</th><th>Motivo</th>
           <th title="Checklist de origem">Checklist</th>
         </tr></thead>
@@ -1559,7 +1566,8 @@ async function relatorioOperadorDevolucoesUI(diaParam) {
         <tfoot>${somatorioLinhasOperadorDev(linhas)}</tfoot>
       </table>` : '<div class="card-sub">Nenhuma devolução lançada neste dia.</div>'}
       ${rodapeDocumento(
-        'Relação das linhas devolvidas no dia, para lançamento pelo operador do '
+        'Todos os pesos desta relação estão em QUILOS (kg) — não em toneladas. '
+        + 'Relação das linhas devolvidas no dia, para lançamento pelo operador do '
         + 'monitoramento. Conferência de descarga, pesagem e destinação não entram '
         + 'aqui — elas ficam no Relatório de Devoluções.',
         `Devoluções do dia ${diaBR}, gravadas no servidor pelo painel.`,
