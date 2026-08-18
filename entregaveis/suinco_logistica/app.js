@@ -1332,6 +1332,24 @@ function fecharRevisoesUI(){
   document.getElementById('modal-revisoes').classList.remove('open');
 }
 
+/* "➕ Outra carga" na Torre — relato do Programador de Embarque
+   (18/08/2026): "a opção de criar uma segunda carga não tá aparecendo".
+
+   Não era regressão, era beco sem saída: o botão só existia na linha da
+   Fila de Programados, e a fila só mostra carga de HOJE em "Aguardando
+   Veículo" (decisão de 11/08). Carga programada ontem, ou caminhão que já
+   chegou, não tem linha lá — e o formulário bloqueia a placa duplicada
+   apontando para um botão que não estava em lugar nenhum. A Torre mostra
+   TODA carga em aberto, sempre; é o lugar que não some. */
+function botaoOutraCargaHtml(c){
+  if(!podeCancelarCarga()) return '';
+  // Caminhão que já seguiu viagem liberou a placa: o formulário aceita a
+  // placa de novo sem autorização nenhuma — o botão aqui seria ruído.
+  if(c.status === 'Seguiu Viagem') return '';
+  return `<button class="btn btn-sec btn-sm" onclick="adicionarOutraCargaNaPlacaUI('${escJs(c.id)}')"
+            title="Programar OUTRA carga para este mesmo caminhão — abre a Programação com placa, transportadora, motorista e rota preenchidos.">➕ Outra carga</button>`;
+}
+
 function botaoCancelarHtml(c){
   /* Carga em "Seguiu Viagem" tem proteção a mais (pede confirmação
      digitando a placa, ver excluirCargaSeguiuViagemUI) — mas não é mais
@@ -1693,7 +1711,7 @@ function renderTorre(){
       <td class="cel-datas">
         <span class="dt-prog">${dataProgramacaoHtml(c)}</span>
         <span class="dt-atu" title="Última movimentação registrada">${fmtDataHora(c.atualizadoEm)}</span></td>
-      ${editavel ? `<td class="no-print">${botaoRevisoesHtml(c)}${botaoCancelarHtml(c)}</td>` : ''}
+      ${editavel ? `<td class="no-print">${botaoOutraCargaHtml(c)}${botaoRevisoesHtml(c)}${botaoCancelarHtml(c)}</td>` : ''}
     </tr>`).join('');
   const vazio = document.getElementById('torre-empty');
   vazio.hidden = lista.length>0;
@@ -1924,7 +1942,8 @@ function criarCargaProgramadaUI(){
       .join(', ');
     notify(
       `${pNorm} já está nesta programação (${numeros}) e ainda não seguiu viagem. `
-      + 'Para lançar outra carga no mesmo caminhão, use "➕ Outra carga" na linha dela.',
+      + 'Para lançar outra carga no mesmo caminhão, use "➕ Outra carga" na linha dela — '
+      + 'na Fila de Programados ou na Torre de Controle.',
       'warn', 9000);
     return;
   }
@@ -2133,6 +2152,12 @@ function marcaCargaDaPlaca(carga, lista){
 function adicionarOutraCargaNaPlacaUI(id){
   const c = getCarga(id);
   if(!c){ notify('Carga não encontrada.', 'warn'); return; }
+
+  /* O botão também vive na Torre de Controle (relato de 18/08/2026: a
+     carga saía da fila do dia e a opção "sumia"). O formulário fica na
+     aba Programação — navega pra lá ANTES de preencher, senão o foco e o
+     scrollIntoView miram campos de uma aba escondida. */
+  if(typeof TAB_ATUAL !== 'undefined' && TAB_ATUAL !== 'programacao') irParaTab('programacao');
 
   const v = (campo, valor) => { const e = document.getElementById(campo); if(e) e.value = valor; };
 
