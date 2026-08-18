@@ -1136,6 +1136,11 @@ async function relatorioDevolucoesUI(diaParam) {
             <td>${esc(devDestinoResumo(i)) || '—'}</td>
             <td>${i.notaFinal ? '✔' : '—'}</td>
           </tr>`).join('')}</tbody>
+        ${/* Somatório no pé da tabela, no padrão do Relatório Operacional
+              (pedido de 18/08/2026): as colunas CX e PESO fecham a conta do
+              checklist, e a pesagem do Faturamento fecha a dela ao lado —
+              é o número que a conferência procura primeiro. */''}
+        <tfoot>${somatorioItensDev(d.itens, 5)}</tfoot>
       </table>
       ${d.divergencias.length ? `<div class="dev-doc-diverg">
           <strong>Divergentes (fora do checklist):</strong>
@@ -1438,6 +1443,43 @@ async function cadastrarClienteDevUI() {
   }
 }
 
+/* Rodapé de somatórios das tabelas de devolução — mesmo desenho do
+   Relatório Operacional (linha-total, rótulo à esquerda, números à
+   direita). Some o que é somável e deixe o resto em branco: coluna que
+   não é quantidade não ganha total só para preencher espaço. */
+function somatorioItensDev(itens, colspanAntes) {
+  const num = (v) => (v === null || v === undefined ? 0 : Number(v) || 0);
+  const cx = itens.reduce((s, i) => s + num(i.cx), 0);
+  const peso = itens.reduce((s, i) => s + num(i.peso), 0);
+  const pesagem = itens.reduce((s, i) => s + num(i.pesoFaturamento), 0);
+  const recebidas = itens.reduce((s, i) => s + num(i.qtdRecebida), 0);
+  const falta = itens.reduce((s, i) => s + num(i.falta), 0);
+  const fmt = (n, casas) => n.toLocaleString('pt-BR', { maximumFractionDigits: casas });
+  return `<tr class="linha-total">
+      <td colspan="${colspanAntes}" class="tot-rotulo">TOTAL — ${itens.length} linha(s)</td>
+      <td class="tot-num">${fmt(cx, 0)}</td>
+      <td class="tot-num">${fmt(peso, 2)}</td>
+      <td colspan="3"></td>
+      <td class="tot-num">${pesagem ? fmt(pesagem, 2) : ''}</td>
+      <td class="tot-num">${recebidas ? fmt(recebidas, 0) : ''}</td>
+      <td class="tot-num">${falta ? 'FALTA ' + fmt(falta, 0) : ''}</td>
+      <td colspan="2"></td>
+    </tr>`;
+}
+
+function somatorioLinhasOperadorDev(linhas) {
+  const num = (v) => (v === null || v === undefined ? 0 : Number(v) || 0);
+  const cx = linhas.reduce((s, { i }) => s + num(i.cx), 0);
+  const peso = linhas.reduce((s, { i }) => s + num(i.peso), 0);
+  const fmt = (n, casas) => n.toLocaleString('pt-BR', { maximumFractionDigits: casas });
+  return `<tr class="linha-total">
+      <td colspan="5" class="tot-rotulo">TOTAL — ${linhas.length} linha(s)</td>
+      <td class="tot-num">${fmt(cx, 0)}</td>
+      <td class="tot-num">${fmt(peso, 2)}</td>
+      <td colspan="5"></td>
+    </tr>`;
+}
+
 /* ------------------------------------------------------------------
    RELATÓRIO PARA O OPERADOR (pedido da Bruna, 18/08/2026)
 
@@ -1514,6 +1556,7 @@ async function relatorioOperadorDevolucoesUI(diaParam) {
             <td>${esc(i.motivo)}</td>
             <td>${esc(devRotulo(d))}${d.tipo === 'SOBRA' ? ' (SOBRA)' : ''} · Nº ${d.numero}</td>
           </tr>`).join('')}</tbody>
+        <tfoot>${somatorioLinhasOperadorDev(linhas)}</tfoot>
       </table>` : '<div class="card-sub">Nenhuma devolução lançada neste dia.</div>'}
       ${rodapeDocumento(
         'Relação das linhas devolvidas no dia, para lançamento pelo operador do '
