@@ -15,6 +15,9 @@ O que se prova no navegador de verdade, contra o backend local:
      preenchido com hoje e o PDF sai com o status ATUAL (é buscado do
      servidor no clique, não do que estava na tela).
   4. RDC (romaneio): o campo dos Controles Internos aparece no cabeçalho.
+  5. Nº DA NOTA PARCIAL em coluna própria, ao lado da nota de venda: nota
+     parcial exige o número, nota total tem o campo travado e vazio. Sai nos
+     dois relatórios, e a linha de TOTAL fecha alinhada com o cabeçalho.
 
     python3 testes/test_sobras_parciais_relatorio.py
 """
@@ -140,6 +143,51 @@ async def main():
         doc = await pg.evaluate("() => document.getElementById('print-devolucoes').innerText")
         ck('a SOBRA criada agora está no relatório', 'SOBRA' in doc)
         ck('a parcial da nota sai identificada no relatório', '118274' in doc)
+
+        print('\n=== 5. Nº DA NOTA PARCIAL: COLUNA PRÓPRIA, SÓ QUANDO É PARCIAL ===')
+        await pg.click(".nav-tab[data-tab='devolucoes']")
+        await pg.evaluate("(id) => { _devExpandida = id; renderDevolucoes(); }", dev['id'])
+        await pg.wait_for_timeout(600)
+        cab = await pg.evaluate(
+            "() => [...document.querySelectorAll('.dev-card.dev-aberta thead th')]"
+            ".map((t) => t.innerText.trim())")
+        ck('coluna "Nº parcial" existe na tela', 'Nº parcial' in cab, ' | '.join(cab[:6]))
+
+        # Uma linha TOTAL, para provar que o campo trava quando não há parcial.
+        await pg.evaluate(
+            "async (id) => { await SuincoSharePoint.devolucoes.criarItem(id,"
+            " {nota: '672123', parcial: false, cx: 4, peso: 30,"
+            "  codProduto: '01189', numDev: '52098', motivo: 'DATA PROXIMA'});"
+            " _devExpandida = id; await carregarDevolucoes(); }", dev['id'])
+        await pg.wait_for_timeout(900)
+        campos = await pg.evaluate(
+            "() => [...document.querySelectorAll('.dev-card.dev-aberta tbody tr')]"
+            ".map((tr) => { const i = tr.querySelector('.dev-parcial-desc');"
+            "  return i ? {v: i.value, off: i.disabled} : null; }).filter(Boolean)")
+        ck('parcial mantém o número editável',
+           any(c['v'] == '118274' and not c['off'] for c in campos), str(campos))
+        ck('nota TOTAL fica com o campo travado e vazio',
+           any(c['off'] and c['v'] == '' for c in campos))
+
+        async with pg.expect_download(timeout=60000):
+            await pg.click("button:has-text('Relatório do dia')")
+        doc = await pg.evaluate("() => document.getElementById('print-devolucoes').innerText")
+        ck('relatório do checklist traz a coluna e o número',
+           'Nº parcial' in doc and '118274' in doc)
+        alin = await pg.evaluate(
+            "() => { const t = document.querySelector('#print-devolucoes table');"
+            "  const cols = t.querySelectorAll('thead th').length;"
+            "  const tf = [...t.querySelectorAll('tfoot td')]"
+            "    .reduce((s, c) => s + (parseInt(c.getAttribute('colspan')) || 1), 0);"
+            "  return {cols, tf}; }")
+        ck('linha de TOTAL alinhada com o cabeçalho', alin['cols'] == alin['tf'], str(alin))
+
+        async with pg.expect_download(timeout=60000):
+            await pg.click("button:has-text('Relação para o operador')")
+        oper = await pg.evaluate(
+            "() => document.getElementById('print-devolucoes-operador').innerText")
+        ck('relação do operador: coluna Nº parcial', 'Nº parcial' in oper)
+        ck('relação do operador: peso em quilos', 'Peso (kg)' in oper and 'QUILOS (kg)' in oper)
 
         # Limpeza: os dois checklists de teste saem do dia.
         await pg.evaluate(
