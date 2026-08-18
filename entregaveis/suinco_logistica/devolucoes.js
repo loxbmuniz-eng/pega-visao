@@ -20,6 +20,8 @@ let _devExpandida = null;   // checklist aberto (sobrevive ao re-render)
 /* Rotas escolhidas no formulário de NOVO checklist — um checklist junta
    várias rotas da mesma região (pedido de 18/08/2026). */
 let _devRotasNovas = [];
+/* Filtro da esteira (clique numa caixa de etapa) — null = todas. */
+let _devFiltroEtapa = null;
 
 function devRotulo(d) {
   return `${d.regiao ? d.regiao + ' · ' : ''}rota(s) ${(d.rotas || []).join(', ') || '—'}`;
@@ -101,6 +103,19 @@ function podeNotaFinalDev() {
   return podeEditarDevolucao() || setor === 'Central de Notas';
 }
 
+/* A etapa cujo DONO é o meu setor — é ela que define a minha fila "SUA
+   VEZ". Logística/Administração não têm uma só (cobrem todas): null. */
+function minhaEtapaDev() {
+  const setor = (DB.operador || {}).setor;
+  if (!setor || setor === 'Logística' || setor === 'Administração') return null;
+  return DEV_ETAPAS.find((e) => e.setores[0] === setor) || null;
+}
+
+function ehMinhaVezDev(d) {
+  const etapa = minhaEtapaDev();
+  return !!(etapa && d.status === etapa.status);
+}
+
 function getDevolucao(id) {
   return DEVOLUCOES.find((d) => d.id === id) || null;
 }
@@ -122,6 +137,11 @@ function renderDevolucoes() {
   if (data && !data.value) data.value = diaLocalDev();
   const filtro = document.getElementById('dev-filtro-dia');
   if (filtro && !filtro.value) filtro.value = diaLocalDev();
+
+  // Criar checklist é da Logística/Administração; os demais setores veem
+  // a esteira e a própria fila, sem um formulário que a API recusaria.
+  const cardNovo = document.getElementById('dev-card-novo');
+  if (cardNovo) cardNovo.hidden = !podeEditarDevolucao();
 
   preencherSelectRotaDev();
   if (!_devCadastrosCarregados) carregarCadastrosDev();
@@ -210,14 +230,74 @@ function devPesoSugerido(codigo, cx) {
   return Math.round(n * p.pesoCaixaKg * 100) / 100;
 }
 
+/* A esteira: uma caixa por etapa com a contagem do dia. Clique filtra a
+   lista (clicar de novo limpa) — mesma pegada das caixas da Torre. A
+   caixa da MINHA etapa ganha destaque: é a minha fila. */
+function renderPipelineDev() {
+  const el = document.getElementById('dev-pipeline');
+  if (!el) return;
+  const porStatus = {};
+  DEVOLUCOES.forEach((d) => { porStatus[d.status] = (porStatus[d.status] || 0) + 1; });
+  const minha = minhaEtapaDev();
+  const TODAS = [...DEV_ETAPAS.map((e) => e.status), 'Nota Finalizada'];
+  el.innerHTML = TODAS.map((status) => {
+    const n = porStatus[status] || 0;
+    const ehMinha = minha && minha.status === status;
+    const ativo = _devFiltroEtapa === status;
+    const dono = status === 'Nota Finalizada' ? 'concluído'
+      : (DEV_ETAPAS.find((e) => e.status === status) || {}).setores?.[0] || '';
+    return `<div class="stat-box stat-clicavel${ehMinha ? ' stat-destaque' : ''}${ativo ? ' stat-ativo' : ''}${ehMinha && n > 0 ? ' stat-alerta' : ''}"
+        onclick="filtrarEtapaDevUI('${escJs(status)}')"
+        title="${esc(dono ? (ehMinha ? 'A SUA fila — clique para ver só ela.' : 'Etapa de: ' + dono) : '')}">
+        <div class="stat-num">${n}</div>
+        <div class="stat-label">${esc(status)}${ehMinha ? ' · SUA VEZ' : ''}</div>
+      </div>`;
+  }).join('');
+
+  const aviso = document.getElementById('dev-sua-vez-aviso');
+  if (aviso) {
+    const pendentes = minha ? (porStatus[minha.status] || 0) : 0;
+    aviso.hidden = !minha || pendentes === 0;
+    if (minha && pendentes > 0) {
+      aviso.innerHTML = `<strong>É a sua vez:</strong> ${pendentes} checklist(s) aguardando `
+        + `a ação do seu setor (${esc((DB.operador || {}).setor || '')}). `
+        + `Termine e ele segue sozinho para a fila do próximo setor.`;
+    }
+  }
+}
+
+function filtrarEtapaDevUI(status) {
+  _devFiltroEtapa = _devFiltroEtapa === status ? null : status;
+  renderListaDevolucoes();
+}
+
 function renderListaDevolucoes() {
   const box = document.getElementById('dev-lista');
   const vazio = document.getElementById('dev-empty');
   if (!box) return;
-  vazio.hidden = DEVOLUCOES.length > 0;
+  renderPipelineDev();
   const editavel = podeEditarDevolucao();
 
-  box.innerHTML = DEVOLUCOES.map((d) => {
+  /* Ordem da lista: primeiro a MINHA fila (o que espera a ação do meu
+     setor), depois o resto na ordem do ciclo. Com o filtro da esteira
+     ativo, só a etapa clicada. */
+  const posicao = (s) => {
+    const i = DEV_ETAPAS.findIndex((e) => e.status === s);
+    return i === -1 ? DEV_ETAPAS.length : i;
+  };
+  let lista = DEVOLUCOES.slice();
+  if (_devFiltroEtapa) lista = lista.filter((d) => d.status === _devFiltroEtapa);
+  lista.sort((a, b) => (ehMinhaVezDev(b) - ehMinhaVezDev(a))
+    || (posicao(a.status) - posicao(b.status)) || (b.numero - a.numero));
+  vazio.hidden = lista.length > 0;
+
+  // Uma única pendência na minha fila: já abre — menos um clique no pátio.
+  if (_devExpandida === null) {
+    const minhas = lista.filter(ehMinhaVezDev);
+    if (minhas.length === 1) _devExpandida = minhas[0].id;
+  }
+
+  box.innerHTML = lista.map((d) => {
     const aberta = _devExpandida === d.id;
     const totalCx = d.itens.reduce((s, i) => s + (i.cx || 0), 0);
     const faltas = d.itens.filter((i) => i.falta !== null && i.falta > 0);
@@ -231,6 +311,7 @@ function renderListaDevolucoes() {
     return `<div class="dev-card${aberta ? ' dev-aberta' : ''}">
       <div class="dev-card-topo" onclick="alternarDevolucaoUI('${escJs(d.id)}')">
         <div class="dev-card-id">
+          ${ehMinhaVezDev(d) ? '<span class="dev-chip dev-chip-suavez">SUA VEZ</span>' : ''}
           <strong>Checklist Nº ${d.numero}</strong>
           <span class="dev-card-rota">${d.regiao ? esc(d.regiao) + ' — ' : ''}${(d.rotas || []).map((r) => 'Rota ' + esc(r)).join(' · ') || 'sem rota'}${d.criadaPor ? ' / ' + esc(devIniciais(d.criadaPor)) : ''}</span>
           ${devStatusChip(d.status)}
@@ -313,12 +394,15 @@ function acaoEtapaDev(d) {
   const id = escJs(d.id);
   let extras = '';
   if (etapa.pede === 'portaria') {
-    /* Alinhamento de 18/08/2026: a Portaria imputa a PLACA que voltou com
-       a devolução e o NOME DO MOTORISTA — só isso. Lacres e nº da carga
-       ficaram no cabeçalho editável da Logística. */
+    /* Alinhamento de 18/08/2026 (com correção do usuário na sequência): a
+       Portaria imputa a PLACA que voltou, o NOME DO MOTORISTA e o LACRE —
+       "lacre também é do escopo da portaria". Nº da carga fica no
+       cabeçalho editável da Logística. */
     extras = `
       <input type="text" id="dev-et-${esc(d.id)}-placa" placeholder="Placa que voltou" value="${esc(d.placa)}">
-      <input type="text" id="dev-et-${esc(d.id)}-motorista" placeholder="Nome do motorista" value="${esc(d.motorista)}">`;
+      <input type="text" id="dev-et-${esc(d.id)}-motorista" placeholder="Nome do motorista" value="${esc(d.motorista)}">
+      <input type="text" id="dev-et-${esc(d.id)}-lacre1" placeholder="Lacre 1" value="${esc(d.lacre1)}">
+      <input type="text" id="dev-et-${esc(d.id)}-lacre2" placeholder="Lacre 2 (se houver)" value="${esc(d.lacre2)}">`;
   } else if (etapa.pede === 'faturamento') {
     extras = `<input type="number" min="0" step="1" id="dev-et-${esc(d.id)}-peso"
       placeholder="Peso final em kg (opcional)" value="${d.pesoFinal ?? ''}">`;
@@ -583,6 +667,8 @@ function avancarEtapaDevolucaoUI(id) {
   if (etapa.pede === 'portaria') {
     corpo.placa = v('placa') || '';
     corpo.motorista = v('motorista') || '';
+    corpo.lacre1 = v('lacre1') || '';
+    corpo.lacre2 = v('lacre2') || '';
   } else if (etapa.pede === 'faturamento') {
     corpo.pesoFinal = v('peso') || '';
   } else if (etapa.pede === 'controles') {

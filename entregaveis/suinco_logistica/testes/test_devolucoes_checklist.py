@@ -76,11 +76,18 @@ async def main():
             "() => !document.querySelector('.nav-tab[data-tab=\\'devolucoes\\']').hidden")
         ck('aba Devoluções visível para Administração', aba_visivel)
 
+        # Fase 2 (18/08): os setores do CICLO veem a aba — Portaria inclusive.
+        # Quem fica de fora é quem não participa do ciclo (Comercial).
         ctxP, pgP = await abrir(nav, 'bruno@teste.local', 'portaria')
         aba_portaria = await pgP.evaluate(
             "() => document.querySelector('.nav-tab[data-tab=\\'devolucoes\\']').hidden")
-        ck('aba Devoluções ESCONDIDA da Portaria (fase 1)', aba_portaria)
+        ck('aba Devoluções VISÍVEL para a Portaria (fase 2)', not aba_portaria)
         await ctxP.close()
+        ctxC, pgC = await abrir(nav, 'comercial@teste.local', 'com')
+        aba_com = await pgC.evaluate(
+            "() => document.querySelector('.nav-tab[data-tab=\\'devolucoes\\']').hidden")
+        ck('aba Devoluções escondida do Comercial (fora do ciclo)', aba_com)
+        await ctxC.close()
 
         print('\n=== 2. PRODUTO COM CÓDIGO, NOME E QUILO ===')
         await pgA.evaluate("() => abrirTab('cadastros')")
@@ -183,15 +190,13 @@ async def main():
         ck('a falta CONTINUA depois do divergente', pos['falta'] == 2, str(pos))
 
         print('\n=== 6. ETAPAS CARIMBAM (PORTARIA IMPUTA PLACA E MOTORISTA) ===')
-        # Alinhamento de 18/08: os inputs da Portaria são placa + motorista.
-        # Lacres e nº da carga passaram ao cabeçalho editável da Logística.
+        # Alinhamento de 18/08 (corrigido pelo usuário): os inputs da
+        # Portaria são placa + motorista + LACRE. Nº da carga fica no
+        # cabeçalho editável da Logística.
         await pgA.fill(f'#dev-et-{dev_id}-motorista', 'Lucas Motorista')
+        await pgA.fill(f'#dev-et-{dev_id}-lacre1', '133476')
         await pgA.click('button:has-text("Receber na Portaria")')
         await pgA.wait_for_timeout(2000)
-        await pgA.evaluate("""(id) => {
-            editarDevolucaoCampoUI(id, 'lacre1', '133476');
-        }""", dev_id)
-        await pgA.wait_for_timeout(1500)
         await pgA.evaluate("""(id) => {
             editarDevolucaoCampoUI(id, 'cargaNumero', '2484');
         }""", dev_id)
@@ -210,7 +215,10 @@ async def main():
 
         # Observação da Bruna: o porteiro escrevia carga+placa num papel
         # para o motorista levar à balança. Agora o papel sai impresso.
-        rotulo = await pg_texto_rotulo(pgA)
+        # Lê o rótulo do NOSSO cartão (o aberto) — a lista pode ter
+        # checklists residuais de outras suítes na frente.
+        rotulo = await pgA.evaluate(
+            "() => (document.querySelector('.dev-card.dev-aberta .dev-card-rota')||{}).innerText || ''")
         ck('identificação Região — Rota / iniciais do operador',
            rotulo.endswith('/ C'), rotulo)
         botao_comp = await pgA.locator('button:has-text("Comprovante do motorista")').count()
@@ -246,6 +254,59 @@ async def main():
             return d && d.transportadora;
         }""", dev_id)
         ck('atualização chegou ao outro terminal sem F5', vivo == 'MUDOU-AO-VIVO', str(vivo))
+
+        print('\n=== 7b. A FILA "SUA VEZ" PASSA O BASTÃO ENTRE OS SETORES ===')
+        # Novo checklist em "Lançada": a Portaria abre a aba, vê a esteira,
+        # o aviso "é a sua vez" e o botão da ação dela — sem formulário de
+        # criação (que é da Logística). Ao receber, o checklist entra na
+        # fila do Faturamento.
+        novo = await pgA.evaluate("""async () => {
+            const d = await SuincoSharePoint.devolucoes.criar({
+                dataDev: new Date().toLocaleDateString('sv'), rotas: ['500'],
+                regiao: 'BH', itens: []});
+            return d.id;
+        }""")
+        ctxP2, pgP2 = await abrir(nav, 'bruno@teste.local', 'p2')
+        await pgP2.evaluate("() => abrirTab('devolucoes')")
+        await pgP2.wait_for_timeout(2500)
+        fila = await pgP2.evaluate("""(id) => ({
+            criarOculto: document.getElementById('dev-card-novo').hidden,
+            aviso: !document.getElementById('dev-sua-vez-aviso').hidden,
+            chip: !!document.querySelector('.dev-chip-suavez'),
+            pipeline: document.querySelectorAll('#dev-pipeline .stat-box').length,
+        })""", novo)
+        ck('Portaria não vê o formulário de criação', fila['criarOculto'])
+        ck('aviso "é a sua vez" aparece para a Portaria', fila['aviso'])
+        ck('checklist marcado com SUA VEZ', fila['chip'])
+        ck('esteira com as 6 etapas', fila['pipeline'] == 6, str(fila['pipeline']))
+
+        await pgP2.evaluate("(id) => { _devExpandida = id; renderListaDevolucoes(); }", novo)
+        await pgP2.wait_for_timeout(400)
+        await pgP2.fill(f'#dev-et-{novo}-placa', 'GFR8A80')
+        await pgP2.fill(f'#dev-et-{novo}-motorista', 'Lucas')
+        await pgP2.click(f'button:has-text("Receber na Portaria")')
+        await pgP2.wait_for_timeout(2500)
+        depois = await pgP2.evaluate("""(id) => {
+            const d = DEVOLUCOES.find(x=>x.id===id);
+            // Olha ESTE checklist (a lista pode ter outros em Lançada,
+            // legitimamente ainda na fila da Portaria).
+            return { status: d.status, minhaVez: ehMinhaVezDev(d) };
+        }""", novo)
+        ck('Portaria recebeu pela própria fila', depois['status'] == 'Recebida na Portaria', str(depois))
+        ck('ESTE checklist saiu da fila da Portaria após a ação', not depois['minhaVez'])
+
+        ctxF, pgF = await abrir(nav, 'diego@teste.local', 'fat')
+        await pgF.evaluate("() => abrirTab('devolucoes')")
+        await pgF.wait_for_timeout(2500)
+        fat = await pgF.evaluate("""(id) => {
+            const d = DEVOLUCOES.find(x=>x.id===id);
+            return { minhaVez: d && typeof ehMinhaVezDev === 'function' && ehMinhaVezDev(d),
+                     aviso: !document.getElementById('dev-sua-vez-aviso').hidden };
+        }""", novo)
+        ck('o checklist entrou na fila do FATURAMENTO', fat['minhaVez'], str(fat))
+        ck('o Faturamento vê o próprio aviso de fila', fat['aviso'])
+        await pgA.evaluate("(id) => SuincoSharePoint.devolucoes.excluir(id)", novo)
+        await ctxP2.close(); await ctxF.close()
 
         print('\n=== 8. TIRAR UMA ROTA PELOS CHIPS ===')
         await pgA.evaluate("""(id) => tirarRotaDevolucaoUI(id, '501')""", dev_id)

@@ -363,7 +363,11 @@ const ABAS_OPERACIONAIS = ['torre','programacao','devolucoes','portaria',
    é a visão de comando sobre todos os postos, não um apoio ao próprio. */
 const SETOR_PERMISSOES = {
   'Logística':    ABAS_OPERACIONAIS.slice(),
-  'Portaria':     ['portaria','historico'],
+  /* 'devolucoes' nos setores do ciclo — fase 2 LIBERADA pelo usuário
+     (18/08/2026): "preciso que haja um relacionamento entre todos os
+     setores... todos na mesma página... workflow fácil como o das filas".
+     Cada setor vê a fila "SUA VEZ" e edita só a própria coluna. */
+  'Portaria':     ['portaria','devolucoes','historico'],
   /* Expedição é o único setor operacional com Indicadores.
 
      Não é exceção arbitrária: é onde o tempo do pátio efetivamente se
@@ -376,7 +380,7 @@ const SETOR_PERMISSOES = {
 
      Indicador sem poder de ação vira placar; com poder de ação, vira
      ferramenta. Por isso aqui sim, e nos outros dois não. */
-  'Expedição':    ['expedicao','indicadores','historico','relatorios'],
+  'Expedição':    ['expedicao','devolucoes','indicadores','historico','relatorios'],
   /* Relatórios abriu para os dois — pedido direto, não decisão minha: os
      dois setores precisam do mesmo PDF Operacional que já circula no
      grupo, sem depender da Logística gerar e mandar. A aba é tudo ou nada
@@ -384,7 +388,7 @@ const SETOR_PERMISSOES = {
      Operacional/Executivo eles também passam a ver Administração de
      Fretes (valor negociado do frete) e a exportação CSV — decisão
      tomada de propósito, não efeito colateral não notado. */
-  'Faturamento':  ['faturamento','historico','relatorios'],
+  'Faturamento':  ['faturamento','devolucoes','historico','relatorios'],
   'Administração':ABAS_OPERACIONAIS.concat(['usuarios']),
   /* Comercial — só leitura, pedido do usuário (08/08/2026): "acesso a
      visualizacao de tudo que a logistica e administração ve mas sem
