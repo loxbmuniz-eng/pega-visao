@@ -104,6 +104,19 @@ async def main():
         await pgA.evaluate("() => abrirTab('devolucoes')")
         await pgA.wait_for_timeout(1500)
         await pgA.fill('#dev-regiao', 'DF')
+
+        # A placa puxa a Frota (pedido de 18/08/2026): transportadora vem
+        # do cadastro, não da digitação — e continua editável.
+        placa_frota = await pgA.evaluate("() => DB.frota[0].placa")
+        await pgA.fill('#dev-placa', placa_frota)
+        await pgA.wait_for_timeout(300)
+        auto = await pgA.evaluate("""() => ({
+            transp: document.getElementById('dev-transportadora').value,
+            hint: document.getElementById('dev-placa-hint').innerText })""")
+        ck('placa reconhecida puxa a transportadora da Frota',
+           bool(auto['transp']), str(auto)[:110])
+        ck('a dica confirma a placa na Frota', '✔' in auto['hint'], auto['hint'][:80])
+
         await pgA.fill('#dev-transportadora', '83369')
         await pgA.select_option('#dev-rota', '500')
         await pgA.click('button:has-text("➕ Rota")')
