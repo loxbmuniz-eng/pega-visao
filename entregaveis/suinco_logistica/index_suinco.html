@@ -63,6 +63,7 @@
 <div id="nav">
   <div class="nav-tab active" data-tab="torre" onclick="abrirTab('torre')">🗼 Torre de Controle</div>
   <div class="nav-tab" data-tab="programacao" onclick="abrirTab('programacao')">📋 Programação</div>
+  <div class="nav-tab" data-tab="devolucoes" onclick="abrirTab('devolucoes')">📦 Devoluções</div>
   <div class="nav-tab" data-tab="portaria" onclick="abrirTab('portaria')">🚧 Portaria</div>
   <div class="nav-tab" data-tab="expedicao" onclick="abrirTab('expedicao')">🚛 Expedição</div>
   <div class="nav-tab" data-tab="faturamento" onclick="abrirTab('faturamento')">🧾 Faturamento</div>
@@ -253,6 +254,84 @@
          consultável por período a qualquer momento, sem precisar arquivar
          nada. Não havia mais o que o botão fizesse -- e botão irreversível
          que não faz nada é a pior combinação possível. -->
+  </div>
+
+  <!-- ===== DEVOLUÇÕES (fase 1: Logística e Administração) =====
+       O checklist de devolução que hoje é impresso e levado em papel à
+       Portaria. Estrutura espelha o documento real: cabeçalho
+       (rota/transportadora/lacres) + itens por nota fiscal. Todo o
+       conteúdo dinâmico é montado por devolucoes.js — servidor-first,
+       sem cópia local. -->
+  <div class="tab-page" id="tab-devolucoes">
+    <div class="funcao-aba" data-tab="devolucoes"></div>
+
+    <!-- Sem conexão não há checklist: a fonte é o servidor, e fingir que
+         gravou foi exatamente o erro que quase custou 62 t nas cargas. -->
+    <div class="card" id="dev-offline" hidden>
+      <div class="card-title"><span class="icon">📦</span> Devoluções</div>
+      <div class="card-sub">As devoluções moram no servidor — sem conexão não há o que listar
+        nem onde gravar. Entre com seu e-mail e senha (login com servidor) e tente de novo.</div>
+    </div>
+
+    <div id="dev-conteudo">
+      <div class="card">
+        <div class="card-title"><span class="icon">📦</span> Novo checklist de devolução</div>
+        <div class="card-sub">O número do checklist é gerado sozinho. <strong>Região + rotas</strong>
+          identificam o checklist na conferência — e um checklist pode juntar VÁRIAS rotas da mesma
+          região. Os itens entram na lista logo abaixo, linha a linha, depois de criar.</div>
+        <div class="form-grid">
+          <div><label for="dev-data">Data da devolução</label>
+            <input type="date" id="dev-data"></div>
+          <div><label for="dev-regiao">Região</label>
+            <input type="text" id="dev-regiao" placeholder="Ex: DF"></div>
+          <div><label for="dev-rota">Rotas (pelo menos uma)</label>
+            <div class="gap8">
+              <select id="dev-rota" style="flex:1"></select>
+              <button class="btn btn-sec btn-sm" onclick="adicionarRotaNovaDevUI()"
+                title="Adicionar a rota escolhida à lista deste checklist">➕ Rota</button>
+            </div>
+            <div id="dev-rotas-escolhidas" class="dev-rotas-chips"></div></div>
+          <div><label for="dev-transportadora">Transportadora</label>
+            <input type="text" id="dev-transportadora" placeholder="Ex: 83369"></div>
+          <div><label for="dev-nota-transf">Nota de transferência</label>
+            <input type="text" id="dev-nota-transf" placeholder="Ex: 171218"></div>
+          <div><label for="dev-placa">Placa do caminhão</label>
+            <input type="text" id="dev-placa" placeholder="Ex: GFR8A80"></div>
+          <div><label for="dev-motorista">Motorista</label>
+            <input type="text" id="dev-motorista"></div>
+        </div>
+        <div class="flex-end" style="margin-top:12px">
+          <button class="btn" onclick="criarDevolucaoUI()">➕ Criar checklist</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title"><span class="icon">🗓️</span> Checklists de devolução</div>
+        <div class="card-sub">Cada checklist mostra quem o criou e as etapas já carimbadas.
+          A conferência aponta a falta sozinha: checklist diz 5 caixas, chegou 3, o sistema marca 2.</div>
+        <div class="form-grid">
+          <div><label for="dev-filtro-dia">Dia</label>
+            <input type="date" id="dev-filtro-dia" onchange="carregarDevolucoes()"></div>
+          <div style="align-self:end" class="gap8">
+            <button class="btn btn-sec btn-sm" onclick="filtroDevolucoesHoje()">Hoje</button>
+            <button class="btn btn-sec btn-sm" onclick="carregarDevolucoes()">↻ Atualizar</button>
+            <button class="btn btn-sec btn-sm" onclick="relatorioDevolucoesUI()">📄 Relatório do dia</button>
+          </div>
+        </div>
+        <div id="dev-lista"></div>
+        <div class="empty" id="dev-empty" hidden>Nenhum checklist de devolução neste dia.</div>
+      </div>
+    </div>
+
+    <!-- Sugestões dos cadastros (Supervisores/Produtos/Motivos). datalist e
+         não select fechado: o cadastro cresce com o uso, e travar a digitação
+         no primeiro dia pararia a operação. -->
+    <datalist id="dl-dev-supervisores"></datalist>
+    <datalist id="dl-dev-produtos"></datalist>
+    <datalist id="dl-dev-motivos"></datalist>
+
+    <!-- Relatório (preenchido na hora da exportação; nunca visível na tela) -->
+    <div id="print-devolucoes" class="print-only" style="display:none"></div>
   </div>
 
   <!-- ===== PORTARIA ===== -->
@@ -715,6 +794,39 @@
           </table>
         </div>
       </div>
+
+      <!-- Cadastros de apoio das DEVOLUÇÕES (18/08/2026): supervisores,
+           produtos e motivos viram sugestão nos campos do checklist — para
+           escolher em vez de digitar (pedido da reunião). Servidor-first,
+           como toda a aba Devoluções. -->
+      <div class="card" id="card-cad-devolucoes">
+        <div class="card-title"><span class="icon">📦</span> Cadastros de Devoluções</div>
+        <div class="card-sub">Supervisores, produtos (código + nome, ex.: 30110-LINGUIÇA) e motivos.
+          Viram sugestões automáticas nos campos do checklist de devolução.</div>
+        <div class="form-row">
+          <div class="form-group"><label>Supervisor</label>
+            <input type="text" id="cad-dev-supervisor" placeholder="Ex: MAKSON"></div>
+          <div class="form-group" style="align-self:end">
+            <button class="btn btn-sec btn-sm" onclick="cadastrarSupervisorDevUI()">➕ Supervisor</button></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>Código do produto</label>
+            <input type="text" id="cad-dev-prod-codigo" placeholder="Ex: 30110"></div>
+          <div class="form-group"><label>Nome do produto</label>
+            <input type="text" id="cad-dev-prod-nome" placeholder="Ex: LINGUIÇA"></div>
+          <div class="form-group"><label>Quilo por caixa <span class="hint">opcional</span></label>
+            <input type="number" min="0" step="0.001" id="cad-dev-prod-kg" placeholder="Ex: 3.5"></div>
+          <div class="form-group" style="align-self:end">
+            <button class="btn btn-sec btn-sm" onclick="cadastrarProdutoDevUI()">➕ Produto</button></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>Motivo de devolução</label>
+            <input type="text" id="cad-dev-motivo" placeholder="Ex: DATA PROXIMA"></div>
+          <div class="form-group" style="align-self:end">
+            <button class="btn btn-sec btn-sm" onclick="cadastrarMotivoDevUI()">➕ Motivo</button></div>
+        </div>
+        <div class="card-sub" id="cad-dev-resumo"></div>
+      </div>
     </div>
   </div>
 
@@ -843,6 +955,7 @@
           <select id="usr-setor">
             <option>Logística</option><option>Portaria</option><option>Expedição</option>
             <option>Faturamento</option><option>Administração</option><option>Comercial</option>
+            <option>Controles Internos</option><option>Central de Notas</option>
           </select>
         </div>
         <div class="form-group">
@@ -1122,5 +1235,6 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
 <script src="suinco-api.js"></script>
 <script src="data.js"></script>
 <script src="app.js"></script>
+<script src="devolucoes.js"></script>
 </body>
 </html>

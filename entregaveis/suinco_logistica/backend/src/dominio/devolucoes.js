@@ -86,6 +86,20 @@ export function podeCriarDevolucao(setor) {
 
 export const DESTINACOES = ['Estoque', 'Descarte', 'Reprocesso'];
 
+/* Lista de rotas vinda do corpo: aceita array ou string "519, 542".
+   Normaliza, corta e deduplica — a validação contra dim_rotas é do
+   chamador (precisa do banco). */
+export function normalizarRotas(v) {
+  const lista = Array.isArray(v) ? v : String(v ?? '').split(/[,;]/);
+  const vistos = new Set();
+  const rotas = [];
+  for (const r of lista) {
+    const cod = String(r ?? '').trim().slice(0, 20);
+    if (cod && !vistos.has(cod)) { vistos.add(cod); rotas.push(cod); }
+  }
+  return rotas.slice(0, 20);
+}
+
 function texto(v, max = 500) {
   return String(v ?? '').slice(0, max);
 }
@@ -98,13 +112,17 @@ function numeroOuNull(v) {
 
 /* Banco → painel (cabeçalho). Os carimbos vão agrupados: a tela e o
    relatório desenham a "linha de assinaturas" a partir disto. */
-export function devolucaoParaPainel(linha, itens = [], divergencias = []) {
+export function devolucaoParaPainel(linha, itens = [], divergencias = [], rotas = []) {
   if (!linha) return null;
   return {
     id: linha.devolucao_id,
     numero: Number(linha.numero),
     dataDev: linha.data_dev,
-    rota: linha.rota_codigo,
+    /* Um checklist junta rotas da mesma região (decisão de 18/08/2026) —
+       sempre array. `linha.rota_codigo` só existe em revisões gravadas
+       antes da migração 012; vira array de um item para o painel não
+       precisar conhecer as duas eras. */
+    rotas: rotas.length ? rotas : (linha.rota_codigo ? [linha.rota_codigo] : []),
     regiao: linha.regiao,
     transportadora: linha.transportadora,
     notaTransferencia: linha.nota_transferencia,
@@ -177,7 +195,6 @@ export function divergenciaParaPainel(d) {
 export function camposCabecalho(corpo) {
   const m = {};
   if (corpo.dataDev !== undefined) m.data_dev = texto(corpo.dataDev, 10);
-  if (corpo.rota !== undefined) m.rota_codigo = texto(corpo.rota, 20).trim();
   if (corpo.regiao !== undefined) m.regiao = texto(corpo.regiao, 100);
   if (corpo.transportadora !== undefined) m.transportadora = texto(corpo.transportadora, 200);
   if (corpo.notaTransferencia !== undefined) m.nota_transferencia = texto(corpo.notaTransferencia, 50);

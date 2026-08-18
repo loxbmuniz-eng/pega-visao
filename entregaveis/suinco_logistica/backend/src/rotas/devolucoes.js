@@ -23,6 +23,7 @@ import {
   divergenciaParaPainel,
   camposCabecalho,
   camposItem,
+  normalizarRotas,
 } from '../dominio/devolucoes.js';
 
 export const rotasDevolucoes = Router();
@@ -41,20 +42,35 @@ async function logDevolucao(cli, { devolucaoId, acao, operador }) {
   );
 }
 
-/* Devolução completa (cabeçalho + itens + divergências) num objeto só —
-   é a unidade que o painel desenha. */
+/* Devolução completa (cabeçalho + rotas + itens + divergências) num
+   objeto só — é a unidade que o painel desenha. */
 async function buscarCompleta(executor, id) {
   const { rows } = await executor.query(
     'SELECT * FROM devolucoes WHERE devolucao_id = $1 AND excluida_em IS NULL', [id]
   );
   if (!rows[0]) return null;
+  const rotas = await executor.query(
+    'SELECT rota_codigo FROM devolucao_rotas WHERE devolucao_id = $1 ORDER BY rota_codigo', [id]
+  );
   const itens = await executor.query(
     'SELECT * FROM devolucao_itens WHERE devolucao_id = $1 ORDER BY item_id', [id]
   );
   const divs = await executor.query(
     'SELECT * FROM devolucao_divergencias WHERE devolucao_id = $1 ORDER BY divergencia_id', [id]
   );
-  return devolucaoParaPainel(rows[0], itens.rows, divs.rows);
+  return devolucaoParaPainel(rows[0], itens.rows, divs.rows,
+    rotas.rows.map((r) => r.rota_codigo));
+}
+
+/* Confere as rotas contra o cadastro e devolve as que NÃO existem —
+   mensagem com o código errado na mão, não um "422 genérico". */
+async function rotasDesconhecidas(rotas) {
+  if (!rotas.length) return [];
+  const { rows } = await consultar(
+    'SELECT codigo FROM dim_rotas WHERE codigo = ANY($1)', [rotas]
+  );
+  const existentes = new Set(rows.map((r) => r.codigo));
+  return rotas.filter((r) => !existentes.has(r));
 }
 
 function emitirAtualizada(id) {
@@ -78,7 +94,7 @@ rotasDevolucoes.get('/devolucoes', exigirLogin, async (req, res, next) => {
       `SELECT * FROM devolucoes WHERE ${filtro} ORDER BY data_dev DESC, numero DESC`, params
     );
     const ids = rows.map((r) => r.devolucao_id);
-    let itens = [], divs = [];
+    let itens = [], divs = [], rotas = [];
     if (ids.length) {
       itens = (await consultar(
         'SELECT * FROM devolucao_itens WHERE devolucao_id = ANY($1) ORDER BY item_id', [ids]
@@ -86,11 +102,15 @@ rotasDevolucoes.get('/devolucoes', exigirLogin, async (req, res, next) => {
       divs = (await consultar(
         'SELECT * FROM devolucao_divergencias WHERE devolucao_id = ANY($1) ORDER BY divergencia_id', [ids]
       )).rows;
+      rotas = (await consultar(
+        'SELECT devolucao_id, rota_codigo FROM devolucao_rotas WHERE devolucao_id = ANY($1) ORDER BY rota_codigo', [ids]
+      )).rows;
     }
     res.json(rows.map((r) => devolucaoParaPainel(
       r,
       itens.filter((i) => i.devolucao_id === r.devolucao_id),
-      divs.filter((d) => d.devolucao_id === r.devolucao_id)
+      divs.filter((d) => d.devolucao_id === r.devolucao_id),
+      rotas.filter((x) => x.devolucao_id === r.devolucao_id).map((x) => x.rota_codigo)
     )));
   } catch (e) { next(e); }
 });
@@ -105,19 +125,23 @@ rotasDevolucoes.post('/devolucoes', exigirLogin, async (req, res, next) => {
       });
     }
     const cab = camposCabecalho(req.body || {});
-    if (!cab.rota_codigo) {
+    /* Um checklist pode juntar VÁRIAS rotas da mesma região (18/08/2026).
+       Aceita `rotas` (array ou "519, 542") e o `rota` antigo por
+       compatibilidade — pelo menos uma, todas cadastradas. */
+    const rotas = normalizarRotas(req.body?.rotas ?? req.body?.rota);
+    if (!rotas.length) {
       return res.status(400).json({
-        erro: 'A rota é obrigatória — é ela que identifica o checklist na conferência.',
+        erro: 'Informe pelo menos uma rota — região + rotas identificam o checklist na conferência.',
         codigo: 'ROTA_FALTANDO',
       });
     }
     if (!cab.data_dev || !/^\d{4}-\d{2}-\d{2}$/.test(cab.data_dev)) {
       return res.status(400).json({ erro: 'Informe a data da devolução (AAAA-MM-DD).', codigo: 'DATA_FALTANDO' });
     }
-    const rota = await consultar('SELECT codigo FROM dim_rotas WHERE codigo = $1', [cab.rota_codigo]);
-    if (!rota.rows[0]) {
+    const faltantes = await rotasDesconhecidas(rotas);
+    if (faltantes.length) {
       return res.status(422).json({
-        erro: `A rota ${cab.rota_codigo} não está cadastrada. Cadastre em Cadastros → Rotas antes.`,
+        erro: `Rota(s) não cadastrada(s): ${faltantes.join(', ')}. Cadastre em Cadastros → Rotas antes.`,
         codigo: 'ROTA_DESCONHECIDA',
       });
     }
@@ -135,6 +159,12 @@ rotasDevolucoes.post('/devolucoes', exigirLogin, async (req, res, next) => {
          VALUES (${colunas.map((_, i) => `$${i + 1}`).join(', ')})`,
         valores
       );
+      for (const rotaCod of rotas) {
+        await cli.query(
+          'INSERT INTO devolucao_rotas (devolucao_id, rota_codigo) VALUES ($1,$2)',
+          [id, rotaCod]
+        );
+      }
       for (const itemCorpo of itensCorpo) {
         const it = camposItem(itemCorpo);
         const cols = ['devolucao_id', 'operador_nome', 'operador_setor', ...Object.keys(it)];
@@ -147,7 +177,7 @@ rotasDevolucoes.post('/devolucoes', exigirLogin, async (req, res, next) => {
       }
       await logDevolucao(cli, {
         devolucaoId: id, operador: op,
-        acao: `Checklist de devolução criado (rota ${cab.rota_codigo}, ${itensCorpo.length} item(ns))`,
+        acao: `Checklist de devolução criado (${cab.regiao ? 'região ' + cab.regiao + ', ' : ''}rota(s) ${rotas.join(', ')}, ${itensCorpo.length} item(ns))`,
       });
       return buscarCompleta(cli, id);
     });
@@ -171,38 +201,66 @@ rotasDevolucoes.patch('/devolucoes/:id', exigirLogin, exigirSetor('Logística'),
   try {
     const op = req.operador;
     const cab = camposCabecalho(req.body || {});
-    if (!Object.keys(cab).length) {
+    const trocaRotas = req.body?.rotas !== undefined || req.body?.rota !== undefined;
+    if (!Object.keys(cab).length && !trocaRotas) {
       return res.status(400).json({ erro: 'Nada para alterar.', codigo: 'SEM_CAMPOS' });
     }
     if (cab.data_dev !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(cab.data_dev)) {
       return res.status(400).json({ erro: 'Data da devolução inválida (use AAAA-MM-DD).', codigo: 'DATA_INVALIDA' });
     }
-    if (cab.rota_codigo !== undefined) {
-      if (!cab.rota_codigo) {
-        return res.status(400).json({ erro: 'A rota é obrigatória.', codigo: 'ROTA_FALTANDO' });
+    let rotas = null;
+    if (trocaRotas) {
+      rotas = normalizarRotas(req.body?.rotas ?? req.body?.rota);
+      if (!rotas.length) {
+        return res.status(400).json({
+          erro: 'O checklist precisa de pelo menos uma rota.', codigo: 'ROTA_FALTANDO',
+        });
       }
-      const rota = await consultar('SELECT codigo FROM dim_rotas WHERE codigo = $1', [cab.rota_codigo]);
-      if (!rota.rows[0]) {
+      const faltantes = await rotasDesconhecidas(rotas);
+      if (faltantes.length) {
         return res.status(422).json({
-          erro: `A rota ${cab.rota_codigo} não está cadastrada.`,
+          erro: `Rota(s) não cadastrada(s): ${faltantes.join(', ')}.`,
           codigo: 'ROTA_DESCONHECIDA',
         });
       }
     }
-    const sets = Object.keys(cab).map((c, i) => `${c} = $${i + 1}`);
-    const vals = Object.values(cab);
-    vals.push(op.nome, op.setor, req.params.id);
-    const upd = await consultar(
-      `UPDATE devolucoes
-          SET ${sets.join(', ')},
-              operador_nome = $${vals.length - 2}, operador_setor = $${vals.length - 1},
-              atualizado_em = now(), versao = versao + 1
-        WHERE devolucao_id = $${vals.length} AND excluida_em IS NULL
-        RETURNING devolucao_id`,
-      vals
-    );
-    if (!upd.rows[0]) return res.status(404).json({ erro: 'Devolução não encontrada.', codigo: 'NAO_ENCONTRADA' });
-    const d = await buscarCompleta({ query: consultar }, req.params.id);
+
+    const d = await emTransacao(async (cli) => {
+      const sets = Object.keys(cab).map((c, i) => `${c} = $${i + 1}`);
+      const vals = Object.values(cab);
+      vals.push(op.nome, op.setor, req.params.id);
+      /* O cabeçalho é atualizado mesmo numa troca só de rotas: o carimbo de
+         operador/versão registra QUEM mexeu — as linhas de devolucao_rotas
+         não passam pelo trigger de revisão, e este rastro cobre isso. */
+      const upd = await cli.query(
+        `UPDATE devolucoes
+            SET ${sets.length ? sets.join(', ') + ',' : ''}
+                operador_nome = $${vals.length - 2}, operador_setor = $${vals.length - 1},
+                atualizado_em = now(), versao = versao + 1
+          WHERE devolucao_id = $${vals.length} AND excluida_em IS NULL
+          RETURNING devolucao_id`,
+        vals
+      );
+      if (!upd.rows[0]) {
+        const e = new Error('Devolução não encontrada.');
+        e.status = 404; e.codigo = 'NAO_ENCONTRADA';
+        throw e;
+      }
+      if (rotas) {
+        await cli.query('DELETE FROM devolucao_rotas WHERE devolucao_id = $1', [req.params.id]);
+        for (const rotaCod of rotas) {
+          await cli.query(
+            'INSERT INTO devolucao_rotas (devolucao_id, rota_codigo) VALUES ($1,$2)',
+            [req.params.id, rotaCod]
+          );
+        }
+        await logDevolucao(cli, {
+          devolucaoId: req.params.id, operador: op,
+          acao: `Rotas do checklist alteradas para: ${rotas.join(', ')}`,
+        });
+      }
+      return buscarCompleta(cli, req.params.id);
+    });
     emitirAtualizada(req.params.id);
     res.json(d);
   } catch (e) { next(e); }
@@ -460,23 +518,26 @@ rotasDevolucoes.post('/devolucoes/:id/restaurar', exigirLogin, exigirSetor(), as
       const d = rev.rows[0].dados;
       /* Os carimbos voltam JUNTO com o status — restaurar "Lançada"
          deixando o carimbo da Portaria na linha criaria um documento que
-         diz duas coisas ao mesmo tempo. */
+         diz duas coisas ao mesmo tempo. As ROTAS ficam como estão: vivem
+         em devolucao_rotas (migração 012) e não fazem parte do retrato do
+         cabeçalho; revisões antigas ainda trazem rota_codigo no JSONB,
+         mas é registro histórico, não alvo de restauração. */
       const upd = await cli.query(
         `UPDATE devolucoes SET
-            data_dev = $1, rota_codigo = $2, regiao = $3, transportadora = $4,
-            nota_transferencia = $5, placa = $6, motorista = $7, carga_numero = $8,
-            lacre1 = $9, lacre2 = $10, peso_final = $11, status = $12,
-            obs_controles = $13, observacoes = $14,
-            portaria_por = $15, portaria_em = $16,
-            faturamento_por = $17, faturamento_em = $18,
-            expedicao_por = $19, expedicao_em = $20,
-            controles_por = $21, controles_em = $22,
-            notas_por = $23, notas_em = $24,
-            operador_nome = $25, operador_setor = $26,
+            data_dev = $1, regiao = $2, transportadora = $3,
+            nota_transferencia = $4, placa = $5, motorista = $6, carga_numero = $7,
+            lacre1 = $8, lacre2 = $9, peso_final = $10, status = $11,
+            obs_controles = $12, observacoes = $13,
+            portaria_por = $14, portaria_em = $15,
+            faturamento_por = $16, faturamento_em = $17,
+            expedicao_por = $18, expedicao_em = $19,
+            controles_por = $20, controles_em = $21,
+            notas_por = $22, notas_em = $23,
+            operador_nome = $24, operador_setor = $25,
             atualizado_em = now(), versao = versao + 1
-          WHERE devolucao_id = $27 AND excluida_em IS NULL
+          WHERE devolucao_id = $26 AND excluida_em IS NULL
           RETURNING devolucao_id`,
-        [d.data_dev, d.rota_codigo, d.regiao, d.transportadora,
+        [d.data_dev, d.regiao, d.transportadora,
          d.nota_transferencia, d.placa, d.motorista, d.carga_numero,
          d.lacre1, d.lacre2, d.peso_final, d.status,
          d.obs_controles, d.observacoes,
@@ -509,12 +570,16 @@ rotasDevolucoes.get('/devolucoes-cadastros', exigirLogin, async (req, res, next)
   try {
     const [sup, prod, mot] = await Promise.all([
       consultar('SELECT nome FROM dim_supervisores ORDER BY nome'),
-      consultar('SELECT codigo, nome FROM dim_produtos ORDER BY codigo'),
+      consultar('SELECT codigo, nome, peso_caixa_kg FROM dim_produtos ORDER BY codigo'),
       consultar('SELECT motivo FROM dim_motivos_devolucao ORDER BY motivo'),
     ]);
     res.json({
       supervisores: sup.rows.map((r) => r.nome),
-      produtos: prod.rows,
+      produtos: prod.rows.map((r) => ({
+        codigo: r.codigo,
+        nome: r.nome,
+        pesoCaixaKg: r.peso_caixa_kg === null ? null : Number(r.peso_caixa_kg),
+      })),
       motivos: mot.rows.map((r) => r.motivo),
     });
   } catch (e) { next(e); }
@@ -534,13 +599,25 @@ rotasDevolucoes.post('/devolucoes-cadastros/produtos', exigirLogin, exigirSetor(
     const codigo = String(req.body?.codigo ?? '').trim().slice(0, 50);
     if (!codigo) return res.status(400).json({ erro: 'Informe o código do produto.', codigo: 'CODIGO_FALTANDO' });
     const nome = String(req.body?.nome ?? '').trim().slice(0, 200);
+    /* Quilo por caixa — mesma lição do capacidadeKg: só a AUSÊNCIA vira
+       null; um número válido é preservado como veio. */
+    const kgBruto = req.body?.pesoCaixaKg;
+    const pesoCaixaKg = kgBruto === '' || kgBruto === null || kgBruto === undefined
+      || !Number.isFinite(Number(kgBruto))
+      ? null : Math.max(0, Number(kgBruto));
     const { rows } = await consultar(
-      `INSERT INTO dim_produtos (codigo, nome) VALUES ($1,$2)
-       ON CONFLICT (codigo) DO UPDATE SET nome = EXCLUDED.nome, atualizado_em = now()
-       RETURNING codigo, nome`,
-      [codigo, nome]
+      `INSERT INTO dim_produtos (codigo, nome, peso_caixa_kg) VALUES ($1,$2,$3)
+       ON CONFLICT (codigo) DO UPDATE
+         SET nome = EXCLUDED.nome, peso_caixa_kg = EXCLUDED.peso_caixa_kg,
+             atualizado_em = now()
+       RETURNING codigo, nome, peso_caixa_kg`,
+      [codigo, nome, pesoCaixaKg]
     );
-    res.status(201).json(rows[0]);
+    res.status(201).json({
+      codigo: rows[0].codigo,
+      nome: rows[0].nome,
+      pesoCaixaKg: rows[0].peso_caixa_kg === null ? null : Number(rows[0].peso_caixa_kg),
+    });
   } catch (e) { next(e); }
 });
 

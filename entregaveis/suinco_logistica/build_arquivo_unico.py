@@ -117,6 +117,7 @@ def main():
     adapter_js = ler('suinco-api.js')
     data_js = ler('data.js')
     app_js = ler('app.js')
+    devolucoes_js = ler('devolucoes.js')
     csv = ler('frota_seed_2026.csv')
 
     logo_bytes = (BASE / 'assets' / 'logo_suinco.png').read_bytes()
@@ -193,6 +194,15 @@ def main():
     )
     if n_app != 1:
         sys.exit(f'ERRO: esperava 1 script para app.js, encontrei {n_app}')
+
+    # 5b. Módulo de Devoluções — depois de app.js (usa os globais dele).
+    html, n_dev = re.subn(
+        r'<script src="devolucoes\.js"></script>',
+        lambda _: '<script>\n' + devolucoes_js + '\n</script>',
+        html,
+    )
+    if n_dev != 1:
+        sys.exit(f'ERRO: esperava 1 script para devolucoes.js, encontrei {n_dev}')
 
     # Nada pode sobrar apontando para arquivo externo, senão quebra offline.
     #

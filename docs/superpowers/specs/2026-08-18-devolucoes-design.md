@@ -116,3 +116,21 @@ viram carimbos automáticos (operador logado + hora) a cada transição.
 - Importação/anexo do Excel das operadoras (conveniência futura).
 - Controle do prazo de 4 dias da planilha de revenda.
 - Fase 2 (aberturas por setor + setores novos) — aguardando autorização.
+
+## Adendos aprovados na mesma data (18/08/2026)
+
+1. **Setores criados já na fase 1** (pedido direto: "na verdade já pode
+   criar"): CONTROLES INTERNOS e CENTRAL DE NOTAS existem como setores de
+   login (migração 011). Veem só a aba Devoluções + Histórico; cada um
+   executa exatamente o próprio passo do checklist (Controles Internos:
+   destinação por item + observações + etapa "Destinada"; Central de
+   Notas: etapa "Nota Finalizada"). A Expedição já pode conferir
+   quantidade quando a aba abrir para ela.
+2. **Produto com quilo**: dim_produtos ganha peso_caixa_kg (migração 011).
+   O lançamento sugere o peso da linha (caixas × kg/caixa) quando a
+   operadora não digita peso; número digitado nunca é sobrescrito.
+3. **Checklist com VÁRIAS rotas** (pedido: "tem checklist que tem mais de
+   uma rota — utilizar nome da região e código de rota"): tabela
+   devolucao_rotas (migração 012), cada código validado contra dim_rotas.
+   A identificação do checklist passa a ser REGIÃO + rotas, no cartão e
+   no relatório. Troca de rotas fica no log de eventos.

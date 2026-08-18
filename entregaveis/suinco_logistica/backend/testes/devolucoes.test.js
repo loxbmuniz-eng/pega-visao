@@ -34,9 +34,13 @@ const OPERADORES = [
   ['dev.carla@devteste.local', 'Carla Dev', 'Expedição'],
   ['dev.diego@devteste.local', 'Diego Dev', 'Faturamento'],
   ['dev.chefe@devteste.local', 'Chefe Dev', 'Administração'],
+  // Setores criados em 18/08/2026 — cada um assina UM passo do checklist.
+  ['dev.controle@devteste.local', 'Controle Dev', 'Controles Internos'],
+  ['dev.notas@devteste.local', 'Notas Dev', 'Central de Notas'],
 ];
 const SENHA = 'senha-de-teste-123';
 const ROTA = 'DEVT';
+const ROTA2 = 'DEVT2';
 
 async function req(caminho, { metodo = 'GET', token, corpo } = {}) {
   const r = await fetch(base + caminho, {
@@ -56,13 +60,16 @@ async function req(caminho, { metodo = 'GET', token, corpo } = {}) {
 before(async () => {
   await pool.query('DELETE FROM devolucao_divergencias');
   await pool.query('DELETE FROM devolucao_itens');
+  await pool.query('DELETE FROM devolucao_rotas');
   await pool.query('DELETE FROM devolucao_revisoes');
   await pool.query('DELETE FROM devolucoes');
   await pool.query("DELETE FROM operadores WHERE email LIKE '%@devteste.local'");
-  await pool.query(
-    `INSERT INTO dim_rotas (codigo, nome) VALUES ($1, 'Rota de teste de devoluções')
-     ON CONFLICT (codigo) DO NOTHING`, [ROTA]
-  );
+  for (const cod of [ROTA, ROTA2]) {
+    await pool.query(
+      `INSERT INTO dim_rotas (codigo, nome) VALUES ($1, 'Rota de teste de devoluções')
+       ON CONFLICT (codigo) DO NOTHING`, [cod]
+    );
+  }
 
   const hash = await bcrypt.hash(SENHA, 4);
   for (const [email, nome, setor] of OPERADORES) {
@@ -93,7 +100,7 @@ const HOJE = new Date().toISOString().slice(0, 10);
 function novoChecklist(extra = {}) {
   return {
     dataDev: HOJE,
-    rota: ROTA,
+    rotas: [ROTA],
     regiao: 'DF',
     transportadora: '83369',
     notaTransferencia: '171218',
@@ -124,20 +131,41 @@ describe('1. Criação: só Logística/Administração, rota obrigatória', () =
     assert.equal(r.json.codigo, 'SETOR_SEM_PERMISSAO');
   });
 
-  test('sem rota → 400 (a rota identifica o checklist)', async () => {
+  test('sem rota → 400 (região + rotas identificam o checklist)', async () => {
     const r = await req('/api/devolucoes', {
-      metodo: 'POST', token: tokens['Logística'], corpo: novoChecklist({ rota: '' }),
+      metodo: 'POST', token: tokens['Logística'], corpo: novoChecklist({ rotas: [] }),
     });
     assert.equal(r.status, 400);
     assert.equal(r.json.codigo, 'ROTA_FALTANDO');
   });
 
-  test('rota inexistente → 422', async () => {
+  test('rota inexistente → 422, dizendo QUAL código está errado', async () => {
     const r = await req('/api/devolucoes', {
-      metodo: 'POST', token: tokens['Logística'], corpo: novoChecklist({ rota: 'XX999' }),
+      metodo: 'POST', token: tokens['Logística'], corpo: novoChecklist({ rotas: [ROTA, 'XX999'] }),
     });
     assert.equal(r.status, 422);
     assert.equal(r.json.codigo, 'ROTA_DESCONHECIDA');
+    assert.ok(r.json.erro.includes('XX999'), r.json.erro);
+  });
+
+  test('checklist aceita MAIS DE UMA rota — e a edição troca a lista inteira', async () => {
+    const r = await req('/api/devolucoes', {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: novoChecklist({ rotas: [ROTA, ROTA2] }),
+    });
+    assert.equal(r.status, 201, r.texto);
+    assert.deepEqual(r.json.rotas.slice().sort(), [ROTA, ROTA2].sort());
+
+    const upd = await req(`/api/devolucoes/${r.json.id}`, {
+      metodo: 'PATCH', token: tokens['Logística'], corpo: { rotas: [ROTA2] },
+    });
+    assert.equal(upd.status, 200, upd.texto);
+    assert.deepEqual(upd.json.rotas, [ROTA2]);
+
+    const vazio = await req(`/api/devolucoes/${r.json.id}`, {
+      metodo: 'PATCH', token: tokens['Logística'], corpo: { rotas: [] },
+    });
+    assert.equal(vazio.status, 400);
   });
 
   test('Logística cria: número gerado, itens gravados, autoria discriminada', async () => {
@@ -244,25 +272,46 @@ describe('3. Etapas em sentido único, com carimbo (as assinaturas do papel)', (
     assert.equal(r.json.carimbos.faturamento.por, 'Ana Dev');
   });
 
-  test('o ciclo fecha: descarga → destinada (com obs) → nota finalizada', async () => {
+  test('o ciclo fecha com CADA setor assinando o próprio passo', async () => {
+    // Setores criados em 18/08/2026 assinam de verdade — não é só a
+    // Logística cobrindo: Expedição → Controles Internos → Central de Notas.
     const a = await req(`/api/devolucoes/${id}/etapa`, {
-      metodo: 'POST', token: tokens['Logística'], corpo: { para: 'Descarga Conferida' },
+      metodo: 'POST', token: tokens['Expedição'], corpo: { para: 'Descarga Conferida' },
     });
     assert.equal(a.status, 200, a.texto);
+    assert.equal(a.json.carimbos.expedicao.por, 'Carla Dev');
+
     const b = await req(`/api/devolucoes/${id}/etapa`, {
-      metodo: 'POST', token: tokens['Logística'],
+      metodo: 'POST', token: tokens['Controles Internos'],
       corpo: { para: 'Destinada', obsControles: 'Romaneio conferido, 2 itens para estoque' },
     });
     assert.equal(b.status, 200, b.texto);
     assert.equal(b.json.obsControles, 'Romaneio conferido, 2 itens para estoque');
+    assert.equal(b.json.carimbos.controles.por, 'Controle Dev');
+
     const c = await req(`/api/devolucoes/${id}/etapa`, {
-      metodo: 'POST', token: tokens['Logística'], corpo: { para: 'Nota Finalizada' },
+      metodo: 'POST', token: tokens['Central de Notas'], corpo: { para: 'Nota Finalizada' },
     });
     assert.equal(c.status, 200, c.texto);
     assert.equal(c.json.status, 'Nota Finalizada');
+    assert.equal(c.json.carimbos.notas.por, 'Notas Dev');
     for (const etapa of ['portaria', 'faturamento', 'expedicao', 'controles', 'notas']) {
       assert.ok(c.json.carimbos[etapa], `carimbo de ${etapa} presente`);
     }
+  });
+
+  test('Central de Notas não assina pelos outros nem cria checklist', async () => {
+    const novo = await req('/api/devolucoes', {
+      metodo: 'POST', token: tokens['Central de Notas'], corpo: novoChecklist(),
+    });
+    assert.equal(novo.status, 403);
+    const outra = await req('/api/devolucoes', {
+      metodo: 'POST', token: tokens['Logística'], corpo: novoChecklist(),
+    });
+    const r = await req(`/api/devolucoes/${outra.json.id}/etapa`, {
+      metodo: 'POST', token: tokens['Central de Notas'], corpo: { para: 'Recebida na Portaria' },
+    });
+    assert.equal(r.status, 403);
   });
 });
 
@@ -303,6 +352,18 @@ describe('4. Conferência: falta calculada, divergência não apaga falta', () =
     assert.equal(ok.status, 200, ok.texto);
     const nao = await req(`/api/devolucoes/${id}/itens/${itemId}`, {
       metodo: 'PATCH', token: tokens['Expedição'], corpo: { cx: 99 },
+    });
+    assert.equal(nao.status, 403);
+  });
+
+  test('Controles Internos destina — e só destina', async () => {
+    const ok = await req(`/api/devolucoes/${id}/itens/${itemId}`, {
+      metodo: 'PATCH', token: tokens['Controles Internos'], corpo: { destinacao: 'Reprocesso' },
+    });
+    assert.equal(ok.status, 200, ok.texto);
+    assert.equal(ok.json.destinacao, 'Reprocesso');
+    const nao = await req(`/api/devolucoes/${id}/itens/${itemId}`, {
+      metodo: 'PATCH', token: tokens['Controles Internos'], corpo: { cx: 99 },
     });
     assert.equal(nao.status, 403);
   });
@@ -369,9 +430,11 @@ describe('6. Cadastros de apoio e exclusão', () => {
     });
     assert.equal(s.status, 201);
     const p = await req('/api/devolucoes-cadastros/produtos', {
-      metodo: 'POST', token: tokens['Logística'], corpo: { codigo: '30110', nome: 'LINGUIÇA' },
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { codigo: '30110', nome: 'LINGUIÇA', pesoCaixaKg: 3.5 },
     });
     assert.equal(p.status, 201);
+    assert.equal(p.json.pesoCaixaKg, 3.5, 'quilo por caixa preservado');
     const m = await req('/api/devolucoes-cadastros/motivos', {
       metodo: 'POST', token: tokens['Logística'], corpo: { motivo: 'DATA PROXIMA' },
     });
@@ -380,7 +443,9 @@ describe('6. Cadastros de apoio e exclusão', () => {
     const lista = await req('/api/devolucoes-cadastros', { token: tokens['Portaria'] });
     assert.equal(lista.status, 200);
     assert.ok(lista.json.supervisores.includes('MAKSON'));
-    assert.ok(lista.json.produtos.some((x) => x.codigo === '30110' && x.nome === 'LINGUIÇA'));
+    assert.ok(lista.json.produtos.some(
+      (x) => x.codigo === '30110' && x.nome === 'LINGUIÇA' && x.pesoCaixaKg === 3.5
+    ), 'produto com código, nome e quilo na lista');
     assert.ok(lista.json.motivos.includes('DATA PROXIMA'));
   });
 
