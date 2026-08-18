@@ -296,7 +296,9 @@
           <div><label for="dev-nota-transf">Nota de transferência</label>
             <input type="text" id="dev-nota-transf" placeholder="Ex: 171218"></div>
           <div><label for="dev-placa">Placa do caminhão</label>
-            <input type="text" id="dev-placa" placeholder="Ex: GFR8A80"></div>
+            <input type="text" id="dev-placa" placeholder="Ex: GFR8A80"
+                   oninput="previewFrotaDevolucao()">
+            <div class="card-sub" id="dev-placa-hint" style="margin:4px 0 0"></div></div>
           <div><label for="dev-motorista">Motorista</label>
             <input type="text" id="dev-motorista"></div>
         </div>

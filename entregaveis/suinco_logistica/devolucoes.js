@@ -511,7 +511,21 @@ function incluirRotaDevolucaoUI(id) {
 }
 
 function editarDevolucaoCampoUI(id, campo, valor) {
-  acaoDev(SuincoSharePoint.devolucoes.editar(id, { [campo]: valor }));
+  let corpo = { [campo]: valor };
+  /* Trocar a PLACA num checklist já criado também puxa a Frota — mesma
+     regra do formulário: transportadora e motorista vêm do cadastro, não
+     da memória de quem digita (e continuam editáveis depois). */
+  if (campo === 'placa' && typeof buscarFrota === 'function') {
+    const f = buscarFrota(valor);
+    if (f) {
+      if (f.transportadora) corpo.transportadora = f.transportadora;
+      if (f.motorista) corpo.motorista = f.motorista;
+      notify(`Placa ${normalizarPlaca(valor)} reconhecida na Frota — transportadora e motorista preenchidos do cadastro.`, 'info');
+    } else if (normalizarPlaca(valor)) {
+      notify(`⚠ ${normalizarPlaca(valor)} não está no cadastro de Frota — confira a placa.`, 'warn', 6000);
+    }
+  }
+  acaoDev(SuincoSharePoint.devolucoes.editar(id, corpo));
 }
 
 function excluirDevolucaoUI(id) {
@@ -908,4 +922,34 @@ async function exportarCadastroDevCsv(qual) {
     baixarCsvCadastro('Motivos', ['Motivo de devolução'],
       (DEV_CADASTROS.motivos || []).map((s) => [s]));
   }
+}
+
+/* ---------- placa puxa a Frota (pedido de 18/08/2026) ----------
+   Mesma regra das cargas: quem sabe a transportadora e o motorista da
+   placa é o cadastro de Frota, não a digitação. Ao reconhecer a placa,
+   transportadora e motorista preenchem sozinhos — e continuam editáveis,
+   porque nesta viagem o motorista pode ser outro. Placa fora da Frota só
+   AVISA (a devolução chega em caminhão de transportadora, que deveria
+   estar na base — mas o checklist não pode travar por causa disso). */
+function previewFrotaDevolucao() {
+  const campo = document.getElementById('dev-placa');
+  const hint = document.getElementById('dev-placa-hint');
+  if (!campo) return;
+  const p = normalizarPlaca(campo.value);
+  if (!hint) return;
+  if (!p) { hint.textContent = ''; return; }
+  const f = (typeof buscarFrota === 'function') ? buscarFrota(p) : null;
+  if (!f) {
+    hint.textContent = p.length >= 7
+      ? `⚠ ${p} não está no cadastro de Frota — confira a placa (dá para criar mesmo assim).`
+      : '';
+    return;
+  }
+  const vT = document.getElementById('dev-transportadora');
+  const vM = document.getElementById('dev-motorista');
+  if (vT && f.transportadora) vT.value = f.transportadora;
+  if (vM && f.motorista) vM.value = f.motorista;
+  hint.textContent = `✔ ${p} · ${f.transportadora || 'sem transportadora'}`
+    + `${f.tipoVeiculo ? ' · ' + f.tipoVeiculo : ''}`
+    + `${f.motorista ? ' · ' + f.motorista : ''}`;
 }
