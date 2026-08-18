@@ -40,7 +40,7 @@ def ck(nome, ok, detalhe=''):
 
 
 async def abrir(nav, email, rotulo):
-    ctx = await nav.new_context()
+    ctx = await nav.new_context(accept_downloads=True)
     pg = await ctx.new_page()
     html = open(PAINEL_ARQ, encoding='utf-8').read()
     html = html.replace("api: 'https://api.embarquesuinco.com.br'", f"api: '{API}'")
@@ -56,6 +56,11 @@ async def abrir(nav, email, rotulo):
     await pg.click('#btn-entrar')
     await pg.wait_for_timeout(3000)
     return ctx, pg
+
+
+async def pg_texto_rotulo(pg):
+    return await pg.evaluate(
+        "() => (document.querySelector('.dev-card-rota')||{}).innerText || ''")
 
 
 async def main():
@@ -177,6 +182,23 @@ async def main():
         ck('status avançou para Recebida na Portaria', et['status'] == 'Recebida na Portaria', str(et))
         ck('lacre e nº da carga gravados', et['lacre1'] == '133476' and et['carga'] == '2484')
         ck('carimbo com operador', et['carimbo'] and et['carimbo']['por'] == 'Chefe', str(et['carimbo']))
+
+        # Observação da Bruna: o porteiro escrevia carga+placa num papel
+        # para o motorista levar à balança. Agora o papel sai impresso.
+        rotulo = await pg_texto_rotulo(pgA)
+        ck('identificação Região — Rota / iniciais do operador',
+           rotulo.endswith('/ C'), rotulo)
+        botao_comp = await pgA.locator('button:has-text("Comprovante do motorista")').count()
+        ck('comprovante do motorista disponível após o recebimento', botao_comp == 1,
+           f'{botao_comp} botão(ões)')
+        try:
+            async with pgA.expect_download(timeout=60000) as dl:
+                await pgA.click('button:has-text("Comprovante do motorista")')
+            arquivo = (await dl.value).suggested_filename
+            ck('comprovante sai como PDF', arquivo.endswith('.pdf')
+               and 'Comprovante' in arquivo, arquivo)
+        except Exception as e:
+            ck('comprovante sai como PDF', False, str(e)[:120])
 
         print('\n=== 7. OUTRO TERMINAL VÊ, EM TEMPO REAL ===')
         # ana@teste.local: fixture da suíte do backend (sempre recriada) —

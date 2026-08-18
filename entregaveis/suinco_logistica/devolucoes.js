@@ -25,6 +25,13 @@ function devRotulo(d) {
   return `${d.regiao ? d.regiao + ' · ' : ''}rota(s) ${(d.rotas || []).join(', ') || '—'}`;
 }
 
+/* Iniciais de quem gerou — o formato pedido pela operação (18/08/2026):
+   "Belo Horizonte - Rota 502 / RP (região / rota / operador)". */
+function devIniciais(nome) {
+  return String(nome || '').trim().split(/\s+/)
+    .map((p) => p[0] || '').join('').toUpperCase().slice(0, 3);
+}
+
 /* Etapas na ordem do processo real. `pede` são os campos que aquela etapa
    imputa — o mesmo papel que o campo tinha na folha impressa. */
 /* `setores` espelha a allowlist do servidor (dominio/devolucoes.js) — a
@@ -202,7 +209,7 @@ function renderListaDevolucoes() {
       <div class="dev-card-topo" onclick="alternarDevolucaoUI('${escJs(d.id)}')">
         <div class="dev-card-id">
           <strong>Checklist Nº ${d.numero}</strong>
-          <span class="dev-card-rota">${d.regiao ? esc(d.regiao) + ' · ' : ''}${(d.rotas || []).map((r) => 'Rota ' + esc(r)).join(' · ') || 'sem rota'}</span>
+          <span class="dev-card-rota">${d.regiao ? esc(d.regiao) + ' — ' : ''}${(d.rotas || []).map((r) => 'Rota ' + esc(r)).join(' · ') || 'sem rota'}${d.criadaPor ? ' / ' + esc(devIniciais(d.criadaPor)) : ''}</span>
           ${devStatusChip(d.status)}
         </div>
         <div class="dev-card-meta">
@@ -345,7 +352,7 @@ function renderDevolucaoAberta(d, editavel) {
       <td><input type="text" id="dev-ni-${esc(d.id)}-nota" placeholder="Nota"></td>
       <td><select id="dev-ni-${esc(d.id)}-parcial"><option value="1">Parcial</option><option value="">Total</option></select></td>
       <td><input type="text" id="dev-ni-${esc(d.id)}-supervisor" list="dl-dev-supervisores" placeholder="Supervisor"></td>
-      <td><input type="text" id="dev-ni-${esc(d.id)}-vendedor" placeholder="Vendedor"></td>
+      <td><input type="text" id="dev-ni-${esc(d.id)}-vendedor" placeholder="RCA" title="RCA / vendedor — como na capa real"></td>
       <td><input type="text" id="dev-ni-${esc(d.id)}-cliente" placeholder="Cód. cliente"></td>
       <td class="c-peso"><input type="number" min="0" step="1" id="dev-ni-${esc(d.id)}-cx" placeholder="CX"></td>
       <td class="c-peso"><input type="number" min="0" step="0.01" id="dev-ni-${esc(d.id)}-peso" placeholder="Peso"></td>
@@ -385,7 +392,7 @@ function renderDevolucaoAberta(d, editavel) {
       <div class="table-wrap">
         <table class="dev-tabela">
           <thead><tr>
-            <th>Nota</th><th>P/T</th><th>Supervisor</th><th>Vendedor</th>
+            <th>Nota</th><th>P/T</th><th>Supervisor</th><th title="Vendedor">RCA</th>
             <th>Cód. Cliente</th><th>CX</th><th>Peso</th><th>Cód. Produto</th>
             <th>Nº DEV</th><th>Motivo</th><th>Recebido</th><th>Falta</th>
             <th>Destinação</th>${editavel ? '<th class="no-print"></th>' : ''}
@@ -396,6 +403,8 @@ function renderDevolucaoAberta(d, editavel) {
       ${d.obsControles ? `<div class="card-sub"><strong>Obs. Controles Internos:</strong> ${esc(d.obsControles)}</div>` : ''}
       ${divergencias}
       <div class="flex-end gap8 no-print" style="margin-top:10px">
+        ${d.carimbos.portaria ? `<button class="btn btn-sec btn-sm" onclick="comprovantePortariaUI('${escJs(d.id)}')"
+          title="PDF pequeno com carga, placa e lacres — o motorista entrega na balança e o Faturamento sabe QUAL devolução é. Substitui o papel escrito à mão pelo porteiro.">🖨 Comprovante do motorista</button>` : ''}
         ${admin ? `<button class="btn btn-sec btn-sm" onclick="abrirRevisoesDevolucaoUI('${escJs(d.id)}')"
           title="Ver alterações deste checklist e restaurar uma versão">↩ Alterações</button>` : ''}
         ${editavel ? `<button class="btn btn-danger btn-sm" onclick="excluirDevolucaoUI('${escJs(d.id)}')">🗑 Excluir checklist</button>` : ''}
@@ -632,6 +641,46 @@ async function restaurarRevisaoDevolucaoUI(id, revisaoId) {
   }
 }
 
+/* ---------- comprovante da Portaria (o papel do porteiro, sem caneta) ----------
+
+   Observação da Bruna (18/08/2026): o porteiro escrevia num papel a carga
+   e a placa para o motorista entregar ao faturista — era assim que a
+   balança sabia QUAL devolução estava chegando. O papel continua (o
+   motorista precisa levar algo na mão), mas agora sai impresso do
+   sistema, com os dados que a Portaria acabou de carimbar. */
+async function comprovantePortariaUI(id) {
+  const d = getDevolucao(id);
+  if (!d) return;
+  const el = document.getElementById('print-devolucoes');
+  if (!el) return;
+  const c = d.carimbos.portaria;
+  const linha = (rot, val) => `<div class="dev-comp-linha">
+      <span class="dev-comp-rot">${rot}</span>
+      <span class="dev-comp-val">${esc(String(val || '—'))}</span></div>`;
+  el.innerHTML = `
+    <div class="print-page doc-normal">
+      ${cabecalhoDocumento({
+        titulo: 'Comprovante de Devolução — Portaria',
+        subtitulo: `Checklist Nº ${d.numero} · ${esc(devRotulo(d))} / ${esc(devIniciais(d.criadaPor))}`,
+      })}
+      <div class="dev-comprovante">
+        ${linha('Nº DA CARGA', d.cargaNumero)}
+        ${linha('PLACA', d.placa)}
+        ${linha('MOTORISTA', d.motorista)}
+        ${linha('TRANSPORTADORA', d.transportadora)}
+        ${linha('REGIÃO / ROTAS', `${d.regiao ? d.regiao + ' — ' : ''}${(d.rotas || []).join(' · ')}`)}
+        ${linha('LACRE(S)', [d.lacre1, d.lacre2].filter(Boolean).join(' · '))}
+        ${linha('RECEBIDO POR', c ? `${c.por} · ${fmtDataHora(c.em)}` : '—')}
+      </div>
+      ${rodapeDocumento(
+        'Entregar este comprovante ao motorista, que o apresenta na balança do '
+        + 'Faturamento — é assim que o faturista identifica QUAL devolução chegou. '
+        + 'Substitui a anotação à mão do porteiro.',
+        '', '')}
+    </div>`;
+  await exportarViaServidor(el, `Comprovante-Devolucao-${d.numero}`);
+}
+
 /* ---------- relatório do dia (mesmo padrão dos demais) ---------- */
 
 async function relatorioDevolucoesUI() {
@@ -665,7 +714,7 @@ async function relatorioDevolucoesUI() {
         + `${d.pesoFinal !== null ? ' · Peso final ' + d.pesoFinal.toLocaleString('pt-BR') + ' kg' : ''}`)}
       <table class="dev-doc-tabela">
         <thead><tr>
-          <th>Nota</th><th>P/T</th><th>Supervisor</th><th>Vendedor</th><th>Cód. Cliente</th>
+          <th>Nota</th><th>P/T</th><th>Supervisor</th><th title="Vendedor">RCA</th><th>Cód. Cliente</th>
           <th>CX</th><th>Peso</th><th>Produto</th><th>Nº DEV</th><th>Motivo</th>
           <th>Recebido</th><th>Falta</th><th>Destinação</th>
         </tr></thead>
