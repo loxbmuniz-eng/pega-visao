@@ -1078,7 +1078,13 @@ function renderTabAtual(){
     // A aba Relatórios é só de botões, mas o resumo do filtro tem que
     // refletir o estado atual do pátio — senão mostra a contagem de quando
     // a página abriu, que já mudou.
-    case 'relatorios': atualizarResumoFiltroRelatorio(); break;
+    case 'relatorios':
+      atualizarResumoFiltroRelatorio();
+      // O campo de dia do relatório de devoluções abre já com o dia de hoje
+      // preenchido — quem quiser outro dia troca; vazio nunca fica, porque o
+      // relatório "de hoje" é o caso de uso de toda hora na Logística.
+      { const rd=document.getElementById('rel-dev-dia'); if(rd && !rd.value && typeof diaLocalDev==='function') rd.value=diaLocalDev(); }
+      break;
     case 'usuarios': renderUsuarios(); break;
   }
   // Depois de pintar, e não antes: os rótulos são derivados das células

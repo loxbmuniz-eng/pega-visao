@@ -24,6 +24,7 @@ let _devRotasNovas = [];
 let _devFiltroEtapa = null;
 
 function devRotulo(d) {
+  if (d.tipo === 'SOBRA') return 'SOBRA';
   return `${d.regiao ? d.regiao + ' · ' : ''}rota(s) ${(d.rotas || []).join(', ') || '—'}`;
 }
 
@@ -149,6 +150,10 @@ function renderDevolucoes() {
   // a esteira e a própria fila, sem um formulário que a API recusaria.
   const cardNovo = document.getElementById('dev-card-novo');
   if (cardNovo) cardNovo.hidden = !podeEditarDevolucao();
+  const cardSobra = document.getElementById('dev-card-sobra');
+  if (cardSobra) cardSobra.hidden = !podeEditarDevolucao();
+  const sobraData = document.getElementById('sobra-data');
+  if (sobraData && !sobraData.value) sobraData.value = diaLocalDev();
 
   preencherSelectRotaDev();
   if (!_devCadastrosCarregados) carregarCadastrosDev();
@@ -326,8 +331,11 @@ function renderListaDevolucoes() {
       <div class="dev-card-topo" onclick="alternarDevolucaoUI('${escJs(d.id)}')">
         <div class="dev-card-id">
           ${ehMinhaVezDev(d) ? '<span class="dev-chip dev-chip-suavez">SUA VEZ</span>' : ''}
+          ${d.tipo === 'SOBRA' ? '<span class="dev-chip dev-chip-sobra">SOBRA</span>' : ''}
           <strong>Checklist Nº ${d.numero}</strong>
-          <span class="dev-card-rota">${d.regiao ? esc(d.regiao) + ' — ' : ''}${(d.rotas || []).map((r) => 'Rota ' + esc(r)).join(' · ') || 'sem rota'}${d.criadaPor ? ' / ' + esc(devIniciais(d.criadaPor)) : ''}</span>
+          <span class="dev-card-rota">${d.tipo === 'SOBRA'
+            ? 'Sobras' + (d.criadaPor ? ' / ' + esc(devIniciais(d.criadaPor)) : '')
+            : `${d.regiao ? esc(d.regiao) + ' — ' : ''}${(d.rotas || []).map((r) => 'Rota ' + esc(r)).join(' · ') || 'sem rota'}${d.criadaPor ? ' / ' + esc(devIniciais(d.criadaPor)) : ''}`}</span>
           ${devStatusChip(d.status)}
         </div>
         <div class="dev-card-meta">
@@ -347,9 +355,12 @@ function alternarDevolucaoUI(id) {
 }
 
 function cabecalhoEditavelDev(d, editavel) {
-  const campo = (rotulo, nome, valor, extra = '') => `
+  /* A Portaria edita os campos do posto dela direto no cabeçalho (teste
+     do usuário, 18/08/2026) — o servidor confere a mesma lista. */
+  const portariaEdita = (DB.operador || {}).setor === 'Portaria';
+  const campo = (rotulo, nome, valor, extra = '', tambemPortaria = false) => `
     <div><label>${rotulo}</label>
-      ${editavel
+      ${(editavel || (portariaEdita && tambemPortaria))
         ? `<input type="text" value="${esc(valor || '')}" ${extra}
              onchange="editarDevolucaoCampoUI('${escJs(d.id)}','${nome}',this.value)">`
         : `<div class="dev-ro">${esc(valor) || '—'}</div>`}
@@ -380,22 +391,42 @@ function cabecalhoEditavelDev(d, editavel) {
   return `${rotasChips}<div class="form-grid dev-cab-grid">
       ${campoData}
       ${campo('Região', 'regiao', d.regiao)}
-      ${campo('Transportadora', 'transportadora', d.transportadora)}
-      ${campo('Nota de transferência', 'notaTransferencia', d.notaTransferencia)}
-      ${campo('Placa', 'placa', d.placa)}
-      ${campo('Motorista', 'motorista', d.motorista)}
+      ${campo('Transportadora', 'transportadora', d.transportadora, '', true)}
+      ${campo('Nota de transferência', 'notaTransferencia', d.notaTransferencia, '', true)}
+      ${campo('Placa', 'placa', d.placa, '', true)}
+      ${campo('Motorista', 'motorista', d.motorista, '', true)}
       ${campo('Cód. operador (monitoramento)', 'operadorCodigo', d.operadorCodigo,
         'title="Número informado pelo monitoramento — é sob ele que as devoluções são lançadas."')}
-      ${campo('Nº carga', 'cargaNumero', d.cargaNumero)}
-      ${campo('Lacre 1', 'lacre1', d.lacre1)}
-      ${campo('Lacre 2', 'lacre2', d.lacre2)}
-      <div><label>Peso final (Faturamento)</label><div class="dev-ro">${d.pesoFinal !== null ? d.pesoFinal.toLocaleString('pt-BR') + ' kg' : '—'}</div></div>
+      ${campo('Nº carga', 'cargaNumero', d.cargaNumero, '', true)}
+      ${campo('Lacre 1', 'lacre1', d.lacre1, '', true)}
+      ${campo('Lacre 2', 'lacre2', d.lacre2, '', true)}
+      <div><label>Peso final (Faturamento)</label>
+        ${(editavel || (DB.operador || {}).setor === 'Faturamento')
+          ? `<input type="number" min="0" step="1" value="${d.pesoFinal ?? ''}" placeholder="kg"
+               title="Pesagem da balança — a confirmação do Faturamento."
+               onchange="editarDevolucaoCampoUI('${escJs(d.id)}','pesoFinal',this.value)">`
+          : `<div class="dev-ro">${d.pesoFinal !== null ? d.pesoFinal.toLocaleString('pt-BR') + ' kg' : '—'}</div>`}
+      </div>
+      <div><label>Gerou RDC (romaneio)?</label>
+        ${(editavel || (DB.operador || {}).setor === 'Controles Internos')
+          ? `<select title="Informado pelos Controles Internos na destinação."
+               onchange="editarDevolucaoCampoUI('${escJs(d.id)}','gerouRdc',this.value)">
+               <option value=""${d.gerouRdc === null || d.gerouRdc === undefined ? ' selected' : ''}>(não informado)</option>
+               <option value="true"${d.gerouRdc === true ? ' selected' : ''}>Sim — gerou RDC</option>
+               <option value="false"${d.gerouRdc === false ? ' selected' : ''}>Não gerou</option>
+             </select>`
+          : `<div class="dev-ro">${d.gerouRdc === true ? 'Sim' : d.gerouRdc === false ? 'Não' : '—'}</div>`}
+      </div>
     </div>`;
 }
 
 function carimbosDev(d) {
+  // Sobra encerra na Expedição — mostrar Controles/Notas como "pendente"
+  // para sempre só confundiria.
+  const etapasVisiveis = d.tipo === 'SOBRA'
+    ? ['portaria', 'faturamento', 'expedicao'] : Object.keys(DEV_ETAPA_ROTULO);
   return `<div class="dev-carimbos">
-    ${Object.entries(DEV_ETAPA_ROTULO).map(([chave, rotulo]) => {
+    ${etapasVisiveis.map((chave) => [chave, DEV_ETAPA_ROTULO[chave]]).map(([chave, rotulo]) => {
       const c = d.carimbos[chave];
       return `<div class="dev-carimbo${c ? ' dev-carimbo-ok' : ''}">
           <span class="dev-carimbo-rot">${rotulo}</span>
@@ -408,6 +439,10 @@ function carimbosDev(d) {
 }
 
 function acaoEtapaDev(d) {
+  /* SOBRA: três OKs e acabou — Portaria, Faturamento, Expedição. */
+  if (d.tipo === 'SOBRA' && d.status === 'Descarga Conferida') {
+    return '<div class="card-sub">✅ Sobra concluída — entrou, conferida e descarregada.</div>';
+  }
   const etapa = DEV_ETAPAS.find((e) => e.status === d.status);
   if (!etapa) return '<div class="card-sub">✅ Ciclo encerrado — nota fiscal finalizada.</div>';
   /* Espelho da allowlist do servidor: quem não assina este passo vê QUEM
@@ -435,7 +470,12 @@ function acaoEtapaDev(d) {
       placeholder="Peso final em kg (opcional)" value="${d.pesoFinal ?? ''}">`;
   } else if (etapa.pede === 'controles') {
     extras = `<input type="text" id="dev-et-${esc(d.id)}-obs"
-      placeholder="Observações dos Controles Internos (saem no relatório)" value="${esc(d.obsControles)}">`;
+      placeholder="Observações dos Controles Internos (saem no relatório)" value="${esc(d.obsControles)}">
+      <select id="dev-et-${esc(d.id)}-rdc" title="Gerou RDC (romaneio)?">
+        <option value=""${d.gerouRdc === null || d.gerouRdc === undefined ? ' selected' : ''}>Gerou RDC? (informar)</option>
+        <option value="true"${d.gerouRdc === true ? ' selected' : ''}>Sim — gerou RDC</option>
+        <option value="false"${d.gerouRdc === false ? ' selected' : ''}>Não gerou</option>
+      </select>`;
   }
   return `<div class="dev-etapa-acao">
       ${extras}
@@ -457,10 +497,17 @@ function renderDevolucaoAberta(d, editavel) {
     return `<tr>
       <td>${cel('nota', i.nota)}</td>
       <td>${editavel
+        /* Nº DA PARCIAL (18/08/2026): a mesma nota fiscal pode voltar em
+           duas parciais do MESMO produto — uma caixa fora de temperatura,
+           outra avariada. Cada parcial tem motivo e Nº DEV próprios, e é o
+           número da parcial que diz a QUAL caixa cada DEV se refere. */
         ? `<select onchange="editarItemDevolucaoUI('${escJs(d.id)}',${i.itemId},'parcial',this.value)">
              <option value="1" ${i.parcial ? 'selected' : ''}>Parcial</option>
-             <option value="" ${i.parcial ? '' : 'selected'}>Total</option></select>`
-        : (i.parcial ? 'Parcial' : 'Total')}</td>
+             <option value="" ${i.parcial ? '' : 'selected'}>Total</option></select>
+           ${i.parcial ? `<input type="text" class="dev-parcial-desc" value="${esc(i.parcialDesc || '')}"
+             placeholder="Nº parcial" title="Número da parcial — é ele que amarra cada Nº DEV à caixa certa quando a mesma nota volta em duas parciais."
+             onchange="editarItemDevolucaoUI('${escJs(d.id)}',${i.itemId},'parcialDesc',this.value)">` : ''}`
+        : `${i.parcial ? 'Parcial' : 'Total'}${i.parcial && i.parcialDesc ? `<small class="text-dim">${esc(i.parcialDesc)}</small>` : ''}`}</td>
       <td>${cel('supervisor', i.supervisor, 'text', 'list="dl-dev-supervisores"')}</td>
       <td>${cel('vendedor', i.vendedor, 'text', 'list="dl-dev-rcas"')}</td>
       <td>${cel('codCliente', i.codCliente, 'text', 'list="dl-dev-clientes" oninput="sugerirClientesDevUI(this.value)"')}</td>
@@ -471,7 +518,11 @@ function renderDevolucaoAberta(d, editavel) {
       <td>${cel('numDev', i.numDev)}</td>
       <td>${cel('dataItem', String(i.dataItem || '').slice(0, 10), 'date',
         'title="Data desta devolução (coluna DATA-DEV da capa)."')}</td>
-      <td>${cel('motivo', i.motivo, 'text', 'list="dl-dev-motivos"')}</td>
+      ${/* O motivo escolhido aparece POR EXTENSO embaixo da caixa de
+            seleção (pedido de 18/08/2026): a coluna é estreita e o código
+            sozinho não diz nada para quem confere. */''}
+      <td>${cel('motivo', i.motivo, 'text', 'list="dl-dev-motivos"')}
+          ${i.motivo ? `<small class="text-dim dev-motivo-desc">${esc(i.motivo)}</small>` : ''}</td>
       <td class="c-peso">${podePesarItemDev()
         ? `<input type="number" min="0" step="0.01" value="${i.pesoFaturamento ?? ''}" placeholder="—"
              title="Pesagem do Faturamento — é a confirmação de que a devolução passou pela balança."
@@ -503,14 +554,21 @@ function renderDevolucaoAberta(d, editavel) {
              title="NOTA FINAL — marque quando a nota deste item estiver finalizada (Central de Notas)."
              onchange="editarItemDevolucaoUI('${escJs(d.id)}',${i.itemId},'notaFinal',this.checked)">`
         : (i.notaFinal ? '✔' : '—')}</td>
-      ${editavel ? `<td class="no-print"><button class="btn btn-danger btn-sm"
-        onclick="excluirItemDevolucaoUI('${escJs(d.id)}',${i.itemId})">✕</button></td>` : ''}
+      ${editavel ? `<td class="no-print dev-cel-acoes">
+        <button class="btn btn-sec btn-sm"
+          title="Outra parcial DESTA nota — repete nota, cliente, RCA, supervisor e produto; o Nº DEV, o motivo, as caixas e o nº da parcial você preenche."
+          onclick="repetirNotaDevolucaoUI('${escJs(d.id)}',${i.itemId})">➕ mesma nota</button>
+        <button class="btn btn-danger btn-sm"
+          onclick="excluirItemDevolucaoUI('${escJs(d.id)}',${i.itemId})">✕</button></td>` : ''}
     </tr>`;
   };
 
   const novaLinha = !editavel ? '' : `<tr class="dev-linha-nova">
       <td><input type="text" id="dev-ni-${esc(d.id)}-nota" placeholder="Nota"></td>
-      <td><select id="dev-ni-${esc(d.id)}-parcial"><option value="1">Parcial</option><option value="">Total</option></select></td>
+      <td><select id="dev-ni-${esc(d.id)}-parcial"
+            onchange="mostrarParcialDevUI('${escJs(d.id)}')"><option value="1">Parcial</option><option value="">Total</option></select>
+          <input type="text" class="dev-parcial-desc" id="dev-ni-${esc(d.id)}-parcialdesc"
+            placeholder="Nº parcial" title="Número da parcial — amarra o Nº DEV à caixa certa quando a mesma nota volta em duas parciais."></td>
       <td><input type="text" id="dev-ni-${esc(d.id)}-supervisor" list="dl-dev-supervisores" placeholder="Supervisor"></td>
       <td><input type="text" id="dev-ni-${esc(d.id)}-vendedor" list="dl-dev-rcas" placeholder="RCA" title="RCA / vendedor — como na capa real"></td>
       <td><input type="text" id="dev-ni-${esc(d.id)}-cliente" list="dl-dev-clientes" placeholder="Cód. cliente ou apelido"
@@ -522,7 +580,10 @@ function renderDevolucaoAberta(d, editavel) {
       <td><input type="text" id="dev-ni-${esc(d.id)}-numdev" placeholder="Nº DEV"></td>
       <td><input type="date" id="dev-ni-${esc(d.id)}-dataitem" value="${esc(String(d.dataDev || '').slice(0, 10))}"
             title="Data desta devolução — vem com o dia do checklist, mude se for de outra data."></td>
-      <td><input type="text" id="dev-ni-${esc(d.id)}-motivo" list="dl-dev-motivos" placeholder="Motivo"></td>
+      <td><input type="text" id="dev-ni-${esc(d.id)}-motivo" list="dl-dev-motivos" placeholder="Motivo"
+            oninput="descreverMotivoDevUI('${escJs(d.id)}')"
+            value="${d.tipo === 'SOBRA' ? '652 — Sobras' : ''}">
+          <small class="text-dim dev-motivo-desc" id="dev-ni-${esc(d.id)}-motivodesc">${d.tipo === 'SOBRA' ? '652 — Sobras' : ''}</small></td>
       <td colspan="5"></td>
       <td class="no-print"><button class="btn btn-sm" onclick="adicionarItemDevolucaoUI('${escJs(d.id)}')"
         title="Acrescentar esta linha ao checklist">➕</button></td>
@@ -569,6 +630,8 @@ function renderDevolucaoAberta(d, editavel) {
         </table>
       </div>
       ${d.obsControles ? `<div class="card-sub"><strong>Obs. Controles Internos:</strong> ${esc(d.obsControles)}</div>` : ''}
+      ${d.gerouRdc !== null && d.gerouRdc !== undefined
+        ? `<div class="card-sub"><strong>RDC (romaneio):</strong> ${d.gerouRdc ? 'Sim — gerado' : 'Não gerado'}</div>` : ''}
       ${divergencias}
       <div class="flex-end gap8 no-print" style="margin-top:10px">
         ${d.carimbos.portaria ? `<button class="btn btn-sec btn-sm" onclick="comprovantePortariaUI('${escJs(d.id)}')"
@@ -653,6 +716,23 @@ async function criarDevolucaoUI() {
   }
 }
 
+/* SOBRA: o checklist enxuto do que só entra — sem carga e sem rota. */
+async function criarSobraUI() {
+  const data = (document.getElementById('sobra-data') || {}).value || diaLocalDev();
+  try {
+    const d = await SuincoSharePoint.devolucoes.criar({
+      tipo: 'SOBRA', dataDev: data, itens: [],
+    });
+    notify(`Checklist de SOBRA Nº ${d.numero} criado. Lance os itens (caixa, peso, produto, motivo) na linha dele.`, 'success', 6000);
+    const filtro = document.getElementById('dev-filtro-dia');
+    if (filtro) filtro.value = data;
+    _devExpandida = d.id;
+    await carregarDevolucoes();
+  } catch (e) {
+    notify((e && e.message) || 'O servidor recusou a criação da sobra.', 'danger', 7000);
+  }
+}
+
 /* Troca de rotas num checklist já criado (chips na própria linha). */
 function tirarRotaDevolucaoUI(id, cod) {
   const d = getDevolucao(id);
@@ -684,6 +764,9 @@ function editarDevolucaoCampoUI(id, campo, valor) {
     }
   }
   let corpo = { [campo]: valor };
+  /* RDC vem de um select sim/não — vazio significa "ainda não informado",
+     não "não gerou". */
+  if (campo === 'gerouRdc') corpo = { gerouRdc: valor === '' ? null : valor === 'true' };
   /* Trocar a PLACA num checklist já criado também puxa a Frota — mesma
      regra do formulário: transportadora e motorista vêm do cadastro, não
      da memória de quem digita (e continuam editáveis depois). */
@@ -727,6 +810,7 @@ function avancarEtapaDevolucaoUI(id) {
     corpo.pesoFinal = v('peso') || '';
   } else if (etapa.pede === 'controles') {
     corpo.obsControles = v('obs') || '';
+    corpo.gerouRdc = v('rdc') ?? '';
   }
   acaoDev(SuincoSharePoint.devolucoes.etapa(id, corpo), `Etapa registrada: ${etapa.proxima}.`);
 }
@@ -764,6 +848,7 @@ function adicionarItemDevolucaoUI(id) {
   const corpo = {
     nota: v('nota'),
     parcial: !!v('parcial'),
+    parcialDesc: v('parcial') ? v('parcialdesc') : '',
     supervisor: v('supervisor'),
     vendedor: v('vendedor'),
     codCliente: v('cliente'),
@@ -782,6 +867,51 @@ function adicionarItemDevolucaoUI(id) {
     return;
   }
   acaoDev(SuincoSharePoint.devolucoes.criarItem(id, corpo));
+}
+
+/* Outra parcial da MESMA nota (18/08/2026). O caso real: o cliente devolve
+   duas caixas do mesmo produto por motivos diferentes (uma fora de
+   temperatura, outra avariada) e emite DUAS parciais na mesma nota fiscal,
+   cada uma com seu Nº DEV. Repetir o cabeçalho da nota à mão é onde o erro
+   entra — este botão copia o que é igual e deixa em branco o que muda:
+   Nº DEV, motivo, caixas, peso e o número da parcial. */
+function repetirNotaDevolucaoUI(id, itemId) {
+  const d = getDevolucao(id);
+  const base = d && (d.itens || []).find((x) => x.itemId === itemId);
+  if (!base) return;
+  acaoDev(
+    SuincoSharePoint.devolucoes.criarItem(id, {
+      nota: base.nota,
+      // Outra parcial da mesma nota é, por definição, parcial.
+      parcial: true,
+      parcialDesc: '',
+      supervisor: base.supervisor,
+      vendedor: base.vendedor,
+      codCliente: base.codCliente,
+      codProduto: base.codProduto,
+      produtoNome: base.produtoNome,
+      dataItem: base.dataItem ? String(base.dataItem).slice(0, 10) : '',
+      cx: 0,
+    }),
+    `Outra parcial da nota ${base.nota || '—'} criada — preencha o Nº DEV, o motivo, as caixas e o nº da parcial.`
+  );
+}
+
+/* O motivo escolhido na linha nova aparece por extenso embaixo da caixa,
+   igual às linhas já lançadas. */
+function descreverMotivoDevUI(id) {
+  const campo = document.getElementById(`dev-ni-${id}-motivo`);
+  const desc = document.getElementById(`dev-ni-${id}-motivodesc`);
+  if (campo && desc) desc.textContent = campo.value || '';
+}
+
+/* O campo do nº da parcial só faz sentido com Parcial escolhida. */
+function mostrarParcialDevUI(id) {
+  const sel = document.getElementById(`dev-ni-${id}-parcial`);
+  const campo = document.getElementById(`dev-ni-${id}-parcialdesc`);
+  if (!sel || !campo) return;
+  campo.style.display = sel.value ? '' : 'none';
+  if (!sel.value) campo.value = '';
 }
 
 function excluirItemDevolucaoUI(id, itemId) {
@@ -897,27 +1027,41 @@ async function comprovantePortariaUI(id) {
 
 /* ---------- relatório do dia (mesmo padrão dos demais) ---------- */
 
-async function relatorioDevolucoesUI() {
+async function relatorioDevolucoesUI(diaParam) {
   if (!devServidorOk()) {
     notify('O relatório de devoluções vem do servidor — entre com login de servidor.', 'warn', 6000);
     return;
   }
-  await carregarDevolucoes();
-  const dia = (document.getElementById('dev-filtro-dia') || {}).value || diaLocalDev();
+  /* Aceita a data vinda do card da aba Relatórios; sem ela, usa o dia do
+     filtro da aba Devoluções. A lista é SEMPRE re-buscada do servidor no
+     clique — o PDF sai com o status atual de cada checklist, não com o
+     retrato de quando a tela abriu. */
+  const dia = (typeof diaParam === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(diaParam))
+    ? diaParam
+    : ((document.getElementById('dev-filtro-dia') || {}).value || diaLocalDev());
+  let lista;
+  try {
+    lista = await SuincoSharePoint.devolucoes.listar(dia, dia);
+  } catch (e) {
+    notify('Não consegui buscar as devoluções para o relatório: ' + (e.message || 'erro'), 'danger', 6000);
+    return;
+  }
   const el = document.getElementById('print-devolucoes');
   if (!el) return;
 
   const [ano, mes, diaN] = dia.split('-');
   const diaBR = `${diaN}/${mes}/${ano}`;
-  const totalCx = DEVOLUCOES.reduce((s, d) => s + d.itens.reduce((x, i) => x + (i.cx || 0), 0), 0);
-  const totalFalta = DEVOLUCOES.reduce((s, d) => s
+  const totalCx = lista.reduce((s, d) => s + d.itens.reduce((x, i) => x + (i.cx || 0), 0), 0);
+  const totalFalta = lista.reduce((s, d) => s
     + d.itens.reduce((x, i) => x + (i.falta || 0), 0), 0);
-  const totalDiverg = DEVOLUCOES.reduce((s, d) => s + d.divergencias.length, 0);
+  const totalDiverg = lista.reduce((s, d) => s + d.divergencias.length, 0);
 
   const bloco = (d) => `
     <div class="dev-doc-checklist">
       ${tituloSecaoPdf(
-        `Checklist Nº ${d.numero} — ${d.regiao ? esc(d.regiao) + ' · ' : ''}Rota(s) ${esc((d.rotas || []).join(', ') || '—')} · ${esc(d.status)}`,
+        d.tipo === 'SOBRA'
+          ? `Checklist Nº ${d.numero} — SOBRA · ${esc(d.status)}`
+          : `Checklist Nº ${d.numero} — ${d.regiao ? esc(d.regiao) + ' · ' : ''}Rota(s) ${esc((d.rotas || []).join(', ') || '—')} · ${esc(d.status)}`,
         `Gerado por <strong>${esc(d.criadaPor)}</strong>`
         + `${d.regiao ? ' · Região ' + esc(d.regiao) : ''}`
         + `${d.transportadora ? ' · Transportadora ' + esc(d.transportadora) : ''}`
@@ -934,7 +1078,8 @@ async function relatorioDevolucoesUI() {
           <th>Pesagem</th><th>Expedição</th><th>Falta</th><th>Destinação</th><th>Nota final</th>
         </tr></thead>
         <tbody>${d.itens.map((i) => `<tr${i.falta > 0 ? ' class="dev-doc-falta"' : ''}>
-            <td>${esc(i.nota)}</td><td>${i.parcial ? 'P' : 'T'}</td>
+            <td>${esc(i.nota)}</td>
+            <td>${i.parcial ? ('P' + (i.parcialDesc ? ' ' + esc(i.parcialDesc) : '')) : 'T'}</td>
             <td>${esc(i.supervisor)}</td><td>${esc(i.vendedor)}</td><td>${esc(i.codCliente)}</td>
             <td class="c-peso">${i.cx.toLocaleString('pt-BR')}</td>
             <td class="c-peso">${i.peso !== null ? i.peso.toLocaleString('pt-BR') : '—'}</td>
@@ -954,6 +1099,8 @@ async function relatorioDevolucoesUI() {
           ${d.divergencias.map((v) => `${v.cx.toLocaleString('pt-BR')} cx ${esc(v.codProduto)}${v.produtoNome ? '-' + esc(v.produtoNome) : ''}${v.observacao ? ' (' + esc(v.observacao) + ')' : ''}`).join(' · ')}
         </div>` : ''}
       ${d.obsControles ? `<div class="dev-doc-diverg"><strong>Obs. Controles Internos:</strong> ${esc(d.obsControles)}</div>` : ''}
+      ${d.gerouRdc !== null && d.gerouRdc !== undefined
+        ? `<div class="dev-doc-diverg"><strong>RDC (romaneio):</strong> ${d.gerouRdc ? 'Sim — gerado' : 'Não gerado'}</div>` : ''}
       <div class="dev-doc-carimbos">
         ${Object.entries(DEV_ETAPA_ROTULO).map(([chave, rotulo]) => {
           const c = d.carimbos[chave];
@@ -966,12 +1113,12 @@ async function relatorioDevolucoesUI() {
     <div class="print-page doc-normal">
       ${cabecalhoDocumento({
         titulo: 'Relatório de Devoluções',
-        subtitulo: `Checklists do dia ${diaBR} · ${DEVOLUCOES.length} checklist(s) · `
+        subtitulo: `Checklists do dia ${diaBR} · ${lista.length} checklist(s) · `
           + `${totalCx.toLocaleString('pt-BR')} cx`
           + `${totalFalta > 0 ? ' · FALTAS: ' + totalFalta.toLocaleString('pt-BR') + ' cx' : ''}`
           + `${totalDiverg > 0 ? ' · ' + totalDiverg + ' divergente(s)' : ''}`,
       })}
-      ${DEVOLUCOES.length ? DEVOLUCOES.map(bloco).join('')
+      ${lista.length ? lista.map(bloco).join('')
         : '<div class="card-sub">Nenhum checklist de devolução neste dia.</div>'}
       ${rodapeDocumento(
         'Cada checklist identifica quem o gerou. A coluna FALTA é calculada '

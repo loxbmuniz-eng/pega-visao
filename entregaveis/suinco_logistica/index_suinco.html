@@ -319,6 +319,23 @@
         </div>
       </div>
 
+      <!-- SOBRAS (18/08/2026): o checklist enxuto do que só ENTRA — sem
+           vínculo com carga, sem rota. Itens: caixa, peso, produto e
+           motivo (652 — Sobras). Ciclo: Portaria OK → Faturamento OK →
+           Expedição OK, acabou. -->
+      <div class="card" id="dev-card-sobra">
+        <div class="card-title"><span class="icon">📥</span> Lançar SOBRA</div>
+        <div class="card-sub">O que o monitoramento passar: só caixa, peso, produto e motivo —
+          sem carga e sem rota. A sobra entra, a Portaria dá o OK, o Faturamento dá o OK e a
+          Expedição dá o OK. Fim.</div>
+        <div class="form-grid">
+          <div><label for="sobra-data">Data</label>
+            <input type="date" id="sobra-data"></div>
+          <div style="align-self:end">
+            <button class="btn" onclick="criarSobraUI()">📥 Criar checklist de SOBRA</button></div>
+        </div>
+      </div>
+
       <div class="card">
         <div class="card-title"><span class="icon">🗓️</span> Checklists de devolução</div>
         <div class="card-sub">Cada checklist mostra quem o criou e as etapas já carimbadas.
@@ -966,6 +983,23 @@
   <!-- ===== RELATÓRIOS ===== -->
   <div class="tab-page" id="tab-relatorios">
     <div class="funcao-aba" data-tab="relatorios"></div>
+    <!-- Relatório de Devoluções acessível também daqui (18/08/2026): os
+         setores que têm a aba Relatórios exportam o checklist do dia com
+         o STATUS ATUAL — a lista é re-buscada do servidor no clique. -->
+    <div class="card">
+      <div class="card-title"><span class="icon">📦</span> Relatório de Devoluções</div>
+      <div class="card-sub">O checklist de devoluções do dia, com carimbos de cada etapa, faltas,
+        divergentes, destinações e sobras — sempre com o status ATUAL (busca no servidor na hora
+        de gerar).</div>
+      <div class="form-row" style="align-items:flex-end">
+        <div class="form-group" style="max-width:220px"><label>Dia</label>
+          <input type="date" id="rel-dev-dia"></div>
+        <div class="form-group">
+          <button class="btn btn-primary btn-sm"
+            onclick="relatorioDevolucoesUI((document.getElementById('rel-dev-dia')||{}).value)">📄 Gerar PDF</button>
+        </div>
+      </div>
+    </div>
 
     <!-- Filtro compartilhado pelos três relatórios. Fica no topo porque
          define o recorte de tudo que vem abaixo — filtro escondido embaixo

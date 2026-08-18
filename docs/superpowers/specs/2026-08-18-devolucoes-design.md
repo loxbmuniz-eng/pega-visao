@@ -134,3 +134,34 @@ viram carimbos automáticos (operador logado + hora) a cada transição.
    devolucao_rotas (migração 012), cada código validado contra dim_rotas.
    A identificação do checklist passa a ser REGIÃO + rotas, no cartão e
    no relatório. Troca de rotas fica no log de eventos.
+4. **Campos de cada posto no cabeçalho** (teste do usuário com login de
+   Portaria): a Portaria edita placa, transportadora, motorista, nº da
+   carga, lacres e nota de transferência direto no cabeçalho; o
+   Faturamento edita o peso final; os Controles Internos, o RDC. Todo o
+   resto continua sendo da Logística. A regra é do SERVIDOR (allowlist por
+   setor no PATCH); o painel só espelha.
+5. **SOBRAS** (migração 021): checklist do que só ENTRA — sem carga e sem
+   rota, itens com caixa, peso, produto e motivo (652 — Sobras, semeado no
+   cadastro). Ciclo curto: Portaria OK → Faturamento OK → Expedição OK, e
+   acabou. Destinada e Nota Finalizada não existem para sobra — nem para a
+   Administração (409 ETAPA_NAO_EXISTE_PARA_SOBRA).
+6. **Relatório de devoluções nas outras abas**: o mesmo relatório do dia
+   ganhou um cartão na aba Relatórios, com escolha de data (abre no dia de
+   hoje). A lista é SEMPRE re-buscada do servidor no clique — o PDF sai com
+   o status atual de cada checklist, não com o retrato de quando a tela
+   abriu.
+7. **RDC / Romaneio** (migração 022, pedido: "na destinação o controle
+   interno precisa ter um campo para informar se gerou RDC"): campo do
+   cabeçalho com três estados — não informado, gerou, não gerou. Informado
+   junto com a etapa Destinada ou direto no cabeçalho; escopo exclusivo dos
+   Controles Internos (Logística/Administração cobrem). Sai no relatório.
+8. **A mesma nota em duas parciais** (migração 023). Caso real relatado: o
+   cliente recebe duas caixas do mesmo produto, uma fora de temperatura e
+   outra avariada, e emite DUAS parciais na mesma nota fiscal — cada uma
+   com seu motivo e seu Nº DEV. Duas mudanças: (a) o item ganha o NÚMERO DA
+   PARCIAL (coluna PARCIAL da capa de papel, confirmada em foto), que é o
+   que amarra cada Nº DEV à caixa certa; (b) o botão "➕ mesma nota" repete
+   nota, cliente, RCA, supervisor e produto numa linha nova, deixando em
+   branco só o que muda entre as caixas. O motivo passa a aparecer por
+   extenso embaixo da caixa de seleção, porque a coluna é estreita e o
+   código sozinho não diz nada a quem confere.
