@@ -1058,7 +1058,15 @@ function renderTabAtual(){
     case 'expedicao': renderExpedicao(); renderVisaoPatio('expedicao'); break;
     case 'faturamento': renderFaturamento(); renderVisaoPatio('faturamento'); break;
     case 'indicadores': renderIndicadores(); break;
-    case 'cadastros': renderCadastros(); break;
+    case 'cadastros':
+      renderCadastros();
+      // A tabela de produtos (base oficial de 18/08/2026) vive no módulo
+      // de Devoluções e vem do servidor — carrega na primeira abertura.
+      if (typeof carregarCadastrosDev === 'function' && typeof devServidorOk === 'function' && devServidorOk()) {
+        if (typeof _devCadastrosCarregados !== 'undefined' && !_devCadastrosCarregados) carregarCadastrosDev();
+        else if (typeof renderProdutosDevUI === 'function') renderProdutosDevUI();
+      }
+      break;
     case 'historico':
       renderHistorico(); renderBuscaTimeline();
       // Se a carga aberta na timeline acabou de ser cancelada por aqui
@@ -1671,7 +1679,7 @@ function renderTorre(){
          mexeram nela pela última vez. 15 colunas viram 11. */
       '<th>Seq.</th><th>Nº Carga</th><th>Veículo</th>'
       + '<th>Motorista</th><th>Rota</th><th>Peso (kg)</th>'
-      + '<th>Palet.</th><th>Tipo de Operação</th><th>Ganchos</th><th>Status</th>'
+      + '<th>Palet.</th><th>Tipo de Operação</th><th title="Ganchos e quantidade de entregas">Ganchos · Entr.</th><th>Status</th>'
       + '<th>Datas</th>'
       + (podeCancelarCarga() ? '<th class="no-print">Ação</th>' : '');
   }
@@ -1708,9 +1716,14 @@ function renderTorre(){
       <td>${editavel ? paletizadaSelectHtml(c) : paletizadaDaCarga(c)}</td>
       <td>${editavel ? praOndeSelectHtml(c)
         : (c.praOnde ? `<span class="chip-praonde">${esc(PRA_ONDE_LABEL[c.praOnde]||c.praOnde)}</span>` : '<span class="text-dim">—</span>')}</td>
-      <td>${editavel
-        ? `<input type="number" class="ganchos-input" min="0" step="1" value="${c.qtdGanchos ?? 0}" onchange="atualizarGanchosUI('${escJs(c.id)}',this.value)" title="0 = Liso">`
-        : (c.qtdGanchos ? c.qtdGanchos : '<span class="text-dim">Liso</span>')}</td>
+      <td class="cel-gan-ent">${editavel
+        /* Entregas na Torre — pedido do gestor (18/08/2026): era o único
+           campo da carga sem edição aqui. Empilhado com Ganchos de
+           propósito: coluna nova alargaria a tabela e traria de volta a
+           rolagem lateral que foi eliminada em 11/08. */
+        ? `<input type="number" class="ganchos-input" min="0" step="1" value="${c.qtdGanchos ?? 0}" onchange="atualizarGanchosUI('${escJs(c.id)}',this.value)" title="Ganchos — 0 = Liso">
+           <input type="number" class="entregas-input" min="0" step="1" value="${c.qtdEntregas ?? 1}" onchange="atualizarEntregasUI('${escJs(c.id)}',this.value)" title="Quantidade de entregas.">`
+        : `${c.qtdGanchos ? c.qtdGanchos : '<span class="text-dim">Liso</span>'} · <span title="Entregas">${c.qtdEntregas ?? 1}</span>`}</td>
       <td>${badgeHtml(c.status)}</td>
       <td class="cel-datas">
         <span class="dt-prog">${dataProgramacaoHtml(c)}</span>
@@ -2583,12 +2596,42 @@ function acaoSaidaUI(){
   const input = document.getElementById('portaria-placa');
   const placa = input.value;
   if(!normalizarPlaca(placa)){ notify('Informe a placa.','warn'); return; }
-  const r = registrarSaidaPortaria(placa, nomeOperadorAtual());
-  if(r.liberadas.length){ notifyGravacao(`${normalizarPlaca(placa)}: saída registrada para ${r.liberadas.length} carga(s) — Seguiu Viagem.`); tocarBeepConfirmacao(); }
+  const campoLacre = document.getElementById('portaria-lacre');
+  const lacre = campoLacre ? campoLacre.value : '';
+  const r = registrarSaidaPortaria(placa, nomeOperadorAtual(), lacre);
+  if(r.liberadas.length && campoLacre) campoLacre.value = '';
+  if(r.liberadas.length){ notifyGravacao(`${normalizarPlaca(placa)}: saída registrada para ${r.liberadas.length} carga(s) — Seguiu Viagem${String(lacre||'').trim() ? `, lacre ${String(lacre).trim()}` : ''}.`); tocarBeepConfirmacao(); }
   if(r.pendentes.length) notify(`${normalizarPlaca(placa)}: ${r.pendentes.length} carga(s) ainda não liberada(s) para saída (status atual: ${r.pendentes.map(c=>c.status).join(', ')}).`, 'warn');
   if(!r.liberadas.length && !r.pendentes.length) notify(`Nenhuma carga em aberto encontrada para a placa ${normalizarPlaca(placa)}.`, 'warn');
   input.value = '';
   input.focus();
+  renderAll();
+}
+
+/* Retenção de lacre na inspeção da saída — pedido do gestor (18/08/2026).
+   O número retido fica na carga, o novo lacre vira o vigente e o motivo
+   entra nas observações (com quem registrou). */
+function registrarLacreRetidoUI(){
+  const v = (id)=> (document.getElementById(id)||{}).value || '';
+  const placa = v('lacre-ret-placa');
+  if(!normalizarPlaca(placa)){ notify('Informe a placa do caminhão.','warn'); return; }
+  const retido = v('lacre-ret-numero').trim();
+  if(!retido){ notify('Informe o número do lacre retido.','warn'); return; }
+  const r = registrarLacreRetido(placa, {
+    lacreRetido: retido,
+    novoLacre: v('lacre-ret-novo'),
+    motivo: v('lacre-ret-motivo'),
+    operador: nomeOperadorAtual(),
+  });
+  if(!r.atingidas.length){
+    notify(`Nenhuma carga encontrada para a placa ${normalizarPlaca(placa)} — nem saída de hoje, nem em aberto.`, 'warn', 7000);
+    return;
+  }
+  notifyGravacao(`${normalizarPlaca(placa)}: lacre ${retido} retido em ${r.atingidas.length} carga(s)`
+    + (v('lacre-ret-novo').trim() ? ` — novo lacre ${v('lacre-ret-novo').trim()}` : '') + '.');
+  tocarBeepConfirmacao();
+  ['lacre-ret-placa','lacre-ret-numero','lacre-ret-novo','lacre-ret-motivo']
+    .forEach(id=>{ const e=document.getElementById(id); if(e) e.value=''; });
   renderAll();
 }
 /* Fila da Portaria com ação direta por linha.
@@ -3455,7 +3498,11 @@ function renderTimelineCarga(id){
     ['Tipo de Operação', PRA_ONDE_LABEL[c.praOnde] || c.praOnde || '—'],
     ['Paletizada', paletizadaDaCarga(c)],
     ['Qtd. Ganchos', (c.qtdGanchos ? c.qtdGanchos : 'Liso')],
-    ['Qtd. Entregas', c.qtdEntregas ?? 1]
+    ['Qtd. Entregas', c.qtdEntregas ?? 1],
+    // Lacres (18/08/2026): só aparecem quando existem — carga que nunca
+    // saiu não precisa de duas linhas em branco na ficha.
+    ...(c.lacre ? [['Lacre', c.lacre]] : []),
+    ...(c.lacreRetido ? [['Lacre retido', c.lacreRetido]] : [])
   ];
 
   wrap.innerHTML = `

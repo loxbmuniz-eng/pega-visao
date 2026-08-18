@@ -325,6 +325,8 @@ const SuincoSharePoint = (function () {
       qtdGanchos: campos.Qtd_Ganchos || 0,
       qtdEntregas: campos.Qtd_Entregas,
       observacoes: campos.Observacoes || '',
+      lacre: campos.Lacre || '',
+      lacreRetido: campos.Lacre_Retido || '',
       programadoEm: campos.Programado_Em,
       status: campos.Status_Atual,
       aguardandoCarga: campos.Aguardando_Carga === true || campos.Aguardando_Carga === 'Sim',
@@ -356,6 +358,8 @@ const SuincoSharePoint = (function () {
          lia de volta, então a observação vivia só no navegador de quem
          digitou e o relatório saía em branco para todo mundo. */
       Observacoes: c.observacoes,
+      Lacre: c.lacre,
+      Lacre_Retido: c.lacreRetido,
       Status_Atual: c.status,
       Aguardando_Carga: c.aguardandoCarga,
       Criado_Em: c.criadoEm,

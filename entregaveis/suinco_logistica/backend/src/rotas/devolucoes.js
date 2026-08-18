@@ -568,17 +568,27 @@ rotasDevolucoes.post('/devolucoes/:id/restaurar', exigirLogin, exigirSetor(), as
 
 rotasDevolucoes.get('/devolucoes-cadastros', exigirLogin, async (req, res, next) => {
   try {
-    const [sup, prod, mot] = await Promise.all([
+    const [sup, prod, mot, rca] = await Promise.all([
       consultar('SELECT nome FROM dim_supervisores ORDER BY nome'),
-      consultar('SELECT codigo, nome, peso_caixa_kg FROM dim_produtos ORDER BY codigo'),
+      consultar(`SELECT codigo, nome, categoria, temperatura, validade, ean,
+                        peso_liquido_txt, peso_caixa_kg, ativo
+                   FROM dim_produtos ORDER BY codigo`),
       consultar('SELECT motivo FROM dim_motivos_devolucao ORDER BY motivo'),
+      consultar('SELECT nome FROM dim_representantes ORDER BY nome'),
     ]);
     res.json({
       supervisores: sup.rows.map((r) => r.nome),
+      representantes: rca.rows.map((r) => r.nome),
       produtos: prod.rows.map((r) => ({
         codigo: r.codigo,
         nome: r.nome,
+        categoria: r.categoria,
+        temperatura: r.temperatura,
+        validade: r.validade,
+        ean: r.ean,
+        pesoLiquidoTxt: r.peso_liquido_txt,
         pesoCaixaKg: r.peso_caixa_kg === null ? null : Number(r.peso_caixa_kg),
+        ativo: r.ativo,
       })),
       motivos: mot.rows.map((r) => r.motivo),
     });

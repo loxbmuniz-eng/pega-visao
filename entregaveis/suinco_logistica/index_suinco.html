@@ -327,6 +327,7 @@
          não select fechado: o cadastro cresce com o uso, e travar a digitação
          no primeiro dia pararia a operação. -->
     <datalist id="dl-dev-supervisores"></datalist>
+    <datalist id="dl-dev-rcas"></datalist>
     <datalist id="dl-dev-produtos"></datalist>
     <datalist id="dl-dev-motivos"></datalist>
 
@@ -342,10 +343,34 @@
       <div class="card-sub">Só 2 botões: <strong>Chegou</strong> (Aguardando Veículo → Aguardando Embarque) e <strong>Saiu</strong> (Faturado → Seguiu Viagem, aplicado a todas as cargas em aberto dessa placa ao mesmo tempo — é o mesmo caminhão, uma única vez). Se a placa não tiver programação, "Chegou" cria automaticamente uma entrada "Aguardando Carga".</div>
       <div class="quick-box">
         <div class="form-group"><label>Placa</label><input type="text" id="portaria-placa" placeholder="ABC1D23" autocomplete="off" onkeydown="if(event.key==='Enter')acaoChegadaUI()"></div>
+        <div class="form-group"><label>Nº do lacre <span class="hint">(na saída)</span></label>
+          <input type="text" id="portaria-lacre" placeholder="Ex: 133476" autocomplete="off"></div>
         <button class="btn btn-success btn-lg" onclick="acaoChegadaUI()">🚚 Chegou</button>
         <button class="btn btn-warn btn-lg" onclick="acaoSaidaUI()">🏁 Saiu</button>
       </div>
-      <div class="card-sub" style="margin-top:-6px">Dica: digite a placa e aperte <strong>Enter</strong> para registrar "Chegou" mais rápido.</div>
+      <div class="card-sub" style="margin-top:-6px">Dica: digite a placa e aperte <strong>Enter</strong> para registrar "Chegou" mais rápido.
+        No "Saiu", o número do lacre fica gravado nas cargas do caminhão.</div>
+    </div>
+
+    <!-- Lacre retido (pedido do gestor, 18/08/2026): o caminhão saiu para
+         inspeção com um lacre, a carga estava incorreta (ou outro motivo)
+         e o lacre foi recolhido — registra-se o número retido e o novo. -->
+    <div class="card">
+      <div class="card-title"><span class="icon">🔏</span> Lacre Retido</div>
+      <div class="card-sub">Quando a inspeção retém o lacre, registre aqui: o número retido fica
+        guardado na carga, o novo lacre (se houver) vira o vigente, e o motivo entra nas observações.</div>
+      <div class="form-row">
+        <div class="form-group"><label>Placa</label>
+          <input type="text" id="lacre-ret-placa" placeholder="ABC1D23" autocomplete="off"></div>
+        <div class="form-group"><label>Nº do lacre retido</label>
+          <input type="text" id="lacre-ret-numero" placeholder="Ex: 133476"></div>
+        <div class="form-group"><label>Novo lacre <span class="hint">(se houver)</span></label>
+          <input type="text" id="lacre-ret-novo" placeholder="Ex: 133480"></div>
+        <div class="form-group"><label>Motivo <span class="hint">(vai para as observações)</span></label>
+          <input type="text" id="lacre-ret-motivo" placeholder="Ex: carga incorreta"></div>
+        <div class="form-group" style="align-self:end">
+          <button class="btn btn-warn btn-sm" onclick="registrarLacreRetidoUI()">🔏 Registrar retenção</button></div>
+      </div>
     </div>
 
     <!-- Havia aqui uma linha solta de comentário, sem abertura nem
@@ -826,6 +851,22 @@
             <button class="btn btn-sec btn-sm" onclick="cadastrarMotivoDevUI()">➕ Motivo</button></div>
         </div>
         <div class="card-sub" id="cad-dev-resumo"></div>
+        <div class="sep"></div>
+        <!-- Base oficial de produtos (INFORMAÇÕES DE PRODUTOS, 18/08/2026) —
+             mesma pegada da tabela de Frota: lista completa com busca. -->
+        <div class="form-group" style="max-width:420px">
+          <label>Buscar produto</label>
+          <input type="text" id="cad-dev-prod-busca" placeholder="Código, nome ou categoria"
+                 oninput="renderProdutosDevUI()">
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Código</th><th>Produto</th><th>Categoria</th>
+              <th>Temp.</th><th>Validade</th><th>kg/cx</th><th>Ativo</th></tr></thead>
+            <tbody id="cad-dev-prod-tbody"></tbody>
+          </table>
+        </div>
+        <div class="card-sub" id="cad-dev-prod-contagem"></div>
       </div>
     </div>
   </div>

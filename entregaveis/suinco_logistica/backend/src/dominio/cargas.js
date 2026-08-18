@@ -73,6 +73,8 @@ export function paraPainel(linha) {
     qtdGanchos: linha.qtd_ganchos,
     qtdEntregas: linha.qtd_entregas,
     observacoes: linha.observacoes,
+    lacre: linha.lacre || '',
+    lacreRetido: linha.lacre_retido || '',
     status: linha.status_atual,
     aguardandoCarga: linha.aguardando_carga,
     criadoEm: linha.criado_em,
@@ -117,6 +119,11 @@ export function saneiarCriacao(corpo, frota) {
     qtd_ganchos: inteiro(corpo.qtdGanchos, 0),
     qtd_entregas: Math.max(1, inteiro(corpo.qtdEntregas, 1, 1)),
     observacoes: texto(corpo.observacoes, 2000),
+    // Lacres (migração 015): normalmente vazios na criação — nascem na
+    // saída — mas a fila offline pode subir uma carga que já saiu com
+    // lacre, e ignorá-los aqui perderia o número em silêncio.
+    lacre: texto(corpo.lacre, 50),
+    lacre_retido: texto(corpo.lacreRetido, 50),
     /* Data em que a CARGA foi lançada. Vem do painel porque ele pode estar
        subindo algo que ficou na fila offline — usar `now` aqui carimbaria a
        hora da sincronização, não a do lançamento. Ver migration 007. */
@@ -185,6 +192,8 @@ export function saneiarEdicao(corpo, camposPermitidos) {
     qtd_ganchos: () => inteiro(corpo.qtdGanchos, 0),
     qtd_entregas: () => Math.max(1, inteiro(corpo.qtdEntregas, 1, 1)),
     observacoes: () => texto(corpo.observacoes, 2000),
+    lacre: () => texto(corpo.lacre, 50),
+    lacre_retido: () => texto(corpo.lacreRetido, 50),
     programado_em: () => dataOuAgora(corpo.programadoEm),
     aguardando_carga: () => corpo.aguardandoCarga === true,
   };
@@ -196,6 +205,7 @@ export function saneiarEdicao(corpo, camposPermitidos) {
     qtd_ganchos: 'qtdGanchos', qtd_entregas: 'qtdEntregas',
     observacoes: 'observacoes', aguardando_carga: 'aguardandoCarga',
     programado_em: 'programadoEm',
+    lacre: 'lacre', lacre_retido: 'lacreRetido',
   };
 
   const saida = {};
@@ -259,6 +269,7 @@ export function camposDeAviso(antes, depois) {
 export const COLUNAS_CARGA = `
   carga_id, numero_carga, placa, transportadora, tipo_veiculo, motorista,
   cliente, destino, peso_kg, doca, rota_codigo, sequencia, pra_onde,
-  paletizada, qtd_ganchos, qtd_entregas, observacoes, status_atual,
+  paletizada, qtd_ganchos, qtd_entregas, observacoes, lacre, lacre_retido,
+  status_atual,
   aguardando_carga, criado_em, programado_em, atualizado_em, operador_id, operador_nome,
   operador_setor, versao, excluida_em, excluida_por`;
