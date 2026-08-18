@@ -355,6 +355,7 @@ rotasDevolucoes.post('/devolucoes/:id/etapa', exigirLogin, async (req, res, next
           põe('placa', String(req.body.placa).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10));
         }
         if (req.body?.motorista !== undefined) põe('motorista', String(req.body.motorista).slice(0, 200));
+        if (req.body?.transportadora !== undefined) põe('transportadora', String(req.body.transportadora).slice(0, 200));
         if (req.body?.lacre1 !== undefined) põe('lacre1', String(req.body.lacre1).slice(0, 50));
         if (req.body?.lacre2 !== undefined) põe('lacre2', String(req.body.lacre2).slice(0, 50));
         if (req.body?.cargaNumero !== undefined) põe('carga_numero', String(req.body.cargaNumero).slice(0, 50));
@@ -434,7 +435,7 @@ rotasDevolucoes.patch('/devolucoes/:id/itens/:itemId', exigirLogin, async (req, 
        tick de nota final. */
     const SO_CONFERENCIA = new Set(['qtd_recebida']);
     const SO_PESAGEM = new Set(['peso_faturamento']);
-    const SO_DESTINACAO = new Set(['destinacao']);
+    const SO_DESTINACAO = new Set(['destinacao', 'dest_estoque', 'dest_descarte', 'dest_reprocesso']);
     const SO_NOTA_FINAL = new Set(['nota_final']);
     const chaves = Object.keys(it);
     const permitido =
@@ -483,7 +484,10 @@ rotasDevolucoes.delete('/devolucoes/:id/itens/:itemId', exigirLogin, exigirSetor
 
 /* ---------- Divergências (o que chegou fora do checklist) ---------- */
 
-rotasDevolucoes.post('/devolucoes/:id/divergencias', exigirLogin, exigirSetor('Logística', 'Expedição'), async (req, res, next) => {
+/* Divergentes são escopo EXCLUSIVO dos Controles Internos (decisão do
+   usuário, 18/08/2026) — nem a Logística lança por eles. Administração
+   continua irrestrita, como em todo o painel. */
+rotasDevolucoes.post('/devolucoes/:id/divergencias', exigirLogin, exigirSetor('Controles Internos'), async (req, res, next) => {
   try {
     const op = req.operador;
     const codProduto = String(req.body?.codProduto ?? '').trim().slice(0, 50);
@@ -511,7 +515,7 @@ rotasDevolucoes.post('/devolucoes/:id/divergencias', exigirLogin, exigirSetor('L
   } catch (e) { next(e); }
 });
 
-rotasDevolucoes.delete('/devolucoes/:id/divergencias/:divId', exigirLogin, exigirSetor('Logística', 'Expedição'), async (req, res, next) => {
+rotasDevolucoes.delete('/devolucoes/:id/divergencias/:divId', exigirLogin, exigirSetor('Controles Internos'), async (req, res, next) => {
   try {
     const del = await consultar(
       'DELETE FROM devolucao_divergencias WHERE devolucao_id = $1 AND divergencia_id = $2 RETURNING divergencia_id',

@@ -3177,3 +3177,7 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
 #dev-pipeline{ margin-bottom:8px; }
 @keyframes suavez-pulsa{ 0%,100%{opacity:1} 50%{opacity:.72} }
 @media (prefers-reduced-motion: reduce){ .dev-chip-suavez{ animation:none; } }
+
+/* Destinação múltipla: três contadores de caixas (E/D/R) numa célula. */
+.dev-dest-grupo{ display:flex; gap:4px; }
+.dev-dest-grupo input{ width:52px; min-width:52px; text-align:center; }

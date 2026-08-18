@@ -111,20 +111,12 @@ async def main():
         await pgA.evaluate("() => abrirTab('devolucoes')")
         await pgA.wait_for_timeout(1500)
         await pgA.fill('#dev-regiao', 'DF')
-
-        # A placa puxa a Frota (pedido de 18/08/2026): transportadora vem
-        # do cadastro, não da digitação — e continua editável.
-        placa_frota = await pgA.evaluate("() => DB.frota[0].placa")
-        await pgA.fill('#dev-placa', placa_frota)
-        await pgA.wait_for_timeout(300)
-        auto = await pgA.evaluate("""() => ({
-            transp: document.getElementById('dev-transportadora').value,
-            hint: document.getElementById('dev-placa-hint').innerText })""")
-        ck('placa reconhecida puxa a transportadora da Frota',
-           bool(auto['transp']), str(auto)[:110])
-        ck('a dica confirma a placa na Frota', '✔' in auto['hint'], auto['hint'][:80])
-
-        await pgA.fill('#dev-transportadora', '83369')
+        # Decisão de 18/08: placa/transportadora/motorista NÃO estão no
+        # lançamento — são da Portaria no recebimento. O formulário das
+        # meninas tem o Cód. do operador (monitoramento).
+        sem_placa = await pgA.evaluate("() => !document.getElementById('dev-placa')")
+        ck('lançamento sem campos de placa/transportadora/motorista', sem_placa)
+        await pgA.fill('#dev-operador-cod', '102345')
         await pgA.select_option('#dev-rota', '500')
         await pgA.click('button:has-text("➕ Rota")')
         # A segunda rota fica SÓ no seletor — esquecer o clique no ➕ não
@@ -135,7 +127,10 @@ async def main():
         d0 = await pgA.evaluate("""() => DEVOLUCOES.length ? {
             id: DEVOLUCOES[0].id, numero: DEVOLUCOES[0].numero,
             rotas: DEVOLUCOES[0].rotas, regiao: DEVOLUCOES[0].regiao,
+            operadorCodigo: DEVOLUCOES[0].operadorCodigo,
             criadaPor: DEVOLUCOES[0].criadaPor, status: DEVOLUCOES[0].status } : null""")
+        ck('cód. do operador (monitoramento) gravado no lançamento',
+           d0 and d0['operadorCodigo'] == '102345', str(d0 and d0['operadorCodigo']))
         ck('checklist criado com número gerado', bool(d0 and d0['numero'] >= 1), str(d0))
         ck('as DUAS rotas ficaram no checklist',
            d0 and sorted(d0['rotas']) == ['500', '501'], str(d0 and d0['rotas']))
@@ -193,6 +188,17 @@ async def main():
         # Alinhamento de 18/08 (corrigido pelo usuário): os inputs da
         # Portaria são placa + motorista + LACRE. Nº da carga fica no
         # cabeçalho editável da Logística.
+        # A placa é da Portaria — e puxa a Frota: digitou, transportadora e
+        # motorista preenchem sozinhos (continuam editáveis).
+        placa_frota = await pgA.evaluate("() => DB.frota[0].placa")
+        await pgA.fill(f'#dev-et-{dev_id}-placa', placa_frota)
+        # O preenchimento pela Frota dispara ao SAIR do campo (change).
+        await pgA.dispatch_event(f'#dev-et-{dev_id}-placa', 'change')
+        await pgA.wait_for_timeout(400)
+        transp_auto = await pgA.evaluate(
+            f"() => document.getElementById('dev-et-{dev_id}-transportadora').value")
+        ck('placa da Portaria puxa a transportadora da Frota', bool(transp_auto),
+           repr(transp_auto[:50]))
         await pgA.fill(f'#dev-et-{dev_id}-motorista', 'Lucas Motorista')
         await pgA.fill(f'#dev-et-{dev_id}-lacre1', '133476')
         await pgA.click('button:has-text("Receber na Portaria")')

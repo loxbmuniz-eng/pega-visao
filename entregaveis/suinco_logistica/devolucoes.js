@@ -102,6 +102,13 @@ function podeNotaFinalDev() {
   const setor = (DB.operador || {}).setor;
   return podeEditarDevolucao() || setor === 'Central de Notas';
 }
+/* Divergentes: escopo EXCLUSIVO dos Controles Internos (decisão de
+   18/08/2026) — nem a Logística lança por eles; Administração é
+   irrestrita como no resto do painel. */
+function podeDivergenciaDev() {
+  const setor = (DB.operador || {}).setor;
+  return setor === 'Controles Internos' || setor === 'Administração';
+}
 
 /* A etapa cujo DONO é o meu setor — é ela que define a minha fila "SUA
    VEZ". Logística/Administração não têm uma só (cobrem todas): null. */
@@ -209,6 +216,17 @@ function devStatusChip(status) {
   const cls = status === 'Nota Finalizada' ? 'dev-chip-final'
     : pos <= 0 ? 'dev-chip-inicio' : 'dev-chip-meio';
   return `<span class="dev-chip ${cls}">${esc(status)}</span>`;
+}
+
+/* Resumo da destinação múltipla: "Estoque 1 · Descarte 2". A destinação
+   antiga (escolha única) entra no resumo se for o que existe. */
+function devDestinoResumo(i) {
+  const partes = [];
+  if (i.destEstoque) partes.push(`Estoque ${i.destEstoque.toLocaleString('pt-BR')}`);
+  if (i.destDescarte) partes.push(`Descarte ${i.destDescarte.toLocaleString('pt-BR')}`);
+  if (i.destReprocesso) partes.push(`Reprocesso ${i.destReprocesso.toLocaleString('pt-BR')}`);
+  if (!partes.length && i.destinacao) partes.push(i.destinacao);
+  return partes.join(' · ');
 }
 
 function devProdutoNomePorCodigo(codigo) {
@@ -349,7 +367,18 @@ function cabecalhoEditavelDev(d, editavel) {
         <button class="btn btn-sec btn-sm" onclick="incluirRotaDevolucaoUI('${escJs(d.id)}')">➕</button>
       </span>` : ''}
     </div>`;
+  /* Data da devolução editável (18/08/2026): as meninas lançam devoluções
+     de OUTRAS datas — a data escolhida decide em qual dia o checklist
+     aparece na lista e no relatório. */
+  const dataDev = String(d.dataDev || '').slice(0, 10);
+  const campoData = `<div><label>Data da devolução</label>
+      ${editavel
+        ? `<input type="date" value="${esc(dataDev)}"
+             onchange="editarDevolucaoCampoUI('${escJs(d.id)}','dataDev',this.value)">`
+        : `<div class="dev-ro">${esc(dataDev) || '—'}</div>`}
+    </div>`;
   return `${rotasChips}<div class="form-grid dev-cab-grid">
+      ${campoData}
       ${campo('Região', 'regiao', d.regiao)}
       ${campo('Transportadora', 'transportadora', d.transportadora)}
       ${campo('Nota de transferência', 'notaTransferencia', d.notaTransferencia)}
@@ -390,12 +419,14 @@ function acaoEtapaDev(d) {
   const id = escJs(d.id);
   let extras = '';
   if (etapa.pede === 'portaria') {
-    /* Alinhamento de 18/08/2026 (com correção do usuário na sequência): a
-       Portaria imputa a PLACA que voltou, o NOME DO MOTORISTA e o LACRE —
-       "lacre também é do escopo da portaria". Nº da carga fica no
-       cabeçalho editável da Logística. */
+    /* Decisão de 18/08/2026: a PORTARIA imputa placa, transportadora,
+       motorista e lacre(s) no recebimento. A placa puxa a Frota — digitou
+       e saiu do campo, transportadora e motorista preenchem sozinhos
+       (mesma lógica da Programação; continuam editáveis). */
     extras = `
-      <input type="text" id="dev-et-${esc(d.id)}-placa" placeholder="Placa que voltou" value="${esc(d.placa)}">
+      <input type="text" id="dev-et-${esc(d.id)}-placa" placeholder="Placa que voltou" value="${esc(d.placa)}"
+        onchange="frotaNaEtapaDevUI('${escJs(d.id)}')">
+      <input type="text" id="dev-et-${esc(d.id)}-transportadora" placeholder="Transportadora" value="${esc(d.transportadora)}">
       <input type="text" id="dev-et-${esc(d.id)}-motorista" placeholder="Nome do motorista" value="${esc(d.motorista)}">
       <input type="text" id="dev-et-${esc(d.id)}-lacre1" placeholder="Lacre 1" value="${esc(d.lacre1)}">
       <input type="text" id="dev-et-${esc(d.id)}-lacre2" placeholder="Lacre 2 (se houver)" value="${esc(d.lacre2)}">`;
@@ -438,6 +469,8 @@ function renderDevolucaoAberta(d, editavel) {
       <td>${cel('codProduto', i.codProduto, 'text', 'list="dl-dev-produtos"')}
           ${i.produtoNome ? `<small class="text-dim">${esc(i.produtoNome)}</small>` : ''}</td>
       <td>${cel('numDev', i.numDev)}</td>
+      <td>${cel('dataItem', String(i.dataItem || '').slice(0, 10), 'date',
+        'title="Data desta devolução (coluna DATA-DEV da capa)."')}</td>
       <td>${cel('motivo', i.motivo, 'text', 'list="dl-dev-motivos"')}</td>
       <td class="c-peso">${podePesarItemDev()
         ? `<input type="number" min="0" step="0.01" value="${i.pesoFaturamento ?? ''}" placeholder="—"
@@ -450,12 +483,21 @@ function renderDevolucaoAberta(d, editavel) {
              onchange="editarItemDevolucaoUI('${escJs(d.id)}',${i.itemId},'qtdRecebida',this.value)">`
         : (i.qtdRecebida ?? '—')}</td>
       <td>${faltaHtml}</td>
-      <td>${podeDestinarDev()
-        ? `<select onchange="editarItemDevolucaoUI('${escJs(d.id)}',${i.itemId},'destinacao',this.value)">
-             <option value="">—</option>
-             ${['Estoque', 'Descarte', 'Reprocesso'].map((x) => `<option ${i.destinacao === x ? 'selected' : ''}>${x}</option>`).join('')}
-           </select>`
-        : (esc(i.destinacao) || '—')}</td>
+      <td class="dev-cel-dest">${podeDestinarDev()
+        /* Destinação MÚLTIPLA (18/08/2026): caixas por destino — 3 caixas
+           podem virar 1 Estoque + 2 Descarte. */
+        ? `<span class="dev-dest-grupo">
+             <input type="number" min="0" step="1" value="${i.destEstoque ?? ''}" placeholder="E"
+               title="Caixas para ESTOQUE"
+               onchange="editarItemDevolucaoUI('${escJs(d.id)}',${i.itemId},'destEstoque',this.value)">
+             <input type="number" min="0" step="1" value="${i.destDescarte ?? ''}" placeholder="D"
+               title="Caixas para DESCARTE"
+               onchange="editarItemDevolucaoUI('${escJs(d.id)}',${i.itemId},'destDescarte',this.value)">
+             <input type="number" min="0" step="1" value="${i.destReprocesso ?? ''}" placeholder="R"
+               title="Caixas para REPROCESSO"
+               onchange="editarItemDevolucaoUI('${escJs(d.id)}',${i.itemId},'destReprocesso',this.value)">
+           </span>`
+        : esc(devDestinoResumo(i)) || '—'}</td>
       <td class="dev-cel-notafinal">${podeNotaFinalDev()
         ? `<input type="checkbox" ${i.notaFinal ? 'checked' : ''}
              title="NOTA FINAL — marque quando a nota deste item estiver finalizada (Central de Notas)."
@@ -478,6 +520,8 @@ function renderDevolucaoAberta(d, editavel) {
       <td class="c-peso"><input type="number" min="0" step="0.01" id="dev-ni-${esc(d.id)}-peso" placeholder="Peso"></td>
       <td><input type="text" id="dev-ni-${esc(d.id)}-produto" list="dl-dev-produtos" placeholder="Cód. produto"></td>
       <td><input type="text" id="dev-ni-${esc(d.id)}-numdev" placeholder="Nº DEV"></td>
+      <td><input type="date" id="dev-ni-${esc(d.id)}-dataitem" value="${esc(String(d.dataDev || '').slice(0, 10))}"
+            title="Data desta devolução — vem com o dia do checklist, mude se for de outra data."></td>
       <td><input type="text" id="dev-ni-${esc(d.id)}-motivo" list="dl-dev-motivos" placeholder="Motivo"></td>
       <td colspan="5"></td>
       <td class="no-print"><button class="btn btn-sm" onclick="adicionarItemDevolucaoUI('${escJs(d.id)}')"
@@ -492,11 +536,11 @@ function renderDevolucaoAberta(d, editavel) {
           ${v.produtoNome ? esc(v.produtoNome) : ''}
           ${v.observacao ? `<span class="text-dim">— ${esc(v.observacao)}</span>` : ''}
           <span class="text-dim">(${esc(v.lancadaPor)})</span>
-          ${podeEditarDevolucao() ? `<button class="btn btn-danger btn-sm"
+          ${podeDivergenciaDev() ? `<button class="btn btn-danger btn-sm"
             onclick="excluirDivergenciaDevolucaoUI('${escJs(d.id)}',${v.divergenciaId})">✕</button>` : ''}
         </li>`).join('')}</ul>`
-      : '<div class="card-sub">Nenhum — o que chegou fora da lista entra aqui e NÃO cancela a falta do item substituído.</div>'}
-      ${podeEditarDevolucao() ? `<div class="dev-diverg-form">
+      : '<div class="card-sub">Nenhum — o que chegou fora da lista entra aqui (lançado pelos CONTROLES INTERNOS) e NÃO cancela a falta do item substituído.</div>'}
+      ${podeDivergenciaDev() ? `<div class="dev-diverg-form">
           <input type="text" id="dev-dv-${esc(d.id)}-produto" list="dl-dev-produtos" placeholder="Cód. produto">
           <input type="number" min="0" step="1" id="dev-dv-${esc(d.id)}-cx" placeholder="CX">
           <input type="text" id="dev-dv-${esc(d.id)}-obs" placeholder="Observação (ex: veio no lugar do 30110)">
@@ -514,7 +558,7 @@ function renderDevolucaoAberta(d, editavel) {
           <thead><tr>
             <th>Nota</th><th>P/T</th><th>Supervisor</th><th title="Vendedor">RCA</th>
             <th>Cód. Cliente</th><th>CX</th><th>Peso</th><th>Cód. Produto</th>
-            <th>Nº DEV</th><th>Motivo</th>
+            <th>Nº DEV</th><th title="Coluna DATA-DEV da capa">Data DEV</th><th>Motivo</th>
             <th title="Pesagem do Faturamento — confirma que passou pela balança">Pesagem</th>
             <th title="Conferência da descarga: quantidade recebida">Expedição</th><th>Falta</th>
             <th>Destinação</th>
@@ -582,21 +626,21 @@ async function criarDevolucaoUI() {
   const rotas = _devRotasNovas.slice();
   if (noSeletor && !rotas.includes(noSeletor)) rotas.push(noSeletor);
   if (!rotas.length) { notify('Escolha pelo menos uma rota — região + rotas identificam o checklist.', 'warn'); return; }
+  /* Placa/transportadora/motorista ficaram com a PORTARIA (decisão de
+     18/08/2026) — as meninas lançam região, rotas, NT e o código do
+     operador do monitoramento. */
   const corpo = {
     dataDev: v('dev-data') || diaLocalDev(),
     rotas,
     regiao: v('dev-regiao'),
-    transportadora: v('dev-transportadora'),
     notaTransferencia: v('dev-nota-transf'),
-    placa: v('dev-placa'),
-    motorista: v('dev-motorista'),
     operadorCodigo: v('dev-operador-cod'),
     itens: [],
   };
   try {
     const d = await SuincoSharePoint.devolucoes.criar(corpo);
     notify(`Checklist Nº ${d.numero} criado (${devRotulo(d)}). Agora lance os itens na linha do próprio checklist.`, 'success', 6000);
-    ['dev-regiao', 'dev-transportadora', 'dev-nota-transf', 'dev-placa', 'dev-motorista']
+    ['dev-regiao', 'dev-nota-transf', 'dev-operador-cod']
       .forEach((id) => { const e = document.getElementById(id); if (e) e.value = ''; });
     _devRotasNovas = [];
     renderRotasNovasDev();
@@ -630,6 +674,15 @@ function incluirRotaDevolucaoUI(id) {
 }
 
 function editarDevolucaoCampoUI(id, campo, valor) {
+  /* Mudou a DATA do checklist: a lista filtra por dia, então ele "muda de
+     página". Avisar evita o susto de "sumiu" — e o filtro acompanha. */
+  if (campo === 'dataDev' && /^\d{4}-\d{2}-\d{2}$/.test(String(valor))) {
+    const filtro = document.getElementById('dev-filtro-dia');
+    if (filtro && filtro.value !== valor) {
+      filtro.value = valor;
+      notify(`Checklist movido para o dia ${valor.split('-').reverse().join('/')} — o filtro da lista acompanhou.`, 'info', 6000);
+    }
+  }
   let corpo = { [campo]: valor };
   /* Trocar a PLACA num checklist já criado também puxa a Frota — mesma
      regra do formulário: transportadora e motorista vêm do cadastro, não
@@ -662,10 +715,14 @@ function avancarEtapaDevolucaoUI(id) {
   const v = (sufixo) => (document.getElementById(`dev-et-${id}-${sufixo}`) || {}).value;
   const corpo = { para: etapa.proxima };
   if (etapa.pede === 'portaria') {
-    corpo.placa = v('placa') || '';
-    corpo.motorista = v('motorista') || '';
-    corpo.lacre1 = v('lacre1') || '';
-    corpo.lacre2 = v('lacre2') || '';
+    /* Só manda o que foi PREENCHIDO: campo vazio do porteiro não pode
+       apagar um valor que a Logística já tenha posto no cabeçalho. */
+    const põeSe = (chave, valor) => { if (String(valor || '').trim()) corpo[chave] = valor; };
+    põeSe('placa', v('placa'));
+    põeSe('transportadora', v('transportadora'));
+    põeSe('motorista', v('motorista'));
+    põeSe('lacre1', v('lacre1'));
+    põeSe('lacre2', v('lacre2'));
   } else if (etapa.pede === 'faturamento') {
     corpo.pesoFinal = v('peso') || '';
   } else if (etapa.pede === 'controles') {
@@ -716,7 +773,9 @@ function adicionarItemDevolucaoUI(id) {
     produtoNome: devProdutoNomePorCodigo(codProduto),
     numDev: v('numdev'),
     motivo: v('motivo'),
-    dataItem: (document.getElementById('dev-filtro-dia') || {}).value || diaLocalDev(),
+    // A data da linha vem do campo Data DEV (a coluna da capa); sem ele,
+    // cai no dia do filtro.
+    dataItem: v('dataitem') || (document.getElementById('dev-filtro-dia') || {}).value || diaLocalDev(),
   };
   if (!corpo.nota && !codProduto) {
     notify('Preencha ao menos a nota fiscal ou o código do produto.', 'warn');
@@ -871,7 +930,7 @@ async function relatorioDevolucoesUI() {
       <table class="dev-doc-tabela">
         <thead><tr>
           <th>Nota</th><th>P/T</th><th>Supervisor</th><th title="Vendedor">RCA</th><th>Cód. Cliente</th>
-          <th>CX</th><th>Peso</th><th>Produto</th><th>Nº DEV</th><th>Motivo</th>
+          <th>CX</th><th>Peso</th><th>Produto</th><th>Nº DEV</th><th>Data DEV</th><th>Motivo</th>
           <th>Pesagem</th><th>Expedição</th><th>Falta</th><th>Destinação</th><th>Nota final</th>
         </tr></thead>
         <tbody>${d.itens.map((i) => `<tr${i.falta > 0 ? ' class="dev-doc-falta"' : ''}>
@@ -880,11 +939,13 @@ async function relatorioDevolucoesUI() {
             <td class="c-peso">${i.cx.toLocaleString('pt-BR')}</td>
             <td class="c-peso">${i.peso !== null ? i.peso.toLocaleString('pt-BR') : '—'}</td>
             <td>${esc(i.codProduto)}${i.produtoNome ? '-' + esc(i.produtoNome) : ''}</td>
-            <td>${esc(i.numDev)}</td><td>${esc(i.motivo)}</td>
+            <td>${esc(i.numDev)}</td>
+            <td>${i.dataItem ? esc(String(i.dataItem).slice(0, 10).split('-').reverse().join('/')) : '—'}</td>
+            <td>${esc(i.motivo)}</td>
             <td class="c-peso">${i.pesoFaturamento !== null ? i.pesoFaturamento.toLocaleString('pt-BR') : '—'}</td>
             <td class="c-peso">${i.qtdRecebida ?? '—'}</td>
             <td class="c-peso">${i.falta === null ? '—' : (i.falta > 0 ? 'FALTA ' + i.falta.toLocaleString('pt-BR') : 'OK')}</td>
-            <td>${esc(i.destinacao) || '—'}</td>
+            <td>${esc(devDestinoResumo(i)) || '—'}</td>
             <td>${i.notaFinal ? '✔' : '—'}</td>
           </tr>`).join('')}</tbody>
       </table>
@@ -1077,34 +1138,31 @@ async function exportarCadastroDevCsv(qual) {
   }
 }
 
-/* ---------- placa puxa a Frota (pedido de 18/08/2026) ----------
-   Mesma regra das cargas: quem sabe a transportadora e o motorista da
-   placa é o cadastro de Frota, não a digitação. Ao reconhecer a placa,
-   transportadora e motorista preenchem sozinhos — e continuam editáveis,
-   porque nesta viagem o motorista pode ser outro. Placa fora da Frota só
-   AVISA (a devolução chega em caminhão de transportadora, que deveria
-   estar na base — mas o checklist não pode travar por causa disso). */
-function previewFrotaDevolucao() {
-  const campo = document.getElementById('dev-placa');
-  const hint = document.getElementById('dev-placa-hint');
-  if (!campo) return;
-  const p = normalizarPlaca(campo.value);
-  if (!hint) return;
-  if (!p) { hint.textContent = ''; return; }
+/* ---------- placa puxa a Frota no recebimento da PORTARIA ----------
+   Decisão de 18/08/2026: placa/transportadora/motorista são inputs da
+   Portaria (saíram do lançamento das meninas). Quem sabe a transportadora
+   e o motorista da placa é o cadastro de Frota, não a digitação: o
+   porteiro digita a placa e os dois campos preenchem sozinhos — e
+   continuam editáveis (motorista substituto existe). Placa fora da Frota
+   só AVISA: devolução não pode travar por cadastro faltando. */
+function frotaNaEtapaDevUI(devId) {
+  const v = (sufixo) => document.getElementById(`dev-et-${devId}-${sufixo}`);
+  const campoPlaca = v('placa');
+  if (!campoPlaca) return;
+  const p = normalizarPlaca(campoPlaca.value);
+  if (!p) return;
   const f = (typeof buscarFrota === 'function') ? buscarFrota(p) : null;
   if (!f) {
-    hint.textContent = p.length >= 7
-      ? `⚠ ${p} não está no cadastro de Frota — confira a placa (dá para criar mesmo assim).`
-      : '';
+    if (p.length >= 7) {
+      notify(`⚠ ${p} não está no cadastro de Frota — confira a placa (dá para receber mesmo assim).`, 'warn', 6000);
+    }
     return;
   }
-  const vT = document.getElementById('dev-transportadora');
-  const vM = document.getElementById('dev-motorista');
+  const vT = v('transportadora');
+  const vM = v('motorista');
   if (vT && f.transportadora) vT.value = f.transportadora;
   if (vM && f.motorista) vM.value = f.motorista;
-  hint.textContent = `✔ ${p} · ${f.transportadora || 'sem transportadora'}`
-    + `${f.tipoVeiculo ? ' · ' + f.tipoVeiculo : ''}`
-    + `${f.motorista ? ' · ' + f.motorista : ''}`;
+  notify(`✔ ${p} reconhecida na Frota — ${[f.transportadora, f.motorista].filter(Boolean).join(' · ')}.`, 'info');
 }
 
 /* ---------- cliente puxa RCA e supervisor (pedido de 18/08/2026) ----------

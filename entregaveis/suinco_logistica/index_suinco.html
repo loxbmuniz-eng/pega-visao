@@ -306,15 +306,13 @@
             <input type="text" id="dev-transportadora" placeholder="Ex: 83369"></div>
           <div><label for="dev-nota-transf">Nota de transferência</label>
             <input type="text" id="dev-nota-transf" placeholder="Ex: 171218"></div>
-          <div><label for="dev-placa">Placa do caminhão</label>
-            <input type="text" id="dev-placa" placeholder="Ex: GFR8A80"
-                   oninput="previewFrotaDevolucao()">
-            <div class="card-sub" id="dev-placa-hint" style="margin:4px 0 0"></div></div>
-          <div><label for="dev-motorista">Motorista</label>
-            <input type="text" id="dev-motorista"></div>
           <div><label for="dev-operador-cod">Cód. operador <span class="hint">(monitoramento)</span></label>
             <input type="text" id="dev-operador-cod"
                    title="Número informado pelo monitoramento — é sob ele que as devoluções são lançadas."></div>
+          <!-- Placa, transportadora e motorista NÃO entram aqui (decisão
+               de 18/08/2026): é a PORTARIA quem os imputa no recebimento,
+               olhando o caminhão que voltou — a Frota preenche
+               transportadora e motorista pela placa. -->
         </div>
         <div class="flex-end" style="margin-top:12px">
           <button class="btn" onclick="criarDevolucaoUI()">➕ Criar checklist</button>
