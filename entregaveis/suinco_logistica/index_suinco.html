@@ -330,6 +330,7 @@
          no primeiro dia pararia a operação. -->
     <datalist id="dl-dev-supervisores"></datalist>
     <datalist id="dl-dev-rcas"></datalist>
+    <datalist id="dl-dev-clientes"></datalist>
     <datalist id="dl-dev-produtos"></datalist>
     <datalist id="dl-dev-motivos"></datalist>
 
@@ -861,6 +862,21 @@
           <div class="form-group" style="align-self:end">
             <button class="btn btn-sec btn-sm" onclick="cadastrarMotivoDevUI()">➕ Motivo</button></div>
         </div>
+        <!-- Cliente → RCA → supervisor (18/08/2026): o código do cliente
+             puxa o vínculo no lançamento, como a placa puxa a Frota. A
+             base também APRENDE sozinha de cada item de checklist gravado. -->
+        <div class="form-row">
+          <div class="form-group"><label>Cód. cliente</label>
+            <input type="text" id="cad-dev-cli-codigo" placeholder="Ex: AREAL"></div>
+          <div class="form-group"><label>Nome <span class="hint">opcional</span></label>
+            <input type="text" id="cad-dev-cli-nome"></div>
+          <div class="form-group"><label>RCA</label>
+            <input type="text" id="cad-dev-cli-rca" list="dl-dev-rcas"></div>
+          <div class="form-group"><label>Supervisor</label>
+            <input type="text" id="cad-dev-cli-supervisor" list="dl-dev-supervisores"></div>
+          <div class="form-group" style="align-self:end">
+            <button class="btn btn-sec btn-sm" onclick="cadastrarClienteDevUI()">➕ Cliente</button></div>
+        </div>
         <div class="card-sub" id="cad-dev-resumo"></div>
         <div class="gap8">
           <button class="btn btn-sec btn-sm" onclick="exportarCadastroDevCsv('produtos')"
@@ -868,6 +884,7 @@
           <button class="btn btn-sec btn-sm" onclick="exportarCadastroDevCsv('supervisores')">⬇ Supervisores CSV</button>
           <button class="btn btn-sec btn-sm" onclick="exportarCadastroDevCsv('representantes')">⬇ Representantes CSV</button>
           <button class="btn btn-sec btn-sm" onclick="exportarCadastroDevCsv('motivos')">⬇ Motivos CSV</button>
+          <button class="btn btn-sec btn-sm" onclick="exportarCadastroDevCsv('clientes')">⬇ Clientes CSV</button>
         </div>
         <div class="sep"></div>
         <!-- Base oficial de produtos (INFORMAÇÕES DE PRODUTOS, 18/08/2026) —

@@ -456,6 +456,46 @@ describe('6. Cadastros de apoio e exclusão', () => {
     assert.equal(r.status, 403);
   });
 
+  test('cliente vincula RCA e supervisor — cadastro e APRENDIZADO automático', async () => {
+    await pool.query("DELETE FROM dim_clientes WHERE codigo IN ('AREAL','SENDAS')");
+
+    // Cadastro manual: código → RCA (com código) → supervisor (com código).
+    const c = await req('/api/devolucoes-cadastros/clientes', {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { codigo: 'AREAL', vendedor: '80031 - L Marinho', supervisor: '101454 - Makson Werlly' },
+    });
+    assert.equal(c.status, 201, c.texto);
+    let lista = await req('/api/devolucoes-cadastros', { token: tokens['Logística'] });
+    let areal = lista.json.clientes.find((x) => x.codigo === 'AREAL');
+    assert.equal(areal.vendedor, '80031 - L Marinho');
+    assert.equal(areal.supervisor, '101454 - Makson Werlly');
+
+    // Aprendizado: um item gravado com cliente novo ENSINA o vínculo.
+    const dev = await req('/api/devolucoes', {
+      metodo: 'POST', token: tokens['Logística'], corpo: novoChecklist({ itens: [] }),
+    });
+    const item = await req(`/api/devolucoes/${dev.json.id}/itens`, {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { nota: '669627', codCliente: 'SENDAS', vendedor: '80235 - Carlos Eduardo',
+               supervisor: '101781 - Manoel Antonio', cx: 2 },
+    });
+    assert.equal(item.status, 201, item.texto);
+    lista = await req('/api/devolucoes-cadastros', { token: tokens['Logística'] });
+    const sendas = lista.json.clientes.find((x) => x.codigo === 'SENDAS');
+    assert.ok(sendas, 'cliente aprendido do item');
+    assert.equal(sendas.vendedor, '80235 - Carlos Eduardo');
+    assert.equal(sendas.supervisor, '101781 - Manoel Antonio');
+
+    // Item posterior SEM RCA/supervisor não apaga o que a base já sabe.
+    await req(`/api/devolucoes/${dev.json.id}/itens`, {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { nota: '669628', codCliente: 'SENDAS', cx: 1 },
+    });
+    lista = await req('/api/devolucoes-cadastros', { token: tokens['Logística'] });
+    const dePois = lista.json.clientes.find((x) => x.codigo === 'SENDAS');
+    assert.equal(dePois.vendedor, '80235 - Carlos Eduardo', 'vazio não apaga o vínculo');
+  });
+
   test('exclusão é suave: some da lista, mas a linha e as revisões ficam', async () => {
     const c = await req('/api/devolucoes', { metodo: 'POST', token: tokens['Logística'], corpo: novoChecklist() });
     const del = await req(`/api/devolucoes/${c.json.id}`, { metodo: 'DELETE', token: tokens['Logística'] });
