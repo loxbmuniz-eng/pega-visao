@@ -232,6 +232,8 @@ rotasDevolucoes.get('/devolucoes/:id', exigirLogin, async (req, res, next) => {
 const CAMPOS_CABECALHO_PORTARIA = new Set([
   'placa', 'transportadora', 'motorista', 'carga_numero',
   'lacre1', 'lacre2', 'nota_transferencia',
+  // "Chegou lacrado?" é a resposta do porteiro no recebimento (18/08/2026).
+  'chegou_lacrado',
 ]);
 
 rotasDevolucoes.patch('/devolucoes/:id', exigirLogin, async (req, res, next) => {
@@ -386,6 +388,14 @@ rotasDevolucoes.post('/devolucoes/:id/etapa', exigirLogin, async (req, res, next
         if (req.body?.lacre1 !== undefined) põe('lacre1', String(req.body.lacre1).slice(0, 50));
         if (req.body?.lacre2 !== undefined) põe('lacre2', String(req.body.lacre2).slice(0, 50));
         if (req.body?.cargaNumero !== undefined) põe('carga_numero', String(req.body.cargaNumero).slice(0, 50));
+        if (req.body?.chegouLacrado !== undefined) {
+          /* Chegou lacrado? A Portaria responde no recebimento: veio
+             lacrado (com número) ou veio SEM lacre. Nenhuma das duas
+             respostas trava a devolução — as duas só precisam ficar
+             registradas. */
+          põe('chegou_lacrado', req.body.chegouLacrado === null || req.body.chegouLacrado === ''
+            ? null : (req.body.chegouLacrado === false || req.body.chegouLacrado === 'false' ? false : true));
+        }
       }
       if (regra.carimbo === 'faturamento' && req.body?.pesoFinal !== undefined) {
         const n = Number(req.body.pesoFinal);
@@ -609,7 +619,7 @@ rotasDevolucoes.post('/devolucoes/:id/restaurar', exigirLogin, exigirSetor(), as
             lacre1 = $8, lacre2 = $9, peso_final = $10, status = $11,
             obs_controles = $12, observacoes = $13,
             operador_codigo = COALESCE($27, operador_codigo),
-            gerou_rdc = $28,
+            gerou_rdc = $28, chegou_lacrado = $29,
             portaria_por = $14, portaria_em = $15,
             faturamento_por = $16, faturamento_em = $17,
             expedicao_por = $18, expedicao_em = $19,
@@ -633,8 +643,9 @@ rotasDevolucoes.post('/devolucoes/:id/restaurar', exigirLogin, exigirSetor(), as
          // mantém o valor atual em vez de apagar com null.
          d.operador_codigo ?? null,
          // gerou_rdc restaura direto (pré-022 volta a "não informado", que
-         // é o retrato fiel daquela época).
-         d.gerou_rdc ?? null]
+         // é o retrato fiel daquela época). Mesma coisa para chegou_lacrado.
+         d.gerou_rdc ?? null,
+         d.chegou_lacrado ?? null]
       );
       if (!upd.rows[0]) {
         const e = new Error('Devolução não encontrada.');

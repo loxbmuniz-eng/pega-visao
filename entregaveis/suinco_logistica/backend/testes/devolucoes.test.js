@@ -803,3 +803,54 @@ describe('9. A mesma nota em duas parciais (caso real de 18/08/2026)', () => {
     assert.equal(r.status, 403);
   });
 });
+
+/* ------------------------------------------------------------------ */
+describe('10. Lacre na devolução: informa, não trava (18/08/2026)', () => {
+  /* Decisão do dia: o lacre da Expedição NÃO vira bloqueio na Portaria. A
+     Portaria só informa — chegou lacrado (com número) ou chegou SEM lacre.
+     "Sem lacre" precisa ser dito, não deduzido de campo vazio. */
+  test('recebimento com lacre: número e resposta ficam gravados', async () => {
+    const c = await req('/api/devolucoes', { metodo: 'POST', token: tokens['Logística'], corpo: novoChecklist() });
+    const r = await req(`/api/devolucoes/${c.json.id}/etapa`, {
+      metodo: 'POST', token: tokens['Portaria'],
+      corpo: { para: 'Recebida na Portaria', chegouLacrado: true, lacre1: '133476' },
+    });
+    assert.equal(r.status, 200, r.texto);
+    assert.equal(r.json.chegouLacrado, true);
+    assert.equal(r.json.lacre1, '133476');
+  });
+
+  test('recebimento SEM lacre passa igual, com a resposta registrada', async () => {
+    const c = await req('/api/devolucoes', { metodo: 'POST', token: tokens['Logística'], corpo: novoChecklist() });
+    const r = await req(`/api/devolucoes/${c.json.id}/etapa`, {
+      metodo: 'POST', token: tokens['Portaria'],
+      corpo: { para: 'Recebida na Portaria', chegouLacrado: 'false' },
+    });
+    assert.equal(r.status, 200, r.texto);
+    assert.equal(r.json.chegouLacrado, false, 'sem lacre é resposta, não ausência');
+    assert.equal(r.json.status, 'Recebida na Portaria', 'a devolução anda mesmo sem lacre');
+  });
+
+  test('não informar também passa — fica null, para ninguém inventar resposta', async () => {
+    const c = await req('/api/devolucoes', { metodo: 'POST', token: tokens['Logística'], corpo: novoChecklist() });
+    const r = await req(`/api/devolucoes/${c.json.id}/etapa`, {
+      metodo: 'POST', token: tokens['Portaria'], corpo: { para: 'Recebida na Portaria' },
+    });
+    assert.equal(r.status, 200, r.texto);
+    assert.equal(r.json.chegouLacrado, null);
+  });
+
+  test('a Portaria corrige a resposta depois, pelo cabeçalho', async () => {
+    const c = await req('/api/devolucoes', { metodo: 'POST', token: tokens['Logística'], corpo: novoChecklist() });
+    const r = await req(`/api/devolucoes/${c.json.id}`, {
+      metodo: 'PATCH', token: tokens['Portaria'], corpo: { chegouLacrado: false },
+    });
+    assert.equal(r.status, 200, r.texto);
+    assert.equal(r.json.chegouLacrado, false);
+    // Continua sendo campo do posto da Portaria: a Expedição não escreve.
+    const exp = await req(`/api/devolucoes/${c.json.id}`, {
+      metodo: 'PATCH', token: tokens['Expedição'], corpo: { chegouLacrado: true },
+    });
+    assert.equal(exp.status, 403);
+  });
+});

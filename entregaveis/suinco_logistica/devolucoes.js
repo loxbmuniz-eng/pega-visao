@@ -398,6 +398,16 @@ function cabecalhoEditavelDev(d, editavel) {
       ${campo('Cód. operador (monitoramento)', 'operadorCodigo', d.operadorCodigo,
         'title="Número informado pelo monitoramento — é sob ele que as devoluções são lançadas."')}
       ${campo('Nº carga', 'cargaNumero', d.cargaNumero, '', true)}
+      <div><label>Chegou lacrado?</label>
+        ${(editavel || portariaEdita)
+          ? `<select title="Resposta da Portaria no recebimento — informação, não trava nada."
+               onchange="editarDevolucaoCampoUI('${escJs(d.id)}','chegouLacrado',this.value)">
+               <option value=""${d.chegouLacrado === null || d.chegouLacrado === undefined ? ' selected' : ''}>(não informado)</option>
+               <option value="true"${d.chegouLacrado === true ? ' selected' : ''}>Sim — chegou lacrado</option>
+               <option value="false"${d.chegouLacrado === false ? ' selected' : ''}>Não — chegou sem lacre</option>
+             </select>`
+          : `<div class="dev-ro">${d.chegouLacrado === true ? 'Sim — lacrado' : d.chegouLacrado === false ? 'Não — sem lacre' : '—'}</div>`}
+      </div>
       ${campo('Lacre 1', 'lacre1', d.lacre1, '', true)}
       ${campo('Lacre 2', 'lacre2', d.lacre2, '', true)}
       <div><label>Peso final (Faturamento)</label>
@@ -459,6 +469,12 @@ function acaoEtapaDev(d) {
        e saiu do campo, transportadora e motorista preenchem sozinhos
        (mesma lógica da Programação; continuam editáveis). */
     extras = `
+      <select id="dev-et-${esc(d.id)}-lacrado" title="O caminhão chegou lacrado?"
+        onchange="mostrarLacreDevUI('${escJs(d.id)}')">
+        <option value=""${d.chegouLacrado === null || d.chegouLacrado === undefined ? ' selected' : ''}>Chegou lacrado? (informar)</option>
+        <option value="true"${d.chegouLacrado === true ? ' selected' : ''}>Sim — chegou LACRADO</option>
+        <option value="false"${d.chegouLacrado === false ? ' selected' : ''}>Não — chegou SEM lacre</option>
+      </select>
       <input type="text" id="dev-et-${esc(d.id)}-placa" placeholder="Placa que voltou" value="${esc(d.placa)}"
         onchange="frotaNaEtapaDevUI('${escJs(d.id)}')">
       <input type="text" id="dev-et-${esc(d.id)}-transportadora" placeholder="Transportadora" value="${esc(d.transportadora)}">
@@ -632,6 +648,11 @@ function renderDevolucaoAberta(d, editavel) {
       ${d.obsControles ? `<div class="card-sub"><strong>Obs. Controles Internos:</strong> ${esc(d.obsControles)}</div>` : ''}
       ${d.gerouRdc !== null && d.gerouRdc !== undefined
         ? `<div class="card-sub"><strong>RDC (romaneio):</strong> ${d.gerouRdc ? 'Sim — gerado' : 'Não gerado'}</div>` : ''}
+      ${d.chegouLacrado === false
+        ? '<div class="card-sub"><strong>Lacre:</strong> chegou SEM lacre (informado pela Portaria).</div>'
+        : (d.chegouLacrado === true
+          ? `<div class="card-sub"><strong>Lacre:</strong> chegou lacrado${d.lacre1 ? ' — nº ' + esc(d.lacre1) : ''}${d.lacre2 ? ' e ' + esc(d.lacre2) : ''}.</div>`
+          : '')}
       ${divergencias}
       <div class="flex-end gap8 no-print" style="margin-top:10px">
         ${d.carimbos.portaria ? `<button class="btn btn-sec btn-sm" onclick="comprovantePortariaUI('${escJs(d.id)}')"
@@ -767,6 +788,7 @@ function editarDevolucaoCampoUI(id, campo, valor) {
   /* RDC vem de um select sim/não — vazio significa "ainda não informado",
      não "não gerou". */
   if (campo === 'gerouRdc') corpo = { gerouRdc: valor === '' ? null : valor === 'true' };
+  if (campo === 'chegouLacrado') corpo = { chegouLacrado: valor === '' ? null : valor === 'true' };
   /* Trocar a PLACA num checklist já criado também puxa a Frota — mesma
      regra do formulário: transportadora e motorista vêm do cadastro, não
      da memória de quem digita (e continuam editáveis depois). */
@@ -806,6 +828,11 @@ function avancarEtapaDevolucaoUI(id) {
     põeSe('motorista', v('motorista'));
     põeSe('lacre1', v('lacre1'));
     põeSe('lacre2', v('lacre2'));
+    /* "Chegou lacrado?" vai mesmo quando a resposta é NÃO — é o ponto do
+       campo: "sem lacre" precisa ser dito, não deduzido de campo vazio.
+       Nada disso trava a devolução; é informação. */
+    const lacrado = v('lacrado');
+    if (lacrado !== '' && lacrado !== undefined) corpo.chegouLacrado = lacrado === 'true';
   } else if (etapa.pede === 'faturamento') {
     corpo.pesoFinal = v('peso') || '';
   } else if (etapa.pede === 'controles') {
@@ -895,6 +922,20 @@ function repetirNotaDevolucaoUI(id, itemId) {
     }),
     `Outra parcial da nota ${base.nota || '—'} criada — preencha o Nº DEV, o motivo, as caixas e o nº da parcial.`
   );
+}
+
+/* Chegou lacrado? Sim mostra os números; Não esconde (e o que estiver
+   digitado não é enviado — a resposta já diz tudo). */
+function mostrarLacreDevUI(id) {
+  const sel = document.getElementById(`dev-et-${id}-lacrado`);
+  if (!sel) return;
+  const semLacre = sel.value === 'false';
+  for (const suf of ['lacre1', 'lacre2']) {
+    const campo = document.getElementById(`dev-et-${id}-${suf}`);
+    if (!campo) continue;
+    campo.style.display = semLacre ? 'none' : '';
+    if (semLacre) campo.value = '';
+  }
 }
 
 /* O motivo escolhido na linha nova aparece por extenso embaixo da caixa,
@@ -1013,7 +1054,9 @@ async function comprovantePortariaUI(id) {
         ${linha('MOTORISTA', d.motorista)}
         ${linha('TRANSPORTADORA', d.transportadora)}
         ${linha('REGIÃO / ROTAS', `${d.regiao ? d.regiao + ' — ' : ''}${(d.rotas || []).join(' · ')}`)}
-        ${linha('LACRE(S)', [d.lacre1, d.lacre2].filter(Boolean).join(' · '))}
+        ${linha('LACRE(S)', d.chegouLacrado === false
+          ? 'CHEGOU SEM LACRE'
+          : [d.lacre1, d.lacre2].filter(Boolean).join(' · '))}
         ${linha('RECEBIDO POR', c ? `${c.por} · ${fmtDataHora(c.em)}` : '—')}
       </div>
       ${rodapeDocumento(
@@ -1101,6 +1144,11 @@ async function relatorioDevolucoesUI(diaParam) {
       ${d.obsControles ? `<div class="dev-doc-diverg"><strong>Obs. Controles Internos:</strong> ${esc(d.obsControles)}</div>` : ''}
       ${d.gerouRdc !== null && d.gerouRdc !== undefined
         ? `<div class="dev-doc-diverg"><strong>RDC (romaneio):</strong> ${d.gerouRdc ? 'Sim — gerado' : 'Não gerado'}</div>` : ''}
+      ${d.chegouLacrado === false
+        ? '<div class="dev-doc-diverg"><strong>Lacre:</strong> chegou SEM lacre (informado pela Portaria).</div>'
+        : (d.chegouLacrado === true
+          ? `<div class="dev-doc-diverg"><strong>Lacre:</strong> chegou lacrado${d.lacre1 ? ' — nº ' + esc(d.lacre1) : ''}${d.lacre2 ? ' e ' + esc(d.lacre2) : ''}.</div>`
+          : '')}
       <div class="dev-doc-carimbos">
         ${Object.entries(DEV_ETAPA_ROTULO).map(([chave, rotulo]) => {
           const c = d.carimbos[chave];
