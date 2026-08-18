@@ -3058,6 +3058,109 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
   .btn:active{ transform: none; }
 }
 
+/* ===================== DEVOLUÇÕES =====================
+   O checklist digital (18/08/2026). Tudo em cima dos tokens existentes —
+   nenhuma cor nova: a aba é operação, não vitrine, e precisa ler igual nos
+   dois temas sem manutenção extra. */
+.dev-card{
+  border:1px solid var(--border-soft);
+  border-radius:var(--radius);
+  margin-bottom:10px;
+  background:var(--campo-bg);
+}
+.dev-card.dev-aberta{ border-color:var(--border); }
+.dev-card-topo{
+  display:flex; justify-content:space-between; align-items:center;
+  gap:8px; flex-wrap:wrap; padding:10px 14px; cursor:pointer;
+}
+.dev-card-topo:hover{ background:rgba(233,185,84,.05); }
+.dev-card-id{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.dev-card-rota{ color:var(--gold-text); font-weight:600; }
+.dev-card-meta{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; color:var(--text-dim); font-size:.9em; }
+.dev-card-seta{ color:var(--text-dim); }
+.dev-card-corpo{ padding:0 14px 14px; border-top:1px solid var(--border-soft); }
+.dev-cab-grid{ margin-top:12px; }
+.dev-ro{ color:var(--text); padding:6px 0; min-height:1.4em; }
+
+/* Etapas: a linha de "assinaturas" do papel. */
+.dev-carimbos{
+  display:flex; gap:8px; flex-wrap:wrap; margin:12px 0;
+}
+.dev-carimbo{
+  border:1px dashed var(--border-soft); border-radius:var(--radius-sm);
+  padding:6px 10px; font-size:.82em; color:var(--text-dim);
+  display:flex; flex-direction:column; min-width:130px;
+}
+.dev-carimbo-ok{ border-style:solid; border-color:var(--ok); }
+.dev-carimbo-rot{ font-weight:700; text-transform:uppercase; letter-spacing:.04em; font-size:.9em; }
+.dev-carimbo-ok .dev-carimbo-rot{ color:var(--ok); }
+.dev-carimbo-quem{ color:var(--text); }
+.dev-carimbo-quando{ font-variant-numeric:tabular-nums; }
+.dev-carimbo-vazio{ font-style:italic; }
+
+.dev-etapa-acao{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin:10px 0; }
+.dev-etapa-acao input{ max-width:220px; }
+
+/* Chips de status e de alerta. Cores dos tokens semânticos existentes. */
+.dev-chip{
+  border-radius:999px; padding:2px 10px; font-size:.78em; font-weight:700;
+  border:1px solid var(--border);
+}
+.dev-chip-inicio{ color:var(--gold-text); }
+.dev-chip-meio{ color:var(--text); }
+.dev-chip-final{ color:var(--ok); border-color:var(--ok); }
+.dev-falta-chip{
+  background:var(--wine); color:#fff; border-radius:999px;
+  padding:2px 8px; font-size:.8em; font-weight:700; white-space:nowrap;
+}
+.dev-diverg-chip{
+  background:var(--warn); color:var(--warn-fg); border-radius:999px;
+  padding:2px 8px; font-size:.8em; font-weight:700; white-space:nowrap;
+}
+.dev-ok-chip{ color:var(--ok); font-weight:700; }
+
+.dev-tabela input, .dev-tabela select{ min-width:70px; }
+.dev-tabela .c-peso input{ max-width:90px; }
+.dev-linha-nova td{ background:rgba(233,185,84,.04); }
+
+.dev-divergencias{ margin-top:12px; border-top:1px solid var(--border-soft); padding-top:10px; }
+.dev-divergencias-tit{ font-weight:700; margin-bottom:6px; color:var(--warn); }
+.dev-divergencias ul{ margin:0 0 8px 18px; padding:0; }
+.dev-divergencias li{ margin-bottom:4px; }
+.dev-diverg-form{ display:flex; gap:8px; flex-wrap:wrap; }
+.dev-diverg-form input{ max-width:220px; }
+
+/* Relatório de Devoluções (impresso pelo servidor — cores de papel). */
+.dev-doc-checklist{ margin-bottom:14px; page-break-inside:avoid; }
+.dev-doc-tabela{ width:100%; border-collapse:collapse; font-size:8.4pt; }
+.dev-doc-tabela th, .dev-doc-tabela td{
+  border:1px solid #999; padding:2px 4px; text-align:left; color:#111;
+}
+.dev-doc-tabela th{ background:#e9e4d8; font-weight:700; }
+.dev-doc-falta td{ background:#fbe6e6; }
+.dev-doc-diverg{ font-size:8.6pt; color:#111; margin-top:4px; }
+.dev-doc-carimbos{ display:flex; gap:10px; flex-wrap:wrap; font-size:7.8pt; color:#333; margin-top:4px; }
+.dev-doc-carimbo{ border:1px solid #bbb; border-radius:4px; padding:1px 6px; }
+
+@media (max-width:820px){
+  .dev-card-meta{ font-size:.82em; }
+  .dev-etapa-acao input, .dev-diverg-form input{ max-width:100%; flex:1 1 140px; }
+}
+
+/* Rotas do checklist de devolução — chips (um checklist pode juntar
+   várias rotas da mesma região, 18/08/2026). */
+.dev-rotas-chips{ display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin-top:8px; }
+.dev-rota-chip{
+  display:inline-flex; align-items:center; gap:6px;
+  border:1px solid var(--border); border-radius:999px;
+  padding:2px 10px; font-size:.85em; font-weight:600; color:var(--gold-text);
+}
+.dev-rota-chip button{
+  background:none; border:none; color:var(--text-dim); cursor:pointer;
+  font-size:1em; padding:0 2px; line-height:1;
+}
+.dev-rota-chip button:hover{ color:var(--wine-light); }
+
 </style>
 <!-- PWA: instalável no Android e no iPhone, com ícone na tela inicial.
      Os dois arquivos são opcionais por construção — abrindo o painel por
@@ -3116,6 +3219,7 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
 <div id="nav">
   <div class="nav-tab active" data-tab="torre" onclick="abrirTab('torre')">🗼 Torre de Controle</div>
   <div class="nav-tab" data-tab="programacao" onclick="abrirTab('programacao')">📋 Programação</div>
+  <div class="nav-tab" data-tab="devolucoes" onclick="abrirTab('devolucoes')">📦 Devoluções</div>
   <div class="nav-tab" data-tab="portaria" onclick="abrirTab('portaria')">🚧 Portaria</div>
   <div class="nav-tab" data-tab="expedicao" onclick="abrirTab('expedicao')">🚛 Expedição</div>
   <div class="nav-tab" data-tab="faturamento" onclick="abrirTab('faturamento')">🧾 Faturamento</div>
@@ -3306,6 +3410,84 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
          consultável por período a qualquer momento, sem precisar arquivar
          nada. Não havia mais o que o botão fizesse -- e botão irreversível
          que não faz nada é a pior combinação possível. -->
+  </div>
+
+  <!-- ===== DEVOLUÇÕES (fase 1: Logística e Administração) =====
+       O checklist de devolução que hoje é impresso e levado em papel à
+       Portaria. Estrutura espelha o documento real: cabeçalho
+       (rota/transportadora/lacres) + itens por nota fiscal. Todo o
+       conteúdo dinâmico é montado por devolucoes.js — servidor-first,
+       sem cópia local. -->
+  <div class="tab-page" id="tab-devolucoes">
+    <div class="funcao-aba" data-tab="devolucoes"></div>
+
+    <!-- Sem conexão não há checklist: a fonte é o servidor, e fingir que
+         gravou foi exatamente o erro que quase custou 62 t nas cargas. -->
+    <div class="card" id="dev-offline" hidden>
+      <div class="card-title"><span class="icon">📦</span> Devoluções</div>
+      <div class="card-sub">As devoluções moram no servidor — sem conexão não há o que listar
+        nem onde gravar. Entre com seu e-mail e senha (login com servidor) e tente de novo.</div>
+    </div>
+
+    <div id="dev-conteudo">
+      <div class="card">
+        <div class="card-title"><span class="icon">📦</span> Novo checklist de devolução</div>
+        <div class="card-sub">O número do checklist é gerado sozinho. <strong>Região + rotas</strong>
+          identificam o checklist na conferência — e um checklist pode juntar VÁRIAS rotas da mesma
+          região. Os itens entram na lista logo abaixo, linha a linha, depois de criar.</div>
+        <div class="form-grid">
+          <div><label for="dev-data">Data da devolução</label>
+            <input type="date" id="dev-data"></div>
+          <div><label for="dev-regiao">Região</label>
+            <input type="text" id="dev-regiao" placeholder="Ex: DF"></div>
+          <div><label for="dev-rota">Rotas (pelo menos uma)</label>
+            <div class="gap8">
+              <select id="dev-rota" style="flex:1"></select>
+              <button class="btn btn-sec btn-sm" onclick="adicionarRotaNovaDevUI()"
+                title="Adicionar a rota escolhida à lista deste checklist">➕ Rota</button>
+            </div>
+            <div id="dev-rotas-escolhidas" class="dev-rotas-chips"></div></div>
+          <div><label for="dev-transportadora">Transportadora</label>
+            <input type="text" id="dev-transportadora" placeholder="Ex: 83369"></div>
+          <div><label for="dev-nota-transf">Nota de transferência</label>
+            <input type="text" id="dev-nota-transf" placeholder="Ex: 171218"></div>
+          <div><label for="dev-placa">Placa do caminhão</label>
+            <input type="text" id="dev-placa" placeholder="Ex: GFR8A80"></div>
+          <div><label for="dev-motorista">Motorista</label>
+            <input type="text" id="dev-motorista"></div>
+        </div>
+        <div class="flex-end" style="margin-top:12px">
+          <button class="btn" onclick="criarDevolucaoUI()">➕ Criar checklist</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title"><span class="icon">🗓️</span> Checklists de devolução</div>
+        <div class="card-sub">Cada checklist mostra quem o criou e as etapas já carimbadas.
+          A conferência aponta a falta sozinha: checklist diz 5 caixas, chegou 3, o sistema marca 2.</div>
+        <div class="form-grid">
+          <div><label for="dev-filtro-dia">Dia</label>
+            <input type="date" id="dev-filtro-dia" onchange="carregarDevolucoes()"></div>
+          <div style="align-self:end" class="gap8">
+            <button class="btn btn-sec btn-sm" onclick="filtroDevolucoesHoje()">Hoje</button>
+            <button class="btn btn-sec btn-sm" onclick="carregarDevolucoes()">↻ Atualizar</button>
+            <button class="btn btn-sec btn-sm" onclick="relatorioDevolucoesUI()">📄 Relatório do dia</button>
+          </div>
+        </div>
+        <div id="dev-lista"></div>
+        <div class="empty" id="dev-empty" hidden>Nenhum checklist de devolução neste dia.</div>
+      </div>
+    </div>
+
+    <!-- Sugestões dos cadastros (Supervisores/Produtos/Motivos). datalist e
+         não select fechado: o cadastro cresce com o uso, e travar a digitação
+         no primeiro dia pararia a operação. -->
+    <datalist id="dl-dev-supervisores"></datalist>
+    <datalist id="dl-dev-produtos"></datalist>
+    <datalist id="dl-dev-motivos"></datalist>
+
+    <!-- Relatório (preenchido na hora da exportação; nunca visível na tela) -->
+    <div id="print-devolucoes" class="print-only" style="display:none"></div>
   </div>
 
   <!-- ===== PORTARIA ===== -->
@@ -3768,6 +3950,39 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
           </table>
         </div>
       </div>
+
+      <!-- Cadastros de apoio das DEVOLUÇÕES (18/08/2026): supervisores,
+           produtos e motivos viram sugestão nos campos do checklist — para
+           escolher em vez de digitar (pedido da reunião). Servidor-first,
+           como toda a aba Devoluções. -->
+      <div class="card" id="card-cad-devolucoes">
+        <div class="card-title"><span class="icon">📦</span> Cadastros de Devoluções</div>
+        <div class="card-sub">Supervisores, produtos (código + nome, ex.: 30110-LINGUIÇA) e motivos.
+          Viram sugestões automáticas nos campos do checklist de devolução.</div>
+        <div class="form-row">
+          <div class="form-group"><label>Supervisor</label>
+            <input type="text" id="cad-dev-supervisor" placeholder="Ex: MAKSON"></div>
+          <div class="form-group" style="align-self:end">
+            <button class="btn btn-sec btn-sm" onclick="cadastrarSupervisorDevUI()">➕ Supervisor</button></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>Código do produto</label>
+            <input type="text" id="cad-dev-prod-codigo" placeholder="Ex: 30110"></div>
+          <div class="form-group"><label>Nome do produto</label>
+            <input type="text" id="cad-dev-prod-nome" placeholder="Ex: LINGUIÇA"></div>
+          <div class="form-group"><label>Quilo por caixa <span class="hint">opcional</span></label>
+            <input type="number" min="0" step="0.001" id="cad-dev-prod-kg" placeholder="Ex: 3.5"></div>
+          <div class="form-group" style="align-self:end">
+            <button class="btn btn-sec btn-sm" onclick="cadastrarProdutoDevUI()">➕ Produto</button></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>Motivo de devolução</label>
+            <input type="text" id="cad-dev-motivo" placeholder="Ex: DATA PROXIMA"></div>
+          <div class="form-group" style="align-self:end">
+            <button class="btn btn-sec btn-sm" onclick="cadastrarMotivoDevUI()">➕ Motivo</button></div>
+        </div>
+        <div class="card-sub" id="cad-dev-resumo"></div>
+      </div>
     </div>
   </div>
 
@@ -3896,6 +4111,7 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
           <select id="usr-setor">
             <option>Logística</option><option>Portaria</option><option>Expedição</option>
             <option>Faturamento</option><option>Administração</option><option>Comercial</option>
+            <option>Controles Internos</option><option>Central de Notas</option>
           </select>
         </div>
         <div class="form-group">
@@ -4236,6 +4452,7 @@ const SuincoSharePoint = (function () {
   let ouvintesEdicao = [];
   let ouvintesExclusao = [];
   let ouvintesPresenca = [];
+  let ouvintesDevolucao = [];
   let ouvintesFechamentoPrograma = [];
   let timerRenovacao = null;
   let ultimaInteracao = Date.now();
@@ -5094,6 +5311,15 @@ const SuincoSharePoint = (function () {
     });
     socket.on('frota:atualizada', () => pullTudo().catch(() => {}));
 
+    /* Devoluções são servidor-first (sem cópia local sincronizada), então o
+       evento não dispara pull de cargas — só avisa a tela de Devoluções
+       para recarregar a lista dela, se estiver aberta. */
+    socket.on('devolucao:atualizada', (aviso) => {
+      ouvintesDevolucao.forEach((fn) => {
+        try { fn(aviso); } catch (e) { console.warn('[Suinco] aviso de devolução:', e); }
+      });
+    });
+
     // Quem está online agora, por operador. Chega sozinho quando alguém
     // conecta/desconecta em qualquer terminal — e também assim que ESTA aba
     // conecta, com o retrato do momento (o servidor manda de propósito).
@@ -5289,6 +5515,69 @@ const SuincoSharePoint = (function () {
     return resposta.blob();
   }
 
+  /* ---------- Devoluções — o checklist digital ----------
+     Servidor-first de propósito: as operadoras trabalham em mesa com rede,
+     e o checklist é um documento vivo entre setores — a fonte é o servidor,
+     sem cópia local que possa ecoar dado velho (a lição das cargas na
+     semana de 14–15/08). Sem conexão, a aba diz isso com todas as letras
+     em vez de fingir que gravou. */
+  function aoAtualizarDevolucao(fn) { if (typeof fn === 'function') ouvintesDevolucao.push(fn); }
+
+  const devolucoesApi = {
+    listar(de, ate) {
+      const q = [];
+      if (de) q.push('de=' + encodeURIComponent(de));
+      if (ate) q.push('ate=' + encodeURIComponent(ate));
+      return chamar('/api/devolucoes' + (q.length ? '?' + q.join('&') : ''));
+    },
+    criar(corpo) { return chamar('/api/devolucoes', { metodo: 'POST', corpo }); },
+    editar(id, corpo) {
+      return chamar('/api/devolucoes/' + encodeURIComponent(id), { metodo: 'PATCH', corpo });
+    },
+    excluir(id) {
+      return chamar('/api/devolucoes/' + encodeURIComponent(id), { metodo: 'DELETE' });
+    },
+    etapa(id, corpo) {
+      return chamar('/api/devolucoes/' + encodeURIComponent(id) + '/etapa', { metodo: 'POST', corpo });
+    },
+    criarItem(id, corpo) {
+      return chamar('/api/devolucoes/' + encodeURIComponent(id) + '/itens', { metodo: 'POST', corpo });
+    },
+    editarItem(id, itemId, corpo) {
+      return chamar('/api/devolucoes/' + encodeURIComponent(id) + '/itens/' + encodeURIComponent(itemId),
+        { metodo: 'PATCH', corpo });
+    },
+    excluirItem(id, itemId) {
+      return chamar('/api/devolucoes/' + encodeURIComponent(id) + '/itens/' + encodeURIComponent(itemId),
+        { metodo: 'DELETE' });
+    },
+    criarDivergencia(id, corpo) {
+      return chamar('/api/devolucoes/' + encodeURIComponent(id) + '/divergencias', { metodo: 'POST', corpo });
+    },
+    excluirDivergencia(id, divId) {
+      return chamar('/api/devolucoes/' + encodeURIComponent(id) + '/divergencias/' + encodeURIComponent(divId),
+        { metodo: 'DELETE' });
+    },
+    listarRevisoes(id) {
+      return chamar('/api/devolucoes/' + encodeURIComponent(id) + '/revisoes');
+    },
+    restaurar(id, revisaoId) {
+      return chamar('/api/devolucoes/' + encodeURIComponent(id) + '/restaurar',
+        { metodo: 'POST', corpo: { revisaoId } });
+    },
+    cadastros() { return chamar('/api/devolucoes-cadastros'); },
+    cadastrarSupervisor(nome) {
+      return chamar('/api/devolucoes-cadastros/supervisores', { metodo: 'POST', corpo: { nome } });
+    },
+    cadastrarProduto(codigo, nome, pesoCaixaKg) {
+      return chamar('/api/devolucoes-cadastros/produtos',
+        { metodo: 'POST', corpo: { codigo, nome, pesoCaixaKg } });
+    },
+    cadastrarMotivo(motivo) {
+      return chamar('/api/devolucoes-cadastros/motivos', { metodo: 'POST', corpo: { motivo } });
+    },
+  };
+
   return {
     SP_CONFIG,
     iniciar, estaConfigurado, estado, conta, aoMudarEstado, aoReceberDados,
@@ -5303,12 +5592,13 @@ const SuincoSharePoint = (function () {
     arquivarDia, fecharPrograma,
     gerarRelatorioPdf, listarProgramacoes,
     listarRevisoes, restaurarRevisao,
+    devolucoes: devolucoesApi, aoAtualizarDevolucao,
   };
 })();
 
 </script>
 <script>window.FROTA_SEED_CSV = "Placa,Transportadora,TipoVeiculo,PrecisaRevisao\nAAK8958,Cooperativa dos Transportadores Unidos Ltda.,Carreta,Nao\nAFZ8792,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nAHG5900,Coopertral,Carreta,Nao\nAJM6032,Logmaster Armazem e Logistica Ltda,Carreta,Nao\nAJY3407,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nAMU5835,Sandra Campanholo Transportes-ME,Carreta,Nao\nANA6563,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nANE3214,Noelia de Sousa Machado 03794699521,3/4,Nao\nAPA4111,Cooperativa de Transp e Logist de Sao Sebastiao do Oeste Mg,Carreta,Nao\nAPA4B11,Cooperativa de Transp e Logist de Sao Sebastiao do Oeste Mg,Carreta,Nao\nAPN0660,Tais Simoes Me,Carreta,Nao\nAQP1978,R A de Castilho Transportes,Carreta,Nao\nARA0338,Fidelis Transportes Ltda.,Bitruck,Nao\nARF4702,Cisne Branco Transportes Ltda EPP,Carreta,Nao\nARF4H02,Cisne Branco,Carreta,Nao\nARX9505,Friocargo Triangulo Ltda,Carreta,Nao\nASE5007,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nASE5A07,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nASG3E42,Baixotes Transportes,Carreta,Nao\nASQ2913,Washington L S Costa Junior - ME,Truck,Nao\nATD5001,Transportadora Multi Express Ltda,Carreta,Nao\nATF4700,Fidelis Transportes Ltda.,Carreta,Nao\nATK3B08,Transportadora Multi Express Ltda,Carreta,Nao\nATM1380,Coopernova Coop Riobranquense de Transporte,Carreta,Nao\nATM1480,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nATO2450,Fidelis Transportes Ltda.,Bitruck,Nao\nATZ9H26,Omega X Solucoes em Logistica e Armazenagem Ltda,Carreta,Nao\nAUH8324,Transportadora Multi Express Ltda,Carreta,Nao\nAVD4546,Transportadora Multi Express Ltda,Bitruck,Nao\nAVD4F46,Giselda Aparecida Gomes Mundim Araujo,Bitruck,Nao\nAVT3222,Fidelis Transportes Ltda.,Carreta,Nao\nAVV3F98,Jorge Lemes da Silva Junior ME,Carreta,Nao\nAZC5116,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nAZC5B17,Cooperativa dos Transportadores Unidos Ltda.,Carreta,Nao\nAZI4219,Fidelis Transportes Ltda.,Bitruck,Nao\nAZS1H23,Cisne Branco Transportes Ltda EPP,Carreta,Nao\nAZV4440,Trans Thalia Transportes Ltda.,Carreta,Nao\nBAH8650,Renato Pereira Lima 03425721640,3/4,Nao\nBAW4341,Log SPM Ltda,Bitruck,Nao\nBBL9819,Fidelis Transportes Ltda.,Bitruck,Nao\nBBW1552,PH Fidelis Transportes e Representacoes Ltda,Carreta,Nao\nBCH0685,Gold Star,Container,Nao\nBCN2B65,Fidelis Transportes Ltda.,Bitruck,Nao\nBDB2J69,Fidelis Transportes Ltda.,Truck,Nao\nBDF5110,Candido Ribeiro do Vale Neto Com de Bebidas e Transportes,Carreta,Nao\nBDZ3108,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nBDZ3B08,Miranda Lacerda Transportes Ltda.,Carreta,Nao\nBDZ7E36,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nBRY0423,Transmartyna Ltda ME,Carreta,Nao\nBRY3559,Transmartyna Ltda ME,Carreta,Nao\nBTR0404,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nBTR0D21,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nBTR2914,R A de Castilho Transportes,Carreta,Nao\nBUP9005,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nBWM8222,R A de Castilho Transportes,Carreta,Nao\nBWQ3386,R A de Castilho Transportes,Carreta,Nao\nBWV4948,Gold Star,Container,Nao\nCDM5889,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nCDM5I89,Cooperativa dos Transportadores Unidos Ltda.,Carreta,Nao\nCLH0866,R A de Castilho Transportes,Carreta,Nao\nCLH2450,Cargofrio Logística e Armazenamento Ltda,Carreta,Nao\nCLK5647,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nCNI9559,Gold Star,Container,Nao\nCNP5E57,Coopertral,Carreta,Nao\nCPG7D79,Candido Ribeiro do Vale Neto Com de Bebidas e Transportes,Carreta,Nao\nCPJ2722,Transmartyna Ltda ME,Carreta,Nao\nCPJ3104,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nCPJ5624,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nCUA4984,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nCUA6452,R A de Castilho Transportes,Carreta,Nao\nCUA7761,Transmartyna Ltda ME,Carreta,Nao\nCUB2232,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nCUC4J12,Rodosousa,Truck,Nao\nCUC9963,R A de Castilho Transportes,Carreta,Nao\nCUE2313,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nCUE2750,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nCUH6E50,Cooperativa dos Transportadores Unidos Ltda.,Carreta,Nao\nCVN0C42,Patos Logística Eirelli,Carreta,Nao\nCVN1345,R A de Castilho Transportes,Carreta,Nao\nCYN6310,R A de Castilho Transportes,Carreta,Nao\nCYR8983,Flay Logistica e Armazenagem Ltda,Truck,Nao\nCZX7719,Cisne Branco Transportes Ltda EPP,Carreta,Nao\nDAO0759,Gold Star,Container,Nao\nDAO2512,Trans Frios Transportes e Logistica Ltda ME,Truck,Nao\nDAO2888,Noelia de Sousa Machado 03794699521,Truck,Nao\nDAO2981,Friocargo Norte Ltda,3/4,Nao\nDAO2H44,Friocargo Norte Ltda,Carreta,Nao\nDAO4959,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nDAO4J59,Transportadora Baixotes Transportes Ltda,Carreta,Nao\nDAO9753,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nDBB8B81,Transmartyna Ltda ME,Carreta,Nao\nDBB8E52,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nDBM4895,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nDBM8771,TAC Transportes Armazenagem e Logistica,Truck,Nao\nDBM9754,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nDBP3272,R A de Castilho Transportes,Carreta,Nao\nDBP3294,R A de Castilho Transportes,Carreta,Nao\nDBP4407,Transportes e Armazenagem Zilli Ltda,Truck,Nao\nDJB9549,Cisne Branco,Carreta,Nao\nDJB9651,Cisne Branco Transportes Ltda EPP,Carreta,Nao\nDJE1454,Cooperativa dos Transportadores Unidos Ltda.,Carreta,Nao\nDJF1B66,Omega X Solucoes em Logistica e Armazenagem Ltda,Carreta,Nao\nDJF7527,Cisne Branco,Carreta,Nao\nDJF8527,Cisne Branco,Carreta,Nao\nDKR6382,Solucao Transportes e Servicos Eireli,Carreta,Nao\nDKT5G89,AJB Transportes,Toco,Nao\nDPB0054,Cisne Branco Transportes Ltda EPP,Carreta,Nao\nDPB1843,Cooperativa dos Transportadores Unidos Ltda.,Carreta,Nao\nDPB1856,Mix Transportes Rodoviarios Ltda - ME,Carreta,Nao\nDPB1862,Cisne Branco,Carreta,Nao\nDPB1863,Cisne Branco Transportes Ltda EPP,Carreta,Nao\nDPB1864,Coopertral,Carreta,Nao\nDPC9846,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nDPE9545,Cisne Branco Transportes Ltda EPP,Carreta,Nao\nDPF3916,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nDPF9524,Maxfrios Distribuidora e Transporte Eireli,Truck,Nao\nDQS1031,Posto Vanete Ltda,Carreta,Nao\nDQS1041,Posto Vanete Ltda,Carreta,Nao\nDQS1048,Omega X Solucoes em Logistica e Armazenagem Ltda,Carreta,Nao\nDQS9035,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nDSG0571,Flay Logistica e Armazenagem Ltda,Truck,Nao\nDTA3156,Cisne Branco,Carreta,Nao\nDTB2717,Cisne Branco Transportes Ltda EPP,Carreta,Nao\nDTD8890,TAC Transportes Armazenagem e Logistica,Toco,Nao\nDTE9880,Giselda Aparecida Gomes Mundim Araujo,Bitruck,Nao\nDTV5836,R A de Castilho Transportes,Carreta,Nao\nDVS2609,Cisne Branco,Carreta,Nao\nDVS2685,Marizileia Transportes,Carreta,Nao\nDVS2708,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nDVS2765,Cisne Branco Transportes Ltda EPP,Carreta,Nao\nDVS2H08,Brasfrios Logistica e Transportes Ltda,Carreta,Nao\nDVS2H66,MMS Armazenagem e Logistica SA,Carreta,Nao\nDVS3653,Cisne Branco,Carreta,Nao\nDVT9G10,Baixotes Transportes,Carreta,Nao\nDXV8593,Transmartyna Ltda ME,Carreta,Nao\nEBQ6E39,Gold Star,Container,Nao\nECU2747,Transmartyna Ltda ME,Carreta,Nao\nEFO7220,Maria Hildete Santana de Matos,Toco,Nao\nEFO7709,Transmartyna Ltda ME,Carreta,Nao\nEFU0217,Isavic Transporte e Armazenamento Ltda,Truck,Nao\nEFW0G14,Tais Simoes Me,Carreta,Nao\nEFW8180,Cooperativa de Transp e Logist de Sao Sebastiao do Oeste Mg,Carreta,Nao\nEGK9135,Lacerda Barros Transportes Ltda.,Carreta,Nao\nEHH8269,Omega X Solucoes em Log e Armazenagem Ltda,Carreta,Nao\nELW5G48,Manoel Araujo Dantas Transportes,3/4,Nao\nEOA5B19,Cisne Branco,Carreta,Nao\nEOE2358,Transportes Zanini Ltda,Carreta,Nao\nEOE5228,Washington L S Costa Junior - ME,Bitruck,Nao\nEPG0A36,Suinco,3/4,Nao\nEPU7319,Transportadora Multi Express Ltda,Carreta,Nao\nEPU7D19,Transportes e Armazenagem Zilli Ltda,Carreta,Nao\nEPU9647,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nESU1150,TAC Transportes Armazenagem e Logistica,Truck,Nao\nESU2194,ASAPH Transportes Ltda.,Carreta,Nao\nESU4I15,Avila Transportes Ltda Me,3/4,Nao\nESU6032,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nESU6206,R A de Castilho Transportes,Carreta,Nao\nESU6906,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nESU6909,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nEVK0647,Matheus Gomes Mundim Araujo - ME,Toco,Nao\nEVK0G47,Marques e Silva,Toco,Nao\nEVO1H32,Gold Star,Container,Nao\nEVO4763,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nEVP6973,R A de Castilho Transportes,Carreta,Nao\nEWJ7D98,Gold Star,Container,Nao\nEWU5609,Transportes e Armazenagem Zilli Ltda,Carreta,Nao\nEYS5406,Transmartyna Ltda ME,Carreta,Nao\nEZL8720,Transportadora Multi Express Ltda,Carreta,Nao\nFCF5910,RN Transporte e Logistica Ltda,3/4,Nao\nFCT9179,Gold Star,Container,Nao\nFCZ2465,Gold Star,Container,Nao\nFDC2122,AC Transportes,Carreta,Nao\nFDC7122,AC Logística,Carreta,Nao\nFEI3101,R A de Castilho Transportes,Carreta,Nao\nFEI3956,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nFEI4913,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nFFI1091,Friocargo Norte Ltda,Toco,Nao\nFFI1G03,MMS Armazenagem e Logistica SA,Carreta,Nao\nFFN9122,Cisne Branco,Carreta,Nao\nFJX0166,Transmartyna Ltda ME,Carreta,Nao\nFKJ7020,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nFKS0886,R A de Castilho Transportes,Carreta,Nao\nFLI6857,Isavic Transporte e Armazenamento Ltda,Bitruck,Nao\nFLI6I57,Marques e Silva,Bitruck,Nao\nFOI8313,Transmartyna Ltda ME,Carreta,Nao\nFPI6789,R A de Castilho Transportes,Carreta,Nao\nFPJ8120,Roosevelt Marques da Silva,Bitruck,Nao\nFPJ8I20,Marques e Silva,Bitruck,Nao\nFQV1237,Transmartyna Ltda ME,Carreta,Nao\nFRS4F21,Marques e Silva,Bitruck,Nao\nFSH2870,Log SPM Ltda,Carreta,Nao\nFST8019,Gold Star,Container,Nao\nFSZ8297,Multi Express,Carreta,Nao\nFTY2826,Rodrigo A Rossi e Cia Ltda Me,Truck,Nao\nFTZ2138,AJB Transportes,Truck,Nao\nFVA0A95,Denia Transportes,Carreta,Nao\nFZZ8821,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nGBR3719,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nGFK8080,Friocargo Norte Ltda,Bitruck,Nao\nGFK8A80,Denia Transportes,Bitruck,Nao\nGHC0660,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nGHC3058,Cooperativa dos Transportadores Unidos Ltda.,Carreta,Nao\nGRA9825,Transportes e Armazenagem Zilli Ltda,Truck,Nao\nGRE3345,TAC Transportes Armazenagem e Logistica,Truck,Nao\nGRE4738,Denia Transportes,Truck,Nao\nGSW0386,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nGSW0509,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nGSW0709,Cooperativa Riobranquense de Transportes Ltda.,Truck,Nao\nGSW7938,Transportes e Armazenagem Zilli Ltda,Truck,Nao\nGVH1A92,Marques e Silva,Toco,Nao\nGVI5286,Flay Logistica e Armazenagem Ltda,Truck,Nao\nGVQ1260,Transportadora Multi Express Ltda,Carreta,Nao\nGVQ6746,Flay Logistica e Armazenagem Ltda,Truck,Nao\nGVQ8934,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nGWI3849,Flay Logistica e Armazenagem Ltda,Truck,Nao\nGWI4688,TAC Transportes Armazenagem e Logistica,Truck,Nao\nGWI4773,Posto Vanete Ltda,Carreta,Nao\nGWI4H60,Cirio Alves de Oliveira Junior - Transportes,3/4,Nao\nGWI8D40,Coopediesel,Carreta,Nao\nGXA0293,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nGXH6D13,Cirio Alves de Oliveira Junior - Transportes,Truck,Nao\nGXM5591,TAC Transportes Armazenagem e Logistica,Truck,Nao\nGXM5C08,Transportadora Multi Express Ltda,Bitruck,Nao\nGXS2438,Matheus Gomes Mundim Araujo - ME,3/4,Nao\nGXS7634,Lagam Transportes & Logistica Ltda,Bitruck,Nao\nGYS6028,Omega X Solucoes em Logistica e Armazenagem Ltda,Truck,Nao\nGYT1208,Trans Frios Transportes e Logistica Ltda ME,Truck,Nao\nGZG1203,Posto Vanete Ltda,Carreta,Nao\nGZG4309,TAC Transportes Armazenagem e Logistica,Bitruck,Nao\nHAX4227,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nHBC1622,Cooperativa de Transportes Montenegro Ltda,Truck,Nao\nHBG6828,Cooperativa Riobranquense de Transportes Ltda.,Toco,Nao\nHBK6688,Cargofrio Logística e Armazenamento Ltda,Truck,Nao\nHBN0986,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nHBN1461,TAC Transportes Armazenagem e Logistica,Truck,Nao\nHBN5086,TAC Transportes Armazenagem e Logistica Ltda,Truck,Nao\nHBN8111,Omega X Solucoes em Log e Armazenagem Ltda,Bitruck,Nao\nHBN8437,Cooperativa de Transportes Montenegro Ltda,Truck,Nao\nHBN9825,Omega X Solucoes em Logistica e Armazenagem Ltda,Truck,Nao\nHBZ0228,Transportes Horizonte Frios Ltda,Truck,Nao\nHCQ6715,Agnaldo Gomes de Souza,Truck,Nao\nHCS8947,Suinco Cooperativa de Suinocultores Ltda,3/4,Nao\nHCW8714,Suinco Cooperativa de Suinocultores Ltda,3/4,Nao\nHDI9336,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nHDI9937,Cooperativa Riobranquense de Transprotes Ltda,3/4,Nao\nHDJ7625,Isavic Transporte e Armazenamento Ltda,Bitruck,Nao\nHEE9J46,Baixotes Transportes,Carreta,Nao\nHEH1386,Douglas Dornelas Figueiredo - 078331606-28,Toco,Nao\nHFB9126,Washington L S Costa Junior - ME,Bitruck,Nao\nHFB9139,Cooperativa de Transp e Logist de Sao Sebastiao do Oeste Mg,Bitruck,Nao\nHFD4176,Coopertral,Carreta,Nao\nHFD4I76,Coopertral,Carreta,Nao\nHFF5A12,Denia Transportes,Carreta,Nao\nHFF5F12,Denia Transportes,Carreta,Nao\nHGH1150,Trans Frios Transportes e Logistica Ltda ME,Truck,Nao\nHGJ8864,Matheus Gomes Mundim Araujo - ME,Bitruck,Nao\nHHE9J46,Baixotes Transportes,Carreta,Nao\nHHG1808,Cooperativa Riobranquense de Transprotes Ltda,3/4,Nao\nHHI2962,Coopdiesel Coop de PF e PJ Seg Transportes em Geral,Toco,Nao\nHHI2J62,Marques e Silva,Toco,Nao\nHHK1101,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nHHK1128,Flay Logistica e Armazenagem Ltda,3/4,Nao\nHHK1143,Sidelia de Fatima Costa ME,3/4,Nao\nHHK1682,Transportes e Armazenagem Zilli Ltda,3/4,Nao\nHHW5634,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nHIA4316,Cooperativa Riobranquense de Transportes Ltda,Carreta,Nao\nHIB9619,Trans Frios Transportes e Logistica Ltda ME,Truck,Nao\nHIG4415,TAC Transportes Armazenagem e Logistica,3/4,Nao\nHIG4J37,TAC Transportes Armazenagem e Logistica,3/4,Nao\nHIJ4272,Transportadora Multi Express Ltda,Truck,Nao\nHIM0845,Aparicio Valmir Ferreira,3/4,Nao\nHIV1702,Washington L S Costa Junior - ME,Bitruck,Nao\nHJA3D75,Marques e Silva,Toco,Nao\nHJI9573,Transportes e Armazenagem Zilli Ltda,Toco,Nao\nHJI9585,Comercial TIVI Ltda.,Toco,Nao\nHJM3916,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nHJZ4521,Washington L S Costa Junior - ME,Bitruck,Nao\nHKE0322,Ailton Benedito Transportes Ltda,Bitruck,Nao\nHKE0D22,TAC Transportes Armazenagem e Logistica,Bitruck,Nao\nHKE5008,Isavic Transporte e Armazenamento Ltda,Carreta,Nao\nHKF3605,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nHKH0223,Flay Logistica e Armazenagem Ltda,Truck,Nao\nHLI0380,TAC Transportes Armazenagem e Logistica,Bitruck,Nao\nHLM4H60,Marques e Silva,Bitruck,Nao\nHLM4J60,Marques e Silva,Bitruck,Nao\nHLY7349,Cooperativa Riobranquense de Transportes Ltda.,Toco,Nao\nHLY7350,TAC Transportes Armazenagem e Logistica,Toco,Nao\nHLY7631,Cooperativa Riobranquense de Transportes Ltda.,Toco,Nao\nHLY7632,Suinco Cooperativa de Suinocultores Ltda,Toco,Nao\nHLY7G32,TAC Transportes Armazenagem e Logistica Ltda,Toco,Nao\nHLY8107,Suinco,3/4,Nao\nHLY8150,Suinco Cooperativa de Suinocultores Ltda,Toco,Nao\nHMV4954,Logmaster Armazem e Logistica Ltda,Carreta,Nao\nHMV4D02,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nHMV6367,Avila Transportes Ltda Me,3/4,Nao\nHNX2274,Trans Frios Transportes e Logistica Ltda ME,Bitruck,Nao\nHOF4678,Cooperativa Riobranquense de Transportes Ltda,Toco,Nao\nHPY3441,Mix Transportes Rodoviarios Ltda - ME,Carreta,Nao\nHQR8499,Cooperativa Riobranquense de Transportes Ltda.,Truck,Nao\nHQR8E99,Rodosousa,Truck,Nao\nHRS6838,RA Transportes e Logistica Eireli,Carreta,Nao\nHRS7035,Posto Vanete Ltda,Carreta,Nao\nHRS8397,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nHRS8D97,Coopertral,Carreta,Nao\nHSJ4627,Friocargo Norte Ltda,Carreta,Nao\nIAH4303,Washington L S Costa Junior - ME,3/4,Nao\nIAH8003,Sidelia de Fatima Costa ME,3/4,Nao\nIKB9915,Posto Vanete Ltda,Carreta,Nao\nIKU9328,Isavic Transporte e Armazenamento Ltda,Carreta,Nao\nILI3703,RN Transporte e Logistica Ltda,Carreta,Nao\nILI3H03,Baixotes Transportes,Carreta,Nao\nINT7417,Transportadora Multi Express Ltda,Carreta,Nao\nIOM9374,Cooperativa de Transp e Logist de Sao Sebastiao do Oeste Mg,Carreta,Nao\nISA1925,Transportes Prigol Ltda,Carreta,Nao\nIUL0644,Transportes Prigol Ltda,Carreta,Nao\nIUR2A43,HDX Transportes e Servicos Ltda,Carreta,Nao\nIUR7491,Transportadora Spellmeier Ltda,Bitruck,Nao\nIWH8877,Flay Logistica e Armazenagem Ltda,Bitruck,Nao\nIYD3003,Tais Simoes Me,Carreta,Nao\nIYD4400,Foba Transportes Ltda - ME,Carreta,Nao\nIYX2917,Senio Transportes de cargas Rodoviaria Ltda,Carreta,Nao\nIYY1676,Transportes Prigol Ltda,Carreta,Nao\nJDD0140,Posto Vanete Ltda,Bitruck,Nao\nJGZ0468,Flay Logistica e Armazenagem Ltda,Bitruck,Nao\nJHJ6232,Friocargo Norte Ltda,3/4,Nao\nJHX6373,Transportadora Multi Express Ltda,Bitruck,Nao\nJIB3H29,Cirio Alves de Oliveira Junior - Transportes,3/4,Nao\nJIG4767,Friocargo Triangulo Ltda,3/4,Nao\nJJB8946,Denia Transportes,Truck,Nao\nJOC2635,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nJOK0854,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nJOK0I54,Denia Transportes,Carreta,Nao\nJRC5555,Trans Shirley Transportes Ltda.,Carreta,Nao\nJRR2673,Transportadora Sudoeste Ltda,Toco,Nao\nJXX9H64,Coopertral,Carreta,Nao\nJYJ8844,Transportadora Multi Express Ltda,Carreta,Nao\nJZS5651,Vivan Transportes Ltda,Carreta,Nao\nKAC3J94,Gold Star,Container,Nao\nKAN5655,Wandell Fabiano Jordao,3/4,Nao\nKBY1081,R A de Castilho Transportes,Carreta,Nao\nKDJ7A83,Patos Logística Eirelli,Carreta,Nao\nKEB0368,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nKER9906,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nKER9J06,Tais Simoes Me,Carreta,Nao\nKEY0318,Cooperativa de Transp e Logist de Sao Sebastiao do Oeste Mg,Carreta,Nao\nKJZ5157,MMS Armazenagem e Logistica SA,Truck,Nao\nKLA3D75,Baixotes Transportes,Carreta,Nao\nKLA7375,Transportadora Baixotes Transportes Ltda,Carreta,Nao\nKLA7D75,Baixotes Transportes,Carreta,Nao\nKTC4518,R A de Castilho Transportes,Carreta,Nao\nKWE2956,AC Armazenagem,Carreta,Nao\nKWE2J56,AC Transportes,Carreta,Nao\nKYP8147,Rodosousa Transportes Ltda,3/4,Nao\nKZR8291,Trans Frios Transportes e Logistica Ltda ME,Toco,Nao\nLBJ8963,Cooperativa dos Transportadores Unidos Ltda.,Carreta,Nao\nLMO2E88,AC Transportes,Truck,Nao\nLMO8E88,AC Transportes,Truck,Nao\nLRD9999,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nLUX5135,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nLWS0237,R A de Castilho Transportes,Carreta,Nao\nLXV1767,GTRANS ALVES TRANSPORTES DE CARGAS LTDA,Carreta,Nao\nLXV5629,Posto Vanete Ltda,Carreta,Nao\nLYL4634,Fidelis Transportes Ltda.,Carreta,Nao\nLYU2742,Posto Vanete Ltda,Carreta,Nao\nLZN2849,RA Transportes e Logistica Eireli,Carreta,Nao\nMBA1451,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nMBJ3588,Omega X Solucoes em Logistica e Armazenagem Ltda,Carreta,Nao\nMBK0133,GF Transportes Ltda.,Carreta,Nao\nMBS0127,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nMCA9D22,ASAPH Transportes Ltda.,Carreta,Nao\nMCI0D83,Coopertral,Carreta,Nao\nMCO2936,ASAPH Transportes Ltda.,Carreta,Nao\nMCT6033,Transportes e Armazenagem Zilli Ltda,Carreta,Nao\nMCV0B18,AC Logística,Carreta,Nao\nMCY1282,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nMDG5672,Tais Simoes Me,Carreta,Nao\nMDH7292,Omega X Solucoes em Log e Armazenagem Ltda,Carreta,Nao\nMDL8499,Christine Prodocimo Roesel Marciano ME,Carreta,Nao\nMDM9D65,Isavic Transportes e Armazenagem Ltda,Carreta,Nao\nMDY6143,Omega X Solucoes em Logistica e Armazenagem Ltda,Carreta,Nao\nMEC0238,ASAPH Transportes Ltda.,Carreta,Nao\nMEG4089,Omega X Solucoes em Logistica e Armazenagem Ltda,Carreta,Nao\nMEG4A89,Omega X Solucoes em Logistica e Armazenagem Ltda,Carreta,Nao\nMEJ7716,Coopertral,Carreta,Nao\nMEO7544,Isavic Transporte e Armazenamento Ltda,Carreta,Nao\nMEV8145,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nMEX6H74,Omega X Solucoes em Logistica e Armazenagem Ltda,Carreta,Nao\nMFC2421,Transportadora Baixotes Transportes Ltda,Carreta,Nao\nMFC8804,TAC Transportes Armazenagem e Logistica,Truck,Nao\nMFF8179,Baixotes Transportes,Carreta,Nao\nMFF8879,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nMFF8I79,Baixotes Transportes,Carreta,Nao\nMFI7684,Omega X Solucoes em Logistica e Armazenagem Ltda,Carreta,Nao\nMFJ7671,Transportadora Baixotes Transportes Ltda,Carreta,Nao\nMFJ7G71,Baixotes Transportes,Carreta,Nao\nMFL9816,Carla da Silva Bruneti Trasp. Rodoviarios ME,Carreta,Nao\nMFM4128,Canada Transportes e Comercio Ltda.,Carreta,Nao\nMFM7088,Transportadora Baixotes Transportes Ltda,Carreta,Nao\nMFM7A88,Baixotes Transportes,Carreta,Nao\nMFN4147,Transportadora Multi Express Ltda,Carreta,Nao\nMFR0J29,Coopertral,Carreta,Nao\nMFT1992,Baixotes Transportes,Carreta,Nao\nMFT1J92,Baixotes Transportes,Carreta,Nao\nMFT5258,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nMFV8569,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nMFY8607,Sergio Nava e Cia Ltda,Carreta,Nao\nMGD4806,Isavic Transportes e Armazenagem Ltda,Carreta,Nao\nMGE5276,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nMGF8544,Omega X Solucoes em Logistica e Armazenagem Ltda,Carreta,Nao\nMGF9902,R A de Castilho Transportes,Carreta,Nao\nMGI4566,Canada Transportes e Comercio Ltda.,Carreta,Nao\nMGN4810,G S Puridade Transportes e Servicos Ltda,Carreta,Nao\nMGQ3782,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nMGR4809,Transportadora Multi Express Ltda,Carreta,Nao\nMGS0639,Canada Transportes e Comercio Ltda.,Carreta,Nao\nMGS8048,G S Puridade Transportes e Servicos Ltda,Carreta,Nao\nMGW0189,Cooperativa dos Transportadores Unidos Ltda.,Carreta,Nao\nMGY4450,Coopertral,Carreta,Nao\nMHB1468,TRANSPORTES BASSANI LTDA.,Carreta,Nao\nMHE7188,MMS Armazenagem e Logistica SA,Carreta,Nao\nMHF3C63,Denia Transportes,Truck,Nao\nMHF6C63,Denia Transportes,Carreta,Nao\nMHH8G10,RP Express,Carreta,Nao\nMHJ2202,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nMHJ5726,Transportadora Multi Express Ltda,Carreta,Nao\nMHK7293,Isavic Transportes e Armazenagem Ltda,Carreta,Nao\nMHM6045,Christine Prodocimo Roesel Marciano ME,Carreta,Nao\nMHN3D66,TransOliveira,Carreta,Nao\nMHN3D99,TransOliveira,Carreta,Nao\nMHR4B55,Coopertral,Carreta,Nao\nMHW7I56,Coopertral,Bitruck,Nao\nMHW9911,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nMIM8459,Friocargo Norte Ltda,Carreta,Nao\nMIQ6927,Posto Vanete Ltda,Carreta,Nao\nMIV2712,Kaipper Continental Transportes Ltda,Carreta,Nao\nMIZ0B87,Silva e Reis Transporte de Cargas Eireli Me,Carreta,Nao\nMJE7248,Transportes e Armazenagem Zilli Ltda,Carreta,Nao\nMJE8477,Canada Transportes,Carreta,Nao\nMJG1727,R A de Castilho Transportes,Carreta,Nao\nMJN3680,Christine Prodocimo Roesel Marciano ME,Carreta,Nao\nMJN7006,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nMJW3158,Denia Transportes,Carreta,Nao\nMJW3B58,Denia Transportes,Carreta,Nao\nMJW3C63,Denia Transportes,Carreta,Nao\nMKA7F71,MR Transportes,Carreta,Nao\nMKC1529,Gilmar Scariot Transportes,Carreta,Nao\nMKL9848,Posto Vanete Ltda,Carreta,Nao\nMKP9C15,Coopediesel,Carreta,Nao\nMKZ2997,Coop. de Tra. de Cargas do E. Santa Catarina,Carreta,Nao\nMLC4834,JCRM TRANSPORTES E LOGISTICA LTDA,Carreta,Nao\nMLK4271,Transportes e Armazenagem Zilli Ltda,Carreta,Nao\nMLN5130,Coop. de Tra. de Cargas do E. Santa Catarina,Carreta,Nao\nMLW7G66,Multi Express,Carreta,Nao\nMME8413,Transportes Zanini Ltda,Carreta,Nao\nMMH6129,Transportes Tozzo Ltda.,Carreta,Nao\nMMJ7G71,Baixotes Transportes,Carreta,Nao\nMMJ9E91,TransOliveira,Carreta,Nao\nMMJ9E99,TransOliveira,Carreta,Nao\nMRN5529,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nMRU6E28,G S Puridade Transportes e Servicos Ltda,Carreta,Nao\nMTC4550,Cooperativa Riobranquense de Transportes Ltda,Toco,Nao\nMWA6634,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nMXA2G32,Transportadora Multi Express Ltda,Carreta,Nao\nMXB5208,Bruno Sergio Ferreira CPF 04625109647,Carreta,Nao\nMXB5C08,AC Armazenagem,Carreta,Nao\nMXD1E41,Coopertral,Carreta,Nao\nNAB8188,Transportadora Multi Express Ltda,Carreta,Nao\nNCH2H15,AC Transportes,Carreta,Nao\nNCX0I40,Coopediesel,Carreta,Nao\nNFC3660,Marcus Eduardo Andrades Peres,Truck,Nao\nNFO1928,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nNGF2954,Cooperativa dos Transportadores Unidos Ltda.,Carreta,Nao\nNJB2858,Galvão & Messias Ltda.,Carreta,Nao\nNKE0329,RN Transporte e Logistica Ltda,Carreta,Nao\nNKK7412,SS LOG Transportes e Logistica Ltda,Carreta,Nao\nNKO0192,Transmartyna Ltda ME,Carreta,Nao\nNLP0479,Lagam Transportes & Logistica Ltda,Bitruck,Nao\nNPJ2578,Transportadora Multi Express Ltda,Carreta,Nao\nNPJ2F58,Multi Express,Carreta,Nao\nNPJ2F78,Multi Express,Carreta,Nao\nNUE1B52,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nNVY0428,Posto Vanete Ltda,Carreta,Nao\nNYE9761,TAC Transportes Armazenagem e Logistica,Truck,Nao\nOBE9693,Baixotes Transportes,Carreta,Nao\nOBE9G93,Baixotes Transportes,Carreta,Nao\nOBL9073,Transportadora Multi Express Ltda,Carreta,Nao\nODA8650,Transportadora Multi Express Ltda,Carreta,Nao\nOFN0964,Baixotes Transportes,Carreta,Nao\nOFS2H37,Cooperativa Riobranquense de Transportes Ltda.,Bitruck,Nao\nOGY2586,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nOKF5239,Rubens Eugenio Fiorentin Transportes Ltda.,Bitruck,Nao\nOKG2369,Sergio Nava e Cia Ltda,Carreta,Nao\nOLI5344,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nOMB0200,Friocargo Triangulo Ltda,Carreta,Nao\nOMB0466,Cooperativa Riobranquense de Transportes Ltda,3/4,Nao\nOMF8787,Omega X Solucoes em Logistica e Armazenagem Ltda,Carreta,Nao\nOMS4B32,Transportadora E Armazenagem Zilli Ltda,Carreta,Nao\nONZ4C37,Cisne Branco Transportes Ltda EPP,Carreta,Nao\nOOF9544,Solucao Transportes e Servicos Eireli,Carreta,Nao\nOOH4498,TAC Transportes Armazenagem e Logistica Ltda,Bitruck,Nao\nOOH4976,Rodocunha Transportes Ltda - ME,Bitruck,Nao\nOOH5001,Rodocunha Transportes Ltda - ME,Bitruck,Nao\nOOV8H47,Marizileia Transportes,Carreta,Nao\nOOW1277,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nOOZ5927,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nOOZ5955,Cooperativa Riobranquense de Transprotes Ltda,3/4,Nao\nOPC4600,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nOPC6065,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nOPF8308,Cooperativa de Transp e Logist de Sao Sebastiao do Oeste Mg,Bitruck,Nao\nOPL2I85,Marques e Silva,Toco,Nao\nOPM7245,Denia Transportes,Carreta,Nao\nOPM7C45,Denia Transportes,Carreta,Nao\nOPM7C55,Denia Transportes,Carreta,Nao\nOPM9245,Denia Transportes,Carreta,Nao\nOPQ0668,TAC Transportes Armazenagem e Logistica,Toco,Nao\nOPQ0672,Transportadora Multi Express Ltda,Toco,Nao\nOPQ3989,Suinco,Toco,Nao\nOPS0605,Transportes e Armazenagem Zilli Ltda,Truck,Nao\nOPT4189,Suinco Cooperativa de Suinocultores Ltda,3/4,Nao\nOQA3631,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nOQB1826,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nOQH3838,Cooperativa Riobranquense de Transportes Ltda.,Toco,Nao\nOQH4050,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nOQN4506,Logmaster Armazem e Logistica Ltda,Carreta,Nao\nOQO4469,Bruno Sergio Ferreira CPF 04625109647,Carreta,Nao\nOQP8538,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nOQQ2484,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nOQR5074,Cooperativa Riobranquense de Transportes Ltda,Carreta,Nao\nOQS0440,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nOQS5031,Locação e Administração Betel Eireli,Bitruck,Nao\nORB4130,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nORB9881,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nOWI8132,Cooperativa Riobranquense de Transprotes Ltda,Toco,Nao\nOWO0091,Transportadora Multi Express Ltda,Truck,Nao\nOWS5001,RN Transporte e Logistica Ltda,Toco,Nao\nOXB7D48,MR Transportes,Carreta,Nao\nOXC1638,Transportes e Armazenagem Zilli Ltda,Carreta,Nao\nOXC9013,Maxfrios Distribuidora e Transporte Eireli,Bitruck,Nao\nOXE9439,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nOXE9E39,Coopertral,Carreta,Nao\nOXI0440,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nOXI2409,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nPLI2086,TAC Transportes Armazenagem e Logistica Ltda,Bitruck,Nao\nPLI2A56,AJB Transportes,Bitruck,Nao\nPLI2A86,AJB Transportes,Bitruck,Nao\nPQS3A09,Coopertral,Carreta,Nao\nPQT7204,TAC Transportes Armazenagem e Logistica Ltda,Carreta,Nao\nPQT7984,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nPQT8064,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nPQT8074,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nPQT8084,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nPRO2122,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nPRR9846,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nPRS0146,Transportadora E Armazenagem Zilli Ltda,Carreta,Nao\nPUA3I52,Marizileia Transportes,Carreta,Nao\nPUD2035,Friocargo Triangulo Ltda,3/4,Nao\nPUD5076,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nPUI0885,Cooperativa Riobranquense de Transprotes Ltda,3/4,Nao\nPUJ1134,Cirio Alves de Oliveira Junior - Transportes,3/4,Nao\nPUK7035,Coopernova Cooperativa Riobranquense de Transporte Ltda.,Carreta,Nao\nPUL1460,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nPUL1470,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nPUN3820,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nPUO3485,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nPUO3E85,Transportadora Multi Express Ltda,Carreta,Nao\nPUO6C29,Marques e Silva,Carreta,Nao\nPUQ8460,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nPUS8E44,Marques e Silva,Carreta,Nao\nPUT4870,Formoso,Carreta,Nao\nPUW9A61,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nPUX2971,G S Puridade Transportes e Servicos Ltda,Carreta,Nao\nPUZ9960,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nPVA4360,Trans Frios Transportes e Logistica Ltda ME,Bitruck,Nao\nPVC6654,Transportes e Armazenagem Zilli Ltda,Toco,Nao\nPVE6696,Transportadora Multi Express Ltda,Bitruck,Nao\nPVG4686,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nPVG7128,Cooperativa Riobranquense de Transprotes Ltda,3/4,Nao\nPWA3260,Transportadora Multi Express Ltda,Carreta,Nao\nPWC1358,Friocargo Triangulo Ltda,3/4,Nao\nPWE3893,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nPWG1739,Transportes e Armazenagem Zilli Ltda,Bitruck,Nao\nPWG1740,Cooperativa Riobranquense de Transportes Ltda.,Bitruck,Nao\nPWL6615,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nPWL8958,Omega X Solucoes em Log e Armazenagem Ltda,Truck,Nao\nPWP3047,Washington L S Costa Junior - ME,Bitruck,Nao\nPWQ8784,TAC Transportes Armazenagem e Logistica,Truck,Nao\nPXJ0726,M Braga & Sobrinho Ltda.,3/4,Nao\nPYF0280,Cooperativa dos Transportadores Unidos Ltda.,Truck,Nao\nPYP5755,Tais Simoes Me,Carreta,Nao\nPYV7I69,Telma Souza de Oliveira Santos 28574076880,3/4,Nao\nPYZ1D03,Baixotes Transportes,Bitruck,Nao\nPZR6754,Cooperativa Riobranquense de Transportes Ltda.,Bitruck,Nao\nPZR6H54,Denia Transportes,Bitruck,Nao\nPZS5316,Flay Logistica e Armazenagem Ltda,Bitruck,Nao\nQBC5B40,Multi Express,Carreta,Nao\nQBH5J89,Multi Express,Carreta,Nao\nQCE5G23,Multi Express,Carreta,Nao\nQGJ0H09,Omega X Solucoes em Logistica e Armazenagem Ltda,Carreta,Nao\nQHA1470,R A de Castilho Transportes,Carreta,Nao\nQHF0778,Transportes Zanini Ltda,Carreta,Nao\nQHK7670,Transportes Zanini Ltda,Carreta,Nao\nQHT8275,Transportes Zanini Ltda,Carreta,Nao\nQHT8855,Transportes Zanini Ltda,Carreta,Nao\nQHT8885,Transportes Zanini Ltda,Carreta,Nao\nQHV8C67,Coopertral,Carreta,Nao\nQJI3576,Transportes Zanini Ltda,Carreta,Nao\nQJK1913,Transportes e Comércio Irmãos Albiero Ltda ME,Carreta,Nao\nQJM1037,Transportes Zanini Ltda,Carreta,Nao\nQJU6926,Kaipper Continental Transportes Ltda,Carreta,Nao\nQJZ7E76,Marques e Silva,Carreta,Nao\nQMR2C59,Cooperativa de Transp e Logist de Sao Sebastiao do Oeste Mg,Bitruck,Nao\nQMR2C75,Cooperativa de Transp e Logist de Sao Sebastiao do Oeste Mg,Bitruck,Nao\nQMX6767,AC Transportes,Truck,Nao\nQNA0693,Posto Vanete Ltda,Carreta,Nao\nQNA4729,Isavic Transporte e Armazenamento Ltda,Carreta,Nao\nQNK1999,Cooperativa Riobranquense de Transportes Ltda.,Truck,Nao\nQNK8591,Cooperativa dos Transportadores Unidos Ltda.,Carreta,Nao\nQNN3324,Transportadora Multi Express Ltda,Bitruck,Nao\nQNQ7011,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nQNQ7021,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nQNQ7031,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nQNQ7041,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nQNQ7A11,Transportadora Multi Express Ltda,Carreta,Nao\nQNQ7A31,Bruno Sergio Ferreira CPF 04625109647,Carreta,Nao\nQNQ7A41,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nQNV2963,Mult Service Montes Claros,Carreta,Nao\nQNV4183,Trans Frios Transportes e Logistica Ltda ME,Bitruck,Nao\nQNW7336,Cooperativa Riobranquense de Transportes Ltda,Toco,Nao\nQNZ7304,Logmaster Armazem e Logistica Ltda,Carreta,Nao\nQNZ7305,Friocargo Triangulo Ltda,Carreta,Nao\nQOC1193,Transportadora Multi Express Ltda,Bitruck,Nao\nQOC3718,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nQOI6463,Matheus Gomes Mundim Araujo - ME,3/4,Nao\nQON7112,Cooperativa Riobranquense de Transportes Ltda,Carreta,Nao\nQOW1672,Cooperativa Riobranquense de Transportes Ltda.,Bitruck,Nao\nQPA2533,AJB Transportes,Bitruck,Nao\nQPX7375,Posto Vanete,Carreta,Nao\nQPX7381,Posto Vanete,Carreta,Nao\nQPX7384,Posto Vanete,Carreta,Nao\nQPZ8I27,TransOliveira,Carreta,Nao\nQQG3946,SS LOG Transportes e Logistica Ltda,Carreta,Nao\nQQI3E51,MR Transportes,Carreta,Nao\nQQO5J16,Multi Express,Carreta,Nao\nQQO8876,Transportes Horizonte Frios Ltda,Carreta,Nao\nQQP6621,Coopertral,Carreta,Nao\nQQT1682,Transportadora Multi Express Ltda,Carreta,Nao\nQQT1G82,Coopertral,Carreta,Nao\nQRD1152,Tais Simoes Me,Carreta,Nao\nQUB9352,Cooperativa Riobranquense de Transprotes Ltda,3/4,Nao\nQUG1307,Transportadora Multi Express Ltda,Carreta,Nao\nQUU0926,Transportes e Armazenagem Zilli Ltda,Carreta,Nao\nQUU0940,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nQWV2926,Transfernata Ltda.,Carreta,Nao\nQXA2439,AC Logística,Carreta,Nao\nQXL7916,Maxfrios Distribuidora e Transporte Eireli,Carreta,Nao\nQXT8D43,MMS Armazenagem e Logistica SA,Carreta,Nao\nQXY1F27,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nQXY4B02,Rodosousa,Bitruck,Nao\nRAG4A52,Cooperativa dos Transportadores Unidos Ltda.,Carreta,Nao\nRAI1G55,Canada Transportes e Comercio Ltda.,Carreta,Nao\nRAJ9J31,Bruno Sergio Ferreira CPF 04625109647,Carreta,Nao\nRCM4A73,MR Transportes,Carreta,Nao\nRCP3C74,Marizileia Transportes,Carreta,Nao\nREE0C39,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nRFB3J59,Transportadora Multi Express Ltda,Carreta,Nao\nRFE0H49,Coopertral,Carreta,Nao\nRFZ7C00,Omega X Solucoes em Logistica e Armazenagem Ltda,Carreta,Nao\nRLA5H78,LNF Transporte,Carreta,Nao\nRLG6A98,Marvel,Container,Nao\nRMH8G11,Multi Express,Carreta,Nao\nRMM0C10,Coopertral,Carreta,Nao\nRMM0C17,Marizileia Transportes,Carreta,Nao\nRMS9H45,Multi Express,Carreta,Nao\nRMT0F38,Baixotes Transportes,Carreta,Nao\nRMT0F41,Baixotes Transportes,Carreta,Nao\nRMW1A91,Coopertral,Truck,Nao\nRMX0B03,Multi Express,Carreta,Nao\nRMY8J16,AJB Transportes,Bitruck,Nao\nRNC6F46,Transportadora Multi Express Ltda,Carreta,Nao\nRNC7B23,Marques e Silva,Bitruck,Nao\nRND3D90,MR Transportes,Carreta,Nao\nRNS2J03,Dorense Transportes de Cargas Ltda-ME,Bitruck,Nao\nRNS3G28,Suinco,3/4,Nao\nRNS3G61,Suinco,3/4,Nao\nRNS3J61,Suinco,3/4,Nao\nRNT5I98,Suinco,3/4,Nao\nRNT5J03,Suinco,3/4,Nao\nRNT8C00,Marizileia Transportes,Carreta,Nao\nRNU1H74,MR Transportes,Carreta,Nao\nRNV2A77,Suinco,3/4,Nao\nRNV4H60,Suinco,3/4,Nao\nRNV5G22,Suinco,3/4,Nao\nRNW4H60,Suinco,3/4,Nao\nRNW7J57,Suinco,3/4,Nao\nRNX0C26,Suinco,3/4,Nao\nRNX0C28,Suinco,3/4,Nao\nRNX3C26,Suinco,3/4,Nao\nRNX3C28,Suinco,3/4,Nao\nRNY8J16,AJB Transportes,Bitruck,Nao\nRTD7C55,MR Transportes,Carreta,Nao\nRTF6I71,Cargofrio Logística e Armazenamento Ltda,Bitruck,Nao\nRUG6B37,Max Frios,Bitruck,Nao\nRUM4A51,Coopertral,Carreta,Nao\nRUR5A00,Marizileia Transportes,Carreta,Nao\nRVI5B24,AC Armazenagem,Truck,Nao\nRVN5G22,Suinco,3/4,Nao\nRVO3A10,MR Transportes,Carreta,Nao\nSDB3F38,AJB Transportes,Bitruck,Nao\nSDB4F38,AJB Transportes,Bitruck,Nao\nSDX0G28,PH Fidelis,Bitruck,Nao\nSIW0E00,Marizileia Transportes,Carreta,Nao\nSIY0147,Suinco,3/4,Nao\nSIY0G36,Suinco,3/4,Nao\nSIY0G38,Suinco,3/4,Nao\nSIY0G39,Suinco,3/4,Nao\nSIY0G41,Suinco,3/4,Nao\nSIY0G43,Suinco,3/4,Nao\nSIY0I47,Suinco,3/4,Nao\nSIY7A00,Marizileia Transportes,Carreta,Nao\nSIYOG36,Suinco,3/4,Sim\nSJY7D76,Joyway Food,Container,Nao\nSRZ4E29,MR Transportes,Bitruck,Nao\nSXF8J27,LNF Transporte,Carreta,Nao\nSXT9B03,Marvel,Carreta,Nao\nSYC3C00,Marizileia Transportes,Carreta,Nao\nSYJ5J26,Coopertral,Carreta,Nao\nSYW0B00,Marizileia Transportes,Carreta,Nao\nSYW0E00,Marizileia Transportes,Carreta,Nao\nSYX4I27,MR Transportes,Carreta,Nao\nTCD2B57,Baixotes Transportes,Carreta,Nao\nTCG1A00,Marizileia Transportes,Carreta,Nao\nTCG9H61,MR Transportes,Carreta,Nao\nTCS9I99,Coopertral,Carreta,Nao\nTCY9J14,Pedro Ferreira Transportes,Carreta,Nao\nTDQ7I07,MR Transportes,Carreta,Nao\nTEW0A46,Multi Express,Carreta,Nao\nTEW0A97,Multi Express,Carreta,Nao\nTIX4J94,LNF Transporte,Carreta,Nao\nTIX8F93,LNF Transporte,Carreta,Nao\nTPO5I06,Marvel,Carreta,Nao\nTXE6E82,Coopertral,Truck,Nao\nTXT3J12,MR Transportes,Carreta,Nao\nTXU5G95,MR Transportes,Carreta,Nao\nTXX3C52,Max Frios,Bitruck,Nao\nTXZ6E13,MR Transportes,Carreta,Nao\nTXZ6E82,Coopertral,Truck,Nao\nTYZ4J12,Multi Express,Bitruck,Nao\nTZB6H99,Multi Express,Carreta,Nao\nTZE6E82,Coopertral,Truck,Nao\n";</script>
-<script>window.SUINCO_BUILD = "18/08 11:51 · 09e6143";</script>
+<script>window.SUINCO_BUILD = "18/08 16:49 · 6e73bdf";</script>
 <script>
 /* =====================================================================
    PAINEL LOGÍSTICO SUINCO — camada de dados
@@ -5655,8 +5945,13 @@ const STATUS_ORDEM_EXPORT = STATUS_FLOW.slice();
    A diferença entre as duas está numa coisa só: a aba Usuários. Criar
    acesso não é operar o pátio — é decidir quem entra. Fica com a
    Administração, como definido desde o início. */
-const ABAS_OPERACIONAIS = ['torre','programacao','portaria','expedicao',
-                           'faturamento','indicadores','cadastros',
+/* 'devolucoes' está aqui — e só aqui — de propósito (fase 1, 18/08/2026):
+   ABAS_OPERACIONAIS alimenta exatamente Logística e Administração, que são
+   quem alimenta e audita o checklist digital antes de abrir para os outros
+   setores (decisão da reunião com o gestor). A fase 2 é acrescentar a aba
+   às listas dos setores — nada além disso. */
+const ABAS_OPERACIONAIS = ['torre','programacao','devolucoes','portaria',
+                           'expedicao','faturamento','indicadores','cadastros',
                            'historico','relatorios'];
 
 /* A Torre saiu das abas de quem opera um posto só.
@@ -5715,6 +6010,12 @@ const SETOR_PERMISSOES = {
      leitura pura, e os campos editáveis dela só aparecem para quem pode
      cancelar carga — Logística/Administração). */
   'Comercial':    ['torre','historico'],
+  /* Setores da devolução (18/08/2026): cada um assina um passo do
+     checklist digital — Controles Internos destina os produtos, Central
+     de Notas finaliza a NF. Só veem a aba Devoluções e o Histórico; o
+     servidor confere de novo o que cada um pode gravar. */
+  'Controles Internos': ['devolucoes','historico'],
+  'Central de Notas':   ['devolucoes','historico'],
 };
 
 // Função de cada aba, exibida no topo dela. Serve para quem abre o painel pela
@@ -8580,6 +8881,10 @@ function renderTabAtual(){
   switch(TAB_ATUAL){
     case 'torre': renderTorre(); renderVisaoPatio('torre'); break;
     case 'programacao': renderProgFila(); renderProgAguardando(); break;
+    // Módulo próprio (devolucoes.js, carregado depois deste arquivo). O
+    // typeof protege a ordem de carga: se o módulo faltar, a aba fica
+    // vazia em vez de derrubar a navegação inteira.
+    case 'devolucoes': if(typeof renderDevolucoes === 'function') renderDevolucoes(); break;
     case 'portaria':
       renderPortariaProgramadas();
       renderPortariaPatio();
@@ -12861,6 +13166,801 @@ function painelStatusHorizontal(dist, total, titulo, explicacao){
         </td>
       </tr></tbody>
     </table>`;
+}
+
+</script>
+<script>
+/* Devoluções — o checklist digital (fase 1: Logística e Administração).
+
+   Módulo separado de app.js de propósito: é um fluxo inteiro com dados
+   próprios, e app.js já passa de 5 mil linhas. Tudo aqui é SERVIDOR-FIRST:
+   a lista vem da API a cada abertura/evento, cada gravação vai direto para
+   a API, e não existe cópia em localStorage — o checklist é um documento
+   compartilhado entre setores, e cópia local dessincronizada foi a raiz do
+   incidente das cargas (14–15/08/2026). Sem conexão a aba diz isso com
+   todas as letras em vez de fingir que gravou.
+
+   Depende dos globais do painel: DB, notify, esc, escJs, fmtDataHora,
+   ROTAS, rotaLabel, TAB_ATUAL, SuincoSharePoint (adaptador),
+   cabecalhoDocumento/rodapeDocumento/tituloSecaoPdf/exportarViaServidor
+   (relatórios). Carregado DEPOIS de app.js no build. */
+
+let DEVOLUCOES = [];
+let DEV_CADASTROS = { supervisores: [], produtos: [], motivos: [] };
+let _devCadastrosCarregados = false;
+let _devExpandida = null;   // checklist aberto (sobrevive ao re-render)
+/* Rotas escolhidas no formulário de NOVO checklist — um checklist junta
+   várias rotas da mesma região (pedido de 18/08/2026). */
+let _devRotasNovas = [];
+
+function devRotulo(d) {
+  return `${d.regiao ? d.regiao + ' · ' : ''}rota(s) ${(d.rotas || []).join(', ') || '—'}`;
+}
+
+/* Etapas na ordem do processo real. `pede` são os campos que aquela etapa
+   imputa — o mesmo papel que o campo tinha na folha impressa. */
+/* `setores` espelha a allowlist do servidor (dominio/devolucoes.js) — a
+   tela não mostra botão que a API vai recusar. Administração passa em
+   tudo, como no resto do painel. */
+const DEV_ETAPAS = [
+  { status: 'Lançada',                  proxima: 'Recebida na Portaria',
+    botao: '🚧 Receber na Portaria', pede: 'portaria',
+    setores: ['Portaria', 'Logística'] },
+  { status: 'Recebida na Portaria',     proxima: 'Conferida no Faturamento',
+    botao: '⚖️ Conferir no Faturamento', pede: 'faturamento',
+    setores: ['Faturamento', 'Logística'] },
+  { status: 'Conferida no Faturamento', proxima: 'Descarga Conferida',
+    botao: '📦 Descarga conferida (Expedição)', pede: null,
+    setores: ['Expedição', 'Logística'] },
+  { status: 'Descarga Conferida',       proxima: 'Destinada',
+    botao: '🏷️ Registrar destinação (Controles Internos)', pede: 'controles',
+    setores: ['Controles Internos', 'Logística'] },
+  { status: 'Destinada',                proxima: 'Nota Finalizada',
+    botao: '🧾 Finalizar nota (Central de Notas)', pede: null,
+    setores: ['Central de Notas', 'Logística'] },
+];
+
+const DEV_ETAPA_ROTULO = {
+  portaria: 'Portaria', faturamento: 'Faturamento', expedicao: 'Expedição',
+  controles: 'Controles Internos', notas: 'Central de Notas',
+};
+
+/* Dia local do pátio — NUNCA toISOString().slice(0,10): às 21h+ de Patos
+   de Minas o UTC já virou o dia seguinte (guardião nº 2). */
+function diaLocalDev(d = new Date()) {
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function devServidorOk() {
+  return typeof SuincoSharePoint !== 'undefined'
+    && SuincoSharePoint.estaConfigurado && SuincoSharePoint.estaConfigurado()
+    && SuincoSharePoint.devolucoes;
+}
+
+function podeEditarDevolucao() {
+  const setor = (DB.operador || {}).setor;
+  return setor === 'Logística' || setor === 'Administração';
+}
+
+/* Papéis da fase 2, já valendo para os setores criados em 18/08/2026:
+   Expedição confere o que chegou; Controles Internos destina. Cada um
+   enxerga editável SÓ a própria coluna — o servidor confere de novo. */
+function podeConferirQtdDev() {
+  const setor = (DB.operador || {}).setor;
+  return podeEditarDevolucao() || setor === 'Expedição';
+}
+function podeDestinarDev() {
+  const setor = (DB.operador || {}).setor;
+  return podeEditarDevolucao() || setor === 'Controles Internos';
+}
+
+function getDevolucao(id) {
+  return DEVOLUCOES.find((d) => d.id === id) || null;
+}
+
+/* ---------- render principal (chamado por renderTabAtual) ---------- */
+
+function renderDevolucoes() {
+  if (!DB.operador) return;
+  const offline = document.getElementById('dev-offline');
+  const conteudo = document.getElementById('dev-conteudo');
+  if (!offline || !conteudo) return;
+
+  const ok = devServidorOk();
+  offline.hidden = ok;
+  conteudo.hidden = !ok;
+  if (!ok) return;
+
+  const data = document.getElementById('dev-data');
+  if (data && !data.value) data.value = diaLocalDev();
+  const filtro = document.getElementById('dev-filtro-dia');
+  if (filtro && !filtro.value) filtro.value = diaLocalDev();
+
+  preencherSelectRotaDev();
+  if (!_devCadastrosCarregados) carregarCadastrosDev();
+  carregarDevolucoes();
+}
+
+function preencherSelectRotaDev() {
+  const sel = document.getElementById('dev-rota');
+  if (!sel) return;
+  const atual = sel.value;
+  sel.innerHTML = '<option value="">(escolha a rota)</option>'
+    + ROTAS.map((r) => `<option value="${esc(r.codigo)}">${esc(rotaLabel(r.codigo))}</option>`).join('');
+  if (atual) sel.value = atual;
+}
+
+async function carregarCadastrosDev() {
+  try {
+    DEV_CADASTROS = await SuincoSharePoint.devolucoes.cadastros();
+    _devCadastrosCarregados = true;
+    const põe = (id, valores) => {
+      const dl = document.getElementById(id);
+      if (dl) dl.innerHTML = valores.map((v) => `<option value="${esc(v)}">`).join('');
+    };
+    põe('dl-dev-supervisores', DEV_CADASTROS.supervisores || []);
+    põe('dl-dev-motivos', DEV_CADASTROS.motivos || []);
+    const dlProd = document.getElementById('dl-dev-produtos');
+    if (dlProd) {
+      dlProd.innerHTML = (DEV_CADASTROS.produtos || [])
+        .map((p) => `<option value="${esc(p.codigo)}">${esc(p.nome)}${p.pesoCaixaKg ? ' · ' + p.pesoCaixaKg + ' kg/cx' : ''}</option>`).join('');
+    }
+  } catch (e) {
+    console.warn('[Devoluções] cadastros:', e);
+  }
+}
+
+async function carregarDevolucoes() {
+  if (!devServidorOk()) return;
+  const dia = (document.getElementById('dev-filtro-dia') || {}).value || diaLocalDev();
+  try {
+    DEVOLUCOES = await SuincoSharePoint.devolucoes.listar(dia, dia);
+    renderListaDevolucoes();
+  } catch (e) {
+    notify('Não consegui buscar as devoluções: ' + (e.message || 'erro desconhecido'), 'danger', 6000);
+  }
+}
+
+function filtroDevolucoesHoje() {
+  const f = document.getElementById('dev-filtro-dia');
+  if (f) f.value = diaLocalDev();
+  carregarDevolucoes();
+}
+
+/* ---------- a lista de checklists ---------- */
+
+function devStatusChip(status) {
+  const pos = DEV_ETAPAS.findIndex((e) => e.status === status);
+  const cls = status === 'Nota Finalizada' ? 'dev-chip-final'
+    : pos <= 0 ? 'dev-chip-inicio' : 'dev-chip-meio';
+  return `<span class="dev-chip ${cls}">${esc(status)}</span>`;
+}
+
+function devProdutoNomePorCodigo(codigo) {
+  const p = (DEV_CADASTROS.produtos || []).find((x) => x.codigo === String(codigo).trim());
+  return p ? p.nome : '';
+}
+
+/* Peso sugerido = caixas × quilo/caixa do cadastro do produto. Só SUGERE
+   quando a operadora não digitou peso — número digitado nunca é
+   sobrescrito por conta. */
+function devPesoSugerido(codigo, cx) {
+  const p = (DEV_CADASTROS.produtos || []).find((x) => x.codigo === String(codigo).trim());
+  const n = Number(cx);
+  if (!p || !p.pesoCaixaKg || !Number.isFinite(n) || n <= 0) return null;
+  return Math.round(n * p.pesoCaixaKg * 100) / 100;
+}
+
+function renderListaDevolucoes() {
+  const box = document.getElementById('dev-lista');
+  const vazio = document.getElementById('dev-empty');
+  if (!box) return;
+  vazio.hidden = DEVOLUCOES.length > 0;
+  const editavel = podeEditarDevolucao();
+
+  box.innerHTML = DEVOLUCOES.map((d) => {
+    const aberta = _devExpandida === d.id;
+    const totalCx = d.itens.reduce((s, i) => s + (i.cx || 0), 0);
+    const faltas = d.itens.filter((i) => i.falta !== null && i.falta > 0);
+    const totalFalta = faltas.reduce((s, i) => s + i.falta, 0);
+    const resumo = [
+      `${d.itens.length} item(ns) · ${totalCx.toLocaleString('pt-BR')} cx`,
+      totalFalta > 0 ? `<span class="dev-falta-chip">falta ${totalFalta.toLocaleString('pt-BR')} cx</span>` : '',
+      d.divergencias.length ? `<span class="dev-diverg-chip">${d.divergencias.length} divergente(s)</span>` : '',
+    ].filter(Boolean).join(' ');
+
+    return `<div class="dev-card${aberta ? ' dev-aberta' : ''}">
+      <div class="dev-card-topo" onclick="alternarDevolucaoUI('${escJs(d.id)}')">
+        <div class="dev-card-id">
+          <strong>Checklist Nº ${d.numero}</strong>
+          <span class="dev-card-rota">${d.regiao ? esc(d.regiao) + ' · ' : ''}${(d.rotas || []).map((r) => 'Rota ' + esc(r)).join(' · ') || 'sem rota'}</span>
+          ${devStatusChip(d.status)}
+        </div>
+        <div class="dev-card-meta">
+          <span>${esc(d.criadaPor)}</span>
+          <span>${resumo}</span>
+          <span class="dev-card-seta">${aberta ? '▾' : '▸'}</span>
+        </div>
+      </div>
+      ${aberta ? renderDevolucaoAberta(d, editavel) : ''}
+    </div>`;
+  }).join('');
+}
+
+function alternarDevolucaoUI(id) {
+  _devExpandida = _devExpandida === id ? null : id;
+  renderListaDevolucoes();
+}
+
+function cabecalhoEditavelDev(d, editavel) {
+  const campo = (rotulo, nome, valor, extra = '') => `
+    <div><label>${rotulo}</label>
+      ${editavel
+        ? `<input type="text" value="${esc(valor || '')}" ${extra}
+             onchange="editarDevolucaoCampoUI('${escJs(d.id)}','${nome}',this.value)">`
+        : `<div class="dev-ro">${esc(valor) || '—'}</div>`}
+    </div>`;
+  const rotasChips = `<div class="dev-rotas-chips">
+      ${(d.rotas || []).map((r) => `<span class="dev-rota-chip">Rota ${esc(r)}
+        ${editavel ? `<button type="button" title="Tirar esta rota do checklist"
+          onclick="tirarRotaDevolucaoUI('${escJs(d.id)}','${escJs(r)}')">✕</button>` : ''}</span>`).join('')}
+      ${editavel ? `<span class="gap8">
+        <select id="dev-addrota-${esc(d.id)}">
+          <option value="">(incluir rota…)</option>
+          ${ROTAS.filter((r) => !(d.rotas || []).includes(r.codigo))
+            .map((r) => `<option value="${esc(r.codigo)}">${esc(rotaLabel(r.codigo))}</option>`).join('')}
+        </select>
+        <button class="btn btn-sec btn-sm" onclick="incluirRotaDevolucaoUI('${escJs(d.id)}')">➕</button>
+      </span>` : ''}
+    </div>`;
+  return `${rotasChips}<div class="form-grid dev-cab-grid">
+      ${campo('Região', 'regiao', d.regiao)}
+      ${campo('Transportadora', 'transportadora', d.transportadora)}
+      ${campo('Nota de transferência', 'notaTransferencia', d.notaTransferencia)}
+      ${campo('Placa', 'placa', d.placa)}
+      ${campo('Motorista', 'motorista', d.motorista)}
+      <div><label>Nº carga (Portaria)</label><div class="dev-ro">${esc(d.cargaNumero) || '—'}</div></div>
+      <div><label>Lacres (Portaria)</label><div class="dev-ro">${esc([d.lacre1, d.lacre2].filter(Boolean).join(' · ')) || '—'}</div></div>
+      <div><label>Peso final (Faturamento)</label><div class="dev-ro">${d.pesoFinal !== null ? d.pesoFinal.toLocaleString('pt-BR') + ' kg' : '—'}</div></div>
+    </div>`;
+}
+
+function carimbosDev(d) {
+  return `<div class="dev-carimbos">
+    ${Object.entries(DEV_ETAPA_ROTULO).map(([chave, rotulo]) => {
+      const c = d.carimbos[chave];
+      return `<div class="dev-carimbo${c ? ' dev-carimbo-ok' : ''}">
+          <span class="dev-carimbo-rot">${rotulo}</span>
+          ${c ? `<span class="dev-carimbo-quem">${esc(c.por)}</span>
+                 <span class="dev-carimbo-quando">${esc(fmtDataHora(c.em))}</span>`
+              : '<span class="dev-carimbo-vazio">— pendente —</span>'}
+        </div>`;
+    }).join('')}
+  </div>`;
+}
+
+function acaoEtapaDev(d) {
+  const etapa = DEV_ETAPAS.find((e) => e.status === d.status);
+  if (!etapa) return '<div class="card-sub">✅ Ciclo encerrado — nota fiscal finalizada.</div>';
+  /* Espelho da allowlist do servidor: quem não assina este passo vê QUEM
+     assina, em vez de um botão que a API recusaria. */
+  const setor = (DB.operador || {}).setor;
+  if (setor !== 'Administração' && !etapa.setores.includes(setor)) {
+    return `<div class="card-sub">Próximo passo: <strong>${esc(etapa.proxima)}</strong> — feito por ${esc(etapa.setores.join(' ou '))}.</div>`;
+  }
+  const id = escJs(d.id);
+  let extras = '';
+  if (etapa.pede === 'portaria') {
+    extras = `
+      <input type="text" id="dev-et-${esc(d.id)}-lacre1" placeholder="Lacre 1" value="${esc(d.lacre1)}">
+      <input type="text" id="dev-et-${esc(d.id)}-lacre2" placeholder="Lacre 2 (se houver)" value="${esc(d.lacre2)}">
+      <input type="text" id="dev-et-${esc(d.id)}-carga" placeholder="Nº da carga" value="${esc(d.cargaNumero)}">`;
+  } else if (etapa.pede === 'faturamento') {
+    extras = `<input type="number" min="0" step="1" id="dev-et-${esc(d.id)}-peso"
+      placeholder="Peso final em kg (opcional)" value="${d.pesoFinal ?? ''}">`;
+  } else if (etapa.pede === 'controles') {
+    extras = `<input type="text" id="dev-et-${esc(d.id)}-obs"
+      placeholder="Observações dos Controles Internos (saem no relatório)" value="${esc(d.obsControles)}">`;
+  }
+  return `<div class="dev-etapa-acao">
+      ${extras}
+      <button class="btn btn-sm" onclick="avancarEtapaDevolucaoUI('${id}')">${etapa.botao}</button>
+    </div>`;
+}
+
+function renderDevolucaoAberta(d, editavel) {
+  const linhaItem = (i) => {
+    const faltaHtml = i.falta === null
+      ? '<span class="text-dim" title="Ainda não conferido">—</span>'
+      : i.falta > 0
+        ? `<span class="dev-falta-chip">falta ${i.falta.toLocaleString('pt-BR')}</span>`
+        : '<span class="dev-ok-chip">✔</span>';
+    const cel = (nome, valor, tipo = 'text', extra = '') => editavel
+      ? `<input type="${tipo}" value="${esc(valor ?? '')}" ${extra}
+           onchange="editarItemDevolucaoUI('${escJs(d.id)}',${i.itemId},'${nome}',this.value)">`
+      : (esc(valor) || '—');
+    return `<tr>
+      <td>${cel('nota', i.nota)}</td>
+      <td>${editavel
+        ? `<select onchange="editarItemDevolucaoUI('${escJs(d.id)}',${i.itemId},'parcial',this.value)">
+             <option value="1" ${i.parcial ? 'selected' : ''}>Parcial</option>
+             <option value="" ${i.parcial ? '' : 'selected'}>Total</option></select>`
+        : (i.parcial ? 'Parcial' : 'Total')}</td>
+      <td>${cel('supervisor', i.supervisor, 'text', 'list="dl-dev-supervisores"')}</td>
+      <td>${cel('vendedor', i.vendedor)}</td>
+      <td>${cel('codCliente', i.codCliente)}</td>
+      <td class="c-peso">${cel('cx', i.cx, 'number', 'min="0" step="1"')}</td>
+      <td class="c-peso">${cel('peso', i.peso, 'number', 'min="0" step="0.01"')}</td>
+      <td>${cel('codProduto', i.codProduto, 'text', 'list="dl-dev-produtos"')}
+          ${i.produtoNome ? `<small class="text-dim">${esc(i.produtoNome)}</small>` : ''}</td>
+      <td>${cel('numDev', i.numDev)}</td>
+      <td>${cel('motivo', i.motivo, 'text', 'list="dl-dev-motivos"')}</td>
+      <td class="c-peso">${podeConferirQtdDev()
+        ? `<input type="number" min="0" step="1" value="${i.qtdRecebida ?? ''}" placeholder="—"
+             title="Quantidade que CHEGOU na descarga. A falta é apontada sozinha."
+             onchange="editarItemDevolucaoUI('${escJs(d.id)}',${i.itemId},'qtdRecebida',this.value)">`
+        : (i.qtdRecebida ?? '—')}</td>
+      <td>${faltaHtml}</td>
+      <td>${podeDestinarDev()
+        ? `<select onchange="editarItemDevolucaoUI('${escJs(d.id)}',${i.itemId},'destinacao',this.value)">
+             <option value="">—</option>
+             ${['Estoque', 'Descarte', 'Reprocesso'].map((x) => `<option ${i.destinacao === x ? 'selected' : ''}>${x}</option>`).join('')}
+           </select>`
+        : (esc(i.destinacao) || '—')}</td>
+      ${editavel ? `<td class="no-print"><button class="btn btn-danger btn-sm"
+        onclick="excluirItemDevolucaoUI('${escJs(d.id)}',${i.itemId})">✕</button></td>` : ''}
+    </tr>`;
+  };
+
+  const novaLinha = !editavel ? '' : `<tr class="dev-linha-nova">
+      <td><input type="text" id="dev-ni-${esc(d.id)}-nota" placeholder="Nota"></td>
+      <td><select id="dev-ni-${esc(d.id)}-parcial"><option value="1">Parcial</option><option value="">Total</option></select></td>
+      <td><input type="text" id="dev-ni-${esc(d.id)}-supervisor" list="dl-dev-supervisores" placeholder="Supervisor"></td>
+      <td><input type="text" id="dev-ni-${esc(d.id)}-vendedor" placeholder="Vendedor"></td>
+      <td><input type="text" id="dev-ni-${esc(d.id)}-cliente" placeholder="Cód. cliente"></td>
+      <td class="c-peso"><input type="number" min="0" step="1" id="dev-ni-${esc(d.id)}-cx" placeholder="CX"></td>
+      <td class="c-peso"><input type="number" min="0" step="0.01" id="dev-ni-${esc(d.id)}-peso" placeholder="Peso"></td>
+      <td><input type="text" id="dev-ni-${esc(d.id)}-produto" list="dl-dev-produtos" placeholder="Cód. produto"></td>
+      <td><input type="text" id="dev-ni-${esc(d.id)}-numdev" placeholder="Nº DEV"></td>
+      <td><input type="text" id="dev-ni-${esc(d.id)}-motivo" list="dl-dev-motivos" placeholder="Motivo"></td>
+      <td colspan="3"></td>
+      <td class="no-print"><button class="btn btn-sm" onclick="adicionarItemDevolucaoUI('${escJs(d.id)}')"
+        title="Acrescentar esta linha ao checklist">➕</button></td>
+    </tr>`;
+
+  const divergencias = `
+    <div class="dev-divergencias">
+      <div class="dev-divergencias-tit">Produtos divergentes (chegaram FORA do checklist)</div>
+      ${d.divergencias.length ? `<ul>${d.divergencias.map((v) => `
+        <li>${v.cx.toLocaleString('pt-BR')} cx · <strong>${esc(v.codProduto)}</strong>
+          ${v.produtoNome ? esc(v.produtoNome) : ''}
+          ${v.observacao ? `<span class="text-dim">— ${esc(v.observacao)}</span>` : ''}
+          <span class="text-dim">(${esc(v.lancadaPor)})</span>
+          ${podeEditarDevolucao() ? `<button class="btn btn-danger btn-sm"
+            onclick="excluirDivergenciaDevolucaoUI('${escJs(d.id)}',${v.divergenciaId})">✕</button>` : ''}
+        </li>`).join('')}</ul>`
+      : '<div class="card-sub">Nenhum — o que chegou fora da lista entra aqui e NÃO cancela a falta do item substituído.</div>'}
+      ${podeEditarDevolucao() ? `<div class="dev-diverg-form">
+          <input type="text" id="dev-dv-${esc(d.id)}-produto" list="dl-dev-produtos" placeholder="Cód. produto">
+          <input type="number" min="0" step="1" id="dev-dv-${esc(d.id)}-cx" placeholder="CX">
+          <input type="text" id="dev-dv-${esc(d.id)}-obs" placeholder="Observação (ex: veio no lugar do 30110)">
+          <button class="btn btn-sec btn-sm" onclick="adicionarDivergenciaDevolucaoUI('${escJs(d.id)}')">➕ Lançar divergente</button>
+        </div>` : ''}
+    </div>`;
+
+  const admin = (DB.operador || {}).setor === 'Administração';
+  return `<div class="dev-card-corpo">
+      ${cabecalhoEditavelDev(d, editavel)}
+      ${carimbosDev(d)}
+      ${acaoEtapaDev(d)}
+      <div class="table-wrap">
+        <table class="dev-tabela">
+          <thead><tr>
+            <th>Nota</th><th>P/T</th><th>Supervisor</th><th>Vendedor</th>
+            <th>Cód. Cliente</th><th>CX</th><th>Peso</th><th>Cód. Produto</th>
+            <th>Nº DEV</th><th>Motivo</th><th>Recebido</th><th>Falta</th>
+            <th>Destinação</th>${editavel ? '<th class="no-print"></th>' : ''}
+          </tr></thead>
+          <tbody>${d.itens.map(linhaItem).join('')}${novaLinha}</tbody>
+        </table>
+      </div>
+      ${d.obsControles ? `<div class="card-sub"><strong>Obs. Controles Internos:</strong> ${esc(d.obsControles)}</div>` : ''}
+      ${divergencias}
+      <div class="flex-end gap8 no-print" style="margin-top:10px">
+        ${admin ? `<button class="btn btn-sec btn-sm" onclick="abrirRevisoesDevolucaoUI('${escJs(d.id)}')"
+          title="Ver alterações deste checklist e restaurar uma versão">↩ Alterações</button>` : ''}
+        ${editavel ? `<button class="btn btn-danger btn-sm" onclick="excluirDevolucaoUI('${escJs(d.id)}')">🗑 Excluir checklist</button>` : ''}
+      </div>
+    </div>`;
+}
+
+/* ---------- ações (todas servidor-first, com aviso honesto) ---------- */
+
+async function acaoDev(promessa, aviso) {
+  try {
+    await promessa;
+    if (aviso) notify(aviso, 'success');
+    await carregarDevolucoes();
+    return true;
+  } catch (e) {
+    notify((e && e.message) || 'O servidor recusou a gravação.', 'danger', 7000);
+    await carregarDevolucoes();   // mostra o estado REAL, não o otimista
+    return false;
+  }
+}
+
+/* Chips de rota do formulário de novo checklist. */
+function renderRotasNovasDev() {
+  const box = document.getElementById('dev-rotas-escolhidas');
+  if (!box) return;
+  box.innerHTML = _devRotasNovas.map((r) => `<span class="dev-rota-chip">Rota ${esc(r)}
+      <button type="button" title="Tirar esta rota"
+        onclick="removerRotaNovaDevUI('${escJs(r)}')">✕</button></span>`).join('');
+}
+
+function adicionarRotaNovaDevUI() {
+  const sel = document.getElementById('dev-rota');
+  const cod = sel && sel.value;
+  if (!cod) { notify('Escolha uma rota no seletor primeiro.', 'warn'); return; }
+  if (!_devRotasNovas.includes(cod)) _devRotasNovas.push(cod);
+  sel.value = '';
+  renderRotasNovasDev();
+}
+
+function removerRotaNovaDevUI(cod) {
+  _devRotasNovas = _devRotasNovas.filter((r) => r !== cod);
+  renderRotasNovasDev();
+}
+
+async function criarDevolucaoUI() {
+  const v = (id) => (document.getElementById(id) || {}).value || '';
+  /* Rota escolhida no seletor mas sem clique no "➕ Rota" conta mesmo
+     assim — esquecer o clique não pode custar um checklist sem a rota. */
+  const noSeletor = v('dev-rota');
+  const rotas = _devRotasNovas.slice();
+  if (noSeletor && !rotas.includes(noSeletor)) rotas.push(noSeletor);
+  if (!rotas.length) { notify('Escolha pelo menos uma rota — região + rotas identificam o checklist.', 'warn'); return; }
+  const corpo = {
+    dataDev: v('dev-data') || diaLocalDev(),
+    rotas,
+    regiao: v('dev-regiao'),
+    transportadora: v('dev-transportadora'),
+    notaTransferencia: v('dev-nota-transf'),
+    placa: v('dev-placa'),
+    motorista: v('dev-motorista'),
+    itens: [],
+  };
+  try {
+    const d = await SuincoSharePoint.devolucoes.criar(corpo);
+    notify(`Checklist Nº ${d.numero} criado (${devRotulo(d)}). Agora lance os itens na linha do próprio checklist.`, 'success', 6000);
+    ['dev-regiao', 'dev-transportadora', 'dev-nota-transf', 'dev-placa', 'dev-motorista']
+      .forEach((id) => { const e = document.getElementById(id); if (e) e.value = ''; });
+    _devRotasNovas = [];
+    renderRotasNovasDev();
+    const filtro = document.getElementById('dev-filtro-dia');
+    if (filtro) filtro.value = corpo.dataDev;
+    _devExpandida = d.id;
+    await carregarDevolucoes();
+  } catch (e) {
+    notify((e && e.message) || 'O servidor recusou a criação.', 'danger', 7000);
+  }
+}
+
+/* Troca de rotas num checklist já criado (chips na própria linha). */
+function tirarRotaDevolucaoUI(id, cod) {
+  const d = getDevolucao(id);
+  if (!d) return;
+  const rotas = (d.rotas || []).filter((r) => r !== cod);
+  if (!rotas.length) { notify('O checklist precisa de pelo menos uma rota.', 'warn'); return; }
+  acaoDev(SuincoSharePoint.devolucoes.editar(id, { rotas }));
+}
+
+function incluirRotaDevolucaoUI(id) {
+  const sel = document.getElementById(`dev-addrota-${id}`);
+  const cod = sel && sel.value;
+  if (!cod) { notify('Escolha a rota a incluir.', 'warn'); return; }
+  const d = getDevolucao(id);
+  if (!d) return;
+  const rotas = (d.rotas || []).slice();
+  if (!rotas.includes(cod)) rotas.push(cod);
+  acaoDev(SuincoSharePoint.devolucoes.editar(id, { rotas }));
+}
+
+function editarDevolucaoCampoUI(id, campo, valor) {
+  acaoDev(SuincoSharePoint.devolucoes.editar(id, { [campo]: valor }));
+}
+
+function excluirDevolucaoUI(id) {
+  const d = getDevolucao(id);
+  if (!d) return;
+  if (!confirm(`Excluir o checklist Nº ${d.numero} (${devRotulo(d)})? Ele some do painel e dos relatórios; o registro fica no histórico.`)) return;
+  acaoDev(SuincoSharePoint.devolucoes.excluir(id), 'Checklist excluído.');
+}
+
+function avancarEtapaDevolucaoUI(id) {
+  const d = getDevolucao(id);
+  if (!d) return;
+  const etapa = DEV_ETAPAS.find((e) => e.status === d.status);
+  if (!etapa) return;
+  const v = (sufixo) => (document.getElementById(`dev-et-${id}-${sufixo}`) || {}).value;
+  const corpo = { para: etapa.proxima };
+  if (etapa.pede === 'portaria') {
+    corpo.lacre1 = v('lacre1') || '';
+    corpo.lacre2 = v('lacre2') || '';
+    corpo.cargaNumero = v('carga') || '';
+  } else if (etapa.pede === 'faturamento') {
+    corpo.pesoFinal = v('peso') || '';
+  } else if (etapa.pede === 'controles') {
+    corpo.obsControles = v('obs') || '';
+  }
+  acaoDev(SuincoSharePoint.devolucoes.etapa(id, corpo), `Etapa registrada: ${etapa.proxima}.`);
+}
+
+function editarItemDevolucaoUI(id, itemId, campo, valor) {
+  let corpo;
+  if (campo === 'parcial') corpo = { parcial: !!valor };
+  else if (campo === 'codProduto') {
+    corpo = { codProduto: valor, produtoNome: devProdutoNomePorCodigo(valor) };
+  } else corpo = { [campo]: valor };
+  acaoDev(SuincoSharePoint.devolucoes.editarItem(id, itemId, corpo));
+}
+
+function adicionarItemDevolucaoUI(id) {
+  const v = (sufixo) => (document.getElementById(`dev-ni-${id}-${sufixo}`) || {}).value || '';
+  const codProduto = v('produto');
+  const pesoDigitado = v('peso');
+  const pesoFinalLinha = pesoDigitado !== '' ? pesoDigitado
+    : (devPesoSugerido(codProduto, v('cx')) ?? '');
+  const corpo = {
+    nota: v('nota'),
+    parcial: !!v('parcial'),
+    supervisor: v('supervisor'),
+    vendedor: v('vendedor'),
+    codCliente: v('cliente'),
+    cx: v('cx'),
+    peso: pesoFinalLinha,
+    codProduto,
+    produtoNome: devProdutoNomePorCodigo(codProduto),
+    numDev: v('numdev'),
+    motivo: v('motivo'),
+    dataItem: (document.getElementById('dev-filtro-dia') || {}).value || diaLocalDev(),
+  };
+  if (!corpo.nota && !codProduto) {
+    notify('Preencha ao menos a nota fiscal ou o código do produto.', 'warn');
+    return;
+  }
+  acaoDev(SuincoSharePoint.devolucoes.criarItem(id, corpo));
+}
+
+function excluirItemDevolucaoUI(id, itemId) {
+  if (!confirm('Remover esta linha do checklist?')) return;
+  acaoDev(SuincoSharePoint.devolucoes.excluirItem(id, itemId));
+}
+
+function adicionarDivergenciaDevolucaoUI(id) {
+  const v = (sufixo) => (document.getElementById(`dev-dv-${id}-${sufixo}`) || {}).value || '';
+  const codProduto = v('produto');
+  if (!codProduto) { notify('Informe o código do produto que chegou fora do checklist.', 'warn'); return; }
+  acaoDev(SuincoSharePoint.devolucoes.criarDivergencia(id, {
+    codProduto,
+    produtoNome: devProdutoNomePorCodigo(codProduto),
+    cx: v('cx'),
+    observacao: v('obs'),
+  }), 'Divergência lançada — a falta do item original continua contando.');
+}
+
+function excluirDivergenciaDevolucaoUI(id, divId) {
+  acaoDev(SuincoSharePoint.devolucoes.excluirDivergencia(id, divId));
+}
+
+/* ---------- revisões (Administração; reusa o modal das cargas) ---------- */
+
+async function abrirRevisoesDevolucaoUI(id) {
+  const d = getDevolucao(id);
+  if (!d) return;
+  const modal = document.getElementById('modal-revisoes');
+  document.getElementById('revisoes-titulo').textContent =
+    `Alterações — checklist de devolução Nº ${d.numero} · ${devRotulo(d)}`;
+  const lista = document.getElementById('revisoes-lista');
+  lista.innerHTML = '<div class="card-sub">Buscando no servidor…</div>';
+  modal.classList.add('open');
+  try {
+    const revs = await SuincoSharePoint.devolucoes.listarRevisoes(id);
+    if (!revs.length) {
+      lista.innerHTML = '<div class="card-sub">Nenhuma alteração de cabeçalho registrada ainda.</div>';
+      return;
+    }
+    lista.innerHTML = revs.map((r) => {
+      const s = r.devolucao || {};
+      return `<div class="revisao-item">
+          <div class="revisao-meta">
+            <strong>${esc(fmtDataHora(r.gravadaEm))}</strong>
+            — mudança feita por ${esc(r.mudadaPor || '—')}${r.mudadaSetor ? ' · ' + esc(r.mudadaSetor) : ''}
+          </div>
+          <div class="revisao-dados">
+            Estado anterior: rota(s) ${esc((s.rotas || []).join(', ') || '—')} · transp. ${esc(s.transportadora || '—')}
+            · NT ${esc(s.notaTransferencia || '—')} · status ${esc(s.status || '—')}
+            ${s.pesoFinal !== null && s.pesoFinal !== undefined ? ` · peso final ${Number(s.pesoFinal).toLocaleString('pt-BR')} kg` : ''}
+          </div>
+          <div class="flex-end"><button class="btn btn-sec btn-sm"
+            onclick="restaurarRevisaoDevolucaoUI('${escJs(id)}',${r.revisaoId})">Restaurar este estado</button></div>
+        </div>`;
+    }).join('');
+  } catch (e) {
+    lista.innerHTML = `<div class="card-sub">Não consegui listar: ${esc(e.message || 'erro')}</div>`;
+  }
+}
+
+async function restaurarRevisaoDevolucaoUI(id, revisaoId) {
+  if (!confirm('Restaurar o checklist para este estado anterior? A mudança vale para todos e fica no log.')) return;
+  try {
+    await SuincoSharePoint.devolucoes.restaurar(id, revisaoId);
+    notify('Checklist restaurado.', 'success');
+    fecharRevisoesUI();
+    await carregarDevolucoes();
+  } catch (e) {
+    notify((e && e.message) || 'O servidor recusou a restauração.', 'danger', 7000);
+  }
+}
+
+/* ---------- relatório do dia (mesmo padrão dos demais) ---------- */
+
+async function relatorioDevolucoesUI() {
+  if (!devServidorOk()) {
+    notify('O relatório de devoluções vem do servidor — entre com login de servidor.', 'warn', 6000);
+    return;
+  }
+  await carregarDevolucoes();
+  const dia = (document.getElementById('dev-filtro-dia') || {}).value || diaLocalDev();
+  const el = document.getElementById('print-devolucoes');
+  if (!el) return;
+
+  const [ano, mes, diaN] = dia.split('-');
+  const diaBR = `${diaN}/${mes}/${ano}`;
+  const totalCx = DEVOLUCOES.reduce((s, d) => s + d.itens.reduce((x, i) => x + (i.cx || 0), 0), 0);
+  const totalFalta = DEVOLUCOES.reduce((s, d) => s
+    + d.itens.reduce((x, i) => x + (i.falta || 0), 0), 0);
+  const totalDiverg = DEVOLUCOES.reduce((s, d) => s + d.divergencias.length, 0);
+
+  const bloco = (d) => `
+    <div class="dev-doc-checklist">
+      ${tituloSecaoPdf(
+        `Checklist Nº ${d.numero} — ${d.regiao ? esc(d.regiao) + ' · ' : ''}Rota(s) ${esc((d.rotas || []).join(', ') || '—')} · ${esc(d.status)}`,
+        `Gerado por <strong>${esc(d.criadaPor)}</strong>`
+        + `${d.regiao ? ' · Região ' + esc(d.regiao) : ''}`
+        + `${d.transportadora ? ' · Transportadora ' + esc(d.transportadora) : ''}`
+        + `${d.notaTransferencia ? ' · NT ' + esc(d.notaTransferencia) : ''}`
+        + `${d.placa ? ' · Placa ' + esc(d.placa) : ''}`
+        + `${d.cargaNumero ? ' · Carga ' + esc(d.cargaNumero) : ''}`
+        + `${d.lacre1 ? ' · Lacre ' + esc([d.lacre1, d.lacre2].filter(Boolean).join('/')) : ''}`
+        + `${d.pesoFinal !== null ? ' · Peso final ' + d.pesoFinal.toLocaleString('pt-BR') + ' kg' : ''}`)}
+      <table class="dev-doc-tabela">
+        <thead><tr>
+          <th>Nota</th><th>P/T</th><th>Supervisor</th><th>Vendedor</th><th>Cód. Cliente</th>
+          <th>CX</th><th>Peso</th><th>Produto</th><th>Nº DEV</th><th>Motivo</th>
+          <th>Recebido</th><th>Falta</th><th>Destinação</th>
+        </tr></thead>
+        <tbody>${d.itens.map((i) => `<tr${i.falta > 0 ? ' class="dev-doc-falta"' : ''}>
+            <td>${esc(i.nota)}</td><td>${i.parcial ? 'P' : 'T'}</td>
+            <td>${esc(i.supervisor)}</td><td>${esc(i.vendedor)}</td><td>${esc(i.codCliente)}</td>
+            <td class="c-peso">${i.cx.toLocaleString('pt-BR')}</td>
+            <td class="c-peso">${i.peso !== null ? i.peso.toLocaleString('pt-BR') : '—'}</td>
+            <td>${esc(i.codProduto)}${i.produtoNome ? '-' + esc(i.produtoNome) : ''}</td>
+            <td>${esc(i.numDev)}</td><td>${esc(i.motivo)}</td>
+            <td class="c-peso">${i.qtdRecebida ?? '—'}</td>
+            <td class="c-peso">${i.falta === null ? '—' : (i.falta > 0 ? 'FALTA ' + i.falta.toLocaleString('pt-BR') : 'OK')}</td>
+            <td>${esc(i.destinacao) || '—'}</td>
+          </tr>`).join('')}</tbody>
+      </table>
+      ${d.divergencias.length ? `<div class="dev-doc-diverg">
+          <strong>Divergentes (fora do checklist):</strong>
+          ${d.divergencias.map((v) => `${v.cx.toLocaleString('pt-BR')} cx ${esc(v.codProduto)}${v.produtoNome ? '-' + esc(v.produtoNome) : ''}${v.observacao ? ' (' + esc(v.observacao) + ')' : ''}`).join(' · ')}
+        </div>` : ''}
+      ${d.obsControles ? `<div class="dev-doc-diverg"><strong>Obs. Controles Internos:</strong> ${esc(d.obsControles)}</div>` : ''}
+      <div class="dev-doc-carimbos">
+        ${Object.entries(DEV_ETAPA_ROTULO).map(([chave, rotulo]) => {
+          const c = d.carimbos[chave];
+          return `<span class="dev-doc-carimbo">${rotulo}: ${c ? esc(c.por) + ' ' + esc(fmtDataHora(c.em)) : '—'}</span>`;
+        }).join('')}
+      </div>
+    </div>`;
+
+  el.innerHTML = `
+    <div class="print-page doc-normal">
+      ${cabecalhoDocumento({
+        titulo: 'Relatório de Devoluções',
+        subtitulo: `Checklists do dia ${diaBR} · ${DEVOLUCOES.length} checklist(s) · `
+          + `${totalCx.toLocaleString('pt-BR')} cx`
+          + `${totalFalta > 0 ? ' · FALTAS: ' + totalFalta.toLocaleString('pt-BR') + ' cx' : ''}`
+          + `${totalDiverg > 0 ? ' · ' + totalDiverg + ' divergente(s)' : ''}`,
+      })}
+      ${DEVOLUCOES.length ? DEVOLUCOES.map(bloco).join('')
+        : '<div class="card-sub">Nenhum checklist de devolução neste dia.</div>'}
+      ${rodapeDocumento(
+        'Cada checklist identifica quem o gerou. A coluna FALTA é calculada '
+        + 'pelo sistema (caixas do checklist menos caixas recebidas na descarga); '
+        + 'produtos divergentes não abatem falta.',
+        `Checklists de devolução do dia ${diaBR}, gravados no servidor pelo painel.`,
+        '')}
+    </div>`;
+
+  await exportarViaServidor(el, `Devolucoes-${dia}`);
+}
+
+/* ---------- tempo real ---------- */
+
+/* O evento chega para QUALQUER devolução alterada em qualquer terminal.
+   Recarrega só se a aba estiver aberta — fora dela não há o que redesenhar,
+   e a próxima abertura já busca tudo de novo. */
+if (typeof SuincoSharePoint !== 'undefined' && SuincoSharePoint.aoAtualizarDevolucao) {
+  SuincoSharePoint.aoAtualizarDevolucao(() => {
+    if (typeof TAB_ATUAL !== 'undefined' && TAB_ATUAL === 'devolucoes') {
+      carregarDevolucoes();
+    }
+  });
+}
+
+/* ---------- cadastros de apoio (card na aba Cadastros) ---------- */
+
+function atualizarResumoCadDev() {
+  const el = document.getElementById('cad-dev-resumo');
+  if (!el) return;
+  el.textContent = `Cadastrados: ${(DEV_CADASTROS.supervisores || []).length} supervisor(es) · `
+    + `${(DEV_CADASTROS.produtos || []).length} produto(s) · `
+    + `${(DEV_CADASTROS.motivos || []).length} motivo(s).`;
+}
+
+async function cadastrarSupervisorDevUI() {
+  const el = document.getElementById('cad-dev-supervisor');
+  const nome = (el && el.value || '').trim();
+  if (!nome) { notify('Informe o nome do supervisor.', 'warn'); return; }
+  try {
+    await SuincoSharePoint.devolucoes.cadastrarSupervisor(nome);
+    notify(`Supervisor ${nome} cadastrado.`, 'success');
+    el.value = '';
+    _devCadastrosCarregados = false;
+    await carregarCadastrosDev();
+    atualizarResumoCadDev();
+  } catch (e) {
+    notify((e && e.message) || 'O servidor recusou o cadastro.', 'danger', 6000);
+  }
+}
+
+async function cadastrarProdutoDevUI() {
+  const cod = (document.getElementById('cad-dev-prod-codigo') || {}).value || '';
+  const nome = (document.getElementById('cad-dev-prod-nome') || {}).value || '';
+  const kg = (document.getElementById('cad-dev-prod-kg') || {}).value || '';
+  if (!cod.trim()) { notify('Informe o código do produto.', 'warn'); return; }
+  try {
+    await SuincoSharePoint.devolucoes.cadastrarProduto(cod.trim(), nome.trim(), kg);
+    notify(`Produto ${cod.trim()}${nome.trim() ? '-' + nome.trim() : ''}`
+      + `${kg ? ` (${kg} kg/cx)` : ''} cadastrado.`, 'success');
+    ['cad-dev-prod-codigo', 'cad-dev-prod-nome', 'cad-dev-prod-kg'].forEach((id) => {
+      const e = document.getElementById(id); if (e) e.value = '';
+    });
+    _devCadastrosCarregados = false;
+    await carregarCadastrosDev();
+    atualizarResumoCadDev();
+  } catch (e) {
+    notify((e && e.message) || 'O servidor recusou o cadastro.', 'danger', 6000);
+  }
+}
+
+async function cadastrarMotivoDevUI() {
+  const el = document.getElementById('cad-dev-motivo');
+  const motivo = (el && el.value || '').trim();
+  if (!motivo) { notify('Informe o motivo.', 'warn'); return; }
+  try {
+    await SuincoSharePoint.devolucoes.cadastrarMotivo(motivo);
+    notify(`Motivo "${motivo}" cadastrado.`, 'success');
+    el.value = '';
+    _devCadastrosCarregados = false;
+    await carregarCadastrosDev();
+    atualizarResumoCadDev();
+  } catch (e) {
+    notify((e && e.message) || 'O servidor recusou o cadastro.', 'danger', 6000);
+  }
 }
 
 </script>

@@ -116,7 +116,9 @@ async def main():
         }""", num)
         ck('peso restaurado na tela do admin', local['peso'] == 21500, str(local))
 
-        ctxB, pgB = await abrir(nav, 'logistica@teste.local', 'log')
+        # ana@teste.local: fixture da suíte do backend (sempre recriada) —
+        # logistica@teste.local é apagada pelo before() de api.test.js.
+        ctxB, pgB = await abrir(nav, 'ana@teste.local', 'log')
         setorB = await pgB.evaluate("() => DB.operador && DB.operador.setor")
         ck('segundo terminal logado', setorB == 'Logística', str(setorB))
         await pgB.wait_for_timeout(5000)

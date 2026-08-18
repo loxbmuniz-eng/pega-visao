@@ -1045,6 +1045,10 @@ function renderTabAtual(){
   switch(TAB_ATUAL){
     case 'torre': renderTorre(); renderVisaoPatio('torre'); break;
     case 'programacao': renderProgFila(); renderProgAguardando(); break;
+    // Módulo próprio (devolucoes.js, carregado depois deste arquivo). O
+    // typeof protege a ordem de carga: se o módulo faltar, a aba fica
+    // vazia em vez de derrubar a navegação inteira.
+    case 'devolucoes': if(typeof renderDevolucoes === 'function') renderDevolucoes(); break;
     case 'portaria':
       renderPortariaProgramadas();
       renderPortariaPatio();

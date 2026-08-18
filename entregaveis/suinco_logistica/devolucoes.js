@@ -1,0 +1,792 @@
+/* Devoluções — o checklist digital (fase 1: Logística e Administração).
+
+   Módulo separado de app.js de propósito: é um fluxo inteiro com dados
+   próprios, e app.js já passa de 5 mil linhas. Tudo aqui é SERVIDOR-FIRST:
+   a lista vem da API a cada abertura/evento, cada gravação vai direto para
+   a API, e não existe cópia em localStorage — o checklist é um documento
+   compartilhado entre setores, e cópia local dessincronizada foi a raiz do
+   incidente das cargas (14–15/08/2026). Sem conexão a aba diz isso com
+   todas as letras em vez de fingir que gravou.
+
+   Depende dos globais do painel: DB, notify, esc, escJs, fmtDataHora,
+   ROTAS, rotaLabel, TAB_ATUAL, SuincoSharePoint (adaptador),
+   cabecalhoDocumento/rodapeDocumento/tituloSecaoPdf/exportarViaServidor
+   (relatórios). Carregado DEPOIS de app.js no build. */
+
+let DEVOLUCOES = [];
+let DEV_CADASTROS = { supervisores: [], produtos: [], motivos: [] };
+let _devCadastrosCarregados = false;
+let _devExpandida = null;   // checklist aberto (sobrevive ao re-render)
+/* Rotas escolhidas no formulário de NOVO checklist — um checklist junta
+   várias rotas da mesma região (pedido de 18/08/2026). */
+let _devRotasNovas = [];
+
+function devRotulo(d) {
+  return `${d.regiao ? d.regiao + ' · ' : ''}rota(s) ${(d.rotas || []).join(', ') || '—'}`;
+}
+
+/* Etapas na ordem do processo real. `pede` são os campos que aquela etapa
+   imputa — o mesmo papel que o campo tinha na folha impressa. */
+/* `setores` espelha a allowlist do servidor (dominio/devolucoes.js) — a
+   tela não mostra botão que a API vai recusar. Administração passa em
+   tudo, como no resto do painel. */
+const DEV_ETAPAS = [
+  { status: 'Lançada',                  proxima: 'Recebida na Portaria',
+    botao: '🚧 Receber na Portaria', pede: 'portaria',
+    setores: ['Portaria', 'Logística'] },
+  { status: 'Recebida na Portaria',     proxima: 'Conferida no Faturamento',
+    botao: '⚖️ Conferir no Faturamento', pede: 'faturamento',
+    setores: ['Faturamento', 'Logística'] },
+  { status: 'Conferida no Faturamento', proxima: 'Descarga Conferida',
+    botao: '📦 Descarga conferida (Expedição)', pede: null,
+    setores: ['Expedição', 'Logística'] },
+  { status: 'Descarga Conferida',       proxima: 'Destinada',
+    botao: '🏷️ Registrar destinação (Controles Internos)', pede: 'controles',
+    setores: ['Controles Internos', 'Logística'] },
+  { status: 'Destinada',                proxima: 'Nota Finalizada',
+    botao: '🧾 Finalizar nota (Central de Notas)', pede: null,
+    setores: ['Central de Notas', 'Logística'] },
+];
+
+const DEV_ETAPA_ROTULO = {
+  portaria: 'Portaria', faturamento: 'Faturamento', expedicao: 'Expedição',
+  controles: 'Controles Internos', notas: 'Central de Notas',
+};
+
+/* Dia local do pátio — NUNCA toISOString().slice(0,10): às 21h+ de Patos
+   de Minas o UTC já virou o dia seguinte (guardião nº 2). */
+function diaLocalDev(d = new Date()) {
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function devServidorOk() {
+  return typeof SuincoSharePoint !== 'undefined'
+    && SuincoSharePoint.estaConfigurado && SuincoSharePoint.estaConfigurado()
+    && SuincoSharePoint.devolucoes;
+}
+
+function podeEditarDevolucao() {
+  const setor = (DB.operador || {}).setor;
+  return setor === 'Logística' || setor === 'Administração';
+}
+
+/* Papéis da fase 2, já valendo para os setores criados em 18/08/2026:
+   Expedição confere o que chegou; Controles Internos destina. Cada um
+   enxerga editável SÓ a própria coluna — o servidor confere de novo. */
+function podeConferirQtdDev() {
+  const setor = (DB.operador || {}).setor;
+  return podeEditarDevolucao() || setor === 'Expedição';
+}
+function podeDestinarDev() {
+  const setor = (DB.operador || {}).setor;
+  return podeEditarDevolucao() || setor === 'Controles Internos';
+}
+
+function getDevolucao(id) {
+  return DEVOLUCOES.find((d) => d.id === id) || null;
+}
+
+/* ---------- render principal (chamado por renderTabAtual) ---------- */
+
+function renderDevolucoes() {
+  if (!DB.operador) return;
+  const offline = document.getElementById('dev-offline');
+  const conteudo = document.getElementById('dev-conteudo');
+  if (!offline || !conteudo) return;
+
+  const ok = devServidorOk();
+  offline.hidden = ok;
+  conteudo.hidden = !ok;
+  if (!ok) return;
+
+  const data = document.getElementById('dev-data');
+  if (data && !data.value) data.value = diaLocalDev();
+  const filtro = document.getElementById('dev-filtro-dia');
+  if (filtro && !filtro.value) filtro.value = diaLocalDev();
+
+  preencherSelectRotaDev();
+  if (!_devCadastrosCarregados) carregarCadastrosDev();
+  carregarDevolucoes();
+}
+
+function preencherSelectRotaDev() {
+  const sel = document.getElementById('dev-rota');
+  if (!sel) return;
+  const atual = sel.value;
+  sel.innerHTML = '<option value="">(escolha a rota)</option>'
+    + ROTAS.map((r) => `<option value="${esc(r.codigo)}">${esc(rotaLabel(r.codigo))}</option>`).join('');
+  if (atual) sel.value = atual;
+}
+
+async function carregarCadastrosDev() {
+  try {
+    DEV_CADASTROS = await SuincoSharePoint.devolucoes.cadastros();
+    _devCadastrosCarregados = true;
+    const põe = (id, valores) => {
+      const dl = document.getElementById(id);
+      if (dl) dl.innerHTML = valores.map((v) => `<option value="${esc(v)}">`).join('');
+    };
+    põe('dl-dev-supervisores', DEV_CADASTROS.supervisores || []);
+    põe('dl-dev-motivos', DEV_CADASTROS.motivos || []);
+    const dlProd = document.getElementById('dl-dev-produtos');
+    if (dlProd) {
+      dlProd.innerHTML = (DEV_CADASTROS.produtos || [])
+        .map((p) => `<option value="${esc(p.codigo)}">${esc(p.nome)}${p.pesoCaixaKg ? ' · ' + p.pesoCaixaKg + ' kg/cx' : ''}</option>`).join('');
+    }
+  } catch (e) {
+    console.warn('[Devoluções] cadastros:', e);
+  }
+}
+
+async function carregarDevolucoes() {
+  if (!devServidorOk()) return;
+  const dia = (document.getElementById('dev-filtro-dia') || {}).value || diaLocalDev();
+  try {
+    DEVOLUCOES = await SuincoSharePoint.devolucoes.listar(dia, dia);
+    renderListaDevolucoes();
+  } catch (e) {
+    notify('Não consegui buscar as devoluções: ' + (e.message || 'erro desconhecido'), 'danger', 6000);
+  }
+}
+
+function filtroDevolucoesHoje() {
+  const f = document.getElementById('dev-filtro-dia');
+  if (f) f.value = diaLocalDev();
+  carregarDevolucoes();
+}
+
+/* ---------- a lista de checklists ---------- */
+
+function devStatusChip(status) {
+  const pos = DEV_ETAPAS.findIndex((e) => e.status === status);
+  const cls = status === 'Nota Finalizada' ? 'dev-chip-final'
+    : pos <= 0 ? 'dev-chip-inicio' : 'dev-chip-meio';
+  return `<span class="dev-chip ${cls}">${esc(status)}</span>`;
+}
+
+function devProdutoNomePorCodigo(codigo) {
+  const p = (DEV_CADASTROS.produtos || []).find((x) => x.codigo === String(codigo).trim());
+  return p ? p.nome : '';
+}
+
+/* Peso sugerido = caixas × quilo/caixa do cadastro do produto. Só SUGERE
+   quando a operadora não digitou peso — número digitado nunca é
+   sobrescrito por conta. */
+function devPesoSugerido(codigo, cx) {
+  const p = (DEV_CADASTROS.produtos || []).find((x) => x.codigo === String(codigo).trim());
+  const n = Number(cx);
+  if (!p || !p.pesoCaixaKg || !Number.isFinite(n) || n <= 0) return null;
+  return Math.round(n * p.pesoCaixaKg * 100) / 100;
+}
+
+function renderListaDevolucoes() {
+  const box = document.getElementById('dev-lista');
+  const vazio = document.getElementById('dev-empty');
+  if (!box) return;
+  vazio.hidden = DEVOLUCOES.length > 0;
+  const editavel = podeEditarDevolucao();
+
+  box.innerHTML = DEVOLUCOES.map((d) => {
+    const aberta = _devExpandida === d.id;
+    const totalCx = d.itens.reduce((s, i) => s + (i.cx || 0), 0);
+    const faltas = d.itens.filter((i) => i.falta !== null && i.falta > 0);
+    const totalFalta = faltas.reduce((s, i) => s + i.falta, 0);
+    const resumo = [
+      `${d.itens.length} item(ns) · ${totalCx.toLocaleString('pt-BR')} cx`,
+      totalFalta > 0 ? `<span class="dev-falta-chip">falta ${totalFalta.toLocaleString('pt-BR')} cx</span>` : '',
+      d.divergencias.length ? `<span class="dev-diverg-chip">${d.divergencias.length} divergente(s)</span>` : '',
+    ].filter(Boolean).join(' ');
+
+    return `<div class="dev-card${aberta ? ' dev-aberta' : ''}">
+      <div class="dev-card-topo" onclick="alternarDevolucaoUI('${escJs(d.id)}')">
+        <div class="dev-card-id">
+          <strong>Checklist Nº ${d.numero}</strong>
+          <span class="dev-card-rota">${d.regiao ? esc(d.regiao) + ' · ' : ''}${(d.rotas || []).map((r) => 'Rota ' + esc(r)).join(' · ') || 'sem rota'}</span>
+          ${devStatusChip(d.status)}
+        </div>
+        <div class="dev-card-meta">
+          <span>${esc(d.criadaPor)}</span>
+          <span>${resumo}</span>
+          <span class="dev-card-seta">${aberta ? '▾' : '▸'}</span>
+        </div>
+      </div>
+      ${aberta ? renderDevolucaoAberta(d, editavel) : ''}
+    </div>`;
+  }).join('');
+}
+
+function alternarDevolucaoUI(id) {
+  _devExpandida = _devExpandida === id ? null : id;
+  renderListaDevolucoes();
+}
+
+function cabecalhoEditavelDev(d, editavel) {
+  const campo = (rotulo, nome, valor, extra = '') => `
+    <div><label>${rotulo}</label>
+      ${editavel
+        ? `<input type="text" value="${esc(valor || '')}" ${extra}
+             onchange="editarDevolucaoCampoUI('${escJs(d.id)}','${nome}',this.value)">`
+        : `<div class="dev-ro">${esc(valor) || '—'}</div>`}
+    </div>`;
+  const rotasChips = `<div class="dev-rotas-chips">
+      ${(d.rotas || []).map((r) => `<span class="dev-rota-chip">Rota ${esc(r)}
+        ${editavel ? `<button type="button" title="Tirar esta rota do checklist"
+          onclick="tirarRotaDevolucaoUI('${escJs(d.id)}','${escJs(r)}')">✕</button>` : ''}</span>`).join('')}
+      ${editavel ? `<span class="gap8">
+        <select id="dev-addrota-${esc(d.id)}">
+          <option value="">(incluir rota…)</option>
+          ${ROTAS.filter((r) => !(d.rotas || []).includes(r.codigo))
+            .map((r) => `<option value="${esc(r.codigo)}">${esc(rotaLabel(r.codigo))}</option>`).join('')}
+        </select>
+        <button class="btn btn-sec btn-sm" onclick="incluirRotaDevolucaoUI('${escJs(d.id)}')">➕</button>
+      </span>` : ''}
+    </div>`;
+  return `${rotasChips}<div class="form-grid dev-cab-grid">
+      ${campo('Região', 'regiao', d.regiao)}
+      ${campo('Transportadora', 'transportadora', d.transportadora)}
+      ${campo('Nota de transferência', 'notaTransferencia', d.notaTransferencia)}
+      ${campo('Placa', 'placa', d.placa)}
+      ${campo('Motorista', 'motorista', d.motorista)}
+      <div><label>Nº carga (Portaria)</label><div class="dev-ro">${esc(d.cargaNumero) || '—'}</div></div>
+      <div><label>Lacres (Portaria)</label><div class="dev-ro">${esc([d.lacre1, d.lacre2].filter(Boolean).join(' · ')) || '—'}</div></div>
+      <div><label>Peso final (Faturamento)</label><div class="dev-ro">${d.pesoFinal !== null ? d.pesoFinal.toLocaleString('pt-BR') + ' kg' : '—'}</div></div>
+    </div>`;
+}
+
+function carimbosDev(d) {
+  return `<div class="dev-carimbos">
+    ${Object.entries(DEV_ETAPA_ROTULO).map(([chave, rotulo]) => {
+      const c = d.carimbos[chave];
+      return `<div class="dev-carimbo${c ? ' dev-carimbo-ok' : ''}">
+          <span class="dev-carimbo-rot">${rotulo}</span>
+          ${c ? `<span class="dev-carimbo-quem">${esc(c.por)}</span>
+                 <span class="dev-carimbo-quando">${esc(fmtDataHora(c.em))}</span>`
+              : '<span class="dev-carimbo-vazio">— pendente —</span>'}
+        </div>`;
+    }).join('')}
+  </div>`;
+}
+
+function acaoEtapaDev(d) {
+  const etapa = DEV_ETAPAS.find((e) => e.status === d.status);
+  if (!etapa) return '<div class="card-sub">✅ Ciclo encerrado — nota fiscal finalizada.</div>';
+  /* Espelho da allowlist do servidor: quem não assina este passo vê QUEM
+     assina, em vez de um botão que a API recusaria. */
+  const setor = (DB.operador || {}).setor;
+  if (setor !== 'Administração' && !etapa.setores.includes(setor)) {
+    return `<div class="card-sub">Próximo passo: <strong>${esc(etapa.proxima)}</strong> — feito por ${esc(etapa.setores.join(' ou '))}.</div>`;
+  }
+  const id = escJs(d.id);
+  let extras = '';
+  if (etapa.pede === 'portaria') {
+    extras = `
+      <input type="text" id="dev-et-${esc(d.id)}-lacre1" placeholder="Lacre 1" value="${esc(d.lacre1)}">
+      <input type="text" id="dev-et-${esc(d.id)}-lacre2" placeholder="Lacre 2 (se houver)" value="${esc(d.lacre2)}">
+      <input type="text" id="dev-et-${esc(d.id)}-carga" placeholder="Nº da carga" value="${esc(d.cargaNumero)}">`;
+  } else if (etapa.pede === 'faturamento') {
+    extras = `<input type="number" min="0" step="1" id="dev-et-${esc(d.id)}-peso"
+      placeholder="Peso final em kg (opcional)" value="${d.pesoFinal ?? ''}">`;
+  } else if (etapa.pede === 'controles') {
+    extras = `<input type="text" id="dev-et-${esc(d.id)}-obs"
+      placeholder="Observações dos Controles Internos (saem no relatório)" value="${esc(d.obsControles)}">`;
+  }
+  return `<div class="dev-etapa-acao">
+      ${extras}
+      <button class="btn btn-sm" onclick="avancarEtapaDevolucaoUI('${id}')">${etapa.botao}</button>
+    </div>`;
+}
+
+function renderDevolucaoAberta(d, editavel) {
+  const linhaItem = (i) => {
+    const faltaHtml = i.falta === null
+      ? '<span class="text-dim" title="Ainda não conferido">—</span>'
+      : i.falta > 0
+        ? `<span class="dev-falta-chip">falta ${i.falta.toLocaleString('pt-BR')}</span>`
+        : '<span class="dev-ok-chip">✔</span>';
+    const cel = (nome, valor, tipo = 'text', extra = '') => editavel
+      ? `<input type="${tipo}" value="${esc(valor ?? '')}" ${extra}
+           onchange="editarItemDevolucaoUI('${escJs(d.id)}',${i.itemId},'${nome}',this.value)">`
+      : (esc(valor) || '—');
+    return `<tr>
+      <td>${cel('nota', i.nota)}</td>
+      <td>${editavel
+        ? `<select onchange="editarItemDevolucaoUI('${escJs(d.id)}',${i.itemId},'parcial',this.value)">
+             <option value="1" ${i.parcial ? 'selected' : ''}>Parcial</option>
+             <option value="" ${i.parcial ? '' : 'selected'}>Total</option></select>`
+        : (i.parcial ? 'Parcial' : 'Total')}</td>
+      <td>${cel('supervisor', i.supervisor, 'text', 'list="dl-dev-supervisores"')}</td>
+      <td>${cel('vendedor', i.vendedor)}</td>
+      <td>${cel('codCliente', i.codCliente)}</td>
+      <td class="c-peso">${cel('cx', i.cx, 'number', 'min="0" step="1"')}</td>
+      <td class="c-peso">${cel('peso', i.peso, 'number', 'min="0" step="0.01"')}</td>
+      <td>${cel('codProduto', i.codProduto, 'text', 'list="dl-dev-produtos"')}
+          ${i.produtoNome ? `<small class="text-dim">${esc(i.produtoNome)}</small>` : ''}</td>
+      <td>${cel('numDev', i.numDev)}</td>
+      <td>${cel('motivo', i.motivo, 'text', 'list="dl-dev-motivos"')}</td>
+      <td class="c-peso">${podeConferirQtdDev()
+        ? `<input type="number" min="0" step="1" value="${i.qtdRecebida ?? ''}" placeholder="—"
+             title="Quantidade que CHEGOU na descarga. A falta é apontada sozinha."
+             onchange="editarItemDevolucaoUI('${escJs(d.id)}',${i.itemId},'qtdRecebida',this.value)">`
+        : (i.qtdRecebida ?? '—')}</td>
+      <td>${faltaHtml}</td>
+      <td>${podeDestinarDev()
+        ? `<select onchange="editarItemDevolucaoUI('${escJs(d.id)}',${i.itemId},'destinacao',this.value)">
+             <option value="">—</option>
+             ${['Estoque', 'Descarte', 'Reprocesso'].map((x) => `<option ${i.destinacao === x ? 'selected' : ''}>${x}</option>`).join('')}
+           </select>`
+        : (esc(i.destinacao) || '—')}</td>
+      ${editavel ? `<td class="no-print"><button class="btn btn-danger btn-sm"
+        onclick="excluirItemDevolucaoUI('${escJs(d.id)}',${i.itemId})">✕</button></td>` : ''}
+    </tr>`;
+  };
+
+  const novaLinha = !editavel ? '' : `<tr class="dev-linha-nova">
+      <td><input type="text" id="dev-ni-${esc(d.id)}-nota" placeholder="Nota"></td>
+      <td><select id="dev-ni-${esc(d.id)}-parcial"><option value="1">Parcial</option><option value="">Total</option></select></td>
+      <td><input type="text" id="dev-ni-${esc(d.id)}-supervisor" list="dl-dev-supervisores" placeholder="Supervisor"></td>
+      <td><input type="text" id="dev-ni-${esc(d.id)}-vendedor" placeholder="Vendedor"></td>
+      <td><input type="text" id="dev-ni-${esc(d.id)}-cliente" placeholder="Cód. cliente"></td>
+      <td class="c-peso"><input type="number" min="0" step="1" id="dev-ni-${esc(d.id)}-cx" placeholder="CX"></td>
+      <td class="c-peso"><input type="number" min="0" step="0.01" id="dev-ni-${esc(d.id)}-peso" placeholder="Peso"></td>
+      <td><input type="text" id="dev-ni-${esc(d.id)}-produto" list="dl-dev-produtos" placeholder="Cód. produto"></td>
+      <td><input type="text" id="dev-ni-${esc(d.id)}-numdev" placeholder="Nº DEV"></td>
+      <td><input type="text" id="dev-ni-${esc(d.id)}-motivo" list="dl-dev-motivos" placeholder="Motivo"></td>
+      <td colspan="3"></td>
+      <td class="no-print"><button class="btn btn-sm" onclick="adicionarItemDevolucaoUI('${escJs(d.id)}')"
+        title="Acrescentar esta linha ao checklist">➕</button></td>
+    </tr>`;
+
+  const divergencias = `
+    <div class="dev-divergencias">
+      <div class="dev-divergencias-tit">Produtos divergentes (chegaram FORA do checklist)</div>
+      ${d.divergencias.length ? `<ul>${d.divergencias.map((v) => `
+        <li>${v.cx.toLocaleString('pt-BR')} cx · <strong>${esc(v.codProduto)}</strong>
+          ${v.produtoNome ? esc(v.produtoNome) : ''}
+          ${v.observacao ? `<span class="text-dim">— ${esc(v.observacao)}</span>` : ''}
+          <span class="text-dim">(${esc(v.lancadaPor)})</span>
+          ${podeEditarDevolucao() ? `<button class="btn btn-danger btn-sm"
+            onclick="excluirDivergenciaDevolucaoUI('${escJs(d.id)}',${v.divergenciaId})">✕</button>` : ''}
+        </li>`).join('')}</ul>`
+      : '<div class="card-sub">Nenhum — o que chegou fora da lista entra aqui e NÃO cancela a falta do item substituído.</div>'}
+      ${podeEditarDevolucao() ? `<div class="dev-diverg-form">
+          <input type="text" id="dev-dv-${esc(d.id)}-produto" list="dl-dev-produtos" placeholder="Cód. produto">
+          <input type="number" min="0" step="1" id="dev-dv-${esc(d.id)}-cx" placeholder="CX">
+          <input type="text" id="dev-dv-${esc(d.id)}-obs" placeholder="Observação (ex: veio no lugar do 30110)">
+          <button class="btn btn-sec btn-sm" onclick="adicionarDivergenciaDevolucaoUI('${escJs(d.id)}')">➕ Lançar divergente</button>
+        </div>` : ''}
+    </div>`;
+
+  const admin = (DB.operador || {}).setor === 'Administração';
+  return `<div class="dev-card-corpo">
+      ${cabecalhoEditavelDev(d, editavel)}
+      ${carimbosDev(d)}
+      ${acaoEtapaDev(d)}
+      <div class="table-wrap">
+        <table class="dev-tabela">
+          <thead><tr>
+            <th>Nota</th><th>P/T</th><th>Supervisor</th><th>Vendedor</th>
+            <th>Cód. Cliente</th><th>CX</th><th>Peso</th><th>Cód. Produto</th>
+            <th>Nº DEV</th><th>Motivo</th><th>Recebido</th><th>Falta</th>
+            <th>Destinação</th>${editavel ? '<th class="no-print"></th>' : ''}
+          </tr></thead>
+          <tbody>${d.itens.map(linhaItem).join('')}${novaLinha}</tbody>
+        </table>
+      </div>
+      ${d.obsControles ? `<div class="card-sub"><strong>Obs. Controles Internos:</strong> ${esc(d.obsControles)}</div>` : ''}
+      ${divergencias}
+      <div class="flex-end gap8 no-print" style="margin-top:10px">
+        ${admin ? `<button class="btn btn-sec btn-sm" onclick="abrirRevisoesDevolucaoUI('${escJs(d.id)}')"
+          title="Ver alterações deste checklist e restaurar uma versão">↩ Alterações</button>` : ''}
+        ${editavel ? `<button class="btn btn-danger btn-sm" onclick="excluirDevolucaoUI('${escJs(d.id)}')">🗑 Excluir checklist</button>` : ''}
+      </div>
+    </div>`;
+}
+
+/* ---------- ações (todas servidor-first, com aviso honesto) ---------- */
+
+async function acaoDev(promessa, aviso) {
+  try {
+    await promessa;
+    if (aviso) notify(aviso, 'success');
+    await carregarDevolucoes();
+    return true;
+  } catch (e) {
+    notify((e && e.message) || 'O servidor recusou a gravação.', 'danger', 7000);
+    await carregarDevolucoes();   // mostra o estado REAL, não o otimista
+    return false;
+  }
+}
+
+/* Chips de rota do formulário de novo checklist. */
+function renderRotasNovasDev() {
+  const box = document.getElementById('dev-rotas-escolhidas');
+  if (!box) return;
+  box.innerHTML = _devRotasNovas.map((r) => `<span class="dev-rota-chip">Rota ${esc(r)}
+      <button type="button" title="Tirar esta rota"
+        onclick="removerRotaNovaDevUI('${escJs(r)}')">✕</button></span>`).join('');
+}
+
+function adicionarRotaNovaDevUI() {
+  const sel = document.getElementById('dev-rota');
+  const cod = sel && sel.value;
+  if (!cod) { notify('Escolha uma rota no seletor primeiro.', 'warn'); return; }
+  if (!_devRotasNovas.includes(cod)) _devRotasNovas.push(cod);
+  sel.value = '';
+  renderRotasNovasDev();
+}
+
+function removerRotaNovaDevUI(cod) {
+  _devRotasNovas = _devRotasNovas.filter((r) => r !== cod);
+  renderRotasNovasDev();
+}
+
+async function criarDevolucaoUI() {
+  const v = (id) => (document.getElementById(id) || {}).value || '';
+  /* Rota escolhida no seletor mas sem clique no "➕ Rota" conta mesmo
+     assim — esquecer o clique não pode custar um checklist sem a rota. */
+  const noSeletor = v('dev-rota');
+  const rotas = _devRotasNovas.slice();
+  if (noSeletor && !rotas.includes(noSeletor)) rotas.push(noSeletor);
+  if (!rotas.length) { notify('Escolha pelo menos uma rota — região + rotas identificam o checklist.', 'warn'); return; }
+  const corpo = {
+    dataDev: v('dev-data') || diaLocalDev(),
+    rotas,
+    regiao: v('dev-regiao'),
+    transportadora: v('dev-transportadora'),
+    notaTransferencia: v('dev-nota-transf'),
+    placa: v('dev-placa'),
+    motorista: v('dev-motorista'),
+    itens: [],
+  };
+  try {
+    const d = await SuincoSharePoint.devolucoes.criar(corpo);
+    notify(`Checklist Nº ${d.numero} criado (${devRotulo(d)}). Agora lance os itens na linha do próprio checklist.`, 'success', 6000);
+    ['dev-regiao', 'dev-transportadora', 'dev-nota-transf', 'dev-placa', 'dev-motorista']
+      .forEach((id) => { const e = document.getElementById(id); if (e) e.value = ''; });
+    _devRotasNovas = [];
+    renderRotasNovasDev();
+    const filtro = document.getElementById('dev-filtro-dia');
+    if (filtro) filtro.value = corpo.dataDev;
+    _devExpandida = d.id;
+    await carregarDevolucoes();
+  } catch (e) {
+    notify((e && e.message) || 'O servidor recusou a criação.', 'danger', 7000);
+  }
+}
+
+/* Troca de rotas num checklist já criado (chips na própria linha). */
+function tirarRotaDevolucaoUI(id, cod) {
+  const d = getDevolucao(id);
+  if (!d) return;
+  const rotas = (d.rotas || []).filter((r) => r !== cod);
+  if (!rotas.length) { notify('O checklist precisa de pelo menos uma rota.', 'warn'); return; }
+  acaoDev(SuincoSharePoint.devolucoes.editar(id, { rotas }));
+}
+
+function incluirRotaDevolucaoUI(id) {
+  const sel = document.getElementById(`dev-addrota-${id}`);
+  const cod = sel && sel.value;
+  if (!cod) { notify('Escolha a rota a incluir.', 'warn'); return; }
+  const d = getDevolucao(id);
+  if (!d) return;
+  const rotas = (d.rotas || []).slice();
+  if (!rotas.includes(cod)) rotas.push(cod);
+  acaoDev(SuincoSharePoint.devolucoes.editar(id, { rotas }));
+}
+
+function editarDevolucaoCampoUI(id, campo, valor) {
+  acaoDev(SuincoSharePoint.devolucoes.editar(id, { [campo]: valor }));
+}
+
+function excluirDevolucaoUI(id) {
+  const d = getDevolucao(id);
+  if (!d) return;
+  if (!confirm(`Excluir o checklist Nº ${d.numero} (${devRotulo(d)})? Ele some do painel e dos relatórios; o registro fica no histórico.`)) return;
+  acaoDev(SuincoSharePoint.devolucoes.excluir(id), 'Checklist excluído.');
+}
+
+function avancarEtapaDevolucaoUI(id) {
+  const d = getDevolucao(id);
+  if (!d) return;
+  const etapa = DEV_ETAPAS.find((e) => e.status === d.status);
+  if (!etapa) return;
+  const v = (sufixo) => (document.getElementById(`dev-et-${id}-${sufixo}`) || {}).value;
+  const corpo = { para: etapa.proxima };
+  if (etapa.pede === 'portaria') {
+    corpo.lacre1 = v('lacre1') || '';
+    corpo.lacre2 = v('lacre2') || '';
+    corpo.cargaNumero = v('carga') || '';
+  } else if (etapa.pede === 'faturamento') {
+    corpo.pesoFinal = v('peso') || '';
+  } else if (etapa.pede === 'controles') {
+    corpo.obsControles = v('obs') || '';
+  }
+  acaoDev(SuincoSharePoint.devolucoes.etapa(id, corpo), `Etapa registrada: ${etapa.proxima}.`);
+}
+
+function editarItemDevolucaoUI(id, itemId, campo, valor) {
+  let corpo;
+  if (campo === 'parcial') corpo = { parcial: !!valor };
+  else if (campo === 'codProduto') {
+    corpo = { codProduto: valor, produtoNome: devProdutoNomePorCodigo(valor) };
+  } else corpo = { [campo]: valor };
+  acaoDev(SuincoSharePoint.devolucoes.editarItem(id, itemId, corpo));
+}
+
+function adicionarItemDevolucaoUI(id) {
+  const v = (sufixo) => (document.getElementById(`dev-ni-${id}-${sufixo}`) || {}).value || '';
+  const codProduto = v('produto');
+  const pesoDigitado = v('peso');
+  const pesoFinalLinha = pesoDigitado !== '' ? pesoDigitado
+    : (devPesoSugerido(codProduto, v('cx')) ?? '');
+  const corpo = {
+    nota: v('nota'),
+    parcial: !!v('parcial'),
+    supervisor: v('supervisor'),
+    vendedor: v('vendedor'),
+    codCliente: v('cliente'),
+    cx: v('cx'),
+    peso: pesoFinalLinha,
+    codProduto,
+    produtoNome: devProdutoNomePorCodigo(codProduto),
+    numDev: v('numdev'),
+    motivo: v('motivo'),
+    dataItem: (document.getElementById('dev-filtro-dia') || {}).value || diaLocalDev(),
+  };
+  if (!corpo.nota && !codProduto) {
+    notify('Preencha ao menos a nota fiscal ou o código do produto.', 'warn');
+    return;
+  }
+  acaoDev(SuincoSharePoint.devolucoes.criarItem(id, corpo));
+}
+
+function excluirItemDevolucaoUI(id, itemId) {
+  if (!confirm('Remover esta linha do checklist?')) return;
+  acaoDev(SuincoSharePoint.devolucoes.excluirItem(id, itemId));
+}
+
+function adicionarDivergenciaDevolucaoUI(id) {
+  const v = (sufixo) => (document.getElementById(`dev-dv-${id}-${sufixo}`) || {}).value || '';
+  const codProduto = v('produto');
+  if (!codProduto) { notify('Informe o código do produto que chegou fora do checklist.', 'warn'); return; }
+  acaoDev(SuincoSharePoint.devolucoes.criarDivergencia(id, {
+    codProduto,
+    produtoNome: devProdutoNomePorCodigo(codProduto),
+    cx: v('cx'),
+    observacao: v('obs'),
+  }), 'Divergência lançada — a falta do item original continua contando.');
+}
+
+function excluirDivergenciaDevolucaoUI(id, divId) {
+  acaoDev(SuincoSharePoint.devolucoes.excluirDivergencia(id, divId));
+}
+
+/* ---------- revisões (Administração; reusa o modal das cargas) ---------- */
+
+async function abrirRevisoesDevolucaoUI(id) {
+  const d = getDevolucao(id);
+  if (!d) return;
+  const modal = document.getElementById('modal-revisoes');
+  document.getElementById('revisoes-titulo').textContent =
+    `Alterações — checklist de devolução Nº ${d.numero} · ${devRotulo(d)}`;
+  const lista = document.getElementById('revisoes-lista');
+  lista.innerHTML = '<div class="card-sub">Buscando no servidor…</div>';
+  modal.classList.add('open');
+  try {
+    const revs = await SuincoSharePoint.devolucoes.listarRevisoes(id);
+    if (!revs.length) {
+      lista.innerHTML = '<div class="card-sub">Nenhuma alteração de cabeçalho registrada ainda.</div>';
+      return;
+    }
+    lista.innerHTML = revs.map((r) => {
+      const s = r.devolucao || {};
+      return `<div class="revisao-item">
+          <div class="revisao-meta">
+            <strong>${esc(fmtDataHora(r.gravadaEm))}</strong>
+            — mudança feita por ${esc(r.mudadaPor || '—')}${r.mudadaSetor ? ' · ' + esc(r.mudadaSetor) : ''}
+          </div>
+          <div class="revisao-dados">
+            Estado anterior: rota(s) ${esc((s.rotas || []).join(', ') || '—')} · transp. ${esc(s.transportadora || '—')}
+            · NT ${esc(s.notaTransferencia || '—')} · status ${esc(s.status || '—')}
+            ${s.pesoFinal !== null && s.pesoFinal !== undefined ? ` · peso final ${Number(s.pesoFinal).toLocaleString('pt-BR')} kg` : ''}
+          </div>
+          <div class="flex-end"><button class="btn btn-sec btn-sm"
+            onclick="restaurarRevisaoDevolucaoUI('${escJs(id)}',${r.revisaoId})">Restaurar este estado</button></div>
+        </div>`;
+    }).join('');
+  } catch (e) {
+    lista.innerHTML = `<div class="card-sub">Não consegui listar: ${esc(e.message || 'erro')}</div>`;
+  }
+}
+
+async function restaurarRevisaoDevolucaoUI(id, revisaoId) {
+  if (!confirm('Restaurar o checklist para este estado anterior? A mudança vale para todos e fica no log.')) return;
+  try {
+    await SuincoSharePoint.devolucoes.restaurar(id, revisaoId);
+    notify('Checklist restaurado.', 'success');
+    fecharRevisoesUI();
+    await carregarDevolucoes();
+  } catch (e) {
+    notify((e && e.message) || 'O servidor recusou a restauração.', 'danger', 7000);
+  }
+}
+
+/* ---------- relatório do dia (mesmo padrão dos demais) ---------- */
+
+async function relatorioDevolucoesUI() {
+  if (!devServidorOk()) {
+    notify('O relatório de devoluções vem do servidor — entre com login de servidor.', 'warn', 6000);
+    return;
+  }
+  await carregarDevolucoes();
+  const dia = (document.getElementById('dev-filtro-dia') || {}).value || diaLocalDev();
+  const el = document.getElementById('print-devolucoes');
+  if (!el) return;
+
+  const [ano, mes, diaN] = dia.split('-');
+  const diaBR = `${diaN}/${mes}/${ano}`;
+  const totalCx = DEVOLUCOES.reduce((s, d) => s + d.itens.reduce((x, i) => x + (i.cx || 0), 0), 0);
+  const totalFalta = DEVOLUCOES.reduce((s, d) => s
+    + d.itens.reduce((x, i) => x + (i.falta || 0), 0), 0);
+  const totalDiverg = DEVOLUCOES.reduce((s, d) => s + d.divergencias.length, 0);
+
+  const bloco = (d) => `
+    <div class="dev-doc-checklist">
+      ${tituloSecaoPdf(
+        `Checklist Nº ${d.numero} — ${d.regiao ? esc(d.regiao) + ' · ' : ''}Rota(s) ${esc((d.rotas || []).join(', ') || '—')} · ${esc(d.status)}`,
+        `Gerado por <strong>${esc(d.criadaPor)}</strong>`
+        + `${d.regiao ? ' · Região ' + esc(d.regiao) : ''}`
+        + `${d.transportadora ? ' · Transportadora ' + esc(d.transportadora) : ''}`
+        + `${d.notaTransferencia ? ' · NT ' + esc(d.notaTransferencia) : ''}`
+        + `${d.placa ? ' · Placa ' + esc(d.placa) : ''}`
+        + `${d.cargaNumero ? ' · Carga ' + esc(d.cargaNumero) : ''}`
+        + `${d.lacre1 ? ' · Lacre ' + esc([d.lacre1, d.lacre2].filter(Boolean).join('/')) : ''}`
+        + `${d.pesoFinal !== null ? ' · Peso final ' + d.pesoFinal.toLocaleString('pt-BR') + ' kg' : ''}`)}
+      <table class="dev-doc-tabela">
+        <thead><tr>
+          <th>Nota</th><th>P/T</th><th>Supervisor</th><th>Vendedor</th><th>Cód. Cliente</th>
+          <th>CX</th><th>Peso</th><th>Produto</th><th>Nº DEV</th><th>Motivo</th>
+          <th>Recebido</th><th>Falta</th><th>Destinação</th>
+        </tr></thead>
+        <tbody>${d.itens.map((i) => `<tr${i.falta > 0 ? ' class="dev-doc-falta"' : ''}>
+            <td>${esc(i.nota)}</td><td>${i.parcial ? 'P' : 'T'}</td>
+            <td>${esc(i.supervisor)}</td><td>${esc(i.vendedor)}</td><td>${esc(i.codCliente)}</td>
+            <td class="c-peso">${i.cx.toLocaleString('pt-BR')}</td>
+            <td class="c-peso">${i.peso !== null ? i.peso.toLocaleString('pt-BR') : '—'}</td>
+            <td>${esc(i.codProduto)}${i.produtoNome ? '-' + esc(i.produtoNome) : ''}</td>
+            <td>${esc(i.numDev)}</td><td>${esc(i.motivo)}</td>
+            <td class="c-peso">${i.qtdRecebida ?? '—'}</td>
+            <td class="c-peso">${i.falta === null ? '—' : (i.falta > 0 ? 'FALTA ' + i.falta.toLocaleString('pt-BR') : 'OK')}</td>
+            <td>${esc(i.destinacao) || '—'}</td>
+          </tr>`).join('')}</tbody>
+      </table>
+      ${d.divergencias.length ? `<div class="dev-doc-diverg">
+          <strong>Divergentes (fora do checklist):</strong>
+          ${d.divergencias.map((v) => `${v.cx.toLocaleString('pt-BR')} cx ${esc(v.codProduto)}${v.produtoNome ? '-' + esc(v.produtoNome) : ''}${v.observacao ? ' (' + esc(v.observacao) + ')' : ''}`).join(' · ')}
+        </div>` : ''}
+      ${d.obsControles ? `<div class="dev-doc-diverg"><strong>Obs. Controles Internos:</strong> ${esc(d.obsControles)}</div>` : ''}
+      <div class="dev-doc-carimbos">
+        ${Object.entries(DEV_ETAPA_ROTULO).map(([chave, rotulo]) => {
+          const c = d.carimbos[chave];
+          return `<span class="dev-doc-carimbo">${rotulo}: ${c ? esc(c.por) + ' ' + esc(fmtDataHora(c.em)) : '—'}</span>`;
+        }).join('')}
+      </div>
+    </div>`;
+
+  el.innerHTML = `
+    <div class="print-page doc-normal">
+      ${cabecalhoDocumento({
+        titulo: 'Relatório de Devoluções',
+        subtitulo: `Checklists do dia ${diaBR} · ${DEVOLUCOES.length} checklist(s) · `
+          + `${totalCx.toLocaleString('pt-BR')} cx`
+          + `${totalFalta > 0 ? ' · FALTAS: ' + totalFalta.toLocaleString('pt-BR') + ' cx' : ''}`
+          + `${totalDiverg > 0 ? ' · ' + totalDiverg + ' divergente(s)' : ''}`,
+      })}
+      ${DEVOLUCOES.length ? DEVOLUCOES.map(bloco).join('')
+        : '<div class="card-sub">Nenhum checklist de devolução neste dia.</div>'}
+      ${rodapeDocumento(
+        'Cada checklist identifica quem o gerou. A coluna FALTA é calculada '
+        + 'pelo sistema (caixas do checklist menos caixas recebidas na descarga); '
+        + 'produtos divergentes não abatem falta.',
+        `Checklists de devolução do dia ${diaBR}, gravados no servidor pelo painel.`,
+        '')}
+    </div>`;
+
+  await exportarViaServidor(el, `Devolucoes-${dia}`);
+}
+
+/* ---------- tempo real ---------- */
+
+/* O evento chega para QUALQUER devolução alterada em qualquer terminal.
+   Recarrega só se a aba estiver aberta — fora dela não há o que redesenhar,
+   e a próxima abertura já busca tudo de novo. */
+if (typeof SuincoSharePoint !== 'undefined' && SuincoSharePoint.aoAtualizarDevolucao) {
+  SuincoSharePoint.aoAtualizarDevolucao(() => {
+    if (typeof TAB_ATUAL !== 'undefined' && TAB_ATUAL === 'devolucoes') {
+      carregarDevolucoes();
+    }
+  });
+}
+
+/* ---------- cadastros de apoio (card na aba Cadastros) ---------- */
+
+function atualizarResumoCadDev() {
+  const el = document.getElementById('cad-dev-resumo');
+  if (!el) return;
+  el.textContent = `Cadastrados: ${(DEV_CADASTROS.supervisores || []).length} supervisor(es) · `
+    + `${(DEV_CADASTROS.produtos || []).length} produto(s) · `
+    + `${(DEV_CADASTROS.motivos || []).length} motivo(s).`;
+}
+
+async function cadastrarSupervisorDevUI() {
+  const el = document.getElementById('cad-dev-supervisor');
+  const nome = (el && el.value || '').trim();
+  if (!nome) { notify('Informe o nome do supervisor.', 'warn'); return; }
+  try {
+    await SuincoSharePoint.devolucoes.cadastrarSupervisor(nome);
+    notify(`Supervisor ${nome} cadastrado.`, 'success');
+    el.value = '';
+    _devCadastrosCarregados = false;
+    await carregarCadastrosDev();
+    atualizarResumoCadDev();
+  } catch (e) {
+    notify((e && e.message) || 'O servidor recusou o cadastro.', 'danger', 6000);
+  }
+}
+
+async function cadastrarProdutoDevUI() {
+  const cod = (document.getElementById('cad-dev-prod-codigo') || {}).value || '';
+  const nome = (document.getElementById('cad-dev-prod-nome') || {}).value || '';
+  const kg = (document.getElementById('cad-dev-prod-kg') || {}).value || '';
+  if (!cod.trim()) { notify('Informe o código do produto.', 'warn'); return; }
+  try {
+    await SuincoSharePoint.devolucoes.cadastrarProduto(cod.trim(), nome.trim(), kg);
+    notify(`Produto ${cod.trim()}${nome.trim() ? '-' + nome.trim() : ''}`
+      + `${kg ? ` (${kg} kg/cx)` : ''} cadastrado.`, 'success');
+    ['cad-dev-prod-codigo', 'cad-dev-prod-nome', 'cad-dev-prod-kg'].forEach((id) => {
+      const e = document.getElementById(id); if (e) e.value = '';
+    });
+    _devCadastrosCarregados = false;
+    await carregarCadastrosDev();
+    atualizarResumoCadDev();
+  } catch (e) {
+    notify((e && e.message) || 'O servidor recusou o cadastro.', 'danger', 6000);
+  }
+}
+
+async function cadastrarMotivoDevUI() {
+  const el = document.getElementById('cad-dev-motivo');
+  const motivo = (el && el.value || '').trim();
+  if (!motivo) { notify('Informe o motivo.', 'warn'); return; }
+  try {
+    await SuincoSharePoint.devolucoes.cadastrarMotivo(motivo);
+    notify(`Motivo "${motivo}" cadastrado.`, 'success');
+    el.value = '';
+    _devCadastrosCarregados = false;
+    await carregarCadastrosDev();
+    atualizarResumoCadDev();
+  } catch (e) {
+    notify((e && e.message) || 'O servidor recusou o cadastro.', 'danger', 6000);
+  }
+}

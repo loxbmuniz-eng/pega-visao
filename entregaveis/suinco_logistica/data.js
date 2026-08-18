@@ -343,8 +343,13 @@ const STATUS_ORDEM_EXPORT = STATUS_FLOW.slice();
    A diferença entre as duas está numa coisa só: a aba Usuários. Criar
    acesso não é operar o pátio — é decidir quem entra. Fica com a
    Administração, como definido desde o início. */
-const ABAS_OPERACIONAIS = ['torre','programacao','portaria','expedicao',
-                           'faturamento','indicadores','cadastros',
+/* 'devolucoes' está aqui — e só aqui — de propósito (fase 1, 18/08/2026):
+   ABAS_OPERACIONAIS alimenta exatamente Logística e Administração, que são
+   quem alimenta e audita o checklist digital antes de abrir para os outros
+   setores (decisão da reunião com o gestor). A fase 2 é acrescentar a aba
+   às listas dos setores — nada além disso. */
+const ABAS_OPERACIONAIS = ['torre','programacao','devolucoes','portaria',
+                           'expedicao','faturamento','indicadores','cadastros',
                            'historico','relatorios'];
 
 /* A Torre saiu das abas de quem opera um posto só.
@@ -403,6 +408,12 @@ const SETOR_PERMISSOES = {
      leitura pura, e os campos editáveis dela só aparecem para quem pode
      cancelar carga — Logística/Administração). */
   'Comercial':    ['torre','historico'],
+  /* Setores da devolução (18/08/2026): cada um assina um passo do
+     checklist digital — Controles Internos destina os produtos, Central
+     de Notas finaliza a NF. Só veem a aba Devoluções e o Histórico; o
+     servidor confere de novo o que cada um pode gravar. */
+  'Controles Internos': ['devolucoes','historico'],
+  'Central de Notas':   ['devolucoes','historico'],
 };
 
 // Função de cada aba, exibida no topo dela. Serve para quem abre o painel pela

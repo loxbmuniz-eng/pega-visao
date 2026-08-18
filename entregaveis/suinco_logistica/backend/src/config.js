@@ -119,4 +119,11 @@ export const SETORES = [
      pra ser bloqueado; precisaria de uma linha a mais em cada uma pra
      ganhar poder de escrita, e essa linha não existe. */
   'Comercial',
+  /* Setores da devolução (18/08/2026) — cada um faz UM passo do checklist
+     digital (dominio/devolucoes.js): Controles Internos destina os
+     produtos (Estoque/Descarte/Reprocesso) e assina "Destinada"; Central
+     de Notas finaliza a nota fiscal. Nas CARGAS não aparecem em nenhuma
+     allowlist — mesmo racional do Comercial acima. */
+  'Controles Internos',
+  'Central de Notas',
 ];

@@ -61,6 +61,7 @@ const SuincoSharePoint = (function () {
   let ouvintesEdicao = [];
   let ouvintesExclusao = [];
   let ouvintesPresenca = [];
+  let ouvintesDevolucao = [];
   let ouvintesFechamentoPrograma = [];
   let timerRenovacao = null;
   let ultimaInteracao = Date.now();
@@ -919,6 +920,15 @@ const SuincoSharePoint = (function () {
     });
     socket.on('frota:atualizada', () => pullTudo().catch(() => {}));
 
+    /* Devoluções são servidor-first (sem cópia local sincronizada), então o
+       evento não dispara pull de cargas — só avisa a tela de Devoluções
+       para recarregar a lista dela, se estiver aberta. */
+    socket.on('devolucao:atualizada', (aviso) => {
+      ouvintesDevolucao.forEach((fn) => {
+        try { fn(aviso); } catch (e) { console.warn('[Suinco] aviso de devolução:', e); }
+      });
+    });
+
     // Quem está online agora, por operador. Chega sozinho quando alguém
     // conecta/desconecta em qualquer terminal — e também assim que ESTA aba
     // conecta, com o retrato do momento (o servidor manda de propósito).
@@ -1114,6 +1124,69 @@ const SuincoSharePoint = (function () {
     return resposta.blob();
   }
 
+  /* ---------- Devoluções — o checklist digital ----------
+     Servidor-first de propósito: as operadoras trabalham em mesa com rede,
+     e o checklist é um documento vivo entre setores — a fonte é o servidor,
+     sem cópia local que possa ecoar dado velho (a lição das cargas na
+     semana de 14–15/08). Sem conexão, a aba diz isso com todas as letras
+     em vez de fingir que gravou. */
+  function aoAtualizarDevolucao(fn) { if (typeof fn === 'function') ouvintesDevolucao.push(fn); }
+
+  const devolucoesApi = {
+    listar(de, ate) {
+      const q = [];
+      if (de) q.push('de=' + encodeURIComponent(de));
+      if (ate) q.push('ate=' + encodeURIComponent(ate));
+      return chamar('/api/devolucoes' + (q.length ? '?' + q.join('&') : ''));
+    },
+    criar(corpo) { return chamar('/api/devolucoes', { metodo: 'POST', corpo }); },
+    editar(id, corpo) {
+      return chamar('/api/devolucoes/' + encodeURIComponent(id), { metodo: 'PATCH', corpo });
+    },
+    excluir(id) {
+      return chamar('/api/devolucoes/' + encodeURIComponent(id), { metodo: 'DELETE' });
+    },
+    etapa(id, corpo) {
+      return chamar('/api/devolucoes/' + encodeURIComponent(id) + '/etapa', { metodo: 'POST', corpo });
+    },
+    criarItem(id, corpo) {
+      return chamar('/api/devolucoes/' + encodeURIComponent(id) + '/itens', { metodo: 'POST', corpo });
+    },
+    editarItem(id, itemId, corpo) {
+      return chamar('/api/devolucoes/' + encodeURIComponent(id) + '/itens/' + encodeURIComponent(itemId),
+        { metodo: 'PATCH', corpo });
+    },
+    excluirItem(id, itemId) {
+      return chamar('/api/devolucoes/' + encodeURIComponent(id) + '/itens/' + encodeURIComponent(itemId),
+        { metodo: 'DELETE' });
+    },
+    criarDivergencia(id, corpo) {
+      return chamar('/api/devolucoes/' + encodeURIComponent(id) + '/divergencias', { metodo: 'POST', corpo });
+    },
+    excluirDivergencia(id, divId) {
+      return chamar('/api/devolucoes/' + encodeURIComponent(id) + '/divergencias/' + encodeURIComponent(divId),
+        { metodo: 'DELETE' });
+    },
+    listarRevisoes(id) {
+      return chamar('/api/devolucoes/' + encodeURIComponent(id) + '/revisoes');
+    },
+    restaurar(id, revisaoId) {
+      return chamar('/api/devolucoes/' + encodeURIComponent(id) + '/restaurar',
+        { metodo: 'POST', corpo: { revisaoId } });
+    },
+    cadastros() { return chamar('/api/devolucoes-cadastros'); },
+    cadastrarSupervisor(nome) {
+      return chamar('/api/devolucoes-cadastros/supervisores', { metodo: 'POST', corpo: { nome } });
+    },
+    cadastrarProduto(codigo, nome, pesoCaixaKg) {
+      return chamar('/api/devolucoes-cadastros/produtos',
+        { metodo: 'POST', corpo: { codigo, nome, pesoCaixaKg } });
+    },
+    cadastrarMotivo(motivo) {
+      return chamar('/api/devolucoes-cadastros/motivos', { metodo: 'POST', corpo: { motivo } });
+    },
+  };
+
   return {
     SP_CONFIG,
     iniciar, estaConfigurado, estado, conta, aoMudarEstado, aoReceberDados,
@@ -1128,5 +1201,6 @@ const SuincoSharePoint = (function () {
     arquivarDia, fecharPrograma,
     gerarRelatorioPdf, listarProgramacoes,
     listarRevisoes, restaurarRevisao,
+    devolucoes: devolucoesApi, aoAtualizarDevolucao,
   };
 })();
