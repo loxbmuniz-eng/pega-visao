@@ -136,6 +136,12 @@ async function carregarCadastrosDev() {
     };
     põe('dl-dev-supervisores', DEV_CADASTROS.supervisores || []);
     põe('dl-dev-rcas', DEV_CADASTROS.representantes || []);
+    const dlCli = document.getElementById('dl-dev-clientes');
+    if (dlCli) {
+      dlCli.innerHTML = (DEV_CADASTROS.clientes || [])
+        .map((c) => `<option value="${esc(c.codigo)}">${esc([c.nome, c.vendedor, c.supervisor].filter(Boolean).join(' · '))}</option>`)
+        .join('');
+    }
     põe('dl-dev-motivos', DEV_CADASTROS.motivos || []);
     const dlProd = document.getElementById('dl-dev-produtos');
     if (dlProd) {
@@ -330,7 +336,7 @@ function renderDevolucaoAberta(d, editavel) {
         : (i.parcial ? 'Parcial' : 'Total')}</td>
       <td>${cel('supervisor', i.supervisor, 'text', 'list="dl-dev-supervisores"')}</td>
       <td>${cel('vendedor', i.vendedor, 'text', 'list="dl-dev-rcas"')}</td>
-      <td>${cel('codCliente', i.codCliente)}</td>
+      <td>${cel('codCliente', i.codCliente, 'text', 'list="dl-dev-clientes"')}</td>
       <td class="c-peso">${cel('cx', i.cx, 'number', 'min="0" step="1"')}</td>
       <td class="c-peso">${cel('peso', i.peso, 'number', 'min="0" step="0.01"')}</td>
       <td>${cel('codProduto', i.codProduto, 'text', 'list="dl-dev-produtos"')}
@@ -359,7 +365,8 @@ function renderDevolucaoAberta(d, editavel) {
       <td><select id="dev-ni-${esc(d.id)}-parcial"><option value="1">Parcial</option><option value="">Total</option></select></td>
       <td><input type="text" id="dev-ni-${esc(d.id)}-supervisor" list="dl-dev-supervisores" placeholder="Supervisor"></td>
       <td><input type="text" id="dev-ni-${esc(d.id)}-vendedor" list="dl-dev-rcas" placeholder="RCA" title="RCA / vendedor — como na capa real"></td>
-      <td><input type="text" id="dev-ni-${esc(d.id)}-cliente" placeholder="Cód. cliente"></td>
+      <td><input type="text" id="dev-ni-${esc(d.id)}-cliente" list="dl-dev-clientes" placeholder="Cód. cliente"
+            onchange="autofillClienteDevUI('${escJs(d.id)}')"></td>
       <td class="c-peso"><input type="number" min="0" step="1" id="dev-ni-${esc(d.id)}-cx" placeholder="CX"></td>
       <td class="c-peso"><input type="number" min="0" step="0.01" id="dev-ni-${esc(d.id)}-peso" placeholder="Peso"></td>
       <td><input type="text" id="dev-ni-${esc(d.id)}-produto" list="dl-dev-produtos" placeholder="Cód. produto"></td>
@@ -559,6 +566,16 @@ function editarItemDevolucaoUI(id, itemId, campo, valor) {
   if (campo === 'parcial') corpo = { parcial: !!valor };
   else if (campo === 'codProduto') {
     corpo = { codProduto: valor, produtoNome: devProdutoNomePorCodigo(valor) };
+  } else if (campo === 'codCliente') {
+    // O cliente puxa o vínculo RCA/supervisor também na linha já gravada
+    // (mesma lógica da placa→Frota). O que a base não sabe, não mexe.
+    corpo = { codCliente: valor };
+    const cli = typeof devClientePorCodigo === 'function' ? devClientePorCodigo(valor) : null;
+    if (cli) {
+      if (cli.vendedor) corpo.vendedor = cli.vendedor;
+      if (cli.supervisor) corpo.supervisor = cli.supervisor;
+      notify(`Cliente ${cli.codigo} reconhecido — RCA e supervisor preenchidos do cadastro.`, 'info');
+    }
   } else corpo = { [campo]: valor };
   acaoDev(SuincoSharePoint.devolucoes.editarItem(id, itemId, corpo));
 }
@@ -921,6 +938,11 @@ async function exportarCadastroDevCsv(qual) {
   } else if (qual === 'motivos') {
     baixarCsvCadastro('Motivos', ['Motivo de devolução'],
       (DEV_CADASTROS.motivos || []).map((s) => [s]));
+  } else if (qual === 'clientes') {
+    baixarCsvCadastro('Clientes',
+      ['Cód. cliente', 'Nome', 'RCA', 'Supervisor'],
+      (DEV_CADASTROS.clientes || []).map((c) => [c.codigo, c.nome || '',
+        c.vendedor || '', c.supervisor || '']));
   }
 }
 
@@ -952,4 +974,51 @@ function previewFrotaDevolucao() {
   hint.textContent = `✔ ${p} · ${f.transportadora || 'sem transportadora'}`
     + `${f.tipoVeiculo ? ' · ' + f.tipoVeiculo : ''}`
     + `${f.motorista ? ' · ' + f.motorista : ''}`;
+}
+
+/* ---------- cliente puxa RCA e supervisor (pedido de 18/08/2026) ----------
+   Mesma lógica da placa→Frota: o código do cliente traz o RCA (com
+   código) e o supervisor (com código) do cadastro de Clientes — que a
+   Logística alimenta na aba Cadastros E que aprende sozinho de cada item
+   de checklist gravado. Campos continuam editáveis. */
+function devClientePorCodigo(codigo) {
+  const alvo = String(codigo || '').trim().toLowerCase();
+  if (!alvo) return null;
+  return (DEV_CADASTROS.clientes || [])
+    .find((c) => String(c.codigo).trim().toLowerCase() === alvo) || null;
+}
+
+function autofillClienteDevUI(devId) {
+  const v = (sufixo) => document.getElementById(`dev-ni-${devId}-${sufixo}`);
+  const campoCliente = v('cliente');
+  if (!campoCliente) return;
+  const cli = devClientePorCodigo(campoCliente.value);
+  if (!cli) return;
+  const campoRca = v('vendedor');
+  const campoSup = v('supervisor');
+  if (campoRca && cli.vendedor) campoRca.value = cli.vendedor;
+  if (campoSup && cli.supervisor) campoSup.value = cli.supervisor;
+  if (cli.vendedor || cli.supervisor) {
+    notify(`Cliente ${cli.codigo} reconhecido — ${[cli.vendedor, cli.supervisor].filter(Boolean).join(' · ')}.`, 'info');
+  }
+}
+
+async function cadastrarClienteDevUI() {
+  const v = (id) => ((document.getElementById(id) || {}).value || '').trim();
+  const codigo = v('cad-dev-cli-codigo');
+  if (!codigo) { notify('Informe o código do cliente.', 'warn'); return; }
+  try {
+    await SuincoSharePoint.devolucoes.cadastrarCliente({
+      codigo, nome: v('cad-dev-cli-nome'),
+      vendedor: v('cad-dev-cli-rca'), supervisor: v('cad-dev-cli-supervisor'),
+    });
+    notify(`Cliente ${codigo} cadastrado com o vínculo RCA/supervisor.`, 'success');
+    ['cad-dev-cli-codigo', 'cad-dev-cli-nome', 'cad-dev-cli-rca', 'cad-dev-cli-supervisor']
+      .forEach((id) => { const e = document.getElementById(id); if (e) e.value = ''; });
+    _devCadastrosCarregados = false;
+    await carregarCadastrosDev();
+    atualizarResumoCadDev();
+  } catch (e) {
+    notify((e && e.message) || 'O servidor recusou o cadastro.', 'danger', 6000);
+  }
 }

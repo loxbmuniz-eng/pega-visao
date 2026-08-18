@@ -77,6 +77,32 @@ function emitirAtualizada(id) {
   emitir('devolucao:atualizada', { id });
 }
 
+/* Aprendizado automático do vínculo cliente → RCA → supervisor (pedido
+   de 18/08/2026): todo item gravado com esses campos ensina a base, e o
+   próximo lançamento do mesmo cliente preenche sozinho — a mesma lógica
+   da placa que puxa a transportadora. Campo vazio não apaga o que a base
+   já sabe (COALESCE/NULLIF, a lição das observações). Nunca derruba a
+   gravação do item: aprender é bônus, não pré-requisito. */
+async function aprenderCliente(executor, item) {
+  const codigo = String(item.cod_cliente ?? '').trim().slice(0, 100);
+  if (!codigo) return;
+  try {
+    await executor.query(
+      `INSERT INTO dim_clientes (codigo, vendedor, supervisor)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (codigo) DO UPDATE SET
+         vendedor   = COALESCE(NULLIF(EXCLUDED.vendedor,  ''), dim_clientes.vendedor),
+         supervisor = COALESCE(NULLIF(EXCLUDED.supervisor, ''), dim_clientes.supervisor),
+         atualizado_em = now()`,
+      [codigo,
+       String(item.vendedor ?? '').trim().slice(0, 100),
+       String(item.supervisor ?? '').trim().slice(0, 100)]
+    );
+  } catch (e) {
+    console.warn('[devolucoes] aprendizado de cliente falhou:', e.message);
+  }
+}
+
 /* Lista por período de DATA DA DEVOLUÇÃO (o dia do checklist, não o dia do
    clique — mesma lição do relatório de cargas). Sem período: últimos 30
    dias, o suficiente para a tela do dia e o histórico recente. */
@@ -174,6 +200,7 @@ rotasDevolucoes.post('/devolucoes', exigirLogin, async (req, res, next) => {
            VALUES (${cols.map((_, i) => `$${i + 1}`).join(', ')})`,
           vals
         );
+        await aprenderCliente(cli, it);
       }
       await logDevolucao(cli, {
         devolucaoId: id, operador: op,
@@ -375,6 +402,7 @@ rotasDevolucoes.post('/devolucoes/:id/itens', exigirLogin, exigirSetor('Logísti
        RETURNING *`,
       vals
     );
+    await aprenderCliente({ query: consultar }, ins.rows[0]);
     emitirAtualizada(req.params.id);
     res.status(201).json(itemParaPainel(ins.rows[0]));
   } catch (e) { next(e); }
@@ -420,6 +448,7 @@ rotasDevolucoes.patch('/devolucoes/:id/itens/:itemId', exigirLogin, async (req, 
       vals
     );
     if (!upd.rows[0]) return res.status(404).json({ erro: 'Item não encontrado.', codigo: 'NAO_ENCONTRADO' });
+    await aprenderCliente({ query: consultar }, upd.rows[0]);
     emitirAtualizada(req.params.id);
     res.json(itemParaPainel(upd.rows[0]));
   } catch (e) { next(e); }
@@ -568,17 +597,19 @@ rotasDevolucoes.post('/devolucoes/:id/restaurar', exigirLogin, exigirSetor(), as
 
 rotasDevolucoes.get('/devolucoes-cadastros', exigirLogin, async (req, res, next) => {
   try {
-    const [sup, prod, mot, rca] = await Promise.all([
+    const [sup, prod, mot, rca, cli] = await Promise.all([
       consultar('SELECT nome FROM dim_supervisores ORDER BY nome'),
       consultar(`SELECT codigo, nome, categoria, temperatura, validade, ean,
                         peso_liquido_txt, peso_caixa_kg, ativo
                    FROM dim_produtos ORDER BY codigo`),
       consultar('SELECT motivo FROM dim_motivos_devolucao ORDER BY motivo'),
       consultar('SELECT nome FROM dim_representantes ORDER BY nome'),
+      consultar('SELECT codigo, nome, vendedor, supervisor FROM dim_clientes ORDER BY codigo'),
     ]);
     res.json({
       supervisores: sup.rows.map((r) => r.nome),
       representantes: rca.rows.map((r) => r.nome),
+      clientes: cli.rows,
       produtos: prod.rows.map((r) => ({
         codigo: r.codigo,
         nome: r.nome,
@@ -628,6 +659,28 @@ rotasDevolucoes.post('/devolucoes-cadastros/produtos', exigirLogin, exigirSetor(
       nome: rows[0].nome,
       pesoCaixaKg: rows[0].peso_caixa_kg === null ? null : Number(rows[0].peso_caixa_kg),
     });
+  } catch (e) { next(e); }
+});
+
+rotasDevolucoes.post('/devolucoes-cadastros/clientes', exigirLogin, exigirSetor('Logística'), async (req, res, next) => {
+  try {
+    const codigo = String(req.body?.codigo ?? '').trim().slice(0, 100);
+    if (!codigo) return res.status(400).json({ erro: 'Informe o código do cliente.', codigo: 'CODIGO_FALTANDO' });
+    const { rows } = await consultar(
+      `INSERT INTO dim_clientes (codigo, nome, vendedor, supervisor)
+       VALUES ($1,$2,$3,$4)
+       ON CONFLICT (codigo) DO UPDATE SET
+         nome       = COALESCE(NULLIF(EXCLUDED.nome, ''), dim_clientes.nome),
+         vendedor   = COALESCE(NULLIF(EXCLUDED.vendedor, ''), dim_clientes.vendedor),
+         supervisor = COALESCE(NULLIF(EXCLUDED.supervisor, ''), dim_clientes.supervisor),
+         atualizado_em = now()
+       RETURNING codigo, nome, vendedor, supervisor`,
+      [codigo,
+       String(req.body?.nome ?? '').trim().slice(0, 200),
+       String(req.body?.vendedor ?? '').trim().slice(0, 100),
+       String(req.body?.supervisor ?? '').trim().slice(0, 100)]
+    );
+    res.status(201).json(rows[0]);
   } catch (e) { next(e); }
 });
 

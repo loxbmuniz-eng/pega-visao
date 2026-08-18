@@ -1189,6 +1189,9 @@ const SuincoSharePoint = (function () {
     cadastrarMotivo(motivo) {
       return chamar('/api/devolucoes-cadastros/motivos', { metodo: 'POST', corpo: { motivo } });
     },
+    cadastrarCliente(corpo) {
+      return chamar('/api/devolucoes-cadastros/clientes', { metodo: 'POST', corpo });
+    },
   };
 
   return {
