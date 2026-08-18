@@ -513,17 +513,22 @@ function renderDevolucaoAberta(d, editavel) {
     return `<tr>
       <td>${cel('nota', i.nota)}</td>
       <td>${editavel
-        /* Nº DA PARCIAL (18/08/2026): a mesma nota fiscal pode voltar em
-           duas parciais do MESMO produto — uma caixa fora de temperatura,
-           outra avariada. Cada parcial tem motivo e Nº DEV próprios, e é o
-           número da parcial que diz a QUAL caixa cada DEV se refere. */
         ? `<select onchange="editarItemDevolucaoUI('${escJs(d.id)}',${i.itemId},'parcial',this.value)">
              <option value="1" ${i.parcial ? 'selected' : ''}>Parcial</option>
-             <option value="" ${i.parcial ? '' : 'selected'}>Total</option></select>
-           ${i.parcial ? `<input type="text" class="dev-parcial-desc" value="${esc(i.parcialDesc || '')}"
-             placeholder="Nº parcial" title="Número da parcial — é ele que amarra cada Nº DEV à caixa certa quando a mesma nota volta em duas parciais."
-             onchange="editarItemDevolucaoUI('${escJs(d.id)}',${i.itemId},'parcialDesc',this.value)">` : ''}`
-        : `${i.parcial ? 'Parcial' : 'Total'}${i.parcial && i.parcialDesc ? `<small class="text-dim">${esc(i.parcialDesc)}</small>` : ''}`}</td>
+             <option value="" ${i.parcial ? '' : 'selected'}>Total</option></select>`
+        : (i.parcial ? 'Parcial' : 'Total')}</td>
+      ${/* Nº DA NOTA PARCIAL — coluna própria (19/08/2026), ao lado da nota
+           de venda. A mesma nota fiscal pode voltar em duas parciais do
+           MESMO produto (uma caixa fora de temperatura, outra avariada), e é
+           este número que diz a QUAL caixa cada Nº DEV se refere. Nota
+           TOTAL não tem parcial: o campo fica travado e vazio de propósito,
+           para ninguém preencher o que não existe. */''}
+      <td>${editavel
+        ? `<input type="text" class="dev-parcial-desc" value="${esc(i.parcialDesc || '')}"
+             ${i.parcial ? '' : 'disabled'} placeholder="${i.parcial ? 'Nº parcial' : '—'}"
+             title="${i.parcial ? 'Número da nota parcial (obrigatório quando a devolução é parcial).' : 'Nota total não tem número de parcial.'}"
+             onchange="editarItemDevolucaoUI('${escJs(d.id)}',${i.itemId},'parcialDesc',this.value)">`
+        : (i.parcial ? (esc(i.parcialDesc) || '<span class="dev-falta-chip">falta o nº</span>') : '—')}</td>
       <td>${cel('supervisor', i.supervisor, 'text', 'list="dl-dev-supervisores"')}</td>
       <td>${cel('vendedor', i.vendedor, 'text', 'list="dl-dev-rcas"')}</td>
       <td>${cel('codCliente', i.codCliente, 'text', 'list="dl-dev-clientes" oninput="sugerirClientesDevUI(this.value)"')}</td>
@@ -582,9 +587,9 @@ function renderDevolucaoAberta(d, editavel) {
   const novaLinha = !editavel ? '' : `<tr class="dev-linha-nova">
       <td><input type="text" id="dev-ni-${esc(d.id)}-nota" placeholder="Nota"></td>
       <td><select id="dev-ni-${esc(d.id)}-parcial"
-            onchange="mostrarParcialDevUI('${escJs(d.id)}')"><option value="1">Parcial</option><option value="">Total</option></select>
-          <input type="text" class="dev-parcial-desc" id="dev-ni-${esc(d.id)}-parcialdesc"
-            placeholder="Nº parcial" title="Número da parcial — amarra o Nº DEV à caixa certa quando a mesma nota volta em duas parciais."></td>
+            onchange="mostrarParcialDevUI('${escJs(d.id)}')"><option value="1">Parcial</option><option value="">Total</option></select></td>
+      <td><input type="text" class="dev-parcial-desc" id="dev-ni-${esc(d.id)}-parcialdesc"
+            placeholder="Nº parcial" title="Número da nota parcial — obrigatório quando é parcial; em nota total, deixe vazio."></td>
       <td><input type="text" id="dev-ni-${esc(d.id)}-supervisor" list="dl-dev-supervisores" placeholder="Supervisor"></td>
       <td><input type="text" id="dev-ni-${esc(d.id)}-vendedor" list="dl-dev-rcas" placeholder="RCA" title="RCA / vendedor — como na capa real"></td>
       <td><input type="text" id="dev-ni-${esc(d.id)}-cliente" list="dl-dev-clientes" placeholder="Cód. cliente ou apelido"
@@ -633,7 +638,9 @@ function renderDevolucaoAberta(d, editavel) {
       <div class="table-wrap">
         <table class="dev-tabela">
           <thead><tr>
-            <th>Nota</th><th>P/T</th><th>Supervisor</th><th title="Vendedor">RCA</th>
+            <th title="Nota fiscal de venda">Nota</th><th>P/T</th>
+            <th title="Número da nota parcial — só quando a devolução é parcial">Nº parcial</th>
+            <th>Supervisor</th><th title="Vendedor">RCA</th>
             <th>Cód. Cliente</th><th>CX</th><th title="Peso em QUILOS (kg)">Peso (kg)</th><th>Cód. Produto</th>
             <th>Nº DEV</th><th title="Coluna DATA-DEV da capa">Data DEV</th><th>Motivo</th>
             <th title="Pesagem do Faturamento — confirma que passou pela balança">Pesagem</th>
@@ -844,7 +851,10 @@ function avancarEtapaDevolucaoUI(id) {
 
 function editarItemDevolucaoUI(id, itemId, campo, valor) {
   let corpo;
-  if (campo === 'parcial') corpo = { parcial: !!valor };
+  /* Virou TOTAL: o número da parcial sai junto. Deixar o número velho numa
+     linha total é pior que não ter número nenhum — parece que existe uma
+     parcial que ninguém encontra. */
+  if (campo === 'parcial') corpo = valor ? { parcial: true } : { parcial: false, parcialDesc: '' };
   else if (campo === 'codProduto') {
     corpo = { codProduto: valor, produtoNome: devProdutoNomePorCodigo(valor) };
   } else if (campo === 'codCliente') {
@@ -951,8 +961,12 @@ function mostrarParcialDevUI(id) {
   const sel = document.getElementById(`dev-ni-${id}-parcial`);
   const campo = document.getElementById(`dev-ni-${id}-parcialdesc`);
   if (!sel || !campo) return;
-  campo.style.display = sel.value ? '' : 'none';
-  if (!sel.value) campo.value = '';
+  /* Nota TOTAL não tem número de parcial: o campo trava e esvazia, em vez
+     de sumir — a coluna continua no lugar e a tabela não "pula". */
+  const ehParcial = !!sel.value;
+  campo.disabled = !ehParcial;
+  campo.placeholder = ehParcial ? 'Nº parcial' : '—';
+  if (!ehParcial) campo.value = '';
 }
 
 function excluirItemDevolucaoUI(id, itemId) {
@@ -1118,13 +1132,15 @@ async function relatorioDevolucoesUI(diaParam) {
         + `${d.pesoFinal !== null ? ' · Peso final ' + d.pesoFinal.toLocaleString('pt-BR') + ' kg' : ''}`)}
       <table class="dev-doc-tabela">
         <thead><tr>
-          <th>Nota</th><th>P/T</th><th>Supervisor</th><th title="Vendedor">RCA</th><th>Cód. Cliente</th>
+          <th>Nota</th><th>P/T</th><th title="Número da nota parcial">Nº parcial</th>
+          <th>Supervisor</th><th title="Vendedor">RCA</th><th>Cód. Cliente</th>
           <th>CX</th><th title="Peso em QUILOS (kg)">Peso (kg)</th><th>Produto</th><th>Nº DEV</th><th>Data DEV</th><th>Motivo</th>
           <th title="Pesagem do Faturamento, em QUILOS (kg)">Pesagem (kg)</th><th>Expedição</th><th>Falta</th><th>Destinação</th><th>Nota final</th>
         </tr></thead>
         <tbody>${d.itens.map((i) => `<tr${i.falta > 0 ? ' class="dev-doc-falta"' : ''}>
             <td>${esc(i.nota)}</td>
-            <td>${i.parcial ? ('P' + (i.parcialDesc ? ' ' + esc(i.parcialDesc) : '')) : 'T'}</td>
+            <td>${i.parcial ? 'P' : 'T'}</td>
+            <td>${i.parcial ? (esc(i.parcialDesc) || '—') : '—'}</td>
             <td>${esc(i.supervisor)}</td><td>${esc(i.vendedor)}</td><td>${esc(i.codCliente)}</td>
             <td class="c-peso">${i.cx.toLocaleString('pt-BR')}</td>
             <td class="c-peso">${i.peso !== null ? i.peso.toLocaleString('pt-BR') : '—'}</td>
@@ -1142,7 +1158,7 @@ async function relatorioDevolucoesUI(diaParam) {
               (pedido de 18/08/2026): as colunas CX e PESO fecham a conta do
               checklist, e a pesagem do Faturamento fecha a dela ao lado —
               é o número que a conferência procura primeiro. */''}
-        <tfoot>${somatorioItensDev(d.itens, 5)}</tfoot>
+        <tfoot>${somatorioItensDev(d.itens, 6)}</tfoot>
       </table>
       ${d.divergencias.length ? `<div class="dev-doc-diverg">
           <strong>Divergentes (fora do checklist):</strong>
@@ -1466,7 +1482,10 @@ function somatorioItensDev(itens, colspanAntes) {
       <td colspan="${colspanAntes}" class="tot-rotulo">TOTAL — ${itens.length} linha(s)</td>
       <td class="tot-num">${fmt(cx, 0)}</td>
       <td class="tot-num">${fmt(peso, 2)} kg</td>
-      <td colspan="3"></td>
+      ${/* Produto, Nº DEV, Data DEV e Motivo não somam — quatro colunas em
+           branco. Estavam declaradas como três, o que empurrava o total da
+           pesagem para a coluna do motivo. */''}
+      <td colspan="4"></td>
       <td class="tot-num">${pesagem ? fmt(pesagem, 2) + ' kg' : ''}</td>
       <td class="tot-num">${recebidas ? fmt(recebidas, 0) : ''}</td>
       <td class="tot-num">${falta ? 'FALTA ' + fmt(falta, 0) : ''}</td>
@@ -1480,7 +1499,7 @@ function somatorioLinhasOperadorDev(linhas) {
   const peso = linhas.reduce((s, { i }) => s + num(i.peso), 0);
   const fmt = (n, casas) => n.toLocaleString('pt-BR', { maximumFractionDigits: casas });
   return `<tr class="linha-total">
-      <td colspan="5" class="tot-rotulo">TOTAL — ${linhas.length} linha(s)</td>
+      <td colspan="6" class="tot-rotulo">TOTAL — ${linhas.length} linha(s)</td>
       <td class="tot-num">${fmt(cx, 0)}</td>
       <td class="tot-num">${fmt(peso, 2)} kg</td>
       <td colspan="5"></td>
@@ -1543,7 +1562,8 @@ async function relatorioOperadorDevolucoesUI(diaParam) {
       ${linhas.length ? `
       <table class="doc-tabela dev-doc-tabela">
         <thead><tr>
-          <th>Nota</th><th>P/T</th><th>Supervisor</th><th title="Vendedor">RCA</th>
+          <th>Nota</th><th>P/T</th><th title="Número da nota parcial">Nº parcial</th>
+          <th>Supervisor</th><th title="Vendedor">RCA</th>
           <th>Cliente</th><th>CX</th><th title="Peso em QUILOS (kg)">Peso (kg)</th><th>Produto</th>
           <th>Nº DEV</th><th>Data DEV</th><th>Motivo</th>
           <th title="Checklist de origem">Checklist</th>
@@ -1551,7 +1571,8 @@ async function relatorioOperadorDevolucoesUI(diaParam) {
         <tbody>${linhas.map(({ d, i }) => `
           <tr>
             <td>${esc(i.nota)}</td>
-            <td>${i.parcial ? ('P' + (i.parcialDesc ? ' ' + esc(i.parcialDesc) : '')) : 'T'}</td>
+            <td>${i.parcial ? 'P' : 'T'}</td>
+            <td>${i.parcial ? (esc(i.parcialDesc) || '—') : '—'}</td>
             <td>${esc(i.supervisor)}</td>
             <td>${esc(i.vendedor)}</td>
             <td>${esc(i.codCliente)}</td>

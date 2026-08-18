@@ -185,3 +185,13 @@ viram carimbos automáticos (operador logado + hora) a cada transição.
     conferência de descarga, pesagem, destinação e carimbos ficam de fora,
     porque não são assunto dele. Botão na aba Devoluções e na aba
     Relatórios (com escolha de dia).
+11. **Nº da nota parcial em coluna própria** (19/08/2026): além do número da
+    nota de venda, cada linha guarda o número da NOTA PARCIAL, em coluna
+    separada na tela e nos dois relatórios. Regra: nota parcial exige o
+    número; nota TOTAL não tem parcial, e o campo fica travado e vazio (e
+    trocar de Parcial para Total apaga o número, porque número de parcial
+    numa linha total aponta para uma parcial que não existe). Correção junto:
+    a linha de TOTAL do relatório do checklist declarava três colunas em
+    branco onde há quatro, o que empurrava o total da pesagem para a coluna
+    do motivo. Pesos, nos dois relatórios, saem sempre em quilos e com a
+    unidade escrita.
