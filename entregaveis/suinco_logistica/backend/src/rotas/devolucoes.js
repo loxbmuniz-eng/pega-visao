@@ -623,12 +623,15 @@ rotasDevolucoes.get('/devolucoes-cadastros', exigirLogin, async (req, res, next)
                    FROM dim_produtos ORDER BY codigo`),
       consultar('SELECT motivo FROM dim_motivos_devolucao ORDER BY motivo'),
       consultar('SELECT nome FROM dim_representantes ORDER BY nome'),
-      consultar('SELECT codigo, nome, vendedor, supervisor FROM dim_clientes ORDER BY codigo'),
+      /* 76 mil clientes NÃO viajam inteiros para o painel — só a contagem.
+         A busca é por /devolucoes-cadastros/clientes?q= conforme se
+         digita (a lição do datalist: 76k <option> travam o navegador). */
+      consultar('SELECT count(*)::int AS total FROM dim_clientes'),
     ]);
     res.json({
       supervisores: sup.rows.map((r) => r.nome),
       representantes: rca.rows.map((r) => r.nome),
-      clientes: cli.rows,
+      clientesTotal: cli.rows[0].total,
       produtos: prod.rows.map((r) => ({
         codigo: r.codigo,
         nome: r.nome,
@@ -678,6 +681,45 @@ rotasDevolucoes.post('/devolucoes-cadastros/produtos', exigirLogin, exigirSetor(
       nome: rows[0].nome,
       pesoCaixaKg: rows[0].peso_caixa_kg === null ? null : Number(rows[0].peso_caixa_kg),
     });
+  } catch (e) { next(e); }
+});
+
+/* Busca de clientes conforme se digita: código por prefixo, apelido e
+   nome por trecho. 30 é o teto — sugestão é para escolher, não para rolar. */
+rotasDevolucoes.get('/devolucoes-cadastros/clientes', exigirLogin, async (req, res, next) => {
+  try {
+    const q = String(req.query.q ?? '').trim().slice(0, 100);
+    if (!q) return res.json([]);
+    const { rows } = await consultar(
+      `SELECT codigo, nome, apelido, vendedor, supervisor
+         FROM dim_clientes
+        WHERE codigo ILIKE $1 OR apelido ILIKE $2 OR nome ILIKE $2
+        ORDER BY (codigo = $3 OR lower(apelido) = lower($3)) DESC, codigo
+        LIMIT 30`,
+      [q + '%', '%' + q + '%', q]
+    );
+    res.json(rows);
+  } catch (e) { next(e); }
+});
+
+/* Exportação completa dos clientes em CSV — gerada no servidor: 76 mil
+   linhas não passam pelo JSON do painel. Mesmo formato dos CSVs da tela
+   (BOM + ponto-e-vírgula, abre direto no Excel pt-BR). */
+rotasDevolucoes.get('/devolucoes-cadastros/clientes-csv', exigirLogin, async (req, res, next) => {
+  try {
+    const { rows } = await consultar(
+      'SELECT codigo, nome, apelido, vendedor, supervisor FROM dim_clientes ORDER BY codigo'
+    );
+    const escapa = (v) => {
+      const s = String(v ?? '');
+      return /[";\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+    };
+    const corpo = [['Cód. cliente', 'Nome', 'Apelido', 'RCA', 'Supervisor']]
+      .concat(rows.map((r) => [r.codigo, r.nome, r.apelido, r.vendedor, r.supervisor]))
+      .map((l) => l.map(escapa).join(';')).join('\r\n');
+    res.setHeader('content-type', 'text/csv; charset=utf-8');
+    res.setHeader('content-disposition', 'attachment; filename="Suinco_Cadastro_Clientes.csv"');
+    res.send('﻿' + corpo);
   } catch (e) { next(e); }
 });
 

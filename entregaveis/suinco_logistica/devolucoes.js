@@ -167,12 +167,8 @@ async function carregarCadastrosDev() {
     };
     põe('dl-dev-supervisores', DEV_CADASTROS.supervisores || []);
     põe('dl-dev-rcas', DEV_CADASTROS.representantes || []);
-    const dlCli = document.getElementById('dl-dev-clientes');
-    if (dlCli) {
-      dlCli.innerHTML = (DEV_CADASTROS.clientes || [])
-        .map((c) => `<option value="${esc(c.codigo)}">${esc([c.nome, c.vendedor, c.supervisor].filter(Boolean).join(' · '))}</option>`)
-        .join('');
-    }
+    // Clientes NÃO são pré-carregados (76 mil) — as sugestões chegam do
+    // servidor conforme se digita (sugerirClientesDevUI).
     põe('dl-dev-motivos', DEV_CADASTROS.motivos || []);
     const dlProd = document.getElementById('dl-dev-produtos');
     if (dlProd) {
@@ -436,7 +432,7 @@ function renderDevolucaoAberta(d, editavel) {
         : (i.parcial ? 'Parcial' : 'Total')}</td>
       <td>${cel('supervisor', i.supervisor, 'text', 'list="dl-dev-supervisores"')}</td>
       <td>${cel('vendedor', i.vendedor, 'text', 'list="dl-dev-rcas"')}</td>
-      <td>${cel('codCliente', i.codCliente, 'text', 'list="dl-dev-clientes"')}</td>
+      <td>${cel('codCliente', i.codCliente, 'text', 'list="dl-dev-clientes" oninput="sugerirClientesDevUI(this.value)"')}</td>
       <td class="c-peso">${cel('cx', i.cx, 'number', 'min="0" step="1"')}</td>
       <td class="c-peso">${cel('peso', i.peso, 'number', 'min="0" step="0.01"')}</td>
       <td>${cel('codProduto', i.codProduto, 'text', 'list="dl-dev-produtos"')}
@@ -475,7 +471,8 @@ function renderDevolucaoAberta(d, editavel) {
       <td><select id="dev-ni-${esc(d.id)}-parcial"><option value="1">Parcial</option><option value="">Total</option></select></td>
       <td><input type="text" id="dev-ni-${esc(d.id)}-supervisor" list="dl-dev-supervisores" placeholder="Supervisor"></td>
       <td><input type="text" id="dev-ni-${esc(d.id)}-vendedor" list="dl-dev-rcas" placeholder="RCA" title="RCA / vendedor — como na capa real"></td>
-      <td><input type="text" id="dev-ni-${esc(d.id)}-cliente" list="dl-dev-clientes" placeholder="Cód. cliente"
+      <td><input type="text" id="dev-ni-${esc(d.id)}-cliente" list="dl-dev-clientes" placeholder="Cód. cliente ou apelido"
+            oninput="sugerirClientesDevUI(this.value)"
             onchange="autofillClienteDevUI('${escJs(d.id)}')"></td>
       <td class="c-peso"><input type="number" min="0" step="1" id="dev-ni-${esc(d.id)}-cx" placeholder="CX"></td>
       <td class="c-peso"><input type="number" min="0" step="0.01" id="dev-ni-${esc(d.id)}-peso" placeholder="Peso"></td>
@@ -684,14 +681,19 @@ function editarItemDevolucaoUI(id, itemId, campo, valor) {
     corpo = { codProduto: valor, produtoNome: devProdutoNomePorCodigo(valor) };
   } else if (campo === 'codCliente') {
     // O cliente puxa o vínculo RCA/supervisor também na linha já gravada
-    // (mesma lógica da placa→Frota). O que a base não sabe, não mexe.
-    corpo = { codCliente: valor };
-    const cli = typeof devClientePorCodigo === 'function' ? devClientePorCodigo(valor) : null;
-    if (cli) {
-      if (cli.vendedor) corpo.vendedor = cli.vendedor;
-      if (cli.supervisor) corpo.supervisor = cli.supervisor;
-      notify(`Cliente ${cli.codigo} reconhecido — RCA e supervisor preenchidos do cadastro.`, 'info');
-    }
+    // (mesma lógica da placa→Frota). A busca é no servidor; o que a base
+    // não sabe, não mexe.
+    (async () => {
+      const corpoCli = { codCliente: valor };
+      const cli = await buscarClienteExatoDev(valor);
+      if (cli) {
+        if (cli.vendedor) corpoCli.vendedor = cli.vendedor;
+        if (cli.supervisor) corpoCli.supervisor = cli.supervisor;
+        notify(`Cliente ${cli.codigo}${cli.apelido ? ' (' + cli.apelido + ')' : ''} reconhecido — RCA e supervisor preenchidos do cadastro.`, 'info');
+      }
+      acaoDev(SuincoSharePoint.devolucoes.editarItem(id, itemId, corpoCli));
+    })();
+    return;
   } else corpo = { [campo]: valor };
   acaoDev(SuincoSharePoint.devolucoes.editarItem(id, itemId, corpo));
 }
@@ -941,7 +943,9 @@ function atualizarResumoCadDev() {
   if (!el) return;
   el.textContent = `Cadastrados: ${(DEV_CADASTROS.supervisores || []).length} supervisor(es) · `
     + `${(DEV_CADASTROS.produtos || []).length} produto(s) · `
-    + `${(DEV_CADASTROS.motivos || []).length} motivo(s).`;
+    + `${(DEV_CADASTROS.motivos || []).length} motivo(s) · `
+    + `${(DEV_CADASTROS.representantes || []).length} RCA(s) · `
+    + `${DEV_CADASTROS.clientesTotal ?? 0} cliente(s).`;
 }
 
 async function cadastrarSupervisorDevUI() {
@@ -1058,10 +1062,18 @@ async function exportarCadastroDevCsv(qual) {
     baixarCsvCadastro('Motivos', ['Motivo de devolução'],
       (DEV_CADASTROS.motivos || []).map((s) => [s]));
   } else if (qual === 'clientes') {
-    baixarCsvCadastro('Clientes',
-      ['Cód. cliente', 'Nome', 'RCA', 'Supervisor'],
-      (DEV_CADASTROS.clientes || []).map((c) => [c.codigo, c.nome || '',
-        c.vendedor || '', c.supervisor || '']));
+    // 76 mil linhas: o CSV vem pronto do servidor, não do JSON do painel.
+    try {
+      const blob = await SuincoSharePoint.devolucoes.clientesCsv();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'Suinco_Cadastro_Clientes.csv';
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      URL.revokeObjectURL(a.href);
+      notifyGravacao('Cadastro de Clientes exportado (arquivo completo do servidor).');
+    } catch (e) {
+      notify((e && e.message) || 'Não consegui exportar os clientes.', 'danger', 6000);
+    }
   }
 }
 
@@ -1100,25 +1112,56 @@ function previewFrotaDevolucao() {
    código) e o supervisor (com código) do cadastro de Clientes — que a
    Logística alimenta na aba Cadastros E que aprende sozinho de cada item
    de checklist gravado. Campos continuam editáveis. */
-function devClientePorCodigo(codigo) {
-  const alvo = String(codigo || '').trim().toLowerCase();
-  if (!alvo) return null;
-  return (DEV_CADASTROS.clientes || [])
-    .find((c) => String(c.codigo).trim().toLowerCase() === alvo) || null;
+/* Cache das últimas sugestões buscadas — é nele que o "match exato" é
+   resolvido sem uma segunda viagem quando a pessoa escolhe da lista. */
+let _devClientesSugestoes = [];
+let _devSugestaoTimer = null;
+
+function sugerirClientesDevUI(valor) {
+  const q = String(valor || '').trim();
+  clearTimeout(_devSugestaoTimer);
+  if (q.length < 2 || !devServidorOk()) return;
+  _devSugestaoTimer = setTimeout(async () => {
+    try {
+      _devClientesSugestoes = await SuincoSharePoint.devolucoes.buscarClientes(q);
+      const dl = document.getElementById('dl-dev-clientes');
+      if (dl) {
+        dl.innerHTML = _devClientesSugestoes
+          .map((c) => `<option value="${esc(c.codigo)}">${esc([c.apelido, c.nome, c.vendedor].filter(Boolean).join(' · ').slice(0, 120))}</option>`)
+          .join('');
+      }
+    } catch (e) { /* sugestão é bônus — sem alarde se falhar */ }
+  }, 250);
 }
 
-function autofillClienteDevUI(devId) {
+/* Match exato por CÓDIGO ou APELIDO (as capas usam "SENDAS", "AREAL").
+   Tenta o cache das sugestões; sem ele, uma busca direta no servidor. */
+async function buscarClienteExatoDev(valor) {
+  const alvo = String(valor || '').trim().toLowerCase();
+  if (!alvo) return null;
+  const acha = (lista) => (lista || []).find((c) =>
+    String(c.codigo).trim().toLowerCase() === alvo
+    || String(c.apelido || '').trim().toLowerCase() === alvo) || null;
+  const doCache = acha(_devClientesSugestoes);
+  if (doCache) return doCache;
+  if (!devServidorOk()) return null;
+  try {
+    return acha(await SuincoSharePoint.devolucoes.buscarClientes(alvo));
+  } catch (e) { return null; }
+}
+
+async function autofillClienteDevUI(devId) {
   const v = (sufixo) => document.getElementById(`dev-ni-${devId}-${sufixo}`);
   const campoCliente = v('cliente');
   if (!campoCliente) return;
-  const cli = devClientePorCodigo(campoCliente.value);
+  const cli = await buscarClienteExatoDev(campoCliente.value);
   if (!cli) return;
   const campoRca = v('vendedor');
   const campoSup = v('supervisor');
   if (campoRca && cli.vendedor) campoRca.value = cli.vendedor;
   if (campoSup && cli.supervisor) campoSup.value = cli.supervisor;
   if (cli.vendedor || cli.supervisor) {
-    notify(`Cliente ${cli.codigo} reconhecido — ${[cli.vendedor, cli.supervisor].filter(Boolean).join(' · ')}.`, 'info');
+    notify(`Cliente ${cli.codigo}${cli.apelido ? ' (' + cli.apelido + ')' : ''} reconhecido — ${[cli.vendedor, cli.supervisor].filter(Boolean).join(' · ')}.`, 'info');
   }
 }
 

@@ -1192,6 +1192,23 @@ const SuincoSharePoint = (function () {
     cadastrarCliente(corpo) {
       return chamar('/api/devolucoes-cadastros/clientes', { metodo: 'POST', corpo });
     },
+    buscarClientes(q) {
+      return chamar('/api/devolucoes-cadastros/clientes?q=' + encodeURIComponent(q || ''));
+    },
+    /* CSV inteiro dos clientes (76 mil linhas) — resposta é texto/blob,
+       não JSON, então não passa pelo chamar(). */
+    async clientesCsv() {
+      const t = lerToken();
+      const resposta = await fetch(SP_CONFIG.api + '/api/devolucoes-cadastros/clientes-csv', {
+        headers: { ...(t ? { authorization: 'Bearer ' + t } : {}) },
+      });
+      if (!resposta.ok) {
+        const e = new Error('O servidor recusou a exportação (' + resposta.status + ').');
+        e.status = resposta.status;
+        throw e;
+      }
+      return resposta.blob();
+    },
   };
 
   return {

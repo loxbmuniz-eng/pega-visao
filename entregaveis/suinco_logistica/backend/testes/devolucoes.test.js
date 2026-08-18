@@ -509,10 +509,18 @@ describe('6. Cadastros de apoio e exclusão', () => {
       corpo: { codigo: 'AREAL', vendedor: '80031 - L Marinho', supervisor: '101454 - Makson Werlly' },
     });
     assert.equal(c.status, 201, c.texto);
-    let lista = await req('/api/devolucoes-cadastros', { token: tokens['Logística'] });
-    let areal = lista.json.clientes.find((x) => x.codigo === 'AREAL');
+    // A busca é no servidor (76 mil clientes não viajam para o painel).
+    let busca = await req('/api/devolucoes-cadastros/clientes?q=AREAL', { token: tokens['Logística'] });
+    let areal = busca.json.find((x) => x.codigo === 'AREAL');
+    assert.ok(areal, 'cliente encontrado pela busca');
     assert.equal(areal.vendedor, '80031 - L Marinho');
     assert.equal(areal.supervisor, '101454 - Makson Werlly');
+
+    // Base oficial: apelido também encontra ("SENDAS"/"AREAL" é como as
+    // capas escrevem o cliente).
+    const tropeira = await req('/api/devolucoes-cadastros/clientes?q=Tropeira', { token: tokens['Logística'] });
+    assert.ok(tropeira.json.some((x) => x.codigo === '10003'),
+      'apelido da base oficial encontra o cliente');
 
     // Aprendizado: um item gravado com cliente novo ENSINA o vínculo.
     const dev = await req('/api/devolucoes', {
@@ -524,8 +532,8 @@ describe('6. Cadastros de apoio e exclusão', () => {
                supervisor: '101781 - Manoel Antonio', cx: 2 },
     });
     assert.equal(item.status, 201, item.texto);
-    lista = await req('/api/devolucoes-cadastros', { token: tokens['Logística'] });
-    const sendas = lista.json.clientes.find((x) => x.codigo === 'SENDAS');
+    busca = await req('/api/devolucoes-cadastros/clientes?q=SENDAS', { token: tokens['Logística'] });
+    const sendas = busca.json.find((x) => x.codigo === 'SENDAS');
     assert.ok(sendas, 'cliente aprendido do item');
     assert.equal(sendas.vendedor, '80235 - Carlos Eduardo');
     assert.equal(sendas.supervisor, '101781 - Manoel Antonio');
@@ -535,8 +543,8 @@ describe('6. Cadastros de apoio e exclusão', () => {
       metodo: 'POST', token: tokens['Logística'],
       corpo: { nota: '669628', codCliente: 'SENDAS', cx: 1 },
     });
-    lista = await req('/api/devolucoes-cadastros', { token: tokens['Logística'] });
-    const dePois = lista.json.clientes.find((x) => x.codigo === 'SENDAS');
+    busca = await req('/api/devolucoes-cadastros/clientes?q=SENDAS', { token: tokens['Logística'] });
+    const dePois = busca.json.find((x) => x.codigo === 'SENDAS');
     assert.equal(dePois.vendedor, '80235 - Carlos Eduardo', 'vazio não apaga o vínculo');
   });
 
