@@ -124,9 +124,18 @@ async def main():
             ck('a linha nova vem sem Nº DEV, motivo e nº da parcial — o que muda entre as caixas',
                len(nova) == 1 and not nova[0]['motivo'] and not nova[0]['parcial'], str(nova))
 
-        print('\n=== 3. RDC (ROMANEIO) NO CABEÇALHO ===')
-        rdc = await pg.locator("label:has-text('Gerou RDC')").count()
-        ck('campo "Gerou RDC (romaneio)?" presente', rdc > 0, str(rdc))
+        print('\n=== 3. CABEÇALHO DA LOGÍSTICA SÓ COM O QUE É DELA ===')
+        # 19/08/2026: cada posto vê o próprio bloco. Na tela da Logística
+        # ficam data, região e código do operador — placa, motorista, carga,
+        # lacres, peso final e RDC são de quem preenche cada um deles.
+        rotulos = ' | '.join(await pg.evaluate(
+            "() => [...document.querySelectorAll('.dev-card.dev-aberta label')]"
+            ".map((l) => l.innerText.trim())"))
+        ck('tem Data, Região e Cód. operador',
+           all(x in rotulos for x in ['Data da devolução', 'Região', 'Cód. operador']), rotulos[:90])
+        ck('não tem campos de outros postos',
+           not any(x in rotulos for x in ['Placa', 'Motorista', 'Lacre', 'Gerou RDC', 'Peso final']),
+           rotulos[:110])
 
         print('\n=== 4. RELATÓRIO NA ABA RELATÓRIOS, EM TEMPO REAL ===')
         await pg.click(".nav-tab[data-tab='relatorios']")

@@ -854,3 +854,59 @@ describe('10. Lacre na devolução: informa, não trava (18/08/2026)', () => {
     assert.equal(exp.status, 403);
   });
 });
+
+/* ------------------------------------------------------------------ */
+describe('11. Motivo por código vira código + descrição (19/08/2026)', () => {
+  /* Reunião com a Logística: "o código do motivo tem que puxar na
+     descrição, abaixo do campo, a nomenclatura referente ao código". Quem
+     lança digita o número da capa; quem confere depois precisa ler o
+     motivo. A regra é do servidor para valer por qualquer caminho. */
+  let id;
+  before(async () => {
+    const r = await req('/api/devolucoes', { metodo: 'POST', token: tokens['Logística'], corpo: novoChecklist() });
+    id = r.json.id;
+  });
+
+  test('item criado com "607" guarda a linha inteira do catálogo', async () => {
+    const r = await req(`/api/devolucoes/${id}/itens`, {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { nota: '999', cx: 1, codProduto: '10719', motivo: '607' },
+    });
+    assert.equal(r.status, 201, r.texto);
+    assert.ok(r.json.motivo.startsWith('607 —'), r.json.motivo);
+    assert.ok(r.json.motivo.length > 10, 'a descrição precisa vir junto');
+  });
+
+  test('editar para "606" também completa', async () => {
+    const dev = await req(`/api/devolucoes/${id}`, { token: tokens['Logística'] });
+    const alvo = dev.json.itens.find((i) => i.nota === '999');
+    const r = await req(`/api/devolucoes/${id}/itens/${alvo.itemId}`, {
+      metodo: 'PATCH', token: tokens['Logística'], corpo: { motivo: '606' },
+    });
+    assert.equal(r.status, 200, r.texto);
+    const depois = await req(`/api/devolucoes/${id}`, { token: tokens['Logística'] });
+    const item = depois.json.itens.find((i) => i.itemId === alvo.itemId);
+    assert.ok(item.motivo.startsWith('606 —'), item.motivo);
+  });
+
+  test('motivo escrito por extenso passa intacto', async () => {
+    const r = await req(`/api/devolucoes/${id}/itens`, {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { nota: '998', cx: 1, motivo: 'DATA PROXIMA' },
+    });
+    assert.equal(r.status, 201);
+    assert.equal(r.json.motivo, 'DATA PROXIMA');
+  });
+
+  test('código que não existe no catálogo fica como veio', async () => {
+    /* Inventar descrição para um código desconhecido seria pior que
+       mostrar o número: quem confere passaria a ler uma informação que
+       ninguém cadastrou. */
+    const r = await req(`/api/devolucoes/${id}/itens`, {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { nota: '997', cx: 1, motivo: '9999' },
+    });
+    assert.equal(r.status, 201);
+    assert.equal(r.json.motivo, '9999');
+  });
+});

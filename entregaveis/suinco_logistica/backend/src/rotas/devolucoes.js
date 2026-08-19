@@ -77,6 +77,23 @@ function emitirAtualizada(id) {
   emitir('devolucao:atualizada', { id });
 }
 
+/* Motivo lançado por CÓDIGO vira código + descrição (19/08/2026).
+
+   Quem lança digita o número que está na capa ("607"), mas quem confere
+   depois precisa ler o motivo. O painel já completa na tela; aqui é a
+   garantia de que vale por qualquer caminho — API, importação, um painel
+   antigo que ainda não atualizou. Código que não existe no catálogo fica
+   como veio: inventar descrição seria pior que mostrar o número. */
+async function expandirMotivo(executor, campos) {
+  const bruto = String(campos.motivo ?? '').trim();
+  if (!bruto || !/^\d{2,4}$/.test(bruto)) return;
+  const { rows } = await executor.query(
+    'SELECT motivo FROM dim_motivos_devolucao WHERE motivo LIKE $1 ORDER BY motivo LIMIT 1',
+    [bruto + ' %']
+  );
+  if (rows[0]) campos.motivo = rows[0].motivo;
+}
+
 /* Aprendizado automático do vínculo cliente → RCA → supervisor (pedido
    de 18/08/2026): todo item gravado com esses campos ensina a base, e o
    próximo lançamento do mesmo cliente preenche sozinho — a mesma lógica
@@ -193,6 +210,7 @@ rotasDevolucoes.post('/devolucoes', exigirLogin, async (req, res, next) => {
       }
       for (const itemCorpo of itensCorpo) {
         const it = camposItem(itemCorpo);
+        await expandirMotivo(cli, it);
         const cols = ['devolucao_id', 'operador_nome', 'operador_setor', ...Object.keys(it)];
         const vals = [id, op.nome, op.setor, ...Object.values(it)];
         await cli.query(
@@ -445,6 +463,7 @@ rotasDevolucoes.post('/devolucoes/:id/itens', exigirLogin, exigirSetor('Logísti
     );
     if (!dev.rows[0]) return res.status(404).json({ erro: 'Devolução não encontrada.', codigo: 'NAO_ENCONTRADA' });
     const it = camposItem(req.body || {});
+    await expandirMotivo({ query: consultar }, it);
     const cols = ['devolucao_id', 'operador_nome', 'operador_setor', ...Object.keys(it)];
     const vals = [req.params.id, op.nome, op.setor, ...Object.values(it)];
     const ins = await consultar(
@@ -469,6 +488,7 @@ rotasDevolucoes.patch('/devolucoes/:id/itens/:itemId', exigirLogin, async (req, 
     if (!Object.keys(it).length) {
       return res.status(400).json({ erro: 'Nada para alterar.', codigo: 'SEM_CAMPOS' });
     }
+    await expandirMotivo({ query: consultar }, it);
 
     /* Fase 1: Logística/Administração mexem em tudo. Cada setor da fase 2
        enxerga só a própria coluna: Expedição confere (qtd_recebida),

@@ -355,16 +355,32 @@ function alternarDevolucaoUI(id) {
 }
 
 function cabecalhoEditavelDev(d, editavel) {
-  /* A Portaria edita os campos do posto dela direto no cabeçalho (teste
-     do usuário, 18/08/2026) — o servidor confere a mesma lista. */
-  const portariaEdita = (DB.operador || {}).setor === 'Portaria';
-  const campo = (rotulo, nome, valor, extra = '', tambemPortaria = false) => `
+  /* CADA POSTO VÊ O QUE É DELE (19/08/2026, reunião com a Logística).
+
+     A tela delas estava com o cabeçalho inteiro — transportadora, nota de
+     transferência, placa, motorista, carga, lacres — e nada disso é delas:
+     "deixar o nosso só a data de devolução, a região e o código do
+     operador, porque essa parte aqui, carga, lacre e tudo mais é a
+     portaria".
+
+     Faz sentido no fluxo real: a devolução é lançada ANTES do caminhão
+     chegar. Na hora do lançamento esses campos não existem — o operador do
+     monitoramento leva o relatório, e é com ele na mão que a Portaria
+     identifica o checklist e preenche o que é dela.
+
+     Então: cada setor edita o próprio bloco, e o que os outros já
+     preencheram aparece como um resumo de leitura, curto, embaixo. */
+  const setor = (DB.operador || {}).setor;
+  const portariaEdita = setor === 'Portaria';
+  const admin = setor === 'Administração';
+  const campo = (rotulo, nome, valor, extra = '', podeEditar = false) => `
     <div><label>${rotulo}</label>
-      ${(editavel || (portariaEdita && tambemPortaria))
+      ${podeEditar
         ? `<input type="text" value="${esc(valor || '')}" ${extra}
              onchange="editarDevolucaoCampoUI('${escJs(d.id)}','${nome}',this.value)">`
         : `<div class="dev-ro">${esc(valor) || '—'}</div>`}
     </div>`;
+
   const rotasChips = `<div class="dev-rotas-chips">
       ${(d.rotas || []).map((r) => `<span class="dev-rota-chip">Rota ${esc(r)}
         ${editavel ? `<button type="button" title="Tirar esta rota do checklist"
@@ -378,9 +394,9 @@ function cabecalhoEditavelDev(d, editavel) {
         <button class="btn btn-sec btn-sm" onclick="incluirRotaDevolucaoUI('${escJs(d.id)}')">➕</button>
       </span>` : ''}
     </div>`;
-  /* Data da devolução editável (18/08/2026): as meninas lançam devoluções
-     de OUTRAS datas — a data escolhida decide em qual dia o checklist
-     aparece na lista e no relatório. */
+
+  /* Data da devolução editável: as meninas lançam devoluções de OUTRAS
+     datas — a data escolhida decide em que dia o checklist aparece. */
   const dataDev = String(d.dataDev || '').slice(0, 10);
   const campoData = `<div><label>Data da devolução</label>
       ${editavel
@@ -388,46 +404,89 @@ function cabecalhoEditavelDev(d, editavel) {
              onchange="editarDevolucaoCampoUI('${escJs(d.id)}','dataDev',this.value)">`
         : `<div class="dev-ro">${esc(dataDev) || '—'}</div>`}
     </div>`;
-  return `${rotasChips}<div class="form-grid dev-cab-grid">
+
+  // ---- bloco da LOGÍSTICA: o que elas lançam, e só isso ----
+  const blocoLogistica = `<div class="form-grid dev-cab-grid">
       ${campoData}
-      ${campo('Região', 'regiao', d.regiao)}
-      ${campo('Transportadora', 'transportadora', d.transportadora, '', true)}
-      ${campo('Nota de transferência', 'notaTransferencia', d.notaTransferencia, '', true)}
-      ${campo('Placa', 'placa', d.placa, '', true)}
-      ${campo('Motorista', 'motorista', d.motorista, '', true)}
+      ${campo('Região', 'regiao', d.regiao, '', editavel)}
       ${campo('Cód. operador (monitoramento)', 'operadorCodigo', d.operadorCodigo,
-        'title="Número informado pelo monitoramento — é sob ele que as devoluções são lançadas."')}
-      ${campo('Nº carga', 'cargaNumero', d.cargaNumero, '', true)}
-      <div><label>Chegou lacrado?</label>
-        ${(editavel || portariaEdita)
-          ? `<select title="Resposta da Portaria no recebimento — informação, não trava nada."
-               onchange="editarDevolucaoCampoUI('${escJs(d.id)}','chegouLacrado',this.value)">
-               <option value=""${d.chegouLacrado === null || d.chegouLacrado === undefined ? ' selected' : ''}>(não informado)</option>
-               <option value="true"${d.chegouLacrado === true ? ' selected' : ''}>Sim — chegou lacrado</option>
-               <option value="false"${d.chegouLacrado === false ? ' selected' : ''}>Não — chegou sem lacre</option>
-             </select>`
-          : `<div class="dev-ro">${d.chegouLacrado === true ? 'Sim — lacrado' : d.chegouLacrado === false ? 'Não — sem lacre' : '—'}</div>`}
-      </div>
-      ${campo('Lacre 1', 'lacre1', d.lacre1, '', true)}
-      ${campo('Lacre 2', 'lacre2', d.lacre2, '', true)}
-      <div><label>Peso final (Faturamento)</label>
-        ${(editavel || (DB.operador || {}).setor === 'Faturamento')
-          ? `<input type="number" min="0" step="1" value="${d.pesoFinal ?? ''}" placeholder="kg"
-               title="Pesagem da balança — a confirmação do Faturamento."
-               onchange="editarDevolucaoCampoUI('${escJs(d.id)}','pesoFinal',this.value)">`
-          : `<div class="dev-ro">${d.pesoFinal !== null ? d.pesoFinal.toLocaleString('pt-BR') + ' kg' : '—'}</div>`}
-      </div>
-      <div><label>Gerou RDC (romaneio)?</label>
-        ${(editavel || (DB.operador || {}).setor === 'Controles Internos')
-          ? `<select title="Informado pelos Controles Internos na destinação."
-               onchange="editarDevolucaoCampoUI('${escJs(d.id)}','gerouRdc',this.value)">
-               <option value=""${d.gerouRdc === null || d.gerouRdc === undefined ? ' selected' : ''}>(não informado)</option>
-               <option value="true"${d.gerouRdc === true ? ' selected' : ''}>Sim — gerou RDC</option>
-               <option value="false"${d.gerouRdc === false ? ' selected' : ''}>Não gerou</option>
-             </select>`
-          : `<div class="dev-ro">${d.gerouRdc === true ? 'Sim' : d.gerouRdc === false ? 'Não' : '—'}</div>`}
-      </div>
+        'title="Número informado pelo monitoramento — é sob ele que as devoluções são lançadas."', editavel)}
     </div>`;
+
+  // ---- bloco da PORTARIA: aparece inteiro só para ela e para a Administração ----
+  const blocoPortaria = (portariaEdita || admin) ? `
+    <div class="dev-cab-posto">
+      <div class="dev-cab-posto-tit">🚧 Portaria — o que é preenchido na chegada</div>
+      <div class="form-grid dev-cab-grid">
+        ${campo('Transportadora', 'transportadora', d.transportadora, '', true)}
+        ${campo('Nota de transferência', 'notaTransferencia', d.notaTransferencia, '', true)}
+        ${campo('Placa', 'placa', d.placa, '', true)}
+        ${campo('Motorista', 'motorista', d.motorista, '', true)}
+        ${campo('Nº carga', 'cargaNumero', d.cargaNumero, '', true)}
+        <div><label>Chegou lacrado?</label>
+          <select title="Resposta da Portaria no recebimento — informação, não trava nada."
+            onchange="editarDevolucaoCampoUI('${escJs(d.id)}','chegouLacrado',this.value)">
+            <option value=""${d.chegouLacrado === null || d.chegouLacrado === undefined ? ' selected' : ''}>(não informado)</option>
+            <option value="true"${d.chegouLacrado === true ? ' selected' : ''}>Sim — chegou lacrado</option>
+            <option value="false"${d.chegouLacrado === false ? ' selected' : ''}>Não — chegou sem lacre</option>
+          </select>
+        </div>
+        ${campo('Lacre 1', 'lacre1', d.lacre1, '', true)}
+        ${campo('Lacre 2', 'lacre2', d.lacre2, '', true)}
+      </div>
+    </div>` : '';
+
+  // ---- campos de outros postos, cada um para o seu dono ----
+  const blocoFaturamento = (setor === 'Faturamento' || admin) ? `
+    <div class="dev-cab-posto">
+      <div class="dev-cab-posto-tit">🧾 Faturamento</div>
+      <div class="form-grid dev-cab-grid">
+        <div><label>Peso final (kg)</label>
+          <input type="number" min="0" step="1" value="${d.pesoFinal ?? ''}" placeholder="kg"
+            title="Pesagem da balança — a confirmação do Faturamento."
+            onchange="editarDevolucaoCampoUI('${escJs(d.id)}','pesoFinal',this.value)">
+        </div>
+      </div>
+    </div>` : '';
+
+  const blocoControles = (setor === 'Controles Internos' || admin) ? `
+    <div class="dev-cab-posto">
+      <div class="dev-cab-posto-tit">🧭 Controles Internos</div>
+      <div class="form-grid dev-cab-grid">
+        <div><label>Gerou RDC (romaneio)?</label>
+          <select title="Informado na destinação."
+            onchange="editarDevolucaoCampoUI('${escJs(d.id)}','gerouRdc',this.value)">
+            <option value=""${d.gerouRdc === null || d.gerouRdc === undefined ? ' selected' : ''}>(não informado)</option>
+            <option value="true"${d.gerouRdc === true ? ' selected' : ''}>Sim — gerou RDC</option>
+            <option value="false"${d.gerouRdc === false ? ' selected' : ''}>Não gerou</option>
+          </select>
+        </div>
+      </div>
+    </div>` : '';
+
+  /* Resumo do que os OUTROS postos já preencheram. Some quando não há nada
+     — checklist recém-lançado não precisa de uma fileira de traços. */
+  const resumo = [];
+  if (!portariaEdita && !admin) {
+    if (d.placa) resumo.push(`Placa ${esc(d.placa)}`);
+    if (d.motorista) resumo.push(`Motorista ${esc(d.motorista)}`);
+    if (d.transportadora) resumo.push(`Transp. ${esc(d.transportadora)}`);
+    if (d.cargaNumero) resumo.push(`Carga ${esc(d.cargaNumero)}`);
+    if (d.notaTransferencia) resumo.push(`NT ${esc(d.notaTransferencia)}`);
+    if (d.chegouLacrado === true) resumo.push(`Lacrado${d.lacre1 ? ' nº ' + esc(d.lacre1) : ''}`);
+    if (d.chegouLacrado === false) resumo.push('Chegou SEM lacre');
+  }
+  if (setor !== 'Faturamento' && !admin && d.pesoFinal !== null && d.pesoFinal !== undefined) {
+    resumo.push(`Peso final ${Number(d.pesoFinal).toLocaleString('pt-BR')} kg`);
+  }
+  if (setor !== 'Controles Internos' && !admin && d.gerouRdc !== null && d.gerouRdc !== undefined) {
+    resumo.push(`RDC: ${d.gerouRdc ? 'gerado' : 'não gerado'}`);
+  }
+  const blocoResumo = resumo.length
+    ? `<div class="dev-cab-resumo"><strong>Já preenchido pelos outros setores:</strong> ${resumo.join(' · ')}</div>`
+    : '';
+
+  return `${rotasChips}${blocoLogistica}${blocoPortaria}${blocoFaturamento}${blocoControles}${blocoResumo}`;
 }
 
 function carimbosDev(d) {
@@ -603,6 +662,7 @@ function renderDevolucaoAberta(d, editavel) {
             title="Data desta devolução — vem com o dia do checklist, mude se for de outra data."></td>
       <td><input type="text" id="dev-ni-${esc(d.id)}-motivo" list="dl-dev-motivos" placeholder="Motivo"
             oninput="descreverMotivoDevUI('${escJs(d.id)}')"
+            onchange="completarMotivoDevUI('${escJs(d.id)}')"
             value="${d.tipo === 'SOBRA' ? '652 — Sobras' : ''}">
           <small class="text-dim dev-motivo-desc" id="dev-ni-${esc(d.id)}-motivodesc">${d.tipo === 'SOBRA' ? '652 — Sobras' : ''}</small></td>
       <td colspan="5"></td>
@@ -855,6 +915,8 @@ function editarItemDevolucaoUI(id, itemId, campo, valor) {
      linha total é pior que não ter número nenhum — parece que existe uma
      parcial que ninguém encontra. */
   if (campo === 'parcial') corpo = valor ? { parcial: true } : { parcial: false, parcialDesc: '' };
+  // Digitou "607" numa linha já lançada: grava a linha inteira do catálogo.
+  else if (campo === 'motivo') corpo = { motivo: motivoOficialDev(valor) };
   else if (campo === 'codProduto') {
     corpo = { codProduto: valor, produtoNome: devProdutoNomePorCodigo(valor) };
   } else if (campo === 'codCliente') {
@@ -894,7 +956,7 @@ function adicionarItemDevolucaoUI(id) {
     codProduto,
     produtoNome: devProdutoNomePorCodigo(codProduto),
     numDev: v('numdev'),
-    motivo: v('motivo'),
+    motivo: motivoOficialDev(v('motivo')),
     // A data da linha vem do campo Data DEV (a coluna da capa); sem ele,
     // cai no dia do filtro.
     dataItem: v('dataitem') || (document.getElementById('dev-filtro-dia') || {}).value || diaLocalDev(),
@@ -948,12 +1010,42 @@ function mostrarLacreDevUI(id) {
   }
 }
 
-/* O motivo escolhido na linha nova aparece por extenso embaixo da caixa,
-   igual às linhas já lançadas. */
+/* Motivo digitado por CÓDIGO vira código + descrição (19/08/2026).
+
+   O catálogo oficial guarda a linha inteira ("607 — Transporte/Avaria.
+   Mercadoria chegou no cliente avariada..."), mas quem lança digita só o
+   número, que é o que está na capa. Pedido da reunião: "o código do motivo
+   tem que puxar na descrição, abaixo do campo, a nomenclatura referente ao
+   código" — porque quem confere depois precisa saber o motivo, não decorar
+   uma tabela de números. */
+function motivoOficialDev(valor) {
+  const texto = String(valor || '').trim();
+  if (!texto) return '';
+  const lista = (DEV_CADASTROS.motivos || []);
+  if (lista.includes(texto)) return texto;
+  const cod = texto.match(/^(\d{2,4})\b/);
+  if (cod) {
+    const achado = lista.find((m) => String(m).trim().startsWith(cod[1] + ' '));
+    if (achado) return achado;
+  }
+  const parcial = lista.find((m) => String(m).toUpperCase().startsWith(texto.toUpperCase()));
+  return parcial || texto;
+}
+
+/* O motivo escolhido na linha nova aparece por extenso embaixo da caixa. */
 function descreverMotivoDevUI(id) {
   const campo = document.getElementById(`dev-ni-${id}-motivo`);
   const desc = document.getElementById(`dev-ni-${id}-motivodesc`);
-  if (campo && desc) desc.textContent = campo.value || '';
+  if (!campo || !desc) return;
+  desc.textContent = motivoOficialDev(campo.value);
+}
+
+/* Ao sair do campo, o código vira a linha completa do catálogo. */
+function completarMotivoDevUI(id) {
+  const campo = document.getElementById(`dev-ni-${id}-motivo`);
+  if (!campo) return;
+  campo.value = motivoOficialDev(campo.value);
+  descreverMotivoDevUI(id);
 }
 
 /* O campo do nº da parcial só faz sentido com Parcial escolhida. */
@@ -1502,7 +1594,7 @@ function somatorioLinhasOperadorDev(linhas) {
       <td colspan="6" class="tot-rotulo">TOTAL — ${linhas.length} linha(s)</td>
       <td class="tot-num">${fmt(cx, 0)}</td>
       <td class="tot-num">${fmt(peso, 2)} kg</td>
-      <td colspan="5"></td>
+      <td colspan="4"></td>
     </tr>`;
 }
 
@@ -1559,33 +1651,39 @@ async function relatorioOperadorDevolucoesUI(diaParam) {
           + `${totalPeso.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} kg`
           + `${operadores.length ? ' · Operador(es): ' + operadores.join(', ') : ''}`,
       })}
-      ${linhas.length ? `
-      <table class="doc-tabela dev-doc-tabela">
-        <thead><tr>
-          <th>Nota</th><th>P/T</th><th title="Número da nota parcial">Nº parcial</th>
-          <th>Supervisor</th><th title="Vendedor">RCA</th>
-          <th>Cliente</th><th>CX</th><th title="Peso em QUILOS (kg)">Peso (kg)</th><th>Produto</th>
-          <th>Nº DEV</th><th>Data DEV</th><th>Motivo</th>
-          <th title="Checklist de origem">Checklist</th>
-        </tr></thead>
-        <tbody>${linhas.map(({ d, i }) => `
-          <tr>
-            <td>${esc(i.nota)}</td>
-            <td>${i.parcial ? 'P' : 'T'}</td>
-            <td>${i.parcial ? (esc(i.parcialDesc) || '—') : '—'}</td>
-            <td>${esc(i.supervisor)}</td>
-            <td>${esc(i.vendedor)}</td>
-            <td>${esc(i.codCliente)}</td>
-            <td class="c-peso">${(Number(i.cx) || 0).toLocaleString('pt-BR')}</td>
-            <td class="c-peso">${i.peso !== null ? Number(i.peso).toLocaleString('pt-BR') : '—'}</td>
-            <td>${esc(i.codProduto)}${i.produtoNome ? '-' + esc(i.produtoNome) : ''}</td>
-            <td>${esc(i.numDev)}</td>
-            <td>${i.dataItem ? esc(String(i.dataItem).slice(0, 10).split('-').reverse().join('/')) : '—'}</td>
-            <td>${esc(i.motivo)}</td>
-            <td>${esc(devRotulo(d))}${d.tipo === 'SOBRA' ? ' (SOBRA)' : ''} · Nº ${d.numero}</td>
-          </tr>`).join('')}</tbody>
-        <tfoot>${somatorioLinhasOperadorDev(linhas)}</tfoot>
-      </table>` : '<div class="card-sub">Nenhuma devolução lançada neste dia.</div>'}
+      ${lista.length ? lista.filter((d) => d.itens.length).map((d) => `
+      <div class="dev-doc-bloco">
+        ${/* A identificação saiu da coluna e virou cabeçalho do bloco: é ela
+              que faz a Portaria reconhecer, na chegada do caminhão, a qual
+              checklist aquele papel se refere. */''}
+        <div class="dev-doc-bloco-tit">Checklist Nº ${d.numero} · ${esc(devRotulo(d))}${d.tipo === 'SOBRA' ? ' · SOBRA' : ''}
+          ${d.operadorCodigo ? ' · Cód. operador ' + esc(d.operadorCodigo) : ''}
+          ${d.dataDev ? ' · ' + esc(String(d.dataDev).slice(0, 10).split('-').reverse().join('/')) : ''}</div>
+        <table class="doc-tabela dev-doc-tabela">
+          <thead><tr>
+            <th>Nota</th><th>P/T</th><th title="Número da nota parcial">Nº parcial</th>
+            <th>Supervisor</th><th title="Vendedor">RCA</th>
+            <th>Cliente</th><th>CX</th><th title="Peso em QUILOS (kg)">Peso (kg)</th><th>Produto</th>
+            <th>Nº DEV</th><th>Data DEV</th><th>Motivo</th>
+          </tr></thead>
+          <tbody>${d.itens.map((i) => `
+            <tr>
+              <td>${esc(i.nota)}</td>
+              <td>${i.parcial ? 'P' : 'T'}</td>
+              <td>${i.parcial ? (esc(i.parcialDesc) || '—') : '—'}</td>
+              <td>${esc(i.supervisor)}</td>
+              <td>${esc(i.vendedor)}</td>
+              <td>${esc(i.codCliente)}</td>
+              <td class="c-peso">${(Number(i.cx) || 0).toLocaleString('pt-BR')}</td>
+              <td class="c-peso">${i.peso !== null ? Number(i.peso).toLocaleString('pt-BR') : '—'}</td>
+              <td>${esc(i.codProduto)}${i.produtoNome ? '-' + esc(i.produtoNome) : ''}</td>
+              <td>${esc(i.numDev)}</td>
+              <td>${i.dataItem ? esc(String(i.dataItem).slice(0, 10).split('-').reverse().join('/')) : '—'}</td>
+              <td>${esc(i.motivo)}</td>
+            </tr>`).join('')}</tbody>
+          <tfoot>${somatorioLinhasOperadorDev(d.itens.map((i) => ({ i })))}</tfoot>
+        </table>
+      </div>`).join('') : '<div class="card-sub">Nenhuma devolução lançada neste dia.</div>'}
       ${rodapeDocumento(
         'Todos os pesos desta relação estão em QUILOS (kg) — não em toneladas. '
         + 'Relação das linhas devolvidas no dia, para lançamento pelo operador do '
