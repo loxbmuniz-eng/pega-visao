@@ -3206,3 +3206,12 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
 .admin-carga-linha{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:8px; }
 .admin-carga-linha label{ min-width:150px; font-size:.8rem; color:var(--text-dim); }
 .admin-carga-linha input[type="text"]{ flex:1; min-width:200px; }
+
+/* Blocos por checklist na relação do operador, e os campos por posto no
+   cabeçalho da devolução (19/08/2026). */
+.dev-doc-bloco{ margin-bottom:10px; break-inside:avoid; }
+.dev-doc-bloco-tit{ font-weight:800; font-size:.82rem; margin:6px 0 3px; }
+.dev-cab-posto{ margin-top:10px; padding-top:8px; border-top:1px dashed var(--navy-lighter); }
+.dev-cab-posto-tit{ font-size:.78rem; font-weight:800; color:var(--text-dim);
+  letter-spacing:.4px; margin-bottom:6px; }
+.dev-cab-resumo{ margin-top:8px; font-size:.8rem; color:var(--text-dim); line-height:1.5; }
