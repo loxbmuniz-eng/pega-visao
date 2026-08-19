@@ -722,6 +722,8 @@ function renderDevolucaoAberta(d, editavel) {
           : '')}
       ${divergencias}
       <div class="flex-end gap8 no-print" style="margin-top:10px">
+        <button class="btn btn-sec btn-sm" onclick="relatorioOperadorDevolucoesUI('${escJs(d.id)}')"
+          title="PDF deste checklist para o operador do monitoramento: nota, parcial, supervisor, RCA, cliente, caixa, peso, produto, Nº DEV, data e motivo. É o papel que acompanha a devolução até a Portaria.">📤 Relação para o operador</button>
         ${d.carimbos.portaria ? `<button class="btn btn-sec btn-sm" onclick="comprovantePortariaUI('${escJs(d.id)}')"
           title="PDF pequeno com carga, placa e lacres — o motorista entrega na balança e o Faturamento sabe QUAL devolução é. Substitui o papel escrito à mão pelo porteiro.">🖨 Comprovante do motorista</button>` : ''}
         ${admin ? `<button class="btn btn-sec btn-sm" onclick="abrirRevisoesDevolucaoUI('${escJs(d.id)}')"
@@ -1623,19 +1625,34 @@ function somatorioLinhasOperadorDev(linhas) {
 
    Sai no mesmo formato do Relatório Operacional (cabeçalho institucional,
    A4 pelo servidor) e é gerado pelas próprias meninas para mandar. */
-async function relatorioOperadorDevolucoesUI(diaParam) {
+async function relatorioOperadorDevolucoesUI(idChecklist) {
   if (!devServidorOk()) {
     notify('O relatório vem do servidor — entre com login de servidor.', 'warn', 6000);
     return;
   }
-  const dia = (typeof diaParam === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(diaParam))
-    ? diaParam
-    : ((document.getElementById('dev-filtro-dia') || {}).value || diaLocalDev());
+  /* UM CHECKLIST POR PAPEL (19/08/2026, pedido do gestor): "o relatório do
+     operador que puxe o relatório individual de cada checklist".
+
+     Faz sentido no uso: é este papel que o operador leva junto com a
+     devolução, e é por ele que a Portaria reconhece qual checklist chegou.
+     Um documento com o dia inteiro serve para conferência (esse é o
+     Relatório do dia), não para acompanhar UMA carga.
+
+     A lista do dia ainda é buscada para pegar o estado ATUAL do checklist —
+     o PDF sai com o que está no servidor agora, não com o retrato da tela. */
+  const alvo = getDevolucao(idChecklist);
+  if (!alvo) {
+    notify('Abra o checklist e gere a relação por ele — este PDF é individual.', 'warn', 7000);
+    return;
+  }
+  const dia = String(alvo.dataDev || '').slice(0, 10) || diaLocalDev();
   let lista;
   try {
-    lista = await SuincoSharePoint.devolucoes.listar(dia, dia);
+    const doDia = await SuincoSharePoint.devolucoes.listar(dia, dia);
+    const atual = doDia.find((d) => d.id === idChecklist);
+    lista = atual ? [atual] : [alvo];
   } catch (e) {
-    notify('Não consegui buscar as devoluções: ' + (e.message || 'erro'), 'danger', 6000);
+    notify('Não consegui buscar a devolução: ' + (e.message || 'erro'), 'danger', 6000);
     return;
   }
   const el = document.getElementById('print-devolucoes-operador');
@@ -1659,10 +1676,11 @@ async function relatorioOperadorDevolucoesUI(diaParam) {
   el.innerHTML = `
     <div class="print-page doc-normal">
       ${cabecalhoDocumento({
-        titulo: 'Devoluções do Dia — Relação para o Operador',
-        subtitulo: `Dia ${diaBR} · ${linhas.length} linha(s) · ${totalCx.toLocaleString('pt-BR')} cx · `
+        titulo: `Relação para o Operador — Checklist Nº ${lista[0].numero}`,
+        subtitulo: `${esc(devRotulo(lista[0]))}${lista[0].tipo === 'SOBRA' ? ' · SOBRA' : ''} · `
+          + `Dia ${diaBR} · ${linhas.length} linha(s) · ${totalCx.toLocaleString('pt-BR')} cx · `
           + `${totalPeso.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} kg`
-          + `${operadores.length ? ' · Operador(es): ' + operadores.join(', ') : ''}`,
+          + `${operadores.length ? ' · Operador ' + operadores.join(', ') : ''}`,
       })}
       ${lista.length ? lista.filter((d) => d.itens.length).map((d) => `
       <div class="dev-doc-bloco">
@@ -1699,12 +1717,13 @@ async function relatorioOperadorDevolucoesUI(diaParam) {
       </div>`).join('') : '<div class="card-sub">Nenhuma devolução lançada neste dia.</div>'}
       ${rodapeDocumento(
         'Todos os pesos desta relação estão em QUILOS (kg) — não em toneladas. '
-        + 'Relação das linhas devolvidas no dia, para lançamento pelo operador do '
-        + 'monitoramento. Conferência de descarga, pesagem e destinação não entram '
-        + 'aqui — elas ficam no Relatório de Devoluções.',
-        `Devoluções do dia ${diaBR}, gravadas no servidor pelo painel.`,
+        + 'Relação das linhas DESTE checklist, para lançamento pelo operador do '
+        + 'monitoramento e para a Portaria reconhecer a devolução na chegada. '
+        + 'Conferência de descarga, pesagem e destinação não entram aqui — elas '
+        + 'ficam no Relatório de Devoluções, que é do dia inteiro.',
+        `Checklist Nº ${lista[0].numero} do dia ${diaBR}, gravado no servidor pelo painel.`,
         '')}
     </div>`;
 
-  await exportarViaServidor(el, `Devolucoes-Operador-${dia}`);
+  await exportarViaServidor(el, `Devolucao-Operador-${lista[0].numero}-${dia}`);
 }

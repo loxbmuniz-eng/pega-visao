@@ -191,12 +191,17 @@ async def main():
             "  return {cols, tf}; }")
         ck('linha de TOTAL alinhada com o cabeçalho', alin['cols'] == alin['tf'], str(alin))
 
+        # A relação do operador virou INDIVIDUAL (19/08/2026): sai pelo botão
+        # dentro do próprio checklist, porque é o papel que acompanha aquela
+        # devolução até a Portaria.
         async with pg.expect_download(timeout=60000):
-            await pg.click("button:has-text('Relação para o operador')")
+            await pg.click(f"button[onclick*=\"relatorioOperadorDevolucoesUI('{dev['id']}')\"]")
         oper = await pg.evaluate(
             "() => document.getElementById('print-devolucoes-operador').innerText")
         ck('relação do operador: coluna Nº parcial', 'Nº parcial' in oper)
         ck('relação do operador: peso em quilos', 'Peso (kg)' in oper and 'QUILOS (kg)' in oper)
+        ck('relação do operador traz UM checklist só',
+           'Checklist Nº' in oper and 'SOBRA' not in oper, oper.split('\n')[0][:70])
 
         # Limpeza: os dois checklists de teste saem do dia.
         await pg.evaluate(
