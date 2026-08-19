@@ -1393,6 +1393,24 @@ function limparPeriodoVisaoPatio(prefixo){
   renderVisaoPatio(prefixo);
 }
 
+/* FROTA PRÓPRIA x TRANSPORTADORAS (19/08/2026).
+
+   Pedido do gestor: na Visão de Pátio da Torre, "um bloco só para a frota
+   própria, liberando o outro bloco para as de transportadoras". São duas
+   conversas diferentes — o caminhão da casa a Suinco remaneja; o de
+   transportadora ela cobra —, e ver as duas misturadas obriga a pessoa a
+   filtrar com o olho a cada leitura.
+
+   A marca é a transportadora do cadastro de Frota: os veículos próprios
+   estão sob "Suinco". Comparação sem acento e sem caixa, porque cadastro
+   digitado à mão sempre traz variação. */
+const MARCAS_FROTA_PROPRIA = ['suinco'];
+function ehFrotaPropria(carga){
+  const t = String((carga && carga.transportadora) || '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  return MARCAS_FROTA_PROPRIA.some(m => t.includes(m));
+}
+
 function renderVisaoPatio(prefixo){
   const tbody = document.getElementById(`${prefixo}-vp-tbody`);
   if(!tbody) return;                       // aba sem a visão (Logística usa a Torre)
@@ -1455,7 +1473,7 @@ function renderVisaoPatio(prefixo){
        acompanha o pátio e age pelo botão da própria etapa. */
   }
 
-  tbody.innerHTML = lista.map(c=>{
+  const linhaCarga = (c)=>{
     const etapas = etapasDaCarga(c);
     return `<tr class="linha-status-${esc((STATUS_META[c.status]||{}).cor || '')}">
       <td class="vp-carga">${esc(c.numeroCarga)||'—'}</td>
@@ -1465,7 +1483,23 @@ function renderVisaoPatio(prefixo){
       ${linhaDoTempoCompacta(etapas)}
       <td class="vp-tempo">${tempoNoPatioTexto(c)}</td>
     </tr>`;
-  }).join('');
+  };
+
+  /* A Torre separa em dois blocos; as outras abas seguem em lista única.
+     Ali a pessoa olha o próprio posto e a origem do caminhão não muda o que
+     ela faz — a divisão só somaria uma linha de título sem serviço. */
+  if(prefixo === 'torre'){
+    const propria = lista.filter(ehFrotaPropria);
+    const terceiros = lista.filter(c=>!ehFrotaPropria(c));
+    const grupo = (titulo, cargas)=> cargas.length
+      ? `<tr class="vp-grupo"><td colspan="6">${titulo} <b>${cargas.length}</b> carga(s)</td></tr>`
+        + cargas.map(linhaCarga).join('')
+      : '';
+    tbody.innerHTML = grupo('🏠 Frota própria —', propria)
+      + grupo('🚛 Transportadoras —', terceiros);
+  } else {
+    tbody.innerHTML = lista.map(linhaCarga).join('');
+  }
 
   /* Estado vazio que oferece a saída.
 
@@ -1491,8 +1525,13 @@ function renderVisaoPatio(prefixo){
     const porStatus = STATUS_FLOW.map(st=>({
       status: st, n: listaCompleta.filter(c=>c.status===st).length
     })).filter(x=>x.n > 0);
+    const nPropria = listaCompleta.filter(ehFrotaPropria).length;
     resumo.innerHTML =
       `<span class="vp-total">${listaCompleta.length} carga(s)</span>`
+      + (prefixo === 'torre' && listaCompleta.length
+          ? `<span class="vp-chip badge">Frota própria: <b>${nPropria}</b></span>`
+            + `<span class="vp-chip badge">Transportadoras: <b>${listaCompleta.length - nPropria}</b></span>`
+          : '')
       + (houvePeriodo ? '<span class="vp-periodo">no período escolhido</span>'
                       : '<span class="vp-periodo">em aberto agora</span>')
       + porStatus.map(x=>`<span class="vp-chip badge ${esc((STATUS_META[x.status]||{}).badge||'')}">${esc(x.status)}: <b>${x.n}</b></span>`).join('')

@@ -3215,3 +3215,10 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
 .dev-cab-posto-tit{ font-size:.78rem; font-weight:800; color:var(--text-dim);
   letter-spacing:.4px; margin-bottom:6px; }
 .dev-cab-resumo{ margin-top:8px; font-size:.8rem; color:var(--text-dim); line-height:1.5; }
+
+/* Divisão da Visão de Pátio da Torre: frota própria e transportadoras
+   (19/08/2026). A linha de grupo é âncora de leitura, não decoração —
+   por isso fica pregada no topo ao rolar a tabela. */
+.tabela-patio tr.vp-grupo td{ background:var(--navy-light); color:var(--gold);
+  font-weight:800; font-size:.78rem; letter-spacing:.5px; text-transform:uppercase;
+  padding:7px 10px; position:sticky; top:0; z-index:2; }
