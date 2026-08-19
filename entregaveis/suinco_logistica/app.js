@@ -1557,6 +1557,21 @@ let _ultimoValorTorre = {};
    aguardandoCarga, não um valor de status). */
 let _torreFiltroStatus = null;
 function filtrarTorrePorStatus(chave){
+  /* A caixa "Entradas sem carga" não filtra a Torre: ela LEVA para a
+     Programação (19/08/2026). Esses registros não aparecem mais aqui, e
+     mandar o filtro devolveria uma tabela vazia — a resposta certa é a aba
+     onde a carga é lançada. */
+  if(chave === '__IR_PROGRAMACAO__'){
+    const abas = (DB.operador && SETOR_PERMISSOES[DB.operador.setor]) || [];
+    if(abas.includes('programacao')){
+      abrirTab('programacao');
+      const alvo = document.getElementById('prog-aguardando-tbody');
+      if(alvo && alvo.scrollIntoView) alvo.scrollIntoView({block:'center'});
+    } else {
+      notify('As entradas sem carga são lançadas pela Logística, na aba Programação.', '', 6000);
+    }
+    return;
+  }
   _torreFiltroStatus = (chave === '__TODAS__' || _torreFiltroStatus === chave) ? null : chave;
   renderTorre();
 }
@@ -1589,14 +1604,27 @@ function renderTorre(){
   const btnFechar = document.getElementById('btn-fechar-programacao-wrap');
   if(btnFechar) btnFechar.hidden = !podeFecharProgramacao();
 
-  const abertas = cargasAbertas();
+  /* A TORRE MOSTRA CARGA LANÇADA (19/08/2026).
+
+     Um caminhão que chega sem programação vira um registro "aguardando
+     carga": tem placa, não tem carga. Ele aparecia na Torre junto com as
+     cargas de verdade, e o gestor pediu para tirar: "não quero que
+     apareçam na torre de controle, pois isso gera confusão... só devem ser
+     exibidos após a carga ser lançada".
+
+     O lugar dele é a aba Programação, onde já existe a tabela "Entradas
+     aguardando carga" com o botão de criar a carga. A caixa aqui continua
+     contando — sumir de vez esconderia caminhão parado no pátio —, mas o
+     clique agora leva para lá, que é onde se resolve. */
+  const emAberto = cargasAbertas();
+  const abertas = emAberto.filter(c=>!c.aguardandoCarga);
   const porStatus = {};
   abertas.forEach(c=>{ porStatus[c.status] = (porStatus[c.status]||0) + 1; });
   // "Aguardando Carga" não é mais um valor de status — é a flag
   // `aguardandoCarga` (o texto fica no campo Número da Carga). Mostrado
   // como uma caixa extra informativa, não como um dos 6 status oficiais.
   const statusVisiveis = STATUS_FLOW.slice(0,-1); // sem "Seguiu Viagem" (não fica em aberto)
-  const aguardandoCargaCount = abertas.filter(c=>c.aguardandoCarga).length;
+  const aguardandoCargaCount = emAberto.filter(c=>c.aguardandoCarga).length;
   /* "Quantos já seguiram viagem" — pedido direto do usuário (08/08/2026):
      "na torre de controle nao aparece quantos seguiram viagem". Fica de
      fora de `abertas` de propósito (Seguiu Viagem não é mais pátio em
@@ -1646,8 +1674,8 @@ function renderTorre(){
     caixa(abertas.length, 'Cargas em aberto', {destaque:true, filtro:'__TODAS__'})
     + statusVisiveis.map(s=>caixa(porStatus[s]||0, s, {filtro:s})).join('')
     + caixa(seguiuViagemHojeCount, 'Seguiu Viagem hoje', {destaque:true, filtro:'__SEGUIU_HOJE__'})
-    + caixa(aguardandoCargaCount, 'Aguardando Carga',
-            {nota:'dados incompletos', filtro:'__AGUARDANDO_CARGA__'});
+    + caixa(aguardandoCargaCount, 'Entradas sem carga',
+            {nota:'resolver na Programação', filtro:'__IR_PROGRAMACAO__'});
   animarContadoresTorre();
 
   // A tabela mostra as cargas do filtro clicado — ou as em aberto de
@@ -1661,8 +1689,6 @@ function renderTorre(){
       const saida = primeiroTimestamp(c.id, 'Seguiu Viagem');
       return saida && new Date(saida) >= hoje;
     });
-  } else if(_torreFiltroStatus === '__AGUARDANDO_CARGA__'){
-    lista = abertas.filter(c=>c.aguardandoCarga);
   } else if(_torreFiltroStatus){
     lista = abertas.filter(c=>c.status === _torreFiltroStatus);
   } else {
