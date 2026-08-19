@@ -110,12 +110,15 @@ async def main():
         print('\n=== 3. CHECKLIST COM REGIÃO + DUAS ROTAS ===')
         await pgA.evaluate("() => abrirTab('devolucoes')")
         await pgA.wait_for_timeout(1500)
-        await pgA.fill('#dev-regiao', 'DF')
-        # Decisão de 18/08: placa/transportadora/motorista NÃO estão no
-        # lançamento — são da Portaria no recebimento. O formulário das
-        # meninas tem o Cód. do operador (monitoramento).
-        sem_placa = await pgA.evaluate("() => !document.getElementById('dev-placa')")
-        ck('lançamento sem campos de placa/transportadora/motorista', sem_placa)
+        # 19/08: o formulário ficou com data, rotas e código do operador. A
+        # rotas e código do operador. A REGIÃO vem do nome da rota no
+        # cadastro; transportadora, NT, placa e motorista são da Portaria.
+        enxuto = await pgA.evaluate(
+            "() => !document.getElementById('dev-placa')"
+            " && !document.getElementById('dev-regiao')"
+            " && !document.getElementById('dev-transportadora')"
+            " && !document.getElementById('dev-nota-transf')")
+        ck('lançamento sem os campos dos outros postos', enxuto)
         await pgA.fill('#dev-operador-cod', '102345')
         await pgA.select_option('#dev-rota', '500')
         await pgA.click('button:has-text("➕ Rota")')
@@ -134,13 +137,16 @@ async def main():
         ck('checklist criado com número gerado', bool(d0 and d0['numero'] >= 1), str(d0))
         ck('as DUAS rotas ficaram no checklist',
            d0 and sorted(d0['rotas']) == ['500', '501'], str(d0 and d0['rotas']))
-        ck('região registrada', d0 and d0['regiao'] == 'DF')
+        # A região é o NOME da rota no cadastro (500 = Patos de Minas), não
+        # mais um campo digitado.
+        ck('região veio do cadastro da rota',
+           d0 and d0['regiao'] == 'Patos de Minas', str(d0 and d0['regiao']))
         ck('autoria discriminada', d0 and d0['criadaPor'] == 'Chefe', str(d0 and d0['criadaPor']))
         dev_id = d0['id']
 
         rotulo_card = await pgA.evaluate(
             "() => document.querySelector('.dev-card-rota').innerText")
-        ck('o cartão identifica por REGIÃO + rotas', 'DF' in rotulo_card
+        ck('o cartão identifica por REGIÃO + rotas', 'Patos de Minas' in rotulo_card
            and '500' in rotulo_card and '501' in rotulo_card, rotulo_card)
 
         print('\n=== 4. ITEM COM PESO SUGERIDO PELO QUILO ===')

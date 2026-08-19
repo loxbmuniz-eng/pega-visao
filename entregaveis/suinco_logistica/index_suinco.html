@@ -287,14 +287,17 @@
 
       <div class="card" id="dev-card-novo">
         <div class="card-title"><span class="icon">📦</span> Novo checklist de devolução</div>
-        <div class="card-sub">O número do checklist é gerado sozinho. <strong>Região + rotas</strong>
-          identificam o checklist na conferência — e um checklist pode juntar VÁRIAS rotas da mesma
-          região. Os itens entram na lista logo abaixo, linha a linha, depois de criar.</div>
+        <div class="card-sub">O número do checklist é gerado sozinho. A <strong>região vem da rota</strong>
+          escolhida (é o nome dela no cadastro) e identifica o checklist na conferência — um checklist
+          pode juntar VÁRIAS rotas da mesma região. Os itens entram na lista logo abaixo, linha a
+          linha, depois de criar.</div>
         <div class="form-grid">
           <div><label for="dev-data">Data da devolução</label>
             <input type="date" id="dev-data"></div>
-          <div><label for="dev-regiao">Região</label>
-            <input type="text" id="dev-regiao" placeholder="Ex: DF"></div>
+          <!-- A REGIÃO saiu do formulário (19/08/2026): ela já é o nome da
+               rota no cadastro (500 = Patos de Minas), então é preenchida
+               sozinha ao escolher a rota. Digitar de novo o que o sistema
+               já sabe é onde nascem as divergências de escrita. -->
           <div><label for="dev-rota">Rotas (pelo menos uma)</label>
             <div class="gap8">
               <select id="dev-rota" style="flex:1"></select>
@@ -302,10 +305,10 @@
                 title="Adicionar a rota escolhida à lista deste checklist">➕ Rota</button>
             </div>
             <div id="dev-rotas-escolhidas" class="dev-rotas-chips"></div></div>
-          <div><label for="dev-transportadora">Transportadora</label>
-            <input type="text" id="dev-transportadora" placeholder="Ex: 83369"></div>
-          <div><label for="dev-nota-transf">Nota de transferência</label>
-            <input type="text" id="dev-nota-transf" placeholder="Ex: 171218"></div>
+          <!-- Transportadora e nota de transferência saíram daqui
+               (19/08/2026): quem preenche é a PORTARIA, no recebimento, e
+               na hora do lançamento o caminhão nem chegou. Mesmo motivo de
+               placa e motorista, que já não estavam aqui. -->
           <div><label for="dev-operador-cod">Cód. operador <span class="hint">(monitoramento)</span></label>
             <input type="text" id="dev-operador-cod"
                    title="Número informado pelo monitoramento — é sob ele que as devoluções são lançadas."></div>

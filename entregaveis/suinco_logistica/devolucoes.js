@@ -777,21 +777,25 @@ async function criarDevolucaoUI() {
   const rotas = _devRotasNovas.slice();
   if (noSeletor && !rotas.includes(noSeletor)) rotas.push(noSeletor);
   if (!rotas.length) { notify('Escolha pelo menos uma rota — região + rotas identificam o checklist.', 'warn'); return; }
-  /* Placa/transportadora/motorista ficaram com a PORTARIA (decisão de
-     18/08/2026) — as meninas lançam região, rotas, NT e o código do
-     operador do monitoramento. */
+  /* O lançamento é só do que existe ANTES do caminhão chegar (19/08/2026):
+     data, região, rotas e o código do operador do monitoramento. Placa,
+     transportadora, motorista, nota de transferência, carga e lacres são da
+     PORTARIA, no recebimento. */
   const corpo = {
     dataDev: v('dev-data') || diaLocalDev(),
     rotas,
-    regiao: v('dev-regiao'),
-    notaTransferencia: v('dev-nota-transf'),
+    /* A região vem do CADASTRO da rota (500 = Patos de Minas). Antes era
+       digitada ao lado da rota — duas fontes para a mesma informação, e a
+       divergência de escrita ("BH", "Belo Horizonte", "B.HORIZONTE")
+       aparecia no rótulo do checklist e no relatório. */
+    regiao: regiaoDaRotaDev(rotas[0]),
     operadorCodigo: v('dev-operador-cod'),
     itens: [],
   };
   try {
     const d = await SuincoSharePoint.devolucoes.criar(corpo);
     notify(`Checklist Nº ${d.numero} criado (${devRotulo(d)}). Agora lance os itens na linha do próprio checklist.`, 'success', 6000);
-    ['dev-regiao', 'dev-nota-transf', 'dev-operador-cod']
+    ['dev-operador-cod']
       .forEach((id) => { const e = document.getElementById(id); if (e) e.value = ''; });
     _devRotasNovas = [];
     renderRotasNovasDev();
@@ -1018,6 +1022,15 @@ function mostrarLacreDevUI(id) {
    tem que puxar na descrição, abaixo do campo, a nomenclatura referente ao
    código" — porque quem confere depois precisa saber o motivo, não decorar
    uma tabela de números. */
+/* A região de um checklist é o nome da rota no cadastro (500 = Patos de
+   Minas). Rota sem nome devolve o próprio código — melhor que vazio, e
+   aparece na tela para alguém completar o cadastro. */
+function regiaoDaRotaDev(codigo) {
+  if (!codigo) return '';
+  const r = (typeof ROTAS !== 'undefined' ? ROTAS : []).find((x) => x.codigo === codigo);
+  return (r && (r.nome || '').trim()) || String(codigo);
+}
+
 function motivoOficialDev(valor) {
   const texto = String(valor || '').trim();
   if (!texto) return '';
