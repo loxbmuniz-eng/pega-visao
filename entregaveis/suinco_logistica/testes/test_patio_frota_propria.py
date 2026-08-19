@@ -86,8 +86,12 @@ async def main():
             "() => [...document.querySelectorAll('#torre-vp-tbody tr.vp-grupo')]"
             ".map((t) => t.innerText.trim())")
         ck('a Torre mostra os dois blocos', len(grupos) == 2, ' / '.join(grupos))
-        ck('o primeiro bloco é a frota própria',
-           bool(grupos) and 'FROTA PRÓPRIA' in grupos[0].upper(), grupos[0] if grupos else '')
+        # Transportadoras primeiro, frota própria depois (ordem pedida em
+        # 19/08/2026).
+        ck('o primeiro bloco é o das transportadoras',
+           bool(grupos) and 'TRANSPORTADORA' in grupos[0].upper(), grupos[0] if grupos else '')
+        ck('o segundo bloco é o da frota própria',
+           len(grupos) > 1 and 'PRÓPRIA' in grupos[1].upper(), grupos[1] if len(grupos) > 1 else '')
 
         # A placa própria tem que estar DEPOIS do título de frota própria e
         # ANTES do título de transportadoras.
@@ -101,10 +105,10 @@ async def main():
                  const idx = (placa) => linhas.findIndex((t) => t.innerText.includes(placa));
                  return {iProp, iTerc, prop: idx(p.propria), terc: idx(p.terceiro)};
                }""", placas)
-        ck('a placa própria caiu no bloco da frota própria',
-           ordem['iProp'] < ordem['prop'] < ordem['iTerc'], str(ordem))
         ck('a placa de transportadora caiu no bloco de transportadoras',
-           ordem['terc'] > ordem['iTerc'], str(ordem))
+           ordem['iTerc'] < ordem['terc'] < ordem['iProp'], str(ordem))
+        ck('a placa própria caiu no bloco da frota própria',
+           ordem['prop'] > ordem['iProp'], str(ordem))
 
         resumo = await pg.evaluate("() => document.getElementById('torre-vp-resumo').innerText")
         # O CSS dos chips deixa o texto em caixa alta — a comparação segue o
