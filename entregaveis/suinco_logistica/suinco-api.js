@@ -589,6 +589,15 @@ const SuincoSharePoint = (function () {
     });
   }
 
+  /* Cargas excluídas — a tela onde o "desfazer exclusão" pode ser clicado.
+     Não entra no estado do painel: é consulta sob demanda da Administração,
+     e misturar carga excluída com o pátio em operação seria voltar atrás na
+     razão de ela ter sumido. */
+  async function listarExcluidas(placa) {
+    const q = placa ? '?placa=' + encodeURIComponent(placa) : '';
+    return chamar('/api/cargas-excluidas' + q);
+  }
+
   async function desfazerExclusao(cargaId, motivo) {
     return chamar(`/api/cargas/${encodeURIComponent(cargaId)}/desfazer-exclusao`, {
       metodo: 'POST', corpo: { motivo },
@@ -1242,7 +1251,7 @@ const SuincoSharePoint = (function () {
     aoFecharPrograma,
     login, sair, diagnosticarConexao,
     push, upsert, excluir, mudarStatus,
-    corrigirEtapa, corrigirDataProgramacao, desfazerExclusao,
+    corrigirEtapa, corrigirDataProgramacao, desfazerExclusao, listarExcluidas,
     pull, pullTudo, drenarFila, pendentes,
     listarOperadores, criarOperador, atualizarOperador,
     sincronizarAgora, iniciarSincroniaPeriodica, pararSincronia, ultimaSincronia,

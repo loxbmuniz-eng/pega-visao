@@ -112,7 +112,7 @@ async def main():
         await pgA.evaluate(
             "() => document.querySelectorAll('.notif-item').forEach((e) => e.remove())")
         await pgA.select_option(f"#adm-etapa-{carga['id']}", 'Faturado')
-        pgA.on('dialog', lambda d: asyncio.ensure_future(d.accept()))
+        pgA.on('dialog', lambda d: asyncio.ensure_future(d.accept('motivo informado no teste')))
         await pgA.click(f"button[onclick*=\"corrigirEtapaCargaUI('{carga['id']}')\"]")
         await pgA.wait_for_timeout(1200)
         avisos = await pgA.evaluate(
@@ -145,6 +145,42 @@ async def main():
             """async (id) => { try { await SuincoSharePoint.corrigirEtapa(id, 'Aguardando Veículo', 'x');
                  return 'passou'; } catch (e) { return e.message; } }""", carga['id'])
         ck('o Faturamento é recusado pelo servidor', 'passou' not in recusa, recusa[:80])
+
+        print('\n=== 6. A TELA DE CARGAS EXCLUÍDAS DEVOLVE O QUE SAIU POR ENGANO ===')
+        # Uma carga nova, excluída de propósito — é o caso do dia: alguém
+        # exclui a programação e precisa dela de volta.
+        outra = await pgA.evaluate(
+            """async () => {
+                 const usadas = new Set(DB.cargas.map((c) => c.placa));
+                 const f = DB.frota.find((x) => x.placa && x.transportadora && !usadas.has(x.placa));
+                 const c = criarCargaProgramada({placa: f.placa, numeroCarga: 'ADM-EXC',
+                   cliente: 'CLIENTE', destino: 'DESTINO', peso: 1000, operador: 'Chefe'});
+                 SuincoStore.save();
+                 await SuincoSharePoint.sincronizarAgora();
+                 await new Promise((r) => setTimeout(r, 800));
+                 await SuincoSharePoint.excluir(c.id, 'excluída por engano no teste');
+                 await SuincoSharePoint.sincronizarAgora();
+                 return {id: c.id, placa: f.placa};
+               }""")
+        await pgA.wait_for_timeout(1500)
+        sumiu = await pgA.evaluate("(id) => !getCarga(id)", outra['id'])
+        ck('a carga excluída sai do painel', sumiu)
+
+        await pgA.fill('#exc-placa', outra['placa'])
+        await pgA.click("button:has-text('Buscar excluídas')")
+        await pgA.wait_for_timeout(1500)
+        naLista = await pgA.evaluate(
+            "(id) => document.getElementById('exc-lista').innerHTML.includes(id)", outra['id'])
+        ck('a carga aparece na lista de excluídas', naLista)
+
+        await pgA.click(f"button[onclick*=\"devolverCargaExcluidaUI('{outra['id']}')\"]")
+        await pgA.wait_for_timeout(3000)
+        voltouCarga = await pgA.evaluate("(id) => !!getCarga(id)", outra['id'])
+        ck('a carga voltou para o painel', voltouCarga)
+
+        await pgA.evaluate(
+            """async (id) => { try { await SuincoSharePoint.excluir(id, 'limpeza de teste'); }
+                 catch (e) {} }""", outra['id'])
 
         # Limpeza.
         await pgA.evaluate(
