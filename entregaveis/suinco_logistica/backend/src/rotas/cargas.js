@@ -10,7 +10,7 @@ import {
 import {
   validarTransicao, podeCriarCarga, podeRegistrarChegadaSemProgramacao,
   camposEditaveisPor, podeRegistrarSaida,
-  ErroDeFluxo, ErroDePermissao, STATUS_INICIAL,
+  ErroDeFluxo, ErroDePermissao, STATUS_INICIAL, STATUS_FLOW,
 } from '../dominio/fluxo.js';
 
 export const rotasCargas = Router();
@@ -843,3 +843,236 @@ rotasCargas.post('/cargas/:id/restaurar', exigirLogin, exigirSetor(), async (req
 /* Erros de domínio já carregam status e código; o handler global em
    servidor.js só precisa repassá-los. */
 export { ErroDeFluxo, ErroDePermissao };
+
+/* Corrigir a DATA DE PROGRAMAÇÃO de uma carga — só a Administração.
+
+   A data nasce quando a carga é lançada e é gravável UMA VEZ SÓ (COALESCE
+   no PATCH), justamente para eco de sincronização não movê-la. Mas
+   acontece de a carga ir para o dia errado: no caso de 19/08/2026, uma
+   programação foi excluída e relançada, e caiu no dia seguinte — "eu quero
+   essa carga de volta na programação de ontem".
+
+   Até aqui a saída era mexer direto no banco. Agora é uma ação do painel,
+   com motivo obrigatório e trilha: quem mudou, de quando para quando e por
+   quê. Correção de data é rara, mas quando é preciso, é preciso — e mexer
+   no banco à mão não deixa rastro que alguém consiga ler depois. */
+rotasCargas.post('/cargas/:id/data-programacao', exigirLogin, exigirSetor(), async (req, res, next) => {
+  try {
+    const id = idSeguro(req.params.id);
+    if (!id) return res.status(400).json({ erro: 'Id inválido.', codigo: 'ID_INVALIDO' });
+
+    const dia = String(req.body?.data ?? '').slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dia)) {
+      return res.status(400).json({
+        erro: 'Informe a data da programação no formato AAAA-MM-DD.', codigo: 'DATA_INVALIDA',
+      });
+    }
+    const motivo = String(req.body?.motivo ?? '').trim().slice(0, 500);
+    if (!motivo) {
+      return res.status(400).json({
+        erro: 'Diga o motivo da correção — a data entra no relatório do dia, e quem ler depois precisa saber por quê.',
+        codigo: 'MOTIVO_OBRIGATORIO',
+      });
+    }
+    const op = req.operador;
+
+    const resultado = await emTransacao(async (cli) => {
+      const { rows } = await cli.query(
+        `SELECT ${COLUNAS_CARGA} FROM fact_viagens
+          WHERE carga_id = $1 AND excluida_em IS NULL FOR UPDATE`,
+        [id]
+      );
+      const carga = rows[0];
+      if (!carga) return { naoEncontrada: true };
+
+      /* Meio-dia local, e não meia-noite: a data é lida em América/São_Paulo
+         e a meia-noite UTC cairia no dia anterior no relatório — o mesmo
+         erro de fuso que a data de programação já teve uma vez. */
+      const nova = new Date(`${dia}T12:00:00-03:00`);
+      const antes = carga.programado_em || carga.criado_em;
+
+      const upd = await cli.query(
+        `UPDATE fact_viagens
+            SET programado_em = $1, atualizado_em = now(),
+                operador_id = $2, operador_nome = $3, operador_setor = $4,
+                versao = versao + 1
+          WHERE carga_id = $5
+          RETURNING ${COLUNAS_CARGA}`,
+        [nova, op.id, op.nome, op.setor, id]
+      );
+
+      await gravarEvento(cli, {
+        cargaId: id,
+        placa: carga.placa,
+        de: carga.status_atual,
+        para: carga.status_atual,
+        operador: op,
+        acao: `Data de programação corrigida: ${new Date(antes).toISOString().slice(0, 10)} → ${dia}. Motivo: ${motivo}`,
+      });
+
+      return { linha: upd.rows[0] };
+    });
+
+    if (resultado.naoEncontrada) {
+      return res.status(404).json({ erro: 'Carga não encontrada.', codigo: 'CARGA_NAO_ENCONTRADA' });
+    }
+    const payload = paraPainel(resultado.linha);
+    emitir('carga:atualizada', payload);
+    return res.json(payload);
+  } catch (e) {
+    return next(e);
+  }
+});
+
+/* Desfazer a exclusão de uma carga — só a Administração.
+
+   Caso de 19/08/2026: a Logística excluiu a programação 118245 e relançou,
+   e a carga original — já faturada, com histórico de todos os setores —
+   ficou marcada como excluída. "Devolve essa aqui." Até agora a única saída
+   era UPDATE no banco à mão; era ele ou perder o processo.
+
+   Exige motivo pelo mesmo motivo da exclusão: a carga volta a contar nos
+   relatórios e nas filas, e quem ler depois precisa saber por quê. */
+rotasCargas.post('/cargas/:id/desfazer-exclusao', exigirLogin, exigirSetor(), async (req, res, next) => {
+  try {
+    const id = idSeguro(req.params.id);
+    if (!id) return res.status(400).json({ erro: 'Id inválido.', codigo: 'ID_INVALIDO' });
+    const motivo = String(req.body?.motivo ?? '').trim().slice(0, 500);
+    if (!motivo) {
+      return res.status(400).json({
+        erro: 'Diga o motivo de devolver a carga — ela volta a contar nos relatórios e nas filas.',
+        codigo: 'MOTIVO_OBRIGATORIO',
+      });
+    }
+    const op = req.operador;
+
+    const resultado = await emTransacao(async (cli) => {
+      const { rows } = await cli.query(
+        `SELECT ${COLUNAS_CARGA} FROM fact_viagens WHERE carga_id = $1 FOR UPDATE`, [id]
+      );
+      const carga = rows[0];
+      if (!carga) return { naoEncontrada: true };
+      if (!carga.excluida_em) return { naoEstavaExcluida: true, linha: carga };
+
+      const upd = await cli.query(
+        `UPDATE fact_viagens
+            SET excluida_em = NULL, atualizado_em = now(),
+                operador_id = $1, operador_nome = $2, operador_setor = $3,
+                versao = versao + 1
+          WHERE carga_id = $4
+          RETURNING ${COLUNAS_CARGA}`,
+        [op.id, op.nome, op.setor, id]
+      );
+
+      await gravarEvento(cli, {
+        cargaId: id,
+        placa: carga.placa,
+        de: carga.status_atual,
+        para: carga.status_atual,
+        operador: op,
+        acao: `Exclusão desfeita — carga devolvida ao painel. Motivo: ${motivo}`,
+      });
+
+      return { linha: upd.rows[0] };
+    });
+
+    if (resultado.naoEncontrada) {
+      return res.status(404).json({ erro: 'Carga não encontrada.', codigo: 'CARGA_NAO_ENCONTRADA' });
+    }
+    const payload = paraPainel(resultado.linha);
+    if (!resultado.naoEstavaExcluida) emitir('carga:atualizada', payload);
+    return res.json(payload);
+  } catch (e) {
+    return next(e);
+  }
+});
+
+/* Voltar (ou corrigir) a ETAPA de uma carga — só a Administração.
+
+   A máquina de estados é de sentido único de propósito: uma etapa que anda
+   sozinha para trás é histórico que ninguém consegue explicar depois. Mas
+   quem opera precisa de uma saída para o erro humano — o clique errado, a
+   carga faturada por engano, o "Seguiu Viagem" numa carga que ainda está no
+   pátio. Pedido de 19/08/2026: "quero conseguir voltar em qualquer etapa
+   pelo painel de administrador".
+
+   Por isso esta rota existe separada da rota de status normal, e não como
+   um parâmetro dela: aqui a transição não é validada contra o fluxo, e é
+   justamente por isso que ela exige Administração, exige motivo e grava
+   trilha dizendo que foi correção, não operação. */
+rotasCargas.post('/cargas/:id/corrigir-etapa', exigirLogin, exigirSetor(), async (req, res, next) => {
+  try {
+    const id = idSeguro(req.params.id);
+    if (!id) return res.status(400).json({ erro: 'Id inválido.', codigo: 'ID_INVALIDO' });
+
+    const statusNovo = String(req.body?.status ?? '');
+    if (!STATUS_FLOW.includes(statusNovo)) {
+      return res.status(400).json({
+        erro: `Etapa desconhecida: "${statusNovo}".`, codigo: 'STATUS_DESCONHECIDO',
+      });
+    }
+    const motivo = String(req.body?.motivo ?? '').trim().slice(0, 500);
+    if (!motivo) {
+      return res.status(400).json({
+        erro: 'Diga o motivo da correção de etapa — ela reescreve o andamento da carga para todos os setores.',
+        codigo: 'MOTIVO_OBRIGATORIO',
+      });
+    }
+    const op = req.operador;
+
+    const resultado = await emTransacao(async (cli) => {
+      const { rows } = await cli.query(
+        `SELECT ${COLUNAS_CARGA} FROM fact_viagens
+          WHERE carga_id = $1 AND excluida_em IS NULL FOR UPDATE`,
+        [id]
+      );
+      const carga = rows[0];
+      if (!carga) return { naoEncontrada: true };
+      if (carga.status_atual === statusNovo) return { semMudanca: true, linha: carga };
+
+      const upd = await cli.query(
+        `UPDATE fact_viagens
+            SET status_atual = $1, atualizado_em = now(),
+                operador_id = $2, operador_nome = $3, operador_setor = $4,
+                versao = versao + 1
+          WHERE carga_id = $5
+          RETURNING ${COLUNAS_CARGA}`,
+        [statusNovo, op.id, op.nome, op.setor, id]
+      );
+
+      const voltou = STATUS_FLOW.indexOf(statusNovo) < STATUS_FLOW.indexOf(carga.status_atual);
+      const movId = await gravarEvento(cli, {
+        cargaId: id,
+        placa: carga.placa,
+        de: carga.status_atual,
+        para: statusNovo,
+        operador: op,
+        acao: `Etapa ${voltou ? 'REVERTIDA' : 'corrigida'} pela Administração: `
+          + `${carga.status_atual} → ${statusNovo}. Motivo: ${motivo}`,
+      });
+
+      return { linha: upd.rows[0], movId, de: carga.status_atual };
+    });
+
+    if (resultado.naoEncontrada) {
+      return res.status(404).json({ erro: 'Carga não encontrada.', codigo: 'CARGA_NAO_ENCONTRADA' });
+    }
+    const payload = paraPainel(resultado.linha);
+    if (!resultado.semMudanca) {
+      emitir('carga:atualizada', payload);
+      emitir('movimentacao:nova', {
+        id: resultado.movId,
+        cargaId: payload.id,
+        placa: payload.placa,
+        statusAnterior: resultado.de,
+        statusNovo: payload.status,
+        setor: op.setor,
+        operador: op.nome,
+        data: payload.atualizadoEm,
+      });
+    }
+    return res.json(payload);
+  } catch (e) {
+    return next(e);
+  }
+});

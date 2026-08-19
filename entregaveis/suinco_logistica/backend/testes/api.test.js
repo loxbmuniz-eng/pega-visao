@@ -2353,3 +2353,246 @@ describe('21. Chegada com carga pendente não promove a programação', () => {
     assert.equal(r.status, 200, r.texto);
   });
 });
+
+/* ---------------------------------------------------------------------
+   22. Corrigir a data de programação (só Administração)
+   ---------------------------------------------------------------------
+   A data de programação é gravável uma vez só, para eco de sincronização
+   não movê-la (bloco 15). Mas quando ela nasce errada — carga excluída e
+   relançada no dia seguinte, caso de 19/08/2026 — alguém precisa poder
+   corrigir sem abrir o banco. Com motivo, e com trilha. ---------------- */
+describe('22. Correção da data de programação', () => {
+  let id;
+  let admin;
+
+  before(async () => {
+    // tokens['Administração'] não é global (mesmo padrão defensivo dos
+    // outros blocos): rodando isolado, faz o login aqui.
+    admin = tokens['Administração'];
+    if (!admin) {
+      const login = await req('/auth/login', {
+        metodo: 'POST', corpo: { email: 'chefe@teste.local', senha: SENHA },
+      });
+      admin = login.json?.token;
+    }
+    const { rows } = await pool.query('SELECT placa FROM dim_veiculos ORDER BY placa OFFSET 62 LIMIT 1');
+    await pool.query('DELETE FROM fact_statusfrota WHERE placa = $1', [rows[0].placa]);
+    await pool.query('DELETE FROM fact_viagens WHERE placa = $1', [rows[0].placa]);
+    const r = await req('/api/cargas', {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { placa: rows[0].placa, numeroCarga: '118245', cliente: 'C', destino: 'D', peso: 1000 },
+    });
+    id = r.json.id;
+  });
+
+  test('sem motivo, não corrige', async () => {
+    const r = await req(`/api/cargas/${id}/data-programacao`, {
+      metodo: 'POST', token: admin, corpo: { data: '2026-08-18' },
+    });
+    assert.equal(r.status, 400);
+    assert.equal(r.json.codigo, 'MOTIVO_OBRIGATORIO');
+  });
+
+  test('Logística NÃO corrige — é ação de Administração', async () => {
+    const r = await req(`/api/cargas/${id}/data-programacao`, {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { data: '2026-08-18', motivo: 'tentativa' },
+    });
+    assert.equal(r.status, 403);
+  });
+
+  test('Administração move a carga para o dia certo, com trilha', async () => {
+    const r = await req(`/api/cargas/${id}/data-programacao`, {
+      metodo: 'POST', token: admin,
+      corpo: { data: '2026-08-18', motivo: 'carga excluída e relançada — volta para o dia da programação original' },
+    });
+    assert.equal(r.status, 200, r.texto);
+    assert.equal(String(r.json.programadoEm).slice(0, 10), '2026-08-18');
+
+    const { rows } = await pool.query(
+      `SELECT acao FROM log_eventos WHERE carga_id = $1
+        AND acao LIKE 'Data de programação corrigida%' ORDER BY data_evento DESC LIMIT 1`, [id]);
+    assert.ok(rows[0], 'correção sem trilha seria pior que o SQL na mão');
+    assert.ok(rows[0].acao.includes('2026-08-18'), rows[0].acao);
+    assert.ok(rows[0].acao.includes('Motivo:'), rows[0].acao);
+  });
+
+  test('a data corrigida não é desfeita por eco de sincronização', async () => {
+    /* O eco reenvia a carga inteira com a data que o terminal tinha. O
+       COALESCE do PATCH protege — e continua protegendo depois da
+       correção, senão o problema volta pela porta dos fundos. */
+    const r = await req(`/api/cargas/${id}`, {
+      metodo: 'PATCH', token: tokens['Logística'],
+      corpo: { programadoEm: '2026-08-19T10:00:00.000Z', observacoes: 'eco' },
+    });
+    assert.equal(r.status, 200, r.texto);
+    assert.equal(String(r.json.programadoEm).slice(0, 10), '2026-08-18', 'o eco não move a data corrigida');
+  });
+});
+
+/* ---------------------------------------------------------------------
+   23. Desfazer a exclusão de uma carga (só Administração)
+   ---------------------------------------------------------------------
+   19/08/2026: a Logística excluiu uma programação já faturada e relançou.
+   A carga original, com o histórico de todos os setores, ficou marcada como
+   excluída — e a única saída era UPDATE no banco à mão. ---------------- */
+describe('23. Desfazer exclusão de carga', () => {
+  let id, admin, placa;
+
+  before(async () => {
+    admin = tokens['Administração'];
+    if (!admin) {
+      const login = await req('/auth/login', {
+        metodo: 'POST', corpo: { email: 'chefe@teste.local', senha: SENHA },
+      });
+      admin = login.json?.token;
+    }
+    const { rows } = await pool.query('SELECT placa FROM dim_veiculos ORDER BY placa OFFSET 63 LIMIT 1');
+    placa = rows[0].placa;
+    await pool.query('DELETE FROM fact_statusfrota WHERE placa = $1', [placa]);
+    await pool.query('DELETE FROM fact_viagens WHERE placa = $1', [placa]);
+    const r = await req('/api/cargas', {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { placa, numeroCarga: '118245', cliente: 'C', destino: 'D', peso: 3000 },
+    });
+    id = r.json.id;
+    const del = await req(`/api/cargas/${id}`, {
+      metodo: 'DELETE', token: tokens['Logística'], corpo: { motivo: 'excluída por engano' },
+    });
+    assert.equal(del.status, 200, del.texto);
+  });
+
+  test('sem motivo, não devolve', async () => {
+    const r = await req(`/api/cargas/${id}/desfazer-exclusao`, { metodo: 'POST', token: admin });
+    assert.equal(r.status, 400);
+    assert.equal(r.json.codigo, 'MOTIVO_OBRIGATORIO');
+  });
+
+  test('Logística NÃO devolve — é ação de Administração', async () => {
+    const r = await req(`/api/cargas/${id}/desfazer-exclusao`, {
+      metodo: 'POST', token: tokens['Logística'], corpo: { motivo: 'tentativa' },
+    });
+    assert.equal(r.status, 403);
+  });
+
+  test('Administração devolve a carga, com trilha, e ela reaparece na leitura', async () => {
+    const r = await req(`/api/cargas/${id}/desfazer-exclusao`, {
+      metodo: 'POST', token: admin, corpo: { motivo: 'excluída por engano — processo do dia anterior' },
+    });
+    assert.equal(r.status, 200, r.texto);
+    assert.equal(r.json.excluida, false);
+
+    const estado = await req('/api/estado', { token: admin });
+    assert.ok(estado.json.cargas.some((c) => c.id === id), 'a carga voltou para o painel');
+
+    const { rows } = await pool.query(
+      `SELECT acao FROM log_eventos WHERE carga_id = $1
+        AND acao LIKE 'Exclusão desfeita%' ORDER BY data_evento DESC LIMIT 1`, [id]);
+    assert.ok(rows[0], 'devolver sem trilha seria o mesmo SQL na mão, só que escondido');
+  });
+
+  test('devolver uma carga que não estava excluída não quebra nada', async () => {
+    const r = await req(`/api/cargas/${id}/desfazer-exclusao`, {
+      metodo: 'POST', token: admin, corpo: { motivo: 'repetido' },
+    });
+    assert.equal(r.status, 200);
+    assert.equal(r.json.excluida, false);
+  });
+});
+
+/* ---------------------------------------------------------------------
+   24. Administração corrige (e volta) a etapa de uma carga
+   ---------------------------------------------------------------------
+   Pedido de 19/08/2026: "quero conseguir voltar em qualquer etapa pelo
+   painel de administrador". A máquina de estados continua de sentido único
+   para os setores; esta é a saída para o erro humano, com motivo e trilha
+   dizendo que foi CORREÇÃO, não operação. ------------------------------ */
+describe('24. Correção de etapa pela Administração', () => {
+  let id, admin, placa;
+
+  before(async () => {
+    admin = tokens['Administração'];
+    if (!admin) {
+      const login = await req('/auth/login', {
+        metodo: 'POST', corpo: { email: 'chefe@teste.local', senha: SENHA },
+      });
+      admin = login.json?.token;
+    }
+    const { rows } = await pool.query('SELECT placa FROM dim_veiculos ORDER BY placa OFFSET 64 LIMIT 1');
+    placa = rows[0].placa;
+    await pool.query('DELETE FROM fact_statusfrota WHERE placa = $1', [placa]);
+    await pool.query('DELETE FROM fact_viagens WHERE placa = $1', [placa]);
+    const r = await req('/api/cargas', {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { placa, numeroCarga: '77001', cliente: 'C', destino: 'D', peso: 1000 },
+    });
+    id = r.json.id;
+    for (const [setor, status] of [['Portaria', 'Aguardando Embarque'],
+      ['Expedição', 'Embarque Iniciado'], ['Expedição', 'Embarque Finalizado'],
+      ['Faturamento', 'Faturado'], ['Portaria', 'Seguiu Viagem']]) {
+      const t = await req(`/api/cargas/${id}/status`, {
+        metodo: 'POST', token: tokens[setor], corpo: { status },
+      });
+      assert.equal(t.status, 200, t.texto);
+    }
+  });
+
+  test('os setores continuam sem voltar etapa pela rota normal', async () => {
+    const r = await req(`/api/cargas/${id}/status`, {
+      metodo: 'POST', token: tokens['Faturamento'], corpo: { status: 'Embarque Finalizado' },
+    });
+    assert.equal(r.status, 409, 'sentido único segue valendo para quem opera');
+  });
+
+  test('a Logística NÃO corrige etapa — é ação de Administração', async () => {
+    const r = await req(`/api/cargas/${id}/corrigir-etapa`, {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { status: 'Faturado', motivo: 'tentativa' },
+    });
+    assert.equal(r.status, 403);
+  });
+
+  test('sem motivo, não corrige', async () => {
+    const r = await req(`/api/cargas/${id}/corrigir-etapa`, {
+      metodo: 'POST', token: admin, corpo: { status: 'Faturado' },
+    });
+    assert.equal(r.status, 400);
+    assert.equal(r.json.codigo, 'MOTIVO_OBRIGATORIO');
+  });
+
+  test('a Administração VOLTA a carga de Seguiu Viagem para Faturado, com trilha', async () => {
+    const r = await req(`/api/cargas/${id}/corrigir-etapa`, {
+      metodo: 'POST', token: admin,
+      corpo: { status: 'Faturado', motivo: 'saída registrada por engano — o caminhão ainda está no pátio' },
+    });
+    assert.equal(r.status, 200, r.texto);
+    assert.equal(r.json.status, 'Faturado');
+
+    const { rows } = await pool.query(
+      `SELECT status_anterior, status_novo FROM fact_statusfrota
+        WHERE carga_id = $1 ORDER BY data_evento DESC LIMIT 1`, [id]);
+    assert.equal(rows[0].status_anterior, 'Seguiu Viagem');
+    assert.equal(rows[0].status_novo, 'Faturado');
+
+    const { rows: log } = await pool.query(
+      `SELECT acao FROM log_eventos WHERE carga_id = $1
+        AND acao LIKE 'Etapa REVERTIDA%' ORDER BY data_evento DESC LIMIT 1`, [id]);
+    assert.ok(log[0], 'reverter sem trilha apaga a história em vez de corrigi-la');
+    assert.ok(log[0].acao.includes('Motivo:'), log[0].acao);
+  });
+
+  test('etapa desconhecida é recusada, mesmo para a Administração', async () => {
+    const r = await req(`/api/cargas/${id}/corrigir-etapa`, {
+      metodo: 'POST', token: admin, corpo: { status: 'Inventada', motivo: 'x' },
+    });
+    assert.equal(r.status, 400);
+    assert.equal(r.json.codigo, 'STATUS_DESCONHECIDO');
+  });
+
+  test('depois de voltar, a carga anda de novo pelo caminho normal', async () => {
+    const r = await req(`/api/cargas/${id}/status`, {
+      metodo: 'POST', token: tokens['Portaria'], corpo: { status: 'Seguiu Viagem' },
+    });
+    assert.equal(r.status, 200, r.texto);
+  });
+});

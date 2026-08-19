@@ -571,6 +571,30 @@ const SuincoSharePoint = (function () {
     }
   }
 
+  /* Correções da Administração (19/08/2026).
+
+     Nunca entram na fila offline, de propósito: correção é ação consciente
+     de uma pessoa olhando a ficha da carga, e uma correção que sobe sozinha
+     meia hora depois — quando o estado já mudou — corrige a coisa errada.
+     Sem rede, o erro sobe para a tela e a pessoa tenta de novo. */
+  async function corrigirEtapa(cargaId, statusNovo, motivo) {
+    return chamar(`/api/cargas/${encodeURIComponent(cargaId)}/corrigir-etapa`, {
+      metodo: 'POST', corpo: { status: statusNovo, motivo },
+    });
+  }
+
+  async function corrigirDataProgramacao(cargaId, data, motivo) {
+    return chamar(`/api/cargas/${encodeURIComponent(cargaId)}/data-programacao`, {
+      metodo: 'POST', corpo: { data, motivo },
+    });
+  }
+
+  async function desfazerExclusao(cargaId, motivo) {
+    return chamar(`/api/cargas/${encodeURIComponent(cargaId)}/desfazer-exclusao`, {
+      metodo: 'POST', corpo: { motivo },
+    });
+  }
+
   /* ---------------------------------------------------------------
      Fila — drenagem em ordem
      ---------------------------------------------------------------
@@ -1218,6 +1242,7 @@ const SuincoSharePoint = (function () {
     aoFecharPrograma,
     login, sair, diagnosticarConexao,
     push, upsert, excluir, mudarStatus,
+    corrigirEtapa, corrigirDataProgramacao, desfazerExclusao,
     pull, pullTudo, drenarFila, pendentes,
     listarOperadores, criarOperador, atualizarOperador,
     sincronizarAgora, iniciarSincroniaPeriodica, pararSincronia, ultimaSincronia,
