@@ -2568,10 +2568,22 @@ function salvarCompletarCarga(){
 }
 
 /* ---------- PORTARIA ---------- */
-function acaoChegadaUI(){
+async function acaoChegadaUI(){
   const input = document.getElementById('portaria-placa');
   const placa = input.value;
   if(!normalizarPlaca(placa)){ notify('Informe a placa.','warn'); return; }
+  /* Antes de registrar chegada, puxa o servidor (19/08/2026).
+
+     O caso que motivou isto: o caminhão saiu sem a Portaria registrar a
+     saída, e no dia seguinte o porteiro clicou "Chegou". No terminal dele a
+     carga anterior não estava à vista — lista velha —, então a checagem
+     local não tinha o que checar e nasceu uma carga duplicada. Uma leitura
+     de meio segundo antes do clique resolve o caso comum; o servidor
+     continua sendo quem recusa de verdade (PLACA_COM_CARGA_ABERTA). */
+  if(SuincoSharePoint && SuincoSharePoint.estaConfigurado && SuincoSharePoint.estaConfigurado()){
+    try{ await SuincoSharePoint.sincronizarAgora(); }
+    catch(e){ /* sem rede: segue com o que há e o servidor decide depois */ }
+  }
   let r;
   try{
     r = registrarChegadaPortaria(placa, nomeOperadorAtual());
@@ -2592,7 +2604,13 @@ function acaoChegadaUI(){
     notifyGravacao(`${normalizarPlaca(placa)}: ${r.atualizadas.length} carga(s) agora em "Aguardando Embarque".`);
     tocarBeepConfirmacao();
   } else if(r.jaNoPatio.length){
-    notify(`${normalizarPlaca(placa)} já está no pátio (${r.jaNoPatio.map(c=>c.status).join(', ')}).`, '');
+    /* Aviso ALTO, e não informativo: este é o momento em que o porteiro
+       está prestes a registrar uma chegada que não pode existir. A carga
+       anterior precisa SAIR primeiro — se o caminhão já foi embora sem
+       baixa, é a saída que está faltando, não a chegada. */
+    notify(`${normalizarPlaca(placa)} ainda tem carga em aberto (${r.jaNoPatio.map(c=>c.numeroCarga || c.status).join(', ')}). `
+      + 'Registre a SAÍDA desse caminhão antes de registrar a chegada dele de novo — '
+      + 'se ele já foi embora sem baixa, use o botão "Saiu".', 'warn', 12000);
   }
   input.value = '';
   input.focus();
