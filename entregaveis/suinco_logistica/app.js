@@ -3567,8 +3567,86 @@ function renderTimelineCarga(id){
           </div>`;
         }).join('')}
       </div>
+      ${painelAdminDaCargaHtml(c)}
     </div>
   `;
+}
+
+/* Painel de correção da Administração, dentro da ficha da carga.
+
+   Pedido de 19/08/2026: "quero conseguir voltar em qualquer etapa pelo
+   painel de administrador, no painel histórico". Duas correções vivem aqui,
+   e as duas exigem motivo — o motivo é o que separa correção de rasura:
+
+     · voltar/corrigir a ETAPA (a máquina de estados segue de sentido único
+       para quem opera; aqui é a saída para o clique errado);
+     · corrigir a DATA DE PROGRAMAÇÃO (a carga que caiu no dia errado).
+
+   As duas passam pelo servidor e deixam trilha no histórico da carga: quem
+   corrigiu, de quando para quando e por quê. */
+function painelAdminDaCargaHtml(c){
+  if((DB.operador||{}).setor !== 'Administração') return '';
+  const dia = String(c.programadoEm || c.criadoEm || '').slice(0,10);
+  return `
+    <div class="admin-carga no-print">
+      <div class="admin-carga-tit">🛠 Correções da Administração</div>
+      <div class="admin-carga-sub">Toda correção aqui pede motivo e fica registrada no histórico da carga,
+        com o seu nome. Vale para todos os setores na hora.</div>
+
+      <div class="admin-carga-linha">
+        <label>Etapa</label>
+        <select id="adm-etapa-${esc(c.id)}">
+          ${STATUS_FLOW.map(st=>`<option value="${esc(st)}" ${st===c.status?'selected':''}>${esc(st)}</option>`).join('')}
+        </select>
+        <input type="text" id="adm-etapa-motivo-${esc(c.id)}" placeholder="Motivo da correção de etapa">
+        <button class="btn btn-sec btn-sm" onclick="corrigirEtapaCargaUI('${escJs(c.id)}')">↩ Aplicar etapa</button>
+      </div>
+
+      <div class="admin-carga-linha">
+        <label>Data da programação</label>
+        <input type="date" id="adm-data-${esc(c.id)}" value="${esc(dia)}">
+        <input type="text" id="adm-data-motivo-${esc(c.id)}" placeholder="Motivo da correção de data">
+        <button class="btn btn-sec btn-sm" onclick="corrigirDataProgramacaoUI('${escJs(c.id)}')">📅 Aplicar data</button>
+      </div>
+    </div>`;
+}
+
+async function corrigirEtapaCargaUI(id){
+  const c = getCarga(id);
+  const status = (document.getElementById('adm-etapa-' + id)||{}).value;
+  const motivo = ((document.getElementById('adm-etapa-motivo-' + id)||{}).value||'').trim();
+  if(!c || !status) return;
+  if(status === c.status){ notify('A carga já está nessa etapa.','warn'); return; }
+  if(!motivo){ notify('Escreva o motivo da correção de etapa.','warn'); return; }
+  const voltando = STATUS_FLOW.indexOf(status) < STATUS_FLOW.indexOf(c.status);
+  if(!confirm(`${voltando ? 'VOLTAR' : 'Avançar'} a carga ${c.numeroCarga || c.placa} de "${c.status}" para "${status}"?\n\n`
+    + 'Isso muda o andamento para todos os setores e fica registrado no histórico.')) return;
+  try{
+    await SuincoSharePoint.corrigirEtapa(id, status, motivo);
+    await SuincoSharePoint.sincronizarAgora();
+    notifyGravacao(`Etapa corrigida: ${c.status} → ${status}.`);
+    renderAll();
+    renderTimelineCarga(id);
+  }catch(e){
+    notify('Não consegui corrigir a etapa: ' + (e.message||'erro'), 'danger', 9000);
+  }
+}
+
+async function corrigirDataProgramacaoUI(id){
+  const c = getCarga(id);
+  const data = (document.getElementById('adm-data-' + id)||{}).value;
+  const motivo = ((document.getElementById('adm-data-motivo-' + id)||{}).value||'').trim();
+  if(!c || !data) return;
+  if(!motivo){ notify('Escreva o motivo da correção de data.','warn'); return; }
+  try{
+    await SuincoSharePoint.corrigirDataProgramacao(id, data, motivo);
+    await SuincoSharePoint.sincronizarAgora();
+    notifyGravacao(`Data de programação corrigida para ${data.split('-').reverse().join('/')}.`);
+    renderAll();
+    renderTimelineCarga(id);
+  }catch(e){
+    notify('Não consegui corrigir a data: ' + (e.message||'erro'), 'danger', 9000);
+  }
 }
 
 /* ---------- HISTÓRICO ---------- */
