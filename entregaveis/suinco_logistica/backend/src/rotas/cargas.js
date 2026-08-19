@@ -169,6 +169,9 @@ rotasCargas.post('/cargas', exigirLogin, async (req, res, next) => {
     const dados = chegadaSemProgramacao
       ? saneiarCriacaoChegadaSemProgramacao(req.body, frotaRows[0])
       : saneiarCriacao(req.body, frotaRows[0]);
+    // Entrada sem programação não tem data de programação, venha o que vier
+    // no corpo (painel antigo mandava a data da CHEGADA aqui).
+    if (chegadaSemProgramacao) dados.programado_em = null;
 
     /* Toda carga nasce dentro do ciclo de programação ABERTO. É o que faz
        o histórico de programações existir sem mover nem copiar carga: ela
@@ -281,8 +284,34 @@ rotasCargas.patch('/cargas/:id', exigirLogin, async (req, res, next) => {
 
        Combina com o COALESCE abaixo: só entra se ainda não houver data, e
        nunca sobrescreve o que o painel informou. */
-    if (mudancas.aguardando_carga === false && mudancas.programado_em === undefined) {
-      mudancas.programado_em = new Date();
+    /* O LANÇAMENTO MANDA NA DATA (19/08/2026).
+
+       Relato: a programação do dia saiu com 11 cargas e o relatório trouxe
+       9. As duas que faltaram eram caminhões que deram entrada ONTEM e
+       tiveram a carga lançada hoje — elas carregavam a data da ENTRADA, e o
+       COALESCE abaixo (que existe para eco de sincronização não mover data)
+       preservava justamente o valor errado.
+
+       Duas regras, e as duas moram aqui porque o servidor é o único ponto
+       que independe de painel atualizado:
+
+         · enquanto a carga está AGUARDANDO CARGA, ela não tem data de
+           programação — nenhuma. Entrada de caminhão não é programação, e
+           inventar uma data aqui é a origem do problema;
+         · no instante do LANÇAMENTO (aguardando_carga true → false), a data
+           é gravada AGORA, por cima do que houver. É o único momento em que
+           sobrescrever é o certo: a carga está sendo programada neste ato. */
+    const eraAguardandoCarga = antes.rows[0].aguardando_carga === true;
+    const estaVirandoCarga = eraAguardandoCarga && mudancas.aguardando_carga === false;
+    let forcarProgramadoEm = null;
+    if (estaVirandoCarga) {
+      forcarProgramadoEm = new Date();
+      mudancas.programado_em = forcarProgramadoEm;
+    } else if (eraAguardandoCarga) {
+      /* Continua sendo só uma ENTRADA: nada aqui pode gravar data de
+         programação — nem o eco de um painel antigo, que mandava a data da
+         chegada e cimentava o erro. */
+      delete mudancas.programado_em;
     }
 
     const cols = Object.keys(mudancas);
@@ -307,7 +336,11 @@ rotasCargas.patch('/cargas/:id', exigirLogin, async (req, res, next) => {
        consciente. */
     const sets = cols.map((c, i) => {
       if (c === 'programado_em') {
-        return `programado_em = COALESCE(programado_em, $${i + 1})`;
+        // No lançamento a data é atribuída; fora dele, COALESCE — a
+        // proteção contra eco de terminal desatualizado continua de pé.
+        return forcarProgramadoEm
+          ? `programado_em = $${i + 1}`
+          : `programado_em = COALESCE(programado_em, $${i + 1})`;
       }
       /* `observacoes`: texto VAZIO não apaga texto existente.
 

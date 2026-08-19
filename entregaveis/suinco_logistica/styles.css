@@ -1432,6 +1432,26 @@ code{
    ler linha por linha. */
 .prog-atrasada{color:var(--warn);font-weight:700}
 .prog-atrasada small{font-weight:400}
+/* A FAIXA QUE SEPARA A PROGRAMAÇÃO DE HOJE DAS SOBRAS DE OUTROS DIAS.
+   Pedido do gestor (19/08/2026): a Torre guarda o que ficou pendente da
+   programação antiga sem atrapalhar a nova. A faixa é o corte visual entre
+   os dois blocos — não é alerta, é divisória, então usa a régua dourada da
+   casa e não o vermelho de erro. */
+#torre-tbody tr.torre-sep td{
+  background:var(--campo-bg);
+  border-top:2px solid var(--gold-dim);
+  color:var(--text-dim);
+  font-size:12px;
+  font-weight:700;
+  letter-spacing:.02em;
+  padding:8px 10px !important;
+  text-align:left;
+}
+#torre-tbody tr.torre-sep .torre-sep-nota{ font-weight:400; opacity:.85 }
+/* As linhas do bloco antigo ficam levemente recuadas do dourado principal:
+   continuam legíveis e editáveis, mas o olho sabe que já saiu do dia. */
+#torre-tbody tr.linha-prog-antiga td{ opacity:.92 }
+#torre-tbody tr.linha-prog-antiga td:first-child{ box-shadow:inset 3px 0 0 var(--gold-dim) }
 /* Aviso de que existem cargas de OUTROS dias fora desta fila. Não é erro
    nem alerta: é orientação de para onde olhar. */
 .aviso-inline{

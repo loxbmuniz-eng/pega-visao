@@ -614,9 +614,18 @@ const SuincoStore = {
       Status_Atual: carga.status,
       Aguardando_Carga: !!carga.aguardandoCarga,
       Criado_Em: carga.criadoEm,
-      // Data em que a CARGA foi lançada (≠ chegada do caminhão). O
-      // relatório filtra por ela — ver filtrarPorDataProgramacao.
-      Programado_Em: carga.programadoEm || carga.criadoEm,
+      /* Data em que a CARGA foi lançada (≠ chegada do caminhão). O
+         relatório filtra por ela — ver filtrarPorDataProgramacao.
+
+         NUNCA derivar de `criadoEm` (19/08/2026). Para um caminhão que
+         entrou pela Portaria, `criadoEm` é a hora em que ele ENTROU no
+         pátio; mandar isso aqui gravava a data da entrada como se fosse a
+         da programação, e a carga lançada hoje sumia do relatório de hoje.
+         Foi o que tirou duas cargas da programação de 19/08.
+
+         Entrada ainda sem carga não tem data de programação: manda null e
+         o servidor decide no lançamento. */
+      Programado_Em: carga.aguardandoCarga ? null : (carga.programadoEm || null),
       // Atualizado_Em é o que decide quem vence quando dois setores mexem na
       // mesma carga. Sem ele a fusão não teria como comparar as versões.
       Atualizado_Em: carga.atualizadoEm || nowISO()
@@ -992,7 +1001,11 @@ function cargaDeLinhaRemota(r){
     status: STATUS_FLOW.includes(r.Status_Atual) ? r.Status_Atual : STATUS_FLOW[0],
     aguardandoCarga: r.Aguardando_Carga === true || r.Aguardando_Carga === 'Sim',
     criadoEm: r.Criado_Em || nowISO(),
-    programadoEm: r.Programado_Em || r.Criado_Em || nowISO(),
+    /* Sem inventar com `criadoEm`: o modelo guarda o que o servidor tem, e
+       quem exibe usa `programadoEm || criadoEm` como leitura. Preencher aqui
+       fazia o painel devolver a data da chegada na sincronização seguinte —
+       o erro voltava sozinho depois de corrigido. */
+    programadoEm: r.Programado_Em || null,
     atualizadoEm: r.Atualizado_Em || r.Timestamp_Sincronia || nowISO(),
     excluida: r.Excluida === true
   };
