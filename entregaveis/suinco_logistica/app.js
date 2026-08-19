@@ -1495,8 +1495,11 @@ function renderVisaoPatio(prefixo){
       ? `<tr class="vp-grupo"><td colspan="6">${titulo} <b>${cargas.length}</b> carga(s)</td></tr>`
         + cargas.map(linhaCarga).join('')
       : '';
-    tbody.innerHTML = grupo('🏠 Frota própria —', propria)
-      + grupo('🚛 Transportadoras —', terceiros);
+    /* Transportadoras primeiro (19/08/2026, pedido do gestor): é o bloco
+       maior e o que exige cobrança externa — a frota própria a casa
+       remaneja quando quiser, então fecha a lista. */
+    tbody.innerHTML = grupo('🚛 Transportadoras —', terceiros)
+      + grupo('🏠 Frota própria —', propria);
   } else {
     tbody.innerHTML = lista.map(linhaCarga).join('');
   }
