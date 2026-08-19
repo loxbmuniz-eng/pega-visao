@@ -203,7 +203,7 @@ describe('2. Trava de frota', () => {
 /* ------------------------------------------------------------------ */
 describe('3. Permissão por setor — validada no SERVIDOR', () => {
   test('Portaria não programa carga', async () => {
-    const { rows } = await pool.query('SELECT placa FROM dim_veiculos LIMIT 1');
+    const { rows } = await pool.query('SELECT placa FROM dim_veiculos ORDER BY placa LIMIT 1');
     const r = await req('/api/cargas', {
       metodo: 'POST', token: tokens['Portaria'],
       corpo: { placa: rows[0].placa, numeroCarga: '90003' },
@@ -212,7 +212,7 @@ describe('3. Permissão por setor — validada no SERVIDOR', () => {
   });
 
   test('setor forjado no CORPO da requisição é ignorado', async () => {
-    const { rows } = await pool.query('SELECT placa FROM dim_veiculos LIMIT 1');
+    const { rows } = await pool.query('SELECT placa FROM dim_veiculos ORDER BY placa LIMIT 1');
     const r = await req('/api/cargas', {
       metodo: 'POST', token: tokens['Portaria'],
       // Este era o furo da versão anterior: o setor vinha do cliente.
@@ -236,7 +236,7 @@ describe('3. Permissão por setor — validada no SERVIDOR', () => {
      existia e que ele tinha todo o direito de estar sincronizando. */
   test('reenviar POST de uma carga que JÁ EXISTE não é bloqueado pela trava de criação',
     async () => {
-      const { rows } = await pool.query('SELECT placa FROM dim_veiculos LIMIT 1 OFFSET 1');
+      const { rows } = await pool.query('SELECT placa FROM dim_veiculos ORDER BY placa LIMIT 1 OFFSET 1');
       const criar = await req('/api/cargas', {
         metodo: 'POST', token: tokens['Logística'],
         corpo: { placa: rows[0].placa, numeroCarga: '90005' },
@@ -273,8 +273,20 @@ describe('3. Permissão por setor — validada no SERVIDOR', () => {
    podeRegistrarChegadaSemProgramacao(), em dominio/fluxo.js — escrita e
    nunca chamada por nenhuma rota. ------------------------------------ */
 describe('3b. Chegada sem programação (Portaria)', () => {
+  /* Uma placa DIFERENTE por caso. Desde a trava de reentrada (bloco 20), um
+     caminhão com carga em aberto não "chega" de novo — reaproveitar a mesma
+     placa aqui faria o segundo caso bater naquela regra em vez de provar o
+     que ele se propõe a provar. */
+  let placas;
+  before(async () => {
+    const { rows } = await pool.query('SELECT placa FROM dim_veiculos ORDER BY placa LIMIT 4');
+    placas = rows.map((r) => r.placa);
+    await pool.query('DELETE FROM fact_statusfrota WHERE placa = ANY($1)', [placas]);
+    await pool.query('DELETE FROM fact_viagens WHERE placa = ANY($1)', [placas]);
+  });
+
   test('Portaria registra chegada sem programação — nasce em Aguardando Embarque', async () => {
-    const { rows } = await pool.query('SELECT placa FROM dim_veiculos LIMIT 1');
+    const rows = [{ placa: placas[0] }];
     const r = await req('/api/cargas', {
       metodo: 'POST', token: tokens['Portaria'],
       corpo: { id: 'chegada_1', placa: rows[0].placa, aguardandoCarga: true },
@@ -318,7 +330,7 @@ describe('3b. Chegada sem programação (Portaria)', () => {
   test('campos de negócio enviados pela Portaria são ignorados — servidor força a forma restrita', async () => {
     // Sem isto, "aguardandoCarga:true" viraria um jeito de driblar a
     // permissão e criar carga com peso/motorista/número arbitrários.
-    const { rows } = await pool.query('SELECT placa FROM dim_veiculos LIMIT 1');
+    const rows = [{ placa: placas[1] }];
     const r = await req('/api/cargas', {
       metodo: 'POST', token: tokens['Portaria'],
       corpo: {
@@ -335,7 +347,7 @@ describe('3b. Chegada sem programação (Portaria)', () => {
   });
 
   test('Logística também pode usar este caminho', async () => {
-    const { rows } = await pool.query('SELECT placa FROM dim_veiculos LIMIT 1');
+    const rows = [{ placa: placas[2] }];
     const r = await req('/api/cargas', {
       metodo: 'POST', token: tokens['Logística'],
       corpo: { id: 'chegada_4', placa: rows[0].placa, aguardandoCarga: true },
@@ -344,7 +356,7 @@ describe('3b. Chegada sem programação (Portaria)', () => {
   });
 
   test('Expedição e Faturamento continuam sem poder criar carga, mesmo com aguardandoCarga:true', async () => {
-    const { rows } = await pool.query('SELECT placa FROM dim_veiculos LIMIT 1');
+    const rows = [{ placa: placas[3] }];
     for (const setor of ['Expedição', 'Faturamento']) {
       const r = await req('/api/cargas', {
         metodo: 'POST', token: tokens[setor],
@@ -361,7 +373,7 @@ describe('4. Máquina de estados', () => {
   let placa;
 
   before(async () => {
-    const { rows } = await pool.query('SELECT placa FROM dim_veiculos OFFSET 5 LIMIT 1');
+    const { rows } = await pool.query('SELECT placa FROM dim_veiculos ORDER BY placa OFFSET 5 LIMIT 1');
     placa = rows[0].placa;
     const r = await req('/api/cargas', {
       metodo: 'POST', token: tokens['Logística'],
@@ -446,7 +458,7 @@ describe('5. Conflito e concorrência', () => {
   let cargaId;
 
   before(async () => {
-    const { rows } = await pool.query('SELECT placa FROM dim_veiculos OFFSET 9 LIMIT 1');
+    const { rows } = await pool.query('SELECT placa FROM dim_veiculos ORDER BY placa OFFSET 9 LIMIT 1');
     const r = await req('/api/cargas', {
       metodo: 'POST', token: tokens['Logística'],
       corpo: { placa: rows[0].placa, numeroCarga: '92000', peso: 1000 },
@@ -504,7 +516,7 @@ describe('5. Conflito e concorrência', () => {
   });
 
   test('reenvio da fila offline não duplica a carga', async () => {
-    const { rows } = await pool.query('SELECT placa FROM dim_veiculos OFFSET 12 LIMIT 1');
+    const { rows } = await pool.query('SELECT placa FROM dim_veiculos ORDER BY placa OFFSET 12 LIMIT 1');
     const corpo = { id: 'carga_fila_offline_1', placa: rows[0].placa, numeroCarga: '93000' };
     const a = await req('/api/cargas', { metodo: 'POST', token: tokens['Logística'], corpo });
     const b = await req('/api/cargas', { metodo: 'POST', token: tokens['Logística'], corpo });
@@ -531,7 +543,7 @@ describe('6. Leitura incremental', () => {
 
   test('?desde= traz o que mudou depois da marca', async () => {
     const marca = new Date().toISOString();
-    const { rows } = await pool.query('SELECT placa FROM dim_veiculos OFFSET 20 LIMIT 1');
+    const { rows } = await pool.query('SELECT placa FROM dim_veiculos ORDER BY placa OFFSET 20 LIMIT 1');
     await req('/api/cargas', {
       metodo: 'POST', token: tokens['Logística'],
       corpo: { placa: rows[0].placa, numeroCarga: '94000' },
@@ -558,7 +570,7 @@ describe('6. Leitura incremental', () => {
      isto é seguro. Este teste prova a ordem, não o corte em si (inserir
      5000 linhas deixaria a suíte lenta demais). */
   test('leitura completa vem do mais NOVO pro mais ANTIGO (prioriza o LIMIT certo)', async () => {
-    const { rows } = await pool.query('SELECT placa FROM dim_veiculos OFFSET 30 LIMIT 3');
+    const { rows } = await pool.query('SELECT placa FROM dim_veiculos ORDER BY placa OFFSET 30 LIMIT 3');
     const criadas = [];
     for (const [i, row] of rows.entries()) {
       const r = await req('/api/cargas', {
@@ -772,7 +784,7 @@ describe('7c. Logística cobre todos os postos', () => {
   let cargaId;
 
   before(async () => {
-    const { rows } = await pool.query('SELECT placa FROM dim_veiculos OFFSET 30 LIMIT 1');
+    const { rows } = await pool.query('SELECT placa FROM dim_veiculos ORDER BY placa OFFSET 30 LIMIT 1');
     const r = await req('/api/cargas', {
       metodo: 'POST', token: tokens['Logística'],
       corpo: { placa: rows[0].placa, numeroCarga: '95000' },
@@ -802,7 +814,7 @@ describe('7c. Logística cobre todos os postos', () => {
   });
 
   test('a Portaria continua SEM poder programar carga', async () => {
-    const { rows } = await pool.query('SELECT placa FROM dim_veiculos OFFSET 31 LIMIT 1');
+    const { rows } = await pool.query('SELECT placa FROM dim_veiculos ORDER BY placa OFFSET 31 LIMIT 1');
     const r = await req('/api/cargas', {
       metodo: 'POST', token: tokens['Portaria'],
       corpo: { placa: rows[0].placa, numeroCarga: '95001' },
@@ -817,7 +829,7 @@ describe('7d. Exclusão de carga programada', () => {
   let placa;
 
   before(async () => {
-    const { rows } = await pool.query('SELECT placa FROM dim_veiculos OFFSET 40 LIMIT 1');
+    const { rows } = await pool.query('SELECT placa FROM dim_veiculos ORDER BY placa OFFSET 40 LIMIT 1');
     placa = rows[0].placa;
     const r = await req('/api/cargas', {
       metodo: 'POST', token: tokens['Logística'],
@@ -899,7 +911,7 @@ describe('7d. Exclusão de carga programada', () => {
      Programação ao sair de "Aguardando Veículo" e não havia como agir sobre
      ela em lugar nenhum — travava a fila do pátio até alguém mexer no banco. */
   test('carga que já andou é CANCELADA, com motivo', async () => {
-    const { rows } = await pool.query('SELECT placa FROM dim_veiculos OFFSET 41 LIMIT 1');
+    const { rows } = await pool.query('SELECT placa FROM dim_veiculos ORDER BY placa OFFSET 41 LIMIT 1');
     const criada = await req('/api/cargas', {
       metodo: 'POST', token: tokens['Logística'],
       corpo: { placa: rows[0].placa, numeroCarga: '96001' },
@@ -938,7 +950,7 @@ describe('7d. Exclusão de carga programada', () => {
      está — e, pior, um dia alguém trocaria a ordem das checagens e a
      Expedição passaria a cancelar carga alheia. */
   test('setor restrito não cancela, nem carga que já andou', async () => {
-    const { rows } = await pool.query('SELECT placa FROM dim_veiculos OFFSET 43 LIMIT 1');
+    const { rows } = await pool.query('SELECT placa FROM dim_veiculos ORDER BY placa OFFSET 43 LIMIT 1');
     const criada = await req('/api/cargas', {
       metodo: 'POST', token: tokens['Logística'],
       corpo: { placa: rows[0].placa, numeroCarga: '96003' },
@@ -964,7 +976,7 @@ describe('7d. Exclusão de carga programada', () => {
      portaria e a nota existe — apagar é apagar o que aconteceu de
      verdade. Sem a flag explícita de confirmação, a recusa é firme. */
   test('carga que já seguiu viagem NÃO sai sem confirmação explícita', async () => {
-    const { rows } = await pool.query('SELECT placa FROM dim_veiculos OFFSET 42 LIMIT 1');
+    const { rows } = await pool.query('SELECT placa FROM dim_veiculos ORDER BY placa OFFSET 42 LIMIT 1');
     const criada = await req('/api/cargas', {
       metodo: 'POST', token: tokens['Logística'],
       corpo: { placa: rows[0].placa, numeroCarga: '96002' },
@@ -989,7 +1001,7 @@ describe('7d. Exclusão de carga programada', () => {
      de excluir (Logística/Administração), e ainda exige motivo, porque a
      carga tem histórico. */
   test('carga que já seguiu viagem SAI com forcarSeguiuViagem + motivo', async () => {
-    const { rows } = await pool.query('SELECT placa FROM dim_veiculos OFFSET 43 LIMIT 1');
+    const { rows } = await pool.query('SELECT placa FROM dim_veiculos ORDER BY placa OFFSET 45 LIMIT 1');
     const criada = await req('/api/cargas', {
       metodo: 'POST', token: tokens['Logística'],
       corpo: { placa: rows[0].placa, numeroCarga: '96004' },
@@ -1019,7 +1031,7 @@ describe('7d. Exclusão de carga programada', () => {
   });
 
   test('forcarSeguiuViagem continua bloqueado para setor sem permissão', async () => {
-    const { rows } = await pool.query('SELECT placa FROM dim_veiculos OFFSET 44 LIMIT 1');
+    const { rows } = await pool.query('SELECT placa FROM dim_veiculos ORDER BY placa OFFSET 44 LIMIT 1');
     const criada = await req('/api/cargas', {
       metodo: 'POST', token: tokens['Logística'],
       corpo: { placa: rows[0].placa, numeroCarga: '96005' },
@@ -1429,7 +1441,7 @@ describe('11. Setor Comercial — só leitura', () => {
   });
 
   test('NÃO cria carga', async () => {
-    const { rows } = await pool.query('SELECT placa FROM dim_veiculos LIMIT 1');
+    const { rows } = await pool.query('SELECT placa FROM dim_veiculos ORDER BY placa LIMIT 1');
     const r = await req('/api/cargas', {
       metodo: 'POST', token: tokenComercial,
       corpo: { placa: rows[0].placa, numeroCarga: '90090' },
@@ -1438,7 +1450,7 @@ describe('11. Setor Comercial — só leitura', () => {
   });
 
   test('NÃO registra chegada sem programação', async () => {
-    const { rows } = await pool.query('SELECT placa FROM dim_veiculos LIMIT 1 OFFSET 2');
+    const { rows } = await pool.query('SELECT placa FROM dim_veiculos ORDER BY placa LIMIT 1 OFFSET 2');
     const r = await req('/api/cargas', {
       metodo: 'POST', token: tokenComercial,
       corpo: { placa: rows[0].placa, aguardandoCarga: true },
@@ -1449,7 +1461,7 @@ describe('11. Setor Comercial — só leitura', () => {
   test('NÃO exclui carga', async () => {
     const criar = await req('/api/cargas', {
       metodo: 'POST', token: tokens['Logística'],
-      corpo: { placa: (await pool.query('SELECT placa FROM dim_veiculos LIMIT 1 OFFSET 3')).rows[0].placa, numeroCarga: '90091' },
+      corpo: { placa: (await pool.query('SELECT placa FROM dim_veiculos ORDER BY placa LIMIT 1 OFFSET 3')).rows[0].placa, numeroCarga: '90091' },
     });
     assert.equal(criar.status, 201, criar.texto);
     const r = await req(`/api/cargas/${criar.json.id}`, { metodo: 'DELETE', token: tokenComercial });
@@ -1471,7 +1483,7 @@ describe('11. Setor Comercial — só leitura', () => {
        de forma determinística. */
     const criar = await req('/api/cargas', {
       metodo: 'POST', token: tokens['Logística'],
-      corpo: { placa: (await pool.query('SELECT placa FROM dim_veiculos LIMIT 1 OFFSET 4')).rows[0].placa, numeroCarga: '90092' },
+      corpo: { placa: (await pool.query('SELECT placa FROM dim_veiculos ORDER BY placa LIMIT 1 OFFSET 4')).rows[0].placa, numeroCarga: '90092' },
     });
     assert.equal(criar.status, 201, criar.texto);
     const r = await req(`/api/cargas/${criar.json.id}/status`, {
@@ -1534,7 +1546,7 @@ describe('12. Fechamento de Programação — senha mestre libera com carga em a
      resta — e que estes testes fixam — é que fechar NÃO apaga nem
      esconde carga: ela continua em fact_viagens, em aberto. */
   test('sem senha, carga em andamento pede a senha (não fecha em silêncio)', async () => {
-    const { rows } = await pool.query('SELECT placa FROM dim_veiculos LIMIT 1 OFFSET 5');
+    const { rows } = await pool.query('SELECT placa FROM dim_veiculos ORDER BY placa LIMIT 1 OFFSET 5');
     const criar = await req('/api/cargas', {
       metodo: 'POST', token: tokens['Logística'],
       corpo: { placa: rows[0].placa, numeroCarga: '90200' },
@@ -1826,7 +1838,7 @@ describe('15. Data de programação é gravável uma vez só', () => {
   let idCarga;
 
   before(async () => {
-    const { rows } = await pool.query('SELECT placa FROM dim_veiculos LIMIT 1');
+    const { rows } = await pool.query('SELECT placa FROM dim_veiculos ORDER BY placa LIMIT 1');
     idCarga = `prog_em_${Date.now()}`;
     // Nasce como chegada sem programação: sem data de programação ainda.
     await pool.query(
@@ -1889,7 +1901,7 @@ describe('16. Observação não é apagada por eco de sincronização', () => {
   let idCarga;
 
   before(async () => {
-    const { rows } = await pool.query('SELECT placa FROM dim_veiculos LIMIT 1');
+    const { rows } = await pool.query('SELECT placa FROM dim_veiculos ORDER BY placa LIMIT 1');
     idCarga = `obs_eco_${Date.now()}`;
     await pool.query(
       `INSERT INTO fact_viagens (carga_id, numero_carga, placa, status_atual, observacoes)
@@ -1954,7 +1966,7 @@ describe('17. Lançar a carga carimba a data mesmo com painel antigo', () => {
   let idCarga;
 
   before(async () => {
-    const { rows } = await pool.query('SELECT placa FROM dim_veiculos LIMIT 1');
+    const { rows } = await pool.query('SELECT placa FROM dim_veiculos ORDER BY placa LIMIT 1');
     idCarga = `sem_prog_${Date.now()}`;
     // Chegada de ontem, ainda sem carga lançada e sem data de programação —
     // o estado em que a migration 008 deixa quem está no pátio.
@@ -2022,7 +2034,7 @@ describe('18. Carga lançada não volta para "Aguardando Carga"', () => {
   let idCarga;
 
   before(async () => {
-    const { rows } = await pool.query('SELECT placa FROM dim_veiculos LIMIT 1');
+    const { rows } = await pool.query('SELECT placa FROM dim_veiculos ORDER BY placa LIMIT 1');
     idCarga = `volta_aguard_${Date.now()}`;
     // Carga JÁ LANÇADA: tem peso, rota e não está aguardando dados.
     await pool.query(
@@ -2055,7 +2067,7 @@ describe('18. Carga lançada não volta para "Aguardando Carga"', () => {
 
   test('o caminho normal (lançar a carga) continua funcionando', async () => {
     const id2 = `lanca_ok_${Date.now()}`;
-    const { rows: v } = await pool.query('SELECT placa FROM dim_veiculos LIMIT 1');
+    const { rows: v } = await pool.query('SELECT placa FROM dim_veiculos ORDER BY placa LIMIT 1');
     await pool.query(
       `INSERT INTO fact_viagens (carga_id, numero_carga, placa, aguardando_carga, status_atual)
        VALUES ($1,'Aguardando Carga',$2,TRUE,'Aguardando Embarque')`,
@@ -2101,7 +2113,7 @@ describe('19. Revisões e Restaurar (Administração)', () => {
     });
     tokenAdmin = r.json.token;
 
-    const { rows } = await pool.query('SELECT placa FROM dim_veiculos LIMIT 1');
+    const { rows } = await pool.query('SELECT placa FROM dim_veiculos ORDER BY placa LIMIT 1');
     idCarga = `rev_${Date.now()}`;
     await pool.query(
       `INSERT INTO fact_viagens (carga_id, numero_carga, placa, status_atual,
@@ -2173,5 +2185,171 @@ describe('19. Revisões e Restaurar (Administração)', () => {
       metodo: 'POST', token: tokens['Logística'], corpo: { revisaoId: 1 },
     });
     assert.equal(r.status, 403);
+  });
+});
+
+/* ---------------------------------------------------------------------
+   20. Caminhão com carga em aberto não "chega" de novo
+   ---------------------------------------------------------------------
+   Relato de produção (19/08/2026, placa real omitida): o caminhão saiu
+   fisicamente, a Portaria não registrou a saída, e no dia seguinte o
+   porteiro digitou a placa e clicou "Chegou". O sistema aceitou: nasceu uma
+   SEGUNDA carga para a mesma placa, e o processo da primeira — que estava em
+   Faturado — ficou órfão na tela de todo mundo.
+
+   A regra, dita pelo gestor: "se o veículo tiver status em aberto, a
+   portaria não pode conseguir alterar. Para ele aceitar que chegou, teria
+   que ter dado saída antes."
+
+   A trava mora no SERVIDOR porque o painel pode estar com a lista velha —
+   foi exatamente o que aconteceu: no terminal da portaria a carga anterior
+   não estava à vista, então a checagem local não tinha o que checar. -- */
+describe('20. Chegada bloqueada enquanto a placa tem carga em aberto', () => {
+  let placa;
+
+  before(async () => {
+    const { rows } = await pool.query('SELECT placa FROM dim_veiculos ORDER BY placa OFFSET 60 LIMIT 1');
+    placa = rows[0].placa;
+    await pool.query('DELETE FROM fact_statusfrota WHERE placa = $1', [placa]);
+    await pool.query('DELETE FROM fact_viagens WHERE placa = $1', [placa]);
+  });
+
+  test('a primeira chegada passa', async () => {
+    const r = await req('/api/cargas', {
+      metodo: 'POST', token: tokens['Portaria'],
+      corpo: { id: 'reentrada_1', placa, aguardandoCarga: true },
+    });
+    assert.equal(r.status, 201, r.texto);
+  });
+
+  test('a segunda chegada é RECUSADA enquanto a carga anterior está aberta', async () => {
+    const r = await req('/api/cargas', {
+      metodo: 'POST', token: tokens['Portaria'],
+      corpo: { id: 'reentrada_2', placa, aguardandoCarga: true },
+    });
+    assert.equal(r.status, 409, r.texto);
+    assert.equal(r.json.codigo, 'PLACA_COM_CARGA_ABERTA');
+    // A mensagem precisa ENSINAR a saída: travar sem dizer o que fazer
+    // devolve o problema para o portão.
+    assert.ok(/sa[ií]da/i.test(r.json.erro), r.json.erro);
+  });
+
+  test('vale também quando a carga aberta está em Faturado — o caso real', async () => {
+    for (const [setor, status] of [['Expedição', 'Embarque Iniciado'],
+      ['Expedição', 'Embarque Finalizado'], ['Faturamento', 'Faturado']]) {
+      const t = await req('/api/cargas/reentrada_1/status', {
+        metodo: 'POST', token: tokens[setor], corpo: { status },
+      });
+      assert.equal(t.status, 200, t.texto);
+    }
+    const r = await req('/api/cargas', {
+      metodo: 'POST', token: tokens['Portaria'],
+      corpo: { id: 'reentrada_3', placa, aguardandoCarga: true },
+    });
+    assert.equal(r.status, 409, r.texto);
+    assert.equal(r.json.codigo, 'PLACA_COM_CARGA_ABERTA');
+  });
+
+  test('depois da SAÍDA, a mesma placa chega de novo normalmente', async () => {
+    const saida = await req('/api/portaria/saida', {
+      metodo: 'POST', token: tokens['Portaria'], corpo: { placa },
+    });
+    assert.equal(saida.status, 200, saida.texto);
+
+    const r = await req('/api/cargas', {
+      metodo: 'POST', token: tokens['Portaria'],
+      corpo: { id: 'reentrada_4', placa, aguardandoCarga: true },
+    });
+    assert.equal(r.status, 201, r.texto);
+    assert.equal(r.json.status, 'Aguardando Embarque');
+  });
+
+  test('a programação da Logística segue livre — a trava é da chegada', async () => {
+    /* A Logística PODE programar a próxima carga do caminhão que ainda está
+       no pátio: é assim que se monta o dia seguinte. O que não pode é a
+       Portaria dizer que ele chegou sem ele ter saído. */
+    const r = await req('/api/cargas', {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { id: 'reentrada_5', placa, numeroCarga: '9911', cliente: 'CLIENTE',
+               destino: 'DESTINO', peso: 1000 },
+    });
+    assert.equal(r.status, 201, r.texto);
+  });
+});
+
+/* ---------------------------------------------------------------------
+   21. Chegada não promove programação enquanto o caminhão não saiu
+   ---------------------------------------------------------------------
+   O bloco 20 tratou da chegada que CRIA carga. Este trata do outro caminho,
+   que foi o do caso real: a placa tinha DUAS cargas — uma faturada de
+   ontem, sem saída registrada, e uma programada para hoje. O "Chegou"
+   promoveu a de hoje (Aguardando Veículo → Aguardando Embarque) e seguiu
+   como se nada houvesse, deixando a de ontem pendurada.
+
+   Enquanto existir carga da placa em Aguardando Embarque ou depois, o
+   sistema entende que aquele caminhão ESTÁ no pátio. Registrar chegada de
+   novo é dizer que ele chegou duas vezes sem nunca ter saído. ---------- */
+describe('21. Chegada com carga pendente não promove a programação', () => {
+  let placa;
+
+  before(async () => {
+    const { rows } = await pool.query('SELECT placa FROM dim_veiculos ORDER BY placa OFFSET 61 LIMIT 1');
+    placa = rows[0].placa;
+    await pool.query('DELETE FROM fact_statusfrota WHERE placa = $1', [placa]);
+    await pool.query('DELETE FROM fact_viagens WHERE placa = $1', [placa]);
+
+    // A carga de ontem: chegou, embarcou, faturou — e ninguém deu a saída.
+    await req('/api/cargas', {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { id: 'pend_ontem', placa, numeroCarga: '8801', cliente: 'C', destino: 'D', peso: 1000 },
+    });
+    for (const [setor, status] of [['Portaria', 'Aguardando Embarque'],
+      ['Expedição', 'Embarque Iniciado'], ['Expedição', 'Embarque Finalizado'],
+      ['Faturamento', 'Faturado']]) {
+      const r = await req('/api/cargas/pend_ontem/status', {
+        metodo: 'POST', token: tokens[setor], corpo: { status },
+      });
+      assert.equal(r.status, 200, r.texto);
+    }
+    // A carga de hoje, recém-programada para a MESMA placa.
+    await req('/api/cargas', {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { id: 'pend_hoje', placa, numeroCarga: '8802', cliente: 'C', destino: 'D', peso: 1000 },
+    });
+  });
+
+  test('a Portaria NÃO consegue marcar a chegada da carga de hoje', async () => {
+    const r = await req('/api/cargas/pend_hoje/status', {
+      metodo: 'POST', token: tokens['Portaria'], corpo: { status: 'Aguardando Embarque' },
+    });
+    assert.equal(r.status, 409, r.texto);
+    assert.equal(r.json.codigo, 'PLACA_COM_CARGA_ABERTA');
+    assert.ok(/sa[ií]da/i.test(r.json.erro), r.json.erro);
+
+    const { rows } = await pool.query(
+      'SELECT status_atual FROM fact_viagens WHERE carga_id = $1', ['pend_hoje']);
+    assert.equal(rows[0].status_atual, 'Aguardando Veículo', 'a carga de hoje não pode ter andado');
+  });
+
+  test('depois da SAÍDA da carga pendente, a chegada de hoje passa', async () => {
+    const saida = await req('/api/portaria/saida', {
+      metodo: 'POST', token: tokens['Portaria'], corpo: { placa },
+    });
+    assert.equal(saida.status, 200, saida.texto);
+
+    const r = await req('/api/cargas/pend_hoje/status', {
+      metodo: 'POST', token: tokens['Portaria'], corpo: { status: 'Aguardando Embarque' },
+    });
+    assert.equal(r.status, 200, r.texto);
+    assert.equal(r.json.status, 'Aguardando Embarque');
+  });
+
+  test('as etapas seguintes da MESMA carga seguem livres', async () => {
+    /* A trava é só da CHEGADA. Um caminhão com duas cargas no mesmo dia
+       continua andando normalmente: chegou uma vez, embarca as duas. */
+    const r = await req('/api/cargas/pend_hoje/status', {
+      metodo: 'POST', token: tokens['Expedição'], corpo: { status: 'Embarque Iniciado' },
+    });
+    assert.equal(r.status, 200, r.texto);
   });
 });

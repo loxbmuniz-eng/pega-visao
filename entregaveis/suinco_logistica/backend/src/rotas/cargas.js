@@ -122,6 +122,50 @@ rotasCargas.post('/cargas', exigirLogin, async (req, res, next) => {
       });
     }
 
+    /* CAMINHÃO QUE NÃO SAIU NÃO CHEGA DE NOVO (19/08/2026).
+
+       Relato do gestor: um caminhão saiu do pátio, a Portaria não registrou
+       a saída, e no dia seguinte o porteiro digitou a placa e clicou
+       "Chegou". Nasceu uma SEGUNDA carga para a mesma placa e o processo da
+       primeira — já em Faturado — ficou órfão: "ele aceitou e agora ele
+       sumiu".
+
+       A regra: "se o veículo tiver status em aberto, a portaria não pode
+       conseguir alterar. Para ele aceitar que chegou, teria que ter dado
+       saída antes."
+
+       A trava mora aqui, e não no painel, porque o painel do porteiro pode
+       estar com a lista velha — foi o que aconteceu: no terminal dele a
+       carga anterior não estava à vista, então a checagem local não tinha
+       o que checar. O servidor sempre tem.
+
+       Vale só para a CHEGADA. A Logística continua programando livremente a
+       próxima carga de um caminhão que ainda está no pátio — é assim que se
+       monta o dia seguinte. */
+    if (chegadaSemProgramacao && !jaExistia) {
+      const { rows: abertas } = await consultar(
+        `SELECT carga_id, numero_carga, status_atual
+           FROM fact_viagens
+          WHERE placa = $1 AND status_atual <> 'Seguiu Viagem' AND excluida_em IS NULL
+          ORDER BY atualizado_em DESC`,
+        [placa]
+      );
+      if (abertas[0]) {
+        const lista = abertas
+          .map((c) => `${c.numero_carga || 'sem número'} (${c.status_atual})`)
+          .join(', ');
+        return res.status(409).json({
+          erro: `${placa} ainda tem ${abertas.length} carga(s) em aberto: ${lista}. `
+            + 'Registre a SAÍDA desse caminhão antes de registrar a chegada dele de novo — '
+            + 'sem isso o processo anterior fica pendurado e some da fila dos outros setores.',
+          codigo: 'PLACA_COM_CARGA_ABERTA',
+          cargasAbertas: abertas.map((c) => ({
+            id: c.carga_id, numeroCarga: c.numero_carga, status: c.status_atual,
+          })),
+        });
+      }
+    }
+
     const dados = chegadaSemProgramacao
       ? saneiarCriacaoChegadaSemProgramacao(req.body, frotaRows[0])
       : saneiarCriacao(req.body, frotaRows[0]);
@@ -413,6 +457,31 @@ rotasCargas.post('/cargas/:id/status', exigirLogin, async (req, res, next) => {
       // automático — nada fica gravado pela metade.
       validarTransicao(carga.status_atual, statusNovo, op.setor);
 
+      /* CHEGADA com outra carga da placa ainda no pátio (19/08/2026).
+
+         O caso real tinha DUAS cargas na mesma placa: uma faturada do dia
+         anterior, sem saída registrada, e uma programada para o dia. O
+         "Chegou" promoveu a de hoje e seguiu como se nada houvesse,
+         deixando a de ontem pendurada — "ele aceitou e agora ele sumiu".
+
+         Enquanto existir carga da placa em Aguardando Embarque ou depois, o
+         sistema entende que aquele caminhão ESTÁ no pátio: registrar
+         chegada de novo é dizer que ele chegou duas vezes sem nunca ter
+         saído. As demais etapas da mesma carga seguem livres — a trava é só
+         da chegada. */
+      if (statusNovo === 'Aguardando Embarque') {
+        const { rows: noPatio } = await cli.query(
+          `SELECT carga_id, numero_carga, status_atual
+             FROM fact_viagens
+            WHERE placa = $1 AND carga_id <> $2 AND excluida_em IS NULL
+              AND status_atual NOT IN ('Aguardando Veículo', 'Seguiu Viagem')`,
+          [carga.placa, id]
+        );
+        if (noPatio[0]) {
+          return { bloqueadaPorPendencia: noPatio, placa: carga.placa };
+        }
+      }
+
       const atualizada = await cli.query(
         `UPDATE fact_viagens
             SET status_atual = $1, operador_id = $2, operador_nome = $3, operador_setor = $4
@@ -435,6 +504,21 @@ rotasCargas.post('/cargas/:id/status', exigirLogin, async (req, res, next) => {
 
     if (resultado.naoEncontrada) {
       return res.status(404).json({ erro: 'Carga não encontrada.', codigo: 'CARGA_NAO_ENCONTRADA' });
+    }
+
+    if (resultado.bloqueadaPorPendencia) {
+      const lista = resultado.bloqueadaPorPendencia
+        .map((c) => `${c.numero_carga || 'sem número'} (${c.status_atual})`)
+        .join(', ');
+      return res.status(409).json({
+        erro: `${resultado.placa} ainda tem carga em aberto no pátio: ${lista}. `
+          + 'Registre a SAÍDA desse caminhão antes de marcar a chegada dele de novo — '
+          + 'sem isso o processo anterior fica pendurado e some da fila dos outros setores.',
+        codigo: 'PLACA_COM_CARGA_ABERTA',
+        cargasAbertas: resultado.bloqueadaPorPendencia.map((c) => ({
+          id: c.carga_id, numeroCarga: c.numero_carga, status: c.status_atual,
+        })),
+      });
     }
 
     const payload = paraPainel(resultado.linha);

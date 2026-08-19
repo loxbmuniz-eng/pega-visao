@@ -1476,6 +1476,22 @@ function registrarChegadaPortaria(placa, operador){
 
   const paraAtualizar = abertas.filter(c => c.status === 'Aguardando Veículo');
   const jaNoPatio = abertas.filter(c => c.status !== 'Aguardando Veículo');
+
+  /* CAMINHÃO QUE NÃO SAIU NÃO CHEGA DE NOVO (19/08/2026).
+
+     O caso real tinha DUAS cargas na mesma placa: uma faturada do dia
+     anterior, sem saída registrada, e uma programada para o dia. O "Chegou"
+     promovia a de hoje e seguia como se nada houvesse, deixando a de ontem
+     pendurada — "ele aceitou e agora ele sumiu".
+
+     Enquanto houver carga da placa em Aguardando Embarque ou depois, o
+     sistema entende que o caminhão ESTÁ no pátio. Se ele foi embora sem
+     baixa, o que falta é a SAÍDA, não a chegada. Nada é alterado aqui: o
+     servidor recusa igual (PLACA_COM_CARGA_ABERTA), e esta checagem é para
+     o porteiro saber na hora, sem esperar a rede. */
+  if(jaNoPatio.length){
+    return {criadas:[], atualizadas:[], jaNoPatio, bloqueadaPorPendencia:true};
+  }
   paraAtualizar.forEach(c=>{
     registrarMovimentacao({cargaId:c.id, placa:p, statusAnterior:c.status, statusNovo:'Aguardando Embarque', operador, setor:'Portaria', ...snapshotCarga(c)});
     c.status = 'Aguardando Embarque';
