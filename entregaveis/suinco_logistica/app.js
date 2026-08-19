@@ -3649,6 +3649,72 @@ async function corrigirDataProgramacaoUI(id){
   }
 }
 
+/* Cargas excluídas — a tela que faltava para o "devolver" ter onde ser
+   clicado (19/08/2026).
+
+   A leitura do painel filtra as excluídas de propósito: o pátio é o que
+   está em operação. O efeito colateral era que uma carga excluída por
+   engano ficava sem tela nenhuma, e a única saída era o banco. Aqui a
+   Administração busca (opcionalmente por placa), vê o que foi excluído e
+   devolve com motivo. */
+async function carregarCargasExcluidasUI(){
+  const alvo = document.getElementById('exc-lista');
+  if(!alvo) return;
+  if((DB.operador||{}).setor !== 'Administração'){
+    alvo.innerHTML = '<div class="card-sub">Só a Administração vê as cargas excluídas.</div>';
+    return;
+  }
+  const placa = ((document.getElementById('exc-placa')||{}).value||'').trim();
+  alvo.innerHTML = '<div class="card-sub">Buscando…</div>';
+  let lista;
+  try{
+    lista = await SuincoSharePoint.listarExcluidas(placa);
+  }catch(e){
+    alvo.innerHTML = `<div class="card-sub">Não consegui buscar: ${esc(e.message||'erro')}</div>`;
+    return;
+  }
+  if(!lista.length){
+    alvo.innerHTML = '<div class="card-sub">Nenhuma carga excluída'
+      + (placa ? ` para a placa ${esc(normalizarPlaca(placa))}` : '') + '.</div>';
+    return;
+  }
+  alvo.innerHTML = `
+    <div class="table-wrap">
+      <table class="tabela-patio">
+        <thead><tr>
+          <th>Placa</th><th>Nº Carga</th><th>Status quando saiu</th>
+          <th>Cliente</th><th>Destino</th><th>Programada</th><th class="no-print"></th>
+        </tr></thead>
+        <tbody>${lista.map(c=>`
+          <tr>
+            <td><strong>${esc(c.placa)}</strong></td>
+            <td>${esc(c.numeroCarga||'—')}</td>
+            <td>${badgeHtml(c.status)}</td>
+            <td>${esc(c.cliente||'—')}</td>
+            <td>${esc(c.destino||'—')}</td>
+            <td>${esc(String(c.programadoEm||c.criadoEm||'').slice(0,10).split('-').reverse().join('/'))}</td>
+            <td class="no-print"><button class="btn btn-sec btn-sm"
+              onclick="devolverCargaExcluidaUI('${escJs(c.id)}')">↩ Devolver</button></td>
+          </tr>`).join('')}</tbody>
+      </table>
+    </div>`;
+}
+
+async function devolverCargaExcluidaUI(id){
+  const motivo = (prompt('Por que esta carga está voltando?\n\n'
+    + 'O motivo fica registrado no histórico com o seu nome.')||'').trim();
+  if(!motivo) return;
+  try{
+    await SuincoSharePoint.desfazerExclusao(id, motivo);
+    await SuincoSharePoint.sincronizarAgora();
+    notifyGravacao('Carga devolvida ao painel.');
+    renderAll();
+    carregarCargasExcluidasUI();
+  }catch(e){
+    notify('Não consegui devolver a carga: ' + (e.message||'erro'), 'danger', 9000);
+  }
+}
+
 /* ---------- HISTÓRICO ---------- */
 /* Log SEM tamanho máximo: cada mudança de status de cada carga, pra sempre.
    Diferente da Frota (importação parada em 749 placas), este array só

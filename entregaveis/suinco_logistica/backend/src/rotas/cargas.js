@@ -1076,3 +1076,29 @@ rotasCargas.post('/cargas/:id/corrigir-etapa', exigirLogin, exigirSetor(), async
     return next(e);
   }
 });
+
+/* Lista as cargas EXCLUÍDAS — só a Administração.
+
+   A leitura completa do painel filtra `excluida_em IS NULL` de propósito: o
+   pátio é o que está em operação. Só que isso deixava a carga excluída sem
+   nenhuma tela — inclusive para desfazer a exclusão, que virou botão em
+   19/08/2026 e não tinha onde ser clicado. Esta rota existe para essa tela,
+   e por isso é enxuta: as últimas exclusões, com o essencial para
+   reconhecer a carga. */
+rotasCargas.get('/cargas-excluidas', exigirLogin, exigirSetor(), async (req, res, next) => {
+  try {
+    const placa = String(req.query.placa || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10);
+    const params = [];
+    let filtro = 'excluida_em IS NOT NULL';
+    if (placa) { params.push(placa); filtro += ` AND placa = $${params.length}`; }
+
+    const { rows } = await consultar(
+      `SELECT ${COLUNAS_CARGA} FROM fact_viagens
+        WHERE ${filtro} ORDER BY excluida_em DESC LIMIT 200`,
+      params
+    );
+    return res.json(rows.map(paraPainel));
+  } catch (e) {
+    return next(e);
+  }
+});
