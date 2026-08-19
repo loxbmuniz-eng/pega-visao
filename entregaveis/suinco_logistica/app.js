@@ -1677,6 +1677,8 @@ function renderTorre(){
      criação da carga: um caminhão programado ontem que só saiu hoje
      conta em hoje. */
   const hoje = new Date(); hoje.setHours(0,0,0,0);
+  // Sobras da programação anterior — ver ehProgramacaoAntiga().
+  const antigasCount = abertas.filter(ehProgramacaoAntiga).length;
   const seguiuViagemHojeCount = DB.cargas.filter(c=>{
     if(c.status !== 'Seguiu Viagem') return false;
     const saida = primeiroTimestamp(c.id, 'Seguiu Viagem');
@@ -1716,6 +1718,9 @@ function renderTorre(){
     caixa(abertas.length, 'Cargas em aberto', {destaque:true, filtro:'__TODAS__'})
     + statusVisiveis.map(s=>caixa(porStatus[s]||0, s, {filtro:s})).join('')
     + caixa(seguiuViagemHojeCount, 'Seguiu Viagem hoje', {destaque:true, filtro:'__SEGUIU_HOJE__'})
+    + caixa(antigasCount, 'Programação anterior',
+            {alerta:true, nota:'ainda em aberto de outros dias',
+             filtro:'__PENDENTES_ANTIGAS__'})
     + caixa(aguardandoCargaCount, 'Entradas sem carga',
             {nota:'resolver na Programação', filtro:'__IR_PROGRAMACAO__'});
   animarContadoresTorre();
@@ -1731,12 +1736,26 @@ function renderTorre(){
       const saida = primeiroTimestamp(c.id, 'Seguiu Viagem');
       return saida && new Date(saida) >= hoje;
     });
+  } else if(_torreFiltroStatus === '__PENDENTES_ANTIGAS__'){
+    lista = abertas.filter(ehProgramacaoAntiga);
   } else if(_torreFiltroStatus){
     lista = abertas.filter(c=>c.status === _torreFiltroStatus);
   } else {
     lista = abertas;
   }
-  lista = lista.slice().sort(ordenarPorSequenciaEAtualizacao);
+  /* Hoje primeiro, sobras depois — e cada bloco na ordem de sempre
+     (sequência, depois última movimentação). É o que separa o joio do
+     trigo sem esconder nem o joio nem o trigo. */
+  lista = lista.slice().sort((a,b)=>{
+    const ga = ehProgramacaoAntiga(a) ? 1 : 0;
+    const gb = ehProgramacaoAntiga(b) ? 1 : 0;
+    if(ga !== gb) return ga - gb;
+    if(ga === 1){
+      const da = diasDesdeProgramacao(a), db = diasDesdeProgramacao(b);
+      if(da !== db) return da - db;   // ontem antes de anteontem
+    }
+    return ordenarPorSequenciaEAtualizacao(a,b);
+  });
 
   const thead = document.getElementById('torre-thead');
   if(thead){
@@ -1767,8 +1786,25 @@ function renderTorre(){
   // lugar. Só quem já podia cancelar/excluir (Logística/Administração)
   // ganha os campos editáveis; os demais setores continuam com texto.
   const editavel = podeCancelarCarga();
+  /* A FAIXA QUE SEPARA OS DOIS DIAS.
+
+     Uma tabela só (não duas): a Torre é impressa, filtrada e ordenada como
+     um bloco, e partir o HTML em duas tabelas duplicaria cabeçalho, ações e
+     estado vazio. A faixa cumpre o mesmo papel na leitura e some sozinha
+     quando não há sobra nenhuma. */
+  const colunasTorre = editavel ? 12 : 11;
+  const antigasNaLista = lista.filter(ehProgramacaoAntiga).length;
+  const idPrimeiraAntiga = antigasNaLista && _torreFiltroStatus !== '__PENDENTES_ANTIGAS__'
+    ? lista.find(ehProgramacaoAntiga).id : null;
+  const faixa = (c)=> c.id === idPrimeiraAntiga
+    ? `<tr class="torre-sep"><td colspan="${colunasTorre}">`
+      + `⏳ Programação anterior — ${antigasNaLista} carga(s) que ainda não seguiram viagem. `
+      + `<span class="torre-sep-nota">Ficam aqui até serem concluídas; não entram na programação de hoje.</span>`
+      + `</td></tr>`
+    : '';
   tbody.innerHTML = lista.map(c=>`
-    <tr>
+    ${faixa(c)}
+    <tr class="${ehProgramacaoAntiga(c) ? 'linha-prog-antiga' : ''}">
       <td>${editavel
         ? `<input type="number" class="seq-input" value="${c.sequencia ?? ''}" onchange="atualizarSequenciaUI('${escJs(c.id)}',this.value)" title="Sequência livre.">`
         : (c.sequencia ?? '—')}</td>
@@ -1807,7 +1843,10 @@ function renderTorre(){
   const vazio = document.getElementById('torre-empty');
   vazio.hidden = lista.length>0;
   if(!vazio.hidden){
-    vazio.innerHTML = _torreFiltroStatus
+    vazio.innerHTML = _torreFiltroStatus === '__PENDENTES_ANTIGAS__'
+      ? 'Nenhuma pendência de programações anteriores — o pátio está só com a programação de hoje.'
+        + '<span class="empty-acao"><button class="btn btn-sec btn-sm" onclick="filtrarTorrePorStatus(\'__TODAS__\')">Ver todas em aberto</button></span>'
+      : _torreFiltroStatus
       ? 'Nenhuma carga com esse status agora.'
         + '<span class="empty-acao"><button class="btn btn-sec btn-sm" onclick="filtrarTorrePorStatus(\'__TODAS__\')">Ver todas em aberto</button></span>'
       : 'Nenhuma carga em aberto no momento.';
@@ -2084,9 +2123,23 @@ function renderProgFila(){
 
      A carga NÃO é escondida do sistema: continua na Torre de Controle, no
      Histórico e nos relatórios. Só sai desta fila específica. */
+  /* O DIA É O DA PROGRAMAÇÃO, NÃO O DO REGISTRO (19/08/2026).
+
+     Esta fila usava `criadoEm` — o instante em que a LINHA nasceu no banco.
+     São coisas diferentes, e a diferença aparece todo dia:
+
+       · carga programada às 22h de ontem PARA HOJE tinha criadoEm de ontem
+         e sumia da fila de hoje;
+       · caminhão que entrou pela Portaria dias atrás e teve a carga lançada
+         hoje carregava o criadoEm da ENTRADA — "não é pra ser o dia que o
+         carro deu entrada".
+
+     `programadoEm` é o carimbo de quando a carga foi programada/lançada, e
+     é gravável uma vez só justamente para não escorregar depois. É ele que
+     responde "isto é trabalho de hoje?". */
   const hoje = new Date(); hoje.setHours(0,0,0,0);
   const doDia = (c)=>{
-    const base = c.criadoEm || c.atualizadoEm;
+    const base = c.programadoEm || c.criadoEm || c.atualizadoEm;
     if(!base) return true;   // sem data conhecida, melhor mostrar que sumir
     const d = new Date(base); d.setHours(0,0,0,0);
     return d.getTime() === hoje.getTime();
@@ -2195,8 +2248,35 @@ function atualizarMotoristaUI(id, val){
    em" não denuncia (ela mexe a cada toque, mesmo sem a carga andar).
    Carga de HOJE aparece só como hora, pra não poluir a coluna com a data
    repetida em toda linha no dia normal. */
+/* PROGRAMAÇÃO DE HOJE x PENDÊNCIA DE PROGRAMAÇÃO ANTERIOR (19/08/2026).
+
+   Pedido do gestor, no mesmo dia em que a data de programação foi
+   corrigida: "manter na torre de controle o que não passou por todas as
+   etapas ainda da programação antiga, SEM ATRAPALHAR a programação nova".
+
+   As duas coisas convivem na Torre — carga de ontem que não seguiu viagem
+   não pode sumir —, mas não podem se misturar na leitura: quem abre a Torre
+   de manhã precisa ver o dia de hoje inteiro primeiro e as sobras do dia
+   anterior claramente marcadas embaixo, não uma lista única em que os dois
+   dias se confundem.
+
+   O dia é o da PROGRAMAÇÃO (programadoEm), nunca o da entrada do veículo. */
+function diasDesdeProgramacao(c){
+  const base = c.programadoEm || c.criadoEm || c.atualizadoEm;
+  if(!base) return 0;
+  const d = new Date(base);
+  if(isNaN(d)) return 0;
+  d.setHours(0,0,0,0);
+  const hoje = new Date(); hoje.setHours(0,0,0,0);
+  return Math.max(0, Math.round((hoje - d) / 86400000));
+}
+function ehProgramacaoAntiga(c){ return diasDesdeProgramacao(c) >= 1; }
+
 function dataProgramacaoHtml(c){
-  const base = c.criadoEm || c.atualizadoEm;
+  // Data da PROGRAMAÇÃO (mesma regra da fila): `criadoEm` é quando a linha
+  // nasceu — numa carga vinda de entrada da Portaria, é o dia em que o
+  // caminhão entrou, não o dia em que ela foi programada.
+  const base = c.programadoEm || c.criadoEm || c.atualizadoEm;
   if(!base) return '<span class="text-dim">—</span>';
   const d = new Date(base);
   if(isNaN(d)) return '<span class="text-dim">—</span>';

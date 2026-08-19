@@ -1853,17 +1853,31 @@ describe('15. Data de programação é gravável uma vez só', () => {
     await pool.query('DELETE FROM fact_viagens WHERE carga_id = $1', [idCarga]);
   });
 
-  test('a primeira gravação define a data', async () => {
-    const quando = '2026-08-14T18:30:00.000Z';
+  test('o lançamento carimba a data de AGORA, não a que o painel mandar', async () => {
+    /* ESTE TESTE INVERTEU DE PREMISSA EM 19/08/2026 — e o registro importa.
+
+       Ele nascera afirmando que a data enviada pelo painel no lançamento era
+       a que valia. Na prática o painel manda "agora" mesmo, então a
+       diferença só aparecia no caso ruim: um terminal desatualizado mandando
+       a data da CHEGADA. Foi assim que duas cargas lançadas hoje, em
+       caminhões que entraram ontem, ficaram fora do relatório do dia — a
+       programação saiu com 11 cargas e o relatório trouxe 9.
+
+       Agora quem decide é o servidor: lançar a carga É programar a carga, e
+       isso acontece no instante do clique. */
+    const quando = '2026-08-14T18:30:00.000Z';   // data velha, como um painel antigo mandaria
     const r = await req(`/api/cargas/${idCarga}`, {
       metodo: 'PATCH', token: tokens['Logística'],
       corpo: { numeroCarga: '900777', aguardandoCarga: false, programadoEm: quando },
     });
     assert.equal(r.status, 200);
     const { rows } = await pool.query(
-      'SELECT programado_em FROM fact_viagens WHERE carga_id = $1', [idCarga]
+      `SELECT (programado_em AT TIME ZONE 'America/Sao_Paulo')::date AS dia,
+              (now() AT TIME ZONE 'America/Sao_Paulo')::date AS hoje
+         FROM fact_viagens WHERE carga_id = $1`, [idCarga]
     );
-    assert.equal(new Date(rows[0].programado_em).toISOString(), quando);
+    assert.equal(String(rows[0].dia), String(rows[0].hoje),
+      'a carga lançada agora conta como programação de agora');
   });
 
   test('eco de sincronia NÃO move a data já definida', async () => {
@@ -1878,10 +1892,13 @@ describe('15. Data de programação é gravável uma vez só', () => {
     const { rows } = await pool.query(
       'SELECT programado_em FROM fact_viagens WHERE carga_id = $1', [idCarga]
     );
-    assert.equal(
-      new Date(rows[0].programado_em).toISOString(), '2026-08-14T18:30:00.000Z',
-      'a data de quem lançou a carga não pode ser desfeita por sincronização'
+    const { rows: hoje } = await pool.query(
+      `SELECT (now() AT TIME ZONE 'America/Sao_Paulo')::date AS hoje,
+              ($1::timestamptz AT TIME ZONE 'America/Sao_Paulo')::date AS dia`,
+      [rows[0].programado_em]
     );
+    assert.equal(String(hoje[0].dia), String(hoje[0].hoje),
+      'a data de quem lançou a carga não pode ser desfeita por sincronização');
   });
 });
 
@@ -2594,5 +2611,113 @@ describe('24. Correção de etapa pela Administração', () => {
       metodo: 'POST', token: tokens['Portaria'], corpo: { status: 'Seguiu Viagem' },
     });
     assert.equal(r.status, 200, r.texto);
+  });
+});
+
+/* ---------------------------------------------------------------------
+   25. A data de programação é a do LANÇAMENTO, nunca a da entrada
+   ---------------------------------------------------------------------
+   Relato de 19/08/2026: a programação do dia saiu com 11 cargas e o
+   relatório mostrou 9. As duas que faltaram eram de caminhões que deram
+   entrada ONTEM e tiveram a carga lançada hoje.
+
+   A cadeia: a entrada sem programação subia com Programado_Em preenchido
+   pelo painel (que derivava de criadoEm, a hora em que o caminhão entrou);
+   o servidor gravava; e no lançamento o COALESCE — que existe para eco de
+   sincronização não mover a data — preservava a data da ENTRADA.
+
+   As duas regras que fecham isso, e ficam no servidor porque é o único
+   lugar que independe de painel atualizado:
+
+     1. carga aguardando carga NÃO tem data de programação, venha o que
+        vier no corpo;
+     2. quando ela é lançada (aguardando_carga: true → false), a data é
+        gravada AGORA, por cima de qualquer valor anterior. ------------- */
+describe('25. Data de programação = dia do lançamento', () => {
+  let placa;
+
+  before(async () => {
+    const { rows } = await pool.query('SELECT placa FROM dim_veiculos ORDER BY placa OFFSET 65 LIMIT 1');
+    placa = rows[0].placa;
+    await pool.query('DELETE FROM fact_statusfrota WHERE placa = $1', [placa]);
+    await pool.query('DELETE FROM fact_viagens WHERE placa = $1', [placa]);
+  });
+
+  test('entrada da Portaria nasce SEM data de programação, mesmo se o painel mandar uma', async () => {
+    const r = await req('/api/cargas', {
+      metodo: 'POST', token: tokens['Portaria'],
+      corpo: { id: 'prog_entrada', placa, aguardandoCarga: true,
+               programadoEm: '2026-08-18T22:43:00.000Z' },
+    });
+    assert.equal(r.status, 201, r.texto);
+    const { rows } = await pool.query(
+      'SELECT programado_em FROM fact_viagens WHERE carga_id = $1', ['prog_entrada']);
+    assert.equal(rows[0].programado_em, null,
+      'entrada não é programação — data inventada aqui é o que tirou carga do relatório');
+  });
+
+  test('eco de sincronização não cria data de programação numa entrada', async () => {
+    const r = await req('/api/cargas/prog_entrada', {
+      metodo: 'PATCH', token: tokens['Logística'],
+      corpo: { programadoEm: '2026-08-18T22:43:00.000Z', observacoes: 'eco' },
+    });
+    assert.equal(r.status, 200, r.texto);
+    const { rows } = await pool.query(
+      'SELECT programado_em FROM fact_viagens WHERE carga_id = $1', ['prog_entrada']);
+    assert.equal(rows[0].programado_em, null);
+  });
+
+  test('ao LANÇAR a carga, a data é a de agora — mesmo com data antiga gravada', async () => {
+    // Cimenta a data de ontem na marra, como o painel antigo fazia.
+    await pool.query(
+      "UPDATE fact_viagens SET programado_em = now() - interval '1 day' WHERE carga_id = $1",
+      ['prog_entrada']);
+
+    const r = await req('/api/cargas/prog_entrada', {
+      metodo: 'PATCH', token: tokens['Logística'],
+      corpo: { aguardandoCarga: false, numeroCarga: '9001', cliente: 'C',
+               destino: 'D', peso: 1000 },
+    });
+    assert.equal(r.status, 200, r.texto);
+
+    const { rows } = await pool.query(
+      "SELECT (programado_em AT TIME ZONE 'America/Sao_Paulo')::date AS dia,"
+      + " (now() AT TIME ZONE 'America/Sao_Paulo')::date AS hoje"
+      + '  FROM fact_viagens WHERE carga_id = $1', ['prog_entrada']);
+    assert.equal(String(rows[0].dia), String(rows[0].hoje),
+      'a carga lançada hoje precisa contar como programação de HOJE');
+  });
+
+  test('carga já programada não tem a data movida por eco', async () => {
+    /* O COALESCE existe por um motivo real (14/08/2026): terminais
+       reenviando a carga inteira desfaziam a data correta. Isso continua
+       protegido — o que mudou é só o momento do lançamento. */
+    const antes = await pool.query(
+      'SELECT programado_em FROM fact_viagens WHERE carga_id = $1', ['prog_entrada']);
+    const r = await req('/api/cargas/prog_entrada', {
+      metodo: 'PATCH', token: tokens['Logística'],
+      corpo: { programadoEm: '2020-01-01T10:00:00.000Z', observacoes: 'eco de terminal velho' },
+    });
+    assert.equal(r.status, 200, r.texto);
+    const depois = await pool.query(
+      'SELECT programado_em FROM fact_viagens WHERE carga_id = $1', ['prog_entrada']);
+    assert.equal(String(depois.rows[0].programado_em), String(antes.rows[0].programado_em));
+  });
+
+  test('carga programada direto pela Logística nasce com a data de hoje', async () => {
+    const { rows: outra } = await pool.query(
+      'SELECT placa FROM dim_veiculos ORDER BY placa OFFSET 66 LIMIT 1');
+    await pool.query('DELETE FROM fact_viagens WHERE placa = $1', [outra[0].placa]);
+    const r = await req('/api/cargas', {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { id: 'prog_direta', placa: outra[0].placa, numeroCarga: '9002',
+               cliente: 'C', destino: 'D', peso: 1000 },
+    });
+    assert.equal(r.status, 201, r.texto);
+    const { rows } = await pool.query(
+      "SELECT (programado_em AT TIME ZONE 'America/Sao_Paulo')::date AS dia,"
+      + " (now() AT TIME ZONE 'America/Sao_Paulo')::date AS hoje"
+      + '  FROM fact_viagens WHERE carga_id = $1', ['prog_direta']);
+    assert.equal(String(rows[0].dia), String(rows[0].hoje));
   });
 });

@@ -80,8 +80,22 @@ export function paraPainel(linha) {
     criadoEm: linha.criado_em,
     /* Data em que a CARGA foi lançada — diferente de criado_em quando o
        caminhão chegou sem programação e a carga só foi lançada depois.
-       O relatório do gestor filtra por esta. Ver migration 007. */
-    programadoEm: linha.programado_em || linha.criado_em,
+       O relatório do gestor filtra por esta. Ver migration 007.
+
+       NULL É RESPOSTA (19/08/2026). Até hoje isto era
+       `programado_em || criado_em`, e esse "||" era o último elo da cadeia
+       que fazia a programação puxar dia errado: o caminhão que entrou
+       ONTEM e teve a carga lançada HOJE recebia de volta a data da
+       ENTRADA, o painel regravava esse valor no próximo save() e a carga
+       nascia velha. Relato do gestor no mesmo dia: "programação hoje foi
+       liberada com 11 cargas, só aparecem 9 — faltam dois que deram
+       entrada ontem".
+
+       Entrada sem carga NÃO TEM data de programação, e dizer isso em voz
+       alta (null) é o que permite ao painel mostrar a data da entrada como
+       entrada e trocar por now() no lançamento. Quem quiser um fallback
+       para exibição que o faça na tela, não aqui. */
+    programadoEm: linha.programado_em || null,
     criadoPor: linha.operador_nome,
     atualizadoEm: linha.atualizado_em,
     versao: linha.versao,
