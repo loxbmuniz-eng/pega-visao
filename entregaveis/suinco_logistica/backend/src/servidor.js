@@ -20,6 +20,7 @@ import { rotasCargas } from './rotas/cargas.js';
 import { rotasCadastros } from './rotas/cadastros.js';
 import { rotasOperadores } from './rotas/operadores.js';
 import { rotasBI } from './rotas/bi.js';
+import { rotasBot } from './rotas/bot.js';
 import { rotasProgramacao } from './rotas/programacao.js';
 import { rotasRelatorios } from './rotas/relatorios.js';
 import { rotasDevolucoes } from './rotas/devolucoes.js';
@@ -195,6 +196,8 @@ export function criarApp() {
   app.use('/api', rotasRelatorios);
   app.use('/api', rotasDevolucoes);
   app.use('/bi', rotasBI);
+  // Robô de relatórios (n8n → WhatsApp) — leitura, token próprio.
+  app.use('/bot', rotasBot);
 
   app.use((req, res) => {
     res.status(404).json({ erro: `Rota não encontrada: ${req.method} ${req.path}`, codigo: 'ROTA_INEXISTENTE' });

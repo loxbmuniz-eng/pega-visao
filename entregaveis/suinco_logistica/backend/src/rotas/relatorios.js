@@ -1,8 +1,7 @@
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
-import { chromium } from 'playwright';
 import { exigirLogin } from '../middleware/auth.js';
-import { config } from '../config.js';
+import { gerarPdf, nomeArquivoSeguro } from '../servicos/pdf.js';
 
 export const rotasRelatorios = Router();
 
@@ -38,14 +37,6 @@ const limitadorRelatorios = rateLimit({
 const LARGURA_MAX_HTML = 3_000_000; // ~3MB: CSS+fonte embutida (~190KB) tem folga enorme; acima disso é corpo suspeito, não relatório real
 const LARGURA_MAX_CSS = 1_000_000;
 
-function nomeArquivoSeguro(nome) {
-  return String(nome || 'relatorio')
-    .normalize('NFD').replace(/[̀-ͯ]/g, '')
-    .replace(/[^A-Za-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '')
-    .slice(0, 120) || 'relatorio';
-}
-
 rotasRelatorios.post('/relatorios/pdf', limitadorRelatorios, exigirLogin, async (req, res, next) => {
   const { html, css, orientacao, nomeArquivo } = req.body || {};
 
@@ -60,65 +51,13 @@ rotasRelatorios.post('/relatorios/pdf', limitadorRelatorios, exigirLogin, async 
   }
   const paisagem = orientacao !== 'retrato';
 
-  let navegador;
   try {
-    navegador = await chromium.launch({
-      headless: true,
-      // Em produção o Playwright usa o Chromium instalado por
-      // `npx playwright install chromium` (ver instalar.sh). Em
-      // desenvolvimento/teste local, PLAYWRIGHT_CHROMIUM_PATH aponta pro
-      // binário já instalado na máquina — sem isso cada ambiente teria que
-      // ter a MESMA revisão exata do Chromium, o que não é garantido.
-      executablePath: config.playwrightChromiumPath || undefined,
-      args: ['--no-sandbox'], // roda como usuário sem privilégio no VPS; sandbox do Chromium exige capacidades que o serviço não tem
-    });
-    const pagina = await navegador.newPage();
-
-    // Documento mínimo, só com o CSS que o próprio painel já usa para
-    // imprimir (o navegador do operador manda o texto do <style> único do
-    // bundle) + o HTML já pronto que `exportarPdfXxx()` constrói. Sem isso
-    // ser um documento completo, `@page` e `@font-face` do CSS não têm
-    // onde se aplicar.
-    /* O `@page` do SERVIDOR vem DEPOIS do CSS recebido, de propósito.
-
-       Achado ao testar: a regra `@page{size:...}` da própria página SEMPRE
-       ganha do parâmetro `landscape` do Playwright — o parâmetro só decide
-       quando a página não opina. Como o CSS do painel traz o seu próprio
-       `@page{size:A4 landscape}`, sem esta linha o parâmetro `orientacao`
-       desta rota seria decorativo: pedir retrato devolveria paisagem.
-
-       Declarar por último faz esta regra vencer no cascata e torna o
-       SERVIDOR a autoridade final sobre a folha — que é exatamente o
-       ponto desta rota existir. A margem repete o valor do painel
-       (styles.css, @page{margin:5mm}) pra folha não mudar de tamanho útil
-       junto. */
-    const folha = `@page{size:A4 ${paisagem ? 'landscape' : 'portrait'};margin:5mm}`;
-    const documento = `<!doctype html><html><head><meta charset="utf-8">`
-      + `<style>${css}</style><style>${folha}</style></head><body>${html}</body></html>`;
-
-    await pagina.setContent(documento, { waitUntil: 'networkidle' });
-    // A fonte embutida (base64, ver build_arquivo_unico.py) ainda precisa
-    // decodificar e ficar pronta pro layout medir texto corretamente —
-    // sem esperar isso, a primeira renderização mediria com a fonte de
-    // fallback e o texto poderia não bater com o que o operador viu na
-    // pré-visualização.
-    await pagina.evaluate(() => document.fonts.ready);
-
-    const bytes = await pagina.pdf({
-      format: 'A4',
-      landscape: paisagem,
-      printBackground: true,
-      // Sem margin aqui: o `@page{margin:5mm}` já embutido no CSS
-      // encaminhado é quem define a margem — pedir os dois ao mesmo tempo
-      // soma margem em dobro.
-    });
+    const bytes = await gerarPdf({ html, css, paisagem });
 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${nomeArquivoSeguro(nomeArquivo)}.pdf"`);
-    res.send(bytes);
+    return res.send(bytes);
   } catch (e) {
     return next(e);
-  } finally {
-    if (navegador) await navegador.close().catch(() => {});
   }
 });

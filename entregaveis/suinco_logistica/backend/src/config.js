@@ -63,6 +63,12 @@ export const config = {
   // views, sem permissão de escrever nada.
   biToken: (process.env.BI_TOKEN || '').trim(),
 
+  /* Token do robô de WhatsApp (n8n). Mesma ideia do BI_TOKEN e pelo mesmo
+     motivo: automação não deve carregar senha de operador. Ela lê o resumo
+     do dia e o PDF do relatório, e não tem como escrever nada — se o token
+     vazar, o estrago possível é alguém ler o andamento do pátio. */
+  botToken: (process.env.BOT_TOKEN || '').trim(),
+
   // Caminho do binário do Chromium usado pra gerar PDF de relatório
   // (backend/src/rotas/relatorios.js). Em produção fica vazio: o
   // Playwright usa o Chromium que `npx playwright install chromium`

@@ -4304,7 +4304,18 @@ async function atualizarDadosAntesDoRelatorio(){
 // colunas de cadastro. Identificação e cadastro (Seq., Carga, Destino, Rota,
 // Placa, Transportadora...) vêm depois, porque respondem "qual carga é",
 // não "em que pé ela está".
-async function exportarPdfOperacional(){
+/* MONTAR e EXPORTAR são duas coisas (20/08/2026).
+
+   Separado porque o relatório passou a ter um segundo leitor: o robô que
+   manda o andamento do carregamento no grupo do WhatsApp de 3 em 3 horas.
+   O servidor abre o painel sem operador nenhum na frente, chama
+   `montarRelatorioOperacional()` e imprime o MESMO documento que a
+   Logística exporta pela tela.
+
+   Duplicar o modelo do relatório no servidor era o outro caminho, e seria
+   o começo de dois relatórios que divergem no primeiro ajuste de coluna
+   que alguém fizer aqui e esquecer de fazer lá. Uma fonte só. */
+async function montarRelatorioOperacional(){
   await atualizarDadosAntesDoRelatorio();
   const el = document.getElementById('print-operacional');
   // TODAS as cargas da programação do dia, INCLUSIVE as já concluídas
@@ -4408,6 +4419,11 @@ async function exportarPdfOperacional(){
           extra: `<strong>Concluídas:</strong> ${concluidas} de ${lista.length}`,
         }))}
     </div>`;
+  return el;
+}
+
+async function exportarPdfOperacional(){
+  const el = await montarRelatorioOperacional();
   await exportarViaServidor(el, 'Relatorio-Operacional');
 }
 
