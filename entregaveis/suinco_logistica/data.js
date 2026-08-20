@@ -610,6 +610,8 @@ const SuincoStore = {
       // guardião nº 1: aqui (ida), daApiParaLinha (volta) e
       // cargaDeLinhaRemota (conversão).
       Lacre: carga.lacre || '',
+      Lacre_2: carga.lacre2 || '',
+      Lacre_3: carga.lacre3 || '',
       Lacre_Retido: carga.lacreRetido || '',
       Status_Atual: carga.status,
       Aguardando_Carga: !!carga.aguardandoCarga,
@@ -997,6 +999,8 @@ function cargaDeLinhaRemota(r){
        branco para todo mundo. */
     observacoes: r.Observacoes || '',
     lacre: r.Lacre || '',
+    lacre2: r.Lacre_2 || '',
+    lacre3: r.Lacre_3 || '',
     lacreRetido: r.Lacre_Retido || '',
     status: STATUS_FLOW.includes(r.Status_Atual) ? r.Status_Atual : STATUS_FLOW[0],
     aguardandoCarga: r.Aguardando_Carga === true || r.Aguardando_Carga === 'Sim',
@@ -1586,19 +1590,35 @@ function avancarStatusCarga(cargaId, statusNovo, operador, setor){
 // uma única vez, sem perguntar qual carga — igual já era antes). Cargas
 // que ainda não chegaram lá ficam intactas e o retorno informa quais são,
 // pra Portaria entender por que não liberou.
-function registrarSaidaPortaria(placa, operador, lacre){
+/* `lacres` aceita string (um lacre, como era até 20/08/2026) ou lista de
+   até três. Manter as duas formas é o que permite um painel antigo em cache
+   continuar registrando saída sem erro enquanto o novo já grava os três. */
+function registrarSaidaPortaria(placa, operador, lacres){
   const p = normalizarPlaca(placa);
   const abertas = cargasAbertasPorPlaca(p);
   const elegiveis = abertas.filter(c => c.status === 'Faturado');
   const pendentes = abertas.filter(c => c.status !== 'Faturado');
-  const lacreLimpo = String(lacre || '').trim().slice(0, 50);
+  const lista = (Array.isArray(lacres) ? lacres : [lacres])
+    .map(x => String(x || '').trim().slice(0, 50))
+    .filter(Boolean)
+    .slice(0, 3);
+  const lacreLimpo = lista[0] || '';
   elegiveis.forEach(c=>{
     registrarMovimentacao({cargaId:c.id, placa:p, statusAnterior:c.status, statusNovo:'Seguiu Viagem', operador, setor:'Portaria', ...snapshotCarga(c)});
     c.status = 'Seguiu Viagem';
-    // Lacre da saída (18/08/2026): o caminhão sai para inspeção com um
-    // lacre numerado — fica em TODAS as cargas da placa que saíram, pois
-    // o lacre é do caminhão, não de uma carga só.
-    if(lacreLimpo) c.lacre = lacreLimpo;
+    /* Lacre da saída (18/08/2026): o caminhão sai para inspeção com lacre
+       numerado — fica em TODAS as cargas da placa que saíram, pois o lacre é
+       do caminhão, não de uma carga só.
+
+       ATÉ TRÊS (20/08/2026), a pedido do gestor: "pode haver mais de um (ou
+       dois, no máximo três) lacres na saída do caminhão". Cada um no seu
+       campo — empilhar os três num campo só faria o número deixar de ser
+       pesquisável, que é justamente para o que ele serve na inspeção. */
+    if(lista.length){
+      c.lacre = lacreLimpo;
+      c.lacre2 = lista[1] || '';
+      c.lacre3 = lista[2] || '';
+    }
     c._statusPendentes = (c._statusPendentes || []).concat('Seguiu Viagem');  // ver sincronizarCarga
     c.atualizadoEm = nowISO();
   });

@@ -1430,6 +1430,24 @@ code{
 /* Carga programada há 2+ dias e ainda parada. Não é erro do sistema — é
    uma carga que o pátio esqueceu, e a cor existe pra ela ser achada sem
    ler linha por linha. */
+/* OS TRÊS CAMPOS DE LACRE DA SAÍDA (20/08/2026).
+
+   Ocupam a LINHA INTEIRA abaixo da placa e dos botões — `flex-basis:100%`
+   dentro do .quick-box, que é flex-wrap. Assim a placa continua com o
+   destaque que tem (é ela que o porteiro digita em toda movimentação) e os
+   lacres, que só valem na saída, não competem por espaço com ela.
+
+   O primeiro campo manda na largura: é o que quase sempre é usado sozinho.
+   No celular os três empilham. */
+.quick-linha-lacres{flex:1 1 100%;margin-top:2px}
+.quick-linha-rotulo{
+  color:var(--text-dim);display:block;font-size:12px;font-weight:600;margin-bottom:4px;
+}
+.lacres-trio{display:flex;gap:6px}
+.lacres-trio input{min-width:0}
+.lacres-trio input:first-child{flex:1.4}
+.lacres-trio input:not(:first-child){flex:1}
+@media (max-width:560px){ .lacres-trio{flex-wrap:wrap} .lacres-trio input{flex:1 1 100%} }
 .prog-atrasada{color:var(--warn);font-weight:700}
 .prog-atrasada small{font-weight:400}
 /* A FAIXA QUE SEPARA A PROGRAMAÇÃO DE HOJE DAS SOBRAS DE OUTROS DIAS.

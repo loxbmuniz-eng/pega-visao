@@ -144,6 +144,9 @@ export function devolucaoParaPainel(linha, itens = [], divergencias = [], rotas 
     cargaNumero: linha.carga_numero,
     lacre1: linha.lacre1,
     lacre2: linha.lacre2,
+    // Terceiro lacre (migração 025): o caminhão pode sair — e chegar — com
+    // até três. Ver o comentário da migração.
+    lacre3: linha.lacre3 || '',
     pesoFinal: linha.peso_final === null ? null : Number(linha.peso_final),
     status: linha.status,
     criadaPor: linha.criada_por,
@@ -194,6 +197,11 @@ export function itemParaPainel(i) {
     codProduto: i.cod_produto,
     produtoNome: i.produto_nome,
     numDev: i.num_dev,
+    /* Nº DA CARGA DE DEVOLUÇÃO (migração 025) — o número que o SIS ATAK
+       gera quando a PORTARIA abre esta DEV. Não confundir com numDev, que
+       é o código da devolução já escrito no checklist pela Logística: são
+       dois números, de dois momentos e de dois donos diferentes. */
+    cargaDev: i.carga_dev || '',
     dataItem: i.data_item,
     motivo: i.motivo,
     qtdRecebida: recebida,
@@ -240,6 +248,7 @@ export function camposCabecalho(corpo) {
      escrevê-los). */
   if (corpo.lacre1 !== undefined) m.lacre1 = texto(corpo.lacre1, 50);
   if (corpo.lacre2 !== undefined) m.lacre2 = texto(corpo.lacre2, 50);
+  if (corpo.lacre3 !== undefined) m.lacre3 = texto(corpo.lacre3, 50);
   if (corpo.cargaNumero !== undefined) m.carga_numero = texto(corpo.cargaNumero, 50);
   // Peso final editável no cabeçalho — campo do Faturamento (18/08/2026).
   if (corpo.pesoFinal !== undefined) {
@@ -283,6 +292,7 @@ export function camposItem(corpo) {
   if (corpo.codProduto !== undefined) m.cod_produto = texto(corpo.codProduto, 50);
   if (corpo.produtoNome !== undefined) m.produto_nome = texto(corpo.produtoNome, 200);
   if (corpo.numDev !== undefined) m.num_dev = texto(corpo.numDev, 50);
+  if (corpo.cargaDev !== undefined) m.carga_dev = texto(corpo.cargaDev, 50);
   if (corpo.dataItem !== undefined) m.data_item = corpo.dataItem ? texto(corpo.dataItem, 10) : null;
   if (corpo.motivo !== undefined) m.motivo = texto(corpo.motivo, 300);
   if (corpo.qtdRecebida !== undefined) {

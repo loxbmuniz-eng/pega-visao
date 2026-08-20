@@ -99,6 +99,26 @@ function podePesarItemDev() {
   const setor = (DB.operador || {}).setor;
   return podeEditarDevolucao() || setor === 'Faturamento';
 }
+/* O Nº DA CARGA DE DEVOLUÇÃO é da PORTARIA (20/08/2026).
+
+   Ele não existe quando o checklist é lançado: nasce depois, quando o
+   porteiro abre a "Montagem de Cargas" do SIS ATAK, escolhe a rota, joga as
+   DEVs daquela rota para dentro e salva — o "Número Documento" que aparece
+   ali é este número. Por isso é a Portaria quem digita, e por isso ele é
+   diferente do Nº DEV, que já vem escrito no checklist. */
+/* O número da carga vale para o checklist inteiro quando o porteiro montou
+   tudo de uma vez — e é assim na maioria das chegadas. A coluna do item só
+   se preenche quando as DEVs do mesmo checklist foram para montagens
+   DIFERENTES (checklist com mais de uma rota: no SIS ATAK a montagem é por
+   rota). Vazio no item, portanto, não é falta de informação: é "vale o do
+   cabeçalho". */
+function cargaDevDoItem(item, dev) {
+  return (item && item.cargaDev) || (dev && dev.cargaNumero) || '';
+}
+function podeInformarCargaDev() {
+  const setor = (DB.operador || {}).setor;
+  return podeEditarDevolucao() || setor === 'Portaria';
+}
 function podeNotaFinalDev() {
   const setor = (DB.operador || {}).setor;
   return podeEditarDevolucao() || setor === 'Central de Notas';
@@ -422,7 +442,8 @@ function cabecalhoEditavelDev(d, editavel) {
         ${campo('Nota de transferência', 'notaTransferencia', d.notaTransferencia, '', true)}
         ${campo('Placa', 'placa', d.placa, '', true)}
         ${campo('Motorista', 'motorista', d.motorista, '', true)}
-        ${campo('Nº carga', 'cargaNumero', d.cargaNumero, '', true)}
+        ${campo('Nº carga de devolução (SIS ATAK)', 'cargaNumero', d.cargaNumero,
+          'title="O Número Documento da Montagem de Cargas do SIS ATAK — o número que o porteiro gera ao abrir as DEVs. Não é o Nº DEV do checklist: são dois números diferentes."', true)}
         <div><label>Chegou lacrado?</label>
           <select title="Resposta da Portaria no recebimento — informação, não trava nada."
             onchange="editarDevolucaoCampoUI('${escJs(d.id)}','chegouLacrado',this.value)">
@@ -433,6 +454,7 @@ function cabecalhoEditavelDev(d, editavel) {
         </div>
         ${campo('Lacre 1', 'lacre1', d.lacre1, '', true)}
         ${campo('Lacre 2', 'lacre2', d.lacre2, '', true)}
+        ${campo('Lacre 3', 'lacre3', d.lacre3, '', true)}
       </div>
     </div>` : '';
 
@@ -596,6 +618,15 @@ function renderDevolucaoAberta(d, editavel) {
       <td>${cel('codProduto', i.codProduto, 'text', 'list="dl-dev-produtos"')}
           ${i.produtoNome ? `<small class="text-dim">${esc(i.produtoNome)}</small>` : ''}</td>
       <td>${cel('numDev', i.numDev)}</td>
+      ${/* Nº DA CARGA DE DEVOLUÇÃO — quem digita é a Portaria, depois de
+            montar a carga no SIS ATAK. Fica ao lado do Nº DEV justamente
+            para os dois nunca mais serem confundidos um com o outro. */''}
+      <td>${podeInformarCargaDev()
+        ? `<input type="text" value="${esc(i.cargaDev || '')}"
+             placeholder="${esc(d.cargaNumero || '—')}"
+             title="Número da carga de devolução gerado no SIS ATAK. Em branco, vale o número do cabeçalho."
+             onchange="editarItemDevolucaoUI('${escJs(d.id)}',${i.itemId},'cargaDev',this.value)">`
+        : (esc(cargaDevDoItem(i, d)) || '—')}</td>
       <td>${cel('dataItem', String(i.dataItem || '').slice(0, 10), 'date',
         'title="Data desta devolução (coluna DATA-DEV da capa)."')}</td>
       ${/* O motivo escolhido aparece POR EXTENSO embaixo da caixa de
@@ -702,7 +733,9 @@ function renderDevolucaoAberta(d, editavel) {
             <th title="Número da nota parcial — só quando a devolução é parcial">Nº parcial</th>
             <th>Supervisor</th><th title="Vendedor">RCA</th>
             <th>Cód. Cliente</th><th>CX</th><th title="Peso em QUILOS (kg)">Peso (kg)</th><th>Cód. Produto</th>
-            <th>Nº DEV</th><th title="Coluna DATA-DEV da capa">Data DEV</th><th>Motivo</th>
+            <th>Nº DEV</th>
+            <th title="Número da carga de devolução gerado pelo porteiro no SIS ATAK — não é o Nº DEV">Nº carga dev</th>
+            <th title="Coluna DATA-DEV da capa">Data DEV</th><th>Motivo</th>
             <th title="Pesagem do Faturamento — confirma que passou pela balança">Pesagem</th>
             <th title="Conferência da descarga: quantidade recebida">Expedição</th><th>Falta</th>
             <th>Destinação</th>
@@ -1235,13 +1268,14 @@ async function relatorioDevolucoesUI(diaParam) {
         + `${d.placa ? ' · Placa ' + esc(d.placa) : ''}`
         + `${d.cargaNumero ? ' · Carga ' + esc(d.cargaNumero) : ''}`
         + `${d.operadorCodigo ? ' · Cód. operador ' + esc(d.operadorCodigo) : ''}`
-        + `${d.lacre1 ? ' · Lacre ' + esc([d.lacre1, d.lacre2].filter(Boolean).join('/')) : ''}`
+        + `${d.lacre1 ? ' · Lacre ' + esc([d.lacre1, d.lacre2, d.lacre3].filter(Boolean).join('/')) : ''}`
         + `${d.pesoFinal !== null ? ' · Peso final ' + d.pesoFinal.toLocaleString('pt-BR') + ' kg' : ''}`)}
       <table class="dev-doc-tabela">
         <thead><tr>
           <th>Nota</th><th>P/T</th><th title="Número da nota parcial">Nº parcial</th>
           <th>Supervisor</th><th title="Vendedor">RCA</th><th>Cód. Cliente</th>
-          <th>CX</th><th title="Peso em QUILOS (kg)">Peso (kg)</th><th>Produto</th><th>Nº DEV</th><th>Data DEV</th><th>Motivo</th>
+          <th>CX</th><th title="Peso em QUILOS (kg)">Peso (kg)</th><th>Produto</th><th>Nº DEV</th>
+          <th title="Carga de devolução do SIS ATAK">Nº carga dev</th><th>Data DEV</th><th>Motivo</th>
           <th title="Pesagem do Faturamento, em QUILOS (kg)">Pesagem (kg)</th><th>Expedição</th><th>Falta</th><th>Destinação</th><th>Nota final</th>
         </tr></thead>
         <tbody>${d.itens.map((i) => `<tr${i.falta > 0 ? ' class="dev-doc-falta"' : ''}>
@@ -1253,6 +1287,7 @@ async function relatorioDevolucoesUI(diaParam) {
             <td class="c-peso">${i.peso !== null ? i.peso.toLocaleString('pt-BR') : '—'}</td>
             <td>${esc(i.codProduto)}${i.produtoNome ? '-' + esc(i.produtoNome) : ''}</td>
             <td>${esc(i.numDev)}</td>
+            <td>${esc(cargaDevDoItem(i, d)) || '—'}</td>
             <td>${i.dataItem ? esc(String(i.dataItem).slice(0, 10).split('-').reverse().join('/')) : '—'}</td>
             <td>${esc(i.motivo)}</td>
             <td class="c-peso">${i.pesoFaturamento !== null ? i.pesoFaturamento.toLocaleString('pt-BR') : '—'}</td>
@@ -1589,10 +1624,10 @@ function somatorioItensDev(itens, colspanAntes) {
       <td colspan="${colspanAntes}" class="tot-rotulo">TOTAL — ${itens.length} linha(s)</td>
       <td class="tot-num">${fmt(cx, 0)}</td>
       <td class="tot-num">${fmt(peso, 2)} kg</td>
-      ${/* Produto, Nº DEV, Data DEV e Motivo não somam — quatro colunas em
-           branco. Estavam declaradas como três, o que empurrava o total da
-           pesagem para a coluna do motivo. */''}
-      <td colspan="4"></td>
+      ${/* Produto, Nº DEV, Nº carga dev, Data DEV e Motivo não somam — cinco
+           colunas em branco. Cada coluna nova aqui no meio precisa entrar
+           nesta conta, senão o total escorrega uma casa para o lado. */''}
+      <td colspan="5"></td>
       <td class="tot-num">${pesagem ? fmt(pesagem, 2) + ' kg' : ''}</td>
       <td class="tot-num">${recebidas ? fmt(recebidas, 0) : ''}</td>
       <td class="tot-num">${falta ? 'FALTA ' + fmt(falta, 0) : ''}</td>
@@ -1609,7 +1644,8 @@ function somatorioLinhasOperadorDev(linhas) {
       <td colspan="6" class="tot-rotulo">TOTAL — ${linhas.length} linha(s)</td>
       <td class="tot-num">${fmt(cx, 0)}</td>
       <td class="tot-num">${fmt(peso, 2)} kg</td>
-      <td colspan="4"></td>
+      ${/* Produto, Nº DEV, Nº carga dev, Data DEV e Motivo. */''}
+      <td colspan="5"></td>
     </tr>`;
 }
 
@@ -1695,7 +1731,9 @@ async function relatorioOperadorDevolucoesUI(idChecklist) {
             <th>Nota</th><th>P/T</th><th title="Número da nota parcial">Nº parcial</th>
             <th>Supervisor</th><th title="Vendedor">RCA</th>
             <th>Cliente</th><th>CX</th><th title="Peso em QUILOS (kg)">Peso (kg)</th><th>Produto</th>
-            <th>Nº DEV</th><th>Data DEV</th><th>Motivo</th>
+            <th>Nº DEV</th>
+            <th title="Carga de devolução do SIS ATAK">Nº carga dev</th>
+            <th>Data DEV</th><th>Motivo</th>
           </tr></thead>
           <tbody>${d.itens.map((i) => `
             <tr>
@@ -1709,6 +1747,7 @@ async function relatorioOperadorDevolucoesUI(idChecklist) {
               <td class="c-peso">${i.peso !== null ? Number(i.peso).toLocaleString('pt-BR') : '—'}</td>
               <td>${esc(i.codProduto)}${i.produtoNome ? '-' + esc(i.produtoNome) : ''}</td>
               <td>${esc(i.numDev)}</td>
+              <td>${esc(cargaDevDoItem(i, d)) || '—'}</td>
               <td>${i.dataItem ? esc(String(i.dataItem).slice(0, 10).split('-').reverse().join('/')) : '—'}</td>
               <td>${esc(i.motivo)}</td>
             </tr>`).join('')}</tbody>

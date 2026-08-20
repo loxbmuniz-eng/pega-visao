@@ -2768,16 +2768,28 @@ function acaoSaidaUI(){
   const input = document.getElementById('portaria-placa');
   const placa = input.value;
   if(!normalizarPlaca(placa)){ notify('Informe a placa.','warn'); return; }
-  const campoLacre = document.getElementById('portaria-lacre');
-  const lacre = campoLacre ? campoLacre.value : '';
-  const r = registrarSaidaPortaria(placa, nomeOperadorAtual(), lacre);
-  if(r.liberadas.length && campoLacre) campoLacre.value = '';
+  // Até três lacres na saída (20/08/2026) — ver o comentário em
+  // registrarSaidaPortaria (data.js).
+  const lerLacre = (id) => {
+    const el = document.getElementById(id);
+    return el ? String(el.value || '').trim() : '';
+  };
+  const lacres = ['portaria-lacre', 'portaria-lacre-2', 'portaria-lacre-3']
+    .map(lerLacre).filter(Boolean);
+  const lacre = lacres.join(' · ');
+  const r = registrarSaidaPortaria(placa, nomeOperadorAtual(), lacres);
+  if(r.liberadas.length){
+    ['portaria-lacre', 'portaria-lacre-2', 'portaria-lacre-3'].forEach((id) => {
+      const el = document.getElementById(id);
+      if(el) el.value = '';
+    });
+  }
   if(r.liberadas.length){ notifyGravacao(`${normalizarPlaca(placa)}: saída registrada para ${r.liberadas.length} carga(s) — Seguiu Viagem${String(lacre||'').trim() ? `, lacre ${String(lacre).trim()}` : ''}.`); tocarBeepConfirmacao(); }
   /* O lacre da saída é INFORMAÇÃO, não trava (decisão de 18/08/2026): a
      carga segue viagem do mesmo jeito. Mas sair sem número registrado é o
      tipo de coisa que só aparece quando alguém procura depois — então o
      painel avisa na hora, com o registro já gravado. */
-  if(r.liberadas.length && !String(lacre||'').trim()){
+  if(r.liberadas.length && !lacres.length){
     notify(`${normalizarPlaca(placa)} saiu SEM número de lacre informado. A saída está registrada; informe o lacre no campo ao lado da placa nas próximas.`, 'warn', 7000);
   }
   if(r.pendentes.length) notify(`${normalizarPlaca(placa)}: ${r.pendentes.length} carga(s) ainda não liberada(s) para saída (status atual: ${r.pendentes.map(c=>c.status).join(', ')}).`, 'warn');
@@ -3680,7 +3692,8 @@ function renderTimelineCarga(id){
     ['Qtd. Entregas', c.qtdEntregas ?? 1],
     // Lacres (18/08/2026): só aparecem quando existem — carga que nunca
     // saiu não precisa de duas linhas em branco na ficha.
-    ...(c.lacre ? [['Lacre', c.lacre]] : []),
+    ...(c.lacre ? [[[c.lacre, c.lacre2, c.lacre3].filter(Boolean).length > 1 ? 'Lacres' : 'Lacre',
+                    [c.lacre, c.lacre2, c.lacre3].filter(Boolean).join(' · ')]] : []),
     ...(c.lacreRetido ? [['Lacre retido', c.lacreRetido]] : [])
   ];
 

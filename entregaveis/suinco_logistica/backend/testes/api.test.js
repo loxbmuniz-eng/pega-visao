@@ -2721,3 +2721,62 @@ describe('25. Data de programação = dia do lançamento', () => {
     assert.equal(String(rows[0].dia), String(rows[0].hoje));
   });
 });
+
+/* ------------------------------------------------------------------ */
+describe('26. Até três lacres na saída (20/08/2026)', () => {
+  /* Pedido do gestor: "pode haver mais de um (ou dois, no máximo três)
+     lacres na saída do caminhão". Cada um no seu campo — juntar os três num
+     texto só faria o número deixar de ser pesquisável, que é exatamente
+     para o que ele serve quando a inspeção pergunta por um lacre. */
+  let placa;
+  let cargaId;
+
+  before(async () => {
+    const { rows } = await pool.query('SELECT placa FROM dim_veiculos ORDER BY placa OFFSET 67 LIMIT 1');
+    placa = rows[0].placa;
+    await pool.query('DELETE FROM fact_statusfrota WHERE placa = $1', [placa]);
+    await pool.query('DELETE FROM fact_viagens WHERE placa = $1', [placa]);
+    const c = await req('/api/cargas', {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { id: 'lacres_trio', placa, numeroCarga: 'LACRE-3', peso: 1000 },
+    });
+    assert.equal(c.status, 201, c.texto);
+    cargaId = c.json.id;
+  });
+
+  test('a Portaria grava os três, e os três voltam separados', async () => {
+    const r = await req(`/api/cargas/${cargaId}`, {
+      metodo: 'PATCH', token: tokens['Portaria'],
+      corpo: { lacre: '133476', lacre2: '133477', lacre3: '133478' },
+    });
+    assert.equal(r.status, 200, r.texto);
+    assert.equal(r.json.lacre, '133476');
+    assert.equal(r.json.lacre2, '133477');
+    assert.equal(r.json.lacre3, '133478');
+  });
+
+  test('um lacre só continua sendo o caso normal — os outros ficam vazios', async () => {
+    const r = await req(`/api/cargas/${cargaId}`, {
+      metodo: 'PATCH', token: tokens['Portaria'],
+      corpo: { lacre: '900001', lacre2: '', lacre3: '' },
+    });
+    assert.equal(r.status, 200, r.texto);
+    assert.equal(r.json.lacre, '900001');
+    assert.equal(r.json.lacre2, '');
+    assert.equal(r.json.lacre3, '');
+  });
+
+  test('os lacres continuam sendo da Portaria — a Expedição não escreve', async () => {
+    /* O servidor filtra o que o setor não pode editar ANTES de gravar;
+       sobrando nada, a resposta é 400 SEM_CAMPOS_PERMITIDOS (e não 403).
+       O que importa aqui é o efeito: o número não muda. */
+    const r = await req(`/api/cargas/${cargaId}`, {
+      metodo: 'PATCH', token: tokens['Expedição'], corpo: { lacre2: '000000' },
+    });
+    assert.equal(r.status, 400, r.texto);
+    assert.equal(r.json.codigo, 'SEM_CAMPOS_PERMITIDOS');
+    const { rows } = await pool.query(
+      'SELECT lacre_2 FROM fact_viagens WHERE carga_id = $1', [cargaId]);
+    assert.equal(rows[0].lacre_2, '', 'a Expedição não deixou marca no lacre');
+  });
+});
