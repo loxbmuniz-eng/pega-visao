@@ -873,6 +873,42 @@ select option{background:var(--campo-bg);color:var(--text)}
 /* CONTROLE DE LACRES NOS RELATÓRIOS (20/08/2026). Uma linha por CAMINHÃO —
    o lacre é do veículo, não da carga —, com a retenção destacada porque é
    ela que gera conversa depois. */
+/* CARGA DUPLA: a situação do CAMINHÃO embaixo do status da CARGA.
+   (20/08/2026)
+
+   Discreta de propósito. O selo colorido continua sendo o protagonista —
+   ele responde a pergunta do setor ("o que eu faço com esta carga?"). Esta
+   linha responde a pergunta que estava faltando ("e o caminhão, cadê?") sem
+   competir por atenção: texto pequeno, sem cor de alerta, exceto no único
+   caso que pede ação — a carga que ainda espera um caminhão que já chegou. */
+.sit-placa{
+  color:var(--text-dim);
+  font-size:10px;
+  line-height:1.35;
+  margin-top:4px;
+  max-width:230px;
+}
+.sit-placa strong{ color:var(--text); font-weight:700 }
+.sit-no-patio strong{ color:#7fd6a4 }
+.sit-placa .sit-outras{ display:block; opacity:.85 }
+.sit-acao{ color:var(--warn); font-weight:700 }
+/* Na lista do pátio, a carga da mesma placa que ainda não teve entrada. */
+.badge-espera{
+  display:inline-block;
+  padding:2px 7px;
+  border-radius:4px;
+  background:rgba(233,185,84,.14);
+  border:1px dashed var(--gold-dim);
+  color:var(--gold);
+  font-size:10px;
+  font-weight:700;
+  white-space:nowrap;
+}
+@media print{
+  .sit-placa{ color:#3d4a5c !important }
+  .sit-placa strong,.sit-no-patio strong{ color:#111418 !important }
+}
+
 /* "VEÍCULO JÁ NO PÁTIO" na carga que ainda espera por ele (20/08/2026).
    Verde discreto: é informação boa (o caminhão chegou), não alerta. */
 .chip-no-patio{

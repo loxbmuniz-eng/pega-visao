@@ -760,8 +760,39 @@ const SuincoSharePoint = (function () {
       rotas: [],
     };
 
-    // Frota e rotas são dimensão: pesadas ou quase estáticas. Baixar a
-    // cada ciclo de 15 s seria desperdício — só vêm na carga inicial.
+    /* Frota e rotas são dimensão: pesadas ou quase estáticas. Baixar a cada
+       ciclo de 15 s seria desperdício — por isso vinham só na carga inicial.
+
+       SÓ QUE "QUASE ESTÁTICA" NÃO É "ESTÁTICA" (20/08/2026). Relato do
+       gestor, duas vezes no mesmo dia e em máquinas diferentes: "não entendo
+       por que a rota 011 está aparecendo sem nada escrito, para mim só o
+       número". A rota existia — tinha sido CADASTRADA naquele dia. Quem
+       cadastrou via o nome; todo painel que estava aberto desde antes só via
+       o código, porque nunca mais tinha buscado a lista de rotas. E painel
+       de pátio fica aberto o dia inteiro.
+
+       A rota volta a ser buscada a cada 5 minutos também na sincronização
+       incremental. São ~30 linhas de texto: o custo é irrisório perto de um
+       operador lendo "011" e não sabendo para onde o caminhão vai. A FROTA
+       continua só na carga inicial — ali são milhares de placas, e o mesmo
+       tratamento seria caro de verdade. */
+    const agora = Date.now();
+    const rotasVelhas = (agora - ultimaBuscaDeRotas) > INTERVALO_ROTAS_MS;
+    if (r.completo || rotasVelhas) {
+      try {
+        const rotas = await chamar('/api/rotas');
+        ultimaBuscaDeRotas = agora;
+        dados.rotas = (rotas || []).map((rt) => ({
+          Codigo: rt.codigo,
+          Nome: rt.nome,
+          Detalhe: rt.detalhe,
+          Operador: rt.operador,
+        }));
+      } catch (e) {
+        console.warn('[Suinco] rotas não carregaram:', e.message);
+      }
+    }
+
     if (r.completo) {
       try {
         const frota = await chamar('/api/frota');
@@ -774,21 +805,48 @@ const SuincoSharePoint = (function () {
       } catch (e) {
         console.warn('[Suinco] frota não carregou:', e.message);
       }
-      try {
-        const rotas = await chamar('/api/rotas');
-        dados.rotas = (rotas || []).map((rt) => ({
-          Codigo: rt.codigo,
-          Nome: rt.nome,
-          Detalhe: rt.detalhe,
-          Operador: rt.operador,
-        }));
-      } catch (e) {
-        console.warn('[Suinco] rotas não carregaram:', e.message);
-      }
     }
 
     ouvintesDados.forEach((fn) => { try { fn(dados); } catch (e) { console.error(e); } });
     return dados;
+  }
+
+  /* Ver o comentário em pull(): a lista de rotas é pequena e muda durante o
+     dia (Cadastros → Cadastrar Rota), então precisa ser reconferida mesmo em
+     painel que não recarrega a página. */
+  const INTERVALO_ROTAS_MS = 5 * 60 * 1000;
+  let ultimaBuscaDeRotas = 0;
+
+  /* GATILHO SOB DEMANDA, além do relógio.
+
+     Esperar até 5 minutos ainda é esperar. Quando o painel recebe uma carga
+     cuja ROTA ele não conhece, isso é a prova de que a lista dele está
+     velha — e é exatamente o instante em que o operador está olhando a
+     linha sem nome. Aqui a lista é rebuscada na hora, com trava de 60 s
+     para um código realmente inexistente (erro de digitação, por exemplo)
+     não virar uma chamada por ciclo de sincronização. */
+  let ultimoPedidoDeRotas = 0;
+  async function recarregarRotas(motivo) {
+    const agora = Date.now();
+    if (agora - ultimoPedidoDeRotas < 60_000) return null;
+    ultimoPedidoDeRotas = agora;
+    try {
+      const rotas = await chamar('/api/rotas');
+      ultimaBuscaDeRotas = agora;
+      const dados = {
+        incremental: true,
+        cargas: [], movimentacoes: [], frota: [],
+        rotas: (rotas || []).map((rt) => ({
+          Codigo: rt.codigo, Nome: rt.nome, Detalhe: rt.detalhe, Operador: rt.operador,
+        })),
+      };
+      ouvintesDados.forEach((fn) => { try { fn(dados); } catch (e) { console.error(e); } });
+      console.info('[Suinco] lista de rotas recarregada —', motivo || 'pedido do painel');
+      return dados.rotas.length;
+    } catch (e) {
+      console.warn('[Suinco] rotas não recarregaram:', e.message);
+      return null;
+    }
   }
 
   function pullTudo() {
@@ -1299,6 +1357,7 @@ const SuincoSharePoint = (function () {
     aoFecharPrograma,
     login, sair, diagnosticarConexao,
     push, upsert, excluir, mudarStatus, encerrarProgramacoesAnteriores, reterLacre,
+    recarregarRotas,
     corrigirEtapa, corrigirDataProgramacao, desfazerExclusao, listarExcluidas,
     pull, pullTudo, drenarFila, pendentes,
     listarOperadores, criarOperador, atualizarOperador,

@@ -130,12 +130,29 @@ async def main():
         ck('segunda carga criada', bool(segunda), str(segunda))
 
         marca = await pgL.evaluate(
-            """(id) => { const c = getCarga(id);
+            """(id) => { const c = getCarga(id); const sit = situacaoPlacaHtml(c);
                  return {status: c.status, jaNoPatio: veiculoJaNoPatio(c),
-                         chip: chipNoPatioHtml(c).includes('já no pátio')}; }""", segunda)
+                         chip: chipNoPatioHtml(c).includes('já no pátio'),
+                         dizNoPatio: sit.includes('Caminhão NO PÁTIO'),
+                         dizFalta: sit.includes('falta registrar a chegada'),
+                         dizQualDelas: /carga \\d+ de 2/.test(sit),
+                         dizOutra: sit.includes('outra(s):')}; }""", segunda)
         ck('ela nasce "Aguardando Veículo" (o status é DA CARGA)',
            marca['status'] == 'Aguardando Veículo', str(marca))
         ck('mas a tela avisa que o VEÍCULO já está no pátio', marca['chip'], str(marca))
+
+        print('\n=== 2b. CARGA DUPLA: A LINHA DIZ AS DUAS COISAS ===')
+        ck('a linha diz que o caminhão está no pátio', marca['dizNoPatio'], str(marca))
+        ck('diz qual das duas cargas é esta', marca['dizQualDelas'], str(marca))
+        ck('diz o que está acontecendo com a outra', marca['dizOutra'], str(marca))
+        ck('e aponta a ação que falta', marca['dizFalta'], str(marca))
+
+        umaSo = await pgL.evaluate(
+            """() => { const c = DB.cargas.find((x) => cargasAbertas()
+                   .filter((y) => normalizarPlaca(y.placa) === normalizarPlaca(x.placa)).length === 1);
+                 return c ? situacaoPlacaHtml(c) : 'sem carga única para conferir'; }""")
+        ck('em caminhão de carga ÚNICA a linha não aparece (seria ruído)',
+           umaSo == '' or umaSo == 'sem carga única para conferir', repr(umaSo)[:80])
 
         print('\n=== 3. A PORTARIA CONSEGUE DAR A ENTRADA (era o travamento) ===')
         await pgP.evaluate("async () => { await SuincoSharePoint.sincronizarAgora(); }")
