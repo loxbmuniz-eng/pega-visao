@@ -910,3 +910,64 @@ describe('11. Motivo por código vira código + descrição (19/08/2026)', () =>
     assert.equal(r.json.motivo, '9999');
   });
 });
+
+/* ------------------------------------------------------------------ */
+describe('12. Nº DEV e Nº da carga de devolução são dois números (20/08/2026)', () => {
+  /* Relato do gestor, com print do SIS ATAK junto: o checklist traz o
+     código da DEV, lançado pela Logística. Depois a Portaria abre a
+     "Montagem de Cargas" do SIS ATAK, escolhe a rota, joga as DEVs daquela
+     rota para dentro e salva — e o "Número Documento" que sai dali é o
+     número da CARGA de devolução. Dois números, dois momentos, dois donos:
+     no mesmo campo, um apagaria o outro. */
+  let id;
+  before(async () => {
+    const c = await req('/api/devolucoes', {
+      metodo: 'POST', token: tokens['Logística'], corpo: novoChecklist(),
+    });
+    id = c.json.id;
+  });
+
+  test('os dois convivem na mesma linha, sem um sobrescrever o outro', async () => {
+    const item = await req(`/api/devolucoes/${id}/itens`, {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { nota: '654789', cx: 1, numDev: '41836' },
+    });
+    assert.equal(item.status, 201, item.texto);
+    assert.equal(item.json.numDev, '41836');
+    assert.equal(item.json.cargaDev, '', 'ainda não passou pela Portaria');
+
+    const r = await req(`/api/devolucoes/${id}/itens/${item.json.itemId}`, {
+      metodo: 'PATCH', token: tokens['Portaria'], corpo: { cargaDev: '118294' },
+    });
+    assert.equal(r.status, 200, r.texto);
+    assert.equal(r.json.cargaDev, '118294');
+    assert.equal(r.json.numDev, '41836', 'o código da DEV continua o mesmo');
+  });
+
+  test('a Portaria só escreve ESSE campo do item', async () => {
+    const item = await req(`/api/devolucoes/${id}/itens`, {
+      metodo: 'POST', token: tokens['Logística'], corpo: { nota: '654790', cx: 2 },
+    });
+    const r = await req(`/api/devolucoes/${id}/itens/${item.json.itemId}`, {
+      metodo: 'PATCH', token: tokens['Portaria'], corpo: { cx: 99 },
+    });
+    assert.equal(r.status, 403, 'caixa é da Logística, não da Portaria');
+  });
+
+  test('o cabeçalho guarda o número do caminhão inteiro, e a Portaria o escreve', async () => {
+    const r = await req(`/api/devolucoes/${id}`, {
+      metodo: 'PATCH', token: tokens['Portaria'], corpo: { cargaNumero: '118294' },
+    });
+    assert.equal(r.status, 200, r.texto);
+    assert.equal(r.json.cargaNumero, '118294');
+  });
+
+  test('terceiro lacre na chegada: o caminhão pode trazer três', async () => {
+    const r = await req(`/api/devolucoes/${id}`, {
+      metodo: 'PATCH', token: tokens['Portaria'],
+      corpo: { lacre1: '133476', lacre2: '133477', lacre3: '133478' },
+    });
+    assert.equal(r.status, 200, r.texto);
+    assert.equal(r.json.lacre3, '133478');
+  });
+});

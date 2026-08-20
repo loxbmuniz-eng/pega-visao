@@ -326,6 +326,8 @@ const SuincoSharePoint = (function () {
       qtdEntregas: campos.Qtd_Entregas,
       observacoes: campos.Observacoes || '',
       lacre: campos.Lacre || '',
+      lacre2: campos.Lacre_2 || '',
+      lacre3: campos.Lacre_3 || '',
       lacreRetido: campos.Lacre_Retido || '',
       programadoEm: campos.Programado_Em,
       status: campos.Status_Atual,
@@ -358,7 +360,16 @@ const SuincoSharePoint = (function () {
          lia de volta, então a observação vivia só no navegador de quem
          digitou e o relatório saía em branco para todo mundo. */
       Observacoes: c.observacoes,
+      /* OS TRÊS PONTOS DE NOVO (20/08/2026). Ao acrescentar o 2º e o 3º
+         lacre, este aqui — a VOLTA do servidor — ficou para trás, e o
+         efeito foi idêntico ao da observação em 14/08: o painel mandava os
+         três, o banco guardava os três, e o terminal continuava mostrando
+         um só, sem erro nenhum na tela. Campo novo em carga se acrescenta
+         nos três lugares ou não se acrescenta: ida (data.js,
+         sincronizarCarga), volta (aqui) e conversão (cargaDeLinhaRemota). */
       Lacre: c.lacre,
+      Lacre_2: c.lacre2,
+      Lacre_3: c.lacre3,
       Lacre_Retido: c.lacreRetido,
       Status_Atual: c.status,
       Aguardando_Carga: c.aguardandoCarga,

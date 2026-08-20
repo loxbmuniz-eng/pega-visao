@@ -382,13 +382,30 @@
       <div class="card-sub">Só 2 botões: <strong>Chegou</strong> (Aguardando Veículo → Aguardando Embarque) e <strong>Saiu</strong> (Faturado → Seguiu Viagem, aplicado a todas as cargas em aberto dessa placa ao mesmo tempo — é o mesmo caminhão, uma única vez). Se a placa não tiver programação, "Chegou" cria automaticamente uma entrada "Aguardando Carga".</div>
       <div class="quick-box">
         <div class="form-group"><label>Placa</label><input type="text" id="portaria-placa" placeholder="ABC1D23" autocomplete="off" onkeydown="if(event.key==='Enter')acaoChegadaUI()"></div>
-        <div class="form-group"><label>Nº do lacre <span class="hint">(na saída)</span></label>
-          <input type="text" id="portaria-lacre" placeholder="Ex: 133476" autocomplete="off"></div>
         <button class="btn btn-success btn-lg" onclick="acaoChegadaUI()">🚚 Chegou</button>
         <button class="btn btn-warn btn-lg" onclick="acaoSaidaUI()">🏁 Saiu</button>
+        <!-- ATÉ TRÊS LACRES (20/08/2026): "pode haver mais de um (ou dois, no
+             máximo três) lacres na saída do caminhão". Três campos, e não um
+             campo onde se digita tudo junto: o número do lacre é procurado
+             um a um na inspeção, e "133476/133477" não é achável por busca
+             nenhuma.
+
+             EM LINHA PRÓPRIA, ABAIXO DA PLACA (pedido do gestor no mesmo
+             dia): "otimiza o espaço e fica mais claro". Na mesma linha, os
+             três campos espremiam a placa e os botões; embaixo, cada coisa
+             tem a largura que merece e fica evidente que os lacres são da
+             SAÍDA, não da chegada. -->
+        <div class="quick-linha-lacres">
+          <label class="quick-linha-rotulo">Nº do lacre <span class="hint">(na saída — até 3)</span></label>
+          <div class="lacres-trio">
+            <input type="text" id="portaria-lacre" placeholder="Ex: 133476" autocomplete="off">
+            <input type="text" id="portaria-lacre-2" placeholder="2º lacre (opcional)" autocomplete="off">
+            <input type="text" id="portaria-lacre-3" placeholder="3º lacre (opcional)" autocomplete="off">
+          </div>
+        </div>
       </div>
       <div class="card-sub" style="margin-top:-6px">Dica: digite a placa e aperte <strong>Enter</strong> para registrar "Chegou" mais rápido.
-        No "Saiu", o número do lacre fica gravado nas cargas do caminhão.</div>
+        No "Saiu", os números de lacre ficam gravados nas cargas do caminhão.</div>
     </div>
 
     <!-- Lacre retido (pedido do gestor, 18/08/2026): o caminhão saiu para

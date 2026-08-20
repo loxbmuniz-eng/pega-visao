@@ -74,6 +74,10 @@ export function paraPainel(linha) {
     qtdEntregas: linha.qtd_entregas,
     observacoes: linha.observacoes,
     lacre: linha.lacre || '',
+    /* Até TRÊS lacres na saída (migração 025). `lacre` continua sendo o
+       primeiro — nenhum relatório antigo precisou mudar por causa disto. */
+    lacre2: linha.lacre_2 || '',
+    lacre3: linha.lacre_3 || '',
     lacreRetido: linha.lacre_retido || '',
     status: linha.status_atual,
     aguardandoCarga: linha.aguardando_carga,
@@ -137,6 +141,8 @@ export function saneiarCriacao(corpo, frota) {
     // saída — mas a fila offline pode subir uma carga que já saiu com
     // lacre, e ignorá-los aqui perderia o número em silêncio.
     lacre: texto(corpo.lacre, 50),
+    lacre_2: texto(corpo.lacre2, 50),
+    lacre_3: texto(corpo.lacre3, 50),
     lacre_retido: texto(corpo.lacreRetido, 50),
     /* Data em que a CARGA foi lançada. Vem do painel porque ele pode estar
        subindo algo que ficou na fila offline — usar `now` aqui carimbaria a
@@ -207,6 +213,8 @@ export function saneiarEdicao(corpo, camposPermitidos) {
     qtd_entregas: () => Math.max(1, inteiro(corpo.qtdEntregas, 1, 1)),
     observacoes: () => texto(corpo.observacoes, 2000),
     lacre: () => texto(corpo.lacre, 50),
+    lacre_2: () => texto(corpo.lacre2, 50),
+    lacre_3: () => texto(corpo.lacre3, 50),
     lacre_retido: () => texto(corpo.lacreRetido, 50),
     programado_em: () => dataOuAgora(corpo.programadoEm),
     aguardando_carga: () => corpo.aguardandoCarga === true,
@@ -219,7 +227,7 @@ export function saneiarEdicao(corpo, camposPermitidos) {
     qtd_ganchos: 'qtdGanchos', qtd_entregas: 'qtdEntregas',
     observacoes: 'observacoes', aguardando_carga: 'aguardandoCarga',
     programado_em: 'programadoEm',
-    lacre: 'lacre', lacre_retido: 'lacreRetido',
+    lacre: 'lacre', lacre_2: 'lacre2', lacre_3: 'lacre3', lacre_retido: 'lacreRetido',
   };
 
   const saida = {};
@@ -283,7 +291,7 @@ export function camposDeAviso(antes, depois) {
 export const COLUNAS_CARGA = `
   carga_id, numero_carga, placa, transportadora, tipo_veiculo, motorista,
   cliente, destino, peso_kg, doca, rota_codigo, sequencia, pra_onde,
-  paletizada, qtd_ganchos, qtd_entregas, observacoes, lacre, lacre_retido,
+  paletizada, qtd_ganchos, qtd_entregas, observacoes, lacre, lacre_2, lacre_3, lacre_retido,
   status_atual,
   aguardando_carga, criado_em, programado_em, atualizado_em, operador_id, operador_nome,
   operador_setor, versao, excluida_em, excluida_por`;

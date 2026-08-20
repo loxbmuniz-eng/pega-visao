@@ -249,7 +249,7 @@ rotasDevolucoes.get('/devolucoes/:id', exigirLogin, async (req, res, next) => {
    status NÃO passam por aqui (têm rota própria com a máquina de estados). */
 const CAMPOS_CABECALHO_PORTARIA = new Set([
   'placa', 'transportadora', 'motorista', 'carga_numero',
-  'lacre1', 'lacre2', 'nota_transferencia',
+  'lacre1', 'lacre2', 'lacre3', 'nota_transferencia',
   // "Chegou lacrado?" é a resposta do porteiro no recebimento (18/08/2026).
   'chegou_lacrado',
 ]);
@@ -499,13 +499,18 @@ rotasDevolucoes.patch('/devolucoes/:id/itens/:itemId', exigirLogin, async (req, 
     const SO_PESAGEM = new Set(['peso_faturamento']);
     const SO_DESTINACAO = new Set(['destinacao', 'dest_estoque', 'dest_descarte', 'dest_reprocesso']);
     const SO_NOTA_FINAL = new Set(['nota_final']);
+    /* O número da carga de devolução nasce no SIS ATAK, no momento em que a
+       PORTARIA abre a DEV — então é ela quem digita, item a item. É o único
+       campo de item que a Portaria escreve, e por isso tem lista própria. */
+    const SO_CARGA_DEV = new Set(['carga_dev']);
     const chaves = Object.keys(it);
     const permitido =
       op.setor === 'Logística' || op.setor === 'Administração'
       || (op.setor === 'Expedição' && chaves.every((c) => SO_CONFERENCIA.has(c)))
       || (op.setor === 'Faturamento' && chaves.every((c) => SO_PESAGEM.has(c)))
       || (op.setor === 'Controles Internos' && chaves.every((c) => SO_DESTINACAO.has(c)))
-      || (op.setor === 'Central de Notas' && chaves.every((c) => SO_NOTA_FINAL.has(c)));
+      || (op.setor === 'Central de Notas' && chaves.every((c) => SO_NOTA_FINAL.has(c)))
+      || (op.setor === 'Portaria' && chaves.every((c) => SO_CARGA_DEV.has(c)));
     if (!permitido) {
       return res.status(403).json({
         erro: `O setor ${op.setor} não altera esses campos do checklist.`,
