@@ -112,6 +112,29 @@ function podePesarItemDev() {
    DIFERENTES (checklist com mais de uma rota: no SIS ATAK a montagem é por
    rota). Vazio no item, portanto, não é falta de informação: é "vale o do
    cabeçalho". */
+/* OS LACRES DA CHEGADA, NO RELATÓRIO (20/08/2026).
+
+   Pedido do gestor: as informações de lacre "tanto na saída quanto
+   devoluções" precisam sair fiéis nos relatórios. Na saída isso vive no
+   Relatório Operacional (blocoLacresPdf, em app.js); aqui é a outra ponta —
+   o que o porteiro encontrou quando o caminhão VOLTOU.
+
+   "Chegou sem lacre" sai escrito, não em branco: campo vazio é ambíguo
+   (ninguém anotou? ou não tinha lacre?), e foi para desfazer essa
+   ambiguidade que `chegouLacrado` existe com três estados. */
+function lacresChegadaDev(d) {
+  const nums = [d.lacre1, d.lacre2, d.lacre3].filter(Boolean);
+  if (d.chegouLacrado === false) {
+    return ' · <strong>Chegou SEM lacre</strong>'
+      + (nums.length ? ` (número anotado: ${esc(nums.join('/'))})` : '');
+  }
+  if (nums.length) {
+    return ` · Lacre${nums.length > 1 ? 's' : ''} na chegada ${esc(nums.join(' / '))}`;
+  }
+  if (d.chegouLacrado === true) return ' · Chegou lacrado (número não anotado)';
+  return ' · Lacre na chegada: não informado';
+}
+
 function cargaDevDoItem(item, dev) {
   return (item && item.cargaDev) || (dev && dev.cargaNumero) || '';
 }
@@ -1268,7 +1291,7 @@ async function relatorioDevolucoesUI(diaParam) {
         + `${d.placa ? ' · Placa ' + esc(d.placa) : ''}`
         + `${d.cargaNumero ? ' · Carga ' + esc(d.cargaNumero) : ''}`
         + `${d.operadorCodigo ? ' · Cód. operador ' + esc(d.operadorCodigo) : ''}`
-        + `${d.lacre1 ? ' · Lacre ' + esc([d.lacre1, d.lacre2, d.lacre3].filter(Boolean).join('/')) : ''}`
+        + `${lacresChegadaDev(d)}`
         + `${d.pesoFinal !== null ? ' · Peso final ' + d.pesoFinal.toLocaleString('pt-BR') + ' kg' : ''}`)}
       <table class="dev-doc-tabela">
         <thead><tr>

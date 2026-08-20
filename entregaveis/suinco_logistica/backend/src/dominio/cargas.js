@@ -78,7 +78,12 @@ export function paraPainel(linha) {
        primeiro — nenhum relatório antigo precisou mudar por causa disto. */
     lacre2: linha.lacre_2 || '',
     lacre3: linha.lacre_3 || '',
+    /* A retenção com os quatro elementos (migração 027): número, motivo,
+       autor e hora. Antes, três deles viviam dentro da observação. */
     lacreRetido: linha.lacre_retido || '',
+    lacreRetidoMotivo: linha.lacre_retido_motivo || '',
+    lacreRetidoPor: linha.lacre_retido_por || '',
+    lacreRetidoEm: linha.lacre_retido_em || null,
     status: linha.status_atual,
     aguardandoCarga: linha.aguardando_carga,
     criadoEm: linha.criado_em,
@@ -300,7 +305,8 @@ export function camposDeAviso(antes, depois) {
 export const COLUNAS_CARGA = `
   carga_id, numero_carga, placa, transportadora, tipo_veiculo, motorista,
   cliente, destino, peso_kg, doca, rota_codigo, sequencia, pra_onde,
-  paletizada, qtd_ganchos, qtd_entregas, observacoes, lacre, lacre_2, lacre_3, lacre_retido,
+  paletizada, qtd_ganchos, qtd_entregas, observacoes, lacre, lacre_2, lacre_3,
+  lacre_retido, lacre_retido_motivo, lacre_retido_por, lacre_retido_em,
   status_atual,
   aguardando_carga, criado_em, programado_em, atualizado_em,
   acao_em, acao_por, acao_setor, operador_id, operador_nome,

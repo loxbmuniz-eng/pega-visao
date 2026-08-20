@@ -329,6 +329,9 @@ const SuincoSharePoint = (function () {
       lacre2: campos.Lacre_2 || '',
       lacre3: campos.Lacre_3 || '',
       lacreRetido: campos.Lacre_Retido || '',
+      lacreRetidoMotivo: campos.Lacre_Retido_Motivo || '',
+      lacreRetidoPor: campos.Lacre_Retido_Por || '',
+      lacreRetidoEm: campos.Lacre_Retido_Em || null,
       programadoEm: campos.Programado_Em,
       status: campos.Status_Atual,
       aguardandoCarga: campos.Aguardando_Carga === true || campos.Aguardando_Carga === 'Sim',
@@ -371,6 +374,12 @@ const SuincoSharePoint = (function () {
       Lacre_2: c.lacre2,
       Lacre_3: c.lacre3,
       Lacre_Retido: c.lacreRetido,
+      /* Os três companheiros do número retido (migração 027): motivo, quem
+         e quando. Vêm do servidor e o painel não os manda de volta — quem
+         carimba retenção é a rota própria, não a sincronização. */
+      Lacre_Retido_Motivo: c.lacreRetidoMotivo || '',
+      Lacre_Retido_Por: c.lacreRetidoPor || '',
+      Lacre_Retido_Em: c.lacreRetidoEm || null,
       Status_Atual: c.status,
       Aguardando_Carga: c.aguardandoCarga,
       Criado_Em: c.criadoEm,
@@ -1191,6 +1200,16 @@ const SuincoSharePoint = (function () {
      ver o comentário da rota. Não passa pela fila offline de propósito:
      é ação em lote sobre cargas de outros setores, e "achar que fechou"
      sem confirmação do servidor seria pior que falhar na hora. */
+  /* Retenção de lacre na inspeção da saída — rota própria (20/08/2026).
+     Passa pelo servidor para o motivo, o autor e a hora ficarem gravados em
+     campo, e não só dentro do texto da observação. */
+  function reterLacre({ placa, lacreRetido, novoLacre, motivo }) {
+    return chamar('/api/portaria/lacre-retido', {
+      metodo: 'POST',
+      corpo: { placa, lacreRetido, novoLacre, motivo },
+    });
+  }
+
   function encerrarProgramacoesAnteriores(motivo, ids) {
     return chamar('/api/cargas/encerrar-anteriores', {
       metodo: 'POST',
@@ -1279,7 +1298,7 @@ const SuincoSharePoint = (function () {
     aoDescartarDaFila, aoEditarCarga, aoExcluirCarga, aoAtualizarPresenca,
     aoFecharPrograma,
     login, sair, diagnosticarConexao,
-    push, upsert, excluir, mudarStatus, encerrarProgramacoesAnteriores,
+    push, upsert, excluir, mudarStatus, encerrarProgramacoesAnteriores, reterLacre,
     corrigirEtapa, corrigirDataProgramacao, desfazerExclusao, listarExcluidas,
     pull, pullTudo, drenarFila, pendentes,
     listarOperadores, criarOperador, atualizarOperador,

@@ -2755,15 +2755,29 @@ describe('26. Até três lacres na saída (20/08/2026)', () => {
     assert.equal(r.json.lacre3, '133478');
   });
 
-  test('um lacre só continua sendo o caso normal — os outros ficam vazios', async () => {
+  test('ECO com lacre vazio NÃO apaga número já gravado', async () => {
+    /* Achado medindo o tráfego do painel em 20/08/2026: um terminal que
+       ainda não recebeu os lacres reenvia a carga com os três em branco, e
+       isso apagava o que a Portaria tinha acabado de registrar — sem erro
+       em tela nenhuma. Mesma família do sumiço das observações em 14/08,
+       mesma defesa: vazio não apaga. */
     const r = await req(`/api/cargas/${cargaId}`, {
       metodo: 'PATCH', token: tokens['Portaria'],
-      corpo: { lacre: '900001', lacre2: '', lacre3: '' },
+      corpo: { lacre: '', lacre2: '', lacre3: '' },
+    });
+    assert.equal(r.status, 200, r.texto);
+    assert.equal(r.json.lacre, '133476');
+    assert.equal(r.json.lacre2, '133477');
+    assert.equal(r.json.lacre3, '133478');
+  });
+
+  test('para trocar um lacre, digita-se o outro número', async () => {
+    const r = await req(`/api/cargas/${cargaId}`, {
+      metodo: 'PATCH', token: tokens['Portaria'], corpo: { lacre: '900001' },
     });
     assert.equal(r.status, 200, r.texto);
     assert.equal(r.json.lacre, '900001');
-    assert.equal(r.json.lacre2, '');
-    assert.equal(r.json.lacre3, '');
+    assert.equal(r.json.lacre2, '133477', 'os outros não se mexem');
   });
 
   test('os lacres continuam sendo da Portaria — a Expedição não escreve', async () => {
@@ -2777,7 +2791,7 @@ describe('26. Até três lacres na saída (20/08/2026)', () => {
     assert.equal(r.json.codigo, 'SEM_CAMPOS_PERMITIDOS');
     const { rows } = await pool.query(
       'SELECT lacre_2 FROM fact_viagens WHERE carga_id = $1', [cargaId]);
-    assert.equal(rows[0].lacre_2, '', 'a Expedição não deixou marca no lacre');
+    assert.equal(rows[0].lacre_2, '133477', 'a Expedição não deixou marca no lacre');
   });
 });
 
@@ -2958,5 +2972,98 @@ describe('28. Encerrar a programação anterior deixa a Torre limpa', () => {
     });
     assert.equal(r.status, 200, r.texto);
     assert.equal(r.json.total, 0);
+  });
+});
+
+/* ------------------------------------------------------------------ */
+describe('29. Lacres gravados fielmente: saída, retenção e trilha', () => {
+  /* Pedido do gestor (20/08/2026): "as informações de lacre dos porteiros —
+     lacres, tanto na saída quanto devoluções, e lacre retido também — saiam
+     como informação para a gente na torre de controle, nos relatórios...
+     grave fielmente no backend". Fiel = campo, com motivo, autor e hora —
+     não frase dentro da observação. */
+  let placa;
+  let cargaId;
+
+  before(async () => {
+    const { rows } = await pool.query('SELECT placa FROM dim_veiculos ORDER BY placa OFFSET 74 LIMIT 1');
+    placa = rows[0].placa;
+    await pool.query('DELETE FROM fact_statusfrota WHERE placa = $1', [placa]);
+    await pool.query('DELETE FROM fact_viagens WHERE placa = $1', [placa]);
+    const c = await req('/api/cargas', {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { id: 'lacre_fiel', placa, numeroCarga: 'LACRE-FIEL', peso: 1000 },
+    });
+    assert.equal(c.status, 201, c.texto);
+    cargaId = c.json.id;
+    for (const [setor, status] of [
+      ['Portaria', 'Aguardando Embarque'], ['Expedição', 'Embarque Iniciado'],
+      ['Expedição', 'Embarque Finalizado'], ['Faturamento', 'Faturado'],
+    ]) {
+      const r = await req(`/api/cargas/${cargaId}/status`, {
+        metodo: 'POST', token: tokens[setor], corpo: { status },
+      });
+      assert.equal(r.status, 200, `${setor}: ${r.texto}`);
+    }
+  });
+
+  test('a saída grava os lacres na MESMA operação, sem PATCH depois', async () => {
+    const r = await req('/api/portaria/saida', {
+      metodo: 'POST', token: tokens['Portaria'],
+      corpo: { placa, lacres: ['133476', '133477', '133478'] },
+    });
+    assert.equal(r.status, 200, r.texto);
+    const c = r.json.liberadas.find((x) => x.id === cargaId);
+    assert.ok(c, 'a carga saiu');
+    assert.equal(c.lacre, '133476');
+    assert.equal(c.lacre2, '133477');
+    assert.equal(c.lacre3, '133478');
+  });
+
+  test('a trilha da saída diz quais lacres foram', async () => {
+    const { rows } = await pool.query(
+      'SELECT acao FROM log_eventos WHERE carga_id = $1 ORDER BY data_evento DESC LIMIT 1', [cargaId]
+    );
+    assert.match(rows[0].acao, /133476 \/ 133477 \/ 133478/);
+  });
+
+  test('a retenção grava número, motivo, autor e hora — não só texto na observação', async () => {
+    const r = await req('/api/portaria/lacre-retido', {
+      metodo: 'POST', token: tokens['Portaria'],
+      corpo: { placa, lacreRetido: '133476', novoLacre: '900123', motivo: 'carga incorreta na conferência' },
+    });
+    assert.equal(r.status, 200, r.texto);
+    assert.equal(r.json.total, 1);
+    const c = r.json.atingidas[0];
+    assert.equal(c.lacreRetido, '133476');
+    assert.equal(c.lacreRetidoMotivo, 'carga incorreta na conferência');
+    assert.ok(c.lacreRetidoPor, 'quem reteve');
+    assert.ok(c.lacreRetidoEm, 'quando reteve');
+    assert.equal(c.lacre, '900123', 'o novo lacre passa a ser o vigente');
+    assert.match(c.observacoes, /RETIDO/, 'a observação continua contando a história para quem lê a tela');
+  });
+
+  test('sem número de lacre, a retenção é recusada', async () => {
+    const r = await req('/api/portaria/lacre-retido', {
+      metodo: 'POST', token: tokens['Portaria'], corpo: { placa, motivo: 'x' },
+    });
+    assert.equal(r.status, 400);
+    assert.equal(r.json.codigo, 'LACRE_FALTANDO');
+  });
+
+  test('retenção é da Portaria — a Expedição não retém', async () => {
+    const r = await req('/api/portaria/lacre-retido', {
+      metodo: 'POST', token: tokens['Expedição'],
+      corpo: { placa, lacreRetido: '1', motivo: 'x' },
+    });
+    assert.equal(r.status, 403);
+  });
+
+  test('a retenção fica na trilha, com o motivo', async () => {
+    const { rows } = await pool.query(
+      "SELECT acao FROM log_eventos WHERE carga_id = $1 AND acao LIKE '%RETIDO%' ORDER BY data_evento DESC LIMIT 1",
+      [cargaId]
+    );
+    assert.match(rows[0].acao, /carga incorreta na conferência/);
   });
 });

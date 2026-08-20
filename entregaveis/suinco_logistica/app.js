@@ -1822,7 +1822,8 @@ function renderTorre(){
         ? `<input type="text" class="placa-input" value="${esc(c.placa)}" onchange="atualizarPlacaUI('${escJs(c.id)}',this.value)" title="Trocar a placa.">`
         : `<span class="veic-placa">${esc(c.placa)}</span>`}
         <span class="veic-transp">${esc(c.transportadora)||'—'}</span>
-        <span class="veic-tipo">${esc(c.tipoVeiculo)||'—'}</span></td>
+        <span class="veic-tipo">${esc(c.tipoVeiculo)||'—'}</span>
+        ${chipLacreHtml(c)}</td>
       <td>${editavel
         ? `<input type="text" class="motorista-input" value="${esc(c.motorista||'')}" onchange="atualizarMotoristaUI('${escJs(c.id)}',this.value)" title="Trocar o motorista desta carga.">`
         : (esc(c.motorista)||'—')}</td>
@@ -2293,6 +2294,126 @@ async function encerrarProgramacaoAnteriorUI(){
   }catch(e){
     notify('Não consegui encerrar: ' + (e && e.message ? e.message : 'erro no servidor') + '.', 'danger', 8000);
   }
+}
+
+/* O BLOCO DE LACRES DOS RELATÓRIOS (20/08/2026).
+
+   Pedido do gestor: as informações de lacre precisam "sair marcadas onde
+   devem ficar em todos os relatórios".
+
+   Por que BLOCO e não coluna na tabela principal: a tabela do Operacional
+   tem 12 colunas em A4 e foi calibrada para caber sem rolagem lateral —
+   enfiar mais uma faria a folha voltar a quebrar, e o lacre não é uma
+   propriedade da linha de carga: é do CAMINHÃO. Um caminhão com duas cargas
+   apareceria com o mesmo lacre repetido em duas linhas, como se fossem
+   dois. Aqui é uma linha por caminhão, que é a verdade do pátio.
+
+   Some sozinho quando não há nada a dizer: relatório com seção vazia ensina
+   o leitor a pular seção. */
+function blocoLacresPdf(lista){
+  const porPlaca = new Map();
+  lista.forEach(c=>{
+    const l = lacresDaCarga(c);
+    if(!l.numeros.length && !l.retido && !l.faltando) return;
+    const chave = normalizarPlaca(c.placa);
+    const atual = porPlaca.get(chave);
+    // Uma linha por caminhão: quem tem duas cargas junta os números delas.
+    if(!atual){
+      porPlaca.set(chave, {
+        placa: c.placa, cargas: [c.numeroCarga].filter(Boolean),
+        lacres: l.numeros.slice(), retido: l.retido, motivo: l.motivo,
+        por: l.por, em: l.em, faltando: l.faltando,
+      });
+      return;
+    }
+    if(c.numeroCarga && !atual.cargas.includes(c.numeroCarga)) atual.cargas.push(c.numeroCarga);
+    l.numeros.forEach(n=>{ if(!atual.lacres.includes(n)) atual.lacres.push(n); });
+    if(l.retido && !atual.retido){
+      atual.retido = l.retido; atual.motivo = l.motivo; atual.por = l.por; atual.em = l.em;
+    }
+    atual.faltando = atual.faltando && l.faltando;
+  });
+
+  const linhas = [...porPlaca.values()];
+  if(!linhas.length) return '';
+
+  const comRetencao = linhas.filter(x=>x.retido).length;
+  const semLacre = linhas.filter(x=>x.faltando).length;
+
+  const corpo = linhas.map(x=>`<tr${x.retido ? ' class="lacre-linha-retida"' : ''}>
+      <td>${esc(x.placa)}</td>
+      <td>${esc(x.cargas.join(', ')) || '—'}</td>
+      <td>${x.lacres.length ? esc(x.lacres.join(' / ')) : '<span class="obs-pendente">sem lacre informado</span>'}</td>
+      <td>${x.retido ? esc(x.retido) : '—'}</td>
+      <td>${x.retido
+        ? esc([x.motivo, x.por ? 'por ' + x.por : '', x.em ? fmtDataHora(x.em) : '']
+            .filter(Boolean).join(' · ')) || '—'
+        : '—'}</td>
+    </tr>`).join('');
+
+  return `
+    <div class="print-bloco-tit">Controle de lacres</div>
+    <table class="tab-lacres">
+      <thead><tr>
+        <th>Placa</th><th>Carga(s)</th><th>Lacre(s) da saída</th>
+        <th>Retido</th><th>Motivo da retenção · quem · quando</th>
+      </tr></thead>
+      <tbody>${corpo}</tbody>
+    </table>
+    <div class="print-nota">
+      ${linhas.length} caminhão(ões) com registro de lacre no período.
+      ${comRetencao ? `<strong>${comRetencao} com lacre RETIDO na inspeção.</strong>` : ''}
+      ${semLacre ? `<strong>${semLacre} seguiram viagem sem número de lacre informado.</strong>` : ''}
+      O lacre é do caminhão, não da carga: quando a placa leva mais de uma carga, os números aparecem uma vez só.
+    </div>`;
+}
+
+/* OS LACRES DE UMA CARGA, EM UM LUGAR SÓ (20/08/2026).
+
+   Pedido do gestor: "as informações de lacre dos porteiros — lacres, tanto
+   na saída quanto devoluções, e lacre retido também — saiam como informação
+   para a gente na torre de controle, nos relatórios".
+
+   Uma função só monta o texto para todas as telas. É o que garante que a
+   Torre, a ficha da carga e os três relatórios digam a MESMA coisa sobre o
+   mesmo caminhão — a alternativa (cada tela montando o seu) é como se
+   produz relatório que não bate com o painel. */
+function lacresDaCarga(c){
+  const nums = [c.lacre, c.lacre2, c.lacre3].filter(Boolean);
+  return {
+    numeros: nums,
+    texto: nums.join(' / '),
+    retido: c.lacreRetido || '',
+    motivo: c.lacreRetidoMotivo || '',
+    por: c.lacreRetidoPor || '',
+    em: c.lacreRetidoEm || null,
+    /* Só é "sem lacre" quem JÁ SAIU sem número informado. Carga que ainda
+       está no pátio não tem lacre porque ainda não é hora — apontar isso
+       como falta seria alarme falso o dia inteiro. */
+    faltando: c.status === 'Seguiu Viagem' && !nums.length,
+  };
+}
+
+/* O chip que aparece na Torre, embaixo da placa. Fica na célula do VEÍCULO
+   porque o lacre é do caminhão, não de uma carga específica — o mesmo
+   motivo pelo qual a saída aplica o número a todas as cargas da placa. */
+function chipLacreHtml(c){
+  const l = lacresDaCarga(c);
+  const partes = [];
+  if(l.numeros.length){
+    partes.push(`<span class="chip-lacre" title="${esc('Lacre(s) da saída: ' + l.texto)}">🔒 ${esc(l.texto)}</span>`);
+  }
+  if(l.retido){
+    const dica = ['Lacre RETIDO na inspeção: ' + l.retido,
+      l.motivo ? 'Motivo: ' + l.motivo : '',
+      l.por ? 'Registrado por ' + l.por : '',
+      l.em ? 'em ' + fmtDataHora(l.em) : ''].filter(Boolean).join(' · ');
+    partes.push(`<span class="chip-lacre chip-lacre-retido" title="${esc(dica)}">⚠️ retido ${esc(l.retido)}</span>`);
+  }
+  if(l.faltando){
+    partes.push('<span class="chip-lacre chip-lacre-falta" title="O caminhão saiu sem número de lacre informado pela Portaria.">🔓 sem lacre</span>');
+  }
+  return partes.join('');
 }
 
 /* ÚLTIMA AÇÃO DE UMA PESSOA — não a última gravação da máquina.
@@ -2907,30 +3028,47 @@ function acaoSaidaUI(){
 }
 
 /* Retenção de lacre na inspeção da saída — pedido do gestor (18/08/2026).
-   O número retido fica na carga, o novo lacre vira o vigente e o motivo
-   entra nas observações (com quem registrou). */
-function registrarLacreRetidoUI(){
+
+   PASSA PELO SERVIDOR (20/08/2026). Antes isto era gravação local que subia
+   junto com o resto da carga, e o motivo/autor/hora viviam só dentro do
+   texto da observação. Agora existe rota própria e três campos próprios
+   (migração 027), porque o gestor precisa dessa informação FIEL no
+   relatório — e observação é campo que qualquer setor edita.
+
+   O retorno do servidor é a fonte da verdade: se ele não achou carga para
+   a placa, a tela diz isso em vez de fingir que gravou. */
+async function registrarLacreRetidoUI(){
   const v = (id)=> (document.getElementById(id)||{}).value || '';
   const placa = v('lacre-ret-placa');
   if(!normalizarPlaca(placa)){ notify('Informe a placa do caminhão.','warn'); return; }
   const retido = v('lacre-ret-numero').trim();
   if(!retido){ notify('Informe o número do lacre retido.','warn'); return; }
-  const r = registrarLacreRetido(placa, {
-    lacreRetido: retido,
-    novoLacre: v('lacre-ret-novo'),
-    motivo: v('lacre-ret-motivo'),
-    operador: nomeOperadorAtual(),
-  });
-  if(!r.atingidas.length){
-    notify(`Nenhuma carga encontrada para a placa ${normalizarPlaca(placa)} — nem saída de hoje, nem em aberto.`, 'warn', 7000);
+  const novo = v('lacre-ret-novo').trim();
+  const motivo = v('lacre-ret-motivo').trim();
+  if(!motivo){
+    notify('Diga o motivo da retenção — é ele que vai para o relatório e explica a ocorrência depois.', 'warn', 7000);
     return;
   }
-  notifyGravacao(`${normalizarPlaca(placa)}: lacre ${retido} retido em ${r.atingidas.length} carga(s)`
-    + (v('lacre-ret-novo').trim() ? ` — novo lacre ${v('lacre-ret-novo').trim()}` : '') + '.');
-  tocarBeepConfirmacao();
-  ['lacre-ret-placa','lacre-ret-numero','lacre-ret-novo','lacre-ret-motivo']
-    .forEach(id=>{ const e=document.getElementById(id); if(e) e.value=''; });
-  renderAll();
+  try{
+    const r = await comOverlaySync('Registrando a retenção do lacre…',
+      () => SuincoSharePoint.reterLacre({
+        placa: normalizarPlaca(placa), lacreRetido: retido, novoLacre: novo, motivo,
+      }));
+    if(!r.total){
+      notify(`Nenhuma carga encontrada para a placa ${normalizarPlaca(placa)} — nem saída de hoje, nem em aberto.`, 'warn', 7000);
+      return;
+    }
+    await SuincoSharePoint.sincronizarAgora();
+    notifyGravacao(`${normalizarPlaca(placa)}: lacre ${retido} retido em ${r.total} carga(s)`
+      + (novo ? ` — novo lacre ${novo}` : '') + '.');
+    tocarBeepConfirmacao();
+    ['lacre-ret-placa','lacre-ret-numero','lacre-ret-novo','lacre-ret-motivo']
+      .forEach(id=>{ const e=document.getElementById(id); if(e) e.value=''; });
+    renderAll();
+  }catch(e){
+    notify('Não consegui registrar a retenção: ' + (e && e.message ? e.message : 'erro no servidor')
+      + '. O lacre NÃO foi marcado como retido.', 'danger', 9000);
+  }
 }
 /* Fila da Portaria com ação direta por linha.
 
@@ -3799,9 +3937,12 @@ function renderTimelineCarga(id){
     ['Qtd. Entregas', c.qtdEntregas ?? 1],
     // Lacres (18/08/2026): só aparecem quando existem — carga que nunca
     // saiu não precisa de duas linhas em branco na ficha.
-    ...(c.lacre ? [[[c.lacre, c.lacre2, c.lacre3].filter(Boolean).length > 1 ? 'Lacres' : 'Lacre',
-                    [c.lacre, c.lacre2, c.lacre3].filter(Boolean).join(' · ')]] : []),
-    ...(c.lacreRetido ? [['Lacre retido', c.lacreRetido]] : [])
+    ...(lacresDaCarga(c).numeros.length
+      ? [[lacresDaCarga(c).numeros.length > 1 ? 'Lacres da saída' : 'Lacre da saída',
+          lacresDaCarga(c).numeros.join(' · ')]] : []),
+    ...(c.lacreRetido ? [['Lacre retido', c.lacreRetido
+        + (c.lacreRetidoMotivo ? ` — ${c.lacreRetidoMotivo}` : '')
+        + (c.lacreRetidoPor ? ` (${c.lacreRetidoPor}` + (c.lacreRetidoEm ? `, ${fmtDataHora(c.lacreRetidoEm)}` : '') + ')' : '')]] : [])
   ];
 
   wrap.innerHTML = `
@@ -4032,11 +4173,26 @@ function renderHistorico(){
   const mobile = window.matchMedia && window.matchMedia('(max-width:560px)').matches;
   const LIMITE = mobile ? 40 : 500;
   const exibidos = lista.slice(0, LIMITE);
+  /* LINHA QUE ABRE (20/08/2026).
+
+     Pedido do gestor: "quero que cada linha do histórico se expanda quando
+     clicada nela com as informações de log, tudo que é necessário quando
+     vou acessar um histórico".
+
+     O Histórico respondia QUANDO, QUEM e DE→PARA. Quem investiga um caso
+     precisa do resto — qual carga era, qual cliente, que peso, que lacre,
+     o que estava escrito na observação — e tinha que ir procurar em outra
+     aba, perdendo o filtro que acabou de montar. Agora abre ali mesmo. */
   document.getElementById('hist-tbody').innerHTML = exibidos.map(m=>`
-    <tr>
-      <td>${fmtDataHora(m.timestamp)}</td><td>${esc(m.placa)}</td>
+    <tr class="hist-linha" onclick="alternarDetalheHistoricoUI('${escJs(m.id)}')"
+        title="Clique para ver tudo o que se sabe sobre este registro.">
+      <td><span class="hist-seta" id="hist-seta-${esc(m.id)}">▸</span> ${fmtDataHora(m.timestamp)}</td>
+      <td>${esc(m.placa)}</td>
       <td>${m.statusAnterior ? badgeHtml(m.statusAnterior) : '—'}</td><td>${badgeHtml(m.statusNovo)}</td>
       <td>${esc(m.operador)}</td><td>${esc(m.setor)}</td>
+    </tr>
+    <tr class="hist-detalhe" id="hist-det-${esc(m.id)}" hidden>
+      <td colspan="6">${detalheHistoricoHtml(m)}</td>
     </tr>`).join('');
   document.getElementById('hist-empty').hidden = lista.length>0;
   const contagemEl = document.getElementById('hist-contagem');
@@ -4045,6 +4201,97 @@ function renderHistorico(){
       ? `Mostrando as ${LIMITE} mais recentes de ${lista.length} — use os filtros pra ver outras.`
       : (lista.length ? `${lista.length} movimentação(ões).` : '');
   }
+}
+
+/* O QUE APARECE QUANDO A LINHA DO HISTÓRICO ABRE.
+
+   Regra de conteúdo: tudo que responde "o que era essa carga naquele
+   momento e o que aconteceu com ela", sem obrigar ninguém a trocar de aba.
+   Quando a carga não existe mais no painel (excluída, ou fora da janela de
+   sincronização), o bloco diz isso em vez de aparecer vazio — sumiço sem
+   explicação é o que faz operador desconfiar do sistema. */
+function detalheHistoricoHtml(m){
+  const c = getCarga(m.cargaId);
+  const linha = (rot, val)=> val === '' || val === null || val === undefined
+    ? '' : `<div class="hist-campo"><dt>${esc(rot)}</dt><dd>${val}</dd></div>`;
+
+  const doEvento = [
+    linha('Registro', `${fmtDataHora(m.timestamp)}`),
+    linha('Etapa', `${m.statusAnterior ? esc(m.statusAnterior) + ' → ' : ''}<strong>${esc(m.statusNovo)}</strong>`),
+    linha('Operador', `${esc(m.operador)}${m.setor ? ' · ' + esc(m.setor) : ''}`),
+    linha('Carga (id)', `<code>${esc(m.cargaId)}</code>`),
+  ].join('');
+
+  if(!c){
+    return `<div class="hist-det-grid">${doEvento}</div>
+      <div class="hist-det-aviso">Esta carga não está mais no painel — pode ter sido excluída ou
+      estar fora do período que o painel mantém carregado. O registro do evento acima continua
+      valendo: ele é da trilha, e a trilha não se apaga.</div>`;
+  }
+
+  const l = lacresDaCarga(c);
+  const daCarga = [
+    linha('Nº da carga', esc(c.numeroCarga) || '—'),
+    linha('Status atual', badgeHtml(c.status)),
+    linha('Cliente', esc(c.cliente) || '—'),
+    linha('Destino', esc(c.destino) || '—'),
+    linha('Rota', esc(rotaCurta(c.rota)) || '—'),
+    linha('Transportadora', esc(c.transportadora) || '—'),
+    linha('Veículo', `${esc(c.tipoVeiculo) || '—'}${c.motorista ? ' · ' + esc(c.motorista) : ''}`),
+    linha('Peso', c.peso ? `${c.peso.toLocaleString('pt-BR')} kg` : '—'),
+    linha('Tipo de operação', c.praOnde ? esc(PRA_ONDE_LABEL[c.praOnde] || c.praOnde) : '—'),
+    linha('Paletizada', paletizadaDaCarga(c)),
+    linha('Ganchos · Entregas', `${c.qtdGanchos || 'Liso'} · ${c.qtdEntregas ?? 1}`),
+    linha('Sequência', c.sequencia ?? '—'),
+  ].join('');
+
+  const lacres = [
+    linha('Lacre(s) da saída', l.numeros.length ? esc(l.texto)
+      : (l.faltando ? '<span class="obs-pendente">saiu sem lacre informado</span>' : '—')),
+    linha('Lacre retido', l.retido
+      ? `${esc(l.retido)}${l.motivo ? ' — ' + esc(l.motivo) : ''}`
+        + `${l.por ? ` <small>(${esc(l.por)}${l.em ? ', ' + fmtDataHora(l.em) : ''})</small>` : ''}`
+      : ''),
+  ].join('');
+
+  const datas = [
+    linha('Programada em', c.programadoEm ? fmtDataHora(c.programadoEm) : '—'),
+    linha('Entrada no pátio', c.criadoEm ? fmtDataHora(c.criadoEm) : '—'),
+    linha('Observações', esc(c.observacoes) || '—'),
+  ].join('');
+
+  return `
+    <div class="hist-det-secao">Este registro</div>
+    <div class="hist-det-grid">${doEvento}</div>
+    <div class="hist-det-secao">A carga</div>
+    <div class="hist-det-grid">${daCarga}</div>
+    ${lacres ? `<div class="hist-det-secao">Lacres</div><div class="hist-det-grid">${lacres}</div>` : ''}
+    <div class="hist-det-secao">Datas e observações</div>
+    <div class="hist-det-grid">${datas}</div>
+    <div class="hist-det-acoes no-print">
+      <button class="btn btn-sec btn-sm" onclick="event.stopPropagation();verLinhaDoTempoDoHistoricoUI('${escJs(c.id)}')"
+        title="Abre a linha do tempo completa desta carga, com todas as etapas.">🕒 Linha do tempo completa</button>
+    </div>`;
+}
+
+function alternarDetalheHistoricoUI(movId){
+  const alvo = document.getElementById('hist-det-' + movId);
+  const seta = document.getElementById('hist-seta-' + movId);
+  if(!alvo) return;
+  alvo.hidden = !alvo.hidden;
+  if(seta) seta.textContent = alvo.hidden ? '▸' : '▾';
+}
+
+/* Leva para a linha do tempo da carga sem perder o que a pessoa estava
+   fazendo: a aba do Histórico continua com os filtros montados quando ela
+   voltar, porque nada aqui é recarregado. */
+function verLinhaDoTempoDoHistoricoUI(cargaId){
+  if(typeof selecionarCargaTimeline === 'function'){
+    abrirTab('torre');
+    selecionarCargaTimeline(cargaId);
+    return;
+  }
+  notify('A linha do tempo completa está na Torre de Controle.', 'info');
 }
 
 /* Calendário: clicar em QUALQUER ponto do campo abre a janelinha.
@@ -4525,6 +4772,10 @@ async function montarRelatorioOperacional(){
            sobra é a única coisa que o leitor precisa saber e não consegue
            deduzir olhando a tabela. -->
       ${avisoDeNumeracao(lista)}
+      ${/* Os lacres do dia, logo abaixo da tabela: quem confere a folha no
+            pátio termina de ler as cargas e encontra o controle de lacre no
+            mesmo documento, sem precisar de outro relatório. */''}
+      ${blocoLacresPdf(lista)}
       ${rodapeDocumento(
         'Todas as cargas da programação aparecem, em qualquer status — as concluídas ' +
         'continuam na lista para o acompanhamento do dia inteiro.<br>' +
