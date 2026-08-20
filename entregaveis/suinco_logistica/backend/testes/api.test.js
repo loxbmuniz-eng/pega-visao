@@ -2780,3 +2780,183 @@ describe('26. Até três lacres na saída (20/08/2026)', () => {
     assert.equal(rows[0].lacre_2, '', 'a Expedição não deixou marca no lacre');
   });
 });
+
+/* ------------------------------------------------------------------ */
+describe('27. Última ação é de GENTE, não de eco de sincronização', () => {
+  /* Relato do gestor (20/08/2026): "todos estão marcando o mesmo horário,
+     no mesmo dia... quero que seja informada a última vez que foi
+     atualizada por um OPERADOR". A causa está documentada desde 14/08: o
+     painel reenvia as cargas que tem em memória a cada reconexão, e o
+     gatilho subia `atualizado_em` mesmo quando a gravação era idêntica. */
+  let placa;
+  let cargaId;
+
+  before(async () => {
+    const { rows } = await pool.query('SELECT placa FROM dim_veiculos ORDER BY placa OFFSET 69 LIMIT 1');
+    placa = rows[0].placa;
+    await pool.query('DELETE FROM fact_statusfrota WHERE placa = $1', [placa]);
+    await pool.query('DELETE FROM fact_viagens WHERE placa = $1', [placa]);
+    const c = await req('/api/cargas', {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { id: 'acao_eco', placa, numeroCarga: 'ACAO-1', peso: 1000 },
+    });
+    assert.equal(c.status, 201, c.texto);
+    cargaId = c.json.id;
+  });
+
+  const carimbo = async () => {
+    const { rows } = await pool.query(
+      'SELECT acao_em, acao_por, acao_setor, atualizado_em, operador_nome FROM fact_viagens WHERE carga_id = $1',
+      [cargaId]
+    );
+    return rows[0];
+  };
+
+  test('a carga nasce com a ação carimbada', async () => {
+    const a = await carimbo();
+    assert.ok(a.acao_em, 'criar é ação de gente');
+  });
+
+  test('mudança de verdade move o carimbo e registra quem fez', async () => {
+    const antes = await carimbo();
+    await new Promise((r) => setTimeout(r, 50));
+    const r = await req(`/api/cargas/${cargaId}`, {
+      metodo: 'PATCH', token: tokens['Logística'], corpo: { peso: 4321 },
+    });
+    assert.equal(r.status, 200, r.texto);
+    const depois = await carimbo();
+    assert.ok(depois.acao_em > antes.acao_em, 'peso mudou: a ação é nova');
+    assert.ok(depois.acao_por, 'a ação tem autor');
+  });
+
+  test('ECO: regravar o mesmo valor NÃO inventa ação nova', async () => {
+    const antes = await carimbo();
+    await new Promise((r) => setTimeout(r, 50));
+    // Exatamente o que um painel reconectando faz: reenvia o que tem.
+    const r = await req(`/api/cargas/${cargaId}`, {
+      metodo: 'PATCH', token: tokens['Logística'], corpo: { peso: 4321 },
+    });
+    assert.equal(r.status, 200, r.texto);
+    const depois = await carimbo();
+    assert.equal(depois.acao_em.getTime(), antes.acao_em.getTime(),
+      'nada mudou: o horário da última ação tem que ficar parado');
+    assert.ok(depois.atualizado_em > antes.atualizado_em,
+      'a linha foi gravada — a sincronia incremental continua enxergando');
+  });
+
+  test('ECO de outro setor não rouba a autoria de quem mexeu', async () => {
+    const antes = await carimbo();
+    const r = await req(`/api/cargas/${cargaId}`, {
+      metodo: 'PATCH', token: tokens['Portaria'], corpo: { motorista: '' },
+    });
+    // Portaria pode editar motorista; mandando o valor que já está lá, é eco.
+    assert.equal(r.status, 200, r.texto);
+    const depois = await carimbo();
+    assert.equal(depois.acao_por, antes.acao_por);
+    assert.equal(depois.operador_nome, antes.operador_nome);
+  });
+
+  test('a etapa também é ação: mudar status move o carimbo', async () => {
+    const antes = await carimbo();
+    await new Promise((r) => setTimeout(r, 50));
+    const r = await req(`/api/cargas/${cargaId}/status`, {
+      metodo: 'POST', token: tokens['Portaria'], corpo: { status: 'Aguardando Embarque' },
+    });
+    assert.equal(r.status, 200, r.texto);
+    const depois = await carimbo();
+    assert.ok(depois.acao_em > antes.acao_em);
+    assert.equal(depois.acao_setor, 'Portaria');
+  });
+
+  test('o painel recebe os três campos na leitura do estado', async () => {
+    const r = await req('/api/estado', { token: tokens['Logística'] });
+    assert.equal(r.status, 200, r.texto);
+    const c = r.json.cargas.find((x) => x.id === cargaId);
+    assert.ok(c, 'a carga veio no estado');
+    assert.ok(c.acaoEm, 'acaoEm');
+    assert.ok(c.acaoPor, 'acaoPor');
+    assert.equal(c.acaoSetor, 'Portaria');
+  });
+});
+
+/* ------------------------------------------------------------------ */
+describe('28. Encerrar a programação anterior deixa a Torre limpa', () => {
+  /* "A programação das viagens que já seguiram viagem e que não têm
+     pendência aberta [precisa sair] da torre de controle de hoje... para
+     montar uma nova programação." */
+  let placaOntem;
+  let placaHoje;
+
+  before(async () => {
+    const { rows } = await pool.query('SELECT placa FROM dim_veiculos ORDER BY placa OFFSET 71 LIMIT 2');
+    placaOntem = rows[0].placa;
+    placaHoje = rows[1].placa;
+    for (const p of [placaOntem, placaHoje]) {
+      await pool.query('DELETE FROM fact_statusfrota WHERE placa = $1', [p]);
+      await pool.query('DELETE FROM fact_viagens WHERE placa = $1', [p]);
+    }
+    await req('/api/cargas', {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { id: 'enc_ontem', placa: placaOntem, numeroCarga: 'ENC-ONTEM', peso: 1000 },
+    });
+    await req('/api/cargas', {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { id: 'enc_hoje', placa: placaHoje, numeroCarga: 'ENC-HOJE', peso: 1000 },
+    });
+    // A de ontem fica presa no meio do caminho, como acontece de verdade.
+    await req('/api/cargas/enc_ontem/status', {
+      metodo: 'POST', token: tokens['Portaria'], corpo: { status: 'Aguardando Embarque' },
+    });
+    await pool.query(
+      "UPDATE fact_viagens SET programado_em = now() - interval '1 day' WHERE carga_id = 'enc_ontem'"
+    );
+  });
+
+  test('sem motivo, não encerra nada', async () => {
+    const r = await req('/api/cargas/encerrar-anteriores', {
+      metodo: 'POST', token: tokens['Logística'], corpo: {},
+    });
+    assert.equal(r.status, 400);
+    assert.equal(r.json.codigo, 'MOTIVO_OBRIGATORIO');
+  });
+
+  test('a Portaria não encerra programação — é da Logística', async () => {
+    const r = await req('/api/cargas/encerrar-anteriores', {
+      metodo: 'POST', token: tokens['Portaria'], corpo: { motivo: 'teste' },
+    });
+    assert.equal(r.status, 403);
+  });
+
+  test('encerra a de ontem e NÃO toca na de hoje', async () => {
+    const r = await req('/api/cargas/encerrar-anteriores', {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { motivo: 'caminhões já saíram; limpando para a programação nova' },
+    });
+    assert.equal(r.status, 200, r.texto);
+    assert.ok(r.json.encerradas.some((c) => c.id === 'enc_ontem'), 'a de ontem fecha');
+    assert.ok(!r.json.encerradas.some((c) => c.id === 'enc_hoje'), 'a de hoje NUNCA fecha aqui');
+
+    const { rows } = await pool.query(
+      "SELECT carga_id, status_atual FROM fact_viagens WHERE carga_id IN ('enc_ontem','enc_hoje') ORDER BY carga_id"
+    );
+    const porId = Object.fromEntries(rows.map((x) => [x.carga_id, x.status_atual]));
+    assert.equal(porId.enc_ontem, 'Seguiu Viagem');
+    assert.equal(porId.enc_hoje, 'Aguardando Veículo');
+  });
+
+  test('o encerramento fica na trilha, com o motivo', async () => {
+    const { rows } = await pool.query(
+      "SELECT acao FROM log_eventos WHERE carga_id = 'enc_ontem' ORDER BY data_evento DESC LIMIT 1"
+    );
+    assert.match(rows[0].acao, /Programação anterior encerrada/);
+    assert.match(rows[0].acao, /caminhões já saíram/);
+  });
+
+  test('rodar de novo não encontra mais nada para encerrar', async () => {
+    const r = await req('/api/cargas/encerrar-anteriores', {
+      metodo: 'POST', token: tokens['Logística'], corpo: { motivo: 'segunda passada' },
+    });
+    assert.equal(r.status, 200, r.texto);
+    assert.equal(r.json.total, 0);
+  });
+});

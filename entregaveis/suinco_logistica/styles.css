@@ -1405,6 +1405,13 @@ code{
 .cel-datas{ line-height:1.25; white-space:nowrap }
 .cel-datas .dt-prog{ display:block }
 .cel-datas .dt-atu{ display:block; font-size:10.5px; color:var(--text-dim) }
+/* Quem mexeu por último. Vem embaixo do horário, menor, porque a pergunta
+   é "andou?" antes de "quem?" — mas as duas respostas ficam à vista sem
+   passar o mouse em nada (20/08/2026). */
+.cel-datas .dt-quem{ display:block; font-size:9.5px; opacity:.85 }
+/* Carga anterior ao registro de ação: diz que não sabe, em vez de mostrar
+   um horário de sincronização como se fosse trabalho de alguém. */
+.cel-datas .dt-sem-acao{ font-style:italic; opacity:.65 }
 
 /* Campos da Torre apertados o suficiente para a tabela caber inteira.
    Não é economia estética: com a tabela mais larga que a tela, Status e

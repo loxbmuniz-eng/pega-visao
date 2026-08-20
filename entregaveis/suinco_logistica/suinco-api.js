@@ -376,6 +376,13 @@ const SuincoSharePoint = (function () {
       Criado_Em: c.criadoEm,
       Programado_Em: c.programadoEm,
       Atualizado_Em: c.atualizadoEm,
+      /* Última ação de GENTE (migração 026). Só na volta e na conversão —
+         o painel nunca manda estes campos, quem carimba é o banco. Mandar
+         seria justamente reabrir a porta do eco: um terminal desatualizado
+         reescreveria "quem mexeu por último" com o que ele tinha em cache. */
+      Acao_Em: c.acaoEm || null,
+      Acao_Por: c.acaoPor || '',
+      Acao_Setor: c.acaoSetor || '',
       Excluida: c.excluida === true,
     };
   }
@@ -1180,6 +1187,17 @@ const SuincoSharePoint = (function () {
      em vez de fingir que gravou. */
   function aoAtualizarDevolucao(fn) { if (typeof fn === 'function') ouvintesDevolucao.push(fn); }
 
+  /* Encerra as pendências das programações ANTERIORES (20/08/2026) —
+     ver o comentário da rota. Não passa pela fila offline de propósito:
+     é ação em lote sobre cargas de outros setores, e "achar que fechou"
+     sem confirmação do servidor seria pior que falhar na hora. */
+  function encerrarProgramacoesAnteriores(motivo, ids) {
+    return chamar('/api/cargas/encerrar-anteriores', {
+      metodo: 'POST',
+      corpo: ids && ids.length ? { motivo, ids } : { motivo },
+    });
+  }
+
   const devolucoesApi = {
     listar(de, ate) {
       const q = [];
@@ -1261,7 +1279,7 @@ const SuincoSharePoint = (function () {
     aoDescartarDaFila, aoEditarCarga, aoExcluirCarga, aoAtualizarPresenca,
     aoFecharPrograma,
     login, sair, diagnosticarConexao,
-    push, upsert, excluir, mudarStatus,
+    push, upsert, excluir, mudarStatus, encerrarProgramacoesAnteriores,
     corrigirEtapa, corrigirDataProgramacao, desfazerExclusao, listarExcluidas,
     pull, pullTudo, drenarFila, pendentes,
     listarOperadores, criarOperador, atualizarOperador,

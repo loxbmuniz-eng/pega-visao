@@ -1011,6 +1011,12 @@ function cargaDeLinhaRemota(r){
        o erro voltava sozinho depois de corrigido. */
     programadoEm: r.Programado_Em || null,
     atualizadoEm: r.Atualizado_Em || r.Timestamp_Sincronia || nowISO(),
+    /* Quando uma PESSOA mexeu, e quem foi. Nunca inventar com
+       `atualizadoEm`: é exatamente essa confusão que fazia a Torre inteira
+       exibir o mesmo horário depois de um eco de sincronização. */
+    acaoEm: r.Acao_Em || null,
+    acaoPor: r.Acao_Por || '',
+    acaoSetor: r.Acao_Setor || '',
     excluida: r.Excluida === true
   };
 }
