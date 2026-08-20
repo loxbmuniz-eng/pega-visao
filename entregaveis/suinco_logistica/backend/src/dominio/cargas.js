@@ -101,7 +101,16 @@ export function paraPainel(linha) {
        para exibição que o faça na tela, não aqui. */
     programadoEm: linha.programado_em || null,
     criadoPor: linha.operador_nome,
+    /* DUAS VERDADES, DUAS DATAS (migração 026).
+
+       `atualizadoEm` é quando a LINHA foi gravada — sobe também com eco de
+       sincronização, e é o que a sincronia incremental usa. `acaoEm` é
+       quando uma PESSOA mudou alguma coisa. Confundir as duas foi o que
+       fez a Torre mostrar a programação inteira com o mesmo horário. */
     atualizadoEm: linha.atualizado_em,
+    acaoEm: linha.acao_em || null,
+    acaoPor: linha.acao_por || '',
+    acaoSetor: linha.acao_setor || '',
     versao: linha.versao,
     // Carga excluída continua sendo devolvida na leitura incremental: é
     // assim que os outros terminais descobrem que ela saiu. Sem esta
@@ -293,5 +302,6 @@ export const COLUNAS_CARGA = `
   cliente, destino, peso_kg, doca, rota_codigo, sequencia, pra_onde,
   paletizada, qtd_ganchos, qtd_entregas, observacoes, lacre, lacre_2, lacre_3, lacre_retido,
   status_atual,
-  aguardando_carga, criado_em, programado_em, atualizado_em, operador_id, operador_nome,
+  aguardando_carga, criado_em, programado_em, atualizado_em,
+  acao_em, acao_por, acao_setor, operador_id, operador_nome,
   operador_setor, versao, excluida_em, excluida_por`;

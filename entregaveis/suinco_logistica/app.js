@@ -1773,7 +1773,7 @@ function renderTorre(){
       '<th>Seq.</th><th>Nº Carga</th><th>Veículo</th>'
       + '<th>Motorista</th><th>Rota</th><th>Peso (kg)</th>'
       + '<th>Palet.</th><th>Tipo de Operação</th><th title="Ganchos e quantidade de entregas">Ganchos · Entr.</th><th>Status</th>'
-      + '<th>Datas</th>'
+      + '<th title="Quando a carga foi programada e quando uma pessoa mexeu nela pela última vez">Programação · Última ação</th>'
       + (podeCancelarCarga() ? '<th class="no-print">Ação</th>' : '');
   }
 
@@ -1800,6 +1800,13 @@ function renderTorre(){
     ? `<tr class="torre-sep"><td colspan="${colunasTorre}">`
       + `⏳ Programação anterior — ${antigasNaLista} carga(s) que ainda não seguiram viagem. `
       + `<span class="torre-sep-nota">Ficam aqui até serem concluídas; não entram na programação de hoje.</span>`
+      /* O botão nasce AQUI, colado na faixa, e não num canto do cabeçalho:
+         quem decide encerrar está olhando exatamente estas linhas, e o
+         número no botão é o mesmo número da faixa. */
+      + (editavel
+        ? ` <button class="btn btn-sec btn-sm no-print" onclick="encerrarProgramacaoAnteriorUI()"
+              title="Fecha estas cargas de dias anteriores (leva cada uma a Seguiu Viagem, com motivo registrado) para a Torre ficar só com a programação de hoje.">🧹 Encerrar as ${antigasNaLista}</button>`
+        : '')
       + `</td></tr>`
     : '';
   tbody.innerHTML = lista.map(c=>`
@@ -1837,7 +1844,7 @@ function renderTorre(){
       <td>${badgeHtml(c.status)}</td>
       <td class="cel-datas">
         <span class="dt-prog">${dataProgramacaoHtml(c)}</span>
-        <span class="dt-atu" title="Última movimentação registrada">${fmtDataHora(c.atualizadoEm)}</span></td>
+        ${ultimaAcaoHtml(c)}</td>
       ${editavel ? `<td class="no-print">${botaoOutraCargaHtml(c)}${botaoRevisoesHtml(c)}${botaoCancelarHtml(c)}</td>` : ''}
     </tr>`).join('');
   const vazio = document.getElementById('torre-empty');
@@ -2248,6 +2255,77 @@ function atualizarMotoristaUI(id, val){
    em" não denuncia (ela mexe a cada toque, mesmo sem a carga andar).
    Carga de HOJE aparece só como hora, pra não poluir a coluna com a data
    repetida em toda linha no dia normal. */
+/* ENCERRAR A PROGRAMAÇÃO ANTERIOR — deixar a Torre pronta para o dia novo.
+   (20/08/2026)
+
+   Pedido do gestor: "a programação das viagens que já seguiram viagem e que
+   não têm nenhuma pendência aberta [precisa sair] da torre de controle de
+   hoje... mantendo apenas as cargas que estão iniciando as etapas".
+
+   Fecha só o que é de DIAS ANTERIORES — a regra mora no servidor, então
+   nem um clique errado aqui alcança a programação de hoje. Cada carga
+   fechada fica registrada com quem fez e por quê; nada é apagado. */
+async function encerrarProgramacaoAnteriorUI(){
+  const antigas = cargasAbertas().filter(c=>!c.aguardandoCarga && ehProgramacaoAntiga(c));
+  if(!antigas.length){
+    notify('Não há pendências de programações anteriores para encerrar.', 'info');
+    return;
+  }
+  const lista = antigas.slice(0, 8)
+    .map(c=>`· ${c.numeroCarga || 'sem número'} — ${c.placa} (${c.status})`).join('\n');
+  const resumo = `${antigas.length} carga(s) de programações anteriores serão encerradas `
+    + `como "Seguiu Viagem":\n\n${lista}`
+    + (antigas.length > 8 ? `\n· … e mais ${antigas.length - 8}` : '')
+    + '\n\nElas saem da Torre e continuam no Histórico e no relatório do dia delas.'
+    + '\n\nMotivo (obrigatório):';
+  const motivo = prompt(resumo, 'Caminhões já saíram; encerramento da programação anterior');
+  if(motivo === null) return;
+  if(!String(motivo).trim()){
+    notify('Encerramento cancelado: o motivo é obrigatório.', 'warn');
+    return;
+  }
+  try{
+    const r = await comOverlaySync('Encerrando a programação anterior…',
+      () => SuincoSharePoint.encerrarProgramacoesAnteriores(String(motivo).trim()));
+    await SuincoSharePoint.sincronizarAgora();
+    renderAll();
+    notifyGravacao(`${r.total} carga(s) da programação anterior encerrada(s). A Torre agora mostra só o dia de hoje.`);
+  }catch(e){
+    notify('Não consegui encerrar: ' + (e && e.message ? e.message : 'erro no servidor') + '.', 'danger', 8000);
+  }
+}
+
+/* ÚLTIMA AÇÃO DE UMA PESSOA — não a última gravação da máquina.
+   (20/08/2026)
+
+   Relato do gestor olhando a Torre: "todos estão marcando o mesmo horário,
+   no mesmo dia". Estavam mesmo, e o horário era verdadeiro para a coisa
+   errada: `atualizadoEm` é quando a LINHA foi gravada, e ela é regravada
+   sempre que um painel reconecta e reenvia o que tem em memória. Meia
+   programação recebia o mesmo carimbo de uma vez, sem ninguém ter tocado
+   em nada.
+
+   `acaoEm` (migração 026) só se move quando um campo do processo muda de
+   verdade, e vem com o nome de quem mudou. É o que responde a pergunta que
+   a Torre existe para responder: "isto andou? quem tocou nisso por
+   último?".
+
+   Carga antiga, de antes da migração, não tem esse carimbo — e aí a tela
+   diz isso, em vez de mostrar um horário que não significa nada. */
+function ultimaAcaoHtml(c){
+  if(!c.acaoEm){
+    return '<span class="dt-atu dt-sem-acao" title="Esta carga é anterior ao registro de última ação por operador. '
+         + 'O histórico completo dela está no Histórico e na linha do tempo.">sem registro de ação</span>';
+  }
+  const quem = [c.acaoPor, c.acaoSetor].filter(Boolean).join(' · ');
+  const dica = quem
+    ? `Última vez que uma PESSOA mexeu nesta carga: ${fmtDataHora(c.acaoEm)} — ${quem}`
+    : `Última vez que uma pessoa mexeu nesta carga: ${fmtDataHora(c.acaoEm)}`;
+  return `<span class="dt-atu" title="${esc(dica)}">${fmtDataHora(c.acaoEm)}`
+       + (quem ? ` <small class="dt-quem">${esc(quem)}</small>` : '')
+       + '</span>';
+}
+
 /* PROGRAMAÇÃO DE HOJE x PENDÊNCIA DE PROGRAMAÇÃO ANTERIOR (19/08/2026).
 
    Pedido do gestor, no mesmo dia em que a data de programação foi

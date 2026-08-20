@@ -1110,6 +1110,117 @@ rotasCargas.post('/cargas/:id/corrigir-etapa', exigirLogin, exigirSetor(), async
   }
 });
 
+/* ---------------------------------------------------------------------
+   POST /api/cargas/encerrar-anteriores — limpa a Torre para o dia novo
+   ---------------------------------------------------------------------
+
+   Pedido do gestor (20/08/2026): "as viagens que já seguiram viagem e que
+   não têm nenhuma pendência aberta [precisam sair] da torre de controle de
+   hoje, para que possamos montar uma nova programação e a torre fique
+   limpa, mantendo apenas as cargas que estão iniciando as etapas".
+
+   O QUE ACONTECE NA VIDA REAL: o caminhão da programação de ontem saiu do
+   pátio, mas o processo dele não chegou ao fim no sistema — faltou o
+   "Faturado", ou faltou o "Saiu" da Portaria. Como a Torre mostra tudo que
+   não seguiu viagem, essas cargas ficam ali para sempre, misturadas com a
+   programação de hoje, e o pátio de hoje deixa de ser legível.
+
+   O QUE ESTA ROTA FAZ: fecha, de uma vez, as cargas de programações
+   ANTERIORES que ficaram em aberto — levando cada uma a "Seguiu Viagem",
+   que é o fim de linha honesto para um caminhão que já foi embora. Cada
+   carga fechada gera evento na trilha com o motivo, então em nenhum momento
+   a informação some: ela sai da Torre e continua inteira no Histórico e no
+   relatório do dia dela.
+
+   O QUE ELA NÃO FAZ, de propósito:
+     · não toca em carga de HOJE — a programação corrente nunca é fechada
+       por engano;
+     · não toca em carga excluída nem em entrada sem carga lançada;
+     · não inventa faturamento nem lacre: o que não foi registrado continua
+       não registrado, e o log diz que o encerramento foi administrativo.
+
+   Motivo é obrigatório pelo mesmo motivo das outras correções: fechar carga
+   dos outros setores sem dizer por quê é o tipo de ação que ninguém
+   consegue auditar depois. */
+rotasCargas.post('/cargas/encerrar-anteriores', exigirLogin, exigirSetor('Logística'), async (req, res, next) => {
+  try {
+    const op = req.operador;
+    const motivo = String(req.body?.motivo ?? '').trim().slice(0, 500);
+    if (!motivo) {
+      return res.status(400).json({
+        erro: 'Diga o motivo do encerramento — ele fecha cargas de outros setores de uma vez.',
+        codigo: 'MOTIVO_OBRIGATORIO',
+      });
+    }
+    /* `ids` restringe a operação a cargas escolhidas na tela. Sem ele, vale
+       para todas as pendências anteriores — que é o botão "limpar a Torre".
+       O filtro de data continua valendo nos dois casos: nem passando id de
+       carga de hoje ela é fechada. */
+    const ids = Array.isArray(req.body?.ids)
+      ? req.body.ids.map(idSeguro).filter(Boolean)
+      : null;
+
+    const FUSO = 'America/Sao_Paulo';
+    const resultado = await emTransacao(async (cli) => {
+      const { rows: pendentes } = await cli.query(
+        `SELECT ${COLUNAS_CARGA} FROM fact_viagens
+          WHERE excluida_em IS NULL
+            AND aguardando_carga = FALSE
+            AND status_atual <> 'Seguiu Viagem'
+            AND (COALESCE(programado_em, criado_em) AT TIME ZONE $1)::date
+                < (now() AT TIME ZONE $1)::date
+            ${ids ? 'AND carga_id = ANY($2)' : ''}
+          ORDER BY COALESCE(programado_em, criado_em)
+          FOR UPDATE`,
+        ids ? [FUSO, ids] : [FUSO]
+      );
+
+      const fechadas = [];
+      for (const carga of pendentes) {
+        const upd = await cli.query(
+          `UPDATE fact_viagens
+              SET status_atual = 'Seguiu Viagem',
+                  operador_id = $1, operador_nome = $2, operador_setor = $3
+            WHERE carga_id = $4
+            RETURNING ${COLUNAS_CARGA}`,
+          [op.id, op.nome, op.setor, carga.carga_id]
+        );
+        const movId = await gravarEvento(cli, {
+          cargaId: carga.carga_id,
+          placa: carga.placa,
+          de: carga.status_atual,
+          para: 'Seguiu Viagem',
+          operador: op,
+          acao: `Programação anterior encerrada (${carga.status_atual} → Seguiu Viagem). `
+            + `Motivo: ${motivo}`,
+        });
+        fechadas.push({ linha: upd.rows[0], movId, de: carga.status_atual });
+      }
+      return fechadas;
+    });
+
+    const payloads = resultado.map((f) => {
+      const payload = paraPainel(f.linha);
+      emitir('carga:atualizada', payload);
+      emitir('movimentacao:nova', {
+        id: f.movId,
+        cargaId: payload.id,
+        placa: payload.placa,
+        statusAnterior: f.de,
+        statusNovo: payload.status,
+        setor: op.setor,
+        operador: op.nome,
+        data: payload.atualizadoEm,
+      });
+      return payload;
+    });
+
+    return res.json({ encerradas: payloads, total: payloads.length });
+  } catch (e) {
+    return next(e);
+  }
+});
+
 /* Lista as cargas EXCLUÍDAS — só a Administração.
 
    A leitura completa do painel filtra `excluida_em IS NULL` de propósito: o
