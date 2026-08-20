@@ -873,6 +873,22 @@ select option{background:var(--campo-bg);color:var(--text)}
 /* CONTROLE DE LACRES NOS RELATÓRIOS (20/08/2026). Uma linha por CAMINHÃO —
    o lacre é do veículo, não da carga —, com a retenção destacada porque é
    ela que gera conversa depois. */
+/* "VEÍCULO JÁ NO PÁTIO" na carga que ainda espera por ele (20/08/2026).
+   Verde discreto: é informação boa (o caminhão chegou), não alerta. */
+.chip-no-patio{
+  display:inline-block;
+  margin-left:6px;
+  padding:1px 7px;
+  border-radius:4px;
+  background:rgba(47,140,90,.16);
+  border:1px solid #2f8c5a;
+  color:#7fd6a4;
+  font-size:10px;
+  font-weight:700;
+  white-space:nowrap;
+}
+.cel-veiculo .chip-no-patio{ display:inline-block; margin:3px 4px 0 0 }
+
 /* HISTÓRICO QUE ABRE (20/08/2026). A linha inteira é o botão — alvo grande
    serve tanto para o mouse quanto para o dedo no celular. */
 .hist-linha{ cursor:pointer }
