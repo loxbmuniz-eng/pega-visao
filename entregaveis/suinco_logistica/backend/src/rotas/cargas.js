@@ -362,6 +362,26 @@ rotasCargas.patch('/cargas/:id', exigirLogin, async (req, res, next) => {
       if (c === 'observacoes') {
         return `observacoes = COALESCE(NULLIF($${i + 1}, ''), observacoes)`;
       }
+      /* OS LACRES SEGUEM A MESMA REGRA — E PELO MESMO MOTIVO (20/08/2026).
+
+         Descoberto medindo o tráfego do painel: um terminal que ainda não
+         recebeu o lacre reenvia a carga com `lacre:'', lacre2:'', lacre3:''`
+         no eco de sincronização, e isso APAGAVA números já gravados. Foi
+         visto acontecer: a Portaria registrou dois lacres na saída, o banco
+         guardou os dois, e minutos depois o segundo estava vazio — sem
+         ninguém ter feito nada, sem erro em tela nenhuma.
+
+         É a mesma família do sumiço das observações em 14/08 e recebe a
+         mesma defesa: VAZIO NÃO APAGA. Para trocar um lacre, digita-se o
+         outro número; para tirar um lacre errado do registro, a correção é
+         consciente, no banco — e não um efeito colateral de alguém ter
+         deixado uma aba aberta.
+
+         Vale também para `lacre_retido`: retenção é ocorrência de inspeção,
+         não pode evaporar por eco. */
+      if (c === 'lacre' || c === 'lacre_2' || c === 'lacre_3' || c === 'lacre_retido') {
+        return `${c} = COALESCE(NULLIF($${i + 1}, ''), ${c})`;
+      }
       /* `aguardando_carga` anda em UM SENTIDO SÓ: true → false.
 
          Incidente de 15/08/2026: cinco cargas já lançadas (com peso, rota,
@@ -724,6 +744,14 @@ rotasCargas.post('/portaria/saida', exigirLogin, async (req, res, next) => {
     const placa = normalizarPlaca(req.body?.placa);
     if (!placa) return res.status(400).json({ erro: 'Placa é obrigatória.', codigo: 'PLACA_FALTANDO' });
 
+    /* Aceita `lacres: []` (painel novo) e `lacre: ''` (painel em cache) —
+       enquanto existir terminal desatualizado na operação, as duas formas
+       precisam funcionar, senão a saída volta a ser registrada sem número. */
+    const lacres = (Array.isArray(req.body?.lacres) ? req.body.lacres : [req.body?.lacre])
+      .map((x) => String(x ?? '').trim().slice(0, 50))
+      .filter(Boolean)
+      .slice(0, 3);
+
     const saida = await emTransacao(async (cli) => {
       const { rows: abertas } = await cli.query(
         `SELECT ${COLUNAS_CARGA} FROM fact_viagens
@@ -736,17 +764,34 @@ rotasCargas.post('/portaria/saida', exigirLogin, async (req, res, next) => {
 
       const liberadas = [];
       for (const c of elegiveis) {
+        /* O LACRE ENTRA AQUI, NA MESMA TRANSAÇÃO DA SAÍDA (20/08/2026).
+
+           Até hoje o painel mandava a saída por esta rota e os números de
+           lacre por um PATCH separado, logo depois. Duas gravações para um
+           fato só: se a segunda falhasse — rede caindo, aba fechada, painel
+           velho —, ficava registrada uma saída SEM lacre e ninguém saberia
+           que faltou. Pedido do gestor: "grave fielmente no backend e traga
+           as informações fiéis saindo nos relatórios". Fiel começa por não
+           poder se perder no meio do caminho.
+
+           Vazio não apaga: quem sai sem informar lacre não zera o que já
+           estava lá (a Portaria pode ter registrado antes). */
         const upd = await cli.query(
           `UPDATE fact_viagens
               SET status_atual = 'Seguiu Viagem', operador_id = $1,
-                  operador_nome = $2, operador_setor = $3
+                  operador_nome = $2, operador_setor = $3,
+                  lacre   = COALESCE(NULLIF($5, ''), lacre),
+                  lacre_2 = COALESCE(NULLIF($6, ''), lacre_2),
+                  lacre_3 = COALESCE(NULLIF($7, ''), lacre_3)
             WHERE carga_id = $4
             RETURNING ${COLUNAS_CARGA}`,
-          [op.id, op.nome, op.setor, c.carga_id]
+          [op.id, op.nome, op.setor, c.carga_id, lacres[0] || '', lacres[1] || '', lacres[2] || '']
         );
         await gravarEvento(cli, {
           cargaId: c.carga_id, placa, de: 'Faturado', para: 'Seguiu Viagem',
-          operador: op, acao: 'Saída do pátio registrada',
+          operador: op,
+          acao: 'Saída do pátio registrada'
+            + (lacres.length ? ` — lacre(s) ${lacres.join(' / ')}` : ' — SEM lacre informado'),
         });
         liberadas.push(upd.rows[0]);
       }
@@ -763,6 +808,108 @@ rotasCargas.post('/portaria/saida', exigirLogin, async (req, res, next) => {
         id: c.carga_id, numeroCarga: c.numero_carga, status: c.status_atual,
       })),
     });
+  } catch (e) {
+    return next(e);
+  }
+});
+
+
+/* ---------------------------------------------------------------------
+   POST /api/portaria/lacre-retido — a retenção vira REGISTRO
+   ---------------------------------------------------------------------
+
+   Na inspeção da saída o lacre às vezes é retido: carga incorreta,
+   conferência, divergência. Até 20/08/2026 o número tinha campo próprio,
+   mas o MOTIVO, o AUTOR e a HORA iam para dentro de `observacoes`, numa
+   frase concatenada — o que serve para ler na tela e não serve para mais
+   nada: não dá para contar retenções do mês, nem filtrar por motivo, e a
+   informação some no dia em que alguém editar a observação.
+
+   Aqui a retenção passa a ser um fato com os quatro elementos: número,
+   motivo, quem e quando. A observação continua recebendo a frase, porque é
+   ali que o operador lê no dia a dia — mas ela deixou de ser a única
+   guardiã do dado.
+
+   Vale para as cargas da PLACA (o lacre é do caminhão, não de uma carga):
+   as que saíram hoje, ou — se nenhuma saiu ainda — as que estão em aberto. */
+rotasCargas.post('/portaria/lacre-retido', exigirLogin, async (req, res, next) => {
+  try {
+    const op = req.operador;
+    if (!podeRegistrarSaida(op.setor)) {
+      throw new ErroDePermissao('A retenção de lacre é registrada pela Portaria.');
+    }
+    const placa = normalizarPlaca(req.body?.placa);
+    if (!placa) return res.status(400).json({ erro: 'Placa é obrigatória.', codigo: 'PLACA_FALTANDO' });
+
+    const retido = String(req.body?.lacreRetido ?? '').trim().slice(0, 50);
+    if (!retido) {
+      return res.status(400).json({
+        erro: 'Informe o número do lacre retido.', codigo: 'LACRE_FALTANDO',
+      });
+    }
+    const novoLacre = String(req.body?.novoLacre ?? '').trim().slice(0, 50);
+    const motivo = String(req.body?.motivo ?? '').trim().slice(0, 500);
+
+    const FUSO = 'America/Sao_Paulo';
+    const resultado = await emTransacao(async (cli) => {
+      /* Alvo: quem saiu HOJE com essa placa. Se ninguém saiu ainda, as
+         cargas em aberto — é o caso do porteiro que retém o lacre antes de
+         liberar o caminhão. */
+      const { rows: sairam } = await cli.query(
+        `SELECT ${COLUNAS_CARGA} FROM fact_viagens
+          WHERE placa = $1 AND excluida_em IS NULL
+            AND status_atual = 'Seguiu Viagem'
+            AND (atualizado_em AT TIME ZONE $2)::date = (now() AT TIME ZONE $2)::date
+          FOR UPDATE`,
+        [placa, FUSO]
+      );
+      let alvo = sairam;
+      if (!alvo.length) {
+        const { rows: abertas } = await cli.query(
+          `SELECT ${COLUNAS_CARGA} FROM fact_viagens
+            WHERE placa = $1 AND excluida_em IS NULL AND status_atual <> 'Seguiu Viagem'
+            FOR UPDATE`,
+          [placa]
+        );
+        alvo = abertas;
+      }
+
+      const nota = `Lacre ${retido} RETIDO`
+        + (motivo ? ` — ${motivo}` : '')
+        + (novoLacre ? ` — novo lacre ${novoLacre}` : '')
+        + ` (${op.nome})`;
+
+      const atingidas = [];
+      for (const c of alvo) {
+        const upd = await cli.query(
+          `UPDATE fact_viagens
+              SET lacre_retido = $1,
+                  lacre_retido_motivo = $2,
+                  lacre_retido_por = $3,
+                  lacre_retido_em = now(),
+                  lacre = COALESCE(NULLIF($4, ''), lacre),
+                  observacoes = CASE WHEN observacoes = '' THEN $5
+                                     ELSE observacoes || ' | ' || $5 END,
+                  operador_id = $6, operador_nome = $7, operador_setor = $8
+            WHERE carga_id = $9
+            RETURNING ${COLUNAS_CARGA}`,
+          [retido, motivo, op.nome, novoLacre, nota, op.id, op.nome, op.setor, c.carga_id]
+        );
+        await cli.query(
+          `INSERT INTO log_eventos
+             (evento_id, carga_id, placa, acao, setor, operador_id, operador_nome,
+              operador_verificado)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,TRUE)`,
+          [novoId('log'), c.carga_id, placa, nota, op.setor, op.id, op.nome]
+        );
+        atingidas.push(upd.rows[0]);
+      }
+      return atingidas;
+    });
+
+    const payloads = resultado.map(paraPainel);
+    payloads.forEach((c) => emitir('carga:atualizada', c));
+    return res.json({ placa, atingidas: payloads, total: payloads.length });
   } catch (e) {
     return next(e);
   }

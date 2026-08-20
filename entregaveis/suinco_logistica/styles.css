@@ -870,6 +870,58 @@ select option{background:var(--campo-bg);color:var(--text)}
 }
 .print-bloco-tit:first-of-type{ margin-top:12px }
 
+/* CONTROLE DE LACRES NOS RELATÓRIOS (20/08/2026). Uma linha por CAMINHÃO —
+   o lacre é do veículo, não da carga —, com a retenção destacada porque é
+   ela que gera conversa depois. */
+/* HISTÓRICO QUE ABRE (20/08/2026). A linha inteira é o botão — alvo grande
+   serve tanto para o mouse quanto para o dedo no celular. */
+.hist-linha{ cursor:pointer }
+.hist-linha:hover td{ background:var(--campo-bg) }
+.hist-seta{ display:inline-block; width:12px; color:var(--gold); font-size:10px }
+.hist-detalhe td{ background:var(--campo-bg); padding:10px 12px !important }
+.hist-det-secao{
+  color:var(--gold);
+  font-size:10px;
+  font-weight:800;
+  letter-spacing:.09em;
+  margin:8px 0 5px;
+  text-transform:uppercase;
+}
+.hist-det-secao:first-child{ margin-top:0 }
+.hist-det-grid{
+  display:grid;
+  gap:6px 18px;
+  grid-template-columns:repeat(auto-fit,minmax(190px,1fr));
+}
+.hist-campo dt{ color:var(--text-dim); font-size:9.5px; letter-spacing:.05em; text-transform:uppercase }
+.hist-campo dd{ margin:1px 0 0; font-size:12px; font-weight:600; word-break:break-word }
+.hist-campo code{ font-size:10.5px; font-weight:400; opacity:.85 }
+.hist-det-aviso{
+  border-left:3px solid var(--gold-dim);
+  color:var(--text-dim);
+  font-size:11.5px;
+  margin-top:8px;
+  padding-left:10px;
+}
+.hist-det-acoes{ margin-top:10px }
+@media print{ .hist-detalhe{ display:none } }
+
+.tab-lacres{ width:100%; border-collapse:collapse; font-size:10px }
+.tab-lacres th, .tab-lacres td{
+  border:1px solid var(--border);
+  padding:4px 6px;
+  text-align:left;
+  vertical-align:top;
+}
+.tab-lacres th{ background:var(--navy-deep); font-weight:700; text-transform:uppercase; letter-spacing:.04em }
+.tab-lacres .lacre-linha-retida td{ background:rgba(233,185,84,.12); font-weight:600 }
+.print-nota{
+  margin:6px 0 14px;
+  color:var(--text-dim);
+  font-size:9.5px;
+  line-height:1.4;
+}
+
 /* Nota de fonte, no pé de cada tabela. */
 /* Cabeçalho de coluna não quebra no meio da palavra.
 
@@ -910,6 +962,14 @@ select option{background:var(--campo-bg);color:var(--text)}
     break-after:avoid;page-break-after:avoid;
     border-left-color:#111418 !important;color:#111418 !important;
   }
+  /* Controle de lacres na folha: preto no branco, e a tabela inteira na
+     mesma página sempre que couber — partir a lista de lacres ao meio
+     transforma conferência em caça ao tesouro. */
+  .tab-lacres{ break-inside:avoid;page-break-inside:avoid }
+  .tab-lacres th{ background:#eef1f6 !important;color:#111418 !important }
+  .tab-lacres th,.tab-lacres td{ border-color:#b9c2d0 !important;color:#111418 !important }
+  .tab-lacres .lacre-linha-retida td{ background:#f8efd8 !important }
+  .print-nota{ color:#3d4a5c !important }
 }
 
 /* ===== PAINEL DE STATUS HORIZONTAL =====
@@ -1402,6 +1462,35 @@ code{
   overflow:hidden; font-size:11px; color:var(--text-dim);
 }
 .cel-veiculo .veic-tipo{ display:block; font-size:10.5px; color:var(--text-dim); opacity:.9 }
+/* CHIPS DE LACRE NA TORRE (20/08/2026). Ficam na célula do veículo porque o
+   lacre é do caminhão. Três estados, três leituras de relance:
+     🔒 número      — saiu lacrado, tudo certo
+     ⚠️ retido      — a inspeção reteve; o motivo está na dica
+     🔓 sem lacre   — saiu e ninguém informou número (só aparece na saída) */
+.cel-veiculo .chip-lacre{
+  display:inline-block;
+  margin-top:3px;
+  margin-right:4px;
+  padding:1px 6px;
+  border-radius:4px;
+  background:var(--campo-bg);
+  border:1px solid var(--border);
+  color:var(--text-dim);
+  font-size:10px;
+  font-weight:600;
+  letter-spacing:.01em;
+  white-space:nowrap;
+}
+.cel-veiculo .chip-lacre-retido{
+  background:rgba(233,185,84,.14);
+  border-color:var(--gold-dim);
+  color:var(--gold);
+}
+.cel-veiculo .chip-lacre-falta{
+  background:rgba(200,80,60,.12);
+  border-color:#a5523c;
+  color:#e8907a;
+}
 .cel-datas{ line-height:1.25; white-space:nowrap }
 .cel-datas .dt-prog{ display:block }
 .cel-datas .dt-atu{ display:block; font-size:10.5px; color:var(--text-dim) }

@@ -1002,6 +1002,9 @@ function cargaDeLinhaRemota(r){
     lacre2: r.Lacre_2 || '',
     lacre3: r.Lacre_3 || '',
     lacreRetido: r.Lacre_Retido || '',
+    lacreRetidoMotivo: r.Lacre_Retido_Motivo || '',
+    lacreRetidoPor: r.Lacre_Retido_Por || '',
+    lacreRetidoEm: r.Lacre_Retido_Em || null,
     status: STATUS_FLOW.includes(r.Status_Atual) ? r.Status_Atual : STATUS_FLOW[0],
     aguardandoCarga: r.Aguardando_Carga === true || r.Aguardando_Carga === 'Sim',
     criadoEm: r.Criado_Em || nowISO(),
@@ -1649,34 +1652,16 @@ function registrarSaidaPortaria(placa, operador, lacres){
   return {liberadas:elegiveis, pendentes};
 }
 
-/* Lacre RETIDO na inspeção (pedido do gestor, 18/08/2026): carga
-   incorreta ou outro motivo — o número retido fica guardado, o novo lacre
-   (se emitido) vira o vigente, e o motivo entra nas observações, que já
-   são protegidas contra apagamento por eco. Vale para as cargas da placa
-   que SAÍRAM HOJE (a retenção acontece na inspeção da saída) — se nenhuma
-   saiu hoje, cai nas cargas em aberto da placa. */
-function registrarLacreRetido(placa, {lacreRetido, novoLacre, motivo, operador}){
-  const p = normalizarPlaca(placa);
-  const hoje = new Date(); hoje.setHours(0,0,0,0);
-  const sairamHoje = DB.cargas.filter(c => normalizarPlaca(c.placa) === p
-    && c.status === 'Seguiu Viagem'
-    && new Date(c.atualizadoEm || c.criadoEm) >= hoje);
-  const alvo = sairamHoje.length ? sairamHoje : cargasAbertasPorPlaca(p);
-  const retido = String(lacreRetido || '').trim().slice(0, 50);
-  const novo = String(novoLacre || '').trim().slice(0, 50);
-  const nota = `Lacre ${retido || '(sem número)'} RETIDO`
-    + (motivo ? ` — ${String(motivo).trim()}` : '')
-    + (novo ? ` — novo lacre ${novo}` : '')
-    + (operador ? ` (${operador})` : '');
-  alvo.forEach(c=>{
-    c.lacreRetido = retido || c.lacre || '';
-    if(novo) c.lacre = novo;
-    c.observacoes = c.observacoes ? `${c.observacoes} | ${nota}` : nota;
-    c.atualizadoEm = nowISO();
-  });
-  if(alvo.length) SuincoStore.save();
-  return {atingidas: alvo};
-}
+/* Lacre RETIDO na inspeção da saída — MORA NO SERVIDOR (20/08/2026).
+
+   Esta função existia aqui e gravava só localmente: o número ia para a
+   carga e o motivo virava um pedaço de texto dentro de `observacoes`. Saiu
+   do painel quando a retenção ganhou rota própria e campos próprios
+   (migração 027) — motivo, autor e hora agora são dado, não frase.
+
+   Não sobrou versão local de propósito: duas maneiras de registrar a mesma
+   ocorrência é como se produz relatório que não bate com a tela. Ver
+   `SuincoSharePoint.reterLacre` e `registrarLacreRetidoUI`. */
 
 /* ---------- INDICADORES ----------
    Tudo aqui vem só do histórico (movimentacoes). OTIF fica de fora de
