@@ -95,6 +95,23 @@ export function exigirTokenBI(req, res, next) {
   return next();
 }
 
+/* Token do robô de WhatsApp — ver config.botToken. Separado do BI de
+   propósito: são dois consumidores diferentes, e revogar um não pode
+   derrubar o outro. */
+export function exigirTokenBot(req, res, next) {
+  if (!config.botToken) {
+    return res.status(503).json({
+      erro: 'O robô de relatórios não está habilitado neste servidor.',
+      codigo: 'BOT_DESABILITADO',
+    });
+  }
+  const enviado = extrairToken(req) || req.query.token;
+  if (!enviado || !comparacaoSegura(enviado, config.botToken)) {
+    return res.status(401).json({ erro: 'Token do robô inválido.', codigo: 'BOT_TOKEN_INVALIDO' });
+  }
+  return next();
+}
+
 /* Comparação em tempo constante. Com `===`, o tempo de resposta vaza quantos
    caracteres iniciais estão certos e o token pode ser descoberto byte a byte.
    É um ataque real contra token comparado ingenuamente. */
