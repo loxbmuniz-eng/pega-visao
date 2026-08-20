@@ -2328,6 +2328,17 @@ describe('21. Chegada com carga pendente não promove a programação', () => {
       });
       assert.equal(r.status, 200, r.texto);
     }
+    /* A carga de ONTEM precisa ser de ontem de verdade (20/08/2026).
+
+       Enquanto a trava barrava qualquer carga da placa no pátio, este bloco
+       passava sem envelhecer nada. Depois que ela passou a distinguir o DIA
+       — porque duas cargas do mesmo dia são rotina, e barrá-las travou a
+       Portaria em produção —, deixar as duas no mesmo dia deixaria de
+       reproduzir o incidente que o bloco existe para guardar. */
+    await pool.query(
+      "UPDATE fact_viagens SET programado_em = now() - interval '1 day' WHERE carga_id = 'pend_ontem'"
+    );
+
     // A carga de hoje, recém-programada para a MESMA placa.
     await req('/api/cargas', {
       metodo: 'POST', token: tokens['Logística'],
@@ -2792,6 +2803,65 @@ describe('26. Até três lacres na saída (20/08/2026)', () => {
     const { rows } = await pool.query(
       'SELECT lacre_2 FROM fact_viagens WHERE carga_id = $1', [cargaId]);
     assert.equal(rows[0].lacre_2, '133477', 'a Expedição não deixou marca no lacre');
+  });
+});
+
+/* ------------------------------------------------------------------ */
+describe('26b. Duas cargas do MESMO dia na mesma placa entram as duas', () => {
+  /* Relato do programador de embarque (20/08/2026), sobre a trava criada na
+     véspera: "na segunda carga a placa está dando que o veículo não chegou,
+     só que o veículo está no pátio... aí você dá a entrada nele e não dá. É
+     isso que está dando interferência".
+
+     Caminhão com duas cargas no mesmo dia é rotina do pátio — carrega,
+     pesa, carrega de novo, pesa. A trava tem que barrar carga PENDURADA DE
+     OUTRO DIA, e só. */
+  let placa;
+
+  before(async () => {
+    const { rows } = await pool.query('SELECT placa FROM dim_veiculos ORDER BY placa OFFSET 77 LIMIT 1');
+    placa = rows[0].placa;
+    await pool.query('DELETE FROM fact_statusfrota WHERE placa = $1', [placa]);
+    await pool.query('DELETE FROM fact_viagens WHERE placa = $1', [placa]);
+    for (const [id, numero] of [['duas_a', '118287'], ['duas_b', '118288']]) {
+      const r = await req('/api/cargas', {
+        metodo: 'POST', token: tokens['Logística'],
+        corpo: { id, placa, numeroCarga: numero, peso: 1000 },
+      });
+      assert.equal(r.status, 201, r.texto);
+    }
+  });
+
+  test('a primeira carga entra', async () => {
+    const r = await req('/api/cargas/duas_a/status', {
+      metodo: 'POST', token: tokens['Portaria'], corpo: { status: 'Aguardando Embarque' },
+    });
+    assert.equal(r.status, 200, r.texto);
+  });
+
+  test('a SEGUNDA carga do mesmo dia também entra — o caminhão é o mesmo', async () => {
+    const r = await req('/api/cargas/duas_b/status', {
+      metodo: 'POST', token: tokens['Portaria'], corpo: { status: 'Aguardando Embarque' },
+    });
+    assert.equal(r.status, 200, r.texto);
+    assert.equal(r.json.status, 'Aguardando Embarque');
+  });
+
+  test('mas carga PENDURADA DE OUTRO DIA continua barrando a chegada', async () => {
+    // A de ontem fica em aberto no pátio; a de hoje tenta entrar.
+    await pool.query(
+      "UPDATE fact_viagens SET programado_em = now() - interval '1 day' WHERE carga_id = 'duas_a'"
+    );
+    const c = await req('/api/cargas', {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { id: 'duas_c', placa, numeroCarga: '118289', peso: 1000 },
+    });
+    assert.equal(c.status, 201, c.texto);
+    const r = await req('/api/cargas/duas_c/status', {
+      metodo: 'POST', token: tokens['Portaria'], corpo: { status: 'Aguardando Embarque' },
+    });
+    assert.equal(r.status, 409, r.texto);
+    assert.equal(r.json.codigo, 'PLACA_COM_CARGA_ABERTA');
   });
 });
 

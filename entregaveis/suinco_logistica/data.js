@@ -1518,7 +1518,23 @@ function registrarChegadaPortaria(placa, operador){
   }
 
   const paraAtualizar = abertas.filter(c => c.status === 'Aguardando Veículo');
-  const jaNoPatio = abertas.filter(c => c.status !== 'Aguardando Veículo');
+  /* Só conta como "já está no pátio sem ter saído" a carga de uma
+     programação ANTERIOR (20/08/2026). Duas cargas do MESMO dia na mesma
+     placa são a rotina do pátio — carrega, pesa, carrega de novo, pesa —, e
+     tratá-las como pendência travava a segunda entrada: "o veículo está no
+     pátio... aí você dá a entrada nele e não dá". Mesma regra do servidor. */
+  const diaDe = (c)=>{
+    const base = c.programadoEm || c.criadoEm;
+    if(!base) return null;
+    const d = new Date(base); if(isNaN(d)) return null;
+    d.setHours(0,0,0,0); return d.getTime();
+  };
+  const hojeDia = (()=>{ const h = new Date(); h.setHours(0,0,0,0); return h.getTime(); })();
+  const jaNoPatio = abertas.filter(c => {
+    if(c.status === 'Aguardando Veículo') return false;
+    const d = diaDe(c);
+    return d !== null && d < hojeDia;
+  });
 
   /* CAMINHÃO QUE NÃO SAIU NÃO CHEGA DE NOVO (19/08/2026).
 

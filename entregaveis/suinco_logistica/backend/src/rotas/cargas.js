@@ -510,25 +510,39 @@ rotasCargas.post('/cargas/:id/status', exigirLogin, async (req, res, next) => {
       // automático — nada fica gravado pela metade.
       validarTransicao(carga.status_atual, statusNovo, op.setor);
 
-      /* CHEGADA com outra carga da placa ainda no pátio (19/08/2026).
+      /* CHEGADA com outra carga da placa ainda no pátio (19/08/2026),
+         CORRIGIDA EM 20/08/2026.
 
-         O caso real tinha DUAS cargas na mesma placa: uma faturada do dia
-         anterior, sem saída registrada, e uma programada para o dia. O
-         "Chegou" promoveu a de hoje e seguiu como se nada houvesse,
-         deixando a de ontem pendurada — "ele aceitou e agora ele sumiu".
+         O caso original: DUAS cargas na mesma placa, uma faturada do dia
+         ANTERIOR sem saída registrada e uma programada para o dia. O
+         "Chegou" promoveu a de hoje e deixou a de ontem pendurada — "ele
+         aceitou e agora ele sumiu".
 
-         Enquanto existir carga da placa em Aguardando Embarque ou depois, o
-         sistema entende que aquele caminhão ESTÁ no pátio: registrar
-         chegada de novo é dizer que ele chegou duas vezes sem nunca ter
-         saído. As demais etapas da mesma carga seguem livres — a trava é só
-         da chegada. */
+         A primeira versão desta trava barrava QUALQUER carga da placa que
+         já estivesse no pátio, e isso quebrou o caso mais comum da
+         operação. Relato do programador de embarque no dia seguinte, sobre
+         uma placa com duas cargas do mesmo dia: "na segunda carga a placa
+         está dando que o veículo não chegou, só que o veículo está no
+         pátio... aí você dá a entrada nele e não dá. É isso que está dando
+         interferência".
+
+         Ele está certo. Caminhão com duas cargas no mesmo dia é rotina —
+         carrega, pesa, carrega de novo, pesa — e as DUAS têm que estar no
+         pátio. O que não pode é a carga de um dia anterior ficar pendurada.
+
+         Então a trava passa a comparar o DIA DE PROGRAMAÇÃO: só barra
+         quando a carga já no pátio é de uma programação ANTERIOR à que está
+         chegando. Mesmo dia = mesmo caminhão, mesma visita, segue livre. */
       if (statusNovo === 'Aguardando Embarque') {
+        const FUSO = 'America/Sao_Paulo';
         const { rows: noPatio } = await cli.query(
           `SELECT carga_id, numero_carga, status_atual
              FROM fact_viagens
             WHERE placa = $1 AND carga_id <> $2 AND excluida_em IS NULL
-              AND status_atual NOT IN ('Aguardando Veículo', 'Seguiu Viagem')`,
-          [carga.placa, id]
+              AND status_atual NOT IN ('Aguardando Veículo', 'Seguiu Viagem')
+              AND (COALESCE(programado_em, criado_em) AT TIME ZONE $3)::date
+                  < (COALESCE($4::timestamptz, now()) AT TIME ZONE $3)::date`,
+          [carga.placa, id, FUSO, carga.programado_em || carga.criado_em]
         );
         if (noPatio[0]) {
           return { bloqueadaPorPendencia: noPatio, placa: carga.placa };

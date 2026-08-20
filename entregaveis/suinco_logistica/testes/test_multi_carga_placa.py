@@ -151,6 +151,20 @@ async def main():
         ck('as duas cargas avançaram juntas',
            r == ['Aguardando Embarque', 'Aguardando Embarque'], str(r))
 
+        # ATÉ 20/08/2026 ESTE TESTE PARAVA AQUI — e era pouco. Ele olhava só
+        # a tela: a segunda carga subia localmente, o SERVIDOR recusava por
+        # causa da trava de reentrada, e o painel desfazia sozinho. Foi
+        # exatamente o que o programador de embarque relatou ("aí você dá a
+        # entrada nele e não dá"). Conferir no banco é o que fecha o buraco.
+        await pg.evaluate("async () => { await SuincoSharePoint.sincronizarAgora(); }")
+        await pg.wait_for_timeout(2500)
+        noServidor = await pg.evaluate(
+            """async (placa) => { await SuincoSharePoint.sincronizarAgora();
+                 return DB.cargas.filter((c) => c.placa === placa).map((c) => c.status); }""",
+            placa)
+        ck('e o SERVIDOR aceitou as duas — não é só na tela',
+           noServidor == ['Aguardando Embarque', 'Aguardando Embarque'], str(noServidor))
+
         print('\n=== 6. CONSOLE ===')
         ck('sem erros de página', not erros, str(erros[:2]))
 

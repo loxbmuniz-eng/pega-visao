@@ -1823,7 +1823,7 @@ function renderTorre(){
         : `<span class="veic-placa">${esc(c.placa)}</span>`}
         <span class="veic-transp">${esc(c.transportadora)||'—'}</span>
         <span class="veic-tipo">${esc(c.tipoVeiculo)||'—'}</span>
-        ${chipLacreHtml(c)}</td>
+        ${chipNoPatioHtml(c)}${chipLacreHtml(c)}</td>
       <td>${editavel
         ? `<input type="text" class="motorista-input" value="${esc(c.motorista||'')}" onchange="atualizarMotoristaUI('${escJs(c.id)}',this.value)" title="Trocar o motorista desta carga.">`
         : (esc(c.motorista)||'—')}</td>
@@ -2164,7 +2164,7 @@ function renderProgFila(){
       </td>
       <td>
         <input type="text" class="placa-input" value="${esc(c.placa)}" onchange="atualizarPlacaUI('${escJs(c.id)}',this.value)" title="Trocar a placa — a transportadora e o tipo de veículo são buscados na Frota automaticamente.">
-        ${marcaCargaDaPlaca(c, lista)}
+        ${marcaCargaDaPlaca(c, lista)}${chipNoPatioHtml(c)}
       </td>
       <td id="transp-${esc(c.id)}">${esc(c.transportadora)||'—'}</td>
       <td>${rotaSelectHtml(c)}</td>
@@ -2366,6 +2366,34 @@ function blocoLacresPdf(lista){
       ${semLacre ? `<strong>${semLacre} seguiram viagem sem número de lacre informado.</strong>` : ''}
       O lacre é do caminhão, não da carga: quando a placa leva mais de uma carga, os números aparecem uma vez só.
     </div>`;
+}
+
+/* "O VEÍCULO JÁ ESTÁ NO PÁTIO" — dito na carga que ainda espera por ele.
+   (20/08/2026)
+
+   Relato do programador de embarque, sobre uma placa com duas cargas do
+   mesmo dia: "na segunda carga a placa está dando que o veículo não chegou,
+   só que o veículo está no pátio... está errado! Tem que ser ao contrário".
+
+   Ele tem razão: "Aguardando Veículo" é o status DA CARGA, não do caminhão.
+   Quando outra carga da mesma placa já está no pátio, a informação existe
+   no sistema e simplesmente não estava sendo mostrada — quem lia a linha
+   concluía o oposto do que era verdade.
+
+   A marca não muda status nenhum: só conta o que já se sabe. Promover a
+   segunda carga continua sendo um clique da Portaria, com registro. */
+function veiculoJaNoPatio(carga){
+  if(!carga || carga.status !== 'Aguardando Veículo') return false;
+  const p = normalizarPlaca(carga.placa);
+  return cargasAbertas().some(c => c.id !== carga.id
+    && normalizarPlaca(c.placa) === p
+    && c.status !== 'Aguardando Veículo');
+}
+function chipNoPatioHtml(carga){
+  return veiculoJaNoPatio(carga)
+    ? '<span class="chip-no-patio" title="Outra carga desta mesma placa já está no pátio — o caminhão chegou. '
+      + 'Falta a Portaria registrar a chegada TAMBÉM para esta carga (botão Chegou).">🚚 veículo já no pátio</span>'
+    : '';
 }
 
 /* OS LACRES DE UMA CARGA, EM UM LUGAR SÓ (20/08/2026).
@@ -3093,7 +3121,7 @@ function renderPortariaProgramadas(){
       acao = `<button class="btn btn-warn btn-sm" onclick="portariaSaiuCarga('${escJs(c.placa)}')">🏁 Saiu</button>`;
     }
     return `<tr>
-      <td class="col-identificacao">${esc(c.placa)}${marcaCargaDaPlaca(c, lista)}</td>
+      <td class="col-identificacao">${esc(c.placa)}${marcaCargaDaPlaca(c, lista)}${chipNoPatioHtml(c)}</td>
       <td class="col-identificacao">${esc(c.numeroCarga)||'—'}</td>
       <td>${esc(c.transportadora)||'—'}</td>
       <td>${esc(rotaCurta(c.rota))}</td>

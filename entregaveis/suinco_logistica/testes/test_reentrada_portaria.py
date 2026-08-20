@@ -21,6 +21,7 @@ O que se prova aqui, no navegador de verdade contra o backend local:
 """
 import asyncio
 import os
+import subprocess
 import sys
 from playwright.async_api import async_playwright
 
@@ -105,6 +106,21 @@ async def main():
         await pgL.wait_for_timeout(1500)
         status = await pgL.evaluate("(id) => (getCarga(id) || {}).status", carga)
         ck('carga anterior ficou em Faturado, sem saída registrada', status == 'Faturado', str(status))
+
+        """A CARGA PENDURADA É DE ONTEM — e agora isso importa (20/08/2026).
+
+           A trava passou a comparar o DIA de programação, porque barrar
+           qualquer carga da placa no pátio quebrou o caso mais comum da
+           operação: caminhão com duas cargas no MESMO dia (carrega, pesa,
+           carrega de novo, pesa). Sem envelhecer esta carga, o teste
+           deixaria de reproduzir o incidente que ele guarda."""
+        subprocess.run(
+            ['sudo', '-u', 'postgres', 'psql', '-tAq', '-P', 'pager=off', '-d', 'embarque_suinco',
+             '-c', "UPDATE fact_viagens SET programado_em = now() - interval '1 day' "
+                   f"WHERE carga_id = '{carga}'"],
+            capture_output=True, text=True)
+        await pgL.evaluate("async () => { await SuincoSharePoint.sincronizarAgora(); }")
+        await pgL.wait_for_timeout(1200)
 
         print('\n=== 1. COM A CARGA À VISTA, O "CHEGOU" É RECUSADO ===')
         ctxP, pgP = await abrir(nav, 'bruno@teste.local', 'portaria')
