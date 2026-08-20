@@ -1377,6 +1377,23 @@ function snapshotCarga(c){
 function historicoDaCarga(cargaId){
   return DB.movimentacoes.filter(m=>m.cargaId===cargaId).sort((a,b)=>new Date(a.timestamp)-new Date(b.timestamp));
 }
+/* A ÚLTIMA MUDANÇA DE ETAPA — a MESMA linha que o Histórico mostra.
+
+   Pedido do gestor (20/08/2026): "quero que na torre de controle apareça o
+   horário fiel ao horário do histórico da última atualização de status de
+   cada carga".
+
+   Fiel não por coincidência: é literalmente o mesmo registro. A Torre passa
+   a ler `DB.movimentacoes` — a trilha que alimenta o Histórico e a linha do
+   tempo —, então não existe como as duas telas discordarem. Qualquer cópia
+   desse horário em outro lugar poderia divergir; esta não é cópia.
+
+   Devolve também QUEM fez e de qual setor, que é a outra metade da
+   pergunta ("quem tocou nisso por último?"). */
+function ultimaMovimentacaoDaCarga(cargaId){
+  const h = historicoDaCarga(cargaId);
+  return h.length ? h[h.length - 1] : null;
+}
 // Primeiro instante em que a carga atingiu determinado status (usado pelos indicadores).
 function primeiroTimestamp(cargaId, status){
   const m = historicoDaCarga(cargaId).find(x=>x.statusNovo===status);

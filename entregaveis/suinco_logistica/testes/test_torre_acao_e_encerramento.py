@@ -115,12 +115,23 @@ async def main():
         await pgL.click(".nav-tab[data-tab='torre']")
         await pgL.wait_for_timeout(1200)
         naTela = await pgL.evaluate(
-            """() => { const t = document.getElementById('torre-tbody');
+            """(id) => { const t = document.getElementById('torre-tbody');
+                 const mov = ultimaMovimentacaoDaCarga(id);
+                 const linha = [...t.querySelectorAll('tr')]
+                   .find((l) => l.innerHTML.includes('TORRE-ONTEM'));
+                 const cel = linha ? linha.querySelector('.cel-datas .dt-atu') : null;
                  return {temQuem: !!t.querySelector('.dt-quem'),
                          cabecalho: [...document.querySelectorAll('#torre-thead th')]
-                           .some((th) => /Última ação/i.test(th.textContent))}; }""")
-        ck('a coluna se chama "Programação · Última ação"', naTela['cabecalho'], str(naTela))
+                           .some((th) => /Última etapa/i.test(th.textContent)),
+                         naTela: cel ? cel.textContent.trim() : null,
+                         doHistorico: mov ? fmtDataHora(mov.timestamp) : null,
+                         etapa: mov ? mov.statusNovo : null}; }""", ids['ontem'])
+        ck('a coluna se chama "Programação · Última etapa"', naTela['cabecalho'], str(naTela))
         ck('o nome de quem mexeu aparece na célula', naTela['temQuem'], str(naTela))
+        # O pedido em uma linha: o horário da Torre é o MESMO do Histórico.
+        ck('o horário da Torre é o mesmo da última etapa no Histórico',
+           naTela['doHistorico'] and naTela['naTela'].startswith(naTela['doHistorico']),
+           f"torre={naTela['naTela']!r} historico={naTela['doHistorico']!r} etapa={naTela['etapa']}")
 
         print('\n=== 2. ECO DE SINCRONIZAÇÃO NÃO INVENTA HORÁRIO ===')
         antes = sql(f"SELECT acao_em, acao_por FROM fact_viagens WHERE carga_id = '{ids['ontem']}'")
