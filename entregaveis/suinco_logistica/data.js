@@ -922,15 +922,35 @@ function fundirEstadoRemoto(dados){
     });
   }
 
-  // ---- rotas (só na carga inicial) — traz pro terminal as rotas que
-  // OUTRO operador cadastrou pela tela, sem esperar uma versão nova do
-  // painel. origem:'sharepoint' porque isto já é confirmado pelo servidor. ----
+  // ---- rotas — traz pro terminal as rotas que OUTRO operador cadastrou
+  // pela tela, sem esperar uma versão nova do painel.
+  // origem:'sharepoint' porque isto já é confirmado pelo servidor. ----
   if(Array.isArray(dados.rotas) && dados.rotas.length){
     dados.rotas.forEach(r => {
       const codigo = String(r.Codigo||'').trim();
       if(!codigo) return;
       upsertRota(codigo, r.Nome || '', r.Detalhe || '', r.Operador || '', { origem:'sharepoint' });
     });
+  }
+
+  /* ROTA QUE CHEGA E O PAINEL NÃO CONHECE (20/08/2026).
+
+     Relato do gestor, duas vezes no mesmo dia, em máquinas diferentes: "não
+     entendo por que a rota 011 está aparecendo sem nada escrito, para mim só
+     o número". A rota tinha sido cadastrada NAQUELE DIA. Quem cadastrou via
+     o nome; os painéis abertos desde antes só viam o código, porque a lista
+     de rotas era buscada uma vez, na carga da página — e painel de pátio
+     fica aberto o dia inteiro.
+
+     Carga com rota desconhecida É a evidência de que a lista está velha, e
+     chega no exato instante em que alguém está olhando a linha sem nome.
+     Rebusca na hora (com trava de 1 min do lado da API, para código digitado
+     errado não virar uma chamada por ciclo). */
+  const semNome = (DB.cargas || []).some(c => c.rota && !rotaInfo(c.rota));
+  if(semNome && typeof SuincoSharePoint !== 'undefined' && SuincoSharePoint.recarregarRotas){
+    SuincoSharePoint.recarregarRotas('carga com rota fora do catálogo')
+      .then(n => { if(n) renderAll(); })
+      .catch(()=>{});
   }
 
   if(res.cargasNovas || res.cargasAtualizadas || res.movimentacoesNovas){

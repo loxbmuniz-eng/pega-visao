@@ -1842,7 +1842,7 @@ function renderTorre(){
         ? `<input type="number" class="ganchos-input" min="0" step="1" value="${c.qtdGanchos ?? 0}" onchange="atualizarGanchosUI('${escJs(c.id)}',this.value)" title="Ganchos — 0 = Liso">
            <input type="number" class="entregas-input" min="0" step="1" value="${c.qtdEntregas ?? 1}" onchange="atualizarEntregasUI('${escJs(c.id)}',this.value)" title="Quantidade de entregas.">`
         : `${c.qtdGanchos ? c.qtdGanchos : '<span class="text-dim">Liso</span>'} · <span title="Entregas">${c.qtdEntregas ?? 1}</span>`}</td>
-      <td>${badgeHtml(c.status)}</td>
+      <td>${badgeHtml(c.status)}${situacaoPlacaHtml(c)}</td>
       <td class="cel-datas">
         <span class="dt-prog">${dataProgramacaoHtml(c)}</span>
         ${ultimaAcaoHtml(c)}</td>
@@ -2394,6 +2394,56 @@ function chipNoPatioHtml(carga){
     ? '<span class="chip-no-patio" title="Outra carga desta mesma placa já está no pátio — o caminhão chegou. '
       + 'Falta a Portaria registrar a chegada TAMBÉM para esta carga (botão Chegou).">🚚 veículo já no pátio</span>'
     : '';
+}
+
+/* CARGA DUPLA: O STATUS DA CARGA E A SITUAÇÃO DO CAMINHÃO, LADO A LADO.
+   (20/08/2026)
+
+   Pedido do gestor depois do relato do programador de embarque: "o status de
+   uma placa com carga dupla, como isso aparece para eles da forma mais clara
+   possível".
+
+   O mal-entendido tem uma raiz só: a coluna Status responde sobre a CARGA, e
+   quem lê a linha entende que é sobre o CAMINHÃO. Com uma carga por placa os
+   dois coincidem e ninguém percebe a diferença. Com duas, elas se separam —
+   e foi aí que a leitura virou o oposto da verdade ("está dando que o veículo
+   não chegou, só que o veículo está no pátio").
+
+   A solução não é trocar um pelo outro: é dizer os dois. O selo continua
+   sendo o da carga; embaixo dele, em uma linha, a situação do caminhão e o
+   que está acontecendo com a OUTRA carga dele. Só aparece quando a placa tem
+   mais de uma carga em aberto — em caminhão de carga única não há ambiguidade
+   e a linha seria ruído. */
+function situacaoPlacaHtml(c){
+  if(!c) return '';
+  const p = normalizarPlaca(c.placa);
+  const irmas = cargasAbertas().filter(x => normalizarPlaca(x.placa) === p);
+  if(irmas.length < 2) return '';
+
+  const ordenadas = irmas.slice().sort((a,b)=> new Date(a.criadoEm) - new Date(b.criadoEm));
+  const posicao = ordenadas.findIndex(x => x.id === c.id) + 1;
+  const noPatio = irmas.filter(x => x.status !== 'Aguardando Veículo');
+  const outras = ordenadas.filter(x => x.id !== c.id);
+  const resumoOutras = outras
+    .map(x => `${esc(x.numeroCarga) || 'sem nº'}: ${esc(x.status)}`)
+    .join(' · ');
+
+  const ondeEsta = noPatio.length
+    ? '<strong>Caminhão NO PÁTIO</strong>'
+    : '<strong>Caminhão ainda não chegou</strong>';
+
+  /* O aviso mais importante da tela: o caminhão está aqui e ESTA carga
+     continua esperando por ele. É exatamente o caso que travou a Portaria. */
+  const pendente = (noPatio.length && c.status === 'Aguardando Veículo')
+    ? ' — <span class="sit-acao">falta registrar a chegada desta carga</span>'
+    : '';
+
+  return `<div class="sit-placa${noPatio.length ? ' sit-no-patio' : ''}"
+      title="${esc('Esta placa tem ' + irmas.length + ' cargas em aberto. O selo acima é o status DESTA carga; '
+        + 'esta linha é a situação do CAMINHÃO.')}">
+      ${noPatio.length ? '🚚' : '⏳'} ${ondeEsta} · carga ${posicao} de ${irmas.length}${pendente}
+      ${resumoOutras ? `<span class="sit-outras">outra(s): ${resumoOutras}</span>` : ''}
+    </div>`;
 }
 
 /* OS LACRES DE UMA CARGA, EM UM LUGAR SÓ (20/08/2026).
@@ -3121,11 +3171,11 @@ function renderPortariaProgramadas(){
       acao = `<button class="btn btn-warn btn-sm" onclick="portariaSaiuCarga('${escJs(c.placa)}')">🏁 Saiu</button>`;
     }
     return `<tr>
-      <td class="col-identificacao">${esc(c.placa)}${marcaCargaDaPlaca(c, lista)}${chipNoPatioHtml(c)}</td>
+      <td class="col-identificacao">${esc(c.placa)}${marcaCargaDaPlaca(c, lista)}</td>
       <td class="col-identificacao">${esc(c.numeroCarga)||'—'}</td>
       <td>${esc(c.transportadora)||'—'}</td>
       <td>${esc(rotaCurta(c.rota))}</td>
-      <td>${badgeHtml(c.status)}</td>
+      <td>${badgeHtml(c.status)}${situacaoPlacaHtml(c)}</td>
       <td class="no-print">${acao}</td>
     </tr>`;
   }).join('');
@@ -3151,9 +3201,23 @@ function renderPortariaPatio(){
     const cargas = porPlaca[p];
     const transp = cargas[0].transportadora || '—';
     const chegada = cargas.map(c=>primeiroTimestamp(c.id,'Aguardando Embarque')||c.criadoEm).sort()[0];
+    /* A CONTA ERA SÓ DO QUE JÁ ESTAVA NO PÁTIO (20/08/2026).
+
+       No print do programador de embarque a placa aparecia aqui com "1
+       carga em aberto" enquanto tinha DUAS — a segunda ainda esperava o
+       registro de chegada. Contar só metade do caminhão é o mesmo
+       mal-entendido da coluna Status, de outro ângulo: o caminhão é um só,
+       e a Portaria precisa saber que falta encostar a outra. */
+    const todas = cargasAbertasPorPlaca(p);
+    const aguardando = todas.filter(c=>c.status === 'Aguardando Veículo');
+    const contagem = aguardando.length
+      ? `${cargas.length} no pátio <span class="sit-acao">+ ${aguardando.length} sem entrada</span>`
+      : String(cargas.length);
     return `<tr>
-      <td>${esc(p)}</td><td>${esc(transp)}</td><td>${cargas.length}</td>
-      <td>${cargas.map(c=>badgeHtml(c.status)).join(' ')}</td><td>${fmtDataHora(chegada)}</td>
+      <td>${esc(p)}</td><td>${esc(transp)}</td><td>${contagem}</td>
+      <td>${cargas.map(c=>badgeHtml(c.status)).join(' ')}
+        ${aguardando.map(c=>`<span class="badge-espera" title="Esta carga da MESMA placa ainda não teve a chegada registrada.">${esc(c.numeroCarga)||'sem nº'}: aguardando entrada</span>`).join(' ')}</td>
+      <td>${fmtDataHora(chegada)}</td>
     </tr>`;
   }).join('');
   document.getElementById('portaria-patio-empty').hidden = placas.length>0;
