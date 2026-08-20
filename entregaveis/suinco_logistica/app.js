@@ -1773,7 +1773,7 @@ function renderTorre(){
       '<th>Seq.</th><th>Nº Carga</th><th>Veículo</th>'
       + '<th>Motorista</th><th>Rota</th><th>Peso (kg)</th>'
       + '<th>Palet.</th><th>Tipo de Operação</th><th title="Ganchos e quantidade de entregas">Ganchos · Entr.</th><th>Status</th>'
-      + '<th title="Quando a carga foi programada e quando uma pessoa mexeu nela pela última vez">Programação · Última ação</th>'
+      + '<th title="Quando a carga foi programada e a última mudança de etapa — o mesmo horário que o Histórico mostra">Programação · Última etapa</th>'
       + (podeCancelarCarga() ? '<th class="no-print">Ação</th>' : '');
   }
 
@@ -2313,15 +2313,44 @@ async function encerrarProgramacaoAnteriorUI(){
    Carga antiga, de antes da migração, não tem esse carimbo — e aí a tela
    diz isso, em vez de mostrar um horário que não significa nada. */
 function ultimaAcaoHtml(c){
+  /* A FONTE É A TRILHA, NÃO UM CAMPO DA CARGA (20/08/2026).
+
+     Pedido do gestor: "o horário fiel ao horário do histórico da última
+     atualização de status". `ultimaMovimentacaoDaCarga` lê exatamente o
+     mesmo registro que o Histórico e a linha do tempo desenham — então as
+     três telas não têm como discordar entre si, por construção.
+
+     `acaoEm` (migração 026) continua valendo como segunda linha: ele marca
+     também EDIÇÃO de campo (peso, rota, observação), que não gera
+     movimentação de etapa. Quando alguém editou depois da última mudança de
+     etapa, isso aparece na dica — sem tirar da célula o horário que o
+     gestor pediu. */
+  const mov = ultimaMovimentacaoDaCarga(c.id);
+  if(mov){
+    const quem = [mov.operador, mov.setor].filter(Boolean).join(' · ');
+    const partes = [`Última mudança de etapa (a mesma do Histórico): ${fmtDataHora(mov.timestamp)}`
+      + ` — ${mov.statusAnterior ? mov.statusAnterior + ' → ' : ''}${mov.statusNovo}`
+      + (quem ? ` por ${quem}` : '')];
+    if(c.acaoEm && new Date(c.acaoEm) > new Date(mov.timestamp)){
+      partes.push(`Depois disso alguém ainda editou campos desta carga: ${fmtDataHora(c.acaoEm)}`
+        + (c.acaoPor ? ` — ${c.acaoPor}${c.acaoSetor ? ' · ' + c.acaoSetor : ''}` : ''));
+    }
+    return `<span class="dt-atu" title="${esc(partes.join(' | '))}">${fmtDataHora(mov.timestamp)}`
+         + (quem ? ` <small class="dt-quem">${esc(quem)}</small>` : '')
+         + '</span>';
+  }
+  /* Sem trilha nenhuma: carga recém-criada, que ainda não mudou de etapa.
+     Aí vale o carimbo de ação — e, faltando os dois, a tela diz que não
+     sabe, em vez de exibir uma hora de sincronização como se fosse
+     trabalho de alguém. */
   if(!c.acaoEm){
-    return '<span class="dt-atu dt-sem-acao" title="Esta carga é anterior ao registro de última ação por operador. '
-         + 'O histórico completo dela está no Histórico e na linha do tempo.">sem registro de ação</span>';
+    return '<span class="dt-atu dt-sem-acao" title="Esta carga ainda não mudou de etapa e é anterior ao '
+         + 'registro de ação por operador. O histórico completo dela está no Histórico e na linha do tempo.'
+         + '">sem registro de etapa</span>';
   }
   const quem = [c.acaoPor, c.acaoSetor].filter(Boolean).join(' · ');
-  const dica = quem
-    ? `Última vez que uma PESSOA mexeu nesta carga: ${fmtDataHora(c.acaoEm)} — ${quem}`
-    : `Última vez que uma pessoa mexeu nesta carga: ${fmtDataHora(c.acaoEm)}`;
-  return `<span class="dt-atu" title="${esc(dica)}">${fmtDataHora(c.acaoEm)}`
+  return `<span class="dt-atu" title="${esc('Ainda sem mudança de etapa. Última edição: '
+         + fmtDataHora(c.acaoEm) + (quem ? ' — ' + quem : ''))}">${fmtDataHora(c.acaoEm)}`
        + (quem ? ` <small class="dt-quem">${esc(quem)}</small>` : '')
        + '</span>';
 }
