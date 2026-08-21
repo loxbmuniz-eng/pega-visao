@@ -135,6 +135,21 @@ function lacresChegadaDev(d) {
   return ' · Lacre na chegada: não informado';
 }
 
+/* PARCIAL/TOTAL POR EXTENSO NOS RELATÓRIOS (20/08/2026).
+
+   Saía "P" e "T". Pedido do gestor: escrever inteiro. E ele tem razão — o
+   relatório sai do painel e vai para a mão de quem não abriu o painel: o
+   operador do monitoramento, a Portaria, quem confere a carga na doca.
+   Para essa pessoa, "P" e "T" são duas letras que ela precisa lembrar o que
+   significam, e a diferença entre parcial e total é justamente o que decide
+   se a nota volta inteira ou não.
+
+   Na TELA a caixa de seleção continua escrita por extenso desde sempre —
+   quem estava abreviado era só o papel. */
+function parcialTotalTexto(item) {
+  return item && item.parcial ? 'PARCIAL' : 'TOTAL';
+}
+
 function cargaDevDoItem(item, dev) {
   return (item && item.cargaDev) || (dev && dev.cargaNumero) || '';
 }
@@ -752,7 +767,8 @@ function renderDevolucaoAberta(d, editavel) {
       <div class="table-wrap">
         <table class="dev-tabela">
           <thead><tr>
-            <th title="Nota fiscal de venda">Nota</th><th>P/T</th>
+            <th title="Nota fiscal de venda">Nota</th>
+            <th title="Parcial ou Total — na tela fica abreviado porque a caixa de seleção logo abaixo já diz a palavra inteira; nos relatórios sai por extenso.">P/T</th>
             <th title="Número da nota parcial — só quando a devolução é parcial">Nº parcial</th>
             <th>Supervisor</th><th title="Vendedor">RCA</th>
             <th>Cód. Cliente</th><th>CX</th><th title="Peso em QUILOS (kg)">Peso (kg)</th><th>Cód. Produto</th>
@@ -1295,7 +1311,7 @@ async function relatorioDevolucoesUI(diaParam) {
         + `${d.pesoFinal !== null ? ' · Peso final ' + d.pesoFinal.toLocaleString('pt-BR') + ' kg' : ''}`)}
       <table class="dev-doc-tabela">
         <thead><tr>
-          <th>Nota</th><th>P/T</th><th title="Número da nota parcial">Nº parcial</th>
+          <th>Nota</th><th title="A devolução é parcial ou total">Parcial / Total</th><th title="Número da nota parcial">Nº parcial</th>
           <th>Supervisor</th><th title="Vendedor">RCA</th><th>Cód. Cliente</th>
           <th>CX</th><th title="Peso em QUILOS (kg)">Peso (kg)</th><th>Produto</th><th>Nº DEV</th>
           <th title="Carga de devolução do SIS ATAK">Nº carga dev</th><th>Data DEV</th><th>Motivo</th>
@@ -1303,7 +1319,7 @@ async function relatorioDevolucoesUI(diaParam) {
         </tr></thead>
         <tbody>${d.itens.map((i) => `<tr${i.falta > 0 ? ' class="dev-doc-falta"' : ''}>
             <td>${esc(i.nota)}</td>
-            <td>${i.parcial ? 'P' : 'T'}</td>
+            <td class="c-pt">${parcialTotalTexto(i)}</td>
             <td>${i.parcial ? (esc(i.parcialDesc) || '—') : '—'}</td>
             <td>${esc(i.supervisor)}</td><td>${esc(i.vendedor)}</td><td>${esc(i.codCliente)}</td>
             <td class="c-peso">${i.cx.toLocaleString('pt-BR')}</td>
@@ -1751,7 +1767,7 @@ async function relatorioOperadorDevolucoesUI(idChecklist) {
           ${d.dataDev ? ' · ' + esc(String(d.dataDev).slice(0, 10).split('-').reverse().join('/')) : ''}</div>
         <table class="doc-tabela dev-doc-tabela">
           <thead><tr>
-            <th>Nota</th><th>P/T</th><th title="Número da nota parcial">Nº parcial</th>
+            <th>Nota</th><th title="A devolução é parcial ou total">Parcial / Total</th><th title="Número da nota parcial">Nº parcial</th>
             <th>Supervisor</th><th title="Vendedor">RCA</th>
             <th>Cliente</th><th>CX</th><th title="Peso em QUILOS (kg)">Peso (kg)</th><th>Produto</th>
             <th>Nº DEV</th>
@@ -1761,7 +1777,7 @@ async function relatorioOperadorDevolucoesUI(idChecklist) {
           <tbody>${d.itens.map((i) => `
             <tr>
               <td>${esc(i.nota)}</td>
-              <td>${i.parcial ? 'P' : 'T'}</td>
+              <td class="c-pt">${parcialTotalTexto(i)}</td>
               <td>${i.parcial ? (esc(i.parcialDesc) || '—') : '—'}</td>
               <td>${esc(i.supervisor)}</td>
               <td>${esc(i.vendedor)}</td>

@@ -958,6 +958,11 @@ select option{background:var(--campo-bg);color:var(--text)}
 .hist-det-acoes{ margin-top:10px }
 @media print{ .hist-detalhe{ display:none } }
 
+/* PARCIAL / TOTAL por extenso no papel (20/08/2026). Sem quebra no meio da
+   palavra e com destaque leve: é a coluna que decide se a nota volta
+   inteira, e quem lê o relatório não tem a tela do lado para conferir. */
+.dev-doc-tabela .c-pt{ white-space:nowrap; font-weight:700; letter-spacing:.02em }
+
 .tab-lacres{ width:100%; border-collapse:collapse; font-size:10px }
 .tab-lacres th, .tab-lacres td{
   border:1px solid var(--border);
