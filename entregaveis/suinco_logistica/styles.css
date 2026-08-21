@@ -446,6 +446,62 @@ body::before{
   display:flex;overflow-x:auto;z-index:999;
   scrollbar-width:thin;border-bottom:1px solid var(--vidro-borda);
 }
+/* =====================================================================
+   ÍCONES VETORIAIS DA CASA (21/08/2026)
+   =====================================================================
+   Pedido do gestor: "melhorar os ícones, trazendo dinâmica e visual melhor
+   e relacionamento/transição entre cada coisa".
+
+   Emoji renderiza diferente em cada sistema operacional e não obedece à
+   paleta — o mesmo 🗼 é azul no Windows e cinza no Android, e nunca fica
+   dourado na aba ativa. Os símbolos SVG (definidos no topo do index)
+   herdam `currentColor`: acompanham o texto, o tema e o estado sem uma
+   linha de código a mais. Emoji continua no CONTEÚDO (avisos, chips),
+   onde o tom informal ajuda; a ESTRUTURA usa vetor. */
+.ico{
+  fill:none;
+  flex:0 0 auto;
+  height:18px;
+  stroke:currentColor;
+  vertical-align:-4px;
+  width:18px;
+}
+.nav-tab .ico{ height:19px; width:19px; opacity:.85; transition:opacity .18s, transform .18s }
+.nav-tab:hover .ico{ opacity:1 }
+.nav-tab.active .ico{ color:var(--gold); opacity:1; transform:scale(1.08) }
+.seg-btn .ico{ height:16px; width:16px; margin-right:2px }
+
+/* =====================================================================
+   MOVIMENTO (21/08/2026) — transições que explicam, não que enfeitam
+   =====================================================================
+   Cada animação daqui responde uma pergunta do olho:
+   · a aba deslizou para cima → "o conteúdo trocou";
+   · o detalhe desceu → "isto saiu DESTA linha";
+   · o cartão levantou no hover → "isto é clicável".
+   Curtas (≤ .22s) para nunca atrasar quem opera o dia inteiro, e todas
+   desligam com prefers-reduced-motion. */
+@keyframes tab-entra{
+  from{ opacity:0; transform:translateY(6px) }
+  to{ opacity:1; transform:none }
+}
+.tab-page.active{ animation:tab-entra .22s ease-out }
+@keyframes det-desce{
+  from{ opacity:0; transform:translateY(-4px) }
+  to{ opacity:1; transform:none }
+}
+.raiox-det td, .hist-detalhe td{ animation:det-desce .18s ease-out }
+.stat-box{ transition:transform .15s ease, border-color .15s ease }
+.stat-box.stat-clicavel:hover{ border-color:var(--gold-dim); transform:translateY(-2px) }
+.raiox-barra{ transition:width .3s ease }
+.btn{ transition:transform .1s ease, filter .15s ease }
+.btn:active{ transform:scale(.97) }
+@media (prefers-reduced-motion: reduce){
+  .tab-page.active, .raiox-det td, .hist-detalhe td{ animation:none }
+  .stat-box, .raiox-barra, .btn, .nav-tab .ico{ transition:none }
+}
+
+.raiox-cel-quando{ font-size:11.5px; white-space:nowrap; color:var(--text-dim) }
+
 .nav-tab{
   flex-shrink:0;padding:0 18px;height:100%;display:flex;align-items:center;gap:7px;
   color:var(--text-dim);cursor:pointer;font-size:14px;font-weight:600;
@@ -869,6 +925,47 @@ select option{background:var(--campo-bg);color:var(--text)}
   font-size:12.5px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;
 }
 .print-bloco-tit:first-of-type{ margin-top:12px }
+
+/* LINHA DO TEMPO NO PDF DA CARGA (21/08/2026) — a mesma jornada visual da
+   tela do Histórico, vertical para A4 retrato. As cores dos pontos vêm
+   inline de corStatusRelatorio (as mesmas dos selos); aqui fica só a
+   estrutura, que precisa imprimir bem em preto no fundo branco. */
+.pdf-timeline{ margin:4px 0 12px }
+.pdf-tl-step{ display:flex; gap:10px }
+.pdf-tl-trilha{
+  display:flex; flex-direction:column; align-items:center; width:22px;
+}
+.pdf-tl-dot{
+  align-items:center;
+  background:#dfe4ee;
+  border:2px solid #b9c2d0;
+  border-radius:50%;
+  color:#111418;
+  display:flex;
+  flex:0 0 auto;
+  font-size:10px;
+  font-weight:800;
+  height:18px;
+  justify-content:center;
+  width:18px;
+}
+/* O conector desce do ponto até o passo seguinte. */
+.pdf-tl-step:not(:last-child) .pdf-tl-trilha::after{
+  background:#b9c2d0;
+  content:'';
+  flex:1;
+  margin:2px 0;
+  width:2px;
+}
+.pdf-tl-corpo{ padding-bottom:12px }
+.pdf-tl-decorrido{
+  color:#3d4a5c; font-size:9px; font-weight:700; margin-bottom:2px;
+}
+.pdf-tl-status{ color:#111418; font-size:11.5px; font-weight:800 }
+.pdf-tl-meta{ color:#3d4a5c; font-size:10px }
+.pdf-tl-pendente .pdf-tl-status{ color:#8a94a6; font-weight:600 }
+.pdf-tl-pendente .pdf-tl-meta{ color:#8a94a6; font-style:italic }
+@media print{ .pdf-tl-step{ break-inside:avoid; page-break-inside:avoid } }
 
 /* FICHA DA CARGA no relatório individual (21/08/2026). Grade de campos —
    é leitura de conferência, não tabela: quem abre este documento procura um
