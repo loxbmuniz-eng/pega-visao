@@ -117,10 +117,15 @@ async def main():
         ck('as duas existem no banco e uma está cancelada',
            no_banco == ['2', '1'], str(no_banco))
 
-        print('\n=== 1. A CONSULTA DO DIA ===')
-        await pg.click(".nav-tab[data-tab='historico']")
+        print('\n=== 1. O RODAPÉ DISCRETO NA ABA PROGRAMAÇÃO ===')
+        await pg.click(".nav-tab[data-tab='programacao']")
         await pg.wait_for_timeout(800)
-        await pg.evaluate("() => carregarProgramacaoDoDiaUI()")
+        rodape = await pg.evaluate(
+            """() => ({botaoVisivel: !document.getElementById('progdia-rodape').hidden,
+                       cardFechado: document.getElementById('card-programacao-dia').hidden})""")
+        ck('o botão do controle aparece para a Logística', rodape['botaoVisivel'], str(rodape))
+        ck('o card começa DOBRADO — só abre ao clicar', rodape['cardFechado'], str(rodape))
+        await pg.click('.btn-progdia')
         await pg.wait_for_timeout(1500)
         tela = await pg.evaluate(
             """() => { const t = document.getElementById('progdia-lista').textContent;
@@ -166,6 +171,30 @@ async def main():
             ck('com a aderência explicada no rodapé', 'aderência' in pdf.lower())
             ck('sem lixo de programação',
                'undefined' not in pdf and 'NaN' not in pdf and '[object' not in pdf)
+
+        print('\n=== 3b. A PORTARIA NÃO VÊ O CONTROLE — NEM NA TELA NEM NO SERVIDOR ===')
+        ctxP = await nav.new_context()
+        pgP = await ctxP.new_page()
+        await pgP.route(f'{API}/__progdia_port', lambda r: asyncio.ensure_future(
+            r.fulfill(status=200, content_type='text/html; charset=utf-8', body=html)))
+        await pgP.goto(f'{API}/__progdia_port')
+        await pgP.wait_for_selector('#login-email', timeout=25000)
+        await pgP.fill('#login-email', 'bruno@teste.local')
+        await pgP.fill('#login-senha', SENHA)
+        await pgP.click('#btn-entrar')
+        await pgP.wait_for_timeout(2500)
+        portaria = await pgP.evaluate(
+            """async () => {
+                 abrirTab('programacao');
+                 const rodape = document.getElementById('progdia-rodape');
+                 let statusApi = null;
+                 try { await SuincoSharePoint.programacaoDoDia('2026-01-01'); statusApi = 200; }
+                 catch (e) { statusApi = String(e.message || e); }
+                 return {botaoEscondido: !rodape || rodape.hidden, statusApi}; }""")
+        ck('o botão do rodapé não existe para a Portaria', portaria['botaoEscondido'], str(portaria))
+        ck('e o SERVIDOR recusa a consulta (tela escondida não é porta destrancada)',
+           portaria['statusApi'] != 200, str(portaria['statusApi'])[:80])
+        await ctxP.close()
 
         print('\n=== 4. CONSOLE LIMPO + CAPTURA ===')
         ck('sem erros de página', not erros, str(erros[:2]))

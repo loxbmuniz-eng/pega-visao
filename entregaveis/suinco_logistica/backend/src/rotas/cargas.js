@@ -939,14 +939,13 @@ rotasCargas.post('/portaria/lacre-retido', exigirLogin, async (req, res, next) =
    braço, a partir de um PDF.
 
    RESTAURAR continua só da Administração (`exigirSetor()` sem argumento).
-   LER as revisões, não (21/08/2026): o Histórico da Programação mostra o
-   log de alterações de cada carga programada para qualquer setor logado —
-   "salvando logs de toda atualização do programador" é pedido de
-   CONTROLE, e controle que só o chefe enxerga não corrige o dia a dia.
-   Ler o passado não muda nada; voltar a ele, sim — e é o voltar que fica
-   atrás da porta da gestão. */
+   LER as revisões abriu um degrau (21/08/2026): Logística também lê — o
+   Controle da Programação mostra o log de alterações de cada carga, e o
+   controle é de quem programa. Os setores de operação (Portaria,
+   Expedição, Faturamento) continuam de fora, por decisão do gestor:
+   "visualização somente Logística/Administração". */
 
-rotasCargas.get('/cargas/:id/revisoes', exigirLogin, async (req, res, next) => {
+rotasCargas.get('/cargas/:id/revisoes', exigirLogin, exigirSetor('Logística'), async (req, res, next) => {
   try {
     const id = idSeguro(req.params.id);
     if (!id) return res.status(400).json({ erro: 'Id inválido.', codigo: 'ID_INVALIDO' });
@@ -1425,11 +1424,11 @@ rotasCargas.get('/cargas-excluidas', exigirLogin, exigirSetor(), async (req, res
    Fica de fora o que NUNCA foi programado: chegada sem programação
    (aguardando_carga) é outro fato, com outra tela.
 
-   Qualquer setor logado lê — é o mesmo nível de acesso do Histórico, e a
-   rota não muda nada. (Sem exigirSetor: sem argumentos ele significa "só
-   Administração", que é mais fechado do que o Histórico que esta tela
-   acompanha.) */
-rotasCargas.get('/programacao-do-dia', exigirLogin, async (req, res, next) => {
+   Visualização SÓ de Logística e Administração (pedido do gestor,
+   21/08/2026): é ferramenta de CONTROLE de quem programa, não tela de
+   operação — a Portaria e os demais setores nem veem o botão, e esta
+   trava garante que tela escondida não vira porta destrancada. */
+rotasCargas.get('/programacao-do-dia', exigirLogin, exigirSetor('Logística'), async (req, res, next) => {
   try {
     const dia = String(req.query.dia || '');
     if (!/^\d{4}-\d{2}-\d{2}$/.test(dia)) {

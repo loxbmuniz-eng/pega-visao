@@ -3688,3 +3688,17 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
 .progdia-log-item{ font-size:12.5px }
 .progdia-log-cab{ color:var(--text-dim) }
 .progdia-log-mudancas{ margin-top:2px; line-height:1.5 }
+/* O rodapé do controle: um botão pequeno, alinhado à direita, tom rebaixado
+   — presença de rodapé mesmo, não de card. Só Logística/Adm o veem. */
+.progdia-rodape{
+  display:flex; justify-content:flex-end; margin:18px 2px 4px;
+}
+.btn-progdia{
+  display:inline-flex; align-items:center; gap:7px;
+  background:none; border:1px solid var(--vidro-brilho); border-radius:8px;
+  color:var(--text-dim); font-size:12px; font-weight:700;
+  padding:6px 12px; cursor:pointer;
+  transition:color .15s ease, border-color .15s ease;
+}
+.btn-progdia:hover{ color:var(--gold-text); border-color:var(--gold-dim) }
+.btn-progdia .ico{ width:14px; height:14px }

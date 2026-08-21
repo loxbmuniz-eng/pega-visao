@@ -2168,11 +2168,14 @@ describe('19. Revisões e Restaurar (Administração)', () => {
     assert.equal(antes, depois, 'eco de sincronização não pode virar revisão');
   });
 
-  test('listar revisões é de qualquer setor logado — ler o passado é controle', async () => {
-    // Mudou em 21/08/2026: o Histórico da Programação mostra o log de
-    // alterações para todos. RESTAURAR continua só da Administração.
-    const r = await req(`/api/cargas/${idCarga}/revisoes`, { token: tokens['Logística'] });
-    assert.equal(r.status, 200);
+  test('listar revisões é de Logística e Administração — operação fica de fora', async () => {
+    // Mudou em 21/08/2026: o Controle da Programação mostra o log de
+    // alterações, e o controle é de quem programa. RESTAURAR continua só
+    // da Administração.
+    const log = await req(`/api/cargas/${idCarga}/revisoes`, { token: tokens['Logística'] });
+    assert.equal(log.status, 200);
+    const portaria = await req(`/api/cargas/${idCarga}/revisoes`, { token: tokens['Portaria'] });
+    assert.equal(portaria.status, 403, 'Portaria é operação, não controle');
     const semLogin = await req(`/api/cargas/${idCarga}/revisoes`);
     assert.equal(semLogin.status, 401, 'sem login continua sem nada');
   });
@@ -3184,6 +3187,13 @@ describe('30. Histórico da programação do dia — canceladas incluídas', () 
   test('sem login, nada', async () => {
     const r = await req(`/api/programacao-do-dia?dia=${hoje}`);
     assert.equal(r.status, 401);
+  });
+
+  test('a consulta é do controle: Portaria e Expedição não leem', async () => {
+    for (const setor of ['Portaria', 'Expedição']) {
+      const r = await req(`/api/programacao-do-dia?dia=${hoje}`, { token: tokens[setor] });
+      assert.equal(r.status, 403, `${setor} é operação, não controle`);
+    }
   });
 
   test('a programação do dia traz a ativa E a cancelada, com autoria do cancelamento', async () => {
