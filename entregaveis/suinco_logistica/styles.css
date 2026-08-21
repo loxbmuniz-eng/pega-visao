@@ -947,6 +947,104 @@ select option{background:var(--campo-bg);color:var(--text)}
 }
 .cel-veiculo .chip-no-patio{ display:inline-block; margin:3px 4px 0 0 }
 
+/* =====================================================================
+   RAIO-X DA OPERAÇÃO (21/08/2026)
+   =====================================================================
+   O controle segmentado e a tabela expansível seguem a identidade da casa:
+   navy fundo, dourado como acento ÚNICO de magnitude, cores de etapa
+   idênticas aos selos de status do painel inteiro. */
+.seg-control{
+  display:inline-flex;
+  gap:2px;
+  background:var(--navy-deep);
+  border:1px solid var(--border);
+  border-radius:10px;
+  padding:3px;
+  margin-bottom:12px;
+}
+.seg-btn{
+  appearance:none;
+  background:transparent;
+  border:0;
+  border-radius:8px;
+  color:var(--text-dim);
+  cursor:pointer;
+  font-size:13px;
+  font-weight:700;
+  padding:7px 16px;
+  transition:background .15s ease, color .15s ease;
+}
+.seg-btn:hover{ color:var(--text) }
+.seg-btn.seg-ativo{
+  background:linear-gradient(180deg, var(--gold), var(--gold-dim));
+  color:#1a1200;
+}
+.seg-btn:focus-visible{ outline:2px solid var(--gold); outline-offset:2px }
+
+.table-raiox{ width:100% }
+.table-raiox .raiox-th{ cursor:pointer; user-select:none; white-space:nowrap }
+.table-raiox .raiox-th:hover{ color:var(--gold) }
+.raiox-linha{ cursor:pointer }
+.raiox-linha:hover td{ background:var(--campo-bg) }
+.raiox-linha.raiox-aberta td{ background:var(--campo-bg) }
+/* A barra de magnitude: comprimento = fatia de cargas da entidade em
+   relação à líder do recorte. Um tom só (dourado), como magnitude pede —
+   o número exato está na coluna Cargas ao lado; a barra é o de-relance. */
+.raiox-cel-barra{ min-width:110px; width:18% }
+.raiox-barra{
+  background:linear-gradient(90deg, var(--gold), var(--gold-dim));
+  border-radius:4px;
+  height:10px;
+  min-width:3px;
+}
+.raiox-det td{
+  background:var(--campo-bg);
+  border-left:3px solid var(--gold-dim);
+  padding:12px 14px !important;
+}
+.raiox-det-grid{
+  display:grid;
+  gap:14px 26px;
+  grid-template-columns:minmax(300px, 1.6fr) minmax(200px, 1fr);
+}
+@media (max-width:760px){ .raiox-det-grid{ grid-template-columns:1fr } }
+.raiox-det-tit{
+  color:var(--gold);
+  font-size:10.5px;
+  font-weight:800;
+  letter-spacing:.09em;
+  margin-bottom:6px;
+  text-transform:uppercase;
+}
+.raiox-extremo{ font-size:12.5px; margin-bottom:7px }
+.raiox-extremo strong{ font-size:14px }
+.raiox-ext-rotulo{
+  color:var(--text-dim);
+  display:block;
+  font-size:9.5px;
+  letter-spacing:.06em;
+  text-transform:uppercase;
+}
+.table-raiox-cargas{ width:100%; font-size:12px }
+.table-raiox-cargas th{ font-size:10px }
+.raiox-acoes{ white-space:nowrap }
+
+/* O gráfico de etapas em SVG. Grade recessiva (só o trilho), rótulo direto
+   em toda barra — a cor nunca é o único canal — e o risco fino da média
+   geral como referência de comparação. */
+.etapas-svg{ display:block; max-width:600px; width:100% }
+.etapas-svg .etapa-rotulo{ fill:var(--text-dim); font-size:11px }
+.etapas-svg .etapa-valor{ fill:var(--text); font-size:11px; font-weight:700 }
+.etapas-svg .etapa-trilho{ fill:var(--navy-deep) }
+.etapas-svg .etapa-media-geral{ stroke:var(--text); stroke-width:2; opacity:.75 }
+.etapas-svg .etapa-nota{ fill:var(--text-dim); font-size:9px }
+@media print{
+  .etapas-svg .etapa-rotulo,.etapas-svg .etapa-nota{ fill:#3d4a5c }
+  .etapas-svg .etapa-valor{ fill:#111418 }
+  .etapas-svg .etapa-trilho{ fill:#e7ebf2 }
+  .etapas-svg .etapa-media-geral{ stroke:#111418 }
+}
+
 /* HISTÓRICO QUE ABRE (20/08/2026). A linha inteira é o botão — alvo grande
    serve tanto para o mouse quanto para o dedo no celular. */
 .hist-linha{ cursor:pointer }

@@ -3433,6 +3433,228 @@ function limparFiltroIndicadores(){
   aplicarFiltroIndicadores();
 }
 
+/* =====================================================================
+   RAIO-X DA OPERAÇÃO — métricas por rota, transportadora e placa
+   =====================================================================
+   (21/08/2026) Pedido do gestor: "da mesma forma que no histórico eu
+   consigo abrir um card detalhado, quero poder enxergar as métricas de
+   cada linha selecionável, cada placa, cada rota... quero que os
+   indicadores mostrem as rotas também".
+
+   Decisões de desenho, na ordem em que importam:
+
+   · TRÊS RECORTES, UMA ESTRUTURA. Rota, transportadora e placa respondem
+     a mesma pergunta ("onde a operação gasta tempo, e com quem?") com
+     chaves diferentes. Um controle segmentado troca o recorte; a tabela,
+     a ordenação e o detalhe são os mesmos — aprender uma vez vale para os
+     três.
+
+   · A BARRA DOURADA É MAGNITUDE, NÃO ENFEITE. Cada linha carrega a fatia
+     de cargas da entidade em relação à maior do recorte — sequencial, um
+     tom só, como magnitude pede. Comparar comprimento é o que o olho faz
+     melhor; comparar números em coluna, não.
+
+   · O DETALHE COMPARA COM A MÉDIA GERAL. "Rota 517 gasta 3h12 aguardando
+     embarque" não diz nada sozinho; com o risco da média geral na mesma
+     barra, vira diagnóstico: acima do risco = pior que o pátio inteiro.
+     As cores das etapas são as MESMAS dos selos de status do painel
+     inteiro (identidade fixa por etapa — validadas para daltonismo e
+     contraste contra o fundo navy, com rótulo direto em toda barra: cor
+     nunca é o único canal).
+
+   · SEM GRÁFICO DE PIZZA NOVO, SEM EIXO DUPLO, SEM HUE INVENTADA. As
+     regras que os gráficos daqui seguem estão em
+     docs/REGISTRO_DE_OCORRENCIAS.md e no método de dataviz: uma métrica
+     por eixo, rótulos diretos, grade recessiva. */
+
+let _raioxVisao = 'rota';
+let _raioxExpandida = null;
+let _raioxOrdem = { campo: 'cargas', asc: false };
+
+const RAIOX_ETAPAS = [
+  { key:'tempoAguardandoEmbarque', rotulo:'Aguardando embarque', cor:'--st-aguardando-embarque-bg' },
+  { key:'tempoCarregamento',       rotulo:'Carregamento',        cor:'--st-embarque-iniciado-bg' },
+  { key:'tempoFaturamento',        rotulo:'Faturamento',         cor:'--st-embarque-finalizado-bg' },
+  { key:'tempoAguardandoSaida',    rotulo:'Aguardando saída',    cor:'--st-faturado-bg' },
+];
+
+function trocarVisaoRaioX(visao){
+  _raioxVisao = visao;
+  _raioxExpandida = null;        // detalhe aberto era de outra entidade
+  renderRaioX();
+}
+
+function ordenarRaioX(campo){
+  if(_raioxOrdem.campo === campo){ _raioxOrdem.asc = !_raioxOrdem.asc; }
+  else { _raioxOrdem = { campo, asc: campo === 'chave' }; }
+  renderRaioX();
+}
+
+function alternarDetalheRaioX(chave){
+  _raioxExpandida = (_raioxExpandida === chave) ? null : chave;
+  renderRaioX();
+}
+
+function rotuloEntidadeRaioX(item){
+  if(_raioxVisao === 'rota') return esc(rotaCurta(item.chave));
+  return esc(item.chave);
+}
+
+/* Barras horizontais de etapa em SVG — desenhadas à mão porque o painel é
+   arquivo único, sem CDN, e um gráfico de 4 barras não justifica
+   dependência. `mediasGeral` vira o risco de referência em cada barra. */
+function barrasEtapasSvg(medias, mediasGeral){
+  const dados = RAIOX_ETAPAS.map(e=>({ ...e, v: medias[e.key], g: mediasGeral[e.key] }));
+  const max = Math.max(1, ...dados.map(d=>Math.max(d.v||0, d.g||0)));
+  const ALT_BARRA = 16, VAO = 12, ROTULO = 148, LARG = 560, PADD = 6;
+  const larguraUtil = LARG - ROTULO - 78;
+  const linhas = dados.map((d, i)=>{
+    const y = PADD + i * (ALT_BARRA + VAO);
+    const w = d.v === null ? 0 : Math.max(2, (d.v / max) * larguraUtil);
+    const gx = d.g === null ? null : ROTULO + (d.g / max) * larguraUtil;
+    const cor = corTema(d.cor);
+    const titulo = d.v === null
+      ? `${d.rotulo}: sem medição neste recorte`
+      : `${d.rotulo}: ${fmtDuracao(d.v)} neste recorte · média geral ${d.g === null ? '—' : fmtDuracao(d.g)}`;
+    return `
+      <g>
+        <title>${esc(titulo)}</title>
+        <text x="${ROTULO - 8}" y="${y + ALT_BARRA - 4}" text-anchor="end" class="etapa-rotulo">${esc(d.rotulo)}</text>
+        <rect x="${ROTULO}" y="${y}" width="${larguraUtil}" height="${ALT_BARRA}" rx="4" class="etapa-trilho"/>
+        ${d.v === null ? '' : `<rect x="${ROTULO}" y="${y}" width="${w}" height="${ALT_BARRA}" rx="4" fill="${cor}"/>`}
+        ${gx === null ? '' : `<line x1="${gx}" y1="${y - 3}" x2="${gx}" y2="${y + ALT_BARRA + 3}" class="etapa-media-geral"><title>Média geral do recorte: ${esc(fmtDuracao(d.g))}</title></line>`}
+        <text x="${ROTULO + larguraUtil + 8}" y="${y + ALT_BARRA - 4}" class="etapa-valor">${d.v === null ? '—' : esc(fmtDuracao(d.v))}</text>
+      </g>`;
+  }).join('');
+  // +18px de respiro para a nota da legenda não encostar na última barra —
+  // visto na captura de tela do teste, não em teoria.
+  const altura = PADD * 2 + dados.length * (ALT_BARRA + VAO) - VAO + 18;
+  return `<svg class="etapas-svg" viewBox="0 0 ${LARG} ${altura}" role="img"
+      aria-label="Tempo médio por etapa, comparado com a média geral">
+    ${linhas}
+    <text x="${ROTULO}" y="${altura - 4}" class="etapa-nota">│ = média geral do recorte filtrado</text>
+  </svg>`;
+}
+
+function detalheRaioXHtml(item, mediasGeral, colunas){
+  const cargasDaEntidade = item.ids
+    .map(id => getCarga(id)).filter(Boolean)
+    .sort((a,b)=> new Date(b.atualizadoEm) - new Date(a.atualizadoEm));
+
+  /* Melhor e pior ciclo: é a pergunta seguinte de quem abriu o detalhe.
+     Média esconde variação — e variação é onde mora o problema operacional. */
+  const comPatio = cargasDaEntidade
+    .map(c => ({ c, patio: indicadoresDaCarga(c.id).tempoPatioTotal }))
+    .filter(x => x.patio !== null);
+  const melhor = comPatio.length ? comPatio.reduce((a,b)=> a.patio <= b.patio ? a : b) : null;
+  const pior   = comPatio.length ? comPatio.reduce((a,b)=> a.patio >= b.patio ? a : b) : null;
+
+  const LIMITE = 12;
+  const recentes = cargasDaEntidade.slice(0, LIMITE);
+  const linhas = recentes.map(({...c} = {}) => c).map(c => {
+    const ind = indicadoresDaCarga(c.id);
+    return `<tr>
+      <td>${esc(c.numeroCarga) || '—'}</td>
+      <td>${_raioxVisao === 'placa' ? esc(rotaCurta(c.rota)) : esc(c.placa)}</td>
+      <td>${esc(String(c.programadoEm || c.criadoEm || '').slice(0,10).split('-').reverse().join('/'))}</td>
+      <td class="c-peso">${c.peso ? c.peso.toLocaleString('pt-BR') : '—'}</td>
+      <td class="c-peso">${fmtDuracao(ind.tempoPatioTotal)}</td>
+      <td class="c-peso">${fmtDuracao(ind.leadTimeTotal)}</td>
+      <td class="no-print raiox-acoes">
+        <button class="btn btn-sec btn-sm" onclick="event.stopPropagation();verLinhaDoTempoDoHistoricoUI('${escJs(c.id)}')" title="Linha do tempo completa desta carga.">🕒</button>
+        <button class="btn btn-sec btn-sm" onclick="event.stopPropagation();relatorioDaCargaUI('${escJs(c.id)}')" title="PDF individual desta carga.">📄</button>
+      </td>
+    </tr>`;
+  }).join('');
+
+  return `<tr class="raiox-det"><td colspan="${colunas}">
+    <div class="raiox-det-grid">
+      <div class="raiox-det-col">
+        <div class="raiox-det-tit">Onde o tempo é gasto</div>
+        ${barrasEtapasSvg(item.mediasEtapas, mediasGeral)}
+      </div>
+      <div class="raiox-det-col">
+        <div class="raiox-det-tit">Extremos do recorte</div>
+        <div class="raiox-extremos">
+          ${melhor ? `<div class="raiox-extremo"><span class="raiox-ext-rotulo">⚡ Ciclo mais rápido</span>
+            <strong>${fmtDuracao(melhor.patio)}</strong> — carga ${esc(melhor.c.numeroCarga)||'s/nº'} · ${esc(melhor.c.placa)}</div>` : ''}
+          ${pior ? `<div class="raiox-extremo"><span class="raiox-ext-rotulo">🐌 Ciclo mais lento</span>
+            <strong>${fmtDuracao(pior.patio)}</strong> — carga ${esc(pior.c.numeroCarga)||'s/nº'} · ${esc(pior.c.placa)}</div>` : ''}
+          ${!comPatio.length ? '<div class="text-dim">Sem ciclos completos medidos neste recorte.</div>' : ''}
+        </div>
+      </div>
+    </div>
+    <div class="raiox-det-tit" style="margin-top:10px">Cargas deste recorte ${cargasDaEntidade.length > LIMITE ? `(as ${LIMITE} mais recentes de ${cargasDaEntidade.length})` : `(${cargasDaEntidade.length})`}</div>
+    <div class="table-wrap"><table class="table-raiox-cargas">
+      <thead><tr><th>Nº Carga</th><th>${_raioxVisao === 'placa' ? 'Rota' : 'Placa'}</th><th>Dia</th><th>Peso (kg)</th><th title="Chegada até a saída">Pátio</th><th title="Criação da carga até Seguiu Viagem">Lead</th><th class="no-print"></th></tr></thead>
+      <tbody>${linhas || '<tr><td colspan="7" class="text-dim">Nenhuma carga carregada no painel para este recorte.</td></tr>'}</tbody>
+    </table></div>
+  </td></tr>`;
+}
+
+function renderRaioX(){
+  const thead = document.getElementById('raiox-thead');
+  const tbody = document.getElementById('raiox-tbody');
+  if(!thead || !tbody) return;
+
+  document.querySelectorAll('#raiox-seg .seg-btn').forEach(b=>{
+    b.classList.toggle('seg-ativo', b.dataset.visao === _raioxVisao);
+  });
+
+  const concluidas = filtrarPorFiltroIndicadores(DB.cargas.filter(c=>c.status==='Seguiu Viagem'));
+  let itens = metricasPorEntidade(_raioxVisao, concluidas);
+
+  // A média geral do RECORTE FILTRADO — é contra ela que cada entidade se
+  // compara. Média do histórico inteiro compararia agosto com a vida.
+  const mediasGeral = {};
+  RAIOX_ETAPAS.forEach(e=>{
+    let soma = 0, n = 0;
+    concluidas.forEach(c=>{
+      const v = indicadoresDaCarga(c.id)[e.key];
+      if(v !== null){ soma += v; n++; }
+    });
+    mediasGeral[e.key] = n ? Math.round(soma/n) : null;
+  });
+
+  const { campo, asc } = _raioxOrdem;
+  itens = itens.slice().sort((a,b)=>{
+    let va = a[campo], vb = b[campo];
+    if(campo === 'chave'){ va = String(va); vb = String(vb); return asc ? va.localeCompare(vb) : vb.localeCompare(va); }
+    va = va === null ? -1 : va; vb = vb === null ? -1 : vb;
+    return asc ? va - vb : vb - va;
+  });
+
+  const seta = (c)=> _raioxOrdem.campo === c ? (_raioxOrdem.asc ? ' ▲' : ' ▼') : '';
+  const ROTULO_VISAO = { rota:'Rota', transportadora:'Transportadora', placa:'Placa' };
+  const colunas = 6;
+  thead.innerHTML = `<tr>
+    <th class="raiox-th" onclick="ordenarRaioX('chave')">${ROTULO_VISAO[_raioxVisao]}${seta('chave')}</th>
+    <th class="raiox-th" onclick="ordenarRaioX('cargas')" title="Cargas concluídas no recorte">Cargas${seta('cargas')}</th>
+    <th class="raiox-th" onclick="ordenarRaioX('pesoTotal')">Peso total (kg)${seta('pesoTotal')}</th>
+    <th class="raiox-th" onclick="ordenarRaioX('mediaPatio')" title="Chegada até a saída, média">Pátio médio${seta('mediaPatio')}</th>
+    <th class="raiox-th" onclick="ordenarRaioX('mediaLead')" title="Criação da carga até Seguiu Viagem, média">Lead médio${seta('mediaLead')}</th>
+    <th title="Fatia de cargas em relação à entidade líder do recorte">Volume</th>
+  </tr>`;
+
+  const maxCargas = Math.max(1, ...itens.map(i=>i.cargas));
+  tbody.innerHTML = itens.map(item=>{
+    const aberta = _raioxExpandida === item.chave;
+    const linha = `<tr class="raiox-linha${aberta ? ' raiox-aberta' : ''}"
+        onclick="alternarDetalheRaioX('${escJs(item.chave)}')"
+        title="Clique para ${aberta ? 'fechar' : 'abrir'} o detalhe — etapas, extremos e as cargas individuais.">
+      <td><span class="hist-seta">${aberta ? '▾' : '▸'}</span> ${rotuloEntidadeRaioX(item)}</td>
+      <td class="c-peso">${item.cargas}</td>
+      <td class="c-peso">${item.pesoTotal ? item.pesoTotal.toLocaleString('pt-BR') : '—'}</td>
+      <td class="c-peso">${fmtDuracao(item.mediaPatio)}</td>
+      <td class="c-peso">${fmtDuracao(item.mediaLead)}</td>
+      <td class="raiox-cel-barra"><div class="raiox-barra" style="width:${Math.round((item.cargas/maxCargas)*100)}%"></div></td>
+    </tr>`;
+    return linha + (aberta ? detalheRaioXHtml(item, mediasGeral, colunas) : '');
+  }).join('');
+
+  document.getElementById('raiox-empty').hidden = itens.length > 0;
+}
+
 function renderIndicadores(){
   preencherFiltrosIndicadores();
   renderDistribuicaoStatus();
@@ -3463,6 +3685,7 @@ function renderIndicadores(){
   html += `<div class="stat-box"><div class="stat-num">${fmtDuracao(nLead?Math.round(somaLead/nLead):null)}</div><div class="stat-label">Lead Time Total</div><div class="stat-note">criação da carga → Seguiu Viagem</div></div>`;
   document.getElementById('ind-stats').innerHTML = html;
 
+  renderRaioX();
   // ---- Bloco 2: Painel do Gestor — comparação por período (novo) ----
   renderComparacaoPeriodos();
   renderRankingPeriodos();

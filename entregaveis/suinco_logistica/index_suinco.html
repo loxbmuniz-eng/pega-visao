@@ -676,6 +676,31 @@
       <div class="bento" id="ind-stats"></div>
     </div>
 
+    <!-- RAIO-X DA OPERAÇÃO (21/08/2026). Pedido do gestor: "quero poder
+         enxergar as métricas de cada linha selecionável, cada informação,
+         cada placa, cada rota". Três recortes da MESMA pergunta — onde a
+         operação gasta tempo, e com quem — trocados por um controle
+         segmentado, com cada linha abrindo em um cartão de detalhe no
+         mesmo padrão do Histórico. Respeita os filtros do topo da aba. -->
+    <div class="card">
+      <div class="card-title"><span class="icon">🧭</span> Raio-X da Operação</div>
+      <div class="card-sub">Cargas <strong>concluídas</strong> do recorte filtrado acima, agrupadas por rota, transportadora ou placa.
+        Clique numa linha para abrir o detalhe: onde o tempo é gasto etapa por etapa, comparado com a média geral, e as cargas
+        individuais — cada uma com linha do tempo e relatório próprio. Clique no título de uma coluna para reordenar.</div>
+      <div class="seg-control" id="raiox-seg">
+        <button class="seg-btn" data-visao="rota" onclick="trocarVisaoRaioX('rota')">🗺️ Rotas</button>
+        <button class="seg-btn" data-visao="transportadora" onclick="trocarVisaoRaioX('transportadora')">🚛 Transportadoras</button>
+        <button class="seg-btn" data-visao="placa" onclick="trocarVisaoRaioX('placa')">🔢 Placas</button>
+      </div>
+      <div class="table-wrap">
+        <table class="table-raiox">
+          <thead id="raiox-thead"></thead>
+          <tbody id="raiox-tbody"></tbody>
+        </table>
+      </div>
+      <div id="raiox-empty" class="card-sub" hidden>Nenhuma carga concluída no recorte filtrado — o Raio-X mede o ciclo completo, então só entra aqui quem já seguiu viagem.</div>
+    </div>
+
     <div class="card">
       <div class="card-title"><span class="icon">🔍</span> Painel do Gestor — comparação por período</div>
       <div class="card-sub">
