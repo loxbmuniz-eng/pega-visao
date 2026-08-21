@@ -287,6 +287,39 @@
          consultável por período a qualquer momento, sem precisar arquivar
          nada. Não havia mais o que o botão fizesse -- e botão irreversível
          que não faz nada é a pior combinação possível. -->
+
+    <!-- CONTROLE DA PROGRAMAÇÃO — rodapé discreto, só Logística/Adm.
+         (21/08/2026, pedido do gestor: "precisa ser do controle e
+         visualização somente Logística/Administração e deve ficar no final
+         da aba Programação dentro de um ícone que só ao clicar abre".)
+         Não é tela de operação: fica dobrado num botão pequeno e o card só
+         existe para quem clicou. -->
+    <div class="progdia-rodape no-print" id="progdia-rodape" hidden>
+      <button class="btn-progdia" onclick="alternarControleProgramacaoUI()"
+        title="Histórico da programação: o dia como foi programado, com canceladas, autoria e log de alterações.">
+        <svg class="ico" aria-hidden="true"><use href="#i-historico"/></svg>
+        Controle da programação
+      </button>
+    </div>
+    <div class="card" id="card-programacao-dia" hidden>
+      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-programacao"/></svg> Programação do dia — como ela foi feita</div>
+      <div class="card-sub">Escolha o dia e veja <strong>tudo</strong> que foi programado para ele — inclusive as cargas
+        canceladas depois, que somem das outras telas de propósito. Cada linha diz quem programou, quando, e o
+        desfecho; clique na linha para o log de alterações. O resumo é a <strong>aderência à programação</strong>:
+        de tudo que foi prometido, quanto de fato seguiu viagem. Visível só para Logística e Administração.</div>
+      <div class="form-row" style="align-items:flex-end">
+        <div class="form-group" style="max-width:200px"><label>Dia da programação</label>
+          <input type="date" id="progdia-data" onchange="carregarProgramacaoDoDiaUI()"></div>
+        <div class="form-group">
+          <button class="btn btn-sec btn-sm" onclick="carregarProgramacaoDoDiaUI()"><svg class="ico ico-btn" aria-hidden="true"><use href="#i-lupa"/></svg> Consultar</button>
+        </div>
+        <div class="form-group">
+          <button class="btn btn-sec btn-sm" id="progdia-pdf" onclick="pdfProgramacaoDoDiaUI()" hidden><svg class="ico ico-btn" aria-hidden="true"><use href="#i-relatorios"/></svg> PDF desta programação</button>
+        </div>
+      </div>
+      <div id="progdia-resumo"></div>
+      <div id="progdia-lista"></div>
+    </div>
   </div>
 
   <!-- ===== DEVOLUÇÕES (fase 1: Logística e Administração) =====
@@ -1048,26 +1081,6 @@
       </div>
       <div id="hist-busca-resultados"></div>
       <div id="hist-timeline-wrap"></div>
-    </div>
-
-    <div class="card" id="card-programacao-dia">
-      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-programacao"/></svg> Programação do dia — como ela foi feita</div>
-      <div class="card-sub">Escolha o dia e veja <strong>tudo</strong> que foi programado para ele — inclusive as cargas
-        canceladas depois, que somem das outras telas de propósito. Cada linha diz quem programou, quando, e o
-        desfecho. O resumo no topo é a <strong>aderência à programação</strong>: de tudo que foi prometido, quanto
-        de fato seguiu viagem.</div>
-      <div class="form-row" style="align-items:flex-end">
-        <div class="form-group" style="max-width:200px"><label>Dia da programação</label>
-          <input type="date" id="progdia-data" onchange="carregarProgramacaoDoDiaUI()"></div>
-        <div class="form-group">
-          <button class="btn btn-sec btn-sm" onclick="carregarProgramacaoDoDiaUI()"><svg class="ico ico-btn" aria-hidden="true"><use href="#i-lupa"/></svg> Consultar</button>
-        </div>
-        <div class="form-group">
-          <button class="btn btn-sec btn-sm" id="progdia-pdf" onclick="pdfProgramacaoDoDiaUI()" hidden><svg class="ico ico-btn" aria-hidden="true"><use href="#i-relatorios"/></svg> PDF desta programação</button>
-        </div>
-      </div>
-      <div id="progdia-resumo"></div>
-      <div id="progdia-lista"></div>
     </div>
 
     <div class="card" id="card-cargas-excluidas">

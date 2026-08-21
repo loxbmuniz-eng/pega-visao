@@ -1044,7 +1044,7 @@ function renderTabAtual(){
   atualizarDatalists();
   switch(TAB_ATUAL){
     case 'torre': renderTorre(); renderVisaoPatio('torre'); break;
-    case 'programacao': renderProgFila(); renderProgAguardando(); break;
+    case 'programacao': renderProgFila(); renderProgAguardando(); renderRodapeControleProgramacao(); break;
     // Módulo próprio (devolucoes.js, carregado depois deste arquivo). O
     // typeof protege a ordem de carga: se o módulo faltar, a aba fica
     // vazia em vez de derrubar a navegação inteira.
@@ -4708,7 +4708,36 @@ async function alternarLogProgramacaoUI(cargaId){
   }
 }
 
+/* Quem pode ver o controle. A mesma regra vale na tela (o rodapé nem
+   aparece para os outros setores) e no servidor (a rota recusa) — tela
+   escondida sem trava de servidor é cortina, não porta. */
+function podeVerControleProgramacao(){
+  const setor = (DB.operador || {}).setor;
+  return setor === 'Logística' || setor === 'Administração';
+}
+
+function renderRodapeControleProgramacao(){
+  const rodape = document.getElementById('progdia-rodape');
+  const card = document.getElementById('card-programacao-dia');
+  if(!rodape) return;
+  const pode = podeVerControleProgramacao();
+  rodape.hidden = !pode;
+  if(!pode && card) card.hidden = true;
+}
+
+function alternarControleProgramacaoUI(){
+  if(!podeVerControleProgramacao()) return;
+  const card = document.getElementById('card-programacao-dia');
+  if(!card) return;
+  card.hidden = !card.hidden;
+  if(!card.hidden){
+    carregarProgramacaoDoDiaUI();
+    card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+}
+
 async function carregarProgramacaoDoDiaUI(){
+  if(!podeVerControleProgramacao()) return;
   const alvoResumo = document.getElementById('progdia-resumo');
   const alvoLista = document.getElementById('progdia-lista');
   const botaoPdf = document.getElementById('progdia-pdf');
