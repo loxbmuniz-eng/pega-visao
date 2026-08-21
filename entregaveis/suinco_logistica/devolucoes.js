@@ -1274,6 +1274,8 @@ async function comprovantePortariaUI(id) {
       })}
       <div class="dev-comprovante">
         ${linha('Nº DA CARGA', d.cargaNumero)}
+        ${linha('Nº(S) DEV', (d.itens || []).map((i) => i.numDev).filter(Boolean)
+          .filter((v, ix, arr) => arr.indexOf(v) === ix).join(' · '))}
         ${linha('PLACA', d.placa)}
         ${linha('MOTORISTA', d.motorista)}
         ${linha('TRANSPORTADORA', d.transportadora)}
