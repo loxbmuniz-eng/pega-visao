@@ -2062,9 +2062,15 @@ function gerarCsvDimCarga(){
   return toCsv(header, linhas, CSV_COLUNAS_TEXTO);
 }
 function gerarCsvDimTransportadora(){
+  // Derivada da FROTA (fonte viva), como o CSV de Cadastros já faz:
+  // DB.transportadoras é a lista legada de cadastro manual e nasce vazia,
+  // então a dimensão saía sem nenhuma linha enquanto Dim_Frota estava
+  // cheia de transportadoras — o cruzamento no Power BI não fechava.
+  // O Id é o próprio nome: é a chave que Dim_Frota carrega.
   const header = ['Id','Nome'];
-  const linhas = listarTransportadoras().map(t=>[t.id, t.nome]);
-  return toCsv(header, linhas, CSV_COLUNAS_TEXTO);
+  const nomes = [...new Set(DB.frota.map(f=>(f.transportadora||'').trim()).filter(Boolean))]
+    .sort((a,b)=>a.localeCompare(b));
+  return toCsv(header, nomes.map(n=>[n, n]), CSV_COLUNAS_TEXTO);
 }
 function gerarCsvDimFrota(){
   const header = ['Placa','Transportadora','TipoVeiculo','CapacidadeKg','UF','DataUltimaMovimentacao','PrecisaRevisao'];
