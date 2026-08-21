@@ -183,6 +183,11 @@ async def main():
         doc = await pg.evaluate("() => document.getElementById('print-devolucoes').innerText")
         ck('relatório do checklist traz a coluna e o número',
            'Nº parcial' in doc and '118274' in doc)
+        # Pedido do gestor (20/08/2026): no papel, escrito por extenso — quem
+        # lê o relatório não tem a tela do lado para lembrar o que é "P".
+        ck('parcial/total sai por extenso, não abreviado',
+           'PARCIAL' in doc and 'TOTAL' in doc and ' P ' not in doc,
+           doc[:0] or 'ok')
         alin = await pg.evaluate(
             "() => { const t = document.querySelector('#print-devolucoes table');"
             "  const cols = t.querySelectorAll('thead th').length;"
