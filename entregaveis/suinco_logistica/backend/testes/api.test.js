@@ -2168,9 +2168,13 @@ describe('19. Revisões e Restaurar (Administração)', () => {
     assert.equal(antes, depois, 'eco de sincronização não pode virar revisão');
   });
 
-  test('listar revisões é só da Administração', async () => {
+  test('listar revisões é de qualquer setor logado — ler o passado é controle', async () => {
+    // Mudou em 21/08/2026: o Histórico da Programação mostra o log de
+    // alterações para todos. RESTAURAR continua só da Administração.
     const r = await req(`/api/cargas/${idCarga}/revisoes`, { token: tokens['Logística'] });
-    assert.equal(r.status, 403, 'restaurar é gestão, não operação');
+    assert.equal(r.status, 200);
+    const semLogin = await req(`/api/cargas/${idCarga}/revisoes`);
+    assert.equal(semLogin.status, 401, 'sem login continua sem nada');
   });
 
   test('Administração lista as revisões no formato do painel', async () => {
@@ -3135,5 +3139,74 @@ describe('29. Lacres gravados fielmente: saída, retenção e trilha', () => {
       [cargaId]
     );
     assert.match(rows[0].acao, /carga incorreta na conferência/);
+  });
+});
+
+/* ------------------------------------------------------------------ */
+describe('30. Histórico da programação do dia — canceladas incluídas', () => {
+  let placaA, placaB, hoje;
+
+  before(async () => {
+    const { rows } = await pool.query(
+      `SELECT v.placa FROM dim_veiculos v
+        LEFT JOIN fact_viagens f ON f.placa = v.placa AND f.excluida_em IS NULL
+       WHERE v.transportadora <> '' AND f.carga_id IS NULL
+       ORDER BY v.placa DESC LIMIT 2`);
+    [placaA, placaB] = rows.map((r) => r.placa);
+    hoje = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit',
+    }).format(new Date());
+
+    const a = await req('/api/cargas', {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { id: 'progdia_a', placa: placaA, numeroCarga: 'PD-1', peso: 1000 },
+    });
+    assert.equal(a.status, 201);
+    const b = await req('/api/cargas', {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { id: 'progdia_b', placa: placaB, numeroCarga: 'PD-2', peso: 2000 },
+    });
+    assert.equal(b.status, 201);
+    // A segunda é CANCELADA — é ela que a leitura normal esconde e esta
+    // consulta precisa mostrar.
+    const del = await req('/api/cargas/progdia_b', {
+      metodo: 'DELETE', token: tokens['Logística'],
+    });
+    assert.equal(del.status, 200);
+  });
+
+  test('sem dia válido, a consulta recusa', async () => {
+    const r = await req('/api/programacao-do-dia?dia=ontem', { token: tokens['Logística'] });
+    assert.equal(r.status, 400);
+    assert.equal(r.json.codigo, 'DIA_INVALIDO');
+  });
+
+  test('sem login, nada', async () => {
+    const r = await req(`/api/programacao-do-dia?dia=${hoje}`);
+    assert.equal(r.status, 401);
+  });
+
+  test('a programação do dia traz a ativa E a cancelada, com autoria do cancelamento', async () => {
+    const r = await req(`/api/programacao-do-dia?dia=${hoje}`, { token: tokens['Logística'] });
+    assert.equal(r.status, 200);
+    const ativa = r.json.find((c) => c.id === 'progdia_a');
+    const cancelada = r.json.find((c) => c.id === 'progdia_b');
+    assert.ok(ativa, 'a carga ativa aparece');
+    assert.ok(cancelada, 'a carga CANCELADA aparece — é a razão da rota existir');
+    assert.equal(cancelada.excluida, true);
+    assert.ok(cancelada.excluidaEm, 'com a data do cancelamento');
+    assert.ok(cancelada.excluidaPor, 'e com quem cancelou');
+    assert.equal(ativa.excluida, false);
+  });
+
+  test('chegada sem programação NÃO entra — nunca foi programada', async () => {
+    const r = await req(`/api/programacao-do-dia?dia=${hoje}`, { token: tokens['Logística'] });
+    assert.ok(r.json.every((c) => !c.aguardandoCarga));
+  });
+
+  test('outro dia devolve vazio (as cargas são de hoje)', async () => {
+    const r = await req('/api/programacao-do-dia?dia=2001-01-01', { token: tokens['Logística'] });
+    assert.equal(r.status, 200);
+    assert.deepEqual(r.json.filter((c) => ['progdia_a', 'progdia_b'].includes(c.id)), []);
   });
 });

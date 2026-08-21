@@ -938,11 +938,15 @@ rotasCargas.post('/portaria/lacre-retido', exigirLogin, async (req, res, next) =
    um ponto anterior — o que na semana de 14–15/08 precisou ser feito no
    braço, a partir de um PDF.
 
-   `exigirSetor()` sem argumento = só Administração (o middleware sempre
-   inclui Administração no conjunto permitido). Restaurar é ação de
-   gestão, não de operação. */
+   RESTAURAR continua só da Administração (`exigirSetor()` sem argumento).
+   LER as revisões, não (21/08/2026): o Histórico da Programação mostra o
+   log de alterações de cada carga programada para qualquer setor logado —
+   "salvando logs de toda atualização do programador" é pedido de
+   CONTROLE, e controle que só o chefe enxerga não corrige o dia a dia.
+   Ler o passado não muda nada; voltar a ele, sim — e é o voltar que fica
+   atrás da porta da gestão. */
 
-rotasCargas.get('/cargas/:id/revisoes', exigirLogin, exigirSetor(), async (req, res, next) => {
+rotasCargas.get('/cargas/:id/revisoes', exigirLogin, async (req, res, next) => {
   try {
     const id = idSeguro(req.params.id);
     if (!id) return res.status(400).json({ erro: 'Id inválido.', codigo: 'ID_INVALIDO' });
@@ -1403,6 +1407,52 @@ rotasCargas.get('/cargas-excluidas', exigirLogin, exigirSetor(), async (req, res
       params
     );
     return res.json(rows.map(paraPainel));
+  } catch (e) {
+    return next(e);
+  }
+});
+
+/* O HISTÓRICO DA PROGRAMAÇÃO — "me mostra a programação do dia X como ela
+   foi feita" (pedido do gestor, 21/08/2026).
+
+   A diferença desta consulta para a leitura normal do painel é UMA e é o
+   motivo de ela existir: as cargas CANCELADAS entram. A leitura do pátio
+   filtra `excluida_em IS NULL` de propósito (o pátio é o que opera); aqui o
+   assunto é controle — "o que foi programado" inclui o que foi programado e
+   depois caiu, senão a aderência à programação sai inflada e ninguém audita
+   um cancelamento.
+
+   Fica de fora o que NUNCA foi programado: chegada sem programação
+   (aguardando_carga) é outro fato, com outra tela.
+
+   Qualquer setor logado lê — é o mesmo nível de acesso do Histórico, e a
+   rota não muda nada. (Sem exigirSetor: sem argumentos ele significa "só
+   Administração", que é mais fechado do que o Histórico que esta tela
+   acompanha.) */
+rotasCargas.get('/programacao-do-dia', exigirLogin, async (req, res, next) => {
+  try {
+    const dia = String(req.query.dia || '');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dia)) {
+      return res.status(400).json({
+        erro: 'Informe o dia da programação como AAAA-MM-DD.',
+        codigo: 'DIA_INVALIDO',
+      });
+    }
+    const FUSO = 'America/Sao_Paulo';
+    const { rows } = await consultar(
+      `SELECT ${COLUNAS_CARGA} FROM fact_viagens
+        WHERE aguardando_carga = FALSE
+          AND (COALESCE(programado_em, criado_em) AT TIME ZONE $1)::date = $2::date
+        ORDER BY sequencia NULLS LAST, criado_em`,
+      [FUSO, dia]
+    );
+    // paraPainel esconde os detalhes da exclusão de propósito (a leitura
+    // normal só precisa do booleano). Aqui quem cancelou e quando É o dado.
+    return res.json(rows.map((linha) => ({
+      ...paraPainel(linha),
+      excluidaEm: linha.excluida_em || null,
+      excluidaPor: linha.excluida_por || '',
+    })));
   } catch (e) {
     return next(e);
   }

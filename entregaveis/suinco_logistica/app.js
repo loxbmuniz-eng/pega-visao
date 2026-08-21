@@ -4558,6 +4558,221 @@ async function corrigirDataProgramacaoUI(id){
    engano ficava sem tela nenhuma, e a única saída era o banco. Aqui a
    Administração busca (opcionalmente por placa), vê o que foi excluído e
    devolve com motivo. */
+/* =====================================================================
+   HISTÓRICO DA PROGRAMAÇÃO — "a programação do dia X como ela foi feita"
+   =====================================================================
+
+   Pedido do gestor (21/08/2026): "quero que haja um histórico da
+   programação também, para controle das cargas que foram programadas".
+
+   O nome disso em logística é ADERÊNCIA À PROGRAMAÇÃO: do que foi
+   prometido para o dia, quanto de fato seguiu viagem. A consulta vem de
+   rota própria porque precisa das cargas CANCELADAS — que o estado do
+   painel esconde de propósito — e cancelada é justamente o que o controle
+   mais quer enxergar. */
+let _progDia = null; // { dia, cargas } da última consulta — alimenta o PDF
+
+function dataHoraBR(iso){
+  if(!iso) return '';
+  const d = new Date(iso);
+  if(Number.isNaN(d.getTime())) return '';
+  return d.toLocaleString('pt-BR', {day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit'});
+}
+
+function desfechoDaCarga(c){
+  if(c.excluida){
+    const quem = c.excluidaPor ? ` por ${c.excluidaPor}` : '';
+    const quando = c.excluidaEm ? ` em ${dataHoraBR(c.excluidaEm)}` : '';
+    return { classe:'progdia-cancelada', rotulo:`Cancelada${quem}${quando}` };
+  }
+  if(c.status === 'Seguiu Viagem'){
+    const quando = c.acaoEm ? ` · ${dataHoraBR(c.acaoEm)}` : '';
+    return { classe:'progdia-concluida', rotulo:`Seguiu Viagem${quando}` };
+  }
+  return { classe:'progdia-aberta', rotulo:`Em aberto — ${c.status}` };
+}
+
+function resumoProgramacaoHtml(cargas){
+  const canceladas = cargas.filter(c=>c.excluida).length;
+  const concluidas = cargas.filter(c=>!c.excluida && c.status==='Seguiu Viagem').length;
+  const abertas = cargas.length - canceladas - concluidas;
+  // Aderência sobre o PROGRAMADO (inclui canceladas no denominador): a
+  // promessa foi feita; cancelar é um jeito de não cumpri-la, não de
+  // apagá-la da conta.
+  const pct = cargas.length ? Math.round(100*concluidas/cargas.length) : 0;
+  return `
+    <div class="progdia-resumo">
+      <div class="stat-box"><div class="stat-num">${cargas.length}</div><div class="stat-label">Programadas</div></div>
+      <div class="stat-box"><div class="stat-num">${concluidas}</div><div class="stat-label">Seguiram viagem</div></div>
+      <div class="stat-box"><div class="stat-num">${canceladas}</div><div class="stat-label">Canceladas</div></div>
+      <div class="stat-box"><div class="stat-num">${abertas}</div><div class="stat-label">Em aberto</div></div>
+      <div class="stat-box"><div class="stat-num">${pct}%</div><div class="stat-label">Aderência</div>
+        <div class="stat-note">seguiram viagem ÷ programadas</div></div>
+    </div>`;
+}
+
+function tabelaProgramacaoHtml(cargas, paraPdf){
+  return `
+    <div class="table-wrap">
+      <table class="tabela-patio tabela-progdia">
+        <thead><tr>
+          <th>Nº Carga</th><th>Placa</th><th>Rota</th><th>Cliente</th>
+          <th>Peso (kg)</th><th>Programada por</th><th>Desfecho</th>
+        </tr></thead>
+        <tbody>${cargas.map(c=>{
+          const d = desfechoDaCarga(c);
+          const linha = `<tr class="${d.classe}${paraPdf ? '' : ' progdia-linha'}"
+            ${paraPdf ? '' : `onclick="alternarLogProgramacaoUI('${escJs(c.id)}')"
+              title="Clique para ver o log de alterações desta carga."`}>
+            <td>${esc(c.numeroCarga||'—')}</td>
+            <td><strong>${esc(c.placa)}</strong></td>
+            <td>${esc(rotaCurta(c.rota)||'—')}</td>
+            <td>${esc(c.cliente||'—')}</td>
+            <td>${c.peso ? Number(c.peso).toLocaleString('pt-BR') : '—'}</td>
+            <td>${esc(c.criadoPor||'—')}${c.criadoEm ? ` · ${dataHoraBR(c.criadoEm)}` : ''}</td>
+            <td class="progdia-desfecho">${esc(d.rotulo)}</td>
+          </tr>`;
+          const log = paraPdf ? '' : `<tr class="progdia-log" id="progdia-log-${esc(c.id)}" hidden>
+            <td colspan="7"></td></tr>`;
+          return linha + log;
+        }).join('')}</tbody>
+      </table>
+    </div>`;
+}
+
+/* O LOG DE CADA CARGA PROGRAMADA — "salvando logs de toda atualização do
+   programador, alteração" (o complemento do pedido).
+
+   O banco JÁ guarda cada mudança real (carga_revisoes, por trigger — até
+   SQL manual entra). O que faltava era mostrar como LOG: cada revisão é o
+   estado ANTES da mudança, então a alteração nº k transforma a revisão k
+   na revisão k+1 — e a última desemboca na carga atual. O diff entre
+   vizinhos, campo a campo, é exatamente "quem mudou o quê". */
+const CAMPOS_LOG_PROG = [
+  ['numeroCarga','Nº da carga'], ['placa','Placa'], ['rota','Rota'],
+  ['cliente','Cliente'], ['destino','Destino'], ['peso','Peso (kg)'],
+  ['sequencia','Sequência'], ['qtdEntregas','Entregas'], ['paletizada','Paletizada'],
+  ['doca','Doca'], ['motorista','Motorista'], ['observacoes','Observações'],
+  ['status','Status'],
+];
+
+function mudancasEntre(antes, depois){
+  const m = [];
+  CAMPOS_LOG_PROG.forEach(([k, rotulo])=>{
+    const a = antes ? antes[k] : undefined;
+    const b = depois ? depois[k] : undefined;
+    if(String(a ?? '') !== String(b ?? '')){
+      m.push(`${rotulo}: ${esc(String(a ?? '') || '—')} → ${esc(String(b ?? '') || '—')}`);
+    }
+  });
+  return m;
+}
+
+function logDaCargaHtml(c, revs){
+  // revs vem DESC do servidor; a linha do tempo lê melhor em ordem ASC e
+  // se apresenta DESC (mais recente no topo), como todo log do painel.
+  const asc = revs.slice().reverse();
+  const eventos = [];
+  for(let i = 0; i < asc.length; i++){
+    const estadoDepois = (i + 1 < asc.length) ? asc[i + 1].carga : c;
+    const mudancas = mudancasEntre(asc[i].carga, estadoDepois);
+    if(!mudancas.length) continue; // eco sem mudança visível nos campos acompanhados
+    eventos.push(`<div class="progdia-log-item">
+      <div class="progdia-log-cab"><strong>${esc(dataHoraBR(asc[i].gravadaEm))}</strong>
+        · ${esc(asc[i].mudadaPor || '—')}${asc[i].mudadaSetor ? ' (' + esc(asc[i].mudadaSetor) + ')' : ''}</div>
+      <div class="progdia-log-mudancas">${mudancas.join('<br>')}</div>
+    </div>`);
+  }
+  eventos.push(`<div class="progdia-log-item">
+    <div class="progdia-log-cab"><strong>${esc(dataHoraBR(c.criadoEm))}</strong>
+      · ${esc(c.criadoPor || '—')}</div>
+    <div class="progdia-log-mudancas">Carga programada.</div>
+  </div>`);
+  return `<div class="progdia-log-caixa">${eventos.reverse().join('')}</div>`;
+}
+
+async function alternarLogProgramacaoUI(cargaId){
+  const linha = document.getElementById(`progdia-log-${cargaId}`);
+  if(!linha || !_progDia) return;
+  if(!linha.hidden){ linha.hidden = true; return; }
+  const c = _progDia.cargas.find(x=>x.id === cargaId);
+  if(!c) return;
+  const celula = linha.querySelector('td');
+  linha.hidden = false;
+  celula.innerHTML = '<div class="card-sub">Buscando o log no servidor…</div>';
+  try{
+    const revs = await SuincoSharePoint.listarRevisoes(cargaId);
+    celula.innerHTML = logDaCargaHtml(c, revs || []);
+  }catch(e){
+    celula.innerHTML = `<div class="card-sub">Não consegui buscar o log: ${esc(e.message||'erro')}</div>`;
+  }
+}
+
+async function carregarProgramacaoDoDiaUI(){
+  const alvoResumo = document.getElementById('progdia-resumo');
+  const alvoLista = document.getElementById('progdia-lista');
+  const botaoPdf = document.getElementById('progdia-pdf');
+  if(!alvoResumo || !alvoLista) return;
+  const campo = document.getElementById('progdia-data');
+  if(campo && !campo.value){
+    // Dia LOCAL, nunca toISOString() (que é UTC e vira ontem depois das 21h
+    // em Patos de Minas) — mesma lição de filtroRelatorioAtalho.
+    const h = new Date();
+    campo.value = `${h.getFullYear()}-${String(h.getMonth()+1).padStart(2,'0')}-${String(h.getDate()).padStart(2,'0')}`;
+  }
+  const dia = campo ? campo.value : '';
+  if(!dia) return;
+
+  _progDia = null;
+  if(botaoPdf) botaoPdf.hidden = true;
+  alvoResumo.innerHTML = '';
+  alvoLista.innerHTML = '<div class="card-sub">Consultando…</div>';
+  let cargas;
+  try{
+    cargas = await SuincoSharePoint.programacaoDoDia(dia);
+  }catch(e){
+    // Painel novo + servidor antigo: a rota ainda não existe lá. Dizer
+    // exatamente isso vale mais que um "erro 404" solto.
+    const semRota = /404|não encontrada|not found/i.test(String(e && e.message || ''));
+    alvoLista.innerHTML = `<div class="card-sub">${semRota
+      ? 'O servidor ainda não conhece esta consulta — falta rodar a atualização do servidor (atualizar.sh). O painel já está pronto.'
+      : 'Não consegui consultar: ' + esc(e.message||'erro')}</div>`;
+    return;
+  }
+  if(!cargas.length){
+    alvoLista.innerHTML = `<div class="card-sub">Nenhuma carga foi programada para ${esc(fmtData(dia))}.</div>`;
+    return;
+  }
+  _progDia = { dia, cargas };
+  if(botaoPdf) botaoPdf.hidden = false;
+  alvoResumo.innerHTML = resumoProgramacaoHtml(cargas);
+  alvoLista.innerHTML = tabelaProgramacaoHtml(cargas, false);
+}
+
+async function pdfProgramacaoDoDiaUI(){
+  if(!_progDia || !_progDia.cargas.length){
+    notify('Consulte um dia com cargas antes de gerar o PDF.', 'warn');
+    return;
+  }
+  const el = document.getElementById('print-programacao');
+  if(!el) return;
+  const { dia, cargas } = _progDia;
+  el.innerHTML = `
+    <div class="print-page doc-amplo">
+      ${cabecalhoDocumento({
+        titulo: `Programação de ${fmtData(dia)} — controle`,
+        subtitulo: 'Tudo que foi programado para o dia, incluindo canceladas, com autoria e desfecho',
+      })}
+      ${resumoProgramacaoHtml(cargas)}
+      ${tabelaProgramacaoHtml(cargas, true)}
+      ${rodapeDocumento(
+        'A aderência conta as canceladas no total de propósito: a programação foi feita; '
+        + 'cancelar é um desfecho, não um apagador. Carga "em aberto" ainda estava no pátio '
+        + 'na hora em que este documento foi gerado.', '', '')}
+    </div>`;
+  await exportarViaServidor(el, `Programacao-${dia}`);
+}
+
 async function carregarCargasExcluidasUI(){
   const alvo = document.getElementById('exc-lista');
   if(!alvo) return;

@@ -3661,3 +3661,30 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
   font-size:11px; color:var(--text-dim);
 }
 .pulso-legenda .grau{ width:16px; height:11px; border-radius:2px; flex:none }
+
+/* =====================================================================
+   PROGRAMAÇÃO DO DIA (Histórico) — controle com canceladas e log
+   ===================================================================== */
+.progdia-resumo{
+  display:grid; grid-template-columns:repeat(5, minmax(110px,1fr));
+  gap:10px; margin:10px 0 14px;
+}
+@media(max-width:900px){ .progdia-resumo{ grid-template-columns:repeat(2,1fr) } }
+.tabela-progdia .progdia-linha{ cursor:pointer }
+.tabela-progdia .progdia-linha:hover td{ background:var(--vidro-brilho) }
+/* Cancelada continua legível — risco só no essencial, nunca cor sozinha. */
+.tabela-progdia tr.progdia-cancelada td{ color:var(--text-dim) }
+.tabela-progdia tr.progdia-cancelada td:first-child,
+.tabela-progdia tr.progdia-cancelada td:nth-child(2){ text-decoration:line-through }
+.tabela-progdia tr.progdia-cancelada .progdia-desfecho{ color:var(--wine-light); font-weight:700; text-decoration:none }
+.tabela-progdia tr.progdia-concluida .progdia-desfecho{ color:var(--ok) }
+.tabela-progdia tr.progdia-aberta .progdia-desfecho{ color:var(--gold-text) }
+.progdia-log > td{ padding:0 10px 12px }
+.progdia-log-caixa{
+  border-left:3px solid var(--gold-dim); border-radius:0 8px 8px 0;
+  background:var(--navy-light); padding:10px 14px;
+  display:flex; flex-direction:column; gap:8px;
+}
+.progdia-log-item{ font-size:12.5px }
+.progdia-log-cab{ color:var(--text-dim) }
+.progdia-log-mudancas{ margin-top:2px; line-height:1.5 }
