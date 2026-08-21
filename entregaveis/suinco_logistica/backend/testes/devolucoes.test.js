@@ -971,3 +971,62 @@ describe('12. Nº DEV e Nº da carga de devolução são dois números (20/08/20
     assert.equal(r.json.lacre3, '133478');
   });
 });
+
+/* ------------------------------------------------------------------ */
+describe('13. Nome do cliente junto do código (20/08/2026)', () => {
+  /* Relato do gestor: "o código do cliente no relatório não está puxando o
+     nome do cliente, está puxando só o código". O item guardava só o
+     código, e o relatório vai para a mão de quem não digitou nada. */
+  let id;
+
+  before(async () => {
+    await pool.query(
+      `INSERT INTO dim_clientes (codigo, nome, apelido, vendedor, supervisor)
+       VALUES ('99913', 'Comercial Teste de Alimentos Ltda', 'TESTE ALIM', '', '')
+       ON CONFLICT (codigo) DO UPDATE SET nome = EXCLUDED.nome, apelido = EXCLUDED.apelido`
+    );
+    const c = await req('/api/devolucoes', {
+      metodo: 'POST', token: tokens['Logística'], corpo: novoChecklist(),
+    });
+    id = c.json.id;
+  });
+
+  test('o servidor completa o nome a partir do cadastro', async () => {
+    const r = await req(`/api/devolucoes/${id}/itens`, {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { nota: '771000', cx: 2, codCliente: '99913' },
+    });
+    assert.equal(r.status, 201, r.texto);
+    assert.equal(r.json.codCliente, '99913');
+    assert.equal(r.json.clienteNome, 'TESTE ALIM', 'o apelido é o que as capas usam');
+  });
+
+  test('nome mandado pelo painel é respeitado — quem digitou sabe mais', async () => {
+    const r = await req(`/api/devolucoes/${id}/itens`, {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { nota: '771001', cx: 1, codCliente: '99913', clienteNome: 'NOME DA CAPA' },
+    });
+    assert.equal(r.status, 201, r.texto);
+    assert.equal(r.json.clienteNome, 'NOME DA CAPA');
+  });
+
+  test('código fora do cadastro grava só o código, sem inventar nome', async () => {
+    const r = await req(`/api/devolucoes/${id}/itens`, {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { nota: '771002', cx: 1, codCliente: '00000-nao-existe' },
+    });
+    assert.equal(r.status, 201, r.texto);
+    assert.equal(r.json.clienteNome, '');
+  });
+
+  test('trocar o cliente da linha atualiza o nome junto', async () => {
+    const item = await req(`/api/devolucoes/${id}/itens`, {
+      metodo: 'POST', token: tokens['Logística'], corpo: { nota: '771003', cx: 1 },
+    });
+    const r = await req(`/api/devolucoes/${id}/itens/${item.json.itemId}`, {
+      metodo: 'PATCH', token: tokens['Logística'], corpo: { codCliente: '99913' },
+    });
+    assert.equal(r.status, 200, r.texto);
+    assert.equal(r.json.clienteNome, 'TESTE ALIM');
+  });
+});

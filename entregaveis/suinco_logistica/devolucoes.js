@@ -146,6 +146,36 @@ function lacresChegadaDev(d) {
 
    Na TELA a caixa de seleção continua escrita por extenso desde sempre —
    quem estava abreviado era só o papel. */
+/* O CLIENTE NO PAPEL: CÓDIGO E NOME (20/08/2026).
+
+   "O código do cliente no relatório não está puxando o nome do cliente,
+   está puxando só o código." Mesma apresentação que o produto já usa —
+   código, traço, nome — para as duas colunas se lerem igual. */
+function clienteTextoDev(item) {
+  const cod = esc(item && item.codCliente ? item.codCliente : '');
+  const nome = esc(item && item.clienteNome ? item.clienteNome : '');
+  if (cod && nome) return `${cod} - ${nome}`;
+  return cod || nome || '—';
+}
+
+/* A CARGA DA DEV SÓ EXISTE DEPOIS QUE O CAMINHÃO CHEGA NA PORTARIA.
+
+   Pedido do gestor (20/08/2026): "número da carga da dev não precisa no
+   relatório antes da Portaria gerar o número que o SIS ATAK gera — só a
+   Portaria pode fazer isso, quando a devolução chega lá".
+
+   A relação para o operador é impressa ANTES disso, quando o caminhão nem
+   saiu. Uma coluna que ninguém pode preencher ainda não é informação
+   faltando: é informação que não existe, e no papel ela vira uma fileira de
+   traços que faz o leitor procurar o que deveria estar ali. Então a coluna
+   só entra no documento quando ALGUÉM já preencheu — no cabeçalho ou em
+   alguma linha. */
+function temCargaDev(d) {
+  if (!d) return false;
+  if (String(d.cargaNumero || '').trim()) return true;
+  return (d.itens || []).some((i) => String(i.cargaDev || '').trim());
+}
+
 function parcialTotalTexto(item) {
   return item && item.parcial ? 'PARCIAL' : 'TOTAL';
 }
@@ -650,7 +680,8 @@ function renderDevolucaoAberta(d, editavel) {
         : (i.parcial ? (esc(i.parcialDesc) || '<span class="dev-falta-chip">falta o nº</span>') : '—')}</td>
       <td>${cel('supervisor', i.supervisor, 'text', 'list="dl-dev-supervisores"')}</td>
       <td>${cel('vendedor', i.vendedor, 'text', 'list="dl-dev-rcas"')}</td>
-      <td>${cel('codCliente', i.codCliente, 'text', 'list="dl-dev-clientes" oninput="sugerirClientesDevUI(this.value)"')}</td>
+      <td>${cel('codCliente', i.codCliente, 'text', 'list="dl-dev-clientes" oninput="sugerirClientesDevUI(this.value)"')}
+          ${i.clienteNome ? `<small class="text-dim">${esc(i.clienteNome)}</small>` : ''}</td>
       <td class="c-peso">${cel('cx', i.cx, 'number', 'min="0" step="1"')}</td>
       <td class="c-peso">${cel('peso', i.peso, 'number', 'min="0" step="0.01"')}</td>
       <td>${cel('codProduto', i.codProduto, 'text', 'list="dl-dev-produtos"')}
@@ -1312,21 +1343,21 @@ async function relatorioDevolucoesUI(diaParam) {
       <table class="dev-doc-tabela">
         <thead><tr>
           <th>Nota</th><th title="A devolução é parcial ou total">Parcial / Total</th><th title="Número da nota parcial">Nº parcial</th>
-          <th>Supervisor</th><th title="Vendedor">RCA</th><th>Cód. Cliente</th>
+          <th>Supervisor</th><th title="Vendedor">RCA</th><th>Cliente</th>
           <th>CX</th><th title="Peso em QUILOS (kg)">Peso (kg)</th><th>Produto</th><th>Nº DEV</th>
-          <th title="Carga de devolução do SIS ATAK">Nº carga dev</th><th>Data DEV</th><th>Motivo</th>
+          ${temCargaDev(d) ? '<th title="Carga de devolução do SIS ATAK">Nº carga dev</th>' : ''}<th>Data DEV</th><th>Motivo</th>
           <th title="Pesagem do Faturamento, em QUILOS (kg)">Pesagem (kg)</th><th>Expedição</th><th>Falta</th><th>Destinação</th><th>Nota final</th>
         </tr></thead>
         <tbody>${d.itens.map((i) => `<tr${i.falta > 0 ? ' class="dev-doc-falta"' : ''}>
             <td>${esc(i.nota)}</td>
             <td class="c-pt">${parcialTotalTexto(i)}</td>
             <td>${i.parcial ? (esc(i.parcialDesc) || '—') : '—'}</td>
-            <td>${esc(i.supervisor)}</td><td>${esc(i.vendedor)}</td><td>${esc(i.codCliente)}</td>
+            <td>${esc(i.supervisor)}</td><td>${esc(i.vendedor)}</td><td>${clienteTextoDev(i)}</td>
             <td class="c-peso">${i.cx.toLocaleString('pt-BR')}</td>
             <td class="c-peso">${i.peso !== null ? i.peso.toLocaleString('pt-BR') : '—'}</td>
             <td>${esc(i.codProduto)}${i.produtoNome ? '-' + esc(i.produtoNome) : ''}</td>
             <td>${esc(i.numDev)}</td>
-            <td>${esc(cargaDevDoItem(i, d)) || '—'}</td>
+            ${temCargaDev(d) ? `<td>${esc(cargaDevDoItem(i, d)) || '—'}</td>` : ''}
             <td>${i.dataItem ? esc(String(i.dataItem).slice(0, 10).split('-').reverse().join('/')) : '—'}</td>
             <td>${esc(i.motivo)}</td>
             <td class="c-peso">${i.pesoFaturamento !== null ? i.pesoFaturamento.toLocaleString('pt-BR') : '—'}</td>
@@ -1339,7 +1370,7 @@ async function relatorioDevolucoesUI(diaParam) {
               (pedido de 18/08/2026): as colunas CX e PESO fecham a conta do
               checklist, e a pesagem do Faturamento fecha a dela ao lado —
               é o número que a conferência procura primeiro. */''}
-        <tfoot>${somatorioItensDev(d.itens, 6)}</tfoot>
+        <tfoot>${somatorioItensDev(d.itens, 6, temCargaDev(d))}</tfoot>
       </table>
       ${d.divergencias.length ? `<div class="dev-doc-diverg">
           <strong>Divergentes (fora do checklist):</strong>
@@ -1651,7 +1682,11 @@ async function cadastrarClienteDevUI() {
    Relatório Operacional (linha-total, rótulo à esquerda, números à
    direita). Some o que é somável e deixe o resto em branco: coluna que
    não é quantidade não ganha total só para preencher espaço. */
-function somatorioItensDev(itens, colspanAntes) {
+/* `comCargaDev` diz se a coluna "Nº carga dev" está no documento — ela só
+   entra depois que a Portaria gera o número no SIS ATAK. Cada coluna que
+   aparece ou some no meio da tabela precisa entrar nesta conta, senão o
+   total escorrega uma casa para o lado. */
+function somatorioItensDev(itens, colspanAntes, comCargaDev) {
   const num = (v) => (v === null || v === undefined ? 0 : Number(v) || 0);
   const cx = itens.reduce((s, i) => s + num(i.cx), 0);
   const peso = itens.reduce((s, i) => s + num(i.peso), 0);
@@ -1663,10 +1698,8 @@ function somatorioItensDev(itens, colspanAntes) {
       <td colspan="${colspanAntes}" class="tot-rotulo">TOTAL — ${itens.length} linha(s)</td>
       <td class="tot-num">${fmt(cx, 0)}</td>
       <td class="tot-num">${fmt(peso, 2)} kg</td>
-      ${/* Produto, Nº DEV, Nº carga dev, Data DEV e Motivo não somam — cinco
-           colunas em branco. Cada coluna nova aqui no meio precisa entrar
-           nesta conta, senão o total escorrega uma casa para o lado. */''}
-      <td colspan="5"></td>
+      ${/* Produto, Nº DEV, [Nº carga dev], Data DEV e Motivo não somam. */''}
+      <td colspan="${comCargaDev ? 5 : 4}"></td>
       <td class="tot-num">${pesagem ? fmt(pesagem, 2) + ' kg' : ''}</td>
       <td class="tot-num">${recebidas ? fmt(recebidas, 0) : ''}</td>
       <td class="tot-num">${falta ? 'FALTA ' + fmt(falta, 0) : ''}</td>
@@ -1674,7 +1707,7 @@ function somatorioItensDev(itens, colspanAntes) {
     </tr>`;
 }
 
-function somatorioLinhasOperadorDev(linhas) {
+function somatorioLinhasOperadorDev(linhas, comCargaDev) {
   const num = (v) => (v === null || v === undefined ? 0 : Number(v) || 0);
   const cx = linhas.reduce((s, { i }) => s + num(i.cx), 0);
   const peso = linhas.reduce((s, { i }) => s + num(i.peso), 0);
@@ -1683,8 +1716,8 @@ function somatorioLinhasOperadorDev(linhas) {
       <td colspan="6" class="tot-rotulo">TOTAL — ${linhas.length} linha(s)</td>
       <td class="tot-num">${fmt(cx, 0)}</td>
       <td class="tot-num">${fmt(peso, 2)} kg</td>
-      ${/* Produto, Nº DEV, Nº carga dev, Data DEV e Motivo. */''}
-      <td colspan="5"></td>
+      ${/* Produto, Nº DEV, [Nº carga dev], Data DEV e Motivo. */''}
+      <td colspan="${comCargaDev ? 5 : 4}"></td>
     </tr>`;
 }
 
@@ -1771,7 +1804,7 @@ async function relatorioOperadorDevolucoesUI(idChecklist) {
             <th>Supervisor</th><th title="Vendedor">RCA</th>
             <th>Cliente</th><th>CX</th><th title="Peso em QUILOS (kg)">Peso (kg)</th><th>Produto</th>
             <th>Nº DEV</th>
-            <th title="Carga de devolução do SIS ATAK">Nº carga dev</th>
+            ${temCargaDev(d) ? '<th title="Carga de devolução do SIS ATAK">Nº carga dev</th>' : ''}
             <th>Data DEV</th><th>Motivo</th>
           </tr></thead>
           <tbody>${d.itens.map((i) => `
@@ -1781,16 +1814,16 @@ async function relatorioOperadorDevolucoesUI(idChecklist) {
               <td>${i.parcial ? (esc(i.parcialDesc) || '—') : '—'}</td>
               <td>${esc(i.supervisor)}</td>
               <td>${esc(i.vendedor)}</td>
-              <td>${esc(i.codCliente)}</td>
+              <td>${clienteTextoDev(i)}</td>
               <td class="c-peso">${(Number(i.cx) || 0).toLocaleString('pt-BR')}</td>
               <td class="c-peso">${i.peso !== null ? Number(i.peso).toLocaleString('pt-BR') : '—'}</td>
               <td>${esc(i.codProduto)}${i.produtoNome ? '-' + esc(i.produtoNome) : ''}</td>
               <td>${esc(i.numDev)}</td>
-              <td>${esc(cargaDevDoItem(i, d)) || '—'}</td>
+              ${temCargaDev(d) ? `<td>${esc(cargaDevDoItem(i, d)) || '—'}</td>` : ''}
               <td>${i.dataItem ? esc(String(i.dataItem).slice(0, 10).split('-').reverse().join('/')) : '—'}</td>
               <td>${esc(i.motivo)}</td>
             </tr>`).join('')}</tbody>
-          <tfoot>${somatorioLinhasOperadorDev(d.itens.map((i) => ({ i })))}</tfoot>
+          <tfoot>${somatorioLinhasOperadorDev(d.itens.map((i) => ({ i })), temCargaDev(d))}</tfoot>
         </table>
       </div>`).join('') : '<div class="card-sub">Nenhuma devolução lançada neste dia.</div>'}
       ${rodapeDocumento(

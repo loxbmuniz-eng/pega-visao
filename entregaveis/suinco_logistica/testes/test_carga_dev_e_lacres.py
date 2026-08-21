@@ -26,11 +26,15 @@ falhas = []
 
 
 def sql(consulta):
-    """Postgres local descartável — não é a produção."""
-    subprocess.run(
-        ['sudo', '-u', 'postgres', 'psql', '-tAq', '-P', 'pager=off',
+    """Postgres local descartável — não é a produção. Devolve a primeira
+    linha em lista (ou None), para servir tanto de escrita quanto de
+    consulta."""
+    saida = subprocess.run(
+        ['sudo', '-u', 'postgres', 'psql', '-tAF', '|', '-P', 'pager=off',
          '-d', 'embarque_suinco', '-c', consulta],
         capture_output=True, text=True)
+    linhas = [l for l in saida.stdout.strip().splitlines() if l]
+    return linhas[0].split('|') if linhas else None
 
 
 def ck(nome, ok, detalhe=''):
@@ -115,12 +119,17 @@ async def main():
         ck('ficam na linha de baixo, depois da placa', tela['abaixoDaPlaca'], str(tela))
 
         print('\n=== 4. A SAÍDA GRAVA OS TRÊS NA CARGA ===')
-        placa = await pgL.evaluate(
-            """() => {
-                 const usadas = new Set(DB.cargas.map((c) => c.placa));
-                 const f = DB.frota.find((x) => x.placa && x.transportadora && !usadas.has(x.placa));
-                 return f ? f.placa : null;
-               }""")
+        # A placa vem do BANCO, não da tela (20/08/2026). Escolher "a
+        # primeira que o painel não conhece" falhava de vez em quando: o
+        # banco de teste é compartilhado entre as suítes, e uma placa sem
+        # carga NA TELA podia ter carga de outra suíte no servidor — aí a
+        # trava de reentrada recusava a promoção e o teste acusava um
+        # defeito que não existia.
+        livre = sql("SELECT v.placa FROM dim_veiculos v "
+                    "LEFT JOIN fact_viagens f ON f.placa = v.placa AND f.excluida_em IS NULL "
+                    "WHERE v.transportadora <> '' AND f.carga_id IS NULL "
+                    "ORDER BY v.placa LIMIT 1")
+        placa = livre[0] if livre else None
         ck('placa livre escolhida', bool(placa), str(placa))
         if not placa:
             await nav.close()

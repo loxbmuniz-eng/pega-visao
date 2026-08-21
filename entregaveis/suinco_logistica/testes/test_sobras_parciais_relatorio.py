@@ -188,6 +188,17 @@ async def main():
         ck('parcial/total sai por extenso, não abreviado',
            'PARCIAL' in doc and 'TOTAL' in doc and ' P ' not in doc,
            doc[:0] or 'ok')
+        """Pedido do gestor (20/08/2026): a coluna da carga da dev só existe
+           depois que a Portaria gera o número no SIS ATAK. Antes disso ela
+           vira uma fileira de traços no papel."""
+        semCarga = await pg.evaluate(
+            """() => { const blocos = [...document.querySelectorAll('#print-devolucoes .dev-doc-checklist')];
+                 const meu = blocos.find((b) => b.innerText.includes('118274'));
+                 if (!meu) return 'bloco não encontrado';
+                 return [...meu.querySelectorAll('thead th')].map((t) => t.innerText.trim()); }""")
+        ck('sem a Portaria, a coluna "Nº carga dev" nem aparece',
+           isinstance(semCarga, list) and 'Nº carga dev' not in semCarga,
+           str(semCarga)[:120])
         alin = await pg.evaluate(
             "() => { const t = document.querySelector('#print-devolucoes table');"
             "  const cols = t.querySelectorAll('thead th').length;"
