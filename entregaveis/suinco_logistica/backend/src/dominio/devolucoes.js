@@ -192,6 +192,10 @@ export function itemParaPainel(i) {
     supervisor: i.supervisor,
     vendedor: i.vendedor,
     codCliente: i.cod_cliente,
+    /* Nome do cliente guardado JUNTO do código (migração 028): o relatório
+       vai para quem não digitou nada, e código sozinho não identifica
+       ninguém. Mesma regra de produtoNome. */
+    clienteNome: i.cliente_nome || '',
     cx,
     peso: i.peso === null ? null : Number(i.peso),
     codProduto: i.cod_produto,
@@ -287,6 +291,7 @@ export function camposItem(corpo) {
   if (corpo.supervisor !== undefined) m.supervisor = texto(corpo.supervisor, 100);
   if (corpo.vendedor !== undefined) m.vendedor = texto(corpo.vendedor, 100);
   if (corpo.codCliente !== undefined) m.cod_cliente = texto(corpo.codCliente, 100);
+  if (corpo.clienteNome !== undefined) m.cliente_nome = texto(corpo.clienteNome, 200);
   if (corpo.cx !== undefined) m.cx = Math.max(0, numeroOuNull(corpo.cx) ?? 0);
   if (corpo.peso !== undefined) m.peso = numeroOuNull(corpo.peso);
   if (corpo.codProduto !== undefined) m.cod_produto = texto(corpo.codProduto, 50);

@@ -94,6 +94,40 @@ async function expandirMotivo(executor, campos) {
   if (rows[0]) campos.motivo = rows[0].motivo;
 }
 
+/* O NOME DO CLIENTE ENTRA JUNTO DO CÓDIGO (20/08/2026).
+
+   Relato do gestor: "o código do cliente no relatório não está puxando o
+   nome do cliente, está puxando só o código".
+
+   Poderia ficar só no painel (ele já busca o cliente ao digitar), mas aí
+   dependeria de a busca ter dado certo naquele instante — rede lenta,
+   digitação colada, importação em lote — e o relatório sairia sem nome sem
+   ninguém entender por quê. Aqui é o servidor que completa, na hora de
+   gravar, sempre que o código existir no cadastro.
+
+   O apelido tem preferência sobre a razão social porque é o que as capas de
+   papel usam ("SENDAS", "AREAL") — mesma decisão da migration 019.
+
+   Nome que o painel mandou explicitamente é respeitado: quem digitou sabe
+   mais que o cadastro sobre aquele lançamento. */
+async function completarNomeDoCliente(executor, campos) {
+  const codigo = String(campos.cod_cliente ?? '').trim();
+  if (!codigo) return;
+  if (String(campos.cliente_nome ?? '').trim()) return;
+  try {
+    const { rows } = await executor.query(
+      'SELECT nome, apelido FROM dim_clientes WHERE codigo = $1', [codigo]
+    );
+    const achado = rows[0];
+    if (!achado) return;
+    const nome = (achado.apelido || '').trim() || (achado.nome || '').trim();
+    if (nome) campos.cliente_nome = nome.slice(0, 200);
+  } catch (e) {
+    // Completar é bônus, não pré-requisito: o item grava de qualquer forma.
+    console.warn('[devolucoes] nome do cliente não completou:', e.message);
+  }
+}
+
 /* Aprendizado automático do vínculo cliente → RCA → supervisor (pedido
    de 18/08/2026): todo item gravado com esses campos ensina a base, e o
    próximo lançamento do mesmo cliente preenche sozinho — a mesma lógica
@@ -211,6 +245,7 @@ rotasDevolucoes.post('/devolucoes', exigirLogin, async (req, res, next) => {
       for (const itemCorpo of itensCorpo) {
         const it = camposItem(itemCorpo);
         await expandirMotivo(cli, it);
+        await completarNomeDoCliente(cli, it);
         const cols = ['devolucao_id', 'operador_nome', 'operador_setor', ...Object.keys(it)];
         const vals = [id, op.nome, op.setor, ...Object.values(it)];
         await cli.query(
@@ -464,6 +499,7 @@ rotasDevolucoes.post('/devolucoes/:id/itens', exigirLogin, exigirSetor('Logísti
     if (!dev.rows[0]) return res.status(404).json({ erro: 'Devolução não encontrada.', codigo: 'NAO_ENCONTRADA' });
     const it = camposItem(req.body || {});
     await expandirMotivo({ query: consultar }, it);
+    await completarNomeDoCliente({ query: consultar }, it);
     const cols = ['devolucao_id', 'operador_nome', 'operador_setor', ...Object.keys(it)];
     const vals = [req.params.id, op.nome, op.setor, ...Object.values(it)];
     const ins = await consultar(
@@ -489,6 +525,7 @@ rotasDevolucoes.patch('/devolucoes/:id/itens/:itemId', exigirLogin, async (req, 
       return res.status(400).json({ erro: 'Nada para alterar.', codigo: 'SEM_CAMPOS' });
     }
     await expandirMotivo({ query: consultar }, it);
+    await completarNomeDoCliente({ query: consultar }, it);
 
     /* Fase 1: Logística/Administração mexem em tudo. Cada setor da fase 2
        enxerga só a própria coluna: Expedição confere (qtd_recebida),
