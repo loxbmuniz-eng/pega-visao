@@ -666,6 +666,17 @@ body::before{
   background:linear-gradient(180deg, var(--gold), var(--gold-dim));
 }
 .card-title .icon{font-size:18px}
+/* O ícone do título herda o dourado do próprio título (currentColor) — o
+   emoji colorido saiu de cena, então o vetor precisa se afirmar sozinho:
+   um ponto maior que o texto e alinhado ao traço da esquerda. */
+.card-title .ico-card{
+  width:19px;height:19px;flex:none;
+}
+/* Ícone dentro de botão de ação (linha do tempo, relatório): acompanha a
+   altura do texto do botão e nunca estica. */
+.btn .ico-btn{
+  width:15px;height:15px;flex:none;vertical-align:-2.5px;
+}
 .card-sub{font-size:12px;color:var(--text-dim);margin-top:-6px;margin-bottom:9px}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
@@ -3639,6 +3650,26 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
   font-weight:800; font-size:.78rem; letter-spacing:.5px; text-transform:uppercase;
   padding:7px 10px; position:sticky; top:0; z-index:2; }
 
+/* =====================================================================
+   PULSO DO PÁTIO (Indicadores) — heatmap hora×dia + evolução diária
+   =====================================================================
+   Duas leituras do mesmo fato (a chegada registrada pela Portaria), lado
+   a lado no desktop e empilhadas no celular. Os gráficos são SVG e podem
+   ser mais largos que a coluna — cada um rola sozinho na horizontal para
+   a página nunca ganhar barra de rolagem lateral. */
+.pulso-grid{ display:grid; grid-template-columns:1fr 1fr; gap:18px }
+@media(max-width:1100px){ .pulso-grid{ grid-template-columns:1fr } }
+.pulso-titulo{
+  font-size:12px; font-weight:800; letter-spacing:.4px; text-transform:uppercase;
+  color:var(--text-dim); margin:4px 0 8px;
+}
+.pulso-scroll{ overflow-x:auto; }
+.pulso-legenda{
+  display:flex; align-items:center; gap:7px; margin-top:6px;
+  font-size:11px; color:var(--text-dim);
+}
+.pulso-legenda .grau{ width:16px; height:11px; border-radius:2px; flex:none }
+
 </style>
 <!-- PWA: instalável no Android e no iPhone, com ícone na tela inicial.
      Os dois arquivos são opcionais por construção — abrindo o painel por
@@ -3672,6 +3703,19 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
   <symbol id="i-usuarios" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M2.5 20c0-3.5 3-5.5 6.5-5.5s6.5 2 6.5 5.5M16 4.8a3.5 3.5 0 010 6.4M17.5 14.7c2.4.7 4 2.4 4 5.3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
   <symbol id="i-rotas" viewBox="0 0 24 24"><path d="M9 20l-6 1V5l6-1 6 2 6-1v16l-6 1-6-2zM9 4v16M15 6v16" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></symbol>
   <symbol id="i-placas" viewBox="0 0 24 24"><rect x="2.5" y="7" width="19" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M6.5 10.5v3M10 10.5v3M14 10.5v3M17.5 10.5v3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="i-fila" viewBox="0 0 24 24"><path d="M9 6h12M9 12h12M9 18h12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M3.2 4.5L4.6 4v4M3 13.5c0-1 .8-1.6 1.7-1.6.9 0 1.6.6 1.6 1.5 0 1.4-3.3 1.6-3.3 3.1h3.4M3.2 18.6c.3-.4.8-.6 1.4-.6 1 0 1.7.5 1.7 1.4 0 .8-.6 1.3-1.4 1.3.8 0 1.5.5 1.5 1.3 0 .9-.8 1.5-1.8 1.5-.6 0-1.1-.2-1.4-.6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-espera" viewBox="0 0 24 24"><path d="M6 3h12M6 21h12M8 3v3.5c0 2.5 4 4 4 5.5s-4 3-4 5.5V21M16 3v3.5c0 2.5-4 4-4 5.5s4 3 4 5.5V21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-esteira" viewBox="0 0 24 24"><path d="M20.5 12a8.5 8.5 0 10-2.6 6.1M20.5 12V7m0 5h-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-entrada" viewBox="0 0 24 24"><path d="M12 3v9m0 0l-3.5-3.5M12 12l3.5-3.5M3 14v5a2 2 0 002 2h14a2 2 0 002-2v-5M3 16h5l1.5 2h5L16 16h5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-lacre" viewBox="0 0 24 24"><rect x="4.5" y="10" width="15" height="10.5" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 10V7a4 4 0 018 0v3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M12 14.2v2.6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="i-patio" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3" fill="none" stroke="currentColor" stroke-width="2"/><path d="M9.5 17V7h4a3 3 0 010 6h-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-bussola" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M15.5 8.5l-2 5-5 2 2-5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></symbol>
+  <symbol id="i-lupa" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M15.3 15.3L21 21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="i-alerta" viewBox="0 0 24 24"><path d="M12 3.5L22 20H2z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M12 10v4.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="17.2" r="1.1" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-semaforo" viewBox="0 0 24 24"><rect x="8" y="2.5" width="8" height="19" rx="2.5" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="7" r="1.4" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="12" cy="17" r="1.4" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-empresa" viewBox="0 0 24 24"><path d="M4 21V4.5L13 3v18M13 8l7 2v11M4 21h16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M7 8h3M7 12h3M7 16h3M16 13.5v.01M16 17v.01" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="i-lixeira" viewBox="0 0 24 24"><path d="M4 7h16M9.5 7V4.5h5V7M6 7l1 14h10l1-14M10 11v6M14 11v6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-fretes" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M15 8.8c-.6-.8-1.7-1.3-3-1.3-1.8 0-3 .9-3 2.2 0 2.9 6 1.5 6 4.4 0 1.3-1.2 2.2-3 2.2-1.3 0-2.4-.5-3-1.3M12 5.8v1.7m0 9v1.7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
 </svg>
 
 <!-- ===================== HEADER ===================== -->
@@ -3735,7 +3779,7 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
   <div class="tab-page active" id="tab-torre">
     <div class="funcao-aba" data-tab="torre"></div>
     <div class="card">
-      <div class="card-title"><span class="icon">🗼</span> Torre de Controle — todas as cargas em aberto</div>
+      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-torre"/></svg> Torre de Controle — todas as cargas em aberto</div>
       <div class="card-sub">Visão de leitura para todos os setores. Atualiza sempre que alguém registra uma movimentação.</div>
       <!-- Só Logística/Administração (podeFecharProgramacao(), app.js).
            Pedido do usuário (08/08/2026): fechar a programação atual e
@@ -3768,7 +3812,7 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
          os outros setores já enxergavam nas próprias abas, não aparecia
          aqui — mesmo a Torre sendo a tela liberada para todo mundo. -->
     <div class="card">
-      <div class="card-title"><span class="icon">🗼</span> Visão do Pátio — linha do tempo</div>
+      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-torre"/></svg> Visão do Pátio — linha do tempo</div>
       <div class="card-sub">Onde cada carga está agora, na linha do tempo das seis etapas. Use o período para revisitar uma carga ou um caminhão de outro dia.</div>
       <div class="filtro-periodo">
         <div class="form-group">
@@ -3802,7 +3846,7 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
   <div class="tab-page" id="tab-programacao">
     <div class="funcao-aba" data-tab="programacao"></div>
     <div class="card">
-      <div class="card-title"><span class="icon">📋</span> Nova Carga Programada</div>
+      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-programacao"/></svg> Nova Carga Programada</div>
       <div class="card-sub">Digite a placa — Transportadora e Tipo de Veículo são preenchidos automaticamente se a placa estiver cadastrada em Cadastros → Frota. <strong>A placa precisa estar cadastrada na Frota</strong> para criar a carga — se não estiver, cadastre em Cadastros → Frota primeiro.</div>
       <div class="form-row">
         <div class="form-group">
@@ -3873,7 +3917,7 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
          irreversível e de uma vez por dia, não merece disputar espaço com a
          fila no alto da tela. -->
     <div class="card">
-      <div class="card-title"><span class="icon">🔢</span> Fila de Programados</div>
+      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-fila"/></svg> Fila de Programados</div>
       <div class="card-sub">Só as cargas programadas hoje. As de outros dias seguem na Torre de Controle.</div>
       <div class="gap8" style="margin-bottom:12px">
         <button class="btn btn-sec btn-sm" onclick="reordenarPorSequenciaUI()">↕️ Reordenar por Sequência</button>
@@ -3889,7 +3933,7 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
     </div>
 
     <div class="card">
-      <div class="card-title"><span class="icon">⏳</span> Aguardando Carga <span id="prog-aguardando-count" class="pill-count" hidden>0</span></div>
+      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-espera"/></svg> Aguardando Carga <span id="prog-aguardando-count" class="pill-count" hidden>0</span></div>
       <div class="card-sub">Veículos que a Portaria registrou no pátio sem programação prévia. Use <strong>Criar carga</strong> na linha do veículo para lançar a carga dele — o caminhão já está aqui, então o status não volta atrás.</div>
       <div class="table-wrap">
         <table>
@@ -3922,7 +3966,7 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
     <!-- Sem conexão não há checklist: a fonte é o servidor, e fingir que
          gravou foi exatamente o erro que quase custou 62 t nas cargas. -->
     <div class="card" id="dev-offline" hidden>
-      <div class="card-title"><span class="icon">📦</span> Devoluções</div>
+      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-devolucoes"/></svg> Devoluções</div>
       <div class="card-sub">As devoluções moram no servidor — sem conexão não há o que listar
         nem onde gravar. Entre com seu e-mail e senha (login com servidor) e tente de novo.</div>
     </div>
@@ -3932,7 +3976,7 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
            filtro. Clique filtra a lista — mesma pegada das caixas da
            Torre. É o que deixa TODOS os setores na mesma página. -->
       <div class="card">
-        <div class="card-title"><span class="icon">🔄</span> Esteira de Devoluções</div>
+        <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-esteira"/></svg> Esteira de Devoluções</div>
         <div class="card-sub">Cada caixa é uma etapa do ciclo. O checklist anda sozinho:
           terminou uma etapa, ele entra na fila do próximo setor — em tempo real, em todas as telas.</div>
         <div class="bento" id="dev-pipeline"></div>
@@ -3940,7 +3984,7 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
       </div>
 
       <div class="card" id="dev-card-novo">
-        <div class="card-title"><span class="icon">📦</span> Novo checklist de devolução</div>
+        <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-devolucoes"/></svg> Novo checklist de devolução</div>
         <div class="card-sub">O número do checklist é gerado sozinho. A <strong>região vem da rota</strong>
           escolhida (é o nome dela no cadastro) e identifica o checklist na conferência — um checklist
           pode juntar VÁRIAS rotas da mesma região. Os itens entram na lista logo abaixo, linha a
@@ -3981,7 +4025,7 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
            motivo (652 — Sobras). Ciclo: Portaria OK → Faturamento OK →
            Expedição OK, acabou. -->
       <div class="card" id="dev-card-sobra">
-        <div class="card-title"><span class="icon">📥</span> Lançar SOBRA</div>
+        <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-entrada"/></svg> Lançar SOBRA</div>
         <div class="card-sub">O que o monitoramento passar: só caixa, peso, produto e motivo —
           sem carga e sem rota. A sobra entra, a Portaria dá o OK, o Faturamento dá o OK e a
           Expedição dá o OK. Fim.</div>
@@ -3994,7 +4038,7 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
       </div>
 
       <div class="card">
-        <div class="card-title"><span class="icon">🗓️</span> Checklists de devolução</div>
+        <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-programacao"/></svg> Checklists de devolução</div>
         <div class="card-sub">Cada checklist mostra quem o criou e as etapas já carimbadas.
           A conferência aponta a falta sozinha: checklist diz 5 caixas, chegou 3, o sistema marca 2.</div>
         <div class="form-grid">
@@ -4032,7 +4076,7 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
   <div class="tab-page" id="tab-portaria">
     <div class="funcao-aba" data-tab="portaria"></div>
     <div class="card">
-      <div class="card-title"><span class="icon">🚧</span> Registrar Movimento de Placa</div>
+      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-placas"/></svg> Registrar Movimento de Placa</div>
       <div class="card-sub">Só 2 botões: <strong>Chegou</strong> (Aguardando Veículo → Aguardando Embarque) e <strong>Saiu</strong> (Faturado → Seguiu Viagem, aplicado a todas as cargas em aberto dessa placa ao mesmo tempo — é o mesmo caminhão, uma única vez). Se a placa não tiver programação, "Chegou" cria automaticamente uma entrada "Aguardando Carga".</div>
       <div class="quick-box">
         <div class="form-group"><label>Placa</label><input type="text" id="portaria-placa" placeholder="ABC1D23" autocomplete="off" onkeydown="if(event.key==='Enter')acaoChegadaUI()"></div>
@@ -4066,7 +4110,7 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
          inspeção com um lacre, a carga estava incorreta (ou outro motivo)
          e o lacre foi recolhido — registra-se o número retido e o novo. -->
     <div class="card" id="card-lacre-retido">
-      <div class="card-title"><span class="icon">🔏</span> Lacre Retido</div>
+      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-lacre"/></svg> Lacre Retido</div>
       <div class="card-sub">Quando a inspeção retém o lacre, registre aqui: o número retido fica
         guardado na carga, o novo lacre (se houver) vira o vigente, e o motivo entra nas observações.</div>
       <div class="form-row">
@@ -4090,7 +4134,7 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
          sobre função interna, à vista do porteiro. Removida. -->
 
     <div class="card">
-      <div class="card-title"><span class="icon">🅿️</span> Veículos no Pátio Agora</div>
+      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-patio"/></svg> Veículos no Pátio Agora</div>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Placa</th><th>Transportadora</th><th>Cargas em aberto</th><th>Status das cargas</th><th>No pátio desde</th></tr></thead>
@@ -4101,7 +4145,7 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
     </div>
 
     <div class="card">
-      <div class="card-title"><span class="icon">📋</span> Cargas Programadas — ação em um clique</div>
+      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-programacao"/></svg> Cargas Programadas — ação em um clique</div>
       <div class="card-sub">Sem digitar placa: o botão aparece só quando a ação é válida para o status atual da carga.</div>
       <div class="table-wrap">
         <table>
@@ -4124,7 +4168,7 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
            alimentando as três abas. Duas cópias divergiriam na primeira
            correção feita com pressa. -->
       <div class="card">
-        <div class="card-title"><span class="icon">🗼</span> Visão do Pátio</div>
+        <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-torre"/></svg> Visão do Pátio</div>
         <div class="card-sub">Onde cada carga está agora, na linha do tempo das seis etapas. Use o período para revisitar uma carga ou um caminhão de outro dia.</div>
         <div class="filtro-periodo">
           <div class="form-group">
@@ -4159,7 +4203,7 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
   <div class="tab-page" id="tab-expedicao">
     <div class="funcao-aba" data-tab="expedicao"></div>
     <div class="card">
-      <div class="card-title"><span class="icon">🚛</span> Ação Rápida por Placa</div>
+      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-expedicao"/></svg> Ação Rápida por Placa</div>
       <div class="card-sub">Se a placa tiver mais de uma carga elegível para a mesma ação, o painel pergunta qual carga está sendo processada.</div>
       <div class="quick-box">
         <div class="form-group"><label>Placa</label><input type="text" id="exp-placa" placeholder="ABC1D23" autocomplete="off"></div>
@@ -4168,7 +4212,7 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
       </div>
     </div>
     <div class="card">
-      <div class="card-title"><span class="icon">📦</span> Cargas em Andamento na Expedição</div>
+      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-devolucoes"/></svg> Cargas em Andamento na Expedição</div>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Seq.</th><th>Nº Carga</th><th>Placa</th><th>Transportadora</th><th>Destino</th><th>Status</th><th class="no-print">Ação</th></tr></thead>
@@ -4190,7 +4234,7 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
            alimentando as três abas. Duas cópias divergiriam na primeira
            correção feita com pressa. -->
       <div class="card">
-        <div class="card-title"><span class="icon">🗼</span> Visão do Pátio</div>
+        <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-torre"/></svg> Visão do Pátio</div>
         <div class="card-sub">Onde cada carga está agora, na linha do tempo das seis etapas. Use o período para revisitar uma carga ou um caminhão de outro dia.</div>
         <div class="filtro-periodo">
           <div class="form-group">
@@ -4225,7 +4269,7 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
   <div class="tab-page" id="tab-faturamento">
     <div class="funcao-aba" data-tab="faturamento"></div>
     <div class="card">
-      <div class="card-title"><span class="icon">🧾</span> Ação Rápida por Placa</div>
+      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-faturamento"/></svg> Ação Rápida por Placa</div>
       <div class="card-sub">Digite a placa e marque como <strong>FATURADO</strong> (<strong>Embarque Finalizado → Faturado</strong>). Só aparece aqui a carga que a Expedição já finalizou. Depois de faturada, a Portaria consegue registrar a saída do caminhão. Se a placa tiver mais de uma carga elegível, o painel pergunta qual está sendo faturada.</div>
       <div class="quick-box">
         <div class="form-group"><label>Placa</label><input type="text" id="fat-placa" placeholder="ABC1D23" autocomplete="off" onkeydown="if(event.key==='Enter')acaoRapidaPlaca('fat-placa','Embarque Finalizado','Faturado','Faturamento')"></div>
@@ -4233,7 +4277,7 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
       </div>
     </div>
     <div class="card">
-      <div class="card-title"><span class="icon">📑</span> Cargas Aguardando Faturamento</div>
+      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-faturamento"/></svg> Cargas Aguardando Faturamento</div>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Nº Carga</th><th>Placa</th><th>Transportadora</th><th>Destino</th><th>Peso (kg)</th><th>Status</th><th class="no-print">Ação</th></tr></thead>
@@ -4255,7 +4299,7 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
            alimentando as três abas. Duas cópias divergiriam na primeira
            correção feita com pressa. -->
       <div class="card">
-        <div class="card-title"><span class="icon">🗼</span> Visão do Pátio</div>
+        <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-torre"/></svg> Visão do Pátio</div>
         <div class="card-sub">Onde cada carga está agora, na linha do tempo das seis etapas. Use o período para revisitar uma carga ou um caminhão de outro dia.</div>
         <div class="filtro-periodo">
           <div class="form-group">
@@ -4290,7 +4334,7 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
   <div class="tab-page" id="tab-indicadores">
     <div class="funcao-aba" data-tab="indicadores"></div>
     <div class="card">
-      <div class="card-title"><span class="icon">📊</span> Tempos Médios — Histórico Completo (cargas concluídas — Seguiu Viagem)</div>
+      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-indicadores"/></svg> Tempos Médios — Histórico Completo (cargas concluídas — Seguiu Viagem)</div>
       <!-- FILTROS DOS INDICADORES
 
            Mesma ideia do painel de despesas: um estado central, vários
@@ -4337,7 +4381,7 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
          segmentado, com cada linha abrindo em um cartão de detalhe no
          mesmo padrão do Histórico. Respeita os filtros do topo da aba. -->
     <div class="card">
-      <div class="card-title"><span class="icon">🧭</span> Raio-X da Operação</div>
+      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-bussola"/></svg> Raio-X da Operação</div>
       <div class="card-sub">Cargas <strong>concluídas</strong> do recorte filtrado acima, agrupadas por rota, transportadora ou placa.
         Clique numa linha para abrir o detalhe: onde o tempo é gasto etapa por etapa, comparado com a média geral, e as cargas
         individuais — cada uma com linha do tempo e relatório próprio. Clique no título de uma coluna para reordenar.</div>
@@ -4356,7 +4400,26 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
     </div>
 
     <div class="card">
-      <div class="card-title"><span class="icon">🔍</span> Painel do Gestor — comparação por período</div>
+      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-patio"/></svg> Pulso do Pátio</div>
+      <div class="card-sub">Quando o pátio congestiona e como ele evoluiu dia a dia. Este card olha os
+        <strong>últimos 30 dias inteiros</strong>, de propósito fora do filtro de período acima — padrão de
+        congestionamento se enxerga no acumulado, não no recorte de um dia.</div>
+      <div class="pulso-grid">
+        <div>
+          <div class="pulso-titulo">Chegadas ao pátio por hora × dia da semana</div>
+          <div class="pulso-scroll" id="pulso-heatmap"></div>
+          <div class="pulso-legenda" id="pulso-heatmap-legenda"></div>
+        </div>
+        <div>
+          <div class="pulso-titulo">Evolução diária — últimos 14 dias</div>
+          <div class="pulso-scroll" id="pulso-evolucao"></div>
+        </div>
+      </div>
+      <div id="pulso-empty" class="card-sub" hidden>Ainda não há chegadas registradas pela Portaria nos últimos 30 dias — o Pulso nasce do fato "entrada no pátio", que é a Portaria quem registra.</div>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-lupa"/></svg> Painel do Gestor — comparação por período</div>
       <div class="card-sub">
         Pente fino: cada indicador quebrado nas mesmas 5 janelas de tempo, lado a lado, sem precisar clicar pra comparar.
         <strong>Semana</strong> = últimos 7 dias corridos. <strong>Mês</strong> = mês calendário atual. Quando não houver
@@ -4371,7 +4434,7 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
     </div>
 
     <div class="card">
-      <div class="card-title"><span class="icon">📈</span> Gráficos — filtros combináveis</div>
+      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-indicadores"/></svg> Gráficos — filtros combináveis</div>
       <div class="card-sub">
         Filtre por Placa, Transportadora, Setor e Período — os 3 gráficos abaixo reagem juntos ao filtro, sem precisar
         recarregar a página. Atualiza a cada ação registrada por <strong>qualquer setor</strong> — os dados vêm do
@@ -4423,7 +4486,7 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
     </div>
 
     <div class="card">
-      <div class="card-title"><span class="icon">⚠️</span> Sobre o OTIF</div>
+      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-alerta"/></svg> Sobre o OTIF</div>
       <div class="card-sub" style="margin-bottom:0">
         O OTIF (entregue no prazo) ainda não é calculado aqui de propósito: ele depende de uma data/hora prometida de referência
         (ex: horário programado de carregamento, prazo combinado com o cliente, SLA por transportadora) que ainda não foi
@@ -4432,7 +4495,7 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
     </div>
 
     <div class="card">
-      <div class="card-title"><span class="icon">🚦</span> Cargas em aberto por status</div>
+      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-semaforo"/></svg> Cargas em aberto por status</div>
       <div class="card-sub">Uma coluna por etapa, o número embaixo. Os 6 status aparecem sempre — inclusive os zerados, porque etapa vazia também é informação. As cores são as mesmas do relatório executivo.</div>
       <div class="table-wrap">
         <!-- Cabeçalho e corpo montados por renderStatusAberto(): a leitura
@@ -4449,7 +4512,7 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
          média move decisão, e o percentual acima da meta diz se o problema
          é pontual ou estrutural. -->
     <div class="card">
-      <div class="card-title"><span class="icon">⏱️</span> Tempo Médio de Pátio</div>
+      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-historico"/></svg> Tempo Médio de Pátio</div>
       <div class="card-sub">Da chegada física até a saída — o tempo que a operação e o motorista sentem. Comparado com a meta de 3 horas.</div>
       <div id="ind-patio-medio"></div>
     </div>
@@ -4457,7 +4520,7 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
     <!-- Ranking por ATRASO, não por volume. Quem move mais carga não é
          necessariamente quem precisa de atenção. -->
     <div class="card">
-      <div class="card-title"><span class="icon">🚨</span> Ranking de Veículos com Maior Atraso</div>
+      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-alerta"/></svg> Ranking de Veículos com Maior Atraso</div>
       <div class="card-sub">Do maior para o menor atraso médio. <strong>Atraso</strong> = tempo em pátio acima da meta de 3 h. Veículo sem atraso não aparece — a lista existe para mostrar onde agir.</div>
       <div class="gap8" id="ind-ranking-periodos" style="margin-bottom:14px"></div>
       <div class="table-wrap">
@@ -4472,7 +4535,7 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
     <!-- Seção automática: o sistema aponta onde olhar, em vez de deixar o
          gestor procurar. -->
     <div class="card">
-      <div class="card-title"><span class="icon">🔎</span> Gargalos e Pontos Críticos de Atenção</div>
+      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-lupa"/></svg> Gargalos e Pontos Críticos de Atenção</div>
       <div class="card-sub">Leitura automática do período selecionado acima. Cada bloco responde uma pergunta que a operação faz de manhã.</div>
       <div id="ind-gargalos"></div>
     </div>
@@ -4482,7 +4545,7 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
   <div class="tab-page" id="tab-cadastros">
     <div class="funcao-aba" data-tab="cadastros"></div>
     <div class="card">
-      <div class="card-title"><span class="icon">🚚</span> Frota (Placa → Transportadora → Tipo de Veículo)</div>
+      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-expedicao"/></svg> Frota (Placa → Transportadora → Tipo de Veículo)</div>
       <div class="card-sub">A Programação só cria carga pra placa cadastrada aqui — cadastre antes de programar.</div>
       <div class="form-row">
         <div class="form-group"><label>Placa</label><input type="text" id="frota-placa"></div>
@@ -4525,7 +4588,7 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
 
     <div class="grid2">
       <div class="card">
-        <div class="card-title"><span class="icon">🏢</span> Transportadoras
+        <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-empresa"/></svg> Transportadoras
           <button class="btn btn-sec btn-sm" style="float:right" onclick="exportarTransportadorasCsv()"
             title="Baixa as transportadoras da Frota (com a contagem de placas de cada uma) em CSV.">⬇ CSV</button></div>
         <div class="form-row">
@@ -4541,7 +4604,7 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
            sempre libera Administração), mas o pedido foi explícito:
            cadastro de rota é ação só do administrador. -->
       <div class="card" id="card-cadastrar-rota" hidden>
-        <div class="card-title"><span class="icon">🗺️</span> Cadastrar Rota</div>
+        <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-rotas"/></svg> Cadastrar Rota</div>
         <div class="card-sub">Só Administração. A rota cadastrada aqui entra na hora no seletor de Rota da Programação — sem esperar versão nova do painel.</div>
         <div class="form-row">
           <div class="form-group"><label>Código</label><input type="text" id="rota-codigo" placeholder="Ex: 542"></div>
@@ -4569,7 +4632,7 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
            escolher em vez de digitar (pedido da reunião). Servidor-first,
            como toda a aba Devoluções. -->
       <div class="card" id="card-cad-devolucoes">
-        <div class="card-title"><span class="icon">📦</span> Cadastros de Devoluções</div>
+        <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-devolucoes"/></svg> Cadastros de Devoluções</div>
         <div class="card-sub">Supervisores, produtos (código + nome, ex.: 30110-LINGUIÇA) e motivos.
           Viram sugestões automáticas nos campos do checklist de devolução.</div>
         <div class="form-row">
@@ -4642,7 +4705,7 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
   <div class="tab-page" id="tab-historico">
     <div class="funcao-aba" data-tab="historico"></div>
     <div class="card">
-      <div class="card-title"><span class="icon">🕓</span> Linha do Tempo de uma Carga</div>
+      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-historico"/></svg> Linha do Tempo de uma Carga</div>
       <div class="card-sub">Digite a placa ou o número de carga — a jornada completa aparece como uma linha do tempo, fácil de ler rápido.</div>
       <div class="form-group" style="max-width:420px;margin-bottom:6px">
         <label>Placa ou Nº de Carga</label>
@@ -4653,7 +4716,7 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
     </div>
 
     <div class="card" id="card-cargas-excluidas">
-      <div class="card-title"><span class="icon">🗑️</span> Cargas excluídas <span class="hint">(Administração)</span></div>
+      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-lixeira"/></svg> Cargas excluídas <span class="hint">(Administração)</span></div>
       <div class="card-sub">Carga excluída some do pátio, mas não do banco. Aqui a Administração vê as
         últimas exclusões e pode DEVOLVER uma carga que saiu por engano — com motivo, e com registro.</div>
       <div class="form-row" style="align-items:flex-end">
@@ -4667,7 +4730,7 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
     </div>
 
     <div class="card" id="card-log-movimentacoes">
-      <div class="card-title"><span class="icon">📜</span> Log Completo de Movimentações</div>
+      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-relatorios"/></svg> Log Completo de Movimentações</div>
       <div class="card-sub">Registro bruto, para auditoria — todas as mudanças de status de todas as cargas. Mais recente primeiro.</div>
       <div class="form-row">
         <div class="form-group"><label>Filtrar por placa</label><input type="text" id="hist-filtro-placa" oninput="renderHistorico()"></div>
@@ -4704,7 +4767,7 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
          setores que têm a aba Relatórios exportam o checklist do dia com
          o STATUS ATUAL — a lista é re-buscada do servidor no clique. -->
     <div class="card">
-      <div class="card-title"><span class="icon">📦</span> Relatório de Devoluções</div>
+      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-devolucoes"/></svg> Relatório de Devoluções</div>
       <div class="card-sub">O checklist de devoluções do dia, com carimbos de cada etapa, faltas,
         divergentes, destinações e sobras — sempre com o status ATUAL (busca no servidor na hora
         de gerar).</div>
@@ -4726,7 +4789,7 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
          do botão faz o gestor gerar o relatório errado e só descobrir
          depois de mandar no grupo. -->
     <div class="card">
-      <div class="card-title"><span class="icon">🗓️</span> Período — Data da Programação</div>
+      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-programacao"/></svg> Período — Data da Programação</div>
       <div class="card-sub">Recorta os relatórios pela data em que a carga foi <strong>inserida no sistema</strong>, não pela chegada do caminhão. Em branco = todas as cargas.</div>
       <div class="form-grid">
         <div class="form-group"><label>De</label><input type="date" id="rel-data-de"></div>
@@ -4745,17 +4808,17 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
     </div>
 
     <div class="card">
-      <div class="card-title"><span class="icon">📄</span> PDF Operacional</div>
+      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-relatorios"/></svg> PDF Operacional</div>
       <div class="card-sub">Sequenciamento de carregamento do dia — mesmo layout da planilha usada hoje: Nº, Carga, Rota, Tipo de Operação, Faturado, Status de Carregamento (célula colorida), Placa, Transportadora, Tipo de Veículo, Peso(ton), Paletizada, Entregas, Ganchos.</div>
       <button class="btn btn-primary" onclick="exportarPdfOperacional()">🖨️ Gerar PDF Operacional</button>
     </div>
     <div class="card">
-      <div class="card-title"><span class="icon">📄</span> PDF Executivo</div>
+      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-relatorios"/></svg> PDF Executivo</div>
       <div class="card-sub">Uma página, KPIs e visão de diretoria.</div>
       <button class="btn btn-primary" onclick="exportarPdfExecutivo()">🖨️ Gerar PDF Executivo</button>
     </div>
     <div class="card">
-      <div class="card-title"><span class="icon">📊</span> Exportar Dados (CSV) — Power BI</div>
+      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-indicadores"/></svg> Exportar Dados (CSV) — Power BI</div>
       <div class="card-sub">
         Gera 5 arquivos CSV (formato fato/dimensão): <code>Fact_Movimentacoes</code>, <code>Dim_Carga</code>,
         <code>Dim_Transportadora</code>, <code>Dim_Frota</code>, <code>Dim_Status</code>.
@@ -4769,7 +4832,7 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
     <!-- Relatório independente, para o setor administrativo. Três colunas
          só: é controle de frete, não acompanhamento de pátio. -->
     <div class="card">
-      <div class="card-title"><span class="icon">💰</span> Administração de Fretes</div>
+      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-fretes"/></svg> Administração de Fretes</div>
       <div class="card-sub">Número da Carga, Rota e Observações. É no campo Observações que a administração registra valor do frete, negociação e instruções — a linha em branco é justamente a que falta preencher.</div>
       <button class="btn btn-primary" onclick="exportarPdfFretes()">🖨️ Gerar Administração de Fretes</button>
     </div>
@@ -4784,7 +4847,7 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
     <div class="funcao-aba" data-tab="usuarios"></div>
 
     <div class="card">
-      <div class="card-title"><span class="icon">➕</span> Novo Usuário</div>
+      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-usuarios"/></svg> Novo Usuário</div>
       <div class="card-sub">O setor define o que a pessoa vê e o que consegue registrar. Isso é validado no servidor — não dá para contornar pela tela.</div>
       <div class="form-row">
         <div class="form-group">
@@ -4810,7 +4873,7 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
     </div>
 
     <div class="card">
-      <div class="card-title"><span class="icon">👥</span> Usuários Cadastrados</div>
+      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-usuarios"/></svg> Usuários Cadastrados</div>
       <div class="card-sub">Último acesso mostra quem está usando de verdade. Usuário que nunca acessou costuma ser cadastro esquecido — e cadastro esquecido é porta aberta.</div>
       <div class="table-wrap">
         <table>
@@ -6453,7 +6516,7 @@ const SuincoSharePoint = (function () {
 
 </script>
 <script>window.FROTA_SEED_CSV = "Placa,Transportadora,TipoVeiculo,PrecisaRevisao\nAAK8958,Cooperativa dos Transportadores Unidos Ltda.,Carreta,Nao\nAFZ8792,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nAHG5900,Coopertral,Carreta,Nao\nAJM6032,Logmaster Armazem e Logistica Ltda,Carreta,Nao\nAJY3407,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nAMU5835,Sandra Campanholo Transportes-ME,Carreta,Nao\nANA6563,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nANE3214,Noelia de Sousa Machado 03794699521,3/4,Nao\nAPA4111,Cooperativa de Transp e Logist de Sao Sebastiao do Oeste Mg,Carreta,Nao\nAPA4B11,Cooperativa de Transp e Logist de Sao Sebastiao do Oeste Mg,Carreta,Nao\nAPN0660,Tais Simoes Me,Carreta,Nao\nAQP1978,R A de Castilho Transportes,Carreta,Nao\nARA0338,Fidelis Transportes Ltda.,Bitruck,Nao\nARF4702,Cisne Branco Transportes Ltda EPP,Carreta,Nao\nARF4H02,Cisne Branco,Carreta,Nao\nARX9505,Friocargo Triangulo Ltda,Carreta,Nao\nASE5007,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nASE5A07,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nASG3E42,Baixotes Transportes,Carreta,Nao\nASQ2913,Washington L S Costa Junior - ME,Truck,Nao\nATD5001,Transportadora Multi Express Ltda,Carreta,Nao\nATF4700,Fidelis Transportes Ltda.,Carreta,Nao\nATK3B08,Transportadora Multi Express Ltda,Carreta,Nao\nATM1380,Coopernova Coop Riobranquense de Transporte,Carreta,Nao\nATM1480,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nATO2450,Fidelis Transportes Ltda.,Bitruck,Nao\nATZ9H26,Omega X Solucoes em Logistica e Armazenagem Ltda,Carreta,Nao\nAUH8324,Transportadora Multi Express Ltda,Carreta,Nao\nAVD4546,Transportadora Multi Express Ltda,Bitruck,Nao\nAVD4F46,Giselda Aparecida Gomes Mundim Araujo,Bitruck,Nao\nAVT3222,Fidelis Transportes Ltda.,Carreta,Nao\nAVV3F98,Jorge Lemes da Silva Junior ME,Carreta,Nao\nAZC5116,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nAZC5B17,Cooperativa dos Transportadores Unidos Ltda.,Carreta,Nao\nAZI4219,Fidelis Transportes Ltda.,Bitruck,Nao\nAZS1H23,Cisne Branco Transportes Ltda EPP,Carreta,Nao\nAZV4440,Trans Thalia Transportes Ltda.,Carreta,Nao\nBAH8650,Renato Pereira Lima 03425721640,3/4,Nao\nBAW4341,Log SPM Ltda,Bitruck,Nao\nBBL9819,Fidelis Transportes Ltda.,Bitruck,Nao\nBBW1552,PH Fidelis Transportes e Representacoes Ltda,Carreta,Nao\nBCH0685,Gold Star,Container,Nao\nBCN2B65,Fidelis Transportes Ltda.,Bitruck,Nao\nBDB2J69,Fidelis Transportes Ltda.,Truck,Nao\nBDF5110,Candido Ribeiro do Vale Neto Com de Bebidas e Transportes,Carreta,Nao\nBDZ3108,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nBDZ3B08,Miranda Lacerda Transportes Ltda.,Carreta,Nao\nBDZ7E36,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nBRY0423,Transmartyna Ltda ME,Carreta,Nao\nBRY3559,Transmartyna Ltda ME,Carreta,Nao\nBTR0404,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nBTR0D21,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nBTR2914,R A de Castilho Transportes,Carreta,Nao\nBUP9005,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nBWM8222,R A de Castilho Transportes,Carreta,Nao\nBWQ3386,R A de Castilho Transportes,Carreta,Nao\nBWV4948,Gold Star,Container,Nao\nCDM5889,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nCDM5I89,Cooperativa dos Transportadores Unidos Ltda.,Carreta,Nao\nCLH0866,R A de Castilho Transportes,Carreta,Nao\nCLH2450,Cargofrio Logística e Armazenamento Ltda,Carreta,Nao\nCLK5647,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nCNI9559,Gold Star,Container,Nao\nCNP5E57,Coopertral,Carreta,Nao\nCPG7D79,Candido Ribeiro do Vale Neto Com de Bebidas e Transportes,Carreta,Nao\nCPJ2722,Transmartyna Ltda ME,Carreta,Nao\nCPJ3104,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nCPJ5624,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nCUA4984,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nCUA6452,R A de Castilho Transportes,Carreta,Nao\nCUA7761,Transmartyna Ltda ME,Carreta,Nao\nCUB2232,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nCUC4J12,Rodosousa,Truck,Nao\nCUC9963,R A de Castilho Transportes,Carreta,Nao\nCUE2313,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nCUE2750,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nCUH6E50,Cooperativa dos Transportadores Unidos Ltda.,Carreta,Nao\nCVN0C42,Patos Logística Eirelli,Carreta,Nao\nCVN1345,R A de Castilho Transportes,Carreta,Nao\nCYN6310,R A de Castilho Transportes,Carreta,Nao\nCYR8983,Flay Logistica e Armazenagem Ltda,Truck,Nao\nCZX7719,Cisne Branco Transportes Ltda EPP,Carreta,Nao\nDAO0759,Gold Star,Container,Nao\nDAO2512,Trans Frios Transportes e Logistica Ltda ME,Truck,Nao\nDAO2888,Noelia de Sousa Machado 03794699521,Truck,Nao\nDAO2981,Friocargo Norte Ltda,3/4,Nao\nDAO2H44,Friocargo Norte Ltda,Carreta,Nao\nDAO4959,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nDAO4J59,Transportadora Baixotes Transportes Ltda,Carreta,Nao\nDAO9753,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nDBB8B81,Transmartyna Ltda ME,Carreta,Nao\nDBB8E52,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nDBM4895,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nDBM8771,TAC Transportes Armazenagem e Logistica,Truck,Nao\nDBM9754,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nDBP3272,R A de Castilho Transportes,Carreta,Nao\nDBP3294,R A de Castilho Transportes,Carreta,Nao\nDBP4407,Transportes e Armazenagem Zilli Ltda,Truck,Nao\nDJB9549,Cisne Branco,Carreta,Nao\nDJB9651,Cisne Branco Transportes Ltda EPP,Carreta,Nao\nDJE1454,Cooperativa dos Transportadores Unidos Ltda.,Carreta,Nao\nDJF1B66,Omega X Solucoes em Logistica e Armazenagem Ltda,Carreta,Nao\nDJF7527,Cisne Branco,Carreta,Nao\nDJF8527,Cisne Branco,Carreta,Nao\nDKR6382,Solucao Transportes e Servicos Eireli,Carreta,Nao\nDKT5G89,AJB Transportes,Toco,Nao\nDPB0054,Cisne Branco Transportes Ltda EPP,Carreta,Nao\nDPB1843,Cooperativa dos Transportadores Unidos Ltda.,Carreta,Nao\nDPB1856,Mix Transportes Rodoviarios Ltda - ME,Carreta,Nao\nDPB1862,Cisne Branco,Carreta,Nao\nDPB1863,Cisne Branco Transportes Ltda EPP,Carreta,Nao\nDPB1864,Coopertral,Carreta,Nao\nDPC9846,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nDPE9545,Cisne Branco Transportes Ltda EPP,Carreta,Nao\nDPF3916,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nDPF9524,Maxfrios Distribuidora e Transporte Eireli,Truck,Nao\nDQS1031,Posto Vanete Ltda,Carreta,Nao\nDQS1041,Posto Vanete Ltda,Carreta,Nao\nDQS1048,Omega X Solucoes em Logistica e Armazenagem Ltda,Carreta,Nao\nDQS9035,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nDSG0571,Flay Logistica e Armazenagem Ltda,Truck,Nao\nDTA3156,Cisne Branco,Carreta,Nao\nDTB2717,Cisne Branco Transportes Ltda EPP,Carreta,Nao\nDTD8890,TAC Transportes Armazenagem e Logistica,Toco,Nao\nDTE9880,Giselda Aparecida Gomes Mundim Araujo,Bitruck,Nao\nDTV5836,R A de Castilho Transportes,Carreta,Nao\nDVS2609,Cisne Branco,Carreta,Nao\nDVS2685,Marizileia Transportes,Carreta,Nao\nDVS2708,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nDVS2765,Cisne Branco Transportes Ltda EPP,Carreta,Nao\nDVS2H08,Brasfrios Logistica e Transportes Ltda,Carreta,Nao\nDVS2H66,MMS Armazenagem e Logistica SA,Carreta,Nao\nDVS3653,Cisne Branco,Carreta,Nao\nDVT9G10,Baixotes Transportes,Carreta,Nao\nDXV8593,Transmartyna Ltda ME,Carreta,Nao\nEBQ6E39,Gold Star,Container,Nao\nECU2747,Transmartyna Ltda ME,Carreta,Nao\nEFO7220,Maria Hildete Santana de Matos,Toco,Nao\nEFO7709,Transmartyna Ltda ME,Carreta,Nao\nEFU0217,Isavic Transporte e Armazenamento Ltda,Truck,Nao\nEFW0G14,Tais Simoes Me,Carreta,Nao\nEFW8180,Cooperativa de Transp e Logist de Sao Sebastiao do Oeste Mg,Carreta,Nao\nEGK9135,Lacerda Barros Transportes Ltda.,Carreta,Nao\nEHH8269,Omega X Solucoes em Log e Armazenagem Ltda,Carreta,Nao\nELW5G48,Manoel Araujo Dantas Transportes,3/4,Nao\nEOA5B19,Cisne Branco,Carreta,Nao\nEOE2358,Transportes Zanini Ltda,Carreta,Nao\nEOE5228,Washington L S Costa Junior - ME,Bitruck,Nao\nEPG0A36,Suinco,3/4,Nao\nEPU7319,Transportadora Multi Express Ltda,Carreta,Nao\nEPU7D19,Transportes e Armazenagem Zilli Ltda,Carreta,Nao\nEPU9647,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nESU1150,TAC Transportes Armazenagem e Logistica,Truck,Nao\nESU2194,ASAPH Transportes Ltda.,Carreta,Nao\nESU4I15,Avila Transportes Ltda Me,3/4,Nao\nESU6032,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nESU6206,R A de Castilho Transportes,Carreta,Nao\nESU6906,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nESU6909,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nEVK0647,Matheus Gomes Mundim Araujo - ME,Toco,Nao\nEVK0G47,Marques e Silva,Toco,Nao\nEVO1H32,Gold Star,Container,Nao\nEVO4763,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nEVP6973,R A de Castilho Transportes,Carreta,Nao\nEWJ7D98,Gold Star,Container,Nao\nEWU5609,Transportes e Armazenagem Zilli Ltda,Carreta,Nao\nEYS5406,Transmartyna Ltda ME,Carreta,Nao\nEZL8720,Transportadora Multi Express Ltda,Carreta,Nao\nFCF5910,RN Transporte e Logistica Ltda,3/4,Nao\nFCT9179,Gold Star,Container,Nao\nFCZ2465,Gold Star,Container,Nao\nFDC2122,AC Transportes,Carreta,Nao\nFDC7122,AC Logística,Carreta,Nao\nFEI3101,R A de Castilho Transportes,Carreta,Nao\nFEI3956,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nFEI4913,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nFFI1091,Friocargo Norte Ltda,Toco,Nao\nFFI1G03,MMS Armazenagem e Logistica SA,Carreta,Nao\nFFN9122,Cisne Branco,Carreta,Nao\nFJX0166,Transmartyna Ltda ME,Carreta,Nao\nFKJ7020,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nFKS0886,R A de Castilho Transportes,Carreta,Nao\nFLI6857,Isavic Transporte e Armazenamento Ltda,Bitruck,Nao\nFLI6I57,Marques e Silva,Bitruck,Nao\nFOI8313,Transmartyna Ltda ME,Carreta,Nao\nFPI6789,R A de Castilho Transportes,Carreta,Nao\nFPJ8120,Roosevelt Marques da Silva,Bitruck,Nao\nFPJ8I20,Marques e Silva,Bitruck,Nao\nFQV1237,Transmartyna Ltda ME,Carreta,Nao\nFRS4F21,Marques e Silva,Bitruck,Nao\nFSH2870,Log SPM Ltda,Carreta,Nao\nFST8019,Gold Star,Container,Nao\nFSZ8297,Multi Express,Carreta,Nao\nFTY2826,Rodrigo A Rossi e Cia Ltda Me,Truck,Nao\nFTZ2138,AJB Transportes,Truck,Nao\nFVA0A95,Denia Transportes,Carreta,Nao\nFZZ8821,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nGBR3719,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nGFK8080,Friocargo Norte Ltda,Bitruck,Nao\nGFK8A80,Denia Transportes,Bitruck,Nao\nGHC0660,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nGHC3058,Cooperativa dos Transportadores Unidos Ltda.,Carreta,Nao\nGRA9825,Transportes e Armazenagem Zilli Ltda,Truck,Nao\nGRE3345,TAC Transportes Armazenagem e Logistica,Truck,Nao\nGRE4738,Denia Transportes,Truck,Nao\nGSW0386,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nGSW0509,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nGSW0709,Cooperativa Riobranquense de Transportes Ltda.,Truck,Nao\nGSW7938,Transportes e Armazenagem Zilli Ltda,Truck,Nao\nGVH1A92,Marques e Silva,Toco,Nao\nGVI5286,Flay Logistica e Armazenagem Ltda,Truck,Nao\nGVQ1260,Transportadora Multi Express Ltda,Carreta,Nao\nGVQ6746,Flay Logistica e Armazenagem Ltda,Truck,Nao\nGVQ8934,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nGWI3849,Flay Logistica e Armazenagem Ltda,Truck,Nao\nGWI4688,TAC Transportes Armazenagem e Logistica,Truck,Nao\nGWI4773,Posto Vanete Ltda,Carreta,Nao\nGWI4H60,Cirio Alves de Oliveira Junior - Transportes,3/4,Nao\nGWI8D40,Coopediesel,Carreta,Nao\nGXA0293,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nGXH6D13,Cirio Alves de Oliveira Junior - Transportes,Truck,Nao\nGXM5591,TAC Transportes Armazenagem e Logistica,Truck,Nao\nGXM5C08,Transportadora Multi Express Ltda,Bitruck,Nao\nGXS2438,Matheus Gomes Mundim Araujo - ME,3/4,Nao\nGXS7634,Lagam Transportes & Logistica Ltda,Bitruck,Nao\nGYS6028,Omega X Solucoes em Logistica e Armazenagem Ltda,Truck,Nao\nGYT1208,Trans Frios Transportes e Logistica Ltda ME,Truck,Nao\nGZG1203,Posto Vanete Ltda,Carreta,Nao\nGZG4309,TAC Transportes Armazenagem e Logistica,Bitruck,Nao\nHAX4227,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nHBC1622,Cooperativa de Transportes Montenegro Ltda,Truck,Nao\nHBG6828,Cooperativa Riobranquense de Transportes Ltda.,Toco,Nao\nHBK6688,Cargofrio Logística e Armazenamento Ltda,Truck,Nao\nHBN0986,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nHBN1461,TAC Transportes Armazenagem e Logistica,Truck,Nao\nHBN5086,TAC Transportes Armazenagem e Logistica Ltda,Truck,Nao\nHBN8111,Omega X Solucoes em Log e Armazenagem Ltda,Bitruck,Nao\nHBN8437,Cooperativa de Transportes Montenegro Ltda,Truck,Nao\nHBN9825,Omega X Solucoes em Logistica e Armazenagem Ltda,Truck,Nao\nHBZ0228,Transportes Horizonte Frios Ltda,Truck,Nao\nHCQ6715,Agnaldo Gomes de Souza,Truck,Nao\nHCS8947,Suinco Cooperativa de Suinocultores Ltda,3/4,Nao\nHCW8714,Suinco Cooperativa de Suinocultores Ltda,3/4,Nao\nHDI9336,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nHDI9937,Cooperativa Riobranquense de Transprotes Ltda,3/4,Nao\nHDJ7625,Isavic Transporte e Armazenamento Ltda,Bitruck,Nao\nHEE9J46,Baixotes Transportes,Carreta,Nao\nHEH1386,Douglas Dornelas Figueiredo - 078331606-28,Toco,Nao\nHFB9126,Washington L S Costa Junior - ME,Bitruck,Nao\nHFB9139,Cooperativa de Transp e Logist de Sao Sebastiao do Oeste Mg,Bitruck,Nao\nHFD4176,Coopertral,Carreta,Nao\nHFD4I76,Coopertral,Carreta,Nao\nHFF5A12,Denia Transportes,Carreta,Nao\nHFF5F12,Denia Transportes,Carreta,Nao\nHGH1150,Trans Frios Transportes e Logistica Ltda ME,Truck,Nao\nHGJ8864,Matheus Gomes Mundim Araujo - ME,Bitruck,Nao\nHHE9J46,Baixotes Transportes,Carreta,Nao\nHHG1808,Cooperativa Riobranquense de Transprotes Ltda,3/4,Nao\nHHI2962,Coopdiesel Coop de PF e PJ Seg Transportes em Geral,Toco,Nao\nHHI2J62,Marques e Silva,Toco,Nao\nHHK1101,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nHHK1128,Flay Logistica e Armazenagem Ltda,3/4,Nao\nHHK1143,Sidelia de Fatima Costa ME,3/4,Nao\nHHK1682,Transportes e Armazenagem Zilli Ltda,3/4,Nao\nHHW5634,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nHIA4316,Cooperativa Riobranquense de Transportes Ltda,Carreta,Nao\nHIB9619,Trans Frios Transportes e Logistica Ltda ME,Truck,Nao\nHIG4415,TAC Transportes Armazenagem e Logistica,3/4,Nao\nHIG4J37,TAC Transportes Armazenagem e Logistica,3/4,Nao\nHIJ4272,Transportadora Multi Express Ltda,Truck,Nao\nHIM0845,Aparicio Valmir Ferreira,3/4,Nao\nHIV1702,Washington L S Costa Junior - ME,Bitruck,Nao\nHJA3D75,Marques e Silva,Toco,Nao\nHJI9573,Transportes e Armazenagem Zilli Ltda,Toco,Nao\nHJI9585,Comercial TIVI Ltda.,Toco,Nao\nHJM3916,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nHJZ4521,Washington L S Costa Junior - ME,Bitruck,Nao\nHKE0322,Ailton Benedito Transportes Ltda,Bitruck,Nao\nHKE0D22,TAC Transportes Armazenagem e Logistica,Bitruck,Nao\nHKE5008,Isavic Transporte e Armazenamento Ltda,Carreta,Nao\nHKF3605,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nHKH0223,Flay Logistica e Armazenagem Ltda,Truck,Nao\nHLI0380,TAC Transportes Armazenagem e Logistica,Bitruck,Nao\nHLM4H60,Marques e Silva,Bitruck,Nao\nHLM4J60,Marques e Silva,Bitruck,Nao\nHLY7349,Cooperativa Riobranquense de Transportes Ltda.,Toco,Nao\nHLY7350,TAC Transportes Armazenagem e Logistica,Toco,Nao\nHLY7631,Cooperativa Riobranquense de Transportes Ltda.,Toco,Nao\nHLY7632,Suinco Cooperativa de Suinocultores Ltda,Toco,Nao\nHLY7G32,TAC Transportes Armazenagem e Logistica Ltda,Toco,Nao\nHLY8107,Suinco,3/4,Nao\nHLY8150,Suinco Cooperativa de Suinocultores Ltda,Toco,Nao\nHMV4954,Logmaster Armazem e Logistica Ltda,Carreta,Nao\nHMV4D02,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nHMV6367,Avila Transportes Ltda Me,3/4,Nao\nHNX2274,Trans Frios Transportes e Logistica Ltda ME,Bitruck,Nao\nHOF4678,Cooperativa Riobranquense de Transportes Ltda,Toco,Nao\nHPY3441,Mix Transportes Rodoviarios Ltda - ME,Carreta,Nao\nHQR8499,Cooperativa Riobranquense de Transportes Ltda.,Truck,Nao\nHQR8E99,Rodosousa,Truck,Nao\nHRS6838,RA Transportes e Logistica Eireli,Carreta,Nao\nHRS7035,Posto Vanete Ltda,Carreta,Nao\nHRS8397,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nHRS8D97,Coopertral,Carreta,Nao\nHSJ4627,Friocargo Norte Ltda,Carreta,Nao\nIAH4303,Washington L S Costa Junior - ME,3/4,Nao\nIAH8003,Sidelia de Fatima Costa ME,3/4,Nao\nIKB9915,Posto Vanete Ltda,Carreta,Nao\nIKU9328,Isavic Transporte e Armazenamento Ltda,Carreta,Nao\nILI3703,RN Transporte e Logistica Ltda,Carreta,Nao\nILI3H03,Baixotes Transportes,Carreta,Nao\nINT7417,Transportadora Multi Express Ltda,Carreta,Nao\nIOM9374,Cooperativa de Transp e Logist de Sao Sebastiao do Oeste Mg,Carreta,Nao\nISA1925,Transportes Prigol Ltda,Carreta,Nao\nIUL0644,Transportes Prigol Ltda,Carreta,Nao\nIUR2A43,HDX Transportes e Servicos Ltda,Carreta,Nao\nIUR7491,Transportadora Spellmeier Ltda,Bitruck,Nao\nIWH8877,Flay Logistica e Armazenagem Ltda,Bitruck,Nao\nIYD3003,Tais Simoes Me,Carreta,Nao\nIYD4400,Foba Transportes Ltda - ME,Carreta,Nao\nIYX2917,Senio Transportes de cargas Rodoviaria Ltda,Carreta,Nao\nIYY1676,Transportes Prigol Ltda,Carreta,Nao\nJDD0140,Posto Vanete Ltda,Bitruck,Nao\nJGZ0468,Flay Logistica e Armazenagem Ltda,Bitruck,Nao\nJHJ6232,Friocargo Norte Ltda,3/4,Nao\nJHX6373,Transportadora Multi Express Ltda,Bitruck,Nao\nJIB3H29,Cirio Alves de Oliveira Junior - Transportes,3/4,Nao\nJIG4767,Friocargo Triangulo Ltda,3/4,Nao\nJJB8946,Denia Transportes,Truck,Nao\nJOC2635,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nJOK0854,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nJOK0I54,Denia Transportes,Carreta,Nao\nJRC5555,Trans Shirley Transportes Ltda.,Carreta,Nao\nJRR2673,Transportadora Sudoeste Ltda,Toco,Nao\nJXX9H64,Coopertral,Carreta,Nao\nJYJ8844,Transportadora Multi Express Ltda,Carreta,Nao\nJZS5651,Vivan Transportes Ltda,Carreta,Nao\nKAC3J94,Gold Star,Container,Nao\nKAN5655,Wandell Fabiano Jordao,3/4,Nao\nKBY1081,R A de Castilho Transportes,Carreta,Nao\nKDJ7A83,Patos Logística Eirelli,Carreta,Nao\nKEB0368,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nKER9906,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nKER9J06,Tais Simoes Me,Carreta,Nao\nKEY0318,Cooperativa de Transp e Logist de Sao Sebastiao do Oeste Mg,Carreta,Nao\nKJZ5157,MMS Armazenagem e Logistica SA,Truck,Nao\nKLA3D75,Baixotes Transportes,Carreta,Nao\nKLA7375,Transportadora Baixotes Transportes Ltda,Carreta,Nao\nKLA7D75,Baixotes Transportes,Carreta,Nao\nKTC4518,R A de Castilho Transportes,Carreta,Nao\nKWE2956,AC Armazenagem,Carreta,Nao\nKWE2J56,AC Transportes,Carreta,Nao\nKYP8147,Rodosousa Transportes Ltda,3/4,Nao\nKZR8291,Trans Frios Transportes e Logistica Ltda ME,Toco,Nao\nLBJ8963,Cooperativa dos Transportadores Unidos Ltda.,Carreta,Nao\nLMO2E88,AC Transportes,Truck,Nao\nLMO8E88,AC Transportes,Truck,Nao\nLRD9999,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nLUX5135,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nLWS0237,R A de Castilho Transportes,Carreta,Nao\nLXV1767,GTRANS ALVES TRANSPORTES DE CARGAS LTDA,Carreta,Nao\nLXV5629,Posto Vanete Ltda,Carreta,Nao\nLYL4634,Fidelis Transportes Ltda.,Carreta,Nao\nLYU2742,Posto Vanete Ltda,Carreta,Nao\nLZN2849,RA Transportes e Logistica Eireli,Carreta,Nao\nMBA1451,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nMBJ3588,Omega X Solucoes em Logistica e Armazenagem Ltda,Carreta,Nao\nMBK0133,GF Transportes Ltda.,Carreta,Nao\nMBS0127,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nMCA9D22,ASAPH Transportes Ltda.,Carreta,Nao\nMCI0D83,Coopertral,Carreta,Nao\nMCO2936,ASAPH Transportes Ltda.,Carreta,Nao\nMCT6033,Transportes e Armazenagem Zilli Ltda,Carreta,Nao\nMCV0B18,AC Logística,Carreta,Nao\nMCY1282,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nMDG5672,Tais Simoes Me,Carreta,Nao\nMDH7292,Omega X Solucoes em Log e Armazenagem Ltda,Carreta,Nao\nMDL8499,Christine Prodocimo Roesel Marciano ME,Carreta,Nao\nMDM9D65,Isavic Transportes e Armazenagem Ltda,Carreta,Nao\nMDY6143,Omega X Solucoes em Logistica e Armazenagem Ltda,Carreta,Nao\nMEC0238,ASAPH Transportes Ltda.,Carreta,Nao\nMEG4089,Omega X Solucoes em Logistica e Armazenagem Ltda,Carreta,Nao\nMEG4A89,Omega X Solucoes em Logistica e Armazenagem Ltda,Carreta,Nao\nMEJ7716,Coopertral,Carreta,Nao\nMEO7544,Isavic Transporte e Armazenamento Ltda,Carreta,Nao\nMEV8145,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nMEX6H74,Omega X Solucoes em Logistica e Armazenagem Ltda,Carreta,Nao\nMFC2421,Transportadora Baixotes Transportes Ltda,Carreta,Nao\nMFC8804,TAC Transportes Armazenagem e Logistica,Truck,Nao\nMFF8179,Baixotes Transportes,Carreta,Nao\nMFF8879,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nMFF8I79,Baixotes Transportes,Carreta,Nao\nMFI7684,Omega X Solucoes em Logistica e Armazenagem Ltda,Carreta,Nao\nMFJ7671,Transportadora Baixotes Transportes Ltda,Carreta,Nao\nMFJ7G71,Baixotes Transportes,Carreta,Nao\nMFL9816,Carla da Silva Bruneti Trasp. Rodoviarios ME,Carreta,Nao\nMFM4128,Canada Transportes e Comercio Ltda.,Carreta,Nao\nMFM7088,Transportadora Baixotes Transportes Ltda,Carreta,Nao\nMFM7A88,Baixotes Transportes,Carreta,Nao\nMFN4147,Transportadora Multi Express Ltda,Carreta,Nao\nMFR0J29,Coopertral,Carreta,Nao\nMFT1992,Baixotes Transportes,Carreta,Nao\nMFT1J92,Baixotes Transportes,Carreta,Nao\nMFT5258,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nMFV8569,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nMFY8607,Sergio Nava e Cia Ltda,Carreta,Nao\nMGD4806,Isavic Transportes e Armazenagem Ltda,Carreta,Nao\nMGE5276,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nMGF8544,Omega X Solucoes em Logistica e Armazenagem Ltda,Carreta,Nao\nMGF9902,R A de Castilho Transportes,Carreta,Nao\nMGI4566,Canada Transportes e Comercio Ltda.,Carreta,Nao\nMGN4810,G S Puridade Transportes e Servicos Ltda,Carreta,Nao\nMGQ3782,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nMGR4809,Transportadora Multi Express Ltda,Carreta,Nao\nMGS0639,Canada Transportes e Comercio Ltda.,Carreta,Nao\nMGS8048,G S Puridade Transportes e Servicos Ltda,Carreta,Nao\nMGW0189,Cooperativa dos Transportadores Unidos Ltda.,Carreta,Nao\nMGY4450,Coopertral,Carreta,Nao\nMHB1468,TRANSPORTES BASSANI LTDA.,Carreta,Nao\nMHE7188,MMS Armazenagem e Logistica SA,Carreta,Nao\nMHF3C63,Denia Transportes,Truck,Nao\nMHF6C63,Denia Transportes,Carreta,Nao\nMHH8G10,RP Express,Carreta,Nao\nMHJ2202,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nMHJ5726,Transportadora Multi Express Ltda,Carreta,Nao\nMHK7293,Isavic Transportes e Armazenagem Ltda,Carreta,Nao\nMHM6045,Christine Prodocimo Roesel Marciano ME,Carreta,Nao\nMHN3D66,TransOliveira,Carreta,Nao\nMHN3D99,TransOliveira,Carreta,Nao\nMHR4B55,Coopertral,Carreta,Nao\nMHW7I56,Coopertral,Bitruck,Nao\nMHW9911,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nMIM8459,Friocargo Norte Ltda,Carreta,Nao\nMIQ6927,Posto Vanete Ltda,Carreta,Nao\nMIV2712,Kaipper Continental Transportes Ltda,Carreta,Nao\nMIZ0B87,Silva e Reis Transporte de Cargas Eireli Me,Carreta,Nao\nMJE7248,Transportes e Armazenagem Zilli Ltda,Carreta,Nao\nMJE8477,Canada Transportes,Carreta,Nao\nMJG1727,R A de Castilho Transportes,Carreta,Nao\nMJN3680,Christine Prodocimo Roesel Marciano ME,Carreta,Nao\nMJN7006,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nMJW3158,Denia Transportes,Carreta,Nao\nMJW3B58,Denia Transportes,Carreta,Nao\nMJW3C63,Denia Transportes,Carreta,Nao\nMKA7F71,MR Transportes,Carreta,Nao\nMKC1529,Gilmar Scariot Transportes,Carreta,Nao\nMKL9848,Posto Vanete Ltda,Carreta,Nao\nMKP9C15,Coopediesel,Carreta,Nao\nMKZ2997,Coop. de Tra. de Cargas do E. Santa Catarina,Carreta,Nao\nMLC4834,JCRM TRANSPORTES E LOGISTICA LTDA,Carreta,Nao\nMLK4271,Transportes e Armazenagem Zilli Ltda,Carreta,Nao\nMLN5130,Coop. de Tra. de Cargas do E. Santa Catarina,Carreta,Nao\nMLW7G66,Multi Express,Carreta,Nao\nMME8413,Transportes Zanini Ltda,Carreta,Nao\nMMH6129,Transportes Tozzo Ltda.,Carreta,Nao\nMMJ7G71,Baixotes Transportes,Carreta,Nao\nMMJ9E91,TransOliveira,Carreta,Nao\nMMJ9E99,TransOliveira,Carreta,Nao\nMRN5529,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nMRU6E28,G S Puridade Transportes e Servicos Ltda,Carreta,Nao\nMTC4550,Cooperativa Riobranquense de Transportes Ltda,Toco,Nao\nMWA6634,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nMXA2G32,Transportadora Multi Express Ltda,Carreta,Nao\nMXB5208,Bruno Sergio Ferreira CPF 04625109647,Carreta,Nao\nMXB5C08,AC Armazenagem,Carreta,Nao\nMXD1E41,Coopertral,Carreta,Nao\nNAB8188,Transportadora Multi Express Ltda,Carreta,Nao\nNCH2H15,AC Transportes,Carreta,Nao\nNCX0I40,Coopediesel,Carreta,Nao\nNFC3660,Marcus Eduardo Andrades Peres,Truck,Nao\nNFO1928,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nNGF2954,Cooperativa dos Transportadores Unidos Ltda.,Carreta,Nao\nNJB2858,Galvão & Messias Ltda.,Carreta,Nao\nNKE0329,RN Transporte e Logistica Ltda,Carreta,Nao\nNKK7412,SS LOG Transportes e Logistica Ltda,Carreta,Nao\nNKO0192,Transmartyna Ltda ME,Carreta,Nao\nNLP0479,Lagam Transportes & Logistica Ltda,Bitruck,Nao\nNPJ2578,Transportadora Multi Express Ltda,Carreta,Nao\nNPJ2F58,Multi Express,Carreta,Nao\nNPJ2F78,Multi Express,Carreta,Nao\nNUE1B52,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nNVY0428,Posto Vanete Ltda,Carreta,Nao\nNYE9761,TAC Transportes Armazenagem e Logistica,Truck,Nao\nOBE9693,Baixotes Transportes,Carreta,Nao\nOBE9G93,Baixotes Transportes,Carreta,Nao\nOBL9073,Transportadora Multi Express Ltda,Carreta,Nao\nODA8650,Transportadora Multi Express Ltda,Carreta,Nao\nOFN0964,Baixotes Transportes,Carreta,Nao\nOFS2H37,Cooperativa Riobranquense de Transportes Ltda.,Bitruck,Nao\nOGY2586,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nOKF5239,Rubens Eugenio Fiorentin Transportes Ltda.,Bitruck,Nao\nOKG2369,Sergio Nava e Cia Ltda,Carreta,Nao\nOLI5344,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nOMB0200,Friocargo Triangulo Ltda,Carreta,Nao\nOMB0466,Cooperativa Riobranquense de Transportes Ltda,3/4,Nao\nOMF8787,Omega X Solucoes em Logistica e Armazenagem Ltda,Carreta,Nao\nOMS4B32,Transportadora E Armazenagem Zilli Ltda,Carreta,Nao\nONZ4C37,Cisne Branco Transportes Ltda EPP,Carreta,Nao\nOOF9544,Solucao Transportes e Servicos Eireli,Carreta,Nao\nOOH4498,TAC Transportes Armazenagem e Logistica Ltda,Bitruck,Nao\nOOH4976,Rodocunha Transportes Ltda - ME,Bitruck,Nao\nOOH5001,Rodocunha Transportes Ltda - ME,Bitruck,Nao\nOOV8H47,Marizileia Transportes,Carreta,Nao\nOOW1277,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nOOZ5927,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nOOZ5955,Cooperativa Riobranquense de Transprotes Ltda,3/4,Nao\nOPC4600,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nOPC6065,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nOPF8308,Cooperativa de Transp e Logist de Sao Sebastiao do Oeste Mg,Bitruck,Nao\nOPL2I85,Marques e Silva,Toco,Nao\nOPM7245,Denia Transportes,Carreta,Nao\nOPM7C45,Denia Transportes,Carreta,Nao\nOPM7C55,Denia Transportes,Carreta,Nao\nOPM9245,Denia Transportes,Carreta,Nao\nOPQ0668,TAC Transportes Armazenagem e Logistica,Toco,Nao\nOPQ0672,Transportadora Multi Express Ltda,Toco,Nao\nOPQ3989,Suinco,Toco,Nao\nOPS0605,Transportes e Armazenagem Zilli Ltda,Truck,Nao\nOPT4189,Suinco Cooperativa de Suinocultores Ltda,3/4,Nao\nOQA3631,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nOQB1826,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nOQH3838,Cooperativa Riobranquense de Transportes Ltda.,Toco,Nao\nOQH4050,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nOQN4506,Logmaster Armazem e Logistica Ltda,Carreta,Nao\nOQO4469,Bruno Sergio Ferreira CPF 04625109647,Carreta,Nao\nOQP8538,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nOQQ2484,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nOQR5074,Cooperativa Riobranquense de Transportes Ltda,Carreta,Nao\nOQS0440,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nOQS5031,Locação e Administração Betel Eireli,Bitruck,Nao\nORB4130,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nORB9881,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nOWI8132,Cooperativa Riobranquense de Transprotes Ltda,Toco,Nao\nOWO0091,Transportadora Multi Express Ltda,Truck,Nao\nOWS5001,RN Transporte e Logistica Ltda,Toco,Nao\nOXB7D48,MR Transportes,Carreta,Nao\nOXC1638,Transportes e Armazenagem Zilli Ltda,Carreta,Nao\nOXC9013,Maxfrios Distribuidora e Transporte Eireli,Bitruck,Nao\nOXE9439,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nOXE9E39,Coopertral,Carreta,Nao\nOXI0440,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nOXI2409,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nPLI2086,TAC Transportes Armazenagem e Logistica Ltda,Bitruck,Nao\nPLI2A56,AJB Transportes,Bitruck,Nao\nPLI2A86,AJB Transportes,Bitruck,Nao\nPQS3A09,Coopertral,Carreta,Nao\nPQT7204,TAC Transportes Armazenagem e Logistica Ltda,Carreta,Nao\nPQT7984,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nPQT8064,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nPQT8074,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nPQT8084,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nPRO2122,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nPRR9846,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nPRS0146,Transportadora E Armazenagem Zilli Ltda,Carreta,Nao\nPUA3I52,Marizileia Transportes,Carreta,Nao\nPUD2035,Friocargo Triangulo Ltda,3/4,Nao\nPUD5076,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nPUI0885,Cooperativa Riobranquense de Transprotes Ltda,3/4,Nao\nPUJ1134,Cirio Alves de Oliveira Junior - Transportes,3/4,Nao\nPUK7035,Coopernova Cooperativa Riobranquense de Transporte Ltda.,Carreta,Nao\nPUL1460,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nPUL1470,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nPUN3820,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nPUO3485,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nPUO3E85,Transportadora Multi Express Ltda,Carreta,Nao\nPUO6C29,Marques e Silva,Carreta,Nao\nPUQ8460,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nPUS8E44,Marques e Silva,Carreta,Nao\nPUT4870,Formoso,Carreta,Nao\nPUW9A61,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nPUX2971,G S Puridade Transportes e Servicos Ltda,Carreta,Nao\nPUZ9960,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nPVA4360,Trans Frios Transportes e Logistica Ltda ME,Bitruck,Nao\nPVC6654,Transportes e Armazenagem Zilli Ltda,Toco,Nao\nPVE6696,Transportadora Multi Express Ltda,Bitruck,Nao\nPVG4686,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nPVG7128,Cooperativa Riobranquense de Transprotes Ltda,3/4,Nao\nPWA3260,Transportadora Multi Express Ltda,Carreta,Nao\nPWC1358,Friocargo Triangulo Ltda,3/4,Nao\nPWE3893,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nPWG1739,Transportes e Armazenagem Zilli Ltda,Bitruck,Nao\nPWG1740,Cooperativa Riobranquense de Transportes Ltda.,Bitruck,Nao\nPWL6615,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nPWL8958,Omega X Solucoes em Log e Armazenagem Ltda,Truck,Nao\nPWP3047,Washington L S Costa Junior - ME,Bitruck,Nao\nPWQ8784,TAC Transportes Armazenagem e Logistica,Truck,Nao\nPXJ0726,M Braga & Sobrinho Ltda.,3/4,Nao\nPYF0280,Cooperativa dos Transportadores Unidos Ltda.,Truck,Nao\nPYP5755,Tais Simoes Me,Carreta,Nao\nPYV7I69,Telma Souza de Oliveira Santos 28574076880,3/4,Nao\nPYZ1D03,Baixotes Transportes,Bitruck,Nao\nPZR6754,Cooperativa Riobranquense de Transportes Ltda.,Bitruck,Nao\nPZR6H54,Denia Transportes,Bitruck,Nao\nPZS5316,Flay Logistica e Armazenagem Ltda,Bitruck,Nao\nQBC5B40,Multi Express,Carreta,Nao\nQBH5J89,Multi Express,Carreta,Nao\nQCE5G23,Multi Express,Carreta,Nao\nQGJ0H09,Omega X Solucoes em Logistica e Armazenagem Ltda,Carreta,Nao\nQHA1470,R A de Castilho Transportes,Carreta,Nao\nQHF0778,Transportes Zanini Ltda,Carreta,Nao\nQHK7670,Transportes Zanini Ltda,Carreta,Nao\nQHT8275,Transportes Zanini Ltda,Carreta,Nao\nQHT8855,Transportes Zanini Ltda,Carreta,Nao\nQHT8885,Transportes Zanini Ltda,Carreta,Nao\nQHV8C67,Coopertral,Carreta,Nao\nQJI3576,Transportes Zanini Ltda,Carreta,Nao\nQJK1913,Transportes e Comércio Irmãos Albiero Ltda ME,Carreta,Nao\nQJM1037,Transportes Zanini Ltda,Carreta,Nao\nQJU6926,Kaipper Continental Transportes Ltda,Carreta,Nao\nQJZ7E76,Marques e Silva,Carreta,Nao\nQMR2C59,Cooperativa de Transp e Logist de Sao Sebastiao do Oeste Mg,Bitruck,Nao\nQMR2C75,Cooperativa de Transp e Logist de Sao Sebastiao do Oeste Mg,Bitruck,Nao\nQMX6767,AC Transportes,Truck,Nao\nQNA0693,Posto Vanete Ltda,Carreta,Nao\nQNA4729,Isavic Transporte e Armazenamento Ltda,Carreta,Nao\nQNK1999,Cooperativa Riobranquense de Transportes Ltda.,Truck,Nao\nQNK8591,Cooperativa dos Transportadores Unidos Ltda.,Carreta,Nao\nQNN3324,Transportadora Multi Express Ltda,Bitruck,Nao\nQNQ7011,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nQNQ7021,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nQNQ7031,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nQNQ7041,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nQNQ7A11,Transportadora Multi Express Ltda,Carreta,Nao\nQNQ7A31,Bruno Sergio Ferreira CPF 04625109647,Carreta,Nao\nQNQ7A41,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nQNV2963,Mult Service Montes Claros,Carreta,Nao\nQNV4183,Trans Frios Transportes e Logistica Ltda ME,Bitruck,Nao\nQNW7336,Cooperativa Riobranquense de Transportes Ltda,Toco,Nao\nQNZ7304,Logmaster Armazem e Logistica Ltda,Carreta,Nao\nQNZ7305,Friocargo Triangulo Ltda,Carreta,Nao\nQOC1193,Transportadora Multi Express Ltda,Bitruck,Nao\nQOC3718,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nQOI6463,Matheus Gomes Mundim Araujo - ME,3/4,Nao\nQON7112,Cooperativa Riobranquense de Transportes Ltda,Carreta,Nao\nQOW1672,Cooperativa Riobranquense de Transportes Ltda.,Bitruck,Nao\nQPA2533,AJB Transportes,Bitruck,Nao\nQPX7375,Posto Vanete,Carreta,Nao\nQPX7381,Posto Vanete,Carreta,Nao\nQPX7384,Posto Vanete,Carreta,Nao\nQPZ8I27,TransOliveira,Carreta,Nao\nQQG3946,SS LOG Transportes e Logistica Ltda,Carreta,Nao\nQQI3E51,MR Transportes,Carreta,Nao\nQQO5J16,Multi Express,Carreta,Nao\nQQO8876,Transportes Horizonte Frios Ltda,Carreta,Nao\nQQP6621,Coopertral,Carreta,Nao\nQQT1682,Transportadora Multi Express Ltda,Carreta,Nao\nQQT1G82,Coopertral,Carreta,Nao\nQRD1152,Tais Simoes Me,Carreta,Nao\nQUB9352,Cooperativa Riobranquense de Transprotes Ltda,3/4,Nao\nQUG1307,Transportadora Multi Express Ltda,Carreta,Nao\nQUU0926,Transportes e Armazenagem Zilli Ltda,Carreta,Nao\nQUU0940,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nQWV2926,Transfernata Ltda.,Carreta,Nao\nQXA2439,AC Logística,Carreta,Nao\nQXL7916,Maxfrios Distribuidora e Transporte Eireli,Carreta,Nao\nQXT8D43,MMS Armazenagem e Logistica SA,Carreta,Nao\nQXY1F27,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nQXY4B02,Rodosousa,Bitruck,Nao\nRAG4A52,Cooperativa dos Transportadores Unidos Ltda.,Carreta,Nao\nRAI1G55,Canada Transportes e Comercio Ltda.,Carreta,Nao\nRAJ9J31,Bruno Sergio Ferreira CPF 04625109647,Carreta,Nao\nRCM4A73,MR Transportes,Carreta,Nao\nRCP3C74,Marizileia Transportes,Carreta,Nao\nREE0C39,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nRFB3J59,Transportadora Multi Express Ltda,Carreta,Nao\nRFE0H49,Coopertral,Carreta,Nao\nRFZ7C00,Omega X Solucoes em Logistica e Armazenagem Ltda,Carreta,Nao\nRLA5H78,LNF Transporte,Carreta,Nao\nRLG6A98,Marvel,Container,Nao\nRMH8G11,Multi Express,Carreta,Nao\nRMM0C10,Coopertral,Carreta,Nao\nRMM0C17,Marizileia Transportes,Carreta,Nao\nRMS9H45,Multi Express,Carreta,Nao\nRMT0F38,Baixotes Transportes,Carreta,Nao\nRMT0F41,Baixotes Transportes,Carreta,Nao\nRMW1A91,Coopertral,Truck,Nao\nRMX0B03,Multi Express,Carreta,Nao\nRMY8J16,AJB Transportes,Bitruck,Nao\nRNC6F46,Transportadora Multi Express Ltda,Carreta,Nao\nRNC7B23,Marques e Silva,Bitruck,Nao\nRND3D90,MR Transportes,Carreta,Nao\nRNS2J03,Dorense Transportes de Cargas Ltda-ME,Bitruck,Nao\nRNS3G28,Suinco,3/4,Nao\nRNS3G61,Suinco,3/4,Nao\nRNS3J61,Suinco,3/4,Nao\nRNT5I98,Suinco,3/4,Nao\nRNT5J03,Suinco,3/4,Nao\nRNT8C00,Marizileia Transportes,Carreta,Nao\nRNU1H74,MR Transportes,Carreta,Nao\nRNV2A77,Suinco,3/4,Nao\nRNV4H60,Suinco,3/4,Nao\nRNV5G22,Suinco,3/4,Nao\nRNW4H60,Suinco,3/4,Nao\nRNW7J57,Suinco,3/4,Nao\nRNX0C26,Suinco,3/4,Nao\nRNX0C28,Suinco,3/4,Nao\nRNX3C26,Suinco,3/4,Nao\nRNX3C28,Suinco,3/4,Nao\nRNY8J16,AJB Transportes,Bitruck,Nao\nRTD7C55,MR Transportes,Carreta,Nao\nRTF6I71,Cargofrio Logística e Armazenamento Ltda,Bitruck,Nao\nRUG6B37,Max Frios,Bitruck,Nao\nRUM4A51,Coopertral,Carreta,Nao\nRUR5A00,Marizileia Transportes,Carreta,Nao\nRVI5B24,AC Armazenagem,Truck,Nao\nRVN5G22,Suinco,3/4,Nao\nRVO3A10,MR Transportes,Carreta,Nao\nSDB3F38,AJB Transportes,Bitruck,Nao\nSDB4F38,AJB Transportes,Bitruck,Nao\nSDX0G28,PH Fidelis,Bitruck,Nao\nSIW0E00,Marizileia Transportes,Carreta,Nao\nSIY0147,Suinco,3/4,Nao\nSIY0G36,Suinco,3/4,Nao\nSIY0G38,Suinco,3/4,Nao\nSIY0G39,Suinco,3/4,Nao\nSIY0G41,Suinco,3/4,Nao\nSIY0G43,Suinco,3/4,Nao\nSIY0I47,Suinco,3/4,Nao\nSIY7A00,Marizileia Transportes,Carreta,Nao\nSIYOG36,Suinco,3/4,Sim\nSJY7D76,Joyway Food,Container,Nao\nSRZ4E29,MR Transportes,Bitruck,Nao\nSXF8J27,LNF Transporte,Carreta,Nao\nSXT9B03,Marvel,Carreta,Nao\nSYC3C00,Marizileia Transportes,Carreta,Nao\nSYJ5J26,Coopertral,Carreta,Nao\nSYW0B00,Marizileia Transportes,Carreta,Nao\nSYW0E00,Marizileia Transportes,Carreta,Nao\nSYX4I27,MR Transportes,Carreta,Nao\nTCD2B57,Baixotes Transportes,Carreta,Nao\nTCG1A00,Marizileia Transportes,Carreta,Nao\nTCG9H61,MR Transportes,Carreta,Nao\nTCS9I99,Coopertral,Carreta,Nao\nTCY9J14,Pedro Ferreira Transportes,Carreta,Nao\nTDQ7I07,MR Transportes,Carreta,Nao\nTEW0A46,Multi Express,Carreta,Nao\nTEW0A97,Multi Express,Carreta,Nao\nTIX4J94,LNF Transporte,Carreta,Nao\nTIX8F93,LNF Transporte,Carreta,Nao\nTPO5I06,Marvel,Carreta,Nao\nTXE6E82,Coopertral,Truck,Nao\nTXT3J12,MR Transportes,Carreta,Nao\nTXU5G95,MR Transportes,Carreta,Nao\nTXX3C52,Max Frios,Bitruck,Nao\nTXZ6E13,MR Transportes,Carreta,Nao\nTXZ6E82,Coopertral,Truck,Nao\nTYZ4J12,Multi Express,Bitruck,Nao\nTZB6H99,Multi Express,Carreta,Nao\nTZE6E82,Coopertral,Truck,Nao\n";</script>
-<script>window.SUINCO_BUILD = "21/08 15:01 · bff1cea";</script>
+<script>window.SUINCO_BUILD = "21/08 15:09 · c4bbc17";</script>
 <script>
 /* =====================================================================
    PAINEL LOGÍSTICO SUINCO — camada de dados
@@ -12456,8 +12519,8 @@ function detalheRaioXHtml(item, mediasGeral, colunas){
       <td class="c-peso">${fmtDuracao(ind.tempoPatioTotal)}</td>
       <td class="c-peso">${fmtDuracao(ind.leadTimeTotal)}</td>
       <td class="no-print raiox-acoes">
-        <button class="btn btn-sec btn-sm" onclick="event.stopPropagation();verLinhaDoTempoDoHistoricoUI('${escJs(c.id)}')" title="Linha do tempo completa desta carga.">🕒</button>
-        <button class="btn btn-sec btn-sm" onclick="event.stopPropagation();relatorioDaCargaUI('${escJs(c.id)}')" title="PDF individual desta carga.">📄</button>
+        <button class="btn btn-sec btn-sm" onclick="event.stopPropagation();verLinhaDoTempoDoHistoricoUI('${escJs(c.id)}')" title="Linha do tempo completa desta carga."><svg class="ico ico-btn" aria-hidden="true"><use href="#i-historico"/></svg></button>
+        <button class="btn btn-sec btn-sm" onclick="event.stopPropagation();relatorioDaCargaUI('${escJs(c.id)}')" title="PDF individual desta carga."><svg class="ico ico-btn" aria-hidden="true"><use href="#i-relatorios"/></svg></button>
       </td>
     </tr>`;
   }).join('');
@@ -12552,6 +12615,174 @@ function renderRaioX(){
   document.getElementById('raiox-empty').hidden = itens.length > 0;
 }
 
+/* =====================================================================
+   PULSO DO PÁTIO — heatmap de chegadas (hora × dia) + evolução diária
+   =====================================================================
+
+   As duas visões nascem do MESMO fato: a entrada no pátio registrada pela
+   Portaria (entradaNoPatioDe). De propósito, o card ignora o filtro de
+   período da aba — congestionamento é padrão que só aparece no acumulado,
+   e um recorte de um dia mostraria uma linha solta e nenhum padrão.
+
+   Regras de desenho (as mesmas do resto do painel):
+   · magnitude = UMA cor (o dourado da casa), do claro ao escuro — nunca
+     arco-íris; o número escrito é o segundo canal, cor nunca fica sozinha;
+   · um eixo por gráfico — entradas e tempo médio são medidas de escalas
+     diferentes, então viram DOIS gráficos empilhados dividindo o mesmo
+     eixo de dias, não um gráfico de dois eixos. */
+const PULSO_DIAS_SEMANA = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
+
+function coletarEntradasNoPatio(dias){
+  const agora = Date.now();
+  const inicio = agora - dias * 24 * 3600 * 1000;
+  const entradas = [];
+  (DB.cargas || []).forEach(c => {
+    const e = entradaNoPatioDe(c);
+    if(!e) return;
+    const t = Date.parse(e);
+    if(!Number.isFinite(t) || t < inicio || t > agora) return;
+    entradas.push({ t, id: c.id });
+  });
+  return entradas;
+}
+
+function heatmapChegadasSvg(entradas){
+  // matriz[linha Seg..Dom][hora 0..23] — getDay() dá 0=Domingo, e a semana
+  // de trabalho começa na segunda, então o domingo vai para a última linha.
+  const LINHA_DO_GETDAY = [6, 0, 1, 2, 3, 4, 5];
+  const m = PULSO_DIAS_SEMANA.map(() => new Array(24).fill(0));
+  entradas.forEach(({ t }) => {
+    const d = new Date(t);
+    m[LINHA_DO_GETDAY[d.getDay()]][d.getHours()]++;
+  });
+  const max = Math.max(1, ...m.flat());
+
+  const CEL = 26, ALT = 21, GAP = 3, ROTULO = 36, TOPO = 16;
+  const W = ROTULO + 24 * (CEL + GAP);
+  const H = TOPO + 7 * (ALT + GAP);
+  const celulas = [];
+  m.forEach((linha, li) => {
+    const y = TOPO + li * (ALT + GAP);
+    celulas.push(`<text x="${ROTULO - 6}" y="${y + ALT / 2 + 3.5}" text-anchor="end"
+      font-size="10" fill="var(--text-dim)">${PULSO_DIAS_SEMANA[li]}</text>`);
+    linha.forEach((n, hora) => {
+      const x = ROTULO + hora * (CEL + GAP);
+      const frac = n / max;
+      // 0 chegadas: célula fantasma (contorno leve), pra grade continuar
+      // legível sem parecer que "0" é um dado dourado fraquinho.
+      const caixa = n === 0
+        ? `<rect x="${x}" y="${y}" width="${CEL}" height="${ALT}" rx="3" fill="var(--vidro-brilho)" opacity="0.35"/>`
+        : `<rect x="${x}" y="${y}" width="${CEL}" height="${ALT}" rx="3" fill="var(--gold)" opacity="${(0.18 + 0.82 * frac).toFixed(2)}"/>`;
+      const texto = n === 0 ? '' : `<text x="${x + CEL / 2}" y="${y + ALT / 2 + 3.5}"
+        text-anchor="middle" font-size="10" font-weight="700"
+        fill="${frac >= 0.55 ? '#161d2c' : 'var(--text-dim)'}">${n}</text>`;
+      celulas.push(`<g>${caixa}${texto}
+        <title>${PULSO_DIAS_SEMANA[li]} ${String(hora).padStart(2, '0')}h — ${n} chegada(s)</title></g>`);
+    });
+  });
+  const horas = [];
+  for(let h = 0; h < 24; h += 3){
+    horas.push(`<text x="${ROTULO + h * (CEL + GAP) + CEL / 2}" y="11" text-anchor="middle"
+      font-size="10" fill="var(--text-dim)">${h}h</text>`);
+  }
+  return { max, svg: `<svg class="heatmap-svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"
+    role="img" aria-label="Chegadas ao pátio por hora e dia da semana, últimos 30 dias">
+    ${horas.join('')}${celulas.join('')}</svg>` };
+}
+
+function evolucaoPatioSvg(entradas){
+  // Últimos 14 dias, do mais antigo para o mais novo. Cada dia soma as
+  // chegadas e a média do tempo total de pátio das cargas que ENTRARAM
+  // naquele dia e já concluíram o ciclo.
+  const DIAS = 14;
+  const chaves = [];
+  for(let i = DIAS - 1; i >= 0; i--){
+    const d = new Date(Date.now() - i * 24 * 3600 * 1000);
+    chaves.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
+  }
+  const porDia = new Map(chaves.map(k => [k, { n: 0, somaPatio: 0, nPatio: 0 }]));
+  entradas.forEach(({ t, id }) => {
+    const d = new Date(t);
+    const k = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const b = porDia.get(k);
+    if(!b) return;
+    b.n++;
+    const patio = indicadoresDaCarga(id).tempoPatioTotal;
+    if(patio !== null){ b.somaPatio += patio; b.nPatio++; }
+  });
+  const dados = chaves.map(k => {
+    const b = porDia.get(k);
+    return { k, n: b.n, media: b.nPatio ? Math.round(b.somaPatio / b.nPatio) : null };
+  });
+
+  const BARRA = 30, GAP = 8, ROTULO = 8, TOPO = 18, PAINEL = 74, ENTRE = 40, BASE = 18;
+  const W = ROTULO + DIAS * (BARRA + GAP);
+  const H = TOPO + PAINEL + ENTRE + PAINEL + BASE;
+  const maxN = Math.max(1, ...dados.map(d => d.n));
+  const maxMedia = Math.max(1, ...dados.map(d => d.media || 0));
+  const y2Topo = TOPO + PAINEL + ENTRE;
+  const partes = [];
+  partes.push(`<text x="${ROTULO}" y="${TOPO - 7}" font-size="10" font-weight="800"
+    fill="var(--text-dim)">ENTRADAS NO PÁTIO</text>`);
+  partes.push(`<text x="${ROTULO}" y="${y2Topo - 7}" font-size="10" font-weight="800"
+    fill="var(--text-dim)">TEMPO MÉDIO DE PÁTIO</text>`);
+  dados.forEach((d, i) => {
+    const x = ROTULO + i * (BARRA + GAP);
+    const [ano, mes, dia] = d.k.split('-');
+    // Painel 1 — entradas (contagem).
+    const h1 = Math.round((d.n / maxN) * (PAINEL - 14));
+    if(d.n > 0){
+      partes.push(`<rect x="${x}" y="${TOPO + (PAINEL - h1)}" width="${BARRA}" height="${h1}"
+        rx="3" fill="var(--gold)"/>`);
+      partes.push(`<text x="${x + BARRA / 2}" y="${TOPO + (PAINEL - h1) - 3}" text-anchor="middle"
+        font-size="10" font-weight="700" fill="var(--text-dim)">${d.n}</text>`);
+    }else{
+      partes.push(`<rect x="${x}" y="${TOPO + PAINEL - 2}" width="${BARRA}" height="2"
+        rx="1" fill="var(--vidro-brilho)"/>`);
+    }
+    // Painel 2 — tempo médio (minutos). Sem carga concluída, sem barra —
+    // um zero aqui mentiria (não é "pátio zerado", é "ainda sem medição").
+    if(d.media !== null){
+      const h2 = Math.max(3, Math.round((d.media / maxMedia) * (PAINEL - 14)));
+      partes.push(`<rect x="${x}" y="${y2Topo + (PAINEL - h2)}" width="${BARRA}" height="${h2}"
+        rx="3" fill="var(--gold)" opacity="0.62"/>`);
+      partes.push(`<text x="${x + BARRA / 2}" y="${y2Topo + (PAINEL - h2) - 3}" text-anchor="middle"
+        font-size="9.5" font-weight="700" fill="var(--text-dim)">${fmtDuracao(d.media)}</text>`);
+    }
+    partes.push(`<text x="${x + BARRA / 2}" y="${H - 5}" text-anchor="middle"
+      font-size="9.5" fill="var(--text-dim)">${dia}/${mes}</text>`);
+    partes.push(`<g><rect x="${x}" y="0" width="${BARRA + GAP}" height="${H}" fill="transparent">
+      </rect><title>${dia}/${mes}/${ano} — ${d.n} entrada(s)${d.media !== null ? ' · pátio médio ' + fmtDuracao(d.media) : ''}</title></g>`);
+  });
+  return `<svg class="evolucao-svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"
+    role="img" aria-label="Entradas no pátio e tempo médio por dia, últimos 14 dias">${partes.join('')}</svg>`;
+}
+
+function renderPulsoDoPatio(){
+  const heatEl = document.getElementById('pulso-heatmap');
+  const evoEl = document.getElementById('pulso-evolucao');
+  const vazioEl = document.getElementById('pulso-empty');
+  if(!heatEl || !evoEl) return;
+  const entradas = coletarEntradasNoPatio(30);
+  const grade = document.querySelector('.pulso-grid');
+  if(!entradas.length){
+    if(grade) grade.hidden = true;
+    if(vazioEl) vazioEl.hidden = false;
+    return;
+  }
+  if(grade) grade.hidden = false;
+  if(vazioEl) vazioEl.hidden = true;
+  const { svg, max } = heatmapChegadasSvg(entradas);
+  heatEl.innerHTML = svg;
+  const leg = document.getElementById('pulso-heatmap-legenda');
+  if(leg){
+    leg.innerHTML = 'menos '
+      + [0.18, 0.45, 0.7, 1].map(o => `<span class="grau" style="background:var(--gold);opacity:${o}"></span>`).join('')
+      + ` mais — pico: ${max} chegada(s) num mesmo horário`;
+  }
+  evoEl.innerHTML = evolucaoPatioSvg(entradas);
+}
+
 function renderIndicadores(){
   preencherFiltrosIndicadores();
   renderDistribuicaoStatus();
@@ -12583,6 +12814,7 @@ function renderIndicadores(){
   document.getElementById('ind-stats').innerHTML = html;
 
   renderRaioX();
+  renderPulsoDoPatio();
   // ---- Bloco 2: Painel do Gestor — comparação por período (novo) ----
   renderComparacaoPeriodos();
   renderRankingPeriodos();
@@ -13665,9 +13897,9 @@ function detalheHistoricoHtml(m){
     <div class="hist-det-grid">${datas}</div>
     <div class="hist-det-acoes no-print">
       <button class="btn btn-sec btn-sm" onclick="event.stopPropagation();verLinhaDoTempoDoHistoricoUI('${escJs(c.id)}')"
-        title="Abre a linha do tempo completa desta carga, com todas as etapas.">🕒 Linha do tempo completa</button>
+        title="Abre a linha do tempo completa desta carga, com todas as etapas."><svg class="ico ico-btn" aria-hidden="true"><use href="#i-historico"/></svg> Linha do tempo completa</button>
       <button class="btn btn-sec btn-sm" onclick="event.stopPropagation();relatorioDaCargaUI('${escJs(c.id)}')"
-        title="Gera o PDF desta carga: ficha completa, datas, lacres e a linha do tempo com o tempo de cada etapa.">📄 Relatório desta carga</button>
+        title="Gera o PDF desta carga: ficha completa, datas, lacres e a linha do tempo com o tempo de cada etapa."><svg class="ico ico-btn" aria-hidden="true"><use href="#i-relatorios"/></svg> Relatório desta carga</button>
     </div>`;
 }
 
