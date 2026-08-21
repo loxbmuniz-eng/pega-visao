@@ -631,6 +631,13 @@ const SuincoSharePoint = (function () {
     });
   }
 
+  /* O histórico da programação de um dia — INCLUI as canceladas, que a
+     leitura do pátio esconde. Consulta sob demanda, como listarExcluidas:
+     controle não é estado vivo do painel. */
+  async function programacaoDoDia(dia) {
+    return chamar('/api/programacao-do-dia?dia=' + encodeURIComponent(dia));
+  }
+
   /* ---------------------------------------------------------------
      Fila — drenagem em ordem
      ---------------------------------------------------------------
@@ -1359,6 +1366,7 @@ const SuincoSharePoint = (function () {
     push, upsert, excluir, mudarStatus, encerrarProgramacoesAnteriores, reterLacre,
     recarregarRotas,
     corrigirEtapa, corrigirDataProgramacao, desfazerExclusao, listarExcluidas,
+    programacaoDoDia,
     pull, pullTudo, drenarFila, pendentes,
     listarOperadores, criarOperador, atualizarOperador,
     sincronizarAgora, iniciarSincroniaPeriodica, pararSincronia, ultimaSincronia,

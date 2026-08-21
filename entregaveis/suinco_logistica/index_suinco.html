@@ -1050,6 +1050,26 @@
       <div id="hist-timeline-wrap"></div>
     </div>
 
+    <div class="card" id="card-programacao-dia">
+      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-programacao"/></svg> Programação do dia — como ela foi feita</div>
+      <div class="card-sub">Escolha o dia e veja <strong>tudo</strong> que foi programado para ele — inclusive as cargas
+        canceladas depois, que somem das outras telas de propósito. Cada linha diz quem programou, quando, e o
+        desfecho. O resumo no topo é a <strong>aderência à programação</strong>: de tudo que foi prometido, quanto
+        de fato seguiu viagem.</div>
+      <div class="form-row" style="align-items:flex-end">
+        <div class="form-group" style="max-width:200px"><label>Dia da programação</label>
+          <input type="date" id="progdia-data" onchange="carregarProgramacaoDoDiaUI()"></div>
+        <div class="form-group">
+          <button class="btn btn-sec btn-sm" onclick="carregarProgramacaoDoDiaUI()"><svg class="ico ico-btn" aria-hidden="true"><use href="#i-lupa"/></svg> Consultar</button>
+        </div>
+        <div class="form-group">
+          <button class="btn btn-sec btn-sm" id="progdia-pdf" onclick="pdfProgramacaoDoDiaUI()" hidden><svg class="ico ico-btn" aria-hidden="true"><use href="#i-relatorios"/></svg> PDF desta programação</button>
+        </div>
+      </div>
+      <div id="progdia-resumo"></div>
+      <div id="progdia-lista"></div>
+    </div>
+
     <div class="card" id="card-cargas-excluidas">
       <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-lixeira"/></svg> Cargas excluídas <span class="hint">(Administração)</span></div>
       <div class="card-sub">Carga excluída some do pátio, mas não do banco. Aqui a Administração vê as
@@ -1404,6 +1424,7 @@
      próprio para não disputar com o Operacional, que tem regra de impressão
      calibrada para 12 colunas em A4. -->
 <div id="print-carga" class="print-only"></div>
+<div id="print-programacao" class="print-only"></div>
 
 <!-- Overlay exibido enquanto há escrita indo para o servidor -->
 <div id="sync-overlay" class="sync-overlay" hidden>
