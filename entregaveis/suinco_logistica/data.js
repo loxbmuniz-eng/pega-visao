@@ -1732,6 +1732,56 @@ function indicadoresDaCarga(cargaId){
 // cargas: lista opcional de cargas já concluídas a considerar (usada pela
 // quebra por período abaixo). Sem argumento, mantém o comportamento
 // histórico original: todas as cargas "Seguiu Viagem" de sempre.
+/* MÉTRICAS POR ENTIDADE — o coração do Raio-X da Operação (21/08/2026).
+
+   Pedido do gestor: "quero poder enxergar as métricas de cada linha
+   selecionável, cada informação, cada placa, cada rota".
+
+   Uma agregação só para os três recortes (rota, transportadora, placa),
+   porque os três respondem a mesma pergunta com chaves diferentes: "onde a
+   operação gasta tempo, e com quem?". Escrever três funções quase iguais é
+   como os três recortes começariam a divergir no primeiro ajuste.
+
+   Só cargas CONCLUÍDAS entram na média: carga em aberto tem etapas sem
+   fim, e média com etapa pela metade puxa o número para baixo — o gestor
+   leria uma melhora que não existe. */
+function metricasPorEntidade(tipo, cargas){
+  const base = cargas || DB.cargas.filter(c=>c.status==='Seguiu Viagem');
+  const chaveDe = (c)=>{
+    if(tipo==='rota') return c.rota ? String(c.rota).trim() : '';
+    if(tipo==='transportadora') return c.transportadora || '';
+    return normalizarPlaca(c.placa) || '';
+  };
+  const ETAPAS = ['tempoAguardandoEmbarque','tempoCarregamento','tempoFaturamento','tempoAguardandoSaida'];
+  const grupos = {};
+  base.forEach(c=>{
+    const k = chaveDe(c);
+    if(!k) return;
+    if(!grupos[k]){
+      grupos[k] = { chave:k, cargas:0, pesoTotal:0, ids:[],
+        somas:{}, ns:{}, somaPatio:0, nPatio:0, somaLead:0, nLead:0 };
+      ETAPAS.forEach(e=>{ grupos[k].somas[e]=0; grupos[k].ns[e]=0; });
+    }
+    const g = grupos[k];
+    g.cargas++;
+    g.pesoTotal += Number(c.peso)||0;
+    g.ids.push(c.id);
+    const ind = indicadoresDaCarga(c.id);
+    ETAPAS.forEach(e=>{ if(ind[e]!==null){ g.somas[e]+=ind[e]; g.ns[e]++; } });
+    if(ind.tempoPatioTotal!==null){ g.somaPatio+=ind.tempoPatioTotal; g.nPatio++; }
+    if(ind.leadTimeTotal!==null){ g.somaLead+=ind.leadTimeTotal; g.nLead++; }
+  });
+  return Object.values(grupos).map(g=>({
+    chave: g.chave,
+    cargas: g.cargas,
+    pesoTotal: g.pesoTotal,
+    ids: g.ids,
+    mediaPatio: g.nPatio ? Math.round(g.somaPatio/g.nPatio) : null,
+    mediaLead: g.nLead ? Math.round(g.somaLead/g.nLead) : null,
+    mediasEtapas: Object.fromEntries(ETAPAS.map(e=>[e, g.ns[e] ? Math.round(g.somas[e]/g.ns[e]) : null])),
+  })).sort((a,b)=> b.cargas - a.cargas);
+}
+
 function rankingTransportadoras(cargas){
   const base = cargas || DB.cargas.filter(c=>c.status==='Seguiu Viagem');
   const porTransp = {};
