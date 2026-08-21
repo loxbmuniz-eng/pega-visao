@@ -51,6 +51,12 @@ async def main():
         url = f'{API}/__raiox'
         await pg.route(url, lambda r: asyncio.ensure_future(
             r.fulfill(status=200, content_type='text/html; charset=utf-8', body=html)))
+        # Limpa sobras de execuções anteriores ANTES do login — se a limpeza
+        # vier depois, o painel já puxou as cargas RX velhas para o estado
+        # local e elas assombram as contagens da tela.
+        sql("DELETE FROM fact_statusfrota WHERE placa IN "
+            "(SELECT placa FROM fact_viagens WHERE numero_carga IN ('RX-1','RX-2'))")
+        sql("DELETE FROM fact_viagens WHERE numero_carga IN ('RX-1','RX-2')")
         await pg.goto(url)
         await pg.wait_for_selector('#login-email', timeout=25000)
         await pg.fill('#login-email', 'chefe@teste.local')
@@ -67,7 +73,7 @@ async def main():
         if not placas:
             await nav.close()
             return 1
-        estados = await pg.evaluate(
+        ids = await pg.evaluate(
             """async ([p1, p2]) => {
                  const ids = [];
                  for (const [placa, rota, num] of [[p1, '500', 'RX-1'], [p2, '517', 'RX-2']]) {
@@ -77,32 +83,47 @@ async def main():
                    await SuincoSharePoint.sincronizarAgora();
                    ids.push(c.id);
                  }
-                 /* A cadeia de status roda DEPOIS de os dois upserts terem
-                    subido, e com uma nova tentativa por etapa: mudarStatus
-                    direto pode correr contra a fila de sincronização e ser
-                    recusado com 404 — no pátio real a Portaria não clica
-                    dentro da mesma fração de segundo da programação. */
-                 /* Dirigido pelo ESTADO, não por uma lista cega: cada volta
-                    olha onde a carga está e pede a PRÓXIMA etapa, até chegar
-                    em Seguiu Viagem. Uma recusa pontual (corrida com a fila
-                    de sincronização) vira só mais uma volta do laço. */
-                 const CADEIA = ['Aguardando Veículo', 'Aguardando Embarque',
-                   'Embarque Iniciado', 'Embarque Finalizado', 'Faturado', 'Seguiu Viagem'];
-                 for (const id of ids) {
-                   for (let volta = 0; volta < 25; volta++) {
-                     const atual = (getCarga(id) || {}).status;
-                     if (atual === 'Seguiu Viagem') break;
-                     const prox = CADEIA[CADEIA.indexOf(atual) + 1];
-                     if (!prox) break;
-                     await SuincoSharePoint.mudarStatus(id, prox);
-                     await new Promise((x) => setTimeout(x, 250));
-                   }
-                 }
-                 await SuincoSharePoint.sincronizarAgora();
-                 return ids.map((id) => (getCarga(id) || {}).status);
+                 return ids;
                }""", placas)
-        ck('as duas cargas de teste concluíram o ciclo',
-           estados == ['Seguiu Viagem', 'Seguiu Viagem'], str(estados))
+        # A cadeia de status é dirigida pelo estado do SERVIDOR, lido por SQL
+        # a cada volta. Duas lições de flakiness anteriores estão embutidas:
+        #   1. O status local é otimista — o laço antigo declarava vitória
+        #      olhando a tela, e uma recusa atrasada revertia depois.
+        #   2. Sincronizar o painel INTEIRO a cada volta estourava o rate
+        #      limit (300 req/min); o 429 vira "queda de rede", a mudança cai
+        #      na fila offline e drena DEPOIS da checagem, fora de ordem.
+        # Por isso cada volta faz UMA requisição HTTP (o próprio mudarStatus)
+        # e a leitura de verdade é SQL, que não passa pela API.
+        CADEIA = ['Aguardando Veículo', 'Aguardando Embarque', 'Embarque Iniciado',
+                  'Embarque Finalizado', 'Faturado', 'Seguiu Viagem']
+        for id_carga, num in zip(ids, ['RX-1', 'RX-2']):
+            for volta in range(30):
+                r = sql(f"SELECT status_atual FROM fact_viagens WHERE numero_carga = '{num}' "
+                        "AND excluida_em IS NULL")
+                atual = r[0] if r else None
+                if atual == 'Seguiu Viagem':
+                    break
+                if atual is None or atual not in CADEIA[:-1]:
+                    # A criação ainda não subiu (ou caiu na fila): dá um
+                    # empurrão e espera, sem martelar a API.
+                    await pg.evaluate("() => SuincoSharePoint.sincronizarAgora()")
+                    await pg.wait_for_timeout(700)
+                    continue
+                prox = CADEIA[CADEIA.index(atual) + 1]
+                rr = await pg.evaluate(
+                    "([id, s]) => SuincoSharePoint.mudarStatus(id, s)", [id_carga, prox])
+                if rr and rr.get('recusado'):
+                    print(f'  [nota] {num}: {atual}->{prox} recusado: {rr.get("erro")}')
+                    await pg.wait_for_timeout(700)
+                else:
+                    await pg.wait_for_timeout(250)
+        srv = sql("SELECT string_agg(status_atual, '|') FROM (SELECT status_atual "
+                  "FROM fact_viagens WHERE numero_carga IN ('RX-1','RX-2') "
+                  "AND excluida_em IS NULL ORDER BY numero_carga) t")
+        ck('as duas cargas de teste concluíram o ciclo NO SERVIDOR',
+           srv == ['Seguiu Viagem', 'Seguiu Viagem'], str(srv))
+        # Uma última sincronização para a tela refletir o servidor confirmado.
+        await pg.evaluate("() => SuincoSharePoint.sincronizarAgora()")
         await pg.wait_for_timeout(1500)
 
         print('\n=== 1. O RAIO-X ABRE EM ROTAS ===')
@@ -139,6 +160,28 @@ async def main():
         ck('os extremos (mais rápido / mais lento)', det and det['extremos'], str(det))
         ck('a lista de cargas individuais', det and det['cargas'], str(det))
         ck('cada carga com linha do tempo e relatório próprios', det and det['botoes'], str(det))
+
+        print('\n=== 2b. O 🕒 ABRE A LINHA DO TEMPO NO HISTÓRICO ===')
+        # Relato do gestor: "quando clico em linha do tempo ele anda do
+        # Indicadores pra Torre de Controle" — o botão apontava para a aba
+        # errada, e a timeline era desenhada num container invisível.
+        await pg.click('#raiox-tbody .raiox-acoes button[title*="Linha do tempo"]')
+        await pg.wait_for_timeout(900)
+        tl = await pg.evaluate(
+            """() => ({
+                 abaAtiva: document.querySelector('.nav-tab.active')?.dataset.tab,
+                 temTimeline: !!document.querySelector('#hist-timeline-wrap .timeline-card'),
+                 passos: document.querySelectorAll('#hist-timeline-wrap .timeline-step').length,
+                 buscaPreenchida: !!document.getElementById('hist-busca-carga').value,
+               })""")
+        ck('o clique leva para o HISTÓRICO (não para a Torre)',
+           tl['abaAtiva'] == 'historico', str(tl))
+        ck('a linha do tempo "tipo iFood" está desenhada', tl['temTimeline'] and tl['passos'] >= 5, str(tl))
+        ck('a busca fica preenchida, como se a pessoa tivesse buscado', tl['buscaPreenchida'], str(tl))
+        await pg.click(".nav-tab[data-tab='indicadores']")
+        await pg.wait_for_timeout(800)
+        await pg.click("#raiox-tbody tr.raiox-linha")
+        await pg.wait_for_timeout(400)
 
         print('\n=== 3. NAVEGAÇÃO ENTRE RECORTES ===')
         await pg.click("#raiox-seg [data-visao='placa']")

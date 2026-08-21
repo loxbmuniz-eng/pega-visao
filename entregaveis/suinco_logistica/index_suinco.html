@@ -19,6 +19,26 @@
 <link rel="apple-touch-icon" href="assets/logo_suinco.png">
 </head>
 <body class="pre-login">
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <!-- Ícones da casa (21/08/2026): stroke currentColor, grade 24, traço 2.
+       Um símbolo por conceito — a MESMA torre em todo lugar que falar de
+       Torre. Emoji ficou restrito ao conteúdo (avisos, chips), onde o tom
+       informal ajuda; navegação e estrutura usam vetor, que respeita a
+       paleta e o tema. -->
+  <symbol id="i-torre" viewBox="0 0 24 24"><path d="M12 3v4m0 0l-5 14m5-14l5 14M8.5 14h7M7 21h10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="3" r="1.6" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-programacao" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="17" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 2.5v3M16 2.5v3M4 9h16M8 13h5M8 17h8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="i-devolucoes" viewBox="0 0 24 24"><path d="M21 11V7.8L12 3 3 7.8V16l9 4.8 4-2.1" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 7.8L12 12l9-4.2M12 12v8.8M21 15h-5m0 0l2.2-2.2M16 15l2.2 2.2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-portaria" viewBox="0 0 24 24"><path d="M3 21h18M5 21V10m14 11V10M3 10h18M5 10l2-5h10l2 5M9 10l1.6-5M13.4 5L15 10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-expedicao" viewBox="0 0 24 24"><path d="M2 6h12v10H2zM14 9h4l3 3.5V16h-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="6" cy="17.5" r="2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="17" cy="17.5" r="2" fill="none" stroke="currentColor" stroke-width="2"/></symbol>
+  <symbol id="i-faturamento" viewBox="0 0 24 24"><path d="M6 3h12v18l-2-1.4L14 21l-2-1.4L10 21l-2-1.4L6 21zM9 8h6M9 12h6M9 16h3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-indicadores" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="i-cadastros" viewBox="0 0 24 24"><ellipse cx="12" cy="5.5" rx="8" ry="2.8" fill="none" stroke="currentColor" stroke-width="2"/><path d="M4 5.5V18.5c0 1.5 3.6 2.8 8 2.8s8-1.3 8-2.8V5.5M4 12c0 1.5 3.6 2.8 8 2.8s8-1.3 8-2.8" fill="none" stroke="currentColor" stroke-width="2"/></symbol>
+  <symbol id="i-historico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 7v5l3.5 2.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-relatorios" viewBox="0 0 24 24"><path d="M6 2.5h8l4 4V21.5H6zM14 2.5v4h4" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M9 12h6M9 16h6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="i-usuarios" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M2.5 20c0-3.5 3-5.5 6.5-5.5s6.5 2 6.5 5.5M16 4.8a3.5 3.5 0 010 6.4M17.5 14.7c2.4.7 4 2.4 4 5.3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="i-rotas" viewBox="0 0 24 24"><path d="M9 20l-6 1V5l6-1 6 2 6-1v16l-6 1-6-2zM9 4v16M15 6v16" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></symbol>
+  <symbol id="i-placas" viewBox="0 0 24 24"><rect x="2.5" y="7" width="19" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M6.5 10.5v3M10 10.5v3M14 10.5v3M17.5 10.5v3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+</svg>
 
 <!-- ===================== HEADER ===================== -->
 <div id="header">
@@ -61,17 +81,17 @@
      na tela que seja um atalho na esquerda que abre um menu". -->
 <div id="menu-overlay" onclick="fecharMenuMobile()"></div>
 <div id="nav">
-  <div class="nav-tab active" data-tab="torre" onclick="abrirTab('torre')">🗼 Torre de Controle</div>
-  <div class="nav-tab" data-tab="programacao" onclick="abrirTab('programacao')">📋 Programação</div>
-  <div class="nav-tab" data-tab="devolucoes" onclick="abrirTab('devolucoes')">📦 Devoluções</div>
-  <div class="nav-tab" data-tab="portaria" onclick="abrirTab('portaria')">🚧 Portaria</div>
-  <div class="nav-tab" data-tab="expedicao" onclick="abrirTab('expedicao')">🚛 Expedição</div>
-  <div class="nav-tab" data-tab="faturamento" onclick="abrirTab('faturamento')">🧾 Faturamento</div>
-  <div class="nav-tab" data-tab="indicadores" onclick="abrirTab('indicadores')">📊 Indicadores</div>
-  <div class="nav-tab" data-tab="cadastros" onclick="abrirTab('cadastros')">🗂️ Cadastros</div>
-  <div class="nav-tab" data-tab="historico" onclick="abrirTab('historico')">🕓 Histórico</div>
-  <div class="nav-tab" data-tab="relatorios" onclick="abrirTab('relatorios')">📄 Relatórios</div>
-  <div class="nav-tab" data-tab="usuarios" onclick="abrirTab('usuarios')">👥 Usuários</div>
+  <div class="nav-tab active" data-tab="torre" onclick="abrirTab('torre')"><svg class="ico" aria-hidden="true"><use href="#i-torre"/></svg> Torre de Controle</div>
+  <div class="nav-tab" data-tab="programacao" onclick="abrirTab('programacao')"><svg class="ico" aria-hidden="true"><use href="#i-programacao"/></svg> Programação</div>
+  <div class="nav-tab" data-tab="devolucoes" onclick="abrirTab('devolucoes')"><svg class="ico" aria-hidden="true"><use href="#i-devolucoes"/></svg> Devoluções</div>
+  <div class="nav-tab" data-tab="portaria" onclick="abrirTab('portaria')"><svg class="ico" aria-hidden="true"><use href="#i-portaria"/></svg> Portaria</div>
+  <div class="nav-tab" data-tab="expedicao" onclick="abrirTab('expedicao')"><svg class="ico" aria-hidden="true"><use href="#i-expedicao"/></svg> Expedição</div>
+  <div class="nav-tab" data-tab="faturamento" onclick="abrirTab('faturamento')"><svg class="ico" aria-hidden="true"><use href="#i-faturamento"/></svg> Faturamento</div>
+  <div class="nav-tab" data-tab="indicadores" onclick="abrirTab('indicadores')"><svg class="ico" aria-hidden="true"><use href="#i-indicadores"/></svg> Indicadores</div>
+  <div class="nav-tab" data-tab="cadastros" onclick="abrirTab('cadastros')"><svg class="ico" aria-hidden="true"><use href="#i-cadastros"/></svg> Cadastros</div>
+  <div class="nav-tab" data-tab="historico" onclick="abrirTab('historico')"><svg class="ico" aria-hidden="true"><use href="#i-historico"/></svg> Histórico</div>
+  <div class="nav-tab" data-tab="relatorios" onclick="abrirTab('relatorios')"><svg class="ico" aria-hidden="true"><use href="#i-relatorios"/></svg> Relatórios</div>
+  <div class="nav-tab" data-tab="usuarios" onclick="abrirTab('usuarios')"><svg class="ico" aria-hidden="true"><use href="#i-usuarios"/></svg> Usuários</div>
 </div>
 
 <!-- ===================== MAIN ===================== -->
@@ -688,9 +708,9 @@
         Clique numa linha para abrir o detalhe: onde o tempo é gasto etapa por etapa, comparado com a média geral, e as cargas
         individuais — cada uma com linha do tempo e relatório próprio. Clique no título de uma coluna para reordenar.</div>
       <div class="seg-control" id="raiox-seg">
-        <button class="seg-btn" data-visao="rota" onclick="trocarVisaoRaioX('rota')">🗺️ Rotas</button>
-        <button class="seg-btn" data-visao="transportadora" onclick="trocarVisaoRaioX('transportadora')">🚛 Transportadoras</button>
-        <button class="seg-btn" data-visao="placa" onclick="trocarVisaoRaioX('placa')">🔢 Placas</button>
+        <button class="seg-btn" data-visao="rota" onclick="trocarVisaoRaioX('rota')"><svg class="ico" aria-hidden="true"><use href="#i-rotas"/></svg> Rotas</button>
+        <button class="seg-btn" data-visao="transportadora" onclick="trocarVisaoRaioX('transportadora')"><svg class="ico" aria-hidden="true"><use href="#i-expedicao"/></svg> Transportadoras</button>
+        <button class="seg-btn" data-visao="placa" onclick="trocarVisaoRaioX('placa')"><svg class="ico" aria-hidden="true"><use href="#i-placas"/></svg> Placas</button>
       </div>
       <div class="table-wrap">
         <table class="table-raiox">

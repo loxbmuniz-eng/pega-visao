@@ -3469,7 +3469,11 @@ function limparFiltroIndicadores(){
 
 let _raioxVisao = 'rota';
 let _raioxExpandida = null;
-let _raioxOrdem = { campo: 'cargas', asc: false };
+/* Padrão: a atividade MAIS RECENTE primeiro — "as últimas placas da
+   operação, da sequência mais recente" (21/08/2026). O histórico inteiro
+   continua na lista, sem corte por data; a ordem é que traz o agora para
+   cima. Qualquer coluna reordena com um clique. */
+let _raioxOrdem = { campo: 'ultimaEm', asc: false };
 
 const RAIOX_ETAPAS = [
   { key:'tempoAguardandoEmbarque', rotulo:'Aguardando embarque', cor:'--st-aguardando-embarque-bg' },
@@ -3626,9 +3630,10 @@ function renderRaioX(){
 
   const seta = (c)=> _raioxOrdem.campo === c ? (_raioxOrdem.asc ? ' ▲' : ' ▼') : '';
   const ROTULO_VISAO = { rota:'Rota', transportadora:'Transportadora', placa:'Placa' };
-  const colunas = 6;
+  const colunas = 7;
   thead.innerHTML = `<tr>
     <th class="raiox-th" onclick="ordenarRaioX('chave')">${ROTULO_VISAO[_raioxVisao]}${seta('chave')}</th>
+    <th class="raiox-th" onclick="ordenarRaioX('ultimaEm')" title="Última movimentação de qualquer carga desta linha">Última atividade${seta('ultimaEm')}</th>
     <th class="raiox-th" onclick="ordenarRaioX('cargas')" title="Cargas concluídas no recorte">Cargas${seta('cargas')}</th>
     <th class="raiox-th" onclick="ordenarRaioX('pesoTotal')">Peso total (kg)${seta('pesoTotal')}</th>
     <th class="raiox-th" onclick="ordenarRaioX('mediaPatio')" title="Chegada até a saída, média">Pátio médio${seta('mediaPatio')}</th>
@@ -3643,6 +3648,7 @@ function renderRaioX(){
         onclick="alternarDetalheRaioX('${escJs(item.chave)}')"
         title="Clique para ${aberta ? 'fechar' : 'abrir'} o detalhe — etapas, extremos e as cargas individuais.">
       <td><span class="hist-seta">${aberta ? '▾' : '▸'}</span> ${rotuloEntidadeRaioX(item)}</td>
+      <td class="raiox-cel-quando">${item.ultimaEm ? fmtDataHora(new Date(item.ultimaEm).toISOString()) : '—'}</td>
       <td class="c-peso">${item.cargas}</td>
       <td class="c-peso">${item.pesoTotal ? item.pesoTotal.toLocaleString('pt-BR') : '—'}</td>
       <td class="c-peso">${fmtDuracao(item.mediaPatio)}</td>
@@ -4520,6 +4526,49 @@ function renderHistorico(){
   }
 }
 
+/* A LINHA DO TEMPO DO PDF — a mesma jornada visual da tela (21/08/2026).
+
+   Pedido do gestor: "o relatório individual de carga pode mostrar o mesmo
+   feature da linha do tempo". A tabela que existia trazia os mesmos dados,
+   mas obrigava o leitor a reconstruir a jornada de cabeça; a linha do
+   tempo desenhada — bolinha por etapa, na cor do status, com o tempo
+   decorrido no conector — é lida de relance, e é o que a pessoa já conhece
+   da tela.
+
+   Reusa `sequenciaDeStatusDaCarga` e `corStatusRelatorio`: as mesmas
+   regras e as mesmas cores da timeline do Histórico e do Relatório
+   Operacional. Etapa que não aconteceu aparece apagada, dita como "ainda
+   não ocorreu" — no PDF de uma carga em andamento, o que falta é tão
+   informação quanto o que já foi. */
+function linhaDoTempoPdfHtml(c, eventos){
+  const sequencia = sequenciaDeStatusDaCarga(eventos);
+  const passos = sequencia.map(status => ({
+    status, mov: eventos.find(m => m.statusNovo === status) || null,
+  }));
+  let anterior = null;
+  const itens = passos.map((p) => {
+    const cs = corStatusRelatorio(p.status);
+    const decorrido = (p.mov && anterior)
+      ? fmtDuracao(Math.round((new Date(p.mov.timestamp) - new Date(anterior.timestamp)) / 60000))
+      : null;
+    if(p.mov) anterior = p.mov;
+    return `<div class="pdf-tl-step${p.mov ? '' : ' pdf-tl-pendente'}">
+      <div class="pdf-tl-trilha">
+        <span class="pdf-tl-dot" style="${p.mov ? `background:${cs.fundo};border-color:${cs.borda}` : ''}">${p.mov ? '✓' : ''}</span>
+      </div>
+      <div class="pdf-tl-corpo">
+        ${decorrido ? `<div class="pdf-tl-decorrido">⏱ ${esc(decorrido)} na etapa anterior</div>` : ''}
+        <div class="pdf-tl-status">${esc(p.status)}</div>
+        ${p.mov
+          ? `<div class="pdf-tl-meta">${fmtDataHora(p.mov.timestamp)} — ${esc(p.mov.operador)} · ${esc(p.mov.setor)}</div>`
+          : '<div class="pdf-tl-meta">ainda não ocorreu</div>'}
+      </div>
+    </div>`;
+  }).join('');
+  return `<div class="pdf-timeline">${itens
+    || '<div class="text-dim">Esta carga ainda não teve mudança de etapa registrada.</div>'}</div>`;
+}
+
 /* RELATÓRIO DE UMA CARGA SÓ (21/08/2026).
 
    Pedido do gestor: "quero conseguir gerar um relatório de qualquer número
@@ -4549,23 +4598,6 @@ async function relatorioDaCargaUI(cargaId){
 
   const campo = (rot, val) => val === '' || val === null || val === undefined
     ? '' : `<div class="doc-campo"><dt>${esc(rot)}</dt><dd>${val}</dd></div>`;
-
-  /* O tempo entre etapas é o que transforma uma lista de horários em
-     resposta: "ficou 6h esperando embarque" explica a reclamação; "chegou
-     09:06, embarcou 15:20" obriga o leitor a fazer a conta. */
-  const linhasTempo = eventos.map((m, i) => {
-    const anterior = i > 0 ? eventos[i - 1] : null;
-    const decorrido = anterior
-      ? fmtDuracao(Math.round((new Date(m.timestamp) - new Date(anterior.timestamp)) / 60000))
-      : '—';
-    return `<tr>
-      <td>${fmtDataHora(m.timestamp)}</td>
-      <td>${m.statusAnterior ? esc(m.statusAnterior) + ' → ' : ''}<strong>${esc(m.statusNovo)}</strong></td>
-      <td>${esc(m.operador)}</td>
-      <td>${esc(m.setor)}</td>
-      <td class="c-peso">${decorrido}</td>
-    </tr>`;
-  }).join('');
 
   const totalCiclo = eventos.length > 1
     ? fmtDuracao(Math.round((new Date(eventos[eventos.length - 1].timestamp)
@@ -4608,14 +4640,8 @@ async function relatorioDaCargaUI(cargaId){
       ${(l.numeros.length || l.retido || l.faltando) ? blocoLacresPdf([c]) : ''}
 
       ${tituloSecaoPdf('Linha do tempo',
-        'Cada mudança de etapa, com quem registrou e quanto tempo a carga ficou na etapa anterior.')}
-      <table class="tab-lacres">
-        <thead><tr>
-          <th>Data / hora</th><th>Etapa</th><th>Operador</th><th>Setor</th>
-          <th>Tempo na etapa anterior</th>
-        </tr></thead>
-        <tbody>${linhasTempo || '<tr><td colspan="5" class="text-center text-dim">Esta carga ainda não teve mudança de etapa registrada.</td></tr>'}</tbody>
-      </table>
+        'A mesma jornada visual da tela do Histórico — etapa, hora, quem registrou e quanto tempo a carga ficou na etapa anterior.')}
+      ${linhaDoTempoPdfHtml(c, eventos)}
 
       ${c.observacoes ? `${tituloSecaoPdf('Observações')}
         <div class="print-nota">${esc(c.observacoes)}</div>` : ''}
@@ -4766,12 +4792,26 @@ function alternarDetalheHistoricoUI(movId){
    fazendo: a aba do Histórico continua com os filtros montados quando ela
    voltar, porque nada aqui é recarregado. */
 function verLinhaDoTempoDoHistoricoUI(cargaId){
-  if(typeof selecionarCargaTimeline === 'function'){
-    abrirTab('torre');
-    selecionarCargaTimeline(cargaId);
-    return;
+  /* COMO SE TIVESSE BUSCADO NO HISTÓRICO (21/08/2026) — literalmente.
+
+     A primeira versão abria a TORRE, mas o cartão "Linha do Tempo de uma
+     Carga" mora no HISTÓRICO: a timeline era desenhada num container que
+     estava em outra aba, invisível. Relato do gestor: "é pra mostrar a
+     linha do tempo daquela carga como se eu tivesse buscado ela no
+     histórico". Então o clique agora faz exatamente o que a pessoa faria:
+     abre o Histórico, preenche a busca com o número da carga (para o
+     estado da tela ficar coerente — dá para refinar dali), seleciona a
+     carga e rola até a timeline. */
+  const c = getCarga(cargaId);
+  abrirTab('historico');
+  const busca = document.getElementById('hist-busca-carga');
+  if(busca && c){
+    busca.value = c.numeroCarga || c.placa || '';
+    if(typeof renderBuscaTimeline === 'function') renderBuscaTimeline();
   }
-  notify('A linha do tempo completa está na Torre de Controle.', 'info');
+  selecionarCargaTimeline(cargaId);
+  const wrap = document.getElementById('hist-timeline-wrap');
+  if(wrap && wrap.scrollIntoView) wrap.scrollIntoView({block:'start'});
 }
 
 /* Calendário: clicar em QUALQUER ponto do campo abre a janelinha.

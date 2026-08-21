@@ -1766,6 +1766,11 @@ function metricasPorEntidade(tipo, cargas){
     g.cargas++;
     g.pesoTotal += Number(c.peso)||0;
     g.ids.push(c.id);
+    // Última atividade do grupo — é o que ordena o Raio-X por padrão:
+    // "as últimas placas da operação, da sequência mais recente" (pedido
+    // do gestor, 21/08/2026), com o histórico inteiro acessível abaixo.
+    const t = Date.parse(c.atualizadoEm) || 0;
+    if(!g.ultimaEm || t > g.ultimaEm) g.ultimaEm = t;
     const ind = indicadoresDaCarga(c.id);
     ETAPAS.forEach(e=>{ if(ind[e]!==null){ g.somas[e]+=ind[e]; g.ns[e]++; } });
     if(ind.tempoPatioTotal!==null){ g.somaPatio+=ind.tempoPatioTotal; g.nPatio++; }
@@ -1776,6 +1781,7 @@ function metricasPorEntidade(tipo, cargas){
     cargas: g.cargas,
     pesoTotal: g.pesoTotal,
     ids: g.ids,
+    ultimaEm: g.ultimaEm || 0,
     mediaPatio: g.nPatio ? Math.round(g.somaPatio/g.nPatio) : null,
     mediaLead: g.nLead ? Math.round(g.somaLead/g.nLead) : null,
     mediasEtapas: Object.fromEntries(ETAPAS.map(e=>[e, g.ns[e] ? Math.round(g.somas[e]/g.ns[e]) : null])),
