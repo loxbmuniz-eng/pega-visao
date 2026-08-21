@@ -870,6 +870,28 @@ select option{background:var(--campo-bg);color:var(--text)}
 }
 .print-bloco-tit:first-of-type{ margin-top:12px }
 
+/* FICHA DA CARGA no relatório individual (21/08/2026). Grade de campos —
+   é leitura de conferência, não tabela: quem abre este documento procura um
+   dado específico (o peso, o lacre, a hora da chegada), não compara linhas. */
+.doc-grid{
+  display:grid;
+  gap:7px 16px;
+  grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+  margin-bottom:12px;
+}
+.doc-campo dt{
+  color:var(--text-dim);
+  font-size:8.5px;
+  letter-spacing:.06em;
+  text-transform:uppercase;
+}
+.doc-campo dd{ margin:1px 0 0; font-size:11px; font-weight:700 }
+@media print{
+  .doc-campo dt{ color:#3d4a5c !important }
+  .doc-campo dd{ color:#111418 !important }
+  .doc-grid{ break-inside:avoid;page-break-inside:avoid }
+}
+
 /* CONTROLE DE LACRES NOS RELATÓRIOS (20/08/2026). Uma linha por CAMINHÃO —
    o lacre é do veículo, não da carga —, com a retenção destacada porque é
    ela que gera conversa depois. */

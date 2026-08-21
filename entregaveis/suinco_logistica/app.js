@@ -2974,7 +2974,8 @@ function renderProgAguardando(){
 function abrirCompletar(id){
   const c = getCarga(id); if(!c) return;
   document.getElementById('completar-id').value = id;
-  document.getElementById('completar-placa-info').textContent = `Placa ${c.placa} — no pátio desde ${fmtDataHora(c.criadoEm)}`;
+  document.getElementById('completar-placa-info').textContent =
+    `Placa ${c.placa} — no pátio desde ${fmtDataHora(entradaNoPatioDe(c) || c.criadoEm)}`;
   document.getElementById('completar-numero-carga').value = '';
   document.getElementById('completar-cliente').value = '';
   document.getElementById('completar-destino').value = '';
@@ -3200,7 +3201,8 @@ function renderPortariaPatio(){
   document.getElementById('portaria-patio-tbody').innerHTML = placas.map(p=>{
     const cargas = porPlaca[p];
     const transp = cargas[0].transportadora || '—';
-    const chegada = cargas.map(c=>primeiroTimestamp(c.id,'Aguardando Embarque')||c.criadoEm).sort()[0];
+    // Uma definição só de "entrada no pátio" — ver entradaNoPatioDe().
+    const chegada = cargas.map(c=>entradaNoPatioDe(c) || c.criadoEm).sort()[0];
     /* A CONTA ERA SÓ DO QUE JÁ ESTAVA NO PÁTIO (20/08/2026).
 
        No print do programador de embarque a placa aparecia aqui com "1
@@ -4295,6 +4297,159 @@ function renderHistorico(){
   }
 }
 
+/* RELATÓRIO DE UMA CARGA SÓ (21/08/2026).
+
+   Pedido do gestor: "quero conseguir gerar um relatório de qualquer número
+   de carga individual do histórico".
+
+   É um documento diferente dos outros três. O Operacional responde "como
+   está o dia"; este responde "o que aconteceu com ESTA carga" — e quem
+   pergunta isso está resolvendo uma pendência específica: uma cobrança de
+   frete, uma divergência de peso, um lacre questionado, uma carga que
+   demorou. Por isso ele traz a linha do tempo com o TEMPO ENTRE AS ETAPAS,
+   que é a informação que a tabela do dia não tem espaço para mostrar.
+
+   Nasce do Histórico, onde a pergunta aparece, e não de mais um botão numa
+   barra de relatórios que ninguém lembra que existe. */
+async function relatorioDaCargaUI(cargaId){
+  const c = getCarga(cargaId);
+  if(!c){
+    notify('Esta carga não está mais no painel — pode ter sido excluída ou estar fora do período carregado.', 'warn', 8000);
+    return;
+  }
+  const el = document.getElementById('print-carga');
+  if(!el){ notify('Não achei o container do relatório.', 'danger'); return; }
+
+  const eventos = historicoDaCarga(cargaId);
+  const entrada = entradaNoPatioDe(c);
+  const l = lacresDaCarga(c);
+
+  const campo = (rot, val) => val === '' || val === null || val === undefined
+    ? '' : `<div class="doc-campo"><dt>${esc(rot)}</dt><dd>${val}</dd></div>`;
+
+  /* O tempo entre etapas é o que transforma uma lista de horários em
+     resposta: "ficou 6h esperando embarque" explica a reclamação; "chegou
+     09:06, embarcou 15:20" obriga o leitor a fazer a conta. */
+  const linhasTempo = eventos.map((m, i) => {
+    const anterior = i > 0 ? eventos[i - 1] : null;
+    const decorrido = anterior
+      ? fmtDuracao(Math.round((new Date(m.timestamp) - new Date(anterior.timestamp)) / 60000))
+      : '—';
+    return `<tr>
+      <td>${fmtDataHora(m.timestamp)}</td>
+      <td>${m.statusAnterior ? esc(m.statusAnterior) + ' → ' : ''}<strong>${esc(m.statusNovo)}</strong></td>
+      <td>${esc(m.operador)}</td>
+      <td>${esc(m.setor)}</td>
+      <td class="c-peso">${decorrido}</td>
+    </tr>`;
+  }).join('');
+
+  const totalCiclo = eventos.length > 1
+    ? fmtDuracao(Math.round((new Date(eventos[eventos.length - 1].timestamp)
+        - new Date(eventos[0].timestamp)) / 60000))
+    : null;
+
+  el.innerHTML = `
+    <div class="print-page doc-normal">
+      ${cabecalhoDocumento({
+        titulo: `Carga ${esc(c.numeroCarga) || '(sem número)'} — ${esc(c.placa)}`,
+        subtitulo: 'Ficha completa da carga, com a linha do tempo de todas as etapas',
+      })}
+
+      ${tituloSecaoPdf('Identificação', 'O que esta carga é, e para onde vai.')}
+      <div class="doc-grid">
+        ${campo('Nº da carga', esc(c.numeroCarga) || '—')}
+        ${campo('Status atual', esc(c.status))}
+        ${campo('Placa', esc(c.placa))}
+        ${campo('Transportadora', esc(c.transportadora) || '—')}
+        ${campo('Tipo de veículo', esc(c.tipoVeiculo) || '—')}
+        ${campo('Motorista', esc(c.motorista) || '—')}
+        ${campo('Rota', esc(rotaCurta(c.rota)))}
+        ${campo('Cliente', esc(c.cliente) || '—')}
+        ${campo('Destino', esc(c.destino) || '—')}
+        ${campo('Tipo de operação', c.praOnde ? esc(PRA_ONDE_LABEL[c.praOnde] || c.praOnde) : '—')}
+        ${campo('Peso', c.peso ? `${c.peso.toLocaleString('pt-BR')} kg` : '—')}
+        ${campo('Paletizada', paletizadaDaCarga(c))}
+        ${campo('Ganchos · Entregas', `${c.qtdGanchos ? c.qtdGanchos : 'Liso'} · ${c.qtdEntregas ?? 1}`)}
+        ${campo('Sequência', c.sequencia ?? '—')}
+      </div>
+
+      ${tituloSecaoPdf('Datas', 'Três fatos diferentes — ver a nota no rodapé.')}
+      <div class="doc-grid">
+        ${campo('Programada em', c.programadoEm ? fmtDataHora(c.programadoEm) : '—')}
+        ${campo('Registro criado em', c.criadoEm ? fmtDataHora(c.criadoEm) : '—')}
+        ${campo('Entrada no pátio', entrada ? fmtDataHora(entrada) : 'chegada não registrada')}
+        ${campo('Ciclo total', totalCiclo || '—')}
+      </div>
+
+      ${(l.numeros.length || l.retido || l.faltando) ? blocoLacresPdf([c]) : ''}
+
+      ${tituloSecaoPdf('Linha do tempo',
+        'Cada mudança de etapa, com quem registrou e quanto tempo a carga ficou na etapa anterior.')}
+      <table class="tab-lacres">
+        <thead><tr>
+          <th>Data / hora</th><th>Etapa</th><th>Operador</th><th>Setor</th>
+          <th>Tempo na etapa anterior</th>
+        </tr></thead>
+        <tbody>${linhasTempo || '<tr><td colspan="5" class="text-center text-dim">Esta carga ainda não teve mudança de etapa registrada.</td></tr>'}</tbody>
+      </table>
+
+      ${c.observacoes ? `${tituloSecaoPdf('Observações')}
+        <div class="print-nota">${esc(c.observacoes)}</div>` : ''}
+
+      ${rodapeDocumento(
+        '<strong>Programada em</strong> = quando a Logística lançou a carga · '
+        + '<strong>Registro criado em</strong> = quando a linha nasceu no sistema · '
+        + '<strong>Entrada no pátio</strong> = quando a Portaria registrou a chegada do caminhão. '
+        + 'São três fatos distintos e podem estar a horas de distância.',
+        'Dados da própria carga e da trilha de movimentações — a mesma que alimenta o Histórico. '
+        + 'Nada aqui é recalculado ou estimado.',
+        fichaDocumento({
+          titulo: `Carga ${c.numeroCarga || '(sem número)'}`,
+          contagem: eventos.length,
+          extra: `<strong>Etapas registradas:</strong> ${eventos.length}`,
+        }))}
+    </div>`;
+
+  await exportarViaServidor(el, `Carga-${c.numeroCarga || c.placa}`);
+}
+
+/* AS TRÊS DATAS DE UMA CARGA — e por que confundi-las custou caro.
+   (21/08/2026)
+
+   Relato do gestor olhando o Histórico: "que estranho essa data de entrada
+   no pátio dessa placa". Estava estranha mesmo. A carga 118292 dizia
+   "Entrada no pátio 20/08 19:57" e a movimentação logo acima mostrava a
+   Portaria registrando a chegada em 21/08 09:06 — quatorze horas depois.
+
+   O rótulo é que estava mentindo. A tela mostrava `criadoEm`, e `criadoEm`
+   significa coisas diferentes dependendo de quem criou a linha:
+
+     · carga PROGRAMADA pela Logística → quando ELA foi lançada (19:57 de
+       ontem), e o caminhão nem tinha chegado;
+     · entrada registrada pela PORTARIA (aguardandoCarga) → aí sim é a
+       chegada do caminhão, porque a linha nasce no momento em que ele
+       encosta.
+
+   A entrada no pátio de verdade tem um registro próprio e inequívoco: o
+   evento de mudança para "Aguardando Embarque", na trilha. É dele que esta
+   função tira a resposta — e devolve null quando o caminhão ainda não
+   chegou, em vez de oferecer uma data qualquer que pareça uma.
+
+   As três datas, para não se misturarem de novo:
+     criadoEm     — quando o REGISTRO nasceu
+     programadoEm — quando a CARGA foi lançada/programada
+     entrada      — quando o CAMINHÃO encostou (esta função) */
+function entradaNoPatioDe(c){
+  if(!c) return null;
+  const ev = primeiroTimestamp(c.id, 'Aguardando Embarque');
+  if(ev) return ev;
+  /* Entrada registrada pela Portaria sem programação: a linha nasce no
+     instante da chegada, então aí — e só aí — criadoEm é a entrada. */
+  if(c.aguardandoCarga) return c.criadoEm || null;
+  return null;
+}
+
 /* O QUE APARECE QUANDO A LINHA DO HISTÓRICO ABRE.
 
    Regra de conteúdo: tudo que responde "o que era essa carga naquele
@@ -4348,7 +4503,15 @@ function detalheHistoricoHtml(m){
 
   const datas = [
     linha('Programada em', c.programadoEm ? fmtDataHora(c.programadoEm) : '—'),
-    linha('Entrada no pátio', c.criadoEm ? fmtDataHora(c.criadoEm) : '—'),
+    linha('Entrada no pátio', (() => {
+      const e = entradaNoPatioDe(c);
+      return e ? fmtDataHora(e)
+        : '<span class="text-dim">o caminhão ainda não teve chegada registrada</span>';
+    })()),
+    /* O instante em que a LINHA nasceu fica à mostra também, com o nome
+       certo: numa auditoria a diferença entre "quando isto foi lançado" e
+       "quando o caminhão chegou" é justamente o que se quer olhar. */
+    linha('Registro criado em', c.criadoEm ? fmtDataHora(c.criadoEm) : '—'),
     linha('Observações', esc(c.observacoes) || '—'),
   ].join('');
 
@@ -4363,6 +4526,8 @@ function detalheHistoricoHtml(m){
     <div class="hist-det-acoes no-print">
       <button class="btn btn-sec btn-sm" onclick="event.stopPropagation();verLinhaDoTempoDoHistoricoUI('${escJs(c.id)}')"
         title="Abre a linha do tempo completa desta carga, com todas as etapas.">🕒 Linha do tempo completa</button>
+      <button class="btn btn-sec btn-sm" onclick="event.stopPropagation();relatorioDaCargaUI('${escJs(c.id)}')"
+        title="Gera o PDF desta carga: ficha completa, datas, lacres e a linha do tempo com o tempo de cada etapa.">📄 Relatório desta carga</button>
     </div>`;
 }
 
