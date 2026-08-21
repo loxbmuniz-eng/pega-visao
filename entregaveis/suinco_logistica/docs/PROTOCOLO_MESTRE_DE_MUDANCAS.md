@@ -127,6 +127,10 @@ Antes de escrever uma linha de código para um pedido desse tamanho, eu:
 
 - **Comandos operacionais do dia a dia, passo a passo** (entrar no
   servidor, atualizar, diagnosticar, backup): `MANUAL_DO_SERVIDOR.md`.
+- **Toda ocorrência relatada pela operação, com causa, correção e o teste
+  que impede que ela volte**: `REGISTRO_DE_OCORRENCIAS.md`. É a lista viva —
+  ocorrência nova entra ali no mesmo dia, e só é dada por encerrada quando
+  tem uma guarda automática associada.
 - **O que aconteceu no incidente de 08/08 especificamente, causa por
   causa**: `POSMORTEM_2026-08-08.md`.
 - **Arquitetura do sistema** (como as peças se encaixam):
