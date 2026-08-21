@@ -3565,8 +3565,8 @@ function detalheRaioXHtml(item, mediasGeral, colunas){
       <td class="c-peso">${fmtDuracao(ind.tempoPatioTotal)}</td>
       <td class="c-peso">${fmtDuracao(ind.leadTimeTotal)}</td>
       <td class="no-print raiox-acoes">
-        <button class="btn btn-sec btn-sm" onclick="event.stopPropagation();verLinhaDoTempoDoHistoricoUI('${escJs(c.id)}')" title="Linha do tempo completa desta carga.">🕒</button>
-        <button class="btn btn-sec btn-sm" onclick="event.stopPropagation();relatorioDaCargaUI('${escJs(c.id)}')" title="PDF individual desta carga.">📄</button>
+        <button class="btn btn-sec btn-sm" onclick="event.stopPropagation();verLinhaDoTempoDoHistoricoUI('${escJs(c.id)}')" title="Linha do tempo completa desta carga."><svg class="ico ico-btn" aria-hidden="true"><use href="#i-historico"/></svg></button>
+        <button class="btn btn-sec btn-sm" onclick="event.stopPropagation();relatorioDaCargaUI('${escJs(c.id)}')" title="PDF individual desta carga."><svg class="ico ico-btn" aria-hidden="true"><use href="#i-relatorios"/></svg></button>
       </td>
     </tr>`;
   }).join('');
@@ -3661,6 +3661,174 @@ function renderRaioX(){
   document.getElementById('raiox-empty').hidden = itens.length > 0;
 }
 
+/* =====================================================================
+   PULSO DO PÁTIO — heatmap de chegadas (hora × dia) + evolução diária
+   =====================================================================
+
+   As duas visões nascem do MESMO fato: a entrada no pátio registrada pela
+   Portaria (entradaNoPatioDe). De propósito, o card ignora o filtro de
+   período da aba — congestionamento é padrão que só aparece no acumulado,
+   e um recorte de um dia mostraria uma linha solta e nenhum padrão.
+
+   Regras de desenho (as mesmas do resto do painel):
+   · magnitude = UMA cor (o dourado da casa), do claro ao escuro — nunca
+     arco-íris; o número escrito é o segundo canal, cor nunca fica sozinha;
+   · um eixo por gráfico — entradas e tempo médio são medidas de escalas
+     diferentes, então viram DOIS gráficos empilhados dividindo o mesmo
+     eixo de dias, não um gráfico de dois eixos. */
+const PULSO_DIAS_SEMANA = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
+
+function coletarEntradasNoPatio(dias){
+  const agora = Date.now();
+  const inicio = agora - dias * 24 * 3600 * 1000;
+  const entradas = [];
+  (DB.cargas || []).forEach(c => {
+    const e = entradaNoPatioDe(c);
+    if(!e) return;
+    const t = Date.parse(e);
+    if(!Number.isFinite(t) || t < inicio || t > agora) return;
+    entradas.push({ t, id: c.id });
+  });
+  return entradas;
+}
+
+function heatmapChegadasSvg(entradas){
+  // matriz[linha Seg..Dom][hora 0..23] — getDay() dá 0=Domingo, e a semana
+  // de trabalho começa na segunda, então o domingo vai para a última linha.
+  const LINHA_DO_GETDAY = [6, 0, 1, 2, 3, 4, 5];
+  const m = PULSO_DIAS_SEMANA.map(() => new Array(24).fill(0));
+  entradas.forEach(({ t }) => {
+    const d = new Date(t);
+    m[LINHA_DO_GETDAY[d.getDay()]][d.getHours()]++;
+  });
+  const max = Math.max(1, ...m.flat());
+
+  const CEL = 26, ALT = 21, GAP = 3, ROTULO = 36, TOPO = 16;
+  const W = ROTULO + 24 * (CEL + GAP);
+  const H = TOPO + 7 * (ALT + GAP);
+  const celulas = [];
+  m.forEach((linha, li) => {
+    const y = TOPO + li * (ALT + GAP);
+    celulas.push(`<text x="${ROTULO - 6}" y="${y + ALT / 2 + 3.5}" text-anchor="end"
+      font-size="10" fill="var(--text-dim)">${PULSO_DIAS_SEMANA[li]}</text>`);
+    linha.forEach((n, hora) => {
+      const x = ROTULO + hora * (CEL + GAP);
+      const frac = n / max;
+      // 0 chegadas: célula fantasma (contorno leve), pra grade continuar
+      // legível sem parecer que "0" é um dado dourado fraquinho.
+      const caixa = n === 0
+        ? `<rect x="${x}" y="${y}" width="${CEL}" height="${ALT}" rx="3" fill="var(--vidro-brilho)" opacity="0.35"/>`
+        : `<rect x="${x}" y="${y}" width="${CEL}" height="${ALT}" rx="3" fill="var(--gold)" opacity="${(0.18 + 0.82 * frac).toFixed(2)}"/>`;
+      const texto = n === 0 ? '' : `<text x="${x + CEL / 2}" y="${y + ALT / 2 + 3.5}"
+        text-anchor="middle" font-size="10" font-weight="700"
+        fill="${frac >= 0.55 ? '#161d2c' : 'var(--text-dim)'}">${n}</text>`;
+      celulas.push(`<g>${caixa}${texto}
+        <title>${PULSO_DIAS_SEMANA[li]} ${String(hora).padStart(2, '0')}h — ${n} chegada(s)</title></g>`);
+    });
+  });
+  const horas = [];
+  for(let h = 0; h < 24; h += 3){
+    horas.push(`<text x="${ROTULO + h * (CEL + GAP) + CEL / 2}" y="11" text-anchor="middle"
+      font-size="10" fill="var(--text-dim)">${h}h</text>`);
+  }
+  return { max, svg: `<svg class="heatmap-svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"
+    role="img" aria-label="Chegadas ao pátio por hora e dia da semana, últimos 30 dias">
+    ${horas.join('')}${celulas.join('')}</svg>` };
+}
+
+function evolucaoPatioSvg(entradas){
+  // Últimos 14 dias, do mais antigo para o mais novo. Cada dia soma as
+  // chegadas e a média do tempo total de pátio das cargas que ENTRARAM
+  // naquele dia e já concluíram o ciclo.
+  const DIAS = 14;
+  const chaves = [];
+  for(let i = DIAS - 1; i >= 0; i--){
+    const d = new Date(Date.now() - i * 24 * 3600 * 1000);
+    chaves.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
+  }
+  const porDia = new Map(chaves.map(k => [k, { n: 0, somaPatio: 0, nPatio: 0 }]));
+  entradas.forEach(({ t, id }) => {
+    const d = new Date(t);
+    const k = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const b = porDia.get(k);
+    if(!b) return;
+    b.n++;
+    const patio = indicadoresDaCarga(id).tempoPatioTotal;
+    if(patio !== null){ b.somaPatio += patio; b.nPatio++; }
+  });
+  const dados = chaves.map(k => {
+    const b = porDia.get(k);
+    return { k, n: b.n, media: b.nPatio ? Math.round(b.somaPatio / b.nPatio) : null };
+  });
+
+  const BARRA = 30, GAP = 8, ROTULO = 8, TOPO = 18, PAINEL = 74, ENTRE = 40, BASE = 18;
+  const W = ROTULO + DIAS * (BARRA + GAP);
+  const H = TOPO + PAINEL + ENTRE + PAINEL + BASE;
+  const maxN = Math.max(1, ...dados.map(d => d.n));
+  const maxMedia = Math.max(1, ...dados.map(d => d.media || 0));
+  const y2Topo = TOPO + PAINEL + ENTRE;
+  const partes = [];
+  partes.push(`<text x="${ROTULO}" y="${TOPO - 7}" font-size="10" font-weight="800"
+    fill="var(--text-dim)">ENTRADAS NO PÁTIO</text>`);
+  partes.push(`<text x="${ROTULO}" y="${y2Topo - 7}" font-size="10" font-weight="800"
+    fill="var(--text-dim)">TEMPO MÉDIO DE PÁTIO</text>`);
+  dados.forEach((d, i) => {
+    const x = ROTULO + i * (BARRA + GAP);
+    const [ano, mes, dia] = d.k.split('-');
+    // Painel 1 — entradas (contagem).
+    const h1 = Math.round((d.n / maxN) * (PAINEL - 14));
+    if(d.n > 0){
+      partes.push(`<rect x="${x}" y="${TOPO + (PAINEL - h1)}" width="${BARRA}" height="${h1}"
+        rx="3" fill="var(--gold)"/>`);
+      partes.push(`<text x="${x + BARRA / 2}" y="${TOPO + (PAINEL - h1) - 3}" text-anchor="middle"
+        font-size="10" font-weight="700" fill="var(--text-dim)">${d.n}</text>`);
+    }else{
+      partes.push(`<rect x="${x}" y="${TOPO + PAINEL - 2}" width="${BARRA}" height="2"
+        rx="1" fill="var(--vidro-brilho)"/>`);
+    }
+    // Painel 2 — tempo médio (minutos). Sem carga concluída, sem barra —
+    // um zero aqui mentiria (não é "pátio zerado", é "ainda sem medição").
+    if(d.media !== null){
+      const h2 = Math.max(3, Math.round((d.media / maxMedia) * (PAINEL - 14)));
+      partes.push(`<rect x="${x}" y="${y2Topo + (PAINEL - h2)}" width="${BARRA}" height="${h2}"
+        rx="3" fill="var(--gold)" opacity="0.62"/>`);
+      partes.push(`<text x="${x + BARRA / 2}" y="${y2Topo + (PAINEL - h2) - 3}" text-anchor="middle"
+        font-size="9.5" font-weight="700" fill="var(--text-dim)">${fmtDuracao(d.media)}</text>`);
+    }
+    partes.push(`<text x="${x + BARRA / 2}" y="${H - 5}" text-anchor="middle"
+      font-size="9.5" fill="var(--text-dim)">${dia}/${mes}</text>`);
+    partes.push(`<g><rect x="${x}" y="0" width="${BARRA + GAP}" height="${H}" fill="transparent">
+      </rect><title>${dia}/${mes}/${ano} — ${d.n} entrada(s)${d.media !== null ? ' · pátio médio ' + fmtDuracao(d.media) : ''}</title></g>`);
+  });
+  return `<svg class="evolucao-svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"
+    role="img" aria-label="Entradas no pátio e tempo médio por dia, últimos 14 dias">${partes.join('')}</svg>`;
+}
+
+function renderPulsoDoPatio(){
+  const heatEl = document.getElementById('pulso-heatmap');
+  const evoEl = document.getElementById('pulso-evolucao');
+  const vazioEl = document.getElementById('pulso-empty');
+  if(!heatEl || !evoEl) return;
+  const entradas = coletarEntradasNoPatio(30);
+  const grade = document.querySelector('.pulso-grid');
+  if(!entradas.length){
+    if(grade) grade.hidden = true;
+    if(vazioEl) vazioEl.hidden = false;
+    return;
+  }
+  if(grade) grade.hidden = false;
+  if(vazioEl) vazioEl.hidden = true;
+  const { svg, max } = heatmapChegadasSvg(entradas);
+  heatEl.innerHTML = svg;
+  const leg = document.getElementById('pulso-heatmap-legenda');
+  if(leg){
+    leg.innerHTML = 'menos '
+      + [0.18, 0.45, 0.7, 1].map(o => `<span class="grau" style="background:var(--gold);opacity:${o}"></span>`).join('')
+      + ` mais — pico: ${max} chegada(s) num mesmo horário`;
+  }
+  evoEl.innerHTML = evolucaoPatioSvg(entradas);
+}
+
 function renderIndicadores(){
   preencherFiltrosIndicadores();
   renderDistribuicaoStatus();
@@ -3692,6 +3860,7 @@ function renderIndicadores(){
   document.getElementById('ind-stats').innerHTML = html;
 
   renderRaioX();
+  renderPulsoDoPatio();
   // ---- Bloco 2: Painel do Gestor — comparação por período (novo) ----
   renderComparacaoPeriodos();
   renderRankingPeriodos();
@@ -4774,9 +4943,9 @@ function detalheHistoricoHtml(m){
     <div class="hist-det-grid">${datas}</div>
     <div class="hist-det-acoes no-print">
       <button class="btn btn-sec btn-sm" onclick="event.stopPropagation();verLinhaDoTempoDoHistoricoUI('${escJs(c.id)}')"
-        title="Abre a linha do tempo completa desta carga, com todas as etapas.">🕒 Linha do tempo completa</button>
+        title="Abre a linha do tempo completa desta carga, com todas as etapas."><svg class="ico ico-btn" aria-hidden="true"><use href="#i-historico"/></svg> Linha do tempo completa</button>
       <button class="btn btn-sec btn-sm" onclick="event.stopPropagation();relatorioDaCargaUI('${escJs(c.id)}')"
-        title="Gera o PDF desta carga: ficha completa, datas, lacres e a linha do tempo com o tempo de cada etapa.">📄 Relatório desta carga</button>
+        title="Gera o PDF desta carga: ficha completa, datas, lacres e a linha do tempo com o tempo de cada etapa."><svg class="ico ico-btn" aria-hidden="true"><use href="#i-relatorios"/></svg> Relatório desta carga</button>
     </div>`;
 }
 

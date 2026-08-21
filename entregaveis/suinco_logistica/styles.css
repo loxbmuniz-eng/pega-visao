@@ -658,6 +658,17 @@ body::before{
   background:linear-gradient(180deg, var(--gold), var(--gold-dim));
 }
 .card-title .icon{font-size:18px}
+/* O ícone do título herda o dourado do próprio título (currentColor) — o
+   emoji colorido saiu de cena, então o vetor precisa se afirmar sozinho:
+   um ponto maior que o texto e alinhado ao traço da esquerda. */
+.card-title .ico-card{
+  width:19px;height:19px;flex:none;
+}
+/* Ícone dentro de botão de ação (linha do tempo, relatório): acompanha a
+   altura do texto do botão e nunca estica. */
+.btn .ico-btn{
+  width:15px;height:15px;flex:none;vertical-align:-2.5px;
+}
 .card-sub{font-size:12px;color:var(--text-dim);margin-top:-6px;margin-bottom:9px}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
@@ -3630,3 +3641,23 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
 .tabela-patio tr.vp-grupo td{ background:var(--navy-light); color:var(--gold);
   font-weight:800; font-size:.78rem; letter-spacing:.5px; text-transform:uppercase;
   padding:7px 10px; position:sticky; top:0; z-index:2; }
+
+/* =====================================================================
+   PULSO DO PÁTIO (Indicadores) — heatmap hora×dia + evolução diária
+   =====================================================================
+   Duas leituras do mesmo fato (a chegada registrada pela Portaria), lado
+   a lado no desktop e empilhadas no celular. Os gráficos são SVG e podem
+   ser mais largos que a coluna — cada um rola sozinho na horizontal para
+   a página nunca ganhar barra de rolagem lateral. */
+.pulso-grid{ display:grid; grid-template-columns:1fr 1fr; gap:18px }
+@media(max-width:1100px){ .pulso-grid{ grid-template-columns:1fr } }
+.pulso-titulo{
+  font-size:12px; font-weight:800; letter-spacing:.4px; text-transform:uppercase;
+  color:var(--text-dim); margin:4px 0 8px;
+}
+.pulso-scroll{ overflow-x:auto; }
+.pulso-legenda{
+  display:flex; align-items:center; gap:7px; margin-top:6px;
+  font-size:11px; color:var(--text-dim);
+}
+.pulso-legenda .grau{ width:16px; height:11px; border-radius:2px; flex:none }

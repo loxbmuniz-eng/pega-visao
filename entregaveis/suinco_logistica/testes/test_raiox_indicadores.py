@@ -220,6 +220,33 @@ async def main():
         ck('clicar de novo inverte a ordem', asc == list(reversed(desc)) and len(asc) >= 2,
            f'{asc[:2]} vs {desc[:2]}')
 
+        print('\n=== 4b. PULSO DO PÁTIO ===')
+        pulso = await pg.evaluate(
+            """() => { const heat = document.querySelector('#pulso-heatmap svg');
+                 const evo = document.querySelector('#pulso-evolucao svg');
+                 const leg = document.getElementById('pulso-heatmap-legenda');
+                 return {heat: !!heat,
+                         celulas: heat ? heat.querySelectorAll('rect').length : 0,
+                         evo: !!evo,
+                         barras: evo ? evo.querySelectorAll('rect').length : 0,
+                         legenda: !!(leg && leg.textContent.includes('pico')),
+                         doisPaineis: evo ? /ENTRADAS NO PÁTIO/.test(evo.textContent)
+                           && /TEMPO MÉDIO DE PÁTIO/.test(evo.textContent) : False}; }"""
+            .replace('False', 'false'))
+        ck('o heatmap hora × dia está desenhado (168 células)',
+           pulso['heat'] and pulso['celulas'] >= 168, str(pulso))
+        ck('a evolução diária está desenhada', pulso['evo'] and pulso['barras'] >= 14, str(pulso))
+        ck('os DOIS painéis existem (entradas e tempo médio — sem eixo duplo)',
+           pulso['doisPaineis'], str(pulso))
+        ck('a legenda do heatmap explica o pico', pulso['legenda'], str(pulso))
+
+        print('\n=== 4c. TÍTULOS DE CARD SEM EMOJI ===')
+        icones = await pg.evaluate(
+            """() => ({svg: document.querySelectorAll('.card-title .ico-card').length,
+                       emoji: document.querySelectorAll('.card-title .icon').length})""")
+        ck('todos os títulos de card usam o ícone vetorial',
+           icones['svg'] >= 40 and icones['emoji'] == 0, str(icones))
+
         print('\n=== 5. CONSOLE LIMPO + CAPTURA ===')
         ck('sem erros de página', not erros, str(erros[:2]))
         await pg.click("#raiox-tbody tr.raiox-linha")
@@ -227,6 +254,9 @@ async def main():
         alvo = await pg.query_selector('#raiox-seg')
         await pg.evaluate("() => document.querySelector('.table-raiox').scrollIntoView({block:'center'})")
         await pg.screenshot(path='/tmp/claude-0/-home-user-pega-visao/82f87c99-e223-5c72-91d0-65150266c838/scratchpad/raiox.png')
+        await pg.evaluate("() => document.getElementById('pulso-heatmap').scrollIntoView({block:'center'})")
+        await pg.wait_for_timeout(400)
+        await pg.screenshot(path='/tmp/claude-0/-home-user-pega-visao/82f87c99-e223-5c72-91d0-65150266c838/scratchpad/pulso.png')
 
         await nav.close()
 
