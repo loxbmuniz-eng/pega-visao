@@ -1214,6 +1214,14 @@
   <div class="tab-page" id="tab-usuarios">
     <div class="funcao-aba" data-tab="usuarios"></div>
 
+    <!-- MINHA SEGURANÇA — o segundo fator de quem está logado (etapa 4).
+         Fica no topo e vale para TODOS os setores: qualquer pessoa pode
+         proteger a própria conta, mesmo quem não administra ninguém. -->
+    <div class="card" id="card-minha-seguranca">
+      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-lacre"/></svg> Minha segurança</div>
+      <div id="mfa-painel"></div>
+    </div>
+
     <div class="card">
       <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-usuarios"/></svg> Novo Usuário</div>
       <div class="card-sub">O setor define o que a pessoa vê e o que consegue registrar. Isso é validado no servidor — não dá para contornar pela tela.</div>
@@ -1291,6 +1299,17 @@
         <label>Senha</label>
         <input type="password" id="login-senha" placeholder="Sua senha"
                autocomplete="current-password" onkeydown="if(event.key==='Enter') entrarNoServidor()">
+      </div>
+      <!-- Segundo fator: só aparece quando o servidor pede (etapa 4 do
+           protocolo de segurança). Campo escondido de saída, para quem não
+           ativou nunca ver um campo que não usa. -->
+      <div class="form-group" id="login-mfa-bloco" hidden style="margin-bottom:10px">
+        <label>Código do aplicativo autenticador</label>
+        <input type="text" id="login-codigo" placeholder="000000" maxlength="29"
+               inputmode="numeric" autocomplete="one-time-code" autocapitalize="off" spellcheck="false"
+               onkeydown="if(event.key==='Enter') entrarNoServidor()">
+        <div class="card-sub" style="margin-top:6px">O código muda a cada 30 segundos.
+          Sem o celular? Use um dos seus códigos de recuperação.</div>
       </div>
       <div class="card-sub">Seu setor e suas permissões vêm do servidor. Se errou de setor, fale com a Administração — não é escolha da tela.</div>
       <div id="login-erro" class="login-erro" hidden></div>

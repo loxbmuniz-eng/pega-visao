@@ -10,9 +10,10 @@
 
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
-import { consultar } from '../banco.js';
+import { consultar, emTransacao } from '../banco.js';
 import { exigirLogin, exigirSetor } from '../middleware/auth.js';
 import { SETORES } from '../config.js';
+import { emitir } from '../tempo-real.js';
 
 export const rotasOperadores = Router();
 
@@ -233,3 +234,63 @@ rotasOperadores.patch('/operadores/:id', SO_ADMIN, async (req, res, next) => {
    de um caminhão destrói a rastreabilidade justamente do caso em que ela
    seria consultada. Desativar bloqueia o acesso e preserva o histórico —
    é o que a auditoria precisa e o que a LGPD tolera muito melhor. */
+
+/* RESET DO SEGUNDO FATOR PELO ADMINISTRADOR — o celular perdido sem os
+   códigos de recuperação.
+   =====================================================================
+   Etapa 4 do protocolo de segurança (22/08/2026).
+
+   POR QUE UM ADMINISTRADOR SÓ, e não dois como nas ações críticas. Aqui a
+   ponderação inverte: exigir duas assinaturas para destravar alguém
+   significaria que, com só um administrador disponível, a pessoa fica
+   parada. E gente parada por causa de um controle é exatamente o que faz
+   nascer o acesso de emergência improvisado — que é pior que a brecha
+   original.
+
+   O que compensa: a ação é RUIDOSA. Fica no log do servidor, avisa todo
+   mundo em tempo real, e derruba as sessões da pessoa — quem tiver
+   sequestrado a conta cai junto. Reset silencioso seria a porta dos fundos
+   perfeita; este é o contrário disso. */
+rotasOperadores.post('/operadores/:id/mfa/resetar', SO_ADMIN, async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const motivo = String(req.body?.motivo ?? '').trim().slice(0, 500);
+    if (!Number.isInteger(id)) {
+      return res.status(400).json({ erro: 'Id inválido.', codigo: 'ID_INVALIDO' });
+    }
+    if (!motivo) {
+      return res.status(400).json({
+        erro: 'Diga o motivo — destravar o segundo fator de alguém precisa ficar explicado.',
+        codigo: 'MOTIVO_OBRIGATORIO',
+      });
+    }
+
+    const { rows } = await consultar('SELECT id, email, nome FROM operadores WHERE id = $1', [id]);
+    if (!rows[0]) {
+      return res.status(404).json({ erro: 'Operador não encontrado.', codigo: 'NAO_ENCONTRADO' });
+    }
+
+    await emTransacao(async (cli) => {
+      await cli.query(
+        `UPDATE operadores
+            SET mfa_ativo = FALSE, mfa_segredo = '', mfa_ativado_em = NULL,
+                sessao_versao = sessao_versao + 1
+          WHERE id = $1`, [id]
+      );
+      await cli.query('DELETE FROM mfa_codigos_recuperacao WHERE operador_id = $1', [id]);
+    });
+
+    emitir('seguranca:mfa-reset', {
+      alvo: rows[0].nome, por: req.operador.nome, motivo,
+    });
+    console.warn(`[seguranca] ${req.operador.nome} RESETOU o segundo fator de ${rows[0].email}: ${motivo}`);
+
+    return res.json({
+      ok: true, operador: rows[0].nome,
+      aviso: 'O segundo fator foi removido e as sessões dessa pessoa caíram. '
+        + 'Peça para ela entrar com a senha e configurar de novo.',
+    });
+  } catch (e) {
+    return next(e);
+  }
+});

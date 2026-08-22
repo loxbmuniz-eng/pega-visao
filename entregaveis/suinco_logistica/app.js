@@ -868,6 +868,7 @@ async function rodarTesteDeConexao(){
 async function entrarNoServidor(){
   const email = (document.getElementById('login-email').value || '').trim();
   const senha = document.getElementById('login-senha').value || '';
+  const codigo = (document.getElementById('login-codigo') || {}).value || '';
   const botao = document.getElementById('btn-entrar');
 
   if(!email || !senha){ mostrarErroLogin('Informe e-mail e senha.'); return; }
@@ -881,7 +882,7 @@ async function entrarNoServidor(){
   botao.textContent = 'Entrando…';
 
   try{
-    const op = await SuincoSharePoint.login(email, senha);
+    const op = await SuincoSharePoint.login(email, senha, codigo);
     // O id vem junto para o painel saber distinguir "eu editei" de "outro
     // editou" — dois operadores podem ter o mesmo primeiro nome.
     DB.operador = { id: op.id, nome: op.nome, setor: op.setor, email: op.email, turno: detectarTurnoPorHora() };
@@ -899,10 +900,151 @@ async function entrarNoServidor(){
     renderAll();
     notify(`Bem-vindo, ${op.nome}! Setor: ${op.setor}`, 'success');
   }catch(e){
-    mostrarErroLogin(await explicarFalhaDeLogin(e));
+    /* SEGUNDO FATOR (etapa 4). O servidor recusa com MFA_NECESSARIO quando
+       a senha está certa e falta o código. Revelar o campo só aqui — e não
+       de saída — significa que quem não ativou nunca vê um campo que não
+       usa, e quem ativou é levado ao passo seguinte sem precisar entender
+       nada de segurança. */
+    const precisaCodigo = /MFA_NECESSARIO|aplicativo autenticador/i.test(String(e && e.message || ''));
+    if(precisaCodigo){
+      const bloco = document.getElementById('login-mfa-bloco');
+      const campo = document.getElementById('login-codigo');
+      if(bloco) bloco.hidden = false;
+      if(campo){ campo.value = ''; campo.focus(); }
+      mostrarErroLogin('Digite o código do seu aplicativo autenticador.');
+    }else{
+      const codigoErrado = /MFA_INVALIDO|Código incorreto/i.test(String(e && e.message || ''));
+      if(codigoErrado){
+        const campo = document.getElementById('login-codigo');
+        if(campo){ campo.value = ''; campo.focus(); }
+      }
+      mostrarErroLogin(await explicarFalhaDeLogin(e));
+    }
   }finally{
     botao.disabled = false;
     botao.textContent = 'Entrar';
+  }
+}
+
+/* =====================================================================
+   SEGUNDO FATOR — a tela de quem ativa o próprio
+   =====================================================================
+   Etapa 4 do protocolo de segurança (22/08/2026). Fica na aba Usuários,
+   porque é onde a pessoa já vai cuidar da própria conta.
+
+   O texto foi escrito para quem nunca ouviu falar de TOTP: a tela fala em
+   "aplicativo autenticador" e "código de 6 dígitos", nunca em "segredo
+   compartilhado" ou "one-time password". Controle que a pessoa não entende
+   é controle que ela contorna. */
+async function renderMinhaSegurancaUI(){
+  const alvo = document.getElementById('mfa-painel');
+  if(!alvo || !SuincoSharePoint.estaConfigurado || !SuincoSharePoint.estaConfigurado()) return;
+  let sit;
+  try{
+    sit = await SuincoSharePoint.mfa.situacao();
+  }catch(e){
+    // Servidor ainda sem a etapa 4: some em silêncio em vez de mostrar erro
+    // para quem não pediu nada.
+    alvo.innerHTML = '';
+    return;
+  }
+  if(sit.mfa_ativo){
+    alvo.innerHTML = `
+      <div class="mfa-ativo">
+        <div><strong>Segundo fator ATIVO</strong>${sit.mfa_ativado_em
+          ? ` · desde ${esc(fmtDataHora(sit.mfa_ativado_em))}` : ''}</div>
+        <div class="card-sub" style="margin:6px 0 10px">
+          Restam <strong>${Number(sit.codigos_restantes || 0)}</strong> códigos de recuperação.
+          ${Number(sit.codigos_restantes || 0) <= 2
+            ? 'Estão acabando — desative e ative de novo para gerar um lote novo.' : ''}
+        </div>
+        <button class="btn btn-sec btn-sm" onclick="desativarMfaUI()">Desativar segundo fator</button>
+      </div>`;
+    return;
+  }
+  alvo.innerHTML = `
+    <div class="card-sub">Seu acesso está protegido só pela senha. Com o segundo fator,
+      quem descobrir sua senha ainda não entra.</div>
+    <button class="btn btn-primary btn-sm" onclick="iniciarMfaUI()">Ativar segundo fator</button>`;
+}
+
+async function iniciarMfaUI(){
+  const alvo = document.getElementById('mfa-painel');
+  try{
+    const r = await SuincoSharePoint.mfa.iniciar();
+    alvo.innerHTML = `
+      <div class="mfa-passos">
+        <div class="mfa-passo"><strong>1.</strong> Instale um aplicativo autenticador no celular
+          (Google Authenticator ou Microsoft Authenticator — os dois são gratuitos).</div>
+        <div class="mfa-passo"><strong>2.</strong> No aplicativo, escolha
+          <em>inserir chave manualmente</em> e digite esta chave:
+          <div class="mfa-segredo">${esc((r.segredo.match(/.{1,4}/g) || []).join(' '))}</div>
+          <span class="card-sub">Conta: Embarque Suinco · ${esc((DB.operador||{}).email || '')}</span>
+        </div>
+        <div class="mfa-passo"><strong>3.</strong> Digite abaixo o código de 6 dígitos que aparecer:
+          <div class="form-row" style="margin-top:8px">
+            <input type="text" id="mfa-confirmar-codigo" placeholder="000000" maxlength="6"
+                   inputmode="numeric" style="max-width:140px">
+            <button class="btn btn-primary btn-sm" onclick="confirmarMfaUI()">Confirmar e ativar</button>
+            <button class="btn btn-sec btn-sm" onclick="renderMinhaSegurancaUI()">Cancelar</button>
+          </div>
+        </div>
+      </div>`;
+  }catch(e){
+    notify('Não consegui iniciar: ' + (e && e.message || 'erro'), 'danger', 6000);
+  }
+}
+
+async function confirmarMfaUI(){
+  const campo = document.getElementById('mfa-confirmar-codigo');
+  const codigo = (campo && campo.value || '').trim();
+  if(codigo.length !== 6){ notify('Digite os 6 dígitos do aplicativo.', 'warn'); return; }
+  try{
+    const r = await SuincoSharePoint.mfa.confirmar(codigo);
+    const alvo = document.getElementById('mfa-painel');
+    /* Os códigos de recuperação aparecem UMA VEZ. Mostrar em bloco grande,
+       com o aviso de imprimir, porque a pessoa que fechar esta tela sem
+       guardar vai depender de um administrador no dia em que perder o
+       celular. */
+    alvo.innerHTML = `
+      <div class="mfa-recuperacao">
+        <div class="mfa-recuperacao-tit">Guarde estes códigos agora — eles não aparecem de novo</div>
+        <div class="card-sub">Cada um serve UMA vez, para entrar sem o celular.
+          Imprima e guarde fora do aparelho.</div>
+        <div class="mfa-codigos">${r.codigosRecuperacao.map(c=>`<span>${esc(c)}</span>`).join('')}</div>
+        <div class="form-row" style="margin-top:10px">
+          <button class="btn btn-sec btn-sm" onclick="window.print()">Imprimir</button>
+          <button class="btn btn-primary btn-sm" onclick="renderMinhaSegurancaUI()">Já guardei</button>
+        </div>
+      </div>`;
+    notify('Segundo fator ativado.', 'success');
+  }catch(e){
+    notify(e && e.message || 'Código incorreto.', 'danger', 6000);
+  }
+}
+
+async function desativarMfaUI(){
+  const senha = prompt('Confirme sua senha para desativar o segundo fator:');
+  if(!senha) return;
+  try{
+    await SuincoSharePoint.mfa.desativar(senha);
+    notify('Segundo fator desativado.', 'warn');
+    renderMinhaSegurancaUI();
+  }catch(e){
+    notify(e && e.message || 'Não consegui desativar.', 'danger', 6000);
+  }
+}
+
+async function resetarMfaDeUI(id, nome){
+  const motivo = prompt(`Por que está removendo o segundo fator de ${nome}?\n`
+    + '(fica registrado e avisa os outros administradores)');
+  if(!motivo || !motivo.trim()) return;
+  try{
+    const r = await SuincoSharePoint.mfa.resetarDe(id, motivo.trim());
+    notify(r.aviso || 'Segundo fator removido.', 'success', 8000);
+    if(typeof renderUsuarios === 'function') renderUsuarios();
+  }catch(e){
+    notify(e && e.message || 'Não consegui remover.', 'danger', 6000);
   }
 }
 function confirmarOperador(){
@@ -958,10 +1100,24 @@ function atualizarHeaderOperador(){
 function aplicarPermissoesSetor(){
   if(!DB.operador) return;
   const doSetor = SETOR_PERMISSOES[DB.operador.setor] || [];
+  const admin = DB.operador.setor === 'Administração';
   document.querySelectorAll('.nav-tab').forEach(el=>{
-    el.hidden = !doSetor.includes(el.dataset.tab);
+    /* A aba Usuários passa a ser de TODOS (22/08/2026, etapa 4).
+
+       O motivo é o segundo fator: proteger a própria conta não pode ser
+       privilégio de quem administra os outros. Quem não é Administração vê
+       ali só "Minha segurança" — os cards de gerenciar usuários continuam
+       escondidos, e o servidor recusa as rotas de qualquer jeito. */
+    const liberada = doSetor.includes(el.dataset.tab)
+      || (el.dataset.tab === 'usuarios');
+    el.hidden = !liberada;
   });
-  if(!doSetor.includes(TAB_ATUAL)) irParaTab(doSetor[0] || 'torre');
+  // Dentro da aba Usuários: gerenciar gente é só da Administração.
+  document.querySelectorAll('#tab-usuarios .card').forEach(card=>{
+    if(card.id === 'card-minha-seguranca') return;
+    card.hidden = !admin;
+  });
+  if(!doSetor.includes(TAB_ATUAL) && TAB_ATUAL !== 'usuarios') irParaTab(doSetor[0] || 'torre');
   atualizarAvisoSetorAba();
 }
 
@@ -1085,7 +1241,7 @@ function renderTabAtual(){
       // relatório "de hoje" é o caso de uso de toda hora na Logística.
       { const rd=document.getElementById('rel-dev-dia'); if(rd && !rd.value && typeof diaLocalDev==='function') rd.value=diaLocalDev(); }
       break;
-    case 'usuarios': renderUsuarios(); break;
+    case 'usuarios': renderUsuarios(); renderMinhaSegurancaUI(); break;
   }
   // Depois de pintar, e não antes: os rótulos são derivados das células
   // que acabaram de ser criadas.
