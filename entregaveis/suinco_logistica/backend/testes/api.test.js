@@ -1746,6 +1746,21 @@ describe('13. Relatório em PDF gerado pelo SERVIDOR (A4 paisagem sempre)', () =
     assert.equal(r.json.codigo, 'DOCUMENTO_SEM_PERMISSAO');
   });
 
+  test('Expedição e Faturamento GERAM o Operacional — é a ordem de montagem deles', async () => {
+    /* Correção do gestor em 22/08/2026: eu tinha fechado o Operacional na
+       Logística. Errado — é o papel que a Expedição usa para saber o que
+       carregar e o Faturamento para saber o que faturar. Restringir não
+       protegia nada e tirava a ferramenta de quem trabalha com ela. */
+    for (const setor of ['Expedição', 'Faturamento']) {
+      const r = await fetch(base + '/api/relatorios/pdf', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${tokens[setor]}` },
+        body: JSON.stringify({ html: HTML, css: CSS, tipo: 'relatorio-operacional' }),
+      });
+      assert.equal(r.status, 200, `${setor} precisa gerar o Operacional: ${await r.text()}`);
+    }
+  });
+
   test('a Portaria GERA o comprovante dela — o dono é por documento, não bloqueio geral', async () => {
     const r = await fetch(base + '/api/relatorios/pdf', {
       method: 'POST',

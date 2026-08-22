@@ -18,7 +18,16 @@
    mesmo jeito que o middleware `exigirSetor` faz. Repetir em nove linhas
    seria nove lugares para esquecer no dia em que a regra mudar. */
 export const DONOS_DO_DOCUMENTO = {
-  'relatorio-operacional': ['Logística'],
+  /* Expedição e Faturamento entraram em 22/08/2026, por correção do gestor.
+
+     Eu tinha fechado demais: o Operacional é a ORDEM DE MONTAGEM do pátio —
+     é o papel que a Expedição usa para saber o que carregar em que ordem, e
+     que o Faturamento usa para saber o que vai faturar no dia. Restringi-lo
+     à Logística não protegia nada e tirava da mão de quem trabalha com ele.
+
+     A lição para a próxima linha desta tabela: o dono de um documento é
+     quem PRECISA dele para operar, não quem hierarquicamente manda. */
+  'relatorio-operacional': ['Logística', 'Expedição', 'Faturamento'],
   'relatorio-executivo': ['Logística'],
   'administracao-fretes': [],
   'ficha-de-carga': ['Logística', 'Expedição', 'Faturamento'],
