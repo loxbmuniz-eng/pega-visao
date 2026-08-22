@@ -4799,7 +4799,7 @@ async function pdfProgramacaoDoDiaUI(){
         + 'cancelar é um desfecho, não um apagador. Carga "em aberto" ainda estava no pátio '
         + 'na hora em que este documento foi gerado.', '', '')}
     </div>`;
-  await exportarViaServidor(el, `Programacao-${dia}`);
+  await exportarViaServidor(el, `Programacao-${dia}`, 'programacao-do-dia');
 }
 
 async function carregarCargasExcluidasUI(){
@@ -5073,7 +5073,7 @@ async function relatorioDaCargaUI(cargaId){
         }))}
     </div>`;
 
-  await exportarViaServidor(el, `Carga-${c.numeroCarga || c.placa}`);
+  await exportarViaServidor(el, `Carga-${c.numeroCarga || c.placa}`, 'ficha-de-carga');
 }
 
 /* AS TRÊS DATAS DE UMA CARGA — e por que confundi-las custou caro.
@@ -5488,7 +5488,12 @@ function exportarTransportadorasCsv(){
     [...porNome.entries()].sort((a, b) => a[0].localeCompare(b[0])));
 }
 
-async function exportarViaServidor(el, nomeDoRelatorio){
+async function exportarViaServidor(el, nomeDoRelatorio, tipo){
+  /* `tipo` identifica o documento para o servidor decidir se o SEU setor
+     pode gerá-lo (etapa 1 do protocolo de segurança, 22/08/2026). Não é
+     opcional: documento sem tipo é recusado, de propósito — assim um
+     documento esquecido no mapa aparece na primeira tentativa, em vez de
+     virar uma porta aberta que ninguém nota. */
   if(!SuincoSharePoint || !SuincoSharePoint.estaConfigurado || !SuincoSharePoint.estaConfigurado()){
     notify('Exportar relatório exige conexão com o servidor — é o que garante que o PDF sai sempre igual, em qualquer aparelho.', 'warn', 6000);
     return;
@@ -5544,7 +5549,10 @@ async function exportarViaServidor(el, nomeDoRelatorio){
       return;
     }
     const html = el.outerHTML;
-    const blob = await SuincoSharePoint.gerarRelatorioPdf({ html, css, orientacao: 'retrato', nomeArquivo });
+    const blob = await SuincoSharePoint.gerarRelatorioPdf({
+      html, css, orientacao: 'retrato', nomeArquivo, tipo,
+      recorte: carimboDoPeriodo(),
+    });
 
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -5553,7 +5561,11 @@ async function exportarViaServidor(el, nomeDoRelatorio){
     URL.revokeObjectURL(url);
     notify('Relatório baixado.', 'success');
   }catch(e){
-    notify('Não consegui gerar o relatório: ' + (e && e.message || 'erro desconhecido'), 'danger', 7000);
+    const semPermissao = /não gera este documento|DOCUMENTO_SEM_PERMISSAO/i.test(String(e && e.message || ''));
+    notify(semPermissao
+      ? 'Seu setor não gera este documento. Peça à Logística ou à Administração.'
+      : 'Não consegui gerar o relatório: ' + (e && e.message || 'erro desconhecido'),
+      'danger', 7000);
   }finally{
     limpar();
   }
@@ -5728,7 +5740,7 @@ async function montarRelatorioOperacional(){
 
 async function exportarPdfOperacional(){
   const el = await montarRelatorioOperacional();
-  await exportarViaServidor(el, 'Relatorio-Operacional');
+  await exportarViaServidor(el, 'Relatorio-Operacional', 'relatorio-operacional');
 }
 
 /* ---------- EXPORT POWER BI (CSV) ----------
@@ -6263,7 +6275,7 @@ async function exportarPdfExecutivo(){
           extra: `<strong>Em aberto:</strong> ${abertas.length} · <strong>Concluídas:</strong> ${concluidasTodas.length}`,
         }))}
     </div>`;
-  await exportarViaServidor(el, 'Relatorio-Executivo');
+  await exportarViaServidor(el, 'Relatorio-Executivo', 'relatorio-executivo');
 }
 
 /* ---------- RELÓGIO ---------- */
@@ -6695,7 +6707,7 @@ async function exportarPdfFretes(){
           extra: semObs ? `<strong>Sem registro:</strong> ${semObs} de ${dados.length}` : null,
         }))}
     </div>`;
-  await exportarViaServidor(el, 'Administracao-de-Fretes');
+  await exportarViaServidor(el, 'Administracao-de-Fretes', 'administracao-fretes');
 }
 
 /* =====================================================================

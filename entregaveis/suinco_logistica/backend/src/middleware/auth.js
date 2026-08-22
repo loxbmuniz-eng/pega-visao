@@ -9,6 +9,7 @@
 
 import jwt from 'jsonwebtoken';
 import { config } from '../config.js';
+import { consultar } from '../banco.js';
 
 export function assinarToken(operador) {
   return jwt.sign(
@@ -17,10 +18,54 @@ export function assinarToken(operador) {
       nome: operador.nome,
       email: operador.email,
       setor: operador.setor,
+      /* VERSÃO DE SESSÃO (etapa 2 do protocolo de segurança, 22/08/2026).
+
+         JWT é auto-suficiente por natureza: uma vez assinado, vale até
+         expirar, e o servidor não tem como voltar atrás. Isso significava
+         que desligar um operador deixava a sessão dele viva por até 12
+         horas, em todos os aparelhos onde estivesse aberta.
+
+         O contador resolve sem abandonar JWT: ele viaja no token e é
+         conferido contra o banco. Incrementar o contador do operador
+         invalida, no mesmo instante, tudo o que ele tem aberto. */
+      sv: Number(operador.sessao_versao ?? 1),
     },
     config.jwtSegredo,
     { expiresIn: config.jwtValidade }
   );
+}
+
+/* Confere a versão de sessão contra o banco.
+
+   CUSTO: uma consulta indexada por requisição autenticada. Com ~30
+   operadores e o volume desta operação, é irrelevante — e a alternativa
+   (conferir só na renovação) deixaria de pé exatamente a janela de 12 horas
+   que este controle existe para fechar.
+
+   FALHA FECHADA, com uma exceção deliberada: se a consulta falhar por a
+   COLUNA não existir (servidor ainda não atualizado), a requisição segue —
+   caso contrário publicar o painel novo antes de rodar a migração derrubaria
+   os cinco setores de uma vez. Qualquer outra falha barra. */
+async function sessaoAindaVale(id, versaoDoToken) {
+  try {
+    const { rows } = await consultar(
+      'SELECT sessao_versao, ativo FROM operadores WHERE id = $1', [id]
+    );
+    const op = rows[0];
+    if (!op) return { vale: false, motivo: 'OPERADOR_INEXISTENTE' };
+    if (!op.ativo) return { vale: false, motivo: 'OPERADOR_INATIVO' };
+    if (Number(op.sessao_versao) !== Number(versaoDoToken ?? 1)) {
+      return { vale: false, motivo: 'SESSAO_REVOGADA' };
+    }
+    return { vale: true };
+  } catch (e) {
+    if (/sessao_versao/.test(e.message || '')) {
+      console.warn('[auth] coluna sessao_versao ausente — rode a migração 029');
+      return { vale: true };
+    }
+    console.error('[auth] falha ao conferir a sessão:', e.message);
+    return { vale: false, motivo: 'SESSAO_NAO_VERIFICAVEL' };
+  }
 }
 
 function extrairToken(req) {
@@ -29,13 +74,26 @@ function extrairToken(req) {
   return null;
 }
 
-export function exigirLogin(req, res, next) {
+export async function exigirLogin(req, res, next) {
   const token = extrairToken(req);
   if (!token) {
     return res.status(401).json({ erro: 'Faça login para continuar.', codigo: 'SEM_TOKEN' });
   }
   try {
     const p = jwt.verify(token, config.jwtSegredo);
+
+    const sessao = await sessaoAindaVale(p.sub, p.sv);
+    if (!sessao.vale) {
+      const revogada = sessao.motivo === 'SESSAO_REVOGADA' || sessao.motivo === 'OPERADOR_INATIVO';
+      console.warn(`[auth] sessão recusada (${sessao.motivo}) de`, req.ip, p.email || p.sub);
+      return res.status(401).json({
+        erro: revogada
+          ? 'Seu acesso foi encerrado por um administrador. Entre de novo.'
+          : 'Não consegui validar sua sessão. Entre de novo.',
+        codigo: sessao.motivo,
+      });
+    }
+
     req.operador = {
       id: p.sub,
       nome: p.nome,

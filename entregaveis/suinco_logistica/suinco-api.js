@@ -1217,7 +1217,13 @@ const SuincoSharePoint = (function () {
      precisa do Blob puro, e um erro do servidor (403/409/500) ainda vem em
      JSON, então os dois formatos de resposta precisam de tratamento
      próprio aqui. */
-  async function gerarRelatorioPdf({ html, css, orientacao = 'paisagem', nomeArquivo }) {
+  async function gerarRelatorioPdf({ html, css, orientacao = 'paisagem', nomeArquivo, tipo, recorte }) {
+    /* `tipo` é o dono do documento (etapa 1 do protocolo de segurança,
+       22/08/2026). O servidor recebe HTML montado e não tem como inferir
+       QUAL relatório é — por isso o painel declara, e o servidor valida
+       contra o setor. Documento sem tipo é recusado de propósito: falha
+       fechada, para que um documento esquecido no mapa apareça na primeira
+       tentativa em vez de virar porta aberta. */
     const t = lerToken();
     const tempo = sinalDeTimeout(45000); // Chromium subindo + renderizando: mais generoso que o timeout padrão de 20s
     let resposta;
@@ -1228,7 +1234,7 @@ const SuincoSharePoint = (function () {
           'content-type': 'application/json',
           ...(t ? { authorization: 'Bearer ' + t } : {}),
         },
-        body: JSON.stringify({ html, css, orientacao, nomeArquivo }),
+        body: JSON.stringify({ html, css, orientacao, nomeArquivo, tipo, recorte }),
         signal: tempo.signal,
       });
     } catch (e) {

@@ -24,7 +24,7 @@ rotasAuth.post('/login', limiteLogin, async (req, res, next) => {
     }
 
     const { rows } = await consultar(
-      'SELECT id, email, nome, setor, senha_hash, ativo FROM operadores WHERE email = $1',
+      'SELECT id, email, nome, setor, senha_hash, ativo, sessao_versao FROM operadores WHERE email = $1',
       [email]
     );
     const op = rows[0];
@@ -80,7 +80,7 @@ rotasAuth.get('/eu', exigirLogin, (req, res) => {
 rotasAuth.post('/renovar', exigirLogin, async (req, res, next) => {
   try {
     const { rows } = await consultar(
-      'SELECT id, email, nome, setor, ativo FROM operadores WHERE id = $1',
+      'SELECT id, email, nome, setor, ativo, sessao_versao FROM operadores WHERE id = $1',
       [req.operador.id]
     );
     const op = rows[0];

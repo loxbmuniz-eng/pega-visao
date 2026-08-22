@@ -8,6 +8,9 @@ import {
   saneiarEdicao, normalizarPlaca, idSeguro, camposDeAviso,
 } from '../dominio/cargas.js';
 import {
+  tipoCriticoValido, podeAprovar, MENSAGEM,
+} from '../dominio/acoes_criticas.js';
+import {
   validarTransicao, podeCriarCarga, podeRegistrarChegadaSemProgramacao,
   camposEditaveisPor, podeRegistrarSaida,
   ErroDeFluxo, ErroDePermissao, STATUS_INICIAL, STATUS_FLOW,
@@ -39,6 +42,44 @@ async function gravarEvento(cli, { cargaId, placa, de, para, operador, acao }) {
     [novoId('log'), cargaId, placa, acao, operador.setor, operador.id, operador.nome]
   );
   return movId;
+}
+
+/* GUARDA DA SEGUNDA ASSINATURA (etapa 3, 22/08/2026).
+
+   Consome um pedido APROVADO por outro administrador e o marca como
+   executado. Sem pedido aprovado, a rota recusa e devolve o que fazer —
+   pedir. O `acaoId` viaja no corpo da requisição de execução.
+
+   Marcar como executado dentro da MESMA transação da execução é o que
+   impede reuso: uma aprovação vale por uma execução, não por várias. */
+async function consumirAprovacao(cli, { acaoId, tipo, cargaId }) {
+  const id = Number(acaoId);
+  if (!Number.isInteger(id)) {
+    const e = new Error('Esta ação precisa de um pedido aprovado por outro administrador.');
+    e.status = 428; e.codigo = 'APROVACAO_NECESSARIA';
+    throw e;
+  }
+  const { rows } = await cli.query(
+    `SELECT * FROM acoes_criticas WHERE acao_id = $1 FOR UPDATE`, [id]
+  );
+  const pedido = rows[0];
+  if (!pedido || pedido.tipo !== tipo || pedido.carga_id !== cargaId) {
+    const e = new Error('O pedido aprovado não corresponde a esta ação.');
+    e.status = 409; e.codigo = 'APROVACAO_NAO_CONFERE';
+    throw e;
+  }
+  if (!pedido.aprovada_em) {
+    const e = new Error('Este pedido ainda não foi aprovado por outro administrador.');
+    e.status = 428; e.codigo = 'APROVACAO_PENDENTE';
+    throw e;
+  }
+  if (pedido.executada_em) {
+    const e = new Error('Este pedido já foi executado. Peça de novo se precisar repetir.');
+    e.status = 409; e.codigo = 'APROVACAO_JA_USADA';
+    throw e;
+  }
+  await cli.query('UPDATE acoes_criticas SET executada_em = now() WHERE acao_id = $1', [id]);
+  return pedido;
 }
 
 /* ---------------------------------------------------------------------
@@ -977,6 +1018,11 @@ rotasCargas.post('/cargas/:id/restaurar', exigirLogin, exigirSetor(), async (req
     const op = req.operador;
 
     const { linha } = await emTransacao(async (cli) => {
+      // Segunda assinatura: sem pedido aprovado por OUTRO administrador,
+      // nada é restaurado. Ver dominio/acoes_criticas.js.
+      await consumirAprovacao(cli, {
+        acaoId: req.body?.acaoId, tipo: 'restaurar', cargaId: id,
+      });
       const rev = await cli.query(
         'SELECT dados FROM carga_revisoes WHERE revisao_id = $1 AND carga_id = $2',
         [revisaoId, id]
@@ -1144,6 +1190,11 @@ rotasCargas.post('/cargas/:id/desfazer-exclusao', exigirLogin, exigirSetor(), as
     const op = req.operador;
 
     const resultado = await emTransacao(async (cli) => {
+      // Segunda assinatura (etapa 3): devolver carga excluída reescreve o
+      // passado do pátio e precisa de dois administradores.
+      await consumirAprovacao(cli, {
+        acaoId: req.body?.acaoId, tipo: 'desfazer-exclusao', cargaId: id,
+      });
       const { rows } = await cli.query(
         `SELECT ${COLUNAS_CARGA} FROM fact_viagens WHERE carga_id = $1 FOR UPDATE`, [id]
       );
@@ -1218,6 +1269,11 @@ rotasCargas.post('/cargas/:id/corrigir-etapa', exigirLogin, exigirSetor(), async
     const op = req.operador;
 
     const resultado = await emTransacao(async (cli) => {
+      // Segunda assinatura (etapa 3): voltar a etapa de uma carga reescreve
+      // a linha do tempo dela — dois administradores, com motivo.
+      await consumirAprovacao(cli, {
+        acaoId: req.body?.acaoId, tipo: 'corrigir-etapa', cargaId: id,
+      });
       const { rows } = await cli.query(
         `SELECT ${COLUNAS_CARGA} FROM fact_viagens
           WHERE carga_id = $1 AND excluida_em IS NULL FOR UPDATE`,
@@ -1452,6 +1508,154 @@ rotasCargas.get('/programacao-do-dia', exigirLogin, exigirSetor('Logística'), a
       excluidaEm: linha.excluida_em || null,
       excluidaPor: linha.excluida_por || '',
     })));
+  } catch (e) {
+    return next(e);
+  }
+});
+
+/* =====================================================================
+   AÇÕES CRÍTICAS — pedido e aprovação por dois administradores
+   =====================================================================
+   Etapa 3 do protocolo de segurança (22/08/2026). Ver
+   dominio/acoes_criticas.js para o porquê da regra.
+
+   As rotas antigas (`/restaurar`, `/desfazer-exclusao`, `/corrigir-etapa`)
+   continuam existindo e continuam sendo as que EXECUTAM — mas agora exigem
+   um pedido aprovado. Isso mantém toda a lógica de execução testada onde
+   ela sempre esteve, em vez de duplicá-la aqui. */
+
+rotasCargas.post('/acoes-criticas', exigirLogin, exigirSetor(), async (req, res, next) => {
+  try {
+    const op = req.operador;
+    const tipo = String(req.body?.tipo || '');
+    const cargaId = idSeguro(req.body?.cargaId);
+    const motivo = String(req.body?.motivo ?? '').trim().slice(0, 500);
+
+    if (!tipoCriticoValido(tipo)) {
+      return res.status(400).json({ erro: 'Tipo de ação inválido.', codigo: 'TIPO_INVALIDO' });
+    }
+    if (!cargaId) {
+      return res.status(400).json({ erro: 'Informe a carga.', codigo: 'CARGA_FALTANDO' });
+    }
+    if (!motivo) {
+      return res.status(400).json({
+        erro: 'Diga por que esta ação é necessária — quem aprova precisa disso para decidir.',
+        codigo: 'MOTIVO_OBRIGATORIO',
+      });
+    }
+
+    const { rows } = await consultar(
+      `INSERT INTO acoes_criticas (tipo, carga_id, parametros, motivo, pedida_por, pedida_por_id)
+       VALUES ($1,$2,$3,$4,$5,$6)
+       RETURNING acao_id, tipo, carga_id, motivo, pedida_por, pedida_em`,
+      [tipo, cargaId, JSON.stringify(req.body?.parametros || {}), motivo, op.nome, String(op.id)]
+    );
+
+    /* ALERTA IMEDIATO. Silêncio é o que o uso indevido precisa: uma ação
+       destrutiva que ninguém vê acontecer só é descoberta quando alguém
+       procura. Aqui os outros administradores sabem no mesmo instante. */
+    emitir('seguranca:pedido', {
+      acaoId: rows[0].acao_id, tipo, cargaId,
+      pedidaPor: op.nome, motivo,
+    });
+    console.log(`[seguranca] ${op.nome} pediu ${tipo} na carga ${cargaId}: ${motivo}`);
+
+    return res.status(201).json(rows[0]);
+  } catch (e) {
+    return next(e);
+  }
+});
+
+rotasCargas.get('/acoes-criticas', exigirLogin, exigirSetor(), async (req, res, next) => {
+  try {
+    const { rows } = await consultar(
+      `SELECT acao_id, tipo, carga_id, parametros, motivo, pedida_por, pedida_por_id,
+              pedida_em, aprovada_por, aprovada_em, executada_em, recusada_por,
+              recusada_em, recusa_motivo
+         FROM acoes_criticas
+        ORDER BY pedida_em DESC LIMIT 100`
+    );
+    return res.json(rows.map((r) => ({
+      ...r,
+      // Quem está olhando pode aprovar este pedido? A tela usa isto para não
+      // oferecer o botão a quem pediu — o servidor recusa de todo jeito.
+      podeAprovar: podeAprovar(r, req.operador.id).pode,
+    })));
+  } catch (e) {
+    return next(e);
+  }
+});
+
+rotasCargas.post('/acoes-criticas/:id/aprovar', exigirLogin, exigirSetor(), async (req, res, next) => {
+  try {
+    const op = req.operador;
+    const acaoId = Number(req.params.id);
+    if (!Number.isInteger(acaoId)) {
+      return res.status(400).json({ erro: 'Id inválido.', codigo: 'ID_INVALIDO' });
+    }
+
+    /* FOR UPDATE: dois administradores aprovando o mesmo pedido ao mesmo
+       tempo executariam a ação duas vezes. O bloqueio faz o segundo esperar
+       e encontrar o pedido já aprovado. */
+    const resultado = await emTransacao(async (cli) => {
+      const { rows } = await cli.query(
+        'SELECT * FROM acoes_criticas WHERE acao_id = $1 FOR UPDATE', [acaoId]
+      );
+      const pedido = rows[0];
+      const veredito = podeAprovar(pedido, op.id);
+      if (!veredito.pode) {
+        const e = new Error(MENSAGEM[veredito.motivo] || 'Pedido não pode ser aprovado.');
+        e.status = veredito.motivo === 'APROVADOR_E_O_MESMO' ? 403 : 409;
+        e.codigo = veredito.motivo;
+        throw e;
+      }
+      const { rows: upd } = await cli.query(
+        `UPDATE acoes_criticas
+            SET aprovada_por = $1, aprovada_por_id = $2, aprovada_em = now()
+          WHERE acao_id = $3
+          RETURNING acao_id, tipo, carga_id, parametros, motivo, pedida_por, aprovada_por, aprovada_em`,
+        [op.nome, String(op.id), acaoId]
+      );
+      return upd[0];
+    });
+
+    emitir('seguranca:aprovado', {
+      acaoId: resultado.acao_id, tipo: resultado.tipo,
+      cargaId: resultado.carga_id, pedidaPor: resultado.pedida_por,
+      aprovadaPor: op.nome,
+    });
+    console.log(`[seguranca] ${op.nome} APROVOU ${resultado.tipo} pedida por ${resultado.pedida_por}`);
+
+    return res.json(resultado);
+  } catch (e) {
+    return next(e);
+  }
+});
+
+rotasCargas.post('/acoes-criticas/:id/recusar', exigirLogin, exigirSetor(), async (req, res, next) => {
+  try {
+    const op = req.operador;
+    const acaoId = Number(req.params.id);
+    const motivo = String(req.body?.motivo ?? '').trim().slice(0, 500);
+    if (!Number.isInteger(acaoId)) {
+      return res.status(400).json({ erro: 'Id inválido.', codigo: 'ID_INVALIDO' });
+    }
+    // Recusa também é decisão auditável: fica com autor e motivo, igual à
+    // aprovação. "Não" sem registro não serve de evidência depois.
+    const { rows } = await consultar(
+      `UPDATE acoes_criticas
+          SET recusada_por = $1, recusada_em = now(), recusa_motivo = $2
+        WHERE acao_id = $3 AND aprovada_em IS NULL AND recusada_em IS NULL
+        RETURNING acao_id, tipo, carga_id, recusada_por, recusa_motivo`,
+      [op.nome, motivo, acaoId]
+    );
+    if (!rows[0]) {
+      return res.status(409).json({
+        erro: 'Pedido já decidido ou inexistente.', codigo: 'PEDIDO_JA_DECIDIDO',
+      });
+    }
+    console.log(`[seguranca] ${op.nome} recusou a ação ${acaoId}: ${motivo}`);
+    return res.json(rows[0]);
   } catch (e) {
     return next(e);
   }

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { consultar } from '../banco.js';
 import { exigirTokenBI } from '../middleware/auth.js';
+import { registrarLeitura } from '../servicos/registro_leitura.js';
 
 export const rotasBI = Router();
 
@@ -43,6 +44,17 @@ rotasBI.get('/:view', exigirTokenBI, async (req, res, next) => {
     }
 
     const { rows, fields } = await consultar(`SELECT * FROM ${tabela}`);
+
+    /* O token do BI não é uma pessoa — é uma chave. Por isso o registro
+       guarda a chave como operador e o endereço de origem: quando a mesma
+       chave começa a puxar a base de um IP novo, é isso que denuncia. */
+    await registrarLeitura({
+      tipo: `bi:${req.params.view}`,
+      detalhe: String(req.query.formato || 'json'),
+      linhas: rows.length,
+      operador: { id: 'token-bi', nome: 'Power BI', setor: 'Integração' },
+      ip: req.ip,
+    });
 
     if (String(req.query.formato) === 'csv') {
       const cabecalhos = fields.map((f) => f.name);

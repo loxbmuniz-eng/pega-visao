@@ -33,6 +33,18 @@ const OPERADORES = [
 ];
 const SENHA = 'senha-de-teste-123';
 
+/* DOIS administradores, não um.
+
+   A etapa 3 do protocolo de segurança (22/08/2026) exige que quem PEDE uma
+   ação crítica não seja quem APROVA. Um administrador só na bancada de teste
+   não conseguiria exercitar a regra — e uma regra que o teste não exercita é
+   uma regra que ninguém garante. */
+const ADMINS = [
+  ['admin1@teste.local', 'Admin Um', 'Administração'],
+  ['admin2@teste.local', 'Admin Dois', 'Administração'],
+];
+const adm = {};
+
 async function req(caminho, { metodo = 'GET', token, corpo, cabecalhos = {} } = {}) {
   const r = await fetch(base + caminho, {
     method: metodo,
@@ -58,7 +70,7 @@ before(async () => {
   await pool.query("DELETE FROM operadores WHERE email LIKE '%@teste.local'");
 
   const hash = await bcrypt.hash(SENHA, 4); // custo baixo: é teste
-  for (const [email, nome, setor] of OPERADORES) {
+  for (const [email, nome, setor] of [...OPERADORES, ...ADMINS]) {
     await pool.query(
       'INSERT INTO operadores (email, nome, setor, senha_hash) VALUES ($1,$2,$3,$4)',
       [email, nome, setor, hash]
@@ -74,7 +86,31 @@ before(async () => {
     assert.equal(r.status, 200, `login de ${email} falhou: ${r.texto}`);
     tokens[setor] = r.json.token;
   }
+  for (const [email, apelido] of ADMINS) {
+    const r = await req('/auth/login', { metodo: 'POST', corpo: { email, senha: SENHA } });
+    assert.equal(r.status, 200, `login de ${email} falhou: ${r.texto}`);
+    adm[apelido === 'Admin Um' ? 'a' : 'b'] = r.json.token;
+  }
+  // Compatibilidade: os blocos antigos usam tokens['Administração'].
+  tokens['Administração'] = adm.a;
 });
+
+/* Pede e aprova uma ação crítica, devolvendo o acaoId pronto para executar.
+
+   Existe porque três rotas passaram a exigir a mesma dança (pedir com um
+   administrador, aprovar com outro) e repetir isso em cada teste esconderia
+   o que cada teste realmente verifica. */
+async function acaoAprovada(tipo, cargaId, motivo = 'teste automatizado') {
+  const pedido = await req('/api/acoes-criticas', {
+    metodo: 'POST', token: adm.a, corpo: { tipo, cargaId, motivo },
+  });
+  assert.equal(pedido.status, 201, `pedido de ${tipo} falhou: ${pedido.texto}`);
+  const ap = await req(`/api/acoes-criticas/${pedido.json.acao_id}/aprovar`, {
+    metodo: 'POST', token: adm.b,
+  });
+  assert.equal(ap.status, 200, `aprovação de ${tipo} falhou: ${ap.texto}`);
+  return pedido.json.acao_id;
+}
 
 after(async () => {
   await new Promise((r) => servidor.close(r));
@@ -1671,7 +1707,7 @@ describe('13. Relatório em PDF gerado pelo SERVIDOR (A4 paisagem sempre)', () =
 
   test('sem html → 400', async () => {
     const r = await req('/api/relatorios/pdf', {
-      metodo: 'POST', token: tokens['Logística'], corpo: { css: CSS },
+      metodo: 'POST', token: tokens['Logística'], corpo: { css: CSS, tipo: 'relatorio-operacional' },
     });
     assert.equal(r.status, 400);
     assert.equal(r.json.codigo, 'HTML_FALTANDO');
@@ -1679,7 +1715,7 @@ describe('13. Relatório em PDF gerado pelo SERVIDOR (A4 paisagem sempre)', () =
 
   test('sem css → 400', async () => {
     const r = await req('/api/relatorios/pdf', {
-      metodo: 'POST', token: tokens['Logística'], corpo: { html: HTML },
+      metodo: 'POST', token: tokens['Logística'], corpo: { html: HTML, tipo: 'relatorio-operacional' },
     });
     assert.equal(r.status, 400);
     assert.equal(r.json.codigo, 'CSS_FALTANDO');
@@ -1688,26 +1724,79 @@ describe('13. Relatório em PDF gerado pelo SERVIDOR (A4 paisagem sempre)', () =
   test('conteúdo absurdamente grande → 413 (não derruba o servidor gerando)', async () => {
     const r = await req('/api/relatorios/pdf', {
       metodo: 'POST', token: tokens['Logística'],
-      corpo: { html: 'x'.repeat(3_000_001), css: CSS },
+      corpo: { html: 'x'.repeat(3_000_001), css: CSS, tipo: 'relatorio-operacional' },
     });
     assert.equal(r.status, 413);
     assert.equal(r.json.codigo, 'CONTEUDO_GRANDE_DEMAIS');
   });
 
-  test('qualquer setor logado consegue gerar (relatório é leitura, não muda estado)', async () => {
+  /* A REGRA INVERTEU EM 22/08/2026 (etapa 1 do protocolo de segurança).
+
+     Antes: qualquer setor logado gerava qualquer relatório, com o argumento
+     de que relatório é leitura e não muda estado. O argumento estava errado —
+     relatório é o que ATRAVESSA A FRONTEIRA DA EMPRESA. A Portaria podia
+     exportar a operação inteira em PDF, e ninguém ficava sabendo. */
+  test('documento tem dono: a Portaria NÃO gera o Relatório Operacional', async () => {
+    const r = await req('/api/relatorios/pdf', {
+      metodo: 'POST', token: tokens['Portaria'],
+      corpo: { html: HTML, css: CSS, tipo: 'relatorio-operacional' },
+    });
+    assert.equal(r.status, 403);
+    assert.equal(r.json.codigo, 'DOCUMENTO_SEM_PERMISSAO');
+  });
+
+  test('a Portaria GERA o comprovante dela — o dono é por documento, não bloqueio geral', async () => {
     const r = await fetch(base + '/api/relatorios/pdf', {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${tokens['Portaria']}` },
-      body: JSON.stringify({ html: HTML, css: CSS }),
+      body: JSON.stringify({ html: HTML, css: CSS, tipo: 'comprovante-portaria' }),
     });
     assert.equal(r.status, 200, await r.text());
+  });
+
+  test('documento sem tipo é recusado — falha FECHADA, não aberta', async () => {
+    const r = await req('/api/relatorios/pdf', {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { html: HTML, css: CSS },
+    });
+    assert.equal(r.status, 400);
+    assert.equal(r.json.codigo, 'DOCUMENTO_DESCONHECIDO');
+  });
+
+  test('a tentativa barrada fica REGISTRADA — negativa repetida é sinal, não silêncio', async () => {
+    await req('/api/relatorios/pdf', {
+      metodo: 'POST', token: tokens['Portaria'],
+      corpo: { html: HTML, css: CSS, tipo: 'relatorio-executivo' },
+    });
+    const { rows } = await pool.query(
+      `SELECT operador_setor FROM log_leitura
+        WHERE tipo = 'pdf:relatorio-executivo' AND NOT permitido
+        ORDER BY leitura_id DESC LIMIT 1`
+    );
+    assert.ok(rows[0], 'a tentativa barrada precisa estar no registro');
+    assert.equal(rows[0].operador_setor, 'Portaria');
+  });
+
+  test('a geração autorizada também fica registrada', async () => {
+    const antes = (await pool.query(
+      "SELECT count(*)::int n FROM log_leitura WHERE tipo = 'pdf:relatorio-operacional' AND permitido"
+    )).rows[0].n;
+    await fetch(base + '/api/relatorios/pdf', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${tokens['Logística']}` },
+      body: JSON.stringify({ html: HTML, css: CSS, tipo: 'relatorio-operacional', recorte: '22/08/2026' }),
+    });
+    const depois = (await pool.query(
+      "SELECT count(*)::int n FROM log_leitura WHERE tipo = 'pdf:relatorio-operacional' AND permitido"
+    )).rows[0].n;
+    assert.equal(depois, antes + 1, 'toda geração de documento entra no registro');
   });
 
   test('devolve PDF de verdade, em A4 PAISAGEM — medido nos bytes, não no CSS', async () => {
     const r = await fetch(base + '/api/relatorios/pdf', {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${tokens['Logística']}` },
-      body: JSON.stringify({ html: HTML, css: CSS, nomeArquivo: 'Teste' }),
+      body: JSON.stringify({ html: HTML, css: CSS, tipo: 'relatorio-operacional', nomeArquivo: 'Teste' }),
     });
     // O corpo só pode ser lido UMA vez: ler aqui, antes de qualquer
     // assert que pudesse consumi-lo na mensagem de erro.
@@ -1736,7 +1825,7 @@ describe('13. Relatório em PDF gerado pelo SERVIDOR (A4 paisagem sempre)', () =
     const r = await fetch(base + '/api/relatorios/pdf', {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${tokens['Logística']}` },
-      body: JSON.stringify({ html: HTML, css: CSS, orientacao: 'retrato' }),
+      body: JSON.stringify({ html: HTML, css: CSS, orientacao: 'retrato', tipo: 'relatorio-operacional' }),
     });
     assert.equal(r.status, 200);
     const texto = Buffer.from(await r.arrayBuffer()).toString('latin1');
@@ -1749,7 +1838,7 @@ describe('13. Relatório em PDF gerado pelo SERVIDOR (A4 paisagem sempre)', () =
     const r = await fetch(base + '/api/relatorios/pdf', {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${tokens['Logística']}` },
-      body: JSON.stringify({ html: HTML, css: CSS, nomeArquivo: '../../etc/Relatório Operacional' }),
+      body: JSON.stringify({ html: HTML, css: CSS, tipo: 'relatorio-operacional', nomeArquivo: '../../etc/Relatório Operacional' }),
     });
     assert.equal(r.status, 200);
     const disp = r.headers.get('content-disposition') || '';
@@ -2191,8 +2280,10 @@ describe('19. Revisões e Restaurar (Administração)', () => {
   test('restaurar volta os campos e deixa trilha de auditoria', async () => {
     const lista = await req(`/api/cargas/${idCarga}/revisoes`, { token: tokenAdmin });
     const alvo = lista.json[0].revisaoId;
+    const acaoR = await acaoAprovada('restaurar', idCarga);
     const r = await req(`/api/cargas/${idCarga}/restaurar`, {
-      metodo: 'POST', token: tokenAdmin, corpo: { revisaoId: alvo },
+      metodo: 'POST', token: tokenAdmin,
+      corpo: { acaoId: acaoR, revisaoId: alvo },
     });
     assert.equal(r.status, 200);
     assert.equal(r.json.peso, 20500, 'o peso voltou ao valor da revisão');
@@ -2511,8 +2602,10 @@ describe('23. Desfazer exclusão de carga', () => {
   });
 
   test('Administração devolve a carga, com trilha, e ela reaparece na leitura', async () => {
+    const acaoD = await acaoAprovada('desfazer-exclusao', id);
     const r = await req(`/api/cargas/${id}/desfazer-exclusao`, {
-      metodo: 'POST', token: admin, corpo: { motivo: 'excluída por engano — processo do dia anterior' },
+      metodo: 'POST', token: admin,
+      corpo: { acaoId: acaoD, motivo: 'excluída por engano — processo do dia anterior' },
     });
     assert.equal(r.status, 200, r.texto);
     assert.equal(r.json.excluida, false);
@@ -2527,8 +2620,10 @@ describe('23. Desfazer exclusão de carga', () => {
   });
 
   test('devolver uma carga que não estava excluída não quebra nada', async () => {
+    // Aprovação é de uso único: repetir a ação exige pedir de novo.
+    const acaoD2 = await acaoAprovada('desfazer-exclusao', id);
     const r = await req(`/api/cargas/${id}/desfazer-exclusao`, {
-      metodo: 'POST', token: admin, corpo: { motivo: 'repetido' },
+      metodo: 'POST', token: admin, corpo: { acaoId: acaoD2, motivo: 'repetido' },
     });
     assert.equal(r.status, 200);
     assert.equal(r.json.excluida, false);
@@ -2596,9 +2691,13 @@ describe('24. Correção de etapa pela Administração', () => {
   });
 
   test('a Administração VOLTA a carga de Seguiu Viagem para Faturado, com trilha', async () => {
+    const acaoC = await acaoAprovada('corrigir-etapa', id);
     const r = await req(`/api/cargas/${id}/corrigir-etapa`, {
       metodo: 'POST', token: admin,
-      corpo: { status: 'Faturado', motivo: 'saída registrada por engano — o caminhão ainda está no pátio' },
+      corpo: {
+        acaoId: acaoC, status: 'Faturado',
+        motivo: 'saída registrada por engano — o caminhão ainda está no pátio',
+      },
     });
     assert.equal(r.status, 200, r.texto);
     assert.equal(r.json.status, 'Faturado');
@@ -3218,5 +3317,216 @@ describe('30. Histórico da programação do dia — canceladas incluídas', () 
     const r = await req('/api/programacao-do-dia?dia=2001-01-01', { token: tokens['Logística'] });
     assert.equal(r.status, 200);
     assert.deepEqual(r.json.filter((c) => ['progdia_a', 'progdia_b'].includes(c.id)), []);
+  });
+});
+
+/* ------------------------------------------------------------------ */
+describe('31. Protocolo de segurança — sessão revogável (etapa 2)', () => {
+  /* A brecha B3: JWT vale até expirar. Desligar um operador deixava a sessão
+     dele viva por até 12 horas, em todos os aparelhos onde estivesse aberta.
+     A correção é um contador por operador, assinado no token e conferido no
+     banco a cada requisição. */
+  let id, token;
+
+  before(async () => {
+    const hash = await bcrypt.hash(SENHA, 4);
+    await pool.query(
+      `INSERT INTO operadores (email, nome, setor, senha_hash)
+       VALUES ('revoga@teste.local','Revoga','Logística',$1)
+       ON CONFLICT (email) DO UPDATE SET senha_hash = EXCLUDED.senha_hash, ativo = TRUE`,
+      [hash]
+    );
+    const r = await req('/auth/login', {
+      metodo: 'POST', corpo: { email: 'revoga@teste.local', senha: SENHA },
+    });
+    assert.equal(r.status, 200, r.texto);
+    token = r.json.token;
+    id = Number(r.json.operador?.id ?? (await pool.query(
+      "SELECT id FROM operadores WHERE email = 'revoga@teste.local'")).rows[0].id);
+  });
+
+  test('a sessão funciona normalmente antes de qualquer revogação', async () => {
+    const r = await req('/api/estado', { token });
+    assert.equal(r.status, 200);
+  });
+
+  test('DESATIVAR o operador derruba a sessão dele na requisição seguinte', async () => {
+    const p = await req(`/api/operadores/${id}`, {
+      metodo: 'PATCH', token: adm.a, corpo: { ativo: false },
+    });
+    assert.equal(p.status, 200, p.texto);
+
+    const r = await req('/api/estado', { token });
+    assert.equal(r.status, 401, 'o token continuou valendo depois do desligamento');
+    assert.ok(['OPERADOR_INATIVO', 'SESSAO_REVOGADA'].includes(r.json.codigo), r.json.codigo);
+  });
+
+  test('TROCAR A SENHA invalida as sessões antigas — senha nova com sessão velha não protege nada', async () => {
+    await req(`/api/operadores/${id}`, {
+      metodo: 'PATCH', token: adm.a, corpo: { ativo: true },
+    });
+    const novo = await req('/auth/login', {
+      metodo: 'POST', corpo: { email: 'revoga@teste.local', senha: SENHA },
+    });
+    assert.equal(novo.status, 200);
+    const tokenAntigo = novo.json.token;
+    assert.equal((await req('/api/estado', { token: tokenAntigo })).status, 200);
+
+    await req(`/api/operadores/${id}`, {
+      metodo: 'PATCH', token: adm.a, corpo: { senha: 'outra-senha-bem-longa-123' },
+    });
+    const r = await req('/api/estado', { token: tokenAntigo });
+    assert.equal(r.status, 401);
+    assert.equal(r.json.codigo, 'SESSAO_REVOGADA');
+  });
+
+  test('MUDAR O SETOR também revoga — o setor viaja dentro do token', async () => {
+    await req(`/api/operadores/${id}`, {
+      metodo: 'PATCH', token: adm.a, corpo: { senha: SENHA },
+    });
+    const novo = await req('/auth/login', {
+      metodo: 'POST', corpo: { email: 'revoga@teste.local', senha: SENHA },
+    });
+    const t = novo.json.token;
+    await req(`/api/operadores/${id}`, {
+      metodo: 'PATCH', token: adm.a, corpo: { setor: 'Portaria' },
+    });
+    const r = await req('/api/estado', { token: t });
+    assert.equal(r.status, 401, 'rebaixar de setor sem revogar deixaria as permissões antigas de pé');
+  });
+
+  after(async () => {
+    await pool.query("DELETE FROM operadores WHERE email = 'revoga@teste.local'");
+  });
+});
+
+/* ------------------------------------------------------------------ */
+describe('32. Protocolo de segurança — segunda assinatura (etapa 3)', () => {
+  /* A brecha B5: restaurar, desfazer exclusão e corrigir etapa não mudam o
+     pátio — mudam a HISTÓRIA do pátio. Eram as ferramentas de quem quer
+     esconder um erro, e estavam a um clique de um único administrador. */
+  let cargaId;
+
+  before(async () => {
+    const { rows } = await pool.query(
+      `SELECT v.placa FROM dim_veiculos v
+        LEFT JOIN fact_viagens f ON f.placa = v.placa AND f.excluida_em IS NULL
+       WHERE v.transportadora <> '' AND f.carga_id IS NULL ORDER BY v.placa LIMIT 1`);
+    const c = await req('/api/cargas', {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { id: 'seg_assinatura_1', placa: rows[0].placa, numeroCarga: 'SEG-1', peso: 1000 },
+    });
+    assert.equal(c.status, 201, c.texto);
+    cargaId = 'seg_assinatura_1';
+  });
+
+  test('executar SEM pedido aprovado é recusado, e a resposta diz o que fazer', async () => {
+    const r = await req(`/api/cargas/${cargaId}/corrigir-etapa`, {
+      metodo: 'POST', token: adm.a,
+      corpo: { status: 'Faturado', motivo: 'sem pedido' },
+    });
+    assert.equal(r.status, 428);
+    assert.equal(r.json.codigo, 'APROVACAO_NECESSARIA');
+  });
+
+  test('pedido sem motivo é recusado — quem aprova precisa saber por quê', async () => {
+    const r = await req('/api/acoes-criticas', {
+      metodo: 'POST', token: adm.a, corpo: { tipo: 'corrigir-etapa', cargaId },
+    });
+    assert.equal(r.status, 400);
+    assert.equal(r.json.codigo, 'MOTIVO_OBRIGATORIO');
+  });
+
+  test('QUEM PEDE NÃO APROVA — é a regra central do controle', async () => {
+    const p = await req('/api/acoes-criticas', {
+      metodo: 'POST', token: adm.a,
+      corpo: { tipo: 'corrigir-etapa', cargaId, motivo: 'tentando aprovar a si mesmo' },
+    });
+    assert.equal(p.status, 201);
+    const r = await req(`/api/acoes-criticas/${p.json.acao_id}/aprovar`, {
+      metodo: 'POST', token: adm.a,
+    });
+    assert.equal(r.status, 403);
+    assert.equal(r.json.codigo, 'APROVADOR_E_O_MESMO');
+  });
+
+  test('a Logística não pede nem aprova ação crítica', async () => {
+    const r = await req('/api/acoes-criticas', {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { tipo: 'restaurar', cargaId, motivo: 'x' },
+    });
+    assert.equal(r.status, 403);
+  });
+
+  test('aprovado por OUTRO administrador, a ação executa — e os dois nomes ficam registrados', async () => {
+    const p = await req('/api/acoes-criticas', {
+      metodo: 'POST', token: adm.a,
+      corpo: { tipo: 'corrigir-etapa', cargaId, motivo: 'entrada registrada por engano' },
+    });
+    const ap = await req(`/api/acoes-criticas/${p.json.acao_id}/aprovar`, {
+      metodo: 'POST', token: adm.b,
+    });
+    assert.equal(ap.status, 200, ap.texto);
+
+    await req(`/api/cargas/${cargaId}/status`, {
+      metodo: 'POST', token: tokens['Portaria'], corpo: { status: 'Aguardando Embarque' },
+    });
+    const r = await req(`/api/cargas/${cargaId}/corrigir-etapa`, {
+      metodo: 'POST', token: adm.a,
+      corpo: { acaoId: p.json.acao_id, status: 'Aguardando Veículo', motivo: 'entrada registrada por engano' },
+    });
+    assert.equal(r.status, 200, r.texto);
+
+    const { rows } = await pool.query(
+      'SELECT pedida_por, aprovada_por, executada_em FROM acoes_criticas WHERE acao_id = $1',
+      [p.json.acao_id]
+    );
+    assert.equal(rows[0].pedida_por, 'Admin Um');
+    assert.equal(rows[0].aprovada_por, 'Admin Dois');
+    assert.ok(rows[0].executada_em, 'a execução precisa ficar carimbada');
+  });
+
+  test('a MESMA aprovação não serve duas vezes', async () => {
+    const { rows } = await pool.query(
+      `SELECT acao_id FROM acoes_criticas
+        WHERE carga_id = $1 AND executada_em IS NOT NULL ORDER BY acao_id DESC LIMIT 1`,
+      [cargaId]
+    );
+    const r = await req(`/api/cargas/${cargaId}/corrigir-etapa`, {
+      metodo: 'POST', token: adm.a,
+      corpo: { acaoId: rows[0].acao_id, status: 'Faturado', motivo: 'reusando aprovação' },
+    });
+    assert.equal(r.status, 409);
+    assert.equal(r.json.codigo, 'APROVACAO_JA_USADA');
+  });
+
+  test('aprovação de OUTRA carga não vale para esta', async () => {
+    const p = await req('/api/acoes-criticas', {
+      metodo: 'POST', token: adm.a,
+      corpo: { tipo: 'corrigir-etapa', cargaId: 'carga_outra_qualquer', motivo: 'de outra carga' },
+    });
+    await req(`/api/acoes-criticas/${p.json.acao_id}/aprovar`, { metodo: 'POST', token: adm.b });
+    const r = await req(`/api/cargas/${cargaId}/corrigir-etapa`, {
+      metodo: 'POST', token: adm.a,
+      corpo: { acaoId: p.json.acao_id, status: 'Faturado', motivo: 'aprovação de outra carga' },
+    });
+    assert.equal(r.status, 409);
+    assert.equal(r.json.codigo, 'APROVACAO_NAO_CONFERE');
+  });
+
+  test('a recusa também fica registrada, com autor e motivo', async () => {
+    const p = await req('/api/acoes-criticas', {
+      metodo: 'POST', token: adm.a,
+      corpo: { tipo: 'restaurar', cargaId, motivo: 'pedido que será recusado' },
+    });
+    const r = await req(`/api/acoes-criticas/${p.json.acao_id}/recusar`, {
+      metodo: 'POST', token: adm.b, corpo: { motivo: 'não procede' },
+    });
+    assert.equal(r.status, 200);
+    assert.equal(r.json.recusada_por, 'Admin Dois');
+    const seg = await req(`/api/acoes-criticas/${p.json.acao_id}/aprovar`, {
+      metodo: 'POST', token: adm.b,
+    });
+    assert.equal(seg.status, 409, 'pedido recusado não pode ser aprovado depois');
   });
 });
