@@ -66,7 +66,10 @@ bash "$BASE/diagnostico.sh" || true   # o diagnóstico sai != 0 quando acha
 azul "4. Resumo"
 COMMIT="$(git rev-parse --short HEAD)"
 ATIVO="$(systemctl is-active embarque-suinco 2>/dev/null || echo desconhecido)"
-SAUDE="$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/health 2>/dev/null || echo 000)"
+# Ver a nota em diagnostico.sh: curl imprime "000" E sai com erro quando
+# não conecta; com `|| echo 000` o valor viraria "000 000".
+SAUDE="$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/health 2>/dev/null || true)"
+SAUDE="${SAUDE:-000}"
 
 # As migrações aplicadas são o que decide se a exclusão de carga funciona.
 # Sem esta linha, "o serviço está no ar" esconde um banco de outra versão.

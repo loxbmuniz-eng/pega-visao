@@ -185,7 +185,22 @@ RECUSAS="$(journalctl -u embarque-suinco --since "$JANELA" --no-pager 2>/dev/nul
   | grep -c 'POST /auth/login.*401' )"
 [[ "${RECUSAS:-0}" -gt 0 ]] && info "$RECUSAS tentativa(s) de login com senha errada desde '$JANELA'"
 
-NGINX_5XX="$(grep -c ' 50[0-9] ' /var/log/nginx/error.log 2>/dev/null || echo 0)"
+# `grep -c` e `curl -w` SAEM COM ERRO E IMPRIMEM AO MESMO TEMPO.
+#
+# Foi o que quebrou o diagnóstico em 22/08/2026, com esta mensagem no
+# terminal do gestor:
+#
+#     diagnostico.sh: line 189: [[: 0 0: syntax error in expression
+#
+# `grep -c` imprime "0" e sai com código 1 quando não acha nada — "não
+# achei" é erro para o grep. Aí o `|| echo 0` dispara EM CIMA de um zero
+# que já foi impresso, a variável vira "0 0", e a comparação numérica
+# quebra. O mesmo vale para `curl -w '%{http_code}'`, que imprime "000" e
+# sai com erro quando não conecta.
+#
+# A saída é `|| true` (que não imprime nada) e o valor padrão aplicado na
+# expansão, não no comando.
+NGINX_5XX="$(grep -c ' 50[0-9] ' /var/log/nginx/error.log 2>/dev/null || true)"
 [[ "${NGINX_5XX:-0}" -gt 0 ]] && aviso "$NGINX_5XX erro(s) 5xx no log do Nginx"
 
 # --- 8. Versão publicada ---------------------------------------------

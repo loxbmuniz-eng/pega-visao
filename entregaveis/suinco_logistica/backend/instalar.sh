@@ -433,7 +433,10 @@ ok "/health respondeu: $SAUDE"
 # Aqui vai pelo endereço público, com HTTPS de verdade. Se o certificado,
 # o Nginx ou o DNS estiverem errados, falha aqui — que é onde deve falhar.
 if getent hosts "$DOMINIO_API" >/dev/null; then
-  CODIGO="$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "https://$DOMINIO_API/health" || echo 000)"
+  # curl imprime o código E sai com erro quando não conecta — `|| echo 000`
+  # duplicaria o valor. Ver a nota em diagnostico.sh.
+  CODIGO="$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "https://$DOMINIO_API/health" || true)"
+  CODIGO="${CODIGO:-000}"
   if [[ "$CODIGO" == "200" ]]; then
     ok "https://$DOMINIO_API/health respondeu 200 (o caminho do navegador)"
   else
