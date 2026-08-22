@@ -278,15 +278,29 @@ const SuincoSharePoint = (function () {
   /* ---------------------------------------------------------------
      Login
      --------------------------------------------------------------- */
-  async function login(email, senha) {
+  async function login(email, senha, codigo) {
     const r = await chamar('/auth/login', {
       metodo: 'POST',
-      corpo: { email, senha },
+      // `codigo` só é enviado quando existe: quem não ativou o segundo fator
+      // não manda campo vazio, e o servidor não precisa distinguir os dois.
+      corpo: codigo ? { email, senha, codigo } : { email, senha },
     });
     guardarToken(r.token, r.operador);
     await iniciar();
     return r.operador;
   }
+
+  /* Segundo fator (etapa 4 do protocolo de segurança, 22/08/2026). */
+  const mfa = {
+    situacao: () => chamar('/auth/mfa/situacao'),
+    iniciar: () => chamar('/auth/mfa/iniciar', { metodo: 'POST' }),
+    confirmar: (codigo) => chamar('/auth/mfa/confirmar', { metodo: 'POST', corpo: { codigo } }),
+    desativar: (senha) => chamar('/auth/mfa/desativar', { metodo: 'POST', corpo: { senha } }),
+    resetarDe: (id, motivo) => chamar(
+      `/api/operadores/${encodeURIComponent(id)}/mfa/resetar`,
+      { metodo: 'POST', corpo: { motivo } }
+    ),
+  };
 
   function sair() {
     pararSincronia();
@@ -1372,7 +1386,7 @@ const SuincoSharePoint = (function () {
     push, upsert, excluir, mudarStatus, encerrarProgramacoesAnteriores, reterLacre,
     recarregarRotas,
     corrigirEtapa, corrigirDataProgramacao, desfazerExclusao, listarExcluidas,
-    programacaoDoDia,
+    programacaoDoDia, mfa,
     pull, pullTudo, drenarFila, pendentes,
     listarOperadores, criarOperador, atualizarOperador,
     sincronizarAgora, iniciarSincroniaPeriodica, pararSincronia, ultimaSincronia,

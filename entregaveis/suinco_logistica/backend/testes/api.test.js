@@ -11,6 +11,7 @@
 import { test, before, after, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import bcrypt from 'bcryptjs';
+import { codigoDoMomento } from '../src/dominio/totp.js';
 import jwt from 'jsonwebtoken';
 
 import { criarServidor, chaveDoLimiteGeral } from '../src/servidor.js';
@@ -3528,5 +3529,169 @@ describe('32. Protocolo de segurança — segunda assinatura (etapa 3)', () => {
       metodo: 'POST', token: adm.b,
     });
     assert.equal(seg.status, 409, 'pedido recusado não pode ser aprovado depois');
+  });
+});
+
+/* ------------------------------------------------------------------ */
+describe('33. Protocolo de segurança — segundo fator (etapa 4)', () => {
+  /* A brecha B4: senha vazada de administrador dá poder de restaurar,
+     apagar e criar usuário. Senha sozinha protege contra quem não sabe a
+     senha; não protege contra quem a descobriu.
+
+     REGRA DE IMPLANTAÇÃO que estes testes também guardam: o segundo fator
+     nasce DESLIGADO. Publicar não pode derrubar o login de ninguém. */
+  let id, token, segredo, codigosRec;
+  const EMAIL = 'mfa@teste.local';
+
+  before(async () => {
+    const hash = await bcrypt.hash(SENHA, 4);
+    await pool.query(
+      `INSERT INTO operadores (email, nome, setor, senha_hash)
+       VALUES ($1,'Fator Duplo','Logística',$2)
+       ON CONFLICT (email) DO UPDATE
+         SET senha_hash = EXCLUDED.senha_hash, ativo = TRUE,
+             mfa_ativo = FALSE, mfa_segredo = ''`,
+      [EMAIL, hash]
+    );
+    const r = await req('/auth/login', { metodo: 'POST', corpo: { email: EMAIL, senha: SENHA } });
+    assert.equal(r.status, 200, r.texto);
+    token = r.json.token;
+    id = (await pool.query('SELECT id FROM operadores WHERE email = $1', [EMAIL])).rows[0].id;
+  });
+
+  test('quem NÃO ativou entra só com a senha — a adesão é por pessoa', async () => {
+    const r = await req('/auth/login', { metodo: 'POST', corpo: { email: EMAIL, senha: SENHA } });
+    assert.equal(r.status, 200, 'publicar o segundo fator não pode derrubar quem não ativou');
+  });
+
+  test('iniciar devolve o segredo e o endereço do aplicativo', async () => {
+    const r = await req('/auth/mfa/iniciar', { metodo: 'POST', token });
+    assert.equal(r.status, 200, r.texto);
+    assert.ok(r.json.segredo && r.json.segredo.length >= 16);
+    assert.match(r.json.endereco, /^otpauth:\/\/totp\//);
+    segredo = r.json.segredo;
+  });
+
+  test('iniciar NÃO liga o segundo fator — quem fecha a tela no meio não fica trancado fora', async () => {
+    const { rows } = await pool.query('SELECT mfa_ativo FROM operadores WHERE id = $1', [id]);
+    assert.equal(rows[0].mfa_ativo, false);
+    const r = await req('/auth/login', { metodo: 'POST', corpo: { email: EMAIL, senha: SENHA } });
+    assert.equal(r.status, 200, 'segredo gerado e não confirmado não pode cobrar código');
+  });
+
+  test('confirmar com código errado é recusado', async () => {
+    const r = await req('/auth/mfa/confirmar', {
+      metodo: 'POST', token, corpo: { codigo: '000000' },
+    });
+    assert.equal(r.status, 400);
+    assert.equal(r.json.codigo, 'MFA_CODIGO_INVALIDO');
+  });
+
+  test('confirmar com o código certo ativa e entrega os códigos de recuperação', async () => {
+    const r = await req('/auth/mfa/confirmar', {
+      metodo: 'POST', token, corpo: { codigo: codigoDoMomento(segredo) },
+    });
+    assert.equal(r.status, 200, r.texto);
+    assert.equal(r.json.ativo, true);
+    assert.equal(r.json.codigosRecuperacao.length, 8);
+    codigosRec = r.json.codigosRecuperacao;
+
+    // Guardados com HASH: quem ler o banco não pode usá-los para entrar.
+    const { rows } = await pool.query(
+      'SELECT codigo_hash FROM mfa_codigos_recuperacao WHERE operador_id = $1 LIMIT 1', [id]
+    );
+    assert.ok(!codigosRec.includes(rows[0].codigo_hash), 'código de recuperação em claro no banco');
+  });
+
+  test('depois de ativo, a senha sozinha NÃO entra mais', async () => {
+    const r = await req('/auth/login', { metodo: 'POST', corpo: { email: EMAIL, senha: SENHA } });
+    assert.equal(r.status, 401);
+    assert.equal(r.json.codigo, 'MFA_NECESSARIO');
+  });
+
+  test('senha certa + código do aplicativo entra', async () => {
+    const r = await req('/auth/login', {
+      metodo: 'POST', corpo: { email: EMAIL, senha: SENHA, codigo: codigoDoMomento(segredo) },
+    });
+    assert.equal(r.status, 200, r.texto);
+    token = r.json.token;
+  });
+
+  test('senha ERRADA com código certo não entra — o segundo fator soma, não substitui', async () => {
+    const r = await req('/auth/login', {
+      metodo: 'POST', corpo: { email: EMAIL, senha: 'errada', codigo: codigoDoMomento(segredo) },
+    });
+    assert.equal(r.status, 401);
+    assert.equal(r.json.codigo, 'CREDENCIAL_INVALIDA');
+  });
+
+  test('CELULAR PERDIDO: um código de recuperação entra', async () => {
+    const r = await req('/auth/login', {
+      metodo: 'POST', corpo: { email: EMAIL, senha: SENHA, codigo: codigosRec[0] },
+    });
+    assert.equal(r.status, 200, r.texto);
+  });
+
+  test('o mesmo código de recuperação NÃO serve duas vezes', async () => {
+    const r = await req('/auth/login', {
+      metodo: 'POST', corpo: { email: EMAIL, senha: SENHA, codigo: codigosRec[0] },
+    });
+    assert.equal(r.status, 401);
+    assert.equal(r.json.codigo, 'MFA_INVALIDO');
+  });
+
+  test('a situação mostra quantos códigos ainda restam', async () => {
+    const entrou = await req('/auth/login', {
+      metodo: 'POST', corpo: { email: EMAIL, senha: SENHA, codigo: codigoDoMomento(segredo) },
+    });
+    const r = await req('/auth/mfa/situacao', { token: entrou.json.token });
+    assert.equal(r.status, 200);
+    assert.equal(r.json.mfa_ativo, true);
+    assert.equal(r.json.codigos_restantes, 7, 'um código foi gasto no teste anterior');
+  });
+
+  test('desativar exige a SENHA — terminal destravado não desliga o segundo fator', async () => {
+    const entrou = await req('/auth/login', {
+      metodo: 'POST', corpo: { email: EMAIL, senha: SENHA, codigo: codigoDoMomento(segredo) },
+    });
+    const r = await req('/auth/mfa/desativar', {
+      metodo: 'POST', token: entrou.json.token, corpo: { senha: 'chute' },
+    });
+    assert.equal(r.status, 401);
+    assert.equal(r.json.codigo, 'SENHA_INVALIDA');
+  });
+
+  test('a Administração RESETA o segundo fator de quem perdeu o celular — com motivo', async () => {
+    const semMotivo = await req(`/api/operadores/${id}/mfa/resetar`, {
+      metodo: 'POST', token: adm.a, corpo: {},
+    });
+    assert.equal(semMotivo.status, 400);
+    assert.equal(semMotivo.json.codigo, 'MOTIVO_OBRIGATORIO');
+
+    const r = await req(`/api/operadores/${id}/mfa/resetar`, {
+      metodo: 'POST', token: adm.a,
+      corpo: { motivo: 'celular quebrado, sem os códigos de recuperação' },
+    });
+    assert.equal(r.status, 200, r.texto);
+
+    const { rows } = await pool.query(
+      'SELECT mfa_ativo, mfa_segredo FROM operadores WHERE id = $1', [id]
+    );
+    assert.equal(rows[0].mfa_ativo, false);
+    assert.equal(rows[0].mfa_segredo, '', 'o segredo antigo precisa sumir no reset');
+
+    const volta = await req('/auth/login', { metodo: 'POST', corpo: { email: EMAIL, senha: SENHA } });
+    assert.equal(volta.status, 200, 'depois do reset a pessoa volta com a senha');
+  });
+
+  test('a Logística NÃO reseta o segundo fator de ninguém', async () => {
+    const r = await req(`/api/operadores/${id}/mfa/resetar`, {
+      metodo: 'POST', token: tokens['Logística'], corpo: { motivo: 'tentativa' },
+    });
+    assert.equal(r.status, 403);
+  });
+
+  after(async () => {
+    await pool.query('DELETE FROM operadores WHERE email = $1', [EMAIL]);
   });
 });

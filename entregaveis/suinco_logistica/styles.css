@@ -3702,3 +3702,31 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
 }
 .btn-progdia:hover{ color:var(--gold-text); border-color:var(--gold-dim) }
 .btn-progdia .ico{ width:14px; height:14px }
+
+/* =====================================================================
+   SEGUNDO FATOR (aba Usuários) — etapa 4 do protocolo de segurança
+   ===================================================================== */
+.mfa-passos{ display:flex; flex-direction:column; gap:14px }
+.mfa-passo{ font-size:14.5px; line-height:1.6 }
+/* A chave é digitada à mão no celular: monoespaçada, grande e agrupada de
+   quatro em quatro, que é como se lê número de cartão sem errar. */
+.mfa-segredo{
+  font-family:ui-monospace,Menlo,Consolas,monospace; font-size:18px; font-weight:700;
+  letter-spacing:.12em; color:var(--gold-text); background:var(--navy-light);
+  border:1px solid var(--gold-dim); border-radius:6px;
+  padding:10px 14px; margin:8px 0 4px; word-break:break-all;
+}
+.mfa-ativo{ font-size:14.5px }
+.mfa-recuperacao{
+  border:1px solid var(--gold-dim); border-radius:8px;
+  background:var(--navy-light); padding:16px 18px;
+}
+.mfa-recuperacao-tit{ font-weight:800; color:var(--gold-text); margin-bottom:4px }
+.mfa-codigos{
+  display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr));
+  gap:8px; margin-top:12px;
+}
+.mfa-codigos span{
+  font-family:ui-monospace,Menlo,Consolas,monospace; font-size:14px; font-weight:600;
+  background:var(--vidro-brilho); border-radius:4px; padding:7px 10px; text-align:center;
+}
