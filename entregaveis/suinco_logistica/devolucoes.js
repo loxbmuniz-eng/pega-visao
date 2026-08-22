@@ -1291,7 +1291,7 @@ async function comprovantePortariaUI(id) {
         + 'Substitui a anotação à mão do porteiro.',
         '', '')}
     </div>`;
-  await exportarViaServidor(el, `Comprovante-Devolucao-${d.numero}`);
+  await exportarViaServidor(el, `Comprovante-Devolucao-${d.numero}`, 'comprovante-portaria');
 }
 
 /* ---------- relatório do dia (mesmo padrão dos demais) ---------- */
@@ -1418,7 +1418,7 @@ async function relatorioDevolucoesUI(diaParam) {
         '')}
     </div>`;
 
-  await exportarViaServidor(el, `Devolucoes-${dia}`);
+  await exportarViaServidor(el, `Devolucoes-${dia}`, 'devolucoes-do-dia');
 }
 
 /* ---------- tempo real ---------- */
@@ -1838,5 +1838,5 @@ async function relatorioOperadorDevolucoesUI(idChecklist) {
         '')}
     </div>`;
 
-  await exportarViaServidor(el, `Devolucao-Operador-${lista[0].numero}-${dia}`);
+  await exportarViaServidor(el, `Devolucao-Operador-${lista[0].numero}-${dia}`, 'devolucao-operador');
 }

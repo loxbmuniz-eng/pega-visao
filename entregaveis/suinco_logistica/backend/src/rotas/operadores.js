@@ -137,6 +137,25 @@ rotasOperadores.patch('/operadores/:id', SO_ADMIN, async (req, res, next) => {
       campos.senha_hash = await bcrypt.hash(senha, CUSTO_BCRYPT);
     }
 
+    /* REVOGAÇÃO IMEDIATA (etapa 2 do protocolo de segurança, 22/08/2026).
+
+       Três mudanças precisam derrubar as sessões abertas da pessoa, na hora:
+
+         DESATIVAR   — é o caso do desligamento. Sem isto, a pessoa seguia
+                       usando o painel por até 12 horas depois de perder o
+                       acesso, em qualquer aparelho onde já estivesse dentro.
+         TROCAR SENHA— senha nova com sessão velha viva não protege de nada:
+                       quem tinha a antiga continua dentro.
+         MUDAR SETOR — o setor viaja DENTRO do token. Sem revogar, a pessoa
+                       carregaria as permissões do setor antigo até o token
+                       expirar — inclusive depois de ser rebaixada.
+
+       Reativar NÃO revoga: não há sessão para derrubar, e o gesto é de
+       devolver acesso, não de tirar. */
+    const revoga = campos.senha_hash !== undefined
+      || campos.setor !== undefined
+      || campos.ativo === false;
+
     if (!Object.keys(campos).length) {
       return res.status(400).json({ erro: 'Nada a alterar.', codigo: 'SEM_CAMPOS' });
     }
@@ -182,12 +201,23 @@ rotasOperadores.patch('/operadores/:id', SO_ADMIN, async (req, res, next) => {
     }
 
     const cols = Object.keys(campos);
+    /* O incremento entra como EXPRESSÃO, não como parâmetro: `sessao_versao
+       + 1` é calculado pelo banco sobre o valor atual, o que mantém a
+       revogação correta mesmo se dois administradores alterarem o mesmo
+       operador ao mesmo tempo. Ler o valor antes e gravar valor+1 na
+       aplicação perderia um dos dois incrementos. */
+    const setSql = cols.map((c, i) => `${c} = $${i + 1}`)
+      .concat(revoga ? ['sessao_versao = sessao_versao + 1'] : [])
+      .join(', ');
     const { rows } = await consultar(
-      `UPDATE operadores SET ${cols.map((c, i) => `${c} = $${i + 1}`).join(', ')}
+      `UPDATE operadores SET ${setSql}
         WHERE id = $${cols.length + 1}
-        RETURNING id, email, nome, setor, ativo, criado_em, ultimo_acesso`,
+        RETURNING id, email, nome, setor, ativo, criado_em, ultimo_acesso, sessao_versao`,
       [...Object.values(campos), id]
     );
+    if (revoga) {
+      console.log(`[seguranca] sessões de ${atual[0].email} revogadas por ${req.operador.nome}`);
+    }
 
     const oque = cols.filter((c) => c !== 'senha_hash');
     if (cols.includes('senha_hash')) oque.push('senha');

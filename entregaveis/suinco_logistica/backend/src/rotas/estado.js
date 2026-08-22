@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { consultar } from '../banco.js';
 import { exigirLogin } from '../middleware/auth.js';
 import { COLUNAS_CARGA, paraPainel } from '../dominio/cargas.js';
+import { registrarLeitura } from '../servicos/registro_leitura.js';
 
 export const rotasEstado = Router();
 
@@ -77,6 +78,20 @@ rotasEstado.get('/estado', exigirLogin, async (req, res, next) => {
         params
       ),
     ]);
+
+    /* Só a leitura COMPLETA entra no registro. A incremental roda a cada
+       poucos segundos em cada terminal — registrá-la encheria a tabela de
+       ruído e esconderia justamente o que importa. A completa é rara no uso
+       normal (recarregar a página) e é o padrão de quem está copiando a
+       base de uma vez só. */
+    if (!desdeValido) {
+      await registrarLeitura({
+        tipo: 'estado-completo',
+        detalhe: 'leitura integral do pátio',
+        linhas: cargas.rows.length,
+        operador: req.operador, ip: req.ip,
+      });
+    }
 
     res.json({
       marca,
