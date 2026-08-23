@@ -2880,6 +2880,14 @@ input,select,textarea{border-radius:5px}
   .table-wrap table.mobile-cartao td{
     display:flex;flex-direction:column;gap:1px;
     border:none;padding:5px 0;
+    /* min-width:0 — item de grid nasce com min-width:auto e não encolhe
+       abaixo do conteúdo. Um nome de transportadora com `nowrap` inflava a
+       coluna, a coluna inflava o cartão, e o "Excluir" saía cortado pela
+       borda direita. É o MESMO defeito que .pulso-grid tinha nos
+       Indicadores, corrigido no mesmo dia — e que eu repeti aqui.
+       Onde houver grid ou flex, esta linha é a que faz "cabe na tela" ser
+       verdade. */
+    min-width:0;
   }
   .table-wrap table.mobile-cartao td::before{
     content:attr(data-rotulo);
@@ -3945,7 +3953,7 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
 @media(max-width:820px){
   .table-wrap table.mobile-cartao td:not([data-rotulo]){
     flex-direction:row;flex-wrap:wrap;gap:6px;align-items:stretch;
-    padding-top:8px;margin-top:2px;border-top:1px solid var(--border-soft);
+    padding-top:5px;margin-top:0;border-top:1px solid var(--border-soft);
   }
   /* 44px de ALTURA não se negocia — é o mínimo de alvo de toque do painel,
      travado por testes/test_auditoria_mobile.py. A economia vem de pôr os
@@ -3956,8 +3964,23 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
      quem está de luva no pátio não acerta 34px. */
   .table-wrap table.mobile-cartao td:not([data-rotulo]) .btn,
   .table-wrap table.mobile-cartao td:not([data-rotulo]) .btn.btn-sm{
-    width:auto;flex:1 1 auto;min-width:0;min-height:44px;
-    padding:0 12px;font-size:13px;
+    /* flex:0 0 auto — largura NATURAL, não esticada. Com `1 1 auto` os dois
+       botões dividiam a linha inteira e viravam o bloco mais pesado do
+       cartão: "Excluir", que é a ação mais rara, ficava sendo o maior
+       elemento vermelho da tela, repetido em cada carga. Altura continua
+       44px (mínimo de toque); o que muda é a largura e, com ela, o peso
+       visual. */
+    width:auto;flex:0 0 auto;min-width:0;min-height:44px;
+    padding:0 14px;font-size:13px;
+  }
+  .table-wrap table.mobile-cartao td:not([data-rotulo]){ justify-content:flex-end }
+  /* Botão SOZINHO na linha ocupa tudo. É o caso da Portaria: ali existe uma
+     ação só — "Chegou" — e ela deve ser o maior alvo da tela, porque quem
+     aperta está de pé, muitas vezes de luva, com o caminhão esperando.
+     Encolher aquele botão para caber ao lado de outro que não existe seria
+     resolver um problema de densidade criando um de operação. */
+  .table-wrap table.mobile-cartao td:not([data-rotulo]) .btn:only-child{
+    flex:1 1 100%;
   }
 
   /* Campo editável dentro do cartão: o rótulo já está acima em 9,5px, então
@@ -3986,6 +4009,16 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
   }
   .table-wrap table.mobile-cartao td[data-rotulo="Veículo"] .veic-transp{
     font-size:11px;
+  }
+  /* Uma linha só, com reticências, no cartão FECHADO. "Cooperativa dos
+     Transportadores Unidos Ltda." quebrava em duas linhas na meia coluna e
+     sozinha esticava a PRIMEIRA linha da grade de 50px para 70px — e a
+     célula vizinha (Nº Carga) esticava junto, de graça. Vinte pixels em
+     cada cartão por um nome que ninguém lê inteiro enquanto varre a lista.
+     O nome completo volta ao abrir o cartão. */
+  .table-wrap table.mobile-cartao tr:not(.cartao-aberto) .veic-transp{
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    display:block; max-width:100%;
   }
 }
 
@@ -4074,6 +4107,30 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
   .table-wrap table.mobile-cartao tr:not(.cartao-aberto) td input,
   .table-wrap table.mobile-cartao tr:not(.cartao-aberto) td select{
     min-height:28px;padding:2px 6px;max-width:120px;
+  }
+  /* O CARTÃO FECHADO É TABELA, NÃO FORMULÁRIO (23/08/2026).
+
+     Relato do gestor sobre a primeira versão compacta: "acho que tá muito
+     grande ainda a dimensão". Ele estava certo, e o motivo não era
+     espaçamento: eu tinha apertado as margens e mantido o cartão como
+     FORMULÁRIO. Cada campo continuava uma caixa branca com borda, fundo e
+     altura de input — quatro caixas por carga, quarenta cargas na tela.
+
+     O desktop, que ele usa como referência, é uma TABELA: o valor é texto,
+     e a caixa só aparece quando você vai escrever. É isso aqui.
+
+     Custo funcional: ZERO. O campo continua sendo input, continua editável
+     com um toque, continua com 16px de fonte (abaixo disso o iOS dá zoom).
+     Só deixa de DESENHAR a caixa enquanto ninguém está escrevendo — e ela
+     volta, com a borda dourada, no foco. */
+  .table-wrap table.mobile-cartao tr:not(.cartao-aberto) td input,
+  .table-wrap table.mobile-cartao tr:not(.cartao-aberto) td select{
+    background:transparent; border-color:transparent; box-shadow:none;
+    padding:0 2px; min-height:0; font-weight:700; color:var(--text);
+  }
+  .table-wrap table.mobile-cartao tr:not(.cartao-aberto) td input:focus,
+  .table-wrap table.mobile-cartao tr:not(.cartao-aberto) td select:focus{
+    background:var(--campo-bg); border-color:var(--gold); padding:2px 6px;
   }
   .table-wrap table.mobile-cartao tr:not(.cartao-aberto) td[data-larg="cheia"] select{
     /* flex-basis ZERO, não auto: com `auto` a base é a largura do maior
