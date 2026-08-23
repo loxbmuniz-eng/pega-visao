@@ -78,10 +78,34 @@ async def main():
         # REDUZIDO em 11/08/2026, a pedido do usuário: "a visão do
         # comercial, só visão de pátio e histórico". Relatórios saiu — o
         # Comercial consulta onde a carga está, não emite documento.
-        esperado_visivel = {'torre', 'historico'}
+        #
+        # 'usuarios' entrou em 22/08/2026 com o segundo fator: a aba deixou de
+        # ser só a tela de administrar gente e passou a ser onde CADA PESSOA
+        # protege a própria conta, e o Comercial tem login e senha como todo
+        # mundo. O que ele não pode continua sendo o que ele ENCONTRA lá
+        # dentro — conferido logo abaixo, que é onde a regra de fato vale.
+        esperado_visivel = {'torre', 'historico', 'usuarios'}
         visiveis = {k for k, v in abas.items() if v}
-        ck('exatamente torre + historico visíveis',
+        ck('exatamente torre + historico + a própria segurança',
            visiveis == esperado_visivel, str(abas))
+
+        await pg2.evaluate("()=>abrirTab('usuarios')")
+        await pg2.wait_for_timeout(1200)
+        dentro = await pg2.evaluate("""()=>{
+          const vis = el => !!el && el.offsetParent !== null;
+          const aba = document.getElementById('tab-usuarios');
+          return {
+            cards: [...aba.querySelectorAll('.card')].filter(vis).map(c=>c.id||'(sem id)'),
+            listaOperadores: vis(document.getElementById('usr-tbody')),
+            aprovacoes: vis(document.getElementById('card-aprovacoes')),
+            minhaSeguranca: vis(document.getElementById('card-minha-seguranca')),
+          };
+        }""")
+        ck('na aba Usuários ele vê só "Minha segurança"',
+           dentro['cards'] == ['card-minha-seguranca'], str(dentro['cards']))
+        ck('Comercial NÃO vê a lista de operadores', not dentro['listaOperadores'])
+        ck('Comercial NÃO vê os pedidos de aprovação', not dentro['aprovacoes'])
+        ck('mas PODE ativar o próprio segundo fator', dentro['minhaSeguranca'])
 
         print('\n=== 3. TORRE: SEM COLUNA DE AÇÃO, SEM CAMPO EDITÁVEL ===')
         await pg2.evaluate("() => abrirTab('torre')")

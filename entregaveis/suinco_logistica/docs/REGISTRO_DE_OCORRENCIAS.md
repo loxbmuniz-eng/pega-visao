@@ -29,6 +29,47 @@ faz achar a próxima em minutos em vez de horas:
 | **Regra larga demais** | Trava criada para um caso real barra também o caso legítimo mais comum. | #05 |
 | **Trava sem o par na tela** | O servidor passa a exigir algo novo e a tela continua com o botão antigo: quem clica só descobre que não pode, e não tem por onde seguir. | #13 |
 | **A mesma decisão escrita em dois lugares** | A regra é copiada em vez de consultada. As cópias divergem e o comportamento fica errado sem que nenhuma linha esteja errada. | #14 |
+| **Teste que mede o proxy, não a regra** | O teste confere um sintoma fácil de medir ("a aba aparece?", "quantas linhas?") em vez da garantia real. Quando o sintoma muda por um motivo legítimo, ele fica vermelho sem que nada tenha quebrado — e some do radar. | #15 |
+
+---
+
+## #15 — Vinte testes vermelhos que ninguém estava vendo (23/08/2026)
+
+**Relato:** nenhum. Foi o problema. A bateria completa das 97 suítes só foi
+rodada inteira ao publicar o lote do cartão do celular — e voltou com 19
+vermelhos, a maioria deles de dias antes.
+
+**O que estava por trás,** depois de rodar cada um isolado e também contra o
+build que estava em produção:
+
+1. **Três testes com a mesma regra vencida.** `test_setor_comercial`,
+   `test_comercial_e_excluir_aguardando` e `test_login_api` exigiam que a aba
+   Usuários NÃO aparecesse para certos setores. A aba abriu para todos em
+   22/08 junto com o segundo fator — deixou de ser a tela de administrar
+   gente e passou a ser onde cada pessoa protege a própria conta. A mudança
+   estava certa; os três testes ficaram para trás juntos, porque os três
+   mediam a mesma coisa fácil ("a aba aparece?") em vez da garantia de
+   verdade ("o que ele encontra lá dentro?"). Agora conferem o conteúdo: sem
+   lista de operadores, sem pedidos de aprovação, só "Minha segurança".
+
+2. **Um teste contando errado.** `test_listas_grandes_mobile` contava `<tr>`
+   para checar o teto de 40 registros do Histórico no celular. Desde 20/08
+   cada registro rende DUAS linhas (a que se lê e a do detalhe, que abre ao
+   clicar): 40 registros davam 80 linhas, e o teste acusava um limite
+   quebrado que nunca quebrou.
+
+3. **Uma trava sem o par na tela** — é a ocorrência #13, e foi
+   `test_admin_historico` falhando em silêncio que a denunciou.
+
+4. **Contaminação entre testes.** A suíte inteira compartilha um Postgres só
+   e não limpa entre um teste e outro. `test_admin_historico` falhava na
+   bateria e passava verde sozinho depois de limpar a base. Parte dos
+   vermelhos era sobra do teste anterior, não defeito do painel.
+
+**O que fica:** rodar a bateria inteira antes de publicar, e não só as
+suítes próximas do que se mexeu — foi o que revelou tudo isto. E quando um
+teste ficar vermelho, perguntar antes de "o que quebrei?": *este teste ainda
+mede a regra, ou passou a medir um sintoma que mudou de forma legítima?*
 
 ---
 
@@ -400,7 +441,13 @@ permitiu recuperar os lacres apagados de #09.
    linha estava errada; erradas estavam as três cópias da mesma lista. Quando
    uma regra precisa valer em CSS e em JS, ela mora em um dos dois e o outro
    pergunta.
-8. **Intuição de layout erra; a régua não.** Duas mudanças "obviamente
+8. **Teste vermelho tem três causas, não uma.** Antes de "eu quebrei",
+   checar: a regra mudou de propósito (e o teste ficou para trás), o teste
+   mede um proxy que mudou de forma, ou é sobra do teste anterior. Em #15 as
+   três apareceram, e só uma linha de 19 era regressão de verdade. Rodar o
+   caso isolado e também contra o build que está em produção responde isso
+   em minutos.
+9. **Intuição de layout erra; a régua não.** Duas mudanças "obviamente
    melhores" de #14 pioraram o número, e só apareceram porque foram medidas
    antes e depois, no mesmo aparelho e com os mesmos dados — sem isso, a
    comparação mede o banco de teste, não a mudança.
