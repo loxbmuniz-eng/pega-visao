@@ -4193,3 +4193,157 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
     padding:6px 0; font-size:12px;
   }
 }
+
+/* =====================================================================
+   FAIXA DE INDICADORES — FORMATO BI (23/08/2026)
+   =====================================================================
+
+   Só onde a marcação pede (.bi-faixa): a Torre de Controle e os tempos
+   médios da aba Indicadores. `.bento` puro continua exatamente como
+   estava — a esteira de Devoluções (#dev-pipeline) usa a mesma classe e
+   NÃO deve mudar. Foi o pedido: misturar o formato novo de indicador com
+   o que já está feito, sem mexer no que já está feito.
+
+   O que muda de fato: as caixas deixam de ser quadrados soltos e viram
+   uma FAIXA contínua — um bloco só, dividido por filetes de 1px, com a
+   cor do status entrando como régua vertical à esquerda de cada célula.
+   A cor sai do lugar do fundo (onde competia com o número) e vai pro
+   lugar da borda (onde só identifica). Foi isso que resolveu, de quebra,
+   o vermelho-sobre-vermelho da caixa "Programação anterior": a nota
+   ficava com --text-dim sobre o preenchimento vermelho, razão 1,9.
+   ===================================================================== */
+.bento.bi-faixa{
+  gap:0;
+  /* O FUNDO DA FAIXA É A MESMA SUPERFÍCIE DAS CAIXAS, não a cor do filete.
+     A primeira versão usava `gap:1px` sobre fundo --border-soft para
+     desenhar as divisórias de graça. Funciona enquanto a última linha da
+     grade está cheia; com 10 caixas em 6 colunas sobram 2 células vazias,
+     e elas apareciam como um bloco cinza sólido do tamanho de duas
+     caixas. Divisória virou borda da própria caixa. */
+  background:var(--vidro-bg);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  overflow:hidden;
+  box-shadow:var(--vidro-sombra);
+  /* Caixas mais estreitas que no .bento (150px): a faixa cabe em menos
+     linhas, que é o ponto inteiro de virar faixa. */
+  grid-template-columns:repeat(auto-fit,minmax(134px,1fr));
+}
+.bento.bi-faixa .stat-box{
+  border:0;
+  border-right:1px solid var(--border-soft);
+  border-bottom:1px solid var(--border-soft);
+  border-radius:0;
+  box-shadow:none;
+  background:transparent;
+  text-align:left;
+  padding:9px 11px 9px 13px;
+  display:flex; flex-direction:column; justify-content:center;
+  min-height:66px;
+}
+/* A régua de cor. Sem --st-cor definido (caixas que não são de status)
+   ela cai no dourado da marca, que é o que a caixa já usava na borda de
+   cima antes desta mudança. */
+.bento.bi-faixa .stat-box::after{
+  content:''; position:absolute; left:0; top:0; bottom:0; width:3px;
+  background:var(--st-cor, var(--gold)); pointer-events:none;
+}
+/* O véu dourado do topo era desenhado para uma caixa alta e centralizada.
+   Na faixa ele cobre metade da célula e briga com o número. */
+.bento.bi-faixa .stat-box::before{ display:none }
+.bento.bi-faixa .stat-num{ font-size:21px; line-height:1.1 }
+.bento.bi-faixa .stat-label{
+  font-size:10.5px; font-weight:700; line-height:1.25; margin-top:1px;
+}
+.bento.bi-faixa .stat-note{ font-size:10px; margin-top:1px }
+/* O DESTAQUE É LARGO: o traço vai AO LADO do número, não embaixo dele.
+   Embaixo, esticado por ~460px, o mini-gráfico virava um fio quase reto
+   colado na base da caixa — lido como borda, não como série. Ao lado, com
+   largura fixa, ele mantém a proporção em que a forma aparece. */
+.bento.bi-faixa .stat-destaque{
+  grid-column:span 2;
+  display:grid; grid-template-columns:1fr auto; align-items:center;
+  column-gap:12px;
+}
+.bento.bi-faixa .stat-destaque .stat-num{ font-size:30px }
+.bento.bi-faixa .stat-destaque .stat-label{ font-size:12px }
+.bento.bi-faixa .stat-destaque > :not(.stat-spark){ grid-column:1 }
+.bento.bi-faixa .stat-destaque .stat-spark{
+  grid-column:2; grid-row:1 / -1;
+  width:104px; height:38px; margin-top:0;
+}
+
+/* A caixa de alerta perde o preenchimento vermelho inteiro e fica com a
+   régua + o número em vermelho-texto. Contraste conferido nos dois temas:
+   --st-aguardando-veiculo-txt sobre --vidro-bg é o mesmo par já usado na
+   coluna de status da Torre. */
+.bento.bi-faixa .stat-alerta{
+  background:var(--vidro-bg);
+  --st-cor:var(--st-aguardando-veiculo-bg);
+}
+.bento.bi-faixa .stat-alerta .stat-num{ color:var(--st-aguardando-veiculo-txt) }
+.bento.bi-faixa .stat-alerta .stat-label,
+.bento.bi-faixa .stat-alerta .stat-note{ color:var(--text-dim) }
+
+.bento.bi-faixa .stat-clicavel:hover{ background:var(--vidro-bg-forte) }
+.bento.bi-faixa .stat-ativo{
+  background:var(--vidro-bg-forte);
+  box-shadow:inset 0 0 0 1.5px var(--gold-text);
+}
+
+/* ---- As três peças que viram "indicador" ---- */
+.stat-share{
+  font-size:10px; color:var(--text-dim); margin-top:1px;
+  font-variant-numeric:tabular-nums;
+}
+.stat-delta{
+  font-size:10.5px; font-weight:700; margin-top:2px;
+  font-variant-numeric:tabular-nums;
+}
+/* Vermelho é "piorou", verde é "melhorou" — e o QUE é piorar depende do
+   indicador (ver deltaHtml em app.js). A seta acompanha o texto para que
+   a leitura não dependa só da cor. */
+.stat-pior{ color:var(--st-aguardando-veiculo-txt) }
+.stat-melhor{ color:var(--st-faturado-txt) }
+.stat-igual{ color:var(--text-dim); font-weight:600 }
+.stat-spark{
+  display:block; width:100%; height:22px; margin-top:5px;
+  opacity:.9; pointer-events:none;
+}
+
+/* CELULAR — a grade de 3 colunas que já existia continua sendo a grade.
+   Não virou tira rolando de lado de propósito: chip fora da tela é chip
+   que ninguém toca, e as 3 colunas já passam nos 44px de alvo de toque
+   (testes/test_auditoria_mobile.py). O que sai é o mini-gráfico, que em
+   ~100px de largura não desenha forma nenhuma — vira ruído. */
+/* CELULAR — ORÇAMENTO DE ALTURA, NÃO LISTA DE DESEJOS.
+   A grade compacta de 3 colunas media 286px. A primeira versão da faixa BI
+   levou isso a 363px: cada peça nova custa uma linha, e três linhas novas
+   em nove caixas somam mais que a faixa inteira economiza. Como a
+   compactação do celular foi pedido explícito e já estava entregue, o
+   formato novo tem que caber DENTRO do que já existia — não ao lado.
+
+   Fica o que carrega informação por pixel: a régua de cor (identifica o
+   status sem ocupar linha) e a variação (uma linha, quatro caracteres).
+   Sai a participação — que continua no title de cada caixa — e sai o
+   traço, exceto na primeira caixa, onde há largura para ele desenhar
+   forma em vez de risco. */
+@media(max-width:640px){
+  .bento.bi-faixa{ grid-template-columns:repeat(3,1fr); gap:0 }
+  /* 44px é o mínimo de alvo de toque (testes/test_auditoria_mobile.py) e
+     também o que a grade compacta anterior usava — mesmo piso, para a
+     faixa não crescer por folga. */
+  .bento.bi-faixa .stat-box{ padding:6px 5px 6px 9px; min-height:44px }
+  .bento.bi-faixa .stat-num{ font-size:19px }
+  .bento.bi-faixa .stat-label{ font-size:9.5px }
+  .bento.bi-faixa .stat-spark{ display:none }
+  .bento.bi-faixa .stat-share{ display:none }
+  .bento.bi-faixa .stat-delta{ font-size:9.5px; margin-top:1px }
+  .bento.bi-faixa .stat-destaque{ grid-column:1 / -1; column-gap:8px }
+  .bento.bi-faixa .stat-destaque .stat-num{ font-size:24px }
+  .bento.bi-faixa .stat-destaque .stat-label{ font-size:11px }
+  /* Só a PRIMEIRA caixa da faixa mantém o traço. */
+  .bento.bi-faixa .stat-box:first-child .stat-spark{
+    display:block; width:74px; height:28px;
+  }
+}

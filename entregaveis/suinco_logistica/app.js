@@ -2035,6 +2035,119 @@ function filtrarTorrePorStatus(chave){
   _torreFiltroStatus = (chave === '__TODAS__' || _torreFiltroStatus === chave) ? null : chave;
   renderTorre();
 }
+/* =====================================================================
+   FAIXA DE INDICADORES NO FORMATO BI (23/08/2026)
+   =====================================================================
+
+   Pedido do usuário, depois de ver o preview: "aplicar essa ideia BI
+   format na parte de indicador, tudo que for indicador na Torre de
+   Controle... mas sem mudar também o que já está feito".
+
+   Então é MISTURA, não substituição: a tabela da Torre, os cartões do
+   celular, o Raio-X e a Visão do Pátio continuam exatamente como estavam.
+   O que muda é só a faixa de números — e o que ela passa a dizer.
+
+   O defeito que isso corrige é conceitual, não estético: um número solto
+   ("8 Aguardando Veículo") é um CONTADOR. Vira INDICADOR quando ganha
+   referência — quanto isso representa do total, e para onde estava indo.
+   Daí as três peças novas em cada caixa: participação (% do pátio),
+   variação contra o dia anterior, e a série dos últimos 14 dias.
+
+   As três saem de dado REAL do próprio painel. Mini-gráfico com número
+   inventado seria pior que não ter mini-gráfico: mente com aparência de
+   evidência.
+   ===================================================================== */
+
+/* Um caminho SVG de uma linha só, sem eixo e sem rótulo — a forma da série,
+   não a leitura precisa dela (o número grande ao lado é que se lê).
+
+   `vector-effect="non-scaling-stroke"` porque o viewBox é esticado pela
+   largura da caixa: sem isso a espessura do traço muda de caixa para
+   caixa, e a faixa inteira fica visualmente desalinhada. */
+function sparklineSvg(vals, cor, w = 74, h = 22){
+  const v = (vals || []).filter(x => Number.isFinite(x));
+  if(v.length < 2) return '';
+  const mx = Math.max(...v), mn = Math.min(...v);
+  /* Série sem variação (todos os valores iguais) precisa desenhar no MEIO
+     da caixa. Com amp forçada em 1, (x-mn)/amp dá 0 para todo ponto e o
+     traço encosta na base — lido como "despencou para o mínimo", que é o
+     oposto de "não mudou". */
+  const chata = mx === mn;
+  const amp = chata ? 1 : (mx - mn);
+  const px = i => (i / (v.length - 1)) * (w - 2) + 1;
+  const py = x => chata ? (h / 2) : (h - 2 - ((x - mn) / amp) * (h - 5));
+  const d = v.map((x, i) => `${i ? 'L' : 'M'}${px(i).toFixed(1)} ${py(x).toFixed(1)}`).join(' ');
+  const idg = 'spk' + Math.random().toString(36).slice(2, 8);
+  return `<svg class="stat-spark" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"
+      preserveAspectRatio="none" aria-hidden="true" focusable="false">
+    <defs><linearGradient id="${idg}" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="${cor}" stop-opacity=".30"/>
+      <stop offset="100%" stop-color="${cor}" stop-opacity="0"/></linearGradient></defs>
+    <path d="${d} L${px(v.length-1).toFixed(1)} ${h} L${px(0).toFixed(1)} ${h} Z" fill="url(#${idg})"/>
+    <path d="${d}" fill="none" stroke="${cor}" stroke-width="1.6" stroke-linecap="round"
+          stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
+    <circle cx="${px(v.length-1).toFixed(1)}" cy="${py(v[v.length-1]).toFixed(1)}" r="2" fill="${cor}"/>
+  </svg>`;
+}
+
+/* A variação escrita por extenso. `pioraQuandoSobe` existe porque a mesma
+   seta significa coisas opostas dependendo do indicador: mais carga parada
+   no pátio é ruim, mais carga concluída é bom. Cor errada aqui ensina o
+   gestor a ler o painel ao contrário. */
+/* `igual` é parâmetro porque a mesma função serve duas comparações
+   diferentes: na Torre é contra ONTEM, nos tempos médios é a semana contra
+   a anterior. Texto fixo dizia "igual a ontem" numa caixa que compara sete
+   dias — número certo com legenda errada é pior que número ausente. */
+function deltaHtml(atual, anterior, {pioraQuandoSobe = true, sufixo = '',
+                                     percentual = false, igual = 'sem variação'} = {}){
+  if(!Number.isFinite(atual) || !Number.isFinite(anterior)) return '';
+  const dif = atual - anterior;
+  if(dif === 0) return `<div class="stat-delta stat-igual">= ${esc(igual)}</div>`;
+  const sobe = dif > 0;
+  const ruim = sobe === pioraQuandoSobe;
+  let texto;
+  if(percentual){
+    if(!anterior) return '';
+    texto = Math.round(Math.abs(dif) / anterior * 100) + '%';
+  } else {
+    texto = Math.abs(dif) + sufixo;
+  }
+  return `<div class="stat-delta ${ruim ? 'stat-pior' : 'stat-melhor'}">`
+       + `${sobe ? '▲' : '▼'} ${texto}</div>`;
+}
+
+/* Quantas cargas estavam EM ABERTO ao fim de cada um dos últimos N dias, e
+   quantas seguiram viagem em cada um deles.
+
+   Reconstruído do próprio histórico: uma carga estava aberta no dia D se
+   nasceu até o fim de D e não tinha saído até o fim de D. Uma passada por
+   carga (a saída é consultada uma vez só e fica em cache), depois N
+   comparações por carga — barato o bastante para rodar a cada render da
+   Torre, que é o que garante que a série nunca fica velha. */
+function serieDoPatio(dias = 14){
+  const fins = [];
+  for(let i = dias - 1; i >= 0; i--){
+    const d = new Date(); d.setHours(23, 59, 59, 999); d.setDate(d.getDate() - i);
+    fins.push(d.getTime());
+  }
+  const abertas = new Array(dias).fill(0);
+  const seguiu  = new Array(dias).fill(0);
+  DB.cargas.forEach(c => {
+    const nasceuEm = new Date(c.programadoEm || c.criadoEm || 0).getTime();
+    if(!Number.isFinite(nasceuEm)) return;
+    const saidaISO = c.status === 'Seguiu Viagem'
+      ? (primeiroTimestamp(c.id, 'Seguiu Viagem') || c.concluidoEm || c.atualizadoEm)
+      : null;
+    const saiuEm = saidaISO ? new Date(saidaISO).getTime() : null;
+    for(let i = 0; i < dias; i++){
+      const fim = fins[i];
+      if(nasceuEm <= fim && (saiuEm === null || saiuEm > fim)) abertas[i]++;
+      if(saiuEm !== null && saiuEm <= fim && saiuEm > fim - 86400000) seguiu[i]++;
+    }
+  });
+  return { abertas, seguiu };
+}
+
 function animarContadoresTorre(){
   const reduzido = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   document.querySelectorAll('#torre-stats [data-contador]').forEach(el=>{
@@ -2111,7 +2224,14 @@ function renderTorre(){
 
      A conta é a mesma de sempre — só o tamanho da caixa muda. */
 
-  const caixa = (num, rotulo, {destaque=false, alerta=false, nota='', filtro=null} = {}) => {
+  /* A série do pátio alimenta o mini-gráfico e a variação. Calculada UMA
+     vez por render — cada caixa só lê o pedaço dela. */
+  const serie = serieDoPatio(14);
+  const totalAberto = abertas.length;
+
+  const caixa = (num, rotulo, {destaque=false, alerta=false, nota='', filtro=null,
+                               cor='', participacao=false, spark=null,
+                               deltaDe=null, pioraQuandoSobe=true} = {}) => {
     const ehLimpar = filtro === '__TODAS__';
     const ativo = filtro !== null && (ehLimpar ? _torreFiltroStatus === null : _torreFiltroStatus === filtro);
     const clicavel = filtro !== null;
@@ -2120,22 +2240,48 @@ function renderTorre(){
     // informação continua acessível, só muda de "sempre visível" pra
     // "sob demanda", como o próprio aviso de clique já era.
     const dicaClique = 'Clique para filtrar a tabela por esta caixa — clique de novo para limpar.';
-    const titulo = [nota, clicavel ? dicaClique : ''].filter(Boolean).join(' — ');
+    /* A participação entra no title junto com a nota: no celular ela sai da
+       tela (ver .bi-faixa .stat-share em styles.css) e sem isso a
+       informação desapareceria em vez de mudar de lugar. */
+    const dicaPct = participacao && totalAberto > 0
+      ? `${Math.round(num / totalAberto * 100)}% das ${totalAberto} cargas em aberto` : '';
+    const titulo = [dicaPct, nota, clicavel ? dicaClique : ''].filter(Boolean).join(' — ');
+
+    /* As três peças que transformam contador em indicador. Cada uma só
+       aparece quando tem dado real por trás — caixa sem série não ganha
+       traço reto fingindo tendência, e participação de zero sobre zero não
+       vira "0% do pátio". */
+    const pct = participacao && totalAberto > 0
+      ? `<div class="stat-share">${Math.round(num / totalAberto * 100)}% do pátio</div>` : '';
+    const delta = deltaDe
+      ? deltaHtml(deltaDe[0], deltaDe[1],
+                  {pioraQuandoSobe, sufixo:' vs. ontem', igual:'igual a ontem'}) : '';
+    const linha = spark && spark.length > 1
+      ? sparklineSvg(spark, corTema(alerta && num > 0 ? '--st-aguardando-veiculo-fg' : '--gold')) : '';
+
     return `<div class="stat-box${destaque?' stat-destaque':''}${alerta && num>0?' stat-alerta':''}${clicavel?' stat-clicavel':''}${ativo?' stat-ativo':''}"
+       ${cor ? `style="--st-cor:var(--st-${cor}-bg)"` : ''}
        ${clicavel ? `onclick="filtrarTorrePorStatus('${escJs(filtro)}')"` : ''}
        ${titulo ? `title="${esc(titulo)}"` : ''}>
        <div class="stat-num" data-contador="${esc(rotulo)}">${num}</div>
        <div class="stat-label">${esc(rotulo)}</div>
+       ${pct}${delta}
        ${nota ? `<div class="stat-note">${esc(nota)}</div>` : ''}
+       ${linha}
      </div>`;
   };
 
   document.getElementById('torre-stats').innerHTML =
     // "Paradas há mais de Xh" foi removida a pedido do usuário
     // (08/08/2026): ícone considerado inútil na Torre.
-    caixa(abertas.length, 'Cargas em aberto', {destaque:true, filtro:'__TODAS__'})
-    + statusVisiveis.map(s=>caixa(porStatus[s]||0, s, {filtro:s})).join('')
-    + caixa(seguiuViagemHojeCount, 'Seguiu Viagem hoje', {destaque:true, filtro:'__SEGUIU_HOJE__'})
+    caixa(abertas.length, 'Cargas em aberto', {
+      destaque:true, filtro:'__TODAS__', spark:serie.abertas,
+      deltaDe:[serie.abertas[13], serie.abertas[12]], pioraQuandoSobe:true})
+    + statusVisiveis.map(s=>caixa(porStatus[s]||0, s,
+        {filtro:s, cor:statusSlug(s), participacao:true})).join('')
+    + caixa(seguiuViagemHojeCount, 'Seguiu Viagem hoje', {
+      destaque:true, filtro:'__SEGUIU_HOJE__', cor:'seguiu-viagem', spark:serie.seguiu,
+      deltaDe:[serie.seguiu[13], serie.seguiu[12]], pioraQuandoSobe:false})
     + caixa(antigasCount, 'Programação anterior',
             {alerta:true, nota:'ainda em aberto de outros dias',
              filtro:'__PENDENTES_ANTIGAS__'})
@@ -4265,16 +4411,85 @@ function renderIndicadores(){
   const somas = {}, contagens = {};
   campos.forEach(f=>{ somas[f]=0; contagens[f]=0; });
   let somaLead=0, nLead=0;
+
+  /* SÉRIE DIÁRIA DOS TEMPOS (23/08/2026) — formato BI nos indicadores.
+
+     Bucket por dia, montado DENTRO da passada que já existia. O custo
+     extra é uma soma por carga; refazer o laço só para ter a série
+     dobraria o tempo da aba em bases grandes, e indicadoresDaCarga é a
+     parte cara.
+
+     14 buckets: os 7 primeiros são a semana anterior, os 7 últimos a
+     semana corrente — é dessa divisão que sai a variação mostrada. Média
+     por dia, não soma: soma sobe só porque saiu mais caminhão. */
+  const DIAS_SERIE = 14;
+  const inicioSerie = new Date(); inicioSerie.setHours(0,0,0,0);
+  inicioSerie.setDate(inicioSerie.getDate() - (DIAS_SERIE - 1));
+  const t0Serie = inicioSerie.getTime();
+  const balde = {};
+  campos.concat('leadTimeTotal').forEach(f=>{
+    balde[f] = { soma:new Array(DIAS_SERIE).fill(0), n:new Array(DIAS_SERIE).fill(0) };
+  });
+  const diaDaCarga = (c) => {
+    const q = primeiroTimestamp(c.id, 'Seguiu Viagem') || c.concluidoEm || c.atualizadoEm;
+    if(!q) return -1;
+    const i = Math.floor((new Date(q).getTime() - t0Serie) / 86400000);
+    return (i >= 0 && i < DIAS_SERIE) ? i : -1;
+  };
+
   concluidas.forEach(c=>{
     const ind = indicadoresDaCarga(c.id);
     campos.forEach(f=>{ if(ind[f]!==null){ somas[f]+=ind[f]; contagens[f]++; } });
     if(ind.leadTimeTotal!==null){ somaLead+=ind.leadTimeTotal; nLead++; }
+    const d = diaDaCarga(c);
+    if(d < 0) return;
+    campos.concat('leadTimeTotal').forEach(f=>{
+      if(ind[f]!==null && ind[f]!==undefined){ balde[f].soma[d]+=ind[f]; balde[f].n[d]++; }
+    });
   });
-  let html = campos.map(f=>{
-    const media = contagens[f] ? Math.round(somas[f]/contagens[f]) : null;
-    return `<div class="stat-box"><div class="stat-num">${fmtDuracao(media)}</div><div class="stat-label">${labels[f]}</div></div>`;
-  }).join('');
-  html += `<div class="stat-box"><div class="stat-num">${fmtDuracao(nLead?Math.round(somaLead/nLead):null)}</div><div class="stat-label">Lead Time Total</div><div class="stat-note">criação da carga → Seguiu Viagem</div></div>`;
+
+  /* Média de cada dia, e a média de cada metade da janela. Dia sem carga
+     concluída fica FORA da conta em vez de virar zero — zero ali diria
+     "carregamos em 0 minutos", que é o oposto de "não carregamos". */
+  const serieDe = (f) => balde[f].soma.map((sm,i)=> balde[f].n[i] ? sm/balde[f].n[i] : null);
+  const mediaFatia = (serie, ini, fim) => {
+    const v = serie.slice(ini, fim).filter(x=>x!==null);
+    return v.length ? v.reduce((a,b)=>a+b,0)/v.length : null;
+  };
+
+  const caixaTempo = (f, rotulo, nota='') => {
+    const media = f === 'leadTimeTotal'
+      ? (nLead ? Math.round(somaLead/nLead) : null)
+      : (contagens[f] ? Math.round(somas[f]/contagens[f]) : null);
+    const serie = serieDe(f);
+    const semana  = mediaFatia(serie, 7, 14);
+    const anterior = mediaFatia(serie, 0, 7);
+    /* Tempo é indicador onde SUBIR é piorar — sempre. Por isso
+       pioraQuandoSobe fica fixo aqui, diferente da faixa da Torre. */
+    const delta = (semana !== null && anterior !== null)
+      ? deltaHtml(Math.round(semana), Math.round(anterior),
+                  {pioraQuandoSobe:true, percentual:true, igual:'estável na semana'})
+      : '';
+    const dica = (semana !== null && anterior !== null)
+      ? `Média dos últimos 7 dias (${fmtDuracao(Math.round(semana))}) contra os 7 anteriores `
+        + `(${fmtDuracao(Math.round(anterior))}). O traço é a média de cada dia; `
+        + `dia sem carga concluída não entra na conta.`
+      : 'Ainda sem dois períodos completos para comparar.';
+    const linha = sparklineSvg(
+      serie.filter(x=>x!==null),
+      corTema(semana !== null && anterior !== null && semana > anterior
+              ? '--st-aguardando-veiculo-txt' : '--st-faturado-txt'));
+    return `<div class="stat-box" title="${esc(dica)}">
+       <div class="stat-num">${fmtDuracao(media)}</div>
+       <div class="stat-label">${esc(rotulo)}</div>
+       ${delta}
+       ${nota ? `<div class="stat-note">${esc(nota)}</div>` : ''}
+       ${linha}
+     </div>`;
+  };
+
+  let html = campos.map(f=>caixaTempo(f, labels[f])).join('');
+  html += caixaTempo('leadTimeTotal', 'Lead Time Total', 'criação da carga → Seguiu Viagem');
   document.getElementById('ind-stats').innerHTML = html;
 
   renderRaioX();
