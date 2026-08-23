@@ -29,7 +29,63 @@ faz achar a próxima em minutos em vez de horas:
 | **Regra larga demais** | Trava criada para um caso real barra também o caso legítimo mais comum. | #05 |
 | **Trava sem o par na tela** | O servidor passa a exigir algo novo e a tela continua com o botão antigo: quem clica só descobre que não pode, e não tem por onde seguir. | #13 |
 | **A mesma decisão escrita em dois lugares** | A regra é copiada em vez de consultada. As cópias divergem e o comportamento fica errado sem que nenhuma linha esteja errada. | #14 |
+| **Duas escritas em voo, a velha ganha** | O painel manda a carga INTEIRA a cada alteração. Duas alterações seguidas viram duas requisições simultâneas, e a primeira carrega o valor velho do campo que ainda ia mudar. | #16 |
 | **Teste que mede o proxy, não a regra** | O teste confere um sintoma fácil de medir ("a aba aparece?", "quantas linhas?") em vez da garantia real. Quando o sintoma muda por um motivo legítimo, ele fica vermelho sem que nada tenha quebrado — e some do radar. | #15 |
+
+---
+
+## #16 — O campo que o operador digita e o servidor não guarda (23/08/2026)
+
+**Relato:** nenhum — de novo, e de novo é isso que assusta. Apareceu porque a
+bateria inteira passou a ser rodada: `test_edicao_marca_alterada` falhava 3
+em 3 vezes com *"os GANCHOS chegaram ao outro terminal — esperado 33, veio
+0"*. Estava vermelho havia dias.
+
+**A primeira hipótese estava errada.** Parecia atraso de sincronia — o outro
+terminal ainda não teria recebido. Conferido no banco, não era:
+
+```
+sequencia = 7 | qtd_ganchos = 0
+```
+
+As duas foram alteradas na MESMA ação. O dado não demorou: ele não chegou.
+
+**Causa**, capturada no tráfego HTTP:
+
+```
+PATCH {"qtdGanchos": 0,  "sequencia": 7}   <- estado ANTES dos ganchos
+PATCH {"qtdGanchos": 33, "sequencia": 7}   <- estado depois
+banco: sequencia = 7, qtd_ganchos = 0
+```
+
+Cada `save()` monta o corpo **inteiro** da carga com o estado daquele
+instante, e `sincronizarCargasAlteradas` disparava sem esperar. Duas
+alterações seguidas na mesma carga viravam duas requisições em voo ao mesmo
+tempo — e a primeira levava o valor velho do campo que ainda ia mudar. Quem
+chegou por último ao banco foi a primeira.
+
+O operador vê 33 na tela dele e o servidor guarda 0. **Sem erro nenhum na
+tela** — o pior jeito de perder dado.
+
+É primo do eco de sincronização (#01): lá era cópia velha de OUTRO terminal
+sobrescrevendo; aqui é cópia velha do PRÓPRIO terminal, criada
+milissegundos antes.
+
+**Correção:** não é esperar mais, é não ter duas em voo. Enquanto uma carga
+sobe, outra alteração dela só marca "refazer" — e o refazer relê o estado
+ATUAL, que já tem as duas mudanças. Duas edições rápidas viram uma
+requisição com o valor final.
+
+Detalhe que importa: quando a subida é adiada, a carga **não** é marcada como
+sincronizada. Marcar ali faria a alteração sumir para sempre — trocaria uma
+perda de dado por outra, pior.
+
+**Alcance:** qualquer campo, não só ganchos. Basta duas alterações na mesma
+carga em sequência rápida — que é o que a Torre faz o tempo todo, porque seus
+campos são editáveis lado a lado.
+
+**Guarda:** `testes/test_edicao_marca_alterada.py`, que já existia e já
+apontava para cá. Faltava alguém rodar.
 
 ---
 
@@ -434,20 +490,25 @@ permitiu recuperar os lacres apagados de #09.
 5. **Toda trava nova precisa da pergunta "e o caso normal?"** A de #05
    estava certa para o incidente e errada para a rotina — e a rotina é o que
    acontece todo dia.
-6. **Trava no servidor sem caminho na tela é bug, não segurança.** A de #13
+6. **Teste vermelho é um relato de produção que ninguém abriu ainda.** #16
+   estava escrito, reproduzível e ignorado havia dias: um campo que o
+   operador digita e o servidor não guarda, sem erro na tela. Não apareceu
+   como reclamação porque quem digita não confere depois — confia. A bateria
+   completa é o que transforma esse relato mudo em achado.
+7. **Trava no servidor sem caminho na tela é bug, não segurança.** A de #13
    estava tecnicamente correta e deixou um administrador sem saída. Regra
    nova só está pronta quando existe o jeito de cumpri-la.
-7. **A mesma decisão em dois lugares vira dois comportamentos.** Em #14 nenhuma
+8. **A mesma decisão em dois lugares vira dois comportamentos.** Em #14 nenhuma
    linha estava errada; erradas estavam as três cópias da mesma lista. Quando
    uma regra precisa valer em CSS e em JS, ela mora em um dos dois e o outro
    pergunta.
-8. **Teste vermelho tem três causas, não uma.** Antes de "eu quebrei",
+9. **Teste vermelho tem três causas, não uma.** Antes de "eu quebrei",
    checar: a regra mudou de propósito (e o teste ficou para trás), o teste
    mede um proxy que mudou de forma, ou é sobra do teste anterior. Em #15 as
    três apareceram, e só uma linha de 19 era regressão de verdade. Rodar o
    caso isolado e também contra o build que está em produção responde isso
    em minutos.
-9. **Intuição de layout erra; a régua não.** Duas mudanças "obviamente
+10. **Intuição de layout erra; a régua não.** Duas mudanças "obviamente
    melhores" de #14 pioraram o número, e só apareceram porque foram medidas
    antes e depois, no mesmo aparelho e com os mesmos dados — sem isso, a
    comparação mede o banco de teste, não a mudança.
