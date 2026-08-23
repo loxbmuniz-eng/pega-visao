@@ -27,6 +27,81 @@ faz achar a próxima em minutos em vez de horas:
 | **Eco de sincronização** | Todo painel reenvia o que tem em memória. Cópia velha sobrescreve dado novo — inclusive com campo vazio. | #01, #03, #08, #10 |
 | **Rótulo que mente** | O dado está certo no banco; o nome dado a ele na tela descreve outra coisa. | #04, #12 |
 | **Regra larga demais** | Trava criada para um caso real barra também o caso legítimo mais comum. | #05 |
+| **Trava sem o par na tela** | O servidor passa a exigir algo novo e a tela continua com o botão antigo: quem clica só descobre que não pode, e não tem por onde seguir. | #13 |
+| **A mesma decisão escrita em dois lugares** | A regra é copiada em vez de consultada. As cópias divergem e o comportamento fica errado sem que nenhuma linha esteja errada. | #14 |
+
+---
+
+## #14 — Cartão do celular grande de novo depois de já ter encolhido (23/08/2026)
+
+**Relato:** *"eu to achando os cards na torre de controle muito grandes no
+mobile, enquanto o desktop já está super bem distribuído, compacto... não só
+na torre mas nas outras abas também"*. E, depois da primeira tentativa de
+correção: *"otimize isso, seja coerente e lógico"*.
+
+**Causa:** a mesma lista de rótulos estava escrita **três vezes**, cada uma
+como seletor de CSS à mão — quem ocupa a linha inteira, quem some no cartão
+fechado, quem lê em linha. Elas divergiram: a terceira tinha seis rótulos e a
+primeira tinha dez. O Histórico, que já havia chegado a 94px por cartão,
+voltou para 147px sem que nenhuma regra estivesse errada — só desalinhada com
+as outras duas.
+
+Junto vieram dois defeitos da mesma família: o limiar do celular era 560px no
+bloco que transforma tabela em cartão e 820px em todo o resto (entre 561 e
+820 as colunas sumiam de uma tabela normal, com cabeçalho visível e nada para
+tocar), e o botão "Chegou" da Portaria passava por cima do rodapé porque uma
+regra com `#id` sobrescrevia o espaço reservado para ele.
+
+**Correção:** a decisão passou a morar num lugar só — `ROTULOS_LARGURA_CHEIA`
+e `ROTULOS_SECUNDARIOS`, em `app.js`. `prepararTabelasMobile()` carimba
+`data-larg="cheia"` e `data-sec="1"` na célula, e o CSS pergunta pelo carimbo
+em vez de repetir a lista. Um limiar só, 820px, o mesmo que `ehTelaEstreita()`
+responde ao JS.
+
+**Medido, no mesmo aparelho e com os mesmos dados** (390×844, 12 cargas em
+placas distintas): Torre de 748px para 255px por cartão (de 1,1 para 3,3
+cartões por tela); Histórico de 197px para 132px; a faixa de indicadores de
+385px para 189px, e a tabela passou a começar em 469px em vez de 664px.
+
+**Guarda:** `testes/test_cartao_mobile_uma_lista.py` confere que todo carimbo
+bate com o Set do JS — se alguém voltar a escrever a lista no CSS, a
+divergência aparece como falha, não como cartão gordo.
+
+**Duas coisas que a medição corrigiu na minha intuição:**
+
+- *"Ler em linha é mais compacto"* é falso em meia coluna. Medido: numa
+  célula de largura inteira o Histórico caiu de 147px para 94px; na meia
+  coluna da Torre o mesmo tratamento SUBIU de 370px para 495px, porque o par
+  rótulo+valor quebra em duas linhas e fica mais alto que empilhado.
+- *"Encolher o botão dá densidade"* também é falso. Buttons de 38px/34px
+  economizaram menos do que pô-los lado a lado (três botões de 44px numa
+  linha ocupam 44px; empilhados, 155px) e derrubaram o mínimo de toque em
+  cinco abas de uma vez. Densidade vem do arranjo, não do alvo menor.
+
+---
+
+## #13 — Botão que só sabe dizer não (23/08/2026)
+
+**Relato:** o Alysson, administrador, clicou em "Restaurar esta versão" no
+painel dele e recebeu *"Esta ação precisa do aval de outro administrador"* —
+sem nenhum lugar para pedir esse aval.
+
+**Causa:** a segunda assinatura foi implementada no servidor sem o par na
+tela. A trava estava certa; o caminho para cumpri-la não existia. E não era
+um botão só: `corrigir-etapa` e `desfazer-exclusão` estavam no mesmo estado,
+e ninguém tinha percebido porque o teste que os cobria falhava em silêncio
+desde então.
+
+**Correção:** `pedirAprovacaoUI()` / `aprovacaoDisponivel()` nos três botões —
+o primeiro clique abre o pedido com o motivo, e o segundo, depois do aval,
+conclui. Quem aprova vê os pedidos na aba Usuários, e quem pediu não vê botão
+de aprovar no próprio pedido (o servidor recusa de todo jeito; a tela explica
+em vez de oferecer).
+
+**Guarda:** `testes/test_segunda_assinatura_ui.py` faz o caminho inteiro com
+dois administradores em duas sessões. E `test_admin_historico.py`, que estava
+vermelho sem ninguém olhar, foi atualizado para a regra nova em vez de para a
+antiga.
 
 ---
 
@@ -318,3 +393,14 @@ permitiu recuperar os lacres apagados de #09.
 5. **Toda trava nova precisa da pergunta "e o caso normal?"** A de #05
    estava certa para o incidente e errada para a rotina — e a rotina é o que
    acontece todo dia.
+6. **Trava no servidor sem caminho na tela é bug, não segurança.** A de #13
+   estava tecnicamente correta e deixou um administrador sem saída. Regra
+   nova só está pronta quando existe o jeito de cumpri-la.
+7. **A mesma decisão em dois lugares vira dois comportamentos.** Em #14 nenhuma
+   linha estava errada; erradas estavam as três cópias da mesma lista. Quando
+   uma regra precisa valer em CSS e em JS, ela mora em um dos dois e o outro
+   pergunta.
+8. **Intuição de layout erra; a régua não.** Duas mudanças "obviamente
+   melhores" de #14 pioraram o número, e só apareceram porque foram medidas
+   antes e depois, no mesmo aparelho e com os mesmos dados — sem isso, a
+   comparação mede o banco de teste, não a mudança.

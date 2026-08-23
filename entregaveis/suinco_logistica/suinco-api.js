@@ -618,9 +618,9 @@ const SuincoSharePoint = (function () {
      de uma pessoa olhando a ficha da carga, e uma correção que sobe sozinha
      meia hora depois — quando o estado já mudou — corrige a coisa errada.
      Sem rede, o erro sobe para a tela e a pessoa tenta de novo. */
-  async function corrigirEtapa(cargaId, statusNovo, motivo) {
+  async function corrigirEtapa(cargaId, statusNovo, motivo, acaoId) {
     return chamar(`/api/cargas/${encodeURIComponent(cargaId)}/corrigir-etapa`, {
-      metodo: 'POST', corpo: { status: statusNovo, motivo },
+      metodo: 'POST', corpo: { status: statusNovo, motivo, acaoId },
     });
   }
 
@@ -639,9 +639,9 @@ const SuincoSharePoint = (function () {
     return chamar('/api/cargas-excluidas' + q);
   }
 
-  async function desfazerExclusao(cargaId, motivo) {
+  async function desfazerExclusao(cargaId, motivo, acaoId) {
     return chamar(`/api/cargas/${encodeURIComponent(cargaId)}/desfazer-exclusao`, {
-      metodo: 'POST', corpo: { motivo },
+      metodo: 'POST', corpo: { motivo, acaoId },
     });
   }
 
@@ -1211,11 +1211,24 @@ const SuincoSharePoint = (function () {
   function listarRevisoes(cargaId) {
     return chamar('/api/cargas/' + encodeURIComponent(cargaId) + '/revisoes');
   }
-  function restaurarRevisao(cargaId, revisaoId) {
+  function restaurarRevisao(cargaId, revisaoId, acaoId) {
     return chamar('/api/cargas/' + encodeURIComponent(cargaId) + '/restaurar', {
-      metodo: 'POST', corpo: { revisaoId },
+      metodo: 'POST', corpo: { revisaoId, acaoId },
     });
   }
+
+  /* Ações críticas — pedido e aprovação por dois administradores.
+     Etapa 3 do protocolo de segurança (22/08/2026). */
+  const acoesCriticas = {
+    listar: () => chamar('/api/acoes-criticas'),
+    pedir: (tipo, cargaId, motivo, parametros) => chamar('/api/acoes-criticas', {
+      metodo: 'POST', corpo: { tipo, cargaId, motivo, parametros },
+    }),
+    aprovar: (acaoId) => chamar(`/api/acoes-criticas/${encodeURIComponent(acaoId)}/aprovar`,
+      { metodo: 'POST' }),
+    recusar: (acaoId, motivo) => chamar(`/api/acoes-criticas/${encodeURIComponent(acaoId)}/recusar`,
+      { metodo: 'POST', corpo: { motivo } }),
+  };
 
   /* Gera o PDF do relatório NO SERVIDOR — pedido do usuário (09/08/2026):
      "eu quero que saia no modo paisagem, e saiam iguais os relatorios que
@@ -1386,7 +1399,7 @@ const SuincoSharePoint = (function () {
     push, upsert, excluir, mudarStatus, encerrarProgramacoesAnteriores, reterLacre,
     recarregarRotas,
     corrigirEtapa, corrigirDataProgramacao, desfazerExclusao, listarExcluidas,
-    programacaoDoDia, mfa,
+    programacaoDoDia, mfa, acoesCriticas,
     pull, pullTudo, drenarFila, pendentes,
     listarOperadores, criarOperador, atualizarOperador,
     sincronizarAgora, iniciarSincroniaPeriodica, pararSincronia, ultimaSincronia,

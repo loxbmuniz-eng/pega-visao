@@ -1088,6 +1088,13 @@ select option{background:var(--campo-bg);color:var(--text)}
   color:#1a1200;
 }
 .seg-btn:focus-visible{ outline:2px solid var(--gold); outline-offset:2px }
+/* No celular esses três (Rotas · Transportadoras · Placas) são os botões
+   que TROCAM a leitura inteira do Raio-X — errar o toque leva a pessoa
+   para o gráfico errado. 30px de altura ficava abaixo do mínimo do painel;
+   a largura já cabe, só faltava altura. */
+@media (max-width:820px){
+  .seg-btn{ min-height:44px; padding:7px 14px }
+}
 
 .table-raiox{ width:100% }
 .table-raiox .raiox-th{ cursor:pointer; user-select:none; white-space:nowrap }
@@ -2756,7 +2763,20 @@ input,select,textarea{border-radius:5px}
   .form-row,.form-grid{ display:block }
   .form-row .form-group,.form-grid .form-group{ width:100%; margin-bottom:10px }
   .gap8{ flex-wrap:wrap }
+}
 
+/* ---- Tabelas viram cartões: 820px, o MESMO limiar de todo o resto ----
+
+   Isto era 560px enquanto todas as regras de aperto do cartão (esconder
+   secundário, ler em linha, botão lado a lado) e a função ehTelaEstreita()
+   do app.js usavam 820px. Entre 561 e 820 a tabela NÃO virava cartão, mas
+   as regras de cartão já valiam: colunas sumiam de uma tabela normal, com
+   cabeçalho visível e sem nada para tocar e reabrir. Tablet e celular
+   deitado caíam exatamente nessa faixa.
+
+   Um limiar só, e ele é 820px — o mesmo que o JS pergunta. Dois números
+   para a mesma decisão é a mesma doença das listas repetidas. */
+@media (max-width:820px){
   /* ---- Tabelas viram cartões ----
      Rolagem lateral em tabela de 14 colunas é inutilizável no celular: o
      usuário perde a referência da linha no primeiro deslize. Cada linha
@@ -2793,18 +2813,12 @@ input,select,textarea{border-radius:5px}
     color:var(--text-dim);
   }
   /* Célula sem rótulo (ações) e os campos de texto longo ocupam as duas
-     colunas — a lista é a mesma em qualquer tabela do painel. */
+     colunas. QUEM é longo está decidido em ROTULOS_LARGURA_CHEIA (app.js),
+     que carimba data-larg="cheia" na célula — este arquivo pergunta pelo
+     carimbo em vez de repetir a lista, porque a mesma lista repetida em
+     três blocos de CSS já divergiu uma vez. */
   .table-wrap table.mobile-cartao td:not([data-rotulo]),
-  .table-wrap table.mobile-cartao td[data-rotulo="Transportadora"],
-  .table-wrap table.mobile-cartao td[data-rotulo="Rota"],
-  .table-wrap table.mobile-cartao td[data-rotulo="Motorista"],
-  .table-wrap table.mobile-cartao td[data-rotulo="Cliente"],
-  .table-wrap table.mobile-cartao td[data-rotulo="Destino"],
-  .table-wrap table.mobile-cartao td[data-rotulo="Observações"],
-  .table-wrap table.mobile-cartao td[data-rotulo="Nome"],
-  .table-wrap table.mobile-cartao td[data-rotulo="E-mail"],
-  .table-wrap table.mobile-cartao td[data-rotulo="Atualizado em"],
-  .table-wrap table.mobile-cartao td[data-rotulo="Linha do tempo"]{
+  .table-wrap table.mobile-cartao td[data-larg="cheia"]{
     grid-column:1 / -1;
   }
   .table-wrap table.mobile-cartao td .btn{ width:100% }
@@ -2832,7 +2846,9 @@ input,select,textarea{border-radius:5px}
 
   /* Tabelas que continuam tabela mantêm rolagem, mas com aviso visual. */
   .table-wrap{ -webkit-overflow-scrolling:touch }
+}
 
+@media (max-width:560px){
   /* ---- Indicadores: cartão empilhado ---- */
   .grid2,.grid3,.grid4{ grid-template-columns:1fr }
   .stat-num{ font-size:26px }
@@ -2853,6 +2869,11 @@ input,select,textarea{border-radius:5px}
 @media (max-width:820px){
   #tab-portaria .btn{ min-height:52px; font-size:15.5px; font-weight:800 }
   #tab-portaria .table-wrap table.mobile-cartao tr{ padding:12px }
+  /* ...mas sem comer o espaço do rodapé "toque para ver tudo": a regra acima
+     tem ID e ganha do padding-bottom:22px que reserva a faixa, e o botão
+     "Chegou" (52px, o maior do painel) passava POR CIMA do texto. Quem
+     redefine o padding do cartão redefine também esta reserva. */
+  #tab-portaria .table-wrap table.mobile-cartao tr[data-expansivel]{ padding-bottom:26px }
   #tab-portaria .table-wrap table.mobile-cartao td .btn{ margin-top:6px }
   #tab-portaria input[type="text"]{ font-size:19px; letter-spacing:1.5px;
     text-align:center; font-weight:800; min-height:56px }
@@ -3650,6 +3671,15 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
    ser mais largos que a coluna — cada um rola sozinho na horizontal para
    a página nunca ganhar barra de rolagem lateral. */
 .pulso-grid{ display:grid; grid-template-columns:1fr 1fr; gap:18px }
+/* min-width:0 nos itens, e é ele que faz o parágrafo acima ser verdade.
+   Item de grid nasce com min-width:auto, ou seja, não encolhe abaixo do
+   próprio conteúdo: o SVG de 732px inchava a coluna, a coluna inchava a
+   grade, e a grade dava barra de rolagem À PÁGINA INTEIRA (medido: 367px
+   de estouro num aparelho de 390px) — enquanto o .pulso-scroll, que existe
+   exatamente para absorver isso, nunca chegava a rolar porque nada o
+   apertava. Com min-width:0 a coluna cede, e a rolagem volta para dentro
+   do gráfico, que era o desenho desde o começo. */
+.pulso-grid > *{ min-width:0 }
 @media(max-width:1100px){ .pulso-grid{ grid-template-columns:1fr } }
 .pulso-titulo{
   font-size:12px; font-weight:800; letter-spacing:.4px; text-transform:uppercase;
@@ -3702,6 +3732,13 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
 }
 .btn-progdia:hover{ color:var(--gold-text); border-color:var(--gold-dim) }
 .btn-progdia .ico{ width:14px; height:14px }
+/* No celular ele continua discreto — mas alvo de toque é 44px, e 28px de
+   altura fazia dele o único botão do painel abaixo do mínimo (apontado por
+   testes/test_auditoria_mobile.py). Discrição é cor e peso de fonte, não
+   área clicável menor do que o dedo. */
+@media (max-width:820px){
+  .btn-progdia{ min-height:44px; padding:6px 14px }
+}
 
 /* =====================================================================
    SEGUNDO FATOR (aba Usuários) — etapa 4 do protocolo de segurança
@@ -3730,3 +3767,249 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
   font-family:ui-monospace,Menlo,Consolas,monospace; font-size:14px; font-weight:600;
   background:var(--vidro-brilho); border-radius:4px; padding:7px 10px; text-align:center;
 }
+
+/* Pedidos de aprovação (etapa 3 do protocolo de segurança) */
+.aprov-item{
+  border:1px solid var(--rule, var(--vidro-brilho)); border-left:3px solid var(--warn);
+  border-radius:0 6px 6px 0; background:var(--navy-light);
+  padding:12px 14px; margin-bottom:10px;
+}
+.aprov-item.aprov-ok{ border-left-color:var(--ok) }
+.aprov-cab{ display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap; align-items:baseline }
+.aprov-quando{ font-size:12px; color:var(--text-dim) }
+.aprov-motivo{ font-style:italic; margin:5px 0; color:var(--text) }
+.aprov-aviso{ margin-top:6px }
+
+/* =====================================================================
+   CELULAR: CARTÃO COMPACTO COM TOQUE PARA ABRIR (23/08/2026)
+   =====================================================================
+
+   Medido antes de mexer, na Torre a 390x844: cada cartão tinha 750px e
+   cabia UM caminhão e pouco na tela. No desktop a mesma tabela mostra
+   quinze linhas. O relato do gestor foi exatamente esse — "os cards no
+   mobile muito grandes, enquanto o desktop já está compacto, com os
+   highlights necessários e a interação de abrir ao clicar".
+
+   A causa não era espaçamento: eram DOZE campos abertos ao mesmo tempo,
+   sendo que três deles são campos de formulário (mais altos que texto).
+
+   A correção é a mesma ideia do desktop: mostrar o que identifica e o que
+   se decide — placa, número, status, rota, peso e a ação — e guardar o
+   resto atrás de um toque. Quem precisa do detalhe toca; quem está
+   varrendo a lista vê quatro ou cinco cargas de uma vez.
+
+   POR QUE POR RÓTULO E NÃO POR POSIÇÃO: a lista abaixo é curada, igual à
+   dos campos de largura inteira logo acima. O mesmo rótulo recebe o mesmo
+   tratamento em qualquer tabela do painel — Torre, Histórico, Programação,
+   Expedição —, que é o que o gestor pediu ao dizer "não só na torre, mas
+   nas outras abas também".
+
+   O DEFAULT É MOSTRAR. Só some o que está nesta lista; coluna nova nasce
+   visível. Errar para o lado de mostrar demais é recuperável — errar para
+   o lado de esconder um dado que alguém precisava não é. */
+@media(max-width:820px){
+  .table-wrap table.mobile-cartao tr:not(.cartao-aberto) td[data-sec]{
+    display:none;
+  }
+  /* Aberto: o `:not(.cartao-aberto)` acima já devolve todos os campos. A
+     linha do tempo precisa de uma linha própria porque a regra base do td
+     é flex-column e ela tem que voltar em LINHA (seis selos lado a lado). */
+  .table-wrap table.mobile-cartao tr.cartao-aberto td.et-linha{
+    display:flex;flex-direction:row;flex-wrap:wrap;
+  }
+
+  /* A pista de que dá para abrir. Sem ela o cartão parece só um cartão
+     pequeno, e o dado escondido vira dado perdido. */
+  .table-wrap table.mobile-cartao tr[data-expansivel]{
+    position:relative;cursor:pointer;padding-bottom:22px;
+  }
+  .table-wrap table.mobile-cartao tr[data-expansivel]::after{
+    content:'toque para ver tudo';
+    position:absolute;left:12px;right:12px;bottom:5px;
+    font-size:9.5px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;
+    color:var(--text-dim);text-align:center;
+    border-top:1px solid var(--border-soft);padding-top:4px;
+  }
+  .table-wrap table.mobile-cartao tr.cartao-aberto::after{ content:'toque para fechar' }
+  /* Histórico e Raio-X abrem o registro inteiro numa linha abaixo, e não o
+     próprio cartão — o rodapé diz o que o toque faz de verdade. */
+  .table-wrap table.mobile-cartao tr[data-expansivel="detalhe"]::after{
+    content:'toque para abrir o registro completo';
+  }
+
+  /* O tipo do veículo sob a placa some no cartão fechado: ele repete a
+     coluna "Tipo de Veículo", que já está guardada atrás do toque, e no
+     estado de varredura ninguém escolhe caminhão pela palavra "Carreta". */
+  .table-wrap table.mobile-cartao tr:not(.cartao-aberto) .veic-tipo{ display:none }
+
+  /* Aperto geral do cartão: com metade dos campos, o respiro de antes
+     vira espaço vazio. */
+  .table-wrap table.mobile-cartao tr{ padding:9px 12px;margin-bottom:8px;gap:0 10px }
+  .table-wrap table.mobile-cartao td{ padding:4px 0 }
+
+  /* HIERARQUIA — o que o olho pega primeiro ao varrer a lista.
+     Placa e número de carga são a identidade; o resto é contexto. */
+  .table-wrap table.mobile-cartao td[data-rotulo="Veículo"],
+  .table-wrap table.mobile-cartao td[data-rotulo="Placa"],
+  .table-wrap table.mobile-cartao td[data-rotulo="Nº Carga"]{
+    font-size:15px;font-weight:700;
+  }
+}
+
+/* Segunda passada, medida (23/08/2026): depois de esconder os secundários
+   a Torre caiu de 750px para 506px por cartão. O que sobrou de maior:
+
+     ações (célula sem rótulo) .. 155px  — botões empilhados, um por linha
+     Nº Carga / Veículo ......... 108px cada — campo editável com rótulo
+     Status ...................... 91px
+
+   Botão de largura total empilhado faz sentido quando é UM botão; com três
+   vira uma coluna de 155px que empurra o próximo caminhão para fora da
+   tela. Lado a lado, com quebra, resolve sem tirar nada da mão de ninguém —
+   e o alvo de toque continua acima do mínimo de 44px de altura. */
+@media(max-width:820px){
+  .table-wrap table.mobile-cartao td:not([data-rotulo]){
+    flex-direction:row;flex-wrap:wrap;gap:6px;align-items:stretch;
+    padding-top:8px;margin-top:2px;border-top:1px solid var(--border-soft);
+  }
+  /* 44px de ALTURA não se negocia — é o mínimo de alvo de toque do painel,
+     travado por testes/test_auditoria_mobile.py. A economia vem de pôr os
+     botões LADO A LADO em vez de empilhados, não de encolher o alvo: três
+     botões de 44px numa linha ocupam 44px; empilhados, 155px. Uma tentativa
+     de 38px/34px chegou a rodar aqui e a auditoria a derrubou em Torre,
+     Histórico, Expedição, Programação e Cadastros de uma vez — dedo de
+     quem está de luva no pátio não acerta 34px. */
+  .table-wrap table.mobile-cartao td:not([data-rotulo]) .btn,
+  .table-wrap table.mobile-cartao td:not([data-rotulo]) .btn.btn-sm{
+    width:auto;flex:1 1 auto;min-width:0;min-height:44px;
+    padding:0 12px;font-size:13px;
+  }
+
+  /* Campo editável dentro do cartão: o rótulo já está acima em 9,5px, então
+     a altura extra do input é só respiro. 16px de fonte continua (o iOS dá
+     zoom automático abaixo disso — isso não se negocia), o resto encolhe. */
+  .table-wrap table.mobile-cartao td input,
+  .table-wrap table.mobile-cartao td select{
+    padding:3px 6px;min-height:30px;
+  }
+
+  /* O selo de status não precisa de bloco próprio de 91px: é uma palavra. */
+  .table-wrap table.mobile-cartao td[data-rotulo="Status"] .badge{
+    padding:3px 9px;font-size:11.5px;
+  }
+  .table-wrap table.mobile-cartao td[data-rotulo="Status"]{ padding-bottom:2px }
+}
+
+/* A linha de situação do CAMINHÃO (sit-placa) dentro do cartão: ela só
+   aparece quando a placa tem mais de uma carga aberta — informação que
+   nasceu de um relato real de produção e não pode sumir. No celular ela
+   quebrava em duas linhas e sozinha respondia por boa parte do bloco de
+   Status. Aqui ela encolhe e cabe em uma. */
+@media(max-width:820px){
+  .table-wrap table.mobile-cartao .sit-placa{
+    font-size:11px;line-height:1.35;margin-top:3px;
+  }
+  .table-wrap table.mobile-cartao td[data-rotulo="Veículo"] .veic-transp{
+    font-size:11px;
+  }
+}
+
+/* =====================================================================
+   CELULAR: A FAIXA DE NÚMEROS DEIXA DE COMER A TELA (23/08/2026)
+   =====================================================================
+
+   Medido com captura a 390x844: da Torre, ~75% da primeira tela era
+   cabeçalho + caixas de número. O primeiro caminhão só aparecia depois de
+   rolar. No desktop os mesmos números ocupam uma faixa fina no topo e a
+   tabela começa em seguida — foi o contraste que o gestor apontou.
+
+   A regra de 640px já compactava cada caixa; o que faltava era encarar a
+   QUANTIDADE: são nove indicadores. Três colunas com destaque ocupando
+   duas viram quatro linhas de grade. Quatro colunas viram duas linhas e
+   meia, e o destaque para de crescer — ele continua sendo o maior e o
+   primeiro, que é o que o torna destaque, sem precisar de corpo de banner.
+
+   Alvo de toque continua ≥44px: a caixa é clicável (filtra a tabela), e
+   densidade que impede o dedo de acertar não é densidade, é defeito. */
+@media(max-width:820px){
+  .bento{ grid-template-columns:repeat(4,1fr); gap:6px }
+  .bento .stat-box{ padding:7px 4px; min-height:46px }
+  .bento .stat-num{ font-size:17px; line-height:1.15 }
+  .bento .stat-label{ font-size:8.5px; line-height:1.15; margin-top:1px }
+  .bento .stat-box::before{ height:14px }
+
+  /* O destaque continua com a largura dobrada e o número maior — mas em
+     escala de faixa, não de banner. */
+  .bento .stat-destaque{ grid-column:span 2 }
+  .bento .stat-destaque .stat-num{ font-size:23px }
+  .bento .stat-destaque .stat-label{ font-size:10px }
+
+  /* A nota de rodapé de cada caixa é reforço; na faixa densa ela vira
+     ruído e empurra a tabela para baixo. */
+  .bento .stat-note{ display:none }
+}
+
+/* =====================================================================
+   O CARTÃO COMPACTO PASSA A LER EM LINHA (23/08/2026)
+   =====================================================================
+
+   Terceira passada, e a que faltava por lógica, não por aperto.
+
+   Cada campo do cartão empilhava RÓTULO em cima e VALOR embaixo — duas
+   linhas de altura para dizer "Peso (kg): 22.000". Isso faz sentido quando
+   o cartão está ABERTO e a pessoa está lendo com atenção. No estado
+   compacto, que existe para VARRER a lista, é o dobro da altura pelo mesmo
+   dado.
+
+   Compacto: rótulo e valor lado a lado, uma linha por campo.
+   Aberto: volta a empilhar, que é como se lê com calma.
+
+   Nenhum rótulo é escondido — a alternativa seria deixar o valor sozinho e
+   contar com o operador adivinhar de que campo é. Um número solto num
+   cartão de carga pode ser peso, ganchos ou entregas; adivinhar dá erro de
+   operação, e erro de operação custa mais que dois centímetros de tela. */
+@media(max-width:820px){
+  /* MEDIDO, e o número corrigiu a intuição (23/08/2026):
+
+       Histórico, célula de largura inteira ... 147px -> 94px  (melhorou)
+       Torre, célula de meia largura .......... 370px -> 495px (PIOROU)
+
+     A causa é geométrica. Na coluna inteira "Operador: Bruna Machado" cabe
+     numa linha. Na meia coluna (~180px) o par rótulo+valor quebra em duas
+     — ficando mais alto que empilhado, que era o que se queria evitar.
+
+     Então a regra não é "inline é melhor": é inline SÓ onde a célula ocupa
+     a largura toda — e "a largura toda" é exatamente data-larg="cheia", o
+     mesmo carimbo que dá grid-column:1/-1 mais acima. Um lugar decide quem
+     é largo (ROTULOS_LARGURA_CHEIA, em app.js) e as duas consequências
+     decorrem dele. Foi a divergência entre essas duas listas escritas à
+     mão que devolveu o Histórico de 94px para 147px. */
+  .table-wrap table.mobile-cartao tr:not(.cartao-aberto) td[data-larg="cheia"]{
+    flex-direction:row;align-items:baseline;gap:6px;flex-wrap:wrap;
+    padding:2px 0;
+  }
+  .table-wrap table.mobile-cartao tr:not(.cartao-aberto) td[data-rotulo]::before{
+    flex:0 0 auto;
+  }
+  /* Campo editável no estado compacto encolhe para caber na linha. O teto de
+     120px existe por causa da MEIA coluna, onde um campo largo empurraria o
+     rótulo para a linha de baixo. Numa célula de largura inteira não há esse
+     aperto — e mantê-lo lá cortava o nome da rota em "500 — Patos…", que é
+     justamente o dado que a pessoa precisa ler antes de decidir. */
+  .table-wrap table.mobile-cartao tr:not(.cartao-aberto) td input,
+  .table-wrap table.mobile-cartao tr:not(.cartao-aberto) td select{
+    min-height:28px;padding:2px 6px;max-width:120px;
+  }
+  .table-wrap table.mobile-cartao tr:not(.cartao-aberto) td[data-larg="cheia"] select{
+    /* flex-basis ZERO, não auto: com `auto` a base é a largura do maior
+       option, que estoura a linha e faz o campo quebrar para baixo do
+       rótulo — mais alto do que se estivesse cortado. Com base 0 ele
+       ocupa o que sobra da linha e encolhe em vez de quebrar. */
+    max-width:none;flex:1 1 0;min-width:0;
+  }
+  /* A transportadora sob a placa vira continuação da mesma linha. */
+  .table-wrap table.mobile-cartao tr:not(.cartao-aberto) .veic-transp{
+    flex:1 1 100%;margin-top:0;
+  }
+}
+
