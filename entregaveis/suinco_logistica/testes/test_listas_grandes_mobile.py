@@ -119,9 +119,15 @@ async def main():
         h = await pg3.evaluate("""() => {
             const tb = document.getElementById('hist-tbody');
             const contagem = document.getElementById('hist-contagem').textContent;
-            return { linhas: tb.querySelectorAll('tr').length, contagem };
+            // REGISTROS, não <tr>: desde 20/08/2026 cada movimentação rende
+            // DUAS linhas — a que se lê e a do detalhe, que abre ao clicar.
+            // Contar <tr> media 80 para os mesmos 40 registros do teto, e
+            // acusava um limite quebrado que nunca quebrou.
+            return { registros: tb.querySelectorAll('tr.hist-linha').length,
+                     linhas: tb.querySelectorAll('tr').length, contagem };
         }""")
-        ck('log completo agora tem teto no celular (<=40)', h['linhas'] <= 40, str(h['linhas']))
+        ck('log completo agora tem teto no celular (<=40)', h['registros'] <= 40,
+           f"{h['registros']} registro(s) em {h['linhas']} linha(s)")
         ck('avisa que só mostra as mais recentes', 'recentes' in h['contagem'], h['contagem'])
         await ctx3.close()
 

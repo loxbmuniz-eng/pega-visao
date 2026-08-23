@@ -105,12 +105,34 @@ async def main():
             "() => [...document.querySelectorAll('.nav-tab')].filter(t=>!t.hidden).map(t=>t.dataset.tab)")
         # A Logística passou a ter acesso total à operação (decisão do
         # gestor): cobre qualquer posto quando falta gente. O que ela NÃO
-        # tem é a aba Usuários — criar acesso não é operar o pátio.
+        # tem é CRIAR ACESSO — isso continua sendo da Administração.
         ck('Logística vê Programação', 'programacao' in visiveis, str(visiveis))
         ck('Logística vê Portaria (cobre o posto)', 'portaria' in visiveis, str(visiveis))
         ck('Logística vê Faturamento (cobre o posto)', 'faturamento' in visiveis, str(visiveis))
-        ck('Logística NÃO vê Usuários', 'usuarios' not in visiveis,
-           'criar acesso é da Administração')
+        # A aba Usuários abriu para todos os setores em 22/08/2026, com o
+        # segundo fator: deixou de ser só a tela de administrar gente e passou
+        # a ser onde cada pessoa protege a própria conta. Por isso a pergunta
+        # mudou de "ele vê a aba?" para "o que ele encontra dentro dela?" — a
+        # regra que interessa é a mesma de sempre, e agora é conferida onde
+        # ela de fato vale.
+        await pagina.evaluate("()=>abrirTab('usuarios')")
+        await pagina.wait_for_timeout(1200)
+        dentro = await pagina.evaluate("""()=>{
+          const vis = el => !!el && el.offsetParent !== null;
+          const aba = document.getElementById('tab-usuarios');
+          return {
+            cards: [...aba.querySelectorAll('.card')].filter(vis).map(c=>c.id||'(sem id)'),
+            listaOperadores: vis(document.getElementById('usr-tbody')),
+            aprovacoes: vis(document.getElementById('card-aprovacoes')),
+            minhaSeguranca: vis(document.getElementById('card-minha-seguranca')),
+          };
+        }""")
+        ck('Logística NÃO cria acesso: sem lista de operadores',
+           not dentro['listaOperadores'], 'criar acesso é da Administração')
+        ck('Logística NÃO vê os pedidos de aprovação', not dentro['aprovacoes'])
+        ck('na aba Usuários ela vê só "Minha segurança"',
+           dentro['cards'] == ['card-minha-seguranca'], str(dentro['cards']))
+        ck('mas PODE ativar o próprio segundo fator', dentro['minhaSeguranca'])
 
         print('\n=== 5. A BASE DE FROTA VEIO DO SERVIDOR ===')
         await pagina.wait_for_timeout(1500)
