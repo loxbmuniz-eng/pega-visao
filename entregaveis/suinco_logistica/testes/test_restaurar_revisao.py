@@ -100,16 +100,42 @@ async def main():
            texto[:150])
 
         print('\n=== 3. RESTAURAR VOLTA O DADO — EM TODOS OS APARELHOS ===')
-        pgA.on('dialog', lambda d: asyncio.ensure_future(d.accept()))
-        # Clica na revisão CERTA — a que mostra 21,50 t. Pode haver mais de
-        # uma revisão (ecos de sincronização com mudança real também geram),
-        # e a primeira da lista é a mais recente, não necessariamente a boa.
-        await pgA.evaluate("""() => {
-            const alvo = [...document.querySelectorAll('#revisoes-lista .revisao-item')]
-                .find(el => el.innerText.includes('21,50'));
-            alvo.querySelector('.btn').click();
-        }""")
-        await pgA.wait_for_timeout(3000)
+        # SEGUNDA ASSINATURA (etapa 3 da segurança, 22/08/2026): restaurar
+        # reescreve o histórico da carga e passou a exigir o aval de OUTRO
+        # administrador. Este teste é de antes disso e ficou vermelho em
+        # silêncio — no build anterior o clique batia direto no servidor e
+        # era recusado, que foi exatamente o beco sem saída relatado pelo
+        # Alysson (ocorrência #13). Agora o primeiro clique ABRE o pedido, o
+        # outro administrador aprova, e o segundo clique conclui.
+        ctxAp, pgAp = await abrir(nav, 'admin2@teste.local', 'aprovador')
+
+        async def clicar_restaurar():
+            await pgA.evaluate("""() => {
+                // A revisão CERTA — a que mostra 21,50 t. Pode haver mais de
+                // uma (eco de sincronização com mudança real também gera), e
+                // a primeira da lista é a mais recente, não a boa.
+                const alvo = [...document.querySelectorAll('#revisoes-lista .revisao-item')]
+                    .find(el => el.innerText.includes('21,50'));
+                alvo.querySelector('.btn').click();
+            }""")
+            await pgA.wait_for_timeout(2500)
+
+        # O motivo do pedido e a confirmação chegam por prompt/confirm.
+        await pgA.evaluate("() => { window.prompt = () => 'peso estragado no teste';"
+                           "        window.confirm = () => true; }")
+        await clicar_restaurar()
+
+        aprovou = await pgAp.evaluate("""async (n) => {
+            const l = await SuincoSharePoint.acoesCriticas.listar();
+            const a = (l||[]).find(x => x.tipo === 'restaurar' && !x.aprovada_em && !x.recusada_em);
+            if (!a) return false;
+            await SuincoSharePoint.acoesCriticas.aprovar(a.acao_id);
+            return true;
+        }""", num)
+        ck('o clique abriu o pedido e o outro administrador aprovou', aprovou)
+
+        await clicar_restaurar()
+        await pgA.wait_for_timeout(1500)
         local = await pgA.evaluate("""(n) => {
             const c = DB.cargas.find(x=>x.numeroCarga===n);
             return {peso: c.peso, rota: c.rota};
@@ -136,7 +162,7 @@ async def main():
             "() => document.querySelectorAll('.btn-revisoes').length")
         ck('nenhum botão ↩ para a Logística', botao_log == 0, f'{botao_log} botões')
 
-        await ctxA.close(); await ctxB.close(); await nav.close()
+        await ctxA.close(); await ctxB.close(); await ctxAp.close(); await nav.close()
 
     print('\n=== RESULTADO ===')
     print('  FALHAS: ' + (', '.join(falhas) if falhas else 'NENHUMA'))

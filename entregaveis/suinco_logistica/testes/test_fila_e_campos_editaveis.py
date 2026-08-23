@@ -54,7 +54,13 @@ async def main():
             const b = criarCargaProgramada({placa:p2, numeroCarga:'VELHA1', peso:8000,
                 rota:'500', operador:'Ana'});
             const tresDias = new Date(Date.now() - 3*86400000).toISOString();
-            b.criadoEm = tresDias; b.atualizadoEm = tresDias;
+            /* `programadoEm` também, e é ele que decide: a fila do dia
+               pergunta QUANDO A CARGA FOI PROGRAMADA, não quando o caminhão
+               entrou no pátio (ver renderFilaProgramados em app.js). A regra
+               mudou de propósito — carga lançada às 22h de ontem PARA HOJE
+               sumia da fila de hoje —, e envelhecer só criadoEm deixou de
+               produzir uma carga "de outro dia". */
+            b.programadoEm = tresDias; b.criadoEm = tresDias; b.atualizadoEm = tresDias;
             SuincoStore.save();
             renderAll();
         }""")
@@ -91,8 +97,12 @@ async def main():
         # Status e os botões. "Programada em" e "Atualizado em" descrevem a
         # mesma coisa (quando), então passaram a dividir uma célula
         # empilhada. Nada foi removido — o dado continua na tela.
+        # O nome da coluna virou "Programação · Última etapa"; o dado é o
+        # mesmo e continua nas duas células (.dt-prog e .dt-atu), conferidas
+        # logo abaixo. Aceita os dois títulos para não travar num rótulo.
+        titulo_datas = await pg.inner_text('#torre-thead')
         ck('coluna de datas existe na Torre',
-           'Datas' in (await pg.inner_text('#torre-thead')))
+           'Datas' in titulo_datas or 'Programação' in titulo_datas, titulo_datas[:80])
         ck('a data da programação continua visível',
            await pg.is_visible('#torre-tbody .dt-prog'))
         ck('a última atualização continua visível',

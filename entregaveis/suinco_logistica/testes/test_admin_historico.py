@@ -59,6 +59,22 @@ async def main():
         nav = await p.chromium.launch(executable_path='/opt/pw-browsers/chromium',
                                       headless=True)
         ctxA, pgA = await abrir(nav, 'chefe@teste.local', 'adm')
+        # SEGUNDA ASSINATURA (etapa 3 da segurança, 22/08/2026): corrigir etapa
+        # e devolver carga excluída reescrevem o histórico e passaram a exigir o
+        # aval de OUTRO administrador. Este teste era de antes disso e ficou
+        # vermelho em silêncio; agora exercita a regra nova, que é o caminho
+        # que a Administração de fato usa.
+        ctxB, pgB = await abrir(nav, 'admin2@teste.local', 'adm2')
+
+        async def aprovar(tipo, carga_id):
+            """O outro administrador aprova o pedido pendente deste tipo."""
+            await pgB.evaluate("""async (d)=>{
+              const l = await SuincoSharePoint.acoesCriticas.listar();
+              const a = (l||[]).find(x=>x.tipo===d.tipo && x.carga_id===d.id
+                && !x.aprovada_em && !x.recusada_em);
+              if(a) await SuincoSharePoint.acoesCriticas.aprovar(a.acao_id);
+            }""", {'tipo': tipo, 'id': carga_id})
+            await pgB.wait_for_timeout(600)
 
         # Uma carga do zero até Seguiu Viagem, numa placa sem histórico.
         carga = await pgA.evaluate(
@@ -121,12 +137,31 @@ async def main():
         depois = await pgA.evaluate("(id) => (getCarga(id) || {}).status", carga['id'])
         ck('a carga não se mexeu', depois == 'Seguiu Viagem', str(depois))
 
-        print('\n=== 3. COM MOTIVO, A CARGA VOLTA DE ETAPA ===')
+        print('\n=== 3. COM MOTIVO E COM O AVAL DE OUTRO ADM, A CARGA VOLTA ===')
         await pgA.fill(f"#adm-etapa-motivo-{carga['id']}", 'saída registrada por engano')
+        # Primeiro clique: não corrige nada, ABRE o pedido de aprovação. É o
+        # que o Alysson não tinha — antes o botão só dizia que não podia.
+        await pgA.evaluate("()=>{ window.prompt = ()=> 'saída registrada por engano'; }")
+        await pgA.click(f"button[onclick*=\"corrigirEtapaCargaUI('{carga['id']}')\"]")
+        await pgA.wait_for_timeout(2000)
+        aindaLa = await pgA.evaluate("(id) => (getCarga(id) || {}).status", carga['id'])
+        ck('sem aval, o primeiro clique não mexe na carga', aindaLa == 'Seguiu Viagem',
+           str(aindaLa))
+        pedido = await pgA.evaluate("""async (id)=>{
+          const l = await SuincoSharePoint.acoesCriticas.listar();
+          return {achou: (l||[]).some(x=>x.tipo==='corrigir-etapa' && x.carga_id===id && !x.aprovada_em),
+                  // Se falhar, o que a tela disse é a pista mais curta.
+                  avisos: [...document.querySelectorAll('.notif-item')].map(e=>e.innerText.slice(0,70))};
+        }""", carga['id'])
+        ck('mas abriu o pedido de aprovação', pedido['achou'],
+           '' if pedido['achou'] else ' · '.join(pedido['avisos']))
+
+        await aprovar('corrigir-etapa', carga['id'])
+        await pgA.evaluate("()=>{ window.confirm = ()=>true; }")
         await pgA.click(f"button[onclick*=\"corrigirEtapaCargaUI('{carga['id']}')\"]")
         await pgA.wait_for_timeout(3000)
         voltou = await pgA.evaluate("(id) => (getCarga(id) || {}).status", carga['id'])
-        ck('a carga voltou para Faturado', voltou == 'Faturado', str(voltou))
+        ck('com o aval, a carga volta para Faturado', voltou == 'Faturado', str(voltou))
 
         print('\n=== 4. A DATA DE PROGRAMAÇÃO É CORRIGIDA PELA FICHA ===')
         await pgA.evaluate("(id) => selecionarCargaTimeline(id)", carga['id'])
@@ -173,10 +208,17 @@ async def main():
             "(id) => document.getElementById('exc-lista').innerHTML.includes(id)", outra['id'])
         ck('a carga aparece na lista de excluídas', naLista)
 
+        # Mesma trava de segunda assinatura: pedir, aprovar, concluir.
+        await pgA.evaluate("()=>{ window.prompt = ()=> 'excluída por engano'; }")
+        await pgA.click(f"button[onclick*=\"devolverCargaExcluidaUI('{outra['id']}')\"]")
+        await pgA.wait_for_timeout(2000)
+        ck('sem aval, a carga excluída continua fora',
+           await pgA.evaluate("(id) => !getCarga(id)", outra['id']))
+        await aprovar('desfazer-exclusao', outra['id'])
         await pgA.click(f"button[onclick*=\"devolverCargaExcluidaUI('{outra['id']}')\"]")
         await pgA.wait_for_timeout(3000)
         voltouCarga = await pgA.evaluate("(id) => !!getCarga(id)", outra['id'])
-        ck('a carga voltou para o painel', voltouCarga)
+        ck('com o aval, a carga volta para o painel', voltouCarga)
 
         await pgA.evaluate(
             """async (id) => { try { await SuincoSharePoint.excluir(id, 'limpeza de teste'); }

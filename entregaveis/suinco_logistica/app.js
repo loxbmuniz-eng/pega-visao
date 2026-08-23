@@ -927,6 +927,89 @@ async function entrarNoServidor(){
 }
 
 /* =====================================================================
+   PEDIDOS DE APROVAÇÃO — o outro lado da segunda assinatura
+   =====================================================================
+   Etapa 3 do protocolo de segurança travou restaurar, corrigir etapa e
+   devolver carga excluída atrás do aval de um segundo administrador — no
+   servidor, e só lá. A tela continuou com o botão antigo, e o resultado
+   foi um administrador clicando em "Restaurar esta versão" para ouvir que
+   precisava de um aval que não tinha onde ser pedido.
+
+   Sem esta tela o pedido some no banco e ninguém sabe que existe. É o par
+   obrigatório da trava: quem pede tem onde pedir, quem aprova tem onde
+   ver. */
+async function renderPedidosAprovacaoUI(){
+  const alvo = document.getElementById('aprovacoes-painel');
+  const card = document.getElementById('card-aprovacoes');
+  if(!alvo || !card) return;
+  if((DB.operador||{}).setor !== 'Administração'){ card.hidden = true; return; }
+
+  let lista;
+  try{
+    lista = await SuincoSharePoint.acoesCriticas.listar();
+  }catch(e){ card.hidden = true; return; }
+
+  const abertos = (lista || []).filter(a => !a.aprovada_em && !a.recusada_em);
+  const recentes = (lista || []).filter(a => a.aprovada_em && !a.executada_em && !a.recusada_em);
+  card.hidden = false;
+
+  if(!abertos.length && !recentes.length){
+    alvo.innerHTML = '<div class="card-sub">Nenhum pedido aguardando. '
+      + 'Quando alguém pedir para restaurar ou devolver uma carga, aparece aqui.</div>';
+    return;
+  }
+
+  const NOME = { 'restaurar':'Restaurar versão anterior',
+    'desfazer-exclusao':'Devolver carga excluída', 'corrigir-etapa':'Corrigir etapa' };
+
+  const linha = (a, aguardando) => `
+    <div class="aprov-item ${aguardando ? '' : 'aprov-ok'}">
+      <div class="aprov-cab">
+        <strong>${esc(NOME[a.tipo] || a.tipo)}</strong>
+        <span class="aprov-quando">${esc(dataHoraBR(a.pedida_em))}</span>
+      </div>
+      <div class="aprov-motivo">"${esc(a.motivo)}"</div>
+      <div class="card-sub">pedido por ${esc(a.pedida_por)}${a.aprovada_por
+        ? ` · aprovado por ${esc(a.aprovada_por)}` : ''}</div>
+      ${aguardando ? (a.podeAprovar
+        ? `<div class="form-row" style="margin-top:8px">
+             <button class="btn btn-primary btn-sm" onclick="aprovarAcaoUI(${Number(a.acao_id)})">Aprovar</button>
+             <button class="btn btn-sec btn-sm" onclick="recusarAcaoUI(${Number(a.acao_id)})">Recusar</button>
+           </div>`
+        : '<div class="card-sub aprov-aviso">Você fez este pedido — quem pede não aprova. '
+          + 'Peça a outro administrador.</div>')
+        : '<div class="card-sub aprov-aviso">Aprovado. Quem pediu já pode concluir a ação.</div>'}
+    </div>`;
+
+  alvo.innerHTML = (abertos.map(a => linha(a, true)).join('')
+    + recentes.map(a => linha(a, false)).join(''));
+}
+
+async function aprovarAcaoUI(acaoId){
+  if(!confirm('Aprovar este pedido? Quem pediu poderá concluir a ação, '
+    + 'e os dois nomes ficam registrados.')) return;
+  try{
+    await SuincoSharePoint.acoesCriticas.aprovar(acaoId);
+    notify('Pedido aprovado.', 'success');
+    renderPedidosAprovacaoUI();
+  }catch(e){
+    notify(e && e.message || 'Não consegui aprovar.', 'danger', 7000);
+  }
+}
+
+async function recusarAcaoUI(acaoId){
+  const motivo = prompt('Por que está recusando? (fica registrado)');
+  if(!motivo || !motivo.trim()) return;
+  try{
+    await SuincoSharePoint.acoesCriticas.recusar(acaoId, motivo.trim());
+    notify('Pedido recusado.', 'warn');
+    renderPedidosAprovacaoUI();
+  }catch(e){
+    notify(e && e.message || 'Não consegui recusar.', 'danger', 7000);
+  }
+}
+
+/* =====================================================================
    SEGUNDO FATOR — a tela de quem ativa o próprio
    =====================================================================
    Etapa 4 do protocolo de segurança (22/08/2026). Fica na aba Usuários,
@@ -1241,12 +1324,149 @@ function renderTabAtual(){
       // relatório "de hoje" é o caso de uso de toda hora na Logística.
       { const rd=document.getElementById('rel-dev-dia'); if(rd && !rd.value && typeof diaLocalDev==='function') rd.value=diaLocalDev(); }
       break;
-    case 'usuarios': renderUsuarios(); renderMinhaSegurancaUI(); break;
+    case 'usuarios': renderUsuarios(); renderMinhaSegurancaUI(); renderPedidosAprovacaoUI(); break;
   }
   // Depois de pintar, e não antes: os rótulos são derivados das células
   // que acabaram de ser criadas.
   prepararTabelasMobile();
 }
+
+/* =====================================================================
+   CELULAR: TOQUE PARA ABRIR O CARTÃO (23/08/2026)
+   =====================================================================
+
+   Par obrigatório da regra de CSS que esconde os campos secundários em
+   telas estreitas. O CSS decide O QUE some; isto decide COMO volta.
+
+   DELEGADO NO DOCUMENTO, e não um ouvinte por linha: as tabelas do painel
+   são redesenhadas o tempo todo (a Torre a cada sincronização), e ouvinte
+   preso à linha morreria no primeiro render. Um ouvinte só, no documento,
+   sobrevive a qualquer redesenho — e vale para toda tabela `mobile-cartao`
+   de qualquer aba, que é o que o gestor pediu: "não só na torre, mas nas
+   outras abas também".
+
+   Não interfere no que já era clicável: se o toque veio de um botão, link,
+   campo ou de uma linha que já tem clique próprio (Histórico, Raio-X), a
+   função sai sem fazer nada e deixa o comportamento original acontecer. */
+function ehTelaEstreita(){
+  return window.matchMedia && window.matchMedia('(max-width:820px)').matches;
+}
+
+/* AS DUAS LISTAS QUE DECIDEM O CARTÃO DO CELULAR — e o motivo de estarem
+   aqui, e não no CSS.
+
+   A primeira versão escrevia cada uma dessas listas como seletor de CSS,
+   repetido em três blocos diferentes (quem ocupa a linha toda, quem some
+   no estado compacto, quem lê em linha). Três cópias da mesma verdade
+   escritas à mão é uma que vai divergir — e divergiu: o Histórico voltou
+   de 94px para 147px por cartão porque a terceira lista tinha seis
+   rótulos e a primeira tinha dez. Nenhum erro de CSS; erro de ter a
+   mesma decisão em três lugares.
+
+   Agora a decisão mora num lugar só. `prepararTabelasMobile` carimba
+   `data-larg="cheia"` e `data-sec="1"` em cada célula, e o CSS pergunta
+   pelo carimbo. Acrescentar um rótulo aqui acerta os três blocos de uma
+   vez, por construção. */
+
+/* LARGURA CHEIA — o valor pode ser longo, então a célula ocupa as duas
+   colunas da grade do cartão. Consequência: no estado compacto essa
+   célula (e só ela) lê em linha, "Rótulo: valor", porque só numa célula
+   de largura inteira o par cabe numa linha só. Na meia coluna ele quebra
+   e fica MAIS alto que empilhado — foi medido, ver o CSS. */
+const ROTULOS_LARGURA_CHEIA = new Set([
+  // Medido no Histórico a 390px: com 'Data/Hora' e 'Placa' em meia coluna o
+  // cartão dava 160px; em largura cheia, lendo em linha, deu 132px. Valor
+  // curto ganha mais de ler em linha do que de dividir a largura.
+  'Data/Hora', 'Placa',
+  // 'Peso (kg)' entra pelo mesmo motivo e por mais um: na Torre ele caía
+  // sozinho numa linha de grade cuja outra metade ficava vazia (o campo
+  // seguinte é de largura inteira e força linha nova). Em linha cheia o
+  // buraco some e o cartão cai de 271px para 253px — sem esconder nada.
+  'Peso (kg)',
+  'Transportadora', 'Rota', 'Motorista', 'Cliente', 'Destino',
+  'Observações', 'Nome', 'E-mail', 'Atualizado em', 'Linha do tempo',
+  'Operador', 'Setor', 'Registro', 'Etapa', 'Status',
+  'Tipo de Operação', 'Programação · Última etapa', 'Tipo de Veículo',
+  'Motivo', 'Produto', 'Cliente / Destino', 'Detalhe', 'Ação do operador',
+]);
+
+/* SECUNDÁRIO — some no cartão fechado, volta com um toque. O default é
+   MOSTRAR: coluna nova nasce visível, e só entra aqui quem foi decidido.
+   Errar para o lado de mostrar demais é recuperável; esconder um dado que
+   alguém precisava, não. */
+const ROTULOS_SECUNDARIOS = new Set([
+  'Seq.', 'Motorista', 'Palet.', 'Paletizada', 'Tipo de Operação',
+  'Ganchos · Entr.', 'Ganchos', 'Entregas', 'Doca', 'Transportadora',
+  'Tipo de Veículo', 'Observações', 'Programação · Última etapa',
+  'Atualizado em', 'Operador', 'Setor', 'Linha do tempo',
+]);
+
+/* Marca as linhas que TÊM algo escondido. Sem esta marca, o rodapé "toque
+   para ver tudo" apareceria também em cartão que já mostra tudo — e aí a
+   promessa da tela seria mentira.
+
+   Lê o carimbo `data-sec` em vez de consultar o Set de novo: quem carimba
+   é `prepararTabelasMobile`, e uma leitura só garante que a marca da linha
+   e a regra do CSS nunca discordem. */
+function marcarCartoesExpansiveis(raiz){
+  const alvo = raiz && raiz.querySelectorAll ? raiz : document;
+  alvo.querySelectorAll('table.mobile-cartao tbody tr').forEach(tr=>{
+    if(!tr.querySelector('td[data-sec]')){
+      tr.removeAttribute('data-expansivel'); tr.classList.remove('cartao-aberto'); return;
+    }
+    // Linha que JÁ tem clique próprio (Histórico e Raio-X abrem o registro
+    // completo embaixo) recebe rodapé com outro texto. Prometer "toque para
+    // ver tudo" e entregar outra coisa é pior que não prometer nada — e o
+    // detalhe que ela abre mostra Operador e Setor, que são exatamente os
+    // campos escondidos aqui.
+    const temClique = tr.classList.contains('hist-linha') || tr.classList.contains('raiox-linha');
+    tr.setAttribute('data-expansivel', temClique ? 'detalhe' : '1');
+  });
+}
+
+document.addEventListener('click', (ev)=>{
+  if(!ehTelaEstreita()) return;
+  const tr = ev.target.closest && ev.target.closest('table.mobile-cartao tbody tr[data-expansivel]');
+  if(!tr) return;
+  // Não sequestra clique de controle nem de linha que já responde sozinha.
+  if(ev.target.closest('button, a, input, select, textarea, label')) return;
+  if(tr.classList.contains('hist-linha') || tr.classList.contains('raiox-linha')) return;
+  tr.classList.toggle('cartao-aberto');
+});
+
+/* Depois de todo redesenho as marcas precisam voltar. `renderTabAtual` já
+   chama `prepararTabelasMobile` no fim de cada pintura; este observador é a
+   rede para o que redesenha FORA dele — a busca de cargas excluídas, o log
+   da programação do dia, qualquer tela que troca a tabela inteira por
+   innerHTML sem passar pelo render geral.
+
+   Observa o #main com subtree, e não cada tbody: tbody que nasce depois do
+   carregamento nunca seria observado, e era isso que deixava essas telas
+   sem rótulo no celular. O custo fica limitado por juntar a rajada de
+   mutações num único passe por quadro — a mesma passada que o render normal
+   já faz, nunca uma por linha inserida.
+
+   Não realimenta: só `childList` é observado, e `prepararTabelasMobile`
+   mexe apenas em atributos. */
+if(typeof MutationObserver !== 'undefined'){
+  let agendado = false;
+  const observador = new MutationObserver(()=>{
+    if(agendado) return;
+    agendado = true;
+    const passar = ()=>{
+      agendado = false;
+      try{ prepararTabelasMobile(); }catch(e){ /* DOM em transição */ }
+    };
+    if(typeof requestAnimationFrame === 'function') requestAnimationFrame(passar);
+    else setTimeout(passar, 0);
+  });
+  document.addEventListener('DOMContentLoaded', ()=>{
+    const main = document.getElementById('main');
+    if(main) observador.observe(main, { childList:true, subtree:true });
+    prepararTabelasMobile(document);
+  });
+}
+
 function renderAll(){
   /* Guardião do pré-login: qualquer caminho que resulte em operador logado
      (botões de login, restauração de sessão por token, teste automatizado
@@ -1467,11 +1687,54 @@ async function abrirRevisoesUI(id){
   }
 }
 
-async function restaurarRevisaoUI(id, revisaoId){
-  if(!confirm('Restaurar esta versão? A carga volta EXATAMENTE ao estado mostrado, '
-    + 'em todos os aparelhos. A ação fica registrada no seu nome.')) return;
+/* SEGUNDA ASSINATURA NA TELA (23/08/2026).
+
+   A etapa 3 do protocolo de segurança passou a exigir dois administradores
+   para restaurar — e eu tinha implementado a TRAVA sem implementar o
+   CAMINHO. O resultado apareceu no celular do Alysson: o botão recusava com
+   "precisa de um pedido aprovado por outro administrador" e não havia lugar
+   nenhum para fazer esse pedido. Trava sem caminho não é controle, é porta
+   emperrada.
+
+   Agora o mesmo botão faz as duas coisas: se já existe aprovação pendente
+   para esta carga, executa; se não existe, ABRE O PEDIDO ali mesmo. Quem
+   aprova vê no card "Pedidos de aprovação", na aba Usuários. */
+async function pedirAprovacaoUI(tipo, cargaId, oQueFaz){
+  const motivo = prompt(`${oQueFaz}\n\nEsta ação reescreve o histórico da carga e precisa `
+    + 'do aval de OUTRO administrador.\n\nPor que ela é necessária?');
+  if(!motivo || !motivo.trim()) return null;
   try{
-    const restaurada = await SuincoSharePoint.restaurarRevisao(id, revisaoId);
+    const p = await SuincoSharePoint.acoesCriticas.pedir(tipo, cargaId, motivo.trim());
+    notify('Pedido enviado. Assim que outro administrador aprovar, clique de novo para concluir.',
+      'success', 9000);
+    return p;
+  }catch(e){
+    notify('Não consegui abrir o pedido: ' + (e && e.message || 'erro'), 'danger', 7000);
+    return null;
+  }
+}
+
+/* Procura uma aprovação já concedida e ainda não usada para esta carga. */
+async function aprovacaoDisponivel(tipo, cargaId){
+  try{
+    const lista = await SuincoSharePoint.acoesCriticas.listar();
+    const achada = (lista || []).find(a => a.tipo === tipo && a.carga_id === cargaId
+      && a.aprovada_em && !a.executada_em && !a.recusada_em);
+    return achada ? achada.acao_id : null;
+  }catch(e){ return null; }
+}
+
+async function restaurarRevisaoUI(id, revisaoId){
+  const acaoId = await aprovacaoDisponivel('restaurar', id);
+  if(!acaoId){
+    await pedirAprovacaoUI('restaurar', id,
+      'Restaurar a carga para uma versão anterior.');
+    return;
+  }
+  if(!confirm('Restaurar esta versão? A carga volta EXATAMENTE ao estado mostrado, '
+    + 'em todos os aparelhos. A ação fica registrada no seu nome e no de quem aprovou.')) return;
+  try{
+    const restaurada = await SuincoSharePoint.restaurarRevisao(id, revisaoId, acaoId);
     // O servidor é a fonte da verdade da restauração: aplica a resposta
     // localmente na hora, sem esperar o próximo ciclo de sincronização.
     const local = getCarga(id);
@@ -1603,8 +1866,7 @@ function renderVisaoPatio(prefixo){
      rolagem de dezenas de milhares de pixels — medido: 400 cargas =
      188.217px de altura de página. Esta função alimenta Torre, Portaria,
      Expedição e Faturamento — a correção vale pras quatro de uma vez. */
-  const mobile = window.matchMedia && window.matchMedia('(max-width:560px)').matches;
-  const LIMITE = mobile ? 40 : 300;
+  const LIMITE = ehTelaEstreita() ? 40 : 300;
   const listaCompleta = lista;
   lista = lista.slice(0, LIMITE);
 
@@ -4425,9 +4687,9 @@ function renderFrotaTabela(){
      mesma altura de ~300 telas de celular empilhadas — medido: 98.676px de
      scroll numa Frota de 749 placas. Auditoria pedida pelo usuário
      ("refinamento em TODAS AS ABAS") depois de eu ter corrigido só a
-     Torre/Indicadores. Mesmo breakpoint que ativa o cartão (560px). */
-  const mobile = window.matchMedia && window.matchMedia('(max-width:560px)').matches;
-  const LIMITE = mobile ? 30 : 300;
+     Torre/Indicadores. Mesmo limiar que ativa o cartão — perguntado a
+     ehTelaEstreita(), para não haver dois números para a mesma decisão. */
+  const LIMITE = ehTelaEstreita() ? 30 : 300;
   const exibidos = lista.slice(0, LIMITE);
   document.getElementById('frota-tbody').innerHTML = exibidos.map(f=>`
     <tr>
@@ -4675,11 +4937,20 @@ async function corrigirEtapaCargaUI(id){
   if(!c || !status) return;
   if(status === c.status){ notify('A carga já está nessa etapa.','warn'); return; }
   if(!motivo){ notify('Escreva o motivo da correção de etapa.','warn'); return; }
+  // Mesma trava e mesmo caminho de "Restaurar": o servidor exige o aval de
+  // outro administrador, então a tela precisa saber PEDIR esse aval. Sem
+  // isto o botão só informa que não pode — foi o beco sem saída relatado.
+  const acaoId = await aprovacaoDisponivel('corrigir-etapa', id);
+  if(!acaoId){
+    await pedirAprovacaoUI('corrigir-etapa', id,
+      `Mudar a etapa da carga ${c.numeroCarga || c.placa} de "${c.status}" para "${status}".`);
+    return;
+  }
   const voltando = STATUS_FLOW.indexOf(status) < STATUS_FLOW.indexOf(c.status);
   if(!confirm(`${voltando ? 'VOLTAR' : 'Avançar'} a carga ${c.numeroCarga || c.placa} de "${c.status}" para "${status}"?\n\n`
     + 'Isso muda o andamento para todos os setores e fica registrado no histórico.')) return;
   try{
-    await SuincoSharePoint.corrigirEtapa(id, status, motivo);
+    await SuincoSharePoint.corrigirEtapa(id, status, motivo, acaoId);
     await SuincoSharePoint.sincronizarAgora();
     notifyGravacao(`Etapa corrigida: ${c.status} → ${status}.`);
     renderAll();
@@ -5002,11 +5273,17 @@ async function carregarCargasExcluidasUI(){
 }
 
 async function devolverCargaExcluidaUI(id){
+  const acaoId = await aprovacaoDisponivel('desfazer-exclusao', id);
+  if(!acaoId){
+    await pedirAprovacaoUI('desfazer-exclusao', id,
+      'Devolver ao painel uma carga que tinha sido excluída.');
+    return;
+  }
   const motivo = (prompt('Por que esta carga está voltando?\n\n'
     + 'O motivo fica registrado no histórico com o seu nome.')||'').trim();
   if(!motivo) return;
   try{
-    await SuincoSharePoint.desfazerExclusao(id, motivo);
+    await SuincoSharePoint.desfazerExclusao(id, motivo, acaoId);
     await SuincoSharePoint.sincronizarAgora();
     notifyGravacao('Carga devolvida ao painel.');
     renderAll();
@@ -5062,8 +5339,7 @@ function renderHistorico(){
       return t >= ini && t <= fim;
     });
   }
-  const mobile = window.matchMedia && window.matchMedia('(max-width:560px)').matches;
-  const LIMITE = mobile ? 40 : 500;
+  const LIMITE = ehTelaEstreita() ? 40 : 500;
   const exibidos = lista.slice(0, LIMITE);
   /* LINHA QUE ABRE (20/08/2026).
 
@@ -5277,14 +5553,19 @@ function entradaNoPatioDe(c){
    explicação é o que faz operador desconfiar do sistema. */
 function detalheHistoricoHtml(m){
   const c = getCarga(m.cargaId);
-  const linha = (rot, val)=> val === '' || val === null || val === undefined
-    ? '' : `<div class="hist-campo"><dt>${esc(rot)}</dt><dd>${val}</dd></div>`;
+  /* `largo` marca o campo que atravessa as duas colunas no celular: nome de
+     cliente, destino, observação e id não cabem em meia largura sem virar
+     três linhas — e aí o remédio fica pior que a doença. Ver .hist-campo-largo
+     no styles.css. */
+  const linha = (rot, val, largo)=> val === '' || val === null || val === undefined
+    ? '' : `<div class="hist-campo${largo ? ' hist-campo-largo' : ''}">`
+        + `<dt>${esc(rot)}</dt><dd>${val}</dd></div>`;
 
   const doEvento = [
     linha('Registro', `${fmtDataHora(m.timestamp)}`),
     linha('Etapa', `${m.statusAnterior ? esc(m.statusAnterior) + ' → ' : ''}<strong>${esc(m.statusNovo)}</strong>`),
     linha('Operador', `${esc(m.operador)}${m.setor ? ' · ' + esc(m.setor) : ''}`),
-    linha('Carga (id)', `<code>${esc(m.cargaId)}</code>`),
+    linha('Carga (id)', `<code>${esc(m.cargaId)}</code>`, true),
   ].join('');
 
   if(!c){
@@ -5298,10 +5579,10 @@ function detalheHistoricoHtml(m){
   const daCarga = [
     linha('Nº da carga', esc(c.numeroCarga) || '—'),
     linha('Status atual', badgeHtml(c.status)),
-    linha('Cliente', esc(c.cliente) || '—'),
-    linha('Destino', esc(c.destino) || '—'),
+    linha('Cliente', esc(c.cliente) || '—', true),
+    linha('Destino', esc(c.destino) || '—', true),
     linha('Rota', esc(rotaCurta(c.rota)) || '—'),
-    linha('Transportadora', esc(c.transportadora) || '—'),
+    linha('Transportadora', esc(c.transportadora) || '—', true),
     linha('Veículo', `${esc(c.tipoVeiculo) || '—'}${c.motorista ? ' · ' + esc(c.motorista) : ''}`),
     linha('Peso', c.peso ? `${c.peso.toLocaleString('pt-BR')} kg` : '—'),
     linha('Tipo de operação', c.praOnde ? esc(PRA_ONDE_LABEL[c.praOnde] || c.praOnde) : '—'),
@@ -5316,7 +5597,7 @@ function detalheHistoricoHtml(m){
     linha('Lacre retido', l.retido
       ? `${esc(l.retido)}${l.motivo ? ' — ' + esc(l.motivo) : ''}`
         + `${l.por ? ` <small>(${esc(l.por)}${l.em ? ', ' + fmtDataHora(l.em) : ''})</small>` : ''}`
-      : ''),
+      : '', true),
   ].join('');
 
   const datas = [
@@ -5330,7 +5611,7 @@ function detalheHistoricoHtml(m){
        certo: numa auditoria a diferença entre "quando isto foi lançado" e
        "quando o caminhão chegou" é justamente o que se quer olhar. */
     linha('Registro criado em', c.criadoEm ? fmtDataHora(c.criadoEm) : '—'),
-    linha('Observações', esc(c.observacoes) || '—'),
+    linha('Observações', esc(c.observacoes) || '—', true),
   ].join('');
 
   return `
@@ -6896,15 +7177,32 @@ function prepararTabelasMobile(raiz){
     tab.querySelectorAll('tbody tr').forEach(tr=>{
       [...tr.children].forEach((td, i)=>{
         const rotulo = cabecalhos[i];
-        // Coluna de ação não recebe rótulo: no cartão ela vira um botão de
-        // largura inteira, e "AÇÃO: [Chegou]" só ocuparia espaço.
-        if(!rotulo || /^(ação|acao|ações|acoes)$/i.test(rotulo)){
+        /* Célula que ATRAVESSA a tabela não é um campo, é um contêiner — a
+           linha de detalhe do Histórico é um <td colspan="6"> com o registro
+           inteiro dentro. Rotular pela posição colava nela o nome da PRIMEIRA
+           coluna: o detalhe abria com um "DATA/HORA" dourado em cima de um
+           bloco que não é data nenhuma. Sem rótulo ela cai na regra de
+           largura inteira, que é o que um contêiner precisa. */
+        if(td.colSpan > 1 || !rotulo || /^(ação|acao|ações|acoes)$/i.test(rotulo)){
           td.removeAttribute('data-rotulo');
-        } else {
-          td.setAttribute('data-rotulo', rotulo);
+          td.removeAttribute('data-larg');
+          td.removeAttribute('data-sec');
+          return;
         }
+        td.setAttribute('data-rotulo', rotulo);
+        // Os dois carimbos que o CSS do celular lê. Ver ROTULOS_LARGURA_CHEIA
+        // e ROTULOS_SECUNDARIOS: a decisão está lá, num lugar só; aqui é só
+        // aplicação.
+        if(ROTULOS_LARGURA_CHEIA.has(rotulo)) td.setAttribute('data-larg', 'cheia');
+        else td.removeAttribute('data-larg');
+        if(ROTULOS_SECUNDARIOS.has(rotulo)) td.setAttribute('data-sec', '1');
+        else td.removeAttribute('data-sec');
       });
     });
+    // Carimbou, então já dá para dizer quais linhas têm algo escondido —
+    // e fazer isso aqui dentro tira a dependência de ordem que existia
+    // quando as duas coisas eram chamadas em pontos diferentes do render.
+    marcarCartoesExpansiveis(tab);
   });
 }
 

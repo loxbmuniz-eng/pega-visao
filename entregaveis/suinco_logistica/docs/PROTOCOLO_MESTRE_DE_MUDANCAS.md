@@ -74,6 +74,36 @@ considerada pronta** — automatizado (`npm run teste` no backend, Playwright
 no frontend) sempre que possível. "Parece que funcionou" não é o critério;
 o teste passando é.
 
+**Antes de publicar, a bateria INTEIRA — não só as suítes vizinhas do que
+foi mexido:**
+
+```
+cd backend && PLAYWRIGHT_CHROMIUM_PATH=/opt/pw-browsers/chromium npm run teste
+cd .. && bash testes/rodar_tudo.sh
+```
+
+O `rodar_tudo.sh` limpa o banco antes de cada suíte. Isso não é zelo: as
+suítes dividem um Postgres só, e sobra de uma vira falha da seguinte —
+vermelhos que não reproduzem quando você roda o caso sozinho, e que fazem
+perder o dia procurando um bug que não existe.
+
+Em 23/08/2026 a bateria completa foi rodada inteira pela primeira vez em
+semanas e voltou com 19 vermelhos. **Um** era regressão de verdade. Os
+outros 18 eram testes que ficaram para trás e ninguém tinha visto, porque
+só se rodava o que parecia relacionado. Ver ocorrência #15.
+
+**Teste vermelho tem quatro causas, e "eu quebrei" é só uma delas.** Antes
+de mexer no código, checar nesta ordem:
+
+1. a regra mudou de propósito e o teste ficou para trás;
+2. o teste mede um proxy que mudou de forma (contar `<tr>` numa tabela que
+   ganhou linha de grupo ou de detalhe é o caso clássico deste projeto);
+3. é sobra do teste anterior — rodar isolado, com o banco limpo;
+4. aí sim, regressão.
+
+Rodar a mesma suíte contra o build anterior separa (4) de (1)–(3) em
+minutos: `git stash && python3 build_arquivo_unico.py`.
+
 ---
 
 ## 3. Protocolo de incidente — "o painel caiu" / "ninguém consegue entrar"

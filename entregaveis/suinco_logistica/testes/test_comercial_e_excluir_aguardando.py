@@ -10,6 +10,14 @@ continua liberada — é o caminho até ela, não poder a mais: a Torre é
 leitura pura e seus campos editáveis só existem para quem pode cancelar
 carga (Logística/Administração), o que o Comercial nunca é.
 
+'usuarios' entrou na lista em 22/08/2026 pelo mesmo raciocínio, ao
+contrário: com o segundo fator, a aba deixou de ser só a tela de
+administrar gente e passou a ser onde CADA PESSOA protege a própria conta.
+O Comercial tem login e senha como todo mundo. Por isso o teste não pergunta
+mais "ele vê a aba?" e sim "o que ele encontra dentro dela?" — a lista de
+operadores e os pedidos de aprovação continuam fora do alcance dele, e é
+isso que precisa ser garantido.
+
     python3 testes/test_comercial_e_excluir_aguardando.py
 """
 import asyncio
@@ -66,19 +74,46 @@ async def main():
         nav = await p.chromium.launch(executable_path='/opt/pw-browsers/chromium', headless=True)
         erros = []
 
-        print('\n=== 1. COMERCIAL: SÓ PÁTIO (TORRE) E HISTÓRICO ===')
+        print('\n=== 1. COMERCIAL: PÁTIO, HISTÓRICO E A PRÓPRIA SEGURANÇA ===')
         pg = await nav.new_page()
         pg.on('pageerror', lambda e: erros.append(str(e)))
         await entrar(pg, 'Comercial')
 
         abas = await abas_visiveis(pg)
         print(f'  abas visíveis: {abas}')
-        ck('Comercial vê exatamente torre + historico',
-           sorted(abas) == ['historico', 'torre'], str(abas))
+        # "usuarios" entrou na lista em 22/08/2026, com o segundo fator: a aba
+        # deixou de ser a tela de ADMINISTRAR gente e passou a ser também onde
+        # cada pessoa protege a própria conta. O Comercial tem login e senha
+        # como todo mundo, então precisa poder ativar o dele — o que não muda
+        # é que ele não administra ninguém, e isso é conferido logo abaixo,
+        # olhando o CONTEÚDO da aba e não só o nome dela.
+        ck('Comercial vê pátio, histórico e a própria segurança',
+           sorted(abas) == ['historico', 'torre', 'usuarios'], str(abas))
         ck('Relatórios saiu da visão do Comercial', 'relatorios' not in abas, str(abas))
         for proibida in ['programacao', 'portaria', 'expedicao', 'faturamento',
-                         'cadastros', 'usuarios', 'indicadores']:
+                         'cadastros', 'indicadores']:
             ck(f'Comercial NÃO vê {proibida}', proibida not in abas)
+
+        # A parte que importa: dentro de Usuários ele só encontra a própria
+        # segurança. Aba visível não pode virar porta de entrada para a lista
+        # de operadores nem para as aprovações de ação crítica.
+        await pg.evaluate("()=>abrirTab('usuarios')")
+        await pg.wait_for_timeout(1500)
+        dentro = await pg.evaluate("""()=>{
+          const vis = el => !!el && el.offsetParent !== null;
+          const aba = document.getElementById('tab-usuarios');
+          return {
+            cards: [...aba.querySelectorAll('.card')].filter(vis).map(c=>c.id||'(sem id)'),
+            listaOperadores: vis(document.getElementById('usr-tbody')),
+            aprovacoes: vis(document.getElementById('card-aprovacoes')),
+            minhaSeguranca: vis(document.getElementById('card-minha-seguranca')),
+          };
+        }""")
+        ck('na aba Usuários ele vê só "Minha segurança"',
+           dentro['cards'] == ['card-minha-seguranca'], str(dentro['cards']))
+        ck('Comercial NÃO vê a lista de operadores', not dentro['listaOperadores'])
+        ck('Comercial NÃO vê os pedidos de aprovação', not dentro['aprovacoes'])
+        ck('mas PODE ativar o próprio segundo fator', dentro['minhaSeguranca'])
 
         print('\n=== 2. COMERCIAL NÃO GANHA CAMPO EDITÁVEL NA TORRE ===')
         await pg.evaluate("""() => {

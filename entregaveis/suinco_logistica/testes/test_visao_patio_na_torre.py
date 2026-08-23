@@ -74,7 +74,7 @@ async def main():
 
         print('\n=== 3. AS DUAS CARGAS APARECEM NA LISTA ===')
         linhas = await pg.evaluate(
-            "() => document.getElementById('torre-vp-tbody').querySelectorAll('tr').length")
+            "() => document.getElementById('torre-vp-tbody').querySelectorAll('tr:not(.vp-grupo)').length")
         ck('2 cargas em aberto aparecem na Visão do Pátio da Torre', linhas == 2, linhas)
 
         print('\n=== 4. RESUMO NO TOPO REFLETE O TOTAL ===')
@@ -87,7 +87,7 @@ async def main():
         await pg.fill('#torre-vp-busca', placa0)
         await pg.wait_for_timeout(150)
         linhas_filtradas = await pg.evaluate(
-            "() => document.getElementById('torre-vp-tbody').querySelectorAll('tr').length")
+            "() => document.getElementById('torre-vp-tbody').querySelectorAll('tr:not(.vp-grupo)').length")
         ck('filtro por placa reduz pra 1 linha', linhas_filtradas == 1, linhas_filtradas)
 
         print('\n=== 6. A TABELA DE STATUS ORIGINAL DA TORRE CONTINUA EXISTINDO ===')

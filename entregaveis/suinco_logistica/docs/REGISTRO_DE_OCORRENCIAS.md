@@ -27,6 +27,178 @@ faz achar a próxima em minutos em vez de horas:
 | **Eco de sincronização** | Todo painel reenvia o que tem em memória. Cópia velha sobrescreve dado novo — inclusive com campo vazio. | #01, #03, #08, #10 |
 | **Rótulo que mente** | O dado está certo no banco; o nome dado a ele na tela descreve outra coisa. | #04, #12 |
 | **Regra larga demais** | Trava criada para um caso real barra também o caso legítimo mais comum. | #05 |
+| **Trava sem o par na tela** | O servidor passa a exigir algo novo e a tela continua com o botão antigo: quem clica só descobre que não pode, e não tem por onde seguir. | #13 |
+| **A mesma decisão escrita em dois lugares** | A regra é copiada em vez de consultada. As cópias divergem e o comportamento fica errado sem que nenhuma linha esteja errada. | #14 |
+| **Duas escritas em voo, a velha ganha** | O painel manda a carga INTEIRA a cada alteração. Duas alterações seguidas viram duas requisições simultâneas, e a primeira carrega o valor velho do campo que ainda ia mudar. | #16 |
+| **Teste que mede o proxy, não a regra** | O teste confere um sintoma fácil de medir ("a aba aparece?", "quantas linhas?") em vez da garantia real. Quando o sintoma muda por um motivo legítimo, ele fica vermelho sem que nada tenha quebrado — e some do radar. | #15 |
+
+---
+
+## #16 — O campo que o operador digita e o servidor não guarda (23/08/2026)
+
+**Relato:** nenhum — de novo, e de novo é isso que assusta. Apareceu porque a
+bateria inteira passou a ser rodada: `test_edicao_marca_alterada` falhava 3
+em 3 vezes com *"os GANCHOS chegaram ao outro terminal — esperado 33, veio
+0"*. Estava vermelho havia dias.
+
+**A primeira hipótese estava errada.** Parecia atraso de sincronia — o outro
+terminal ainda não teria recebido. Conferido no banco, não era:
+
+```
+sequencia = 7 | qtd_ganchos = 0
+```
+
+As duas foram alteradas na MESMA ação. O dado não demorou: ele não chegou.
+
+**Causa**, capturada no tráfego HTTP:
+
+```
+PATCH {"qtdGanchos": 0,  "sequencia": 7}   <- estado ANTES dos ganchos
+PATCH {"qtdGanchos": 33, "sequencia": 7}   <- estado depois
+banco: sequencia = 7, qtd_ganchos = 0
+```
+
+Cada `save()` monta o corpo **inteiro** da carga com o estado daquele
+instante, e `sincronizarCargasAlteradas` disparava sem esperar. Duas
+alterações seguidas na mesma carga viravam duas requisições em voo ao mesmo
+tempo — e a primeira levava o valor velho do campo que ainda ia mudar. Quem
+chegou por último ao banco foi a primeira.
+
+O operador vê 33 na tela dele e o servidor guarda 0. **Sem erro nenhum na
+tela** — o pior jeito de perder dado.
+
+É primo do eco de sincronização (#01): lá era cópia velha de OUTRO terminal
+sobrescrevendo; aqui é cópia velha do PRÓPRIO terminal, criada
+milissegundos antes.
+
+**Correção:** não é esperar mais, é não ter duas em voo. Enquanto uma carga
+sobe, outra alteração dela só marca "refazer" — e o refazer relê o estado
+ATUAL, que já tem as duas mudanças. Duas edições rápidas viram uma
+requisição com o valor final.
+
+Detalhe que importa: quando a subida é adiada, a carga **não** é marcada como
+sincronizada. Marcar ali faria a alteração sumir para sempre — trocaria uma
+perda de dado por outra, pior.
+
+**Alcance:** qualquer campo, não só ganchos. Basta duas alterações na mesma
+carga em sequência rápida — que é o que a Torre faz o tempo todo, porque seus
+campos são editáveis lado a lado.
+
+**Guarda:** `testes/test_edicao_marca_alterada.py`, que já existia e já
+apontava para cá. Faltava alguém rodar.
+
+---
+
+## #15 — Vinte testes vermelhos que ninguém estava vendo (23/08/2026)
+
+**Relato:** nenhum. Foi o problema. A bateria completa das 97 suítes só foi
+rodada inteira ao publicar o lote do cartão do celular — e voltou com 19
+vermelhos, a maioria deles de dias antes.
+
+**O que estava por trás,** depois de rodar cada um isolado e também contra o
+build que estava em produção:
+
+1. **Três testes com a mesma regra vencida.** `test_setor_comercial`,
+   `test_comercial_e_excluir_aguardando` e `test_login_api` exigiam que a aba
+   Usuários NÃO aparecesse para certos setores. A aba abriu para todos em
+   22/08 junto com o segundo fator — deixou de ser a tela de administrar
+   gente e passou a ser onde cada pessoa protege a própria conta. A mudança
+   estava certa; os três testes ficaram para trás juntos, porque os três
+   mediam a mesma coisa fácil ("a aba aparece?") em vez da garantia de
+   verdade ("o que ele encontra lá dentro?"). Agora conferem o conteúdo: sem
+   lista de operadores, sem pedidos de aprovação, só "Minha segurança".
+
+2. **Um teste contando errado.** `test_listas_grandes_mobile` contava `<tr>`
+   para checar o teto de 40 registros do Histórico no celular. Desde 20/08
+   cada registro rende DUAS linhas (a que se lê e a do detalhe, que abre ao
+   clicar): 40 registros davam 80 linhas, e o teste acusava um limite
+   quebrado que nunca quebrou.
+
+3. **Uma trava sem o par na tela** — é a ocorrência #13, e foi
+   `test_admin_historico` falhando em silêncio que a denunciou.
+
+4. **Contaminação entre testes.** A suíte inteira compartilha um Postgres só
+   e não limpa entre um teste e outro. `test_admin_historico` falhava na
+   bateria e passava verde sozinho depois de limpar a base. Parte dos
+   vermelhos era sobra do teste anterior, não defeito do painel.
+
+**O que fica:** rodar a bateria inteira antes de publicar, e não só as
+suítes próximas do que se mexeu — foi o que revelou tudo isto. E quando um
+teste ficar vermelho, perguntar antes de "o que quebrei?": *este teste ainda
+mede a regra, ou passou a medir um sintoma que mudou de forma legítima?*
+
+---
+
+## #14 — Cartão do celular grande de novo depois de já ter encolhido (23/08/2026)
+
+**Relato:** *"eu to achando os cards na torre de controle muito grandes no
+mobile, enquanto o desktop já está super bem distribuído, compacto... não só
+na torre mas nas outras abas também"*. E, depois da primeira tentativa de
+correção: *"otimize isso, seja coerente e lógico"*.
+
+**Causa:** a mesma lista de rótulos estava escrita **três vezes**, cada uma
+como seletor de CSS à mão — quem ocupa a linha inteira, quem some no cartão
+fechado, quem lê em linha. Elas divergiram: a terceira tinha seis rótulos e a
+primeira tinha dez. O Histórico, que já havia chegado a 94px por cartão,
+voltou para 147px sem que nenhuma regra estivesse errada — só desalinhada com
+as outras duas.
+
+Junto vieram dois defeitos da mesma família: o limiar do celular era 560px no
+bloco que transforma tabela em cartão e 820px em todo o resto (entre 561 e
+820 as colunas sumiam de uma tabela normal, com cabeçalho visível e nada para
+tocar), e o botão "Chegou" da Portaria passava por cima do rodapé porque uma
+regra com `#id` sobrescrevia o espaço reservado para ele.
+
+**Correção:** a decisão passou a morar num lugar só — `ROTULOS_LARGURA_CHEIA`
+e `ROTULOS_SECUNDARIOS`, em `app.js`. `prepararTabelasMobile()` carimba
+`data-larg="cheia"` e `data-sec="1"` na célula, e o CSS pergunta pelo carimbo
+em vez de repetir a lista. Um limiar só, 820px, o mesmo que `ehTelaEstreita()`
+responde ao JS.
+
+**Medido, no mesmo aparelho e com os mesmos dados** (390×844, 12 cargas em
+placas distintas): Torre de 748px para 255px por cartão (de 1,1 para 3,3
+cartões por tela); Histórico de 197px para 132px; a faixa de indicadores de
+385px para 189px, e a tabela passou a começar em 469px em vez de 664px.
+
+**Guarda:** `testes/test_cartao_mobile_uma_lista.py` confere que todo carimbo
+bate com o Set do JS — se alguém voltar a escrever a lista no CSS, a
+divergência aparece como falha, não como cartão gordo.
+
+**Duas coisas que a medição corrigiu na minha intuição:**
+
+- *"Ler em linha é mais compacto"* é falso em meia coluna. Medido: numa
+  célula de largura inteira o Histórico caiu de 147px para 94px; na meia
+  coluna da Torre o mesmo tratamento SUBIU de 370px para 495px, porque o par
+  rótulo+valor quebra em duas linhas e fica mais alto que empilhado.
+- *"Encolher o botão dá densidade"* também é falso. Buttons de 38px/34px
+  economizaram menos do que pô-los lado a lado (três botões de 44px numa
+  linha ocupam 44px; empilhados, 155px) e derrubaram o mínimo de toque em
+  cinco abas de uma vez. Densidade vem do arranjo, não do alvo menor.
+
+---
+
+## #13 — Botão que só sabe dizer não (23/08/2026)
+
+**Relato:** o Alysson, administrador, clicou em "Restaurar esta versão" no
+painel dele e recebeu *"Esta ação precisa do aval de outro administrador"* —
+sem nenhum lugar para pedir esse aval.
+
+**Causa:** a segunda assinatura foi implementada no servidor sem o par na
+tela. A trava estava certa; o caminho para cumpri-la não existia. E não era
+um botão só: `corrigir-etapa` e `desfazer-exclusão` estavam no mesmo estado,
+e ninguém tinha percebido porque o teste que os cobria falhava em silêncio
+desde então.
+
+**Correção:** `pedirAprovacaoUI()` / `aprovacaoDisponivel()` nos três botões —
+o primeiro clique abre o pedido com o motivo, e o segundo, depois do aval,
+conclui. Quem aprova vê os pedidos na aba Usuários, e quem pediu não vê botão
+de aprovar no próprio pedido (o servidor recusa de todo jeito; a tela explica
+em vez de oferecer).
+
+**Guarda:** `testes/test_segunda_assinatura_ui.py` faz o caminho inteiro com
+dois administradores em duas sessões. E `test_admin_historico.py`, que estava
+vermelho sem ninguém olhar, foi atualizado para a regra nova em vez de para a
+antiga.
 
 ---
 
@@ -318,3 +490,25 @@ permitiu recuperar os lacres apagados de #09.
 5. **Toda trava nova precisa da pergunta "e o caso normal?"** A de #05
    estava certa para o incidente e errada para a rotina — e a rotina é o que
    acontece todo dia.
+6. **Teste vermelho é um relato de produção que ninguém abriu ainda.** #16
+   estava escrito, reproduzível e ignorado havia dias: um campo que o
+   operador digita e o servidor não guarda, sem erro na tela. Não apareceu
+   como reclamação porque quem digita não confere depois — confia. A bateria
+   completa é o que transforma esse relato mudo em achado.
+7. **Trava no servidor sem caminho na tela é bug, não segurança.** A de #13
+   estava tecnicamente correta e deixou um administrador sem saída. Regra
+   nova só está pronta quando existe o jeito de cumpri-la.
+8. **A mesma decisão em dois lugares vira dois comportamentos.** Em #14 nenhuma
+   linha estava errada; erradas estavam as três cópias da mesma lista. Quando
+   uma regra precisa valer em CSS e em JS, ela mora em um dos dois e o outro
+   pergunta.
+9. **Teste vermelho tem três causas, não uma.** Antes de "eu quebrei",
+   checar: a regra mudou de propósito (e o teste ficou para trás), o teste
+   mede um proxy que mudou de forma, ou é sobra do teste anterior. Em #15 as
+   três apareceram, e só uma linha de 19 era regressão de verdade. Rodar o
+   caso isolado e também contra o build que está em produção responde isso
+   em minutos.
+10. **Intuição de layout erra; a régua não.** Duas mudanças "obviamente
+   melhores" de #14 pioraram o número, e só apareceram porque foram medidas
+   antes e depois, no mesmo aparelho e com os mesmos dados — sem isso, a
+   comparação mede o banco de teste, não a mudança.

@@ -56,7 +56,10 @@ async def main():
         await pg.evaluate("() => abrirTab('torre')")
         await pg.wait_for_timeout(500)
         info = await pg.evaluate("""() => {
-            const tr = document.querySelector('#torre-vp-tbody tr');
+            // :not(.vp-grupo) — a Torre agrupa em "🚛 Transportadoras" e
+            // "🏠 Frota própria" desde 19/08/2026, e a PRIMEIRA linha e o
+            // cabecalho do grupo: um <td colspan> sem linha do tempo nenhuma.
+            const tr = document.querySelector('#torre-vp-tbody tr:not(.vp-grupo)');
             const linha = tr.querySelector('.et-linha');
             const chips = [...linha.querySelectorAll('.et-mini')];
             return {

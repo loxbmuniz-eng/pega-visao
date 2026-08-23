@@ -45,19 +45,46 @@ async def main():
         }""")
         await pg.evaluate("() => abrirTab('torre')"); await pg.wait_for_timeout(400)
         info = await pg.evaluate("""() => {
-          const td = document.querySelector('#torre-tbody td[data-rotulo]');
+          // Uma célula VISÍVEL, e não a primeira que existir: desde 23/08 o
+          // cartão fechado esconde os campos secundários (ver
+          // ROTULOS_SECUNDARIOS em app.js) e a primeira célula da Torre é
+          // "Seq.", que está justamente entre eles. Medir display numa célula
+          // escondida responde "none" e não diz nada sobre o empilhamento.
+          const tds = [...document.querySelectorAll('#torre-tbody td[data-rotulo]')];
+          const td = tds.find(t => t.offsetParent !== null);
+          const escondida = tds.find(t => t.dataset.sec === '1');
           const thead = document.querySelector('#tab-torre thead');
+          const tr = td && td.closest('tr');
           return {
             rotulo: td && td.getAttribute('data-rotulo'),
             display: td && getComputedStyle(td).display,
             theadOculto: thead && getComputedStyle(thead).display === 'none',
-            temClasse: !!document.querySelector('#tab-torre table.mobile-cartao')
+            temClasse: !!document.querySelector('#tab-torre table.mobile-cartao'),
+            // O outro lado do cartão compacto: o que some tem como voltar.
+            escondidaSome: escondida ? escondida.offsetParent === null : null,
+            linhaSeAnuncia: tr ? tr.hasAttribute('data-expansivel') : false,
           };
         }""")
         ck('tabela marcada como cartão', info['temClasse'])
         ck('cabeçalho vira rótulo da célula', bool(info['rotulo']), str(info['rotulo']))
         ck('thead escondido no celular', info['theadOculto'] is True)
         ck('célula empilhada', info['display'] == 'flex', str(info['display']))
+        ck('campo secundário fica guardado no cartão fechado',
+           info['escondidaSome'] is not False, str(info['escondidaSome']))
+        ck('e a linha avisa que dá para abrir', info['linhaSeAnuncia'])
+
+        # Abrir devolve tudo — sem isso, "esconder" seria "perder".
+        await pg.evaluate("""() => {
+          const tr = document.querySelector('#torre-tbody tr[data-expansivel]');
+          if (tr) tr.classList.add('cartao-aberto');
+        }""")
+        await pg.wait_for_timeout(200)
+        voltou = await pg.evaluate("""() => {
+          const tr = document.querySelector('#torre-tbody tr.cartao-aberto');
+          if (!tr) return null;
+          return [...tr.querySelectorAll('td[data-sec]')].every(t => t.offsetParent !== null);
+        }""")
+        ck('ao abrir, os campos guardados voltam', voltou is not False, str(voltou))
 
         print('\n=== 4. PORTARIA: BOTÃO GRANDE ===')
         await pg.evaluate("() => { DB.operador={nome:'Bruno',setor:'Portaria'}; abrirTab('portaria'); }")
