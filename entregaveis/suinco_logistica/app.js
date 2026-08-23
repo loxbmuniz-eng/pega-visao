@@ -5553,14 +5553,19 @@ function entradaNoPatioDe(c){
    explicação é o que faz operador desconfiar do sistema. */
 function detalheHistoricoHtml(m){
   const c = getCarga(m.cargaId);
-  const linha = (rot, val)=> val === '' || val === null || val === undefined
-    ? '' : `<div class="hist-campo"><dt>${esc(rot)}</dt><dd>${val}</dd></div>`;
+  /* `largo` marca o campo que atravessa as duas colunas no celular: nome de
+     cliente, destino, observação e id não cabem em meia largura sem virar
+     três linhas — e aí o remédio fica pior que a doença. Ver .hist-campo-largo
+     no styles.css. */
+  const linha = (rot, val, largo)=> val === '' || val === null || val === undefined
+    ? '' : `<div class="hist-campo${largo ? ' hist-campo-largo' : ''}">`
+        + `<dt>${esc(rot)}</dt><dd>${val}</dd></div>`;
 
   const doEvento = [
     linha('Registro', `${fmtDataHora(m.timestamp)}`),
     linha('Etapa', `${m.statusAnterior ? esc(m.statusAnterior) + ' → ' : ''}<strong>${esc(m.statusNovo)}</strong>`),
     linha('Operador', `${esc(m.operador)}${m.setor ? ' · ' + esc(m.setor) : ''}`),
-    linha('Carga (id)', `<code>${esc(m.cargaId)}</code>`),
+    linha('Carga (id)', `<code>${esc(m.cargaId)}</code>`, true),
   ].join('');
 
   if(!c){
@@ -5574,10 +5579,10 @@ function detalheHistoricoHtml(m){
   const daCarga = [
     linha('Nº da carga', esc(c.numeroCarga) || '—'),
     linha('Status atual', badgeHtml(c.status)),
-    linha('Cliente', esc(c.cliente) || '—'),
-    linha('Destino', esc(c.destino) || '—'),
+    linha('Cliente', esc(c.cliente) || '—', true),
+    linha('Destino', esc(c.destino) || '—', true),
     linha('Rota', esc(rotaCurta(c.rota)) || '—'),
-    linha('Transportadora', esc(c.transportadora) || '—'),
+    linha('Transportadora', esc(c.transportadora) || '—', true),
     linha('Veículo', `${esc(c.tipoVeiculo) || '—'}${c.motorista ? ' · ' + esc(c.motorista) : ''}`),
     linha('Peso', c.peso ? `${c.peso.toLocaleString('pt-BR')} kg` : '—'),
     linha('Tipo de operação', c.praOnde ? esc(PRA_ONDE_LABEL[c.praOnde] || c.praOnde) : '—'),
@@ -5592,7 +5597,7 @@ function detalheHistoricoHtml(m){
     linha('Lacre retido', l.retido
       ? `${esc(l.retido)}${l.motivo ? ' — ' + esc(l.motivo) : ''}`
         + `${l.por ? ` <small>(${esc(l.por)}${l.em ? ', ' + fmtDataHora(l.em) : ''})</small>` : ''}`
-      : ''),
+      : '', true),
   ].join('');
 
   const datas = [
@@ -5606,7 +5611,7 @@ function detalheHistoricoHtml(m){
        certo: numa auditoria a diferença entre "quando isto foi lançado" e
        "quando o caminhão chegou" é justamente o que se quer olhar. */
     linha('Registro criado em', c.criadoEm ? fmtDataHora(c.criadoEm) : '—'),
-    linha('Observações', esc(c.observacoes) || '—'),
+    linha('Observações', esc(c.observacoes) || '—', true),
   ].join('');
 
   return `
