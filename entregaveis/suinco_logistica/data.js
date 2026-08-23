@@ -549,16 +549,79 @@ const SuincoStore = {
      ser mais recente e desfazia o clique. */
   _ultimoStatusSync: new Map(),
 
+  /* UMA SUBIDA POR VEZ, POR CARGA (23/08/2026).
+
+     Sem isto, duas alterações seguidas na mesma carga viravam duas
+     requisições em voo ao mesmo tempo — e a mais VELHA podia ser aplicada
+     por último, gravando por cima o valor que ela nem sabia que tinha
+     mudado.
+
+     Capturado no tráfego, editando sequência e ganchos na mesma ação:
+
+       PATCH {"qtdGanchos": 0,  "sequencia": 7}   <- estado ANTES dos ganchos
+       PATCH {"qtdGanchos": 33, "sequencia": 7}   <- estado depois
+       banco: sequencia = 7, qtd_ganchos = 0
+
+     Cada `save()` monta o corpo INTEIRO da carga com o estado daquele
+     instante. O primeiro save (da sequência) já carregava ganchos = 0; o
+     segundo carregava 33. As duas saíram juntas, e quem chegou por último
+     ao banco foi a primeira. O operador vê 33 na tela dele e o servidor
+     guarda 0 — sem erro nenhum, que é o pior jeito de perder dado.
+
+     É primo do eco de sincronização (ocorrência #01): lá era uma cópia
+     velha de OUTRO terminal sobrescrevendo; aqui é uma cópia velha do
+     PRÓPRIO terminal, criada milissegundos antes.
+
+     A correção não é esperar mais: é não ter duas em voo. Enquanto uma
+     carga está subindo, outra alteração dela só marca "refazer" — e o
+     refazer relê o estado ATUAL, que já tem as duas mudanças. Duas edições
+     rápidas viram uma requisição com o valor final, em vez de duas em
+     corrida. */
+  _emVoo: new Map(),
+  _refazer: new Set(),
+
   sincronizarCargasAlteradas(){
     if(typeof SuincoSharePoint === 'undefined' || !SuincoSharePoint.estaConfigurado()) return;
     DB.cargas.forEach(c => {
       const marca = c.atualizadoEm || c.criadoEm || '';
       if(this._ultimoSync.get(c.id) === marca) return;      // nada mudou nesta
+      if(this._emVoo.has(c.id)){
+        /* Já existe uma subida desta carga em voo. NÃO marca como
+           sincronizada: o estado atual ainda não chegou ao servidor, e
+           marcar aqui faria a mudança sumir para sempre. */
+        this._refazer.add(c.id);
+        return;
+      }
       this._ultimoSync.set(c.id, marca);
       if(!DB._sincronizado) DB._sincronizado = {};
       DB._sincronizado[c.id] = marca;                       // sobrevive ao F5
-      this.sincronizarCarga(c, DB.operador).catch(e=>console.warn('[Suinco] sync carga:', e));
+      this._subirCarga(c.id);
     });
+  },
+
+  /* Sobe UMA carga e, ao terminar, refaz se ela mudou no meio do caminho.
+     Relê de DB.cargas de propósito: o objeto pode ter sido alterado desde
+     que a subida começou, e o que interessa é o estado de agora. */
+  _subirCarga(id){
+    const atual = DB.cargas.find(x => x.id === id);
+    if(!atual){ this._emVoo.delete(id); this._refazer.delete(id); return; }
+    const p = this.sincronizarCarga(atual, DB.operador)
+      .catch(e=>console.warn('[Suinco] sync carga:', e))
+      .finally(()=>{
+        this._emVoo.delete(id);
+        if(this._refazer.has(id)){
+          this._refazer.delete(id);
+          const depois = DB.cargas.find(x => x.id === id);
+          if(depois){
+            const m = depois.atualizadoEm || depois.criadoEm || '';
+            this._ultimoSync.set(id, m);
+            if(!DB._sincronizado) DB._sincronizado = {};
+            DB._sincronizado[id] = m;
+            this._subirCarga(id);
+          }
+        }
+      });
+    this._emVoo.set(id, p);
   },
 
   /* ---- Sincronia com o SharePoint / Power BI ----
