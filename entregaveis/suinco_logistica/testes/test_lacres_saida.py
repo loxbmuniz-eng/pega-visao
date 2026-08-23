@@ -66,28 +66,56 @@ async def main():
         campo = await pg.evaluate("() => document.getElementById('portaria-lacre').value")
         ck('o campo do lacre limpa após a saída', campo == '', repr(campo))
 
-        print('\n=== 2. RETENÇÃO: NÚMERO RETIDO + NOVO LACRE + MOTIVO ===')
+        print('\n=== 2. RETENÇÃO SEM SERVIDOR: RECUSA HONESTA, NUNCA SILÊNCIO ===')
+        # A retenção deixou de ser gravação local em 20/08/2026 (migração
+        # 027): passou a ter rota própria para o motivo, o autor e a hora
+        # ficarem em CAMPO, e não dentro do texto da observação — que
+        # qualquer setor edita. Este teste roda em "modo local", sem
+        # servidor, então o que ele pode e deve provar aqui é o outro lado:
+        # que o painel NÃO finge ter gravado.
+        #
+        # O caminho feliz da retenção está coberto no backend
+        # (api.test.js, /api/portaria/lacre-retido: número retido, motivo,
+        # quem reteve e quando).
+        #
+        # Isto não é detalhe de teste. Lacre já sumiu de verdade em produção
+        # uma vez (ocorrência #09), e a diferença entre "não gravou e avisou"
+        # e "não gravou e ficou quieto" é a diferença entre o porteiro
+        # tentar de novo e o dado se perder.
+        await pg.evaluate("() => { const n = document.getElementById('notificacoes');"
+                          "         if (n) n.innerHTML = ''; }")
         await pg.fill('#lacre-ret-placa', placa)
         await pg.fill('#lacre-ret-numero', '133476')
         await pg.fill('#lacre-ret-novo', '133480')
         await pg.fill('#lacre-ret-motivo', 'carga incorreta')
         await pg.click('button:has-text("Registrar retenção")')
-        await pg.wait_for_timeout(500)
+        aviso = ''
+        for _ in range(12):   # a recusa chega em ~1s; a folga é do CI, não do produto
+            await pg.wait_for_timeout(500)
+            aviso = await pg.evaluate(
+                "() => [...document.querySelectorAll('.notif-item')]"
+                "        .map(e => e.innerText).join(' ')")
+            if 'reten' in aviso.lower():
+                break
+        ck('o painel avisa que não conseguiu registrar',
+           'não consegui registrar a retenção' in aviso.lower(), aviso[:120])
+        ck('e diz textualmente que o lacre NÃO foi marcado',
+           'NÃO foi marcado como retido' in aviso, aviso[:120])
+
         r = await pg.evaluate("""() => DB.cargas.map(c => ({
             retido: c.lacreRetido, vigente: c.lacre, obs: c.observacoes }))""")
-        ck('o número retido ficou guardado', all(x['retido'] == '133476' for x in r), str(r)[:120])
-        ck('o novo lacre virou o vigente', all(x['vigente'] == '133480' for x in r))
-        ck('o motivo foi para as observações, com autor',
-           all('RETIDO' in x['obs'] and 'carga incorreta' in x['obs'] and 'Ana' in x['obs'] for x in r),
-           r[0]['obs'][:90])
+        ck('e não inventa uma retenção que não aconteceu',
+           all(not x['retido'] for x in r), str(r)[:120])
+        ck('o lacre vigente continua o que saiu de verdade',
+           all(x['vigente'] == '133476' for x in r), str(r)[:120])
 
-        print('\n=== 3. A FICHA DA CARGA MOSTRA OS LACRES ===')
+        print('\n=== 3. A FICHA DA CARGA MOSTRA O LACRE QUE EXISTE ===')
         await pg.evaluate("() => abrirTab('historico')")
         await pg.fill('#hist-busca-carga', '70001')
         await pg.wait_for_timeout(600)
         ficha = await pg.evaluate("() => document.body.innerText")
-        ck('lacre vigente na ficha', '133480' in ficha)
-        ck('lacre retido na ficha', '133476' in ficha)
+        ck('o lacre da saída aparece na ficha', '133476' in ficha)
+        ck('e o lacre que NÃO foi gravado não aparece', '133480' not in ficha)
 
         print('\n=== 4. TORRE EDITA ENTREGAS (CAMPO QUE FALTAVA) ===')
         await pg.evaluate("""() => {

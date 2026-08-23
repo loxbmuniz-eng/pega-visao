@@ -114,7 +114,8 @@ async def main():
                 await pg3.fill(f'#{prefixo}-vp-ate', '2035-12-31')
                 await pg3.wait_for_timeout(400)
                 linhas = await pg3.evaluate(
-                    f"() => document.getElementById('{prefixo}-vp-tbody').querySelectorAll('tr').length")
+                    f"() => document.getElementById('{prefixo}-vp-tbody')"
+                    f".querySelectorAll('tr:not(.vp-grupo)').length")
                 ck(f'{prefixo}: também respeita o teto de 40 no celular', linhas <= 40, str(linhas))
 
         print('\n=== 4. SEM PERÍODO (pátio de agora), COMPORTAMENTO NÃO MUDOU ===')

@@ -71,6 +71,10 @@ async def main():
                 rota:'500', motorista:'José da Silva', operador:'Ana'});
             const c = DB.cargas[0];
             const ontem = new Date(Date.now() - 24*3600*1000);
+            /* `programadoEm` junto: é ele que a fila do dia consulta —
+               quando a carga foi PROGRAMADA, não quando o carro entrou.
+               Ver renderFilaProgramados em app.js. */
+            c.programadoEm = ontem.toISOString();
             c.criadoEm = ontem.toISOString();
             SuincoStore.save();
             renderAll();

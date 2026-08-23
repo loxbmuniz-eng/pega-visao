@@ -202,8 +202,15 @@ async def main():
                 const inp = tr.querySelector('.numero-carga-input');
                 return tr.textContent.includes('VP900') || (inp && inp.value === 'VP900');
             });
-            const b = alvo && alvo.querySelector('button');
-            return b ? b.textContent.trim() : null;
+            // PROCURA o Cancelar entre os botoes, em vez de supor que ele e
+            // o primeiro: desde 19/08/2026 a linha abre com "➕ Outra carga"
+            // (pedido do Emerson, para programar outra carga na mesma placa
+            // sem sair da Torre). Pegar querySelector('button') passou a
+            // devolver o botao errado, e o teste acusava um Cancelar ausente
+            // que estava ali do lado.
+            if (!alvo) return null;
+            const bs = [...alvo.querySelectorAll('button')].map(b => b.textContent.trim());
+            return bs.includes('Cancelar') ? 'Cancelar' : bs.join(' | ');
         }""")
         ck('a Torre oferece a ação na própria linha', tem_botao == 'Cancelar', str(tem_botao))
 
