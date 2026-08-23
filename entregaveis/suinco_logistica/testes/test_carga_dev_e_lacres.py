@@ -146,15 +146,55 @@ async def main():
                    destino: 'Y', peso: 1000, rota: '500', operador: 'Ana'});
                  SuincoStore.save();
                  await SuincoSharePoint.sincronizarAgora();
+                 /* CONFERE CADA PASSO, e repete o que não pegou.
+                    `mudarStatus` não lança quando o servidor recusa — devolve
+                    sem `item`. Avançar os quatro em fila sem olhar a resposta
+                    fazia a carga parar em "Embarque Finalizado" de vez em
+                    quando (1 em 3 execuções medido), e o teste acusava um
+                    defeito de produto onde havia uma recusa engolida: a
+                    subida da carga e a primeira troca de status disputam, e
+                    quem chega antes ganha.
+
+                    É o mesmo remédio de test_admin_historico.py, que já
+                    fazia assim — e a mesma lição do raio-X: dirigir a cadeia
+                    pelo que o SERVIDOR confirmou, nunca pelo otimismo local. */
                  for (const s of ['Aguardando Embarque', 'Embarque Iniciado',
                                   'Embarque Finalizado', 'Faturado']) {
-                   await SuincoSharePoint.mudarStatus(c.id, s);
+                   let ok = false;
+                   for (let i = 0; i < 5 && !ok; i++) {
+                     const r = await SuincoSharePoint.mudarStatus(c.id, s);
+                     ok = !!(r && r.item);
+                     if (!ok) await new Promise((res) => setTimeout(res, 600));
+                   }
                  }
                  await SuincoSharePoint.sincronizarAgora();
                  return c.id;
                }""", placa)
-        pronto = await pgL.evaluate(
-            "(id) => { const c = getCarga(id); return c ? c.status : null; }", cargaId)
+        # ESPERA A CONDIÇÃO, não um instante.
+        #
+        # O servidor aceita as quatro trocas — conferido no banco: a carga
+        # chega a Faturado e segue. O que atrasa é a TELA: enquanto a
+        # gravação de uma carga está em voo ela fica marcada como pendente, e
+        # a fusão do estado remoto a ignora de propósito — senão a resposta
+        # do servidor apagaria o que o operador acabou de fazer (ocorrência
+        # #01). A marca sai quando a gravação confirma.
+        #
+        # Ler o estado local no instante seguinte ao laço pegava essa janela
+        # e acusava defeito de produto onde havia leitura cedo demais.
+        # Medido: falhava em 2 de 4 execuções ANTES de qualquer mudança desta
+        # sessão e em 3 de 4 depois — com n=4 isso é ruído, e nos dois casos
+        # o servidor estava certo.
+        #
+        # Na operação real ninguém dispara quatro trocas de status em dois
+        # segundos; o teste dispara. Então ele espera a condição.
+        pronto = None
+        for _ in range(20):
+            pronto = await pgL.evaluate(
+                "(id) => { const c = getCarga(id); return c ? c.status : null; }", cargaId)
+            if pronto == 'Faturado':
+                break
+            await pgL.wait_for_timeout(500)
+            await pgL.evaluate("async () => { await SuincoSharePoint.sincronizarAgora(); }")
         ck('carga de teste chegou a Faturado, pronta para sair', pronto == 'Faturado', str(pronto))
 
         await pgP.evaluate("async () => { await SuincoSharePoint.sincronizarAgora(); }")
