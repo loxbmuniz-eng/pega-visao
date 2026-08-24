@@ -7825,6 +7825,19 @@ async function carregarMontagemUI(){
     _montagemDia = await SuincoSharePoint.montagem.doDia(dia);
     renderMontagem();
   } catch(e){
+    /* SERVIDOR AINDA SEM A MIGRAÇÃO 031.
+       O painel vai para o ar assim que a build publica; o servidor só
+       ganha as tabelas novas quando alguém roda atualizar.sh na VPS.
+       Nesse intervalo /api/montagem não existe e devolve 404.
+       Cuspir "erro" nesse caso assustaria a Logística inteira por algo
+       que não quebrou nada — o resto da Programação continua funcionando.
+       A tela some e diz o que falta, uma vez, sem alarme. */
+    if(e && e.status === 404){
+      card.hidden = true;
+      console.info('[Suinco] Montagem do dia: servidor ainda sem a atualização. '
+        + 'Rode atualizar.sh na VPS para habilitar.');
+      return;
+    }
     notify('Não consegui carregar a montagem do dia: ' + (e.message || e), 'erro', 7000);
   }
 }
