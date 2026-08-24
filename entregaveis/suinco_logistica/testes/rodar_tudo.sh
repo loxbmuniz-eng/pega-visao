@@ -63,7 +63,8 @@ export LOGS
 
 limpar_banco(){
   psql -q -c "DELETE FROM log_eventos; DELETE FROM fact_statusfrota;
-              DELETE FROM fact_viagens; DELETE FROM acoes_criticas;" 2>/dev/null
+              DELETE FROM fact_viagens; DELETE FROM acoes_criticas;
+              DELETE FROM programacao_montagem;" 2>/dev/null
 }
 
 # Marcadores de que a suíte fala com o servidor. Mantidos aqui e não no

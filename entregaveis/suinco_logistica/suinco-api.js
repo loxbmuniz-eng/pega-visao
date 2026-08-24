@@ -1205,6 +1205,47 @@ const SuincoSharePoint = (function () {
     return chamar('/api/programacoes');
   }
 
+  /* MODELO DA SEMANA E MONTAGEM DO DIA (23/08/2026).
+
+     A etapa que ainda vivia no Excel: montar o dia sobre as rotas
+     pré-definidas e só depois contratar as placas. Nada aqui passa pela
+     fila offline — montar programação sem servidor criaria duas versões
+     do dia, e o dia é justamente o que precisa ser um só para os cinco
+     setores enxergarem o mesmo. */
+  const modeloSemana = {
+    listar() { return chamar('/api/modelo-semana'); },
+    gravar(campos) {
+      return chamar('/api/modelo-semana', { metodo: 'POST', corpo: campos });
+    },
+    remover(id) {
+      return chamar('/api/modelo-semana/' + encodeURIComponent(id), { metodo: 'DELETE' });
+    },
+  };
+
+  const montagem = {
+    doDia(dia) {
+      return chamar('/api/montagem' + (dia ? '?dia=' + encodeURIComponent(dia) : ''));
+    },
+    criar(campos) {
+      return chamar('/api/montagem', { metodo: 'POST', corpo: campos });
+    },
+    alterar(id, campos) {
+      return chamar('/api/montagem/' + encodeURIComponent(id),
+        { metodo: 'PATCH', corpo: campos });
+    },
+    cancelar(id, motivo) {
+      return chamar('/api/montagem/' + encodeURIComponent(id) + '/cancelar',
+        { metodo: 'POST', corpo: { motivo } });
+    },
+    /* Avisa o servidor de que a montagem virou a carga `cargaId`. Quem cria
+       a carga é o caminho de sempre — ver o comentário da rota no
+       servidor sobre por que não há um segundo caminho de criação. */
+    efetivar(id, cargaId) {
+      return chamar('/api/montagem/' + encodeURIComponent(id) + '/efetivar',
+        { metodo: 'POST', corpo: { cargaId } });
+    },
+  };
+
   /* Revisões de carga (Bloco B, 16/08/2026). Só a Administração — o
      servidor é quem barra, isto aqui só transporta. Não passa pela fila
      offline: restaurar sem servidor não existe (o histórico mora lá). */
@@ -1400,6 +1441,7 @@ const SuincoSharePoint = (function () {
     recarregarRotas,
     corrigirEtapa, corrigirDataProgramacao, desfazerExclusao, listarExcluidas,
     programacaoDoDia, mfa, acoesCriticas,
+    modeloSemana, montagem,
     pull, pullTudo, drenarFila, pendentes,
     listarOperadores, criarOperador, atualizarOperador,
     sincronizarAgora, iniciarSincroniaPeriodica, pararSincronia, ultimaSincronia,

@@ -4356,6 +4356,13 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
   }
 }
 
+/* Linha de montagem já efetivada ou cancelada: virou leitura. Recuo de
+   contraste em vez de cinza chapado — ela continua sendo informação (o
+   dia foi montado assim), só não é mais ação. A badge fica em opacidade
+   cheia: é ela que diz POR QUE a linha está apagada. */
+.linha-fraca td{ opacity:.62 }
+.linha-fraca .badge{ opacity:1 }
+
 </style>
 <!-- PWA: instalável no Android e no iPhone, com ícone na tela inicial.
      Os dois arquivos são opcionais por construção — abrindo o painel por
@@ -4596,6 +4603,52 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
       </div>
       <div class="form-group" style="margin-bottom:10px"><label>Observações</label><textarea id="prog-obs"></textarea></div>
       <div class="flex-end"><button class="btn btn-primary" onclick="criarCargaProgramadaUI()">➕ Criar Carga (Aguardando Veículo)</button></div>
+    </div>
+
+    <!-- ===== MONTAGEM DO DIA (23/08/2026) =====
+         A etapa que ainda acontecia no Excel do Teams: as rotas do dia da
+         semana já vêm definidas, a Logística monta as cargas em cima delas
+         e só depois contrata as placas.
+
+         Fica ACIMA da Fila de Programados de propósito: é a primeira coisa
+         que se faz de manhã, e a Fila é o que se consulta depois. A carga
+         montada aqui NÃO aparece na Torre — ela só vira carga de verdade
+         quando ganha placa (ver migração 031). -->
+    <div class="card" id="card-montagem">
+      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-programacao"/></svg>
+        Montagem do dia <span id="mont-dia-nome" class="pill-count"></span></div>
+      <div class="card-sub">As rotas deste dia da semana já vêm do modelo. Monte as cargas primeiro e
+        coloque as placas quando o transporte for contratado — a placa pode entrar, sair e trocar de linha
+        à vontade. <strong>Só entra na Torre de Controle quando tiver placa.</strong></div>
+      <div class="filtro-periodo">
+        <div class="form-group">
+          <label>Dia da programação</label>
+          <input type="date" id="mont-data" onchange="carregarMontagemUI()">
+        </div>
+        <div class="form-group filtro-acoes">
+          <button class="btn btn-sec btn-sm" onclick="montagemHojeUI()">Hoje</button>
+        </div>
+        <div class="form-group filtro-acoes">
+          <button class="btn btn-sec btn-sm" id="mont-btn-modelo" onclick="aplicarModeloDoDiaUI()"
+            title="Cria uma linha para cada rota do modelo deste dia da semana que ainda não foi montada.">
+            ⚡ Puxar rotas do modelo
+          </button>
+        </div>
+      </div>
+      <div class="bento bi-faixa" id="mont-stats" style="margin-bottom:12px"></div>
+      <div class="table-wrap">
+        <table id="mont-tabela">
+          <thead><tr>
+            <th>Seq.</th><th>Rota</th><th>Nº Carga</th><th>Placa</th><th>Peso (kg)</th>
+            <th>Entregas</th><th>Ganchos</th><th>Palet.</th><th>Tipo de Operação</th><th class="no-print">Ação</th>
+          </tr></thead>
+          <tbody id="mont-tbody"></tbody>
+        </table>
+      </div>
+      <div class="empty-state" id="mont-empty" data-icone="🗓️" hidden>
+        Nada montado para este dia ainda. Use <strong>Puxar rotas do modelo</strong> para começar
+        com as rotas que costumam rodar neste dia da semana.</div>
+      <div id="mont-faltando" class="aviso-inline no-print" hidden></div>
     </div>
 
     <!-- A Fila de Programados vem antes: é o que a Logística consulta o dia
@@ -7101,6 +7154,47 @@ const SuincoSharePoint = (function () {
     return chamar('/api/programacoes');
   }
 
+  /* MODELO DA SEMANA E MONTAGEM DO DIA (23/08/2026).
+
+     A etapa que ainda vivia no Excel: montar o dia sobre as rotas
+     pré-definidas e só depois contratar as placas. Nada aqui passa pela
+     fila offline — montar programação sem servidor criaria duas versões
+     do dia, e o dia é justamente o que precisa ser um só para os cinco
+     setores enxergarem o mesmo. */
+  const modeloSemana = {
+    listar() { return chamar('/api/modelo-semana'); },
+    gravar(campos) {
+      return chamar('/api/modelo-semana', { metodo: 'POST', corpo: campos });
+    },
+    remover(id) {
+      return chamar('/api/modelo-semana/' + encodeURIComponent(id), { metodo: 'DELETE' });
+    },
+  };
+
+  const montagem = {
+    doDia(dia) {
+      return chamar('/api/montagem' + (dia ? '?dia=' + encodeURIComponent(dia) : ''));
+    },
+    criar(campos) {
+      return chamar('/api/montagem', { metodo: 'POST', corpo: campos });
+    },
+    alterar(id, campos) {
+      return chamar('/api/montagem/' + encodeURIComponent(id),
+        { metodo: 'PATCH', corpo: campos });
+    },
+    cancelar(id, motivo) {
+      return chamar('/api/montagem/' + encodeURIComponent(id) + '/cancelar',
+        { metodo: 'POST', corpo: { motivo } });
+    },
+    /* Avisa o servidor de que a montagem virou a carga `cargaId`. Quem cria
+       a carga é o caminho de sempre — ver o comentário da rota no
+       servidor sobre por que não há um segundo caminho de criação. */
+    efetivar(id, cargaId) {
+      return chamar('/api/montagem/' + encodeURIComponent(id) + '/efetivar',
+        { metodo: 'POST', corpo: { cargaId } });
+    },
+  };
+
   /* Revisões de carga (Bloco B, 16/08/2026). Só a Administração — o
      servidor é quem barra, isto aqui só transporta. Não passa pela fila
      offline: restaurar sem servidor não existe (o histórico mora lá). */
@@ -7296,6 +7390,7 @@ const SuincoSharePoint = (function () {
     recarregarRotas,
     corrigirEtapa, corrigirDataProgramacao, desfazerExclusao, listarExcluidas,
     programacaoDoDia, mfa, acoesCriticas,
+    modeloSemana, montagem,
     pull, pullTudo, drenarFila, pendentes,
     listarOperadores, criarOperador, atualizarOperador,
     sincronizarAgora, iniciarSincroniaPeriodica, pararSincronia, ultimaSincronia,
@@ -7309,7 +7404,7 @@ const SuincoSharePoint = (function () {
 
 </script>
 <script>window.FROTA_SEED_CSV = "Placa,Transportadora,TipoVeiculo,PrecisaRevisao\nAAK8958,Cooperativa dos Transportadores Unidos Ltda.,Carreta,Nao\nAFZ8792,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nAHG5900,Coopertral,Carreta,Nao\nAJM6032,Logmaster Armazem e Logistica Ltda,Carreta,Nao\nAJY3407,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nAMU5835,Sandra Campanholo Transportes-ME,Carreta,Nao\nANA6563,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nANE3214,Noelia de Sousa Machado 03794699521,3/4,Nao\nAPA4111,Cooperativa de Transp e Logist de Sao Sebastiao do Oeste Mg,Carreta,Nao\nAPA4B11,Cooperativa de Transp e Logist de Sao Sebastiao do Oeste Mg,Carreta,Nao\nAPN0660,Tais Simoes Me,Carreta,Nao\nAQP1978,R A de Castilho Transportes,Carreta,Nao\nARA0338,Fidelis Transportes Ltda.,Bitruck,Nao\nARF4702,Cisne Branco Transportes Ltda EPP,Carreta,Nao\nARF4H02,Cisne Branco,Carreta,Nao\nARX9505,Friocargo Triangulo Ltda,Carreta,Nao\nASE5007,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nASE5A07,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nASG3E42,Baixotes Transportes,Carreta,Nao\nASQ2913,Washington L S Costa Junior - ME,Truck,Nao\nATD5001,Transportadora Multi Express Ltda,Carreta,Nao\nATF4700,Fidelis Transportes Ltda.,Carreta,Nao\nATK3B08,Transportadora Multi Express Ltda,Carreta,Nao\nATM1380,Coopernova Coop Riobranquense de Transporte,Carreta,Nao\nATM1480,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nATO2450,Fidelis Transportes Ltda.,Bitruck,Nao\nATZ9H26,Omega X Solucoes em Logistica e Armazenagem Ltda,Carreta,Nao\nAUH8324,Transportadora Multi Express Ltda,Carreta,Nao\nAVD4546,Transportadora Multi Express Ltda,Bitruck,Nao\nAVD4F46,Giselda Aparecida Gomes Mundim Araujo,Bitruck,Nao\nAVT3222,Fidelis Transportes Ltda.,Carreta,Nao\nAVV3F98,Jorge Lemes da Silva Junior ME,Carreta,Nao\nAZC5116,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nAZC5B17,Cooperativa dos Transportadores Unidos Ltda.,Carreta,Nao\nAZI4219,Fidelis Transportes Ltda.,Bitruck,Nao\nAZS1H23,Cisne Branco Transportes Ltda EPP,Carreta,Nao\nAZV4440,Trans Thalia Transportes Ltda.,Carreta,Nao\nBAH8650,Renato Pereira Lima 03425721640,3/4,Nao\nBAW4341,Log SPM Ltda,Bitruck,Nao\nBBL9819,Fidelis Transportes Ltda.,Bitruck,Nao\nBBW1552,PH Fidelis Transportes e Representacoes Ltda,Carreta,Nao\nBCH0685,Gold Star,Container,Nao\nBCN2B65,Fidelis Transportes Ltda.,Bitruck,Nao\nBDB2J69,Fidelis Transportes Ltda.,Truck,Nao\nBDF5110,Candido Ribeiro do Vale Neto Com de Bebidas e Transportes,Carreta,Nao\nBDZ3108,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nBDZ3B08,Miranda Lacerda Transportes Ltda.,Carreta,Nao\nBDZ7E36,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nBRY0423,Transmartyna Ltda ME,Carreta,Nao\nBRY3559,Transmartyna Ltda ME,Carreta,Nao\nBTR0404,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nBTR0D21,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nBTR2914,R A de Castilho Transportes,Carreta,Nao\nBUP9005,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nBWM8222,R A de Castilho Transportes,Carreta,Nao\nBWQ3386,R A de Castilho Transportes,Carreta,Nao\nBWV4948,Gold Star,Container,Nao\nCDM5889,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nCDM5I89,Cooperativa dos Transportadores Unidos Ltda.,Carreta,Nao\nCLH0866,R A de Castilho Transportes,Carreta,Nao\nCLH2450,Cargofrio Logística e Armazenamento Ltda,Carreta,Nao\nCLK5647,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nCNI9559,Gold Star,Container,Nao\nCNP5E57,Coopertral,Carreta,Nao\nCPG7D79,Candido Ribeiro do Vale Neto Com de Bebidas e Transportes,Carreta,Nao\nCPJ2722,Transmartyna Ltda ME,Carreta,Nao\nCPJ3104,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nCPJ5624,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nCUA4984,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nCUA6452,R A de Castilho Transportes,Carreta,Nao\nCUA7761,Transmartyna Ltda ME,Carreta,Nao\nCUB2232,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nCUC4J12,Rodosousa,Truck,Nao\nCUC9963,R A de Castilho Transportes,Carreta,Nao\nCUE2313,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nCUE2750,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nCUH6E50,Cooperativa dos Transportadores Unidos Ltda.,Carreta,Nao\nCVN0C42,Patos Logística Eirelli,Carreta,Nao\nCVN1345,R A de Castilho Transportes,Carreta,Nao\nCYN6310,R A de Castilho Transportes,Carreta,Nao\nCYR8983,Flay Logistica e Armazenagem Ltda,Truck,Nao\nCZX7719,Cisne Branco Transportes Ltda EPP,Carreta,Nao\nDAO0759,Gold Star,Container,Nao\nDAO2512,Trans Frios Transportes e Logistica Ltda ME,Truck,Nao\nDAO2888,Noelia de Sousa Machado 03794699521,Truck,Nao\nDAO2981,Friocargo Norte Ltda,3/4,Nao\nDAO2H44,Friocargo Norte Ltda,Carreta,Nao\nDAO4959,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nDAO4J59,Transportadora Baixotes Transportes Ltda,Carreta,Nao\nDAO9753,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nDBB8B81,Transmartyna Ltda ME,Carreta,Nao\nDBB8E52,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nDBM4895,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nDBM8771,TAC Transportes Armazenagem e Logistica,Truck,Nao\nDBM9754,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nDBP3272,R A de Castilho Transportes,Carreta,Nao\nDBP3294,R A de Castilho Transportes,Carreta,Nao\nDBP4407,Transportes e Armazenagem Zilli Ltda,Truck,Nao\nDJB9549,Cisne Branco,Carreta,Nao\nDJB9651,Cisne Branco Transportes Ltda EPP,Carreta,Nao\nDJE1454,Cooperativa dos Transportadores Unidos Ltda.,Carreta,Nao\nDJF1B66,Omega X Solucoes em Logistica e Armazenagem Ltda,Carreta,Nao\nDJF7527,Cisne Branco,Carreta,Nao\nDJF8527,Cisne Branco,Carreta,Nao\nDKR6382,Solucao Transportes e Servicos Eireli,Carreta,Nao\nDKT5G89,AJB Transportes,Toco,Nao\nDPB0054,Cisne Branco Transportes Ltda EPP,Carreta,Nao\nDPB1843,Cooperativa dos Transportadores Unidos Ltda.,Carreta,Nao\nDPB1856,Mix Transportes Rodoviarios Ltda - ME,Carreta,Nao\nDPB1862,Cisne Branco,Carreta,Nao\nDPB1863,Cisne Branco Transportes Ltda EPP,Carreta,Nao\nDPB1864,Coopertral,Carreta,Nao\nDPC9846,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nDPE9545,Cisne Branco Transportes Ltda EPP,Carreta,Nao\nDPF3916,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nDPF9524,Maxfrios Distribuidora e Transporte Eireli,Truck,Nao\nDQS1031,Posto Vanete Ltda,Carreta,Nao\nDQS1041,Posto Vanete Ltda,Carreta,Nao\nDQS1048,Omega X Solucoes em Logistica e Armazenagem Ltda,Carreta,Nao\nDQS9035,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nDSG0571,Flay Logistica e Armazenagem Ltda,Truck,Nao\nDTA3156,Cisne Branco,Carreta,Nao\nDTB2717,Cisne Branco Transportes Ltda EPP,Carreta,Nao\nDTD8890,TAC Transportes Armazenagem e Logistica,Toco,Nao\nDTE9880,Giselda Aparecida Gomes Mundim Araujo,Bitruck,Nao\nDTV5836,R A de Castilho Transportes,Carreta,Nao\nDVS2609,Cisne Branco,Carreta,Nao\nDVS2685,Marizileia Transportes,Carreta,Nao\nDVS2708,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nDVS2765,Cisne Branco Transportes Ltda EPP,Carreta,Nao\nDVS2H08,Brasfrios Logistica e Transportes Ltda,Carreta,Nao\nDVS2H66,MMS Armazenagem e Logistica SA,Carreta,Nao\nDVS3653,Cisne Branco,Carreta,Nao\nDVT9G10,Baixotes Transportes,Carreta,Nao\nDXV8593,Transmartyna Ltda ME,Carreta,Nao\nEBQ6E39,Gold Star,Container,Nao\nECU2747,Transmartyna Ltda ME,Carreta,Nao\nEFO7220,Maria Hildete Santana de Matos,Toco,Nao\nEFO7709,Transmartyna Ltda ME,Carreta,Nao\nEFU0217,Isavic Transporte e Armazenamento Ltda,Truck,Nao\nEFW0G14,Tais Simoes Me,Carreta,Nao\nEFW8180,Cooperativa de Transp e Logist de Sao Sebastiao do Oeste Mg,Carreta,Nao\nEGK9135,Lacerda Barros Transportes Ltda.,Carreta,Nao\nEHH8269,Omega X Solucoes em Log e Armazenagem Ltda,Carreta,Nao\nELW5G48,Manoel Araujo Dantas Transportes,3/4,Nao\nEOA5B19,Cisne Branco,Carreta,Nao\nEOE2358,Transportes Zanini Ltda,Carreta,Nao\nEOE5228,Washington L S Costa Junior - ME,Bitruck,Nao\nEPG0A36,Suinco,3/4,Nao\nEPU7319,Transportadora Multi Express Ltda,Carreta,Nao\nEPU7D19,Transportes e Armazenagem Zilli Ltda,Carreta,Nao\nEPU9647,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nESU1150,TAC Transportes Armazenagem e Logistica,Truck,Nao\nESU2194,ASAPH Transportes Ltda.,Carreta,Nao\nESU4I15,Avila Transportes Ltda Me,3/4,Nao\nESU6032,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nESU6206,R A de Castilho Transportes,Carreta,Nao\nESU6906,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nESU6909,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nEVK0647,Matheus Gomes Mundim Araujo - ME,Toco,Nao\nEVK0G47,Marques e Silva,Toco,Nao\nEVO1H32,Gold Star,Container,Nao\nEVO4763,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nEVP6973,R A de Castilho Transportes,Carreta,Nao\nEWJ7D98,Gold Star,Container,Nao\nEWU5609,Transportes e Armazenagem Zilli Ltda,Carreta,Nao\nEYS5406,Transmartyna Ltda ME,Carreta,Nao\nEZL8720,Transportadora Multi Express Ltda,Carreta,Nao\nFCF5910,RN Transporte e Logistica Ltda,3/4,Nao\nFCT9179,Gold Star,Container,Nao\nFCZ2465,Gold Star,Container,Nao\nFDC2122,AC Transportes,Carreta,Nao\nFDC7122,AC Logística,Carreta,Nao\nFEI3101,R A de Castilho Transportes,Carreta,Nao\nFEI3956,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nFEI4913,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nFFI1091,Friocargo Norte Ltda,Toco,Nao\nFFI1G03,MMS Armazenagem e Logistica SA,Carreta,Nao\nFFN9122,Cisne Branco,Carreta,Nao\nFJX0166,Transmartyna Ltda ME,Carreta,Nao\nFKJ7020,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nFKS0886,R A de Castilho Transportes,Carreta,Nao\nFLI6857,Isavic Transporte e Armazenamento Ltda,Bitruck,Nao\nFLI6I57,Marques e Silva,Bitruck,Nao\nFOI8313,Transmartyna Ltda ME,Carreta,Nao\nFPI6789,R A de Castilho Transportes,Carreta,Nao\nFPJ8120,Roosevelt Marques da Silva,Bitruck,Nao\nFPJ8I20,Marques e Silva,Bitruck,Nao\nFQV1237,Transmartyna Ltda ME,Carreta,Nao\nFRS4F21,Marques e Silva,Bitruck,Nao\nFSH2870,Log SPM Ltda,Carreta,Nao\nFST8019,Gold Star,Container,Nao\nFSZ8297,Multi Express,Carreta,Nao\nFTY2826,Rodrigo A Rossi e Cia Ltda Me,Truck,Nao\nFTZ2138,AJB Transportes,Truck,Nao\nFVA0A95,Denia Transportes,Carreta,Nao\nFZZ8821,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nGBR3719,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nGFK8080,Friocargo Norte Ltda,Bitruck,Nao\nGFK8A80,Denia Transportes,Bitruck,Nao\nGHC0660,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nGHC3058,Cooperativa dos Transportadores Unidos Ltda.,Carreta,Nao\nGRA9825,Transportes e Armazenagem Zilli Ltda,Truck,Nao\nGRE3345,TAC Transportes Armazenagem e Logistica,Truck,Nao\nGRE4738,Denia Transportes,Truck,Nao\nGSW0386,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nGSW0509,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nGSW0709,Cooperativa Riobranquense de Transportes Ltda.,Truck,Nao\nGSW7938,Transportes e Armazenagem Zilli Ltda,Truck,Nao\nGVH1A92,Marques e Silva,Toco,Nao\nGVI5286,Flay Logistica e Armazenagem Ltda,Truck,Nao\nGVQ1260,Transportadora Multi Express Ltda,Carreta,Nao\nGVQ6746,Flay Logistica e Armazenagem Ltda,Truck,Nao\nGVQ8934,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nGWI3849,Flay Logistica e Armazenagem Ltda,Truck,Nao\nGWI4688,TAC Transportes Armazenagem e Logistica,Truck,Nao\nGWI4773,Posto Vanete Ltda,Carreta,Nao\nGWI4H60,Cirio Alves de Oliveira Junior - Transportes,3/4,Nao\nGWI8D40,Coopediesel,Carreta,Nao\nGXA0293,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nGXH6D13,Cirio Alves de Oliveira Junior - Transportes,Truck,Nao\nGXM5591,TAC Transportes Armazenagem e Logistica,Truck,Nao\nGXM5C08,Transportadora Multi Express Ltda,Bitruck,Nao\nGXS2438,Matheus Gomes Mundim Araujo - ME,3/4,Nao\nGXS7634,Lagam Transportes & Logistica Ltda,Bitruck,Nao\nGYS6028,Omega X Solucoes em Logistica e Armazenagem Ltda,Truck,Nao\nGYT1208,Trans Frios Transportes e Logistica Ltda ME,Truck,Nao\nGZG1203,Posto Vanete Ltda,Carreta,Nao\nGZG4309,TAC Transportes Armazenagem e Logistica,Bitruck,Nao\nHAX4227,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nHBC1622,Cooperativa de Transportes Montenegro Ltda,Truck,Nao\nHBG6828,Cooperativa Riobranquense de Transportes Ltda.,Toco,Nao\nHBK6688,Cargofrio Logística e Armazenamento Ltda,Truck,Nao\nHBN0986,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nHBN1461,TAC Transportes Armazenagem e Logistica,Truck,Nao\nHBN5086,TAC Transportes Armazenagem e Logistica Ltda,Truck,Nao\nHBN8111,Omega X Solucoes em Log e Armazenagem Ltda,Bitruck,Nao\nHBN8437,Cooperativa de Transportes Montenegro Ltda,Truck,Nao\nHBN9825,Omega X Solucoes em Logistica e Armazenagem Ltda,Truck,Nao\nHBZ0228,Transportes Horizonte Frios Ltda,Truck,Nao\nHCQ6715,Agnaldo Gomes de Souza,Truck,Nao\nHCS8947,Suinco Cooperativa de Suinocultores Ltda,3/4,Nao\nHCW8714,Suinco Cooperativa de Suinocultores Ltda,3/4,Nao\nHDI9336,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nHDI9937,Cooperativa Riobranquense de Transprotes Ltda,3/4,Nao\nHDJ7625,Isavic Transporte e Armazenamento Ltda,Bitruck,Nao\nHEE9J46,Baixotes Transportes,Carreta,Nao\nHEH1386,Douglas Dornelas Figueiredo - 078331606-28,Toco,Nao\nHFB9126,Washington L S Costa Junior - ME,Bitruck,Nao\nHFB9139,Cooperativa de Transp e Logist de Sao Sebastiao do Oeste Mg,Bitruck,Nao\nHFD4176,Coopertral,Carreta,Nao\nHFD4I76,Coopertral,Carreta,Nao\nHFF5A12,Denia Transportes,Carreta,Nao\nHFF5F12,Denia Transportes,Carreta,Nao\nHGH1150,Trans Frios Transportes e Logistica Ltda ME,Truck,Nao\nHGJ8864,Matheus Gomes Mundim Araujo - ME,Bitruck,Nao\nHHE9J46,Baixotes Transportes,Carreta,Nao\nHHG1808,Cooperativa Riobranquense de Transprotes Ltda,3/4,Nao\nHHI2962,Coopdiesel Coop de PF e PJ Seg Transportes em Geral,Toco,Nao\nHHI2J62,Marques e Silva,Toco,Nao\nHHK1101,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nHHK1128,Flay Logistica e Armazenagem Ltda,3/4,Nao\nHHK1143,Sidelia de Fatima Costa ME,3/4,Nao\nHHK1682,Transportes e Armazenagem Zilli Ltda,3/4,Nao\nHHW5634,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nHIA4316,Cooperativa Riobranquense de Transportes Ltda,Carreta,Nao\nHIB9619,Trans Frios Transportes e Logistica Ltda ME,Truck,Nao\nHIG4415,TAC Transportes Armazenagem e Logistica,3/4,Nao\nHIG4J37,TAC Transportes Armazenagem e Logistica,3/4,Nao\nHIJ4272,Transportadora Multi Express Ltda,Truck,Nao\nHIM0845,Aparicio Valmir Ferreira,3/4,Nao\nHIV1702,Washington L S Costa Junior - ME,Bitruck,Nao\nHJA3D75,Marques e Silva,Toco,Nao\nHJI9573,Transportes e Armazenagem Zilli Ltda,Toco,Nao\nHJI9585,Comercial TIVI Ltda.,Toco,Nao\nHJM3916,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nHJZ4521,Washington L S Costa Junior - ME,Bitruck,Nao\nHKE0322,Ailton Benedito Transportes Ltda,Bitruck,Nao\nHKE0D22,TAC Transportes Armazenagem e Logistica,Bitruck,Nao\nHKE5008,Isavic Transporte e Armazenamento Ltda,Carreta,Nao\nHKF3605,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nHKH0223,Flay Logistica e Armazenagem Ltda,Truck,Nao\nHLI0380,TAC Transportes Armazenagem e Logistica,Bitruck,Nao\nHLM4H60,Marques e Silva,Bitruck,Nao\nHLM4J60,Marques e Silva,Bitruck,Nao\nHLY7349,Cooperativa Riobranquense de Transportes Ltda.,Toco,Nao\nHLY7350,TAC Transportes Armazenagem e Logistica,Toco,Nao\nHLY7631,Cooperativa Riobranquense de Transportes Ltda.,Toco,Nao\nHLY7632,Suinco Cooperativa de Suinocultores Ltda,Toco,Nao\nHLY7G32,TAC Transportes Armazenagem e Logistica Ltda,Toco,Nao\nHLY8107,Suinco,3/4,Nao\nHLY8150,Suinco Cooperativa de Suinocultores Ltda,Toco,Nao\nHMV4954,Logmaster Armazem e Logistica Ltda,Carreta,Nao\nHMV4D02,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nHMV6367,Avila Transportes Ltda Me,3/4,Nao\nHNX2274,Trans Frios Transportes e Logistica Ltda ME,Bitruck,Nao\nHOF4678,Cooperativa Riobranquense de Transportes Ltda,Toco,Nao\nHPY3441,Mix Transportes Rodoviarios Ltda - ME,Carreta,Nao\nHQR8499,Cooperativa Riobranquense de Transportes Ltda.,Truck,Nao\nHQR8E99,Rodosousa,Truck,Nao\nHRS6838,RA Transportes e Logistica Eireli,Carreta,Nao\nHRS7035,Posto Vanete Ltda,Carreta,Nao\nHRS8397,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nHRS8D97,Coopertral,Carreta,Nao\nHSJ4627,Friocargo Norte Ltda,Carreta,Nao\nIAH4303,Washington L S Costa Junior - ME,3/4,Nao\nIAH8003,Sidelia de Fatima Costa ME,3/4,Nao\nIKB9915,Posto Vanete Ltda,Carreta,Nao\nIKU9328,Isavic Transporte e Armazenamento Ltda,Carreta,Nao\nILI3703,RN Transporte e Logistica Ltda,Carreta,Nao\nILI3H03,Baixotes Transportes,Carreta,Nao\nINT7417,Transportadora Multi Express Ltda,Carreta,Nao\nIOM9374,Cooperativa de Transp e Logist de Sao Sebastiao do Oeste Mg,Carreta,Nao\nISA1925,Transportes Prigol Ltda,Carreta,Nao\nIUL0644,Transportes Prigol Ltda,Carreta,Nao\nIUR2A43,HDX Transportes e Servicos Ltda,Carreta,Nao\nIUR7491,Transportadora Spellmeier Ltda,Bitruck,Nao\nIWH8877,Flay Logistica e Armazenagem Ltda,Bitruck,Nao\nIYD3003,Tais Simoes Me,Carreta,Nao\nIYD4400,Foba Transportes Ltda - ME,Carreta,Nao\nIYX2917,Senio Transportes de cargas Rodoviaria Ltda,Carreta,Nao\nIYY1676,Transportes Prigol Ltda,Carreta,Nao\nJDD0140,Posto Vanete Ltda,Bitruck,Nao\nJGZ0468,Flay Logistica e Armazenagem Ltda,Bitruck,Nao\nJHJ6232,Friocargo Norte Ltda,3/4,Nao\nJHX6373,Transportadora Multi Express Ltda,Bitruck,Nao\nJIB3H29,Cirio Alves de Oliveira Junior - Transportes,3/4,Nao\nJIG4767,Friocargo Triangulo Ltda,3/4,Nao\nJJB8946,Denia Transportes,Truck,Nao\nJOC2635,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nJOK0854,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nJOK0I54,Denia Transportes,Carreta,Nao\nJRC5555,Trans Shirley Transportes Ltda.,Carreta,Nao\nJRR2673,Transportadora Sudoeste Ltda,Toco,Nao\nJXX9H64,Coopertral,Carreta,Nao\nJYJ8844,Transportadora Multi Express Ltda,Carreta,Nao\nJZS5651,Vivan Transportes Ltda,Carreta,Nao\nKAC3J94,Gold Star,Container,Nao\nKAN5655,Wandell Fabiano Jordao,3/4,Nao\nKBY1081,R A de Castilho Transportes,Carreta,Nao\nKDJ7A83,Patos Logística Eirelli,Carreta,Nao\nKEB0368,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nKER9906,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nKER9J06,Tais Simoes Me,Carreta,Nao\nKEY0318,Cooperativa de Transp e Logist de Sao Sebastiao do Oeste Mg,Carreta,Nao\nKJZ5157,MMS Armazenagem e Logistica SA,Truck,Nao\nKLA3D75,Baixotes Transportes,Carreta,Nao\nKLA7375,Transportadora Baixotes Transportes Ltda,Carreta,Nao\nKLA7D75,Baixotes Transportes,Carreta,Nao\nKTC4518,R A de Castilho Transportes,Carreta,Nao\nKWE2956,AC Armazenagem,Carreta,Nao\nKWE2J56,AC Transportes,Carreta,Nao\nKYP8147,Rodosousa Transportes Ltda,3/4,Nao\nKZR8291,Trans Frios Transportes e Logistica Ltda ME,Toco,Nao\nLBJ8963,Cooperativa dos Transportadores Unidos Ltda.,Carreta,Nao\nLMO2E88,AC Transportes,Truck,Nao\nLMO8E88,AC Transportes,Truck,Nao\nLRD9999,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nLUX5135,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nLWS0237,R A de Castilho Transportes,Carreta,Nao\nLXV1767,GTRANS ALVES TRANSPORTES DE CARGAS LTDA,Carreta,Nao\nLXV5629,Posto Vanete Ltda,Carreta,Nao\nLYL4634,Fidelis Transportes Ltda.,Carreta,Nao\nLYU2742,Posto Vanete Ltda,Carreta,Nao\nLZN2849,RA Transportes e Logistica Eireli,Carreta,Nao\nMBA1451,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nMBJ3588,Omega X Solucoes em Logistica e Armazenagem Ltda,Carreta,Nao\nMBK0133,GF Transportes Ltda.,Carreta,Nao\nMBS0127,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nMCA9D22,ASAPH Transportes Ltda.,Carreta,Nao\nMCI0D83,Coopertral,Carreta,Nao\nMCO2936,ASAPH Transportes Ltda.,Carreta,Nao\nMCT6033,Transportes e Armazenagem Zilli Ltda,Carreta,Nao\nMCV0B18,AC Logística,Carreta,Nao\nMCY1282,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nMDG5672,Tais Simoes Me,Carreta,Nao\nMDH7292,Omega X Solucoes em Log e Armazenagem Ltda,Carreta,Nao\nMDL8499,Christine Prodocimo Roesel Marciano ME,Carreta,Nao\nMDM9D65,Isavic Transportes e Armazenagem Ltda,Carreta,Nao\nMDY6143,Omega X Solucoes em Logistica e Armazenagem Ltda,Carreta,Nao\nMEC0238,ASAPH Transportes Ltda.,Carreta,Nao\nMEG4089,Omega X Solucoes em Logistica e Armazenagem Ltda,Carreta,Nao\nMEG4A89,Omega X Solucoes em Logistica e Armazenagem Ltda,Carreta,Nao\nMEJ7716,Coopertral,Carreta,Nao\nMEO7544,Isavic Transporte e Armazenamento Ltda,Carreta,Nao\nMEV8145,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nMEX6H74,Omega X Solucoes em Logistica e Armazenagem Ltda,Carreta,Nao\nMFC2421,Transportadora Baixotes Transportes Ltda,Carreta,Nao\nMFC8804,TAC Transportes Armazenagem e Logistica,Truck,Nao\nMFF8179,Baixotes Transportes,Carreta,Nao\nMFF8879,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nMFF8I79,Baixotes Transportes,Carreta,Nao\nMFI7684,Omega X Solucoes em Logistica e Armazenagem Ltda,Carreta,Nao\nMFJ7671,Transportadora Baixotes Transportes Ltda,Carreta,Nao\nMFJ7G71,Baixotes Transportes,Carreta,Nao\nMFL9816,Carla da Silva Bruneti Trasp. Rodoviarios ME,Carreta,Nao\nMFM4128,Canada Transportes e Comercio Ltda.,Carreta,Nao\nMFM7088,Transportadora Baixotes Transportes Ltda,Carreta,Nao\nMFM7A88,Baixotes Transportes,Carreta,Nao\nMFN4147,Transportadora Multi Express Ltda,Carreta,Nao\nMFR0J29,Coopertral,Carreta,Nao\nMFT1992,Baixotes Transportes,Carreta,Nao\nMFT1J92,Baixotes Transportes,Carreta,Nao\nMFT5258,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nMFV8569,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nMFY8607,Sergio Nava e Cia Ltda,Carreta,Nao\nMGD4806,Isavic Transportes e Armazenagem Ltda,Carreta,Nao\nMGE5276,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nMGF8544,Omega X Solucoes em Logistica e Armazenagem Ltda,Carreta,Nao\nMGF9902,R A de Castilho Transportes,Carreta,Nao\nMGI4566,Canada Transportes e Comercio Ltda.,Carreta,Nao\nMGN4810,G S Puridade Transportes e Servicos Ltda,Carreta,Nao\nMGQ3782,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nMGR4809,Transportadora Multi Express Ltda,Carreta,Nao\nMGS0639,Canada Transportes e Comercio Ltda.,Carreta,Nao\nMGS8048,G S Puridade Transportes e Servicos Ltda,Carreta,Nao\nMGW0189,Cooperativa dos Transportadores Unidos Ltda.,Carreta,Nao\nMGY4450,Coopertral,Carreta,Nao\nMHB1468,TRANSPORTES BASSANI LTDA.,Carreta,Nao\nMHE7188,MMS Armazenagem e Logistica SA,Carreta,Nao\nMHF3C63,Denia Transportes,Truck,Nao\nMHF6C63,Denia Transportes,Carreta,Nao\nMHH8G10,RP Express,Carreta,Nao\nMHJ2202,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nMHJ5726,Transportadora Multi Express Ltda,Carreta,Nao\nMHK7293,Isavic Transportes e Armazenagem Ltda,Carreta,Nao\nMHM6045,Christine Prodocimo Roesel Marciano ME,Carreta,Nao\nMHN3D66,TransOliveira,Carreta,Nao\nMHN3D99,TransOliveira,Carreta,Nao\nMHR4B55,Coopertral,Carreta,Nao\nMHW7I56,Coopertral,Bitruck,Nao\nMHW9911,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nMIM8459,Friocargo Norte Ltda,Carreta,Nao\nMIQ6927,Posto Vanete Ltda,Carreta,Nao\nMIV2712,Kaipper Continental Transportes Ltda,Carreta,Nao\nMIZ0B87,Silva e Reis Transporte de Cargas Eireli Me,Carreta,Nao\nMJE7248,Transportes e Armazenagem Zilli Ltda,Carreta,Nao\nMJE8477,Canada Transportes,Carreta,Nao\nMJG1727,R A de Castilho Transportes,Carreta,Nao\nMJN3680,Christine Prodocimo Roesel Marciano ME,Carreta,Nao\nMJN7006,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nMJW3158,Denia Transportes,Carreta,Nao\nMJW3B58,Denia Transportes,Carreta,Nao\nMJW3C63,Denia Transportes,Carreta,Nao\nMKA7F71,MR Transportes,Carreta,Nao\nMKC1529,Gilmar Scariot Transportes,Carreta,Nao\nMKL9848,Posto Vanete Ltda,Carreta,Nao\nMKP9C15,Coopediesel,Carreta,Nao\nMKZ2997,Coop. de Tra. de Cargas do E. Santa Catarina,Carreta,Nao\nMLC4834,JCRM TRANSPORTES E LOGISTICA LTDA,Carreta,Nao\nMLK4271,Transportes e Armazenagem Zilli Ltda,Carreta,Nao\nMLN5130,Coop. de Tra. de Cargas do E. Santa Catarina,Carreta,Nao\nMLW7G66,Multi Express,Carreta,Nao\nMME8413,Transportes Zanini Ltda,Carreta,Nao\nMMH6129,Transportes Tozzo Ltda.,Carreta,Nao\nMMJ7G71,Baixotes Transportes,Carreta,Nao\nMMJ9E91,TransOliveira,Carreta,Nao\nMMJ9E99,TransOliveira,Carreta,Nao\nMRN5529,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nMRU6E28,G S Puridade Transportes e Servicos Ltda,Carreta,Nao\nMTC4550,Cooperativa Riobranquense de Transportes Ltda,Toco,Nao\nMWA6634,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nMXA2G32,Transportadora Multi Express Ltda,Carreta,Nao\nMXB5208,Bruno Sergio Ferreira CPF 04625109647,Carreta,Nao\nMXB5C08,AC Armazenagem,Carreta,Nao\nMXD1E41,Coopertral,Carreta,Nao\nNAB8188,Transportadora Multi Express Ltda,Carreta,Nao\nNCH2H15,AC Transportes,Carreta,Nao\nNCX0I40,Coopediesel,Carreta,Nao\nNFC3660,Marcus Eduardo Andrades Peres,Truck,Nao\nNFO1928,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nNGF2954,Cooperativa dos Transportadores Unidos Ltda.,Carreta,Nao\nNJB2858,Galvão & Messias Ltda.,Carreta,Nao\nNKE0329,RN Transporte e Logistica Ltda,Carreta,Nao\nNKK7412,SS LOG Transportes e Logistica Ltda,Carreta,Nao\nNKO0192,Transmartyna Ltda ME,Carreta,Nao\nNLP0479,Lagam Transportes & Logistica Ltda,Bitruck,Nao\nNPJ2578,Transportadora Multi Express Ltda,Carreta,Nao\nNPJ2F58,Multi Express,Carreta,Nao\nNPJ2F78,Multi Express,Carreta,Nao\nNUE1B52,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nNVY0428,Posto Vanete Ltda,Carreta,Nao\nNYE9761,TAC Transportes Armazenagem e Logistica,Truck,Nao\nOBE9693,Baixotes Transportes,Carreta,Nao\nOBE9G93,Baixotes Transportes,Carreta,Nao\nOBL9073,Transportadora Multi Express Ltda,Carreta,Nao\nODA8650,Transportadora Multi Express Ltda,Carreta,Nao\nOFN0964,Baixotes Transportes,Carreta,Nao\nOFS2H37,Cooperativa Riobranquense de Transportes Ltda.,Bitruck,Nao\nOGY2586,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nOKF5239,Rubens Eugenio Fiorentin Transportes Ltda.,Bitruck,Nao\nOKG2369,Sergio Nava e Cia Ltda,Carreta,Nao\nOLI5344,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nOMB0200,Friocargo Triangulo Ltda,Carreta,Nao\nOMB0466,Cooperativa Riobranquense de Transportes Ltda,3/4,Nao\nOMF8787,Omega X Solucoes em Logistica e Armazenagem Ltda,Carreta,Nao\nOMS4B32,Transportadora E Armazenagem Zilli Ltda,Carreta,Nao\nONZ4C37,Cisne Branco Transportes Ltda EPP,Carreta,Nao\nOOF9544,Solucao Transportes e Servicos Eireli,Carreta,Nao\nOOH4498,TAC Transportes Armazenagem e Logistica Ltda,Bitruck,Nao\nOOH4976,Rodocunha Transportes Ltda - ME,Bitruck,Nao\nOOH5001,Rodocunha Transportes Ltda - ME,Bitruck,Nao\nOOV8H47,Marizileia Transportes,Carreta,Nao\nOOW1277,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nOOZ5927,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nOOZ5955,Cooperativa Riobranquense de Transprotes Ltda,3/4,Nao\nOPC4600,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nOPC6065,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nOPF8308,Cooperativa de Transp e Logist de Sao Sebastiao do Oeste Mg,Bitruck,Nao\nOPL2I85,Marques e Silva,Toco,Nao\nOPM7245,Denia Transportes,Carreta,Nao\nOPM7C45,Denia Transportes,Carreta,Nao\nOPM7C55,Denia Transportes,Carreta,Nao\nOPM9245,Denia Transportes,Carreta,Nao\nOPQ0668,TAC Transportes Armazenagem e Logistica,Toco,Nao\nOPQ0672,Transportadora Multi Express Ltda,Toco,Nao\nOPQ3989,Suinco,Toco,Nao\nOPS0605,Transportes e Armazenagem Zilli Ltda,Truck,Nao\nOPT4189,Suinco Cooperativa de Suinocultores Ltda,3/4,Nao\nOQA3631,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nOQB1826,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nOQH3838,Cooperativa Riobranquense de Transportes Ltda.,Toco,Nao\nOQH4050,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nOQN4506,Logmaster Armazem e Logistica Ltda,Carreta,Nao\nOQO4469,Bruno Sergio Ferreira CPF 04625109647,Carreta,Nao\nOQP8538,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nOQQ2484,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nOQR5074,Cooperativa Riobranquense de Transportes Ltda,Carreta,Nao\nOQS0440,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nOQS5031,Locação e Administração Betel Eireli,Bitruck,Nao\nORB4130,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nORB9881,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nOWI8132,Cooperativa Riobranquense de Transprotes Ltda,Toco,Nao\nOWO0091,Transportadora Multi Express Ltda,Truck,Nao\nOWS5001,RN Transporte e Logistica Ltda,Toco,Nao\nOXB7D48,MR Transportes,Carreta,Nao\nOXC1638,Transportes e Armazenagem Zilli Ltda,Carreta,Nao\nOXC9013,Maxfrios Distribuidora e Transporte Eireli,Bitruck,Nao\nOXE9439,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nOXE9E39,Coopertral,Carreta,Nao\nOXI0440,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nOXI2409,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nPLI2086,TAC Transportes Armazenagem e Logistica Ltda,Bitruck,Nao\nPLI2A56,AJB Transportes,Bitruck,Nao\nPLI2A86,AJB Transportes,Bitruck,Nao\nPQS3A09,Coopertral,Carreta,Nao\nPQT7204,TAC Transportes Armazenagem e Logistica Ltda,Carreta,Nao\nPQT7984,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nPQT8064,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nPQT8074,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nPQT8084,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nPRO2122,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nPRR9846,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nPRS0146,Transportadora E Armazenagem Zilli Ltda,Carreta,Nao\nPUA3I52,Marizileia Transportes,Carreta,Nao\nPUD2035,Friocargo Triangulo Ltda,3/4,Nao\nPUD5076,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nPUI0885,Cooperativa Riobranquense de Transprotes Ltda,3/4,Nao\nPUJ1134,Cirio Alves de Oliveira Junior - Transportes,3/4,Nao\nPUK7035,Coopernova Cooperativa Riobranquense de Transporte Ltda.,Carreta,Nao\nPUL1460,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nPUL1470,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nPUN3820,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nPUO3485,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nPUO3E85,Transportadora Multi Express Ltda,Carreta,Nao\nPUO6C29,Marques e Silva,Carreta,Nao\nPUQ8460,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nPUS8E44,Marques e Silva,Carreta,Nao\nPUT4870,Formoso,Carreta,Nao\nPUW9A61,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nPUX2971,G S Puridade Transportes e Servicos Ltda,Carreta,Nao\nPUZ9960,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nPVA4360,Trans Frios Transportes e Logistica Ltda ME,Bitruck,Nao\nPVC6654,Transportes e Armazenagem Zilli Ltda,Toco,Nao\nPVE6696,Transportadora Multi Express Ltda,Bitruck,Nao\nPVG4686,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nPVG7128,Cooperativa Riobranquense de Transprotes Ltda,3/4,Nao\nPWA3260,Transportadora Multi Express Ltda,Carreta,Nao\nPWC1358,Friocargo Triangulo Ltda,3/4,Nao\nPWE3893,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nPWG1739,Transportes e Armazenagem Zilli Ltda,Bitruck,Nao\nPWG1740,Cooperativa Riobranquense de Transportes Ltda.,Bitruck,Nao\nPWL6615,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nPWL8958,Omega X Solucoes em Log e Armazenagem Ltda,Truck,Nao\nPWP3047,Washington L S Costa Junior - ME,Bitruck,Nao\nPWQ8784,TAC Transportes Armazenagem e Logistica,Truck,Nao\nPXJ0726,M Braga & Sobrinho Ltda.,3/4,Nao\nPYF0280,Cooperativa dos Transportadores Unidos Ltda.,Truck,Nao\nPYP5755,Tais Simoes Me,Carreta,Nao\nPYV7I69,Telma Souza de Oliveira Santos 28574076880,3/4,Nao\nPYZ1D03,Baixotes Transportes,Bitruck,Nao\nPZR6754,Cooperativa Riobranquense de Transportes Ltda.,Bitruck,Nao\nPZR6H54,Denia Transportes,Bitruck,Nao\nPZS5316,Flay Logistica e Armazenagem Ltda,Bitruck,Nao\nQBC5B40,Multi Express,Carreta,Nao\nQBH5J89,Multi Express,Carreta,Nao\nQCE5G23,Multi Express,Carreta,Nao\nQGJ0H09,Omega X Solucoes em Logistica e Armazenagem Ltda,Carreta,Nao\nQHA1470,R A de Castilho Transportes,Carreta,Nao\nQHF0778,Transportes Zanini Ltda,Carreta,Nao\nQHK7670,Transportes Zanini Ltda,Carreta,Nao\nQHT8275,Transportes Zanini Ltda,Carreta,Nao\nQHT8855,Transportes Zanini Ltda,Carreta,Nao\nQHT8885,Transportes Zanini Ltda,Carreta,Nao\nQHV8C67,Coopertral,Carreta,Nao\nQJI3576,Transportes Zanini Ltda,Carreta,Nao\nQJK1913,Transportes e Comércio Irmãos Albiero Ltda ME,Carreta,Nao\nQJM1037,Transportes Zanini Ltda,Carreta,Nao\nQJU6926,Kaipper Continental Transportes Ltda,Carreta,Nao\nQJZ7E76,Marques e Silva,Carreta,Nao\nQMR2C59,Cooperativa de Transp e Logist de Sao Sebastiao do Oeste Mg,Bitruck,Nao\nQMR2C75,Cooperativa de Transp e Logist de Sao Sebastiao do Oeste Mg,Bitruck,Nao\nQMX6767,AC Transportes,Truck,Nao\nQNA0693,Posto Vanete Ltda,Carreta,Nao\nQNA4729,Isavic Transporte e Armazenamento Ltda,Carreta,Nao\nQNK1999,Cooperativa Riobranquense de Transportes Ltda.,Truck,Nao\nQNK8591,Cooperativa dos Transportadores Unidos Ltda.,Carreta,Nao\nQNN3324,Transportadora Multi Express Ltda,Bitruck,Nao\nQNQ7011,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nQNQ7021,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nQNQ7031,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nQNQ7041,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nQNQ7A11,Transportadora Multi Express Ltda,Carreta,Nao\nQNQ7A31,Bruno Sergio Ferreira CPF 04625109647,Carreta,Nao\nQNQ7A41,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nQNV2963,Mult Service Montes Claros,Carreta,Nao\nQNV4183,Trans Frios Transportes e Logistica Ltda ME,Bitruck,Nao\nQNW7336,Cooperativa Riobranquense de Transportes Ltda,Toco,Nao\nQNZ7304,Logmaster Armazem e Logistica Ltda,Carreta,Nao\nQNZ7305,Friocargo Triangulo Ltda,Carreta,Nao\nQOC1193,Transportadora Multi Express Ltda,Bitruck,Nao\nQOC3718,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nQOI6463,Matheus Gomes Mundim Araujo - ME,3/4,Nao\nQON7112,Cooperativa Riobranquense de Transportes Ltda,Carreta,Nao\nQOW1672,Cooperativa Riobranquense de Transportes Ltda.,Bitruck,Nao\nQPA2533,AJB Transportes,Bitruck,Nao\nQPX7375,Posto Vanete,Carreta,Nao\nQPX7381,Posto Vanete,Carreta,Nao\nQPX7384,Posto Vanete,Carreta,Nao\nQPZ8I27,TransOliveira,Carreta,Nao\nQQG3946,SS LOG Transportes e Logistica Ltda,Carreta,Nao\nQQI3E51,MR Transportes,Carreta,Nao\nQQO5J16,Multi Express,Carreta,Nao\nQQO8876,Transportes Horizonte Frios Ltda,Carreta,Nao\nQQP6621,Coopertral,Carreta,Nao\nQQT1682,Transportadora Multi Express Ltda,Carreta,Nao\nQQT1G82,Coopertral,Carreta,Nao\nQRD1152,Tais Simoes Me,Carreta,Nao\nQUB9352,Cooperativa Riobranquense de Transprotes Ltda,3/4,Nao\nQUG1307,Transportadora Multi Express Ltda,Carreta,Nao\nQUU0926,Transportes e Armazenagem Zilli Ltda,Carreta,Nao\nQUU0940,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nQWV2926,Transfernata Ltda.,Carreta,Nao\nQXA2439,AC Logística,Carreta,Nao\nQXL7916,Maxfrios Distribuidora e Transporte Eireli,Carreta,Nao\nQXT8D43,MMS Armazenagem e Logistica SA,Carreta,Nao\nQXY1F27,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nQXY4B02,Rodosousa,Bitruck,Nao\nRAG4A52,Cooperativa dos Transportadores Unidos Ltda.,Carreta,Nao\nRAI1G55,Canada Transportes e Comercio Ltda.,Carreta,Nao\nRAJ9J31,Bruno Sergio Ferreira CPF 04625109647,Carreta,Nao\nRCM4A73,MR Transportes,Carreta,Nao\nRCP3C74,Marizileia Transportes,Carreta,Nao\nREE0C39,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nRFB3J59,Transportadora Multi Express Ltda,Carreta,Nao\nRFE0H49,Coopertral,Carreta,Nao\nRFZ7C00,Omega X Solucoes em Logistica e Armazenagem Ltda,Carreta,Nao\nRLA5H78,LNF Transporte,Carreta,Nao\nRLG6A98,Marvel,Container,Nao\nRMH8G11,Multi Express,Carreta,Nao\nRMM0C10,Coopertral,Carreta,Nao\nRMM0C17,Marizileia Transportes,Carreta,Nao\nRMS9H45,Multi Express,Carreta,Nao\nRMT0F38,Baixotes Transportes,Carreta,Nao\nRMT0F41,Baixotes Transportes,Carreta,Nao\nRMW1A91,Coopertral,Truck,Nao\nRMX0B03,Multi Express,Carreta,Nao\nRMY8J16,AJB Transportes,Bitruck,Nao\nRNC6F46,Transportadora Multi Express Ltda,Carreta,Nao\nRNC7B23,Marques e Silva,Bitruck,Nao\nRND3D90,MR Transportes,Carreta,Nao\nRNS2J03,Dorense Transportes de Cargas Ltda-ME,Bitruck,Nao\nRNS3G28,Suinco,3/4,Nao\nRNS3G61,Suinco,3/4,Nao\nRNS3J61,Suinco,3/4,Nao\nRNT5I98,Suinco,3/4,Nao\nRNT5J03,Suinco,3/4,Nao\nRNT8C00,Marizileia Transportes,Carreta,Nao\nRNU1H74,MR Transportes,Carreta,Nao\nRNV2A77,Suinco,3/4,Nao\nRNV4H60,Suinco,3/4,Nao\nRNV5G22,Suinco,3/4,Nao\nRNW4H60,Suinco,3/4,Nao\nRNW7J57,Suinco,3/4,Nao\nRNX0C26,Suinco,3/4,Nao\nRNX0C28,Suinco,3/4,Nao\nRNX3C26,Suinco,3/4,Nao\nRNX3C28,Suinco,3/4,Nao\nRNY8J16,AJB Transportes,Bitruck,Nao\nRTD7C55,MR Transportes,Carreta,Nao\nRTF6I71,Cargofrio Logística e Armazenamento Ltda,Bitruck,Nao\nRUG6B37,Max Frios,Bitruck,Nao\nRUM4A51,Coopertral,Carreta,Nao\nRUR5A00,Marizileia Transportes,Carreta,Nao\nRVI5B24,AC Armazenagem,Truck,Nao\nRVN5G22,Suinco,3/4,Nao\nRVO3A10,MR Transportes,Carreta,Nao\nSDB3F38,AJB Transportes,Bitruck,Nao\nSDB4F38,AJB Transportes,Bitruck,Nao\nSDX0G28,PH Fidelis,Bitruck,Nao\nSIW0E00,Marizileia Transportes,Carreta,Nao\nSIY0147,Suinco,3/4,Nao\nSIY0G36,Suinco,3/4,Nao\nSIY0G38,Suinco,3/4,Nao\nSIY0G39,Suinco,3/4,Nao\nSIY0G41,Suinco,3/4,Nao\nSIY0G43,Suinco,3/4,Nao\nSIY0I47,Suinco,3/4,Nao\nSIY7A00,Marizileia Transportes,Carreta,Nao\nSIYOG36,Suinco,3/4,Sim\nSJY7D76,Joyway Food,Container,Nao\nSRZ4E29,MR Transportes,Bitruck,Nao\nSXF8J27,LNF Transporte,Carreta,Nao\nSXT9B03,Marvel,Carreta,Nao\nSYC3C00,Marizileia Transportes,Carreta,Nao\nSYJ5J26,Coopertral,Carreta,Nao\nSYW0B00,Marizileia Transportes,Carreta,Nao\nSYW0E00,Marizileia Transportes,Carreta,Nao\nSYX4I27,MR Transportes,Carreta,Nao\nTCD2B57,Baixotes Transportes,Carreta,Nao\nTCG1A00,Marizileia Transportes,Carreta,Nao\nTCG9H61,MR Transportes,Carreta,Nao\nTCS9I99,Coopertral,Carreta,Nao\nTCY9J14,Pedro Ferreira Transportes,Carreta,Nao\nTDQ7I07,MR Transportes,Carreta,Nao\nTEW0A46,Multi Express,Carreta,Nao\nTEW0A97,Multi Express,Carreta,Nao\nTIX4J94,LNF Transporte,Carreta,Nao\nTIX8F93,LNF Transporte,Carreta,Nao\nTPO5I06,Marvel,Carreta,Nao\nTXE6E82,Coopertral,Truck,Nao\nTXT3J12,MR Transportes,Carreta,Nao\nTXU5G95,MR Transportes,Carreta,Nao\nTXX3C52,Max Frios,Bitruck,Nao\nTXZ6E13,MR Transportes,Carreta,Nao\nTXZ6E82,Coopertral,Truck,Nao\nTYZ4J12,Multi Express,Bitruck,Nao\nTZB6H99,Multi Express,Carreta,Nao\nTZE6E82,Coopertral,Truck,Nao\n";</script>
-<script>window.SUINCO_BUILD = "23/08 23:22 · af55b43";</script>
+<script>window.SUINCO_BUILD = "24/08 18:38 · b70b30b";</script>
 <script>
 /* =====================================================================
    PAINEL LOGÍSTICO SUINCO — camada de dados
@@ -11093,7 +11188,7 @@ function renderTabAtual(){
   atualizarDatalists();
   switch(TAB_ATUAL){
     case 'torre': renderTorre(); renderVisaoPatio('torre'); break;
-    case 'programacao': renderProgFila(); renderProgAguardando(); renderRodapeControleProgramacao(); break;
+    case 'programacao': renderProgFila(); renderProgAguardando(); renderRodapeControleProgramacao(); carregarMontagemUI(); break;
     // Módulo próprio (devolucoes.js, carregado depois deste arquivo). O
     // typeof protege a ordem de carga: se o módulo faltar, a aba fica
     // vazia em vez de derrubar a navegação inteira.
@@ -17565,6 +17660,284 @@ function painelStatusHorizontal(dist, total, titulo, explicacao){
         </td>
       </tr></tbody>
     </table>`;
+}
+
+/* =====================================================================
+   MONTAGEM DO DIA — a carga antes de ter placa (23/08/2026)
+   =====================================================================
+
+   O que ainda prendia a operação no Excel. O dia nascia numa planilha do
+   Teams: o template do dia da semana traz as rotas, a Logística monta as
+   cargas em cima delas, e só DEPOIS contrata as placas. O painel não
+   participava dessa etapa porque `criarCargaProgramada` recusa placa
+   vazia — no painel a carga só existia quando o veículo já estava
+   contratado, que é o ÚLTIMO passo do processo real.
+
+   A montagem vive no servidor (tabela própria, migração 031) e NÃO entra
+   em DB.cargas. Consequência que é o ponto do desenho: a Torre de
+   Controle não vê nada disso. Ela continua recebendo cargas com placa,
+   como sempre recebeu.
+
+   Quando a placa entra, a linha vira carga pelo caminho de sempre
+   (criarCargaProgramada) e é marcada como efetivada.
+   ===================================================================== */
+
+let _montagemDia = null;      // { dia, diaSemana, modelo:[], montagens:[] }
+const NOMES_DIA = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
+
+/* Dia de HOJE no fuso de quem está olhando, nunca em UTC.
+
+   `toISOString()` devolve UTC: às 21h01 em Brasília a data UTC já é a de
+   amanhã, e o botão "Hoje" abriria a programação do dia seguinte para
+   quem monta o dia à noite. O guardião em testes/test_guardioes.py existe
+   exatamente para impedir que isso volte — e pegou este código. */
+function diaLocalISO(d = new Date()){
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+function montagemHojeUI(){
+  const el = document.getElementById('mont-data');
+  if(el) el.value = diaLocalISO();
+  carregarMontagemUI();
+}
+
+async function carregarMontagemUI(){
+  const card = document.getElementById('card-montagem');
+  if(!card) return;
+  /* Só quem programa monta. Os demais setores continuam vendo a Fila e a
+     Torre — a montagem é trabalho da Logística, não informação de pátio. */
+  const setor = DB.operador && DB.operador.setor;
+  const podeMontar = setor === 'Logística' || setor === 'Administração';
+  card.hidden = !podeMontar;
+  if(!podeMontar) return;
+
+  const campoData = document.getElementById('mont-data');
+  if(campoData && !campoData.value) campoData.value = diaLocalISO();
+  const dia = campoData ? campoData.value : '';
+
+  if(!SuincoSharePoint.estaConfigurado()){
+    document.getElementById('mont-tbody').innerHTML = '';
+    const av = document.getElementById('mont-faltando');
+    if(av){
+      av.hidden = false;
+      av.textContent = 'A montagem do dia mora no servidor — entre com seu usuário para montar a programação.';
+    }
+    return;
+  }
+
+  try {
+    _montagemDia = await SuincoSharePoint.montagem.doDia(dia);
+    renderMontagem();
+  } catch(e){
+    notify('Não consegui carregar a montagem do dia: ' + (e.message || e), 'erro', 7000);
+  }
+}
+
+function renderMontagem(){
+  if(!_montagemDia) return;
+  const { diaSemana, modelo, montagens } = _montagemDia;
+  const nomeDia = document.getElementById('mont-dia-nome');
+  if(nomeDia) nomeDia.textContent = NOMES_DIA[diaSemana];
+
+  const vivas = montagens.filter(m => !m.cancelada_em);
+  const comPlaca = vivas.filter(m => m.placa);
+  const efetivadas = vivas.filter(m => m.efetivada_em);
+
+  /* "Rotas do modelo que ainda não foram montadas" é o número que diz o
+     que FALTA fazer — e é a única razão de a tela carregar o modelo junto
+     com a montagem. Conta por rota, não por carga: o modelo pode prever
+     duas saídas para a mesma praça, e o que interessa aqui é se a praça
+     foi contemplada. */
+  const rotasMontadas = new Set(vivas.map(m => m.rota_codigo));
+  const faltando = modelo.filter(m => !rotasMontadas.has(m.rota_codigo));
+
+  const faixa = document.getElementById('mont-stats');
+  if(faixa){
+    const caixa = (n, rot, cor) =>
+      `<div class="stat-box"${cor ? ` style="--st-cor:${cor}"` : ''}>
+         <div class="stat-num">${n}</div><div class="stat-label">${esc(rot)}</div></div>`;
+    faixa.innerHTML =
+      caixa(vivas.length, 'Cargas montadas')
+      + caixa(comPlaca.length, 'Com placa', 'var(--st-embarque-finalizado-bg)')
+      + caixa(vivas.length - comPlaca.length, 'Sem placa', 'var(--st-aguardando-embarque-bg)')
+      + caixa(efetivadas.length, 'Já na Torre', 'var(--st-faturado-bg)')
+      + caixa(faltando.length, 'Rotas do modelo sem carga',
+              faltando.length ? 'var(--st-aguardando-veiculo-bg)' : '');
+  }
+
+  const aviso = document.getElementById('mont-faltando');
+  if(aviso){
+    aviso.hidden = !faltando.length;
+    if(faltando.length){
+      aviso.innerHTML = `<strong>Ainda sem carga montada:</strong> `
+        + faltando.map(m => esc(m.rota_nome)).join(' · ');
+    }
+  }
+
+  const tbody = document.getElementById('mont-tbody');
+  const vazio = document.getElementById('mont-empty');
+  const lista = montagens;
+  if(vazio) vazio.hidden = lista.length > 0;
+  if(!tbody) return;
+
+  tbody.innerHTML = lista.map(m => {
+    const trancada = !!(m.efetivada_em || m.cancelada_em);
+    const id = escJs(m.montagem_id);
+    /* Linha efetivada ou cancelada vira leitura: alterar aqui depois de a
+       carga existir criaria duas verdades — a montagem e a carga — sem
+       ninguém para conciliar. Quem precisa mudar, muda na Torre. */
+    const campo = (nome, valor, tipo = 'text', extra = '') => trancada
+      ? esc(valor ?? '—')
+      : `<input type="${tipo}" value="${esc(valor ?? '')}" ${extra}
+           onchange="alterarMontagemUI('${id}','${nome}',this.value)">`;
+    const marca = m.cancelada_em
+      ? `<span class="badge badge-aguardando-veiculo">CANCELADA</span>`
+      : m.efetivada_em ? `<span class="badge badge-faturado">NA TORRE</span>` : '';
+    return `<tr${trancada ? ' class="linha-fraca"' : ''}>
+      <td>${campo('sequencia', m.sequencia, 'number', 'min="1" style="width:64px"')}</td>
+      <td><strong>${esc(m.rota_nome)}</strong> <span class="text-dim">${esc(m.rota_codigo)}</span> ${marca}</td>
+      <td>${campo('numeroCarga', m.numero_carga)}</td>
+      <td>${trancada ? esc(m.placa || '—')
+            : `<input type="text" class="placa-input" value="${esc(m.placa)}" placeholder="sem placa"
+                 onchange="definirPlacaMontagemUI('${id}', this.value)">`}</td>
+      <td>${campo('peso', m.peso, 'number', 'min="0"')}</td>
+      <td>${campo('qtdEntregas', m.qtd_entregas, 'number', 'min="1" style="width:64px"')}</td>
+      <td>${campo('qtdGanchos', m.qtd_ganchos, 'number', 'min="0" style="width:64px"')}</td>
+      <td>${trancada ? esc(m.paletizada)
+            : `<select onchange="alterarMontagemUI('${id}','paletizada',this.value)">
+                 <option${m.paletizada === 'Não' ? ' selected' : ''}>Não</option>
+                 <option${m.paletizada === 'Sim' ? ' selected' : ''}>Sim</option></select>`}</td>
+      <td>${campo('tipoOperacao', m.tipo_operacao)}</td>
+      <td class="no-print">${acoesMontagemHtml(m, trancada)}</td>
+    </tr>`;
+  }).join('');
+}
+
+function acoesMontagemHtml(m, trancada){
+  const id = escJs(m.montagem_id);
+  if(m.cancelada_em) return `<span class="text-dim" title="${esc(m.motivo_cancelo)}">cancelada</span>`;
+  if(m.efetivada_em) return `<span class="text-dim">virou carga</span>`;
+  /* O botão de efetivar só aparece com placa. Sem placa ele existiria só
+     para dizer "não" — o defeito que a ocorrência #13 registrou. */
+  const criar = m.placa
+    ? `<button class="btn btn-primary btn-sm" onclick="efetivarMontagemUI('${id}')"
+         title="Cria a carga e manda para a Torre de Controle.">➕ Criar carga</button>`
+    : '';
+  return `${criar}
+    <button class="btn btn-sec btn-sm" onclick="cancelarMontagemUI('${id}')">Cancelar</button>`;
+}
+
+/* Puxa do modelo as rotas deste dia da semana que ainda não têm carga.
+   Não apaga nem duplica o que já existe: rodar duas vezes seguidas não
+   faz nada na segunda. */
+async function aplicarModeloDoDiaUI(){
+  if(!_montagemDia) return;
+  const { dia, modelo, montagens } = _montagemDia;
+  const jaMontadas = new Set(montagens.filter(m => !m.cancelada_em).map(m => m.rota_codigo));
+  const novas = modelo.filter(m => !jaMontadas.has(m.rota_codigo));
+  if(!novas.length){
+    notify('Todas as rotas do modelo deste dia já estão montadas.', '', 5000);
+    return;
+  }
+  if(!confirm(`Criar ${novas.length} carga(s) a partir do modelo de ${NOMES_DIA[_montagemDia.diaSemana]}?`)) return;
+  let criadas = 0, erros = [];
+  for(const [i, m] of novas.entries()){
+    try {
+      await SuincoSharePoint.montagem.criar({
+        dia, rotaCodigo: m.rota_codigo, sequencia: montagens.length + i + 1,
+        tipoOperacao: m.tipo_operacao, qtdEntregas: m.qtd_entregas || 1,
+        paletizada: m.paletizada || 'Não',
+      });
+      criadas += 1;
+    } catch(e){ erros.push(`${m.rota_nome}: ${e.message || e}`); }
+  }
+  await carregarMontagemUI();
+  if(erros.length){
+    notify(`${criadas} criada(s), ${erros.length} com problema — ${erros[0]}`, 'erro', 9000);
+  } else {
+    notify(`${criadas} carga(s) montada(s) a partir do modelo.`, 'ok', 5000);
+  }
+}
+
+async function alterarMontagemUI(id, campo, valor){
+  try {
+    await SuincoSharePoint.montagem.alterar(id, { [campo]: valor });
+    await carregarMontagemUI();
+  } catch(e){
+    notify('Não gravou: ' + (e.message || e), 'erro', 7000);
+    await carregarMontagemUI();   // devolve a tela ao que o servidor tem
+  }
+}
+
+/* Pôr, tirar ou trocar a placa. É o movimento que a planilha permitia o
+   dia inteiro e o painel não permitia — e por isso tem tratamento
+   próprio: a mensagem de placa fora da Frota precisa ensinar onde
+   resolver, e a de placa repetida precisa dizer que já está em outra
+   linha de hoje. */
+async function definirPlacaMontagemUI(id, valor){
+  try {
+    await SuincoSharePoint.montagem.alterar(id, { placa: valor });
+    await carregarMontagemUI();
+  } catch(e){
+    notify(e.message || String(e), 'erro', 9000);
+    await carregarMontagemUI();
+  }
+}
+
+async function cancelarMontagemUI(id){
+  const motivo = prompt('Por que esta rota não sai hoje?');
+  if(motivo === null) return;
+  if(!motivo.trim()){ notify('Precisa dizer o motivo.', 'erro', 5000); return; }
+  try {
+    await SuincoSharePoint.montagem.cancelar(id, motivo.trim());
+    await carregarMontagemUI();
+    notify('Rota marcada como não programada hoje.', 'ok', 4000);
+  } catch(e){ notify('Não consegui cancelar: ' + (e.message || e), 'erro', 7000); }
+}
+
+/* A PONTE. Cria a carga pelo caminho de sempre e só então avisa o servidor
+   de que a montagem virou aquela carga.
+
+   A ordem importa: se avisasse primeiro e a criação falhasse (placa fora
+   da Frota, recusa do servidor), a montagem ficaria marcada como
+   efetivada apontando para uma carga que não existe. */
+async function efetivarMontagemUI(id){
+  const m = (_montagemDia?.montagens || []).find(x => x.montagem_id === id);
+  if(!m) return;
+  if(!m.placa){ notify('Coloque a placa antes de criar a carga.', 'erro', 5000); return; }
+  let carga;
+  try {
+    carga = criarCargaProgramada({
+      placa: m.placa,
+      numeroCarga: m.numero_carga,
+      rota: m.rota_codigo,
+      peso: m.peso,
+      sequencia: m.sequencia,
+      praOnde: m.tipo_operacao,
+      paletizada: m.paletizada,
+      qtdGanchos: m.qtd_ganchos,
+      qtdEntregas: m.qtd_entregas,
+      motorista: m.motorista,
+      observacoes: m.observacoes,
+      operador: DB.operador ? DB.operador.nome : '',
+    });
+  } catch(e){
+    notify(e.message || String(e), 'erro', 9000);
+    return;
+  }
+  try {
+    await SuincoSharePoint.montagem.efetivar(id, carga.id);
+  } catch(e){
+    /* A carga JÁ existe e já está na Torre — este aviso é sobre o elo
+       entre planejamento e execução, não sobre a carga. Dizer que "não
+       criou" seria mentira e faria alguém criar de novo. */
+    notify('A carga foi criada, mas não consegui marcar a montagem como efetivada: '
+      + (e.message || e), 'erro', 9000);
+  }
+  await carregarMontagemUI();
+  renderAll();
+  notify(`Carga da rota ${m.rota_nome} criada e enviada para a Torre.`, 'ok', 5000);
 }
 
 </script>
