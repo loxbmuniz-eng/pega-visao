@@ -14,6 +14,7 @@ aberto o dia inteiro.
     python3 testes/test_rota_cadastrada_aparece.py
 """
 import asyncio
+import subprocess
 import os
 import sys
 from playwright.async_api import async_playwright
@@ -51,7 +52,20 @@ async def abrir(nav, email, rotulo):
 
 
 async def main():
-    codigo = '0' + str(int(asyncio.get_event_loop().time() * 100) % 90 + 10)
+    # Código de USO ÚNICO, e a suíte apaga o que criou no fim.
+    #
+    # A versão anterior derivava dois dígitos do relógio ('0NN') e nunca
+    # limpava. Rodando dia após dia ela foi deixando rota após rota no
+    # cadastro — os onze "Force Meat-RJ" (012, 025, 028, 036, 041, 047,
+    # 053, 069, 073, 078, 081) são resíduo dela. Além de sujar a base,
+    # o teste passou a colidir consigo mesmo: quando o relógio caía num
+    # código já deixado, a checagem "antes de cadastrar o painel só tem o
+    # número" falhava porque a rota JÁ existia.
+    #
+    # Prefixo 'ZT' sai da faixa numérica que a operação usa, então nunca
+    # colide com rota de verdade nem aparece numa lista de escolha por
+    # engano.
+    codigo = 'ZT' + str(int(asyncio.get_event_loop().time() * 1000) % 100000)
     nome = 'Force Meat-RJ'
 
     async with async_playwright() as p:
@@ -105,6 +119,15 @@ async def main():
            nome in atualizou, repr(atualizou))
 
         await nav.close()
+
+    # Não deixa rastro no cadastro — a lição dos onze Force Meat-RJ.
+
+    subprocess.run(['sudo', '-u', 'postgres', 'psql', '-q', '-d', 'embarque_suinco',
+
+                    '-c', f"DELETE FROM dim_rotas WHERE codigo = '{codigo}'"],
+
+                   capture_output=True)
+
 
     print('\n=== RESULTADO ===')
     print('  FALHAS:', ', '.join(falhas) if falhas else 'NENHUMA')

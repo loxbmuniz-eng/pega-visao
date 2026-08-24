@@ -4347,3 +4347,10 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
     display:block; width:74px; height:28px;
   }
 }
+
+/* Linha de montagem já efetivada ou cancelada: virou leitura. Recuo de
+   contraste em vez de cinza chapado — ela continua sendo informação (o
+   dia foi montado assim), só não é mais ação. A badge fica em opacidade
+   cheia: é ela que diz POR QUE a linha está apagada. */
+.linha-fraca td{ opacity:.62 }
+.linha-fraca .badge{ opacity:1 }

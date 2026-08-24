@@ -1283,7 +1283,7 @@ function renderTabAtual(){
   atualizarDatalists();
   switch(TAB_ATUAL){
     case 'torre': renderTorre(); renderVisaoPatio('torre'); break;
-    case 'programacao': renderProgFila(); renderProgAguardando(); renderRodapeControleProgramacao(); break;
+    case 'programacao': renderProgFila(); renderProgAguardando(); renderRodapeControleProgramacao(); carregarMontagemUI(); break;
     // Módulo próprio (devolucoes.js, carregado depois deste arquivo). O
     // typeof protege a ordem de carga: se o módulo faltar, a aba fica
     // vazia em vez de derrubar a navegação inteira.
@@ -7755,4 +7755,295 @@ function painelStatusHorizontal(dist, total, titulo, explicacao){
         </td>
       </tr></tbody>
     </table>`;
+}
+
+/* =====================================================================
+   MONTAGEM DO DIA — a carga antes de ter placa (23/08/2026)
+   =====================================================================
+
+   O que ainda prendia a operação no Excel. O dia nascia numa planilha do
+   Teams: o template do dia da semana traz as rotas, a Logística monta as
+   cargas em cima delas, e só DEPOIS contrata as placas. O painel não
+   participava dessa etapa porque `criarCargaProgramada` recusa placa
+   vazia — no painel a carga só existia quando o veículo já estava
+   contratado, que é o ÚLTIMO passo do processo real.
+
+   A montagem vive no servidor (tabela própria, migração 031) e NÃO entra
+   em DB.cargas. Consequência que é o ponto do desenho: a Torre de
+   Controle não vê nada disso. Ela continua recebendo cargas com placa,
+   como sempre recebeu.
+
+   Quando a placa entra, a linha vira carga pelo caminho de sempre
+   (criarCargaProgramada) e é marcada como efetivada.
+   ===================================================================== */
+
+let _montagemDia = null;      // { dia, diaSemana, modelo:[], montagens:[] }
+const NOMES_DIA = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
+
+/* Dia de HOJE no fuso de quem está olhando, nunca em UTC.
+
+   `toISOString()` devolve UTC: às 21h01 em Brasília a data UTC já é a de
+   amanhã, e o botão "Hoje" abriria a programação do dia seguinte para
+   quem monta o dia à noite. O guardião em testes/test_guardioes.py existe
+   exatamente para impedir que isso volte — e pegou este código. */
+function diaLocalISO(d = new Date()){
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+function montagemHojeUI(){
+  const el = document.getElementById('mont-data');
+  if(el) el.value = diaLocalISO();
+  carregarMontagemUI();
+}
+
+async function carregarMontagemUI(){
+  const card = document.getElementById('card-montagem');
+  if(!card) return;
+  /* Só quem programa monta. Os demais setores continuam vendo a Fila e a
+     Torre — a montagem é trabalho da Logística, não informação de pátio. */
+  const setor = DB.operador && DB.operador.setor;
+  const podeMontar = setor === 'Logística' || setor === 'Administração';
+  card.hidden = !podeMontar;
+  if(!podeMontar) return;
+
+  const campoData = document.getElementById('mont-data');
+  if(campoData && !campoData.value) campoData.value = diaLocalISO();
+  const dia = campoData ? campoData.value : '';
+
+  if(!SuincoSharePoint.estaConfigurado()){
+    document.getElementById('mont-tbody').innerHTML = '';
+    const av = document.getElementById('mont-faltando');
+    if(av){
+      av.hidden = false;
+      av.textContent = 'A montagem do dia mora no servidor — entre com seu usuário para montar a programação.';
+    }
+    return;
+  }
+
+  try {
+    _montagemDia = await SuincoSharePoint.montagem.doDia(dia);
+    renderMontagem();
+  } catch(e){
+    /* SERVIDOR AINDA SEM A MIGRAÇÃO 031.
+       O painel vai para o ar assim que a build publica; o servidor só
+       ganha as tabelas novas quando alguém roda atualizar.sh na VPS.
+       Nesse intervalo /api/montagem não existe e devolve 404.
+       Cuspir "erro" nesse caso assustaria a Logística inteira por algo
+       que não quebrou nada — o resto da Programação continua funcionando.
+       A tela some e diz o que falta, uma vez, sem alarme. */
+    if(e && e.status === 404){
+      card.hidden = true;
+      console.info('[Suinco] Montagem do dia: servidor ainda sem a atualização. '
+        + 'Rode atualizar.sh na VPS para habilitar.');
+      return;
+    }
+    notify('Não consegui carregar a montagem do dia: ' + (e.message || e), 'erro', 7000);
+  }
+}
+
+function renderMontagem(){
+  if(!_montagemDia) return;
+  const { diaSemana, modelo, montagens } = _montagemDia;
+  const nomeDia = document.getElementById('mont-dia-nome');
+  if(nomeDia) nomeDia.textContent = NOMES_DIA[diaSemana];
+
+  const vivas = montagens.filter(m => !m.cancelada_em);
+  const comPlaca = vivas.filter(m => m.placa);
+  const efetivadas = vivas.filter(m => m.efetivada_em);
+
+  /* "Rotas do modelo que ainda não foram montadas" é o número que diz o
+     que FALTA fazer — e é a única razão de a tela carregar o modelo junto
+     com a montagem. Conta por rota, não por carga: o modelo pode prever
+     duas saídas para a mesma praça, e o que interessa aqui é se a praça
+     foi contemplada. */
+  const rotasMontadas = new Set(vivas.map(m => m.rota_codigo));
+  const faltando = modelo.filter(m => !rotasMontadas.has(m.rota_codigo));
+
+  const faixa = document.getElementById('mont-stats');
+  if(faixa){
+    const caixa = (n, rot, cor) =>
+      `<div class="stat-box"${cor ? ` style="--st-cor:${cor}"` : ''}>
+         <div class="stat-num">${n}</div><div class="stat-label">${esc(rot)}</div></div>`;
+    faixa.innerHTML =
+      caixa(vivas.length, 'Cargas montadas')
+      + caixa(comPlaca.length, 'Com placa', 'var(--st-embarque-finalizado-bg)')
+      + caixa(vivas.length - comPlaca.length, 'Sem placa', 'var(--st-aguardando-embarque-bg)')
+      + caixa(efetivadas.length, 'Já na Torre', 'var(--st-faturado-bg)')
+      + caixa(faltando.length, 'Rotas do modelo sem carga',
+              faltando.length ? 'var(--st-aguardando-veiculo-bg)' : '');
+  }
+
+  const aviso = document.getElementById('mont-faltando');
+  if(aviso){
+    aviso.hidden = !faltando.length;
+    if(faltando.length){
+      aviso.innerHTML = `<strong>Ainda sem carga montada:</strong> `
+        + faltando.map(m => esc(m.rota_nome)).join(' · ');
+    }
+  }
+
+  const tbody = document.getElementById('mont-tbody');
+  const vazio = document.getElementById('mont-empty');
+  const lista = montagens;
+  if(vazio) vazio.hidden = lista.length > 0;
+  if(!tbody) return;
+
+  tbody.innerHTML = lista.map(m => {
+    const trancada = !!(m.efetivada_em || m.cancelada_em);
+    const id = escJs(m.montagem_id);
+    /* Linha efetivada ou cancelada vira leitura: alterar aqui depois de a
+       carga existir criaria duas verdades — a montagem e a carga — sem
+       ninguém para conciliar. Quem precisa mudar, muda na Torre. */
+    const campo = (nome, valor, tipo = 'text', extra = '') => trancada
+      ? esc(valor ?? '—')
+      : `<input type="${tipo}" value="${esc(valor ?? '')}" ${extra}
+           onchange="alterarMontagemUI('${id}','${nome}',this.value)">`;
+    const marca = m.cancelada_em
+      ? `<span class="badge badge-aguardando-veiculo">CANCELADA</span>`
+      : m.efetivada_em ? `<span class="badge badge-faturado">NA TORRE</span>` : '';
+    return `<tr${trancada ? ' class="linha-fraca"' : ''}>
+      <td>${campo('sequencia', m.sequencia, 'number', 'min="1" style="width:64px"')}</td>
+      <td><strong>${esc(m.rota_nome)}</strong> <span class="text-dim">${esc(m.rota_codigo)}</span> ${marca}</td>
+      <td>${campo('numeroCarga', m.numero_carga)}</td>
+      <td>${trancada ? esc(m.placa || '—')
+            : `<input type="text" class="placa-input" value="${esc(m.placa)}" placeholder="sem placa"
+                 onchange="definirPlacaMontagemUI('${id}', this.value)">`}</td>
+      <td>${campo('peso', m.peso, 'number', 'min="0"')}</td>
+      <td>${campo('qtdEntregas', m.qtd_entregas, 'number', 'min="1" style="width:64px"')}</td>
+      <td>${campo('qtdGanchos', m.qtd_ganchos, 'number', 'min="0" style="width:64px"')}</td>
+      <td>${trancada ? esc(m.paletizada)
+            : `<select onchange="alterarMontagemUI('${id}','paletizada',this.value)">
+                 <option${m.paletizada === 'Não' ? ' selected' : ''}>Não</option>
+                 <option${m.paletizada === 'Sim' ? ' selected' : ''}>Sim</option></select>`}</td>
+      <td>${campo('tipoOperacao', m.tipo_operacao)}</td>
+      <td class="no-print">${acoesMontagemHtml(m, trancada)}</td>
+    </tr>`;
+  }).join('');
+}
+
+function acoesMontagemHtml(m, trancada){
+  const id = escJs(m.montagem_id);
+  if(m.cancelada_em) return `<span class="text-dim" title="${esc(m.motivo_cancelo)}">cancelada</span>`;
+  if(m.efetivada_em) return `<span class="text-dim">virou carga</span>`;
+  /* O botão de efetivar só aparece com placa. Sem placa ele existiria só
+     para dizer "não" — o defeito que a ocorrência #13 registrou. */
+  const criar = m.placa
+    ? `<button class="btn btn-primary btn-sm" onclick="efetivarMontagemUI('${id}')"
+         title="Cria a carga e manda para a Torre de Controle.">➕ Criar carga</button>`
+    : '';
+  return `${criar}
+    <button class="btn btn-sec btn-sm" onclick="cancelarMontagemUI('${id}')">Cancelar</button>`;
+}
+
+/* Puxa do modelo as rotas deste dia da semana que ainda não têm carga.
+   Não apaga nem duplica o que já existe: rodar duas vezes seguidas não
+   faz nada na segunda. */
+async function aplicarModeloDoDiaUI(){
+  if(!_montagemDia) return;
+  const { dia, modelo, montagens } = _montagemDia;
+  const jaMontadas = new Set(montagens.filter(m => !m.cancelada_em).map(m => m.rota_codigo));
+  const novas = modelo.filter(m => !jaMontadas.has(m.rota_codigo));
+  if(!novas.length){
+    notify('Todas as rotas do modelo deste dia já estão montadas.', '', 5000);
+    return;
+  }
+  if(!confirm(`Criar ${novas.length} carga(s) a partir do modelo de ${NOMES_DIA[_montagemDia.diaSemana]}?`)) return;
+  let criadas = 0, erros = [];
+  for(const [i, m] of novas.entries()){
+    try {
+      await SuincoSharePoint.montagem.criar({
+        dia, rotaCodigo: m.rota_codigo, sequencia: montagens.length + i + 1,
+        tipoOperacao: m.tipo_operacao, qtdEntregas: m.qtd_entregas || 1,
+        paletizada: m.paletizada || 'Não',
+      });
+      criadas += 1;
+    } catch(e){ erros.push(`${m.rota_nome}: ${e.message || e}`); }
+  }
+  await carregarMontagemUI();
+  if(erros.length){
+    notify(`${criadas} criada(s), ${erros.length} com problema — ${erros[0]}`, 'erro', 9000);
+  } else {
+    notify(`${criadas} carga(s) montada(s) a partir do modelo.`, 'ok', 5000);
+  }
+}
+
+async function alterarMontagemUI(id, campo, valor){
+  try {
+    await SuincoSharePoint.montagem.alterar(id, { [campo]: valor });
+    await carregarMontagemUI();
+  } catch(e){
+    notify('Não gravou: ' + (e.message || e), 'erro', 7000);
+    await carregarMontagemUI();   // devolve a tela ao que o servidor tem
+  }
+}
+
+/* Pôr, tirar ou trocar a placa. É o movimento que a planilha permitia o
+   dia inteiro e o painel não permitia — e por isso tem tratamento
+   próprio: a mensagem de placa fora da Frota precisa ensinar onde
+   resolver, e a de placa repetida precisa dizer que já está em outra
+   linha de hoje. */
+async function definirPlacaMontagemUI(id, valor){
+  try {
+    await SuincoSharePoint.montagem.alterar(id, { placa: valor });
+    await carregarMontagemUI();
+  } catch(e){
+    notify(e.message || String(e), 'erro', 9000);
+    await carregarMontagemUI();
+  }
+}
+
+async function cancelarMontagemUI(id){
+  const motivo = prompt('Por que esta rota não sai hoje?');
+  if(motivo === null) return;
+  if(!motivo.trim()){ notify('Precisa dizer o motivo.', 'erro', 5000); return; }
+  try {
+    await SuincoSharePoint.montagem.cancelar(id, motivo.trim());
+    await carregarMontagemUI();
+    notify('Rota marcada como não programada hoje.', 'ok', 4000);
+  } catch(e){ notify('Não consegui cancelar: ' + (e.message || e), 'erro', 7000); }
+}
+
+/* A PONTE. Cria a carga pelo caminho de sempre e só então avisa o servidor
+   de que a montagem virou aquela carga.
+
+   A ordem importa: se avisasse primeiro e a criação falhasse (placa fora
+   da Frota, recusa do servidor), a montagem ficaria marcada como
+   efetivada apontando para uma carga que não existe. */
+async function efetivarMontagemUI(id){
+  const m = (_montagemDia?.montagens || []).find(x => x.montagem_id === id);
+  if(!m) return;
+  if(!m.placa){ notify('Coloque a placa antes de criar a carga.', 'erro', 5000); return; }
+  let carga;
+  try {
+    carga = criarCargaProgramada({
+      placa: m.placa,
+      numeroCarga: m.numero_carga,
+      rota: m.rota_codigo,
+      peso: m.peso,
+      sequencia: m.sequencia,
+      praOnde: m.tipo_operacao,
+      paletizada: m.paletizada,
+      qtdGanchos: m.qtd_ganchos,
+      qtdEntregas: m.qtd_entregas,
+      motorista: m.motorista,
+      observacoes: m.observacoes,
+      operador: DB.operador ? DB.operador.nome : '',
+    });
+  } catch(e){
+    notify(e.message || String(e), 'erro', 9000);
+    return;
+  }
+  try {
+    await SuincoSharePoint.montagem.efetivar(id, carga.id);
+  } catch(e){
+    /* A carga JÁ existe e já está na Torre — este aviso é sobre o elo
+       entre planejamento e execução, não sobre a carga. Dizer que "não
+       criou" seria mentira e faria alguém criar de novo. */
+    notify('A carga foi criada, mas não consegui marcar a montagem como efetivada: '
+      + (e.message || e), 'erro', 9000);
+  }
+  await carregarMontagemUI();
+  renderAll();
+  notify(`Carga da rota ${m.rota_nome} criada e enviada para a Torre.`, 'ok', 5000);
 }

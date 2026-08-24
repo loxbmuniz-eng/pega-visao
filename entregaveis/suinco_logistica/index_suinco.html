@@ -247,6 +247,52 @@
       <div class="flex-end"><button class="btn btn-primary" onclick="criarCargaProgramadaUI()">➕ Criar Carga (Aguardando Veículo)</button></div>
     </div>
 
+    <!-- ===== MONTAGEM DO DIA (23/08/2026) =====
+         A etapa que ainda acontecia no Excel do Teams: as rotas do dia da
+         semana já vêm definidas, a Logística monta as cargas em cima delas
+         e só depois contrata as placas.
+
+         Fica ACIMA da Fila de Programados de propósito: é a primeira coisa
+         que se faz de manhã, e a Fila é o que se consulta depois. A carga
+         montada aqui NÃO aparece na Torre — ela só vira carga de verdade
+         quando ganha placa (ver migração 031). -->
+    <div class="card" id="card-montagem">
+      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-programacao"/></svg>
+        Montagem do dia <span id="mont-dia-nome" class="pill-count"></span></div>
+      <div class="card-sub">As rotas deste dia da semana já vêm do modelo. Monte as cargas primeiro e
+        coloque as placas quando o transporte for contratado — a placa pode entrar, sair e trocar de linha
+        à vontade. <strong>Só entra na Torre de Controle quando tiver placa.</strong></div>
+      <div class="filtro-periodo">
+        <div class="form-group">
+          <label>Dia da programação</label>
+          <input type="date" id="mont-data" onchange="carregarMontagemUI()">
+        </div>
+        <div class="form-group filtro-acoes">
+          <button class="btn btn-sec btn-sm" onclick="montagemHojeUI()">Hoje</button>
+        </div>
+        <div class="form-group filtro-acoes">
+          <button class="btn btn-sec btn-sm" id="mont-btn-modelo" onclick="aplicarModeloDoDiaUI()"
+            title="Cria uma linha para cada rota do modelo deste dia da semana que ainda não foi montada.">
+            ⚡ Puxar rotas do modelo
+          </button>
+        </div>
+      </div>
+      <div class="bento bi-faixa" id="mont-stats" style="margin-bottom:12px"></div>
+      <div class="table-wrap">
+        <table id="mont-tabela">
+          <thead><tr>
+            <th>Seq.</th><th>Rota</th><th>Nº Carga</th><th>Placa</th><th>Peso (kg)</th>
+            <th>Entregas</th><th>Ganchos</th><th>Palet.</th><th>Tipo de Operação</th><th class="no-print">Ação</th>
+          </tr></thead>
+          <tbody id="mont-tbody"></tbody>
+        </table>
+      </div>
+      <div class="empty-state" id="mont-empty" data-icone="🗓️" hidden>
+        Nada montado para este dia ainda. Use <strong>Puxar rotas do modelo</strong> para começar
+        com as rotas que costumam rodar neste dia da semana.</div>
+      <div id="mont-faltando" class="aviso-inline no-print" hidden></div>
+    </div>
+
     <!-- A Fila de Programados vem antes: é o que a Logística consulta o dia
          inteiro. O Encerramento do Ciclo desceu para o fim da aba — é ação
          irreversível e de uma vez por dia, não merece disputar espaço com a
