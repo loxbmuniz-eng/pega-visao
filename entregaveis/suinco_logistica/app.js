@@ -1283,7 +1283,7 @@ function renderTabAtual(){
   atualizarDatalists();
   switch(TAB_ATUAL){
     case 'torre': renderTorre(); renderVisaoPatio('torre'); break;
-    case 'programacao': renderProgFila(); renderProgAguardando(); renderRodapeControleProgramacao(); carregarMontagemUI(); break;
+    case 'programacao': renderProgFila(); renderProgAguardando(); renderRodapeControleProgramacao(); carregarMontagemUI(); carregarModeloSemanaUI(); break;
     // Módulo próprio (devolucoes.js, carregado depois deste arquivo). O
     // typeof protege a ordem de carga: se o módulo faltar, a aba fica
     // vazia em vez de derrubar a navegação inteira.
@@ -7944,6 +7944,15 @@ async function aplicarModeloDoDiaUI(){
   const { dia, modelo, montagens } = _montagemDia;
   const jaMontadas = new Set(montagens.filter(m => !m.cancelada_em).map(m => m.rota_codigo));
   const novas = modelo.filter(m => !jaMontadas.has(m.rota_codigo));
+  /* Duas situações MUITO diferentes que davam a mesma resposta, e a
+     resposta era falsa quando o modelo estava vazio: dizer "já estão
+     montadas" para quem nunca cadastrou rota nenhuma manda a pessoa
+     procurar um erro que não existe. */
+  if(!modelo.length){
+    notify(`Não há rotas cadastradas para ${NOMES_DIA[_montagemDia.diaSemana]} ainda. `
+      + 'Cadastre em "Rotas por dia da semana", logo abaixo.', 'erro', 8000);
+    return;
+  }
   if(!novas.length){
     notify('Todas as rotas do modelo deste dia já estão montadas.', '', 5000);
     return;
@@ -8046,4 +8055,124 @@ async function efetivarMontagemUI(id){
   await carregarMontagemUI();
   renderAll();
   notify(`Carga da rota ${m.rota_nome} criada e enviada para a Torre.`, 'ok', 5000);
+}
+
+/* =====================================================================
+   ROTAS POR DIA DA SEMANA — o template que vivia no Teams (24/08/2026)
+   =====================================================================
+
+   Faltou na primeira entrega e o efeito foi um botão mudo: "Puxar rotas
+   do modelo" não tinha de onde puxar, porque não havia tela para
+   cadastrar o modelo. A lição, anotada: rota de servidor sem tela é a
+   mesma família do defeito da ocorrência #13 — a regra existe e o
+   caminho para cumpri-la, não.
+
+   Mudança aqui vale para as PRÓXIMAS semanas. O dia já montado é uma
+   cópia, não um espelho: reprogramar o passado por tabelar o futuro seria
+   reescrever história que a operação já viveu.
+   ===================================================================== */
+
+let _modeloDiaAtivo = null;   // 1=seg … 5=sex
+let _modeloCache = [];
+
+async function carregarModeloSemanaUI(){
+  const card = document.getElementById('card-modelo-semana');
+  if(!card) return;
+  const setor = DB.operador && DB.operador.setor;
+  const podeVer = setor === 'Logística' || setor === 'Administração';
+  card.hidden = !podeVer;
+  if(!podeVer || !SuincoSharePoint.estaConfigurado()) return;
+
+  if(_modeloDiaAtivo === null){
+    /* Abre no dia de HOJE quando é dia útil — é o que a pessoa quer ver
+       na maioria das vezes. Fim de semana cai em segunda. */
+    const h = new Date().getDay();
+    _modeloDiaAtivo = (h >= 1 && h <= 5) ? h : 1;
+  }
+  try {
+    const r = await SuincoSharePoint.modeloSemana.listar();
+    _modeloCache = r.modelo || [];
+    renderModeloSemana();
+  } catch(e){
+    if(e && e.status === 404){ card.hidden = true; return; }
+    notify('Não consegui carregar as rotas por dia: ' + (e.message || e), 'erro', 7000);
+  }
+}
+
+function trocarDiaModeloUI(dia){
+  _modeloDiaAtivo = Number(dia);
+  renderModeloSemana();
+}
+
+function renderModeloSemana(){
+  const seg = document.getElementById('modelo-seg');
+  if(seg){
+    seg.innerHTML = [1, 2, 3, 4, 5].map(d => {
+      const n = _modeloCache.filter(m => Number(m.dia_semana) === d).length;
+      return `<button class="seg-btn${d === _modeloDiaAtivo ? ' seg-ativo' : ''}"
+                onclick="trocarDiaModeloUI(${d})">${NOMES_DIA[d]}
+                ${n ? `<span class="pill-count">${n}</span>` : ''}</button>`;
+    }).join('');
+  }
+
+  /* A lista sai do cadastro oficial — nunca de texto livre. É o que
+     impede "Belo Horinzonte" de virar rota nova, que foi exatamente o
+     que a planilha acumulou em cinco dias.
+
+     Usa ROTAS e rotaLabel, os mesmos de prog-rota: mantendo uma fonte só,
+     rota cadastrada em Cadastros aparece aqui na hora. E reconstrói
+     sempre, preservando a escolha — pela mesma razão. */
+  const sel = document.getElementById('modelo-rota');
+  if(sel){
+    const atual = sel.value;
+    sel.innerHTML = ROTAS.map(r =>
+      `<option value="${esc(r.codigo)}">${esc(rotaLabel(r.codigo))}</option>`).join('');
+    if(atual) sel.value = atual;
+  }
+
+  const doDia = _modeloCache
+    .filter(m => Number(m.dia_semana) === _modeloDiaAtivo)
+    .sort((a, b) => (a.ordem - b.ordem) || String(a.rota_codigo).localeCompare(b.rota_codigo));
+
+  const vazio = document.getElementById('modelo-empty');
+  if(vazio) vazio.hidden = doDia.length > 0;
+  const tbody = document.getElementById('modelo-tbody');
+  if(!tbody) return;
+  tbody.innerHTML = doDia.map((m, i) => `<tr>
+      <td class="text-dim">${i + 1}</td>
+      <td><strong>${esc(m.rota_nome)}</strong> <span class="text-dim">${esc(m.rota_codigo)}</span></td>
+      <td>${esc(m.tipo_operacao) || '<span class="text-dim">—</span>'}</td>
+      <td>${m.qtd_entregas ?? '<span class="text-dim">—</span>'}</td>
+      <td class="no-print">
+        <button class="btn btn-sec btn-sm" onclick="removerDoModeloUI(${Number(m.modelo_id)})">Remover</button>
+      </td></tr>`).join('');
+}
+
+async function adicionarAoModeloUI(){
+  const rota = (document.getElementById('modelo-rota') || {}).value;
+  if(!rota){ notify('Escolha a rota.', 'erro', 4000); return; }
+  const jaTem = _modeloCache.filter(m =>
+    Number(m.dia_semana) === _modeloDiaAtivo && m.rota_codigo === rota).length;
+  try {
+    await SuincoSharePoint.modeloSemana.gravar({
+      diaSemana: _modeloDiaAtivo,
+      rotaCodigo: rota,
+      /* A ordem é o que permite a MESMA rota duas vezes no mesmo dia —
+         duas saídas para a mesma praça acontecem, e o índice único é por
+         (dia, rota, ordem). */
+      ordem: jaTem,
+      tipoOperacao: (document.getElementById('modelo-tipo') || {}).value || '',
+      qtdEntregas: (document.getElementById('modelo-entregas') || {}).value || '',
+    });
+    await carregarModeloSemanaUI();
+    notify('Rota adicionada ao modelo de ' + NOMES_DIA[_modeloDiaAtivo] + '.', 'ok', 4000);
+  } catch(e){ notify(e.message || String(e), 'erro', 8000); }
+}
+
+async function removerDoModeloUI(id){
+  if(!confirm('Tirar esta rota do modelo deste dia?')) return;
+  try {
+    await SuincoSharePoint.modeloSemana.remover(id);
+    await carregarModeloSemanaUI();
+  } catch(e){ notify('Não consegui remover: ' + (e.message || e), 'erro', 7000); }
 }
