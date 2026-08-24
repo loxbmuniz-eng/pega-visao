@@ -45,6 +45,60 @@ def totp(segredo_b32, quando=None):
     return str(num % 10 ** 6).zfill(6)
 
 
+def marcarSuspeita():
+    """Coloca a conta no estado que faz o servidor pedir o código.
+
+    Desde 24/08/2026 o segundo fator só aparece depois de CINCO senhas
+    erradas na janela de 30 min. Toda seção que queira ver o campo de
+    código precisa passar por aqui primeiro — inclusive DEPOIS de uma
+    entrada bem-sucedida, porque entrar zera o contador de propósito.
+
+    Escrito direto no banco em vez de cinco tentativas pela tela: o que
+    estas seções testam é a TELA reagindo ao pedido do servidor. O
+    contador em si tem teste próprio no bloco 10 de api.test.js.
+    """
+    subprocess.run(
+        ['sudo', '-u', 'postgres', 'psql', '-q', '-d', 'embarque_suinco', '-c',
+         "UPDATE operadores SET falhas_senha = 5, falhas_desde = now(), "
+         "bloqueado_ate = NULL WHERE email = 'mfaui@teste.local'"],
+        capture_output=True)
+
+
+async def esperarEntrada(pg, segundos=20):
+    """Espera o painel confirmar que entrou, em vez de dormir um tanto fixo.
+
+    O sleep fixo passava isolado e falhava na bateria: com quatro
+    navegadores disputando CPU, a volta do servidor mais o render passam
+    de três segundos. Vermelho de relógio custa mais caro que o defeito
+    que ele finge denunciar — é a mesma lição de test_carga_dev_e_lacres.
+    """
+    for _ in range(segundos * 4):
+        if await pg.evaluate("() => !!(DB.operador && DB.operador.email)"):
+            return True
+        await asyncio.sleep(0.25)
+    return False
+
+
+async def esperarPedidoDeCodigo(pg, segundos=20):
+    """Espera o servidor TER PEDIDO o código antes de preencher o campo.
+
+    O campo aparecer não basta. Preencher enquanto a resposta do primeiro
+    clique ainda está voltando faz o painel limpar o valor ao renderizar o
+    pedido — o formulário sobe com o código VAZIO e o servidor responde
+    "Digite o código", que é exatamente o que se estava tentando fazer.
+
+    A mensagem de erro na tela é a prova de que a ida ao servidor
+    terminou. Esperar por ela é esperar a condição certa.
+    """
+    for _ in range(segundos * 4):
+        txt = await pg.evaluate(
+            "() => (document.getElementById('login-erro')||{}).textContent || ''")
+        if 'autenticador' in txt:
+            return True
+        await asyncio.sleep(0.25)
+    return False
+
+
 async def abrir(nav, rotulo):
     ctx = await nav.new_context(viewport={'width': 1280, 'height': 900})
     pg = await ctx.new_page()
@@ -129,7 +183,27 @@ async def main():
             "() => (document.querySelector('.mfa-recuperacao')||{}).textContent || ''")
         ck('a tela avisa que eles não aparecem de novo', 'não aparecem de novo' in avisa)
 
-        print('\n=== 3. AGORA O LOGIN PEDE O CÓDIGO ===')
+        print('\n=== 3. ENTRADA NORMAL CONTINUA SÓ COM A SENHA ===')
+        # MUDANÇA DE REGRA (24/08/2026): "2FA não deve aparecer no login,
+        # somente caso erre a senha mais de 5x". Ativar o segundo fator
+        # deixou de cobrar código em toda entrada — se cobrasse, ninguém
+        # ativaria, que foi exatamente o que aconteceu nos dois primeiros
+        # dias. Ver o cabeçalho da migração 032.
+        ctx0, pg0 = await abrir(nav, 'z')
+        await pg0.fill('#login-email', 'mfaui@teste.local')
+        await pg0.fill('#login-senha', SENHA)
+        await pg0.click('#btn-entrar')
+        await pg0.wait_for_timeout(2500)
+        normal = await pg0.evaluate(
+            "() => !document.getElementById('login-mfa-bloco').hidden")
+        ck('sem suspeita, o campo de código NÃO aparece', not normal)
+        await ctx0.close()
+
+        print('\n=== 3b. DEPOIS DE CINCO SENHAS ERRADAS, O LOGIN PEDE O CÓDIGO ===')
+        # Escrito direto no banco em vez de cinco tentativas pela tela: o
+        # que se testa aqui é a TELA reagindo ao pedido do servidor; o
+        # contador tem teste próprio no backend (bloco 10 de api.test.js).
+        marcarSuspeita()
         ctx2, pg2 = await abrir(nav, 'b')
         await pg2.fill('#login-email', 'mfaui@teste.local')
         await pg2.fill('#login-senha', SENHA)
@@ -143,23 +217,38 @@ async def main():
         ck('e a mensagem diz o que fazer',
            'aplicativo autenticador' in apareceu['erro'], apareceu['erro'][:60])
 
+        await esperarPedidoDeCodigo(pg2)
         await pg2.fill('#login-codigo', totp(segredo))
         await pg2.click('#btn-entrar')
-        await pg2.wait_for_timeout(3000)
-        dentro = await pg2.evaluate("() => !!(DB.operador && DB.operador.email)")
-        ck('senha + código entra', dentro, str(dentro))
+        dentro = await esperarEntrada(pg2)
+        ck('senha + código entra', dentro,
+           '' if dentro else await pg2.evaluate(
+               "() => (document.getElementById('login-erro')||{}).textContent || ''"))
 
         print('\n=== 4. CÓDIGO DE RECUPERAÇÃO (celular perdido) ===')
+        # A entrada da seção 3b zerou o contador — é o comportamento certo
+        # e documentado. Para ver o campo de código de novo, a conta
+        # precisa voltar ao estado de suspeita.
+        marcarSuspeita()
         ctx3, pg3 = await abrir(nav, 'c')
         await pg3.fill('#login-email', 'mfaui@teste.local')
         await pg3.fill('#login-senha', SENHA)
         await pg3.click('#btn-entrar')
-        await pg3.wait_for_timeout(2000)
+        # Espera o servidor TER PEDIDO o código — o campo visível não
+        # basta, ver esperarPedidoDeCodigo.
+        await pg3.wait_for_selector('#login-codigo:visible', timeout=15000)
+        await esperarPedidoDeCodigo(pg3)
         await pg3.fill('#login-codigo', codigos[0])
         await pg3.click('#btn-entrar')
-        await pg3.wait_for_timeout(3000)
-        rec = await pg3.evaluate("() => !!(DB.operador && DB.operador.email)")
-        ck('um código de recuperação entra sem o celular', rec, str(rec))
+        await esperarEntrada(pg3)
+        rec = await pg3.evaluate(
+            """() => ({dentro: !!(DB.operador && DB.operador.email),
+                       erro: (document.getElementById('login-erro')||{}).textContent || ''})""")
+        # Leva o MOTIVO junto. Sem isso, esta linha falhava na bateria e
+        # passava isolada sem dizer por quê — e um vermelho que não se
+        # explica custa mais tempo que o defeito que ele denuncia.
+        ck('um código de recuperação entra sem o celular',
+           rec['dentro'], rec['erro'][:90] or 'sem mensagem na tela')
 
         print('\n=== 5. CONSOLE LIMPO + CAPTURA ===')
         ck('sem erros de página', not erros, str(erros[:2]))
