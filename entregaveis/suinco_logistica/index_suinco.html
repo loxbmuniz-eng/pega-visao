@@ -293,6 +293,49 @@
       <div id="mont-faltando" class="aviso-inline no-print" hidden></div>
     </div>
 
+    <!-- ===== ROTAS POR DIA DA SEMANA (24/08/2026) =====
+         O template que hoje vive numa planilha do Teams. Fica logo abaixo
+         da Montagem porque é consultado uma vez por mês e a montagem é
+         usada todo dia — mas na MESMA aba, porque é o mesmo trabalho.
+
+         Sem esta tela o botão "Puxar rotas do modelo" não tinha o que
+         puxar. Faltou na primeira entrega. -->
+    <div class="card" id="card-modelo-semana">
+      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-rotas"/></svg>
+        Rotas por dia da semana</div>
+      <div class="card-sub">Quais rotas costumam rodar em cada dia. É daqui que a Montagem do dia
+        puxa a lista pronta toda manhã. <strong>Mudar aqui vale para as próximas semanas</strong> —
+        o dia já montado não muda sozinho.</div>
+      <div class="seg-control" id="modelo-seg"></div>
+      <div class="form-row" style="align-items:flex-end">
+        <div class="form-group">
+          <label>Adicionar rota a este dia</label>
+          <select id="modelo-rota"></select>
+        </div>
+        <div class="form-group">
+          <label>Tipo de Operação <span class="hint">(padrão da rota)</span></label>
+          <select id="modelo-tipo">
+            <option value="">—</option>
+            <option>CROSS-DOCKING</option><option>ENTREGA DIRETA</option><option>RET FRIGO</option>
+          </select>
+        </div>
+        <div class="form-group" style="max-width:120px">
+          <label>Entregas</label><input type="number" id="modelo-entregas" min="1">
+        </div>
+        <div class="form-group filtro-acoes">
+          <button class="btn btn-primary btn-sm" onclick="adicionarAoModeloUI()">➕ Adicionar</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Ordem</th><th>Rota</th><th>Tipo de Operação</th><th>Entregas</th><th class="no-print">Ação</th></tr></thead>
+          <tbody id="modelo-tbody"></tbody>
+        </table>
+      </div>
+      <div class="empty-state" id="modelo-empty" data-icone="🗒️" hidden>
+        Nenhuma rota cadastrada para este dia ainda.</div>
+    </div>
+
     <!-- A Fila de Programados vem antes: é o que a Logística consulta o dia
          inteiro. O Encerramento do Ciclo desceu para o fim da aba — é ação
          irreversível e de uma vez por dia, não merece disputar espaço com a

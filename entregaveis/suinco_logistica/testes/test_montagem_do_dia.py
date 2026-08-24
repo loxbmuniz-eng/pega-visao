@@ -202,7 +202,52 @@ async def main():
            novas == max(0, no_modelo - montadas),
            f'modelo {no_modelo} rotas, {montadas} montadas, oferece {novas}')
 
-        print('\n=== 8. SEM ERRO DE JAVASCRIPT ===')
+        print('\n=== 8. O MODELO DA SEMANA TEM TELA, E O BOTÃO NÃO FICA MUDO ===')
+        # O defeito que este bloco existe para não deixar voltar: a
+        # primeira entrega trouxe a rota do servidor e o botão "Puxar
+        # rotas do modelo", mas NÃO a tela para cadastrar o modelo. O
+        # botão não tinha de onde puxar, e a mensagem ainda dizia "todas
+        # as rotas já estão montadas" — o oposto da verdade.
+        await pg.evaluate("() => abrirTab('programacao')")
+        await pg.wait_for_timeout(1200)
+        tela = await pg.evaluate("""() => ({
+            existe: !!document.getElementById('card-modelo-semana'),
+            visivel: !document.getElementById('card-modelo-semana').hidden,
+            dias: document.querySelectorAll('#modelo-seg .seg-btn').length,
+            temSeletor: (document.getElementById('modelo-rota')||{}).options?.length > 0
+        })""")
+        ck('a tela de rotas por dia existe', tela['existe'])
+        ck('e aparece para a Logística', tela['visivel'], str(tela))
+        ck('com os cinco dias úteis', tela['dias'] == 5, str(tela['dias']))
+        ck('e o seletor traz as rotas do cadastro oficial', tela['temSeletor'], str(tela))
+
+        rota2 = sql("SELECT codigo FROM dim_rotas WHERE codigo = '510'")
+        antes = sql("SELECT count(*) FROM programacao_modelo WHERE dia_semana = 2")
+        await pg.evaluate("""async (rota) => {
+              await SuincoSharePoint.modeloSemana.gravar(
+                {diaSemana: 2, rotaCodigo: rota, ordem: 0, tipoOperacao: 'CROSS-DOCKING'});
+            }""", rota2[0])
+        depois = sql("SELECT count(*) FROM programacao_modelo WHERE dia_semana = 2")
+        ck('adicionar rota ao modelo grava', int(depois[0]) == int(antes[0]) + 1,
+           f'{antes[0]} → {depois[0]}')
+
+        # A mensagem honesta quando o modelo do dia está vazio.
+        vazio = await pg.evaluate("""async () => {
+              _montagemDia = await SuincoSharePoint.montagem.doDia();
+              _montagemDia.modelo = [];
+              let dito = '';
+              const orig = window.notify;
+              window.notify = (m) => { dito = m; };
+              await aplicarModeloDoDiaUI();
+              window.notify = orig;
+              return dito;
+            }""")
+        ck('modelo vazio diz a verdade, não "já estão montadas"',
+           'Não há rotas cadastradas' in vazio, vazio[:80])
+
+        sql("DELETE FROM programacao_modelo WHERE dia_semana = 2 AND rota_codigo = '510'")
+
+        print('\n=== 9. SEM ERRO DE JAVASCRIPT ===')
         ck('nenhum erro no console', not erros, '; '.join(erros[:3]))
 
         # Limpeza para não contaminar a próxima suíte.
