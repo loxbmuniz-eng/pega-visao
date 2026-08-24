@@ -1222,6 +1222,96 @@ describe('8. Superfície de ataque', () => {
    colidir com o que os outros blocos já inseriram (o before() global só
    limpa log_eventos/fact_statusfrota/fact_viagens/operadores — NÃO
    dim_veiculos nem dim_rotas). ------------------------------------ */
+/* =====================================================================
+   10. CINCO SENHAS ERRADAS (etapa 4, 24/08/2026)
+   ---------------------------------------------------------------------
+   A regra: entrada normal nunca pede código. Cinco senhas erradas dentro
+   de 30 minutos mudam o tratamento da conta — quem tem segundo fator
+   passa a digitar o código, quem não tem espera 15 minutos.
+
+   O que isto pega: força bruta. O que não pega: senha vazada — quem sabe
+   a senha acerta de primeira e nunca chega às cinco. A diferença está no
+   cabeçalho da migração 032 e não deve se perder.
+   ===================================================================== */
+describe('10. Cinco senhas erradas', () => {
+  const EMAIL = 'falhas@teste.local';
+  const SENHA = 'senha-de-teste-123';
+  let id;
+
+  before(async () => {
+    await pool.query('DELETE FROM operadores WHERE email = $1', [EMAIL]);
+    const hash = await bcrypt.hash(SENHA, 10);
+    const { rows } = await pool.query(
+      `INSERT INTO operadores (nome, email, setor, senha_hash, ativo)
+       VALUES ('Falhas', $1, 'Logística', $2, TRUE) RETURNING id`, [EMAIL, hash]);
+    id = rows[0].id;
+  });
+
+  after(async () => {
+    await pool.query('DELETE FROM operadores WHERE email = $1', [EMAIL]);
+  });
+
+  async function zerar() {
+    await pool.query(
+      `UPDATE operadores SET falhas_senha = 0, falhas_desde = NULL,
+                             bloqueado_ate = NULL WHERE id = $1`, [id]);
+  }
+
+  test('entrada normal não pede nada além da senha', async () => {
+    await zerar();
+    const r = await req('/auth/login', { metodo: 'POST', corpo: { email: EMAIL, senha: SENHA } });
+    assert.equal(r.status, 200, r.texto);
+  });
+
+  test('cada senha errada é contada', async () => {
+    await zerar();
+    for (let i = 0; i < 3; i += 1) {
+      await req('/auth/login', { metodo: 'POST', corpo: { email: EMAIL, senha: 'errada' } });
+    }
+    const { rows } = await pool.query('SELECT falhas_senha FROM operadores WHERE id = $1', [id]);
+    assert.equal(rows[0].falhas_senha, 3);
+  });
+
+  test('acertar a senha zera o contador', async () => {
+    await req('/auth/login', { metodo: 'POST', corpo: { email: EMAIL, senha: SENHA } });
+    const { rows } = await pool.query('SELECT falhas_senha FROM operadores WHERE id = $1', [id]);
+    assert.equal(rows[0].falhas_senha, 0);
+  });
+
+  test('sem segundo fator, a quinta falha leva a bloqueio curto', async () => {
+    await zerar();
+    for (let i = 0; i < 5; i += 1) {
+      await req('/auth/login', { metodo: 'POST', corpo: { email: EMAIL, senha: 'errada' } });
+    }
+    const r = await req('/auth/login', { metodo: 'POST', corpo: { email: EMAIL, senha: SENHA } });
+    assert.equal(r.status, 429);
+    assert.equal(r.json.codigo, 'BLOQUEIO_TEMPORARIO');
+    assert.match(r.json.erro, /minuto/, 'a mensagem precisa dizer quanto esperar');
+  });
+
+  test('a resposta a senha errada continua idêntica à de e-mail inexistente', async () => {
+    // Se o bloqueio vazasse antes da senha, um atacante descobriria quais
+    // contas existem só de bater nelas até travar.
+    const a = await req('/auth/login', { metodo: 'POST', corpo: { email: EMAIL, senha: 'x' } });
+    const b = await req('/auth/login',
+      { metodo: 'POST', corpo: { email: 'ninguem@teste.local', senha: 'x' } });
+    assert.equal(a.status, b.status);
+    assert.equal(a.json.codigo, b.json.codigo);
+  });
+
+  test('falha VELHA não conta — a janela é de 30 minutos', async () => {
+    /* Limpa também o bloqueio: o teste anterior deixou a conta travada por
+       15 minutos, e é isso que se quer aqui — medir a JANELA, não o
+       bloqueio, que tem teste próprio logo acima. */
+    await pool.query(
+      `UPDATE operadores SET falhas_senha = 9, falhas_desde = now() - interval '2 hours',
+                             bloqueado_ate = NULL
+        WHERE id = $1`, [id]);
+    const r = await req('/auth/login', { metodo: 'POST', corpo: { email: EMAIL, senha: SENHA } });
+    assert.equal(r.status, 200, 'erro de digitação de ontem não pode travar hoje: ' + r.texto);
+  });
+});
+
 describe('9. Cadastros — Frota e Rotas', () => {
   const PLACA_TESTE = 'TST9001';
   const CODIGO_TESTE = 'ZZ901';
@@ -3618,13 +3708,50 @@ describe('33. Protocolo de segurança — segundo fator (etapa 4)', () => {
     assert.ok(!codigosRec.includes(rows[0].codigo_hash), 'código de recuperação em claro no banco');
   });
 
-  test('depois de ativo, a senha sozinha NÃO entra mais', async () => {
+
+  /* Coloca a conta no estado que a regra de 24/08/2026 exige para o
+     segundo fator aparecer: cinco senhas erradas dentro da janela.
+     Escrito direto no banco em vez de cinco POSTs porque o que se testa
+     aqui é a REGRA, não o contador — o contador tem teste próprio. */
+  async function sobSuspeita() {
+    await pool.query(
+      `UPDATE operadores SET falhas_senha = 5, falhas_desde = now(),
+                             bloqueado_ate = NULL WHERE id = $1`, [id]);
+  }
+  async function semSuspeita() {
+    await pool.query(
+      `UPDATE operadores SET falhas_senha = 0, falhas_desde = NULL,
+                             bloqueado_ate = NULL WHERE id = $1`, [id]);
+  }
+
+  /* MUDANÇA DE REGRA (24/08/2026), e ela inverte o teste anterior.
+
+     Até aqui: ativou o segundo fator, digitava o código em TODA entrada.
+     Agora: o código só é pedido depois de CINCO senhas erradas. Decisão
+     do dono do projeto — "2FA não deve aparecer no login, somente caso
+     erre a senha mais de 5x" — tomada porque em dois dias ninguém ativou
+     a versão anterior, e proteção que ninguém liga não protege nada.
+
+     O teste velho ("a senha sozinha NÃO entra mais") virou o oposto e
+     está logo abaixo. Quem vier depois e achar que isto é regressão:
+     não é. Está no cabeçalho da migração 032, com o que a regra pega
+     (força bruta) e o que ela não pega (senha vazada). */
+  test('com o segundo fator ativo, a senha sozinha AINDA entra — não há suspeita', async () => {
+    await semSuspeita();
+    const r = await req('/auth/login', { metodo: 'POST', corpo: { email: EMAIL, senha: SENHA } });
+    assert.equal(r.status, 200, 'entrada normal não pode pedir código: ' + r.texto);
+    token = r.json.token;
+  });
+
+  test('depois de CINCO senhas erradas, a senha sozinha deixa de bastar', async () => {
+    await sobSuspeita();
     const r = await req('/auth/login', { metodo: 'POST', corpo: { email: EMAIL, senha: SENHA } });
     assert.equal(r.status, 401);
     assert.equal(r.json.codigo, 'MFA_NECESSARIO');
   });
 
-  test('senha certa + código do aplicativo entra', async () => {
+  test('sob suspeita, senha certa + código do aplicativo entra', async () => {
+    await sobSuspeita();
     const r = await req('/auth/login', {
       metodo: 'POST', corpo: { email: EMAIL, senha: SENHA, codigo: codigoDoMomento(segredo) },
     });
@@ -3632,7 +3759,25 @@ describe('33. Protocolo de segurança — segundo fator (etapa 4)', () => {
     token = r.json.token;
   });
 
+  test('entrar zera o contador — cinco erros de um dia não cobram código para sempre', async () => {
+    const { rows } = await pool.query(
+      'SELECT falhas_senha, falhas_desde, bloqueado_ate FROM operadores WHERE id = $1', [id]);
+    assert.equal(rows[0].falhas_senha, 0);
+    assert.equal(rows[0].falhas_desde, null);
+    assert.equal(rows[0].bloqueado_ate, null);
+  });
+
+  test('quem TEM segundo fator nunca é bloqueado — digita o código e entra', async () => {
+    await sobSuspeita();
+    const r = await req('/auth/login', {
+      metodo: 'POST', corpo: { email: EMAIL, senha: SENHA, codigo: codigoDoMomento(segredo) },
+    });
+    assert.notEqual(r.json.codigo, 'BLOQUEIO_TEMPORARIO', 'bloqueio é só para quem não tem código');
+    assert.equal(r.status, 200, r.texto);
+  });
+
   test('senha ERRADA com código certo não entra — o segundo fator soma, não substitui', async () => {
+    await sobSuspeita();
     const r = await req('/auth/login', {
       metodo: 'POST', corpo: { email: EMAIL, senha: 'errada', codigo: codigoDoMomento(segredo) },
     });
@@ -3641,6 +3786,7 @@ describe('33. Protocolo de segurança — segundo fator (etapa 4)', () => {
   });
 
   test('CELULAR PERDIDO: um código de recuperação entra', async () => {
+    await sobSuspeita();
     const r = await req('/auth/login', {
       metodo: 'POST', corpo: { email: EMAIL, senha: SENHA, codigo: codigosRec[0] },
     });
@@ -3648,6 +3794,7 @@ describe('33. Protocolo de segurança — segundo fator (etapa 4)', () => {
   });
 
   test('o mesmo código de recuperação NÃO serve duas vezes', async () => {
+    await sobSuspeita();
     const r = await req('/auth/login', {
       metodo: 'POST', corpo: { email: EMAIL, senha: SENHA, codigo: codigosRec[0] },
     });

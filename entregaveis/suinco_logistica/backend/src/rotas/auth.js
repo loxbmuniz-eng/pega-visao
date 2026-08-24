@@ -29,7 +29,7 @@ rotasAuth.post('/login', limiteLogin, async (req, res, next) => {
 
     const { rows } = await consultar(
       `SELECT id, email, nome, setor, senha_hash, ativo, sessao_versao,
-              mfa_segredo, mfa_ativo
+              mfa_segredo, mfa_ativo, falhas_senha, falhas_desde, bloqueado_ate
          FROM operadores WHERE email = $1`,
       [email]
     );
@@ -42,9 +42,34 @@ rotasAuth.post('/login', limiteLogin, async (req, res, next) => {
     const hash = op?.senha_hash || '$2a$10$invalidoinvalidoinvalidoinvalidoinvalidoinvalidoinvalido';
     const confere = await bcrypt.compare(senha, hash);
 
+    /* CONTAGEM DE SENHAS ERRADAS (etapa 4, 24/08/2026).
+       Janela de 30 min: cinco erros espalhados ao longo de meses não são
+       ataque, são digitação. O que interessa é a rajada. */
+    const JANELA_MS = 30 * 60 * 1000;
+    const desde = op?.falhas_desde ? new Date(op.falhas_desde).getTime() : 0;
+    const naJanela = Boolean(desde) && (Date.now() - desde) < JANELA_MS;
+    const falhas = naJanela ? Number(op?.falhas_senha || 0) : 0;
+
     if (!op || !confere || !op.ativo) {
       if (op && !op.ativo) console.warn('[auth] login de operador inativo:', email);
+      if (op) {
+        await consultar(
+          `UPDATE operadores SET falhas_senha = $2, falhas_desde = COALESCE($3, now())
+            WHERE id = $1`,
+          [op.id, falhas + 1, naJanela ? op.falhas_desde : null]
+        );
+      }
       return res.status(401).json({ erro: 'E-mail ou senha incorretos.', codigo: 'CREDENCIAL_INVALIDA' });
+    }
+
+    /* Bloqueio conferido DEPOIS da senha, pelo mesmo motivo de sempre:
+       responder antes diria a um atacante quais contas estão sob ataque. */
+    if (op.bloqueado_ate && new Date(op.bloqueado_ate).getTime() > Date.now()) {
+      const faltam = Math.ceil((new Date(op.bloqueado_ate).getTime() - Date.now()) / 60000);
+      return res.status(429).json({
+        erro: `Muitas senhas erradas nesta conta. Tente de novo em ${faltam} minuto(s).`,
+        codigo: 'BLOQUEIO_TEMPORARIO',
+      });
     }
 
     /* SEGUNDO FATOR (etapa 4 do protocolo de segurança, 22/08/2026).
@@ -54,8 +79,31 @@ rotasAuth.post('/login', limiteLogin, async (req, res, next) => {
 
        A senha já foi conferida quando chegamos aqui. Isso é de propósito:
        pedir o código antes da senha diria a um atacante quais e-mails têm
-       segundo fator, que é informação que ele não precisa ter. */
-    if (op.mfa_ativo) {
+       segundo fator, que é informação que ele não precisa ter.
+
+       DESDE 24/08/2026 O CÓDIGO SÓ É PEDIDO DEPOIS DE CINCO SENHAS
+       ERRADAS. Decisão do dono do projeto: "2FA não deve aparecer no
+       login, somente caso erre a senha mais de 5x". Quem digita a senha
+       certa entra como sempre — é isso que torna possível manter a
+       proteção ligada sem parar o pátio. O que ela pega e o que não pega
+       está na migração 032. */
+    const SUSPEITO = falhas >= 5;
+
+    if (SUSPEITO && !op.mfa_ativo) {
+      /* Sem segundo fator não há código para pedir; o que resta é uma
+         espera curta — inviabiliza a força bruta sem virar chamado. */
+      await consultar(
+        `UPDATE operadores SET bloqueado_ate = now() + interval '15 minutes',
+                               falhas_senha = 0, falhas_desde = NULL
+          WHERE id = $1`, [op.id]
+      );
+      return res.status(429).json({
+        erro: 'Muitas senhas erradas nesta conta. Tente de novo em 15 minutos.',
+        codigo: 'BLOQUEIO_TEMPORARIO',
+      });
+    }
+
+    if (SUSPEITO && op.mfa_ativo) {
       const codigo = String(req.body?.codigo ?? '').trim();
       if (!codigo) {
         return res.status(401).json({
@@ -100,7 +148,17 @@ rotasAuth.post('/login', limiteLogin, async (req, res, next) => {
       }
     }
 
-    await consultar('UPDATE operadores SET ultimo_acesso = now() WHERE id = $1', [op.id]);
+    /* Entrou: o contador zera e o bloqueio some.
+
+       Sem isto, cinco erros de digitação numa terça passariam a cobrar
+       código para sempre — a contagem só existe para descrever a rajada
+       que está acontecendo AGORA, não o histórico da pessoa. */
+    await consultar(
+      `UPDATE operadores
+          SET ultimo_acesso = now(), falhas_senha = 0,
+              falhas_desde = NULL, bloqueado_ate = NULL
+        WHERE id = $1`, [op.id]
+    );
 
     return res.json({
       token: assinarToken(op),
