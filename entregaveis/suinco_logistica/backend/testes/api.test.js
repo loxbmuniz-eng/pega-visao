@@ -96,22 +96,6 @@ before(async () => {
   tokens['Administração'] = adm.a;
 });
 
-/* Pede e aprova uma ação crítica, devolvendo o acaoId pronto para executar.
-
-   Existe porque três rotas passaram a exigir a mesma dança (pedir com um
-   administrador, aprovar com outro) e repetir isso em cada teste esconderia
-   o que cada teste realmente verifica. */
-async function acaoAprovada(tipo, cargaId, motivo = 'teste automatizado') {
-  const pedido = await req('/api/acoes-criticas', {
-    metodo: 'POST', token: adm.a, corpo: { tipo, cargaId, motivo },
-  });
-  assert.equal(pedido.status, 201, `pedido de ${tipo} falhou: ${pedido.texto}`);
-  const ap = await req(`/api/acoes-criticas/${pedido.json.acao_id}/aprovar`, {
-    metodo: 'POST', token: adm.b,
-  });
-  assert.equal(ap.status, 200, `aprovação de ${tipo} falhou: ${ap.texto}`);
-  return pedido.json.acao_id;
-}
 
 after(async () => {
   await new Promise((r) => servidor.close(r));
@@ -813,6 +797,98 @@ describe('7b. Gestão de operadores (só Administração)', () => {
     });
     assert.equal(r.status, 409);
     assert.equal(r.json.codigo, 'AUTO_REBAIXAMENTO');
+  });
+
+  /* EXCLUIR CONTA — pedido do dono (25/08/2026). Até aqui só dava para
+     bloquear. Bloquear continua sendo o caminho de quem saiu da empresa;
+     excluir é para o cadastro errado, o teste e o duplicado. */
+  test('Logística não exclui operador', async () => {
+    const r = await req(`/api/operadores/${idCriado}`, {
+      metodo: 'DELETE', token: tokens['Logística'],
+    });
+    assert.equal(r.status, 403);
+  });
+
+  test('o admin não exclui a si mesmo — não teria como desfazer', async () => {
+    const eu = await req('/auth/eu', { token: tokenAdmin });
+    const r = await req(`/api/operadores/${eu.json.operador.id}`, {
+      metodo: 'DELETE', token: tokenAdmin,
+    });
+    assert.equal(r.status, 409);
+    assert.equal(r.json.codigo, 'NAO_PODE_EXCLUIR_A_SI');
+  });
+
+  test('excluir operador inexistente devolve 404', async () => {
+    const r = await req('/api/operadores/98765432', {
+      metodo: 'DELETE', token: tokenAdmin,
+    });
+    assert.equal(r.status, 404);
+  });
+
+  test('não dá para ficar sem nenhum administrador por este caminho', async () => {
+    /* Escrevi uma trava de "último administrador" na rota e este teste
+       mostrou que ela nunca dispararia: quem exclui já é administrador
+       ATIVO e acabou de ser impedido de excluir a si mesmo, então sempre
+       sobra ele. A trava saiu; esta checagem ficou no lugar dela, para
+       registrar a garantia e pegar o dia em que alguém afrouxar a regra
+       do auto-delete sem perceber a consequência. */
+    const eu = await req('/auth/eu', { token: tokenAdmin });
+    const r = await req(`/api/operadores/${eu.json.operador.id}`, {
+      metodo: 'DELETE', token: tokenAdmin,
+    });
+    assert.equal(r.json.codigo, 'NAO_PODE_EXCLUIR_A_SI',
+      'é esta recusa que garante que sempre reste um administrador');
+
+    const { rows } = await pool.query(
+      "SELECT count(*)::int AS n FROM operadores WHERE setor = 'Administração' AND ativo = TRUE");
+    assert.ok(rows[0].n >= 1, 'precisa restar pelo menos um administrador ativo');
+  });
+
+  test('excluir de verdade some com a conta, e o histórico dela FICA', async () => {
+    /* A razão de o DELETE ter sido considerado proibido por três dias era
+       "o log referencia o operador". Não referencia: log_eventos guarda o
+       nome como TEXTO copiado. Este teste é a prova disso — sem ela, a
+       exclusão seria uma perda de rastreabilidade silenciosa. */
+    await pool.query(
+      `INSERT INTO log_eventos (evento_id, carga_id, placa, acao, setor,
+                                operador_id, operador_nome, operador_verificado)
+       VALUES ('log_excl_teste','carga_excl_teste','XXX0X00','registro de teste',
+               'Portaria',$1,'Fulano Excluído',TRUE)`, [String(idCriado)]);
+
+    const r = await req(`/api/operadores/${idCriado}`, {
+      metodo: 'DELETE', token: tokenAdmin,
+    });
+    assert.equal(r.status, 200, r.texto);
+    assert.equal(r.json.excluido, true);
+
+    const { rows: conta } = await pool.query(
+      'SELECT id FROM operadores WHERE id = $1', [idCriado]);
+    assert.equal(conta.length, 0, 'a conta precisa ter sumido');
+
+    const { rows: log } = await pool.query(
+      "SELECT operador_nome FROM log_eventos WHERE evento_id = 'log_excl_teste'");
+    assert.equal(log.length, 1, 'o histórico NÃO pode sumir junto');
+    assert.equal(log[0].operador_nome, 'Fulano Excluído');
+
+    await pool.query("DELETE FROM log_eventos WHERE evento_id = 'log_excl_teste'");
+  });
+
+  test('a sessão de quem foi excluído morre no pedido seguinte', async () => {
+    const hash = await bcrypt.hash(SENHA, 4);
+    const { rows } = await pool.query(
+      `INSERT INTO operadores (email, nome, setor, senha_hash)
+       VALUES ('vaisair@teste.local','Vai Sair','Portaria',$1)
+       ON CONFLICT (email) DO UPDATE SET ativo = TRUE RETURNING id`, [hash]);
+    const login = await req('/auth/login', {
+      metodo: 'POST', corpo: { email: 'vaisair@teste.local', senha: SENHA },
+    });
+    const antes = await req('/auth/eu', { token: login.json.token });
+    assert.equal(antes.status, 200, 'o token precisa valer ANTES da exclusão');
+
+    await req(`/api/operadores/${rows[0].id}`, { metodo: 'DELETE', token: tokenAdmin });
+
+    const depois = await req('/auth/eu', { token: login.json.token });
+    assert.equal(depois.status, 401, 'conta apagada não pode continuar entrando');
   });
 });
 
@@ -2386,10 +2462,9 @@ describe('19. Revisões e Restaurar (Administração)', () => {
   test('restaurar volta os campos e deixa trilha de auditoria', async () => {
     const lista = await req(`/api/cargas/${idCarga}/revisoes`, { token: tokenAdmin });
     const alvo = lista.json[0].revisaoId;
-    const acaoR = await acaoAprovada('restaurar', idCarga);
     const r = await req(`/api/cargas/${idCarga}/restaurar`, {
       metodo: 'POST', token: tokenAdmin,
-      corpo: { acaoId: acaoR, revisaoId: alvo },
+      corpo: { revisaoId: alvo, motivo: 'peso lançado errado' },
     });
     assert.equal(r.status, 200);
     assert.equal(r.json.peso, 20500, 'o peso voltou ao valor da revisão');
@@ -2708,10 +2783,9 @@ describe('23. Desfazer exclusão de carga', () => {
   });
 
   test('Administração devolve a carga, com trilha, e ela reaparece na leitura', async () => {
-    const acaoD = await acaoAprovada('desfazer-exclusao', id);
     const r = await req(`/api/cargas/${id}/desfazer-exclusao`, {
       metodo: 'POST', token: admin,
-      corpo: { acaoId: acaoD, motivo: 'excluída por engano — processo do dia anterior' },
+      corpo: { motivo: 'excluída por engano — processo do dia anterior' },
     });
     assert.equal(r.status, 200, r.texto);
     assert.equal(r.json.excluida, false);
@@ -2726,10 +2800,8 @@ describe('23. Desfazer exclusão de carga', () => {
   });
 
   test('devolver uma carga que não estava excluída não quebra nada', async () => {
-    // Aprovação é de uso único: repetir a ação exige pedir de novo.
-    const acaoD2 = await acaoAprovada('desfazer-exclusao', id);
     const r = await req(`/api/cargas/${id}/desfazer-exclusao`, {
-      metodo: 'POST', token: admin, corpo: { acaoId: acaoD2, motivo: 'repetido' },
+      metodo: 'POST', token: admin, corpo: { motivo: 'repetido' },
     });
     assert.equal(r.status, 200);
     assert.equal(r.json.excluida, false);
@@ -2797,11 +2869,10 @@ describe('24. Correção de etapa pela Administração', () => {
   });
 
   test('a Administração VOLTA a carga de Seguiu Viagem para Faturado, com trilha', async () => {
-    const acaoC = await acaoAprovada('corrigir-etapa', id);
     const r = await req(`/api/cargas/${id}/corrigir-etapa`, {
       metodo: 'POST', token: admin,
       corpo: {
-        acaoId: acaoC, status: 'Faturado',
+        status: 'Faturado',
         motivo: 'saída registrada por engano — o caminhão ainda está no pátio',
       },
     });
@@ -3507,10 +3578,19 @@ describe('31. Protocolo de segurança — sessão revogável (etapa 2)', () => {
 });
 
 /* ------------------------------------------------------------------ */
-describe('32. Protocolo de segurança — segunda assinatura (etapa 3)', () => {
-  /* A brecha B5: restaurar, desfazer exclusão e corrigir etapa não mudam o
-     pátio — mudam a HISTÓRIA do pátio. Eram as ferramentas de quem quer
-     esconder um erro, e estavam a um clique de um único administrador. */
+describe('32. Reescrever o passado — sem segunda assinatura, com motivo', () => {
+  /* A REGRA MUDOU DE PROPÓSITO EM 25/08/2026.
+
+     De 22 a 25/08 restaurar, desfazer exclusão e corrigir etapa exigiam
+     pedido de um administrador e aprovação de OUTRO. O dono tirou a
+     exigência: "quem for da administração não precisa da autorização de
+     nada". Como as três rotas já eram exclusivas da Administração,
+     dispensar a Administração dispensou a trava inteira.
+
+     Este bloco existe para garantir o que FICOU no lugar dela: as três
+     ações continuam sendo só da Administração, continuam exigindo MOTIVO,
+     e o motivo continua chegando ao histórico da carga. Sem isso a
+     mudança teria trocado uma trava por um buraco. */
   let cargaId;
 
   before(async () => {
@@ -3526,114 +3606,75 @@ describe('32. Protocolo de segurança — segunda assinatura (etapa 3)', () => {
     cargaId = 'seg_assinatura_1';
   });
 
-  test('executar SEM pedido aprovado é recusado, e a resposta diz o que fazer', async () => {
+  test('a Administração corrige a etapa SOZINHA — sem pedir aval a ninguém', async () => {
     const r = await req(`/api/cargas/${cargaId}/corrigir-etapa`, {
       metodo: 'POST', token: adm.a,
-      corpo: { status: 'Faturado', motivo: 'sem pedido' },
+      corpo: { status: 'Faturado', motivo: 'lançamento em duplicidade' },
     });
-    assert.equal(r.status, 428);
-    assert.equal(r.json.codigo, 'APROVACAO_NECESSARIA');
+    assert.equal(r.status, 200, r.texto);
   });
 
-  test('pedido sem motivo é recusado — quem aprova precisa saber por quê', async () => {
-    const r = await req('/api/acoes-criticas', {
-      metodo: 'POST', token: adm.a, corpo: { tipo: 'corrigir-etapa', cargaId },
+  test('e o MOTIVO foi para o histórico da carga', async () => {
+    const { rows } = await pool.query(
+      `SELECT acao, operador_nome FROM log_eventos
+        WHERE carga_id = $1 ORDER BY data_evento DESC LIMIT 5`, [cargaId]);
+    const achou = rows.find((l) => (l.acao || '').includes('lançamento em duplicidade'));
+    assert.ok(achou, 'o motivo digitado precisa aparecer no log: '
+      + JSON.stringify(rows.map((l) => l.acao)));
+    assert.equal(achou.operador_nome, 'Admin Um');
+  });
+
+  test('corrigir etapa SEM motivo continua recusado — o histórico ficaria mudo', async () => {
+    const r = await req(`/api/cargas/${cargaId}/corrigir-etapa`, {
+      metodo: 'POST', token: adm.a, corpo: { status: 'Seguiu Viagem' },
     });
     assert.equal(r.status, 400);
     assert.equal(r.json.codigo, 'MOTIVO_OBRIGATORIO');
   });
 
-  test('QUEM PEDE NÃO APROVA — é a regra central do controle', async () => {
-    const p = await req('/api/acoes-criticas', {
-      metodo: 'POST', token: adm.a,
-      corpo: { tipo: 'corrigir-etapa', cargaId, motivo: 'tentando aprovar a si mesmo' },
+  test('restaurar SEM motivo é recusado pelo mesmo princípio', async () => {
+    const revs = await req(`/api/cargas/${cargaId}/revisoes`, { token: adm.a });
+    assert.equal(revs.status, 200, revs.texto);
+    const r = await req(`/api/cargas/${cargaId}/restaurar`, {
+      metodo: 'POST', token: adm.a, corpo: { revisaoId: revs.json[0].revisaoId },
     });
-    assert.equal(p.status, 201);
-    const r = await req(`/api/acoes-criticas/${p.json.acao_id}/aprovar`, {
-      metodo: 'POST', token: adm.a,
-    });
-    assert.equal(r.status, 403);
-    assert.equal(r.json.codigo, 'APROVADOR_E_O_MESMO');
+    assert.equal(r.status, 400);
+    assert.equal(r.json.codigo, 'MOTIVO_OBRIGATORIO');
   });
 
-  test('a Logística não pede nem aprova ação crítica', async () => {
-    const r = await req('/api/acoes-criticas', {
-      metodo: 'POST', token: tokens['Logística'],
-      corpo: { tipo: 'restaurar', cargaId, motivo: 'x' },
-    });
-    assert.equal(r.status, 403);
-  });
-
-  test('aprovado por OUTRO administrador, a ação executa — e os dois nomes ficam registrados', async () => {
-    const p = await req('/api/acoes-criticas', {
+  test('restaurar COM motivo executa, e o motivo fica no histórico', async () => {
+    const revs = await req(`/api/cargas/${cargaId}/revisoes`, { token: adm.a });
+    const r = await req(`/api/cargas/${cargaId}/restaurar`, {
       metodo: 'POST', token: adm.a,
-      corpo: { tipo: 'corrigir-etapa', cargaId, motivo: 'entrada registrada por engano' },
-    });
-    const ap = await req(`/api/acoes-criticas/${p.json.acao_id}/aprovar`, {
-      metodo: 'POST', token: adm.b,
-    });
-    assert.equal(ap.status, 200, ap.texto);
-
-    await req(`/api/cargas/${cargaId}/status`, {
-      metodo: 'POST', token: tokens['Portaria'], corpo: { status: 'Aguardando Embarque' },
-    });
-    const r = await req(`/api/cargas/${cargaId}/corrigir-etapa`, {
-      metodo: 'POST', token: adm.a,
-      corpo: { acaoId: p.json.acao_id, status: 'Aguardando Veículo', motivo: 'entrada registrada por engano' },
+      corpo: { revisaoId: revs.json[revs.json.length - 1].revisaoId,
+               motivo: 'informação incorreta' },
     });
     assert.equal(r.status, 200, r.texto);
-
     const { rows } = await pool.query(
-      'SELECT pedida_por, aprovada_por, executada_em FROM acoes_criticas WHERE acao_id = $1',
-      [p.json.acao_id]
-    );
-    assert.equal(rows[0].pedida_por, 'Admin Um');
-    assert.equal(rows[0].aprovada_por, 'Admin Dois');
-    assert.ok(rows[0].executada_em, 'a execução precisa ficar carimbada');
+      `SELECT acao FROM log_eventos WHERE carga_id = $1
+        ORDER BY data_evento DESC LIMIT 3`, [cargaId]);
+    assert.ok(rows.some((l) => (l.acao || '').includes('informação incorreta')),
+      'motivo da restauração precisa estar no log: '
+      + JSON.stringify(rows.map((l) => l.acao)));
   });
 
-  test('a MESMA aprovação não serve duas vezes', async () => {
-    const { rows } = await pool.query(
-      `SELECT acao_id FROM acoes_criticas
-        WHERE carga_id = $1 AND executada_em IS NOT NULL ORDER BY acao_id DESC LIMIT 1`,
-      [cargaId]
-    );
+  test('a Logística continua sem poder reescrever o passado', async () => {
     const r = await req(`/api/cargas/${cargaId}/corrigir-etapa`, {
-      metodo: 'POST', token: adm.a,
-      corpo: { acaoId: rows[0].acao_id, status: 'Faturado', motivo: 'reusando aprovação' },
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { status: 'Faturado', motivo: 'nao deveria passar' },
     });
-    assert.equal(r.status, 409);
-    assert.equal(r.json.codigo, 'APROVACAO_JA_USADA');
+    assert.equal(r.status, 403);
+    assert.equal(r.json.codigo, 'SETOR_SEM_PERMISSAO');
   });
 
-  test('aprovação de OUTRA carga não vale para esta', async () => {
-    const p = await req('/api/acoes-criticas', {
+  test('as rotas de pedido/aprovação não existem mais', async () => {
+    const pedir = await req('/api/acoes-criticas', {
       metodo: 'POST', token: adm.a,
-      corpo: { tipo: 'corrigir-etapa', cargaId: 'carga_outra_qualquer', motivo: 'de outra carga' },
+      corpo: { tipo: 'corrigir-etapa', cargaId, motivo: 'x' },
     });
-    await req(`/api/acoes-criticas/${p.json.acao_id}/aprovar`, { metodo: 'POST', token: adm.b });
-    const r = await req(`/api/cargas/${cargaId}/corrigir-etapa`, {
-      metodo: 'POST', token: adm.a,
-      corpo: { acaoId: p.json.acao_id, status: 'Faturado', motivo: 'aprovação de outra carga' },
-    });
-    assert.equal(r.status, 409);
-    assert.equal(r.json.codigo, 'APROVACAO_NAO_CONFERE');
-  });
-
-  test('a recusa também fica registrada, com autor e motivo', async () => {
-    const p = await req('/api/acoes-criticas', {
-      metodo: 'POST', token: adm.a,
-      corpo: { tipo: 'restaurar', cargaId, motivo: 'pedido que será recusado' },
-    });
-    const r = await req(`/api/acoes-criticas/${p.json.acao_id}/recusar`, {
-      metodo: 'POST', token: adm.b, corpo: { motivo: 'não procede' },
-    });
-    assert.equal(r.status, 200);
-    assert.equal(r.json.recusada_por, 'Admin Dois');
-    const seg = await req(`/api/acoes-criticas/${p.json.acao_id}/aprovar`, {
-      metodo: 'POST', token: adm.b,
-    });
-    assert.equal(seg.status, 409, 'pedido recusado não pode ser aprovado depois');
+    assert.equal(pedir.status, 404, 'POST /acoes-criticas saiu em 25/08');
+    const listar = await req('/api/acoes-criticas', { token: adm.a });
+    assert.equal(listar.status, 404, 'GET /acoes-criticas saiu em 25/08');
   });
 });
 

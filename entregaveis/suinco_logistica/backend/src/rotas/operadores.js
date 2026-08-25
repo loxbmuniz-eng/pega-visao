@@ -228,12 +228,73 @@ rotasOperadores.patch('/operadores/:id', SO_ADMIN, async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-/* Não existe DELETE de propósito.
+/* EXCLUIR OPERADOR — pedido do dono (25/08/2026): "não tem um botão
+   excluir usuários, somente bloquear, preciso poder excluir também".
+   =====================================================================
 
-   O log de auditoria referencia o operador. Apagar quem registrou a saída
-   de um caminhão destrói a rastreabilidade justamente do caso em que ela
-   seria consultada. Desativar bloqueia o acesso e preserva o histórico —
-   é o que a auditoria precisa e o que a LGPD tolera muito melhor. */
+   Aqui existia um comentário dizendo que o DELETE não existia de propósito,
+   porque "o log de auditoria referencia o operador" e apagá-lo destruiria a
+   rastreabilidade. Fui conferir antes de mexer, e a premissa estava errada:
+
+     - log_eventos e fact_statusfrota guardam operador_nome e setor como
+       TEXTO COPIADO no momento do registro, não como referência à tabela.
+       O histórico continua dizendo "Bruno, Portaria, 09:30" depois de a
+       conta ser apagada.
+     - A única chave estrangeira apontando para operadores é
+       mfa_codigos_recuperacao, com ON DELETE CASCADE — os códigos de
+       recuperação da própria pessoa, que não fazem sentido sem ela.
+
+   Então o histórico sobrevive. O que se perde é o vínculo com a CONTA (o
+   e-mail, a data de criação, o último acesso). Para quem só quer tirar da
+   lista alguém que saiu da empresa, é o que se espera.
+
+   DESATIVAR CONTINUA SENDO O CAMINHO NORMAL, e a tela diz isso: desativar
+   bloqueia o acesso na hora e mantém a ficha. Excluir é para o cadastro
+   errado, o teste, o duplicado.
+
+   A sessão morre sozinha: sessaoAindaVale devolve OPERADOR_INEXISTENTE
+   quando a linha some, e a pessoa cai no próximo pedido ao servidor. */
+rotasOperadores.delete('/operadores/:id', SO_ADMIN, async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+      return res.status(400).json({ erro: 'Id inválido.', codigo: 'ID_INVALIDO' });
+    }
+
+    const { rows: atual } = await consultar(
+      'SELECT id, email, nome, setor, ativo FROM operadores WHERE id = $1', [id]
+    );
+    if (!atual[0]) {
+      return res.status(404).json({ erro: 'Operador não encontrado.', codigo: 'NAO_ENCONTRADO' });
+    }
+
+    /* MESMA TRAVA DO DESATIVAR, e por um motivo mais forte: desativar a si
+       mesmo se desfaz por outro administrador; excluir a si mesmo não se
+       desfaz de jeito nenhum pela tela. */
+    if (String(id) === String(req.operador.id)) {
+      return res.status(409).json({
+        erro: 'Você não pode excluir a si mesmo. Peça a outro administrador.',
+        codigo: 'NAO_PODE_EXCLUIR_A_SI',
+      });
+    }
+
+    /* NÃO EXISTE TRAVA DE "ÚLTIMO ADMINISTRADOR" AQUI, e não é esquecimento.
+
+       Eu escrevi uma e o teste mostrou que ela nunca dispararia: quem
+       chama esta rota já é um administrador ATIVO (SO_ADMIN exige), e
+       acabou de ser impedido de excluir a si mesmo. Logo, depois de
+       qualquer exclusão bem-sucedida sobra pelo menos ele. Chegar a zero
+       administradores por este caminho é impossível, e uma verificação que
+       não pode falhar só faz o leitor achar que o risco existe.
+
+       O caminho que REALMENTE leva a zero é o desativar — e lá a trava
+       existe (AUTO_DESATIVACAO, no PATCH acima). */
+    await consultar('DELETE FROM operadores WHERE id = $1', [id]);
+    console.log(`[operadores] ${req.operador.nome} EXCLUIU ${atual[0].email}`);
+
+    res.json({ excluido: true, id: String(id), email: atual[0].email, nome: atual[0].nome });
+  } catch (e) { next(e); }
+});
 
 /* RESET DO SEGUNDO FATOR PELO ADMINISTRADOR — o celular perdido sem os
    códigos de recuperação.

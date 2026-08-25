@@ -1001,86 +1001,24 @@ async function entrarNoServidor(){
 }
 
 /* =====================================================================
-   PEDIDOS DE APROVAÇÃO — o outro lado da segunda assinatura
+   PEDIDOS DE APROVAÇÃO — desligado em 25/08/2026
    =====================================================================
-   Etapa 3 do protocolo de segurança travou restaurar, corrigir etapa e
-   devolver carga excluída atrás do aval de um segundo administrador — no
-   servidor, e só lá. A tela continuou com o botão antigo, e o resultado
-   foi um administrador clicando em "Restaurar esta versão" para ouvir que
-   precisava de um aval que não tinha onde ser pedido.
+   Este card era o outro lado da segunda assinatura: quem pedia para
+   restaurar, corrigir etapa ou devolver carga excluída aparecia aqui para
+   outro administrador aprovar.
 
-   Sem esta tela o pedido some no banco e ninguém sabe que existe. É o par
-   obrigatório da trava: quem pede tem onde pedir, quem aprova tem onde
-   ver. */
+   O dono tirou a exigência ("quem for da administração não precisa da
+   autorização de nada") e, com ela, este card perdeu função: não há mais
+   pedido nenhum a fazer. Ver o comentário no topo de
+   backend/src/rotas/cargas.js para o que a trava protegia e o que ficou
+   no lugar dela.
+
+   A função continua existindo e continua sendo chamada de um lugar só —
+   para MANTER O CARD ESCONDIDO. Sem isto, o card do HTML voltaria a
+   aparecer vazio para quem estivesse com a página aberta. */
 async function renderPedidosAprovacaoUI(){
-  const alvo = document.getElementById('aprovacoes-painel');
   const card = document.getElementById('card-aprovacoes');
-  if(!alvo || !card) return;
-  if((DB.operador||{}).setor !== 'Administração'){ card.hidden = true; return; }
-
-  let lista;
-  try{
-    lista = await SuincoSharePoint.acoesCriticas.listar();
-  }catch(e){ card.hidden = true; return; }
-
-  const abertos = (lista || []).filter(a => !a.aprovada_em && !a.recusada_em);
-  const recentes = (lista || []).filter(a => a.aprovada_em && !a.executada_em && !a.recusada_em);
-  card.hidden = false;
-
-  if(!abertos.length && !recentes.length){
-    alvo.innerHTML = '<div class="card-sub">Nenhum pedido aguardando. '
-      + 'Quando alguém pedir para restaurar ou devolver uma carga, aparece aqui.</div>';
-    return;
-  }
-
-  const NOME = { 'restaurar':'Restaurar versão anterior',
-    'desfazer-exclusao':'Devolver carga excluída', 'corrigir-etapa':'Corrigir etapa' };
-
-  const linha = (a, aguardando) => `
-    <div class="aprov-item ${aguardando ? '' : 'aprov-ok'}">
-      <div class="aprov-cab">
-        <strong>${esc(NOME[a.tipo] || a.tipo)}</strong>
-        <span class="aprov-quando">${esc(dataHoraBR(a.pedida_em))}</span>
-      </div>
-      <div class="aprov-motivo">"${esc(a.motivo)}"</div>
-      <div class="card-sub">pedido por ${esc(a.pedida_por)}${a.aprovada_por
-        ? ` · aprovado por ${esc(a.aprovada_por)}` : ''}</div>
-      ${aguardando ? (a.podeAprovar
-        ? `<div class="form-row" style="margin-top:8px">
-             <button class="btn btn-primary btn-sm" onclick="aprovarAcaoUI(${Number(a.acao_id)})">Aprovar</button>
-             <button class="btn btn-sec btn-sm" onclick="recusarAcaoUI(${Number(a.acao_id)})">Recusar</button>
-           </div>`
-        : '<div class="card-sub aprov-aviso">Você fez este pedido — quem pede não aprova. '
-          + 'Peça a outro administrador.</div>')
-        : '<div class="card-sub aprov-aviso">Aprovado. Quem pediu já pode concluir a ação.</div>'}
-    </div>`;
-
-  alvo.innerHTML = (abertos.map(a => linha(a, true)).join('')
-    + recentes.map(a => linha(a, false)).join(''));
-}
-
-async function aprovarAcaoUI(acaoId){
-  if(!confirm('Aprovar este pedido? Quem pediu poderá concluir a ação, '
-    + 'e os dois nomes ficam registrados.')) return;
-  try{
-    await SuincoSharePoint.acoesCriticas.aprovar(acaoId);
-    notify('Pedido aprovado.', 'success');
-    renderPedidosAprovacaoUI();
-  }catch(e){
-    notify(e && e.message || 'Não consegui aprovar.', 'danger', 7000);
-  }
-}
-
-async function recusarAcaoUI(acaoId){
-  const motivo = prompt('Por que está recusando? (fica registrado)');
-  if(!motivo || !motivo.trim()) return;
-  try{
-    await SuincoSharePoint.acoesCriticas.recusar(acaoId, motivo.trim());
-    notify('Pedido recusado.', 'warn');
-    renderPedidosAprovacaoUI();
-  }catch(e){
-    notify(e && e.message || 'Não consegui recusar.', 'danger', 7000);
-  }
+  if(card) card.hidden = true;
 }
 
 /* =====================================================================
@@ -1791,54 +1729,20 @@ async function abrirRevisoesUI(id){
   }
 }
 
-/* SEGUNDA ASSINATURA NA TELA (23/08/2026).
-
-   A etapa 3 do protocolo de segurança passou a exigir dois administradores
-   para restaurar — e eu tinha implementado a TRAVA sem implementar o
-   CAMINHO. O resultado apareceu no celular do Alysson: o botão recusava com
-   "precisa de um pedido aprovado por outro administrador" e não havia lugar
-   nenhum para fazer esse pedido. Trava sem caminho não é controle, é porta
-   emperrada.
-
-   Agora o mesmo botão faz as duas coisas: se já existe aprovação pendente
-   para esta carga, executa; se não existe, ABRE O PEDIDO ali mesmo. Quem
-   aprova vê no card "Pedidos de aprovação", na aba Usuários. */
-async function pedirAprovacaoUI(tipo, cargaId, oQueFaz){
-  const motivo = prompt(`${oQueFaz}\n\nEsta ação reescreve o histórico da carga e precisa `
-    + 'do aval de OUTRO administrador.\n\nPor que ela é necessária?');
-  if(!motivo || !motivo.trim()) return null;
-  try{
-    const p = await SuincoSharePoint.acoesCriticas.pedir(tipo, cargaId, motivo.trim());
-    notify('Pedido enviado. Assim que outro administrador aprovar, clique de novo para concluir.',
-      'success', 9000);
-    return p;
-  }catch(e){
-    notify('Não consegui abrir o pedido: ' + (e && e.message || 'erro'), 'danger', 7000);
-    return null;
-  }
-}
-
-/* Procura uma aprovação já concedida e ainda não usada para esta carga. */
-async function aprovacaoDisponivel(tipo, cargaId){
-  try{
-    const lista = await SuincoSharePoint.acoesCriticas.listar();
-    const achada = (lista || []).find(a => a.tipo === tipo && a.carga_id === cargaId
-      && a.aprovada_em && !a.executada_em && !a.recusada_em);
-    return achada ? achada.acao_id : null;
-  }catch(e){ return null; }
-}
-
 async function restaurarRevisaoUI(id, revisaoId){
-  const acaoId = await aprovacaoDisponivel('restaurar', id);
-  if(!acaoId){
-    await pedirAprovacaoUI('restaurar', id,
-      'Restaurar a carga para uma versão anterior.');
-    return;
-  }
-  if(!confirm('Restaurar esta versão? A carga volta EXATAMENTE ao estado mostrado, '
-    + 'em todos os aparelhos. A ação fica registrada no seu nome e no de quem aprovou.')) return;
+  /* UMA CAIXA, e a ação acontece (25/08/2026).
+
+     Até aqui isto abria um PEDIDO e esperava outro administrador aprovar.
+     O dono tirou essa exigência — ver o comentário no topo de
+     backend/src/rotas/cargas.js para o que a trava protegia e o que ficou
+     no lugar dela. O motivo continua obrigatório porque é ele que
+     responde "por que esta carga voltou" no histórico. */
+  const motivo = (prompt('Restaurar a carga para esta versão?\n\n'
+    + 'A carga volta EXATAMENTE ao estado mostrado, em todos os aparelhos.\n\n'
+    + 'Por que ela precisa voltar? (fica no histórico com o seu nome)')||'').trim();
+  if(!motivo) return;
   try{
-    const restaurada = await SuincoSharePoint.restaurarRevisao(id, revisaoId, acaoId);
+    const restaurada = await SuincoSharePoint.restaurarRevisao(id, revisaoId, motivo);
     // O servidor é a fonte da verdade da restauração: aplica a resposta
     // localmente na hora, sem esperar o próximo ciclo de sincronização.
     const local = getCarga(id);
@@ -5322,20 +5226,11 @@ async function corrigirEtapaCargaUI(id){
   if(!c || !status) return;
   if(status === c.status){ notify('A carga já está nessa etapa.','warn'); return; }
   if(!motivo){ notify('Escreva o motivo da correção de etapa.','warn'); return; }
-  // Mesma trava e mesmo caminho de "Restaurar": o servidor exige o aval de
-  // outro administrador, então a tela precisa saber PEDIR esse aval. Sem
-  // isto o botão só informa que não pode — foi o beco sem saída relatado.
-  const acaoId = await aprovacaoDisponivel('corrigir-etapa', id);
-  if(!acaoId){
-    await pedirAprovacaoUI('corrigir-etapa', id,
-      `Mudar a etapa da carga ${c.numeroCarga || c.placa} de "${c.status}" para "${status}".`);
-    return;
-  }
   const voltando = STATUS_FLOW.indexOf(status) < STATUS_FLOW.indexOf(c.status);
   if(!confirm(`${voltando ? 'VOLTAR' : 'Avançar'} a carga ${c.numeroCarga || c.placa} de "${c.status}" para "${status}"?\n\n`
     + 'Isso muda o andamento para todos os setores e fica registrado no histórico.')) return;
   try{
-    await SuincoSharePoint.corrigirEtapa(id, status, motivo, acaoId);
+    await SuincoSharePoint.corrigirEtapa(id, status, motivo);
     await SuincoSharePoint.sincronizarAgora();
     notifyGravacao(`Etapa corrigida: ${c.status} → ${status}.`);
     renderAll();
@@ -5658,17 +5553,11 @@ async function carregarCargasExcluidasUI(){
 }
 
 async function devolverCargaExcluidaUI(id){
-  const acaoId = await aprovacaoDisponivel('desfazer-exclusao', id);
-  if(!acaoId){
-    await pedirAprovacaoUI('desfazer-exclusao', id,
-      'Devolver ao painel uma carga que tinha sido excluída.');
-    return;
-  }
   const motivo = (prompt('Por que esta carga está voltando?\n\n'
     + 'O motivo fica registrado no histórico com o seu nome.')||'').trim();
   if(!motivo) return;
   try{
-    await SuincoSharePoint.desfazerExclusao(id, motivo, acaoId);
+    await SuincoSharePoint.desfazerExclusao(id, motivo);
     await SuincoSharePoint.sincronizarAgora();
     notifyGravacao('Carga devolvida ao painel.');
     renderAll();
@@ -7662,6 +7551,9 @@ async function renderUsuarios(){
           ${u.ativo
             ? `<button class="btn btn-danger btn-sm" onclick="bloquearUsuarioUI('${escJs(u.id)}', false)" ${sou?'disabled title="Você não pode bloquear a si mesmo"':''}>🚫 Bloquear</button>`
             : `<button class="btn btn-success btn-sm" onclick="bloquearUsuarioUI('${escJs(u.id)}', true)">✅ Reativar</button>`}
+          ${sou ? '' : `<button class="btn btn-danger btn-sm btn-excluir-usuario"
+              onclick="excluirUsuarioUI('${escJs(u.id)}')"
+              title="Apaga a conta de vez. O histórico do que a pessoa registrou continua.">🗑️ Excluir</button>`}
         </div>
       </td>
     </tr>`;
@@ -7728,6 +7620,41 @@ async function bloquearUsuarioUI(id, ativar){
     notify(`${u.nome} ${ativar ? 'reativado' : 'bloqueado'}.`, 'success');
   }catch(e){
     notify(`Não conseguiu ${acao.toLowerCase()}: ` + e.message, 'danger');
+  }
+  renderUsuarios();
+}
+
+/* EXCLUIR DE VEZ — pedido do dono (25/08/2026): "não tem um botão excluir
+   usuários, somente bloquear, preciso poder excluir também".
+
+   Bloquear continua sendo o caminho normal, e a caixa de confirmação diz
+   isso em vez de só perguntar "tem certeza?": quem saiu da empresa fica
+   melhor BLOQUEADO (perde o acesso, mantém a ficha). Excluir é para o
+   cadastro errado, o teste e o duplicado.
+
+   Confirmação DIGITADA, não um "OK". Excluir conta não se desfaz pela
+   tela, e o clique de reflexo em cima do botão vermelho ao lado do
+   Bloquear é justamente o erro provável aqui. */
+async function excluirUsuarioUI(id){
+  const u = _usuarioPorId(id);
+  if(!u) return;
+  const resposta = prompt(`EXCLUIR a conta de ${u.nome} (${u.email})?\n\n`
+    + 'A conta some da lista e a pessoa cai na hora. Isto NÃO se desfaz.\n\n'
+    + 'O histórico do que ela registrou (chegadas, saídas, faturamentos) '
+    + 'continua no sistema com o nome dela.\n\n'
+    + 'Se a pessoa só saiu da empresa, BLOQUEAR é melhor: tira o acesso e '
+    + 'mantém a ficha.\n\n'
+    + 'Para confirmar, digite EXCLUIR:');
+  if(resposta === null) return;
+  if(resposta.trim().toUpperCase() !== 'EXCLUIR'){
+    notify('Não excluí — a confirmação não conferiu.', 'warn', 5000);
+    return;
+  }
+  try{
+    await SuincoSharePoint.excluirOperador(id);
+    notify(`Conta de ${u.nome} excluída.`, 'success', 6000);
+  }catch(e){
+    notify('Não consegui excluir: ' + (e && e.message || 'erro'), 'danger', 9000);
   }
   renderUsuarios();
 }

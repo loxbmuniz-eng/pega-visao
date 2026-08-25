@@ -1337,18 +1337,11 @@
   <div class="tab-page" id="tab-usuarios">
     <div class="funcao-aba" data-tab="usuarios"></div>
 
-    <!-- PEDIDOS DE APROVAÇÃO — o par obrigatório da trava de segunda
-         assinatura (etapa 3). Só Administração.
-
-         Vem antes de tudo nesta aba porque é a única coisa aqui que outra
-         pessoa está ESPERANDO: enquanto um pedido fica sem resposta, tem
-         administrador parado num botão que só sabe dizer não. -->
-    <div class="card" id="card-aprovacoes" hidden>
-      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-alerta"/></svg> Pedidos de aprovação</div>
-      <div class="card-sub">Restaurar versão, devolver carga excluída e corrigir etapa reescrevem o
-        histórico do pátio — por isso pedem dois administradores. Quem pede não aprova.</div>
-      <div id="aprovacoes-painel"></div>
-    </div>
+    <!-- O card "Pedidos de aprovação" ficava aqui e saiu em 25/08/2026,
+         junto com a exigência de segunda assinatura. O elemento continua
+         no HTML, sempre escondido, para não quebrar quem tiver a página
+         antiga aberta; ver renderPedidosAprovacaoUI em app.js. -->
+    <div class="card" id="card-aprovacoes" hidden></div>
 
     <!-- MINHA SEGURANÇA — o segundo fator de quem está logado (etapa 4).
          Vale para TODOS os setores: qualquer pessoa pode proteger a própria
