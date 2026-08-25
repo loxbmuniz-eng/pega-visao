@@ -250,6 +250,14 @@ async def main():
             auditar_lixo('Fretes', h)
             ck('Fretes: traz a carga QLD-1 com a observação',
                'QLD-1' in h and 'Observacao de auditoria' in h)
+            # PLACA — pedido do dono (25/08/2026): "está faltando uma coluna
+            # placa". Quem confere frete negocia com a TRANSPORTADORA, e é a
+            # placa que liga a linha ao veículo que rodou; o número da carga
+            # é o índice do sistema, não o que se fala no telefone.
+            ck('Fretes: tem a coluna Placa no cabeçalho', '>Placa<' in h,
+               'cabeçalho sem a coluna')
+            ck('Fretes: e a placa da carga aparece na linha', placa in h,
+               f'esperava {placa}')
 
         print('\n=== 5. RELATÓRIO INDIVIDUAL DA CARGA ===')
         h = await gerar('Carga', 'async (id) => { await relatorioDaCargaUI(id); }', cargaId)

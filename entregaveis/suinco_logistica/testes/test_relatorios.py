@@ -179,7 +179,15 @@ async def main():
         }''')
         ck('Fretes tem container próprio', f['containerProprio'],
            'compartilhar com o Operacional era a causa da fonte minúscula')
-        ck('três colunas, como pedido', f['colunas'] == ['Número da Carga','Rota','Observações'],
+        # QUATRO colunas desde 25/08/2026, não três. O dono conferiu o
+        # relatório em campo e faltava a placa: "o relatorio de administracao
+        # de fretes precisa aparecer a placa tambem, acabei de checar aqui e
+        # esta faltando uma coluna placa". Sem ela, quem confere o frete não
+        # sabe qual caminhão fez a viagem que está cobrando — o número da
+        # carga sozinho obriga a abrir outro relatório.
+        # A regra mudou de propósito; o teste segue a regra nova.
+        ck('quatro colunas — a placa entrou em 25/08',
+           f['colunas'] == ['Número da Carga','Placa','Rota','Observações'],
            str(f['colunas']))
         ck('fonte de leitura na tela', f['fonteTela'] >= 12, f"{f['fonteTela']}px")
 

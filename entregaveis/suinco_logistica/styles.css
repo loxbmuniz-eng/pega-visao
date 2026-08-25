@@ -3258,12 +3258,20 @@ input,select,textarea{border-radius:5px}
 .doc-nota strong{ color:var(--text) }
 .doc-assinatura{ font-size:9.5px; opacity:.75; letter-spacing:.02em }
 
-/* ---- Relatório de Fretes: três colunas, papel em pé ---- */
+/* ---- Relatório de Fretes: quatro colunas, papel em pé ----
+   A Placa entrou a pedido do dono (25/08/2026): quem confere frete
+   negocia com a TRANSPORTADORA, e é a placa que liga a linha ao veículo
+   que rodou. As larguras saíram de 20/28 para 17/16/24 — Observações
+   continua com o resto, que é onde o texto de verdade mora. */
 .tab-fretes .col-carga{
-  width:20%; font-weight:800; font-variant-numeric:tabular-nums;
+  width:17%; font-weight:800; font-variant-numeric:tabular-nums;
   background:rgba(185,144,63,.16);
 }
-.tab-fretes .col-rota{ width:28% }
+.tab-fretes .col-placa{
+  width:16%; font-weight:800; letter-spacing:.4px; text-transform:uppercase;
+  white-space:nowrap;
+}
+.tab-fretes .col-rota{ width:24% }
 .tab-fretes .col-obs{ white-space:normal; line-height:1.5 }
 .obs-pendente{
   font-style:italic; opacity:.55; font-size:.92em;

@@ -2522,6 +2522,14 @@ function dadosAdministracaoFretes(cargas){
     })
     .map(c => ({
       numeroCarga: c.numeroCarga || '—',
+      /* PLACA — pedido do dono (25/08/2026): "o relatório de administração
+         de fretes precisa aparecer a placa também, está faltando".
+
+         Ele tem razão e o motivo é o assunto do relatório: quem confere
+         frete negocia com a TRANSPORTADORA, e a placa é o que liga a linha
+         ao veículo que rodou. Número da carga é o índice do sistema; a
+         placa é como a conversa acontece no telefone. */
+      placa: c.placa || '—',
       rota: rotaCurta(c.rota) || '—',
       observacoes: c.observacoes || ''
     }));
