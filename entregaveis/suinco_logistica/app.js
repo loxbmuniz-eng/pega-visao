@@ -1051,20 +1051,50 @@ async function renderMinhaSegurancaUI(){
     <button class="btn btn-primary btn-sm" onclick="iniciarMfaUI()">Ativar segundo fator</button>`;
 }
 
+/* ATIVAR O SEGUNDO FATOR — com QR, porque é assim que a pessoa faz.
+
+   Pedido do gestor (25/08/2026): "a autenticação de dois fatores eu quero
+   pelo Microsoft Authenticator".
+
+   O painel já falava a língua do aplicativo — o que faltava era o QR. Antes,
+   a tela pedia que a pessoa achasse "inserir chave manualmente" dentro de um
+   menu do aplicativo e digitasse 32 caracteres embaralhados no celular. É o
+   passo em que a adesão morre: quem erra dois caracteres não sabe que errou,
+   vê "código inválido" e desiste.
+
+   A CHAVE CONTINUA NA TELA, embaixo do QR e sem destaque. Não é redundância
+   boba: câmera quebrada, permissão negada, aplicativo de empresa que só
+   aceita entrada manual — e QR na tela de computador que o operador acessa
+   pelo próprio celular (não dá para fotografar a própria tela). Uma saída
+   só é uma saída frágil.
+
+   Se o desenho do QR falhar por qualquer motivo, a tela mostra a chave e
+   segue funcionando — nunca um quadrado quebrado no lugar. */
 async function iniciarMfaUI(){
   const alvo = document.getElementById('mfa-painel');
   try{
     const r = await SuincoSharePoint.mfa.iniciar();
+    const qr = (typeof SuincoQR !== 'undefined' && r.endereco)
+      ? SuincoQR.svg(r.endereco, 190) : null;
     alvo.innerHTML = `
       <div class="mfa-passos">
-        <div class="mfa-passo"><strong>1.</strong> Instale um aplicativo autenticador no celular
-          (Google Authenticator ou Microsoft Authenticator — os dois são gratuitos).</div>
-        <div class="mfa-passo"><strong>2.</strong> No aplicativo, escolha
-          <em>inserir chave manualmente</em> e digite esta chave:
-          <div class="mfa-segredo">${esc((r.segredo.match(/.{1,4}/g) || []).join(' '))}</div>
-          <span class="card-sub">Conta: Embarque Suinco · ${esc((DB.operador||{}).email || '')}</span>
+        <div class="mfa-passo"><strong>1.</strong> No celular, abra o
+          <strong>Microsoft Authenticator</strong> (ou o Google Authenticator —
+          os dois servem e são gratuitos).</div>
+        <div class="mfa-passo"><strong>2.</strong> Toque em <em>+</em> →
+          <em>Conta corporativa ou de estudante</em> → <em>Ler código QR</em>
+          e aponte a câmera para o quadrado abaixo.
+          ${qr ? `<div class="mfa-qr">${qr}</div>` : ''}
+          <details class="mfa-manual">
+            <summary>Não consegue ler o código? Digite a chave</summary>
+            <div class="card-sub" style="margin-top:6px">No aplicativo, escolha
+              <em>inserir chave manualmente</em> e digite:</div>
+            <div class="mfa-segredo">${esc((r.segredo.match(/.{1,4}/g) || []).join(' '))}</div>
+            <span class="card-sub">Conta: Embarque Suinco · ${esc((DB.operador||{}).email || '')}</span>
+          </details>
         </div>
-        <div class="mfa-passo"><strong>3.</strong> Digite abaixo o código de 6 dígitos que aparecer:
+        <div class="mfa-passo"><strong>3.</strong> Digite abaixo o código de 6 dígitos
+          que o aplicativo mostrar:
           <div class="form-row" style="margin-top:8px">
             <input type="text" id="mfa-confirmar-codigo" placeholder="000000" maxlength="6"
                    inputmode="numeric" style="max-width:140px">
@@ -3809,7 +3839,63 @@ function acaoRapidaPlaca(inputId, statusOrigem, statusDestino){
   }
   abrirModalPicker(elegiveis, statusDestino, ()=>{ input.value=''; });
 }
-function executarAvanco(cargaId, statusDestino){
+/* FATURAR PEDE CONFIRMAÇÃO — e mostra QUAL carga (25/08/2026).
+
+   Pedido do gestor: "quando o faturista clicar em FATURAR, aparecer um
+   alerta na tela para confirmar aquela etapa".
+
+   Faturar é a última etapa do pátio e a única que sai do painel para o
+   dinheiro. Diferente de "Iniciar Embarque", que a pessoa corrige em
+   dois cliques, uma carga faturada por engano vira nota emitida.
+
+   A pergunta NÃO é "tem certeza?" — essa todo mundo aprende a clicar sem
+   ler. A pergunta é "é esta carga?", e por isso a janela mostra número,
+   placa, transportadora, destino e peso. O erro que ela existe para pegar
+   é o de LINHA trocada numa tabela de dez cargas, não o de dedo.
+
+   A trava mora aqui, no executarAvanco, e não no botão: as duas portas
+   que chegam a "Faturado" (o botão da linha e o campo de placa da ação
+   rápida, que ainda passa pelo seletor quando a placa tem mais de uma
+   carga) desembocam nesta função. Guardar só o botão deixaria a outra
+   porta destrancada. */
+let _faturarPendente = null;
+
+function pedirConfirmacaoFaturamentoUI(cargaId){
+  const c = getCarga(cargaId);
+  if(!c){ notify('Carga não encontrada.', 'danger'); return; }
+  _faturarPendente = cargaId;
+  const linha = (rot, val) => `<div class="fat-conf-linha">
+      <span class="fat-conf-rot">${rot}</span>
+      <span class="fat-conf-val">${esc(val) || '—'}</span></div>`;
+  document.getElementById('faturar-resumo').innerHTML =
+      linha('Nº da carga', c.numeroCarga)
+    + linha('Placa', c.placa)
+    + linha('Transportadora', c.transportadora)
+    + linha('Destino', c.destino)
+    + linha('Peso', `${(c.peso || 0).toLocaleString('pt-BR')} kg`);
+  document.getElementById('modal-faturar').classList.add('open');
+  // O foco vai para CANCELAR, não para o botão que age: quem apertar Enter
+  // por reflexo não fatura sem ler.
+  const cancelar = document.getElementById('faturar-cancelar');
+  if(cancelar) cancelar.focus();
+}
+
+function fecharModalFaturar(){
+  document.getElementById('modal-faturar').classList.remove('open');
+  _faturarPendente = null;
+}
+
+function confirmarFaturamentoUI(){
+  const id = _faturarPendente;
+  fecharModalFaturar();
+  if(id) executarAvanco(id, 'Faturado', true);
+}
+
+function executarAvanco(cargaId, statusDestino, jaConfirmado){
+  if(statusDestino === 'Faturado' && !jaConfirmado){
+    pedirConfirmacaoFaturamentoUI(cargaId);
+    return;
+  }
   try{
     const c = getCarga(cargaId);
     avancarStatusCarga(cargaId, statusDestino, nomeOperadorAtual(), setorOperadorAtual());

@@ -1,0 +1,32 @@
+[
+  {
+    "texto": "HELLO",
+    "lado": 21,
+    "sha256": "32fbc389880456d584e32bdf2c31372391c92f9f853e119a75bec5e14c380a23"
+  },
+  {
+    "texto": "otpauth://totp/A%3Ab?secret=AAAA&issuer=A",
+    "lado": 29,
+    "sha256": "f747998ab07235cf019a8a50b235fa7dfd443881de87f2be5598a4d654244b93"
+  },
+  {
+    "texto": "otpauth://totp/Embarque%20Suinco%3Aa%40b.co?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP&issuer=Embarque%20Suinco&algorithm=SHA1&digits=6&period=30",
+    "lado": 49,
+    "sha256": "f9ba959eff5c43a94b22827ce02664ed65c207af4e14fe1a4eaebbfa4ef5f436"
+  },
+  {
+    "texto": "otpauth://totp/Embarque%20Suinco%3Aana%40teste.local?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP&issuer=Embarque%20Suinco&algorithm=SHA1&digits=6&period=30",
+    "lado": 49,
+    "sha256": "615c6e636b79d2aa60eb615efeeb30be1c779f2460bfd494d93b9a3cf17af952"
+  },
+  {
+    "texto": "otpauth://totp/Embarque%20Suinco%3Aluiz.otavio.muniz%40suinco.com.br?secret=MFRGGZDFMZTWQ2LKNNWG23TPOA5XA43F&issuer=Embarque%20Suinco&algorithm=SHA1&digits=6&period=30",
+    "lado": 53,
+    "sha256": "cc53e88def70a89698fa17b9bed8ead45478d8f0408c0b85e4341cd8a2d1f11a"
+  },
+  {
+    "texto": "acentuação: João Gonçalves — ção",
+    "lado": 29,
+    "sha256": "dabcaa0d108a2cc5a06fbf150e84e5357630cd9bf1e3839ad58ab39602b0f1a8"
+  }
+]
