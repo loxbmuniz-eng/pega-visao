@@ -7969,44 +7969,185 @@ function renderMontagem(){
     }
   }
 
+  /* O BOTÃO DE LOTE. Na sexta são 39 cargas; confirmar uma a uma é o
+     pedágio que faz a pessoa desistir e voltar para o Excel. */
+  const prontas = vivas.filter(m => m.placa && !m.efetivada_em);
+  const btnLote = document.getElementById('mont-btn-lote');
+  if(btnLote){
+    btnLote.hidden = prontas.length === 0;
+    btnLote.textContent = prontas.length === 1
+      ? '🚚 Enviar 1 carga para a Torre'
+      : `🚚 Enviar as ${prontas.length} prontas para a Torre`;
+  }
+
   const tbody = document.getElementById('mont-tbody');
   const vazio = document.getElementById('mont-empty');
   const lista = montagens;
   if(vazio) vazio.hidden = lista.length > 0;
   if(!tbody) return;
 
-  tbody.innerHTML = lista.map(m => {
-    const trancada = !!(m.efetivada_em || m.cancelada_em);
-    const id = escJs(m.montagem_id);
-    /* Linha efetivada ou cancelada vira leitura: alterar aqui depois de a
-       carga existir criaria duas verdades — a montagem e a carga — sem
-       ninguém para conciliar. Quem precisa mudar, muda na Torre. */
-    const campo = (nome, valor, tipo = 'text', extra = '') => trancada
-      ? esc(valor ?? '—')
-      : `<input type="${tipo}" value="${esc(valor ?? '')}" ${extra}
-           onchange="alterarMontagemUI('${id}','${nome}',this.value)">`;
-    const marca = m.cancelada_em
-      ? `<span class="badge badge-aguardando-veiculo">CANCELADA</span>`
-      : m.efetivada_em ? `<span class="badge badge-faturado">NA TORRE</span>` : '';
-    return `<tr${trancada ? ' class="linha-fraca"' : ''}>
-      <td>${campo('sequencia', m.sequencia, 'number', 'min="1" style="width:64px"')}</td>
+  tbody.innerHTML = lista.map(m => linhaMontagemHtml(m)).join('');
+}
+
+/* A LINHA COMO RESUMO, O FORMULÁRIO COMO DETALHE (25/08/2026)
+
+   Pedido do gestor: "cadê os campos pra poder começar a preencher essa
+   rota na programação? eu preciso que essas linhas sejam expansíveis e
+   quando se expande pode ser criada carga nela normalmente".
+
+   Antes, os campos existiam — como dez inputs espremidos numa linha de
+   tabela. Existir e ser usável são coisas diferentes: no celular aquilo
+   não cabia, e no desktop faltavam justamente os campos que a Programação
+   tem e a montagem não tinha (motorista, observações, o aviso da frota).
+
+   Agora a linha mostra o que a pessoa precisa para RECONHECER a carga
+   (sequência, rota, nº, placa, peso) e o clique abre o formulário
+   completo, na MESMA ORDEM da aba Programação. Ordem igual não é capricho:
+   é a mesma pessoa preenchendo a mesma carga, e duas telas com ordem
+   diferente para o mesmo trabalho geram erro de campo trocado. */
+let _montagemAberta = null;
+
+function alternarLinhaMontagemUI(id){
+  _montagemAberta = (_montagemAberta === id) ? null : id;
+  renderMontagem();
+  if(_montagemAberta){
+    const foco = document.getElementById(`montf-placa-${_montagemAberta}`);
+    if(foco) foco.focus();
+  }
+}
+
+function linhaMontagemHtml(m){
+  const trancada = !!(m.efetivada_em || m.cancelada_em);
+  const id = escJs(m.montagem_id);
+  const aberta = _montagemAberta === m.montagem_id && !trancada;
+  const marca = m.cancelada_em
+    ? `<span class="badge badge-aguardando-veiculo">CANCELADA</span>`
+    : m.efetivada_em ? `<span class="badge badge-faturado">NA TORRE</span>` : '';
+
+  const resumo = `<tr class="mont-linha${trancada ? ' linha-fraca' : ''}${aberta ? ' mont-linha-aberta' : ''}"
+      ${trancada ? '' : `onclick="alternarLinhaMontagemUI('${id}')" title="Clique para abrir os campos desta carga"`}>
+      <td>${m.sequencia ?? '—'}</td>
       <td><strong>${esc(m.rota_nome)}</strong> <span class="text-dim">${esc(m.rota_codigo)}</span> ${marca}
-          ${m.observacoes ? `<div class="text-dim" style="font-size:11.5px">${esc(m.observacoes)}</div>` : ''}</td>
-      <td>${campo('numeroCarga', m.numero_carga)}</td>
-      <td>${trancada ? esc(m.placa || '—')
-            : `<input type="text" class="placa-input" value="${esc(m.placa)}" placeholder="sem placa"
-                 onchange="definirPlacaMontagemUI('${id}', this.value)">`}</td>
-      <td>${campo('peso', m.peso, 'number', 'min="0"')}</td>
-      <td>${campo('qtdEntregas', m.qtd_entregas, 'number', 'min="1" style="width:64px"')}</td>
-      <td>${campo('qtdGanchos', m.qtd_ganchos, 'number', 'min="0" style="width:64px"')}</td>
-      <td>${trancada ? esc(m.paletizada)
-            : `<select onchange="alterarMontagemUI('${id}','paletizada',this.value)">
-                 <option${m.paletizada === 'Não' ? ' selected' : ''}>Não</option>
-                 <option${m.paletizada === 'Sim' ? ' selected' : ''}>Sim</option></select>`}</td>
-      <td>${campo('tipoOperacao', m.tipo_operacao)}</td>
-      <td class="no-print">${acoesMontagemHtml(m, trancada)}</td>
+          ${m.apelido_rota ? `<div class="text-dim" style="font-size:11.5px">${esc(m.apelido_rota)}</div>` : ''}</td>
+      <td>${esc(m.numero_carga) || '<span class="text-dim">—</span>'}</td>
+      <td>${m.placa
+            ? `<strong>${esc(m.placa)}</strong>`
+            : '<span class="text-dim">sem placa</span>'}</td>
+      <td>${m.peso ? Number(m.peso).toLocaleString('pt-BR') : '<span class="text-dim">—</span>'}</td>
+      <td class="no-print">${trancada
+            ? acoesMontagemHtml(m, trancada)
+            : `<span class="mont-seta${aberta ? ' aberta' : ''}" aria-hidden="true">▸</span>`}</td>
     </tr>`;
-  }).join('');
+
+  if(!aberta) return resumo;
+  return resumo + `<tr class="mont-detalhe"><td colspan="6">${formMontagemHtml(m)}</td></tr>`;
+}
+
+/* O formulário de uma carga da montagem.
+
+   A ROTA NÃO É EDITÁVEL AQUI de propósito: a linha nasceu de uma rota do
+   modelo, e trocar a rota transformaria "a segunda saída de Patos" em
+   outra coisa sem ninguém perceber. Quem errou a rota cancela a linha e
+   puxa a certa — é uma ação a mais e uma confusão a menos.
+
+   Transportadora e Tipo de Veículo também não aparecem como campo: eles
+   vêm da Frota pela placa, e deixar alguém digitar por cima criaria uma
+   segunda verdade sobre o mesmo caminhão. O aviso abaixo da placa mostra
+   o que a Frota respondeu. */
+function formMontagemHtml(m){
+  const id = escJs(m.montagem_id);
+  const alt = (campo) => `onchange="alterarMontagemUI('${id}','${campo}',this.value)"`;
+  const frota = m.placa ? buscarFrota(m.placa) : null;
+  return `
+    <div class="mont-form">
+      <div class="mont-form-tit">${esc(m.rota_nome)}
+        <span class="text-dim">${esc(m.rota_codigo)}</span>
+        ${m.apelido_rota ? `<span class="text-dim"> · ${esc(m.apelido_rota)}</span>` : ''}</div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>Placa <span class="hint">(quando o transporte for contratado)</span></label>
+          <input type="text" id="montf-placa-${esc(m.montagem_id)}" value="${esc(m.placa)}"
+                 placeholder="ABC1D23" autocomplete="off"
+                 onchange="definirPlacaMontagemUI('${id}', this.value)">
+        </div>
+        <div class="form-group">
+          <label>Transportadora <span class="hint">(da Frota)</span></label>
+          <input type="text" value="${esc(frota ? frota.transportadora : '')}"
+                 placeholder="vem da placa" disabled>
+        </div>
+        <div class="form-group">
+          <label>Tipo de Veículo <span class="hint">(da Frota)</span></label>
+          <input type="text" value="${esc(frota ? frota.tipoVeiculo : '')}"
+                 placeholder="vem da placa" disabled>
+        </div>
+      </div>
+      <div class="form-group" style="margin-bottom:10px">${avisoFrotaMontagemHtml(m)}</div>
+
+      <div class="form-row">
+        <div class="form-group"><label>Número de Carga</label>
+          <input type="text" value="${esc(m.numero_carga)}" placeholder="Ex: 10245"
+                 ${alt('numeroCarga')}></div>
+        <div class="form-group"><label>Motorista</label>
+          <input type="text" value="${esc(m.motorista)}" placeholder="Nome do motorista"
+                 ${alt('motorista')}></div>
+        <div class="form-group"><label>Tipo de Operação</label>
+          <select ${alt('tipoOperacao')}>
+            <option value=""${!m.tipo_operacao ? ' selected' : ''}>—</option>
+            ${PRA_ONDE_OPCOES.map(o =>
+              `<option${m.tipo_operacao === o ? ' selected' : ''}>${esc(o)}</option>`).join('')}
+          </select></div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group"><label>Peso (kg)</label>
+          <input type="number" min="0" value="${m.peso ?? ''}" ${alt('peso')}></div>
+        <div class="form-group">
+          <label>Sequência <span class="hint">(prioridade de montagem do dia)</span></label>
+          <input type="number" min="1" value="${m.sequencia ?? ''}" ${alt('sequencia')}></div>
+        <div class="form-group"><label>Paletizada?</label>
+          <select ${alt('paletizada')}>
+            <option${m.paletizada === 'Não' ? ' selected' : ''}>Não</option>
+            <option${m.paletizada === 'Sim' ? ' selected' : ''}>Sim</option>
+          </select></div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>Qtd. Ganchos (Gancheira) <span class="hint">0 = Liso</span></label>
+          <input type="number" min="0" step="1" value="${m.qtd_ganchos ?? 0}" ${alt('qtdGanchos')}></div>
+        <div class="form-group"><label>Qtd. Entregas</label>
+          <input type="number" min="1" step="1" value="${m.qtd_entregas ?? 1}" ${alt('qtdEntregas')}></div>
+      </div>
+
+      <div class="form-group" style="margin-bottom:10px"><label>Observações</label>
+        <textarea ${alt('observacoes')} placeholder="O que a operação precisa saber sobre esta carga">${esc(m.observacoes)}</textarea></div>
+
+      <div class="flex-end gap8">
+        <button class="btn btn-sec btn-sm" onclick="cancelarMontagemUI('${id}')">Cancelar esta linha</button>
+        <button class="btn btn-sec btn-sm" onclick="alternarLinhaMontagemUI('${id}')">Fechar</button>
+        ${m.placa
+          ? `<button class="btn btn-primary btn-sm mont-btn-criar" onclick="efetivarMontagemUI('${id}')"
+               title="Cria a carga e manda para a Torre de Controle.">➕ Criar carga</button>`
+          : `<button class="btn btn-primary btn-sm mont-btn-criar" disabled
+               title="Coloque a placa para poder criar a carga.">➕ Criar carga</button>`}
+      </div>
+    </div>`;
+}
+
+/* O mesmo aviso da aba Programação, pelo mesmo motivo: placa fora da Frota
+   BLOQUEIA a criação da carga, e descobrir isso só na hora de clicar em
+   "Criar carga" é tarde. Aqui a pessoa vê no momento em que digita. */
+function avisoFrotaMontagemHtml(m){
+  if(!m.placa) return '<span class="text-dim">Sem placa ainda — a linha fica no planejamento.</span>';
+  const f = buscarFrota(m.placa);
+  if(f){
+    return '<span class="text-dim">✅ Placa encontrada na Frota — Transportadora e Tipo de Veículo '
+      + 'vêm dela automaticamente.</span>';
+  }
+  return '<span style="color:var(--wine-light)">⛔ Placa não cadastrada na Frota — a criação da carga '
+    + 'será BLOQUEADA.</span> <span class="text-dim">Cadastre em Cadastros → Frota.</span>';
+
 }
 
 function acoesMontagemHtml(m, trancada){
@@ -8070,10 +8211,9 @@ async function aplicarModeloDoDiaUI(){
         tipoOperacao: m.tipo_operacao, qtdEntregas: m.qtd_entregas || 1,
         paletizada: m.paletizada || 'Não',
         /* O nome como a operação o conhece ("Brasília - Versatto") viaja
-           junto. O código organiza; o nome é o que a Logística reconhece
-           na hora de montar — e duas transportadoras na mesma praça
-           viram duas linhas idênticas sem ele. */
-        observacoes: m.observacoes || '',
+           junto, mas em CAMPO PRÓPRIO: `observacoes` é da pessoa que monta
+           a carga, e o apelido apagaria o que ela escreveu. */
+        apelidoRota: m.apelido_rota || '',
       });
       criadas += 1;
     } catch(e){ erros.push(`${m.rota_nome}: ${e.message || e}`); }
@@ -8128,10 +8268,75 @@ async function cancelarMontagemUI(id){
    A ordem importa: se avisasse primeiro e a criação falhasse (placa fora
    da Frota, recusa do servidor), a montagem ficaria marcada como
    efetivada apontando para uma carga que não existe. */
-async function efetivarMontagemUI(id){
+/* ENVIO EM LOTE — o pedágio que faria a pessoa voltar para o Excel.
+
+   A confirmação carga a carga é deliberada (ver efetivarMontagemUI), mas
+   na sexta são 39 linhas. Trinta e nove cliques não é cuidado, é castigo,
+   e tela que castiga é tela que a operação abandona.
+
+   O lote pergunta UMA vez, listando o que vai mandar, e segue em frente
+   quando uma linha falha: uma placa que saiu da Frota entre a montagem e o
+   clique não pode travar as outras 38. No fim, diz quantas foram e quais
+   não foram, com o motivo de cada uma. */
+async function efetivarLoteMontagemUI(){
+  const prontas = (_montagemDia?.montagens || [])
+    .filter(m => m.placa && !m.efetivada_em && !m.cancelada_em);
+  if(!prontas.length){
+    notify('Nenhuma linha com placa para enviar.', 'warn', 5000);
+    return;
+  }
+  const nomes = prontas.map(m => `${m.rota_nome} (${m.placa})`).join('\n');
+  const ok = confirm(`Criar ${prontas.length} carga(s) e mandar para a Torre de Controle?\n\n`
+    + nomes + '\n\nDepois disso elas aparecem para a Portaria e a Expedição.');
+  if(!ok) return;
+
+  let criadas = 0;
+  const erros = [];
+  for(const m of prontas){
+    try{
+      await efetivarMontagemUI(m.montagem_id, { silencioso: true });
+      criadas += 1;
+    }catch(e){
+      erros.push(`${m.rota_nome}: ${e && e.message || e}`);
+    }
+  }
+  await carregarMontagemUI();
+  renderAll();
+  if(criadas) notify(`${criadas} carga(s) criada(s) e na Torre de Controle.`, 'ok', 6000);
+  if(erros.length){
+    notify(`${erros.length} não foi/foram criada(s):\n` + erros.join('\n'), 'erro', 12000);
+  }
+}
+
+/* CRIAR A CARGA — o momento em que planejamento vira operação.
+
+   POR QUE UM CLIQUE, E NÃO AUTOMÁTICO AO DIGITAR A PLACA. A pergunta veio
+   do gestor (25/08/2026), e a resposta é o custo do erro nos dois lados.
+
+   Automático: o campo da placa grava ao sair dele. Um dígito errado, um
+   autocompletar do navegador, um Tab sem querer — e existe carga de
+   verdade na Torre. Desfazer custa ir na Torre, cancelar, e torcer para a
+   Portaria não ter registrado chegada no meio do caminho.
+
+   Com clique: o custo do erro é fechar o formulário. A montagem é um
+   RASCUNHO — placa entra, sai, troca de linha, transportadora desiste — e
+   rascunho não pode vazar para a tela que a operação usa para trabalhar.
+
+   O clique não é "tem certeza?". É a fronteira entre as duas tabelas.
+   E para o pedágio não pesar, existe o envio em lote logo acima.
+
+   `silencioso` é para o lote: ele avisa uma vez no fim, em vez de despejar
+   39 avisos na tela. Nesse modo os erros SOBEM (throw) em vez de virar
+   aviso, para o lote poder contá-los e seguir com as outras linhas. */
+async function efetivarMontagemUI(id, { silencioso = false } = {}){
   const m = (_montagemDia?.montagens || []).find(x => x.montagem_id === id);
   if(!m) return;
-  if(!m.placa){ notify('Coloque a placa antes de criar a carga.', 'erro', 5000); return; }
+  if(!m.placa){
+    const erro = new Error('Coloque a placa antes de criar a carga.');
+    if(silencioso) throw erro;
+    notify(erro.message, 'erro', 5000);
+    return;
+  }
   let carga;
   try {
     carga = criarCargaProgramada({
@@ -8145,10 +8350,14 @@ async function efetivarMontagemUI(id){
       qtdGanchos: m.qtd_ganchos,
       qtdEntregas: m.qtd_entregas,
       motorista: m.motorista,
-      observacoes: m.observacoes,
+      /* O apelido da rota entra na frente da observação, não no lugar
+         dela: quem lê a carga na Torre precisa saber que "517" é a Ômega,
+         e a Logística precisa que o recado dela sobreviva. */
+      observacoes: [m.apelido_rota, m.observacoes].filter(Boolean).join(' — '),
       operador: DB.operador ? DB.operador.nome : '',
     });
   } catch(e){
+    if(silencioso) throw e;
     notify(e.message || String(e), 'erro', 9000);
     return;
   }
@@ -8161,6 +8370,10 @@ async function efetivarMontagemUI(id){
     notify('A carga foi criada, mas não consegui marcar a montagem como efetivada: '
       + (e.message || e), 'erro', 9000);
   }
+  if(silencioso) return;
+  // A linha vira leitura depois de virar carga; deixar aberta mostraria um
+  // formulário que não aceita mais nada.
+  if(_montagemAberta === id) _montagemAberta = null;
   await carregarMontagemUI();
   renderAll();
   notify(`Carga da rota ${m.rota_nome} criada e enviada para a Torre.`, 'ok', 5000);
@@ -8250,7 +8463,7 @@ function renderModeloSemana(){
   tbody.innerHTML = doDia.map((m, i) => `<tr>
       <td class="text-dim">${i + 1}</td>
       <td><strong>${esc(m.rota_nome)}</strong> <span class="text-dim">${esc(m.rota_codigo)}</span>
-          ${m.observacoes ? `<div class="text-dim" style="font-size:11.5px">${esc(m.observacoes)}</div>` : ''}</td>
+          ${m.apelido_rota ? `<div class="text-dim" style="font-size:11.5px">${esc(m.apelido_rota)}</div>` : ''}</td>
       <td>${esc(m.tipo_operacao) || '<span class="text-dim">—</span>'}</td>
       <td>${m.qtd_entregas ?? '<span class="text-dim">—</span>'}</td>
       <td class="no-print">

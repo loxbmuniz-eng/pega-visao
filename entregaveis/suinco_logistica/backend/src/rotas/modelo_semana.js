@@ -56,7 +56,7 @@ rotasModeloSemana.get('/modelo-semana', exigirLogin, async (req, res, next) => {
   try {
     const { rows } = await consultar(
       `SELECT m.modelo_id, m.dia_semana, m.rota_codigo, m.ordem, m.tipo_operacao,
-              m.qtd_entregas, m.paletizada, m.observacoes, m.ativo,
+              m.qtd_entregas, m.paletizada, m.observacoes, m.apelido_rota, m.ativo,
               r.nome AS rota_nome
          FROM programacao_modelo m
          JOIN dim_rotas r ON r.codigo = m.rota_codigo
@@ -91,13 +91,14 @@ rotasModeloSemana.post('/modelo-semana', SO_LOGISTICA, async (req, res, next) =>
     const { rows } = await consultar(
       `INSERT INTO programacao_modelo
          (dia_semana, rota_codigo, ordem, tipo_operacao, qtd_entregas,
-          paletizada, observacoes, criado_por)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+          paletizada, observacoes, apelido_rota, criado_por)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
        ON CONFLICT (dia_semana, rota_codigo, ordem) DO UPDATE
          SET tipo_operacao = EXCLUDED.tipo_operacao,
              qtd_entregas  = EXCLUDED.qtd_entregas,
              paletizada    = EXCLUDED.paletizada,
              observacoes   = EXCLUDED.observacoes,
+             apelido_rota  = EXCLUDED.apelido_rota,
              ativo         = TRUE,
              atualizado_em = now()
        RETURNING *`,
@@ -106,6 +107,7 @@ rotasModeloSemana.post('/modelo-semana', SO_LOGISTICA, async (req, res, next) =>
        Number.isFinite(Number(req.body?.qtdEntregas)) ? Number(req.body.qtdEntregas) : null,
        String(req.body?.paletizada ?? '').trim(),
        String(req.body?.observacoes ?? '').trim(),
+       String(req.body?.apelidoRota ?? '').trim(),
        req.operador.nome]
     );
     emitir('modelo:alterado', { diaSemana: dia, por: req.operador.nome });
@@ -182,8 +184,8 @@ rotasModeloSemana.post('/montagem', SO_LOGISTICA, async (req, res, next) => {
       `INSERT INTO programacao_montagem
          (montagem_id, data_prog, rota_codigo, sequencia, numero_carga, peso,
           qtd_entregas, qtd_ganchos, paletizada, tipo_operacao, motorista,
-          observacoes, criado_por, criado_setor, operador_nome)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$13)
+          observacoes, apelido_rota, criado_por, criado_setor, operador_nome)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$14)
        RETURNING *`,
       [novoId(), dia, rota,
        Number.isFinite(Number(req.body?.sequencia)) ? Number(req.body.sequencia) : null,
@@ -195,6 +197,9 @@ rotasModeloSemana.post('/montagem', SO_LOGISTICA, async (req, res, next) => {
        String(req.body?.tipoOperacao ?? '').trim(),
        String(req.body?.motorista ?? '').trim(),
        String(req.body?.observacoes ?? '').trim(),
+       // O apelido vem do MODELO, não de quem digita: identifica a
+       // transportadora dentro da praça e viaja junto com a linha.
+       String(req.body?.apelidoRota ?? '').trim(),
        req.operador.nome, req.operador.setor]
     );
     emitir('montagem:criada', { dia, rota, por: req.operador.nome });

@@ -4409,3 +4409,76 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
   /* Alvo de toque: o resumo do <details> é um controle como outro qualquer. */
   .mfa-manual summary{ min-height:44px; display:flex; align-items:center; }
 }
+
+/* MONTAGEM DO DIA — linha-resumo que abre em formulário (25/08/2026)
+   ---------------------------------------------------------------------
+   A tabela tinha dez inputs por linha. Existir e ser usável são coisas
+   diferentes: no celular aquilo não cabia e no desktop os campos ficavam
+   do tamanho de um selo. Agora a linha mostra o que identifica a carga e o
+   clique abre o formulário inteiro, na ordem da aba Programação.
+
+   O <tr> do detalhe usa a MESMA superfície da linha aberta, com um filete
+   dourado à esquerda: sem isso, num dia de 39 linhas, a pessoa perde de
+   vista de qual rota é o formulário que está preenchendo. */
+.mont-linha{ cursor:pointer }
+.mont-linha:hover td{ background:var(--vidro-bg) }
+.mont-linha-aberta td{
+  background:var(--vidro-bg-forte);
+  border-bottom-color:transparent;
+}
+.mont-seta{
+  display:inline-block; color:var(--text-dim); font-size:16px;
+  transition:transform .15s ease;
+}
+.mont-seta.aberta{ transform:rotate(90deg); color:var(--gold-text) }
+.mont-detalhe > td{
+  background:var(--vidro-bg-forte);
+  border-left:3px solid var(--gold);
+  padding:0 0 14px 0;
+}
+.mont-form{ padding:4px 16px 0 16px }
+.mont-form-tit{
+  font-weight:800; font-size:15px; margin:2px 0 12px;
+  color:var(--gold-text);
+}
+/* Campo que vem da Frota: dá para ler, não dá para digitar. Cinza demais
+   viraria "quebrado"; o contraste fica no piso de leitura. */
+.mont-form input[disabled]{ opacity:.72; cursor:not-allowed }
+@media (max-width:820px){
+  .mont-form{ padding:4px 10px 0 10px }
+  .mont-detalhe > td{ border-left-width:4px }
+}
+
+/* O FORMULÁRIO DA MONTAGEM É FORMULÁRIO, MESMO DENTRO DA TABELA
+   ---------------------------------------------------------------------
+   No celular toda tabela vira "cartão" e os inputs das linhas fechadas
+   perdem caixa, padding e altura de propósito — o cartão fechado é tabela,
+   não formulário (ver o bloco mobile-cartao acima).
+
+   A linha de detalhe não é um cartão fechado: é o formulário que abriu.
+   Sem esta regra os campos saíam com 17px de altura, impossíveis de
+   acertar com o dedo — o teste mediu 9 de 10 abaixo do piso de 44px.
+
+   A especificidade precisa ser maior que a da regra do cartão, e é por
+   isso que o seletor é comprido: encurtar aqui é reintroduzir o defeito. */
+@media (max-width:820px){
+  .table-wrap table.mobile-cartao tr.mont-detalhe td .mont-form input,
+  .table-wrap table.mobile-cartao tr.mont-detalhe td .mont-form select,
+  .table-wrap table.mobile-cartao tr.mont-detalhe td .mont-form textarea{
+    background:var(--campo-bg);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    padding:9px 10px;
+    min-height:44px;
+    max-width:none; width:100%;
+    /* 16px: abaixo disso o iOS dá zoom ao focar e desalinha a tela. */
+    font-size:16px; font-weight:400;
+    color:var(--text);
+  }
+  .table-wrap table.mobile-cartao tr.mont-detalhe td .mont-form textarea{
+    min-height:66px;
+  }
+  /* Uma coluna: três campos lado a lado em 390px viram três tiras. */
+  .mont-detalhe .form-row{ flex-direction:column; gap:10px }
+  .mont-detalhe .form-group{ width:100% }
+}
