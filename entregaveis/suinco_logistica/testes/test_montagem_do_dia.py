@@ -287,8 +287,10 @@ async def main():
         ck('nenhum código de rota inventado — só os do painel',
            novas and novas[0] == '0', str(novas))
 
-        # O nome da planilha sobreviveu ao de-para.
-        comNome = sql("SELECT count(*) FROM programacao_modelo WHERE observacoes <> ''")
+        # O nome da planilha sobreviveu ao de-para. Desde a migração 034 ele
+        # mora em `apelido_rota`: `observacoes` virou campo da pessoa que
+        # monta a carga, e um campo com dois donos apaga um deles.
+        comNome = sql("SELECT count(*) FROM programacao_modelo WHERE apelido_rota <> ''")
         ck('cada linha guarda o nome como a operação o conhece',
            comNome and int(comNome[0]) >= 100, str(comNome))
 
@@ -308,7 +310,7 @@ async def main():
         ck('puxar o modelo de terça monta as cargas do dia',
            montou['depois'] > montou['antes'], str(montou))
         nomes = sql("SELECT count(*) FROM programacao_montagem "
-                    "WHERE data_prog = '2026-09-01' AND observacoes <> ''")
+                    "WHERE data_prog = '2026-09-01' AND apelido_rota <> ''")
         ck('e o nome da planilha chega na montagem',
            nomes and int(nomes[0]) > 0, str(nomes))
         sql("DELETE FROM programacao_montagem WHERE data_prog = '2026-09-01'")

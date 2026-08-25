@@ -259,9 +259,10 @@
     <div class="card" id="card-montagem">
       <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-programacao"/></svg>
         Montagem do dia <span id="mont-dia-nome" class="pill-count"></span></div>
-      <div class="card-sub">As rotas deste dia da semana já vêm do modelo. Monte as cargas primeiro e
-        coloque as placas quando o transporte for contratado — a placa pode entrar, sair e trocar de linha
-        à vontade. <strong>Só entra na Torre de Controle quando tiver placa.</strong></div>
+      <div class="card-sub">As rotas deste dia da semana já vêm do modelo. <strong>Clique na linha</strong>
+        para abrir os campos e preencher a carga; a placa entra quando o transporte for contratado — e pode
+        sair e trocar de linha à vontade. Nada daqui aparece para a Portaria ou a Expedição enquanto você
+        não clicar em <strong>Criar carga</strong>: até lá é planejamento, não operação.</div>
       <div class="filtro-periodo">
         <div class="form-group">
           <label>Dia da programação</label>
@@ -276,13 +277,24 @@
             ⚡ Puxar rotas do modelo
           </button>
         </div>
+        <!-- ENVIO EM LOTE. Na sexta são 39 cargas: confirmar uma a uma é
+             um pedágio que faz a pessoa voltar para o Excel. O botão diz
+             QUANTAS vai mandar, e some quando não há nenhuma pronta. -->
+        <div class="form-group filtro-acoes">
+          <button class="btn btn-primary btn-sm" id="mont-btn-lote" hidden
+            onclick="efetivarLoteMontagemUI()"></button>
+        </div>
       </div>
       <div class="bento bi-faixa" id="mont-stats" style="margin-bottom:12px"></div>
       <div class="table-wrap">
         <table id="mont-tabela">
+          <!-- SEIS COLUNAS, NÃO DEZ. A linha é um RESUMO; o preenchimento
+               acontece no formulário que abre ao clicar nela. Dez inputs
+               espremidos numa linha é o que estava aqui antes: ilegível no
+               desktop e impossível no celular. -->
           <thead><tr>
             <th>Seq.</th><th>Rota</th><th>Nº Carga</th><th>Placa</th><th>Peso (kg)</th>
-            <th>Entregas</th><th>Ganchos</th><th>Palet.</th><th>Tipo de Operação</th><th class="no-print">Ação</th>
+            <th class="no-print">Ação</th>
           </tr></thead>
           <tbody id="mont-tbody"></tbody>
         </table>
