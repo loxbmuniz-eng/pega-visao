@@ -7501,6 +7501,7 @@ async function exportarPdfFretes(){
 
   const linhas = dados.map(d=>`<tr>
       <td class="col-carga">${esc(d.numeroCarga)}</td>
+      <td class="col-placa">${esc(d.placa)}</td>
       <td class="col-rota">${esc(d.rota)}</td>
       <td class="col-obs">${d.observacoes
         ? esc(d.observacoes)
@@ -7516,10 +7517,11 @@ async function exportarPdfFretes(){
       <table class="tab-fretes">
         <thead><tr>
           <th class="col-carga">Número da Carga</th>
+          <th class="col-placa">Placa</th>
           <th class="col-rota">Rota</th>
           <th class="col-obs">Observações</th>
         </tr></thead>
-        <tbody>${linhas || '<tr><td colspan="3" class="text-center text-dim">Nenhuma carga no período selecionado.</td></tr>'}</tbody>
+        <tbody>${linhas || '<tr><td colspan="4" class="text-center text-dim">Nenhuma carga no período selecionado.</td></tr>'}</tbody>
       </table>
       ${rodapeDocumento(
         'O campo <strong>Observações</strong> é onde a administração registra valor do frete, ' +
@@ -8155,6 +8157,15 @@ function alternarLinhaMontagemUI(id){
   }
 }
 
+/* Abre a linha JÁ no campo da placa. É o que o botão "Colocar placa"
+   promete, e prometer uma coisa e abrir outra é pior que não oferecer. */
+function abrirParaColocarPlacaUI(id){
+  _montagemAberta = id;
+  renderMontagem();
+  const campo = document.getElementById(`montf-placa-${id}`);
+  if(campo){ campo.focus(); campo.scrollIntoView({ block: 'center' }); }
+}
+
 function linhaMontagemHtml(m){
   const trancada = !!(m.efetivada_em || m.cancelada_em);
   const id = escJs(m.montagem_id);
@@ -8165,7 +8176,18 @@ function linhaMontagemHtml(m){
 
   const resumo = `<tr class="mont-linha${trancada ? ' linha-fraca' : ''}${aberta ? ' mont-linha-aberta' : ''}"
       ${trancada ? '' : `onclick="alternarLinhaMontagemUI('${id}')" title="Clique para abrir os campos desta carga"`}>
-      <td>${m.sequencia ?? '—'}</td>
+      <!-- SEQUENCIA EDITAVEL NA LINHA — pedido do dono (25/08/2026):
+           "o campo sequencia precisa estar disponivel para edicao e
+           organizacao de sequencia tambem".
+
+           Ordenar o dia e trabalho de VARREDURA: a pessoa olha as 42
+           linhas e decide quem carrega primeiro. Abrir cada formulario
+           para mexer num numero e o que fazia isso ser feito no Excel.
+           O stopPropagation impede que digitar abra/feche a linha. -->
+      <td onclick="event.stopPropagation()">
+        <input type="number" min="1" class="seq-input" value="${m.sequencia ?? ''}"
+               aria-label="Sequência"
+               onchange="alterarMontagemUI('${id}','sequencia',this.value)"></td>
       <td>${destinoMontagemHtml(m)} ${marca}</td>
       <td>${esc(m.numero_carga) || '<span class="text-dim">—</span>'}</td>
       <td>${m.placa
@@ -8217,7 +8239,12 @@ async function exportarMontagemDoDiaUI(){
       m.apelido_rota || m.rota_nome || '',
       m.tipo_operacao || '',
       m.placa || '',
-      f.transportadora || '',
+      /* A transportadora do DIA na frente da do cadastro. Se o arquivo do
+         dia mostrasse sempre a da Frota, a exceção que alguém registrou de
+         propósito (subcontratação, freteiro) sumiria justamente no papel
+         que existe para ser o registro — e quem conferisse o frete seis
+         meses depois leria o transportador errado. */
+      m.transportadora || f.transportadora || '',
       f.tipoVeiculo || '',
       // Vírgula decimal: é o que o Excel pt-BR entende como número.
       m.peso ? String((Number(m.peso) / 1000).toFixed(1)).replace('.', ',') : '',
@@ -8306,21 +8333,35 @@ async function adicionarCargaForaDoModeloUI(){
    fechar sozinha. Três passos para o que era um.
 
    O formulário é para PREENCHER; a linha é para AGIR. As duas coisas
-   convivem, e o botão continua desabilitado sem placa — dizer "não" depois
-   do clique é pior que dizer antes.
+   convivem, e sem placa a linha não nega o clique: oferece o passo que
+   falta (ver o comentário do botão, logo abaixo).
 
    stopPropagation é obrigatório: a linha inteira é clicável para abrir, e
    sem isso criar a carga abriria o formulário de uma linha que acabou de
    virar leitura. */
 function acoesLinhaMontagemHtml(m, aberta){
   const id = escJs(m.montagem_id);
+  /* SEM PLACA, O BOTAO OFERECE O QUE E POSSIVEL AGORA (25/08/2026).
+
+     Relato do dono, com foto da tela: "por que nao consigo clicar em cima
+     de criar carga?????". A resposta era "porque a linha esta sem placa" —
+     e o botao dizia isso num `title` que so aparece parado em cima dele,
+     depois de tentar clicar.
+
+     O mecanismo funcionava (desabilitado, cursor de proibido, aviso no
+     hover). O problema e outro: treze linhas com um botao dourado que nao
+     aperta e um beco sem saida. Botao desabilitado nao ensina o caminho,
+     so nega.
+
+     Agora, sem placa, o botao E o caminho: abre a linha com o cursor no
+     campo da placa. Uma acao a menos e nenhuma negativa. */
   const criar = m.placa
     ? `<button class="btn btn-primary btn-sm mont-btn-criar"
          onclick="event.stopPropagation(); efetivarMontagemUI('${id}')"
          title="Cria a carga e manda para a Torre de Controle.">➕ Criar carga</button>`
-    : `<button class="btn btn-primary btn-sm mont-btn-criar" disabled
-         onclick="event.stopPropagation()"
-         title="Coloque a placa para poder criar a carga.">➕ Criar carga</button>`;
+    : `<button class="btn btn-sec btn-sm mont-btn-placa"
+         onclick="event.stopPropagation(); abrirParaColocarPlacaUI('${id}')"
+         title="A carga so existe com placa cadastrada na Frota. Clique para colocar.">🚚 Colocar placa</button>`;
   /* EXCLUIR NA PRÓPRIA LINHA — pedido do dono (25/08/2026).
 
      A linha que não vai rodar hoje (rota que não saiu, carga que a
@@ -8344,10 +8385,16 @@ function acoesLinhaMontagemHtml(m, aberta){
    outra coisa sem ninguém perceber. Quem errou a rota cancela a linha e
    puxa a certa — é uma ação a mais e uma confusão a menos.
 
-   Transportadora e Tipo de Veículo também não aparecem como campo: eles
-   vêm da Frota pela placa, e deixar alguém digitar por cima criaria uma
-   segunda verdade sobre o mesmo caminhão. O aviso abaixo da placa mostra
-   o que a Frota respondeu. */
+   Tipo de Veículo não é campo: vem da Frota pela placa, e deixar alguém
+   digitar por cima criaria uma segunda verdade sobre o mesmo caminhão. O
+   aviso abaixo da placa mostra o que a Frota respondeu.
+
+   TRANSPORTADORA É EXCEÇÃO, a pedido do dono (25/08/2026): "transportadora
+   também". A Frota diz de quem é o caminhão; quem carrega aquele dia pode
+   ser outra — subcontratação e troca de última hora acontecem, e antes
+   isso era escrito na planilha sem discussão. O campo vazio significa "o
+   que a Frota disser"; preenchido, vale só para esta carga e não mexe no
+   cadastro do veículo. */
 function formMontagemHtml(m){
   const id = escJs(m.montagem_id);
   const alt = (campo) => `onchange="alterarMontagemUI('${id}','${campo}',this.value)"`;
@@ -8366,9 +8413,11 @@ function formMontagemHtml(m){
                  onchange="definirPlacaMontagemUI('${id}', this.value)">
         </div>
         <div class="form-group">
-          <label>Transportadora <span class="hint">(da Frota)</span></label>
-          <input type="text" value="${esc(frota ? frota.transportadora : '')}"
-                 placeholder="vem da placa" disabled>
+          <label>Transportadora <span class="hint">(da Frota — dá para trocar)</span></label>
+          <input type="text" list="lista-transportadoras"
+                 value="${esc(m.transportadora || (frota ? frota.transportadora : ''))}"
+                 placeholder="vem da placa"
+                 onchange="alterarMontagemUI('${id}','transportadora',this.value)">
         </div>
         <div class="form-group">
           <label>Tipo de Veículo <span class="hint">(da Frota)</span></label>
@@ -8423,8 +8472,13 @@ function formMontagemHtml(m){
         ${m.placa
           ? `<button class="btn btn-primary btn-sm mont-btn-criar" onclick="efetivarMontagemUI('${id}')"
                title="Cria a carga e manda para a Torre de Controle.">➕ Criar carga</button>`
-          : `<button class="btn btn-primary btn-sm mont-btn-criar" disabled
-               title="Coloque a placa para poder criar a carga.">➕ Criar carga</button>`}
+          /* Mesmo motivo da linha (ver acoesLinhaMontagemHtml): botao
+             desabilitado nega sem ensinar. Aqui o campo da placa esta a
+             quatro linhas de distancia, entao o botao leva o cursor ate
+             ele em vez de so ficar apagado. */
+          : `<button class="btn btn-sec btn-sm mont-btn-placa"
+               onclick="abrirParaColocarPlacaUI('${id}')"
+               title="A carga so existe com placa cadastrada na Frota. Clique para colocar.">🚚 Colocar placa</button>`}
       </div>
     </div>`;
 }
@@ -8659,6 +8713,10 @@ async function efetivarMontagemUI(id, { silencioso = false } = {}){
       qtdGanchos: m.qtd_ganchos,
       qtdEntregas: m.qtd_entregas,
       motorista: m.motorista,
+      /* Vazio = o que a Frota diz (criarCargaProgramada resolve pela
+         placa). Preenchido = a exceção do dia — subcontratação, freteiro,
+         veículo emprestado —, e aí é ela que vale. */
+      transportadora: m.transportadora || '',
       /* O apelido da rota entra na frente da observação, não no lugar
          dela: quem lê a carga na Torre precisa saber que "517" é a Ômega,
          e a Logística precisa que o recado dela sobreviva. */

@@ -176,6 +176,86 @@ async def main():
            naTela == naTelaB, f'A={naTela} · B={naTelaB}')
         await ctxB.close()
 
+        print('\n=== 3b. TODAS AS ETAPAS, NAO SO A ENTRADA ===')
+        # Pedido do dono: "nao so o horario de entrada, mas qualquer
+        # registro das etapas precisa ser unico e fiel".
+        #
+        # A correcao casa a provisoria com a do servidor por (carga, de ->
+        # para), entao vale para as seis etapas — mas "vale por construcao"
+        # nao e prova. Aqui a carga anda o ciclo inteiro pelo caminho dos
+        # botoes, e cada etapa e conferida contra o banco.
+        ETAPAS = ['Embarque Iniciado', 'Embarque Finalizado', 'Faturado',
+                  'Seguiu Viagem']
+        for etapa in ETAPAS:
+            await pgA.evaluate(
+                """([id, e]) => {
+                     avancarStatusCarga(id, e, 'Ana', 'Logística');
+                     SuincoStore.save();
+                   }""", [cargaId, etapa])
+            await pgA.wait_for_timeout(1800)
+            await pgA.evaluate("() => SuincoSharePoint.sincronizarAgora()")
+            await pgA.wait_for_timeout(1800)
+
+            noBanco = sql("SELECT count(*) FROM fact_statusfrota WHERE carga_id = '"
+                          + cargaId + "' AND status_novo = '" + etapa + "'")
+            d = await pgA.evaluate(
+                """([id, e]) => {
+                     const l = DB.movimentacoes.filter(
+                       m => m.cargaId === id && m.statusNovo === e);
+                     return { quantas: l.length, provisorias: l.filter(m => m._local).length,
+                              horarios: l.map(m => m.timestamp) };
+                   }""", [cargaId, etapa])
+            ck(f'{etapa}: uma no banco, uma no aparelho',
+               bool(noBanco) and noBanco[0] == '1' and d['quantas'] == 1,
+               f"banco {noBanco} · aparelho {d['quantas']} {d['horarios']}")
+            ck(f'{etapa}: nenhuma provisoria sobrou',
+               d['provisorias'] == 0, f"{d['provisorias']} provisoria(s)")
+
+        # E os dois aparelhos contam a MESMA jornada, etapa por etapa.
+        ctxC, pgC = await abrir(nav, 'chefe@teste.local')
+        await pgC.evaluate("() => SuincoSharePoint.sincronizarAgora()")
+        await pgC.wait_for_timeout(2500)
+        jornadaA = await pgA.evaluate(
+            """(id) => DB.movimentacoes.filter(m => m.cargaId === id)
+                 .sort((a,b) => new Date(a.timestamp) - new Date(b.timestamp))
+                 .map(m => m.statusNovo + '@' + m.timestamp)""", cargaId)
+        jornadaC = await pgC.evaluate(
+            """(id) => DB.movimentacoes.filter(m => m.cargaId === id)
+                 .sort((a,b) => new Date(a.timestamp) - new Date(b.timestamp))
+                 .map(m => m.statusNovo + '@' + m.timestamp)""", cargaId)
+        ck('os dois aparelhos contam a mesma jornada, etapa por etapa',
+           jornadaA == jornadaC,
+           f'A={len(jornadaA)} etapas · C={len(jornadaC)} etapas')
+        # SEIS, não cinco: a criação da carga ("Aguardando Veículo") também
+        # é um registro de etapa — escrevi cinco de cabeça e o teste
+        # corrigiu. As cinco transições do pátio mais o nascimento.
+        ck('e a jornada tem as seis etapas do ciclo',
+           len(jornadaA) == 6, ' | '.join(x.split('@')[0] for x in jornadaA))
+        await ctxC.close()
+
+        print('\n=== 3c. O SERVIDOR IGNORA A HORA QUE O PAINEL MANDA ===')
+        # `atualizado_em` e `acao_em` NAO estao em CAMPOS_EDITAVEIS: o painel
+        # os envia, e o servidor descarta e carimba o proprio relogio. Este
+        # bloco existe para que alguem que amanha "complete" a lista de
+        # campos editaveis descubra na hora o que esta abrindo.
+        antes = sql("SELECT atualizado_em FROM fact_viagens WHERE carga_id = '" + cargaId + "'")
+        await pgA.evaluate(
+            """async (id) => {
+                 const c = getCarga(id);
+                 // Relogio do aparelho vinte anos no futuro.
+                 c.atualizadoEm = '2046-01-01T00:00:00.000Z';
+                 c.acaoEm = '2046-01-01T00:00:00.000Z';
+                 c.observacoes = 'teste de relogio';
+                 SuincoStore.save();
+                 await SuincoSharePoint.sincronizarAgora();
+               }""", cargaId)
+        await pgA.wait_for_timeout(2000)
+        depois = sql("SELECT atualizado_em, acao_em FROM fact_viagens WHERE carga_id = '"
+                     + cargaId + "'")
+        ck('a hora do aparelho nao entra no banco',
+           bool(depois) and not str(depois[0]).startswith('2046')
+           and not str(depois[1]).startswith('2046'), str(depois))
+
         print('\n=== 4. SEM CHEGADA, A TELA DIZ ISSO — NÃO INVENTA UMA DATA ===')
         # O "20:42 de ontem": três telas faziam `entradaNoPatioDe(c) ||
         # c.criadoEm`, trocando a resposta honesta pela data em que a LINHA

@@ -252,7 +252,8 @@ rotasModeloSemana.patch('/montagem/:id', SO_LOGISTICA, async (req, res, next) =>
           SET rota_codigo = $2, sequencia = $3, numero_carga = $4, peso = $5,
               qtd_entregas = $6, qtd_ganchos = $7, paletizada = $8,
               tipo_operacao = $9, motorista = $10, observacoes = $11,
-              placa = $12, operador_nome = $13, atualizado_em = now()
+              placa = $12, transportadora = $14, operador_nome = $13,
+              atualizado_em = now()
         WHERE montagem_id = $1
         RETURNING *`,
       [id,
@@ -266,7 +267,11 @@ rotasModeloSemana.patch('/montagem/:id', SO_LOGISTICA, async (req, res, next) =>
        campo('tipoOperacao', 'tipo_operacao', v => String(v ?? '').trim()),
        campo('motorista', 'motorista', v => String(v ?? '').trim()),
        campo('observacoes', 'observacoes', v => String(v ?? '').trim()),
-       placa, req.operador.nome]
+       placa, req.operador.nome,
+       /* Vazio = "o que a Frota diz". A coluna guarda só a EXCEÇÃO do dia
+          (subcontratação, freteiro), para o cadastro continuar sendo a
+          fonte e o dia registrar o desvio sem apagá-la. */
+       campo('transportadora', 'transportadora', v => String(v ?? '').trim())]
     );
     emitir('montagem:alterada', { dia: rows[0].data_prog, por: req.operador.nome });
     res.json({ montagem: rows[0] });

@@ -146,7 +146,10 @@ async def main():
                 aberto: true,
                 rotulos: rot,
                 temTextarea: !!det.querySelector('textarea'),
-                botaoCriar: !!det.querySelector('.mont-btn-criar'),
+                // Sem placa o rodape traz "Colocar placa"; com placa,
+                // "Criar carga". O que se garante e que SEMPRE ha uma acao
+                // de avanco ali — nunca um botao travado (ver bloco 5).
+                botaoAvanco: !!det.querySelector('.mont-btn-criar, .mont-btn-placa'),
               };
             }""")
         ck('o formulário abriu', d['aberto'], str(d)[:80])
@@ -157,17 +160,42 @@ async def main():
         for r in ROTULOS:
             ck(f'tem o campo {r}', r in juntos, juntos[:100] if r not in juntos else '')
         ck('Observações é caixa de texto, não linha única', d.get('temTextarea'))
-        ck('e o botão de criar carga está no formulário', d.get('botaoCriar'))
+        ck('e o formulário termina com a ação de avanço da linha',
+           d.get('botaoAvanco'))
 
-        print('\n=== 3. TRANSPORTADORA E TIPO DE VEÍCULO VÊM DA FROTA ===')
+        print('\n=== 3. O QUE VEM DA FROTA E O QUE DÁ PARA TROCAR ===')
+        # MUDOU EM 25/08/2026, a pedido do dono ("transportadora também").
+        # Antes os DOIS campos da Frota eram travados. Hoje só o Tipo de
+        # Veículo é: ele descreve o caminhão, e o caminhão é o que é.
+        # Transportadora é OUTRA coisa — descreve quem faz a viagem, e isso
+        # muda no dia (subcontratação, freteiro, troca de última hora). A
+        # planilha antiga permitia escrever isso sem discussão; travar era
+        # perder informação verdadeira, não proteger o cadastro.
         d = await pg.evaluate("""() => {
               const det = document.querySelector('#mont-tbody tr.mont-detalhe');
               const ins = [...det.querySelectorAll('input')];
-              const desabilitados = ins.filter(i => i.disabled).length;
-              return { desabilitados, total: ins.length };
+              const porRotulo = (txt) => {
+                const g = [...det.querySelectorAll('.form-group')]
+                  .find(x => x.querySelector('label')
+                          && x.querySelector('label').innerText.includes(txt));
+                return g ? g.querySelector('input') : null;
+              };
+              const transp = porRotulo('Transportadora');
+              const tipo = porRotulo('Tipo de Veículo');
+              return {
+                desabilitados: ins.filter(i => i.disabled).length,
+                transpEditavel: transp ? !transp.disabled : null,
+                transpTemLista: transp ? transp.getAttribute('list') : null,
+                tipoTravado: tipo ? tipo.disabled : null,
+              };
             }""")
-        ck('os dois campos da Frota não são digitáveis',
-           d['desabilitados'] == 2, str(d))
+        ck('Tipo de Veículo continua vindo travado da Frota',
+           d['tipoTravado'] is True, str(d))
+        ck('Transportadora virou campo editável', d['transpEditavel'] is True, str(d))
+        ck('e oferece as transportadoras já cadastradas',
+           d['transpTemLista'] == 'lista-transportadoras', str(d))
+        ck('só o Tipo de Veículo fica travado agora',
+           d['desabilitados'] == 1, str(d))
 
         print('\n=== 4. O QUE SE DIGITA CHEGA AO BANCO ===')
         await pg.evaluate("""async (id) => {
@@ -186,12 +214,25 @@ async def main():
            r and r[4] and r[4] != 'carregar por ultimo', str(r[4] if r else None))
 
         print('\n=== 5. SEM PLACA NÃO VAI PARA A TORRE ===')
+        # MUDOU EM 25/08/2026. Antes o formulário mostrava "Criar carga"
+        # desabilitado. O dono mandou foto da tela perguntando "por que nao
+        # consigo clicar em cima de criar carga?????" — a regra estava
+        # certa (sem placa não há carga) e a comunicação estava errada: um
+        # botão dourado que não aperta nega sem ensinar o caminho.
+        # A trava continua; o que mudou é que agora ela ABRE o caminho.
         d = await pg.evaluate("""() => {
               const det = document.querySelector('#mont-tbody tr.mont-detalhe');
-              const b = det.querySelector('.mont-btn-criar');
-              return { desabilitado: b ? b.disabled : null };
+              return {
+                temCriar: !!det.querySelector('.mont-btn-criar'),
+                temColocarPlaca: !!det.querySelector('.mont-btn-placa'),
+                desabilitados: [...det.querySelectorAll('button')]
+                                 .filter(b => b.disabled).length,
+              };
             }""")
-        ck('"Criar carga" fica desabilitado sem placa', d['desabilitado'] is True, str(d))
+        ck('sem placa não existe botão de criar carga', d['temCriar'] is False, str(d))
+        ck('no lugar dele aparece "Colocar placa"', d['temColocarPlaca'] is True, str(d))
+        ck('e nenhum botão fica no beco sem saída (desabilitado)',
+           d['desabilitados'] == 0, str(d))
 
         placa = sql("SELECT v.placa FROM dim_veiculos v LEFT JOIN fact_viagens f "
                     "ON f.placa = v.placa AND f.excluida_em IS NULL "
@@ -292,38 +333,57 @@ async def main():
               // comportamento certo.
               const linhas = [...document.querySelectorAll(
                 '#mont-tbody tr.mont-linha:not(.linha-fraca)')];
-              const comBotao = linhas.filter(tr => tr.querySelector('.mont-btn-criar')).length;
               const semPlaca = linhas.find(tr => tr.textContent.includes('sem placa'));
               const comPlaca = linhas.find(tr => {
                 const b = tr.querySelector('.mont-btn-criar');
                 return b && !b.disabled;
               });
               return {
-                linhas: linhas.length, comBotao,
-                desabilitadoSemPlaca: semPlaca
-                  ? semPlaca.querySelector('.mont-btn-criar').disabled : null,
+                linhas: linhas.length,
+                // Toda linha oferece UMA ação de avanço: criar (com placa)
+                // ou colocar placa (sem). Nenhuma fica sem saída.
+                comAcao: linhas.filter(tr =>
+                  tr.querySelector('.mont-btn-criar, .mont-btn-placa')).length,
+                semPlacaOferecePlaca: semPlaca
+                  ? !!semPlaca.querySelector('.mont-btn-placa') : null,
+                semPlacaNaoTemCriar: semPlaca
+                  ? !semPlaca.querySelector('.mont-btn-criar') : null,
                 habilitadoComPlaca: !!comPlaca,
+                // A regra que o dono reclamou: zero botões travados na tela.
+                travadosNaTela: [...document.querySelectorAll(
+                  '#mont-tbody button')].filter(b => b.disabled).length,
               };
             }""")
-        ck('toda linha ainda em montagem traz o botão de criar carga',
-           d['comBotao'] == d['linhas'], str(d))
-        ck('sem placa o botão fica desabilitado na própria linha',
-           d['desabilitadoSemPlaca'] is True, str(d))
-        ck('com placa ele fica clicável', d['habilitadoComPlaca'], str(d))
+        ck('toda linha ainda em montagem traz uma ação de avanço',
+           d['comAcao'] == d['linhas'], str(d))
+        ck('sem placa a linha oferece "Colocar placa"',
+           d['semPlacaOferecePlaca'] is True, str(d))
+        ck('e não mostra "Criar carga" só para negá-lo',
+           d['semPlacaNaoTemCriar'] is True, str(d))
+        ck('com placa o botão de criar fica clicável', d['habilitadoComPlaca'], str(d))
+        ck('nenhum botão travado na montagem do dia',
+           d['travadosNaTela'] == 0, str(d))
 
         # O clique no botão NÃO pode abrir/fechar a linha junto: a linha
         # inteira é clicável, e sem stopPropagation criar a carga abriria o
         # formulário de uma linha que acabou de virar leitura.
         antes = await pg.evaluate(
             "() => !!document.querySelector('#mont-tbody tr.mont-detalhe')")
+        # Clica no EXCLUIR de uma linha e cancela o prompt: a ação não
+        # acontece, então o único efeito observável seria a linha abrir por
+        # tabela — que é justamente o que o stopPropagation impede.
+        # (Antes este trecho clicava num "Criar carga" desabilitado; esse
+        #  botão não existe mais desde 25/08 — ver bloco 5.)
+        await pg.evaluate("() => { window.__promptReal = window.prompt; window.prompt = () => null; }")
         await pg.evaluate("""() => {
-              const tr = [...document.querySelectorAll('#mont-tbody tr.mont-linha')]
-                .find(t => { const b = t.querySelector('.mont-btn-criar'); return b && b.disabled; });
-              tr.querySelector('.mont-btn-criar').click();
+              const tr = [...document.querySelectorAll(
+                '#mont-tbody tr.mont-linha:not(.linha-fraca)')][0];
+              tr.querySelector('.mont-btn-excluir').click();
             }""")
         await pg.wait_for_timeout(400)
         depois = await pg.evaluate(
             "() => !!document.querySelector('#mont-tbody tr.mont-detalhe')")
+        await pg.evaluate("() => { window.prompt = window.__promptReal; }")
         ck('clicar no botão não abre a linha por tabela',
            antes == depois, f'antes {antes} · depois {depois}')
 
@@ -482,6 +542,157 @@ async def main():
                       "FROM programacao_montagem WHERE montagem_id = '" + alvo2 + "'")
         ck('mas continua no banco, com motivo e hora',
            bool(noBanco) and noBanco[0] == 't' and bool(noBanco[1]), str(noBanco))
+
+        print('\n=== 17. ORDENAR E TROCAR A TRANSPORTADORA SEM ABRIR A LINHA ===')
+        # Pedido do dono, 25/08/2026, em duas mensagens seguidas: "o campo
+        # da sequencia na cargas do dia precisa ter o campo sequencia
+        # disponivel para edicao e organizacao de sequencia tambem" e, logo
+        # depois, "transportadora tambem".
+        #
+        # Por que na LINHA e nao so no formulario: ordenar o dia e trabalho
+        # de VARREDURA. A pessoa olha as 42 linhas de sexta e decide quem
+        # carrega primeiro. Abrir e fechar um formulario por linha para
+        # mexer num numero e exatamente o que fazia isso continuar sendo
+        # feito no Excel.
+        # Prefere uma linha COM placa: sem placa, a checagem de que a
+        # transportadora do dia nao reescreve o cadastro da Frota nao teria
+        # o que exercer, e passaria por omissao.
+        alvo3 = await pg.evaluate(
+            """() => {
+                 const vivas = _montagemDia.montagens
+                   .filter(m => !m.efetivada_em && !m.cancelada_em);
+                 return (vivas.find(m => m.placa) || vivas[0]).montagem_id;
+               }""")
+
+        d = await pg.evaluate("""(id) => {
+              const tr = [...document.querySelectorAll('#mont-tbody tr.mont-linha')]
+                .find(t => t.outerHTML.includes(id));
+              const inp = tr ? tr.querySelector('input.seq-input') : null;
+              return {
+                temCampo: !!inp,
+                tipo: inp ? inp.type : null,
+                // O <td> em volta precisa engolir o clique: a linha inteira
+                // abre ao ser clicada, e sem isso digitar a sequencia
+                // abriria/fecharia o formulario a cada toque.
+                tdBloqueiaClique: inp
+                  ? !!inp.closest('td').getAttribute('onclick') : null,
+                aberta: !!document.querySelector('#mont-tbody tr.mont-detalhe'),
+              };
+            }""", alvo3)
+        ck('a sequencia e um campo na propria linha', d['temCampo'] is True, str(d))
+        ck('e um campo numerico', d['tipo'] == 'number', str(d))
+        ck('o clique nele nao abre a linha por tabela',
+           d['tdBloqueiaClique'] is True, str(d))
+
+        # Digitar na linha tem que CHEGAR AO BANCO — o resto e enfeite.
+        await pg.evaluate("""async (id) => {
+              const tr = [...document.querySelectorAll('#mont-tbody tr.mont-linha')]
+                .find(t => t.outerHTML.includes(id));
+              const inp = tr.querySelector('input.seq-input');
+              inp.value = '77';
+              inp.dispatchEvent(new Event('change', { bubbles: true }));
+            }""", alvo3)
+        await pg.wait_for_timeout(1500)
+        r = sql("SELECT sequencia FROM programacao_montagem WHERE montagem_id = '" + alvo3 + "'")
+        ck('a sequencia digitada na linha chega ao banco',
+           bool(r) and str(r[0]) == '77', str(r))
+
+        # TRANSPORTADORA: vazio significa "o que a Frota disser"; preenchido
+        # e a excecao do dia, e nao pode encostar no cadastro do veiculo.
+        #
+        # A linha precisa TER placa para a garantia valer alguma coisa: sem
+        # placa nao ha cadastro de Frota para (nao) ser reescrito, e o teste
+        # passaria por omissao. A esta altura da bateria as linhas com placa
+        # ja viraram carga, entao o teste poe uma.
+        placaAlvo = sql("SELECT placa FROM programacao_montagem "
+                        "WHERE montagem_id = '" + alvo3 + "'")
+        if not (placaAlvo and placaAlvo[0]):
+            livre = sql("SELECT v.placa FROM dim_veiculos v LEFT JOIN fact_viagens f "
+                        "ON f.placa = v.placa AND f.excluida_em IS NULL "
+                        "WHERE v.transportadora <> '' AND f.carga_id IS NULL "
+                        "AND v.placa NOT IN (SELECT placa FROM programacao_montagem "
+                        "                     WHERE data_prog = '" + DIA + "' AND placa <> '') "
+                        "ORDER BY v.placa LIMIT 1")
+            if livre:
+                await pg.evaluate("(a) => definirPlacaMontagemUI(a[0], a[1])",
+                                  [alvo3, livre[0]])
+                await pg.wait_for_timeout(1500)
+                placaAlvo = sql("SELECT placa FROM programacao_montagem "
+                                "WHERE montagem_id = '" + alvo3 + "'")
+        await pg.evaluate("(id) => alterarMontagemUI(id, 'transportadora', 'TRANSPORTES TESTE 77')", alvo3)
+        await pg.wait_for_timeout(1500)
+        r = sql("SELECT transportadora FROM programacao_montagem WHERE montagem_id = '" + alvo3 + "'")
+        ck('a transportadora do dia grava na linha da montagem',
+           bool(r) and r[0] == 'TRANSPORTES TESTE 77', str(r))
+
+        ck('a linha escolhida tem placa — a garantia abaixo tem o que exercer',
+           bool(placaAlvo and placaAlvo[0]), str(placaAlvo))
+        if placaAlvo and placaAlvo[0]:
+            cad = sql("SELECT transportadora FROM dim_veiculos WHERE placa = '" + placaAlvo[0] + "'")
+            ck('e NAO reescreve o cadastro da Frota daquela placa',
+               bool(cad) and cad[0] != 'TRANSPORTES TESTE 77', str(cad))
+
+        # E O PONTO INTEIRO DO CAMPO: a excecao do dia tem que CHEGAR NA
+        # CARGA. Se ficasse so na linha da montagem, quem confere o frete
+        # continuaria vendo a transportadora do cadastro — e o campo seria
+        # enfeite.
+        await pg.evaluate("(id) => efetivarMontagemUI(id, { silencioso: true })", alvo3)
+        await pg.wait_for_timeout(2500)
+        r = sql("SELECT f.transportadora FROM fact_viagens f "
+                "JOIN programacao_montagem g ON g.carga_id = f.carga_id "
+                "WHERE g.montagem_id = '" + alvo3 + "'")
+        ck('a transportadora do dia vai junto para a carga na Torre',
+           bool(r) and r[0] == 'TRANSPORTES TESTE 77', str(r))
+
+        # E TEM QUE APARECER NA PLANILHA DO DIA. O arquivo do dia e o
+        # registro que a Suinco sempre teve; se ele mostrasse a
+        # transportadora do CADASTRO, a excecao registrada de proposito
+        # sumiria justamente no papel que existe para guarda-la.
+        d = await pg.evaluate(
+            """async (id) => {
+                 let baixado = null;
+                 const real = window.baixarCsvDoDia;
+                 window.baixarCsvDoDia = (nome, cab, linhas) => {
+                   baixado = { nome, cab, linhas };
+                 };
+                 await exportarMontagemDoDiaUI();
+                 window.baixarCsvDoDia = real;
+                 if(!baixado) return { gerou: false };
+                 const iTransp = baixado.cab.indexOf('Transportadora');
+                 const iPlaca = baixado.cab.indexOf('Placa');
+                 const m = _montagemDia.montagens.find(x => x.montagem_id === id);
+                 const linha = baixado.linhas.find(l => m && l[iPlaca] === m.placa);
+                 return { gerou: true, transpNaPlanilha: linha ? linha[iTransp] : null };
+               }""", alvo3)
+        ck('a transportadora do dia e a que sai na planilha do dia',
+           d.get('transpNaPlanilha') == 'TRANSPORTES TESTE 77', str(d))
+
+        print('\n=== 18. "COLOCAR PLACA" ABRE A LINHA NO CAMPO CERTO ===')
+        # A promessa do botao e "clique para colocar a placa". Abrir a linha
+        # e deixar a pessoa procurar o campo entre nove outros seria
+        # prometer uma coisa e entregar outra.
+        await pg.evaluate("() => { _montagemAberta = null; renderMontagem(); }")
+        d = await pg.evaluate("""async () => {
+              const tr = [...document.querySelectorAll(
+                '#mont-tbody tr.mont-linha:not(.linha-fraca)')]
+                .find(t => t.querySelector('.mont-btn-placa'));
+              if(!tr) return { achou: false };
+              tr.querySelector('.mont-btn-placa').click();
+              await new Promise(r => setTimeout(r, 300));
+              const det = document.querySelector('#mont-tbody tr.mont-detalhe');
+              const foco = document.activeElement;
+              return {
+                achou: true,
+                abriu: !!det,
+                focoNaPlaca: !!(foco && foco.id && foco.id.startsWith('montf-placa-')),
+                focoEm: foco ? (foco.id || foco.tagName) : null,
+              };
+            }""")
+        ck('existe linha sem placa para o teste', d['achou'] is True, str(d))
+        if d['achou']:
+            ck('o botao abre o formulario da linha', d['abriu'] is True, str(d))
+            ck('e o cursor ja fica no campo da placa',
+               d['focoNaPlaca'] is True, str(d))
 
         print('\n=== 9. SEM ERRO DE JAVASCRIPT ===')
         ck('console limpo', not erros, '; '.join(erros[:3]))
