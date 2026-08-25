@@ -118,6 +118,7 @@ def main():
     data_js = ler('data.js')
     app_js = ler('app.js')
     devolucoes_js = ler('devolucoes.js')
+    qr_js = ler('qr.js')
     csv = ler('frota_seed_2026.csv')
 
     logo_bytes = (BASE / 'assets' / 'logo_suinco.png').read_bytes()
@@ -186,6 +187,16 @@ def main():
     )
     if n_data != 1:
         sys.exit(f'ERRO: esperava 1 script para data.js, encontrei {n_data}')
+
+    # 5a. O desenhista do QR do segundo fator. Entra ANTES do app.js, que o
+    #     usa na tela de ativar o segundo fator.
+    html, n_qr = re.subn(
+        r'<script src="qr\.js"></script>',
+        lambda _: '<script>\n' + qr_js + '\n</script>',
+        html,
+    )
+    if n_qr != 1:
+        sys.exit(f'ERRO: esperava 1 script para qr.js, encontrei {n_qr}')
 
     html, n_app = re.subn(
         r'<script src="app\.js"></script>',

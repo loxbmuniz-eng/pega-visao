@@ -1477,6 +1477,25 @@
   </div>
 </div>
 
+<!-- CONFIRMAÇÃO DE FATURAMENTO — pedido do gestor (25/08/2026).
+
+     A última etapa do pátio e a única que vira nota. A janela mostra QUAL
+     carga porque o erro real é linha trocada numa tabela, não dedo torto.
+     O botão que age tem a cor do status "Faturado" (a mesma da badge e da
+     linha do tempo), e o foco começa em Cancelar. -->
+<div class="modal-overlay" id="modal-faturar">
+  <div class="modal-box">
+    <h2>Confirmar faturamento</h2>
+    <div class="card-sub">Confira a carga antes de faturar — esta etapa vira nota.</div>
+    <div class="fat-conf" id="faturar-resumo"></div>
+    <div class="flex-end">
+      <button class="btn btn-sec" id="faturar-cancelar" onclick="fecharModalFaturar()">Cancelar</button>
+      <button class="btn btn-avanco btn-avanco-faturado" id="faturar-confirmar"
+              onclick="confirmarFaturamentoUI()">FATURAR</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="modal-completar">
   <div class="modal-box">
     <h2>Criar carga do veículo que já está no pátio</h2>
@@ -1633,6 +1652,7 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
         defer crossorigin="anonymous" onerror="window.__socketIoFalhou=true"></script>
 <script src="suinco-api.js"></script>
 <script src="data.js"></script>
+<script src="qr.js"></script>
 <script src="app.js"></script>
 <script src="devolucoes.js"></script>
 </body>
