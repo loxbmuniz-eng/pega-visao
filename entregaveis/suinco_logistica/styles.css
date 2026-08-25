@@ -4516,3 +4516,135 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
 @media (max-width:820px){
   .mont-acoes .mont-seta{ display:none }
 }
+
+/* HISTÓRICO NO CELULAR É LISTA, NÃO CARTÃO (25/08/2026)
+   =====================================================================
+   Relato do dono: "o histórico no celular ainda está saindo muito grande o
+   card de cada atualização, não está como uma lista".
+
+   Medido antes de mexer: 132px por movimento, e mais da metade era
+   moldura. O tratamento genérico de cartão — que é o certo para a Torre e
+   a Portaria, onde cada linha é uma CARGA que a pessoa opera — carimbava
+   em CADA registro os rótulos DATA/HORA, PLACA, STATUS ANTERIOR, STATUS
+   NOVO e o rodapé "toque para abrir o registro completo". Quarenta
+   registros na tela viram quarenta repetições do mesmo texto.
+
+   Log não é cartão. Ninguém opera uma linha de auditoria: a pessoa VARRE
+   procurando um horário, uma placa ou um nome.
+
+   DUAS LINHAS, e a divisão entre elas não é arbitrária:
+
+     linha 1 — QUEM E QUANDO: placa em negrito, data, operador, setor;
+     linha 2 — O QUE MUDOU: o de→para, com a largura inteira à disposição.
+
+   A primeira tentativa punha os dois badges ao lado da placa, na mesma
+   linha. Cabia na conta e não cabia na tela: "EMBARQUE FINALIZADO" saía
+   como "EMBARQUE FINALIZAD" e "Logística" como "Loç". Status cortado é
+   pior que status ausente — quem lê "EMBARQUE ..." não sabe se foi
+   iniciado ou finalizado, que é justamente a pergunta do log.
+
+   Os rótulos por campo saem porque a posição já diz o que é. O rodapé
+   "toque para abrir" sai porque a seta ▸ promete a mesma coisa uma vez,
+   em vez de quarenta.
+   ===================================================================== */
+@media (max-width:820px){
+  /* DUAS COLUNAS IGUAIS, TRÊS LINHAS.
+
+     A tentativa anterior punha tudo em duas linhas com colunas dimensionadas
+     pelo conteúdo — e o badge "AGUARDANDO EMBARQUE", que é largo, esticava a
+     primeira coluna e empurrava o resto para fora: "Logística" virava "Lo".
+     Em grade, quem manda na largura da coluna é o item mais largo dela,
+     então texto curto e badge largo não podem dividir coluna.
+
+     Com duas colunas de 1fr, cada badge tem metade da linha garantida
+     (~170px em 390px) e cabe inteiro. Status cortado é pior que status
+     ausente: quem lê "EMBARQUE ..." não sabe se foi iniciado ou finalizado,
+     que é exatamente a pergunta que o log responde. */
+  #tab-historico .table-wrap table.mobile-cartao tr.hist-linha{
+    display:grid;
+    grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+    align-items:center;
+    /* O vão entre as colunas é 22px porque a seta mora nele. Com 8px ela
+       encostava no badge da esquerda quando o status era longo. */
+    gap:3px 22px;
+    padding:7px 22px 7px 11px;   /* 22px à direita: a seta de abrir mora lá */
+    position:relative;
+  }
+
+  /* Rótulo por campo some: a posição já diz o que cada coisa é.
+
+     O !important aqui é obrigatório (a regra genérica do cartão também é
+     !important) — e por isso a seta entre os status, logo abaixo, precisa
+     do dela: sem isso este seletor apaga a seta junto com os rótulos, que
+     foi exatamente o que aconteceu na primeira versão. */
+  #tab-historico table.mobile-cartao tr.hist-linha td::before{ display:none !important }
+  /* E o rodapé repetido some junto — a seta ▸ já promete a mesma coisa. */
+  #tab-historico table.mobile-cartao tr.hist-linha[data-expansivel]::after{ display:none }
+
+  #tab-historico table.mobile-cartao tr.hist-linha td{
+    padding:0; border:none; min-width:0; width:auto;
+    display:flex; align-items:center;
+  }
+  /* Ordem das colunas na tabela: 1 Data/Hora · 2 Placa · 3 St. anterior
+     · 4 St. novo · 5 Operador · 6 Setor. A grade reordena sem tocar no
+     HTML, que continua servindo o desktop e a impressão.
+
+       linha 1 — placa e quando
+       linha 2 — o que mudou (o dado do log, com espaço para caber)
+       linha 3 — quem fez */
+  #tab-historico tr.hist-linha td:nth-child(2){          /* placa */
+    grid-area:1/1; font-weight:800; font-size:14.5px; letter-spacing:.02em;
+  }
+  #tab-historico tr.hist-linha td:nth-child(1){          /* data/hora */
+    grid-area:1/2; justify-content:flex-end;
+  }
+  /* Os dois badges se encontram no meio da linha: o anterior encosta à
+     direita da sua metade, o novo começa à esquerda da dele. */
+  #tab-historico tr.hist-linha td:nth-child(3){ grid-area:2/1; justify-content:flex-end }
+  #tab-historico tr.hist-linha td:nth-child(4){ grid-area:2/2; justify-content:flex-start }
+  #tab-historico tr.hist-linha td:nth-child(5){ grid-area:3/1 }  /* operador */
+  #tab-historico tr.hist-linha td:nth-child(6){ grid-area:3/2 }  /* setor */
+
+  /* Contexto em tom de apoio. */
+  #tab-historico tr.hist-linha td:nth-child(1),
+  #tab-historico tr.hist-linha td:nth-child(5),
+  #tab-historico tr.hist-linha td:nth-child(6){
+    font-size:11.5px; color:var(--text-dim); white-space:nowrap;
+    overflow:hidden; text-overflow:ellipsis;
+  }
+
+  /* 9.5px e padding curto não é economia estética: "AGUARDANDO EMBARQUE"
+     é o rótulo mais longo da escala e precisa caber INTEIRO na metade da
+     linha. A 10px ele media 141px numa coluna de 140 — sobrava um pixel
+     para fora e a seta encostava nele. */
+  #tab-historico tr.hist-linha .badge{
+    font-size:9.5px; padding:2px 6px; white-space:nowrap;
+  }
+  /* A seta entre os dois status.
+
+     Duas armadilhas de uma vez aqui, as duas custaram uma medição:
+
+     1. precisa vencer a regra que apaga os rótulos logo acima. Como as
+        duas são !important, quem decide é a ESPECIFICIDADE — daí o
+        seletor carregar `table.mobile-cartao` também;
+     2. como item normal do flex ela somava 22px à largura do badge, que
+        então não cabia na coluna e quebrava para a linha de baixo: a
+        linha inteira crescia de 80px para 95px por causa de uma seta.
+        Fora do fluxo, ela ocupa o VÃO entre as duas colunas e não disputa
+        largura com nada. */
+  #tab-historico table.mobile-cartao tr.hist-linha td:nth-child(4){ position:relative }
+  #tab-historico table.mobile-cartao tr.hist-linha td:nth-child(4)::before{
+    content:'→' !important; display:block !important;
+    position:absolute; left:-16px; top:50%; transform:translateY(-50%);
+    color:var(--text-dim); font-size:12px; line-height:1;
+  }
+
+  /* A seta de abrir, encostada na direita e centrada na altura da linha. */
+  #tab-historico tr.hist-linha .hist-seta{
+    position:absolute; right:9px; top:50%; transform:translateY(-50%);
+    color:var(--text-dim); font-size:15px;
+  }
+  #tab-historico tr.hist-linha.aberta .hist-seta{
+    transform:translateY(-50%) rotate(90deg); color:var(--gold-text);
+  }
+}
