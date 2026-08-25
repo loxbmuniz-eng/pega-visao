@@ -239,6 +239,32 @@
      vermelha no monitor da Portaria e rosa-claro no do escritório. */
 }
 *{box-sizing:border-box;margin:0;padding:0}
+
+/* `hidden` SIGNIFICA ESCONDIDO. SEMPRE. (25/08/2026)
+   ---------------------------------------------------------------------
+   Relato do dono: "na tela de login só apareça login e senha, nada sobre
+   autenticação de dois fatores". Ele estava certo — o campo do segundo
+   fator nascia com o atributo `hidden` E aparecia mesmo assim, 114px de
+   altura, para gente que nem tinha 2FA ativado.
+
+   A causa é uma armadilha de cascata, não um esquecimento: `[hidden]` é
+   seletor de ATRIBUTO e tem a mesma especificidade de uma CLASSE. Como a
+   regra `[hidden]{display:none}` mora na folha do NAVEGADOR e
+   `.form-group{display:flex}` mora aqui, a nossa vence — folha de autor
+   sempre ganha da folha do navegador no empate. Todo `display` que
+   escrevemos numa classe apaga silenciosamente o `hidden` de quem usar
+   aquela classe.
+
+   O projeto já tinha sido mordido duas vezes e remendado caso a caso
+   (`.nav-tab[hidden]`, `.sync-overlay[hidden]`). Remendo por elemento não
+   escala: o terceiro caso aparece quando ninguém está olhando — e apareceu,
+   em `.pulso-grid`, que mostrava a grade vazia JUNTO com a mensagem de
+   "ainda não há chegadas".
+
+   Esta regra fecha a classe inteira do defeito. O `!important` é o ponto:
+   `hidden` é decisão do código, não sugestão de estilo, e nenhuma classe
+   pode contrariá-la sem dizer isso explicitamente. */
+[hidden]{display:none !important}
 html,body{
   background:var(--navy-deep);
   color:var(--text);

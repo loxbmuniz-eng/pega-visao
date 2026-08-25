@@ -43,6 +43,31 @@ def ck(nome, ok, detalhe=''):
         falhas.append(nome)
 
 
+async def esperarProgDia(pg, limite_ms=25000):
+    """Espera a CONSULTA terminar, não o relógio.
+
+    A versão anterior dormia 1500 ms fixos depois do clique. Rodando
+    sozinho isso sobra; na bateria, com um navegador por núcleo brigando
+    pela mesma máquina e pelo mesmo servidor, a resposta às vezes demora
+    mais — e o teste lia a tela ainda escrita "Consultando…", reprovando
+    tudo de uma vez com todos os campos vazios. Falha que aparece só sob
+    carga é a pior de diagnosticar, porque some quando você vai olhar.
+
+    Espera até a lista parar de dizer "Consultando…". Devolve o que está
+    na tela, para a mensagem de falha dizer o que de fato apareceu em vez
+    de um dicionário de vazios.
+    """
+    esperado = limite_ms // 100
+    for _ in range(esperado):
+        texto = await pg.evaluate(
+            "() => (document.getElementById('progdia-lista') || {}).textContent || ''")
+        if texto and 'Consultando' not in texto:
+            return texto
+        await pg.wait_for_timeout(100)
+    return await pg.evaluate(
+        "() => (document.getElementById('progdia-lista') || {}).textContent || ''")
+
+
 async def main():
     async with async_playwright() as p:
         nav = await p.chromium.launch(executable_path='/opt/pw-browsers/chromium',
@@ -138,7 +163,7 @@ async def main():
         ck('o botão do controle aparece para a Logística', rodape['botaoVisivel'], str(rodape))
         ck('o card começa DOBRADO — só abre ao clicar', rodape['cardFechado'], str(rodape))
         await pg.click('.btn-progdia')
-        await pg.wait_for_timeout(1500)
+        naTela = await esperarProgDia(pg)
         tela = await pg.evaluate(
             """() => { const t = document.getElementById('progdia-lista').textContent;
                  const resumo = document.getElementById('progdia-resumo').textContent;
@@ -148,7 +173,8 @@ async def main():
                          textoCancelada: cancelada ? cancelada.textContent : '',
                          resumo,
                          pdfVisivel: !document.getElementById('progdia-pdf').hidden}; }""")
-        ck('a carga ativa aparece', tela['temQP1'], str(tela)[:120])
+        ck('a carga ativa aparece', tela['temQP1'],
+           str(tela)[:120] + f' | tela: {naTela[:80]!r}')
         ck('a carga CANCELADA aparece — razão da tela existir', tela['temQP2'])
         ck('a cancelada vem marcada como cancelada, com autor',
            tela['canceladaMarcada'] and 'Cancelada por' in tela['textoCancelada'],
