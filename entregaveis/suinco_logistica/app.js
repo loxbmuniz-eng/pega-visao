@@ -19,6 +19,48 @@ let _operadoresOnline = new Set();
 const NOTIF_MAX_VISIVEL = 3;
 let _notifFila = [];
 
+/* AVISO DE OUTRO SETOR É NOTÍCIA, E NOTÍCIA TEM PRAZO (25/08/2026)
+   =====================================================================
+   Relato do dono, com print de "+142 aviso(s) aguardando": "essa fila de
+   avisos tá foda com esses avisos acumulados; deixa os avisos mais
+   focados pro ao vivo mesmo, larga mão de ficar mostrando ele
+   infinitamente pra quem tá abrindo o painel agora".
+
+   A fila nunca descartava nada. Três avisos na tela por vez, cinco
+   segundos cada — num pátio movimentado chegam mais rápido do que isso
+   drena, e o resto ficava esperando a vez para sempre. Quem abria o painel
+   às 12h assistia, um a um, a avisos de coisas que aconteceram às 9h. E
+   pior: o painel já MOSTRAVA o estado atual daquelas cargas — o aviso não
+   informava nada, só ocupava a tela.
+
+   Três regras, e a terceira é a que o dono pediu:
+
+   1. FILA CURTA. Além de MAX_FILA, o mais antigo cai. Aviso que espera
+      atrás de dez outros já chegou tarde.
+
+   2. PRAZO DE VALIDADE. Item que passou VALIDADE_MS na fila é descartado
+      na hora de aparecer. "Carga 118350 mudou pra Faturado" às 9h07 não é
+      notícia às 12h — é histórico, e histórico tem aba própria.
+
+   3. JANELA DE CHEGADA. Nos primeiros segundos depois de o painel abrir,
+      aviso de mudança de OUTRO setor não aparece. Quem acabou de chegar
+      está lendo a tela inteira; a tela já mostra o resultado dessas
+      mudanças. Anunciar o que ele nunca viu diferente é ruído.
+
+   O QUE NÃO É SILENCIADO, em nenhuma das três: aviso com som (`forte`) —
+   troca de placa é segurança, o caminhão errado entra na doca por causa
+   dele — e tudo que é resposta a uma ação de QUEM ESTÁ NA FRENTE DA TELA
+   (gravou, foi recusado, perdeu a conexão). Esses não são notícia de
+   terceiro: são a conversa com quem clicou. */
+const NOTIF_MAX_FILA = 4;
+const NOTIF_VALIDADE_MS = 30000;
+const NOTIF_JANELA_CHEGADA_MS = 12000;
+const _notifAbertoEm = Date.now();
+
+function notifRecemChegado(){
+  return (Date.now() - _notifAbertoEm) < NOTIF_JANELA_CHEGADA_MS;
+}
+
 // Próxima ação disponível a partir de cada status (usada nos botões de
 // linha das tabelas de Expedição/Faturamento — cada linha já é uma carga
 // específica, então não há ambiguidade de "qual carga" aqui).
@@ -238,14 +280,42 @@ function botaoAvancoHtml(carga){
    atualizacoes". O aviso de troca de placa é segurança (o caminhão errado
    entra na doca por causa dele) — não é candidato a "descartar os mais
    antigos", só a esperar um pouco. */
-function _exibirNotif(el, ms){
+function _exibirNotif(el, ms, opcoes){
   const container = document.getElementById('notif');
+  // `perecivel`: notícia de outro setor. Ver o bloco de regras no topo.
+  const perecivel = !!(opcoes && opcoes.perecivel) && !el.classList.contains('forte');
+  if(perecivel && notifRecemChegado()) return;
+
   if(container.querySelectorAll('.notif-item').length >= NOTIF_MAX_VISIVEL){
-    _notifFila.push({el, ms});
+    if(!perecivel){
+      _notifFila.push({ el, ms, em: Date.now(), perecivel: false });
+    } else {
+      _notifFila.push({ el, ms, em: Date.now(), perecivel: true });
+      // Fila curta: o mais antigo PERECÍVEL cai primeiro. Um aviso que não
+      // é perecível (recusa, erro de gravação) nunca é descartado por
+      // pressão de fila — ele é resposta a uma ação de quem está aqui.
+      while(_notifFila.length > NOTIF_MAX_FILA){
+        const i = _notifFila.findIndex(x => x.perecivel);
+        if(i < 0) break;
+        _notifFila.splice(i, 1);
+      }
+    }
     _atualizarContadorFila();
     return;
   }
   _mostrarNotifAgora(el, ms);
+}
+
+/* Tira da fila o próximo que ainda VALE mostrar. Perecível vencido é
+   descartado aqui, e não quando entrou: enquanto a fila anda rápido ele
+   ainda é notícia; quando ela empaca, deixou de ser. */
+function _proximoDaFila(){
+  while(_notifFila.length){
+    const item = _notifFila.shift();
+    if(item.perecivel && (Date.now() - item.em) > NOTIF_VALIDADE_MS) continue;
+    return item;
+  }
+  return null;
 }
 // Separado de _exibirNotif de propósito: um item que passa pela fila só
 // pode ganhar o botão de fechar e o temporizador UMA vez, na hora em que
@@ -264,7 +334,7 @@ function _mostrarNotifAgora(el, ms){
   const remover = () => {
     clearTimeout(temporizador);
     el.remove();
-    const proximo = _notifFila.shift();   // tira da fila ANTES de contar — o contador reflete o que sobra
+    const proximo = _proximoDaFila();   // tira da fila ANTES de contar — o contador reflete o que sobra
     _atualizarContadorFila();
     if(proximo) _mostrarNotifAgora(proximo.el, proximo.ms);
   };
@@ -328,13 +398,13 @@ function notifyGravacao(msgSucesso, msObrigatorio){
     'danger', 12000);
 }
 
-function notify(msg, type, ms){
+function notify(msg, type, ms, opcoes){
   const el = document.createElement('div');
   el.className = 'notif-item' + (type ? ' ' + type : '');
   const texto = document.createElement('span');
   texto.textContent = msg;
   el.appendChild(texto);
-  _exibirNotif(el, ms);
+  _exibirNotif(el, ms, opcoes);
 }
 
 /* Monta a mensagem de "outro setor mexeu em alguma coisa" a partir do que
@@ -489,7 +559,11 @@ function receberEdicaoRemota(aviso){
      um que exige clique acumularia na tela do terminal compartilhado —
      mas quem já leu pode fechar na hora pelo X, e libera a vez pro
      próximo da fila sem esperar o tempo passar. */
-  _exibirNotif(el, aviso.sonoro ? 20000 : 9000);
+  /* Perecível, EXCETO o sonoro: troca de placa é segurança (o caminhão
+     errado entra na doca por causa dela) e nunca é descartada nem
+     silenciada na janela de chegada. _exibirNotif já protege a classe
+     `forte`; o sinalizador aqui é o mesmo, escrito por extenso. */
+  _exibirNotif(el, aviso.sonoro ? 20000 : 9000, { perecivel: !aviso.sonoro });
 
   if(aviso.sonoro) tocarAlertaAlteracao();
 }
@@ -7101,7 +7175,12 @@ async function init(){
         // precisa saber disso — tela que se altera sozinha sem explicação
         // destrói a confiança no painel.
         if(!dados.incremental) return;   // carga inicial não é "novidade"
-        if(r.cargasNovas || r.cargasAtualizadas) notify(mensagemAtualizacaoRemota(r), 'success');
+        /* PERECÍVEL: é notícia de outro setor, e a tela já mostra o
+           resultado dela. Quem acabou de abrir o painel não precisa
+           assistir à reprise do que aconteceu antes de ele chegar. */
+        if(r.cargasNovas || r.cargasAtualizadas){
+          notify(mensagemAtualizacaoRemota(r), 'success', undefined, { perecivel: true });
+        }
       }
       atualizarRodapeConexao(SuincoSharePoint.estado());
     });
@@ -8000,7 +8079,19 @@ function renderMontagem(){
 
   const tbody = document.getElementById('mont-tbody');
   const vazio = document.getElementById('mont-empty');
-  const lista = montagens;
+  /* CANCELADA SOME DA TELA — pedido do dono (25/08/2026): "quando uma rota
+     e cancelada na montagem do dia, ela precisa desaparecer das linhas, e
+     nao ficar la como cancelada".
+
+     Ele tem razao sobre ESTA tela: a montagem e a lista do que VAI rodar
+     hoje, e linha cancelada ali e ruido entre as que ainda pedem trabalho.
+     Numa sexta de 42 linhas, meia duzia de canceladas empurra para baixo
+     justamente as que faltam preencher.
+
+     Some da TELA, nao do banco: a linha continua gravada com o motivo, a
+     hora e quem cancelou, e o Historico responde por ela. O Excel apagava
+     sem deixar rastro; e isso que este painel existe para acabar. */
+  const lista = montagens.filter(m => !m.cancelada_em);
   if(vazio) vazio.hidden = lista.length > 0;
   if(!tbody) return;
 
@@ -8382,16 +8473,30 @@ async function aplicarModeloDoDiaUI(){
      A primeira versão filtrava com um Set de rotas já montadas: bastava
      uma carga de Patos existir para as OUTRAS saídas de Patos sumirem da
      oferta. Na sexta isso escondia 20 das 39 cargas do dia. */
-  const montadasPorRota = new Map();
-  montagens.filter(m => !m.cancelada_em).forEach(m => {
-    montadasPorRota.set(m.rota_codigo, (montadasPorRota.get(m.rota_codigo) || 0) + 1);
-  });
-  const saldo = new Map(montadasPorRota);
-  const novas = modelo.filter(m => {
-    const resta = saldo.get(m.rota_codigo) || 0;
-    if(resta > 0){ saldo.set(m.rota_codigo, resta - 1); return false; }
-    return true;
-  });
+  /* CASA POR LINHA DO MODELO, NAO POR CODIGO DE ROTA (25/08/2026).
+
+     Relato do dono: "ta tudo duplicado ainda na montagem do dia".
+
+     As duas versoes anteriores erraram no mesmo lugar, cada uma de um
+     jeito. A primeira usava um Set de codigos: bastava uma carga de Patos
+     existir para as OUTRAS saidas de Patos sumirem da oferta. A segunda
+     passou a CONTAR por codigo — resolveu o sumico e criou a duplicata.
+
+     Contagem nao resolve ambiguidade. Na terca, Arinos/Buritis, Joao
+     Pinheiro, Paracatu, Riachinho e Unai sao todos o codigo 504: contando,
+     o painel sabe que "faltam 2 de 504" e nao sabe QUAIS 2. Puxa duas
+     quaisquer, e o dia fica com Joao Pinheiro repetido e Unai faltando.
+
+     Identidade resolve. Cada montagem guarda a linha do modelo que a
+     originou (migracao 035), e aqui a pergunta passa a ser exata: esta
+     linha ja virou carga hoje?
+
+     Montagem antiga (sem modelo_id) e carga avulsa nao entram na conta —
+     nao vieram de linha nenhuma, entao nao marcam nenhuma como feita. */
+  const jaVieram = new Set(
+    montagens.filter(m => !m.cancelada_em && m.modelo_id != null)
+             .map(m => String(m.modelo_id)));
+  const novas = modelo.filter(m => !jaVieram.has(String(m.modelo_id)));
   /* Duas situações MUITO diferentes que davam a mesma resposta, e a
      resposta era falsa quando o modelo estava vazio: dizer "já estão
      montadas" para quem nunca cadastrou rota nenhuma manda a pessoa
@@ -8411,6 +8516,7 @@ async function aplicarModeloDoDiaUI(){
     try {
       await SuincoSharePoint.montagem.criar({
         dia, rotaCodigo: m.rota_codigo, sequencia: montagens.length + i + 1,
+        modeloId: m.modelo_id,
         tipoOperacao: m.tipo_operacao, qtdEntregas: m.qtd_entregas || 1,
         paletizada: m.paletizada || 'Não',
         /* O nome como a operação o conhece ("Brasília - Versatto") viaja
