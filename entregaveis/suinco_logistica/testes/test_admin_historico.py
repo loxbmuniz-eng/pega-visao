@@ -127,20 +127,18 @@ async def main():
         depois = await pgA.evaluate("(id) => (getCarga(id) || {}).status", carga['id'])
         ck('a carga não se mexeu', depois == 'Seguiu Viagem', str(depois))
 
-        print('\n=== 3. COM MOTIVO E COM O AVAL DE OUTRO ADM, A CARGA VOLTA ===')
+        print('\n=== 3. COM MOTIVO, UM ADMINISTRADOR SOZINHO CORRIGE ===')
+        # De 22 a 25/08/2026 este passo exigia o aval de outro administrador:
+        # o primeiro clique abria um pedido e só o segundo, depois da
+        # aprovação, corrigia. A exigência caiu por decisão do dono.
+        #
+        # O caso "sem motivo" NÃO se repete aqui: a seção 2 já o cobre, e o
+        # cobre pelo mecanismo certo. Eu tinha escrito uma segunda checagem
+        # com prompt() vazio e ela falhou — corrigirEtapaCargaUI lê o motivo
+        # do CAMPO #adm-etapa-motivo, não de um prompt, e o campo acabara de
+        # ser preenchido na linha acima. Testava o nada.
         await pgA.fill(f"#adm-etapa-motivo-{carga['id']}", 'saída registrada por engano')
-        # Primeiro clique: não corrige nada, ABRE o pedido de aprovação. É o
-        # que o Alysson não tinha — antes o botão só dizia que não podia.
-        # SEM MOTIVO, NADA ACONTECE. É a única coisa que sobrou entre o
-        # clique e o histórico reescrito — por isso é o primeiro caso.
-        await pgA.evaluate("()=>{ window.prompt = ()=> ''; window.confirm = ()=>true; }")
-        await pgA.click(f"button[onclick*=\"corrigirEtapaCargaUI('{carga['id']}')\"]")
-        await pgA.wait_for_timeout(2000)
-        aindaLa = await pgA.evaluate("(id) => (getCarga(id) || {}).status", carga['id'])
-        ck('sem motivo, a carga não se mexe', aindaLa == 'Seguiu Viagem', str(aindaLa))
-
-        # Com motivo, um administrador sozinho corrige a etapa.
-        await pgA.evaluate("()=>{ window.prompt = ()=> 'saída registrada por engano'; }")
+        await pgA.evaluate("()=>{ window.confirm = ()=>true; }")
         await pgA.click(f"button[onclick*=\"corrigirEtapaCargaUI('{carga['id']}')\"]")
         await pgA.wait_for_timeout(3000)
         voltou = await pgA.evaluate("(id) => (getCarga(id) || {}).status", carga['id'])
