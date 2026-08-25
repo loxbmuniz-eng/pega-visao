@@ -3568,8 +3568,14 @@ function renderProgAguardando(){
 function abrirCompletar(id){
   const c = getCarga(id); if(!c) return;
   document.getElementById('completar-id').value = id;
-  document.getElementById('completar-placa-info').textContent =
-    `Placa ${c.placa} — no pátio desde ${fmtDataHora(entradaNoPatioDe(c) || c.criadoEm)}`;
+  /* "No pátio desde" só quando a chegada foi REGISTRADA. O `|| c.criadoEm`
+     que estava aqui trocava a resposta honesta pela data em que a LINHA
+     nasceu — que numa carga programada é a véspera. Foi assim que uma
+     placa que chegou de manhã apareceu "no pátio desde 20:42 de ontem". */
+  const entradaCompletar = entradaNoPatioDe(c);
+  document.getElementById('completar-placa-info').textContent = entradaCompletar
+    ? `Placa ${c.placa} — no pátio desde ${fmtDataHora(entradaCompletar)}`
+    : `Placa ${c.placa} — chegada ainda não registrada pela Portaria`;
   document.getElementById('completar-numero-carga').value = '';
   document.getElementById('completar-cliente').value = '';
   document.getElementById('completar-destino').value = '';
@@ -3795,8 +3801,11 @@ function renderPortariaPatio(){
   document.getElementById('portaria-patio-tbody').innerHTML = placas.map(p=>{
     const cargas = porPlaca[p];
     const transp = cargas[0].transportadora || '—';
-    // Uma definição só de "entrada no pátio" — ver entradaNoPatioDe().
-    const chegada = cargas.map(c=>entradaNoPatioDe(c) || c.criadoEm).sort()[0];
+    /* Uma definição só de "entrada no pátio" — ver entradaNoPatioDe().
+       Sem `|| c.criadoEm`: quando não há chegada registrada a coluna fica
+       vazia, em vez de mostrar a data em que a linha foi criada com cara
+       de hora de chegada. */
+    const chegada = cargas.map(entradaNoPatioDe).filter(Boolean).sort()[0] || null;
     /* A CONTA ERA SÓ DO QUE JÁ ESTAVA NO PÁTIO (20/08/2026).
 
        No print do programador de embarque a placa aparecia aqui com "1
@@ -3813,7 +3822,8 @@ function renderPortariaPatio(){
       <td>${esc(p)}</td><td>${esc(transp)}</td><td>${contagem}</td>
       <td>${cargas.map(c=>badgeHtml(c.status)).join(' ')}
         ${aguardando.map(c=>`<span class="badge-espera" title="Esta carga da MESMA placa ainda não teve a chegada registrada.">${esc(c.numeroCarga)||'sem nº'}: aguardando entrada</span>`).join(' ')}</td>
-      <td>${fmtDataHora(chegada)}</td>
+      <td>${chegada ? fmtDataHora(chegada)
+            : '<span class="text-dim">chegada não registrada</span>'}</td>
     </tr>`;
   }).join('');
   document.getElementById('portaria-patio-empty').hidden = placas.length>0;

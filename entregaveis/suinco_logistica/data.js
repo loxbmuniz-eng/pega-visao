@@ -965,11 +965,31 @@ function fundirEstadoRemoto(dados){
     }
   });
 
-  // ---- movimentações (log: só acrescenta) ----
+  /* ---- movimentações (log: só acrescenta) ----
+
+     O SERVIDOR É A FONTE DE VERDADE DO HORÁRIO (25/08/2026).
+
+     Quando a movimentação do servidor chega, a provisória local do MESMO
+     evento sai. Não é otimização: é o que impede o mesmo caminhão de ter
+     duas horas de entrada no mesmo aparelho — uma do relógio do celular
+     de quem clicou, outra do relógio do servidor.
+
+     O casamento é por (carga, de → para), que é o que identifica o evento
+     independentemente do id. Sai UMA provisória por movimentação que
+     chega: se a mesma transição aconteceu duas vezes de verdade (correção
+     de etapa), a segunda continua lá esperando a sua. */
   const vistas = new Set(DB.movimentacoes.map(m => m.id));
   (dados.movimentacoes || []).forEach(r => {
     const mov = movimentacaoDeLinhaRemota(r);
     if(!mov || !mov.id || vistas.has(mov.id)) return;
+    const i = DB.movimentacoes.findIndex(x => x._local
+      && x.cargaId === mov.cargaId
+      && x.statusNovo === mov.statusNovo
+      && (x.statusAnterior || null) === (mov.statusAnterior || null));
+    if(i >= 0){
+      vistas.delete(DB.movimentacoes[i].id);
+      DB.movimentacoes.splice(i, 1);
+    }
     DB.movimentacoes.push(mov); vistas.add(mov.id); res.movimentacoesNovas++;
   });
 
@@ -1428,6 +1448,20 @@ function registrarMovimentacao({cargaId, placa, statusAnterior, statusNovo, oper
   DB.movimentacoes.push({
     id: uid('mov'),
     timestamp: nowISO(),
+    /* PROVISÓRIA ATÉ O SERVIDOR RESPONDER (25/08/2026).
+
+       Este registro existe para a tela responder na hora — inclusive
+       offline — e carrega o relógio DESTE aparelho. O servidor grava o
+       dele, com `data_evento` no relógio DELE, e é esse que vale.
+
+       Sem esta marca, os dois conviviam para sempre: a fusão do estado
+       remoto deduplica por id, e o id local (uuid) nunca bate com o do
+       servidor. O aparelho de quem registrou ficava com DUAS entradas
+       para o mesmo caminhão, e a tela mostrava a mais antiga das duas —
+       enquanto o aparelho do colega, que só recebeu a do servidor,
+       mostrava outra hora. Foi o relato de 25/08: três telas, três
+       horários para a mesma placa. */
+    _local: true,
     operador: operador || '(não identificado)',
     setor: setor || '—',
     placa: normalizarPlaca(placa),
