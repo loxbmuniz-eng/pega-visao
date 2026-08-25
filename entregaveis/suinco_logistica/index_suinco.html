@@ -284,6 +284,15 @@
           <button class="btn btn-primary btn-sm" id="mont-btn-lote" hidden
             onclick="efetivarLoteMontagemUI()"></button>
         </div>
+        <!-- O dia em planilha: o painel substituiu o Excel na OPERAÇÃO, mas
+             a planilha também era o ARQUIVO do dia. Tirar sem repor troca
+             um problema por outro. -->
+        <div class="form-group filtro-acoes">
+          <button class="btn btn-sec btn-sm" onclick="exportarMontagemDoDiaUI()"
+            title="Baixa a programação deste dia em planilha (abre no Excel).">
+            ⬇ Exportar o dia
+          </button>
+        </div>
       </div>
       <div class="bento bi-faixa" id="mont-stats" style="margin-bottom:12px"></div>
       <!-- CARGA FORA DO MODELO. O modelo cobre a semana típica; frete extra,

@@ -8007,6 +8007,36 @@ function renderMontagem(){
   tbody.innerHTML = lista.map(m => linhaMontagemHtml(m)).join('');
 }
 
+/* O DESTINO NO TÍTULO, A PRAÇA EMBAIXO (25/08/2026)
+
+   Relato do dono: "nessas das cargas do dia tem várias duplicadas, tão
+   saindo duplicadas as rotas".
+
+   Fui conferir contra as cinco planilhas que ele mandou, linha a linha.
+   Duas coisas diferentes estavam acontecendo, e só uma é defeito:
+
+   NÃO É DEFEITO — a sexta tem MESMO quatro caminhões para Montes Claros e
+   três para Brasília, cada um com número de carga e placa próprios. Copiar
+   isso é ser fiel; enxugar seria inventar.
+
+   É DEFEITO — o de-para colapsou destinos DIFERENTES no mesmo código,
+   porque a praça cadastrada no painel cobre um circuito inteiro. Na terça,
+   Arinos/Buritis, João Pinheiro, Paracatu, Riachinho e Unaí viram todos
+   "504". A tela mostrava o nome da PRAÇA em negrito e o destino real em
+   letra miúda embaixo — seis linhas com o mesmo título gritado e a
+   diferença sussurrada. Quem olha lê seis duplicatas.
+
+   Inverti: o destino da planilha é o título, a praça e o código viram a
+   informação de apoio. O dado é o mesmo; o que muda é qual metade a tela
+   grita. Onde não há apelido (carga fora do modelo), a praça continua
+   sendo o título — não há nada mais específico para mostrar. */
+function destinoMontagemHtml(m){
+  const praca = `<span class="text-dim mont-praca">${esc(m.rota_nome)} · ${esc(m.rota_codigo)}</span>`;
+  return m.apelido_rota
+    ? `<strong>${esc(m.apelido_rota)}</strong><div>${praca}</div>`
+    : `<strong>${esc(m.rota_nome)}</strong> <span class="text-dim">${esc(m.rota_codigo)}</span>`;
+}
+
 /* A LINHA COMO RESUMO, O FORMULÁRIO COMO DETALHE (25/08/2026)
 
    Pedido do gestor: "cadê os campos pra poder começar a preencher essa
@@ -8045,8 +8075,7 @@ function linhaMontagemHtml(m){
   const resumo = `<tr class="mont-linha${trancada ? ' linha-fraca' : ''}${aberta ? ' mont-linha-aberta' : ''}"
       ${trancada ? '' : `onclick="alternarLinhaMontagemUI('${id}')" title="Clique para abrir os campos desta carga"`}>
       <td>${m.sequencia ?? '—'}</td>
-      <td><strong>${esc(m.rota_nome)}</strong> <span class="text-dim">${esc(m.rota_codigo)}</span> ${marca}
-          ${m.apelido_rota ? `<div class="text-dim" style="font-size:11.5px">${esc(m.apelido_rota)}</div>` : ''}</td>
+      <td>${destinoMontagemHtml(m)} ${marca}</td>
       <td>${esc(m.numero_carga) || '<span class="text-dim">—</span>'}</td>
       <td>${m.placa
             ? `<strong>${esc(m.placa)}</strong>`
@@ -8059,6 +8088,82 @@ function linhaMontagemHtml(m){
 
   if(!aberta) return resumo;
   return resumo + `<tr class="mont-detalhe"><td colspan="6">${formMontagemHtml(m)}</td></tr>`;
+}
+
+/* O DIA EM PLANILHA — para o registro que a Suinco sempre teve.
+
+   Pedido do dono (25/08/2026): "quero poder exportar por dia tudo isso no
+   formato excel para seguir o padrão que era antes pelo menos para
+   registro, ou relatório de rota do dia".
+
+   O painel substituiu a planilha na OPERAÇÃO, e isso é o ponto dele: a
+   planilha também era o ARQUIVO. Quem precisa responder "como foi o dia 21"
+   daqui a seis meses abria o arquivo daquele dia. Tirar isso sem repor
+   troca um problema por outro.
+
+   CSV com ponto-e-vírgula e BOM, não .xlsx: é o que o Excel em português
+   abre com duplo clique e colunas separadas, sem biblioteca nova dentro do
+   painel — e o painel é um arquivo só, sem CDN. O BOM não é detalhe: sem
+   ele o Excel pt-BR abre "Ç" como lixo, o que já apareceu em campo.
+
+   As colunas seguem a ORDEM DA PLANILHA ANTIGA (Sequência, Carga, Rota,
+   Pra onde, Placa, Transportadora, Perfil, Peso, Paletizada), com as que
+   o painel acrescentou no fim. Quem abrir vai reconhecer o arquivo. */
+async function exportarMontagemDoDiaUI(){
+  if(!_montagemDia){ notify('Escolha o dia primeiro.', 'erro', 4000); return; }
+  const { dia, montagens } = _montagemDia;
+  const vivas = montagens.filter(m => !m.cancelada_em);
+  if(!vivas.length){
+    notify('Não há cargas montadas neste dia para exportar.', 'warn', 5000);
+    return;
+  }
+  const frotaDe = (placa) => (placa ? buscarFrota(placa) : null) || {};
+  const linhas = vivas.map(m => {
+    const f = frotaDe(m.placa);
+    return [
+      m.sequencia ?? '',
+      m.numero_carga || '',
+      m.apelido_rota || m.rota_nome || '',
+      m.tipo_operacao || '',
+      m.placa || '',
+      f.transportadora || '',
+      f.tipoVeiculo || '',
+      // Vírgula decimal: é o que o Excel pt-BR entende como número.
+      m.peso ? String((Number(m.peso) / 1000).toFixed(1)).replace('.', ',') : '',
+      m.paletizada || '',
+      m.qtd_entregas ?? '',
+      m.qtd_ganchos ?? '',
+      m.rota_codigo || '',
+      m.motorista || '',
+      m.observacoes || '',
+      /* O desfecho no papel: sem ele, o arquivo do dia não distingue a
+         carga que rodou da que ficou só planejada. */
+      m.efetivada_em ? 'Na Torre' : (m.placa ? 'Com placa' : 'Sem placa'),
+    ];
+  });
+  baixarCsvDoDia(`Programacao_${dia}`, [
+    'Sequência', 'Carga', 'Rota', 'Pra onde?', 'Placa', 'Transportadora',
+    'Perfil', 'Peso (t)', 'Paletizada', 'Entregas', 'Ganchos',
+    'Código da rota', 'Motorista', 'Observações', 'Situação',
+  ], linhas);
+}
+
+/* Mesmo escapamento e mesmo BOM de baixarCsvCadastro — separado só porque
+   o nome do arquivo é outro (o dia, não o cadastro) e porque este some se
+   alguém mexer nos cadastros amanhã. */
+function baixarCsvDoDia(nome, cabecalhos, linhas){
+  const escapa = (v) => {
+    const t = String(v ?? '');
+    return /[";\n\r]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t;
+  };
+  const corpo = [cabecalhos, ...linhas].map(l => l.map(escapa).join(';')).join('\r\n');
+  const blob = new Blob(['\ufeff' + corpo], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `Suinco_${nome}.csv`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(a.href);
+  notifyGravacao(`Programação do dia exportada: ${linhas.length} carga(s).`);
 }
 
 /* CARGA FORA DO MODELO — porque frete extra não é exceção rara.
@@ -8125,7 +8230,19 @@ function acoesLinhaMontagemHtml(m, aberta){
     : `<button class="btn btn-primary btn-sm mont-btn-criar" disabled
          onclick="event.stopPropagation()"
          title="Coloque a placa para poder criar a carga.">➕ Criar carga</button>`;
+  /* EXCLUIR NA PRÓPRIA LINHA — pedido do dono (25/08/2026).
+
+     A linha que não vai rodar hoje (rota que não saiu, carga que a
+     fábrica cancelou) tinha que ser aberta para ser tirada. Numa sexta de
+     42 linhas isso é um clique a mais em cada uma que sobra.
+
+     "Cancelar", não "apagar": a linha some da montagem e continua no
+     banco com o motivo e a hora — programação que se apaga sem rastro é
+     como o Excel era, e é o que este painel existe para acabar. */
   return `<div class="mont-acoes">${criar}
+    <button class="btn btn-danger btn-sm mont-btn-excluir"
+      onclick="event.stopPropagation(); cancelarMontagemUI('${id}')"
+      title="Tira esta linha do dia. Fica registrada, com o motivo.">Excluir</button>
     <span class="mont-seta${aberta ? ' aberta' : ''}" aria-hidden="true">▸</span></div>`;
 }
 
@@ -8146,9 +8263,9 @@ function formMontagemHtml(m){
   const frota = m.placa ? buscarFrota(m.placa) : null;
   return `
     <div class="mont-form">
-      <div class="mont-form-tit">${esc(m.rota_nome)}
-        <span class="text-dim">${esc(m.rota_codigo)}</span>
-        ${m.apelido_rota ? `<span class="text-dim"> · ${esc(m.apelido_rota)}</span>` : ''}</div>
+      <div class="mont-form-tit">${esc(m.apelido_rota || m.rota_nome)}
+        <span class="text-dim" style="font-weight:400">
+          ${m.apelido_rota ? esc(m.rota_nome) + ' · ' : ''}${esc(m.rota_codigo)}</span></div>
 
       <div class="form-row">
         <div class="form-group">
@@ -8548,8 +8665,7 @@ function renderModeloSemana(){
   if(!tbody) return;
   tbody.innerHTML = doDia.map((m, i) => `<tr>
       <td class="text-dim">${i + 1}</td>
-      <td><strong>${esc(m.rota_nome)}</strong> <span class="text-dim">${esc(m.rota_codigo)}</span>
-          ${m.apelido_rota ? `<div class="text-dim" style="font-size:11.5px">${esc(m.apelido_rota)}</div>` : ''}</td>
+      <td>${destinoMontagemHtml(m)}</td>
       <td>${esc(m.tipo_operacao) || '<span class="text-dim">—</span>'}</td>
       <td>${m.qtd_entregas ?? '<span class="text-dim">—</span>'}</td>
       <td class="no-print">

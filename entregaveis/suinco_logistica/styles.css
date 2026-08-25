@@ -4648,3 +4648,8 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
     transform:translateY(-50%) rotate(90deg); color:var(--gold-text);
   }
 }
+
+/* Praça e código embaixo do destino: apoio, não manchete. Ver
+   destinoMontagemHtml — o título é o destino da planilha, porque seis
+   linhas com a mesma praça em negrito leem como seis duplicatas. */
+.mont-praca{ font-size:11.5px }
