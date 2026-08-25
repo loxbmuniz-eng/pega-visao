@@ -282,6 +282,74 @@ async def main():
         await pgm.close()
         await ctxm.close()
 
+        print('\n=== 10. O BOTÃO DE CRIAR CARGA FICA NA LINHA, NÃO SÓ NO FORMULÁRIO ===')
+        # Eu tinha movido as ações para dentro do formulário e isso foi um
+        # retrocesso: numa sexta de 39 cargas, mandar uma para a Torre
+        # passava a exigir abrir a linha, clicar, e a linha fechar sozinha.
+        d = await pg.evaluate("""() => {
+              // Linha já efetivada é LEITURA: ali a coluna mostra "virou
+              // carga", não um botão. Contar ela junto reprovaria o
+              // comportamento certo.
+              const linhas = [...document.querySelectorAll(
+                '#mont-tbody tr.mont-linha:not(.linha-fraca)')];
+              const comBotao = linhas.filter(tr => tr.querySelector('.mont-btn-criar')).length;
+              const semPlaca = linhas.find(tr => tr.textContent.includes('sem placa'));
+              const comPlaca = linhas.find(tr => {
+                const b = tr.querySelector('.mont-btn-criar');
+                return b && !b.disabled;
+              });
+              return {
+                linhas: linhas.length, comBotao,
+                desabilitadoSemPlaca: semPlaca
+                  ? semPlaca.querySelector('.mont-btn-criar').disabled : null,
+                habilitadoComPlaca: !!comPlaca,
+              };
+            }""")
+        ck('toda linha ainda em montagem traz o botão de criar carga',
+           d['comBotao'] == d['linhas'], str(d))
+        ck('sem placa o botão fica desabilitado na própria linha',
+           d['desabilitadoSemPlaca'] is True, str(d))
+        ck('com placa ele fica clicável', d['habilitadoComPlaca'], str(d))
+
+        # O clique no botão NÃO pode abrir/fechar a linha junto: a linha
+        # inteira é clicável, e sem stopPropagation criar a carga abriria o
+        # formulário de uma linha que acabou de virar leitura.
+        antes = await pg.evaluate(
+            "() => !!document.querySelector('#mont-tbody tr.mont-detalhe')")
+        await pg.evaluate("""() => {
+              const tr = [...document.querySelectorAll('#mont-tbody tr.mont-linha')]
+                .find(t => { const b = t.querySelector('.mont-btn-criar'); return b && b.disabled; });
+              tr.querySelector('.mont-btn-criar').click();
+            }""")
+        await pg.wait_for_timeout(400)
+        depois = await pg.evaluate(
+            "() => !!document.querySelector('#mont-tbody tr.mont-detalhe')")
+        ck('clicar no botão não abre a linha por tabela',
+           antes == depois, f'antes {antes} · depois {depois}')
+
+        print('\n=== 11. CARGA FORA DO MODELO ===')
+        # Frete extra e cliente novo não são exceção rara, são terça-feira.
+        # Sem esta porta a Logística sai da tela e cria a carga na aba de
+        # cima — e o dia deixa de estar todo num lugar só.
+        antes = await pg.evaluate("() => _montagemDia.montagens.length")
+        d = await pg.evaluate("""async () => {
+              const sel = document.getElementById('mont-rota-extra');
+              const opcoes = sel.options.length;
+              sel.value = '500';
+              await adicionarCargaForaDoModeloUI();
+              const aberta = document.querySelector('#mont-tbody tr.mont-detalhe');
+              return { opcoes, depois: _montagemDia.montagens.length,
+                       abriuSozinha: !!aberta };
+            }""")
+        ck('o seletor traz as rotas do cadastro oficial', d['opcoes'] > 10, str(d['opcoes']))
+        ck('a linha nova entrou no dia', d['depois'] == antes + 1,
+           f"{antes} → {d['depois']}")
+        ck('e já abre para preencher', d['abriuSozinha'], str(d))
+        nova = sql(f"SELECT apelido_rota, rota_codigo FROM programacao_montagem "
+                   f"WHERE data_prog = '{DIA}' ORDER BY criado_em DESC LIMIT 1")
+        ck('a linha avulsa nasce SEM apelido — não veio de planilha nenhuma',
+           nova and nova[0] == '' and nova[1] == '500', str(nova))
+
         print('\n=== 9. SEM ERRO DE JAVASCRIPT ===')
         ck('console limpo', not erros, '; '.join(erros[:3]))
 

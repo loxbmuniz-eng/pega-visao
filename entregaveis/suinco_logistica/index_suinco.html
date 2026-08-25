@@ -286,6 +286,19 @@
         </div>
       </div>
       <div class="bento bi-faixa" id="mont-stats" style="margin-bottom:12px"></div>
+      <!-- CARGA FORA DO MODELO. O modelo cobre a semana típica; frete extra,
+           cliente novo e reforço de última hora não são exceção rara, são
+           terça-feira. Sem isto, a Logística sai da tela e cria a carga na
+           aba de cima — e o dia deixa de estar todo num lugar só. -->
+      <div class="form-row" style="align-items:flex-end">
+        <div class="form-group">
+          <label>Adicionar carga fora do modelo <span class="hint">(frete extra do dia)</span></label>
+          <select id="mont-rota-extra"></select>
+        </div>
+        <div class="form-group filtro-acoes">
+          <button class="btn btn-sec btn-sm" onclick="adicionarCargaForaDoModeloUI()">➕ Adicionar linha</button>
+        </div>
+      </div>
       <div class="table-wrap">
         <table id="mont-tabela">
           <!-- SEIS COLUNAS, NÃO DEZ. A linha é um RESUMO; o preenchimento

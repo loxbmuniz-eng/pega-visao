@@ -7980,6 +7980,14 @@ function renderMontagem(){
       : `🚚 Enviar as ${prontas.length} prontas para a Torre`;
   }
 
+  /* Mesma fonte do seletor do modelo (ROTAS + rotaLabel): rota cadastrada
+     em Cadastros aparece aqui na hora, sem lista paralela para envelhecer. */
+  const selExtra = document.getElementById('mont-rota-extra');
+  if(selExtra && !selExtra.options.length){
+    selExtra.innerHTML = ROTAS.map(r =>
+      `<option value="${esc(r.codigo)}">${esc(rotaLabel(r.codigo))}</option>`).join('');
+  }
+
   const tbody = document.getElementById('mont-tbody');
   const vazio = document.getElementById('mont-empty');
   const lista = montagens;
@@ -8036,11 +8044,79 @@ function linhaMontagemHtml(m){
       <td>${m.peso ? Number(m.peso).toLocaleString('pt-BR') : '<span class="text-dim">—</span>'}</td>
       <td class="no-print">${trancada
             ? acoesMontagemHtml(m, trancada)
-            : `<span class="mont-seta${aberta ? ' aberta' : ''}" aria-hidden="true">▸</span>`}</td>
+            : acoesLinhaMontagemHtml(m, aberta)}</td>
     </tr>`;
 
   if(!aberta) return resumo;
   return resumo + `<tr class="mont-detalhe"><td colspan="6">${formMontagemHtml(m)}</td></tr>`;
+}
+
+/* CARGA FORA DO MODELO — porque frete extra não é exceção rara.
+
+   O modelo cobre a semana típica. Cliente novo, reforço de última hora e
+   carga que a fábrica soltou depois do fechamento acontecem toda semana, e
+   sem uma porta para eles a Logística sai desta tela e cria a carga na aba
+   de cima — o dia deixa de estar todo num lugar só, e a contagem de "rotas
+   do modelo sem carga" passa a mentir.
+
+   A linha nasce SEM apelido de rota: ela não veio de planilha nenhuma, e
+   inventar um apelido faria uma carga avulsa parecer parte do template na
+   hora de conferir o dia. */
+async function adicionarCargaForaDoModeloUI(){
+  if(!_montagemDia){ notify('Escolha o dia primeiro.', 'erro', 4000); return; }
+  const rota = (document.getElementById('mont-rota-extra') || {}).value;
+  if(!rota){ notify('Escolha a rota da carga.', 'erro', 4000); return; }
+  const { dia, montagens } = _montagemDia;
+  try {
+    await SuincoSharePoint.montagem.criar({
+      dia, rotaCodigo: rota,
+      sequencia: montagens.length + 1,
+      qtdEntregas: 1, paletizada: 'Não',
+    });
+  } catch(e){
+    notify('Não consegui adicionar: ' + (e && e.message || e), 'erro', 8000);
+    return;
+  }
+  await carregarMontagemUI();
+  /* Abre a linha nova na hora: quem clicou em "adicionar" vai preencher
+     agora, e procurar a linha recém-criada numa lista de 39 é trabalho
+     que a tela pode poupar. */
+  const nova = (_montagemDia?.montagens || [])
+    .filter(m => m.rota_codigo === rota && !m.efetivada_em && !m.cancelada_em).pop();
+  if(nova){
+    _montagemAberta = nova.montagem_id;
+    renderMontagem();
+    const foco = document.getElementById(`montf-placa-${nova.montagem_id}`);
+    if(foco) foco.focus();
+  }
+  notify(`Linha de ${rotaLabel(rota)} adicionada ao dia.`, 'ok', 4000);
+}
+
+/* O BOTÃO DE CRIAR CARGA MORA NA LINHA, não só dentro do formulário.
+
+   Eu tinha movido as ações para dentro do formulário quando a linha virou
+   expansível, e isso foi um retrocesso: numa sexta de 39 cargas, mandar
+   uma para a Torre passava a exigir abrir a linha, clicar, e a linha
+   fechar sozinha. Três passos para o que era um.
+
+   O formulário é para PREENCHER; a linha é para AGIR. As duas coisas
+   convivem, e o botão continua desabilitado sem placa — dizer "não" depois
+   do clique é pior que dizer antes.
+
+   stopPropagation é obrigatório: a linha inteira é clicável para abrir, e
+   sem isso criar a carga abriria o formulário de uma linha que acabou de
+   virar leitura. */
+function acoesLinhaMontagemHtml(m, aberta){
+  const id = escJs(m.montagem_id);
+  const criar = m.placa
+    ? `<button class="btn btn-primary btn-sm mont-btn-criar"
+         onclick="event.stopPropagation(); efetivarMontagemUI('${id}')"
+         title="Cria a carga e manda para a Torre de Controle.">➕ Criar carga</button>`
+    : `<button class="btn btn-primary btn-sm mont-btn-criar" disabled
+         onclick="event.stopPropagation()"
+         title="Coloque a placa para poder criar a carga.">➕ Criar carga</button>`;
+  return `<div class="mont-acoes">${criar}
+    <span class="mont-seta${aberta ? ' aberta' : ''}" aria-hidden="true">▸</span></div>`;
 }
 
 /* O formulário de uma carga da montagem.
