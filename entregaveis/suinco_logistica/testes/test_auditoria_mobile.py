@@ -190,9 +190,22 @@ async def main():
         await pagina.wait_for_timeout(1000)
         await preparar(pagina, 'Expedição')
 
-        print('\n=== A. A VISÃO DO PÁTIO ROLA DENTRO DA CAIXA ===')
-        # Seis colunas de etapa não cabem em 390px. A tabela precisa rolar
-        # dentro do próprio quadro — a página, nunca.
+        print('\n=== A. A VISÃO DO PÁTIO CABE NA CAIXA ===')
+        # ESTA REGRA MUDOU DE PROPÓSITO (25/08/2026).
+        #
+        # O que estava aqui exigia o contrário: que a tabela fosse MAIS LARGA
+        # que a caixa e rolasse de lado. Era certo enquanto a linha era linha
+        # — seis colunas de etapa não cabem em 390px.
+        #
+        # Desde 23/08 a linha vira CARTÃO no celular: empilha, não tem
+        # colunas, não precisa de largura. O `min-width:640px` que sobrou
+        # deixou de ser rolagem e virou CORTE — o dono mandou o print com
+        # "Nº CARGA" aparecendo como "° CARGA" e "PLACA" como "LACA", o
+        # cartão inteiro deslocado para fora da tela.
+        #
+        # A caixa continua com overflow:auto (é a rede de segurança para
+        # conteúdo largo que apareça no futuro); o que mudou é que não sobra
+        # nada para rolar. Ver test_torre_cabe_no_celular.py.
         await pagina.evaluate("() => { abrirTab('expedicao'); renderAll(); }")
         await pagina.wait_for_timeout(400)
         r = await pagina.evaluate("""() => {
@@ -209,8 +222,10 @@ async def main():
                 pagina: document.documentElement.scrollWidth - document.documentElement.clientWidth
             };
         }""")
-        ck('a caixa da tabela permite rolagem', r['overflow'] in ('auto', 'scroll'), str(r))
-        ck('a tabela é mais larga que a caixa (e rola)', r['rola'], str(r))
+        ck('a caixa da tabela permite rolagem se precisar',
+           r['overflow'] in ('auto', 'scroll'), str(r))
+        ck('a tabela cabe na caixa — não sobra nada para rolar de lado',
+           r['tabela'] <= r['caixa'] + 1, str(r))
         ck('mas a PÁGINA não rola de lado', r['pagina'] <= 1, str(r))
 
         print('\n=== B. FILTRO DE PERÍODO USÁVEL COM O POLEGAR ===')

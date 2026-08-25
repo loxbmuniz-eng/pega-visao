@@ -1745,10 +1745,29 @@ code{
 }
 
 @media (max-width:820px){
-  /* No celular a matriz de seis colunas não cabe. A tabela rola dentro da
-     própria caixa — a página nunca rola de lado. */
   .filtro-periodo .form-group{min-width:calc(50% - 8px)}
+
+  /* A LARGURA MÍNIMA DE 640px SAIU QUANDO A LINHA VIROU CARTÃO (25/08/2026)
+     -------------------------------------------------------------------
+     O comentário que estava aqui dizia: "no celular a matriz de seis
+     colunas não cabe; a tabela rola dentro da própria caixa". Era verdade
+     — até 23/08, quando a linha passou a virar CARTÃO no celular.
+
+     Depois disso o mínimo deixou de ser rolagem e virou corte. Medido em
+     390px: a linha de grupo ("🚛 TRANSPORTADORAS — 4 CARGA(S)") não quebra,
+     estica a tabela para 640px dentro de uma caixa de 340, e TODAS as
+     linhas herdam a largura. O que o dono viu no print foi o resultado:
+     "Nº CARGA" cortado em "° CARGA", "PLACA" em "LACA", "ROTA" em "OTA" —
+     o cartão inteiro deslocado para fora da tela.
+
+     Cartão empilha; não precisa de largura mínima. Onde a tabela NÃO vira
+     cartão, o mínimo continua valendo. */
   .tabela-patio{min-width:640px}
+  .table-wrap table.mobile-cartao.tabela-patio{min-width:0}
+  /* E o título do grupo passa a quebrar, em vez de esticar a tabela. */
+  .table-wrap table.mobile-cartao.tabela-patio tr.vp-grupo td{
+    white-space:normal; word-break:break-word;
+  }
   .vp-resumo{font-size:12px}
 }
 
