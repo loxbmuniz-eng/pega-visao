@@ -427,6 +427,62 @@ async def main():
         ck('uma linha por carga viva do dia',
            d.get('linhas') == d.get('vivas'), f"{d.get('linhas')} de {d.get('vivas')}")
 
+        print('\n=== 15. PUXAR DUAS VEZES NAO DUPLICA, NEM COM CODIGO REPETIDO ===')
+        # Relato do dono: "ta tudo duplicado ainda na montagem do dia".
+        # Na terca, Arinos/Buritis, Joao Pinheiro, Paracatu, Riachinho e
+        # Unai sao todos o codigo 504. Contando por codigo, o painel sabia
+        # que "faltam 2 de 504" e nao sabia QUAIS 2 — puxava duas quaisquer.
+        # Agora casa pela LINHA do modelo.
+        d = await pg.evaluate(
+            """async () => {
+                 window.confirm = () => true;
+                 const antes = _montagemDia.montagens.filter(m => !m.cancelada_em).length;
+                 // Linha do modelo que foi CANCELADA volta a ser oferecida, e
+                 // isso e certo: quem cancelou por engano puxa de novo e ela
+                 // volta. Entao o esperado nao e "zero novas" — e "nenhuma
+                 // linha do modelo aparecendo duas vezes".
+                 const canceladasDoModelo = new Set(
+                   _montagemDia.montagens.filter(m => m.cancelada_em && m.modelo_id != null)
+                     .map(m => String(m.modelo_id))).size;
+                 await aplicarModeloDoDiaUI();
+                 const depois = _montagemDia.montagens.filter(m => !m.cancelada_em).length;
+                 const vivas = _montagemDia.montagens.filter(m => !m.cancelada_em);
+                 const doModelo = vivas.filter(m => m.modelo_id != null)
+                                       .map(m => String(m.modelo_id));
+                 return { antes, depois, canceladasDoModelo,
+                          linhasDoModelo: doModelo.length,
+                          distintas: new Set(doModelo).size };
+               }""")
+        ck('puxar de novo so recria o que foi cancelado',
+           d['depois'] - d['antes'] == d['canceladasDoModelo'],
+           f"{d['antes']} -> {d['depois']}, {d['canceladasDoModelo']} cancelada(s)")
+        ck('nenhuma linha do modelo virou carga duas vezes',
+           d['linhasDoModelo'] == d['distintas'],
+           f"{d['linhasDoModelo']} linhas, {d['distintas']} distintas")
+
+        print('\n=== 16. CANCELADA SOME DA TELA, MAS NAO DO BANCO ===')
+        # Pedido do dono: a montagem e a lista do que VAI rodar hoje; linha
+        # cancelada ali e ruido entre as que ainda pedem trabalho.
+        alvo2 = await pg.evaluate(
+            "() => _montagemDia.montagens.find(m => !m.efetivada_em && !m.cancelada_em).montagem_id")
+        await pg.evaluate("() => { window.prompt = () => 'rota nao sai hoje'; }")
+        await pg.evaluate("(id) => cancelarMontagemUI(id)", alvo2)
+        await pg.wait_for_timeout(1500)
+        d = await pg.evaluate(
+            """(id) => {
+                 const linhas = [...document.querySelectorAll('#mont-tbody tr.mont-linha')];
+                 return { naTela: linhas.some(t => t.outerHTML.includes(id)),
+                          textoCancelada: linhas.some(t => /CANCELADA/i.test(t.textContent)),
+                          total: linhas.length };
+               }""", alvo2)
+        ck('a linha cancelada some da tela', not d['naTela'], str(d))
+        ck('e nenhuma linha fica marcada como CANCELADA',
+           not d['textoCancelada'], str(d))
+        noBanco = sql("SELECT cancelada_em IS NOT NULL, motivo_cancelo "
+                      "FROM programacao_montagem WHERE montagem_id = '" + alvo2 + "'")
+        ck('mas continua no banco, com motivo e hora',
+           bool(noBanco) and noBanco[0] == 't' and bool(noBanco[1]), str(noBanco))
+
         print('\n=== 9. SEM ERRO DE JAVASCRIPT ===')
         ck('console limpo', not erros, '; '.join(erros[:3]))
 

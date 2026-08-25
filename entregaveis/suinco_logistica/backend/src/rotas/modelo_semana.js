@@ -184,8 +184,8 @@ rotasModeloSemana.post('/montagem', SO_LOGISTICA, async (req, res, next) => {
       `INSERT INTO programacao_montagem
          (montagem_id, data_prog, rota_codigo, sequencia, numero_carga, peso,
           qtd_entregas, qtd_ganchos, paletizada, tipo_operacao, motorista,
-          observacoes, apelido_rota, criado_por, criado_setor, operador_nome)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$14)
+          observacoes, apelido_rota, modelo_id, criado_por, criado_setor, operador_nome)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$15)
        RETURNING *`,
       [novoId(), dia, rota,
        Number.isFinite(Number(req.body?.sequencia)) ? Number(req.body.sequencia) : null,
@@ -200,6 +200,12 @@ rotasModeloSemana.post('/montagem', SO_LOGISTICA, async (req, res, next) => {
        // O apelido vem do MODELO, não de quem digita: identifica a
        // transportadora dentro da praça e viaja junto com a linha.
        String(req.body?.apelidoRota ?? '').trim(),
+       /* De qual LINHA do modelo esta carga veio. NULL para carga avulsa.
+          E o que permite ao "puxar rotas" perguntar "esta linha ja virou
+          carga?" em vez de contar quantas daquele codigo existem — e
+          contagem nao resolve ambiguidade quando cinco destinos dividem o
+          mesmo codigo. */
+       Number.isFinite(Number(req.body?.modeloId)) ? Number(req.body.modeloId) : null,
        req.operador.nome, req.operador.setor]
     );
     emitir('montagem:criada', { dia, rota, por: req.operador.nome });
