@@ -618,9 +618,9 @@ const SuincoSharePoint = (function () {
      de uma pessoa olhando a ficha da carga, e uma correção que sobe sozinha
      meia hora depois — quando o estado já mudou — corrige a coisa errada.
      Sem rede, o erro sobe para a tela e a pessoa tenta de novo. */
-  async function corrigirEtapa(cargaId, statusNovo, motivo, acaoId) {
+  async function corrigirEtapa(cargaId, statusNovo, motivo) {
     return chamar(`/api/cargas/${encodeURIComponent(cargaId)}/corrigir-etapa`, {
-      metodo: 'POST', corpo: { status: statusNovo, motivo, acaoId },
+      metodo: 'POST', corpo: { status: statusNovo, motivo },
     });
   }
 
@@ -639,9 +639,9 @@ const SuincoSharePoint = (function () {
     return chamar('/api/cargas-excluidas' + q);
   }
 
-  async function desfazerExclusao(cargaId, motivo, acaoId) {
+  async function desfazerExclusao(cargaId, motivo) {
     return chamar(`/api/cargas/${encodeURIComponent(cargaId)}/desfazer-exclusao`, {
-      metodo: 'POST', corpo: { motivo, acaoId },
+      metodo: 'POST', corpo: { motivo },
     });
   }
 
@@ -1182,6 +1182,13 @@ const SuincoSharePoint = (function () {
     });
   }
 
+  /* Apaga a conta de vez. Não passa pela fila offline de propósito: sem
+     servidor não há exclusão, e enfileirar daria a impressão de que a conta
+     saiu quando ela ainda está lá, ativa, no aparelho de quem for entrar. */
+  function excluirOperador(id) {
+    return chamar(`/api/operadores/${encodeURIComponent(id)}`, { metodo: 'DELETE' });
+  }
+
   /* O encerramento do ciclo virou responsabilidade do servidor (o histórico
      fica no banco, não em pastas). A função continua para app.js não quebrar. */
   async function arquivarDia(resumo, operador) {
@@ -1252,24 +1259,14 @@ const SuincoSharePoint = (function () {
   function listarRevisoes(cargaId) {
     return chamar('/api/cargas/' + encodeURIComponent(cargaId) + '/revisoes');
   }
-  function restaurarRevisao(cargaId, revisaoId, acaoId) {
+  /* O motivo é obrigatório e vai para o histórico da carga. Era, até
+     25/08/2026, um pedido a ser aprovado por outro administrador — a
+     exigência caiu por decisão do dono; ver backend/src/rotas/cargas.js. */
+  function restaurarRevisao(cargaId, revisaoId, motivo) {
     return chamar('/api/cargas/' + encodeURIComponent(cargaId) + '/restaurar', {
-      metodo: 'POST', corpo: { revisaoId, acaoId },
+      metodo: 'POST', corpo: { revisaoId, motivo },
     });
   }
-
-  /* Ações críticas — pedido e aprovação por dois administradores.
-     Etapa 3 do protocolo de segurança (22/08/2026). */
-  const acoesCriticas = {
-    listar: () => chamar('/api/acoes-criticas'),
-    pedir: (tipo, cargaId, motivo, parametros) => chamar('/api/acoes-criticas', {
-      metodo: 'POST', corpo: { tipo, cargaId, motivo, parametros },
-    }),
-    aprovar: (acaoId) => chamar(`/api/acoes-criticas/${encodeURIComponent(acaoId)}/aprovar`,
-      { metodo: 'POST' }),
-    recusar: (acaoId, motivo) => chamar(`/api/acoes-criticas/${encodeURIComponent(acaoId)}/recusar`,
-      { metodo: 'POST', corpo: { motivo } }),
-  };
 
   /* Gera o PDF do relatório NO SERVIDOR — pedido do usuário (09/08/2026):
      "eu quero que saia no modo paisagem, e saiam iguais os relatorios que
@@ -1440,10 +1437,10 @@ const SuincoSharePoint = (function () {
     push, upsert, excluir, mudarStatus, encerrarProgramacoesAnteriores, reterLacre,
     recarregarRotas,
     corrigirEtapa, corrigirDataProgramacao, desfazerExclusao, listarExcluidas,
-    programacaoDoDia, mfa, acoesCriticas,
+    programacaoDoDia, mfa,
     modeloSemana, montagem,
     pull, pullTudo, drenarFila, pendentes,
-    listarOperadores, criarOperador, atualizarOperador,
+    listarOperadores, criarOperador, atualizarOperador, excluirOperador,
     sincronizarAgora, iniciarSincroniaPeriodica, pararSincronia, ultimaSincronia,
     renovarSessao, registrarInteracao,
     arquivarDia, fecharPrograma,

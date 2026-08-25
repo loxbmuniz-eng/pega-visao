@@ -100,14 +100,9 @@ async def main():
            texto[:150])
 
         print('\n=== 3. RESTAURAR VOLTA O DADO — EM TODOS OS APARELHOS ===')
-        # SEGUNDA ASSINATURA (etapa 3 da segurança, 22/08/2026): restaurar
-        # reescreve o histórico da carga e passou a exigir o aval de OUTRO
-        # administrador. Este teste é de antes disso e ficou vermelho em
-        # silêncio — no build anterior o clique batia direto no servidor e
-        # era recusado, que foi exatamente o beco sem saída relatado pelo
-        # Alysson (ocorrência #13). Agora o primeiro clique ABRE o pedido, o
-        # outro administrador aprova, e o segundo clique conclui.
-        ctxAp, pgAp = await abrir(nav, 'admin2@teste.local', 'aprovador')
+        # De 22 a 25/08/2026 restaurar exigia o aval de OUTRO administrador,
+        # e este bloco abria uma terceira sessão só para aprovar. A exigência
+        # caiu por decisão do dono; sobrou o motivo obrigatório.
 
         async def clicar_restaurar():
             await pgA.evaluate("""() => {
@@ -120,20 +115,12 @@ async def main():
             }""")
             await pgA.wait_for_timeout(2500)
 
-        # O motivo do pedido e a confirmação chegam por prompt/confirm.
+        # A SEGUNDA ASSINATURA SAIU EM 25/08/2026: até então o primeiro
+        # clique só abria um pedido, e restaurar de verdade exigia outro
+        # administrador aprovar. Agora um clique com motivo já restaura.
+        # O motivo continua obrigatório — é ele que sobra no histórico.
         await pgA.evaluate("() => { window.prompt = () => 'peso estragado no teste';"
                            "        window.confirm = () => true; }")
-        await clicar_restaurar()
-
-        aprovou = await pgAp.evaluate("""async (n) => {
-            const l = await SuincoSharePoint.acoesCriticas.listar();
-            const a = (l||[]).find(x => x.tipo === 'restaurar' && !x.aprovada_em && !x.recusada_em);
-            if (!a) return false;
-            await SuincoSharePoint.acoesCriticas.aprovar(a.acao_id);
-            return true;
-        }""", num)
-        ck('o clique abriu o pedido e o outro administrador aprovou', aprovou)
-
         await clicar_restaurar()
         await pgA.wait_for_timeout(1500)
         local = await pgA.evaluate("""(n) => {
@@ -162,7 +149,7 @@ async def main():
             "() => document.querySelectorAll('.btn-revisoes').length")
         ck('nenhum botão ↩ para a Logística', botao_log == 0, f'{botao_log} botões')
 
-        await ctxA.close(); await ctxB.close(); await ctxAp.close(); await nav.close()
+        await ctxA.close(); await ctxB.close(); await nav.close()
 
     print('\n=== RESULTADO ===')
     print('  FALHAS: ' + (', '.join(falhas) if falhas else 'NENHUMA'))
