@@ -53,7 +53,19 @@ async def main():
             "(SELECT placa FROM fact_viagens WHERE numero_carga IN ('QP-1','QP-2'))")
         sql("DELETE FROM fact_viagens WHERE numero_carga IN ('QP-1','QP-2')")
 
-        ctx = await nav.new_context(viewport={'width': 1360, 'height': 900})
+        # RELÓGIO DE PATOS DE MINAS, NÃO O DO CONTÊINER (25/08/2026).
+        #
+        # O painel monta o dia a consultar com o relógio LOCAL do navegador; o
+        # servidor agrupa a programação em America/Sao_Paulo. Em produção isso
+        # bate — o navegador está no Brasil. Aqui não: o contêiner roda em UTC,
+        # e entre 00h e 03h UTC (21h e 00h em Patos) o painel pede 25/08
+        # enquanto o servidor ainda está no dia 24. O teste caía sozinho, sem
+        # nada quebrado, só numa janela de três horas por dia.
+        #
+        # Fixar o fuso do navegador não é maquiar a falha: é fazer o teste
+        # rodar no fuso em que o sistema realmente roda.
+        ctx = await nav.new_context(viewport={'width': 1360, 'height': 900},
+                                    timezone_id='America/Sao_Paulo')
         pg = await ctx.new_page()
         html = open(PAINEL_ARQ, encoding='utf-8').read()
         html = html.replace("api: 'https://api.embarquesuinco.com.br'", f"api: '{API}'")
@@ -173,7 +185,7 @@ async def main():
                'undefined' not in pdf and 'NaN' not in pdf and '[object' not in pdf)
 
         print('\n=== 3b. A PORTARIA NÃO VÊ O CONTROLE — NEM NA TELA NEM NO SERVIDOR ===')
-        ctxP = await nav.new_context()
+        ctxP = await nav.new_context(timezone_id='America/Sao_Paulo')
         pgP = await ctxP.new_page()
         await pgP.route(f'{API}/__progdia_port', lambda r: asyncio.ensure_future(
             r.fulfill(status=200, content_type='text/html; charset=utf-8', body=html)))

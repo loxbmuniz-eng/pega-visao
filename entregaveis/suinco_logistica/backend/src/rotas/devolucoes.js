@@ -128,6 +128,41 @@ async function completarNomeDoCliente(executor, campos) {
   }
 }
 
+/* O NOME DO PRODUTO ENTRA JUNTO DO CÓDIGO (25/08/2026).
+
+   Mesmo caso do cliente logo acima, e descoberto do mesmo jeito: a auditoria
+   de qualidade de dados mostrou o relatório de devoluções saindo com "30110"
+   pelado, sem "LINGUIÇA" do lado.
+
+   Até aqui só o PAINEL completava esse nome, no momento em que a operadora
+   digitava o código (devProdutoNomePorCodigo, sobre a lista de produtos que a
+   tela tinha em memória). Isso funciona quando a tela carregou o cadastro e a
+   pessoa digitou devagar — e falha calado em tudo que não passa por esse
+   caminho: importação em lote, item criado por outra rota, tela aberta antes
+   do cadastro terminar de carregar, rede lenta. O item grava, o relatório sai,
+   e ninguém entende por que aquele veio sem nome.
+
+   Agora quem completa é o servidor, na hora de gravar, sempre que o código
+   existir no cadastro — o dado nasce completo, não depende do instante.
+
+   Nome que o painel mandou explicitamente continua ganhando: quem digitou sabe
+   mais que o cadastro sobre aquele lançamento. */
+async function completarNomeDoProduto(executor, campos) {
+  const codigo = String(campos.cod_produto ?? '').trim();
+  if (!codigo) return;
+  if (String(campos.produto_nome ?? '').trim()) return;
+  try {
+    const { rows } = await executor.query(
+      'SELECT nome FROM dim_produtos WHERE codigo = $1', [codigo]
+    );
+    const nome = String(rows[0]?.nome ?? '').trim();
+    if (nome) campos.produto_nome = nome.slice(0, 200);
+  } catch (e) {
+    // Completar é bônus, não pré-requisito: o item grava de qualquer forma.
+    console.warn('[devolucoes] nome do produto não completou:', e.message);
+  }
+}
+
 /* Aprendizado automático do vínculo cliente → RCA → supervisor (pedido
    de 18/08/2026): todo item gravado com esses campos ensina a base, e o
    próximo lançamento do mesmo cliente preenche sozinho — a mesma lógica
@@ -246,6 +281,7 @@ rotasDevolucoes.post('/devolucoes', exigirLogin, async (req, res, next) => {
         const it = camposItem(itemCorpo);
         await expandirMotivo(cli, it);
         await completarNomeDoCliente(cli, it);
+        await completarNomeDoProduto(cli, it);
         const cols = ['devolucao_id', 'operador_nome', 'operador_setor', ...Object.keys(it)];
         const vals = [id, op.nome, op.setor, ...Object.values(it)];
         await cli.query(
@@ -500,6 +536,7 @@ rotasDevolucoes.post('/devolucoes/:id/itens', exigirLogin, exigirSetor('Logísti
     const it = camposItem(req.body || {});
     await expandirMotivo({ query: consultar }, it);
     await completarNomeDoCliente({ query: consultar }, it);
+    await completarNomeDoProduto({ query: consultar }, it);
     const cols = ['devolucao_id', 'operador_nome', 'operador_setor', ...Object.keys(it)];
     const vals = [req.params.id, op.nome, op.setor, ...Object.values(it)];
     const ins = await consultar(
@@ -526,6 +563,7 @@ rotasDevolucoes.patch('/devolucoes/:id/itens/:itemId', exigirLogin, async (req, 
     }
     await expandirMotivo({ query: consultar }, it);
     await completarNomeDoCliente({ query: consultar }, it);
+    await completarNomeDoProduto({ query: consultar }, it);
 
     /* Fase 1: Logística/Administração mexem em tudo. Cada setor da fase 2
        enxerga só a própria coluna: Expedição confere (qtd_recebida),

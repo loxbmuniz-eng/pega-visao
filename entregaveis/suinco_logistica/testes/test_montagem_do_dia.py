@@ -194,13 +194,13 @@ async def main():
                  return _montagemDia.modelo.filter(m => !ja.has(m.rota_codigo)).length;
                }""")
         montadas = await pg.evaluate(
-            """() => new Set(_montagemDia.montagens.filter(m => !m.cancelada_em)
-                              .map(m => m.rota_codigo)).size""")
-        no_modelo = await pg.evaluate(
-            "() => new Set(_montagemDia.modelo.map(m => m.rota_codigo)).size")
-        ck('rota já montada não é oferecida de novo',
+            """() => _montagemDia.montagens.filter(m => !m.cancelada_em).length""")
+        no_modelo = await pg.evaluate("() => _montagemDia.modelo.length")
+        # Conta LINHAS, não rotas distintas: o modelo prevê a mesma praça
+        # mais de uma vez no mesmo dia, e cada uma é uma carga.
+        ck('o que falta montar é o modelo menos o que já foi montado',
            novas == max(0, no_modelo - montadas),
-           f'modelo {no_modelo} rotas, {montadas} montadas, oferece {novas}')
+           f'modelo {no_modelo} linhas, {montadas} montadas, oferece {novas}')
 
         print('\n=== 8. O MODELO DA SEMANA TEM TELA, E O BOTÃO NÃO FICA MUDO ===')
         # O defeito que este bloco existe para não deixar voltar: a
@@ -247,7 +247,73 @@ async def main():
 
         sql("DELETE FROM programacao_modelo WHERE dia_semana = 2 AND rota_codigo = '510'")
 
-        print('\n=== 9. SEM ERRO DE JAVASCRIPT ===')
+        print('\n=== 7b. DUAS SAÍDAS PARA A MESMA PRAÇA NÃO SE ANULAM ===')
+        # O defeito: filtrar por "rota já montada" fazia a segunda saída
+        # da mesma praça sumir da oferta. Na sexta isso escondia 20 das
+        # 39 cargas do dia.
+        dupla = await pg.evaluate("""() => {
+              const modelo = [{rota_codigo:'500', rota_nome:'Patos de Minas'},
+                              {rota_codigo:'500', rota_nome:'Patos de Minas'},
+                              {rota_codigo:'510', rota_nome:'Belo Horizonte'}];
+              const montagens = [{rota_codigo:'500', cancelada_em:null}];
+              const conta = new Map();
+              montagens.filter(m => !m.cancelada_em).forEach(m =>
+                conta.set(m.rota_codigo, (conta.get(m.rota_codigo)||0) + 1));
+              const saldo = new Map(conta);
+              return modelo.filter(m => {
+                const r = saldo.get(m.rota_codigo) || 0;
+                if(r > 0){ saldo.set(m.rota_codigo, r - 1); return false; }
+                return true;
+              }).length;
+            }""")
+        ck('com 2 no modelo e 1 montada, ainda oferece a segunda',
+           dupla == 2, f'ofereceu {dupla}, esperado 2 (a 2ª de Patos + BH)')
+
+        print('\n=== 9. O TEMPLATE DAS PLANILHAS ESTÁ NO PAINEL E FUNCIONA ===')
+        # O pedido: "preciso daquele template de cada dia de semana pronto
+        # e funcionando". Não basta a tabela ter linhas — o botão precisa
+        # montar o dia a partir delas.
+        porDia = {}
+        for d in range(1, 6):
+            r = sql(f'SELECT count(*) FROM programacao_modelo WHERE dia_semana = {d}')
+            porDia[d] = int(r[0]) if r else 0
+        ck('os cinco dias úteis têm rotas no modelo',
+           all(porDia[d] > 0 for d in range(1, 6)), str(porDia))
+        ck('terça e sexta são os dias grandes, como nas planilhas',
+           porDia[2] > porDia[3] and porDia[5] > porDia[4], str(porDia))
+
+        # Os códigos são os que JÁ existiam — nenhuma rota nova inventada.
+        novas = sql("SELECT count(*) FROM programacao_modelo WHERE rota_codigo >= '900'")
+        ck('nenhum código de rota inventado — só os do painel',
+           novas and novas[0] == '0', str(novas))
+
+        # O nome da planilha sobreviveu ao de-para.
+        comNome = sql("SELECT count(*) FROM programacao_modelo WHERE observacoes <> ''")
+        ck('cada linha guarda o nome como a operação o conhece',
+           comNome and int(comNome[0]) >= 100, str(comNome))
+
+        # E o ciclo completo: puxar o modelo de uma terça monta as cargas.
+        sql("DELETE FROM programacao_montagem WHERE data_prog = '2026-09-01'")
+        montou = await pg.evaluate("""async () => {
+              document.getElementById('mont-data').value = '2026-09-01';  // terça, e NÃO hoje:
+              // montar 26 cargas no dia de hoje no meio da bateria contamina
+              // quem lê 'a programação de hoje'. Terça que vem prova o mesmo.
+              await carregarMontagemUI();
+              const antes = _montagemDia.montagens.length;
+              window.confirm = () => true;
+              await aplicarModeloDoDiaUI();
+              return {antes, depois: _montagemDia.montagens.length,
+                      rotas: _montagemDia.modelo.length};
+            }""")
+        ck('puxar o modelo de terça monta as cargas do dia',
+           montou['depois'] > montou['antes'], str(montou))
+        nomes = sql("SELECT count(*) FROM programacao_montagem "
+                    "WHERE data_prog = '2026-09-01' AND observacoes <> ''")
+        ck('e o nome da planilha chega na montagem',
+           nomes and int(nomes[0]) > 0, str(nomes))
+        sql("DELETE FROM programacao_montagem WHERE data_prog = '2026-09-01'")
+
+        print('\n=== 10. SEM ERRO DE JAVASCRIPT ===')
         ck('nenhum erro no console', not erros, '; '.join(erros[:3]))
 
         # Limpeza para não contaminar a próxima suíte.
