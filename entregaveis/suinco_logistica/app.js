@@ -7904,7 +7904,8 @@ function renderMontagem(){
       : m.efetivada_em ? `<span class="badge badge-faturado">NA TORRE</span>` : '';
     return `<tr${trancada ? ' class="linha-fraca"' : ''}>
       <td>${campo('sequencia', m.sequencia, 'number', 'min="1" style="width:64px"')}</td>
-      <td><strong>${esc(m.rota_nome)}</strong> <span class="text-dim">${esc(m.rota_codigo)}</span> ${marca}</td>
+      <td><strong>${esc(m.rota_nome)}</strong> <span class="text-dim">${esc(m.rota_codigo)}</span> ${marca}
+          ${m.observacoes ? `<div class="text-dim" style="font-size:11.5px">${esc(m.observacoes)}</div>` : ''}</td>
       <td>${campo('numeroCarga', m.numero_carga)}</td>
       <td>${trancada ? esc(m.placa || '—')
             : `<input type="text" class="placa-input" value="${esc(m.placa)}" placeholder="sem placa"
@@ -7942,8 +7943,25 @@ function acoesMontagemHtml(m, trancada){
 async function aplicarModeloDoDiaUI(){
   if(!_montagemDia) return;
   const { dia, modelo, montagens } = _montagemDia;
-  const jaMontadas = new Set(montagens.filter(m => !m.cancelada_em).map(m => m.rota_codigo));
-  const novas = modelo.filter(m => !jaMontadas.has(m.rota_codigo));
+  /* CONTA por rota, não presença.
+
+     O modelo prevê a MESMA praça mais de uma vez no mesmo dia — duas
+     saídas para Patos de Minas na sexta é rotina, e por isso o índice
+     único é (dia, rota, ordem) e não (dia, rota).
+
+     A primeira versão filtrava com um Set de rotas já montadas: bastava
+     uma carga de Patos existir para as OUTRAS saídas de Patos sumirem da
+     oferta. Na sexta isso escondia 20 das 39 cargas do dia. */
+  const montadasPorRota = new Map();
+  montagens.filter(m => !m.cancelada_em).forEach(m => {
+    montadasPorRota.set(m.rota_codigo, (montadasPorRota.get(m.rota_codigo) || 0) + 1);
+  });
+  const saldo = new Map(montadasPorRota);
+  const novas = modelo.filter(m => {
+    const resta = saldo.get(m.rota_codigo) || 0;
+    if(resta > 0){ saldo.set(m.rota_codigo, resta - 1); return false; }
+    return true;
+  });
   /* Duas situações MUITO diferentes que davam a mesma resposta, e a
      resposta era falsa quando o modelo estava vazio: dizer "já estão
      montadas" para quem nunca cadastrou rota nenhuma manda a pessoa
@@ -7965,6 +7983,11 @@ async function aplicarModeloDoDiaUI(){
         dia, rotaCodigo: m.rota_codigo, sequencia: montagens.length + i + 1,
         tipoOperacao: m.tipo_operacao, qtdEntregas: m.qtd_entregas || 1,
         paletizada: m.paletizada || 'Não',
+        /* O nome como a operação o conhece ("Brasília - Versatto") viaja
+           junto. O código organiza; o nome é o que a Logística reconhece
+           na hora de montar — e duas transportadoras na mesma praça
+           viram duas linhas idênticas sem ele. */
+        observacoes: m.observacoes || '',
       });
       criadas += 1;
     } catch(e){ erros.push(`${m.rota_nome}: ${e.message || e}`); }
@@ -8140,7 +8163,8 @@ function renderModeloSemana(){
   if(!tbody) return;
   tbody.innerHTML = doDia.map((m, i) => `<tr>
       <td class="text-dim">${i + 1}</td>
-      <td><strong>${esc(m.rota_nome)}</strong> <span class="text-dim">${esc(m.rota_codigo)}</span></td>
+      <td><strong>${esc(m.rota_nome)}</strong> <span class="text-dim">${esc(m.rota_codigo)}</span>
+          ${m.observacoes ? `<div class="text-dim" style="font-size:11.5px">${esc(m.observacoes)}</div>` : ''}</td>
       <td>${esc(m.tipo_operacao) || '<span class="text-dim">—</span>'}</td>
       <td>${m.qtd_entregas ?? '<span class="text-dim">—</span>'}</td>
       <td class="no-print">
