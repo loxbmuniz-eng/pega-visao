@@ -350,6 +350,83 @@ async def main():
         ck('a linha avulsa nasce SEM apelido — não veio de planilha nenhuma',
            nova and nova[0] == '' and nova[1] == '500', str(nova))
 
+        print('\n=== 12. DESTINOS DIFERENTES NAO LEEM COMO DUPLICATA ===')
+        # Relato do dono: "tao saindo duplicadas as rotas". Nao eram
+        # duplicatas: o de-para colapsa destinos diferentes no mesmo codigo
+        # (na terca, Arinos/Buritis, Joao Pinheiro, Paracatu, Riachinho e
+        # Unai sao todos "504"), e a tela gritava a PRACA e sussurrava o
+        # destino. Seis linhas com o mesmo titulo em negrito.
+        d = await pg.evaluate(
+            """() => {
+                 const tit = [...document.querySelectorAll('#mont-tbody tr.mont-linha strong')]
+                   .map(e => e.textContent.trim());
+                 const comApelido = _montagemDia.montagens
+                   .filter(m => !m.cancelada_em && m.apelido_rota);
+                 return { titulos: tit,
+                          distintos: new Set(tit).size,
+                          apelidos: comApelido.map(m => m.apelido_rota),
+                          apelidosDistintos: new Set(comApelido.map(m => m.apelido_rota)).size };
+               }""")
+        ck('cada destino distinto tem um titulo distinto na tela',
+           d['distintos'] >= d['apelidosDistintos'],
+           f"{d['distintos']} titulos para {d['apelidosDistintos']} destinos")
+        ck('e o titulo e o destino da planilha, nao o nome da praca',
+           all(a in d['titulos'] for a in set(d['apelidos'])),
+           str(d['titulos'][:4]))
+
+        print('\n=== 13. EXCLUIR NA PROPRIA LINHA ===')
+        # Numa sexta de 42 linhas, tirar a que nao vai rodar nao pode
+        # exigir abrir o formulario antes.
+        alvo = await pg.evaluate(
+            "() => _montagemDia.montagens.find(m => !m.efetivada_em && !m.cancelada_em).montagem_id")
+        d = await pg.evaluate(
+            """() => {
+                 const tr = [...document.querySelectorAll('#mont-tbody tr.mont-linha')]
+                   .find(t => t.querySelector('.mont-btn-excluir'));
+                 return { temBotao: !!tr };
+               }""")
+        ck('a linha traz o botao de excluir sem precisar abrir', d['temBotao'], str(d))
+        antes = await pg.evaluate(
+            "() => _montagemDia.montagens.filter(m => !m.cancelada_em).length")
+        await pg.evaluate("() => { window.prompt = () => 'nao vai rodar hoje'; }")
+        await pg.evaluate("(id) => cancelarMontagemUI(id)", alvo)
+        await pg.wait_for_timeout(1500)
+        depois = await pg.evaluate(
+            "() => _montagemDia.montagens.filter(m => !m.cancelada_em).length")
+        ck('excluir tira a linha do dia', depois == antes - 1, f'{antes} -> {depois}')
+        noBanco = sql("SELECT cancelada_em IS NOT NULL, motivo_cancelo "
+                      "FROM programacao_montagem WHERE montagem_id = '" + alvo + "'")
+        ck('e ela continua no banco, com o motivo — nao some sem rastro',
+           bool(noBanco) and noBanco[0] == 't' and bool(noBanco[1]), str(noBanco))
+
+        print('\n=== 14. O DIA SAI EM PLANILHA ===')
+        # O painel substituiu o Excel na operacao, mas a planilha tambem era
+        # o ARQUIVO do dia. Tirar sem repor troca um problema por outro.
+        d = await pg.evaluate(
+            """async () => {
+                 let baixado = null;
+                 const antes = window.baixarCsvDoDia;
+                 window.baixarCsvDoDia = (nome, cab, linhas) => {
+                   baixado = { nome, cab, linhas };
+                 };
+                 await exportarMontagemDoDiaUI();
+                 window.baixarCsvDoDia = antes;
+                 if(!baixado) return { gerou: false };
+                 return { gerou: true, nome: baixado.nome,
+                          colunas: baixado.cab,
+                          linhas: baixado.linhas.length,
+                          primeira: baixado.linhas[0],
+                          vivas: _montagemDia.montagens.filter(m => !m.cancelada_em).length };
+               }""")
+        ck('a exportacao gera o arquivo', d['gerou'], str(d)[:80])
+        ck('o nome do arquivo traz o dia', DIA in (d.get('nome') or ''), str(d.get('nome')))
+        for coluna in ('Sequência', 'Carga', 'Rota', 'Pra onde?', 'Placa',
+                       'Transportadora', 'Peso (t)', 'Paletizada', 'Situação'):
+            ck(f'tem a coluna {coluna}', coluna in (d.get('colunas') or []),
+               str(d.get('colunas'))[:90])
+        ck('uma linha por carga viva do dia',
+           d.get('linhas') == d.get('vivas'), f"{d.get('linhas')} de {d.get('vivas')}")
+
         print('\n=== 9. SEM ERRO DE JAVASCRIPT ===')
         ck('console limpo', not erros, '; '.join(erros[:3]))
 
