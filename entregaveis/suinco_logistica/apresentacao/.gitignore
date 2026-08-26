@@ -1,0 +1,5 @@
+# Os prints são SUBPRODUTO: o capturar_telas.py os refaz a qualquer momento,
+# contra o painel atual — versioná-los congelaria telas velhas no repositório
+# (mesma regra de tutoriais/capturas). O que se versiona é o gerador e a
+# apresentação final.
+prints/
