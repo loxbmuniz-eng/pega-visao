@@ -64,13 +64,30 @@ titulo "3. O index.html corresponde às fontes"
 # O painel é um arquivo só, gerado. Publicar sem regerar sobe a versão
 # ANTERIOR do código com a mensagem da nova — o pior tipo de mentira,
 # porque o commit diz uma coisa e o navegador roda outra.
+#
+# A COMPARAÇÃO IGNORA O CARIMBO, e isso não é frouxidão: o carimbo é a HORA
+# do build, então ele muda a cada execução por definição. A primeira versão
+# deste passo comparava o arquivo inteiro e reprovava toda publicação —
+# inclusive as corretas. Portão que acusa sempre é portão que alguém
+# desliga na terceira vez.
+#
+# O que interessa é o resto do arquivo: se o código gerado for igual ao
+# commitado, o build estava em dia. Se qualquer outra linha mudar, faltou
+# rodar o build antes de commitar.
 cd "$AQUI"
 python3 build_arquivo_unico.py >/dev/null || falhou "o build falhou."
 cd "$RAIZ"
-if [[ -n "$(git status --porcelain -- '*/index.html' '*/sw.js')" ]]; then
+DIFERENCA="$(git diff --unified=0 -- '*/index.html' '*/sw.js' \
+             | grep -E '^[+-]' | grep -vE '^(\+\+\+|---)' \
+             | grep -vE 'SUINCO_BUILD|SUINCO_BUILD_EM|const BUILD =' || true)"
+if [[ -n "$DIFERENCA" ]]; then
+  printf '%s\n' "$DIFERENCA" | head -12 | sed 's/^/      /'
   falhou "o index.html/sw.js mudou ao regerar — faltou rodar o build antes de commitar."
 fi
-verde "  ok  build em dia"
+# O carimbo novo não vai junto na publicação: ele muda a cada build e
+# sujaria a árvore. O que vale é o conteúdo, já conferido acima.
+git checkout -- '*/index.html' '*/sw.js' 2>/dev/null || true
+verde "  ok  build em dia (carimbo à parte)"
 
 titulo "4. Testes do servidor"
 ( cd "$AQUI/backend" && npm run teste >/tmp/suinco-teste-backend.txt 2>&1 ) \
