@@ -123,26 +123,48 @@ async def main():
         ck('o caminhão que ficou sem carga continua no pátio', sobrou == 1, f'{sobrou} registro(s)')
 
         print('\n=== 3. DUAS CARGAS NA MESMA PLACA APARECEM NO RELATÓRIO ===')
-        html = await pgL.evaluate(
+        # A MARCA NA CÉLULA SAIU — decisão do dono em 26/08/2026, depois de a
+        # primeira versão dela quebrar o layout do relatório em produção:
+        # "NAO PRECISA DESSA INFORMACAO 1 DE 2 2 DE 2, MANTEM A PLACA E QUE
+        # SEJA NORMAL MARCAR 2 CARGAS NUMA PLACA SO".
+        #
+        # Ele está certo: duas cargas no mesmo caminhão é rotina do pátio, e
+        # rotina não merece marca na linha. O que precisa continuar aparecendo
+        # — e é o pedido original, de que duas rotas na mesma placa saiam com
+        # clareza — mora no rodapé, onde sobra largura para dizer QUAIS são as
+        # rotas. É isso que este bloco guarda agora.
+        # 512 e 513 são códigos que EXISTEM no cadastro. A primeira versão
+        # deste bloco usou 500 e 600; a 600 não existe, criarCargaProgramada
+        # guarda vazio para código desconhecido, e o rodapé — corretamente —
+        # não tinha duas rotas para citar. O teste acusou o produto por um
+        # defeito que era dele mesmo.
+        r = await pgL.evaluate(
             """async ([pC]) => {
-                 // Duas cargas no MESMO caminhão, rotas diferentes — o caso do relato.
                  criarCargaProgramada({numeroCarga: 'REP-1', placa: pC, cliente: 'C',
-                   destino: 'D', peso: 8000, rota: '500', operador: 'Ana'});
+                   destino: 'D', peso: 8000, rota: '512', operador: 'Ana'});
                  criarCargaProgramada({numeroCarga: 'REP-2', placa: pC, cliente: 'C',
-                   destino: 'D', peso: 7000, rota: '600', operador: 'Ana'});
+                   destino: 'D', peso: 7000, rota: '513', operador: 'Ana'});
                  SuincoStore.save();
                  const el = await montarRelatorioOperacional();
-                 return el.innerHTML;
+                 const aviso = [...el.querySelectorAll('.doc-aviso-numeracao')]
+                   .map(x => x.innerText).join(' | ');
+                 return {
+                   placas: [...el.querySelectorAll('td.c-placa')].map(x => x.innerText.trim()),
+                   aviso,
+                 };
                }""", [pC])
 
-        temMarca = '1 de 2' in html or '(1 de' in html
-        # Detalhe SÓ quando falha: "nenhuma marca encontrada" impresso ao lado
-        # de um [OK ] é a linha que faz alguém perder dez minutos depois.
-        ck('o relatório marca "1 de" na placa repetida', temMarca,
-           '' if temMarca else 'nenhuma marca encontrada no HTML do relatório')
-        ck('o relatório diz que as rotas são diferentes', 'rotas diferentes' in html)
-        ck('o rodapé lista o caminhão com mais de uma carga',
-           'mais de uma carga nesta programação' in html)
+        # ESCOPO NA CÉLULA, não no documento inteiro. A primeira versão
+        # procurava "1/2" no HTML da folha toda e acusava marca onde não
+        # havia — a folha tem datas, estilos e referências com barra.
+        sujas = [x for x in r['placas'] if any(c.isdigit() and '/' in x for c in x)
+                 or ' de ' in x]
+        ck('a coluna Placa traz só a placa, sem marca de ordem',
+           not sujas, f'células com marca: {sujas}')
+        ck('o rodapé nomeia o caminhão com mais de uma carga',
+           'Caminhão com mais de uma carga' in r['aviso'], r['aviso'][:120])
+        ck('o rodapé diz QUAIS são as rotas',
+           '512' in r['aviso'] and '513' in r['aviso'], r['aviso'][:120])
 
         print('\n=== LIMPEZA ===')
         await pgL.evaluate(

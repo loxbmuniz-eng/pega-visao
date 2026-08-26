@@ -6712,38 +6712,27 @@ async function atualizarDadosAntesDoRelatorio(){
    Duplicar o modelo do relatório no servidor era o outro caminho, e seria
    o começo de dois relatórios que divergem no primeiro ajuste de coluna
    que alguém fizer aqui e esquecer de fazer lá. Uma fonte só. */
-/* DUAS CARGAS NA MESMA PLACA APARECEM COMO DUAS — TAMBÉM NO PAPEL.
+/* CAMINHÃO COM DUAS CARGAS: a informação fica no RODAPÉ, não na célula.
 
-   Relato do dono, 26/08/2026: "o caminhão tava com duas rotas na mesma
-   placa, então quando o Alysson abriu o relatório depois só tava aparecendo
-   uma das rotas".
+   Duas tentativas erradas antes desta, no mesmo dia (26/08/2026), e as duas
+   valem registro porque a lição é a mesma:
 
-   A marca "1 de 2" existia na fila e na Visão do Pátio desde 11/08 —
-   justamente para ninguém "corrigir" uma duplicidade que não existe e apagar
-   uma carga de verdade. Só que ela NUNCA entrou em relatório nenhum.
-   Conferido: `marcaCargaDaPlaca` é usada em três lugares da tela e em zero
-   documentos.
+     · escrever "(1 de 2, rotas diferentes)" dentro da célula da placa. A
+       coluna Placa tem 7,5% da folha e não quebra linha: o texto inchou a
+       coluna para um terço da página e derrubou a tabela inteira do A4. O
+       dono viu o relatório do dia assim — "TA TOTALMENTE ZUADO";
+     · encurtar para "1/2*" e pôr numa linha própria dentro da célula. O
+       layout parou de quebrar, mas o dono foi direto ao ponto: "NAO PRECISA
+       DESSA INFORMACAO 1 DE 2 2 DE 2, MANTEM A PLACA E QUE SEJA NORMAL
+       MARCAR 2 CARGAS NUMA PLACA SO".
 
-   Quem lê a folha no pátio vê duas linhas com a mesma placa, sem nada que
-   diga que são duas viagens do mesmo caminhão — e a leitura natural é que
-   uma delas está errada.
+   Ele está certo, e a correção é melhor do que as duas: duas cargas no mesmo
+   caminhão é rotina do pátio, não anomalia, e anomalia é o que merece marca
+   na linha. As duas linhas já mostram a mesma placa com rotas diferentes —
+   quem lê enxerga. O rodapé nomeia o caso para quem confere a folha inteira,
+   e é lá que sobra largura para dizer QUAIS são as rotas.
 
-   TEXTO, não etiqueta colorida: o documento vira PDF e foto de WhatsApp, e
-   cor some nas duas. "(1 de 2)" atravessa qualquer impressão.
-
-   E quando os DESTINOS são diferentes, o texto diz — que é exatamente a
-   informação que sumiu no relato. */
-function marcaPlacaRepetida(carga, lista){
-  const p = normalizarPlaca(carga.placa);
-  const irmas = lista.filter(c => normalizarPlaca(c.placa) === p);
-  if(irmas.length < 2) return '';
-  const posicao = irmas.findIndex(c => c.id === carga.id) + 1;
-  const rotasDiferentes = new Set(irmas.map(c => (c.rota || '').trim())).size > 1;
-  return ` <strong>(${posicao} de ${irmas.length}`
-    + `${rotasDiferentes ? ', rotas diferentes' : ''})</strong>`;
-}
-
-/* O aviso de rodapé, para quem confere a folha inteira e não linha a linha. */
+   A regra que fica: célula de coluna estreita recebe DADO, nunca explicação. */
 function avisoDePlacaRepetida(lista){
   const porPlaca = new Map();
   lista.forEach(c => {
@@ -6753,16 +6742,62 @@ function avisoDePlacaRepetida(lista){
   });
   const repetidas = [...porPlaca.entries()].filter(([, cs]) => cs.length > 1);
   if(!repetidas.length) return '';
+  /* TEXTO CORRIDO, sem <ul>. A caixa de aviso desta folha foi desenhada
+     para uma ou duas linhas de texto; uma lista dentro dela empurra o bloco
+     e come espaço da tabela numa folha que já é apertada. O mesmo formato
+     do aviso de numeração, que já roda há semanas sem problema. */
   const itens = repetidas.map(([p, cs]) => {
     const rotas = [...new Set(cs.map(c => rotaCurta(c.rota) || 'sem rota'))];
-    return `<li><strong>${esc(p)}</strong> — ${cs.length} cargas`
-      + `${rotas.length > 1 ? `, rotas ${esc(rotas.join(' e '))}` : ''}</li>`;
-  }).join('');
+    return `<strong>${esc(p)}</strong> (${cs.length} cargas`
+      + `${rotas.length > 1 ? `, rotas ${esc(rotas.join(' e '))}` : ''})`;
+  }).join(' · ');
   return `<div class="doc-aviso-numeracao">
-    <strong>Caminhões com mais de uma carga nesta programação</strong> —
-    são viagens diferentes do mesmo veículo, não duplicidade:
-    <ul style="margin:4px 0 0 18px">${itens}</ul>
+    <strong>Caminhão com mais de uma carga:</strong> ${itens}. São viagens
+    diferentes do mesmo veículo, não duplicidade.
   </div>`;
+}
+
+/* AS DATAS DE UMA LINHA DE RELATÓRIO — pedido do dono, 26/08/2026:
+   "puxamos o relatório de administração de fretes dos últimos 30 dias e não
+   está vindo com DATA, eu preciso da data e hora em cada linha de relatório,
+   de todos os relatórios que precisam dessa informação clara".
+
+   Ele está certo, e o relatório de fretes não tinha data NENHUMA: quatro
+   colunas — número, placa, rota, observações. Trinta dias assim não se
+   confere.
+
+   UMA CARGA TEM MAIS DE UMA DATA, e confundi-las já produziu incidente. São
+   três relógios diferentes:
+
+     · a DATA DA PROGRAMAÇÃO — o dia a que a viagem pertence;
+     · a ENTRADA no pátio — quando o caminhão de fato chegou;
+     · a SAÍDA — quando ele seguiu viagem.
+
+   Elas coincidem quase sempre, e se separam justamente nos casos que dão
+   problema: caminhão programado num dia que só sai no outro. Foi isso que
+   fez duas cargas sumirem do relatório em 19/08.
+
+   A DATA DA PROGRAMAÇÃO usa `programadoEm || criadoEm` — exatamente o mesmo
+   campo que `filtrarPorDataProgramacao` usa para decidir se a linha entra no
+   período. Mostrar uma data diferente da que filtrou seria a receita para
+   alguém jurar que o relatório está errado.
+
+   FUSO: aqui NÃO se corta o texto do ISO com slice(0,10). O carimbo vem em
+   UTC; cortar a string devolve o dia de Londres, e qualquer coisa depois das
+   21h daqui apareceria no dia seguinte. `toLocaleDateString('pt-BR')`
+   converte para o fuso de quem lê, que é o do pátio. */
+function dataCurtaLocal(iso){
+  if(!iso) return '';
+  const d = new Date(iso);
+  return isNaN(d) ? '' : d.toLocaleDateString('pt-BR');
+}
+
+function datasDaLinhaDeRelatorio(c){
+  return {
+    programada: c.programadoEm || c.criadoEm || null,
+    entrada: entradaNoPatioDe(c),
+    saida: primeiroTimestamp(c.id, 'Seguiu Viagem'),
+  };
 }
 
 async function montarRelatorioOperacional(){
@@ -6794,12 +6829,27 @@ async function montarRelatorioOperacional(){
        espremia "Aguardando Embarque" em duas linhas. Com classe, mover ou
        remover coluna não desalinha mais nada. */
     return `<tr>
+      <td class="c-quando">${(() => {
+        /* UMA coluna, duas linhas dentro. O Operacional já tem 12 colunas em
+           A4 deitado com fonte de 7,6px; duas colunas novas espremeriam o
+           Status, que é a informação que se lê de relance na foto do grupo.
+
+           Em cima o dia da programação; embaixo o horário que importa para
+           AQUELA linha — saída se o caminhão já foi, entrada se ele está no
+           pátio, nada se ainda não chegou. Mostrar "entrou —" numa carga que
+           não chegou seria preencher espaço com ausência. */
+        const d = datasDaLinhaDeRelatorio(c);
+        const dia = dataCurtaLocal(d.programada) || '—';
+        const hora = d.saida ? `saiu ${fmtHora(d.saida)}`
+          : (d.entrada ? `entrou ${fmtHora(d.entrada)}` : '');
+        return `${dia}${hora ? `<br><span class="hora-linha">${hora}</span>` : ''}`;
+      })()}</td>
       <td class="c-seq">${c.sequencia ?? '—'}</td>
       <td class="c-carga">${esc(c.numeroCarga).toUpperCase()||'—'}</td>
       <td class="c-status" style="background:${cs.fundo};color:${cs.texto}">${esc(c.status)}</td>
       <td class="c-rota">${esc(rotaCurta(c.rota))}</td>
       <td class="c-operacao" ${praOndeStyle}>${c.praOnde ? esc(PRA_ONDE_LABEL[c.praOnde]) : '—'}</td>
-      <td class="c-placa">${esc(c.placa).toUpperCase()}${marcaPlacaRepetida(c, lista)}</td>
+      <td class="c-placa">${esc(c.placa).toUpperCase()}</td>
       <td class="c-transp">${esc(c.transportadora)||'—'}</td>
       <td class="c-veiculo">${esc(c.tipoVeiculo)||'—'}</td>
       <td class="c-peso">${pesoTon}</td>
@@ -6826,6 +6876,7 @@ async function montarRelatorioOperacional(){
            algo que já estava escrito. -->
       <table>
         <thead><tr>
+          <th class="c-quando">Data / Hora</th>
           <th class="c-seq">Seq.</th>
           <th class="c-carga">Nº Carga</th>
           <th class="c-status">Status</th>
@@ -6842,10 +6893,19 @@ async function montarRelatorioOperacional(){
                O significado vai no rodapé. -->
           <th class="c-palet">Palet.</th>
           <th class="c-entregas">Entr.</th>
-          <th class="c-ganchos">Ganchos</th>
+          <!-- "Ganch.", pelo mesmo motivo de "Palet." e "Entr." logo acima:
+               nesta largura o navegador cortava a palavra. Com a coluna
+               Data / Hora (26/08/2026) a folha ficou mais apertada e
+               "GANCHOS" passou a sair cortado no cabeçalho. O significado
+               está no rodapé, junto com "Liso = sem gancheira". -->
+          <th class="c-ganchos">Ganch.</th>
         </tr></thead>
         <tbody>${linhas || '<tr><td colspan="13" class="text-center text-dim">Nenhuma carga no período selecionado.</td></tr>'}</tbody>
-        ${lista.length ? `<tfoot>${rodapeSomatorios(lista, 8, ['peso','', 'entregas','ganchos'])}</tfoot>` : ''}
+        ${lista.length ? `<tfoot>${/* 9, não 8: a coluna "Data / Hora" entrou na frente de tudo em
+             26/08/2026 e o rótulo TOTAL precisa atravessar uma coluna a
+             mais. Errar aqui desalinha os totais sob as colunas erradas —
+             e ninguém confere um total que está no lugar certo. */''
+           }${rodapeSomatorios(lista, 9, ['peso','', 'entregas','ganchos'])}</tfoot>` : ''}
       </table>
       <!-- Nota de rodapé enxugada.
 
@@ -7817,6 +7877,10 @@ async function exportarPdfFretes(){
   const semObs = dados.filter(d=>!d.observacoes).length;
 
   const linhas = dados.map(d=>`<tr>
+      <td class="col-data">${dataCurtaLocal(d.programada) || '—'}</td>
+      <td class="col-saida">${d.saida
+        ? fmtDataHora(d.saida)
+        : '<span class="text-dim">ainda no pátio</span>'}</td>
       <td class="col-carga">${esc(d.numeroCarga)}</td>
       <td class="col-placa">${esc(d.placa)}</td>
       <td class="col-rota">${esc(d.rota)}</td>
@@ -7833,12 +7897,21 @@ async function exportarPdfFretes(){
       })}
       <table class="tab-fretes">
         <thead><tr>
-          <th class="col-carga">Número da Carga</th>
+          <!-- DUAS datas, e não uma: "Programada" é o dia a que a viagem
+               pertence e é o campo que o filtro de período usa; "Saída" é
+               quando o caminhão de fato seguiu viagem. Elas divergem
+               exatamente nos casos que dão problema na conferência. -->
+          <th class="col-data">Data</th>
+          <th class="col-saida">Saída</th>
+          <!-- "Nº Carga", como no Operacional. "Número da Carga" por extenso
+               não cabia na largura da coluna e saía cortado no cabeçalho —
+               achado pela conferência de layout do test_relatorios.py. -->
+          <th class="col-carga">Nº Carga</th>
           <th class="col-placa">Placa</th>
           <th class="col-rota">Rota</th>
           <th class="col-obs">Observações</th>
         </tr></thead>
-        <tbody>${linhas || '<tr><td colspan="4" class="text-center text-dim">Nenhuma carga no período selecionado.</td></tr>'}</tbody>
+        <tbody>${linhas || '<tr><td colspan="6" class="text-center text-dim">Nenhuma carga no período selecionado.</td></tr>'}</tbody>
       </table>
       ${rodapeDocumento(
         'O campo <strong>Observações</strong> é onde a administração registra valor do frete, ' +

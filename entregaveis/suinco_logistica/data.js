@@ -2538,6 +2538,11 @@ function dadosAdministracaoFretes(cargas){
          placa é como a conversa acontece no telefone. */
       placa: c.placa || '—',
       rota: rotaCurta(c.rota) || '—',
+      /* AS DUAS DATAS (26/08/2026). O relatório saía sem data nenhuma, e
+         trinta dias assim não se confere. `programada` é o mesmo campo que o
+         filtro de período usa; `saida` é o evento real de "Seguiu Viagem". */
+      programada: c.programadoEm || c.criadoEm || null,
+      saida: primeiroTimestamp(c.id, 'Seguiu Viagem'),
       observacoes: c.observacoes || ''
     }));
 }

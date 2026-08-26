@@ -2624,8 +2624,16 @@ input,select,textarea{border-radius:5px}
      errado numa reunião é decisão errada. Por isso, além de refazer o
      orçamento, toda célula numérica ganhou white-space:nowrap abaixo —
      largura pode faltar, número quebrado não pode existir. */
+  /* DATA / HORA entrou em 26/08/2026 — pedido do dono: "preciso da data e
+     hora em cada linha de relatório". Os 7% saíram das colunas de TEXTO
+     (rota, transportadora, operação, número) e de 1% do peso; o Status
+     ficou intocado de propósito: a largura dele é calibrada para
+     "AGUARDANDO EMBARQUE" caber em uma linha e tem teste guardando
+     (test_relatorios.py, "todo status cabe em UMA linha").
+     As doze larguras abaixo somam 100 com esta. */
+  #print-operacional .c-quando{ width:7%; white-space:nowrap }
   #print-operacional .c-seq{ width:3.5% }
-  #print-operacional .c-carga{ width:7% }
+  #print-operacional .c-carga{ width:6.5% }
   /* 16%, não 17%: encolhida 1% a pedido do usuário — ainda a maior
      coluna de texto fixo da folha, de propósito. A fonte deste documento
      subiu de 9,2 para 9,8px (pedido de legibilidade anterior), e
@@ -2634,15 +2642,15 @@ input,select,textarea{border-radius:5px}
      testes/test_relatorios.py ("todo status cabe em UMA linha") antes de
      fixar o valor. */
   #print-operacional .c-status{ width:16% }     /* "AGUARDANDO EMBARQUE" */
-  #print-operacional .c-rota{ width:14.5% }
-  #print-operacional .c-operacao{ width:10% }
+  #print-operacional .c-rota{ width:10.5% }
+  #print-operacional .c-operacao{ width:9% }
   #print-operacional .c-placa{ width:7.5% }
-  #print-operacional .c-transp{ width:13.5% }   /* nomes longos de empresa */
+  #print-operacional .c-transp{ width:11% }   /* nomes longos de empresa */
   #print-operacional .c-veiculo{ width:6.5% }
   #print-operacional .c-peso{ width:8% }
   #print-operacional .c-palet{ width:4.5% }
   #print-operacional .c-entregas{ width:4.5% }
-  #print-operacional .c-ganchos{ width:4.5% }
+  #print-operacional .c-ganchos{ width:5.5% }
 }
 
 /* ---- Leitura dos dados: o que precisa saltar aos olhos ----
@@ -3263,16 +3271,34 @@ input,select,textarea{border-radius:5px}
    negocia com a TRANSPORTADORA, e é a placa que liga a linha ao veículo
    que rodou. As larguras saíram de 20/28 para 17/16/24 — Observações
    continua com o resto, que é onde o texto de verdade mora. */
+/* AS DUAS DATAS (26/08/2026). O relatório saía sem data nenhuma e ninguém
+   confere trinta dias assim. Sobrava largura: eram quatro colunas numa folha
+   ampla. As três colunas de texto encolheram e Observações continua com o
+   resto, que é onde o texto de verdade mora. */
+.tab-fretes .col-data,
+.tab-fretes .col-saida{
+  white-space:nowrap; font-variant-numeric:tabular-nums;
+  /* Recuo menor que o das outras colunas: a folha usa 10px de cada lado, e
+     em coluna de data isso são 20px roubados de um conteúdo que não quebra
+     linha. Medido — "26/08/2026 17:16" não cabia e saía cortado. */
+  padding-left:6px !important; padding-right:6px !important;
+}
+.tab-fretes .col-data{ width:12% }
+.tab-fretes .col-saida{ width:17% }
 .tab-fretes .col-carga{
-  width:17%; font-weight:800; font-variant-numeric:tabular-nums;
+  width:12%; font-weight:800; font-variant-numeric:tabular-nums;
   background:rgba(185,144,63,.16);
 }
 .tab-fretes .col-placa{
-  width:16%; font-weight:800; letter-spacing:.4px; text-transform:uppercase;
+  width:11%; font-weight:800; letter-spacing:.4px; text-transform:uppercase;
   white-space:nowrap;
 }
-.tab-fretes .col-rota{ width:24% }
+.tab-fretes .col-rota{ width:15% }
 .tab-fretes .col-obs{ white-space:normal; line-height:1.5 }
+/* A hora, embaixo do dia, na mesma célula. Menor e mais apagada: o dia é a
+   informação que se procura; a hora é a que se confere depois de achar. */
+.hora-linha{ font-size:.85em; opacity:.7; white-space:nowrap }
+
 .obs-pendente{
   font-style:italic; opacity:.55; font-size:.92em;
   text-transform:uppercase; letter-spacing:.05em;
