@@ -205,6 +205,35 @@ const SuincoSharePoint = (function () {
       e.status = resposta.status;
       e.codigo = dados && dados.codigo;
       e.dados = dados;
+
+      /* PAINEL NOVO, SERVIDOR VELHO — a janela entre os dois deploys.
+         =================================================================
+         O painel sobe sozinho no Vercel assim que a branch é publicada; o
+         servidor só muda quando alguém roda o atualizar.sh por SSH. Entre
+         um e outro existe uma janela em que a tela já tem o botão e o
+         servidor ainda não tem a rota.
+
+         Relato do dono (26/08/2026), com foto: clicou em Excluir na aba
+         Usuários e a tela mostrou "Não consegui excluir: Rota não
+         encontrada: DELETE /api/operadores/12". A frase está tecnicamente
+         correta e é inútil para quem está trabalhando — parece defeito do
+         painel, quando o que falta é uma atualização do servidor.
+
+         Este tratamento já existia, mas só dentro de excluir() de carga.
+         Aqui ele passa a valer para TODA chamada: qualquer rota que o
+         servidor ainda não conheça vira uma frase que diz o que fazer.
+         Assim a próxima função nova nasce com o aviso pronto, em vez de
+         repetir este mesmo relato.
+
+         O `codigo` continua sendo ROTA_INEXISTENTE de propósito: excluir()
+         depende dele para NÃO tratar a resposta como "carga já não existe"
+         — o que faria a carga sumir da tela de um e continuar no banco. */
+      if (resposta.status === 404 && e.codigo === 'ROTA_INEXISTENTE') {
+        e.servidorDesatualizado = true;
+        e.message = 'Este painel está mais novo que o servidor: a ação que você '
+          + 'pediu ainda não existe lá, e NADA foi alterado. Peça para rodar a '
+          + 'atualização do servidor (atualizar.sh) e tente de novo.';
+      }
       throw e;
     }
     // 201 e 200 significam coisas diferentes no POST de carga: criada agora

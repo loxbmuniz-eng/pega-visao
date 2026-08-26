@@ -105,6 +105,47 @@ async def main():
             else:
                 ck(f'{rotulo}: tratado como sucesso', r['ok'], str(r.get('mensagem')))
 
+        print('\n=== QUALQUER ROTA NOVA, NÃO SÓ A DE EXCLUIR CARGA ===')
+        # Relato do dono, 26/08/2026, com foto da aba Usuários: clicou em
+        # Excluir e leu "Não consegui excluir: Rota não encontrada: DELETE
+        # /api/operadores/12". O painel tinha subido no Vercel com o botão;
+        # o servidor ainda não tinha rodado o atualizar.sh.
+        #
+        # O aviso de "servidor desatualizado" existia desde 16/08, mas só
+        # dentro de excluir() de CARGA. Toda função nova nascia sem ele e
+        # repetia o mesmo relato. Agora o tratamento é do `chamar()`, então
+        # vale para qualquer rota — inclusive as que ainda nem foram
+        # escritas. Este caso usa excluirOperador porque foi o que estourou
+        # em campo, mas o que está sendo testado é o caminho comum.
+        r = await pg.evaluate("""async () => {
+            const original = window.fetch;
+            window.fetch = async () => new Response(JSON.stringify(
+                { erro: 'Rota não encontrada: DELETE /api/operadores/12',
+                  codigo: 'ROTA_INEXISTENTE' }),
+                { status: 404, headers: { 'content-type': 'application/json' } });
+            try {
+                await SuincoSharePoint.excluirOperador('12');
+                return { ok: true };
+            } catch (e) {
+                return { ok: false, mensagem: e.message,
+                         codigo: e.codigo, marcado: !!e.servidorDesatualizado };
+            } finally {
+                window.fetch = original;
+            }
+        }""")
+        ck('uma rota que o servidor não tem levanta erro', not r['ok'], str(r))
+        ck('a mensagem NÃO é o texto técnico do servidor',
+           'Rota não encontrada' not in (r.get('mensagem') or ''),
+           r.get('mensagem', '')[:90])
+        ck('ela diz que o servidor é que está atrás',
+           'servidor' in (r.get('mensagem') or '').lower(), r.get('mensagem', '')[:90])
+        ck('ela diz que NADA foi alterado — é o que tira o medo de repetir',
+           'NADA foi alterado' in (r.get('mensagem') or ''), r.get('mensagem', '')[:90])
+        ck('ela nomeia o atualizar.sh, que é a ação que resolve',
+           'atualizar.sh' in (r.get('mensagem') or ''), r.get('mensagem', '')[:90])
+        ck('e o erro fica marcado para quem quiser tratar em código',
+           r.get('marcado') is True, str(r.get('marcado')))
+
         print('\n=== CONSOLE ===')
         ck('sem erros de página', not erros, str(erros[:2]))
         await nav.close()
