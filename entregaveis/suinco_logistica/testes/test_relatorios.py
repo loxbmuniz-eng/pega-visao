@@ -291,14 +291,12 @@ async def main():
         ck('coluna Destino removida (o campo saiu do formulário)', not o['temDestino'],
            str(o['colunas']))
         ck('linha de totais preservada', o['total'])
-        # DATA / HORA no Operacional (26/08/2026). O dono pediu para os dois
-        # relatórios: "o relatorio operacional tambem precisa ter essa
-        # especificacao". Aqui é UMA coluna com duas linhas dentro — o dia em
-        # cima, o horário que importa para aquela linha embaixo — porque a
-        # folha já tem treze colunas em A4 deitado e duas novas espremeriam o
-        # Status, que é o que se lê de relance na foto do grupo.
-        ck('coluna Data / Hora no Operacional', 'Data / Hora' in o['colunas'],
-           str(o['colunas']))
+        # A coluna "Data / Hora" chegou a existir aqui em 26/08/2026 e saiu no
+        # mesmo dia, por decisão do dono: a folha é do DIA, com a mesma data em
+        # toda linha e o dia já no cabeçalho. As datas ficaram no Fretes, que é
+        # de período — e lá têm teste próprio, logo acima.
+        ck('Operacional não repete a data em toda linha',
+           'Data / Hora' not in o['colunas'], str(o['colunas']))
         ck('nota de rodapé enxuta', o['linhasRodape'] <= 3, f"{o['linhasRodape']} linha(s)")
         # A tabela precisa continuar coerente: cabeçalho e células no mesmo número.
         coerente = await pg.evaluate('''() => {

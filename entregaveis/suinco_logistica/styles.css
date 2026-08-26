@@ -2624,16 +2624,20 @@ input,select,textarea{border-radius:5px}
      errado numa reunião é decisão errada. Por isso, além de refazer o
      orçamento, toda célula numérica ganhou white-space:nowrap abaixo —
      largura pode faltar, número quebrado não pode existir. */
-  /* DATA / HORA entrou em 26/08/2026 — pedido do dono: "preciso da data e
-     hora em cada linha de relatório". Os 7% saíram das colunas de TEXTO
-     (rota, transportadora, operação, número) e de 1% do peso; o Status
-     ficou intocado de propósito: a largura dele é calibrada para
-     "AGUARDANDO EMBARQUE" caber em uma linha e tem teste guardando
-     (test_relatorios.py, "todo status cabe em UMA linha").
-     As doze larguras abaixo somam 100 com esta. */
-  #print-operacional .c-quando{ width:7%; white-space:nowrap }
+  /* DOZE colunas, somando 100%.
+
+     A "Data / Hora" chegou a existir aqui em 26/08/2026 e saiu no mesmo dia,
+     por decisão do dono: esta folha é do DIA, com a mesma data em toda linha
+     e o dia já escrito no cabeçalho — a coluna gastava 7% de largura para
+     repetir o que o documento inteiro já dizia. As datas ficaram no Fretes,
+     que é o relatório de período e onde elas fazem falta de verdade.
+
+     O que NÃO voltou ao valor antigo é "Ganch.": o cabeçalho "GANCHOS" saía
+     cortado em 4,5% desde muito antes disso, e ninguém tinha reparado porque
+     não havia conferência de layout. Agora há (test_relatorios.py), e ela
+     exige 5,5%. O 1% sai da rota, que quebra linha sem prejuízo. */
   #print-operacional .c-seq{ width:3.5% }
-  #print-operacional .c-carga{ width:6.5% }
+  #print-operacional .c-carga{ width:7% }
   /* 16%, não 17%: encolhida 1% a pedido do usuário — ainda a maior
      coluna de texto fixo da folha, de propósito. A fonte deste documento
      subiu de 9,2 para 9,8px (pedido de legibilidade anterior), e
@@ -2642,10 +2646,10 @@ input,select,textarea{border-radius:5px}
      testes/test_relatorios.py ("todo status cabe em UMA linha") antes de
      fixar o valor. */
   #print-operacional .c-status{ width:16% }     /* "AGUARDANDO EMBARQUE" */
-  #print-operacional .c-rota{ width:10.5% }
-  #print-operacional .c-operacao{ width:9% }
+  #print-operacional .c-rota{ width:13.5% }
+  #print-operacional .c-operacao{ width:10% }
   #print-operacional .c-placa{ width:7.5% }
-  #print-operacional .c-transp{ width:11% }   /* nomes longos de empresa */
+  #print-operacional .c-transp{ width:13.5% }   /* nomes longos de empresa */
   #print-operacional .c-veiculo{ width:6.5% }
   #print-operacional .c-peso{ width:8% }
   #print-operacional .c-palet{ width:4.5% }
@@ -3295,10 +3299,6 @@ input,select,textarea{border-radius:5px}
 }
 .tab-fretes .col-rota{ width:15% }
 .tab-fretes .col-obs{ white-space:normal; line-height:1.5 }
-/* A hora, embaixo do dia, na mesma célula. Menor e mais apagada: o dia é a
-   informação que se procura; a hora é a que se confere depois de achar. */
-.hora-linha{ font-size:.85em; opacity:.7; white-space:nowrap }
-
 .obs-pendente{
   font-style:italic; opacity:.55; font-size:.92em;
   text-transform:uppercase; letter-spacing:.05em;
