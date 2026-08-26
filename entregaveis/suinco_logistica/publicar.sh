@@ -179,10 +179,32 @@ else
 fi
 
 titulo "7. Publicando"
-git checkout "$ENTREGA" >/dev/null 2>&1
-git merge "$TRABALHO" --no-edit >/dev/null
-git push -u origin "$ENTREGA" >/dev/null
-git checkout "$TRABALHO" >/dev/null 2>&1
+# A BATERIA REGENERA O index.html — e um build regerado tem carimbo novo,
+# então a árvore fica suja no fim dos testes mesmo sem ninguém mexer em
+# nada. Trocar de branch nesse estado falha, e na primeira execução isso
+# aconteceu SEM DIZER NADA: o `git checkout` estava com a saída silenciada,
+# o script parou no meio e o resumo final nunca apareceu.
+#
+# Um portão que falha em silêncio é o defeito que ele existe para impedir,
+# escrito dentro dele. Por isso aqui: restaura o que é build, confere que
+# não sobrou mais nada solto, e deixa o git falar.
+git checkout -- '*/index.html' '*/sw.js' 2>/dev/null || true
+if [[ -n "$(git status --porcelain)" ]]; then
+  git status --short | sed 's/^/      /'
+  falhou "os testes deixaram arquivos alterados que não são build."
+fi
+
+git checkout "$ENTREGA" || falhou "não consegui trocar para $ENTREGA."
+git merge "$TRABALHO" --no-edit || {
+  git merge --abort 2>/dev/null || true
+  git checkout "$TRABALHO" 2>/dev/null || true
+  falhou "o merge em $ENTREGA deu conflito."
+}
+git push -u origin "$ENTREGA" || {
+  git checkout "$TRABALHO" 2>/dev/null || true
+  falhou "o push falhou — a entrega NÃO subiu."
+}
+git checkout "$TRABALHO" || falhou "publiquei, mas não consegui voltar para $TRABALHO."
 verde "  ok  $ENTREGA atualizada — o Vercel sobe em instantes"
 
 echo
