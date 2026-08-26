@@ -452,4 +452,49 @@ GUIAS = {
       },
     ],
   },
+  'Comercial': {
+    'email': 'guia.comercial@suinco.demo',
+    'icone': '👁️',
+    'missao': 'Saber onde está cada carga sem precisar ligar para o pátio.',
+    'resumo': [
+      'O seu acesso é de LEITURA: você vê tudo o que a Logística vê na Torre e no Histórico, e não altera nada.',
+      'A pergunta do cliente — "onde está a minha carga?" — se responde em segundos, pela placa ou pelo número.',
+      'O que você vê é o mesmo que o pátio vê, atualizado no segundo em que qualquer setor registra.',
+    ],
+    'passos': [
+      {
+        'titulo': 'Entrar no painel',
+        'tab': None, 'destaque': '#login-servidor',
+        'oque': 'Entrar com o seu e-mail e a sua senha.',
+        'onde': 'Tela de entrada, que aparece antes do painel.',
+        'porque': 'O acesso do Comercial é individual e somente-leitura: você consulta tudo, e o sistema garante que nada muda a partir daqui — nem sem querer.',
+        'quando': 'Uma vez por turno. O painel lembra de você no mesmo aparelho.',
+      },
+      {
+        'titulo': 'Ver o pátio inteiro na Torre de Controle',
+        'tab': 'torre', 'destaque': '#torre-tbody',
+        'oque': 'Abrir a Torre e ler a situação de cada carga em aberto: etapa, horário e responsável.',
+        'onde': 'Aba Torre de Controle — a primeira que abre para você.',
+        'porque': 'É a resposta de relance: quantos caminhões aguardando, quantos carregando, quantos já saíram. O que um setor registra aparece aqui no mesmo segundo.',
+        'quando': 'Sempre que precisar saber a situação geral do dia — antes de responder um cliente, por exemplo.',
+      },
+      {
+        'titulo': 'Achar UMA carga pela placa ou pelo número',
+        'tab': 'historico', 'destaque': '#hist-busca-carga',
+        'oque': 'Digitar a placa ou o número da carga na busca da Linha do Tempo.',
+        'onde': 'Aba Histórico → cartão "Linha do Tempo de uma Carga".',
+        'porque': 'A jornada inteira aparece como uma linha: quando foi programada, quando o caminhão entrou, quando carregou, faturou e saiu — com nome e hora em cada etapa.',
+        'quando': 'Quando o cliente perguntar "onde está a minha carga?" — a resposta sai daqui, em segundos.',
+      },
+      {
+        'titulo': 'Consultar o que já aconteceu',
+        'tab': 'historico', 'destaque': '#tab-historico .card',
+        'oque': 'Percorrer as movimentações do dia, com filtro de período.',
+        'onde': 'Aba Histórico → tabela de movimentações.',
+        'porque': 'Todo movimento fica registrado para sempre, com autor e hora. O que você lê aqui é o registro oficial — o mesmo que os relatórios usam.',
+        'quando': 'Para conferências: o que saiu ontem, o que rodou na semana, o que aconteceu com determinada placa.',
+      },
+    ],
+  },
+
 }

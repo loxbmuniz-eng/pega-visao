@@ -6792,14 +6792,6 @@ function dataCurtaLocal(iso){
   return isNaN(d) ? '' : d.toLocaleDateString('pt-BR');
 }
 
-function datasDaLinhaDeRelatorio(c){
-  return {
-    programada: c.programadoEm || c.criadoEm || null,
-    entrada: entradaNoPatioDe(c),
-    saida: primeiroTimestamp(c.id, 'Seguiu Viagem'),
-  };
-}
-
 async function montarRelatorioOperacional(){
   await atualizarDadosAntesDoRelatorio();
   const el = document.getElementById('print-operacional');
@@ -6829,21 +6821,6 @@ async function montarRelatorioOperacional(){
        espremia "Aguardando Embarque" em duas linhas. Com classe, mover ou
        remover coluna não desalinha mais nada. */
     return `<tr>
-      <td class="c-quando">${(() => {
-        /* UMA coluna, duas linhas dentro. O Operacional já tem 12 colunas em
-           A4 deitado com fonte de 7,6px; duas colunas novas espremeriam o
-           Status, que é a informação que se lê de relance na foto do grupo.
-
-           Em cima o dia da programação; embaixo o horário que importa para
-           AQUELA linha — saída se o caminhão já foi, entrada se ele está no
-           pátio, nada se ainda não chegou. Mostrar "entrou —" numa carga que
-           não chegou seria preencher espaço com ausência. */
-        const d = datasDaLinhaDeRelatorio(c);
-        const dia = dataCurtaLocal(d.programada) || '—';
-        const hora = d.saida ? `saiu ${fmtHora(d.saida)}`
-          : (d.entrada ? `entrou ${fmtHora(d.entrada)}` : '');
-        return `${dia}${hora ? `<br><span class="hora-linha">${hora}</span>` : ''}`;
-      })()}</td>
       <td class="c-seq">${c.sequencia ?? '—'}</td>
       <td class="c-carga">${esc(c.numeroCarga).toUpperCase()||'—'}</td>
       <td class="c-status" style="background:${cs.fundo};color:${cs.texto}">${esc(c.status)}</td>
@@ -6876,7 +6853,6 @@ async function montarRelatorioOperacional(){
            algo que já estava escrito. -->
       <table>
         <thead><tr>
-          <th class="c-quando">Data / Hora</th>
           <th class="c-seq">Seq.</th>
           <th class="c-carga">Nº Carga</th>
           <th class="c-status">Status</th>
@@ -6901,11 +6877,13 @@ async function montarRelatorioOperacional(){
           <th class="c-ganchos">Ganch.</th>
         </tr></thead>
         <tbody>${linhas || '<tr><td colspan="13" class="text-center text-dim">Nenhuma carga no período selecionado.</td></tr>'}</tbody>
-        ${lista.length ? `<tfoot>${/* 9, não 8: a coluna "Data / Hora" entrou na frente de tudo em
-             26/08/2026 e o rótulo TOTAL precisa atravessar uma coluna a
-             mais. Errar aqui desalinha os totais sob as colunas erradas —
-             e ninguém confere um total que está no lugar certo. */''
-           }${rodapeSomatorios(lista, 9, ['peso','', 'entregas','ganchos'])}</tfoot>` : ''}
+        ${lista.length ? `<tfoot>${/* 8 é o número de colunas antes do Peso. A coluna "Data / Hora" chegou
+             a existir aqui em 26/08 e saiu no mesmo dia, por decisão do dono:
+             a folha do Operacional é do DIA, com a mesma data em toda linha e
+             o dia já escrito no cabeçalho — a coluna gastava largura para
+             repetir o que o documento inteiro já dizia. As datas ficaram onde
+             fazem falta: no Fretes, que é de período. */''
+           }${rodapeSomatorios(lista, 8, ['peso','', 'entregas','ganchos'])}</tfoot>` : ''}
       </table>
       <!-- Nota de rodapé enxugada.
 
