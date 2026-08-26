@@ -1236,6 +1236,27 @@ describe('8. Superfície de ataque', () => {
     assert.equal(r.status, 200);
   });
 
+  /* O /health tem que dizer se o RELATÓRIO funciona, não só se o banco
+     responde (26/08/2026).
+
+     Um servidor subido sem PLAYWRIGHT_CHROMIUM_PATH devolve ok:true, aceita
+     login e grava carga — parece inteiro. Só o PDF não sai, e a falha aparece
+     lá na ponta como "o download não veio em 60 segundos". Custou uma bateria
+     de 25 minutos com três suítes vermelhas que pareciam regressão. */
+  test('/health diz se o servidor consegue gerar relatório em PDF', async () => {
+    const r = await req('/health');
+    assert.equal(r.status, 200);
+    assert.ok(r.json.pdf, 'o campo pdf precisa existir para o portão perguntar');
+    assert.equal(typeof r.json.pdf.pronto, 'boolean');
+  });
+
+  test('o /health não entrega o caminho do Chromium, só se ele existe', async () => {
+    const r = await req('/health');
+    const texto = JSON.stringify(r.json);
+    assert.ok(!texto.includes('/opt/') && !texto.includes('/usr/') && !texto.includes('.playwright'),
+      'caminho de sistema num endpoint sem login é informação de graça para quem sonda');
+  });
+
   test('id com payload de XSS é recusado antes de tocar no banco', async () => {
     const r = await req(`/api/cargas/${encodeURIComponent("x');alert(1)//")}/status`, {
       metodo: 'POST', token: tokens['Portaria'], corpo: { status: 'Aguardando Embarque' },

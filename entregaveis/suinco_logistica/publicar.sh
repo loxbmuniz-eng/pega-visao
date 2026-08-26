@@ -135,19 +135,50 @@ verde "  ok  $(grep -E '^# pass' /tmp/suinco-teste-backend.txt | head -1)"
 titulo "5. Servidor de teste no ar"
 PORTA_TESTE="$(grep -E '^PORT=' "$AQUI/backend/.env" 2>/dev/null | cut -d= -f2 | tr -d '[:space:]')"
 PORTA_TESTE="${PORTA_TESTE:-3000}"
-if curl -sf --max-time 3 "http://127.0.0.1:$PORTA_TESTE/health" >/dev/null 2>&1; then
-  verde "  ok  API respondendo na porta $PORTA_TESTE"
+# "ESTÁ NO AR" NÃO BASTA — TEM QUE ESTAR INTEIRA.
+#
+# Segunda lição do mesmo dia, e mais cara que a primeira. Depois de o portão
+# passar a conferir se a API respondia, ele encontrou uma no ar e seguiu — só
+# que aquela tinha sido subida À MÃO, sem PLAYWRIGHT_CHROMIUM_PATH. Um
+# servidor assim responde /health com ok:true, aceita login, grava carga:
+# parece inteiro. Só o PDF não sai. Três suítes de relatório reprovaram
+# depois de 25 minutos, e por um momento pareceu regressão de verdade.
+#
+# Por isso a pergunta virou "responde E consegue gerar relatório?". O
+# /health passou a dizer isso em `pdf.pronto`. Se estiver no ar mas capenga,
+# o portão derruba e sobe do jeito certo — meia dúvida aqui custa a bateria
+# inteira lá na frente.
+api_inteira() {
+  local corpo
+  corpo="$(curl -sf --max-time 3 "http://127.0.0.1:$PORTA_TESTE/health" 2>/dev/null)" || return 1
+  [[ "$corpo" == *'"pronto":true'* ]]
+}
+
+subir_api() {
+  ( cd "$AQUI/backend" && PLAYWRIGHT_CHROMIUM_PATH="$PLAYWRIGHT_CHROMIUM_PATH" \
+      nohup node src/servidor.js > /tmp/suinco-api-teste.log 2>&1 & )
+  for _ in $(seq 1 25); do api_inteira && return 0; sleep 1; done
+  return 1
+}
+
+if api_inteira; then
+  verde "  ok  API no ar na porta $PORTA_TESTE, com Chromium para os PDFs"
 else
-  echo "      API fora do ar — subindo (log em /tmp/suinco-api-teste.log)"
-  ( cd "$AQUI/backend" && nohup node src/servidor.js > /tmp/suinco-api-teste.log 2>&1 & )
-  for _ in $(seq 1 20); do
-    curl -sf --max-time 2 "http://127.0.0.1:$PORTA_TESTE/health" >/dev/null 2>&1 && break
-    sleep 1
-  done
-  curl -sf --max-time 3 "http://127.0.0.1:$PORTA_TESTE/health" >/dev/null 2>&1 \
-    || { tail -15 /tmp/suinco-api-teste.log 2>/dev/null | sed 's/^/      /'
-         falhou "não consegui subir a API de teste na porta $PORTA_TESTE."; }
-  verde "  ok  API no ar na porta $PORTA_TESTE"
+  if curl -sf --max-time 3 "http://127.0.0.1:$PORTA_TESTE/health" >/dev/null 2>&1; then
+    echo "      API no ar, mas SEM Chromium — os relatórios em PDF falhariam."
+    echo "      Derrubando e subindo do jeito certo."
+    # Padrão ANCORADO. Sem as âncoras, `pkill -f` casa com qualquer shell
+    # que tenha esse texto na linha de comando — inclusive o próprio wrapper
+    # que está rodando este script. Já aconteceu nesta bancada: o pkill matou
+    # a sessão que o chamou e o erro saiu como "exit 144", sem explicação.
+    pkill -f '^node src/servidor\.js$' 2>/dev/null || true
+    sleep 2
+  else
+    echo "      API fora do ar — subindo (log em /tmp/suinco-api-teste.log)"
+  fi
+  subir_api || { tail -15 /tmp/suinco-api-teste.log 2>/dev/null | sed 's/^/      /'
+                 falhou "não consegui subir a API de teste inteira na porta $PORTA_TESTE."; }
+  verde "  ok  API no ar na porta $PORTA_TESTE, com Chromium para os PDFs"
 fi
 
 titulo "6. Bateria de tela"
