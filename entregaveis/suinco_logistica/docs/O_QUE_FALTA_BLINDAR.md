@@ -41,7 +41,7 @@ O `APLICADAS_EM_PRODUCAO.txt` mandava conferir o servidor com
 
 Estas quatro não são opinião: são coisas que **já estão custando** todo dia.
 
-### P1. As migrações 035 e 036 não subiram
+### P1. As migrações 035, 036 e 037 não subiram
 
 O servidor está na **034**. O que quebra enquanto não sobe:
 
@@ -49,6 +49,7 @@ O servidor está na **034**. O que quebra enquanto não sobe:
 |---|---|
 | 035 | a Montagem do dia duplica linha a cada "puxar do modelo". O painel hoje tem um remendo por rota+destino que segura a maioria dos casos, mas a identidade exata só volta com a coluna. |
 | 036 | a transportadora do dia não salva. A exceção do dia se perde e volta a da frota. |
+| 037 | os avisos no celular não ligam. O painel mostra "avisos indisponíveis" e ninguém recebe nada. Ver P5. |
 
 ```
 ssh root@2.25.95.253
@@ -103,6 +104,20 @@ tenho o código de rota deles e **não vou inventar código de rota**:
 
 Me mande o código de rota de cada um (o mesmo que aparece no cadastro de
 Rotas) e eu fecho a planilha.
+
+### P5. Ligar os avisos no celular (migração 037 + chaves VAPID)
+
+Pronto e testado no código; **desligado** até alguém rodar dois comandos no
+servidor. Enquanto isso o painel mostra "o aviso ainda não foi ligado no
+servidor" e o resto roda exatamente igual — nada quebra.
+
+O passo a passo completo está em `docs/AVISOS_NO_CELULAR.md`: gerar as
+chaves com `npx web-push generate-vapid-keys`, colar as três linhas no
+`.env`, e rodar o `atualizar.sh` (que também aplica a migração 037).
+
+Depois disso, cada pessoa liga no 🔔 do próprio aparelho — e no **iPhone só
+funciona com o painel instalado na tela de início**, que é como o Luis
+descreveu o pedido desde o começo.
 
 ---
 

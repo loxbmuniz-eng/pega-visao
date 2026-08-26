@@ -89,6 +89,36 @@ export const config = {
      aberto é recusado com uma mensagem dizendo o que configurar. */
   senhaFechamento: (process.env.SENHA_FECHAMENTO || '').trim(),
 
+  /* AVISO NO CELULAR (26/08/2026).
+
+     As duas chaves do padrão VAPID, que é como o navegador confere que
+     quem mandou a notificação é este servidor e não um estranho que
+     descobriu o endereço de inscrição de alguém.
+
+     GERAR UMA VEZ, NO SERVIDOR, e nunca mais:
+         cd /opt/embarque-suinco && npx web-push generate-vapid-keys
+     A pública vai em VAPID_PUBLICA, a privada em VAPID_PRIVADA, no .env.
+
+     A PRIVADA É SEGREDO de verdade: quem a tem manda notificação em nome
+     do painel para qualquer aparelho inscrito. Ela nunca sai do .env do
+     servidor — não passa por conversa, não vai para o repositório.
+
+     TROCAR AS CHAVES DESINSCREVE TODO MUNDO. A inscrição que cada celular
+     guardou é amarrada à chave pública que ele viu no dia; com outra, o
+     envio passa a ser recusado. Se um dia for preciso trocar, a tabela
+     push_inscricoes tem que ser esvaziada junto e todos reativam o aviso.
+
+     VAZIAS = FUNÇÃO DESLIGADA, e desligada de propósito: o painel mostra
+     "avisos indisponíveis" e o resto do sistema roda exatamente igual.
+     Um pátio inteiro não pode parar porque uma notificação não configurou. */
+  avisos: {
+    chavePublica: (process.env.VAPID_PUBLICA || '').trim(),
+    chavePrivada: (process.env.VAPID_PRIVADA || '').trim(),
+    // Exigido pelo padrão: um contato para o serviço de push (Google,
+    // Apple) alcançar o dono do servidor se algo estiver errado.
+    contato: (process.env.VAPID_CONTATO || 'mailto:lo.xbmuniz@gmail.com').trim(),
+  },
+
   limites: {
     // O pátio inteiro em hora de pico faz muito menos que isso. O teto
     // existe para conter script, não para atrapalhar operador.

@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { consultar, emTransacao } from '../banco.js';
+import { consultar, emTransacao, pool as bancoPool } from '../banco.js';
 import { exigirLogin, exigirSetor } from '../middleware/auth.js';
 import { emitir } from '../tempo-real.js';
 import { programacaoAtual } from '../dominio/programacoes.js';
@@ -12,6 +12,9 @@ import {
   camposEditaveisPor, podeRegistrarSaida,
   ErroDeFluxo, ErroDePermissao, STATUS_INICIAL, STATUS_FLOW,
 } from '../dominio/fluxo.js';
+import {
+  avisarChegada, avisarSaida, avisarFimDaProgramacao, primeiraVezHoje, contarPatio,
+} from '../servicos/avisos.js';
 
 export const rotasCargas = Router();
 
@@ -241,6 +244,17 @@ rotasCargas.post('/cargas', exigirLogin, async (req, res, next) => {
 
     const payload = paraPainel(carga.linha);
     if (carga.nova) emitir('carga:criada', payload);
+
+    /* AVISO NO CELULAR — chegada sem programação (26/08/2026).
+
+       Sem `await` de propósito, e é o ponto do desenho todo: a resposta ao
+       porteiro não pode esperar a Google entregar notificação para três
+       setores. A gravação já está confirmada no banco; o aviso é acessório
+       e nunca pode segurar — nem derrubar — o que já valeu. Mesma regra do
+       emitir() do tempo-real.js. */
+    if (carga.nova && chegadaSemProgramacao) {
+      avisarChegada(carga.linha).catch(() => {});
+    }
     return res.status(carga.nova ? 201 : 200).json(payload);
   } catch (e) {
     return next(e);
@@ -663,6 +677,19 @@ rotasCargas.post('/cargas/:id/status', exigirLogin, async (req, res, next) => {
     }
 
     const payload = paraPainel(resultado.linha);
+
+    /* AVISO NO CELULAR — chegada da carga JÁ PROGRAMADA.
+
+       "Caminhão deu entrada na portaria" tem dois caminhos no sistema, e
+       este é o comum: a carga já existia esperando o veículo, e o "Chegou"
+       a move para Aguardando Embarque. O outro caminho (placa sem
+       programação nenhuma) está na criação, mais acima. Avisar só um dos
+       dois deixaria metade das entradas mudas — e seria impossível
+       perceber olhando a tela, porque as duas aparecem igual nela. */
+    if (resultado.de === 'Aguardando Veículo' && payload.status === 'Aguardando Embarque') {
+      avisarChegada(resultado.linha).catch(() => {});
+    }
+
     emitir('carga:atualizada', payload);
     emitir('movimentacao:nova', {
       id: resultado.movId,
@@ -816,6 +843,29 @@ rotasCargas.delete('/cargas/:id', exigirLogin, async (req, res, next) => {
   }
 });
 
+/* "A PROGRAMAÇÃO FOI FINALIZADA POR INTEIRO" — o terceiro aviso.
+
+   O dono escolheu, entre as duas leituras possíveis, a automática: o aviso
+   sai quando o ÚLTIMO caminhão do dia sai, não quando alguém aperta
+   "Fechar programação". O motivo é bom — o botão pode ser esquecido, e
+   também pode ser apertado com carga ainda no pátio (o fechamento aceita
+   forçar, com senha). O pátio vazio não mente.
+
+   A regra de o que conta como "ainda aberto" mora em contarPatio(), no
+   serviço, junto com a explicação e a prova. A trava contra aviso repetido
+   é primeiraVezHoje(): a contagem pode chegar a zero mais de uma vez no
+   mesmo dia. */
+async function conferirFimDaProgramacao() {
+  const { abertas, concluidas_hoje: concluidas } = await contarPatio(bancoPool);
+  if (abertas !== 0) return;
+  /* Pátio vazio sem nenhuma carga concluída hoje não é fim de expediente:
+     é um dia que não começou. Avisar "a programação terminou" num domingo
+     seria ruído puro. */
+  if (!concluidas) return;
+  if (!(await primeiraVezHoje('fim-do-dia'))) return;
+  await avisarFimDaProgramacao(concluidas);
+}
+
 /* ---------------------------------------------------------------------
    POST /api/portaria/saida — o caminhão saiu do pátio
    ---------------------------------------------------------------------
@@ -888,6 +938,17 @@ rotasCargas.post('/portaria/saida', exigirLogin, async (req, res, next) => {
 
     const liberadas = saida.liberadas.map(paraPainel);
     liberadas.forEach((c) => emitir('carga:atualizada', c));
+
+    /* AVISO NO CELULAR — saída, e possivelmente o fim do dia.
+
+       Sem `await`: a resposta ao porteiro não espera notificação nenhuma.
+       O `.catch()` existe porque promessa rejeitada sem tratamento derruba
+       o Node inteiro — e derrubar o servidor porque uma notificação falhou
+       seria transformar o acessório em ponto único de falha. */
+    if (liberadas.length) {
+      avisarSaida(placa, saida.liberadas).catch(() => {});
+      conferirFimDaProgramacao().catch(() => {});
+    }
 
     return res.json({
       placa,

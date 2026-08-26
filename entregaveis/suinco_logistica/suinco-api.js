@@ -1462,6 +1462,166 @@ const SuincoSharePoint = (function () {
     },
   };
 
+  /* =====================================================================
+     AVISO NO CELULAR (26/08/2026)
+     ---------------------------------------------------------------------
+     Pedido do dono: quem tem o painel instalado como aplicativo recebe um
+     aviso a cada caminhão que entra na portaria, a cada saída, e quando a
+     programação do dia termina.
+
+     ISTO NÃO É O SINO DA TELA. O `notify()` do painel avisa quem está
+     olhando. Aqui a mensagem chega com o aplicativo FECHADO — quem entrega
+     é o service worker, e o servidor fala com a Google/Apple, não com esta
+     aba.
+
+     TRÊS PORTAS PRECISAM ESTAR ABERTAS ao mesmo tempo, e o painel precisa
+     saber dizer QUAL está fechada — "não funcionou" sem motivo é o que faz
+     alguém desistir:
+       1. o navegador suporta push (no iPhone, só com o atalho na tela de
+          início — Safari em aba nunca vai receber);
+       2. a pessoa deu permissão, no aparelho dela, uma vez;
+       3. o servidor tem as chaves VAPID configuradas.
+     ===================================================================== */
+
+  /* A chave pública vem em base64url e o navegador exige bytes. Conversão
+     mecânica: repõe o padding, desfaz as trocas do alfabeto url-safe. */
+  function chaveParaBytes(base64url) {
+    const resto = '='.repeat((4 - (base64url.length % 4)) % 4);
+    const base64 = (base64url + resto).replace(/-/g, '+').replace(/_/g, '/');
+    const cru = atob(base64);
+    const bytes = new Uint8Array(cru.length);
+    for (let i = 0; i < cru.length; i++) bytes[i] = cru.charCodeAt(i);
+    return bytes;
+  }
+
+  function nomeDoAparelho() {
+    const ua = navigator.userAgent || '';
+    const sistema = /iPhone|iPad/i.test(ua) ? 'iPhone'
+      : /Android/i.test(ua) ? 'Android'
+      : /Windows/i.test(ua) ? 'Windows'
+      : /Mac/i.test(ua) ? 'Mac' : 'Aparelho';
+    const instalado = ehAplicativoInstalado() ? ' (aplicativo)' : ' (navegador)';
+    return sistema + instalado;
+  }
+
+  function ehAplicativoInstalado() {
+    try {
+      return window.matchMedia('(display-mode: standalone)').matches
+        || window.navigator.standalone === true;
+    } catch (e) { return false; }
+  }
+
+  function ehIOS() {
+    return /iPhone|iPad|iPod/i.test(navigator.userAgent || '')
+      // iPad moderno se apresenta como Mac; o toque é o que o denuncia.
+      || (/Mac/i.test(navigator.userAgent || '') && navigator.maxTouchPoints > 1);
+  }
+
+  const avisosApi = {
+    ehAplicativoInstalado,
+    ehIOS,
+
+    /* Por que este aparelho NÃO pode receber — em uma frase que a pessoa
+       entende. Devolve null quando pode. */
+    porQueNaoPode() {
+      if (!('serviceWorker' in navigator)) {
+        return 'Este navegador não sabe receber avisos. Use o Chrome (Android) ou o Safari (iPhone).';
+      }
+      if (!('PushManager' in window)) {
+        if (ehIOS() && !ehAplicativoInstalado()) {
+          return 'No iPhone o aviso só funciona com o painel instalado na tela de início. '
+            + 'Toque em Compartilhar e depois em "Adicionar à Tela de Início" — '
+            + 'e abra o painel por esse ícone.';
+        }
+        return 'Este navegador não sabe receber avisos no celular.';
+      }
+      if (ehIOS() && !ehAplicativoInstalado()) {
+        return 'No iPhone o aviso só funciona com o painel instalado na tela de início. '
+          + 'Toque em Compartilhar e depois em "Adicionar à Tela de Início".';
+      }
+      if (Notification.permission === 'denied') {
+        return 'Os avisos foram bloqueados para este site no seu aparelho. '
+          + 'Libere nas configurações do navegador e volte aqui.';
+      }
+      return null;
+    },
+
+    /* O que o SERVIDOR diz: se a função está ligada lá e quantos aparelhos
+       esta pessoa já inscreveu. */
+    estadoNoServidor() {
+      return chamar('/api/avisos/chave');
+    },
+
+    /* Este aparelho já está inscrito? Pergunta ao próprio navegador, que é
+       quem sabe — o servidor conhece a conta, não o aparelho. */
+    async ligadoNesteAparelho() {
+      try {
+        if (!('serviceWorker' in navigator) || !('PushManager' in window)) return false;
+        const reg = await navigator.serviceWorker.ready;
+        return Boolean(await reg.pushManager.getSubscription());
+      } catch (e) { return false; }
+    },
+
+    /* Liga. Pede a permissão (uma vez, no aparelho), inscreve no navegador
+       e guarda no servidor. Erro aqui vira mensagem, nunca silêncio. */
+    async ligar() {
+      const impedimento = this.porQueNaoPode();
+      if (impedimento) throw new Error(impedimento);
+
+      const servidor = await chamar('/api/avisos/chave');
+      if (!servidor.ligado || !servidor.chavePublica) {
+        throw new Error('O aviso no celular ainda não foi ligado no servidor. '
+          + 'Peça para rodar a atualização do servidor antes de tentar de novo.');
+      }
+
+      const permissao = await Notification.requestPermission();
+      if (permissao !== 'granted') {
+        throw new Error('Você precisa permitir os avisos quando o aparelho perguntar. '
+          + 'Se não apareceu nada, os avisos já estavam bloqueados nas configurações.');
+      }
+
+      const reg = await navigator.serviceWorker.ready;
+      /* userVisibleOnly é obrigatório e não é enfeite: é o compromisso de
+         que todo push vira notificação visível. O service worker cumpre a
+         parte dele mostrando algo mesmo quando o pacote vem quebrado. */
+      const inscricao = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: chaveParaBytes(servidor.chavePublica),
+      });
+
+      await chamar('/api/avisos/inscrever', {
+        metodo: 'POST',
+        corpo: { inscricao: inscricao.toJSON(), aparelho: nomeDoAparelho() },
+      });
+      return true;
+    },
+
+    /* Desliga NESTE aparelho. Sai dos dois lados: do navegador (senão o
+       serviço de push continua entregando) e do servidor (senão o servidor
+       continua tentando, para sempre). */
+    async desligar() {
+      let endpoint = '';
+      try {
+        const reg = await navigator.serviceWorker.ready;
+        const inscricao = await reg.pushManager.getSubscription();
+        if (inscricao) {
+          endpoint = inscricao.endpoint;
+          await inscricao.unsubscribe();
+        }
+      } catch (e) { /* segue e limpa o servidor mesmo assim */ }
+      if (endpoint) {
+        await chamar('/api/avisos/desinscrever', { metodo: 'POST', corpo: { endpoint } });
+      }
+      return true;
+    },
+
+    /* Mandar um teste para si mesmo. Sem isto a pessoa só descobre que o
+       aviso não chega no dia em que precisava dele. */
+    testar() {
+      return chamar('/api/avisos/testar', { metodo: 'POST' });
+    },
+  };
+
   return {
     SP_CONFIG,
     iniciar, estaConfigurado, enderecoDaApi, estado, conta, aoMudarEstado, aoReceberDados,
@@ -1481,5 +1641,6 @@ const SuincoSharePoint = (function () {
     gerarRelatorioPdf, listarProgramacoes,
     listarRevisoes, restaurarRevisao,
     devolucoes: devolucoesApi, aoAtualizarDevolucao,
+    avisos: avisosApi,
   };
 })();
