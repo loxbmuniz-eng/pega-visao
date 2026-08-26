@@ -45,6 +45,31 @@ falhou() { vermelho "  X  $*"; echo; vermelho "PUBLICAÇÃO CANCELADA."; exit 1;
 
 cd "$RAIZ"
 
+# ---------------------------------------------------------------------
+# O NAVEGADOR QUE OS TESTES USAM.
+#
+# Duas partes do sistema abrem um navegador: a bateria de tela (Playwright)
+# e o PDF gerado pelo SERVIDOR. Em produção o instalar.sh baixa o Chromium
+# com `npx playwright install`; neste ambiente ele já vem em /opt.
+#
+# Sem apontar o caminho, o serviço de PDF procura um binário que não existe
+# aqui e SEIS testes reprovam por motivo de ambiente — não de código. Foi o
+# que cancelou a segunda execução deste portão. Deixar assim treinaria
+# qualquer um a ignorar vermelho, que é o oposto do que ele existe para
+# fazer.
+#
+# Se o navegador não estiver em lugar nenhum, o portão AVISA e segue: os
+# testes vão reprovar de verdade e o cancelamento explica sozinho. O que
+# não pode é reprovar em silêncio por falta de um caminho.
+# ---------------------------------------------------------------------
+if [[ -z "${PLAYWRIGHT_CHROMIUM_PATH:-}" && -x /opt/pw-browsers/chromium ]]; then
+  export PLAYWRIGHT_CHROMIUM_PATH=/opt/pw-browsers/chromium
+fi
+if [[ -z "${PLAYWRIGHT_CHROMIUM_PATH:-}" ]]; then
+  vermelho "  !  PLAYWRIGHT_CHROMIUM_PATH não definido e /opt/pw-browsers/chromium não existe."
+  vermelho "     Os testes de PDF e a bateria de tela vão reprovar por falta de navegador."
+fi
+
 titulo "1. Branch de trabalho"
 ATUAL="$(git rev-parse --abbrev-ref HEAD)"
 [[ "$ATUAL" == "$TRABALHO" ]] || falhou "você está em '$ATUAL'; o trabalho é feito em '$TRABALHO'."
