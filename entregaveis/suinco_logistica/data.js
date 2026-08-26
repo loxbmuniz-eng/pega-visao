@@ -1533,6 +1533,13 @@ function cargasAbertas(){
 }
 function cargasAbertasPorPlaca(placa){
   const p = normalizarPlaca(placa);
+  /* VAZIO NUNCA CASA (26/08/2026). Com carga sem placa no sistema, '' virou
+     um valor que EXISTE em cargas de verdade — e esta função é usada pela
+     trava de duplicidade, pela marca "1 de 2" e pela chegada da Portaria.
+     Sem esta linha, duas cargas ainda sem caminhão seriam "o mesmo veículo"
+     e a segunda seria bloqueada como duplicata. Placa vazia não é um
+     caminhão: é a ausência de um. */
+  if(!p) return [];
   return cargasAbertas().filter(c => normalizarPlaca(c.placa) === p);
 }
 function getCarga(id){ return DB.cargas.find(c=>c.id===id) || null; }
@@ -1545,17 +1552,26 @@ function getCarga(id){ return DB.cargas.find(c=>c.id===id) || null; }
 // não cadastrada) via "Aguardando Carga" — a trava é só na Programação.
 function criarCargaProgramada({placa, transportadora, tipoVeiculo, numeroCarga, cliente, destino, produto, peso, doca, rota, sequencia, observacoes, motorista, praOnde, paletizada, qtdGanchos, qtdEntregas, operador}){
   const p = normalizarPlaca(placa);
-  if(!p) throw new Error('Placa é obrigatória');
-  const frota = buscarFrota(p);
-  if(!frota){
+  /* PLACA VAZIA = caminhão ainda não contratado (26/08/2026).
+
+     Pedido do dono: "quero poder criar a carga sem a placa, e só a partir
+     da hora que colocarem a placa ela vai pra torre de controle". A carga
+     nasce com rota, peso e dia; a placa entra quando a transportadora for
+     contratada — e aí ela sobe para a Torre sozinha.
+
+     A trava de frota NÃO afrouxou: vazio passa ("ainda não contratei"),
+     placa digitada e fora do cadastro continua recusada (erro de digitação
+     é exatamente o que a trava existe para pegar). */
+  const frota = p ? buscarFrota(p) : null;
+  if(p && !frota){
     throw new Error(`Placa ${p} não está cadastrada na Frota. Cadastre em Cadastros → Frota antes de programar esta carga.`);
   }
   const carga = {
     id: uid('carga'),
     numeroCarga: normalizarNumeroCarga(numeroCarga),
     placa: p,
-    transportadora: transportadora || frota.transportadora,
-    tipoVeiculo: tipoVeiculo || frota.tipoVeiculo,
+    transportadora: transportadora || (frota && frota.transportadora) || '',
+    tipoVeiculo: tipoVeiculo || (frota && frota.tipoVeiculo) || '',
     motorista: motorista||'',
     cliente: cliente||'', destino: destino||'', produto: produto||'', peso: Number(peso)||0,
     doca: doca||'', sequencia: sequencia!==undefined && sequencia!=='' ? Number(sequencia) : null,

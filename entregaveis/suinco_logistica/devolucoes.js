@@ -51,7 +51,12 @@ const DEV_ETAPAS = [
     botao: '📦 Descarga conferida (Expedição)', pede: null,
     setores: ['Expedição', 'Logística'] },
   { status: 'Descarga Conferida',       proxima: 'Destinada',
-    botao: '🏷️ Registrar destinação (Controles Internos)', pede: 'controles',
+    /* "Destinações" — pedido do dono (26/08/2026): "alterar nome no painel,
+       destinações", valendo SÓ para a etapa dos Controles Internos. O nome
+       de tela muda; o STATUS gravado ('Destinada') fica: é dado, o servidor
+       valida a transição por ele, e renomear valor de banco por estética é
+       como nasceu mais de um incidente por aqui. */
+    botao: '🏷️ Destinações (Controles Internos)', pede: 'controles',
     setores: ['Controles Internos', 'Logística'] },
   { status: 'Destinada',                proxima: 'Nota Finalizada',
     botao: '🧾 Finalizar nota (Central de Notas)', pede: null,
@@ -808,7 +813,7 @@ function renderDevolucaoAberta(d, editavel) {
             <th title="Coluna DATA-DEV da capa">Data DEV</th><th>Motivo</th>
             <th title="Pesagem do Faturamento — confirma que passou pela balança">Pesagem</th>
             <th title="Conferência da descarga: quantidade recebida">Expedição</th><th>Falta</th>
-            <th>Destinação</th>
+            <th>Destinações</th>
             <th title="Tick da Central de Notas: nota finalizada">Nota final</th>
             ${editavel ? '<th class="no-print"></th>' : ''}
           </tr></thead>
@@ -1348,7 +1353,7 @@ async function relatorioDevolucoesUI(diaParam) {
           <th>Supervisor</th><th title="Vendedor">RCA</th><th>Cliente</th>
           <th>CX</th><th title="Peso em QUILOS (kg)">Peso (kg)</th><th>Produto</th><th>Nº DEV</th>
           ${temCargaDev(d) ? '<th title="Carga de devolução do SIS ATAK">Nº carga dev</th>' : ''}<th>Data DEV</th><th>Motivo</th>
-          <th title="Pesagem do Faturamento, em QUILOS (kg)">Pesagem (kg)</th><th>Expedição</th><th>Falta</th><th>Destinação</th><th>Nota final</th>
+          <th title="Pesagem do Faturamento, em QUILOS (kg)">Pesagem (kg)</th><th>Expedição</th><th>Falta</th><th>Destinações</th><th>Nota final</th>
         </tr></thead>
         <tbody>${d.itens.map((i) => `<tr${i.falta > 0 ? ' class="dev-doc-falta"' : ''}>
             <td>${esc(i.nota)}</td>

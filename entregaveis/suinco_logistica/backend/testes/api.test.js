@@ -4423,3 +4423,140 @@ describe('37. Trocar a placa reencontra o caminhão que já está no pátio', ()
     assert.equal(r.json.placa, placaB);
   });
 });
+
+/* ------------------------------------------------------------------ */
+/* CARGA SEM PLACA — pedido do dono, 26/08/2026: "na programação de carga
+   quero poder liberar criar a carga sem a placa, e só a partir da hora que
+   colocarem a placa ela vai pra torre de controle".
+
+   O caso real: a Logística sabe a rota, o peso e o dia antes de saber o
+   caminhão — a transportadora é contratada depois. Hoje isso vira anotação
+   fora do sistema até a placa existir.
+
+   A placa VAZIA é o próprio sinal — nenhuma coluna nova, nenhuma migração.
+   As guardas são o que impede a facilidade de virar buraco:
+
+     · a trava de frota aceita o vazio ("ainda não contratei") e continua
+       recusando placa que existe e não está no cadastro (erro de digitação);
+     · o status NÃO anda sem placa: caminhão que não existe não chega, não
+       carrega, não sai;
+     · o "Chegou" da Portaria nunca casa com carga sem placa — sem isso,
+       qualquer caminhão desconhecido "adotaria" uma carga que não é dele;
+     · preencher a placa passa pela MESMA reconciliação de pátio da troca de
+       placa: se o caminhão contratado já entrou, a carga sobe sozinha para
+       Aguardando Embarque com o horário real da entrada. */
+describe('38. Carga sem placa — a Torre espera a contratação', () => {
+  async function limparPlacas(quantas, salto) {
+    const { rows } = await pool.query(
+      'SELECT placa FROM dim_veiculos ORDER BY placa OFFSET $1 LIMIT $2', [salto, quantas]
+    );
+    for (const r of rows) {
+      await pool.query('DELETE FROM fact_statusfrota WHERE placa = $1', [r.placa]);
+      await pool.query('DELETE FROM fact_viagens WHERE placa = $1', [r.placa]);
+    }
+    return rows.map((r) => r.placa);
+  }
+
+  test('Logística cria a carga sem placa, e ela nasce Aguardando Veículo', async () => {
+    const r = await req('/api/cargas', {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { numeroCarga: 'SEMPLACA-1', peso: 15000, rota: '512' },
+    });
+    assert.equal(r.status, 201, JSON.stringify(r.json));
+    assert.equal(r.json.placa, '');
+    assert.equal(r.json.status, 'Aguardando Veículo');
+  });
+
+  test('placa ERRADA continua recusada — o vazio não abriu a porteira', async () => {
+    const r = await req('/api/cargas', {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { numeroCarga: 'SEMPLACA-2', placa: 'ZZZ0Z00', peso: 9000 },
+    });
+    assert.equal(r.status, 422);
+    assert.equal(r.json.codigo, 'PLACA_FORA_DA_FROTA');
+  });
+
+  test('chegada sem programação da Portaria SEMPRE exige placa', async () => {
+    const r = await req('/api/cargas', {
+      metodo: 'POST', token: tokens['Portaria'],
+      corpo: { aguardandoCarga: true },
+    });
+    assert.equal(r.status, 400, 'entrada de pátio sem placa não descreve caminhão nenhum');
+  });
+
+  test('o status não anda sem placa — nem com o setor certo', async () => {
+    const criada = await req('/api/cargas', {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { numeroCarga: 'SEMPLACA-3', peso: 7000 },
+    });
+    assert.equal(criada.status, 201);
+    const r = await req(`/api/cargas/${criada.json.id}/status`, {
+      metodo: 'POST', token: tokens['Portaria'],
+      corpo: { status: 'Aguardando Embarque' },
+    });
+    assert.equal(r.status, 422, JSON.stringify(r.json));
+    assert.equal(r.json.codigo, 'CARGA_SEM_PLACA');
+  });
+
+  test('preencher a placa valida a frota e puxa a transportadora', async () => {
+    const [placa] = await limparPlacas(1, 34);
+    const criada = await req('/api/cargas', {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { numeroCarga: 'SEMPLACA-4', peso: 11000 },
+    });
+    const ruim = await req(`/api/cargas/${criada.json.id}`, {
+      metodo: 'PATCH', token: tokens['Logística'], corpo: { placa: 'YYY9Y99' },
+    });
+    assert.equal(ruim.status, 422);
+
+    const boa = await req(`/api/cargas/${criada.json.id}`, {
+      metodo: 'PATCH', token: tokens['Logística'], corpo: { placa },
+    });
+    assert.equal(boa.status, 200, JSON.stringify(boa.json));
+    assert.equal(boa.json.placa, placa);
+    assert.ok(boa.json.transportadora, 'a transportadora vem do cadastro, sozinha');
+    // Caminhão ainda não chegou: contratou ≠ chegou.
+    assert.equal(boa.json.status, 'Aguardando Veículo');
+  });
+
+  test('se o caminhão contratado JÁ está no pátio, a carga sobe com a entrada real', async () => {
+    const [placa] = await limparPlacas(1, 36);
+    const chegada = await req('/api/cargas', {
+      metodo: 'POST', token: tokens['Portaria'],
+      corpo: { placa, aguardandoCarga: true },
+    });
+    assert.equal(chegada.status, 201, JSON.stringify(chegada.json));
+    await pool.query(
+      "UPDATE fact_viagens SET criado_em = now() - interval '2 hours' WHERE carga_id = $1",
+      [chegada.json.id]
+    );
+    const criada = await req('/api/cargas', {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { numeroCarga: 'SEMPLACA-5', peso: 13000 },
+    });
+    const r = await req(`/api/cargas/${criada.json.id}`, {
+      metodo: 'PATCH', token: tokens['Logística'], corpo: { placa },
+    });
+    assert.equal(r.status, 200, JSON.stringify(r.json));
+    assert.equal(r.json.status, 'Aguardando Embarque',
+      'contratou um caminhão que já estava dentro: a carga não pode ficar esperando por ele');
+  });
+
+  test('o "Chegou" de um caminhão qualquer não adota a carga sem placa', async () => {
+    const [placa] = await limparPlacas(1, 38);
+    const semPlaca = await req('/api/cargas', {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { numeroCarga: 'SEMPLACA-6', peso: 5000 },
+    });
+    const chegada = await req('/api/cargas', {
+      metodo: 'POST', token: tokens['Portaria'],
+      corpo: { placa, aguardandoCarga: true },
+    });
+    assert.equal(chegada.status, 201);
+    const { rows } = await pool.query(
+      'SELECT placa, status_atual FROM fact_viagens WHERE carga_id = $1', [semPlaca.json.id]
+    );
+    assert.equal(rows[0].placa, '', 'a carga sem placa continua sem placa');
+    assert.equal(rows[0].status_atual, 'Aguardando Veículo');
+  });
+});
