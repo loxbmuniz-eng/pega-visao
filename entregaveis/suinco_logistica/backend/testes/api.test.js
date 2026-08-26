@@ -3801,6 +3801,155 @@ describe('34. O limite de login não pune quem acerta a senha', () => {
 });
 
 /* ------------------------------------------------------------------ */
+describe('35. Eco de sincronização não desfaz o lançamento da carga', () => {
+  /* INCIDENTE DE 25/08/2026, apurado no banco de produção.
+
+     Quatro cargas do dia (placas OPQ3989, SIY0G36, RNS3G28 e SIY0G43)
+     perderam número, rota, peso, sequência e entregas entre duas emissões
+     do Relatório Operacional: 171,70 t às 21:13, 153,10 t às 23:51.
+
+     O histórico de versões mostrou UM ÚNICO carga_id por placa — mesma
+     carga, sobrescrita, sem exclusão nem carga nova. As quatro gravações
+     caíram numa janela de 32 segundos, vindas de mais de um terminal, sem
+     ação correspondente no log: eco de sincronização.
+
+     As quatro nasceram como "Chegada sem programação" pela Portaria e
+     foram preenchidas depois. O que voltou por cima foi a versão de
+     nascimento — que é o que um terminal com aba antiga ainda tinha.
+
+     É a terceira vez desta família: observações em 14/08, cinco cargas
+     voltando para "Aguardando Carga" em 15/08 (62 t), lacres em 20/08. A
+     trava de 15/08 protegeu a MARCA `aguardando_carga` e deixou os campos
+     passarem — o comentário dela já dizia que "junto com a marca voltava o
+     peso zerado e a rota vazia". Estes testes fecham o pacote inteiro. */
+
+  let cargaId;
+  let placa;
+
+  before(async () => {
+    const { rows } = await pool.query(
+      `SELECT v.placa FROM dim_veiculos v
+        LEFT JOIN fact_viagens f ON f.placa = v.placa AND f.excluida_em IS NULL
+       WHERE v.transportadora <> '' AND f.carga_id IS NULL ORDER BY v.placa LIMIT 1`);
+    placa = rows[0].placa;
+    cargaId = 'eco_25ago_1';
+
+    // 1. O caminhão chega sem programação. Nasce vazia, como na Portaria.
+    const chegada = await req('/api/cargas', {
+      metodo: 'POST', token: tokens['Portaria'],
+      corpo: { id: cargaId, placa, aguardandoCarga: true },
+    });
+    assert.equal(chegada.status, 201, chegada.texto);
+
+    // 2. A Logística lança a carga: número, rota, peso, sequência, entregas.
+    const lancamento = await req(`/api/cargas/${cargaId}`, {
+      metodo: 'PATCH', token: tokens['Logística'],
+      corpo: { numeroCarga: '118394', rota: '504', peso: 6300,
+               sequencia: 13, qtdEntregas: 35, aguardandoCarga: false },
+    });
+    assert.ok(lancamento.status < 400, lancamento.texto);
+  });
+
+  after(async () => {
+    await pool.query('DELETE FROM log_eventos WHERE carga_id = $1', [cargaId]);
+    await pool.query('DELETE FROM fact_statusfrota WHERE carga_id = $1', [cargaId]);
+    await pool.query('DELETE FROM carga_revisoes WHERE carga_id = $1', [cargaId]);
+    await pool.query('DELETE FROM fact_viagens WHERE carga_id = $1', [cargaId]);
+  });
+
+  test('a carga foi lançada e está completa', async () => {
+    const { rows } = await pool.query(
+      `SELECT numero_carga, rota_codigo, peso_kg, sequencia, qtd_entregas, aguardando_carga
+         FROM fact_viagens WHERE carga_id = $1`, [cargaId]);
+    assert.equal(rows[0].numero_carga, '118394');
+    assert.equal(rows[0].aguardando_carga, false, 'lançar tira a marca');
+  });
+
+  test('o terminal com a aba antiga reenvia a versão de nascimento — e ela é descartada',
+    async () => {
+      /* O pacote é a carga INTEIRA como o terminal a tinha ANTES do
+         lançamento. É assim que o painel manda: tudo, a cada gravação. */
+      const r = await req(`/api/cargas/${cargaId}`, {
+        metodo: 'PATCH', token: tokens['Expedição'],
+        corpo: {
+          numeroCarga: 'Aguardando Carga', rota: '', peso: 0,
+          sequencia: null, qtdEntregas: 1, qtdGanchos: 0,
+          aguardandoCarga: true,
+        },
+      });
+      // 200, não erro: eco é normal, e recusar faria a fila tentar para sempre.
+      assert.equal(r.status, 200, r.texto);
+
+      const { rows } = await pool.query(
+        `SELECT numero_carga, rota_codigo, peso_kg, sequencia, qtd_entregas, aguardando_carga
+           FROM fact_viagens WHERE carga_id = $1`, [cargaId]);
+      assert.equal(rows[0].numero_carga, '118394', 'o número não pode voltar ao rótulo');
+      assert.equal(rows[0].rota_codigo, '504', 'a rota não pode esvaziar');
+      assert.equal(Number(rows[0].peso_kg), 6300, 'o peso não pode zerar — é ele que muda o relatório');
+      assert.equal(Number(rows[0].sequencia), 13, 'a sequência de carregamento não se perde');
+      /* Entregas é o caso que uma defesa campo a campo NÃO alcançaria: 1 é
+         valor legítimo, e olhando só o valor não dá para saber se é
+         apagamento. Descartar o pacote inteiro resolve os dois. */
+      assert.equal(Number(rows[0].qtd_entregas), 35, 'entregas não pode cair para o padrão');
+      assert.equal(rows[0].aguardando_carga, false);
+    });
+
+  test('editar de propósito continua funcionando — a trava não vira prisão', async () => {
+    const r = await req(`/api/cargas/${cargaId}`, {
+      metodo: 'PATCH', token: tokens['Logística'],
+      corpo: { numeroCarga: '118999', rota: '505', peso: 7100,
+               sequencia: 21, qtdEntregas: 40 },
+    });
+    assert.ok(r.status < 400, r.texto);
+    const { rows } = await pool.query(
+      `SELECT numero_carga, rota_codigo, peso_kg, sequencia, qtd_entregas
+         FROM fact_viagens WHERE carga_id = $1`, [cargaId]);
+    assert.equal(rows[0].numero_carga, '118999');
+    assert.equal(rows[0].rota_codigo, '505');
+    assert.equal(Number(rows[0].peso_kg), 7100);
+    assert.equal(Number(rows[0].sequencia), 21);
+    assert.equal(Number(rows[0].qtd_entregas), 40);
+  });
+
+  test('e a carga que AINDA aguarda continua recebendo o eco normalmente', async () => {
+    /* A regra só descarta pacote que afirma "aguardando" para uma carga já
+       lançada. Enquanto ela de fato aguarda, nada muda — senão a trava
+       quebraria o caminho da Portaria, que é o começo de tudo. */
+    const outra = 'eco_25ago_2';
+    /* Placa DIFERENTE de propósito: o servidor recusa registrar chegada
+       para uma placa que já tem carga em aberto, e a primeira ainda está.
+       Reaproveitar a placa aqui reprovava o teste por outro motivo. */
+    const { rows: livre } = await pool.query(
+      `SELECT v.placa FROM dim_veiculos v
+        LEFT JOIN fact_viagens f ON f.placa = v.placa AND f.excluida_em IS NULL
+       WHERE v.transportadora <> '' AND f.carga_id IS NULL
+         AND v.placa <> $1 ORDER BY v.placa LIMIT 1`, [placa]);
+    try {
+      const c = await req('/api/cargas', {
+        metodo: 'POST', token: tokens['Portaria'],
+        corpo: { id: outra, placa: livre[0].placa, aguardandoCarga: true },
+      });
+      assert.equal(c.status, 201, c.texto);
+      // Logística, e não Expedição: a Expedição só edita ganchos e
+      // observações, e um 400 de permissão reprovaria por outro motivo.
+      const r = await req(`/api/cargas/${outra}`, {
+        metodo: 'PATCH', token: tokens['Logística'],
+        corpo: { motorista: 'Jose da Silva', aguardandoCarga: true },
+      });
+      assert.ok(r.status < 400, r.texto);
+      const { rows } = await pool.query(
+        'SELECT motorista FROM fact_viagens WHERE carga_id = $1', [outra]);
+      assert.equal(rows[0].motorista, 'Jose da Silva');
+    } finally {
+      await pool.query('DELETE FROM log_eventos WHERE carga_id = $1', [outra]);
+      await pool.query('DELETE FROM fact_statusfrota WHERE carga_id = $1', [outra]);
+      await pool.query('DELETE FROM carga_revisoes WHERE carga_id = $1', [outra]);
+      await pool.query('DELETE FROM fact_viagens WHERE carga_id = $1', [outra]);
+    }
+  });
+});
+
+/* ------------------------------------------------------------------ */
 describe('33. Protocolo de segurança — segundo fator (etapa 4)', () => {
   /* A brecha B4: senha vazada de administrador dá poder de restaurar,
      apagar e criar usuário. Senha sozinha protege contra quem não sabe a

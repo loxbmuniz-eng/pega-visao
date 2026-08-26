@@ -328,6 +328,54 @@ rotasCargas.patch('/cargas/:id', exigirLogin, async (req, res, next) => {
            é gravada AGORA, por cima do que houver. É o único momento em que
            sobrescrever é o certo: a carga está sendo programada neste ato. */
     const eraAguardandoCarga = antes.rows[0].aguardando_carga === true;
+
+    /* PACOTE VELHO NÃO ENTRA — NEM UM CAMPO DELE (26/08/2026).
+       =================================================================
+       INCIDENTE DE 25/08, apurado no banco. Quatro cargas do dia perderam
+       número, rota, peso, sequência e entregas entre duas emissões do
+       Relatório Operacional: 171,70 t às 21:13, 153,10 t às 23:51. O
+       histórico de versões mostrou UM ÚNICO carga_id por placa — mesma
+       carga, sobrescrita — e as quatro gravações caíram numa janela de 32
+       segundos (21:30:43, 21:30:44, 21:31:03 e 21:31:15), vindas de mais
+       de um terminal, sem nenhuma ação correspondente no log. Eco de
+       sincronização, não gente trabalhando.
+
+       O valor que voltou era exatamente o que a Portaria grava na chegada
+       sem programação: numero_carga 'Aguardando Carga', rota vazia, peso 0.
+       As quatro cargas nasceram assim (todas "Chegada sem programação") e
+       foram preenchidas depois — e foi essa versão de nascimento que os
+       terminais reenviaram por cima.
+
+       POR QUE A TRAVA EXISTENTE NÃO SEGUROU. A regra logo abaixo
+       (`aguardando_carga = aguardando_carga AND $n`) foi escrita em 15/08
+       para este mesmo defeito e protege A MARCA. O comentário dela já
+       registrava que "junto com a marca voltava o peso zerado e a rota
+       vazia daquela versão" — mas a defesa parou na marca. Os campos
+       continuaram passando.
+
+       A REGRA AQUI é a generalização daquela, e usa o sinal que o próprio
+       pacote carrega: `aguardando_carga` só anda de true para false, nunca
+       volta. Logo, um pacote que afirma `true` para uma carga que o banco
+       já tem como `false` foi montado ANTES do lançamento — está velho
+       inteiro. Não há campo dele que valha a pena aproveitar.
+
+       Descartar o pacote todo é o que protege quantidade de entregas e
+       ganchos, que uma defesa campo a campo não alcança: 1 entrega e 0
+       ganchos são valores legítimos, e não dá para distingui-los de um
+       apagamento olhando só o valor.
+
+       NÃO É ERRO PARA O PAINEL. Devolve 200 com a carga como ela está: é
+       o eco normal de um terminal com aba antiga, e responder erro faria a
+       fila offline tentar para sempre. Fica no log do servidor porque eco
+       silencioso foi o que deixou este defeito voltar três vezes. */
+    if (mudancas.aguardando_carga === true && !eraAguardandoCarga) {
+      console.warn(
+        `[eco] PATCH descartado: pacote anterior ao lançamento da carga ${id} `
+        + `(placa ${antes.rows[0].placa}, nº ${antes.rows[0].numero_carga}) — `
+        + `enviado por ${op.nome}/${op.setor}`
+      );
+      return res.json(paraPainel(antes.rows[0]));
+    }
     const estaVirandoCarga = eraAguardandoCarga && mudancas.aguardando_carga === false;
     let forcarProgramadoEm = null;
     if (estaVirandoCarga) {
