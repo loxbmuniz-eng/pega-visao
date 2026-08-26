@@ -709,6 +709,69 @@ function detectarTurnoPorHora(){
   if(h>=14 && h<22) return 'Tarde (14h–22h)';
   return 'Noite (22h–06h)';
 }
+/* O PAINEL PERCEBE SOZINHO QUE O SERVIDOR FICOU PARA TRAS (26/08/2026).
+   =====================================================================
+   Cobranca do Luis, e ele tem razao: "voce errou e ficou em silencio numa
+   operacao rodando".
+
+   O painel sobe sozinho no Vercel; o servidor so muda quando alguem roda o
+   atualizar.sh por SSH. Entre os dois ha uma janela em que a tela ja tem o
+   botao novo e o servidor ainda nao tem a rota. Em 25 e 26/08 essa janela
+   custou tres relatos: o botao de excluir usuario dando "Rota nao
+   encontrada", e a montagem do dia acumulando 53 linhas duplicadas porque
+   a de-duplicacao dependia de uma migracao que nao tinha subido.
+
+   Nas tres vezes a informacao existia e dependia de EU lembrar de avisar.
+   Na terceira eu esqueci — e a operacao rodou o dia inteiro duplicando.
+
+   Isto tira a memoria do caminho. O /health passou a dizer a data da versao
+   do servidor; aqui o painel compara com a data da propria build e avisa
+   quem pode agir.
+
+   SO PARA QUEM RESOLVE. Administracao e Logistica sao quem pede o
+   atualizar.sh; a Portaria nao tem o que fazer com essa informacao, e um
+   aviso que a pessoa nao pode atender vira ruido que ela aprende a ignorar.
+
+   MARGEM DE UMA HORA. Publicar o painel e atualizar o servidor nunca
+   acontecem no mesmo minuto, e uma diferenca de minutos e o fluxo normal de
+   um deploy. O aviso e para a defasagem que ficou — nao para a que esta
+   acontecendo agora. */
+const _FOLGA_DEPLOY_MS = 60 * 60 * 1000;
+
+async function conferirVersaoDoServidor(){
+  const setor = (DB.operador || {}).setor;
+  if(setor !== 'Administração' && setor !== 'Logística') return;
+
+  const nossoEm = (typeof window !== 'undefined' && window.SUINCO_BUILD_EM) || null;
+  if(!nossoEm) return;   // build de desenvolvimento, sem carimbo
+
+  try {
+    const r = await fetch(SuincoSharePoint.enderecoDaApi() + '/health');
+    if(!r.ok) return;
+    const saude = await r.json();
+    if(!saude || !saude.versaoEm) return;   // servidor antigo, sem o campo
+
+    const servidor = new Date(saude.versaoEm).getTime();
+    const painel   = new Date(nossoEm).getTime();
+    if(!Number.isFinite(servidor) || !Number.isFinite(painel)) return;
+    if(servidor >= painel - _FOLGA_DEPLOY_MS) return;   // em dia
+
+    const horas = Math.round((painel - servidor) / 3600000);
+    const quanto = horas < 24
+      ? `${horas} hora(s)`
+      : `${Math.round(horas / 24)} dia(s)`;
+    notify(
+      `O servidor está ${quanto} atrás deste painel (servidor: ${esc(saude.versao)}). `
+      + 'Funções novas podem não funcionar até rodar a atualização do servidor '
+      + '(atualizar.sh). Avise a TI.',
+      'warn', 15000);
+  } catch(e){
+    /* Sem rede, ou /health fora do ar: silêncio. Este aviso é um extra —
+       transformá-lo em mais um erro na tela de quem já está sem conexão
+       seria trocar ajuda por barulho. */
+  }
+}
+
 function abrirLogin(){
   /* Pré-login: o painel some por inteiro (body.pre-login esconde tudo que
      não é a tela de entrada — ver styles.css). Não é só estética: terminal
@@ -988,6 +1051,7 @@ async function entrarNoServidor(){
     aplicarPermissoesSetor();
     renderAll();
     notify(`Bem-vindo, ${op.nome}! Setor: ${op.setor}`, 'success');
+    conferirVersaoDoServidor();   // sem await: não segura a entrada de ninguém
   }catch(e){
     /* SEGUNDO FATOR (etapa 4). O servidor recusa com MFA_NECESSARIO quando
        a senha está certa e falta o código. Revelar o campo só aqui — e não

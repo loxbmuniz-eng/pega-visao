@@ -95,6 +95,11 @@ const SuincoSharePoint = (function () {
     return SP_CONFIG.ativo && !!SP_CONFIG.api && !!lerToken();
   }
 
+  /* O endereço da API, para quem precisa falar com ela FORA do `chamar()`
+     — hoje só a conferência de versão do servidor, que bate no /health sem
+     token e não deve herdar o tratamento de sessão expirada. */
+  function enderecoDaApi() { return SP_CONFIG.api || ''; }
+
   /* ---------------------------------------------------------------
      Fila offline
      --------------------------------------------------------------- */
@@ -1459,7 +1464,7 @@ const SuincoSharePoint = (function () {
 
   return {
     SP_CONFIG,
-    iniciar, estaConfigurado, estado, conta, aoMudarEstado, aoReceberDados,
+    iniciar, estaConfigurado, enderecoDaApi, estado, conta, aoMudarEstado, aoReceberDados,
     aoDescartarDaFila, aoEditarCarga, aoExcluirCarga, aoAtualizarPresenca,
     aoFecharPrograma,
     login, sair, diagnosticarConexao,

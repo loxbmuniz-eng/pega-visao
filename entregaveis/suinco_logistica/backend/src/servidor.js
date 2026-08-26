@@ -80,12 +80,17 @@ function versaoDoServidor() {
       { cwd: raiz, encoding: 'utf8', timeout: 3000 }).trim();
     const quando = execFileSync('git', ['log', '-1', '--format=%cd', '--date=format:%d/%m %H:%M'],
       { cwd: raiz, encoding: 'utf8', timeout: 3000 }).trim();
-    return `${quando} · ${curto}`;
+    /* A data em ISO vai junto para o painel poder COMPARAR, e não só
+       mostrar. Texto "26/08 11:44" é para gente ler; o ISO é o que permite
+       a tela perceber sozinha que o servidor ficou para trás. */
+    const iso = execFileSync('git', ['log', '-1', '--format=%cI'],
+      { cwd: raiz, encoding: 'utf8', timeout: 3000 }).trim();
+    return { texto: `${quando} · ${curto}`, em: iso };
   } catch {
     /* Sem git (container, cópia sem .git): não é erro. O /health continua
        respondendo tudo o mais — deixar de responder por causa disto seria
        trocar um diagnóstico por um problema. */
-    return 'desconhecida';
+    return { texto: 'desconhecida', em: null };
   }
 }
 
@@ -214,8 +219,10 @@ export function criarApp() {
         ok: true,
         banco: 'conectado',
         agora,
-        // Responde "o servidor já foi atualizado?" sem SSH. Ver versaoDoServidor().
-        versao: VERSAO_SERVIDOR,
+        // Responde "o servidor já foi atualizado?" sem SSH. `versao` é para
+        // ler; `versaoEm` é o que deixa o painel comparar sozinho.
+        versao: VERSAO_SERVIDOR.texto,
+        versaoEm: VERSAO_SERVIDOR.em,
         conectados: conectados(),
         limites: {
           porJanela: config.limites.porJanela,

@@ -1,5 +1,6 @@
 -- =====================================================================
 -- 035 — A MONTAGEM SABE DE QUAL LINHA DO MODELO VEIO (25/08/2026)
+-- SEM ESTA MIGRAÇÃO: a montagem do dia volta a duplicar linhas a cada "puxar do modelo" (o painel tem um plano B por rota+destino desde 26/08, mas a identidade exata so vem com esta coluna).
 -- ---------------------------------------------------------------------
 -- Relato do dono: "tá tudo duplicado ainda na montagem do dia".
 --
