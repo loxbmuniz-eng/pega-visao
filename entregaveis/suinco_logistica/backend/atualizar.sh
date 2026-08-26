@@ -8,7 +8,7 @@
 #
 # No servidor:
 #     ssh root@2.25.95.253
-#     cd /opt/suinco-src && git pull && sudo bash entregaveis/suinco_logistica/backend/atualizar.sh
+#     cd /opt/suinco-src && git pull && bash entregaveis/suinco_logistica/backend/atualizar.sh
 #
 # O QUE ELE FAZ, nesta ordem:
 #   1. baixa o código novo
@@ -34,7 +34,29 @@ azul()  { printf '\n\033[1;36m== %s\033[0m\n' "$*"; }
 ok()    { printf '   \033[0;32mok\033[0m   %s\n' "$*"; }
 falha() { printf '   \033[0;31mX\033[0m    %s\n' "$*"; }
 
-[[ $EUID -eq 0 ]] || { echo "rode com sudo: sudo bash $0"; exit 1; }
+[[ $EUID -eq 0 ]] || { echo "precisa ser root. Entre como root e rode: bash $0"; exit 1; }
+
+# COMO VIRAR O USUÁRIO postgres, nesta máquina.
+#
+# O VPS da Suinco NÃO tem sudo instalado — descoberto em 26/08/2026, com o
+# dono parado no terminal lendo "command 'sudo' from deb sudo... Try: apt
+# install". Escrever `sudo -u postgres` num script que só roda como root é
+# depender de um pacote que ninguém prometeu que existe.
+#
+# `su` vem no sistema base e sempre esteve lá — o instalar.sh já usava só
+# ele. Aqui a função tenta o su e cai no sudo se algum dia rodar numa
+# máquina onde o postgres não aceite su. Uma função, um lugar para consertar.
+como_postgres() {
+  if su -s /bin/sh postgres -c 'true' 2>/dev/null; then
+    su -s /bin/sh postgres -c "$1"
+  elif command -v sudo >/dev/null 2>&1; then
+    sudo -u postgres sh -c "$1"
+  else
+    echo "não consegui virar o usuário postgres (nem su nem sudo)" >&2
+    return 1
+  fi
+}
+
 
 # Tudo que sai daqui vai para a tela E para o arquivo. Se algo quebrar no
 # meio, o log inteiro fica salvo — sem depender de alguém ter rolado o
@@ -78,8 +100,7 @@ SAUDE="${SAUDE:-000}"
 # diagnostico.sh já usava. Lido pelo psql como postgres, e não por um script
 # Node: é a consulta mais simples possível e não depende de o serviço estar
 # de pé para responder.
-MIG="$(sudo -u postgres psql -d embarque_suinco -tAc \
-        'SELECT arquivo FROM _migrations ORDER BY arquivo' 2>/dev/null \
+MIG="$(como_postgres "psql -d embarque_suinco -tAc 'SELECT arquivo FROM _migrations ORDER BY arquivo'" 2>/dev/null \
         | paste -sd', ' - || echo 'não consegui ler')"
 [[ -n "$MIG" ]] || MIG='nenhuma'
 

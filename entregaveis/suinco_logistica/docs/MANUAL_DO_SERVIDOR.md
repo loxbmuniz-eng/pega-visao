@@ -1,5 +1,11 @@
 # Manual do servidor — Embarque Suinco
 
+> **Neste servidor não existe `sudo`, e não precisa.** Você entra como
+> `root`, então todo comando abaixo roda direto. Para virar outro usuário
+> (postgres, suinco), o comando é `su`, que vem no sistema base. Descoberto
+> em 26/08/2026, com o dono parado no terminal lendo "command 'sudo' from
+> deb sudo... Try: apt install".
+
 Tudo que se faz no servidor, por que se faz, e o que esperar de cada comando.
 Feito para ser usado sem pedir ajuda.
 
@@ -123,7 +129,7 @@ Se reclamar de arquivo modificado ou pedir alguma coisa, **pare e me avise antes
 de forçar**.
 
 ```
-sudo bash entregaveis/suinco_logistica/backend/instalar.sh
+bash entregaveis/suinco_logistica/backend/instalar.sh
 ```
 Aplica tudo: copia o código para o lugar certo, instala dependências, aplica
 alterações de banco, renova o certificado, reinicia o serviço e confere se voltou.
@@ -148,7 +154,7 @@ continuar com a versão antiga.
 ## 5. Diagnóstico (quando algo não funciona)
 
 ```
-sudo bash entregaveis/suinco_logistica/backend/diagnostico.sh
+bash entregaveis/suinco_logistica/backend/diagnostico.sh
 ```
 
 Rode de dentro de `/opt/suinco-src`. **Não altera nada** e pode rodar com o pátio
@@ -182,42 +188,42 @@ O serviço é a API. Ele sobe sozinho quando o servidor liga.
 
 **Ver se está rodando:**
 ```
-sudo systemctl status embarque-suinco
+systemctl status embarque-suinco
 ```
 Procure por `active (running)` em verde. Para sair da tela, aperte **q**.
 
 **Reiniciar** (depois de mexer em configuração):
 ```
-sudo systemctl restart embarque-suinco
+systemctl restart embarque-suinco
 ```
 Leva 2 a 3 segundos. Quem estiver no painel nem percebe — as gravações do momento
 ficam na fila do navegador e sobem sozinhas.
 
 **Parar** (só se souber por quê):
 ```
-sudo systemctl stop embarque-suinco
+systemctl stop embarque-suinco
 ```
 O pátio inteiro para de sincronizar enquanto estiver parado.
 
 **Subir de novo:**
 ```
-sudo systemctl start embarque-suinco
+systemctl start embarque-suinco
 ```
 
 **Ver o log ao vivo** (fica rolando conforme acontece):
 ```
-sudo journalctl -u embarque-suinco -f
+journalctl -u embarque-suinco -f
 ```
 Para sair: **Ctrl + C**.
 
 **Ver as últimas 50 linhas:**
 ```
-sudo journalctl -u embarque-suinco -n 50 --no-pager
+journalctl -u embarque-suinco -n 50 --no-pager
 ```
 
 **Ver só os erros das últimas 2 horas:**
 ```
-sudo journalctl -u embarque-suinco --since "2 hours ago" --no-pager | grep -i erro
+journalctl -u embarque-suinco --since "2 hours ago" --no-pager | grep -i erro
 ```
 
 ---
@@ -241,13 +247,13 @@ cd /opt/embarque-suinco
 
 **Ver quem está cadastrado:**
 ```
-sudo -u suinco node scripts/operador.js listar
+su -s /bin/sh suinco -c "node scripts/operador.js listar"
 ```
 Mostra setor, nome, e-mail e último acesso. `✗` marca quem está desativado.
 
 **Criar operador:**
 ```
-sudo -u suinco node scripts/operador.js criar joao@suinco.com.br "João Pedro" Faturamento
+su -s /bin/sh suinco -c 'node scripts/operador.js criar joao@suinco.com.br "João Pedro" Faturamento'
 ```
 A senha é pedida depois, e **não aparece enquanto você digita**. Nunca passe a
 senha no próprio comando: ela ficaria gravada no histórico do terminal.
@@ -257,12 +263,12 @@ Setores válidos: `Logística`, `Portaria`, `Expedição`, `Faturamento`,
 
 **Trocar a senha de alguém:**
 ```
-sudo -u suinco node scripts/operador.js senha joao@suinco.com.br
+su -s /bin/sh suinco -c "node scripts/operador.js senha joao@suinco.com.br"
 ```
 
 **Bloquear o acesso de alguém:**
 ```
-sudo -u suinco node scripts/operador.js desativar joao@suinco.com.br
+su -s /bin/sh suinco -c "node scripts/operador.js desativar joao@suinco.com.br"
 ```
 Desativar não apaga: o histórico do que a pessoa fez continua no log de auditoria,
 como tem que ser.
@@ -289,7 +295,8 @@ assim que tem que ficar.
 
 **Abrir o banco:**
 ```
-sudo -u postgres psql embarque_suinco
+su postgres
+psql embarque_suinco
 ```
 Dentro dele, todo comando termina com `;`. Para sair: `\q`.
 
@@ -297,32 +304,36 @@ Dentro dele, todo comando termina com `;`. Para sair: `\q`.
 
 Quantas cargas existem hoje:
 ```
-sudo -u postgres psql embarque_suinco -c "SELECT status_atual, count(*) FROM fact_viagens WHERE excluida_em IS NULL GROUP BY 1 ORDER BY 2 DESC;"
+su postgres
+psql embarque_suinco -c "SELECT status_atual, count(*) FROM fact_viagens WHERE excluida_em IS NULL GROUP BY 1 ORDER BY 2 DESC;"
 ```
 
 Últimos 20 eventos do pátio:
 ```
-sudo -u postgres psql embarque_suinco -c "SELECT data_evento, placa, status_anterior, status_novo, operador_nome FROM fact_statusfrota ORDER BY data_evento DESC LIMIT 20;"
+su postgres
+psql embarque_suinco -c "SELECT data_evento, placa, status_anterior, status_novo, operador_nome FROM fact_statusfrota ORDER BY data_evento DESC LIMIT 20;"
 ```
 
 Quem fez o quê nas últimas horas (auditoria):
 ```
-sudo -u postgres psql embarque_suinco -c "SELECT data_evento, operador_nome, setor, acao, placa FROM log_eventos ORDER BY data_evento DESC LIMIT 30;"
+su postgres
+psql embarque_suinco -c "SELECT data_evento, operador_nome, setor, acao, placa FROM log_eventos ORDER BY data_evento DESC LIMIT 30;"
 ```
 
 Quantas placas na frota:
 ```
-sudo -u postgres psql embarque_suinco -c "SELECT count(*) FROM dim_veiculos;"
+su postgres
+psql embarque_suinco -c "SELECT count(*) FROM dim_veiculos;"
 ```
 
 **Aplicar alterações de banco pendentes** (o instalador já faz isso; use só se o
 diagnóstico apontar pendência):
 ```
-cd /opt/embarque-suinco && sudo -u suinco node scripts/migrar.js
+cd /opt/embarque-suinco && su -s /bin/sh suinco -c "node scripts/migrar.js"
 ```
 Depois, sempre:
 ```
-sudo systemctl restart embarque-suinco
+systemctl restart embarque-suinco
 ```
 
 ---
@@ -339,21 +350,25 @@ ls -lh /var/backups/embarque-suinco
 
 **Forçar um backup agora** (antes de mexer em algo arriscado):
 ```
-sudo /etc/cron.daily/backup-embarque-suinco && ls -lh /var/backups/embarque-suinco | tail -3
+/etc/cron.daily/backup-embarque-suinco && ls -lh /var/backups/embarque-suinco | tail -3
 ```
 
 **Restaurar** — só em emergência real, e **isto apaga o que está lá hoje**:
 ```
-sudo systemctl stop embarque-suinco
+systemctl stop embarque-suinco
 ```
 ```
-sudo -u postgres dropdb embarque_suinco && sudo -u postgres createdb -O suinco embarque_suinco
+su postgres
+dropdb embarque_suinco
+createdb -O suinco embarque_suinco
+exit
 ```
 ```
-gunzip -c /var/backups/embarque-suinco/embarque_suinco_AAAAMMDD.sql.gz | sudo -u postgres psql embarque_suinco
+gunzip -c /var/backups/embarque-suinco/embarque_suinco_AAAAMMDD.sql.gz | su postgres
+psql embarque_suinco
 ```
 ```
-sudo systemctl start embarque-suinco
+systemctl start embarque-suinco
 ```
 Troque `AAAAMMDD` pela data do arquivo. **Antes de rodar isso, me chame** — restaurar
 significa perder tudo que aconteceu depois daquele backup.
@@ -371,17 +386,17 @@ Renova sozinho. O diagnóstico avisa quando faltam menos de 10 dias.
 
 **Ver quando vence:**
 ```
-sudo certbot certificates
+certbot certificates
 ```
 
 **Renovar na mão** (se o diagnóstico reclamar):
 ```
-sudo certbot renew --nginx
+certbot renew --nginx
 ```
 
 **Reinstalar do zero** (se o HTTPS parar de funcionar):
 ```
-sudo certbot --nginx -d api.embarquesuinco.com.br --reinstall --redirect
+certbot --nginx -d api.embarquesuinco.com.br --reinstall --redirect
 ```
 
 ---
@@ -397,7 +412,7 @@ operando vê o painel em modo offline, e as gravações ficam na fila até volta
 Melhor momento: fim de expediente ou pátio vazio.
 
 ```
-sudo reboot
+reboot
 ```
 
 A conexão SSH cai na hora — é esperado, não é problema. Espere 2 minutos e entre
@@ -410,7 +425,7 @@ ssh root@2.25.95.253
 Não precisa rodar mais nada: o serviço e o banco sobem sozinhos. Para confirmar:
 
 ```
-cd /opt/suinco-src && sudo bash entregaveis/suinco_logistica/backend/diagnostico.sh
+cd /opt/suinco-src && bash entregaveis/suinco_logistica/backend/diagnostico.sh
 ```
 
 ---
@@ -420,7 +435,7 @@ cd /opt/suinco-src && sudo bash entregaveis/suinco_logistica/backend/diagnostico
 O token de leitura fica no `.env`. Para vê-lo quando for configurar o Power BI:
 
 ```
-sudo grep BI_TOKEN /opt/embarque-suinco/.env
+grep BI_TOKEN /opt/embarque-suinco/.env
 ```
 
 **Não cole esse token em conversa, e-mail ou print.** Leia direto no servidor,
@@ -428,7 +443,7 @@ use, e feche.
 
 Se ele vazar (apareceu num print, por exemplo), troque:
 ```
-sudo sed -i "s/^BI_TOKEN=.*/BI_TOKEN=$(openssl rand -hex 32)/" /opt/embarque-suinco/.env && sudo systemctl restart embarque-suinco
+sed -i "s/^BI_TOKEN=.*/BI_TOKEN=$(openssl rand -hex 32)/" /opt/embarque-suinco/.env && systemctl restart embarque-suinco
 ```
 Depois releia o novo com o comando acima e reconfigure o Power BI.
 
@@ -484,21 +499,21 @@ manda.
 ### O painel parou para todo mundo
 
 ```
-cd /opt/suinco-src && sudo bash entregaveis/suinco_logistica/backend/diagnostico.sh
+cd /opt/suinco-src && bash entregaveis/suinco_logistica/backend/diagnostico.sh
 ```
 Manda a saída para mim. Enquanto isso, tente:
 ```
-sudo systemctl restart embarque-suinco
+systemctl restart embarque-suinco
 ```
 
 ### O serviço não sobe
 
 ```
-sudo journalctl -u embarque-suinco -n 40 --no-pager
+journalctl -u embarque-suinco -n 40 --no-pager
 ```
 As últimas linhas dizem o motivo. Se falar em **migração pendente**, a correção é:
 ```
-cd /opt/embarque-suinco && sudo -u suinco node scripts/migrar.js && sudo systemctl restart embarque-suinco
+cd /opt/embarque-suinco && su -s /bin/sh suinco -c "node scripts/migrar.js && systemctl restart embarque-suinco"
 ```
 
 ### Uma pessoa não consegue entrar
@@ -514,7 +529,7 @@ com o número da carga e a data.
 ### Perdi o acesso de Administração
 
 ```
-cd /opt/embarque-suinco && sudo -u suinco node scripts/operador.js senha seu@email.com
+cd /opt/embarque-suinco && su -s /bin/sh suinco -c "node scripts/operador.js senha seu@email.com"
 ```
 Troca a sua senha pelo terminal e devolve o acesso.
 
@@ -527,17 +542,17 @@ ssh root@2.25.95.253                                    # entrar
 
 cd /opt/suinco-src                                      # ir para o código
 git -c core.editor=true pull --no-edit                  # baixar atualização
-sudo bash entregaveis/suinco_logistica/backend/instalar.sh   # aplicar
+bash entregaveis/suinco_logistica/backend/instalar.sh   # aplicar
 
-sudo bash entregaveis/suinco_logistica/backend/diagnostico.sh  # o que está errado?
+bash entregaveis/suinco_logistica/backend/diagnostico.sh  # o que está errado?
 
-sudo systemctl status  embarque-suinco                  # está rodando?
-sudo systemctl restart embarque-suinco                  # reiniciar a API
-sudo journalctl -u embarque-suinco -n 50 --no-pager     # últimas linhas do log
+systemctl status  embarque-suinco                  # está rodando?
+systemctl restart embarque-suinco                  # reiniciar a API
+journalctl -u embarque-suinco -n 50 --no-pager     # últimas linhas do log
 
 cd /opt/embarque-suinco
-sudo -u suinco node scripts/operador.js listar          # quem tem acesso
+su -s /bin/sh suinco -c "node scripts/operador.js listar          # quem tem acesso"
 
-sudo reboot                                             # reiniciar o servidor
+reboot                                             # reiniciar o servidor
 exit                                                    # sair
 ```

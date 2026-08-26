@@ -59,16 +59,34 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ "$(id -u)" != "0" ]]; then
-  vermelho "Rode como root (é preciso virar o usuário postgres):  sudo bash $0"
+  vermelho "Rode como root (é preciso virar o usuário postgres):  bash $0"
   exit 2
 fi
 
 # Todo acesso ao PostgreSQL passa por aqui, sempre como o usuário postgres.
-pg() { sudo -u postgres psql "$@"; }
-if ! command -v sudo >/dev/null 2>&1; then
-  vermelho "sudo não existe nesta máquina — este script precisa dele."
+#
+# Com `su`, e não com `sudo`: o VPS da Suinco não tem sudo instalado —
+# descoberto em 26/08/2026, com o dono parado no terminal lendo "command
+# 'sudo' from deb sudo... Try: apt install". O `su` vem no sistema base.
+# O sudo fica como segunda tentativa, para uma máquina onde o postgres não
+# aceite su.
+COMO_POSTGRES=""
+if su -s /bin/sh postgres -c 'true' 2>/dev/null; then
+  COMO_POSTGRES="su"
+elif command -v sudo >/dev/null 2>&1; then
+  COMO_POSTGRES="sudo"
+else
+  vermelho "não consigo virar o usuário postgres (nem su nem sudo nesta máquina)."
   exit 2
 fi
+
+pg() {
+  if [[ "$COMO_POSTGRES" == "su" ]]; then
+    su -s /bin/sh postgres -c "psql $(printf '%q ' "$@")"
+  else
+    sudo -u postgres psql "$@"
+  fi
+}
 
 # ---------------------------------------------------------------------
 titulo "1. Escolhendo o backup"
@@ -168,7 +186,11 @@ fi
 titulo "4. Restaurando"
 
 ERROS_LOG="$(mktemp)"
-gunzip -c "$ARQUIVO" | sudo -u postgres psql -q -d "$TEMP" >/dev/null 2>"$ERROS_LOG"
+if [[ "$COMO_POSTGRES" == "su" ]]; then
+  gunzip -c "$ARQUIVO" | su -s /bin/sh postgres -c "psql -q -d '$TEMP'" >/dev/null 2>"$ERROS_LOG"
+else
+  gunzip -c "$ARQUIVO" | sudo -u postgres psql -q -d "$TEMP" >/dev/null 2>"$ERROS_LOG"
+fi
 
 N_ERROS=$(grep -c '^ERRO:\|^ERROR:' "$ERROS_LOG" || true)
 if (( N_ERROS == 0 )); then

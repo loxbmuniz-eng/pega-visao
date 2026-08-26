@@ -120,7 +120,68 @@ titulo "4. Testes do servidor"
   || { tail -25 /tmp/suinco-teste-backend.txt; falhou "testes do servidor reprovaram."; }
 verde "  ok  $(grep -E '^# pass' /tmp/suinco-teste-backend.txt | head -1)"
 
-titulo "5. Bateria de tela"
+# ---------------------------------------------------------------------
+# A BATERIA PRECISA DA API NO AR — E ISSO NÃO É ÓBVIO PARA QUEM OLHA O ERRO.
+#
+# O rodar_tudo.sh não sobe o servidor: ele assume que já está de pé. Em
+# 26/08/2026 o contêiner reiniciou no meio do dia e derrubou o processo. A
+# bateria seguinte gastou 25 minutos para terminar com UMA suíte vermelha
+# (test_torre_acao_e_encerramento, acaoEm/acaoPor/acaoSetor todos nulos) —
+# que é exatamente como um dado que não sincroniza se parece.
+#
+# Vinte e cinco minutos para descobrir que faltava ligar o servidor, e uma
+# suíte vermelha que parecia regressão de verdade. O portão precisa
+# responder isso em dois segundos, antes de começar.
+titulo "5. Servidor de teste no ar"
+PORTA_TESTE="$(grep -E '^PORT=' "$AQUI/backend/.env" 2>/dev/null | cut -d= -f2 | tr -d '[:space:]')"
+PORTA_TESTE="${PORTA_TESTE:-3000}"
+# "ESTÁ NO AR" NÃO BASTA — TEM QUE ESTAR INTEIRA.
+#
+# Segunda lição do mesmo dia, e mais cara que a primeira. Depois de o portão
+# passar a conferir se a API respondia, ele encontrou uma no ar e seguiu — só
+# que aquela tinha sido subida À MÃO, sem PLAYWRIGHT_CHROMIUM_PATH. Um
+# servidor assim responde /health com ok:true, aceita login, grava carga:
+# parece inteiro. Só o PDF não sai. Três suítes de relatório reprovaram
+# depois de 25 minutos, e por um momento pareceu regressão de verdade.
+#
+# Por isso a pergunta virou "responde E consegue gerar relatório?". O
+# /health passou a dizer isso em `pdf.pronto`. Se estiver no ar mas capenga,
+# o portão derruba e sobe do jeito certo — meia dúvida aqui custa a bateria
+# inteira lá na frente.
+api_inteira() {
+  local corpo
+  corpo="$(curl -sf --max-time 3 "http://127.0.0.1:$PORTA_TESTE/health" 2>/dev/null)" || return 1
+  [[ "$corpo" == *'"pronto":true'* ]]
+}
+
+subir_api() {
+  ( cd "$AQUI/backend" && PLAYWRIGHT_CHROMIUM_PATH="$PLAYWRIGHT_CHROMIUM_PATH" \
+      nohup node src/servidor.js > /tmp/suinco-api-teste.log 2>&1 & )
+  for _ in $(seq 1 25); do api_inteira && return 0; sleep 1; done
+  return 1
+}
+
+if api_inteira; then
+  verde "  ok  API no ar na porta $PORTA_TESTE, com Chromium para os PDFs"
+else
+  if curl -sf --max-time 3 "http://127.0.0.1:$PORTA_TESTE/health" >/dev/null 2>&1; then
+    echo "      API no ar, mas SEM Chromium — os relatórios em PDF falhariam."
+    echo "      Derrubando e subindo do jeito certo."
+    # Padrão ANCORADO. Sem as âncoras, `pkill -f` casa com qualquer shell
+    # que tenha esse texto na linha de comando — inclusive o próprio wrapper
+    # que está rodando este script. Já aconteceu nesta bancada: o pkill matou
+    # a sessão que o chamou e o erro saiu como "exit 144", sem explicação.
+    pkill -f '^node src/servidor\.js$' 2>/dev/null || true
+    sleep 2
+  else
+    echo "      API fora do ar — subindo (log em /tmp/suinco-api-teste.log)"
+  fi
+  subir_api || { tail -15 /tmp/suinco-api-teste.log 2>/dev/null | sed 's/^/      /'
+                 falhou "não consegui subir a API de teste inteira na porta $PORTA_TESTE."; }
+  verde "  ok  API no ar na porta $PORTA_TESTE, com Chromium para os PDFs"
+fi
+
+titulo "6. Bateria de tela"
 ( cd "$AQUI" && bash testes/rodar_tudo.sh >/tmp/suinco-bateria.txt 2>&1 ) \
   || { tail -25 /tmp/suinco-bateria.txt; falhou "a bateria reprovou."; }
 grep -q "0 falha(s)" /tmp/suinco-bateria.txt \
@@ -128,7 +189,7 @@ grep -q "0 falha(s)" /tmp/suinco-bateria.txt \
 verde "  ok  $(grep -E 'verde\(s\)' /tmp/suinco-bateria.txt | tail -1 | sed 's/^ *//')"
 
 # ---------------------------------------------------------------------
-# 6. A TRAVA QUE ESTE SCRIPT EXISTE PARA APLICAR.
+# 7. A TRAVA QUE ESTE SCRIPT EXISTE PARA APLICAR.
 #
 # Toda migração nova precisa declarar, no cabeçalho, o que acontece no
 # painel ENQUANTO ela não sobe. A linha tem esta forma:
@@ -139,7 +200,7 @@ verde "  ok  $(grep -E 'verde\(s\)' /tmp/suinco-bateria.txt | tail -1 | sed 's/^
 # fim, e é esse texto que precisa ser repassado ao Luis junto com o aviso
 # de rodar o atualizar.sh. A omissão deixa de ser possível por esquecimento.
 # ---------------------------------------------------------------------
-titulo "6. Migrações pendentes declaram o que quebra sem elas"
+titulo "7. Migrações pendentes declaram o que quebra sem elas"
 # A pergunta certa NÃO é "esta publicação traz migração nova?" — é "o que o
 # SERVIDOR ainda não tem?". Foi assim que a primeira versão deste passo
 # errou: a 035 e a 036 subiram para o repositório em 25/08, seguiram sem
@@ -179,7 +240,7 @@ else
   verde "  ok  $QUANTAS pendente(s), todas com a consequência declarada"
 fi
 
-titulo "7. Publicando"
+titulo "8. Publicando"
 # A BATERIA REGENERA O index.html — e um build regerado tem carimbo novo,
 # então a árvore fica suja no fim dos testes mesmo sem ninguém mexer em
 # nada. Trocar de branch nesse estado falha, e na primeira execução isso

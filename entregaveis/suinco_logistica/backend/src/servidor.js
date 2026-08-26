@@ -5,6 +5,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import express from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
@@ -225,6 +226,24 @@ export function criarApp() {
         versao: VERSAO_SERVIDOR.texto,
         versaoEm: VERSAO_SERVIDOR.em,
         conectados: conectados(),
+        /* O RELATÓRIO EM PDF DEPENDE DE UM CHROMIUM, E ISSO PRECISA SER
+           VISÍVEL DE FORA (26/08/2026).
+
+           Um servidor subido sem PLAYWRIGHT_CHROMIUM_PATH responde /health
+           com ok:true e aceita login — parece inteiro. Só o PDF não sai, e a
+           falha aparece como "download não veio em 60s" na ponta.
+
+           Custou 25 minutos de bateria: o portão perguntava só "está no ar?",
+           três suítes de relatório reprovaram, e por um momento pareceu
+           regressão de verdade. Agora dá para perguntar "está no ar E
+           consegue gerar relatório?" numa requisição só.
+
+           Não é segredo: diz se existe um executável no caminho configurado,
+           não qual é o caminho. */
+        pdf: {
+          pronto: Boolean(config.playwrightChromiumPath)
+            && existsSync(config.playwrightChromiumPath),
+        },
         limites: {
           porJanela: config.limites.porJanela,
           loginPorJanela: config.limites.loginPorJanela,

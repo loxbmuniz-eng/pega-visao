@@ -50,7 +50,7 @@ e junto com elas duas conferências que nunca foram feitas.
 
 ```
 ssh root@2.25.95.253
-sudo bash /opt/suinco-src/entregaveis/suinco_logistica/backend/atualizar_tudo.sh
+bash /opt/suinco-src/entregaveis/suinco_logistica/backend/atualizar_tudo.sh
 ```
 
 Ele faz, na ordem: puxa o código, aplica as migrações, gera sozinho as

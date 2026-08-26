@@ -120,11 +120,12 @@ Para não reabrir hipóteses já investigadas com evidência:
 - [ ] Confirmar que `atualizar.sh` já rodou em produção (aplica a causa 2).
 - [ ] Rodar a checagem somente-leitura para confirmar o dado no banco:
   ```bash
-  sudo -u postgres psql -d embarque_suinco -c "
+  su postgres
+  psql -d embarque_suinco <<'SQL'
   SELECT count(*) FILTER (WHERE status_novo = 'Seguiu Viagem' AND data_evento >= current_date)
     AS seguiu_viagem_hoje_no_banco
   FROM fact_statusfrota;
-  "
+SQL
   ```
 - [ ] Confirmação de quem estava travado (Administração) de que login e
   painel estão estáveis agora, sem piscar entre online/offline.

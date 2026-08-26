@@ -125,7 +125,7 @@ estiver lá, algo falhou — e o diagnóstico aponta.
 Antes de qualquer mudança arriscada:
 
 ```
-sudo /etc/cron.daily/backup-embarque-suinco
+/etc/cron.daily/backup-embarque-suinco
 ```
 
 ### Como restaurar

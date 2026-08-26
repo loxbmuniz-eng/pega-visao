@@ -22,8 +22,9 @@
 #
 # COMO CONFERIR o que o servidor tem de verdade:
 #     ssh root@2.25.95.253
-#     sudo -u postgres psql -d embarque_suinco \
-#       -c "SELECT arquivo FROM _migrations ORDER BY arquivo DESC LIMIT 5"
+#     su postgres
+#     psql -d embarque_suinco -c "SELECT arquivo FROM _migrations ORDER BY arquivo DESC LIMIT 5"
+#     exit
 #
 # (A tabela chama-se _migrations e a coluna, arquivo. Estava escrito
 #  "migracoes"/"nome" aqui, que não existem: o comando de conferência

@@ -1444,10 +1444,17 @@ function registrarAlteracao({cargaId, placa, campo, de, para, operador, setor}){
   // gravação só. Salvar duas vezes dispararia dois ciclos de sincronia.
 }
 
-function registrarMovimentacao({cargaId, placa, statusAnterior, statusNovo, operador, setor, cliente, motorista, tipoVeiculo, qtdEntregas}){
+function registrarMovimentacao({cargaId, placa, statusAnterior, statusNovo, operador, setor, cliente, motorista, tipoVeiculo, qtdEntregas, timestamp}){
   DB.movimentacoes.push({
     id: uid('mov'),
-    timestamp: nowISO(),
+    /* `timestamp` opcional, e existe por um caso só: a entrada HERDADA.
+
+       Quando a carga muda para uma placa que já estava no pátio, o evento de
+       "Aguardando Embarque" tem que carregar a hora em que o caminhão de fato
+       entrou — não a hora da edição. O relógio de 3 horas começa na entrada;
+       carimbar agora faria o SLA mentir a favor da operação, que é o pior
+       tipo de erro num indicador. Fora desse caso, é sempre agora. */
+    timestamp: timestamp || nowISO(),
     /* PROVISÓRIA ATÉ O SERVIDOR RESPONDER (25/08/2026).
 
        Este registro existe para a tela responder na hora — inclusive

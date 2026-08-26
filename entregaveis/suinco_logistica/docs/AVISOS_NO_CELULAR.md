@@ -39,7 +39,7 @@ As duas chaves de segurança que o aviso precisa (padrão VAPID) são geradas
 
 ```
 ssh root@2.25.95.253
-sudo bash /opt/suinco-src/entregaveis/suinco_logistica/backend/atualizar_tudo.sh
+bash /opt/suinco-src/entregaveis/suinco_logistica/backend/atualizar_tudo.sh
 ```
 
 No fim ele imprime um bloco com `aviso no celular: ligado`. É por aí que se

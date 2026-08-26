@@ -6,7 +6,7 @@
 # que é necessário no nosso sistema".
 #
 #     ssh root@2.25.95.253
-#     sudo bash /opt/suinco-src/entregaveis/suinco_logistica/backend/atualizar_tudo.sh
+#     bash /opt/suinco-src/entregaveis/suinco_logistica/backend/atualizar_tudo.sh
 #
 # O QUE ELE FAZ, na ordem:
 #   1. atualizar.sh — puxa o código, aplica as migrações pendentes, gera as
@@ -39,7 +39,42 @@ ok()    { printf '   \033[0;32mok\033[0m   %s\n' "$*"; }
 falha() { printf '   \033[0;31mX\033[0m    %s\n' "$*"; }
 aviso() { printf '   \033[0;33m!\033[0m    %s\n' "$*"; }
 
-[[ $EUID -eq 0 ]] || { echo "rode com sudo: sudo bash $0"; exit 1; }
+[[ $EUID -eq 0 ]] || { echo "precisa ser root. Entre como root e rode: bash $0"; exit 1; }
+
+# COMO VIRAR O USUÁRIO postgres, nesta máquina.
+#
+# O VPS da Suinco NÃO tem sudo instalado — descoberto em 26/08/2026, com o
+# dono parado no terminal lendo "command 'sudo' from deb sudo... Try: apt
+# install". Escrever `sudo -u postgres` num script que só roda como root é
+# depender de um pacote que ninguém prometeu que existe.
+#
+# `su` vem no sistema base e sempre esteve lá — o instalar.sh já usava só
+# ele. Aqui a função tenta o su e cai no sudo se algum dia rodar numa
+# máquina onde o postgres não aceite su. Uma função, um lugar para consertar.
+como_postgres() {
+  if su -s /bin/sh postgres -c 'true' 2>/dev/null; then
+    su -s /bin/sh postgres -c "$1"
+  elif command -v sudo >/dev/null 2>&1; then
+    sudo -u postgres sh -c "$1"
+  else
+    echo "não consegui virar o usuário postgres (nem su nem sudo)" >&2
+    return 1
+  fi
+}
+
+# Consulta de uma linha só, com o SQL vindo pela entrada padrão.
+#
+# Escrever a consulta INLINE dentro de `su -c "psql -c \"SELECT...\""` é
+# empilhar três níveis de aspas, e foi exatamente onde este script quebrou na
+# primeira escrita. Com arquivo temporário não há aspa nenhuma para escapar.
+consulta() {
+  local arq; arq="$(mktemp)"
+  cat > "$arq"
+  chmod 644 "$arq"          # o usuário postgres precisa conseguir ler
+  como_postgres "psql -d embarque_suinco -tA -f '$arq'" 2>/dev/null
+  rm -f "$arq"
+}
+
 
 exec > >(tee -a "$LOG") 2>&1
 echo "Log completo desta execução: $LOG"
@@ -62,7 +97,7 @@ if [[ ! -f "$LIMPEZA" ]]; then
   aviso "não achei $LIMPEZA — pulei"
 else
   echo "   Primeiro, o que SAIRIA (nada foi apagado ainda):"
-  sudo -u postgres psql -d embarque_suinco -f "$LIMPEZA" 2>&1 | sed 's/^/   /'
+  como_postgres "psql -d embarque_suinco -f '$LIMPEZA'" 2>&1 | sed 's/^/   /'
 
   # Sem terminal (rodando por cron, por exemplo) não se apaga nada. Uma
   # exclusão que acontece sem ninguém olhando é exatamente o que o script
@@ -70,12 +105,12 @@ else
   if [[ ! -t 0 ]]; then
     aviso "sem terminal interativo — não apaguei nada."
     aviso "para apagar, rode este script à mão, ou:"
-    echo  "        sudo -u postgres psql -d embarque_suinco -v apagar=1 -f $LIMPEZA"
+    echo  "        su -s /bin/sh postgres -c \"psql -d embarque_suinco -v apagar=1 -f $LIMPEZA\""
   else
     echo
     read -r -p "   Apagar as linhas listadas acima? (digite SIM para apagar) " RESPOSTA
     if [[ "$RESPOSTA" == "SIM" ]]; then
-      if sudo -u postgres psql -d embarque_suinco -v apagar=1 -f "$LIMPEZA" 2>&1 | sed 's/^/   /'; then
+      if como_postgres "psql -d embarque_suinco -v apagar=1 -f '$LIMPEZA'" 2>&1 | sed 's/^/   /'; then
         ok "duplicadas removidas"
       else
         falha "a limpeza deu erro"
@@ -106,16 +141,23 @@ azul "RESUMO"
 COMMIT="$(cd "$SRC" && git rev-parse --short HEAD 2>/dev/null || echo '?')"
 ATIVO="$(systemctl is-active embarque-suinco 2>/dev/null || echo desconhecido)"
 SAUDE="$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/health 2>/dev/null || true)"
-MIG="$(sudo -u postgres psql -d embarque_suinco -tAc \
-        'SELECT arquivo FROM _migrations ORDER BY arquivo DESC LIMIT 1' 2>/dev/null \
-        || echo 'não consegui ler')"
+MIG="$(consulta <<'SQL' || true
+SELECT arquivo FROM _migrations ORDER BY arquivo DESC LIMIT 1
+SQL
+)"
+[[ -n "$MIG" ]] || MIG='não consegui ler'
+
 AVISOS="$(grep -qE '^VAPID_PRIVADA=.+' /opt/embarque-suinco/.env 2>/dev/null \
           && echo 'ligado' || echo 'DESLIGADO')"
-DUPES="$(sudo -u postgres psql -d embarque_suinco -tAc \
-  "SELECT count(*) FROM programacao_montagem m
-    WHERE m.efetivada_em IS NULL AND m.cancelada_em IS NULL
-      AND coalesce(m.placa,'')='' AND coalesce(m.numero_carga,'')=''
-      AND coalesce(m.motorista,'')='' AND coalesce(m.peso,0)=0" 2>/dev/null || echo '?')"
+
+DUPES="$(consulta <<'SQL' || true
+SELECT count(*) FROM programacao_montagem m
+ WHERE m.efetivada_em IS NULL AND m.cancelada_em IS NULL
+   AND coalesce(m.placa,'') = '' AND coalesce(m.numero_carga,'') = ''
+   AND coalesce(m.motorista,'') = '' AND coalesce(m.peso,0) = 0
+SQL
+)"
+[[ -n "$DUPES" ]] || DUPES='?'
 
 echo
 echo "--------- COPIE DAQUI ---------"
