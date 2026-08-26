@@ -309,6 +309,8 @@ def documento(setor, guia, imagens):
   .capa h1 {{ font-size: 34pt; line-height: 1.08; margin: 0 0 4mm; letter-spacing: -.5pt; }}
   .capa .setor {{ font-size: 15pt; color: {OURO}; font-weight: 700; letter-spacing: .8pt;
     text-transform: uppercase; }}
+  .capa .capa-frase {{ font-size: 10.5pt; color: #E8B34B; font-weight: 700;
+    letter-spacing: .06em; text-transform: uppercase; margin: 2mm 0 4mm; }}
   .capa .missao {{ font-size: 12.5pt; line-height: 1.5; max-width: 130mm; opacity: .93; }}
   .capa .meta {{ font-size: 9.5pt; opacity: .78; border-top: 1px solid rgba(246,241,231,.22);
     padding-top: 5mm; display: flex; justify-content: space-between; }}
@@ -357,7 +359,14 @@ def documento(setor, guia, imagens):
       {'<img class="capa-logo" src="data:image/png;base64,' + logo64 + '" alt="Suinco">' if logo64 else ''}
       <div class="capa-tarja"></div>
       <div class="setor">{guia['icone']} {esc(setor)}</div>
-      <h1>Guia do Painel<br>de Embarque e Devoluções</h1>
+      <!-- "Devoluções" saiu do título — pedido do dono na véspera da
+           apresentação (26/08/2026): "tire do título principal a palavra
+           DEVOLUÇÕES... aqui indicamos a posição de embarque dos carros".
+           A devolução continua DENTRO dos guias de quem participa dela;
+           o que muda é a identidade: o painel se apresenta pelo que é
+           para todos — o embarque. -->
+      <h1>Guia do Painel<br>de Embarque</h1>
+      <p class="capa-frase">Aqui indicamos a posição de embarque dos carros.</p>
       <p class="missao">{esc(guia['missao'])}</p>
     </div>
     <div>
