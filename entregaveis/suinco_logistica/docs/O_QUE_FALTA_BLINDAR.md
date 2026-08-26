@@ -59,6 +59,17 @@ diagnóstico, **mostra** as linhas duplicadas da Montagem e pergunta antes de
 apagar, e por fim prova que o backup restaura de verdade. No fim imprime um
 bloco pronto para mandar de volta.
 
+**A correção da troca de placa (relato do Alysson) SÓ FUNCIONA depois disto.**
+O painel já faz a parte dele — mostra na hora que o caminhão está no pátio.
+Mas quem manda é o servidor, e um servidor sem esta atualização devolve o
+status antigo no próximo eco de sincronização e **desfaz** o que o painel
+mostrou. Enquanto o `atualizar.sh` não rodar, trocar placa continua gerando
+a duplicata de sempre.
+
+Isto não é migração — é código de servidor. O portão de publicação sabe
+cobrar migração pendente e **não sabe** cobrar isto; por isso está escrito
+aqui, onde ele lê a lista inteira em toda publicação.
+
 O que quebra enquanto não sobe:
 
 | Migração | Sem ela |
