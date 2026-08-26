@@ -20,6 +20,11 @@ const DEMO = [
   ['guia.controles@suinco.demo',  'Operador Controles Internos', 'Controles Internos'],
   ['guia.notas@suinco.demo',      'Operador Central de Notas',  'Central de Notas'],
   ['guia.adm@suinco.demo',        'Gestor Administração',       'Administração'],
+  /* Comercial entrou depois (08/08/2026) e ficou de fora desta lista, então
+     o setor nunca teve guia. É o único posto que só LÊ — e justamente por
+     isso precisa do guia: quem não aperta botão não descobre a tela
+     sozinho, descobre perguntando para os outros. */
+  ['guia.comercial@suinco.demo',  'Operador Comercial',         'Comercial'],
 ];
 
 const hash = await bcrypt.hash(SENHA, 8);
