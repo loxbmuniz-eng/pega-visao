@@ -1,5 +1,24 @@
 # Decisões confirmadas — Migração Suinco (Excel/VBA → Painel HTML)
 
+> ## ⚠️ Documento histórico — o SharePoint nunca entrou em produção
+>
+> Este texto foi escrito quando o painel **ia** rodar sobre Listas do
+> SharePoint, com login da Microsoft (MSAL). Essa arquitetura **nunca chegou
+> a ser usada**: nenhuma Lista foi provisionada, nenhum dado da operação
+> passou por lá.
+>
+> Desde a migração de agosto/2026 o painel roda com backend próprio — Node +
+> PostgreSQL num VPS — e o login é e-mail e senha do próprio painel.
+>
+> Os trechos sobre SharePoint, Teams, Graph, MSAL ou Listas ficam aqui como
+> **registro de por que as decisões foram tomadas**, nunca como instrução do
+> que fazer. O sistema de hoje está em `MAPA_COMPLETO_DO_SISTEMA.md`; a
+> operação do servidor, em `MANUAL_DO_SERVIDOR.md`.
+>
+> **Nem tudo aqui é história.** As decisões de OPERAÇÃO registradas neste
+> arquivo continuam valendo — o que caiu foi a plataforma (SharePoint,
+> Teams, MSAL), não as regras de pátio.
+
 Registro das decisões já tomadas em conversa, para não precisar redecidir nem
 presumir de novo mais adiante. Datas em horário da conversa.
 

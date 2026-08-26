@@ -1,12 +1,23 @@
 # Modelo de dados — Listas do SharePoint
 
-Este documento espelha exatamente as estruturas que `data.js` já usa em memória
-(hoje persistidas em localStorage só para teste). Quando o Administrador do
-Sistema/responsável de TI provisionar estas Listas no SharePoint, os nomes de
-coluna abaixo devem ser usados como estão, para que a troca do adaptador de
-armazenamento em `data.js` (`SuincoStore`) seja mecânica — trocar
-`localStorage.getItem/setItem` por chamadas à API REST do SharePoint ou
-Microsoft Graph, sem mudar o resto do painel.
+> ## ⚠️ Documento histórico — o SharePoint nunca entrou em produção
+>
+> Este texto foi escrito quando o painel **ia** rodar sobre Listas do
+> SharePoint, com login da Microsoft (MSAL). Essa arquitetura **nunca chegou
+> a ser usada**: nenhuma Lista foi provisionada, nenhum dado da operação
+> passou por lá.
+>
+> Desde a migração de agosto/2026 o painel roda com backend próprio — Node +
+> PostgreSQL num VPS — e o login é e-mail e senha do próprio painel.
+>
+> Os trechos sobre SharePoint, Teams, Graph, MSAL ou Listas ficam aqui como
+> **registro de por que as decisões foram tomadas**, nunca como instrução do
+> que fazer. O sistema de hoje está em `MAPA_COMPLETO_DO_SISTEMA.md`; a
+> operação do servidor, em `MANUAL_DO_SERVIDOR.md`.
+>
+> **Este documento em particular nunca saiu do papel.** As colunas abaixo
+> descrevem Listas que não existem em lugar nenhum. O modelo de dados que
+> vale hoje são as tabelas do PostgreSQL, em `backend/migrations/`.
 
 
 > ## ⚠️ Revisão de 31/07/2026 — leia antes de provisionar

@@ -82,6 +82,12 @@ Hoje **convivem duas nomenclaturas**, e isso não pode ir para o Postgres:
 São modelos diferentes para os mesmos dados. Um deles é o que o seu Power BI
 usa; o outro é resíduo.
 
+> **Resolvido, e vale registrar qual venceu.** As "Listas SharePoint" da linha
+> de baixo nunca existiram — aquela plataforma foi descartada antes de
+> qualquer provisionamento. A nomenclatura que valeu é a do PostgreSQL, em
+> `backend/migrations/`, e o `MODELO_DADOS_SHAREPOINT.md` fica no repositório
+> só como registro histórico.
+
 **Proposta:** o Postgres adota a nomenclatura das **Listas** (`fact_Viagens`,
 `fact_StatusFrota`, `dim_Veiculos`, `LOG_EVENTOS`), porque foi a alinhada com o
 modelo do BI, e as *views* de export reproduzem **exatamente** os cabeçalhos que

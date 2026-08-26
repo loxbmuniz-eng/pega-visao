@@ -39,56 +39,46 @@ O `APLICADAS_EM_PRODUCAO.txt` mandava conferir o servidor com
 
 ## PENDENTE — precisa da mão do Luis, no servidor
 
-Estas quatro não são opinião: são coisas que **já estão custando** todo dia.
+Duas coisas, e as duas já estão custando todo dia.
 
-### P1. As migrações 035, 036 e 037 não subiram
+### P1. Rodar o passo a passo no servidor — um comando só
 
-O servidor está na **034**. O que quebra enquanto não sobe:
+O servidor está na migração **034**. Faltam a **035**, a **036** e a **037**,
+e junto com elas duas conferências que nunca foram feitas.
+
+**Tudo isso agora é um comando:**
+
+```
+ssh root@2.25.95.253
+sudo bash /opt/suinco-src/entregaveis/suinco_logistica/backend/atualizar_tudo.sh
+```
+
+Ele faz, na ordem: puxa o código, aplica as migrações, gera sozinho as
+chaves do aviso no celular, reinstala o que mudou, reinicia, roda o
+diagnóstico, **mostra** as linhas duplicadas da Montagem e pergunta antes de
+apagar, e por fim prova que o backup restaura de verdade. No fim imprime um
+bloco pronto para mandar de volta.
+
+O que quebra enquanto não sobe:
 
 | Migração | Sem ela |
 |---|---|
-| 035 | a Montagem do dia duplica linha a cada "puxar do modelo". O painel hoje tem um remendo por rota+destino que segura a maioria dos casos, mas a identidade exata só volta com a coluna. |
-| 036 | a transportadora do dia não salva. A exceção do dia se perde e volta a da frota. |
-| 037 | os avisos no celular não ligam. O painel mostra "avisos indisponíveis" e ninguém recebe nada. Ver P5. |
+| 035 | a Montagem do dia duplica linha a cada "puxar do modelo". O painel tem um remendo por rota+destino desde 26/08, mas a identidade exata só volta com a coluna. |
+| 036 | a transportadora do dia não salva. A exceção (subcontratação, freteiro) some e vale sempre a do cadastro. |
+| 037 | os avisos no celular não ligam. O painel mostra "ainda não foi ligado no servidor" e ninguém recebe nada. |
 
-```
-ssh root@2.25.95.253
-cd /opt/suinco-src && git pull
-sudo bash entregaveis/suinco_logistica/backend/atualizar.sh
-```
+E as duas dívidas que o mesmo comando fecha:
 
-Depois de rodar e ver a confirmação, **avise** — o número em
-`backend/migrations/APLICADAS_EM_PRODUCAO.txt` sobe de 034 para 036. Nunca
-antes.
+- **as 53 linhas duplicadas** já gravadas na Montagem — a correção do painel
+  evita duplicata nova, não apaga o que já está lá. Só saem linhas **vazias**,
+  não efetivadas, não canceladas, com irmã mais antiga do mesmo dia, mesma
+  rota e mesmo destino. Linha com placa, número, peso ou motorista nunca sai;
+- **o backup nunca restaurado**. O `instalar.sh` carrega desde o primeiro dia
+  a frase "backup que nunca foi restaurado não é backup". Agora tem prova.
 
-### P2. As 53 linhas duplicadas que já estão gravadas
-
-A correção do painel evita duplicata **nova**. Ela não apaga o que já foi
-gravado. Isso apaga, em dois passos de propósito:
-
-```
-# 1. ver o que sairia, sem apagar nada
-sudo -u postgres psql -d embarque_suinco \
-  -f /opt/suinco-src/entregaveis/suinco_logistica/backend/scripts/limpar_montagem_duplicada.sql
-
-# 2. se a lista fizer sentido, apagar
-sudo -u postgres psql -d embarque_suinco -v apagar=1 \
-  -f /opt/suinco-src/entregaveis/suinco_logistica/backend/scripts/limpar_montagem_duplicada.sql
-```
-
-Só saem linhas **vazias**, não efetivadas, não canceladas, e que têm uma
-irmã mais antiga do mesmo dia com a mesma rota e o mesmo destino. Linha com
-placa, número, peso ou motorista nunca sai.
-
-### P3. Rodar o teste de restauração do backup, uma vez
-
-```
-ssh root@2.25.95.253
-bash /opt/suinco-src/entregaveis/suinco_logistica/backend/scripts/testar_restauracao_backup.sh
-```
-
-No fim ele imprime VEREDITO. Qualquer coisa diferente de "O BACKUP PRESTA",
-mande a saída inteira. Depois disso, o ideal é repetir uma vez por mês.
+Depois de rodar, **me mande o bloco final** — é com ele que o número em
+`backend/migrations/APLICADAS_EM_PRODUCAO.txt` sobe de 034 para 037. Nunca
+antes: aquele arquivo é registro do que ACONTECEU.
 
 ### P4. Os 6 destinos que faltam na planilha da semana
 
@@ -104,20 +94,6 @@ tenho o código de rota deles e **não vou inventar código de rota**:
 
 Me mande o código de rota de cada um (o mesmo que aparece no cadastro de
 Rotas) e eu fecho a planilha.
-
-### P5. Ligar os avisos no celular (migração 037 + chaves VAPID)
-
-Pronto e testado no código; **desligado** até alguém rodar dois comandos no
-servidor. Enquanto isso o painel mostra "o aviso ainda não foi ligado no
-servidor" e o resto roda exatamente igual — nada quebra.
-
-O passo a passo completo está em `docs/AVISOS_NO_CELULAR.md`: gerar as
-chaves com `npx web-push generate-vapid-keys`, colar as três linhas no
-`.env`, e rodar o `atualizar.sh` (que também aplica a migração 037).
-
-Depois disso, cada pessoa liga no 🔔 do próprio aparelho — e no **iPhone só
-funciona com o painel instalado na tela de início**, que é como o Luis
-descreveu o pedido desde o começo.
 
 ---
 
@@ -188,4 +164,5 @@ Fica registrado como dívida conhecida, não como tarefa pendente.
 | Data | O que mudou |
 |---|---|
 | 26/08/2026 | Lista criada. Teste de restauração de backup entregue; comando de conferência de migração corrigido. |
+| 26/08/2026 | Avisos no celular entregues. P1, P2, P3 e P5 viraram um comando só (atualizar_tudo.sh). |
 | 26/08/2026 | R1 decidido (push no celular) e guia escrito. `pg` subiu para 8.23; `playwright` adiado com motivo registrado. |

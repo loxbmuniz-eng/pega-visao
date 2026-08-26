@@ -115,6 +115,30 @@ async function comOverlaySync(sub, tarefa){
    no rodapé. Quando se abre a fonte direto (sem build), fica 'fonte'. */
 const BUILD_ID = (typeof window !== 'undefined' && window.SUINCO_BUILD) || 'fonte';
 
+/* O crachá de conexão do cabeçalho, com a palavra separada do ícone.
+
+   MOTIVO, medido em 26/08/2026: num iPhone SE (320px) o cabeçalho passou a
+   transbordar 26px quando ganhou o sino dos avisos. O crachá sozinho ocupava
+   80px — mais que qualquer botão — porque carregava "⚙️ Local" por extenso.
+   E ele só aparece quando a conexão NÃO está boa, ou seja, exatamente na
+   hora em que o operador está no pátio com o aparelho mais apertado.
+
+   A saída é a mesma que os botões do cabeçalho já usavam desde 08/08: a
+   palavra vai para <span class="rot-btn">, que a folha de estilo esconde
+   abaixo de 560px. O ícone fica, o `title` e o `aria-label` carregam a
+   frase inteira, e o rodapé continua explicando o estado por extenso — lá
+   sobra largura.
+
+   Quem tirar o .rot-btn daqui devolve o estouro. Existe teste que reprova:
+   testes/test_auditoria_mobile.py, "cabeçalho não transborda a largura". */
+function marcarBadgeConexao(badge, classe, icone, frase){
+  badge.hidden = false;
+  badge.className = 'badge-conexao ' + classe;
+  badge.title = frase;
+  badge.setAttribute('aria-label', frase);
+  badge.innerHTML = esc(icone) + '<span class="rot-btn">&nbsp;' + esc(frase) + '</span>';
+}
+
 function atualizarRodapeConexao(estado, detalhe){
   const rod = document.getElementById('rodape-conexao');
   const badge = document.getElementById('badge-conexao');
@@ -133,7 +157,7 @@ function atualizarRodapeConexao(estado, detalhe){
   } else if(estado === 'offline'){
     rod.className = 'rodape-conexao offline';
     rod.innerHTML = `⚠️ Modo Offline — gravando no aparelho e sincronizando assim que a rede voltar${esc(sufixoFila)}${esc(carimbo)}`;
-    if(badge){ badge.hidden = false; badge.className = 'badge-conexao offline'; badge.textContent = '⚠️ Modo Offline'; }
+    if(badge) marcarBadgeConexao(badge, 'offline', '⚠️', 'Modo Offline');
   } else {
     /* 'local' cobre TRÊS situações diferentes, e mostrá-las com o mesmo
        texto engana. "Sem conexão com o servidor" antes de alguém fazer
@@ -150,7 +174,7 @@ function atualizarRodapeConexao(estado, detalhe){
       // Sem e-mail: escolheu o modo local de propósito.
       rod.innerHTML = '⚠️ Modo Local — os dados ficam SÓ neste navegador e não são vistos pelos outros setores.' + esc(carimbo);
     }
-    if(badge){ badge.hidden = false; badge.className = 'badge-conexao local'; badge.textContent = '⚙️ Local'; }
+    if(badge) marcarBadgeConexao(badge, 'local', '⚙️', 'Modo Local');
   }
 }
 

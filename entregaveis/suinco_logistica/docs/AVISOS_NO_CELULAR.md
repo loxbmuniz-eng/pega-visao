@@ -31,49 +31,36 @@ sairia.
 
 ---
 
-## Ligar a função — uma vez só, no servidor
+## Ligar a função — não tem passo manual
 
-Sem isto a função fica desligada e o painel diz isso na cara, em vez de
-oferecer um botão que não faria nada.
-
-**1. Gerar as duas chaves** (no servidor, uma vez na vida):
+As duas chaves de segurança que o aviso precisa (padrão VAPID) são geradas
+**pelo próprio instalador**, na primeira atualização que rodar depois de
+26/08/2026. Não há comando extra para lembrar.
 
 ```
 ssh root@2.25.95.253
-cd /opt/embarque-suinco && npx web-push generate-vapid-keys
+sudo bash /opt/suinco-src/entregaveis/suinco_logistica/backend/atualizar_tudo.sh
 ```
 
-**2. Guardar no `.env` do servidor:**
+No fim ele imprime um bloco com `aviso no celular: ligado`. É por aí que se
+confere.
 
-```
-nano /opt/embarque-suinco/.env
-```
+> **Por que gerar sozinho.** O primeiro desenho pedia dois comandos à mão e
+> três linhas coladas no `.env`. Passo manual em roteiro de implantação é
+> passo que uma hora não é dado — e o resultado seria a função pronta e
+> desligada, que é a pior combinação possível. Agora ela nasce ligada, pelo
+> mesmo caminho que já gera o `JWT_SECRET`.
 
-Preencher as três linhas:
-
-```
-VAPID_PUBLICA=<a Public Key que apareceu>
-VAPID_PRIVADA=<a Private Key que apareceu>
-VAPID_CONTATO=mailto:lo.xbmuniz@gmail.com
-```
-
-**3. Aplicar:**
-
-```
-cd /opt/suinco-src && git pull
-sudo bash entregaveis/suinco_logistica/backend/atualizar.sh
-```
+> **As chaves nunca são regeradas.** A inscrição que cada celular guardou é
+> amarrada à chave pública que ele viu no dia; trocar a chave desinscreve
+> todo mundo em silêncio. O instalador confere se já existe chave privada e
+> sai fora se existir. Se um dia for mesmo preciso trocar, a tabela
+> `push_inscricoes` tem que ser esvaziada junto e todos reativam o aviso.
 
 > **A chave privada é segredo de verdade.** Quem a tem manda notificação em
-> nome do painel para qualquer aparelho inscrito. Ela nunca sai do `.env`
-> do servidor — não vai para o repositório, não vai para conversa nenhuma.
->
-> **Trocar as chaves desinscreve todo mundo.** A inscrição que cada celular
-> guardou é amarrada à chave pública que ele viu no dia. Se um dia for
-> preciso trocar, a tabela `push_inscricoes` tem que ser esvaziada junto e
-> todos reativam o aviso.
-
----
+> nome do painel para qualquer aparelho inscrito. Ela vive só no
+> `/opt/embarque-suinco/.env`, com permissão 600 — não vai para o
+> repositório, não vai para conversa nenhuma.
 
 ## Cada pessoa liga no aparelho dela
 

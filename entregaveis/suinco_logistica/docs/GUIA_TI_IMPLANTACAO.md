@@ -1,5 +1,24 @@
 # Guia de Implantação — Painel Logístico Suinco em ambiente compartilhado (Teams/SharePoint)
 
+> ## ⚠️ Documento histórico — o SharePoint nunca entrou em produção
+>
+> Este texto foi escrito quando o painel **ia** rodar sobre Listas do
+> SharePoint, com login da Microsoft (MSAL). Essa arquitetura **nunca chegou
+> a ser usada**: nenhuma Lista foi provisionada, nenhum dado da operação
+> passou por lá.
+>
+> Desde a migração de agosto/2026 o painel roda com backend próprio — Node +
+> PostgreSQL num VPS — e o login é e-mail e senha do próprio painel.
+>
+> Os trechos sobre SharePoint, Teams, Graph, MSAL ou Listas ficam aqui como
+> **registro de por que as decisões foram tomadas**, nunca como instrução do
+> que fazer. O sistema de hoje está em `MAPA_COMPLETO_DO_SISTEMA.md`; a
+> operação do servidor, em `MANUAL_DO_SERVIDOR.md`.
+>
+> **NÃO PROVISIONE NADA COM BASE NESTE ARQUIVO.** Ele é um roteiro de
+> implantação de uma plataforma que foi descartada. Seguir os passos daqui
+> significa configurar um ambiente que o painel não usa e nunca usou.
+
 Este documento é o roteiro completo para o TI colocar o painel em produção, multiusuário
 de verdade, dentro do ecossistema Microsoft 365 já existente na Suinco. Cobre: o que
 precisa ser provisionado, na ordem certa; os problemas reais que vão aparecer; e a
