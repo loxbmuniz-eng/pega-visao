@@ -39,6 +39,7 @@ ENTREGA="claude/pega-visao-up19-deliverables-6cqhjb"
 
 vermelho() { printf '\033[0;31m%s\033[0m\n' "$*"; }
 verde()    { printf '\033[0;32m%s\033[0m\n' "$*"; }
+amarelo()  { printf '\033[0;33m%s\033[0m\n' "$*"; }
 titulo()   { printf '\n\033[1;36m== %s\033[0m\n' "$*"; }
 
 falhou() { vermelho "  X  $*"; echo; vermelho "PUBLICAÇÃO CANCELADA."; exit 1; }
@@ -224,3 +225,28 @@ else
   verde "Publicação completa — nada depende de atualização do servidor."
 fi
 echo "====================================================================="
+
+# ---------------------------------------------------------------------
+# O QUE CONTINUA ABERTO — e não é migração.
+#
+# O passo 6 só enxerga migração. Mas em 26/08 o que ficou de fora da
+# lista não foi migração nenhuma: foram as 53 linhas duplicadas já
+# gravadas, que precisavam de um script à parte. Eu escrevi a lista de
+# pendências à mão, esqueci essa, e o Luis descobriu na operação.
+#
+# Por isso o portão passou a ler o arquivo em vez de confiar em mim: toda
+# publicação imprime tudo que está aberto no O_QUE_FALTA_BLINDAR.md, seja
+# migração, script, decisão ou informação que falta. Fechar item é editar
+# aquele arquivo — não é lembrar.
+BLINDAR="$RAIZ/entregaveis/suinco_logistica/docs/O_QUE_FALTA_BLINDAR.md"
+if [[ -f "$BLINDAR" ]]; then
+  ABERTOS="$(awk '/^## PENDENTE/{p=1;next} /^## ABERTO/{p=1;next} /^## (FEITO|DÍVIDA|Histórico)/{p=0} p && /^### /{sub(/^### /,"");print "  · " $0}' "$BLINDAR")"
+  if [[ -n "$ABERTOS" ]]; then
+    echo
+    amarelo "AINDA EM ABERTO (docs/O_QUE_FALTA_BLINDAR.md):"
+    printf '%s\n' "$ABERTOS"
+    echo
+    echo "  Item só sai dessa lista depois de alguém rodar e ver funcionar."
+    echo "====================================================================="
+  fi
+fi
