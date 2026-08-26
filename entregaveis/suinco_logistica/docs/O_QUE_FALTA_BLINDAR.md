@@ -110,42 +110,43 @@ Rotas) e eu fecho a planilha.
 
 ### R1. Ninguém é avisado se o servidor cair
 
-Hoje o `systemd` reinicia o processo sozinho se ele morre, e o painel mostra
-"⚠️ Modo Offline" para quem estiver com a tela aberta. Isso cobre o
-horário de trabalho. **Não cobre madrugada, fim de semana e feriado** — e
-não cobre a máquina inteira cair, só o processo.
+**Decidido (26/08): notificação no celular.** O passo a passo completo está
+em `docs/ALERTA_DE_QUEDA.md` — cadastro no serviço externo, o que preencher,
+a configuração por palavra-chave que pega "banco caiu mas o site abriu", e o
+teste de parar o serviço de propósito uma vez para ver o alarme tocar.
 
-Um vigia rodando dentro do próprio VPS não resolve: se o VPS cai, o vigia
-cai junto. Vale para o robô de WhatsApp planejado também — ele vai morar no
-mesmo VPS. Quem avisa que o servidor caiu precisa estar **fora** dele.
+**Falta o Luis fazer o cadastro e o teste.** Enquanto isso não acontecer,
+continua valendo o de sempre: a gente descobre que caiu quando alguém do
+pátio avisa.
 
-**Recomendação:** um serviço externo de uptime batendo em
-`https://api.embarquesuinco.com.br/health` de 5 em 5 minutos. O `/health`
-já existe, já responde sem login de propósito, e já devolve se o banco
-respondeu. Não custa código nenhum — custa cinco minutos de cadastro e a
-escolha de para onde o aviso vai.
+### R3. Pacotes atrasados
 
-**Decisão do Luis:** para onde o aviso deve chegar — e-mail, aplicativo no
-celular, ou os dois.
+`npm audit` dá **0 vulnerabilidade**. Não é urgência de segurança, é
+manutenção.
 
-### R3. Sete pacotes atrasados
+**Feito em 26/08:** `pg` 8.22 → 8.23, mexendo só no arquivo de trava, com os
+314 testes do servidor verdes depois.
 
-`npm audit` dá **0 vulnerabilidades** hoje. Portanto isto não é urgência de
-segurança — é manutenção. Em dois grupos:
+**Adiado de propósito — `playwright` 1.61 → 1.62.** Parecia estar no mesmo
+balde do `pg`, mas não está: é ele que gera o PDF dos relatórios no
+servidor, e subir a versão faz o `instalar.sh` baixar um Chromium novo de
+uns 150 MB no VPS. Ganho hoje: nenhum mensurável. Custo: um download grande
+numa máquina cujo espaço livre eu não consigo conferir daqui. Vai junto com
+os de versão maior, quando alguém puder olhar o `df -h` na hora.
 
-| Seguro (mesma versão maior) | Perigoso (versão maior nova) |
+**Aguardando janela combinada — os cinco de versão maior:**
+
+| Pacote | O que muda |
 |---|---|
-| `pg` 8.22 → 8.23 | `bcryptjs` 2 → 3 — **mexe em senha de todo mundo** |
-| `playwright` 1.61 → 1.62 | `express` 4 → 5 — muda roteamento e middleware |
-| | `helmet` 7 → 8, `express-rate-limit` 7 → 8, `dotenv` 16 → 17 |
+| `bcryptjs` 2 → 3 | **mexe em senha de todo mundo** — testar login de usuário JÁ EXISTENTE antes de qualquer outra coisa |
+| `express` 4 → 5 | roteamento e middleware |
+| `helmet` 7 → 8 | cabeçalhos de segurança |
+| `express-rate-limit` 7 → 8 | limite de requisições |
+| `dotenv` 16 → 17 | leitura do .env |
 
-**Recomendação:** subir os dois seguros junto com a próxima entrega, com a
-bateria inteira verde. Os cinco de versão maior, **um de cada vez**, cada um
-com sua própria rodada de testes, e nunca numa manhã de dia útil. O
-`bcryptjs` é o que exige mais cuidado: se o formato do hash mudar, ninguém
-loga.
+Decisão do Luis em 26/08: **só depois de estabilizar**. Um de cada vez, cada
+um com a bateria inteira, nunca em manhã de dia útil.
 
----
 
 ## DÍVIDA CONHECIDA — decidido não mexer
 
@@ -172,3 +173,4 @@ Fica registrado como dívida conhecida, não como tarefa pendente.
 | Data | O que mudou |
 |---|---|
 | 26/08/2026 | Lista criada. Teste de restauração de backup entregue; comando de conferência de migração corrigido. |
+| 26/08/2026 | R1 decidido (push no celular) e guia escrito. `pg` subiu para 8.23; `playwright` adiado com motivo registrado. |
