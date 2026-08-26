@@ -114,7 +114,7 @@ grupo:
 
 ```
 ssh root@2.25.95.253
-sudo bash /opt/suinco-src/entregaveis/suinco_logistica/backend/diagnostico.sh
+bash /opt/suinco-src/entregaveis/suinco_logistica/backend/diagnostico.sh
 ```
 
 Ele não altera nada, só lê, e pode rodar com o pátio operando.

@@ -513,21 +513,21 @@ ssh root@2.25.95.253                                          # entrar
 # ATUALIZAR (depois de um push que muda o backend)
 cd /opt/suinco-src
 git -c core.editor=true pull --no-edit
-sudo bash entregaveis/suinco_logistica/backend/instalar.sh    # seguro rodar quantas vezes quiser
+bash entregaveis/suinco_logistica/backend/instalar.sh    # seguro rodar quantas vezes quiser
 
 # DIAGNOSTICAR (não altera nada, pode rodar com o pátio operando)
-sudo bash entregaveis/suinco_logistica/backend/diagnostico.sh
+bash entregaveis/suinco_logistica/backend/diagnostico.sh
 
 # SERVIÇO
-sudo systemctl status  embarque-suinco                        # está rodando?
-sudo systemctl restart embarque-suinco                        # reiniciar (2-3s, gravações ficam na fila)
-sudo journalctl -u embarque-suinco -n 50 --no-pager            # últimas linhas do log
+systemctl status  embarque-suinco                        # está rodando?
+systemctl restart embarque-suinco                        # reiniciar (2-3s, gravações ficam na fila)
+journalctl -u embarque-suinco -n 50 --no-pager            # últimas linhas do log
 
 # USUÁRIOS (o normal é pela tela; terminal só para o 1º operador ou recuperação)
 cd /opt/embarque-suinco
-sudo -u suinco node scripts/operador.js listar
-sudo -u suinco node scripts/operador.js criar email@x.com "Nome" Setor
-sudo -u suinco node scripts/operador.js senha email@x.com
+su -s /bin/sh suinco -c "node scripts/operador.js listar"
+su -s /bin/sh suinco -c 'node scripts/operador.js criar email@x.com "Nome" Setor'
+su -s /bin/sh suinco -c "node scripts/operador.js senha email@x.com"
 
 exit
 ```
@@ -552,7 +552,7 @@ código).
 - **Backup automático diário**, retém 14 dias, em
   `/var/backups/embarque-suinco` — não precisa criar nada.
 - **Forçar backup antes de mexer em algo arriscado:**
-  `sudo /etc/cron.daily/backup-embarque-suinco`
+  `/etc/cron.daily/backup-embarque-suinco`
 - **Restaurar** (só em emergência real — apaga o que está no banco hoje):
   parar o serviço → `dropdb`/`createdb` → `gunzip | psql` do arquivo do
   backup → subir o serviço de novo. Passo a passo completo em
