@@ -95,16 +95,28 @@ export const config = {
     janelaMs: 60_000,
     porJanela: Number(process.env.RATE_LIMIT || 300),
 
-    /* Login: 30 por minuto, não 10.
-    
-       O limite é POR IP, e o pátio inteiro sai pelo mesmo IP. Com 10, uma
-       troca de turno com cinco pessoas entrando junto já estoura, e as
-       últimas veem "muitas tentativas" achando que erraram a senha —
-       exatamente na hora em que o caminhão está esperando.
-    
-       30 continua barrando força bruta com folga: cada tentativa custa
-       ~250 ms de bcrypt no servidor, então 30/min é uma taxa que não
-       quebra senha nenhuma e não atrapalha ninguém. */
+    /* Login: 30 SENHAS ERRADAS por minuto, por IP.
+
+       O número não mudou desde 24/08, mas o que ele conta mudou em
+       26/08/2026, e é isso que importa: o limitador passou a ignorar os
+       logins que dão CERTO (skipSuccessfulRequests, em rotas/auth.js).
+
+       Antes contava tudo. Como o pátio inteiro sai pelo mesmo IP (NAT do
+       escritório), cada pessoa que entrava certo gastava o orçamento de
+       todos, e a troca de turno estourava o limite sem ninguém errar
+       nada — foi o que barrou o René Fonseca, da Expedição, em 25/08 às
+       21:03, com a senha correta.
+
+       Este teto já tinha sido subido de 10 para 30 por causa do MESMO
+       sintoma, e o sintoma voltou. Fica registrado para o próximo que for
+       tentado a subir de novo: enquanto o limitador contar acerto, não
+       existe número alto o bastante — só um pátio maior. Contando apenas
+       erro, 30/min é folgado para digitação humana e apertado para força
+       bruta (cada tentativa custa ~250 ms de bcrypt).
+
+       E não é a defesa principal: cinco senhas erradas em 30 minutos
+       bloqueiam AQUELA CONTA por 15 minutos, o que é preciso onde um teto
+       por IP é grosseiro. */
     loginPorJanela: Number(process.env.RATE_LIMIT_LOGIN || 30),
   },
 };
