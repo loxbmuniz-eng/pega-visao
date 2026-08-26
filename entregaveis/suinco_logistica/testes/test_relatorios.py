@@ -179,17 +179,42 @@ async def main():
         }''')
         ck('Fretes tem container próprio', f['containerProprio'],
            'compartilhar com o Operacional era a causa da fonte minúscula')
-        # QUATRO colunas desde 25/08/2026, não três. O dono conferiu o
-        # relatório em campo e faltava a placa: "o relatorio de administracao
-        # de fretes precisa aparecer a placa tambem, acabei de checar aqui e
-        # esta faltando uma coluna placa". Sem ela, quem confere o frete não
-        # sabe qual caminhão fez a viagem que está cobrando — o número da
-        # carga sozinho obriga a abrir outro relatório.
-        # A regra mudou de propósito; o teste segue a regra nova.
-        ck('quatro colunas — a placa entrou em 25/08',
-           f['colunas'] == ['Número da Carga','Placa','Rota','Observações'],
+        # SEIS colunas desde 26/08/2026. A história desta linha é a de um
+        # relatório que foi ganhando o que faltava para ser conferível:
+        #
+        #   · 25/08 — entrou a PLACA. "o relatorio de administracao de fretes
+        #     precisa aparecer a placa tambem, acabei de checar aqui e esta
+        #     faltando uma coluna placa". Sem ela, quem confere o frete não
+        #     sabe qual caminhão fez a viagem que está cobrando;
+        #   · 26/08 — entraram as DATAS. "puxamos o relatorio de administracao
+        #     de fretes dos ultimos 30 dias e nao esta vindo com DATA, eu
+        #     preciso da data e hora em cada linha". Trinta dias sem data não
+        #     se confere de jeito nenhum.
+        #
+        # A regra mudou de propósito das duas vezes; o teste segue a regra
+        # nova. E a ORDEM importa: data primeiro, porque é por ela que se
+        # procura a linha numa folha de trinta dias.
+        ck('seis colunas — as datas entraram em 26/08',
+           f['colunas'] == ['Programada','Saída','Número da Carga','Placa','Rota','Observações'],
            str(f['colunas']))
         ck('fonte de leitura na tela', f['fonteTela'] >= 12, f"{f['fonteTela']}px")
+
+        # A COLUNA EXISTIR NÃO BASTA: ela tem que trazer data de verdade.
+        # Uma coluna nova que sai com "—" em toda linha passa numa conferência
+        # de cabeçalho e não serve para nada na folha.
+        datas = await pg.evaluate('''() => {
+          const c = document.getElementById('print-fretes');
+          const dados = [...c.querySelectorAll('table')]
+                          .find(t => !t.classList.contains('doc-identificacao'));
+          if (!dados) return [];
+          return [...dados.querySelectorAll('tbody tr')]
+                   .map(tr => (tr.children[0] || {}).innerText || '')
+                   .map(s => s.trim());
+        }''')
+        comData = [d for d in datas if '/' in d]
+        ck('a coluna Programada traz data de verdade',
+           len(datas) == 0 or len(comData) == len(datas),
+           f'{len(comData)} de {len(datas)} linhas com data')
 
         print('\n=== OPERACIONAL: MESMA LIMPEZA ===')
         await pg.evaluate("()=>exportarPdfOperacional()")
@@ -210,6 +235,14 @@ async def main():
         ck('coluna Destino removida (o campo saiu do formulário)', not o['temDestino'],
            str(o['colunas']))
         ck('linha de totais preservada', o['total'])
+        # DATA / HORA no Operacional (26/08/2026). O dono pediu para os dois
+        # relatórios: "o relatorio operacional tambem precisa ter essa
+        # especificacao". Aqui é UMA coluna com duas linhas dentro — o dia em
+        # cima, o horário que importa para aquela linha embaixo — porque a
+        # folha já tem treze colunas em A4 deitado e duas novas espremeriam o
+        # Status, que é o que se lê de relance na foto do grupo.
+        ck('coluna Data / Hora no Operacional', 'Data / Hora' in o['colunas'],
+           str(o['colunas']))
         ck('nota de rodapé enxuta', o['linhasRodape'] <= 3, f"{o['linhasRodape']} linha(s)")
         # A tabela precisa continuar coerente: cabeçalho e células no mesmo número.
         coerente = await pg.evaluate('''() => {

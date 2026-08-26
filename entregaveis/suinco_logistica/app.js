@@ -6765,6 +6765,49 @@ function avisoDePlacaRepetida(lista){
   </div>`;
 }
 
+/* AS DATAS DE UMA LINHA DE RELATÓRIO — pedido do dono, 26/08/2026:
+   "puxamos o relatório de administração de fretes dos últimos 30 dias e não
+   está vindo com DATA, eu preciso da data e hora em cada linha de relatório,
+   de todos os relatórios que precisam dessa informação clara".
+
+   Ele está certo, e o relatório de fretes não tinha data NENHUMA: quatro
+   colunas — número, placa, rota, observações. Trinta dias assim não se
+   confere.
+
+   UMA CARGA TEM MAIS DE UMA DATA, e confundi-las já produziu incidente. São
+   três relógios diferentes:
+
+     · a DATA DA PROGRAMAÇÃO — o dia a que a viagem pertence;
+     · a ENTRADA no pátio — quando o caminhão de fato chegou;
+     · a SAÍDA — quando ele seguiu viagem.
+
+   Elas coincidem quase sempre, e se separam justamente nos casos que dão
+   problema: caminhão programado num dia que só sai no outro. Foi isso que
+   fez duas cargas sumirem do relatório em 19/08.
+
+   A DATA DA PROGRAMAÇÃO usa `programadoEm || criadoEm` — exatamente o mesmo
+   campo que `filtrarPorDataProgramacao` usa para decidir se a linha entra no
+   período. Mostrar uma data diferente da que filtrou seria a receita para
+   alguém jurar que o relatório está errado.
+
+   FUSO: aqui NÃO se corta o texto do ISO com slice(0,10). O carimbo vem em
+   UTC; cortar a string devolve o dia de Londres, e qualquer coisa depois das
+   21h daqui apareceria no dia seguinte. `toLocaleDateString('pt-BR')`
+   converte para o fuso de quem lê, que é o do pátio. */
+function dataCurtaLocal(iso){
+  if(!iso) return '';
+  const d = new Date(iso);
+  return isNaN(d) ? '' : d.toLocaleDateString('pt-BR');
+}
+
+function datasDaLinhaDeRelatorio(c){
+  return {
+    programada: c.programadoEm || c.criadoEm || null,
+    entrada: entradaNoPatioDe(c),
+    saida: primeiroTimestamp(c.id, 'Seguiu Viagem'),
+  };
+}
+
 async function montarRelatorioOperacional(){
   await atualizarDadosAntesDoRelatorio();
   const el = document.getElementById('print-operacional');
@@ -6794,6 +6837,21 @@ async function montarRelatorioOperacional(){
        espremia "Aguardando Embarque" em duas linhas. Com classe, mover ou
        remover coluna não desalinha mais nada. */
     return `<tr>
+      <td class="c-quando">${(() => {
+        /* UMA coluna, duas linhas dentro. O Operacional já tem 12 colunas em
+           A4 deitado com fonte de 7,6px; duas colunas novas espremeriam o
+           Status, que é a informação que se lê de relance na foto do grupo.
+
+           Em cima o dia da programação; embaixo o horário que importa para
+           AQUELA linha — saída se o caminhão já foi, entrada se ele está no
+           pátio, nada se ainda não chegou. Mostrar "entrou —" numa carga que
+           não chegou seria preencher espaço com ausência. */
+        const d = datasDaLinhaDeRelatorio(c);
+        const dia = dataCurtaLocal(d.programada) || '—';
+        const hora = d.saida ? `saiu ${fmtHora(d.saida)}`
+          : (d.entrada ? `entrou ${fmtHora(d.entrada)}` : '');
+        return `${dia}${hora ? `<br><span class="hora-linha">${hora}</span>` : ''}`;
+      })()}</td>
       <td class="c-seq">${c.sequencia ?? '—'}</td>
       <td class="c-carga">${esc(c.numeroCarga).toUpperCase()||'—'}</td>
       <td class="c-status" style="background:${cs.fundo};color:${cs.texto}">${esc(c.status)}</td>
@@ -6826,6 +6884,7 @@ async function montarRelatorioOperacional(){
            algo que já estava escrito. -->
       <table>
         <thead><tr>
+          <th class="c-quando">Data / Hora</th>
           <th class="c-seq">Seq.</th>
           <th class="c-carga">Nº Carga</th>
           <th class="c-status">Status</th>
@@ -6845,7 +6904,11 @@ async function montarRelatorioOperacional(){
           <th class="c-ganchos">Ganchos</th>
         </tr></thead>
         <tbody>${linhas || '<tr><td colspan="13" class="text-center text-dim">Nenhuma carga no período selecionado.</td></tr>'}</tbody>
-        ${lista.length ? `<tfoot>${rodapeSomatorios(lista, 8, ['peso','', 'entregas','ganchos'])}</tfoot>` : ''}
+        ${lista.length ? `<tfoot>${/* 9, não 8: a coluna "Data / Hora" entrou na frente de tudo em
+             26/08/2026 e o rótulo TOTAL precisa atravessar uma coluna a
+             mais. Errar aqui desalinha os totais sob as colunas erradas —
+             e ninguém confere um total que está no lugar certo. */''
+           }${rodapeSomatorios(lista, 9, ['peso','', 'entregas','ganchos'])}</tfoot>` : ''}
       </table>
       <!-- Nota de rodapé enxugada.
 
@@ -7817,6 +7880,10 @@ async function exportarPdfFretes(){
   const semObs = dados.filter(d=>!d.observacoes).length;
 
   const linhas = dados.map(d=>`<tr>
+      <td class="col-data">${dataCurtaLocal(d.programada) || '—'}</td>
+      <td class="col-saida">${d.saida
+        ? fmtDataHora(d.saida)
+        : '<span class="text-dim">ainda no pátio</span>'}</td>
       <td class="col-carga">${esc(d.numeroCarga)}</td>
       <td class="col-placa">${esc(d.placa)}</td>
       <td class="col-rota">${esc(d.rota)}</td>
@@ -7833,12 +7900,18 @@ async function exportarPdfFretes(){
       })}
       <table class="tab-fretes">
         <thead><tr>
+          <!-- DUAS datas, e não uma: "Programada" é o dia a que a viagem
+               pertence e é o campo que o filtro de período usa; "Saída" é
+               quando o caminhão de fato seguiu viagem. Elas divergem
+               exatamente nos casos que dão problema na conferência. -->
+          <th class="col-data">Programada</th>
+          <th class="col-saida">Saída</th>
           <th class="col-carga">Número da Carga</th>
           <th class="col-placa">Placa</th>
           <th class="col-rota">Rota</th>
           <th class="col-obs">Observações</th>
         </tr></thead>
-        <tbody>${linhas || '<tr><td colspan="4" class="text-center text-dim">Nenhuma carga no período selecionado.</td></tr>'}</tbody>
+        <tbody>${linhas || '<tr><td colspan="6" class="text-center text-dim">Nenhuma carga no período selecionado.</td></tr>'}</tbody>
       </table>
       ${rodapeDocumento(
         'O campo <strong>Observações</strong> é onde a administração registra valor do frete, ' +
