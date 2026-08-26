@@ -1,0 +1,105 @@
+# =====================================================================
+# TESTES DO SERVIDOR, A CADA PUSH
+# ---------------------------------------------------------------------
+# Até hoje a única coisa que rodava os 346 testes era eu, à mão, antes de
+# publicar. Isso tem um limite óbvio: se alguém mais mexer no código — e a
+# partir de agora vai ter parceiro de TI no repositório —, ninguém sabe se
+# quebrou até alguém lembrar de rodar.
+#
+# Aqui roda sozinho: sobe um PostgreSQL descartável, aplica as 37 migrações
+# e roda a bateria da API. Se ficar vermelho, aparece na hora no commit e no
+# pull request, com o log.
+#
+# O QUE NÃO RODA AQUI, de propósito: a bateria de 110 telas (Playwright).
+# Ela leva ~20 minutos e precisa de navegador — é cara para rodar a cada
+# push. Ela continua obrigatória no portão de publicação (publicar.sh), que
+# é onde ela protege o que interessa: o que vai para a operação.
+# =====================================================================
+name: Testes do servidor
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  api:
+    name: Bateria da API (${{ matrix.node }})
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        # 22 é o que roda no VPS hoje. 20 é o mínimo declarado no
+        # package.json — testar os dois evita descobrir em produção que
+        # alguém usou uma sintaxe que o servidor não entende.
+        node: ['20', '22']
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: suinco
+          POSTGRES_PASSWORD: senha-de-teste-ci
+          POSTGRES_DB: embarque_suinco
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U suinco"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      NODE_ENV: test
+      PORT: '3010'
+      PGHOST: 127.0.0.1
+      PGPORT: '5432'
+      PGDATABASE: embarque_suinco
+      PGUSER: suinco
+      PGPASSWORD: senha-de-teste-ci
+      JWT_SECRET: segredo-so-do-ci-nao-vale-em-lugar-nenhum-32c
+      JWT_VALIDADE: 12h
+      ORIGENS_PERMITIDAS: https://embarquesuinco.com.br,https://www.embarquesuinco.com.br
+      RATE_LIMIT: '300'
+      RATE_LIMIT_LOGIN: '30'
+
+    defaults:
+      run:
+        working-directory: entregaveis/suinco_logistica/backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+          cache-dependency-path: entregaveis/suinco_logistica/backend/package-lock.json
+
+      # `npm ci` e não `npm install`: o lock manda. Instalação que resolve
+      # versão sozinha testa um conjunto de dependências que não é o que vai
+      # para o servidor.
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Aplicar as migrações
+        run: npm run migrar
+
+      - name: Rodar a bateria da API
+        run: npm run teste
+
+  seguranca:
+    name: Vulnerabilidades nas dependências
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: entregaveis/suinco_logistica/backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      # Só ALTA e CRÍTICA reprovam. Vulnerabilidade baixa em dependência de
+      # desenvolvimento não pode travar uma correção de pátio às 6 da manhã.
+      - name: npm audit
+        run: npm audit --audit-level=high
