@@ -3618,9 +3618,107 @@ function atualizarPlacaUI(id, val){
     operador: (DB.operador && DB.operador.nome) || '(não identificado)'
   });
 
+  const recados = reconciliarPatioAoTrocarPlaca(c, anterior);
+
   SuincoStore.save();
   notify(`Placa alterada para ${nova} — transportadora ${c.transportadora || 'não informada'}.`, 'success');
+  recados.forEach(m => notify(m, 'info'));
   renderAll();
+}
+
+/* O PÁTIO É CONSULTADO NA TROCA DE PLACA — relato do Alysson, 26/08/2026.
+
+   "A carga do GPA já tinha entrado nesse caminhão aqui, o FTZ. A portaria
+   tinha registrado nele também. Aí eu alterei a carga do GPA ali na torre...
+   alterou tudo, só que o status do veículo, informando que a carga já estava
+   aqui, não mudou. Tive que registrar na portaria novamente... depois
+   apareceu duas informações."
+
+   Duas metades, e as duas terminam na mesma duplicata:
+
+     · a placa que ENTRA na carga já estava no pátio, e a carga continuava
+       esperando um caminhão parado lá dentro;
+     · a placa que SAI sumia da tela da Portaria, que só mostra placa com
+       carga aberta. Para o porteiro, a entrada das 12:49 tinha evaporado —
+       e ele registrou de novo. Essa segunda entrada é a duplicata.
+
+   Isto aqui é a resposta IMEDIATA na tela. Quem manda é o servidor, que faz
+   a mesma coisa em reconciliarPatioNaTrocaDePlaca (backend/src/rotas/
+   cargas.js) e grava a trilha completa. O painel adianta o resultado para o
+   operador não ficar olhando um estado que ele sabe estar errado.
+
+   SÓ ANTES DA DOCA, decisão do dono: depois que o embarque começou, trocar
+   placa é caso excepcional e a etapa só muda por correção com motivo. */
+function reconciliarPatioAoTrocarPlaca(carga, placaAntiga){
+  const recados = [];
+  if(carga.status !== 'Aguardando Veículo' && carga.status !== 'Aguardando Embarque') return recados;
+
+  const quem = (DB.operador && DB.operador.nome) || '(não identificado)';
+  const setor = (DB.operador && DB.operador.setor) || 'Logística';
+  const hora = (iso) => iso ? fmtDataHora(iso) : 'horário não registrado';
+
+  /* ---- Metade 1: a placa nova já está no pátio ---- */
+  const orfa = cargasAbertas().find(x =>
+    x.id !== carga.id && x.aguardandoCarga &&
+    normalizarPlaca(x.placa) === normalizarPlaca(carga.placa));
+
+  if(orfa){
+    const entrada = entradaNoPatioDe(orfa);
+    if(carga.status === 'Aguardando Veículo'){
+      const antes = carga.status;
+      carga.status = 'Aguardando Embarque';
+      registrarMovimentacao({
+        cargaId: carga.id, placa: carga.placa,
+        statusAnterior: antes, statusNovo: 'Aguardando Embarque',
+        operador: quem, setor, timestamp: entrada || undefined,
+        cliente: carga.cliente, motorista: carga.motorista,
+        tipoVeiculo: carga.tipoVeiculo, qtdEntregas: carga.qtdEntregas
+      });
+    }
+    // Sai da operação, continua no Histórico — pátio não se apaga.
+    orfa.excluida = true;
+    orfa.atualizadoEm = nowISO();
+    registrarAlteracao({
+      cargaId: orfa.id, placa: orfa.placa, campo: 'Entrada sem carga',
+      de: 'aguardando carga', para: `absorvida pela carga ${carga.numeroCarga || carga.id}`,
+      setor, operador: quem
+    });
+    recados.push(`${carga.placa} já estava no pátio desde ${hora(entrada)} — `
+      + `a carga assumiu essa entrada. Não registre a chegada de novo.`);
+  }
+
+  /* ---- Metade 2: a placa antiga fica sozinha no pátio ---- */
+  /* Só quando o caminhão antigo tinha de fato entrado: carga que nunca passou
+     de "Aguardando Veículo" não deixa caminhão nenhum para trás. */
+  const entradaAntiga = entradaNoPatioDe(carga);
+  const aindaTemCarga = cargasAbertas().some(x =>
+    x.id !== carga.id && normalizarPlaca(x.placa) === normalizarPlaca(placaAntiga));
+
+  if(entradaAntiga && !aindaTemCarga){
+    const frota = buscarFrota(placaAntiga);
+    const solta = {
+      id: uid('carga'), numeroCarga: 'Aguardando Carga', placa: normalizarPlaca(placaAntiga),
+      transportadora: frota ? frota.transportadora : '',
+      tipoVeiculo: frota ? frota.tipoVeiculo : '',
+      motorista: '', cliente: '', destino: '', produto: '', peso: 0, doca: '',
+      sequencia: null, observacoes: '', rota: '',
+      praOnde: praOndeSugerido(frota ? frota.transportadora : ''),
+      paletizada: 'Não', qtdGanchos: 0, qtdEntregas: 1,
+      status: 'Aguardando Embarque', aguardandoCarga: true,
+      criadoEm: entradaAntiga, criadoPor: quem,
+      atualizadoEm: nowISO(), _nuncaConfirmada: true
+    };
+    DB.cargas.push(solta);
+    registrarMovimentacao({
+      cargaId: solta.id, placa: solta.placa,
+      statusAnterior: null, statusNovo: 'Aguardando Embarque',
+      operador: quem, setor, timestamp: entradaAntiga
+    });
+    recados.push(`${solta.placa} ficou no pátio sem carga — continua lá, com a `
+      + `entrada de ${hora(entradaAntiga)}. A Portaria não precisa registrar de novo.`);
+  }
+
+  return recados;
 }
 
 function atualizarNumeroCargaUI(id, val){
@@ -6614,6 +6712,59 @@ async function atualizarDadosAntesDoRelatorio(){
    Duplicar o modelo do relatório no servidor era o outro caminho, e seria
    o começo de dois relatórios que divergem no primeiro ajuste de coluna
    que alguém fizer aqui e esquecer de fazer lá. Uma fonte só. */
+/* DUAS CARGAS NA MESMA PLACA APARECEM COMO DUAS — TAMBÉM NO PAPEL.
+
+   Relato do dono, 26/08/2026: "o caminhão tava com duas rotas na mesma
+   placa, então quando o Alysson abriu o relatório depois só tava aparecendo
+   uma das rotas".
+
+   A marca "1 de 2" existia na fila e na Visão do Pátio desde 11/08 —
+   justamente para ninguém "corrigir" uma duplicidade que não existe e apagar
+   uma carga de verdade. Só que ela NUNCA entrou em relatório nenhum.
+   Conferido: `marcaCargaDaPlaca` é usada em três lugares da tela e em zero
+   documentos.
+
+   Quem lê a folha no pátio vê duas linhas com a mesma placa, sem nada que
+   diga que são duas viagens do mesmo caminhão — e a leitura natural é que
+   uma delas está errada.
+
+   TEXTO, não etiqueta colorida: o documento vira PDF e foto de WhatsApp, e
+   cor some nas duas. "(1 de 2)" atravessa qualquer impressão.
+
+   E quando os DESTINOS são diferentes, o texto diz — que é exatamente a
+   informação que sumiu no relato. */
+function marcaPlacaRepetida(carga, lista){
+  const p = normalizarPlaca(carga.placa);
+  const irmas = lista.filter(c => normalizarPlaca(c.placa) === p);
+  if(irmas.length < 2) return '';
+  const posicao = irmas.findIndex(c => c.id === carga.id) + 1;
+  const rotasDiferentes = new Set(irmas.map(c => (c.rota || '').trim())).size > 1;
+  return ` <strong>(${posicao} de ${irmas.length}`
+    + `${rotasDiferentes ? ', rotas diferentes' : ''})</strong>`;
+}
+
+/* O aviso de rodapé, para quem confere a folha inteira e não linha a linha. */
+function avisoDePlacaRepetida(lista){
+  const porPlaca = new Map();
+  lista.forEach(c => {
+    const p = normalizarPlaca(c.placa);
+    if(!porPlaca.has(p)) porPlaca.set(p, []);
+    porPlaca.get(p).push(c);
+  });
+  const repetidas = [...porPlaca.entries()].filter(([, cs]) => cs.length > 1);
+  if(!repetidas.length) return '';
+  const itens = repetidas.map(([p, cs]) => {
+    const rotas = [...new Set(cs.map(c => rotaCurta(c.rota) || 'sem rota'))];
+    return `<li><strong>${esc(p)}</strong> — ${cs.length} cargas`
+      + `${rotas.length > 1 ? `, rotas ${esc(rotas.join(' e '))}` : ''}</li>`;
+  }).join('');
+  return `<div class="doc-aviso-numeracao">
+    <strong>Caminhões com mais de uma carga nesta programação</strong> —
+    são viagens diferentes do mesmo veículo, não duplicidade:
+    <ul style="margin:4px 0 0 18px">${itens}</ul>
+  </div>`;
+}
+
 async function montarRelatorioOperacional(){
   await atualizarDadosAntesDoRelatorio();
   const el = document.getElementById('print-operacional');
@@ -6648,7 +6799,7 @@ async function montarRelatorioOperacional(){
       <td class="c-status" style="background:${cs.fundo};color:${cs.texto}">${esc(c.status)}</td>
       <td class="c-rota">${esc(rotaCurta(c.rota))}</td>
       <td class="c-operacao" ${praOndeStyle}>${c.praOnde ? esc(PRA_ONDE_LABEL[c.praOnde]) : '—'}</td>
-      <td class="c-placa">${esc(c.placa).toUpperCase()}</td>
+      <td class="c-placa">${esc(c.placa).toUpperCase()}${marcaPlacaRepetida(c, lista)}</td>
       <td class="c-transp">${esc(c.transportadora)||'—'}</td>
       <td class="c-veiculo">${esc(c.tipoVeiculo)||'—'}</td>
       <td class="c-peso">${pesoTon}</td>
@@ -6704,6 +6855,7 @@ async function montarRelatorioOperacional(){
            sobra é a única coisa que o leitor precisa saber e não consegue
            deduzir olhando a tabela. -->
       ${avisoDeNumeracao(lista)}
+      ${avisoDePlacaRepetida(lista)}
       ${/* Os lacres do dia, logo abaixo da tabela: quem confere a folha no
             pátio termina de ler as cargas e encontra o controle de lacre no
             mesmo documento, sem precisar de outro relatório. */''}

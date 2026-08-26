@@ -4242,3 +4242,163 @@ describe('36. Aviso no celular — o estado desligado é honesto', () => {
     assert.equal(r.json.codigo, 'ROTA_INEXISTENTE');
   });
 });
+
+/* ------------------------------------------------------------------ */
+/* RELATO DO ALYSSON, 26/08/2026 — a troca de placa e o caminhão que já
+   estava no pátio.
+
+   Nas palavras dele: "a carga do GPA já tinha entrado nesse caminhão aqui,
+   o FTZ. A portaria tinha registrado nele também. Aí eu alterei a carga do
+   GPA ali na torre... alterou tudo, só que o status do veículo, informando
+   que a carga já estava aqui, não mudou. Tive que registrar na portaria
+   novamente... depois apareceu duas informações."
+
+   Duas metades, e as duas produzem a mesma duplicata:
+
+     · a placa que ENTRA na carga já estava no pátio, e a carga continuava
+       esperando um caminhão que estava lá dentro;
+     · a placa que SAI da carga tinha entrada registrada e sumia da tela da
+       Portaria, porque ela só mostra placa com carga aberta. Do ponto de
+       vista do porteiro, uma entrada evaporou — e ele registrou de novo.
+
+   Decidido com o dono em 26/08: absorver automático, com rastro, e só para
+   carga que ainda não começou o embarque. Depois da doca, trocar placa é
+   caso excepcional e continua exigindo correção de etapa com motivo. */
+describe('37. Trocar a placa reencontra o caminhão que já está no pátio', () => {
+  async function placasLimpas(quantas, salto) {
+    const { rows } = await pool.query(
+      'SELECT placa FROM dim_veiculos ORDER BY placa OFFSET $1 LIMIT $2', [salto, quantas]
+    );
+    for (const r of rows) {
+      await pool.query('DELETE FROM fact_statusfrota WHERE placa = $1', [r.placa]);
+      await pool.query('DELETE FROM fact_viagens WHERE placa = $1', [r.placa]);
+    }
+    return rows.map((r) => r.placa);
+  }
+
+  /* O cenário do relato: caminhão B no pátio desde 3 horas atrás, sem carga;
+     carga programada na placa A. Recuar a entrada é o que permite provar que
+     o horário herdado é o REAL e não o da edição — com tudo acontecendo no
+     mesmo segundo, os dois seriam indistinguíveis. */
+  async function cenario(salto, extra = {}) {
+    const [placaA, placaB] = await placasLimpas(2, salto);
+    const chegada = await req('/api/cargas', {
+      metodo: 'POST', token: tokens['Portaria'],
+      corpo: { placa: placaB, aguardandoCarga: true },
+    });
+    assert.equal(chegada.status, 201, JSON.stringify(chegada.json));
+    await pool.query(
+      "UPDATE fact_viagens SET criado_em = now() - interval '3 hours' WHERE carga_id = $1",
+      [chegada.json.id]
+    );
+    await pool.query(
+      "UPDATE fact_statusfrota SET data_evento = now() - interval '3 hours' WHERE carga_id = $1",
+      [chegada.json.id]
+    );
+    const carga = await req('/api/cargas', {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { placa: placaA, numeroCarga: `TROCA-${salto}`, peso: 12000, ...extra },
+    });
+    assert.equal(carga.status, 201, JSON.stringify(carga.json));
+    return { placaA, placaB, chegadaId: chegada.json.id, cargaId: carga.json.id };
+  }
+
+  test('a carga sobe para Aguardando Embarque quando a placa nova já está no pátio', async () => {
+    const c = await cenario(20);
+    const r = await req(`/api/cargas/${c.cargaId}`, {
+      metodo: 'PATCH', token: tokens['Logística'], corpo: { placa: c.placaB },
+    });
+    assert.equal(r.status, 200, JSON.stringify(r.json));
+    assert.equal(r.json.status, 'Aguardando Embarque',
+      'o caminhão já estava no pátio: a carga não pode continuar esperando por ele');
+  });
+
+  test('e herda o horário REAL da entrada, não a hora da troca', async () => {
+    const c = await cenario(22);
+    await req(`/api/cargas/${c.cargaId}`, {
+      metodo: 'PATCH', token: tokens['Logística'], corpo: { placa: c.placaB },
+    });
+    const { rows } = await pool.query(
+      `SELECT data_evento FROM fact_statusfrota
+        WHERE carga_id = $1 AND status_novo = 'Aguardando Embarque'
+        ORDER BY data_evento LIMIT 1`, [c.cargaId]
+    );
+    assert.ok(rows[0], 'a entrada precisa virar evento na trilha desta carga');
+    const horas = (Date.now() - new Date(rows[0].data_evento).getTime()) / 3600000;
+    assert.ok(horas > 2.5,
+      `o relógio de pátio começa na entrada do caminhão, não na edição — veio ${horas.toFixed(2)}h`);
+  });
+
+  test('o registro de chegada sem carga é absorvido, e deixa rastro', async () => {
+    const c = await cenario(24);
+    await req(`/api/cargas/${c.cargaId}`, {
+      metodo: 'PATCH', token: tokens['Logística'], corpo: { placa: c.placaB },
+    });
+    const { rows } = await pool.query(
+      'SELECT excluida_em FROM fact_viagens WHERE carga_id = $1', [c.chegadaId]
+    );
+    assert.ok(rows[0], 'o registro não pode ser APAGADO — histórico de pátio permanece');
+    assert.ok(rows[0].excluida_em, 'depois de absorvido ele sai da operação');
+
+    const log = await pool.query(
+      "SELECT acao FROM log_eventos WHERE carga_id = $1 AND acao ILIKE '%absorv%'", [c.chegadaId]
+    );
+    assert.ok(log.rows.length > 0, 'o Histórico tem que dizer que ele virou outra carga');
+  });
+
+  test('a placa que ficou sem carga volta a constar no pátio', async () => {
+    const c = await cenario(26);
+    // O caminhão A também chegou: a carga dele está em Aguardando Embarque.
+    const st = await req(`/api/cargas/${c.cargaId}/status`, {
+      metodo: 'POST', token: tokens['Portaria'], corpo: { status: 'Aguardando Embarque' },
+    });
+    assert.equal(st.status, 200, JSON.stringify(st.json));
+
+    await req(`/api/cargas/${c.cargaId}`, {
+      metodo: 'PATCH', token: tokens['Logística'], corpo: { placa: c.placaB },
+    });
+
+    const { rows } = await pool.query(
+      `SELECT carga_id, aguardando_carga FROM fact_viagens
+        WHERE placa = $1 AND excluida_em IS NULL AND status_atual <> 'Seguiu Viagem'`,
+      [c.placaA]
+    );
+    assert.equal(rows.length, 1,
+      'o caminhão A continua no pátio sem carga — se sumir, a Portaria registra de novo');
+    assert.equal(rows[0].aguardando_carga, true);
+  });
+
+  test('não mexe em carga que já começou o embarque', async () => {
+    const c = await cenario(28);
+    for (const s of ['Aguardando Embarque', 'Embarque Iniciado']) {
+      const r = await req(`/api/cargas/${c.cargaId}/status`, {
+        metodo: 'POST',
+        token: tokens[s === 'Aguardando Embarque' ? 'Portaria' : 'Expedição'],
+        corpo: { status: s },
+      });
+      assert.equal(r.status, 200, JSON.stringify(r.json));
+    }
+    const r = await req(`/api/cargas/${c.cargaId}`, {
+      metodo: 'PATCH', token: tokens['Logística'], corpo: { placa: c.placaB },
+    });
+    assert.equal(r.status, 200, JSON.stringify(r.json));
+    assert.equal(r.json.status, 'Embarque Iniciado',
+      'depois da doca a etapa só muda por correção consciente, com motivo');
+  });
+
+  test('placa nova sem chegada registrada não muda o status', async () => {
+    const [placaA, placaB] = await placasLimpas(2, 30);
+    const carga = await req('/api/cargas', {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { placa: placaA, numeroCarga: 'TROCA-SEM-PATIO', peso: 9000 },
+    });
+    assert.equal(carga.status, 201, JSON.stringify(carga.json));
+    const r = await req(`/api/cargas/${carga.json.id}`, {
+      metodo: 'PATCH', token: tokens['Logística'], corpo: { placa: placaB },
+    });
+    assert.equal(r.status, 200, JSON.stringify(r.json));
+    assert.equal(r.json.status, 'Aguardando Veículo',
+      'sem entrada registrada, nada a reencontrar — a carga continua esperando');
+    assert.equal(r.json.placa, placaB);
+  });
+});

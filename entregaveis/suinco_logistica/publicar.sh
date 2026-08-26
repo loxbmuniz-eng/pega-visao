@@ -120,7 +120,37 @@ titulo "4. Testes do servidor"
   || { tail -25 /tmp/suinco-teste-backend.txt; falhou "testes do servidor reprovaram."; }
 verde "  ok  $(grep -E '^# pass' /tmp/suinco-teste-backend.txt | head -1)"
 
-titulo "5. Bateria de tela"
+# ---------------------------------------------------------------------
+# A BATERIA PRECISA DA API NO AR — E ISSO NÃO É ÓBVIO PARA QUEM OLHA O ERRO.
+#
+# O rodar_tudo.sh não sobe o servidor: ele assume que já está de pé. Em
+# 26/08/2026 o contêiner reiniciou no meio do dia e derrubou o processo. A
+# bateria seguinte gastou 25 minutos para terminar com UMA suíte vermelha
+# (test_torre_acao_e_encerramento, acaoEm/acaoPor/acaoSetor todos nulos) —
+# que é exatamente como um dado que não sincroniza se parece.
+#
+# Vinte e cinco minutos para descobrir que faltava ligar o servidor, e uma
+# suíte vermelha que parecia regressão de verdade. O portão precisa
+# responder isso em dois segundos, antes de começar.
+titulo "5. Servidor de teste no ar"
+PORTA_TESTE="$(grep -E '^PORT=' "$AQUI/backend/.env" 2>/dev/null | cut -d= -f2 | tr -d '[:space:]')"
+PORTA_TESTE="${PORTA_TESTE:-3000}"
+if curl -sf --max-time 3 "http://127.0.0.1:$PORTA_TESTE/health" >/dev/null 2>&1; then
+  verde "  ok  API respondendo na porta $PORTA_TESTE"
+else
+  echo "      API fora do ar — subindo (log em /tmp/suinco-api-teste.log)"
+  ( cd "$AQUI/backend" && nohup node src/servidor.js > /tmp/suinco-api-teste.log 2>&1 & )
+  for _ in $(seq 1 20); do
+    curl -sf --max-time 2 "http://127.0.0.1:$PORTA_TESTE/health" >/dev/null 2>&1 && break
+    sleep 1
+  done
+  curl -sf --max-time 3 "http://127.0.0.1:$PORTA_TESTE/health" >/dev/null 2>&1 \
+    || { tail -15 /tmp/suinco-api-teste.log 2>/dev/null | sed 's/^/      /'
+         falhou "não consegui subir a API de teste na porta $PORTA_TESTE."; }
+  verde "  ok  API no ar na porta $PORTA_TESTE"
+fi
+
+titulo "6. Bateria de tela"
 ( cd "$AQUI" && bash testes/rodar_tudo.sh >/tmp/suinco-bateria.txt 2>&1 ) \
   || { tail -25 /tmp/suinco-bateria.txt; falhou "a bateria reprovou."; }
 grep -q "0 falha(s)" /tmp/suinco-bateria.txt \
@@ -128,7 +158,7 @@ grep -q "0 falha(s)" /tmp/suinco-bateria.txt \
 verde "  ok  $(grep -E 'verde\(s\)' /tmp/suinco-bateria.txt | tail -1 | sed 's/^ *//')"
 
 # ---------------------------------------------------------------------
-# 6. A TRAVA QUE ESTE SCRIPT EXISTE PARA APLICAR.
+# 7. A TRAVA QUE ESTE SCRIPT EXISTE PARA APLICAR.
 #
 # Toda migração nova precisa declarar, no cabeçalho, o que acontece no
 # painel ENQUANTO ela não sobe. A linha tem esta forma:
@@ -139,7 +169,7 @@ verde "  ok  $(grep -E 'verde\(s\)' /tmp/suinco-bateria.txt | tail -1 | sed 's/^
 # fim, e é esse texto que precisa ser repassado ao Luis junto com o aviso
 # de rodar o atualizar.sh. A omissão deixa de ser possível por esquecimento.
 # ---------------------------------------------------------------------
-titulo "6. Migrações pendentes declaram o que quebra sem elas"
+titulo "7. Migrações pendentes declaram o que quebra sem elas"
 # A pergunta certa NÃO é "esta publicação traz migração nova?" — é "o que o
 # SERVIDOR ainda não tem?". Foi assim que a primeira versão deste passo
 # errou: a 035 e a 036 subiram para o repositório em 25/08, seguiram sem
@@ -179,7 +209,7 @@ else
   verde "  ok  $QUANTAS pendente(s), todas com a consequência declarada"
 fi
 
-titulo "7. Publicando"
+titulo "8. Publicando"
 # A BATERIA REGENERA O index.html — e um build regerado tem carimbo novo,
 # então a árvore fica suja no fim dos testes mesmo sem ninguém mexer em
 # nada. Trocar de branch nesse estado falha, e na primeira execução isso

@@ -44,6 +44,165 @@ async function gravarEvento(cli, { cargaId, placa, de, para, operador, acao }) {
   return movId;
 }
 
+/* TROCAR A PLACA REENCONTRA O CAMINHÃO QUE JÁ ESTÁ NO PÁTIO (26/08/2026).
+   =====================================================================
+
+   RELATO DO ALYSSON, palavras dele: "a carga do GPA já tinha entrado nesse
+   caminhão aqui, o FTZ. A portaria tinha registrado nele também. Aí eu
+   alterei a carga do GPA ali na torre... alterou tudo, só que o status do
+   veículo, informando que a carga já estava aqui, não mudou. Tive que
+   registrar na portaria novamente... depois apareceu duas informações."
+
+   O QUE O CÓDIGO FAZIA. Trocar a placa mudava três coisas — placa,
+   transportadora e tipo de veículo — e o comentário do painel dizia, com
+   todas as letras, que "troca de placa é alteração de dado operacional, não
+   mudança de status". Está certo em quase todo caso. Está errado em um: o
+   caminhão novo já estar no pátio.
+
+   AS DUAS METADES, e as duas terminam na mesma duplicata:
+
+     · a placa que ENTRA na carga já tinha entrada registrada, e a carga
+       continuava "Aguardando Veículo" — esperando um caminhão que estava
+       parado lá dentro;
+     · a placa que SAI da carga tinha entrada registrada e sumia da tela da
+       Portaria, que só mostra placa com carga aberta. Para o porteiro, uma
+       entrada das 12:49 tinha evaporado. Ele fez a única coisa possível:
+       registrou de novo. Foi essa segunda entrada que virou a duplicata.
+
+   O HORÁRIO HERDADO É O REAL. A carga sobe para "Aguardando Embarque" com
+   `data_evento` da entrada de verdade, não da edição. O relógio de 3 horas
+   começa quando o caminhão entra no pátio; carimbar a hora da troca faria o
+   SLA mentir a favor da operação, que é o pior tipo de erro num indicador.
+
+   NADA É APAGADO. O registro de chegada absorvido recebe `excluida_em` e um
+   evento no log dizendo em qual carga ele virou. Histórico de pátio não some
+   — some da operação, continua no Histórico e nos relatórios.
+
+   SÓ ANTES DA DOCA. Decisão do dono em 26/08: vale para carga em "Aguardando
+   Veículo" ou "Aguardando Embarque". Depois que o carregamento começou,
+   trocar placa é caso excepcional e continua exigindo correção de etapa com
+   motivo — mexer sozinho na etapa de uma carga que já está na doca é risco
+   sem contrapartida. */
+const ETAPAS_QUE_RECONCILIAM = new Set(['Aguardando Veículo', 'Aguardando Embarque']);
+
+async function reconciliarPatioNaTrocaDePlaca({ id, placaNova, placaAntiga, statusAntes, op }) {
+  let mexeu = false;
+
+  /* ---- Metade 1: a placa NOVA já está no pátio? ---------------------- */
+  const chegada = await consultar(
+    `SELECT carga_id, criado_em, numero_carga
+       FROM fact_viagens
+      WHERE placa = $1
+        AND carga_id <> $2
+        AND aguardando_carga = TRUE
+        AND status_atual <> 'Seguiu Viagem'
+        AND excluida_em IS NULL
+      ORDER BY criado_em
+      LIMIT 1`,
+    [placaNova, id]
+  );
+
+  if (chegada.rows[0]) {
+    const entrada = chegada.rows[0].criado_em;
+    const orfa = chegada.rows[0].carga_id;
+
+    if (statusAntes === 'Aguardando Veículo') {
+      await consultar(
+        `UPDATE fact_viagens SET status_atual = 'Aguardando Embarque' WHERE carga_id = $1`,
+        [id]
+      );
+      await consultar(
+        `INSERT INTO fact_statusfrota
+           (movimentacao_id, carga_id, placa, status_anterior, status_novo, setor,
+            data_evento, operador_id, operador_nome)
+         VALUES ($1,$2,$3,$4,'Aguardando Embarque',$5,$6,$7,$8)`,
+        [novoId('mov'), id, placaNova, statusAntes, op.setor, entrada, op.id, op.nome]
+      );
+      mexeu = true;
+    }
+
+    // O registro órfão sai da operação, mas com nome e endereço de para onde foi.
+    await consultar(
+      'UPDATE fact_viagens SET excluida_em = now() WHERE carga_id = $1', [orfa]
+    );
+    await consultar(
+      `INSERT INTO log_eventos
+         (evento_id, carga_id, placa, acao, setor, operador_id, operador_nome, operador_verificado)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,TRUE)`,
+      [novoId('log'), orfa, placaNova,
+       `Entrada absorvida pela carga ${id} — o caminhão estava no pátio desde `
+       + `${new Date(entrada).toISOString()} e passou a ser o veículo dela.`,
+       op.setor, op.id, op.nome]
+    );
+    await consultar(
+      `INSERT INTO log_eventos
+         (evento_id, carga_id, placa, acao, setor, operador_id, operador_nome, operador_verificado)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,TRUE)`,
+      [novoId('log'), id, placaNova,
+       `Placa trocada para ${placaNova}, que já estava no pátio — entrada de `
+       + `${new Date(entrada).toISOString()} aproveitada, sem registrar chegada de novo.`,
+       op.setor, op.id, op.nome]
+    );
+    mexeu = true;
+  }
+
+  /* ---- Metade 2: a placa ANTIGA fica sozinha no pátio? --------------- */
+  /* Só quando o caminhão antigo de fato tinha entrado. Carga que nunca
+     passou de "Aguardando Veículo" não deixa caminhão nenhum para trás. */
+  if (statusAntes !== 'Aguardando Veículo') {
+    const sobrou = await consultar(
+      `SELECT 1 FROM fact_viagens
+        WHERE placa = $1 AND carga_id <> $2
+          AND status_atual <> 'Seguiu Viagem' AND excluida_em IS NULL
+        LIMIT 1`,
+      [placaAntiga, id]
+    );
+
+    if (!sobrou.rows[0]) {
+      const ev = await consultar(
+        `SELECT MIN(data_evento) AS entrada FROM fact_statusfrota
+          WHERE carga_id = $1 AND status_novo = 'Aguardando Embarque'`,
+        [id]
+      );
+      const entrada = ev.rows[0] && ev.rows[0].entrada ? ev.rows[0].entrada : new Date();
+      const veic = await consultar(
+        'SELECT transportadora, tipo_veiculo FROM dim_veiculos WHERE placa = $1', [placaAntiga]
+      );
+      const novaId = novoId('carga');
+      await consultar(
+        `INSERT INTO fact_viagens
+           (carga_id, numero_carga, placa, transportadora, tipo_veiculo,
+            status_atual, aguardando_carga, criado_em, programado_em,
+            operador_id, operador_nome)
+         VALUES ($1,'Aguardando Carga',$2,$3,$4,'Aguardando Embarque',TRUE,$5,NULL,$6,$7)`,
+        [novaId, placaAntiga,
+         (veic.rows[0] && veic.rows[0].transportadora) || '',
+         (veic.rows[0] && veic.rows[0].tipo_veiculo) || '',
+         entrada, op.id, op.nome]
+      );
+      await consultar(
+        `INSERT INTO fact_statusfrota
+           (movimentacao_id, carga_id, placa, status_anterior, status_novo, setor,
+            data_evento, operador_id, operador_nome)
+         VALUES ($1,$2,$3,NULL,'Aguardando Embarque',$4,$5,$6,$7)`,
+        [novoId('mov'), novaId, placaAntiga, op.setor, entrada, op.id, op.nome]
+      );
+      await consultar(
+        `INSERT INTO log_eventos
+           (evento_id, carga_id, placa, acao, setor, operador_id, operador_nome, operador_verificado)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,TRUE)`,
+        [novoId('log'), novaId, placaAntiga,
+         `Caminhão ficou no pátio sem carga: a carga ${id} passou para outra placa. `
+         + `A entrada original foi mantida — a Portaria não precisa registrar de novo.`,
+         op.setor, op.id, op.nome]
+      );
+      mexeu = true;
+    }
+  }
+
+  return mexeu;
+}
+
 /* A SEGUNDA ASSINATURA SAIU — decisão do dono, 25/08/2026.
    =====================================================================
 
@@ -538,7 +697,29 @@ rotasCargas.patch('/cargas/:id', exigirLogin, async (req, res, next) => {
       });
     }
 
-    const payload = paraPainel(rows[0]);
+    /* A TROCA DE PLACA OLHA O PÁTIO — ver o comentário grande de
+       reconciliarPatioNaTrocaDePlaca, acima. Roda DEPOIS da gravação, porque
+       precisa da placa nova já valendo, e só quando a placa mudou de verdade:
+       eco de sincronização regravando a mesma placa não é troca. */
+    let linhaFinal = rows[0];
+    const trocouPlaca = mudancas.placa && mudancas.placa !== antes.rows[0].placa;
+    if (trocouPlaca && ETAPAS_QUE_RECONCILIAM.has(antes.rows[0].status_atual)) {
+      const mexeu = await reconciliarPatioNaTrocaDePlaca({
+        id,
+        placaNova: mudancas.placa,
+        placaAntiga: antes.rows[0].placa,
+        statusAntes: antes.rows[0].status_atual,
+        op,
+      });
+      if (mexeu) {
+        const relido = await consultar(
+          `SELECT ${COLUNAS_CARGA} FROM fact_viagens WHERE carga_id = $1`, [id]
+        );
+        if (relido.rows[0]) linhaFinal = relido.rows[0];
+      }
+    }
+
+    const payload = paraPainel(linhaFinal);
     emitir('carga:atualizada', payload);
 
     /* Aviso legível, separado do dado.
@@ -551,7 +732,7 @@ rotasCargas.patch('/cargas/:id', exigirLogin, async (req, res, next) => {
        Só entram os campos que mudaram de verdade — regravar a mesma placa
        não é notícia. E só os campos que o pátio precisa saber: mexer na
        observação de uma carga não pode disparar alerta em cinco terminais. */
-    const alteracoes = camposDeAviso(antes.rows[0], rows[0]);
+    const alteracoes = camposDeAviso(antes.rows[0], linhaFinal);
     if (alteracoes.length) {
       emitir('carga:editada', {
         cargaId: payload.id,
