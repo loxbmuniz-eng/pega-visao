@@ -94,13 +94,27 @@ async def main():
         }""")
         await pg.wait_for_timeout(700)
 
+        # Lê por CLASSE, não por posição.
+        #
+        # Este bloco usava td[0] e td[1]. Em 26/08/2026 entrou a coluna
+        # "Data / Hora" na frente de tudo e o teste passou a ler a data
+        # achando que era a sequência — três checagens vermelhas de uma vez,
+        # sem que a regra que ele guarda (a folha sai na ordem da sequência)
+        # tivesse mudado nada.
+        #
+        # O próprio relatório já resolveu isso do lado do código: cada coluna
+        # tem classe própria justamente para que "mover ou remover coluna não
+        # desalinhe mais nada" (ver montarRelatorioOperacional). O teste é que
+        # tinha ficado para trás.
         linhas = await pg.evaluate("""() => {
             const el = document.getElementById('print-operacional');
-            return [...el.querySelectorAll('tbody tr')].map(tr => {
-                const td = tr.querySelectorAll('td');
-                return {seq: (td[0]||{}).textContent?.trim(),
-                        num: (td[1]||{}).textContent?.trim()};
-            });
+            const txt = (tr, cls) => {
+                const c = tr.querySelector('td.' + cls);
+                return c ? c.textContent.trim() : '';
+            };
+            return [...el.querySelectorAll('tbody tr')]
+                .filter(tr => tr.querySelector('td.c-carga'))
+                .map(tr => ({seq: txt(tr, 'c-seq'), num: txt(tr, 'c-carga')}));
         }""")
 
         # Só as cargas da planilha (o painel pode ter outras do seed).
@@ -128,15 +142,24 @@ async def main():
             exportarPdfOperacional();
         }""")
         await pg.wait_for_timeout(700)
+        # Também por CLASSE — mesma razão do bloco acima.
         depois = await pg.evaluate("""() => {
             const el = document.getElementById('print-operacional');
-            return [...el.querySelectorAll('tbody tr')].map(
-                tr => (tr.querySelectorAll('td')[1]||{}).textContent?.trim());
+            return [...el.querySelectorAll('tbody tr td.c-carga')]
+                     .map(td => td.textContent.trim());
         }""")
         pos_sem = depois.index('SEM-SEQ') if 'SEM-SEQ' in depois else -1
-        pos_ultima = max(depois.index(n) for n in esperada if n in depois)
-        ck('carga sem sequência fica depois das que têm',
-           pos_sem > pos_ultima, f'sem-seq na {pos_sem}, última da planilha na {pos_ultima}')
+        # Sem guarda, uma leitura vazia rebentava com "max() arg is an empty
+        # sequence" — traceback em vez de FALHA, que esconde o diagnóstico
+        # exatamente quando ele é mais necessário.
+        pos_planilha = [depois.index(n) for n in esperada if n in depois]
+        if not pos_planilha:
+            ck('carga sem sequência fica depois das que têm', False,
+               f'nenhuma carga da planilha na folha — li {len(depois)} linha(s)')
+        else:
+            pos_ultima = max(pos_planilha)
+            ck('carga sem sequência fica depois das que têm',
+               pos_sem > pos_ultima, f'sem-seq na {pos_sem}, última da planilha na {pos_ultima}')
 
         print('\n=== O RODAPÉ EXPLICA A ORDEM CERTA ===')
         # Se a nota continuar dizendo "ordenadas pela etapa", ela mente.
