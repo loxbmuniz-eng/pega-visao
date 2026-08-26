@@ -34,7 +34,7 @@
    Trocar o nome do cache junto é de propósito: o `activate` apaga os caches
    de versões anteriores, e com isso a cópia velha do index.html sai de cena
    em vez de sobreviver a um deploy. */
-const BUILD = "26/08 11:51 · 8c57741";
+const BUILD = "26/08 14:06 · b17d74d";
 const VERSAO = 'suinco-' + BUILD;
 const ESSENCIAIS = [
   './',
@@ -59,6 +59,82 @@ self.addEventListener('activate', (evento) => {
         chaves.filter((c) => c !== VERSAO).map((c) => caches.delete(c))
       ))
       .then(() => self.clients.claim())
+  );
+});
+
+/* AVISO NO CELULAR (26/08/2026)
+   ---------------------------------------------------------------------
+   Pedido do dono: quem tem o painel instalado como aplicativo recebe um
+   aviso a cada caminhão que entra na portaria, a cada saída, e quando a
+   programação do dia termina.
+
+   MOSTRAR ALGUMA COISA SEMPRE. Se um `push` chega e nenhuma notificação
+   aparece, o navegador entende que o site está usando push escondido e
+   pode cancelar a inscrição — no iPhone isso é regra dura. Por isso o
+   `catch` no fim não é zelo: é o que impede o aparelho de ser
+   desinscrito por causa de um pacote mal formado. Aviso genérico é ruim;
+   ficar sem nenhum aviso, para sempre, é pior.
+
+   IMAGEM: o `icon` é o que aparece grande, e o `badge` é o desenho
+   monocromático da barra de status do Android. O mesmo arquivo serve nos
+   dois — não há um ícone monocromático próprio, e um badge ausente vira
+   um quadrado cinza genérico. */
+self.addEventListener('push', (evento) => {
+  let dados = {};
+  try {
+    dados = evento.data ? evento.data.json() : {};
+  } catch {
+    dados = {};
+  }
+  const titulo = dados.titulo || 'Embarque Suinco';
+  const opcoes = {
+    body: dados.corpo || '',
+    // Agrupa: um aviso novo da MESMA placa substitui o anterior em vez de
+    // empilhar dois iguais na tela.
+    tag: dados.tag || 'suinco',
+    renotify: true,
+    icon: './assets/logo_suinco.png',
+    badge: './assets/logo_suinco.png',
+    data: { url: dados.url || './index.html' },
+    // Sem vibração personalizada: o pátio é barulhento e cada aparelho
+    // tem o padrão que o dono escolheu. Não é lugar de inventar.
+  };
+  evento.waitUntil(
+    self.registration.showNotification(titulo, opcoes)
+      .catch(() => self.registration.showNotification('Embarque Suinco', {
+        body: 'Há movimento novo no pátio.',
+        tag: 'suinco',
+      }))
+  );
+});
+
+/* Tocar no aviso abre o painel — reaproveitando a janela que já estiver
+   aberta em vez de abrir outra. Quem trabalha o turno inteiro com o
+   aplicativo aberto não quer uma aba nova a cada caminhão. */
+self.addEventListener('notificationclick', (evento) => {
+  evento.notification.close();
+  const destino = (evento.notification.data && evento.notification.data.url) || './index.html';
+  evento.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((janelas) => {
+      for (const j of janelas) {
+        if ('focus' in j) return j.focus();
+      }
+      return self.clients.openWindow(destino);
+    })
+  );
+});
+
+/* O navegador troca o endereço de inscrição sozinho de vez em quando
+   (rodízio de chave do serviço de push). Quando isso acontece, o endereço
+   guardado no servidor deixa de valer e o aparelho para de receber, em
+   silêncio. Este evento é o único aviso que existe disso — o painel
+   reinscreve na próxima abertura, e o endereço velho morre sozinho pela
+   contagem de falhas do servidor. */
+self.addEventListener('pushsubscriptionchange', (evento) => {
+  evento.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((janelas) => {
+      janelas.forEach((j) => j.postMessage({ tipo: 'reinscrever-avisos' }));
+    })
   );
 });
 

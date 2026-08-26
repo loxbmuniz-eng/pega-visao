@@ -115,6 +115,30 @@ async function comOverlaySync(sub, tarefa){
    no rodapé. Quando se abre a fonte direto (sem build), fica 'fonte'. */
 const BUILD_ID = (typeof window !== 'undefined' && window.SUINCO_BUILD) || 'fonte';
 
+/* O crachá de conexão do cabeçalho, com a palavra separada do ícone.
+
+   MOTIVO, medido em 26/08/2026: num iPhone SE (320px) o cabeçalho passou a
+   transbordar 26px quando ganhou o sino dos avisos. O crachá sozinho ocupava
+   80px — mais que qualquer botão — porque carregava "⚙️ Local" por extenso.
+   E ele só aparece quando a conexão NÃO está boa, ou seja, exatamente na
+   hora em que o operador está no pátio com o aparelho mais apertado.
+
+   A saída é a mesma que os botões do cabeçalho já usavam desde 08/08: a
+   palavra vai para <span class="rot-btn">, que a folha de estilo esconde
+   abaixo de 560px. O ícone fica, o `title` e o `aria-label` carregam a
+   frase inteira, e o rodapé continua explicando o estado por extenso — lá
+   sobra largura.
+
+   Quem tirar o .rot-btn daqui devolve o estouro. Existe teste que reprova:
+   testes/test_auditoria_mobile.py, "cabeçalho não transborda a largura". */
+function marcarBadgeConexao(badge, classe, icone, frase){
+  badge.hidden = false;
+  badge.className = 'badge-conexao ' + classe;
+  badge.title = frase;
+  badge.setAttribute('aria-label', frase);
+  badge.innerHTML = esc(icone) + '<span class="rot-btn">&nbsp;' + esc(frase) + '</span>';
+}
+
 function atualizarRodapeConexao(estado, detalhe){
   const rod = document.getElementById('rodape-conexao');
   const badge = document.getElementById('badge-conexao');
@@ -133,7 +157,7 @@ function atualizarRodapeConexao(estado, detalhe){
   } else if(estado === 'offline'){
     rod.className = 'rodape-conexao offline';
     rod.innerHTML = `⚠️ Modo Offline — gravando no aparelho e sincronizando assim que a rede voltar${esc(sufixoFila)}${esc(carimbo)}`;
-    if(badge){ badge.hidden = false; badge.className = 'badge-conexao offline'; badge.textContent = '⚠️ Modo Offline'; }
+    if(badge) marcarBadgeConexao(badge, 'offline', '⚠️', 'Modo Offline');
   } else {
     /* 'local' cobre TRÊS situações diferentes, e mostrá-las com o mesmo
        texto engana. "Sem conexão com o servidor" antes de alguém fazer
@@ -150,7 +174,7 @@ function atualizarRodapeConexao(estado, detalhe){
       // Sem e-mail: escolheu o modo local de propósito.
       rod.innerHTML = '⚠️ Modo Local — os dados ficam SÓ neste navegador e não são vistos pelos outros setores.' + esc(carimbo);
     }
-    if(badge){ badge.hidden = false; badge.className = 'badge-conexao local'; badge.textContent = '⚙️ Local'; }
+    if(badge) marcarBadgeConexao(badge, 'local', '⚙️', 'Modo Local');
   }
 }
 
@@ -736,6 +760,178 @@ function detectarTurnoPorHora(){
    acontecem no mesmo minuto, e uma diferenca de minutos e o fluxo normal de
    um deploy. O aviso e para a defasagem que ficou — nao para a que esta
    acontecendo agora. */
+/* =====================================================================
+   AVISO NO CELULAR (26/08/2026)
+   ---------------------------------------------------------------------
+   Pedido do dono: "eu quero que todos que estiverem com o embarquesuinco
+   ligado no celular com atalho direto nos icones do celular como se fosse
+   um aplicativo recebam notificacoes push a cada vez que um caminhao
+   entrar na portaria ou sair, a cada vez que a programacao for finalizada
+   por inteiro".
+
+   O QUE ESTA TELA PRECISA FAZER, e é só isso: dizer com honestidade o que
+   está acontecendo. Ligar é um botão; o difícil é o caso em que NÃO dá — e
+   aí a tela tem que dizer POR QUE e o que fazer. "Não funcionou" sem
+   motivo é o que faz a pessoa desistir e nunca mais tentar.
+   ===================================================================== */
+
+/* Espelho da regra do servidor (servicos/avisos.js). Existe para a tela
+   poder dizer "você recebe isto" sem chutar. Se um dia a lista de lá
+   mudar, esta muda junto — e há teste de tela que reprova se divergirem. */
+function _avisosQueEsteSetorRecebe(setor){
+  const recebe = [];
+  if(['Logística','Administração','Expedição'].includes(setor)){
+    recebe.push('🚚 Caminhão entrando na portaria');
+  }
+  if(['Logística','Administração'].includes(setor)){
+    recebe.push('✅ Caminhão que seguiu viagem');
+  }
+  recebe.push('🏁 Fim da programação do dia');
+  return recebe;
+}
+
+async function abrirModalAvisos(){
+  document.getElementById('modal-avisos').classList.add('open');
+  await atualizarModalAvisos();
+}
+
+function fecharModalAvisos(){
+  document.getElementById('modal-avisos').classList.remove('open');
+}
+
+async function atualizarModalAvisos(){
+  const caixaLista = document.getElementById('avisos-oquerecebe');
+  const caixaEstado = document.getElementById('avisos-estado');
+  const botao = document.getElementById('avisos-alternar');
+  const btnTeste = document.getElementById('avisos-testar');
+  const setor = (DB.operador || {}).setor || '';
+
+  caixaLista.innerHTML = '<strong>O que você recebe, como ' + esc(setor) + ':</strong><br>'
+    + _avisosQueEsteSetorRecebe(setor).map(x => '· ' + esc(x)).join('<br>');
+
+  /* `typeof`, e não `window.SuincoSharePoint`: o adaptador é declarado com
+     `const` no topo do arquivo, e const de topo NÃO vira propriedade de
+     window. Escrito da outra forma, esta tela dizia "painel desatualizado"
+     em todos os casos — o teste de tela pegou. */
+  const api = (typeof SuincoSharePoint !== 'undefined' && SuincoSharePoint.avisos) || null;
+  if(!api){
+    caixaEstado.textContent = 'Este painel está desatualizado. Recarregue a página.';
+    botao.hidden = true; btnTeste.hidden = true;
+    return;
+  }
+
+  /* Ordem das perguntas de propósito: primeiro o que impede o APARELHO
+     (que a pessoa resolve sozinha), depois o que impede o SERVIDOR (que
+     depende de outra pessoa). Começar pelo servidor faria o dono de um
+     iPhone em aba receber "peça para atualizar o servidor" — e ele
+     pediria, e continuaria sem funcionar. */
+  const impedimento = api.porQueNaoPode();
+  if(impedimento){
+    caixaEstado.textContent = impedimento;
+    botao.hidden = true; btnTeste.hidden = true;
+    return;
+  }
+
+  let servidor;
+  try{
+    servidor = await api.estadoNoServidor();
+  }catch(e){
+    caixaEstado.textContent = 'Não consegui falar com o servidor agora. Tente daqui a pouco.';
+    botao.hidden = true; btnTeste.hidden = true;
+    return;
+  }
+
+  if(!servidor.ligado){
+    caixaEstado.textContent = 'O aviso no celular ainda não foi ligado no servidor. '
+      + 'É uma configuração de uma vez só — avise a Logística.';
+    botao.hidden = true; btnTeste.hidden = true;
+    return;
+  }
+
+  const ligado = await api.ligadoNesteAparelho();
+  botao.hidden = false;
+  botao.textContent = ligado ? 'Desligar neste aparelho' : 'Ligar avisos';
+  botao.className = ligado ? 'btn btn-sec' : 'btn btn-primary';
+  btnTeste.hidden = !ligado;
+
+  if(ligado){
+    caixaEstado.textContent = 'Ligado neste aparelho.'
+      + (servidor.aparelhos > 1 ? ` Você tem ${servidor.aparelhos} aparelhos recebendo.` : '')
+      + (api.ehAplicativoInstalado() ? '' :
+         ' Dica: instale o painel na tela de início para o aviso chegar com o navegador fechado.');
+  }else{
+    caixaEstado.textContent = 'Desligado neste aparelho. '
+      + 'Ao ligar, o aparelho vai pedir permissão uma vez.';
+  }
+}
+
+async function alternarAvisosUI(){
+  const api = SuincoSharePoint.avisos;
+  const botao = document.getElementById('avisos-alternar');
+  botao.disabled = true;
+  try{
+    if(await api.ligadoNesteAparelho()){
+      await api.desligar();
+      notify('Avisos desligados neste aparelho.', 'info');
+    }else{
+      await api.ligar();
+      notify('Avisos ligados. Mande um teste para conferir.', 'success');
+    }
+  }catch(e){
+    notify(e.message || 'Não consegui mudar os avisos.', 'error', 9000);
+  }finally{
+    botao.disabled = false;
+    await atualizarModalAvisos();
+  }
+}
+
+async function testarAvisosUI(){
+  const btn = document.getElementById('avisos-testar');
+  btn.disabled = true;
+  try{
+    const r = await SuincoSharePoint.avisos.testar();
+    notify(r.enviados
+      ? 'Mandei. Se não aparecer em alguns segundos, o aparelho está com os avisos bloqueados.'
+      : 'O servidor não achou nenhum aparelho seu inscrito. Ligue os avisos de novo.',
+      r.enviados ? 'success' : 'warning', 9000);
+  }catch(e){
+    notify(e.message || 'Não consegui mandar o teste.', 'error', 9000);
+  }finally{
+    btn.disabled = false;
+  }
+}
+
+/* Reinscreve em silêncio quem JÁ tinha ligado.
+
+   Duas coisas quebram uma inscrição sem ninguém perceber: o navegador
+   trocar o endereço sozinho (rodízio de chave do serviço de push) e a
+   pessoa entrar com outra conta no mesmo aparelho — a inscrição continua
+   viva, mas amarrada a quem saiu. Nos dois casos o aviso simplesmente para
+   de chegar, sem erro nenhum na tela.
+
+   Por isso isto roda a cada login: se a permissão JÁ foi dada, reinscreve.
+   Nunca PEDE permissão sozinho — pedir sem a pessoa ter clicado em nada é
+   o caminho mais rápido para um "bloquear" definitivo. */
+async function garantirInscricaoDeAvisos(){
+  try{
+    const api = (typeof SuincoSharePoint !== 'undefined' && SuincoSharePoint.avisos) || null;
+    if(!api) return;
+    if(typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+    if(api.porQueNaoPode()) return;
+    await api.ligar();
+  }catch(e){
+    /* Silêncio de propósito: quem não ligou os avisos não pode ganhar uma
+       mensagem de erro sobre eles ao entrar no painel. */
+  }
+}
+
+/* O service worker avisa quando o endereço de inscrição mudou. */
+if(typeof navigator !== 'undefined' && navigator.serviceWorker){
+  navigator.serviceWorker.addEventListener('message', (ev)=>{
+    if(ev.data && ev.data.tipo === 'reinscrever-avisos') garantirInscricaoDeAvisos();
+  });
+}
+
 const _FOLGA_DEPLOY_MS = 60 * 60 * 1000;
 
 async function conferirVersaoDoServidor(){
@@ -1052,6 +1248,7 @@ async function entrarNoServidor(){
     renderAll();
     notify(`Bem-vindo, ${op.nome}! Setor: ${op.setor}`, 'success');
     conferirVersaoDoServidor();   // sem await: não segura a entrada de ninguém
+    garantirInscricaoDeAvisos(); // idem: e nunca pede permissão sozinho
   }catch(e){
     /* SEGUNDO FATOR (etapa 4). O servidor recusa com MFA_NECESSARIO quando
        a senha está certa e falta o código. Revelar o campo só aqui — e não

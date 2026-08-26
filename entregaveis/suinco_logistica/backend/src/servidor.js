@@ -20,6 +20,7 @@ import { rotasEstado } from './rotas/estado.js';
 import { rotasCargas } from './rotas/cargas.js';
 import { rotasCadastros } from './rotas/cadastros.js';
 import { rotasOperadores } from './rotas/operadores.js';
+import { rotasAvisos } from './rotas/avisos.js';
 import { rotasBI } from './rotas/bi.js';
 import { rotasBot } from './rotas/bot.js';
 import { rotasProgramacao } from './rotas/programacao.js';
@@ -240,6 +241,7 @@ export function criarApp() {
   app.use('/api', rotasCargas);
   app.use('/api', rotasCadastros);
   app.use('/api', rotasOperadores);
+  app.use('/api', rotasAvisos);
   app.use('/api', rotasProgramacao);
   app.use('/api', rotasModeloSemana);
   app.use('/api', rotasRelatorios);

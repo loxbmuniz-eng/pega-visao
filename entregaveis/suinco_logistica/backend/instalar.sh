@@ -208,6 +208,50 @@ ok "dependências instaladas"
 su -s /bin/bash "$APP_USER" -c "cd '$APP_DIR' && node scripts/migrar.js"
 su -s /bin/bash "$APP_USER" -c "cd '$APP_DIR' && node scripts/seed.js"
 
+# --- 6c. Chaves do aviso no celular ------------------------------------
+# As duas chaves do padrão VAPID, que é como o navegador confere que quem
+# mandou a notificação é este servidor e não um estranho que descobriu o
+# endereço de inscrição de alguém.
+#
+# GERADAS AQUI, e não à mão, pelo mesmo motivo do JWT_SECRET logo acima:
+# passo manual em roteiro de implantação é passo que uma hora não é dado. O
+# dono pediu o aviso no celular em 26/08/2026; se as chaves dependessem de
+# alguém lembrar de rodar um comando extra, a função ficaria pronta e
+# desligada — que é a pior combinação possível.
+#
+# NUNCA REGERA. Trocar as chaves desinscreve todo mundo: a inscrição que
+# cada celular guardou é amarrada à chave pública que ele viu no dia. Por
+# isso a condição olha se a PRIVADA já tem conteúdo, e sai fora se tiver.
+#
+# Precisa vir depois do `npm ci` — a biblioteca que gera as chaves é uma
+# dependência do projeto. E antes do serviço subir, para o processo já
+# nascer enxergando as chaves.
+azul "6c. Aviso no celular"
+if grep -qE '^VAPID_PRIVADA=.+' "$ENV_FILE"; then
+  ok "chaves já existiam — preservadas (trocar desinscreveria todo mundo)"
+else
+  CHAVES_VAPID="$(su -s /bin/bash "$APP_USER" -c "cd '$APP_DIR' && node -e \"const k=require('web-push').generateVAPIDKeys();console.log(k.publicKey);console.log(k.privateKey)\"" 2>/dev/null || true)"
+  VAPID_PUB="$(printf '%s\n' "$CHAVES_VAPID" | sed -n 1p)"
+  VAPID_PRI="$(printf '%s\n' "$CHAVES_VAPID" | sed -n 2p)"
+  if [[ -n "$VAPID_PUB" && -n "$VAPID_PRI" ]]; then
+    # Tira as linhas vazias do modelo antes de escrever as de verdade.
+    sed -i '/^VAPID_PUBLICA=/d;/^VAPID_PRIVADA=/d;/^VAPID_CONTATO=/d' "$ENV_FILE"
+    {
+      echo "VAPID_PUBLICA=$VAPID_PUB"
+      echo "VAPID_PRIVADA=$VAPID_PRI"
+      echo "VAPID_CONTATO=mailto:lo.xbmuniz@gmail.com"
+    } >> "$ENV_FILE"
+    chown "$APP_USER:$APP_USER" "$ENV_FILE"
+    chmod 600 "$ENV_FILE"
+    ok "chaves geradas — cada pessoa liga no sino do painel, no aparelho dela"
+  else
+    # Sem chave a função fica desligada, e desligada é um estado válido: o
+    # painel diz "avisos indisponíveis" e o resto roda igual. Não é motivo
+    # para abortar uma implantação inteira.
+    aviso "não consegui gerar as chaves — o aviso no celular fica desligado"
+  fi
+fi
+
 # --- 6b. Chromium para gerar PDF de relatório --------------------------
 # Pedido do usuário (09/08/2026): o relatório precisa sair SEMPRE A4
 # paisagem, igual em iOS/Android/desktop — o único jeito de garantir isso

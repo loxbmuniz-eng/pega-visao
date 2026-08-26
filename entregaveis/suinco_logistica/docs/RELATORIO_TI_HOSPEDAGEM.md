@@ -9,6 +9,21 @@
 - **Documentos relacionados:** `GUIA_TI_IMPLANTACAO.md` (roteiro operacional passo a passo),
   `MODELO_DADOS_SHAREPOINT.md` (schema das listas), `DECISOES_CONFIRMADAS.md` (histórico de decisões)
 
+> ## ⚠️ Documento histórico — o SharePoint nunca entrou em produção
+>
+> Este texto foi escrito quando o painel **ia** rodar sobre Listas do
+> SharePoint, com login da Microsoft (MSAL). Essa arquitetura **nunca chegou
+> a ser usada**: nenhuma Lista foi provisionada, nenhum dado da operação
+> passou por lá.
+>
+> Desde a migração de agosto/2026 o painel roda com backend próprio — Node +
+> PostgreSQL num VPS — e o login é e-mail e senha do próprio painel.
+>
+> **O "Status" logo acima está congelado no dia em que foi escrito.** Não há
+> parâmetro nenhum a provisionar, e a integração descrita aqui não é a que
+> está no ar. O sistema de hoje está em `MAPA_COMPLETO_DO_SISTEMA.md`; a
+> operação do servidor, em `MANUAL_DO_SERVIDOR.md`.
+
 > ### O que mudou na versão 3 (mesmo dia, após rodada de homologação com o gestor)
 >
 > A versão 2 já registrava a integração pronta. Esta versão incorpora as

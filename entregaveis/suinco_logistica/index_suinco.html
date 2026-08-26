@@ -79,6 +79,13 @@
          para que o celular estreito possa esconder só a palavra e manter o
          ícone. O aria-label carrega o nome inteiro nos dois casos: quem usa
          leitor de tela não perde nada quando a palavra some. -->
+    <!-- AVISO NO CELULAR (26/08/2026). Fica no cabeçalho, e não numa aba,
+         porque é ajuste PESSOAL e de APARELHO: a mesma pessoa liga no
+         celular e deixa desligado no computador da mesa. Escondido dentro
+         de uma aba de setor, quem mais precisa (quem anda pelo pátio)
+         nunca acharia. -->
+    <button class="btn btn-sec btn-sm" id="btn-avisos" onclick="abrirModalAvisos()"
+            title="Avisos no celular" aria-label="Avisos no celular">🔔<span class="rot-btn">Avisos</span></button>
     <button class="btn btn-sec btn-sm" onclick="trocarUsuario()" title="Trocar de usuário" aria-label="Trocar usuário">👤<span class="rot-btn">Trocar usuário</span></button>
   </div>
 </div>
@@ -1510,6 +1517,30 @@
      carga porque o erro real é linha trocada numa tabela, não dedo torto.
      O botão que age tem a cor do status "Faturado" (a mesma da badge e da
      linha do tempo), e o foco começa em Cancelar. -->
+<div class="modal-overlay" id="modal-avisos">
+  <div class="modal-box">
+    <h2>Avisos no celular</h2>
+    <div class="card-sub">
+      Chega mesmo com o painel fechado: caminhão que entra na portaria,
+      caminhão que segue viagem, e o fim da programação do dia.
+    </div>
+
+    <!-- O que ESTE aparelho recebe, pelo setor de quem está logado. A lista
+         é montada em app.js porque muda com o setor — mostrar "você recebe
+         a saída" para quem não recebe seria mentira, e mentira em aviso é
+         o que faz o operador parar de acreditar no painel inteiro. -->
+    <div id="avisos-oquerecebe" class="fat-conf"></div>
+
+    <div id="avisos-estado" class="card-sub"></div>
+
+    <div class="flex-end">
+      <button class="btn btn-sec" onclick="fecharModalAvisos()">Fechar</button>
+      <button class="btn btn-sec" id="avisos-testar" onclick="testarAvisosUI()" hidden>Mandar um teste</button>
+      <button class="btn btn-primary" id="avisos-alternar" onclick="alternarAvisosUI()">Ligar avisos</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="modal-faturar">
   <div class="modal-box">
     <h2>Confirmar faturamento</h2>

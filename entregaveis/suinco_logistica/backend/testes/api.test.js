@@ -4169,3 +4169,76 @@ describe('33. Protocolo de segurança — segundo fator (etapa 4)', () => {
     await pool.query('DELETE FROM operadores WHERE email = $1', [EMAIL]);
   });
 });
+
+/* ------------------------------------------------------------------ */
+describe('36. Aviso no celular — o estado desligado é honesto', () => {
+  /* Este servidor de teste sobe SEM as chaves VAPID, de propósito: é
+     exatamente o estado do servidor de produção antes de alguém gerar as
+     chaves. O que precisa ser provado aqui não é o envio (isso está em
+     avisos.test.js, com um serviço de push de mentira) — é que a ausência
+     de configuração NÃO derruba nada e NÃO mente para o painel. */
+
+  test('a chave é consulta autenticada — sem token, 401', async () => {
+    const r = await req('/api/avisos/chave');
+    assert.equal(r.status, 401);
+  });
+
+  test('sem VAPID o servidor diz "desligado" em vez de fingir', async () => {
+    const r = await req('/api/avisos/chave', { token: tokens['Logística'] });
+    assert.equal(r.status, 200);
+    assert.equal(r.json.ligado, false);
+    assert.equal(r.json.chavePublica, '');
+    assert.equal(r.json.aparelhos, 0);
+  });
+
+  test('inscrever num servidor desligado é 503 com código, não 500', async () => {
+    const r = await req('/api/avisos/inscrever', {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { inscricao: { endpoint: 'https://x/y', keys: { p256dh: 'a', auth: 'b' } } },
+    });
+    assert.equal(r.status, 503);
+    assert.equal(r.json.codigo, 'AVISOS_DESLIGADOS');
+    // O painel usa esta mensagem tal e qual. Precisa dizer o que houve.
+    assert.match(r.json.erro, /ainda não foi ligado/i);
+  });
+
+  test('testar num servidor desligado também é 503', async () => {
+    const r = await req('/api/avisos/testar', { metodo: 'POST', token: tokens['Logística'] });
+    assert.equal(r.status, 503);
+    assert.equal(r.json.codigo, 'AVISOS_DESLIGADOS');
+  });
+
+  test('inscrever sem token é 401 — inscrição pertence a uma conta', async () => {
+    const r = await req('/api/avisos/inscrever', {
+      metodo: 'POST',
+      corpo: { inscricao: { endpoint: 'https://x/y', keys: { p256dh: 'a', auth: 'b' } } },
+    });
+    assert.equal(r.status, 401);
+  });
+
+  /* Desinscrever funciona MESMO com o serviço desligado, e isso é
+     deliberado: se as chaves forem trocadas ou a função for desligada, os
+     aparelhos que já estavam inscritos precisam conseguir se desligar. Uma
+     porta de saída que só abre quando a de entrada está aberta não é porta
+     de saída. */
+  test('desinscrever continua funcionando com o serviço desligado', async () => {
+    const r = await req('/api/avisos/desinscrever', {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { endpoint: 'https://nao/existe' },
+    });
+    assert.equal(r.status, 200);
+    assert.equal(r.json.removidas, 0);
+  });
+
+  test('não existe rota para disparar aviso a outras pessoas', async () => {
+    /* Uma rota "mandar aviso para o setor X" seria a porta perfeita para
+       alguém apitar o celular do pátio inteiro. Os avisos saem sozinhos
+       dos três fatos da operação e de mais nada. */
+    const r = await req('/api/avisos/enviar', {
+      metodo: 'POST', token: tokens['Administração'],
+      corpo: { setores: ['Logística'], titulo: 'oi', corpo: 'oi' },
+    });
+    assert.equal(r.status, 404);
+    assert.equal(r.json.codigo, 'ROTA_INEXISTENTE');
+  });
+});
