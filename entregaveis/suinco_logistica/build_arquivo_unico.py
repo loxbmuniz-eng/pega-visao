@@ -164,7 +164,14 @@ def main():
     # 3b. Carimbo do build. app.js lê window.SUINCO_BUILD e mostra no rodapé,
     #     para dar para responder "atualizou?" olhando a tela.
     seed += ('\n<script>window.SUINCO_BUILD = '
-             + json.dumps(carimbo, ensure_ascii=False) + ';</script>')
+             + json.dumps(carimbo, ensure_ascii=False) + ';'
+             # A hora do build em ISO, ao lado do texto: é o que permite ao
+             # painel COMPARAR com a versão que o /health informa e perceber
+             # sozinho que o servidor ficou para trás. Sem isto, saber que o
+             # atualizar.sh não rodou dependia de alguém lembrar de avisar.
+             + 'window.SUINCO_BUILD_EM = '
+             + json.dumps(datetime.datetime.now().astimezone().isoformat())
+             + ';</script>')
 
     # 4. O adaptador da API entra inline. O <script> do Socket.IO continua
     #    apontando para o próprio backend: é uma biblioteca que só faz

@@ -709,6 +709,69 @@ function detectarTurnoPorHora(){
   if(h>=14 && h<22) return 'Tarde (14h–22h)';
   return 'Noite (22h–06h)';
 }
+/* O PAINEL PERCEBE SOZINHO QUE O SERVIDOR FICOU PARA TRAS (26/08/2026).
+   =====================================================================
+   Cobranca do Luis, e ele tem razao: "voce errou e ficou em silencio numa
+   operacao rodando".
+
+   O painel sobe sozinho no Vercel; o servidor so muda quando alguem roda o
+   atualizar.sh por SSH. Entre os dois ha uma janela em que a tela ja tem o
+   botao novo e o servidor ainda nao tem a rota. Em 25 e 26/08 essa janela
+   custou tres relatos: o botao de excluir usuario dando "Rota nao
+   encontrada", e a montagem do dia acumulando 53 linhas duplicadas porque
+   a de-duplicacao dependia de uma migracao que nao tinha subido.
+
+   Nas tres vezes a informacao existia e dependia de EU lembrar de avisar.
+   Na terceira eu esqueci — e a operacao rodou o dia inteiro duplicando.
+
+   Isto tira a memoria do caminho. O /health passou a dizer a data da versao
+   do servidor; aqui o painel compara com a data da propria build e avisa
+   quem pode agir.
+
+   SO PARA QUEM RESOLVE. Administracao e Logistica sao quem pede o
+   atualizar.sh; a Portaria nao tem o que fazer com essa informacao, e um
+   aviso que a pessoa nao pode atender vira ruido que ela aprende a ignorar.
+
+   MARGEM DE UMA HORA. Publicar o painel e atualizar o servidor nunca
+   acontecem no mesmo minuto, e uma diferenca de minutos e o fluxo normal de
+   um deploy. O aviso e para a defasagem que ficou — nao para a que esta
+   acontecendo agora. */
+const _FOLGA_DEPLOY_MS = 60 * 60 * 1000;
+
+async function conferirVersaoDoServidor(){
+  const setor = (DB.operador || {}).setor;
+  if(setor !== 'Administração' && setor !== 'Logística') return;
+
+  const nossoEm = (typeof window !== 'undefined' && window.SUINCO_BUILD_EM) || null;
+  if(!nossoEm) return;   // build de desenvolvimento, sem carimbo
+
+  try {
+    const r = await fetch(SuincoSharePoint.enderecoDaApi() + '/health');
+    if(!r.ok) return;
+    const saude = await r.json();
+    if(!saude || !saude.versaoEm) return;   // servidor antigo, sem o campo
+
+    const servidor = new Date(saude.versaoEm).getTime();
+    const painel   = new Date(nossoEm).getTime();
+    if(!Number.isFinite(servidor) || !Number.isFinite(painel)) return;
+    if(servidor >= painel - _FOLGA_DEPLOY_MS) return;   // em dia
+
+    const horas = Math.round((painel - servidor) / 3600000);
+    const quanto = horas < 24
+      ? `${horas} hora(s)`
+      : `${Math.round(horas / 24)} dia(s)`;
+    notify(
+      `O servidor está ${quanto} atrás deste painel (servidor: ${esc(saude.versao)}). `
+      + 'Funções novas podem não funcionar até rodar a atualização do servidor '
+      + '(atualizar.sh). Avise a TI.',
+      'warn', 15000);
+  } catch(e){
+    /* Sem rede, ou /health fora do ar: silêncio. Este aviso é um extra —
+       transformá-lo em mais um erro na tela de quem já está sem conexão
+       seria trocar ajuda por barulho. */
+  }
+}
+
 function abrirLogin(){
   /* Pré-login: o painel some por inteiro (body.pre-login esconde tudo que
      não é a tela de entrada — ver styles.css). Não é só estética: terminal
@@ -988,6 +1051,7 @@ async function entrarNoServidor(){
     aplicarPermissoesSetor();
     renderAll();
     notify(`Bem-vindo, ${op.nome}! Setor: ${op.setor}`, 'success');
+    conferirVersaoDoServidor();   // sem await: não segura a entrada de ninguém
   }catch(e){
     /* SEGUNDO FATOR (etapa 4). O servidor recusa com MFA_NECESSARIO quando
        a senha está certa e falta o código. Revelar o campo só aqui — e não
@@ -8484,15 +8548,59 @@ async function aplicarModeloDoDiaUI(){
      quaisquer, e o dia fica com Joao Pinheiro repetido e Unai faltando.
 
      Identidade resolve. Cada montagem guarda a linha do modelo que a
-     originou (migracao 035), e aqui a pergunta passa a ser exata: esta
-     linha ja virou carga hoje?
+     originou (migracao 035), e a pergunta passa a ser exata: esta linha ja
+     virou carga hoje?
 
-     Montagem antiga (sem modelo_id) e carga avulsa nao entram na conta —
-     nao vieram de linha nenhuma, entao nao marcam nenhuma como feita. */
-  const jaVieram = new Set(
-    montagens.filter(m => !m.cancelada_em && m.modelo_id != null)
-             .map(m => String(m.modelo_id)));
-  const novas = modelo.filter(m => !jaVieram.has(String(m.modelo_id)));
+     E QUANDO A MIGRACAO AINDA NAO SUBIU? (26/08/2026)
+
+     A versao anterior desta funcao so sabia casar por modelo_id. Num
+     servidor sem a migracao 035 esse campo simplesmente nao existe, entao
+     NADA casava: cada clique em "puxar o modelo" recriava o dia inteiro.
+     Foi o que a apuracao de 25/08 mostrou — 53 linhas na montagem, quase
+     todas vazias e em pares, uma unica virando carga.
+
+     Isso foi erro meu de projeto, nao do servidor: escrevi uma correcao
+     que so funciona depois que outra coisa acontece, e sem plano B ela
+     falha do jeito mais barulhento possivel. Agora ha plano B.
+
+     O plano B e ROTA + APELIDO, e ele funciona porque a migracao 034 (essa
+     sim ja aplicada) moveu o destino da planilha para apelido_rota. As
+     seis linhas de codigo 504 da terca — Arinos, Joao Pinheiro, Paracatu,
+     Riachinho, Unai — tem apelidos DIFERENTES. O que era ambiguo contando
+     por codigo deixa de ser ao olhar o destino.
+
+     E CONTAGEM, nao presenca: o modelo preve a mesma praca duas vezes no
+     mesmo dia (duas saidas para Montes Claros na sexta), e um Set faria a
+     segunda sumir da oferta. Cada montagem existente consome UMA linha do
+     modelo; o que sobrar e o que ainda falta montar.
+
+     Os dois criterios convivem porque o dia seguinte a uma migracao tem os
+     dois tipos de linha na mesma tela: a antiga sem modelo_id e a nova com
+     ele. Casar so por um dos dois traria a duplicata de volta pela metade. */
+  const contagem = new Map();
+  const chaveExata   = (x) => `id:${x.modelo_id}`;
+  const chaveDestino = (x) => `rt:${x.rota_codigo || ''}¦${x.apelido_rota || ''}`;
+
+  for(const g of montagens){
+    if(g.cancelada_em) continue;
+    /* Carga avulsa (criada na mao, sem vir do modelo) tem rota mas nao tem
+       apelido do modelo. Ela entra na contagem pela chave de destino, o que
+       e o certo: se alguem ja montou Unai na mao, o modelo nao precisa
+       oferecer Unai de novo. */
+    const k = g.modelo_id != null ? chaveExata(g) : chaveDestino(g);
+    contagem.set(k, (contagem.get(k) || 0) + 1);
+  }
+
+  const consumir = (k) => {
+    const n = contagem.get(k) || 0;
+    if(n <= 0) return false;
+    contagem.set(k, n - 1);
+    return true;
+  };
+
+  // Tenta a identidade exata primeiro; so cai no destino se ela nao casar.
+  const novas = modelo.filter(m =>
+    !consumir(chaveExata(m)) && !consumir(chaveDestino(m)));
   /* Duas situações MUITO diferentes que davam a mesma resposta, e a
      resposta era falsa quando o modelo estava vazio: dizer "já estão
      montadas" para quem nunca cadastrou rota nenhuma manda a pessoa

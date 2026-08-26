@@ -1,5 +1,6 @@
 -- =====================================================================
 -- 036 — TRANSPORTADORA NA MONTAGEM (25/08/2026)
+-- SEM ESTA MIGRAÇÃO: a transportadora do dia nao grava: a excecao (subcontratacao, freteiro) some e vale sempre a do cadastro.
 -- ---------------------------------------------------------------------
 -- Pedido do dono, junto com o da sequência: "transportadora também".
 --
