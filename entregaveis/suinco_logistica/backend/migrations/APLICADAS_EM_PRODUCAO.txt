@@ -1,0 +1,27 @@
+034
+
+# ---------------------------------------------------------------------
+# ATÉ QUAL MIGRAÇÃO O SERVIDOR DE PRODUÇÃO ESTÁ.
+#
+# A primeira linha é o número, e só ela é lida. Tudo acima dela é
+# considerado PENDENTE pelo portão de publicação (publicar.sh), que passa a
+# imprimir a consequência de cada uma até que subam.
+#
+# POR QUE ESTE ARQUIVO EXISTE. O portão sabia detectar migração nova NESTA
+# publicação, e não migração NÃO APLICADA. Eram coisas diferentes: a 035 e
+# a 036 subiram para o repositório em 25/08, continuaram sem rodar no
+# servidor, e o portão as consideraria resolvidas por já não serem novas —
+# repetindo em forma de script exatamente o esquecimento que ele existe
+# para impedir.
+#
+# QUEM ATUALIZA, E QUANDO. Depois de rodar o atualizar.sh no servidor e ver
+# a confirmação, o número aqui sobe para a última migração aplicada. Nunca
+# antes: este arquivo é registro do que ACONTECEU, não do que se pretende
+# fazer. Subir o número "porque já vai rodar" transforma o controle em
+# enfeite.
+#
+# COMO CONFERIR o que o servidor tem de verdade:
+#     ssh root@2.25.95.253
+#     sudo -u postgres psql -d embarque_suinco \
+#       -c "SELECT nome FROM migracoes ORDER BY nome DESC LIMIT 5"
+# ---------------------------------------------------------------------

@@ -96,22 +96,44 @@ verde "  ok  $(grep -E 'verde\(s\)' /tmp/suinco-bateria.txt | tail -1 | sed 's/^
 # fim, e é esse texto que precisa ser repassado ao Luis junto com o aviso
 # de rodar o atualizar.sh. A omissão deixa de ser possível por esquecimento.
 # ---------------------------------------------------------------------
-titulo "6. Migrações novas declaram o que quebra sem elas"
-NOVAS="$(git diff --name-only --diff-filter=A "origin/$ENTREGA...HEAD" \
-         -- '*/backend/migrations/*.sql' || true)"
+titulo "6. Migrações pendentes declaram o que quebra sem elas"
+# A pergunta certa NÃO é "esta publicação traz migração nova?" — é "o que o
+# SERVIDOR ainda não tem?". Foi assim que a primeira versão deste passo
+# errou: a 035 e a 036 subiram para o repositório em 25/08, seguiram sem
+# rodar no servidor, e como já não eram "novas" o portão as daria por
+# resolvidas — repetindo em forma de script o esquecimento que ele existe
+# para impedir.
+#
+# A referência é o APLICADAS_EM_PRODUCAO.txt, que guarda até onde o
+# servidor foi de fato atualizado. Tudo acima disso é pendente, venha da
+# publicação de hoje ou da semana passada.
+MARCA="$AQUI/backend/migrations/APLICADAS_EM_PRODUCAO.txt"
+[[ -f "$MARCA" ]] || falhou "falta $MARCA — sem ele não dá para saber o que o servidor tem."
+APLICADA="$(head -1 "$MARCA" | tr -d '[:space:]')"
+[[ "$APLICADA" =~ ^[0-9]+$ ]] || falhou "a primeira linha de APLICADAS_EM_PRODUCAO.txt precisa ser o número da migração."
+echo "      servidor está na migração $APLICADA"
+
 PENDENTES=""
-if [[ -z "$NOVAS" ]]; then
-  verde "  ok  nenhuma migração nova nesta publicação"
+QUANTAS=0
+for m in "$AQUI"/backend/migrations/*.sql; do
+  NUM="$(basename "$m" | cut -d_ -f1)"
+  [[ "$NUM" =~ ^[0-9]+$ ]] || continue
+  # 10#$NUM força base decimal: "035" em base 8 seria outro número, e
+  # "038" nem existiria em octal — o script morreria sozinho em setembro.
+  (( 10#$NUM > 10#$APLICADA )) || continue
+  QUANTAS=$(( QUANTAS + 1 ))
+  if ! grep -qi '^-- SEM ESTA MIGRAÇÃO:' "$m"; then
+    vermelho "      $(basename "$m") — falta a linha '-- SEM ESTA MIGRAÇÃO: <o que quebra>'"
+    falhou "migração pendente sem declaração de consequência."
+  fi
+  LINHA="$(grep -i '^-- SEM ESTA MIGRAÇÃO:' "$m" | head -1 | sed 's/^-- SEM ESTA MIGRAÇÃO: *//I')"
+  PENDENTES+="  · $(basename "$m"): $LINHA"$'\n'
+done
+
+if (( QUANTAS == 0 )); then
+  verde "  ok  nenhuma migração pendente"
 else
-  for m in $NOVAS; do
-    if ! grep -qi '^-- SEM ESTA MIGRAÇÃO:' "$m"; then
-      vermelho "      $m — falta a linha '-- SEM ESTA MIGRAÇÃO: <o que quebra>'"
-      falhou "migração sem declaração de consequência."
-    fi
-    LINHA="$(grep -i '^-- SEM ESTA MIGRAÇÃO:' "$m" | head -1 | sed 's/^-- SEM ESTA MIGRAÇÃO: *//I')"
-    PENDENTES+="  · $(basename "$m"): $LINHA"$'\n'
-    verde "  ok  $(basename "$m")"
-  done
+  verde "  ok  $QUANTAS pendente(s), todas com a consequência declarada"
 fi
 
 titulo "7. Publicando"
