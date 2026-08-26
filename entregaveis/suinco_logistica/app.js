@@ -2474,7 +2474,11 @@ function renderTorre(){
      contando — sumir de vez esconderia caminhão parado no pátio —, mas o
      clique agora leva para lá, que é onde se resolve. */
   const emAberto = cargasAbertas();
-  const abertas = emAberto.filter(c=>!c.aguardandoCarga);
+  /* Sem placa, fora da Torre — o pedido literal do dono (26/08/2026): "só a
+     partir da hora que colocarem a placa ela vai pra torre de controle". A
+     Torre é o pátio; carga sem caminhão ainda é planejamento e mora na aba
+     Programação, na lista "Cargas sem caminhão". */
+  const abertas = emAberto.filter(c=>!c.aguardandoCarga && c.placa);
   const porStatus = {};
   abertas.forEach(c=>{ porStatus[c.status] = (porStatus[c.status]||0) + 1; });
   // "Aguardando Carga" não é mais um valor de status — é a flag
@@ -2908,7 +2912,13 @@ let _placaMultiCargaAutorizada = null;
 
 function criarCargaProgramadaUI(){
   const placa = document.getElementById('prog-placa').value;
-  if(!normalizarPlaca(placa)){ notify('Informe a placa.','warn'); return; }
+  /* PLACA VAZIA CRIA A CARGA MESMO ASSIM (26/08/2026) — mas nunca em
+     silêncio. O aviso diz o que aconteceu e o que falta: sem confirmação
+     visível, criar sem placa e criar com placa parecem iguais na tela, e o
+     dia em que alguém ESQUECE a placa fica indistinguível do dia em que
+     ainda não contratou. O texto resolve os dois: quem esqueceu percebe,
+     quem não contratou segue tranquilo. */
+  const semPlaca = !normalizarPlaca(placa);
 
   /* Duplicidade de placa na mesma programação — pedido do usuário
      (11/08/2026): "IMPEDIR DUPLICIDADE DE PLACAS DENTRO DA MESMA
@@ -2954,7 +2964,13 @@ function criarCargaProgramadaUI(){
       operador: nomeOperadorAtual()
     });
     _placaMultiCargaAutorizada = null;   // vale uma vez só
-    notifyGravacao(`Carga criada para a placa ${normalizarPlaca(placa)} — status Aguardando Veículo.`);
+    if(semPlaca){
+      notifyGravacao('Carga criada SEM caminhão — ela fica em "Cargas sem caminhão", '
+        + 'aqui na Programação. Quando contratar, preencha a placa na linha e ela '
+        + 'entra sozinha na Torre.');
+    } else {
+      notifyGravacao(`Carga criada para a placa ${normalizarPlaca(placa)} — status Aguardando Veículo.`);
+    }
     ['prog-placa','prog-transportadora','prog-tipoveiculo','prog-motorista','prog-numero-carga','prog-cliente','prog-destino','prog-peso','prog-sequencia','prog-obs']
       .forEach(id=>document.getElementById(id).value='');
     document.getElementById('prog-praonde').value = PRA_ONDE_PADRAO;
@@ -3457,6 +3473,7 @@ function dataProgramacaoHtml(c){
    duplicidade que não existe e apaga uma carga de verdade. */
 function marcaCargaDaPlaca(carga, lista){
   const p = normalizarPlaca(carga.placa);
+  if(!p) return '';   // sem caminhão não há "1 de 2" — vazio não é placa
   const irmas = lista.filter(c => normalizarPlaca(c.placa) === p);
   if(irmas.length < 2) return '';
   const posicao = irmas.findIndex(c => c.id === carga.id) + 1;
@@ -6826,7 +6843,8 @@ async function montarRelatorioOperacional(){
       <td class="c-status" style="background:${cs.fundo};color:${cs.texto}">${esc(c.status)}</td>
       <td class="c-rota">${esc(rotaCurta(c.rota))}</td>
       <td class="c-operacao" ${praOndeStyle}>${c.praOnde ? esc(PRA_ONDE_LABEL[c.praOnde]) : '—'}</td>
-      <td class="c-placa">${esc(c.placa).toUpperCase()}</td>
+      <td class="c-placa">${c.placa ? esc(c.placa).toUpperCase()
+        : '<span class="liso">a contratar</span>'}</td>
       <td class="c-transp">${esc(c.transportadora)||'—'}</td>
       <td class="c-veiculo">${esc(c.tipoVeiculo)||'—'}</td>
       <td class="c-peso">${pesoTon}</td>
@@ -6837,6 +6855,11 @@ async function montarRelatorioOperacional(){
   }).join('');
   const agora = new Date();
   const concluidas = lista.filter(c=>c.status==='Seguiu Viagem').length;
+  /* Conta SEPARADA, decisão do dono (26/08): a tonelagem já planejada
+     aparece sem se misturar com o que já tem caminhão contratado. */
+  const semCaminhao = lista.filter(c=>!c.placa);
+  const semCaminhaoTon = (semCaminhao.reduce((s,c)=>s+(c.peso||0),0)/1000)
+    .toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
   el.innerHTML = `
     <div class="print-page doc-denso">
       ${cabecalhoDocumento({
@@ -6909,7 +6932,10 @@ async function montarRelatorioOperacional(){
         fichaDocumento({
           titulo: 'Relatório Operacional',
           contagem: lista.length,
-          extra: `<strong>Concluídas:</strong> ${concluidas} de ${lista.length}`,
+          extra: `<strong>Concluídas:</strong> ${concluidas} de ${lista.length}`
+            + (semCaminhao.length
+              ? ` · <strong>Sem caminhão contratado:</strong> ${semCaminhao.length} carga(s), ${semCaminhaoTon} t`
+              : ''),
         }))}
     </div>`;
   return el;

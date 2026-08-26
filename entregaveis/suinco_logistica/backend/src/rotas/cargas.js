@@ -289,7 +289,18 @@ rotasCargas.post('/cargas', exigirLogin, async (req, res, next) => {
     }
 
     const placa = normalizarPlaca(req.body?.placa);
-    if (!placa) {
+    /* PLACA VAZIA É PROGRAMAÇÃO SEM CAMINHÃO CONTRATADO (26/08/2026).
+
+       Pedido do dono: "quero poder criar a carga sem a placa, e só a partir
+       da hora que colocarem a placa ela vai pra torre de controle". O caso
+       real: a Logística sabe rota, peso e dia antes de saber o caminhão —
+       a transportadora é contratada depois. Até aqui isso virava anotação
+       fora do sistema.
+
+       O vazio é o próprio sinal; nenhuma coluna nova. Vale SÓ para a
+       programação: a chegada sem programação continua exigindo placa,
+       porque entrada de pátio sem placa não descreve caminhão nenhum. */
+    if (!placa && chegadaSemProgramacao) {
       return res.status(400).json({ erro: 'Placa é obrigatória.', codigo: 'PLACA_FALTANDO' });
     }
 
@@ -298,11 +309,11 @@ rotasCargas.post('/cargas', exigirLogin, async (req, res, next) => {
        existia só no navegador; aqui passa a valer também para quem chamar a
        API direto. Não vale para chegadaSemProgramacao — ver o comentário
        acima. */
-    const { rows: frotaRows } = await consultar(
+    const { rows: frotaRows } = placa ? await consultar(
       'SELECT placa, transportadora, tipo_veiculo FROM dim_veiculos WHERE placa = $1',
       [placa]
-    );
-    if (!frotaRows[0]) {
+    ) : { rows: [] };
+    if (placa && !frotaRows[0]) {
       return res.status(422).json({
         erro: `Placa ${placa} não está cadastrada na Frota. ` +
               `Cadastre em Cadastros → Frota antes de programar esta carga.`,
@@ -629,6 +640,20 @@ rotasCargas.patch('/cargas/:id', exigirLogin, async (req, res, next) => {
       if (c === 'lacre' || c === 'lacre_2' || c === 'lacre_3' || c === 'lacre_retido') {
         return `${c} = COALESCE(NULLIF($${i + 1}, ''), ${c})`;
       }
+      /* A PLACA TAMBÉM: VAZIO NÃO APAGA (26/08/2026).
+
+         Com carga sem placa no ar, existe um novo eco perigoso: um terminal
+         que ainda tem a cópia de ANTES da contratação reenvia a carga com
+         placa '' — e apagaria a placa que a Logística acabou de preencher,
+         tirando a carga da Torre em silêncio. Mesma família do sumiço dos
+         lacres (20/08) e das observações (14/08), mesma defesa.
+
+         O custo é não haver "descontratar" pela tela — trocar placa continua
+         possível (um valor novo substitui), esvaziar não. Se um dia precisar,
+         é correção consciente, não efeito de aba aberta. */
+      if (c === 'placa') {
+        return `placa = COALESCE(NULLIF($${i + 1}, ''), placa)`;
+      }
       /* `aguardando_carga` anda em UM SENTIDO SÓ: true → false.
 
          Incidente de 15/08/2026: cinco cargas já lançadas (com peso, rota,
@@ -774,6 +799,19 @@ rotasCargas.post('/cargas/:id/status', exigirLogin, async (req, res, next) => {
       );
       const carga = rows[0];
       if (!carga) return { naoEncontrada: true };
+
+      /* CAMINHÃO QUE NÃO EXISTE NÃO CHEGA, NÃO CARREGA, NÃO SAI.
+
+         Carga sem placa (26/08/2026) é programação sem caminhão contratado.
+         Deixar o status andar sem placa produziria uma "chegada" de nada —
+         e a Torre, o SLA e a Portaria passariam a contar um veículo que
+         ninguém viu. A placa entra primeiro; o fluxo anda depois. */
+      if (!carga.placa) {
+        const e = new Error('Esta carga ainda não tem caminhão: preencha a placa antes de mover o status.');
+        e.status = 422;
+        e.codigo = 'CARGA_SEM_PLACA';
+        throw e;
+      }
 
       // Lança ErroDeFluxo (409) ou ErroDePermissao (403). O rollback é
       // automático — nada fica gravado pela metade.
