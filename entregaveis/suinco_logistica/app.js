@@ -8484,15 +8484,59 @@ async function aplicarModeloDoDiaUI(){
      quaisquer, e o dia fica com Joao Pinheiro repetido e Unai faltando.
 
      Identidade resolve. Cada montagem guarda a linha do modelo que a
-     originou (migracao 035), e aqui a pergunta passa a ser exata: esta
-     linha ja virou carga hoje?
+     originou (migracao 035), e a pergunta passa a ser exata: esta linha ja
+     virou carga hoje?
 
-     Montagem antiga (sem modelo_id) e carga avulsa nao entram na conta —
-     nao vieram de linha nenhuma, entao nao marcam nenhuma como feita. */
-  const jaVieram = new Set(
-    montagens.filter(m => !m.cancelada_em && m.modelo_id != null)
-             .map(m => String(m.modelo_id)));
-  const novas = modelo.filter(m => !jaVieram.has(String(m.modelo_id)));
+     E QUANDO A MIGRACAO AINDA NAO SUBIU? (26/08/2026)
+
+     A versao anterior desta funcao so sabia casar por modelo_id. Num
+     servidor sem a migracao 035 esse campo simplesmente nao existe, entao
+     NADA casava: cada clique em "puxar o modelo" recriava o dia inteiro.
+     Foi o que a apuracao de 25/08 mostrou — 53 linhas na montagem, quase
+     todas vazias e em pares, uma unica virando carga.
+
+     Isso foi erro meu de projeto, nao do servidor: escrevi uma correcao
+     que so funciona depois que outra coisa acontece, e sem plano B ela
+     falha do jeito mais barulhento possivel. Agora ha plano B.
+
+     O plano B e ROTA + APELIDO, e ele funciona porque a migracao 034 (essa
+     sim ja aplicada) moveu o destino da planilha para apelido_rota. As
+     seis linhas de codigo 504 da terca — Arinos, Joao Pinheiro, Paracatu,
+     Riachinho, Unai — tem apelidos DIFERENTES. O que era ambiguo contando
+     por codigo deixa de ser ao olhar o destino.
+
+     E CONTAGEM, nao presenca: o modelo preve a mesma praca duas vezes no
+     mesmo dia (duas saidas para Montes Claros na sexta), e um Set faria a
+     segunda sumir da oferta. Cada montagem existente consome UMA linha do
+     modelo; o que sobrar e o que ainda falta montar.
+
+     Os dois criterios convivem porque o dia seguinte a uma migracao tem os
+     dois tipos de linha na mesma tela: a antiga sem modelo_id e a nova com
+     ele. Casar so por um dos dois traria a duplicata de volta pela metade. */
+  const contagem = new Map();
+  const chaveExata   = (x) => `id:${x.modelo_id}`;
+  const chaveDestino = (x) => `rt:${x.rota_codigo || ''}¦${x.apelido_rota || ''}`;
+
+  for(const g of montagens){
+    if(g.cancelada_em) continue;
+    /* Carga avulsa (criada na mao, sem vir do modelo) tem rota mas nao tem
+       apelido do modelo. Ela entra na contagem pela chave de destino, o que
+       e o certo: se alguem ja montou Unai na mao, o modelo nao precisa
+       oferecer Unai de novo. */
+    const k = g.modelo_id != null ? chaveExata(g) : chaveDestino(g);
+    contagem.set(k, (contagem.get(k) || 0) + 1);
+  }
+
+  const consumir = (k) => {
+    const n = contagem.get(k) || 0;
+    if(n <= 0) return false;
+    contagem.set(k, n - 1);
+    return true;
+  };
+
+  // Tenta a identidade exata primeiro; so cai no destino se ela nao casar.
+  const novas = modelo.filter(m =>
+    !consumir(chaveExata(m)) && !consumir(chaveDestino(m)));
   /* Duas situações MUITO diferentes que davam a mesma resposta, e a
      resposta era falsa quando o modelo estava vazio: dizer "já estão
      montadas" para quem nunca cadastrou rota nenhuma manda a pessoa

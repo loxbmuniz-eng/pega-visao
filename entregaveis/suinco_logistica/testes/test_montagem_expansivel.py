@@ -520,6 +520,57 @@ async def main():
            d['linhasDoModelo'] == d['distintas'],
            f"{d['linhasDoModelo']} linhas, {d['distintas']} distintas")
 
+        print('\n=== 15b. NAO DUPLICA NEM EM SERVIDOR SEM A MIGRACAO 035 ===')
+        # Apuracao de 25/08/2026: a montagem do dia em producao tinha 53
+        # linhas, quase todas vazias e em pares, e uma unica virou carga.
+        #
+        # A causa nao era a regra de de-duplicacao: era ela depender de
+        # modelo_id, que so existe depois da migracao 035. No servidor sem
+        # a migracao o campo nao vem, NADA casa, e cada clique em "puxar o
+        # modelo" recria o dia inteiro.
+        #
+        # Este teste tira o modelo_id das montagens ANTES de puxar de novo,
+        # que e exatamente o que o painel recebe de um servidor atrasado.
+        # Sem o plano B (rota + apelido), ele reprova criando tudo outra vez.
+        d = await pg.evaluate("""async () => {
+                 window.confirm = () => true;
+                 // Simula o servidor antigo: o campo simplesmente nao existe.
+                 _montagemDia.montagens.forEach(m => { delete m.modelo_id; });
+                 const vivasAntes = _montagemDia.montagens
+                   .filter(m => !m.cancelada_em).length;
+                 const canceladas = _montagemDia.montagens
+                   .filter(m => m.cancelada_em).length;
+                 await aplicarModeloDoDiaUI();
+                 return {
+                   antes: vivasAntes,
+                   canceladas,
+                   depois: _montagemDia.montagens.filter(m => !m.cancelada_em).length,
+                 };
+               }""")
+        # Recriar o que foi cancelado continua certo (bloco 15). O que nao
+        # pode e recriar o que esta la, vivo, na tela.
+        ck('sem modelo_id, puxar de novo nao recria o que ja esta montado',
+           d['depois'] - d['antes'] <= d['canceladas'],
+           f"{d['antes']} -> {d['depois']} (canceladas: {d['canceladas']})")
+
+        # Puxar mais uma vez, ainda sem modelo_id, nao pode mover o numero.
+        # Esta e a garantia que importa: idempotencia. A versao anterior
+        # deste teste exigia que nenhum destino se repetisse, e isso e
+        # FALSO por construcao — o modelo preve duas saidas para Patos de
+        # Minas no mesmo dia. Medir unicidade de destino reprovaria o
+        # comportamento correto.
+        d2 = await pg.evaluate("""async () => {
+                 window.confirm = () => true;
+                 _montagemDia.montagens.forEach(m => { delete m.modelo_id; });
+                 const antes = _montagemDia.montagens.filter(m => !m.cancelada_em).length;
+                 await aplicarModeloDoDiaUI();
+                 _montagemDia.montagens.forEach(m => { delete m.modelo_id; });
+                 const depois = _montagemDia.montagens.filter(m => !m.cancelada_em).length;
+                 return { antes, depois };
+               }""")
+        ck('puxar mais uma vez nao move o numero de linhas',
+           d2['depois'] == d2['antes'], f"{d2['antes']} -> {d2['depois']}")
+
         print('\n=== 16. CANCELADA SOME DA TELA, MAS NAO DO BANCO ===')
         # Pedido do dono: a montagem e a lista do que VAI rodar hoje; linha
         # cancelada ali e ruido entre as que ainda pedem trabalho.
