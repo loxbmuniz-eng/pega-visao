@@ -133,6 +133,37 @@ CARGAS_DIA = [
 ]
 
 
+def espalhar_eventos_no_dia():
+    """Backdata os eventos das cargas de demonstração para horários realistas.
+
+    Regra simples: a chegada foi há N horas e cada etapa seguinte consome um
+    pedaço plausível (45–75 min). SÓ para as cargas 24xx do banco LOCAL —
+    produção nunca passa por aqui."""
+    import subprocess
+    sql = r"""
+    WITH ev AS (
+      SELECT movimentacao_id, carga_id, status_novo,
+             row_number() OVER (PARTITION BY carga_id ORDER BY data_evento) AS n
+        FROM fact_statusfrota
+       WHERE carga_id IN (SELECT carga_id FROM fact_viagens
+                           WHERE numero_carga IN ('2484','2485','2486','2487','2488','2489'))
+    )
+    UPDATE fact_statusfrota f
+       SET data_evento = now() - interval '6 hours' + (ev.n * interval '68 minutes')
+      FROM ev WHERE f.movimentacao_id = ev.movimentacao_id;
+    UPDATE fact_viagens
+       SET criado_em = now() - interval '7 hours'
+     WHERE numero_carga IN ('2484','2485','2486','2487','2488','2489');
+    """
+    r = subprocess.run(['su', 'postgres', '-c',
+                        'psql -d embarque_suinco -q -v ON_ERROR_STOP=1'],
+                       input=sql, capture_output=True, text=True)
+    if r.returncode != 0:
+        print('  (backdate falhou: ' + r.stderr.strip()[:200] + ')')
+    else:
+        print('  · eventos espalhados pelas últimas 6 horas')
+
+
 async def main():
     async with async_playwright() as p:
         nav = await p.chromium.launch(
@@ -142,6 +173,11 @@ async def main():
 
         # O pátio é montado uma vez, DIRETO na API, e vale para todos.
         montar_patio_api()
+        # Os eventos são reespalhados pelo dia: as cargas de demonstração
+        # atravessam o fluxo em segundos e TODO indicador de tempo sai
+        # "0 min" — no telão isso parece sistema quebrado, não pátio rápido.
+        # Só toca nas cargas 24xx desta demonstração, e só no banco LOCAL.
+        espalhar_eventos_no_dia()
 
         for arquivo, email, aba, preparo, rolar in TELAS:
             ctx, pg = await abrir(nav, arquivo)
@@ -160,8 +196,10 @@ async def main():
                         rolar)
                     await pg.wait_for_timeout(500)
             # O toast de boas-vindas fica em cima do conteúdo no print.
+            # A classe de verdade é .notif-item (função notify em app.js);
+            # a primeira tentativa chutou nomes e o toast continuou no print.
             await pg.evaluate(
-                "() => document.querySelectorAll('.toast,.notificacao,#toasts,.aviso-tempo-real')"
+                "() => document.querySelectorAll('.notif-item,#notifs,.notif-wrap')"
                 "  .forEach((e) => e.remove())")
             await pg.wait_for_timeout(300)
             await pg.screenshot(path=str(PRINTS / f'{arquivo}.png'))
