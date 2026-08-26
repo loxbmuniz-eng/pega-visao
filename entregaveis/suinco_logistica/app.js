@@ -766,9 +766,24 @@ function esconderErroLogin(){
    o que o operador fotografa e manda, e o que permite responder sem pedir
    para abrir o console do navegador. */
 async function explicarFalhaDeLogin(e){
+  /* DOIS 429 DIFERENTES, e confundi-los foi metade do problema do René
+     (25/08/2026): a tela dizia "muitas tentativas deste local" para quem
+     tinha digitado a senha certa uma vez só.
+
+     BLOQUEIO_TEMPORARIO é da CONTA — cinco senhas erradas nela — e o
+     servidor já manda a frase com quantos minutos faltam. Repassar a dele
+     é melhor do que inventar uma versão mais vaga aqui.
+
+     LIMITE_LOGIN é do LOCAL, e desde 26/08 só conta senha ERRADA: se esta
+     mensagem aparecer para alguém que digitou certo, é defeito, não
+     excesso de gente entrando junto. */
+  if(e && e.codigo === 'BLOQUEIO_TEMPORARIO'){
+    return (e.message || 'Esta conta está bloqueada por alguns minutos.') + ' [CONTA]';
+  }
   if(e && e.status === 429){
-    return 'Muitas tentativas de entrada deste local no último minuto. '
-         + 'Espere 1 minuto e tente de novo. [LIMITE]';
+    return 'Muitas senhas erradas deste local no último minuto. '
+         + 'Espere 1 minuto e tente de novo. Se você não errou a senha, '
+         + 'avise a Logística — isto não é para acontecer. [LIMITE]';
   }
   if(e && e.status >= 500){
     return `O servidor recebeu o pedido mas falhou (erro ${e.status}). `

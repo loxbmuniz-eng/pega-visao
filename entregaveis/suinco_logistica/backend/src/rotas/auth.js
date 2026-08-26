@@ -11,12 +11,46 @@ import {
 
 export const rotasAuth = Router();
 
+/* O LIMITE CONTA SÓ QUEM ERROU A SENHA.
+   =====================================================================
+   Relato de produção, 25/08/2026 21:03: René Fonseca, da Expedição,
+   tentando entrar pelo celular e recebendo "muitas tentativas deste local"
+   com a senha CERTA, sem ter errado nenhuma vez.
+
+   A causa não era o teto ser baixo. Era o limitador contar TODA
+   requisição — inclusive as bem-sucedidas — e ser chaveado por IP. A
+   Suinco inteira sai pelo mesmo IP (NAT do escritório): o mesmo fato que
+   já estava documentado em chaveDoLimiteGeral, e que na época foi
+   corrigido só para o limitador geral. Cada colega que entrava CERTO
+   gastava o orçamento de todos, e a troca de turno estourava o limite
+   sozinha, sem ninguém errar nada.
+
+   Isso já tinha sido "corrigido" uma vez, subindo o teto de 10 para 30
+   (ver config.js). Subir número não resolve — adia até o pátio crescer de
+   novo. `skipSuccessfulRequests` resolve pela raiz: um login que deu certo
+   não é tentativa de invasão, e por isso não pode custar nada a ninguém.
+   Com ele, a recusa só alcança quem de fato errou a senha várias vezes no
+   último minuto — nunca quem digitou certo, não importa quantos colegas
+   entrem junto.
+
+   A defesa contra força bruta não depende deste teto e é mais precisa que
+   ele: cinco senhas erradas em 30 minutos bloqueiam AQUELA CONTA por 15
+   minutos (campos falhas_senha/bloqueado_ate, mais abaixo). O limitador
+   por IP fica como rede de proteção contra quem varre e-mails que nem
+   existem — caso em que não há conta para bloquear. */
 const limiteLogin = rateLimit({
   windowMs: config.limites.janelaMs,
   limit: config.limites.loginPorJanela,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { erro: 'Muitas tentativas de login. Espere um minuto.', codigo: 'LIMITE_LOGIN' },
+  skipSuccessfulRequests: true,
+  /* A mensagem diz o que REALMENTE aconteceu. A antiga falava em
+     "tentativas de login", e quem lia com a senha certa na mão concluía
+     que o sistema estava quebrado — o que, naquele dia, era verdade. */
+  message: {
+    erro: 'Muitas senhas erradas deste local no último minuto. Espere um minuto.',
+    codigo: 'LIMITE_LOGIN',
+  },
 });
 
 rotasAuth.post('/login', limiteLogin, async (req, res, next) => {

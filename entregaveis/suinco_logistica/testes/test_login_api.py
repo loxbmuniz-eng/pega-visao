@@ -84,6 +84,31 @@ async def main():
            (await pagina.inner_text('#login-erro')).strip() if await pagina.is_visible('#login-erro') else '')
         ck('continua no login', await pagina.is_visible('#modal-operador'))
 
+        print('\n=== 2b. OS DOIS "429" NÃO SE CONFUNDEM ===')
+        # Incidente de 25/08/2026: René Fonseca, da Expedição, com a senha
+        # CERTA, viu "Muitas tentativas de entrada deste local". A causa
+        # estava no servidor (o limite contava acerto), mas a tela piorou o
+        # diagnóstico: tratava todo 429 como excesso de tentativas do LOCAL,
+        # inclusive o bloqueio da CONTA, que é outra coisa e vem com o
+        # número de minutos junto.
+        msgs = await pagina.evaluate("""async () => {
+          const local = await explicarFalhaDeLogin(
+            { status: 429, codigo: 'LIMITE_LOGIN',
+              message: 'Muitas senhas erradas deste local no último minuto.' });
+          const conta = await explicarFalhaDeLogin(
+            { status: 429, codigo: 'BLOQUEIO_TEMPORARIO',
+              message: 'Muitas senhas erradas nesta conta. Tente de novo em 12 minuto(s).' });
+          return { local, conta };
+        }""")
+        ck('o bloqueio da CONTA repassa a frase do servidor, com os minutos',
+           '12 minuto' in msgs['conta'], msgs['conta'])
+        ck('e é marcado como [CONTA], não como [LIMITE]',
+           '[CONTA]' in msgs['conta'] and '[LIMITE]' not in msgs['conta'], msgs['conta'])
+        ck('o limite do LOCAL fala em senha ERRADA, não em "tentativas"',
+           'errada' in msgs['local'].lower(), msgs['local'])
+        ck('e manda avisar a Logística se a pessoa não errou a senha',
+           'Logística' in msgs['local'], msgs['local'])
+
         print('\n=== 3. LOGIN CERTO ===')
         await pagina.fill('#login-senha', SENHA)
         await pagina.click('#btn-entrar')

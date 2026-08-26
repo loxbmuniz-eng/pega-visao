@@ -1270,6 +1270,28 @@ describe('8. Superfície de ataque', () => {
     assert.equal(typeof r.json.limites.janelaMs, 'number');
   });
 
+  test('/health diz qual versão do servidor está no ar', async () => {
+    /* 26/08/2026: dois relatos seguidos ("não consigo excluir usuário") que
+       eram a mesma coisa — o painel sobe no Vercel na hora, o servidor só
+       muda quando alguém roda o atualizar.sh, e no meio existe uma janela
+       em que a tela tem o botão e o servidor não tem a rota.
+
+       A pergunta que encerra isso em dez segundos é "o servidor já foi
+       atualizado?", e ela não tinha como ser respondida sem SSH. Agora
+       tem: basta abrir /health e comparar com o carimbo que aparece
+       embaixo da tela de login. */
+    const r = await req('/health');
+    assert.equal(r.status, 200);
+    assert.equal(typeof r.json.versao, 'string');
+    assert.ok(r.json.versao.length > 0, 'versão não pode vir vazia');
+    /* Curta e sem caminho de disco. A checagem de barra "/" que escrevi
+       primeiro reprovava o próprio formato — a data é 26/08. O que importa
+       não é a barra, é não vazar onde o código mora no servidor. */
+    assert.ok(r.json.versao.length <= 40, `versão longa demais: ${r.json.versao}`);
+    assert.ok(!/\/(opt|home|root|usr|var)\b/.test(r.json.versao),
+      `versão não pode carregar caminho de disco: ${r.json.versao}`);
+  });
+
   test('rota inexistente devolve 404 em JSON', async () => {
     const r = await req('/api/rota-que-nao-existe', { token: tokens['Logística'] });
     assert.equal(r.status, 404);
@@ -3675,6 +3697,106 @@ describe('32. Reescrever o passado — sem segunda assinatura, com motivo', () =
     assert.equal(pedir.status, 404, 'POST /acoes-criticas saiu em 25/08');
     const listar = await req('/api/acoes-criticas', { token: adm.a });
     assert.equal(listar.status, 404, 'GET /acoes-criticas saiu em 25/08');
+  });
+});
+
+/* ------------------------------------------------------------------ */
+describe('34. O limite de login não pune quem acerta a senha', () => {
+  /* RELATO DE PRODUÇÃO, 25/08/2026 21:03. René Fonseca, da Expedição,
+     tentando entrar pelo celular e recebendo "Muitas tentativas de entrada
+     deste local no último minuto" — com a senha CERTA, sem ter errado
+     nenhuma vez.
+
+     CAUSA, confirmada medindo o cabeçalho ratelimit-remaining: o limitador
+     de /auth/login contava TODA requisição, inclusive as bem-sucedidas, e
+     era chaveado por IP. A Suinco inteira sai pelo mesmo IP (NAT do
+     escritório) — o mesmo motivo que já estava documentado em
+     chaveDoLimiteGeral, e que na época foi corrigido só para o limitador
+     geral. Resultado: cada colega que entrava CERTO gastava o orçamento de
+     todos, e na troca de turno o limite estourava sozinho.
+
+     Já tinham "corrigido" isso uma vez subindo o teto de 10 para 30. Subir
+     número não resolve: adia. O que resolve é o limitador parar de contar
+     quem acertou — um login bem-sucedido não é tentativa de invasão.
+
+     A defesa de verdade contra força bruta continua onde sempre esteve e
+     é mais precisa que qualquer teto por IP: cinco senhas erradas em 30
+     minutos bloqueiam AQUELA CONTA por 15 minutos (bloco 4, campos
+     falhas_senha/bloqueado_ate). */
+
+  const LOGIN = '/auth/login';
+
+  async function tentar(email, senha) {
+    const r = await req(LOGIN, { metodo: 'POST', corpo: { email, senha } });
+    return { status: r.status, resta: Number(r.headers.get('ratelimit-remaining')) };
+  }
+
+  test('acertar a senha NÃO gasta o orçamento do local', async () => {
+    /* É o caso do René, e é a garantia que faz o incidente não voltar:
+       não importa quantas pessoas entrem no mesmo minuto pelo mesmo IP —
+       se estão acertando a senha, o limite não se move. */
+    const a = await tentar('chefe@teste.local', SENHA);
+    assert.equal(a.status, 200, 'a fixture precisa entrar');
+    const b = await tentar('chefe@teste.local', SENHA);
+    assert.equal(b.status, 200);
+    const c = await tentar('chefe@teste.local', SENHA);
+    assert.equal(c.status, 200);
+
+    assert.equal(b.resta, a.resta,
+      `dois acertos seguidos não podem consumir o limite (${a.resta} -> ${b.resta})`);
+    assert.equal(c.resta, a.resta,
+      `três acertos seguidos não podem consumir o limite (${a.resta} -> ${c.resta})`);
+  });
+
+  test('errar a senha AINDA gasta — é isso que o limite existe para conter', async () => {
+    /* Compara dois ERROS seguidos, e não um acerto contra um erro. Com
+       skipSuccessfulRequests o cabeçalho sai ANTES de o acerto ser
+       devolvido ao orçamento: um acerto e um erro mostram o mesmo número,
+       e comparar os dois acusaria o código estando certo. Foi o que
+       aconteceu na primeira versão deste teste. */
+    const um = await tentar('chefe@teste.local', 'senha-errada-de-proposito');
+    const dois = await tentar('chefe@teste.local', 'outra-senha-errada');
+    assert.equal(um.status, 401);
+    assert.equal(dois.status, 401);
+    assert.ok(dois.resta < um.resta,
+      `cada senha errada precisa consumir o limite (${um.resta} -> ${dois.resta})`);
+
+    // Não deixa a conta da fixture com falhas acumuladas para os outros blocos.
+    await pool.query(
+      "UPDATE operadores SET falhas_senha = 0, falhas_desde = NULL, bloqueado_ate = NULL"
+      + " WHERE email = 'chefe@teste.local'");
+  });
+
+  test('a troca de turno inteira entra sem encostar no limite', async () => {
+    /* A reprodução do incidente: várias pessoas DIFERENTES, todas com a
+       senha certa, no mesmo minuto e no mesmo IP. Antes da correção isto
+       consumia uma unidade por pessoa e, com o teto de produção (30),
+       estourava com o pátio inteiro chegando. */
+    const hash = await bcrypt.hash(SENHA, 4);
+    const emails = [];
+    for (let i = 0; i < 12; i++) {
+      const email = `turno${i}@teste.local`;
+      emails.push(email);
+      await pool.query(
+        `INSERT INTO operadores (email, nome, setor, senha_hash)
+         VALUES ($1,$2,'Expedição',$3)
+         ON CONFLICT (email) DO UPDATE SET ativo = TRUE, senha_hash = EXCLUDED.senha_hash`,
+        [email, `Turno ${i}`, hash]);
+    }
+    try {
+      const inicio = await tentar(emails[0], SENHA);
+      assert.equal(inicio.status, 200, 'o primeiro do turno precisa entrar');
+      let ultimo = inicio;
+      for (const email of emails.slice(1)) {
+        ultimo = await tentar(email, SENHA);
+        assert.equal(ultimo.status, 200, `${email} foi recusado com a senha certa`);
+      }
+      assert.equal(ultimo.resta, inicio.resta,
+        `12 pessoas certas não podem gastar o orçamento do local `
+        + `(${inicio.resta} -> ${ultimo.resta})`);
+    } finally {
+      await pool.query("DELETE FROM operadores WHERE email LIKE 'turno%@teste.local'");
+    }
   });
 });
 
