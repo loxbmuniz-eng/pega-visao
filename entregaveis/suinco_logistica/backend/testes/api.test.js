@@ -1270,6 +1270,28 @@ describe('8. Superfície de ataque', () => {
     assert.equal(typeof r.json.limites.janelaMs, 'number');
   });
 
+  test('/health diz qual versão do servidor está no ar', async () => {
+    /* 26/08/2026: dois relatos seguidos ("não consigo excluir usuário") que
+       eram a mesma coisa — o painel sobe no Vercel na hora, o servidor só
+       muda quando alguém roda o atualizar.sh, e no meio existe uma janela
+       em que a tela tem o botão e o servidor não tem a rota.
+
+       A pergunta que encerra isso em dez segundos é "o servidor já foi
+       atualizado?", e ela não tinha como ser respondida sem SSH. Agora
+       tem: basta abrir /health e comparar com o carimbo que aparece
+       embaixo da tela de login. */
+    const r = await req('/health');
+    assert.equal(r.status, 200);
+    assert.equal(typeof r.json.versao, 'string');
+    assert.ok(r.json.versao.length > 0, 'versão não pode vir vazia');
+    /* Curta e sem caminho de disco. A checagem de barra "/" que escrevi
+       primeiro reprovava o próprio formato — a data é 26/08. O que importa
+       não é a barra, é não vazar onde o código mora no servidor. */
+    assert.ok(r.json.versao.length <= 40, `versão longa demais: ${r.json.versao}`);
+    assert.ok(!/\/(opt|home|root|usr|var)\b/.test(r.json.versao),
+      `versão não pode carregar caminho de disco: ${r.json.versao}`);
+  });
+
   test('rota inexistente devolve 404 em JSON', async () => {
     const r = await req('/api/rota-que-nao-existe', { token: tokens['Logística'] });
     assert.equal(r.status, 404);

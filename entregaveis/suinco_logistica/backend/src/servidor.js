@@ -4,6 +4,7 @@ import http from 'node:http';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { execFileSync } from 'node:child_process';
 import express from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
@@ -53,6 +54,43 @@ export function chaveDoLimiteGeral(req) {
   }
   return req.ip;
 }
+
+/* QUAL VERSÃO DO SERVIDOR ESTÁ NO AR — respondida sem SSH.
+   =====================================================================
+   O painel sobe sozinho no Vercel; o servidor só muda quando alguém roda
+   o atualizar.sh. Entre os dois existe uma janela em que a tela já tem um
+   botão e o servidor ainda não tem a rota.
+
+   Isso custou dois relatos em 26/08/2026 — "não consigo excluir usuário",
+   com a mensagem crua "Rota não encontrada" — e a pergunta que resolveria
+   os dois em dez segundos ("o servidor já foi atualizado?") não tinha
+   como ser respondida de fora. Era exatamente a situação que fez expor
+   `limites` aqui depois do incidente de 08/08: um dado bobo que evita um
+   SSH inteiro.
+
+   Lido UMA VEZ, na subida. Rodar git a cada /health seria pagar um
+   processo por batida de monitoramento para um valor que não muda
+   enquanto o serviço está no ar. */
+function versaoDoServidor() {
+  try {
+    const daqui = path.dirname(fileURLToPath(import.meta.url));
+    // backend/src -> backend -> suinco_logistica -> entregaveis -> raiz
+    const raiz = path.resolve(daqui, '..', '..', '..', '..');
+    const curto = execFileSync('git', ['rev-parse', '--short', 'HEAD'],
+      { cwd: raiz, encoding: 'utf8', timeout: 3000 }).trim();
+    const quando = execFileSync('git', ['log', '-1', '--format=%cd', '--date=format:%d/%m %H:%M'],
+      { cwd: raiz, encoding: 'utf8', timeout: 3000 }).trim();
+    return `${quando} · ${curto}`;
+  } catch {
+    /* Sem git (container, cópia sem .git): não é erro. O /health continua
+       respondendo tudo o mais — deixar de responder por causa disto seria
+       trocar um diagnóstico por um problema. */
+    return 'desconhecida';
+  }
+}
+
+/* Uma vez por processo: o valor não muda enquanto o serviço está no ar. */
+const VERSAO_SERVIDOR = versaoDoServidor();
 
 export function criarApp() {
   const app = express();
@@ -176,6 +214,8 @@ export function criarApp() {
         ok: true,
         banco: 'conectado',
         agora,
+        // Responde "o servidor já foi atualizado?" sem SSH. Ver versaoDoServidor().
+        versao: VERSAO_SERVIDOR,
         conectados: conectados(),
         limites: {
           porJanela: config.limites.porJanela,
