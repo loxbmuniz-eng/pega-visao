@@ -194,8 +194,11 @@ async def main():
         # A regra mudou de propósito das duas vezes; o teste segue a regra
         # nova. E a ORDEM importa: data primeiro, porque é por ela que se
         # procura a linha numa folha de trinta dias.
+        # Rótulos CURTOS: "Programada" e "Número da Carga" por extenso não
+        # cabiam na largura das colunas e saíam cortados no cabeçalho — achado
+        # pela conferência de layout logo abaixo, não pelo olho.
         ck('seis colunas — as datas entraram em 26/08',
-           f['colunas'] == ['Programada','Saída','Número da Carga','Placa','Rota','Observações'],
+           f['colunas'] == ['Data','Saída','Nº Carga','Placa','Rota','Observações'],
            str(f['colunas']))
         ck('fonte de leitura na tela', f['fonteTela'] >= 12, f"{f['fonteTela']}px")
 
@@ -215,6 +218,59 @@ async def main():
         ck('a coluna Programada traz data de verdade',
            len(datas) == 0 or len(comData) == len(datas),
            f'{len(comData)} de {len(datas)} linhas com data')
+
+        # ================================================================
+        # A FOLHA CABE NO PAPEL — a trava que faltava (26/08/2026).
+        #
+        # Nesta mesma tarde eu publiquei uma marca de texto dentro da célula
+        # da placa. A coluna Placa tem 7,5% da folha e não quebra linha: o
+        # texto inchou a coluna para um terço da página e derrubou a tabela
+        # inteira para fora do A4. O dono abriu o relatório do dia e escreveu
+        # "TA TOTALMENTE ZUADO".
+        #
+        # E TODOS OS TESTES PASSARAM. Havia teste de coluna, de rodapé, de
+        # fonte, de conteúdo — e nenhum media a única coisa que o leitor vê
+        # primeiro: se a folha cabe na folha.
+        #
+        # Esta checagem roda em MODO IMPRESSÃO (emulate_media), porque as
+        # larguras do relatório vivem dentro de @media print e não valem na
+        # tela. Medir na tela é medir outro documento.
+        # ================================================================
+        print('\n=== A FOLHA CABE NO PAPEL ===')
+        for alvo, nome in [('print-fretes', 'Fretes'), ('print-operacional', 'Operacional')]:
+            await pg.evaluate(
+                "(id) => { const e=document.getElementById(id);"
+                "  e.dataset.medindo='1'; e.style.display='block'; }", alvo)
+        await pg.emulate_media(media='print')
+        await pg.wait_for_timeout(500)
+        for alvo, nome in [('print-fretes', 'Fretes'), ('print-operacional', 'Operacional')]:
+            m = await pg.evaluate("""(id) => {
+                const c = document.getElementById(id);
+                const t = c.querySelector('table');
+                const pag = c.querySelector('.print-page');
+                if (!t || !pag) return null;
+                const vaza = [...c.querySelectorAll('td,th')]
+                  .filter(x => x.scrollWidth > x.clientWidth + 1)
+                  .map(x => (x.className.split(' ')[0] || 'sem-classe') + ': '
+                             + x.innerText.trim().slice(0, 18));
+                return {
+                  tabela: Math.round(t.getBoundingClientRect().width),
+                  pagina: Math.round(pag.getBoundingClientRect().width),
+                  vaza,
+                };
+            }""", alvo)
+            if not m:
+                ck(f'{nome}: folha medida', False, 'não achei a tabela')
+                continue
+            ck(f'{nome}: a tabela cabe na página',
+               m['tabela'] <= m['pagina'] + 2,
+               f"tabela {m['tabela']}px, página {m['pagina']}px")
+            ck(f'{nome}: nenhuma célula transborda a própria coluna',
+               not m['vaza'], '; '.join(m['vaza'][:4]))
+        await pg.emulate_media(media='screen')
+        await pg.evaluate(
+            "() => document.querySelectorAll('[data-medindo]')"
+            "  .forEach(e => { e.style.display=''; delete e.dataset.medindo; })")
 
         print('\n=== OPERACIONAL: MESMA LIMPEZA ===')
         await pg.evaluate("()=>exportarPdfOperacional()")

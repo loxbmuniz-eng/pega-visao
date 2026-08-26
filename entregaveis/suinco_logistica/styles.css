@@ -2642,15 +2642,15 @@ input,select,textarea{border-radius:5px}
      testes/test_relatorios.py ("todo status cabe em UMA linha") antes de
      fixar o valor. */
   #print-operacional .c-status{ width:16% }     /* "AGUARDANDO EMBARQUE" */
-  #print-operacional .c-rota{ width:12% }
+  #print-operacional .c-rota{ width:10.5% }
   #print-operacional .c-operacao{ width:9% }
   #print-operacional .c-placa{ width:7.5% }
-  #print-operacional .c-transp{ width:11.5% }   /* nomes longos de empresa */
+  #print-operacional .c-transp{ width:11% }   /* nomes longos de empresa */
   #print-operacional .c-veiculo{ width:6.5% }
-  #print-operacional .c-peso{ width:7% }
+  #print-operacional .c-peso{ width:8% }
   #print-operacional .c-palet{ width:4.5% }
   #print-operacional .c-entregas{ width:4.5% }
-  #print-operacional .c-ganchos{ width:4.5% }
+  #print-operacional .c-ganchos{ width:5.5% }
 }
 
 /* ---- Leitura dos dados: o que precisa saltar aos olhos ----
@@ -3275,21 +3275,25 @@ input,select,textarea{border-radius:5px}
    confere trinta dias assim. Sobrava largura: eram quatro colunas numa folha
    ampla. As três colunas de texto encolheram e Observações continua com o
    resto, que é onde o texto de verdade mora. */
-.tab-fretes .col-data{
-  width:10%; white-space:nowrap; font-variant-numeric:tabular-nums;
-}
+.tab-fretes .col-data,
 .tab-fretes .col-saida{
-  width:13%; white-space:nowrap; font-variant-numeric:tabular-nums;
+  white-space:nowrap; font-variant-numeric:tabular-nums;
+  /* Recuo menor que o das outras colunas: a folha usa 10px de cada lado, e
+     em coluna de data isso são 20px roubados de um conteúdo que não quebra
+     linha. Medido — "26/08/2026 17:16" não cabia e saía cortado. */
+  padding-left:6px !important; padding-right:6px !important;
 }
+.tab-fretes .col-data{ width:12% }
+.tab-fretes .col-saida{ width:17% }
 .tab-fretes .col-carga{
-  width:13%; font-weight:800; font-variant-numeric:tabular-nums;
+  width:12%; font-weight:800; font-variant-numeric:tabular-nums;
   background:rgba(185,144,63,.16);
 }
 .tab-fretes .col-placa{
-  width:12%; font-weight:800; letter-spacing:.4px; text-transform:uppercase;
+  width:11%; font-weight:800; letter-spacing:.4px; text-transform:uppercase;
   white-space:nowrap;
 }
-.tab-fretes .col-rota{ width:18% }
+.tab-fretes .col-rota{ width:15% }
 .tab-fretes .col-obs{ white-space:normal; line-height:1.5 }
 /* A hora, embaixo do dia, na mesma célula. Menor e mais apagada: o dia é a
    informação que se procura; a hora é a que se confere depois de achar. */
