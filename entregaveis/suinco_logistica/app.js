@@ -8624,10 +8624,51 @@ function abrirParaColocarPlacaUI(id){
   if(campo){ campo.focus(); campo.scrollIntoView({ block: 'center' }); }
 }
 
+/* QUEM MEXE NA CARGA DO DIA, EM QUALQUER LUGAR (27/08/2026).
+
+   Relato do dono: "o antonio ta tentando mexer nas cargas de hoje pela
+   programacao aparece o simbolo de proibido, voce precisa liberar acesso
+   pra administracao e logistica e nao bloquear".
+
+   O servidor NUNCA bloqueou: camposEditaveisPor() já dá a lista inteira
+   para Logística, e Administração herda ela. A trava era só de tela. */
+function podeEditarCargaDoDia(){
+  const s = (DB.operador && DB.operador.setor) || '';
+  return s === 'Logística' || s === 'Administração';
+}
+
+/* Uma célula editável da linha efetivada. Chama a MESMA função que a Fila
+   de Programados e a Torre chamam — nada de caminho paralelo: assim a
+   alteração cai na carga, entra no log de revisões e sobe para todos os
+   setores, em vez de morrer no rascunho da montagem. */
+function celulaCargaHtml(carga, tipo){
+  const id = escJs(carga.id);
+  if(tipo === 'numero'){
+    return `<input type="text" class="numero-carga-input" value="${esc(carga.numeroCarga)}"
+      onchange="atualizarNumeroCargaUI('${id}',this.value)"
+      title="Número da carga — grava na carga que já está na Torre.">`;
+  }
+  if(tipo === 'placa'){
+    return `<input type="text" class="placa-input" value="${esc(carga.placa)}"
+      onchange="atualizarPlacaUI('${id}',this.value)"
+      title="Trocar a placa. Se o caminhão novo já estiver no pátio, a carga assume a entrada dele.">`;
+  }
+  if(tipo === 'peso'){
+    return `<input type="number" class="peso-input" min="0" step="1" value="${carga.peso ?? ''}"
+      onchange="atualizarPesoUI('${id}',this.value)" title="Peso em kg.">`;
+  }
+  return '';
+}
+
 function linhaMontagemHtml(m){
-  const trancada = !!(m.efetivada_em || m.cancelada_em);
+  /* CANCELADA continua trancada: ela é histórico e não tem carga viva do
+     outro lado. EFETIVADA deixa de trancar para quem pode editar — a
+     linha passa a ser uma janela para a carga, não um retrato dela. */
+  const cargaViva = (m.efetivada_em && m.carga_id) ? getCarga(m.carga_id) : null;
+  const comoCarga = !!cargaViva && podeEditarCargaDoDia();
+  const trancada = !!m.cancelada_em || (!!m.efetivada_em && !comoCarga);
   const id = escJs(m.montagem_id);
-  const aberta = _montagemAberta === m.montagem_id && !trancada;
+  const aberta = _montagemAberta === m.montagem_id && !trancada && !comoCarga;
   const marca = m.cancelada_em
     ? `<span class="badge badge-aguardando-veiculo">CANCELADA</span>`
     : m.efetivada_em ? `<span class="badge badge-faturado">NA TORRE</span>` : '';
@@ -8643,15 +8684,22 @@ function linhaMontagemHtml(m){
            para mexer num numero e o que fazia isso ser feito no Excel.
            O stopPropagation impede que digitar abra/feche a linha. -->
       <td onclick="event.stopPropagation()">
-        <input type="number" min="1" class="seq-input" value="${m.sequencia ?? ''}"
+        <input type="number" min="1" class="seq-input" value="${comoCarga ? (cargaViva.sequencia ?? '') : (m.sequencia ?? '')}"
                aria-label="Sequência"
-               onchange="alterarMontagemUI('${id}','sequencia',this.value)"></td>
+               onchange="${comoCarga
+                 ? `atualizarSequenciaUI('${escJs(cargaViva.id)}',this.value)`
+                 : `alterarMontagemUI('${id}','sequencia',this.value)`}"></td>
       <td>${destinoMontagemHtml(m)} ${marca}</td>
-      <td>${esc(m.numero_carga) || '<span class="text-dim">—</span>'}</td>
-      <td>${m.placa
-            ? `<strong>${esc(m.placa)}</strong>`
-            : '<span class="text-dim">sem placa</span>'}</td>
-      <td>${m.peso ? Number(m.peso).toLocaleString('pt-BR') : '<span class="text-dim">—</span>'}</td>
+      <td ${comoCarga ? 'onclick="event.stopPropagation()"' : ''}>${comoCarga
+            ? celulaCargaHtml(cargaViva, 'numero')
+            : (esc(m.numero_carga) || '<span class="text-dim">—</span>')}</td>
+      <td ${comoCarga ? 'onclick="event.stopPropagation()"' : ''}>${comoCarga
+            ? celulaCargaHtml(cargaViva, 'placa')
+            : (m.placa ? `<strong>${esc(m.placa)}</strong>`
+                       : '<span class="text-dim">sem placa</span>')}</td>
+      <td ${comoCarga ? 'onclick="event.stopPropagation()"' : ''}>${comoCarga
+            ? celulaCargaHtml(cargaViva, 'peso')
+            : (m.peso ? Number(m.peso).toLocaleString('pt-BR') : '<span class="text-dim">—</span>')}</td>
       <td class="no-print">${trancada
             ? acoesMontagemHtml(m, trancada)
             : acoesLinhaMontagemHtml(m, aberta)}</td>
