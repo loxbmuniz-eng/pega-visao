@@ -17,6 +17,7 @@ let DEVOLUCOES = [];
 let DEV_CADASTROS = { supervisores: [], produtos: [], motivos: [] };
 let _devCadastrosCarregados = false;
 let _devExpandida = null;   // checklist aberto (sobrevive ao re-render)
+let _devDiaCarregado = null;  // dia que a lista em memória representa
 /* Rotas escolhidas no formulário de NOVO checklist — um checklist junta
    várias rotas da mesma região (pedido de 18/08/2026). */
 let _devRotasNovas = [];
@@ -250,7 +251,25 @@ function renderDevolucoes() {
 
   preencherSelectRotaDev();
   if (!_devCadastrosCarregados) carregarCadastrosDev();
-  carregarDevolucoes();
+
+  /* NÃO REBUSCAR A LISTA A CADA REDESENHO (27/08/2026).
+
+     Relato do dono: "qualquer coisa que aparece atualizado apaga o
+     checklist de devoluções".
+
+     `renderAll()` roda toda vez que uma carga é criada, alterada ou
+     movimentada em QUALQUER setor — e também na consulta periódica, sempre
+     que algo mudou no dia. Ele chama esta função, que chamava
+     `carregarDevolucoes()` sem perguntar: a lista era buscada de novo e
+     `#dev-lista` reescrito inteiro. Quem estava lançando uma nota via os
+     campos esvaziarem na frente dela.
+
+     Carga não tem nada a ver com checklist. A lista recarrega quando há
+     motivo: a primeira vez, uma troca de dia, uma ação de quem está aqui,
+     ou o aviso `devolucao:atualizada` — que tem caminho próprio. */
+  const diaPedido = (document.getElementById('dev-filtro-dia') || {}).value || diaLocalDev();
+  if (_devDiaCarregado !== diaPedido) carregarDevolucoes();
+  else renderListaDevolucoes();
 }
 
 function preencherSelectRotaDev() {
@@ -295,6 +314,7 @@ async function carregarDevolucoes() {
   const dia = (document.getElementById('dev-filtro-dia') || {}).value || diaLocalDev();
   try {
     DEVOLUCOES = await SuincoSharePoint.devolucoes.listar(dia, dia);
+    _devDiaCarregado = dia;
     renderListaDevolucoes();
   } catch (e) {
     notify('Não consegui buscar as devoluções: ' + (e.message || 'erro desconhecido'), 'danger', 6000);
@@ -409,6 +429,7 @@ function renderListaDevolucoes() {
     if (minhas.length === 1) _devExpandida = minhas[0].id;
   }
 
+  const digitado = _devCapturarDigitacao();
   box.innerHTML = lista.map((d) => {
     const aberta = _devExpandida === d.id;
     const totalCx = d.itens.reduce((s, i) => s + (i.cx || 0), 0);
@@ -440,6 +461,72 @@ function renderListaDevolucoes() {
       ${aberta ? renderDevolucaoAberta(d, editavel) : ''}
     </div>`;
   }).join('');
+  _devRestaurarDigitacao(digitado);
+}
+
+/* NADA DIGITADO SE PERDE NUM REDESENHO (27/08/2026).
+
+   A primeira metade do conserto (acima) tira os redesenhos que não tinham
+   motivo. Sobram os que TÊM: alguém do outro lado mexeu no mesmo checklist,
+   ou a própria pessoa gravou um campo. Nesses o quadro precisa ser refeito
+   — e é aqui que o que está sendo digitado tem que atravessar.
+
+   O critério é o que separa "digitado" de "veio do servidor": um campo cujo
+   valor atual é diferente do valor com que ele NASCEU no HTML tem coisa
+   digitada e ainda não gravada. Só esses voltam. Assim uma alteração que
+   outro setor gravou aparece normalmente, e o que a pessoa está escrevendo
+   nunca é sobrescrito — se os dois mexeram no mesmo campo, quem está com o
+   dedo no teclado ganha, e vê o conflito quando gravar.
+
+   Vale para todo campo com id dentro da lista: cabeçalho, linha do item,
+   linha nova e divergência. É por isso que TODOS ganharam id. */
+function _devValorDeNascimento(el) {
+  if (el.type === 'checkbox' || el.type === 'radio') return el.defaultChecked;
+  if (el.tagName === 'SELECT') {
+    const marcada = el.querySelector('option[selected]');
+    return marcada ? marcada.value : (el.options[0] ? el.options[0].value : '');
+  }
+  return el.defaultValue;
+}
+
+function _devValorAtual(el) {
+  return (el.type === 'checkbox' || el.type === 'radio') ? el.checked : el.value;
+}
+
+function _devCapturarDigitacao() {
+  const box = document.getElementById('dev-lista');
+  if (!box) return null;
+  const valores = {};
+  box.querySelectorAll('input[id], select[id], textarea[id]').forEach((el) => {
+    if (_devValorAtual(el) !== _devValorDeNascimento(el)) valores[el.id] = _devValorAtual(el);
+  });
+  const foco = document.activeElement;
+  const dentro = foco && foco.id && box.contains(foco);
+  return {
+    valores,
+    focoId: dentro ? foco.id : null,
+    // Sem isto o cursor volta para o fim do campo e quem estava corrigindo
+    // o meio de um número digita o resto no lugar errado.
+    ini: dentro && typeof foco.selectionStart === 'number' ? foco.selectionStart : null,
+    fim: dentro && typeof foco.selectionEnd === 'number' ? foco.selectionEnd : null,
+  };
+}
+
+function _devRestaurarDigitacao(estado) {
+  if (!estado) return;
+  Object.keys(estado.valores).forEach((id) => {
+    const el = document.getElementById(id);
+    if (!el) return;   // o campo saiu da tela (item excluído por outro setor)
+    if (el.type === 'checkbox' || el.type === 'radio') el.checked = estado.valores[id];
+    else el.value = estado.valores[id];
+  });
+  if (!estado.focoId) return;
+  const el = document.getElementById(estado.focoId);
+  if (!el) return;
+  el.focus();
+  if (estado.ini !== null) {
+    try { el.setSelectionRange(estado.ini, estado.fim); } catch (e) { /* number/date não aceitam */ }
+  }
 }
 
 function alternarDevolucaoUI(id) {
@@ -469,7 +556,7 @@ function cabecalhoEditavelDev(d, editavel) {
   const campo = (rotulo, nome, valor, extra = '', podeEditar = false) => `
     <div><label>${rotulo}</label>
       ${podeEditar
-        ? `<input type="text" value="${esc(valor || '')}" ${extra}
+        ? `<input type="text" id="dev-cab-${esc(d.id)}-${nome}" value="${esc(valor || '')}" ${extra}
              onchange="editarDevolucaoCampoUI('${escJs(d.id)}','${nome}',this.value)">`
         : `<div class="dev-ro">${esc(valor) || '—'}</div>`}
     </div>`;
@@ -493,7 +580,7 @@ function cabecalhoEditavelDev(d, editavel) {
   const dataDev = String(d.dataDev || '').slice(0, 10);
   const campoData = `<div><label>Data da devolução</label>
       ${editavel
-        ? `<input type="date" value="${esc(dataDev)}"
+        ? `<input type="date" id="dev-cab-${esc(d.id)}-dataDev" value="${esc(dataDev)}"
              onchange="editarDevolucaoCampoUI('${escJs(d.id)}','dataDev',this.value)">`
         : `<div class="dev-ro">${esc(dataDev) || '—'}</div>`}
     </div>`;
@@ -518,7 +605,8 @@ function cabecalhoEditavelDev(d, editavel) {
         ${campo('Nº carga de devolução (SIS ATAK)', 'cargaNumero', d.cargaNumero,
           'title="O Número Documento da Montagem de Cargas do SIS ATAK — o número que o porteiro gera ao abrir as DEVs. Não é o Nº DEV do checklist: são dois números diferentes."', true)}
         <div><label>Chegou lacrado?</label>
-          <select title="Resposta da Portaria no recebimento — informação, não trava nada."
+          <select id="dev-cab-${esc(d.id)}-chegouLacrado"
+            title="Resposta da Portaria no recebimento — informação, não trava nada."
             onchange="editarDevolucaoCampoUI('${escJs(d.id)}','chegouLacrado',this.value)">
             <option value=""${d.chegouLacrado === null || d.chegouLacrado === undefined ? ' selected' : ''}>(não informado)</option>
             <option value="true"${d.chegouLacrado === true ? ' selected' : ''}>Sim — chegou lacrado</option>
@@ -537,7 +625,8 @@ function cabecalhoEditavelDev(d, editavel) {
       <div class="dev-cab-posto-tit">🧾 Faturamento</div>
       <div class="form-grid dev-cab-grid">
         <div><label>Peso final (kg)</label>
-          <input type="number" min="0" step="1" value="${d.pesoFinal ?? ''}" placeholder="kg"
+          <input type="number" min="0" step="1" id="dev-cab-${esc(d.id)}-pesoFinal"
+            value="${d.pesoFinal ?? ''}" placeholder="kg"
             title="Pesagem da balança — a confirmação do Faturamento."
             onchange="editarDevolucaoCampoUI('${escJs(d.id)}','pesoFinal',this.value)">
         </div>
@@ -549,7 +638,7 @@ function cabecalhoEditavelDev(d, editavel) {
       <div class="dev-cab-posto-tit">🧭 Controles Internos</div>
       <div class="form-grid dev-cab-grid">
         <div><label>Gerou RDC (romaneio)?</label>
-          <select title="Informado na destinação."
+          <select id="dev-cab-${esc(d.id)}-gerouRdc" title="Informado na destinação."
             onchange="editarDevolucaoCampoUI('${escJs(d.id)}','gerouRdc',this.value)">
             <option value=""${d.gerouRdc === null || d.gerouRdc === undefined ? ' selected' : ''}>(não informado)</option>
             <option value="true"${d.gerouRdc === true ? ' selected' : ''}>Sim — gerou RDC</option>
@@ -660,14 +749,19 @@ function renderDevolucaoAberta(d, editavel) {
       : i.falta > 0
         ? `<span class="dev-falta-chip">falta ${i.falta.toLocaleString('pt-BR')}</span>`
         : '<span class="dev-ok-chip">✔</span>';
+    /* Todo campo do item ganha id (27/08/2026): sem id não há como
+       devolver o que estava sendo digitado depois de um redesenho — ver
+       _devCapturarDigitacao. O item_id é BIGSERIAL, então é único no
+       painel inteiro. */
     const cel = (nome, valor, tipo = 'text', extra = '') => editavel
-      ? `<input type="${tipo}" value="${esc(valor ?? '')}" ${extra}
+      ? `<input type="${tipo}" id="dev-it-${i.itemId}-${nome}" value="${esc(valor ?? '')}" ${extra}
            onchange="editarItemDevolucaoUI('${escJs(d.id)}',${i.itemId},'${nome}',this.value)">`
       : (esc(valor) || '—');
     return `<tr>
       <td>${cel('nota', i.nota)}</td>
       <td>${editavel
-        ? `<select onchange="editarItemDevolucaoUI('${escJs(d.id)}',${i.itemId},'parcial',this.value)">
+        ? `<select id="dev-it-${i.itemId}-parcial"
+             onchange="editarItemDevolucaoUI('${escJs(d.id)}',${i.itemId},'parcial',this.value)">
              <option value="1" ${i.parcial ? 'selected' : ''}>Parcial</option>
              <option value="" ${i.parcial ? '' : 'selected'}>Total</option></select>`
         : (i.parcial ? 'Parcial' : 'Total')}</td>
@@ -678,7 +772,8 @@ function renderDevolucaoAberta(d, editavel) {
            TOTAL não tem parcial: o campo fica travado e vazio de propósito,
            para ninguém preencher o que não existe. */''}
       <td>${editavel
-        ? `<input type="text" class="dev-parcial-desc" value="${esc(i.parcialDesc || '')}"
+        ? `<input type="text" class="dev-parcial-desc" id="dev-it-${i.itemId}-parcialDesc"
+             value="${esc(i.parcialDesc || '')}"
              ${i.parcial ? '' : 'disabled'} placeholder="${i.parcial ? 'Nº parcial' : '—'}"
              title="${i.parcial ? 'Número da nota parcial (obrigatório quando a devolução é parcial).' : 'Nota total não tem número de parcial.'}"
              onchange="editarItemDevolucaoUI('${escJs(d.id)}',${i.itemId},'parcialDesc',this.value)">`
@@ -696,7 +791,7 @@ function renderDevolucaoAberta(d, editavel) {
             montar a carga no SIS ATAK. Fica ao lado do Nº DEV justamente
             para os dois nunca mais serem confundidos um com o outro. */''}
       <td>${podeInformarCargaDev()
-        ? `<input type="text" value="${esc(i.cargaDev || '')}"
+        ? `<input type="text" id="dev-it-${i.itemId}-cargaDev" value="${esc(i.cargaDev || '')}"
              placeholder="${esc(d.cargaNumero || '—')}"
              title="Número da carga de devolução gerado no SIS ATAK. Em branco, vale o número do cabeçalho."
              onchange="editarItemDevolucaoUI('${escJs(d.id)}',${i.itemId},'cargaDev',this.value)">`
@@ -709,12 +804,14 @@ function renderDevolucaoAberta(d, editavel) {
       <td>${cel('motivo', i.motivo, 'text', 'list="dl-dev-motivos"')}
           ${i.motivo ? `<small class="text-dim dev-motivo-desc">${esc(i.motivo)}</small>` : ''}</td>
       <td class="c-peso">${podePesarItemDev()
-        ? `<input type="number" min="0" step="0.01" value="${i.pesoFaturamento ?? ''}" placeholder="—"
+        ? `<input type="number" min="0" step="0.01" id="dev-it-${i.itemId}-pesoFaturamento"
+             value="${i.pesoFaturamento ?? ''}" placeholder="—"
              title="Pesagem do Faturamento — é a confirmação de que a devolução passou pela balança."
              onchange="editarItemDevolucaoUI('${escJs(d.id)}',${i.itemId},'pesoFaturamento',this.value)">`
         : (i.pesoFaturamento ?? '—')}</td>
       <td class="c-peso">${podeConferirQtdDev()
-        ? `<input type="number" min="0" step="1" value="${i.qtdRecebida ?? ''}" placeholder="—"
+        ? `<input type="number" min="0" step="1" id="dev-it-${i.itemId}-qtdRecebida"
+             value="${i.qtdRecebida ?? ''}" placeholder="—"
              title="Conferência da Expedição: quantidade que CHEGOU na descarga. A falta é apontada sozinha."
              onchange="editarItemDevolucaoUI('${escJs(d.id)}',${i.itemId},'qtdRecebida',this.value)">`
         : (i.qtdRecebida ?? '—')}</td>
@@ -723,19 +820,22 @@ function renderDevolucaoAberta(d, editavel) {
         /* Destinação MÚLTIPLA (18/08/2026): caixas por destino — 3 caixas
            podem virar 1 Estoque + 2 Descarte. */
         ? `<span class="dev-dest-grupo">
-             <input type="number" min="0" step="1" value="${i.destEstoque ?? ''}" placeholder="E"
+             <input type="number" min="0" step="1" id="dev-it-${i.itemId}-destEstoque"
+               value="${i.destEstoque ?? ''}" placeholder="E"
                title="Caixas para ESTOQUE"
                onchange="editarItemDevolucaoUI('${escJs(d.id)}',${i.itemId},'destEstoque',this.value)">
-             <input type="number" min="0" step="1" value="${i.destDescarte ?? ''}" placeholder="D"
+             <input type="number" min="0" step="1" id="dev-it-${i.itemId}-destDescarte"
+               value="${i.destDescarte ?? ''}" placeholder="D"
                title="Caixas para DESCARTE"
                onchange="editarItemDevolucaoUI('${escJs(d.id)}',${i.itemId},'destDescarte',this.value)">
-             <input type="number" min="0" step="1" value="${i.destReprocesso ?? ''}" placeholder="R"
+             <input type="number" min="0" step="1" id="dev-it-${i.itemId}-destReprocesso"
+               value="${i.destReprocesso ?? ''}" placeholder="R"
                title="Caixas para REPROCESSO"
                onchange="editarItemDevolucaoUI('${escJs(d.id)}',${i.itemId},'destReprocesso',this.value)">
            </span>`
         : esc(devDestinoResumo(i)) || '—'}</td>
       <td class="dev-cel-notafinal">${podeNotaFinalDev()
-        ? `<input type="checkbox" ${i.notaFinal ? 'checked' : ''}
+        ? `<input type="checkbox" id="dev-it-${i.itemId}-notaFinal" ${i.notaFinal ? 'checked' : ''}
              title="NOTA FINAL — marque quando a nota deste item estiver finalizada (Central de Notas)."
              onchange="editarItemDevolucaoUI('${escJs(d.id)}',${i.itemId},'notaFinal',this.checked)">`
         : (i.notaFinal ? '✔' : '—')}</td>
