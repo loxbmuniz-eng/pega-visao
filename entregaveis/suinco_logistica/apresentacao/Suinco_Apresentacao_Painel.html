@@ -565,6 +565,35 @@
   /* print do painel com presença: preenche a coluna, cantos do painel */
   .tela-img img{ width:100%; object-fit:contain; }
 
+
+  /* ═══ CORREÇÕES DA AUDITORIA HALLMARK (27/08/2026) ═══
+     Três achados reais numa peça que já estava boa. Nenhum deles é gosto:
+     os três são regra de acessibilidade ou tell de design gerado. */
+
+  /* CRÍTICO — animação sem saída de emergência.
+     Cada slide entra com deslocamento vertical, e não havia
+     prefers-reduced-motion. Quem sente enjoo com movimento (e quem
+     configurou o celular para reduzir animação) levava 21 deslocamentos
+     na cara. Agora a troca vira só um clarear de 120ms. */
+  @media (prefers-reduced-motion: reduce){
+    .slide.ativa{ animation-duration:.12s; }
+    @keyframes entra{ from{ opacity:0 } to{ opacity:1 } }
+    *{ transition-duration:.01ms !important; }
+  }
+
+  /* MAIOR — a navegação não tinha foco visível.
+     Quem apresenta com teclado (Tab entre os botões, o caso normal num
+     telão) não enxergava onde estava. Anel dourado, sem animação: foco
+     que aparece devagar é foco que não serve. */
+  .nav button:focus-visible, .contador:focus-visible{
+    outline:3px solid var(--p-gold); outline-offset:3px; }
+
+  /* MAIOR — subtítulo em itálico.
+     A .frase é tipo de display (entra logo abaixo do h2), e display em
+     itálico é um dos sinais mais confiáveis de página gerada por IA.
+     A ênfase passa a vir do peso e da cor — que a marca já tem. */
+  .frase{ font-style:normal; font-weight:500; letter-spacing:.005em; }
+
 </style>
 </head>
 <body>
