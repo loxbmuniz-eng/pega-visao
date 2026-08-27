@@ -1,0 +1,30 @@
+3226250
+# ---------------------------------------------------------------------
+# EM QUE COMMIT O SERVIDOR DE PRODUÇÃO ESTÁ.
+#
+# A primeira linha é o commit, e só ela é lida. Tudo que mudou em
+# backend/src/ desde ele é tratado como PENDENTE pelo portão de
+# publicação (publicar.sh), que passa a imprimir arquivo por arquivo até
+# alguém rodar o atualizar.sh.
+#
+# POR QUE ESTE ARQUIVO EXISTE. 27/08/2026: a publicação levou 147 linhas
+# novas em backend/src/rotas/cargas.js — a absorção da entrada no pátio,
+# que é a correção da placa que aparecia duas vezes. O portão imprimiu
+# "Publicação completa — nada depende de atualização do servidor".
+#
+# Estava errado. Ele sabia comparar migração aplicada contra migração no
+# repositório, e não sabia NADA sobre código de servidor. Se a frase
+# tivesse sido repassada, o painel iria para o ar prometendo uma correção
+# que o servidor não sabia fazer.
+#
+# É a mesma família do erro de 25 e 26/08, e a mesma cura:
+# APLICADAS_EM_PRODUCAO.txt tirou a migração da memória; este tira o
+# código.
+#
+# COMO ATUALIZAR. Só com o bloco COPIE DAQUI colado pelo dono, que traz a
+# linha "commit no servidor". Nunca por dedução, nunca por "deve ter
+# rodado". Este arquivo é registro do que ACONTECEU.
+#
+# Prova do valor atual: bloco colado em 27/08/2026, com commit no
+# servidor 3226250, serviço active e /health local 200.
+# ---------------------------------------------------------------------
