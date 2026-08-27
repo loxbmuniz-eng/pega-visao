@@ -447,6 +447,25 @@
       linear-gradient(150deg, var(--nv-a) 0%, var(--nv-b) 55%, var(--nv-c) 100%); }
   }
 
+
+  /* ═══ LEITURA NOS CARTÕES CREME: tinta mais escura e corpo um pouco maior ═══ */
+  .cols .col li{ color:#3A1B0C; font-size:1.06em; }
+  .cols .col li strong, .cols .col strong{ color:#7A0E12; font-weight:600; }
+  .cols .col h3{ font-size:.88em; }
+  .n span{ color:#3A1B0C; font-size:.94em; font-weight:500; }
+  .etapa b{ font-size:.98em; }
+  .etapa small{ color:#3A1B0C; font-size:.84em; }
+  .etapa i{ font-size:.72em; }
+  .s-fim .data.sobre-creme{ font-size:.8em; }
+  .s-fim .sub.sobre-creme{ font-size:1.05em; }
+
+  /* na página impressa (mais baixa que a tela) o corpo maior é compensado
+     com menos folga vertical nos itens, pra nada estourar o cartão */
+  @media print{
+    .cols .col li{ padding-top:.9vh; padding-bottom:.9vh; }
+    .cols .col{ padding:1.1em 1.5em; }
+  }
+
 </style>
 </head>
 <body>
