@@ -3148,6 +3148,32 @@ function atualizarEntregasUI(id, val){
   SuincoStore.save();
   renderAll();
 }
+/* Transportadora e Observações da CARGA.
+
+   As duas faltavam do lado da carga e existiam só no rascunho da montagem
+   — e era por isso que a linha efetivada perdia campo ao virar janela para
+   a carga. Os dois são editáveis pela Logística no servidor
+   (CAMPOS_EDITAVEIS em dominio/fluxo.js), então a gravação sobe igual às
+   demais.
+
+   TRANSPORTADORA vazia significa "o que a Frota disser": quem carrega hoje
+   pode não ser o dono do caminhão (subcontratação, troca de última hora), e
+   escrever aqui vale só para ESTA carga — o cadastro do veículo fica como
+   está. */
+function atualizarTransportadoraUI(id, val){
+  const c = getCarga(id); if(!c) return;
+  c.transportadora = String(val || '').trim();
+  c.atualizadoEm = nowISO();   // sem isto a mudança não sobe — ver atualizarSequenciaUI
+  SuincoStore.save();
+  renderAll();
+}
+function atualizarObservacoesUI(id, val){
+  const c = getCarga(id); if(!c) return;
+  c.observacoes = String(val || '');
+  c.atualizadoEm = nowISO();
+  SuincoStore.save();
+  renderAll();
+}
 function atualizarMotoristaUI(id, val){
   const c = getCarga(id); if(!c) return;
   /* Só a carga muda — o cadastro da placa na Frota fica como está. São
@@ -5396,7 +5422,25 @@ function renderFrotaTabela(){
      Torre/Indicadores. Mesmo limiar que ativa o cartão — perguntado a
      ehTelaEstreita(), para não haver dois números para a mesma decisão. */
   const LIMITE = ehTelaEstreita() ? 30 : 300;
-  const exibidos = lista.slice(0, LIMITE);
+
+  /* NO CELULAR A FROTA COMEÇA FECHADA, E A BUSCA É A PORTA (27/08/2026).
+
+     Pedido do dono sobre o celular: "tem que rolar muito até chegar na
+     parte que é interessante ver". Medido em 390px: a aba Cadastros tinha
+     8.822px de rolagem — 10,5 telas — e a Frota sozinha era 7.465px
+     disso, 85% da aba. Trinta cartões de veículo que ninguém lê.
+
+     Quem abre a Frota no celular quer UM caminhão, e já sabe a placa. A
+     lista completa não é resposta para essa pergunta; é o obstáculo até
+     ela. Então sem busca não sai lista: sai o total e o convite para
+     digitar. Com busca, sai o que casa, com o mesmo limite de sempre.
+
+     No computador nada muda — lá a tabela cabe e serve para varrer.
+
+     O filtro "só quem precisa de revisão" continua mostrando lista sem
+     busca: ali a pergunta É a lista, e ela é curta. */
+  const semBuscaNoCelular = ehTelaEstreita() && !buscaTexto && !soRevisao;
+  const exibidos = semBuscaNoCelular ? [] : lista.slice(0, LIMITE);
   document.getElementById('frota-tbody').innerHTML = exibidos.map(f=>`
     <tr>
       <td>${esc(f.placa)}</td><td>${esc(f.transportadora)||'—'}</td><td>${esc(f.tipoVeiculo)||'—'}</td>
@@ -5409,9 +5453,11 @@ function renderFrotaTabela(){
   document.getElementById('frota-empty').hidden = todos.length>0;
   const contagemEl = document.getElementById('frota-contagem');
   if(contagemEl){
-    contagemEl.textContent = lista.length > LIMITE
-      ? `Mostrando ${LIMITE} de ${lista.length} (de ${todos.length} no total) — refine a busca pra ver outras.`
-      : `${lista.length} de ${todos.length} placa(s) cadastrada(s).`;
+    contagemEl.textContent = semBuscaNoCelular
+      ? `${todos.length} placa(s) cadastrada(s). Digite a placa ou a transportadora acima para ver.`
+      : (lista.length > LIMITE
+        ? `Mostrando ${LIMITE} de ${lista.length} (de ${todos.length} no total) — refine a busca pra ver outras.`
+        : `${lista.length} de ${todos.length} placa(s) cadastrada(s).`);
   }
 }
 function addFrotaUI(){
@@ -8660,6 +8706,128 @@ function celulaCargaHtml(carga, tipo){
   return '';
 }
 
+/* AS AÇÕES DA LINHA QUE JÁ VIROU CARGA.
+
+   Aqui não cabe "➕ Criar carga" — a carga já existe, e o botão ofereceria
+   criar uma segunda para a mesma linha. Nem "Excluir": cancelar a linha da
+   montagem não desfaz a carga que já está na Torre, e um botão que promete
+   remover sem remover é pior que não ter botão. Quem precisa tirar a carga
+   faz isso na Torre, onde a regra de exclusão vale por inteiro.
+
+   Sobra o que é verdade: a linha virou carga, e a seta diz que ela abre. */
+function acoesCargaNaMontagemHtml(aberta){
+  return `<div class="mont-acoes"><span class="text-dim">virou carga</span>
+    <span class="mont-seta${aberta ? ' aberta' : ''}" aria-hidden="true">▸</span></div>`;
+}
+
+/* O FORMULÁRIO COMPLETO DA LINHA QUE JÁ VIROU CARGA (27/08/2026).
+
+   Relato do dono, no mesmo dia em que a linha efetivada foi destravada:
+
+     "o tonin nao consegue mais abrir a carga e editar detalhadamente cada
+      carga, quantidade de entrega, ganchos, isso precisa ser expansivel e
+      nao pode faltar onde colocar"
+
+   Erro meu, e da minha própria mudança: ao transformar a linha efetivada em
+   janela para a carga, eu troquei o formulário de DOZE campos por três
+   células na linha (número, placa, peso). Quem montava a carga perdeu
+   Motorista, Tipo de Operação, Paletizada, Ganchos, Entregas e Observações
+   — justamente os campos que só existem no formulário.
+
+   Agora a linha abre de novo, com a MESMA ORDEM e o MESMO desenho do
+   formulário da montagem (`formMontagemHtml`), campo por campo. Ordem igual
+   não é capricho: é a mesma pessoa preenchendo a mesma carga, e duas telas
+   com ordem diferente para o mesmo trabalho geram erro de campo trocado.
+
+   A diferença é para onde cada campo grava: aqui tudo chama as MESMAS
+   funções da Fila de Programados e da Torre, então a alteração cai na
+   CARGA, entra no log de revisões do servidor e sobe para todos os setores
+   — em vez de morrer no rascunho da montagem, que depois de efetivado é
+   histórico e o servidor recusa com 409 JA_EFETIVADA.
+
+   ROTA continua sem edição aqui, pelo mesmo motivo de sempre: a linha
+   nasceu de uma rota do modelo do dia, e trocá-la transformaria "a segunda
+   saída de Patos" em outra coisa sem ninguém perceber. Mas o campo NÃO fica
+   só negando — ele diz onde se troca. */
+function formCargaHtml(c, m){
+  const id = escJs(c.id);
+  const frota = c.placa ? buscarFrota(c.placa) : null;
+  return `
+    <div class="mont-form">
+      <div class="mont-form-tit">${esc(m.apelido_rota || m.rota_nome)}
+        <span class="text-dim" style="font-weight:400">
+          ${m.apelido_rota ? esc(m.rota_nome) + ' · ' : ''}${esc(m.rota_codigo)}</span></div>
+
+      <div class="form-group" style="margin-bottom:10px">
+        <span class="text-dim">✅ Esta linha já virou carga. O que você mudar aqui grava na
+        CARGA — aparece na Torre de Controle, nos relatórios e para os outros setores, com
+        registro de quem mudou.</span></div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>Placa</label>
+          <input type="text" id="montf-placa-${esc(m.montagem_id)}" value="${esc(c.placa)}"
+                 placeholder="ABC1D23" autocomplete="off"
+                 onchange="atualizarPlacaUI('${id}', this.value)"></div>
+        <div class="form-group">
+          <label>Transportadora <span class="hint">(da Frota — dá para trocar)</span></label>
+          <input type="text" list="lista-transportadoras" value="${esc(c.transportadora)}"
+                 placeholder="vem da placa"
+                 onchange="atualizarTransportadoraUI('${id}',this.value)"></div>
+        <div class="form-group">
+          <label>Tipo de Veículo <span class="hint">(da Frota)</span></label>
+          <input type="text" value="${esc(c.tipoVeiculo || (frota ? frota.tipoVeiculo : ''))}"
+                 placeholder="vem da placa" disabled></div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group"><label>Número de Carga</label>
+          <input type="text" value="${esc(c.numeroCarga)}" placeholder="Ex: 10245"
+                 onchange="atualizarNumeroCargaUI('${id}',this.value)"></div>
+        <div class="form-group"><label>Motorista</label>
+          <input type="text" value="${esc(c.motorista)}" placeholder="Nome do motorista"
+                 onchange="atualizarMotoristaUI('${id}',this.value)"></div>
+        <div class="form-group"><label>Tipo de Operação</label>
+          ${praOndeSelectHtml(c)}</div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group"><label>Peso (kg)</label>
+          <input type="number" min="0" value="${c.peso ?? ''}"
+                 onchange="atualizarPesoUI('${id}',this.value)"></div>
+        <div class="form-group">
+          <label>Sequência <span class="hint">(prioridade de montagem do dia)</span></label>
+          <input type="number" min="1" value="${c.sequencia ?? ''}"
+                 onchange="atualizarSequenciaUI('${id}',this.value)"></div>
+        <div class="form-group"><label>Paletizada?</label>
+          ${paletizadaSelectHtml(c)}</div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>Qtd. Ganchos (Gancheira) <span class="hint">0 = Liso</span></label>
+          <input type="number" min="0" step="1" value="${c.qtdGanchos ?? 0}"
+                 onchange="atualizarGanchosUI('${id}',this.value)"></div>
+        <div class="form-group"><label>Qtd. Entregas</label>
+          <input type="number" min="1" step="1" value="${c.qtdEntregas ?? 1}"
+                 onchange="atualizarEntregasUI('${id}',this.value)"></div>
+        <div class="form-group">
+          <label>Rota <span class="hint">(vem do modelo do dia)</span></label>
+          <input type="text" value="${esc(rotaCurta(c.rota))}" disabled
+                 title="A rota desta linha veio do modelo do dia. Para trocar, altere na Fila de Programados ou cancele a linha e puxe a rota certa."></div>
+      </div>
+
+      <div class="form-group" style="margin-bottom:10px"><label>Observações</label>
+        <textarea onchange="atualizarObservacoesUI('${id}',this.value)"
+          placeholder="O que a operação precisa saber sobre esta carga">${esc(c.observacoes)}</textarea></div>
+
+      <div class="flex-end gap8">
+        <button class="btn btn-sec btn-sm"
+          onclick="alternarLinhaMontagemUI('${escJs(m.montagem_id)}')">Fechar</button>
+      </div>
+    </div>`;
+}
+
 function linhaMontagemHtml(m){
   /* CANCELADA continua trancada: ela é histórico e não tem carga viva do
      outro lado. EFETIVADA deixa de trancar para quem pode editar — a
@@ -8668,12 +8836,21 @@ function linhaMontagemHtml(m){
   const comoCarga = !!cargaViva && podeEditarCargaDoDia();
   const trancada = !!m.cancelada_em || (!!m.efetivada_em && !comoCarga);
   const id = escJs(m.montagem_id);
-  const aberta = _montagemAberta === m.montagem_id && !trancada && !comoCarga;
+  /* A LINHA EFETIVADA VOLTA A ABRIR (27/08/2026). O `&& !comoCarga` que
+     estava aqui era o defeito relatado pelo dono: ela ficava clicável e não
+     abria nada, e os campos que só existem no formulário sumiam da tela. */
+  const aberta = _montagemAberta === m.montagem_id && !trancada;
   const marca = m.cancelada_em
     ? `<span class="badge badge-aguardando-veiculo">CANCELADA</span>`
     : m.efetivada_em ? `<span class="badge badge-faturado">NA TORRE</span>` : '';
 
-  const resumo = `<tr class="mont-linha${trancada ? ' linha-fraca' : ''}${aberta ? ' mont-linha-aberta' : ''}"
+  /* `mont-linha-carga` marca a linha que JÁ virou carga e continua
+     editável. Ela não é "linha-fraca" (não está trancada) nem uma linha em
+     montagem (não tem "Criar carga"): é uma terceira situação, e sem uma
+     classe própria a tela e os testes só conseguem descrevê-la por
+     ausência — foi assim que a checagem "toda linha traz uma ação de
+     avanço" passou a contar uma linha que, com razão, não tem nenhuma. */
+  const resumo = `<tr class="mont-linha${trancada ? ' linha-fraca' : ''}${comoCarga ? ' mont-linha-carga' : ''}${aberta ? ' mont-linha-aberta' : ''}"
       ${trancada ? '' : `onclick="alternarLinhaMontagemUI('${id}')" title="Clique para abrir os campos desta carga"`}>
       <!-- SEQUENCIA EDITAVEL NA LINHA — pedido do dono (25/08/2026):
            "o campo sequencia precisa estar disponivel para edicao e
@@ -8702,11 +8879,13 @@ function linhaMontagemHtml(m){
             : (m.peso ? Number(m.peso).toLocaleString('pt-BR') : '<span class="text-dim">—</span>')}</td>
       <td class="no-print">${trancada
             ? acoesMontagemHtml(m, trancada)
+            : comoCarga ? acoesCargaNaMontagemHtml(aberta)
             : acoesLinhaMontagemHtml(m, aberta)}</td>
     </tr>`;
 
   if(!aberta) return resumo;
-  return resumo + `<tr class="mont-detalhe"><td colspan="6">${formMontagemHtml(m)}</td></tr>`;
+  return resumo + `<tr class="mont-detalhe"><td colspan="6">${
+    comoCarga ? formCargaHtml(cargaViva, m) : formMontagemHtml(m)}</td></tr>`;
 }
 
 /* O DIA EM PLANILHA — para o registro que a Suinco sempre teve.
@@ -9518,16 +9697,32 @@ function _prepararTitulosExplicaveis(){
    Só a primeira visita decide isso. Depois vale o que a pessoa escolheu —
    inclusive fechar tudo, se for o que ela quer.
    ───────────────────────────────────────────────────────────────────── */
-const SECOES_CHAVE = 'suinco_indicadores_secoes';
+/* ABAS COM SEÇÃO RECOLHIDA NO CELULAR.
+   Indicadores entrou em 27/08; Cadastros no mesmo dia, pela mesma medida:
+   8.822px de rolagem, 10,5 telas. Uma mecânica, duas abas — a lista aqui é
+   o único lugar que decide quais. */
+const SECOES_ABAS = ['indicadores', 'cadastros'];
+const SECOES_SELETOR = SECOES_ABAS
+  .map(a => `#tab-${a} > .card > .card-title, #tab-${a} > .grid2 > .card > .card-title`)
+  .join(', ');
+function _secoesChave(aba){ return `suinco_secoes_${aba}`; }
+/* A chave antiga fica: quem já escolheu em Indicadores não perde a escolha. */
+const SECOES_CHAVE_LEGADO = { indicadores: 'suinco_indicadores_secoes' };
 
-function _secoesEstado(){
+function _secoesEstado(aba){
   try {
-    const cru = localStorage.getItem(SECOES_CHAVE);
+    const cru = localStorage.getItem(_secoesChave(aba))
+             || (SECOES_CHAVE_LEGADO[aba] ? localStorage.getItem(SECOES_CHAVE_LEGADO[aba]) : null);
     return cru ? JSON.parse(cru) : null;   // null = nunca escolheu nada
   } catch { return null; }
 }
-function _secoesGravar(lista){
-  try { localStorage.setItem(SECOES_CHAVE, JSON.stringify(lista)); } catch {}
+function _secoesGravar(aba, lista){
+  try { localStorage.setItem(_secoesChave(aba), JSON.stringify(lista)); } catch {}
+}
+/* Os cartões de uma aba, na ordem da tela. Em Cadastros parte deles mora
+   dentro de .grid2 — por isso não dá para usar só filho direto. */
+function _secoesCards(abaEl){
+  return [...abaEl.querySelectorAll(':scope > .card, :scope > .grid2 > .card')];
 }
 function _secaoId(card){
   const t = card.querySelector(':scope > .card-title');
@@ -9535,15 +9730,16 @@ function _secaoId(card){
 }
 
 function restaurarSecoesIndicadores(){
-  const aba = document.getElementById('tab-indicadores');
+  SECOES_ABAS.forEach(restaurarSecoesDaAba);
+}
+function restaurarSecoesDaAba(nomeAba){
+  const aba = document.getElementById(`tab-${nomeAba}`);
   if (!aba || window.innerWidth > 820) return;
-  const cards = [...aba.children].filter(e => e.classList && e.classList.contains('card'));
+  const cards = _secoesCards(aba);
   if (!cards.length) return;
-
-  const guardado = _secoesEstado();
+  const guardado = _secoesEstado(nomeAba);
   const abertas = new Set(guardado || []);
   const primeiraVisita = guardado === null;
-
   cards.forEach((card, i) => {
     const t = card.querySelector(':scope > .card-title');
     if (!t) return;
@@ -9559,7 +9755,7 @@ function restaurarSecoesIndicadores(){
 
 document.addEventListener('click', (ev) => {
   if (window.innerWidth > 820) return;
-  const titulo = ev.target.closest('#tab-indicadores > .card > .card-title');
+  const titulo = ev.target.closest(SECOES_SELETOR);
   if (!titulo) return;
   if (ev.target.closest('button, a, input, select, label')) return;
 
@@ -9567,11 +9763,19 @@ document.addEventListener('click', (ev) => {
   const aberta = card.classList.toggle('sec-aberta');
   titulo.setAttribute('aria-expanded', aberta ? 'true' : 'false');
 
-  const aba = document.getElementById('tab-indicadores');
-  const lista = [...aba.children]
-    .filter(e => e.classList && e.classList.contains('card') && e.classList.contains('sec-aberta'))
-    .map(_secaoId);
-  _secoesGravar(lista);
+  const aba = card.closest('[id^="tab-"]');
+  if (!aba) return;
+  const nomeAba = aba.id.replace('tab-', '');
+  _secoesGravar(nomeAba, _secoesCards(aba)
+    .filter(c => c.classList.contains('sec-aberta'))
+    .map(_secaoId));
+  /* A FROTA PRECISA DO FOCO NA BUSCA (27/08/2026). Ela abre sem lista — a
+     busca é a porta. Abrir e deixar o dedo procurando o campo seria trocar
+     uma rolagem por um garimpo. */
+  if (aberta && nomeAba === 'cadastros'){
+    const busca = card.querySelector('#frota-busca');
+    if (busca) setTimeout(() => { try { busca.focus({preventScroll:true}); } catch(e){} }, 60);
+  }
 });
 
 document.addEventListener('keydown', (ev) => {

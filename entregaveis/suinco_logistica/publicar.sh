@@ -270,6 +270,38 @@ git checkout "$TRABALHO" || falhou "publiquei, mas não consegui voltar para $TR
 verde "  ok  $ENTREGA atualizada — o Vercel sobe em instantes"
 
 echo
+# ---------------------------------------------------------------------
+# CÓDIGO DE SERVIDOR TAMBÉM É PENDÊNCIA — e o portão era cego para isso.
+#
+# 27/08/2026: esta publicação levou 147 linhas novas em
+# backend/src/rotas/cargas.js (a absorção da entrada no pátio) e o portão
+# imprimiu "nada depende de atualização do servidor". Estava errado. Ele
+# sabia comparar MIGRAÇÃO aplicada contra migração no repositório, e não
+# sabia nada sobre código.
+#
+# Se aquela frase tivesse sido repassada, o painel iria para o ar
+# prometendo uma correção que o servidor não sabia fazer — que é
+# exatamente o erro de 25 e 26/08 que este arquivo existe para impedir.
+#
+# A conta agora é a mesma das migrações: existe um registro do commit que
+# está RODANDO no servidor, e ele só sobe com o bloco COPIE DAQUI colado
+# pelo dono. Tudo que mudou em backend/src/ desde aquele commit é
+# pendência, com nome de arquivo.
+COMMIT_PROD_ARQ="$AQUI/backend/COMMIT_EM_PRODUCAO.txt"
+COMMIT_PROD="$(head -1 "$COMMIT_PROD_ARQ" 2>/dev/null | tr -d '[:space:]')"
+if [[ -n "$COMMIT_PROD" ]] && git -C "$RAIZ" cat-file -e "${COMMIT_PROD}^{commit}" 2>/dev/null; then
+  MUDOU_SERVIDOR="$(git -C "$RAIZ" diff --name-only "$COMMIT_PROD" HEAD \
+      -- entregaveis/suinco_logistica/backend/src/ 2>/dev/null | head -12)"
+  if [[ -n "$MUDOU_SERVIDOR" ]]; then
+    while IFS= read -r arq; do
+      [[ -n "$arq" ]] || continue
+      PENDENTES="${PENDENTES}  · ${arq##*/backend/src/}: código de servidor novo. Só passa a valer depois do atualizar.sh."$'\n'
+    done <<< "$MUDOU_SERVIDOR"
+  fi
+else
+  PENDENTES="${PENDENTES}  · NÃO SEI em que commit o servidor está (backend/COMMIT_EM_PRODUCAO.txt ausente ou desconhecido). Trate como se dependesse do atualizar.sh."$'\n'
+fi
+
 echo "====================================================================="
 if [[ -n "$PENDENTES" ]]; then
   vermelho "ESTA PUBLICAÇÃO SÓ FUNCIONA POR COMPLETO DEPOIS DO atualizar.sh."

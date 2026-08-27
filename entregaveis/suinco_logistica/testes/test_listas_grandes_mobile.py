@@ -86,7 +86,21 @@ async def main():
             return { linhas: tb.querySelectorAll('tr').length, contagem, altura: document.body.scrollHeight };
         }""")
         ck('mostra no máximo 30 placas no celular', info['linhas'] <= 30, str(info['linhas']))
-        ck('avisa que cortou e mais placas existem', 'Mostrando' in info['contagem'] and 'refine' in info['contagem'],
+        # A REGRA MUDOU DE PROPÓSITO EM 27/08/2026, a pedido do dono:
+        # "tem que rolar muito até chegar na parte que é interessante ver".
+        #
+        # Antes o celular listava 30 placas e avisava "refine a busca pra ver
+        # outras" — o castigo DEPOIS de rolar. Agora a Frota abre pela BUSCA:
+        # sem busca não há lista, e a contagem convida a digitar. Quem abre a
+        # Frota no celular já sabe a placa que procura.
+        #
+        # A garantia aqui ficou mais forte, não mais fraca: zero linha em vez
+        # de trinta, e o total continua visível para ninguém achar que o
+        # cadastro sumiu.
+        ck('sem busca, o celular não desenha lista nenhuma',
+           info['linhas'] == 0, f"{info['linhas']} linha(s)")
+        ck('mas mostra o total e ensina o caminho',
+           'placa(s) cadastrada(s)' in info['contagem'] and 'Digite' in info['contagem'],
            info['contagem'])
         ck('altura da página fica em faixa razoável (< 20000px) com 60 placas',
            info['altura'] < 20000, f"{info['altura']}px")

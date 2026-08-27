@@ -328,11 +328,17 @@ async def main():
         # retrocesso: numa sexta de 39 cargas, mandar uma para a Torre
         # passava a exigir abrir a linha, clicar, e a linha fechar sozinha.
         d = await pg.evaluate("""() => {
-              // Linha já efetivada é LEITURA: ali a coluna mostra "virou
-              // carga", não um botão. Contar ela junto reprovaria o
+              // Linha já efetivada NÃO entra na conta: ali a coluna mostra
+              // "virou carga", não um botão, e contar ela junto reprovaria o
               // comportamento certo.
+              //
+              // Desde 27/08 ela tem classe própria (`mont-linha-carga`):
+              // para a Logística e a Administração a linha efetivada deixou
+              // de ser "linha-fraca" — ela virou janela editável para a
+              // carga —, e sem esta segunda exclusão o teste passou a
+              // reprovar a linha por não ter um botão que ela não deve ter.
               const linhas = [...document.querySelectorAll(
-                '#mont-tbody tr.mont-linha:not(.linha-fraca)')];
+                '#mont-tbody tr.mont-linha:not(.linha-fraca):not(.mont-linha-carga)')];
               const semPlaca = linhas.find(tr => tr.textContent.includes('sem placa'));
               const comPlaca = linhas.find(tr => {
                 const b = tr.querySelector('.mont-btn-criar');
@@ -377,7 +383,7 @@ async def main():
         await pg.evaluate("() => { window.__promptReal = window.prompt; window.prompt = () => null; }")
         await pg.evaluate("""() => {
               const tr = [...document.querySelectorAll(
-                '#mont-tbody tr.mont-linha:not(.linha-fraca)')][0];
+                '#mont-tbody tr.mont-linha:not(.linha-fraca):not(.mont-linha-carga)')][0];
               tr.querySelector('.mont-btn-excluir').click();
             }""")
         await pg.wait_for_timeout(400)
@@ -386,6 +392,67 @@ async def main():
         await pg.evaluate("() => { window.prompt = window.__promptReal; }")
         ck('clicar no botão não abre a linha por tabela',
            antes == depois, f'antes {antes} · depois {depois}')
+
+        # --------------------------------------------------------------
+        print('\n=== 10b. A LINHA QUE VIROU CARGA ABRE E EDITA A CARGA ===')
+        # Relato do dono (27/08/2026), depois que a linha efetivada foi
+        # destravada para Logística e Administração:
+        #
+        #   "o tonin nao consegue mais abrir a carga e editar detalhadamente
+        #    cada carga, quantidade de entrega, ganchos, isso precisa ser
+        #    expansivel e nao pode faltar onde colocar"
+        #
+        # Erro meu: eu troquei o formulário de doze campos por três células
+        # na linha. Aqui a prova é do jeito que ele faz — clicando.
+        d = await pg.evaluate("""async () => {
+              _montagemAberta = null; renderMontagem();
+              const tr = document.querySelector('#mont-tbody tr.mont-linha-carga');
+              if(!tr) return { achou: false };
+              tr.click();
+              await new Promise(r => setTimeout(r, 350));
+              const det = document.querySelector('#mont-tbody tr.mont-detalhe');
+              if(!det) return { achou: true, abriu: false };
+              const rotulo = (txt) => [...det.querySelectorAll('label')]
+                .some(l => l.textContent.includes(txt));
+              const html = det.innerHTML;
+              return {
+                achou: true, abriu: true,
+                entregas: rotulo('Qtd. Entregas'),
+                ganchos: rotulo('Qtd. Ganchos'),
+                motorista: rotulo('Motorista'),
+                observacoes: rotulo('Observações'),
+                campos: det.querySelectorAll('input,select,textarea').length,
+                // A gravação tem que ir para a CARGA. O rascunho da montagem
+                // já é histórico e o servidor recusa com 409 JA_EFETIVADA —
+                // gravar lá mudaria a tela e não mudaria a carga.
+                naCarga: html.includes('atualizarEntregasUI')
+                      && html.includes('atualizarGanchosUI'),
+                noRascunho: html.includes('alterarMontagemUI'),
+                // Tipo de Operação e Paletizada são os seletores da Fila de
+                // Programados, reaproveitados de propósito. A largura deles
+                // foi feita para célula estreita de tabela (.palet-inline
+                // tem 80px fixos) — dentro do formulário isso apareceria
+                // como campo encolhido no meio de campos inteiros.
+                selectsEncolhidos: [...det.querySelectorAll('.form-group > select')]
+                  .filter(s => s.getBoundingClientRect().width
+                             < s.parentElement.getBoundingClientRect().width - 3)
+                  .length,
+                selects: det.querySelectorAll('.form-group > select').length,
+              };
+            }""")
+        ck('existe linha que já virou carga para o teste', d['achou'] is True, str(d))
+        if d.get('achou'):
+            ck('ela ABRE ao clique — o formulário voltou', d.get('abriu') is True, str(d))
+            ck('com Qtd. Entregas e Qtd. Ganchos, que era o que sumiu',
+               d.get('entregas') and d.get('ganchos'), str(d))
+            ck('e com Motorista e Observações, que só existem no formulário',
+               d.get('motorista') and d.get('observacoes'), str(d))
+            ck('a gravação vai para a CARGA, não para o rascunho',
+               d.get('naCarga') and not d.get('noRascunho'), str(d))
+            ck('e os seletores ocupam a coluna, como todo campo do formulário',
+               d.get('selectsEncolhidos') == 0,
+               f"{d.get('selectsEncolhidos')} de {d.get('selects')} encolhido(s)")
+        await pg.evaluate("() => { _montagemAberta = null; renderMontagem(); }")
 
         print('\n=== 11. CARGA FORA DO MODELO ===')
         # Frete extra e cliente novo não são exceção rara, são terça-feira.

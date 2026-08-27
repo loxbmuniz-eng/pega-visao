@@ -61,10 +61,27 @@ PARALELO="${PARALELO:-$(nproc 2>/dev/null || echo 2)}"
 LOGS=$(mktemp -d)
 export LOGS
 
+# A LIMPEZA PRECISA ACONTECER — E RECLAMAR SE NÃO ACONTECER (27/08/2026).
+#
+# Esta função rodava `psql` direto, sem usuário e sem banco, com o erro
+# jogado no lixo. Como root não é papel do Postgres nesta máquina, ela
+# FALHAVA TODAS AS VEZES, em silêncio: as suítes de servidor rodavam uma
+# atrás da outra num banco que só acumulava. Seis suítes reprovavam no
+# portão e passavam sozinhas — e "passa sozinha, falha no portão" é o tipo
+# de vermelho que ensina a gente a desconfiar do portão em vez do código.
+#
+# O `sudo -u postgres` é o mesmo que cada suíte já usa para consultar o
+# banco. E a falha agora derruba a bateria: limpeza que falha calada é pior
+# que limpeza nenhuma, porque o verde seguinte não significa nada.
 limpar_banco(){
-  psql -q -c "DELETE FROM log_eventos; DELETE FROM fact_statusfrota;
-              DELETE FROM fact_viagens; DELETE FROM acoes_criticas;
-              DELETE FROM programacao_montagem;" 2>/dev/null
+  sudo -u postgres psql -q -d embarque_suinco -c \
+    "DELETE FROM log_eventos; DELETE FROM fact_statusfrota;
+     DELETE FROM fact_viagens; DELETE FROM acoes_criticas;
+     DELETE FROM programacao_montagem;" >/dev/null || {
+    echo "  X  não consegui limpar o banco de teste — as suítes de servidor"
+    echo "      rodariam sujas e o resultado não valeria nada."
+    exit 1
+  }
 }
 
 # Marcadores de que a suíte fala com o servidor. Mantidos aqui e não no
