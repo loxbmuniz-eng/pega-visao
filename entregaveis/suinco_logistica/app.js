@@ -1832,6 +1832,10 @@ function renderAll(){
     document.body.classList.add('pre-login');
   }
   renderTabAtual();
+
+  /* Explicação sob demanda no celular: cartão redesenhado volta sem a
+     classe, então o estado escolhido é reaplicado a cada ciclo. */
+  try { _prepararTitulosExplicaveis(); restaurarExplicacoes(); } catch(e){}
 }
 
 /* ---------- TORRE DE CONTROLE ---------- */
@@ -9373,4 +9377,89 @@ async function removerDoModeloUI(id){
     await SuincoSharePoint.modeloSemana.remover(id);
     await carregarModeloSemanaUI();
   } catch(e){ notify('Não consegui remover: ' + (e.message || e), 'erro', 7000); }
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   EXPLICAÇÃO SOB DEMANDA NO CELULAR — o interruptor
+   ---------------------------------------------------------------------
+   O CSS esconde `.card-sub` abaixo de 820px; aqui o título passa a abrir
+   e fechar. Três decisões que valem explicação:
+
+   1. DELEGAÇÃO, não listener por cartão. São 66 cartões e vários são
+      redesenhados a cada sincronização — listener preso ao elemento morre
+      no primeiro render. O clique é ouvido no documento e resolvido por
+      `closest`, então funciona em cartão que ainda nem existe.
+
+   2. A escolha é GUARDADA POR CARTÃO. Quem opera Devoluções todo dia não
+      quer reabrir a mesma explicação amanhã; quem está aprendendo deixa
+      aberta. A chave é o texto do título, que é estável entre versões —
+      o índice do cartão não é (basta inserir um cartão no meio).
+
+   3. NÃO É SEGREDO: no computador nada muda, e no celular o "?" ao lado
+      do título anuncia que há explicação ali. Esconder sem avisar seria
+      pior que o problema original.
+   ───────────────────────────────────────────────────────────────────── */
+const EXPLIC_CHAVE = 'suinco_explicacoes_abertas';
+
+function _explicAbertas(){
+  try { return new Set(JSON.parse(localStorage.getItem(EXPLIC_CHAVE) || '[]')); }
+  catch { return new Set(); }
+}
+function _explicGravar(conjunto){
+  try { localStorage.setItem(EXPLIC_CHAVE, JSON.stringify([...conjunto])); }
+  catch { /* modo privado: a sessão funciona, só não lembra amanhã */ }
+}
+function _explicId(card){
+  const t = card.querySelector(':scope > .card-title');
+  return t ? t.textContent.trim().slice(0, 60) : '';
+}
+
+/* Reaplica o que a pessoa escolheu. Chamado depois de cada render, porque
+   cartão redesenhado volta com a classe limpa. */
+function restaurarExplicacoes(){
+  if (window.innerWidth > 820) return;
+  const abertas = _explicAbertas();
+  document.querySelectorAll('.card').forEach(card => {
+    if (!card.querySelector(':scope > .card-sub')) return;
+    card.classList.toggle('exp-aberta', abertas.has(_explicId(card)));
+  });
+}
+
+document.addEventListener('click', (ev) => {
+  if (window.innerWidth > 820) return;
+  const titulo = ev.target.closest('.card-title');
+  if (!titulo) return;
+  const card = titulo.parentElement;
+  if (!card || !card.classList.contains('card')) return;
+  if (!card.querySelector(':scope > .card-sub')) return;
+  // Não sequestra clique em botão/link que viva dentro do título.
+  if (ev.target.closest('button, a, input, select, label')) return;
+
+  const aberta = card.classList.toggle('exp-aberta');
+  const abertas = _explicAbertas();
+  const id = _explicId(card);
+  if (aberta) abertas.add(id); else abertas.delete(id);
+  _explicGravar(abertas);
+});
+
+/* Teclado: o título virou controle, então precisa ser alcançável e
+   acionável por quem não usa toque. */
+document.addEventListener('keydown', (ev) => {
+  if (ev.key !== 'Enter' && ev.key !== ' ') return;
+  const t = document.activeElement;
+  if (!t || !t.classList || !t.classList.contains('card-title')) return;
+  if (window.innerWidth > 820) return;
+  ev.preventDefault(); t.click();
+});
+
+function _prepararTitulosExplicaveis(){
+  if (window.innerWidth > 820) return;
+  document.querySelectorAll('.card > .card-sub').forEach(sub => {
+    const t = sub.parentElement.querySelector(':scope > .card-title');
+    if (t && !t.hasAttribute('tabindex')){
+      t.setAttribute('tabindex', '0');
+      t.setAttribute('role', 'button');
+      t.setAttribute('aria-label', t.textContent.trim() + ' — toque para ver a explicação');
+    }
+  });
 }
