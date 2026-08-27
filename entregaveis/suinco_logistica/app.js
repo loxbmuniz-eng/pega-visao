@@ -313,18 +313,11 @@ function _exibirNotif(el, ms, opcoes){
   if(container.querySelectorAll('.notif-item').length >= NOTIF_MAX_VISIVEL){
     if(!perecivel){
       _notifFila.push({ el, ms, em: Date.now(), perecivel: false });
-    } else {
-      _notifFila.push({ el, ms, em: Date.now(), perecivel: true });
-      // Fila curta: o mais antigo PERECÍVEL cai primeiro. Um aviso que não
-      // é perecível (recusa, erro de gravação) nunca é descartado por
-      // pressão de fila — ele é resposta a uma ação de quem está aqui.
-      while(_notifFila.length > NOTIF_MAX_FILA){
-        const i = _notifFila.findIndex(x => x.perecivel);
-        if(i < 0) break;
-        _notifFila.splice(i, 1);
-      }
+      _atualizarContadorFila();
     }
-    _atualizarContadorFila();
+    // PERECÍVEL NÃO ESPERA (pedido do dono, 27/08/2026): notícia de outro
+    // setor é tempo real ou nada. A tela já mostra o resultado da mudança;
+    // guardar o aviso pra depois vira reprise retroativa — morre aqui.
     return;
   }
   _mostrarNotifAgora(el, ms);
@@ -463,6 +456,46 @@ function mensagemAtualizacaoRemota(r){
   const resto = total - mostrar.length;
   return 'Atualizado por outro setor: ' + mostrar.join(' · ')
     + (resto > 0 ? ` · e mais ${resto}` : '') + '.';
+}
+
+/* Notícia de outro setor é TEMPO REAL OU NADA (pedido do dono, 27/08/2026:
+   "quero que seja em tempo real e só, e não fique mostrando notificações
+   retroativas"). Três regras, nesta ordem:
+
+   1. Já tem um aviso verde de outro setor na tela? NÃO empilha outro:
+      o mesmo aviso atualiza o texto com o total acumulado. No máximo UMA
+      janelinha verde existe por vez.
+   2. A tela está cheia de avisos mais importantes? A notícia é DESCARTADA,
+      não enfileirada. A tela já mostra o resultado da mudança — reprise
+      de "carga X mudou" minutos depois é ruído, nunca informação.
+   3. O aviso dura pouco (7s) e morre sozinho.
+
+   Avisos NÃO perecíveis (recusa do servidor, erro de gravação, troca de
+   placa) continuam com a fila de antes — aqueles são resposta a uma ação
+   de quem está na tela, e esperar a vez é correto. */
+let _remotaEl = null;
+let _remotaTotal = 0;
+function notifyAtualizacaoRemota(r){
+  const totalNovo = (r.cargasNovas||0) + (r.cargasAtualizadas||0);
+  if(_remotaEl && _remotaEl.isConnected){
+    _remotaTotal += totalNovo;
+    const span = _remotaEl.querySelector('span');
+    if(span) span.textContent = 'Atualizado por outros setores: '
+      + `${_remotaTotal} movimentação(ões) agora há pouco — a tela já mostra tudo.`;
+    return;
+  }
+  const container = document.getElementById('notif');
+  if(container && container.querySelectorAll('.notif-item').length >= NOTIF_MAX_VISIVEL){
+    return; // tela ocupada com coisa mais importante: notícia morre aqui
+  }
+  _remotaTotal = totalNovo;
+  const el = document.createElement('div');
+  el.className = 'notif-item success';
+  const texto = document.createElement('span');
+  texto.textContent = mensagemAtualizacaoRemota(r);
+  el.appendChild(texto);
+  _remotaEl = el;
+  _exibirNotif(el, 7000, { perecivel: true });
 }
 
 /* ---------- SOM DE CONFIRMAÇÃO ----------
@@ -7560,7 +7593,7 @@ async function init(){
            resultado dela. Quem acabou de abrir o painel não precisa
            assistir à reprise do que aconteceu antes de ele chegar. */
         if(r.cargasNovas || r.cargasAtualizadas){
-          notify(mensagemAtualizacaoRemota(r), 'success', undefined, { perecivel: true });
+          notifyAtualizacaoRemota(r);
         }
       }
       atualizarRodapeConexao(SuincoSharePoint.estado());

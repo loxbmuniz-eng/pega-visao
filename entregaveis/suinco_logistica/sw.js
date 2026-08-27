@@ -34,7 +34,7 @@
    Trocar o nome do cache junto é de propósito: o `activate` apaga os caches
    de versões anteriores, e com isso a cópia velha do index.html sai de cena
    em vez de sobreviver a um deploy. */
-const BUILD = "26/08 20:27 · 6a12973";
+const BUILD = "27/08 03:09 · c330162";
 const VERSAO = 'suinco-' + BUILD;
 const ESSENCIAIS = [
   './',
@@ -99,13 +99,22 @@ self.addEventListener('push', (evento) => {
     // Sem vibração personalizada: o pátio é barulhento e cada aparelho
     // tem o padrão que o dono escolheu. Não é lugar de inventar.
   };
-  evento.waitUntil(
-    self.registration.showNotification(titulo, opcoes)
+  evento.waitUntil((async () => {
+    /* COM O PAINEL NA FRENTE, O CELULAR FICA QUIETO (pedido do dono,
+       27/08/2026): se alguma janela do painel está visível, a própria
+       tela já mostra a movimentação em tempo real — subir notificação
+       por cima é ruído. O push existe pro app FECHADO ou em segundo
+       plano. Pular o showNotification com janela visível é permitido
+       pelos navegadores (a regra dura do iPhone vale para push sem
+       NADA visível — janela em foco conta como visível). */
+    const janelas = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    if (janelas.some((j) => j.visibilityState === 'visible')) return;
+    await self.registration.showNotification(titulo, opcoes)
       .catch(() => self.registration.showNotification('Embarque Suinco', {
         body: 'Há movimento novo no pátio.',
         tag: 'suinco',
-      }))
-  );
+      }));
+  })());
 });
 
 /* Tocar no aviso abre o painel — reaproveitando a janela que já estiver
