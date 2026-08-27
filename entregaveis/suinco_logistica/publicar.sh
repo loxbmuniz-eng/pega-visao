@@ -279,7 +279,7 @@ if [[ -n "$PENDENTES" ]]; then
   printf '%s' "$PENDENTES"
   echo
   echo "  ssh root@2.25.95.253"
-  echo "  cd /opt/suinco-src && git pull && sudo bash entregaveis/suinco_logistica/backend/atualizar.sh"
+  echo "  cd /opt/suinco-src && git pull && bash entregaveis/suinco_logistica/backend/atualizar.sh"
   echo
   vermelho "REPASSE ESTE BLOCO AO LUIS. Publicar sem contar isto foi o erro de 25 e 26/08."
 else

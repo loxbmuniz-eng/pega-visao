@@ -1,0 +1,4 @@
+# O HTML é SUBPRODUTO: o gerar_ficha.py o refaz a qualquer momento a partir
+# da lista de pontos que vive dentro do próprio script. O que se versiona é
+# o gerador e o PDF final — que é o que vai para a mão do Alysson.
+Ficha_Priorizacao_Devolucoes.html

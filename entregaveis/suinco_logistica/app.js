@@ -2983,7 +2983,7 @@ function criarCargaProgramadaUI(){
   }
 
   try{
-    criarCargaProgramada({
+    const criada = criarCargaProgramada({
       placa,
       transportadora: document.getElementById('prog-transportadora').value,
       tipoVeiculo: document.getElementById('prog-tipoveiculo').value,
@@ -3007,7 +3007,17 @@ function criarCargaProgramadaUI(){
         + 'aqui na Programação. Quando contratar, preencha a placa na linha e ela '
         + 'entra sozinha na Torre.');
     } else {
-      notifyGravacao(`Carga criada para a placa ${normalizarPlaca(placa)} — status Aguardando Veículo.`);
+      /* O RECADO DA ABSORÇÃO VEM DA CRIAÇÃO (27/08/2026). Quando a placa
+         já estava no pátio, a carga não nasce em "Aguardando Veículo" — ela
+         assume a entrada que já existia. Dizer "Aguardando Veículo" aí
+         seria mentir para quem acabou de gravar. */
+      const recadosCriacao = (criada && criada._recados) || [];
+      if(recadosCriacao.length){
+        notifyGravacao(`Carga criada para a placa ${normalizarPlaca(placa)} — o caminhão JÁ ESTÁ no pátio, então ela nasce em Aguardando Embarque.`);
+        recadosCriacao.forEach(m => notify(m, 'info'));
+      } else {
+        notifyGravacao(`Carga criada para a placa ${normalizarPlaca(placa)} — status Aguardando Veículo.`);
+      }
     }
     ['prog-placa','prog-transportadora','prog-tipoveiculo','prog-motorista','prog-numero-carga','prog-cliente','prog-destino','prog-peso','prog-sequencia','prog-obs']
       .forEach(id=>document.getElementById(id).value='');
@@ -3713,34 +3723,12 @@ function reconciliarPatioAoTrocarPlaca(carga, placaAntiga){
   const hora = (iso) => iso ? fmtDataHora(iso) : 'horário não registrado';
 
   /* ---- Metade 1: a placa nova já está no pátio ---- */
-  const orfa = cargasAbertas().find(x =>
-    x.id !== carga.id && x.aguardandoCarga &&
-    normalizarPlaca(x.placa) === normalizarPlaca(carga.placa));
-
-  if(orfa){
-    const entrada = entradaNoPatioDe(orfa);
-    if(carga.status === 'Aguardando Veículo'){
-      const antes = carga.status;
-      carga.status = 'Aguardando Embarque';
-      registrarMovimentacao({
-        cargaId: carga.id, placa: carga.placa,
-        statusAnterior: antes, statusNovo: 'Aguardando Embarque',
-        operador: quem, setor, timestamp: entrada || undefined,
-        cliente: carga.cliente, motorista: carga.motorista,
-        tipoVeiculo: carga.tipoVeiculo, qtdEntregas: carga.qtdEntregas
-      });
-    }
-    // Sai da operação, continua no Histórico — pátio não se apaga.
-    orfa.excluida = true;
-    orfa.atualizadoEm = nowISO();
-    registrarAlteracao({
-      cargaId: orfa.id, placa: orfa.placa, campo: 'Entrada sem carga',
-      de: 'aguardando carga', para: `absorvida pela carga ${carga.numeroCarga || carga.id}`,
-      setor, operador: quem
-    });
-    recados.push(`${carga.placa} já estava no pátio desde ${hora(entrada)} — `
-      + `a carga assumiu essa entrada. Não registre a chegada de novo.`);
-  }
+  /* O miolo mora em data.js (absorverEntradaDoPatio) porque a MESMA
+     situação acontece por dois caminhos: trocar a placa de uma carga, e
+     criar carga para uma placa que já entrou. Antes ele existia só aqui, e
+     por isso o segundo caminho ficava sem tratamento — era o relato do
+     dono em 27/08. Uma função, dois chamadores. */
+  recados.push(...absorverEntradaDoPatio(carga, { nome: quem, setor }));
 
   /* ---- Metade 2: a placa antiga fica sozinha no pátio ---- */
   /* Só quando o caminhão antigo tinha de fato entrado: carga que nunca passou
@@ -8636,10 +8624,51 @@ function abrirParaColocarPlacaUI(id){
   if(campo){ campo.focus(); campo.scrollIntoView({ block: 'center' }); }
 }
 
+/* QUEM MEXE NA CARGA DO DIA, EM QUALQUER LUGAR (27/08/2026).
+
+   Relato do dono: "o antonio ta tentando mexer nas cargas de hoje pela
+   programacao aparece o simbolo de proibido, voce precisa liberar acesso
+   pra administracao e logistica e nao bloquear".
+
+   O servidor NUNCA bloqueou: camposEditaveisPor() já dá a lista inteira
+   para Logística, e Administração herda ela. A trava era só de tela. */
+function podeEditarCargaDoDia(){
+  const s = (DB.operador && DB.operador.setor) || '';
+  return s === 'Logística' || s === 'Administração';
+}
+
+/* Uma célula editável da linha efetivada. Chama a MESMA função que a Fila
+   de Programados e a Torre chamam — nada de caminho paralelo: assim a
+   alteração cai na carga, entra no log de revisões e sobe para todos os
+   setores, em vez de morrer no rascunho da montagem. */
+function celulaCargaHtml(carga, tipo){
+  const id = escJs(carga.id);
+  if(tipo === 'numero'){
+    return `<input type="text" class="numero-carga-input" value="${esc(carga.numeroCarga)}"
+      onchange="atualizarNumeroCargaUI('${id}',this.value)"
+      title="Número da carga — grava na carga que já está na Torre.">`;
+  }
+  if(tipo === 'placa'){
+    return `<input type="text" class="placa-input" value="${esc(carga.placa)}"
+      onchange="atualizarPlacaUI('${id}',this.value)"
+      title="Trocar a placa. Se o caminhão novo já estiver no pátio, a carga assume a entrada dele.">`;
+  }
+  if(tipo === 'peso'){
+    return `<input type="number" class="peso-input" min="0" step="1" value="${carga.peso ?? ''}"
+      onchange="atualizarPesoUI('${id}',this.value)" title="Peso em kg.">`;
+  }
+  return '';
+}
+
 function linhaMontagemHtml(m){
-  const trancada = !!(m.efetivada_em || m.cancelada_em);
+  /* CANCELADA continua trancada: ela é histórico e não tem carga viva do
+     outro lado. EFETIVADA deixa de trancar para quem pode editar — a
+     linha passa a ser uma janela para a carga, não um retrato dela. */
+  const cargaViva = (m.efetivada_em && m.carga_id) ? getCarga(m.carga_id) : null;
+  const comoCarga = !!cargaViva && podeEditarCargaDoDia();
+  const trancada = !!m.cancelada_em || (!!m.efetivada_em && !comoCarga);
   const id = escJs(m.montagem_id);
-  const aberta = _montagemAberta === m.montagem_id && !trancada;
+  const aberta = _montagemAberta === m.montagem_id && !trancada && !comoCarga;
   const marca = m.cancelada_em
     ? `<span class="badge badge-aguardando-veiculo">CANCELADA</span>`
     : m.efetivada_em ? `<span class="badge badge-faturado">NA TORRE</span>` : '';
@@ -8655,15 +8684,22 @@ function linhaMontagemHtml(m){
            para mexer num numero e o que fazia isso ser feito no Excel.
            O stopPropagation impede que digitar abra/feche a linha. -->
       <td onclick="event.stopPropagation()">
-        <input type="number" min="1" class="seq-input" value="${m.sequencia ?? ''}"
+        <input type="number" min="1" class="seq-input" value="${comoCarga ? (cargaViva.sequencia ?? '') : (m.sequencia ?? '')}"
                aria-label="Sequência"
-               onchange="alterarMontagemUI('${id}','sequencia',this.value)"></td>
+               onchange="${comoCarga
+                 ? `atualizarSequenciaUI('${escJs(cargaViva.id)}',this.value)`
+                 : `alterarMontagemUI('${id}','sequencia',this.value)`}"></td>
       <td>${destinoMontagemHtml(m)} ${marca}</td>
-      <td>${esc(m.numero_carga) || '<span class="text-dim">—</span>'}</td>
-      <td>${m.placa
-            ? `<strong>${esc(m.placa)}</strong>`
-            : '<span class="text-dim">sem placa</span>'}</td>
-      <td>${m.peso ? Number(m.peso).toLocaleString('pt-BR') : '<span class="text-dim">—</span>'}</td>
+      <td ${comoCarga ? 'onclick="event.stopPropagation()"' : ''}>${comoCarga
+            ? celulaCargaHtml(cargaViva, 'numero')
+            : (esc(m.numero_carga) || '<span class="text-dim">—</span>')}</td>
+      <td ${comoCarga ? 'onclick="event.stopPropagation()"' : ''}>${comoCarga
+            ? celulaCargaHtml(cargaViva, 'placa')
+            : (m.placa ? `<strong>${esc(m.placa)}</strong>`
+                       : '<span class="text-dim">sem placa</span>')}</td>
+      <td ${comoCarga ? 'onclick="event.stopPropagation()"' : ''}>${comoCarga
+            ? celulaCargaHtml(cargaViva, 'peso')
+            : (m.peso ? Number(m.peso).toLocaleString('pt-BR') : '<span class="text-dim">—</span>')}</td>
       <td class="no-print">${trancada
             ? acoesMontagemHtml(m, trancada)
             : acoesLinhaMontagemHtml(m, aberta)}</td>

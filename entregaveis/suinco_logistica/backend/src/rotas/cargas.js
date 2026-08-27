@@ -85,12 +85,29 @@ async function gravarEvento(cli, { cargaId, placa, de, para, operador, acao }) {
    sem contrapartida. */
 const ETAPAS_QUE_RECONCILIAM = new Set(['Aguardando Veículo', 'Aguardando Embarque']);
 
-async function reconciliarPatioNaTrocaDePlaca({ id, placaNova, placaAntiga, statusAntes, op }) {
-  let mexeu = false;
+/* A CARGA ENCONTRA A ENTRADA QUE JÁ ESTAVA NO PÁTIO — o lado do servidor.
 
-  /* ---- Metade 1: a placa NOVA já está no pátio? ---------------------- */
+   Relato do dono, 27/08/2026: "se tem um caminhao que a portaria ja deu
+   entrada, e ele for programado depois da entrada do caminhao, apos o input
+   da programacao o caminhao que ja entrou passa a obter essa carga
+   programada?"
+
+   Passava a NÃO obter. Este miolo já existia e funcionava, mas morava
+   DENTRO da troca de placa — era chamado de um lugar só. Agora é função
+   própria, e quem chama são os dois caminhos pelos quais a mesma situação
+   acontece: trocar a placa de uma carga, e criar carga para uma placa que
+   já está no pátio.
+
+   O que ela absorve é só a linha `aguardando_carga`: o registro que a
+   Portaria cria quando o caminhão chega sem programação, cuja única razão
+   de existir é ser substituída quando a carga real aparecer. Placa com
+   DUAS cargas de verdade continua com duas — não é disso que se trata.
+
+   `motivo` entra no log para o Histórico dizer QUAL dos dois caminhos
+   trouxe a absorção. */
+async function absorverEntradaDoPatio({ id, placa, statusAntes, op, motivo }) {
   const chegada = await consultar(
-    `SELECT carga_id, criado_em, numero_carga
+    `SELECT carga_id, criado_em
        FROM fact_viagens
       WHERE placa = $1
         AND carga_id <> $2
@@ -99,50 +116,62 @@ async function reconciliarPatioNaTrocaDePlaca({ id, placaNova, placaAntiga, stat
         AND excluida_em IS NULL
       ORDER BY criado_em
       LIMIT 1`,
-    [placaNova, id]
+    [placa, id]
   );
+  if (!chegada.rows[0]) return false;
 
-  if (chegada.rows[0]) {
-    const entrada = chegada.rows[0].criado_em;
-    const orfa = chegada.rows[0].carga_id;
+  const entrada = chegada.rows[0].criado_em;
+  const orfa = chegada.rows[0].carga_id;
 
-    if (statusAntes === 'Aguardando Veículo') {
-      await consultar(
-        `UPDATE fact_viagens SET status_atual = 'Aguardando Embarque' WHERE carga_id = $1`,
-        [id]
-      );
-      await consultar(
-        `INSERT INTO fact_statusfrota
-           (movimentacao_id, carga_id, placa, status_anterior, status_novo, setor,
-            data_evento, operador_id, operador_nome)
-         VALUES ($1,$2,$3,$4,'Aguardando Embarque',$5,$6,$7,$8)`,
-        [novoId('mov'), id, placaNova, statusAntes, op.setor, entrada, op.id, op.nome]
-      );
-      mexeu = true;
-    }
-
-    // O registro órfão sai da operação, mas com nome e endereço de para onde foi.
+  /* O STATUS SOBE COM O CARIMBO DA CHEGADA, não com o de agora. É a regra
+     de fidelidade ao momento exato: o caminhão entrou quando entrou, e o
+     tempo de pátio conta de lá. */
+  if (statusAntes === 'Aguardando Veículo') {
     await consultar(
-      'UPDATE fact_viagens SET excluida_em = now() WHERE carga_id = $1', [orfa]
+      `UPDATE fact_viagens SET status_atual = 'Aguardando Embarque' WHERE carga_id = $1`,
+      [id]
     );
     await consultar(
-      `INSERT INTO log_eventos
-         (evento_id, carga_id, placa, acao, setor, operador_id, operador_nome, operador_verificado)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,TRUE)`,
-      [novoId('log'), orfa, placaNova,
-       `Entrada absorvida pela carga ${id} — o caminhão estava no pátio desde `
-       + `${new Date(entrada).toISOString()} e passou a ser o veículo dela.`,
-       op.setor, op.id, op.nome]
+      `INSERT INTO fact_statusfrota
+         (movimentacao_id, carga_id, placa, status_anterior, status_novo, setor,
+          data_evento, operador_id, operador_nome)
+       VALUES ($1,$2,$3,$4,'Aguardando Embarque',$5,$6,$7,$8)`,
+      [novoId('mov'), id, placa, statusAntes, op.setor, entrada, op.id, op.nome]
     );
-    await consultar(
-      `INSERT INTO log_eventos
-         (evento_id, carga_id, placa, acao, setor, operador_id, operador_nome, operador_verificado)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,TRUE)`,
-      [novoId('log'), id, placaNova,
-       `Placa trocada para ${placaNova}, que já estava no pátio — entrada de `
-       + `${new Date(entrada).toISOString()} aproveitada, sem registrar chegada de novo.`,
-       op.setor, op.id, op.nome]
-    );
+  }
+
+  // O registro órfão sai da operação, mas com nome e endereço de para onde foi.
+  await consultar(
+    'UPDATE fact_viagens SET excluida_em = now() WHERE carga_id = $1', [orfa]
+  );
+  await consultar(
+    `INSERT INTO log_eventos
+       (evento_id, carga_id, placa, acao, setor, operador_id, operador_nome, operador_verificado)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,TRUE)`,
+    [novoId('log'), orfa, placa,
+     `Entrada absorvida pela carga ${id} — o caminhão estava no pátio desde `
+     + `${new Date(entrada).toISOString()} e passou a ser o veículo dela.`,
+     op.setor, op.id, op.nome]
+  );
+  await consultar(
+    `INSERT INTO log_eventos
+       (evento_id, carga_id, placa, acao, setor, operador_id, operador_nome, operador_verificado)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,TRUE)`,
+    [novoId('log'), id, placa,
+     `${motivo} ${placa} já estava no pátio — entrada de `
+     + `${new Date(entrada).toISOString()} aproveitada, sem registrar chegada de novo.`,
+     op.setor, op.id, op.nome]
+  );
+  return true;
+}
+
+async function reconciliarPatioNaTrocaDePlaca({ id, placaNova, placaAntiga, statusAntes, op }) {
+  let mexeu = false;
+
+  /* ---- Metade 1: a placa NOVA já está no pátio? ---------------------- */
+  if (await absorverEntradaDoPatio({
+        id, placa: placaNova, statusAntes, op,
+        motivo: `Placa trocada para ${placaNova}, que` })) {
     mexeu = true;
   }
 
@@ -412,7 +441,39 @@ rotasCargas.post('/cargas', exigirLogin, async (req, res, next) => {
       return { linha: ins.rows[0], nova: true };
     });
 
-    const payload = paraPainel(carga.linha);
+    /* O CAMINHÃO PODE JÁ ESTAR NO PÁTIO (27/08/2026, relato do dono).
+
+       Roda DEPOIS da gravação e FORA da transação, igual à reconciliação da
+       troca de placa: a carga já vale, e a absorção é consequência dela.
+
+       As três condições, e o porquê de cada uma:
+         · `carga.nova` — reenvio da fila offline não absorve de novo;
+         · `!chegadaSemProgramacao` — é a própria Portaria criando a linha
+           que serve para ser absorvida; ela não pode absorver a si mesma;
+         · `placa` — carga sem caminhão contratado não tem o que encontrar.
+
+       Depois relemos a linha: o status pode ter subido para "Aguardando
+       Embarque", e devolver o payload antigo faria o painel mostrar
+       "Aguardando Veículo" por um ciclo inteiro. */
+    let linhaFinal = carga.linha;
+    if (carga.nova && !chegadaSemProgramacao && placa) {
+      const absorveu = await absorverEntradaDoPatio({
+        id: dados.carga_id,
+        placa,
+        statusAntes: dados.status_atual || STATUS_INICIAL,
+        op,
+        motivo: 'Carga programada para',
+      }).catch(() => false);
+      if (absorveu) {
+        const relida = await consultar(
+          `SELECT ${COLUNAS_CARGA} FROM fact_viagens WHERE carga_id = $1`,
+          [dados.carga_id]
+        );
+        if (relida.rows[0]) linhaFinal = relida.rows[0];
+      }
+    }
+
+    const payload = paraPainel(linhaFinal);
     if (carga.nova) emitir('carga:criada', payload);
 
     /* AVISO NO CELULAR — chegada sem programação (26/08/2026).

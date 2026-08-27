@@ -4560,3 +4560,74 @@ describe('38. Carga sem placa — a Torre espera a contratação', () => {
     assert.equal(rows[0].status_atual, 'Aguardando Veículo');
   });
 });
+
+
+describe('10. A carga programada encontra o caminhão que já está no pátio', () => {
+  /* Relato do dono, 27/08/2026: "se tem um caminhao que a portaria ja deu
+     entrada, e ele for programado depois da entrada do caminhao, apos o
+     input da programacao o caminhao que ja entrou passa a obter essa carga
+     programada?"
+
+     Passava a não obter: ficavam DUAS linhas abertas na mesma placa, e a
+     nova nascia dizendo "Aguardando Veículo" com o caminhão parado no pátio
+     desde antes.
+
+     Este bloco prova no BANCO, não na tela — é o servidor que manda, e é
+     dele que a próxima sincronia traria a órfã de volta. */
+  const PLACA = 'TST1050';
+
+  before(async () => {
+    await pool.query(
+      `INSERT INTO dim_veiculos (placa, transportadora, tipo_veiculo)
+       VALUES ($1, 'Transportadora Teste', 'Truck')
+       ON CONFLICT (placa) DO NOTHING`, [PLACA]);
+  });
+
+  after(async () => {
+    await pool.query('DELETE FROM fact_statusfrota WHERE placa = $1', [PLACA]);
+    await pool.query('DELETE FROM log_eventos WHERE placa = $1', [PLACA]);
+    await pool.query('DELETE FROM fact_viagens WHERE placa = $1', [PLACA]);
+    await pool.query('DELETE FROM dim_veiculos WHERE placa = $1', [PLACA]);
+  });
+
+  test('a carga criada depois absorve a entrada da Portaria', async () => {
+    // 1. A Portaria registra a chegada de quem não tem programação.
+    const chegada = await req('/api/cargas', {
+      metodo: 'POST', token: tokens['Portaria'],
+      corpo: { id: 'carga_orfa_1050', placa: PLACA, aguardandoCarga: true,
+               numeroCarga: 'Aguardando Carga', status: 'Aguardando Embarque' },
+    });
+    assert.equal(chegada.status, 201, 'a Portaria precisa conseguir registrar a chegada');
+
+    // 2. A Logística programa a carga da MESMA placa, depois.
+    const prog = await req('/api/cargas', {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { id: 'carga_real_1050', placa: PLACA, numeroCarga: '991050',
+               rota: '500', peso: 9000 },
+    });
+    assert.equal(prog.status, 201);
+
+    // 3. UMA carga aberta na placa, e é a real.
+    const abertas = await pool.query(
+      `SELECT carga_id, numero_carga, status_atual FROM fact_viagens
+        WHERE placa = $1 AND excluida_em IS NULL AND status_atual <> 'Seguiu Viagem'`,
+      [PLACA]);
+    assert.equal(abertas.rows.length, 1,
+      `esperava 1 carga aberta, veio ${abertas.rows.length}: `
+      + JSON.stringify(abertas.rows));
+    assert.equal(abertas.rows[0].numero_carga, '991050');
+
+    // 4. E ela já sabe que o caminhão está aqui.
+    assert.equal(abertas.rows[0].status_atual, 'Aguardando Embarque');
+
+    // 5. A órfã não sumiu do mundo: saiu da operação com rastro.
+    const orfa = await pool.query(
+      'SELECT excluida_em FROM fact_viagens WHERE carga_id = $1', ['carga_orfa_1050']);
+    assert.ok(orfa.rows[0] && orfa.rows[0].excluida_em,
+      'a entrada absorvida precisa continuar existindo, marcada como saída');
+    const log = await pool.query(
+      `SELECT acao FROM log_eventos WHERE carga_id = $1 AND acao LIKE '%absorvida%'`,
+      ['carga_orfa_1050']);
+    assert.ok(log.rows.length >= 1, 'a absorção precisa estar no Histórico');
+  });
+});
