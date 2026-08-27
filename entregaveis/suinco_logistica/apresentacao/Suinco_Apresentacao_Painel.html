@@ -112,7 +112,11 @@
 
   @media (max-width: 900px) {
     body { overflow: auto; }
-    .slide { position: static; display: flex !important; min-height: 100vh; }
+    /* position:relative, não static: com static o .slide deixa de ser
+       referência e TODO fundo absoluto de slide (as ondas, a estrada com
+       o caminhãozinho) se ancora na tela inteira e pinta por cima da
+       capa. Foi assim que a onda do slide 2 apareceu na miniatura. */
+    .slide { position: relative; display: flex !important; min-height: 100vh; }
     .tela-grid, .cols { grid-template-columns: 1fr; }
     .fluxo { grid-template-columns: repeat(2, 1fr); }
     .nums, .nums.linha2 { grid-template-columns: repeat(2, 1fr); }
@@ -530,7 +534,25 @@
     box-shadow:inset 0 1px 0 rgba(255,255,255,.09), 0 18px 40px rgba(4,8,18,.55); }
 
   /* sem a faixa creme do site — o fundo é o do painel, de ponta a ponta */
-  .s-capa::before, .s-fim::before{ display:none; }
+  /* A ONDA DA CAPA (pedido do dono, 27/08/2026)
+     ---------------------------------------------------------------------
+     Ele viu esta onda na miniatura do artifact e pediu para reproduzi-la
+     no slide 1. A onda já era nossa — é o fundo dos slides de conteúdo
+     (.s-texto::before) — mas caía na capa POR ERRO: no formato estreito o
+     .slide vira position:static, o fundo do slide 2 perde a referência e
+     se ancora na tela inteira. Corrigido logo abaixo.
+
+     Aqui ela entra de propósito, e só na capa: as mesmas duas curvas, a
+     clara por cima (branco a 5%) e a escura por baixo (preto a 22%),
+     sobre o mesmo navy do painel. Sem o caminhãozinho do rodapé — a capa
+     já tem o caminhão grande com o Pipo, dois seria ruído.
+
+     O fechamento (.s-fim) segue sem faixa: lá o fundo é liso de ponta a
+     ponta, como estava. */
+  .s-capa::before{ display:block; content:''; position:absolute;
+    inset:0; height:auto; z-index:1; pointer-events:none;
+    background:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 700" preserveAspectRatio="none"><path d="M0 210 C 300 140 600 300 1200 190 L1200 260 C 700 360 300 220 0 300 Z" fill="%23ffffff" opacity=".05"/><path d="M0 470 C 400 380 800 560 1200 450 L1200 520 C 800 620 400 460 0 560 Z" fill="%23000000" opacity=".22"/></svg>') center/100% 100% no-repeat; }
+  .s-fim::before{ display:none; }
   .sobre-creme, .s-fim .sub.sobre-creme strong{ color:var(--p-text-dim) !important; }
   .s-fim .sub.sobre-creme strong{ color:var(--p-gold) !important; }
   .s-fim .data.sobre-creme{ color:var(--p-text-dim) !important; }
