@@ -543,15 +543,21 @@
      se ancora na tela inteira. Corrigido logo abaixo.
 
      Aqui ela entra de propósito, e só na capa: as mesmas duas curvas, a
-     clara por cima (branco a 5%) e a escura por baixo (preto a 22%),
-     sobre o mesmo navy do painel. Sem o caminhãozinho do rodapé — a capa
+     clara por cima e a escura por baixo, sobre o mesmo navy do painel.
+
+     AS OPACIDADES NÃO SÃO CHUTE. No vazamento, os 17 slides de conteúdo
+     empilhavam o MESMO desenho no mesmo lugar. Empilhar branco a 3%
+     dezessete vezes dá 1-0,97^17 = 0,404; preto a 22% dá 1-0,78^17 =
+     0,985. É essa a onda forte que o dono viu e aprovou — então é essa
+     que está aqui, numa camada só. Baixar estes números deixa a capa
+     visivelmente mais fraca do que o que foi aprovado. Sem o caminhãozinho do rodapé — a capa
      já tem o caminhão grande com o Pipo, dois seria ruído.
 
      O fechamento (.s-fim) segue sem faixa: lá o fundo é liso de ponta a
      ponta, como estava. */
   .s-capa::before{ display:block; content:''; position:absolute;
     inset:0; height:auto; z-index:1; pointer-events:none;
-    background:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 700" preserveAspectRatio="none"><path d="M0 210 C 300 140 600 300 1200 190 L1200 260 C 700 360 300 220 0 300 Z" fill="%23ffffff" opacity=".05"/><path d="M0 470 C 400 380 800 560 1200 450 L1200 520 C 800 620 400 460 0 560 Z" fill="%23000000" opacity=".22"/></svg>') center/100% 100% no-repeat; }
+    background:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 700" preserveAspectRatio="none"><path d="M0 210 C 300 140 600 300 1200 190 L1200 260 C 700 360 300 220 0 300 Z" fill="%23ffffff" opacity=".404"/><path d="M0 470 C 400 380 800 560 1200 450 L1200 520 C 800 620 400 460 0 560 Z" fill="%23000000" opacity=".985"/></svg>') center/100% 100% no-repeat; }
   .s-fim::before{ display:none; }
   .sobre-creme, .s-fim .sub.sobre-creme strong{ color:var(--p-text-dim) !important; }
   .s-fim .sub.sobre-creme strong{ color:var(--p-gold) !important; }
