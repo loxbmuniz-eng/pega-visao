@@ -428,6 +428,16 @@ async def main():
                 naCarga: html.includes('atualizarEntregasUI')
                       && html.includes('atualizarGanchosUI'),
                 noRascunho: html.includes('alterarMontagemUI'),
+                // Tipo de Operação e Paletizada são os seletores da Fila de
+                // Programados, reaproveitados de propósito. A largura deles
+                // foi feita para célula estreita de tabela (.palet-inline
+                // tem 80px fixos) — dentro do formulário isso apareceria
+                // como campo encolhido no meio de campos inteiros.
+                selectsEncolhidos: [...det.querySelectorAll('.form-group > select')]
+                  .filter(s => s.getBoundingClientRect().width
+                             < s.parentElement.getBoundingClientRect().width - 3)
+                  .length,
+                selects: det.querySelectorAll('.form-group > select').length,
               };
             }""")
         ck('existe linha que já virou carga para o teste', d['achou'] is True, str(d))
@@ -439,6 +449,9 @@ async def main():
                d.get('motorista') and d.get('observacoes'), str(d))
             ck('a gravação vai para a CARGA, não para o rascunho',
                d.get('naCarga') and not d.get('noRascunho'), str(d))
+            ck('e os seletores ocupam a coluna, como todo campo do formulário',
+               d.get('selectsEncolhidos') == 0,
+               f"{d.get('selectsEncolhidos')} de {d.get('selects')} encolhido(s)")
         await pg.evaluate("() => { _montagemAberta = null; renderMontagem(); }")
 
         print('\n=== 11. CARGA FORA DO MODELO ===')
