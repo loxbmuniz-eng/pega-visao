@@ -47,6 +47,8 @@ TELAS = [
 async def abrir(nav, rotulo):
     ctx = await nav.new_context(viewport={'width': 1600, 'height': 950},
                                 device_scale_factor=2)
+    # a apresentação mostra o painel como ele é por padrão: MODO ESCURO
+    await ctx.add_init_script("localStorage.setItem('suinco_tema','escuro')")
     pg = await ctx.new_page()
     html = open(RAIZ / 'index.html', encoding='utf-8').read()
     html = html.replace("api: 'https://api.embarquesuinco.com.br'", f"api: '{API}'")
