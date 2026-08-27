@@ -17,6 +17,7 @@ import asyncio
 import base64
 import datetime
 import os
+import re
 import pathlib
 import sys
 
@@ -36,6 +37,47 @@ HOJE = datetime.date.today().isoformat()
 HOJE_BR = datetime.date.today().strftime('%d/%m/%Y')
 
 # Identidade do painel (mesmos tokens do design system em uso).
+
+# TIPOGRAFIA E MASCOTE — o mesmo padrão da apresentação institucional
+# (27/08/2026, pedido do dono: "aplicar o mesmo padrão em todos os manuais").
+#
+# As fontes ficam EMBUTIDAS no arquivo, não apenas nomeadas. Antes o CSS
+# pedia 'Inter' sem embutir nada: o PDF saía com a fonte que o sistema
+# tivesse, e dois computadores geravam guias com letras diferentes.
+_FONTES = pathlib.Path(__file__).resolve().parent / 'assets_guia' / 'fontes.css'
+FACES = _FONTES.read_text(encoding='utf-8') if _FONTES.exists() else ''
+
+# O Pipo oficial, recortado do material da marca. O espaço reservado que
+# existia aqui ("o arquivo ainda não está no projeto") acabou.
+_PIPO = pathlib.Path(__file__).resolve().parent / 'assets_guia' / 'pipo.png'
+PIPO64 = base64.b64encode(_PIPO.read_bytes()).decode() if _PIPO.exists() else ''
+
+# Cena da capa: o caminhão Suinco com o Pipo do lado, a mesma peça da
+# apresentação institucional (pedido do dono, 27/08/2026: "pipo e caminhao
+# suinco, nos guias"). O arquivo é extraído da apresentação, não redesenhado.
+_CENA = pathlib.Path(__file__).resolve().parent / 'assets_guia' / 'cena_capa.svg'
+CENA_CAPA = _CENA.read_text(encoding='utf-8') if _CENA.exists() else ''
+
+# Ícones IDÊNTICOS aos do painel: o sprite é lido de index_suinco.html, a
+# mesma fonte que a apresentação usa. Nada é redesenhado aqui.
+def _sprite_do_painel():
+    try:
+        html = (RAIZ / 'index_suinco.html').read_text(encoding='utf-8')
+    except OSError:
+        return ''
+    simbolos = re.findall(r'<symbol id="i-[^"]+".*?</symbol>', html, re.S)
+    return '\n'.join(simbolos)
+
+SPRITE = _sprite_do_painel()
+
+# Cada setor com o ícone que ele já vê na barra lateral do painel.
+ICONE_DO_SETOR = {
+    'Portaria': 'i-portaria', 'Faturamento': 'i-faturamento',
+    'Expedição': 'i-expedicao', 'Controles Internos': 'i-devolucoes',
+    'Central de Notas': 'i-relatorios', 'Logística': 'i-programacao',
+    'Administração': 'i-usuarios', 'Comercial': 'i-lupa',
+}
+
 NAVY = '#0B1B2B'
 NAVY_2 = '#12293F'
 OURO = '#E8B34B'
@@ -288,21 +330,69 @@ def documento(setor, guia, imagens):
         pagina_passo(i, total, p, img, setor)
         for i, (p, img) in enumerate(zip(guia['passos'], imagens), 1))
 
+    # Ícone do painel para este setor (o mesmo da barra lateral). Sem
+    # correspondência, o guia sai sem ícone em vez de sair com um errado.
+    ico = ICONE_DO_SETOR.get(setor)
+    icone_svg = (f'<svg class="ico-setor" aria-hidden="true"><use href="#{ico}"/></svg>'
+                 if ico and SPRITE else '')
+    # A cena inteira (caminhão + Pipo) quando os dois materiais existem;
+    # só o Pipo se a cena faltar; nada se nem o Pipo houver.
+    if CENA_CAPA and PIPO64 and logo64:
+        cena = (CENA_CAPA
+                .replace('__PIPO__', f'data:image/png;base64,{PIPO64}')
+                .replace('__LOGO__', f'data:image/png;base64,{logo64}'))
+        pipo_img = f'<div class="capa-cena">{cena}</div>'
+    elif PIPO64:
+        pipo_img = (f'<img class="capa-pipo" src="data:image/png;base64,{PIPO64}"'
+                    ' alt="Pipo, o mascote da Suinco">')
+    else:
+        pipo_img = ''
+
     return f"""<!doctype html>
 <html lang="pt-BR"><head><meta charset="utf-8">
 <title>Guia do Painel — {esc(setor)}</title>
 <style>
   @page {{ size: A4; margin: 0; }}
   * {{ box-sizing: border-box; }}
+  {FACES}
   body {{ margin: 0; background: #fff; color: {TINTA};
-    font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Arial, sans-serif; }}
+    font-family: 'Roboto', system-ui, -apple-system, 'Segoe UI', Arial, sans-serif;
+    line-height: 1.55; }}
+  h1, h2, .passo-num, .q-rot, .i-num, .capa .setor, .capa .capa-frase, .topo {{
+    font-family: 'Poppins', system-ui, Arial, sans-serif; }}
+  h1, .passo-num, .i-num {{ font-weight: 800; }}
+  h2, .capa .setor {{ font-weight: 600; }}
+  .ico-setor {{ width: 1.5em; height: 1.5em; vertical-align: -.35em;
+    margin-right: .4em; color: {OURO}; }}
   .pagina {{ width: 210mm; min-height: 297mm; padding: 14mm 15mm 12mm;
     page-break-after: always; position: relative; display: flex; flex-direction: column; }}
   .pagina:last-child {{ page-break-after: auto; }}
 
   /* ---------- capa ---------- */
-  .capa {{ background: linear-gradient(160deg, {NAVY} 0%, {NAVY_2} 62%, #0A1622 100%);
-    color: {CREME}; justify-content: space-between; padding: 20mm 18mm; }}
+  /* Capa no mesmo tratamento dos slides: cetim navy com textura fina,
+     brilho dourado e moldura dupla. Mesma peça, dois formatos. */
+  .capa {{ background:
+      repeating-linear-gradient(45deg, rgba(255,255,255,.016) 0 1px, transparent 1px 8px),
+      radial-gradient(120mm 90mm at 80% 8%, rgba(233,185,84,.10), transparent 60%),
+      linear-gradient(160deg, {NAVY} 0%, {NAVY_2} 62%, #0A1622 100%);
+    color: {CREME}; justify-content: space-between; padding: 20mm 18mm;
+    position: relative; }}
+  /* A ONDA DA CAPA — o mesmo desenho do slide 1 da apresentação, para o
+     guia e a apresentação terem a mesma cara. Duas curvas: a clara por
+     cima (branco a 40%), a escura por baixo (preto a 98%). As opacidades
+     foram MEDIDAS do render que o dono aprovou, não escolhidas no olho.
+     Fica atrás de tudo (z-index 0); o conteúdo da capa é z-index 1. */
+  .capa::before {{ content: ''; position: absolute; inset: 0; z-index: 0;
+    pointer-events: none;
+    background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 700" preserveAspectRatio="none"><path d="M0 210 C 300 140 600 300 1200 190 L1200 260 C 700 360 300 220 0 300 Z" fill="%23ffffff" opacity=".404"/><path d="M0 470 C 400 380 800 560 1200 450 L1200 520 C 800 620 400 460 0 560 Z" fill="%23000000" opacity=".985"/></svg>') center/100% 100% no-repeat; }}
+  .capa::after {{ content: ''; position: absolute; inset: 8mm; pointer-events: none;
+    border: .4mm solid rgba(233,185,84,.35); }}
+  .capa > * {{ position: relative; z-index: 1; }}
+  .capa-cena {{ margin: 0 0 6mm; }}
+  .capa-cena svg {{ width: 100%; max-width: 152mm; height: auto; display: block;
+    filter: drop-shadow(0 5mm 10mm rgba(0,0,0,.42)); }}
+  .capa-pipo {{ width: 52mm; display: block; margin: 0 0 6mm auto;
+    filter: drop-shadow(0 6mm 12mm rgba(0,0,0,.45)); }}
   .capa-logo {{ width: 44mm; background: #fff; padding: 4mm; border-radius: 10px;
     box-shadow: 0 10px 30px rgba(0,0,0,.35); }}
   .capa-tarja {{ height: 4px; width: 40mm; background: {OURO}; margin: 10mm 0 6mm; }}
@@ -330,7 +420,7 @@ def documento(setor, guia, imagens):
 
   /* ---------- passos ---------- */
   .topo {{ display: flex; justify-content: space-between; font-size: 8.5pt;
-    letter-spacing: .6pt; text-transform: uppercase; color: #7C7466;
+    letter-spacing: .6pt; text-transform: uppercase; color: #746C5F;
     border-bottom: 2px solid {OURO}; padding-bottom: 2.5mm; margin-bottom: 6mm; }}
   .topo-setor {{ color: {NAVY}; font-weight: 800; }}
   .passo-cab {{ display: flex; gap: 5mm; align-items: center; margin-bottom: 5mm; }}
@@ -338,10 +428,10 @@ def documento(setor, guia, imagens):
     width: 15mm; height: 15mm; border-radius: 10px; display: flex; align-items: center;
     justify-content: center; }}
   .passo-cab h2 {{ margin: 0; font-size: 17pt; color: {NAVY}; line-height: 1.2; }}
-  .passo-de {{ font-size: 9pt; color: #7C7466; margin-top: 1mm; }}
+  .passo-de {{ font-size: 9pt; color: #746C5F; margin-top: 1mm; }}
   figure.print {{ margin: 0 0 6mm; }}
   figure.print img {{ width: 100%; border: 1px solid #C9C2B4; border-radius: 8px; display: block; }}
-  figure.print figcaption {{ font-size: 8.5pt; color: #7C7466; margin-top: 2mm; }}
+  figure.print figcaption {{ font-size: 8.5pt; color: #746C5F; margin-top: 2mm; }}
   .quadro {{ display: grid; grid-template-columns: 1fr 1fr; gap: 4mm; }}
   .q {{ background: #FAF7F1; border-left: 3px solid {OURO}; border-radius: 6px; padding: 4mm 4.5mm; }}
   .q-rot {{ font-size: 8pt; font-weight: 800; letter-spacing: .9pt; color: {NAVY}; margin-bottom: 1.5mm; }}
@@ -351,14 +441,15 @@ def documento(setor, guia, imagens):
   .atencao span {{ display: block; font-size: 8pt; font-weight: 800; letter-spacing: .9pt;
     color: #8A5A00; margin-bottom: 1.5mm; }}
   .rodape {{ margin-top: auto; padding-top: 5mm; border-top: 1px solid #E7E2D8;
-    display: flex; justify-content: space-between; font-size: 8pt; color: #8B8375; }}
+    display: flex; justify-content: space-between; font-size: 8pt; color: #726C60; }}
 </style></head><body>
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">{SPRITE}</svg>
 
   <section class="pagina capa">
     <div>
       {'<img class="capa-logo" src="data:image/png;base64,' + logo64 + '" alt="Suinco">' if logo64 else ''}
       <div class="capa-tarja"></div>
-      <div class="setor">{guia['icone']} {esc(setor)}</div>
+      <div class="setor">{icone_svg}{esc(setor)}</div>
       <!-- "Devoluções" saiu do título — pedido do dono na véspera da
            apresentação (26/08/2026): "tire do título principal a palavra
            DEVOLUÇÕES... aqui indicamos a posição de embarque dos carros".
@@ -370,9 +461,7 @@ def documento(setor, guia, imagens):
       <p class="missao">{esc(guia['missao'])}</p>
     </div>
     <div>
-      <div class="mascote">ESPAÇO RESERVADO — mascote Pipo. O arquivo de imagem
-        do Pipo ainda não está no projeto; assim que chegar, ele entra aqui e nas
-        aberturas de cada guia, sem mexer em mais nada.</div>
+      {pipo_img}
       <div class="meta" style="margin-top:8mm">
         <span>Suinco Cooperativa Agroindustrial · Patos de Minas — MG</span>
         <span>Emitido em {HOJE_BR} · Uso interno</span>

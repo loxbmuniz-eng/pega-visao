@@ -313,18 +313,11 @@ function _exibirNotif(el, ms, opcoes){
   if(container.querySelectorAll('.notif-item').length >= NOTIF_MAX_VISIVEL){
     if(!perecivel){
       _notifFila.push({ el, ms, em: Date.now(), perecivel: false });
-    } else {
-      _notifFila.push({ el, ms, em: Date.now(), perecivel: true });
-      // Fila curta: o mais antigo PERECÍVEL cai primeiro. Um aviso que não
-      // é perecível (recusa, erro de gravação) nunca é descartado por
-      // pressão de fila — ele é resposta a uma ação de quem está aqui.
-      while(_notifFila.length > NOTIF_MAX_FILA){
-        const i = _notifFila.findIndex(x => x.perecivel);
-        if(i < 0) break;
-        _notifFila.splice(i, 1);
-      }
+      _atualizarContadorFila();
     }
-    _atualizarContadorFila();
+    // PERECÍVEL NÃO ESPERA (pedido do dono, 27/08/2026): notícia de outro
+    // setor é tempo real ou nada. A tela já mostra o resultado da mudança;
+    // guardar o aviso pra depois vira reprise retroativa — morre aqui.
     return;
   }
   _mostrarNotifAgora(el, ms);
@@ -463,6 +456,46 @@ function mensagemAtualizacaoRemota(r){
   const resto = total - mostrar.length;
   return 'Atualizado por outro setor: ' + mostrar.join(' · ')
     + (resto > 0 ? ` · e mais ${resto}` : '') + '.';
+}
+
+/* Notícia de outro setor é TEMPO REAL OU NADA (pedido do dono, 27/08/2026:
+   "quero que seja em tempo real e só, e não fique mostrando notificações
+   retroativas"). Três regras, nesta ordem:
+
+   1. Já tem um aviso verde de outro setor na tela? NÃO empilha outro:
+      o mesmo aviso atualiza o texto com o total acumulado. No máximo UMA
+      janelinha verde existe por vez.
+   2. A tela está cheia de avisos mais importantes? A notícia é DESCARTADA,
+      não enfileirada. A tela já mostra o resultado da mudança — reprise
+      de "carga X mudou" minutos depois é ruído, nunca informação.
+   3. O aviso dura pouco (7s) e morre sozinho.
+
+   Avisos NÃO perecíveis (recusa do servidor, erro de gravação, troca de
+   placa) continuam com a fila de antes — aqueles são resposta a uma ação
+   de quem está na tela, e esperar a vez é correto. */
+let _remotaEl = null;
+let _remotaTotal = 0;
+function notifyAtualizacaoRemota(r){
+  const totalNovo = (r.cargasNovas||0) + (r.cargasAtualizadas||0);
+  if(_remotaEl && _remotaEl.isConnected){
+    _remotaTotal += totalNovo;
+    const span = _remotaEl.querySelector('span');
+    if(span) span.textContent = 'Atualizado por outros setores: '
+      + `${_remotaTotal} movimentação(ões) agora há pouco — a tela já mostra tudo.`;
+    return;
+  }
+  const container = document.getElementById('notif');
+  if(container && container.querySelectorAll('.notif-item').length >= NOTIF_MAX_VISIVEL){
+    return; // tela ocupada com coisa mais importante: notícia morre aqui
+  }
+  _remotaTotal = totalNovo;
+  const el = document.createElement('div');
+  el.className = 'notif-item success';
+  const texto = document.createElement('span');
+  texto.textContent = mensagemAtualizacaoRemota(r);
+  el.appendChild(texto);
+  _remotaEl = el;
+  _exibirNotif(el, 7000, { perecivel: true });
 }
 
 /* ---------- SOM DE CONFIRMAÇÃO ----------
@@ -1799,6 +1832,11 @@ function renderAll(){
     document.body.classList.add('pre-login');
   }
   renderTabAtual();
+
+  /* Explicação sob demanda no celular: cartão redesenhado volta sem a
+     classe, então o estado escolhido é reaplicado a cada ciclo. */
+  try { _prepararTitulosExplicaveis(); restaurarExplicacoes();
+        restaurarSecoesIndicadores(); } catch(e){}
 }
 
 /* ---------- TORRE DE CONTROLE ---------- */
@@ -7560,7 +7598,7 @@ async function init(){
            resultado dela. Quem acabou de abrir o painel não precisa
            assistir à reprise do que aconteceu antes de ele chegar. */
         if(r.cargasNovas || r.cargasAtualizadas){
-          notify(mensagemAtualizacaoRemota(r), 'success', undefined, { perecivel: true });
+          notifyAtualizacaoRemota(r);
         }
       }
       atualizarRodapeConexao(SuincoSharePoint.estado());
@@ -9341,3 +9379,169 @@ async function removerDoModeloUI(id){
     await carregarModeloSemanaUI();
   } catch(e){ notify('Não consegui remover: ' + (e.message || e), 'erro', 7000); }
 }
+
+/* ─────────────────────────────────────────────────────────────────────
+   EXPLICAÇÃO SOB DEMANDA NO CELULAR — o interruptor
+   ---------------------------------------------------------------------
+   O CSS esconde `.card-sub` abaixo de 820px; aqui o título passa a abrir
+   e fechar. Três decisões que valem explicação:
+
+   1. DELEGAÇÃO, não listener por cartão. São 66 cartões e vários são
+      redesenhados a cada sincronização — listener preso ao elemento morre
+      no primeiro render. O clique é ouvido no documento e resolvido por
+      `closest`, então funciona em cartão que ainda nem existe.
+
+   2. A escolha é GUARDADA POR CARTÃO. Quem opera Devoluções todo dia não
+      quer reabrir a mesma explicação amanhã; quem está aprendendo deixa
+      aberta. A chave é o texto do título, que é estável entre versões —
+      o índice do cartão não é (basta inserir um cartão no meio).
+
+   3. NÃO É SEGREDO: no computador nada muda, e no celular o "?" ao lado
+      do título anuncia que há explicação ali. Esconder sem avisar seria
+      pior que o problema original.
+   ───────────────────────────────────────────────────────────────────── */
+const EXPLIC_CHAVE = 'suinco_explicacoes_abertas';
+
+function _explicAbertas(){
+  try { return new Set(JSON.parse(localStorage.getItem(EXPLIC_CHAVE) || '[]')); }
+  catch { return new Set(); }
+}
+function _explicGravar(conjunto){
+  try { localStorage.setItem(EXPLIC_CHAVE, JSON.stringify([...conjunto])); }
+  catch { /* modo privado: a sessão funciona, só não lembra amanhã */ }
+}
+function _explicId(card){
+  const t = card.querySelector(':scope > .card-title');
+  return t ? t.textContent.trim().slice(0, 60) : '';
+}
+
+/* Reaplica o que a pessoa escolheu. Chamado depois de cada render, porque
+   cartão redesenhado volta com a classe limpa. */
+function restaurarExplicacoes(){
+  if (window.innerWidth > 820) return;
+  const abertas = _explicAbertas();
+  document.querySelectorAll('.card').forEach(card => {
+    if (!card.querySelector(':scope > .card-sub')) return;
+    card.classList.toggle('exp-aberta', abertas.has(_explicId(card)));
+  });
+}
+
+document.addEventListener('click', (ev) => {
+  if (window.innerWidth > 820) return;
+  const titulo = ev.target.closest('.card-title');
+  if (!titulo) return;
+  // Em Indicadores quem manda é a seção recolhida (ver styles.css,
+  // "CONFLITO DE AFORDÂNCIA"): lá o mesmo toque abre a seção inteira, e a
+  // explicação vem junto. Sem esta guarda, os dois tratadores disparavam
+  // no mesmo clique e um desfazia o outro.
+  if (titulo.closest('#tab-indicadores')) return;
+  const card = titulo.parentElement;
+  if (!card || !card.classList.contains('card')) return;
+  if (!card.querySelector(':scope > .card-sub')) return;
+  // Não sequestra clique em botão/link que viva dentro do título.
+  if (ev.target.closest('button, a, input, select, label')) return;
+
+  const aberta = card.classList.toggle('exp-aberta');
+  const abertas = _explicAbertas();
+  const id = _explicId(card);
+  if (aberta) abertas.add(id); else abertas.delete(id);
+  _explicGravar(abertas);
+});
+
+/* Teclado: o título virou controle, então precisa ser alcançável e
+   acionável por quem não usa toque. */
+document.addEventListener('keydown', (ev) => {
+  if (ev.key !== 'Enter' && ev.key !== ' ') return;
+  const t = document.activeElement;
+  if (!t || !t.classList || !t.classList.contains('card-title')) return;
+  if (window.innerWidth > 820) return;
+  ev.preventDefault(); t.click();
+});
+
+function _prepararTitulosExplicaveis(){
+  if (window.innerWidth > 820) return;
+  document.querySelectorAll('.card > .card-sub').forEach(sub => {
+    const t = sub.parentElement.querySelector(':scope > .card-title');
+    if (t && !t.hasAttribute('tabindex')){
+      t.setAttribute('tabindex', '0');
+      t.setAttribute('role', 'button');
+      t.setAttribute('aria-label', t.textContent.trim() + ' — toque para ver a explicação');
+    }
+  });
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   INDICADORES NO CELULAR — abrir e fechar cada seção
+   ---------------------------------------------------------------------
+   Mesma mecânica da explicação sob demanda (delegação + escolha guardada
+   por título), com uma diferença que importa: aqui o PRIMEIRO cartão abre
+   sozinho na primeira visita. Uma aba de indicadores que abre inteiramente
+   fechada parece quebrada; abrindo o primeiro, a pessoa vê um número e
+   entende que os outros títulos são portas.
+
+   Só a primeira visita decide isso. Depois vale o que a pessoa escolheu —
+   inclusive fechar tudo, se for o que ela quer.
+   ───────────────────────────────────────────────────────────────────── */
+const SECOES_CHAVE = 'suinco_indicadores_secoes';
+
+function _secoesEstado(){
+  try {
+    const cru = localStorage.getItem(SECOES_CHAVE);
+    return cru ? JSON.parse(cru) : null;   // null = nunca escolheu nada
+  } catch { return null; }
+}
+function _secoesGravar(lista){
+  try { localStorage.setItem(SECOES_CHAVE, JSON.stringify(lista)); } catch {}
+}
+function _secaoId(card){
+  const t = card.querySelector(':scope > .card-title');
+  return t ? t.textContent.trim().slice(0, 60) : '';
+}
+
+function restaurarSecoesIndicadores(){
+  const aba = document.getElementById('tab-indicadores');
+  if (!aba || window.innerWidth > 820) return;
+  const cards = [...aba.children].filter(e => e.classList && e.classList.contains('card'));
+  if (!cards.length) return;
+
+  const guardado = _secoesEstado();
+  const abertas = new Set(guardado || []);
+  const primeiraVisita = guardado === null;
+
+  cards.forEach((card, i) => {
+    const t = card.querySelector(':scope > .card-title');
+    if (!t) return;
+    if (!t.hasAttribute('tabindex')){
+      t.setAttribute('tabindex', '0');
+      t.setAttribute('role', 'button');
+    }
+    const aberta = primeiraVisita ? (i === 0) : abertas.has(_secaoId(card));
+    card.classList.toggle('sec-aberta', aberta);
+    t.setAttribute('aria-expanded', aberta ? 'true' : 'false');
+  });
+}
+
+document.addEventListener('click', (ev) => {
+  if (window.innerWidth > 820) return;
+  const titulo = ev.target.closest('#tab-indicadores > .card > .card-title');
+  if (!titulo) return;
+  if (ev.target.closest('button, a, input, select, label')) return;
+
+  const card = titulo.parentElement;
+  const aberta = card.classList.toggle('sec-aberta');
+  titulo.setAttribute('aria-expanded', aberta ? 'true' : 'false');
+
+  const aba = document.getElementById('tab-indicadores');
+  const lista = [...aba.children]
+    .filter(e => e.classList && e.classList.contains('card') && e.classList.contains('sec-aberta'))
+    .map(_secaoId);
+  _secoesGravar(lista);
+});
+
+document.addEventListener('keydown', (ev) => {
+  if (ev.key !== 'Enter' && ev.key !== ' ') return;
+  const t = document.activeElement;
+  if (!t || !t.matches || !t.matches('#tab-indicadores > .card > .card-title')) return;
+  if (window.innerWidth > 820) return;
+  ev.preventDefault(); t.click();
+});

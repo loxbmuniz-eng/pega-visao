@@ -116,24 +116,37 @@ async def main():
         ck('e o contador não anuncia dezenas',
            d['fila'] < 10, f"+{d['fila']} aguardando")
 
-        print('\n=== 5. PRAZO: NOTÍCIA VELHA NÃO VIRA REPRISE ===')
-        # O caso do relato: o aviso esperou tanto que o painel já mostra o
-        # resultado dele. Descartar é mais honesto que exibir.
+        print('\n=== 5. PERECÍVEL NÃO ESPERA: NEM CHEGA A ENTRAR NA FILA ===')
+        # MUDANÇA DE REGRA (27/08/2026, pedido do dono: "eu quero que seja
+        # em tempo real e só, e não fique mostrando notificações
+        # retroativas").
+        #
+        # Antes: notícia de outro setor entrava na fila e era descartada
+        # DEPOIS, ao vencer o prazo. O teste media isso — enchia a fila,
+        # envelhecia os itens na marra e conferia o descarte.
+        #
+        # Agora: com a tela cheia, o perecível morre em _exibirNotif e a
+        # fila nunca chega a recebê-lo. A garantia ficou mais forte, não
+        # mais fraca: não existe reprise nem por um instante. Por isso o
+        # que se mede aqui é FILA VAZIA, e não "fila que esvazia".
         d = await pg.evaluate("""() => {
               document.getElementById('notif').innerHTML = '';
               _notifFila.length = 0;
-              // Três na tela + dois na fila, os da fila já vencidos.
+              // Cinco disparos com a tela enchendo: os que não couberem
+              // não podem virar espera.
               for(let i = 0; i < 5; i++){
                 notify('Carga 3183' + i + ' mudou (Portaria).', 'success',
                        60000, { perecivel: true });
               }
-              _notifFila.forEach(x => { x.em = Date.now() - 120000; });
+              const naTela = document.querySelectorAll('#notif .notif-item').length;
               const naFila = _notifFila.length;
               const proximo = _proximoDaFila();
-              return { naFila, sobrou: _notifFila.length, veio: !!proximo };
+              return { naTela, naFila, sobrou: _notifFila.length,
+                       veio: !!proximo };
             }""")
-        ck('havia notícia vencida esperando', d['naFila'] >= 1, str(d))
-        ck('a vencida é descartada em vez de exibida',
+        ck('a tela mostra só o que cabe', d['naTela'] >= 1, str(d))
+        ck('o que não coube NÃO ficou esperando', d['naFila'] == 0, str(d))
+        ck('e não há reprise para puxar da fila',
            not d['veio'] and d['sobrou'] == 0, str(d))
 
         print('\n=== 6. A EXCEÇÃO: TROCA DE PLACA NUNCA É ENGOLIDA ===')

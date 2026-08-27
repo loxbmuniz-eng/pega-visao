@@ -1,0 +1,587 @@
+<title>Mapa do Embarque Suinco</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;800&family=Roboto:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+  :root{
+    --fundo:#0E1C2E; --fundo-2:#132539; --painel:#18294700;
+    --carta:rgba(30,42,82,.62); --carta-borda:rgba(233,185,84,.22);
+    --ouro:#E9B954; --ouro-esc:#B9903F;
+    --tinta:#F2ECDD; --tinta-2:#A9B8CE; --tinta-3:#7C8BA3;
+    --verde:#4CB37A; --ambar:#E0A63A; --vermelho:#D4574B;
+    --mono:'JetBrains Mono','SF Mono',Menlo,monospace;
+    --lg:1180px;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--fundo); color:var(--tinta);
+    font:400 16px/1.65 'Roboto',system-ui,Arial,sans-serif;
+    background-image:
+      repeating-linear-gradient(45deg, rgba(255,255,255,.012) 0 1px, transparent 1px 9px),
+      radial-gradient(1100px 700px at 84% -8%, rgba(233,185,84,.09), transparent 58%),
+      radial-gradient(1200px 800px at 0% 104%, rgba(0,0,0,.4), transparent 60%);
+    background-attachment:fixed;
+  }
+  h1,h2,h3,.eyebrow,.chip,.passo-n{font-family:'Poppins',system-ui,Arial,sans-serif}
+
+  /* ── cabeçalho ── */
+  .capa{max-width:var(--lg);margin:0 auto;padding:64px 28px 40px}
+  .eyebrow{font-size:12px;font-weight:600;letter-spacing:.19em;text-transform:uppercase;
+    color:var(--ouro);display:flex;align-items:center;gap:10px}
+  .eyebrow::before{content:'';width:3px;height:15px;border-radius:2px;
+    background:linear-gradient(180deg,var(--ouro),var(--ouro-esc))}
+  .capa h1{font-size:clamp(34px,5.4vw,52px);font-weight:800;line-height:1.06;
+    margin:18px 0 14px;text-wrap:balance;letter-spacing:-.015em}
+  .capa p.lede{font-size:18px;color:var(--tinta-2);max-width:62ch;margin:0}
+  .selo{display:flex;flex-wrap:wrap;gap:10px;margin-top:26px}
+  .selo span{font-family:var(--mono);font-size:12px;padding:6px 11px;border-radius:6px;
+    background:rgba(233,185,84,.09);border:1px solid var(--carta-borda);color:var(--ouro)}
+
+  /* ── corpo em duas colunas ── */
+  .corpo{max-width:var(--lg);margin:0 auto;padding:0 28px 90px;
+    display:grid;grid-template-columns:216px 1fr;gap:44px;align-items:start}
+  nav.indice{position:sticky;top:26px}
+  nav.indice ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}
+  nav.indice a{display:block;padding:7px 10px;border-radius:7px;text-decoration:none;
+    color:var(--tinta-3);font-size:13.5px;border-left:2px solid transparent;transition:.15s}
+  nav.indice a:hover,nav.indice a:focus-visible{color:var(--tinta);
+    background:rgba(233,185,84,.07);border-left-color:var(--ouro)}
+  nav.indice .n{font-family:var(--mono);font-size:11px;color:var(--ouro-esc);margin-right:7px}
+
+  section{scroll-margin-top:22px}
+  section+section{margin-top:52px}
+  section>h2{font-size:26px;font-weight:600;margin:0 0 6px;letter-spacing:-.01em}
+  section>.sub{color:var(--tinta-2);margin:0 0 20px;max-width:70ch}
+  h3{font-size:16.5px;font-weight:600;margin:26px 0 10px;color:var(--ouro)}
+
+  .carta{background:var(--carta);border:1px solid var(--carta-borda);border-radius:12px;
+    padding:20px 22px;box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 10px 26px rgba(4,8,18,.34)}
+  .grade{display:grid;gap:14px}
+  .g2{grid-template-columns:repeat(2,1fr)}
+  .g3{grid-template-columns:repeat(3,1fr)}
+
+  dl.fatos{margin:0;display:grid;grid-template-columns:auto 1fr;gap:9px 20px;align-items:baseline}
+  dl.fatos dt{color:var(--tinta-3);font-size:13px;text-transform:uppercase;letter-spacing:.08em;
+    font-family:'Poppins';font-weight:500;white-space:nowrap}
+  dl.fatos dd{margin:0;font-size:15.5px}
+  dl.fatos code{font-family:var(--mono);font-size:13.5px;color:var(--ouro)}
+
+  /* ── blocos de comando ── */
+  .cmd{margin:12px 0;border-radius:10px;overflow:hidden;border:1px solid rgba(233,185,84,.2);
+    background:#0A1524}
+  .cmd-topo{display:flex;justify-content:space-between;align-items:center;gap:12px;
+    padding:8px 12px;background:rgba(233,185,84,.08);border-bottom:1px solid rgba(233,185,84,.16)}
+  .cmd-onde{font-family:var(--mono);font-size:11.5px;color:var(--ouro);letter-spacing:.03em}
+  .cmd-copiar{font-family:'Poppins';font-size:11px;font-weight:600;letter-spacing:.06em;
+    text-transform:uppercase;color:var(--tinta-2);background:transparent;
+    border:1px solid rgba(233,185,84,.3);border-radius:5px;padding:4px 9px;cursor:pointer;transition:.15s}
+  .cmd-copiar:hover,.cmd-copiar:focus-visible{color:var(--fundo);background:var(--ouro);border-color:var(--ouro)}
+  .cmd pre{margin:0;padding:14px 15px;overflow-x:auto;font-family:var(--mono);
+    font-size:13.5px;line-height:1.62;color:#DCE6F2}
+  .cmd pre .c{color:var(--tinta-3)}
+
+  /* ── tabela de diagnóstico ── */
+  .rolagem{overflow-x:auto;border-radius:12px;border:1px solid var(--carta-borda)}
+  table{border-collapse:collapse;width:100%;min-width:640px;font-size:14.5px;background:var(--carta)}
+  th,td{text-align:left;padding:12px 15px;border-bottom:1px solid rgba(233,185,84,.12);vertical-align:top}
+  th{font-family:'Poppins';font-weight:600;font-size:12px;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--ouro);background:rgba(233,185,84,.07)}
+  tr:last-child td{border-bottom:0}
+  td code{font-family:var(--mono);font-size:12.8px;color:var(--ouro);white-space:nowrap}
+
+  .chip{display:inline-block;font-size:11px;font-weight:600;letter-spacing:.07em;
+    text-transform:uppercase;padding:3px 9px;border-radius:999px;white-space:nowrap}
+  .c-ok{background:rgba(76,179,122,.16);color:var(--verde);border:1px solid rgba(76,179,122,.35)}
+  .c-at{background:rgba(224,166,58,.16);color:var(--ambar);border:1px solid rgba(224,166,58,.35)}
+  .c-pa{background:rgba(212,87,75,.16);color:var(--vermelho);border:1px solid rgba(212,87,75,.4)}
+
+  ul.lista{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:11px}
+  ul.lista li{padding-left:22px;position:relative;color:var(--tinta-2)}
+  ul.lista li::before{content:'›';position:absolute;left:6px;color:var(--ouro);font-weight:700}
+  ul.lista strong{color:var(--tinta);font-weight:500}
+
+  .fala{border-left:3px solid var(--ouro);padding:4px 0 4px 18px;margin:14px 0;
+    font-size:16.5px;color:var(--tinta);font-style:italic}
+  .aviso{border-radius:10px;padding:15px 18px;margin:16px 0;font-size:15px;
+    background:rgba(212,87,75,.1);border:1px solid rgba(212,87,75,.34)}
+  .aviso b{color:var(--vermelho)}
+  .nota{border-radius:10px;padding:15px 18px;margin:16px 0;font-size:15px;
+    background:rgba(233,185,84,.08);border:1px solid var(--carta-borda);color:var(--tinta-2)}
+  .nota b{color:var(--ouro)}
+
+  .passo{display:flex;gap:15px;align-items:flex-start;padding:13px 0;
+    border-bottom:1px solid rgba(233,185,84,.11)}
+  .passo:last-child{border-bottom:0}
+  .passo-n{flex:none;width:29px;height:29px;border-radius:8px;display:grid;place-items:center;
+    background:rgba(233,185,84,.14);color:var(--ouro);font-weight:600;font-size:13.5px;
+    border:1px solid rgba(233,185,84,.3)}
+  .passo div p{margin:0;color:var(--tinta-2)}
+  .passo div b{color:var(--tinta);font-weight:500}
+
+  footer{max-width:var(--lg);margin:0 auto;padding:26px 28px 60px;color:var(--tinta-3);
+    font-size:13px;border-top:1px solid rgba(233,185,84,.16)}
+
+  @media (max-width:860px){
+    .corpo{grid-template-columns:1fr;gap:26px}
+    nav.indice{position:static;order:-1}
+    nav.indice ol{flex-direction:row;flex-wrap:wrap;gap:6px}
+    nav.indice a{border-left:0;border:1px solid var(--carta-borda);font-size:12.5px;padding:6px 9px}
+    .g2,.g3{grid-template-columns:1fr}
+    .capa{padding:40px 20px 26px}
+    .corpo{padding:0 20px 60px}
+  }
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<header class="capa">
+  <div class="eyebrow">Documento mestre · uso interno</div>
+  <h1>Mapa do Embarque Suinco</h1>
+  <p class="lede">O que o sistema é, do que ele é feito, onde mexer, quando não mexer,
+    e o que fazer quando alguma coisa para. Escrito para o arquiteto do sistema —
+    e para responder a TI sem hesitar.</p>
+  <div class="selo">
+    <span>Atualizado 27/08/2026</span>
+    <span>8 setores em produção</span>
+    <span>37 migrações</span>
+    <span>281 testes de servidor · 111 de tela</span>
+  </div>
+</header>
+
+<div class="corpo">
+  <nav class="indice" aria-label="Índice">
+    <ol>
+      <li><a href="#resposta"><span class="n">01</span>A resposta de 30s</a></li>
+      <li><a href="#stack"><span class="n">02</span>O stack</a></li>
+      <li><a href="#camadas"><span class="n">03</span>As três camadas</a></li>
+      <li><a href="#seguranca"><span class="n">04</span>Segurança e a TI</a></li>
+      <li><a href="#dados"><span class="n">05</span>Buscar um dado</a></li>
+      <li><a href="#backup"><span class="n">06</span>Backup</a></li>
+      <li><a href="#mexer"><span class="n">07</span>Onde e quando mexer</a></li>
+      <li><a href="#socorro"><span class="n">08</span>Quando algo para</a></li>
+      <li><a href="#chaves"><span class="n">09</span>Chaves e acessos</a></li>
+      <li><a href="#pendencias"><span class="n">10</span>O que falta</a></li>
+    </ol>
+  </nav>
+
+  <main>
+    <section id="resposta">
+      <h2>A resposta de 30 segundos</h2>
+      <p class="sub">Quando alguém perguntar "o que é isso que vocês fizeram?", esta é a resposta.
+        Decore o primeiro parágrafo; o resto do documento só te dá o que sustentar.</p>
+      <div class="carta">
+        <p class="fala">"É um sistema web próprio que controla o embarque de cargas da
+          cooperativa em tempo real. Oito setores usam a mesma tela: a Logística programa,
+          a Portaria registra entrada e saída, a Expedição carrega, o Faturamento emite a
+          nota. Toda ação fica assinada com nome, setor e horário. Roda em servidor próprio,
+          com banco PostgreSQL e backup diário."</p>
+        <ul class="lista" style="margin-top:18px">
+          <li><strong>Qual o problema que ele resolve:</strong> antes a informação vivia em
+            planilhas e ligações. "Onde está o caminhão?" era telefone para o pátio, várias
+            vezes por dia, com resposta diferente em cada cópia da planilha.</li>
+          <li><strong>Quem construiu:</strong> desenvolvido sob medida para a Suinco, com
+            código no nosso repositório — não é software alugado de terceiro, não tem
+            mensalidade por usuário e a cooperativa é dona do código e dos dados.</li>
+          <li><strong>Onde os dados moram:</strong> em servidor contratado pela cooperativa,
+            no Brasil, com backup automático diário guardado por 14 dias.</li>
+        </ul>
+      </div>
+    </section>
+
+    <section id="stack">
+      <h2>O stack</h2>
+      <p class="sub">A pergunta que te pegou. Aqui está, em ordem de quem perguntar: primeiro
+        a resposta curta, depois o detalhe que a TI vai querer.</p>
+
+      <div class="carta">
+        <p class="fala">"Frontend em JavaScript puro, sem framework. Backend em Node.js com
+          Express. Banco PostgreSQL. Tempo real por Socket.IO. Front hospedado na Vercel,
+          backend em VPS própria com Nginx e HTTPS."</p>
+      </div>
+
+      <h3>O detalhe, camada por camada</h3>
+      <div class="rolagem">
+        <table>
+          <thead><tr><th>Camada</th><th>Tecnologia</th><th>Por que essa escolha</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><b>Painel (o que abre no navegador)</b></td>
+              <td><code>HTML + CSS + JavaScript</code> sem framework, empacotado num arquivo único</td>
+              <td>Abre rápido no celular do pátio, funciona offline depois da primeira visita, e não depende de biblioteca de terceiro que muda sozinha.</td>
+            </tr>
+            <tr>
+              <td><b>Servidor</b></td>
+              <td><code>Node.js 20+</code> com <code>Express 4</code></td>
+              <td>É a mesma linguagem do painel — uma pessoa só consegue dar manutenção nas duas pontas.</td>
+            </tr>
+            <tr>
+              <td><b>Banco de dados</b></td>
+              <td><code>PostgreSQL</code> (via <code>pg</code>, SQL escrito à mão)</td>
+              <td>Banco relacional maduro e gratuito. SQL à mão em vez de ORM: dá para ler exatamente o que vai ao banco.</td>
+            </tr>
+            <tr>
+              <td><b>Tempo real</b></td>
+              <td><code>Socket.IO 4</code></td>
+              <td>É o que faz a tela de um setor mudar quando outro registra algo, sem ninguém apertar atualizar.</td>
+            </tr>
+            <tr>
+              <td><b>Segurança</b></td>
+              <td><code>JWT</code>, <code>bcrypt</code>, <code>helmet</code>, <code>express-rate-limit</code>, <code>CORS</code></td>
+              <td>Sessão assinada, senha com hash, cabeçalhos de proteção, limite de requisições e origem controlada.</td>
+            </tr>
+            <tr>
+              <td><b>Relatórios em PDF</b></td>
+              <td><code>Playwright</code> (Chromium no servidor)</td>
+              <td>O PDF sai idêntico em qualquer aparelho porque quem imprime é o servidor, não o celular de cada um.</td>
+            </tr>
+            <tr>
+              <td><b>Aviso no celular</b></td>
+              <td><code>web-push</code> (Web Push / VAPID)</td>
+              <td>Notificação chega com o aplicativo fechado, sem precisar publicar app em loja.</td>
+            </tr>
+            <tr>
+              <td><b>Hospedagem</b></td>
+              <td>Painel na <code>Vercel</code> · Servidor em <code>VPS Hostinger</code> com <code>Nginx</code> + <code>Certbot</code></td>
+              <td>O painel é estático e a Vercel entrega de graça e rápido; o servidor precisa de banco e disco, então fica em máquina própria.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="nota"><b>Se perguntarem "e se o desenvolvedor sumir?":</b> o código está
+        num repositório Git com histórico completo, os testes automatizados descrevem o
+        comportamento esperado, e existe um manual do servidor com todos os comandos.
+        Qualquer desenvolvedor Node consegue continuar.</div>
+    </section>
+
+    <section id="camadas">
+      <h2>As três camadas — e o que acontece quando alguém clica</h2>
+      <p class="sub">Entender este caminho resolve 80% das dúvidas de "por que não apareceu?".</p>
+      <div class="carta">
+        <div class="passo"><div class="passo-n">1</div><div>
+          <p><b>O painel</b> (<code style="font-family:var(--mono);color:var(--ouro)">embarquesuinco.com.br</code>) roda no navegador da pessoa.
+          Ele grava primeiro no próprio aparelho e só depois manda pro servidor — por isso
+          continua funcionando se a internet do pátio cair.</p></div></div>
+        <div class="passo"><div class="passo-n">2</div><div>
+          <p><b>O servidor</b> (<code style="font-family:var(--mono);color:var(--ouro)">api.embarquesuinco.com.br</code>) é quem manda de verdade.
+          Ele confere se aquele setor pode fazer aquilo, grava no banco e avisa todo mundo
+          pelo Socket.IO. <b>Esconder um botão na tela não é segurança — recusar no servidor é.</b></p></div></div>
+        <div class="passo"><div class="passo-n">3</div><div>
+          <p><b>O banco PostgreSQL</b> guarda tudo, e nada é apagado de verdade: correção
+          gera revisão, exclusão marca a data. O histórico é permanente.</p></div></div>
+      </div>
+      <div class="nota"><b>A consequência prática:</b> quando você publica uma mudança no
+        painel, ela chega a todo mundo em minutos pela Vercel. Quando a mudança é no
+        servidor, <b>alguém precisa rodar a atualização na VPS</b> — senão o painel novo
+        conversa com um servidor velho.</div>
+    </section>
+
+    <section id="seguranca">
+      <h2>Segurança — e o que dizer para a TI</h2>
+      <p class="sub">O pessoal da TI ficou de cara porque um sistema apareceu na empresa sem
+        passar por eles. É uma reação legítima. O que desarma é transparência com fatos.</p>
+
+      <h3>O que responder ao Pedro</h3>
+      <div class="carta">
+        <ul class="lista">
+          <li><strong>O repositório pode ser compartilhado?</strong> Sim. Auditei antes de
+            te falar isso: <b>nenhuma senha, chave ou token está no repositório</b>, nem no
+            histórico de commits. Os segredos vivem só no arquivo <code style="font-family:var(--mono);color:var(--ouro)">.env</code> da VPS, que
+            é bloqueado por regra explícita de versionamento.</li>
+          <li><strong>Os dados são da cooperativa?</strong> Sim — banco em servidor
+            contratado pela Suinco, sem terceiro intermediando.</li>
+          <li><strong>Tem controle de acesso?</strong> Cada pessoa tem login próprio, o setor
+            define o que ela vê e faz, existe segundo fator disponível, sessão revogável e
+            bloqueio pela Administração. Toda ação fica registrada com autor e horário.</li>
+          <li><strong>Tem backup?</strong> Diário, automático, guardado 14 dias — e existe um
+            script que <b>testa a restauração</b>, porque backup que nunca foi restaurado é
+            promessa, não backup.</li>
+          <li><strong>Passou por teste?</strong> 281 testes automatizados no servidor e 111
+            baterias de tela, rodados a cada publicação.</li>
+        </ul>
+      </div>
+
+      <h3>O que é honesto reconhecer</h3>
+      <div class="aviso">
+        <b>Não minta para a TI — o custo de ser pego é maior que o de admitir.</b> Três pontos
+        que eles podem levantar e você deve admitir de frente: (1) o sistema nasceu fora do
+        processo formal de TI; (2) hoje ele depende de uma VPS que só você e eu acessamos —
+        <b>não há um segundo administrador</b>; (3) a senha de root do servidor precisa ser
+        trocada, e isso ainda não foi feito. Levar esses três pontos você mesmo transforma
+        uma auditoria hostil numa conversa de melhoria.
+      </div>
+      <div class="nota"><b>A proposta que fecha a conversa:</b> ofereça dar acesso de leitura
+        do repositório à TI e pedir que eles indiquem um segundo responsável técnico pelo
+        servidor. Custa nada e resolve o incômodo real deles, que é não ter visibilidade.</div>
+    </section>
+
+    <section id="dados">
+      <h2>Buscar um dado importante</h2>
+      <p class="sub">Três caminhos, do mais seguro para o mais técnico. Comece sempre pelo primeiro.</p>
+
+      <h3>Caminho 1 — pelo painel <span class="chip c-ok">sem risco</span></h3>
+      <p class="sub" style="margin-bottom:12px">Serve para 95% dos casos: Histórico responde
+        "o que aconteceu com esta carga", Relatórios exporta período em PDF, e cada linha do
+        Histórico abre a linha do tempo completa ao ser tocada. <b>Não precisa de terminal.</b></p>
+
+      <h3>Caminho 2 — consulta direta no banco <span class="chip c-at">exige cuidado</span></h3>
+      <p class="sub" style="margin-bottom:12px">Quando você precisa de algo que o painel não
+        mostra. Use sempre <code style="font-family:var(--mono);color:var(--ouro)">SELECT</code> — nunca <code style="font-family:var(--mono);color:var(--ouro)">UPDATE</code> ou <code style="font-family:var(--mono);color:var(--ouro)">DELETE</code> à mão.</p>
+      <div class="cmd">
+        <div class="cmd-topo"><span class="cmd-onde">terminal da VPS · root@2.25.95.253</span>
+          <button class="cmd-copiar" type="button">Copiar</button></div>
+<pre><span class="c"># entra no banco (o usuário do banco é postgres, não root)</span>
+su postgres
+psql embarque_suinco
+
+<span class="c"># exemplo: tudo que aconteceu com uma placa nos últimos 7 dias</span>
+SELECT c.numero_carga, c.placa, e.acao, e.setor, e.autor, e.criado_em
+FROM log_eventos e JOIN fact_viagens c ON c.id = e.carga_id
+WHERE c.placa = 'ABC1D23' AND e.criado_em > now() - interval '7 days'
+ORDER BY e.criado_em;
+
+<span class="c"># sair: \q  e depois exit</span></pre>
+      </div>
+
+      <h3>Caminho 3 — o diagnóstico pronto <span class="chip c-ok">sem risco</span></h3>
+      <p class="sub" style="margin-bottom:12px">Um script que já responde "o sistema está
+        saudável?" sem você precisar saber SQL. Pode rodar com o pátio operando.</p>
+      <div class="cmd">
+        <div class="cmd-topo"><span class="cmd-onde">terminal da VPS</span>
+          <button class="cmd-copiar" type="button">Copiar</button></div>
+<pre>cd /opt/suinco-src
+bash entregaveis/suinco_logistica/backend/diagnostico.sh</pre>
+      </div>
+    </section>
+
+    <section id="backup">
+      <h2>Backup — onde está e como pegar</h2>
+      <p class="sub">O backup roda sozinho todo dia e guarda 14 dias. Você não precisa criar
+        nada; precisa saber achar e restaurar.</p>
+
+      <div class="grade g2">
+        <div class="carta">
+          <dl class="fatos">
+            <dt>Onde ficam</dt><dd><code>/var/backups/embarque-suinco</code></dd>
+            <dt>Frequência</dt><dd>Diária, automática</dd>
+            <dt>Retenção</dt><dd>14 dias</dd>
+            <dt>Formato</dt><dd><code>.sql.gz</code> (dump comprimido)</dd>
+          </dl>
+        </div>
+        <div class="carta">
+          <dl class="fatos">
+            <dt>Código rodando</dt><dd><code>/opt/embarque-suinco</code></dd>
+            <dt>Cópia do repo</dt><dd><code>/opt/suinco-src</code></dd>
+            <dt>Segredos</dt><dd><code>/opt/embarque-suinco/.env</code></dd>
+            <dt>Serviço</dt><dd><code>embarque-suinco</code></dd>
+          </dl>
+        </div>
+      </div>
+
+      <h3>Ver os backups que existem <span class="chip c-ok">sem risco</span></h3>
+      <div class="cmd">
+        <div class="cmd-topo"><span class="cmd-onde">terminal da VPS</span>
+          <button class="cmd-copiar" type="button">Copiar</button></div>
+<pre>ls -lh /var/backups/embarque-suinco</pre>
+      </div>
+
+      <h3>Forçar um backup agora <span class="chip c-ok">sem risco</span></h3>
+      <p class="sub" style="margin-bottom:12px">Faça isto <b>antes</b> de qualquer coisa arriscada.</p>
+      <div class="cmd">
+        <div class="cmd-topo"><span class="cmd-onde">terminal da VPS</span>
+          <button class="cmd-copiar" type="button">Copiar</button></div>
+<pre>/etc/cron.daily/backup-embarque-suinco && ls -lh /var/backups/embarque-suinco | tail -3</pre>
+      </div>
+
+      <h3>Baixar um backup para o seu computador <span class="chip c-ok">sem risco</span></h3>
+      <div class="cmd">
+        <div class="cmd-topo"><span class="cmd-onde">terminal do SEU computador (não da VPS)</span>
+          <button class="cmd-copiar" type="button">Copiar</button></div>
+<pre>scp root@2.25.95.253:/var/backups/embarque-suinco/embarque_suinco_AAAAMMDD.sql.gz ~/Downloads/</pre>
+      </div>
+
+      <h3>Restaurar <span class="chip c-pa">último recurso</span></h3>
+      <div class="aviso"><b>Restaurar apaga tudo que aconteceu depois daquele backup.</b>
+        Um dia inteiro de pátio pode sumir. Só faça isso com o sistema já quebrado, sabendo
+        exatamente o que perde — e, se der, me chame antes.</div>
+      <div class="cmd">
+        <div class="cmd-topo"><span class="cmd-onde">terminal da VPS · com o sistema parado</span>
+          <button class="cmd-copiar" type="button">Copiar</button></div>
+<pre>systemctl stop embarque-suinco
+gunzip -c /var/backups/embarque-suinco/embarque_suinco_AAAAMMDD.sql.gz | su postgres
+systemctl start embarque-suinco</pre>
+      </div>
+      <div class="nota"><b>A prova de que o backup presta:</b> existe um script que restaura
+        num banco descartável e confere se os dados chegaram inteiros —
+        <code style="font-family:var(--mono);color:var(--ouro)">scripts/testar_restauracao_backup.sh</code>. Ele roda junto com o
+        <code style="font-family:var(--mono);color:var(--ouro)">atualizar_tudo.sh</code>.</div>
+    </section>
+
+    <section id="mexer">
+      <h2>Onde mexer, quando mexer</h2>
+      <p class="sub">A regra que evita o incidente: <b>mudança no painel é barata, mudança no
+        servidor exige atualizar a VPS, e mudança no banco é definitiva.</b></p>
+
+      <div class="rolagem">
+        <table>
+          <thead><tr><th>Quero mudar…</th><th>Onde vive</th><th>Risco</th><th>Precisa fazer o quê</th></tr></thead>
+          <tbody>
+            <tr><td>Texto, cor, posição de botão</td><td><code>styles.css</code>, <code>app.js</code></td>
+              <td><span class="chip c-ok">baixo</span></td><td>Publicar o painel. Chega sozinho.</td></tr>
+            <tr><td>Uma tela nova, um campo novo na tela</td><td><code>app.js</code>, <code>index_suinco.html</code></td>
+              <td><span class="chip c-ok">baixo</span></td><td>Publicar o painel + rodar a bateria de testes.</td></tr>
+            <tr><td>Regra de quem pode fazer o quê</td><td><code>backend/src/dominio/fluxo.js</code></td>
+              <td><span class="chip c-at">médio</span></td><td>Publicar <b>e</b> atualizar a VPS. Painel novo com servidor velho recusa a ação.</td></tr>
+            <tr><td>Um campo novo guardado no banco</td><td><code>backend/migrations/</code></td>
+              <td><span class="chip c-pa">alto</span></td><td>Backup antes, migração, atualizar a VPS. Migração aplicada não volta atrás sozinha.</td></tr>
+            <tr><td>Guias dos setores</td><td><code>tutoriais/roteiros.py</code></td>
+              <td><span class="chip c-ok">baixo</span></td><td>Rodar o gerador. Os PDFs saem com prints novos.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Quando NÃO mexer</h3>
+      <div class="carta">
+        <ul class="lista">
+          <li><strong>Durante a janela de embarque.</strong> O pátio carregando é o pior
+            momento para descobrir um defeito. Prefira início da manhã ou fim do dia.</li>
+          <li><strong>Sem teste que prove.</strong> A regra desta casa: primeiro escreve o
+            teste que falha, depois corrige. Correção sem teste volta.</li>
+          <li><strong>Duas mudanças de uma vez.</strong> Se quebrar, você não sabe qual foi.</li>
+          <li><strong>Sexta à tarde.</strong> Clássico, e verdadeiro.</li>
+        </ul>
+      </div>
+
+      <h3>O comando que publica no servidor</h3>
+      <div class="cmd">
+        <div class="cmd-topo"><span class="cmd-onde">terminal da VPS · depois de cada publicação minha</span>
+          <button class="cmd-copiar" type="button">Copiar</button></div>
+<pre>cd /opt/suinco-src && git pull
+bash entregaveis/suinco_logistica/backend/atualizar_tudo.sh</pre>
+      </div>
+      <div class="nota"><b>Por que <code style="font-family:var(--mono)">atualizar_tudo.sh</code> e não <code style="font-family:var(--mono)">atualizar.sh</code>:</b>
+        o primeiro faz tudo — atualiza, aplica migrações, testa a restauração do backup e
+        imprime um resumo do que aconteceu. É o que você me manda depois.</div>
+    </section>
+
+    <section id="socorro">
+      <h2>Quando algo para — sintoma, causa, comando</h2>
+      <p class="sub">Ache o sintoma na coluna da esquerda. Não pule para o comando sem ler a causa.</p>
+      <div class="rolagem">
+        <table>
+          <thead><tr><th>O que as pessoas relatam</th><th>Causa mais provável</th><th>O que fazer</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><b>"O painel não abre"</b> / fica girando</td>
+              <td>O serviço do servidor caiu, ou o certificado venceu</td>
+              <td>Ver estado: <code>systemctl status embarque-suinco</code>. Se estiver parado: <code>systemctl restart embarque-suinco</code></td>
+            </tr>
+            <tr>
+              <td><b>"Abre mas fica desconectado"</b> (rodapé vermelho)</td>
+              <td>O painel não alcança o servidor — rede da empresa ou serviço fora</td>
+              <td>Abrir <code>api.embarquesuinco.com.br/health</code> no navegador. Se responder, é rede local; se não, é o servidor.</td>
+            </tr>
+            <tr>
+              <td><b>"Registrei e o outro setor não vê"</b></td>
+              <td>Gravou offline e ainda não subiu, ou o servidor recusou</td>
+              <td>A pessoa deve ver o aviso de conexão no rodapé. Voltando a rede, a fila sobe sozinha. Se o aviso disse "recusado", é permissão de setor.</td>
+            </tr>
+            <tr>
+              <td><b>"O relatório em PDF não sai"</b></td>
+              <td>O Chromium do servidor não está pronto</td>
+              <td>Conferir em <code>/health</code> o campo <code>pdf.pronto</code>. Se vier falso, rodar <code>atualizar.sh</code> na VPS.</td>
+            </tr>
+            <tr>
+              <td><b>"Não chega notificação no celular"</b></td>
+              <td>Chaves de aviso ausentes, ou a pessoa não ativou no aparelho</td>
+              <td>Sino <b>Avisos</b> no painel → Ativar. No servidor, as chaves ficam no <code>.env</code> (<code>VAPID_*</code>).</td>
+            </tr>
+            <tr>
+              <td><b>"Sumiu uma carga"</b></td>
+              <td>Quase sempre foi cancelada ou excluída por alguém — nada some sozinho</td>
+              <td>Histórico → buscar pelo número. O log mostra quem fez e quando. Administração consegue restaurar.</td>
+            </tr>
+            <tr>
+              <td><b>Tudo lento, todo mundo reclamando</b></td>
+              <td>Disco cheio na VPS ou limite de requisições atingido</td>
+              <td><code>df -h</code> para o disco; <code>diagnostico.sh</code> para o resto.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="aviso"><b>Regra de ouro do socorro:</b> antes de reiniciar, deletar ou
+        restaurar qualquer coisa, <b>tire um backup</b> (comando na seção 06) e anote o que
+        você viu na tela. Metade dos incidentes fica sem diagnóstico porque a evidência foi
+        apagada na pressa de resolver.</div>
+    </section>
+
+    <section id="chaves">
+      <h2>Chaves e acessos — quem tem o quê</h2>
+      <p class="sub">Sendo o arquiteto, esta é a lista que você precisa conseguir recitar.</p>
+      <div class="rolagem">
+        <table>
+          <thead><tr><th>Acesso</th><th>Onde se usa</th><th>Onde a chave vive</th></tr></thead>
+          <tbody>
+            <tr><td><b>Servidor (root)</b></td><td>SSH em <code>2.25.95.253</code></td><td>Só na sua cabeça / gerenciador de senhas. <span class="chip c-pa">trocar</span></td></tr>
+            <tr><td><b>Banco de dados</b></td><td>Usuário <code>postgres</code> na VPS</td><td><code>/opt/embarque-suinco/.env</code></td></tr>
+            <tr><td><b>Assinatura de sessão</b></td><td>Login dos operadores</td><td><code>.env</code> → <code>JWT_SEGREDO</code></td></tr>
+            <tr><td><b>Aviso no celular</b></td><td>Push nos aparelhos</td><td><code>.env</code> → <code>VAPID_PUBLICA</code> / <code>VAPID_PRIVADA</code></td></tr>
+            <tr><td><b>Repositório</b></td><td>GitHub · código-fonte</td><td>Sua conta GitHub</td></tr>
+            <tr><td><b>Publicação do painel</b></td><td>Vercel</td><td>Conta Vercel ligada ao GitHub</td></tr>
+            <tr><td><b>Domínio</b></td><td><code>embarquesuinco.com.br</code></td><td>Registro em nome da cooperativa</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="aviso"><b>Pendência de segurança em aberto:</b> a senha de root do servidor
+        foi exposta em conversa e <b>ainda não foi trocada</b>. Comando na VPS:
+        <code style="font-family:var(--mono);color:var(--vermelho)">passwd root</code>. É rápido e elimina o único risco real desta lista.</div>
+    </section>
+
+    <section id="pendencias">
+      <h2>O que ainda falta</h2>
+      <p class="sub">Um mapa honesto mostra também o que não está pronto. Estes são os pontos
+        abertos hoje — nenhum impede a operação, todos merecem data.</p>
+      <div class="grade g2">
+        <div class="carta">
+          <h3 style="margin-top:0">Segurança e continuidade</h3>
+          <ul class="lista">
+            <li><strong>Trocar a senha de root</strong> do servidor.</li>
+            <li><strong>Segundo responsável técnico</strong> — hoje só você acessa a VPS.</li>
+            <li><strong>Monitor de queda</strong> (UptimeRobot) para avisar antes do pátio perceber.</li>
+          </ul>
+        </div>
+        <div class="carta">
+          <h3 style="margin-top:0">Operação</h3>
+          <ul class="lista">
+            <li><strong>6 códigos de rota</strong> ainda faltando no cadastro.</li>
+            <li><strong>Atualização de pacotes</strong> em janela combinada.</li>
+            <li><strong>Robô de WhatsApp</strong> com o resumo do dia — projetado, não construído.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<footer>
+  Programação de Embarque · Suinco Cooperativa Agroindustrial · documento de uso interno,
+  atualizado em 27/08/2026. Todo dado técnico aqui foi conferido no código e no servidor
+  no momento da escrita — não é resumo de memória.
+</footer>
+
+<script>
+  document.querySelectorAll('.cmd-copiar').forEach((b) => {
+    b.addEventListener('click', async () => {
+      const pre = b.closest('.cmd').querySelector('pre');
+      try {
+        await navigator.clipboard.writeText(pre.innerText);
+        const antes = b.textContent;
+        b.textContent = 'Copiado';
+        setTimeout(() => { b.textContent = antes; }, 1600);
+      } catch {
+        const sel = window.getSelection();
+        const faixa = document.createRange();
+        faixa.selectNodeContents(pre);
+        sel.removeAllRanges(); sel.addRange(faixa);
+        b.textContent = 'Selecionado';
+        setTimeout(() => { b.textContent = 'Copiar'; }, 1600);
+      }
+    });
+  });
+</script>

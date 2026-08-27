@@ -4249,12 +4249,22 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
    Só nas abas de uso DIÁRIO. Quem abre a Torre pela quinquagésima vez hoje
    não precisa ler o que é a Torre; quem abre Relatórios ou Cadastros de vez
    em quando precisa, e lá o texto fica. */
+/* SUBSTITUÍDO EM 27/08/2026 — ver "EXPLICAÇÃO SOB DEMANDA NO CELULAR" no
+   fim deste arquivo. A regra antiga escondia o texto de orientação em cinco
+   abas, e o diagnóstico dela continua certo: o peso estava no cabeçalho.
+   Dois problemas, porém, medidos agora:
+
+   1. APAGAVA. `display:none` no celular deixava a pessoa sem NENHUMA forma
+      de ler a explicação naquele aparelho. Quem está aprendendo a Portaria
+      pelo celular ficava sem o texto que existe justamente para ela.
+   2. NÃO COBRIA A PIOR ABA. Indicadores ficou de fora da lista e é a mais
+      pesada de todas: 8.060px de altura, 1.150px só de texto de instrução —
+      dez telas de rolagem.
+
+   O sistema novo colapsa em TODAS as abas e devolve o texto com um toque no
+   título, guardando a escolha por cartão. Some da rolagem, continua ao
+   alcance. */
 @media (max-width:820px){
-  #tab-torre > .card > .card-sub,
-  #tab-portaria > .card > .card-sub,
-  #tab-expedicao > .card > .card-sub,
-  #tab-faturamento > .card > .card-sub,
-  #tab-programacao > .card > .card-sub{ display:none }
 
   /* O título em duas linhas a 20px custava 72px. O nome da tela já está na
      aba selecionada logo acima — aqui ele confirma, não apresenta. */
@@ -4706,3 +4716,134 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
    destinoMontagemHtml — o título é o destino da planilha, porque seis
    linhas com a mesma praça em negrito leem como seis duplicatas. */
 .mont-praca{ font-size:11.5px }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   EXPLICAÇÃO SOB DEMANDA NO CELULAR (27/08/2026)
+   -----------------------------------------------------------------------
+   Pedido do dono: "alguns cabeçalhos informativos estão tomando muito
+   espaço, tipo instrução do que aquela função faz... tem que rolar muito
+   até chegar na parte que é interessante ver".
+
+   Medido antes de mexer, em tela de 390px: a aba Indicadores gastava
+   1.150px só em texto de instrução — 1,4 tela inteira de explicação antes
+   do primeiro número. A aba inteira somava 8.060px, quase 10 telas.
+
+   A explicação NÃO foi apagada: ela continua no HTML, continua no
+   computador, e no celular volta com um toque no título. Quem está
+   aprendendo abre; quem já sabe não rola. A escolha fica guardada por
+   cartão, então quem sempre quer uma explicação aberta não repete o toque.
+
+   Só no celular. No computador nada muda — lá sobra espaço e a explicação
+   ajuda sem custar rolagem.
+   ═══════════════════════════════════════════════════════════════════════ */
+@media (max-width:820px){
+  /* max-height, e não a técnica de grade `0fr`: o texto da explicação é
+     TEXTO SOLTO dentro do .card-sub, sem elemento em volta. Item anônimo de
+     grade tem altura mínima automática que nenhum seletor alcança — medido:
+     colapsava para 35px em vez de 0. max-height não tem esse problema. */
+  .card-sub{
+    max-height:0; overflow:hidden; margin:0; opacity:0;
+    transition:max-height var(--t-lenta) ease, opacity var(--t-media) ease,
+               margin var(--t-lenta) ease;
+  }
+  .card.exp-aberta > .card-sub{
+    max-height:24em; opacity:1; margin-top:-6px; margin-bottom:9px;
+  }
+  /* o título vira o botão: alvo grande, sem markup novo em 66 cartões */
+  .card:has(> .card-sub) > .card-title{
+    cursor:pointer; -webkit-tap-highlight-color:transparent;
+    padding-right:30px; position:relative;
+  }
+  .card:has(> .card-sub) > .card-title::after{
+    content:'?'; position:absolute; right:0; top:50%; transform:translateY(-50%);
+    width:20px; height:20px; border-radius:50%;
+    border:1.5px solid var(--gold-dim); color:var(--gold-text);
+    font-size:12px; font-weight:800; line-height:17px; text-align:center;
+    transition:background var(--t-media) ease, color var(--t-media) ease;
+  }
+  .card.exp-aberta > .card-title::after{
+    content:'×'; background:var(--gold); color:var(--navy-deep);
+    border-color:var(--gold); font-size:15px; line-height:16px;
+  }
+  .card:has(> .card-sub) > .card-title:focus-visible{
+    outline:2px solid var(--gold-text); outline-offset:3px; border-radius:4px;
+  }
+}
+@media (max-width:820px) and (prefers-reduced-motion:reduce){
+  .card-sub{ transition:none }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   INDICADORES NO CELULAR: SEÇÃO RECOLHIDA (27/08/2026)
+   -----------------------------------------------------------------------
+   Medido em 390px: dez cartões de gráfico somando 8.060px — 9,8 telas de
+   rolagem. Quem abre Indicadores no celular quer UM número, e precisava
+   percorrer a aba inteira para achar qualquer coisa.
+
+   A referência é o preview do Suinco BI: só o que interessa na tela, o
+   resto a um toque. Aqui cada cartão vira uma seção recolhida — o título
+   fica, o conteúdo espera. A altura de um cartão fechado é a do título.
+
+   POR QUE NÃO ESCONDER OS TÍTULOS TAMBÉM: a lista de títulos É o índice da
+   aba. Fechada, ela cabe em uma tela e mostra tudo que existe ali — que é
+   mais do que a pessoa enxergava rolando.
+
+   O primeiro cartão abre sozinho, para a aba nunca aparecer vazia. E a
+   escolha é guardada: quem abre "Gargalos" todo dia encontra aberto.
+
+   Só no celular. No computador os dez cartões continuam abertos.
+   ═══════════════════════════════════════════════════════════════════════ */
+@media (max-width:820px){
+  #tab-indicadores > .card > .card-title{
+    cursor:pointer; -webkit-tap-highlight-color:transparent;
+    padding-right:30px; position:relative; margin-bottom:0;
+  }
+  /* a seta é o sinal de "tem mais aqui dentro" */
+  #tab-indicadores > .card > .card-title::before{
+    content:''; position:absolute; right:4px; top:50%;
+    width:8px; height:8px; margin-top:-5px;
+    border-right:2px solid var(--gold-text); border-bottom:2px solid var(--gold-text);
+    transform:rotate(45deg); transform-origin:center;
+    transition:transform var(--t-media) ease;
+  }
+  #tab-indicadores > .card.sec-aberta > .card-title::before{
+    transform:rotate(-135deg); margin-top:-2px;
+  }
+  /* tudo que não é o título recolhe */
+  #tab-indicadores > .card > *:not(.card-title){
+    max-height:0; overflow:hidden; opacity:0; margin-top:0; margin-bottom:0;
+    transition:max-height var(--t-lenta) ease, opacity var(--t-media) ease;
+  }
+  #tab-indicadores > .card.sec-aberta > *:not(.card-title){
+    max-height:none; overflow:visible; opacity:1;
+  }
+  /* cartão fechado encolhe o próprio respiro */
+  #tab-indicadores > .card:not(.sec-aberta){ padding-top:11px; padding-bottom:11px; }
+  #tab-indicadores > .card > .card-title:focus-visible{
+    outline:2px solid var(--gold-text); outline-offset:3px; border-radius:4px;
+  }
+}
+@media (max-width:820px) and (prefers-reduced-motion:reduce){
+  #tab-indicadores > .card > *:not(.card-title){ transition:none }
+  #tab-indicadores > .card > .card-title::before{ transition:none }
+}
+
+/* CONFLITO DE AFORDÂNCIA EM INDICADORES (corrigido no mesmo dia)
+   -----------------------------------------------------------------------
+   Os dois recursos de hoje se encontraram no mesmo canto do título: o "?"
+   da explicação sob demanda (::after) e a seta da seção recolhida
+   (::before). Ficaram sobrepostos, e pior: dois significados diferentes
+   para o mesmo toque.
+
+   Em Indicadores manda a SEÇÃO. Um toque no título abre a seção inteira —
+   e a explicação vem junto, porque ela é parte do que estava recolhido.
+   Some o "?" ali, e a pessoa tem um gesto só com um resultado só. */
+@media (max-width:820px){
+  #tab-indicadores > .card > .card-title::after{ display:none }
+  #tab-indicadores > .card.sec-aberta > .card-sub{
+    max-height:24em; opacity:1; margin-top:-6px; margin-bottom:9px;
+  }
+  /* o ícone do título não quebra linha sozinho */
+  #tab-indicadores > .card > .card-title{ display:flex; align-items:center; gap:8px; flex-wrap:nowrap }
+  #tab-indicadores > .card > .card-title > .ico{ flex:none }
+}
