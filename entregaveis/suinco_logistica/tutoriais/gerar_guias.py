@@ -52,6 +52,12 @@ FACES = _FONTES.read_text(encoding='utf-8') if _FONTES.exists() else ''
 _PIPO = pathlib.Path(__file__).resolve().parent / 'assets_guia' / 'pipo.png'
 PIPO64 = base64.b64encode(_PIPO.read_bytes()).decode() if _PIPO.exists() else ''
 
+# Cena da capa: o caminhão Suinco com o Pipo do lado, a mesma peça da
+# apresentação institucional (pedido do dono, 27/08/2026: "pipo e caminhao
+# suinco, nos guias"). O arquivo é extraído da apresentação, não redesenhado.
+_CENA = pathlib.Path(__file__).resolve().parent / 'assets_guia' / 'cena_capa.svg'
+CENA_CAPA = _CENA.read_text(encoding='utf-8') if _CENA.exists() else ''
+
 # Ícones IDÊNTICOS aos do painel: o sprite é lido de index_suinco.html, a
 # mesma fonte que a apresentação usa. Nada é redesenhado aqui.
 def _sprite_do_painel():
@@ -329,8 +335,18 @@ def documento(setor, guia, imagens):
     ico = ICONE_DO_SETOR.get(setor)
     icone_svg = (f'<svg class="ico-setor" aria-hidden="true"><use href="#{ico}"/></svg>'
                  if ico and SPRITE else '')
-    pipo_img = (f'<img class="capa-pipo" src="data:image/png;base64,{PIPO64}"'
-                ' alt="Pipo, o mascote da Suinco">' if PIPO64 else '')
+    # A cena inteira (caminhão + Pipo) quando os dois materiais existem;
+    # só o Pipo se a cena faltar; nada se nem o Pipo houver.
+    if CENA_CAPA and PIPO64 and logo64:
+        cena = (CENA_CAPA
+                .replace('__PIPO__', f'data:image/png;base64,{PIPO64}')
+                .replace('__LOGO__', f'data:image/png;base64,{logo64}'))
+        pipo_img = f'<div class="capa-cena">{cena}</div>'
+    elif PIPO64:
+        pipo_img = (f'<img class="capa-pipo" src="data:image/png;base64,{PIPO64}"'
+                    ' alt="Pipo, o mascote da Suinco">')
+    else:
+        pipo_img = ''
 
     return f"""<!doctype html>
 <html lang="pt-BR"><head><meta charset="utf-8">
@@ -364,6 +380,9 @@ def documento(setor, guia, imagens):
   .capa::after {{ content: ''; position: absolute; inset: 8mm; pointer-events: none;
     border: .4mm solid rgba(233,185,84,.35); }}
   .capa > * {{ position: relative; z-index: 1; }}
+  .capa-cena {{ margin: 0 0 6mm; }}
+  .capa-cena svg {{ width: 100%; max-width: 152mm; height: auto; display: block;
+    filter: drop-shadow(0 5mm 10mm rgba(0,0,0,.42)); }}
   .capa-pipo {{ width: 52mm; display: block; margin: 0 0 6mm auto;
     filter: drop-shadow(0 6mm 12mm rgba(0,0,0,.45)); }}
   .capa-logo {{ width: 44mm; background: #fff; padding: 4mm; border-radius: 10px;
