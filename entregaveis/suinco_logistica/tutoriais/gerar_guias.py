@@ -377,6 +377,14 @@ def documento(setor, guia, imagens):
       linear-gradient(160deg, {NAVY} 0%, {NAVY_2} 62%, #0A1622 100%);
     color: {CREME}; justify-content: space-between; padding: 20mm 18mm;
     position: relative; }}
+  /* A ONDA DA CAPA — o mesmo desenho do slide 1 da apresentação, para o
+     guia e a apresentação terem a mesma cara. Duas curvas: a clara por
+     cima (branco a 40%), a escura por baixo (preto a 98%). As opacidades
+     foram MEDIDAS do render que o dono aprovou, não escolhidas no olho.
+     Fica atrás de tudo (z-index 0); o conteúdo da capa é z-index 1. */
+  .capa::before {{ content: ''; position: absolute; inset: 0; z-index: 0;
+    pointer-events: none;
+    background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 700" preserveAspectRatio="none"><path d="M0 210 C 300 140 600 300 1200 190 L1200 260 C 700 360 300 220 0 300 Z" fill="%23ffffff" opacity=".404"/><path d="M0 470 C 400 380 800 560 1200 450 L1200 520 C 800 620 400 460 0 560 Z" fill="%23000000" opacity=".985"/></svg>') center/100% 100% no-repeat; }}
   .capa::after {{ content: ''; position: absolute; inset: 8mm; pointer-events: none;
     border: .4mm solid rgba(233,185,84,.35); }}
   .capa > * {{ position: relative; z-index: 1; }}
