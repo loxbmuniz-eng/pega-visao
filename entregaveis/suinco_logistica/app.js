@@ -5396,7 +5396,25 @@ function renderFrotaTabela(){
      Torre/Indicadores. Mesmo limiar que ativa o cartão — perguntado a
      ehTelaEstreita(), para não haver dois números para a mesma decisão. */
   const LIMITE = ehTelaEstreita() ? 30 : 300;
-  const exibidos = lista.slice(0, LIMITE);
+
+  /* NO CELULAR A FROTA COMEÇA FECHADA, E A BUSCA É A PORTA (27/08/2026).
+
+     Pedido do dono sobre o celular: "tem que rolar muito até chegar na
+     parte que é interessante ver". Medido em 390px: a aba Cadastros tinha
+     8.822px de rolagem — 10,5 telas — e a Frota sozinha era 7.465px
+     disso, 85% da aba. Trinta cartões de veículo que ninguém lê.
+
+     Quem abre a Frota no celular quer UM caminhão, e já sabe a placa. A
+     lista completa não é resposta para essa pergunta; é o obstáculo até
+     ela. Então sem busca não sai lista: sai o total e o convite para
+     digitar. Com busca, sai o que casa, com o mesmo limite de sempre.
+
+     No computador nada muda — lá a tabela cabe e serve para varrer.
+
+     O filtro "só quem precisa de revisão" continua mostrando lista sem
+     busca: ali a pergunta É a lista, e ela é curta. */
+  const semBuscaNoCelular = ehTelaEstreita() && !buscaTexto && !soRevisao;
+  const exibidos = semBuscaNoCelular ? [] : lista.slice(0, LIMITE);
   document.getElementById('frota-tbody').innerHTML = exibidos.map(f=>`
     <tr>
       <td>${esc(f.placa)}</td><td>${esc(f.transportadora)||'—'}</td><td>${esc(f.tipoVeiculo)||'—'}</td>
@@ -5409,9 +5427,11 @@ function renderFrotaTabela(){
   document.getElementById('frota-empty').hidden = todos.length>0;
   const contagemEl = document.getElementById('frota-contagem');
   if(contagemEl){
-    contagemEl.textContent = lista.length > LIMITE
-      ? `Mostrando ${LIMITE} de ${lista.length} (de ${todos.length} no total) — refine a busca pra ver outras.`
-      : `${lista.length} de ${todos.length} placa(s) cadastrada(s).`;
+    contagemEl.textContent = semBuscaNoCelular
+      ? `${todos.length} placa(s) cadastrada(s). Digite a placa ou a transportadora acima para ver.`
+      : (lista.length > LIMITE
+        ? `Mostrando ${LIMITE} de ${lista.length} (de ${todos.length} no total) — refine a busca pra ver outras.`
+        : `${lista.length} de ${todos.length} placa(s) cadastrada(s).`);
   }
 }
 function addFrotaUI(){
@@ -9518,16 +9538,32 @@ function _prepararTitulosExplicaveis(){
    Só a primeira visita decide isso. Depois vale o que a pessoa escolheu —
    inclusive fechar tudo, se for o que ela quer.
    ───────────────────────────────────────────────────────────────────── */
-const SECOES_CHAVE = 'suinco_indicadores_secoes';
+/* ABAS COM SEÇÃO RECOLHIDA NO CELULAR.
+   Indicadores entrou em 27/08; Cadastros no mesmo dia, pela mesma medida:
+   8.822px de rolagem, 10,5 telas. Uma mecânica, duas abas — a lista aqui é
+   o único lugar que decide quais. */
+const SECOES_ABAS = ['indicadores', 'cadastros'];
+const SECOES_SELETOR = SECOES_ABAS
+  .map(a => `#tab-${a} > .card > .card-title, #tab-${a} > .grid2 > .card > .card-title`)
+  .join(', ');
+function _secoesChave(aba){ return `suinco_secoes_${aba}`; }
+/* A chave antiga fica: quem já escolheu em Indicadores não perde a escolha. */
+const SECOES_CHAVE_LEGADO = { indicadores: 'suinco_indicadores_secoes' };
 
-function _secoesEstado(){
+function _secoesEstado(aba){
   try {
-    const cru = localStorage.getItem(SECOES_CHAVE);
+    const cru = localStorage.getItem(_secoesChave(aba))
+             || (SECOES_CHAVE_LEGADO[aba] ? localStorage.getItem(SECOES_CHAVE_LEGADO[aba]) : null);
     return cru ? JSON.parse(cru) : null;   // null = nunca escolheu nada
   } catch { return null; }
 }
-function _secoesGravar(lista){
-  try { localStorage.setItem(SECOES_CHAVE, JSON.stringify(lista)); } catch {}
+function _secoesGravar(aba, lista){
+  try { localStorage.setItem(_secoesChave(aba), JSON.stringify(lista)); } catch {}
+}
+/* Os cartões de uma aba, na ordem da tela. Em Cadastros parte deles mora
+   dentro de .grid2 — por isso não dá para usar só filho direto. */
+function _secoesCards(abaEl){
+  return [...abaEl.querySelectorAll(':scope > .card, :scope > .grid2 > .card')];
 }
 function _secaoId(card){
   const t = card.querySelector(':scope > .card-title');
@@ -9535,15 +9571,16 @@ function _secaoId(card){
 }
 
 function restaurarSecoesIndicadores(){
-  const aba = document.getElementById('tab-indicadores');
+  SECOES_ABAS.forEach(restaurarSecoesDaAba);
+}
+function restaurarSecoesDaAba(nomeAba){
+  const aba = document.getElementById(`tab-${nomeAba}`);
   if (!aba || window.innerWidth > 820) return;
-  const cards = [...aba.children].filter(e => e.classList && e.classList.contains('card'));
+  const cards = _secoesCards(aba);
   if (!cards.length) return;
-
-  const guardado = _secoesEstado();
+  const guardado = _secoesEstado(nomeAba);
   const abertas = new Set(guardado || []);
   const primeiraVisita = guardado === null;
-
   cards.forEach((card, i) => {
     const t = card.querySelector(':scope > .card-title');
     if (!t) return;
@@ -9559,7 +9596,7 @@ function restaurarSecoesIndicadores(){
 
 document.addEventListener('click', (ev) => {
   if (window.innerWidth > 820) return;
-  const titulo = ev.target.closest('#tab-indicadores > .card > .card-title');
+  const titulo = ev.target.closest(SECOES_SELETOR);
   if (!titulo) return;
   if (ev.target.closest('button, a, input, select, label')) return;
 
@@ -9567,11 +9604,19 @@ document.addEventListener('click', (ev) => {
   const aberta = card.classList.toggle('sec-aberta');
   titulo.setAttribute('aria-expanded', aberta ? 'true' : 'false');
 
-  const aba = document.getElementById('tab-indicadores');
-  const lista = [...aba.children]
-    .filter(e => e.classList && e.classList.contains('card') && e.classList.contains('sec-aberta'))
-    .map(_secaoId);
-  _secoesGravar(lista);
+  const aba = card.closest('[id^="tab-"]');
+  if (!aba) return;
+  const nomeAba = aba.id.replace('tab-', '');
+  _secoesGravar(nomeAba, _secoesCards(aba)
+    .filter(c => c.classList.contains('sec-aberta'))
+    .map(_secaoId));
+  /* A FROTA PRECISA DO FOCO NA BUSCA (27/08/2026). Ela abre sem lista — a
+     busca é a porta. Abrir e deixar o dedo procurando o campo seria trocar
+     uma rolagem por um garimpo. */
+  if (aberta && nomeAba === 'cadastros'){
+    const busca = card.querySelector('#frota-busca');
+    if (busca) setTimeout(() => { try { busca.focus({preventScroll:true}); } catch(e){} }, 60);
+  }
 });
 
 document.addEventListener('keydown', (ev) => {
