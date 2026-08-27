@@ -412,7 +412,7 @@ def documento(setor, guia, imagens):
 
   /* ---------- passos ---------- */
   .topo {{ display: flex; justify-content: space-between; font-size: 8.5pt;
-    letter-spacing: .6pt; text-transform: uppercase; color: #7C7466;
+    letter-spacing: .6pt; text-transform: uppercase; color: #746C5F;
     border-bottom: 2px solid {OURO}; padding-bottom: 2.5mm; margin-bottom: 6mm; }}
   .topo-setor {{ color: {NAVY}; font-weight: 800; }}
   .passo-cab {{ display: flex; gap: 5mm; align-items: center; margin-bottom: 5mm; }}
@@ -420,10 +420,10 @@ def documento(setor, guia, imagens):
     width: 15mm; height: 15mm; border-radius: 10px; display: flex; align-items: center;
     justify-content: center; }}
   .passo-cab h2 {{ margin: 0; font-size: 17pt; color: {NAVY}; line-height: 1.2; }}
-  .passo-de {{ font-size: 9pt; color: #7C7466; margin-top: 1mm; }}
+  .passo-de {{ font-size: 9pt; color: #746C5F; margin-top: 1mm; }}
   figure.print {{ margin: 0 0 6mm; }}
   figure.print img {{ width: 100%; border: 1px solid #C9C2B4; border-radius: 8px; display: block; }}
-  figure.print figcaption {{ font-size: 8.5pt; color: #7C7466; margin-top: 2mm; }}
+  figure.print figcaption {{ font-size: 8.5pt; color: #746C5F; margin-top: 2mm; }}
   .quadro {{ display: grid; grid-template-columns: 1fr 1fr; gap: 4mm; }}
   .q {{ background: #FAF7F1; border-left: 3px solid {OURO}; border-radius: 6px; padding: 4mm 4.5mm; }}
   .q-rot {{ font-size: 8pt; font-weight: 800; letter-spacing: .9pt; color: {NAVY}; margin-bottom: 1.5mm; }}
@@ -433,7 +433,7 @@ def documento(setor, guia, imagens):
   .atencao span {{ display: block; font-size: 8pt; font-weight: 800; letter-spacing: .9pt;
     color: #8A5A00; margin-bottom: 1.5mm; }}
   .rodape {{ margin-top: auto; padding-top: 5mm; border-top: 1px solid #E7E2D8;
-    display: flex; justify-content: space-between; font-size: 8pt; color: #8B8375; }}
+    display: flex; justify-content: space-between; font-size: 8pt; color: #726C60; }}
 </style></head><body>
 <svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">{SPRITE}</svg>
 

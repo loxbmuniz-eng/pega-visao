@@ -634,6 +634,26 @@
     .rel-oque{ font-size:.86em; line-height:1.42; }
   }
 
+
+  /* ═══ FAQ (27/08/2026) — macroestrutura Conversational FAQ ═══
+     Quarta estrutura da apresentação, de propósito: cartão, linha, grade e
+     agora pergunta-resposta. A pergunta é a manchete; a resposta vem
+     imediatamente abaixo, curta. Sem sanfona: no telão e no PDF tudo
+     precisa estar visível de uma vez. */
+  .s-faq{ justify-content:flex-start; }
+  .faq-grade{ display:grid; grid-template-columns:1fr 1fr; gap:1.6vh 3vw;
+    flex:1; align-content:center; margin-top:2vh; }
+  .faq-par{ padding-left:1em; border-left:2px solid var(--p-gold); }
+  .faq-p{ font-family:'Poppins',Arial,sans-serif; font-weight:600; font-size:.98em;
+    color:var(--p-gold); line-height:1.3; margin-bottom:.45em; }
+  .faq-r{ font-size:.88em; line-height:1.55; color:var(--p-text); }
+  .faq-r strong{ color:#fff; font-weight:600; }
+  @media (max-width:900px){ .faq-grade{ grid-template-columns:1fr; } }
+  @media print{
+    .faq-grade{ grid-template-columns:1fr 1fr !important; gap:1.3vh 2.6vw; }
+    .faq-r{ font-size:.85em; line-height:1.45; }
+  }
+
 </style>
 </head>
 <body>
@@ -1017,6 +1037,37 @@
         <li><strong>Planejamento antecipado</strong> — a programação pode nascer antes mesmo da contratação do transporte, e o pátio a recebe no instante certo.</li>
         <li><strong>Capacitação permanente</strong> — cada setor conta com o seu guia ilustrado, passo a passo, que evolui junto com o sistema.</li>
       </ul>
+    </div>
+  </div>
+</section>
+<section class="slide s-faq">
+  <header><span class="mini"><svg class="ico-mini" aria-hidden="true"><use href="#i-bussola"/></svg>Perguntas frequentes</span><span class="num">21</span></header>
+  <h2>O que perguntam com mais frequência</h2>
+  <p class="frase">Seis perguntas que já apareceram na operação — com a resposta curta.</p>
+  <div class="faq-grade">
+    <div class="faq-par">
+      <div class="faq-p">“Registrei e o outro setor não viu. Sumiu?”</div>
+      <div class="faq-r">Não sumiu. Se a internet cair, o painel grava no aparelho e avisa em amarelo que ainda <strong>não subiu</strong>. Quando a rede volta, sobe sozinho. A confirmação verde só aparece quando o servidor confirmou.</div>
+    </div>
+    <div class="faq-par">
+      <div class="faq-p">“Troquei a placa e apareceu carga duplicada.”</div>
+      <div class="faq-r">Corrigido. Ao trocar a placa, o sistema procura o caminhão que <strong>já está no pátio</strong> e reaproveita a entrada real — com o horário verdadeiro, não o da troca. A placa que saiu volta para a Portaria.</div>
+    </div>
+    <div class="faq-par">
+      <div class="faq-p">“Por que não consigo mudar este status?”</div>
+      <div class="faq-r">Cada etapa pertence a um setor. Esconder o botão não seria segurança — quem recusa é o <strong>servidor</strong>. Se precisar mudar fora da sua etapa, a Administração faz, e fica registrado quem pediu.</div>
+    </div>
+    <div class="faq-par">
+      <div class="faq-p">“E se eu errar e apagar uma carga?”</div>
+      <div class="faq-r">Nada é apagado de verdade. Exclusão marca data e autor; correção gera <strong>revisão</strong>, preservando o valor original. A Administração restaura pelo Histórico.</div>
+    </div>
+    <div class="faq-par">
+      <div class="faq-p">“Preciso da carga antes de contratar o frete.”</div>
+      <div class="faq-r">Pode criar <strong>sem placa</strong>. Ela fica na programação do dia e só entra na Torre de Controle quando a placa for preenchida — porque caminhão que não existe não chega nem carrega.</div>
+    </div>
+    <div class="faq-par">
+      <div class="faq-p">“Onde ficam os dados? É seguro?”</div>
+      <div class="faq-r">Em servidor próprio da cooperativa, com <strong>backup diário testado</strong>. Login individual, permissão por setor validada no servidor, segundo fator disponível e toda ação assinada com nome e horário.</div>
     </div>
   </div>
 </section>
