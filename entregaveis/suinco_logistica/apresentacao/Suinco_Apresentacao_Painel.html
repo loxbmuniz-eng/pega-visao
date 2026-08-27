@@ -365,6 +365,88 @@
     .nums.linha2{ grid-template-columns:repeat(3,1fr); }
   }
 
+
+  /* ═══════════════════════════════════════════════════════════════════
+     TEMA INSTITUCIONAL — o navy do painel, tratado como apresentação:
+     cetim azul-marinho com textura fina, moldura dourada dupla com
+     cantos trabalhados, cartões creme com borda dourada. O vermelho
+     Suinco vira acento (títulos de cartão, detalhes), não fundo.
+     ═══════════════════════════════════════════════════════════════════ */
+  :root{ --nv-a:#14294A; --nv-b:#0E2038; --nv-c:#081526;
+         --ouro-a:#F3D27A; --ouro-b:#B97F2E; --tinta-navy:#12233B; }
+
+  .slide{ background:
+      /* textura fina diagonal, quase imperceptível */
+      repeating-linear-gradient(45deg, rgba(255,255,255,.016) 0 1px, transparent 1px 8px),
+      /* brilho de cetim e sombra de vinheta */
+      radial-gradient(1200px 700px at 80% 6%, rgba(243,210,122,.10), transparent 55%),
+      radial-gradient(1400px 900px at 8% 104%, rgba(0,0,0,.45), transparent 60%),
+      linear-gradient(150deg, var(--nv-a) 0%, var(--nv-b) 55%, var(--nv-c) 100%);
+      color:#F2ECDD; }
+
+  /* ondas suaves de fundo + caminhãozinho no pé (tons do navy) */
+  .s-texto::before, .s-tela::before{ content:''; position:absolute; inset:0;
+    left:0; right:0; top:0; bottom:0; height:auto; opacity:1;
+    background:
+      url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 700" preserveAspectRatio="none"><path d="M0 210 C 300 140 600 300 1200 190 L1200 260 C 700 360 300 220 0 300 Z" fill="%23ffffff" opacity=".03"/><path d="M0 470 C 400 380 800 560 1200 450 L1200 520 C 800 620 400 460 0 560 Z" fill="%23000000" opacity=".22"/></svg>') center/cover no-repeat,
+      url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 40"><g><rect x="70" y="14" width="26" height="14" rx="2" fill="%23F6F1E7"/><rect x="70" y="14" width="26" height="4" rx="2" fill="%23E8B34B"/><path d="M96 19h8l6 6v3h-14z" fill="%23E8B34B"/><rect x="98" y="20.5" width="5.5" height="4.5" rx="1" fill="%23BFD4E8"/><circle cx="78" cy="30" r="3.6" fill="%23050D18"/><circle cx="78" cy="30" r="1.5" fill="%23F3D27A"/><circle cx="88" cy="30" r="3.6" fill="%23050D18"/><circle cx="88" cy="30" r="1.5" fill="%23F3D27A"/><circle cx="104" cy="30" r="3.6" fill="%23050D18"/><circle cx="104" cy="30" r="1.5" fill="%23F3D27A"/><path d="M2 33h64" stroke="%23F6F1E7" stroke-width="2" stroke-dasharray="7 6" opacity=".4"/></g></svg>') left 44px bottom 30px / auto 34px no-repeat; }
+
+  /* moldura dupla: fita dourada no topo + filete interno + cantos em L */
+  .slide::after{ border:1px solid rgba(243,210,122,.32);
+    box-shadow:inset 0 0 0 1px rgba(8,21,38,.9), inset 0 0 0 2px rgba(243,210,122,.12);
+    background:
+      linear-gradient(90deg, var(--ouro-b), var(--ouro-a) 30%, #fff7e0 50%, var(--ouro-a) 70%, var(--ouro-b)) top center/100% 4px,
+      linear-gradient(var(--ouro-a),var(--ouro-a)) top    left  /30px 2px,
+      linear-gradient(var(--ouro-a),var(--ouro-a)) top    left  /2px 30px,
+      linear-gradient(var(--ouro-b),var(--ouro-b)) top    left  /18px 1px,
+      linear-gradient(var(--ouro-a),var(--ouro-a)) top    right /30px 2px,
+      linear-gradient(var(--ouro-a),var(--ouro-a)) top    right /2px 30px,
+      linear-gradient(var(--ouro-b),var(--ouro-b)) top    right /18px 1px,
+      linear-gradient(var(--ouro-a),var(--ouro-a)) bottom left  /30px 2px,
+      linear-gradient(var(--ouro-a),var(--ouro-a)) bottom left  /2px 30px,
+      linear-gradient(var(--ouro-a),var(--ouro-a)) bottom right /30px 2px,
+      linear-gradient(var(--ouro-a),var(--ouro-a)) bottom right /2px 30px;
+    background-repeat:no-repeat; }
+
+  h1,h2{ color:#FFFDF7; } .sub{ color:rgba(242,236,221,.85); }
+  h2::after{ background:linear-gradient(90deg,var(--ouro-a),var(--ouro-b)); }
+  .slide header .mini{ color:var(--ouro-a); }
+  .slide header .mini::before{ background:linear-gradient(180deg,var(--ouro-a),var(--ouro-b)); }
+  .slide header .num{ border-color:rgba(243,210,122,.5); color:var(--ouro-a); }
+
+  /* cartões creme com borda dourada dupla — em cima do navy */
+  .cols .col, .n, .etapa{ background:var(--creme);
+    border:1px solid var(--ouro-b); border-radius:16px;
+    box-shadow:0 0 0 4px rgba(243,210,122,.16), 0 20px 40px rgba(0,0,0,.5); }
+  .s-tela img{ border:6px solid var(--creme); outline:1px solid var(--ouro-b);
+    box-shadow:0 0 0 5px rgba(243,210,122,.16), 0 24px 48px rgba(0,0,0,.55); }
+
+  .s-tela .tela-txt{ border-left-color:rgba(243,210,122,.6); }
+  .s-tela .tela-txt li{ color:rgba(242,236,221,.9); }
+  .s-tela .tela-txt strong{ color:var(--ouro-a); }
+  ul li::marker{ color:var(--ouro-a); }
+  .s-fluxo .nota{ color:rgba(242,236,221,.85); border-left-color:var(--ouro-a); }
+
+  .s-capa .data{ color:var(--ouro-a); }
+  .s-capa .dica{ color:rgba(242,236,221,.5); }
+
+  /* o que cai sobre a faixa creme: tinta navy institucional */
+  .sobre-creme, .s-fim .sub.sobre-creme strong{ color:var(--tinta-navy) !important; }
+
+  /* navegação: pastilha navy com borda dourada, legível em navy e creme */
+  .nav button{ background:rgba(12,29,51,.92); color:var(--creme);
+    border:1px solid rgba(243,210,122,.55); }
+  .nav button:hover{ background:rgba(20,41,74,.98); }
+  .contador{ background:rgba(12,29,51,.92); color:var(--creme);
+    border:1px solid rgba(243,210,122,.55); }
+
+  @media print{
+    body{ background:var(--nv-b); }
+    .slide{ position:relative; background:
+      radial-gradient(1200px 700px at 80% 6%, rgba(243,210,122,.10), transparent 55%),
+      linear-gradient(150deg, var(--nv-a) 0%, var(--nv-b) 55%, var(--nv-c) 100%); }
+  }
+
 </style>
 </head>
 <body>
