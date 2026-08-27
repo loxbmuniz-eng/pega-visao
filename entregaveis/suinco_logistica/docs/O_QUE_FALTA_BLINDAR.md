@@ -41,55 +41,63 @@ O `APLICADAS_EM_PRODUCAO.txt` mandava conferir o servidor com
 
 Duas coisas, e as duas já estão custando todo dia.
 
-### P1. Rodar o passo a passo no servidor — um comando só
+### ✅ P1 (parte 1 de 3). O servidor subiu para a migração 037 — 27/08/2026
 
-O servidor está na migração **034**. Faltam a **035**, a **036** e a **037**,
-e junto com elas duas conferências que nunca foram feitas.
+**Feito, com prova.** O Luis rodou o `atualizar.sh` e colou o bloco final:
 
-**Tudo isso agora é um comando:**
+```
+commit no servidor : 41b6e10      (exatamente o que o portão publicou)
+serviço            : active
+/health local      : 200
+migrações aplicadas: ... 035_montagem_sabe_de_qual_linha_veio.sql,
+                         036_transportadora_na_montagem.sql,
+                         037_avisos_no_celular.sql
+```
+
+`backend/migrations/APLICADAS_EM_PRODUCAO.txt` subiu de 034 para 037 por
+causa deste bloco, e não antes — aquele arquivo é registro do que
+ACONTECEU.
+
+Com isso morreram as três consequências que o portão vinha imprimindo em
+toda publicação: a Montagem do dia para de duplicar linha nova, a
+transportadora do dia volta a gravar, e a tabela dos avisos existe.
+
+**E os avisos no celular funcionam de verdade.** O Luis recebeu um aviso no
+aparelho dele minutos depois. Isso é prova de ponta a ponta e vale mais que
+qualquer conferência de log: só chega aviso se as QUATRO peças estiverem no
+lugar — migração 037 aplicada, chaves VAPID no `.env`, serviço de pé e
+inscrição do aparelho válida. Fecha o pedido aberto desde o começo do
+projeto.
+
+**Também passou a valer agora:** a correção da troca de placa (relato do
+Alysson). Ela é código de servidor, não migração — o `git pull` e o
+reinício do `atualizar.sh` a colocaram no ar. Ainda SEM prova de uso real:
+alguém precisa trocar uma placa e ver o caminhão ser reencontrado no pátio.
+Fica aberta até isso acontecer.
+
+### P1 (partes 2 e 3). Ainda NÃO foram feitas
+
+O `atualizar.sh` faz um passo. O `atualizar_tudo.sh` faz três, e só o
+primeiro rodou. Continuam em aberto:
+
+- **as 53 linhas duplicadas** já gravadas na Montagem. A correção evita
+  duplicata NOVA; não apaga o que já está lá. Só saem linhas **vazias**,
+  não efetivadas, não canceladas, com irmã mais antiga do mesmo dia, mesma
+  rota e mesmo destino — linha com placa, número, peso ou motorista nunca
+  sai, e o script MOSTRA antes de apagar e pergunta;
+- **a prova de que o backup restaura**. O `instalar.sh` carrega desde o
+  primeiro dia a frase "backup que nunca foi restaurado não é backup".
+  Continua sem prova.
+
+Os dois são o mesmo comando, e ele pergunta antes de apagar qualquer coisa:
 
 ```
 ssh root@2.25.95.253
 bash /opt/suinco-src/entregaveis/suinco_logistica/backend/atualizar_tudo.sh
 ```
 
-Ele faz, na ordem: puxa o código, aplica as migrações, gera sozinho as
-chaves do aviso no celular, reinstala o que mudou, reinicia, roda o
-diagnóstico, **mostra** as linhas duplicadas da Montagem e pergunta antes de
-apagar, e por fim prova que o backup restaura de verdade. No fim imprime um
-bloco pronto para mandar de volta.
-
-**A correção da troca de placa (relato do Alysson) SÓ FUNCIONA depois disto.**
-O painel já faz a parte dele — mostra na hora que o caminhão está no pátio.
-Mas quem manda é o servidor, e um servidor sem esta atualização devolve o
-status antigo no próximo eco de sincronização e **desfaz** o que o painel
-mostrou. Enquanto o `atualizar.sh` não rodar, trocar placa continua gerando
-a duplicata de sempre.
-
-Isto não é migração — é código de servidor. O portão de publicação sabe
-cobrar migração pendente e **não sabe** cobrar isto; por isso está escrito
-aqui, onde ele lê a lista inteira em toda publicação.
-
-O que quebra enquanto não sobe:
-
-| Migração | Sem ela |
-|---|---|
-| 035 | a Montagem do dia duplica linha a cada "puxar do modelo". O painel tem um remendo por rota+destino desde 26/08, mas a identidade exata só volta com a coluna. |
-| 036 | a transportadora do dia não salva. A exceção (subcontratação, freteiro) some e vale sempre a do cadastro. |
-| 037 | os avisos no celular não ligam. O painel mostra "ainda não foi ligado no servidor" e ninguém recebe nada. |
-
-E as duas dívidas que o mesmo comando fecha:
-
-- **as 53 linhas duplicadas** já gravadas na Montagem — a correção do painel
-  evita duplicata nova, não apaga o que já está lá. Só saem linhas **vazias**,
-  não efetivadas, não canceladas, com irmã mais antiga do mesmo dia, mesma
-  rota e mesmo destino. Linha com placa, número, peso ou motorista nunca sai;
-- **o backup nunca restaurado**. O `instalar.sh` carrega desde o primeiro dia
-  a frase "backup que nunca foi restaurado não é backup". Agora tem prova.
-
-Depois de rodar, **me mande o bloco final** — é com ele que o número em
-`backend/migrations/APLICADAS_EM_PRODUCAO.txt` sobe de 034 para 037. Nunca
-antes: aquele arquivo é registro do que ACONTECEU.
+Ele repete o passo 1 (que agora não tem nada a aplicar e sai rápido) e
+segue para os passos 2 e 3.
 
 ### P4. Os 6 destinos que faltam na planilha da semana
 
