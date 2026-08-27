@@ -70,6 +70,8 @@ async def entrar(pg, setor):
 
 
 # Uma linha de montagem que JÁ virou carga — o caso do Antonio.
+# Devolve o resumo da linha E a linha ABERTA, porque os doze campos do
+# formulário só existem depois do clique.
 MONTA = """(setor) => {
   const placa = (DB.frota && DB.frota[0] && DB.frota[0].placa) || '';
   const carga = criarCargaProgramada({
@@ -81,7 +83,11 @@ MONTA = """(setor) => {
               placa, peso: 8000, tipo_operacao: 'Entrega',
               efetivada_em: new Date().toISOString(), cancelada_em: null,
               carga_id: carga.id };
-  return { html: linhaMontagemHtml(m), cargaId: carga.id, placa };
+  const fechada = linhaMontagemHtml(m);
+  _montagemAberta = 'mont_teste_1';
+  const aberta = linhaMontagemHtml(m);
+  _montagemAberta = null;
+  return { html: fechada, aberta, cargaId: carga.id, placa };
 }"""
 
 
@@ -113,10 +119,43 @@ async def main():
                 ck('a linha NÃO fica apagada (sem cursor de proibido)', not fraca)
                 ck('e a gravação vai para a CARGA, não para o rascunho',
                    not gravaNaMontagem and f"'{r['cargaId']}'" in html)
+
+                # O RELATO DE 27/08: "o tonin nao consegue mais abrir a carga
+                # e editar detalhadamente cada carga, quantidade de entrega,
+                # ganchos, isso precisa ser expansivel e nao pode faltar onde
+                # colocar". Três células na linha não substituem o formulário.
+                ab = r['aberta']
+                cid = r['cargaId']
+                ck('a linha ABRE o formulário completo', 'mont-detalhe' in ab
+                   and 'mont-form' in ab)
+                faltando = [rot for rot, marca in [
+                    ('Qtd. Entregas', f"atualizarEntregasUI('{cid}'"),
+                    ('Qtd. Ganchos', f"atualizarGanchosUI('{cid}'"),
+                    ('Motorista', f"atualizarMotoristaUI('{cid}'"),
+                    ('Transportadora', f"atualizarTransportadoraUI('{cid}'"),
+                    ('Observações', f"atualizarObservacoesUI('{cid}'"),
+                    ('Tipo de Operação', f"atualizarPraOndeUI('{cid}'"),
+                    ('Paletizada', f"atualizarPaletizadaUI('{cid}'"),
+                    ('Sequência', f"atualizarSequenciaUI('{cid}'"),
+                    ('Peso', f"atualizarPesoUI('{cid}'"),
+                    ('Número de Carga', f"atualizarNumeroCargaUI('{cid}'"),
+                    ('Placa', f"atualizarPlacaUI('{cid}'"),
+                ] if marca not in ab]
+                # Onze gravam; Tipo de Veículo vem da Frota e Rota vem do
+                # modelo do dia — os dois aparecem, sem edição, por decisão
+                # antiga do formulário da montagem.
+                ck('os onze campos editáveis gravam na CARGA, nenhum faltando',
+                   not faltando,
+                   'faltando: ' + ', '.join(faltando) if faltando else '11 de 11')
+                ck('nada do formulário grava no rascunho da montagem',
+                   "alterarMontagemUI('mont_teste_1'" not in ab)
+                ck('e a linha não oferece "Criar carga" para carga que já existe',
+                   'efetivarMontagemUI' not in ab)
             else:
                 ck('setor sem permissão continua só lendo',
                    not (temCampoPlaca or temCampoPeso or temCampoNumero))
                 ck('e a linha segue marcada como histórico', fraca)
+                ck('e nem abre formulário', 'mont-detalhe' not in r['aberta'])
             await pg.close()
 
         # A edição precisa CHEGAR na carga, não só existir na tela.
