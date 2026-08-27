@@ -1599,8 +1599,106 @@ function criarCargaProgramada({placa, transportadora, tipoVeiculo, numeroCarga, 
   };
   DB.cargas.push(carga);
   registrarMovimentacao({cargaId:carga.id, placa:p, statusAnterior:null, statusNovo:'Aguardando Veículo', operador, setor:'Logística', ...snapshotCarga(carga)});
+
+  /* O CAMINHÃO PODE JÁ ESTAR NO PÁTIO (27/08/2026, relato do dono):
+
+       "se tem um caminhao que a portaria ja deu entrada, e ele for
+        programado depois da entrada do caminhao, apos o input da
+        programacao o caminhao que ja entrou passa a obter essa carga
+        programada?"
+
+     Passava a NÃO obter. Ficavam duas linhas na mesma placa: a entrada da
+     Portaria e a carga nova nascendo em "Aguardando Veículo" — afirmando
+     que o caminhão não chegou, com ele parado no pátio desde antes.
+
+     A reconciliação já existia e funcionava; era chamada de um lugar só,
+     a troca de placa. Aqui ela passa a valer também na criação, que é o
+     outro jeito de a mesma situação acontecer. */
+  const recados = absorverEntradaDoPatio(carga, operador);
+
   SuincoStore.save();
+  carga._recados = recados;   // a interface avisa o operador; ver criarCargaProgramadaUI
   return carga;
+}
+
+/* A CARGA ENCONTRA A ENTRADA QUE JÁ ESTAVA NO PÁTIO.
+
+   Uma placa pode ter DUAS cargas de verdade no mesmo dia, e isso é normal
+   — não é disso que se trata aqui. O que esta função absorve é só a linha
+   "Aguardando Carga": o registro que a Portaria cria quando o caminhão
+   chega sem programação, cuja única razão de existir é ser substituída
+   quando a carga real aparecer.
+
+   TRÊS COISAS QUE ELA PRESERVA, e o porquê de cada uma:
+
+   1. O HORÁRIO. A carga herda o instante da entrada na portaria, não o da
+      programação. É a regra de fidelidade ao momento exato: o caminhão
+      entrou quando entrou, e o tempo de pátio conta de lá.
+   2. O RASTRO. A entrada sai da operação (`excluida`) mas continua no
+      Histórico, com o registro de que foi absorvida e por qual carga.
+      Pátio não se apaga — some sem explicação é o que faz operador
+      desconfiar do sistema.
+   3. O RECADO. Devolve a frase para a interface dizer ao operador que
+      aquela placa já estava aqui, para ninguém registrar a chegada de
+      novo.
+
+   Devolve lista vazia quando não há nada a absorver, que é o caso comum. */
+function absorverEntradaDoPatio(carga, operador){
+  const recados = [];
+  if(!carga || !carga.placa) return recados;
+  if(carga.status !== 'Aguardando Veículo' && carga.status !== 'Aguardando Embarque'){
+    return recados;
+  }
+
+  const orfa = cargasAbertas().find(x =>
+    x.id !== carga.id && x.aguardandoCarga &&
+    normalizarPlaca(x.placa) === normalizarPlaca(carga.placa));
+  if(!orfa) return recados;
+
+  const quem = (operador && (operador.nome || operador)) || (DB.operador && DB.operador.nome) || '(não identificado)';
+  const setor = (operador && operador.setor) || (DB.operador && DB.operador.setor) || 'Logística';
+  // Mesma conta de entradaNoPatioDe (app.js): a linha da Portaria nasce no
+  // instante da chegada, então nela criadoEm É a entrada.
+  const entrada = primeiroTimestamp(orfa.id, 'Aguardando Embarque') || orfa.criadoEm || null;
+
+  if(carga.status === 'Aguardando Veículo'){
+    const antes = carga.status;
+    carga.status = 'Aguardando Embarque';
+    carga.atualizadoEm = nowISO();
+    registrarMovimentacao({
+      cargaId: carga.id, placa: carga.placa,
+      statusAnterior: antes, statusNovo: 'Aguardando Embarque',
+      operador: quem, setor, timestamp: entrada || undefined,
+      cliente: carga.cliente, motorista: carga.motorista,
+      tipoVeiculo: carga.tipoVeiculo, qtdEntregas: carga.qtdEntregas
+    });
+  }
+
+  /* SAI DA LISTA, NÃO SÓ RECEBE UMA MARCA. Marcar `excluida` e deixar a
+     linha na lista é o que a troca de placa fazia — e aí a entrada órfã
+     continuava aparecendo como carga aberta no pátio até uma sincronia
+     com o servidor passar e removê-la. Local, ficava para sempre.
+
+     Aqui vale o mesmo caminho da exclusão de verdade (_efetivarExclusaoCarga,
+     app.js): a linha sai de DB.cargas e leva junto as movimentações dela.
+     O rastro NÃO se perde — vai para `alteracoes`, logo abaixo, que é o
+     Histórico. E o horário de entrada já foi herdado pela carga real, então
+     a linha do tempo do pátio continua contando do momento certo.
+
+     Quem manda continua sendo o servidor, que faz a mesma absorção ao
+     receber a carga nova. Isto aqui é a resposta imediata na tela. */
+  registrarAlteracao({
+    cargaId: orfa.id, placa: orfa.placa, campo: 'Entrada sem carga',
+    de: 'aguardando carga',
+    para: `absorvida pela carga ${carga.numeroCarga || carga.id}`,
+    setor, operador: quem
+  });
+  DB.cargas = DB.cargas.filter(x => x.id !== orfa.id);
+  DB.movimentacoes = DB.movimentacoes.filter(m => m.cargaId !== orfa.id);
+
+  recados.push(`${carga.placa} já estava no pátio` + (entrada ? ` desde ${entrada}` : '')
+    + ' — a carga assumiu essa entrada. Não registre a chegada de novo.');
+  return recados;
 }
 
 // Portaria — botão "Chegou": chegada física de uma placa. Regra especial —

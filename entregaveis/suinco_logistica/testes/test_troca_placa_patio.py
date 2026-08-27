@@ -112,7 +112,18 @@ async def main():
             """async ([pA, pC]) => {
                  const c = criarCargaProgramada({numeroCarga: 'TROCA-2', placa: pA, cliente: 'C',
                    destino: 'D', peso: 9000, rota: '500', operador: 'Ana'});
-                 avancarStatusCarga(c.id, 'Aguardando Embarque', 'Porteiro', 'Portaria');
+                 /* A CARGA JÁ NASCE EM "AGUARDANDO EMBARQUE" (27/08/2026).
+                    O caminhão da placa A ficou sozinho no pátio no fim da
+                    seção 1, e desde esta data criar carga para uma placa
+                    que já está no pátio ABSORVE aquela entrada. Antes era
+                    preciso avançar o status na mão aqui; fazer isso agora
+                    estoura com "não é possível ir de Aguardando Embarque
+                    para Aguardando Embarque". O avanço manual continua,
+                    porém condicionado — assim este teste segue valendo se
+                    um dia a absorção não acontecer. */
+                 if(c.status === 'Aguardando Veículo'){
+                   avancarStatusCarga(c.id, 'Aguardando Embarque', 'Porteiro', 'Portaria');
+                 }
                  SuincoStore.save();
                  atualizarPlacaUI(c.id, pC);
                }""", [pA, pC])

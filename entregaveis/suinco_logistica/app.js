@@ -2983,7 +2983,7 @@ function criarCargaProgramadaUI(){
   }
 
   try{
-    criarCargaProgramada({
+    const criada = criarCargaProgramada({
       placa,
       transportadora: document.getElementById('prog-transportadora').value,
       tipoVeiculo: document.getElementById('prog-tipoveiculo').value,
@@ -3007,7 +3007,17 @@ function criarCargaProgramadaUI(){
         + 'aqui na Programação. Quando contratar, preencha a placa na linha e ela '
         + 'entra sozinha na Torre.');
     } else {
-      notifyGravacao(`Carga criada para a placa ${normalizarPlaca(placa)} — status Aguardando Veículo.`);
+      /* O RECADO DA ABSORÇÃO VEM DA CRIAÇÃO (27/08/2026). Quando a placa
+         já estava no pátio, a carga não nasce em "Aguardando Veículo" — ela
+         assume a entrada que já existia. Dizer "Aguardando Veículo" aí
+         seria mentir para quem acabou de gravar. */
+      const recadosCriacao = (criada && criada._recados) || [];
+      if(recadosCriacao.length){
+        notifyGravacao(`Carga criada para a placa ${normalizarPlaca(placa)} — o caminhão JÁ ESTÁ no pátio, então ela nasce em Aguardando Embarque.`);
+        recadosCriacao.forEach(m => notify(m, 'info'));
+      } else {
+        notifyGravacao(`Carga criada para a placa ${normalizarPlaca(placa)} — status Aguardando Veículo.`);
+      }
     }
     ['prog-placa','prog-transportadora','prog-tipoveiculo','prog-motorista','prog-numero-carga','prog-cliente','prog-destino','prog-peso','prog-sequencia','prog-obs']
       .forEach(id=>document.getElementById(id).value='');
@@ -3713,34 +3723,12 @@ function reconciliarPatioAoTrocarPlaca(carga, placaAntiga){
   const hora = (iso) => iso ? fmtDataHora(iso) : 'horário não registrado';
 
   /* ---- Metade 1: a placa nova já está no pátio ---- */
-  const orfa = cargasAbertas().find(x =>
-    x.id !== carga.id && x.aguardandoCarga &&
-    normalizarPlaca(x.placa) === normalizarPlaca(carga.placa));
-
-  if(orfa){
-    const entrada = entradaNoPatioDe(orfa);
-    if(carga.status === 'Aguardando Veículo'){
-      const antes = carga.status;
-      carga.status = 'Aguardando Embarque';
-      registrarMovimentacao({
-        cargaId: carga.id, placa: carga.placa,
-        statusAnterior: antes, statusNovo: 'Aguardando Embarque',
-        operador: quem, setor, timestamp: entrada || undefined,
-        cliente: carga.cliente, motorista: carga.motorista,
-        tipoVeiculo: carga.tipoVeiculo, qtdEntregas: carga.qtdEntregas
-      });
-    }
-    // Sai da operação, continua no Histórico — pátio não se apaga.
-    orfa.excluida = true;
-    orfa.atualizadoEm = nowISO();
-    registrarAlteracao({
-      cargaId: orfa.id, placa: orfa.placa, campo: 'Entrada sem carga',
-      de: 'aguardando carga', para: `absorvida pela carga ${carga.numeroCarga || carga.id}`,
-      setor, operador: quem
-    });
-    recados.push(`${carga.placa} já estava no pátio desde ${hora(entrada)} — `
-      + `a carga assumiu essa entrada. Não registre a chegada de novo.`);
-  }
+  /* O miolo mora em data.js (absorverEntradaDoPatio) porque a MESMA
+     situação acontece por dois caminhos: trocar a placa de uma carga, e
+     criar carga para uma placa que já entrou. Antes ele existia só aqui, e
+     por isso o segundo caminho ficava sem tratamento — era o relato do
+     dono em 27/08. Uma função, dois chamadores. */
+  recados.push(...absorverEntradaDoPatio(carga, { nome: quem, setor }));
 
   /* ---- Metade 2: a placa antiga fica sozinha no pátio ---- */
   /* Só quando o caminhão antigo tinha de fato entrado: carga que nunca passou
