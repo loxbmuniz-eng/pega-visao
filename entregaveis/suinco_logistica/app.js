@@ -1835,7 +1835,8 @@ function renderAll(){
 
   /* Explicação sob demanda no celular: cartão redesenhado volta sem a
      classe, então o estado escolhido é reaplicado a cada ciclo. */
-  try { _prepararTitulosExplicaveis(); restaurarExplicacoes(); } catch(e){}
+  try { _prepararTitulosExplicaveis(); restaurarExplicacoes();
+        restaurarSecoesIndicadores(); } catch(e){}
 }
 
 /* ---------- TORRE DE CONTROLE ---------- */
@@ -9429,6 +9430,11 @@ document.addEventListener('click', (ev) => {
   if (window.innerWidth > 820) return;
   const titulo = ev.target.closest('.card-title');
   if (!titulo) return;
+  // Em Indicadores quem manda é a seção recolhida (ver styles.css,
+  // "CONFLITO DE AFORDÂNCIA"): lá o mesmo toque abre a seção inteira, e a
+  // explicação vem junto. Sem esta guarda, os dois tratadores disparavam
+  // no mesmo clique e um desfazia o outro.
+  if (titulo.closest('#tab-indicadores')) return;
   const card = titulo.parentElement;
   if (!card || !card.classList.contains('card')) return;
   if (!card.querySelector(':scope > .card-sub')) return;
@@ -9463,3 +9469,79 @@ function _prepararTitulosExplicaveis(){
     }
   });
 }
+
+/* ─────────────────────────────────────────────────────────────────────
+   INDICADORES NO CELULAR — abrir e fechar cada seção
+   ---------------------------------------------------------------------
+   Mesma mecânica da explicação sob demanda (delegação + escolha guardada
+   por título), com uma diferença que importa: aqui o PRIMEIRO cartão abre
+   sozinho na primeira visita. Uma aba de indicadores que abre inteiramente
+   fechada parece quebrada; abrindo o primeiro, a pessoa vê um número e
+   entende que os outros títulos são portas.
+
+   Só a primeira visita decide isso. Depois vale o que a pessoa escolheu —
+   inclusive fechar tudo, se for o que ela quer.
+   ───────────────────────────────────────────────────────────────────── */
+const SECOES_CHAVE = 'suinco_indicadores_secoes';
+
+function _secoesEstado(){
+  try {
+    const cru = localStorage.getItem(SECOES_CHAVE);
+    return cru ? JSON.parse(cru) : null;   // null = nunca escolheu nada
+  } catch { return null; }
+}
+function _secoesGravar(lista){
+  try { localStorage.setItem(SECOES_CHAVE, JSON.stringify(lista)); } catch {}
+}
+function _secaoId(card){
+  const t = card.querySelector(':scope > .card-title');
+  return t ? t.textContent.trim().slice(0, 60) : '';
+}
+
+function restaurarSecoesIndicadores(){
+  const aba = document.getElementById('tab-indicadores');
+  if (!aba || window.innerWidth > 820) return;
+  const cards = [...aba.children].filter(e => e.classList && e.classList.contains('card'));
+  if (!cards.length) return;
+
+  const guardado = _secoesEstado();
+  const abertas = new Set(guardado || []);
+  const primeiraVisita = guardado === null;
+
+  cards.forEach((card, i) => {
+    const t = card.querySelector(':scope > .card-title');
+    if (!t) return;
+    if (!t.hasAttribute('tabindex')){
+      t.setAttribute('tabindex', '0');
+      t.setAttribute('role', 'button');
+    }
+    const aberta = primeiraVisita ? (i === 0) : abertas.has(_secaoId(card));
+    card.classList.toggle('sec-aberta', aberta);
+    t.setAttribute('aria-expanded', aberta ? 'true' : 'false');
+  });
+}
+
+document.addEventListener('click', (ev) => {
+  if (window.innerWidth > 820) return;
+  const titulo = ev.target.closest('#tab-indicadores > .card > .card-title');
+  if (!titulo) return;
+  if (ev.target.closest('button, a, input, select, label')) return;
+
+  const card = titulo.parentElement;
+  const aberta = card.classList.toggle('sec-aberta');
+  titulo.setAttribute('aria-expanded', aberta ? 'true' : 'false');
+
+  const aba = document.getElementById('tab-indicadores');
+  const lista = [...aba.children]
+    .filter(e => e.classList && e.classList.contains('card') && e.classList.contains('sec-aberta'))
+    .map(_secaoId);
+  _secoesGravar(lista);
+});
+
+document.addEventListener('keydown', (ev) => {
+  if (ev.key !== 'Enter' && ev.key !== ' ') return;
+  const t = document.activeElement;
+  if (!t || !t.matches || !t.matches('#tab-indicadores > .card > .card-title')) return;
+  if (window.innerWidth > 820) return;
+  ev.preventDefault(); t.click();
+});
