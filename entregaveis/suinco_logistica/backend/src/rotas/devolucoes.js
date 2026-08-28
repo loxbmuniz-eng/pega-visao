@@ -318,6 +318,17 @@ rotasDevolucoes.get('/devolucoes/:id', exigirLogin, async (req, res, next) => {
    18/08/2026: "carga, lacre, nota de transferência, placa, motorista,
    transportadora" precisam estar disponíveis para a Portaria). Carimbos e
    status NÃO passam por aqui (têm rota própria com a máquina de estados). */
+/* CADA POSTO EDITA O QUE É DELE, também no cabeçalho.
+
+   Faturamento: as DUAS pesagens (27/08/2026) — o caminhão cheio na chegada
+   e o vazio depois da descarga. Controles Internos e Central de Notas: o
+   recado para a próxima etapa, que é o que o dono pediu que elas tivessem
+   além do check ("observações para que eles possam comunicar com a próxima
+   etapa"). */
+const CAMPOS_CABECALHO_FATURAMENTO = new Set(['peso_entrada', 'peso_final']);
+const CAMPOS_CABECALHO_CONTROLES = new Set(['obs_controles']);
+const CAMPOS_CABECALHO_NOTAS = new Set(['obs_notas']);
+
 const CAMPOS_CABECALHO_PORTARIA = new Set([
   'placa', 'transportadora', 'motorista', 'carga_numero',
   'lacre1', 'lacre2', 'lacre3', 'nota_transferencia',
@@ -338,14 +349,20 @@ rotasDevolucoes.patch('/devolucoes/:id', exigirLogin, async (req, res, next) => 
       const chavesCab = Object.keys(cab);
       const permitido = !trocaRotas && (
         (op.setor === 'Portaria' && chavesCab.every((c) => CAMPOS_CABECALHO_PORTARIA.has(c)))
-        // Peso final é o campo do Faturamento no cabeçalho (18/08/2026).
-        || (op.setor === 'Faturamento' && chavesCab.every((c) => c === 'peso_final'))
-        // RDC/Romaneio é o campo dos Controles Internos (18/08/2026).
-        || (op.setor === 'Controles Internos' && chavesCab.every((c) => c === 'gerou_rdc'))
+        // As duas pesagens são do Faturamento (18/08/2026 e 27/08/2026).
+        || (op.setor === 'Faturamento' && chavesCab.every((c) => CAMPOS_CABECALHO_FATURAMENTO.has(c)))
+        // Controles Internos: o RDC (18/08) e o recado da etapa (27/08).
+        || (op.setor === 'Controles Internos'
+            && chavesCab.every((c) => c === 'gerou_rdc' || CAMPOS_CABECALHO_CONTROLES.has(c)))
+        // Central de Notas: o recado da etapa (27/08).
+        || (op.setor === 'Central de Notas' && chavesCab.every((c) => CAMPOS_CABECALHO_NOTAS.has(c)))
       );
       if (!permitido) {
         return res.status(403).json({
-          erro: 'Esses campos do checklist são da Logística — a Portaria edita placa/transportadora/motorista/carga/lacres/NT; o Faturamento edita o peso final; os Controles Internos, o RDC.',
+          erro: 'Esses campos do checklist são da Logística — a Portaria edita '
+          + 'placa/transportadora/motorista/carga/lacres/NT; o Faturamento edita as duas '
+          + 'pesagens (entrada e final); os Controles Internos, o RDC e a observação da '
+          + 'etapa deles; a Central de Notas, a observação da etapa dela.',
           codigo: 'SETOR_SEM_PERMISSAO',
         });
       }
@@ -486,13 +503,29 @@ rotasDevolucoes.post('/devolucoes/:id/etapa', exigirLogin, async (req, res, next
             ? null : (req.body.chegouLacrado === false || req.body.chegouLacrado === 'false' ? false : true));
         }
       }
-      if (regra.carimbo === 'faturamento' && req.body?.pesoFinal !== undefined) {
+      /* AS DUAS IDAS À BALANÇA (27/08/2026).
+
+         `faturamento` é a chegada — o caminhão CHEIO. `pesofinal` é a volta,
+         depois da descarga — o caminhão VAZIO. Cada etapa grava o peso da
+         SUA pesagem: aceitar peso_final na chegada seria gravar, no campo do
+         caminhão vazio, o número do caminhão cheio. */
+      if (regra.carimbo === 'faturamento' && req.body?.pesoEntrada !== undefined) {
+        const n = Number(req.body.pesoEntrada);
+        põe('peso_entrada', req.body.pesoEntrada === '' || req.body.pesoEntrada === null
+          ? null : (Number.isFinite(n) ? n : null));
+      }
+      if (regra.carimbo === 'pesofinal' && req.body?.pesoFinal !== undefined) {
         const n = Number(req.body.pesoFinal);
         põe('peso_final', req.body.pesoFinal === '' || req.body.pesoFinal === null
           ? null : (Number.isFinite(n) ? n : null));
       }
       if (regra.carimbo === 'controles' && req.body?.obsControles !== undefined) {
         põe('obs_controles', String(req.body.obsControles).slice(0, 2000));
+      }
+      /* O recado que a Central de Notas deixa ao encerrar — a última etapa
+         também fala com quem vem depois (a auditoria, o mês seguinte). */
+      if (regra.carimbo === 'notas' && req.body?.obsNotas !== undefined) {
+        põe('obs_notas', String(req.body.obsNotas).slice(0, 2000));
       }
       if (regra.carimbo === 'controles' && req.body?.gerouRdc !== undefined) {
         // "Gerou RDC (romaneio)?" — informado junto com a destinação.
@@ -720,6 +753,15 @@ rotasDevolucoes.post('/devolucoes/:id/restaurar', exigirLogin, exigirSetor(), as
             obs_controles = $12, observacoes = $13,
             operador_codigo = COALESCE($27, operador_codigo),
             gerou_rdc = $28, chegou_lacrado = $29,
+            /* Migração 038: sem estas três a restauração devolveria o
+               cabeçalho velho e DEIXARIA o peso de entrada, o carimbo da
+               segunda balança e o recado da Central de Notas da versão
+               nova — a linha passaria a dizer duas coisas ao mesmo tempo,
+               que é exatamente o que o comentário acima existe para
+               impedir. Revisão anterior à 038 não tem os campos: voltam
+               nulos/vazios, que é o retrato fiel daquela época. */
+            peso_entrada = $30, pesofinal_por = $31, pesofinal_em = $32,
+            obs_notas = $33,
             portaria_por = $14, portaria_em = $15,
             faturamento_por = $16, faturamento_em = $17,
             expedicao_por = $18, expedicao_em = $19,
@@ -745,7 +787,10 @@ rotasDevolucoes.post('/devolucoes/:id/restaurar', exigirLogin, exigirSetor(), as
          // gerou_rdc restaura direto (pré-022 volta a "não informado", que
          // é o retrato fiel daquela época). Mesma coisa para chegou_lacrado.
          d.gerou_rdc ?? null,
-         d.chegou_lacrado ?? null]
+         d.chegou_lacrado ?? null,
+         d.peso_entrada ?? null,
+         d.pesofinal_por ?? null, d.pesofinal_em ?? null,
+         d.obs_notas ?? '']
       );
       if (!upd.rows[0]) {
         const e = new Error('Devolução não encontrada.');

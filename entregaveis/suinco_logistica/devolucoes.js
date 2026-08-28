@@ -46,12 +46,19 @@ const DEV_ETAPAS = [
     botao: '🚧 Receber na Portaria', pede: 'portaria',
     setores: ['Portaria', 'Logística'] },
   { status: 'Recebida na Portaria',     proxima: 'Conferida no Faturamento',
-    botao: '⚖️ Conferir no Faturamento', pede: 'faturamento',
+    botao: '⚖️ Pesar na chegada (Faturamento)', pede: 'faturamento',
     setores: ['Faturamento', 'Logística'] },
   { status: 'Conferida no Faturamento', proxima: 'Descarga Conferida',
     botao: '📦 Descarga conferida (Expedição)', pede: null,
     setores: ['Expedição', 'Logística'] },
-  { status: 'Descarga Conferida',       proxima: 'Destinada',
+  /* A SEGUNDA IDA À BALANÇA (27/08/2026). O dono: "depois que descarrega
+     o motorista volta pra balança e pesa o peso final com o caminhão
+     vazio". É do Faturamento, como a primeira, mas é outro momento e
+     outra assinatura. */
+  { status: 'Descarga Conferida',       proxima: 'Peso Final Registrado',
+    botao: '⚖️ Registrar peso final (Faturamento)', pede: 'pesofinal',
+    setores: ['Faturamento', 'Logística'] },
+  { status: 'Peso Final Registrado',    proxima: 'Destinada',
     /* "Destinações" — pedido do dono (26/08/2026): "alterar nome no painel,
        destinações", valendo SÓ para a etapa dos Controles Internos. O nome
        de tela muda; o STATUS gravado ('Destinada') fica: é dado, o servidor
@@ -60,12 +67,16 @@ const DEV_ETAPAS = [
     botao: '🏷️ Destinações (Controles Internos)', pede: 'controles',
     setores: ['Controles Internos', 'Logística'] },
   { status: 'Destinada',                proxima: 'Nota Finalizada',
-    botao: '🧾 Finalizar nota (Central de Notas)', pede: null,
+    /* `pede: 'notas'` desde 27/08/2026: a última etapa também deixa recado.
+       Estava null, e o campo de observações simplesmente não aparecia para
+       a Central de Notas — o teste pegou. */
+    botao: '🧾 Finalizar nota (Central de Notas)', pede: 'notas',
     setores: ['Central de Notas', 'Logística'] },
 ];
 
 const DEV_ETAPA_ROTULO = {
-  portaria: 'Portaria', faturamento: 'Faturamento', expedicao: 'Expedição',
+  portaria: 'Portaria', faturamento: 'Balança (entrada)', expedicao: 'Expedição',
+  pesofinal: 'Balança (peso final)',
   controles: 'Controles Internos', notas: 'Central de Notas',
 };
 
@@ -205,17 +216,30 @@ function podeDivergenciaDev() {
   return setor === 'Controles Internos' || setor === 'Administração';
 }
 
-/* A etapa cujo DONO é o meu setor — é ela que define a minha fila "SUA
-   VEZ". Logística/Administração não têm uma só (cobrem todas): null. */
-function minhaEtapaDev() {
+/* AS etapas cujo DONO é o meu setor — são elas que definem a minha fila
+   "SUA VEZ". Logística/Administração não têm uma só (cobrem todas): lista
+   vazia.
+
+   PLURAL desde 27/08/2026: o Faturamento passou a ter DUAS etapas (a
+   balança da chegada e a do peso final). Enquanto isto era `find`, a
+   segunda simplesmente não existia para ele — o checklist parava em
+   "Descarga Conferida" e ninguém era chamado. */
+function minhasEtapasDev() {
   const setor = (DB.operador || {}).setor;
-  if (!setor || setor === 'Logística' || setor === 'Administração') return null;
-  return DEV_ETAPAS.find((e) => e.setores[0] === setor) || null;
+  if (!setor || setor === 'Logística' || setor === 'Administração') return [];
+  return DEV_ETAPAS.filter((e) => e.setores[0] === setor);
+}
+
+/* A etapa da minha fila que está ACONTECENDO agora, se houver. */
+function minhaEtapaDev(status) {
+  const minhas = minhasEtapasDev();
+  if (!minhas.length) return null;
+  if (status !== undefined) return minhas.find((e) => e.status === status) || null;
+  return minhas[0];
 }
 
 function ehMinhaVezDev(d) {
-  const etapa = minhaEtapaDev();
-  return !!(etapa && d.status === etapa.status);
+  return minhasEtapasDev().some((e) => e.status === d.status);
 }
 
 function getDevolucao(id) {
@@ -370,11 +394,12 @@ function renderPipelineDev() {
   if (!el) return;
   const porStatus = {};
   DEVOLUCOES.forEach((d) => { porStatus[d.status] = (porStatus[d.status] || 0) + 1; });
-  const minha = minhaEtapaDev();
+  const minhas = minhasEtapasDev();
+  const ehMinhaEtapa = (status) => minhas.some((e) => e.status === status);
   const TODAS = [...DEV_ETAPAS.map((e) => e.status), 'Nota Finalizada'];
   el.innerHTML = TODAS.map((status) => {
     const n = porStatus[status] || 0;
-    const ehMinha = minha && minha.status === status;
+    const ehMinha = ehMinhaEtapa(status);
     const ativo = _devFiltroEtapa === status;
     const dono = status === 'Nota Finalizada' ? 'concluído'
       : (DEV_ETAPAS.find((e) => e.status === status) || {}).setores?.[0] || '';
@@ -388,9 +413,11 @@ function renderPipelineDev() {
 
   const aviso = document.getElementById('dev-sua-vez-aviso');
   if (aviso) {
-    const pendentes = minha ? (porStatus[minha.status] || 0) : 0;
-    aviso.hidden = !minha || pendentes === 0;
-    if (minha && pendentes > 0) {
+    // Soma as DUAS pontas: o Faturamento pode ter caminhão esperando na
+    // balança de entrada E na de saída ao mesmo tempo.
+    const pendentes = minhas.reduce((soma, e) => soma + (porStatus[e.status] || 0), 0);
+    aviso.hidden = !minhas.length || pendentes === 0;
+    if (minhas.length && pendentes > 0) {
       aviso.innerHTML = `<strong>É a sua vez:</strong> ${pendentes} checklist(s) aguardando `
         + `a ação do seu setor (${esc((DB.operador || {}).setor || '')}). `
         + `Termine e ele segue sozinho para a fila do próximo setor.`;
@@ -620,30 +647,61 @@ function cabecalhoEditavelDev(d, editavel) {
     </div>` : '';
 
   // ---- campos de outros postos, cada um para o seu dono ----
+  /* AS DUAS PESAGENS, LADO A LADO (27/08/2026). Elas não são dois campos
+     parecidos: são as duas pontas da mesma medição, e é a diferença entre
+     elas que vira o peso devolvido. Separá-las em lugares diferentes da
+     tela faria a conta ficar invisível para quem digita. */
   const blocoFaturamento = (setor === 'Faturamento' || admin) ? `
     <div class="dev-cab-posto">
-      <div class="dev-cab-posto-tit">🧾 Faturamento</div>
+      <div class="dev-cab-posto-tit">⚖️ Faturamento — as duas balanças</div>
       <div class="form-grid dev-cab-grid">
-        <div><label>Peso final (kg)</label>
+        <div><label>Peso na chegada (kg) <span class="hint">caminhão cheio</span></label>
+          <input type="number" min="0" step="1" id="dev-cab-${esc(d.id)}-pesoEntrada"
+            value="${d.pesoEntrada ?? ''}" placeholder="kg"
+            title="Primeira pesagem: o caminhão chega com a devolução dentro."
+            onchange="editarDevolucaoCampoUI('${escJs(d.id)}','pesoEntrada',this.value)">
+        </div>
+        <div><label>Peso final (kg) <span class="hint">caminhão vazio</span></label>
           <input type="number" min="0" step="1" id="dev-cab-${esc(d.id)}-pesoFinal"
             value="${d.pesoFinal ?? ''}" placeholder="kg"
-            title="Pesagem da balança — a confirmação do Faturamento."
+            title="Segunda pesagem: depois de descarregar, o motorista volta à balança."
             onchange="editarDevolucaoCampoUI('${escJs(d.id)}','pesoFinal',this.value)">
         </div>
       </div>
+      <div class="dev-peso-conta">${contaPesoDevHtml(d)}</div>
     </div>` : '';
 
+  /* CONTROLES INTERNOS E CENTRAL DE NOTAS: CHECK + RECADO, e só (27/08/2026).
+
+     Pedido do dono, com estas palavras: "controles internos e central de
+     notas, que precisa só de um campo pro CHECK do checklist pra confirmar
+     a etapa, e observações para que eles possam comunicar com a próxima
+     etapa". O check é o próprio botão da etapa; aqui fica o recado.
+
+     O "Gerou RDC?" saiu da tela por decisão dele. A coluna continua no
+     banco e nos relatórios já emitidos — o que saiu foi a pergunta. */
   const blocoControles = (setor === 'Controles Internos' || admin) ? `
     <div class="dev-cab-posto">
       <div class="dev-cab-posto-tit">🧭 Controles Internos</div>
       <div class="form-grid dev-cab-grid">
-        <div><label>Gerou RDC (romaneio)?</label>
-          <select id="dev-cab-${esc(d.id)}-gerouRdc" title="Informado na destinação."
-            onchange="editarDevolucaoCampoUI('${escJs(d.id)}','gerouRdc',this.value)">
-            <option value=""${d.gerouRdc === null || d.gerouRdc === undefined ? ' selected' : ''}>(não informado)</option>
-            <option value="true"${d.gerouRdc === true ? ' selected' : ''}>Sim — gerou RDC</option>
-            <option value="false"${d.gerouRdc === false ? ' selected' : ''}>Não gerou</option>
-          </select>
+        <div style="grid-column:1/-1"><label>Observações para a próxima etapa</label>
+          <input type="text" id="dev-cab-${esc(d.id)}-obsControles"
+            value="${esc(d.obsControles || '')}" placeholder="O que a Central de Notas precisa saber"
+            title="Sai no relatório e é o recado desta etapa para a seguinte."
+            onchange="editarDevolucaoCampoUI('${escJs(d.id)}','obsControles',this.value)">
+        </div>
+      </div>
+    </div>` : '';
+
+  const blocoNotas = (setor === 'Central de Notas' || admin) ? `
+    <div class="dev-cab-posto">
+      <div class="dev-cab-posto-tit">🧾 Central de Notas</div>
+      <div class="form-grid dev-cab-grid">
+        <div style="grid-column:1/-1"><label>Observações para a próxima etapa</label>
+          <input type="text" id="dev-cab-${esc(d.id)}-obsNotas"
+            value="${esc(d.obsNotas || '')}" placeholder="O que fica registrado ao encerrar a nota"
+            title="Sai no relatório. É o último recado do ciclo."
+            onchange="editarDevolucaoCampoUI('${escJs(d.id)}','obsNotas',this.value)">
         </div>
       </div>
     </div>` : '';
@@ -660,17 +718,104 @@ function cabecalhoEditavelDev(d, editavel) {
     if (d.chegouLacrado === true) resumo.push(`Lacrado${d.lacre1 ? ' nº ' + esc(d.lacre1) : ''}`);
     if (d.chegouLacrado === false) resumo.push('Chegou SEM lacre');
   }
-  if (setor !== 'Faturamento' && !admin && d.pesoFinal !== null && d.pesoFinal !== undefined) {
-    resumo.push(`Peso final ${Number(d.pesoFinal).toLocaleString('pt-BR')} kg`);
+  if (setor !== 'Faturamento' && !admin) {
+    /* As duas balanças aparecem para quem não é do Faturamento, e o
+       DEVOLVIDO junto: para a Expedição e para os Controles Internos, o
+       número que importa é quanto desceu do caminhão. */
+    if (d.pesoEntrada !== null && d.pesoEntrada !== undefined) {
+      resumo.push(`Chegada ${Number(d.pesoEntrada).toLocaleString('pt-BR')} kg`);
+    }
+    if (d.pesoFinal !== null && d.pesoFinal !== undefined) {
+      resumo.push(`Vazio ${Number(d.pesoFinal).toLocaleString('pt-BR')} kg`);
+    }
+    if (d.pesoDevolvido !== null && d.pesoDevolvido !== undefined) {
+      resumo.push(`<strong>Devolvido ${Number(d.pesoDevolvido).toLocaleString('pt-BR')} kg</strong>`);
+    }
   }
+  /* O RDC saiu da TELA (27/08/2026) mas o dado antigo não sumiu: checklist
+     que já tem a resposta continua mostrando, para o histórico não virar
+     um buraco. O que não existe mais é a pergunta. */
   if (setor !== 'Controles Internos' && !admin && d.gerouRdc !== null && d.gerouRdc !== undefined) {
     resumo.push(`RDC: ${d.gerouRdc ? 'gerado' : 'não gerado'}`);
+  }
+  /* Os recados de cada etapa para a seguinte — é para isso que eles existem:
+     quem está na etapa de agora precisa LER o que a anterior escreveu. */
+  if (setor !== 'Controles Internos' && !admin && d.obsControles) {
+    resumo.push(`Controles Internos: “${esc(d.obsControles)}”`);
+  }
+  if (setor !== 'Central de Notas' && !admin && d.obsNotas) {
+    resumo.push(`Central de Notas: “${esc(d.obsNotas)}”`);
   }
   const blocoResumo = resumo.length
     ? `<div class="dev-cab-resumo"><strong>Já preenchido pelos outros setores:</strong> ${resumo.join(' · ')}</div>`
     : '';
 
-  return `${rotasChips}${blocoLogistica}${blocoPortaria}${blocoFaturamento}${blocoControles}${blocoResumo}`;
+  return `${rotasChips}${blocoLogistica}${blocoPortaria}${blocoFaturamento}`
+    + `${blocoControles}${blocoNotas}${blocoResumo}`;
+}
+
+/* A CONTA DAS DUAS BALANÇAS (27/08/2026).
+
+   O dono pediu os dois pesos "e o painel calcula o devolvido". O número
+   sozinho não serve para nada: o que ele responde é se o que DESCEU do
+   caminhão bate com o que foi LANÇADO no checklist. É essa diferença que
+   denuncia devolução a mais, a menos, ou lançamento errado — e é por isso
+   que a comparação aparece do lado da conta, não num relatório de fim de mês.
+
+   Quem manda no número é o SERVIDOR: `pesoDevolvido` vem calculado de lá
+   (dominio/devolucoes.js). Aqui só se desenha — e o `preview`, enquanto a
+   pessoa digita, usa a mesma subtração para não existir uma segunda conta
+   com direito a discordar da primeira.
+
+   Falta uma das pontas, não há conta. Null não é zero: dizer "0 kg
+   devolvidos" quando ninguém pesou é inventar um número. */
+function pesoLancadoDev(d) {
+  return (d.itens || []).reduce((soma, i) => soma + (Number(i.peso) || 0), 0);
+}
+
+function contaPesoDevHtml(d, finalDigitado) {
+  /* `Number(null)` é 0, e 0 é finito: sem esta guarda o painel mostrava
+     "Devolvido: 21.500 kg (21.500 − 0)" para um caminhão que ainda nem
+     tinha voltado à balança. Número inventado é pior que campo vazio —
+     este apareceu no primeiro teste de tela e é a mesma armadilha que a
+     regra "null não é zero" existe para evitar. */
+  const vazio = (v) => v === null || v === undefined || v === '';
+  const entrada = vazio(d.pesoEntrada) ? NaN : Number(d.pesoEntrada);
+  const finalBruto = finalDigitado === undefined ? d.pesoFinal : finalDigitado;
+  const final = vazio(finalBruto) ? NaN : Number(finalBruto);
+  if (!Number.isFinite(entrada)) {
+    return '<span class="text-dim">Sem o peso da chegada não dá para calcular o devolvido.</span>';
+  }
+  if (!Number.isFinite(final)) {
+    return `<span class="text-dim">Chegada: ${entrada.toLocaleString('pt-BR')} kg. `
+         + 'Falta o peso do caminhão vazio.</span>';
+  }
+  const devolvido = entrada - final;
+  const lancado = pesoLancadoDev(d);
+  const dif = lancado > 0 ? devolvido - lancado : null;
+  /* 2% de tolerância: balança de pátio não é balança de laboratório, e
+     apontar divergência a cada 3 kg faria o aviso virar paisagem. */
+  const fora = dif !== null && Math.abs(dif) > Math.max(20, lancado * 0.02);
+  return `<strong>Devolvido: ${devolvido.toLocaleString('pt-BR')} kg</strong>`
+    + `<span class="text-dim"> (${entrada.toLocaleString('pt-BR')} − ${final.toLocaleString('pt-BR')})</span>`
+    + (lancado > 0
+        ? (fora
+            ? ` <span class="dev-falta-chip" title="A balança e o checklist não batem. Confira antes de seguir.">`
+              + `não bate com o lançado: ${lancado.toLocaleString('pt-BR')} kg `
+              + `(${dif > 0 ? '+' : ''}${dif.toLocaleString('pt-BR')} kg)</span>`
+            : ` <span class="dev-ok-chip" title="A balança bate com o que foi lançado no checklist.">`
+              + `bate com o lançado (${lancado.toLocaleString('pt-BR')} kg)</span>`)
+        : ' <span class="text-dim">— nenhum peso lançado no checklist para comparar.</span>');
+}
+
+/* A conta na hora, enquanto se digita. Sem isto o operador só descobre que
+   errou um dígito depois de assinar a etapa. */
+function previewPesoDevolvidoUI(id) {
+  const d = getDevolucao(id);
+  const campo = document.getElementById(`dev-et-${id}-pesofinal`);
+  const alvo = document.getElementById(`dev-et-${id}-conta`);
+  if (!d || !campo || !alvo) return;
+  alvo.innerHTML = contaPesoDevHtml(d, campo.value);
 }
 
 function carimbosDev(d) {
@@ -725,16 +870,35 @@ function acaoEtapaDev(d) {
       <input type="text" id="dev-et-${esc(d.id)}-lacre1" placeholder="Lacre 1" value="${esc(d.lacre1)}">
       <input type="text" id="dev-et-${esc(d.id)}-lacre2" placeholder="Lacre 2 (se houver)" value="${esc(d.lacre2)}">`;
   } else if (etapa.pede === 'faturamento') {
-    extras = `<input type="number" min="0" step="1" id="dev-et-${esc(d.id)}-peso"
-      placeholder="Peso final em kg (opcional)" value="${d.pesoFinal ?? ''}">`;
-  } else if (etapa.pede === 'controles') {
+    /* PRIMEIRA BALANÇA: o caminhão CHEIO, na chegada. Era aqui que o painel
+       pedia "peso final" — o número certo no campo errado, porque o final
+       é o do caminhão vazio, que ainda nem descarregou. */
+    extras = `<input type="number" min="0" step="1" id="dev-et-${esc(d.id)}-pesoentrada"
+      placeholder="Peso do caminhão CHEIO, em kg (opcional)" value="${d.pesoEntrada ?? ''}"
+      title="Pesagem da chegada, com a mercadoria dentro. O peso do caminhão vazio é registrado depois da descarga.">`;
+  } else if (etapa.pede === 'pesofinal') {
+    /* SEGUNDA BALANÇA: o caminhão VAZIO, depois da descarga. O painel
+       mostra a conta na hora — quem digita vê o devolvido aparecer e
+       percebe na mesma tela se o número saiu torto. */
+    extras = `<input type="number" min="0" step="1" id="dev-et-${esc(d.id)}-pesofinal"
+        placeholder="Peso do caminhão VAZIO, em kg" value="${d.pesoFinal ?? ''}"
+        oninput="previewPesoDevolvidoUI('${escJs(d.id)}')"
+        title="Pesagem depois da descarga, caminhão vazio.">
+      <span class="dev-peso-conta" id="dev-et-${esc(d.id)}-conta">${contaPesoDevHtml(d)}</span>`;
+  } else if (etapa.pede === 'controles' || etapa.pede === 'notas') {
+    /* AS DUAS ÚLTIMAS ETAPAS SÃO CHECK + RECADO (27/08/2026).
+
+       O dono: "controles internos e central de notas, que precisa só de um
+       campo pro CHECK do checklist pra confirmar a etapa, e observações
+       para que eles possam comunicar com a próxima etapa".
+
+       O "Gerou RDC?" saiu daqui a pedido dele. O dado continua no banco e
+       nos relatórios antigos — o que saiu foi a pergunta na tela. */
+    const ehControles = etapa.pede === 'controles';
     extras = `<input type="text" id="dev-et-${esc(d.id)}-obs"
-      placeholder="Observações dos Controles Internos (saem no relatório)" value="${esc(d.obsControles)}">
-      <select id="dev-et-${esc(d.id)}-rdc" title="Gerou RDC (romaneio)?">
-        <option value=""${d.gerouRdc === null || d.gerouRdc === undefined ? ' selected' : ''}>Gerou RDC? (informar)</option>
-        <option value="true"${d.gerouRdc === true ? ' selected' : ''}>Sim — gerou RDC</option>
-        <option value="false"${d.gerouRdc === false ? ' selected' : ''}>Não gerou</option>
-      </select>`;
+      placeholder="Observações para a próxima etapa (saem no relatório)"
+      value="${esc(ehControles ? d.obsControles : (d.obsNotas || ''))}"
+      title="O recado de quem faz esta etapa para quem vem depois.">`;
   }
   return `<div class="dev-etapa-acao">
       ${extras}
@@ -920,7 +1084,10 @@ function renderDevolucaoAberta(d, editavel) {
           <tbody>${d.itens.map(linhaItem).join('')}${novaLinha}</tbody>
         </table>
       </div>
+      ${d.pesoEntrada !== null && d.pesoEntrada !== undefined
+        ? `<div class="card-sub dev-peso-conta">${contaPesoDevHtml(d)}</div>` : ''}
       ${d.obsControles ? `<div class="card-sub"><strong>Obs. Controles Internos:</strong> ${esc(d.obsControles)}</div>` : ''}
+      ${d.obsNotas ? `<div class="card-sub"><strong>Obs. Central de Notas:</strong> ${esc(d.obsNotas)}</div>` : ''}
       ${d.gerouRdc !== null && d.gerouRdc !== undefined
         ? `<div class="card-sub"><strong>RDC (romaneio):</strong> ${d.gerouRdc ? 'Sim — gerado' : 'Não gerado'}</div>` : ''}
       ${d.chegouLacrado === false
@@ -1115,10 +1282,13 @@ function avancarEtapaDevolucaoUI(id) {
     const lacrado = v('lacrado');
     if (lacrado !== '' && lacrado !== undefined) corpo.chegouLacrado = lacrado === 'true';
   } else if (etapa.pede === 'faturamento') {
-    corpo.pesoFinal = v('peso') || '';
+    corpo.pesoEntrada = v('pesoentrada') || '';
+  } else if (etapa.pede === 'pesofinal') {
+    corpo.pesoFinal = v('pesofinal') || '';
   } else if (etapa.pede === 'controles') {
     corpo.obsControles = v('obs') || '';
-    corpo.gerouRdc = v('rdc') ?? '';
+  } else if (etapa.pede === 'notas') {
+    corpo.obsNotas = v('obs') || '';
   }
   acaoDev(SuincoSharePoint.devolucoes.etapa(id, corpo), `Etapa registrada: ${etapa.proxima}.`);
 }
@@ -1332,7 +1502,8 @@ async function abrirRevisoesDevolucaoUI(id) {
           <div class="revisao-dados">
             Estado anterior: rota(s) ${esc((s.rotas || []).join(', ') || '—')} · transp. ${esc(s.transportadora || '—')}
             · NT ${esc(s.notaTransferencia || '—')} · status ${esc(s.status || '—')}
-            ${s.pesoFinal !== null && s.pesoFinal !== undefined ? ` · peso final ${Number(s.pesoFinal).toLocaleString('pt-BR')} kg` : ''}
+            ${s.pesoEntrada !== null && s.pesoEntrada !== undefined ? ` · chegada ${Number(s.pesoEntrada).toLocaleString('pt-BR')} kg` : ''}
+            ${s.pesoFinal !== null && s.pesoFinal !== undefined ? ` · vazio ${Number(s.pesoFinal).toLocaleString('pt-BR')} kg` : ''}
           </div>
           <div class="flex-end"><button class="btn btn-sec btn-sm"
             onclick="restaurarRevisaoDevolucaoUI('${escJs(id)}',${r.revisaoId})">Restaurar este estado</button></div>
@@ -1446,7 +1617,15 @@ async function relatorioDevolucoesUI(diaParam) {
         + `${d.cargaNumero ? ' · Carga ' + esc(d.cargaNumero) : ''}`
         + `${d.operadorCodigo ? ' · Cód. operador ' + esc(d.operadorCodigo) : ''}`
         + `${lacresChegadaDev(d)}`
-        + `${d.pesoFinal !== null ? ' · Peso final ' + d.pesoFinal.toLocaleString('pt-BR') + ' kg' : ''}`)}
+        /* AS DUAS BALANÇAS NO PAPEL (27/08/2026). O documento que acompanha
+           a devolução precisa dizer o que a balança disse nas DUAS pontas —
+           "peso final" sozinho não responde quanto voltou. */
+        + `${d.pesoEntrada !== null && d.pesoEntrada !== undefined
+             ? ' · Chegada ' + Number(d.pesoEntrada).toLocaleString('pt-BR') + ' kg' : ''}`
+        + `${d.pesoFinal !== null && d.pesoFinal !== undefined
+             ? ' · Vazio ' + Number(d.pesoFinal).toLocaleString('pt-BR') + ' kg' : ''}`
+        + `${d.pesoDevolvido !== null && d.pesoDevolvido !== undefined
+             ? ' · Devolvido ' + Number(d.pesoDevolvido).toLocaleString('pt-BR') + ' kg' : ''}`)}
       <table class="dev-doc-tabela">
         <thead><tr>
           <th>Nota</th><th title="A devolução é parcial ou total">Parcial / Total</th><th title="Número da nota parcial">Nº parcial</th>

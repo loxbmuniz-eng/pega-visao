@@ -265,13 +265,18 @@ describe('3. Etapas em sentido único, com carimbo (as assinaturas do papel)', (
     assert.ok(r.json.carimbos.portaria.em, 'instante carimbado');
   });
 
-  test('peso final do Faturamento é opcional — vazio não trava', async () => {
+  /* A REGRA MUDOU EM 27/08/2026, de propósito. A balança é usada DUAS
+     vezes: a etapa do Faturamento na chegada grava o caminhão CHEIO
+     (pesoEntrada), e a etapa NOVA depois da Expedição grava o caminhão
+     VAZIO (pesoFinal). Antes existia um campo só, e ele era gravado na
+     chegada — o que era o peso errado no campo errado. */
+  test('a pesagem da chegada é opcional — vazio não trava', async () => {
     const r = await req(`/api/devolucoes/${id}/etapa`, {
       metodo: 'POST', token: tokens['Logística'],
-      corpo: { para: 'Conferida no Faturamento', pesoFinal: '' },
+      corpo: { para: 'Conferida no Faturamento', pesoEntrada: '' },
     });
     assert.equal(r.status, 200, r.texto);
-    assert.equal(r.json.pesoFinal, null);
+    assert.equal(r.json.pesoEntrada, null);
     assert.equal(r.json.carimbos.faturamento.por, 'Ana Dev');
   });
 
@@ -283,6 +288,16 @@ describe('3. Etapas em sentido único, com carimbo (as assinaturas do papel)', (
     });
     assert.equal(a.status, 200, a.texto);
     assert.equal(a.json.carimbos.expedicao.por, 'Carla Dev');
+
+    // A segunda ida à balança: o caminhão volta VAZIO e o Faturamento
+    // assina de novo, com carimbo próprio.
+    const p = await req(`/api/devolucoes/${id}/etapa`, {
+      metodo: 'POST', token: tokens['Faturamento'],
+      corpo: { para: 'Peso Final Registrado', pesoFinal: 14000 },
+    });
+    assert.equal(p.status, 200, p.texto);
+    assert.equal(p.json.pesoFinal, 14000);
+    assert.equal(p.json.carimbos.pesofinal.por, 'Diego Dev');
 
     const b = await req(`/api/devolucoes/${id}/etapa`, {
       metodo: 'POST', token: tokens['Controles Internos'],
@@ -298,7 +313,7 @@ describe('3. Etapas em sentido único, com carimbo (as assinaturas do papel)', (
     assert.equal(c.status, 200, c.texto);
     assert.equal(c.json.status, 'Nota Finalizada');
     assert.equal(c.json.carimbos.notas.por, 'Notas Dev');
-    for (const etapa of ['portaria', 'faturamento', 'expedicao', 'controles', 'notas']) {
+    for (const etapa of ['portaria', 'faturamento', 'expedicao', 'pesofinal', 'controles', 'notas']) {
       assert.ok(c.json.carimbos[etapa], `carimbo de ${etapa} presente`);
     }
   });
@@ -623,6 +638,13 @@ describe('7. Sobras: ciclo curto — entra, três OKs, acabou (18/08/2026)', () 
   });
 
   test('sobra não passa por Controles Internos nem Central de Notas', async () => {
+    /* Nem volta à balança (27/08/2026): o caminhão da sobra não é pesado
+       vazio, e pedir esse peso seria pedir um número que ninguém tem. */
+    const peso = await req(`/api/devolucoes/${id}/etapa`, {
+      metodo: 'POST', token: tokens['Faturamento'], corpo: { para: 'Peso Final Registrado' },
+    });
+    assert.equal(peso.status, 409);
+    assert.equal(peso.json.codigo, 'ETAPA_NAO_EXISTE_PARA_SOBRA');
     const r = await req(`/api/devolucoes/${id}/etapa`, {
       metodo: 'POST', token: tokens['Controles Internos'], corpo: { para: 'Destinada' },
     });
@@ -680,12 +702,19 @@ describe('8. Cabeçalho por posto: Portaria e Faturamento editam SÓ o que é de
     assert.equal(b.status, 403, 'juntar campo permitido com rota não fura a regra');
   });
 
-  test('Faturamento edita o peso final — e SÓ ele nesse cabeçalho', async () => {
+  test('Faturamento edita AS DUAS pesagens — e só elas nesse cabeçalho', async () => {
     const ok = await req(`/api/devolucoes/${id}`, {
       metodo: 'PATCH', token: tokens['Faturamento'], corpo: { pesoFinal: 47.5 },
     });
     assert.equal(ok.status, 200, ok.texto);
     assert.equal(Number(ok.json.pesoFinal), 47.5);
+    // O peso de entrada é do mesmo dono (27/08/2026).
+    const ent = await req(`/api/devolucoes/${id}`, {
+      metodo: 'PATCH', token: tokens['Faturamento'], corpo: { pesoEntrada: 100.5 },
+    });
+    assert.equal(ent.status, 200, ent.texto);
+    assert.equal(Number(ent.json.pesoEntrada), 100.5);
+    assert.equal(Number(ent.json.pesoDevolvido), 53, 'devolvido = entrada - final');
     const nao = await req(`/api/devolucoes/${id}`, {
       metodo: 'PATCH', token: tokens['Faturamento'], corpo: { transportadora: 'OUTRA' },
     });
@@ -729,6 +758,7 @@ describe('8. Cabeçalho por posto: Portaria e Faturamento editam SÓ o que é de
       [tokens['Portaria'], 'Recebida na Portaria'],
       [tokens['Faturamento'], 'Conferida no Faturamento'],
       [tokens['Expedição'], 'Descarga Conferida'],
+      [tokens['Faturamento'], 'Peso Final Registrado'],
     ]) {
       const r = await req(`/api/devolucoes/${did}/etapa`, { metodo: 'POST', token, corpo: { para } });
       assert.equal(r.status, 200, r.texto);
@@ -1028,5 +1058,150 @@ describe('13. Nome do cliente junto do código (20/08/2026)', () => {
     });
     assert.equal(r.status, 200, r.texto);
     assert.equal(r.json.clienteNome, 'TESTE ALIM');
+  });
+});
+
+/* ------------------------------------------------------------------ */
+describe('14. As duas pesagens e a esteira inteira (27/08/2026)', () => {
+  /* O FLUXO REAL, contado pelo dono:
+
+       "caminhão chega com devoluções, pesa na balança, vai pra expedição,
+        descarrega, depois volta pra balança pra pesar vazio (...)
+        faturamento colocar o peso final depois que descarregou (...) de lá
+        vai pra controles internos e central de notas, que precisa só de um
+        campo pro CHECK do checklist pra confirmar a etapa, e observações
+        para que eles possam comunicar com a próxima etapa".
+
+     O que este bloco prova, na ordem em que acontece no pátio. */
+  let id;
+  before(async () => {
+    const r = await req('/api/devolucoes', {
+      metodo: 'POST', token: tokens['Logística'], corpo: novoChecklist(),
+    });
+    id = r.json.id;
+  });
+
+  test('a esteira tem SETE etapas, com a segunda balança entre Expedição e Controles', async () => {
+    const passos = [
+      [tokens['Portaria'], 'Recebida na Portaria', {}],
+      [tokens['Faturamento'], 'Conferida no Faturamento', { pesoEntrada: 21500 }],
+      [tokens['Expedição'], 'Descarga Conferida', {}],
+      [tokens['Faturamento'], 'Peso Final Registrado', { pesoFinal: 14300 }],
+      [tokens['Controles Internos'], 'Destinada', { obsControles: 'Separado, 2 cx para descarte' }],
+      [tokens['Central de Notas'], 'Nota Finalizada', { obsNotas: 'NF 998877 emitida' }],
+    ];
+    let ultimo = null;
+    for (const [token, para, extra] of passos) {
+      const r = await req(`/api/devolucoes/${id}/etapa`, {
+        metodo: 'POST', token, corpo: { para, ...extra },
+      });
+      assert.equal(r.status, 200, `${para}: ${r.texto}`);
+      ultimo = r.json;
+    }
+    assert.equal(ultimo.status, 'Nota Finalizada');
+    assert.equal(Number(ultimo.pesoEntrada), 21500, 'o caminhão cheio, na chegada');
+    assert.equal(Number(ultimo.pesoFinal), 14300, 'o caminhão vazio, depois da descarga');
+    assert.equal(Number(ultimo.pesoDevolvido), 7200, 'o devolvido é a diferença, calculada no servidor');
+    assert.equal(ultimo.obsControles, 'Separado, 2 cx para descarte');
+    assert.equal(ultimo.obsNotas, 'NF 998877 emitida', 'o recado da Central de Notas');
+    // Cada balança tem a SUA assinatura: são dois momentos diferentes.
+    assert.ok(ultimo.carimbos.faturamento, 'assinatura da pesagem de chegada');
+    assert.ok(ultimo.carimbos.pesofinal, 'assinatura da pesagem de saída');
+    assert.notEqual(ultimo.carimbos.faturamento.em, ultimo.carimbos.pesofinal.em);
+  });
+
+  test('pular a segunda balança é recusado — Expedição não vai direto para Destinada', async () => {
+    const c = await req('/api/devolucoes', { metodo: 'POST', token: tokens['Logística'], corpo: novoChecklist() });
+    const did = c.json.id;
+    for (const [token, para] of [
+      [tokens['Portaria'], 'Recebida na Portaria'],
+      [tokens['Faturamento'], 'Conferida no Faturamento'],
+      [tokens['Expedição'], 'Descarga Conferida'],
+    ]) {
+      const r = await req(`/api/devolucoes/${did}/etapa`, { metodo: 'POST', token, corpo: { para } });
+      assert.equal(r.status, 200, r.texto);
+    }
+    const pulo = await req(`/api/devolucoes/${did}/etapa`, {
+      metodo: 'POST', token: tokens['Controles Internos'], corpo: { para: 'Destinada' },
+    });
+    assert.equal(pulo.status, 409, 'a balança de saída não se pula');
+  });
+
+  test('a segunda balança é do Faturamento — Expedição não assina por ele', async () => {
+    const c = await req('/api/devolucoes', { metodo: 'POST', token: tokens['Logística'], corpo: novoChecklist() });
+    const did = c.json.id;
+    for (const [token, para] of [
+      [tokens['Portaria'], 'Recebida na Portaria'],
+      [tokens['Faturamento'], 'Conferida no Faturamento'],
+      [tokens['Expedição'], 'Descarga Conferida'],
+    ]) {
+      await req(`/api/devolucoes/${did}/etapa`, { metodo: 'POST', token, corpo: { para } });
+    }
+    const r = await req(`/api/devolucoes/${did}/etapa`, {
+      metodo: 'POST', token: tokens['Expedição'], corpo: { para: 'Peso Final Registrado' },
+    });
+    assert.equal(r.status, 403);
+  });
+
+  test('pesar só uma ponta NÃO inventa o devolvido — null não é zero', async () => {
+    const c = await req('/api/devolucoes', { metodo: 'POST', token: tokens['Logística'], corpo: novoChecklist() });
+    const so = await req(`/api/devolucoes/${c.json.id}`, {
+      metodo: 'PATCH', token: tokens['Faturamento'], corpo: { pesoEntrada: 20000 },
+    });
+    assert.equal(so.status, 200, so.texto);
+    assert.equal(Number(so.json.pesoEntrada), 20000);
+    assert.equal(so.json.pesoFinal, null);
+    assert.equal(so.json.pesoDevolvido, null, 'sem as duas pontas não há conta');
+  });
+
+  test('o recado das duas últimas etapas é de quem faz a etapa, e de mais ninguém', async () => {
+    const c = await req('/api/devolucoes', { metodo: 'POST', token: tokens['Logística'], corpo: novoChecklist() });
+    const did = c.json.id;
+    const ci = await req(`/api/devolucoes/${did}`, {
+      metodo: 'PATCH', token: tokens['Controles Internos'], corpo: { obsControles: 'recado dos CI' },
+    });
+    assert.equal(ci.status, 200, ci.texto);
+    assert.equal(ci.json.obsControles, 'recado dos CI');
+    const cn = await req(`/api/devolucoes/${did}`, {
+      metodo: 'PATCH', token: tokens['Central de Notas'], corpo: { obsNotas: 'recado das notas' },
+    });
+    assert.equal(cn.status, 200, cn.texto);
+    assert.equal(cn.json.obsNotas, 'recado das notas');
+    // Trocado: cada um só escreve no seu.
+    const trocado = await req(`/api/devolucoes/${did}`, {
+      metodo: 'PATCH', token: tokens['Central de Notas'], corpo: { obsControles: 'não é meu' },
+    });
+    assert.equal(trocado.status, 403);
+    const trocado2 = await req(`/api/devolucoes/${did}`, {
+      metodo: 'PATCH', token: tokens['Controles Internos'], corpo: { obsNotas: 'nem meu' },
+    });
+    assert.equal(trocado2.status, 403);
+  });
+
+  test('restaurar uma revisão devolve TAMBÉM o peso de entrada e a segunda assinatura', async () => {
+    const c = await req('/api/devolucoes', { metodo: 'POST', token: tokens['Logística'], corpo: novoChecklist() });
+    const did = c.json.id;
+    for (const [token, para, extra] of [
+      [tokens['Portaria'], 'Recebida na Portaria', {}],
+      [tokens['Faturamento'], 'Conferida no Faturamento', { pesoEntrada: 30000 }],
+      [tokens['Expedição'], 'Descarga Conferida', {}],
+      [tokens['Faturamento'], 'Peso Final Registrado', { pesoFinal: 12000 }],
+    ]) {
+      const r = await req(`/api/devolucoes/${did}/etapa`, { metodo: 'POST', token, corpo: { para, ...extra } });
+      assert.equal(r.status, 200, r.texto);
+    }
+    const revs = await req(`/api/devolucoes/${did}/revisoes`, { token: tokens['Administração'] });
+    assert.equal(revs.status, 200, revs.texto);
+    // A revisão anterior à segunda balança: ali ainda não havia peso final.
+    const antes = revs.json.find((r) => r.devolucao.status === 'Descarga Conferida');
+    assert.ok(antes, 'existe revisão do estado antes da segunda pesagem');
+    const volta = await req(`/api/devolucoes/${did}/restaurar`, {
+      metodo: 'POST', token: tokens['Administração'], corpo: { revisaoId: antes.revisaoId },
+    });
+    assert.equal(volta.status, 200, volta.texto);
+    assert.equal(volta.json.status, 'Descarga Conferida');
+    assert.equal(volta.json.pesoFinal, null, 'o peso final volta a não existir');
+    assert.equal(volta.json.carimbos.pesofinal, null, 'e a assinatura da segunda balança também');
+    assert.equal(Number(volta.json.pesoEntrada), 30000, 'o peso de entrada daquele momento continua');
   });
 });
