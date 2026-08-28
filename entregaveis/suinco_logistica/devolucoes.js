@@ -1314,16 +1314,45 @@ function avancarEtapaDevolucaoUI(id) {
        Nada disso trava a devolução; é informação. */
     const lacrado = v('lacrado');
     if (lacrado !== '' && lacrado !== undefined) corpo.chegouLacrado = lacrado === 'true';
-  } else if (etapa.pede === 'faturamento') {
-    corpo.pesoEntrada = v('pesoentrada') || '';
-  } else if (etapa.pede === 'pesofinal') {
-    corpo.pesoFinal = v('pesofinal') || '';
-  } else if (etapa.pede === 'expedicao') {
-    corpo.obsExpedicao = v('obs') || '';
-  } else if (etapa.pede === 'controles') {
-    corpo.obsControles = v('obs') || '';
-  } else if (etapa.pede === 'notas') {
-    corpo.obsNotas = v('obs') || '';
+  } else {
+    /* A MESMA PROTEÇÃO DA PORTARIA, PARA AS OUTRAS CINCO ETAPAS
+       (28/08/2026).
+
+       Relato do dono: "quando alguém de outro setor atualiza a carga ou
+       alguma informação, isso apaga o que estava sendo feito na
+       devolução".
+
+       O caminho, rastreado: estas cinco etapas mandavam `v('campo') || ''`
+       — a string vazia ia junto e o servidor gravava por cima. Basta o
+       campo estar vazio NESTA tela para o valor sumir do banco. E ele
+       fica vazio em duas situações comuns:
+
+         · a tela foi desenhada ANTES de alguém preencher aquele campo pelo
+           cabeçalho, e carrega um retrato velho (é a ocorrência #16 —
+           "duas escritas em voo, a velha ganha", aqui nas devoluções);
+         · quem avança a etapa não é quem preenche o campo (a Logística
+           cobre todos os postos e avança etapas dos outros).
+
+       A Portaria já tinha a regra escrita, com estas palavras: "campo
+       vazio do porteiro não pode apagar um valor que a Logística já tenha
+       posto no cabeçalho". Faltava valer para as demais — a mesma regra em
+       um lugar só, agora, para as seis.
+
+       Para APAGAR de propósito existe o campo do cabeçalho, que grava o
+       vazio explicitamente. O botão de avançar etapa serve para carimbar a
+       etapa, não para limpar o trabalho de outro setor. */
+    const CAMPO_DA_ETAPA = {
+      faturamento: ['pesoentrada', 'pesoEntrada'],
+      pesofinal:   ['pesofinal',   'pesoFinal'],
+      expedicao:   ['obs',         'obsExpedicao'],
+      controles:   ['obs',         'obsControles'],
+      notas:       ['obs',         'obsNotas'],
+    }[etapa.pede];
+    if (CAMPO_DA_ETAPA) {
+      const [sufixo, chave] = CAMPO_DA_ETAPA;
+      const valor = v(sufixo);
+      if (String(valor ?? '').trim()) corpo[chave] = valor;
+    }
   }
   acaoDev(SuincoSharePoint.devolucoes.etapa(id, corpo), `Etapa registrada: ${etapa.proxima}.`);
 }

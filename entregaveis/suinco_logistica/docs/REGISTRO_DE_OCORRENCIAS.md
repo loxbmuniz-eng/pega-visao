@@ -30,9 +30,57 @@ faz achar a próxima em minutos em vez de horas:
 | **Trava sem o par na tela** | O servidor passa a exigir algo novo e a tela continua com o botão antigo: quem clica só descobre que não pode, e não tem por onde seguir. | #13 |
 | **A mesma decisão escrita em dois lugares** | A regra é copiada em vez de consultada. As cópias divergem e o comportamento fica errado sem que nenhuma linha esteja errada. | #14 |
 | **Duas escritas em voo, a velha ganha** | O painel manda a carga INTEIRA a cada alteração. Duas alterações seguidas viram duas requisições simultâneas, e a primeira carrega o valor velho do campo que ainda ia mudar. | #16 |
+| **A proteção escrita para um posto só** | A regra certa existe, com comentário e tudo — mas vale para um caminho e não para os irmãos dele. Não é cópia divergente: é a cópia que nunca foi escrita. | #20 |
 | **A tela não oferece o que o servidor aceita** | A rota grava o campo, mas a coluna correspondente é texto. Quem precisa registrar o dado escreve no primeiro campo que aceita digitação — e ele vai parar onde ninguém procura. | #19 |
 | **Dois filtros para a mesma tela** | Duas filtragens paralelas sobre os mesmos dados. Uma move os números, a outra move os gráficos, e nada avisa que discordam. | #18 |
 | **Teste que mede o proxy, não a regra** | O teste confere um sintoma fácil de medir ("a aba aparece?", "quantas linhas?") em vez da garantia real. Quando o sintoma muda por um motivo legítimo, ele fica vermelho sem que nada tenha quebrado — e some do radar. | #15 |
+
+---
+
+## #20 — Avançar a etapa apagava o que outro setor tinha preenchido (28/08/2026)
+
+**Relato:** *"quando se está realizando um processo de devolução e alguém de
+outro setor atualiza a carga ou alguma informação, isso apaga o que estava
+sendo feito na devolução. Precisamos entender onde está o problema, onde ele
+é registrado no servidor e por que esse caminho não está sendo executado
+corretamente."*
+
+**A primeira investigação não achou nada — e isso era informação.** As duas
+defesas da TELA, feitas em 27/08 (não rebuscar a lista a cada redesenho;
+devolver o que estava digitado depois de um redesenho), estavam no lugar e
+com teste verde (`test_checklist_nao_apaga`). O relato continuava. Logo o
+apagamento não era da tela: alguma coisa estava gravando o vazio.
+
+**Causa:** o botão que avança a etapa manda, junto com o status novo, o campo
+daquela etapa — e cinco das seis mandavam `v('campo') || ''`. A string vazia
+ia junto e `POST /devolucoes/:id/etapa` gravava por cima. Não é a tela que
+perde o dado: é o servidor que o apaga, a pedido.
+
+O campo fica vazio em duas situações que acontecem todo dia:
+
+- a tela de quem avança foi desenhada **antes** de o outro setor preencher
+  aquele campo pelo cabeçalho — ela carrega um retrato velho. É a ocorrência
+  **#16** ("duas escritas em voo, a velha ganha") aparecendo nas devoluções;
+- quem avança não é quem preenche: a Logística cobre todos os postos e
+  avança etapa dos outros o tempo todo.
+
+**O detalhe que dói:** a regra já existia. A etapa da Portaria tinha, escrita
+no código: *"Só manda o que foi PREENCHIDO: campo vazio do porteiro não pode
+apagar um valor que a Logística já tenha posto no cabeçalho."* A proteção
+foi escrita para um posto e não valeu para os outros cinco — é a família "a
+mesma decisão em dois lugares", só que aqui a segunda cópia simplesmente
+não foi escrita.
+
+**Feito:** a regra passou a valer para as seis etapas, em um lugar só. Para
+apagar de propósito existe o campo do cabeçalho, que grava o vazio
+explicitamente; o botão de avançar serve para carimbar a etapa, não para
+limpar o trabalho de outro setor.
+
+**Guarda:** `testes/test_etapa_nao_apaga_de_outro_setor.py` — leva um
+checklist até cada etapa, grava o campo pelo cabeçalho (o "outro setor"),
+avança a etapa com o campo VAZIO na tela e confere **no banco** que o valor
+continua lá. Mais o contrapeso: o que é escrito no campo da etapa continua
+sendo gravado, para a proteção não virar "a etapa não grava mais nada".
 
 ---
 

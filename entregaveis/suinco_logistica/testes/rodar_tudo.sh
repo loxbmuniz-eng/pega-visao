@@ -53,6 +53,33 @@ case "${PGHOST:-}" in
 esac
 
 export PLAYWRIGHT_CHROMIUM_PATH="${PLAYWRIGHT_CHROMIUM_PATH:-/opt/pw-browsers/chromium}"
+# O SERVIDOR PRECISA ESTAR INTEIRO ANTES DE COMEÇAR (28/08/2026).
+#
+# Três suítes reprovaram numa bateria de 121 e as três passavam sozinhas.
+# A causa não estava em nenhuma delas: a API tinha sido reiniciada sem
+# PLAYWRIGHT_CHROMIUM_PATH, e o gerador de PDF ficou fora do ar. Quem
+# exporta relatório recebia um download que nunca chegava, e o relatório
+# do erro apontava para o teste.
+#
+# A checagem custa um curl. Não custa nada perto de meia hora
+# investigando o teste errado — e, principalmente, não depende de alguém
+# lembrar. O aviso é fatal de propósito: bateria que roda com o servidor
+# pela metade produz um vermelho que não significa nada.
+API="${SUINCO_API:-http://127.0.0.1:3010}"
+saude=$(curl -s -m 5 "$API/health" 2>/dev/null || true)
+case "$saude" in
+  '') echo "  X  a API não respondeu em $API/health."
+      echo "      Suba com: cd backend && PLAYWRIGHT_CHROMIUM_PATH=/opt/pw-browsers/chromium node src/servidor.js"
+      exit 1 ;;
+esac
+case "$saude" in
+  *'"pronto":false'*)
+      echo "  X  a API está no ar, mas o gerador de PDF NÃO."
+      echo "      Toda suíte que exporta relatório vai reprovar sem ter defeito."
+      echo "      Reinicie a API com PLAYWRIGHT_CHROMIUM_PATH=/opt/pw-browsers/chromium."
+      exit 1 ;;
+esac
+
 FILTRO="${1:-}"
 # Um navegador por processo pesa ~300MB. Teto no número de núcleos para não
 # transformar paralelismo em disputa de CPU — teste lento estoura o timeout
