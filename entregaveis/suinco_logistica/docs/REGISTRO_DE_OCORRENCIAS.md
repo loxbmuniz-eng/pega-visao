@@ -30,7 +30,170 @@ faz achar a próxima em minutos em vez de horas:
 | **Trava sem o par na tela** | O servidor passa a exigir algo novo e a tela continua com o botão antigo: quem clica só descobre que não pode, e não tem por onde seguir. | #13 |
 | **A mesma decisão escrita em dois lugares** | A regra é copiada em vez de consultada. As cópias divergem e o comportamento fica errado sem que nenhuma linha esteja errada. | #14 |
 | **Duas escritas em voo, a velha ganha** | O painel manda a carga INTEIRA a cada alteração. Duas alterações seguidas viram duas requisições simultâneas, e a primeira carrega o valor velho do campo que ainda ia mudar. | #16 |
+| **A proteção escrita para um posto só** | A regra certa existe, com comentário e tudo — mas vale para um caminho e não para os irmãos dele. Não é cópia divergente: é a cópia que nunca foi escrita. | #20 |
+| **A tela não oferece o que o servidor aceita** | A rota grava o campo, mas a coluna correspondente é texto. Quem precisa registrar o dado escreve no primeiro campo que aceita digitação — e ele vai parar onde ninguém procura. | #19 |
+| **Dois filtros para a mesma tela** | Duas filtragens paralelas sobre os mesmos dados. Uma move os números, a outra move os gráficos, e nada avisa que discordam. | #18 |
 | **Teste que mede o proxy, não a regra** | O teste confere um sintoma fácil de medir ("a aba aparece?", "quantas linhas?") em vez da garantia real. Quando o sintoma muda por um motivo legítimo, ele fica vermelho sem que nada tenha quebrado — e some do radar. | #15 |
+
+---
+
+## #20 — Avançar a etapa apagava o que outro setor tinha preenchido (28/08/2026)
+
+**Relato:** *"quando se está realizando um processo de devolução e alguém de
+outro setor atualiza a carga ou alguma informação, isso apaga o que estava
+sendo feito na devolução. Precisamos entender onde está o problema, onde ele
+é registrado no servidor e por que esse caminho não está sendo executado
+corretamente."*
+
+**A primeira investigação não achou nada — e isso era informação.** As duas
+defesas da TELA, feitas em 27/08 (não rebuscar a lista a cada redesenho;
+devolver o que estava digitado depois de um redesenho), estavam no lugar e
+com teste verde (`test_checklist_nao_apaga`). O relato continuava. Logo o
+apagamento não era da tela: alguma coisa estava gravando o vazio.
+
+**Causa:** o botão que avança a etapa manda, junto com o status novo, o campo
+daquela etapa — e cinco das seis mandavam `v('campo') || ''`. A string vazia
+ia junto e `POST /devolucoes/:id/etapa` gravava por cima. Não é a tela que
+perde o dado: é o servidor que o apaga, a pedido.
+
+O campo fica vazio em duas situações que acontecem todo dia:
+
+- a tela de quem avança foi desenhada **antes** de o outro setor preencher
+  aquele campo pelo cabeçalho — ela carrega um retrato velho. É a ocorrência
+  **#16** ("duas escritas em voo, a velha ganha") aparecendo nas devoluções;
+- quem avança não é quem preenche: a Logística cobre todos os postos e
+  avança etapa dos outros o tempo todo.
+
+**O detalhe que dói:** a regra já existia. A etapa da Portaria tinha, escrita
+no código: *"Só manda o que foi PREENCHIDO: campo vazio do porteiro não pode
+apagar um valor que a Logística já tenha posto no cabeçalho."* A proteção
+foi escrita para um posto e não valeu para os outros cinco — é a família "a
+mesma decisão em dois lugares", só que aqui a segunda cópia simplesmente
+não foi escrita.
+
+**Feito:** a regra passou a valer para as seis etapas, em um lugar só. Para
+apagar de propósito existe o campo do cabeçalho, que grava o vazio
+explicitamente; o botão de avançar serve para carimbar a etapa, não para
+limpar o trabalho de outro setor.
+
+**Guarda:** `testes/test_etapa_nao_apaga_de_outro_setor.py` — leva um
+checklist até cada etapa, grava o campo pelo cabeçalho (o "outro setor"),
+avança a etapa com o campo VAZIO na tela e confere **no banco** que o valor
+continua lá. Mais o contrapeso: o que é escrito no campo da etapa continua
+sendo gravado, para a proteção não virar "a etapa não grava mais nada".
+
+---
+
+## #19 — A coluna que mostra um traço e não aceita o dado (28/08/2026)
+
+**Relato:** *"porra ficou faltando os campos rota peso numero de carga,
+veiculo ta aparecendo sem placa, porque nao estao editaveis??? editaveis, as
+placas que estao neles nao estao puxando direto as infos da placa como
+veiculo"* — com foto da Montagem do Dia, 39 linhas montadas.
+
+**Causa:** na linha de rascunho da Montagem, três das nove colunas eram
+TEXTO: Nº Carga, Veículo e Peso exibiam `—` e não recebiam digitação. O
+servidor aceitava `numeroCarga`, `peso`, `placa` e `rotaCodigo` no PATCH
+desde sempre — faltava a TELA oferecer.
+
+**O detalhe que dói:** o único campo editável da linha era o de Motorista, e
+era exatamente ali que as placas do dia estavam escritas (RNT5J03, RNV2A77,
+RNW7J57…). Ninguém digitou no campo errado por distração: **digitaram no
+único campo que aceitava**. Coluna que mostra um traço e não recebe o dado
+não é neutra — ela empurra o dado para onde couber, e ele vai parar onde
+ninguém vai procurar.
+
+**Um bug maior atrás do relato:** ao investigar "a placa não puxa as infos",
+apareceu que `suinco-api.js` recebia a frota do servidor e **descartava o
+motorista** no mapeamento (copiava só Placa, Transportadora, Tipo e
+Revisão). Ou seja, o autopreenchimento "digitou a placa, veio o motorista"
+funcionava apenas para quem tinha cadastrado aquela placa NAQUELE navegador.
+Para todo mundo que recebe a frota do servidor — todo mundo, todo dia — o
+campo chegava vazio. O relato era sobre a Montagem; o defeito era da camada
+de dados e atingia todas as telas.
+
+**Feito:** as quatro colunas viraram campos na própria linha, com as MESMAS
+classes da Fila e da Torre; a placa ganhou sugestão da Frota e passa a
+trazer transportadora, tipo e motorista; trocar a rota limpa o apelido do
+modelo (que descrevia a rota antiga) — para isso o PATCH passou a aceitar
+`apelidoRota`; e o mapeamento da frota deixou de jogar fora motorista,
+capacidade e UF.
+
+**Guarda:** `testes/test_montagem_linha_editavel.py` — confere que as
+colunas são campos, que o que se digita chega ao BANCO (não à tela), que a
+placa puxa os três dados da Frota, que o motorista escrito à mão sobrevive à
+troca de placa, e que no celular os quatro campos aparecem sem precisar
+abrir o cartão. Contra o build publicado, reprova em 4 pontos.
+
+---
+
+## #18 — O filtro que movia os números e não movia os gráficos (28/08/2026)
+
+**Relato:** *"quando usa o filtro os graficos somem voce precisa resolver
+isso, os indicadores de qual regional transportadora enfim"* e *"quando
+clica nos graficos e filtra por transportadora ele precisa interagir com
+aquele dado filtrado ou clicado"*.
+
+**Causa:** a aba Indicadores tinha DOIS conjuntos de filtros independentes.
+O de cima movia cartões e tabelas; um segundo, dentro do card de Gráficos,
+movia só os gráficos — e os dois não se falavam. Medido antes de mexer:
+filtrar uma transportadora no filtro de cima deixava os três gráficos com
+exatamente os mesmos pixels (3.321 / 1.057 / 15.590 antes e depois). As
+listas também discordavam: 7 transportadoras num filtro, 1 no outro, porque
+cada um olhava um universo de cargas diferente.
+
+Duas verdades sobre o mesmo dia, na mesma tela, sem nada avisando qual era
+qual. E `renderGargalos` e o tempo médio de pátio liam `DB.cargas` cru: não
+obedeciam a nenhum dos dois.
+
+**Feito:** um filtro só para a aba inteira. A regra passou a morar em uma
+função de `data.js` (`aplicarFiltrosCargas`) que as tabelas e os gráficos
+chamam — uma função, dois chamadores, de propósito: enquanto forem duas,
+voltam a divergir. Gargalos e tempo de pátio passaram a obedecê-la, o
+período virou único, e clicar numa transportadora, rota ou operação nas
+tabelas de Gargalos filtra a aba inteira (clicar de novo limpa).
+
+**Guarda:** `testes/test_filtro_indicadores_move_graficos.py` — conta os
+PIXELS pintados de cada gráfico antes e depois de filtrar. Um teste que só
+olhasse o valor do `<select>` passaria com o defeito intacto, que foi
+exatamente o que aconteceu por semanas. Contra o build publicado, reprova em
+11 pontos.
+
+---
+
+## #17 — Os gráficos do Custo de Frete sumindo ao serem clicados (28/08/2026)
+
+**Relato:** *"os graficos somem quando tento interagir com eles"*, com foto
+do painel de Custo de Frete aberto no Mac: cabeçalho com os números certos
+(10.856 linhas · 3.926 cargas · R$ 44.867.593,86) e os painéis dos gráficos
+em branco.
+
+**Causa, pela pilha do erro:**
+
+```
+TypeError: this._fn is not a function
+    at Cs.tick            (animador)
+    at Cs.cancel
+    at bt.stop
+    at An.stop / An._stop  (destroy do gráfico)
+```
+
+Cada filtro redesenha os oito gráficos, e redesenhar ali é destruir e
+recriar. Quando o `destroy()` pegava uma ANIMAÇÃO em curso, o Chart.js
+cancelava um quadro que já tinha perdido a função dele e quebrava no meio —
+o painel ficava em branco. Havia um segundo defeito na mesma linha: o
+`onClick` chamava `render()` na hora, ou seja, o gráfico se destruía DENTRO
+do evento de clique que o próprio Chart.js ainda estava despachando.
+
+**Feito:** animação desligada na raiz (oito gráficos que se refazem inteiros
+a cada clique não ganham nada com meio segundo de animação; ganham um erro),
+`destroy()` protegido, e os quatro `onClick` passaram por uma função só que
+devolve o controle ao Chart.js antes de redesenhar.
+
+**Guarda:** `testes/test_custo_frete_clique_nao_apaga_grafico.py` — conta os
+pixels de cada canvas antes e depois de clicar em cada gráfico clicável, e
+reprova em qualquer erro de JavaScript. Gráfico que "some" é um canvas em
+branco, e branco é um número.
 
 ---
 

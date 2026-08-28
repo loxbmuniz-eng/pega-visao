@@ -326,6 +326,7 @@ rotasDevolucoes.get('/devolucoes/:id', exigirLogin, async (req, res, next) => {
    além do check ("observações para que eles possam comunicar com a próxima
    etapa"). */
 const CAMPOS_CABECALHO_FATURAMENTO = new Set(['peso_entrada', 'peso_final']);
+const CAMPOS_CABECALHO_EXPEDICAO = new Set(['obs_expedicao']);
 const CAMPOS_CABECALHO_CONTROLES = new Set(['obs_controles']);
 const CAMPOS_CABECALHO_NOTAS = new Set(['obs_notas']);
 
@@ -355,6 +356,7 @@ rotasDevolucoes.patch('/devolucoes/:id', exigirLogin, async (req, res, next) => 
         || (op.setor === 'Controles Internos'
             && chavesCab.every((c) => c === 'gerou_rdc' || CAMPOS_CABECALHO_CONTROLES.has(c)))
         // Central de Notas: o recado da etapa (27/08).
+        || (op.setor === 'Expedição' && chavesCab.every((c) => CAMPOS_CABECALHO_EXPEDICAO.has(c)))
         || (op.setor === 'Central de Notas' && chavesCab.every((c) => CAMPOS_CABECALHO_NOTAS.has(c)))
       );
       if (!permitido) {
@@ -518,6 +520,17 @@ rotasDevolucoes.post('/devolucoes/:id/etapa', exigirLogin, async (req, res, next
         const n = Number(req.body.pesoFinal);
         põe('peso_final', req.body.pesoFinal === '' || req.body.pesoFinal === null
           ? null : (Number.isFinite(n) ? n : null));
+      }
+      /* O OK DA EXPEDIÇÃO TAMBÉM DEIXA RECADO (28/08/2026).
+
+         Pedido do dono: a Expedição não consegue conferir a quantidade nem
+         destinar na hora que o caminhão chega, então a etapa dela passa a
+         ser o mesmo "OKzinho + observações" da Central de Notas. A
+         conferência e a destinação continuam existindo e podem ser feitas
+         depois — o que mudou é que elas nunca foram, e agora claramente
+         não são, pré-requisito para o OK. */
+      if (regra.carimbo === 'expedicao' && req.body?.obsExpedicao !== undefined) {
+        põe('obs_expedicao', String(req.body.obsExpedicao).slice(0, 2000));
       }
       if (regra.carimbo === 'controles' && req.body?.obsControles !== undefined) {
         põe('obs_controles', String(req.body.obsControles).slice(0, 2000));
@@ -761,7 +774,7 @@ rotasDevolucoes.post('/devolucoes/:id/restaurar', exigirLogin, exigirSetor(), as
                impedir. Revisão anterior à 038 não tem os campos: voltam
                nulos/vazios, que é o retrato fiel daquela época. */
             peso_entrada = $30, pesofinal_por = $31, pesofinal_em = $32,
-            obs_notas = $33,
+            obs_notas = $33, obs_expedicao = $34,
             portaria_por = $14, portaria_em = $15,
             faturamento_por = $16, faturamento_em = $17,
             expedicao_por = $18, expedicao_em = $19,
@@ -790,7 +803,10 @@ rotasDevolucoes.post('/devolucoes/:id/restaurar', exigirLogin, exigirSetor(), as
          d.chegou_lacrado ?? null,
          d.peso_entrada ?? null,
          d.pesofinal_por ?? null, d.pesofinal_em ?? null,
-         d.obs_notas ?? '']
+         d.obs_notas ?? '',
+         /* Migração 039: revisão anterior a ela não tem o campo — volta
+            vazio, que é o retrato fiel daquela época. */
+         d.obs_expedicao ?? '']
       );
       if (!upd.rows[0]) {
         const e = new Error('Devolução não encontrada.');

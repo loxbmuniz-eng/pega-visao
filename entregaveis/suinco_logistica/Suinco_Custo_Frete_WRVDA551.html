@@ -372,7 +372,58 @@ Chart.defaults.font.family="'Segoe UI',system-ui,Arial,sans-serif";
 Chart.defaults.borderColor='#2a3444';
 Chart.defaults.animation = {duration:260};
 const G = {};
-function grafico(id, cfg){ if(G[id]) G[id].destroy(); G[id]=new Chart($(id), cfg); return G[id]; }
+/* SEM ANIMAÇÃO — E O MOTIVO NÃO É GOSTO (28/08/2026).
+
+   Erro real que derrubava os painéis: "this._fn is not a function", com
+   pilha em An._stop -> bt.stop -> Cs.cancel. Traduzindo: cada filtro
+   redesenha os oito gráficos, e redesenhar é destruir e recriar. Quando o
+   destroy pega uma ANIMAÇÃO em curso, o Chart.js cancela um quadro que já
+   perdeu a função dele e quebra no meio — o painel fica em branco, que foi
+   exatamente o que o dono viu ao interagir com os gráficos.
+
+   Oito gráficos que se refazem inteiros a cada clique não ganham nada com
+   meio segundo de animação; ganham um erro. Desligada na raiz, para todos
+   os gráficos de uma vez. */
+Chart.defaults.animation = false;
+Chart.defaults.animations = {};
+Chart.defaults.transitions.active.animation.duration = 0;
+Chart.defaults.transitions.resize.animation.duration = 0;
+
+function grafico(id, cfg){
+  const velho = G[id];
+  if(velho){
+    /* Cinto e suspensório: com a animação desligada o destroy não tem o que
+       cancelar, mas um erro aqui não pode impedir o gráfico NOVO de nascer
+       — foi assim que um painel ficou em branco em vez de mostrar o dado
+       filtrado. */
+    try { velho.stop(); } catch(e){}
+    try { velho.destroy(); } catch(e){}
+    G[id] = null;
+  }
+  G[id] = new Chart($(id), cfg);
+  return G[id];
+}
+
+/* CLIQUE NO GRÁFICO NÃO REDESENHA O GRÁFICO POR DENTRO DO PRÓPRIO CLIQUE.
+
+   O defeito, relatado pelo dono: "os gráficos somem quando tento interagir
+   com eles". Clicar numa barra chamava render() na hora, render() chama
+   grafico(), e grafico() faz destroy() — ou seja, o gráfico se destruía no
+   meio do despacho do evento que o Chart.js ainda estava processando. O
+   Chart.js seguia falando com um objeto morto e quebrava com
+   "this._fn is not a function"; a tela ficava com o painel em branco e o
+   filtro nem chegava a ser aplicado.
+
+   O setTimeout devolve o controle ao Chart.js: ele termina o clique, e só
+   então o painel se redesenha inteiro. Uma função para os quatro gráficos
+   clicáveis — o mesmo erro em quatro cópias foi o que tornou isso caro. */
+function cliqueFiltra(aplicar){
+  return (evento, elementos) => {
+    if(!elementos || !elementos.length) return;
+    aplicar(elementos[0].index);
+    setTimeout(render, 0);
+  };
+}
 const eixoR$ = {ticks:{callback:v=>brlC(v)}};
 const tipR$ = c=>c.dataset.label+': '+brl(c.raw);
 
@@ -490,8 +541,8 @@ function gMes(){
     options:{plugins:{legend:{position:'top'},tooltip:{callbacks:{label:tipR$,
         afterBody:c=>meses[c[0].dataIndex]===D.meta.mes_incompleto?['⚠ mês incompleto (corte em 25/08)']:[]}}},
       scales:{x:{stacked:true},y:{stacked:true,...eixoR$}},
-      onClick:(e,el)=>{ if(!el.length) return; const m=meses[el[0].index];
-        F.mesDe=m;F.mesAte=m;$('fMesDe').value=m;$('fMesAte').value=m;render(); }}});
+      onClick:cliqueFiltra(i=>{ const m=meses[i];
+        F.mesDe=m;F.mesAte=m;$('fMesDe').value=m;$('fMesAte').value=m; })}});
 }
 
 /* ---------- 2. composição por item ---------- */
@@ -507,8 +558,7 @@ function gItem(){
     options:{indexAxis:'y',plugins:{legend:{display:false},tooltip:{callbacks:{
         label:c=>brl(c.raw)+'  ('+pct(c.raw/tot)+' do exibido)'}}},
       scales:{x:eixoR$},
-      onClick:(e,el)=>{ if(!el.length) return; F.item=itens[el[0].index][0];
-        $('fItem').value=F.item; render(); }}});
+      onClick:cliqueFiltra(i=>{ F.item=itens[i][0]; $('fItem').value=F.item; })}});
 }
 
 /* ---------- 3. regional: total × custo por carga ---------- */
@@ -531,8 +581,7 @@ function gRegional(){
            regional mais barata fica CORTADA fora do gráfico — some justo
            quem estava indo bem. */
         y1:{position:'right',beginAtZero:true,grid:{drawOnChartArea:false},ticks:{callback:v=>brlC(v)}}},
-      onClick:(e,el)=>{ if(!el.length) return; F.regional=linhas[el[0].index].k;
-        $('fRegional').value=F.regional; render(); }}});
+      onClick:cliqueFiltra(i=>{ F.regional=linhas[i].k; $('fRegional').value=F.regional; })}});
 }
 
 /* ---------- 4. transportadoras + pareto ---------- */
@@ -551,8 +600,7 @@ function gTransp(){
       scales:{x:{ticks:{maxRotation:62,minRotation:45,font:{size:9.5}}},
         y:{position:'left',...eixoR$},
         y1:{position:'right',min:0,max:100,grid:{drawOnChartArea:false},ticks:{callback:v=>v+'%'}}},
-      onClick:(e,el)=>{ if(!el.length) return; F.transp=top[el[0].index][0];
-        $('fTransp').value=F.transp; render(); }}});
+      onClick:cliqueFiltra(i=>{ F.transp=top[i][0]; $('fTransp').value=F.transp; })}});
 }
 
 /* ---------- 5. retrabalho por regional e por transportadora ---------- */

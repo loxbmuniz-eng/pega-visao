@@ -999,6 +999,15 @@ function fundirEstadoRemoto(dados){
       const placa = normalizarPlaca(r.Placa || '');
       if(!placa) return;
       upsertFrota(placa, r.Transportadora || '', r.Tipo_Veiculo || '', {
+        /* SÓ o motorista tem a semântica "undefined preserva" dentro de
+           upsertFrota — e é justamente o que protege este terminal de um
+           servidor antigo, que ainda não devolve o campo, apagar o
+           motorista que já estava cadastrado aqui. Capacidade e UF seguem
+           a regra normal (o que vem do servidor manda), como sempre
+           seguiram; a diferença é que agora elas VÊM. */
+        motorista: r.Motorista !== undefined ? r.Motorista : undefined,
+        capacidadeKg: r.Capacidade_Kg,
+        uf: r.UF || '',
         precisaRevisao: r.Precisa_Revisao === true || r.Precisa_Revisao === 'Sim',
         origem: 'sharepoint'
       });
@@ -2122,24 +2131,41 @@ function indicadoresPorPeriodo(periodoKey){
   return { periodo: periodoKey, totalCargas: concluidas.length, medias };
 }
 
-/* ---------- GRÁFICOS (Painel do Gestor) — filtros combináveis -----------
-   Placa (contém), Transportadora (igual) e Período (mesmas 5 janelas
-   acima) filtram o conjunto de cargas usado por TODOS os gráficos. Setor
-   só faz sentido pra alguns deles — cada gráfico documenta na própria UI
-   se e como aplica o filtro de Setor, em vez de fingir uma granularidade
-   que os dados não têm. Tudo recalculado do zero a cada render, sem
-   cache — sempre reflete o estado atual do DB (mesma sessão/navegador). */
+/* ---------- FILTRO DOS INDICADORES — UMA REGRA SÓ ----------------------
+   Esta função decide QUAIS cargas entram nos indicadores. Quem a usa:
+   as tabelas/cartões da aba (filtrarPorFiltroIndicadores, em app.js) e
+   TODOS os gráficos (temposMediosPorEtapaFiltrado, cargasConcluidasPorDia,
+   distribuicaoStatusAtual). Uma função, dois chamadores — de propósito.
+
+   POR QUE ESTÁ ESCRITO ASSIM (28/08/2026)
+   Antes existiam duas filtragens paralelas: a de cima movia as tabelas, a
+   de baixo movia os gráficos, e as duas nem conversavam. Filtrar uma
+   transportadora mexia nos números e deixava os três gráficos exatamente
+   iguais — o dono viu e relatou: "quando usa o filtro os gráficos somem".
+   Enquanto forem duas funções, elas voltam a divergir. Por isso é uma.
+
+   Chaves aceitas: transportadora (igual), rota (igual), operacao (igual,
+   lê c.praOnde), busca (placa OU número da carga, contém). `setor` NÃO
+   filtra carga: ele escolhe quais BARRAS/status aparecem, e é aplicado
+   dentro de cada gráfico que tem esse conceito.
+
+   Tudo recalculado do zero a cada render, sem cache — sempre reflete o
+   estado atual do DB (mesma sessão/navegador). */
 function aplicarFiltrosCargas(lista, filtros){
   filtros = filtros || {};
-  let r = lista;
-  if(filtros.placa){
-    const p = normalizarPlaca(filtros.placa);
-    r = r.filter(c => normalizarPlaca(c.placa).includes(p));
-  }
-  if(filtros.transportadora){
-    r = r.filter(c => c.transportadora === filtros.transportadora);
-  }
-  return r;
+  const busca = String(filtros.busca || '').trim().toLowerCase();
+  const placa = busca ? normalizarPlaca(filtros.busca) : '';
+  return lista.filter(c=>{
+    if(filtros.transportadora && c.transportadora !== filtros.transportadora) return false;
+    if(filtros.rota && (c.rota||'') !== filtros.rota) return false;
+    if(filtros.operacao && (c.praOnde||'') !== filtros.operacao) return false;
+    if(busca){
+      const bate = normalizarPlaca(c.placa).includes(placa)
+                || String(c.numeroCarga||'').toLowerCase().includes(busca);
+      if(!bate) return false;
+    }
+    return true;
+  });
 }
 function cargasConcluidasNoPeriodoFiltrado(periodoKey, filtros){
   return aplicarFiltrosCargas(cargasConcluidasNoPeriodo(periodoKey), filtros);

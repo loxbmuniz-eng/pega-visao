@@ -877,10 +877,26 @@ const SuincoSharePoint = (function () {
     if (r.completo) {
       try {
         const frota = await chamar('/api/frota');
+        /* O MOTORISTA VINHA E ERA JOGADO FORA (28/08/2026).
+
+           O servidor devolve motorista, capacidade e UF nesta rota desde
+           que o campo existe. Este mapeamento copiava só quatro chaves, e
+           as outras morriam aqui — então o autopreenchimento "digitou a
+           placa, veio o motorista" só funcionava para quem tinha
+           cadastrado aquela placa NESTE navegador. Para todo mundo que
+           recebeu a frota do servidor (ou seja, todo mundo, todo dia), o
+           campo chegava vazio.
+
+           Descoberto ao investigar o relato do dono sobre a Montagem do
+           Dia: "as placas que estão neles não estão puxando direto as
+           infos da placa". A tela estava certa; o dado é que não chegava. */
         dados.frota = (frota || []).map((v) => ({
           Placa: v.placa,
           Transportadora: v.transportadora,
           Tipo_Veiculo: v.tipoVeiculo,
+          Motorista: v.motorista,
+          Capacidade_Kg: v.capacidadeKg,
+          UF: v.uf,
           Precisa_Revisao: v.precisaRevisao,
         }));
       } catch (e) {

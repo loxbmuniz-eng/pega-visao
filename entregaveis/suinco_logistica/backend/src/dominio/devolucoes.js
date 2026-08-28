@@ -190,6 +190,7 @@ export function devolucaoParaPainel(linha, itens = [], divergencias = [], rotas 
     /* O recado da Central de Notas para quem vem depois — a outra metade do
        que o dono pediu para as duas últimas etapas: "observações para que
        eles possam comunicar com a próxima etapa". */
+    obsExpedicao: linha.obs_expedicao || '',
     obsNotas: linha.obs_notas || '',
     /* RDC/Romaneio (18/08/2026): os Controles Internos informam na
        destinação se o romaneio foi gerado. Três estados — null (ainda não
@@ -312,6 +313,7 @@ export function camposCabecalho(corpo) {
      rota da destinação; agora também é campo de cabeçalho, porque a etapa
      dos Controles Internos passou a ser só confirmar e deixar recado. */
   if (corpo.obsControles !== undefined) m.obs_controles = texto(corpo.obsControles, 2000);
+  if (corpo.obsExpedicao !== undefined) m.obs_expedicao = texto(corpo.obsExpedicao, 2000);
   if (corpo.obsNotas !== undefined) m.obs_notas = texto(corpo.obsNotas, 2000);
   // RDC/Romaneio — campo dos Controles Internos (18/08/2026). Vazio/null
   // volta a "não informado"; qualquer outra coisa vira sim/não de verdade.

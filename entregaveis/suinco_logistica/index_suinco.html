@@ -188,6 +188,28 @@
   <div class="tab-page" id="tab-programacao">
     <div class="funcao-aba" data-tab="programacao"></div>
     <div class="card">
+      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-fila"/></svg> Fila de Programados</div>
+      <div class="card-sub">Só as cargas programadas hoje. As de outros dias seguem na Torre de Controle.</div>
+      <div class="gap8" style="margin-bottom:12px">
+        <button class="btn btn-sec btn-sm" onclick="reordenarPorSequenciaUI()">↕️ Reordenar por Sequência</button>
+      </div>
+      <div class="aviso-inline no-print" id="prog-fila-outros-dias" hidden></div>
+      <div class="table-wrap">
+        <table>
+          <!-- MESMAS COLUNAS DA TORRE (28/08/2026), a pedido do dono: "na
+               programação eu queria que ficasse igual à torre de controle".
+               Sete colunas na linha e o resto ao clicar — quem varre a fila
+               do dia procura sequência, número e caminhão; o resto é
+               preenchimento, e preenchimento tem lugar próprio. Veículo
+               reúne placa, transportadora e tipo, como lá. -->
+          <thead><tr><th>Seq.</th><th>Nº Carga</th><th>Veículo</th><th>Motorista</th><th>Rota</th><th>Peso (kg)</th><th>Palet.</th><th>Tipo de Operação</th><th class="no-print">Ação</th></tr></thead>
+          <tbody id="prog-fila-tbody"></tbody>
+        </table>
+      </div>
+      <div class="empty-state" id="prog-fila-empty" data-icone="📋" hidden>Nenhuma carga programada aguardando chegada.</div>
+    </div>
+
+    <div class="card">
       <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-programacao"/></svg> Nova Carga Programada</div>
       <div class="card-sub">Digite a placa — Transportadora e Tipo de Veículo são preenchidos automaticamente se a placa estiver cadastrada em Cadastros → Frota. <strong>Ainda não contratou o caminhão? Deixe a placa em branco</strong> — a carga fica aqui na Programação e entra na Torre sozinha quando a placa for preenchida. Placa digitada precisa estar cadastrada na Frota.</div>
       <div class="form-row">
@@ -384,27 +406,6 @@
          inteiro. O Encerramento do Ciclo desceu para o fim da aba — é ação
          irreversível e de uma vez por dia, não merece disputar espaço com a
          fila no alto da tela. -->
-    <div class="card">
-      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-fila"/></svg> Fila de Programados</div>
-      <div class="card-sub">Só as cargas programadas hoje. As de outros dias seguem na Torre de Controle.</div>
-      <div class="gap8" style="margin-bottom:12px">
-        <button class="btn btn-sec btn-sm" onclick="reordenarPorSequenciaUI()">↕️ Reordenar por Sequência</button>
-      </div>
-      <div class="aviso-inline no-print" id="prog-fila-outros-dias" hidden></div>
-      <div class="table-wrap">
-        <table>
-          <!-- MESMAS COLUNAS DA TORRE (28/08/2026), a pedido do dono: "na
-               programação eu queria que ficasse igual à torre de controle".
-               Sete colunas na linha e o resto ao clicar — quem varre a fila
-               do dia procura sequência, número e caminhão; o resto é
-               preenchimento, e preenchimento tem lugar próprio. Veículo
-               reúne placa, transportadora e tipo, como lá. -->
-          <thead><tr><th>Seq.</th><th>Nº Carga</th><th>Veículo</th><th>Motorista</th><th>Rota</th><th>Peso (kg)</th><th>Palet.</th><th>Tipo de Operação</th><th class="no-print">Ação</th></tr></thead>
-          <tbody id="prog-fila-tbody"></tbody>
-        </table>
-      </div>
-      <div class="empty-state" id="prog-fila-empty" data-icone="📋" hidden>Nenhuma carga programada aguardando chegada.</div>
-    </div>
 
     <div class="card">
       <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-espera"/></svg> Aguardando Carga <span id="prog-aguardando-count" class="pill-count" hidden>0</span></div>
@@ -875,6 +876,17 @@
           <select id="ind-f-operacao" onchange="aplicarFiltroIndicadores()"><option value="">Todos</option></select>
         </div>
         <div class="form-group">
+          <label>Período</label>
+          <select id="ind-f-periodo" onchange="aplicarFiltroIndicadores()">
+            <option value="6h">Últimas 6h</option>
+            <option value="12h">Últimas 12h</option>
+            <option value="hoje">Hoje</option>
+            <option value="semana">Semana (7d)</option>
+            <option value="mes">Mês</option>
+            <option value="" selected>Todo o histórico</option>
+          </select>
+        </div>
+        <div class="form-group">
           <label>Placa ou Nº de carga</label>
           <input type="text" id="ind-f-busca" placeholder="Ex: ABC1D23" oninput="aplicarFiltroIndicadores()">
         </div>
@@ -951,53 +963,40 @@
     </div>
 
     <div class="card">
-      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-indicadores"/></svg> Gráficos — filtros combináveis</div>
+      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-indicadores"/></svg> Gráficos</div>
       <div class="card-sub">
-        Filtre por Placa, Transportadora, Setor e Período — os 3 gráficos abaixo reagem juntos ao filtro, sem precisar
-        recarregar a página. Atualiza a cada ação registrada por <strong>qualquer setor</strong> — os dados vêm do
-        servidor, não deste navegador.
-      </div>
-      <div class="form-row" style="align-items:flex-end">
-        <div class="form-group"><label>Placa <span class="hint">(contém)</span></label><input type="text" id="graf-filtro-placa" placeholder="Ex: ABC1D23" oninput="renderGraficosIndicadores()"></div>
-        <div class="form-group">
-          <label>Transportadora</label>
-          <select id="graf-filtro-transportadora" onchange="renderGraficosIndicadores()"><option value="">Todas</option></select>
-        </div>
-        <div class="form-group">
-          <label>Setor <span class="hint">(só afeta onde faz sentido — ver legendas)</span></label>
-          <select id="graf-filtro-setor" onchange="renderGraficosIndicadores()">
-            <option value="">Todos</option>
-            <option>Logística</option><option>Portaria</option><option>Expedição</option><option>Faturamento</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>Período</label>
-          <select id="graf-filtro-periodo" onchange="renderGraficosIndicadores()">
-            <option value="6h">Últimas 6h</option>
-            <option value="12h">Últimas 12h</option>
-            <option value="hoje" selected>Hoje</option>
-            <option value="semana">Semana (7d)</option>
-            <option value="mes">Mês</option>
-          </select>
-        </div>
-        <div class="form-group" style="flex:0"><button class="btn btn-sec btn-sm" onclick="limparFiltrosGraficos()">Limpar filtros</button></div>
+        <!-- UM FILTRO SÓ PARA A ABA INTEIRA (28/08/2026).
+
+             Esta aba tinha DOIS conjuntos de filtros independentes: o de
+             cima movia cartões e tabelas, este movia só os gráficos. Medido:
+             filtrar uma transportadora lá em cima não mudava UM PIXEL dos
+             três gráficos (3.321 / 1.057 / 15.590 antes e depois). E as
+             listas discordavam — 7 transportadoras num filtro, 1 no outro,
+             porque cada um olhava um universo de cargas diferente.
+
+             Duas verdades sobre o mesmo dia na mesma tela, e ninguém tinha
+             como perceber olhando. Agora existe um filtro só, lá em cima,
+             e estes gráficos leem dele. -->
+        Os três gráficos obedecem ao <strong>filtro no topo da aba</strong> — o mesmo dos cartões e das tabelas.
+        Para filtrar por uma transportadora, rota ou operação sem procurar na lista, clique nela nas
+        tabelas de <strong>Gargalos</strong> logo abaixo: a aba inteira se recorta naquele item.
       </div>
       <div class="grafico-grid">
         <div class="grafico-box">
           <div class="grafico-titulo">Tempo médio por etapa (min)</div>
           <canvas id="grafico-barras" height="160"></canvas>
-          <div class="card-sub grafico-legenda" id="grafico-barras-legenda">Respeita Placa/Transportadora/Período. Setor aqui esconde/mostra barras — cada etapa tem um setor "dono" fixo (Expedição, Faturamento ou Portaria).</div>
+          <div class="card-sub grafico-legenda" id="grafico-barras-legenda">Só as cargas que sobraram do filtro do topo, dentro do período escolhido.</div>
         </div>
         <div class="grafico-box">
           <div class="grafico-titulo">Cargas concluídas por dia</div>
           <canvas id="grafico-linha" height="160"></canvas>
-          <div class="card-sub grafico-legenda">Respeita Placa/Transportadora/Período. Setor não se aplica aqui (toda carga concluída passou pela Portaria).</div>
+          <div class="card-sub grafico-legenda">Um ponto por dia do período escolhido, já com o filtro do topo aplicado.</div>
         </div>
         <div class="grafico-box">
           <div class="grafico-titulo">Distribuição por status atual (cargas em aberto)</div>
           <canvas id="grafico-pizza" height="160"></canvas>
           <div id="grafico-pizza-legenda" class="grafico-legenda-lista"></div>
-          <div class="card-sub grafico-legenda">Foto de agora — não depende do período. Respeita Placa/Transportadora/Setor (Setor filtra pra só os status daquele setor).</div>
+          <div class="card-sub grafico-legenda">Foto de agora: cargas ainda no pátio. Respeita o filtro do topo, mas <strong>não</strong> o período — quem está no pátio está no pátio.</div>
         </div>
       </div>
     </div>
@@ -1419,6 +1418,11 @@
 </div>
 
 <datalist id="lista-transportadoras"></datalist>
+<!-- Placas da Frota, para o campo de placa da Montagem do Dia sugerir em vez
+     de exigir memória. A trava continua sendo do servidor (placa fora da
+     Frota é recusada com a frase que ensina onde cadastrar); a lista só
+     evita a digitação às cegas. -->
+<datalist id="lista-placas-frota"></datalist>
 
 <!-- ===================== MODAIS ===================== -->
 <!-- Login. Duas formas, e qual delas aparece NÃO é escolha do usuário: é o
