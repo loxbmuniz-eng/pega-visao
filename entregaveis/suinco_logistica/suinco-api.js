@@ -646,6 +646,32 @@ const SuincoSharePoint = (function () {
     }
   }
 
+  /* SAÍDA DO PÁTIO — PELA ROTA PRÓPRIA DO SERVIDOR (28/08/2026).
+
+     A rota `POST /api/portaria/saida` existe desde 20/08 e estava sendo
+     chamada por NINGUÉM: o painel registrava a saída localmente e deixava
+     a sincronia comum levar o status depois. Foi assim que a placa PUX2971
+     saiu às 06:38 com o porteiro vendo "Seguiu Viagem" na tela e o
+     servidor sem saber de nada — a Bruna, em outro terminal, continuava
+     vendo o caminhão no pátio, e o Alysson teve que dar a saída de novo às
+     08:59.
+
+     Por que a rota importa, e não é preciosismo: ela resolve a placa
+     INTEIRA dentro de UMA transação, lendo o estado real do banco com
+     FOR UPDATE. Quem decide o que sai é o servidor, com a lista dele — não
+     o que este navegador tinha em memória, que pode estar minutos atrasado.
+
+     NÃO ENTRA NA FILA OFFLINE, pelo mesmo motivo de `corrigirEtapa`: uma
+     saída que sobe sozinha meia hora depois libera um caminhão que já foi
+     embora, ou pior, libera outro que entrou nesse meio-tempo. Sem rede, o
+     erro sobe para a tela e o porteiro fica sabendo na hora. */
+  async function portariaSaida(placa, lacres) {
+    return chamar('/api/portaria/saida', {
+      metodo: 'POST',
+      corpo: { placa, lacres: Array.isArray(lacres) ? lacres : [lacres].filter(Boolean) },
+    });
+  }
+
   /* Correções da Administração (19/08/2026).
 
      Nunca entram na fila offline, de propósito: correção é ação consciente
@@ -1640,6 +1666,7 @@ const SuincoSharePoint = (function () {
     arquivarDia, fecharPrograma,
     gerarRelatorioPdf, listarProgramacoes,
     listarRevisoes, restaurarRevisao,
+    portariaSaida,
     devolucoes: devolucoesApi, aoAtualizarDevolucao,
     avisos: avisosApi,
   };

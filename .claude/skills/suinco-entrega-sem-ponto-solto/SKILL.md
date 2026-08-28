@@ -170,7 +170,45 @@ verde onde não há prova.
 - **Playwright**: `p.chromium.launch(executable_path='/opt/pw-browsers/chromium')`.
   Sem isso, "Executable doesn't exist".
 
-## 10. Antes de mandar a mensagem — a conferência final
+## 10. Bateria começada é bateria terminada
+
+Regra do dono, 28/08/2026:
+
+> "não existe mais isso de não finalizar uma bateria e encerrar, e ter que
+> começar de novo. Toda bateria precisa ser cumprida e qualquer issue você
+> vai focar e resolver antes da bateria finalizar."
+
+O que isso proíbe, na prática:
+
+- **matar o portão no meio** para arrumar qualquer coisa. Se apareceu
+  vermelho enquanto ele roda, trabalha-se o vermelho EM PARALELO e a
+  bateria segue até o fim;
+- **commitar durante a corrida.** O portão já passou pela checagem de
+  árvore limpa; arquivo commitado depois entra no merge sem ter sido
+  testado. Aconteceu em 28/08 — um teste novo foi publicado sem passar pela
+  bateria;
+- **deixar o dono esperando sem número.** Quantas suítes rodaram, quantas
+  faltam, quantos vermelhos até agora. "Está rodando" não é resposta.
+
+E o que exige: **suíte que reprova é re-executada sozinha, com banco
+limpo, antes de a bateria declarar falha**. "Passa sozinha, falha no
+portão" não pode ser conclusão do dono — é trabalho meu.
+
+## 11. Comando só quando estiver pronto
+
+Regra do dono, 28/08/2026, depois de rodar `atualizar.sh` cedo demais e
+trazer de volta o mesmo commit:
+
+> "para de me mandar rodar atualizar sem ter finalizado o processo, você me
+> confunde"
+
+Comando na tela é convite para executar. Mandar comando junto com "mas
+espera" não funciona: o comando fica, o aviso some.
+
+**Nenhum comando vai para ele antes de existir o que executar.** Quando
+existir, vai UMA mensagem, com o comando e nada mais.
+
+## 12. Antes de mandar a mensagem — a conferência final
 
 Nenhuma entrega sai sem estas seis:
 

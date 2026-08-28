@@ -9,13 +9,30 @@
    reunião com o gestor). Os setores da fase 2 já estão nas listas de cada
    transição: quando existirem operadores desses setores, nada aqui muda. */
 
+/* A BALANÇA É USADA DUAS VEZES (27/08/2026).
+
+   O dono, descrevendo o caminho real: "caminhão chega com devoluções, pesa
+   na balança, vai pra expedição, descarrega, depois volta pra balança pra
+   pesar vazio (...) faturamento colocar o peso final depois que
+   descarregou".
+
+   Até aqui a esteira tinha UMA passagem pelo Faturamento, antes da
+   Expedição, e um campo de peso só. Faltava a segunda ida à balança — que
+   não é detalhe: é a diferença entre as duas pesagens que diz quanto
+   voltou de VERDADE, e é essa conta que se compara com a soma do que foi
+   lançado no checklist. Sem ela, divergência entre o lançado e o que
+   desceu do caminhão não aparece em lugar nenhum.
+
+   As duas passagens são do Faturamento e têm assinaturas separadas: são
+   dois momentos e duas responsabilidades. */
 export const DEV_STATUS_FLOW = [
   'Lançada',                   // 1 — Logística cria o checklist
   'Recebida na Portaria',      // 2 — porteiro imputa lacre(s) e nº da carga
-  'Conferida no Faturamento',  // 3 — balança (peso final é opcional)
+  'Conferida no Faturamento',  // 3 — balança, caminhão CHEIO (peso de entrada)
   'Descarga Conferida',        // 4 — Expedição confere item a item
-  'Destinada',                 // 5 — Controles Internos: Estoque/Descarte/Reprocesso
-  'Nota Finalizada',           // 6 — Central de Notas encerra a NF
+  'Peso Final Registrado',     // 5 — balança de novo, caminhão VAZIO (peso final)
+  'Destinada',                 // 6 — Controles Internos confirmam e deixam recado
+  'Nota Finalizada',           // 7 — Central de Notas encerra a NF
 ];
 
 export const DEV_STATUS_INICIAL = DEV_STATUS_FLOW[0];
@@ -30,7 +47,8 @@ const TRANSICOES_DEV = [
   { de: 'Lançada',                  para: 'Recebida na Portaria',     setores: ['Portaria', 'Logística'],         carimbo: 'portaria' },
   { de: 'Recebida na Portaria',     para: 'Conferida no Faturamento', setores: ['Faturamento', 'Logística'],      carimbo: 'faturamento' },
   { de: 'Conferida no Faturamento', para: 'Descarga Conferida',       setores: ['Expedição', 'Logística'],        carimbo: 'expedicao' },
-  { de: 'Descarga Conferida',       para: 'Destinada',                setores: ['Controles Internos', 'Logística'], carimbo: 'controles' },
+  { de: 'Descarga Conferida',       para: 'Peso Final Registrado',    setores: ['Faturamento', 'Logística'],      carimbo: 'pesofinal' },
+  { de: 'Peso Final Registrado',    para: 'Destinada',                setores: ['Controles Internos', 'Logística'], carimbo: 'controles' },
   { de: 'Destinada',                para: 'Nota Finalizada',          setores: ['Central de Notas', 'Logística'], carimbo: 'notas' },
 ];
 
@@ -63,9 +81,14 @@ export function validarTransicaoDevolucao(statusAtual, statusNovo, setor, tipo) 
   /* SOBRA (18/08/2026): ciclo curto — Portaria OK, Faturamento OK,
      Expedição OK, acabou. Não passa por Controles Internos nem Central
      de Notas. */
-  if (tipo === 'SOBRA' && ['Destinada', 'Nota Finalizada'].includes(statusNovo)) {
+  /* A SOBRA NÃO GANHA A SEGUNDA PESAGEM: ela encerra no OK da Expedição,
+     e o caminhão da sobra não volta à balança. Acrescentar a etapa aqui
+     seria pedir um peso que ninguém tem para dar. */
+  if (tipo === 'SOBRA'
+      && ['Peso Final Registrado', 'Destinada', 'Nota Finalizada'].includes(statusNovo)) {
     throw new ErroDeFluxoDevolucao(
-      'Sobra encerra no OK da Expedição — não passa por Controles Internos nem Central de Notas.',
+      'Sobra encerra no OK da Expedição — não volta à balança nem passa por '
+      + 'Controles Internos e Central de Notas.',
       'ETAPA_NAO_EXISTE_PARA_SOBRA'
     );
   }
@@ -147,11 +170,27 @@ export function devolucaoParaPainel(linha, itens = [], divergencias = [], rotas 
     // Terceiro lacre (migração 025): o caminhão pode sair — e chegar — com
     // até três. Ver o comentário da migração.
     lacre3: linha.lacre3 || '',
+    /* AS DUAS PESAGENS E A CONTA (27/08/2026). `pesoEntrada` é o caminhão
+       cheio na chegada; `pesoFinal`, o mesmo caminhão vazio depois da
+       descarga. `pesoDevolvido` é a diferença — calculada aqui, no
+       servidor, para que painel, relatório e BI leiam o MESMO número: a
+       mesma conta escrita em três lugares vira três respostas na primeira
+       correção feita com pressa. Falta uma das pontas, a conta não existe
+       (null), e null não é zero. */
+    pesoEntrada: linha.peso_entrada === null || linha.peso_entrada === undefined
+      ? null : Number(linha.peso_entrada),
     pesoFinal: linha.peso_final === null ? null : Number(linha.peso_final),
+    pesoDevolvido: (linha.peso_entrada === null || linha.peso_entrada === undefined
+                    || linha.peso_final === null || linha.peso_final === undefined)
+      ? null : Number(linha.peso_entrada) - Number(linha.peso_final),
     status: linha.status,
     criadaPor: linha.criada_por,
     criadaSetor: linha.criada_setor,
     obsControles: linha.obs_controles,
+    /* O recado da Central de Notas para quem vem depois — a outra metade do
+       que o dono pediu para as duas últimas etapas: "observações para que
+       eles possam comunicar com a próxima etapa". */
+    obsNotas: linha.obs_notas || '',
     /* RDC/Romaneio (18/08/2026): os Controles Internos informam na
        destinação se o romaneio foi gerado. Três estados — null (ainda não
        informado), true (gerou) e false (não gerou) — porque "não informado"
@@ -167,6 +206,7 @@ export function devolucaoParaPainel(linha, itens = [], divergencias = [], rotas 
       portaria:    linha.portaria_em    ? { por: linha.portaria_por,    em: linha.portaria_em }    : null,
       faturamento: linha.faturamento_em ? { por: linha.faturamento_por, em: linha.faturamento_em } : null,
       expedicao:   linha.expedicao_em   ? { por: linha.expedicao_por,   em: linha.expedicao_em }   : null,
+      pesofinal:   linha.pesofinal_em   ? { por: linha.pesofinal_por,   em: linha.pesofinal_em }   : null,
       controles:   linha.controles_em   ? { por: linha.controles_por,   em: linha.controles_em }   : null,
       notas:       linha.notas_em       ? { por: linha.notas_por,       em: linha.notas_em }       : null,
     },
@@ -254,7 +294,11 @@ export function camposCabecalho(corpo) {
   if (corpo.lacre2 !== undefined) m.lacre2 = texto(corpo.lacre2, 50);
   if (corpo.lacre3 !== undefined) m.lacre3 = texto(corpo.lacre3, 50);
   if (corpo.cargaNumero !== undefined) m.carga_numero = texto(corpo.cargaNumero, 50);
-  // Peso final editável no cabeçalho — campo do Faturamento (18/08/2026).
+  // As duas pesagens, as duas do Faturamento (18/08/2026 e 27/08/2026).
+  if (corpo.pesoEntrada !== undefined) {
+    const n = numeroOuNull(corpo.pesoEntrada);
+    m.peso_entrada = n === null ? null : Math.max(0, n);
+  }
   if (corpo.pesoFinal !== undefined) {
     const n = numeroOuNull(corpo.pesoFinal);
     m.peso_final = n === null ? null : Math.max(0, n);
@@ -264,6 +308,11 @@ export function camposCabecalho(corpo) {
   if (corpo.placa !== undefined) m.placa = texto(corpo.placa, 10).toUpperCase().replace(/[^A-Z0-9]/g, '');
   if (corpo.motorista !== undefined) m.motorista = texto(corpo.motorista, 200);
   if (corpo.observacoes !== undefined) m.observacoes = texto(corpo.observacoes, 2000);
+  /* Os recados das duas últimas etapas. `obsControles` já era gravado pela
+     rota da destinação; agora também é campo de cabeçalho, porque a etapa
+     dos Controles Internos passou a ser só confirmar e deixar recado. */
+  if (corpo.obsControles !== undefined) m.obs_controles = texto(corpo.obsControles, 2000);
+  if (corpo.obsNotas !== undefined) m.obs_notas = texto(corpo.obsNotas, 2000);
   // RDC/Romaneio — campo dos Controles Internos (18/08/2026). Vazio/null
   // volta a "não informado"; qualquer outra coisa vira sim/não de verdade.
   // "Chegou lacrado?" — informado pela PORTARIA no recebimento. Vazio

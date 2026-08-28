@@ -290,7 +290,11 @@ async def main():
         ck('Portaria não vê o formulário de criação', fila['criarOculto'])
         ck('aviso "é a sua vez" aparece para a Portaria', fila['aviso'])
         ck('checklist marcado com SUA VEZ', fila['chip'])
-        ck('esteira com as 6 etapas', fila['pipeline'] == 6, str(fila['pipeline']))
+        # SETE desde 27/08/2026: a balança passou a ser usada duas vezes —
+        # o caminhão pesa CHEIO na chegada e VAZIO depois da descarga —, e a
+        # segunda pesagem virou etapa própria, entre Expedição e Controles
+        # Internos. A regra mudou de propósito; o número aqui acompanha.
+        ck('esteira com as 7 etapas', fila['pipeline'] == 7, str(fila['pipeline']))
 
         await pgP2.evaluate("(id) => { _devExpandida = id; renderListaDevolucoes(); }", novo)
         await pgP2.wait_for_timeout(400)

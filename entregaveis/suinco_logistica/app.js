@@ -4092,39 +4092,163 @@ async function acaoChegadaUI(){
   input.focus();
   renderAll();
 }
-function acaoSaidaUI(){
+/* A SAÍDA DO PÁTIO — REESCRITA DEPOIS DO INCIDENTE DE 28/08/2026.
+
+   O QUE ACONTECEU. A Portaria deu saída na placa PUX2971 às 06:38. No
+   terminal do porteiro apareceu "Seguiu Viagem", com beep de confirmação, e
+   no Histórico dele a movimentação estava lá. A Bruna, em OUTRO terminal,
+   continuou vendo o caminhão no pátio; ligou para o Alysson, que às 08:59
+   deu a saída de novo — e o servidor aceitou, porque para ele a carga
+   nunca tinha saído. Duas horas e meia com o pátio dizendo uma coisa e o
+   painel de cada um dizendo outra.
+
+   POR QUE ACONTECEU — três defeitos meus, empilhados:
+
+   1. A rota `POST /api/portaria/saida` existe no servidor desde 20/08 e
+      NINGUÉM a chamava. A saída era escrita no navegador e entregue à
+      sincronia comum. A etapa que solta o caminhão do pátio era a única
+      que não falava direto com quem manda.
+   2. `acaoChegadaUI` puxa o servidor ANTES de agir desde 19/08, justamente
+      porque lista velha produz decisão errada. A saída, que é o espelho
+      dela, nunca ganhou o mesmo cuidado. Uma função, dois chamadores — e
+      aqui eram dois caminhos com um cuidado só.
+   3. A confirmação era otimista: o beep e o "saída registrada" tocavam
+      antes de qualquer resposta do servidor. Sem rede, ou com o terminal
+      em modo local, a fila offline engolia tudo em silêncio e o porteiro
+      liberava o caminhão achando que estava tudo gravado.
+
+   COMO FICA. Quem decide o que saiu é o SERVIDOR, dentro de uma transação,
+   lendo o estado real da placa. A tela só repete o que ele respondeu. Se
+   ele não responder, o porteiro é avisado ALTO e a placa fica marcada como
+   não confirmada até alguém resolver — porque caminhão liberado com saída
+   não gravada é o começo da carga fantasma do dia seguinte. */
+async function acaoSaidaUI(){
   const input = document.getElementById('portaria-placa');
-  const placa = input.value;
-  if(!normalizarPlaca(placa)){ notify('Informe a placa.','warn'); return; }
-  // Até três lacres na saída (20/08/2026) — ver o comentário em
-  // registrarSaidaPortaria (data.js).
+  const placa = normalizarPlaca(input.value);
+  if(!placa){ notify('Informe a placa.','warn'); return; }
   const lerLacre = (id) => {
     const el = document.getElementById(id);
     return el ? String(el.value || '').trim() : '';
   };
   const lacres = ['portaria-lacre', 'portaria-lacre-2', 'portaria-lacre-3']
     .map(lerLacre).filter(Boolean);
-  const lacre = lacres.join(' · ');
-  const r = registrarSaidaPortaria(placa, nomeOperadorAtual(), lacres);
-  if(r.liberadas.length){
-    ['portaria-lacre', 'portaria-lacre-2', 'portaria-lacre-3'].forEach((id) => {
-      const el = document.getElementById(id);
-      if(el) el.value = '';
-    });
+  const limparLacres = () => ['portaria-lacre', 'portaria-lacre-2', 'portaria-lacre-3']
+    .forEach((id) => { const el = document.getElementById(id); if(el) el.value = ''; });
+
+  const comServidor = typeof SuincoSharePoint !== 'undefined'
+    && SuincoSharePoint.estaConfigurado && SuincoSharePoint.estaConfigurado()
+    && typeof SuincoSharePoint.portariaSaida === 'function';
+
+  /* SEM SERVIDOR NÃO EXISTE SAÍDA CONFIRMADA, e a tela precisa dizer isso
+     com todas as letras. O caminho local continua existindo — o porteiro
+     está com o caminhão na frente e não pode ficar parado —, mas ele sai
+     daqui SABENDO que a baixa ainda não é oficial. */
+  if(!comServidor){
+    const r = registrarSaidaPortaria(placa, nomeOperadorAtual(), lacres);
+    if(r.liberadas.length) limparLacres();
+    marcarSaidaNaoConfirmada(placa, r.liberadas.length,
+      'este terminal está sem servidor');
+    avisarPendentesDaSaida(placa, r);
+    input.value = ''; input.focus(); renderAll();
+    return;
   }
-  if(r.liberadas.length){ notifyGravacao(`${normalizarPlaca(placa)}: saída registrada para ${r.liberadas.length} carga(s) — Seguiu Viagem${String(lacre||'').trim() ? `, lacre ${String(lacre).trim()}` : ''}.`); tocarBeepConfirmacao(); }
-  /* O lacre da saída é INFORMAÇÃO, não trava (decisão de 18/08/2026): a
-     carga segue viagem do mesmo jeito. Mas sair sem número registrado é o
-     tipo de coisa que só aparece quando alguém procura depois — então o
-     painel avisa na hora, com o registro já gravado. */
-  if(r.liberadas.length && !lacres.length){
-    notify(`${normalizarPlaca(placa)} saiu SEM número de lacre informado. A saída está registrada; informe o lacre no campo ao lado da placa nas próximas.`, 'warn', 7000);
+
+  /* Lista velha decide errado: uma leitura antes do clique é o que separa
+     "o servidor não sabia da segunda carga" de "o porteiro foi avisado". */
+  try{ await SuincoSharePoint.sincronizarAgora(); }
+  catch(e){ /* sem rede agora; o POST abaixo é quem vai dizer a verdade */ }
+
+  let resposta;
+  try{
+    resposta = await comOverlaySync('Registrando a saída no servidor…',
+      () => SuincoSharePoint.portariaSaida(placa, lacres));
+  }catch(e){
+    /* A saída NÃO foi gravada. Registrar localmente aqui só recriaria o
+       defeito de hoje — tela verde, servidor mudo. O que se faz é gritar. */
+    notify(`${placa}: a saída NÃO foi registrada no servidor `
+      + `(${e && e.message ? e.message : 'sem resposta'}). `
+      + 'NÃO libere o caminhão sem registrar — tente de novo, e se não passar, '
+      + 'avise a Logística agora.', 'danger', 20000);
+    tocarAlertaAlteracao();
+    marcarSaidaNaoConfirmada(placa, 0, e && e.message ? e.message : 'sem resposta do servidor');
+    input.focus(); input.select();
+    return;
   }
-  if(r.pendentes.length) notify(`${normalizarPlaca(placa)}: ${r.pendentes.length} carga(s) ainda não liberada(s) para saída (status atual: ${r.pendentes.map(c=>c.status).join(', ')}).`, 'warn');
-  if(!r.liberadas.length && !r.pendentes.length) notify(`Nenhuma carga em aberto encontrada para a placa ${normalizarPlaca(placa)}.`, 'warn');
+
+  /* A verdade é a do servidor: o painel adota a resposta dele em vez de
+     confiar no que tinha em memória. */
+  await SuincoSharePoint.sincronizarAgora().catch(()=>{});
+  const liberadas = (resposta && resposta.liberadas) || [];
+  const pendentes = (resposta && resposta.pendentes) || [];
+  limparSaidaNaoConfirmada(placa);
+
+  if(liberadas.length){
+    limparLacres();
+    notifyGravacao(`${placa}: saída CONFIRMADA pelo servidor para ${liberadas.length} carga(s) — `
+      + `Seguiu Viagem${lacres.length ? `, lacre ${lacres.join(' · ')}` : ''}.`);
+    tocarBeepConfirmacao();
+  }
+  if(liberadas.length && !lacres.length){
+    notify(`${placa} saiu SEM número de lacre informado. A saída está registrada; `
+      + 'informe o lacre no campo ao lado da placa nas próximas.', 'warn', 7000);
+  }
+  avisarPendentesDaSaida(placa, { liberadas, pendentes });
   input.value = '';
   input.focus();
   renderAll();
+}
+
+/* O caminhão sai UMA vez, mas a placa pode ter mais de uma carga. Carga que
+   fica para trás não pode ser um aviso que some em cinco segundos: ela é o
+   motivo pelo qual outro setor vai continuar vendo o caminhão no pátio —
+   foi o que a Bruna viu hoje. Então fica escrito na tela da Portaria. */
+function avisarPendentesDaSaida(placa, r){
+  const pendentes = r.pendentes || [];
+  if(!pendentes.length && !r.liberadas.length){
+    notify(`Nenhuma carga em aberto encontrada para a placa ${placa}.`, 'warn', 9000);
+  }
+  const faixa = document.getElementById('portaria-saida-aviso');
+  if(!faixa) return;
+  /* NÃO APAGA UM AVISO DE PERIGO. Os dois avisos moram na mesma faixa, e a
+     ordem em que são escritos não pode decidir qual sobrevive: "a saída não
+     foi confirmada" é mais grave que "sobrou carga" e não pode ser
+     silenciado por não haver pendência. Este defeito apareceu no primeiro
+     teste — o modo local levantava a faixa e ela era apagada uma linha
+     depois. */
+  if(faixa.className.indexOf('aviso-faixa-perigo') >= 0 && !faixa.hidden) return;
+  if(!pendentes.length){ faixa.hidden = true; faixa.innerHTML = ''; return; }
+  const lista = pendentes.map(c => `${esc(c.numeroCarga || c.numero_carga || c.id || '—')} `
+    + `(${esc(c.status || c.status_atual || '—')})`).join(', ');
+  faixa.hidden = false;
+  faixa.className = 'aviso-faixa aviso-faixa-warn';
+  faixa.innerHTML = `<strong>${esc(placa)}: ${pendentes.length} carga(s) NÃO saíram</strong> — `
+    + `${lista}. Só sai o que está Faturado. Enquanto elas estiverem abertas, `
+    + 'os outros setores continuam vendo este caminhão no pátio.';
+  if(pendentes.length) tocarAlertaAlteracao();
+}
+
+/* Saída que não chegou ao servidor não pode virar assunto encerrado. Fica
+   na tela, com a placa, até alguém registrar de verdade. */
+function marcarSaidaNaoConfirmada(placa, quantas, motivo){
+  notify(`${placa}: saída registrada SÓ NESTE TERMINAL (${motivo}). `
+    + 'Os outros setores continuam vendo o caminhão no pátio. '
+    + 'Confirme com a Logística antes de considerar resolvido.', 'danger', 20000);
+  tocarAlertaAlteracao();
+  const faixa = document.getElementById('portaria-saida-aviso');
+  if(!faixa) return;
+  faixa.hidden = false;
+  faixa.className = 'aviso-faixa aviso-faixa-perigo';
+  faixa.innerHTML = `<strong>⚠ ${esc(placa)}: saída NÃO confirmada pelo servidor</strong> — `
+    + `${esc(motivo)}. ${quantas ? quantas + ' carga(s) mudaram só nesta tela. ' : ''}`
+    + 'Registre de novo quando a conexão voltar, ou avise a Logística.';
+}
+
+function limparSaidaNaoConfirmada(placa){
+  const faixa = document.getElementById('portaria-saida-aviso');
+  if(faixa && faixa.className.indexOf('aviso-faixa-perigo') >= 0
+     && faixa.innerHTML.indexOf(placa) >= 0){
+    faixa.hidden = true; faixa.innerHTML = '';
+  }
 }
 
 /* Retenção de lacre na inspeção da saída — pedido do gestor (18/08/2026).
@@ -9200,72 +9324,98 @@ function acoesMontagemHtml(m, trancada){
 /* Puxa do modelo as rotas deste dia da semana que ainda não têm carga.
    Não apaga nem duplica o que já existe: rodar duas vezes seguidas não
    faz nada na segunda. */
-async function aplicarModeloDoDiaUI(){
-  if(!_montagemDia) return;
-  const { dia, modelo, montagens } = _montagemDia;
-  /* CONTA por rota, não presença.
+/* O QUE AINDA FALTA MONTAR DO MODELO — UMA FUNÇÃO, DOIS CHAMADORES.
 
-     O modelo prevê a MESMA praça mais de uma vez no mesmo dia — duas
-     saídas para Patos de Minas na sexta é rotina, e por isso o índice
-     único é (dia, rota, ordem) e não (dia, rota).
+   Extraída de `aplicarModeloDoDiaUI` em 28/08/2026, e o motivo é um
+   vermelho: o teste do dia reimplementava esta conta com um Set de códigos
+   de rota — a PRIMEIRA versão desta lógica, abandonada justamente por
+   errar. Ele passava por sorte, enquanto as linhas já montadas tivessem
+   códigos distintos; no dia em que duas montagens caíram na mesma praça,
+   ele acusou 38 onde o painel oferece 37.
 
-     A primeira versão filtrava com um Set de rotas já montadas: bastava
-     uma carga de Patos existir para as OUTRAS saídas de Patos sumirem da
-     oferta. Na sexta isso escondia 20 das 39 cargas do dia. */
+   Teste que reimplementa a regra não testa a regra: testa a cópia que ele
+   mesmo escreveu. Agora existe UMA conta, aqui, e quem quiser saber o que
+   falta — a tela ou a prova — pergunta para ela.
+
+   CONTA por rota, não presença.
+
+   O modelo prevê a MESMA praça mais de uma vez no mesmo dia — duas
+   saídas para Patos de Minas na sexta é rotina, e por isso o índice
+   único é (dia, rota, ordem) e não (dia, rota).
+
+   A primeira versão filtrava com um Set de rotas já montadas: bastava
+   uma carga de Patos existir para as OUTRAS saídas de Patos sumirem da
+   oferta. Na sexta isso escondia 20 das 39 cargas do dia. */
   /* CASA POR LINHA DO MODELO, NAO POR CODIGO DE ROTA (25/08/2026).
 
-     Relato do dono: "ta tudo duplicado ainda na montagem do dia".
+   Relato do dono: "ta tudo duplicado ainda na montagem do dia".
 
-     As duas versoes anteriores erraram no mesmo lugar, cada uma de um
-     jeito. A primeira usava um Set de codigos: bastava uma carga de Patos
-     existir para as OUTRAS saidas de Patos sumirem da oferta. A segunda
-     passou a CONTAR por codigo — resolveu o sumico e criou a duplicata.
+   As duas versoes anteriores erraram no mesmo lugar, cada uma de um
+   jeito. A primeira usava um Set de codigos: bastava uma carga de Patos
+   existir para as OUTRAS saidas de Patos sumirem da oferta. A segunda
+   passou a CONTAR por codigo — resolveu o sumico e criou a duplicata.
 
-     Contagem nao resolve ambiguidade. Na terca, Arinos/Buritis, Joao
-     Pinheiro, Paracatu, Riachinho e Unai sao todos o codigo 504: contando,
-     o painel sabe que "faltam 2 de 504" e nao sabe QUAIS 2. Puxa duas
-     quaisquer, e o dia fica com Joao Pinheiro repetido e Unai faltando.
+   Contagem nao resolve ambiguidade. Na terca, Arinos/Buritis, Joao
+   Pinheiro, Paracatu, Riachinho e Unai sao todos o codigo 504: contando,
+   o painel sabe que "faltam 2 de 504" e nao sabe QUAIS 2. Puxa duas
+   quaisquer, e o dia fica com Joao Pinheiro repetido e Unai faltando.
 
-     Identidade resolve. Cada montagem guarda a linha do modelo que a
-     originou (migracao 035), e a pergunta passa a ser exata: esta linha ja
-     virou carga hoje?
+   Identidade resolve. Cada montagem guarda a linha do modelo que a
+   originou (migracao 035), e a pergunta passa a ser exata: esta linha ja
+   virou carga hoje?
 
-     E QUANDO A MIGRACAO AINDA NAO SUBIU? (26/08/2026)
+   E QUANDO A MIGRACAO AINDA NAO SUBIU? (26/08/2026)
 
-     A versao anterior desta funcao so sabia casar por modelo_id. Num
-     servidor sem a migracao 035 esse campo simplesmente nao existe, entao
-     NADA casava: cada clique em "puxar o modelo" recriava o dia inteiro.
-     Foi o que a apuracao de 25/08 mostrou — 53 linhas na montagem, quase
-     todas vazias e em pares, uma unica virando carga.
+   A versao anterior desta funcao so sabia casar por modelo_id. Num
+   servidor sem a migracao 035 esse campo simplesmente nao existe, entao
+   NADA casava: cada clique em "puxar o modelo" recriava o dia inteiro.
+   Foi o que a apuracao de 25/08 mostrou — 53 linhas na montagem, quase
+   todas vazias e em pares, uma unica virando carga.
 
-     Isso foi erro meu de projeto, nao do servidor: escrevi uma correcao
-     que so funciona depois que outra coisa acontece, e sem plano B ela
-     falha do jeito mais barulhento possivel. Agora ha plano B.
+   Isso foi erro meu de projeto, nao do servidor: escrevi uma correcao
+   que so funciona depois que outra coisa acontece, e sem plano B ela
+   falha do jeito mais barulhento possivel. Agora ha plano B.
 
-     O plano B e ROTA + APELIDO, e ele funciona porque a migracao 034 (essa
-     sim ja aplicada) moveu o destino da planilha para apelido_rota. As
-     seis linhas de codigo 504 da terca — Arinos, Joao Pinheiro, Paracatu,
-     Riachinho, Unai — tem apelidos DIFERENTES. O que era ambiguo contando
-     por codigo deixa de ser ao olhar o destino.
+   O plano B e ROTA + APELIDO, e ele funciona porque a migracao 034 (essa
+   sim ja aplicada) moveu o destino da planilha para apelido_rota. As
+   seis linhas de codigo 504 da terca — Arinos, Joao Pinheiro, Paracatu,
+   Riachinho, Unai — tem apelidos DIFERENTES. O que era ambiguo contando
+   por codigo deixa de ser ao olhar o destino.
 
-     E CONTAGEM, nao presenca: o modelo preve a mesma praca duas vezes no
-     mesmo dia (duas saidas para Montes Claros na sexta), e um Set faria a
-     segunda sumir da oferta. Cada montagem existente consome UMA linha do
-     modelo; o que sobrar e o que ainda falta montar.
+   E CONTAGEM, nao presenca: o modelo preve a mesma praca duas vezes no
+   mesmo dia (duas saidas para Montes Claros na sexta), e um Set faria a
+   segunda sumir da oferta. Cada montagem existente consome UMA linha do
+   modelo; o que sobrar e o que ainda falta montar.
 
-     Os dois criterios convivem porque o dia seguinte a uma migracao tem os
-     dois tipos de linha na mesma tela: a antiga sem modelo_id e a nova com
-     ele. Casar so por um dos dois traria a duplicata de volta pela metade. */
+   Os dois criterios convivem porque o dia seguinte a uma migracao tem os
+   dois tipos de linha na mesma tela: a antiga sem modelo_id e a nova com
+   ele. Casar so por um dos dois traria a duplicata de volta pela metade. */
+function linhasDoModeloQueFaltam(modelo, montagens){
   const contagem = new Map();
   const chaveExata   = (x) => `id:${x.modelo_id}`;
   const chaveDestino = (x) => `rt:${x.rota_codigo || ''}¦${x.apelido_rota || ''}`;
 
-  for(const g of montagens){
+  for(const g of (montagens || [])){
     if(g.cancelada_em) continue;
-    /* Carga avulsa (criada na mao, sem vir do modelo) tem rota mas nao tem
-       apelido do modelo. Ela entra na contagem pela chave de destino, o que
-       e o certo: se alguem ja montou Unai na mao, o modelo nao precisa
-       oferecer Unai de novo. */
+    /* CARGA AVULSA NAO CONSOME LINHA DO MODELO — e isso e deliberado.
+
+       O comentario antigo aqui dizia o contrario ("se alguem ja montou Unai
+       na mao, o modelo nao precisa oferecer Unai de novo") e o codigo nunca
+       fez isso: a linha feita a mao tem rota mas NAO tem apelido, e a chave
+       de destino do modelo tem ("rt:504¦Unai"). As duas nunca casaram.
+       Medido em 28/08/2026, com dois avulsos de rota 500 e um modelo que
+       tem "500 ¦ Patos de Minas": consumo zero.
+
+       E o comportamento CERTO, e o comentario e que estava errado. Uma
+       carga extra na rota 500 nao e a saida de Patos de Minas prevista para
+       o dia — e frete a mais. Deixar ela apagar a linha prevista seria uma
+       rota que nao embarca, e ninguem descobre: linha que some da oferta
+       nao aparece em lugar nenhum. Oferecer uma linha a mais aparece: a
+       pessoa le a lista antes de confirmar e cancela o que nao quer.
+
+       Vale a mesma razao do 504 mais abaixo — sem apelido nao da para saber
+       QUAL destino a avulsa atende, e escolher um no chute e o defeito que
+       a contagem por codigo produzia. */
     const k = g.modelo_id != null ? chaveExata(g) : chaveDestino(g);
     contagem.set(k, (contagem.get(k) || 0) + 1);
   }
@@ -9278,8 +9428,14 @@ async function aplicarModeloDoDiaUI(){
   };
 
   // Tenta a identidade exata primeiro; so cai no destino se ela nao casar.
-  const novas = modelo.filter(m =>
+  return (modelo || []).filter(m =>
     !consumir(chaveExata(m)) && !consumir(chaveDestino(m)));
+}
+
+async function aplicarModeloDoDiaUI(){
+  if(!_montagemDia) return;
+  const { dia, modelo, montagens } = _montagemDia;
+  const novas = linhasDoModeloQueFaltam(modelo, montagens);
   /* Duas situações MUITO diferentes que davam a mesma resposta, e a
      resposta era falsa quando o modelo estava vazio: dizer "já estão
      montadas" para quem nunca cadastrou rota nenhuma manda a pessoa

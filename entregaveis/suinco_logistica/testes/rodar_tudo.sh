@@ -126,6 +126,42 @@ for f in "${comServidor[@]}"; do
   rodar_uma "$f"
 done
 
+# ---- Fase 3: SEGUNDA CHANCE, sozinha e com banco limpo (28/08/2026) ----
+#
+# Regra do dono, depois de esperar uma bateria inteira por um vermelho que
+# passava sozinho: "toda bateria precisa ser cumprida e qualquer issue você
+# vai focar e resolver antes da bateria finalizar".
+#
+# "Passa sozinha, falha no portão" não pode ser conclusão de ninguém — é
+# trabalho do script. Toda suíte que reprovou volta a rodar UMA vez, sem
+# ninguém junto e com o banco limpo. Se passar aqui, o vermelho era
+# contaminação ou corrida entre suítes, e isso fica DITO na tela em vez de
+# virar meia hora de investigação manual. Se reprovar de novo, é vermelho
+# de verdade e a bateria cai — como tem que cair.
+if [ -f "$LOGS/.falhas" ]; then
+  mapfile -t primeiraLeva < "$LOGS/.falhas"
+  if [ ${#primeiraLeva[@]} -gt 0 ]; then
+    echo
+    echo "  ${#primeiraLeva[@]} suíte(s) reprovaram. Segunda chance, uma a uma, com banco limpo:"
+    rm -f "$LOGS/.falhas"
+    for nome in "${primeiraLeva[@]}"; do
+      arquivo=""
+      for f in "${isoladas[@]}" "${comServidor[@]}"; do
+        [ "$(basename "$f" .py)" = "$nome" ] && arquivo="$f" && break
+      done
+      [ -n "$arquivo" ] || { echo "$nome" >> "$LOGS/.falhas"; continue; }
+      limpar_banco
+      if timeout 300 python3 "$arquivo" > "$LOGS/$nome.txt" 2>&1; then
+        printf '  %-46s ok (sozinha) — era contaminação, não regressão\n' "$nome"
+      else
+        printf '  %-46s FALHA de novo — é vermelho de verdade\n' "$nome"
+        grep -m3 'FALHA' "$LOGS/$nome.txt" | sed 's/^/      /'
+        echo "$nome" >> "$LOGS/.falhas"
+      fi
+    done
+  fi
+fi
+
 falhas=()
 [ -f "$LOGS/.falhas" ] && mapfile -t falhas < "$LOGS/.falhas"
 ok=$(( total - ${#falhas[@]} ))
