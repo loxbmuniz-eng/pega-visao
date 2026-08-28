@@ -71,16 +71,29 @@ async def main():
 
         print('\n=== 2. O MODAL PEDE OS MESMOS DADOS, NA MESMA ORDEM ===')
         # Compara a sequência dos campos realmente digitáveis nas duas telas.
+        # O CARD É ACHADO PELO QUE ELE TEM, NÃO POR SER O PRIMEIRO
+        # (28/08/2026). A raiz era '#tab-programacao .card', ou seja, o
+        # primeiro card da aba. No dia em que o dono pediu a Fila de
+        # Programados no topo, este teste passou a olhar a Fila, achou zero
+        # campos e reprovou — sem que a regra que ele guarda tivesse
+        # mudado. Ordem de card é decisão de layout; o que este teste
+        # protege é que as duas telas pedem os MESMOS dados na MESMA
+        # ordem. Agora ele acha o card pelo campo que só existe nele.
         async def ordem_visivel(prefixo, raiz):
             return await pagina.evaluate("""([prefixo, raiz]) => {
-                const el = document.querySelector(raiz);
+                let el = document.querySelector(raiz);
+                if (!el && raiz.startsWith('#tab-')) {
+                    const ancora = document.getElementById(prefixo + '-placa')
+                                || document.querySelector('[id^="' + prefixo + '-"]');
+                    el = ancora ? ancora.closest('.card') : null;
+                }
                 if (!el) return ['(tela não encontrada)'];
                 return [...el.querySelectorAll('input, select, textarea')]
                     .filter(c => c.type !== 'hidden' && c.id && c.id.startsWith(prefixo + '-'))
                     .map(c => c.id.slice(prefixo.length + 1));
             }""", [prefixo, raiz])
 
-        prog = await ordem_visivel('prog', '#tab-programacao .card')
+        prog = await ordem_visivel('prog', '#tab-programacao .card:has(#prog-placa)')
         comp = await ordem_visivel('completar', '#modal-completar')
 
         # A Programação tem a placa; o modal não, porque a carga já existe e a
