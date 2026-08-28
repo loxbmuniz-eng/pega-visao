@@ -431,7 +431,11 @@ function filtrar(){
   const busca = F.busca.trim().toLowerCase();
   for(let i=0;i<NL;i++){
     if(!noEscopo(i)) continue;
-    if(F.mes && mesRef(i) !== F.mes) continue;
+    /* Competência sempre pelo MOVIMENTO, mesmo com a data de referência
+       em "embarque": o recorte contábil não muda porque alguém quer ver a
+       evolução por data de embarque. A data de referência manda na
+       evolução no tempo e no cálculo do atraso, que é o papel dela. */
+    if(F.mes && mesDm(i) !== F.mes) continue;
     if(F.filial !== '' && D.filiais[L.fi[i]] !== F.filial) continue;
     if(F.docto !== '' && D.doctos[L.do[i]] !== F.docto) continue;
     if(F.reg !== '' && String(L.rg[i]) !== F.reg) continue;
@@ -458,7 +462,7 @@ function semEscopo(){
   const idx = [];
   const busca = F.busca.trim().toLowerCase();
   for(let i=0;i<NL;i++){
-    if(F.mes && mesRef(i) !== F.mes) continue;
+    if(F.mes && mesDm(i) !== F.mes) continue;
     if(F.filial !== '' && D.filiais[L.fi[i]] !== F.filial) continue;
     if(F.docto !== '' && D.doctos[L.do[i]] !== F.docto) continue;
     if(F.reg !== '' && String(L.rg[i]) !== F.reg) continue;
@@ -476,7 +480,16 @@ function semEscopo(){
 
 /* ---------- seletores ---------- */
 (function preencher(){
-  const meses = [...new Set(Array.from({length:NL},(_,i)=>mesDe(i)))].sort();
+  /* COMPETÊNCIA É O MÊS CONTÁBIL — VEM DO MOVIMENTO (28/08/2026).
+
+     Estava vindo da data de EMBARQUE, e o seletor listava 21 meses:
+     2023-01, 2026-12, até jul/2029. O dono viu e disse o óbvio: "tem mês
+     aí que nem chegou ainda". Não era invenção do painel — são datas de
+     embarque erradas na origem, 411 lançamentos com embarque fora do
+     período. Mas competência é o mês em que o custo ENTROU na
+     contabilidade, e esse é o do movimento: jan a ago/2026, os oito meses
+     do relatório. */
+  const meses = [...new Set(Array.from({length:NL},(_,i)=>mesDm(i)))].sort();
   $('fMes').innerHTML = '<option value="">Todo o período</option>' +
     meses.map(m=>`<option value="${m}">${rotMes(m)}</option>`).join('');
   $('fFilial').innerHTML = '<option value="">Todas</option>' +
@@ -515,9 +528,23 @@ function renderKpis(idx){
   $('kLanc').textContent = fmtN(idx.length);
   $('kTicket').textContent = idx.length ? fmtBRL2(Math.round(v/idx.length)) : '–';
 
+  /* O ATRASO IGNORA O QUE É IMPOSSÍVEL (28/08/2026).
+
+     Atraso negativo significa embarque DEPOIS do lançamento contábil —
+     ninguém embarca depois de faturar. É erro de digitação na origem, e
+     um só deles (um embarque marcado em jul/2029) puxava a média do
+     recorte inteiro para -327 dias. Ficam de fora da média e são
+     contados à parte, para o erro aparecer em vez de sumir. */
   const lags = idx.map(lag).filter(x=>Number.isFinite(x));
-  const medio = lags.length ? lags.reduce((a,b)=>a+b,0)/lags.length : 0;
-  $('kLag').textContent = lags.length ? medio.toLocaleString('pt-BR',{maximumFractionDigits:1}) + ' d' : '–';
+  const validos = lags.filter(x=>x >= 0);
+  const impossiveis = lags.length - validos.length;
+  const medio = validos.length ? validos.reduce((a,b)=>a+b,0)/validos.length : 0;
+  $('kLag').textContent = validos.length ? medio.toLocaleString('pt-BR',{maximumFractionDigits:1}) + ' d' : '–';
+  const subLag = $('kLag').parentElement.querySelector('.k-sub');
+  if(subLag){
+    subLag.innerHTML = 'dias entre embarque e lançamento contábil'
+      + (impossiveis ? ` · <strong>${fmtN(impossiveis)}</strong> fora da conta (embarque posterior ao lançamento — data errada na origem)` : '');
+  }
 
   /* "Fora da competência": embarcou num mês e o lançamento contábil caiu
      em outro. É o que faz o custo de um mês carregar operação de outro.
@@ -720,6 +747,16 @@ function gInsights(){
      `<b>${fmtBRL(soma(fora))}</b> em ${fmtN(fora.length)} lançamento(s) embarcaram num mês e
       caíram na contabilidade de outro — ${fmtPct(soma(fora)/(total||1))} do total.`,
      'Enquanto isso existir, o custo de um mês carrega operação de outro, e a comparação entre meses erra por construção.'],
+    ['gold','Qualidade da data de embarque',
+     (() => {
+       const ruins = idx.filter(i => lag(i) < 0);
+       const antigos = idx.filter(i => mesDe(i) < '2026-01' && lag(i) >= 0);
+       return `<b>${fmtN(ruins.length)}</b> lançamento(s) têm embarque DEPOIS do lançamento contábil —
+         impossível, é erro de digitação na origem, e ficam fora do cálculo de atraso.
+         Outros <b>${fmtN(antigos.length)}</b> embarcaram antes de janeiro/2026 e só foram lançados
+         dentro do período — esses são reais e entram na conta.`;
+     })(),
+     'A competência do painel é sempre o mês do MOVIMENTO — jan a ago/2026, os oito meses do relatório. A data de embarque serve para medir o atraso e desenhar a evolução, não para dizer de que mês é o custo.'],
   ];
   $('insightsBox').innerHTML = cartoes.map(([cls,tag,txt,crit])=>`
     <div class="insight ${cls}"><div class="i-tag">${tag}</div>
