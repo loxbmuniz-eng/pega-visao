@@ -102,8 +102,30 @@ async def main():
         }""")
         ck('fila não mostra Cliente', 'Cliente' not in cabecalhos, str(cabecalhos))
         ck('fila não mostra Destino', 'Destino' not in cabecalhos, str(cabecalhos))
-        for esperada in ['Rota', 'Peso (kg)', 'Palet.', 'Ganchos', 'Entregas']:
-            ck(f'fila mostra {esperada}', esperada in cabecalhos, str(cabecalhos))
+        # A REGRA MUDOU DE PROPÓSITO EM 28/08/2026. Pedido do dono: "na
+        # programação eu queria que ficasse igual à torre de controle" — as
+        # mesmas sete colunas, na mesma ordem, e o resto ao clicar na linha.
+        # Ganchos e Entregas SAÍRAM DA LINHA e foram para a expansão; não
+        # saíram do sistema. Varrer a fila é procurar sequência, número e
+        # caminhão; preencher é outro momento.
+        for esperada in ['Rota', 'Peso (kg)', 'Palet.', 'Motorista', 'Veículo']:
+            ck(f'fila mostra {esperada} na linha', esperada in cabecalhos, str(cabecalhos))
+        for movida in ['Ganchos', 'Entregas']:
+            ck(f'{movida} saiu da linha (foi para a expansão)',
+               movida not in cabecalhos, str(cabecalhos))
+        # E a garantia que impede isto de virar campo perdido: elas têm que
+        # estar na expansão, gravando na carga.
+        naExp = await pagina.evaluate("""() => {
+              const tr = document.querySelector('#prog-fila-tbody tr.prog-linha');
+              if(!tr) return null;
+              tr.click();
+              const det = document.querySelector('#prog-fila-tbody tr.prog-detalhe');
+              return det ? { ganchos: det.innerHTML.includes('atualizarGanchosUI'),
+                             entregas: det.innerHTML.includes('atualizarEntregasUI') } : {abriu:false};
+            }""")
+        if naExp:
+            ck('e as duas continuam editáveis na expansão, gravando na carga',
+               naExp.get('ganchos') and naExp.get('entregas'), str(naExp))
 
         print('\n=== 4. A TORRE SEGUE A MESMA REGRA ===')
         torre = await pagina.evaluate("""() => {

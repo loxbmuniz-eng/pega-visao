@@ -132,8 +132,15 @@ async def main():
             })""")
         ck('todas as linhas aparecem', d['linhas'] > 0, str(d))
         ck('nenhum formulário aberto de saída', d['detalhes'] == 0, str(d))
-        ck('a tabela tem 6 colunas, não 10 (o resto está no formulário)',
-           d['colunas'] == 6, f"{d['colunas']} colunas")
+        # NOVE COLUNAS DESDE 28/08/2026 — as OITO da Torre e da Fila, mais a
+        # de Ação. Pedido do dono: "quero poder ver isso na montagem do dia",
+        # depois de pedir a Programação igual à Torre. A regra que este bloco
+        # protege não é o número 6: é que a linha continua sendo RESUMO e o
+        # preenchimento acontece no formulário que abre ao clicar. Dez inputs
+        # espremidos numa linha é o defeito; oito colunas de leitura com o
+        # resto na expansão, não.
+        ck('a tabela tem as 8 colunas da Torre + Ação, não os 10 campos',
+           d['colunas'] == 9, f"{d['colunas']} colunas")
 
         print('\n=== 2. CLICAR ABRE O FORMULÁRIO COMPLETO ===')
         await pg.evaluate("(id) => alternarLinhaMontagemUI(id)", mid)

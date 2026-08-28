@@ -39,7 +39,7 @@ PAINEL = 'file:///home/user/pega-visao/entregaveis/suinco_logistica/index.html'
 falhas = []
 
 # A ordem que o dono ditou, palavra por palavra.
-COLUNAS = ['Seq.', 'Nº Carga', 'Veículo', 'Motorista', 'Rota', 'Peso (kg)', 'Palet.']
+COLUNAS = ['Seq.', 'Nº Carga', 'Veículo', 'Motorista', 'Rota', 'Peso (kg)', 'Palet.', 'Tipo de Operação']
 
 
 def ck(nome, ok, detalhe=''):
@@ -91,16 +91,26 @@ async def main():
               return tabela ? [...tabela.querySelectorAll('thead th')]
                 .map(t => t.textContent.trim()) : [];
             }""")
-        ck('são 8 colunas: as 7 do dono + Ação', len(cabec) == 8, str(cabec))
-        ck('e estão exatamente na ordem pedida', cabec[:7] == COLUNAS, str(cabec[:7]))
+        ck('são 9 colunas: as 8 editáveis + Ação', len(cabec) == 9, str(cabec))
+        ck('e estão exatamente na ordem pedida', cabec[:8] == COLUNAS, str(cabec[:8]))
 
         torre = await pg.evaluate("""() => {
               renderTorre && renderTorre();
               const th = document.getElementById('torre-thead');
               return th ? [...th.querySelectorAll('th')].map(t => t.textContent.trim()) : [];
             }""")
-        ck('as sete primeiras são AS MESMAS da Torre',
-           torre[:7] == COLUNAS, f'torre={torre[:7]}')
+        ck('as oito primeiras são AS MESMAS da Torre',
+           torre[:8] == COLUNAS, f'torre={torre[:8]}')
+
+        # A TERCEIRA TELA (28/08/2026): "quero poder ver isso na montagem do
+        # dia". As três onde a mesma carga aparece têm que falar a mesma
+        # língua — conferido contra o cabeçalho REAL de cada uma, nunca
+        # contra uma lista copiada aqui.
+        mont = await pg.evaluate("""() => {
+              const t = document.getElementById('mont-tabela');
+              return t ? [...t.querySelectorAll('thead th')].map(x=>x.textContent.trim()) : [];
+            }""")
+        ck('e a Montagem do Dia também', mont[:8] == COLUNAS, f'montagem={mont[:8]}')
 
         print('\n=== 2. VEÍCULO REÚNE PLACA, TRANSPORTADORA E TIPO ===')
         v = await pg.evaluate("""() => {
@@ -130,12 +140,15 @@ async def main():
         ck('a linha abriu', ab.get('abriu') is True, str(ab)[:70])
         if ab.get('abriu'):
             juntos = ' | '.join(ab['rotulos'])
-            for r in ['Tipo de Operação', 'Qtd. Ganchos', 'Qtd. Entregas',
+            for r in ['Qtd. Ganchos', 'Qtd. Entregas',
                       'Cliente', 'Destino', 'Observações']:
                 ck(f'a expansão tem {r}', r in juntos, juntos[:90])
             ck('e TUDO ali grava na carga, não numa cópia',
-               ab['entregas'] and ab['ganchos'] and ab['praonde']
-               and ab['obs'] and ab['cliente'], str(ab))
+               ab['entregas'] and ab['ganchos'] and ab['obs'] and ab['cliente'], str(ab))
+            # Tipo de Operação subiu para a LINHA: não pode existir nos dois
+            # lugares da mesma tela, senão são dois campos para um dado só.
+            ck('Tipo de Operação está na LINHA, e só nela',
+               not ab['praonde'], str(ab['praonde']))
 
         print('\n=== 4. A GRAVAÇÃO CHEGA NA CARGA ===')
         g = await pg.evaluate("""(id) => {

@@ -3109,6 +3109,7 @@ function renderProgFila(){
       <td onclick="event.stopPropagation()">${rotaSelectHtml(c)}</td>
       <td class="c-peso" onclick="event.stopPropagation()"><input type="number" class="peso-input" min="0" step="1" value="${c.peso ?? ''}" onchange="atualizarPesoUI('${id}',this.value)" title="Peso em kg."></td>
       <td onclick="event.stopPropagation()">${paletizadaSelectHtml(c)}</td>
+      <td onclick="event.stopPropagation()">${praOndeSelectHtml(c)}</td>
       <td class="no-print gap8" onclick="event.stopPropagation()">
         <button class="btn btn-sec btn-sm" onclick="adicionarOutraCargaNaPlacaUI('${id}')"
                 title="Programar OUTRA carga para este mesmo caminhão — o formulário já vem com placa, transportadora, motorista e rota preenchidos.">➕ Outra carga</button>
@@ -3116,7 +3117,7 @@ function renderProgFila(){
         <span class="mont-seta${aberta ? ' aberta' : ''}" aria-hidden="true">▸</span>
       </td>
     </tr>`;
-    return aberta ? linha + `<tr class="prog-detalhe"><td colspan="8">${formCargaFilaHtml(c)}</td></tr>` : linha;
+    return aberta ? linha + `<tr class="prog-detalhe"><td colspan="9">${formCargaFilaHtml(c)}</td></tr>` : linha;
   }).join('');
   document.getElementById('prog-fila-empty').hidden = lista.length>0;
 
@@ -3154,7 +3155,9 @@ function formCargaFilaHtml(c){
   return `
     <div class="mont-form">
       <div class="form-row">
-        <div class="form-group"><label>Tipo de Operação</label>${praOndeSelectHtml(c)}</div>
+        ${/* Tipo de Operação subiu para a LINHA em 28/08/2026 — é a 8ª coluna
+             da Torre, e o dono contou oito campos editáveis. Sai daqui para
+             não existir o mesmo campo em dois lugares da mesma tela. */''}
         <div class="form-group">
           <label>Qtd. Ganchos <span class="hint">0 = Liso</span></label>
           <input type="number" min="0" step="1" value="${c.qtdGanchos ?? 0}"
@@ -9092,17 +9095,42 @@ function linhaMontagemHtml(m){
                onchange="${comoCarga
                  ? `atualizarSequenciaUI('${escJs(cargaViva.id)}',this.value)`
                  : `alterarMontagemUI('${id}','sequencia',this.value)`}"></td>
-      <td>${destinoMontagemHtml(m)} ${marca}</td>
+      ${/* AS MESMAS COLUNAS DA TORRE E DA FILA (28/08/2026). Quando a linha
+            já virou carga, cada célula grava na CARGA; enquanto é rascunho,
+            grava na montagem. Mesma tela, mesmo lugar, dono diferente — e o
+            dono certo, que é o que impede a alteração de morrer no rascunho. */''}
       <td ${comoCarga ? 'onclick="event.stopPropagation()"' : ''}>${comoCarga
             ? celulaCargaHtml(cargaViva, 'numero')
             : (esc(m.numero_carga) || '<span class="text-dim">—</span>')}</td>
-      <td ${comoCarga ? 'onclick="event.stopPropagation()"' : ''}>${comoCarga
+      <td class="cel-veiculo" ${comoCarga ? 'onclick="event.stopPropagation()"' : ''}>${comoCarga
             ? celulaCargaHtml(cargaViva, 'placa')
             : (m.placa ? `<strong>${esc(m.placa)}</strong>`
-                       : '<span class="text-dim">sem placa</span>')}</td>
+                       : '<span class="text-dim">sem placa</span>')}
+        <span class="veic-transp">${esc(comoCarga ? cargaViva.transportadora
+            : (m.transportadora || (m.placa && buscarFrota(m.placa) ? buscarFrota(m.placa).transportadora : ''))) || '—'}</span>
+        <span class="veic-tipo">${esc(comoCarga ? cargaViva.tipoVeiculo
+            : (m.placa && buscarFrota(m.placa) ? buscarFrota(m.placa).tipoVeiculo : '')) || '—'}</span></td>
+      <td onclick="event.stopPropagation()">
+        <input type="text" class="motorista-input" value="${esc(comoCarga ? (cargaViva.motorista||'') : (m.motorista||''))}"
+               aria-label="Motorista"
+               onchange="${comoCarga
+                 ? `atualizarMotoristaUI('${escJs(cargaViva.id)}',this.value)`
+                 : `alterarMontagemUI('${id}','motorista',this.value)`}"></td>
+      <td>${destinoMontagemHtml(m)} ${marca}</td>
       <td ${comoCarga ? 'onclick="event.stopPropagation()"' : ''}>${comoCarga
             ? celulaCargaHtml(cargaViva, 'peso')
             : (m.peso ? Number(m.peso).toLocaleString('pt-BR') : '<span class="text-dim">—</span>')}</td>
+      <td onclick="event.stopPropagation()">${comoCarga
+            ? paletizadaSelectHtml(cargaViva)
+            : `<select class="palet-inline" onchange="alterarMontagemUI('${id}','paletizada',this.value)">
+                 ${['Não','Sim'].map(op=>`<option value="${op}" ${(m.paletizada||'Não')===op?'selected':''}>${op}</option>`).join('')}
+               </select>`}</td>
+      <td onclick="event.stopPropagation()">${comoCarga
+            ? praOndeSelectHtml(cargaViva)
+            : `<select class="praonde-inline" onchange="alterarMontagemUI('${id}','tipoOperacao',this.value)">
+                 <option value=""${!m.tipo_operacao ? ' selected' : ''}>—</option>
+                 ${PRA_ONDE_OPCOES.map(o=>`<option${m.tipo_operacao===o?' selected':''}>${esc(o)}</option>`).join('')}
+               </select>`}</td>
       <td class="no-print">${trancada
             ? acoesMontagemHtml(m, trancada)
             : comoCarga ? acoesCargaNaMontagemHtml(aberta)
@@ -9110,7 +9138,7 @@ function linhaMontagemHtml(m){
     </tr>`;
 
   if(!aberta) return resumo;
-  return resumo + `<tr class="mont-detalhe"><td colspan="6">${
+  return resumo + `<tr class="mont-detalhe"><td colspan="9">${
     comoCarga ? formCargaHtml(cargaViva, m) : formMontagemHtml(m)}</td></tr>`;
 }
 
