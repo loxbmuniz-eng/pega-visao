@@ -19,11 +19,46 @@ Prazo: 28 de agosto · Resultado: meados do outono (hemisfério norte)
 | City / Country | Cuiabá, Mato Grosso — Brazil |
 | DJ, producer or both | DJ (and festival founder / curator) |
 | Instagram | @ota.blind · @pegavisaofestival |
-| Setup pedido | **Wireless DJ setup** — TMA-2 Move XE Wireless |
+| Setup pedido | **Os dois** — TMA-2 Studio Wireless+ (cabine) e TMA-2 Move XE Wireless (fora dela) |
 
-Sobre a escolha do setup: peça o **DJ**, não o studio. Toda a sua história é de
-cabine e de palco, e o pedido fica coerente com o resto da aplicação. Pedir os
-dois enfraquece.
+**Correção técnica, e ela importa.** O Move XE Wireless é Bluetooth 5.0 — tem
+latência, e latência mata beatmatching. Quem serve para a cabine é o
+**TMA-2 Studio Wireless+**, com o link W+ de latência ultrabaixa e sem
+compressão: é o único da linha deles feito para monitorar sem fio de verdade.
+Se você pedir "wireless DJ" genérico, corre o risco de receber o Bluetooth.
+Peça pelo nome.
+
+Por isso o pedido duplo tem pé: são dois aparelhos para dois trabalhos
+diferentes, e você sabe qual é qual. Isso é o oposto de pedir dois por pedir.
+
+### Resposta para o campo do setup (~170 palavras)
+
+> I already own a TMA-2. That's part of why I'm asking you and not somebody
+> else — I know the system, and I know it's modular, so this doesn't have to be
+> two whole headphones.
+>
+> What I actually need is the wireless part.
+>
+> Studio Wireless+ for the booth. Bluetooth latency makes beatmatching
+> impossible, so the W+ link is the only thing in your range that genuinely lets
+> me DJ untethered. That's the one that changes my job.
+>
+> And a Move XE Wireless for everything around the booth — forty hours, light
+> enough to wear all day, which is what a festival week actually is. Writing my
+> own material in whatever room I'm staying in, running the blindfolded ceramics
+> sessions, working on the sound for the tactile pieces we build for the gallery.
+>
+> If it has to be one, make it the Studio Wireless+. And if units make more sense
+> on your end than complete sets, that works too. I've already got the rest.
+
+*PT — a primeira linha é o que carrega tudo. Você não é um desconhecido pedindo
+brinde: é alguém que já comprou, já usa e conhece o sistema modular deles. E a
+última linha barateia o sim — se eles puderem mandar só as unidades sem fio em
+vez de dois fones completos, o pedido duplo deixa de ser caro. Pedido duplo só
+morre quando parece ganância; esse aqui parece competência.*
+
+*Se você lembrar qual TMA-2 é o seu (Studio, Studio XE, Move, DJ), diga o nome
+na primeira frase. Fica ainda mais forte.*
 
 ---
 
@@ -90,11 +125,15 @@ público não importa, intenção importa. Você responde exatamente isso.*
 > aren't gear to me. They're the room I work in. Being tethered to a mixer by
 > the one sense I actually rely on has always felt backwards.
 >
+> It's the same when I'm writing my own material. I produce on the move, in
+> whatever room I'm staying in, and the headphones are the only monitoring I
+> have that I trust from one room to the next.
+>
 > And at Pega Visão I spend most of the night walking blindfolded people through
 > a space. A cable is the wrong object to have on my head in a room built around
 > people who can't see where they're going.
 
-*PT — três golpes: (1) o cabo é risco real pra quem é monocular, e a solução
+*PT — quatro golpes: (1) o cabo é risco real pra quem é monocular, e a solução
 que você achou foi parar de andar; (2) o fone não é acessório, é a sala — foi o
 que te orientou no escuro; (3) no seu próprio festival, cabo é literalmente o
 objeto errado. Nenhum outro candidato tem esse terceiro argumento.*
@@ -179,7 +218,11 @@ porque eu não tenho como confirmar:
    *"This December I go back"* por *"This December I return"* → e, se for
    preciso, *"I'm going back to Universo Paralello this December"* sem
    nomear os palcos.
-3. **Datas da cegueira** (jul/2022 → set/2024, "2 anos, 2 meses e 2 dias") —
+3. **"Writing my own material" / trabalhar no som das peças táteis.** Você
+   toca sets autorais, então produzir é verdade. Mas se você não produz de fato
+   fora de casa, corte o parágrafo do Move XE — o pedido duplo cai por terra se
+   o segundo uso não for real. Melhor pedir um só e ganhar.
+4. **Datas da cegueira** (jul/2022 → set/2024, "2 anos, 2 meses e 2 dias") —
    conferi contra o deck, mas esse número é o coração da aplicação. Cheque.
 
 E o operacional:
@@ -187,9 +230,13 @@ E o operacional:
 - [ ] Ter em mãos: **Instagram, SoundCloud/Bandcamp/Spotify e 1 link de set**.
       A AIAIAI vai querer ouvir. Se você só tem um set gravado, é esse.
 - [ ] Uma **foto boa sua** — a `assets/fotos/ota_retrato.jpg` do repo serve.
-- [ ] Escolher **Wireless DJ**, não studio.
-- [ ] Enviar **hoje, 28/08**. Fuso da Dinamarca está à frente do Brasil —
-      não deixe pra noite.
+- [ ] Pedir os dois **pelo nome**: TMA-2 **Studio Wireless+** e TMA-2 **Move XE
+      Wireless**. Se o formulário só deixar marcar um, marque o Studio
+      Wireless+ e use o campo aberto para pedir o segundo.
+- [ ] Dizer **qual TMA-2 você já tem**, se lembrar o modelo.
+- [ ] Enviar **até as 18h de Cuiabá**. Eles não publicaram hora, só a data —
+      e meia-noite em Copenhague (CEST, UTC+2) é 18h aqui (UTC−4). Depois
+      disso você está apostando.
 
 ---
 
