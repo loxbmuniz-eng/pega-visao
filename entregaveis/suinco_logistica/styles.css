@@ -4962,3 +4962,20 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
 }
 .aviso-faixa strong{ color:var(--gold-text) }
 .aviso-faixa-perigo strong{ color:var(--wine-light) }
+
+/* A FILA DE PROGRAMADOS COM A CARA DA TORRE (28/08/2026).
+   -------------------------------------------------------------------
+   Mesma linguagem da montagem do dia — a linha abre, e a expansão é um
+   formulário de verdade, não uma tira de campos. Reaproveita `.mont-form`
+   de propósito: a pessoa que preenche aqui é a mesma que preenche lá, e
+   dois desenhos para o mesmo trabalho é onde nasce o campo trocado. */
+.prog-linha{ cursor:pointer }
+.prog-linha-aberta{ background:var(--vidro-bg-forte) }
+.prog-detalhe > td{
+  background:var(--vidro-bg-forte);
+  border-left:3px solid var(--gold);
+  padding:0 0 14px 0;
+}
+@media (max-width:820px){
+  .prog-detalhe > td{ border-left-width:4px }
+}

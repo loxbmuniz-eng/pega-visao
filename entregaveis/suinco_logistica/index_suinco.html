@@ -317,12 +317,15 @@
       </div>
       <div class="table-wrap">
         <table id="mont-tabela">
-          <!-- SEIS COLUNAS, NÃO DEZ. A linha é um RESUMO; o preenchimento
-               acontece no formulário que abre ao clicar nela. Dez inputs
-               espremidos numa linha é o que estava aqui antes: ilegível no
-               desktop e impossível no celular. -->
+          <!-- AS MESMAS COLUNAS DA TORRE E DA FILA (28/08/2026), a pedido do
+               dono: "quero poder ver isso na montagem do dia". As três telas
+               onde a mesma carga aparece passam a ter a mesma ordem — é a
+               mesma pessoa, no mesmo dia, e ordem diferente para o mesmo
+               trabalho é onde nasce o campo trocado.
+               A linha continua sendo RESUMO: o resto abre ao clicar. -->
           <thead><tr>
-            <th>Seq.</th><th>Rota</th><th>Nº Carga</th><th>Placa</th><th>Peso (kg)</th>
+            <th>Seq.</th><th>Nº Carga</th><th>Veículo</th><th>Motorista</th>
+            <th>Rota</th><th>Peso (kg)</th><th>Palet.</th><th>Tipo de Operação</th>
             <th class="no-print">Ação</th>
           </tr></thead>
           <tbody id="mont-tbody"></tbody>
@@ -390,7 +393,13 @@
       <div class="aviso-inline no-print" id="prog-fila-outros-dias" hidden></div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Seq.</th><th>Nº Carga</th><th>Placa</th><th>Transportadora</th><th>Rota</th><th>Tipo de Operação</th><th>Peso (kg)</th><th>Palet.</th><th>Ganchos</th><th>Entregas</th><th class="no-print">Ação</th></tr></thead>
+          <!-- MESMAS COLUNAS DA TORRE (28/08/2026), a pedido do dono: "na
+               programação eu queria que ficasse igual à torre de controle".
+               Sete colunas na linha e o resto ao clicar — quem varre a fila
+               do dia procura sequência, número e caminhão; o resto é
+               preenchimento, e preenchimento tem lugar próprio. Veículo
+               reúne placa, transportadora e tipo, como lá. -->
+          <thead><tr><th>Seq.</th><th>Nº Carga</th><th>Veículo</th><th>Motorista</th><th>Rota</th><th>Peso (kg)</th><th>Palet.</th><th>Tipo de Operação</th><th class="no-print">Ação</th></tr></thead>
           <tbody id="prog-fila-tbody"></tbody>
         </table>
       </div>
