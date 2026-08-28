@@ -188,6 +188,28 @@
   <div class="tab-page" id="tab-programacao">
     <div class="funcao-aba" data-tab="programacao"></div>
     <div class="card">
+      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-fila"/></svg> Fila de Programados</div>
+      <div class="card-sub">Só as cargas programadas hoje. As de outros dias seguem na Torre de Controle.</div>
+      <div class="gap8" style="margin-bottom:12px">
+        <button class="btn btn-sec btn-sm" onclick="reordenarPorSequenciaUI()">↕️ Reordenar por Sequência</button>
+      </div>
+      <div class="aviso-inline no-print" id="prog-fila-outros-dias" hidden></div>
+      <div class="table-wrap">
+        <table>
+          <!-- MESMAS COLUNAS DA TORRE (28/08/2026), a pedido do dono: "na
+               programação eu queria que ficasse igual à torre de controle".
+               Sete colunas na linha e o resto ao clicar — quem varre a fila
+               do dia procura sequência, número e caminhão; o resto é
+               preenchimento, e preenchimento tem lugar próprio. Veículo
+               reúne placa, transportadora e tipo, como lá. -->
+          <thead><tr><th>Seq.</th><th>Nº Carga</th><th>Veículo</th><th>Motorista</th><th>Rota</th><th>Peso (kg)</th><th>Palet.</th><th>Tipo de Operação</th><th class="no-print">Ação</th></tr></thead>
+          <tbody id="prog-fila-tbody"></tbody>
+        </table>
+      </div>
+      <div class="empty-state" id="prog-fila-empty" data-icone="📋" hidden>Nenhuma carga programada aguardando chegada.</div>
+    </div>
+
+    <div class="card">
       <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-programacao"/></svg> Nova Carga Programada</div>
       <div class="card-sub">Digite a placa — Transportadora e Tipo de Veículo são preenchidos automaticamente se a placa estiver cadastrada em Cadastros → Frota. <strong>Ainda não contratou o caminhão? Deixe a placa em branco</strong> — a carga fica aqui na Programação e entra na Torre sozinha quando a placa for preenchida. Placa digitada precisa estar cadastrada na Frota.</div>
       <div class="form-row">
@@ -384,27 +406,6 @@
          inteiro. O Encerramento do Ciclo desceu para o fim da aba — é ação
          irreversível e de uma vez por dia, não merece disputar espaço com a
          fila no alto da tela. -->
-    <div class="card">
-      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-fila"/></svg> Fila de Programados</div>
-      <div class="card-sub">Só as cargas programadas hoje. As de outros dias seguem na Torre de Controle.</div>
-      <div class="gap8" style="margin-bottom:12px">
-        <button class="btn btn-sec btn-sm" onclick="reordenarPorSequenciaUI()">↕️ Reordenar por Sequência</button>
-      </div>
-      <div class="aviso-inline no-print" id="prog-fila-outros-dias" hidden></div>
-      <div class="table-wrap">
-        <table>
-          <!-- MESMAS COLUNAS DA TORRE (28/08/2026), a pedido do dono: "na
-               programação eu queria que ficasse igual à torre de controle".
-               Sete colunas na linha e o resto ao clicar — quem varre a fila
-               do dia procura sequência, número e caminhão; o resto é
-               preenchimento, e preenchimento tem lugar próprio. Veículo
-               reúne placa, transportadora e tipo, como lá. -->
-          <thead><tr><th>Seq.</th><th>Nº Carga</th><th>Veículo</th><th>Motorista</th><th>Rota</th><th>Peso (kg)</th><th>Palet.</th><th>Tipo de Operação</th><th class="no-print">Ação</th></tr></thead>
-          <tbody id="prog-fila-tbody"></tbody>
-        </table>
-      </div>
-      <div class="empty-state" id="prog-fila-empty" data-icone="📋" hidden>Nenhuma carga programada aguardando chegada.</div>
-    </div>
 
     <div class="card">
       <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-espera"/></svg> Aguardando Carga <span id="prog-aguardando-count" class="pill-count" hidden>0</span></div>
