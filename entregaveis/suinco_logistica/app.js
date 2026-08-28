@@ -9324,72 +9324,98 @@ function acoesMontagemHtml(m, trancada){
 /* Puxa do modelo as rotas deste dia da semana que ainda não têm carga.
    Não apaga nem duplica o que já existe: rodar duas vezes seguidas não
    faz nada na segunda. */
-async function aplicarModeloDoDiaUI(){
-  if(!_montagemDia) return;
-  const { dia, modelo, montagens } = _montagemDia;
-  /* CONTA por rota, não presença.
+/* O QUE AINDA FALTA MONTAR DO MODELO — UMA FUNÇÃO, DOIS CHAMADORES.
 
-     O modelo prevê a MESMA praça mais de uma vez no mesmo dia — duas
-     saídas para Patos de Minas na sexta é rotina, e por isso o índice
-     único é (dia, rota, ordem) e não (dia, rota).
+   Extraída de `aplicarModeloDoDiaUI` em 28/08/2026, e o motivo é um
+   vermelho: o teste do dia reimplementava esta conta com um Set de códigos
+   de rota — a PRIMEIRA versão desta lógica, abandonada justamente por
+   errar. Ele passava por sorte, enquanto as linhas já montadas tivessem
+   códigos distintos; no dia em que duas montagens caíram na mesma praça,
+   ele acusou 38 onde o painel oferece 37.
 
-     A primeira versão filtrava com um Set de rotas já montadas: bastava
-     uma carga de Patos existir para as OUTRAS saídas de Patos sumirem da
-     oferta. Na sexta isso escondia 20 das 39 cargas do dia. */
+   Teste que reimplementa a regra não testa a regra: testa a cópia que ele
+   mesmo escreveu. Agora existe UMA conta, aqui, e quem quiser saber o que
+   falta — a tela ou a prova — pergunta para ela.
+
+   CONTA por rota, não presença.
+
+   O modelo prevê a MESMA praça mais de uma vez no mesmo dia — duas
+   saídas para Patos de Minas na sexta é rotina, e por isso o índice
+   único é (dia, rota, ordem) e não (dia, rota).
+
+   A primeira versão filtrava com um Set de rotas já montadas: bastava
+   uma carga de Patos existir para as OUTRAS saídas de Patos sumirem da
+   oferta. Na sexta isso escondia 20 das 39 cargas do dia. */
   /* CASA POR LINHA DO MODELO, NAO POR CODIGO DE ROTA (25/08/2026).
 
-     Relato do dono: "ta tudo duplicado ainda na montagem do dia".
+   Relato do dono: "ta tudo duplicado ainda na montagem do dia".
 
-     As duas versoes anteriores erraram no mesmo lugar, cada uma de um
-     jeito. A primeira usava um Set de codigos: bastava uma carga de Patos
-     existir para as OUTRAS saidas de Patos sumirem da oferta. A segunda
-     passou a CONTAR por codigo — resolveu o sumico e criou a duplicata.
+   As duas versoes anteriores erraram no mesmo lugar, cada uma de um
+   jeito. A primeira usava um Set de codigos: bastava uma carga de Patos
+   existir para as OUTRAS saidas de Patos sumirem da oferta. A segunda
+   passou a CONTAR por codigo — resolveu o sumico e criou a duplicata.
 
-     Contagem nao resolve ambiguidade. Na terca, Arinos/Buritis, Joao
-     Pinheiro, Paracatu, Riachinho e Unai sao todos o codigo 504: contando,
-     o painel sabe que "faltam 2 de 504" e nao sabe QUAIS 2. Puxa duas
-     quaisquer, e o dia fica com Joao Pinheiro repetido e Unai faltando.
+   Contagem nao resolve ambiguidade. Na terca, Arinos/Buritis, Joao
+   Pinheiro, Paracatu, Riachinho e Unai sao todos o codigo 504: contando,
+   o painel sabe que "faltam 2 de 504" e nao sabe QUAIS 2. Puxa duas
+   quaisquer, e o dia fica com Joao Pinheiro repetido e Unai faltando.
 
-     Identidade resolve. Cada montagem guarda a linha do modelo que a
-     originou (migracao 035), e a pergunta passa a ser exata: esta linha ja
-     virou carga hoje?
+   Identidade resolve. Cada montagem guarda a linha do modelo que a
+   originou (migracao 035), e a pergunta passa a ser exata: esta linha ja
+   virou carga hoje?
 
-     E QUANDO A MIGRACAO AINDA NAO SUBIU? (26/08/2026)
+   E QUANDO A MIGRACAO AINDA NAO SUBIU? (26/08/2026)
 
-     A versao anterior desta funcao so sabia casar por modelo_id. Num
-     servidor sem a migracao 035 esse campo simplesmente nao existe, entao
-     NADA casava: cada clique em "puxar o modelo" recriava o dia inteiro.
-     Foi o que a apuracao de 25/08 mostrou — 53 linhas na montagem, quase
-     todas vazias e em pares, uma unica virando carga.
+   A versao anterior desta funcao so sabia casar por modelo_id. Num
+   servidor sem a migracao 035 esse campo simplesmente nao existe, entao
+   NADA casava: cada clique em "puxar o modelo" recriava o dia inteiro.
+   Foi o que a apuracao de 25/08 mostrou — 53 linhas na montagem, quase
+   todas vazias e em pares, uma unica virando carga.
 
-     Isso foi erro meu de projeto, nao do servidor: escrevi uma correcao
-     que so funciona depois que outra coisa acontece, e sem plano B ela
-     falha do jeito mais barulhento possivel. Agora ha plano B.
+   Isso foi erro meu de projeto, nao do servidor: escrevi uma correcao
+   que so funciona depois que outra coisa acontece, e sem plano B ela
+   falha do jeito mais barulhento possivel. Agora ha plano B.
 
-     O plano B e ROTA + APELIDO, e ele funciona porque a migracao 034 (essa
-     sim ja aplicada) moveu o destino da planilha para apelido_rota. As
-     seis linhas de codigo 504 da terca — Arinos, Joao Pinheiro, Paracatu,
-     Riachinho, Unai — tem apelidos DIFERENTES. O que era ambiguo contando
-     por codigo deixa de ser ao olhar o destino.
+   O plano B e ROTA + APELIDO, e ele funciona porque a migracao 034 (essa
+   sim ja aplicada) moveu o destino da planilha para apelido_rota. As
+   seis linhas de codigo 504 da terca — Arinos, Joao Pinheiro, Paracatu,
+   Riachinho, Unai — tem apelidos DIFERENTES. O que era ambiguo contando
+   por codigo deixa de ser ao olhar o destino.
 
-     E CONTAGEM, nao presenca: o modelo preve a mesma praca duas vezes no
-     mesmo dia (duas saidas para Montes Claros na sexta), e um Set faria a
-     segunda sumir da oferta. Cada montagem existente consome UMA linha do
-     modelo; o que sobrar e o que ainda falta montar.
+   E CONTAGEM, nao presenca: o modelo preve a mesma praca duas vezes no
+   mesmo dia (duas saidas para Montes Claros na sexta), e um Set faria a
+   segunda sumir da oferta. Cada montagem existente consome UMA linha do
+   modelo; o que sobrar e o que ainda falta montar.
 
-     Os dois criterios convivem porque o dia seguinte a uma migracao tem os
-     dois tipos de linha na mesma tela: a antiga sem modelo_id e a nova com
-     ele. Casar so por um dos dois traria a duplicata de volta pela metade. */
+   Os dois criterios convivem porque o dia seguinte a uma migracao tem os
+   dois tipos de linha na mesma tela: a antiga sem modelo_id e a nova com
+   ele. Casar so por um dos dois traria a duplicata de volta pela metade. */
+function linhasDoModeloQueFaltam(modelo, montagens){
   const contagem = new Map();
   const chaveExata   = (x) => `id:${x.modelo_id}`;
   const chaveDestino = (x) => `rt:${x.rota_codigo || ''}¦${x.apelido_rota || ''}`;
 
-  for(const g of montagens){
+  for(const g of (montagens || [])){
     if(g.cancelada_em) continue;
-    /* Carga avulsa (criada na mao, sem vir do modelo) tem rota mas nao tem
-       apelido do modelo. Ela entra na contagem pela chave de destino, o que
-       e o certo: se alguem ja montou Unai na mao, o modelo nao precisa
-       oferecer Unai de novo. */
+    /* CARGA AVULSA NAO CONSOME LINHA DO MODELO — e isso e deliberado.
+
+       O comentario antigo aqui dizia o contrario ("se alguem ja montou Unai
+       na mao, o modelo nao precisa oferecer Unai de novo") e o codigo nunca
+       fez isso: a linha feita a mao tem rota mas NAO tem apelido, e a chave
+       de destino do modelo tem ("rt:504¦Unai"). As duas nunca casaram.
+       Medido em 28/08/2026, com dois avulsos de rota 500 e um modelo que
+       tem "500 ¦ Patos de Minas": consumo zero.
+
+       E o comportamento CERTO, e o comentario e que estava errado. Uma
+       carga extra na rota 500 nao e a saida de Patos de Minas prevista para
+       o dia — e frete a mais. Deixar ela apagar a linha prevista seria uma
+       rota que nao embarca, e ninguem descobre: linha que some da oferta
+       nao aparece em lugar nenhum. Oferecer uma linha a mais aparece: a
+       pessoa le a lista antes de confirmar e cancela o que nao quer.
+
+       Vale a mesma razao do 504 mais abaixo — sem apelido nao da para saber
+       QUAL destino a avulsa atende, e escolher um no chute e o defeito que
+       a contagem por codigo produzia. */
     const k = g.modelo_id != null ? chaveExata(g) : chaveDestino(g);
     contagem.set(k, (contagem.get(k) || 0) + 1);
   }
@@ -9402,8 +9428,14 @@ async function aplicarModeloDoDiaUI(){
   };
 
   // Tenta a identidade exata primeiro; so cai no destino se ela nao casar.
-  const novas = modelo.filter(m =>
+  return (modelo || []).filter(m =>
     !consumir(chaveExata(m)) && !consumir(chaveDestino(m)));
+}
+
+async function aplicarModeloDoDiaUI(){
+  if(!_montagemDia) return;
+  const { dia, modelo, montagens } = _montagemDia;
+  const novas = linhasDoModeloQueFaltam(modelo, montagens);
   /* Duas situações MUITO diferentes que davam a mesma resposta, e a
      resposta era falsa quando o modelo estava vazio: dizer "já estão
      montadas" para quem nunca cadastrou rota nenhuma manda a pessoa

@@ -187,20 +187,60 @@ async def main():
             }""")
         n1 = await pg.evaluate("() => _montagemDia.montagens.filter(m => !m.cancelada_em).length")
         # Simula o segundo clique: as rotas já montadas são filtradas fora.
+        # PERGUNTA À FUNÇÃO DE VERDADE, e não a uma cópia dela (28/08/2026).
+        #
+        # Este bloco reimplementava a conta aqui, com um Set de códigos de
+        # rota — que é a PRIMEIRA versão da lógica, abandonada em 25/08 por
+        # errar: bastava uma carga de Patos existir para as outras saídas de
+        # Patos sumirem da oferta. O teste passava por sorte, enquanto as
+        # linhas já montadas tivessem códigos distintos. No dia em que duas
+        # caíram na mesma praça, ele acusou 38 onde o painel oferece 37 — e
+        # o errado era ele, não o painel.
+        #
+        # Teste que reimplementa a regra não testa a regra: testa a cópia
+        # que ele mesmo escreveu. Agora chama `linhasDoModeloQueFaltam`, a
+        # mesma função que o botão "puxar o modelo" usa — uma função, dois
+        # chamadores.
         novas = await pg.evaluate(
-            """() => {
-                 const ja = new Set(_montagemDia.montagens.filter(m => !m.cancelada_em)
-                                     .map(m => m.rota_codigo));
-                 return _montagemDia.modelo.filter(m => !ja.has(m.rota_codigo)).length;
-               }""")
+            """() => linhasDoModeloQueFaltam(
+                 _montagemDia.modelo, _montagemDia.montagens).length""")
         montadas = await pg.evaluate(
             """() => _montagemDia.montagens.filter(m => !m.cancelada_em).length""")
         no_modelo = await pg.evaluate("() => _montagemDia.modelo.length")
-        # Conta LINHAS, não rotas distintas: o modelo prevê a mesma praça
-        # mais de uma vez no mesmo dia, e cada uma é uma carga.
-        ck('o que falta montar é o modelo menos o que já foi montado',
-           novas == max(0, no_modelo - montadas),
-           f'modelo {no_modelo} linhas, {montadas} montadas, oferece {novas}')
+        # A REGRA DESTE BLOCO É IDEMPOTÊNCIA, e era isso que a asserção
+        # antiga NÃO media (28/08/2026).
+        #
+        # Ela comparava `oferecidas == modelo - montadas`, o que só vale se
+        # TODA montagem existente tiver vindo do modelo. As duas montagens
+        # que os blocos anteriores criam são AVULSAS — feitas à mão, sem
+        # `modelo_id` e sem apelido. Elas não consomem linha do modelo, e
+        # não devem consumir mesmo: uma carga extra na rota 500 não é a
+        # saída de Patos de Minas prevista para o dia, e fazer a saída
+        # prevista sumir seria uma rota que não embarca — invisível.
+        # Oferecer uma linha a mais é visível: a pessoa lê a lista e
+        # cancela. (Ver o comentário de `linhasDoModeloQueFaltam`.)
+        #
+        # O que este bloco promete no título é outra coisa, e é o que se
+        # mede agora: puxar o modelo DUAS VEZES não duplica. Depois de
+        # montar o que falta, não falta mais nada.
+        depois = await pg.evaluate(
+            """() => {
+                 const modelo = _montagemDia.modelo;
+                 const faltam = linhasDoModeloQueFaltam(modelo, _montagemDia.montagens);
+                 // Simula o clique: cada linha oferecida vira montagem, com
+                 // a identidade da linha do modelo que a originou.
+                 const agora = _montagemDia.montagens.concat(
+                   faltam.map(m => ({ modelo_id: m.modelo_id, rota_codigo: m.rota_codigo,
+                                      apelido_rota: m.apelido_rota })));
+                 return linhasDoModeloQueFaltam(modelo, agora).length;
+               }""")
+        ck('depois de montar o que falta, o segundo clique não oferece nada',
+           depois == 0,
+           f'modelo {no_modelo} linhas, {montadas} montadas, ofereceu {novas}, '
+           f'no segundo clique oferece {depois}')
+        ck('e o modelo inteiro cabe no dia — nenhuma linha some da oferta',
+           novas + 0 <= no_modelo and novas > 0,
+           f'{novas} de {no_modelo} linhas oferecidas')
 
         print('\n=== 8. O MODELO DA SEMANA TEM TELA, E O BOTÃO NÃO FICA MUDO ===')
         # O defeito que este bloco existe para não deixar voltar: a
