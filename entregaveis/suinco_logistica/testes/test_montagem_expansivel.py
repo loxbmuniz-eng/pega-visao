@@ -346,7 +346,18 @@ async def main():
               // reprovar a linha por não ter um botão que ela não deve ter.
               const linhas = [...document.querySelectorAll(
                 '#mont-tbody tr.mont-linha:not(.linha-fraca):not(.mont-linha-carga)')];
-              const semPlaca = linhas.find(tr => tr.textContent.includes('sem placa'));
+              /* "sem placa" virou o PLACEHOLDER de um campo (28/08/2026):
+                 a coluna Veículo passou a aceitar a placa na própria linha,
+                 a pedido do dono. Placeholder não entra em textContent, e
+                 procurar pelo texto passou a não achar linha nenhuma — o
+                 teste reprovava sem que nada tivesse quebrado. A pergunta
+                 certa agora é pelo campo VAZIO, que é o que "sem placa"
+                 sempre quis dizer. */
+              const semPlaca = linhas.find(tr => {
+                const campo = tr.querySelector('.placa-input');
+                if(campo) return !campo.value.trim();
+                return tr.textContent.includes('sem placa');
+              });
               const comPlaca = linhas.find(tr => {
                 const b = tr.querySelector('.mont-btn-criar');
                 return b && !b.disabled;

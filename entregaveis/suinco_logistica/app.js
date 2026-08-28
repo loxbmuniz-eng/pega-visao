@@ -8940,12 +8940,24 @@ function rotaMontagemSelectHtml(m){
   // select abriria em branco e a primeira gravação trocaria a rota da
   // carga sem ninguém pedir.
   const conhecida = ROTAS.some(r => String(r.codigo) === atual);
-  return `<select class="rota-inline" aria-label="Rota"
+  /* O DESTINO CONTINUA SENDO O TÍTULO (28/08/2026 — segunda tentativa).
+
+     A primeira versão desta função trocou o título pelo seletor, e o
+     seletor mostra a PRAÇA. Isso desfez a correção da ocorrência #14: numa
+     terça, Arinos/Buritis, João Pinheiro, Paracatu, Riachinho e Unaí são
+     todos o código 504 — com a praça no lugar do título, seis linhas
+     diferentes voltam a parecer a mesma, que foi o relato "tão saindo
+     duplicadas as rotas". O teste pegou antes de ir para o pátio.
+
+     Agora as duas coisas convivem: o destino em cima, em negrito, para
+     RECONHECER a linha; o seletor embaixo, para TROCAR a rota. */
+  return `${destinoMontagemHtml(m)}
+    <select class="rota-inline" aria-label="Trocar a rota desta linha"
+        title="Trocar a rota desta linha"
         onchange="alterarRotaMontagemUI('${id}', this.value)">
       ${conhecida ? '' : `<option value="${esc(atual)}" selected>${esc(m.rota_nome || atual)} · ${esc(atual)}</option>`}
       ${ROTAS.map(r => `<option value="${esc(r.codigo)}"${String(r.codigo)===atual?' selected':''}>${esc(rotaLabel(r.codigo))}</option>`).join('')}
-    </select>${m.apelido_rota
-      ? `<div class="mont-apelido text-dim">do modelo: ${esc(m.apelido_rota)}</div>` : ''}`;
+    </select>`;
 }
 
 /* Trocar a rota limpa o apelido do modelo: ele pertencia à linha antiga.
@@ -9243,7 +9255,7 @@ function linhaMontagemHtml(m){
                  : `alterarMontagemUI('${id}','motorista',this.value)`}"></td>
       <td ${comoCarga ? '' : 'onclick="event.stopPropagation()"'}>${comoCarga
             ? `${destinoMontagemHtml(m)} ${marca}`
-            : rotaMontagemSelectHtml(m)}</td>
+            : `${rotaMontagemSelectHtml(m)} ${marca}`}</td>
       <td onclick="event.stopPropagation()">${comoCarga
             ? celulaCargaHtml(cargaViva, 'peso')
             : `<input type="number" min="0" class="peso-input" value="${m.peso ?? ''}"

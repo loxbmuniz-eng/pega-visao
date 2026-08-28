@@ -48,8 +48,21 @@ const DEV_ETAPAS = [
   { status: 'Recebida na Portaria',     proxima: 'Conferida no Faturamento',
     botao: '⚖️ Pesar na chegada (Faturamento)', pede: 'faturamento',
     setores: ['Faturamento', 'Logística'] },
+  /* O "OKZINHO" DA EXPEDIÇÃO (28/08/2026).
+
+     O dono, depois de ouvir a Expedição: "quando o caminhão chega à
+     expedição, eles não conseguem verificar se toda a quantidade chegou
+     nem fazer a destinação imediatamente. Por isso pediram para deixar
+     apenas o 'OKzinho', como na Central de Notas".
+
+     Era `pede: null` — a etapa tinha só o botão, sem nem um lugar para
+     escrever. Agora é check + recado, igual às duas últimas etapas. A
+     conferência de quantidade e a destinação continuam na tela e podem ser
+     feitas depois, por eles ou pela Logística: elas nunca travaram o OK, e
+     tirá-las apagaria a "falta", que é o que o checklist existe para
+     apontar. */
   { status: 'Conferida no Faturamento', proxima: 'Descarga Conferida',
-    botao: '📦 Descarga conferida (Expedição)', pede: null,
+    botao: '📦 Descarga conferida (Expedição)', pede: 'expedicao',
     setores: ['Expedição', 'Logística'] },
   /* A SEGUNDA IDA À BALANÇA (27/08/2026). O dono: "depois que descarrega
      o motorista volta pra balança e pesa o peso final com o caminhão
@@ -693,6 +706,22 @@ function cabecalhoEditavelDev(d, editavel) {
       </div>
     </div>` : '';
 
+  /* O posto da Expedição no cabeçalho. Ela já tinha a coluna de
+     conferência dentro da tabela de itens; o que faltava era o lugar de
+     escrever o recado — o mesmo que os dois postos seguintes têm. */
+  const blocoExpedicao = (setor === 'Expedição' || admin) ? `
+    <div class="dev-cab-posto">
+      <div class="dev-cab-posto-tit">📦 Expedição</div>
+      <div class="form-grid dev-cab-grid">
+        <div style="grid-column:1/-1"><label>Observações para a próxima etapa</label>
+          <input type="text" id="dev-cab-${esc(d.id)}-obsExpedicao"
+            value="${esc(d.obsExpedicao || '')}" placeholder="O que a próxima etapa precisa saber da descarga"
+            title="Sai no relatório e é o recado da descarga para quem vem depois."
+            onchange="editarDevolucaoCampoUI('${escJs(d.id)}','obsExpedicao',this.value)">
+        </div>
+      </div>
+    </div>` : '';
+
   const blocoNotas = (setor === 'Central de Notas' || admin) ? `
     <div class="dev-cab-posto">
       <div class="dev-cab-posto-tit">🧾 Central de Notas</div>
@@ -740,6 +769,9 @@ function cabecalhoEditavelDev(d, editavel) {
   }
   /* Os recados de cada etapa para a seguinte — é para isso que eles existem:
      quem está na etapa de agora precisa LER o que a anterior escreveu. */
+  if (setor !== 'Expedição' && !admin && d.obsExpedicao) {
+    resumo.push(`Expedição: “${esc(d.obsExpedicao)}”`);
+  }
   if (setor !== 'Controles Internos' && !admin && d.obsControles) {
     resumo.push(`Controles Internos: “${esc(d.obsControles)}”`);
   }
@@ -751,7 +783,7 @@ function cabecalhoEditavelDev(d, editavel) {
     : '';
 
   return `${rotasChips}${blocoLogistica}${blocoPortaria}${blocoFaturamento}`
-    + `${blocoControles}${blocoNotas}${blocoResumo}`;
+    + `${blocoExpedicao}${blocoControles}${blocoNotas}${blocoResumo}`;
 }
 
 /* A CONTA DAS DUAS BALANÇAS (27/08/2026).
@@ -885,7 +917,7 @@ function acaoEtapaDev(d) {
         oninput="previewPesoDevolvidoUI('${escJs(d.id)}')"
         title="Pesagem depois da descarga, caminhão vazio.">
       <span class="dev-peso-conta" id="dev-et-${esc(d.id)}-conta">${contaPesoDevHtml(d)}</span>`;
-  } else if (etapa.pede === 'controles' || etapa.pede === 'notas') {
+  } else if (etapa.pede === 'expedicao' || etapa.pede === 'controles' || etapa.pede === 'notas') {
     /* AS DUAS ÚLTIMAS ETAPAS SÃO CHECK + RECADO (27/08/2026).
 
        O dono: "controles internos e central de notas, que precisa só de um
@@ -894,10 +926,10 @@ function acaoEtapaDev(d) {
 
        O "Gerou RDC?" saiu daqui a pedido dele. O dado continua no banco e
        nos relatórios antigos — o que saiu foi a pergunta na tela. */
-    const ehControles = etapa.pede === 'controles';
+    const jaEscrito = { expedicao: d.obsExpedicao, controles: d.obsControles, notas: d.obsNotas };
     extras = `<input type="text" id="dev-et-${esc(d.id)}-obs"
       placeholder="Observações para a próxima etapa (saem no relatório)"
-      value="${esc(ehControles ? d.obsControles : (d.obsNotas || ''))}"
+      value="${esc(jaEscrito[etapa.pede] || '')}"
       title="O recado de quem faz esta etapa para quem vem depois.">`;
   }
   return `<div class="dev-etapa-acao">
@@ -1086,6 +1118,7 @@ function renderDevolucaoAberta(d, editavel) {
       </div>
       ${d.pesoEntrada !== null && d.pesoEntrada !== undefined
         ? `<div class="card-sub dev-peso-conta">${contaPesoDevHtml(d)}</div>` : ''}
+      ${d.obsExpedicao ? `<div class="card-sub"><strong>Obs. Expedição:</strong> ${esc(d.obsExpedicao)}</div>` : ''}
       ${d.obsControles ? `<div class="card-sub"><strong>Obs. Controles Internos:</strong> ${esc(d.obsControles)}</div>` : ''}
       ${d.obsNotas ? `<div class="card-sub"><strong>Obs. Central de Notas:</strong> ${esc(d.obsNotas)}</div>` : ''}
       ${d.gerouRdc !== null && d.gerouRdc !== undefined
@@ -1285,6 +1318,8 @@ function avancarEtapaDevolucaoUI(id) {
     corpo.pesoEntrada = v('pesoentrada') || '';
   } else if (etapa.pede === 'pesofinal') {
     corpo.pesoFinal = v('pesofinal') || '';
+  } else if (etapa.pede === 'expedicao') {
+    corpo.obsExpedicao = v('obs') || '';
   } else if (etapa.pede === 'controles') {
     corpo.obsControles = v('obs') || '';
   } else if (etapa.pede === 'notas') {
@@ -1662,6 +1697,7 @@ async function relatorioDevolucoesUI(diaParam) {
           <strong>Divergentes (fora do checklist):</strong>
           ${d.divergencias.map((v) => `${v.cx.toLocaleString('pt-BR')} cx ${esc(v.codProduto)}${v.produtoNome ? '-' + esc(v.produtoNome) : ''}${v.observacao ? ' (' + esc(v.observacao) + ')' : ''}`).join(' · ')}
         </div>` : ''}
+      ${d.obsExpedicao ? `<div class="dev-doc-diverg"><strong>Obs. Expedição:</strong> ${esc(d.obsExpedicao)}</div>` : ''}
       ${d.obsControles ? `<div class="dev-doc-diverg"><strong>Obs. Controles Internos:</strong> ${esc(d.obsControles)}</div>` : ''}
       ${d.gerouRdc !== null && d.gerouRdc !== undefined
         ? `<div class="dev-doc-diverg"><strong>RDC (romaneio):</strong> ${d.gerouRdc ? 'Sim — gerado' : 'Não gerado'}</div>` : ''}

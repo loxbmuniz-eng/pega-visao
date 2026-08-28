@@ -1896,9 +1896,10 @@ code{
 #mont-tbody .peso-input{ width:82px }
 #mont-tbody .rota-inline{ min-width:150px; width:100% }
 #mont-tbody .motorista-input{ min-width:80px; width:100% }
-/* O apelido do modelo ("Triângulo Mineiro - Total Service") é apoio, não
-   título: a rota da linha agora é o que está escolhido no campo acima. */
-.mont-apelido{ font-size:11px; margin-top:3px; line-height:1.2 }
+/* O seletor de rota fica ABAIXO do destino, e menor: o destino é o que
+   identifica a linha (ocorrência #14 — seis linhas do código 504 são seis
+   cidades diferentes), o seletor é só o controle para trocá-la. */
+#mont-tbody .rota-inline{ margin-top:4px; font-size:11.5px; padding:3px 4px }
 
 /* TORRE SEM ROLAGEM LATERAL (11/08/2026).
 
