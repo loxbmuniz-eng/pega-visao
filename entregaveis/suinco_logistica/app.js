@@ -3068,29 +3068,56 @@ function renderProgFila(){
   const lista = todosAguardando.filter(doDia).sort(ordenarPorSequenciaEAtualizacao);
   const deOutrosDias = todosAguardando.length - lista.length;
 
-  document.getElementById('prog-fila-tbody').innerHTML = lista.map(c=>`
-    <tr>
-      <td><input type="number" class="seq-input" value="${c.sequencia ?? ''}" onchange="atualizarSequenciaUI('${c.id}',this.value)" title="Sequência livre — digite o número que quiser, a qualquer momento."></td>
-      <td class="col-identificacao">
-        <input type="text" class="numero-carga-input" value="${esc(c.numeroCarga)}" onchange="atualizarNumeroCargaUI('${escJs(c.id)}',this.value)" title="Alterar o número desta carga.">
+  /* A FILA COM A CARA DA TORRE (28/08/2026).
+
+     Pedido do dono: "na programação eu queria que ficasse igual à torre de
+     controle (...) e clicar em cima e ela possa expandir e aí sim ter todas
+     as informações completas".
+
+     São as MESMAS sete colunas da Torre, na mesma ordem, com a mesma
+     célula de Veículo (placa + transportadora + tipo empilhados). Ordem
+     igual não é estética: é a mesma pessoa, no mesmo dia, olhando a mesma
+     carga em duas telas — e duas ordens diferentes para o mesmo trabalho
+     produzem erro de campo trocado.
+
+     O que saiu da linha (Tipo de Operação, Ganchos, Entregas, Observações,
+     Cliente, Destino) NÃO saiu do sistema: está na expansão, editável, e
+     grava nas mesmas funções de sempre. Varrer a fila é procurar sequência,
+     número e caminhão; preencher é outro momento, e agora tem lugar próprio.
+
+     Os botões ficam NA LINHA, por decisão do dono — quem programa outra
+     carga ou exclui está varrendo, não preenchendo. O stopPropagation
+     impede que clicar neles abra a linha por tabela. */
+  document.getElementById('prog-fila-tbody').innerHTML = lista.map(c=>{
+    const id = escJs(c.id);
+    const aberta = _progFilaAberta === c.id;
+    const linha = `
+    <tr class="prog-linha${aberta ? ' prog-linha-aberta' : ''}"
+        onclick="alternarLinhaProgFilaUI('${id}')"
+        title="Clique para abrir os demais campos desta carga">
+      <td onclick="event.stopPropagation()"><input type="number" class="seq-input" value="${c.sequencia ?? ''}" onchange="atualizarSequenciaUI('${id}',this.value)" title="Sequência livre — digite o número que quiser, a qualquer momento."></td>
+      <td class="col-identificacao" onclick="event.stopPropagation()">
+        <input type="text" class="numero-carga-input" value="${esc(c.numeroCarga)}" onchange="atualizarNumeroCargaUI('${id}',this.value)" title="Alterar o número desta carga.">
       </td>
-      <td>
-        <input type="text" class="placa-input" value="${esc(c.placa)}" onchange="atualizarPlacaUI('${escJs(c.id)}',this.value)" title="Trocar a placa — a transportadora e o tipo de veículo são buscados na Frota automaticamente.">
-        ${marcaCargaDaPlaca(c, lista)}${chipNoPatioHtml(c)}
-      </td>
-      <td id="transp-${esc(c.id)}">${esc(c.transportadora)||'—'}</td>
-      <td>${rotaSelectHtml(c)}</td>
-      <td>${praOndeSelectHtml(c)}</td>
-      <td class="c-peso"><input type="number" class="peso-input" min="0" step="1" value="${c.peso ?? ''}" onchange="atualizarPesoUI('${escJs(c.id)}',this.value)" title="Peso em kg."></td>
-      <td>${paletizadaSelectHtml(c)}</td>
-      <td><input type="number" class="ganchos-input" min="0" step="1" value="${c.qtdGanchos ?? 0}" onchange="atualizarGanchosUI('${c.id}',this.value)" title="0 = Liso"></td>
-      <td><input type="number" class="entregas-input" min="0" step="1" value="${c.qtdEntregas ?? 1}" onchange="atualizarEntregasUI('${escJs(c.id)}',this.value)" title="Quantidade de entregas."></td>
-      <td class="no-print gap8">
-        <button class="btn btn-sec btn-sm" onclick="adicionarOutraCargaNaPlacaUI('${escJs(c.id)}')"
+      <td class="col-identificacao cel-veiculo" onclick="event.stopPropagation()">
+        <input type="text" class="placa-input" value="${esc(c.placa)}" onchange="atualizarPlacaUI('${id}',this.value)" title="Trocar a placa — a transportadora e o tipo de veículo são buscados na Frota automaticamente.">
+        <span class="veic-transp" id="transp-${esc(c.id)}">${esc(c.transportadora)||'—'}</span>
+        <span class="veic-tipo">${esc(c.tipoVeiculo)||'—'}</span>
+        ${marcaCargaDaPlaca(c, lista)}${chipNoPatioHtml(c)}</td>
+      <td onclick="event.stopPropagation()">
+        <input type="text" class="motorista-input" value="${esc(c.motorista||'')}" onchange="atualizarMotoristaUI('${id}',this.value)" title="Quem dirige ESTA viagem — não mexe no cadastro da placa."></td>
+      <td onclick="event.stopPropagation()">${rotaSelectHtml(c)}</td>
+      <td class="c-peso" onclick="event.stopPropagation()"><input type="number" class="peso-input" min="0" step="1" value="${c.peso ?? ''}" onchange="atualizarPesoUI('${id}',this.value)" title="Peso em kg."></td>
+      <td onclick="event.stopPropagation()">${paletizadaSelectHtml(c)}</td>
+      <td class="no-print gap8" onclick="event.stopPropagation()">
+        <button class="btn btn-sec btn-sm" onclick="adicionarOutraCargaNaPlacaUI('${id}')"
                 title="Programar OUTRA carga para este mesmo caminhão — o formulário já vem com placa, transportadora, motorista e rota preenchidos.">➕ Outra carga</button>
-        <button class="btn btn-danger btn-sm" onclick="excluirCargaUI('${escJs(c.id)}')">Excluir</button>
+        <button class="btn btn-danger btn-sm" onclick="excluirCargaUI('${id}')">Excluir</button>
+        <span class="mont-seta${aberta ? ' aberta' : ''}" aria-hidden="true">▸</span>
       </td>
-    </tr>`).join('');
+    </tr>`;
+    return aberta ? linha + `<tr class="prog-detalhe"><td colspan="8">${formCargaFilaHtml(c)}</td></tr>` : linha;
+  }).join('');
   document.getElementById('prog-fila-empty').hidden = lista.length>0;
 
   // Some sem explicação é pior que não sumir: quem programou ontem
@@ -3102,6 +3129,81 @@ function renderProgFila(){
       ? '1 carga programada em outro dia continua aguardando veículo — veja na Torre de Controle.'
       : `${deOutrosDias} cargas programadas em outros dias continuam aguardando veículo — veja na Torre de Controle.`;
   }
+}
+
+/* Qual linha da fila está aberta. Uma só: duas expansões abertas ao mesmo
+   tempo empurram a lista para baixo e quem varre perde a referência. */
+let _progFilaAberta = null;
+
+function alternarLinhaProgFilaUI(id){
+  _progFilaAberta = (_progFilaAberta === id) ? null : id;
+  renderProgFila();
+}
+
+/* O QUE SAIU DA LINHA E VEIO PARA CÁ (28/08/2026).
+
+   Nada foi removido do sistema: Tipo de Operação, Ganchos, Entregas,
+   Observações, Cliente e Destino continuam editáveis e gravam nas MESMAS
+   funções que a Torre e a montagem usam — a alteração cai na carga, entra
+   no log de revisões do servidor e sobe para todos os setores.
+
+   O desenho é o mesmo do formulário da montagem (`.mont-form`), de novo por
+   causa da ordem: a pessoa que preenche aqui é a mesma que preenche lá. */
+function formCargaFilaHtml(c){
+  const id = escJs(c.id);
+  return `
+    <div class="mont-form">
+      <div class="form-row">
+        <div class="form-group"><label>Tipo de Operação</label>${praOndeSelectHtml(c)}</div>
+        <div class="form-group">
+          <label>Qtd. Ganchos <span class="hint">0 = Liso</span></label>
+          <input type="number" min="0" step="1" value="${c.qtdGanchos ?? 0}"
+                 onchange="atualizarGanchosUI('${id}',this.value)"></div>
+        <div class="form-group"><label>Qtd. Entregas</label>
+          <input type="number" min="0" step="1" value="${c.qtdEntregas ?? 1}"
+                 onchange="atualizarEntregasUI('${id}',this.value)"></div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group"><label>Cliente</label>
+          <input type="text" value="${esc(c.cliente)}" placeholder="—"
+                 onchange="atualizarClienteUI('${id}',this.value)"></div>
+        <div class="form-group"><label>Destino</label>
+          <input type="text" value="${esc(c.destino)}" placeholder="—"
+                 onchange="atualizarDestinoUI('${id}',this.value)"></div>
+        <div class="form-group">
+          <label>Transportadora <span class="hint">(vem da Frota pela placa)</span></label>
+          <input type="text" value="${esc(c.transportadora)}" disabled></div>
+      </div>
+
+      <div class="form-group" style="margin-bottom:10px"><label>Observações</label>
+        <textarea onchange="atualizarObservacoesUI('${id}',this.value)"
+          placeholder="O que a operação precisa saber sobre esta carga">${esc(c.observacoes)}</textarea></div>
+
+      <div class="form-group" style="margin-bottom:10px">
+        <span class="text-dim">Programada em ${dataProgramacaoHtml(c)} · status atual ${esc(c.status)}.</span></div>
+
+      <div class="flex-end gap8">
+        <button class="btn btn-sec btn-sm" onclick="alternarLinhaProgFilaUI('${id}')">Fechar</button>
+      </div>
+    </div>`;
+}
+
+/* Cliente e Destino da carga — os dois só existiam no formulário de
+   criação, e quem errava a digitação tinha que excluir e refazer. */
+function atualizarClienteUI(id, val){
+  const c = getCarga(id); if(!c) return;
+  c.cliente = String(val || '').trim();
+  c.atualizadoEm = nowISO();
+  SuincoStore.save();
+  renderAll();
+}
+function atualizarDestinoUI(id, val){
+  const c = getCarga(id); if(!c) return;
+  c.destino = String(val || '').trim();
+  c.atualizadoEm = nowISO();
+  SuincoStore.save();
+  renderAll();
 }
 
 /* Rota e Paletizada viram campo editável na fila — pedido do usuário

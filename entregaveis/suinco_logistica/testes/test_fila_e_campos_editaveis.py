@@ -146,11 +146,44 @@ async def main():
         print('\n=== 6. CAMPOS EDITÁVEIS NA FILA DE PROGRAMADOS ===')
         await pg.evaluate("() => abrirTab('programacao')")
         await pg.wait_for_timeout(400)
+        # NA LINHA continuam os campos de varredura — os mesmos sete da
+        # Torre (28/08/2026, pedido do dono: "na programação eu queria que
+        # ficasse igual à torre de controle").
         for campo, seletor in [('rota', '#prog-fila-tbody .rota-inline'),
                                ('peso', '#prog-fila-tbody .peso-input'),
                                ('paletizada', '#prog-fila-tbody .palet-inline'),
-                               ('entregas', '#prog-fila-tbody .entregas-input')]:
-            ck(f'{campo} é editável na Fila', await pg.is_visible(seletor))
+                               ('motorista', '#prog-fila-tbody .motorista-input')]:
+            ck(f'{campo} é editável na linha da Fila', await pg.is_visible(seletor))
+
+        # ENTREGAS MUDOU DE LUGAR, NÃO SUMIU. Ela saiu da linha e foi para a
+        # expansão, junto com Ganchos, Tipo de Operação, Cliente, Destino e
+        # Observações: varrer a fila é procurar sequência, número e
+        # caminhão; preencher é outro momento. O que este teste garante é
+        # que ela continua EDITÁVEL e gravando na carga — perder o campo
+        # seria o defeito, mudá-lo de lugar é o pedido.
+        d6 = await pg.evaluate("""() => {
+              const tr = document.querySelector('#prog-fila-tbody tr.prog-linha');
+              if(!tr) return { semLinha: true };
+              tr.click();
+              const det = document.querySelector('#prog-fila-tbody tr.prog-detalhe');
+              const c = DB.cargas.find(x => x.numeroCarga === 'HOJE1');
+              return { abriu: !!det,
+                       temEntregas: !!det && det.innerHTML.includes('atualizarEntregasUI'),
+                       temGanchos: !!det && det.innerHTML.includes('atualizarGanchosUI'),
+                       cargaId: c && c.id };
+            }""")
+        if d6.get('semLinha'):
+            print('  (fila vazia nesta execução — nada a medir)')
+        else:
+            ck('a linha da Fila abre ao clique', d6['abriu'] is True, str(d6))
+            ck('e entregas continua editável, agora na expansão',
+               d6['temEntregas'] is True, str(d6))
+            ck('junto com ganchos', d6['temGanchos'] is True, str(d6))
+            if d6.get('cargaId'):
+                chegou = await pg.evaluate(
+                    """(id) => { atualizarEntregasUI(id, '9');
+                                 return getCarga(id).qtdEntregas; }""", d6['cargaId'])
+                ck('e a edição chega na carga', str(chegou) == '9', str(chegou))
 
         print('\n=== CONSOLE ===')
         ck('sem erros de página', not erros, str(erros[:3]))
