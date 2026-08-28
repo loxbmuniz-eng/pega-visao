@@ -4092,39 +4092,163 @@ async function acaoChegadaUI(){
   input.focus();
   renderAll();
 }
-function acaoSaidaUI(){
+/* A SAÍDA DO PÁTIO — REESCRITA DEPOIS DO INCIDENTE DE 28/08/2026.
+
+   O QUE ACONTECEU. A Portaria deu saída na placa PUX2971 às 06:38. No
+   terminal do porteiro apareceu "Seguiu Viagem", com beep de confirmação, e
+   no Histórico dele a movimentação estava lá. A Bruna, em OUTRO terminal,
+   continuou vendo o caminhão no pátio; ligou para o Alysson, que às 08:59
+   deu a saída de novo — e o servidor aceitou, porque para ele a carga
+   nunca tinha saído. Duas horas e meia com o pátio dizendo uma coisa e o
+   painel de cada um dizendo outra.
+
+   POR QUE ACONTECEU — três defeitos meus, empilhados:
+
+   1. A rota `POST /api/portaria/saida` existe no servidor desde 20/08 e
+      NINGUÉM a chamava. A saída era escrita no navegador e entregue à
+      sincronia comum. A etapa que solta o caminhão do pátio era a única
+      que não falava direto com quem manda.
+   2. `acaoChegadaUI` puxa o servidor ANTES de agir desde 19/08, justamente
+      porque lista velha produz decisão errada. A saída, que é o espelho
+      dela, nunca ganhou o mesmo cuidado. Uma função, dois chamadores — e
+      aqui eram dois caminhos com um cuidado só.
+   3. A confirmação era otimista: o beep e o "saída registrada" tocavam
+      antes de qualquer resposta do servidor. Sem rede, ou com o terminal
+      em modo local, a fila offline engolia tudo em silêncio e o porteiro
+      liberava o caminhão achando que estava tudo gravado.
+
+   COMO FICA. Quem decide o que saiu é o SERVIDOR, dentro de uma transação,
+   lendo o estado real da placa. A tela só repete o que ele respondeu. Se
+   ele não responder, o porteiro é avisado ALTO e a placa fica marcada como
+   não confirmada até alguém resolver — porque caminhão liberado com saída
+   não gravada é o começo da carga fantasma do dia seguinte. */
+async function acaoSaidaUI(){
   const input = document.getElementById('portaria-placa');
-  const placa = input.value;
-  if(!normalizarPlaca(placa)){ notify('Informe a placa.','warn'); return; }
-  // Até três lacres na saída (20/08/2026) — ver o comentário em
-  // registrarSaidaPortaria (data.js).
+  const placa = normalizarPlaca(input.value);
+  if(!placa){ notify('Informe a placa.','warn'); return; }
   const lerLacre = (id) => {
     const el = document.getElementById(id);
     return el ? String(el.value || '').trim() : '';
   };
   const lacres = ['portaria-lacre', 'portaria-lacre-2', 'portaria-lacre-3']
     .map(lerLacre).filter(Boolean);
-  const lacre = lacres.join(' · ');
-  const r = registrarSaidaPortaria(placa, nomeOperadorAtual(), lacres);
-  if(r.liberadas.length){
-    ['portaria-lacre', 'portaria-lacre-2', 'portaria-lacre-3'].forEach((id) => {
-      const el = document.getElementById(id);
-      if(el) el.value = '';
-    });
+  const limparLacres = () => ['portaria-lacre', 'portaria-lacre-2', 'portaria-lacre-3']
+    .forEach((id) => { const el = document.getElementById(id); if(el) el.value = ''; });
+
+  const comServidor = typeof SuincoSharePoint !== 'undefined'
+    && SuincoSharePoint.estaConfigurado && SuincoSharePoint.estaConfigurado()
+    && typeof SuincoSharePoint.portariaSaida === 'function';
+
+  /* SEM SERVIDOR NÃO EXISTE SAÍDA CONFIRMADA, e a tela precisa dizer isso
+     com todas as letras. O caminho local continua existindo — o porteiro
+     está com o caminhão na frente e não pode ficar parado —, mas ele sai
+     daqui SABENDO que a baixa ainda não é oficial. */
+  if(!comServidor){
+    const r = registrarSaidaPortaria(placa, nomeOperadorAtual(), lacres);
+    if(r.liberadas.length) limparLacres();
+    marcarSaidaNaoConfirmada(placa, r.liberadas.length,
+      'este terminal está sem servidor');
+    avisarPendentesDaSaida(placa, r);
+    input.value = ''; input.focus(); renderAll();
+    return;
   }
-  if(r.liberadas.length){ notifyGravacao(`${normalizarPlaca(placa)}: saída registrada para ${r.liberadas.length} carga(s) — Seguiu Viagem${String(lacre||'').trim() ? `, lacre ${String(lacre).trim()}` : ''}.`); tocarBeepConfirmacao(); }
-  /* O lacre da saída é INFORMAÇÃO, não trava (decisão de 18/08/2026): a
-     carga segue viagem do mesmo jeito. Mas sair sem número registrado é o
-     tipo de coisa que só aparece quando alguém procura depois — então o
-     painel avisa na hora, com o registro já gravado. */
-  if(r.liberadas.length && !lacres.length){
-    notify(`${normalizarPlaca(placa)} saiu SEM número de lacre informado. A saída está registrada; informe o lacre no campo ao lado da placa nas próximas.`, 'warn', 7000);
+
+  /* Lista velha decide errado: uma leitura antes do clique é o que separa
+     "o servidor não sabia da segunda carga" de "o porteiro foi avisado". */
+  try{ await SuincoSharePoint.sincronizarAgora(); }
+  catch(e){ /* sem rede agora; o POST abaixo é quem vai dizer a verdade */ }
+
+  let resposta;
+  try{
+    resposta = await comOverlaySync('Registrando a saída no servidor…',
+      () => SuincoSharePoint.portariaSaida(placa, lacres));
+  }catch(e){
+    /* A saída NÃO foi gravada. Registrar localmente aqui só recriaria o
+       defeito de hoje — tela verde, servidor mudo. O que se faz é gritar. */
+    notify(`${placa}: a saída NÃO foi registrada no servidor `
+      + `(${e && e.message ? e.message : 'sem resposta'}). `
+      + 'NÃO libere o caminhão sem registrar — tente de novo, e se não passar, '
+      + 'avise a Logística agora.', 'danger', 20000);
+    tocarAlertaAlteracao();
+    marcarSaidaNaoConfirmada(placa, 0, e && e.message ? e.message : 'sem resposta do servidor');
+    input.focus(); input.select();
+    return;
   }
-  if(r.pendentes.length) notify(`${normalizarPlaca(placa)}: ${r.pendentes.length} carga(s) ainda não liberada(s) para saída (status atual: ${r.pendentes.map(c=>c.status).join(', ')}).`, 'warn');
-  if(!r.liberadas.length && !r.pendentes.length) notify(`Nenhuma carga em aberto encontrada para a placa ${normalizarPlaca(placa)}.`, 'warn');
+
+  /* A verdade é a do servidor: o painel adota a resposta dele em vez de
+     confiar no que tinha em memória. */
+  await SuincoSharePoint.sincronizarAgora().catch(()=>{});
+  const liberadas = (resposta && resposta.liberadas) || [];
+  const pendentes = (resposta && resposta.pendentes) || [];
+  limparSaidaNaoConfirmada(placa);
+
+  if(liberadas.length){
+    limparLacres();
+    notifyGravacao(`${placa}: saída CONFIRMADA pelo servidor para ${liberadas.length} carga(s) — `
+      + `Seguiu Viagem${lacres.length ? `, lacre ${lacres.join(' · ')}` : ''}.`);
+    tocarBeepConfirmacao();
+  }
+  if(liberadas.length && !lacres.length){
+    notify(`${placa} saiu SEM número de lacre informado. A saída está registrada; `
+      + 'informe o lacre no campo ao lado da placa nas próximas.', 'warn', 7000);
+  }
+  avisarPendentesDaSaida(placa, { liberadas, pendentes });
   input.value = '';
   input.focus();
   renderAll();
+}
+
+/* O caminhão sai UMA vez, mas a placa pode ter mais de uma carga. Carga que
+   fica para trás não pode ser um aviso que some em cinco segundos: ela é o
+   motivo pelo qual outro setor vai continuar vendo o caminhão no pátio —
+   foi o que a Bruna viu hoje. Então fica escrito na tela da Portaria. */
+function avisarPendentesDaSaida(placa, r){
+  const pendentes = r.pendentes || [];
+  if(!pendentes.length && !r.liberadas.length){
+    notify(`Nenhuma carga em aberto encontrada para a placa ${placa}.`, 'warn', 9000);
+  }
+  const faixa = document.getElementById('portaria-saida-aviso');
+  if(!faixa) return;
+  /* NÃO APAGA UM AVISO DE PERIGO. Os dois avisos moram na mesma faixa, e a
+     ordem em que são escritos não pode decidir qual sobrevive: "a saída não
+     foi confirmada" é mais grave que "sobrou carga" e não pode ser
+     silenciado por não haver pendência. Este defeito apareceu no primeiro
+     teste — o modo local levantava a faixa e ela era apagada uma linha
+     depois. */
+  if(faixa.className.indexOf('aviso-faixa-perigo') >= 0 && !faixa.hidden) return;
+  if(!pendentes.length){ faixa.hidden = true; faixa.innerHTML = ''; return; }
+  const lista = pendentes.map(c => `${esc(c.numeroCarga || c.numero_carga || c.id || '—')} `
+    + `(${esc(c.status || c.status_atual || '—')})`).join(', ');
+  faixa.hidden = false;
+  faixa.className = 'aviso-faixa aviso-faixa-warn';
+  faixa.innerHTML = `<strong>${esc(placa)}: ${pendentes.length} carga(s) NÃO saíram</strong> — `
+    + `${lista}. Só sai o que está Faturado. Enquanto elas estiverem abertas, `
+    + 'os outros setores continuam vendo este caminhão no pátio.';
+  if(pendentes.length) tocarAlertaAlteracao();
+}
+
+/* Saída que não chegou ao servidor não pode virar assunto encerrado. Fica
+   na tela, com a placa, até alguém registrar de verdade. */
+function marcarSaidaNaoConfirmada(placa, quantas, motivo){
+  notify(`${placa}: saída registrada SÓ NESTE TERMINAL (${motivo}). `
+    + 'Os outros setores continuam vendo o caminhão no pátio. '
+    + 'Confirme com a Logística antes de considerar resolvido.', 'danger', 20000);
+  tocarAlertaAlteracao();
+  const faixa = document.getElementById('portaria-saida-aviso');
+  if(!faixa) return;
+  faixa.hidden = false;
+  faixa.className = 'aviso-faixa aviso-faixa-perigo';
+  faixa.innerHTML = `<strong>⚠ ${esc(placa)}: saída NÃO confirmada pelo servidor</strong> — `
+    + `${esc(motivo)}. ${quantas ? quantas + ' carga(s) mudaram só nesta tela. ' : ''}`
+    + 'Registre de novo quando a conexão voltar, ou avise a Logística.';
+}
+
+function limparSaidaNaoConfirmada(placa){
+  const faixa = document.getElementById('portaria-saida-aviso');
+  if(faixa && faixa.className.indexOf('aviso-faixa-perigo') >= 0
+     && faixa.innerHTML.indexOf(placa) >= 0){
+    faixa.hidden = true; faixa.innerHTML = '';
+  }
 }
 
 /* Retenção de lacre na inspeção da saída — pedido do gestor (18/08/2026).
