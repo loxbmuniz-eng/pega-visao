@@ -91,6 +91,24 @@ async def main():
             ck(f'{cid}: e nenhum gráfico ficou vazio', not [k for k,v in t.items() if v<400],
                str([k for k,v in t.items() if v<400]))
 
+        print('\n=== 2b. O DONUT SEMPRE COMPARA ===')
+        # O gráfico da correlação não pode ficar com uma fatia só: com um
+        # motivo filtrado, o outro lado da comparação tem que continuar na
+        # tela. Foi o relato do dono — "não faz a correlação comparativa".
+        await pg.evaluate("() => document.getElementById('btnClear').click()"); await pg.wait_for_timeout(500)
+        itens=await pg.evaluate("() => [...document.getElementById('fItem').options].map(o=>({v:o.value,t:o.text}))")
+        semComp=[]
+        for it in itens[1:]:
+            await pg.select_option('#fItem', it['v']); await pg.wait_for_timeout(300)
+            d=await pg.evaluate("() => G['chDonut'].data.datasets[0].data")
+            if len([v for v in d if v>0]) < 2: semComp.append(it['t'])
+        ck('todo motivo mantém a comparação no donut', not semComp,
+           f'{len(semComp)} sem comparação: {semComp[:4]}')
+        leitura=await pg.evaluate("() => document.getElementById('donutLeitura').innerText")
+        ck('a correlação vem escrita em números embaixo do donut',
+           'do frete base' in leitura, leitura[:80])
+        await pg.evaluate("() => document.getElementById('btnClear').click()"); await pg.wait_for_timeout(500)
+
         print('\n=== 3. MATRIZ E TABELA ===')
         await pg.evaluate("() => document.getElementById('btnClear').click()"); await pg.wait_for_timeout(500)
         cel=await pg.query_selector('#matrix td.cell')

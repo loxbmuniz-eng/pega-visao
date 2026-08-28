@@ -274,8 +274,11 @@ footer{padding:2rem; text-align:center; color:var(--muted); font-size:.78rem}
       </div>
       <div class="card">
         <h3>Frete base × custos extras</h3>
-        <div class="como-ler">Como ler: proporção do frete carne (operação planejada) contra tudo que foi pago além dele no período.</div>
+        <div class="como-ler">Como ler: proporção do frete carne (operação planejada) contra tudo que foi pago além dele no período.
+          Com um motivo escolhido no filtro, ele entra em destaque e a comparação continua de pé — este gráfico existe para
+          comparar, então é o único que não se recorta pelo motivo.</div>
         <div class="chart-wrap"><canvas id="chDonut"></canvas></div>
+        <div class="como-ler" id="donutLeitura" style="margin:.7rem 0 0; color:var(--text); font-size:.85rem; line-height:1.6"></div>
       </div>
     </div>
   </section>
@@ -620,18 +623,89 @@ function gItens(idx){
         y:{ticks:{color:C.text}}},
       onClick:cliqueFiltra(i=>{ F.item = String(m[i][0]); $('fItem').value = F.item; })}});
 }
+/* O DONUT É O GRÁFICO DA CORRELAÇÃO — E PRECISA DOS DOIS LADOS
+   (28/08/2026).
+
+   Relato do dono: "quando coloca só o frete dedicado, o gráfico de pizza
+   não está fazendo a correlação do custo extra vs o frete base; ele gera o
+   gráfico mas não faz a correlação comparativa".
+
+   Ele estava certo, e a causa é a natureza do gráfico. Todos os outros
+   respondem "quanto foi"; este responde "quanto isso PESA contra a
+   operação planejada". Filtrar um motivo dentro dele apagava o outro lado
+   da comparação: com "Frete Dedicado" escolhido sobrava uma fatia só, um
+   círculo inteiro de uma cor — desenho bonito, informação nenhuma.
+
+   Então este gráfico, e só ele, IGNORA o filtro de motivo. Ele continua
+   obedecendo tudo o mais (competência, filial, documento, regional,
+   transportadora, busca): o recorte é o mesmo do resto da tela, o que ele
+   não faz é jogar fora o termo de comparação.
+
+   Com um motivo escolhido, ele passa a ter quatro fatias: o motivo em
+   destaque, o resto dos extras, o custo de falha e o frete base. É a
+   leitura que a diretoria pede — "esse item sozinho é quanto do que
+   planejamos gastar?" — e ela vem escrita embaixo, em uma frase. */
 function gDonut(){
-  const idx = semEscopo();
-  const base = soma(idx.filter(i=>PRINC.has(L.it[i])));
-  const extra = soma(idx.filter(i=>!PRINC.has(L.it[i]) && !RETR.has(L.it[i])));
-  const falha = soma(idx.filter(i=>RETR.has(L.it[i])));
-  const tot = base+extra+falha || 1;
+  const idx = semEscopoNemItem();
+  const itemSel = F.item === '' ? null : Number(F.item);
+  const base  = soma(idx.filter(i => PRINC.has(L.it[i])));
+  const falha = soma(idx.filter(i => RETR.has(L.it[i]) && L.it[i] !== itemSel));
+  const outros = soma(idx.filter(i => !PRINC.has(L.it[i]) && !RETR.has(L.it[i]) && L.it[i] !== itemSel));
+  const doItem = itemSel === null ? 0 : soma(idx.filter(i => L.it[i] === itemSel));
+  const tot = base + falha + outros + doItem || 1;
+
+  const rot = [], val = [], cor = [];
+  if(itemSel !== null){ rot.push(D.itens[itemSel].d); val.push(doItem); cor.push(C.green); }
+  rot.push('Frete base (carne)');   val.push(base);   cor.push(C.blue);
+  rot.push(itemSel === null ? 'Extras operacionais' : 'Outros extras');
+  val.push(outros); cor.push(C.gold);
+  rot.push('Custo de falha');       val.push(falha);  cor.push(C.wine);
+
   grafico('chDonut', {type:'doughnut',
-    data:{labels:['Frete base (carne)','Extras operacionais','Custo de falha'],
-      datasets:[{data:[base,extra,falha], backgroundColor:[C.blue,C.gold,C.wine],
-        borderColor:C.surface, borderWidth:3}]},
+    data:{labels:rot, datasets:[{data:val, backgroundColor:cor,
+      borderColor:C.surface, borderWidth:3}]},
     options:{cutout:'58%', plugins:{legend:{position:'bottom'}, tooltip:{callbacks:{
-      label:c=>c.label+': '+fmtBRL2(c.raw)+'  ('+fmtPct(c.raw/tot)+')'}}}}});
+      label:c=>c.label+': '+fmtBRL2(c.raw)+'  ('+fmtPct(c.raw/tot)+' do frete do recorte)'}}}}});
+
+  /* A CORRELAÇÃO EM UMA FRASE. Gráfico de rosca é bom para dar a
+     proporção de relance e ruim para dar o número: ninguém lê 4,7% num
+     arco. A frase abaixo dele diz o que o arco mostra, com o valor. */
+  const cx = $('donutLeitura');
+  if(!cx) return;
+  if(itemSel === null){
+    const extraTot = outros + falha;
+    cx.innerHTML = `No recorte, <b>${fmtBRL(base)}</b> foram o transporte planejado e
+      <b>${fmtBRL(extraTot)}</b> foi tudo que se pagou além dele — <b>${fmtPct(extraTot/(base||1))}</b>
+      do frete base. Escolha um motivo no filtro para comparar um item específico contra a operação.`;
+  } else {
+    const nome = D.itens[itemSel].d;
+    /* Item sem lançamento no recorte: dizer "custou R$ 0 · 0% do frete
+       base" é tecnicamente verdade e praticamente inútil — parece defeito.
+       O que aconteceu é que os outros filtros não deixaram nada dele. */
+    if(doItem === 0){
+      cx.innerHTML = `<b>${nome}</b> não teve nenhum lançamento neste recorte —
+        os outros filtros do topo não deixaram nada dele. O gráfico segue mostrando a
+        composição do recorte: <b>${fmtBRL(base)}</b> de frete base contra
+        <b>${fmtBRL(outros + falha)}</b> de custos além dele.`;
+      return;
+    }
+    cx.innerHTML = `<b>${nome}</b> custou <b>${fmtBRL(doItem)}</b> no recorte —
+      <b>${fmtPct(doItem/(base||1))}</b> do frete base (${fmtBRL(base)}) e
+      <b>${fmtPct(doItem/tot)}</b> de tudo que foi pago.
+      ${doItem > 0 && base > 0
+        ? `A cada R$ 100 de transporte planejado, <b>R$ ${(100*doItem/base).toLocaleString('pt-BR',{maximumFractionDigits:2})}</b> saíram nesse item.`
+        : ''}`;
+  }
+}
+
+/* O recorte de comparação: tudo o que a pessoa filtrou, MENOS o escopo e o
+   motivo — os dois que, aqui, apagariam o termo de comparação. */
+function semEscopoNemItem(){
+  const guarda = F.item;
+  F.item = '';
+  const r = semEscopo();
+  F.item = guarda;
+  return r;
 }
 
 /* ---------- 2. matriz regional × motivo ---------- */
