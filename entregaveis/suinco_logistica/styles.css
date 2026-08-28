@@ -1542,6 +1542,31 @@ tbody tr{ transition:background-color var(--t-rapida) ease }
    instantâneo apontando pra aquelas cargas de cada status". */
 .stat-clicavel{ cursor:pointer }
 .stat-clicavel:hover{ border-top-color:var(--gold-text) }
+
+/* Célula de tabela que aplica o filtro da aba Indicadores (28/08/2026).
+   Mesmo vocabulário das caixas clicáveis da Torre — dourado marca "isto
+   responde ao toque" — porque é o mesmo gesto, em outro formato. O
+   sublinhado pontilhado é o que diferencia à primeira vista uma célula que
+   age de uma que só informa; cor sozinha não bastaria para quem não
+   distingue bem o dourado. */
+.cel-filtro{
+  cursor:pointer; user-select:none;
+  text-decoration:underline dotted var(--text-dim); text-underline-offset:3px;
+}
+.cel-filtro:hover, .cel-filtro:focus-visible{
+  color:var(--gold-text); text-decoration-color:var(--gold-text);
+}
+.cel-filtro:focus-visible{ outline:2px solid var(--gold-text); outline-offset:-2px }
+.cel-filtro-ativa{
+  color:var(--gold-text); font-weight:700;
+  text-decoration:none; box-shadow:inset 3px 0 0 var(--gold-text);
+}
+.cel-filtro-ativa::after{ content:' ✕'; font-size:11px; opacity:.75 }
+@media (max-width:820px){
+  /* Alvo de toque: célula de tabela nasce com 30-34px de altura, abaixo do
+     mínimo de 44px. Só nas que respondem ao toque. */
+  .cel-filtro{ min-height:44px; padding-top:12px; padding-bottom:12px }
+}
 .stat-ativo{
   border-top-color:var(--gold-text);
   box-shadow:0 0 0 2px var(--gold-text) inset, var(--vidro-sombra);
@@ -1854,6 +1879,26 @@ code{
 .rota-inline{min-width:120px}
 .palet-inline{width:80px}
 .motorista-input{min-width:90px}
+
+/* MONTAGEM DO DIA — as mesmas larguras da Torre (28/08/2026).
+
+   Relato do dono, com foto: "ficou faltando os campos rota peso numero de
+   carga, veiculo ta aparecendo sem placa, porque nao estao editaveis???".
+   As células viraram campos; as larguras aqui existem para 39 linhas
+   caberem na tela sem rolagem lateral — que era o motivo pelo qual, um dia,
+   alguém preferiu deixá-las como texto. Texto cabe, mas não recebe o dado.
+
+   As classes são as MESMAS da Fila e da Torre de propósito: é o mesmo
+   campo, preenchido pela mesma pessoa, e três aparências para o mesmo dado
+   é como se aprende a desconfiar de qual está valendo. */
+#mont-tbody .placa-input{ min-width:86px; width:100%; text-transform:uppercase }
+#mont-tbody .numero-carga-input{ min-width:76px; width:100% }
+#mont-tbody .peso-input{ width:82px }
+#mont-tbody .rota-inline{ min-width:150px; width:100% }
+#mont-tbody .motorista-input{ min-width:80px; width:100% }
+/* O apelido do modelo ("Triângulo Mineiro - Total Service") é apoio, não
+   título: a rota da linha agora é o que está escolhido no campo acima. */
+.mont-apelido{ font-size:11px; margin-top:3px; line-height:1.2 }
 
 /* TORRE SEM ROLAGEM LATERAL (11/08/2026).
 

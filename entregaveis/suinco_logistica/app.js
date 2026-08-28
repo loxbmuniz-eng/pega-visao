@@ -1779,8 +1779,13 @@ document.addEventListener('click', (ev)=>{
   if(!ehTelaEstreita()) return;
   const tr = ev.target.closest && ev.target.closest('table.mobile-cartao tbody tr[data-expansivel]');
   if(!tr) return;
-  // Não sequestra clique de controle nem de linha que já responde sozinha.
-  if(ev.target.closest('button, a, input, select, textarea, label')) return;
+  /* Não sequestra clique de controle nem de linha que já responde sozinha.
+     `[role="button"]` entrou em 28/08/2026: as células que filtram a aba
+     Indicadores ao toque são <td role="button">, e sem isto um toque nelas
+     fazia as duas coisas ao mesmo tempo — aplicava o filtro E abria o
+     cartão. Duas respostas para um toque é o tipo de coisa que ensina a
+     pessoa a não tocar. */
+  if(ev.target.closest('button, a, input, select, textarea, label, [role="button"]')) return;
   if(tr.classList.contains('hist-linha') || tr.classList.contains('raiox-linha')) return;
   tr.classList.toggle('cartao-aberto');
 });
@@ -4670,27 +4675,20 @@ function renderDistribuicaoStatus(){
 
    Nada aqui calcula indicador: só decide QUAIS cargas entram. Os cálculos
    continuam todos em data.js, intocados. */
-const FILTRO_IND = { transportadora:'', rota:'', operacao:'', busca:'' };
+const FILTRO_IND = { transportadora:'', rota:'', operacao:'', busca:'', periodo:'' };
 
 function filtroIndicadoresAtivo(){
   return !!(FILTRO_IND.transportadora || FILTRO_IND.rota || FILTRO_IND.operacao || FILTRO_IND.busca);
 }
 
+// A REGRA MORA EM data.js, E OS GRÁFICOS USAM A MESMA (28/08/2026).
+// Esta função existia com a regra escrita aqui dentro, e os gráficos tinham
+// a sua própria em aplicarFiltrosCargas. Duas cópias da mesma ideia = duas
+// que se desencontram: filtrar transportadora movia as tabelas e não mexia
+// um pixel nos gráficos. Agora as duas telas chamam a MESMA função.
 function filtrarPorFiltroIndicadores(cargas){
   if(!filtroIndicadoresAtivo()) return cargas;
-  const busca = FILTRO_IND.busca.trim().toLowerCase();
-  const placa = normalizarPlaca(FILTRO_IND.busca);
-  return cargas.filter(c=>{
-    if(FILTRO_IND.transportadora && c.transportadora !== FILTRO_IND.transportadora) return false;
-    if(FILTRO_IND.rota && (c.rota||'') !== FILTRO_IND.rota) return false;
-    if(FILTRO_IND.operacao && (c.praOnde||'') !== FILTRO_IND.operacao) return false;
-    if(busca){
-      const bate = normalizarPlaca(c.placa).includes(placa)
-                || String(c.numeroCarga||'').toLowerCase().includes(busca);
-      if(!bate) return false;
-    }
-    return true;
-  });
+  return aplicarFiltrosCargas(cargas, FILTRO_IND);
 }
 
 /* Preenche os seletores com o que EXISTE nos dados, não com uma lista
@@ -4710,12 +4708,66 @@ function preencherFiltrosIndicadores(){
   alvo('ind-f-operacao', uniq(c=>c.praOnde), 'Todos');
 }
 
+const ROTULO_PERIODO_IND = {
+  '6h':'Últimas 6h', '12h':'Últimas 12h', 'hoje':'Hoje',
+  'semana':'Semana (7d)', 'mes':'Mês',
+};
+
+/* CLICAR NO GRÁFICO VIRA FILTRO (28/08/2026).
+
+   Pedido do dono: "quando clica nos gráficos e filtra por transportadora ele
+   precisa interagir com aquele dado filtrado ou clicado". É o gesto que as
+   pessoas já tentam — e até hoje não acontecia nada.
+
+   Clicar de novo no mesmo valor LIMPA o filtro: sem isso, quem clica errado
+   fica preso e tem que caçar o botão de limpar. */
+function filtrarIndicadoresPor(campo, valor){
+  const id = { transportadora:'ind-f-transp', rota:'ind-f-rota', operacao:'ind-f-operacao' }[campo];
+  if(!id) return;
+  const el = document.getElementById(id);
+  if(!el) return;
+  const v = String(valor ?? '');
+  const limpar = (el.value === v);
+  el.value = limpar ? '' : v;
+  // Atribuir um valor que não está na lista de opções não dá erro: o select
+  // fica em branco e o clique não faz nada visível — "não aconteceu nada" é
+  // a pior resposta possível. Se acontecer, o valor entra como opção e o
+  // filtro se aplica do mesmo jeito.
+  if(!limpar && el.value !== v){
+    el.insertAdjacentHTML('beforeend', `<option value="${esc(v)}">${esc(v)}</option>`);
+    el.value = v;
+  }
+  aplicarFiltroIndicadores();
+}
+
+/* Célula de tabela que aplica o filtro da aba ao ser clicada.
+
+   Uma função, vários chamadores: gargalos (transportadora, rota, operação)
+   e ranking usam esta mesma célula, então o gesto é idêntico em toda a aba
+   e o estado "este é o filtro ligado agora" é desenhado de um jeito só.
+   Teclado incluído: a tabela inteira é operável sem mouse. */
+function celFiltro(campo, valor, rotulo){
+  const v = (valor === 0 || valor) ? String(valor) : '';
+  if(!v) return `<td>${esc(rotulo ?? '—')}</td>`;
+  const ativo = String(FILTRO_IND[campo] || '') === v;
+  const chamada = `filtrarIndicadoresPor('${escJs(campo)}','${escJs(v)}')`;
+  return `<td class="cel-filtro${ativo ? ' cel-filtro-ativa' : ''}" role="button" tabindex="0"
+      title="${ativo ? 'Clique para tirar este filtro' : 'Clique para filtrar a aba inteira por este item'}"
+      onclick="${chamada}"
+      onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();${chamada}}"
+    >${esc(rotulo ?? v)}</td>`;
+}
+
 function aplicarFiltroIndicadores(){
   const ler = id => (document.getElementById(id)||{}).value || '';
   FILTRO_IND.transportadora = ler('ind-f-transp');
   FILTRO_IND.rota           = ler('ind-f-rota');
   FILTRO_IND.operacao       = ler('ind-f-operacao');
   FILTRO_IND.busca          = ler('ind-f-busca');
+  /* PERÍODO ÚNICO PARA A ABA (28/08/2026). Ele morava só no filtro dos
+     gráficos; os cartões usavam o histórico inteiro. Dois recortes de tempo
+     na mesma tela, sem ninguém avisar qual era qual. */
+  FILTRO_IND.periodo        = ler('ind-f-periodo');
 
   /* A nota diz, em texto, o que está sendo mostrado. Número filtrado sem
      aviso é a forma mais silenciosa de tirar conclusão errada — ainda mais
@@ -4727,6 +4779,7 @@ function aplicarFiltroIndicadores(){
     if(FILTRO_IND.rota)           partes.push('Rota ' + FILTRO_IND.rota);
     if(FILTRO_IND.operacao)       partes.push(FILTRO_IND.operacao);
     if(FILTRO_IND.busca)          partes.push('"' + FILTRO_IND.busca + '"');
+    if(FILTRO_IND.periodo)        partes.push(ROTULO_PERIODO_IND[FILTRO_IND.periodo] || FILTRO_IND.periodo);
     nota.hidden = partes.length === 0;
     nota.innerHTML = partes.length
       ? `<strong>Filtro ativo:</strong> ${esc(partes.join(' · '))}`
@@ -4737,7 +4790,7 @@ function aplicarFiltroIndicadores(){
 }
 
 function limparFiltroIndicadores(){
-  ['ind-f-transp','ind-f-rota','ind-f-operacao','ind-f-busca'].forEach(id=>{
+  ['ind-f-transp','ind-f-rota','ind-f-operacao','ind-f-busca','ind-f-periodo'].forEach(id=>{
     const el = document.getElementById(id); if(el) el.value = '';
   });
   aplicarFiltroIndicadores();
@@ -5371,7 +5424,7 @@ function renderRankingPeriodos(){
     <tr>
       <td>${i+1}º</td>
       <td><strong>${esc(r.placa)}</strong></td>
-      <td>${esc(r.transportadora)}</td>
+      ${celFiltro('transportadora', r.transportadora)}
       <td class="cel-num">${r.atrasos} de ${r.totalCargas}</td>
       <td class="cel-num">${fmtDuracao(r.tempoMedioAtraso)}</td>
       <td>${r.ultimoAtraso ? esc(fmtDataHora(r.ultimoAtraso)) : '—'}</td>
@@ -5535,30 +5588,23 @@ function drawPieChart(canvas, fatias){
     return `<div class="legenda-item"><span class="legenda-chip" style="background:${f.cor}"></span>${esc(f.status)}: <strong>${f.quantidade}</strong> (${pct}%)</div>`;
   }).join('') || '<div class="text-dim">Nenhuma carga em aberto.</div>';
 }
-function popularSelectTransportadoraGraficos(){
-  const sel = document.getElementById('graf-filtro-transportadora');
-  if(!sel) return;
-  const atual = sel.value;
-  const nomes = listarTransportadoras().map(t=>t.nome);
-  sel.innerHTML = '<option value="">Todas</option>' + nomes.map(n=>`<option value="${esc(n)}" ${n===atual?'selected':''}>${esc(n)}</option>`).join('');
-}
-function limparFiltrosGraficos(){
-  document.getElementById('graf-filtro-placa').value = '';
-  document.getElementById('graf-filtro-transportadora').value = '';
-  document.getElementById('graf-filtro-setor').value = '';
-  document.getElementById('graf-filtro-periodo').value = 'hoje';
-  renderGraficosIndicadores();
-}
 function renderGraficosIndicadores(){
   const canvasBarras = document.getElementById('grafico-barras');
   if(!canvasBarras) return; // aba ainda não renderizada
-  popularSelectTransportadoraGraficos();
-  const filtros = {
-    placa: document.getElementById('graf-filtro-placa').value,
-    transportadora: document.getElementById('graf-filtro-transportadora').value,
-    setor: document.getElementById('graf-filtro-setor').value
-  };
-  const periodo = document.getElementById('graf-filtro-periodo').value;
+
+  /* UM FILTRO SÓ (28/08/2026). Estes três gráficos tinham filtros próprios e
+     ignoravam o do topo da aba: filtrar uma transportadora lá em cima não
+     mudava um pixel aqui — medido, 3.321/1.057/15.590 antes e depois. Agora
+     leem de FILTRO_IND, o mesmo que move os cartões e as tabelas.
+
+     `setor` não existe mais como filtro: ele só afetava um dos três gráficos
+     e não tinha equivalente no filtro de cima. Filtro que muda um terço da
+     tela e cala nos outros dois terços ensina a desconfiar do painel. */
+  // O objeto do filtro vai INTEIRO. Montar um objeto novo aqui era o
+  // caminho para esquecer uma chave e ter gráfico obedecendo metade do
+  // filtro — pior que não obedecer, porque parece que funcionou.
+  const filtros = FILTRO_IND;
+  const periodo = FILTRO_IND.periodo || 'mes';
 
   // 1) Barras — tempo médio por etapa (cor única/dourada: aqui a cor NÃO
   // representa status, representa "duração" — evita usar a mesma cor com
@@ -5736,6 +5782,14 @@ function addTransportadoraUI(){
 function removerTransportadoraUI(id){ removerTransportadora(id); renderAll(); }
 function atualizarDatalists(){
   document.getElementById('lista-transportadoras').innerHTML = DB.transportadoras.map(t=>`<option value="${esc(t.nome)}">`).join('');
+  /* Placas da Frota para o campo de placa da Montagem. A sugestão mostra a
+     transportadora junto: quem monta o dia reconhece o caminhão pela
+     empresa, não pelas sete letras. */
+  const dlPlacas = document.getElementById('lista-placas-frota');
+  if(dlPlacas){
+    dlPlacas.innerHTML = (DB.frota || []).map(f =>
+      `<option value="${esc(f.placa)}">${esc(f.transportadora || '')}${f.tipoVeiculo ? ' · ' + esc(f.tipoVeiculo) : ''}</option>`).join('');
+  }
 }
 
 /* ---------- HISTÓRICO — LINHA DO TEMPO POR CARGA (item 7 do briefing) ----
@@ -7923,8 +7977,12 @@ document.addEventListener('DOMContentLoaded', init);
 function renderTempoMedioPatio(){
   const wrap = document.getElementById('ind-patio-medio');
   if(!wrap) return;
-  const t = tempoMedioPatio(cargasConcluidasNoPeriodo('hoje'));
-  const geral = tempoMedioPatio(DB.cargas.filter(c=>c.status==='Seguiu Viagem'));
+  // O período vem do filtro do topo, não é mais 'hoje' fixo: com o seletor
+  // de período na aba, uma caixa escrita "hoje" ao lado de tabelas de
+  // "Últimas 6h" é convite a comparar coisas diferentes.
+  const periodo = FILTRO_IND.periodo || 'hoje';
+  const t = tempoMedioPatio(filtrarPorFiltroIndicadores(cargasConcluidasNoPeriodo(periodo)));
+  const geral = tempoMedioPatio(filtrarPorFiltroIndicadores(DB.cargas.filter(c=>c.status==='Seguiu Viagem')));
 
   if(!t.amostra && !geral.amostra){
     wrap.innerHTML = `<div class="empty-state">Nenhuma carga concluída com tempo de pátio calculável ainda.</div>`;
@@ -7953,7 +8011,7 @@ function renderTempoMedioPatio(){
   };
 
   wrap.innerHTML = `<div class="grid4">
-      ${caixa(t, 'Tempo Médio de Pátio — hoje', 'Chegada até a saída')}
+      ${caixa(t, 'Tempo Médio de Pátio — ' + ((ROTULO_PERIODO_IND[periodo] || 'hoje').toLowerCase()), 'Chegada até a saída')}
       ${caixa(geral, 'Tempo Médio de Pátio — histórico', 'Todas as cargas concluídas')}
     </div>`;
 }
@@ -7963,7 +8021,11 @@ function renderTempoMedioPatio(){
 function renderGargalos(){
   const wrap = document.getElementById('ind-gargalos');
   if(!wrap) return;
-  const g = analiseGargalos(DB.cargas);
+  // OBEDECE AO FILTRO DO TOPO (28/08/2026). Lia DB.cargas cru: com uma
+  // transportadora filtrada lá em cima, os cartões e as tabelas mudavam e
+  // esta seção continuava mostrando o pátio inteiro. Duas respostas
+  // diferentes na mesma tela, sem nada dizendo que eram bases diferentes.
+  const g = analiseGargalos(filtrarPorFiltroIndicadores(DB.cargas));
   const blocos = [];
 
   const tabela = (titulo, explicacao, cabecalhos, linhas) => {
@@ -7983,7 +8045,7 @@ function renderGargalos(){
     'Dois ou mais atrasos. Um atraso é acaso; dois viram padrão.',
     ['Placa','Transportadora','Atrasos','Atraso Médio'],
     g.veiculosRecorrentes.map(v=>`<tr>
-      <td><strong>${esc(v.placa)}</strong></td><td>${esc(v.transportadora)}</td>
+      <td><strong>${esc(v.placa)}</strong></td>${celFiltro('transportadora', v.transportadora)}
       <td class="cel-num">${v.atrasos} de ${v.totalCargas}</td>
       <td class="cel-num">${fmtDuracao(v.tempoMedioAtraso)}</td></tr>`)
   ));
@@ -7993,7 +8055,7 @@ function renderGargalos(){
     'Tempo médio da chegada até a saída, por tipo de operação.',
     ['Tipo de Operação','Tempo Médio','Cargas'],
     g.operacoesMaiorPermanencia.map(o=>`<tr>
-      <td>${esc(PRA_ONDE_LABEL[o.operacao] || o.operacao)}</td>
+      ${celFiltro('operacao', o.operacao, PRA_ONDE_LABEL[o.operacao] || o.operacao)}
       <td class="cel-num">${fmtDuracao(o.media)}</td>
       <td class="cel-num">${o.amostra}</td></tr>`)
   ));
@@ -8003,7 +8065,7 @@ function renderGargalos(){
     'Informativo, sem ranking principal — parte do atraso é do pátio, não da transportadora.',
     ['Transportadora','Cargas Atrasadas','% do Total'],
     g.transportadorasAtraso.map(t=>`<tr>
-      <td>${esc(t.transportadora)}</td>
+      ${celFiltro('transportadora', t.transportadora)}
       <td class="cel-num">${t.atrasadas} de ${t.total}</td>
       <td class="cel-num">${t.percentual}%</td></tr>`)
   ));
@@ -8023,7 +8085,7 @@ function renderGargalos(){
     'Rota que atrasa sempre costuma ser problema de janela ou de sequenciamento.',
     ['Rota','Cargas Atrasadas','Atraso Médio'],
     g.rotasAtraso.map(r=>`<tr>
-      <td>${esc(r.rotulo || r.rota)}</td>
+      ${celFiltro('rota', r.rota, r.rotulo || r.rota)}
       <td class="cel-num">${r.atrasadas} de ${r.total}</td>
       <td class="cel-num">${fmtDuracao(r.atrasoMedio)}</td></tr>`)
   ));
@@ -8856,6 +8918,49 @@ function renderMontagem(){
    informação de apoio. O dado é o mesmo; o que muda é qual metade a tela
    grita. Onde não há apelido (carga fora do modelo), a praça continua
    sendo o título — não há nada mais específico para mostrar. */
+/* A ROTA DA LINHA TAMBÉM SE TROCA NA LINHA (28/08/2026).
+
+   Faz parte do mesmo relato do dono ("ficou faltando os campos rota
+   peso..."). Trocar a rota era coisa de reabrir o formulário; na planilha
+   antiga era mudar uma célula.
+
+   O APELIDO VIRA ETIQUETA, NÃO TÍTULO. Ele vem do modelo da semana e
+   identifica a transportadora dentro da praça ("Triângulo Mineiro - Total
+   Service"). Se a pessoa trocar a rota, esse apelido passa a descrever uma
+   coisa que não é mais a rota da linha — em negrito, por cima do nome
+   certo, ele seria a primeira coisa lida e a errada. Aqui ele aparece
+   embaixo, dito como o que é: o que o modelo trouxe.
+
+   Mesma fonte do seletor de carga extra (ROTAS + rotaLabel): rota
+   cadastrada em Cadastros aparece aqui na hora, sem lista paralela.  */
+function rotaMontagemSelectHtml(m){
+  const id = escJs(m.montagem_id);
+  const atual = String(m.rota_codigo ?? '');
+  // Rota que sumiu do cadastro não pode sumir da linha: sem esta opção o
+  // select abriria em branco e a primeira gravação trocaria a rota da
+  // carga sem ninguém pedir.
+  const conhecida = ROTAS.some(r => String(r.codigo) === atual);
+  return `<select class="rota-inline" aria-label="Rota"
+        onchange="alterarRotaMontagemUI('${id}', this.value)">
+      ${conhecida ? '' : `<option value="${esc(atual)}" selected>${esc(m.rota_nome || atual)} · ${esc(atual)}</option>`}
+      ${ROTAS.map(r => `<option value="${esc(r.codigo)}"${String(r.codigo)===atual?' selected':''}>${esc(rotaLabel(r.codigo))}</option>`).join('')}
+    </select>${m.apelido_rota
+      ? `<div class="mont-apelido text-dim">do modelo: ${esc(m.apelido_rota)}</div>` : ''}`;
+}
+
+/* Trocar a rota limpa o apelido do modelo: ele pertencia à linha antiga.
+   Mandar os dois juntos numa gravação só evita a janela em que a tela
+   mostra a rota nova com a etiqueta velha. */
+async function alterarRotaMontagemUI(id, codigo){
+  try {
+    await SuincoSharePoint.montagem.alterar(id, { rotaCodigo: codigo, apelidoRota: '' });
+    await carregarMontagemUI();
+  } catch(e){
+    notify('Não gravou a rota: ' + (e.message || e), 'erro', 7000);
+    await carregarMontagemUI();
+  }
+}
+
 function destinoMontagemHtml(m){
   const praca = `<span class="text-dim mont-praca">${esc(m.rota_nome)} · ${esc(m.rota_codigo)}</span>`;
   return m.apelido_rota
@@ -9099,13 +9204,33 @@ function linhaMontagemHtml(m){
             já virou carga, cada célula grava na CARGA; enquanto é rascunho,
             grava na montagem. Mesma tela, mesmo lugar, dono diferente — e o
             dono certo, que é o que impede a alteração de morrer no rascunho. */''}
-      <td ${comoCarga ? 'onclick="event.stopPropagation()"' : ''}>${comoCarga
+      ${/* NÚMERO, PLACA E PESO SE DIGITAM NA PRÓPRIA LINHA (28/08/2026).
+
+            Relato do dono, com foto da tela de hoje: "ficou faltando os
+            campos rota peso numero de carga, veiculo ta aparecendo sem
+            placa, porque nao estao editaveis???".
+
+            Estas três células eram TEXTO enquanto a linha era rascunho:
+            mostravam "—" e não recebiam nada. O único campo que aceitava
+            digitação na linha era o de Motorista — e foi exatamente lá que
+            as placas do dia foram parar (RNT5J03, RNV2A77...), porque era
+            o único lugar onde dava para escrever. Coluna que mostra um
+            traço e não aceita o dado ensina a pessoa a guardá-lo no campo
+            errado.
+
+            O servidor já aceitava os quatro campos desde sempre; faltava a
+            tela oferecer. */''}
+      <td onclick="event.stopPropagation()">${comoCarga
             ? celulaCargaHtml(cargaViva, 'numero')
-            : (esc(m.numero_carga) || '<span class="text-dim">—</span>')}</td>
-      <td class="cel-veiculo" ${comoCarga ? 'onclick="event.stopPropagation()"' : ''}>${comoCarga
+            : `<input type="text" class="numero-carga-input" value="${esc(m.numero_carga)}"
+                      placeholder="—" aria-label="Número da carga"
+                      onchange="alterarMontagemUI('${id}','numeroCarga',this.value)">`}</td>
+      <td class="cel-veiculo" onclick="event.stopPropagation()">${comoCarga
             ? celulaCargaHtml(cargaViva, 'placa')
-            : (m.placa ? `<strong>${esc(m.placa)}</strong>`
-                       : '<span class="text-dim">sem placa</span>')}
+            : `<input type="text" class="placa-input" value="${esc(m.placa)}"
+                      list="lista-placas-frota" placeholder="sem placa" autocomplete="off"
+                      aria-label="Placa do veículo"
+                      onchange="definirPlacaMontagemUI('${id}', this.value)">`}
         <span class="veic-transp">${esc(comoCarga ? cargaViva.transportadora
             : (m.transportadora || (m.placa && buscarFrota(m.placa) ? buscarFrota(m.placa).transportadora : ''))) || '—'}</span>
         <span class="veic-tipo">${esc(comoCarga ? cargaViva.tipoVeiculo
@@ -9116,10 +9241,14 @@ function linhaMontagemHtml(m){
                onchange="${comoCarga
                  ? `atualizarMotoristaUI('${escJs(cargaViva.id)}',this.value)`
                  : `alterarMontagemUI('${id}','motorista',this.value)`}"></td>
-      <td>${destinoMontagemHtml(m)} ${marca}</td>
-      <td ${comoCarga ? 'onclick="event.stopPropagation()"' : ''}>${comoCarga
+      <td ${comoCarga ? '' : 'onclick="event.stopPropagation()"'}>${comoCarga
+            ? `${destinoMontagemHtml(m)} ${marca}`
+            : rotaMontagemSelectHtml(m)}</td>
+      <td onclick="event.stopPropagation()">${comoCarga
             ? celulaCargaHtml(cargaViva, 'peso')
-            : (m.peso ? Number(m.peso).toLocaleString('pt-BR') : '<span class="text-dim">—</span>')}</td>
+            : `<input type="number" min="0" class="peso-input" value="${m.peso ?? ''}"
+                      placeholder="—" aria-label="Peso em quilos"
+                      onchange="alterarMontagemUI('${id}','peso',this.value)">`}</td>
       <td onclick="event.stopPropagation()">${comoCarga
             ? paletizadaSelectHtml(cargaViva)
             : `<select class="palet-inline" onchange="alterarMontagemUI('${id}','paletizada',this.value)">
@@ -9620,8 +9749,26 @@ async function alterarMontagemUI(id, campo, valor){
    resolver, e a de placa repetida precisa dizer que já está em outra
    linha de hoje. */
 async function definirPlacaMontagemUI(id, valor){
+  /* A PLACA TRAZ O QUE A FROTA JÁ SABE (28/08/2026).
+
+     Relato do dono: "as placas que estão neles não estão puxando direto as
+     infos da placa como veículo". Transportadora e tipo de veículo já eram
+     lidos da Frota na hora de desenhar a linha; o MOTORISTA não — ficava
+     em branco mesmo com a Frota sabendo quem dirige aquele caminhão, e a
+     pessoa redigitava um dado que o painel já tinha.
+
+     Só preenche o que está VAZIO. Motorista escrito à mão é a exceção do
+     dia (folga, troca de turno) e sobrescrevê-lo com o cadastro apagaria
+     justamente a informação que alguém se deu ao trabalho de registrar. */
+  const linha = ((_montagemDia || {}).montagens || []).find(m => m.montagem_id === id) || {};
+  const mudanca = { placa: valor };
+  const f = valor ? buscarFrota(valor) : null;
+  if(f){
+    if(!String(linha.motorista || '').trim() && f.motorista) mudanca.motorista = f.motorista;
+    if(!String(linha.transportadora || '').trim() && f.transportadora) mudanca.transportadora = f.transportadora;
+  }
   try {
-    await SuincoSharePoint.montagem.alterar(id, { placa: valor });
+    await SuincoSharePoint.montagem.alterar(id, mudanca);
     await carregarMontagemUI();
   } catch(e){
     notify(e.message || String(e), 'erro', 9000);

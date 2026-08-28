@@ -30,7 +30,122 @@ faz achar a próxima em minutos em vez de horas:
 | **Trava sem o par na tela** | O servidor passa a exigir algo novo e a tela continua com o botão antigo: quem clica só descobre que não pode, e não tem por onde seguir. | #13 |
 | **A mesma decisão escrita em dois lugares** | A regra é copiada em vez de consultada. As cópias divergem e o comportamento fica errado sem que nenhuma linha esteja errada. | #14 |
 | **Duas escritas em voo, a velha ganha** | O painel manda a carga INTEIRA a cada alteração. Duas alterações seguidas viram duas requisições simultâneas, e a primeira carrega o valor velho do campo que ainda ia mudar. | #16 |
+| **A tela não oferece o que o servidor aceita** | A rota grava o campo, mas a coluna correspondente é texto. Quem precisa registrar o dado escreve no primeiro campo que aceita digitação — e ele vai parar onde ninguém procura. | #19 |
+| **Dois filtros para a mesma tela** | Duas filtragens paralelas sobre os mesmos dados. Uma move os números, a outra move os gráficos, e nada avisa que discordam. | #18 |
 | **Teste que mede o proxy, não a regra** | O teste confere um sintoma fácil de medir ("a aba aparece?", "quantas linhas?") em vez da garantia real. Quando o sintoma muda por um motivo legítimo, ele fica vermelho sem que nada tenha quebrado — e some do radar. | #15 |
+
+---
+
+## #19 — A coluna que mostra um traço e não aceita o dado (28/08/2026)
+
+**Relato:** *"porra ficou faltando os campos rota peso numero de carga,
+veiculo ta aparecendo sem placa, porque nao estao editaveis??? editaveis, as
+placas que estao neles nao estao puxando direto as infos da placa como
+veiculo"* — com foto da Montagem do Dia, 39 linhas montadas.
+
+**Causa:** na linha de rascunho da Montagem, três das nove colunas eram
+TEXTO: Nº Carga, Veículo e Peso exibiam `—` e não recebiam digitação. O
+servidor aceitava `numeroCarga`, `peso`, `placa` e `rotaCodigo` no PATCH
+desde sempre — faltava a TELA oferecer.
+
+**O detalhe que dói:** o único campo editável da linha era o de Motorista, e
+era exatamente ali que as placas do dia estavam escritas (RNT5J03, RNV2A77,
+RNW7J57…). Ninguém digitou no campo errado por distração: **digitaram no
+único campo que aceitava**. Coluna que mostra um traço e não recebe o dado
+não é neutra — ela empurra o dado para onde couber, e ele vai parar onde
+ninguém vai procurar.
+
+**Um bug maior atrás do relato:** ao investigar "a placa não puxa as infos",
+apareceu que `suinco-api.js` recebia a frota do servidor e **descartava o
+motorista** no mapeamento (copiava só Placa, Transportadora, Tipo e
+Revisão). Ou seja, o autopreenchimento "digitou a placa, veio o motorista"
+funcionava apenas para quem tinha cadastrado aquela placa NAQUELE navegador.
+Para todo mundo que recebe a frota do servidor — todo mundo, todo dia — o
+campo chegava vazio. O relato era sobre a Montagem; o defeito era da camada
+de dados e atingia todas as telas.
+
+**Feito:** as quatro colunas viraram campos na própria linha, com as MESMAS
+classes da Fila e da Torre; a placa ganhou sugestão da Frota e passa a
+trazer transportadora, tipo e motorista; trocar a rota limpa o apelido do
+modelo (que descrevia a rota antiga) — para isso o PATCH passou a aceitar
+`apelidoRota`; e o mapeamento da frota deixou de jogar fora motorista,
+capacidade e UF.
+
+**Guarda:** `testes/test_montagem_linha_editavel.py` — confere que as
+colunas são campos, que o que se digita chega ao BANCO (não à tela), que a
+placa puxa os três dados da Frota, que o motorista escrito à mão sobrevive à
+troca de placa, e que no celular os quatro campos aparecem sem precisar
+abrir o cartão. Contra o build publicado, reprova em 4 pontos.
+
+---
+
+## #18 — O filtro que movia os números e não movia os gráficos (28/08/2026)
+
+**Relato:** *"quando usa o filtro os graficos somem voce precisa resolver
+isso, os indicadores de qual regional transportadora enfim"* e *"quando
+clica nos graficos e filtra por transportadora ele precisa interagir com
+aquele dado filtrado ou clicado"*.
+
+**Causa:** a aba Indicadores tinha DOIS conjuntos de filtros independentes.
+O de cima movia cartões e tabelas; um segundo, dentro do card de Gráficos,
+movia só os gráficos — e os dois não se falavam. Medido antes de mexer:
+filtrar uma transportadora no filtro de cima deixava os três gráficos com
+exatamente os mesmos pixels (3.321 / 1.057 / 15.590 antes e depois). As
+listas também discordavam: 7 transportadoras num filtro, 1 no outro, porque
+cada um olhava um universo de cargas diferente.
+
+Duas verdades sobre o mesmo dia, na mesma tela, sem nada avisando qual era
+qual. E `renderGargalos` e o tempo médio de pátio liam `DB.cargas` cru: não
+obedeciam a nenhum dos dois.
+
+**Feito:** um filtro só para a aba inteira. A regra passou a morar em uma
+função de `data.js` (`aplicarFiltrosCargas`) que as tabelas e os gráficos
+chamam — uma função, dois chamadores, de propósito: enquanto forem duas,
+voltam a divergir. Gargalos e tempo de pátio passaram a obedecê-la, o
+período virou único, e clicar numa transportadora, rota ou operação nas
+tabelas de Gargalos filtra a aba inteira (clicar de novo limpa).
+
+**Guarda:** `testes/test_filtro_indicadores_move_graficos.py` — conta os
+PIXELS pintados de cada gráfico antes e depois de filtrar. Um teste que só
+olhasse o valor do `<select>` passaria com o defeito intacto, que foi
+exatamente o que aconteceu por semanas. Contra o build publicado, reprova em
+11 pontos.
+
+---
+
+## #17 — Os gráficos do Custo de Frete sumindo ao serem clicados (28/08/2026)
+
+**Relato:** *"os graficos somem quando tento interagir com eles"*, com foto
+do painel de Custo de Frete aberto no Mac: cabeçalho com os números certos
+(10.856 linhas · 3.926 cargas · R$ 44.867.593,86) e os painéis dos gráficos
+em branco.
+
+**Causa, pela pilha do erro:**
+
+```
+TypeError: this._fn is not a function
+    at Cs.tick            (animador)
+    at Cs.cancel
+    at bt.stop
+    at An.stop / An._stop  (destroy do gráfico)
+```
+
+Cada filtro redesenha os oito gráficos, e redesenhar ali é destruir e
+recriar. Quando o `destroy()` pegava uma ANIMAÇÃO em curso, o Chart.js
+cancelava um quadro que já tinha perdido a função dele e quebrava no meio —
+o painel ficava em branco. Havia um segundo defeito na mesma linha: o
+`onClick` chamava `render()` na hora, ou seja, o gráfico se destruía DENTRO
+do evento de clique que o próprio Chart.js ainda estava despachando.
+
+**Feito:** animação desligada na raiz (oito gráficos que se refazem inteiros
+a cada clique não ganham nada com meio segundo de animação; ganham um erro),
+`destroy()` protegido, e os quatro `onClick` passaram por uma função só que
+devolve o controle ao Chart.js antes de redesenhar.
+
+**Guarda:** `testes/test_custo_frete_clique_nao_apaga_grafico.py` — conta os
+pixels de cada canvas antes e depois de clicar em cada gráfico clicável, e
+reprova em qualquer erro de JavaScript. Gráfico que "some" é um canvas em
+branco, e branco é um número.
 
 ---
 
