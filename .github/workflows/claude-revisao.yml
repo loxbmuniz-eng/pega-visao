@@ -1,0 +1,55 @@
+# =====================================================================
+# REVISÃO AUTOMÁTICA DE TODO PULL REQUEST
+# ---------------------------------------------------------------------
+# A cada PR aberto ou atualizado, o Claude lê o diff e comenta o que achou
+# — comentário na linha exata de cada problema, ou um comentário só dizendo
+# que está limpo.
+#
+# POR QUE ISTO EXISTE. Até aqui, quem lia todo diff antes de publicar era
+# uma pessoa só. Isso tem limite óbvio: cansaço, pressa, e o dia em que
+# entrar mais alguém no repositório. A revisão automática não substitui o
+# portão (publicar.sh) — ela pega o defeito ANTES, quando corrigir ainda é
+# barato.
+#
+# O QUE ELA NÃO É: um carimbo. Ela COMENTA, não aprova nem bloqueia. Quem
+# decide continua sendo gente.
+#
+# Ele pula PR em rascunho, PR fechado, e PR que já tem comentário dele.
+# =====================================================================
+name: Revisão do Claude
+
+on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review, reopened]
+
+# Um PR atualizado três vezes em cinco minutos não precisa de três revisões:
+# a última é a única que vale. Cancela as anteriores e economiza a conta.
+concurrency:
+  group: revisao-claude-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  revisao:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          plugin_marketplaces: "https://github.com/anthropics/claude-code.git"
+          plugins: "code-review@claude-code-plugins"
+          prompt: "/code-review:code-review --comment ${{ github.repository }}/pull/${{ github.event.pull_request.number }}"
+          # Esta linha NÃO é redundante: a action só liga o servidor que
+          # posta comentário na linha quando --allowedTools o nomeia aqui.
+          claude_args: '--allowedTools "mcp__github_inline_comment__create_inline_comment"'

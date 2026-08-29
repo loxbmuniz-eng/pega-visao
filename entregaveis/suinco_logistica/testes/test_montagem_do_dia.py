@@ -223,8 +223,7 @@ async def main():
         # O que este bloco promete no título é outra coisa, e é o que se
         # mede agora: puxar o modelo DUAS VEZES não duplica. Depois de
         # montar o que falta, não falta mais nada.
-        depois = await pg.evaluate(
-            """() => {
+        SEGUNDO_CLIQUE = """() => {
                  const modelo = _montagemDia.modelo;
                  const faltam = linhasDoModeloQueFaltam(modelo, _montagemDia.montagens);
                  // Simula o clique: cada linha oferecida vira montagem, com
@@ -233,14 +232,49 @@ async def main():
                    faltam.map(m => ({ modelo_id: m.modelo_id, rota_codigo: m.rota_codigo,
                                       apelido_rota: m.apelido_rota })));
                  return linhasDoModeloQueFaltam(modelo, agora).length;
-               }""")
+               }"""
+        depois = await pg.evaluate(SEGUNDO_CLIQUE)
         ck('depois de montar o que falta, o segundo clique não oferece nada',
            depois == 0,
            f'modelo {no_modelo} linhas, {montadas} montadas, ofereceu {novas}, '
            f'no segundo clique oferece {depois}')
+        # O DIA EM QUE A BATERIA RODA NÃO PODE DECIDIR SE ESTA GUARDA VALE
+        # (29/08/2026).
+        #
+        # A bateria rodou num SÁBADO e esta linha ficou vermelha sozinha. O
+        # modelo da semana tem só segunda a sexta — que é a verdade da
+        # operação, e o bloco 8 já prova que o painel diz isso com todas as
+        # letras. No sábado `no_modelo` é 0, e exigir `novas > 0` virava
+        # impossível: vermelho todo fim de semana, sem nada quebrado.
+        #
+        # É a CAUSA 2 da lista do corredor — o teste media um atalho ("tem
+        # linha hoje?") em vez da regra ("nenhuma linha do modelo some da
+        # oferta").
+        #
+        # Deixar passar vazio também não serve: a guarda sumiria dois dias
+        # por semana sem ninguém notar, que é como se perde uma proteção sem
+        # ninguém decidir perder. Então, quando hoje não tem modelo, a MESMA
+        # regra é medida num dia que TEM — e o teste diz em qual dia mediu.
+        dia_medido = 'hoje'
+        if no_modelo == 0:
+            TERCA = '2026-09-01'
+            medida = await pg.evaluate(
+                """async (dia) => {
+                     document.getElementById('mont-data').value = dia;
+                     await carregarMontagemUI();   // só LÊ, não aplica o modelo
+                     return {
+                       novas: linhasDoModeloQueFaltam(_montagemDia.modelo,
+                                                      _montagemDia.montagens).length,
+                       noModelo: _montagemDia.modelo.length
+                     };
+                   }""", TERCA)
+            novas, no_modelo = medida['novas'], medida['noModelo']
+            depois = await pg.evaluate(SEGUNDO_CLIQUE)
+            dia_medido = f'terça {TERCA} — hoje não tem modelo (dia sem operação)'
+            ck('a idempotência também vale no dia medido', depois == 0, str(depois))
         ck('e o modelo inteiro cabe no dia — nenhuma linha some da oferta',
-           novas + 0 <= no_modelo and novas > 0,
-           f'{novas} de {no_modelo} linhas oferecidas')
+           novas <= no_modelo and novas > 0,
+           f'{novas} de {no_modelo} linhas oferecidas · medido em {dia_medido}')
 
         print('\n=== 8. O MODELO DA SEMANA TEM TELA, E O BOTÃO NÃO FICA MUDO ===')
         # O defeito que este bloco existe para não deixar voltar: a
