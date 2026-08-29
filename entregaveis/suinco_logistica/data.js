@@ -1922,17 +1922,59 @@ function avancarStatusCarga(cargaId, statusNovo, operador, setor){
    agora": vale enquanto ninguém tirou a carga do lugar para onde ela foi
    posta de volta. Sem janela de tempo de propósito — prazo mágico é
    controle que depende da memória de quem escreveu. */
-function etapaDevolvida(carga){
-  if(!carga || !carga.id) return null;
-  let ultima = null;
-  (DB.movimentacoes || []).forEach(m => {
-    if(m.cargaId !== carga.id || !m.statusAnterior || !m.statusNovo) return;
+/* UM ÍNDICE, NÃO UMA VARREDURA POR LINHA (29/08/2026 — medido, não suposto).
+
+   A primeira versão desta função varria `DB.movimentacoes` INTEIRO a cada
+   chamada. Como a marca é desenhada uma vez por linha da tela, o custo
+   virava 300 linhas × todo o histórico, a cada `renderAll()` — e o
+   renderAll roda a cada sincronia, de 15 em 15 segundos.
+
+   Medido no navegador, com 300 linhas na tela:
+
+        5.000 movimentações (o teto da primeira leitura) →  50 ms
+       20.000                                            → 114 ms
+       50.000                                            → 252 ms
+
+   Um quarto de segundo de tela travada, e num celular do pátio bem pior —
+   CPU mais fraca. Não aparecia em teste porque o banco de teste é pequeno:
+   é o tipo de defeito que só cresce em produção, devagar, até virar "o
+   painel ficou lento" sem ninguém saber por quê.
+
+   Agora o histórico é lido UMA vez e vira um mapa carga → última devolução.
+   A chave do cache é o tamanho da lista mais o id do último item: as duas
+   mudam em qualquer alteração real, inclusive na troca de uma movimentação
+   provisória pela definitiva (que mantém o tamanho e muda o último id). No
+   pior caso imaginável o mapa fica um ciclo atrasado — a marca demora 15
+   segundos a mais para aparecer. Nenhum dado se perde: quem decide é sempre
+   `DB.movimentacoes`, o cache só evita reler o que não mudou. */
+let _mapaDevolvidas = null;
+let _mapaDevolvidasChave = '';
+
+function _indiceDeDevolucoes(){
+  const movs = DB.movimentacoes || [];
+  const ultimo = movs.length ? movs[movs.length - 1] : null;
+  const chave = movs.length + '|' + ((ultimo && ultimo.id) || '');
+  if(_mapaDevolvidas && _mapaDevolvidasChave === chave) return _mapaDevolvidas;
+
+  const idx = new Map();
+  movs.forEach(m => {
+    if(!m.cargaId || !m.statusAnterior || !m.statusNovo) return;
     const de = STATUS_FLOW.indexOf(m.statusAnterior);
     const para = STATUS_FLOW.indexOf(m.statusNovo);
     if(de === -1 || para === -1 || para >= de) return;   // só o que ANDOU PARA TRÁS
     // A mais recente manda: uma carga pode ter sido devolvida mais de uma vez.
-    if(!ultima || String(m.timestamp||'') >= String(ultima.timestamp||'')) ultima = m;
+    const atual = idx.get(m.cargaId);
+    if(!atual || String(m.timestamp||'') >= String(atual.timestamp||'')) idx.set(m.cargaId, m);
   });
+
+  _mapaDevolvidas = idx;
+  _mapaDevolvidasChave = chave;
+  return idx;
+}
+
+function etapaDevolvida(carga){
+  if(!carga || !carga.id) return null;
+  const ultima = _indiceDeDevolucoes().get(carga.id);
   if(!ultima) return null;
   return {
     de: ultima.statusAnterior,

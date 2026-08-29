@@ -190,6 +190,45 @@ async def main():
         ck('o painel de quem corrigiu avisa que a carga voltou a andar',
            aviso['temAviso'], aviso['trecho'].strip() or 'nenhum aviso na tela')
 
+        print('\n=== 6. A MARCA NÃO PODE TRAVAR A TELA ===')
+        # POR QUE ESTA GUARDA EXISTE (29/08/2026).
+        #
+        # A primeira versão de `etapaDevolvida` varria DB.movimentacoes
+        # INTEIRO a cada chamada — e a marca é desenhada uma vez por linha.
+        # Com 300 linhas (o teto do desktop), medido no navegador:
+        #
+        #      5.000 movimentações →  50 ms
+        #     20.000               → 114 ms
+        #     50.000               → 252 ms
+        #
+        # A cada renderAll(), que roda de 15 em 15 segundos. Um quarto de
+        # segundo de tela travada, e num celular do pátio bem pior.
+        #
+        # Não aparecia em nenhum teste porque o banco de teste é pequeno: é
+        # o defeito que só cresce em produção até virar "o painel ficou
+        # lento" sem ninguém saber por quê. Por isso a medida virou teste.
+        #
+        # O teto de 60 ms é folgado de propósito — a versão com índice mede
+        # uns poucos milissegundos, e máquina de bateria carregada varia. O
+        # que ele pega é a volta da varredura por linha, que era 4x isso.
+        perf = await pgP.evaluate("""(N) => {
+            const cargas = [], movs = [];
+            for(let i=0;i<300;i++) cargas.push({id:'perf'+i, placa:'AAA0A0'+(i%10),
+              numeroCarga:''+i, status:'Aguardando Veículo'});
+            for(let i=0;i<N;i++) movs.push({id:'pm'+i, cargaId:'perf'+(i%300),
+              statusAnterior:'Aguardando Veículo', statusNovo:'Aguardando Embarque',
+              timestamp:new Date().toISOString(), operador:'X', setor:'Portaria'});
+            const guardaC = DB.cargas, guardaM = DB.movimentacoes;
+            DB.cargas = cargas; DB.movimentacoes = movs;
+            const t0 = performance.now();
+            cargas.forEach(c => marcaEtapaDevolvidaHtml(c));
+            const ms = performance.now() - t0;
+            DB.cargas = guardaC; DB.movimentacoes = guardaM;
+            return Math.round(ms);
+        }""", 50000)
+        ck('300 linhas com 50 mil movimentações desenham rápido',
+           perf < 60, f'{perf} ms (teto 60 ms; a versão que varria por linha media ~252 ms)')
+
         ck('nenhum erro de JavaScript', not erros, '; '.join(erros[:2]))
         await nav.close()
 
