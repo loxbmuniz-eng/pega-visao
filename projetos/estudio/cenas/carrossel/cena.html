@@ -49,10 +49,19 @@
 (() => {
   const K = Kit;
   const d = window.__dados || {};
-  const cor = d.cor || '#FF6B2C';
-  const pendenteCor = d.corPendente || '#E5B76B';
-  document.documentElement.style.setProperty('--marca', cor);
-  document.documentElement.style.setProperty('--pendente', pendenteCor);
+  // A identidade da campanha vem do JSON, não do CSS: a mesma cena serve
+  // FRVIN (vermelho sobre preto) e Grooving (dourado sobre preto) sem fork.
+  const raiz = document.documentElement.style;
+  raiz.setProperty('--marca', d.cor || '#FF6B2C');
+  raiz.setProperty('--pendente', d.corPendente || '#E5B76B');
+  if (d.corFundo) raiz.setProperty('--tinta', d.corFundo);
+  if (d.corTexto) raiz.setProperty('--papel', d.corTexto);
+  if (d.corSuave) raiz.setProperty('--suave', d.corSuave);
+  if (d.corLinha) raiz.setProperty('--linha', d.corLinha);
+  if (d.fonte) raiz.setProperty('--fonte', d.fonte);
+  // Tracking da campanha (a Grooving usa .30em em caixa alta).
+  if (d.tracking) document.head.insertAdjacentHTML('beforeend',
+    `<style>.titulo{letter-spacing:${d.tracking} !important}</style>`);
 
   const slides = Array.isArray(d.slides) && d.slides.length ? d.slides : [{
     selo: '01', titulo: 'Sem dados', texto: 'Passe --dados com um JSON contendo "slides".',
@@ -87,7 +96,9 @@
   });
 
   window.cena = {
-    duracao: total, fps: 30, largura: 1080, altura: 1920,
+    duracao: total, fps: 30,
+    largura: Number(d.largura) || 1080,
+    altura: Number(d.altura) || 1920,
     aoTempo(t) {
       let atual = 0;
       for (let i = 0; i < slides.length; i++) if (t >= inicios[i]) atual = i;

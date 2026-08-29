@@ -3,7 +3,7 @@
 import { readdir, readFile, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join, dirname, resolve, basename } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { renderizar } from './motor/renderizar.mjs';
 import { renderizarLote } from './motor/lote.mjs';
 import { acharFfmpeg, capacidades, escolherFormato, montarVideo } from './motor/ffmpeg.mjs';
@@ -12,6 +12,39 @@ import { gerar, listarProvedores } from './geracao/gerar.mjs';
 
 const RAIZ = dirname(fileURLToPath(import.meta.url));
 const PASTA_CENAS = join(RAIZ, 'cenas');
+
+
+// Carrega --dados e resolve caminhos de imagem.
+//
+// POR QUE resolver: a cena é carregada por file:// de dentro de cenas/<nome>/,
+// então um caminho relativo no JSON seria procurado a partir DALI, não da
+// pasta do JSON. O Chromium não acha, a imagem não aparece, e o vídeo sai
+// com o card em branco sem nenhum erro. Resolver aqui, contra a pasta do
+// próprio JSON, é o que faz "imagem": "cards/blind_story.png" funcionar.
+async function lerDados(alvo) {
+  if (!alvo) return {};
+  if (typeof alvo !== 'string') return {};
+  if (alvo.trim().startsWith('{')) return JSON.parse(alvo);
+  const caminho = resolve(alvo);
+  const base = dirname(caminho);
+  const dados = JSON.parse(await readFile(caminho, 'utf8'));
+  const resolverImagem = (obj) => {
+    if (!obj || typeof obj !== 'object') return;
+    for (const [chave, valor] of Object.entries(obj)) {
+      if (chave === 'imagem' && typeof valor === 'string' && valor && !/^(https?:|data:|file:)/.test(valor)) {
+        const absoluto = resolve(base, valor);
+        if (!existsSync(absoluto)) {
+          throw new Error(`imagem não encontrada: ${valor}\n    procurei em ${absoluto}`);
+        }
+        obj[chave] = pathToFileURL(absoluto).href;
+      } else if (typeof valor === 'object') {
+        Array.isArray(valor) ? valor.forEach(resolverImagem) : resolverImagem(valor);
+      }
+    }
+  };
+  resolverImagem(dados);
+  return dados;
+}
 
 function lerArgs(argv) {
   const soltos = [];
@@ -60,9 +93,7 @@ async function cmdCenas() {
 
 async function cmdRenderizar({ soltos, flags }) {
   const cena = resolverCena(soltos[0]);
-  const dados = flags.dados
-    ? (flags.dados.trim().startsWith('{') ? JSON.parse(flags.dados) : JSON.parse(await readFile(flags.dados, 'utf8')))
-    : {};
+  const dados = await lerDados(flags.dados);
   let ultimo = '';
   const r = await renderizar({
     cena,
