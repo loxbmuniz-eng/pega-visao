@@ -1081,6 +1081,25 @@ select option{background:var(--campo-bg);color:var(--text)}
 }
 .cel-veiculo .chip-no-patio{ display:inline-block; margin:3px 4px 0 0 }
 
+/* "ETAPA DEVOLVIDA" na carga que a Administração pôs de volta (29/08/2026).
+   Vinho, ao contrário do chip verde acima: aquele informa, este PEDE PARA
+   PARAR E CONFERIR antes de fazer a carga andar de novo. */
+.chip-devolvida{
+  display:inline-block;
+  margin-left:6px;
+  padding:1px 7px;
+  border-radius:4px;
+  background:rgba(150,42,58,.18);
+  border:1px solid var(--wine-light,#a8465a);
+  color:var(--wine-light,#e08a99);
+  font-size:10px;
+  font-weight:700;
+  white-space:nowrap;
+  text-transform:none;
+  vertical-align:middle;
+}
+.cel-veiculo .chip-devolvida{ display:inline-block; margin:3px 4px 0 0 }
+
 /* =====================================================================
    RAIO-X DA OPERAÇÃO (21/08/2026)
    =====================================================================

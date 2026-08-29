@@ -2222,7 +2222,7 @@ function renderVisaoPatio(prefixo){
     const etapas = etapasDaCarga(c);
     return `<tr class="linha-status-${esc((STATUS_META[c.status]||{}).cor || '')}">
       <td class="vp-carga">${esc(c.numeroCarga)||'—'}</td>
-      <td class="vp-placa">${esc(c.placa)}${marcaCargaDaPlaca(c, lista)}</td>
+      <td class="vp-placa">${esc(c.placa)}${marcaCargaDaPlaca(c, lista)}${marcaEtapaDevolvidaHtml(c)}</td>
       <td class="vp-transp">${esc(c.transportadora)||'—'}</td>
       <td class="vp-rota">${esc(rotaCurta(c.rota))}</td>
       ${linhaDoTempoCompacta(etapas)}
@@ -3108,7 +3108,7 @@ function renderProgFila(){
         <input type="text" class="placa-input" value="${esc(c.placa)}" onchange="atualizarPlacaUI('${id}',this.value)" title="Trocar a placa — a transportadora e o tipo de veículo são buscados na Frota automaticamente.">
         <span class="veic-transp" id="transp-${esc(c.id)}">${esc(c.transportadora)||'—'}</span>
         <span class="veic-tipo">${esc(c.tipoVeiculo)||'—'}</span>
-        ${marcaCargaDaPlaca(c, lista)}${chipNoPatioHtml(c)}</td>
+        ${marcaCargaDaPlaca(c, lista)}${chipNoPatioHtml(c)}${marcaEtapaDevolvidaHtml(c)}</td>
       <td onclick="event.stopPropagation()">
         <input type="text" class="motorista-input" value="${esc(c.motorista||'')}" onchange="atualizarMotoristaUI('${id}',this.value)" title="Quem dirige ESTA viagem — não mexe no cadastro da placa."></td>
       <td onclick="event.stopPropagation()">${rotaSelectHtml(c)}</td>
@@ -3437,6 +3437,26 @@ function veiculoJaNoPatio(carga){
     && normalizarPlaca(c.placa) === p
     && c.status !== 'Aguardando Veículo');
 }
+/* A ETAPA FOI DEVOLVIDA — e quem olha a fila precisa ver isso ANTES de agir.
+
+   Sem esta marca, a carga devolvida para "Aguardando Veículo" aparece para
+   a Portaria idêntica a uma que nunca chegou. O porteiro, que já deixou
+   aquele caminhão entrar, lê "não chegou", clica "Chegou" de boa-fé e
+   desfaz a correção. Foi o laço do relato do FTZ2138 (29/08/2026).
+
+   Vinho, e não verde: ao contrário do "veículo já no pátio", isto NÃO é
+   informação tranquila — é um pedido para parar e conferir. Some sozinha
+   quando alguém legitimamente move a carga (ver `aindaVale`). */
+function marcaEtapaDevolvidaHtml(carga){
+  const d = (typeof etapaDevolvida === 'function') ? etapaDevolvida(carga) : null;
+  if(!d || !d.aindaVale) return '';
+  const quando = d.quando ? fmtDataHora(d.quando) : 'horário não registrado';
+  return `<span class="chip-devolvida" title="${esc(d.setor)} (${esc(d.quem)}) devolveu esta carga `
+    + `de &quot;${esc(d.de)}&quot; para &quot;${esc(d.para)}&quot; em ${esc(quando)}. `
+    + `O motivo está no Histórico da carga. Confira antes de fazer a carga andar de novo.">`
+    + `↩ etapa devolvida</span>`;
+}
+
 function chipNoPatioHtml(carga){
   return veiculoJaNoPatio(carga)
     ? '<span class="chip-no-patio" title="Outra carga desta mesma placa já está no pátio — o caminhão chegou. '
@@ -4170,6 +4190,45 @@ async function acaoChegadaUI(){
     try{ await SuincoSharePoint.sincronizarAgora(); }
     catch(e){ /* sem rede: segue com o que há e o servidor decide depois */ }
   }
+  /* A ETAPA DEVOLVIDA PEDE CONFIRMAÇÃO — 29/08/2026, relato do FTZ2138.
+
+     Aqui era onde o laço se fechava: a carga que a Administração devolveu
+     para "Aguardando Veículo" reaparece na fila da Portaria como "não
+     chegou", e o "Chegou" a empurrava de volta na hora, calado. Quem
+     corrigiu tentava de novo, e a coisa girava.
+
+     PERGUNTA, NÃO BLOQUEIA. A Portaria tem autoridade sobre a chegada e o
+     caminhão pode de fato ter chegado de novo — botão desabilitado não
+     ensina o caminho, só nega. O que faltava não era permissão, era a
+     INFORMAÇÃO de que aquilo tinha sido feito de propósito, por alguém,
+     com motivo. A pergunta traz quem, quando e de onde para onde.
+
+     Roda DEPOIS do `sincronizarAgora()` acima, de propósito: a devolução
+     pode ter acabado de acontecer em outro terminal, e perguntar com lista
+     velha é não perguntar. */
+  const devolvidas = cargasAbertasPorPlaca(normalizarPlaca(placa))
+    .map(c => ({ carga: c, d: etapaDevolvida(c) }))
+    .filter(x => x.d && x.d.aindaVale && x.d.para === 'Aguardando Veículo');
+  if(devolvidas.length){
+    const { carga, d } = devolvidas[0];
+    const quando = d.quando ? fmtDataHora(d.quando) : 'horário não registrado';
+    const qual = carga.numeroCarga ? `a carga ${carga.numeroCarga}` : 'esta carga';
+    const ok = confirm(
+      `${normalizarPlaca(placa)}: a etapa foi DEVOLVIDA de propósito.\n\n`
+      + `${d.setor} (${d.quem}) devolveu ${qual} de "${d.de}" para "${d.para}" em ${quando}.\n`
+      + `O motivo está no Histórico da carga.\n\n`
+      + `Registrar a chegada agora desfaz essa correção.\n`
+      + `O caminhão chegou de novo?`);
+    if(!ok){
+      notify(`Chegada NÃO registrada — ${normalizarPlaca(placa)} continua em "${d.para}", `
+        + `como ${d.setor} deixou. Se o caminhão chegou mesmo, clique "Chegou" e confirme.`,
+        'info', 9000);
+      input.value = '';
+      input.focus();
+      return;
+    }
+  }
+
   let r;
   try{
     r = registrarChegadaPortaria(placa, nomeOperadorAtual());
@@ -4427,7 +4486,7 @@ function renderPortariaProgramadas(){
       acao = `<button class="btn btn-warn btn-sm" onclick="portariaSaiuCarga('${escJs(c.placa)}')">🏁 Saiu</button>`;
     }
     return `<tr>
-      <td class="col-identificacao">${esc(c.placa)}${marcaCargaDaPlaca(c, lista)}</td>
+      <td class="col-identificacao">${esc(c.placa)}${marcaCargaDaPlaca(c, lista)}${marcaEtapaDevolvidaHtml(c)}</td>
       <td class="col-identificacao">${esc(c.numeroCarga)||'—'}</td>
       <td>${esc(c.transportadora)||'—'}</td>
       <td>${esc(rotaCurta(c.rota))}</td>
@@ -7904,6 +7963,25 @@ async function init(){
       if(typeof SuincoSharePoint.pendentes === 'function' && SuincoSharePoint.pendentes() === 0){
         liberarPendencias();
       }
+
+      /* VOLTOU A ANDAR DEPOIS DE TER SIDO DEVOLVIDA (29/08/2026).
+
+         Quem devolve uma etapa de propósito precisa saber na hora quando
+         ela volta a andar. Sem isso, o dono corrigia, outro setor desfazia
+         em silêncio, e ele tentava de novo achando que a correção não
+         tinha gravado — o relato do FTZ2138 por inteiro.
+
+         Vem ANTES do renderAll e fora do `if` de contagem: é notícia sobre
+         uma decisão que esta pessoa tomou, não redesenho de tela. Alto e
+         com som, no mesmo padrão da recusa de status. */
+      (r.reandouAposDevolucao || []).forEach(x => {
+        const quem = `${x.devolvida.setor} (${x.devolvida.quem})`;
+        notify(`${x.placa}${x.numeroCarga ? ' · ' + x.numeroCarga : ''}: a carga VOLTOU A ANDAR `
+          + `— de "${x.de}" para "${x.para}". ${quem} tinha devolvido a etapa. `
+          + `Se não era pra andar, devolva de novo pelo Histórico e avise o setor.`,
+          'warn', 14000);
+        tocarBeepConfirmacao();
+      });
 
       if(r.cargasNovas || r.cargasAtualizadas || r.movimentacoesNovas){
         renderAll();

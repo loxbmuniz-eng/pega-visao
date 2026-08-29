@@ -30,10 +30,76 @@ faz achar a próxima em minutos em vez de horas:
 | **Trava sem o par na tela** | O servidor passa a exigir algo novo e a tela continua com o botão antigo: quem clica só descobre que não pode, e não tem por onde seguir. | #13 |
 | **A mesma decisão escrita em dois lugares** | A regra é copiada em vez de consultada. As cópias divergem e o comportamento fica errado sem que nenhuma linha esteja errada. | #14 |
 | **Duas escritas em voo, a velha ganha** | O painel manda a carga INTEIRA a cada alteração. Duas alterações seguidas viram duas requisições simultâneas, e a primeira carrega o valor velho do campo que ainda ia mudar. | #16 |
+| **A correção que outro setor desfaz sem saber** | Um setor corrige de propósito o que outro fez. A tela do segundo continua mostrando o estado como se nada tivesse sido decidido, e o gesto normal dele desfaz a correção — em silêncio, dos dois lados. | #21 |
 | **A proteção escrita para um posto só** | A regra certa existe, com comentário e tudo — mas vale para um caminho e não para os irmãos dele. Não é cópia divergente: é a cópia que nunca foi escrita. | #20 |
 | **A tela não oferece o que o servidor aceita** | A rota grava o campo, mas a coluna correspondente é texto. Quem precisa registrar o dado escreve no primeiro campo que aceita digitação — e ele vai parar onde ninguém procura. | #19 |
 | **Dois filtros para a mesma tela** | Duas filtragens paralelas sobre os mesmos dados. Uma move os números, a outra move os gráficos, e nada avisa que discordam. | #18 |
 | **Teste que mede o proxy, não a regra** | O teste confere um sintoma fácil de medir ("a aba aparece?", "quantas linhas?") em vez da garantia real. Quando o sintoma muda por um motivo legítimo, ele fica vermelho sem que nada tenha quebrado — e some do radar. | #15 |
+
+---
+
+## #21 — A etapa corrigida voltava sozinha para "Aguardando Embarque" (29/08/2026)
+
+**Relato:** *"TO TENTANDO MUDAR O STATUS DE UMA CARGA QUE TA ERRADA EU TENTO
+COLOCAR AGUARDANDO VEICULO AO INVES DE AGUARDANDO EMBARQUE E NAO CONSIGO
+PPOIS FICA VOLTANDO PRA AGUARDANDO EMBARQUE FTZ2138"*
+
+**O que o sintoma sugeria, e não era.** "Volta sozinha" é a assinatura da
+ocorrência **#01** (eco de sincronização) e do defeito do botão "Chegou" que
+o comentário de `sincronizarCarga` descreve. Fui atrás disso primeiro e
+**descartei os três, com evidência**:
+
+- o servidor recusando a volta — **não**: `POST /cargas/:id/corrigir-etapa`
+  grava certo (conferido no banco: `versao 4, Aguardando Veículo`);
+- `_pendente` / fila travando a tela — **não**: `pendente=False`,
+  `statusPendentes=[]` em todos os ciclos de sincronia;
+- a absorção de entrada solta do pátio empurrando a carga — **não**: com a
+  linha órfã na mesma placa, a carga ficou em "Aguardando Veículo".
+
+**Causa:** ao voltar para "Aguardando Veículo", a carga **reaparece na fila
+da Portaria como "não chegou"** — com o botão "Chegou" ativo e nenhum sinal
+de que aquilo tinha sido uma correção deliberada. O porteiro vê um caminhão
+que ele mesmo deixou entrar listado como se não tivesse chegado, clica
+"Chegou" de boa-fé, e a carga volta para "Aguardando Embarque" na hora. Quem
+corrigiu não é avisado, tenta de novo, e o laço se fecha.
+
+Reprodução que fechou o diagnóstico, com dois painéis abertos ao mesmo tempo:
+
+```
+depois da correção, ADM vê:  Aguardando Veículo
+PORTARIA vê:                 Aguardando Veículo
+aviso de que foi correção:   []            <- nenhum
+porteiro clicou "Chegou":    atualizadas=1, bloqueada=False
+ADM vê agora:                Aguardando Embarque   <- voltou
+```
+
+**O que estava faltando não era permissão — era informação.** Os dois lados
+agiam certo com o que viam. O sistema é que não contava a nenhum dos dois o
+que o outro tinha feito.
+
+**Feito** — três pontos, todos lendo o MESMO fato (a movimentação que andou
+para trás na `STATUS_FLOW`), via `etapaDevolvida()`. Sem coluna nova, sem
+migração: a devolução já estava escrita, faltava alguém ler.
+
+1. **Marca visível** `↩ etapa devolvida` ao lado da placa, na Visão do Pátio,
+   na fila de programados e na lista da Portaria — some sozinha quando
+   alguém legitimamente move a carga.
+2. **O "Chegou" pergunta antes**, dizendo quem devolveu, quando e de onde
+   para onde. **Pergunta, não bloqueia**: a Portaria tem autoridade e o
+   caminhão pode ter chegado de novo — botão desabilitado não ensina o
+   caminho, só nega.
+3. **Quem corrigiu é avisado** quando a carga volta a andar, alto e com som.
+
+**Sem janela de tempo, de propósito.** A marca vale enquanto ninguém tirou a
+carga do lugar para onde ela foi devolvida — prazo mágico é controle que
+depende da memória de quem escreveu.
+
+**Guarda:** `testes/test_etapa_devolvida_nao_volta_sozinha.py` — devolve a
+etapa, confere que a Portaria VÊ a marca antes de clicar, que o "Chegou"
+pergunta, que **recusando a carga não anda (nem na tela nem no servidor)**,
+que **confirmando ela anda** (a autoridade da Portaria fica de pé) e que o
+painel de quem corrigiu avisa. Reprovou em 6 pontos contra o código
+publicado antes da correção.
 
 ---
 

@@ -917,7 +917,7 @@ function fundirEstadoRemoto(dados){
   // de um tempo offline) — listar cada uma tornaria a notificação maior
   // que o problema que ela resolve.
   const DETALHES_MAX = 4;
-  const res = { cargasNovas:0, cargasAtualizadas:0, movimentacoesNovas:0, ignoradasPorPendencia:0, detalhes:[] };
+  const res = { cargasNovas:0, cargasAtualizadas:0, movimentacoesNovas:0, ignoradasPorPendencia:0, detalhes:[], reandouAposDevolucao:[] };
   if(!dados) return res;
 
   const registrarDetalhe = (carga, acao) => {
@@ -960,6 +960,26 @@ function fundirEstadoRemoto(dados){
     const tRemoto = Date.parse(carga.atualizadoEm || 0) || 0;
     if(tRemoto > tLocal){
       const statusMudou = local.status !== carga.status;
+
+      /* ANDOU DEPOIS DE TER SIDO DEVOLVIDA — o aviso que faltava.
+
+         Quem devolve uma etapa de propósito precisa saber quando ela volta
+         a andar, senão fica tentando corrigir de novo achando que não
+         gravou. Foi exatamente o que aconteceu no relato do FTZ2138: a
+         correção valia, e outro setor a desfazia em seguida, calado.
+
+         A checagem é feita ANTES do Object.assign, com o status que este
+         terminal ainda tem — depois dele o "de onde saiu" já se perdeu. */
+      const devolvida = statusMudou ? etapaDevolvida(local) : null;
+      const reandou = !!(devolvida && devolvida.aindaVale
+        && STATUS_FLOW.indexOf(carga.status) > STATUS_FLOW.indexOf(local.status));
+      if(reandou){
+        res.reandouAposDevolucao.push({
+          placa: carga.placa, numeroCarga: carga.numeroCarga,
+          de: local.status, para: carga.status, devolvida
+        });
+      }
+
       Object.assign(local, carga); res.cargasAtualizadas++;
       registrarDetalhe(local, statusMudou ? 'mudou de status' : 'foi editada');
     }
@@ -1872,6 +1892,56 @@ function avancarStatusCarga(cargaId, statusNovo, operador, setor){
   c.atualizadoEm = nowISO();
   SuincoStore.save();
   return c;
+}
+
+/* A ETAPA QUE FOI DEVOLVIDA DE PROPÓSITO — e ainda está onde a puseram.
+
+   RELATO DO DONO, 29/08/2026, palavra por palavra:
+
+     "TO TENTANDO MUDAR O STATUS DE UMA CARGA QUE TA ERRADA EU TENTO COLOCAR
+      AGUARDANDO VEICULO AO INVES DE AGUARDANDO EMBARQUE E NAO CONSIGO PPOIS
+      FICA VOLTANDO PRA AGUARDANDO EMBARQUE FTZ2138"
+
+   O QUE ESTAVA ACONTECENDO. A correção de etapa da Administração grava
+   certo e chega nos outros terminais — isso foi reproduzido e conferido no
+   banco. O problema vem DEPOIS: ao voltar para "Aguardando Veículo", a
+   carga reaparece na fila da Portaria como "não chegou", com o botão
+   "Chegou" ativo e NENHUM sinal de que aquilo foi uma correção deliberada.
+   O porteiro vê um caminhão que ele já deixou entrar listado como se não
+   tivesse chegado, clica "Chegou", e a carga volta para "Aguardando
+   Embarque" na hora. Quem corrigiu tenta de novo, e o laço se fecha.
+
+   POR QUE ISTO MORA AQUI, E NÃO NUMA COLUNA NOVA. A devolução JÁ ESTÁ
+   escrita: é uma movimentação cujo status novo vem ANTES do anterior na
+   STATUS_FLOW. Ler o que já existe evita migração, evita esperar o servidor
+   ser atualizado, e — o que importa mais — não cria uma segunda verdade
+   sobre o mesmo fato. Uma função, e os três chamadores (a marca na tela, a
+   pergunta do "Chegou" e o aviso de que voltou a andar) leem dela.
+
+   `aindaVale` é o que separa "foi devolvida um dia" de "está devolvida
+   agora": vale enquanto ninguém tirou a carga do lugar para onde ela foi
+   posta de volta. Sem janela de tempo de propósito — prazo mágico é
+   controle que depende da memória de quem escreveu. */
+function etapaDevolvida(carga){
+  if(!carga || !carga.id) return null;
+  let ultima = null;
+  (DB.movimentacoes || []).forEach(m => {
+    if(m.cargaId !== carga.id || !m.statusAnterior || !m.statusNovo) return;
+    const de = STATUS_FLOW.indexOf(m.statusAnterior);
+    const para = STATUS_FLOW.indexOf(m.statusNovo);
+    if(de === -1 || para === -1 || para >= de) return;   // só o que ANDOU PARA TRÁS
+    // A mais recente manda: uma carga pode ter sido devolvida mais de uma vez.
+    if(!ultima || String(m.timestamp||'') >= String(ultima.timestamp||'')) ultima = m;
+  });
+  if(!ultima) return null;
+  return {
+    de: ultima.statusAnterior,
+    para: ultima.statusNovo,
+    quem: ultima.operador || '(não identificado)',
+    setor: ultima.setor || '—',
+    quando: ultima.timestamp || null,
+    aindaVale: carga.status === ultima.statusNovo
+  };
 }
 
 // Portaria — botão "Saiu": saída física de uma placa — aplica a TODAS as
