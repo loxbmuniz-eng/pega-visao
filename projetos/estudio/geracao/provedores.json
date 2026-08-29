@@ -1,0 +1,27 @@
+{
+  "_leia": "Ordem de preferência por tipo. O primeiro que estiver disponível ganha. 'espaco_reservado' fecha a fila porque nunca falha — ele não inventa conteúdo, só produz um marcador honesto para o pipeline seguir.",
+  "ordem": {
+    "imagem": ["comfyui", "espaco_reservado"],
+    "voz": ["piper", "espaco_reservado"],
+    "texto": ["ollama", "openai_compativel"]
+  },
+  "comfyui": {
+    "endereco": "http://127.0.0.1:8188",
+    "fluxo": null,
+    "_nota": "fluxo = caminho de um workflow API do ComfyUI exportado em JSON. Sem ele o provedor se declara indisponível em vez de chutar um grafo."
+  },
+  "ollama": {
+    "endereco": "http://127.0.0.1:11434",
+    "modelo": "llama3.1"
+  },
+  "openai_compativel": {
+    "endereco": "http://127.0.0.1:1234/v1",
+    "modelo": "local-model",
+    "_nota": "LM Studio, llama.cpp server, vLLM — qualquer servidor local que fale a API da OpenAI."
+  },
+  "piper": {
+    "binario": null,
+    "voz": null,
+    "_nota": "binario = caminho do executável do piper; voz = caminho do .onnx. https://github.com/rhasspy/piper"
+  }
+}

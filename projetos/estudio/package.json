@@ -1,0 +1,13 @@
+{
+  "name": "estudio",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Vídeo escrito em HTML, CSS e JS — render determinístico e geração em lote.",
+  "bin": { "estudio": "./cli.mjs" },
+  "scripts": {
+    "teste": "node --test \"testes/teste_*.mjs\"",
+    "checar": "node cli.mjs checar"
+  },
+  "engines": { "node": ">=22" }
+}
