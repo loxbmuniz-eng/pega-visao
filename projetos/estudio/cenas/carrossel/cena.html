@@ -1,0 +1,122 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Cena — carrossel em vídeo 9:16</title>
+<link rel="stylesheet" href="../base.css">
+<style>
+  .palco { padding: 0; }
+  .pontos { position: absolute; top: 74px; left: 90px; right: 90px; display: flex; gap: 10px; z-index: 3; }
+  .ponto { flex: 1; height: 5px; border-radius: 3px; background: #2A2A31; overflow: hidden; }
+  .ponto i { display: block; height: 100%; width: 0; background: var(--marca); }
+
+  /* Fundo opaco em cada slide: sem isso o slide que sai continua legível
+     atrás do que entra e o quadro do meio da transição vira sopa de texto.
+     Apareceu no primeiro render da campanha FRVIN. */
+  .slide { position: absolute; inset: 0; display: flex; flex-direction: column;
+           justify-content: center; padding: 190px 90px 210px; background: var(--tinta); }
+  .selo { font-family: var(--mono); font-size: 25px; letter-spacing: .28em; text-transform: uppercase;
+          color: var(--marca); font-weight: 700; margin-bottom: 40px; }
+  .titulo { font-size: 104px; line-height: .98; font-weight: 800; letter-spacing: -.035em;
+            text-transform: uppercase; }
+  .titulo.menor { font-size: 76px; text-transform: none; letter-spacing: -.03em; line-height: 1.05; }
+  .texto { margin-top: 40px; font-size: 38px; line-height: 1.42; color: var(--suave); }
+  .texto b { color: var(--papel); font-weight: 700; }
+  .rodape { margin-top: 52px; font-family: var(--mono); font-size: 31px; color: var(--papel);
+            border-top: 2px solid var(--linha); padding-top: 28px; }
+
+  /* Amarelo = dado que não temos e não se inventa. A regra veio do próprio
+     documento da campanha; a cena carrega a regra para dentro do vídeo. */
+  .pendente { margin-top: 34px; border-left: 5px solid var(--pendente); padding: 16px 0 16px 24px;
+              font-family: var(--mono); font-size: 26px; color: var(--pendente); line-height: 1.45; }
+
+  .marca { position: absolute; left: 90px; bottom: 88px; font-family: var(--mono);
+           font-size: 28px; letter-spacing: .1em; color: var(--suave); z-index: 4; }
+  .contador { position: absolute; right: 90px; bottom: 88px; font-family: var(--mono);
+              font-size: 28px; color: var(--marca); font-weight: 700; z-index: 4; }
+  /* Acima dos slides: eles agora têm fundo opaco e cobririam a assinatura. */
+  .vinheta { z-index: 3; }
+</style>
+
+<div class="palco">
+  <div class="pontos" id="pontos"></div>
+  <div id="slides"></div>
+  <div class="marca" id="assinatura"></div>
+  <div class="contador" id="contador"></div>
+  <div class="vinheta"></div>
+</div>
+
+<script src="../kit.js"></script>
+<script>
+(() => {
+  const K = Kit;
+  const d = window.__dados || {};
+  const cor = d.cor || '#FF6B2C';
+  const pendenteCor = d.corPendente || '#E5B76B';
+  document.documentElement.style.setProperty('--marca', cor);
+  document.documentElement.style.setProperty('--pendente', pendenteCor);
+
+  const slides = Array.isArray(d.slides) && d.slides.length ? d.slides : [{
+    selo: '01', titulo: 'Sem dados', texto: 'Passe --dados com um JSON contendo "slides".',
+  }];
+  K.$('#assinatura').textContent = d.assinatura || '';
+
+  const ENTRADA = 0.55;          // quanto dura a entrada de cada slide
+  const tempos = slides.map((s) => Number(s.segundos) || 3.4);
+  const inicios = tempos.reduce((acc, t) => (acc.push((acc.at(-1) ?? 0) + t), acc), [0]);
+  const total = inicios.at(-1);
+
+  const alvoSlides = K.$('#slides');
+  const alvoPontos = K.$('#pontos');
+  const nos = slides.map((s, i) => {
+    const el = document.createElement('div');
+    el.className = 'slide';
+    const grande = (s.titulo || '').length <= 34 && !s.tituloMenor;
+    el.innerHTML =
+      (s.selo ? `<div class="selo">${s.selo}</div>` : '') +
+      (s.titulo ? `<div class="titulo${grande ? '' : ' menor'}">${s.titulo}</div>` : '') +
+      (s.texto ? `<div class="texto">${s.texto}</div>` : '') +
+      (s.pendente ? `<div class="pendente">FALTA · ${s.pendente}</div>` : '') +
+      (s.rodape ? `<div class="rodape">${s.rodape}</div>` : '');
+    el.style.opacity = '0';
+    alvoSlides.appendChild(el);
+
+    const p = document.createElement('div');
+    p.className = 'ponto';
+    p.innerHTML = '<i></i>';
+    alvoPontos.appendChild(p);
+    return { el, barra: p.querySelector('i') };
+  });
+
+  window.cena = {
+    duracao: total, fps: 30, largura: 1080, altura: 1920,
+    aoTempo(t) {
+      let atual = 0;
+      for (let i = 0; i < slides.length; i++) if (t >= inicios[i]) atual = i;
+
+      nos.forEach(({ el, barra }, i) => {
+        const dentro = i === atual;
+        const local = t - inicios[i];
+        if (dentro) {
+          // Entra deslizando e OPACO — cobre o anterior em vez de se misturar
+          // com ele. A opacidade some rápido (0,18s) só para não dar um pulo
+          // seco no primeiro quadro.
+          const desl = K.saida(K.limitar(local / ENTRADA));
+          el.style.opacity = String(K.limitar(local / 0.18));
+          el.style.transform = `translate3d(0, ${K.mistura(64, 0, desl)}px, 0)`;
+          el.style.zIndex = '2';
+        } else if (i === atual - 1) {
+          // O anterior fica parado e ATRÁS: quem o esconde é o fundo do novo.
+          el.style.opacity = '1';
+          el.style.transform = 'translate3d(0, 0, 0)';
+          el.style.zIndex = '1';
+        } else {
+          el.style.opacity = '0';
+          el.style.zIndex = '0';
+        }
+        barra.style.width = `${K.limitar((t - inicios[i]) / tempos[i]) * 100}%`;
+      });
+
+      K.$('#contador').textContent = `${String(atual + 1).padStart(2, '0')}/${String(slides.length).padStart(2, '0')}`;
+    },
+  };
+})();
+</script>
