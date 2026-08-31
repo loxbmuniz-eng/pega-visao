@@ -1875,7 +1875,82 @@ if(typeof MutationObserver !== 'undefined'){
   });
 }
 
+/* O REDESENHO NÃO PODE ARRANCAR O CAMPO DA MÃO DE QUEM DIGITA (31/08/2026).
+
+   RELATO, do Wemerson: "começa a preencher o campo e o campo para de
+   digitar, tem que clicar de novo no campo; na hora de fazer um cadastro,
+   completando informações, tem que ficar voltando no campo que tá digitando".
+
+   O painel se redesenha inteiro a cada sincronia — de 15 em 15 segundos — e
+   a cada dado que chega de outro setor. As linhas editáveis da Torre, da
+   Fila e da Montagem são reescritas por completo: o campo que estava sob o
+   dedo deixa de existir e um novo nasce no lugar, vazio. O foco vai para o
+   BODY, o que já tinha sido digitado some, e o cursor volta para o começo.
+   Reproduzido em teste antes desta correção.
+
+   A PROTEÇÃO JÁ EXISTIA — e valia para um lugar só. `_devCapturarDigitacao`
+   e `_devRestaurarDigitacao` (devolucoes.js) fazem exatamente isto, guardando
+   valor, foco e posição do cursor, desde 27/08. Foram escritas para
+   `#dev-lista`. É a família da ocorrência #20: a regra certa existe, com
+   comentário e tudo, e não vale para os irmãos dela.
+
+   Aqui ela passa a valer para o painel inteiro, no ponto por onde todo
+   redesenho passa. Uma função, um chamador — em vez de cada tela lembrar. */
+function _capturarDigitacao(){
+  const foco = document.activeElement;
+  const editavel = foco && (foco.tagName === 'INPUT' || foco.tagName === 'TEXTAREA'
+                            || foco.tagName === 'SELECT');
+  if(!editavel) return null;
+  /* A âncora é o id quando existe; quando não existe, a posição do campo
+     dentro da tabela. As linhas da Torre e da Montagem nascem com id; as
+     células de carga usam classe, e para essas o caminho é o índice. */
+  const linha = foco.closest('tr');
+  const cel = foco.closest('td');
+  return {
+    id: foco.id || null,
+    classe: foco.className || '',
+    valor: (foco.type === 'checkbox' || foco.type === 'radio') ? foco.checked : foco.value,
+    ini: typeof foco.selectionStart === 'number' ? foco.selectionStart : null,
+    fim: typeof foco.selectionEnd === 'number' ? foco.selectionEnd : null,
+    linhaId: linha ? (linha.dataset && linha.dataset.id) || null : null,
+    idxLinha: linha && linha.parentElement
+      ? [...linha.parentElement.children].indexOf(linha) : -1,
+    idxCel: cel && cel.parentElement ? [...cel.parentElement.children].indexOf(cel) : -1,
+    tabelaId: linha && linha.closest('tbody') ? linha.closest('tbody').id : null,
+  };
+}
+
+function _restaurarDigitacao(e){
+  if(!e) return;
+  let el = e.id ? document.getElementById(e.id) : null;
+  if(!el && e.tabelaId && e.idxLinha >= 0 && e.idxCel >= 0){
+    const tb = document.getElementById(e.tabelaId);
+    const tr = tb && tb.children[e.idxLinha];
+    const td = tr && tr.children[e.idxCel];
+    el = td ? td.querySelector('input, select, textarea') : null;
+  }
+  if(!el) return;   // a linha saiu da tela (outro setor moveu a carga)
+  /* Só devolve o que a pessoa digitou se o campo voltou vazio ou diferente:
+     se o redesenho trouxe um valor NOVO vindo do servidor, quem manda é o
+     servidor — a tela adianta, a transação decide. */
+  if(el.type === 'checkbox' || el.type === 'radio'){
+    if(el.checked !== e.valor) el.checked = e.valor;
+  } else if(el.value !== e.valor){
+    el.value = e.valor;
+  }
+  try{
+    el.focus({ preventScroll: true });
+    if(e.ini !== null) el.setSelectionRange(e.ini, e.fim);
+  }catch(err){ /* number e date não aceitam setSelectionRange */ }
+}
+
 function renderAll(){
+  const _digitando = _capturarDigitacao();
+  try { _renderAllInterno(); }
+  finally { _restaurarDigitacao(_digitando); }
+}
+
+function _renderAllInterno(){
   /* Guardião do pré-login: qualquer caminho que resulte em operador logado
      (botões de login, restauração de sessão por token, teste automatizado
      que grava DB.operador direto) revela o painel — e qualquer caminho que
