@@ -39,6 +39,82 @@ faz achar a próxima em minutos em vez de horas:
 
 ---
 
+## #24 — Sessão vencida gravava no vácuo, e a tela dizia "offline" (31/08/2026)
+
+**Relato.** Print do celular do Rene da Expedição, mandado pelo dono. Na
+tela: a faixa vermelha "VOCÊ ESTÁ OFFLINE — SISTEMA INDISPONÍVEL", os botões
+"Iniciar Embarque" e "Finalizar Embarque", a carga 118495 da placa MMJ9E91 —
+e, no alto do aparelho, o indicador de **5G**. Ele não estava offline.
+
+No rodapé, em letra pequena, o texto que denunciava o que era de verdade:
+*"Sem conexão com o servidor — entre de novo para voltar a compartilhar"*.
+Esse é o texto do estado `local`. A sessão dele tinha vencido.
+
+**Causa.** O token mora em `sessionStorage` — morre quando a aba fecha. No
+celular isso não é caso raro: o Android descarta aba em segundo plano o
+tempo todo, e o 401 de sessão vencida chega ao mesmo lugar por outro
+caminho. `DB.operador` fica no `localStorage` e sobrevive, então o painel
+reabre parecendo logado, no estado `local`.
+
+Sem token, `estaConfigurado()` responde não — e os CINCO caminhos de
+escrita (`upsert`, `excluir`, `gravarFrota`, `gravarRota`, `mudarStatus`)
+saíam com a mesma linha copiada cinco vezes: `return { enfileirado: false }`.
+Sem recusa, sem fila, sem aviso.
+
+Medido antes de mexer:
+
+```
+configurado: False        estado: local
+respostaDoUpsert: {'enfileirado': False}    <- nenhuma recusa
+cargaFicouNaTela: True    cargasDepois: 1
+filaOffline: 0            avisoNaTela: False
+```
+
+Carga criada, guardada só no aparelho, nada enviado, nada enfileirado, nada
+dito. O operador trabalha a tarde inteira gravando no vácuo.
+
+**Por que a trava de offline não pegou.** Ela foi escrita para "a rede
+caiu" e olhava o resultado da chamada de rede. "A sessão venceu" nunca chega
+a fazer chamada nenhuma — sai antes, na guarda. E no pátio a sessão vencida
+é o caso MUITO mais comum, porque o telefone fica com a aba aberta o dia
+inteiro. A trava cobria o caso raro e deixava passar o frequente.
+
+É o mesmo mecanismo do incidente do Alysson em 31/08 pela manhã ("alterei no
+computador e ao acessar pelo celular o sistema reverteu todas as
+alterações"): um aparelho com cópia local que ninguém sabia que estava
+isolado.
+
+**Correção.**
+
+- `semServidor()` em `suinco-api.js`: uma função para a decisão que estava
+  copiada em cinco lugares. Com a sessão perdida ela devolve
+  `{recusado:true, sessaoExpirada:true}` com o texto certo; em modo local
+  de propósito devolve o `{enfileirado:false}` de sempre.
+- `sessaoPerdida()` = entrou pelo servidor neste aparelho E não tem token.
+  A marca vive no `localStorage` porque precisa sobreviver ao token — é
+  justamente quando o token some que a pergunta importa. Marcada dentro de
+  `guardarToken` (ponto único do login E da renovação), apagada em `sair()`,
+  porque sair é decisão de quem usa e não pode virar bloqueio.
+- A faixa passa a dizer **SUA SESSÃO EXPIROU**, com a frase que faltava: *"o
+  aparelho tem internet; foi o acesso que venceu"*.
+- E ganha o botão **"Entrar de novo"** dentro dela, alvo de toque de 44px.
+  O caminho de volta existia só numa linha pequena no rodapé. Botão que só
+  nega não ensina o caminho.
+
+**Teste que trava.** `testes/test_sessao_vencida.py`: a recusa acontece e
+diz que foi a sessão; a fila continua vazia; a faixa não diz "offline" e
+afirma que há internet; o botão existe, tem 44px e ABRE o login; e o modo
+local escolhido de propósito continua funcionando — decisão de quem usa não
+pode ser confundida com acidente.
+
+**Família.** *Trava sem o par na tela* (#13), invertida: aqui a trava
+existia e estava certa, mas cobria um caminho e não o irmão dele — a mesma
+assinatura de #20, "a proteção escrita para um posto só". Cinco cópias da
+mesma linha de guarda são cinco lugares onde a regra nova precisa ser
+lembrada, e a memória falha. Vira uma função.
+
+---
+
 ## #23 — Expedição, Controles Internos e Central de Notas sumiram do checklist (31/08/2026)
 
 **Relato.** A Bruna, testando logo depois da publicação, pelo Luis: *"sumiu a

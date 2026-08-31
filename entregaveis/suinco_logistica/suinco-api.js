@@ -83,6 +83,11 @@ const SuincoSharePoint = (function () {
     token = t;
     operadorLogado = operador;
     try { sessionStorage.setItem(CHAVE_TOKEN, t); } catch (e) { /* modo privado */ }
+    /* A marca vai AQUI, e não no login: `guardarToken` é o ponto único por
+       onde passa todo token de servidor — o do login e o da renovação de
+       sessão. Marcar só no login deixaria de fora quem entrou de manhã e
+       teve a sessão renovada durante o dia. Uma função, dois chamadores. */
+    marcarEntradaPeloServidor();
   }
 
   function limparToken() {
@@ -93,6 +98,64 @@ const SuincoSharePoint = (function () {
 
   function estaConfigurado() {
     return SP_CONFIG.ativo && !!SP_CONFIG.api && !!lerToken();
+  }
+
+  /* SESSÃO PERDIDA NÃO É MODO LOCAL — e tratar as duas igual abriu o buraco
+     em que o Rene da Expedição caiu em 31/08/2026.
+
+     O token mora em sessionStorage: ele MORRE quando a aba fecha. No celular
+     isso não é caso raro, é a rotina — o Android descarta aba em segundo
+     plano o tempo todo, e o 401 de sessão vencida faz o mesmo por outro
+     caminho. `DB.operador` fica no localStorage e sobrevive, então o painel
+     reabre parecendo logado, com estado 'local'.
+
+     E aí, sem token, `estaConfigurado()` responde NÃO e os cinco caminhos de
+     escrita saíam com `{ enfileirado: false }` — sem recusa, sem fila, sem
+     aviso. Medido: carga criada, `cargaFicouNaTela: true`, `filaOffline: 0`,
+     `avisoNaTela: false`. O operador trabalha a tarde inteira gravando só no
+     próprio aparelho.
+
+     É exatamente o que a trava de offline existe para impedir, e ela não
+     pegava este caso: ela cobre "a rede caiu", não "a sessão venceu" — que
+     no pátio é o caso muito mais comum.
+
+     A MARCA VIVE NO localStorage de propósito: precisa sobreviver ao token,
+     senão a pergunta "esta pessoa entrou pelo servidor?" fica sem resposta
+     justamente quando ela mais importa. */
+  const CHAVE_ENTROU_PELO_SERVIDOR = 'suinco_entrou_pelo_servidor';
+
+  function marcarEntradaPeloServidor() {
+    try { localStorage.setItem(CHAVE_ENTROU_PELO_SERVIDOR, '1'); } catch (e) { /* modo privado */ }
+  }
+  function esquecerEntradaPeloServidor() {
+    try { localStorage.removeItem(CHAVE_ENTROU_PELO_SERVIDOR); } catch (e) { /* ignora */ }
+  }
+  /* Entrou pelo servidor alguma vez NESTE aparelho e agora não tem token:
+     a sessão se perdeu. Quem escolheu "Entrar sem servidor" nunca marcou,
+     então o modo local continua funcionando como sempre — ele é uma decisão
+     de quem usa, não um acidente. */
+  function sessaoPerdida() {
+    if (lerToken()) return false;
+    try { return localStorage.getItem(CHAVE_ENTROU_PELO_SERVIDOR) === '1'; }
+    catch (e) { return false; }
+  }
+
+  /* A MESMA DECISÃO, UM LUGAR SÓ.
+
+     Cinco caminhos de escrita — upsert, excluir, gravarFrota, gravarRota e
+     mudarStatus — repetiam `if (!estaConfigurado()) return { enfileirado:
+     false }`. Cinco cópias da mesma resposta, e as cinco erradas para a
+     sessão vencida. É a regra da casa: uma função, dois chamadores. */
+  function semServidor() {
+    if (sessaoPerdida()) {
+      mudarEstado('local');
+      return {
+        enfileirado: false, recusado: true, sessaoExpirada: true,
+        erro: 'SUA SESSÃO EXPIROU — SISTEMA INDISPONÍVEL. ENTRE DE NOVO PARA '
+            + 'CONTINUAR. A alteração NÃO foi gravada.'
+      };
+    }
+    return { enfileirado: false };
   }
 
   /* O endereço da API, para quem precisa falar com ela FORA do `chamar()`
@@ -405,6 +468,9 @@ const SuincoSharePoint = (function () {
     pararSincronia();
     if (socket) { try { socket.disconnect(); } catch (e) { /* ignora */ } socket = null; }
     limparToken();
+    /* Sair é decisão de quem usa, não sessão perdida: o painel não pode
+       ficar recusando escrita depois de alguém sair de propósito. */
+    esquecerEntradaPeloServidor();
   }
 
   function conta() {
@@ -528,7 +594,7 @@ const SuincoSharePoint = (function () {
     if (lista === 'frota') return gravarFrota(campos);
     if (lista === 'rotas') return gravarRota(campos);
     if (lista !== 'cargas') return { enfileirado: false };
-    if (!estaConfigurado()) return { enfileirado: false };
+    if (!estaConfigurado()) return semServidor();
 
     const corpo = deLinhaParaApi(campos);
     try {
@@ -583,7 +649,7 @@ const SuincoSharePoint = (function () {
      Falha de rede vai, porque a exclusão precisa acontecer mesmo que a rede
      tenha caído no instante do clique. */
   async function excluir(id, motivo, opcoes) {
-    if (!estaConfigurado()) return { enfileirado: false };
+    if (!estaConfigurado()) return semServidor();
     // forcarSeguiuViagem: exclusão de carga já finalizada, só depois que o
     // operador confirmou digitando a placa (excluirCargaSeguiuViagemUI,
     // app.js). Sem isso o servidor recusa com CARGA_JA_SAIU (cargas.js).
@@ -643,7 +709,7 @@ const SuincoSharePoint = (function () {
   }
 
   async function gravarFrota(campos) {
-    if (!estaConfigurado()) return { enfileirado: false };
+    if (!estaConfigurado()) return semServidor();
     try {
       /* Manda TODOS os campos, não só três.
 
@@ -673,7 +739,7 @@ const SuincoSharePoint = (function () {
   }
 
   async function gravarRota(campos) {
-    if (!estaConfigurado()) return { enfileirado: false };
+    if (!estaConfigurado()) return semServidor();
     try {
       await chamar('/api/rotas', {
         metodo: 'POST',
@@ -695,7 +761,7 @@ const SuincoSharePoint = (function () {
      que o painel deve mover a carga — e é o que impede alguém com o token de
      marcar "Faturado" num caminhão que nunca chegou. */
   async function mudarStatus(cargaId, statusNovo) {
-    if (!estaConfigurado()) return { enfileirado: false };
+    if (!estaConfigurado()) return semServidor();
     try {
       const c = await chamar(`/api/cargas/${encodeURIComponent(cargaId)}/status`, {
         metodo: 'POST',
@@ -1741,6 +1807,7 @@ const SuincoSharePoint = (function () {
     programacaoDoDia, mfa,
     modeloSemana, montagem,
     pull, pullTudo, drenarFila, pendentes, descartarFilaAntiga, estaOnline,
+    sessaoPerdida,
     listarOperadores, criarOperador, atualizarOperador, excluirOperador,
     sincronizarAgora, iniciarSincroniaPeriodica, pararSincronia, ultimaSincronia,
     renovarSessao, registrarInteracao,
