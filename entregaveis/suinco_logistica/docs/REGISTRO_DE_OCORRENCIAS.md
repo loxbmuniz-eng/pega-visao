@@ -34,7 +34,57 @@ faz achar a próxima em minutos em vez de horas:
 | **A proteção escrita para um posto só** | A regra certa existe, com comentário e tudo — mas vale para um caminho e não para os irmãos dele. Não é cópia divergente: é a cópia que nunca foi escrita. | #20 |
 | **A tela não oferece o que o servidor aceita** | A rota grava o campo, mas a coluna correspondente é texto. Quem precisa registrar o dado escreve no primeiro campo que aceita digitação — e ele vai parar onde ninguém procura. | #19 |
 | **Dois filtros para a mesma tela** | Duas filtragens paralelas sobre os mesmos dados. Uma move os números, a outra move os gráficos, e nada avisa que discordam. | #18 |
-| **Teste que mede o proxy, não a regra** | O teste confere um sintoma fácil de medir ("a aba aparece?", "quantas linhas?") em vez da garantia real. Quando o sintoma muda por um motivo legítimo, ele fica vermelho sem que nada tenha quebrado — e some do radar. | #15 |
+| **Teste que mede o proxy, não a regra** | O teste confere um sintoma fácil de medir ("a aba aparece?", "quantas linhas?") em vez da garantia real, ou monta um cenário que deixou de corresponder ao sistema. Quando o sintoma muda por um motivo legítimo, ele fica vermelho sem que nada tenha quebrado — e aponta para o lugar errado. | #15, #22 |
+
+---
+
+## #22 — Carga lançada sem sinal sumia da tela acusando "o servidor recusou" (31/08/2026)
+
+**Relato.** Não veio da operação — veio da bateria. Ao isolar
+`test_contador_torre`, 18 das 20 cargas criadas em um bloco tinham
+desaparecido no bloco seguinte, e o teste reprovava acusando a animação do
+contador da Torre.
+
+**Causa.** Duas coisas separadas, e só uma era defeito.
+
+A primeira NÃO era defeito. A trava de offline (31/08, pedido do dono:
+*"Off Line não tem conversa não!"*) fez `enfileirar()` deixar de responder
+"guardei na fila" e passar a responder `{recusado:true, offline:true}`.
+Criação nunca confirmada que é recusada sai da tela de propósito — é a
+correção da ocorrência de carga-fantasma de 07/08. Sem sinal, portanto, a
+carga é recusada e a linha sai. Isso está certo e é o que o dono pediu.
+
+O que fazia o teste reprovar era o CENÁRIO dele: o arquivo plantava um
+`suinco_token` falso no sessionStorage e depois entrava por "Entrar sem
+servidor". O token fazia `estaConfigurado()` responder SIM, e aí cada carga
+tentava subir para uma API que não existe naquele ambiente. O teste estava
+medindo a trava de offline sem saber, e culpando o contador.
+
+A segunda era defeito de verdade, e de honestidade: o aviso dizia
+*"o servidor recusou a criação desta carga (...) placa cadastrada na Frota?
+setor com permissão?"*. Quem está sem sinal ia procurar um problema de
+cadastro que não existe. Offline não é recusa do servidor — é ausência
+dele, e o conserto é reconectar e refazer.
+
+**Correção.**
+
+- `sincronizarCarga` (`data.js`) passa `r.offline` adiante;
+  `receberRecusaDeCarga` (`app.js`) escreve o texto de offline quando a
+  causa é falta de conexão, e mantém o texto de recusa quando o servidor
+  realmente respondeu não.
+- `test_contador_torre` deixou de plantar token falso. Ele roda em
+  `file://`, sem servidor, e é isso que sempre quis medir.
+
+**Teste que trava.** `testes/test_offline_nao_grava.py`, bloco 2b: a carga
+lançada offline não fica fantasma na tela E o aviso não diz que o servidor
+recusou. `testes/test_aviso_recusa_carga.py` continua exigindo o texto de
+recusa no caso em que o servidor de fato recusou — os dois juntos impedem
+que consertar um texto estrague o outro.
+
+**Família.** *Teste que mede o proxy, não a regra* (#15) — com um agravante
+novo: aqui o cenário do teste é que estava desatualizado, não a asserção. Um
+token falso plantado por conveniência transformou um teste de animação num
+teste de sincronização, e o vermelho apontou para o lugar errado por horas.
 
 ---
 

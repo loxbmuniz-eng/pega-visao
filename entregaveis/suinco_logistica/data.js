@@ -757,7 +757,13 @@ const SuincoStore = {
       if(eraCriacaoNuncaConfirmada){
         DB.cargas = DB.cargas.filter(c => c.id !== carga.id);
       }
-      if(_aoRecusarCarga) _aoRecusarCarga(carga, r.erro, eraCriacaoNuncaConfirmada);
+      /* `r.offline` separa duas recusas que NÃO têm a mesma causa nem a
+         mesma correção: "o servidor disse não" (placa fora da frota, setor
+         sem permissão — refazer não adianta sem corrigir o motivo) e "não
+         houve servidor nenhum" (trava de offline, 31/08/2026 — basta
+         reconectar e refazer). Dizer "o servidor recusou" quando o aparelho
+         está sem rede manda o operador procurar um problema que não existe. */
+      if(_aoRecusarCarga) _aoRecusarCarga(carga, r.erro, eraCriacaoNuncaConfirmada, !!r.offline);
     } else if(r && r.enfileirado === false){
       delete carga._nuncaConfirmada;
     }

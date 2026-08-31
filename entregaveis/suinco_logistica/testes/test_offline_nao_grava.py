@@ -104,6 +104,27 @@ async def main():
         ck('a tela avisa que está offline e que não gravou',
            'OFFLINE' in texto.upper(), 'nenhuma menção a OFFLINE na tela')
 
+        print('\n=== 2b. A CARGA NÃO FICA FANTASMA, E O AVISO NÃO CULPA O SERVIDOR ===')
+        # Achado ao isolar test_contador_torre (31/08/2026): a trava de
+        # offline devolve `{recusado:true, offline:true}`, e criação nunca
+        # confirmada que é recusada SAI da tela — certo, senão a carga fica
+        # visível só para quem lançou, como o fantasma de 07/08.
+        #
+        # O que estava errado era o TEXTO: dizia "o servidor recusou a
+        # criação desta carga", e quem está sem sinal ia procurar placa fora
+        # da frota ou falta de permissão — problema que não existe. Offline
+        # não é recusa do servidor, é ausência dele; o conserto é reconectar
+        # e refazer, não corrigir cadastro.
+        sumida = await pg.evaluate("""() => ({
+            aindaNaTela: DB.cargas.some(c => c.numeroCarga === 'OFF-1'),
+            texto: document.body.innerText
+        })""")
+        ck('a carga lançada offline não fica fantasma na tela',
+           sumida['aindaNaTela'] is False, 'OFF-1 continua em DB.cargas')
+        ck('o aviso NÃO diz que o servidor recusou — ele nem foi consultado',
+           'servidor recusou' not in sumida['texto'],
+           'a tela culpa o servidor por uma falta de conexão')
+
         print('\n=== 3. A FAIXA DE ALERTA, COM O TEXTO DO DONO ===')
         faixa = await pg.evaluate("""() => {
             const f = document.getElementById('faixa-offline');

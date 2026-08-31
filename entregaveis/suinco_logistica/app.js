@@ -712,11 +712,19 @@ function receberRecusaDeStatus(carga, alvo, motivo){
    status, aqui não dá para saber com segurança se a carga já existia no
    servidor antes (edição) ou nunca chegou a existir (criação), e chutar
    errado apagaria dado de verdade. O aviso é alto e diz pra conferir. */
-function receberRecusaDeCarga(carga, motivo, removida){
+function receberRecusaDeCarga(carga, motivo, removida, offline){
   const rotulo = carga.numeroCarga && carga.numeroCarga !== 'Aguardando Carga'
     ? carga.numeroCarga : (carga.placa || carga.id);
+  /* Offline não é recusa do servidor — é ausência dele. O caminho é o
+     mesmo (nada foi gravado, a linha sai da tela), mas o que o operador
+     precisa fazer é oposto: aqui ele reconecta e refaz; na recusa de
+     verdade ele corrige placa ou setor primeiro. */
   notify(
-    removida
+    offline
+      ? `⛔ ${rotulo}: VOCÊ ESTÁ OFFLINE — SISTEMA INDISPONÍVEL. `
+        + 'NADA FOI GRAVADO e a linha saiu da tela. '
+        + 'Conecte-se e lance de novo.'
+      : removida
       ? `${rotulo}: o servidor recusou a criação desta carga. ${motivo || ''} `
         + 'Ela foi removida da tela — nunca existiu no banco. Corrija o motivo '
         + '(placa cadastrada na Frota? setor com permissão?) e refaça.'

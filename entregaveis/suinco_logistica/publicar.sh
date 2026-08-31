@@ -115,6 +115,33 @@ fi
 git checkout -- '*/index.html' '*/sw.js' 2>/dev/null || true
 verde "  ok  build em dia (carimbo à parte)"
 
+# ---------------------------------------------------------------------
+# O BANCO PRECISA ESTAR DE PÉ ANTES DE QUALQUER TESTE.
+#
+# Em 31/08/2026 este portão ficou 1h21 pendurado. Não havia defeito nenhum
+# no código: o Postgres do contêiner estava parado. Os testes do servidor
+# abrem conexão e ficam esperando — não reprovam, não avisam, esperam. E
+# como o portão só imprime o resultado no fim, a tela ficou parada mais de
+# uma hora sem dizer o que estava acontecendo.
+#
+# É o mesmo tipo de armadilha do passo 5: falta de ambiente disfarçada de
+# problema de código. A diferença é que a API fora do ar reprova rápido, e o
+# banco fora do ar não reprova nunca.
+#
+# Dois segundos aqui, em vez de uma hora lá.
+# ---------------------------------------------------------------------
+titulo "3b. Banco de dados local no ar"
+if pg_isready -q -t 3 2>/dev/null; then
+  verde "  ok  Postgres respondendo"
+else
+  echo "      Postgres parado — subindo o cluster 16/main"
+  pg_ctlcluster 16 main start >/dev/null 2>&1 || true
+  for _ in $(seq 1 15); do pg_isready -q -t 2 2>/dev/null && break; sleep 1; done
+  pg_isready -q -t 3 2>/dev/null \
+    || falhou "o Postgres não subiu. Sem banco, os testes do servidor ficam pendurados em vez de reprovar — foi o que travou o portão por 1h21 em 31/08."
+  verde "  ok  Postgres subiu"
+fi
+
 titulo "4. Testes do servidor"
 ( cd "$AQUI/backend" && npm run teste >/tmp/suinco-teste-backend.txt 2>&1 ) \
   || { tail -25 /tmp/suinco-teste-backend.txt; falhou "testes do servidor reprovaram."; }
