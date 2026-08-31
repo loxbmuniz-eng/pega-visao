@@ -5051,18 +5051,40 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
    Fixa no topo, vermelha, não fecha. Enquanto ela está na tela o sistema
    não grava nada — a fila offline foi desligada por decisão do dono.
    ===================================================================== */
+/* A FAIXA VAI PARA O RODAPÉ, E NÃO INTERCEPTA CLIQUE NENHUM.
+
+   Ordem do dono, com a operação parada em 31/08/2026: "precisa arrancar a
+   faixa ou deixar ela no rodapé, NÃO TAMPANDO BOTÕES".
+
+   Ele está certo, e a medição provou do jeito mais direto. No desktop
+   1440x900, com a sessão morta, o robô de teste não conseguiu nem digitar
+   no e-mail nem clicar em Entrar:
+
+       quemRecebeNoBotao: 'faixa-offline'
+       quemRecebeNoEmail: 'faixa-offline'
+       DIGITOU NO EMAIL: NAO · CLICOU NO ENTRAR: NAO
+
+   Eu tentei consertar isso duas vezes por cima — primeiro baixando o
+   z-index, depois impedindo a faixa de nascer com o login aberto — e as
+   duas erraram pelo mesmo motivo: mantinham uma tarja do tamanho da tela
+   NO TOPO, onde ficam os botões. Um aviso que ocupa o lugar da ação é um
+   bloqueio com outro nome.
+
+   Duas garantias agora, e nenhuma depende de eu lembrar de alguma coisa:
+
+   1. RODAPÉ. Fixa embaixo, junto do rodapé de conexão, longe de tudo que
+      se clica. Nunca mais no caminho de um botão.
+   2. `pointer-events:none` na barra inteira. Mesmo que um dia ela volte a
+      ficar por cima de alguma coisa, o clique ATRAVESSA. Só o botão de
+      entrar de novo recebe toque, e ele é o único que precisa. */
 .faixa-offline{
-  /* z-index ABAIXO do .modal-overlay (3600), de propósito. Em 9999 a faixa
-     pintava por cima de qualquer caixa de diálogo e ENGOLIA O TOQUE: no
-     celular deitado do Rene, o dedo no topo do formulário de login batia
-     em `faixa-offline-sub` em vez de bater no campo. Aviso nenhum vale
-     tirar da pessoa o botão que resolve o aviso. */
-  position:sticky; top:0; z-index:3400;
+  position:fixed; left:0; right:0; bottom:34px; top:auto; z-index:3400;
+  pointer-events:none;
   display:flex; flex-wrap:wrap; align-items:baseline; justify-content:center;
-  gap:6px 14px; padding:11px 16px; text-align:center;
+  gap:6px 14px; padding:10px 16px; text-align:center;
   background:#8e1b2b; color:#fff;
-  border-bottom:3px solid #ffd166;
-  box-shadow:0 4px 14px rgba(0,0,0,.4);
+  border-top:3px solid #ffd166;
+  box-shadow:0 -4px 14px rgba(0,0,0,.4);
 }
 .faixa-offline-tit{ font-weight:900; letter-spacing:.06em; font-size:14px }
 .faixa-offline-txt{ font-weight:800; letter-spacing:.03em; font-size:14px }
@@ -5071,6 +5093,9 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
    toque de 44px porque quem lê isto está de luva, no pátio, com o celular
    numa mão só. */
 .faixa-offline-btn{
+  /* A barra inteira é `pointer-events:none`; este botão é a única exceção,
+     porque é a única parte dela em que alguém precisa tocar. */
+  pointer-events:auto;
   min-height:44px; padding:0 18px; font-weight:800; white-space:nowrap;
   background:#ffd166; color:#3a2400; border:none;
 }

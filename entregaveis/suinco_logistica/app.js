@@ -241,6 +241,33 @@ function abrirLoginDeNovo(){
 }
 
 function atualizarRodapeConexao(estado, detalhe){
+  /* SESSÃO MORTA ABRE O LOGIN. Não é aviso, é a única coisa que resolve.
+
+     O que a operação relatou em 31/08/2026, com todo mundo parado: "quem tá
+     tentando abrir a versão com a faixa não consegue fazer nada, nem clicar
+     no novo login". Medido no desktop, com a sessão perdida:
+
+         loginAberto: False   ·   DIGITOU NO EMAIL: NAO
+
+     E o motivo não era a faixa tampando — era que NÃO HAVIA login na tela.
+     O painel reabre com o operador restaurado do localStorage, monta a tela
+     de trabalho inteira, e a caixa de login fica `display:none`. A pessoa
+     olha botões que não gravam nada e não tem por onde entrar de novo.
+     Todo o resto que eu fiz hoje (baixar o z-index, esconder a faixa, pôr
+     um botão dentro dela) tratava o sintoma: a porta continuava fechada.
+
+     Sem sessão não há o que fazer no painel — então o painel pede a sessão.
+     Só vale para sessão PERDIDA: quem escolheu "Entrar sem servidor" decidiu
+     isso, e não pode ser interrompido por uma tela de login. */
+  try{
+    if(typeof SuincoSharePoint !== 'undefined' && SuincoSharePoint.sessaoPerdida
+       && SuincoSharePoint.sessaoPerdida()){
+      const m = document.getElementById('modal-operador');
+      if(m && !m.classList.contains('open') && typeof abrirLogin === 'function'){
+        abrirLogin();
+      }
+    }
+  }catch(e){ console.warn('[Suinco] abrir login apos sessao perdida:', e); }
   atualizarFaixaOffline(estado);
   const rod = document.getElementById('rodape-conexao');
   const badge = document.getElementById('badge-conexao');
@@ -526,9 +553,37 @@ function notifyGravacao(msgSucesso, msObrigatorio){
     'danger', 12000);
 }
 
+/* UM AVISO DE OFFLINE POR VEZ, NÃO UM POR TENTATIVA.
+
+   Relato do dono, 31/08/2026, com a operação rodando: "ta vindo muitos
+   avisos aguardando e eu nao quero isso aparecendo, sao todos avisos de
+   voce esta offline".
+
+   Ele tem razão e a causa é aritmética: com a sessão morta, TODA gravação
+   é recusada — e cada recusa disparava seu próprio aviso, de 12 a 20
+   segundos. A sincronia tenta a cada 15 s e o operador continua clicando,
+   então em um minuto a tela vira uma pilha de tarjas iguais que esconde o
+   painel e não acrescenta nada.
+
+   A faixa do rodapé JÁ diz que está offline, e fica lá o tempo todo. O
+   aviso individual só precisa existir uma vez: repetir a mesma frase não
+   informa mais, informa menos — vira ruído que se aprende a ignorar, e aí
+   o aviso que importa passa despercebido junto.
+
+   Então: aviso de offline/sessão substitui o anterior em vez de empilhar.
+   Um só na tela, sempre o mais recente. */
+const _MARCA_OFFLINE = /VOCÊ ESTÁ OFFLINE|SESSÃO EXPIROU|SISTEMA INDISPONÍVEL|NADA FOI GRAVADO/i;
+
 function notify(msg, type, ms, opcoes){
+  const eDeConexao = _MARCA_OFFLINE.test(String(msg || ''));
+  if(eDeConexao){
+    // Tira os irmãos que já estão na tela antes de pôr este.
+    document.querySelectorAll('.notif-item.aviso-de-conexao')
+      .forEach(x => { try{ x.remove(); }catch(e){} });
+  }
   const el = document.createElement('div');
-  el.className = 'notif-item' + (type ? ' ' + type : '');
+  el.className = 'notif-item' + (type ? ' ' + type : '')
+    + (eDeConexao ? ' aviso-de-conexao' : '');
   const texto = document.createElement('span');
   texto.textContent = msg;
   el.appendChild(texto);
@@ -1140,6 +1195,27 @@ function abrirLogin(){
   const v = document.getElementById('login-versao');
   if(v) v.textContent = 'versão ' + BUILD_ID;
   document.getElementById('modal-operador').classList.add('open');
+  /* A FAIXA TEM QUE SAIR AGORA, e não só deixar de nascer.
+
+     A guarda `loginAberto()` em atualizarFaixaOffline só decide o que fazer
+     QUANDO ELA É CHAMADA. A faixa nasce numa mudança de estado; se a tela de
+     login abre DEPOIS disso, ninguém chama a função de novo e a faixa
+     vermelha fica parada por cima do formulário.
+
+     Reproduzido em 31/08/2026, desktop e celular:
+
+         nasceu: True · faixaContinua: True
+
+     O dono, com a operação em andamento: "a faixa ta aparecendo ainda até na
+     parte do desktop zuando tudo, as pessoas nao conseguem fazer o proprio
+     login". Depois da correção do z-index o toque já chegava no formulário,
+     mas uma tarja vermelha escrita "SISTEMA INDISPONÍVEL" em cima da caixa
+     de entrada faz qualquer um parar de tentar — e estava certo em parar,
+     porque até ontem era verdade.
+
+     Guarda não basta quando o estado pode mudar dos dois lados: quem abre o
+     login também precisa avisar. */
+  atualizarFaixaOffline('login');
   // Qual formulário aparece não é escolha do usuário: se o servidor está
   // configurado, é e-mail e senha. O modo local fica atrás de um link, para
   // ninguém cair nele por acidente e achar que está compartilhando dados
