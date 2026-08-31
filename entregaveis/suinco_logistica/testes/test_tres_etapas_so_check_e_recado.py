@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""As três últimas etapas da devolução: só o CHECK e o recado (31/08/2026).
+"""As três últimas etapas da devolução avançam com o checklist vazio (31/08/2026).
 
 O PEDIDO, do dono, em duas mensagens:
 
@@ -9,29 +9,33 @@ O PEDIDO, do dono, em duas mensagens:
 
     "central de notas tambem só dar o ok check tambem e observacoes"
 
-O QUE SAI DA TELA, e de quem era:
+O QUE ELE QUER DIZER — e este arquivo já errou isto uma vez, com custo.
 
-  · Expedição            — a coluna "Qtd. recebida" (conferência item a item)
-  · Controles Internos   — as três caixas de destinação por item (E / D / R)
-  · Central de Notas     — o tique "Nota final" por item
+Quer dizer que dar o OK da etapa não pode DEPENDER de preencher item nenhum:
+a Expedição fecha a descarga sem conferir caixa por caixa, os Controles
+Internos destinam depois, a Central de Notas encerra sem tique por item. Cada
+posto ganhou um campo de observações no cabeçalho, que chega em quem vem
+depois e sai no relatório.
 
-CONSEQUÊNCIA ACEITA PELO DONO, escrita aqui para não virar surpresa: sem
-quantidade recebida o painel PARA de apontar a falta sozinho. A falta nascia
-da diferença entre o lançado e o recebido.
+NÃO quer dizer que a conferência sai da tela. A primeira versão deste teste
+exigia que os campos SUMISSEM. Ele ficou verde, a mudança passou pelo portão
+e subiu — e a Bruna abriu um checklist novo e relatou: "sumiu a parte da
+expedição, controles internos e central de notas". Sem esses campos ninguém
+tem onde conferir quantidade, destinar caixa ou dar o tique, e a falta — que
+é o que o checklist existe para apontar — nunca mais é calculada.
 
-O QUE NÃO PODE ACONTECER — e é o que este teste guarda:
+O código já dizia isso desde 28/08, no comentário da etapa da Expedição: a
+conferência e a destinação "nunca travaram o OK, e tirá-las apagaria a
+falta". Ocorrência #23.
 
-  1. dado velho não some. Checklist que JÁ tem quantidade, destinação ou
-     nota final continua mostrando na ficha e no relatório. É a mesma regra
-     que valeu para o "Gerou RDC?" em 27/08: sai da tela, fica no banco.
-  2. coluna que só mostra traço não fica na tela. É a ocorrência #19 — se
-     nenhum item do checklist tem o dado, a coluna inteira sai, cabeçalho
-     junto. Coluna de traços é pior que coluna nenhuma: promete um campo que
-     não aceita nada.
-  3. as três etapas avançam com o checklist VAZIO. É o pedido inteiro: o OK
-     não pode depender de preencher item nenhum.
-  4. a observação de cada uma continua chegando em quem vem depois e saindo
-     no relatório.
+O QUE ESTE TESTE EXIGE:
+
+  1. as três etapas avançam com o checklist VAZIO — o pedido inteiro;
+  2. a observação de cada uma é gravada e chega em quem vem depois;
+  3. os campos de conferência, destinação e nota final CONTINUAM na tela num
+     checklist recém-criado, que é o estado em que a Bruna abriu. Campo que
+     só aparece depois que o dado existe é campo que nunca recebe dado;
+  4. dado já gravado continua aparecendo.
 
 Exige o backend local no ar.
 
@@ -131,7 +135,25 @@ async def main():
         ck('o recado dos Controles foi gravado', andou['obsCtrl'] == 'destinado ok', str(andou.get('obsCtrl')))
         ck('o recado da Central de Notas foi gravado', andou['obsNotas'] == 'nota fechada', str(andou.get('obsNotas')))
 
-        print('\n=== 2. OS CAMPOS SAÍRAM DA TELA ===')
+        print('\n=== 2. OS CAMPOS DE CONFERÊNCIA CONTINUAM NA TELA ===')
+        # ESTE BLOCO EXIGIA O CONTRÁRIO, e foi por isso que o defeito passou.
+        #
+        # Eu li "só o campo para dar o OK: CHECK e observações" como "apague
+        # a conferência item a item", escrevi o teste exigindo que os campos
+        # sumissem, e o verde carimbou a leitura errada. Subiu, e a Bruna viu
+        # na primeira abertura: "sumiu a parte da expedição, controles
+        # internos e central de notas".
+        #
+        # O pedido é sobre o que o OK EXIGE (bloco 1: as etapas avançam com o
+        # checklist vazio), não sobre o que a tela OFERECE. Sem estes campos
+        # a Expedição não tem onde conferir quantidade, os Controles Internos
+        # não têm onde destinar caixa e a Central de Notas não tem onde dar o
+        # tique — e a falta, que é o que o checklist existe para apontar,
+        # nunca mais é calculada.
+        #
+        # O checklist aqui está VAZIO de propósito: é o estado em que a
+        # Bruna abriu. Se os campos só aparecessem quando já houvesse dado,
+        # o dado nunca poderia ser digitado.
         novo = await criar_checklist(pg, '88002')
         await pg.evaluate("() => renderDevolucoes()")
         await pg.wait_for_timeout(1200)
@@ -145,21 +167,23 @@ async def main():
               notaFinal: /-notaFinal"/.test(html),
             };
         }""", novo)
-        ck('a coluna Qtd. recebida (Expedição) saiu', not tela['qtdRecebida'], str(tela))
-        ck('as caixas de destinação (E/D/R) saíram',
-           not tela['destEstoque'] and not tela['destDescarte'] and not tela['destReprocesso'],
+        ck('a Expedição tem onde conferir a quantidade recebida',
+           tela['qtdRecebida'], str(tela))
+        ck('os Controles Internos têm as três caixas de destinação (E/D/R)',
+           tela['destEstoque'] and tela['destDescarte'] and tela['destReprocesso'],
            str(tela))
-        ck('o tique Nota final saiu', not tela['notaFinal'], str(tela))
+        ck('a Central de Notas tem o tique da nota final',
+           tela['notaFinal'], str(tela))
 
-        print('\n=== 3. COLUNA QUE SÓ MOSTRARIA TRAÇO NÃO FICA (ocorrência #19) ===')
+        print('\n=== 3. E O CABEÇALHO DELAS TAMBÉM, NO CHECKLIST VAZIO ===')
         cab = await pg.evaluate("""() => {
             const ths = [...document.querySelectorAll('#tab-devolucoes thead th')]
               .map(t => t.textContent.trim());
             return ths;
         }""")
         for coluna in ('Expedição', 'Destinações', 'Nota final', 'Falta'):
-            ck(f'o cabeçalho "{coluna}" saiu do checklist sem esse dado',
-               coluna not in cab, ' | '.join(cab)[:150])
+            ck(f'a coluna "{coluna}" está no checklist recém-criado',
+               coluna in cab, ' | '.join(cab)[:150])
 
         print('\n=== 4. DADO VELHO NÃO SOME ===')
         # Um checklist que JÁ tem os três dados gravados continua mostrando.
