@@ -34,7 +34,74 @@ faz achar a próxima em minutos em vez de horas:
 | **A proteção escrita para um posto só** | A regra certa existe, com comentário e tudo — mas vale para um caminho e não para os irmãos dele. Não é cópia divergente: é a cópia que nunca foi escrita. | #20 |
 | **A tela não oferece o que o servidor aceita** | A rota grava o campo, mas a coluna correspondente é texto. Quem precisa registrar o dado escreve no primeiro campo que aceita digitação — e ele vai parar onde ninguém procura. | #19 |
 | **Dois filtros para a mesma tela** | Duas filtragens paralelas sobre os mesmos dados. Uma move os números, a outra move os gráficos, e nada avisa que discordam. | #18 |
+| **O teste que carimba a leitura errada do pedido** | O teste está novo e verde, e mede exatamente o que foi escrito — só que o pedido foi entendido ao contrário. Verde prova que o código faz o que o teste diz, não que a regra está certa. Mudança que REMOVE algo da tela precisa do teste que garante que o trabalho de quem usava aquilo ainda é possível. | #23 |
 | **Teste que mede o proxy, não a regra** | O teste confere um sintoma fácil de medir ("a aba aparece?", "quantas linhas?") em vez da garantia real, ou monta um cenário que deixou de corresponder ao sistema. Quando o sintoma muda por um motivo legítimo, ele fica vermelho sem que nada tenha quebrado — e aponta para o lugar errado. | #15, #22 |
+
+---
+
+## #23 — Expedição, Controles Internos e Central de Notas sumiram do checklist (31/08/2026)
+
+**Relato.** A Bruna, testando logo depois da publicação, pelo Luis: *"sumiu a
+parte da expedição, controles internos e central de notas"*. No print, o
+cabeçalho da tabela de itens termina em "Pesagem" — as quatro colunas
+seguintes não existem mais.
+
+**Causa.** Leitura errada do pedido, minha, carimbada por um teste que eu
+mesmo escrevi para exigir o comportamento errado.
+
+O dono pediu, em duas mensagens: *"a parte da expedicao e da destinacao
+precisam ter so o campo para dar o OK: CHECK e um campo para escrever
+observacoes"* e *"central de notas tambem só dar o ok check tambem e
+observacoes"*.
+
+Isso é sobre o que o OK **exige**: avançar a etapa não pode depender de
+preencher item nenhum. Eu li como "apague a conferência item a item" e tirei
+de `renderDevolucaoAberta` as quatro colunas — quantidade recebida
+(Expedição), falta, destinação E/D/R (Controles Internos) e o tique da nota
+final (Central de Notas).
+
+Pior que tirar: eu as troquei por colunas que só apareciam **se já houvesse
+dado** (`temAlgum`), e apaguei os campos de digitação junto. Como o único
+jeito de o dado existir era digitando, ele nunca podia existir. Armadilha
+fechada: a coluna só nasce com o dado, e o dado só nasce pela coluna.
+
+O código já dizia o contrário desde 28/08, no comentário da própria etapa da
+Expedição: a conferência e a destinação *"nunca travaram o OK, e tirá-las
+apagaria a falta, que é o que o checklist existe para apontar"*. Eu escrevi
+esse comentário e passei por cima dele três dias depois.
+
+**O sinal que estava na mão.** `podeConferirQtdDev()`, `podeDestinarDev()` e
+`podeNotaFinalDev()` ficaram com **zero chamadores**. Três funções de
+permissão sem ninguém que as consulte é a assinatura exata de tela sem o
+caminho — o mesmo padrão de `mudarStatus`, `liberarPendencias` e da trava de
+versão nesta mesma semana. Uma varredura de "permissão sem chamador" teria
+pego isto antes do portão.
+
+**Por que o portão deixou passar.** Ele não deixou: ele fez o que mandei. O
+teste `test_tres_etapas_so_check_e_recado.py` exigia, em dois blocos, que os
+campos SUMISSEM. Ficou verde porque o código fazia exatamente o que o teste
+pedia. Portão só barra o que alguém escreveu que é errado.
+
+**Correção.** As quatro colunas voltaram, com os campos editáveis para quem
+tem permissão — a tabela de itens ficou byte a byte igual à versão que estava
+funcionando. O que o dono pediu de verdade continua: as três etapas avançam
+com o checklist vazio, e cada posto tem seu campo de observações no cabeçalho,
+que chega na etapa seguinte e sai no relatório.
+
+**Teste que trava.** `testes/test_tres_etapas_so_check_e_recado.py`, blocos 2
+e 3, invertidos: num checklist RECÉM-CRIADO (o estado em que a Bruna abriu),
+os campos de conferência, destinação e nota final precisam estar na tela, com
+cabeçalho. O bloco 1 continua exigindo que as etapas avancem com o checklist
+vazio — os dois juntos impedem tanto a volta do defeito quanto a volta da
+exigência que o dono mandou tirar.
+
+**Família.** Nova: **o teste que carimba a leitura errada do pedido**. Não é
+"teste velho" (#15) nem "teste que mede o proxy": o teste estava novo, verde e
+media exatamente o que eu tinha escrito — só que eu tinha entendido o pedido
+ao contrário. Verde não prova que a regra está certa; prova que o código faz o
+que o teste diz. Quando a mudança REMOVE algo da tela, o teste que garante a
+remoção precisa vir acompanhado do teste que garante que o trabalho de quem
+usava aquilo ainda é possível.
 
 ---
 

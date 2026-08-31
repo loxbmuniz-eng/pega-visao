@@ -938,38 +938,33 @@ function acaoEtapaDev(d) {
     </div>`;
 }
 
-/* AS TRÊS ÚLTIMAS ETAPAS FICARAM SÓ COM O CHECK E O RECADO (31/08/2026).
+/* AS TRÊS ÚLTIMAS ETAPAS AVANÇAM COM O CHECKLIST VAZIO (31/08/2026).
 
    O dono, em duas mensagens: "a parte da expedicao e da destinacao precisam
    ter so o campo para dar o OK: CHECK e um campo para escrever observacoes,
    que sairao nos relatorios das devolucoes" e "central de notas tambem só
    dar o ok check tambem e observacoes".
 
-   SAI DA TELA, NÃO SAI DO BANCO. É a mesma regra que valeu para o "Gerou
-   RDC?" em 27/08: o campo deixa de ser oferecido, e o que já foi gravado
-   continua aparecendo. Checklist antigo não pode perder informação porque a
-   tela de hoje mudou — quem consulta o histórico de um mês atrás precisa ver
-   o que foi registrado naquele dia.
+   O QUE ISSO QUER DIZER, e o que NÃO quer.
 
-   E A COLUNA SÓ EXISTE SE TIVER O QUE MOSTRAR. Deixar o cabeçalho fixo com
-   um traço embaixo é a ocorrência #19 ("a coluna que mostra um traço e não
-   aceita o dado"): promete um campo que não recebe nada, e a pessoa procura
-   onde digitar. Sem dado, a coluna inteira sai — cabeçalho junto.
+   Quer dizer: dar o OK da etapa não pode depender de preencher item nenhum.
+   A Expedição fecha a descarga sem conferir caixa por caixa, os Controles
+   Internos destinam depois, a Central de Notas encerra sem tique por item.
+   Cada um ganhou no cabeçalho um campo de observações que vai para a etapa
+   seguinte e sai no relatório — blocoExpedicao, blocoControles, blocoNotas.
 
-   A FALTA ANDA COM A QUANTIDADE. Ela nasce da diferença entre o lançado e o
-   recebido; sem quantidade recebida não há o que subtrair. Sai junto, e o
-   dono foi avisado disso antes de aprovar. */
+   NÃO quer dizer que a conferência sai da tela. Eu li assim na primeira
+   versão desta mudança e apaguei as três colunas de dentro da tabela de
+   itens. Como as colunas passaram a aparecer só quando já havia dado, e o
+   campo de digitar tinha sido apagado junto, o dado nunca podia existir:
+   ninguém mais tinha onde conferir quantidade, destinar caixa ou dar o
+   tique da nota. Subiu para produção e a Bruna viu na primeira abertura —
+   "sumiu a parte da expedição, controles internos e central de notas".
+
+   O código já dizia isso desde 28/08, no comentário da etapa da Expedição:
+   a conferência e a destinação "nunca travaram o OK, e tirá-las apagaria a
+   falta, que é o que o checklist existe para apontar". Ocorrência #23. */
 function renderDevolucaoAberta(d, editavel) {
-  const temAlgum = (campo) => (d.itens || []).some((i) => {
-    const v = i[campo];
-    return v !== null && v !== undefined && v !== '' && v !== false;
-  });
-  const colQtd  = temAlgum('qtdRecebida');
-  const colDest = temAlgum('destEstoque') || temAlgum('destDescarte') || temAlgum('destReprocesso');
-  const colNF   = temAlgum('notaFinal');
-  // Quantas colunas a linha em branco precisa pular no fim da tabela.
-  const vaziasNoFim = 1 + (colQtd ? 2 : 0) + (colDest ? 1 : 0) + (colNF ? 1 : 0);
-
   const linhaItem = (i) => {
     const faltaHtml = i.falta === null
       ? '<span class="text-dim" title="Ainda não conferido">—</span>'
@@ -1036,9 +1031,61 @@ function renderDevolucaoAberta(d, editavel) {
              title="Pesagem do Faturamento — é a confirmação de que a devolução passou pela balança."
              onchange="editarItemDevolucaoUI('${escJs(d.id)}',${i.itemId},'pesoFaturamento',this.value)">`
         : (i.pesoFaturamento ?? '—')}</td>
-      ${colQtd ? `<td class="c-peso">${i.qtdRecebida ?? '—'}</td><td>${faltaHtml}</td>` : ''}
-      ${colDest ? `<td class="dev-cel-dest">${esc(devDestinoResumo(i)) || '—'}</td>` : ''}
-      ${colNF ? `<td class="dev-cel-notafinal">${i.notaFinal ? '✔' : '—'}</td>` : ''}
+      ${/* ESTAS TRÊS COLUNAS VOLTARAM (31/08/2026, mesmo dia em que saíram).
+
+            Eu as tinha tirado lendo o pedido do dono — "a parte da expedição
+            e da destinação precisam ter só o campo para dar o OK: CHECK e um
+            campo para escrever observações" — como "apague a conferência
+            item a item". Está errado, e o próprio código já dizia isso desde
+            28/08, no comentário da etapa da Expedição: "a conferência de
+            quantidade e a destinação continuam na tela e podem ser feitas
+            depois; elas nunca travaram o OK, e tirá-las apagaria a falta,
+            que é o que o checklist existe para apontar".
+
+            O pedido é sobre o que o OK EXIGE, não sobre o que a tela
+            OFERECE: avançar a etapa não pode depender de preencher item
+            nenhum. Isso continua valendo e tem teste.
+
+            O estrago da leitura errada: as colunas só apareciam se já
+            houvesse dado, e o campo de digitar tinha sido apagado junto —
+            então o dado nunca podia existir. Expedição sem onde conferir,
+            Controles Internos sem onde destinar, Central de Notas sem onde
+            dar o tique. A Bruna viu na primeira abertura: "sumiu a parte da
+            expedição, controles internos e central de notas".
+
+            Sinal que eu tinha na mão e não olhei: podeConferirQtdDev,
+            podeDestinarDev e podeNotaFinalDev ficaram com ZERO chamadores.
+            Permissão sem quem a consulte é tela sem o caminho. */''}
+      <td class="c-peso">${podeConferirQtdDev()
+        ? `<input type="number" min="0" step="1" id="dev-it-${i.itemId}-qtdRecebida"
+             value="${i.qtdRecebida ?? ''}" placeholder="—"
+             title="Conferência da Expedição: quantidade que CHEGOU na descarga. A falta é apontada sozinha."
+             onchange="editarItemDevolucaoUI('${escJs(d.id)}',${i.itemId},'qtdRecebida',this.value)">`
+        : (i.qtdRecebida ?? '—')}</td>
+      <td>${faltaHtml}</td>
+      <td class="dev-cel-dest">${podeDestinarDev()
+        /* Destinação MÚLTIPLA (18/08/2026): caixas por destino — 3 caixas
+           podem virar 1 Estoque + 2 Descarte. */
+        ? `<span class="dev-dest-grupo">
+             <input type="number" min="0" step="1" id="dev-it-${i.itemId}-destEstoque"
+               value="${i.destEstoque ?? ''}" placeholder="E"
+               title="Caixas para ESTOQUE"
+               onchange="editarItemDevolucaoUI('${escJs(d.id)}',${i.itemId},'destEstoque',this.value)">
+             <input type="number" min="0" step="1" id="dev-it-${i.itemId}-destDescarte"
+               value="${i.destDescarte ?? ''}" placeholder="D"
+               title="Caixas para DESCARTE"
+               onchange="editarItemDevolucaoUI('${escJs(d.id)}',${i.itemId},'destDescarte',this.value)">
+             <input type="number" min="0" step="1" id="dev-it-${i.itemId}-destReprocesso"
+               value="${i.destReprocesso ?? ''}" placeholder="R"
+               title="Caixas para REPROCESSO"
+               onchange="editarItemDevolucaoUI('${escJs(d.id)}',${i.itemId},'destReprocesso',this.value)">
+           </span>`
+        : esc(devDestinoResumo(i)) || '—'}</td>
+      <td class="dev-cel-notafinal">${podeNotaFinalDev()
+        ? `<input type="checkbox" id="dev-it-${i.itemId}-notaFinal" ${i.notaFinal ? 'checked' : ''}
+             title="NOTA FINAL — marque quando a nota deste item estiver finalizada (Central de Notas)."
+             onchange="editarItemDevolucaoUI('${escJs(d.id)}',${i.itemId},'notaFinal',this.checked)">`
+        : (i.notaFinal ? '✔' : '—')}</td>
       ${editavel ? `<td class="no-print dev-cel-acoes">
         <button class="btn btn-sec btn-sm"
           title="Outra parcial DESTA nota — repete nota, cliente, RCA, supervisor e produto; o Nº DEV, o motivo, as caixas e o nº da parcial você preenche."
@@ -1070,7 +1117,7 @@ function renderDevolucaoAberta(d, editavel) {
             onchange="completarMotivoDevUI('${escJs(d.id)}')"
             value="${d.tipo === 'SOBRA' ? '652 — Sobras' : ''}">
           <small class="text-dim dev-motivo-desc" id="dev-ni-${esc(d.id)}-motivodesc">${d.tipo === 'SOBRA' ? '652 — Sobras' : ''}</small></td>
-      <td colspan="${vaziasNoFim}"></td>
+      <td colspan="5"></td>
       <td class="no-print"><button class="btn btn-sm" onclick="adicionarItemDevolucaoUI('${escJs(d.id)}')"
         title="Acrescentar esta linha ao checklist">➕</button></td>
     </tr>`;
@@ -1112,9 +1159,9 @@ function renderDevolucaoAberta(d, editavel) {
             <th title="Número da carga de devolução gerado pelo porteiro no SIS ATAK — não é o Nº DEV">Nº carga dev</th>
             <th title="Coluna DATA-DEV da capa">Data DEV</th><th>Motivo</th>
             <th title="Pesagem do Faturamento — confirma que passou pela balança">Pesagem</th>
-            ${colQtd ? '<th title="Conferência da descarga: quantidade recebida">Expedição</th><th>Falta</th>' : ''}
-            ${colDest ? '<th>Destinações</th>' : ''}
-            ${colNF ? '<th title="Tique da Central de Notas: nota finalizada">Nota final</th>' : ''}
+            <th title="Conferência da descarga: quantidade recebida">Expedição</th><th>Falta</th>
+            <th>Destinações</th>
+            <th title="Tique da Central de Notas: nota finalizada">Nota final</th>
             ${editavel ? '<th class="no-print"></th>' : ''}
           </tr></thead>
           <tbody>${d.itens.map(linhaItem).join('')}${novaLinha}</tbody>
