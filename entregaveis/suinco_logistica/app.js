@@ -1186,6 +1186,19 @@ async function conferirVersaoDoServidor(){
   }
 }
 
+/* A pergunta única: esta pessoa pode ver a tela de trabalho AGORA?
+
+   Não é "ela já entrou alguma vez" — é "ela tem sessão". Ver ocorrência
+   #25. Quem entrou pelo servidor precisa de token; quem escolheu o modo
+   local não tem e-mail e não depende de nenhum. */
+function temSessaoParaOPainel(){
+  if(!DB.operador) return false;
+  if(!DB.operador.email) return true;          // modo local, de propósito
+  if(typeof SuincoSharePoint === 'undefined'
+     || !SuincoSharePoint.sessaoPerdida) return true;
+  return !SuincoSharePoint.sessaoPerdida();
+}
+
 function abrirLogin(){
   /* Pré-login: o painel some por inteiro (body.pre-login esconde tudo que
      não é a tela de entrada — ver styles.css). Não é só estética: terminal
@@ -2111,9 +2124,42 @@ function _renderAllInterno(){
      o deslogue esconde. Concentrar aqui evita a classe presa: foi
      exatamente o que a primeira versão desta tela causou nos fluxos que
      não passavam pelos botões. */
-  if(DB.operador && document.body.classList.contains('pre-login')){
+  /* "LOGADO" SIGNIFICA "TEM SESSÃO" — UMA FONTE DE VERDADE (31/08/2026).
+
+     Esta linha era `if(DB.operador && ...)`, e essa é a causa raiz do dia
+     inteiro de incidentes de 31/08. Dois fatos diferentes, guardados em
+     lugares com PRAZOS diferentes, tratados como um só:
+
+         DB.operador (nome, setor, e-mail)  →  localStorage  →  para sempre
+         o token (a sessão de verdade)      →  sessionStorage →  morre com a aba
+
+     Quem entrou uma vez ficava "logado" para sempre aos olhos da tela. A
+     aba fecha (ou o Android a descarta, ou a sessão vence), o token morre,
+     o operador fica — e o painel revelava a tela de trabalho INTEIRA sem
+     sessão nenhuma. A partir daí, em cascata:
+
+       · sem sessão ele não lê o servidor, então a Torre e a programação
+         mostravam a cópia local — zero, num navegador limpo. Foi o "zerou
+         tudo" que o dono viu no desktop enquanto o celular mostrava tudo
+         certo (o celular tinha sessão, e por isso lia do servidor);
+       · nada do que a pessoa digitasse subia — e até a manhã de 31/08 isso
+         era silencioso (ocorrência #24);
+       · e NÃO HAVIA LOGIN na tela para sair do estado, porque aos olhos do
+         painel a pessoa já estava logada.
+
+     Corrigi as consequências uma a uma durante o dia — a recusa, o aviso
+     honesto, a faixa, o login abrindo sozinho. Todas necessárias, nenhuma
+     suficiente: enquanto a decisão de revelar o painel olhasse um dado que
+     sobrevive à sessão, o problema voltaria de outra forma.
+
+     Modo local continua entrando: quem escolheu "Entrar sem servidor" não
+     tem e-mail e não depende de token — é decisão de quem usa, não sessão
+     perdida. */
+  if(DB.operador && temSessaoParaOPainel()
+     && document.body.classList.contains('pre-login')){
     revelarPainel();
-  } else if(!DB.operador && !document.body.classList.contains('pre-login')
+  } else if((!DB.operador || !temSessaoParaOPainel())
+            && !document.body.classList.contains('pre-login')
             && document.getElementById('modal-operador').classList.contains('open')){
     document.body.classList.add('pre-login');
   }

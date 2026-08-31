@@ -1611,6 +1611,26 @@ tbody tr{ transition:background-color var(--t-rapida) ease }
   align-items:center;justify-content:center;z-index:3600;padding:20px;
 }
 .modal-overlay.open{display:flex}
+/* TELA BAIXA: A MARCA SAI, O LOGIN CABE (31/08/2026).
+
+   Medido em celular deitado, que é como o pessoal do pátio segura o
+   aparelho — e como o Rene da Expedição estava com o dele:
+
+       tela 360px · o bloco da marca sozinho ocupa 161px (45% da tela)
+       caixa do login: 91px visíveis, precisando de 296 → tem que rolar
+       botão "Entrar" em 388–440 → FORA DA TELA
+
+   O formulário virava uma fresta e o botão ficava abaixo do fim da tela.
+   A pessoa não vê o que fazer, e rolar DENTRO de uma caixa de 91px não é
+   um gesto que alguém adivinha com o caminhão esperando.
+
+   Entre mostrar o logotipo e conseguir entrar, entrar ganha. Abaixo de
+   480px de altura a marca sai e a caixa usa a tela inteira. */
+@media (max-height: 480px){
+  #login-marca{ display:none !important }
+  .modal-overlay{ padding:8px; align-items:flex-start }
+  .modal-overlay .modal-box{ max-height:calc(100vh - 16px) }
+}
 /* A caixa em si fica OPACA. Modal translúcido deixa a tabela de trás
    aparecendo através do formulário — vira ruído exatamente onde alguém
    está digitando placa e senha. */

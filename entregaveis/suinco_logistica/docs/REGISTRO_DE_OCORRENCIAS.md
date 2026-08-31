@@ -35,7 +35,97 @@ faz achar a próxima em minutos em vez de horas:
 | **A tela não oferece o que o servidor aceita** | A rota grava o campo, mas a coluna correspondente é texto. Quem precisa registrar o dado escreve no primeiro campo que aceita digitação — e ele vai parar onde ninguém procura. | #19 |
 | **Dois filtros para a mesma tela** | Duas filtragens paralelas sobre os mesmos dados. Uma move os números, a outra move os gráficos, e nada avisa que discordam. | #18 |
 | **O teste que carimba a leitura errada do pedido** | O teste está novo e verde, e mede exatamente o que foi escrito — só que o pedido foi entendido ao contrário. Verde prova que o código faz o que o teste diz, não que a regra está certa. Mudança que REMOVE algo da tela precisa do teste que garante que o trabalho de quem usava aquilo ainda é possível. | #23 |
+| **Dois fatos com prazos diferentes tratados como um só** | Cada dado está certo no seu lugar; o defeito nasce de perguntar a um deles algo que só o outro sabe (`DB.operador` no localStorage vive para sempre; o token no sessionStorage morre com a aba). Reconhece-se assim: o mesmo relato volta com roupa nova depois de cada correção. Corrigir no nível do sintoma nunca fecha. | #25 |
 | **Teste que mede o proxy, não a regra** | O teste confere um sintoma fácil de medir ("a aba aparece?", "quantas linhas?") em vez da garantia real, ou monta um cenário que deixou de corresponder ao sistema. Quando o sintoma muda por um motivo legítimo, ele fica vermelho sem que nada tenha quebrado — e aponta para o lugar errado. | #15, #22 |
+
+---
+
+## #25 — CAUSA RAIZ: "já entrou uma vez" tratado como "está conectado agora" (31/08/2026)
+
+**Esta ocorrência é a mãe das #24, e das quatro correções de emergência do
+dia.** As outras descrevem sintomas; esta descreve por que eles existiam.
+
+**Relato final, o que fez o dono parar tudo.** No meio da operação: *"acabei
+de abrir aqui o painel e zerou tudo (...) zerou a programação que estava em
+andamento, a torre de controle"*. E, logo em seguida, o dado que resolveu:
+*"no celular tá aparecendo"*.
+
+Essa segunda frase é o que provou que nada tinha se perdido. O celular tinha
+sessão e lia do servidor; o desktop não tinha, e mostrava a cópia local —
+vazia.
+
+**A causa, em uma linha** (`app.js`, o revelar do painel):
+
+```js
+if(DB.operador && document.body.classList.contains('pre-login')){
+  revelarPainel();
+}
+```
+
+Dois fatos diferentes, guardados em lugares com PRAZOS diferentes, tratados
+como um só:
+
+| o que | onde mora | quanto dura |
+|---|---|---|
+| `DB.operador` (nome, setor, e-mail) | `localStorage` | para sempre |
+| o token (a sessão de verdade) | `sessionStorage` | morre quando a aba fecha |
+
+Quem entrou uma vez ficava "logado" para sempre aos olhos da tela. E no
+celular a aba morre sozinha o tempo todo: o Android descarta aba em segundo
+plano, e o 401 de sessão vencida chega ao mesmo lugar por outro caminho.
+
+**A cascata que isso produziu, toda em 31/08:**
+
+1. o painel revelava a tela de trabalho INTEIRA sem sessão nenhuma;
+2. sem sessão ele não lê o servidor → Torre e programação mostravam a cópia
+   local, ZERO num navegador limpo. O "zerou tudo";
+3. nada do que se digitasse subia — e até a manhã daquele dia, calado
+   (ocorrência #24);
+4. não havia login na tela para sair do estado, porque aos olhos do painel a
+   pessoa já estava logada;
+5. e a faixa de offline que eu tinha acabado de criar ficava no topo, por
+   cima da única saída — engolindo o toque no formulário.
+
+**O erro de método, meu, e é o que interessa para a próxima vez.** Corrigi
+os cinco itens acima um por um, ao longo do dia, cada um com teste. Todas as
+correções estavam certas. Nenhuma era suficiente: enquanto a decisão de
+revelar o painel olhasse um dado que sobrevive à sessão, o defeito voltava
+com outra cara. Voltou quatro vezes, cada uma delas com a operação parada.
+
+Quando o mesmo relato reaparece com roupa diferente no mesmo dia, o que está
+errado não é a correção — é o nível em que ela foi feita.
+
+**Correção.** `temSessaoParaOPainel()`: uma pergunta só, "esta pessoa pode
+ver a tela de trabalho AGORA?". Quem entrou pelo servidor precisa de token;
+quem escolheu "Entrar sem servidor" não tem e-mail e não depende de nenhum —
+é decisão de quem usa, não acidente. Sem sessão, o painel não revela nada:
+pede o login.
+
+**E um achado que veio junto, medido ao travar o teste.** No celular
+deitado (740x360), que é como o pátio segura o aparelho:
+
+```
+tela 360px · o bloco da marca ocupava 161px — 45% da tela
+caixa do login: 91px visíveis, precisando de 296
+botão "Entrar" em 388–440 → FORA DA TELA
+```
+
+O botão existia e era inalcançável. Abaixo de 480px de altura a marca sai e
+a caixa usa a tela inteira: entre mostrar o logotipo e conseguir entrar,
+entrar ganha.
+
+**Testes que travam.** `testes/test_sem_sessao_nao_mostra_painel.py` (sem
+sessão o painel não aparece; a Torre não fica visível zerada por trás; modo
+local continua entrando; e QUEM TEM SESSÃO ENTRA NORMAL — a trava não pode
+barrar quem está certo) e `testes/test_faixa_no_rodape_e_login_abre.py`, que
+passou a exigir o botão DENTRO da tela, não só existindo.
+
+**Família.** Nova, e é a mais cara da lista: **dois fatos com prazos
+diferentes tratados como um só**. Não é cópia divergente (#14) nem proteção
+escrita para um posto só (#20): os dois dados estão certos, cada um no seu
+lugar, e o defeito nasce de perguntar a um deles uma coisa que só o outro
+sabe. O sinal de reconhecimento é o relato voltar com roupa nova depois de
+cada correção.
 
 ---
 

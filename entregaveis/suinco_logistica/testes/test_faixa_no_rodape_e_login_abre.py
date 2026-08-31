@@ -127,6 +127,26 @@ async def main():
             except Exception:
                 clicou = False
             ck(f'{nome}: dá para clicar em Entrar de verdade', clicou)
+
+            # O BOTÃO PRECISA ESTAR DENTRO DA TELA, não só existir.
+            #
+            # Medido em 31/08/2026 no celular deitado (740x360), que é como
+            # o pátio segura o aparelho: o bloco da marca ocupava 161px dos
+            # 360 — 45% da tela —, o formulário virava uma fresta de 91px e
+            # o botão "Entrar" caía em 388–440, ABAIXO do fim da tela.
+            # `elementFromPoint` devolvia None: fora da área visível.
+            #
+            # Existir e ser alcançável são coisas diferentes, e foi a
+            # diferença entre as duas que travou a operação.
+            fold = await pg.evaluate("""() => {
+                const b = document.getElementById('btn-entrar');
+                const q = b.getBoundingClientRect();
+                return { topo: Math.round(q.top), fundo: Math.round(q.bottom),
+                         tela: window.innerHeight,
+                         dentro: q.top >= 0 && q.bottom <= window.innerHeight };
+            }""")
+            ck(f'{nome}: o botão Entrar está DENTRO da tela, sem precisar rolar',
+               fold['dentro'], f"botão em {fold['topo']}–{fold['fundo']} de {fold['tela']}px")
             await ctx.close()
 
         print('\n=== A FAIXA FICA NO RODAPÉ, E NÃO INTERCEPTA CLIQUE ===')
