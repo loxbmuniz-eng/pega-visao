@@ -616,9 +616,13 @@ rotasDevolucoes.patch('/devolucoes/:id/itens/:itemId', exigirLogin, async (req, 
        Faturamento pesa (peso_faturamento — a confirmação de que passou
        pela balança), Controles Internos destina, Central de Notas dá o
        tick de nota final. */
-    const SO_CONFERENCIA = new Set(['qtd_recebida']);
+    /* O OK da Expedição anda junto com a conferência: é o mesmo posto, e o
+       dono pediu que bastasse o tique — a quantidade ficou ao lado, para
+       quem quiser apontar a falta (migração 040). */
+    const SO_CONFERENCIA = new Set(['qtd_recebida', 'ok_expedicao']);
     const SO_PESAGEM = new Set(['peso_faturamento']);
-    const SO_DESTINACAO = new Set(['destinacao', 'dest_estoque', 'dest_descarte', 'dest_reprocesso']);
+    const SO_DESTINACAO = new Set(['destinacao', 'dest_estoque', 'dest_descarte',
+      'dest_reprocesso', 'ok_destinacao']);
     const SO_NOTA_FINAL = new Set(['nota_final']);
     /* O número da carga de devolução nasce no SIS ATAK, no momento em que a
        PORTARIA abre a DEV — então é ela quem digita, item a item. É o único
