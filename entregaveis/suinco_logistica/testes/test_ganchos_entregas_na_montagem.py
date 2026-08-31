@@ -132,7 +132,19 @@ async def main():
         ck('e voltaram para a tela', str(na_tela and na_tela['g']) == '37'
            and str(na_tela and na_tela['e']) == '9', str(na_tela))
 
-        print('\n=== 4. NÃO FICARAM DUPLICADOS NO FORMULÁRIO ===')
+        print('\n=== 4. OS DOIS LUGARES GRAVAM NO MESMO DADO ===')
+        # A PRIMEIRA VERSÃO DESTE BLOCO EXIGIA O CONTRÁRIO, e estava errada.
+        #
+        # Eu tinha tirado Ganchos e Entregas do formulário seguindo a regra do
+        # "mesmo campo em dois lugares da mesma tela" — a que fez o Tipo de
+        # Operação sair em 28/08. A bateria mostrou que ela não se aplica
+        # aqui: existe uma guarda em test_montagem_expansivel dizendo "com
+        # Qtd. Entregas e Qtd. Ganchos, QUE ERA O QUE SUMIU". Os dois já
+        # desapareceram do formulário uma vez e viraram incidente.
+        #
+        # A regra do não-duplicar existe para campo que grava em lugares
+        # DIFERENTES. O que precisa ser verdade quando ele aparece duas vezes
+        # é que os dois escrevam no MESMO dado — e é isso que se mede agora.
         await pg.evaluate("(id) => alternarLinhaMontagemUI(id)", alvo)
         await pg.wait_for_timeout(900)
         dobrado = await pg.evaluate("""() => {
@@ -145,9 +157,21 @@ async def main():
         if dobrado.get('semDetalhe'):
             ck('o formulário abriu para conferir', False, 'a linha não expandiu')
         else:
-            ck('Ganchos NÃO está repetido no formulário', not dobrado['ganchos'], str(dobrado))
-            ck('Entregas NÃO está repetido no formulário', not dobrado['entregas'], str(dobrado))
+            ck('o formulário TAMBÉM oferece Ganchos', dobrado['ganchos'], str(dobrado))
+            ck('e Entregas', dobrado['entregas'], str(dobrado))
 
+        # O que separa "dois campos para um dado" de "dois campos para dois
+        # dados": gravar por um caminho e ler pelo outro.
+        casou = await pg.evaluate("""async (o) => {
+              await alterarMontagemUI(o.id, 'qtdGanchos', '52');
+              await carregarMontagemUI();
+              const m = _montagemDia.montagens.find(x => x.montagem_id === o.id);
+              return { noEstado: m && m.qtd_ganchos };
+            }""", {'id': alvo})
+        ck('gravar num lugar muda o dado que o outro lê',
+           str(casou['noEstado']) == '52', str(casou))
+
+        sql(f"DELETE FROM programacao_montagem WHERE data_prog = '{DIA}'")
         sql(f"DELETE FROM programacao_montagem WHERE data_prog = '{DIA}'")
         ck('nenhum erro de JavaScript', not erros, '; '.join(erros[:2]))
         await nav.close()

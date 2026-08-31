@@ -442,12 +442,18 @@ function notifyGravacao(msgSucesso, msObrigatorio){
   if(estado === 'online'){ notify(msgSucesso, 'success', msObrigatorio); return; }
 
   if(estado === 'offline'){
-    const fila = (typeof SuincoSharePoint !== 'undefined' && SuincoSharePoint.pendentes)
-      ? SuincoSharePoint.pendentes() : 0;
-    notify(`⚠️ SEM CONEXÃO — ${msgSucesso} Está gravado só neste aparelho`
-      + (fila ? ` (${fila} na fila)` : '')
-      + ' e sobe sozinho quando a rede voltar. Os outros setores ainda NÃO veem.',
-      'warn', 10000);
+    /* A FRASE MUDOU COM A REGRA (31/08/2026). Ela dizia "está gravado só
+       neste aparelho e sobe sozinho quando a rede voltar" — o que deixou de
+       ser verdade quando o dono aboliu a gravação offline. Nada sobe sozinho
+       agora, porque nada fica guardado.
+
+       Esta função é o ponto por onde passa TODO aviso de gravação do painel:
+       corrigir a mensagem aqui corrige em todas as telas de uma vez, em vez
+       de caçar cada uma — e é o que evita a tela dizer "cadastrada" numa
+       linha e "não foi cadastrada" na seguinte. */
+    notify(`⛔ VOCÊ ESTÁ OFFLINE — SISTEMA INDISPONÍVEL. `
+      + `NADA FOI GRAVADO. Conecte-se e faça de novo.`,
+      'danger', 12000);
     return;
   }
   // 'local': nem sessão de servidor existe. Aqui não sobe nunca sozinho.
@@ -758,10 +764,15 @@ function receberEnfileiramentoDeRota(rota){
   tocarAlertaAlteracao();
 }
 
-function receberRecusaDeRota(rota, motivo){
-  notify(
-    `Rota ${rota.codigo}: o servidor recusou o cadastro. ${motivo || ''} `
-    + 'Ficou salva só neste aparelho — outros terminais ainda não vão ver esta rota.',
+function receberRecusaDeRota(rota, motivo, desfeita){
+  /* Duas recusas, duas frases. Antes era uma só, e ela mentia metade do
+     tempo: dizia "ficou salva só neste aparelho" mesmo quando a rota tinha
+     sido desfeita. Rótulo que mente é a família da ocorrência #04. */
+  notify(desfeita
+    ? `Rota ${rota.codigo} NÃO foi cadastrada. ${motivo || ''} `
+      + 'Ela não ficou guardada em lugar nenhum — conecte e cadastre de novo.'
+    : `Rota ${rota.codigo}: o servidor recusou o cadastro. ${motivo || ''} `
+      + 'Ficou salva só neste aparelho — outros terminais ainda não vão ver esta rota.',
     'danger', 20000);
   tocarAlertaAlteracao();
 }
@@ -5740,13 +5751,13 @@ function renderRotasCadastro(){
     .map(r=>`<tr><td>${esc(r.codigo)}</td><td>${esc(r.nome)||'—'}</td><td>${esc(r.detalhe)||'—'}</td><td>${esc(r.operador)||'—'}</td></tr>`)
     .join('');
 }
-function addRotaUI(){
+async function addRotaUI(){
   const codigo = document.getElementById('rota-codigo').value.trim();
   const nome = document.getElementById('rota-nome').value.trim();
   if(!codigo){ notify('Informe o código da rota.', 'warn'); return; }
   if(!nome){ notify('Informe o nome da rota.', 'warn'); return; }
   const jaExistia = !!rotaInfo(codigo);
-  upsertRota(codigo, nome, document.getElementById('rota-detalhe').value,
+  const rotaCriada = upsertRota(codigo, nome, document.getElementById('rota-detalhe').value,
              document.getElementById('rota-operador').value);
   ['rota-codigo','rota-nome','rota-detalhe','rota-operador'].forEach(id=>document.getElementById(id).value='');
   preencherSelectsRota();   // dropdowns de Rota atualizados na hora
@@ -5766,6 +5777,31 @@ function addRotaUI(){
      quando subiu; amarelo "SEM CONEXÃO … os outros setores ainda NÃO
      veem" quando ficou na fila. A recusa do servidor já tinha aviso
      próprio (receberRecusaDeRota) e continua valendo. */
+  /* O AVISO ESPERA O SERVIDOR (31/08/2026).
+
+     Ele era otimista: dizia "Rota X cadastrada" no mesmo instante do clique,
+     e só depois — quando a resposta chegava — vinha o "NÃO foi cadastrada".
+     Duas frases contrárias na mesma tela, e a pessoa lê a primeira.
+
+     É o incidente da rota 537 (14/08) voltando por outra porta: naquele dia
+     o problema era o verde prometendo compartilhamento que não existia.
+     Agora não existe nem gravação: com a regra do dono, offline não grava.
+     Então o aviso de sucesso só pode sair depois de o servidor confirmar —
+     quem avisa o contrário é `receberRecusaDeRota`, que já tem frase própria
+     para cada caso. */
+  /* ESPERA A RESPOSTA ANTES DE DIZER QUE CADASTROU.
+
+     Olhar o estado da conexão não bastava: no instante do clique ele ainda
+     diz "online", porque só vira offline quando alguma requisição falha. O
+     que decide é a resposta desta gravação, não o estado de antes dela. */
+  const r = await (rotaCriada && rotaCriada._promessa
+    ? rotaCriada._promessa.catch(() => ({ recusado: true }))
+    : Promise.resolve(null));
+  if(r && r.recusado){
+    // receberRecusaDeRota já falou — e com a frase certa para cada caso.
+    renderAll();
+    return;
+  }
   notifyGravacao(jaExistia
     ? `Rota ${codigo} atualizada.`
     : `Rota ${codigo} — ${nome} cadastrada.`);
@@ -9290,10 +9326,16 @@ function formCargaHtml(c, m){
       </div>
 
       <div class="form-row">
-          ${/* GANCHOS E ENTREGAS SUBIRAM PARA A LINHA (31/08/2026).
-                Saem daqui pela mesma razão que o Tipo de Operação saiu em
-                28/08: o mesmo campo em dois lugares da mesma tela é como se
-                produz um valor digitado num e lido do outro. */''}
+        ${/* Ver a nota em formMontagemHtml: os dois campos ficam na linha E
+              aqui, porque gravam na MESMA carga pela mesma função — e porque
+              já sumiram daqui uma vez, o que virou guarda de teste. */''}
+        <div class="form-group">
+          <label>Qtd. Ganchos (Gancheira) <span class="hint">0 = Liso</span></label>
+          <input type="number" min="0" step="1" value="${c.qtdGanchos ?? 0}"
+                 onchange="atualizarGanchosUI('${id}',this.value)"></div>
+        <div class="form-group"><label>Qtd. Entregas</label>
+          <input type="number" min="1" step="1" value="${c.qtdEntregas ?? 1}"
+                 onchange="atualizarEntregasUI('${id}',this.value)"></div>
 
         <div class="form-group">
           <label>Rota <span class="hint">(vem do modelo do dia)</span></label>
@@ -9399,6 +9441,18 @@ function linhaMontagemHtml(m){
             : `<input type="number" min="0" class="peso-input" value="${m.peso ?? ''}"
                       placeholder="—" aria-label="Peso em quilos"
                       onchange="alterarMontagemUI('${id}','peso',this.value)">`}</td>
+
+      <td onclick="event.stopPropagation()">${comoCarga
+            ? paletizadaSelectHtml(cargaViva)
+            : `<select class="palet-inline" onchange="alterarMontagemUI('${id}','paletizada',this.value)">
+                 ${['Não','Sim'].map(op=>`<option value="${op}" ${(m.paletizada||'Não')===op?'selected':''}>${op}</option>`).join('')}
+               </select>`}</td>
+      <td onclick="event.stopPropagation()">${comoCarga
+            ? praOndeSelectHtml(cargaViva)
+            : `<select class="praonde-inline" onchange="alterarMontagemUI('${id}','tipoOperacao',this.value)">
+                 <option value=""${!m.tipo_operacao ? ' selected' : ''}>—</option>
+                 ${PRA_ONDE_OPCOES.map(o=>`<option${m.tipo_operacao===o?' selected':''}>${esc(o)}</option>`).join('')}
+               </select>`}</td>
       ${/* GANCHOS E ENTREGAS NA LINHA — pedido do dono (31/08/2026):
             "ta faltando o campo de quantidade de entregar e quantidade de
             ganchos igual na torre, precisa aparecer na programacao do dia"
@@ -9430,17 +9484,6 @@ function linhaMontagemHtml(m){
                       value="${m.qtd_entregas ?? 1}" aria-label="Entregas"
                       title="Quantidade de entregas."
                       onchange="alterarMontagemUI('${id}','qtdEntregas',this.value)">`}</td>
-      <td onclick="event.stopPropagation()">${comoCarga
-            ? paletizadaSelectHtml(cargaViva)
-            : `<select class="palet-inline" onchange="alterarMontagemUI('${id}','paletizada',this.value)">
-                 ${['Não','Sim'].map(op=>`<option value="${op}" ${(m.paletizada||'Não')===op?'selected':''}>${op}</option>`).join('')}
-               </select>`}</td>
-      <td onclick="event.stopPropagation()">${comoCarga
-            ? praOndeSelectHtml(cargaViva)
-            : `<select class="praonde-inline" onchange="alterarMontagemUI('${id}','tipoOperacao',this.value)">
-                 <option value=""${!m.tipo_operacao ? ' selected' : ''}>—</option>
-                 ${PRA_ONDE_OPCOES.map(o=>`<option${m.tipo_operacao===o?' selected':''}>${esc(o)}</option>`).join('')}
-               </select>`}</td>
       <td class="no-print">${trancada
             ? acoesMontagemHtml(m, trancada)
             : comoCarga ? acoesCargaNaMontagemHtml(aberta)
@@ -9704,10 +9747,26 @@ function formMontagemHtml(m){
           </select></div>
       </div>
 
-      ${/* GANCHOS E ENTREGAS SUBIRAM PARA A LINHA (31/08/2026). Saem daqui
-            pela mesma razão que o Tipo de Operação saiu em 28/08: o mesmo
-            campo em dois lugares da mesma tela é como se produz um valor
-            digitado num e lido do outro. */''}
+      ${/* GANCHOS E ENTREGAS FICAM NOS DOIS LUGARES (31/08/2026).
+
+            Eles subiram para a LINHA a pedido do dono ("precisa aparecer e
+            funcionar"), e eu os tinha tirado daqui seguindo a regra do
+            "mesmo campo em dois lugares". A bateria mostrou que a regra não
+            se aplica: existe uma guarda dizendo "com Qtd. Entregas e Qtd.
+            Ganchos, QUE ERA O QUE SUMIU" — eles já desapareceram daqui uma
+            vez e viraram incidente.
+
+            A regra do não-duplicar existe para campo que grava em lugares
+            DIFERENTES (foi o caso do Tipo de Operação). Aqui os dois gravam
+            na mesma carga, pela mesma função: alterar num reflete no outro
+            no próximo desenho da tela. */''}
+      <div class="form-row">
+        <div class="form-group">
+          <label>Qtd. Ganchos (Gancheira) <span class="hint">0 = Liso</span></label>
+          <input type="number" min="0" step="1" value="${m.qtd_ganchos ?? 0}" ${alt('qtdGanchos')}></div>
+        <div class="form-group"><label>Qtd. Entregas</label>
+          <input type="number" min="1" step="1" value="${m.qtd_entregas ?? 1}" ${alt('qtdEntregas')}></div>
+      </div>
 
       <div class="form-group" style="margin-bottom:10px"><label>Observações</label>
         <textarea ${alt('observacoes')} placeholder="O que a operação precisa saber sobre esta carga">${esc(m.observacoes)}</textarea></div>
