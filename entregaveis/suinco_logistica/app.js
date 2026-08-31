@@ -148,16 +148,40 @@ function marcarBadgeConexao(badge, classe, icone, frase){
    nada é gravado — a fila offline foi desligada (ver enfileirar() em
    suinco-api.js). Aviso que some é aviso que não impediu nada: a pessoa
    digita meia hora achando que gravou. */
+/* A FAIXA NUNCA PODE FICAR NA FRENTE DE QUEM ESTÁ TENTANDO ENTRAR.
+
+   Relato do Luis, do celular do Rene da Expedição (31/08/2026): "a faixa
+   vermelha aparece e esconde o botão de login e a pessoa não consegue
+   clicar no botão de login porque o alerta sobrepõe o lugar onde ficaria
+   esse botão".
+
+   Reproduzido em celular DEITADO (740x360, que é como ele estava segurando):
+   a caixa do login começa em 31px, a faixa vai de 0 a 61px, e o toque no
+   topo do formulário cai em `faixa-offline-sub` em vez de cair no campo.
+   Em pé não acontece — sobra altura. Por isso o defeito parecia aleatório.
+
+   DUAS COISAS MINHAS ERRARAM JUNTAS, e cada uma sozinha já bastava:
+
+   1. A guarda "antes do login não existe offline" olhava `DB.operador` —
+      que SOBREVIVE no localStorage (SuincoStore.save grava o DB inteiro).
+      Quem já entrou uma vez tem operador salvo para sempre, então a guarda
+      nunca protegia a tela de login de ninguém que já tivesse usado o
+      painel. Agora a pergunta é a certa: a tela de login está aberta?
+      Enquanto ela estiver, avisar "você está offline" não ajuda — a ação
+      que resolve é justamente entrar.
+
+   2. z-index 9999 contra 3600 do .modal-overlay: a faixa pintava por cima
+      de QUALQUER caixa de diálogo, não só a do login, e comia o toque.
+      Corrigido no CSS. */
+function loginAberto(){
+  const m = document.getElementById('modal-operador');
+  return !!(m && m.classList.contains('open'));
+}
+
 function atualizarFaixaOffline(estado){
   let faixa = document.getElementById('faixa-offline');
   const online = estado === 'online';
-  if(online){
-    if(faixa) faixa.remove();
-    document.body.classList.remove('esta-offline');
-    return;
-  }
-  // Antes do login não existe "offline": ninguém tentou conectar ainda.
-  if(!DB.operador){
+  if(online || loginAberto()){
     if(faixa) faixa.remove();
     document.body.classList.remove('esta-offline');
     return;
