@@ -186,18 +186,58 @@ function atualizarFaixaOffline(estado){
     document.body.classList.remove('esta-offline');
     return;
   }
+  /* SESSÃO VENCIDA E FALTA DE REDE NÃO SÃO A MESMA COISA, e dizer a
+     errada manda a pessoa procurar um problema que não existe.
+
+     O celular do Rene da Expedição estava com 5G no sinal e a faixa dizia
+     "VOCÊ ESTÁ OFFLINE". Ele não estava: a sessão dele tinha vencido — o
+     token mora em sessionStorage e morre quando a aba fecha, o que no
+     celular acontece sozinho o tempo todo. O caminho de volta existia, mas
+     numa linha pequena no rodapé: "entre de novo para voltar a
+     compartilhar".
+
+     Aqui a faixa passa a dizer qual dos dois é, e no caso da sessão ela
+     LEVA a pessoa de volta — botão que só nega não ensina o caminho. */
+  const sessaoVenceu = (typeof SuincoSharePoint !== 'undefined'
+    && SuincoSharePoint.sessaoPerdida && SuincoSharePoint.sessaoPerdida());
+  const corpo = sessaoVenceu
+    ? '<span class="faixa-offline-tit">⚠️ ALERTA !!!</span>'
+      + '<span class="faixa-offline-txt">SUA SESSÃO EXPIROU — SISTEMA INDISPONÍVEL. '
+      + 'ENTRE DE NOVO PARA CONTINUAR.</span>'
+      + '<span class="faixa-offline-sub">Nada digitado agora será gravado. '
+      + 'O aparelho tem internet; foi o acesso que venceu.</span>'
+      + '<button type="button" class="btn btn-primary btn-sm faixa-offline-btn" '
+      + 'onclick="abrirLoginDeNovo()">Entrar de novo</button>'
+    : '<span class="faixa-offline-tit">⚠️ ALERTA !!!</span>'
+      + '<span class="faixa-offline-txt">VOCÊ ESTÁ OFFLINE — SISTEMA INDISPONÍVEL. '
+      + 'CONECTE-SE PARA CONTINUAR.</span>'
+      + '<span class="faixa-offline-sub">Nada digitado agora será gravado.</span>';
   if(!faixa){
     faixa = document.createElement('div');
     faixa.id = 'faixa-offline';
     faixa.className = 'faixa-offline no-print';
     faixa.setAttribute('role', 'alert');
-    faixa.innerHTML = '<span class="faixa-offline-tit">⚠️ ALERTA !!!</span>'
-      + '<span class="faixa-offline-txt">VOCÊ ESTÁ OFFLINE — SISTEMA INDISPONÍVEL. '
-      + 'CONECTE-SE PARA CONTINUAR.</span>'
-      + '<span class="faixa-offline-sub">Nada digitado agora será gravado.</span>';
     document.body.insertBefore(faixa, document.body.firstChild);
   }
+  // Reescreve sempre: o mesmo painel pode passar de sessão vencida para
+  // rede caída sem recarregar, e a faixa que sobrou mentiria.
+  faixa.innerHTML = corpo;
   document.body.classList.add('esta-offline');
+}
+
+/* A volta para dentro, a partir da faixa. Abre a mesma tela de login de
+   sempre; `atualizarFaixaOffline` tira a faixa sozinha assim que ela abre,
+   pela guarda do `loginAberto()`. */
+function abrirLoginDeNovo(){
+  const m = document.getElementById('modal-operador');
+  if(m) m.classList.add('open');
+  const srv = document.getElementById('login-servidor');
+  const loc = document.getElementById('login-local');
+  if(srv) srv.hidden = false;
+  if(loc) loc.hidden = true;
+  atualizarFaixaOffline('local');
+  const email = document.getElementById('login-email');
+  if(email) email.focus();
 }
 
 function atualizarRodapeConexao(estado, detalhe){
@@ -743,8 +783,14 @@ function receberRecusaDeCarga(carga, motivo, removida, offline){
      mesmo (nada foi gravado, a linha sai da tela), mas o que o operador
      precisa fazer é oposto: aqui ele reconecta e refaz; na recusa de
      verdade ele corrige placa ou setor primeiro. */
+  const sessaoVenceu = (typeof SuincoSharePoint !== 'undefined'
+    && SuincoSharePoint.sessaoPerdida && SuincoSharePoint.sessaoPerdida());
   notify(
-    offline
+    sessaoVenceu
+      ? `⛔ ${rotulo}: SUA SESSÃO EXPIROU. NADA FOI GRAVADO e a linha saiu `
+        + 'da tela. Entre de novo (o aviso vermelho no topo tem o botão) e '
+        + 'lance outra vez.'
+      : offline
       ? `⛔ ${rotulo}: VOCÊ ESTÁ OFFLINE — SISTEMA INDISPONÍVEL. `
         + 'NADA FOI GRAVADO e a linha saiu da tela. '
         + 'Conecte-se e lance de novo.'
