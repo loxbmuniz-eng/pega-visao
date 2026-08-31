@@ -130,9 +130,10 @@ async def main():
         print('\n=== 5. FILA VELHA NO APARELHO É DESCARTADA, E O PAINEL DIZ ===')
         # Planta uma fila como a que existe hoje nos aparelhos e recarrega.
         await pg.evaluate("""() => {
-            const chave = Object.keys(localStorage).find(k => /fila/i.test(k))
-              || 'suinco_fila_offline';
-            localStorage.setItem(chave, JSON.stringify([
+            // A chave REAL da fila (CHAVE_FILA em suinco-api.js). Chutar o
+            // nome fazia o teste plantar num lugar que ninguém lê — e ele
+            // passava a medir o próprio erro em vez do painel.
+            localStorage.setItem('suinco_fila_api', JSON.stringify([
               { tipo:'carga', corpo:{ placa:'AAA1A11', numeroCarga:'VELHA-1' },
                 enfileiradoEm:'2026-08-30T10:00:00.000Z' },
               { tipo:'status', cargaId:'x', status:'Aguardando Embarque',
