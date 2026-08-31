@@ -1056,31 +1056,38 @@ function renderDevolucaoAberta(d, editavel) {
             Sinal que eu tinha na mão e não olhei: podeConferirQtdDev,
             podeDestinarDev e podeNotaFinalDev ficaram com ZERO chamadores.
             Permissão sem quem a consulte é tela sem o caminho. */''}
+      ${/* EXPEDIÇÃO: O TIQUE VEM PRIMEIRO, A QUANTIDADE FICA AO LADO
+            (31/08/2026).
+
+            O dono, apontando a coluna na tela: "precisa que expedição,
+            destinação fica igual da central de nota, só colocar um ok".
+
+            O OK é o que a Expedição precisa dar com o caminhão esperando.
+            A quantidade continua sendo oferecida porque a FALTA nasce dela
+            (`cx - qtdRecebida`) — decisão do dono ao ser avisado de que
+            tirá-la apagaria a coluna Falta: quem quiser conferir caixa a
+            caixa aponta a falta, quem não quiser só dá o OK. */''}
+      <td class="dev-cel-ok">${podeConferirQtdDev()
+        ? `<input type="checkbox" id="dev-it-${i.itemId}-okExpedicao" ${i.okExpedicao ? 'checked' : ''}
+             title="OK da Expedição: a descarga deste item foi conferida."
+             onchange="editarItemDevolucaoUI('${escJs(d.id)}',${i.itemId},'okExpedicao',this.checked)">`
+        : (i.okExpedicao ? '✔' : '—')}</td>
       <td class="c-peso">${podeConferirQtdDev()
         ? `<input type="number" min="0" step="1" id="dev-it-${i.itemId}-qtdRecebida"
              value="${i.qtdRecebida ?? ''}" placeholder="—"
-             title="Conferência da Expedição: quantidade que CHEGOU na descarga. A falta é apontada sozinha."
+             title="Opcional: quantidade que CHEGOU na descarga. Só preencha se quiser que a falta seja apontada."
              onchange="editarItemDevolucaoUI('${escJs(d.id)}',${i.itemId},'qtdRecebida',this.value)">`
         : (i.qtdRecebida ?? '—')}</td>
       <td>${faltaHtml}</td>
-      <td class="dev-cel-dest">${podeDestinarDev()
-        /* Destinação MÚLTIPLA (18/08/2026): caixas por destino — 3 caixas
-           podem virar 1 Estoque + 2 Descarte. */
-        ? `<span class="dev-dest-grupo">
-             <input type="number" min="0" step="1" id="dev-it-${i.itemId}-destEstoque"
-               value="${i.destEstoque ?? ''}" placeholder="E"
-               title="Caixas para ESTOQUE"
-               onchange="editarItemDevolucaoUI('${escJs(d.id)}',${i.itemId},'destEstoque',this.value)">
-             <input type="number" min="0" step="1" id="dev-it-${i.itemId}-destDescarte"
-               value="${i.destDescarte ?? ''}" placeholder="D"
-               title="Caixas para DESCARTE"
-               onchange="editarItemDevolucaoUI('${escJs(d.id)}',${i.itemId},'destDescarte',this.value)">
-             <input type="number" min="0" step="1" id="dev-it-${i.itemId}-destReprocesso"
-               value="${i.destReprocesso ?? ''}" placeholder="R"
-               title="Caixas para REPROCESSO"
-               onchange="editarItemDevolucaoUI('${escJs(d.id)}',${i.itemId},'destReprocesso',this.value)">
-           </span>`
-        : esc(devDestinoResumo(i)) || '—'}</td>
+      ${/* DESTINAÇÕES: SÓ O TIQUE. As três caixas por destino (E/D/R)
+            saíram da tela pelo mesmo pedido. As COLUNAS continuam no banco
+            e o que já foi distribuído continua saindo nos relatórios — dado
+            gravado não some porque a tela mudou (ocorrência #23). */''}
+      <td class="dev-cel-ok">${podeDestinarDev()
+        ? `<input type="checkbox" id="dev-it-${i.itemId}-okDestinacao" ${i.okDestinacao ? 'checked' : ''}
+             title="OK dos Controles Internos: a destinação deste item foi resolvida."
+             onchange="editarItemDevolucaoUI('${escJs(d.id)}',${i.itemId},'okDestinacao',this.checked)">`
+        : (i.okDestinacao ? '✔' : (esc(devDestinoResumo(i)) || '—'))}</td>
       <td class="dev-cel-notafinal">${podeNotaFinalDev()
         ? `<input type="checkbox" id="dev-it-${i.itemId}-notaFinal" ${i.notaFinal ? 'checked' : ''}
              title="NOTA FINAL — marque quando a nota deste item estiver finalizada (Central de Notas)."
@@ -1117,7 +1124,10 @@ function renderDevolucaoAberta(d, editavel) {
             onchange="completarMotivoDevUI('${escJs(d.id)}')"
             value="${d.tipo === 'SOBRA' ? '652 — Sobras' : ''}">
           <small class="text-dim dev-motivo-desc" id="dev-ni-${esc(d.id)}-motivodesc">${d.tipo === 'SOBRA' ? '652 — Sobras' : ''}</small></td>
-      <td colspan="5"></td>
+      ${/* Seis colunas no fim: OK Expedição · Qtd. · Falta · Destinações ·
+            Nota final, mais a Pesagem que vem antes. Conferido contra o
+            cabeçalho — colspan que não bate desalinha a linha inteira. */''}
+      <td colspan="6"></td>
       <td class="no-print"><button class="btn btn-sm" onclick="adicionarItemDevolucaoUI('${escJs(d.id)}')"
         title="Acrescentar esta linha ao checklist">➕</button></td>
     </tr>`;
@@ -1159,8 +1169,10 @@ function renderDevolucaoAberta(d, editavel) {
             <th title="Número da carga de devolução gerado pelo porteiro no SIS ATAK — não é o Nº DEV">Nº carga dev</th>
             <th title="Coluna DATA-DEV da capa">Data DEV</th><th>Motivo</th>
             <th title="Pesagem do Faturamento — confirma que passou pela balança">Pesagem</th>
-            <th title="Conferência da descarga: quantidade recebida">Expedição</th><th>Falta</th>
-            <th>Destinações</th>
+            <th title="OK da Expedição: descarga conferida">Expedição</th>
+            <th title="Opcional — só para apontar a falta: quantidade recebida">Qtd.</th>
+            <th title="Diferença entre o lançado e o recebido. Só aparece quando a quantidade é preenchida">Falta</th>
+            <th title="OK dos Controles Internos: destinação resolvida">Destinações</th>
             <th title="Tique da Central de Notas: nota finalizada">Nota final</th>
             ${editavel ? '<th class="no-print"></th>' : ''}
           </tr></thead>
@@ -1422,7 +1434,13 @@ function editarItemDevolucaoUI(id, itemId, campo, valor) {
     // O cliente puxa o vínculo RCA/supervisor também na linha já gravada
     // (mesma lógica da placa→Frota). A busca é no servidor; o que a base
     // não sabe, não mexe.
-    (async () => {
+    /* DEVOLVE A PROMESSA. Sem o `return`, quem chama não tem como esperar
+       a gravação terminar — duas mudanças seguidas viram duas requisições
+       simultâneas, e a recarga da mais lenta apaga na tela o que a mais
+       rápida já tinha gravado. É a família da ocorrência #16 ("duas
+       escritas em voo, a velha ganha"), e apareceu ao travar os tiques de
+       31/08: o banco ficava com os dois OKs e a tela mostrava um só. */
+    return (async () => {
       const corpoCli = { codCliente: valor };
       const cli = await buscarClienteExatoDev(valor);
       if (cli) {
@@ -1432,9 +1450,8 @@ function editarItemDevolucaoUI(id, itemId, campo, valor) {
       }
       acaoDev(SuincoSharePoint.devolucoes.editarItem(id, itemId, corpoCli));
     })();
-    return;
   } else corpo = { [campo]: valor };
-  acaoDev(SuincoSharePoint.devolucoes.editarItem(id, itemId, corpo));
+  return acaoDev(SuincoSharePoint.devolucoes.editarItem(id, itemId, corpo));
 }
 
 function adicionarItemDevolucaoUI(id) {
@@ -1747,7 +1764,13 @@ async function relatorioDevolucoesUI(diaParam) {
           <th>Supervisor</th><th title="Vendedor">RCA</th><th>Cliente</th>
           <th>CX</th><th title="Peso em QUILOS (kg)">Peso (kg)</th><th>Produto</th><th>Nº DEV</th>
           ${temCargaDev(d) ? '<th title="Carga de devolução do SIS ATAK">Nº carga dev</th>' : ''}<th>Data DEV</th><th>Motivo</th>
-          <th title="Pesagem do Faturamento, em QUILOS (kg)">Pesagem (kg)</th><th>Expedição</th><th>Falta</th><th>Destinações</th><th>Nota final</th>
+          ${/* O relatório mostra o OK e a quantidade SEPARADOS, como a tela.
+                Juntar os dois numa coluna só ("OK" ou o número) esconderia a
+                diferença entre "conferi e estava tudo certo" e "nem conferi"
+                — e é essa diferença que o checklist existe para registrar. */''}
+          <th title="Pesagem do Faturamento, em QUILOS (kg)">Pesagem (kg)</th>
+          <th title="OK da Expedição">Expedição</th><th title="Quantidade recebida, quando conferida">Qtd.</th>
+          <th>Falta</th><th title="OK dos Controles Internos">Destinações</th><th>Nota final</th>
         </tr></thead>
         <tbody>${d.itens.map((i) => `<tr${i.falta > 0 ? ' class="dev-doc-falta"' : ''}>
             <td>${esc(i.nota)}</td>
@@ -1762,9 +1785,12 @@ async function relatorioDevolucoesUI(diaParam) {
             <td>${i.dataItem ? esc(String(i.dataItem).slice(0, 10).split('-').reverse().join('/')) : '—'}</td>
             <td>${esc(i.motivo)}</td>
             <td class="c-peso">${i.pesoFaturamento !== null ? i.pesoFaturamento.toLocaleString('pt-BR') : '—'}</td>
+            <td>${i.okExpedicao ? '✔' : '—'}</td>
             <td class="c-peso">${i.qtdRecebida ?? '—'}</td>
             <td class="c-peso">${i.falta === null ? '—' : (i.falta > 0 ? 'FALTA ' + i.falta.toLocaleString('pt-BR') : 'OK')}</td>
-            <td>${esc(devDestinoResumo(i)) || '—'}</td>
+            ${/* O que já foi distribuído em caixas continua saindo, ao lado
+                  do tique: dado gravado não some porque a tela mudou. */''}
+            <td>${i.okDestinacao ? '✔' : '—'}${(() => { const r = devDestinoResumo(i); return r ? ' <small>' + esc(r) + '</small>' : ''; })()}</td>
             <td>${i.notaFinal ? '✔' : '—'}</td>
           </tr>`).join('')}</tbody>
         ${/* Somatório no pé da tabela, no padrão do Relatório Operacional
@@ -2103,6 +2129,11 @@ function somatorioItensDev(itens, colspanAntes, comCargaDev) {
       ${/* Produto, Nº DEV, [Nº carga dev], Data DEV e Motivo não somam. */''}
       <td colspan="${comCargaDev ? 5 : 4}"></td>
       <td class="tot-num">${pesagem ? fmt(pesagem, 2) + ' kg' : ''}</td>
+      ${/* O tique da Expedição não soma — é sim/não, não é quantidade.
+            A célula vazia existe para o rodapé continuar alinhado com o
+            cabeçalho: Pesagem · OK Expedição · Qtd. · Falta · Destinações ·
+            Nota final. Contado a partir do cabeçalho, não de cabeça. */''}
+      <td></td>
       <td class="tot-num">${recebidas ? fmt(recebidas, 0) : ''}</td>
       <td class="tot-num">${falta ? 'FALTA ' + fmt(falta, 0) : ''}</td>
       <td colspan="2"></td>

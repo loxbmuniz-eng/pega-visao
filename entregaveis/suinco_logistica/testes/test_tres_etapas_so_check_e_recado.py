@@ -165,13 +165,33 @@ async def main():
               destDescarte: /-destDescarte"/.test(html),
               destReprocesso: /-destReprocesso"/.test(html),
               notaFinal: /-notaFinal"/.test(html),
+              okExpedicao: /-okExpedicao"/.test(html),
+              okDestinacao: /-okDestinacao"/.test(html),
             };
         }""", novo)
-        ck('a Expedição tem onde conferir a quantidade recebida',
+        ck('a Expedição tem onde registrar a conferência (tique de OK)',
+           tela['okExpedicao'], str(tela))
+        ck('e o campo de quantidade continua ao lado, para apontar a falta',
            tela['qtdRecebida'], str(tela))
-        ck('os Controles Internos têm as três caixas de destinação (E/D/R)',
-           tela['destEstoque'] and tela['destDescarte'] and tela['destReprocesso'],
-           str(tela))
+        # ESTA LINHA MUDOU DE PROPÓSITO NO MESMO DIA — e o motivo fica escrito
+        # para ninguém depois ler como regressão.
+        #
+        # De manhã ela exigia as três caixas E/D/R, porque eu tinha apagado a
+        # destinação inteira da tela e a Bruna ficou sem onde destinar
+        # (ocorrência #23). A exigência estava certa: o posto precisa de um
+        # lugar para registrar.
+        #
+        # À tarde o dono olhou a tela pronta e pediu outra coisa: "precisa que
+        # expedição, destinação fica igual da central de nota, só colocar um
+        # ok". Não é voltar atrás — é o mesmo requisito com outra forma. O
+        # posto continua tendo onde registrar; o registro virou um tique, que
+        # é o que serve para quem está no pátio com o caminhão esperando.
+        #
+        # O que NÃO pode voltar é a tela sem lugar nenhum, e é isso que este
+        # bloco guarda. Os detalhes do tique estão em
+        # test_ok_expedicao_e_destinacao.py.
+        ck('os Controles Internos têm onde registrar a destinação (agora o tique de OK)',
+           tela['okDestinacao'], str(tela))
         ck('a Central de Notas tem o tique da nota final',
            tela['notaFinal'], str(tela))
 

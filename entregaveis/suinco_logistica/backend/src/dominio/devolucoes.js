@@ -265,6 +265,13 @@ export function itemParaPainel(i) {
       ? null : Number(i.peso_faturamento),
     // Tick da Central de Notas: item com a nota finalizada.
     notaFinal: !!i.nota_final,
+    /* Os OKs da Expedição e dos Controles Internos (migração 040) — o
+       mesmo formato do tique da Central de Notas, que foi o modelo pedido
+       pelo dono: "expedição, destinação fica igual da central de nota, só
+       colocar um ok". A quantidade e as caixas por destino continuam
+       existindo ao lado; ver o comentário da migração. */
+    okExpedicao: !!i.ok_expedicao,
+    okDestinacao: !!i.ok_destinacao,
   };
 }
 
@@ -370,5 +377,7 @@ export function camposItem(corpo) {
     m.peso_faturamento = n === null ? null : Math.max(0, n);
   }
   if (corpo.notaFinal !== undefined) m.nota_final = !!corpo.notaFinal;
+  if (corpo.okExpedicao !== undefined) m.ok_expedicao = !!corpo.okExpedicao;
+  if (corpo.okDestinacao !== undefined) m.ok_destinacao = !!corpo.okDestinacao;
   return m;
 }
