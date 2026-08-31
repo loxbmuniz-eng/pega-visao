@@ -113,13 +113,78 @@ const SuincoSharePoint = (function () {
     catch (e) { console.warn('[Suinco] fila não coube no armazenamento local'); }
   }
 
+  /* OFFLINE NÃO GRAVA. NADA. (31/08/2026 — decisão do dono.)
+
+     As palavras dele: "se estiver conectado aceita alteração, aceita
+     inclusão, aceita qualquer coisa. Offline não tem conversa não."
+
+     E a razão que ele deu é a certa, e é a regra de sistema distribuído que
+     a maioria erra:
+
+       "a proposta do offline funciona quando você tem operações que são
+        específicas de UM usuário... você bipa 10 notas, essas notas estão
+        com você, ninguém mais vai mexer. Agora as cargas, um monte de
+        gente mexe. Dados compartilhados você não pode tratar assim,
+        porque senão pode dar sobreposição."
+
+     Fila offline serve para dado de DONO ÚNICO. Carga é dado COMPARTILHADO:
+     seis setores mexem na mesma linha ao mesmo tempo. Guardar uma alteração
+     no aparelho e subir meia hora depois significa gravar por cima do que
+     outra pessoa fez nesse meio tempo — sem ninguém saber.
+
+     Foi o que aconteceu duas vezes em três dias:
+
+       · 29/08 — o relatório do Everaldo desfez as correções do Alysson;
+       · 31/08 — o Alysson alterou no computador, o celular entrou depois e
+         "reverteu todas as alterações e restaurou a configuração anterior
+         do telefone".
+
+     A fila era a metade do mecanismo. A outra metade era a trava de versão
+     do servidor, que nunca foi acionada porque o painel não manda a versão
+     que leu — essa vem em seguida, e vale para dois terminais ONLINE ao
+     mesmo tempo. Esta aqui mata a sobreposição do offline.
+
+     Não devolve mais `{enfileirado:true}`: devolve recusa, e quem chamou
+     precisa mostrar. Recusa silenciosa é como se perde dado. */
   function enfileirar(item) {
-    const fila = lerFila();
-    fila.push({ ...item, enfileiradoEm: new Date().toISOString() });
-    gravarFila(fila);
     mudarEstado('offline');
-    return { enfileirado: true };
+    return {
+      enfileirado: false,
+      recusado: true,
+      offline: true,
+      tipo: item && item.tipo,
+      erro: 'VOCÊ ESTÁ OFFLINE — SISTEMA INDISPONÍVEL. CONECTE-SE PARA CONTINUAR. '
+          + 'A alteração NÃO foi gravada.',
+    };
   }
+
+  /* A FILA QUE JÁ ESTAVA NOS APARELHOS É JOGADA FORA — uma vez, na abertura.
+
+     Sem isto a trava valeria só daqui para frente: o que já está guardado no
+     celular de quem ficou offline subiria na próxima conexão e sobrescreveria
+     de novo, que é exatamente o defeito que estamos fechando.
+
+     NÃO some calado. Devolve o que havia para a tela listar, com placa e
+     tipo, para a pessoa refazer o que ainda fizer sentido. Jogar trabalho
+     fora sem dizer o que era é pior que o defeito. */
+  function descartarFilaAntiga() {
+    const fila = lerFila();
+    if (!fila.length) return { havia: 0, itens: [] };
+    const itens = fila.map((f) => ({
+      tipo: f.tipo,
+      placa: (f.corpo && (f.corpo.placa || f.corpo.Placa)) || '',
+      numeroCarga: (f.corpo && (f.corpo.numeroCarga || f.corpo.Numero_Carga)) || '',
+      cargaId: f.cargaId || (f.corpo && f.corpo.cargaId) || '',
+      status: f.status || '',
+      quando: f.enfileiradoEm || '',
+    }));
+    try { localStorage.removeItem(CHAVE_FILA); } catch (e) { /* já era */ }
+    return { havia: fila.length, itens };
+  }
+
+  /* "Online" é o SERVIDOR TER RESPONDIDO, não o ícone do wi-fi estar aceso.
+     É a diferença entre "tenho sinal" e "a gravação chegou". */
+  function estaOnline() { return estadoAtual === 'online'; }
 
   function pendentes() {
     return lerFila().length;
@@ -1675,7 +1740,7 @@ const SuincoSharePoint = (function () {
     corrigirEtapa, corrigirDataProgramacao, desfazerExclusao, listarExcluidas,
     programacaoDoDia, mfa,
     modeloSemana, montagem,
-    pull, pullTudo, drenarFila, pendentes,
+    pull, pullTudo, drenarFila, pendentes, descartarFilaAntiga, estaOnline,
     listarOperadores, criarOperador, atualizarOperador, excluirOperador,
     sincronizarAgora, iniciarSincroniaPeriodica, pararSincronia, ultimaSincronia,
     renovarSessao, registrarInteracao,

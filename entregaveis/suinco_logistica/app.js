@@ -139,7 +139,45 @@ function marcarBadgeConexao(badge, classe, icone, frase){
   badge.innerHTML = esc(icone) + '<span class="rot-btn">&nbsp;' + esc(frase) + '</span>';
 }
 
+/* A FAIXA DE OFFLINE — texto do dono, 31/08/2026.
+
+   "colocar uma mensagem quando esta offline VOCE ESTA OFFLINE SISTEMA
+    INDISPONIVEL CONECTE-SE PARA CONTINUAR e ALERTA !!!"
+
+   Fixa no topo, não fecha e não some sozinha. Enquanto ela estiver na tela,
+   nada é gravado — a fila offline foi desligada (ver enfileirar() em
+   suinco-api.js). Aviso que some é aviso que não impediu nada: a pessoa
+   digita meia hora achando que gravou. */
+function atualizarFaixaOffline(estado){
+  let faixa = document.getElementById('faixa-offline');
+  const online = estado === 'online';
+  if(online){
+    if(faixa) faixa.remove();
+    document.body.classList.remove('esta-offline');
+    return;
+  }
+  // Antes do login não existe "offline": ninguém tentou conectar ainda.
+  if(!DB.operador){
+    if(faixa) faixa.remove();
+    document.body.classList.remove('esta-offline');
+    return;
+  }
+  if(!faixa){
+    faixa = document.createElement('div');
+    faixa.id = 'faixa-offline';
+    faixa.className = 'faixa-offline no-print';
+    faixa.setAttribute('role', 'alert');
+    faixa.innerHTML = '<span class="faixa-offline-tit">⚠️ ALERTA !!!</span>'
+      + '<span class="faixa-offline-txt">VOCÊ ESTÁ OFFLINE — SISTEMA INDISPONÍVEL. '
+      + 'CONECTE-SE PARA CONTINUAR.</span>'
+      + '<span class="faixa-offline-sub">Nada digitado agora será gravado.</span>';
+    document.body.insertBefore(faixa, document.body.firstChild);
+  }
+  document.body.classList.add('esta-offline');
+}
+
 function atualizarRodapeConexao(estado, detalhe){
+  atualizarFaixaOffline(estado);
   const rod = document.getElementById('rodape-conexao');
   const badge = document.getElementById('badge-conexao');
   if(!rod) return;
@@ -156,7 +194,10 @@ function atualizarRodapeConexao(estado, detalhe){
     if(badge){ badge.hidden = true; }
   } else if(estado === 'offline'){
     rod.className = 'rodape-conexao offline';
-    rod.innerHTML = `⚠️ Modo Offline — gravando no aparelho e sincronizando assim que a rede voltar${esc(sufixoFila)}${esc(carimbo)}`;
+    /* A frase antiga dizia "gravando no aparelho e sincronizando assim que
+       a rede voltar". Isso deixou de ser verdade em 31/08: offline não grava
+       mais nada. Rótulo que mente é a família da ocorrência #04. */
+    rod.innerHTML = `⛔ OFFLINE — o sistema não aceita alteração sem conexão${esc(carimbo)}`;
     if(badge) marcarBadgeConexao(badge, 'offline', '⚠️', 'Modo Offline');
   } else {
     /* 'local' cobre TRÊS situações diferentes, e mostrá-las com o mesmo
@@ -7933,6 +7974,27 @@ async function init(){
   // Conecta ao servidor se houver sessão; caso contrário fica em modo
   // local e o rodapé diz isso. Nunca bloqueia a abertura do painel.
   if(typeof SuincoSharePoint !== 'undefined'){
+    /* A FILA VELHA DOS APARELHOS É DESCARTADA NA ABERTURA (31/08/2026).
+
+       Sem isto, a trava do offline valeria só daqui para frente: o que já
+       está guardado no celular de quem ficou sem rede subiria na próxima
+       conexão e sobrescreveria de novo — que é exatamente o defeito que
+       estamos fechando. Foi assim que o celular do Alysson desfez o que ele
+       tinha acabado de fazer no computador.
+
+       NÃO some calado: lista o que foi descartado, com placa e tipo, para a
+       pessoa refazer o que ainda fizer sentido. */
+    if(typeof SuincoSharePoint.descartarFilaAntiga === 'function'){
+      const jogado = SuincoSharePoint.descartarFilaAntiga();
+      if(jogado && jogado.havia){
+        const linhas = jogado.itens.slice(0, 8).map(i =>
+          `${i.tipo}${i.placa ? ' · ' + i.placa : ''}${i.numeroCarga ? ' · carga ' + i.numeroCarga : ''}`
+        ).join(' | ');
+        notify(`⚠️ ${jogado.havia} alteração(ões) que estavam guardadas NESTE aparelho foram DESCARTADAS. `
+          + `O sistema não grava mais offline — elas subiriam por cima do que os outros setores já fizeram. `
+          + `Refaça se ainda fizer sentido: ${linhas}`, 'danger', 30000);
+      }
+    }
     SuincoSharePoint.aoMudarEstado(atualizarRodapeConexao);
     // Toda leitura das Listas cai aqui: funde no DB e redesenha se algo mudou.
     // É o que faz a Portaria enxergar a carga que a Logística acabou de criar.
