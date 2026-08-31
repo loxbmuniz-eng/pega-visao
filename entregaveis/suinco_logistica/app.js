@@ -9290,13 +9290,11 @@ function formCargaHtml(c, m){
       </div>
 
       <div class="form-row">
-        <div class="form-group">
-          <label>Qtd. Ganchos (Gancheira) <span class="hint">0 = Liso</span></label>
-          <input type="number" min="0" step="1" value="${c.qtdGanchos ?? 0}"
-                 onchange="atualizarGanchosUI('${id}',this.value)"></div>
-        <div class="form-group"><label>Qtd. Entregas</label>
-          <input type="number" min="1" step="1" value="${c.qtdEntregas ?? 1}"
-                 onchange="atualizarEntregasUI('${id}',this.value)"></div>
+          ${/* GANCHOS E ENTREGAS SUBIRAM PARA A LINHA (31/08/2026).
+                Saem daqui pela mesma razão que o Tipo de Operação saiu em
+                28/08: o mesmo campo em dois lugares da mesma tela é como se
+                produz um valor digitado num e lido do outro. */''}
+
         <div class="form-group">
           <label>Rota <span class="hint">(vem do modelo do dia)</span></label>
           <input type="text" value="${esc(rotaCurta(c.rota))}" disabled
@@ -9401,6 +9399,37 @@ function linhaMontagemHtml(m){
             : `<input type="number" min="0" class="peso-input" value="${m.peso ?? ''}"
                       placeholder="—" aria-label="Peso em quilos"
                       onchange="alterarMontagemUI('${id}','peso',this.value)">`}</td>
+      ${/* GANCHOS E ENTREGAS NA LINHA — pedido do dono (31/08/2026):
+            "ta faltando o campo de quantidade de entregar e quantidade de
+            ganchos igual na torre, precisa aparecer na programacao do dia"
+            e "precisa aparecer e funcionar".
+
+            O servidor já aceitava os dois no PATCH da montagem e a tabela já
+            tinha `qtd_entregas` e `qtd_ganchos` desde a migração que criou a
+            montagem — faltava só a tela oferecer. Mesma história das quatro
+            colunas de 28/08: o dado tinha onde morar e ninguém tinha onde
+            digitar.
+
+            Como nas outras: virou carga, grava na CARGA (que tem log de
+            revisões); ainda rascunho, grava na montagem. */''}
+      <td class="c-ganchos" onclick="event.stopPropagation()">${comoCarga
+            ? `<input type="number" class="ganchos-input" min="0" step="1"
+                      value="${cargaViva.qtdGanchos ?? 0}" aria-label="Ganchos"
+                      title="Ganchos — 0 = Liso"
+                      onchange="atualizarGanchosUI('${escJs(cargaViva.id)}',this.value)">`
+            : `<input type="number" class="ganchos-input" min="0" step="1"
+                      value="${m.qtd_ganchos ?? 0}" aria-label="Ganchos"
+                      title="Ganchos — 0 = Liso"
+                      onchange="alterarMontagemUI('${id}','qtdGanchos',this.value)">`}</td>
+      <td class="c-entregas" onclick="event.stopPropagation()">${comoCarga
+            ? `<input type="number" class="entregas-input" min="1" step="1"
+                      value="${cargaViva.qtdEntregas ?? 1}" aria-label="Entregas"
+                      title="Quantidade de entregas."
+                      onchange="atualizarEntregasUI('${escJs(cargaViva.id)}',this.value)">`
+            : `<input type="number" class="entregas-input" min="1" step="1"
+                      value="${m.qtd_entregas ?? 1}" aria-label="Entregas"
+                      title="Quantidade de entregas."
+                      onchange="alterarMontagemUI('${id}','qtdEntregas',this.value)">`}</td>
       <td onclick="event.stopPropagation()">${comoCarga
             ? paletizadaSelectHtml(cargaViva)
             : `<select class="palet-inline" onchange="alterarMontagemUI('${id}','paletizada',this.value)">
@@ -9419,7 +9448,7 @@ function linhaMontagemHtml(m){
     </tr>`;
 
   if(!aberta) return resumo;
-  return resumo + `<tr class="mont-detalhe"><td colspan="9">${
+  return resumo + `<tr class="mont-detalhe"><td colspan="11">${
     comoCarga ? formCargaHtml(cargaViva, m) : formMontagemHtml(m)}</td></tr>`;
 }
 
@@ -9675,13 +9704,10 @@ function formMontagemHtml(m){
           </select></div>
       </div>
 
-      <div class="form-row">
-        <div class="form-group">
-          <label>Qtd. Ganchos (Gancheira) <span class="hint">0 = Liso</span></label>
-          <input type="number" min="0" step="1" value="${m.qtd_ganchos ?? 0}" ${alt('qtdGanchos')}></div>
-        <div class="form-group"><label>Qtd. Entregas</label>
-          <input type="number" min="1" step="1" value="${m.qtd_entregas ?? 1}" ${alt('qtdEntregas')}></div>
-      </div>
+      ${/* GANCHOS E ENTREGAS SUBIRAM PARA A LINHA (31/08/2026). Saem daqui
+            pela mesma razão que o Tipo de Operação saiu em 28/08: o mesmo
+            campo em dois lugares da mesma tela é como se produz um valor
+            digitado num e lido do outro. */''}
 
       <div class="form-group" style="margin-bottom:10px"><label>Observações</label>
         <textarea ${alt('observacoes')} placeholder="O que a operação precisa saber sobre esta carga">${esc(m.observacoes)}</textarea></div>
