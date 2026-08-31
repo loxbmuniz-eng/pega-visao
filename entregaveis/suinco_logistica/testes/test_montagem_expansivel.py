@@ -139,8 +139,19 @@ async def main():
         # preenchimento acontece no formulário que abre ao clicar. Dez inputs
         # espremidos numa linha é o defeito; oito colunas de leitura com o
         # resto na expansão, não.
-        ck('a tabela tem as 8 colunas da Torre + Ação, não os 10 campos',
-           d['colunas'] == 9, f"{d['colunas']} colunas")
+        # DUAS COLUNAS A MAIS POR ORDEM DO DONO (31/08/2026): "ta faltando o
+        # campo de quantidade de entregar e quantidade de ganchos igual na
+        # torre, precisa aparecer na programcao do dia" — e, quando perguntei
+        # se bastava aparecer: "precisa aparecer e funcionar".
+        #
+        # A regra que este bloco protege continua a mesma e NÃO foi afrouxada:
+        # a linha é resumo, o preenchimento pesado acontece no formulário.
+        # Ganchos e Entregas são número curto de dois dígitos — cabem na linha
+        # sem espremer, que era o defeito original ("dez inputs espremidos").
+        # O número deixou de ser 9 porque a decisão mudou, não porque a guarda
+        # incomodou.
+        ck('a tabela tem as colunas da Torre + Ganchos, Entregas e Ação',
+           d['colunas'] == 11, f"{d['colunas']} colunas")
 
         print('\n=== 2. CLICAR ABRE O FORMULÁRIO COMPLETO ===')
         await pg.evaluate("(id) => alternarLinhaMontagemUI(id)", mid)

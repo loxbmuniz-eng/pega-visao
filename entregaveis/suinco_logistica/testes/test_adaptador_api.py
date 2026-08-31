@@ -155,11 +155,22 @@ async def main():
            r.get('enfileirado') is False,
            'enfileirar uma recusa faria o painel repetir para sempre algo que nunca é aceito')
 
-        print('\n=== 8. FILA OFFLINE ===')
-        # Volta para a Logística antes de enfileirar: criar carga é ação dela.
-        # Enfileirar como Portaria faria o servidor recusar com 403 na hora de
-        # drenar, e o item seria descartado — comportamento correto, mas que
-        # não é o que este teste quer medir.
+        print('\n=== 8. OFFLINE NÃO GRAVA — E NÃO GUARDA (31/08/2026) ===')
+        # A REGRA MUDOU DE PROPÓSITO, e este bloco media a regra antiga.
+        #
+        # Até 30/08 a gravação sem rede ia para uma fila no aparelho e subia
+        # depois. O dono aboliu isso em 31/08, e a razão é a certa: fila
+        # offline serve para dado de DONO ÚNICO ("você bipa 10 notas, essas
+        # notas estão com você"); carga é dado COMPARTILHADO, seis setores
+        # mexem na mesma linha. Subir meia hora depois é gravar por cima do
+        # que outro fez nesse meio tempo.
+        #
+        # Custou duas perdas de trabalho em três dias: o relatório do
+        # Everaldo desfazendo as correções do Alysson em 29/08, e o celular
+        # do Alysson revertendo o que ele tinha feito no computador em 31/08.
+        #
+        # É a causa 1 da lista do corredor — a regra mudou, o teste é que
+        # estava velho. O que ele mede agora é a regra nova.
         await pagina.evaluate("() => SuincoSharePoint.sair()")
         await pagina.evaluate("async ([e,s]) => SuincoSharePoint.login(e,s)",
                               ['ana@teste.local', SENHA])
@@ -167,25 +178,26 @@ async def main():
         r = await pagina.evaluate(
             "([p,id]) => SuincoSharePoint.upsert('cargas','Carga_ID',"
             "{Carga_ID:id, Placa:p, Numero_Carga:'99003'})", [placa, CARGA_FILA])
-        ck('sem rede, a gravação vai para a fila', r.get('enfileirado') is True, str(r))
-        ck('pendentes() conta certo',
-           await pagina.evaluate("() => SuincoSharePoint.pendentes()") >= 1)
+        ck('sem rede, a gravação é RECUSADA — não enfileirada',
+           r.get('enfileirado') is False and r.get('recusado') is True, str(r))
+        ck('a recusa diz que está offline, com o texto do dono',
+           'OFFLINE' in str(r.get('erro', '')).upper()
+           and 'CONECTE-SE' in str(r.get('erro', '')).upper(), str(r.get('erro')))
+        ck('NADA ficou guardado no aparelho',
+           await pagina.evaluate("() => SuincoSharePoint.pendentes()") == 0)
         ck('estado = offline', await pagina.evaluate("() => SuincoSharePoint.estado()") == 'offline')
 
         await ctx.set_offline(False)
-        d = await pagina.evaluate("() => SuincoSharePoint.drenarFila()")
-        ck('a fila esvaziou quando a rede voltou', d.get('restantes') == 0, str(d))
-        ck('pendentes() zerou',
-           await pagina.evaluate("() => SuincoSharePoint.pendentes()") == 0)
-
-        # Fila vazia não prova entrega: o item poderia ter sido descartado.
-        # A pergunta que importa é se a carga chegou ao servidor.
-        chegou = await pagina.evaluate("""async ([id]) => {
+        # E o que importa de verdade: a carga recusada NÃO aparece no servidor
+        # depois que a rede volta. Se aparecesse, a fila teria sobrevivido em
+        # algum lugar — e o defeito continuaria de pé.
+        await pagina.evaluate("async () => { try { await SuincoSharePoint.sincronizarAgora(); } catch(e){} }")
+        vazou = await pagina.evaluate("""async ([id]) => {
             const d = await SuincoSharePoint.pullTudo();
             return (d.cargas || []).some(c => c.Carga_ID === id);
         }""", [CARGA_FILA])
-        ck('a carga gravada offline existe no servidor', chegou,
-           'sem isto, "fila esvaziou" poderia significar "item perdido"')
+        ck('a gravação recusada NÃO chegou ao servidor quando a rede voltou',
+           not vazou, 'se chegou, sobrou fila em algum lugar')
 
         print('\n=== 9. LEITURA INCREMENTAL VÊ O QUE O OUTRO SETOR FEZ ===')
         recebido = await pagina.evaluate("""async () => {

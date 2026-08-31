@@ -186,6 +186,18 @@ function rotaCurta(codigo){
    'sharepoint' identifica "isto já veio confirmado do servidor" (carga
    inicial ou reaplicação no load()) e pula o re-envio — do contrário,
    toda leitura completa reenviaria as mesmas rotas de volta ao servidor. */
+/* Desfaz a gravação local de uma rota que o servidor não aceitou por falta
+   de conexão. Tira das três estruturas onde ela entrou, na ordem inversa. */
+function removerRotaLocal(codigo){
+  const i = ROTAS.findIndex(r => r.codigo === codigo);
+  if(i >= 0) ROTAS.splice(i, 1);
+  ROTA_POR_CODIGO.delete(codigo);
+  if(Array.isArray(DB.rotasExtras)){
+    DB.rotasExtras = DB.rotasExtras.filter(r => r.codigo !== codigo);
+  }
+  SuincoStore.save();
+}
+
 function upsertRota(codigo, nome, detalhe, operador, extra){
   extra = extra || {};
   codigo = String(codigo||'').trim();
@@ -213,10 +225,32 @@ function upsertRota(codigo, nome, detalhe, operador, extra){
 
   if(extra.origem !== 'sharepoint'
      && typeof SuincoSharePoint !== 'undefined' && SuincoSharePoint.estaConfigurado()){
-    SuincoSharePoint.upsert('rotas', 'codigo', {
+    /* A PROMESSA FICA DISPONÍVEL PARA QUEM CHAMOU (31/08/2026).
+
+       Sem isto, a tela só conseguia avisar "cadastrada" no instante do
+       clique — antes de o servidor responder — e a recusa chegava depois,
+       contradizendo a frase anterior. Quem chama agora pode esperar o
+       resultado e falar uma vez só, a verdade. */
+    rota._promessa = SuincoSharePoint.upsert('rotas', 'codigo', {
       Codigo: rota.codigo, Nome: rota.nome, Detalhe: rota.detalhe, Operador: rota.operador
     }, DB.operador).then(r=>{
-      if(r && r.recusado && _aoRecusarRota) _aoRecusarRota(rota, r.erro);
+      /* RECUSADA POR ESTAR OFFLINE: A ROTA NÃO FICA (31/08/2026).
+
+         Antes, a rota recusada continuava neste navegador e o aviso dizia
+         "ficou salva só neste aparelho". Com a regra nova do dono — offline
+         não grava nada — isso virou contradição: uma metade da frase diz que
+         não gravou, a outra diz que ficou salva. E o pior não é a frase: é a
+         rota existir aqui e não existir para mais ninguém, que é a
+         divergência que a regra veio acabar.
+
+         Recusa POR PERMISSÃO ou por dado inválido é outra coisa: ali o
+         servidor está no ar e respondeu, e apagar seria esconder o que a
+         pessoa digitou. Por isso só o caso `offline` desfaz. */
+      if(r && r.recusado && r.offline){
+        removerRotaLocal(rota.codigo);
+        if(_aoRecusarRota) _aoRecusarRota(rota, r.erro, true);
+      }
+      else if(r && r.recusado && _aoRecusarRota) _aoRecusarRota(rota, r.erro);
       /* Enfileirada = gravou aqui e AINDA não subiu. Precisa de aviso
          próprio: o estado geral da conexão pode estar "online" e mesmo
          assim esta gravação específica ter caído na fila (foi o caso do
@@ -723,7 +757,13 @@ const SuincoStore = {
       if(eraCriacaoNuncaConfirmada){
         DB.cargas = DB.cargas.filter(c => c.id !== carga.id);
       }
-      if(_aoRecusarCarga) _aoRecusarCarga(carga, r.erro, eraCriacaoNuncaConfirmada);
+      /* `r.offline` separa duas recusas que NÃO têm a mesma causa nem a
+         mesma correção: "o servidor disse não" (placa fora da frota, setor
+         sem permissão — refazer não adianta sem corrigir o motivo) e "não
+         houve servidor nenhum" (trava de offline, 31/08/2026 — basta
+         reconectar e refazer). Dizer "o servidor recusou" quando o aparelho
+         está sem rede manda o operador procurar um problema que não existe. */
+      if(_aoRecusarCarga) _aoRecusarCarga(carga, r.erro, eraCriacaoNuncaConfirmada, !!r.offline);
     } else if(r && r.enfileirado === false){
       delete carga._nuncaConfirmada;
     }

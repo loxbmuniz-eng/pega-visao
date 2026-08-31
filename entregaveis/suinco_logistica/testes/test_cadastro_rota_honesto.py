@@ -134,8 +134,24 @@ async def main():
         ck('logado no servidor', bool(setor), str(setor))
         await cadastrar(pg, '9537')
         txt = await avisos(pg)
-        ck('avisa que a rota AINDA NÃO subiu',
-           'SEM CONEXÃO' in txt.upper() or 'fila' in txt.lower(), txt[-240:])
+        # A REGRA MUDOU DE PROPÓSITO (31/08/2026) e esta asserção media a
+        # antiga. Ela procurava "SEM CONEXÃO ... está na fila" — a promessa de
+        # que a rota subiria sozinha depois. O dono aboliu a gravação offline:
+        # "Off Line não tem conversa não". Não há mais fila, e a rota nem fica
+        # guardada neste aparelho.
+        #
+        # O que a guarda existe para impedir NÃO mudou, e ficou mais forte: a
+        # tela não pode deixar a pessoa acreditar que cadastrou. Antes ela
+        # dizia "Rota 9537 cadastrada" no clique e "NÃO foi cadastrada" logo
+        # depois — duas frases contrárias, e a pessoa lê a primeira. Agora o
+        # aviso espera a resposta do servidor e fala uma vez só.
+        ck('diz que NÃO foi cadastrada',
+           'NÃO FOI CADASTRADA' in txt.upper() or 'NADA FOI GRAVADO' in txt.upper(),
+           txt[-240:])
+        ck('e manda conectar para refazer',
+           'CONECTE' in txt.upper(), txt[-240:])
+        ck('NÃO existe a frase que diz que cadastrou',
+           'cadastrada.' not in txt.replace('NÃO foi cadastrada.', ''), txt[-240:])
         ck('NÃO afirma que já aparece para os outros',
            'Já aparece no seletor' not in txt, txt[-240:])
         await ctx.close()

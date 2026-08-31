@@ -139,7 +139,45 @@ function marcarBadgeConexao(badge, classe, icone, frase){
   badge.innerHTML = esc(icone) + '<span class="rot-btn">&nbsp;' + esc(frase) + '</span>';
 }
 
+/* A FAIXA DE OFFLINE — texto do dono, 31/08/2026.
+
+   "colocar uma mensagem quando esta offline VOCE ESTA OFFLINE SISTEMA
+    INDISPONIVEL CONECTE-SE PARA CONTINUAR e ALERTA !!!"
+
+   Fixa no topo, não fecha e não some sozinha. Enquanto ela estiver na tela,
+   nada é gravado — a fila offline foi desligada (ver enfileirar() em
+   suinco-api.js). Aviso que some é aviso que não impediu nada: a pessoa
+   digita meia hora achando que gravou. */
+function atualizarFaixaOffline(estado){
+  let faixa = document.getElementById('faixa-offline');
+  const online = estado === 'online';
+  if(online){
+    if(faixa) faixa.remove();
+    document.body.classList.remove('esta-offline');
+    return;
+  }
+  // Antes do login não existe "offline": ninguém tentou conectar ainda.
+  if(!DB.operador){
+    if(faixa) faixa.remove();
+    document.body.classList.remove('esta-offline');
+    return;
+  }
+  if(!faixa){
+    faixa = document.createElement('div');
+    faixa.id = 'faixa-offline';
+    faixa.className = 'faixa-offline no-print';
+    faixa.setAttribute('role', 'alert');
+    faixa.innerHTML = '<span class="faixa-offline-tit">⚠️ ALERTA !!!</span>'
+      + '<span class="faixa-offline-txt">VOCÊ ESTÁ OFFLINE — SISTEMA INDISPONÍVEL. '
+      + 'CONECTE-SE PARA CONTINUAR.</span>'
+      + '<span class="faixa-offline-sub">Nada digitado agora será gravado.</span>';
+    document.body.insertBefore(faixa, document.body.firstChild);
+  }
+  document.body.classList.add('esta-offline');
+}
+
 function atualizarRodapeConexao(estado, detalhe){
+  atualizarFaixaOffline(estado);
   const rod = document.getElementById('rodape-conexao');
   const badge = document.getElementById('badge-conexao');
   if(!rod) return;
@@ -156,7 +194,10 @@ function atualizarRodapeConexao(estado, detalhe){
     if(badge){ badge.hidden = true; }
   } else if(estado === 'offline'){
     rod.className = 'rodape-conexao offline';
-    rod.innerHTML = `⚠️ Modo Offline — gravando no aparelho e sincronizando assim que a rede voltar${esc(sufixoFila)}${esc(carimbo)}`;
+    /* A frase antiga dizia "gravando no aparelho e sincronizando assim que
+       a rede voltar". Isso deixou de ser verdade em 31/08: offline não grava
+       mais nada. Rótulo que mente é a família da ocorrência #04. */
+    rod.innerHTML = `⛔ OFFLINE — o sistema não aceita alteração sem conexão${esc(carimbo)}`;
     if(badge) marcarBadgeConexao(badge, 'offline', '⚠️', 'Modo Offline');
   } else {
     /* 'local' cobre TRÊS situações diferentes, e mostrá-las com o mesmo
@@ -401,12 +442,18 @@ function notifyGravacao(msgSucesso, msObrigatorio){
   if(estado === 'online'){ notify(msgSucesso, 'success', msObrigatorio); return; }
 
   if(estado === 'offline'){
-    const fila = (typeof SuincoSharePoint !== 'undefined' && SuincoSharePoint.pendentes)
-      ? SuincoSharePoint.pendentes() : 0;
-    notify(`⚠️ SEM CONEXÃO — ${msgSucesso} Está gravado só neste aparelho`
-      + (fila ? ` (${fila} na fila)` : '')
-      + ' e sobe sozinho quando a rede voltar. Os outros setores ainda NÃO veem.',
-      'warn', 10000);
+    /* A FRASE MUDOU COM A REGRA (31/08/2026). Ela dizia "está gravado só
+       neste aparelho e sobe sozinho quando a rede voltar" — o que deixou de
+       ser verdade quando o dono aboliu a gravação offline. Nada sobe sozinho
+       agora, porque nada fica guardado.
+
+       Esta função é o ponto por onde passa TODO aviso de gravação do painel:
+       corrigir a mensagem aqui corrige em todas as telas de uma vez, em vez
+       de caçar cada uma — e é o que evita a tela dizer "cadastrada" numa
+       linha e "não foi cadastrada" na seguinte. */
+    notify(`⛔ VOCÊ ESTÁ OFFLINE — SISTEMA INDISPONÍVEL. `
+      + `NADA FOI GRAVADO. Conecte-se e faça de novo.`,
+      'danger', 12000);
     return;
   }
   // 'local': nem sessão de servidor existe. Aqui não sobe nunca sozinho.
@@ -665,11 +712,19 @@ function receberRecusaDeStatus(carga, alvo, motivo){
    status, aqui não dá para saber com segurança se a carga já existia no
    servidor antes (edição) ou nunca chegou a existir (criação), e chutar
    errado apagaria dado de verdade. O aviso é alto e diz pra conferir. */
-function receberRecusaDeCarga(carga, motivo, removida){
+function receberRecusaDeCarga(carga, motivo, removida, offline){
   const rotulo = carga.numeroCarga && carga.numeroCarga !== 'Aguardando Carga'
     ? carga.numeroCarga : (carga.placa || carga.id);
+  /* Offline não é recusa do servidor — é ausência dele. O caminho é o
+     mesmo (nada foi gravado, a linha sai da tela), mas o que o operador
+     precisa fazer é oposto: aqui ele reconecta e refaz; na recusa de
+     verdade ele corrige placa ou setor primeiro. */
   notify(
-    removida
+    offline
+      ? `⛔ ${rotulo}: VOCÊ ESTÁ OFFLINE — SISTEMA INDISPONÍVEL. `
+        + 'NADA FOI GRAVADO e a linha saiu da tela. '
+        + 'Conecte-se e lance de novo.'
+      : removida
       ? `${rotulo}: o servidor recusou a criação desta carga. ${motivo || ''} `
         + 'Ela foi removida da tela — nunca existiu no banco. Corrija o motivo '
         + '(placa cadastrada na Frota? setor com permissão?) e refaça.'
@@ -717,10 +772,15 @@ function receberEnfileiramentoDeRota(rota){
   tocarAlertaAlteracao();
 }
 
-function receberRecusaDeRota(rota, motivo){
-  notify(
-    `Rota ${rota.codigo}: o servidor recusou o cadastro. ${motivo || ''} `
-    + 'Ficou salva só neste aparelho — outros terminais ainda não vão ver esta rota.',
+function receberRecusaDeRota(rota, motivo, desfeita){
+  /* Duas recusas, duas frases. Antes era uma só, e ela mentia metade do
+     tempo: dizia "ficou salva só neste aparelho" mesmo quando a rota tinha
+     sido desfeita. Rótulo que mente é a família da ocorrência #04. */
+  notify(desfeita
+    ? `Rota ${rota.codigo} NÃO foi cadastrada. ${motivo || ''} `
+      + 'Ela não ficou guardada em lugar nenhum — conecte e cadastre de novo.'
+    : `Rota ${rota.codigo}: o servidor recusou o cadastro. ${motivo || ''} `
+      + 'Ficou salva só neste aparelho — outros terminais ainda não vão ver esta rota.',
     'danger', 20000);
   tocarAlertaAlteracao();
 }
@@ -1823,7 +1883,82 @@ if(typeof MutationObserver !== 'undefined'){
   });
 }
 
+/* O REDESENHO NÃO PODE ARRANCAR O CAMPO DA MÃO DE QUEM DIGITA (31/08/2026).
+
+   RELATO, do Wemerson: "começa a preencher o campo e o campo para de
+   digitar, tem que clicar de novo no campo; na hora de fazer um cadastro,
+   completando informações, tem que ficar voltando no campo que tá digitando".
+
+   O painel se redesenha inteiro a cada sincronia — de 15 em 15 segundos — e
+   a cada dado que chega de outro setor. As linhas editáveis da Torre, da
+   Fila e da Montagem são reescritas por completo: o campo que estava sob o
+   dedo deixa de existir e um novo nasce no lugar, vazio. O foco vai para o
+   BODY, o que já tinha sido digitado some, e o cursor volta para o começo.
+   Reproduzido em teste antes desta correção.
+
+   A PROTEÇÃO JÁ EXISTIA — e valia para um lugar só. `_devCapturarDigitacao`
+   e `_devRestaurarDigitacao` (devolucoes.js) fazem exatamente isto, guardando
+   valor, foco e posição do cursor, desde 27/08. Foram escritas para
+   `#dev-lista`. É a família da ocorrência #20: a regra certa existe, com
+   comentário e tudo, e não vale para os irmãos dela.
+
+   Aqui ela passa a valer para o painel inteiro, no ponto por onde todo
+   redesenho passa. Uma função, um chamador — em vez de cada tela lembrar. */
+function _capturarDigitacao(){
+  const foco = document.activeElement;
+  const editavel = foco && (foco.tagName === 'INPUT' || foco.tagName === 'TEXTAREA'
+                            || foco.tagName === 'SELECT');
+  if(!editavel) return null;
+  /* A âncora é o id quando existe; quando não existe, a posição do campo
+     dentro da tabela. As linhas da Torre e da Montagem nascem com id; as
+     células de carga usam classe, e para essas o caminho é o índice. */
+  const linha = foco.closest('tr');
+  const cel = foco.closest('td');
+  return {
+    id: foco.id || null,
+    classe: foco.className || '',
+    valor: (foco.type === 'checkbox' || foco.type === 'radio') ? foco.checked : foco.value,
+    ini: typeof foco.selectionStart === 'number' ? foco.selectionStart : null,
+    fim: typeof foco.selectionEnd === 'number' ? foco.selectionEnd : null,
+    linhaId: linha ? (linha.dataset && linha.dataset.id) || null : null,
+    idxLinha: linha && linha.parentElement
+      ? [...linha.parentElement.children].indexOf(linha) : -1,
+    idxCel: cel && cel.parentElement ? [...cel.parentElement.children].indexOf(cel) : -1,
+    tabelaId: linha && linha.closest('tbody') ? linha.closest('tbody').id : null,
+  };
+}
+
+function _restaurarDigitacao(e){
+  if(!e) return;
+  let el = e.id ? document.getElementById(e.id) : null;
+  if(!el && e.tabelaId && e.idxLinha >= 0 && e.idxCel >= 0){
+    const tb = document.getElementById(e.tabelaId);
+    const tr = tb && tb.children[e.idxLinha];
+    const td = tr && tr.children[e.idxCel];
+    el = td ? td.querySelector('input, select, textarea') : null;
+  }
+  if(!el) return;   // a linha saiu da tela (outro setor moveu a carga)
+  /* Só devolve o que a pessoa digitou se o campo voltou vazio ou diferente:
+     se o redesenho trouxe um valor NOVO vindo do servidor, quem manda é o
+     servidor — a tela adianta, a transação decide. */
+  if(el.type === 'checkbox' || el.type === 'radio'){
+    if(el.checked !== e.valor) el.checked = e.valor;
+  } else if(el.value !== e.valor){
+    el.value = e.valor;
+  }
+  try{
+    el.focus({ preventScroll: true });
+    if(e.ini !== null) el.setSelectionRange(e.ini, e.fim);
+  }catch(err){ /* number e date não aceitam setSelectionRange */ }
+}
+
 function renderAll(){
+  const _digitando = _capturarDigitacao();
+  try { _renderAllInterno(); }
+  finally { _restaurarDigitacao(_digitando); }
+}
+
+function _renderAllInterno(){
   /* Guardião do pré-login: qualquer caminho que resulte em operador logado
      (botões de login, restauração de sessão por token, teste automatizado
      que grava DB.operador direto) revela o painel — e qualquer caminho que
@@ -5699,13 +5834,13 @@ function renderRotasCadastro(){
     .map(r=>`<tr><td>${esc(r.codigo)}</td><td>${esc(r.nome)||'—'}</td><td>${esc(r.detalhe)||'—'}</td><td>${esc(r.operador)||'—'}</td></tr>`)
     .join('');
 }
-function addRotaUI(){
+async function addRotaUI(){
   const codigo = document.getElementById('rota-codigo').value.trim();
   const nome = document.getElementById('rota-nome').value.trim();
   if(!codigo){ notify('Informe o código da rota.', 'warn'); return; }
   if(!nome){ notify('Informe o nome da rota.', 'warn'); return; }
   const jaExistia = !!rotaInfo(codigo);
-  upsertRota(codigo, nome, document.getElementById('rota-detalhe').value,
+  const rotaCriada = upsertRota(codigo, nome, document.getElementById('rota-detalhe').value,
              document.getElementById('rota-operador').value);
   ['rota-codigo','rota-nome','rota-detalhe','rota-operador'].forEach(id=>document.getElementById(id).value='');
   preencherSelectsRota();   // dropdowns de Rota atualizados na hora
@@ -5725,6 +5860,31 @@ function addRotaUI(){
      quando subiu; amarelo "SEM CONEXÃO … os outros setores ainda NÃO
      veem" quando ficou na fila. A recusa do servidor já tinha aviso
      próprio (receberRecusaDeRota) e continua valendo. */
+  /* O AVISO ESPERA O SERVIDOR (31/08/2026).
+
+     Ele era otimista: dizia "Rota X cadastrada" no mesmo instante do clique,
+     e só depois — quando a resposta chegava — vinha o "NÃO foi cadastrada".
+     Duas frases contrárias na mesma tela, e a pessoa lê a primeira.
+
+     É o incidente da rota 537 (14/08) voltando por outra porta: naquele dia
+     o problema era o verde prometendo compartilhamento que não existia.
+     Agora não existe nem gravação: com a regra do dono, offline não grava.
+     Então o aviso de sucesso só pode sair depois de o servidor confirmar —
+     quem avisa o contrário é `receberRecusaDeRota`, que já tem frase própria
+     para cada caso. */
+  /* ESPERA A RESPOSTA ANTES DE DIZER QUE CADASTROU.
+
+     Olhar o estado da conexão não bastava: no instante do clique ele ainda
+     diz "online", porque só vira offline quando alguma requisição falha. O
+     que decide é a resposta desta gravação, não o estado de antes dela. */
+  const r = await (rotaCriada && rotaCriada._promessa
+    ? rotaCriada._promessa.catch(() => ({ recusado: true }))
+    : Promise.resolve(null));
+  if(r && r.recusado){
+    // receberRecusaDeRota já falou — e com a frase certa para cada caso.
+    renderAll();
+    return;
+  }
   notifyGravacao(jaExistia
     ? `Rota ${codigo} atualizada.`
     : `Rota ${codigo} — ${nome} cadastrada.`);
@@ -7933,6 +8093,27 @@ async function init(){
   // Conecta ao servidor se houver sessão; caso contrário fica em modo
   // local e o rodapé diz isso. Nunca bloqueia a abertura do painel.
   if(typeof SuincoSharePoint !== 'undefined'){
+    /* A FILA VELHA DOS APARELHOS É DESCARTADA NA ABERTURA (31/08/2026).
+
+       Sem isto, a trava do offline valeria só daqui para frente: o que já
+       está guardado no celular de quem ficou sem rede subiria na próxima
+       conexão e sobrescreveria de novo — que é exatamente o defeito que
+       estamos fechando. Foi assim que o celular do Alysson desfez o que ele
+       tinha acabado de fazer no computador.
+
+       NÃO some calado: lista o que foi descartado, com placa e tipo, para a
+       pessoa refazer o que ainda fizer sentido. */
+    if(typeof SuincoSharePoint.descartarFilaAntiga === 'function'){
+      const jogado = SuincoSharePoint.descartarFilaAntiga();
+      if(jogado && jogado.havia){
+        const linhas = jogado.itens.slice(0, 8).map(i =>
+          `${i.tipo}${i.placa ? ' · ' + i.placa : ''}${i.numeroCarga ? ' · carga ' + i.numeroCarga : ''}`
+        ).join(' | ');
+        notify(`⚠️ ${jogado.havia} alteração(ões) que estavam guardadas NESTE aparelho foram DESCARTADAS. `
+          + `O sistema não grava mais offline — elas subiriam por cima do que os outros setores já fizeram. `
+          + `Refaça se ainda fizer sentido: ${linhas}`, 'danger', 30000);
+      }
+    }
     SuincoSharePoint.aoMudarEstado(atualizarRodapeConexao);
     // Toda leitura das Listas cai aqui: funde no DB e redesenha se algo mudou.
     // É o que faz a Portaria enxergar a carga que a Logística acabou de criar.
@@ -9228,6 +9409,9 @@ function formCargaHtml(c, m){
       </div>
 
       <div class="form-row">
+        ${/* Ver a nota em formMontagemHtml: os dois campos ficam na linha E
+              aqui, porque gravam na MESMA carga pela mesma função — e porque
+              já sumiram daqui uma vez, o que virou guarda de teste. */''}
         <div class="form-group">
           <label>Qtd. Ganchos (Gancheira) <span class="hint">0 = Liso</span></label>
           <input type="number" min="0" step="1" value="${c.qtdGanchos ?? 0}"
@@ -9235,6 +9419,7 @@ function formCargaHtml(c, m){
         <div class="form-group"><label>Qtd. Entregas</label>
           <input type="number" min="1" step="1" value="${c.qtdEntregas ?? 1}"
                  onchange="atualizarEntregasUI('${id}',this.value)"></div>
+
         <div class="form-group">
           <label>Rota <span class="hint">(vem do modelo do dia)</span></label>
           <input type="text" value="${esc(rotaCurta(c.rota))}" disabled
@@ -9339,6 +9524,7 @@ function linhaMontagemHtml(m){
             : `<input type="number" min="0" class="peso-input" value="${m.peso ?? ''}"
                       placeholder="—" aria-label="Peso em quilos"
                       onchange="alterarMontagemUI('${id}','peso',this.value)">`}</td>
+
       <td onclick="event.stopPropagation()">${comoCarga
             ? paletizadaSelectHtml(cargaViva)
             : `<select class="palet-inline" onchange="alterarMontagemUI('${id}','paletizada',this.value)">
@@ -9350,6 +9536,37 @@ function linhaMontagemHtml(m){
                  <option value=""${!m.tipo_operacao ? ' selected' : ''}>—</option>
                  ${PRA_ONDE_OPCOES.map(o=>`<option${m.tipo_operacao===o?' selected':''}>${esc(o)}</option>`).join('')}
                </select>`}</td>
+      ${/* GANCHOS E ENTREGAS NA LINHA — pedido do dono (31/08/2026):
+            "ta faltando o campo de quantidade de entregar e quantidade de
+            ganchos igual na torre, precisa aparecer na programacao do dia"
+            e "precisa aparecer e funcionar".
+
+            O servidor já aceitava os dois no PATCH da montagem e a tabela já
+            tinha `qtd_entregas` e `qtd_ganchos` desde a migração que criou a
+            montagem — faltava só a tela oferecer. Mesma história das quatro
+            colunas de 28/08: o dado tinha onde morar e ninguém tinha onde
+            digitar.
+
+            Como nas outras: virou carga, grava na CARGA (que tem log de
+            revisões); ainda rascunho, grava na montagem. */''}
+      <td class="c-ganchos" onclick="event.stopPropagation()">${comoCarga
+            ? `<input type="number" class="ganchos-input" min="0" step="1"
+                      value="${cargaViva.qtdGanchos ?? 0}" aria-label="Ganchos"
+                      title="Ganchos — 0 = Liso"
+                      onchange="atualizarGanchosUI('${escJs(cargaViva.id)}',this.value)">`
+            : `<input type="number" class="ganchos-input" min="0" step="1"
+                      value="${m.qtd_ganchos ?? 0}" aria-label="Ganchos"
+                      title="Ganchos — 0 = Liso"
+                      onchange="alterarMontagemUI('${id}','qtdGanchos',this.value)">`}</td>
+      <td class="c-entregas" onclick="event.stopPropagation()">${comoCarga
+            ? `<input type="number" class="entregas-input" min="1" step="1"
+                      value="${cargaViva.qtdEntregas ?? 1}" aria-label="Entregas"
+                      title="Quantidade de entregas."
+                      onchange="atualizarEntregasUI('${escJs(cargaViva.id)}',this.value)">`
+            : `<input type="number" class="entregas-input" min="1" step="1"
+                      value="${m.qtd_entregas ?? 1}" aria-label="Entregas"
+                      title="Quantidade de entregas."
+                      onchange="alterarMontagemUI('${id}','qtdEntregas',this.value)">`}</td>
       <td class="no-print">${trancada
             ? acoesMontagemHtml(m, trancada)
             : comoCarga ? acoesCargaNaMontagemHtml(aberta)
@@ -9357,7 +9574,7 @@ function linhaMontagemHtml(m){
     </tr>`;
 
   if(!aberta) return resumo;
-  return resumo + `<tr class="mont-detalhe"><td colspan="9">${
+  return resumo + `<tr class="mont-detalhe"><td colspan="11">${
     comoCarga ? formCargaHtml(cargaViva, m) : formMontagemHtml(m)}</td></tr>`;
 }
 
@@ -9613,6 +9830,19 @@ function formMontagemHtml(m){
           </select></div>
       </div>
 
+      ${/* GANCHOS E ENTREGAS FICAM NOS DOIS LUGARES (31/08/2026).
+
+            Eles subiram para a LINHA a pedido do dono ("precisa aparecer e
+            funcionar"), e eu os tinha tirado daqui seguindo a regra do
+            "mesmo campo em dois lugares". A bateria mostrou que a regra não
+            se aplica: existe uma guarda dizendo "com Qtd. Entregas e Qtd.
+            Ganchos, QUE ERA O QUE SUMIU" — eles já desapareceram daqui uma
+            vez e viraram incidente.
+
+            A regra do não-duplicar existe para campo que grava em lugares
+            DIFERENTES (foi o caso do Tipo de Operação). Aqui os dois gravam
+            na mesma carga, pela mesma função: alterar num reflete no outro
+            no próximo desenho da tela. */''}
       <div class="form-row">
         <div class="form-group">
           <label>Qtd. Ganchos (Gancheira) <span class="hint">0 = Liso</span></label>
