@@ -1,3 +1,4 @@
+import { ehFilial } from './fluxo.js';
 /* Devoluções: máquina de estados, permissões e tradução banco ↔ painel.
 
    Mesma filosofia de dominio/fluxo.js e dominio/cargas.js: a regra mora no
@@ -112,8 +113,16 @@ export function validarTransicaoDevolucao(statusAtual, statusNovo, setor, tipo) 
 
 /* Criar e editar o checklist é da Logística (Administração irrestrita) —
    "controle total das meninas", requisito nº 1 do pedido. */
+/* CRIAR CHECKLIST: a Logística e as três filiais (02/09/2026).
+
+   O dono: a filial "vai poder so criar checklists e acompanhar historico
+   de devolucoes somente que competem a eles".
+
+   Criar é o único verbo do fluxo que a filial tem. Avançar etapa é
+   recusado explicitamente na rota, e ler é filtrado por `criada_setor` —
+   as três coisas juntas é que fazem a permissão; nenhuma sozinha basta. */
 export function podeCriarDevolucao(setor) {
-  return setor === 'Logística' || setor === SETOR_IRRESTRITO;
+  return setor === 'Logística' || setor === SETOR_IRRESTRITO || ehFilial(setor);
 }
 
 export const DESTINACOES = ['Estoque', 'Descarte', 'Reprocesso'];

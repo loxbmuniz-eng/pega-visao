@@ -27,7 +27,36 @@ export const SETORES = [
   'Expedição',
   'Faturamento',
   'Administração',
+  /* AS FILIAIS (02/09/2026).
+
+     Pedido do dono: "isso é um setor novo, so vai ter acesso a aba
+     devolucoes e escopo de devolucoes, e vai poder so criar checklists e
+     acompanhar historico de devolucoes somente que competem a eles, ou
+     seja, quem for filial so acompanha dev filial (...) o processo de dev
+     é feito aqui normalmente, porem as permissoes da filial sao restritas
+     a isso" — e, à pergunta de quantas: "crie 3 setores filial 105 BSB,
+     106 BAHIA, 107 ES".
+
+     TRÊS SETORES E NÃO UM COM SUBDIVISÃO. A filial 105 não pode ver a
+     devolução da 106, e setor já é a chave que separa tudo no sistema:
+     `devolucoes.criada_setor` existe desde a migração 010 e guarda quem
+     criou. Um campo novo de "qual filial" seria uma segunda chave para a
+     mesma pergunta — e duas chaves para a mesma pergunta divergem.
+
+     ELAS NÃO ENTRAM EM `PODE`, logo abaixo: filial não avança etapa
+     nenhuma do fluxo de carga nem do de devolução. Cria o checklist e
+     acompanha o que criou; o ciclo é rodado pela matriz. */
+  'Filial 105 BSB',
+  'Filial 106 BAHIA',
+  'Filial 107 ES',
 ];
+
+/* As filiais, num lugar só. Quem precisa saber "este operador é de
+   filial?" pergunta aqui — a alternativa é repetir a lista em cinco
+   arquivos e descobrir a sexta cópia no dia em que uma filial nova
+   entrar. */
+export const SETORES_FILIAL = ['Filial 105 BSB', 'Filial 106 BAHIA', 'Filial 107 ES'];
+export function ehFilial(setor) { return SETORES_FILIAL.includes(setor); }
 
 /* Quem pode executar cada passo.
 

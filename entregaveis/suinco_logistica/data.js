@@ -473,7 +473,30 @@ const TAB_FUNCAO = {
   usuarios:    { setor:'Administração', oque:'Criar, bloquear e redefinir senha dos operadores de todos os setores.',                            move:'Não altera cargas — define quem entra e o que cada um pode registrar.' }
 };
 
+/* AS TRÊS FILIAIS VEEM UMA ABA SÓ (02/09/2026).
+
+   Pedido do dono: "so vai ter acesso a aba devolucoes e escopo de
+   devolucoes, e vai poder so criar checklists e acompanhar historico de
+   devolucoes somente que competem a eles".
+
+   Nem 'torre' nem 'historico', que são liberados para todo mundo nos
+   outros setores: a filial não acompanha o pátio da matriz. E a trava de
+   verdade não está aqui — está no servidor, que filtra a listagem por
+   `criada_setor`. Esta linha é só a tela; esconder aba não é permissão. */
+SETOR_PERMISSOES['Filial 105 BSB'] = ['devolucoes'];
+SETOR_PERMISSOES['Filial 106 BAHIA'] = ['devolucoes'];
+SETOR_PERMISSOES['Filial 107 ES'] = ['devolucoes'];
+
 const SETORES = Object.keys(SETOR_PERMISSOES);
+
+/* Quem é filial, do lado da tela. A lista mora no servidor
+   (dominio/fluxo.js, SETORES_FILIAL); aqui ela é repetida porque o painel
+   precisa decidir o que desenhar antes de perguntar qualquer coisa — e o
+   nome do setor vem do login, não de uma chamada. Se um dia entrar uma
+   quarta filial, os dois lugares mudam juntos: está escrito nos dois. */
+function ehSetorFilial(setor) {
+  return String(setor || '').startsWith('Filial ');
+}
 
 /* ---------- estado em memória ---------- */
 let DB = {
