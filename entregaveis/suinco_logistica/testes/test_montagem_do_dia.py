@@ -364,9 +364,26 @@ async def main():
         # O nome da planilha sobreviveu ao de-para. Desde a migração 034 ele
         # mora em `apelido_rota`: `observacoes` virou campo da pessoa que
         # monta a carga, e um campo com dois donos apaga um deles.
-        comNome = sql("SELECT count(*) FROM programacao_modelo WHERE apelido_rota <> ''")
+        # ESTA CONTA MUDOU DE FORMA EM 02/09/2026, e o motivo fica escrito.
+        #
+        # Ela exigia "pelo menos 100 linhas com apelido" — 100 era o tamanho
+        # do modelo que a migração 033 tinha semeado. O dono substituiu o
+        # modelo pelas planilhas dele (migração 041) e o total virou 80, então
+        # a suíte reprovou sem que nada tivesse quebrado.
+        #
+        # O erro estava na medição, não no número: o nome da verificação diz
+        # "CADA linha guarda o nome", e contar linhas não mede isso. Contagem
+        # é proxy do tamanho do modelo, e o tamanho do modelo é decisão da
+        # operação — muda quando o dono manda outra planilha, que é
+        # exatamente o que aconteceu.
+        #
+        # Agora ela pergunta o que quer saber: existe alguma linha SEM nome?
+        semNome = sql("SELECT count(*) FROM programacao_modelo "
+                      "WHERE ativo AND apelido_rota = ''")
+        total = sql("SELECT count(*) FROM programacao_modelo WHERE ativo")
         ck('cada linha guarda o nome como a operação o conhece',
-           comNome and int(comNome[0]) >= 100, str(comNome))
+           semNome and semNome[0] == '0' and total and int(total[0]) > 0,
+           f"{semNome} sem nome, de {total} linhas")
 
         # E o ciclo completo: puxar o modelo de uma terça monta as cargas.
         sql("DELETE FROM programacao_montagem WHERE data_prog = '2026-09-01'")
