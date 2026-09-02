@@ -552,10 +552,12 @@
         <div class="card-sub">Cada checklist mostra quem o criou e as etapas já carimbadas.
           A conferência aponta a falta sozinha: checklist diz 5 caixas, chegou 3, o sistema marca 2.</div>
         <div class="form-grid">
-          <div><label for="dev-filtro-dia">Dia</label>
-            <input type="date" id="dev-filtro-dia" onchange="carregarDevolucoes()"></div>
+          <!-- O CAMPO "DIA" SAIU (02/09/2026), a pedido da Bruna: "os demais
+               setores acham complicado ficar filtrando por dia para
+               localizar". A lista passou a trazer os últimos 30 dias de uma
+               vez; para achar uma devolução antiga existe o Histórico, que
+               é busca e não rolagem. -->
           <div style="align-self:end" class="gap8">
-            <button class="btn btn-sec btn-sm" onclick="filtroDevolucoesHoje()">Hoje</button>
             <button class="btn btn-sec btn-sm" onclick="carregarDevolucoes()">↻ Atualizar</button>
             <button class="btn btn-sec btn-sm" onclick="relatorioDevolucoesUI()">📄 Relatório do dia</button>
             <!-- A relação para o operador virou botão de CADA checklist
