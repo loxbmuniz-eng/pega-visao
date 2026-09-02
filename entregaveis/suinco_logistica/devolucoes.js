@@ -23,6 +23,8 @@ let _devDiaCarregado = null;  // dia que a lista em memória representa
 let _devRotasNovas = [];
 /* Filtro da esteira (clique numa caixa de etapa) — null = todas. */
 let _devFiltroEtapa = null;
+/* O texto digitado na caixa de busca da lista. Vazio = lista inteira. */
+let _devBusca = '';
 
 function devRotulo(d) {
   if (d.tipo === 'SOBRA') return 'SOBRA';
@@ -505,9 +507,26 @@ function renderListaDevolucoes() {
   };
   let lista = DEVOLUCOES.slice();
   if (_devFiltroEtapa) lista = lista.filter((d) => d.status === _devFiltroEtapa);
+  lista = lista.filter(_devCasaComBusca);
   lista.sort((a, b) => (ehMinhaVezDev(b) - ehMinhaVezDev(a))
     || (posicao(a.status) - posicao(b.status)) || (b.numero - a.numero));
+  /* LISTA VAZIA PRECISA DIZER POR QUÊ.
+
+     O texto era fixo: "Nenhum checklist de devolução neste dia" — e mentia
+     duas vezes depois de 02/09. Não existe mais "neste dia" (o filtro de
+     data saiu), e com a busca ligada a lista fica vazia por um motivo
+     completamente diferente: o que foi digitado não casou com nada. Quem lê
+     "não há checklist" conclui que a devolução não existe, quando ela pode
+     estar ali com outro número. */
   vazio.hidden = lista.length > 0;
+  if (!vazio.hidden) {
+    vazio.textContent = _devBusca
+      ? `Nenhum checklist casa com "${_devBusca}". A busca olha os últimos 30 dias `
+        + '— devolução mais antiga que isso não aparece aqui.'
+      : (_devFiltroEtapa
+        ? `Nenhum checklist parado em "${_devFiltroEtapa}".`
+        : 'Nenhum checklist de devolução nos últimos 30 dias.');
+  }
 
   // Uma única pendência na minha fila: já abre — menos um clique no pátio.
   if (_devExpandida === null) {
@@ -1263,6 +1282,42 @@ async function acaoDev(promessa, aviso) {
     await carregarDevolucoes();   // mostra o estado REAL, não o otimista
     return false;
   }
+}
+
+/* BUSCA NA LISTA (02/09/2026).
+
+   Pedido do dono: "pode usar o numero do check list, ai nao precisa ser por
+   data para o operador identificar (...) fica melhor do q criar um
+   historico, pode ser so a lista mesmo".
+
+   Procura em três campos, e o rótulo da caixa diz os três — busca que
+   entende só um formato e ignora calada os outros faz a pessoa concluir
+   que a devolução não existe:
+
+     · Nº do checklist — como a operação se refere a ele entre setores
+     · Nº DEV do item  — como o SIS ATAK o conhece
+     · placa           — como a Portaria o reconhece no pátio
+
+   ONDE ELA PROCURA, e o limite está dito no `title` do campo: nos
+   checklists já carregados, que são os últimos 30 dias. Devolução mais
+   antiga não aparece nem digitando o número certo — para isso o servidor
+   precisaria aprender a buscar por número em qualquer data, e aí é rodada
+   com atualizar.sh. Fica anotado para o dia em que doer. */
+function buscarDevolucoesUI(texto) {
+  _devBusca = String(texto || '').trim().toUpperCase();
+  renderListaDevolucoes();
+}
+
+function _devCasaComBusca(d) {
+  if (!_devBusca) return true;
+  const alvos = [String(d.numero || ''), normalizarPlaca(d.placa || ''),
+    String(d.cargaNumero || '')];
+  (d.itens || []).forEach((i) => {
+    if (i.numDev) alvos.push(String(i.numDev).toUpperCase());
+    if (i.nota) alvos.push(String(i.nota).toUpperCase());
+    if (i.cargaDev) alvos.push(String(i.cargaDev).toUpperCase());
+  });
+  return alvos.some((v) => v && v.toUpperCase().includes(_devBusca));
 }
 
 /* Chips de rota do formulário de novo checklist. */
