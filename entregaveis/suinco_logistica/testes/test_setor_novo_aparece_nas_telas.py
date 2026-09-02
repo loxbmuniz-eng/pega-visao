@@ -33,6 +33,8 @@ Roda sem servidor.
     python3 testes/test_setor_novo_aparece_nas_telas.py
 """
 import asyncio
+import io
+import re
 import sys
 
 from playwright.async_api import async_playwright
@@ -41,6 +43,22 @@ PAINEL = 'file:///home/user/pega-visao/entregaveis/suinco_logistica/index.html'
 ANTIGOS = ['Logística', 'Portaria', 'Expedição', 'Faturamento',
            'Administração', 'Comercial', 'Controles Internos', 'Central de Notas']
 FILIAIS = ['Filial 105 BSB', 'Filial 106 BAHIA', 'Filial 107 ES']
+FLUXO = '/home/user/pega-visao/entregaveis/suinco_logistica/backend/src/dominio/fluxo.js'
+
+
+def setores_do_servidor():
+    """A lista do servidor, lida do arquivo — sem subir API nem banco.
+
+    Recorta o bloco `export const SETORES = [ ... ];` de dominio/fluxo.js e
+    pega o que está entre aspas, ignorando comentário (que é onde os nomes
+    dos setores mais aparecem escritos em prosa neste arquivo).
+    """
+    fonte = io.open(FLUXO, encoding='utf-8').read()
+    i = fonte.index('export const SETORES = [')
+    bloco = fonte[i:fonte.index('];', i)]
+    bloco = re.sub(r'/\*.*?\*/', '', bloco, flags=re.S)
+    bloco = re.sub(r'//[^\n]*', '', bloco)
+    return re.findall(r"'([^']+)'", bloco)
 
 falhas = []
 
@@ -100,6 +118,25 @@ async def main():
         ck('o cadastro mostra exatamente SETORES',
            sel['usuario'] == sel['naLista'],
            f"tela {len(sel['usuario'] or [])} · lista {len(sel['naLista'] or [])}")
+
+        print('\n=== 6. PAINEL E SERVIDOR OFERECEM A MESMA LISTA ===')
+        # A recusa que o dono levou depois da entrega das filiais:
+        #
+        #     "ta dando setor invaldio ainda"
+        #
+        # O setor aparecia no <select>, o banco aceitava (migração 043) e a
+        # rota RECUSAVA — porque rotas/operadores.js validava contra uma
+        # SEGUNDA lista do servidor, em config.js, esquecida na atualização.
+        # Eram SEIS cópias, não cinco. config.js virou reexport de
+        # dominio/fluxo.js; sobraram duas — o painel e o servidor — porque
+        # o painel é build de arquivo único e não importa do backend.
+        #
+        # Esta comparação é o que trava as duas juntas. Setor acrescentado
+        # de um lado só reprova aqui, antes de chegar em quem cadastra.
+        servidor = setores_do_servidor()
+        ck('a lista do painel é IGUAL à do servidor',
+           sel['naLista'] == servidor,
+           f"painel {sel['naLista']} · servidor {servidor}")
 
         ck('nenhum erro de JavaScript', not erros, '; '.join(erros[:2]))
         await nav.close()

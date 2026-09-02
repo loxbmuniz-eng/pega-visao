@@ -28,7 +28,7 @@ faz achar a próxima em minutos em vez de horas:
 | **Rótulo que mente** | O dado está certo no banco; o nome dado a ele na tela descreve outra coisa. | #04, #12 |
 | **Regra larga demais** | Trava criada para um caso real barra também o caso legítimo mais comum. | #05 |
 | **Trava sem o par na tela** | O servidor passa a exigir algo novo e a tela continua com o botão antigo: quem clica só descobre que não pode, e não tem por onde seguir. | #13 |
-| **A mesma decisão escrita em dois lugares** | A regra é copiada em vez de consultada. As cópias divergem e o comportamento fica errado sem que nenhuma linha esteja errada. | #14 |
+| **A mesma decisão escrita em dois lugares** | A regra é copiada em vez de consultada. As cópias divergem e o comportamento fica errado sem que nenhuma linha esteja errada. | #14, #26 |
 | **Duas escritas em voo, a velha ganha** | O painel manda a carga INTEIRA a cada alteração. Duas alterações seguidas viram duas requisições simultâneas, e a primeira carrega o valor velho do campo que ainda ia mudar. | #16 |
 | **A correção que outro setor desfaz sem saber** | Um setor corrige de propósito o que outro fez. A tela do segundo continua mostrando o estado como se nada tivesse sido decidido, e o gesto normal dele desfaz a correção — em silêncio, dos dois lados. | #21 |
 | **A proteção escrita para um posto só** | A regra certa existe, com comentário e tudo — mas vale para um caminho e não para os irmãos dele. Não é cópia divergente: é a cópia que nunca foi escrita. | #20 |
@@ -37,6 +37,80 @@ faz achar a próxima em minutos em vez de horas:
 | **O teste que carimba a leitura errada do pedido** | O teste está novo e verde, e mede exatamente o que foi escrito — só que o pedido foi entendido ao contrário. Verde prova que o código faz o que o teste diz, não que a regra está certa. Mudança que REMOVE algo da tela precisa do teste que garante que o trabalho de quem usava aquilo ainda é possível. | #23 |
 | **Dois fatos com prazos diferentes tratados como um só** | Cada dado está certo no seu lugar; o defeito nasce de perguntar a um deles algo que só o outro sabe (`DB.operador` no localStorage vive para sempre; o token no sessionStorage morre com a aba). Reconhece-se assim: o mesmo relato volta com roupa nova depois de cada correção. Corrigir no nível do sintoma nunca fecha. | #25 |
 | **Teste que mede o proxy, não a regra** | O teste confere um sintoma fácil de medir ("a aba aparece?", "quantas linhas?") em vez da garantia real, ou monta um cenário que deixou de corresponder ao sistema. Quando o sintoma muda por um motivo legítimo, ele fica vermelho sem que nada tenha quebrado — e aponta para o lugar errado. | #15, #22 |
+
+---
+
+## #26 — "Setor inválido" no cadastro do usuário de filial (02/09/2026)
+
+**Relato, do dono, tentando criar o usuário da filial depois de a entrega
+estar publicada:**
+
+    "nao apareceu a filial pra cadastrar usuarios"
+    "precisa ter esse setor pra eu poder cadastrar nao aparece"
+    "ta dando setor invaldio ainda"
+
+Três tentativas, três recusas — e a terceira **depois** de eu ter dito que
+estava corrigido. É a parte que mais importa aqui: a primeira correção
+resolveu o que eu tinha olhado, e eu afirmei "resolvido" sem ter feito o
+cadastro passar do início ao fim uma única vez.
+
+**A causa.** A lista de setores estava escrita em **seis lugares**:
+
+| # | Onde | Tinha as filiais? |
+|---|---|---|
+| 1 | `backend/src/dominio/fluxo.js` | sim (entrei nele) |
+| 2 | `backend/src/config.js` | **não** ← a recusa saía daqui |
+| 3 | `data.js` (`SETOR_PERMISSOES`) | sim |
+| 4 | `index_suinco.html`, cadastro de usuário | não (à mão) |
+| 5 | `index_suinco.html`, filtro do Histórico | não (à mão) |
+| 6 | `index_suinco.html`, login local | não (à mão) |
+
+Mais a `CHECK` da tabela `operadores`, no banco.
+
+A primeira correção fechou 4, 5 e 6 — os `<select>` passaram a ser montados
+por código a partir de `data.js`. O setor apareceu na tela, o banco aceitava
+(migração 043), e `POST /api/operadores` continuou recusando: ele valida
+contra `SETORES` de **`config.js`**, que é um arquivo cujo assunto é `.env`
+— host, senha, limite de requisição — e que ninguém pensa em abrir quando o
+assunto é permissão de setor.
+
+**O que eu fiz de errado, e não é o esquecimento.** No commit da primeira
+correção eu escrevi, com todas as letras: *"eram CINCO cópias da mesma
+lista. Criar um setor exigia lembrar das cinco, e eu lembrei de duas."*
+Nomeei o risco e mesmo assim não fui procurar a sexta — e entreguei sem
+executar o cadastro de ponta a ponta. A recusa que o dono levou é a que um
+único `POST` teria mostrado.
+
+**A correção.**
+
+- `dominio/fluxo.js` passa a ser a **única** lista do servidor, com os onze
+  setores e os comentários de cada um;
+- `config.js` virou `export { SETORES } from './dominio/fluxo.js'` — quem já
+  importava de lá não muda nada, e a cópia deixou de existir;
+- restam duas listas — servidor e painel — porque o painel é build de
+  arquivo único e não importa do backend. As duas ficaram travadas uma na
+  outra por teste.
+
+**O teste que trava.** Dois, e nenhum deles pergunta "a lista bate?":
+
+1. `backend/testes/api.test.js` → *"todo setor oferecido aceita cadastro e
+   login"*. Percorre `SETORES` e, para cada setor, **cria o operador pela
+   mesma rota que a tela usa e faz ele entrar**. É o percurso inteiro: rota
+   → validação → `CHECK` do banco → login. Contra o código com a lista velha
+   ele reprova com a frase exata do relato: `setor "Filial 105 BSB" recusado
+   no cadastro: {"erro":"Setor inválido..."}`.
+2. `testes/test_setor_novo_aparece_nas_telas.py`, bloco 6 → a lista do
+   painel tem que ser **idêntica** à do servidor, lida de `fluxo.js`.
+
+Setor acrescentado em um lugar só reprova antes de chegar em quem cadastra.
+
+**A lição, que é diferente da de #14.** Em #14 a lição foi "uma fonte, os
+outros perguntam". Aqui a fonte foi criada e ainda assim quebrou, porque a
+sexta cópia estava num arquivo cujo nome não tem nada a ver com o assunto.
+O que fecha esse tipo de furo não é lembrar melhor: é o teste percorrer a
+lista inteira pelo caminho de verdade. Enquanto o teste conferia se o setor
+**aparecia na tela**, ele mediu o proxy — e o proxy estava verde enquanto o
+dono levava "Setor inválido" na cara.
 
 ---
 
@@ -1024,3 +1098,10 @@ permitiu recuperar os lacres apagados de #09.
    melhores" de #14 pioraram o número, e só apareceram porque foram medidas
    antes e depois, no mesmo aparelho e com os mesmos dados — sem isso, a
    comparação mede o banco de teste, não a mudança.
+11. **Nomear o risco não é fechá-lo.** O commit da primeira correção de #26
+   dizia "eram cinco cópias e eu lembrei de duas" — e a sexta derrubou o
+   cadastro no dia seguinte. Escrever o risco no comentário deixa registro;
+   só o teste que percorre o caminho inteiro impede a repetição.
+12. **Entrega de cadastro só está pronta depois de cadastrar.** Em #26 a
+   tela mostrava o setor, o banco aceitava, e a rota recusava. Nenhuma
+   inspeção de código pegaria os três ao mesmo tempo; um `POST` pegaria.

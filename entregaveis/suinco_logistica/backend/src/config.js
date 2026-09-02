@@ -151,27 +151,16 @@ export const config = {
   },
 };
 
-export const SETORES = [
-  'Logística',
-  'Portaria',
-  'Expedição',
-  'Faturamento',
-  'Administração',
-  /* Comercial: só leitura — pedido do usuário (08/08/2026), pra tirar da
-     Logística/Administração o trabalho de responder pergunta de cliente
-     sobre onde a carga está. Não aparece em NENHUMA função de permissão de
-     escrita deste arquivo nem de dominio/fluxo.js (podeCriarCarga,
-     podeRegistrarChegadaSemProgramacao, podeRegistrarSaida,
-     camposEditaveisPor) de propósito — todas são allowlist, então "não
-     estar na lista" já barra por padrão. Não precisa de exceção nenhuma
-     pra ser bloqueado; precisaria de uma linha a mais em cada uma pra
-     ganhar poder de escrita, e essa linha não existe. */
-  'Comercial',
-  /* Setores da devolução (18/08/2026) — cada um faz UM passo do checklist
-     digital (dominio/devolucoes.js): Controles Internos destina os
-     produtos (Estoque/Descarte/Reprocesso) e assina "Destinada"; Central
-     de Notas finaliza a nota fiscal. Nas CARGAS não aparecem em nenhuma
-     allowlist — mesmo racional do Comercial acima. */
-  'Controles Internos',
-  'Central de Notas',
-];
+/* OS SETORES NÃO MORAM MAIS AQUI (02/09/2026).
+
+   Esta constante era uma SEGUNDA cópia da lista de setores, e foi ela que
+   recusou o cadastro do usuário de filial com "Setor inválido" — as três
+   filiais tinham sido acrescentadas em dominio/fluxo.js, e rotas/operadores.js
+   valida contra ESTA. A lista estava certa na tela, certa no banco (migração
+   043) e velha aqui, num arquivo cujo assunto é .env, não regra de operação.
+
+   Agora é um reexport: quem já importava `SETORES` de '../config.js' continua
+   funcionando sem mudar uma linha, e a lista real está em um lugar só.
+   Setor novo se acrescenta em dominio/fluxo.js e na migração da CHECK — nunca
+   mais aqui. */
+export { SETORES } from './dominio/fluxo.js';

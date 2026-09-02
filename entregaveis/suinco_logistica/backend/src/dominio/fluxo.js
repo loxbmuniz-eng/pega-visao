@@ -21,12 +21,45 @@ export const STATUS_FLOW = [
 
 export const STATUS_INICIAL = STATUS_FLOW[0];
 
+/* A LISTA DE SETORES DO SISTEMA — ESTE É O ÚNICO LUGAR.
+
+   Ela existia em dois arquivos do servidor: aqui e em config.js. Em
+   02/09/2026 as três filiais entraram só aqui, e a tela de Usuários —
+   que valida contra a de config.js — recusou o cadastro com "Setor
+   inválido" mesmo com o setor aparecendo na lista da tela. O dono
+   tentou cadastrar a filial e levou a recusa três vezes.
+
+   Somando as duas do servidor, as três da tela e a do banco, a mesma
+   lista estava escrita em SEIS lugares. Criar um setor exigia lembrar
+   dos seis. Agora config.js REEXPORTA daqui, os <select> da tela são
+   montados por código a partir de data.js, e o banco tem a CHECK da
+   migração 043. Sobraram dois lugares — o servidor e o painel — porque
+   o painel não fala com este arquivo (é build de arquivo único), e o
+   teste testes/test_setor_novo_aparece_nas_telas.py compara os dois.
+
+   ORDEM: a mesma de SETOR_PERMISSOES em data.js, de propósito — é assim
+   que a lista aparece no <select> de cadastro. */
 export const SETORES = [
   'Logística',
   'Portaria',
   'Expedição',
   'Faturamento',
   'Administração',
+  /* Comercial: só leitura — pedido do usuário (08/08/2026), pra tirar da
+     Logística/Administração o trabalho de responder pergunta de cliente
+     sobre onde a carga está. Não aparece em NENHUMA função de permissão
+     de escrita deste arquivo (podeCriarCarga,
+     podeRegistrarChegadaSemProgramacao, podeRegistrarSaida,
+     camposEditaveisPor) de propósito — todas são allowlist, então "não
+     estar na lista" já barra por padrão. */
+  'Comercial',
+  /* Setores da devolução (18/08/2026) — cada um faz UM passo do checklist
+     digital (dominio/devolucoes.js): Controles Internos destina os
+     produtos (Estoque/Descarte/Reprocesso) e assina "Destinada"; Central
+     de Notas finaliza a nota fiscal. Nas CARGAS não aparecem em nenhuma
+     allowlist — mesmo racional do Comercial acima. */
+  'Controles Internos',
+  'Central de Notas',
   /* AS FILIAIS (02/09/2026).
 
      Pedido do dono: "isso é um setor novo, so vai ter acesso a aba

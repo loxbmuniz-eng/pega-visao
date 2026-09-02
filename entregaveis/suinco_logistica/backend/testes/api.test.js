@@ -17,6 +17,7 @@ import jwt from 'jsonwebtoken';
 import { criarServidor, chaveDoLimiteGeral } from '../src/servidor.js';
 import { pool } from '../src/banco.js';
 import { config } from '../src/config.js';
+import { SETORES } from '../src/dominio/fluxo.js';
 
 function jwtAssinar(payload) {
   return jwt.sign(payload, config.jwtSegredo, { expiresIn: '1h' });
@@ -724,6 +725,36 @@ describe('7b. Gestão de operadores (só Administração)', () => {
     });
     assert.equal(login.status, 200, 'de nada adianta criar se a pessoa não entra');
     assert.equal(login.json.operador.setor, 'Portaria');
+  });
+
+  /* TODO SETOR DA LISTA ACEITA CADASTRO — a guarda que faltava.
+
+     Em 02/09/2026 as três filiais entraram na lista do domínio e na CHECK
+     do banco, apareceram no <select> da tela de Usuários, e mesmo assim o
+     cadastro voltava "Setor inválido": rotas/operadores.js validava contra
+     uma SEGUNDA lista, em config.js, que ninguém lembrou de atualizar. O
+     teste que existia conferia só se o setor aparecia na tela.
+
+     Este não confere uma lista contra a outra — ele CRIA um operador em
+     cada setor, pela mesma rota que a tela usa, e faz cada um entrar. É o
+     percurso inteiro: rota → validação → CHECK do banco → login. Setor
+     que estiver oferecido e não puder ser cadastrado reprova aqui, sem
+     ninguém precisar lembrar de nada. */
+  test('todo setor oferecido aceita cadastro e login', async () => {
+    for (const setor of SETORES) {
+      const email = `setor_${Date.now()}_${SETORES.indexOf(setor)}@teste.local`;
+      const r = await req('/api/operadores', {
+        metodo: 'POST', token: tokenAdmin,
+        corpo: { email, nome: `Operador ${setor}`, setor, senha: 'senha-inicial-1' },
+      });
+      assert.equal(r.status, 201, `setor "${setor}" recusado no cadastro: ${r.texto}`);
+
+      const login = await req('/auth/login', {
+        metodo: 'POST', corpo: { email, senha: 'senha-inicial-1' },
+      });
+      assert.equal(login.status, 200, `setor "${setor}" cadastrou mas não entra`);
+      assert.equal(login.json.operador.setor, setor);
+    }
   });
 
   test('e-mail duplicado é recusado', async () => {
