@@ -8259,7 +8259,46 @@ function iniciarRelogio(){
 }
 
 /* ---------- INIT ---------- */
+/* OS SELETORES DE SETOR SE MONTAM DA LISTA ÚNICA (02/09/2026).
+
+   As três filiais foram criadas no servidor e em SETOR_PERMISSOES, e não
+   apareceram na tela de Usuários. O dono, tentando cadastrar: "nao apareceu
+   a filial pra cadastrar usuarios (...) precisa ter esse setor pra eu poder
+   cadastrar nao aparece".
+
+   A causa: a lista de setores estava escrita À MÃO no HTML, em TRÊS
+   lugares — o filtro do Histórico, o cadastro de usuário e o login local.
+   Somando `SETORES` (data.js) e `SETORES` (dominio/fluxo.js), eram CINCO
+   cópias da mesma lista. Criar um setor exigia lembrar das cinco, e eu
+   lembrei de duas.
+
+   É a família da ocorrência #14 — "a mesma decisão escrita em dois
+   lugares" —, agora com cinco. A correção é a mesma que valeu lá: uma
+   fonte, e os outros perguntam. Setor novo passa a aparecer nas três telas
+   sozinho.
+
+   O LOGIN LOCAL FICA DE FORA da lista completa de propósito: ele é o modo
+   sem servidor, e filial que entrasse por ali trabalharia isolada — que é
+   exatamente o que a trava de offline existe para impedir. */
+function montarSeletoresDeSetor(){
+  const alvos = [
+    { id: 'usr-setor',          comTodos: false, comFilial: true  },
+    { id: 'hist-filtro-setor',  comTodos: true,  comFilial: true  },
+    { id: 'login-setor',        comTodos: false, comFilial: false },
+  ];
+  alvos.forEach(({ id, comTodos, comFilial }) => {
+    const sel = document.getElementById(id);
+    if(!sel) return;
+    const escolhido = sel.value;
+    const lista = SETORES.filter(s => comFilial || !ehSetorFilial(s));
+    sel.innerHTML = (comTodos ? '<option value="">Todos</option>' : '')
+      + lista.map(s => `<option>${esc(s)}</option>`).join('');
+    if(escolhido && lista.includes(escolhido)) sel.value = escolhido;
+  });
+}
+
 async function init(){
+  montarSeletoresDeSetor();
   // Carrega a base real de Frota antes de desenhar a tela — ver
   // carregarFrotaSeedSeVazia em data.js. Nunca trava o painel se falhar
   // (ex: aberto via file://): segue com Frota vazia, exigindo cadastro/import
