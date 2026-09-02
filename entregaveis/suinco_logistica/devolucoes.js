@@ -138,6 +138,24 @@ function podeEditarDevolucao() {
   return setor === 'Logística' || setor === 'Administração';
 }
 
+/* CRIAR CHECKLIST: matriz E filial (02/09/2026).
+
+   `podeEditarDevolucao` continua sendo "manda em tudo" — é ele que libera
+   editar checklist alheio, excluir e mexer em qualquer campo. A filial não
+   é isso: ela cria o próprio checklist, lança os itens dele e acompanha.
+
+   Duas perguntas diferentes precisavam de duas funções. Reaproveitar
+   `podeEditarDevolucao` para liberar o botão de criar teria dado à filial,
+   de brinde, tudo o mais que ele libera. */
+function podeCriarDevolucao() {
+  return podeEditarDevolucao() || ehSetorFilial((DB.operador || {}).setor);
+}
+
+/* A filial não avança etapa: o ciclo é rodado pela matriz. */
+function podeAvancarEtapaDev() {
+  return !ehSetorFilial((DB.operador || {}).setor);
+}
+
 /* Papéis da fase 2, já valendo para os setores criados em 18/08/2026:
    Expedição confere o que chegou; Controles Internos destina. Cada um
    enxerga editável SÓ a própria coluna — o servidor confere de novo. */
@@ -307,9 +325,9 @@ function renderDevolucoes() {
   // Criar checklist é da Logística/Administração; os demais setores veem
   // a esteira e a própria fila, sem um formulário que a API recusaria.
   const cardNovo = document.getElementById('dev-card-novo');
-  if (cardNovo) cardNovo.hidden = !podeEditarDevolucao();
+  if (cardNovo) cardNovo.hidden = !podeCriarDevolucao();
   const cardSobra = document.getElementById('dev-card-sobra');
-  if (cardSobra) cardSobra.hidden = !podeEditarDevolucao();
+  if (cardSobra) cardSobra.hidden = !podeCriarDevolucao();
   const sobraData = document.getElementById('sobra-data');
   if (sobraData && !sobraData.value) sobraData.value = diaLocalDev();
 
@@ -551,7 +569,22 @@ function renderListaDevolucoes() {
         <div class="dev-card-id">
           ${ehMinhaVezDev(d) ? '<span class="dev-chip dev-chip-suavez">SUA VEZ</span>' : ''}
           ${d.tipo === 'SOBRA' ? '<span class="dev-chip dev-chip-sobra">SOBRA</span>' : ''}
-          <strong>Checklist Nº ${d.numero}</strong>
+          ${/* DE QUAL FILIAL VEIO (02/09/2026).
+
+                Pedido do dono: "é importante ter discriminado o que é da
+                filial". O processo é o mesmo — a Portaria recebe, a
+                Balança pesa, a Expedição confere, exatamente como numa
+                devolução da matriz. Mas quem está no pátio precisa
+                RECONHECER de onde veio, e o nome de quem criou fica no
+                rodapé do cartão, em letra pequena, longe do olho.
+
+                A marca mostra o SETOR e não a pessoa: "Filial 106 BAHIA"
+                diz de onde; "criada por Fulano" diz quem, e quem é a
+                pergunta que vem depois. */''}
+          ${ehSetorFilial(d.criadaSetor)
+            ? `<span class="dev-chip dev-chip-filial">${esc(d.criadaSetor.toUpperCase())}</span>` : ''}
+          <strong>Checklist Nº ${d.numero}</strong>${ehSetorFilial(d.criadaSetor)
+            ? ` <span class="dev-chip dev-chip-filial">${esc(d.criadaSetor.toUpperCase())}</span>` : ''}
           <span class="dev-card-rota">${d.tipo === 'SOBRA'
             ? 'Sobras' + (d.criadaPor ? ' / ' + esc(devIniciais(d.criadaPor)) : '')
             : `${d.regiao ? esc(d.regiao) + ' — ' : ''}${(d.rotas || []).map((r) => 'Rota ' + esc(r)).join(' · ') || 'sem rota'}${d.criadaPor ? ' / ' + esc(devIniciais(d.criadaPor)) : ''}`}</span>
@@ -1779,7 +1812,14 @@ async function comprovantePortariaUI(id) {
     <div class="print-page doc-normal">
       ${cabecalhoDocumento({
         titulo: 'Comprovante de Devolução — Portaria',
-        subtitulo: `Checklist Nº ${d.numero} · ${esc(devRotulo(d))} / ${esc(devIniciais(d.criadaPor))}`,
+        /* A ORIGEM VAI NO PAPEL, e vem primeiro (02/09/2026).
+
+           O dono: "essa informacao é importante, o processo é o mesmo, mas
+           por ser filial tem que ter essa identificacao". O documento é o
+           que anda com o caminhão e o que alguém confere semanas depois —
+           marca que só existe na tela não sobrevive à impressão. */
+        subtitulo: `${ehSetorFilial(d.criadaSetor) ? esc(d.criadaSetor.toUpperCase()) + ' · ' : ''}`
+          + `Checklist Nº ${d.numero} · ${esc(devRotulo(d))} / ${esc(devIniciais(d.criadaPor))}`,
       })}
       <div class="dev-comprovante">
         ${linha('Nº DA CARGA', d.cargaNumero)}
@@ -1840,8 +1880,8 @@ async function relatorioDevolucoesUI(diaParam) {
     <div class="dev-doc-checklist">
       ${tituloSecaoPdf(
         d.tipo === 'SOBRA'
-          ? `Checklist Nº ${d.numero} — SOBRA · ${esc(d.status)}`
-          : `Checklist Nº ${d.numero} — ${d.regiao ? esc(d.regiao) + ' · ' : ''}Rota(s) ${esc((d.rotas || []).join(', ') || '—')} · ${esc(d.status)}`,
+          ? `${ehSetorFilial(d.criadaSetor) ? esc(d.criadaSetor.toUpperCase()) + ' · ' : ''}Checklist Nº ${d.numero} — SOBRA · ${esc(d.status)}`
+          : `${ehSetorFilial(d.criadaSetor) ? esc(d.criadaSetor.toUpperCase()) + ' · ' : ''}Checklist Nº ${d.numero} — ${d.regiao ? esc(d.regiao) + ' · ' : ''}Rota(s) ${esc((d.rotas || []).join(', ') || '—')} · ${esc(d.status)}`,
         `Gerado por <strong>${esc(d.criadaPor)}</strong>`
         + `${d.regiao ? ' · Região ' + esc(d.regiao) : ''}`
         + `${d.transportadora ? ' · Transportadora ' + esc(d.transportadora) : ''}`

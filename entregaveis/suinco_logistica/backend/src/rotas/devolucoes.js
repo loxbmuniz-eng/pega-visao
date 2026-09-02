@@ -13,6 +13,7 @@
 import { Router } from 'express';
 import { consultar, emTransacao } from '../banco.js';
 import { exigirLogin, exigirSetor } from '../middleware/auth.js';
+import { ehFilial, SETORES_FILIAL } from '../dominio/fluxo.js';
 import { emitir } from '../tempo-real.js';
 import {
   DEV_STATUS_INICIAL,
@@ -194,10 +195,26 @@ async function aprenderCliente(executor, item) {
    dias, o suficiente para a tela do dia e o histórico recente. */
 rotasDevolucoes.get('/devolucoes', exigirLogin, async (req, res, next) => {
   try {
+    const op = req.operador;
     const de = String(req.query.de || '').slice(0, 10);
     const ate = String(req.query.ate || '').slice(0, 10);
     const params = [];
     let filtro = 'excluida_em IS NULL';
+
+    /* CADA FILIAL VÊ SÓ O QUE ELA CRIOU (02/09/2026).
+
+       Pedido do dono: "cada setor so acompanha o historico de checklists
+       da sua filial" e, do outro lado, "nós da logistica e administracao
+       temos acesso a tudo normalmente".
+
+       A trava mora AQUI, na consulta, e não na tela. Esconder linha no
+       painel não é permissão: qualquer um que abrisse o endereço da API
+       veria tudo. `criada_setor` guarda quem criou desde a migração 010 —
+       é a mesma chave que separa os setores no resto do sistema. */
+    if (ehFilial(op.setor)) {
+      params.push(op.setor);
+      filtro += ` AND criada_setor = $${params.length}`;
+    }
     if (/^\d{4}-\d{2}-\d{2}$/.test(de)) { params.push(de); filtro += ` AND data_dev >= $${params.length}`; }
     else { filtro += " AND data_dev >= (now() AT TIME ZONE 'America/Sao_Paulo')::date - 30"; }
     if (/^\d{4}-\d{2}-\d{2}$/.test(ate)) { params.push(ate); filtro += ` AND data_dev <= $${params.length}`; }
@@ -309,6 +326,12 @@ rotasDevolucoes.get('/devolucoes/:id', exigirLogin, async (req, res, next) => {
   try {
     const d = await buscarCompleta({ query: consultar }, req.params.id);
     if (!d) return res.status(404).json({ erro: 'Devolução não encontrada.', codigo: 'NAO_ENCONTRADA' });
+    /* A filial que pede pelo ID recebe a mesma resposta de quem pede uma
+       devolução que não existe. Dizer "existe, mas não é sua" contaria à
+       105 quantos checklists a 106 tem — e a lista já não a mostra. */
+    if (ehFilial(req.operador.setor) && d.criadaSetor !== req.operador.setor) {
+      return res.status(404).json({ erro: 'Devolução não encontrada.', codigo: 'NAO_ENCONTRADA' });
+    }
     res.json(d);
   } catch (e) { next(e); }
 });
@@ -340,6 +363,15 @@ const CAMPOS_CABECALHO_PORTARIA = new Set([
 rotasDevolucoes.patch('/devolucoes/:id', exigirLogin, async (req, res, next) => {
   try {
     const op = req.operador;
+    if (ehFilial(op.setor)) {
+      const dono = await consultar(
+        'SELECT criada_setor FROM devolucoes WHERE devolucao_id = $1 AND excluida_em IS NULL',
+        [req.params.id]
+      );
+      if (!dono.rows[0] || dono.rows[0].criada_setor !== op.setor) {
+        return res.status(404).json({ erro: 'Devolução não encontrada.', codigo: 'NAO_ENCONTRADA' });
+      }
+    }
     const cab = camposCabecalho(req.body || {});
     const trocaRotas = req.body?.rotas !== undefined || req.body?.rota !== undefined;
     if (!Object.keys(cab).length && !trocaRotas) {
@@ -348,7 +380,17 @@ rotasDevolucoes.patch('/devolucoes/:id', exigirLogin, async (req, res, next) => 
     const ehGestor = op.setor === 'Logística' || op.setor === 'Administração';
     if (!ehGestor) {
       const chavesCab = Object.keys(cab);
-      const permitido = !trocaRotas && (
+      /* Mesma regra do item: a filial mexe no cabeçalho do checklist que
+         ela criou — região, transportadora, placa, motorista, nota de
+         transferência —, nunca nos campos que são carimbo de outra etapa.
+         Por subtração, pelo mesmo motivo. */
+      const CARIMBO_DE_ETAPA = new Set([
+        ...CAMPOS_CABECALHO_PORTARIA, ...CAMPOS_CABECALHO_FATURAMENTO,
+        ...CAMPOS_CABECALHO_CONTROLES, ...CAMPOS_CABECALHO_EXPEDICAO,
+        ...CAMPOS_CABECALHO_NOTAS, 'gerou_rdc']);
+      const permitido = (ehFilial(op.setor)
+          && chavesCab.every((c) => !CARIMBO_DE_ETAPA.has(c)))
+        || (!trocaRotas && (
         (op.setor === 'Portaria' && chavesCab.every((c) => CAMPOS_CABECALHO_PORTARIA.has(c)))
         // As duas pesagens são do Faturamento (18/08/2026 e 27/08/2026).
         || (op.setor === 'Faturamento' && chavesCab.every((c) => CAMPOS_CABECALHO_FATURAMENTO.has(c)))
@@ -358,7 +400,7 @@ rotasDevolucoes.patch('/devolucoes/:id', exigirLogin, async (req, res, next) => 
         // Central de Notas: o recado da etapa (27/08).
         || (op.setor === 'Expedição' && chavesCab.every((c) => CAMPOS_CABECALHO_EXPEDICAO.has(c)))
         || (op.setor === 'Central de Notas' && chavesCab.every((c) => CAMPOS_CABECALHO_NOTAS.has(c)))
-      );
+      ));
       if (!permitido) {
         return res.status(403).json({
           erro: 'Esses campos do checklist são da Logística — a Portaria edita '
@@ -465,6 +507,16 @@ rotasDevolucoes.delete('/devolucoes/:id', exigirLogin, exigirSetor('Logística')
 rotasDevolucoes.post('/devolucoes/:id/etapa', exigirLogin, async (req, res, next) => {
   try {
     const op = req.operador;
+    /* Filial não roda o ciclo — o dono foi explícito: "o processo de dev é
+       feito aqui normalmente, porem as permissoes da filial sao restritas"
+       a criar e acompanhar. A recusa é EXPLICADA, não um 403 seco: quem
+       lê precisa saber que não é erro dele nem falha do sistema. */
+    if (ehFilial(op.setor)) {
+      return res.status(403).json({
+        erro: 'A filial cria o checklist e acompanha; quem avança as etapas é a matriz.',
+        codigo: 'SETOR_SEM_PERMISSAO',
+      });
+    }
     const para = String(req.body?.para ?? '');
 
     const resultado = await emTransacao(async (cli) => {
@@ -571,14 +623,27 @@ rotasDevolucoes.post('/devolucoes/:id/etapa', exigirLogin, async (req, res, next
 
 /* ---------- Itens do checklist ---------- */
 
-rotasDevolucoes.post('/devolucoes/:id/itens', exigirLogin, exigirSetor('Logística'), async (req, res, next) => {
+/* A FILIAL LANÇA OS ITENS DO PRÓPRIO CHECKLIST (02/09/2026).
+
+   "Criar checklist" sem lançar item é criar uma capa vazia: o que a filial
+   está dizendo é O QUE está voltando — nota, produto, caixas, motivo. Sem
+   isso a matriz recebe um papel em branco e teria que ligar para perguntar,
+   que é exatamente o processo que este painel existe para acabar.
+
+   Só no PRÓPRIO checklist, e a checagem é a mesma do resto: `criada_setor`.
+   A 105 não lança item no checklist da 106 nem no da matriz. */
+rotasDevolucoes.post('/devolucoes/:id/itens', exigirLogin,
+  exigirSetor('Logística', ...SETORES_FILIAL), async (req, res, next) => {
   try {
     const op = req.operador;
     const dev = await consultar(
-      'SELECT devolucao_id FROM devolucoes WHERE devolucao_id = $1 AND excluida_em IS NULL',
+      'SELECT devolucao_id, criada_setor FROM devolucoes WHERE devolucao_id = $1 AND excluida_em IS NULL',
       [req.params.id]
     );
     if (!dev.rows[0]) return res.status(404).json({ erro: 'Devolução não encontrada.', codigo: 'NAO_ENCONTRADA' });
+    if (ehFilial(op.setor) && dev.rows[0].criada_setor !== op.setor) {
+      return res.status(404).json({ erro: 'Devolução não encontrada.', codigo: 'NAO_ENCONTRADA' });
+    }
     const it = camposItem(req.body || {});
     await expandirMotivo({ query: consultar }, it);
     await completarNomeDoCliente({ query: consultar }, it);
@@ -603,6 +668,15 @@ rotasDevolucoes.post('/devolucoes/:id/itens', exigirLogin, exigirSetor('Logísti
 rotasDevolucoes.patch('/devolucoes/:id/itens/:itemId', exigirLogin, async (req, res, next) => {
   try {
     const op = req.operador;
+    if (ehFilial(op.setor)) {
+      const dono = await consultar(
+        'SELECT criada_setor FROM devolucoes WHERE devolucao_id = $1 AND excluida_em IS NULL',
+        [req.params.id]
+      );
+      if (!dono.rows[0] || dono.rows[0].criada_setor !== op.setor) {
+        return res.status(404).json({ erro: 'Devolução não encontrada.', codigo: 'NAO_ENCONTRADA' });
+      }
+    }
     const it = camposItem(req.body || {});
     if (!Object.keys(it).length) {
       return res.status(400).json({ erro: 'Nada para alterar.', codigo: 'SEM_CAMPOS' });
@@ -629,8 +703,19 @@ rotasDevolucoes.patch('/devolucoes/:id/itens/:itemId', exigirLogin, async (req, 
        campo de item que a Portaria escreve, e por isso tem lista própria. */
     const SO_CARGA_DEV = new Set(['carga_dev']);
     const chaves = Object.keys(it);
+    /* A FILIAL EDITA O QUE ELA LANÇOU, e nada do que é de outro posto.
+
+       Ela já passou pela checagem de dono lá em cima (só o próprio
+       checklist). Aqui o que se decide é QUAIS COLUNAS — e a resposta é
+       "as do lançamento": nota, produto, caixas, peso, motivo, cliente.
+       As colunas dos outros postos ficam de fora por SUBTRAÇÃO e não por
+       lista própria: assim, o dia em que um posto novo ganhar coluna, ela
+       nasce fechada para a filial sem ninguém precisar lembrar. */
+    const DE_OUTRO_POSTO = new Set([...SO_CONFERENCIA, ...SO_PESAGEM,
+      ...SO_DESTINACAO, ...SO_NOTA_FINAL, ...SO_CARGA_DEV]);
     const permitido =
       op.setor === 'Logística' || op.setor === 'Administração'
+      || (ehFilial(op.setor) && chaves.every((c) => !DE_OUTRO_POSTO.has(c)))
       || (op.setor === 'Expedição' && chaves.every((c) => SO_CONFERENCIA.has(c)))
       || (op.setor === 'Faturamento' && chaves.every((c) => SO_PESAGEM.has(c)))
       || (op.setor === 'Controles Internos' && chaves.every((c) => SO_DESTINACAO.has(c)))

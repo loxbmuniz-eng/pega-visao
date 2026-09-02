@@ -3879,6 +3879,13 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
 .dev-cel-acoes{ white-space:nowrap; display:flex; gap:4px; align-items:center; }
 
 /* Chip de SOBRA — o checklist enxuto que só entra. */
+/* De qual filial veio o checklist. Cor própria, separada do "SUA VEZ"
+   (que é ação) e do "SOBRA" (que é tipo): esta é ORIGEM, uma terceira
+   pergunta, e três perguntas com a mesma cor viram uma tarja só. */
+.dev-chip-filial{
+  background:#2d3f6b; color:#cfe0ff; border:1px solid #4a6299;
+  letter-spacing:.04em;
+}
 .dev-chip-sobra{ background:var(--navy-light); color:var(--text); border-color:var(--navy-lighter); }
 
 /* Painel de correções da Administração, na ficha da carga (19/08/2026).
