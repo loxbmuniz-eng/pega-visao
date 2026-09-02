@@ -1,0 +1,81 @@
+dia_semana;dia;ordem;rota_codigo;apelido_rota;paletizada
+1;Segunda;1;500;Patos de Minas;Não
+1;Segunda;2;500;Patos de Minas;Não
+1;Segunda;3;501;São Gotardo;Não
+1;Segunda;4;501;São Gotardo;Não
+1;Segunda;5;505;Triângulo Mineiro - Total Service;Não
+1;Segunda;6;521;Ribeirão Preto - Cargo Frio;Sim
+1;Segunda;7;538;Marília - Cargo Frio;Sim
+1;Segunda;8;510;Belo Horizonte - RP Express;Sim
+1;Segunda;9;519;Brasília - Versatto;Sim
+1;Segunda;10;517;Rio de Janeiro - Ômega X;Sim
+1;Segunda;11;517;Rio de Janeiro - Ômega X;Sim
+1;Segunda;12;525;Bahia Capital - LogMaster;Sim
+1;Segunda;13;525;Bahia Capital - LogMaster;Sim
+2;Terça;1;509;Centro-Oeste 6 Rotas;Sim
+2;Terça;2;517;Floresta RJ;Sim
+2;Terça;3;500;Patos de Minas;Não
+2;Terça;4;500;Patos de Minas;Não
+2;Terça;5;536;Goiás - AG Sestini;Sim
+2;Terça;6;522;SP Capital - SPM Log;Sim
+2;Terça;7;524;Zona da Mata - BSF Logística;Sim
+2;Terça;8;516;Montes Claros - Mult Service;Sim
+2;Terça;9;505;Triângulo Mineiro - Total Service;Sim
+2;Terça;10;512;Varginha - Brasfrios;Sim
+2;Terça;11;513;Passos - Maxfrios;Sim
+2;Terça;12;517;Rio de Janeiro - Ômega X;Sim
+2;Terça;13;517;Rio de Janeiro - Ômega X;Sim
+2;Terça;14;504;Arinos / Buritis;Não
+2;Terça;15;504;Riachinho;Não
+2;Terça;16;504;João Pinheiro;Não
+2;Terça;17;504;Paracatu;Não
+2;Terça;18;504;Unaí;Não
+2;Terça;19;502;Araxá;Não
+2;Terça;20;503;Patrocínio;Não
+2;Terça;21;503;Coromandel;Não
+3;Quarta;1;500;Patos de Minas;
+3;Quarta;2;500;Patos de Minas;
+3;Quarta;3;501;São Gotardo;
+3;Quarta;4;501;São Gotardo;
+3;Quarta;5;517;Rio de Janeiro - Ômega X;
+3;Quarta;6;518;Rio de Janeiro - Kanejo;
+3;Quarta;7;510;Supermercado BH - Contagem;
+3;Quarta;8;510;Belo Horizonte - RP Express;
+3;Quarta;9;519;Brasília - Versatto;
+4;Quinta;1;500;Patos de Minas;
+4;Quinta;2;500;Patos de Minas;
+4;Quinta;3;501;São Gotardo;
+4;Quinta;4;501;São Gotardo;
+4;Quinta;5;521;Ribeirão Preto - Cargo Frio;
+4;Quinta;6;538;Marília - Cargo Frio;
+4;Quinta;7;517;Rio de Janeiro - Ômega X;
+4;Quinta;8;517;Rio de Janeiro - Ômega X;
+4;Quinta;9;525;Bahia Capital - LogMaster;
+4;Quinta;10;525;Bahia Capital - LogMaster;
+4;Quinta;11;532;Bahia Interior - TransVieira;
+4;Quinta;12;532;Bahia Interior - TransVieira;
+5;Sexta;1;517;Rio de Janeiro - Ômega X;
+5;Sexta;2;517;Rio de Janeiro - Ômega X;
+5;Sexta;3;516;Montes Claros - Total Service;
+5;Sexta;4;516;Montes Claros - Total Service;
+5;Sexta;5;536;Goiás - AG Sestini;
+5;Sexta;6;519;Brasília - Versatto;
+5;Sexta;7;524;Zona da Mata - BSF Logística;
+5;Sexta;8;522;Osasco - SPM Logística;
+5;Sexta;9;505;Triângulo Mineiro - Total Service;
+5;Sexta;10;519;Brasília - Pantanal;
+5;Sexta;11;510;Belo Horizonte - RP Express;
+5;Sexta;12;512;Varginha - Brasfrios;
+5;Sexta;13;513;Passos - Maxfrios;
+5;Sexta;14;523;Vale do Aço - SS Log;
+5;Sexta;15;500;Patos de Minas;
+5;Sexta;16;500;Patos de Minas;
+5;Sexta;17;504;Arinos / Buritis;
+5;Sexta;18;504;Arinos / Buritis;
+5;Sexta;19;504;Riachinho;
+5;Sexta;20;504;Riachinho;
+5;Sexta;21;504;João Pinheiro;
+5;Sexta;22;504;Paracatu;
+5;Sexta;23;504;Unaí;
+5;Sexta;24;502;Araxá;
+5;Sexta;25;503;Patrocínio;
