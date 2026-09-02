@@ -554,9 +554,20 @@
         <div class="form-grid">
           <!-- O CAMPO "DIA" SAIU (02/09/2026), a pedido da Bruna: "os demais
                setores acham complicado ficar filtrando por dia para
-               localizar". A lista passou a trazer os últimos 30 dias de uma
-               vez; para achar uma devolução antiga existe o Histórico, que
-               é busca e não rolagem. -->
+               localizar". A lista traz os últimos 30 dias de uma vez.
+
+               NO LUGAR DELE, BUSCA — e não um Histórico à parte. Decisão do
+               dono no mesmo dia: "pode usar o numero do check list, ai nao
+               precisa ser por data para o operador identificar (...) fica
+               melhor do q criar um historico, pode ser so a lista mesmo".
+
+               O RÓTULO DIZ O QUE A CAIXA ACEITA. Uma busca que só entende o
+               nº do checklist e ignora calada uma placa digitada é pior que
+               não ter busca: a pessoa conclui que a devolução não existe. -->
+          <div><label for="dev-busca">Buscar</label>
+            <input type="search" id="dev-busca" oninput="buscarDevolucoesUI(this.value)"
+              placeholder="Nº do checklist, Nº DEV ou placa"
+              title="Filtra a lista abaixo. Procura nos checklists dos últimos 30 dias."></div>
           <div style="align-self:end" class="gap8">
             <button class="btn btn-sec btn-sm" onclick="carregarDevolucoes()">↻ Atualizar</button>
             <button class="btn btn-sec btn-sm" onclick="relatorioDevolucoesUI()">📄 Relatório do dia</button>
@@ -566,7 +577,7 @@
           </div>
         </div>
         <div id="dev-lista"></div>
-        <div class="empty" id="dev-empty" hidden>Nenhum checklist de devolução neste dia.</div>
+        <div class="empty" id="dev-empty" hidden></div>
       </div>
     </div>
 
