@@ -93,6 +93,31 @@ const DEV_ETAPA_ROTULO = {
   controles: 'Controles Internos', notas: 'Central de Notas',
 };
 
+/* A ORDEM NA TELA É OUTRA COISA QUE A ORDEM DO TRABALHO (02/09/2026).
+
+   A Bruna marcou num print a sequência que a operação enxerga:
+
+       1 Portaria · 2 Balança (entrada) · 3 Balança (PESO FINAL)
+       4 Expedição · 5 Controles Internos · 6 Central de Notas
+
+   A segunda pesagem vem ANTES da Expedição — e é assim no pátio mesmo: o
+   caminhão descarrega, volta na balança e vai embora; a conferência da
+   Expedição acontece depois, no ritmo deles. Foi por isso que em 28/08 a
+   etapa da Expedição virou só o "OKzinho".
+
+   O QUE NÃO MUDOU: a máquina de estados (DEV_ETAPAS, logo acima). Ninguém
+   ficou travado esperando ninguém — cada setor continua dando o OK quando
+   puder. Decisão do dono ao ser perguntado se era ordem de tela ou ordem
+   de trabalho: começar pela tela, porque mudar o fluxo deixaria as
+   devoluções em andamento com a pesagem final PULADA.
+
+   POR QUE ISTO É UMA LISTA COM NOME, e não a ordem das chaves do objeto
+   acima: agora as duas ordens são DIFERENTES de propósito. Deixar a de
+   tela implícita na declaração é convidar a próxima pessoa a "consertar"
+   uma para bater com a outra, e desfazer o pedido sem perceber. */
+const DEV_ORDEM_NA_TELA = ['portaria', 'faturamento', 'pesofinal',
+  'expedicao', 'controles', 'notas'];
+
 /* Dia local do pátio — NUNCA toISOString().slice(0,10): às 21h+ de Patos
    de Minas o UTC já virou o dia seguinte (guardião nº 2). */
 function diaLocalDev(d = new Date()) {
@@ -304,8 +329,10 @@ function renderDevolucoes() {
      Carga não tem nada a ver com checklist. A lista recarrega quando há
      motivo: a primeira vez, uma troca de dia, uma ação de quem está aqui,
      ou o aviso `devolucao:atualizada` — que tem caminho próprio. */
-  const diaPedido = (document.getElementById('dev-filtro-dia') || {}).value || diaLocalDev();
-  if (_devDiaCarregado !== diaPedido) carregarDevolucoes();
+  // Sem filtro de dia não existe mais "trocou o dia": carrega na primeira
+  // vez e, depois disso, só repinta — quem recarrega de verdade é o botão
+  // Atualizar, uma ação de quem está aqui, ou o aviso do servidor.
+  if (_devDiaCarregado !== 'todos') carregarDevolucoes();
   else renderListaDevolucoes();
 }
 
@@ -346,21 +373,40 @@ async function carregarCadastrosDev() {
   }
 }
 
+/* SEM FILTRO DE DIA (02/09/2026).
+
+   Pedido da Bruna, com as palavras dela: "seria possível remover a opção de
+   filtrar por dados no checklist, de modo que, em vez de filtrarmos, todos
+   os itens apareçam sequenciados na tela? Não precisamos filtrar por dia,
+   pois os demais setores acham complicado ficar filtrando por dia para
+   localizar".
+
+   A causa era esta função: ela pedia `listar(dia, dia)` — UM dia só. Um
+   checklist criado ontem sumia da tela hoje, e quem chegava para dar o OK
+   da própria etapa tinha que adivinhar a data para achar o próprio
+   trabalho. A Expedição e os Controles Internos trabalham exatamente
+   assim: entram depois, às vezes no dia seguinte.
+
+   O servidor NÃO precisou mudar: a rota GET /devolucoes já devolve os
+   últimos 30 dias quando ninguém manda período (ver o `else` do filtro em
+   rotas/devolucoes.js). O painel é que estava estreitando a resposta.
+
+   Trinta dias e não "tudo": lista que cresce para sempre recria a queixa
+   com outra cara, e daí sem filtro para socorrer. Para achar uma devolução
+   antiga existe o Histórico, que é busca — não rolagem. */
 async function carregarDevolucoes() {
   if (!devServidorOk()) return;
-  const dia = (document.getElementById('dev-filtro-dia') || {}).value || diaLocalDev();
   try {
-    DEVOLUCOES = await SuincoSharePoint.devolucoes.listar(dia, dia);
-    _devDiaCarregado = dia;
+    DEVOLUCOES = await SuincoSharePoint.devolucoes.listar();
+    _devDiaCarregado = 'todos';
     renderListaDevolucoes();
   } catch (e) {
     notify('Não consegui buscar as devoluções: ' + (e.message || 'erro desconhecido'), 'danger', 6000);
   }
 }
 
+/* Mantida para não quebrar chamada antiga: hoje ela só recarrega. */
 function filtroDevolucoesHoje() {
-  const f = document.getElementById('dev-filtro-dia');
-  if (f) f.value = diaLocalDev();
   carregarDevolucoes();
 }
 
@@ -854,7 +900,7 @@ function carimbosDev(d) {
   // Sobra encerra na Expedição — mostrar Controles/Notas como "pendente"
   // para sempre só confundiria.
   const etapasVisiveis = d.tipo === 'SOBRA'
-    ? ['portaria', 'faturamento', 'expedicao'] : Object.keys(DEV_ETAPA_ROTULO);
+    ? ['portaria', 'faturamento', 'expedicao'] : DEV_ORDEM_NA_TELA;
   return `<div class="dev-carimbos">
     ${etapasVisiveis.map((chave) => [chave, DEV_ETAPA_ROTULO[chave]]).map(([chave, rotulo]) => {
       const c = d.carimbos[chave];
@@ -1813,7 +1859,9 @@ async function relatorioDevolucoesUI(diaParam) {
           ? `<div class="dev-doc-diverg"><strong>Lacre:</strong> chegou lacrado${d.lacre1 ? ' — nº ' + esc(d.lacre1) : ''}${d.lacre2 ? ' e ' + esc(d.lacre2) : ''}.</div>`
           : '')}
       <div class="dev-doc-carimbos">
-        ${Object.entries(DEV_ETAPA_ROTULO).map(([chave, rotulo]) => {
+        ${/* O relatório segue a MESMA ordem da tela: quem confere o papel na
+              mão é a mesma pessoa que olhou o painel. */''}
+        ${DEV_ORDEM_NA_TELA.map((chave) => [chave, DEV_ETAPA_ROTULO[chave]]).map(([chave, rotulo]) => {
           const c = d.carimbos[chave];
           return `<span class="dev-doc-carimbo">${rotulo}: ${c ? esc(c.por) + ' ' + esc(fmtDataHora(c.em)) : '—'}</span>`;
         }).join('')}
