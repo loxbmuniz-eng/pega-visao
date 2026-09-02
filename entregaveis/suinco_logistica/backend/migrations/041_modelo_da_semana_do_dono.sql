@@ -47,6 +47,13 @@
 --     de uma semana específica, e carregá-la para um modelo novo seria
 --     mostrar número velho como se fosse o de agora.
 --
+-- SEM ESTA MIGRAÇÃO: o modelo da semana continua o antigo, das planilhas de
+-- 17 a 21/08 (migração 033) — 100 linhas, com a sequência quase toda em zero
+-- e por isso fora de ordem na tela. Nada quebra e nada dá erro: a Montagem
+-- do Dia monta normalmente, só que pelo modelo velho, e a sequência que o
+-- dono mandou não aparece. O painel novo não depende de coluna nenhuma que
+-- esta migração crie — ela só troca DADO.
+--
 -- O QUE FOI PRESERVADO: `tipo_operacao` (CROSS-DOCKING / ENTREGA DIRETA /
 -- RET FRIGO). Ele não está nas planilhas, mas é propriedade da ROTA e não
 -- da semana — e a regra da casa é que campo vazio não é ordem de apagar.
