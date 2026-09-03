@@ -1,0 +1,282 @@
+<title>FRVIN Last Dance</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;800&family=IBM+Plex+Mono:wght@400;700&display=swap">
+<style>
+  /* Identidade da campanha, vinda do JSON em projetos/estudio/exemplos/frvin_last_dance.json.
+     Peça de pista: comprometida com um só mundo visual, escuro. Por isso pinta
+     tudo explicitamente e não segue o tema do visualizador. */
+  :root{
+    --tinta:#0B0B0D;
+    --piso:#131318;
+    --papel:#F2EFE9;
+    --suave:#96938D;
+    --linha:#2A2A31;
+    --marca:#FF4438;
+    --pendente:#E5B76B;
+    --display:'Archivo','Helvetica Neue',Arial,sans-serif;
+    --mono:'IBM Plex Mono',ui-monospace,'SF Mono',Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;background:var(--tinta);color:var(--papel);
+    font-family:var(--display);
+    -webkit-font-smoothing:antialiased;
+    overflow-x:hidden;
+  }
+  a{color:var(--marca)}
+  :focus-visible{outline:2px solid var(--marca);outline-offset:3px}
+
+  .envelope{max-width:1080px;margin:0 auto;padding:28px 20px 64px}
+
+  /* ---------- cabeçalho ---------- */
+  .topo{display:flex;flex-direction:column;gap:14px;padding:8px 4px 26px}
+  .eyebrow{
+    font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.28em;
+    text-transform:uppercase;color:var(--marca);
+  }
+  .topo h1{
+    margin:0;font-size:clamp(38px,11vw,68px);font-weight:800;line-height:.94;
+    letter-spacing:-.035em;text-transform:uppercase;text-wrap:balance;
+  }
+  .linhafina{
+    font-family:var(--mono);font-size:13px;color:var(--suave);line-height:1.6;
+    border-top:1px solid var(--linha);padding-top:14px;
+  }
+  .linhafina b{color:var(--papel);font-weight:700}
+
+  /* ---------- trilha de progresso ---------- */
+  .pontos{display:flex;gap:6px;padding:0 4px 12px}
+  .ponto{flex:1;height:4px;border-radius:3px;background:var(--linha);transition:background .18s ease}
+  .ponto[data-ativo="1"]{background:var(--marca)}
+  .ponto[data-visto="1"]{background:#66201C}
+
+  /* ---------- carrossel ---------- */
+  .carrossel{
+    display:flex;gap:16px;overflow-x:auto;scroll-snap-type:x mandatory;
+    padding:4px 4px 18px;
+    scrollbar-width:none;-webkit-overflow-scrolling:touch;
+  }
+  .carrossel::-webkit-scrollbar{display:none}
+
+  .slide{
+    container-type:inline-size;
+    flex:0 0 auto;scroll-snap-align:center;
+    width:min(86vw,392px);aspect-ratio:9/16;
+    background:var(--piso);border:1px solid var(--linha);
+    position:relative;overflow:hidden;
+    display:flex;flex-direction:column;justify-content:center;
+    padding:17.6cqw 8.3cqw 19.4cqw;
+  }
+  /* Vinheta: o mesmo peso de canto que a cena de vídeo desenha. */
+  .slide::after{
+    content:"";position:absolute;inset:0;pointer-events:none;
+    background:radial-gradient(115% 78% at 50% 42%,transparent 42%,rgba(0,0,0,.62) 100%);
+  }
+  .selo{
+    font-family:var(--mono);font-size:2.31cqw;font-weight:700;letter-spacing:.28em;
+    text-transform:uppercase;color:var(--marca);margin-bottom:3.7cqw;
+  }
+  .titulo{
+    font-size:9.6cqw;line-height:.98;font-weight:800;letter-spacing:-.035em;
+    text-transform:uppercase;margin:0;
+  }
+  .titulo.menor{font-size:7cqw;text-transform:none;letter-spacing:-.03em;line-height:1.05}
+  .texto{margin:3.7cqw 0 0;font-size:3.5cqw;line-height:1.42;color:var(--suave)}
+  .texto b{color:var(--papel);font-weight:700}
+  .rodape{
+    margin-top:4.8cqw;font-family:var(--mono);font-size:2.87cqw;color:var(--papel);
+    border-top:2px solid var(--linha);padding-top:2.6cqw;
+  }
+  /* Amarelo = dado que não temos e não se inventa. */
+  .falta{
+    margin-top:3.1cqw;border-left:.46cqw solid var(--pendente);padding:1.5cqw 0 1.5cqw 2.2cqw;
+    font-family:var(--mono);font-size:2.4cqw;color:var(--pendente);line-height:1.45;
+  }
+  .assinatura,.contador{
+    position:absolute;bottom:8.1cqw;font-family:var(--mono);font-size:2.6cqw;z-index:2;
+  }
+  .assinatura{left:8.3cqw;letter-spacing:.1em;color:var(--suave)}
+  .contador{right:8.3cqw;color:var(--marca);font-weight:700}
+
+  /* ---------- rodapé de trabalho ---------- */
+  .dica{
+    font-family:var(--mono);font-size:12px;color:var(--suave);
+    padding:0 4px 30px;letter-spacing:.04em;
+  }
+  .pendencias{
+    border-top:1px solid var(--linha);padding:26px 4px 0;
+    display:flex;flex-direction:column;gap:18px;
+  }
+  .pendencias h2{
+    margin:0;font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.28em;
+    text-transform:uppercase;color:var(--pendente);
+  }
+  .pendencias ul{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:12px}
+  .pendencias li{
+    display:flex;gap:14px;align-items:baseline;
+    font-size:15px;line-height:1.5;color:var(--papel);
+  }
+  .pendencias li span{
+    font-family:var(--mono);font-size:12px;font-weight:700;color:var(--pendente);
+    flex:0 0 auto;min-width:34px;
+  }
+  .fonte{
+    margin-top:12px;font-family:var(--mono);font-size:11.5px;line-height:1.7;
+    color:var(--suave);border-top:1px solid var(--linha);padding-top:16px;
+  }
+
+  @media (prefers-reduced-motion:reduce){
+    .carrossel{scroll-behavior:auto}
+    *{transition:none !important}
+  }
+  @media (min-width:760px){
+    .slide{width:340px}
+    .envelope{padding:44px 32px 72px}
+  }
+</style>
+
+<div class="envelope">
+  <header class="topo">
+    <div class="eyebrow">FRVIN · encerramento</div>
+    <h1>Last Dance</h1>
+    <div class="linhafina">
+      Carrossel de 9 telas · <b>06.09</b> · domingo · 22h às 06h · Cândido Mariano<br>
+      Copy transcrita do documento de aprovação. Amarelo é dado que ainda falta.
+    </div>
+  </header>
+
+  <div class="pontos" id="pontos" aria-hidden="true"></div>
+
+  <div class="carrossel" id="carrossel" tabindex="0" role="region" aria-label="Telas do carrossel FRVIN Last Dance">
+
+    <article class="slide">
+      <div class="selo">01 · capa</div>
+      <h2 class="titulo">A última vez<br>nessa pista</h2>
+      <div class="rodape">06.09 · domingo · 22h às 06h</div>
+      <div class="assinatura">#FRVINBADALO</div><div class="contador">01/09</div>
+    </article>
+
+    <article class="slide">
+      <div class="selo">02 · o convite</div>
+      <h2 class="titulo">Ainda dá tempo<br>de estar lá.</h2>
+      <p class="texto">No dia 6 de setembro o FRVIN abre pela última vez. Oito horas, seis sets, do primeiro disco até o sol nascer na Cândido Mariano.</p>
+      <div class="assinatura">#FRVINBADALO</div><div class="contador">02/09</div>
+    </article>
+
+    <article class="slide">
+      <div class="selo">03 · o que essa pista foi</div>
+      <h2 class="titulo">Quatro anos.<br>Uma curadoria.</h2>
+      <p class="texto">Quatro anos de programação assinada pela <b>Say Ventura</b> — sexta e sábado, sem atalho, escolhendo nome por nome o que essa pista ia ouvir.</p>
+      <div class="assinatura">#FRVINBADALO</div><div class="contador">03/09</div>
+    </article>
+
+    <article class="slide">
+      <div class="selo">04 · noite</div>
+      <h2 class="titulo">Joyce Muniz</h2>
+      <p class="texto">Brasileira que Viena não devolveu. Tocou aqui, no mesmo chão que você vai pisar dia 6.</p>
+      <div class="falta">FALTA · ano + uma lembrança concreta da noite</div>
+      <div class="assinatura">#FRVINBADALO</div><div class="contador">04/09</div>
+    </article>
+
+    <article class="slide">
+      <div class="selo">05 · noite</div>
+      <h2 class="titulo">Entropia</h2>
+      <p class="texto">Tem noite em que a casa inteira anda junto sem ninguém combinar. Essa foi uma.</p>
+      <div class="falta">FALTA · ano + o que fez essa noite ser diferente</div>
+      <div class="assinatura">#FRVINBADALO</div><div class="contador">05/09</div>
+    </article>
+
+    <article class="slide">
+      <div class="selo">06 · noite</div>
+      <h2 class="titulo">Julião</h2>
+      <p class="texto">Do tipo que a pessoa lembra exatamente de onde estava quando a música virou.</p>
+      <div class="falta">FALTA · ano + por que entrou pra história da casa</div>
+      <div class="assinatura">#FRVINBADALO</div><div class="contador">06/09</div>
+    </article>
+
+    <article class="slide">
+      <div class="selo">07 · a homenagem</div>
+      <h2 class="titulo">Say Ventura</h2>
+      <p class="texto">Quatro anos segurando a curadoria do FRVIN. Cada line-up que passou por aqui passou pela mão dela primeiro.<br><br>No dia 6 ela toca também. Fechando o que ela mesma construiu.</p>
+      <div class="assinatura">#FRVINBADALO</div><div class="contador">07/09</div>
+    </article>
+
+    <article class="slide">
+      <div class="selo">08 · o coletivo</div>
+      <h2 class="titulo menor">E todas as que<br>não têm nome.</h2>
+      <p class="texto">A sexta que não devia dar ninguém e deu. O after que virou almoço. A vez que o ar morreu e ninguém saiu.<br><br><b>Falta uma. E ela é dia 6.</b></p>
+      <div class="assinatura">#FRVINBADALO</div><div class="contador">08/09</div>
+    </article>
+
+    <article class="slide">
+      <div class="selo">09 · line-up</div>
+      <h2 class="titulo">06.09<br>a última</h2>
+      <p class="texto"><b>C VEDRONI · RAMSAY · OTA BLIND<br>LOLÔ BORTHOLACCI · SAY VENTURA · JOEVKID</b><br><br>Domingo, véspera de feriado.<br>Ninguém tem hora pra acordar.</p>
+      <div class="falta">FALTA · confirmar os @ dos artistas</div>
+      <div class="rodape">22h — 06h · R$ 40 · Sympla, link na bio</div>
+      <div class="assinatura">#FRVINBADALO</div><div class="contador">09/09</div>
+    </article>
+
+  </div>
+
+  <div class="dica">Arraste para o lado · ou use as setas ← →</div>
+
+  <section class="pendencias">
+    <h2>O que ainda falta preencher</h2>
+    <ul>
+      <li><span>04</span>Joyce Muniz — ano da noite e uma lembrança concreta dela.</li>
+      <li><span>05</span>Entropia — ano da noite e o que fez ela ser diferente.</li>
+      <li><span>06</span>Julião — ano da noite e por que entrou pra história da casa.</li>
+      <li><span>09</span>Line-up — confirmar os @ de cada artista.</li>
+    </ul>
+    <div class="fonte">
+      Copy transcrita do documento de aprovação “FRVIN Last Dance — copy e estratégia”, não reescrita.<br>
+      Cena de vídeo correspondente: <b>projetos/estudio/cenas/carrossel/cena.html</b> · dados: <b>projetos/estudio/exemplos/frvin_last_dance.json</b>
+    </div>
+  </section>
+</div>
+
+<script>
+(() => {
+  const trilho = document.getElementById('carrossel');
+  const slides = [...trilho.querySelectorAll('.slide')];
+  const pontos = document.getElementById('pontos');
+
+  slides.forEach(() => {
+    const p = document.createElement('div');
+    p.className = 'ponto';
+    pontos.appendChild(p);
+  });
+  const marcas = [...pontos.children];
+
+  const marcar = () => {
+    const centro = trilho.scrollLeft + trilho.clientWidth / 2;
+    let atual = 0, menor = Infinity;
+    slides.forEach((s, i) => {
+      const d = Math.abs(s.offsetLeft + s.offsetWidth / 2 - centro);
+      if (d < menor) { menor = d; atual = i; }
+    });
+    marcas.forEach((m, i) => {
+      m.dataset.ativo = i === atual ? '1' : '0';
+      m.dataset.visto = i < atual ? '1' : '0';
+    });
+  };
+
+  trilho.addEventListener('scroll', () => requestAnimationFrame(marcar), { passive: true });
+  window.addEventListener('resize', marcar);
+  marcar();
+
+  trilho.addEventListener('keydown', (e) => {
+    const passo = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+    if (!passo) return;
+    e.preventDefault();
+    const centro = trilho.scrollLeft + trilho.clientWidth / 2;
+    let atual = 0, menor = Infinity;
+    slides.forEach((s, i) => {
+      const d = Math.abs(s.offsetLeft + s.offsetWidth / 2 - centro);
+      if (d < menor) { menor = d; atual = i; }
+    });
+    const alvo = slides[Math.min(slides.length - 1, Math.max(0, atual + passo))];
+    trilho.scrollTo({ left: alvo.offsetLeft - (trilho.clientWidth - alvo.offsetWidth) / 2, behavior: 'smooth' });
+  });
+})();
+</script>
