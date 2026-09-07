@@ -1,0 +1,216 @@
+<title>Estúdio, FRVIN e Grooving</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=IBM+Plex+Mono:wght@400;600;700&family=Public+Sans:ital,wght@0,400;0,600;1,400&display=swap">
+<style>
+  /* Peça de leitura para o Luis, no mundo escuro das duas campanhas
+     (FRVIN vermelho, Grooving dourado). Compromisso deliberado com um só
+     tema: tudo pintado explicitamente, nada herdado do visualizador. */
+  :root{
+    --tinta:#0A0A0C;
+    --piso:#131317;
+    --piso2:#1A1A20;
+    --papel:#EDE9E1;
+    --suave:#918C83;
+    --linha:#26262E;
+    --frvin:#FF4438;
+    --groov:#C9A96A;
+    --alerta:#E5B76B;
+    --disp:'Bricolage Grotesque','Helvetica Neue',Arial,sans-serif;
+    --corpo:'Public Sans','Helvetica Neue',Arial,sans-serif;
+    --mono:'IBM Plex Mono',ui-monospace,'SF Mono',Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--tinta);color:var(--papel);font-family:var(--corpo);
+       font-size:16px;line-height:1.6;-webkit-font-smoothing:antialiased}
+  :focus-visible{outline:2px solid var(--frvin);outline-offset:3px}
+
+  .pagina{max-width:760px;margin:0 auto;padding:30px 20px 72px;
+          display:flex;flex-direction:column;gap:38px}
+
+  .rot{font-family:var(--mono);font-size:11.5px;font-weight:700;letter-spacing:.26em;
+       text-transform:uppercase;color:var(--suave)}
+
+  header{display:flex;flex-direction:column;gap:12px}
+  header h1{margin:0;font-family:var(--disp);font-size:clamp(31px,8vw,46px);font-weight:800;
+            line-height:1.02;letter-spacing:-.02em;text-wrap:balance}
+  header p{margin:0;color:var(--suave);max-width:60ch}
+
+  /* A resposta primeiro: por que os arquivos sumiram. */
+  .achado{background:var(--piso);border-left:3px solid var(--frvin);padding:20px 22px;
+          display:flex;flex-direction:column;gap:10px}
+  .achado h2{margin:0;font-family:var(--disp);font-size:20px;font-weight:700;letter-spacing:-.01em}
+  .achado p{margin:0}
+  .achado code{font-family:var(--mono);font-size:13.5px;color:var(--frvin);
+               background:#000;padding:1px 6px;border-radius:3px}
+
+  /* O que mudou desde que o material foi feito. */
+  .alerta{border:1px solid var(--alerta);background:rgba(229,183,107,.07);
+          padding:20px 22px;display:flex;flex-direction:column;gap:10px}
+  .alerta h2{margin:0;font-family:var(--disp);font-size:20px;font-weight:700;color:var(--alerta)}
+  .alerta p{margin:0}
+  .alerta .datas{font-family:var(--mono);font-size:13.5px;color:var(--alerta);
+                 display:flex;flex-direction:column;gap:4px;margin-top:2px}
+
+  section{display:flex;flex-direction:column;gap:16px}
+  h2.titulo{margin:0;font-family:var(--disp);font-size:25px;font-weight:700;letter-spacing:-.015em}
+
+  /* As duas campanhas: mesma estrutura, sotaque de cor por marca. */
+  .campanhas{display:flex;flex-direction:column;gap:16px}
+  .camp{background:var(--piso);padding:22px;display:flex;flex-direction:column;gap:14px;
+        border-top:3px solid var(--acento)}
+  .camp.frvin{--acento:var(--frvin)}
+  .camp.groov{--acento:var(--groov)}
+  .camp h3{margin:0;font-family:var(--disp);font-size:22px;font-weight:800;letter-spacing:-.01em;
+           color:var(--acento);text-transform:uppercase}
+  .camp .quando{font-family:var(--mono);font-size:13px;color:var(--papel)}
+  .camp dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:8px 16px;
+           font-size:14.5px;align-items:baseline}
+  .camp dt{font-family:var(--mono);font-size:11.5px;letter-spacing:.16em;text-transform:uppercase;
+           color:var(--suave);white-space:nowrap}
+  .camp dd{margin:0}
+  .swatch{display:inline-block;width:9px;height:9px;border-radius:2px;
+          background:var(--acento);margin-right:7px;vertical-align:baseline}
+
+  .regras{background:var(--piso2);padding:16px 18px;display:flex;flex-direction:column;gap:8px}
+  .regras p{margin:0;font-size:13.5px;color:var(--suave)}
+  .regras ul{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:5px;font-size:14px}
+  .regras b{color:var(--papel)}
+
+  /* Falta: uma linha por pendência, com a origem. */
+  table{width:100%;border-collapse:collapse;font-size:14.5px}
+  .rolagem{overflow-x:auto}
+  th{text-align:left;font-family:var(--mono);font-size:11px;letter-spacing:.18em;
+     text-transform:uppercase;color:var(--suave);font-weight:700;
+     padding:0 14px 10px 0;border-bottom:1px solid var(--linha);white-space:nowrap}
+  td{padding:11px 14px 11px 0;border-bottom:1px solid var(--linha);vertical-align:top}
+  td.marca{font-family:var(--mono);font-size:12px;font-weight:700;white-space:nowrap}
+  td.marca.f{color:var(--frvin)} td.marca.g{color:var(--groov)}
+
+  /* Três estados, a marcação da casa. */
+  .estados{display:flex;flex-direction:column;gap:9px}
+  .est{display:flex;gap:12px;align-items:baseline;font-size:15px}
+  .est i{font-style:normal;flex:0 0 auto}
+  .est b{font-weight:600}
+
+  pre{margin:0;background:#000;border:1px solid var(--linha);padding:15px 16px;
+      overflow-x:auto;font-family:var(--mono);font-size:12.5px;line-height:1.65;color:var(--papel)}
+  pre .c{color:var(--suave)}
+
+  footer{border-top:1px solid var(--linha);padding-top:18px;font-family:var(--mono);
+         font-size:11.5px;line-height:1.75;color:var(--suave)}
+  footer b{color:var(--papel)}
+</style>
+
+<div class="pagina">
+
+  <header>
+    <div class="rot">Briefing · 07.09.2026</div>
+    <h1>Onde foram parar os MP4, e o que existe das duas campanhas</h1>
+    <p>O projeto que gera os vídeos, as duas campanhas que rodaram nele, o que ficou pendente e o que mudou desde que o material foi feito.</p>
+  </header>
+
+  <div class="achado">
+    <h2>Os vídeos nunca estiveram no repositório</h2>
+    <p>O <code>.gitignore</code> do estúdio ignora <code>saida/</code>, <code>*.mp4</code> e <code>*.webm</code>. Foi versionado o <b>código que gera</b> os vídeos — as cenas e os dados de cada campanha —, nunca os arquivos renderizados. Quando o container daquela sessão foi reciclado, os MP4 foram junto.</p>
+    <p>Não é perda: o render é determinístico de propósito. Rodei os três de novo agora, e eles saem idênticos ao que saiu lá.</p>
+  </div>
+
+  <div class="alerta">
+    <h2>As duas datas já passaram</h2>
+    <p>Todo esse material é de pré-evento — convite, contagem, line-up. Hoje é <b>segunda, 07.09</b>.</p>
+    <div class="datas">
+      <span>Grooving Four Years · 05.09 · sábado · passou</span>
+      <span>FRVIN Last Dance · 06.09 · domingo · passou</span>
+    </div>
+    <p>Publicar qualquer um deles agora anuncia festa que já aconteceu. O que serve daqui pra frente é pós: agradecimento, aftermovie, e as <b>next dates</b> que você pediu.</p>
+  </div>
+
+  <section>
+    <h2 class="titulo">O que existe</h2>
+    <div class="campanhas">
+
+      <article class="camp frvin">
+        <h3>FRVIN Last Dance</h3>
+        <div class="quando">06.09 · domingo · 22h às 06h · Cândido Mariano</div>
+        <dl>
+          <dt>Peça</dt><dd>Carrossel de 9 telas, 1080×1920 · 38,8s</dd>
+          <dt>Cor</dt><dd><span class="swatch"></span>#FF4438 sobre preto</dd>
+          <dt>Assinatura</dt><dd>#FRVINBADALO</dd>
+          <dt>Line-up</dt><dd>C Vedroni · Ramsay · Ota Blind · Lolô Bortholacci · Say Ventura · Joevkid</dd>
+          <dt>Ingresso</dt><dd>R$ 40 · Sympla</dd>
+          <dt>Eixo</dt><dd>Encerramento. Quatro anos de curadoria da Say Ventura, três noites lembradas, e ela tocando no fechamento do que construiu.</dd>
+        </dl>
+      </article>
+
+      <article class="camp groov">
+        <h3>Grooving Four Years</h3>
+        <div class="quando">05.09 · sábado · Chácara Zanatta · Primavera do Leste — MT</div>
+        <dl>
+          <dt>Peça</dt><dd>Duas versões: story 1080×1920 e feed 1080×1350 · 28,8s cada</dd>
+          <dt>Cor</dt><dd><span class="swatch"></span>#C9A96A sobre preto</dd>
+          <dt>Line-up</dt><dd>Ota Blind · Lolô Bortholacci · BROM · Murilo Cassador · Gabriel Nilson · Ivo Mioranza</dd>
+          <dt>Eixo</dt><dd>Aniversário de 4 anos. Uma tela por artista, e a pista como personagem.</dd>
+        </dl>
+        <div class="regras">
+          <p>Regras fixas que vieram do handoff e estão gravadas no arquivo de dados:</p>
+          <ul>
+            <li>sempre <b>“aniversário de 4 anos da Grooving”</b> — nunca “dela”</li>
+            <li>sempre <b>“pista”</b> — nunca “sala”</li>
+            <li>não citar número de edições</li>
+            <li>não citar cidade de origem dos artistas</li>
+            <li>não citar artistas de edições passadas</li>
+          </ul>
+        </div>
+      </article>
+
+    </div>
+  </section>
+
+  <section>
+    <h2 class="titulo">O que falta — e já faltava</h2>
+    <div class="rolagem">
+      <table>
+        <thead><tr><th>Campanha</th><th>Pendência</th><th>Onde trava</th></tr></thead>
+        <tbody>
+          <tr><td class="marca f">FRVIN</td><td>Ano e uma lembrança concreta da noite da Joyce Muniz</td><td>tela 04</td></tr>
+          <tr><td class="marca f">FRVIN</td><td>Ano e o que fez a noite Entropia ser diferente</td><td>tela 05</td></tr>
+          <tr><td class="marca f">FRVIN</td><td>Ano e por que o Julião entrou pra história da casa</td><td>tela 06</td></tr>
+          <tr><td class="marca f">FRVIN</td><td>Os @ dos seis artistas</td><td>tela 09</td></tr>
+          <tr><td class="marca g">Grooving</td><td>Os @ dos seis artistas</td><td>seis telas de line-up</td></tr>
+          <tr><td class="marca g">Grooving</td><td>Ordem final do line-up e os b2b</td><td>o handoff pede re-render quando fecharem</td></tr>
+          <tr><td class="marca g">Grooving</td><td>Hudson Sanches está na lista antiga e não tem material</td><td>decisão sua: entra ou sai</td></tr>
+          <tr><td class="marca f">as duas</td><td>A arte das marcas — os vídeos saíram tipográficos por falta de imagem</td><td>a cena <b>cartoes</b> anima card pronto; sem PNG ela mostra moldura vazia</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2 class="titulo">O estúdio, em uma passada</h2>
+    <p style="margin:0;color:var(--suave)">O vídeo é uma página HTML. O renderizador é dono do relógio — a cena não anima sozinha, e <code style="font-family:var(--mono);font-size:13px;color:var(--groov)">animation</code> e <code style="font-family:var(--mono);font-size:13px;color:var(--groov)">transition</code> do CSS estão desligados à força. É isso que faz o quadro 47 ser o quadro 47 em qualquer máquina: o vídeo entregue é o vídeo aprovado, não uma gravação de tela que pulou quadro. Zero dependências — Node e Chromium, nada de npm.</p>
+    <pre><span class="c"># uma campanha vira vídeo assim</span>
+./estudio renderizar carrossel \
+  --dados exemplos/frvin_last_dance.json \
+  --formato mp4
+
+<span class="c"># trocar copy = editar o JSON e rodar de novo</span>
+<span class="c"># nenhuma arte é redesenhada; a identidade vem do próprio dado</span></pre>
+  </section>
+
+  <section>
+    <h2 class="titulo">Estados</h2>
+    <div class="estados">
+      <div class="est"><i>✅</i><span><b>Os três MP4 re-renderizados</b> — mandei no chat: FRVIN 9:16, Grooving 9:16 e Grooving 4:5, H.264.</span></div>
+      <div class="est"><i>✅</i><span><b>Código e dados das campanhas</b> — versionados na branch <span style="font-family:var(--mono);font-size:13px">claude/projetos-por-nicho-39za6z</span>.</span></div>
+      <div class="est"><i>🟡</i><span><b>Release do Joevkid</b> — guardado no repositório, ainda não virou copy.</span></div>
+      <div class="est"><i>⬜</i><span><b>B2B Joevkid × Kaled Nasser</b> — esperando o release do Kaled, mais data, casa e cidade.</span></div>
+      <div class="est"><i>⬜</i><span><b>Post da Sayuri e next dates</b> — sem briefing ainda.</span></div>
+      <div class="est"><i>⬜</i><span><b>Vídeos com a arte real</b> — dependem dos PNG das marcas.</span></div>
+    </div>
+  </section>
+
+  <footer>
+    Fontes lidas: <b>projetos/estudio/</b> na branch claude/projetos-por-nicho-39za6z — README, cenas/carrossel, cenas/cartoes e os três arquivos de dados de campanha.<br>
+    Nada aqui foi inventado: line-up, datas, cores e regras saíram dos arquivos. O que não estava lá está listado como pendência.
+  </footer>
+
+</div>
