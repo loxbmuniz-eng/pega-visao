@@ -514,6 +514,10 @@ const SuincoSharePoint = (function () {
       programadoEm: campos.Programado_Em,
       status: campos.Status_Atual,
       aguardandoCarga: campos.Aguardando_Carga === true || campos.Aguardando_Carga === 'Sim',
+      /* Saiu sem carregar — só trouxe devolução (08/09/2026). SÓ NA VOLTA:
+         quem carimba é o servidor, na transição da Portaria. O painel
+         nunca manda este campo, como acontece com Lacre_Retido_Por. */
+      saidaSemCarregar: campos.Saida_Sem_Carregar === true,
     };
   }
 
@@ -561,6 +565,7 @@ const SuincoSharePoint = (function () {
       Lacre_Retido_Em: c.lacreRetidoEm || null,
       Status_Atual: c.status,
       Aguardando_Carga: c.aguardandoCarga,
+      Saida_Sem_Carregar: c.saidaSemCarregar === true,
       Criado_Em: c.criadoEm,
       Programado_Em: c.programadoEm,
       Atualizado_Em: c.atualizadoEm,
@@ -760,18 +765,23 @@ const SuincoSharePoint = (function () {
   /* Muda o status pela rota que valida a transição no servidor. É por aqui
      que o painel deve mover a carga — e é o que impede alguém com o token de
      marcar "Faturado" num caminhão que nunca chegou. */
-  async function mudarStatus(cargaId, statusNovo) {
+  /* `extra` carrega a confirmação de transições que o servidor só aceita
+     com o gesto explícito — hoje `{ soDevolucao: true }`, a saída do
+     caminhão que entrou, entregou devolução e foi embora sem carregar
+     (08/09/2026). Sem ele o servidor devolve 422 com a explicação, e é
+     essa explicação que a tela mostra na pergunta ao porteiro. */
+  async function mudarStatus(cargaId, statusNovo, extra) {
     if (!estaConfigurado()) return semServidor();
     try {
       const c = await chamar(`/api/cargas/${encodeURIComponent(cargaId)}/status`, {
         metodo: 'POST',
-        corpo: { status: statusNovo },
+        corpo: { status: statusNovo, ...(extra || {}) },
       });
       mudarEstado('online');
       return { enfileirado: false, item: c };
     } catch (e) {
       if (eFalhaDeRede(e)) {
-        return enfileirar({ tipo: 'status', cargaId, status: statusNovo });
+        return enfileirar({ tipo: 'status', cargaId, status: statusNovo, extra: extra || null });
       }
       return { enfileirado: false, recusado: true, erro: e.message };
     }
@@ -894,8 +904,12 @@ const SuincoSharePoint = (function () {
             if (e2.status !== 404) throw e2;
           }
         } else if (item.tipo === 'status') {
+          /* `extra` viaja com o item da fila. Sem isto, a saída "só
+             devolução" registrada offline chegaria ao servidor sem a
+             confirmação e voltaria recusada com 422 — o porteiro teria
+             confirmado uma vez, e o caminhão continuaria no pátio. */
           await chamar(`/api/cargas/${encodeURIComponent(item.cargaId)}/status`, {
-            metodo: 'POST', corpo: { status: item.status },
+            metodo: 'POST', corpo: { status: item.status, ...(item.extra || {}) },
           });
         } else if (item.tipo === 'frota') {
           await gravarFrota(item.corpo);

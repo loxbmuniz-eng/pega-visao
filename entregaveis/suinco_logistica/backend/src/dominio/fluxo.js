@@ -112,7 +112,40 @@ const TRANSICOES = [
   { de: 'Embarque Iniciado',   para: 'Embarque Finalizado', setores: ['Expedição', 'Logística'] },
   { de: 'Embarque Finalizado', para: 'Faturado',            setores: ['Faturamento', 'Logística'] },
   { de: 'Faturado',            para: 'Seguiu Viagem',       setores: ['Portaria', 'Logística'] },
+  /* O CAMINHÃO QUE SÓ TROUXE DEVOLUÇÃO (08/09/2026).
+
+     Pedido do dono, trazendo o que a Portaria relatou: "quando a devolução
+     chega em um caminhão que não tá programado pra carregar (...) ele tem
+     que ter a opção só de depois colocar lá que ele saiu, que é só
+     devolução, então ele não vai carregar". E, sobre a rotina: "muitas
+     vezes chega, descarrega e vai embora e muitas vezes chega, descarrega
+     e fica no pátio aguardando carga novamente".
+
+     São os DOIS casos, e a diferença entre eles só se sabe na hora de
+     sair — não na entrada. Por isso a entrada continua sendo a de sempre
+     (o veículo aparece na Torre, e é isso que a Portaria queria) e o que
+     muda é a saída: daqui o porteiro pode encerrar sem passar por
+     Expedição e Faturamento. Quem fica para carregar segue no fluxo
+     normal, sem nada diferente.
+
+     `exigeConfirmacao` NÃO é uma trava: é a pergunta antes do gesto
+     grande. A regra da casa é "botão desabilitado não ensina o caminho,
+     só nega" — quem tem autoridade decide, depois de ler o que vai
+     acontecer. Sem a confirmação explícita a rota recusa, para que um
+     toque errado no celular do porteiro não mande embora um caminhão que
+     ainda ia carregar. */
+  { de: 'Aguardando Embarque', para: 'Seguiu Viagem',       setores: ['Portaria', 'Logística'],
+    exigeConfirmacao: 'soDevolucao',
+    explicacao: 'Este caminhão ainda não carregou. Encerrar aqui registra que ele '
+      + 'entrou, entregou a devolução e foi embora sem carregar.' },
 ];
+
+/* A transição que o chamador precisa examinar antes de aplicar — hoje só
+   para saber se ela exige confirmação explícita. Uma função, dois
+   chamadores: a rota pergunta aqui em vez de repetir a lista. */
+export function regraDaTransicao(statusAtual, statusNovo) {
+  return TRANSICOES.find((t) => t.de === statusAtual && t.para === statusNovo) || null;
+}
 
 // Administração existe para destravar operação parada às 2h da manhã sem
 // depender de alguém com acesso ao banco. Toda ação dela fica no log com

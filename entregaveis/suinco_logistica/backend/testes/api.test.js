@@ -4662,3 +4662,94 @@ describe('10. A carga programada encontra o caminhão que já está no pátio', 
     assert.ok(log.rows.length >= 1, 'a absorção precisa estar no Histórico');
   });
 });
+
+
+/* ------------------------------------------------------------------ */
+describe('7c. O caminhão que só trouxe devolução sai pela Portaria (08/09/2026)', () => {
+  /* O dono, trazendo o relato da Portaria:
+
+       "quando a devolução chega em um caminhão que não tá programado pra
+        carregar (...) ele tem que ter a opção só de depois colocar lá que
+        ele saiu, que é só devolução, então ele não vai carregar"
+
+     e, sobre a rotina real:
+
+       "muitas vezes chega, descarrega e vai embora e muitas vezes chega,
+        descarrega e fica no pátio aguardando carga novamente"
+
+     Até aqui o único caminho para "Seguiu Viagem" vinha de "Faturado".
+     Um caminhão que entrou só para entregar devolução nunca chega lá — e
+     ficava presa no pátio para sempre, contando na Torre como veículo
+     presente. */
+  let placaDaFrota;
+  before(async () => {
+    // A placa precisa existir na frota — é a trava do bloco 2.
+    const { rows } = await pool.query('SELECT placa FROM dim_veiculos LIMIT 1');
+    placaDaFrota = rows[0].placa;
+  });
+
+  async function cargaNoPatio() {
+    const c = await req('/api/cargas', {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { numeroCarga: `DEV-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+               placa: placaDaFrota },
+    });
+    assert.equal(c.status, 201, c.texto);
+    const ch = await req(`/api/cargas/${c.json.id}/status`, {
+      metodo: 'POST', token: tokens['Portaria'], corpo: { status: 'Aguardando Embarque' },
+    });
+    assert.equal(ch.status, 200, ch.texto);
+    return c.json.id;
+  }
+
+  test('sem confirmar, o servidor RECUSA e explica o que vai acontecer', async () => {
+    // Um toque errado no celular do porteiro não pode mandar embora um
+    // caminhão que ainda ia carregar.
+    const id = await cargaNoPatio();
+    const r = await req(`/api/cargas/${id}/status`, {
+      metodo: 'POST', token: tokens['Portaria'], corpo: { status: 'Seguiu Viagem' },
+    });
+    assert.equal(r.status, 422, r.texto);
+    assert.equal(r.json.codigo, 'CONFIRMACAO_NECESSARIA');
+    assert.match(r.json.erro, /ainda não carregou/i, 'a recusa ensina o caminho, não só nega');
+  });
+
+  test('confirmando, a Portaria encerra sem Expedição nem Faturamento', async () => {
+    const id = await cargaNoPatio();
+    const r = await req(`/api/cargas/${id}/status`, {
+      metodo: 'POST', token: tokens['Portaria'],
+      corpo: { status: 'Seguiu Viagem', soDevolucao: true },
+    });
+    assert.equal(r.status, 200, r.texto);
+    assert.equal(r.json.status, 'Seguiu Viagem');
+    assert.equal(r.json.saidaSemCarregar, true, 'a saída fica marcada como sem carregamento');
+  });
+
+  test('a saída NORMAL continua não sendo marcada como só devolução', async () => {
+    /* A guarda que impede a marca de vazar para a viagem de verdade: se
+       ela vazasse, "quantas cargas saíram" passaria a contar caminhão que
+       não levou nada, e o número mentiria a favor da operação. */
+    const id = await cargaNoPatio();
+    for (const [setor, status] of [
+      ['Expedição', 'Embarque Iniciado'],
+      ['Expedição', 'Embarque Finalizado'],
+      ['Faturamento', 'Faturado'],
+      ['Portaria', 'Seguiu Viagem'],
+    ]) {
+      const r = await req(`/api/cargas/${id}/status`, {
+        metodo: 'POST', token: tokens[setor], corpo: { status },
+      });
+      assert.equal(r.status, 200, `${status}: ${r.texto}`);
+      assert.equal(r.json.saidaSemCarregar, false, `${status} não é saída sem carregar`);
+    }
+  });
+
+  test('a Expedição não usa este atalho — a saída é da Portaria', async () => {
+    const id = await cargaNoPatio();
+    const r = await req(`/api/cargas/${id}/status`, {
+      metodo: 'POST', token: tokens['Expedição'],
+      corpo: { status: 'Seguiu Viagem', soDevolucao: true },
+    });
+    assert.equal(r.status, 403, r.texto);
+  });
+});

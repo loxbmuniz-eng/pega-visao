@@ -63,17 +63,30 @@ const DEV_ETAPAS = [
      feitas depois, por eles ou pela Logística: elas nunca travaram o OK, e
      tirá-las apagaria a "falta", que é o que o checklist existe para
      apontar. */
-  { status: 'Conferida no Faturamento', proxima: 'Descarga Conferida',
-    botao: '📦 Descarga conferida (Expedição)', pede: 'expedicao',
-    setores: ['Expedição', 'Logística'] },
-  /* A SEGUNDA IDA À BALANÇA (27/08/2026). O dono: "depois que descarrega
-     o motorista volta pra balança e pesa o peso final com o caminhão
-     vazio". É do Faturamento, como a primeira, mas é outro momento e
-     outra assinatura. */
-  { status: 'Descarga Conferida',       proxima: 'Peso Final Registrado',
+  /* A SEGUNDA IDA À BALANÇA (27/08/2026), AGORA LOGO DEPOIS DA PRIMEIRA
+     (08/09/2026). O dono: "depois que descarrega o motorista volta pra
+     balança e pesa o peso final com o caminhão vazio". É do Faturamento,
+     como a primeira, mas é outro momento e outra assinatura.
+
+     A Expedição SAIU DO MEIO das duas pesagens por pedido do dono: "o
+     faturamento precisa conseguir dar continuidade antes da expedicao".
+     O OKzinho dela demora por desenho (foi criado assim em 28/08, porque
+     eles não conferem na hora) — e um passo que demora não pode ficar
+     entre o caminhão descarregar e o caminhão ir embora. */
+  { status: 'Conferida no Faturamento', proxima: 'Peso Final Registrado',
     botao: '⚖️ Registrar peso final (Faturamento)', pede: 'pesofinal',
     setores: ['Faturamento', 'Logística'] },
-  { status: 'Peso Final Registrado',    proxima: 'Destinada',
+  { status: 'Peso Final Registrado',    proxima: 'Descarga Conferida',
+    botao: '📦 Descarga conferida (Expedição)', pede: 'expedicao',
+    setores: ['Expedição', 'Logística'] },
+  /* A SOBRA PULA A BALANÇA FINAL e vai da chegada direto ao OK da
+     Expedição — ela nunca volta à balança. `soSobra` mantém este atalho
+     fechado para a devolução normal, onde pular a pesagem é exatamente o
+     que não pode acontecer. Espelha a transição do servidor. */
+  { status: 'Conferida no Faturamento', proxima: 'Descarga Conferida',
+    botao: '📦 Descarga conferida (Expedição)', pede: 'expedicao',
+    setores: ['Expedição', 'Logística'], soSobra: true },
+  { status: 'Descarga Conferida',       proxima: 'Destinada',
     /* "Destinações" — pedido do dono (26/08/2026): "alterar nome no painel,
        destinações", valendo SÓ para a etapa dos Controles Internos. O nome
        de tela muda; o STATUS gravado ('Destinada') fica: é dado, o servidor
@@ -117,6 +130,22 @@ const DEV_ETAPA_ROTULO = {
    acima: agora as duas ordens são DIFERENTES de propósito. Deixar a de
    tela implícita na declaração é convidar a próxima pessoa a "consertar"
    uma para bater com a outra, e desfazer o pedido sem perceber. */
+/* EM 08/09/2026 AS DUAS ORDENS VOLTARAM A SER A MESMA — e é por isso que
+   esta lista continua existindo com nome próprio.
+
+   Em 02/09 elas foram separadas: a tela seguia a numeração da Bruna
+   (peso final antes da Expedição) e o trabalho seguia outra, porque
+   mudar o fluxo naquele dia deixaria as devoluções em andamento com a
+   pesagem final pulada. O dono voltou ao assunto depois de rodar o
+   processo com o Faturamento — "o faturamento precisa conseguir dar
+   continuidade antes da expedicao" — e aí o fluxo mudou de verdade, com
+   a migração 045 cuidando das que estavam no meio do caminho.
+
+   Ou seja: a Bruna estava certa desde o começo, e agora o servidor
+   concorda com ela. A lista fica porque a tela pode voltar a divergir do
+   fluxo (é decisão de operação, não consequência de código), e porque
+   apagá-la faria a próxima mudança de ordem mexer na máquina de estados
+   sem ninguém perceber. */
 const DEV_ORDEM_NA_TELA = ['portaria', 'faturamento', 'pesofinal',
   'expedicao', 'controles', 'notas'];
 
@@ -170,9 +199,20 @@ function podeDestinarDev() {
 /* Alinhamento de 18/08/2026: a pesagem por item é do Faturamento (é a
    confirmação de que passou pela balança) e o tick de NOTA FINAL é da
    Central de Notas. */
+/* O PESO POR PRODUTO NÃO É DO FATURAMENTO (08/09/2026).
+
+   O dono, vendo a tela dele: "tá fazendo a sua linha o peso das
+   quantidades de produtos. Não pode (...) Ele só coloca o peso e pronto
+   acabou." E, confirmando: "nao digita nada por produto, so digita o
+   peso".
+
+   Os dois pesos do Faturamento são os do CAMINHÃO — cheio na chegada,
+   vazio no final — e ficam na capa, nas etapas dele. A coluna do item
+   continua para quem lança o checklist: é dela que sai o "não bate com o
+   lançado" na comparação com a balança. Apagá-la seria repetir a
+   ocorrência #23. */
 function podePesarItemDev() {
-  const setor = (DB.operador || {}).setor;
-  return podeEditarDevolucao() || setor === 'Faturamento';
+  return podeEditarDevolucao();
 }
 /* O Nº DA CARGA DE DEVOLUÇÃO é da PORTARIA (20/08/2026).
 
@@ -966,12 +1006,21 @@ function carimbosDev(d) {
   </div>`;
 }
 
+/* Qual passo esta devolução tem pela frente. Duas transições saem de
+   "Conferida no Faturamento" — a balança final (devolução normal) e o
+   atalho da sobra — então a busca precisa saber o tipo. Sem isto a sobra
+   veria o botão da balança, que o servidor recusa. */
+function etapaDeDev(d) {
+  return DEV_ETAPAS.find((e) => e.status === d.status
+    && (e.soSobra ? d.tipo === 'SOBRA' : !(d.tipo === 'SOBRA' && e.proxima === 'Peso Final Registrado')));
+}
+
 function acaoEtapaDev(d) {
   /* SOBRA: três OKs e acabou — Portaria, Faturamento, Expedição. */
   if (d.tipo === 'SOBRA' && d.status === 'Descarga Conferida') {
     return '<div class="card-sub">✅ Sobra concluída — entrou, conferida e descarregada.</div>';
   }
-  const etapa = DEV_ETAPAS.find((e) => e.status === d.status);
+  const etapa = etapaDeDev(d);
   if (!etapa) return '<div class="card-sub">✅ Ciclo encerrado — nota fiscal finalizada.</div>';
   /* Espelho da allowlist do servidor: quem não assina este passo vê QUEM
      assina, em vez de um botão que a API recusaria. */
