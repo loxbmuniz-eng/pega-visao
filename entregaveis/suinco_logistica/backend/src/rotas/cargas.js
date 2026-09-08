@@ -904,8 +904,25 @@ rotasCargas.post('/cargas/sequenciar', exigirLogin, async (req, res, next) => {
         [STATUS_QUE_AINDA_CARREGAM, base]
       );
 
-      const mudancas = filaReordenada(fila, cargaId, posicao);
-      if (mudancas === null) return { posicaoInvalida: fila.length };
+      /* OS NÚMEROS JÁ OCUPADOS POR QUEM SAIU DA FILA.
+
+         São as cargas do mesmo dia que já estão carregando ou já
+         carregaram. Elas não se mexem, então o número delas está reservado
+         e a fila tem que desviar. Sem esta leitura, a renumeração de 1 a N
+         passava por cima e o dia ficava com dois números iguais. */
+      const { rows: fora } = await cli.query(
+        `SELECT sequencia
+           FROM fact_viagens
+          WHERE excluida_em IS NULL
+            AND NOT (status_atual = ANY($1))
+            AND sequencia IS NOT NULL
+            AND date(COALESCE(programado_em, criado_em)) = date($2)`,
+        [STATUS_QUE_AINDA_CARREGAM, base]
+      );
+      const ocupados = fora.map((r) => r.sequencia);
+
+      const mudancas = filaReordenada(fila, cargaId, posicao, ocupados);
+      if (mudancas === null) return { posicaoInvalida: fila.length, ocupados };
 
       for (const m of mudancas) {
         await cli.query(
@@ -942,7 +959,15 @@ rotasCargas.post('/cargas/sequenciar', exigirLogin, async (req, res, next) => {
     }
     if (resultado.posicaoInvalida !== undefined) {
       return res.status(400).json({
-        erro: `Posição inválida. A fila do dia tem ${resultado.posicaoInvalida} carga(s) esperando para carregar.`,
+        /* DUAS RECUSAS DIFERENTES, DUAS EXPLICAÇÕES DIFERENTES.
+
+           "Passou do fim da fila" e "esse número é de um caminhão que já
+           carregou" são coisas distintas, e quem está reordenando precisa
+           saber qual das duas aconteceu para saber o que fazer. Uma frase
+           só para as duas seria negar sem ensinar o caminho. */
+        erro: (resultado.ocupados || []).map(Number).includes(Number(req.body?.posicao))
+          ? `O número ${Number(req.body?.posicao)} é de uma carga que já carregou — esse número não volta para a fila. Escolha outro.`
+          : `Posição inválida. A fila do dia tem ${resultado.posicaoInvalida} carga(s) esperando para carregar.`,
         codigo: 'POSICAO_INVALIDA',
       });
     }

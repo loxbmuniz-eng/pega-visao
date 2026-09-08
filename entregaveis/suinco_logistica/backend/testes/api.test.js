@@ -4857,4 +4857,39 @@ describe('7d. Sequenciamento da fila: digitou 1, entra na frente (08/09/2026)', 
     assert.equal(r.status, 400, r.texto);
     assert.match(String(r.json && r.json.erro), /posi/i);
   });
+
+  /* O RELATO DO DONO, 08/09/2026: "ela ta deixando ficarem numeros repetidos
+     isso nao pode acontecer nunca".
+
+     O teste acima já garantia que a carga que JÁ CARREGOU não muda de
+     número. O que ele nunca perguntou é se OUTRA carga assume esse número —
+     e era exatamente o que acontecia: a fila era renumerada de 1 a N
+     ignorando os números que as cargas fora dela já ocupavam. Com uma carga
+     em Embarque Iniciado no número 1, mover uma da fila para a primeira
+     posição criava DOIS números 1 no mesmo dia.
+
+     Escolha do dono, perguntado: opção A — "a que já carregou fica 1, e a
+     fila vira 2, 3, 4". Quem saiu da fila guarda o número; a fila ocupa os
+     que sobraram, em ordem. */
+  test('NENHUM número se repete no dia, nem com carga já carregada na frente', async () => {
+    const r = await req('/api/estado', { token: tokens['Logística'] });
+    const doDia = (r.json.cargas || []).filter((c) => ids.includes(c.id));
+    const numeros = doDia.map((c) => c.sequencia).filter((n) => n != null);
+    const repetidos = numeros.filter((n, i) => numeros.indexOf(n) !== i);
+    assert.deepEqual(repetidos, [],
+      `número repetido no mesmo dia: ${JSON.stringify(doDia.map((c) => ({ seq: c.sequencia, st: c.status })))}`);
+  });
+
+  test('a fila ocupa os números que sobraram, sem passar por cima de quem já carregou', async () => {
+    // ids[0] está em Embarque Iniciado desde o teste anterior e guarda o
+    // número dele. As outras duas precisam ficar nos dois números seguintes.
+    const r = await req('/api/estado', { token: tokens['Logística'] });
+    const mapa = {};
+    for (const c of (r.json.cargas || [])) mapa[String(c.id)] = c;
+    const fora = mapa[String(ids[0])];
+    const naFila = [mapa[String(ids[1])], mapa[String(ids[2])]]
+      .map((c) => c.sequencia).sort((a, b) => a - b);
+    assert.ok(!naFila.includes(fora.sequencia),
+      `a fila (${naFila}) passou por cima do número ${fora.sequencia} de quem já carregou`);
+  });
 });
