@@ -3424,10 +3424,17 @@ function renderProgFila(){
     const id = escJs(c.id);
     const aberta = _progFilaAberta === c.id;
     const linha = `
-    <tr class="prog-linha${aberta ? ' prog-linha-aberta' : ''}"
+    <tr class="prog-linha${aberta ? ' prog-linha-aberta' : ''}" data-carga="${esc(c.id)}"
+        draggable="true"
+        ondragstart="filaArrastarInicio(event,'${id}')"
+        ondragover="filaArrastarSobre(event)"
+        ondrop="filaArrastarSolta(event,'${id}')"
+        ondragend="filaArrastarFim(event)"
         onclick="alternarLinhaProgFilaUI('${id}')"
-        title="Clique para abrir os demais campos desta carga">
-      <td onclick="event.stopPropagation()"><input type="number" class="seq-input" value="${c.sequencia ?? ''}" onchange="atualizarSequenciaUI('${id}',this.value)" title="Sequência livre — digite o número que quiser, a qualquer momento."></td>
+        title="Clique para abrir os demais campos. Arraste para mudar a ordem de carregamento.">
+      <td onclick="event.stopPropagation()" class="cel-seq">
+        <span class="alca-arrastar" title="Arraste para mudar a posição na fila">⠿</span>
+        <input type="number" min="1" class="seq-input" value="${c.sequencia ?? ''}" onchange="definirPosicaoNaFilaUI('${id}',this.value)" title="Digite a posição: a carga entra nela e as outras descem uma casa."></td>
       <td class="col-identificacao" onclick="event.stopPropagation()">
         <input type="text" class="numero-carga-input" value="${esc(c.numeroCarga)}" onchange="atualizarNumeroCargaUI('${id}',this.value)" title="Alterar o número desta carga.">
       </td>
@@ -4091,6 +4098,80 @@ function adicionarOutraCargaNaPlacaUI(id){
 // Sequência continua 100% livre: número manual do Programador de Embarque,
 // sem geração automática nem trava de duplicidade — regra confirmada,
 // não mexer nisso (docs/DECISOES_CONFIRMADAS.md item 2).
+/* DIGITAR UM NÚMERO REORDENA A FILA (08/09/2026).
+
+   Pedido do Wemerson, trazido pelo dono: "se ele digitar 1 numa carga e já
+   tiver uma como 1, ela vai automaticamente pra dois, e a que ele colocou 1
+   entra no início da fila".
+
+   Antes disto a sequência era um número solto — duas cargas podiam ser 1 ao
+   mesmo tempo, e o próprio campo dizia "digite o número que quiser".
+
+   QUEM FAZ A CONTA É O SERVIDOR, numa transação só. Reordenar quinze cargas
+   mandando quinze alterações separadas é a família da ocorrência #16 — duas
+   escritas em voo, a velha ganha — e com duas pessoas mexendo ao mesmo tempo
+   a fila embaralharia sem ninguém entender por quê. Aqui a tela só diz para
+   onde a carga foi; a fila nova volta pronta.
+
+   Apagar o campo continua APAGANDO o número, e não mandando para o fim:
+   campo vazio não é ordem de reordenar. */
+async function moverNaFilaUI(id, posicao){
+  const c = getCarga(id); if(!c) return;
+  if(!devServidorOk_paraFila()){
+    notify('Sem servidor agora — a ordem da fila é decidida pelo servidor e não pode ser mudada offline.', 'warn');
+    renderAll();
+    return;
+  }
+  const r = await SuincoSharePoint.sequenciar(id, posicao);
+  /* `sequenciar` DEVOLVE a recusa em vez de lançar — quem chama precisa
+     olhar o valor. É a regra da casa, e a ocorrência que a criou. */
+  if(r && r.recusado){
+    notify(r.erro || 'O servidor recusou a reordenação.', 'error');
+    await SuincoSharePoint.sincronizarAgora();
+    renderAll();
+    return;
+  }
+  if(r && r.enfileirado){
+    notify('Sem servidor agora — a ordem não foi mudada.', 'warn');
+    renderAll();
+    return;
+  }
+  await SuincoSharePoint.sincronizarAgora();
+  notifyGravacao(`Carga ${c.numeroCarga || c.placa} foi para a posição ${posicao}.`);
+  renderAll();
+}
+
+function devServidorOk_paraFila(){
+  return typeof SuincoSharePoint !== 'undefined'
+    && SuincoSharePoint.estaConfigurado && SuincoSharePoint.estaConfigurado();
+}
+
+/* POSIÇÃO NA FILA — NÃO É A MESMA COISA QUE "SEQUÊNCIA LIVRE" (08/09/2026).
+
+   Estas duas telas escrevem no mesmo campo e querem coisas DIFERENTES:
+
+     · Torre de Controle  — "Sequência livre": o número que o programador
+       escreve. Vale o que ele digitou, mesmo 7 numa lista de 2.
+     · Fila de Programados — "posição na fila": a carga entra naquela casa
+       e as outras descem uma. O servidor renumera de 1 a N.
+
+   Eu já mandei as duas para moverNaFilaUI() achando que era "uma função,
+   dois chamadores". Não era: eram duas PERGUNTAS diferentes com o mesmo
+   nome de campo. O resultado foi a Torre parar de guardar a sequência
+   digitada — o defeito de 14/08/2026 de volta, "alterei três vezes e ela
+   não se mantém". Juntar decisões diferentes quebra tanto quanto copiar
+   a mesma decisão em dois lugares. */
+function definirPosicaoNaFilaUI(id, val){
+  const n = Number(val);
+  if(val === '' || !Number.isInteger(n) || n < 1){
+    /* Campo vazio não é ordem de apagar a ordem: só redesenha e devolve
+       o valor que o servidor tem. */
+    renderAll();
+    return;
+  }
+  moverNaFilaUI(id, n);
+}
+
 function atualizarSequenciaUI(id, val){
   const c = getCarga(id); if(!c) return;
   c.sequencia = val==='' ? null : Number(val);
@@ -4108,6 +4189,59 @@ function atualizarSequenciaUI(id, val){
 }
 // Popula os selects de Rota. Uma função só, alimentada por ROTAS em data.js —
 // acrescentar uma rota lá aparece nos dois formulários sem tocar aqui.
+/* ARRASTAR PARA MUDAR A ORDEM (08/09/2026).
+
+   Arrastar e digitar são a MESMA operação — "mover para a posição N" — e
+   por isso as duas terminam em moverNaFilaUI(). Uma função, dois
+   chamadores: duas contas de posição diferentes divergiriam no primeiro
+   caso de borda, e o caso de borda aqui é a fila do dia de embarque.
+
+   Guarda só o id do que está sendo arrastado. A POSIÇÃO não é calculada
+   aqui: quem responde "para que número isso vai" é a posição da linha
+   sobre a qual soltou, lida da tela na hora — porque é isso que a pessoa
+   está vendo quando solta. */
+let _filaArrastando = null;
+
+function filaArrastarInicio(ev, id){
+  _filaArrastando = id;
+  ev.dataTransfer.effectAllowed = 'move';
+  /* Firefox só inicia o arrasto se algum dado for escrito. */
+  try{ ev.dataTransfer.setData('text/plain', id); }catch(e){}
+  const tr = ev.currentTarget;
+  if(tr && tr.classList) tr.classList.add('fila-arrastando');
+}
+
+function filaArrastarSobre(ev){
+  if(!_filaArrastando) return;
+  ev.preventDefault();                      // sem isto o navegador não deixa soltar
+  ev.dataTransfer.dropEffect = 'move';
+  const tr = ev.currentTarget;
+  if(tr && tr.classList) tr.classList.add('fila-alvo');
+}
+
+function filaArrastarFim(){
+  _filaArrastando = null;
+  document.querySelectorAll('.fila-arrastando, .fila-alvo')
+    .forEach(el => el.classList.remove('fila-arrastando','fila-alvo'));
+}
+
+function filaArrastarSolta(ev, idDestino){
+  ev.preventDefault();
+  ev.stopPropagation();
+  const movido = _filaArrastando;
+  filaArrastarFim();
+  if(!movido || movido === idDestino) return;
+  /* A posição é a que a linha de destino ocupa NA TELA, contando de 1.
+     Ler da tela e não do dado é de propósito: a pessoa soltou onde estava
+     vendo, e é essa a intenção dela. */
+  const corpo = ev.currentTarget.closest('tbody');
+  if(!corpo) return;
+  const linhas = [...corpo.querySelectorAll('tr[data-carga]')];
+  const pos = linhas.findIndex(tr => tr.dataset.carga === idDestino) + 1;
+  if(pos < 1) return;
+  moverNaFilaUI(movido, pos);
+}
+
 function preencherSelectsRota(){
   const opcoes = '<option value="">(rota não informada)</option>' +
     ROTAS.map(r=>`<option value="${esc(r.codigo)}">${esc(rotaLabel(r.codigo))}</option>`).join('');

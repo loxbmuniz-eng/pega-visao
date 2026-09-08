@@ -6,7 +6,7 @@
    aqui — em um lugar só — para o resto do servidor não precisar saber das
    duas convenções. */
 
-import { STATUS_FLOW, STATUS_INICIAL } from './fluxo.js';
+import { STATUS_FLOW, STATUS_INICIAL, camposEditaveisPor } from './fluxo.js';
 
 /* 3 categorias, não 4. Pedido do gestor (08/08/2026, migração
    003_tipo_operacao.sql): FROTA PROPRIA saiu (caminhão próprio fazendo
@@ -315,3 +315,72 @@ export const COLUNAS_CARGA = `
   aguardando_carga, saida_sem_carregar, criado_em, programado_em, atualizado_em,
   acao_em, acao_por, acao_setor, operador_id, operador_nome,
   operador_setor, versao, excluida_em, excluida_por`;
+
+/* =====================================================================
+   A FILA DE CARREGAMENTO — reordenar em cascata (08/09/2026)
+   ---------------------------------------------------------------------
+   Pedido do Wemerson: "se ele digitar 1 numa carga e já tiver uma como 1,
+   ela vai automaticamente pra dois, e a que ele colocou 1 entra no início
+   da fila". Antes disto a sequência era um número solto — duas cargas
+   podiam ser 1 ao mesmo tempo, e o campo dizia "digite o número que
+   quiser".
+
+   FUNÇÃO PURA, de propósito. Ela não sabe de banco, de HTTP nem de tela:
+   recebe a fila e devolve a fila nova. Isso permite que o servidor e o
+   painel façam a MESMA conta — e é a regra da casa (uma função, dois
+   chamadores). Fila reordenada de dois jeitos diferentes é fila que
+   diverge no primeiro caso de borda.
+
+   DIGITAR E ARRASTAR SÃO A MESMA OPERAÇÃO: "mover para a posição N". Por
+   isso existe uma função só, e não duas que precisariam concordar.
+   ===================================================================== */
+
+/* Só quem já pode editar `sequencia` numa carga reordena a fila — a
+   permissão sai da mesma lista, não de uma segunda cópia. */
+export function podeSequenciar(setor) {
+  return camposEditaveisPor(setor).includes('sequencia');
+}
+
+/* A fila que ENTRA na renumeração.
+
+   Decisão do dono, perguntado em 08/09/2026: "só carga que vão carregar".
+   Caminhão que já está na doca não tem como ser empurrado para trás na
+   fila da vida real, e mexer no número de uma carga já faturada faria o
+   registro do que aconteceu mentir — é a regra da fidelidade ao momento
+   exato, aplicada à ordem. */
+export const STATUS_QUE_AINDA_CARREGAM = ['Aguardando Veículo', 'Aguardando Embarque'];
+
+export function entraNaFila(carga) {
+  return STATUS_QUE_AINDA_CARREGAM.includes(carga.status_atual || carga.status)
+    && !carga.excluida_em;
+}
+
+/* Move `cargaId` para `posicao` (1-based) e renumera a fila inteira de 1 a
+   N, sem buraco e sem repetido.
+
+   `fila` chega ORDENADA como a tela mostra. Carga sem sequência vai para o
+   fim — não some, e não vira 0: null e zero são coisas diferentes, e essa
+   confusão já apagou capacidade de veículo neste projeto.
+
+   Devolve `[{ id, sequencia }]` só das que MUDARAM de número. Quem não
+   mudou não precisa de escrita, e escrita à toa é uma chance a mais de
+   corrida. */
+export function filaReordenada(fila, cargaId, posicao) {
+  const ids = fila.map((c) => String(c.id ?? c.carga_id));
+  const de = ids.indexOf(String(cargaId));
+  if (de === -1) return null;                       // a carga não está nesta fila
+  const alvo = Number(posicao);
+  if (!Number.isInteger(alvo) || alvo < 1 || alvo > ids.length) return null;
+
+  const nova = ids.slice();
+  nova.splice(de, 1);
+  nova.splice(alvo - 1, 0, String(cargaId));
+
+  const antes = new Map(fila.map((c) => [String(c.id ?? c.carga_id), c.sequencia]));
+  const mudou = [];
+  nova.forEach((id, i) => {
+    const seq = i + 1;
+    if (antes.get(id) !== seq) mudou.push({ id, sequencia: seq });
+  });
+  return mudou;
+}

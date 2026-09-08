@@ -4919,6 +4919,22 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
   #tab-indicadores > .card.sec-aberta > *:not(.card-title){
     max-height:none; overflow:visible; opacity:1;
   }
+  /* A CAIXA DE TABELA É A EXCEÇÃO DO ESTADO ABERTO (08/09/2026).
+
+     `overflow:visible` acima é o que faz a seção crescer ao abrir — e,
+     sem esta linha, ele também apagava o `overflow-x:auto` de
+     `.table-wrap`. Efeito medido em 390px com as seções abertas: a tabela
+     de status tem 520px, não rolava dentro da própria caixa, e empurrava
+     a PÁGINA INTEIRA para 545px de largura. O painel passava a rolar de
+     lado — exatamente o que o comentário de `.tabela-status-h` promete que
+     não acontece ("a tabela rola dentro da caixa, como as outras; a página
+     nunca rola de lado").
+
+     Só o eixo X volta a rolar. O Y continua visível, senão a seção
+     recolhida/aberta ganharia uma barra vertical própria. */
+  #tab-indicadores > .card.sec-aberta > .table-wrap{
+    overflow-x:auto; overflow-y:visible;
+  }
   /* cartão fechado encolhe o próprio respiro */
   #tab-indicadores > .card:not(.sec-aberta){ padding-top:11px; padding-bottom:11px; }
   #tab-indicadores > .card > .card-title:focus-visible{
@@ -5173,4 +5189,173 @@ body.esta-offline .btn-danger{ opacity:.45; }
   background: var(--aviso-fraco, #4a3a12);
   color: var(--aviso, #d9a441);
   border: 1px solid var(--aviso, #d9a441);
+}
+
+/* =======================================================================
+   O PAINEL CABE NO CELULAR — 08/09/2026
+   -----------------------------------------------------------------------
+   Pedido do dono: "no mobile ainda tem coisas muito grandes e
+   desproporcionais, quero que processe em todas as abas e telas de visão".
+
+   MEDIDO antes de mexer, num iPhone de 390px com 12 cargas: cartão de
+   carga a 224px na Torre (três por tela), o nome do operador passando 75px
+   POR BAIXO dos botões do cabeçalho, o gráfico dos Indicadores estourando
+   367px, e campos de 11 a 21px de altura onde o dedo precisa de 44.
+
+   O QUE ESTE BLOCO NÃO FAZ: tirar campo, coluna ou informação da tela. A
+   ocorrência #23 nasceu de "enxugar" ter virado "apagar coluna" — aqui é
+   só espaço, proporção e alvo de toque. O teste
+   testes/test_painel_cabe_no_celular.py mede os quatro e trava.
+   ===================================================================== */
+
+/* --- 1. O NOME DO OPERADOR NÃO ENTRA DEBAIXO DOS BOTÕES ---------------
+   `.badge-setor` tinha `white-space:nowrap` e nenhum limite de largura:
+   num flex, isso faz o item CRESCER além do espaço e passar por cima do
+   vizinho. `#header-mid` tem overflow:hidden, então o efeito era o pior
+   possível — o nome era cortado no meio da letra, sem reticências, e a
+   pessoa não sabia se aquilo era o nome dela ou um erro. */
+@media(max-width:820px){
+  #header-mid{ min-width:0 }
+  .badge-setor{
+    flex:0 1 auto; min-width:0;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  }
+}
+
+@media(max-width:640px){
+  /* --- 2. O CARTÃO DE LISTA, DE 224px PARA A FAIXA DOS 140 -----------
+     A altura vinha de cada célula gastar DUAS linhas: o rótulo em cima
+     (::before) e o valor embaixo. Num cartão com seis campos são doze
+     linhas para seis informações.
+
+     Agora rótulo e valor dividem a MESMA linha, com o valor à direita —
+     que é como ficha de operação se lê no papel. Dobra o que cabe na
+     tela sem tirar um campo sequer.
+
+     A célula de largura cheia continua empilhada: ela existe justamente
+     para o texto que não cabe ao lado do rótulo (transportadora, cliente,
+     observação), e espremer esse texto numa linha só o cortaria. */
+  .table-wrap table.mobile-cartao tr{ padding:7px 10px; gap:0 10px; margin-bottom:8px }
+  .table-wrap table.mobile-cartao td{
+    flex-direction:row; align-items:baseline; justify-content:space-between;
+    /* `wrap` NÃO é detalhe: sem ele o valor que não cabe ao lado do rótulo
+       simplesmente sai pela borda. Na primeira tentativa os selos de status
+       da Portaria estouraram 131px por causa disso — eles têm nowrap e num
+       flex sem quebra o item cresce além do container em vez de descer.
+       `min-width:0` no valor é o par disso: item de flex nasce sem poder
+       encolher abaixo do próprio conteúdo. */
+    flex-wrap:wrap; gap:0 8px; padding:3px 0; line-height:1.25;
+  }
+  /* NENHUM `min-width:0` AQUI, e o motivo é o contrário do que parece.
+
+     Item de flex nasce com `min-width:auto`, que o IMPEDE de encolher
+     abaixo do próprio conteúdo. Eu pus `min-width:0` achando que ajudava a
+     caber — e foi exatamente isso que espremeu o selo de status até ele
+     cortar o próprio texto: "Embarque Finalizado" num box de 142px vira
+     "Embarque ...", que não diz se foi iniciado ou finalizado. Status
+     cortado é pior que status largo: o largo se lê, o cortado engana. O
+     teste test_historico_lista_mobile pegou.
+
+     Sem a regra, o selo mantém o tamanho do texto e o `flex-wrap` da regra
+     acima joga ele para a linha de baixo quando não couber ao lado do
+     rótulo. Cabe e continua legível — que é o pedido inteiro. */
+  .table-wrap table.mobile-cartao td::before{ flex:0 0 auto; font-size:9px }
+  .table-wrap table.mobile-cartao td[data-larg="cheia"]{
+    flex-direction:column; align-items:stretch;
+  }
+  /* A linha do tempo compacta continua sendo a exceção que já era —
+     seis selos lado a lado, não empilhados. */
+  .table-wrap table.mobile-cartao td.et-linha{
+    flex-direction:row; flex-wrap:wrap; align-items:center; justify-content:flex-start;
+  }
+
+  /* --- 3. DÁ PARA TOCAR COM O DEDO -----------------------------------
+     O QUE EU NÃO VOU MEXER AQUI, e o motivo.
+
+     Os campos dentro do cartão medem 21px de altura porque uma decisão
+     anterior — documentada mais acima neste arquivo — pede que eles NÃO
+     desenhem caixa enquanto ninguém está escrevendo: "o desktop é uma
+     tabela, o valor é texto, e a caixa só aparece quando você vai
+     escrever". Pôr 44px de altura neles desfaz essa decisão e foi o que
+     inflou o cartão da Torre de 224 para 303px na primeira tentativa.
+
+     Densidade e alvo de toque estão em conflito real aqui, e resolver
+     isso é decisão do dono, não minha. Fica levantado, não mexido.
+
+     O que dá para corrigir sem tocar naquela decisão são os botões do
+     cabeçalho, que não têm nada a ver com densidade de cartão. */
+  #header-actions .btn{ min-width:44px; min-height:44px }
+  /* Botão só de ícone (o "↩" de reverter, no cartão da Torre) media 41px
+     de largura. Um caractere não empurra o botão até o alvo do dedo, e
+     esses botões ficam encostados uns nos outros dentro do cartão — 3px a
+     menos vira toque no vizinho errado, e o vizinho aqui é uma ação que
+     mexe em carga. */
+  #main .btn{ min-width:44px; min-height:44px }
+
+  /* --- 3b. O BLOCO DE BOTÕES DO CARTÃO, DE 171px PARA DUAS FILEIRAS ---
+     Medido: a célula de ações da Torre sozinha tinha 171px — mais da
+     metade do cartão inteiro — porque cada botão ocupava a largura toda e
+     eles empilhavam um debaixo do outro. Lado a lado, dois por fileira,
+     cada um continua com 44px de altura para o dedo e o bloco cai para
+     perto de 100px. Nenhum botão sai. */
+  .table-wrap table.mobile-cartao td:not([data-rotulo]){
+    flex-direction:row; flex-wrap:wrap; gap:6px; align-items:stretch;
+  }
+  .table-wrap table.mobile-cartao td:not([data-rotulo]) .btn{
+    width:auto; flex:1 1 44%; min-height:44px; margin-top:0;
+  }
+  /* Caixa de marcar: 24px é o mínimo da WCAG 2.5.8 para alvo. Levar a 44
+     deixaria um quadrado do tamanho de um botão ao lado de um rótulo de
+     uma linha — feio e desproporcional, que é o oposto do pedido. */
+  input[type="checkbox"], input[type="radio"]{ width:24px; height:24px }
+
+  /* --- 4. ESPAÇO VAZIO PROPORCIONAL À TELA --------------------------- */
+  .empty-state{ padding:10px 12px; font-size:12.5px }
+  .empty-state::before{ font-size:18px; margin-bottom:3px }
+  .notif-item{ padding:8px 26px 8px 11px; font-size:13px }
+}
+
+/* --- 5. GRÁFICO DENTRO DA TELA ----------------------------------------
+   `heatmap-svg` e `evolucao-svg` saem do app.js com `width` fixo em pixel.
+   Num monitor sobra largura e ninguém percebe; em 390px o desenho passava
+   367px da borda — mais da metade dele ficava fora, e não havia rolagem
+   para alcançar. Os dois já têm viewBox, então basta deixar a largura
+   seguir o container que o desenho inteiro reaparece, na proporção certa.
+   Fora de media query de propósito: largura fixa em SVG com viewBox não
+   ajuda em tela nenhuma. */
+.heatmap-svg, .evolucao-svg, .etapas-svg{ max-width:100%; height:auto }
+
+/* Caixa de marcar dentro de rótulo — a margem que antes vinha em `style=`
+   direto no HTML. Inline vence folha de estilo, e por isso não havia como
+   dar a essas duas caixas os 24px de alvo da WCAG 2.5.8 no celular: elas
+   ficavam com 13px de largura e o dedo escorregava. */
+.chk-inline{ width:auto; margin-right:6px; flex:0 0 auto }
+@media(max-width:640px){
+  .chk-inline{ width:24px; height:24px; margin-right:8px }
+}
+
+/* =======================================================================
+   ARRASTAR PARA MUDAR A ORDEM DA FILA — 08/09/2026
+   -----------------------------------------------------------------------
+   Pedido do Wemerson: além de digitar o número, poder arrastar o cartão
+   para a posição. A alça existe porque arrastar sem sinal visível é
+   funcionalidade que ninguém descobre — e no celular ela é o que separa
+   "arrastar a linha" de "rolar a página".
+   ===================================================================== */
+.alca-arrastar{
+  display:inline-block; cursor:grab; user-select:none;
+  color:var(--text-dim); font-size:15px; line-height:1;
+  padding:0 6px 0 0; vertical-align:middle;
+}
+.alca-arrastar:active{ cursor:grabbing }
+tr.prog-linha[draggable="true"]{ cursor:default }
+tr.fila-arrastando{ opacity:.45 }
+/* A linha sobre a qual se vai soltar mostra ONDE a carga vai parar. Sem
+   isso o arrasto é um chute — a pessoa solta e descobre depois. */
+tr.fila-alvo > td{ box-shadow:inset 0 3px 0 0 var(--gold) }
+.cel-seq{ white-space:nowrap }
+@media(max-width:640px){
+  /* No celular a alça precisa de área de dedo, senão o toque vira rolagem
+     da página em vez de arrasto da linha. */
+  .alca-arrastar{ font-size:20px; padding:10px 8px 10px 0 }
 }

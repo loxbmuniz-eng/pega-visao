@@ -6,6 +6,7 @@ import { programacaoAtual } from '../dominio/programacoes.js';
 import {
   COLUNAS_CARGA, paraPainel, saneiarCriacao, saneiarCriacaoChegadaSemProgramacao,
   saneiarEdicao, normalizarPlaca, idSeguro, camposDeAviso,
+  podeSequenciar, filaReordenada, STATUS_QUE_AINDA_CARREGAM,
 } from '../dominio/cargas.js';
 import {
   validarTransicao, podeCriarCarga, podeRegistrarChegadaSemProgramacao,
@@ -842,6 +843,116 @@ rotasCargas.patch('/cargas/:id', exigirLogin, async (req, res, next) => {
 /* ---------------------------------------------------------------------
    POST /api/cargas/:id/status — avança a carga no fluxo
    --------------------------------------------------------------------- */
+/* ---------------------------------------------------------------------
+   POST /api/cargas/sequenciar — mover uma carga na fila de carregamento
+   ---------------------------------------------------------------------
+   Pedido do Wemerson (08/09/2026): "se ele digitar 1 numa carga e já tiver
+   uma como 1, ela vai automaticamente pra dois, e a que ele colocou 1 entra
+   no início da fila". Digitar um número e ARRASTAR o cartão são a mesma
+   operação — "mover para a posição N" — e por isso passam os dois por aqui.
+
+   POR QUE UMA ROTA, E NÃO QUINZE PATCH. Reordenar uma fila de quinze cargas
+   muda quinze linhas. Mandadas uma a uma, são quinze requisições que se
+   cruzam com as de quem mais estiver mexendo — é a família da ocorrência
+   #16, "duas escritas em voo, a velha ganha", e o resultado seria a fila
+   embaralhada sem ninguém entender por quê. Aqui é UMA transação: ou a fila
+   inteira fica na ordem nova, ou nada muda.
+
+   A FILA É A DO DIA, e só as cargas que AINDA VÃO CARREGAR entram nela.
+   Escolha do dono, perguntado: "só carga que vão carregar". Caminhão que já
+   está na doca não tem como ser empurrado para trás na fila da vida real, e
+   renumerar uma carga já faturada faria o registro do que aconteceu mentir.
+   --------------------------------------------------------------------- */
+rotasCargas.post('/cargas/sequenciar', exigirLogin, async (req, res, next) => {
+  try {
+    const op = req.operador;
+    if (!podeSequenciar(op.setor)) {
+      return res.status(403).json({
+        erro: `O setor ${op.setor} não reordena a fila de carregamento.`,
+        codigo: 'SETOR_SEM_PERMISSAO',
+      });
+    }
+    const cargaId = idSeguro(req.body?.cargaId);
+    if (!cargaId) {
+      return res.status(400).json({ erro: 'Id inválido.', codigo: 'ID_INVALIDO' });
+    }
+    const posicao = Number(req.body?.posicao);
+
+    const resultado = await emTransacao(async (cli) => {
+      /* FOR UPDATE na fila INTEIRA, e não só na carga movida: quem reordena
+         lê todas para decidir os números novos, então todas precisam estar
+         travadas até o fim. Travar só a movida deixaria duas pessoas
+         calculando a mesma fila a partir de leituras diferentes. */
+      const alvo = await cli.query(
+        'SELECT programado_em, criado_em, status_atual FROM fact_viagens WHERE carga_id = $1 AND excluida_em IS NULL',
+        [cargaId]
+      );
+      if (!alvo.rows[0]) return { naoEncontrada: true };
+      if (!STATUS_QUE_AINDA_CARREGAM.includes(alvo.rows[0].status_atual)) {
+        return { foraDaFila: alvo.rows[0].status_atual };
+      }
+      const base = alvo.rows[0].programado_em || alvo.rows[0].criado_em;
+
+      const { rows: fila } = await cli.query(
+        `SELECT carga_id AS id, sequencia
+           FROM fact_viagens
+          WHERE excluida_em IS NULL
+            AND status_atual = ANY($1)
+            AND date(COALESCE(programado_em, criado_em)) = date($2)
+          ORDER BY sequencia NULLS LAST, criado_em
+          FOR UPDATE`,
+        [STATUS_QUE_AINDA_CARREGAM, base]
+      );
+
+      const mudancas = filaReordenada(fila, cargaId, posicao);
+      if (mudancas === null) return { posicaoInvalida: fila.length };
+
+      for (const m of mudancas) {
+        await cli.query(
+          `UPDATE fact_viagens
+              SET sequencia = $1, operador_id = $2, operador_nome = $3, operador_setor = $4
+            WHERE carga_id = $5`,
+          [m.sequencia, op.id, op.nome, op.setor, m.id]
+        );
+      }
+      /* UM evento para a fila inteira, não um por carga. O que aconteceu foi
+         uma decisão só — "a carga X foi para a posição N" — e quinze linhas
+         no histórico esconderiam essa decisão em vez de registrá-la. */
+      if (mudancas.length) {
+        await gravarEvento(cli, {
+          cargaId, placa: '', de: 'fila', para: `posição ${posicao}`, operador: op,
+          acao: `Fila de carregamento reordenada: ${mudancas.length} carga(s) renumerada(s)`,
+        });
+      }
+      const { rows } = await cli.query(
+        `SELECT ${COLUNAS_CARGA} FROM fact_viagens WHERE carga_id = ANY($1)`,
+        [mudancas.map((m) => m.id)]
+      );
+      return { linhas: rows, mudancas: mudancas.length };
+    });
+
+    if (resultado.naoEncontrada) {
+      return res.status(404).json({ erro: 'Carga não encontrada.', codigo: 'CARGA_NAO_ENCONTRADA' });
+    }
+    if (resultado.foraDaFila) {
+      return res.status(409).json({
+        erro: `Esta carga já está em "${resultado.foraDaFila}" — a fila só reordena o que ainda vai carregar.`,
+        codigo: 'FORA_DA_FILA',
+      });
+    }
+    if (resultado.posicaoInvalida !== undefined) {
+      return res.status(400).json({
+        erro: `Posição inválida. A fila do dia tem ${resultado.posicaoInvalida} carga(s) esperando para carregar.`,
+        codigo: 'POSICAO_INVALIDA',
+      });
+    }
+
+    const payload = resultado.linhas.map(paraPainel);
+    payload.forEach((c) => emitir('carga:atualizada', c));
+    return res.json({ cargas: payload, renumeradas: resultado.mudancas });
+  } catch (e) { return next(e); }
+});
+
 rotasCargas.post('/cargas/:id/status', exigirLogin, async (req, res, next) => {
   try {
     const op = req.operador;

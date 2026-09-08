@@ -4753,3 +4753,108 @@ describe('7c. O caminhão que só trouxe devolução sai pela Portaria (08/09/20
     assert.equal(r.status, 403, r.texto);
   });
 });
+
+
+/* ------------------------------------------------------------------ */
+describe('7d. Sequenciamento da fila: digitou 1, entra na frente (08/09/2026)', () => {
+  /* Pedido do Wemerson, trazido pelo dono: "se ele digitar 1 numa carga e já
+     tiver uma como 1, ela vai automaticamente pra dois, e a que ele colocou
+     1 entra no início da fila".
+
+     Antes disto a sequência era um número solto: duas cargas podiam ser 1 ao
+     mesmo tempo e o campo dizia "digite o número que quiser". Agora digitar
+     um número REORDENA a fila inteira do dia, em cascata.
+
+     ESCOLHA DO DONO, quando perguntado: renumera só as cargas que AINDA VÃO
+     CARREGAR. Caminhão que já está na doca não tem como ser empurrado para
+     trás na fila da vida real, e mexer no número de uma carga já faturada
+     faria o registro do que aconteceu mentir.
+
+     UMA TRANSAÇÃO SÓ, e não N chamadas: mandar quinze alterações separadas é
+     a família da ocorrência #16 — duas escritas em voo, a velha ganha. Com
+     duas pessoas reordenando ao mesmo tempo a fila embaralharia sem ninguém
+     entender por quê. */
+  let placa, ids = [];
+
+  before(async () => {
+    const { rows } = await pool.query('SELECT placa FROM dim_veiculos LIMIT 1');
+    placa = rows[0].placa;
+    for (let i = 1; i <= 4; i++) {
+      const r = await req('/api/cargas', {
+        metodo: 'POST', token: tokens['Logística'],
+        corpo: { numeroCarga: `SEQ-${Date.now()}-${i}`, placa, sequencia: i },
+      });
+      assert.equal(r.status, 201, r.texto);
+      ids.push(r.json.id);
+    }
+  });
+
+  async function fila() {
+    // /api/estado devolve a carga já em formato de painel (paraPainel):
+    // `id` e `sequencia`, não `Carga_ID`/`Sequencia`.
+    const r = await req('/api/estado', { token: tokens['Logística'] });
+    const mapa = {};
+    for (const c of (r.json.cargas || [])) mapa[String(c.id)] = c.sequencia;
+    return ids.map((id) => mapa[String(id)]);
+  }
+
+  test('a fila começa 1, 2, 3, 4', async () => {
+    assert.deepEqual(await fila(), [1, 2, 3, 4]);
+  });
+
+  test('pôr a QUARTA em 1 empurra as outras em cascata', async () => {
+    const r = await req('/api/cargas/sequenciar', {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { cargaId: ids[3], posicao: 1 },
+    });
+    assert.equal(r.status, 200, r.texto);
+    // a que era 4 vira 1; as três de cima descem uma casa
+    assert.deepEqual(await fila(), [2, 3, 4, 1]);
+  });
+
+  test('nenhuma sequência fica repetida', async () => {
+    const f = await fila();
+    assert.equal(new Set(f).size, f.length, `repetiu: ${f}`);
+  });
+
+  test('a Portaria não reordena a fila da Logística', async () => {
+    const r = await req('/api/cargas/sequenciar', {
+      metodo: 'POST', token: tokens['Portaria'],
+      corpo: { cargaId: ids[0], posicao: 1 },
+    });
+    assert.equal(r.status, 403, r.texto);
+  });
+
+  test('carga que JÁ ESTÁ CARREGANDO não entra na renumeração', async () => {
+    /* A escolha do dono: "só carga que vão carregar". Levamos a primeira da
+       lista até Embarque Iniciado e conferimos que ela guarda o número que
+       tinha — o número dela virou registro, não fila. */
+    const alvo = ids[0];
+    for (const [setor, status] of [
+      ['Portaria', 'Aguardando Embarque'],
+      ['Expedição', 'Embarque Iniciado'],
+    ]) {
+      const r = await req(`/api/cargas/${alvo}/status`, {
+        metodo: 'POST', token: tokens[setor], corpo: { status },
+      });
+      assert.equal(r.status, 200, `${status}: ${r.texto}`);
+    }
+    const antes = (await fila())[0];
+    const r = await req('/api/cargas/sequenciar', {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { cargaId: ids[2], posicao: 1 },
+    });
+    assert.equal(r.status, 200, r.texto);
+    assert.equal((await fila())[0], antes,
+      'a carga em Embarque Iniciado mudou de número — ela é registro, não fila');
+  });
+
+  test('posição fora da fila é recusada com explicação', async () => {
+    const r = await req('/api/cargas/sequenciar', {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { cargaId: ids[1], posicao: 999 },
+    });
+    assert.equal(r.status, 400, r.texto);
+    assert.match(String(r.json && r.json.erro), /posi/i);
+  });
+});
