@@ -5246,7 +5246,19 @@ body.esta-offline .btn-danger{ opacity:.45; }
        encolher abaixo do próprio conteúdo. */
     flex-wrap:wrap; gap:0 8px; padding:3px 0; line-height:1.25;
   }
-  .table-wrap table.mobile-cartao td > *{ min-width:0; max-width:100% }
+  /* NENHUM `min-width:0` AQUI, e o motivo é o contrário do que parece.
+
+     Item de flex nasce com `min-width:auto`, que o IMPEDE de encolher
+     abaixo do próprio conteúdo. Eu pus `min-width:0` achando que ajudava a
+     caber — e foi exatamente isso que espremeu o selo de status até ele
+     cortar o próprio texto: "Embarque Finalizado" num box de 142px vira
+     "Embarque ...", que não diz se foi iniciado ou finalizado. Status
+     cortado é pior que status largo: o largo se lê, o cortado engana. O
+     teste test_historico_lista_mobile pegou.
+
+     Sem a regra, o selo mantém o tamanho do texto e o `flex-wrap` da regra
+     acima joga ele para a linha de baixo quando não couber ao lado do
+     rótulo. Cabe e continua legível — que é o pedido inteiro. */
   .table-wrap table.mobile-cartao td::before{ flex:0 0 auto; font-size:9px }
   .table-wrap table.mobile-cartao td[data-larg="cheia"]{
     flex-direction:column; align-items:stretch;
