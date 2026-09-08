@@ -2549,7 +2549,7 @@ function renderVisaoPatio(prefixo){
     const etapas = etapasDaCarga(c);
     return `<tr class="linha-status-${esc((STATUS_META[c.status]||{}).cor || '')}">
       <td class="vp-carga">${esc(c.numeroCarga)||'—'}</td>
-      <td class="vp-placa">${esc(c.placa)}${marcaCargaDaPlaca(c, lista)}${marcaEtapaDevolvidaHtml(c)}</td>
+      <td class="vp-placa">${esc(c.placa)}${marcaCargaDaPlaca(c, lista)}${marcaEtapaDevolvidaHtml(c)}${marcaSaiuSemCarregarHtml(c)}</td>
       <td class="vp-transp">${esc(c.transportadora)||'—'}</td>
       <td class="vp-rota">${esc(rotaCurta(c.rota))}</td>
       ${linhaDoTempoCompacta(etapas)}
@@ -3435,7 +3435,7 @@ function renderProgFila(){
         <input type="text" class="placa-input" value="${esc(c.placa)}" onchange="atualizarPlacaUI('${id}',this.value)" title="Trocar a placa — a transportadora e o tipo de veículo são buscados na Frota automaticamente.">
         <span class="veic-transp" id="transp-${esc(c.id)}">${esc(c.transportadora)||'—'}</span>
         <span class="veic-tipo">${esc(c.tipoVeiculo)||'—'}</span>
-        ${marcaCargaDaPlaca(c, lista)}${chipNoPatioHtml(c)}${marcaEtapaDevolvidaHtml(c)}</td>
+        ${marcaCargaDaPlaca(c, lista)}${chipNoPatioHtml(c)}${marcaEtapaDevolvidaHtml(c)}${marcaSaiuSemCarregarHtml(c)}</td>
       <td onclick="event.stopPropagation()">
         <input type="text" class="motorista-input" value="${esc(c.motorista||'')}" onchange="atualizarMotoristaUI('${id}',this.value)" title="Quem dirige ESTA viagem — não mexe no cadastro da placa."></td>
       <td onclick="event.stopPropagation()">${rotaSelectHtml(c)}</td>
@@ -3782,6 +3782,24 @@ function marcaEtapaDevolvidaHtml(carga){
     + `de &quot;${esc(d.de)}&quot; para &quot;${esc(d.para)}&quot; em ${esc(quando)}. `
     + `O motivo está no Histórico da carga. Confira antes de fazer a carga andar de novo.">`
     + `↩ etapa devolvida</span>`;
+}
+
+/* SAIU SEM CARREGAR — a marca que impede o número de mentir (08/09/2026).
+
+   Um caminhão que entrou, entregou devolução e foi embora fica em "Seguiu
+   Viagem" igualzinho a quem levou 20 toneladas. Sem esta marca, qualquer
+   leitura de "quantas cargas saíram hoje" conta os dois do mesmo jeito, e
+   o indicador passa a mentir a favor da operação — que é justamente o que
+   a regra da casa sobre fidelidade existe para evitar.
+
+   A marca é da CARGA e vem do servidor (`saidaSemCarregar`), não de uma
+   conta feita aqui: quem sabe se houve carregamento é a transação que
+   registrou a saída. */
+function marcaSaiuSemCarregarHtml(carga){
+  if(!carga || carga.saidaSemCarregar !== true) return '';
+  return '<span class="chip-sem-carregar" title="Este caminhão entrou, entregou a '
+    + 'devolução e foi embora SEM carregar. A saída foi registrada pela Portaria.">'
+    + '↩ só devolução</span>';
 }
 
 function chipNoPatioHtml(carga){
@@ -4811,9 +4829,25 @@ function renderPortariaProgramadas(){
       acao = `<button class="btn btn-success btn-sm" onclick="portariaChegouCarga('${escJs(c.placa)}')">🚚 Chegou</button>`;
     } else if(c.status === 'Faturado'){
       acao = `<button class="btn btn-warn btn-sm" onclick="portariaSaiuCarga('${escJs(c.placa)}')">🏁 Saiu</button>`;
+    } else if(c.status === 'Aguardando Embarque'){
+      /* O CAMINHÃO QUE SÓ TROUXE DEVOLUÇÃO (08/09/2026).
+
+         Pedido do dono, vindo da Portaria: "ele tem que ter a opção só de
+         depois colocar lá que ele saiu, que é só devolução, então ele não
+         vai carregar". E a rotina, nas palavras dele: "muitas vezes chega,
+         descarrega e vai embora e muitas vezes chega, descarrega e fica no
+         pátio aguardando carga novamente".
+
+         Por isso o botão fica AQUI e não na entrada: qual dos dois casos é
+         só se sabe na hora de sair. Quem vai carregar continua vendo o
+         fluxo normal — este botão não substitui nada, ele acrescenta a
+         única saída que faltava. */
+      acao = `<button class="btn btn-sm btn-saida-devolucao"
+        title="O caminhão entregou devolução e vai embora sem carregar."
+        onclick="portariaSaiuSoDevolucaoUI('${escJs(c.id)}')">↩️ Só devolução — saiu</button>`;
     }
     return `<tr>
-      <td class="col-identificacao">${esc(c.placa)}${marcaCargaDaPlaca(c, lista)}${marcaEtapaDevolvidaHtml(c)}</td>
+      <td class="col-identificacao">${esc(c.placa)}${marcaCargaDaPlaca(c, lista)}${marcaEtapaDevolvidaHtml(c)}${marcaSaiuSemCarregarHtml(c)}</td>
       <td class="col-identificacao">${esc(c.numeroCarga)||'—'}</td>
       <td>${esc(c.transportadora)||'—'}</td>
       <td>${esc(rotaCurta(c.rota))}</td>
@@ -4832,6 +4866,50 @@ function portariaChegouCarga(placa){
 function portariaSaiuCarga(placa){
   document.getElementById('portaria-placa').value = placa;
   acaoSaidaUI();
+}
+
+/* Saída do caminhão que entrou só para entregar devolução (08/09/2026).
+
+   PERGUNTA EXPLICANDO, não bloqueia: é a regra da casa — "botão
+   desabilitado não ensina o caminho, só nega". O porteiro tem autoridade
+   para encerrar; o que ele precisa é saber o que o gesto faz antes de
+   fazer. E o gesto é grande: encerra a carga sem passar por Expedição e
+   Faturamento.
+
+   Quem decide de verdade é o SERVIDOR — ele recusa a transição sem a
+   confirmação e devolve a explicação. Aqui a pergunta é feita antes para
+   não gastar a viagem, mas se alguém chamar esta função direto, a recusa
+   continua acontecendo no lugar certo. */
+async function portariaSaiuSoDevolucaoUI(cargaId){
+  const c = DB.cargas.find(x=>x.id === cargaId);
+  if(!c) return;
+  const ok = confirm(
+    `SAÍDA SEM CARREGAR — placa ${c.placa}\n\n`
+    + 'Este caminhão ainda não carregou. Confirmando, fica registrado que ele '
+    + 'entrou, entregou a devolução e foi embora sem carregar.\n\n'
+    + 'Se ele vai FICAR no pátio para carregar, cancele: o fluxo normal segue '
+    + 'pela Expedição.'
+  );
+  if(!ok) return;
+  const r = await SuincoSharePoint.mudarStatus(cargaId, 'Seguiu Viagem', { soDevolucao: true });
+  /* `mudarStatus` DEVOLVE a recusa em vez de lançar — quem chama precisa
+     olhar o valor (regra da casa, e a ocorrência que a criou). */
+  if(r && r.recusado){
+    notify(r.erro || 'O servidor recusou a saída.', 'error');
+    return;
+  }
+  if(r && r.enfileirado){
+    notify('Sem servidor agora — a saída foi para a fila e sobe quando a conexão voltar.', 'warn');
+    return;
+  }
+  /* Quem manda é a transação: só depois de o servidor confirmar é que a
+     tela puxa o estado de volta. Escrever a saída local antes e sincronizar
+     depois foi exatamente como a placa PUX2971 saiu na tela do porteiro
+     sem o servidor saber (28/08). */
+  await SuincoSharePoint.sincronizarAgora();
+  notifyGravacao(`Placa ${c.placa} saiu — só devolução, sem carregamento.`);
+  tocarBeepConfirmacao();
+  renderAll();
 }
 
 function renderPortariaPatio(){

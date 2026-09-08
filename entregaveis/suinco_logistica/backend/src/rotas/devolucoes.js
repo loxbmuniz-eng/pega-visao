@@ -613,6 +613,39 @@ rotasDevolucoes.post('/devolucoes/:id/etapa', exigirLogin, async (req, res, next
         devolucaoId: req.params.id, operador: op,
         acao: `Devolução nº ${rows[0].numero}: ${rows[0].status} → ${para}`,
       });
+
+      /* NINGUÉM ASSINA DUAS VEZES (08/09/2026).
+
+         A troca de ordem desta data deixou uma situação real no meio do
+         caminho: as devoluções que já tinham o OK da Expedição e ainda não
+         tinham a pesagem final. A migração 045 devolve essas ao
+         Faturamento para que a balança não seja pulada — e aí elas voltam
+         a passar por uma etapa que a Expedição JÁ assinou.
+
+         Pedir o mesmo OK de novo seria transformar uma correção nossa em
+         trabalho do pátio. Se o carimbo da Expedição já existe quando o
+         peso final entra, o passo dela é dado junto, com a assinatura e o
+         instante ORIGINAIS: quem assinou foi quem assinou, na hora em que
+         assinou (regra da casa — "fidelidade ao momento exato"). O log
+         registra o pulo para que ninguém, depois, ache que a etapa foi
+         esquecida. */
+      let statusFinal = para;
+      if (regra.carimbo === 'pesofinal' && rows[0].expedicao_em) {
+        await cli.query(
+          `UPDATE devolucoes SET status = $1, atualizado_em = now(), versao = versao + 1
+            WHERE devolucao_id = $2`,
+          ['Descarga Conferida', req.params.id]
+        );
+        statusFinal = 'Descarga Conferida';
+        await logDevolucao(cli, {
+          devolucaoId: req.params.id, operador: op,
+          acao: `Devolução nº ${rows[0].numero}: Peso Final Registrado → Descarga Conferida `
+              + `(a Expedição já tinha assinado em ${new Date(rows[0].expedicao_em).toISOString()} `
+              + `— etapa não repetida)`,
+        });
+      }
+      void statusFinal;
+
       return buscarCompleta(cli, req.params.id);
     });
 
@@ -694,7 +727,25 @@ rotasDevolucoes.patch('/devolucoes/:id/itens/:itemId', exigirLogin, async (req, 
        dono pediu que bastasse o tique — a quantidade ficou ao lado, para
        quem quiser apontar a falta (migração 040). */
     const SO_CONFERENCIA = new Set(['qtd_recebida', 'ok_expedicao']);
-    const SO_PESAGEM = new Set(['peso_faturamento']);
+    /* O FATURAMENTO SAIU DA COLUNA DE PESO POR PRODUTO (08/09/2026).
+
+       O dono, vendo a tela dele: "tá fazendo a sua linha o peso das
+       quantidades de produtos. Não pode (...) Ele só coloca o peso e
+       pronto acabou. Então na chegada, então no final." E, confirmando:
+       "nao digita nada por produto, so digita o peso".
+
+       `peso_faturamento` era a ÚNICA coluna de item que o Faturamento
+       podia editar — então a tela dele pedia exatamente uma coisa:
+       preencher linha a linha. Os dois pesos que ele deve dar são os do
+       CAMINHÃO (cheio na chegada, vazio no final) e moram na capa, não no
+       item. O conjunto ficou vazio: nenhum campo de item é dele.
+
+       A COLUNA NÃO FOI APAGADA — é a lição da ocorrência #23, em que li
+       "só precisa do OK" como "apague a conferência" e a Bruna viu as
+       colunas sumirem em produção. Quem lança o checklist (Logística e
+       Administração) continua pesando o item, e é esse peso que alimenta
+       o aviso "não bate com o lançado" na comparação com a balança. */
+    const SO_PESAGEM = new Set();
     const SO_DESTINACAO = new Set(['destinacao', 'dest_estoque', 'dest_descarte',
       'dest_reprocesso', 'ok_destinacao']);
     const SO_NOTA_FINAL = new Set(['nota_final']);
@@ -717,7 +768,11 @@ rotasDevolucoes.patch('/devolucoes/:id/itens/:itemId', exigirLogin, async (req, 
       op.setor === 'Logística' || op.setor === 'Administração'
       || (ehFilial(op.setor) && chaves.every((c) => !DE_OUTRO_POSTO.has(c)))
       || (op.setor === 'Expedição' && chaves.every((c) => SO_CONFERENCIA.has(c)))
-      || (op.setor === 'Faturamento' && chaves.every((c) => SO_PESAGEM.has(c)))
+      /* `SO_PESAGEM` está vazio, então `every` daria TRUE para lista
+         vazia de chaves — e chaves nunca é vazia (há guarda acima). Fica
+         explícito mesmo assim: o Faturamento não altera campo de item. */
+      || (op.setor === 'Faturamento' && SO_PESAGEM.size > 0
+          && chaves.every((c) => SO_PESAGEM.has(c)))
       || (op.setor === 'Controles Internos' && chaves.every((c) => SO_DESTINACAO.has(c)))
       || (op.setor === 'Central de Notas' && chaves.every((c) => SO_NOTA_FINAL.has(c)))
       || (op.setor === 'Portaria' && chaves.every((c) => SO_CARGA_DEV.has(c)));

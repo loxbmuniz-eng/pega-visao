@@ -117,9 +117,10 @@ async def main():
               const et = (para, extra) => SuincoSharePoint.devolucoes.etapa(id, { para, ...extra });
               await et('Recebida na Portaria', { placa: 'AAK8958' });
               await et('Conferida no Faturamento', { pesoEntrada: 21500 });
+              // ORDEM DE 08/09: a balança de saída vem antes da Expedição.
+              await et('Peso Final Registrado', { pesoFinal: 21000 });
               // AS TRÊS, sem preencher NADA item a item:
               await et('Descarga Conferida', { obsExpedicao: 'descarga ok' });
-              await et('Peso Final Registrado', { pesoFinal: 21000 });
               await et('Destinada', { obsControles: 'destinado ok' });
               await et('Nota Finalizada', { obsNotas: 'nota fechada' });
               await carregarDevolucoes();

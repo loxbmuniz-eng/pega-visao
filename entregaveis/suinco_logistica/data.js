@@ -1202,6 +1202,12 @@ function cargaDeLinhaRemota(r){
     lacreRetidoEm: r.Lacre_Retido_Em || null,
     status: STATUS_FLOW.includes(r.Status_Atual) ? r.Status_Atual : STATUS_FLOW[0],
     aguardandoCarga: r.Aguardando_Carga === true || r.Aguardando_Carga === 'Sim',
+    /* TERCEIRO PONTO — a família das ocorrências #02 e #09. Este campo
+       precisa existir na tradução do adaptador (daApiParaLinha), na volta
+       para objeto do painel e AQUI. Faltando em qualquer um, ele some sem
+       erro nenhum em tela. Não entra no pacote de IDA de propósito: quem
+       carimba a saída sem carregamento é o servidor, na transição. */
+    saidaSemCarregar: r.Saida_Sem_Carregar === true,
     criadoEm: r.Criado_Em || nowISO(),
     /* Sem inventar com `criadoEm`: o modelo guarda o que o servidor tem, e
        quem exibe usa `programadoEm || criadoEm` como leitura. Preencher aqui

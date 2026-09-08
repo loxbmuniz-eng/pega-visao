@@ -9,7 +9,7 @@ import {
 } from '../dominio/cargas.js';
 import {
   validarTransicao, podeCriarCarga, podeRegistrarChegadaSemProgramacao,
-  camposEditaveisPor, podeRegistrarSaida,
+  camposEditaveisPor, podeRegistrarSaida, regraDaTransicao,
   ErroDeFluxo, ErroDePermissao, STATUS_INICIAL, STATUS_FLOW,
 } from '../dominio/fluxo.js';
 import {
@@ -878,6 +878,26 @@ rotasCargas.post('/cargas/:id/status', exigirLogin, async (req, res, next) => {
       // automático — nada fica gravado pela metade.
       validarTransicao(carga.status_atual, statusNovo, op.setor);
 
+      /* A SAÍDA DO CAMINHÃO QUE SÓ TROUXE DEVOLUÇÃO (08/09/2026).
+
+         `exigeConfirmacao` vem da própria transição (dominio/fluxo.js) —
+         a rota não repete a lista, pergunta a ela. Hoje só uma transição
+         pede isso: encerrar direto de "Aguardando Embarque", sem passar
+         por Expedição e Faturamento.
+
+         A recusa DEVOLVE A EXPLICAÇÃO em vez de um "não" seco, porque é
+         ela que a tela mostra na pergunta ao porteiro. Regra da casa:
+         botão desabilitado não ensina o caminho, só nega — quem tem
+         autoridade decide depois de ler o que vai acontecer. */
+      const regra = regraDaTransicao(carga.status_atual, statusNovo);
+      if (regra && regra.exigeConfirmacao && req.body?.[regra.exigeConfirmacao] !== true) {
+        const e = new Error(regra.explicacao);
+        e.status = 422;
+        e.codigo = 'CONFIRMACAO_NECESSARIA';
+        e.confirmar = regra.exigeConfirmacao;
+        throw e;
+      }
+
       /* CHEGADA com outra carga da placa ainda no pátio (19/08/2026),
          CORRIGIDA EM 20/08/2026.
 
@@ -917,9 +937,15 @@ rotasCargas.post('/cargas/:id/status', exigirLogin, async (req, res, next) => {
         }
       }
 
+      /* Carimba a saída sem carregamento na MESMA transação que move o
+         status. Duas escritas separadas abririam a janela em que a carga
+         já está em "Seguiu Viagem" e ainda não diz por quê — e quem
+         lesse ali contaria uma viagem que não houve. */
+      const semCarregar = !!(regra && regra.exigeConfirmacao === 'soDevolucao');
       const atualizada = await cli.query(
         `UPDATE fact_viagens
             SET status_atual = $1, operador_id = $2, operador_nome = $3, operador_setor = $4
+                ${semCarregar ? ', saida_sem_carregar = TRUE' : ''}
           WHERE carga_id = $5
           RETURNING ${COLUNAS_CARGA}`,
         [statusNovo, op.id, op.nome, op.setor, id]
@@ -931,7 +957,9 @@ rotasCargas.post('/cargas/:id/status', exigirLogin, async (req, res, next) => {
         de: carga.status_atual,
         para: statusNovo,
         operador: op,
-        acao: `Status: ${carga.status_atual} → ${statusNovo}`,
+        acao: semCarregar
+          ? `Status: ${carga.status_atual} → ${statusNovo} (só devolução — saiu sem carregar)`
+          : `Status: ${carga.status_atual} → ${statusNovo}`,
       });
 
       return { linha: atualizada.rows[0], movId, de: carga.status_atual };

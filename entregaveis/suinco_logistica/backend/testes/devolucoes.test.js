@@ -283,14 +283,10 @@ describe('3. Etapas em sentido único, com carimbo (as assinaturas do papel)', (
   test('o ciclo fecha com CADA setor assinando o próprio passo', async () => {
     // Setores criados em 18/08/2026 assinam de verdade — não é só a
     // Logística cobrindo: Expedição → Controles Internos → Central de Notas.
-    const a = await req(`/api/devolucoes/${id}/etapa`, {
-      metodo: 'POST', token: tokens['Expedição'], corpo: { para: 'Descarga Conferida' },
-    });
-    assert.equal(a.status, 200, a.texto);
-    assert.equal(a.json.carimbos.expedicao.por, 'Carla Dev');
-
-    // A segunda ida à balança: o caminhão volta VAZIO e o Faturamento
-    // assina de novo, com carimbo próprio.
+    /* ORDEM DE 08/09/2026: as duas balanças são seguidas e a Expedição
+       vem DEPOIS. O que este teste garante continua o mesmo — cada setor
+       assina o SEU passo, e o carimbo guarda quem foi. O que mudou foi a
+       ordem, por pedido do dono, não a garantia. */
     const p = await req(`/api/devolucoes/${id}/etapa`, {
       metodo: 'POST', token: tokens['Faturamento'],
       corpo: { para: 'Peso Final Registrado', pesoFinal: 14000 },
@@ -298,6 +294,12 @@ describe('3. Etapas em sentido único, com carimbo (as assinaturas do papel)', (
     assert.equal(p.status, 200, p.texto);
     assert.equal(p.json.pesoFinal, 14000);
     assert.equal(p.json.carimbos.pesofinal.por, 'Diego Dev');
+
+    const a = await req(`/api/devolucoes/${id}/etapa`, {
+      metodo: 'POST', token: tokens['Expedição'], corpo: { para: 'Descarga Conferida' },
+    });
+    assert.equal(a.status, 200, a.texto);
+    assert.equal(a.json.carimbos.expedicao.por, 'Carla Dev');
 
     const b = await req(`/api/devolucoes/${id}/etapa`, {
       metodo: 'POST', token: tokens['Controles Internos'],
@@ -393,17 +395,26 @@ describe('4. Conferência: falta calculada, divergência não apaga falta', () =
     assert.equal(nao.status, 403);
   });
 
-  test('alinhamento da capa: pesagem é do Faturamento, tick de nota final é da Central de Notas', async () => {
-    // Pesagem por item — a confirmação de que passou pela balança.
-    const pesa = await req(`/api/devolucoes/${id}/itens/${itemId}`, {
-      metodo: 'PATCH', token: tokens['Faturamento'], corpo: { pesoFaturamento: 15.5 },
-    });
-    assert.equal(pesa.status, 200, pesa.texto);
-    assert.equal(pesa.json.pesoFaturamento, 15.5);
-    const naoFat = await req(`/api/devolucoes/${id}/itens/${itemId}`, {
-      metodo: 'PATCH', token: tokens['Faturamento'], corpo: { cx: 99 },
-    });
-    assert.equal(naoFat.status, 403, 'Faturamento só pesa');
+  test('alinhamento da capa: o Faturamento não mexe em item, tick de nota final é da Central de Notas', async () => {
+    /* INVERTIDO EM 08/09/2026, e de propósito.
+
+       Este teste garantia que o Faturamento PESAVA o item. O dono tirou
+       essa tarefa dele com todas as letras — "nao digita nada por
+       produto, so digita o peso" — porque a tela pedia que ele
+       preenchesse linha a linha, e os dois pesos que ele deve dar são os
+       do caminhão, que ficam na capa.
+
+       Deixar o teste como estava seria manter verde uma regra que o dono
+       mandou acabar. Ele passa a exigir o contrário: nenhum campo de item
+       é do Faturamento. A coluna continua existindo para quem lança o
+       checklist — isso é o bloco 16 que garante. */
+    for (const campo of [{ pesoFaturamento: 15.5 }, { cx: 99 }]) {
+      const r = await req(`/api/devolucoes/${id}/itens/${itemId}`, {
+        metodo: 'PATCH', token: tokens['Faturamento'], corpo: campo,
+      });
+      assert.equal(r.status, 403,
+        `Faturamento não altera campo de item (${Object.keys(campo)[0]}): ${r.texto}`);
+    }
 
     // NOTA FINAL — o tick da Central de Notas por item.
     const tick = await req(`/api/devolucoes/${id}/itens/${itemId}`, {
@@ -757,8 +768,8 @@ describe('8. Cabeçalho por posto: Portaria e Faturamento editam SÓ o que é de
     for (const [token, para] of [
       [tokens['Portaria'], 'Recebida na Portaria'],
       [tokens['Faturamento'], 'Conferida no Faturamento'],
-      [tokens['Expedição'], 'Descarga Conferida'],
       [tokens['Faturamento'], 'Peso Final Registrado'],
+      [tokens['Expedição'], 'Descarga Conferida'],
     ]) {
       const r = await req(`/api/devolucoes/${did}/etapa`, { metodo: 'POST', token, corpo: { para } });
       assert.equal(r.status, 200, r.texto);
@@ -1081,12 +1092,16 @@ describe('14. As duas pesagens e a esteira inteira (27/08/2026)', () => {
     id = r.json.id;
   });
 
-  test('a esteira tem SETE etapas, com a segunda balança entre Expedição e Controles', async () => {
+  test('a esteira tem SETE etapas, com as DUAS balanças seguidas', async () => {
+    /* ORDEM DE 08/09/2026: a Expedição saiu do meio das balanças e passou
+       para depois delas — pedido do dono, porque o "OKzinho" dela demora
+       por desenho e estava segurando o Faturamento. As sete etapas
+       continuam sete; o que mudou foi quem vem antes de quem. */
     const passos = [
       [tokens['Portaria'], 'Recebida na Portaria', {}],
       [tokens['Faturamento'], 'Conferida no Faturamento', { pesoEntrada: 21500 }],
-      [tokens['Expedição'], 'Descarga Conferida', {}],
       [tokens['Faturamento'], 'Peso Final Registrado', { pesoFinal: 14300 }],
+      [tokens['Expedição'], 'Descarga Conferida', {}],
       [tokens['Controles Internos'], 'Destinada', { obsControles: 'Separado, 2 cx para descarte' }],
       [tokens['Central de Notas'], 'Nota Finalizada', { obsNotas: 'NF 998877 emitida' }],
     ];
@@ -1116,11 +1131,15 @@ describe('14. As duas pesagens e a esteira inteira (27/08/2026)', () => {
     for (const [token, para] of [
       [tokens['Portaria'], 'Recebida na Portaria'],
       [tokens['Faturamento'], 'Conferida no Faturamento'],
-      [tokens['Expedição'], 'Descarga Conferida'],
     ]) {
       const r = await req(`/api/devolucoes/${did}/etapa`, { metodo: 'POST', token, corpo: { para } });
       assert.equal(r.status, 200, r.texto);
     }
+    /* A GARANTIA NÃO MUDOU COM A ORDEM: a destinação não acontece sem a
+       balança de saída. Antes o salto testado era Expedição → Destinada;
+       agora, com a Expedição depois das balanças, o salto que precisa ser
+       recusado é chegada → Destinada. É a mesma coisa que o teste sempre
+       protegeu — devolução sem peso final não segue adiante. */
     const pulo = await req(`/api/devolucoes/${did}/etapa`, {
       metodo: 'POST', token: tokens['Controles Internos'], corpo: { para: 'Destinada' },
     });
@@ -1133,7 +1152,6 @@ describe('14. As duas pesagens e a esteira inteira (27/08/2026)', () => {
     for (const [token, para] of [
       [tokens['Portaria'], 'Recebida na Portaria'],
       [tokens['Faturamento'], 'Conferida no Faturamento'],
-      [tokens['Expedição'], 'Descarga Conferida'],
     ]) {
       await req(`/api/devolucoes/${did}/etapa`, { metodo: 'POST', token, corpo: { para } });
     }
@@ -1184,24 +1202,156 @@ describe('14. As duas pesagens e a esteira inteira (27/08/2026)', () => {
     for (const [token, para, extra] of [
       [tokens['Portaria'], 'Recebida na Portaria', {}],
       [tokens['Faturamento'], 'Conferida no Faturamento', { pesoEntrada: 30000 }],
-      [tokens['Expedição'], 'Descarga Conferida', {}],
       [tokens['Faturamento'], 'Peso Final Registrado', { pesoFinal: 12000 }],
+      [tokens['Expedição'], 'Descarga Conferida', {}],
     ]) {
       const r = await req(`/api/devolucoes/${did}/etapa`, { metodo: 'POST', token, corpo: { para, ...extra } });
       assert.equal(r.status, 200, r.texto);
     }
     const revs = await req(`/api/devolucoes/${did}/revisoes`, { token: tokens['Administração'] });
     assert.equal(revs.status, 200, revs.texto);
-    // A revisão anterior à segunda balança: ali ainda não havia peso final.
-    const antes = revs.json.find((r) => r.devolucao.status === 'Descarga Conferida');
+    /* A revisão anterior à segunda balança: ali ainda não havia peso
+       final. Com a ordem de 08/09 esse estado é "Conferida no
+       Faturamento" — antes era "Descarga Conferida", porque a Expedição
+       ficava no meio das duas pesagens. */
+    const antes = revs.json.find((r) => r.devolucao.status === 'Conferida no Faturamento');
     assert.ok(antes, 'existe revisão do estado antes da segunda pesagem');
     const volta = await req(`/api/devolucoes/${did}/restaurar`, {
       metodo: 'POST', token: tokens['Administração'], corpo: { revisaoId: antes.revisaoId },
     });
     assert.equal(volta.status, 200, volta.texto);
-    assert.equal(volta.json.status, 'Descarga Conferida');
+    assert.equal(volta.json.status, 'Conferida no Faturamento');
     assert.equal(volta.json.pesoFinal, null, 'o peso final volta a não existir');
     assert.equal(volta.json.carimbos.pesofinal, null, 'e a assinatura da segunda balança também');
     assert.equal(Number(volta.json.pesoEntrada), 30000, 'o peso de entrada daquele momento continua');
+  });
+});
+
+/* ------------------------------------------------------------------ */
+describe('15. O Faturamento não espera a Expedição (08/09/2026)', () => {
+  /* O RELATO, do dono, depois de rodar o processo com o Faturamento:
+
+       "o faturamento precisa conseguir dar continuidade antes da expedicao"
+       "Não tem que ser os dois sequenciados (...) No sistema está
+        sequenciado mas quando a gente faz na prática ele não está."
+
+     A CAUSA. A máquina de estados exigia o OK da Expedição ENTRE as duas
+     balanças: chegada → Expedição → peso final. Só que a etapa da
+     Expedição virou o "OKzinho" em 28/08 justamente porque eles NÃO
+     conseguem conferir na hora — então a devolução ficava parada na
+     balança esperando um OK que, por desenho, demora.
+
+     A tela mostrava a ordem certa (Bruna, 02/09: 2 Balança entrada, 3
+     Peso final, 4 Expedição) e o servidor exigia outra. O Faturamento
+     via o passo e não conseguia dar. Agora as duas dizem a mesma coisa. */
+  let id;
+  before(async () => {
+    const r = await req('/api/devolucoes', { metodo: 'POST', token: tokens['Logística'], corpo: novoChecklist() });
+    id = r.json.id;
+    await req(`/api/devolucoes/${id}/etapa`, {
+      metodo: 'POST', token: tokens['Portaria'], corpo: { para: 'Recebida na Portaria' },
+    });
+    await req(`/api/devolucoes/${id}/etapa`, {
+      metodo: 'POST', token: tokens['Faturamento'],
+      corpo: { para: 'Conferida no Faturamento', pesoEntrada: 21500 },
+    });
+  });
+
+  test('o Faturamento fecha a SEGUNDA balança sem o OK da Expedição', async () => {
+    const r = await req(`/api/devolucoes/${id}/etapa`, {
+      metodo: 'POST', token: tokens['Faturamento'],
+      corpo: { para: 'Peso Final Registrado', pesoFinal: 15000 },
+    });
+    assert.equal(r.status, 200, `a balança final não pode depender da Expedição: ${r.texto}`);
+    assert.equal(r.json.status, 'Peso Final Registrado');
+    assert.equal(r.json.pesoFinal, 15000);
+    assert.equal(r.json.pesoDevolvido, 6500, 'a conta é chegada − vazio');
+  });
+
+  test('a Expedição dá o OKzinho DEPOIS, no ritmo dela', async () => {
+    const r = await req(`/api/devolucoes/${id}/etapa`, {
+      metodo: 'POST', token: tokens['Expedição'],
+      corpo: { para: 'Descarga Conferida', obsExpedicao: 'faltou 1 cx' },
+    });
+    assert.equal(r.status, 200, r.texto);
+    assert.equal(r.json.status, 'Descarga Conferida');
+    assert.equal(r.json.obsExpedicao, 'faltou 1 cx');
+  });
+
+  test('e os Controles Internos seguem depois dela', async () => {
+    const r = await req(`/api/devolucoes/${id}/etapa`, {
+      metodo: 'POST', token: tokens['Controles Internos'], corpo: { para: 'Destinada' },
+    });
+    assert.equal(r.status, 200, r.texto);
+    assert.equal(r.json.status, 'Destinada');
+  });
+
+  test('a ordem velha morreu: da chegada NÃO se pula para a Expedição', async () => {
+    // Sem esta guarda, a correção teria deixado os DOIS caminhos abertos —
+    // e a pesagem final viraria opcional sem ninguém decidir isso.
+    const r2 = await req('/api/devolucoes', { metodo: 'POST', token: tokens['Logística'], corpo: novoChecklist() });
+    const outro = r2.json.id;
+    await req(`/api/devolucoes/${outro}/etapa`, {
+      metodo: 'POST', token: tokens['Portaria'], corpo: { para: 'Recebida na Portaria' } });
+    await req(`/api/devolucoes/${outro}/etapa`, {
+      metodo: 'POST', token: tokens['Faturamento'], corpo: { para: 'Conferida no Faturamento' } });
+    const r = await req(`/api/devolucoes/${outro}/etapa`, {
+      metodo: 'POST', token: tokens['Expedição'], corpo: { para: 'Descarga Conferida' },
+    });
+    assert.equal(r.status, 409, 'a devolução normal não pula a balança final');
+  });
+});
+
+/* ------------------------------------------------------------------ */
+describe('16. O Faturamento digita o peso do CAMINHÃO, não do produto (08/09/2026)', () => {
+  /* O dono, sobre a tela do Faturamento:
+
+       "tá fazendo a sua linha o peso das quantidades de produtos. Não
+        pode (...) Ele só coloca o peso e pronto acabou. Então na chegada,
+        então no final."
+
+     E, confirmando: "nao digita nada por produto, so digita o peso".
+
+     `peso_faturamento` era a ÚNICA coluna de item que o Faturamento
+     podia editar — ou seja, a tela dele pedia exatamente uma coisa:
+     preencher peso linha a linha. Os dois pesos que ele deve dar são os
+     do caminhão, e esses moram na CAPA, não no item. */
+  let id, itemId;
+  before(async () => {
+    const r = await req('/api/devolucoes', { metodo: 'POST', token: tokens['Logística'], corpo: novoChecklist() });
+    id = r.json.id;
+    itemId = r.json.itens[0].itemId;
+  });
+
+  test('o Faturamento NÃO grava peso por produto', async () => {
+    const r = await req(`/api/devolucoes/${id}/itens/${itemId}`, {
+      metodo: 'PATCH', token: tokens['Faturamento'], corpo: { pesoFaturamento: 12.5 },
+    });
+    assert.equal(r.status, 403, `linha a linha não é trabalho do Faturamento: ${r.texto}`);
+  });
+
+  test('mas os DOIS pesos do caminhão continuam sendo dele', async () => {
+    await req(`/api/devolucoes/${id}/etapa`, {
+      metodo: 'POST', token: tokens['Portaria'], corpo: { para: 'Recebida na Portaria' } });
+    const a = await req(`/api/devolucoes/${id}/etapa`, {
+      metodo: 'POST', token: tokens['Faturamento'],
+      corpo: { para: 'Conferida no Faturamento', pesoEntrada: 20000 } });
+    assert.equal(a.status, 200, a.texto);
+    assert.equal(a.json.pesoEntrada, 20000);
+    const b = await req(`/api/devolucoes/${id}/etapa`, {
+      metodo: 'POST', token: tokens['Faturamento'],
+      corpo: { para: 'Peso Final Registrado', pesoFinal: 14000 } });
+    assert.equal(b.status, 200, b.texto);
+    assert.equal(b.json.pesoFinal, 14000);
+  });
+
+  test('a Logística continua podendo pesar o item (a conferência não sumiu)', async () => {
+    // A lição da ocorrência #23: tirar da mão de um posto não é apagar a
+    // coluna. Quem lança o checklist continua com ela.
+    const r = await req(`/api/devolucoes/${id}/itens/${itemId}`, {
+      metodo: 'PATCH', token: tokens['Logística'], corpo: { pesoFaturamento: 12.5 },
+    });
+    assert.equal(r.status, 200, r.texto);
+    assert.equal(r.json.pesoFaturamento, 12.5);
   });
 });

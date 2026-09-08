@@ -56,7 +56,16 @@ async def main():
         ck('clique mudou o status sem digitar placa', st=='Aguardando Embarque', st)
         acao = await pg.evaluate("""()=>{const b=document.querySelector('#portaria-prog-tbody button');
             return b?b.textContent.trim():'(sem botão)';}""")
-        ck('sem botão em etapa de outro setor', acao=='(sem botão)', acao)
+        # ATUALIZADO EM 08/09/2026. A garantia continua a mesma — a Portaria
+        # não vê ação de OUTRO setor — mas ela ganhou uma ação própria neste
+        # status: a saída do caminhão que só trouxe devolução. O dono: "ele
+        # tem que ter a opção só de depois colocar lá que ele saiu, que é só
+        # devolução". Antes daqui só se saía de "Faturado", e um caminhão que
+        # não carrega nunca chega lá — ficava preso no pátio para sempre.
+        ck('em Aguardando Embarque a Portaria vê a saída de devolução, e só ela',
+           'Só devolução' in acao, acao)
+        ck('e NÃO vê ação da Expedição',
+           'Iniciar' not in acao and 'Embarque' not in acao, acao)
 
         print('\n=== 5. PROGRAMAÇÃO ===')
         ck('Tipo de Operação existe uma vez só',

@@ -5141,3 +5141,36 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
    casa: botão desabilitado não ensina o caminho, só nega. */
 body.esta-offline .btn-primary:not(#btn-entrar),
 body.esta-offline .btn-danger{ opacity:.45; }
+
+/* ---------------------------------------------------------------------
+   SÓ DEVOLUÇÃO — o caminhão que entrou, entregou e foi embora (08/09/2026)
+   ---------------------------------------------------------------------
+   O botão fica na fila da Portaria, na linha da carga que está em
+   "Aguardando Embarque". Cor de aviso e não de sucesso de propósito: o
+   gesto encerra a carga sem passar por Expedição e Faturamento, e a cor
+   é parte do que ensina isso antes do clique.
+
+   Altura mínima de 44px: é o alvo de toque do celular do porteiro, que é
+   onde este botão vai ser usado de verdade — no portão, em pé. */
+.btn-saida-devolucao{
+  background: var(--aviso-fraco, #4a3a12);
+  color: var(--texto, #f2f2f2);
+  border: 1px solid var(--aviso, #d9a441);
+  min-height: 44px;
+}
+.btn-saida-devolucao:hover{ background: var(--aviso, #d9a441); color: #1a1a1a; }
+
+/* A marca na Torre, na Visão do Pátio e na fila da Portaria. Some junto do
+   texto para caber no cartão do celular. */
+.chip-sem-carregar{
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: .72rem;
+  font-weight: 600;
+  white-space: nowrap;
+  background: var(--aviso-fraco, #4a3a12);
+  color: var(--aviso, #d9a441);
+  border: 1px solid var(--aviso, #d9a441);
+}

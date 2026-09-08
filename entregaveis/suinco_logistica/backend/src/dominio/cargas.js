@@ -86,6 +86,10 @@ export function paraPainel(linha) {
     lacreRetidoEm: linha.lacre_retido_em || null,
     status: linha.status_atual,
     aguardandoCarga: linha.aguardando_carga,
+    /* Saiu sem carregar: entrou só para entregar devolução (08/09/2026).
+       Vai para o painel porque a Torre e o Histórico precisam mostrar a
+       diferença — carga que saiu sem levar nada não é viagem. */
+    saidaSemCarregar: linha.saida_sem_carregar === true,
     criadoEm: linha.criado_em,
     /* Data em que a CARGA foi lançada — diferente de criado_em quando o
        caminhão chegou sem programação e a carga só foi lançada depois.
@@ -308,6 +312,6 @@ export const COLUNAS_CARGA = `
   paletizada, qtd_ganchos, qtd_entregas, observacoes, lacre, lacre_2, lacre_3,
   lacre_retido, lacre_retido_motivo, lacre_retido_por, lacre_retido_em,
   status_atual,
-  aguardando_carga, criado_em, programado_em, atualizado_em,
+  aguardando_carga, saida_sem_carregar, criado_em, programado_em, atualizado_em,
   acao_em, acao_por, acao_setor, operador_id, operador_nome,
   operador_setor, versao, excluida_em, excluida_por`;
