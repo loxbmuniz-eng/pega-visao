@@ -129,8 +129,24 @@ gzip -t "$ARQ" 2>/dev/null || falhou "o arquivo está corrompido (gzip -t reprov
 # meio de um COPY, o .gz continua VÁLIDO e o conteúdo está pela metade —
 # é o caso que engana, e por isso a conferência olha o fim do conteúdo, e
 # não só o envelope.
-if ! zcat "$ARQ" | tail -5 | grep -q "PostgreSQL database dump complete"; then
-  falhou "o dump não termina com a marca de conclusão: foi interrompido no meio."
+#
+# VINTE LINHAS, E DUAS MARCAS ACEITAS (08/09/2026). A primeira versão desta
+# checagem olhava só as últimas 5 e procurava uma marca só. O PostgreSQL
+# 16.13 do servidor fecha o arquivo assim:
+#
+#     -- PostgreSQL database dump complete
+#     --
+#
+#     \unrestrict <token>
+#
+# O `\unrestrict` é proteção que as versões recentes acrescentaram ao
+# pg_dump. Com ele no fim, a marca de conclusão passou a ser a QUINTA linha
+# de trás para frente — passava por um fio, e uma linha a mais no rodapé
+# quebraria a conferência de um backup perfeitamente bom. Reprovar backup
+# íntegro é tão ruim quanto aprovar backup quebrado: nos dois casos o
+# controle deixa de dizer a verdade.
+if ! zcat "$ARQ" | tail -20 | grep -qE "PostgreSQL database dump complete|^\\unrestrict "; then
+  falhou "o dump não termina com marca de conclusão nem com \\unrestrict: foi interrompido no meio."
 fi
 verde "  ok  íntegro: tamanho, compactação e marca de fim conferidos"
 
