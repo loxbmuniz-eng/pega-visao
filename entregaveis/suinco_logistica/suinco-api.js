@@ -787,6 +787,31 @@ const SuincoSharePoint = (function () {
     }
   }
 
+  /* REORDENAR A FILA DE CARREGAMENTO (08/09/2026).
+
+     Uma chamada só para a fila inteira, e não uma por carga: quinze
+     alterações separadas se cruzam com as de quem mais estiver mexendo, e
+     a fila embaralha. O servidor grava tudo numa transação.
+
+     NÃO ENTRA NA FILA OFFLINE de propósito. A ordem depende de ler a fila
+     inteira no momento da decisão; guardada para subir depois, ela seria
+     aplicada sobre uma fila que já mudou — e o resultado seria uma ordem
+     que ninguém pediu. Sem servidor, a resposta honesta é "não deu". */
+  async function sequenciar(cargaId, posicao) {
+    if (!estaConfigurado()) return semServidor();
+    try {
+      const r = await chamar('/api/cargas/sequenciar', {
+        metodo: 'POST',
+        corpo: { cargaId, posicao: Number(posicao) },
+      });
+      mudarEstado('online');
+      return { enfileirado: false, item: r };
+    } catch (e) {
+      if (eFalhaDeRede(e)) return { enfileirado: false, recusado: true, erro: e.message };
+      return { enfileirado: false, recusado: true, erro: e.message };
+    }
+  }
+
   /* SAÍDA DO PÁTIO — PELA ROTA PRÓPRIA DO SERVIDOR (28/08/2026).
 
      A rota `POST /api/portaria/saida` existe desde 20/08 e estava sendo
@@ -1815,7 +1840,7 @@ const SuincoSharePoint = (function () {
     aoDescartarDaFila, aoEditarCarga, aoExcluirCarga, aoAtualizarPresenca,
     aoFecharPrograma,
     login, sair, diagnosticarConexao,
-    push, upsert, excluir, mudarStatus, encerrarProgramacoesAnteriores, reterLacre,
+    push, upsert, excluir, mudarStatus, sequenciar, encerrarProgramacoesAnteriores, reterLacre,
     recarregarRotas,
     corrigirEtapa, corrigirDataProgramacao, desfazerExclusao, listarExcluidas,
     programacaoDoDia, mfa,

@@ -5333,3 +5333,29 @@ body.esta-offline .btn-danger{ opacity:.45; }
 @media(max-width:640px){
   .chk-inline{ width:24px; height:24px; margin-right:8px }
 }
+
+/* =======================================================================
+   ARRASTAR PARA MUDAR A ORDEM DA FILA — 08/09/2026
+   -----------------------------------------------------------------------
+   Pedido do Wemerson: além de digitar o número, poder arrastar o cartão
+   para a posição. A alça existe porque arrastar sem sinal visível é
+   funcionalidade que ninguém descobre — e no celular ela é o que separa
+   "arrastar a linha" de "rolar a página".
+   ===================================================================== */
+.alca-arrastar{
+  display:inline-block; cursor:grab; user-select:none;
+  color:var(--text-dim); font-size:15px; line-height:1;
+  padding:0 6px 0 0; vertical-align:middle;
+}
+.alca-arrastar:active{ cursor:grabbing }
+tr.prog-linha[draggable="true"]{ cursor:default }
+tr.fila-arrastando{ opacity:.45 }
+/* A linha sobre a qual se vai soltar mostra ONDE a carga vai parar. Sem
+   isso o arrasto é um chute — a pessoa solta e descobre depois. */
+tr.fila-alvo > td{ box-shadow:inset 0 3px 0 0 var(--gold) }
+.cel-seq{ white-space:nowrap }
+@media(max-width:640px){
+  /* No celular a alça precisa de área de dedo, senão o toque vira rolagem
+     da página em vez de arrasto da linha. */
+  .alca-arrastar{ font-size:20px; padding:10px 8px 10px 0 }
+}
