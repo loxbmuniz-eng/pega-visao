@@ -40,6 +40,49 @@ faz achar a próxima em minutos em vez de horas:
 
 ---
 
+## #27 — A Torre parou de guardar a sequência digitada (08/09/2026)
+
+**Onde apareceu:** no portão, não na operação. `test_edicao_marca_alterada`
+reprovou, foi rodado sozinho com banco limpo, reprovou de novo — vermelho de
+verdade, não contaminação. A publicação foi **cancelada pelo próprio portão**;
+nada disso chegou a subir.
+
+    [FALHA] a sequência mudou na tela de quem editou — {'seq': 1, 'ganchos': 33}
+    [FALHA] a SEQUÊNCIA chegou ao outro terminal — esperado 7, veio 1
+    [FALHA] a sequência continua 7 depois do sincronismo — {'seq': 1, ...}
+
+**A causa.** `atualizarSequenciaUI` tinha **dois chamadores querendo coisas
+diferentes**, e a implementação do sequenciamento novo só enxergou um:
+
+| Tela | Título do campo | O que significa |
+|---|---|---|
+| Torre de Controle (`app.js:3038`) | "Sequência livre." | o número que o programador escreve — 7 vale 7, mesmo numa lista de 2 |
+| Fila de Programados (`app.js:3437`) | "Digite a posição..." | posição na fila — o servidor renumera de 1 a N e as outras descem |
+
+Todo inteiro foi roteado para `moverNaFilaUI()`. Na Torre, digitar 7 numa
+fila de 1 carga virava "posição 7 não existe" → o servidor recusava (com
+aviso na tela, isso funcionou) e a sequência ficava no valor antigo. Ou
+seja: **o defeito de 14/08 de volta** — *"já alterei três vezes e ela não se
+mantém na torre de controle"*.
+
+**Correção.** Separar as duas perguntas: a Fila passou a chamar
+`definirPosicaoNaFilaUI()`, e `atualizarSequenciaUI()` voltou a ser só o
+editor de número livre da Torre, com o carimbo `atualizadoEm` intacto.
+
+**A guarda.** Em `testes/test_fila_reordena_em_cascata.py`, duas checagens
+novas que reprovam contra a versão quebrada (conferido no `git show`):
+`a Torre NÃO passa pela fila` e `a Torre continua carimbando a carga como
+alterada`. `test_edicao_marca_alterada` continua sendo a rede de baixo.
+
+**A lição, que é o inverso da #14.** "Uma função, dois chamadores" existe
+para impedir que a MESMA decisão seja copiada em dois lugares. Aqui foram
+duas decisões DIFERENTES forçadas na mesma função porque compartilhavam o
+nome do campo. Antes de unificar, a pergunta não é "é o mesmo campo?" — é
+"é a mesma pergunta?". Neste caso o próprio `title=` das duas telas já
+respondia que não.
+
+---
+
 ## #26 — "Setor inválido" no cadastro do usuário de filial (02/09/2026)
 
 **Relato, do dono, tentando criar o usuário da filial depois de a entrega
@@ -1105,3 +1148,8 @@ permitiu recuperar os lacres apagados de #09.
 12. **Entrega de cadastro só está pronta depois de cadastrar.** Em #26 a
    tela mostrava o setor, o banco aceitava, e a rota recusava. Nenhuma
    inspeção de código pegaria os três ao mesmo tempo; um `POST` pegaria.
+13. **Antes de unificar, pergunte se é a mesma PERGUNTA — não se é o mesmo
+   campo.** Em #27 duas telas escreviam em `sequencia` querendo coisas
+   opostas, e juntá-las numa função só quebrou tanto quanto copiar teria
+   quebrado. O `title=` de cada campo já dizia que eram perguntas
+   diferentes.

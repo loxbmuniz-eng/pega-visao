@@ -86,13 +86,32 @@ async def main():
         # de borda aqui é a fila do dia de embarque.
         uma_so = await pg.evaluate("""() => {
             const f = (fn) => (typeof window[fn] === 'function') ? window[fn].toString() : '';
+            const app = document.documentElement.innerHTML;
             return { soltaChamaMover: /moverNaFilaUI/.test(f('filaArrastarSolta')),
-                     digitarChamaMover: /moverNaFilaUI/.test(f('atualizarSequenciaUI')),
-                     moverExiste: typeof window.moverNaFilaUI === 'function' };
+                     digitarChamaMover: /moverNaFilaUI/.test(f('definirPosicaoNaFilaUI')),
+                     moverExiste: typeof window.moverNaFilaUI === 'function',
+                     torreNaoEntraNaFila: !/moverNaFilaUI/.test(f('atualizarSequenciaUI')),
+                     torreCarimba: /atualizadoEm/.test(f('atualizarSequenciaUI')) };
         }""")
         ck('existe uma função só de mover na fila', uma_so and uma_so['moverExiste'])
         ck('arrastar chama ela', uma_so and uma_so['soltaChamaMover'], str(uma_so))
-        ck('digitar chama ela', uma_so and uma_so['digitarChamaMover'], str(uma_so))
+        ck('digitar na Fila chama ela', uma_so and uma_so['digitarChamaMover'], str(uma_so))
+
+        # A GUARDA DESTA REGRESSÃO (08/09/2026).
+        #
+        # A Torre de Controle e a Fila escrevem no MESMO campo querendo coisas
+        # diferentes: na Torre a sequência é livre (vale 7 numa lista de 2), na
+        # Fila é posição, e o servidor renumera de 1 a N. Mandei as duas para
+        # moverNaFilaUI achando que era a mesma decisão. Não era — a Torre
+        # parou de guardar o número digitado e o defeito de 14/08 voltou:
+        # "alterei três vezes e ela não se mantém na torre de controle".
+        #
+        # Estas duas linhas travam os dois lados: a Torre não pode cair na
+        # fila, e não pode perder o carimbo que faz a edição subir.
+        ck('a Torre NÃO passa pela fila — sequência livre continua livre',
+           uma_so and uma_so['torreNaoEntraNaFila'], str(uma_so))
+        ck('a Torre continua carimbando a carga como alterada',
+           uma_so and uma_so['torreCarimba'], str(uma_so))
 
         print('\n=== 3. SEM SERVIDOR, A TELA DIZ QUE NÃO DEU ===')
         # A ordem depende de ler a fila inteira no momento da decisão. Guardada

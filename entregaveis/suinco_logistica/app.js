@@ -3434,7 +3434,7 @@ function renderProgFila(){
         title="Clique para abrir os demais campos. Arraste para mudar a ordem de carregamento.">
       <td onclick="event.stopPropagation()" class="cel-seq">
         <span class="alca-arrastar" title="Arraste para mudar a posição na fila">⠿</span>
-        <input type="number" min="1" class="seq-input" value="${c.sequencia ?? ''}" onchange="atualizarSequenciaUI('${id}',this.value)" title="Digite a posição: a carga entra nela e as outras descem uma casa."></td>
+        <input type="number" min="1" class="seq-input" value="${c.sequencia ?? ''}" onchange="definirPosicaoNaFilaUI('${id}',this.value)" title="Digite a posição: a carga entra nela e as outras descem uma casa."></td>
       <td class="col-identificacao" onclick="event.stopPropagation()">
         <input type="text" class="numero-carga-input" value="${esc(c.numeroCarga)}" onchange="atualizarNumeroCargaUI('${id}',this.value)" title="Alterar o número desta carga.">
       </td>
@@ -4146,13 +4146,34 @@ function devServidorOk_paraFila(){
     && SuincoSharePoint.estaConfigurado && SuincoSharePoint.estaConfigurado();
 }
 
-function atualizarSequenciaUI(id, val){
-  const c = getCarga(id); if(!c) return;
+/* POSIÇÃO NA FILA — NÃO É A MESMA COISA QUE "SEQUÊNCIA LIVRE" (08/09/2026).
+
+   Estas duas telas escrevem no mesmo campo e querem coisas DIFERENTES:
+
+     · Torre de Controle  — "Sequência livre": o número que o programador
+       escreve. Vale o que ele digitou, mesmo 7 numa lista de 2.
+     · Fila de Programados — "posição na fila": a carga entra naquela casa
+       e as outras descem uma. O servidor renumera de 1 a N.
+
+   Eu já mandei as duas para moverNaFilaUI() achando que era "uma função,
+   dois chamadores". Não era: eram duas PERGUNTAS diferentes com o mesmo
+   nome de campo. O resultado foi a Torre parar de guardar a sequência
+   digitada — o defeito de 14/08/2026 de volta, "alterei três vezes e ela
+   não se mantém". Juntar decisões diferentes quebra tanto quanto copiar
+   a mesma decisão em dois lugares. */
+function definirPosicaoNaFilaUI(id, val){
   const n = Number(val);
-  if(val !== '' && Number.isInteger(n) && n >= 1){
-    moverNaFilaUI(id, n);
+  if(val === '' || !Number.isInteger(n) || n < 1){
+    /* Campo vazio não é ordem de apagar a ordem: só redesenha e devolve
+       o valor que o servidor tem. */
+    renderAll();
     return;
   }
+  moverNaFilaUI(id, n);
+}
+
+function atualizarSequenciaUI(id, val){
+  const c = getCarga(id); if(!c) return;
   c.sequencia = val==='' ? null : Number(val);
   /* Sem este carimbo a alteração NÃO SOBE ao servidor.
 
