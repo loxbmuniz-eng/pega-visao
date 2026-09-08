@@ -4231,15 +4231,21 @@ function filaArrastarSolta(ev, idDestino){
   const movido = _filaArrastando;
   filaArrastarFim();
   if(!movido || movido === idDestino) return;
-  /* A posição é a que a linha de destino ocupa NA TELA, contando de 1.
-     Ler da tela e não do dado é de propósito: a pessoa soltou onde estava
-     vendo, e é essa a intenção dela. */
-  const corpo = ev.currentTarget.closest('tbody');
-  if(!corpo) return;
-  const linhas = [...corpo.querySelectorAll('tr[data-carga]')];
-  const pos = linhas.findIndex(tr => tr.dataset.carga === idDestino) + 1;
-  if(pos < 1) return;
-  moverNaFilaUI(movido, pos);
+  /* MANDA O NÚMERO DA LINHA DE DESTINO, NÃO A POSIÇÃO DELA (08/09/2026).
+
+     Antes isto mandava o índice da linha na tela, contando de 1. Enquanto a
+     fila era numerada 1, 2, 3... índice e número eram a mesma coisa e não
+     dava para notar a diferença. Passaram a ser coisas distintas quando os
+     números de quem já carregou viraram reservados: a fila pode ser
+     4, 5, 6 num dia em que três caminhões já saíram, e a primeira linha da
+     tela é o número 4.
+
+     Quem solta em cima da linha que mostra "5" quer o número 5. É o mesmo
+     valor que ela digitaria no campo — e por isso arrastar e digitar
+     continuam sendo a mesma operação. */
+  const alvo = getCarga(idDestino);
+  if(!alvo || alvo.sequencia == null) return;
+  moverNaFilaUI(movido, alvo.sequencia);
 }
 
 function preencherSelectsRota(){

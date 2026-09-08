@@ -365,21 +365,57 @@ export function entraNaFila(carga) {
    Devolve `[{ id, sequencia }]` só das que MUDARAM de número. Quem não
    mudou não precisa de escrita, e escrita à toa é uma chance a mais de
    corrida. */
-export function filaReordenada(fila, cargaId, posicao) {
+/* OS NÚMEROS QUE A FILA NÃO PODE USAR (08/09/2026).
+
+   `ocupados` são as sequências das cargas do MESMO DIA que já saíram da
+   fila — as que estão carregando, carregadas, faturadas. Elas não se mexem
+   (decisão do dono: "o que já carregou não se mexe"), e por isso o número
+   delas está reservado.
+
+   Sem esta reserva, a fila era renumerada de 1 a N por cima de todo mundo:
+   com uma carga em Embarque Iniciado no número 1, mover uma da fila para a
+   frente criava DOIS números 1 no mesmo dia. Relato do dono, 08/09/2026:
+   "ela ta deixando ficarem numeros repetidos isso nao pode acontecer
+   nunca". */
+export function numerosLivres(ocupados, quantos) {
+  const reservados = new Set((ocupados || [])
+    .map(Number).filter((n) => Number.isInteger(n) && n >= 1));
+  const livres = [];
+  for (let n = 1; livres.length < quantos; n++) {
+    if (!reservados.has(n)) livres.push(n);
+  }
+  return livres;
+}
+
+/* Move `cargaId` para o NÚMERO `posicao` e reacomoda o resto da fila nos
+   números que sobraram, em ordem.
+
+   `posicao` é o NÚMERO que a pessoa quer para a carga, não o índice da
+   linha: é o que ela digita no campo e o que lê na linha onde soltou. Se
+   esse número for de uma carga que já carregou, a operação é RECUSADA com
+   o motivo — nunca calada, e nunca roubando o número de um registro.
+
+   Devolve `[{ id, sequencia }]` só das que MUDARAM de número. */
+export function filaReordenada(fila, cargaId, posicao, ocupados = []) {
   const ids = fila.map((c) => String(c.id ?? c.carga_id));
   const de = ids.indexOf(String(cargaId));
   if (de === -1) return null;                       // a carga não está nesta fila
   const alvo = Number(posicao);
-  if (!Number.isInteger(alvo) || alvo < 1 || alvo > ids.length) return null;
+  if (!Number.isInteger(alvo) || alvo < 1) return null;
+
+  const livres = numerosLivres(ocupados, ids.length);
+  const k = livres.indexOf(alvo);
+  if (k === -1) return null;   // o número não é da fila: ou passou do fim,
+                               // ou pertence a quem já carregou
 
   const nova = ids.slice();
   nova.splice(de, 1);
-  nova.splice(alvo - 1, 0, String(cargaId));
+  nova.splice(k, 0, String(cargaId));
 
   const antes = new Map(fila.map((c) => [String(c.id ?? c.carga_id), c.sequencia]));
   const mudou = [];
   nova.forEach((id, i) => {
-    const seq = i + 1;
+    const seq = livres[i];
     if (antes.get(id) !== seq) mudou.push({ id, sequencia: seq });
   });
   return mudou;
