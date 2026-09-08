@@ -79,13 +79,6 @@ const DEV_ETAPAS = [
   { status: 'Peso Final Registrado',    proxima: 'Descarga Conferida',
     botao: '📦 Descarga conferida (Expedição)', pede: 'expedicao',
     setores: ['Expedição', 'Logística'] },
-  /* A SOBRA PULA A BALANÇA FINAL e vai da chegada direto ao OK da
-     Expedição — ela nunca volta à balança. `soSobra` mantém este atalho
-     fechado para a devolução normal, onde pular a pesagem é exatamente o
-     que não pode acontecer. Espelha a transição do servidor. */
-  { status: 'Conferida no Faturamento', proxima: 'Descarga Conferida',
-    botao: '📦 Descarga conferida (Expedição)', pede: 'expedicao',
-    setores: ['Expedição', 'Logística'], soSobra: true },
   { status: 'Descarga Conferida',       proxima: 'Destinada',
     /* "Destinações" — pedido do dono (26/08/2026): "alterar nome no painel,
        destinações", valendo SÓ para a etapa dos Controles Internos. O nome
@@ -101,6 +94,30 @@ const DEV_ETAPAS = [
     botao: '🧾 Finalizar nota (Central de Notas)', pede: 'notas',
     setores: ['Central de Notas', 'Logística'] },
 ];
+
+/* O ATALHO DA SOBRA MORA FORA DA ESTEIRA — e isso não é organização, é
+   correção de um defeito que eu criei em 08/09/2026.
+
+   A sobra pula a balança final: ela encerra no OK da Expedição e o
+   caminhão nunca volta a pesar. Quando a ordem mudou, ela ficou sem
+   caminho até o próprio fim, e eu resolvi acrescentando mais um item a
+   `DEV_ETAPAS` — com `soSobra: true` para não valer na devolução normal.
+
+   A permissão ficou certa e a esteira ficou errada. `DEV_ETAPAS` não é
+   só uma lista de transições: é A LISTA DAS SETE ETAPAS, e várias telas
+   a percorrem para desenhar a esteira. Com o oitavo item, o painel passou
+   a mostrar "Conferida no Faturamento" DUAS vezes, para todo mundo,
+   inclusive em devolução que não é sobra. Três suítes pegaram na mesma
+   rodada.
+
+   Aqui ele é o que sempre foi: uma exceção de UM tipo, consultada por
+   quem pergunta "qual o próximo passo desta devolução" e invisível para
+   quem desenha a esteira. */
+const DEV_ATALHO_SOBRA = {
+  status: 'Conferida no Faturamento', proxima: 'Descarga Conferida',
+  botao: '📦 Descarga conferida (Expedição)', pede: 'expedicao',
+  setores: ['Expedição', 'Logística'],
+};
 
 const DEV_ETAPA_ROTULO = {
   portaria: 'Portaria', faturamento: 'Balança (entrada)', expedicao: 'Expedição',
@@ -1006,13 +1023,13 @@ function carimbosDev(d) {
   </div>`;
 }
 
-/* Qual passo esta devolução tem pela frente. Duas transições saem de
-   "Conferida no Faturamento" — a balança final (devolução normal) e o
-   atalho da sobra — então a busca precisa saber o tipo. Sem isto a sobra
-   veria o botão da balança, que o servidor recusa. */
+/* Qual passo esta devolução tem pela frente. De "Conferida no
+   Faturamento" saem dois caminhos — a balança final, na devolução
+   normal, e o atalho da sobra — então a resposta depende do tipo. Sem
+   isto a sobra veria o botão da balança, que o servidor recusa. */
 function etapaDeDev(d) {
-  return DEV_ETAPAS.find((e) => e.status === d.status
-    && (e.soSobra ? d.tipo === 'SOBRA' : !(d.tipo === 'SOBRA' && e.proxima === 'Peso Final Registrado')));
+  if (d.tipo === 'SOBRA' && d.status === DEV_ATALHO_SOBRA.status) return DEV_ATALHO_SOBRA;
+  return DEV_ETAPAS.find((e) => e.status === d.status) || null;
 }
 
 function acaoEtapaDev(d) {

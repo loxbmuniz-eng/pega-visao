@@ -139,17 +139,38 @@ async def main():
                ordem['rotulos'] == esperado,
                ' | '.join(ordem['rotulos']))
 
-        print('\n=== 4. A ORDEM DO TRABALHO NÃO MUDOU ===')
-        # A tentação de "alinhar as duas ordens" é o que desfaria o pedido
-        # sem ninguém perceber — e mudar o fluxo deixaria devolução em
-        # andamento com a pesagem final pulada. Por isso está travado aqui.
+        print('\n=== 4. AGORA O FLUXO SEGUE A MESMA ORDEM DA TELA ===')
+        # ESTE BLOCO FOI INVERTIDO EM 08/09/2026, e o motivo importa.
+        #
+        # Ele existia para impedir que alguém "alinhasse as duas ordens" e
+        # desfizesse o pedido da Bruna sem perceber. Em 02/09 o fluxo NÃO
+        # foi mexido de propósito: mudar a ordem naquele dia deixaria as
+        # devoluções em andamento com a pesagem final PULADA.
+        #
+        # O dono voltou ao assunto depois de rodar o processo com o
+        # Faturamento: "o faturamento precisa conseguir dar continuidade
+        # antes da expedicao (...) No sistema está sequenciado mas quando a
+        # gente faz na prática ele não está". A tela mostrava o passo e o
+        # servidor recusava — o Faturamento ficava travado esperando um OK
+        # que, por desenho (28/08), demora.
+        #
+        # O risco que o guarda velho nomeava não sumiu: ele foi TRATADO
+        # pela migração 045, que devolve ao Faturamento as devoluções que
+        # estavam em "Descarga Conferida" sem peso final. Por isso agora dá
+        # para exigir o contrário sem abrir mão de nada.
         fluxo = await pg.evaluate("() => DEV_ETAPAS.map(e => e.status)")
-        ck('a Expedição continua vindo antes da segunda pesagem no FLUXO',
-           fluxo.index('Conferida no Faturamento') < fluxo.index('Descarga Conferida'),
+        ck('a segunda pesagem vem ANTES da Expedição no fluxo',
+           fluxo.index('Peso Final Registrado') < fluxo.index('Descarga Conferida'),
            ' → '.join(fluxo))
-        ck('e "Descarga Conferida" continua antes de "Peso Final Registrado"',
-           fluxo.index('Descarga Conferida') < fluxo.index('Peso Final Registrado'),
+        ck('a tela e o fluxo dizem a MESMA coisa',
+           await pg.evaluate("""() => JSON.stringify(DEV_ORDEM_NA_TELA)
+               === JSON.stringify(DEV_ETAPAS.map(e => e.pede))"""),
            ' → '.join(fluxo))
+        # A esteira tem sete etapas, nem uma a mais: o atalho da sobra mora
+        # FORA de DEV_ETAPAS justamente para não virar etapa na tela de
+        # quem não é sobra (foi o defeito que a bateria pegou hoje).
+        ck('a esteira continua com seis transições, sem status repetido',
+           len(fluxo) == 6 and len(set(fluxo)) == 6, ' → '.join(fluxo))
 
         sql(f"DELETE FROM devolucoes WHERE devolucao_id = '{criado}'")
         ck('nenhum erro de JavaScript', not erros, '; '.join(erros[:2]))
