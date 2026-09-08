@@ -1089,7 +1089,7 @@
         <div class="form-group"><label>UF <span class="hint">opcional</span></label><input type="text" id="frota-uf" maxlength="2" placeholder="Ex: PR"></div>
         <div class="form-group"><label>Última Movimentação <span class="hint">opcional</span></label><input type="date" id="frota-ultima-mov"></div>
         <div class="form-group">
-          <label><input type="checkbox" id="frota-revisao" style="width:auto;margin-right:6px"> Precisa Revisão</label>
+          <label><input type="checkbox" id="frota-revisao" class="chk-inline"> Precisa Revisão</label>
         </div>
       </div>
       <div class="card-sub" style="margin-top:-6px">Capacidade/UF/Última Movimentação/Revisão: schema pronto pro dia em que esse histórico vier de um ERP/Sisatak — hoje ficam opcionais.</div>
@@ -1101,7 +1101,7 @@
       <div class="sep"></div>
       <div class="form-row" style="align-items:flex-end">
         <div class="form-group" style="flex:2"><label>Buscar (Placa ou Transportadora)</label><input type="text" id="frota-busca" placeholder="Digite pra filtrar…" oninput="renderFrotaTabela()"></div>
-        <div class="form-group"><label><input type="checkbox" id="frota-so-revisao" style="width:auto;margin-right:6px" onchange="renderFrotaTabela()"> Só Precisa Revisão</label></div>
+        <div class="form-group"><label><input type="checkbox" id="frota-so-revisao" class="chk-inline" onchange="renderFrotaTabela()"> Só Precisa Revisão</label></div>
         <div class="form-group" style="align-self:end">
           <button class="btn btn-sec btn-sm" onclick="exportarFrotaCsv()"
             title="Baixa a relação COMPLETA e atualizada da Frota em CSV — abre direto no Excel.">⬇ Exportar CSV</button>
