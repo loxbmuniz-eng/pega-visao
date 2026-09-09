@@ -4893,3 +4893,94 @@ describe('7d. Sequenciamento da fila: digitou 1, entra na frente (08/09/2026)', 
       `a fila (${naFila}) passou por cima do número ${fora.sequencia} de quem já carregou`);
   });
 });
+
+describe('39. A filial não enxerga o pátio por fora da tela (09/09/2026)', () => {
+  /* Achado ALTO da auditoria de segurança de 09/09/2026: com o crachá de
+     uma filial, GET /api/estado devolvia o pátio inteiro (cargas, clientes,
+     destinos, motoristas), /montagem, /modelo-semana e /programacoes
+     respondiam 200, e /devolucoes-cadastros/clientes-csv entregava a base
+     inteira de clientes (77 mil linhas). Os botões estavam escondidos na
+     tela; o endereço, não.
+
+     A regra do dono (02/09/2026): filial "so vai ter acesso a aba devolucoes
+     e escopo de devolucoes (...) as permissoes da filial sao restritas a
+     isso". Regra que vale na tela e não no servidor não é regra.
+
+     /estado NÃO devolve 403: o painel chama essa rota no sincronismo de todo
+     setor, e um 403 ali viraria faixa de "recusado" na tela da filial a cada
+     poucos segundos. Ela recebe a mesma resposta, com o pátio VAZIO e o
+     escopo declarado. /frota e /rotas continuam abertas: o checklist de
+     devolução precisa da placa e da rota. */
+  let tokenFilial;
+  let tokenLogistica;
+
+  before(async () => {
+    const hash = await bcrypt.hash(SENHA, 4);
+    await pool.query("DELETE FROM operadores WHERE email = 'filial39@teste.local'");
+    await pool.query(
+      'INSERT INTO operadores (email, nome, setor, senha_hash) VALUES ($1,$2,$3,$4)',
+      ['filial39@teste.local', 'Filial Teste', 'Filial 105 BSB', hash]
+    );
+    const f = await req('/auth/login', { metodo: 'POST', corpo: { email: 'filial39@teste.local', senha: SENHA } });
+    assert.equal(f.status, 200, f.texto);
+    tokenFilial = f.json.token;
+    tokenLogistica = tokens['Logística'];
+  });
+
+  test('/estado responde à filial com o pátio VAZIO e o escopo declarado', async () => {
+    const r = await req('/api/estado', { token: tokenFilial });
+    assert.equal(r.status, 200, r.texto);
+    assert.deepEqual(r.json.cargas, [], 'a filial não pode ver carga nenhuma do pátio');
+    assert.deepEqual(r.json.movimentacoes, []);
+    assert.deepEqual(r.json.log, []);
+    assert.equal(r.json.escopo, 'devolucoes');
+    assert.ok(r.json.marca, 'a marca continua vindo — o sincronismo da filial não pode quebrar');
+  });
+
+  test('/estado continua entregando o pátio inteiro aos setores operacionais', async () => {
+    const r = await req('/api/estado', { token: tokenLogistica });
+    assert.equal(r.status, 200, r.texto);
+    assert.ok(Array.isArray(r.json.cargas));
+    assert.equal(r.json.escopo, undefined);
+  });
+
+  for (const rota of ['/api/montagem', '/api/modelo-semana', '/api/programacoes']) {
+    test(`${rota} recusa a filial com 403 e explica`, async () => {
+      const r = await req(rota, { token: tokenFilial });
+      assert.equal(r.status, 403, `${rota}: ${r.status} ${r.texto.slice(0, 120)}`);
+      assert.equal(r.json.codigo, 'SETOR_SEM_PERMISSAO');
+    });
+  }
+
+  test('a base inteira de clientes (CSV) só sai para Logística e Administração — e fica registrada', async () => {
+    const f = await req('/api/devolucoes-cadastros/clientes-csv', { token: tokenFilial });
+    assert.equal(f.status, 403, `filial: ${f.status}`);
+    const p = await req('/api/devolucoes-cadastros/clientes-csv', { token: tokens['Portaria'] });
+    assert.equal(p.status, 403, `portaria: ${p.status}`);
+    const antes = await pool.query("SELECT count(*)::int AS n FROM log_leitura WHERE tipo = 'clientes-csv'");
+    const l = await req('/api/devolucoes-cadastros/clientes-csv', { token: tokenLogistica });
+    assert.equal(l.status, 200, `logística: ${l.status}`);
+    const depois = await pool.query("SELECT count(*)::int AS n FROM log_leitura WHERE tipo = 'clientes-csv'");
+    assert.equal(depois.rows[0].n, antes.rows[0].n + 1, 'baixar a base inteira precisa deixar rastro');
+  });
+
+  test('a filial continua lendo frota e rotas — o checklist precisa da placa e da rota', async () => {
+    const f = await req('/api/frota', { token: tokenFilial });
+    assert.equal(f.status, 200, f.texto.slice(0, 120));
+    const r = await req('/api/rotas', { token: tokenFilial });
+    assert.equal(r.status, 200, r.texto.slice(0, 120));
+  });
+
+  /* Achado MÉDIO da mesma auditoria: os três jwt.verify aceitavam qualquer
+     algoritmo HMAC. O login assina em HS256; um crachá HS512 com o mesmo
+     segredo era aceito. Não é explorável sem o segredo — mas a própria
+     bateria de auditoria do projeto (token_de_login.mjs) já reprovava, e
+     vermelho com causa real não se publica. */
+  test('crachá assinado em HS512 é recusado, mesmo com o segredo certo', async () => {
+    const payload = jwt.decode(tokenLogistica);
+    delete payload.iat; delete payload.exp;
+    const forjado = jwt.sign(payload, config.jwtSegredo, { algorithm: 'HS512', expiresIn: '1h' });
+    const r = await req('/api/estado', { token: forjado });
+    assert.equal(r.status, 401, `HS512 devia ser recusado, veio ${r.status}`);
+  });
+});

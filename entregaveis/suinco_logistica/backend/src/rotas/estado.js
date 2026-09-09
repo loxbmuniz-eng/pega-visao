@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { consultar } from '../banco.js';
 import { exigirLogin } from '../middleware/auth.js';
+import { ehFilial } from '../dominio/fluxo.js';
 import { COLUNAS_CARGA, paraPainel } from '../dominio/cargas.js';
 import { registrarLeitura } from '../servicos/registro_leitura.js';
 
@@ -26,6 +27,25 @@ rotasEstado.get('/estado', exigirLogin, async (req, res, next) => {
 
     // A marca vem primeiro. Não mova esta linha para depois das consultas.
     const marca = new Date(Date.now() - MARGEM_MS).toISOString();
+
+    /* A FILIAL RECEBE O PÁTIO VAZIO, NÃO UM 403 (09/09/2026).
+
+       Auditoria de segurança: o crachá de filial puxava daqui as cargas do
+       pátio inteiro — cliente, destino, motorista, peso, placa — sem nenhum
+       botão na tela para isso. A regra do dono é "filial só devolução".
+
+       Por que não 403: o painel chama esta rota no sincronismo de TODO setor,
+       a cada poucos segundos. Um 403 aqui viraria faixa de "recusado" na tela
+       da filial o tempo inteiro. Ela recebe a mesma forma de resposta, com o
+       pátio vazio e o escopo dito com todas as letras — o sincronismo dela
+       segue normal, e as devoluções têm a rota própria, já filtrada por
+       filial. */
+    if (ehFilial(req.operador.setor)) {
+      return res.json({
+        marca, completo: !desdeValido, escopo: 'devolucoes',
+        cargas: [], movimentacoes: [], log: [],
+      });
+    }
 
     const params = desdeValido ? [desdeValido] : [];
 

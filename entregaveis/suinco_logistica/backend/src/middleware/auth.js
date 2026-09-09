@@ -9,6 +9,7 @@
 
 import jwt from 'jsonwebtoken';
 import { config } from '../config.js';
+import { ehFilial } from '../dominio/fluxo.js';
 import { consultar } from '../banco.js';
 
 export function assinarToken(operador) {
@@ -80,7 +81,13 @@ export async function exigirLogin(req, res, next) {
     return res.status(401).json({ erro: 'Faça login para continuar.', codigo: 'SEM_TOKEN' });
   }
   try {
-    const p = jwt.verify(token, config.jwtSegredo);
+    /* `algorithms` fixado (09/09/2026). O login assina em HS256; sem esta
+       lista, um crachá assinado em HS512 com o mesmo segredo era aceito. Não
+       é explorável sem o segredo — mas a bateria de auditoria do projeto
+       (scripts/auditoria/token_de_login.mjs) reprovava, e vermelho com causa
+       real não se publica. Os outros dois jwt.verify (tempo-real.js e
+       servidor.js) fixam a mesma lista pelo mesmo motivo. */
+    const p = jwt.verify(token, config.jwtSegredo, { algorithms: ['HS256'] });
 
     const sessao = await sessaoAindaVale(p.sub, p.sv);
     if (!sessao.vale) {
@@ -120,6 +127,29 @@ export async function exigirLogin(req, res, next) {
 /* Restringe uma rota a setores específicos. Complementa (não substitui) a
    validação de transição em dominio/fluxo.js: esta barra a porta, aquela
    confere se o passo faz sentido para a carga naquele momento. */
+/* A FILIAL NÃO ENXERGA O PÁTIO POR FORA DA TELA (09/09/2026).
+
+   Auditoria de segurança: com o crachá de uma filial, /montagem,
+   /modelo-semana e /programacoes respondiam 200 — os botões estavam
+   escondidos no painel, o endereço não. A regra do dono é "filial só
+   devolução", e regra que vale na tela e não no servidor não é regra.
+
+   É um middleware, e não um `if` copiado em cada rota, pela mesma razão de
+   sempre: a lista de quem é filial mora em fluxo.js, e a decisão "filial não
+   entra aqui" mora aqui — uma função, N chamadores. */
+export function recusarFilial(req, res, next) {
+  if (!req.operador) {
+    return res.status(401).json({ erro: 'Faça login para continuar.', codigo: 'SEM_TOKEN' });
+  }
+  if (ehFilial(req.operador.setor)) {
+    return res.status(403).json({
+      erro: 'O setor de filial só acessa as devoluções.',
+      codigo: 'SETOR_SEM_PERMISSAO',
+    });
+  }
+  return next();
+}
+
 export function exigirSetor(...setoresPermitidos) {
   const permitidos = new Set([...setoresPermitidos, 'Administração']);
   return (req, res, next) => {
