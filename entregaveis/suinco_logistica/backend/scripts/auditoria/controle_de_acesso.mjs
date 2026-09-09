@@ -1,7 +1,7 @@
 /* AUDITORIA DE CONTROLE DE ACESSO — metodologia da skill
    testing-for-broken-access-control aplicada com token real de cada setor. */
 import bcrypt from 'bcryptjs';
-import { pool } from './src/banco.js';
+import { pool } from '../../src/banco.js';
 
 const BASE = 'http://127.0.0.1:3010';
 const SENHA = 'auditoria-de-acesso-123';
