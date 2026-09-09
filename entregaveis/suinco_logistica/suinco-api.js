@@ -882,6 +882,12 @@ const SuincoSharePoint = (function () {
   /* O histórico da programação de um dia — INCLUI as canceladas, que a
      leitura do pátio esconde. Consulta sob demanda, como listarExcluidas:
      controle não é estado vivo do painel. */
+  /* O passado que já não está neste navegador (09/09/2026). Ver a rota
+     /api/historico e JANELA_LOCAL_DIAS em data.js. */
+  async function historico(de, ate) {
+    return chamar('/api/historico?de=' + encodeURIComponent(de) + '&ate=' + encodeURIComponent(ate));
+  }
+
   async function programacaoDoDia(dia) {
     return chamar('/api/programacao-do-dia?dia=' + encodeURIComponent(dia));
   }
@@ -1851,7 +1857,7 @@ const SuincoSharePoint = (function () {
     push, upsert, excluir, mudarStatus, sequenciar, encerrarProgramacoesAnteriores, reterLacre,
     recarregarRotas,
     corrigirEtapa, corrigirDataProgramacao, desfazerExclusao, listarExcluidas,
-    programacaoDoDia, mfa,
+    programacaoDoDia, historico, mfa,
     modeloSemana, montagem,
     pull, pullTudo, drenarFila, pendentes, descartarFilaAntiga, estaOnline,
     sessaoPerdida,

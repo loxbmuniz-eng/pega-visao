@@ -5437,6 +5437,15 @@ function celFiltro(campo, valor, rotulo){
     >${esc(rotulo ?? v)}</td>`;
 }
 
+/* O período do seletor em datas, para a busca no servidor. 'todos' vira a
+   janela máxima da rota (90 dias): período aberto sem teto derruba
+   servidor, e o Histórico continua sendo o caminho para ir mais longe. */
+function periodoIndicadoresEmDatas(){
+  const chave = (document.getElementById('ind-f-periodo') || {}).value || '';
+  const { inicio } = janelaPeriodo(chave || 'mes');
+  const de = chave === '' ? new Date(Date.now() - 90*86400000) : inicio;
+  return { de: isoDiaLocal(de), ate: isoDiaLocal(new Date()) };
+}
 function aplicarFiltroIndicadores(){
   const ler = id => (document.getElementById(id)||{}).value || '';
   FILTRO_IND.transportadora = ler('ind-f-transp');
@@ -5466,6 +5475,9 @@ function aplicarFiltroIndicadores(){
       : '';
   }
   renderIndicadores();
+  // Período além dos 30 dias locais: busca no servidor (ver garantirPeriodoNoPainel).
+  const p = periodoIndicadoresEmDatas();
+  garantirPeriodoNoPainel(p.de, p.ate, 'ind-aviso-periodo');
 }
 
 function limparFiltroIndicadores(){
@@ -7040,6 +7052,50 @@ function limparFiltroHistorico(){
   renderHistorico();
 }
 
+/* PEDIU MAIS QUE A JANELA LOCAL? BUSCA NO SERVIDOR (09/09/2026).
+
+   O navegador guarda 30 dias (JANELA_LOCAL_DIAS, data.js). A decisão do
+   dono foi explícita: "se eu quiser buscar mais ele vai aparecer". Esta é
+   a ponte — uma função, três chamadores (Histórico, Indicadores,
+   Relatórios). O que vem fica em memória e some ao recarregar; as telas
+   não sabem de onde o dado veio, então nenhuma delas precisou mudar de
+   cálculo.
+
+   Sem servidor, DIZ. Mostrar 30 dias calados quando alguém pediu 90 é a
+   família "número errado com cara de certo" — o gestor compararia meses
+   com um deles pela metade. */
+let _buscandoPeriodo = null;
+async function garantirPeriodoNoPainel(de, ate, ondeAvisar){
+  if(!de) return { ok:true, jaTinha:true };
+  const inicio = Date.parse(de + 'T00:00:00');
+  if(!Number.isFinite(inicio) || inicio >= limiteDaJanelaLocal()) return { ok:true, jaTinha:true };
+  const fim = ate && /^\d{4}-\d{2}-\d{2}$/.test(ate) ? ate : isoDiaLocal(new Date());
+  const chave = de + '|' + fim;
+  if(_buscandoPeriodo === chave) return { ok:true, emAndamento:true };
+  _buscandoPeriodo = chave;
+  const aviso = ondeAvisar && document.getElementById(ondeAvisar);
+  if(aviso){ aviso.hidden = false; aviso.textContent = 'Buscando no servidor o período anterior aos últimos '
+    + JANELA_LOCAL_DIAS + ' dias…'; }
+  const r = await buscarHistoricoNoServidor(de, fim);
+  _buscandoPeriodo = null;
+  if(aviso){
+    if(r.ok){
+      aviso.hidden = r.cargas === 0;
+      aviso.textContent = `${r.cargas} carga(s) do período vieram do servidor — este navegador guarda `
+        + `os últimos ${JANELA_LOCAL_DIAS} dias.`;
+    }else{
+      aviso.hidden = false;
+      aviso.textContent = r.motivo === 'sem-servidor'
+        ? `Sem servidor agora: só os últimos ${JANELA_LOCAL_DIAS} dias estão neste navegador. `
+          + 'O que é mais antigo está guardado no servidor e aparece quando a conexão voltar.'
+        : `Não consegui buscar o período no servidor (${esc(r.erro || '')}). O que está na tela são só os `
+          + `últimos ${JANELA_LOCAL_DIAS} dias.`;
+    }
+  }
+  if(r.ok && r.cargas) renderAll();
+  return r;
+}
+
 function renderHistorico(){
   const filtroPlaca = normalizarPlaca(document.getElementById('hist-filtro-placa')?.value || '');
   const filtroSetor = document.getElementById('hist-filtro-setor')?.value || '';
@@ -7054,6 +7110,8 @@ function renderHistorico(){
      filtrarPorDataProgramacao, em data.js. */
   const dDe = document.getElementById('hist-data-de')?.value || '';
   const dAte = document.getElementById('hist-data-ate')?.value || '';
+  // Pediu antes da janela local: busca no servidor e redesenha quando chegar.
+  garantirPeriodoNoPainel(dDe, dAte, 'hist-aviso-periodo');
   let lista = DB.movimentacoes.slice().sort((a,b)=>new Date(b.timestamp)-new Date(a.timestamp));
   if(filtroPlaca) lista = lista.filter(m=>m.placa.includes(filtroPlaca));
   if(filtroSetor) lista = lista.filter(m=>m.setor===filtroSetor);

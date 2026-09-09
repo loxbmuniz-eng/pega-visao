@@ -2,8 +2,8 @@
    Forja tokens de propósito e confere que o servidor recusa todos. */
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
-import { pool } from './src/banco.js';
-import { config } from './src/config.js';
+import { pool } from '../../src/banco.js';
+import { config } from '../../src/config.js';
 
 const BASE='http://127.0.0.1:3010', SENHA='auditoria-jwt-123';
 const falhas=[];

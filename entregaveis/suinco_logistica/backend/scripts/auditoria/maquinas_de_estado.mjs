@@ -2,8 +2,8 @@
    Não lê a tabela: EXERCITA todas as combinações contra a função que o
    servidor usa, e roda as cinco verificações (alcançabilidade, ausência de
    deadlock, determinismo, completude, coerência de guarda). */
-import { STATUS_FLOW, STATUS_INICIAL, validarTransicao, SETORES } from './src/dominio/fluxo.js';
-import { DEV_STATUS_FLOW, DEV_STATUS_INICIAL, validarTransicaoDevolucao } from './src/dominio/devolucoes.js';
+import { STATUS_FLOW, STATUS_INICIAL, validarTransicao, SETORES } from '../../src/dominio/fluxo.js';
+import { DEV_STATUS_FLOW, DEV_STATUS_INICIAL, validarTransicaoDevolucao } from '../../src/dominio/devolucoes.js';
 
 const falhas = [];
 const ck = (nome, ok, det='') => {

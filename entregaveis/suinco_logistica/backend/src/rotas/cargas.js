@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import { consultar, emTransacao, pool as bancoPool } from '../banco.js';
-import { exigirLogin, exigirSetor } from '../middleware/auth.js';
+import { exigirLogin, exigirSetor, recusarFilial } from '../middleware/auth.js';
 import { emitir } from '../tempo-real.js';
+import { registrarLeitura } from '../servicos/registro_leitura.js';
 import { programacaoAtual } from '../dominio/programacoes.js';
 import {
   COLUNAS_CARGA, paraPainel, saneiarCriacao, saneiarCriacaoChegadaSemProgramacao,
@@ -2044,6 +2045,92 @@ rotasCargas.get('/cargas-excluidas', exigirLogin, exigirSetor(), async (req, res
    21/08/2026): é ferramenta de CONTROLE de quem programa, não tela de
    operação — a Portaria e os demais setores nem veem o botão, e esta
    trava garante que tela escondida não vira porta destrancada. */
+/* ---------------------------------------------------------------------
+   GET /api/historico?de=AAAA-MM-DD&ate=AAAA-MM-DD — o passado inteiro.
+
+   O navegador guarda os últimos 30 dias (ver JANELA_LOCAL_DIAS em data.js):
+   com 1.500 cargas na memória a aba Indicadores congelava 5 s a cada
+   sincronia, e o armazenamento local estourava a cota em silêncio. Podar
+   sem esta rota seria PERDER acesso — e a decisão do dono foi explícita:
+   "se eu quiser buscar mais ele vai aparecer".
+
+   Devolve as cargas CONCLUÍDAS no período e as movimentações delas, no
+   mesmo formato da leitura normal — o painel funde em memória e todas as
+   telas (Histórico, Indicadores, Relatórios, Raio-X) passam a enxergar o
+   período sem nenhuma delas saber de onde o dado veio.
+
+   Por saída, não por programação: "o que aconteceu no período" é a
+   pergunta do Histórico e dos indicadores de tempo de pátio. Teto de 90
+   dias por consulta e 20.000 movimentações — período aberto sem teto é
+   como um relatório derruba um servidor.
+
+   Filial não entra: ela só acessa devolução (ocorrência #28).
+   --------------------------------------------------------------------- */
+rotasCargas.get('/historico', exigirLogin, recusarFilial, async (req, res, next) => {
+  try {
+    const de = String(req.query.de || '');
+    const ate = String(req.query.ate || '');
+    const formato = /^\d{4}-\d{2}-\d{2}$/;
+    if (!formato.test(de) || !formato.test(ate)) {
+      return res.status(400).json({
+        erro: 'Informe o período como de=AAAA-MM-DD&ate=AAAA-MM-DD.',
+        codigo: 'PERIODO_INVALIDO',
+      });
+    }
+    const dias = (Date.parse(ate) - Date.parse(de)) / 86400000;
+    if (!Number.isFinite(dias) || dias < 0) {
+      return res.status(400).json({ erro: 'A data inicial precisa vir antes da final.', codigo: 'PERIODO_INVALIDO' });
+    }
+    if (dias > 90) {
+      return res.status(400).json({
+        erro: 'O período máximo por consulta é de 90 dias. Divida em partes.',
+        codigo: 'PERIODO_LONGO',
+      });
+    }
+    const FUSO = 'America/Sao_Paulo';
+    const { rows: cargas } = await consultar(
+      `SELECT ${COLUNAS_CARGA} FROM fact_viagens
+        WHERE excluida_em IS NULL
+          AND status_atual = 'Seguiu Viagem'
+          AND carga_id IN (
+            SELECT DISTINCT carga_id FROM fact_statusfrota
+             WHERE status_novo = 'Seguiu Viagem'
+               AND (data_evento AT TIME ZONE $1)::date BETWEEN $2::date AND $3::date)
+        ORDER BY criado_em`,
+      [FUSO, de, ate]
+    );
+    const ids = cargas.map((c) => c.carga_id);
+    let movimentacoes = [];
+    if (ids.length) {
+      const r = await consultar(
+        `SELECT movimentacao_id, carga_id, placa, status_anterior, status_novo,
+                setor, data_evento, operador_nome
+           FROM fact_statusfrota
+          WHERE carga_id = ANY($1)
+          ORDER BY data_evento
+          LIMIT 20000`,
+        [ids]
+      );
+      movimentacoes = r.rows;
+    }
+    await registrarLeitura({
+      tipo: 'historico', detalhe: `período ${de} a ${ate}`,
+      linhas: cargas.length, operador: req.operador, ip: req.ip,
+    });
+    return res.json({
+      de, ate,
+      cargas: cargas.map(paraPainel),
+      movimentacoes: movimentacoes.map((m) => ({
+        id: m.movimentacao_id, cargaId: m.carga_id, placa: m.placa,
+        statusAnterior: m.status_anterior, statusNovo: m.status_novo,
+        setor: m.setor, data: m.data_evento, operador: m.operador_nome,
+      })),
+    });
+  } catch (e) {
+    return next(e);
+  }
+});
+
 rotasCargas.get('/programacao-do-dia', exigirLogin, exigirSetor('Logística'), async (req, res, next) => {
   try {
     const dia = String(req.query.dia || '');

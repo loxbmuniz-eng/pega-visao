@@ -1,4 +1,4 @@
-037
+046
 
 # ---------------------------------------------------------------------
 # ATÉ QUAL MIGRAÇÃO O SERVIDOR DE PRODUÇÃO ESTÁ.
@@ -30,3 +30,8 @@
 #  "migracoes"/"nome" aqui, que não existem: o comando de conferência
 #  devolveria erro justo na hora de conferir.)
 # ---------------------------------------------------------------------
+
+# 09/09/2026 — confirmado pelo bloco "COPIE DAQUI" do atualizar.sh, colado
+# pelo dono: commit f86cd3a, serviço active, /health 200, migrações 001 a 046
+# aplicadas. Estava parado em 037 desde 27/08 — nove migrações subiram de uma
+# vez (038 a 046), junto com seis lotes de código de servidor.
