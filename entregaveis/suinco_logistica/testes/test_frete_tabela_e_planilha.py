@@ -149,29 +149,49 @@ async def main():
         ck('destino fora da tabela: sem KM de referência, e a tela explica',
            r['ref'] == '' and 'Tabela de Frete' in r['aviso'], str(r)[:140])
 
-        print('\n=== 3. SEM KM E SEM OBSERVAÇÃO, NÃO CONTRATA — E DIZ O QUE FALTA ===')
+        print('\n=== 3. SEM KM A CARGA NASCE — E A FALTA É DITA, NÃO ESCONDIDA ===')
+        # A REGRA MUDOU DE PROPÓSITO, horas depois de eu escrever este teste:
+        # causa nº 1 das quatro, não regressão. A trava de KM existiu e saiu
+        # por decisão do dono — "não põe a trava do quilômetro então" — depois
+        # de a bateria mostrar que a Montagem do Dia cria carga em LOTE por
+        # outro caminho, sem campo de KM, e que carga recusada na criação é
+        # APAGADA do painel. O lote sumiria na frente da Logística.
+        #
+        # O que este bloco guarda agora é o que ficou no lugar, e vale mais:
+        # a carga nasce, e a ausência do KM é DECLARADA. Célula vazia sem
+        # explicação é lida como R$ 0,00 por quem confere frete.
         r = await pg.evaluate("""() => {
-            window.__avisos = []; const _n = window.notify;
-            window.notify = (m,t,ms)=>{ window.__avisos.push(String(m)); return _n(m,t,ms); };
             ['prog-frete-destino','prog-km-destino','prog-km-deslocamento','prog-obs']
               .forEach(id=>document.getElementById(id).value='');
             document.getElementById('prog-placa').value = 'FRT3C33';
             document.getElementById('prog-numero-carga').value = 'SEM-KM';
             const antes = DB.cargas.length;
             criarCargaProgramadaUI();
-            return { criou: DB.cargas.length > antes, avisos: window.__avisos,
-                     foco: (document.activeElement||{}).id };
+            const nova = DB.cargas[DB.cargas.length-1];
+            return { criou: DB.cargas.length > antes,
+                     km: nova && nova.kmDeslocamento,
+                     valor: nova && nova.freteValor };
         }""")
-        ck('a carga NÃO é criada', not r['criou'], str(r['criou']))
-        aviso = ' '.join(r['avisos'])
-        ck('o aviso diz KM E observação pelo nome',
-           'KM de deslocamento' in aviso and 'Observação' in aviso, aviso[:150])
-        ck('e o foco vai para o campo que falta — não é só um "não"',
-           r['foco'] == 'prog-km-deslocamento', str(r['foco']))
+        ck('a carga É criada — nada de caminhão parado por falta de KM', r['criou'], str(r))
+        ck('o KM fica null, não zero — zero quilômetro calcularia frete de R$ 0,00',
+           r['km'] is None, f"kmDeslocamento={r['km']}")
+        ck('e sem KM não há valor inventado', r['valor'] is None, f"freteValor={r['valor']}")
+
+        # A cobrança mudou de lugar: saiu do portão e foi para o relatório,
+        # que é onde o dado é usado.
+        motivo = await pg.evaluate("""() => {
+            const c = DB.cargas.find(x=>x.numeroCarga==='SEM-KM');
+            if(!c) return null;
+            c.freteMotivo = 'Sem KM de deslocamento — o valor não pode ser calculado.';
+            const d = dadosPlanilhaDeFretes([c])[0];
+            return { motivo: d.freteMotivo, valor: d.freteValor, km: d.kmDeslocamento };
+        }""")
+        ck('a planilha carrega o MOTIVO da célula vazia',
+           motivo and 'Sem KM' in (motivo['motivo'] or ''), str(motivo))
+        ck('com o valor vazio, não zerado', motivo and motivo['valor'] is None, str(motivo))
 
         print('\n=== 4. SEM PLACA, A CARGA NASCE SEM KM — É PROGRAMAÇÃO ===')
         r = await pg.evaluate("""() => {
-            window.__avisos = [];
             document.getElementById('prog-placa').value = '';
             document.getElementById('prog-numero-carga').value = 'SEM-PLACA';
             document.getElementById('prog-obs').value = '';

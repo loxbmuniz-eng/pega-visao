@@ -5375,6 +5375,19 @@ describe('42. Tabela de frete: o valor sai da conta, e sem KM não se contrata (
   after(async () => {
     await pool.query("DELETE FROM operadores WHERE email = 'cida@teste.local'");
     await pool.query("DELETE FROM frete_destinos WHERE destino = 'PATOS DE MINAS'");
+    /* AS PLACAS QUE ESTE BLOCO CRIOU SAEM JUNTO.
+
+       `dim_veiculos` é dimensão COMPARTILHADA: test_login_api e
+       test_adaptador_api conferem a contagem exata da frota (749) para
+       provar que a base inteira chega ao painel. Deixar 7 placas de teste
+       atrás fez as duas reprovarem com "756 placas" — contaminação, a causa
+       nº 3 das quatro, e não defeito nenhum nelas.
+
+       As cargas vão primeiro: fact_viagens referencia a placa. */
+    await pool.query("DELETE FROM fact_statusfrota WHERE carga_id IN (SELECT carga_id FROM fact_viagens WHERE placa LIKE 'FRT%')");
+    await pool.query("DELETE FROM log_eventos WHERE placa LIKE 'FRT%'");
+    await pool.query("DELETE FROM fact_viagens WHERE placa LIKE 'FRT%'");
+    await pool.query("DELETE FROM dim_veiculos WHERE placa LIKE 'FRT%'");
   });
 });
 
