@@ -19,8 +19,21 @@ import {
 
 export const rotasCargas = Router();
 
-function novoId(prefixo) {
+export function novoId(prefixo) {
   return `${prefixo}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+/* Uma NOTA no histórico — só log_eventos, sem movimentação de status. Para
+   mudanças de campo que a operação precisa enxergar depois (ex.: a
+   transportadora da viagem trocada à mão). Exportada: cadastros.js usa a
+   mesma para a troca na Frota. */
+export async function gravarNota(cli, { cargaId, placa, operador, acao }) {
+  await cli.query(
+    `INSERT INTO log_eventos
+       (evento_id, carga_id, placa, acao, setor, operador_id, operador_nome, operador_verificado)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,TRUE)`,
+    [novoId('log'), cargaId, placa, acao, operador.setor, operador.id, operador.nome]
+  );
 }
 
 /* Grava a movimentação e o log na MESMA transação da mudança da carga.
@@ -806,6 +819,22 @@ rotasCargas.patch('/cargas/:id', exigirLogin, async (req, res, next) => {
       }
     }
 
+    /* TRANSPORTADORA TROCADA À MÃO DEIXA RASTRO (09/09/2026). A carga copia
+       a transportadora da Frota quando a placa entra e o campo continua
+       editável (freteiro, substituição). Trocar é permitido; trocar sem
+       ninguém saber não — foi assim que a Torre disse "Rodosousa" para uma
+       placa que a Frota dizia "Denia". A nota diz de → para e o que a Frota
+       diz, para o Histórico responder sozinho. */
+    if (mudancas.transportadora !== undefined
+        && String(antes.rows[0].transportadora || '') !== String(linhaFinal.transportadora || '')) {
+      const frota = await consultar('SELECT transportadora FROM dim_veiculos WHERE placa = $1', [linhaFinal.placa]);
+      const daFrota = frota.rows[0] ? frota.rows[0].transportadora : '';
+      await gravarNota({ query: consultar }, {
+        cargaId: id, placa: linhaFinal.placa, operador: op,
+        acao: `Transportadora da viagem trocada à mão: "${antes.rows[0].transportadora || '—'}" → "${linhaFinal.transportadora || '—'}"`
+          + (daFrota && daFrota !== linhaFinal.transportadora ? ` (Frota: "${daFrota}")` : ' (igual à Frota)'),
+      });
+    }
     const payload = paraPainel(linhaFinal);
     emitir('carga:atualizada', payload);
 

@@ -5025,3 +5025,80 @@ describe('40. Fundação: sessão revogada cai do socket, "hoje" é o de São Pa
     await assert.rejects(() => validarTokenDeSocket(''), /SEM_TOKEN/);
   });
 });
+
+describe('41. Frota muda de transportadora: as cargas abertas acompanham, as concluídas ficam (09/09/2026)', () => {
+  /* Relato do dono (fotos): carga 118675 / JJB8946 dizia "Rodosousa" na
+     Torre e "Denia Transportes" no cadastro da Frota. A transportadora da
+     carga é cópia feita quando a placa entra; mudar a Frota não avisava as
+     cargas, e trocar à mão não deixava rastro em lugar nenhum.
+
+     Decisão do dono: opção A — quando a placa muda de transportadora na
+     Frota, as cargas ABERTAS daquela placa acompanham (com log); as
+     concluídas ficam como registro do que aconteceu; trocar à mão na carga
+     continua permitido, e fica registrado. */
+  let placa, aberta, concluida, transpOriginal;
+
+  before(async () => {
+    const { rows } = await pool.query("SELECT placa, transportadora FROM dim_veiculos WHERE transportadora <> '' ORDER BY placa OFFSET 60 LIMIT 1");
+    placa = rows[0].placa; transpOriginal = rows[0].transportadora;
+    const a = await req('/api/cargas', { metodo: 'POST', token: tokens['Logística'], corpo: { placa, numeroCarga: 'TR-ABERTA-' + Date.now() } });
+    assert.equal(a.status, 201, a.texto); aberta = a.json.id;
+    const c = await req('/api/cargas', { metodo: 'POST', token: tokens['Logística'], corpo: { placa, numeroCarga: 'TR-CONCL-' + Date.now() } });
+    assert.equal(c.status, 201, c.texto); concluida = c.json.id;
+    for (const [status, setor] of [['Aguardando Embarque', 'Portaria'], ['Embarque Iniciado', 'Expedição'],
+      ['Embarque Finalizado', 'Expedição'], ['Faturado', 'Faturamento'], ['Seguiu Viagem', 'Portaria']]) {
+      const r = await req(`/api/cargas/${concluida}/status`, { metodo: 'POST', token: tokens[setor], corpo: { status, confirmado: true } });
+      assert.equal(r.status, 200, `${status}: ${r.texto}`);
+    }
+  });
+
+  async function transpDe(id) {
+    const { rows } = await pool.query('SELECT transportadora FROM fact_viagens WHERE carga_id = $1', [id]);
+    return rows[0].transportadora;
+  }
+
+  test('as duas cargas nascem com a transportadora da Frota', async () => {
+    assert.equal(await transpDe(aberta), transpOriginal);
+    assert.equal(await transpDe(concluida), transpOriginal);
+  });
+
+  test('mudar a transportadora da placa na Frota: a aberta acompanha, a concluída fica, e fica no log', async () => {
+    const r = await req('/api/frota', { metodo: 'POST', token: tokens['Logística'],
+      corpo: { placa, transportadora: 'NOVA TRANSPORTADORA TESTE', tipoVeiculo: 'Truck' } });
+    assert.equal(r.status, 201, r.texto);
+    assert.equal(await transpDe(aberta), 'NOVA TRANSPORTADORA TESTE', 'carga aberta tinha que acompanhar a Frota');
+    assert.equal(await transpDe(concluida), transpOriginal, 'carga concluída é registro — não muda');
+    // >= 1, não == 1: outras suítes podem ter deixado carga aberta nesta placa (contaminação, não defeito)
+    assert.ok(r.json.cargasAtualizadas >= 1, `a resposta diz quantas cargas abertas acompanharam: ${r.json.cargasAtualizadas}`);
+    const { rows } = await pool.query(
+      "SELECT acao FROM log_eventos WHERE placa = $1 AND acao LIKE 'Frota:%' ORDER BY data_evento DESC LIMIT 1", [placa]);
+    assert.ok(rows[0], 'a troca na Frota precisa deixar rastro no log');
+    assert.match(rows[0].acao, /NOVA TRANSPORTADORA TESTE/);
+  });
+
+  test('regravar a Frota com a MESMA transportadora não gera evento nem mexe em carga', async () => {
+    const antes = await pool.query("SELECT count(*)::int AS n FROM log_eventos WHERE placa = $1 AND acao LIKE 'Frota:%'", [placa]);
+    const r = await req('/api/frota', { metodo: 'POST', token: tokens['Logística'],
+      corpo: { placa, transportadora: 'NOVA TRANSPORTADORA TESTE', tipoVeiculo: 'Truck' } });
+    assert.equal(r.status, 201, r.texto);
+    assert.equal(r.json.cargasAtualizadas, 0);
+    const depois = await pool.query("SELECT count(*)::int AS n FROM log_eventos WHERE placa = $1 AND acao LIKE 'Frota:%'", [placa]);
+    assert.equal(depois.rows[0].n, antes.rows[0].n, 'eco de sincronização não é notícia');
+  });
+
+  test('trocar à mão na carga continua permitido — e deixa rastro dizendo que diverge da Frota', async () => {
+    const r = await req(`/api/cargas/${aberta}`, { metodo: 'PATCH', token: tokens['Logística'],
+      corpo: { transportadora: 'FRETEIRO DO DIA' } });
+    assert.equal(r.status, 200, r.texto);
+    assert.equal(await transpDe(aberta), 'FRETEIRO DO DIA');
+    const { rows } = await pool.query(
+      "SELECT acao FROM log_eventos WHERE carga_id = $1 AND acao LIKE 'Transportadora%' ORDER BY data_evento DESC LIMIT 1", [aberta]);
+    assert.ok(rows[0], 'a troca à mão precisa aparecer no Histórico');
+    assert.match(rows[0].acao, /FRETEIRO DO DIA/);
+    assert.match(rows[0].acao, /NOVA TRANSPORTADORA TESTE/, 'o evento diz qual é a da Frota');
+  });
+
+  after(async () => {
+    await pool.query('UPDATE dim_veiculos SET transportadora = $1 WHERE placa = $2', [transpOriginal, placa]);
+  });
+});

@@ -40,6 +40,50 @@ faz achar a próxima em minutos em vez de horas:
 
 ---
 
+## #32 — A carga dizia "Rodosousa", a Frota dizia "Denia" (09/09/2026)
+
+**Relato do dono (fotos):** carga 118675, placa JJB8946 — a Torre mostrava
+"Rodosousa / Truck"; o cadastro da Frota, "Denia Transportes / Truck".
+
+**A causa.** A transportadora da carga é uma CÓPIA feita quando a placa
+entra (`atualizarPlacaUI`, criação) e o campo continua editável à mão na
+expansão ("da Frota — dá para trocar"). Depois disso as duas podem
+divergir por dois caminhos, ambos silenciosos: alguém troca à mão na carga
+(sem nota no Histórico — a trilha por gatilho guarda, mas ninguém lê ali),
+ou a placa muda de transportadora na Frota (`POST /frota`, `ON CONFLICT DO
+UPDATE`) sem propagar às cargas abertas e sem registrar no log. E nenhuma
+tela mostrava a diferença: a Torre e a Fila mostram a cópia; o Cadastro
+mostra a Frota. Duas fontes da verdade, cada uma certa sozinha. As notas da
+base dizem que 85 placas mudaram de transportadora em 2 anos — é rotina.
+
+**Decisão do dono: opção A.** Quando a placa muda de transportadora na
+Frota, as cargas ABERTAS daquela placa acompanham, com log; as concluídas
+ficam como registro; trocar à mão na carga continua permitido, mas marcado
+e registrado.
+
+**Correção.** `POST /frota` numa transação: grava a Frota, atualiza a
+transportadora das cargas da placa que ainda não saíram, escreve uma nota
+no Histórico por carga e uma da troca em si (mesmo sem carga aberta), emite
+`carga:atualizada`; regravar a mesma transportadora não escreve nada.
+`PATCH /cargas/:id` que troca a transportadora escreve a nota "trocada à
+mão: de → para (Frota: X)". Na tela, `marcaTransportadoraHtml`: quando a
+carga ≠ Frota, o marcador "≠ Frota: X" na Torre e na Fila, com um clique
+"usar a da Frota". `gravarNota` (só log_eventos) é uma função exportada de
+cargas.js e usada por cadastros.js.
+
+**As guardas.** `api.test.js` bloco 41 (aberta acompanha, concluída fica,
+log da troca, eco não escreve, troca à mão registrada com o que a Frota
+diz) e `testes/test_transportadora_divergente.py` (marcador na Fila e na
+Torre; clique alinha; carga alinhada sem marcador). Ambos reprovando antes.
+
+**A lição.** Cópia de cadastro dentro do registro da viagem é decisão
+legítima (a viagem pode ter transportadora própria) — mas cópia sem
+marcador e sem rastro vira duas verdades. Quem copia precisa (1) mostrar
+quando divergiu, (2) registrar quem divergiu, e (3) decidir com o dono o
+que acontece quando a origem muda.
+
+---
+
 ## #30 — A carga programada ontem sem veículo "sumia" da Fila (09/09/2026)
 
 **Relato do dono:** "A carga criada ontem, mas não contratada na programação
