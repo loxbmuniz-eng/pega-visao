@@ -3536,6 +3536,29 @@ input,select,textarea{border-radius:5px}
      de destaque do Operacional, pela mesma razão: é o que a pessoa
      procura primeiro. */
   #print-fretes .col-carga{ background:rgba(185,144,63,.22) !important }
+
+  /* O PAPEL DO MANOBRISTA (09/09/2026) — LETRA GRANDE, DE PROPÓSITO.
+
+     Duas colunas numa folha A4 deitada: sobra página inteira. Os outros
+     relatórios estão em 13px porque disputam espaço com 13 colunas; aqui
+     não há disputa, e usar a mesma densidade seria economizar o que ninguém
+     está pedindo. Este papel é lido DE PÉ, no pátio, pendurado na portaria
+     ou aberto no celular com o caminhão chegando — e ele existe para ser
+     lido em um olhar, não estudado.
+
+     A placa em mono e espaçada porque é o que o olho procura, e porque
+     O/0 e I/1 em placa confundem na fonte de texto corrido. */
+  .doc-manobrista table{ font-size:22px !important; table-layout:fixed; width:100% }
+  .doc-manobrista th{ font-size:13px !important; letter-spacing:.08em; padding:10px 14px !important }
+  .doc-manobrista td{ padding:14px !important; vertical-align:middle }
+  .doc-manobrista .col-mb-placa{ width:52%; font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+    letter-spacing:.06em; font-weight:700 }
+  .doc-manobrista .col-mb-ganchos{ width:48% }
+  /* Zebra mais forte que a dos outros: a linha é alta e a folha é curta —
+     a listra aqui é o que mantém placa e ganchos visualmente grudados. */
+  .doc-manobrista tbody tr:nth-child(even) td{ background:#eef0f3 !important }
+  /* "Liso" é informação, não ausência — então tem peso de informação. */
+  .doc-manobrista .mb-liso{ font-weight:700; letter-spacing:.04em }
 }
 
 /* Aviso de conferência dos números da carga, dentro do relatório.

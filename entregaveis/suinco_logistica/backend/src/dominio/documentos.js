@@ -32,6 +32,15 @@ export const DONOS_DO_DOCUMENTO = {
   'administracao-fretes': [],
   'ficha-de-carga': ['Logística', 'Expedição', 'Faturamento'],
   'programacao-do-dia': ['Logística'],
+  /* O PAPEL DO MANOBRISTA (09/09/2026). Decisão do dono, perguntado quem
+     gera: "so a logistica e admisnistracao".
+
+     A Expedição NÃO entra, e é diferente do Operacional logo acima — lá a
+     lição foi "o dono do documento é quem PRECISA dele para operar". Aqui
+     quem precisa é o manobrista, que não tem login: ele recebe o papel (ou
+     a imagem no celular) de quem montou a fila. Quem monta a fila é a
+     Logística. */
+  'programacao-manobrista': ['Logística'],
   'devolucoes-do-dia': ['Logística', 'Controles Internos', 'Central de Notas'],
   'devolucao-operador': ['Logística', 'Controles Internos', 'Central de Notas'],
   'comprovante-portaria': ['Portaria', 'Logística'],

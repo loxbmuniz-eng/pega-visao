@@ -1852,6 +1852,7 @@ function irParaTab(tab){
 }
 function renderTabAtual(){
   atualizarDatalists();
+  renderEscopoDoManobrista();
   switch(TAB_ATUAL){
     case 'torre': renderTorre(); renderVisaoPatio('torre'); break;
     case 'programacao': renderProgFila(); renderProgAguardando(); renderRodapeControleProgramacao(); carregarMontagemUI(); carregarModeloSemanaUI(); break;
@@ -4349,7 +4350,13 @@ function definirPosicaoNaFilaUI(id, val){
      já carregou         → o número é registro; guarda o valor, carimba
                            para subir, e NÃO reordena ninguém */
 function aindaVaiCarregar(c){
-  return !!c && (c.status === 'Aguardando Veículo' || c.status === 'Aguardando Embarque');
+  /* A LISTA MORA EM data.js (09/09/2026) — uma função, dois chamadores.
+     Ela já estava escrita aqui em prosa (dois `===` com ||) e passou a ser
+     precisa também em dadosManobrista, que é dado e vive em data.js. Duas
+     cópias da MESMA pergunta divergem no dia em que um status entrar no
+     fluxo, e aí a Torre deixa de arrastar uma carga que o papel do
+     manobrista continua listando. */
+  return !!c && STATUS_QUE_AINDA_CARREGAM_UI.includes(c.status);
 }
 function definirSequenciaTorreUI(id, val){
   const c = getCarga(id); if(!c) return;
@@ -9472,12 +9479,93 @@ async function exportarPdfFretes(){
    o servidor recusa o valor de qualquer jeito (podeVerValorDeFrete) e
    nenhum dado de frete chega ao navegador dela. Aqui é só não oferecer o
    que não é dela, para a tela não virar um menu de coisas que dão erro. */
+/* Quem vê o botão do papel do manobrista.
+
+   Decisão do dono: "so a logistica e admisnistracao". A mesma regra do valor
+   de frete, e por isso reusa a mesma função em vez de escrever um segundo
+   `setor === 'Logística' || ...` — duas cópias da mesma pergunta divergem.
+
+   Chamada no render de TODA aba (renderTabAtual), não só da Torre: o botão
+   existe nas duas telas que ele pediu, e esconder numa e esquecer na outra
+   seria pior que não ter. */
+function renderEscopoDoManobrista(){
+  const pode = podeVerValorDeFreteUI((DB.operador || {}).setor);
+  document.querySelectorAll('[data-botao="manobrista"]').forEach(b => { b.hidden = !pode; });
+}
+
 function renderEscopoDosRelatorios(){
   const setor = (DB.operador || {}).setor;
   const soChecklist = soAcompanhaUI(setor);
   document.querySelectorAll('#tab-relatorios [data-relatorio]').forEach(card => {
     card.hidden = soChecklist && card.getAttribute('data-relatorio') !== 'checklist';
   });
+}
+
+/* ---------- O PAPEL DO MANOBRISTA (09/09/2026) ----------
+
+   "um relatorio da programacao do dia que traga a placa, numero de ganchos
+    para o manobrista" · "mandar no celular, da pra imprimir tambem, mesmo
+    padrao dos nossos relatorios"
+
+   MESMO PADRÃO, e é por isso que ele passa por exportarViaServidor como os
+   outros três: o PDF sai idêntico em qualquer aparelho, o setor é conferido
+   no servidor, e a geração fica registrada. Papel que sai do pátio é
+   documento, e documento tem dono.
+
+   LAYOUT PRÓPRIO: duas colunas, letra GRANDE. Os outros relatórios são
+   calibrados para caber 13 colunas em A4 deitado — fonte de 7,6px, que no
+   celular de pátio e no papel pendurado na portaria é ilegível. Aqui são
+   duas colunas e sobra página inteira; usar a mesma densidade seria
+   economizar espaço que ninguém está disputando. */
+async function exportarPdfManobrista(){
+  await atualizarDadosAntesDoRelatorio();
+  const el = document.getElementById('print-manobrista');
+  const dados = dadosManobrista(cargasDoRelatorio());
+
+  if(!dados.length){
+    notify('Nenhuma carga esperando para carregar — não há o que passar ao manobrista.',
+           'warn', 6000);
+    return;
+  }
+
+  /* GANCHOS 0 VIRA "LISO", em palavra. Zero é instrução — caminhão sem
+     gancheira — e uma célula vazia ao lado de uma placa é lida como "não
+     sei", que manda o manobrista perguntar. O número também aparece para
+     quem conta gancho, mas quem só precisa saber o tipo lê a palavra. */
+  const linhas = dados.map(d=>`<tr>
+      <td class="col-mb-placa">${esc(d.placa) || '<span class="text-dim">sem placa</span>'}</td>
+      <td class="col-mb-ganchos">${d.ganchos > 0
+        ? `<strong>${d.ganchos}</strong> ganchos`
+        : '<span class="mb-liso">Liso</span>'}</td>
+    </tr>`).join('');
+
+  const comGancheira = dados.filter(d=>d.ganchos > 0).length;
+
+  el.innerHTML = `
+    <div class="print-page doc-manobrista">
+      ${cabecalhoDocumento({
+        titulo: 'Manobrista — fila de carregamento',
+        subtitulo: 'Caminhões esperando para carregar, na ordem da fila',
+      })}
+      <table class="tab-manobrista">
+        <thead><tr>
+          <th class="col-mb-placa">Placa</th>
+          <th class="col-mb-ganchos">Ganchos</th>
+        </tr></thead>
+        <tbody>${linhas}</tbody>
+      </table>
+      ${rodapeDocumento(
+        'A ordem das linhas é a <strong>ordem da fila</strong>: a primeira é o próximo caminhão. '
+        + '<strong>Liso</strong> é caminhão sem gancheira.',
+        'Somente as cargas que ainda vão carregar (Aguardando Veículo e Aguardando '
+        + 'Embarque) no momento da emissão. Caminhão que já está na doca não aparece.',
+        fichaDocumento({
+          titulo: 'Manobrista',
+          contagem: dados.length,
+          extra: `<strong>Com gancheira:</strong> ${comGancheira} de ${dados.length}`,
+        }))}
+    </div>`;
+  await exportarViaServidor(el, 'Manobrista-fila-de-carregamento', 'programacao-manobrista');
 }
 
 /* ---------- PLANILHA DE ADMINISTRAÇÃO DE FRETES (09/09/2026) ----------

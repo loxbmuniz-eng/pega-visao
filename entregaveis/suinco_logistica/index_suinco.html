@@ -123,6 +123,16 @@
     <div class="card">
       <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-torre"/></svg> Torre de Controle — todas as cargas em aberto</div>
       <div class="card-sub">Visão de leitura para todos os setores. Atualiza sempre que alguém registra uma movimentação.</div>
+      <!-- O PAPEL DO MANOBRISTA (09/09/2026). Pedido do dono: "poder gerar na
+           programacao OU na torre de controle". Os dois, porque quem monta a
+           fila às vezes está numa tela e às vezes na outra — e um botão que
+           existe só na outra aba é um botão que não existe.
+           Só Logística/Administração: renderEscopoDoManobrista() alterna o
+           `hidden`, e o servidor recusa o documento (documentos.js). -->
+      <button class="btn btn-sec btn-sm no-print" data-botao="manobrista" hidden
+        onclick="exportarPdfManobrista()"
+        title="Lista só com placa e ganchos, na ordem da fila — para mandar ao manobrista no celular ou imprimir.">🚜 Papel do manobrista</button>
+
       <!-- Só Logística/Administração (podeFecharProgramacao(), app.js).
            Pedido do usuário (08/08/2026): fechar a programação atual e
            começar uma nova — só possível com o pátio limpo (nenhuma carga
@@ -190,6 +200,16 @@
     <div class="card">
       <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-fila"/></svg> Fila de Programados</div>
       <div class="card-sub">As cargas programadas para o dia escolhido. As de dias anteriores que ainda não têm veículo ficam listadas logo abaixo, até serem contratadas.</div>
+      <!-- O PAPEL DO MANOBRISTA (09/09/2026). Pedido do dono: "poder gerar na
+           programacao OU na torre de controle". Os dois, porque quem monta a
+           fila às vezes está numa tela e às vezes na outra — e um botão que
+           existe só na outra aba é um botão que não existe.
+           Só Logística/Administração: renderEscopoDoManobrista() alterna o
+           `hidden`, e o servidor recusa o documento (documentos.js). -->
+      <button class="btn btn-sec btn-sm no-print" data-botao="manobrista" hidden
+        onclick="exportarPdfManobrista()"
+        title="Lista só com placa e ganchos, na ordem da fila — para mandar ao manobrista no celular ou imprimir.">🚜 Papel do manobrista</button>
+
       <!-- FILA POR DIA (09/09/2026). Relato do dono: a carga programada ontem
            e não contratada "some da programação" quando o dia vira. Ela
            estava gravada e aparecia na Torre — mas para quem programa, sair
@@ -1825,6 +1845,10 @@
 <!-- Container próprio do relatório de Fretes. Compartilhar o do Operacional
      fazia ele herdar a densidade de 13 colunas e sair com fonte de 7,6px. -->
 <div id="print-fretes" class="print-only"></div>
+<!-- Container PRÓPRIO (09/09/2026): duas colunas e letra grande. Dividir o
+     do Operacional herdaria a regra de impressão calibrada para 13 colunas
+     em A4 deitado — fonte de 7,6px, ilegível no papel do pátio. -->
+<div id="print-manobrista" class="print-only"></div>
 <!-- Relatório de UMA carga, gerado pelo Histórico (21/08/2026). Container
      próprio para não disputar com o Operacional, que tem regra de impressão
      calibrada para 12 colunas em A4. -->
