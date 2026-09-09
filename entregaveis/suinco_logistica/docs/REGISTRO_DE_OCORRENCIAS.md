@@ -40,6 +40,62 @@ faz achar a próxima em minutos em vez de horas:
 
 ---
 
+## #28 — A filial enxergava o pátio inteiro por fora da tela (09/09/2026)
+
+**Onde apareceu:** na auditoria de segurança pedida pelo dono para o
+refinamento geral — não na operação. Com o crachá de `filial@teste.local`,
+rota por rota:
+
+    GET /api/estado                          200 — 12 cargas, cliente, destino, motorista, placa
+    GET /api/montagem                        200
+    GET /api/modelo-semana                   200
+    GET /api/programacoes                    200
+    GET /api/devolucoes-cadastros/clientes-csv   200 — 77.099 linhas, sem registro
+
+A regra do dono (02/09/2026) é literal: filial "so vai ter acesso a aba
+devolucoes e escopo de devolucoes (...) as permissoes da filial sao restritas
+a isso". O painel escondia os botões; o servidor entregava tudo a quem
+pedisse pelo endereço.
+
+**A causa.** As rotas de LEITURA nasceram para os cinco setores operacionais,
+todas com `exigirLogin` e nada mais — um comentário em `dominio/documentos.js`
+até registra que "GET /estado devolve o pátio inteiro a todo mundo, e isso é
+FEATURE". Era, para cinco setores. As filiais entraram em 02/09 como exceção,
+e a exceção chegou às rotas de devolução (IDOR, listagem, etapa — tudo
+correto, conferido ao vivo) mas nunca às rotas de leitura geral. Família da
+#26: um setor novo precisa entrar em N lugares, e um deles ficou de fora.
+
+**Correção.**
+- `recusarFilial` (middleware, `auth.js`) em `/montagem`, `/modelo-semana` e
+  `/programacoes` — 403 com explicação.
+- `/estado` para filial devolve a **mesma forma** com o pátio vazio e
+  `escopo: 'devolucoes'`. Não é 403 de propósito: o painel chama essa rota
+  no sincronismo de todo setor, e um 403 viraria faixa de "recusado" na tela
+  da filial a cada poucos segundos.
+- `clientes-csv` passa a ser `exigirSetor('Logística')` e registra a
+  exportação em `log_leitura` (tipo `clientes-csv`). A busca por nome com
+  teto de 30 continua aberta — é o que o checklist precisa.
+- `/frota` e `/rotas` continuam abertas à filial: placa e rota são campos
+  do checklist.
+- No mesmo lote: `jwt.verify` com `algorithms:['HS256']` nos três lugares
+  (o script `token_de_login.mjs` reprovava HS512 → 200) e o Chromium do PDF
+  com rede bloqueada (`pagina.route('**/*', abort)`) — o relatório é
+  autossuficiente e o `networkidle` esperava por qualquer endereço que o
+  HTML pedisse.
+
+**A guarda.** `api.test.js` bloco 39 — oito casos, seis reprovando antes da
+correção (o pátio vazio para filial, os três 403, o CSV com registro, o
+HS512 recusado) e dois que travam o que NÃO pode mudar (Logística segue vendo
+tudo; filial segue lendo frota e rotas).
+
+**A lição.** Esconder botão não é permissão. Toda regra de "quem vê o quê"
+tem que existir no servidor, e o teste tem que bater no endereço, não na
+tela. A #26 ensinou que setor novo entra em N lugares; esta ensina que um
+desses lugares é a lista de rotas de LEITURA, que ninguém lembra porque
+"todo mundo pode ler".
+
+---
+
 ## #27 — A Torre parou de guardar a sequência digitada (08/09/2026)
 
 **Onde apareceu:** no portão, não na operação. `test_edicao_marca_alterada`

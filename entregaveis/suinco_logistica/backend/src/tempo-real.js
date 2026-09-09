@@ -48,7 +48,7 @@ export function iniciarTempoReal(servidorHttp) {
     const token = socket.handshake.auth?.token;
     if (!token) return next(new Error('SEM_TOKEN'));
     try {
-      const p = jwt.verify(token, config.jwtSegredo);
+      const p = jwt.verify(token, config.jwtSegredo, { algorithms: ['HS256'] });
       socket.data.operador = { id: p.sub, nome: p.nome, setor: p.setor };
       return next();
     } catch {

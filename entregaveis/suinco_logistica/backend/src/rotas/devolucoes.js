@@ -15,6 +15,7 @@ import { consultar, emTransacao } from '../banco.js';
 import { exigirLogin, exigirSetor } from '../middleware/auth.js';
 import { ehFilial, SETORES_FILIAL } from '../dominio/fluxo.js';
 import { emitir } from '../tempo-real.js';
+import { registrarLeitura } from '../servicos/registro_leitura.js';
 import {
   DEV_STATUS_INICIAL,
   validarTransicaoDevolucao,
@@ -1061,11 +1062,21 @@ rotasDevolucoes.get('/devolucoes-cadastros/clientes', exigirLogin, async (req, r
 /* Exportação completa dos clientes em CSV — gerada no servidor: 76 mil
    linhas não passam pelo JSON do painel. Mesmo formato dos CSVs da tela
    (BOM + ponto-e-vírgula, abre direto no Excel pt-BR). */
-rotasDevolucoes.get('/devolucoes-cadastros/clientes-csv', exigirLogin, async (req, res, next) => {
+/* A BASE INTEIRA DE CLIENTES SÓ SAI PARA QUEM CADASTRA, E DEIXA RASTRO
+   (09/09/2026). Auditoria de segurança: qualquer crachá logado — inclusive
+   o de filial — baixava as 77 mil linhas, sem registro. A busca por nome
+   (`/clientes?q=`) continua aberta a todos, com teto de 30: é o que o
+   checklist precisa. Exportar a base é outra coisa, e é da Logística.
+   O registro vai para log_leitura, como a leitura integral do pátio. */
+rotasDevolucoes.get('/devolucoes-cadastros/clientes-csv', exigirLogin, exigirSetor('Logística'), async (req, res, next) => {
   try {
     const { rows } = await consultar(
       'SELECT codigo, nome, apelido, vendedor, supervisor FROM dim_clientes ORDER BY codigo'
     );
+    await registrarLeitura({
+      tipo: 'clientes-csv', detalhe: 'exportação da base de clientes',
+      linhas: rows.length, operador: req.operador, ip: req.ip,
+    });
     const escapa = (v) => {
       const s = String(v ?? '');
       return /[";\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;

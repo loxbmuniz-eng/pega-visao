@@ -34,6 +34,16 @@ export async function gerarPdf({ html, css, paisagem = true }) {
     const documento = `<!doctype html><html><head><meta charset="utf-8">`
       + `<style>${css}</style><style>${folha}</style></head><body>${html}</body></html>`;
 
+    /* O RELATÓRIO É AUTOSSUFICIENTE — E O CHROMIUM NÃO SAI PARA A REDE
+       (09/09/2026). O HTML e o CSS chegam prontos do painel; a fonte vem
+       embutida em base64. Nada aqui precisa buscar recurso externo. Sem
+       este bloqueio, um HTML com <img src="http://127.0.0.1:5432"> ou um
+       endereço interno faria o servidor buscar o que não devia e esperar
+       por ele no `networkidle` (auditoria de segurança: SSRF). Requisição
+       `data:` não passa por aqui — o Playwright não intercepta esse esquema,
+       e é só disso que o documento precisa. */
+    await pagina.route('**/*', (rota) => rota.abort('blockedbyclient'));
+
     await pagina.setContent(documento, { waitUntil: 'networkidle' });
     // A fonte embutida (base64) ainda precisa decodificar antes de o layout
     // medir texto — sem esperar, a primeira medição usaria o fallback.

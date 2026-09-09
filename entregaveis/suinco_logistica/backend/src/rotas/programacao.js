@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { consultar, emTransacao } from '../banco.js';
-import { exigirLogin, exigirSetor } from '../middleware/auth.js';
+import { exigirLogin, exigirSetor, recusarFilial } from '../middleware/auth.js';
 import { emitir } from '../tempo-real.js';
 import { config } from '../config.js';
 import { programacaoAtual, abrirProgramacao } from '../dominio/programacoes.js';
@@ -130,7 +130,7 @@ rotasProgramacao.post('/programacao/fechar', exigirLogin, exigirSetor('Logístic
    Traz também quantas cargas ficaram em aberto no momento do fechamento,
    que é o número que interessa quando alguém for revisar uma decisão de
    fechar com caminhão no pátio. */
-rotasProgramacao.get('/programacoes', exigirLogin, async (req, res, next) => {
+rotasProgramacao.get('/programacoes', exigirLogin, recusarFilial, async (req, res, next) => {
   try {
     const { rows } = await consultar(
       `SELECT p.programacao_id, p.aberta_em, p.fechada_em, p.fechada_por,

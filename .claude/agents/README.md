@@ -1,6 +1,6 @@
 # O time do painel Suinco
 
-Nove agentes, cada um com uma função do fluxo que a gente construiu. Chame pelo
+Onze agentes, cada um com uma função do fluxo que a gente construiu. Chame pelo
 nome (`use o suinco-investigador para...`) ou deixe o Claude escolher pela
 descrição.
 
@@ -69,3 +69,25 @@ começa sabendo o que não pode repetir.
 As skills continuam valendo para todos: `suinco-entrega-sem-ponto-solto`,
 `suinco-yard-flow`, `superpowers:systematic-debugging`,
 `superpowers:test-driven-development`, `superpowers:verification-before-completion`.
+
+## O caminho do novo objetivo — o maior case da Suinco (09/09/2026)
+
+```
+  "quero a melhor integração com o Sisatak e o Delivery B2B"
+          │
+          ▼
+  suinco-integrador-atak     mapa de sistemas, fonte da verdade por dado, contrato
+          │                  de integração, o que depende da ATAK/TI, plano por fases
+          │   (aprovado)
+          ▼
+  suinco-teste-que-reprova → suinco-servidor → suinco-portao   (como toda demanda)
+
+  "esse case precisa ser o maior da Suinco"
+          │
+          ▼
+  suinco-case                indicadores com consulta e fonte, antes × depois,
+                             referência de mercado com URL, narrativa de uma página
+```
+
+Os dois não escrevem código de produção sozinhos. O integrador especifica; o
+case mede. Quem implementa continua sendo o caminho de sempre, pelo portão.

@@ -13,7 +13,7 @@
    ===================================================================== */
 import { Router } from 'express';
 import { consultar, emTransacao } from '../banco.js';
-import { exigirLogin, exigirSetor } from '../middleware/auth.js';
+import { exigirLogin, exigirSetor, recusarFilial } from '../middleware/auth.js';
 import { emitir } from '../tempo-real.js';
 
 export const rotasModeloSemana = Router();
@@ -52,7 +52,7 @@ function hojeISO() {
 /* Leitura liberada a qualquer setor logado, pelo mesmo motivo da Torre
    compartilhada: enxergar o plano do dia não é privilégio, é o que
    substituiu a pasta do Teams. Escrever continua restrito. */
-rotasModeloSemana.get('/modelo-semana', exigirLogin, async (req, res, next) => {
+rotasModeloSemana.get('/modelo-semana', exigirLogin, recusarFilial, async (req, res, next) => {
   try {
     const { rows } = await consultar(
       `SELECT m.modelo_id, m.dia_semana, m.rota_codigo, m.ordem, m.tipo_operacao,
@@ -141,7 +141,7 @@ rotasModeloSemana.delete('/modelo-semana/:id', SO_LOGISTICA, async (req, res, ne
    foi montado. A tela precisa dos dois juntos para mostrar "rota do
    modelo ainda sem carga" — que é o que diz à Logística o que falta
    fazer. */
-rotasModeloSemana.get('/montagem', exigirLogin, async (req, res, next) => {
+rotasModeloSemana.get('/montagem', exigirLogin, recusarFilial, async (req, res, next) => {
   try {
     const dia = diaOu(hojeISO(), req.query?.dia);
     /* Dia da semana calculado a partir da data ESCOLHIDA, não de "agora":
