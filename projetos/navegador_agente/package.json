@@ -1,0 +1,13 @@
+{
+  "name": "navegador-agente",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Um navegador de verdade para agentes de IA — extração, captura e fluxos, com robots.txt no núcleo.",
+  "bin": { "navegador": "./cli.mjs" },
+  "scripts": {
+    "teste": "node --test \"testes/teste_*.mjs\"",
+    "servidor": "node cli.mjs servidor"
+  },
+  "engines": { "node": ">=22" }
+}

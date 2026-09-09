@@ -1,0 +1,125 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Cena — cartões prontos em vídeo</title>
+<link rel="stylesheet" href="../base.css">
+<style>
+  /* Esta cena NÃO desenha arte. Ela anima arte que já existe.
+     É a diferença entre "recriar a identidade" (que dá errado sem os
+     arquivos da marca) e "dar movimento ao card que o designer já fechou". */
+  .palco { background: var(--tinta); }
+  .cartao { position: absolute; inset: 0; overflow: hidden; background: var(--tinta); }
+  .cartao img { position: absolute; inset: 0; width: 100%; height: 100%;
+                object-fit: cover; object-position: center; }
+  /* Véu de leitura: só entra quando o slide tem texto por cima. */
+  .veu { position: absolute; inset: 0; }
+  .faixa { position: absolute; left: 0; right: 0; bottom: 0; padding: 90px 80px 100px; }
+  .rotulo { font-family: var(--mono); font-size: 26px; letter-spacing: .26em;
+            text-transform: uppercase; color: var(--marca); font-weight: 700; margin-bottom: 18px; }
+  .nome { font-size: 78px; font-weight: 700; line-height: 1.02; letter-spacing: .04em;
+          text-transform: uppercase; color: var(--papel); }
+  .apoio { margin-top: 20px; font-family: var(--mono); font-size: 28px; color: var(--suave); }
+  .pendente { margin-top: 22px; border-left: 5px solid var(--pendente); padding-left: 20px;
+              font-family: var(--mono); font-size: 24px; color: var(--pendente); }
+  .pontos { position: absolute; top: 60px; left: 70px; right: 70px; display: flex; gap: 8px; z-index: 5; }
+  .ponto { flex: 1; height: 4px; border-radius: 3px; background: rgba(255,255,255,.22); overflow: hidden; }
+  .ponto i { display: block; height: 100%; width: 0; background: var(--marca); }
+  .faltando { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+              flex-direction: column; gap: 22px; text-align: center; padding: 90px;
+              border: 6px dashed var(--pendente); color: var(--pendente); font-family: var(--mono); }
+  .faltando b { font-size: 40px; }
+  .faltando span { font-size: 26px; color: var(--suave); }
+</style>
+
+<div class="palco">
+  <div class="pontos" id="pontos"></div>
+  <div id="cartoes"></div>
+</div>
+
+<script src="../kit.js"></script>
+<script>
+(() => {
+  const K = Kit;
+  const d = window.__dados || {};
+  const raiz = document.documentElement.style;
+  raiz.setProperty('--marca', d.cor || '#FF6B2C');
+  raiz.setProperty('--pendente', d.corPendente || '#E5B76B');
+  if (d.corFundo) raiz.setProperty('--tinta', d.corFundo);
+  if (d.corTexto) raiz.setProperty('--papel', d.corTexto);
+  if (d.corSuave) raiz.setProperty('--suave', d.corSuave);
+  if (d.fonte) raiz.setProperty('--fonte', d.fonte);
+
+  const cartoes = Array.isArray(d.cartoes) && d.cartoes.length ? d.cartoes : [];
+  const ENTRADA = 0.5;
+  const tempos = cartoes.map((c) => Number(c.segundos) || 3.0);
+  const inicios = tempos.reduce((a, t) => (a.push((a.at(-1) ?? 0) + t), a), [0]);
+
+  const alvo = K.$('#cartoes');
+  const alvoPontos = K.$('#pontos');
+  const nos = cartoes.map((c) => {
+    const el = document.createElement('div');
+    el.className = 'cartao';
+    const temTexto = c.nome || c.rotulo || c.apoio || c.pendente;
+    el.innerHTML =
+      (c.imagem
+        // Quando o card existe, ele é o quadro inteiro — a arte é dele.
+        ? `<img src="${c.imagem}" alt="">`
+        // Quando não existe, o vídeo DIZ que não existe em vez de fingir com
+        // um fundo preto bonito. Foi assim que a primeira versão enganou.
+        : `<div class="faltando"><b>${(c.nome || 'card').toUpperCase()}</b>
+             <span>arte não fornecida — passe "imagem" no JSON</span></div>`) +
+      (c.imagem && temTexto ? '<div class="veu"></div>' : '') +
+      (temTexto ? `<div class="faixa">
+          ${c.rotulo ? `<div class="rotulo">${c.rotulo}</div>` : ''}
+          ${c.nome ? `<div class="nome">${c.nome}</div>` : ''}
+          ${c.apoio ? `<div class="apoio">${c.apoio}</div>` : ''}
+          ${c.pendente ? `<div class="pendente">FALTA · ${c.pendente}</div>` : ''}
+        </div>` : '');
+    el.style.opacity = '0';
+    alvo.appendChild(el);
+
+    const veu = el.querySelector('.veu');
+    if (veu) {
+      const forca = c.veu === undefined ? 0.78 : Number(c.veu);
+      veu.style.background =
+        `linear-gradient(to top, rgba(0,0,0,${forca}) 0%, rgba(0,0,0,${forca * 0.75}) 34%, rgba(0,0,0,0) 62%)`;
+    }
+    const p = document.createElement('div');
+    p.className = 'ponto'; p.innerHTML = '<i></i>';
+    alvoPontos.appendChild(p);
+    return { el, img: el.querySelector('img'), barra: p.querySelector('i') };
+  });
+
+  const ZOOM = Number(d.zoom ?? 0.06);   // Ken Burns: 6% ao longo do card
+
+  window.cena = {
+    duracao: inicios.at(-1) || 1,
+    fps: 30,
+    largura: Number(d.largura) || 1080,
+    altura: Number(d.altura) || 1920,
+    aoTempo(t) {
+      let atual = 0;
+      for (let i = 0; i < cartoes.length; i++) if (t >= inicios[i]) atual = i;
+      nos.forEach(({ el, img, barra }, i) => {
+        const local = t - inicios[i];
+        if (i === atual) {
+          el.style.opacity = String(K.limitar(local / 0.2));
+          el.style.zIndex = '2';
+          // O zoom continua durante o card inteiro: é o que dá vida a uma
+          // imagem parada sem precisar de vídeo.
+          if (img) {
+            const p = K.limitar(local / tempos[i]);
+            img.style.transform = `scale(${1 + ZOOM * p})`;
+          }
+        } else if (i === atual - 1) {
+          el.style.opacity = '1';
+          el.style.zIndex = '1';
+        } else {
+          el.style.opacity = '0';
+          el.style.zIndex = '0';
+        }
+        barra.style.width = `${K.limitar(local / tempos[i]) * 100}%`;
+      });
+    },
+  };
+})();
+</script>

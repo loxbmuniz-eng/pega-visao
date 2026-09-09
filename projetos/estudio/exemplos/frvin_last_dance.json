@@ -1,0 +1,68 @@
+{
+  "_fonte": "Artifact 'FRVIN Last Dance — copy e estratégia para aprovação' (a7076685). Copy transcrita, não reescrita. Os campos 'pendente' são os FALTA marcados no próprio documento — dado que não temos e não se inventa.",
+  "marca": "FRVIN",
+  "assinatura": "#FRVINBADALO",
+  "cor": "#FF4438",
+  "corPendente": "#E5B76B",
+  "slides": [
+    {
+      "selo": "01 · capa",
+      "titulo": "A última vez<br>nessa pista",
+      "rodape": "06.09 · domingo · 22h às 06h",
+      "segundos": 3.4
+    },
+    {
+      "selo": "02 · o convite",
+      "titulo": "Ainda dá tempo<br>de estar lá.",
+      "texto": "No dia 6 de setembro o FRVIN abre pela última vez. Oito horas, seis sets, do primeiro disco até o sol nascer na Cândido Mariano.",
+      "segundos": 4.6
+    },
+    {
+      "selo": "03 · o que essa pista foi",
+      "titulo": "Quatro anos.<br>Uma curadoria.",
+      "texto": "Quatro anos de programação assinada pela <b>Say Ventura</b> — sexta e sábado, sem atalho, escolhendo nome por nome o que essa pista ia ouvir.",
+      "segundos": 4.6
+    },
+    {
+      "selo": "04 · noite",
+      "titulo": "Joyce Muniz",
+      "texto": "Brasileira que Viena não devolveu. Tocou aqui, no mesmo chão que você vai pisar dia 6.",
+      "pendente": "ano + uma lembrança concreta da noite",
+      "segundos": 3.6
+    },
+    {
+      "selo": "05 · noite",
+      "titulo": "Entropia",
+      "texto": "Tem noite em que a casa inteira anda junto sem ninguém combinar. Essa foi uma.",
+      "pendente": "ano + o que fez essa noite ser diferente",
+      "segundos": 3.6
+    },
+    {
+      "selo": "06 · noite",
+      "titulo": "Julião",
+      "texto": "Do tipo que a pessoa lembra exatamente de onde estava quando a música virou.",
+      "pendente": "ano + por que entrou pra história da casa",
+      "segundos": 3.6
+    },
+    {
+      "selo": "07 · a homenagem",
+      "titulo": "Say Ventura",
+      "texto": "Quatro anos segurando a curadoria do FRVIN. Cada line-up que passou por aqui passou pela mão dela primeiro.<br><br>No dia 6 ela toca também. Fechando o que ela mesma construiu.",
+      "segundos": 5.0
+    },
+    {
+      "selo": "08 · o coletivo",
+      "titulo": "E todas as que<br>não têm nome.",
+      "texto": "A sexta que não devia dar ninguém e deu. O after que virou almoço. A vez que o ar morreu e ninguém saiu.<br><br><b>Falta uma. E ela é dia 6.</b>",
+      "segundos": 5.0
+    },
+    {
+      "selo": "09 · line-up",
+      "titulo": "06.09<br>a última",
+      "texto": "<b>C VEDRONI · RAMSAY · OTA BLIND<br>LOLÔ BORTHOLACCI · SAY VENTURA · JOEVKID</b><br><br>Domingo, véspera de feriado.<br>Ninguém tem hora pra acordar.",
+      "rodape": "22h — 06h · R$ 40 · Sympla, link na bio",
+      "pendente": "confirmar os @ dos artistas",
+      "segundos": 5.4
+    }
+  ]
+}

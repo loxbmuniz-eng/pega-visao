@@ -1,0 +1,16 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Cena de teste</title>
+<style>html,body{margin:0;width:100%;height:100%;background:#111;color:#fff;font:48px monospace}
+ #a{position:absolute;left:0;top:0}</style>
+<div id="a">0</div>
+<script>
+  window.cena = {
+    duracao: 0.2, fps: 10, largura: 200, altura: 120,
+    aoTempo(t) {
+      // Posição derivada só de t: é isto que o teste de determinismo verifica.
+      document.getElementById('a').style.transform = `translate(${Math.round(t * 100)}px, 20px)`;
+      document.getElementById('a').textContent = (window.__dados && window.__dados.rotulo) || t.toFixed(2);
+    },
+  };
+</script>

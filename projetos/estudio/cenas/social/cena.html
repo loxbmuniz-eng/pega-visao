@@ -1,0 +1,72 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Cena — social 9:16</title>
+<link rel="stylesheet" href="../base.css">
+<style>
+  .palco { display: flex; flex-direction: column; justify-content: center; padding: 130px 90px; }
+  .selo {
+    align-self: flex-start; font-size: 28px; letter-spacing: .22em; text-transform: uppercase;
+    color: var(--realce); border: 2px solid var(--realce); border-radius: 999px;
+    padding: 14px 28px; margin-bottom: 56px; font-weight: 700;
+  }
+  h1 { font-size: 116px; line-height: .96; font-weight: 800; letter-spacing: -.035em; }
+  h1 em { font-style: normal; color: var(--realce); }
+  .sub { margin-top: 40px; font-size: 42px; line-height: 1.35; color: var(--suave); max-width: 20ch; }
+  ul { list-style: none; margin-top: 76px; display: flex; flex-direction: column; gap: 30px; }
+  li { font-size: 44px; font-weight: 600; display: flex; align-items: center; gap: 26px; }
+  li::before {
+    content: ''; width: 16px; height: 16px; border-radius: 50%;
+    background: var(--realce); flex: none;
+  }
+  .rodape {
+    position: absolute; left: 90px; right: 90px; bottom: 96px;
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 30px; color: var(--suave); border-top: 2px solid var(--linha); padding-top: 30px;
+  }
+  .barra { position: absolute; left: 0; bottom: 0; height: 10px; background: var(--realce); }
+</style>
+
+<div class="palco">
+  <div class="selo" id="selo"></div>
+  <h1 id="titulo"></h1>
+  <p class="sub" id="sub"></p>
+  <ul id="itens"></ul>
+  <div class="rodape"><span id="assinatura"></span><span id="cta"></span></div>
+  <div class="vinheta"></div>
+</div>
+<div class="barra" id="barra"></div>
+
+<script src="../kit.js"></script>
+<script>
+(() => {
+  const K = Kit;
+  const titulo = K.dado('titulo', 'Vídeo em código');
+  const destaque = K.dado('destaque', 'código');   // parte do título que vai em laranja
+  const itens = K.lista('itens', ['Páginas de lançamento', 'Demonstrações de produto', 'Anúncios', 'Redes sociais']);
+
+  K.$('#titulo').innerHTML = destaque && titulo.includes(destaque)
+    ? titulo.replace(destaque, `<em>${destaque}</em>`)
+    : titulo;
+  K.$('#sub').textContent = K.dado('sub', 'Escreva HTML. O estúdio entrega o vídeo.');
+  K.$('#selo').textContent = K.dado('selo', 'Estúdio');
+  K.$('#assinatura').textContent = K.dado('assinatura', '@seuperfil');
+  K.$('#cta').textContent = K.dado('cta', 'link na bio');
+  const li = K.pintarLista(K.$('#itens'), itens);
+
+  window.cena = {
+    duracao: Number(K.dado('duracao', 8)),
+    fps: 30,
+    largura: 1080,
+    altura: 1920,
+    aoTempo(t) {
+      K.surgir(K.$('#selo'), t, 0.10, 0.5, 24);
+      K.surgir(K.$('#titulo'), t, 0.30, 0.7, 56);
+      K.surgir(K.$('#sub'), t, 0.60, 0.6, 36);
+      li.forEach((el, i) => K.surgir(el, t, 1.10 + i * 0.18, 0.55, 34));
+      K.surgir(K.$('.rodape'), t, 1.10 + li.length * 0.18 + 0.3, 0.6, 24);
+      // A barra é o relógio visível: quem assiste sabe quanto falta.
+      K.$('#barra').style.width = `${(t / this.duracao) * 100}%`;
+    },
+  };
+})();
+</script>

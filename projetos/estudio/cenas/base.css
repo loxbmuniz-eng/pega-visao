@@ -1,0 +1,37 @@
+/* Base das cenas. Tokens primeiro, para trocar a identidade em um lugar só. */
+:root {
+  --tinta:   #0A0A0B;   /* fundo */
+  --papel:   #F5F5F4;   /* texto principal */
+  --suave:   #8B8B93;   /* texto secundário */
+  --realce:  #FF6B2C;   /* a cor da marca */
+  --linha:   #1F1F23;
+  --verde:   #3FCF8E;
+  --fonte:   'Inter', 'Helvetica Neue', Arial, 'Liberation Sans', sans-serif;
+  --mono:    'JetBrains Mono', 'SF Mono', 'DejaVu Sans Mono', monospace;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  width: 100%; height: 100%;
+  background: var(--tinta);
+  color: var(--papel);
+  font-family: var(--fonte);
+  overflow: hidden;
+  /* Sem animação/transição em cena: quem manda no tempo é o renderizador. */
+  -webkit-font-smoothing: antialiased;
+}
+
+*, *::before, *::after { animation: none !important; transition: none !important; }
+
+.palco { position: relative; width: 100%; height: 100%; overflow: hidden; }
+
+/* Vinheta e grão dão profundidade sem pesar no encode. */
+.vinheta {
+  position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(120% 80% at 50% 30%, transparent 40%, rgba(0,0,0,.65) 100%);
+}
+
+.realce { color: var(--realce); }
+.suave  { color: var(--suave); }
+.mono   { font-family: var(--mono); }

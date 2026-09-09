@@ -1,0 +1,98 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Cena — página de lançamento 16:9</title>
+<link rel="stylesheet" href="../base.css">
+<style>
+  .palco { display: grid; grid-template-columns: 1fr 1fr; align-items: center; gap: 80px; padding: 0 110px; }
+  .selo { display: inline-block; font-size: 20px; letter-spacing: .2em; text-transform: uppercase;
+          color: var(--realce); font-weight: 700; margin-bottom: 28px; }
+  h1 { font-size: 84px; line-height: 1; font-weight: 800; letter-spacing: -.035em; }
+  h1 em { font-style: normal; color: var(--realce); }
+  .sub { margin-top: 28px; font-size: 27px; line-height: 1.5; color: var(--suave); max-width: 30ch; }
+  .acoes { margin-top: 44px; display: flex; gap: 18px; align-items: center; }
+  .botao { background: var(--realce); color: #0A0A0B; font-weight: 800; font-size: 23px;
+           padding: 20px 40px; border-radius: 12px; }
+  .nota { font-size: 20px; color: var(--suave); }
+  /* Janela de navegador falsa: dá contexto de produto sem precisar de captura real. */
+  .janela { border: 1px solid var(--linha); border-radius: 16px; overflow: hidden; background: #0E0E11; box-shadow: 0 60px 120px rgba(0,0,0,.6); }
+  .topo { display: flex; gap: 9px; padding: 17px 20px; border-bottom: 1px solid var(--linha); align-items: center; }
+  .bolha { width: 12px; height: 12px; border-radius: 50%; background: #2B2B31; }
+  .barraurl { flex: 1; margin-left: 14px; height: 26px; border-radius: 7px; background: #17171B;
+              font-size: 14px; color: var(--suave); display: flex; align-items: center; padding: 0 12px; }
+  .corpo { padding: 34px; display: flex; flex-direction: column; gap: 18px; }
+  .linha { height: 15px; border-radius: 5px; background: #1C1C21; }
+  .bloco { height: 150px; border-radius: 10px;
+           background: linear-gradient(120deg, rgba(255,107,44,.28), rgba(255,107,44,.05)); }
+  .metricas { display: flex; gap: 14px; margin-top: 4px; }
+  .metrica { flex: 1; background: #131317; border: 1px solid var(--linha); border-radius: 10px; padding: 16px; }
+  .metrica b { display: block; font-size: 30px; color: var(--realce); }
+  .metrica span { font-size: 14px; color: var(--suave); }
+</style>
+
+<div class="palco">
+  <div class="texto">
+    <div class="selo" id="selo"></div>
+    <h1 id="titulo"></h1>
+    <p class="sub" id="sub"></p>
+    <div class="acoes"><div class="botao" id="botao"></div><div class="nota" id="nota"></div></div>
+  </div>
+  <div class="janela" id="janela">
+    <div class="topo"><i class="bolha"></i><i class="bolha"></i><i class="bolha"></i>
+      <div class="barraurl" id="url"></div></div>
+    <div class="corpo">
+      <div class="bloco" id="bloco"></div>
+      <div class="linha" style="width:78%"></div>
+      <div class="linha" style="width:56%"></div>
+      <div class="metricas" id="metricas"></div>
+    </div>
+  </div>
+  <div class="vinheta"></div>
+</div>
+
+<script src="../kit.js"></script>
+<script>
+(() => {
+  const K = Kit;
+  const titulo = K.dado('titulo', 'Seu lançamento em vídeo, hoje');
+  const destaque = K.dado('destaque', 'em vídeo');
+  K.$('#titulo').innerHTML = titulo.includes(destaque) ? titulo.replace(destaque, `<em>${destaque}</em>`) : titulo;
+  K.$('#selo').textContent = K.dado('selo', 'lançamento');
+  K.$('#sub').textContent = K.dado('sub', 'A mesma página que você escreveu vira o vídeo do anúncio. Sem editor, sem timeline.');
+  K.$('#botao').textContent = K.dado('cta', 'Começar agora');
+  K.$('#nota').textContent = K.dado('nota', 'sem cartão de crédito');
+  K.$('#url').textContent = K.dado('url', 'seuproduto.com.br');
+
+  // "12.4k assinantes; 3min setup; 0 edição" -> três cartões
+  const metricas = K.lista('metricas', ['312 vídeos :: por mês', '4 min :: do brief ao mp4', 'R$ 0 :: de licença de editor']);
+  const alvoM = K.$('#metricas');
+  const cartoes = metricas.map((m) => {
+    const [valor, rotulo] = K.partes(m);
+    const d = document.createElement('div');
+    d.className = 'metrica';
+    d.innerHTML = `<b>${valor ?? ''}</b><span>${rotulo ?? ''}</span>`;
+    d.style.opacity = '0';
+    alvoM.appendChild(d);
+    return d;
+  });
+
+  window.cena = {
+    duracao: Number(K.dado('duracao', 10)), fps: 30, largura: 1920, altura: 1080,
+    aoTempo(t) {
+      K.surgir(K.$('#selo'), t, 0.10, 0.5, 18);
+      K.surgir(K.$('#titulo'), t, 0.25, 0.7, 44);
+      K.surgir(K.$('#sub'), t, 0.55, 0.6, 30);
+      K.surgir(K.$('.acoes'), t, 0.85, 0.6, 26);
+
+      // A janela entra depois e com escala: o olho vai para o texto primeiro.
+      const p = K.saida(K.janela(t, 0.45, 0.9));
+      const j = K.$('#janela');
+      j.style.opacity = String(p);
+      j.style.transform = `translate3d(0, ${K.mistura(60, 0, p)}px, 0) scale(${K.mistura(0.94, 1, p)})`;
+
+      const pb = K.saida(K.janela(t, 1.2, 0.8));
+      K.$('#bloco').style.opacity = String(0.35 + 0.65 * pb);
+      cartoes.forEach((c, i) => K.surgir(c, t, 1.7 + i * 0.16, 0.5, 18));
+    },
+  };
+})();
+</script>

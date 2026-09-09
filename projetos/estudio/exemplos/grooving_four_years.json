@@ -1,0 +1,43 @@
+{
+  "_fonte": "Handoff GROOVING · FOUR YEARS, 29/08/2026. Regras fixas do handoff respeitadas: 'aniversário de 4 anos da Grooving' (nunca 'dela'), 'pista' (nunca 'sala'), sem número de edições, sem cidade de origem dos artistas, sem citar artistas de edições passadas. Line-up e @ ficam como FALTA — o handoff diz que a ordem final e os b2b não estão confirmados.",
+  "marca": "GROOVING",
+  "assinatura": "05.09 · CHÁCARA ZANATTA",
+  "cor": "#C9A96A",
+  "corPendente": "#E5B76B",
+  "corFundo": "#050505",
+  "corTexto": "#EDE6DA",
+  "corSuave": "#8C8578",
+  "corLinha": "#241F16",
+  "fonte": "'Helvetica Neue', Helvetica, Arial, 'Liberation Sans', sans-serif",
+  "tracking": "0.06em",
+  "largura": 1080,
+  "altura": 1920,
+  "slides": [
+    {
+      "selo": "grooving",
+      "titulo": "Quatro anos",
+      "rodape": "05.09.2026 · sábado · Chácara Zanatta",
+      "segundos": 3.6
+    },
+    {
+      "selo": "o encontro",
+      "titulo": "Aniversário de<br>4 anos da Grooving",
+      "texto": "Chácara Zanatta · Primavera do Leste — MT",
+      "segundos": 4.2
+    },
+    { "selo": "line-up", "titulo": "Ota Blind", "segundos": 2.6, "pendente": "@ a confirmar" },
+    { "selo": "line-up", "titulo": "Lolô Bortholacci", "segundos": 2.6, "pendente": "@ a confirmar" },
+    { "selo": "line-up", "titulo": "BROM", "segundos": 2.6, "pendente": "@ a confirmar" },
+    { "selo": "line-up", "titulo": "Murilo Cassador", "segundos": 2.6, "pendente": "@ a confirmar" },
+    { "selo": "line-up", "titulo": "Gabriel Nilson", "segundos": 2.6, "pendente": "@ a confirmar" },
+    { "selo": "line-up", "titulo": "Ivo Mioranza", "segundos": 2.6, "pendente": "@ a confirmar" },
+    {
+      "selo": "05.09",
+      "titulo": "A pista<br>de novo",
+      "texto": "Chácara Zanatta · Primavera do Leste — MT",
+      "rodape": "05.09.2026 · sábado",
+      "pendente": "ordem final do line-up e os b2b não estão confirmados — o handoff pede re-render quando fecharem. Hudson Sanches está na lista antiga e não tem material.",
+      "segundos": 5.4
+    }
+  ]
+}
