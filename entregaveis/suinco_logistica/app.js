@@ -3044,7 +3044,7 @@ function renderTorre(){
       <td class="col-identificacao cel-veiculo">${editavel
         ? `<input type="text" class="placa-input" value="${esc(c.placa)}" onchange="atualizarPlacaUI('${escJs(c.id)}',this.value)" title="Trocar a placa.">`
         : `<span class="veic-placa">${esc(c.placa)}</span>`}
-        <span class="veic-transp">${esc(c.transportadora)||'—'}</span>
+        <span class="veic-transp">${esc(c.transportadora)||'—'}</span>${marcaTransportadoraHtml(c)}
         <span class="veic-tipo">${esc(c.tipoVeiculo)||'—'}</span>
         ${chipNoPatioHtml(c)}${chipLacreHtml(c)}</td>
       <td>${editavel
@@ -3108,7 +3108,7 @@ function linhaFilaHtml(c, lista, arrastavel){
       </td>
       <td class="col-identificacao cel-veiculo" onclick="event.stopPropagation()">
         <input type="text" class="placa-input" value="${esc(c.placa)}" onchange="atualizarPlacaUI('${id}',this.value)" title="Trocar a placa — a transportadora e o tipo de veículo são buscados na Frota automaticamente.">
-        <span class="veic-transp" id="transp-${esc(c.id)}">${esc(c.transportadora)||'—'}</span>
+        <span class="veic-transp" id="transp-${esc(c.id)}">${esc(c.transportadora)||'—'}</span>${marcaTransportadoraHtml(c)}
         <span class="veic-tipo">${esc(c.tipoVeiculo)||'—'}</span>
         ${marcaCargaDaPlaca(c, lista)}${chipNoPatioHtml(c)}${marcaEtapaDevolvidaHtml(c)}${marcaSaiuSemCarregarHtml(c)}</td>
       <td onclick="event.stopPropagation()">
@@ -4074,6 +4074,28 @@ function dataProgramacaoHtml(c){
    um erro de digitação. Quem olha a fila precisa saber, sem contar linha,
    que aquilo é o mesmo caminhão com duas cargas — senão alguém "corrige" a
    duplicidade que não existe e apaga uma carga de verdade. */
+/* A CARGA DIZ UMA TRANSPORTADORA, A FROTA DIZ OUTRA — A TELA MOSTRA (09/09/2026).
+   Relato do dono: 118675 / JJB8946 — "Rodosousa" na Torre, "Denia" no
+   cadastro. A transportadora da carga é cópia feita quando a placa entra e
+   pode ser trocada à mão; a Frota pode mudar depois. Nenhuma das duas telas
+   avisava. O marcador aparece quando divergem, e um clique alinha à Frota. */
+function marcaTransportadoraHtml(c){
+  const f = c && c.placa ? buscarFrota(c.placa) : null;
+  if(!f || !f.transportadora) return '';
+  const norm = (s)=>String(s||'').trim().toLowerCase();
+  if(norm(f.transportadora) === norm(c.transportadora)) return '';
+  return `<span class="marca-multi marca-frota" onclick="event.stopPropagation(); usarTransportadoraDaFrotaUI('${escJs(c.id)}')"
+    title="A Frota diz ${esc(f.transportadora)}; esta viagem está com ${esc(c.transportadora || '—')}. Clique para usar a da Frota.">≠ Frota: ${esc(f.transportadora)}</span>`;
+}
+function usarTransportadoraDaFrotaUI(id){
+  const c = getCarga(id); if(!c) return;
+  const f = buscarFrota(c.placa); if(!f || !f.transportadora) return;
+  c.transportadora = f.transportadora;
+  c.atualizadoEm = nowISO();   // sem carimbo a mudança não sobe
+  SuincoStore.save();
+  notifyGravacao(`Carga ${c.numeroCarga || c.placa}: transportadora alinhada à Frota (${f.transportadora}).`);
+  renderAll();
+}
 function marcaCargaDaPlaca(carga, lista){
   const p = normalizarPlaca(carga.placa);
   if(!p) return '';   // sem caminhão não há "1 de 2" — vazio não é placa

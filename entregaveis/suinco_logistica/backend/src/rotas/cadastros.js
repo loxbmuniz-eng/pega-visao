@@ -1,8 +1,9 @@
 import { Router } from 'express';
-import { consultar } from '../banco.js';
+import { consultar, emTransacao } from '../banco.js';
 import { exigirLogin, exigirSetor } from '../middleware/auth.js';
 import { emitir } from '../tempo-real.js';
-import { normalizarPlaca } from '../dominio/cargas.js';
+import { normalizarPlaca, COLUNAS_CARGA, paraPainel } from '../dominio/cargas.js';
+import { gravarNota } from './cargas.js';
 
 export const rotasCadastros = Router();
 
@@ -43,28 +44,66 @@ rotasCadastros.post('/frota', exigirLogin, exigirSetor('Logística'), async (req
       && req.body?.capacidadeKg !== '' && req.body?.capacidadeKg != null
       ? Number(req.body.capacidadeKg) : null;
 
-    const { rows } = await consultar(
-      `INSERT INTO dim_veiculos (placa, transportadora, tipo_veiculo, capacidade_kg, uf, motorista, origem)
-       VALUES ($1,$2,$3,$4,$5,$6,'manual')
-       ON CONFLICT (placa) DO UPDATE
-         SET transportadora = EXCLUDED.transportadora,
-             tipo_veiculo   = EXCLUDED.tipo_veiculo,
-             capacidade_kg  = EXCLUDED.capacidade_kg,
-             uf             = EXCLUDED.uf,
-             motorista      = EXCLUDED.motorista,
-             atualizado_em  = now()
-       RETURNING placa, transportadora, tipo_veiculo, motorista`,
-      [
-        placa,
-        String(req.body?.transportadora ?? '').slice(0, 200),
-        String(req.body?.tipoVeiculo ?? '').slice(0, 100),
-        capacidadeKg,
-        String(req.body?.uf ?? '').slice(0, 2).toUpperCase() || null,
-        String(req.body?.motorista ?? '').slice(0, 200),
-      ]
-    );
+    const transportadoraNova = String(req.body?.transportadora ?? '').slice(0, 200);
+    const op = req.operador;
+
+    /* A PLACA MUDOU DE TRANSPORTADORA → AS CARGAS ABERTAS ACOMPANHAM (09/09/2026).
+
+       Decisão do dono (opção A), depois da carga 118675 dizer "Rodosousa"
+       na Torre com a Frota dizendo "Denia Transportes": a transportadora
+       da carga é cópia feita quando a placa entra, e mudar a Frota não
+       avisava ninguém. Agora, na MESMA transação: a Frota grava, as cargas
+       da placa que ainda não saíram recebem a transportadora nova, cada
+       uma ganha uma nota no Histórico, e a troca em si fica registrada
+       mesmo sem carga aberta. As concluídas ficam como estavam — são
+       registro do que aconteceu. Regravar a mesma transportadora (eco de
+       sincronização) não é notícia: nada muda, nada é escrito. */
+    const resultado = await emTransacao(async (cli) => {
+      const antes = await cli.query('SELECT transportadora FROM dim_veiculos WHERE placa = $1', [placa]);
+      const transportadoraAntes = antes.rows[0] ? String(antes.rows[0].transportadora || '') : null;
+      const { rows } = await cli.query(
+        `INSERT INTO dim_veiculos (placa, transportadora, tipo_veiculo, capacidade_kg, uf, motorista, origem)
+         VALUES ($1,$2,$3,$4,$5,$6,'manual')
+         ON CONFLICT (placa) DO UPDATE
+           SET transportadora = EXCLUDED.transportadora,
+               tipo_veiculo   = EXCLUDED.tipo_veiculo,
+               capacidade_kg  = EXCLUDED.capacidade_kg,
+               uf             = EXCLUDED.uf,
+               motorista      = EXCLUDED.motorista,
+               atualizado_em  = now()
+         RETURNING placa, transportadora, tipo_veiculo, motorista`,
+        [
+          placa,
+          transportadoraNova,
+          String(req.body?.tipoVeiculo ?? '').slice(0, 100),
+          capacidadeKg,
+          String(req.body?.uf ?? '').slice(0, 2).toUpperCase() || null,
+          String(req.body?.motorista ?? '').slice(0, 200),
+        ]
+      );
+      const mudou = transportadoraAntes !== null && transportadoraAntes !== transportadoraNova;
+      let abertas = [];
+      if (mudou) {
+        const upd = await cli.query(
+          `UPDATE fact_viagens
+              SET transportadora = $1, operador_id = $2, operador_nome = $3, operador_setor = $4
+            WHERE placa = $5 AND excluida_em IS NULL AND status_atual <> 'Seguiu Viagem'
+            RETURNING ${COLUNAS_CARGA}`,
+          [transportadoraNova, op.id, op.nome, op.setor, placa]
+        );
+        abertas = upd.rows;
+        const acao = `Frota: transportadora da placa ${placa} mudou de "${transportadoraAntes || '—'}" para "${transportadoraNova || '—'}"`;
+        await gravarNota(cli, { cargaId: null, placa, operador: op,
+          acao: `${acao} — ${abertas.length} carga(s) aberta(s) acompanharam` });
+        for (const c of abertas) {
+          await gravarNota(cli, { cargaId: c.carga_id, placa, operador: op, acao: `${acao} — esta carga acompanhou` });
+        }
+      }
+      return { frota: rows[0], abertas };
+    });
     emitir('frota:atualizada', { placa });
-    res.status(201).json(rows[0]);
+    resultado.abertas.forEach((c) => emitir('carga:atualizada', paraPainel(c)));
+    res.status(201).json({ ...resultado.frota, cargasAtualizadas: resultado.abertas.length });
   } catch (e) { next(e); }
 });
 
