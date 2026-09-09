@@ -1401,7 +1401,7 @@
     <!-- Relatório de Devoluções acessível também daqui (18/08/2026): os
          setores que têm a aba Relatórios exportam o checklist do dia com
          o STATUS ATUAL — a lista é re-buscada do servidor no clique. -->
-    <div class="card">
+    <div class="card" data-relatorio="checklist">
       <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-devolucoes"/></svg> Relatório de Devoluções</div>
       <div class="card-sub">O checklist de devoluções do dia, com carimbos de cada etapa, faltas,
         divergentes, destinações e sobras — sempre com o status ATUAL (busca no servidor na hora
@@ -1423,7 +1423,7 @@
          define o recorte de tudo que vem abaixo — filtro escondido embaixo
          do botão faz o gestor gerar o relatório errado e só descobrir
          depois de mandar no grupo. -->
-    <div class="card">
+    <div class="card" data-relatorio="patio">
       <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-programacao"/></svg> Período — Data da Programação</div>
       <div class="card-sub">Recorta os relatórios pela data em que a carga foi <strong>inserida no sistema</strong>, não pela chegada do caminhão. Em branco = todas as cargas.</div>
       <div class="form-grid">
@@ -1445,17 +1445,17 @@
       <div id="rel-resumo-filtro" class="card-sub" style="margin:6px 0 0"></div>
     </div>
 
-    <div class="card">
+    <div class="card" data-relatorio="patio">
       <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-relatorios"/></svg> PDF Operacional</div>
       <div class="card-sub">Sequenciamento de carregamento do dia — mesmo layout da planilha usada hoje: Nº, Carga, Rota, Tipo de Operação, Faturado, Status de Carregamento (célula colorida), Placa, Transportadora, Tipo de Veículo, Peso(ton), Paletizada, Entregas, Ganchos.</div>
       <button class="btn btn-primary" onclick="exportarPdfOperacional()">🖨️ Gerar PDF Operacional</button>
     </div>
-    <div class="card">
+    <div class="card" data-relatorio="patio">
       <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-relatorios"/></svg> PDF Executivo</div>
       <div class="card-sub">Uma página, KPIs e visão de diretoria.</div>
       <button class="btn btn-primary" onclick="exportarPdfExecutivo()">🖨️ Gerar PDF Executivo</button>
     </div>
-    <div class="card">
+    <div class="card" data-relatorio="patio">
       <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-indicadores"/></svg> Exportar Dados (CSV) — Power BI</div>
       <div class="card-sub">
         Gera 5 arquivos CSV (formato fato/dimensão): <code>Fact_Movimentacoes</code>, <code>Dim_Carga</code>,
@@ -1469,7 +1469,7 @@
 
     <!-- Relatório independente, para o setor administrativo. Três colunas
          só: é controle de frete, não acompanhamento de pátio. -->
-    <div class="card">
+    <div class="card" data-relatorio="frete">
       <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-fretes"/></svg> Administração de Fretes</div>
       <div class="card-sub">Sequência, Nº da carga, data do faturamento, rota, placa, transportadora,
         caminhão, peso, quilometragem, entregas, motorista, valor do frete e o número do

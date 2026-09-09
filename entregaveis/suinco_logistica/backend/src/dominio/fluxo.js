@@ -60,6 +60,29 @@ export const SETORES = [
      allowlist — mesmo racional do Comercial acima. */
   'Controles Internos',
   'Central de Notas',
+  /* QUALIDADE (09/09/2026).
+
+     Pedido do dono: "voce criou um setor no sistema para a QUALIDADE ter
+     acesso aos checklists? ela vai poder exportar relatorios tambem
+     todos". Perguntado o escopo, ele fechou em duas frases: "qualidade so
+     acompanha e exporta relatorio" e "tambem ve a devolucao das filiais,
+     todos os relatorios que competem ao checklist".
+
+     É O PRIMEIRO SETOR SÓ-LEITURA DENTRO DA DEVOLUÇÃO. O Comercial já é
+     só leitura, mas nas cargas, onde ele não aparece em allowlist nenhuma
+     e por isso é barrado por padrão. Aqui não bastaria: as rotas da
+     devolução misturam allowlist de setor com regra de filial, e "não
+     estar na lista" cai em lugares diferentes em cada uma. Por isso a
+     recusa é EXPLÍCITA (soAcompanha, abaixo) — a regra fica escrita, e a
+     próxima rota de escrita nasce com ela em vez de depender de alguém
+     lembrar.
+
+     VÊ AS FILIAIS, ao contrário da regra da 043: a 105 não vê a 106
+     porque cada uma responde pela sua operação. A Qualidade responde pelo
+     PRODUTO, e produto não tem filial — um problema que só aparece na
+     Bahia é justamente o que ela precisa enxergar. Isso sai de graça por
+     ela NÃO ser filial: nenhum filtro por `criada_setor` a alcança. */
+  'Qualidade',
   /* AS FILIAIS (02/09/2026).
 
      Pedido do dono: "isso é um setor novo, so vai ter acesso a aba
@@ -90,6 +113,30 @@ export const SETORES = [
    entrar. */
 export const SETORES_FILIAL = ['Filial 105 BSB', 'Filial 106 BAHIA', 'Filial 107 ES'];
 export function ehFilial(setor) { return SETORES_FILIAL.includes(setor); }
+
+/* OS SETORES QUE SÓ ACOMPANHAM (09/09/2026).
+
+   Quem está aqui LÊ tudo o que a aba mostra e EXPORTA relatório, e não
+   escreve nada — nem cria, nem avança etapa, nem edita campo.
+
+   Lista, e não um `setor === 'Qualidade'` espalhado: no dia em que entrar
+   um segundo setor observador (o dono já falou em SAC), ele entra numa
+   linha e vale em todas as rotas de uma vez. Espalhado, valeria nas que
+   alguém lembrasse. */
+export const SETORES_SO_ACOMPANHAM = ['Qualidade'];
+export function soAcompanha(setor) { return SETORES_SO_ACOMPANHAM.includes(setor); }
+
+/* A recusa dita em português de operação, num lugar só.
+
+   "Recusa do servidor nunca pode ser silenciosa" — e um 403 seco faz a
+   pessoa achar que errou a senha ou que o sistema quebrou. Aqui ela lê o
+   que pode fazer e quem faz o resto. */
+export const RECUSA_SO_ACOMPANHA = {
+  erro: 'A Qualidade acompanha o checklist e exporta os relatórios; '
+    + 'quem preenche e avança as etapas é a operação (Logística, Expedição, '
+    + 'Faturamento, Controles Internos e Central de Notas).',
+  codigo: 'SETOR_SO_ACOMPANHA',
+};
 
 /* Quem pode executar cada passo.
 

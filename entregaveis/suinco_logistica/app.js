@@ -1889,6 +1889,7 @@ function renderTabAtual(){
     // refletir o estado atual do pátio — senão mostra a contagem de quando
     // a página abriu, que já mudou.
     case 'relatorios':
+      renderEscopoDosRelatorios();
       atualizarResumoFiltroRelatorio();
       // O campo de dia do relatório de devoluções abre já com o dia de hoje
       // preenchido — quem quiser outro dia troca; vazio nunca fica, porque o
@@ -9448,6 +9449,27 @@ async function exportarPdfFretes(){
         }))}
     </div>`;
   await exportarViaServidor(el, 'Administracao-de-Fretes', 'administracao-fretes');
+}
+
+/* QUAIS RELATÓRIOS ESTE SETOR VÊ (09/09/2026).
+
+   A Qualidade ganhou a aba Relatórios — nenhum outro setor de devolução
+   tem — porque o pedido era esse: "ela vai poder exportar relatorios". Mas
+   ele delimitou logo depois: "todos os relatorios que competem ao
+   CHECKLIST".
+
+   Então a aba abre com um card só: o Relatório de Devoluções. Operacional,
+   Executivo e Power BI são de pátio; Administração de Fretes carrega valor
+   de frete, que é de Logística e Administração. Esconder não é a trava —
+   o servidor recusa o valor de qualquer jeito (podeVerValorDeFrete) e
+   nenhum dado de frete chega ao navegador dela. Aqui é só não oferecer o
+   que não é dela, para a tela não virar um menu de coisas que dão erro. */
+function renderEscopoDosRelatorios(){
+  const setor = (DB.operador || {}).setor;
+  const soChecklist = soAcompanhaUI(setor);
+  document.querySelectorAll('#tab-relatorios [data-relatorio]').forEach(card => {
+    card.hidden = soChecklist && card.getAttribute('data-relatorio') !== 'checklist';
+  });
 }
 
 /* ---------- PLANILHA DE ADMINISTRAÇÃO DE FRETES (09/09/2026) ----------

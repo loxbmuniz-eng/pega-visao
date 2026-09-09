@@ -452,7 +452,27 @@ const SETOR_PERMISSOES = {
      servidor confere de novo o que cada um pode gravar. */
   'Controles Internos': ['devolucoes','historico'],
   'Central de Notas':   ['devolucoes','historico'],
+  /* QUALIDADE (09/09/2026) — acompanha e exporta, não escreve.
+
+     Pedido do dono, com as respostas dele às três perguntas: "qualidade so
+     acompanha e exporta relatorio" · "tambem ve a devolucao das filiais,
+     todos os relatorios que competem ao checklist".
+
+     TEM 'relatorios', que nenhum outro setor de devolução tem — é o ponto
+     do pedido. Mas dentro da aba ela vê SÓ o Relatório de Devoluções: o
+     Operacional e o Executivo são de pátio, e o de Administração de Fretes
+     carrega valor de frete, que é de Logística e Administração. Quem
+     esconde os três é renderRelatorios(); o servidor recusa o valor de
+     qualquer jeito (podeVerValorDeFrete). */
+  'Qualidade':    ['devolucoes','historico','relatorios'],
 };
+
+/* Gêmea de soAcompanha() em backend/src/dominio/fluxo.js — duplicada
+   porque o painel é build de arquivo único e não importa do servidor. O
+   teste testes/test_setor_qualidade.py compara as duas listas, para não
+   virar a sexta cópia divergente que o comentário de SETORES conta. */
+const SETORES_SO_ACOMPANHAM = ['Qualidade'];
+function soAcompanhaUI(setor){ return SETORES_SO_ACOMPANHAM.includes(setor); }
 
 // Função de cada aba, exibida no topo dela. Serve para quem abre o painel pela
 // primeira vez saber o que fazer ali sem depender de treinamento verbal.

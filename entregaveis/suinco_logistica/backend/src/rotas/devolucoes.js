@@ -13,7 +13,7 @@
 import { Router } from 'express';
 import { consultar, emTransacao } from '../banco.js';
 import { exigirLogin, exigirSetor } from '../middleware/auth.js';
-import { ehFilial, SETORES_FILIAL } from '../dominio/fluxo.js';
+import { ehFilial, SETORES_FILIAL, soAcompanha, RECUSA_SO_ACOMPANHA } from '../dominio/fluxo.js';
 import { emitir } from '../tempo-real.js';
 import { registrarLeitura } from '../servicos/registro_leitura.js';
 import {
@@ -247,6 +247,10 @@ rotasDevolucoes.get('/devolucoes', exigirLogin, async (req, res, next) => {
 
 rotasDevolucoes.post('/devolucoes', exigirLogin, async (req, res, next) => {
   try {
+    /* SÓ ACOMPANHA (09/09/2026). A Qualidade lê tudo e exporta; não
+       escreve nada. Explícito, e não deixado para a allowlist barrar por
+       omissão — ver SETORES_SO_ACOMPANHAM em dominio/fluxo.js. */
+    if (soAcompanha(req.operador.setor)) return res.status(403).json(RECUSA_SO_ACOMPANHA);
     const op = req.operador;
     if (!podeCriarDevolucao(op.setor)) {
       return res.status(403).json({
@@ -364,6 +368,10 @@ const CAMPOS_CABECALHO_PORTARIA = new Set([
 rotasDevolucoes.patch('/devolucoes/:id', exigirLogin, async (req, res, next) => {
   try {
     const op = req.operador;
+    /* SÓ ACOMPANHA (09/09/2026). A Qualidade lê tudo e exporta; não
+       escreve nada. Explícito, e não deixado para a allowlist barrar por
+       omissão — ver SETORES_SO_ACOMPANHAM em dominio/fluxo.js. */
+    if (soAcompanha(req.operador.setor)) return res.status(403).json(RECUSA_SO_ACOMPANHA);
     if (ehFilial(op.setor)) {
       const dono = await consultar(
         'SELECT criada_setor FROM devolucoes WHERE devolucao_id = $1 AND excluida_em IS NULL',
@@ -508,6 +516,10 @@ rotasDevolucoes.delete('/devolucoes/:id', exigirLogin, exigirSetor('Logística')
 rotasDevolucoes.post('/devolucoes/:id/etapa', exigirLogin, async (req, res, next) => {
   try {
     const op = req.operador;
+    /* SÓ ACOMPANHA (09/09/2026). A Qualidade lê tudo e exporta; não
+       escreve nada. Explícito, e não deixado para a allowlist barrar por
+       omissão — ver SETORES_SO_ACOMPANHAM em dominio/fluxo.js. */
+    if (soAcompanha(req.operador.setor)) return res.status(403).json(RECUSA_SO_ACOMPANHA);
     /* Filial não roda o ciclo — o dono foi explícito: "o processo de dev é
        feito aqui normalmente, porem as permissoes da filial sao restritas"
        a criar e acompanhar. A recusa é EXPLICADA, não um 403 seco: quem
@@ -702,6 +714,10 @@ rotasDevolucoes.post('/devolucoes/:id/itens', exigirLogin,
 rotasDevolucoes.patch('/devolucoes/:id/itens/:itemId', exigirLogin, async (req, res, next) => {
   try {
     const op = req.operador;
+    /* SÓ ACOMPANHA (09/09/2026). A Qualidade lê tudo e exporta; não
+       escreve nada. Explícito, e não deixado para a allowlist barrar por
+       omissão — ver SETORES_SO_ACOMPANHAM em dominio/fluxo.js. */
+    if (soAcompanha(req.operador.setor)) return res.status(403).json(RECUSA_SO_ACOMPANHA);
     if (ehFilial(op.setor)) {
       const dono = await consultar(
         'SELECT criada_setor FROM devolucoes WHERE devolucao_id = $1 AND excluida_em IS NULL',
