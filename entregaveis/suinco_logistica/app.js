@@ -8067,11 +8067,34 @@ async function exportarViaServidor(el, nomeDoRelatorio, tipo){
     URL.revokeObjectURL(url);
     notify('Relatório baixado.', 'success');
   }catch(e){
-    const semPermissao = /não gera este documento|DOCUMENTO_SEM_PERMISSAO/i.test(String(e && e.message || ''));
-    notify(semPermissao
-      ? 'Seu setor não gera este documento. Peça à Logística ou à Administração.'
-      : 'Não consegui gerar o relatório: ' + (e && e.message || 'erro desconhecido'),
-      'danger', 7000);
+    const msg = String(e && e.message || '');
+    const semPermissao = /não gera este documento|DOCUMENTO_SEM_PERMISSAO/i.test(msg);
+    /* RELATÓRIO NOVO, SERVIDOR ANTIGO — DIGA A VERDADE (09/09/2026).
+       =================================================================
+       A mensagem do servidor para documento fora do mapa é "Atualize a
+       página e tente de novo". Ela está certa para o caso que a escreveu
+       (aba velha em cache, sem o tipo novo no código do painel) e MENTE no
+       caso oposto: o painel está novo, o servidor é que não conhece o
+       documento ainda. Aí atualizar a página não resolve nada, e quem segue
+       o conselho tenta três vezes antes de pedir ajuda.
+
+       É a porta pela qual os incidentes de 25 e 26/08 chegaram: botão
+       publicado antes da rota. O portão passou a avisar da pendência, mas o
+       aviso vai para o dono — não para quem está com o dedo no botão.
+
+       Esta frase diz o que de fato aconteceu e o que destrava. Ela some
+       sozinha no dia em que o servidor subir: o documento passa a existir no
+       mapa e este galho nunca mais é percorrido. */
+    const servidorAtrasado = /DOCUMENTO_DESCONHECIDO|não está no mapa de permissões/i.test(msg);
+    notify(
+      semPermissao
+        ? 'Seu setor não gera este documento. Peça à Logística ou à Administração.'
+        : servidorAtrasado
+          ? 'Este relatório é novo e o SERVIDOR ainda não foi atualizado — '
+            + 'atualizar a página não resolve. Ele funciona depois que a atualização do '
+            + 'servidor rodar. Os outros relatórios continuam normais.'
+          : 'Não consegui gerar o relatório: ' + (msg || 'erro desconhecido'),
+      'danger', servidorAtrasado ? 12000 : 7000);
   }finally{
     limpar();
   }

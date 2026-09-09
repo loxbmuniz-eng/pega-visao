@@ -178,6 +178,45 @@ async def main():
             ck('e o dono é só a Logística (Administração entra por podeGerar)',
                donos == {'Logística'}, str(sorted(donos)))
 
+        print('\n=== 7. SERVIDOR ANTIGO: A MENSAGEM DIZ A VERDADE ===')
+        # Publicado antes do atualizar.sh, por decisão do dono ("publica o
+        # manobrista"). A recusa do servidor para documento fora do mapa é
+        # "Atualize a página e tente de novo" — certa para aba velha em
+        # cache, MENTIROSA aqui: o painel está novo, o servidor é que não
+        # conhece o documento. Quem segue o conselho tenta três vezes.
+        await pg.evaluate(seed('Logística'))
+        aviso = await pg.evaluate("""async () => {
+            const capturados = [];
+            const original = window.notify;
+            window.notify = (m,t,ms)=>{ capturados.push(String(m)); };
+            // Simula exatamente a recusa do servidor antigo.
+            const _chamar = SuincoSharePoint.gerarRelatorioPdf;
+            try {
+              await (async () => {
+                const e = new Error('Este documento não está no mapa de permissões. Atualize a página e tente de novo.');
+                e.codigo = 'DOCUMENTO_DESCONHECIDO';
+                throw e;
+              })();
+            } catch(e) {
+              // Reexecuta o MESMO tratamento que exportarViaServidor aplica.
+              const msg = String(e.message || '');
+              const servidorAtrasado = /DOCUMENTO_DESCONHECIDO|não está no mapa de permissões/i.test(msg);
+              window.notify(servidorAtrasado
+                ? 'Este relatório é novo e o SERVIDOR ainda não foi atualizado — atualizar a página não resolve.'
+                : msg, 'danger');
+            }
+            window.notify = original;
+            return capturados.join(' | ');
+        }""")
+        ck('a frase aponta para o SERVIDOR, não para a página',
+           'SERVIDOR' in aviso and 'não resolve' in aviso, aviso[:140])
+        # E a guarda de verdade: o tratamento existe no código publicado.
+        fonte = await pg.evaluate("() => exportarViaServidor.toString()")
+        ck('exportarViaServidor reconhece DOCUMENTO_DESCONHECIDO',
+           'DOCUMENTO_DESCONHECIDO' in fonte, fonte[:0])
+        ck('e não repete o conselho de atualizar a página nesse caso',
+           'atualizar a página não resolve' in fonte, fonte[:0])
+
         ck('nenhum erro de JavaScript', not erros, '; '.join(erros)[:300])
         await nav.close()
 
