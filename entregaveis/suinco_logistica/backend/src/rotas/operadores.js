@@ -13,7 +13,7 @@ import bcrypt from 'bcryptjs';
 import { consultar, emTransacao } from '../banco.js';
 import { exigirLogin, exigirSetor } from '../middleware/auth.js';
 import { SETORES } from '../config.js';
-import { emitir } from '../tempo-real.js';
+import { emitir, desconectarOperador } from '../tempo-real.js';
 
 export const rotasOperadores = Router();
 
@@ -218,6 +218,7 @@ rotasOperadores.patch('/operadores/:id', SO_ADMIN, async (req, res, next) => {
     );
     if (revoga) {
       console.log(`[seguranca] sessões de ${atual[0].email} revogadas por ${req.operador.nome}`);
+      desconectarOperador(id);   // o socket também cai, não só o HTTP
     }
 
     const oque = cols.filter((c) => c !== 'senha_hash');
@@ -345,6 +346,7 @@ rotasOperadores.post('/operadores/:id/mfa/resetar', SO_ADMIN, async (req, res, n
       alvo: rows[0].nome, por: req.operador.nome, motivo,
     });
     console.warn(`[seguranca] ${req.operador.nome} RESETOU o segundo fator de ${rows[0].email}: ${motivo}`);
+    desconectarOperador(id);
 
     return res.json({
       ok: true, operador: rows[0].nome,

@@ -41,8 +41,14 @@ function diaOu(hoje, v) {
   return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : hoje;
 }
 
-function hojeISO() {
-  return new Date().toISOString().slice(0, 10);
+/* "HOJE" É O DE SÃO PAULO, não o do relógio UTC do servidor (09/09/2026).
+   Entre 21h e meia-noite o servidor achava que já era amanhã e a tela da
+   manhã abria no dia errado — o mesmo erro do relatório de 14/08, agora do
+   lado do servidor. Exportada para o teste conferir. */
+export function hojeISO() {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date());
 }
 
 /* ---------------------------------------------------------------------

@@ -189,8 +189,17 @@
     <div class="funcao-aba" data-tab="programacao"></div>
     <div class="card">
       <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-fila"/></svg> Fila de Programados</div>
-      <div class="card-sub">Só as cargas programadas hoje. As de outros dias seguem na Torre de Controle.</div>
-      <div class="gap8" style="margin-bottom:12px">
+      <div class="card-sub">As cargas programadas para o dia escolhido. As de dias anteriores que ainda não têm veículo ficam listadas logo abaixo, até serem contratadas.</div>
+      <!-- FILA POR DIA (09/09/2026). Relato do dono: a carga programada ontem
+           e não contratada "some da programação" quando o dia vira. Ela
+           estava gravada e aparecia na Torre — mas para quem programa, sair
+           da Fila é sumir. Agora a Fila tem o dia, e as de dias anteriores
+           sem veículo ficam num bloco fixo abaixo, até ganhar placa. -->
+      <div class="gap8 fila-dia" style="margin-bottom:12px">
+        <button class="btn btn-sec btn-sm" onclick="mudarDiaFilaUI(-1)" title="Dia anterior">◀</button>
+        <input type="date" id="prog-fila-dia" onchange="mudarDiaFilaUI(this.value)" title="Fila de programados deste dia">
+        <button class="btn btn-sec btn-sm" onclick="mudarDiaFilaUI(1)" title="Dia seguinte">▶</button>
+        <button class="btn btn-sec btn-sm" onclick="mudarDiaFilaUI('hoje')">Hoje</button>
         <button class="btn btn-sec btn-sm" onclick="reordenarPorSequenciaUI()">↕️ Reordenar por Sequência</button>
       </div>
       <div class="aviso-inline no-print" id="prog-fila-outros-dias" hidden></div>
@@ -207,6 +216,17 @@
         </table>
       </div>
       <div class="empty-state" id="prog-fila-empty" data-icone="📋" hidden>Nenhuma carga programada aguardando chegada.</div>
+
+      <div id="prog-fila-anteriores" hidden>
+        <div class="card-title" style="margin-top:16px">⏳ Ainda sem veículo — programadas em dias anteriores</div>
+        <div class="card-sub">Não somem: continuam aqui, editáveis, até ganhar placa ou serem excluídas. Sequência e arrasto valem só dentro do dia de cada uma.</div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Seq.</th><th>Nº Carga</th><th>Veículo</th><th>Motorista</th><th>Rota</th><th>Peso (kg)</th><th>Palet.</th><th>Tipo de Operação</th><th class="no-print">Ação</th></tr></thead>
+            <tbody id="prog-fila-anteriores-tbody"></tbody>
+          </table>
+        </div>
+      </div>
     </div>
 
     <div class="card">

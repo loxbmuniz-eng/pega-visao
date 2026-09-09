@@ -47,7 +47,7 @@ export function assinarToken(operador) {
    COLUNA não existir (servidor ainda não atualizado), a requisição segue —
    caso contrário publicar o painel novo antes de rodar a migração derrubaria
    os cinco setores de uma vez. Qualquer outra falha barra. */
-async function sessaoAindaVale(id, versaoDoToken) {
+export async function sessaoAindaVale(id, versaoDoToken) {
   try {
     const { rows } = await consultar(
       'SELECT sessao_versao, ativo FROM operadores WHERE id = $1', [id]

@@ -690,6 +690,7 @@ const SuincoStore = {
     if(typeof SuincoSharePoint === 'undefined') return;
     // `_pendente` protege esta carga de ser sobrescrita pela sincronia
     // enquanto a gravação não confirmar. Ver regra 3 de fundirEstadoRemoto.
+    const jaPendente = !!carga._pendente;
     carga._pendente = true;
     const r = await SuincoSharePoint.upsert('cargas', 'Carga_ID', {
       Title: carga.numeroCarga || carga.id,
@@ -750,7 +751,14 @@ const SuincoStore = {
       Programado_Em: carga.aguardandoCarga ? null : (carga.programadoEm || null),
       // Atualizado_Em é o que decide quem vence quando dois setores mexem na
       // mesma carga. Sem ele a fusão não teria como comparar as versões.
-      Atualizado_Em: carga.atualizadoEm || nowISO()
+      Atualizado_Em: carga.atualizadoEm || nowISO(),
+      /* A VERSÃO QUE ESTE TERMINAL LEU (09/09/2026). O servidor tem bloqueio
+         otimista desde 2026-08 e o painel nunca mandava a versão — dois
+         terminais online editando a mesma carga era "o último grava por
+         cima", sem aviso (família da #16, entre terminais diferentes). Só
+         vai quando se conhece a versão e não há gravação desta carga ainda
+         em voo; sem ela o servidor grava sem checar, como a fila offline. */
+      Versao: (!jaPendente && Number.isFinite(Number(carga.versao))) ? Number(carga.versao) : undefined
     }, operador);
 
     /* Recusa de criação/edição avisada — generalização do achado da
@@ -767,6 +775,16 @@ const SuincoStore = {
        checava `r.recusado` e avisava — criação/edição não tinha o
        equivalente. */
     if(r && r.recusado){
+      /* CONFLITO DE VERSÃO: outro terminal gravou antes. O servidor devolve
+         a carga atual; ela entra no lugar da cópia velha, e o aviso pede
+         para conferir e refazer. Recusar sem recarregar deixaria a pessoa
+         tentando de novo com a mesma cópia velha, para sempre. */
+      if(r.codigo === 'CONFLITO_DE_VERSAO' && r.atual){
+        const nova = cargaDeLinhaRemota(r.atual);
+        if(nova){ Object.assign(carga, nova); delete carga._pendente; }
+        r.erro = (r.erro || 'Outro operador alterou esta carga enquanto você editava.')
+          + ' O painel recarregou a carga com o que está no servidor — confira e refaça a sua alteração.';
+      }
       /* Carga NUNCA confirmada pelo servidor (_nuncaConfirmada, marcada na
          criação) pode ser removida com segurança: ao contrário de uma
          edição — onde o servidor já tinha uma versão válida da carga antes
@@ -789,6 +807,9 @@ const SuincoStore = {
       if(_aoRecusarCarga) _aoRecusarCarga(carga, r.erro, eraCriacaoNuncaConfirmada, !!r.offline);
     } else if(r && r.enfileirado === false){
       delete carga._nuncaConfirmada;
+      // A versão nova volta na resposta do PATCH. Sem guardá-la, a PRÓXIMA
+      // edição deste mesmo terminal iria com a versão velha e levaria 409.
+      if(r.item && Number.isFinite(Number(r.item.versao))) carga.versao = Number(r.item.versao);
     }
 
     /* MUDANÇA DE STATUS VAI POR ROTA PRÓPRIA, e este bloco é a correção de
@@ -905,7 +926,9 @@ const SuincoStore = {
       Placa: frota.placa,
       Transportadora: frota.transportadora || '',
       Tipo_Veiculo: frota.tipoVeiculo || '',
-      Capacidade_Kg: frota.capacidadeKg || null,
+      // null ≠ zero: `|| null` apagava capacidade 0 (regra da casa; já aconteceu aqui)
+      Capacidade_Kg: (frota.capacidadeKg === null || frota.capacidadeKg === undefined || frota.capacidadeKg === '')
+        ? null : Number(frota.capacidadeKg),
       UF: frota.uf || '',
       Motorista: frota.motorista || '',
       Precisa_Revisao: !!frota.precisaRevisao
@@ -1074,6 +1097,7 @@ function fundirEstadoRemoto(dados){
       DB.movimentacoes.splice(i, 1);
     }
     DB.movimentacoes.push(mov); vistas.add(mov.id); res.movimentacoesNovas++;
+    invalidarIndiceMovimentacoes();   // splice + push mantém o tamanho — o índice não perceberia
   });
 
   // ---- frota (só na carga inicial; dimensão de leitura) ----
@@ -1219,6 +1243,7 @@ function cargaDeLinhaRemota(r){
        `atualizadoEm`: é exatamente essa confusão que fazia a Torre inteira
        exibir o mesmo horário depois de um eco de sincronização. */
     acaoEm: r.Acao_Em || null,
+    versao: Number.isFinite(Number(r.Versao)) ? Number(r.Versao) : null,
     acaoPor: r.Acao_Por || '',
     acaoSetor: r.Acao_Setor || '',
     excluida: r.Excluida === true
@@ -1616,8 +1641,38 @@ function registrarMovimentacao({cargaId, placa, statusAnterior, statusNovo, oper
 function snapshotCarga(c){
   return { cliente: c.cliente, motorista: c.motorista, tipoVeiculo: c.tipoVeiculo, qtdEntregas: c.qtdEntregas };
 }
+/* ÍNDICE cargaId → movimentações ordenadas (09/09/2026).
+
+   historicoDaCarga filtrava e ordenava TODAS as movimentações a cada
+   chamada — e indicadoresDaCarga a chama 5 vezes por carga, por render.
+   Medido: 300 cargas, 0,5 s na aba Indicadores; 1.500 cargas (6–8 semanas
+   de operação), 5,1 s a cada sincronia; 5.000 num navegador antigo, 59 s.
+   O painel congelava sozinho, sem ninguém mexer em nada.
+
+   Mesmo padrão do índice da Frota: reconstruído quando a lista troca de
+   identidade ou de tamanho. A sincronia troca movimentação por
+   movimentação (splice + push — MESMO tamanho), então quem faz isso chama
+   invalidarIndiceMovimentacoes() explicitamente. Resposta idêntica, custo
+   linear. */
+let _movIndice = null, _movIndiceRef = null, _movIndiceLen = -1;
+function invalidarIndiceMovimentacoes(){ _movIndice = null; _movIndiceRef = null; _movIndiceLen = -1; }
+function indiceMovimentacoes(){
+  if(_movIndice && _movIndiceRef === DB.movimentacoes && _movIndiceLen === DB.movimentacoes.length){
+    return _movIndice;
+  }
+  const m = new Map();
+  DB.movimentacoes.forEach(x => {
+    let lista = m.get(x.cargaId);
+    if(!lista){ lista = []; m.set(x.cargaId, lista); }
+    lista.push(x);
+  });
+  m.forEach(lista => lista.sort((a,b)=>new Date(a.timestamp)-new Date(b.timestamp)));
+  _movIndice = m; _movIndiceRef = DB.movimentacoes; _movIndiceLen = DB.movimentacoes.length;
+  return m;
+}
 function historicoDaCarga(cargaId){
-  return DB.movimentacoes.filter(m=>m.cargaId===cargaId).sort((a,b)=>new Date(a.timestamp)-new Date(b.timestamp));
+  const lista = indiceMovimentacoes().get(cargaId);
+  return lista ? lista.slice() : [];
 }
 /* A ÚLTIMA MUDANÇA DE ETAPA — a MESMA linha que o Histórico mostra.
 
@@ -1925,11 +1980,20 @@ function registrarChegadaPortaria(placa, operador){
     const d = new Date(base); if(isNaN(d)) return null;
     d.setHours(0,0,0,0); return d.getTime();
   };
+  /* O DIA DE REFERÊNCIA É O DA CARGA QUE ESTÁ CHEGANDO, não "hoje" (09/09/2026).
+     O servidor compara com o dia de programação da carga que chega
+     (`COALESCE($4, now())`); a tela comparava com o dia do relógio do
+     aparelho. Duas cargas programadas ontem à noite para hoje — rotina — e
+     a tela barrava a segunda entrada ("ontem < hoje") num caso em que o
+     servidor aceitaria ("ontem < ontem"). Regra escrita duas vezes tem que
+     ser a MESMA regra. Sem carga programada chegando, vale hoje, que é o
+     que o servidor faz com now(). */
   const hojeDia = (()=>{ const h = new Date(); h.setHours(0,0,0,0); return h.getTime(); })();
+  const diaDaChegada = paraAtualizar.map(diaDe).filter(d => d !== null).sort((a,b)=>a-b)[0] ?? hojeDia;
   const jaNoPatio = abertas.filter(c => {
     if(c.status === 'Aguardando Veículo') return false;
     const d = diaDe(c);
-    return d !== null && d < hojeDia;
+    return d !== null && d < diaDaChegada;
   });
 
   /* CAMINHÃO QUE NÃO SAIU NÃO CHEGA DE NOVO (19/08/2026).
