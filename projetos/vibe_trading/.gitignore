@@ -1,5 +1,0 @@
-__pycache__/
-*.pyc
-dossie.md
-*.csv
-!exemplos/*.csv
