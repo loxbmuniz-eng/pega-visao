@@ -3488,6 +3488,16 @@ function destinoFreteMudouUI(){
 
 function kmDeslocamentoMudouUI(){ avisarSobreKmUI(); }
 
+/* O mesmo gesto no modal de Completar. Dois pares de campos e uma conta só
+   (kmDoDestino) — o que NÃO se duplica é a decisão de quanto vale o km,
+   que é do servidor. */
+function destinoFreteCompletarUI(){
+  const km = kmDoDestino(document.getElementById('completar-frete-destino').value);
+  document.getElementById('completar-km-destino').value = km ?? '';
+  const desl = document.getElementById('completar-km-deslocamento');
+  if(km !== null && !desl.value) desl.value = km;
+}
+
 /* DIVERGÊNCIA É AVISO, NÃO ERRO. Desvio, retorno e coleta no caminho
    existem e são justamente o motivo de haver dois campos. O que não pode
    é a diferença passar despercebida: quem paga o frete precisa saber que
@@ -4814,6 +4824,9 @@ function abrirCompletar(id){
   document.getElementById('completar-paletizada').value = 'Não';
   document.getElementById('completar-ganchos').value = '0';
   document.getElementById('completar-entregas').value = '1';
+  document.getElementById('completar-frete-destino').value = c.freteDestino || '';
+  document.getElementById('completar-km-destino').value = c.kmDestino ?? '';
+  document.getElementById('completar-km-deslocamento').value = c.kmDeslocamento ?? '';
   document.getElementById('modal-completar').classList.add('open');
 }
 function fecharModalCompletar(){ document.getElementById('modal-completar').classList.remove('open'); }
@@ -4835,6 +4848,8 @@ function salvarCompletarCarga(){
       paletizada: document.getElementById('completar-paletizada').value,
       qtdGanchos: document.getElementById('completar-ganchos').value,
       qtdEntregas: document.getElementById('completar-entregas').value,
+      freteDestino: document.getElementById('completar-frete-destino').value,
+      kmDeslocamento: document.getElementById('completar-km-deslocamento').value,
       operador: nomeOperadorAtual()
     });
     fecharModalCompletar();

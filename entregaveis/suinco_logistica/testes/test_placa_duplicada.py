@@ -36,6 +36,11 @@ async def preencher_e_criar(pg, placa, numero, rota='500'):
     await pg.fill('#prog-numero-carga', numero)
     await pg.fill('#prog-peso', '9000')
     await pg.select_option('#prog-rota', rota)
+    # Contratar exige KM e observação desde 09/09/2026 — sem eles a recusa
+    # de KM chegaria ANTES da de placa duplicada e este teste passaria a
+    # medir a trava errada.
+    await pg.fill('#prog-km-deslocamento', '100')
+    await pg.fill('#prog-obs', 'carga de teste')
     await pg.evaluate("() => criarCargaProgramadaUI()")
     await pg.wait_for_timeout(500)
 
@@ -89,6 +94,10 @@ async def main():
         await pg.fill('#prog-numero-carga', 'DUP-3')
         await pg.fill('#prog-peso', '8000')
         await pg.select_option('#prog-rota', '501')      # rota DIFERENTE
+        # O formulário é limpo a cada criação bem-sucedida, então KM e
+        # observação precisam ser preenchidos de novo aqui.
+        await pg.fill('#prog-km-deslocamento', '100')
+        await pg.fill('#prog-obs', 'segunda carga deliberada')
         await pg.evaluate("() => criarCargaProgramadaUI()")
         await pg.wait_for_timeout(600)
         ck('segunda carga deliberada foi criada', await contar(pg, placa) == 2,

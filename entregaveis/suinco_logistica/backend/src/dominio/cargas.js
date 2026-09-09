@@ -465,15 +465,65 @@ export function numerosLivres(ocupados, quantos) {
   return livres;
 }
 
-/* Move `cargaId` para o NÚMERO `posicao` e reacomoda o resto da fila nos
-   números que sobraram, em ordem.
+/* O TABULEIRO DA FILA — os números que ela JÁ TEM (09/09/2026).
+   =====================================================================
+   RELATO DO DONO, em produção, no mesmo dia em que o arrastar entrou:
+   "tentei arrastar as cargas de hoje da torre de controle e não consegui,
+    o arrasto elas não trocam de lugar e aparece que essa ação é inválida".
 
-   `posicao` é o NÚMERO que a pessoa quer para a carga, não o índice da
-   linha: é o que ela digita no campo e o que lê na linha onde soltou. Se
-   esse número for de uma carga que já carregou, a operação é RECUSADA com
-   o motivo — nunca calada, e nunca roubando o número de um registro.
+   A CAUSA ERA UMA SUPOSIÇÃO MINHA. `numerosLivres` monta os primeiros N
+   números livres — o que descreve uma fila que ocupa 1,2,3... desviando só
+   de quem já carregou. O dia real não é assim: a Logística digita os
+   números ao longo da manhã e a Portaria chama o caminhão que CHEGOU, não
+   o próximo da lista. Sobra uma fila salteada, tipo 1, 7, 12.
 
-   Devolve `[{ id, sequencia }]` só das que MUDARAM de número. */
+     fila 1, 7, 12 · já carregaram 2, 3, 4
+     primeiros 3 livres = 1, 5, 6
+     soltar na linha que mostra 7 → 7 não está em [1,5,6] → recusado
+
+   E ATRÁS DISSO HAVIA UM PIOR: quando o número por acaso estava na lista
+   (soltar na linha 1), a operação era ACEITA e renumerava a fila de
+   1,7,12 para 1,5,6 — reescrevendo em silêncio números que uma pessoa
+   tinha digitado. O que o dono via era só a recusa; a renumeração calada
+   ainda ia aparecer depois, como número trocado sem ninguém ter mexido.
+
+   A REGRA CERTA, e é a que ele descreveu com "mantendo a logica e a
+   sequencia": os números que a fila tem são o TABULEIRO. Arrastar troca
+   quem ocupa cada casa; não inventa numeração nova.
+
+   NÚMERO NOVO SÓ ENTRA POR DUAS PORTAS, as duas explícitas:
+     · carga da fila que ainda não tem número nenhum — recebe um livre
+       ACIMA do maior, para não empurrar ninguém que já estava numerado;
+     · alguém DIGITA um número que não existe na fila (é o caso do campo
+       da Torre: "digitar 1 numa carga e já tiver uma como 1"). Aí a casa
+       nova entra e a que a carga deixou sai.
+
+   Número de quem já carregou nunca entra: aquilo é registro. */
+export function numerosDaFila(fila, ocupados = []) {
+  const reservados = new Set((ocupados || [])
+    .map(Number).filter((n) => Number.isInteger(n) && n >= 1));
+
+  /* Os números que a fila já usa. Fora os reservados: se uma carga da fila
+     estiver com o mesmo número de uma que já carregou (duplicata herdada
+     de antes da trava), o número é de quem carregou — e esta carga entra
+     como se não tivesse número, ganhando um novo no passo seguinte. */
+  const pool = [];
+  for (const c of fila) {
+    const n = Number(c.sequencia);
+    if (Number.isInteger(n) && n >= 1 && !reservados.has(n) && !pool.includes(n)) pool.push(n);
+  }
+  pool.sort((a, b) => a - b);
+
+  /* Falta número para alguém: completa ACIMA do maior, nunca por baixo.
+     Preencher os buracos de baixo mudaria o número de quem já estava
+     numerado — que é exatamente o defeito que esta função corrige. */
+  let proximo = pool.length ? pool[pool.length - 1] + 1 : 1;
+  while (pool.length < fila.length) {
+    if (!reservados.has(proximo)) pool.push(proximo);
+    proximo++;
+  }
+  return pool;
+}
 export function filaReordenada(fila, cargaId, posicao, ocupados = []) {
   const ids = fila.map((c) => String(c.id ?? c.carga_id));
   const de = ids.indexOf(String(cargaId));
@@ -481,10 +531,20 @@ export function filaReordenada(fila, cargaId, posicao, ocupados = []) {
   const alvo = Number(posicao);
   if (!Number.isInteger(alvo) || alvo < 1) return null;
 
-  const livres = numerosLivres(ocupados, ids.length);
-  const k = livres.indexOf(alvo);
-  if (k === -1) return null;   // o número não é da fila: ou passou do fim,
-                               // ou pertence a quem já carregou
+  /* O número pedido é de quem já carregou? Recusa — e a rota sabe dizer
+     qual das duas causas foi, porque `ocupados` chega até lá. */
+  const reservados = new Set((ocupados || [])
+    .map(Number).filter((n) => Number.isInteger(n) && n >= 1));
+  if (reservados.has(alvo)) return null;
+
+  /* SÓ AS CASAS QUE A FILA TEM. Número solto (999 numa fila de 3) continua
+     recusado — é decisão de 08/09, com teste próprio, e o relato de hoje
+     era sobre ARRASTAR, que sempre solta em cima de um número existente.
+     Alargar isso aqui consertaria o que ninguém pediu e apagaria a decisão
+     de ontem de quebra. */
+  const casas = numerosDaFila(fila, ocupados);
+  const k = casas.indexOf(alvo);
+  if (k === -1) return null;
 
   const nova = ids.slice();
   nova.splice(de, 1);
@@ -493,7 +553,7 @@ export function filaReordenada(fila, cargaId, posicao, ocupados = []) {
   const antes = new Map(fila.map((c) => [String(c.id ?? c.carga_id), c.sequencia]));
   const mudou = [];
   nova.forEach((id, i) => {
-    const seq = livres[i];
+    const seq = casas[i];
     if (antes.get(id) !== seq) mudou.push({ id, sequencia: seq });
   });
   return mudou;

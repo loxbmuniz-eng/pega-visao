@@ -2274,7 +2274,7 @@ function registrarChegadaPortaria(placa, operador){
 // Embarque" (o caminhão já está fisicamente no pátio) — então isto é só
 // edição de dados, e por isso NÃO gera linha no log de movimentações
 // (log só registra mudança de STATUS).
-function completarCargaAguardando(cargaId, {numeroCarga, cliente, destino, produto, peso, doca, rota, sequencia, observacoes, transportadora, tipoVeiculo, motorista, praOnde, paletizada, qtdGanchos, qtdEntregas, operador}){
+function completarCargaAguardando(cargaId, {numeroCarga, cliente, destino, produto, peso, doca, rota, sequencia, observacoes, transportadora, tipoVeiculo, motorista, praOnde, paletizada, qtdGanchos, qtdEntregas, freteDestino, kmDeslocamento, operador}){
   const c = getCarga(cargaId);
   if(!c) throw new Error('Carga não encontrada');
   if(!c.aguardandoCarga) throw new Error('Esta carga não está aguardando dados (Aguardando Carga).');
@@ -2282,6 +2282,14 @@ function completarCargaAguardando(cargaId, {numeroCarga, cliente, destino, produ
   c.doca = doca||''; c.sequencia = sequencia!==undefined && sequencia!=='' ? Number(sequencia) : null;
   c.observacoes = observacoes||'';
   c.motorista = motorista||'';
+  /* FRETE no lançamento do caminhão que já está no pátio (09/09/2026).
+
+     `!== undefined` e não `|| ''`: o modal pode não mandar o campo (painel
+     em versão antiga), e nesse caso o que já está gravado tem que ficar.
+     Campo vazio não é ordem de apagar. */
+  if(freteDestino !== undefined) c.freteDestino = String(freteDestino||'').trim().toUpperCase();
+  if(kmDeslocamento !== undefined) c.kmDeslocamento = kmValidoLocal(kmDeslocamento);
+  if(c.freteDestino) c.kmDestino = kmDoDestino(c.freteDestino);
   c.praOnde = PRA_ONDE_OPCOES.includes(praOnde) ? praOnde : PRA_ONDE_PADRAO;
   c.rota = rotaInfo(rota) ? String(rota).trim() : '';
   c.paletizada = paletizada === 'Sim' || paletizada === true ? 'Sim' : 'Não';

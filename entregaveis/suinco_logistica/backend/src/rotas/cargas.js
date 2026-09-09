@@ -7,7 +7,7 @@ import { programacaoAtual } from '../dominio/programacoes.js';
 import {
   COLUNAS_CARGA, paraPainel, saneiarCriacao, saneiarCriacaoChegadaSemProgramacao,
   saneiarEdicao, normalizarPlaca, idSeguro, camposDeAviso,
-  podeSequenciar, filaReordenada, STATUS_QUE_AINDA_CARREGAM, paraPainelPara,
+  podeSequenciar, filaReordenada, numerosDaFila, STATUS_QUE_AINDA_CARREGAM, paraPainelPara,
 } from '../dominio/cargas.js';
 import {
   validarTransicao, podeCriarCarga, podeRegistrarChegadaSemProgramacao,
@@ -20,6 +20,15 @@ import {
 import { calcularFrete, faltaParaContratar, kmValido } from '../dominio/frete.js';
 
 export const rotasCargas = Router();
+
+/* "1, 7 e 12" — do jeito que uma pessoa escreve, não "1,7,12".
+   A mensagem é lida por quem está no pátio com o caminhão na frente. */
+function listaEmPortugues(ns) {
+  const v = (ns || []).map(Number).filter(Number.isFinite);
+  if (!v.length) return '';
+  if (v.length === 1) return String(v[0]);
+  return `${v.slice(0, -1).join(', ')} e ${v[v.length - 1]}`;
+}
 
 export function novoId(prefixo) {
   return `${prefixo}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
@@ -1095,7 +1104,9 @@ rotasCargas.post('/cargas/sequenciar', exigirLogin, async (req, res, next) => {
       const ocupados = fora.map((r) => r.sequencia);
 
       const mudancas = filaReordenada(fila, cargaId, posicao, ocupados);
-      if (mudancas === null) return { posicaoInvalida: fila.length, ocupados };
+      if (mudancas === null) {
+        return { posicaoInvalida: fila.length, ocupados, casas: numerosDaFila(fila, ocupados) };
+      }
 
       for (const m of mudancas) {
         await cli.query(
@@ -1138,10 +1149,22 @@ rotasCargas.post('/cargas/sequenciar', exigirLogin, async (req, res, next) => {
            carregou" são coisas distintas, e quem está reordenando precisa
            saber qual das duas aconteceu para saber o que fazer. Uma frase
            só para as duas seria negar sem ensinar o caminho. */
+        /* TRÊS RECUSAS DIFERENTES, TRÊS EXPLICAÇÕES DIFERENTES.
+
+           A terceira nasceu do relato de 09/09 ("aparece que essa ação é
+           inválida"): quando a fila tem números salteados — 1, 7, 12 — a
+           frase "a fila tem 3 cargas" não explica nada. O operador vê o 5
+           ser recusado sendo menor que o 12, tenta o 4, tenta o 6, e conclui
+           que o campo está quebrado. Dizer QUAIS casas existem é o que
+           transforma a negativa em instrução. */
         erro: (resultado.ocupados || []).map(Number).includes(Number(req.body?.posicao))
           ? `O número ${Number(req.body?.posicao)} é de uma carga que já carregou — esse número não volta para a fila. Escolha outro.`
-          : `Posição inválida. A fila do dia tem ${resultado.posicaoInvalida} carga(s) esperando para carregar.`,
+          : (resultado.casas || []).length
+            ? `Posição inválida. As casas desta fila são ${listaEmPortugues(resultado.casas)} `
+              + `— arraste a carga para a linha que você quer, ou digite um desses números.`
+            : `Posição inválida. A fila do dia tem ${resultado.posicaoInvalida} carga(s) esperando para carregar.`,
         codigo: 'POSICAO_INVALIDA',
+        casas: resultado.casas || [],
       });
     }
 

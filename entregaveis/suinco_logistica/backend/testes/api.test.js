@@ -5378,3 +5378,164 @@ describe('42. Tabela de frete: o valor sai da conta, e sem KM não se contrata (
     await pool.query("DELETE FROM frete_destinos WHERE destino = 'PATOS DE MINAS'");
   });
 });
+
+describe('43. Arrastar respeita os números que a fila JÁ TEM (09/09/2026)', () => {
+  /* RELATO DO DONO, em produção, hoje: "tentei arrastar as cargas de hoje
+     da torre de controle e não consegui, o arrasto elas não trocam de
+     lugar e aparece que essa ação é inválida".
+
+     REPRODUZIDO, e a causa é uma conta minha, de ontem. `filaReordenada`
+     montava o destino a partir dos PRIMEIROS N NÚMEROS LIVRES — como se a
+     fila sempre ocupasse 1,2,3... pulando só o que já carregou. No dia
+     real ela não ocupa: a Logística digita os números ao longo do dia e a
+     Portaria chama o caminhão que chegou, não o próximo da lista. Sobra
+     uma fila tipo 1, 7, 12.
+
+       fila 1, 7, 12 · já carregaram 2, 3, 4
+       primeiros 3 livres = 1, 5, 6
+       soltar em cima da linha que mostra 7  →  7 não está em [1,5,6]
+                                             →  RECUSADO, "ação inválida"
+
+     E o pior estava escondido atrás disso: quando por acaso o número
+     ESTAVA na lista (soltar na linha 1), a operação era aceita e
+     RENUMERAVA a fila de 1,7,12 para 1,5,6 — reescrevendo em silêncio
+     números que a Logística tinha digitado.
+
+     A REGRA CERTA: os números que a fila já tem são o tabuleiro. Arrastar
+     REORDENA quem ocupa cada número; não inventa numeração nova. Número
+     novo só entra para carga que ainda não tem nenhum. É o que o dono
+     pediu com "mantendo a logica e a sequencia". */
+  /* SEIS PLACAS NOVAS POR CENÁRIO. Reusar as mesmas faria o segundo
+     cenário esbarrar na trava de 19/08 ("caminhão que não saiu não chega de
+     novo") — que está certa e não é o assunto aqui. */
+  let proximaPlaca = 120;
+  async function seisPlacas() {
+    const { rows } = await pool.query(
+      `SELECT placa FROM dim_veiculos WHERE transportadora <> ''
+        ORDER BY placa OFFSET $1 LIMIT 6`, [proximaPlaca]);
+    proximaPlaca += 6;
+    return rows.map((r) => r.placa);
+  }
+
+  /* Monta um dia com a forma do relato: seis cargas, três já carregaram
+     segurando 2, 3 e 4, e a fila fica com 1, 7 e 12.
+
+     CADA CENÁRIO NUM DIA PRÓPRIO. A fila que o servidor monta é a do DIA da
+     carga arrastada, e outros blocos desta bateria deixam cargas em aberto
+     no dia de hoje — elas entrariam na mesma fila e o teste passaria a medir
+     um tabuleiro que não é o que ele montou (a causa nº 3 das quatro do
+     vermelho: contaminação entre suítes). Um dia por cenário isola. */
+  let diaSeq = 0;
+  async function montarDia(prefixo) {
+    const placas = await seisPlacas();
+    const ids = [];
+    for (let i = 0; i < 6; i++) {
+      const r = await req('/api/cargas', { metodo: 'POST', token: tokens['Logística'], corpo: {
+        placa: placas[i], numeroCarga: `${prefixo}-${i}-${Date.now()}`,
+      } });
+      assert.equal(r.status, 201, r.texto);
+      ids.push(r.json.id);
+    }
+    // Três saem da fila (Embarque Iniciado) e ficam com 2, 3, 4.
+    for (let i = 0; i < 3; i++) {
+      for (const [status, setor] of [['Aguardando Embarque', 'Portaria'], ['Embarque Iniciado', 'Expedição']]) {
+        const r = await req(`/api/cargas/${ids[i]}/status`, { metodo: 'POST', token: tokens[setor],
+          corpo: { status, confirmado: true } });
+        assert.equal(r.status, 200, `${status}: ${r.texto}`);
+      }
+    }
+    /* O dia próprio e os números, na MESMA escrita e DEPOIS de as etapas
+       terem andado — a rota de status carimba `programado_em` no
+       lançamento, e gravar antes seria desfeito por ela. */
+    diaSeq += 1;
+    const numeros = [2, 3, 4, 1, 7, 12];
+    for (let i = 0; i < 6; i++) {
+      await pool.query(
+        `UPDATE fact_viagens SET sequencia = $1,
+           programado_em = date_trunc('day', now()) - ($2 || ' days')::interval + interval '9 hours'
+         WHERE carga_id = $3`,
+        [numeros[i], String(200 + diaSeq), ids[i]]);
+    }
+    return { ids, fila: ids.slice(3) };  // fila = os que ainda vão carregar: 1, 7, 12
+  }
+
+  async function seqDe(ids) {
+    const { rows } = await pool.query(
+      'SELECT carga_id, sequencia FROM fact_viagens WHERE carga_id = ANY($1)', [ids]);
+    const m = new Map(rows.map((r) => [r.carga_id, r.sequencia]));
+    return ids.map((id) => m.get(id));
+  }
+
+  test('soltar em cima de um número que a fila TEM funciona — mesmo salteado', async () => {
+    const { fila } = await montarDia('ARR-A');
+    // fila: [1, 7, 12]. Arrasta a de 12 para cima da linha que mostra 7.
+    const r = await req('/api/cargas/sequenciar', { metodo: 'POST', token: tokens['Logística'],
+      corpo: { cargaId: fila[2], posicao: 7 } });
+    assert.equal(r.status, 200, r.texto);
+    assert.deepEqual(await seqDe(fila), [1, 12, 7],
+      'quem estava em 12 assume o 7; quem estava em 7 desce para o 12');
+  });
+
+  test('e NÃO reescreve os números que a Logística digitou', async () => {
+    const { fila } = await montarDia('ARR-B');
+    const r = await req('/api/cargas/sequenciar', { metodo: 'POST', token: tokens['Logística'],
+      corpo: { cargaId: fila[2], posicao: 1 } });
+    assert.equal(r.status, 200, r.texto);
+    const depois = await seqDe(fila);
+    assert.deepEqual([...depois].sort((a, b) => a - b), [1, 7, 12],
+      'o conjunto de números da fila é o mesmo — arrastar reordena, não renumera');
+    assert.deepEqual(depois, [7, 12, 1], 'a arrastada foi para o 1 e as outras subiram uma casa');
+  });
+
+  test('os números de quem já carregou continuam intocados', async () => {
+    const { ids, fila } = await montarDia('ARR-C');
+    await req('/api/cargas/sequenciar', { metodo: 'POST', token: tokens['Logística'],
+      corpo: { cargaId: fila[2], posicao: 7 } });
+    assert.deepEqual(await seqDe(ids.slice(0, 3)), [2, 3, 4],
+      'carga que já carregou é registro do que aconteceu');
+  });
+
+  test('pedir o número de quem já carregou continua recusado, com o motivo', async () => {
+    const { fila } = await montarDia('ARR-D');
+    const r = await req('/api/cargas/sequenciar', { metodo: 'POST', token: tokens['Logística'],
+      corpo: { cargaId: fila[2], posicao: 3 } });
+    assert.equal(r.status, 400, r.texto);
+    assert.equal(r.json.codigo, 'POSICAO_INVALIDA');
+    assert.match(r.json.erro, /já carregou/, 'a recusa diz QUAL das duas causas foi');
+  });
+
+  test('carga da fila SEM número recebe um livre, sem tomar o de ninguém', async () => {
+    const { fila } = await montarDia('ARR-E');
+    await pool.query('UPDATE fact_viagens SET sequencia = NULL WHERE carga_id = $1', [fila[1]]);
+    // fila agora: 1, (sem número), 12
+    const r = await req('/api/cargas/sequenciar', { metodo: 'POST', token: tokens['Logística'],
+      corpo: { cargaId: fila[2], posicao: 1 } });
+    assert.equal(r.status, 200, r.texto);
+    const depois = await seqDe(fila);
+    assert.equal(depois[2], 1, 'a arrastada foi para o 1');
+    assert.equal(new Set(depois).size, 3, 'ninguém ficou com número repetido');
+    assert.ok(depois.every((n) => ![2, 3, 4].includes(n)),
+      'e ninguém tomou o número de quem já carregou');
+  });
+
+  test('número solto, fora das casas da fila, CONTINUA recusado — e a recusa diz quais valem', async () => {
+    /* Decisão de 08/09, com teste próprio no bloco 7d: a fila tem casas, e
+       999 numa fila de 3 não é uma delas. O relato de hoje era sobre
+       ARRASTAR, que solta sempre em cima de um número que existe — alargar
+       a regra aqui consertaria o que ninguém pediu e apagaria a decisão de
+       ontem junto.
+
+       O QUE MUDA É A FRASE. "A fila tem 3 cargas" não explica por que 5 é
+       inválido quando as casas são 1, 7 e 12: o número é menor que o maior
+       e mesmo assim não serve. Agora a recusa DIZ quais são as casas — sem
+       isso o operador tenta 4, tenta 6, e conclui que o campo está quebrado. */
+    const { fila } = await montarDia('ARR-F');
+    const r = await req('/api/cargas/sequenciar', { metodo: 'POST', token: tokens['Logística'],
+      corpo: { cargaId: fila[2], posicao: 5 } });
+    assert.equal(r.status, 400, r.texto);
+    assert.equal(r.json.codigo, 'POSICAO_INVALIDA');
+    assert.match(r.json.erro, /1, 7 e 12|1, 7, 12/,
+      `a recusa precisa dizer quais números valem: ${r.json.erro}`);
+    assert.deepEqual(await seqDe(fila), [1, 7, 12], 'e nada foi renumerado');
+  });
+});

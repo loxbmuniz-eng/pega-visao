@@ -1756,6 +1756,38 @@
     <div class="form-row">
       <div class="form-group"><label>Peso (kg)</label><input type="number" id="completar-peso" min="0"></div>
     </div>
+    <!-- FRETE, também aqui (09/09/2026). Os mesmos três campos, na mesma
+         ordem — a regra do card acima vale: quem mexe numa tela mexe na
+         outra, e existe teste que reprova se divergirem.
+
+         AQUI NÃO TRAVA. O caminhão JÁ ESTÁ no pátio: a placa foi digitada
+         pela Portaria na chegada, então este lançamento não é o ato de
+         contratar, e o servidor não exige (a trava é a passagem de "sem
+         placa" para "com placa"). Travar uma carga de caminhão que já
+         encostou seria literalmente caminhão parado no portão.
+
+         O campo existe para o KM ser informado NA HORA em que alguém sabe
+         dele. Se ficar vazio, o relatório de fretes mostra a linha com o
+         motivo escrito ("Sem KM de deslocamento") em vez de uma célula
+         muda — visível para a Administração completar, e não um zero
+         silencioso. -->
+    <div class="form-row">
+      <div class="form-group" style="flex:2">
+        <label>Destino do frete <span class="hint">(puxa o KM da tabela)</span></label>
+        <input type="text" id="completar-frete-destino" list="lista-destinos-frete"
+               placeholder="Ex: GOIANIA" oninput="destinoFreteCompletarUI()">
+      </div>
+      <div class="form-group">
+        <label>KM destino <span class="hint">referência da tabela</span></label>
+        <input type="number" id="completar-km-destino" min="1" step="1" readonly
+               title="Vem da Tabela de Frete. Só de leitura: para mudar, edite o destino em Cadastros.">
+      </div>
+      <div class="form-group">
+        <label>KM deslocamento <span class="hint">o que será pago</span></label>
+        <input type="number" id="completar-km-deslocamento" min="1" step="1"
+               title="O KM que multiplica a tarifa. Diferente do KM do destino quando há desvio, retorno ou coleta no caminho.">
+      </div>
+    </div>
     <div class="form-row">
       <div class="form-group">
         <label>Sequência <span class="hint">(prioridade de montagem do dia)</span></label>
