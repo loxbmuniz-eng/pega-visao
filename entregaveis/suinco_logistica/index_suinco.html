@@ -100,18 +100,18 @@
      usuário (08/08/2026): "ao inves de ser uma barra de rolagem pro lado
      na tela que seja um atalho na esquerda que abre um menu". -->
 <div id="menu-overlay" onclick="fecharMenuMobile()"></div>
-<div id="nav">
-  <div class="nav-tab active" data-tab="torre" onclick="abrirTab('torre')"><svg class="ico" aria-hidden="true"><use href="#i-torre"/></svg> Torre de Controle</div>
-  <div class="nav-tab" data-tab="programacao" onclick="abrirTab('programacao')"><svg class="ico" aria-hidden="true"><use href="#i-programacao"/></svg> Programação</div>
-  <div class="nav-tab" data-tab="devolucoes" onclick="abrirTab('devolucoes')"><svg class="ico" aria-hidden="true"><use href="#i-devolucoes"/></svg> Devoluções</div>
-  <div class="nav-tab" data-tab="portaria" onclick="abrirTab('portaria')"><svg class="ico" aria-hidden="true"><use href="#i-portaria"/></svg> Portaria</div>
-  <div class="nav-tab" data-tab="expedicao" onclick="abrirTab('expedicao')"><svg class="ico" aria-hidden="true"><use href="#i-expedicao"/></svg> Expedição</div>
-  <div class="nav-tab" data-tab="faturamento" onclick="abrirTab('faturamento')"><svg class="ico" aria-hidden="true"><use href="#i-faturamento"/></svg> Faturamento</div>
-  <div class="nav-tab" data-tab="indicadores" onclick="abrirTab('indicadores')"><svg class="ico" aria-hidden="true"><use href="#i-indicadores"/></svg> Indicadores</div>
-  <div class="nav-tab" data-tab="cadastros" onclick="abrirTab('cadastros')"><svg class="ico" aria-hidden="true"><use href="#i-cadastros"/></svg> Cadastros</div>
-  <div class="nav-tab" data-tab="historico" onclick="abrirTab('historico')"><svg class="ico" aria-hidden="true"><use href="#i-historico"/></svg> Histórico</div>
-  <div class="nav-tab" data-tab="relatorios" onclick="abrirTab('relatorios')"><svg class="ico" aria-hidden="true"><use href="#i-relatorios"/></svg> Relatórios</div>
-  <div class="nav-tab" data-tab="usuarios" onclick="abrirTab('usuarios')"><svg class="ico" aria-hidden="true"><use href="#i-usuarios"/></svg> Usuários</div>
+<div id="nav" role="tablist" aria-label="Abas do painel">
+  <div class="nav-tab active" role="tab" tabindex="0" aria-selected="true" data-tab="torre" onclick="abrirTab('torre')"><svg class="ico" aria-hidden="true"><use href="#i-torre"/></svg> Torre de Controle</div>
+  <div class="nav-tab" role="tab" tabindex="0" aria-selected="false" data-tab="programacao" onclick="abrirTab('programacao')"><svg class="ico" aria-hidden="true"><use href="#i-programacao"/></svg> Programação</div>
+  <div class="nav-tab" role="tab" tabindex="0" aria-selected="false" data-tab="devolucoes" onclick="abrirTab('devolucoes')"><svg class="ico" aria-hidden="true"><use href="#i-devolucoes"/></svg> Devoluções</div>
+  <div class="nav-tab" role="tab" tabindex="0" aria-selected="false" data-tab="portaria" onclick="abrirTab('portaria')"><svg class="ico" aria-hidden="true"><use href="#i-portaria"/></svg> Portaria</div>
+  <div class="nav-tab" role="tab" tabindex="0" aria-selected="false" data-tab="expedicao" onclick="abrirTab('expedicao')"><svg class="ico" aria-hidden="true"><use href="#i-expedicao"/></svg> Expedição</div>
+  <div class="nav-tab" role="tab" tabindex="0" aria-selected="false" data-tab="faturamento" onclick="abrirTab('faturamento')"><svg class="ico" aria-hidden="true"><use href="#i-faturamento"/></svg> Faturamento</div>
+  <div class="nav-tab" role="tab" tabindex="0" aria-selected="false" data-tab="indicadores" onclick="abrirTab('indicadores')"><svg class="ico" aria-hidden="true"><use href="#i-indicadores"/></svg> Indicadores</div>
+  <div class="nav-tab" role="tab" tabindex="0" aria-selected="false" data-tab="cadastros" onclick="abrirTab('cadastros')"><svg class="ico" aria-hidden="true"><use href="#i-cadastros"/></svg> Cadastros</div>
+  <div class="nav-tab" role="tab" tabindex="0" aria-selected="false" data-tab="historico" onclick="abrirTab('historico')"><svg class="ico" aria-hidden="true"><use href="#i-historico"/></svg> Histórico</div>
+  <div class="nav-tab" role="tab" tabindex="0" aria-selected="false" data-tab="relatorios" onclick="abrirTab('relatorios')"><svg class="ico" aria-hidden="true"><use href="#i-relatorios"/></svg> Relatórios</div>
+  <div class="nav-tab" role="tab" tabindex="0" aria-selected="false" data-tab="usuarios" onclick="abrirTab('usuarios')"><svg class="ico" aria-hidden="true"><use href="#i-usuarios"/></svg> Usuários</div>
 </div>
 
 <!-- ===================== MAIN ===================== -->

@@ -1844,7 +1844,8 @@ function irParaTab(tab){
   const page = document.getElementById('tab-'+tab);
   const navBtn = document.querySelector(`.nav-tab[data-tab="${tab}"]`);
   if(page) page.classList.add('active');
-  if(navBtn) navBtn.classList.add('active');
+  document.querySelectorAll('.nav-tab').forEach(el=>el.setAttribute('aria-selected','false'));
+  if(navBtn){ navBtn.classList.add('active'); navBtn.setAttribute('aria-selected','true'); }
   TAB_ATUAL = tab;
   atualizarAvisoSetorAba();
   renderTabAtual();
@@ -5893,6 +5894,7 @@ function renderIndicadores(){
 
   let html = campos.map(f=>caixaTempo(f, labels[f])).join('');
   html += caixaTempo('leadTimeTotal', 'Lead Time Total', 'criação da carga → Seguiu Viagem');
+  html += notaDescarteHtml(concluidas);
   document.getElementById('ind-stats').innerHTML = html;
 
   renderRaioX();
@@ -5914,7 +5916,8 @@ function renderComparacaoPeriodos(){
     { key:'tempoPatioTotal',          label:'Tempo em Pátio (total)' },
     { key:'leadTimeTotal',            label:'Lead Time Total' }
   ];
-  const porPeriodo = PERIODOS_INDICADOR.map(p => ({ periodo:p, dados: indicadoresPorPeriodo(p.key) }));
+  // Passa o filtro do topo: a nota "só este recorte" precisa valer aqui também.
+  const porPeriodo = PERIODOS_INDICADOR.map(p => ({ periodo:p, dados: indicadoresPorPeriodo(p.key, filtroIndicadoresAtivo() ? FILTRO_IND : null) }));
   const tbody = document.getElementById('ind-periodos-tbody');
   tbody.innerHTML = linhasDef.map(linha=>{
     const celulas = porPeriodo.map(({dados})=>{
@@ -7183,15 +7186,8 @@ async function relatorioDaCargaUI(cargaId){
      criadoEm     — quando o REGISTRO nasceu
      programadoEm — quando a CARGA foi lançada/programada
      entrada      — quando o CAMINHÃO encostou (esta função) */
-function entradaNoPatioDe(c){
-  if(!c) return null;
-  const ev = primeiroTimestamp(c.id, 'Aguardando Embarque');
-  if(ev) return ev;
-  /* Entrada registrada pela Portaria sem programação: a linha nasce no
-     instante da chegada, então aí — e só aí — criadoEm é a entrada. */
-  if(c.aguardandoCarga) return c.criadoEm || null;
-  return null;
-}
+/* entradaNoPatioDe() mora em data.js desde 09/09/2026 — a Torre, o PDF
+   Executivo e a reconciliação da Portaria usam a mesma definição. */
 
 /* O QUE APARECE QUANDO A LINHA DO HISTÓRICO ABRE.
 
@@ -8351,11 +8347,13 @@ async function exportarPdfExecutivo(){
      — essa lista é cortada em dez para caber na folha, e um indicador que
      empaca em "10" quando há quinze cargas travadas engana justamente no
      dia em que o gestor mais precisa dele. */
+  /* Pela CHEGADA, pela mesma função da lista de Gargalos (data.js). Contar
+     por atualizadoEm imprimia "0 Paradas Além da Meta" com um caminhão
+     parado 17h47 — duas linhas acima da timeline que mostrava a chegada
+     às 06:00. Auditoria de 09/09/2026. */
   const metaPatio = metaTempoPatio();
-  const agoraMs = Date.now();
-  const paradasAlemDaMeta = abertas.filter(c =>
-    (agoraMs - (Date.parse(c.atualizadoEm || c.criadoEm) || agoraMs)) / 60000 > metaPatio
-  ).length;
+  const paradas = paradasAlemDaMeta(abertas);
+  const paradasAlemDaMeta_ = paradas.total;
 
   el.innerHTML = `
     <div class="print-page doc-normal">
@@ -8396,7 +8394,7 @@ async function exportarPdfExecutivo(){
       <div class="print-bloco-tit">1 · O que exige ação agora</div>
 
       <div class="grid4" style="margin-bottom:18px">
-        <div class="stat-box"><div class="stat-num">${paradasAlemDaMeta}</div><div class="stat-label">Paradas Além da Meta</div></div>
+        <div class="stat-box"><div class="stat-num">${paradasAlemDaMeta_}</div><div class="stat-label">Paradas Além da Meta</div></div>
         <div class="stat-box"><div class="stat-num">${aguardandoDados.length}</div><div class="stat-label">Aguardando Dados da Carga</div></div>
         <div class="stat-box"><div class="stat-num">${abertas.length}</div><div class="stat-label">Cargas em Aberto</div></div>
         <div class="stat-box"><div class="stat-num">${fmtDuracao(nHoje?Math.round(somaHoje/nHoje):null)}</div><div class="stat-label">Lead Time Médio (período)</div></div>
@@ -8675,6 +8673,17 @@ async function init(){
   renderAll();
 }
 document.addEventListener('DOMContentLoaded', init);
+/* AS ABAS EXISTEM PARA O TECLADO (09/09/2026). Eram <div onclick> sem
+   tabindex: o Tab pulava do cabeçalho direto para a tabela, e um gestor de
+   mesa não trocava de aba sem mouse. Enter e Espaço fazem o que o clique
+   faz; o anel de foco é o :focus-visible global. */
+document.addEventListener('keydown', (ev) => {
+  if(ev.key !== 'Enter' && ev.key !== ' ') return;
+  const aba = ev.target && ev.target.closest && ev.target.closest('.nav-tab[data-tab]');
+  if(!aba) return;
+  ev.preventDefault();
+  abrirTab(aba.dataset.tab);
+});
 
 /* =====================================================================
    TEMPO MÉDIO DE PÁTIO, GARGALOS E RELATÓRIOS FILTRADOS
@@ -8721,7 +8730,20 @@ function renderTempoMedioPatio(){
   wrap.innerHTML = `<div class="grid4">
       ${caixa(t, 'Tempo Médio de Pátio — ' + ((ROTULO_PERIODO_IND[periodo] || 'hoje').toLowerCase()), 'Chegada até a saída')}
       ${caixa(geral, 'Tempo Médio de Pátio — histórico', 'Todas as cargas concluídas')}
-    </div>`;
+    </div>${notaDescarteHtml(filtrarPorFiltroIndicadores(DB.cargas.filter(c=>c.status==='Seguiu Viagem')))}`;
+}
+
+/* A NOTA DO QUE FICOU FORA DA CONTA (09/09/2026). Sai do cálculo, fica na
+   tela. Sem isto o gestor não tem como saber que uma média de 3h00 foi
+   calculada com 4 cargas e não 5 — e a quinta é justamente a que alguém
+   precisa corrigir. */
+function notaDescarteHtml(base){
+  const fora = cargasComDataInconsistente(base);
+  if(!fora.length) return '';
+  const nomes = fora.slice(0, 8).map(c => esc(c.numeroCarga || c.placa || c.id)).join(', ')
+    + (fora.length > 8 ? ` e mais ${fora.length - 8}` : '');
+  return `<div class="ind-descarte" title="Etapa fora de ordem ou data impossível — corrija a etapa da carga no Histórico">`
+    + `${fora.length} carga(s) fora da conta por data inconsistente: ${nomes}</div>`;
 }
 
 /* Leitura automática de gargalos. Cada bloco só aparece se tiver conteúdo:
@@ -8733,7 +8755,15 @@ function renderGargalos(){
   // transportadora filtrada lá em cima, os cartões e as tabelas mudavam e
   // esta seção continuava mostrando o pátio inteiro. Duas respostas
   // diferentes na mesma tela, sem nada dizendo que eram bases diferentes.
-  const g = analiseGargalos(filtrarPorFiltroIndicadores(DB.cargas));
+  /* E OBEDECE AO PERÍODO (09/09/2026). O subtítulo do card prometia
+     "leitura do período selecionado acima" e a base era o histórico inteiro:
+     escolher "Últimas 6h" não mudava uma linha. Base = concluídas NO PERÍODO
+     (ou todas, quando o período é "todo o histórico") + as abertas de agora,
+     que são o item acionável da seção. */
+  const periodoG = FILTRO_IND.periodo;
+  const concluidasG = periodoG ? cargasConcluidasNoPeriodo(periodoG)
+                               : DB.cargas.filter(c => c.status === 'Seguiu Viagem');
+  const g = analiseGargalos(filtrarPorFiltroIndicadores(concluidasG.concat(cargasAbertas())));
   const blocos = [];
 
   const tabela = (titulo, explicacao, cabecalhos, linhas) => {
@@ -8806,7 +8836,7 @@ function renderGargalos(){
       <td>${esc(c.numeroCarga)}</td><td><strong>${esc(c.placa)}</strong></td>
       <td>${esc(c.transportadora)}</td>
       <td>${badgeHtml(c.status)}</td>
-      <td class="cel-num">${fmtDuracao(c.paradaHaMin)}</td></tr>`)
+      <td class="cel-num">${c.paradaHaMin === null ? '<span class="text-dim">sem registro de chegada</span>' : fmtDuracao(c.paradaHaMin)}</td></tr>`)
   ));
 
   const conteudo = blocos.filter(Boolean).join('');
@@ -9334,13 +9364,13 @@ function blocoPendentesAntigasPdf(cargas){
       <tbody>${g.pendentesAntigas.map(c=>{
         // Acima da meta ganha marca no texto, e não só na cor: este
         // documento é impresso em preto e branco com frequência.
-        const critica = c.paradaHaMin > g.meta;
+        const critica = c.paradaHaMin !== null && c.paradaHaMin > g.meta;
         return `<tr>
           <td class="id-cel">${esc(c.numeroCarga)}</td>
           <td class="id-cel">${esc(c.placa)}</td>
           <td>${esc(c.transportadora)}</td>
           <td>${esc(c.status)}</td>
-          <td class="num-forte"${critica ? ' style="color:#a3271f"' : ''}>${fmtDuracao(c.paradaHaMin)}${critica ? ' ⚠' : ''}</td>
+          <td class="num-forte"${critica ? ' style="color:#a3271f"' : ''}>${c.paradaHaMin === null ? 'sem registro de chegada' : fmtDuracao(c.paradaHaMin)}${critica ? ' ⚠' : ''}</td>
         </tr>`;
       }).join('')}</tbody>
     </table>` +
