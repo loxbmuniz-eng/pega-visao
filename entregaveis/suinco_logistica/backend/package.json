@@ -30,5 +30,8 @@
     "web-push": "^3.6.7"
   },
   "license": "UNLICENSED",
-  "private": true
+  "private": true,
+  "overrides": {
+    "qs": "^6.16.0"
+  }
 }

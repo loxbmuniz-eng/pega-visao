@@ -558,8 +558,33 @@ const SuincoStore = {
   // toda a máquina de estados, que a diretriz manda não alterar.
   save(){
     try{
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(DB));
-    }catch(e){ console.error('Falha ao salvar dados locais', e); }
+      /* O que veio de uma consulta de período fica FORA do armazenamento:
+         é leitura, não estado deste navegador. Gravar traria de volta o
+         problema que a poda resolve — o cofre local crescendo sem teto. */
+      const doServidor = DB.cargas.some(ehCargaDoServidor);
+      let paraGravar = DB;
+      if(doServidor){
+        const cargas = DB.cargas.filter(c => !ehCargaDoServidor(c));
+        /* A MARCA TAMBÉM FICA DE FORA. `_sincronizado` guarda id de carga, e
+           deixar ali o id do que veio de uma consulta de período faria o
+           cofre local crescer justamente pelo caminho que a poda fecha —
+           além de guardar rastro de carga que este navegador não tem. */
+        const vivas = new Set(cargas.map(c => c.id));
+        const marca = {};
+        Object.keys(DB._sincronizado || {}).forEach(id => {
+          if(vivas.has(id)) marca[id] = DB._sincronizado[id];
+        });
+        paraGravar = { ...DB, cargas, _sincronizado: marca,
+          movimentacoes: DB.movimentacoes.filter(m => !m._doServidor) };
+      }
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(paraGravar));
+    }catch(e){
+      console.error('Falha ao salvar dados locais', e);
+      if(typeof notify === 'function' && e && /quota|Quota|exceeded/.test(String(e.name || e.message))){
+        notify('O armazenamento deste navegador encheu. Recarregue a página — '
+          + 'o servidor tem tudo, e o painel volta com os últimos ' + JANELA_LOCAL_DIAS + ' dias.', 'danger', 15000);
+      }
+    }
     // Ponto único de saída para o SharePoint. Roda depois de a regra de
     // negócio ter aplicado a mudança, que é justamente o que faltava.
     this.sincronizarCargasAlteradas();
@@ -640,6 +665,7 @@ const SuincoStore = {
   sincronizarCargasAlteradas(){
     if(typeof SuincoSharePoint === 'undefined' || !SuincoSharePoint.estaConfigurado()) return;
     DB.cargas.forEach(c => {
+      if(ehCargaDoServidor(c)) return;   // leitura de período: nunca sobe de volta
       const marca = c.atualizadoEm || c.criadoEm || '';
       if(this._ultimoSync.get(c.id) === marca) return;      // nada mudou nesta
       if(this._emVoo.has(c.id)){
@@ -1152,6 +1178,7 @@ function fundirEstadoRemoto(dados){
       .catch(()=>{});
   }
 
+  res.podadas = podarLocal();   // ver JANELA_LOCAL_DIAS
   if(res.cargasNovas || res.cargasAtualizadas || res.movimentacoesNovas){
     // Marca como já sincronizado o que acabou de VIR do servidor, senão o
     // save() abaixo devolveria tudo de volta — um eco infinito entre os
@@ -1738,6 +1765,105 @@ function paradasAlemDaMeta(cargas){
     else if(m > meta) total++;
   });
   return { total, semChegada, meta };
+}
+
+/* A carga que a rota /api/historico devolve já vem em formato de painel
+   (paraPainel), não em formato de LISTA (Carga_ID etc.) — por isso não
+   passa por cargaDeLinhaRemota. Uma função só para os campos que as telas
+   de período usam. */
+function daApiParaCargaLocal(x){
+  if(!x || !x.id) return null;
+  return {
+    id: x.id, numeroCarga: x.numeroCarga || '', placa: x.placa || '',
+    transportadora: x.transportadora || '', tipoVeiculo: x.tipoVeiculo || '',
+    motorista: x.motorista || '', cliente: x.cliente || '', destino: x.destino || '',
+    peso: x.peso || 0, doca: x.doca || '', rota: x.rota || '', sequencia: x.sequencia,
+    praOnde: x.praOnde || '', paletizada: x.paletizada || '', qtdGanchos: x.qtdGanchos || 0,
+    qtdEntregas: x.qtdEntregas, observacoes: x.observacoes || '',
+    lacre: x.lacre || '', lacre2: x.lacre2 || '', lacre3: x.lacre3 || '',
+    lacreRetido: x.lacreRetido || '', saidaSemCarregar: !!x.saidaSemCarregar,
+    status: x.status, aguardandoCarga: !!x.aguardandoCarga,
+    criadoEm: x.criadoEm, programadoEm: x.programadoEm, atualizadoEm: x.atualizadoEm,
+    concluidoEm: x.concluidoEm || null, versao: x.versao,
+  };
+}
+
+/* ---------- A JANELA DO NAVEGADOR (09/09/2026) ----------------------
+
+   Decisão do dono: 30 dias. O navegador guarda as cargas concluídas dos
+   últimos 30 dias; o servidor guarda tudo, para sempre. Pedindo período
+   maior, o painel BUSCA no servidor (buscarHistoricoNoServidor) e as telas
+   passam a enxergar — nada fica inacessível.
+
+   Por que existe: medido em Chromium, com 1.500 cargas na memória a aba
+   Indicadores levava 5 s a cada sincronia; com 5.000 o localStorage
+   estourava a cota (9,4 MB) e o save() falhava SÓ NO CONSOLE — a cópia
+   local parava de atualizar sem ninguém perceber. A 30–40 cargas/dia, 30
+   dias são ~1.000 cargas: cabe com folga.
+
+   NUNCA poda carga aberta: a poda é só do que já saiu (Seguiu Viagem), e
+   só depois da janela. Também não poda o que ainda está subindo
+   (_pendente/_statusPendentes) — perder isso seria perder gravação. */
+const JANELA_LOCAL_DIAS = 30;
+
+function limiteDaJanelaLocal(){
+  return Date.now() - JANELA_LOCAL_DIAS * 86400000;
+}
+/* Carga trazida do servidor por consulta de período: vive só em memória,
+   nunca é gravada no navegador e nunca sobe de volta. */
+function ehCargaDoServidor(c){ return !!(c && c._doServidor); }
+
+function podarLocal(){
+  const limite = limiteDaJanelaLocal();
+  const podadas = new Set();
+  DB.cargas.forEach(c => {
+    if(c.status !== 'Seguiu Viagem') return;
+    if(c._pendente || (c._statusPendentes && c._statusPendentes.length)) return;
+    if(ehCargaDoServidor(c)) return;
+    const saida = primeiroTimestamp(c.id, 'Seguiu Viagem') || c.concluidoEm || c.atualizadoEm;
+    const t = saida ? Date.parse(saida) : NaN;
+    if(Number.isFinite(t) && t < limite) podadas.add(c.id);
+  });
+  if(!podadas.size) return 0;
+  DB.cargas = DB.cargas.filter(c => !podadas.has(c.id));
+  DB.movimentacoes = DB.movimentacoes.filter(m => !podadas.has(m.cargaId));
+  invalidarIndiceMovimentacoes();
+  if(DB._sincronizado) podadas.forEach(id => { delete DB._sincronizado[id]; });
+  if(SuincoStore && SuincoStore._ultimoSync) podadas.forEach(id => SuincoStore._ultimoSync.delete(id));
+  return podadas.size;
+}
+
+/* Traz do servidor as cargas concluídas de um período e as funde EM
+   MEMÓRIA. Marcadas com _doServidor: save() não as grava e a sincronia não
+   as reenvia. Assim Histórico, Indicadores, Relatórios e Raio-X enxergam o
+   período sem nenhuma delas precisar saber de onde o dado veio. */
+async function buscarHistoricoNoServidor(de, ate){
+  if(typeof SuincoSharePoint === 'undefined' || !SuincoSharePoint.estaConfigurado()){
+    return { ok:false, motivo:'sem-servidor' };
+  }
+  try{
+    const r = await SuincoSharePoint.historico(de, ate);
+    const vistos = new Set(DB.cargas.map(c => c.id));
+    let novas = 0;
+    (r.cargas || []).forEach(linha => {
+      const c = daApiParaCargaLocal(linha);
+      if(!c || vistos.has(c.id)) return;
+      c._doServidor = true;
+      DB.cargas.push(c); vistos.add(c.id); novas++;
+    });
+    const vistasMov = new Set(DB.movimentacoes.map(m => m.id));
+    (r.movimentacoes || []).forEach(m => {
+      if(!m || !m.id || vistasMov.has(m.id)) return;
+      DB.movimentacoes.push({ id:m.id, cargaId:m.cargaId, placa:m.placa,
+        statusAnterior:m.statusAnterior, statusNovo:m.statusNovo, setor:m.setor,
+        timestamp:m.data, operador:m.operador, _doServidor:true });
+      vistasMov.add(m.id);
+    });
+    invalidarIndiceMovimentacoes();
+    return { ok:true, cargas:novas, de, ate };
+  }catch(e){
+    return { ok:false, motivo:'erro', erro: (e && e.message) || String(e) };
+  }
 }
 
 /* ---------- CARGAS ---------- */

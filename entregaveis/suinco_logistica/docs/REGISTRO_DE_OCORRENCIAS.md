@@ -40,6 +40,58 @@ faz achar a próxima em minutos em vez de horas:
 
 ---
 
+## #33 — O painel ia encher o navegador sozinho, e podar sem buscar seria perder acesso (09/09/2026)
+
+**Não é defeito relatado: é defeito medido antes de acontecer.** A auditoria
+de arquitetura mediu, em Chromium: o painel nunca esquecia carga concluída.
+
+    300 cargas    → Indicadores 468 ms
+    1.500 cargas  → 5.073 ms A CADA SINCRONIA (6–8 semanas de operação)
+    5.000 cargas  → 10.927 ms, e o localStorage estoura a cota (9,4 MB)
+                    com o save() falhando SÓ NO CONSOLE
+
+O `catch` do `save()` era `console.error` e nada mais: a cópia local pararia
+de atualizar sem ninguém perceber, e depois de um F5 voltaria uma versão
+velha até a primeira leitura terminar.
+
+**A conversa que definiu a correção.** Proposta a poda, o dono respondeu
+*"nao da pra ter acesso a tudo no navegador"* e, em seguida, *"pode ser de
+30 dias mas se eu quiser buscar mais ele vai aparecer né?"*. É a regra da
+casa dita por ele: podar sem caminho de volta não é economia, é perda de
+acesso.
+
+**Correção.** `JANELA_LOCAL_DIAS = 30`. `podarLocal()` roda na fusão e tira
+da memória a carga **concluída** cuja saída passou da janela, com as
+movimentações dela — nunca carga aberta, nunca carga com gravação em voo
+(`_pendente`/`_statusPendentes`). O servidor ganhou
+`GET /api/historico?de=&ate=` (concluídas do período + linha do tempo, teto
+de 90 dias por consulta, filial barrada, leitura registrada em
+`log_leitura`). Na tela, `garantirPeriodoNoPainel()` — uma função, três
+chamadores (Histórico, Indicadores, Relatórios): pediu período anterior à
+janela, busca e funde **em memória**, marcado `_doServidor`. Com isso
+nenhum cálculo mudou — Raio-X, Gargalos, comparação por período e o PDF
+passaram a enxergar o passado sem saber de onde ele veio.
+
+**Os dois vazamentos que o teste pegou.** (1) O que vem do servidor não
+pode ser gravado nem reenviado: `save()` filtra e `sincronizarCargasAlteradas`
+ignora `_doServidor`. (2) Faltava filtrar `_sincronizado` — a MARCA de
+sincronização guarda id de carga, e sozinha ela traria de volta o
+crescimento que a poda fecha. O teste reprovou exatamente nisso antes da
+segunda correção.
+
+**A guarda.** `testes/test_poda_com_acesso_a_tudo.py` — a de 60 dias sai, a
+de 10 fica, a aberta de 90 nunca sai, sem servidor a tela DIZ que só tem 30
+dias, e com servidor a carga antiga volta com a linha do tempo, sem ser
+gravada nem reenviada.
+
+**A lição.** Toda economia de memória precisa vir com o caminho de volta, e
+o caminho de volta precisa ser *silencioso quando funciona e explícito
+quando não funciona*. Mostrar 30 dias calado para quem pediu 90 seria a
+família "número errado com cara de certo" — pior que a lentidão que a poda
+resolve.
+
+---
+
 ## #32 — A carga dizia "Rodosousa", a Frota dizia "Denia" (09/09/2026)
 
 **Relato do dono (fotos):** carga 118675, placa JJB8946 — a Torre mostrava
