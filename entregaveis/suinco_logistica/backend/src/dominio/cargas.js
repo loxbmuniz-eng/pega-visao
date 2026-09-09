@@ -6,7 +6,10 @@
    aqui — em um lugar só — para o resto do servidor não precisar saber das
    duas convenções. */
 
-import { STATUS_FLOW, STATUS_INICIAL, camposEditaveisPor } from './fluxo.js';
+import {
+  STATUS_FLOW, STATUS_INICIAL, camposEditaveisPor, podeVerValorDeFrete,
+} from './fluxo.js';
+import { kmValido, motivoSemValor } from './frete.js';
 
 /* 3 categorias, não 4. Pedido do gestor (08/08/2026, migração
    003_tipo_operacao.sql): FROTA PROPRIA saiu (caminhão próprio fazendo
@@ -121,6 +124,32 @@ export function paraPainel(linha) {
     acaoPor: linha.acao_por || '',
     acaoSetor: linha.acao_setor || '',
     versao: linha.versao,
+    /* O FRETE (09/09/2026). Seis campos, e cada um responde uma pergunta
+       que a Administração faz hoje por telefone.
+
+       `kmDivergente` é DERIVADO, não guardado: é a mesma pergunta que
+       `km_destino <> km_deslocamento` responde, e guardar a resposta de
+       uma comparação cria uma segunda verdade que envelhece sozinha
+       (ocorrência #32, a transportadora da carga × a da Frota). Só marca
+       quando existem os DOIS: sem referência não há divergência, há
+       ausência de tabela — e dizer "divergente" nesse caso seria acusar
+       erro onde não houve. */
+    freteDestino: linha.frete_destino || '',
+    kmDestino: linha.km_destino ?? null,
+    kmDeslocamento: linha.km_deslocamento ?? null,
+    freteValor: linha.frete_valor === null || linha.frete_valor === undefined
+      ? null : Number(linha.frete_valor),
+    freteTarifaUsada: linha.frete_tarifa_usada === null || linha.frete_tarifa_usada === undefined
+      ? null : Number(linha.frete_tarifa_usada),
+    freteDocumento: linha.frete_documento || '',
+    kmDivergente: linha.km_destino != null && linha.km_deslocamento != null
+      && Number(linha.km_destino) !== Number(linha.km_deslocamento),
+    freteMotivo: motivoSemValor({
+      transportadora: linha.transportadora,
+      kmDeslocamento: linha.km_deslocamento,
+      tipoVeiculo: linha.tipo_veiculo,
+      freteValor: linha.frete_valor,
+    }),
     // Carga excluída continua sendo devolvida na leitura incremental: é
     // assim que os outros terminais descobrem que ela saiu. Sem esta
     // marca, uma linha apagada simplesmente não apareceria em consulta
@@ -168,6 +197,16 @@ export function saneiarCriacao(corpo, frota) {
     programado_em: dataOuAgora(corpo.programadoEm),
     status_atual: STATUS_FLOW.includes(corpo.status) ? corpo.status : STATUS_INICIAL,
     aguardando_carga: corpo.aguardandoCarga === true,
+    /* FRETE. `km_destino`, `frete_valor` e `frete_tarifa_usada` NÃO saem
+       daqui: quem os calcula é a rota, contra a tabela do banco. O cliente
+       manda o destino e o deslocamento; o preço é do servidor.
+
+       kmValido() em vez de inteiro(): `inteiro('', 0)` devolveria ZERO, e
+       zero quilômetro é uma viagem que não existe — mas calcularia frete
+       R$ 0,00 sem ninguém ver. Campo em branco vira null. */
+    frete_destino: texto(corpo.freteDestino, 200).toUpperCase() || null,
+    km_deslocamento: kmValido(corpo.kmDeslocamento),
+    frete_documento: texto(corpo.freteDocumento, 100) || null,
   };
 }
 
@@ -236,6 +275,14 @@ export function saneiarEdicao(corpo, camposPermitidos) {
     lacre_retido: () => texto(corpo.lacreRetido, 50),
     programado_em: () => dataOuAgora(corpo.programadoEm),
     aguardando_carga: () => corpo.aguardandoCarga === true,
+    frete_destino: () => texto(corpo.freteDestino, 200).toUpperCase() || null,
+    km_deslocamento: () => kmValido(corpo.kmDeslocamento),
+    /* O documento de frete é o número que a Administração cria FORA do
+       sistema — informação dela, que o relatório precisa carregar de volta
+       ("preciso de uma coluna adicional para inserir os números dos
+       documentos de frete que estou criando. Essa informação é minha e não
+       está no sistema"). */
+    frete_documento: () => texto(corpo.freteDocumento, 100) || null,
   };
   const chaveDoPainel = {
     numero_carga: 'numeroCarga', placa: 'placa', transportadora: 'transportadora',
@@ -246,6 +293,8 @@ export function saneiarEdicao(corpo, camposPermitidos) {
     observacoes: 'observacoes', aguardando_carga: 'aguardandoCarga',
     programado_em: 'programadoEm',
     lacre: 'lacre', lacre_2: 'lacre2', lacre_3: 'lacre3', lacre_retido: 'lacreRetido',
+    frete_destino: 'freteDestino', km_deslocamento: 'kmDeslocamento',
+    frete_documento: 'freteDocumento',
   };
 
   const saida = {};
@@ -306,6 +355,33 @@ export function camposDeAviso(antes, depois) {
   return saida;
 }
 
+/* A CARGA SEM O PREÇO — para quem não pode ver valor de frete.
+
+   Apaga os TRÊS campos de dinheiro e deixa os de operação (destino, os
+   dois KM, o número do documento): o Comercial responde "onde está minha
+   carga" e a distância faz parte da resposta; quanto se paga por ela, não.
+
+   `null` e não `undefined`: o campo continua existindo e dizendo "não há
+   valor aqui para você". Sumir com a chave faria o painel do Comercial
+   parecer um painel de carga sem frete nenhum, o que é outra coisa. */
+export function semValorDeFrete(payload) {
+  if (!payload) return payload;
+  return { ...payload, freteValor: null, freteTarifaUsada: null, freteMotivo: '' };
+}
+
+/* O TRADUTOR DE QUEM ESTÁ LENDO.
+
+   Devolve a função de conversão já decidida para aquele setor, em vez de
+   deixar cada rota lembrar de apagar o preço. É a mesma razão de
+   `emitirCarga` existir no tempo-real: a decisão fica num lugar, e quem
+   escreve a próxima rota de leitura herda a regra sem saber que ela
+   existe. Esquecer aqui é impossível; esquecer em cada rota era só questão
+   de tempo. */
+export function paraPainelPara(setor) {
+  const ve = podeVerValorDeFrete(setor);
+  return (linha) => (ve ? paraPainel(linha) : semValorDeFrete(paraPainel(linha)));
+}
+
 export const COLUNAS_CARGA = `
   carga_id, numero_carga, placa, transportadora, tipo_veiculo, motorista,
   cliente, destino, peso_kg, doca, rota_codigo, sequencia, pra_onde,
@@ -314,7 +390,9 @@ export const COLUNAS_CARGA = `
   status_atual,
   aguardando_carga, saida_sem_carregar, criado_em, programado_em, atualizado_em,
   acao_em, acao_por, acao_setor, operador_id, operador_nome,
-  operador_setor, versao, excluida_em, excluida_por`;
+  operador_setor, versao, excluida_em, excluida_por,
+  frete_destino, km_destino, km_deslocamento, frete_valor,
+  frete_tarifa_usada, frete_documento`;
 
 /* =====================================================================
    A FILA DE CARREGAMENTO — reordenar em cascata (08/09/2026)

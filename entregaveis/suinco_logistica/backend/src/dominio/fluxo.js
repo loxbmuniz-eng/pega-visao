@@ -231,6 +231,15 @@ const CAMPOS_EDITAVEIS = {
     // caminhão que já estava no pátio — por isso precisa ser editável.
     'programado_em',
     'lacre', 'lacre_2', 'lacre_3', 'lacre_retido',
+    /* FRETE (09/09/2026). Destino e deslocamento são da Logística: é ela
+       que contrata e que sabe a distância combinada. `frete_valor` e
+       `km_destino` NÃO entram aqui de propósito — não são digitados, são
+       calculados pelo servidor contra a tabela; deixá-los editáveis
+       abriria um caminho para gravar um preço que a tabela não produz. */
+    'frete_destino', 'km_deslocamento',
+    /* O número do documento de frete é da Administração, que o cria fora
+       do sistema. Ela herda esta lista inteira (SETOR_IRRESTRITO). */
+    'frete_documento',
   ],
   // Lacres (18/08/2026): é a Portaria quem coloca o lacre na saída e quem
   // o retém quando a carga está incorreta — os dois números são dela.
@@ -238,6 +247,19 @@ const CAMPOS_EDITAVEIS = {
   'Expedição': ['qtd_ganchos', 'observacoes'],
   'Faturamento': ['observacoes'],
 };
+
+/* QUEM VÊ VALOR DE FRETE (09/09/2026).
+
+   Perguntado ao dono quem enxerga o valor: "logistica e administracao".
+
+   Não é a mesma pergunta que "quem edita": a Portaria edita motorista e
+   lacre e não vê preço; o Comercial não edita nada e também não vê. Por
+   isso é função própria, e não uma leitura de CAMPOS_EDITAVEIS — juntar as
+   duas faria a permissão de escrita mandar na de leitura, e no dia em que
+   uma mudasse a outra mudaria junto sem ninguém pedir. */
+export function podeVerValorDeFrete(setor) {
+  return setor === 'Logística' || setor === SETOR_IRRESTRITO;
+}
 
 export function camposEditaveisPor(setor) {
   if (setor === SETOR_IRRESTRITO) return CAMPOS_EDITAVEIS['Logística'];

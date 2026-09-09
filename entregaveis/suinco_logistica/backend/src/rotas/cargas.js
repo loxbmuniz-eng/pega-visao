@@ -1,13 +1,13 @@
 import { Router } from 'express';
 import { consultar, emTransacao, pool as bancoPool } from '../banco.js';
 import { exigirLogin, exigirSetor, recusarFilial } from '../middleware/auth.js';
-import { emitir } from '../tempo-real.js';
+import { emitir, emitirCarga } from '../tempo-real.js';
 import { registrarLeitura } from '../servicos/registro_leitura.js';
 import { programacaoAtual } from '../dominio/programacoes.js';
 import {
   COLUNAS_CARGA, paraPainel, saneiarCriacao, saneiarCriacaoChegadaSemProgramacao,
   saneiarEdicao, normalizarPlaca, idSeguro, camposDeAviso,
-  podeSequenciar, filaReordenada, STATUS_QUE_AINDA_CARREGAM,
+  podeSequenciar, filaReordenada, STATUS_QUE_AINDA_CARREGAM, paraPainelPara,
 } from '../dominio/cargas.js';
 import {
   validarTransicao, podeCriarCarga, podeRegistrarChegadaSemProgramacao,
@@ -17,6 +17,7 @@ import {
 import {
   avisarChegada, avisarSaida, avisarFimDaProgramacao, primeiraVezHoje, contarPatio,
 } from '../servicos/avisos.js';
+import { calcularFrete, faltaParaContratar, kmValido } from '../dominio/frete.js';
 
 export const rotasCargas = Router();
 
@@ -35,6 +36,49 @@ export async function gravarNota(cli, { cargaId, placa, operador, acao }) {
      VALUES ($1,$2,$3,$4,$5,$6,$7,TRUE)`,
     [novoId('log'), cargaId, placa, acao, operador.setor, operador.id, operador.nome]
   );
+}
+
+/* =====================================================================
+   O FRETE DA CARGA — calculado aqui, gravado uma vez (09/09/2026)
+   ---------------------------------------------------------------------
+   Duas coisas acontecem neste bloco, e elas são separadas de propósito:
+
+   1. `precoDaCarga()` — a conta. Lê a tabela do banco (5 tarifas, 23
+      destinos), chama a função pura de dominio/frete.js e devolve as três
+      colunas calculadas. O painel não faz esta conta: quem manda é o
+      servidor, e uma segunda conta de dinheiro em JavaScript de navegador
+      divergiria na primeira mudança de tarifa.
+
+   2. `recalcula()` — QUANDO refazer a conta. Só quando uma das ENTRADAS
+      muda (deslocamento, destino, tipo de veículo, transportadora, placa).
+      É isto que congela o frete: mudar a tarifa amanhã não toca em carga
+      nenhuma, porque nenhuma carga é reescrita por causa disso. Recalcular
+      o passado com o preço de hoje faria o relatório da Administração
+      mentir a favor de quem cobra.
+   ===================================================================== */
+const ENTRADAS_DO_FRETE = ['km_deslocamento', 'frete_destino', 'tipo_veiculo', 'transportadora', 'placa'];
+
+export function recalculaFrete(mudancas) {
+  return ENTRADAS_DO_FRETE.some((c) => Object.prototype.hasOwnProperty.call(mudancas, c));
+}
+
+export async function precoDaCarga({ transportadora, tipoVeiculo, freteDestino, kmDeslocamento }, cli) {
+  const q = cli ? (sql, p) => cli.query(sql, p) : consultar;
+  const { rows: tar } = await q('SELECT tipo_veiculo, valor_por_km FROM frete_tarifas');
+  const tarifas = new Map(tar.map((t) => [t.tipo_veiculo, Number(t.valor_por_km)]));
+
+  /* O km do destino é COPIADO para a carga no momento da escolha, e não
+     lido por join na hora do relatório. Destino sai do cadastro, muda de
+     km, é desativado — e a carga que já rodou tem que continuar dizendo a
+     distância com que foi contratada. Carga gravada é registro. */
+  let kmDestino = null;
+  if (freteDestino) {
+    const { rows } = await q('SELECT km FROM frete_destinos WHERE destino = $1', [freteDestino]);
+    if (rows[0]) kmDestino = rows[0].km;
+  }
+
+  const r = calcularFrete({ transportadora, tipoVeiculo, kmDeslocamento, tarifas });
+  return { km_destino: kmDestino, frete_valor: r.valor, frete_tarifa_usada: r.tarifa, motivo: r.motivo };
 }
 
 /* Grava a movimentação e o log na MESMA transação da mudança da carga.
@@ -412,6 +456,53 @@ rotasCargas.post('/cargas', exigirLogin, async (req, res, next) => {
     const dados = chegadaSemProgramacao
       ? saneiarCriacaoChegadaSemProgramacao(req.body, frotaRows[0])
       : saneiarCriacao(req.body, frotaRows[0]);
+
+    /* A TRAVA DA CONTRATAÇÃO — KM E OBSERVAÇÃO (09/09/2026).
+       =================================================================
+       Pedido do dono: "vamos incluir um campo de kilometragem obrigatoria
+       na criacao de qualquer carga KM". Perguntado se isso impede criar a
+       carga ou impede contratar a placa, ele respondeu "1 trava a
+       contratacao" — e "2 observacao obrigatoria".
+
+       CONTRATAR É PÔR A PLACA. A carga nasce sem caminhão (26/08/2026: a
+       Logística sabe rota e peso antes de saber quem leva); o que exige KM
+       é o instante em que uma transportadora passa a ter frete a receber.
+       Por isso a condição é `placa`, e não "sempre".
+
+       NÃO VALE PARA CHEGADA SEM PROGRAMAÇÃO. O porteiro registrando um
+       caminhão que encostou no portão não sabe km nem tem o que observar,
+       e travar ali seria exatamente o caminhão parado no portão. A carga
+       dele é lançada depois, pela Logística, e é NESSE lançamento que a
+       trava pega (ver o PATCH).
+
+       O QUE ISTO CUSTA, DITO EM VOZ ALTA: a partir da publicação, nenhuma
+       carga recebe placa sem KM e sem observação. É a regra que o dono
+       pediu; a tela preenche o KM sozinha quando o destino está na tabela,
+       para que o custo seja um clique e não uma consulta. */
+    if (!chegadaSemProgramacao && placa) {
+      const falta = faltaParaContratar({
+        kmDeslocamento: dados.km_deslocamento,
+        observacoes: dados.observacoes,
+      });
+      if (falta.length) {
+        return res.status(422).json({
+          erro: `Para contratar a placa ${placa} falta: ${falta.join(' e ')}. `
+            + 'O KM de deslocamento é o que será pago no frete; a observação é onde '
+            + 'a Administração lê o valor combinado quando ele foge da tabela.',
+          codigo: 'KM_FALTANDO',
+          faltando: falta,
+        });
+      }
+      const preco = await precoDaCarga({
+        transportadora: dados.transportadora,
+        tipoVeiculo: dados.tipo_veiculo,
+        freteDestino: dados.frete_destino,
+        kmDeslocamento: dados.km_deslocamento,
+      });
+      dados.km_destino = preco.km_destino;
+      dados.frete_valor = preco.frete_valor;
+      dados.frete_tarifa_usada = preco.frete_tarifa_usada;
+    }
     // Entrada sem programação não tem data de programação, venha o que vier
     // no corpo (painel antigo mandava a data da CHEGADA aqui).
     if (chegadaSemProgramacao) dados.programado_em = null;
@@ -489,7 +580,7 @@ rotasCargas.post('/cargas', exigirLogin, async (req, res, next) => {
     }
 
     const payload = paraPainel(linhaFinal);
-    if (carga.nova) emitir('carga:criada', payload);
+    if (carga.nova) emitirCarga('carga:criada', payload);
 
     /* AVISO NO CELULAR — chegada sem programação (26/08/2026).
 
@@ -646,6 +737,58 @@ rotasCargas.patch('/cargas/:id', exigirLogin, async (req, res, next) => {
          programação — nem o eco de um painel antigo, que mandava a data da
          chegada e cimentava o erro. */
       delete mudancas.programado_em;
+    }
+
+    /* A TRAVA DA CONTRATAÇÃO, DO OUTRO LADO (09/09/2026).
+
+       Aqui é o caminho que o dono descreveu como o normal: a carga foi
+       programada sem caminhão, a transportadora foi fechada mais tarde, e
+       alguém volta na carga para pôr a placa. Esse é o ato de contratar, e
+       é ele que exige KM e observação.
+
+       O QUE ENTRA NA CONTA é o valor EFETIVO — o que a carga terá depois
+       desta gravação: o que veio no pacote, e o que já estava lá para o
+       que não veio. Olhar só o pacote recusaria quem mandou apenas a placa
+       numa carga que já tinha KM; olhar só o banco deixaria passar a placa
+       sem KM nenhum.
+
+       SÓ NA PASSAGEM DE "SEM PLACA" PARA "COM PLACA". Trocar a placa de
+       uma carga já contratada não é contratar de novo — o frete já existe,
+       e reexigir os campos travaria uma correção de digitação no meio da
+       operação. */
+    const efetivo = (col, chave) => (
+      Object.prototype.hasOwnProperty.call(mudancas, col) ? mudancas[col] : antes.rows[0][chave || col]
+    );
+    const contratandoAgora = !!mudancas.placa && !antes.rows[0].placa;
+    if (contratandoAgora) {
+      const falta = faltaParaContratar({
+        kmDeslocamento: efetivo('km_deslocamento'),
+        observacoes: efetivo('observacoes'),
+      });
+      if (falta.length) {
+        return res.status(422).json({
+          erro: `Para contratar a placa ${mudancas.placa} falta: ${falta.join(' e ')}. `
+            + 'O KM de deslocamento é o que será pago no frete; a observação é onde '
+            + 'a Administração lê o valor combinado quando ele foge da tabela.',
+          codigo: 'KM_FALTANDO',
+          faltando: falta,
+        });
+      }
+    }
+
+    /* RECALCULA SÓ QUANDO UMA ENTRADA MUDA. Editar a observação de uma
+       carga de três meses atrás não pode reprecificá-la com a tarifa de
+       hoje — é o que congela o valor sem precisar de coluna de "fechado". */
+    if (recalculaFrete(mudancas)) {
+      const preco = await precoDaCarga({
+        transportadora: efetivo('transportadora'),
+        tipoVeiculo: efetivo('tipo_veiculo'),
+        freteDestino: efetivo('frete_destino'),
+        kmDeslocamento: efetivo('km_deslocamento'),
+      });
+      mudancas.km_destino = preco.km_destino;
+      mudancas.frete_valor = preco.frete_valor;
+      mudancas.frete_tarifa_usada = preco.frete_tarifa_usada;
     }
 
     const cols = Object.keys(mudancas);
@@ -837,7 +980,7 @@ rotasCargas.patch('/cargas/:id', exigirLogin, async (req, res, next) => {
       });
     }
     const payload = paraPainel(linhaFinal);
-    emitir('carga:atualizada', payload);
+    emitirCarga('carga:atualizada', payload);
 
     /* Aviso legível, separado do dado.
 
@@ -851,7 +994,7 @@ rotasCargas.patch('/cargas/:id', exigirLogin, async (req, res, next) => {
        observação de uma carga não pode disparar alerta em cinco terminais. */
     const alteracoes = camposDeAviso(antes.rows[0], linhaFinal);
     if (alteracoes.length) {
-      emitir('carga:editada', {
+      emitirCarga('carga:editada', {
         cargaId: payload.id,
         numeroCarga: payload.numeroCarga || '',
         placa: payload.placa,
@@ -1003,7 +1146,7 @@ rotasCargas.post('/cargas/sequenciar', exigirLogin, async (req, res, next) => {
     }
 
     const payload = resultado.linhas.map(paraPainel);
-    payload.forEach((c) => emitir('carga:atualizada', c));
+    payload.forEach((c) => emitirCarga('carga:atualizada', c));
     return res.json({ cargas: payload, renumeradas: resultado.mudancas });
   } catch (e) { return next(e); }
 });
@@ -1164,7 +1307,7 @@ rotasCargas.post('/cargas/:id/status', exigirLogin, async (req, res, next) => {
       avisarChegada(resultado.linha).catch(() => {});
     }
 
-    emitir('carga:atualizada', payload);
+    emitirCarga('carga:atualizada', payload);
     emitir('movimentacao:nova', {
       id: resultado.movId,
       cargaId: payload.id,
@@ -1303,8 +1446,8 @@ rotasCargas.delete('/cargas/:id', exigirLogin, async (req, res, next) => {
     }
 
     const payload = { ...paraPainel(resultado.excluida), excluida: true };
-    emitir('carga:atualizada', payload);
-    emitir('carga:excluida', {
+    emitirCarga('carga:atualizada', payload);
+    emitirCarga('carga:excluida', {
       cargaId: payload.id,
       numeroCarga: payload.numeroCarga || '',
       placa: payload.placa,
@@ -1411,7 +1554,7 @@ rotasCargas.post('/portaria/saida', exigirLogin, async (req, res, next) => {
     });
 
     const liberadas = saida.liberadas.map(paraPainel);
-    liberadas.forEach((c) => emitir('carga:atualizada', c));
+    liberadas.forEach((c) => emitirCarga('carga:atualizada', c));
 
     /* AVISO NO CELULAR — saída, e possivelmente o fim do dia.
 
@@ -1531,7 +1674,7 @@ rotasCargas.post('/portaria/lacre-retido', exigirLogin, async (req, res, next) =
     });
 
     const payloads = resultado.map(paraPainel);
-    payloads.forEach((c) => emitir('carga:atualizada', c));
+    payloads.forEach((c) => emitirCarga('carga:atualizada', c));
     return res.json({ placa, atingidas: payloads, total: payloads.length });
   } catch (e) {
     return next(e);
@@ -1649,7 +1792,7 @@ rotasCargas.post('/cargas/:id/restaurar', exigirLogin, exigirSetor(), async (req
     });
 
     const payload = paraPainel(linha);
-    emitir('carga:atualizada', payload);
+    emitirCarga('carga:atualizada', payload);
     res.json(payload);
   } catch (e) { next(e); }
 });
@@ -1731,7 +1874,7 @@ rotasCargas.post('/cargas/:id/data-programacao', exigirLogin, exigirSetor(), asy
       return res.status(404).json({ erro: 'Carga não encontrada.', codigo: 'CARGA_NAO_ENCONTRADA' });
     }
     const payload = paraPainel(resultado.linha);
-    emitir('carga:atualizada', payload);
+    emitirCarga('carga:atualizada', payload);
     return res.json(payload);
   } catch (e) {
     return next(e);
@@ -1794,7 +1937,7 @@ rotasCargas.post('/cargas/:id/desfazer-exclusao', exigirLogin, exigirSetor(), as
       return res.status(404).json({ erro: 'Carga não encontrada.', codigo: 'CARGA_NAO_ENCONTRADA' });
     }
     const payload = paraPainel(resultado.linha);
-    if (!resultado.naoEstavaExcluida) emitir('carga:atualizada', payload);
+    if (!resultado.naoEstavaExcluida) emitirCarga('carga:atualizada', payload);
     return res.json(payload);
   } catch (e) {
     return next(e);
@@ -1873,7 +2016,7 @@ rotasCargas.post('/cargas/:id/corrigir-etapa', exigirLogin, exigirSetor(), async
     }
     const payload = paraPainel(resultado.linha);
     if (!resultado.semMudanca) {
-      emitir('carga:atualizada', payload);
+      emitirCarga('carga:atualizada', payload);
       emitir('movimentacao:nova', {
         id: resultado.movId,
         cargaId: payload.id,
@@ -1982,7 +2125,7 @@ rotasCargas.post('/cargas/encerrar-anteriores', exigirLogin, exigirSetor('Logís
 
     const payloads = resultado.map((f) => {
       const payload = paraPainel(f.linha);
-      emitir('carga:atualizada', payload);
+      emitirCarga('carga:atualizada', payload);
       emitir('movimentacao:nova', {
         id: f.movId,
         cargaId: payload.id,
@@ -2022,7 +2165,7 @@ rotasCargas.get('/cargas-excluidas', exigirLogin, exigirSetor(), async (req, res
         WHERE ${filtro} ORDER BY excluida_em DESC LIMIT 200`,
       params
     );
-    return res.json(rows.map(paraPainel));
+    return res.json(rows.map(paraPainelPara(req.operador.setor)));
   } catch (e) {
     return next(e);
   }
@@ -2119,7 +2262,7 @@ rotasCargas.get('/historico', exigirLogin, recusarFilial, async (req, res, next)
     });
     return res.json({
       de, ate,
-      cargas: cargas.map(paraPainel),
+      cargas: cargas.map(paraPainelPara(req.operador.setor)),
       movimentacoes: movimentacoes.map((m) => ({
         id: m.movimentacao_id, cargaId: m.carga_id, placa: m.placa,
         statusAnterior: m.status_anterior, statusNovo: m.status_novo,

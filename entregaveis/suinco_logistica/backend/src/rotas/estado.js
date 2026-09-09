@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { consultar } from '../banco.js';
 import { exigirLogin } from '../middleware/auth.js';
 import { ehFilial } from '../dominio/fluxo.js';
-import { COLUNAS_CARGA, paraPainel } from '../dominio/cargas.js';
+import { COLUNAS_CARGA, paraPainel, paraPainelPara } from '../dominio/cargas.js';
 import { registrarLeitura } from '../servicos/registro_leitura.js';
 
 export const rotasEstado = Router();
@@ -116,7 +116,7 @@ rotasEstado.get('/estado', exigirLogin, async (req, res, next) => {
     res.json({
       marca,
       completo: !desdeValido,
-      cargas: cargas.rows.map(paraPainel),
+      cargas: cargas.rows.map(paraPainelPara(req.operador.setor)),
       movimentacoes: movimentacoes.rows.map((m) => ({
         id: m.movimentacao_id,
         cargaId: m.carga_id,

@@ -13,6 +13,8 @@ import { Server } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import { config } from './config.js';
 import { sessaoAindaVale } from './middleware/auth.js';
+import { podeVerValorDeFrete } from './dominio/fluxo.js';
+import { semValorDeFrete } from './dominio/cargas.js';
 
 let io = null;
 
@@ -62,6 +64,14 @@ export function iniciarTempoReal(servidorHttp) {
   io.on('connection', (socket) => {
     const op = socket.data.operador;
     socket.join('patio');
+    /* A SALA DO FRETE (09/09/2026). Quem pode ver valor entra também aqui,
+       e é para cá que a carga completa é emitida — o `patio` recebe a mesma
+       carga com os campos de dinheiro apagados.
+
+       Duas salas, e não um filtro no cliente: esconder na tela deixaria o
+       valor viajar pelo socket até o navegador do Comercial, onde qualquer
+       um lê no console. O que não pode ser visto não é enviado. */
+    if (podeVerValorDeFrete(op.setor)) socket.join('frete');
     console.log(`[tempo-real] ${op.nome} (${op.setor}) conectou · ${io.engine.clientsCount} online`);
     socket.emit('conectado', { operador: op, online: io.engine.clientsCount });
 
@@ -112,6 +122,22 @@ export function desconectarOperador(id) {
     if (String(s.data?.operador?.id) === String(id)) { s.disconnect(true); n++; }
   }
   return n;
+}
+
+/* Carga em tempo real, com o preço só para quem pode ver.
+
+   Existe separada de emitir() de propósito: `emitir` serve para dezenas de
+   eventos que não têm dinheiro dentro (presença, frota, programação), e
+   fazer todos passarem por uma regra de frete seria pedir para alguém
+   esquecer por que ela está lá. Quem emite CARGA chama esta. */
+export function emitirCarga(evento, carga) {
+  if (!io) return;
+  try {
+    io.to('frete').emit(evento, carga);
+    io.to('patio').except('frete').emit(evento, semValorDeFrete(carga));
+  } catch (e) {
+    console.error('[tempo-real] falha ao emitir carga', evento, '—', e.message);
+  }
 }
 
 export function emitir(evento, dados) {
