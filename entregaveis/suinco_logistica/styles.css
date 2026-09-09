@@ -4205,6 +4205,9 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
     white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
     display:block; max-width:100%;
   }
+  /* O marcador "≠ Frota" esticava o cartão FECHADO em 7px (227 > 220). No
+     cartão aberto ele aparece; na varredura, a transportadora já basta. */
+  .table-wrap table.mobile-cartao tr:not(.cartao-aberto) .marca-frota{ display:none; }
 }
 
 /* =====================================================================

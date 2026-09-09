@@ -3562,7 +3562,10 @@ function formCargaFilaHtml(c){
                  onchange="atualizarDestinoUI('${id}',this.value)"></div>
         <div class="form-group">
           <label>Transportadora <span class="hint">(vem da Frota pela placa)</span></label>
-          <input type="text" value="${esc(c.transportadora)}" disabled></div>
+          <input type="text" value="${esc(c.transportadora)}" disabled>
+          ${marcaTransportadoraHtml(c) ? `<button type="button" class="btn btn-sec btn-sm" style="margin-top:6px"
+              onclick="event.stopPropagation(); usarTransportadoraDaFrotaUI('${id}')"
+              title="A Frota diz outra transportadora para esta placa. Este botão alinha a carga ao cadastro.">≠ Frota — usar a da Frota (${esc((buscarFrota(c.placa)||{}).transportadora||'')})</button>` : ''}</div>
       </div>
 
       <div class="form-group" style="margin-bottom:10px"><label>Observações</label>
@@ -4084,8 +4087,11 @@ function marcaTransportadoraHtml(c){
   if(!f || !f.transportadora) return '';
   const norm = (s)=>String(s||'').trim().toLowerCase();
   if(norm(f.transportadora) === norm(c.transportadora)) return '';
-  return `<span class="marca-multi marca-frota" onclick="event.stopPropagation(); usarTransportadoraDaFrotaUI('${escJs(c.id)}')"
-    title="A Frota diz ${esc(f.transportadora)}; esta viagem está com ${esc(c.transportadora || '—')}. Clique para usar a da Frota.">≠ Frota: ${esc(f.transportadora)}</span>`;
+  /* Marcador, não botão: com 17px de altura ele reprovaria a regra dos 44px
+     para o dedo no celular. A ação "usar a da Frota" é um botão de verdade
+     na expansão da carga. */
+  return `<span class="marca-multi marca-frota"
+    title="A Frota diz ${esc(f.transportadora)}; esta viagem está com ${esc(c.transportadora || '—')}. Abra a carga para usar a da Frota.">≠ Frota: ${esc(f.transportadora)}</span>`;
 }
 function usarTransportadoraDaFrotaUI(id){
   const c = getCarga(id); if(!c) return;
