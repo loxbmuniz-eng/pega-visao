@@ -40,6 +40,47 @@ faz achar a próxima em minutos em vez de horas:
 
 ---
 
+## #34 — Arrastar na Torre, sem repetir a #27 (09/09/2026)
+
+**Pedido do dono:** "quero conseguir arrastar a ordem do sequenciamento de
+carga na torre de controle". Perguntado se o campo de número deveria virar
+posição (A) ou continuar livre (B): *"a e b, se mudar o numero reordena se
+arrastar reordena, os 2 precisam funcionar, mantendo a logica e a sequencia"*.
+
+**Por que isso exigia cuidado.** De manhã, a #27: a Torre e a Fila
+compartilhavam `atualizarSequenciaUI`, mandei todo inteiro para a cascata, e
+a Torre parou de guardar o número digitado — o defeito de 14/08 de volta.
+Fazer os dois caminhos reordenarem na Torre é justamente reabrir aquela
+porta, se for feito do mesmo jeito.
+
+**A diferença que resolve.** Na #27 quem decidia era a TELA (Torre × Fila) e
+a pessoa não tinha como saber qual comportamento ia acontecer. Aqui quem
+decide é o **STATUS DA LINHA**, que está visível: a alça só aparece onde
+arrastar funciona, e o `title` do campo diz qual é a regra daquela linha.
+
+    ainda vai carregar  → digitar = posição, cascata no servidor
+                          (mesmo caminho do arrastar: uma conta só)
+                          arrasto com alça
+    já carregou         → o número é registro: guarda o valor, carimba para
+                          subir, e NÃO reordena ninguém · sem alça
+
+`definirSequenciaTorreUI` só delega — `definirPosicaoNaFilaUI` para a fila,
+`atualizarSequenciaUI` para o registro. Nenhuma conta nova, nenhuma rota
+nova: o servidor já fazia a cascata desde 08/09.
+
+**A guarda.** `testes/test_torre_arrasta_sequencia.py` — quem ainda carrega
+tem alça e arrasta; quem já carregou não tem e não arrasta; digitar 9 numa
+carga carregada guarda 9, carimba e não mexe em ninguém; sem servidor a fila
+não anda sozinha. Reprovava contra o publicado.
+
+**A correção do meu próprio teste, no meio do caminho.** Uma checagem lia o
+carimbo DENTRO de `definirSequenciaTorreUI` — mas ela delega, e o carimbo
+mora na função de destino. Era a causa nº 2 das quatro (o teste mede um
+atalho que mudou de forma), não regressão: a checagem de comportamento
+logo abaixo, com carga de verdade, já provava o carimbo.
+
+---
+
 ## #33 — O painel ia encher o navegador sozinho, e podar sem buscar seria perder acesso (09/09/2026)
 
 **Não é defeito relatado: é defeito medido antes de acontecer.** A auditoria
