@@ -272,6 +272,31 @@
       <div class="form-row">
         <div class="form-group"><label>Peso (kg)</label><input type="number" id="prog-peso" min="0"></div>
       </div>
+      <!-- FRETE (09/09/2026). O DESTINO puxa o KM da tabela; o KM DE
+           DESLOCAMENTO é o que de fato será pago e pode divergir (desvio,
+           retorno, coleta no caminho). Os dois existem porque são duas
+           perguntas — a referência e o efetivo.
+           Sem KM e sem observação a carga não recebe placa: decisão do dono
+           ("1 trava a contratacao", "2 observacao obrigatoria"). -->
+      <div class="form-row">
+        <div class="form-group" style="flex:2">
+          <label>Destino do frete <span class="hint">(puxa o KM da tabela)</span></label>
+          <input type="text" id="prog-frete-destino" list="lista-destinos-frete"
+                 placeholder="Ex: GOIANIA" oninput="destinoFreteMudouUI()">
+        </div>
+        <div class="form-group">
+          <label>KM destino <span class="hint">referência da tabela</span></label>
+          <input type="number" id="prog-km-destino" min="1" step="1" readonly
+                 title="Vem da Tabela de Frete. Só de leitura: para mudar, edite o destino em Cadastros.">
+        </div>
+        <div class="form-group">
+          <label>KM deslocamento <span class="hint">o que será pago</span></label>
+          <input type="number" id="prog-km-deslocamento" min="1" step="1"
+                 oninput="kmDeslocamentoMudouUI()"
+                 title="O KM que multiplica a tarifa. Diferente do KM do destino quando há desvio, retorno ou coleta no caminho.">
+        </div>
+      </div>
+      <div class="form-group" id="prog-frete-aviso" style="margin-bottom:10px"></div>
       <div class="form-row">
         <div class="form-group">
           <label>Sequência <span class="hint">(prioridade de montagem do dia)</span></label>
@@ -1179,6 +1204,63 @@
         </div>
       </div>
 
+      <!-- TABELA DE FRETE (09/09/2026). Só Logística e Administração —
+           renderCadastros() alterna o `hidden`, e o servidor recusa a
+           leitura para os outros setores (exigirSetor em /api/frete/*).
+           Quanto se paga por quilômetro não é informação de pátio. -->
+      <div class="card" id="card-tabela-frete" hidden>
+        <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-rotas"/></svg> Tabela de Frete</div>
+        <div class="card-sub">O valor do frete é <strong>KM de deslocamento × tarifa do tipo de veículo</strong>.
+          Cadastre a tarifa por modalidade e o KM de cada destino — o painel preenche o KM sozinho
+          quando o destino está aqui. Transportadora <strong>SUINCO</strong> (frota própria) e
+          <strong>FOB</strong> (retirada no frigorífico) não têm frete de tabela.</div>
+
+        <div class="form-row">
+          <div class="form-group"><label>Tipo de veículo</label>
+            <input type="text" id="frete-tarifa-tipo" list="lista-tipos-veiculo" placeholder="Ex: Truck"></div>
+          <div class="form-group"><label>Valor por km (R$)</label>
+            <input type="number" id="frete-tarifa-valor" min="0" step="0.0001" placeholder="Ex: 7,75"></div>
+          <div class="form-group"><label>Vigente desde <span class="hint">opcional</span></label>
+            <input type="date" id="frete-tarifa-vigencia"></div>
+          <div class="form-group" style="align-self:end">
+            <button class="btn btn-primary btn-sm" onclick="addTarifaFreteUI()">➕ Salvar tarifa</button></div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Tipo de veículo</th><th>R$ / km</th><th>Vigente desde</th><th>Quem cadastrou</th></tr></thead>
+            <tbody id="frete-tarifas-tbody"></tbody>
+          </table>
+        </div>
+        <div class="empty-state" id="frete-tarifas-empty" data-icone="💰" hidden>Nenhuma tarifa cadastrada ainda.</div>
+
+        <div class="sep"></div>
+        <div class="form-row">
+          <div class="form-group" style="flex:2"><label>Destino</label>
+            <input type="text" id="frete-destino-nome" placeholder="Ex: GOIANIA · MONTES CLAROS (COM DESVIO)"></div>
+          <div class="form-group"><label>KM</label>
+            <input type="number" id="frete-destino-km" min="1" step="1" placeholder="Ex: 583"></div>
+          <div class="form-group" style="align-self:end">
+            <button class="btn btn-primary btn-sm" onclick="addDestinoFreteUI()">➕ Salvar destino</button></div>
+        </div>
+        <div class="card-sub" style="margin-top:-6px">Variantes são destinos <strong>diferentes</strong>:
+          “MONTES CLAROS (COM DESVIO)” e “(SEM DESVIO)” têm KM diferente, e é o KM que decide o valor.</div>
+        <div class="form-row" style="align-items:flex-end">
+          <div class="form-group" style="flex:2"><label>Buscar destino</label>
+            <input type="text" id="frete-destino-busca" placeholder="Digite pra filtrar…" oninput="renderTabelaDeFrete()"></div>
+          <div class="form-group" style="align-self:end">
+            <button class="btn btn-sec btn-sm" onclick="exportarTabelaFreteCsv()"
+              title="Baixa a tabela de frete completa (tarifas e destinos) em CSV.">⬇ Exportar CSV</button></div>
+          <div class="form-group text-dim" id="frete-destinos-contagem" style="flex:1;text-align:right"></div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Destino</th><th>KM</th><th>Quem cadastrou</th><th class="no-print">Ação</th></tr></thead>
+            <tbody id="frete-destinos-tbody"></tbody>
+          </table>
+        </div>
+        <div class="empty-state" id="frete-destinos-empty" data-icone="🗺️" hidden>Nenhum destino cadastrado ainda.</div>
+      </div>
+
       <!-- Cadastros de apoio das DEVOLUÇÕES (18/08/2026): supervisores,
            produtos e motivos viram sugestão nos campos do checklist — para
            escolher em vez de digitar (pedido da reunião). Servidor-first,
@@ -1319,7 +1401,7 @@
     <!-- Relatório de Devoluções acessível também daqui (18/08/2026): os
          setores que têm a aba Relatórios exportam o checklist do dia com
          o STATUS ATUAL — a lista é re-buscada do servidor no clique. -->
-    <div class="card">
+    <div class="card" data-relatorio="checklist">
       <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-devolucoes"/></svg> Relatório de Devoluções</div>
       <div class="card-sub">O checklist de devoluções do dia, com carimbos de cada etapa, faltas,
         divergentes, destinações e sobras — sempre com o status ATUAL (busca no servidor na hora
@@ -1341,7 +1423,7 @@
          define o recorte de tudo que vem abaixo — filtro escondido embaixo
          do botão faz o gestor gerar o relatório errado e só descobrir
          depois de mandar no grupo. -->
-    <div class="card">
+    <div class="card" data-relatorio="patio">
       <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-programacao"/></svg> Período — Data da Programação</div>
       <div class="card-sub">Recorta os relatórios pela data em que a carga foi <strong>inserida no sistema</strong>, não pela chegada do caminhão. Em branco = todas as cargas.</div>
       <div class="form-grid">
@@ -1363,17 +1445,17 @@
       <div id="rel-resumo-filtro" class="card-sub" style="margin:6px 0 0"></div>
     </div>
 
-    <div class="card">
+    <div class="card" data-relatorio="patio">
       <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-relatorios"/></svg> PDF Operacional</div>
       <div class="card-sub">Sequenciamento de carregamento do dia — mesmo layout da planilha usada hoje: Nº, Carga, Rota, Tipo de Operação, Faturado, Status de Carregamento (célula colorida), Placa, Transportadora, Tipo de Veículo, Peso(ton), Paletizada, Entregas, Ganchos.</div>
       <button class="btn btn-primary" onclick="exportarPdfOperacional()">🖨️ Gerar PDF Operacional</button>
     </div>
-    <div class="card">
+    <div class="card" data-relatorio="patio">
       <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-relatorios"/></svg> PDF Executivo</div>
       <div class="card-sub">Uma página, KPIs e visão de diretoria.</div>
       <button class="btn btn-primary" onclick="exportarPdfExecutivo()">🖨️ Gerar PDF Executivo</button>
     </div>
-    <div class="card">
+    <div class="card" data-relatorio="patio">
       <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-indicadores"/></svg> Exportar Dados (CSV) — Power BI</div>
       <div class="card-sub">
         Gera 5 arquivos CSV (formato fato/dimensão): <code>Fact_Movimentacoes</code>, <code>Dim_Carga</code>,
@@ -1387,10 +1469,22 @@
 
     <!-- Relatório independente, para o setor administrativo. Três colunas
          só: é controle de frete, não acompanhamento de pátio. -->
-    <div class="card">
+    <div class="card" data-relatorio="frete">
       <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-fretes"/></svg> Administração de Fretes</div>
-      <div class="card-sub">Número da Carga, Placa, Rota e Observações. É no campo Observações que a administração registra valor do frete, negociação e instruções — a linha em branco é justamente a que falta preencher.</div>
-      <button class="btn btn-primary" onclick="exportarPdfFretes()">🖨️ Gerar Administração de Fretes</button>
+      <div class="card-sub">Sequência, Nº da carga, data do faturamento, rota, placa, transportadora,
+        caminhão, peso, quilometragem, entregas, motorista, valor do frete e o número do
+        documento de frete. É no campo Observações que a administração registra o valor
+        combinado quando ele foge da tabela — a linha em branco é justamente a que falta preencher.</div>
+      <div class="flex-end" style="justify-content:flex-start;gap:8px;flex-wrap:wrap">
+        <!-- A PLANILHA VEM PRIMEIRO, e é a primária (09/09/2026): é o
+             formato em que a Administração TRABALHA. O PDF continua para
+             arquivar e assinar — trabalhar num PDF é redigitar, que é o
+             retrabalho que o dono pediu para acabar. -->
+        <button class="btn btn-primary" onclick="exportarPlanilhaFretes()"
+          title="Baixa a planilha (CSV) que abre direto no Excel, com as colunas na ordem da administração.">📊 Baixar Planilha (Excel)</button>
+        <button class="btn btn-sec" onclick="exportarPdfFretes()"
+          title="Gera o PDF para arquivar e assinar.">🖨️ Gerar PDF</button>
+      </div>
     </div>
   </div>
 
@@ -1458,6 +1552,11 @@
 </div>
 
 <datalist id="lista-transportadoras"></datalist>
+<datalist id="lista-destinos-frete"></datalist>
+<datalist id="lista-tipos-veiculo">
+  <option value="3/4"></option><option value="Toco"></option><option value="Truck"></option>
+  <option value="Bitruck"></option><option value="Carreta"></option>
+</datalist>
 <!-- Placas da Frota, para o campo de placa da Montagem do Dia sugerir em vez
      de exigir memória. A trava continua sendo do servidor (placa fora da
      Frota é recusada com a frase que ensina onde cadastrar); a lista só
@@ -1656,6 +1755,38 @@
     </div>
     <div class="form-row">
       <div class="form-group"><label>Peso (kg)</label><input type="number" id="completar-peso" min="0"></div>
+    </div>
+    <!-- FRETE, também aqui (09/09/2026). Os mesmos três campos, na mesma
+         ordem — a regra do card acima vale: quem mexe numa tela mexe na
+         outra, e existe teste que reprova se divergirem.
+
+         AQUI NÃO TRAVA. O caminhão JÁ ESTÁ no pátio: a placa foi digitada
+         pela Portaria na chegada, então este lançamento não é o ato de
+         contratar, e o servidor não exige (a trava é a passagem de "sem
+         placa" para "com placa"). Travar uma carga de caminhão que já
+         encostou seria literalmente caminhão parado no portão.
+
+         O campo existe para o KM ser informado NA HORA em que alguém sabe
+         dele. Se ficar vazio, o relatório de fretes mostra a linha com o
+         motivo escrito ("Sem KM de deslocamento") em vez de uma célula
+         muda — visível para a Administração completar, e não um zero
+         silencioso. -->
+    <div class="form-row">
+      <div class="form-group" style="flex:2">
+        <label>Destino do frete <span class="hint">(puxa o KM da tabela)</span></label>
+        <input type="text" id="completar-frete-destino" list="lista-destinos-frete"
+               placeholder="Ex: GOIANIA" oninput="destinoFreteCompletarUI()">
+      </div>
+      <div class="form-group">
+        <label>KM destino <span class="hint">referência da tabela</span></label>
+        <input type="number" id="completar-km-destino" min="1" step="1" readonly
+               title="Vem da Tabela de Frete. Só de leitura: para mudar, edite o destino em Cadastros.">
+      </div>
+      <div class="form-group">
+        <label>KM deslocamento <span class="hint">o que será pago</span></label>
+        <input type="number" id="completar-km-deslocamento" min="1" step="1"
+               title="O KM que multiplica a tarifa. Diferente do KM do destino quando há desvio, retorno ou coleta no caminho.">
+      </div>
     </div>
     <div class="form-row">
       <div class="form-group">

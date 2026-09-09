@@ -4542,8 +4542,11 @@ describe('38. Carga sem placa — a Torre espera a contratação', () => {
     });
     assert.equal(ruim.status, 422);
 
+    // Pôr a placa É contratar, e contratar exige KM e observação desde
+    // 09/09/2026 (bloco 42) — é o que o painel manda junto no mesmo gesto.
     const boa = await req(`/api/cargas/${criada.json.id}`, {
-      metodo: 'PATCH', token: tokens['Logística'], corpo: { placa },
+      metodo: 'PATCH', token: tokens['Logística'],
+      corpo: { placa, kmDeslocamento: 100, observacoes: 'contratação de teste' },
     });
     assert.equal(boa.status, 200, JSON.stringify(boa.json));
     assert.equal(boa.json.placa, placa);
@@ -4568,7 +4571,8 @@ describe('38. Carga sem placa — a Torre espera a contratação', () => {
       corpo: { numeroCarga: 'SEMPLACA-5', peso: 13000 },
     });
     const r = await req(`/api/cargas/${criada.json.id}`, {
-      metodo: 'PATCH', token: tokens['Logística'], corpo: { placa },
+      metodo: 'PATCH', token: tokens['Logística'],
+      corpo: { placa, kmDeslocamento: 100, observacoes: 'contratação de teste' },
     });
     assert.equal(r.status, 200, JSON.stringify(r.json));
     assert.equal(r.json.status, 'Aguardando Embarque',
@@ -5100,5 +5104,450 @@ describe('41. Frota muda de transportadora: as cargas abertas acompanham, as con
 
   after(async () => {
     await pool.query('UPDATE dim_veiculos SET transportadora = $1 WHERE placa = $2', [transpOriginal, placa]);
+  });
+});
+
+describe('42. Tabela de frete: o valor sai da conta, e sem KM não se contrata (09/09/2026)', () => {
+  /* PEDIDO DO DONO, com a tabela oficial em PDF na mão:
+
+       "criar tabela de frete no embarquesuinco.com.br, cadastro possa ser
+        editavel e criada da mesma forma que funcionam os cadastros (...) na
+        verdade vao ser dois campos de KM, um de KM DESTINO, e KM
+        DESLOCAMENTO (precisa ser o valor certinho do valor que sera pago no
+        frete)"
+       "a tabela de frete deve fazer o calculo segundo a kilometragem e destino"
+       "valor kilometragem é por modalidade de veiculo"
+       "transportadora suinco ou FOB nao tem valor de frete"
+       "vamos incluir um campo de kilometragem obrigatoria na criacao de
+        qualquer carga KM"  → confirmado depois: "1 trava a contratacao".
+
+     A TABELA DO PDF É UMA CONTA. As 23 linhas × 5 tipos = 115 células foram
+     conferidas uma a uma: TODAS são `km × tarifa do tipo`. Por isso o
+     servidor guarda 5 tarifas e 23 km, e o valor sai calculado — e por isso
+     este bloco confere o resultado contra os números impressos do PDF, que
+     é a única fonte que o dono reconhece.
+
+     O QUE ESTE BLOCO TRAVA
+       1. as 5 tarifas e os 23 destinos existem com os valores do PDF;
+       2. o valor calculado bate com o PDF nas 5 modalidades;
+       3. SUINCO e FOB não têm valor de frete — e o motivo vem junto;
+       4. sem KM DESLOCAMENTO não se contrata placa (nem na criação, nem no
+          PATCH que coloca a placa depois);
+       5. KM divergente do destino é MARCADO, não recusado — desvio, retorno
+          e coleta no caminho existem;
+       6. o Comercial não enxerga valor de frete;
+       7. mudar a tarifa NÃO recalcula frete já contratado. */
+
+  const T = { '3/4': 5.04, Toco: 6.09, Truck: 7.75, Bitruck: 8.97, Carreta: 11.66 };
+  // GOIANIA = 583 km. Os cinco valores impressos no PDF, na coluna de Goiânia.
+  const PDF_GOIANIA = { '3/4': 2938.32, Toco: 3550.47, Truck: 4518.25, Bitruck: 5229.51, Carreta: 6797.78 };
+  const placas = {};
+  let placaSuinco, placaFob, semKm;
+
+  before(async () => {
+    /* Uma placa por modalidade, mais uma SUINCO e uma FOB. Placas de teste
+       próprias: pegar da base real amarraria o teste a um cadastro que muda. */
+    let i = 0;
+    for (const tipo of Object.keys(T)) {
+      const placa = `FRT${String(i).padStart(2, '0')}A${i}${i}`;
+      await pool.query(
+        `INSERT INTO dim_veiculos (placa, transportadora, tipo_veiculo, uf, origem)
+         VALUES ($1,'TRANSPORTES FRETE TESTE',$2,'MG','manual')
+         ON CONFLICT (placa) DO UPDATE SET transportadora = EXCLUDED.transportadora,
+           tipo_veiculo = EXCLUDED.tipo_veiculo`, [placa, tipo]);
+      placas[tipo] = placa; i++;
+    }
+    placaSuinco = 'FRTSUI9A9';
+    placaFob = 'FRTFOB8B8';
+    await pool.query(
+      `INSERT INTO dim_veiculos (placa, transportadora, tipo_veiculo, uf, origem)
+       VALUES ($1,'SUINCO','Truck','MG','manual'), ($2,'FOB','Carreta','MG','manual')
+       ON CONFLICT (placa) DO UPDATE SET transportadora = EXCLUDED.transportadora,
+         tipo_veiculo = EXCLUDED.tipo_veiculo`, [placaSuinco, placaFob]);
+  });
+
+  test('as cinco tarifas do PDF estão cadastradas', async () => {
+    const r = await req('/api/frete/tarifas', { token: tokens['Logística'] });
+    assert.equal(r.status, 200, r.texto);
+    const porTipo = Object.fromEntries(r.json.map((t) => [t.tipoVeiculo, Number(t.valorPorKm)]));
+    for (const [tipo, valor] of Object.entries(T)) {
+      assert.equal(porTipo[tipo], valor, `tarifa de ${tipo}`);
+    }
+  });
+
+  test('os destinos do PDF estão cadastrados, com o km de referência', async () => {
+    const r = await req('/api/frete/destinos', { token: tokens['Logística'] });
+    assert.equal(r.status, 200, r.texto);
+    const porNome = Object.fromEntries(r.json.map((d) => [d.destino, d.km]));
+    assert.equal(porNome['GOIANIA'], 583);
+    assert.equal(porNome['SALVADOR (COM DESVIO)'], 1570);
+    assert.equal(porNome['SALVADOR (SEM DESVIO)'], 1430);
+    // As variantes são destinos DIFERENTES — é o que decide o valor.
+    assert.equal(porNome['MONTES CLAROS (COM DESVIO)'], 585);
+    assert.equal(porNome['MONTES CLAROS (SEM DESVIO)'], 445);
+    assert.ok(r.json.length >= 23, `${r.json.length} destinos`);
+  });
+
+  test('o valor calculado bate com o PDF nas CINCO modalidades', async () => {
+    for (const [tipo, esperado] of Object.entries(PDF_GOIANIA)) {
+      const r = await req('/api/cargas', { metodo: 'POST', token: tokens['Logística'], corpo: {
+        placa: placas[tipo], numeroCarga: `FRT-${tipo}-${Date.now()}`,
+        freteDestino: 'GOIANIA', kmDeslocamento: 583, observacoes: 'tabela',
+      } });
+      assert.equal(r.status, 201, `${tipo}: ${r.texto}`);
+      assert.equal(Number(r.json.freteValor), esperado, `${tipo}: ${583} x ${T[tipo]}`);
+      assert.equal(Number(r.json.freteTarifaUsada), T[tipo], `${tipo}: a tarifa usada fica gravada`);
+      assert.equal(r.json.kmDestino, 583, 'o km do destino é copiado do cadastro');
+    }
+  });
+
+  test('SUINCO e FOB não têm valor de frete — e o painel recebe o motivo', async () => {
+    for (const [placa, rotulo] of [[placaSuinco, 'SUINCO'], [placaFob, 'FOB']]) {
+      const r = await req('/api/cargas', { metodo: 'POST', token: tokens['Logística'], corpo: {
+        placa, numeroCarga: `FRT-${rotulo}-${Date.now()}`,
+        freteDestino: 'GOIANIA', kmDeslocamento: 583, observacoes: 'sem frete',
+      } });
+      assert.equal(r.status, 201, `${rotulo}: ${r.texto}`);
+      assert.equal(r.json.freteValor, null, `${rotulo} não paga frete de tabela`);
+      assert.match(String(r.json.freteMotivo || ''), new RegExp(rotulo, 'i'),
+        `o painel precisa saber POR QUE está vazio — null calado é o defeito`);
+    }
+  });
+
+  test('SEM KM A CARGA NASCE IGUAL — e a ausência vem DECLARADA, não muda', async () => {
+    /* AQUI HAVIA UMA TRAVA, E ELA SAIU POR DECISÃO DO DONO (09/09/2026).
+
+       O pedido era "kilometragem obrigatoria" e ele confirmou "1 trava a
+       contratacao". A bateria mostrou o custo antes de a operação pagar:
+       a Montagem do Dia cria carga por outro caminho, EM LOTE, sem campo de
+       KM — e carga recusada na criação é apagada do painel (proteção de
+       07/08). O lote sumiria na frente da Logística. Levado a ele com a
+       evidência: "não põe a trava do quilômetro então".
+
+       O QUE ESTE TESTE GUARDA AGORA é o que sobrou no lugar da trava, e que
+       vale mais: a carga nasce, e a falta do KM é DITA. Célula vazia sem
+       explicação é lida como R$ 0,00 por quem confere o frete — foi assim
+       que o relatório passou meses saindo com "a preencher" sem ninguém
+       saber de quem era a pendência. */
+    const r = await req('/api/cargas', { metodo: 'POST', token: tokens['Logística'], corpo: {
+      placa: placas.Truck, numeroCarga: 'FRT-SEMKM-' + Date.now(), observacoes: 'x',
+    } });
+    assert.equal(r.status, 201, r.texto);
+    assert.equal(r.json.kmDeslocamento, null, 'null, não zero: não informado ≠ zero quilômetro');
+    assert.equal(r.json.freteValor, null, 'sem KM não há conta a fazer');
+    assert.match(r.json.freteMotivo, /Sem KM/i,
+      'e o painel recebe o motivo — a ausência é declarada, não silenciosa');
+  });
+
+  test('mas a carga SEM PLACA nasce sem KM — é programação, não contratação', async () => {
+    const r = await req('/api/cargas', { metodo: 'POST', token: tokens['Logística'], corpo: {
+      numeroCarga: 'FRT-SEMPLACA-' + Date.now(), rota: '500',
+    } });
+    assert.equal(r.status, 201, r.texto);
+    assert.equal(r.json.placa, '');
+    assert.equal(r.json.kmDeslocamento, null, 'null, não zero: km não informado ≠ km zero');
+    semKm = r.json.id;
+  });
+
+  test('e ao COLOCAR a placa nela, o frete é calculado com o que houver', async () => {
+    // Sem KM, contratar continua sendo possível — só não produz valor.
+    const sem = await req(`/api/cargas/${semKm}`, { metodo: 'PATCH', token: tokens['Logística'],
+      corpo: { placa: placas.Carreta } });
+    assert.equal(sem.status, 200, sem.texto);
+    assert.equal(sem.json.freteValor, null);
+    assert.match(sem.json.freteMotivo, /Sem KM/i);
+
+    const com = await req(`/api/cargas/${semKm}`, { metodo: 'PATCH', token: tokens['Logística'],
+      corpo: { placa: placas.Carreta, freteDestino: 'UBERLANDIA', kmDeslocamento: 220, observacoes: 'combinado' } });
+    assert.equal(com.status, 200, com.texto);
+    assert.equal(Number(com.json.freteValor), Number((220 * T.Carreta).toFixed(2)));
+  });
+
+  test('carga já contratada continua editável sem repetir o KM', async () => {
+    // A trava é do ATO de contratar. Reexigir KM em toda edição travaria a
+    // Portaria mudando motorista numa carga que já rodou.
+    const r = await req(`/api/cargas/${semKm}`, { metodo: 'PATCH', token: tokens['Logística'],
+      corpo: { motorista: 'José' } });
+    assert.equal(r.status, 200, r.texto);
+    assert.equal(r.json.motorista, 'José');
+  });
+
+  test('KM DESLOCAMENTO diferente do destino é MARCADO, não recusado', async () => {
+    // Desvio, retorno e coleta no caminho existem — e é o deslocamento que paga.
+    const r = await req('/api/cargas', { metodo: 'POST', token: tokens['Logística'], corpo: {
+      placa: placas.Truck, numeroCarga: 'FRT-DESVIO-' + Date.now(),
+      freteDestino: 'GOIANIA', kmDeslocamento: 640, observacoes: 'desvio combinado',
+    } });
+    assert.equal(r.status, 201, r.texto);
+    assert.equal(r.json.kmDestino, 583, 'a referência da tabela fica registrada');
+    assert.equal(r.json.kmDeslocamento, 640, 'o que será pago é o deslocamento');
+    assert.equal(Number(r.json.freteValor), Number((640 * T.Truck).toFixed(2)), 'quem multiplica é o deslocamento');
+    assert.equal(r.json.kmDivergente, true, 'a divergência é visível, não escondida');
+  });
+
+  test('destino fora do cadastro não impede a carga — só não traz km de referência', async () => {
+    const r = await req('/api/cargas', { metodo: 'POST', token: tokens['Logística'], corpo: {
+      placa: placas.Toco, numeroCarga: 'FRT-NOVO-' + Date.now(),
+      freteDestino: 'CIDADE QUE AINDA NAO ESTA NA TABELA', kmDeslocamento: 300, observacoes: 'combinado à parte',
+    } });
+    assert.equal(r.status, 201, r.texto);
+    assert.equal(r.json.kmDestino, null);
+    assert.equal(Number(r.json.freteValor), Number((300 * T.Toco).toFixed(2)),
+      'o deslocamento digitado calcula mesmo sem destino cadastrado');
+  });
+
+  test('o Comercial NÃO enxerga valor de frete', async () => {
+    const { rows } = await pool.query(
+      "SELECT senha_hash FROM operadores WHERE email = 'ana@teste.local'");
+    await pool.query(
+      `INSERT INTO operadores (email, nome, setor, senha_hash) VALUES ($1,'Cida','Comercial',$2)
+       ON CONFLICT (email) DO UPDATE SET setor = 'Comercial'`,
+      ['cida@teste.local', rows[0].senha_hash]);
+    const login = await req('/auth/login', { metodo: 'POST', corpo: { email: 'cida@teste.local', senha: SENHA } });
+    assert.equal(login.status, 200, login.texto);
+    const est = await req('/api/estado?desde=1970-01-01T00:00:00.000Z', { token: login.json.token });
+    assert.equal(est.status, 200, est.texto);
+    const comValor = (est.json.cargas || []).filter((c) => c.freteValor != null);
+    assert.equal(comValor.length, 0,
+      `o Comercial recebeu ${comValor.length} carga(s) com valor de frete — o valor é de Logística e Administração`);
+    // E a tabela de preço também não é dele.
+    const tar = await req('/api/frete/tarifas', { token: login.json.token });
+    assert.equal(tar.status, 403, tar.texto);
+  });
+
+  test('mudar a tarifa NÃO recalcula frete já contratado', async () => {
+    const r = await req('/api/cargas', { metodo: 'POST', token: tokens['Logística'], corpo: {
+      placa: placas.Bitruck, numeroCarga: 'FRT-CONGELA-' + Date.now(),
+      freteDestino: 'PASSOS', kmDeslocamento: 445, observacoes: 'congela',
+    } });
+    assert.equal(r.status, 201, r.texto);
+    const antes = Number(r.json.freteValor);
+    assert.equal(antes, Number((445 * T.Bitruck).toFixed(2)));
+
+    const up = await req('/api/frete/tarifas', { metodo: 'POST', token: tokens['Administração'],
+      corpo: { tipoVeiculo: 'Bitruck', valorPorKm: 99.99 } });
+    assert.equal(up.status, 201, up.texto);
+
+    const { rows } = await pool.query('SELECT frete_valor FROM fact_viagens WHERE carga_id = $1', [r.json.id]);
+    assert.equal(Number(rows[0].frete_valor), antes,
+      'recalcular o passado com a tarifa de hoje faria o relatório mentir');
+
+    await pool.query('UPDATE frete_tarifas SET valor_por_km = $1 WHERE tipo_veiculo = $2', [T.Bitruck, 'Bitruck']);
+  });
+
+  test('o cadastro de tarifa e destino é da Logística/Administração — a Portaria não mexe', async () => {
+    const t = await req('/api/frete/tarifas', { metodo: 'POST', token: tokens['Portaria'],
+      corpo: { tipoVeiculo: 'Truck', valorPorKm: 1 } });
+    assert.equal(t.status, 403, t.texto);
+    const d = await req('/api/frete/destinos', { metodo: 'POST', token: tokens['Portaria'],
+      corpo: { destino: 'X', km: 1 } });
+    assert.equal(d.status, 403, d.texto);
+  });
+
+  test('a Logística cadastra destino novo, e ele passa a valer no cálculo', async () => {
+    const d = await req('/api/frete/destinos', { metodo: 'POST', token: tokens['Logística'],
+      corpo: { destino: 'PATOS DE MINAS', km: 310, operador: 'Ana' } });
+    assert.equal(d.status, 201, d.texto);
+    assert.equal(d.json.km, 310);
+    const r = await req('/api/cargas', { metodo: 'POST', token: tokens['Logística'], corpo: {
+      placa: placas['3/4'], numeroCarga: 'FRT-PATOS-' + Date.now(),
+      freteDestino: 'PATOS DE MINAS', kmDeslocamento: 310, observacoes: 'destino novo',
+    } });
+    assert.equal(r.status, 201, r.texto);
+    assert.equal(r.json.kmDestino, 310);
+    assert.equal(Number(r.json.freteValor), Number((310 * T['3/4']).toFixed(2)));
+  });
+
+  test('km ZERO não vira frete de R$ 0,00 — é tratado como não informado', async () => {
+    /* `Number('') === 0` e `Number(null) === 0`. Sem kmValido(), um campo em
+       branco viraria "zero quilômetros" e o frete sairia R$ 0,00 sem ninguém
+       ver — a mesma família do `Number(0) || null` que já apagou capacidade
+       de veículo neste projeto, do outro lado da moeda. */
+    const r = await req('/api/cargas', { metodo: 'POST', token: tokens['Logística'], corpo: {
+      placa: placas.Truck, numeroCarga: 'FRT-ZERO-' + Date.now(), kmDeslocamento: 0, observacoes: 'x',
+    } });
+    assert.equal(r.status, 201, r.texto);
+    assert.equal(r.json.kmDeslocamento, null, 'zero digitado é guardado como NÃO INFORMADO');
+    assert.equal(r.json.freteValor, null, 'e não como frete de R$ 0,00');
+    assert.match(r.json.freteMotivo, /Sem KM/i);
+  });
+
+  after(async () => {
+    await pool.query("DELETE FROM operadores WHERE email = 'cida@teste.local'");
+    await pool.query("DELETE FROM frete_destinos WHERE destino = 'PATOS DE MINAS'");
+    /* AS PLACAS QUE ESTE BLOCO CRIOU SAEM JUNTO.
+
+       `dim_veiculos` é dimensão COMPARTILHADA: test_login_api e
+       test_adaptador_api conferem a contagem exata da frota (749) para
+       provar que a base inteira chega ao painel. Deixar 7 placas de teste
+       atrás fez as duas reprovarem com "756 placas" — contaminação, a causa
+       nº 3 das quatro, e não defeito nenhum nelas.
+
+       As cargas vão primeiro: fact_viagens referencia a placa. */
+    await pool.query("DELETE FROM fact_statusfrota WHERE carga_id IN (SELECT carga_id FROM fact_viagens WHERE placa LIKE 'FRT%')");
+    await pool.query("DELETE FROM log_eventos WHERE placa LIKE 'FRT%'");
+    await pool.query("DELETE FROM fact_viagens WHERE placa LIKE 'FRT%'");
+    await pool.query("DELETE FROM dim_veiculos WHERE placa LIKE 'FRT%'");
+  });
+});
+
+describe('43. Arrastar respeita os números que a fila JÁ TEM (09/09/2026)', () => {
+  /* RELATO DO DONO, em produção, hoje: "tentei arrastar as cargas de hoje
+     da torre de controle e não consegui, o arrasto elas não trocam de
+     lugar e aparece que essa ação é inválida".
+
+     REPRODUZIDO, e a causa é uma conta minha, de ontem. `filaReordenada`
+     montava o destino a partir dos PRIMEIROS N NÚMEROS LIVRES — como se a
+     fila sempre ocupasse 1,2,3... pulando só o que já carregou. No dia
+     real ela não ocupa: a Logística digita os números ao longo do dia e a
+     Portaria chama o caminhão que chegou, não o próximo da lista. Sobra
+     uma fila tipo 1, 7, 12.
+
+       fila 1, 7, 12 · já carregaram 2, 3, 4
+       primeiros 3 livres = 1, 5, 6
+       soltar em cima da linha que mostra 7  →  7 não está em [1,5,6]
+                                             →  RECUSADO, "ação inválida"
+
+     E o pior estava escondido atrás disso: quando por acaso o número
+     ESTAVA na lista (soltar na linha 1), a operação era aceita e
+     RENUMERAVA a fila de 1,7,12 para 1,5,6 — reescrevendo em silêncio
+     números que a Logística tinha digitado.
+
+     A REGRA CERTA: os números que a fila já tem são o tabuleiro. Arrastar
+     REORDENA quem ocupa cada número; não inventa numeração nova. Número
+     novo só entra para carga que ainda não tem nenhum. É o que o dono
+     pediu com "mantendo a logica e a sequencia". */
+  /* SEIS PLACAS NOVAS POR CENÁRIO. Reusar as mesmas faria o segundo
+     cenário esbarrar na trava de 19/08 ("caminhão que não saiu não chega de
+     novo") — que está certa e não é o assunto aqui. */
+  let proximaPlaca = 120;
+  async function seisPlacas() {
+    const { rows } = await pool.query(
+      `SELECT placa FROM dim_veiculos WHERE transportadora <> ''
+        ORDER BY placa OFFSET $1 LIMIT 6`, [proximaPlaca]);
+    proximaPlaca += 6;
+    return rows.map((r) => r.placa);
+  }
+
+  /* Monta um dia com a forma do relato: seis cargas, três já carregaram
+     segurando 2, 3 e 4, e a fila fica com 1, 7 e 12.
+
+     CADA CENÁRIO NUM DIA PRÓPRIO. A fila que o servidor monta é a do DIA da
+     carga arrastada, e outros blocos desta bateria deixam cargas em aberto
+     no dia de hoje — elas entrariam na mesma fila e o teste passaria a medir
+     um tabuleiro que não é o que ele montou (a causa nº 3 das quatro do
+     vermelho: contaminação entre suítes). Um dia por cenário isola. */
+  let diaSeq = 0;
+  async function montarDia(prefixo) {
+    const placas = await seisPlacas();
+    const ids = [];
+    for (let i = 0; i < 6; i++) {
+      const r = await req('/api/cargas', { metodo: 'POST', token: tokens['Logística'], corpo: {
+        placa: placas[i], numeroCarga: `${prefixo}-${i}-${Date.now()}`,
+      } });
+      assert.equal(r.status, 201, r.texto);
+      ids.push(r.json.id);
+    }
+    // Três saem da fila (Embarque Iniciado) e ficam com 2, 3, 4.
+    for (let i = 0; i < 3; i++) {
+      for (const [status, setor] of [['Aguardando Embarque', 'Portaria'], ['Embarque Iniciado', 'Expedição']]) {
+        const r = await req(`/api/cargas/${ids[i]}/status`, { metodo: 'POST', token: tokens[setor],
+          corpo: { status, confirmado: true } });
+        assert.equal(r.status, 200, `${status}: ${r.texto}`);
+      }
+    }
+    /* O dia próprio e os números, na MESMA escrita e DEPOIS de as etapas
+       terem andado — a rota de status carimba `programado_em` no
+       lançamento, e gravar antes seria desfeito por ela. */
+    diaSeq += 1;
+    const numeros = [2, 3, 4, 1, 7, 12];
+    for (let i = 0; i < 6; i++) {
+      await pool.query(
+        `UPDATE fact_viagens SET sequencia = $1,
+           programado_em = date_trunc('day', now()) - ($2 || ' days')::interval + interval '9 hours'
+         WHERE carga_id = $3`,
+        [numeros[i], String(200 + diaSeq), ids[i]]);
+    }
+    return { ids, fila: ids.slice(3) };  // fila = os que ainda vão carregar: 1, 7, 12
+  }
+
+  async function seqDe(ids) {
+    const { rows } = await pool.query(
+      'SELECT carga_id, sequencia FROM fact_viagens WHERE carga_id = ANY($1)', [ids]);
+    const m = new Map(rows.map((r) => [r.carga_id, r.sequencia]));
+    return ids.map((id) => m.get(id));
+  }
+
+  test('soltar em cima de um número que a fila TEM funciona — mesmo salteado', async () => {
+    const { fila } = await montarDia('ARR-A');
+    // fila: [1, 7, 12]. Arrasta a de 12 para cima da linha que mostra 7.
+    const r = await req('/api/cargas/sequenciar', { metodo: 'POST', token: tokens['Logística'],
+      corpo: { cargaId: fila[2], posicao: 7 } });
+    assert.equal(r.status, 200, r.texto);
+    assert.deepEqual(await seqDe(fila), [1, 12, 7],
+      'quem estava em 12 assume o 7; quem estava em 7 desce para o 12');
+  });
+
+  test('e NÃO reescreve os números que a Logística digitou', async () => {
+    const { fila } = await montarDia('ARR-B');
+    const r = await req('/api/cargas/sequenciar', { metodo: 'POST', token: tokens['Logística'],
+      corpo: { cargaId: fila[2], posicao: 1 } });
+    assert.equal(r.status, 200, r.texto);
+    const depois = await seqDe(fila);
+    assert.deepEqual([...depois].sort((a, b) => a - b), [1, 7, 12],
+      'o conjunto de números da fila é o mesmo — arrastar reordena, não renumera');
+    assert.deepEqual(depois, [7, 12, 1], 'a arrastada foi para o 1 e as outras subiram uma casa');
+  });
+
+  test('os números de quem já carregou continuam intocados', async () => {
+    const { ids, fila } = await montarDia('ARR-C');
+    await req('/api/cargas/sequenciar', { metodo: 'POST', token: tokens['Logística'],
+      corpo: { cargaId: fila[2], posicao: 7 } });
+    assert.deepEqual(await seqDe(ids.slice(0, 3)), [2, 3, 4],
+      'carga que já carregou é registro do que aconteceu');
+  });
+
+  test('pedir o número de quem já carregou continua recusado, com o motivo', async () => {
+    const { fila } = await montarDia('ARR-D');
+    const r = await req('/api/cargas/sequenciar', { metodo: 'POST', token: tokens['Logística'],
+      corpo: { cargaId: fila[2], posicao: 3 } });
+    assert.equal(r.status, 400, r.texto);
+    assert.equal(r.json.codigo, 'POSICAO_INVALIDA');
+    assert.match(r.json.erro, /já carregou/, 'a recusa diz QUAL das duas causas foi');
+  });
+
+  test('carga da fila SEM número recebe um livre, sem tomar o de ninguém', async () => {
+    const { fila } = await montarDia('ARR-E');
+    await pool.query('UPDATE fact_viagens SET sequencia = NULL WHERE carga_id = $1', [fila[1]]);
+    // fila agora: 1, (sem número), 12
+    const r = await req('/api/cargas/sequenciar', { metodo: 'POST', token: tokens['Logística'],
+      corpo: { cargaId: fila[2], posicao: 1 } });
+    assert.equal(r.status, 200, r.texto);
+    const depois = await seqDe(fila);
+    assert.equal(depois[2], 1, 'a arrastada foi para o 1');
+    assert.equal(new Set(depois).size, 3, 'ninguém ficou com número repetido');
+    assert.ok(depois.every((n) => ![2, 3, 4].includes(n)),
+      'e ninguém tomou o número de quem já carregou');
+  });
+
+  test('número solto, fora das casas da fila, CONTINUA recusado — e a recusa diz quais valem', async () => {
+    /* Decisão de 08/09, com teste próprio no bloco 7d: a fila tem casas, e
+       999 numa fila de 3 não é uma delas. O relato de hoje era sobre
+       ARRASTAR, que solta sempre em cima de um número que existe — alargar
+       a regra aqui consertaria o que ninguém pediu e apagaria a decisão de
+       ontem junto.
+
+       O QUE MUDA É A FRASE. "A fila tem 3 cargas" não explica por que 5 é
+       inválido quando as casas são 1, 7 e 12: o número é menor que o maior
+       e mesmo assim não serve. Agora a recusa DIZ quais são as casas — sem
+       isso o operador tenta 4, tenta 6, e conclui que o campo está quebrado. */
+    const { fila } = await montarDia('ARR-F');
+    const r = await req('/api/cargas/sequenciar', { metodo: 'POST', token: tokens['Logística'],
+      corpo: { cargaId: fila[2], posicao: 5 } });
+    assert.equal(r.status, 400, r.texto);
+    assert.equal(r.json.codigo, 'POSICAO_INVALIDA');
+    assert.match(r.json.erro, /1, 7 e 12|1, 7, 12/,
+      `a recusa precisa dizer quais números valem: ${r.json.erro}`);
+    assert.deepEqual(await seqDe(fila), [1, 7, 12], 'e nada foi renumerado');
   });
 });

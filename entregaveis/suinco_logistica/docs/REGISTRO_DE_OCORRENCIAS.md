@@ -1486,3 +1486,67 @@ permitiu recuperar os lacres apagados de #09.
    opostas, e juntá-las numa função só quebrou tanto quanto copiar teria
    quebrado. O `title=` de cada campo já dizia que eram perguntas
    diferentes.
+
+---
+
+## #35 — "A Logística não vê o ciclo encerrado": era o limite de requisições (09/09/2026)
+
+**Sintoma.** `test_login_api` reprovou em TRÊS baterias seguidas, sempre na
+mesma linha: *"a Logística vê o ciclo encerrado sem recarregar a página —
+Aguardando Veículo"*. A carga andava os seis status com sucesso (cada
+`mudarStatus` respondia OK), mas o terminal da Logística ficava parado no
+primeiro. Tinha cara de regressão na propagação por socket — e eu havia
+mexido exatamente ali no mesmo dia, criando duas salas para esconder valor de
+frete do Comercial.
+
+**A armadilha.** Três sinais apontavam para mim: a suíte começou a falhar com
+o frete, eu tinha mexido no socket, e o sintoma é de propagação. Três sinais
+na mesma direção convencem.
+
+**A causa, medida.** Instrumentei o contador de requisições por chave e
+caminho. O que apareceu:
+
+```
+op:3548 /api/cargas   297        ← um operador, num limite de 300/minuto
+[429] op:3548 · POST /api/cargas  (11x)
+```
+
+O painel **reenvia toda carga aberta ao logar** — é o eco normal de
+sincronização. O banco de teste tinha 99 cargas acumuladas das rodadas do
+dia; três leituras completas × 99 = 297 POSTs. O limite é 300 por minuto.
+O resto da suíte tomava 429, a sincronização entrava em recuo exponencial, e
+a propagação parava. Nada a ver com socket.
+
+Com o banco limpo e a janela de 60s vazia, a suíte passa com o limite de
+produção (300). Reproduzido nos dois sentidos.
+
+**Por que a segunda chance não pegou.** `rodar_tudo.sh` já roda toda suíte
+reprovada de novo, sozinha e com o banco limpo — justamente para separar
+contaminação de regressão. Mas `limpar_banco` zera o BANCO e não zera o
+contador do limite, que vive na memória do servidor com janela de 60
+segundos. As suítes rodam encostadas e compartilham os mesmos operadores de
+teste: a segunda chance herdava o orçamento gasto pela anterior e dizia
+"vermelho de verdade" para contaminação — o contrário do que foi escrita para
+fazer, e a conclusão mais cara possível.
+
+**Correção.** A segunda chance passou a esperar a janela
+(`esperar_limite_de_requisicoes`). Custa um minuto por suíte reprovada, e só
+nelas.
+
+**A família.** É parente da #15 (sobra de uma suíte virando falha da
+seguinte), com uma diferença que importa: ali o estado compartilhado era o
+BANCO, que o script sabia limpar. Aqui é um contador **na memória do
+servidor**, que limpar banco não alcança. Ao caçar contaminação, a pergunta
+não é "o banco está limpo?" — é **"que estado compartilhado sobrou, e ele está
+dentro ou fora do banco?"**.
+
+**O que isto revelou de produção, e não é defeito meu.** Um login da Logística
+com 70 cargas abertas gasta 70 das 300 requisições do minuto dela. Está longe
+de estourar hoje, mas cresce com o movimento do dia e não está medido em lugar
+nenhum. Fica anotado como dívida, não corrigido nesta entrega: mexer em limite
+de requisição sem o dono pedir é mexer numa trava de segurança.
+
+**Teste que trava.** Nenhum teste novo — a guarda é no próprio harness, e ela
+é estrutural: a segunda chance agora só conclui "regressão" quando o estado
+compartilhado foi de fato esvaziado. Um teste que simulasse o 429 provaria
+menos do que o script passar a dizer a verdade.

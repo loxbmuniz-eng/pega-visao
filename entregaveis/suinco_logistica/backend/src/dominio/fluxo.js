@@ -60,6 +60,29 @@ export const SETORES = [
      allowlist — mesmo racional do Comercial acima. */
   'Controles Internos',
   'Central de Notas',
+  /* QUALIDADE (09/09/2026).
+
+     Pedido do dono: "voce criou um setor no sistema para a QUALIDADE ter
+     acesso aos checklists? ela vai poder exportar relatorios tambem
+     todos". Perguntado o escopo, ele fechou em duas frases: "qualidade so
+     acompanha e exporta relatorio" e "tambem ve a devolucao das filiais,
+     todos os relatorios que competem ao checklist".
+
+     É O PRIMEIRO SETOR SÓ-LEITURA DENTRO DA DEVOLUÇÃO. O Comercial já é
+     só leitura, mas nas cargas, onde ele não aparece em allowlist nenhuma
+     e por isso é barrado por padrão. Aqui não bastaria: as rotas da
+     devolução misturam allowlist de setor com regra de filial, e "não
+     estar na lista" cai em lugares diferentes em cada uma. Por isso a
+     recusa é EXPLÍCITA (soAcompanha, abaixo) — a regra fica escrita, e a
+     próxima rota de escrita nasce com ela em vez de depender de alguém
+     lembrar.
+
+     VÊ AS FILIAIS, ao contrário da regra da 043: a 105 não vê a 106
+     porque cada uma responde pela sua operação. A Qualidade responde pelo
+     PRODUTO, e produto não tem filial — um problema que só aparece na
+     Bahia é justamente o que ela precisa enxergar. Isso sai de graça por
+     ela NÃO ser filial: nenhum filtro por `criada_setor` a alcança. */
+  'Qualidade',
   /* AS FILIAIS (02/09/2026).
 
      Pedido do dono: "isso é um setor novo, so vai ter acesso a aba
@@ -90,6 +113,30 @@ export const SETORES = [
    entrar. */
 export const SETORES_FILIAL = ['Filial 105 BSB', 'Filial 106 BAHIA', 'Filial 107 ES'];
 export function ehFilial(setor) { return SETORES_FILIAL.includes(setor); }
+
+/* OS SETORES QUE SÓ ACOMPANHAM (09/09/2026).
+
+   Quem está aqui LÊ tudo o que a aba mostra e EXPORTA relatório, e não
+   escreve nada — nem cria, nem avança etapa, nem edita campo.
+
+   Lista, e não um `setor === 'Qualidade'` espalhado: no dia em que entrar
+   um segundo setor observador (o dono já falou em SAC), ele entra numa
+   linha e vale em todas as rotas de uma vez. Espalhado, valeria nas que
+   alguém lembrasse. */
+export const SETORES_SO_ACOMPANHAM = ['Qualidade'];
+export function soAcompanha(setor) { return SETORES_SO_ACOMPANHAM.includes(setor); }
+
+/* A recusa dita em português de operação, num lugar só.
+
+   "Recusa do servidor nunca pode ser silenciosa" — e um 403 seco faz a
+   pessoa achar que errou a senha ou que o sistema quebrou. Aqui ela lê o
+   que pode fazer e quem faz o resto. */
+export const RECUSA_SO_ACOMPANHA = {
+  erro: 'A Qualidade acompanha o checklist e exporta os relatórios; '
+    + 'quem preenche e avança as etapas é a operação (Logística, Expedição, '
+    + 'Faturamento, Controles Internos e Central de Notas).',
+  codigo: 'SETOR_SO_ACOMPANHA',
+};
 
 /* Quem pode executar cada passo.
 
@@ -231,6 +278,15 @@ const CAMPOS_EDITAVEIS = {
     // caminhão que já estava no pátio — por isso precisa ser editável.
     'programado_em',
     'lacre', 'lacre_2', 'lacre_3', 'lacre_retido',
+    /* FRETE (09/09/2026). Destino e deslocamento são da Logística: é ela
+       que contrata e que sabe a distância combinada. `frete_valor` e
+       `km_destino` NÃO entram aqui de propósito — não são digitados, são
+       calculados pelo servidor contra a tabela; deixá-los editáveis
+       abriria um caminho para gravar um preço que a tabela não produz. */
+    'frete_destino', 'km_deslocamento',
+    /* O número do documento de frete é da Administração, que o cria fora
+       do sistema. Ela herda esta lista inteira (SETOR_IRRESTRITO). */
+    'frete_documento',
   ],
   // Lacres (18/08/2026): é a Portaria quem coloca o lacre na saída e quem
   // o retém quando a carga está incorreta — os dois números são dela.
@@ -238,6 +294,19 @@ const CAMPOS_EDITAVEIS = {
   'Expedição': ['qtd_ganchos', 'observacoes'],
   'Faturamento': ['observacoes'],
 };
+
+/* QUEM VÊ VALOR DE FRETE (09/09/2026).
+
+   Perguntado ao dono quem enxerga o valor: "logistica e administracao".
+
+   Não é a mesma pergunta que "quem edita": a Portaria edita motorista e
+   lacre e não vê preço; o Comercial não edita nada e também não vê. Por
+   isso é função própria, e não uma leitura de CAMPOS_EDITAVEIS — juntar as
+   duas faria a permissão de escrita mandar na de leitura, e no dia em que
+   uma mudasse a outra mudaria junto sem ninguém pedir. */
+export function podeVerValorDeFrete(setor) {
+  return setor === 'Logística' || setor === SETOR_IRRESTRITO;
+}
 
 export function camposEditaveisPor(setor) {
   if (setor === SETOR_IRRESTRITO) return CAMPOS_EDITAVEIS['Logística'];

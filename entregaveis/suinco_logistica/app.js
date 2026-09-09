@@ -1889,6 +1889,7 @@ function renderTabAtual(){
     // refletir o estado atual do pátio — senão mostra a contagem de quando
     // a página abriu, que já mudou.
     case 'relatorios':
+      renderEscopoDosRelatorios();
       atualizarResumoFiltroRelatorio();
       // O campo de dia do relatório de devoluções abre já com o dia de hoje
       // preenchido — quem quiser outro dia troca; vazio nunca fica, porque o
@@ -3384,6 +3385,22 @@ function criarCargaProgramadaUI(){
     return;
   }
 
+  /* AQUI HAVIA UMA TRAVA DE KM E OBSERVAÇÃO, E ELA SAIU (09/09/2026).
+
+     O dono tinha pedido "kilometragem obrigatoria" e confirmado "1 trava a
+     contratacao". A bateria mostrou o custo antes de a operação pagar por
+     ele: a Montagem do Dia cria carga por outro caminho, em lote, sem campo
+     de KM — e carga recusada na criação é APAGADA do painel (proteção de
+     07/08/2026). O lote inteiro sumiria na frente da Logística.
+
+     Decisão dele, com a evidência na mão: "não põe a trava do quilômetro
+     então".
+
+     O CAMPO CONTINUA, e continua se preenchendo sozinho pelo destino. O que
+     não existe mais é o portão. Carga sem KM nasce igual, e é o relatório
+     de fretes que cobra: a linha aparece com o motivo escrito em vez de uma
+     célula vazia. Cobrar onde o dado é usado, e não onde o caminhão passa. */
+
   try{
     const criada = criarCargaProgramada({
       placa,
@@ -3401,6 +3418,8 @@ function criarCargaProgramadaUI(){
       paletizada: document.getElementById('prog-paletizada').value,
       qtdGanchos: document.getElementById('prog-ganchos').value,
       qtdEntregas: document.getElementById('prog-entregas').value,
+      freteDestino: document.getElementById('prog-frete-destino').value,
+      kmDeslocamento: document.getElementById('prog-km-deslocamento').value,
       operador: nomeOperadorAtual()
     });
     _placaMultiCargaAutorizada = null;   // vale uma vez só
@@ -3421,8 +3440,9 @@ function criarCargaProgramadaUI(){
         notifyGravacao(`Carga criada para a placa ${normalizarPlaca(placa)} — status Aguardando Veículo.`);
       }
     }
-    ['prog-placa','prog-transportadora','prog-tipoveiculo','prog-motorista','prog-numero-carga','prog-cliente','prog-destino','prog-peso','prog-sequencia','prog-obs']
+    ['prog-placa','prog-transportadora','prog-tipoveiculo','prog-motorista','prog-numero-carga','prog-cliente','prog-destino','prog-peso','prog-sequencia','prog-obs','prog-frete-destino','prog-km-destino','prog-km-deslocamento']
       .forEach(id=>document.getElementById(id).value='');
+    document.getElementById('prog-frete-aviso').innerHTML = '';
     document.getElementById('prog-praonde').value = PRA_ONDE_PADRAO;
   document.getElementById('prog-rota').value = '';
   document.getElementById('prog-paletizada').value = 'Não';
@@ -3432,6 +3452,65 @@ function criarCargaProgramadaUI(){
     renderAll();
   }catch(e){ notify(e.message, 'danger'); }
 }
+/* O DESTINO PUXA O KM — e o deslocamento nasce igual, para ser mudado.
+
+   Pedido do dono: "a tabela de frete deve fazer o calculo segundo a
+   kilometragem e destino" e "KM DESLOCAMENTO (precisa ser o valor certinho
+   do valor que sera pago no frete)".
+
+   Preencher o deslocamento com o KM do destino é o que torna o caso comum
+   (viagem direta) um clique, e mantém o caso real (desvio, retorno,
+   coleta) a uma digitação de distância. NÃO sobrescreve o que a pessoa já
+   digitou: quem escreveu 640 no deslocamento e depois trocou o destino
+   estava corrigindo o destino, não desistindo dos 640. */
+function destinoFreteMudouUI(){
+  const campo = document.getElementById('prog-frete-destino');
+  const km = kmDoDestino(campo.value);
+  const alvoKm = document.getElementById('prog-km-destino');
+  const alvoDesl = document.getElementById('prog-km-deslocamento');
+  alvoKm.value = km ?? '';
+  if(km !== null && !alvoDesl.value) alvoDesl.value = km;
+  avisarSobreKmUI();
+}
+
+function kmDeslocamentoMudouUI(){ avisarSobreKmUI(); }
+
+/* O mesmo gesto no modal de Completar. Dois pares de campos e uma conta só
+   (kmDoDestino) — o que NÃO se duplica é a decisão de quanto vale o km,
+   que é do servidor. */
+function destinoFreteCompletarUI(){
+  const km = kmDoDestino(document.getElementById('completar-frete-destino').value);
+  document.getElementById('completar-km-destino').value = km ?? '';
+  const desl = document.getElementById('completar-km-deslocamento');
+  if(km !== null && !desl.value) desl.value = km;
+}
+
+/* DIVERGÊNCIA É AVISO, NÃO ERRO. Desvio, retorno e coleta no caminho
+   existem e são justamente o motivo de haver dois campos. O que não pode
+   é a diferença passar despercebida: quem paga o frete precisa saber que
+   está pagando 640 km numa rota cuja tabela diz 583. */
+function avisarSobreKmUI(){
+  const aviso = document.getElementById('prog-frete-aviso');
+  if(!aviso) return;
+  const destino = document.getElementById('prog-frete-destino').value.trim();
+  const kmRef = kmDoDestino(destino);
+  const kmDesl = kmValidoLocal(document.getElementById('prog-km-deslocamento').value);
+  if(destino && kmRef === null){
+    aviso.innerHTML = `<span class="text-warn">“${esc(destino.toUpperCase())}” não está na Tabela de Frete `
+      + `— sem KM de referência. O valor sai pelo KM de deslocamento que você digitar. `
+      + `Para cadastrar: Cadastros → Tabela de Frete.</span>`;
+    return;
+  }
+  if(kmRef !== null && kmDesl !== null && kmRef !== kmDesl){
+    const dif = kmDesl - kmRef;
+    aviso.innerHTML = `<span class="text-warn">KM de deslocamento <strong>${kmDesl}</strong> difere `
+      + `dos <strong>${kmRef}</strong> da tabela (${dif > 0 ? '+' : ''}${dif} km). `
+      + `É o deslocamento que será pago — explique o motivo na Observação.</span>`;
+    return;
+  }
+  aviso.innerHTML = '';
+}
+
 function renderProgFila(){
   /* Só os programados DE HOJE — pedido do usuário (11/08/2026): "no campo
      fila de programados na programacao manter somente os programados NO
@@ -4732,6 +4811,9 @@ function abrirCompletar(id){
   document.getElementById('completar-paletizada').value = 'Não';
   document.getElementById('completar-ganchos').value = '0';
   document.getElementById('completar-entregas').value = '1';
+  document.getElementById('completar-frete-destino').value = c.freteDestino || '';
+  document.getElementById('completar-km-destino').value = c.kmDestino ?? '';
+  document.getElementById('completar-km-deslocamento').value = c.kmDeslocamento ?? '';
   document.getElementById('modal-completar').classList.add('open');
 }
 function fecharModalCompletar(){ document.getElementById('modal-completar').classList.remove('open'); }
@@ -4753,6 +4835,8 @@ function salvarCompletarCarga(){
       paletizada: document.getElementById('completar-paletizada').value,
       qtdGanchos: document.getElementById('completar-ganchos').value,
       qtdEntregas: document.getElementById('completar-entregas').value,
+      freteDestino: document.getElementById('completar-frete-destino').value,
+      kmDeslocamento: document.getElementById('completar-km-deslocamento').value,
       operador: nomeOperadorAtual()
     });
     fecharModalCompletar();
@@ -6355,7 +6439,177 @@ function renderCadastros(){
     cardRota.hidden = !(DB.operador && DB.operador.setor === 'Administração');
     if(!cardRota.hidden) renderRotasCadastro();
   }
+  /* Tabela de frete: Logística e Administração. A tela esconde, e o
+     servidor recusa — as duas coisas, porque esconder sozinho é decoração:
+     o dado ainda viajaria até o navegador de quem não pode vê-lo. */
+  const cardFrete = document.getElementById('card-tabela-frete');
+  if(cardFrete){
+    cardFrete.hidden = !(DB.operador && podeVerValorDeFreteUI(DB.operador.setor));
+    if(!cardFrete.hidden) renderTabelaDeFrete();
+  }
 }
+
+/* Gêmea de podeVerValorDeFrete() em backend/src/dominio/fluxo.js.
+   Duplicada porque o painel é build de arquivo único e não fala com o
+   servidor em tempo de código — a mesma razão pela qual SETOR_PERMISSOES
+   existe dos dois lados, e o teste testes/test_frete_tabela_e_planilha.py
+   compara as duas listas. */
+function podeVerValorDeFreteUI(setor){
+  return setor === 'Logística' || setor === 'Administração';
+}
+/* =====================================================================
+   TABELA DE FRETE — a tela do cadastro (09/09/2026)
+   =====================================================================
+   Espelha o cadastro de Rota de propósito: mesmo card, mesmo par
+   "formulário em cima, tabela embaixo", mesmo botão de CSV. O dono pediu
+   assim — "cadastro possa ser editavel e criada da mesma forma que
+   funcionam os cadastros" — e a razão é boa: quem já cadastrou uma rota
+   sabe cadastrar uma tarifa sem ninguém explicar.
+
+   NÃO GRAVA OFFLINE, e isso é diferente da Frota. Tabela de preço não é
+   operação de pátio: ninguém está com o caminhão parado esperando por ela,
+   e uma tarifa subindo horas depois pela fila poderia passar por cima de
+   uma correção feita no meio. Sem conexão, avisa e não grava. */
+function renderTabelaDeFrete(){
+  const tb = document.getElementById('frete-tarifas-tbody');
+  if(tb){
+    tb.innerHTML = TARIFAS_FRETE.slice()
+      .sort((a,b)=> Number(a.valorPorKm) - Number(b.valorPorKm))
+      .map(t=>`<tr>
+        <td>${esc(t.tipoVeiculo)}</td>
+        <td class="num">${fmtDinheiro(t.valorPorKm)}</td>
+        <td>${t.vigenteDesde ? esc(dataCurtaLocal(t.vigenteDesde)) : '—'}</td>
+        <td>${esc(t.operador)||'—'}</td></tr>`).join('');
+    const vazio = document.getElementById('frete-tarifas-empty');
+    if(vazio) vazio.hidden = TARIFAS_FRETE.length > 0;
+  }
+
+  const td = document.getElementById('frete-destinos-tbody');
+  if(td){
+    const busca = (document.getElementById('frete-destino-busca')||{}).value || '';
+    const filtro = busca.trim().toUpperCase();
+    const lista = DESTINOS_FRETE
+      .filter(d => !filtro || String(d.destino).toUpperCase().includes(filtro))
+      .sort((a,b)=> String(a.destino).localeCompare(String(b.destino), 'pt-BR'));
+    td.innerHTML = lista.map(d=>`<tr>
+        <td>${esc(d.destino)}</td>
+        <td class="num">${Number(d.km).toLocaleString('pt-BR')} km</td>
+        <td>${esc(d.operador)||'—'}</td>
+        <td class="no-print"><button class="btn btn-sec btn-xs"
+          onclick="editarDestinoFreteUI(${JSON.stringify(String(d.destino)).replace(/"/g,'&quot;')})"
+          title="Traz este destino para o formulário acima">✎ Editar</button></td></tr>`).join('');
+    const vazio = document.getElementById('frete-destinos-empty');
+    if(vazio) vazio.hidden = lista.length > 0;
+    const cont = document.getElementById('frete-destinos-contagem');
+    if(cont) cont.textContent = filtro
+      ? `${lista.length} de ${DESTINOS_FRETE.length} destinos`
+      : `${DESTINOS_FRETE.length} destinos`;
+  }
+}
+
+/* Dinheiro em português, com duas casas — e SEM inventar zero.
+   Tarifa ausente é "—", não "R$ 0,00": preço zero é uma afirmação, e
+   afirmar de graça o que ninguém digitou é como o relatório passa a
+   mentir. */
+function fmtDinheiro(v){
+  if(v === null || v === undefined || v === '') return '—';
+  const n = Number(v);
+  if(!Number.isFinite(n)) return '—';
+  return n.toLocaleString('pt-BR', {style:'currency', currency:'BRL', minimumFractionDigits:2});
+}
+
+function editarDestinoFreteUI(destino){
+  const d = DESTINOS_FRETE.find(x => String(x.destino) === String(destino));
+  if(!d) return;
+  document.getElementById('frete-destino-nome').value = d.destino;
+  document.getElementById('frete-destino-km').value = d.km;
+  document.getElementById('frete-destino-nome').focus();
+}
+
+async function addTarifaFreteUI(){
+  const tipo = document.getElementById('frete-tarifa-tipo').value.trim();
+  const bruto = document.getElementById('frete-tarifa-valor').value;
+  if(!tipo){ notify('Informe o tipo de veículo.', 'warn'); return; }
+  /* Campo em branco NÃO é zero. `Number('')` é 0, e cadastrar tarifa zero
+     sem querer é frete de graça gravado em silêncio para toda uma
+     modalidade. */
+  if(bruto === '' || !Number.isFinite(Number(bruto)) || Number(bruto) < 0){
+    notify('Informe o valor por km (ex.: 7,75).', 'warn'); return;
+  }
+  const r = await SuincoSharePoint.gravarTarifaFrete({
+    tipoVeiculo: tipo,
+    valorPorKm: Number(bruto),
+    vigenteDesde: document.getElementById('frete-tarifa-vigencia').value || undefined,
+    operador: (DB.operador && DB.operador.nome) || '',
+  });
+  if(r && (r.recusado || r.enfileirado)){
+    notify(`A tarifa de ${tipo} NÃO foi salva: ${r.erro || 'sem conexão com o servidor'}. `
+      + 'Tabela de preço não fica em fila — tente de novo quando a conexão voltar.', 'erro', 9000);
+    return;
+  }
+  ['frete-tarifa-tipo','frete-tarifa-valor','frete-tarifa-vigencia'].forEach(id=>document.getElementById(id).value='');
+  await recarregarTabelaDeFrete();
+  notifyGravacao(`Tarifa de ${tipo}: ${fmtDinheiro(bruto)} por km.`);
+}
+
+async function addDestinoFreteUI(){
+  const destino = document.getElementById('frete-destino-nome').value.trim().toUpperCase();
+  const km = kmValidoLocal(document.getElementById('frete-destino-km').value);
+  if(!destino){ notify('Informe o destino.', 'warn'); return; }
+  if(km === null){ notify('Informe o KM do destino (maior que zero).', 'warn'); return; }
+  const r = await SuincoSharePoint.gravarDestinoFrete({
+    destino, km, operador: (DB.operador && DB.operador.nome) || '',
+  });
+  if(r && (r.recusado || r.enfileirado)){
+    notify(`O destino ${destino} NÃO foi salvo: ${r.erro || 'sem conexão com o servidor'}.`, 'erro', 9000);
+    return;
+  }
+  ['frete-destino-nome','frete-destino-km'].forEach(id=>document.getElementById(id).value='');
+  await recarregarTabelaDeFrete();
+  notifyGravacao(`Destino ${destino}: ${km} km.`);
+}
+
+/* Relê a tabela do servidor depois de gravar, em vez de mexer na lista
+   local com o que acabou de ser digitado. É a regra da casa: quem manda é
+   a transação, não a tela. Se o servidor normalizou o nome do destino ou
+   recusou parte do que foi enviado, é a versão dele que aparece. */
+async function recarregarTabelaDeFrete(){
+  /* A TABELA, E SÓ A TABELA.
+
+     Isto chamava pullTudo() — uma leitura COMPLETA do pátio — para reler
+     cinco tarifas. Era o martelo errado: traz todas as cargas, a frota
+     inteira e as rotas, de propósito nenhum, a cada tarifa salva. E
+     requisição à toa custa caro aqui: o limite cai para o IP quando a
+     chamada não tem token, e quatro terminais no mesmo IP já deram 429 na
+     bateria (test_login_api). Agora pede a tabela, que é o que mudou. */
+  try{
+    const t = await SuincoSharePoint.tabelaDeFrete();
+    if(t) receberTabelaDeFrete({tarifas: t.tarifas, destinos: t.destinos});
+  }catch(e){ console.warn('[frete] recarga da tabela falhou:', e.message); }
+  renderTabelaDeFrete();
+  preencherSelectsDestinoFrete();
+}
+
+function exportarTabelaFreteCsv(){
+  const linhas = [];
+  TARIFAS_FRETE.forEach(t => linhas.push(['Tarifa', t.tipoVeiculo, '', String(t.valorPorKm).replace('.', ','), t.operador||'']));
+  DESTINOS_FRETE.forEach(d => linhas.push(['Destino', '', d.destino, String(d.km), d.operador||'']));
+  baixarCsvDoDia('Tabela_de_Frete',
+    ['O quê', 'Tipo de veículo', 'Destino', 'Valor por km / KM', 'Quem cadastrou'], linhas);
+}
+
+/* Alimenta o <datalist> de destinos do formulário de carga. Chamado
+   sempre que a tabela chega do servidor — mesmo padrão de
+   preencherSelectsRota(), pelo mesmo motivo (painel de pátio fica aberto o
+   dia inteiro e não pode ficar com a lista de ontem). */
+function preencherSelectsDestinoFrete(){
+  const dl = document.getElementById('lista-destinos-frete');
+  if(!dl) return;
+  dl.innerHTML = DESTINOS_FRETE.slice()
+    .sort((a,b)=> String(a.destino).localeCompare(String(b.destino), 'pt-BR'))
+    .map(d=>`<option value="${esc(d.destino)}">${Number(d.km).toLocaleString('pt-BR')} km</option>`).join('');
+}
+
 function renderRotasCadastro(){
   const tbody = document.getElementById('rotas-tbody');
   if(!tbody) return;
@@ -8728,6 +8982,14 @@ async function init(){
     // Toda leitura das Listas cai aqui: funde no DB e redesenha se algo mudou.
     // É o que faz a Portaria enxergar a carga que a Logística acabou de criar.
     SuincoSharePoint.aoReceberDados(dados => {
+      /* A tabela de frete chega junto do resto (09/09/2026). Antes de
+         fundir as cargas de propósito: se uma carga nova traz um destino,
+         a tela já precisa saber o km dele para exibir. */
+      if(dados.freteTarifas || dados.freteDestinos){
+        receberTabelaDeFrete({tarifas: dados.freteTarifas, destinos: dados.freteDestinos});
+        if(typeof renderTabelaDeFrete === 'function') renderTabelaDeFrete();
+        if(typeof preencherSelectsDestinoFrete === 'function') preencherSelectsDestinoFrete();
+      }
       const r = fundirEstadoRemoto(dados);
 
       /* liberarPendencias() estava escrita desde sempre e NUNCA era chamada
@@ -9195,6 +9457,95 @@ async function exportarPdfFretes(){
         }))}
     </div>`;
   await exportarViaServidor(el, 'Administracao-de-Fretes', 'administracao-fretes');
+}
+
+/* QUAIS RELATÓRIOS ESTE SETOR VÊ (09/09/2026).
+
+   A Qualidade ganhou a aba Relatórios — nenhum outro setor de devolução
+   tem — porque o pedido era esse: "ela vai poder exportar relatorios". Mas
+   ele delimitou logo depois: "todos os relatorios que competem ao
+   CHECKLIST".
+
+   Então a aba abre com um card só: o Relatório de Devoluções. Operacional,
+   Executivo e Power BI são de pátio; Administração de Fretes carrega valor
+   de frete, que é de Logística e Administração. Esconder não é a trava —
+   o servidor recusa o valor de qualquer jeito (podeVerValorDeFrete) e
+   nenhum dado de frete chega ao navegador dela. Aqui é só não oferecer o
+   que não é dela, para a tela não virar um menu de coisas que dão erro. */
+function renderEscopoDosRelatorios(){
+  const setor = (DB.operador || {}).setor;
+  const soChecklist = soAcompanhaUI(setor);
+  document.querySelectorAll('#tab-relatorios [data-relatorio]').forEach(card => {
+    card.hidden = soChecklist && card.getAttribute('data-relatorio') !== 'checklist';
+  });
+}
+
+/* ---------- PLANILHA DE ADMINISTRAÇÃO DE FRETES (09/09/2026) ----------
+
+   "Nosso relatório de administração de fretes atualmente sai em PDF; ele
+    precisa ser disponibilizado em formato de planilha para reduzir
+    retrabalho."
+
+   O PDF CONTINUA. Ele não é substituído: serve para arquivar e assinar, e
+   tirar isso seria trocar um problema por outro. O que faltava era o
+   formato em que a Administração TRABALHA — e trabalhar num PDF é
+   redigitar.
+
+   CSV com ponto-e-vírgula e BOM, não .xlsx: é o que o Excel em português
+   abre com duplo clique já em colunas, sem biblioteca nova dentro do
+   painel — e o painel é arquivo único, sem CDN. O BOM não é detalhe: sem
+   ele o Excel pt-BR abre "Ç" como lixo, o que já apareceu em campo.
+
+   NÚMEROS COM VÍRGULA DECIMAL, pelo mesmo motivo: peso e valor precisam
+   chegar como NÚMERO na planilha, senão a Daniela não soma a coluna. */
+async function exportarPlanilhaFretes(){
+  await atualizarDadosAntesDoRelatorio();
+  const dados = dadosPlanilhaDeFretes(cargasDoRelatorio());
+  if(!dados.length){
+    notify('Nenhuma carga no período selecionado — não há o que exportar.', 'warn', 5000);
+    return;
+  }
+  const veValor = podeVerValorDeFreteUI((DB.operador||{}).setor);
+  const num = (v) => (v === null || v === undefined || v === '') ? '' : String(v).replace('.', ',');
+
+  const linhas = dados.map(d => [
+    d.sequencia ?? '',
+    d.numeroCarga,
+    d.faturamento ? dataCurtaLocal(d.faturamento) : '',
+    d.rota,
+    d.praOnde,
+    d.placa,
+    d.transportadora,
+    d.tipoVeiculo,
+    // Peso em toneladas, com vírgula: é como a operação fala e como a
+    // planilha antiga trazia.
+    d.peso ? num((Number(d.peso)/1000).toFixed(1)) : '',
+    d.freteDestino,
+    d.kmDestino ?? '',
+    d.kmDeslocamento ?? '',
+    /* A divergência vira COLUNA, e não só uma cor. Cor não sobrevive ao
+       CSV, e é exatamente esta linha que alguém precisa justificar quando
+       o frete pago não bate com a tabela. */
+    d.kmDivergente ? 'SIM' : '',
+    d.qtdEntregas,
+    d.motorista,
+    // Valor só para quem pode ver. Para os outros a coluna existe e vem
+    // vazia — sumir com ela faria duas versões da mesma planilha andarem
+    // pela empresa com colunas em posições diferentes.
+    veValor ? num(d.freteValor === null ? '' : Number(d.freteValor).toFixed(2)) : '',
+    veValor ? d.freteMotivo : '',
+    d.observacoes,
+    d.freteDocumento,
+  ]);
+
+  baixarCsvDoDia(`Administracao_de_Fretes_${isoDiaLocal(new Date())}`, [
+    'Sequência', 'Nº da Carga', 'Data do Faturamento', 'Rota', 'Tipo de Operação',
+    'Placa', 'Transportadora', 'Tipo de Veículo', 'Peso (t)',
+    'Destino do Frete', 'KM Destino', 'KM Deslocamento', 'KM Divergente',
+    'Entregas', 'Motorista',
+    'Valor do Frete (R$)', 'Observação do Frete', 'Observações',
+    'Documento de Frete',
+  ], linhas);
 }
 
 /* =====================================================================
