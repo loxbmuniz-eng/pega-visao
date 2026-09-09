@@ -34,7 +34,25 @@ async def main():
         await pg.goto(PAINEL)
         await pg.wait_for_timeout(900)
 
-        await pg.evaluate("() => { sessionStorage.setItem('suinco_token', 'token-de-teste'); }")
+        # NADA DE TOKEN FALSO AQUI. Este teste roda em file://, sem servidor
+        # nenhum no ar, e entra por "Entrar sem servidor" — modo local puro.
+        #
+        # A versão anterior plantava `suinco_token` no sessionStorage antes
+        # de entrar. Isso fazia `estaConfigurado()` responder SIM (ativo +
+        # api + token), e aí cada carga criada tentava subir para
+        # api.embarquesuinco.com.br, que não existe neste ambiente. Depois
+        # da trava de offline (31/08/2026) a resposta de uma tentativa sem
+        # rede deixou de ser "guardei na fila" e passou a ser
+        # `{recusado:true, offline:true}` — e criação nunca confirmada que é
+        # recusada SAI da tela, de propósito (sincronizarCarga, data.js).
+        #
+        # Resultado: 18 das 20 cargas do bloco de baixo sumiam sozinhas
+        # entre um bloco e o outro, e o teste reprovava acusando o contador
+        # de animação por um estrago que era da trava de offline agindo
+        # exatamente como o dono pediu. O contador nunca teve defeito.
+        #
+        # Sem token, `estaConfigurado()` é NÃO e nenhuma carga tenta subir —
+        # que é o que este arquivo sempre quis medir: a animação do número.
         await pg.evaluate("() => mostrarLoginLocal()")
         await pg.fill('#login-nome', 'Ana')
         await pg.select_option('#login-setor', 'Logística')
@@ -91,7 +109,6 @@ async def main():
         pg2 = await ctx2.new_page()
         await pg2.goto(PAINEL)
         await pg2.wait_for_timeout(900)
-        await pg2.evaluate("() => { sessionStorage.setItem('suinco_token', 'token-de-teste'); }")
         await pg2.evaluate("() => mostrarLoginLocal()")
         await pg2.fill('#login-nome', 'Ana')
         await pg2.select_option('#login-setor', 'Logística')

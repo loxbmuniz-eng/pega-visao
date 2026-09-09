@@ -48,7 +48,7 @@ export function chaveDoLimiteGeral(req) {
   const auth = req.headers?.authorization;
   if (auth && auth.startsWith('Bearer ')) {
     try {
-      const payload = jwt.verify(auth.slice(7), config.jwtSegredo);
+      const payload = jwt.verify(auth.slice(7), config.jwtSegredo, { algorithms: ['HS256'] });
       if (payload?.sub) return `op:${payload.sub}`;
     } catch {
       // Token ausente, expirado ou inválido: cai para IP abaixo.

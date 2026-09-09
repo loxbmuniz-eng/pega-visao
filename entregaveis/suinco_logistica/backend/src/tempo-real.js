@@ -12,6 +12,9 @@
 import { Server } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import { config } from './config.js';
+import { sessaoAindaVale } from './middleware/auth.js';
+import { podeVerValorDeFrete } from './dominio/fluxo.js';
+import { semValorDeFrete } from './dominio/cargas.js';
 
 let io = null;
 
@@ -44,21 +47,31 @@ export function iniciarTempoReal(servidorHttp) {
   /* Socket sem autenticação seria um vazamento silencioso: qualquer um na
      internet abriria uma conexão e receberia todo o movimento do pátio em
      tempo real, sem passar por nenhuma rota protegida. */
-  io.use((socket, next) => {
-    const token = socket.handshake.auth?.token;
-    if (!token) return next(new Error('SEM_TOKEN'));
+  /* A MESMA CONFERÊNCIA DE SESSÃO DO HTTP (09/09/2026). Só o jwt.verify
+     deixava um operador bloqueado — ou com a senha trocada — continuar
+     recebendo o pátio inteiro pelo socket até o token vencer (12 h), com
+     placa, cliente e motorista. validarTokenDeSocket confere sessao_versao
+     e ativo, como toda requisição HTTP. */
+  io.use(async (socket, next) => {
     try {
-      const p = jwt.verify(token, config.jwtSegredo);
-      socket.data.operador = { id: p.sub, nome: p.nome, setor: p.setor };
+      socket.data.operador = await validarTokenDeSocket(socket.handshake.auth?.token);
       return next();
-    } catch {
-      return next(new Error('TOKEN_INVALIDO'));
+    } catch (e) {
+      return next(e instanceof Error ? e : new Error(String(e)));
     }
   });
 
   io.on('connection', (socket) => {
     const op = socket.data.operador;
     socket.join('patio');
+    /* A SALA DO FRETE (09/09/2026). Quem pode ver valor entra também aqui,
+       e é para cá que a carga completa é emitida — o `patio` recebe a mesma
+       carga com os campos de dinheiro apagados.
+
+       Duas salas, e não um filtro no cliente: esconder na tela deixaria o
+       valor viajar pelo socket até o navegador do Comercial, onde qualquer
+       um lê no console. O que não pode ser visto não é enviado. */
+    if (podeVerValorDeFrete(op.setor)) socket.join('frete');
     console.log(`[tempo-real] ${op.nome} (${op.setor}) conectou · ${io.engine.clientsCount} online`);
     socket.emit('conectado', { operador: op, online: io.engine.clientsCount });
 
@@ -85,6 +98,46 @@ export function iniciarTempoReal(servidorHttp) {
   });
 
   return io;
+}
+
+export async function validarTokenDeSocket(token) {
+  if (!token) throw new Error('SEM_TOKEN');
+  let p;
+  try {
+    p = jwt.verify(token, config.jwtSegredo, { algorithms: ['HS256'] });
+  } catch {
+    throw new Error('TOKEN_INVALIDO');
+  }
+  const sessao = await sessaoAindaVale(p.sub, p.sv);
+  if (!sessao.vale) throw new Error(sessao.motivo || 'SESSAO_REVOGADA');
+  return { id: p.sub, nome: p.nome, setor: p.setor };
+}
+
+/* Derruba as conexões de quem foi bloqueado ou teve a sessão revogada —
+   o HTTP já recusa na hora; o socket precisava ser mandado embora. */
+export function desconectarOperador(id) {
+  if (!io) return 0;
+  let n = 0;
+  for (const s of io.sockets.sockets.values()) {
+    if (String(s.data?.operador?.id) === String(id)) { s.disconnect(true); n++; }
+  }
+  return n;
+}
+
+/* Carga em tempo real, com o preço só para quem pode ver.
+
+   Existe separada de emitir() de propósito: `emitir` serve para dezenas de
+   eventos que não têm dinheiro dentro (presença, frota, programação), e
+   fazer todos passarem por uma regra de frete seria pedir para alguém
+   esquecer por que ela está lá. Quem emite CARGA chama esta. */
+export function emitirCarga(evento, carga) {
+  if (!io) return;
+  try {
+    io.to('frete').emit(evento, carga);
+    io.to('patio').except('frete').emit(evento, semValorDeFrete(carga));
+  } catch (e) {
+    console.error('[tempo-real] falha ao emitir carga', evento, '—', e.message);
+  }
 }
 
 export function emitir(evento, dados) {

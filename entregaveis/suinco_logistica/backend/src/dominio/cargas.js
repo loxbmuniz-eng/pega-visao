@@ -6,7 +6,10 @@
    aqui — em um lugar só — para o resto do servidor não precisar saber das
    duas convenções. */
 
-import { STATUS_FLOW, STATUS_INICIAL } from './fluxo.js';
+import {
+  STATUS_FLOW, STATUS_INICIAL, camposEditaveisPor, podeVerValorDeFrete,
+} from './fluxo.js';
+import { kmValido, motivoSemValor } from './frete.js';
 
 /* 3 categorias, não 4. Pedido do gestor (08/08/2026, migração
    003_tipo_operacao.sql): FROTA PROPRIA saiu (caminhão próprio fazendo
@@ -86,6 +89,10 @@ export function paraPainel(linha) {
     lacreRetidoEm: linha.lacre_retido_em || null,
     status: linha.status_atual,
     aguardandoCarga: linha.aguardando_carga,
+    /* Saiu sem carregar: entrou só para entregar devolução (08/09/2026).
+       Vai para o painel porque a Torre e o Histórico precisam mostrar a
+       diferença — carga que saiu sem levar nada não é viagem. */
+    saidaSemCarregar: linha.saida_sem_carregar === true,
     criadoEm: linha.criado_em,
     /* Data em que a CARGA foi lançada — diferente de criado_em quando o
        caminhão chegou sem programação e a carga só foi lançada depois.
@@ -117,6 +124,32 @@ export function paraPainel(linha) {
     acaoPor: linha.acao_por || '',
     acaoSetor: linha.acao_setor || '',
     versao: linha.versao,
+    /* O FRETE (09/09/2026). Seis campos, e cada um responde uma pergunta
+       que a Administração faz hoje por telefone.
+
+       `kmDivergente` é DERIVADO, não guardado: é a mesma pergunta que
+       `km_destino <> km_deslocamento` responde, e guardar a resposta de
+       uma comparação cria uma segunda verdade que envelhece sozinha
+       (ocorrência #32, a transportadora da carga × a da Frota). Só marca
+       quando existem os DOIS: sem referência não há divergência, há
+       ausência de tabela — e dizer "divergente" nesse caso seria acusar
+       erro onde não houve. */
+    freteDestino: linha.frete_destino || '',
+    kmDestino: linha.km_destino ?? null,
+    kmDeslocamento: linha.km_deslocamento ?? null,
+    freteValor: linha.frete_valor === null || linha.frete_valor === undefined
+      ? null : Number(linha.frete_valor),
+    freteTarifaUsada: linha.frete_tarifa_usada === null || linha.frete_tarifa_usada === undefined
+      ? null : Number(linha.frete_tarifa_usada),
+    freteDocumento: linha.frete_documento || '',
+    kmDivergente: linha.km_destino != null && linha.km_deslocamento != null
+      && Number(linha.km_destino) !== Number(linha.km_deslocamento),
+    freteMotivo: motivoSemValor({
+      transportadora: linha.transportadora,
+      kmDeslocamento: linha.km_deslocamento,
+      tipoVeiculo: linha.tipo_veiculo,
+      freteValor: linha.frete_valor,
+    }),
     // Carga excluída continua sendo devolvida na leitura incremental: é
     // assim que os outros terminais descobrem que ela saiu. Sem esta
     // marca, uma linha apagada simplesmente não apareceria em consulta
@@ -164,6 +197,16 @@ export function saneiarCriacao(corpo, frota) {
     programado_em: dataOuAgora(corpo.programadoEm),
     status_atual: STATUS_FLOW.includes(corpo.status) ? corpo.status : STATUS_INICIAL,
     aguardando_carga: corpo.aguardandoCarga === true,
+    /* FRETE. `km_destino`, `frete_valor` e `frete_tarifa_usada` NÃO saem
+       daqui: quem os calcula é a rota, contra a tabela do banco. O cliente
+       manda o destino e o deslocamento; o preço é do servidor.
+
+       kmValido() em vez de inteiro(): `inteiro('', 0)` devolveria ZERO, e
+       zero quilômetro é uma viagem que não existe — mas calcularia frete
+       R$ 0,00 sem ninguém ver. Campo em branco vira null. */
+    frete_destino: texto(corpo.freteDestino, 200).toUpperCase() || null,
+    km_deslocamento: kmValido(corpo.kmDeslocamento),
+    frete_documento: texto(corpo.freteDocumento, 100) || null,
   };
 }
 
@@ -232,6 +275,14 @@ export function saneiarEdicao(corpo, camposPermitidos) {
     lacre_retido: () => texto(corpo.lacreRetido, 50),
     programado_em: () => dataOuAgora(corpo.programadoEm),
     aguardando_carga: () => corpo.aguardandoCarga === true,
+    frete_destino: () => texto(corpo.freteDestino, 200).toUpperCase() || null,
+    km_deslocamento: () => kmValido(corpo.kmDeslocamento),
+    /* O documento de frete é o número que a Administração cria FORA do
+       sistema — informação dela, que o relatório precisa carregar de volta
+       ("preciso de uma coluna adicional para inserir os números dos
+       documentos de frete que estou criando. Essa informação é minha e não
+       está no sistema"). */
+    frete_documento: () => texto(corpo.freteDocumento, 100) || null,
   };
   const chaveDoPainel = {
     numero_carga: 'numeroCarga', placa: 'placa', transportadora: 'transportadora',
@@ -242,6 +293,8 @@ export function saneiarEdicao(corpo, camposPermitidos) {
     observacoes: 'observacoes', aguardando_carga: 'aguardandoCarga',
     programado_em: 'programadoEm',
     lacre: 'lacre', lacre_2: 'lacre2', lacre_3: 'lacre3', lacre_retido: 'lacreRetido',
+    frete_destino: 'freteDestino', km_deslocamento: 'kmDeslocamento',
+    frete_documento: 'freteDocumento',
   };
 
   const saida = {};
@@ -302,12 +355,206 @@ export function camposDeAviso(antes, depois) {
   return saida;
 }
 
+/* A CARGA SEM O PREÇO — para quem não pode ver valor de frete.
+
+   Apaga os TRÊS campos de dinheiro e deixa os de operação (destino, os
+   dois KM, o número do documento): o Comercial responde "onde está minha
+   carga" e a distância faz parte da resposta; quanto se paga por ela, não.
+
+   `null` e não `undefined`: o campo continua existindo e dizendo "não há
+   valor aqui para você". Sumir com a chave faria o painel do Comercial
+   parecer um painel de carga sem frete nenhum, o que é outra coisa. */
+export function semValorDeFrete(payload) {
+  if (!payload) return payload;
+  return { ...payload, freteValor: null, freteTarifaUsada: null, freteMotivo: '' };
+}
+
+/* O TRADUTOR DE QUEM ESTÁ LENDO.
+
+   Devolve a função de conversão já decidida para aquele setor, em vez de
+   deixar cada rota lembrar de apagar o preço. É a mesma razão de
+   `emitirCarga` existir no tempo-real: a decisão fica num lugar, e quem
+   escreve a próxima rota de leitura herda a regra sem saber que ela
+   existe. Esquecer aqui é impossível; esquecer em cada rota era só questão
+   de tempo. */
+export function paraPainelPara(setor) {
+  const ve = podeVerValorDeFrete(setor);
+  return (linha) => (ve ? paraPainel(linha) : semValorDeFrete(paraPainel(linha)));
+}
+
 export const COLUNAS_CARGA = `
   carga_id, numero_carga, placa, transportadora, tipo_veiculo, motorista,
   cliente, destino, peso_kg, doca, rota_codigo, sequencia, pra_onde,
   paletizada, qtd_ganchos, qtd_entregas, observacoes, lacre, lacre_2, lacre_3,
   lacre_retido, lacre_retido_motivo, lacre_retido_por, lacre_retido_em,
   status_atual,
-  aguardando_carga, criado_em, programado_em, atualizado_em,
+  aguardando_carga, saida_sem_carregar, criado_em, programado_em, atualizado_em,
   acao_em, acao_por, acao_setor, operador_id, operador_nome,
-  operador_setor, versao, excluida_em, excluida_por`;
+  operador_setor, versao, excluida_em, excluida_por,
+  frete_destino, km_destino, km_deslocamento, frete_valor,
+  frete_tarifa_usada, frete_documento`;
+
+/* =====================================================================
+   A FILA DE CARREGAMENTO — reordenar em cascata (08/09/2026)
+   ---------------------------------------------------------------------
+   Pedido do Wemerson: "se ele digitar 1 numa carga e já tiver uma como 1,
+   ela vai automaticamente pra dois, e a que ele colocou 1 entra no início
+   da fila". Antes disto a sequência era um número solto — duas cargas
+   podiam ser 1 ao mesmo tempo, e o campo dizia "digite o número que
+   quiser".
+
+   FUNÇÃO PURA, de propósito. Ela não sabe de banco, de HTTP nem de tela:
+   recebe a fila e devolve a fila nova. Isso permite que o servidor e o
+   painel façam a MESMA conta — e é a regra da casa (uma função, dois
+   chamadores). Fila reordenada de dois jeitos diferentes é fila que
+   diverge no primeiro caso de borda.
+
+   DIGITAR E ARRASTAR SÃO A MESMA OPERAÇÃO: "mover para a posição N". Por
+   isso existe uma função só, e não duas que precisariam concordar.
+   ===================================================================== */
+
+/* Só quem já pode editar `sequencia` numa carga reordena a fila — a
+   permissão sai da mesma lista, não de uma segunda cópia. */
+export function podeSequenciar(setor) {
+  return camposEditaveisPor(setor).includes('sequencia');
+}
+
+/* A fila que ENTRA na renumeração.
+
+   Decisão do dono, perguntado em 08/09/2026: "só carga que vão carregar".
+   Caminhão que já está na doca não tem como ser empurrado para trás na
+   fila da vida real, e mexer no número de uma carga já faturada faria o
+   registro do que aconteceu mentir — é a regra da fidelidade ao momento
+   exato, aplicada à ordem. */
+export const STATUS_QUE_AINDA_CARREGAM = ['Aguardando Veículo', 'Aguardando Embarque'];
+
+export function entraNaFila(carga) {
+  return STATUS_QUE_AINDA_CARREGAM.includes(carga.status_atual || carga.status)
+    && !carga.excluida_em;
+}
+
+/* Move `cargaId` para `posicao` (1-based) e renumera a fila inteira de 1 a
+   N, sem buraco e sem repetido.
+
+   `fila` chega ORDENADA como a tela mostra. Carga sem sequência vai para o
+   fim — não some, e não vira 0: null e zero são coisas diferentes, e essa
+   confusão já apagou capacidade de veículo neste projeto.
+
+   Devolve `[{ id, sequencia }]` só das que MUDARAM de número. Quem não
+   mudou não precisa de escrita, e escrita à toa é uma chance a mais de
+   corrida. */
+/* OS NÚMEROS QUE A FILA NÃO PODE USAR (08/09/2026).
+
+   `ocupados` são as sequências das cargas do MESMO DIA que já saíram da
+   fila — as que estão carregando, carregadas, faturadas. Elas não se mexem
+   (decisão do dono: "o que já carregou não se mexe"), e por isso o número
+   delas está reservado.
+
+   Sem esta reserva, a fila era renumerada de 1 a N por cima de todo mundo:
+   com uma carga em Embarque Iniciado no número 1, mover uma da fila para a
+   frente criava DOIS números 1 no mesmo dia. Relato do dono, 08/09/2026:
+   "ela ta deixando ficarem numeros repetidos isso nao pode acontecer
+   nunca". */
+export function numerosLivres(ocupados, quantos) {
+  const reservados = new Set((ocupados || [])
+    .map(Number).filter((n) => Number.isInteger(n) && n >= 1));
+  const livres = [];
+  for (let n = 1; livres.length < quantos; n++) {
+    if (!reservados.has(n)) livres.push(n);
+  }
+  return livres;
+}
+
+/* O TABULEIRO DA FILA — os números que ela JÁ TEM (09/09/2026).
+   =====================================================================
+   RELATO DO DONO, em produção, no mesmo dia em que o arrastar entrou:
+   "tentei arrastar as cargas de hoje da torre de controle e não consegui,
+    o arrasto elas não trocam de lugar e aparece que essa ação é inválida".
+
+   A CAUSA ERA UMA SUPOSIÇÃO MINHA. `numerosLivres` monta os primeiros N
+   números livres — o que descreve uma fila que ocupa 1,2,3... desviando só
+   de quem já carregou. O dia real não é assim: a Logística digita os
+   números ao longo da manhã e a Portaria chama o caminhão que CHEGOU, não
+   o próximo da lista. Sobra uma fila salteada, tipo 1, 7, 12.
+
+     fila 1, 7, 12 · já carregaram 2, 3, 4
+     primeiros 3 livres = 1, 5, 6
+     soltar na linha que mostra 7 → 7 não está em [1,5,6] → recusado
+
+   E ATRÁS DISSO HAVIA UM PIOR: quando o número por acaso estava na lista
+   (soltar na linha 1), a operação era ACEITA e renumerava a fila de
+   1,7,12 para 1,5,6 — reescrevendo em silêncio números que uma pessoa
+   tinha digitado. O que o dono via era só a recusa; a renumeração calada
+   ainda ia aparecer depois, como número trocado sem ninguém ter mexido.
+
+   A REGRA CERTA, e é a que ele descreveu com "mantendo a logica e a
+   sequencia": os números que a fila tem são o TABULEIRO. Arrastar troca
+   quem ocupa cada casa; não inventa numeração nova.
+
+   NÚMERO NOVO SÓ ENTRA POR DUAS PORTAS, as duas explícitas:
+     · carga da fila que ainda não tem número nenhum — recebe um livre
+       ACIMA do maior, para não empurrar ninguém que já estava numerado;
+     · alguém DIGITA um número que não existe na fila (é o caso do campo
+       da Torre: "digitar 1 numa carga e já tiver uma como 1"). Aí a casa
+       nova entra e a que a carga deixou sai.
+
+   Número de quem já carregou nunca entra: aquilo é registro. */
+export function numerosDaFila(fila, ocupados = []) {
+  const reservados = new Set((ocupados || [])
+    .map(Number).filter((n) => Number.isInteger(n) && n >= 1));
+
+  /* Os números que a fila já usa. Fora os reservados: se uma carga da fila
+     estiver com o mesmo número de uma que já carregou (duplicata herdada
+     de antes da trava), o número é de quem carregou — e esta carga entra
+     como se não tivesse número, ganhando um novo no passo seguinte. */
+  const pool = [];
+  for (const c of fila) {
+    const n = Number(c.sequencia);
+    if (Number.isInteger(n) && n >= 1 && !reservados.has(n) && !pool.includes(n)) pool.push(n);
+  }
+  pool.sort((a, b) => a - b);
+
+  /* Falta número para alguém: completa ACIMA do maior, nunca por baixo.
+     Preencher os buracos de baixo mudaria o número de quem já estava
+     numerado — que é exatamente o defeito que esta função corrige. */
+  let proximo = pool.length ? pool[pool.length - 1] + 1 : 1;
+  while (pool.length < fila.length) {
+    if (!reservados.has(proximo)) pool.push(proximo);
+    proximo++;
+  }
+  return pool;
+}
+export function filaReordenada(fila, cargaId, posicao, ocupados = []) {
+  const ids = fila.map((c) => String(c.id ?? c.carga_id));
+  const de = ids.indexOf(String(cargaId));
+  if (de === -1) return null;                       // a carga não está nesta fila
+  const alvo = Number(posicao);
+  if (!Number.isInteger(alvo) || alvo < 1) return null;
+
+  /* O número pedido é de quem já carregou? Recusa — e a rota sabe dizer
+     qual das duas causas foi, porque `ocupados` chega até lá. */
+  const reservados = new Set((ocupados || [])
+    .map(Number).filter((n) => Number.isInteger(n) && n >= 1));
+  if (reservados.has(alvo)) return null;
+
+  /* SÓ AS CASAS QUE A FILA TEM. Número solto (999 numa fila de 3) continua
+     recusado — é decisão de 08/09, com teste próprio, e o relato de hoje
+     era sobre ARRASTAR, que sempre solta em cima de um número existente.
+     Alargar isso aqui consertaria o que ninguém pediu e apagaria a decisão
+     de ontem de quebra. */
+  const casas = numerosDaFila(fila, ocupados);
+  const k = casas.indexOf(alvo);
+  if (k === -1) return null;
+
+  const nova = ids.slice();
+  nova.splice(de, 1);
+  nova.splice(k, 0, String(cargaId));
+
+  const antes = new Map(fila.map((c) => [String(c.id ?? c.carga_id), c.sequencia]));
+  const mudou = [];
+  nova.forEach((id, i) => {
+    const seq = casas[i];
+    if (antes.get(id) !== seq) mudou.push({ id, sequencia: seq });
+  });
+  return mudou;
+}

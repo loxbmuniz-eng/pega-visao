@@ -1,3 +1,4 @@
+import { ehFilial } from './fluxo.js';
 /* Devoluções: máquina de estados, permissões e tradução banco ↔ painel.
 
    Mesma filosofia de dominio/fluxo.js e dominio/cargas.js: a regra mora no
@@ -29,8 +30,8 @@ export const DEV_STATUS_FLOW = [
   'Lançada',                   // 1 — Logística cria o checklist
   'Recebida na Portaria',      // 2 — porteiro imputa lacre(s) e nº da carga
   'Conferida no Faturamento',  // 3 — balança, caminhão CHEIO (peso de entrada)
-  'Descarga Conferida',        // 4 — Expedição confere item a item
-  'Peso Final Registrado',     // 5 — balança de novo, caminhão VAZIO (peso final)
+  'Peso Final Registrado',     // 4 — balança de novo, caminhão VAZIO (peso final)
+  'Descarga Conferida',        // 5 — o OKzinho da Expedição, no ritmo dela
   'Destinada',                 // 6 — Controles Internos confirmam e deixam recado
   'Nota Finalizada',           // 7 — Central de Notas encerra a NF
 ];
@@ -46,9 +47,36 @@ const SETOR_IRRESTRITO = 'Administração';
 const TRANSICOES_DEV = [
   { de: 'Lançada',                  para: 'Recebida na Portaria',     setores: ['Portaria', 'Logística'],         carimbo: 'portaria' },
   { de: 'Recebida na Portaria',     para: 'Conferida no Faturamento', setores: ['Faturamento', 'Logística'],      carimbo: 'faturamento' },
-  { de: 'Conferida no Faturamento', para: 'Descarga Conferida',       setores: ['Expedição', 'Logística'],        carimbo: 'expedicao' },
-  { de: 'Descarga Conferida',       para: 'Peso Final Registrado',    setores: ['Faturamento', 'Logística'],      carimbo: 'pesofinal' },
-  { de: 'Peso Final Registrado',    para: 'Destinada',                setores: ['Controles Internos', 'Logística'], carimbo: 'controles' },
+  /* AS DUAS BALANÇAS SÃO SEGUIDAS; A EXPEDIÇÃO VEM DEPOIS (08/09/2026).
+
+     Era chegada → Expedição → peso final, e o dono trouxe da operação:
+     "o faturamento precisa conseguir dar continuidade antes da expedicao
+     (...) No sistema está sequenciado mas quando a gente faz na prática
+     ele não está."
+
+     Não é preferência de tela: é consequência do que já tinha sido
+     decidido em 28/08, quando a etapa da Expedição virou só o "OKzinho"
+     PORQUE eles não conseguem conferir na hora que o caminhão chega. Um
+     passo que, por desenho, demora não pode ficar no meio da balança —
+     o caminhão descarrega, volta a pesar e vai embora; a conferência
+     acontece depois. Exigir o OK entre as duas pesagens era pedir que o
+     Faturamento esperasse o que ninguém prometeu entregar naquela hora.
+
+     A tela já dizia isso desde 02/09 (a numeração da Bruna: 2 Balança
+     entrada, 3 Peso final, 4 Expedição). Quem estava errado era o
+     servidor — e o Faturamento via o passo e não conseguia dar. */
+  { de: 'Conferida no Faturamento', para: 'Peso Final Registrado',    setores: ['Faturamento', 'Logística'],      carimbo: 'pesofinal' },
+  { de: 'Peso Final Registrado',    para: 'Descarga Conferida',       setores: ['Expedição', 'Logística'],        carimbo: 'expedicao' },
+  /* A SOBRA PULA A BALANÇA FINAL — e por isso tem transição própria.
+
+     Ela encerra no OK da Expedição e nunca volta à balança (o caminhão da
+     sobra não é pesado vazio). Com a troca acima, "Descarga Conferida"
+     passou a vir depois de "Peso Final Registrado" — sem esta linha a
+     sobra ficaria sem caminho até o próprio fim. `soSobra` existe para
+     que este atalho NÃO fique aberto para a devolução normal: lá, pular a
+     pesagem final é justamente o que não pode acontecer. */
+  { de: 'Conferida no Faturamento', para: 'Descarga Conferida',       setores: ['Expedição', 'Logística'],        carimbo: 'expedicao', soSobra: true },
+  { de: 'Descarga Conferida',       para: 'Destinada',                setores: ['Controles Internos', 'Logística'], carimbo: 'controles' },
   { de: 'Destinada',                para: 'Nota Finalizada',          setores: ['Central de Notas', 'Logística'], carimbo: 'notas' },
 ];
 
@@ -95,7 +123,13 @@ export function validarTransicaoDevolucao(statusAtual, statusNovo, setor, tipo) 
   if (statusAtual === statusNovo) {
     throw new ErroDeFluxoDevolucao(`A devolução já está em "${statusNovo}".`, 'SEM_MUDANCA');
   }
-  const regra = TRANSICOES_DEV.find((t) => t.de === statusAtual && t.para === statusNovo);
+  /* `soSobra` separa os dois caminhos que saem de "Conferida no
+     Faturamento": a devolução normal vai para a balança final, a sobra
+     vai direto para o OK da Expedição. Filtrar aqui — e não com um `if`
+     mais adiante — é o que impede a devolução normal de encontrar o
+     atalho da sobra e pular a pesagem. */
+  const regra = TRANSICOES_DEV.find((t) => t.de === statusAtual && t.para === statusNovo
+    && (t.soSobra ? tipo === 'SOBRA' : !(tipo === 'SOBRA' && t.para === 'Peso Final Registrado')));
   if (!regra) {
     throw new ErroDeFluxoDevolucao(
       `Não é possível ir de "${statusAtual}" direto para "${statusNovo}".`
@@ -112,8 +146,16 @@ export function validarTransicaoDevolucao(statusAtual, statusNovo, setor, tipo) 
 
 /* Criar e editar o checklist é da Logística (Administração irrestrita) —
    "controle total das meninas", requisito nº 1 do pedido. */
+/* CRIAR CHECKLIST: a Logística e as três filiais (02/09/2026).
+
+   O dono: a filial "vai poder so criar checklists e acompanhar historico
+   de devolucoes somente que competem a eles".
+
+   Criar é o único verbo do fluxo que a filial tem. Avançar etapa é
+   recusado explicitamente na rota, e ler é filtrado por `criada_setor` —
+   as três coisas juntas é que fazem a permissão; nenhuma sozinha basta. */
 export function podeCriarDevolucao(setor) {
-  return setor === 'Logística' || setor === SETOR_IRRESTRITO;
+  return setor === 'Logística' || setor === SETOR_IRRESTRITO || ehFilial(setor);
 }
 
 export const DESTINACOES = ['Estoque', 'Descarte', 'Reprocesso'];
@@ -265,6 +307,13 @@ export function itemParaPainel(i) {
       ? null : Number(i.peso_faturamento),
     // Tick da Central de Notas: item com a nota finalizada.
     notaFinal: !!i.nota_final,
+    /* Os OKs da Expedição e dos Controles Internos (migração 040) — o
+       mesmo formato do tique da Central de Notas, que foi o modelo pedido
+       pelo dono: "expedição, destinação fica igual da central de nota, só
+       colocar um ok". A quantidade e as caixas por destino continuam
+       existindo ao lado; ver o comentário da migração. */
+    okExpedicao: !!i.ok_expedicao,
+    okDestinacao: !!i.ok_destinacao,
   };
 }
 
@@ -370,5 +419,7 @@ export function camposItem(corpo) {
     m.peso_faturamento = n === null ? null : Math.max(0, n);
   }
   if (corpo.notaFinal !== undefined) m.nota_final = !!corpo.notaFinal;
+  if (corpo.okExpedicao !== undefined) m.ok_expedicao = !!corpo.okExpedicao;
+  if (corpo.okDestinacao !== undefined) m.ok_destinacao = !!corpo.okDestinacao;
   return m;
 }

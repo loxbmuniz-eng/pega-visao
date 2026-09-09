@@ -186,6 +186,18 @@ function rotaCurta(codigo){
    'sharepoint' identifica "isto já veio confirmado do servidor" (carga
    inicial ou reaplicação no load()) e pula o re-envio — do contrário,
    toda leitura completa reenviaria as mesmas rotas de volta ao servidor. */
+/* Desfaz a gravação local de uma rota que o servidor não aceitou por falta
+   de conexão. Tira das três estruturas onde ela entrou, na ordem inversa. */
+function removerRotaLocal(codigo){
+  const i = ROTAS.findIndex(r => r.codigo === codigo);
+  if(i >= 0) ROTAS.splice(i, 1);
+  ROTA_POR_CODIGO.delete(codigo);
+  if(Array.isArray(DB.rotasExtras)){
+    DB.rotasExtras = DB.rotasExtras.filter(r => r.codigo !== codigo);
+  }
+  SuincoStore.save();
+}
+
 function upsertRota(codigo, nome, detalhe, operador, extra){
   extra = extra || {};
   codigo = String(codigo||'').trim();
@@ -213,10 +225,32 @@ function upsertRota(codigo, nome, detalhe, operador, extra){
 
   if(extra.origem !== 'sharepoint'
      && typeof SuincoSharePoint !== 'undefined' && SuincoSharePoint.estaConfigurado()){
-    SuincoSharePoint.upsert('rotas', 'codigo', {
+    /* A PROMESSA FICA DISPONÍVEL PARA QUEM CHAMOU (31/08/2026).
+
+       Sem isto, a tela só conseguia avisar "cadastrada" no instante do
+       clique — antes de o servidor responder — e a recusa chegava depois,
+       contradizendo a frase anterior. Quem chama agora pode esperar o
+       resultado e falar uma vez só, a verdade. */
+    rota._promessa = SuincoSharePoint.upsert('rotas', 'codigo', {
       Codigo: rota.codigo, Nome: rota.nome, Detalhe: rota.detalhe, Operador: rota.operador
     }, DB.operador).then(r=>{
-      if(r && r.recusado && _aoRecusarRota) _aoRecusarRota(rota, r.erro);
+      /* RECUSADA POR ESTAR OFFLINE: A ROTA NÃO FICA (31/08/2026).
+
+         Antes, a rota recusada continuava neste navegador e o aviso dizia
+         "ficou salva só neste aparelho". Com a regra nova do dono — offline
+         não grava nada — isso virou contradição: uma metade da frase diz que
+         não gravou, a outra diz que ficou salva. E o pior não é a frase: é a
+         rota existir aqui e não existir para mais ninguém, que é a
+         divergência que a regra veio acabar.
+
+         Recusa POR PERMISSÃO ou por dado inválido é outra coisa: ali o
+         servidor está no ar e respondeu, e apagar seria esconder o que a
+         pessoa digitou. Por isso só o caso `offline` desfaz. */
+      if(r && r.recusado && r.offline){
+        removerRotaLocal(rota.codigo);
+        if(_aoRecusarRota) _aoRecusarRota(rota, r.erro, true);
+      }
+      else if(r && r.recusado && _aoRecusarRota) _aoRecusarRota(rota, r.erro);
       /* Enfileirada = gravou aqui e AINDA não subiu. Precisa de aviso
          próprio: o estado geral da conexão pode estar "online" e mesmo
          assim esta gravação específica ter caído na fila (foi o caso do
@@ -418,7 +452,27 @@ const SETOR_PERMISSOES = {
      servidor confere de novo o que cada um pode gravar. */
   'Controles Internos': ['devolucoes','historico'],
   'Central de Notas':   ['devolucoes','historico'],
+  /* QUALIDADE (09/09/2026) — acompanha e exporta, não escreve.
+
+     Pedido do dono, com as respostas dele às três perguntas: "qualidade so
+     acompanha e exporta relatorio" · "tambem ve a devolucao das filiais,
+     todos os relatorios que competem ao checklist".
+
+     TEM 'relatorios', que nenhum outro setor de devolução tem — é o ponto
+     do pedido. Mas dentro da aba ela vê SÓ o Relatório de Devoluções: o
+     Operacional e o Executivo são de pátio, e o de Administração de Fretes
+     carrega valor de frete, que é de Logística e Administração. Quem
+     esconde os três é renderRelatorios(); o servidor recusa o valor de
+     qualquer jeito (podeVerValorDeFrete). */
+  'Qualidade':    ['devolucoes','historico','relatorios'],
 };
+
+/* Gêmea de soAcompanha() em backend/src/dominio/fluxo.js — duplicada
+   porque o painel é build de arquivo único e não importa do servidor. O
+   teste testes/test_setor_qualidade.py compara as duas listas, para não
+   virar a sexta cópia divergente que o comentário de SETORES conta. */
+const SETORES_SO_ACOMPANHAM = ['Qualidade'];
+function soAcompanhaUI(setor){ return SETORES_SO_ACOMPANHAM.includes(setor); }
 
 // Função de cada aba, exibida no topo dela. Serve para quem abre o painel pela
 // primeira vez saber o que fazer ali sem depender de treinamento verbal.
@@ -439,7 +493,30 @@ const TAB_FUNCAO = {
   usuarios:    { setor:'Administração', oque:'Criar, bloquear e redefinir senha dos operadores de todos os setores.',                            move:'Não altera cargas — define quem entra e o que cada um pode registrar.' }
 };
 
+/* AS TRÊS FILIAIS VEEM UMA ABA SÓ (02/09/2026).
+
+   Pedido do dono: "so vai ter acesso a aba devolucoes e escopo de
+   devolucoes, e vai poder so criar checklists e acompanhar historico de
+   devolucoes somente que competem a eles".
+
+   Nem 'torre' nem 'historico', que são liberados para todo mundo nos
+   outros setores: a filial não acompanha o pátio da matriz. E a trava de
+   verdade não está aqui — está no servidor, que filtra a listagem por
+   `criada_setor`. Esta linha é só a tela; esconder aba não é permissão. */
+SETOR_PERMISSOES['Filial 105 BSB'] = ['devolucoes'];
+SETOR_PERMISSOES['Filial 106 BAHIA'] = ['devolucoes'];
+SETOR_PERMISSOES['Filial 107 ES'] = ['devolucoes'];
+
 const SETORES = Object.keys(SETOR_PERMISSOES);
+
+/* Quem é filial, do lado da tela. A lista mora no servidor
+   (dominio/fluxo.js, SETORES_FILIAL); aqui ela é repetida porque o painel
+   precisa decidir o que desenhar antes de perguntar qualquer coisa — e o
+   nome do setor vem do login, não de uma chamada. Se um dia entrar uma
+   quarta filial, os dois lugares mudam juntos: está escrito nos dois. */
+function ehSetorFilial(setor) {
+  return String(setor || '').startsWith('Filial ');
+}
 
 /* ---------- estado em memória ---------- */
 let DB = {
@@ -468,6 +545,62 @@ let DB = {
   operador: null,          // {nome, setor, turno} — placeholder até SSO
   dark: true
 };
+
+/* =====================================================================
+   A TABELA DE FRETE NO PAINEL — cópia de leitura, nunca a fonte
+   ---------------------------------------------------------------------
+   Pedido do dono: "criar tabela de frete no embarquesuinco.com.br,
+   cadastro possa ser editavel e criada da mesma forma que funcionam os
+   cadastros" e "a tabela de frete deve fazer o calculo segundo a
+   kilometragem e destino".
+
+   O QUE ESTAS DUAS LISTAS SÃO, E O QUE NÃO SÃO. Elas existem para a tela
+   poder mostrar o km do destino no instante em que a pessoa escolhe, e
+   para o seletor ter o que listar. Elas NÃO decidem o valor: quem calcula
+   é o servidor, contra a tabela do banco (backend/src/dominio/frete.js).
+
+   Isso é decisão, não descuido. Duas contas de dinheiro — uma no navegador
+   e outra no servidor — divergem no primeiro caso de borda: um terminal
+   com a tabela velha calcularia um valor, o servidor gravaria outro, e a
+   diferença apareceria como frete pago errado, não como tela feia. Aqui a
+   tela ADIANTA o resultado; quem decide é a transação, como em todo o
+   resto do painel.
+   ===================================================================== */
+let TARIFAS_FRETE = [];   // {tipoVeiculo, valorPorKm, vigenteDesde}
+let DESTINOS_FRETE = [];  // {destino, km}
+const KM_POR_DESTINO = new Map();
+
+/* KM que vale: inteiro positivo, ou null. Nunca zero por engano.
+
+   Gêmea de kmValido() em backend/src/dominio/frete.js — de propósito, e é
+   a única coisa desta família duplicada nos dois lados. A alternativa era
+   o campo em branco chegar ao servidor como 0 e ser recusado lá, depois
+   de a pessoa já ter clicado. */
+function kmValidoLocal(v){
+  if(v === '' || v === null || v === undefined) return null;
+  const n = Number(v);
+  if(!Number.isFinite(n)) return null;
+  const i = Math.trunc(n);
+  return i > 0 ? i : null;
+}
+
+function kmDoDestino(destino){
+  const d = String(destino || '').trim().toUpperCase();
+  return d && KM_POR_DESTINO.has(d) ? KM_POR_DESTINO.get(d) : null;
+}
+
+/* Recebe a tabela do servidor. Substitui inteira em vez de mesclar: o
+   servidor é a fonte, e mesclar deixaria viva no navegador uma tarifa que
+   alguém apagou lá — exatamente o tipo de sobra que faz a tela mostrar um
+   preço que não existe mais. */
+function receberTabelaDeFrete({tarifas, destinos}){
+  if(Array.isArray(tarifas)) TARIFAS_FRETE = tarifas.slice();
+  if(Array.isArray(destinos)){
+    DESTINOS_FRETE = destinos.slice();
+    KM_POR_DESTINO.clear();
+    DESTINOS_FRETE.forEach(d => KM_POR_DESTINO.set(String(d.destino).toUpperCase(), d.km));
+  }
+}
 
 /* ---------- storage adapter (trocar aqui quando vier o SharePoint) ---------- */
 const SuincoStore = {
@@ -501,8 +634,33 @@ const SuincoStore = {
   // toda a máquina de estados, que a diretriz manda não alterar.
   save(){
     try{
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(DB));
-    }catch(e){ console.error('Falha ao salvar dados locais', e); }
+      /* O que veio de uma consulta de período fica FORA do armazenamento:
+         é leitura, não estado deste navegador. Gravar traria de volta o
+         problema que a poda resolve — o cofre local crescendo sem teto. */
+      const doServidor = DB.cargas.some(ehCargaDoServidor);
+      let paraGravar = DB;
+      if(doServidor){
+        const cargas = DB.cargas.filter(c => !ehCargaDoServidor(c));
+        /* A MARCA TAMBÉM FICA DE FORA. `_sincronizado` guarda id de carga, e
+           deixar ali o id do que veio de uma consulta de período faria o
+           cofre local crescer justamente pelo caminho que a poda fecha —
+           além de guardar rastro de carga que este navegador não tem. */
+        const vivas = new Set(cargas.map(c => c.id));
+        const marca = {};
+        Object.keys(DB._sincronizado || {}).forEach(id => {
+          if(vivas.has(id)) marca[id] = DB._sincronizado[id];
+        });
+        paraGravar = { ...DB, cargas, _sincronizado: marca,
+          movimentacoes: DB.movimentacoes.filter(m => !m._doServidor) };
+      }
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(paraGravar));
+    }catch(e){
+      console.error('Falha ao salvar dados locais', e);
+      if(typeof notify === 'function' && e && /quota|Quota|exceeded/.test(String(e.name || e.message))){
+        notify('O armazenamento deste navegador encheu. Recarregue a página — '
+          + 'o servidor tem tudo, e o painel volta com os últimos ' + JANELA_LOCAL_DIAS + ' dias.', 'danger', 15000);
+      }
+    }
     // Ponto único de saída para o SharePoint. Roda depois de a regra de
     // negócio ter aplicado a mudança, que é justamente o que faltava.
     this.sincronizarCargasAlteradas();
@@ -583,6 +741,7 @@ const SuincoStore = {
   sincronizarCargasAlteradas(){
     if(typeof SuincoSharePoint === 'undefined' || !SuincoSharePoint.estaConfigurado()) return;
     DB.cargas.forEach(c => {
+      if(ehCargaDoServidor(c)) return;   // leitura de período: nunca sobe de volta
       const marca = c.atualizadoEm || c.criadoEm || '';
       if(this._ultimoSync.get(c.id) === marca) return;      // nada mudou nesta
       if(this._emVoo.has(c.id)){
@@ -633,6 +792,7 @@ const SuincoStore = {
     if(typeof SuincoSharePoint === 'undefined') return;
     // `_pendente` protege esta carga de ser sobrescrita pela sincronia
     // enquanto a gravação não confirmar. Ver regra 3 de fundirEstadoRemoto.
+    const jaPendente = !!carga._pendente;
     carga._pendente = true;
     const r = await SuincoSharePoint.upsert('cargas', 'Carga_ID', {
       Title: carga.numeroCarga || carga.id,
@@ -676,6 +836,21 @@ const SuincoStore = {
       Lacre_2: carga.lacre2 || '',
       Lacre_3: carga.lacre3 || '',
       Lacre_Retido: carga.lacreRetido || '',
+      /* O FRETE (09/09/2026) — nos QUATRO pontos, como manda o guardião nº 1
+         (a família das ocorrências #02, #09 e #14): aqui (ida do painel),
+         deLinhaParaApi (ida para a API), daApiParaLinha (volta) e
+         cargaDeLinhaRemota (conversão). Faltando em UM deles, o campo some
+         sem erro nenhum em tela — foi assim que a observação passou meses
+         chegando vazia ao relatório de fretes.
+
+         SÓ ESTES TRÊS SOBEM. `km_destino`, `frete_valor` e
+         `frete_tarifa_usada` são do servidor: ele os calcula contra a
+         tabela. Mandá-los daqui seria oferecer ao painel um jeito de gravar
+         um preço que a tabela não produz — e a fila offline reenviaria um
+         valor velho por cima do calculado. */
+      Frete_Destino: carga.freteDestino || '',
+      Km_Deslocamento: carga.kmDeslocamento ?? null,
+      Frete_Documento: carga.freteDocumento || '',
       Status_Atual: carga.status,
       Aguardando_Carga: !!carga.aguardandoCarga,
       Criado_Em: carga.criadoEm,
@@ -693,7 +868,14 @@ const SuincoStore = {
       Programado_Em: carga.aguardandoCarga ? null : (carga.programadoEm || null),
       // Atualizado_Em é o que decide quem vence quando dois setores mexem na
       // mesma carga. Sem ele a fusão não teria como comparar as versões.
-      Atualizado_Em: carga.atualizadoEm || nowISO()
+      Atualizado_Em: carga.atualizadoEm || nowISO(),
+      /* A VERSÃO QUE ESTE TERMINAL LEU (09/09/2026). O servidor tem bloqueio
+         otimista desde 2026-08 e o painel nunca mandava a versão — dois
+         terminais online editando a mesma carga era "o último grava por
+         cima", sem aviso (família da #16, entre terminais diferentes). Só
+         vai quando se conhece a versão e não há gravação desta carga ainda
+         em voo; sem ela o servidor grava sem checar, como a fila offline. */
+      Versao: (!jaPendente && Number.isFinite(Number(carga.versao))) ? Number(carga.versao) : undefined
     }, operador);
 
     /* Recusa de criação/edição avisada — generalização do achado da
@@ -710,6 +892,16 @@ const SuincoStore = {
        checava `r.recusado` e avisava — criação/edição não tinha o
        equivalente. */
     if(r && r.recusado){
+      /* CONFLITO DE VERSÃO: outro terminal gravou antes. O servidor devolve
+         a carga atual; ela entra no lugar da cópia velha, e o aviso pede
+         para conferir e refazer. Recusar sem recarregar deixaria a pessoa
+         tentando de novo com a mesma cópia velha, para sempre. */
+      if(r.codigo === 'CONFLITO_DE_VERSAO' && r.atual){
+        const nova = cargaDeLinhaRemota(r.atual);
+        if(nova){ Object.assign(carga, nova); delete carga._pendente; }
+        r.erro = (r.erro || 'Outro operador alterou esta carga enquanto você editava.')
+          + ' O painel recarregou a carga com o que está no servidor — confira e refaça a sua alteração.';
+      }
       /* Carga NUNCA confirmada pelo servidor (_nuncaConfirmada, marcada na
          criação) pode ser removida com segurança: ao contrário de uma
          edição — onde o servidor já tinha uma versão válida da carga antes
@@ -723,9 +915,18 @@ const SuincoStore = {
       if(eraCriacaoNuncaConfirmada){
         DB.cargas = DB.cargas.filter(c => c.id !== carga.id);
       }
-      if(_aoRecusarCarga) _aoRecusarCarga(carga, r.erro, eraCriacaoNuncaConfirmada);
+      /* `r.offline` separa duas recusas que NÃO têm a mesma causa nem a
+         mesma correção: "o servidor disse não" (placa fora da frota, setor
+         sem permissão — refazer não adianta sem corrigir o motivo) e "não
+         houve servidor nenhum" (trava de offline, 31/08/2026 — basta
+         reconectar e refazer). Dizer "o servidor recusou" quando o aparelho
+         está sem rede manda o operador procurar um problema que não existe. */
+      if(_aoRecusarCarga) _aoRecusarCarga(carga, r.erro, eraCriacaoNuncaConfirmada, !!r.offline);
     } else if(r && r.enfileirado === false){
       delete carga._nuncaConfirmada;
+      // A versão nova volta na resposta do PATCH. Sem guardá-la, a PRÓXIMA
+      // edição deste mesmo terminal iria com a versão velha e levaria 409.
+      if(r.item && Number.isFinite(Number(r.item.versao))) carga.versao = Number(r.item.versao);
     }
 
     /* MUDANÇA DE STATUS VAI POR ROTA PRÓPRIA, e este bloco é a correção de
@@ -842,7 +1043,9 @@ const SuincoStore = {
       Placa: frota.placa,
       Transportadora: frota.transportadora || '',
       Tipo_Veiculo: frota.tipoVeiculo || '',
-      Capacidade_Kg: frota.capacidadeKg || null,
+      // null ≠ zero: `|| null` apagava capacidade 0 (regra da casa; já aconteceu aqui)
+      Capacidade_Kg: (frota.capacidadeKg === null || frota.capacidadeKg === undefined || frota.capacidadeKg === '')
+        ? null : Number(frota.capacidadeKg),
       UF: frota.uf || '',
       Motorista: frota.motorista || '',
       Precisa_Revisao: !!frota.precisaRevisao
@@ -917,7 +1120,7 @@ function fundirEstadoRemoto(dados){
   // de um tempo offline) — listar cada uma tornaria a notificação maior
   // que o problema que ela resolve.
   const DETALHES_MAX = 4;
-  const res = { cargasNovas:0, cargasAtualizadas:0, movimentacoesNovas:0, ignoradasPorPendencia:0, detalhes:[] };
+  const res = { cargasNovas:0, cargasAtualizadas:0, movimentacoesNovas:0, ignoradasPorPendencia:0, detalhes:[], reandouAposDevolucao:[] };
   if(!dados) return res;
 
   const registrarDetalhe = (carga, acao) => {
@@ -960,6 +1163,26 @@ function fundirEstadoRemoto(dados){
     const tRemoto = Date.parse(carga.atualizadoEm || 0) || 0;
     if(tRemoto > tLocal){
       const statusMudou = local.status !== carga.status;
+
+      /* ANDOU DEPOIS DE TER SIDO DEVOLVIDA — o aviso que faltava.
+
+         Quem devolve uma etapa de propósito precisa saber quando ela volta
+         a andar, senão fica tentando corrigir de novo achando que não
+         gravou. Foi exatamente o que aconteceu no relato do FTZ2138: a
+         correção valia, e outro setor a desfazia em seguida, calado.
+
+         A checagem é feita ANTES do Object.assign, com o status que este
+         terminal ainda tem — depois dele o "de onde saiu" já se perdeu. */
+      const devolvida = statusMudou ? etapaDevolvida(local) : null;
+      const reandou = !!(devolvida && devolvida.aindaVale
+        && STATUS_FLOW.indexOf(carga.status) > STATUS_FLOW.indexOf(local.status));
+      if(reandou){
+        res.reandouAposDevolucao.push({
+          placa: carga.placa, numeroCarga: carga.numeroCarga,
+          de: local.status, para: carga.status, devolvida
+        });
+      }
+
       Object.assign(local, carga); res.cargasAtualizadas++;
       registrarDetalhe(local, statusMudou ? 'mudou de status' : 'foi editada');
     }
@@ -991,6 +1214,7 @@ function fundirEstadoRemoto(dados){
       DB.movimentacoes.splice(i, 1);
     }
     DB.movimentacoes.push(mov); vistas.add(mov.id); res.movimentacoesNovas++;
+    invalidarIndiceMovimentacoes();   // splice + push mantém o tamanho — o índice não perceberia
   });
 
   // ---- frota (só na carga inicial; dimensão de leitura) ----
@@ -1045,6 +1269,7 @@ function fundirEstadoRemoto(dados){
       .catch(()=>{});
   }
 
+  res.podadas = podarLocal();   // ver JANELA_LOCAL_DIAS
   if(res.cargasNovas || res.cargasAtualizadas || res.movimentacoesNovas){
     // Marca como já sincronizado o que acabou de VIR do servidor, senão o
     // save() abaixo devolveria tudo de volta — um eco infinito entre os
@@ -1119,6 +1344,26 @@ function cargaDeLinhaRemota(r){
     lacreRetidoEm: r.Lacre_Retido_Em || null,
     status: STATUS_FLOW.includes(r.Status_Atual) ? r.Status_Atual : STATUS_FLOW[0],
     aguardandoCarga: r.Aguardando_Carga === true || r.Aguardando_Carga === 'Sim',
+    /* TERCEIRO PONTO — a família das ocorrências #02 e #09. Este campo
+       precisa existir na tradução do adaptador (daApiParaLinha), na volta
+       para objeto do painel e AQUI. Faltando em qualquer um, ele some sem
+       erro nenhum em tela. Não entra no pacote de IDA de propósito: quem
+       carimba a saída sem carregamento é o servidor, na transição. */
+    saidaSemCarregar: r.Saida_Sem_Carregar === true,
+    /* FRETE. Os três primeiros o painel manda de volta; os quatro últimos
+       são só de leitura — quem os produz é o servidor.
+
+       `?? null` e NÃO `|| 0`: km é dinheiro aqui. `Number(0) || null` já
+       apagou capacidade de veículo neste projeto, e do outro lado da moeda
+       `|| 0` transformaria "não informado" em "zero quilômetro", que
+       calcularia frete R$ 0,00 sem ninguém ver. */
+    freteDestino: r.Frete_Destino || '',
+    kmDeslocamento: r.Km_Deslocamento ?? null,
+    freteDocumento: r.Frete_Documento || '',
+    kmDestino: r.Km_Destino ?? null,
+    freteValor: r.Frete_Valor ?? null,
+    freteTarifaUsada: r.Frete_Tarifa_Usada ?? null,
+    freteMotivo: r.Frete_Motivo || '',
     criadoEm: r.Criado_Em || nowISO(),
     /* Sem inventar com `criadoEm`: o modelo guarda o que o servidor tem, e
        quem exibe usa `programadoEm || criadoEm` como leitura. Preencher aqui
@@ -1130,6 +1375,7 @@ function cargaDeLinhaRemota(r){
        `atualizadoEm`: é exatamente essa confusão que fazia a Torre inteira
        exibir o mesmo horário depois de um eco de sincronização. */
     acaoEm: r.Acao_Em || null,
+    versao: Number.isFinite(Number(r.Versao)) ? Number(r.Versao) : null,
     acaoPor: r.Acao_Por || '',
     acaoSetor: r.Acao_Setor || '',
     excluida: r.Excluida === true
@@ -1173,9 +1419,26 @@ function fmtHora(iso){
 function normalizarPlaca(p){
   return (p||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
 }
+/* DURAÇÃO NEGATIVA NÃO EXISTE (09/09/2026). Fim antes do início é registro
+   inconsistente — carimbo fora de ordem, relógio de terminal errado, etapa
+   corrigida à mão — e não "menos tempo". Antes, uma carga com a chegada em
+   2029 levava a média de pátio da aba inteira para −243.504 min, publicada
+   no PDF com cara de número. Aqui devolve null: sai da conta. Quem precisa
+   saber QUAIS cargas saíram chama cargasComDataInconsistente(). */
 function minutosEntre(isoA, isoB){
   if(!isoA || !isoB) return null;
-  return Math.round((new Date(isoB) - new Date(isoA)) / 60000);
+  const m = Math.round((new Date(isoB) - new Date(isoA)) / 60000);
+  return Number.isFinite(m) && m >= 0 ? m : null;
+}
+/* Data de evento plausível: existe, não está no futuro (5 min de folga para
+   relógio de celular) e não é anterior a 2020. Evento no futuro entrava
+   nos cartões e sumia das tabelas de período — a mesma tela dizia "5
+   cargas" num bloco e "sem dados" no outro. */
+function dataDeEventoPlausivel(iso){
+  if(!iso) return false;
+  const t = Date.parse(iso);
+  if(!Number.isFinite(t)) return false;
+  return t <= Date.now() + 5*60000 && t >= Date.parse('2020-01-01T00:00:00Z');
 }
 function fmtDuracao(min){
   if(min===null || min===undefined || isNaN(min)) return '—';
@@ -1510,8 +1773,38 @@ function registrarMovimentacao({cargaId, placa, statusAnterior, statusNovo, oper
 function snapshotCarga(c){
   return { cliente: c.cliente, motorista: c.motorista, tipoVeiculo: c.tipoVeiculo, qtdEntregas: c.qtdEntregas };
 }
+/* ÍNDICE cargaId → movimentações ordenadas (09/09/2026).
+
+   historicoDaCarga filtrava e ordenava TODAS as movimentações a cada
+   chamada — e indicadoresDaCarga a chama 5 vezes por carga, por render.
+   Medido: 300 cargas, 0,5 s na aba Indicadores; 1.500 cargas (6–8 semanas
+   de operação), 5,1 s a cada sincronia; 5.000 num navegador antigo, 59 s.
+   O painel congelava sozinho, sem ninguém mexer em nada.
+
+   Mesmo padrão do índice da Frota: reconstruído quando a lista troca de
+   identidade ou de tamanho. A sincronia troca movimentação por
+   movimentação (splice + push — MESMO tamanho), então quem faz isso chama
+   invalidarIndiceMovimentacoes() explicitamente. Resposta idêntica, custo
+   linear. */
+let _movIndice = null, _movIndiceRef = null, _movIndiceLen = -1;
+function invalidarIndiceMovimentacoes(){ _movIndice = null; _movIndiceRef = null; _movIndiceLen = -1; }
+function indiceMovimentacoes(){
+  if(_movIndice && _movIndiceRef === DB.movimentacoes && _movIndiceLen === DB.movimentacoes.length){
+    return _movIndice;
+  }
+  const m = new Map();
+  DB.movimentacoes.forEach(x => {
+    let lista = m.get(x.cargaId);
+    if(!lista){ lista = []; m.set(x.cargaId, lista); }
+    lista.push(x);
+  });
+  m.forEach(lista => lista.sort((a,b)=>new Date(a.timestamp)-new Date(b.timestamp)));
+  _movIndice = m; _movIndiceRef = DB.movimentacoes; _movIndiceLen = DB.movimentacoes.length;
+  return m;
+}
 function historicoDaCarga(cargaId){
-  return DB.movimentacoes.filter(m=>m.cargaId===cargaId).sort((a,b)=>new Date(a.timestamp)-new Date(b.timestamp));
+  const lista = indiceMovimentacoes().get(cargaId);
+  return lista ? lista.slice() : [];
 }
 /* A ÚLTIMA MUDANÇA DE ETAPA — a MESMA linha que o Histórico mostra.
 
@@ -1534,6 +1827,148 @@ function ultimaMovimentacaoDaCarga(cargaId){
 function primeiroTimestamp(cargaId, status){
   const m = historicoDaCarga(cargaId).find(x=>x.statusNovo===status);
   return m ? m.timestamp : null;
+}
+
+/* ENTRADA NO PÁTIO — UMA DEFINIÇÃO SÓ (movida de app.js em 09/09/2026).
+
+   Três datas que não podem se misturar:
+     criadoEm     — quando o REGISTRO nasceu
+     programadoEm — quando a CARGA foi lançada/programada
+     entrada      — quando o CAMINHÃO encostou (esta função)
+
+   A entrada de verdade é o evento "Aguardando Embarque" na trilha. Quando a
+   Portaria registra a chegada sem programação (aguardandoCarga), a linha
+   nasce no instante da chegada — só aí criadoEm é a entrada. Sem nenhum dos
+   dois, devolve null: o caminhão ainda não chegou, e inventar uma data que
+   pareça uma é como o Executivo passou a imprimir "0 paradas". */
+function entradaNoPatioDe(c){
+  if(!c) return null;
+  const ev = primeiroTimestamp(c.id, 'Aguardando Embarque');
+  if(ev) return ev;
+  if(c.aguardandoCarga) return c.criadoEm || null;
+  return null;
+}
+/* Há quanto tempo o caminhão está no pátio AGORA — pela chegada, nunca pela
+   última gravação. `atualizadoEm` muda a cada observação escrita e a cada
+   eco de sincronização (abrir o painel regrava as cargas); contar por ele
+   zerava "Parada há" e "Paradas Além da Meta" justamente com o painel em
+   uso. Ocorrência #08, nos dois pontos que a correção não tinha alcançado. */
+function minutosNoPatioAgora(c){
+  const entrada = entradaNoPatioDe(c);
+  if(!entrada || !dataDeEventoPlausivel(entrada)) return null;
+  return minutosEntre(entrada, new Date().toISOString());
+}
+/* Uma função, dois chamadores: a lista de Gargalos e a caixa do Relatório
+   Executivo contam pela mesma régua. `semChegada` é o que a tela precisa
+   dizer em vez de somar zero. */
+function paradasAlemDaMeta(cargas){
+  const meta = metaTempoPatio();
+  let total = 0, semChegada = 0;
+  (cargas || cargasAbertas()).forEach(c => {
+    const m = minutosNoPatioAgora(c);
+    if(m === null) semChegada++;
+    else if(m > meta) total++;
+  });
+  return { total, semChegada, meta };
+}
+
+/* A carga que a rota /api/historico devolve já vem em formato de painel
+   (paraPainel), não em formato de LISTA (Carga_ID etc.) — por isso não
+   passa por cargaDeLinhaRemota. Uma função só para os campos que as telas
+   de período usam. */
+function daApiParaCargaLocal(x){
+  if(!x || !x.id) return null;
+  return {
+    id: x.id, numeroCarga: x.numeroCarga || '', placa: x.placa || '',
+    transportadora: x.transportadora || '', tipoVeiculo: x.tipoVeiculo || '',
+    motorista: x.motorista || '', cliente: x.cliente || '', destino: x.destino || '',
+    peso: x.peso || 0, doca: x.doca || '', rota: x.rota || '', sequencia: x.sequencia,
+    praOnde: x.praOnde || '', paletizada: x.paletizada || '', qtdGanchos: x.qtdGanchos || 0,
+    qtdEntregas: x.qtdEntregas, observacoes: x.observacoes || '',
+    lacre: x.lacre || '', lacre2: x.lacre2 || '', lacre3: x.lacre3 || '',
+    lacreRetido: x.lacreRetido || '', saidaSemCarregar: !!x.saidaSemCarregar,
+    status: x.status, aguardandoCarga: !!x.aguardandoCarga,
+    criadoEm: x.criadoEm, programadoEm: x.programadoEm, atualizadoEm: x.atualizadoEm,
+    concluidoEm: x.concluidoEm || null, versao: x.versao,
+  };
+}
+
+/* ---------- A JANELA DO NAVEGADOR (09/09/2026) ----------------------
+
+   Decisão do dono: 30 dias. O navegador guarda as cargas concluídas dos
+   últimos 30 dias; o servidor guarda tudo, para sempre. Pedindo período
+   maior, o painel BUSCA no servidor (buscarHistoricoNoServidor) e as telas
+   passam a enxergar — nada fica inacessível.
+
+   Por que existe: medido em Chromium, com 1.500 cargas na memória a aba
+   Indicadores levava 5 s a cada sincronia; com 5.000 o localStorage
+   estourava a cota (9,4 MB) e o save() falhava SÓ NO CONSOLE — a cópia
+   local parava de atualizar sem ninguém perceber. A 30–40 cargas/dia, 30
+   dias são ~1.000 cargas: cabe com folga.
+
+   NUNCA poda carga aberta: a poda é só do que já saiu (Seguiu Viagem), e
+   só depois da janela. Também não poda o que ainda está subindo
+   (_pendente/_statusPendentes) — perder isso seria perder gravação. */
+const JANELA_LOCAL_DIAS = 30;
+
+function limiteDaJanelaLocal(){
+  return Date.now() - JANELA_LOCAL_DIAS * 86400000;
+}
+/* Carga trazida do servidor por consulta de período: vive só em memória,
+   nunca é gravada no navegador e nunca sobe de volta. */
+function ehCargaDoServidor(c){ return !!(c && c._doServidor); }
+
+function podarLocal(){
+  const limite = limiteDaJanelaLocal();
+  const podadas = new Set();
+  DB.cargas.forEach(c => {
+    if(c.status !== 'Seguiu Viagem') return;
+    if(c._pendente || (c._statusPendentes && c._statusPendentes.length)) return;
+    if(ehCargaDoServidor(c)) return;
+    const saida = primeiroTimestamp(c.id, 'Seguiu Viagem') || c.concluidoEm || c.atualizadoEm;
+    const t = saida ? Date.parse(saida) : NaN;
+    if(Number.isFinite(t) && t < limite) podadas.add(c.id);
+  });
+  if(!podadas.size) return 0;
+  DB.cargas = DB.cargas.filter(c => !podadas.has(c.id));
+  DB.movimentacoes = DB.movimentacoes.filter(m => !podadas.has(m.cargaId));
+  invalidarIndiceMovimentacoes();
+  if(DB._sincronizado) podadas.forEach(id => { delete DB._sincronizado[id]; });
+  if(SuincoStore && SuincoStore._ultimoSync) podadas.forEach(id => SuincoStore._ultimoSync.delete(id));
+  return podadas.size;
+}
+
+/* Traz do servidor as cargas concluídas de um período e as funde EM
+   MEMÓRIA. Marcadas com _doServidor: save() não as grava e a sincronia não
+   as reenvia. Assim Histórico, Indicadores, Relatórios e Raio-X enxergam o
+   período sem nenhuma delas precisar saber de onde o dado veio. */
+async function buscarHistoricoNoServidor(de, ate){
+  if(typeof SuincoSharePoint === 'undefined' || !SuincoSharePoint.estaConfigurado()){
+    return { ok:false, motivo:'sem-servidor' };
+  }
+  try{
+    const r = await SuincoSharePoint.historico(de, ate);
+    const vistos = new Set(DB.cargas.map(c => c.id));
+    let novas = 0;
+    (r.cargas || []).forEach(linha => {
+      const c = daApiParaCargaLocal(linha);
+      if(!c || vistos.has(c.id)) return;
+      c._doServidor = true;
+      DB.cargas.push(c); vistos.add(c.id); novas++;
+    });
+    const vistasMov = new Set(DB.movimentacoes.map(m => m.id));
+    (r.movimentacoes || []).forEach(m => {
+      if(!m || !m.id || vistasMov.has(m.id)) return;
+      DB.movimentacoes.push({ id:m.id, cargaId:m.cargaId, placa:m.placa,
+        statusAnterior:m.statusAnterior, statusNovo:m.statusNovo, setor:m.setor,
+        timestamp:m.data, operador:m.operador, _doServidor:true });
+      vistasMov.add(m.id);
+    });
+    invalidarIndiceMovimentacoes();
+    return { ok:true, cargas:novas, de, ate };
+  }catch(e){
+    return { ok:false, motivo:'erro', erro: (e && e.message) || String(e) };
+  }
 }
 
 /* ---------- CARGAS ---------- */
@@ -1559,7 +1994,7 @@ function getCarga(id){ return DB.cargas.find(c=>c.id===id) || null; }
 // se a placa não estiver cadastrada em Frota, a criação é recusada. A
 // Portaria continua podendo registrar a chegada de QUALQUER placa (mesmo
 // não cadastrada) via "Aguardando Carga" — a trava é só na Programação.
-function criarCargaProgramada({placa, transportadora, tipoVeiculo, numeroCarga, cliente, destino, produto, peso, doca, rota, sequencia, observacoes, motorista, praOnde, paletizada, qtdGanchos, qtdEntregas, operador}){
+function criarCargaProgramada({placa, transportadora, tipoVeiculo, numeroCarga, cliente, destino, produto, peso, doca, rota, sequencia, observacoes, motorista, praOnde, paletizada, qtdGanchos, qtdEntregas, freteDestino, kmDeslocamento, freteDocumento, operador}){
   const p = normalizarPlaca(placa);
   /* PLACA VAZIA = caminhão ainda não contratado (26/08/2026).
 
@@ -1593,6 +2028,19 @@ function criarCargaProgramada({placa, transportadora, tipoVeiculo, numeroCarga, 
     paletizada: paletizada === 'Sim' || paletizada === true ? 'Sim' : 'Não',
     qtdGanchos: qtdGanchos!==undefined && qtdGanchos!=='' ? Math.max(0, Number(qtdGanchos)||0) : 0,
     qtdEntregas: qtdEntregas!==undefined && qtdEntregas!=='' ? Math.max(1, Number(qtdEntregas)||1) : 1,
+    /* FRETE (09/09/2026). Os três que o painel preenche; os calculados
+       chegam do servidor na confirmação.
+
+       `kmValidoLocal` e não `Number(x)||0`: campo em branco tem que virar
+       null. Zero quilômetro calcularia frete R$ 0,00 — a mesma família do
+       `Number(0) || null` que apagou capacidade de veículo aqui. */
+    freteDestino: String(freteDestino || '').trim().toUpperCase(),
+    kmDeslocamento: kmValidoLocal(kmDeslocamento),
+    freteDocumento: String(freteDocumento || '').trim(),
+    kmDestino: kmDoDestino(freteDestino),
+    freteValor: null,
+    freteTarifaUsada: null,
+    freteMotivo: '',
     status: 'Aguardando Veículo',
     aguardandoCarga: false,
     criadoEm: nowISO(), criadoPor: operador||'(não identificado)',
@@ -1666,9 +2114,9 @@ function absorverEntradaDoPatio(carga, operador){
 
   const quem = (operador && (operador.nome || operador)) || (DB.operador && DB.operador.nome) || '(não identificado)';
   const setor = (operador && operador.setor) || (DB.operador && DB.operador.setor) || 'Logística';
-  // Mesma conta de entradaNoPatioDe (app.js): a linha da Portaria nasce no
-  // instante da chegada, então nela criadoEm É a entrada.
-  const entrada = primeiroTimestamp(orfa.id, 'Aguardando Embarque') || orfa.criadoEm || null;
+  // A entrada da linha da Portaria: a linha nasce no instante da chegada.
+  // Uma definição só — entradaNoPatioDe — para este ponto, a Torre e o PDF.
+  const entrada = entradaNoPatioDe(orfa) || orfa.criadoEm || null;
 
   if(carga.status === 'Aguardando Veículo'){
     const antes = carga.status;
@@ -1776,11 +2224,20 @@ function registrarChegadaPortaria(placa, operador){
     const d = new Date(base); if(isNaN(d)) return null;
     d.setHours(0,0,0,0); return d.getTime();
   };
+  /* O DIA DE REFERÊNCIA É O DA CARGA QUE ESTÁ CHEGANDO, não "hoje" (09/09/2026).
+     O servidor compara com o dia de programação da carga que chega
+     (`COALESCE($4, now())`); a tela comparava com o dia do relógio do
+     aparelho. Duas cargas programadas ontem à noite para hoje — rotina — e
+     a tela barrava a segunda entrada ("ontem < hoje") num caso em que o
+     servidor aceitaria ("ontem < ontem"). Regra escrita duas vezes tem que
+     ser a MESMA regra. Sem carga programada chegando, vale hoje, que é o
+     que o servidor faz com now(). */
   const hojeDia = (()=>{ const h = new Date(); h.setHours(0,0,0,0); return h.getTime(); })();
+  const diaDaChegada = paraAtualizar.map(diaDe).filter(d => d !== null).sort((a,b)=>a-b)[0] ?? hojeDia;
   const jaNoPatio = abertas.filter(c => {
     if(c.status === 'Aguardando Veículo') return false;
     const d = diaDe(c);
-    return d !== null && d < hojeDia;
+    return d !== null && d < diaDaChegada;
   });
 
   /* CAMINHÃO QUE NÃO SAIU NÃO CHEGA DE NOVO (19/08/2026).
@@ -1817,7 +2274,7 @@ function registrarChegadaPortaria(placa, operador){
 // Embarque" (o caminhão já está fisicamente no pátio) — então isto é só
 // edição de dados, e por isso NÃO gera linha no log de movimentações
 // (log só registra mudança de STATUS).
-function completarCargaAguardando(cargaId, {numeroCarga, cliente, destino, produto, peso, doca, rota, sequencia, observacoes, transportadora, tipoVeiculo, motorista, praOnde, paletizada, qtdGanchos, qtdEntregas, operador}){
+function completarCargaAguardando(cargaId, {numeroCarga, cliente, destino, produto, peso, doca, rota, sequencia, observacoes, transportadora, tipoVeiculo, motorista, praOnde, paletizada, qtdGanchos, qtdEntregas, freteDestino, kmDeslocamento, operador}){
   const c = getCarga(cargaId);
   if(!c) throw new Error('Carga não encontrada');
   if(!c.aguardandoCarga) throw new Error('Esta carga não está aguardando dados (Aguardando Carga).');
@@ -1825,6 +2282,14 @@ function completarCargaAguardando(cargaId, {numeroCarga, cliente, destino, produ
   c.doca = doca||''; c.sequencia = sequencia!==undefined && sequencia!=='' ? Number(sequencia) : null;
   c.observacoes = observacoes||'';
   c.motorista = motorista||'';
+  /* FRETE no lançamento do caminhão que já está no pátio (09/09/2026).
+
+     `!== undefined` e não `|| ''`: o modal pode não mandar o campo (painel
+     em versão antiga), e nesse caso o que já está gravado tem que ficar.
+     Campo vazio não é ordem de apagar. */
+  if(freteDestino !== undefined) c.freteDestino = String(freteDestino||'').trim().toUpperCase();
+  if(kmDeslocamento !== undefined) c.kmDeslocamento = kmValidoLocal(kmDeslocamento);
+  if(c.freteDestino) c.kmDestino = kmDoDestino(c.freteDestino);
   c.praOnde = PRA_ONDE_OPCOES.includes(praOnde) ? praOnde : PRA_ONDE_PADRAO;
   c.rota = rotaInfo(rota) ? String(rota).trim() : '';
   c.paletizada = paletizada === 'Sim' || paletizada === true ? 'Sim' : 'Não';
@@ -1872,6 +2337,98 @@ function avancarStatusCarga(cargaId, statusNovo, operador, setor){
   c.atualizadoEm = nowISO();
   SuincoStore.save();
   return c;
+}
+
+/* A ETAPA QUE FOI DEVOLVIDA DE PROPÓSITO — e ainda está onde a puseram.
+
+   RELATO DO DONO, 29/08/2026, palavra por palavra:
+
+     "TO TENTANDO MUDAR O STATUS DE UMA CARGA QUE TA ERRADA EU TENTO COLOCAR
+      AGUARDANDO VEICULO AO INVES DE AGUARDANDO EMBARQUE E NAO CONSIGO PPOIS
+      FICA VOLTANDO PRA AGUARDANDO EMBARQUE FTZ2138"
+
+   O QUE ESTAVA ACONTECENDO. A correção de etapa da Administração grava
+   certo e chega nos outros terminais — isso foi reproduzido e conferido no
+   banco. O problema vem DEPOIS: ao voltar para "Aguardando Veículo", a
+   carga reaparece na fila da Portaria como "não chegou", com o botão
+   "Chegou" ativo e NENHUM sinal de que aquilo foi uma correção deliberada.
+   O porteiro vê um caminhão que ele já deixou entrar listado como se não
+   tivesse chegado, clica "Chegou", e a carga volta para "Aguardando
+   Embarque" na hora. Quem corrigiu tenta de novo, e o laço se fecha.
+
+   POR QUE ISTO MORA AQUI, E NÃO NUMA COLUNA NOVA. A devolução JÁ ESTÁ
+   escrita: é uma movimentação cujo status novo vem ANTES do anterior na
+   STATUS_FLOW. Ler o que já existe evita migração, evita esperar o servidor
+   ser atualizado, e — o que importa mais — não cria uma segunda verdade
+   sobre o mesmo fato. Uma função, e os três chamadores (a marca na tela, a
+   pergunta do "Chegou" e o aviso de que voltou a andar) leem dela.
+
+   `aindaVale` é o que separa "foi devolvida um dia" de "está devolvida
+   agora": vale enquanto ninguém tirou a carga do lugar para onde ela foi
+   posta de volta. Sem janela de tempo de propósito — prazo mágico é
+   controle que depende da memória de quem escreveu. */
+/* UM ÍNDICE, NÃO UMA VARREDURA POR LINHA (29/08/2026 — medido, não suposto).
+
+   A primeira versão desta função varria `DB.movimentacoes` INTEIRO a cada
+   chamada. Como a marca é desenhada uma vez por linha da tela, o custo
+   virava 300 linhas × todo o histórico, a cada `renderAll()` — e o
+   renderAll roda a cada sincronia, de 15 em 15 segundos.
+
+   Medido no navegador, com 300 linhas na tela:
+
+        5.000 movimentações (o teto da primeira leitura) →  50 ms
+       20.000                                            → 114 ms
+       50.000                                            → 252 ms
+
+   Um quarto de segundo de tela travada, e num celular do pátio bem pior —
+   CPU mais fraca. Não aparecia em teste porque o banco de teste é pequeno:
+   é o tipo de defeito que só cresce em produção, devagar, até virar "o
+   painel ficou lento" sem ninguém saber por quê.
+
+   Agora o histórico é lido UMA vez e vira um mapa carga → última devolução.
+   A chave do cache é o tamanho da lista mais o id do último item: as duas
+   mudam em qualquer alteração real, inclusive na troca de uma movimentação
+   provisória pela definitiva (que mantém o tamanho e muda o último id). No
+   pior caso imaginável o mapa fica um ciclo atrasado — a marca demora 15
+   segundos a mais para aparecer. Nenhum dado se perde: quem decide é sempre
+   `DB.movimentacoes`, o cache só evita reler o que não mudou. */
+let _mapaDevolvidas = null;
+let _mapaDevolvidasChave = '';
+
+function _indiceDeDevolucoes(){
+  const movs = DB.movimentacoes || [];
+  const ultimo = movs.length ? movs[movs.length - 1] : null;
+  const chave = movs.length + '|' + ((ultimo && ultimo.id) || '');
+  if(_mapaDevolvidas && _mapaDevolvidasChave === chave) return _mapaDevolvidas;
+
+  const idx = new Map();
+  movs.forEach(m => {
+    if(!m.cargaId || !m.statusAnterior || !m.statusNovo) return;
+    const de = STATUS_FLOW.indexOf(m.statusAnterior);
+    const para = STATUS_FLOW.indexOf(m.statusNovo);
+    if(de === -1 || para === -1 || para >= de) return;   // só o que ANDOU PARA TRÁS
+    // A mais recente manda: uma carga pode ter sido devolvida mais de uma vez.
+    const atual = idx.get(m.cargaId);
+    if(!atual || String(m.timestamp||'') >= String(atual.timestamp||'')) idx.set(m.cargaId, m);
+  });
+
+  _mapaDevolvidas = idx;
+  _mapaDevolvidasChave = chave;
+  return idx;
+}
+
+function etapaDevolvida(carga){
+  if(!carga || !carga.id) return null;
+  const ultima = _indiceDeDevolucoes().get(carga.id);
+  if(!ultima) return null;
+  return {
+    de: ultima.statusAnterior,
+    para: ultima.statusNovo,
+    quem: ultima.operador || '(não identificado)',
+    setor: ultima.setor || '—',
+    quando: ultima.timestamp || null,
+    aindaVale: carga.status === ultima.statusNovo
+  };
 }
 
 // Portaria — botão "Saiu": saída física de uma placa — aplica a TODAS as
@@ -1941,12 +2498,33 @@ function registrarSaidaPortaria(placa, operador, lacres){
      - tempoAguardandoSaida (NOVO): Faturado → Seguiu Viagem — preenche o
        intervalo que antes era coberto por "Liberado para Saída → Saída",
        mesma granularidade de antes, só reencaixada nos checkpoints reais. */
+/* Os carimbos da carga, já filtrados pela plausibilidade: um carimbo no
+   futuro ou antes de 2020 vira null aqui, e null nunca entra em média. */
+function carimbosDaCarga(cargaId){
+  const p = (st) => { const t = primeiroTimestamp(cargaId, st); return dataDeEventoPlausivel(t) ? t : null; };
+  return {
+    tChegada: p('Aguardando Embarque'), tIniciado: p('Embarque Iniciado'),
+    tFinalizado: p('Embarque Finalizado'), tFaturado: p('Faturado'), tSaida: p('Seguiu Viagem'),
+  };
+}
+/* A LISTA DO QUE FICOU FORA DA CONTA. Sai do cálculo, fica na tela: toda
+   caixa de média ganha a nota "N carga(s) fora da conta por data
+   inconsistente", com os números das cargas. Esconder o descarte seria
+   trocar um número errado por um número sem explicação. */
+function problemasDeDataDaCarga(cargaId){
+  const brutos = ['Aguardando Embarque','Embarque Iniciado','Embarque Finalizado','Faturado','Seguiu Viagem']
+    .map(st => primeiroTimestamp(cargaId, st)).filter(Boolean);
+  const problemas = [];
+  brutos.forEach(t => { if(!dataDeEventoPlausivel(t)) problemas.push('data impossível: ' + t); });
+  const ordem = brutos.filter(dataDeEventoPlausivel).map(t => Date.parse(t));
+  for(let i=1;i<ordem.length;i++){ if(ordem[i] < ordem[i-1]){ problemas.push('etapa fora de ordem'); break; } }
+  return problemas;
+}
+function cargasComDataInconsistente(cargas){
+  return (cargas || DB.cargas).filter(c => problemasDeDataDaCarga(c.id).length > 0);
+}
 function indicadoresDaCarga(cargaId){
-  const tChegada = primeiroTimestamp(cargaId,'Aguardando Embarque');
-  const tIniciado = primeiroTimestamp(cargaId,'Embarque Iniciado');
-  const tFinalizado = primeiroTimestamp(cargaId,'Embarque Finalizado');
-  const tFaturado = primeiroTimestamp(cargaId,'Faturado');
-  const tSaida = primeiroTimestamp(cargaId,'Seguiu Viagem');
+  const { tChegada, tIniciado, tFinalizado, tFaturado, tSaida } = carimbosDaCarga(cargaId);
   return {
     tempoAguardandoEmbarque: minutosEntre(tChegada, tIniciado),
     tempoCarregamento: minutosEntre(tIniciado, tFinalizado),
@@ -2114,8 +2692,12 @@ function cargasConcluidasNoPeriodo(periodoKey){
 // Médias dos indicadores de tempo dentro de um período, mais a contagem de
 // cargas concluídas nele — a UI usa totalCargas===0 pra distinguir "sem
 // dados suficientes" de "0 minutos" (que seria enganoso).
-function indicadoresPorPeriodo(periodoKey){
-  const concluidas = cargasConcluidasNoPeriodo(periodoKey);
+function indicadoresPorPeriodo(periodoKey, filtros){
+  // Com filtros, usa a MESMA função dos gráficos (cargasConcluidasNoPeriodoFiltrado).
+  // Sem isso a tabela de comparação por período ignorava o filtro do topo e a
+  // nota "só este recorte" era falsa para ela — família da ocorrência #18.
+  const concluidas = filtros ? cargasConcluidasNoPeriodoFiltrado(periodoKey, filtros)
+                             : cargasConcluidasNoPeriodo(periodoKey);
   const campos = ['tempoAguardandoEmbarque','tempoCarregamento','tempoFaturamento','tempoAguardandoSaida','tempoPatioTotal'];
   const somas = {}, contagens = {};
   campos.forEach(f=>{ somas[f]=0; contagens[f]=0; });
@@ -2638,9 +3220,11 @@ function analiseGargalos(cargas){
       placa: c.placa,
       transportadora: c.transportadora || '—',
       status: c.status,
-      paradaHaMin: Math.round((agora - (Date.parse(c.atualizadoEm || c.criadoEm) || agora))/60000)
+      // Pela CHEGADA (ver minutosNoPatioAgora). null = sem chegada registrada:
+      // a tela escreve isso em vez de fingir zero.
+      paradaHaMin: minutosNoPatioAgora(c)
     }))
-    .sort((a,b)=> b.paradaHaMin - a.paradaHaMin)
+    .sort((a,b)=> (b.paradaHaMin ?? -1) - (a.paradaHaMin ?? -1))
     .slice(0, 10);
 
   return {
@@ -2659,6 +3243,79 @@ function analiseGargalos(cargas){
    administração registra valor de frete, negociação e instruções — por
    isso a carga entra na lista mesmo sem observação nenhuma: é justamente
    a linha em branco que precisa ser preenchida. */
+/* A PLANILHA DE FRETES — as colunas que o dono ditou (09/09/2026)
+   ---------------------------------------------------------------------
+   Pedido dele, na ordem em que veio:
+
+     "Coluna A: sequência / Coluna B: número da carga / Coluna C: data do
+      faturamento da carga. Preciso de uma coluna adicional (pode ser a
+      última) (...) para inserir os números dos documentos de frete que
+      estou criando. Essa informação é minha e não está no sistema. A rota
+      deve incluir, conforme o tipo (cross ou entrega direta): placa,
+      transportadora, caminhão, tipo, peso, quilometragem, entrega e
+      motorista. Além disso, acrescentar: Quilometragem, Observação. A
+      parte 'palletizada' pode ser excluída; não é necessária para daniela.
+      (...) Nosso relatório de administração de fretes atualmente sai em
+      PDF; ele precisa ser disponibilizado em formato de planilha para
+      reduzir retrabalho."
+
+   DATA DO FATURAMENTO É O EVENTO, NÃO A GRAVAÇÃO. Perguntado, ele
+   confirmou: "data do faturamento precisa seguir a data que foi faturada".
+   É o primeiro instante em que a carga chegou a "Faturado" na trilha — o
+   mesmo princípio da fidelidade ao momento exato que já corrigiu o
+   Relatório Executivo. Carga que ainda não faturou fica em branco, e
+   branco aqui quer dizer "ainda não", não "hoje".
+
+   PALETIZADA SAIU. Ela continua existindo na carga e nos outros
+   relatórios; só não entra nesta planilha, que é da Daniela. */
+function dadosPlanilhaDeFretes(cargas){
+  const lista = (cargas || DB.cargas)
+    .filter(c => !c.aguardandoCarga)
+    .slice()
+    .sort((a,b)=>{
+      /* Sequência primeiro, porque a coluna A é a sequência e planilha se
+         lê de cima para baixo. Sem sequência vai para o fim — null não é
+         zero, e mandá-la para a frente como se fosse "0" inverteria a
+         ordem da montagem do dia. */
+      const sa = a.sequencia ?? Number.MAX_SAFE_INTEGER;
+      const sb = b.sequencia ?? Number.MAX_SAFE_INTEGER;
+      if(sa !== sb) return sa - sb;
+      return String(a.numeroCarga||'').localeCompare(String(b.numeroCarga||''), 'pt-BR', {numeric:true});
+    });
+
+  return lista.map(c => {
+    const f = buscarFrota(c.placa) || {};
+    return {
+      sequencia: c.sequencia ?? null,
+      numeroCarga: c.numeroCarga || '',
+      faturamento: primeiroTimestamp(c.id, 'Faturado'),
+      rota: rotaCurta(c.rota) || '',
+      praOnde: c.praOnde || '',
+      placa: c.placa || '',
+      /* A transportadora DA CARGA na frente da do cadastro — ocorrência
+         #32. Se a planilha mostrasse sempre a da Frota, a exceção que
+         alguém registrou de propósito (subcontratação, freteiro do dia)
+         sumiria justamente do papel que existe para conferir o pagamento. */
+      transportadora: c.transportadora || f.transportadora || '',
+      tipoVeiculo: c.tipoVeiculo || f.tipoVeiculo || '',
+      peso: c.peso || 0,
+      freteDestino: c.freteDestino || '',
+      kmDestino: c.kmDestino ?? null,
+      kmDeslocamento: c.kmDeslocamento ?? null,
+      kmDivergente: c.kmDestino != null && c.kmDeslocamento != null
+        && Number(c.kmDestino) !== Number(c.kmDeslocamento),
+      qtdEntregas: c.qtdEntregas ?? 1,
+      motorista: c.motorista || f.motorista || '',
+      freteValor: c.freteValor ?? null,
+      freteMotivo: c.freteMotivo || '',
+      observacoes: c.observacoes || '',
+      // Última coluna, por pedido explícito: é dele, preenchida fora do
+      // sistema, e o painel a carrega de volta.
+      freteDocumento: c.freteDocumento || ''
+    };
+  });
+}
+
 function dadosAdministracaoFretes(cargas){
   return (cargas || DB.cargas)
     .filter(c => !c.aguardandoCarga)

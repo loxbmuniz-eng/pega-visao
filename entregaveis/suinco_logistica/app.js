@@ -139,7 +139,136 @@ function marcarBadgeConexao(badge, classe, icone, frase){
   badge.innerHTML = esc(icone) + '<span class="rot-btn">&nbsp;' + esc(frase) + '</span>';
 }
 
+/* A FAIXA DE OFFLINE — texto do dono, 31/08/2026.
+
+   "colocar uma mensagem quando esta offline VOCE ESTA OFFLINE SISTEMA
+    INDISPONIVEL CONECTE-SE PARA CONTINUAR e ALERTA !!!"
+
+   Fixa no topo, não fecha e não some sozinha. Enquanto ela estiver na tela,
+   nada é gravado — a fila offline foi desligada (ver enfileirar() em
+   suinco-api.js). Aviso que some é aviso que não impediu nada: a pessoa
+   digita meia hora achando que gravou. */
+/* A FAIXA NUNCA PODE FICAR NA FRENTE DE QUEM ESTÁ TENTANDO ENTRAR.
+
+   Relato do Luis, do celular do Rene da Expedição (31/08/2026): "a faixa
+   vermelha aparece e esconde o botão de login e a pessoa não consegue
+   clicar no botão de login porque o alerta sobrepõe o lugar onde ficaria
+   esse botão".
+
+   Reproduzido em celular DEITADO (740x360, que é como ele estava segurando):
+   a caixa do login começa em 31px, a faixa vai de 0 a 61px, e o toque no
+   topo do formulário cai em `faixa-offline-sub` em vez de cair no campo.
+   Em pé não acontece — sobra altura. Por isso o defeito parecia aleatório.
+
+   DUAS COISAS MINHAS ERRARAM JUNTAS, e cada uma sozinha já bastava:
+
+   1. A guarda "antes do login não existe offline" olhava `DB.operador` —
+      que SOBREVIVE no localStorage (SuincoStore.save grava o DB inteiro).
+      Quem já entrou uma vez tem operador salvo para sempre, então a guarda
+      nunca protegia a tela de login de ninguém que já tivesse usado o
+      painel. Agora a pergunta é a certa: a tela de login está aberta?
+      Enquanto ela estiver, avisar "você está offline" não ajuda — a ação
+      que resolve é justamente entrar.
+
+   2. z-index 9999 contra 3600 do .modal-overlay: a faixa pintava por cima
+      de QUALQUER caixa de diálogo, não só a do login, e comia o toque.
+      Corrigido no CSS. */
+function loginAberto(){
+  const m = document.getElementById('modal-operador');
+  return !!(m && m.classList.contains('open'));
+}
+
+function atualizarFaixaOffline(estado){
+  let faixa = document.getElementById('faixa-offline');
+  const online = estado === 'online';
+  if(online || loginAberto()){
+    if(faixa) faixa.remove();
+    document.body.classList.remove('esta-offline');
+    return;
+  }
+  /* SESSÃO VENCIDA E FALTA DE REDE NÃO SÃO A MESMA COISA, e dizer a
+     errada manda a pessoa procurar um problema que não existe.
+
+     O celular do Rene da Expedição estava com 5G no sinal e a faixa dizia
+     "VOCÊ ESTÁ OFFLINE". Ele não estava: a sessão dele tinha vencido — o
+     token mora em sessionStorage e morre quando a aba fecha, o que no
+     celular acontece sozinho o tempo todo. O caminho de volta existia, mas
+     numa linha pequena no rodapé: "entre de novo para voltar a
+     compartilhar".
+
+     Aqui a faixa passa a dizer qual dos dois é, e no caso da sessão ela
+     LEVA a pessoa de volta — botão que só nega não ensina o caminho. */
+  const sessaoVenceu = (typeof SuincoSharePoint !== 'undefined'
+    && SuincoSharePoint.sessaoPerdida && SuincoSharePoint.sessaoPerdida());
+  const corpo = sessaoVenceu
+    ? '<span class="faixa-offline-tit">⚠️ ALERTA !!!</span>'
+      + '<span class="faixa-offline-txt">SUA SESSÃO EXPIROU — SISTEMA INDISPONÍVEL. '
+      + 'ENTRE DE NOVO PARA CONTINUAR.</span>'
+      + '<span class="faixa-offline-sub">Nada digitado agora será gravado. '
+      + 'O aparelho tem internet; foi o acesso que venceu.</span>'
+      + '<button type="button" class="btn btn-primary btn-sm faixa-offline-btn" '
+      + 'onclick="abrirLoginDeNovo()">Entrar de novo</button>'
+    : '<span class="faixa-offline-tit">⚠️ ALERTA !!!</span>'
+      + '<span class="faixa-offline-txt">VOCÊ ESTÁ OFFLINE — SISTEMA INDISPONÍVEL. '
+      + 'CONECTE-SE PARA CONTINUAR.</span>'
+      + '<span class="faixa-offline-sub">Nada digitado agora será gravado.</span>';
+  if(!faixa){
+    faixa = document.createElement('div');
+    faixa.id = 'faixa-offline';
+    faixa.className = 'faixa-offline no-print';
+    faixa.setAttribute('role', 'alert');
+    document.body.insertBefore(faixa, document.body.firstChild);
+  }
+  // Reescreve sempre: o mesmo painel pode passar de sessão vencida para
+  // rede caída sem recarregar, e a faixa que sobrou mentiria.
+  faixa.innerHTML = corpo;
+  document.body.classList.add('esta-offline');
+}
+
+/* A volta para dentro, a partir da faixa. Abre a mesma tela de login de
+   sempre; `atualizarFaixaOffline` tira a faixa sozinha assim que ela abre,
+   pela guarda do `loginAberto()`. */
+function abrirLoginDeNovo(){
+  const m = document.getElementById('modal-operador');
+  if(m) m.classList.add('open');
+  const srv = document.getElementById('login-servidor');
+  const loc = document.getElementById('login-local');
+  if(srv) srv.hidden = false;
+  if(loc) loc.hidden = true;
+  atualizarFaixaOffline('local');
+  const email = document.getElementById('login-email');
+  if(email) email.focus();
+}
+
 function atualizarRodapeConexao(estado, detalhe){
+  /* SESSÃO MORTA ABRE O LOGIN. Não é aviso, é a única coisa que resolve.
+
+     O que a operação relatou em 31/08/2026, com todo mundo parado: "quem tá
+     tentando abrir a versão com a faixa não consegue fazer nada, nem clicar
+     no novo login". Medido no desktop, com a sessão perdida:
+
+         loginAberto: False   ·   DIGITOU NO EMAIL: NAO
+
+     E o motivo não era a faixa tampando — era que NÃO HAVIA login na tela.
+     O painel reabre com o operador restaurado do localStorage, monta a tela
+     de trabalho inteira, e a caixa de login fica `display:none`. A pessoa
+     olha botões que não gravam nada e não tem por onde entrar de novo.
+     Todo o resto que eu fiz hoje (baixar o z-index, esconder a faixa, pôr
+     um botão dentro dela) tratava o sintoma: a porta continuava fechada.
+
+     Sem sessão não há o que fazer no painel — então o painel pede a sessão.
+     Só vale para sessão PERDIDA: quem escolheu "Entrar sem servidor" decidiu
+     isso, e não pode ser interrompido por uma tela de login. */
+  try{
+    if(typeof SuincoSharePoint !== 'undefined' && SuincoSharePoint.sessaoPerdida
+       && SuincoSharePoint.sessaoPerdida()){
+      const m = document.getElementById('modal-operador');
+      if(m && !m.classList.contains('open') && typeof abrirLogin === 'function'){
+        abrirLogin();
+      }
+    }
+  }catch(e){ console.warn('[Suinco] abrir login apos sessao perdida:', e); }
+  atualizarFaixaOffline(estado);
   const rod = document.getElementById('rodape-conexao');
   const badge = document.getElementById('badge-conexao');
   if(!rod) return;
@@ -156,7 +285,10 @@ function atualizarRodapeConexao(estado, detalhe){
     if(badge){ badge.hidden = true; }
   } else if(estado === 'offline'){
     rod.className = 'rodape-conexao offline';
-    rod.innerHTML = `⚠️ Modo Offline — gravando no aparelho e sincronizando assim que a rede voltar${esc(sufixoFila)}${esc(carimbo)}`;
+    /* A frase antiga dizia "gravando no aparelho e sincronizando assim que
+       a rede voltar". Isso deixou de ser verdade em 31/08: offline não grava
+       mais nada. Rótulo que mente é a família da ocorrência #04. */
+    rod.innerHTML = `⛔ OFFLINE — o sistema não aceita alteração sem conexão${esc(carimbo)}`;
     if(badge) marcarBadgeConexao(badge, 'offline', '⚠️', 'Modo Offline');
   } else {
     /* 'local' cobre TRÊS situações diferentes, e mostrá-las com o mesmo
@@ -401,12 +533,18 @@ function notifyGravacao(msgSucesso, msObrigatorio){
   if(estado === 'online'){ notify(msgSucesso, 'success', msObrigatorio); return; }
 
   if(estado === 'offline'){
-    const fila = (typeof SuincoSharePoint !== 'undefined' && SuincoSharePoint.pendentes)
-      ? SuincoSharePoint.pendentes() : 0;
-    notify(`⚠️ SEM CONEXÃO — ${msgSucesso} Está gravado só neste aparelho`
-      + (fila ? ` (${fila} na fila)` : '')
-      + ' e sobe sozinho quando a rede voltar. Os outros setores ainda NÃO veem.',
-      'warn', 10000);
+    /* A FRASE MUDOU COM A REGRA (31/08/2026). Ela dizia "está gravado só
+       neste aparelho e sobe sozinho quando a rede voltar" — o que deixou de
+       ser verdade quando o dono aboliu a gravação offline. Nada sobe sozinho
+       agora, porque nada fica guardado.
+
+       Esta função é o ponto por onde passa TODO aviso de gravação do painel:
+       corrigir a mensagem aqui corrige em todas as telas de uma vez, em vez
+       de caçar cada uma — e é o que evita a tela dizer "cadastrada" numa
+       linha e "não foi cadastrada" na seguinte. */
+    notify(`⛔ VOCÊ ESTÁ OFFLINE — SISTEMA INDISPONÍVEL. `
+      + `NADA FOI GRAVADO. Conecte-se e faça de novo.`,
+      'danger', 12000);
     return;
   }
   // 'local': nem sessão de servidor existe. Aqui não sobe nunca sozinho.
@@ -415,9 +553,37 @@ function notifyGravacao(msgSucesso, msObrigatorio){
     'danger', 12000);
 }
 
+/* UM AVISO DE OFFLINE POR VEZ, NÃO UM POR TENTATIVA.
+
+   Relato do dono, 31/08/2026, com a operação rodando: "ta vindo muitos
+   avisos aguardando e eu nao quero isso aparecendo, sao todos avisos de
+   voce esta offline".
+
+   Ele tem razão e a causa é aritmética: com a sessão morta, TODA gravação
+   é recusada — e cada recusa disparava seu próprio aviso, de 12 a 20
+   segundos. A sincronia tenta a cada 15 s e o operador continua clicando,
+   então em um minuto a tela vira uma pilha de tarjas iguais que esconde o
+   painel e não acrescenta nada.
+
+   A faixa do rodapé JÁ diz que está offline, e fica lá o tempo todo. O
+   aviso individual só precisa existir uma vez: repetir a mesma frase não
+   informa mais, informa menos — vira ruído que se aprende a ignorar, e aí
+   o aviso que importa passa despercebido junto.
+
+   Então: aviso de offline/sessão substitui o anterior em vez de empilhar.
+   Um só na tela, sempre o mais recente. */
+const _MARCA_OFFLINE = /VOCÊ ESTÁ OFFLINE|SESSÃO EXPIROU|SISTEMA INDISPONÍVEL|NADA FOI GRAVADO/i;
+
 function notify(msg, type, ms, opcoes){
+  const eDeConexao = _MARCA_OFFLINE.test(String(msg || ''));
+  if(eDeConexao){
+    // Tira os irmãos que já estão na tela antes de pôr este.
+    document.querySelectorAll('.notif-item.aviso-de-conexao')
+      .forEach(x => { try{ x.remove(); }catch(e){} });
+  }
   const el = document.createElement('div');
-  el.className = 'notif-item' + (type ? ' ' + type : '');
+  el.className = 'notif-item' + (type ? ' ' + type : '')
+    + (eDeConexao ? ' aviso-de-conexao' : '');
   const texto = document.createElement('span');
   texto.textContent = msg;
   el.appendChild(texto);
@@ -665,11 +831,25 @@ function receberRecusaDeStatus(carga, alvo, motivo){
    status, aqui não dá para saber com segurança se a carga já existia no
    servidor antes (edição) ou nunca chegou a existir (criação), e chutar
    errado apagaria dado de verdade. O aviso é alto e diz pra conferir. */
-function receberRecusaDeCarga(carga, motivo, removida){
+function receberRecusaDeCarga(carga, motivo, removida, offline){
   const rotulo = carga.numeroCarga && carga.numeroCarga !== 'Aguardando Carga'
     ? carga.numeroCarga : (carga.placa || carga.id);
+  /* Offline não é recusa do servidor — é ausência dele. O caminho é o
+     mesmo (nada foi gravado, a linha sai da tela), mas o que o operador
+     precisa fazer é oposto: aqui ele reconecta e refaz; na recusa de
+     verdade ele corrige placa ou setor primeiro. */
+  const sessaoVenceu = (typeof SuincoSharePoint !== 'undefined'
+    && SuincoSharePoint.sessaoPerdida && SuincoSharePoint.sessaoPerdida());
   notify(
-    removida
+    sessaoVenceu
+      ? `⛔ ${rotulo}: SUA SESSÃO EXPIROU. NADA FOI GRAVADO e a linha saiu `
+        + 'da tela. Entre de novo (o aviso vermelho no topo tem o botão) e '
+        + 'lance outra vez.'
+      : offline
+      ? `⛔ ${rotulo}: VOCÊ ESTÁ OFFLINE — SISTEMA INDISPONÍVEL. `
+        + 'NADA FOI GRAVADO e a linha saiu da tela. '
+        + 'Conecte-se e lance de novo.'
+      : removida
       ? `${rotulo}: o servidor recusou a criação desta carga. ${motivo || ''} `
         + 'Ela foi removida da tela — nunca existiu no banco. Corrija o motivo '
         + '(placa cadastrada na Frota? setor com permissão?) e refaça.'
@@ -717,10 +897,15 @@ function receberEnfileiramentoDeRota(rota){
   tocarAlertaAlteracao();
 }
 
-function receberRecusaDeRota(rota, motivo){
-  notify(
-    `Rota ${rota.codigo}: o servidor recusou o cadastro. ${motivo || ''} `
-    + 'Ficou salva só neste aparelho — outros terminais ainda não vão ver esta rota.',
+function receberRecusaDeRota(rota, motivo, desfeita){
+  /* Duas recusas, duas frases. Antes era uma só, e ela mentia metade do
+     tempo: dizia "ficou salva só neste aparelho" mesmo quando a rota tinha
+     sido desfeita. Rótulo que mente é a família da ocorrência #04. */
+  notify(desfeita
+    ? `Rota ${rota.codigo} NÃO foi cadastrada. ${motivo || ''} `
+      + 'Ela não ficou guardada em lugar nenhum — conecte e cadastre de novo.'
+    : `Rota ${rota.codigo}: o servidor recusou o cadastro. ${motivo || ''} `
+      + 'Ficou salva só neste aparelho — outros terminais ainda não vão ver esta rota.',
     'danger', 20000);
   tocarAlertaAlteracao();
 }
@@ -1001,6 +1186,19 @@ async function conferirVersaoDoServidor(){
   }
 }
 
+/* A pergunta única: esta pessoa pode ver a tela de trabalho AGORA?
+
+   Não é "ela já entrou alguma vez" — é "ela tem sessão". Ver ocorrência
+   #25. Quem entrou pelo servidor precisa de token; quem escolheu o modo
+   local não tem e-mail e não depende de nenhum. */
+function temSessaoParaOPainel(){
+  if(!DB.operador) return false;
+  if(!DB.operador.email) return true;          // modo local, de propósito
+  if(typeof SuincoSharePoint === 'undefined'
+     || !SuincoSharePoint.sessaoPerdida) return true;
+  return !SuincoSharePoint.sessaoPerdida();
+}
+
 function abrirLogin(){
   /* Pré-login: o painel some por inteiro (body.pre-login esconde tudo que
      não é a tela de entrada — ver styles.css). Não é só estética: terminal
@@ -1010,6 +1208,27 @@ function abrirLogin(){
   const v = document.getElementById('login-versao');
   if(v) v.textContent = 'versão ' + BUILD_ID;
   document.getElementById('modal-operador').classList.add('open');
+  /* A FAIXA TEM QUE SAIR AGORA, e não só deixar de nascer.
+
+     A guarda `loginAberto()` em atualizarFaixaOffline só decide o que fazer
+     QUANDO ELA É CHAMADA. A faixa nasce numa mudança de estado; se a tela de
+     login abre DEPOIS disso, ninguém chama a função de novo e a faixa
+     vermelha fica parada por cima do formulário.
+
+     Reproduzido em 31/08/2026, desktop e celular:
+
+         nasceu: True · faixaContinua: True
+
+     O dono, com a operação em andamento: "a faixa ta aparecendo ainda até na
+     parte do desktop zuando tudo, as pessoas nao conseguem fazer o proprio
+     login". Depois da correção do z-index o toque já chegava no formulário,
+     mas uma tarja vermelha escrita "SISTEMA INDISPONÍVEL" em cima da caixa
+     de entrada faz qualquer um parar de tentar — e estava certo em parar,
+     porque até ontem era verdade.
+
+     Guarda não basta quando o estado pode mudar dos dois lados: quem abre o
+     login também precisa avisar. */
+  atualizarFaixaOffline('login');
   // Qual formulário aparece não é escolha do usuário: se o servidor está
   // configurado, é e-mail e senha. O modo local fica atrás de um link, para
   // ninguém cair nele por acidente e achar que está compartilhando dados
@@ -1625,7 +1844,8 @@ function irParaTab(tab){
   const page = document.getElementById('tab-'+tab);
   const navBtn = document.querySelector(`.nav-tab[data-tab="${tab}"]`);
   if(page) page.classList.add('active');
-  if(navBtn) navBtn.classList.add('active');
+  document.querySelectorAll('.nav-tab').forEach(el=>el.setAttribute('aria-selected','false'));
+  if(navBtn){ navBtn.classList.add('active'); navBtn.setAttribute('aria-selected','true'); }
   TAB_ATUAL = tab;
   atualizarAvisoSetorAba();
   renderTabAtual();
@@ -1669,6 +1889,7 @@ function renderTabAtual(){
     // refletir o estado atual do pátio — senão mostra a contagem de quando
     // a página abriu, que já mudou.
     case 'relatorios':
+      renderEscopoDosRelatorios();
       atualizarResumoFiltroRelatorio();
       // O campo de dia do relatório de devoluções abre já com o dia de hoje
       // preenchido — quem quiser outro dia troca; vazio nunca fica, porque o
@@ -1823,16 +2044,124 @@ if(typeof MutationObserver !== 'undefined'){
   });
 }
 
+/* O REDESENHO NÃO PODE ARRANCAR O CAMPO DA MÃO DE QUEM DIGITA (31/08/2026).
+
+   RELATO, do Wemerson: "começa a preencher o campo e o campo para de
+   digitar, tem que clicar de novo no campo; na hora de fazer um cadastro,
+   completando informações, tem que ficar voltando no campo que tá digitando".
+
+   O painel se redesenha inteiro a cada sincronia — de 15 em 15 segundos — e
+   a cada dado que chega de outro setor. As linhas editáveis da Torre, da
+   Fila e da Montagem são reescritas por completo: o campo que estava sob o
+   dedo deixa de existir e um novo nasce no lugar, vazio. O foco vai para o
+   BODY, o que já tinha sido digitado some, e o cursor volta para o começo.
+   Reproduzido em teste antes desta correção.
+
+   A PROTEÇÃO JÁ EXISTIA — e valia para um lugar só. `_devCapturarDigitacao`
+   e `_devRestaurarDigitacao` (devolucoes.js) fazem exatamente isto, guardando
+   valor, foco e posição do cursor, desde 27/08. Foram escritas para
+   `#dev-lista`. É a família da ocorrência #20: a regra certa existe, com
+   comentário e tudo, e não vale para os irmãos dela.
+
+   Aqui ela passa a valer para o painel inteiro, no ponto por onde todo
+   redesenho passa. Uma função, um chamador — em vez de cada tela lembrar. */
+function _capturarDigitacao(){
+  const foco = document.activeElement;
+  const editavel = foco && (foco.tagName === 'INPUT' || foco.tagName === 'TEXTAREA'
+                            || foco.tagName === 'SELECT');
+  if(!editavel) return null;
+  /* A âncora é o id quando existe; quando não existe, a posição do campo
+     dentro da tabela. As linhas da Torre e da Montagem nascem com id; as
+     células de carga usam classe, e para essas o caminho é o índice. */
+  const linha = foco.closest('tr');
+  const cel = foco.closest('td');
+  return {
+    id: foco.id || null,
+    classe: foco.className || '',
+    valor: (foco.type === 'checkbox' || foco.type === 'radio') ? foco.checked : foco.value,
+    ini: typeof foco.selectionStart === 'number' ? foco.selectionStart : null,
+    fim: typeof foco.selectionEnd === 'number' ? foco.selectionEnd : null,
+    linhaId: linha ? (linha.dataset && linha.dataset.id) || null : null,
+    idxLinha: linha && linha.parentElement
+      ? [...linha.parentElement.children].indexOf(linha) : -1,
+    idxCel: cel && cel.parentElement ? [...cel.parentElement.children].indexOf(cel) : -1,
+    tabelaId: linha && linha.closest('tbody') ? linha.closest('tbody').id : null,
+  };
+}
+
+function _restaurarDigitacao(e){
+  if(!e) return;
+  let el = e.id ? document.getElementById(e.id) : null;
+  if(!el && e.tabelaId && e.idxLinha >= 0 && e.idxCel >= 0){
+    const tb = document.getElementById(e.tabelaId);
+    const tr = tb && tb.children[e.idxLinha];
+    const td = tr && tr.children[e.idxCel];
+    el = td ? td.querySelector('input, select, textarea') : null;
+  }
+  if(!el) return;   // a linha saiu da tela (outro setor moveu a carga)
+  /* Só devolve o que a pessoa digitou se o campo voltou vazio ou diferente:
+     se o redesenho trouxe um valor NOVO vindo do servidor, quem manda é o
+     servidor — a tela adianta, a transação decide. */
+  if(el.type === 'checkbox' || el.type === 'radio'){
+    if(el.checked !== e.valor) el.checked = e.valor;
+  } else if(el.value !== e.valor){
+    el.value = e.valor;
+  }
+  try{
+    el.focus({ preventScroll: true });
+    if(e.ini !== null) el.setSelectionRange(e.ini, e.fim);
+  }catch(err){ /* number e date não aceitam setSelectionRange */ }
+}
+
 function renderAll(){
+  const _digitando = _capturarDigitacao();
+  try { _renderAllInterno(); }
+  finally { _restaurarDigitacao(_digitando); }
+}
+
+function _renderAllInterno(){
   /* Guardião do pré-login: qualquer caminho que resulte em operador logado
      (botões de login, restauração de sessão por token, teste automatizado
      que grava DB.operador direto) revela o painel — e qualquer caminho que
      o deslogue esconde. Concentrar aqui evita a classe presa: foi
      exatamente o que a primeira versão desta tela causou nos fluxos que
      não passavam pelos botões. */
-  if(DB.operador && document.body.classList.contains('pre-login')){
+  /* "LOGADO" SIGNIFICA "TEM SESSÃO" — UMA FONTE DE VERDADE (31/08/2026).
+
+     Esta linha era `if(DB.operador && ...)`, e essa é a causa raiz do dia
+     inteiro de incidentes de 31/08. Dois fatos diferentes, guardados em
+     lugares com PRAZOS diferentes, tratados como um só:
+
+         DB.operador (nome, setor, e-mail)  →  localStorage  →  para sempre
+         o token (a sessão de verdade)      →  sessionStorage →  morre com a aba
+
+     Quem entrou uma vez ficava "logado" para sempre aos olhos da tela. A
+     aba fecha (ou o Android a descarta, ou a sessão vence), o token morre,
+     o operador fica — e o painel revelava a tela de trabalho INTEIRA sem
+     sessão nenhuma. A partir daí, em cascata:
+
+       · sem sessão ele não lê o servidor, então a Torre e a programação
+         mostravam a cópia local — zero, num navegador limpo. Foi o "zerou
+         tudo" que o dono viu no desktop enquanto o celular mostrava tudo
+         certo (o celular tinha sessão, e por isso lia do servidor);
+       · nada do que a pessoa digitasse subia — e até a manhã de 31/08 isso
+         era silencioso (ocorrência #24);
+       · e NÃO HAVIA LOGIN na tela para sair do estado, porque aos olhos do
+         painel a pessoa já estava logada.
+
+     Corrigi as consequências uma a uma durante o dia — a recusa, o aviso
+     honesto, a faixa, o login abrindo sozinho. Todas necessárias, nenhuma
+     suficiente: enquanto a decisão de revelar o painel olhasse um dado que
+     sobrevive à sessão, o problema voltaria de outra forma.
+
+     Modo local continua entrando: quem escolheu "Entrar sem servidor" não
+     tem e-mail e não depende de token — é decisão de quem usa, não sessão
+     perdida. */
+  if(DB.operador && temSessaoParaOPainel()
+     && document.body.classList.contains('pre-login')){
     revelarPainel();
-  } else if(!DB.operador && !document.body.classList.contains('pre-login')
+  } else if((!DB.operador || !temSessaoParaOPainel())
+            && !document.body.classList.contains('pre-login')
             && document.getElementById('modal-operador').classList.contains('open')){
     document.body.classList.add('pre-login');
   }
@@ -2222,7 +2551,7 @@ function renderVisaoPatio(prefixo){
     const etapas = etapasDaCarga(c);
     return `<tr class="linha-status-${esc((STATUS_META[c.status]||{}).cor || '')}">
       <td class="vp-carga">${esc(c.numeroCarga)||'—'}</td>
-      <td class="vp-placa">${esc(c.placa)}${marcaCargaDaPlaca(c, lista)}</td>
+      <td class="vp-placa">${esc(c.placa)}${marcaCargaDaPlaca(c, lista)}${marcaEtapaDevolvidaHtml(c)}${marcaSaiuSemCarregarHtml(c)}</td>
       <td class="vp-transp">${esc(c.transportadora)||'—'}</td>
       <td class="vp-rota">${esc(rotaCurta(c.rota))}</td>
       ${linhaDoTempoCompacta(etapas)}
@@ -2706,9 +3035,14 @@ function renderTorre(){
     : '';
   tbody.innerHTML = lista.map(c=>`
     ${faixa(c)}
-    <tr class="${ehProgramacaoAntiga(c) ? 'linha-prog-antiga' : ''}">
-      <td>${editavel
-        ? `<input type="number" class="seq-input" value="${c.sequencia ?? ''}" onchange="atualizarSequenciaUI('${escJs(c.id)}',this.value)" title="Sequência livre.">`
+    <tr class="${ehProgramacaoAntiga(c) ? 'linha-prog-antiga' : ''}" data-carga="${esc(c.id)}"
+        ${editavel && aindaVaiCarregar(c) ? `draggable="true"
+        ondragstart="filaArrastarInicio(event,'${escJs(c.id)}')"
+        ondragover="filaArrastarSobre(event)"
+        ondrop="filaArrastarSolta(event,'${escJs(c.id)}')"
+        ondragend="filaArrastarFim(event)"` : ''}>
+      <td class="cel-seq">${editavel
+        ? `${aindaVaiCarregar(c) ? `<span class="alca-arrastar" title="Arraste para mudar a posição na fila">⠿</span>` : ''}<input type="number" class="seq-input" value="${c.sequencia ?? ''}" onchange="definirSequenciaTorreUI('${escJs(c.id)}',this.value)" title="${aindaVaiCarregar(c) ? 'Digite a posição: a carga entra nela e as outras descem uma casa.' : 'Este caminhão já carregou — o número é registro do que aconteceu e NÃO reordena a fila.'}">`
         : (c.sequencia ?? '—')}</td>
       <td class="col-identificacao">${editavel
         ? `<input type="text" class="numero-carga-input" value="${esc(c.numeroCarga)}" onchange="atualizarNumeroCargaUI('${escJs(c.id)}',this.value)" title="Alterar o número desta carga.">`
@@ -2716,7 +3050,7 @@ function renderTorre(){
       <td class="col-identificacao cel-veiculo">${editavel
         ? `<input type="text" class="placa-input" value="${esc(c.placa)}" onchange="atualizarPlacaUI('${escJs(c.id)}',this.value)" title="Trocar a placa.">`
         : `<span class="veic-placa">${esc(c.placa)}</span>`}
-        <span class="veic-transp">${esc(c.transportadora)||'—'}</span>
+        <span class="veic-transp">${esc(c.transportadora)||'—'}</span>${marcaTransportadoraHtml(c)}
         <span class="veic-tipo">${esc(c.tipoVeiculo)||'—'}</span>
         ${chipNoPatioHtml(c)}${chipLacreHtml(c)}</td>
       <td>${editavel
@@ -2754,6 +3088,70 @@ function renderTorre(){
         + '<span class="empty-acao"><button class="btn btn-sec btn-sm" onclick="filtrarTorrePorStatus(\'__TODAS__\')">Ver todas em aberto</button></span>'
       : 'Nenhuma carga em aberto no momento.';
   }
+}
+/* UMA LINHA DA FILA — usada pela fila do dia e pelo bloco de dias
+   anteriores. `arrastavel` decide alça e arrasto: a sequência é do dia de
+   cada carga, então só a fila do dia escolhido reordena por arrasto. No
+   bloco de anteriores a alça vira a DATA da programação (clicável: leva a
+   fila para aquele dia). */
+function linhaFilaHtml(c, lista, arrastavel){
+    const id = escJs(c.id);
+    const aberta = _progFilaAberta === c.id;
+    const linha = `
+    <tr class="prog-linha${aberta ? ' prog-linha-aberta' : ''}" data-carga="${esc(c.id)}"
+        ${arrastavel ? `draggable="true"
+        ondragstart="filaArrastarInicio(event,'${id}')"
+        ondragover="filaArrastarSobre(event)"
+        ondrop="filaArrastarSolta(event,'${id}')"
+        ondragend="filaArrastarFim(event)"` : `draggable="false"`}
+        onclick="alternarLinhaProgFilaUI('${id}')"
+        title="Clique para abrir os demais campos. Arraste para mudar a ordem de carregamento.">
+      <td onclick="event.stopPropagation()" class="cel-seq">
+        ${arrastavel ? `<span class="alca-arrastar" title="Arraste para mudar a posição na fila">⠿</span>` : `<span class="chip-dia-prog" title="Programada em ${esc(fmtData(c.programadoEm || c.criadoEm))}" onclick="event.stopPropagation(); mudarDiaFilaUI('${esc(isoDiaLocal(new Date(c.programadoEm || c.criadoEm)))}')">${esc(fmtData(c.programadoEm || c.criadoEm).slice(0,5))}</span>`}
+        <input type="number" min="1" class="seq-input" value="${c.sequencia ?? ''}" onchange="definirPosicaoNaFilaUI('${id}',this.value)" title="Digite a posição: a carga entra nela e as outras descem uma casa."></td>
+      <td class="col-identificacao" onclick="event.stopPropagation()">
+        <input type="text" class="numero-carga-input" value="${esc(c.numeroCarga)}" onchange="atualizarNumeroCargaUI('${id}',this.value)" title="Alterar o número desta carga.">
+      </td>
+      <td class="col-identificacao cel-veiculo" onclick="event.stopPropagation()">
+        <input type="text" class="placa-input" value="${esc(c.placa)}" onchange="atualizarPlacaUI('${id}',this.value)" title="Trocar a placa — a transportadora e o tipo de veículo são buscados na Frota automaticamente.">
+        <span class="veic-transp" id="transp-${esc(c.id)}">${esc(c.transportadora)||'—'}</span>${marcaTransportadoraHtml(c)}
+        <span class="veic-tipo">${esc(c.tipoVeiculo)||'—'}</span>
+        ${marcaCargaDaPlaca(c, lista)}${chipNoPatioHtml(c)}${marcaEtapaDevolvidaHtml(c)}${marcaSaiuSemCarregarHtml(c)}</td>
+      <td onclick="event.stopPropagation()">
+        <input type="text" class="motorista-input" value="${esc(c.motorista||'')}" onchange="atualizarMotoristaUI('${id}',this.value)" title="Quem dirige ESTA viagem — não mexe no cadastro da placa."></td>
+      <td onclick="event.stopPropagation()">${rotaSelectHtml(c)}</td>
+      <td class="c-peso" onclick="event.stopPropagation()"><input type="number" class="peso-input" min="0" step="1" value="${c.peso ?? ''}" onchange="atualizarPesoUI('${id}',this.value)" title="Peso em kg."></td>
+      <td onclick="event.stopPropagation()">${paletizadaSelectHtml(c)}</td>
+      <td onclick="event.stopPropagation()">${praOndeSelectHtml(c)}</td>
+      <td class="no-print gap8" onclick="event.stopPropagation()">
+        <button class="btn btn-sec btn-sm" onclick="adicionarOutraCargaNaPlacaUI('${id}')"
+                title="Programar OUTRA carga para este mesmo caminhão — o formulário já vem com placa, transportadora, motorista e rota preenchidos.">➕ Outra carga</button>
+        <button class="btn btn-danger btn-sm" onclick="excluirCargaUI('${id}')">Excluir</button>
+        <span class="mont-seta${aberta ? ' aberta' : ''}" aria-hidden="true">▸</span>
+      </td>
+    </tr>`;
+    return aberta ? linha + `<tr class="prog-detalhe"><td colspan="9">${formCargaFilaHtml(c)}</td></tr>` : linha;
+}
+
+/* O dia que a Fila mostra. null = hoje (não guarda a data de hoje para não
+   envelhecer: quem deixa a aba aberta de madrugada vê o dia virar). */
+let _progFilaDia = null;
+function isoDiaLocal(d){
+  const p = (n)=>String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;
+}
+function diaFilaSelecionado(){ return _progFilaDia || isoDiaLocal(new Date()); }
+function mudarDiaFilaUI(v){
+  if(v === 'hoje' || v === '' || v === null || v === undefined){ _progFilaDia = null; }
+  else if(typeof v === 'number'){
+    const [a,m,d] = diaFilaSelecionado().split('-').map(Number);
+    const dt = new Date(a, m-1, d + v);
+    const iso = isoDiaLocal(dt);
+    _progFilaDia = iso === isoDiaLocal(new Date()) ? null : iso;
+  } else if(/^\d{4}-\d{2}-\d{2}$/.test(String(v))){
+    _progFilaDia = String(v) === isoDiaLocal(new Date()) ? null : String(v);
+  }
+  renderAll();
 }
 function ordenarPorSequenciaEAtualizacao(a,b){
   const sa = (a.sequencia===null||a.sequencia===undefined) ? Infinity : a.sequencia;
@@ -2987,6 +3385,22 @@ function criarCargaProgramadaUI(){
     return;
   }
 
+  /* AQUI HAVIA UMA TRAVA DE KM E OBSERVAÇÃO, E ELA SAIU (09/09/2026).
+
+     O dono tinha pedido "kilometragem obrigatoria" e confirmado "1 trava a
+     contratacao". A bateria mostrou o custo antes de a operação pagar por
+     ele: a Montagem do Dia cria carga por outro caminho, em lote, sem campo
+     de KM — e carga recusada na criação é APAGADA do painel (proteção de
+     07/08/2026). O lote inteiro sumiria na frente da Logística.
+
+     Decisão dele, com a evidência na mão: "não põe a trava do quilômetro
+     então".
+
+     O CAMPO CONTINUA, e continua se preenchendo sozinho pelo destino. O que
+     não existe mais é o portão. Carga sem KM nasce igual, e é o relatório
+     de fretes que cobra: a linha aparece com o motivo escrito em vez de uma
+     célula vazia. Cobrar onde o dado é usado, e não onde o caminhão passa. */
+
   try{
     const criada = criarCargaProgramada({
       placa,
@@ -3004,6 +3418,8 @@ function criarCargaProgramadaUI(){
       paletizada: document.getElementById('prog-paletizada').value,
       qtdGanchos: document.getElementById('prog-ganchos').value,
       qtdEntregas: document.getElementById('prog-entregas').value,
+      freteDestino: document.getElementById('prog-frete-destino').value,
+      kmDeslocamento: document.getElementById('prog-km-deslocamento').value,
       operador: nomeOperadorAtual()
     });
     _placaMultiCargaAutorizada = null;   // vale uma vez só
@@ -3024,8 +3440,9 @@ function criarCargaProgramadaUI(){
         notifyGravacao(`Carga criada para a placa ${normalizarPlaca(placa)} — status Aguardando Veículo.`);
       }
     }
-    ['prog-placa','prog-transportadora','prog-tipoveiculo','prog-motorista','prog-numero-carga','prog-cliente','prog-destino','prog-peso','prog-sequencia','prog-obs']
+    ['prog-placa','prog-transportadora','prog-tipoveiculo','prog-motorista','prog-numero-carga','prog-cliente','prog-destino','prog-peso','prog-sequencia','prog-obs','prog-frete-destino','prog-km-destino','prog-km-deslocamento']
       .forEach(id=>document.getElementById(id).value='');
+    document.getElementById('prog-frete-aviso').innerHTML = '';
     document.getElementById('prog-praonde').value = PRA_ONDE_PADRAO;
   document.getElementById('prog-rota').value = '';
   document.getElementById('prog-paletizada').value = 'Não';
@@ -3035,6 +3452,65 @@ function criarCargaProgramadaUI(){
     renderAll();
   }catch(e){ notify(e.message, 'danger'); }
 }
+/* O DESTINO PUXA O KM — e o deslocamento nasce igual, para ser mudado.
+
+   Pedido do dono: "a tabela de frete deve fazer o calculo segundo a
+   kilometragem e destino" e "KM DESLOCAMENTO (precisa ser o valor certinho
+   do valor que sera pago no frete)".
+
+   Preencher o deslocamento com o KM do destino é o que torna o caso comum
+   (viagem direta) um clique, e mantém o caso real (desvio, retorno,
+   coleta) a uma digitação de distância. NÃO sobrescreve o que a pessoa já
+   digitou: quem escreveu 640 no deslocamento e depois trocou o destino
+   estava corrigindo o destino, não desistindo dos 640. */
+function destinoFreteMudouUI(){
+  const campo = document.getElementById('prog-frete-destino');
+  const km = kmDoDestino(campo.value);
+  const alvoKm = document.getElementById('prog-km-destino');
+  const alvoDesl = document.getElementById('prog-km-deslocamento');
+  alvoKm.value = km ?? '';
+  if(km !== null && !alvoDesl.value) alvoDesl.value = km;
+  avisarSobreKmUI();
+}
+
+function kmDeslocamentoMudouUI(){ avisarSobreKmUI(); }
+
+/* O mesmo gesto no modal de Completar. Dois pares de campos e uma conta só
+   (kmDoDestino) — o que NÃO se duplica é a decisão de quanto vale o km,
+   que é do servidor. */
+function destinoFreteCompletarUI(){
+  const km = kmDoDestino(document.getElementById('completar-frete-destino').value);
+  document.getElementById('completar-km-destino').value = km ?? '';
+  const desl = document.getElementById('completar-km-deslocamento');
+  if(km !== null && !desl.value) desl.value = km;
+}
+
+/* DIVERGÊNCIA É AVISO, NÃO ERRO. Desvio, retorno e coleta no caminho
+   existem e são justamente o motivo de haver dois campos. O que não pode
+   é a diferença passar despercebida: quem paga o frete precisa saber que
+   está pagando 640 km numa rota cuja tabela diz 583. */
+function avisarSobreKmUI(){
+  const aviso = document.getElementById('prog-frete-aviso');
+  if(!aviso) return;
+  const destino = document.getElementById('prog-frete-destino').value.trim();
+  const kmRef = kmDoDestino(destino);
+  const kmDesl = kmValidoLocal(document.getElementById('prog-km-deslocamento').value);
+  if(destino && kmRef === null){
+    aviso.innerHTML = `<span class="text-warn">“${esc(destino.toUpperCase())}” não está na Tabela de Frete `
+      + `— sem KM de referência. O valor sai pelo KM de deslocamento que você digitar. `
+      + `Para cadastrar: Cadastros → Tabela de Frete.</span>`;
+    return;
+  }
+  if(kmRef !== null && kmDesl !== null && kmRef !== kmDesl){
+    const dif = kmDesl - kmRef;
+    aviso.innerHTML = `<span class="text-warn">KM de deslocamento <strong>${kmDesl}</strong> difere `
+      + `dos <strong>${kmRef}</strong> da tabela (${dif > 0 ? '+' : ''}${dif} km). `
+      + `É o deslocamento que será pago — explique o motivo na Observação.</span>`;
+    return;
+  }
+  aviso.innerHTML = '';
+}
+
 function renderProgFila(){
   /* Só os programados DE HOJE — pedido do usuário (11/08/2026): "no campo
      fila de programados na programacao manter somente os programados NO
@@ -3062,16 +3538,31 @@ function renderProgFila(){
      `programadoEm` é o carimbo de quando a carga foi programada/lançada, e
      é gravável uma vez só justamente para não escorregar depois. É ele que
      responde "isto é trabalho de hoje?". */
-  const hoje = new Date(); hoje.setHours(0,0,0,0);
-  const doDia = (c)=>{
+  /* A FILA TEM DIA (09/09/2026). Relato do dono: "a carga criada ontem, mas
+     não contratada (...) some da programação (...) não pode acontecer". Ela
+     não sumia do sistema — sumia DESTA lista, que só mostrava hoje e mandava
+     olhar a Torre. Agora: a fila do dia escolhido (padrão hoje), e um bloco
+     fixo abaixo com as de dias anteriores ainda sem veículo, editáveis, até
+     ganharem placa. */
+  const hojeISO = isoDiaLocal(new Date());
+  const diaSel = diaFilaSelecionado();
+  const diaDaCarga = (c)=>{
     const base = c.programadoEm || c.criadoEm || c.atualizadoEm;
-    if(!base) return true;   // sem data conhecida, melhor mostrar que sumir
-    const d = new Date(base); d.setHours(0,0,0,0);
-    return d.getTime() === hoje.getTime();
+    return base ? isoDiaLocal(new Date(base)) : null;
+  };
+  const doDia = (c)=>{
+    const d = diaDaCarga(c);
+    if(!d) return diaSel === hojeISO;   // sem data conhecida, melhor mostrar (em hoje) que sumir
+    return d === diaSel;
   };
   const todosAguardando = DB.cargas.filter(c=>c.status==='Aguardando Veículo');
   const lista = todosAguardando.filter(doDia).sort(ordenarPorSequenciaEAtualizacao);
-  const deOutrosDias = todosAguardando.length - lista.length;
+  const anteriores = todosAguardando
+    .filter(c => { const d = diaDaCarga(c); return d && d < hojeISO && d !== diaSel; })
+    .sort((a,b) => (diaDaCarga(a) < diaDaCarga(b) ? -1 : diaDaCarga(a) > diaDaCarga(b) ? 1 : ordenarPorSequenciaEAtualizacao(a,b)));
+  const deOutrosDias = anteriores.length;
+  const campoDia = document.getElementById('prog-fila-dia');
+  if(campoDia && campoDia.value !== diaSel) campoDia.value = diaSel;
 
   /* A FILA COM A CARA DA TORRE (28/08/2026).
 
@@ -3093,37 +3584,11 @@ function renderProgFila(){
      Os botões ficam NA LINHA, por decisão do dono — quem programa outra
      carga ou exclui está varrendo, não preenchendo. O stopPropagation
      impede que clicar neles abra a linha por tabela. */
-  document.getElementById('prog-fila-tbody').innerHTML = lista.map(c=>{
-    const id = escJs(c.id);
-    const aberta = _progFilaAberta === c.id;
-    const linha = `
-    <tr class="prog-linha${aberta ? ' prog-linha-aberta' : ''}"
-        onclick="alternarLinhaProgFilaUI('${id}')"
-        title="Clique para abrir os demais campos desta carga">
-      <td onclick="event.stopPropagation()"><input type="number" class="seq-input" value="${c.sequencia ?? ''}" onchange="atualizarSequenciaUI('${id}',this.value)" title="Sequência livre — digite o número que quiser, a qualquer momento."></td>
-      <td class="col-identificacao" onclick="event.stopPropagation()">
-        <input type="text" class="numero-carga-input" value="${esc(c.numeroCarga)}" onchange="atualizarNumeroCargaUI('${id}',this.value)" title="Alterar o número desta carga.">
-      </td>
-      <td class="col-identificacao cel-veiculo" onclick="event.stopPropagation()">
-        <input type="text" class="placa-input" value="${esc(c.placa)}" onchange="atualizarPlacaUI('${id}',this.value)" title="Trocar a placa — a transportadora e o tipo de veículo são buscados na Frota automaticamente.">
-        <span class="veic-transp" id="transp-${esc(c.id)}">${esc(c.transportadora)||'—'}</span>
-        <span class="veic-tipo">${esc(c.tipoVeiculo)||'—'}</span>
-        ${marcaCargaDaPlaca(c, lista)}${chipNoPatioHtml(c)}</td>
-      <td onclick="event.stopPropagation()">
-        <input type="text" class="motorista-input" value="${esc(c.motorista||'')}" onchange="atualizarMotoristaUI('${id}',this.value)" title="Quem dirige ESTA viagem — não mexe no cadastro da placa."></td>
-      <td onclick="event.stopPropagation()">${rotaSelectHtml(c)}</td>
-      <td class="c-peso" onclick="event.stopPropagation()"><input type="number" class="peso-input" min="0" step="1" value="${c.peso ?? ''}" onchange="atualizarPesoUI('${id}',this.value)" title="Peso em kg."></td>
-      <td onclick="event.stopPropagation()">${paletizadaSelectHtml(c)}</td>
-      <td onclick="event.stopPropagation()">${praOndeSelectHtml(c)}</td>
-      <td class="no-print gap8" onclick="event.stopPropagation()">
-        <button class="btn btn-sec btn-sm" onclick="adicionarOutraCargaNaPlacaUI('${id}')"
-                title="Programar OUTRA carga para este mesmo caminhão — o formulário já vem com placa, transportadora, motorista e rota preenchidos.">➕ Outra carga</button>
-        <button class="btn btn-danger btn-sm" onclick="excluirCargaUI('${id}')">Excluir</button>
-        <span class="mont-seta${aberta ? ' aberta' : ''}" aria-hidden="true">▸</span>
-      </td>
-    </tr>`;
-    return aberta ? linha + `<tr class="prog-detalhe"><td colspan="9">${formCargaFilaHtml(c)}</td></tr>` : linha;
-  }).join('');
+  document.getElementById('prog-fila-tbody').innerHTML = lista.map(c => linhaFilaHtml(c, lista, true)).join('');
+  const antTbody = document.getElementById('prog-fila-anteriores-tbody');
+  const antWrap = document.getElementById('prog-fila-anteriores');
+  if(antTbody) antTbody.innerHTML = anteriores.map(c => linhaFilaHtml(c, anteriores, false)).join('');
+  if(antWrap) antWrap.hidden = anteriores.length === 0;
   document.getElementById('prog-fila-empty').hidden = lista.length>0;
 
   // Some sem explicação é pior que não sumir: quem programou ontem
@@ -3132,8 +3597,8 @@ function renderProgFila(){
   if(aviso){
     aviso.hidden = deOutrosDias === 0;
     aviso.textContent = deOutrosDias === 1
-      ? '1 carga programada em outro dia continua aguardando veículo — veja na Torre de Controle.'
-      : `${deOutrosDias} cargas programadas em outros dias continuam aguardando veículo — veja na Torre de Controle.`;
+      ? '1 carga de dia anterior ainda sem veículo — está listada logo abaixo, até ganhar placa.'
+      : `${deOutrosDias} cargas de dias anteriores ainda sem veículo — estão listadas logo abaixo, até ganharem placa.`;
   }
 }
 
@@ -3181,7 +3646,10 @@ function formCargaFilaHtml(c){
                  onchange="atualizarDestinoUI('${id}',this.value)"></div>
         <div class="form-group">
           <label>Transportadora <span class="hint">(vem da Frota pela placa)</span></label>
-          <input type="text" value="${esc(c.transportadora)}" disabled></div>
+          <input type="text" value="${esc(c.transportadora)}" disabled>
+          ${marcaTransportadoraHtml(c) ? `<button type="button" class="btn btn-sec btn-sm" style="margin-top:6px"
+              onclick="event.stopPropagation(); usarTransportadoraDaFrotaUI('${id}')"
+              title="A Frota diz outra transportadora para esta placa. Este botão alinha a carga ao cadastro.">≠ Frota — usar a da Frota (${esc((buscarFrota(c.placa)||{}).transportadora||'')})</button>` : ''}</div>
       </div>
 
       <div class="form-group" style="margin-bottom:10px"><label>Observações</label>
@@ -3437,6 +3905,44 @@ function veiculoJaNoPatio(carga){
     && normalizarPlaca(c.placa) === p
     && c.status !== 'Aguardando Veículo');
 }
+/* A ETAPA FOI DEVOLVIDA — e quem olha a fila precisa ver isso ANTES de agir.
+
+   Sem esta marca, a carga devolvida para "Aguardando Veículo" aparece para
+   a Portaria idêntica a uma que nunca chegou. O porteiro, que já deixou
+   aquele caminhão entrar, lê "não chegou", clica "Chegou" de boa-fé e
+   desfaz a correção. Foi o laço do relato do FTZ2138 (29/08/2026).
+
+   Vinho, e não verde: ao contrário do "veículo já no pátio", isto NÃO é
+   informação tranquila — é um pedido para parar e conferir. Some sozinha
+   quando alguém legitimamente move a carga (ver `aindaVale`). */
+function marcaEtapaDevolvidaHtml(carga){
+  const d = (typeof etapaDevolvida === 'function') ? etapaDevolvida(carga) : null;
+  if(!d || !d.aindaVale) return '';
+  const quando = d.quando ? fmtDataHora(d.quando) : 'horário não registrado';
+  return `<span class="chip-devolvida" title="${esc(d.setor)} (${esc(d.quem)}) devolveu esta carga `
+    + `de &quot;${esc(d.de)}&quot; para &quot;${esc(d.para)}&quot; em ${esc(quando)}. `
+    + `O motivo está no Histórico da carga. Confira antes de fazer a carga andar de novo.">`
+    + `↩ etapa devolvida</span>`;
+}
+
+/* SAIU SEM CARREGAR — a marca que impede o número de mentir (08/09/2026).
+
+   Um caminhão que entrou, entregou devolução e foi embora fica em "Seguiu
+   Viagem" igualzinho a quem levou 20 toneladas. Sem esta marca, qualquer
+   leitura de "quantas cargas saíram hoje" conta os dois do mesmo jeito, e
+   o indicador passa a mentir a favor da operação — que é justamente o que
+   a regra da casa sobre fidelidade existe para evitar.
+
+   A marca é da CARGA e vem do servidor (`saidaSemCarregar`), não de uma
+   conta feita aqui: quem sabe se houve carregamento é a transação que
+   registrou a saída. */
+function marcaSaiuSemCarregarHtml(carga){
+  if(!carga || carga.saidaSemCarregar !== true) return '';
+  return '<span class="chip-sem-carregar" title="Este caminhão entrou, entregou a '
+    + 'devolução e foi embora SEM carregar. A saída foi registrada pela Portaria.">'
+    + '↩ só devolução</span>';
+}
+
 function chipNoPatioHtml(carga){
   return veiculoJaNoPatio(carga)
     ? '<span class="chip-no-patio" title="Outra carga desta mesma placa já está no pátio — o caminhão chegou. '
@@ -3655,6 +4161,31 @@ function dataProgramacaoHtml(c){
    um erro de digitação. Quem olha a fila precisa saber, sem contar linha,
    que aquilo é o mesmo caminhão com duas cargas — senão alguém "corrige" a
    duplicidade que não existe e apaga uma carga de verdade. */
+/* A CARGA DIZ UMA TRANSPORTADORA, A FROTA DIZ OUTRA — A TELA MOSTRA (09/09/2026).
+   Relato do dono: 118675 / JJB8946 — "Rodosousa" na Torre, "Denia" no
+   cadastro. A transportadora da carga é cópia feita quando a placa entra e
+   pode ser trocada à mão; a Frota pode mudar depois. Nenhuma das duas telas
+   avisava. O marcador aparece quando divergem, e um clique alinha à Frota. */
+function marcaTransportadoraHtml(c){
+  const f = c && c.placa ? buscarFrota(c.placa) : null;
+  if(!f || !f.transportadora) return '';
+  const norm = (s)=>String(s||'').trim().toLowerCase();
+  if(norm(f.transportadora) === norm(c.transportadora)) return '';
+  /* Marcador, não botão: com 17px de altura ele reprovaria a regra dos 44px
+     para o dedo no celular. A ação "usar a da Frota" é um botão de verdade
+     na expansão da carga. */
+  return `<span class="marca-multi marca-frota"
+    title="A Frota diz ${esc(f.transportadora)}; esta viagem está com ${esc(c.transportadora || '—')}. Abra a carga para usar a da Frota.">≠ Frota: ${esc(f.transportadora)}</span>`;
+}
+function usarTransportadoraDaFrotaUI(id){
+  const c = getCarga(id); if(!c) return;
+  const f = buscarFrota(c.placa); if(!f || !f.transportadora) return;
+  c.transportadora = f.transportadora;
+  c.atualizadoEm = nowISO();   // sem carimbo a mudança não sobe
+  SuincoStore.save();
+  notifyGravacao(`Carga ${c.numeroCarga || c.placa}: transportadora alinhada à Frota (${f.transportadora}).`);
+  renderAll();
+}
 function marcaCargaDaPlaca(carga, lista){
   const p = normalizarPlaca(carga.placa);
   if(!p) return '';   // sem caminhão não há "1 de 2" — vazio não é placa
@@ -3726,6 +4257,106 @@ function adicionarOutraCargaNaPlacaUI(id){
 // Sequência continua 100% livre: número manual do Programador de Embarque,
 // sem geração automática nem trava de duplicidade — regra confirmada,
 // não mexer nisso (docs/DECISOES_CONFIRMADAS.md item 2).
+/* DIGITAR UM NÚMERO REORDENA A FILA (08/09/2026).
+
+   Pedido do Wemerson, trazido pelo dono: "se ele digitar 1 numa carga e já
+   tiver uma como 1, ela vai automaticamente pra dois, e a que ele colocou 1
+   entra no início da fila".
+
+   Antes disto a sequência era um número solto — duas cargas podiam ser 1 ao
+   mesmo tempo, e o próprio campo dizia "digite o número que quiser".
+
+   QUEM FAZ A CONTA É O SERVIDOR, numa transação só. Reordenar quinze cargas
+   mandando quinze alterações separadas é a família da ocorrência #16 — duas
+   escritas em voo, a velha ganha — e com duas pessoas mexendo ao mesmo tempo
+   a fila embaralharia sem ninguém entender por quê. Aqui a tela só diz para
+   onde a carga foi; a fila nova volta pronta.
+
+   Apagar o campo continua APAGANDO o número, e não mandando para o fim:
+   campo vazio não é ordem de reordenar. */
+async function moverNaFilaUI(id, posicao){
+  const c = getCarga(id); if(!c) return;
+  if(!devServidorOk_paraFila()){
+    notify('Sem servidor agora — a ordem da fila é decidida pelo servidor e não pode ser mudada offline.', 'warn');
+    renderAll();
+    return;
+  }
+  const r = await SuincoSharePoint.sequenciar(id, posicao);
+  /* `sequenciar` DEVOLVE a recusa em vez de lançar — quem chama precisa
+     olhar o valor. É a regra da casa, e a ocorrência que a criou. */
+  if(r && r.recusado){
+    notify(r.erro || 'O servidor recusou a reordenação.', 'error');
+    await SuincoSharePoint.sincronizarAgora();
+    renderAll();
+    return;
+  }
+  if(r && r.enfileirado){
+    notify('Sem servidor agora — a ordem não foi mudada.', 'warn');
+    renderAll();
+    return;
+  }
+  await SuincoSharePoint.sincronizarAgora();
+  notifyGravacao(`Carga ${c.numeroCarga || c.placa} foi para a posição ${posicao}.`);
+  renderAll();
+}
+
+function devServidorOk_paraFila(){
+  return typeof SuincoSharePoint !== 'undefined'
+    && SuincoSharePoint.estaConfigurado && SuincoSharePoint.estaConfigurado();
+}
+
+/* POSIÇÃO NA FILA — NÃO É A MESMA COISA QUE "SEQUÊNCIA LIVRE" (08/09/2026).
+
+   Estas duas telas escrevem no mesmo campo e querem coisas DIFERENTES:
+
+     · Torre de Controle  — "Sequência livre": o número que o programador
+       escreve. Vale o que ele digitou, mesmo 7 numa lista de 2.
+     · Fila de Programados — "posição na fila": a carga entra naquela casa
+       e as outras descem uma. O servidor renumera de 1 a N.
+
+   Eu já mandei as duas para moverNaFilaUI() achando que era "uma função,
+   dois chamadores". Não era: eram duas PERGUNTAS diferentes com o mesmo
+   nome de campo. O resultado foi a Torre parar de guardar a sequência
+   digitada — o defeito de 14/08/2026 de volta, "alterei três vezes e ela
+   não se mantém". Juntar decisões diferentes quebra tanto quanto copiar
+   a mesma decisão em dois lugares. */
+function definirPosicaoNaFilaUI(id, val){
+  const n = Number(val);
+  if(val === '' || !Number.isInteger(n) || n < 1){
+    /* Campo vazio não é ordem de apagar a ordem: só redesenha e devolve
+       o valor que o servidor tem. */
+    renderAll();
+    return;
+  }
+  moverNaFilaUI(id, n);
+}
+
+/* ARRASTAR E DIGITAR NA TORRE (09/09/2026).
+
+   Pedido do dono: "quero conseguir arrastar a ordem do sequenciamento de
+   carga na torre de controle" e, sobre digitar × arrastar: "os 2 precisam
+   funcionar, mantendo a logica e a sequencia".
+
+   O CUIDADO É A OCORRÊNCIA #27, desta mesma manhã. Lá eu mandei TODO inteiro
+   para moverNaFilaUI porque a Torre e a Fila compartilhavam o nome do campo
+   — e a Torre parou de guardar a sequência digitada, o defeito de 14/08 de
+   volta. A diferença aqui: quem decide não é a TELA, é o STATUS DA LINHA,
+   que está visível na cor do selo, e a alça só aparece onde arrastar
+   funciona. A pessoa vê antes de tentar.
+
+     ainda vai carregar  → posição na fila, cascata no servidor (o mesmo
+                           caminho do arrastar: uma conta só)
+     já carregou         → o número é registro; guarda o valor, carimba
+                           para subir, e NÃO reordena ninguém */
+function aindaVaiCarregar(c){
+  return !!c && (c.status === 'Aguardando Veículo' || c.status === 'Aguardando Embarque');
+}
+function definirSequenciaTorreUI(id, val){
+  const c = getCarga(id); if(!c) return;
+  if(aindaVaiCarregar(c)) return definirPosicaoNaFilaUI(id, val);
+  return atualizarSequenciaUI(id, val);
+}
+
 function atualizarSequenciaUI(id, val){
   const c = getCarga(id); if(!c) return;
   c.sequencia = val==='' ? null : Number(val);
@@ -3743,6 +4374,65 @@ function atualizarSequenciaUI(id, val){
 }
 // Popula os selects de Rota. Uma função só, alimentada por ROTAS em data.js —
 // acrescentar uma rota lá aparece nos dois formulários sem tocar aqui.
+/* ARRASTAR PARA MUDAR A ORDEM (08/09/2026).
+
+   Arrastar e digitar são a MESMA operação — "mover para a posição N" — e
+   por isso as duas terminam em moverNaFilaUI(). Uma função, dois
+   chamadores: duas contas de posição diferentes divergiriam no primeiro
+   caso de borda, e o caso de borda aqui é a fila do dia de embarque.
+
+   Guarda só o id do que está sendo arrastado. A POSIÇÃO não é calculada
+   aqui: quem responde "para que número isso vai" é a posição da linha
+   sobre a qual soltou, lida da tela na hora — porque é isso que a pessoa
+   está vendo quando solta. */
+let _filaArrastando = null;
+
+function filaArrastarInicio(ev, id){
+  _filaArrastando = id;
+  ev.dataTransfer.effectAllowed = 'move';
+  /* Firefox só inicia o arrasto se algum dado for escrito. */
+  try{ ev.dataTransfer.setData('text/plain', id); }catch(e){}
+  const tr = ev.currentTarget;
+  if(tr && tr.classList) tr.classList.add('fila-arrastando');
+}
+
+function filaArrastarSobre(ev){
+  if(!_filaArrastando) return;
+  ev.preventDefault();                      // sem isto o navegador não deixa soltar
+  ev.dataTransfer.dropEffect = 'move';
+  const tr = ev.currentTarget;
+  if(tr && tr.classList) tr.classList.add('fila-alvo');
+}
+
+function filaArrastarFim(){
+  _filaArrastando = null;
+  document.querySelectorAll('.fila-arrastando, .fila-alvo')
+    .forEach(el => el.classList.remove('fila-arrastando','fila-alvo'));
+}
+
+function filaArrastarSolta(ev, idDestino){
+  ev.preventDefault();
+  ev.stopPropagation();
+  const movido = _filaArrastando;
+  filaArrastarFim();
+  if(!movido || movido === idDestino) return;
+  /* MANDA O NÚMERO DA LINHA DE DESTINO, NÃO A POSIÇÃO DELA (08/09/2026).
+
+     Antes isto mandava o índice da linha na tela, contando de 1. Enquanto a
+     fila era numerada 1, 2, 3... índice e número eram a mesma coisa e não
+     dava para notar a diferença. Passaram a ser coisas distintas quando os
+     números de quem já carregou viraram reservados: a fila pode ser
+     4, 5, 6 num dia em que três caminhões já saíram, e a primeira linha da
+     tela é o número 4.
+
+     Quem solta em cima da linha que mostra "5" quer o número 5. É o mesmo
+     valor que ela digitaria no campo — e por isso arrastar e digitar
+     continuam sendo a mesma operação. */
+  const alvo = getCarga(idDestino);
+  if(!alvo || alvo.sequencia == null) return;
+  moverNaFilaUI(movido, alvo.sequencia);
+}
+
 function preencherSelectsRota(){
   const opcoes = '<option value="">(rota não informada)</option>' +
     ROTAS.map(r=>`<option value="${esc(r.codigo)}">${esc(rotaLabel(r.codigo))}</option>`).join('');
@@ -4121,6 +4811,9 @@ function abrirCompletar(id){
   document.getElementById('completar-paletizada').value = 'Não';
   document.getElementById('completar-ganchos').value = '0';
   document.getElementById('completar-entregas').value = '1';
+  document.getElementById('completar-frete-destino').value = c.freteDestino || '';
+  document.getElementById('completar-km-destino').value = c.kmDestino ?? '';
+  document.getElementById('completar-km-deslocamento').value = c.kmDeslocamento ?? '';
   document.getElementById('modal-completar').classList.add('open');
 }
 function fecharModalCompletar(){ document.getElementById('modal-completar').classList.remove('open'); }
@@ -4142,6 +4835,8 @@ function salvarCompletarCarga(){
       paletizada: document.getElementById('completar-paletizada').value,
       qtdGanchos: document.getElementById('completar-ganchos').value,
       qtdEntregas: document.getElementById('completar-entregas').value,
+      freteDestino: document.getElementById('completar-frete-destino').value,
+      kmDeslocamento: document.getElementById('completar-km-deslocamento').value,
       operador: nomeOperadorAtual()
     });
     fecharModalCompletar();
@@ -4170,6 +4865,45 @@ async function acaoChegadaUI(){
     try{ await SuincoSharePoint.sincronizarAgora(); }
     catch(e){ /* sem rede: segue com o que há e o servidor decide depois */ }
   }
+  /* A ETAPA DEVOLVIDA PEDE CONFIRMAÇÃO — 29/08/2026, relato do FTZ2138.
+
+     Aqui era onde o laço se fechava: a carga que a Administração devolveu
+     para "Aguardando Veículo" reaparece na fila da Portaria como "não
+     chegou", e o "Chegou" a empurrava de volta na hora, calado. Quem
+     corrigiu tentava de novo, e a coisa girava.
+
+     PERGUNTA, NÃO BLOQUEIA. A Portaria tem autoridade sobre a chegada e o
+     caminhão pode de fato ter chegado de novo — botão desabilitado não
+     ensina o caminho, só nega. O que faltava não era permissão, era a
+     INFORMAÇÃO de que aquilo tinha sido feito de propósito, por alguém,
+     com motivo. A pergunta traz quem, quando e de onde para onde.
+
+     Roda DEPOIS do `sincronizarAgora()` acima, de propósito: a devolução
+     pode ter acabado de acontecer em outro terminal, e perguntar com lista
+     velha é não perguntar. */
+  const devolvidas = cargasAbertasPorPlaca(normalizarPlaca(placa))
+    .map(c => ({ carga: c, d: etapaDevolvida(c) }))
+    .filter(x => x.d && x.d.aindaVale && x.d.para === 'Aguardando Veículo');
+  if(devolvidas.length){
+    const { carga, d } = devolvidas[0];
+    const quando = d.quando ? fmtDataHora(d.quando) : 'horário não registrado';
+    const qual = carga.numeroCarga ? `a carga ${carga.numeroCarga}` : 'esta carga';
+    const ok = confirm(
+      `${normalizarPlaca(placa)}: a etapa foi DEVOLVIDA de propósito.\n\n`
+      + `${d.setor} (${d.quem}) devolveu ${qual} de "${d.de}" para "${d.para}" em ${quando}.\n`
+      + `O motivo está no Histórico da carga.\n\n`
+      + `Registrar a chegada agora desfaz essa correção.\n`
+      + `O caminhão chegou de novo?`);
+    if(!ok){
+      notify(`Chegada NÃO registrada — ${normalizarPlaca(placa)} continua em "${d.para}", `
+        + `como ${d.setor} deixou. Se o caminhão chegou mesmo, clique "Chegou" e confirme.`,
+        'info', 9000);
+      input.value = '';
+      input.focus();
+      return;
+    }
+  }
+
   let r;
   try{
     r = registrarChegadaPortaria(placa, nomeOperadorAtual());
@@ -4425,9 +5159,25 @@ function renderPortariaProgramadas(){
       acao = `<button class="btn btn-success btn-sm" onclick="portariaChegouCarga('${escJs(c.placa)}')">🚚 Chegou</button>`;
     } else if(c.status === 'Faturado'){
       acao = `<button class="btn btn-warn btn-sm" onclick="portariaSaiuCarga('${escJs(c.placa)}')">🏁 Saiu</button>`;
+    } else if(c.status === 'Aguardando Embarque'){
+      /* O CAMINHÃO QUE SÓ TROUXE DEVOLUÇÃO (08/09/2026).
+
+         Pedido do dono, vindo da Portaria: "ele tem que ter a opção só de
+         depois colocar lá que ele saiu, que é só devolução, então ele não
+         vai carregar". E a rotina, nas palavras dele: "muitas vezes chega,
+         descarrega e vai embora e muitas vezes chega, descarrega e fica no
+         pátio aguardando carga novamente".
+
+         Por isso o botão fica AQUI e não na entrada: qual dos dois casos é
+         só se sabe na hora de sair. Quem vai carregar continua vendo o
+         fluxo normal — este botão não substitui nada, ele acrescenta a
+         única saída que faltava. */
+      acao = `<button class="btn btn-sm btn-saida-devolucao"
+        title="O caminhão entregou devolução e vai embora sem carregar."
+        onclick="portariaSaiuSoDevolucaoUI('${escJs(c.id)}')">↩️ Só devolução — saiu</button>`;
     }
     return `<tr>
-      <td class="col-identificacao">${esc(c.placa)}${marcaCargaDaPlaca(c, lista)}</td>
+      <td class="col-identificacao">${esc(c.placa)}${marcaCargaDaPlaca(c, lista)}${marcaEtapaDevolvidaHtml(c)}${marcaSaiuSemCarregarHtml(c)}</td>
       <td class="col-identificacao">${esc(c.numeroCarga)||'—'}</td>
       <td>${esc(c.transportadora)||'—'}</td>
       <td>${esc(rotaCurta(c.rota))}</td>
@@ -4446,6 +5196,50 @@ function portariaChegouCarga(placa){
 function portariaSaiuCarga(placa){
   document.getElementById('portaria-placa').value = placa;
   acaoSaidaUI();
+}
+
+/* Saída do caminhão que entrou só para entregar devolução (08/09/2026).
+
+   PERGUNTA EXPLICANDO, não bloqueia: é a regra da casa — "botão
+   desabilitado não ensina o caminho, só nega". O porteiro tem autoridade
+   para encerrar; o que ele precisa é saber o que o gesto faz antes de
+   fazer. E o gesto é grande: encerra a carga sem passar por Expedição e
+   Faturamento.
+
+   Quem decide de verdade é o SERVIDOR — ele recusa a transição sem a
+   confirmação e devolve a explicação. Aqui a pergunta é feita antes para
+   não gastar a viagem, mas se alguém chamar esta função direto, a recusa
+   continua acontecendo no lugar certo. */
+async function portariaSaiuSoDevolucaoUI(cargaId){
+  const c = DB.cargas.find(x=>x.id === cargaId);
+  if(!c) return;
+  const ok = confirm(
+    `SAÍDA SEM CARREGAR — placa ${c.placa}\n\n`
+    + 'Este caminhão ainda não carregou. Confirmando, fica registrado que ele '
+    + 'entrou, entregou a devolução e foi embora sem carregar.\n\n'
+    + 'Se ele vai FICAR no pátio para carregar, cancele: o fluxo normal segue '
+    + 'pela Expedição.'
+  );
+  if(!ok) return;
+  const r = await SuincoSharePoint.mudarStatus(cargaId, 'Seguiu Viagem', { soDevolucao: true });
+  /* `mudarStatus` DEVOLVE a recusa em vez de lançar — quem chama precisa
+     olhar o valor (regra da casa, e a ocorrência que a criou). */
+  if(r && r.recusado){
+    notify(r.erro || 'O servidor recusou a saída.', 'error');
+    return;
+  }
+  if(r && r.enfileirado){
+    notify('Sem servidor agora — a saída foi para a fila e sobe quando a conexão voltar.', 'warn');
+    return;
+  }
+  /* Quem manda é a transação: só depois de o servidor confirmar é que a
+     tela puxa o estado de volta. Escrever a saída local antes e sincronizar
+     depois foi exatamente como a placa PUX2971 saiu na tela do porteiro
+     sem o servidor saber (28/08). */
+  await SuincoSharePoint.sincronizarAgora();
+  notifyGravacao(`Placa ${c.placa} saiu — só devolução, sem carregamento.`);
+  tocarBeepConfirmacao();
+  renderAll();
 }
 
 function renderPortariaPatio(){
@@ -4758,6 +5552,15 @@ function celFiltro(campo, valor, rotulo){
     >${esc(rotulo ?? v)}</td>`;
 }
 
+/* O período do seletor em datas, para a busca no servidor. 'todos' vira a
+   janela máxima da rota (90 dias): período aberto sem teto derruba
+   servidor, e o Histórico continua sendo o caminho para ir mais longe. */
+function periodoIndicadoresEmDatas(){
+  const chave = (document.getElementById('ind-f-periodo') || {}).value || '';
+  const { inicio } = janelaPeriodo(chave || 'mes');
+  const de = chave === '' ? new Date(Date.now() - 90*86400000) : inicio;
+  return { de: isoDiaLocal(de), ate: isoDiaLocal(new Date()) };
+}
 function aplicarFiltroIndicadores(){
   const ler = id => (document.getElementById(id)||{}).value || '';
   FILTRO_IND.transportadora = ler('ind-f-transp');
@@ -4787,6 +5590,9 @@ function aplicarFiltroIndicadores(){
       : '';
   }
   renderIndicadores();
+  // Período além dos 30 dias locais: busca no servidor (ver garantirPeriodoNoPainel).
+  const p = periodoIndicadoresEmDatas();
+  garantirPeriodoNoPainel(p.de, p.ate, 'ind-aviso-periodo');
 }
 
 function limparFiltroIndicadores(){
@@ -5289,6 +6095,7 @@ function renderIndicadores(){
 
   let html = campos.map(f=>caixaTempo(f, labels[f])).join('');
   html += caixaTempo('leadTimeTotal', 'Lead Time Total', 'criação da carga → Seguiu Viagem');
+  html += notaDescarteHtml(concluidas);
   document.getElementById('ind-stats').innerHTML = html;
 
   renderRaioX();
@@ -5310,7 +6117,8 @@ function renderComparacaoPeriodos(){
     { key:'tempoPatioTotal',          label:'Tempo em Pátio (total)' },
     { key:'leadTimeTotal',            label:'Lead Time Total' }
   ];
-  const porPeriodo = PERIODOS_INDICADOR.map(p => ({ periodo:p, dados: indicadoresPorPeriodo(p.key) }));
+  // Passa o filtro do topo: a nota "só este recorte" precisa valer aqui também.
+  const porPeriodo = PERIODOS_INDICADOR.map(p => ({ periodo:p, dados: indicadoresPorPeriodo(p.key, filtroIndicadoresAtivo() ? FILTRO_IND : null) }));
   const tbody = document.getElementById('ind-periodos-tbody');
   tbody.innerHTML = linhasDef.map(linha=>{
     const celulas = porPeriodo.map(({dados})=>{
@@ -5631,7 +6439,177 @@ function renderCadastros(){
     cardRota.hidden = !(DB.operador && DB.operador.setor === 'Administração');
     if(!cardRota.hidden) renderRotasCadastro();
   }
+  /* Tabela de frete: Logística e Administração. A tela esconde, e o
+     servidor recusa — as duas coisas, porque esconder sozinho é decoração:
+     o dado ainda viajaria até o navegador de quem não pode vê-lo. */
+  const cardFrete = document.getElementById('card-tabela-frete');
+  if(cardFrete){
+    cardFrete.hidden = !(DB.operador && podeVerValorDeFreteUI(DB.operador.setor));
+    if(!cardFrete.hidden) renderTabelaDeFrete();
+  }
 }
+
+/* Gêmea de podeVerValorDeFrete() em backend/src/dominio/fluxo.js.
+   Duplicada porque o painel é build de arquivo único e não fala com o
+   servidor em tempo de código — a mesma razão pela qual SETOR_PERMISSOES
+   existe dos dois lados, e o teste testes/test_frete_tabela_e_planilha.py
+   compara as duas listas. */
+function podeVerValorDeFreteUI(setor){
+  return setor === 'Logística' || setor === 'Administração';
+}
+/* =====================================================================
+   TABELA DE FRETE — a tela do cadastro (09/09/2026)
+   =====================================================================
+   Espelha o cadastro de Rota de propósito: mesmo card, mesmo par
+   "formulário em cima, tabela embaixo", mesmo botão de CSV. O dono pediu
+   assim — "cadastro possa ser editavel e criada da mesma forma que
+   funcionam os cadastros" — e a razão é boa: quem já cadastrou uma rota
+   sabe cadastrar uma tarifa sem ninguém explicar.
+
+   NÃO GRAVA OFFLINE, e isso é diferente da Frota. Tabela de preço não é
+   operação de pátio: ninguém está com o caminhão parado esperando por ela,
+   e uma tarifa subindo horas depois pela fila poderia passar por cima de
+   uma correção feita no meio. Sem conexão, avisa e não grava. */
+function renderTabelaDeFrete(){
+  const tb = document.getElementById('frete-tarifas-tbody');
+  if(tb){
+    tb.innerHTML = TARIFAS_FRETE.slice()
+      .sort((a,b)=> Number(a.valorPorKm) - Number(b.valorPorKm))
+      .map(t=>`<tr>
+        <td>${esc(t.tipoVeiculo)}</td>
+        <td class="num">${fmtDinheiro(t.valorPorKm)}</td>
+        <td>${t.vigenteDesde ? esc(dataCurtaLocal(t.vigenteDesde)) : '—'}</td>
+        <td>${esc(t.operador)||'—'}</td></tr>`).join('');
+    const vazio = document.getElementById('frete-tarifas-empty');
+    if(vazio) vazio.hidden = TARIFAS_FRETE.length > 0;
+  }
+
+  const td = document.getElementById('frete-destinos-tbody');
+  if(td){
+    const busca = (document.getElementById('frete-destino-busca')||{}).value || '';
+    const filtro = busca.trim().toUpperCase();
+    const lista = DESTINOS_FRETE
+      .filter(d => !filtro || String(d.destino).toUpperCase().includes(filtro))
+      .sort((a,b)=> String(a.destino).localeCompare(String(b.destino), 'pt-BR'));
+    td.innerHTML = lista.map(d=>`<tr>
+        <td>${esc(d.destino)}</td>
+        <td class="num">${Number(d.km).toLocaleString('pt-BR')} km</td>
+        <td>${esc(d.operador)||'—'}</td>
+        <td class="no-print"><button class="btn btn-sec btn-xs"
+          onclick="editarDestinoFreteUI(${JSON.stringify(String(d.destino)).replace(/"/g,'&quot;')})"
+          title="Traz este destino para o formulário acima">✎ Editar</button></td></tr>`).join('');
+    const vazio = document.getElementById('frete-destinos-empty');
+    if(vazio) vazio.hidden = lista.length > 0;
+    const cont = document.getElementById('frete-destinos-contagem');
+    if(cont) cont.textContent = filtro
+      ? `${lista.length} de ${DESTINOS_FRETE.length} destinos`
+      : `${DESTINOS_FRETE.length} destinos`;
+  }
+}
+
+/* Dinheiro em português, com duas casas — e SEM inventar zero.
+   Tarifa ausente é "—", não "R$ 0,00": preço zero é uma afirmação, e
+   afirmar de graça o que ninguém digitou é como o relatório passa a
+   mentir. */
+function fmtDinheiro(v){
+  if(v === null || v === undefined || v === '') return '—';
+  const n = Number(v);
+  if(!Number.isFinite(n)) return '—';
+  return n.toLocaleString('pt-BR', {style:'currency', currency:'BRL', minimumFractionDigits:2});
+}
+
+function editarDestinoFreteUI(destino){
+  const d = DESTINOS_FRETE.find(x => String(x.destino) === String(destino));
+  if(!d) return;
+  document.getElementById('frete-destino-nome').value = d.destino;
+  document.getElementById('frete-destino-km').value = d.km;
+  document.getElementById('frete-destino-nome').focus();
+}
+
+async function addTarifaFreteUI(){
+  const tipo = document.getElementById('frete-tarifa-tipo').value.trim();
+  const bruto = document.getElementById('frete-tarifa-valor').value;
+  if(!tipo){ notify('Informe o tipo de veículo.', 'warn'); return; }
+  /* Campo em branco NÃO é zero. `Number('')` é 0, e cadastrar tarifa zero
+     sem querer é frete de graça gravado em silêncio para toda uma
+     modalidade. */
+  if(bruto === '' || !Number.isFinite(Number(bruto)) || Number(bruto) < 0){
+    notify('Informe o valor por km (ex.: 7,75).', 'warn'); return;
+  }
+  const r = await SuincoSharePoint.gravarTarifaFrete({
+    tipoVeiculo: tipo,
+    valorPorKm: Number(bruto),
+    vigenteDesde: document.getElementById('frete-tarifa-vigencia').value || undefined,
+    operador: (DB.operador && DB.operador.nome) || '',
+  });
+  if(r && (r.recusado || r.enfileirado)){
+    notify(`A tarifa de ${tipo} NÃO foi salva: ${r.erro || 'sem conexão com o servidor'}. `
+      + 'Tabela de preço não fica em fila — tente de novo quando a conexão voltar.', 'erro', 9000);
+    return;
+  }
+  ['frete-tarifa-tipo','frete-tarifa-valor','frete-tarifa-vigencia'].forEach(id=>document.getElementById(id).value='');
+  await recarregarTabelaDeFrete();
+  notifyGravacao(`Tarifa de ${tipo}: ${fmtDinheiro(bruto)} por km.`);
+}
+
+async function addDestinoFreteUI(){
+  const destino = document.getElementById('frete-destino-nome').value.trim().toUpperCase();
+  const km = kmValidoLocal(document.getElementById('frete-destino-km').value);
+  if(!destino){ notify('Informe o destino.', 'warn'); return; }
+  if(km === null){ notify('Informe o KM do destino (maior que zero).', 'warn'); return; }
+  const r = await SuincoSharePoint.gravarDestinoFrete({
+    destino, km, operador: (DB.operador && DB.operador.nome) || '',
+  });
+  if(r && (r.recusado || r.enfileirado)){
+    notify(`O destino ${destino} NÃO foi salvo: ${r.erro || 'sem conexão com o servidor'}.`, 'erro', 9000);
+    return;
+  }
+  ['frete-destino-nome','frete-destino-km'].forEach(id=>document.getElementById(id).value='');
+  await recarregarTabelaDeFrete();
+  notifyGravacao(`Destino ${destino}: ${km} km.`);
+}
+
+/* Relê a tabela do servidor depois de gravar, em vez de mexer na lista
+   local com o que acabou de ser digitado. É a regra da casa: quem manda é
+   a transação, não a tela. Se o servidor normalizou o nome do destino ou
+   recusou parte do que foi enviado, é a versão dele que aparece. */
+async function recarregarTabelaDeFrete(){
+  /* A TABELA, E SÓ A TABELA.
+
+     Isto chamava pullTudo() — uma leitura COMPLETA do pátio — para reler
+     cinco tarifas. Era o martelo errado: traz todas as cargas, a frota
+     inteira e as rotas, de propósito nenhum, a cada tarifa salva. E
+     requisição à toa custa caro aqui: o limite cai para o IP quando a
+     chamada não tem token, e quatro terminais no mesmo IP já deram 429 na
+     bateria (test_login_api). Agora pede a tabela, que é o que mudou. */
+  try{
+    const t = await SuincoSharePoint.tabelaDeFrete();
+    if(t) receberTabelaDeFrete({tarifas: t.tarifas, destinos: t.destinos});
+  }catch(e){ console.warn('[frete] recarga da tabela falhou:', e.message); }
+  renderTabelaDeFrete();
+  preencherSelectsDestinoFrete();
+}
+
+function exportarTabelaFreteCsv(){
+  const linhas = [];
+  TARIFAS_FRETE.forEach(t => linhas.push(['Tarifa', t.tipoVeiculo, '', String(t.valorPorKm).replace('.', ','), t.operador||'']));
+  DESTINOS_FRETE.forEach(d => linhas.push(['Destino', '', d.destino, String(d.km), d.operador||'']));
+  baixarCsvDoDia('Tabela_de_Frete',
+    ['O quê', 'Tipo de veículo', 'Destino', 'Valor por km / KM', 'Quem cadastrou'], linhas);
+}
+
+/* Alimenta o <datalist> de destinos do formulário de carga. Chamado
+   sempre que a tabela chega do servidor — mesmo padrão de
+   preencherSelectsRota(), pelo mesmo motivo (painel de pátio fica aberto o
+   dia inteiro e não pode ficar com a lista de ontem). */
+function preencherSelectsDestinoFrete(){
+  const dl = document.getElementById('lista-destinos-frete');
+  if(!dl) return;
+  dl.innerHTML = DESTINOS_FRETE.slice()
+    .sort((a,b)=> String(a.destino).localeCompare(String(b.destino), 'pt-BR'))
+    .map(d=>`<option value="${esc(d.destino)}">${Number(d.km).toLocaleString('pt-BR')} km</option>`).join('');
+}
+
 function renderRotasCadastro(){
   const tbody = document.getElementById('rotas-tbody');
   if(!tbody) return;
@@ -5640,13 +6618,13 @@ function renderRotasCadastro(){
     .map(r=>`<tr><td>${esc(r.codigo)}</td><td>${esc(r.nome)||'—'}</td><td>${esc(r.detalhe)||'—'}</td><td>${esc(r.operador)||'—'}</td></tr>`)
     .join('');
 }
-function addRotaUI(){
+async function addRotaUI(){
   const codigo = document.getElementById('rota-codigo').value.trim();
   const nome = document.getElementById('rota-nome').value.trim();
   if(!codigo){ notify('Informe o código da rota.', 'warn'); return; }
   if(!nome){ notify('Informe o nome da rota.', 'warn'); return; }
   const jaExistia = !!rotaInfo(codigo);
-  upsertRota(codigo, nome, document.getElementById('rota-detalhe').value,
+  const rotaCriada = upsertRota(codigo, nome, document.getElementById('rota-detalhe').value,
              document.getElementById('rota-operador').value);
   ['rota-codigo','rota-nome','rota-detalhe','rota-operador'].forEach(id=>document.getElementById(id).value='');
   preencherSelectsRota();   // dropdowns de Rota atualizados na hora
@@ -5666,6 +6644,31 @@ function addRotaUI(){
      quando subiu; amarelo "SEM CONEXÃO … os outros setores ainda NÃO
      veem" quando ficou na fila. A recusa do servidor já tinha aviso
      próprio (receberRecusaDeRota) e continua valendo. */
+  /* O AVISO ESPERA O SERVIDOR (31/08/2026).
+
+     Ele era otimista: dizia "Rota X cadastrada" no mesmo instante do clique,
+     e só depois — quando a resposta chegava — vinha o "NÃO foi cadastrada".
+     Duas frases contrárias na mesma tela, e a pessoa lê a primeira.
+
+     É o incidente da rota 537 (14/08) voltando por outra porta: naquele dia
+     o problema era o verde prometendo compartilhamento que não existia.
+     Agora não existe nem gravação: com a regra do dono, offline não grava.
+     Então o aviso de sucesso só pode sair depois de o servidor confirmar —
+     quem avisa o contrário é `receberRecusaDeRota`, que já tem frase própria
+     para cada caso. */
+  /* ESPERA A RESPOSTA ANTES DE DIZER QUE CADASTROU.
+
+     Olhar o estado da conexão não bastava: no instante do clique ele ainda
+     diz "online", porque só vira offline quando alguma requisição falha. O
+     que decide é a resposta desta gravação, não o estado de antes dela. */
+  const r = await (rotaCriada && rotaCriada._promessa
+    ? rotaCriada._promessa.catch(() => ({ recusado: true }))
+    : Promise.resolve(null));
+  if(r && r.recusado){
+    // receberRecusaDeRota já falou — e com a frase certa para cada caso.
+    renderAll();
+    return;
+  }
   notifyGravacao(jaExistia
     ? `Rota ${codigo} atualizada.`
     : `Rota ${codigo} — ${nome} cadastrada.`);
@@ -6334,6 +7337,50 @@ function limparFiltroHistorico(){
   renderHistorico();
 }
 
+/* PEDIU MAIS QUE A JANELA LOCAL? BUSCA NO SERVIDOR (09/09/2026).
+
+   O navegador guarda 30 dias (JANELA_LOCAL_DIAS, data.js). A decisão do
+   dono foi explícita: "se eu quiser buscar mais ele vai aparecer". Esta é
+   a ponte — uma função, três chamadores (Histórico, Indicadores,
+   Relatórios). O que vem fica em memória e some ao recarregar; as telas
+   não sabem de onde o dado veio, então nenhuma delas precisou mudar de
+   cálculo.
+
+   Sem servidor, DIZ. Mostrar 30 dias calados quando alguém pediu 90 é a
+   família "número errado com cara de certo" — o gestor compararia meses
+   com um deles pela metade. */
+let _buscandoPeriodo = null;
+async function garantirPeriodoNoPainel(de, ate, ondeAvisar){
+  if(!de) return { ok:true, jaTinha:true };
+  const inicio = Date.parse(de + 'T00:00:00');
+  if(!Number.isFinite(inicio) || inicio >= limiteDaJanelaLocal()) return { ok:true, jaTinha:true };
+  const fim = ate && /^\d{4}-\d{2}-\d{2}$/.test(ate) ? ate : isoDiaLocal(new Date());
+  const chave = de + '|' + fim;
+  if(_buscandoPeriodo === chave) return { ok:true, emAndamento:true };
+  _buscandoPeriodo = chave;
+  const aviso = ondeAvisar && document.getElementById(ondeAvisar);
+  if(aviso){ aviso.hidden = false; aviso.textContent = 'Buscando no servidor o período anterior aos últimos '
+    + JANELA_LOCAL_DIAS + ' dias…'; }
+  const r = await buscarHistoricoNoServidor(de, fim);
+  _buscandoPeriodo = null;
+  if(aviso){
+    if(r.ok){
+      aviso.hidden = r.cargas === 0;
+      aviso.textContent = `${r.cargas} carga(s) do período vieram do servidor — este navegador guarda `
+        + `os últimos ${JANELA_LOCAL_DIAS} dias.`;
+    }else{
+      aviso.hidden = false;
+      aviso.textContent = r.motivo === 'sem-servidor'
+        ? `Sem servidor agora: só os últimos ${JANELA_LOCAL_DIAS} dias estão neste navegador. `
+          + 'O que é mais antigo está guardado no servidor e aparece quando a conexão voltar.'
+        : `Não consegui buscar o período no servidor (${esc(r.erro || '')}). O que está na tela são só os `
+          + `últimos ${JANELA_LOCAL_DIAS} dias.`;
+    }
+  }
+  if(r.ok && r.cargas) renderAll();
+  return r;
+}
+
 function renderHistorico(){
   const filtroPlaca = normalizarPlaca(document.getElementById('hist-filtro-placa')?.value || '');
   const filtroSetor = document.getElementById('hist-filtro-setor')?.value || '';
@@ -6348,6 +7395,8 @@ function renderHistorico(){
      filtrarPorDataProgramacao, em data.js. */
   const dDe = document.getElementById('hist-data-de')?.value || '';
   const dAte = document.getElementById('hist-data-ate')?.value || '';
+  // Pediu antes da janela local: busca no servidor e redesenha quando chegar.
+  garantirPeriodoNoPainel(dDe, dAte, 'hist-aviso-periodo');
   let lista = DB.movimentacoes.slice().sort((a,b)=>new Date(b.timestamp)-new Date(a.timestamp));
   if(filtroPlaca) lista = lista.filter(m=>m.placa.includes(filtroPlaca));
   if(filtroSetor) lista = lista.filter(m=>m.setor===filtroSetor);
@@ -6554,15 +7603,8 @@ async function relatorioDaCargaUI(cargaId){
      criadoEm     — quando o REGISTRO nasceu
      programadoEm — quando a CARGA foi lançada/programada
      entrada      — quando o CAMINHÃO encostou (esta função) */
-function entradaNoPatioDe(c){
-  if(!c) return null;
-  const ev = primeiroTimestamp(c.id, 'Aguardando Embarque');
-  if(ev) return ev;
-  /* Entrada registrada pela Portaria sem programação: a linha nasce no
-     instante da chegada, então aí — e só aí — criadoEm é a entrada. */
-  if(c.aguardandoCarga) return c.criadoEm || null;
-  return null;
-}
+/* entradaNoPatioDe() mora em data.js desde 09/09/2026 — a Torre, o PDF
+   Executivo e a reconciliação da Portaria usam a mesma definição. */
 
 /* O QUE APARECE QUANDO A LINHA DO HISTÓRICO ABRE.
 
@@ -7722,11 +8764,13 @@ async function exportarPdfExecutivo(){
      — essa lista é cortada em dez para caber na folha, e um indicador que
      empaca em "10" quando há quinze cargas travadas engana justamente no
      dia em que o gestor mais precisa dele. */
+  /* Pela CHEGADA, pela mesma função da lista de Gargalos (data.js). Contar
+     por atualizadoEm imprimia "0 Paradas Além da Meta" com um caminhão
+     parado 17h47 — duas linhas acima da timeline que mostrava a chegada
+     às 06:00. Auditoria de 09/09/2026. */
   const metaPatio = metaTempoPatio();
-  const agoraMs = Date.now();
-  const paradasAlemDaMeta = abertas.filter(c =>
-    (agoraMs - (Date.parse(c.atualizadoEm || c.criadoEm) || agoraMs)) / 60000 > metaPatio
-  ).length;
+  const paradas = paradasAlemDaMeta(abertas);
+  const paradasAlemDaMeta_ = paradas.total;
 
   el.innerHTML = `
     <div class="print-page doc-normal">
@@ -7767,7 +8811,7 @@ async function exportarPdfExecutivo(){
       <div class="print-bloco-tit">1 · O que exige ação agora</div>
 
       <div class="grid4" style="margin-bottom:18px">
-        <div class="stat-box"><div class="stat-num">${paradasAlemDaMeta}</div><div class="stat-label">Paradas Além da Meta</div></div>
+        <div class="stat-box"><div class="stat-num">${paradasAlemDaMeta_}</div><div class="stat-label">Paradas Além da Meta</div></div>
         <div class="stat-box"><div class="stat-num">${aguardandoDados.length}</div><div class="stat-label">Aguardando Dados da Carga</div></div>
         <div class="stat-box"><div class="stat-num">${abertas.length}</div><div class="stat-label">Cargas em Aberto</div></div>
         <div class="stat-box"><div class="stat-num">${fmtDuracao(nHoje?Math.round(somaHoje/nHoje):null)}</div><div class="stat-label">Lead Time Médio (período)</div></div>
@@ -7848,7 +8892,46 @@ function iniciarRelogio(){
 }
 
 /* ---------- INIT ---------- */
+/* OS SELETORES DE SETOR SE MONTAM DA LISTA ÚNICA (02/09/2026).
+
+   As três filiais foram criadas no servidor e em SETOR_PERMISSOES, e não
+   apareceram na tela de Usuários. O dono, tentando cadastrar: "nao apareceu
+   a filial pra cadastrar usuarios (...) precisa ter esse setor pra eu poder
+   cadastrar nao aparece".
+
+   A causa: a lista de setores estava escrita À MÃO no HTML, em TRÊS
+   lugares — o filtro do Histórico, o cadastro de usuário e o login local.
+   Somando `SETORES` (data.js) e `SETORES` (dominio/fluxo.js), eram CINCO
+   cópias da mesma lista. Criar um setor exigia lembrar das cinco, e eu
+   lembrei de duas.
+
+   É a família da ocorrência #14 — "a mesma decisão escrita em dois
+   lugares" —, agora com cinco. A correção é a mesma que valeu lá: uma
+   fonte, e os outros perguntam. Setor novo passa a aparecer nas três telas
+   sozinho.
+
+   O LOGIN LOCAL FICA DE FORA da lista completa de propósito: ele é o modo
+   sem servidor, e filial que entrasse por ali trabalharia isolada — que é
+   exatamente o que a trava de offline existe para impedir. */
+function montarSeletoresDeSetor(){
+  const alvos = [
+    { id: 'usr-setor',          comTodos: false, comFilial: true  },
+    { id: 'hist-filtro-setor',  comTodos: true,  comFilial: true  },
+    { id: 'login-setor',        comTodos: false, comFilial: false },
+  ];
+  alvos.forEach(({ id, comTodos, comFilial }) => {
+    const sel = document.getElementById(id);
+    if(!sel) return;
+    const escolhido = sel.value;
+    const lista = SETORES.filter(s => comFilial || !ehSetorFilial(s));
+    sel.innerHTML = (comTodos ? '<option value="">Todos</option>' : '')
+      + lista.map(s => `<option>${esc(s)}</option>`).join('');
+    if(escolhido && lista.includes(escolhido)) sel.value = escolhido;
+  });
+}
+
 async function init(){
+  montarSeletoresDeSetor();
   // Carrega a base real de Frota antes de desenhar a tela — ver
   // carregarFrotaSeedSeVazia em data.js. Nunca trava o painel se falhar
   // (ex: aberto via file://): segue com Frota vazia, exigindo cadastro/import
@@ -7874,10 +8957,39 @@ async function init(){
   // Conecta ao servidor se houver sessão; caso contrário fica em modo
   // local e o rodapé diz isso. Nunca bloqueia a abertura do painel.
   if(typeof SuincoSharePoint !== 'undefined'){
+    /* A FILA VELHA DOS APARELHOS É DESCARTADA NA ABERTURA (31/08/2026).
+
+       Sem isto, a trava do offline valeria só daqui para frente: o que já
+       está guardado no celular de quem ficou sem rede subiria na próxima
+       conexão e sobrescreveria de novo — que é exatamente o defeito que
+       estamos fechando. Foi assim que o celular do Alysson desfez o que ele
+       tinha acabado de fazer no computador.
+
+       NÃO some calado: lista o que foi descartado, com placa e tipo, para a
+       pessoa refazer o que ainda fizer sentido. */
+    if(typeof SuincoSharePoint.descartarFilaAntiga === 'function'){
+      const jogado = SuincoSharePoint.descartarFilaAntiga();
+      if(jogado && jogado.havia){
+        const linhas = jogado.itens.slice(0, 8).map(i =>
+          `${i.tipo}${i.placa ? ' · ' + i.placa : ''}${i.numeroCarga ? ' · carga ' + i.numeroCarga : ''}`
+        ).join(' | ');
+        notify(`⚠️ ${jogado.havia} alteração(ões) que estavam guardadas NESTE aparelho foram DESCARTADAS. `
+          + `O sistema não grava mais offline — elas subiriam por cima do que os outros setores já fizeram. `
+          + `Refaça se ainda fizer sentido: ${linhas}`, 'danger', 30000);
+      }
+    }
     SuincoSharePoint.aoMudarEstado(atualizarRodapeConexao);
     // Toda leitura das Listas cai aqui: funde no DB e redesenha se algo mudou.
     // É o que faz a Portaria enxergar a carga que a Logística acabou de criar.
     SuincoSharePoint.aoReceberDados(dados => {
+      /* A tabela de frete chega junto do resto (09/09/2026). Antes de
+         fundir as cargas de propósito: se uma carga nova traz um destino,
+         a tela já precisa saber o km dele para exibir. */
+      if(dados.freteTarifas || dados.freteDestinos){
+        receberTabelaDeFrete({tarifas: dados.freteTarifas, destinos: dados.freteDestinos});
+        if(typeof renderTabelaDeFrete === 'function') renderTabelaDeFrete();
+        if(typeof preencherSelectsDestinoFrete === 'function') preencherSelectsDestinoFrete();
+      }
       const r = fundirEstadoRemoto(dados);
 
       /* liberarPendencias() estava escrita desde sempre e NUNCA era chamada
@@ -7904,6 +9016,25 @@ async function init(){
       if(typeof SuincoSharePoint.pendentes === 'function' && SuincoSharePoint.pendentes() === 0){
         liberarPendencias();
       }
+
+      /* VOLTOU A ANDAR DEPOIS DE TER SIDO DEVOLVIDA (29/08/2026).
+
+         Quem devolve uma etapa de propósito precisa saber na hora quando
+         ela volta a andar. Sem isso, o dono corrigia, outro setor desfazia
+         em silêncio, e ele tentava de novo achando que a correção não
+         tinha gravado — o relato do FTZ2138 por inteiro.
+
+         Vem ANTES do renderAll e fora do `if` de contagem: é notícia sobre
+         uma decisão que esta pessoa tomou, não redesenho de tela. Alto e
+         com som, no mesmo padrão da recusa de status. */
+      (r.reandouAposDevolucao || []).forEach(x => {
+        const quem = `${x.devolvida.setor} (${x.devolvida.quem})`;
+        notify(`${x.placa}${x.numeroCarga ? ' · ' + x.numeroCarga : ''}: a carga VOLTOU A ANDAR `
+          + `— de "${x.de}" para "${x.para}". ${quem} tinha devolvido a etapa. `
+          + `Se não era pra andar, devolva de novo pelo Histórico e avise o setor.`,
+          'warn', 14000);
+        tocarBeepConfirmacao();
+      });
 
       if(r.cargasNovas || r.cargasAtualizadas || r.movimentacoesNovas){
         renderAll();
@@ -7967,6 +9098,17 @@ async function init(){
   renderAll();
 }
 document.addEventListener('DOMContentLoaded', init);
+/* AS ABAS EXISTEM PARA O TECLADO (09/09/2026). Eram <div onclick> sem
+   tabindex: o Tab pulava do cabeçalho direto para a tabela, e um gestor de
+   mesa não trocava de aba sem mouse. Enter e Espaço fazem o que o clique
+   faz; o anel de foco é o :focus-visible global. */
+document.addEventListener('keydown', (ev) => {
+  if(ev.key !== 'Enter' && ev.key !== ' ') return;
+  const aba = ev.target && ev.target.closest && ev.target.closest('.nav-tab[data-tab]');
+  if(!aba) return;
+  ev.preventDefault();
+  abrirTab(aba.dataset.tab);
+});
 
 /* =====================================================================
    TEMPO MÉDIO DE PÁTIO, GARGALOS E RELATÓRIOS FILTRADOS
@@ -8013,7 +9155,20 @@ function renderTempoMedioPatio(){
   wrap.innerHTML = `<div class="grid4">
       ${caixa(t, 'Tempo Médio de Pátio — ' + ((ROTULO_PERIODO_IND[periodo] || 'hoje').toLowerCase()), 'Chegada até a saída')}
       ${caixa(geral, 'Tempo Médio de Pátio — histórico', 'Todas as cargas concluídas')}
-    </div>`;
+    </div>${notaDescarteHtml(filtrarPorFiltroIndicadores(DB.cargas.filter(c=>c.status==='Seguiu Viagem')))}`;
+}
+
+/* A NOTA DO QUE FICOU FORA DA CONTA (09/09/2026). Sai do cálculo, fica na
+   tela. Sem isto o gestor não tem como saber que uma média de 3h00 foi
+   calculada com 4 cargas e não 5 — e a quinta é justamente a que alguém
+   precisa corrigir. */
+function notaDescarteHtml(base){
+  const fora = cargasComDataInconsistente(base);
+  if(!fora.length) return '';
+  const nomes = fora.slice(0, 8).map(c => esc(c.numeroCarga || c.placa || c.id)).join(', ')
+    + (fora.length > 8 ? ` e mais ${fora.length - 8}` : '');
+  return `<div class="ind-descarte" title="Etapa fora de ordem ou data impossível — corrija a etapa da carga no Histórico">`
+    + `${fora.length} carga(s) fora da conta por data inconsistente: ${nomes}</div>`;
 }
 
 /* Leitura automática de gargalos. Cada bloco só aparece se tiver conteúdo:
@@ -8025,7 +9180,15 @@ function renderGargalos(){
   // transportadora filtrada lá em cima, os cartões e as tabelas mudavam e
   // esta seção continuava mostrando o pátio inteiro. Duas respostas
   // diferentes na mesma tela, sem nada dizendo que eram bases diferentes.
-  const g = analiseGargalos(filtrarPorFiltroIndicadores(DB.cargas));
+  /* E OBEDECE AO PERÍODO (09/09/2026). O subtítulo do card prometia
+     "leitura do período selecionado acima" e a base era o histórico inteiro:
+     escolher "Últimas 6h" não mudava uma linha. Base = concluídas NO PERÍODO
+     (ou todas, quando o período é "todo o histórico") + as abertas de agora,
+     que são o item acionável da seção. */
+  const periodoG = FILTRO_IND.periodo;
+  const concluidasG = periodoG ? cargasConcluidasNoPeriodo(periodoG)
+                               : DB.cargas.filter(c => c.status === 'Seguiu Viagem');
+  const g = analiseGargalos(filtrarPorFiltroIndicadores(concluidasG.concat(cargasAbertas())));
   const blocos = [];
 
   const tabela = (titulo, explicacao, cabecalhos, linhas) => {
@@ -8098,7 +9261,7 @@ function renderGargalos(){
       <td>${esc(c.numeroCarga)}</td><td><strong>${esc(c.placa)}</strong></td>
       <td>${esc(c.transportadora)}</td>
       <td>${badgeHtml(c.status)}</td>
-      <td class="cel-num">${fmtDuracao(c.paradaHaMin)}</td></tr>`)
+      <td class="cel-num">${c.paradaHaMin === null ? '<span class="text-dim">sem registro de chegada</span>' : fmtDuracao(c.paradaHaMin)}</td></tr>`)
   ));
 
   const conteudo = blocos.filter(Boolean).join('');
@@ -8296,6 +9459,95 @@ async function exportarPdfFretes(){
   await exportarViaServidor(el, 'Administracao-de-Fretes', 'administracao-fretes');
 }
 
+/* QUAIS RELATÓRIOS ESTE SETOR VÊ (09/09/2026).
+
+   A Qualidade ganhou a aba Relatórios — nenhum outro setor de devolução
+   tem — porque o pedido era esse: "ela vai poder exportar relatorios". Mas
+   ele delimitou logo depois: "todos os relatorios que competem ao
+   CHECKLIST".
+
+   Então a aba abre com um card só: o Relatório de Devoluções. Operacional,
+   Executivo e Power BI são de pátio; Administração de Fretes carrega valor
+   de frete, que é de Logística e Administração. Esconder não é a trava —
+   o servidor recusa o valor de qualquer jeito (podeVerValorDeFrete) e
+   nenhum dado de frete chega ao navegador dela. Aqui é só não oferecer o
+   que não é dela, para a tela não virar um menu de coisas que dão erro. */
+function renderEscopoDosRelatorios(){
+  const setor = (DB.operador || {}).setor;
+  const soChecklist = soAcompanhaUI(setor);
+  document.querySelectorAll('#tab-relatorios [data-relatorio]').forEach(card => {
+    card.hidden = soChecklist && card.getAttribute('data-relatorio') !== 'checklist';
+  });
+}
+
+/* ---------- PLANILHA DE ADMINISTRAÇÃO DE FRETES (09/09/2026) ----------
+
+   "Nosso relatório de administração de fretes atualmente sai em PDF; ele
+    precisa ser disponibilizado em formato de planilha para reduzir
+    retrabalho."
+
+   O PDF CONTINUA. Ele não é substituído: serve para arquivar e assinar, e
+   tirar isso seria trocar um problema por outro. O que faltava era o
+   formato em que a Administração TRABALHA — e trabalhar num PDF é
+   redigitar.
+
+   CSV com ponto-e-vírgula e BOM, não .xlsx: é o que o Excel em português
+   abre com duplo clique já em colunas, sem biblioteca nova dentro do
+   painel — e o painel é arquivo único, sem CDN. O BOM não é detalhe: sem
+   ele o Excel pt-BR abre "Ç" como lixo, o que já apareceu em campo.
+
+   NÚMEROS COM VÍRGULA DECIMAL, pelo mesmo motivo: peso e valor precisam
+   chegar como NÚMERO na planilha, senão a Daniela não soma a coluna. */
+async function exportarPlanilhaFretes(){
+  await atualizarDadosAntesDoRelatorio();
+  const dados = dadosPlanilhaDeFretes(cargasDoRelatorio());
+  if(!dados.length){
+    notify('Nenhuma carga no período selecionado — não há o que exportar.', 'warn', 5000);
+    return;
+  }
+  const veValor = podeVerValorDeFreteUI((DB.operador||{}).setor);
+  const num = (v) => (v === null || v === undefined || v === '') ? '' : String(v).replace('.', ',');
+
+  const linhas = dados.map(d => [
+    d.sequencia ?? '',
+    d.numeroCarga,
+    d.faturamento ? dataCurtaLocal(d.faturamento) : '',
+    d.rota,
+    d.praOnde,
+    d.placa,
+    d.transportadora,
+    d.tipoVeiculo,
+    // Peso em toneladas, com vírgula: é como a operação fala e como a
+    // planilha antiga trazia.
+    d.peso ? num((Number(d.peso)/1000).toFixed(1)) : '',
+    d.freteDestino,
+    d.kmDestino ?? '',
+    d.kmDeslocamento ?? '',
+    /* A divergência vira COLUNA, e não só uma cor. Cor não sobrevive ao
+       CSV, e é exatamente esta linha que alguém precisa justificar quando
+       o frete pago não bate com a tabela. */
+    d.kmDivergente ? 'SIM' : '',
+    d.qtdEntregas,
+    d.motorista,
+    // Valor só para quem pode ver. Para os outros a coluna existe e vem
+    // vazia — sumir com ela faria duas versões da mesma planilha andarem
+    // pela empresa com colunas em posições diferentes.
+    veValor ? num(d.freteValor === null ? '' : Number(d.freteValor).toFixed(2)) : '',
+    veValor ? d.freteMotivo : '',
+    d.observacoes,
+    d.freteDocumento,
+  ]);
+
+  baixarCsvDoDia(`Administracao_de_Fretes_${isoDiaLocal(new Date())}`, [
+    'Sequência', 'Nº da Carga', 'Data do Faturamento', 'Rota', 'Tipo de Operação',
+    'Placa', 'Transportadora', 'Tipo de Veículo', 'Peso (t)',
+    'Destino do Frete', 'KM Destino', 'KM Deslocamento', 'KM Divergente',
+    'Entregas', 'Motorista',
+    'Valor do Frete (R$)', 'Observação do Frete', 'Observações',
+    'Documento de Frete',
+  ], linhas);
+}
+
 /* =====================================================================
    MOBILE — tabela vira cartão
    =====================================================================
@@ -8416,6 +9668,8 @@ async function renderUsuarios(){
       <td class="no-print">
         <div class="gap8">
           <button class="btn btn-sec btn-sm" onclick="redefinirSenhaUsuarioUI('${escJs(u.id)}')">🔑 Senha</button>
+          ${sou ? '' : `<button class="btn btn-sec btn-sm" onclick="resetarMfaDeUI('${escJs(u.id)}','${escJs(u.nome)}')"
+              title="Remove o segundo fator de quem perdeu o celular — fica registrado e avisa os outros administradores">📵 2º fator</button>`}
           ${u.ativo
             ? `<button class="btn btn-danger btn-sm" onclick="bloquearUsuarioUI('${escJs(u.id)}', false)" ${sou?'disabled title="Você não pode bloquear a si mesmo"':''}>🚫 Bloquear</button>`
             : `<button class="btn btn-success btn-sm" onclick="bloquearUsuarioUI('${escJs(u.id)}', true)">✅ Reativar</button>`}
@@ -8626,13 +9880,13 @@ function blocoPendentesAntigasPdf(cargas){
       <tbody>${g.pendentesAntigas.map(c=>{
         // Acima da meta ganha marca no texto, e não só na cor: este
         // documento é impresso em preto e branco com frequência.
-        const critica = c.paradaHaMin > g.meta;
+        const critica = c.paradaHaMin !== null && c.paradaHaMin > g.meta;
         return `<tr>
           <td class="id-cel">${esc(c.numeroCarga)}</td>
           <td class="id-cel">${esc(c.placa)}</td>
           <td>${esc(c.transportadora)}</td>
           <td>${esc(c.status)}</td>
-          <td class="num-forte"${critica ? ' style="color:#a3271f"' : ''}>${fmtDuracao(c.paradaHaMin)}${critica ? ' ⚠' : ''}</td>
+          <td class="num-forte"${critica ? ' style="color:#a3271f"' : ''}>${c.paradaHaMin === null ? 'sem registro de chegada' : fmtDuracao(c.paradaHaMin)}${critica ? ' ⚠' : ''}</td>
         </tr>`;
       }).join('')}</tbody>
     </table>` +
@@ -9150,6 +10404,9 @@ function formCargaHtml(c, m){
       </div>
 
       <div class="form-row">
+        ${/* Ver a nota em formMontagemHtml: os dois campos ficam na linha E
+              aqui, porque gravam na MESMA carga pela mesma função — e porque
+              já sumiram daqui uma vez, o que virou guarda de teste. */''}
         <div class="form-group">
           <label>Qtd. Ganchos (Gancheira) <span class="hint">0 = Liso</span></label>
           <input type="number" min="0" step="1" value="${c.qtdGanchos ?? 0}"
@@ -9157,6 +10414,7 @@ function formCargaHtml(c, m){
         <div class="form-group"><label>Qtd. Entregas</label>
           <input type="number" min="1" step="1" value="${c.qtdEntregas ?? 1}"
                  onchange="atualizarEntregasUI('${id}',this.value)"></div>
+
         <div class="form-group">
           <label>Rota <span class="hint">(vem do modelo do dia)</span></label>
           <input type="text" value="${esc(rotaCurta(c.rota))}" disabled
@@ -9261,6 +10519,7 @@ function linhaMontagemHtml(m){
             : `<input type="number" min="0" class="peso-input" value="${m.peso ?? ''}"
                       placeholder="—" aria-label="Peso em quilos"
                       onchange="alterarMontagemUI('${id}','peso',this.value)">`}</td>
+
       <td onclick="event.stopPropagation()">${comoCarga
             ? paletizadaSelectHtml(cargaViva)
             : `<select class="palet-inline" onchange="alterarMontagemUI('${id}','paletizada',this.value)">
@@ -9272,6 +10531,37 @@ function linhaMontagemHtml(m){
                  <option value=""${!m.tipo_operacao ? ' selected' : ''}>—</option>
                  ${PRA_ONDE_OPCOES.map(o=>`<option${m.tipo_operacao===o?' selected':''}>${esc(o)}</option>`).join('')}
                </select>`}</td>
+      ${/* GANCHOS E ENTREGAS NA LINHA — pedido do dono (31/08/2026):
+            "ta faltando o campo de quantidade de entregar e quantidade de
+            ganchos igual na torre, precisa aparecer na programacao do dia"
+            e "precisa aparecer e funcionar".
+
+            O servidor já aceitava os dois no PATCH da montagem e a tabela já
+            tinha `qtd_entregas` e `qtd_ganchos` desde a migração que criou a
+            montagem — faltava só a tela oferecer. Mesma história das quatro
+            colunas de 28/08: o dado tinha onde morar e ninguém tinha onde
+            digitar.
+
+            Como nas outras: virou carga, grava na CARGA (que tem log de
+            revisões); ainda rascunho, grava na montagem. */''}
+      <td class="c-ganchos" onclick="event.stopPropagation()">${comoCarga
+            ? `<input type="number" class="ganchos-input" min="0" step="1"
+                      value="${cargaViva.qtdGanchos ?? 0}" aria-label="Ganchos"
+                      title="Ganchos — 0 = Liso"
+                      onchange="atualizarGanchosUI('${escJs(cargaViva.id)}',this.value)">`
+            : `<input type="number" class="ganchos-input" min="0" step="1"
+                      value="${m.qtd_ganchos ?? 0}" aria-label="Ganchos"
+                      title="Ganchos — 0 = Liso"
+                      onchange="alterarMontagemUI('${id}','qtdGanchos',this.value)">`}</td>
+      <td class="c-entregas" onclick="event.stopPropagation()">${comoCarga
+            ? `<input type="number" class="entregas-input" min="1" step="1"
+                      value="${cargaViva.qtdEntregas ?? 1}" aria-label="Entregas"
+                      title="Quantidade de entregas."
+                      onchange="atualizarEntregasUI('${escJs(cargaViva.id)}',this.value)">`
+            : `<input type="number" class="entregas-input" min="1" step="1"
+                      value="${m.qtd_entregas ?? 1}" aria-label="Entregas"
+                      title="Quantidade de entregas."
+                      onchange="alterarMontagemUI('${id}','qtdEntregas',this.value)">`}</td>
       <td class="no-print">${trancada
             ? acoesMontagemHtml(m, trancada)
             : comoCarga ? acoesCargaNaMontagemHtml(aberta)
@@ -9279,7 +10569,7 @@ function linhaMontagemHtml(m){
     </tr>`;
 
   if(!aberta) return resumo;
-  return resumo + `<tr class="mont-detalhe"><td colspan="9">${
+  return resumo + `<tr class="mont-detalhe"><td colspan="11">${
     comoCarga ? formCargaHtml(cargaViva, m) : formMontagemHtml(m)}</td></tr>`;
 }
 
@@ -9535,6 +10825,19 @@ function formMontagemHtml(m){
           </select></div>
       </div>
 
+      ${/* GANCHOS E ENTREGAS FICAM NOS DOIS LUGARES (31/08/2026).
+
+            Eles subiram para a LINHA a pedido do dono ("precisa aparecer e
+            funcionar"), e eu os tinha tirado daqui seguindo a regra do
+            "mesmo campo em dois lugares". A bateria mostrou que a regra não
+            se aplica: existe uma guarda dizendo "com Qtd. Entregas e Qtd.
+            Ganchos, QUE ERA O QUE SUMIU" — eles já desapareceram daqui uma
+            vez e viraram incidente.
+
+            A regra do não-duplicar existe para campo que grava em lugares
+            DIFERENTES (foi o caso do Tipo de Operação). Aqui os dois gravam
+            na mesma carga, pela mesma função: alterar num reflete no outro
+            no próximo desenho da tela. */''}
       <div class="form-row">
         <div class="form-group">
           <label>Qtd. Ganchos (Gancheira) <span class="hint">0 = Liso</span></label>

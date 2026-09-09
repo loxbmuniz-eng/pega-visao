@@ -82,18 +82,30 @@ async def main():
 
         print('\n=== 1. A ESTEIRA TEM AS DUAS BALANÇAS, NA ORDEM DO PÁTIO ===')
         ordem = await pg.evaluate("() => DEV_ETAPAS.map(e => e.status)")
+        # ORDEM ATUALIZADA EM 08/09/2026. As duas balanças passaram a ser
+        # SEGUIDAS e o OK da Expedição foi para depois delas — pedido do
+        # dono: "o faturamento precisa conseguir dar continuidade antes da
+        # expedicao". O OKzinho da Expedição demora por desenho (28/08),
+        # e estava segurando o caminhão entre descarregar e ir embora.
+        #
+        # O que este teste garante não mudou: as duas idas à balança
+        # existem, são do Faturamento, e são momentos distintos com
+        # assinaturas distintas. Mudou só quem vem depois delas.
         esperado = ['Lançada', 'Recebida na Portaria', 'Conferida no Faturamento',
-                    'Descarga Conferida', 'Peso Final Registrado', 'Destinada']
+                    'Peso Final Registrado', 'Descarga Conferida', 'Destinada']
         ck('as etapas estão na ordem certa', ordem == esperado, str(ordem))
         idx = {s: i for i, s in enumerate(ordem)}
-        ck('a balança de saída fica DEPOIS da Expedição e ANTES dos Controles',
-           idx['Descarga Conferida'] < idx['Peso Final Registrado'] < idx['Destinada'],
+        ck('a balança de saída fica logo DEPOIS da chegada e ANTES da Expedição',
+           idx['Conferida no Faturamento'] < idx['Peso Final Registrado']
+           < idx['Descarga Conferida'] < idx['Destinada'],
            str(idx))
         donos = await pg.evaluate(
             "() => Object.fromEntries(DEV_ETAPAS.map(e => [e.status, e.setores[0]]))")
+        # A chave é o status DE ONDE a etapa sai: a primeira balança sai de
+        # "Recebida na Portaria", a segunda de "Conferida no Faturamento".
         ck('as duas balanças são do Faturamento',
            donos['Recebida na Portaria'] == 'Faturamento'
-           and donos['Descarga Conferida'] == 'Faturamento', str(donos))
+           and donos['Conferida no Faturamento'] == 'Faturamento', str(donos))
 
         print('\n=== 2. O CAMINHÃO ANDA: CHEGA, PESA, DESCARREGA, PESA VAZIO ===')
         await pg.evaluate("() => abrirTab('devolucoes')")
@@ -126,14 +138,15 @@ async def main():
               const et = (para, extra) => SuincoSharePoint.devolucoes.etapa(id, { para, ...extra });
               await et('Recebida na Portaria', { placa: 'AAK8958' });
               await et('Conferida no Faturamento', { pesoEntrada: 21500 });
-              await et('Descarga Conferida', {});
               await carregarDevolucoes();
               const d = DEVOLUCOES.find(x => x.id === id);
               return { status: d.status, entrada: d.pesoEntrada, final: d.pesoFinal,
                        devolvido: d.pesoDevolvido };
             }""", did)
-        ck('depois da descarga o checklist para na balança de saída',
-           passos['status'] == 'Descarga Conferida', str(passos['status']))
+        # ORDEM DE 08/09/2026: depois da chegada o passo seguinte JÁ é a
+        # balança de saída — a Expedição saiu do meio das duas pesagens.
+        ck('depois da chegada o checklist para na balança de saída',
+           passos['status'] == 'Conferida no Faturamento', str(passos['status']))
         ck('o peso da CHEGADA ficou gravado', float(passos['entrada']) == 21500,
            str(passos['entrada']))
         ck('e o peso final ainda não existe — o caminhão nem voltou à balança',
@@ -190,6 +203,9 @@ async def main():
 
         print('\n=== 5. CONTROLES INTERNOS E CENTRAL DE NOTAS: CHECK + RECADO ===')
         ci = await pg.evaluate("""async (id) => {
+              // O OKzinho da Expedição entra AQUI desde 08/09: ele saiu do
+              // meio das balanças e passou para depois delas.
+              await SuincoSharePoint.devolucoes.etapa(id, { para: 'Descarga Conferida' });
               await SuincoSharePoint.devolucoes.etapa(id, {
                 para: 'Destinada', obsControles: 'Separado: 2 cx descarte' });
               await carregarDevolucoes();
@@ -225,8 +241,12 @@ async def main():
               DB.operador.setor = 'Faturamento';
               return minhasEtapasDev().map(e => e.status);
             }""")
+        # A chave é o status DE ONDE cada etapa sai. Com a ordem de
+        # 08/09 a segunda balança passou a sair de "Conferida no
+        # Faturamento" em vez de "Descarga Conferida". A garantia é a
+        # mesma: as DUAS pesagens chamam o Faturamento.
         ck('as duas etapas do Faturamento contam como "sua vez"',
-           sorted(filas) == ['Descarga Conferida', 'Recebida na Portaria'], str(filas))
+           sorted(filas) == ['Conferida no Faturamento', 'Recebida na Portaria'], str(filas))
 
         print('\n=== 7. SEM ERRO DE JAVASCRIPT ===')
         ck('console limpo', not erros, '; '.join(erros[:3]))

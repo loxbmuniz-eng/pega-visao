@@ -35,9 +35,18 @@ RETIRADOS = ['cliente', 'destino']
 
 # A ordem em que a Programação pede os dados. O modal de completar tem que
 # pedir na mesma ordem: é a mesma pessoa, preenchendo a mesma carga.
+# A LISTA MUDOU DE PROPÓSITO EM 09/09/2026 — causa nº 1 das quatro do
+# vermelho, não regressão. Entraram os três campos de frete (destino, KM de
+# referência e KM de deslocamento) nas DUAS telas, entre Peso e Sequência.
+#
+# O teste pegou um buraco real ao reprovar: eles tinham entrado só na
+# Programação. O caminhão que chega sem programação é lançado pelo modal de
+# Completar, e sem os campos lá a carga dele nasceria sem KM — frete a pagar
+# sem quilometragem, achado justo por esta comparação existir.
 ORDEM = [
     'transportadora', 'tipoveiculo', 'numero-carga', 'motorista', 'rota',
-    'praonde', 'peso', 'sequencia', 'paletizada', 'ganchos', 'entregas', 'obs',
+    'praonde', 'peso', 'frete-destino', 'km-destino', 'km-deslocamento',
+    'sequencia', 'paletizada', 'ganchos', 'entregas', 'obs',
 ]
 
 

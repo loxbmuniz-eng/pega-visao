@@ -70,11 +70,15 @@ def ck(nome, ok, detalhe=''):
 
 # A esteira inteira, com o campo de cada etapa preenchido ANTES pelo
 # cabeçalho e o botão da etapa clicado com o campo VAZIO na tela.
+# ORDEM DE 08/09/2026: as duas balanças ficaram seguidas e o OK da
+# Expedição passou para depois delas. A primeira coluna é o status DE ONDE
+# cada etapa sai — o que este teste garante (campo vazio na tela não apaga
+# o que outro setor gravou pelo cabeçalho) não mudou nada.
 ETAPAS = [
     ('Recebida na Portaria',     'faturamento', 'peso_entrada',  '18500', 'pesoEntrada'),
-    ('Descarga Conferida',       'pesofinal',   'peso_final',    '9200',  'pesoFinal'),
-    ('Conferida no Faturamento', 'expedicao',   'obs_expedicao', 'DESCARGA OK - PALETE 3 MOLHADO', 'obsExpedicao'),
-    ('Peso Final Registrado',    'controles',   'obs_controles', 'DESTINO DEFINIDO NA REUNIAO',    'obsControles'),
+    ('Conferida no Faturamento', 'pesofinal',   'peso_final',    '9200',  'pesoFinal'),
+    ('Peso Final Registrado',    'expedicao',   'obs_expedicao', 'DESCARGA OK - PALETE 3 MOLHADO', 'obsExpedicao'),
+    ('Descarga Conferida',       'controles',   'obs_controles', 'DESTINO DEFINIDO NA REUNIAO',    'obsControles'),
     ('Destinada',                'notas',       'obs_notas',     'NOTA CONFERIDA COM O FISCAL',    'obsNotas'),
 ]
 
@@ -118,7 +122,7 @@ async def main():
                      const d = await SuincoSharePoint.devolucoes.criar({
                        dataDev: hoje, rotas: [rota], regiao: 'TESTE-APAGA'});
                      const CAMINHO = ['Lançada','Recebida na Portaria','Conferida no Faturamento',
-                       'Descarga Conferida','Peso Final Registrado','Destinada','Nota Finalizada'];
+                       'Peso Final Registrado','Descarga Conferida','Destinada','Nota Finalizada'];
                      let atual = d.status;
                      while(atual !== status){
                        const prox = CAMINHO[CAMINHO.indexOf(atual)+1];
@@ -171,6 +175,9 @@ async def main():
                    dataDev: hoje, rotas: [rota], regiao: 'TESTE-APAGA'});
                  await SuincoSharePoint.devolucoes.etapa(d.id, {para: 'Recebida na Portaria'});
                  await SuincoSharePoint.devolucoes.etapa(d.id, {para: 'Conferida no Faturamento'});
+                 // A etapa da Expedição agora sai de "Peso Final Registrado":
+                 // desde 08/09 ela vem DEPOIS das duas balanças.
+                 await SuincoSharePoint.devolucoes.etapa(d.id, {para: 'Peso Final Registrado'});
                  return d.id;
                }""", rota[0])
         await pg.evaluate("""async (id) => {

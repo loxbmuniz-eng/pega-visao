@@ -83,6 +83,11 @@ const SuincoSharePoint = (function () {
     token = t;
     operadorLogado = operador;
     try { sessionStorage.setItem(CHAVE_TOKEN, t); } catch (e) { /* modo privado */ }
+    /* A marca vai AQUI, e não no login: `guardarToken` é o ponto único por
+       onde passa todo token de servidor — o do login e o da renovação de
+       sessão. Marcar só no login deixaria de fora quem entrou de manhã e
+       teve a sessão renovada durante o dia. Uma função, dois chamadores. */
+    marcarEntradaPeloServidor();
   }
 
   function limparToken() {
@@ -93,6 +98,64 @@ const SuincoSharePoint = (function () {
 
   function estaConfigurado() {
     return SP_CONFIG.ativo && !!SP_CONFIG.api && !!lerToken();
+  }
+
+  /* SESSÃO PERDIDA NÃO É MODO LOCAL — e tratar as duas igual abriu o buraco
+     em que o Rene da Expedição caiu em 31/08/2026.
+
+     O token mora em sessionStorage: ele MORRE quando a aba fecha. No celular
+     isso não é caso raro, é a rotina — o Android descarta aba em segundo
+     plano o tempo todo, e o 401 de sessão vencida faz o mesmo por outro
+     caminho. `DB.operador` fica no localStorage e sobrevive, então o painel
+     reabre parecendo logado, com estado 'local'.
+
+     E aí, sem token, `estaConfigurado()` responde NÃO e os cinco caminhos de
+     escrita saíam com `{ enfileirado: false }` — sem recusa, sem fila, sem
+     aviso. Medido: carga criada, `cargaFicouNaTela: true`, `filaOffline: 0`,
+     `avisoNaTela: false`. O operador trabalha a tarde inteira gravando só no
+     próprio aparelho.
+
+     É exatamente o que a trava de offline existe para impedir, e ela não
+     pegava este caso: ela cobre "a rede caiu", não "a sessão venceu" — que
+     no pátio é o caso muito mais comum.
+
+     A MARCA VIVE NO localStorage de propósito: precisa sobreviver ao token,
+     senão a pergunta "esta pessoa entrou pelo servidor?" fica sem resposta
+     justamente quando ela mais importa. */
+  const CHAVE_ENTROU_PELO_SERVIDOR = 'suinco_entrou_pelo_servidor';
+
+  function marcarEntradaPeloServidor() {
+    try { localStorage.setItem(CHAVE_ENTROU_PELO_SERVIDOR, '1'); } catch (e) { /* modo privado */ }
+  }
+  function esquecerEntradaPeloServidor() {
+    try { localStorage.removeItem(CHAVE_ENTROU_PELO_SERVIDOR); } catch (e) { /* ignora */ }
+  }
+  /* Entrou pelo servidor alguma vez NESTE aparelho e agora não tem token:
+     a sessão se perdeu. Quem escolheu "Entrar sem servidor" nunca marcou,
+     então o modo local continua funcionando como sempre — ele é uma decisão
+     de quem usa, não um acidente. */
+  function sessaoPerdida() {
+    if (lerToken()) return false;
+    try { return localStorage.getItem(CHAVE_ENTROU_PELO_SERVIDOR) === '1'; }
+    catch (e) { return false; }
+  }
+
+  /* A MESMA DECISÃO, UM LUGAR SÓ.
+
+     Cinco caminhos de escrita — upsert, excluir, gravarFrota, gravarRota e
+     mudarStatus — repetiam `if (!estaConfigurado()) return { enfileirado:
+     false }`. Cinco cópias da mesma resposta, e as cinco erradas para a
+     sessão vencida. É a regra da casa: uma função, dois chamadores. */
+  function semServidor() {
+    if (sessaoPerdida()) {
+      mudarEstado('local');
+      return {
+        enfileirado: false, recusado: true, sessaoExpirada: true,
+        erro: 'SUA SESSÃO EXPIROU — SISTEMA INDISPONÍVEL. ENTRE DE NOVO PARA '
+            + 'CONTINUAR. A alteração NÃO foi gravada.'
+      };
+    }
+    return { enfileirado: false };
   }
 
   /* O endereço da API, para quem precisa falar com ela FORA do `chamar()`
@@ -113,13 +176,78 @@ const SuincoSharePoint = (function () {
     catch (e) { console.warn('[Suinco] fila não coube no armazenamento local'); }
   }
 
+  /* OFFLINE NÃO GRAVA. NADA. (31/08/2026 — decisão do dono.)
+
+     As palavras dele: "se estiver conectado aceita alteração, aceita
+     inclusão, aceita qualquer coisa. Offline não tem conversa não."
+
+     E a razão que ele deu é a certa, e é a regra de sistema distribuído que
+     a maioria erra:
+
+       "a proposta do offline funciona quando você tem operações que são
+        específicas de UM usuário... você bipa 10 notas, essas notas estão
+        com você, ninguém mais vai mexer. Agora as cargas, um monte de
+        gente mexe. Dados compartilhados você não pode tratar assim,
+        porque senão pode dar sobreposição."
+
+     Fila offline serve para dado de DONO ÚNICO. Carga é dado COMPARTILHADO:
+     seis setores mexem na mesma linha ao mesmo tempo. Guardar uma alteração
+     no aparelho e subir meia hora depois significa gravar por cima do que
+     outra pessoa fez nesse meio tempo — sem ninguém saber.
+
+     Foi o que aconteceu duas vezes em três dias:
+
+       · 29/08 — o relatório do Everaldo desfez as correções do Alysson;
+       · 31/08 — o Alysson alterou no computador, o celular entrou depois e
+         "reverteu todas as alterações e restaurou a configuração anterior
+         do telefone".
+
+     A fila era a metade do mecanismo. A outra metade era a trava de versão
+     do servidor, que nunca foi acionada porque o painel não manda a versão
+     que leu — essa vem em seguida, e vale para dois terminais ONLINE ao
+     mesmo tempo. Esta aqui mata a sobreposição do offline.
+
+     Não devolve mais `{enfileirado:true}`: devolve recusa, e quem chamou
+     precisa mostrar. Recusa silenciosa é como se perde dado. */
   function enfileirar(item) {
-    const fila = lerFila();
-    fila.push({ ...item, enfileiradoEm: new Date().toISOString() });
-    gravarFila(fila);
     mudarEstado('offline');
-    return { enfileirado: true };
+    return {
+      enfileirado: false,
+      recusado: true,
+      offline: true,
+      tipo: item && item.tipo,
+      erro: 'VOCÊ ESTÁ OFFLINE — SISTEMA INDISPONÍVEL. CONECTE-SE PARA CONTINUAR. '
+          + 'A alteração NÃO foi gravada.',
+    };
   }
+
+  /* A FILA QUE JÁ ESTAVA NOS APARELHOS É JOGADA FORA — uma vez, na abertura.
+
+     Sem isto a trava valeria só daqui para frente: o que já está guardado no
+     celular de quem ficou offline subiria na próxima conexão e sobrescreveria
+     de novo, que é exatamente o defeito que estamos fechando.
+
+     NÃO some calado. Devolve o que havia para a tela listar, com placa e
+     tipo, para a pessoa refazer o que ainda fizer sentido. Jogar trabalho
+     fora sem dizer o que era é pior que o defeito. */
+  function descartarFilaAntiga() {
+    const fila = lerFila();
+    if (!fila.length) return { havia: 0, itens: [] };
+    const itens = fila.map((f) => ({
+      tipo: f.tipo,
+      placa: (f.corpo && (f.corpo.placa || f.corpo.Placa)) || '',
+      numeroCarga: (f.corpo && (f.corpo.numeroCarga || f.corpo.Numero_Carga)) || '',
+      cargaId: f.cargaId || (f.corpo && f.corpo.cargaId) || '',
+      status: f.status || '',
+      quando: f.enfileiradoEm || '',
+    }));
+    try { localStorage.removeItem(CHAVE_FILA); } catch (e) { /* já era */ }
+    return { havia: fila.length, itens };
+  }
+
+  /* "Online" é o SERVIDOR TER RESPONDIDO, não o ícone do wi-fi estar aceso.
+     É a diferença entre "tenho sinal" e "a gravação chegou". */
+  function estaOnline() { return estadoAtual === 'online'; }
 
   function pendentes() {
     return lerFila().length;
@@ -340,6 +468,9 @@ const SuincoSharePoint = (function () {
     pararSincronia();
     if (socket) { try { socket.disconnect(); } catch (e) { /* ignora */ } socket = null; }
     limparToken();
+    /* Sair é decisão de quem usa, não sessão perdida: o painel não pode
+       ficar recusando escrita depois de alguém sair de propósito. */
+    esquecerEntradaPeloServidor();
   }
 
   function conta() {
@@ -381,8 +512,19 @@ const SuincoSharePoint = (function () {
       lacreRetidoPor: campos.Lacre_Retido_Por || '',
       lacreRetidoEm: campos.Lacre_Retido_Em || null,
       programadoEm: campos.Programado_Em,
+      /* Frete — só o que o painel tem direito de gravar. O valor não sobe:
+         quem calcula é o servidor, contra a tabela (ver dominio/frete.js). */
+      freteDestino: campos.Frete_Destino || '',
+      kmDeslocamento: campos.Km_Deslocamento ?? null,
+      freteDocumento: campos.Frete_Documento || '',
+      // Versão lida pelo terminal — bloqueio otimista (ver data.js, pacote de ida).
+      versao: Number.isFinite(Number(campos.Versao)) ? Number(campos.Versao) : undefined,
       status: campos.Status_Atual,
       aguardandoCarga: campos.Aguardando_Carga === true || campos.Aguardando_Carga === 'Sim',
+      /* Saiu sem carregar — só trouxe devolução (08/09/2026). SÓ NA VOLTA:
+         quem carimba é o servidor, na transição da Portaria. O painel
+         nunca manda este campo, como acontece com Lacre_Retido_Por. */
+      saidaSemCarregar: campos.Saida_Sem_Carregar === true,
     };
   }
 
@@ -411,6 +553,7 @@ const SuincoSharePoint = (function () {
          lia de volta, então a observação vivia só no navegador de quem
          digitou e o relatório saía em branco para todo mundo. */
       Observacoes: c.observacoes,
+      Versao: c.versao,
       /* OS TRÊS PONTOS DE NOVO (20/08/2026). Ao acrescentar o 2º e o 3º
          lacre, este aqui — a VOLTA do servidor — ficou para trás, e o
          efeito foi idêntico ao da observação em 14/08: o painel mandava os
@@ -430,6 +573,21 @@ const SuincoSharePoint = (function () {
       Lacre_Retido_Em: c.lacreRetidoEm || null,
       Status_Atual: c.status,
       Aguardando_Carga: c.aguardandoCarga,
+      Saida_Sem_Carregar: c.saidaSemCarregar === true,
+      /* Frete, na volta. Os calculados (km do destino, valor, tarifa usada,
+         divergência e o motivo de não haver valor) só existem neste sentido
+         — mesmo padrão de Lacre_Retido_Por e Saida_Sem_Carregar.
+
+         `freteValor` chega NULO para quem não pode vê-lo: o servidor apaga
+         antes de enviar (paraPainelPara / emitirCarga), então o valor nem
+         viaja até o navegador do Comercial. */
+      Frete_Destino: c.freteDestino || '',
+      Km_Deslocamento: c.kmDeslocamento ?? null,
+      Frete_Documento: c.freteDocumento || '',
+      Km_Destino: c.kmDestino ?? null,
+      Frete_Valor: c.freteValor ?? null,
+      Frete_Tarifa_Usada: c.freteTarifaUsada ?? null,
+      Frete_Motivo: c.freteMotivo || '',
       Criado_Em: c.criadoEm,
       Programado_Em: c.programadoEm,
       Atualizado_Em: c.atualizadoEm,
@@ -463,7 +621,7 @@ const SuincoSharePoint = (function () {
     if (lista === 'frota') return gravarFrota(campos);
     if (lista === 'rotas') return gravarRota(campos);
     if (lista !== 'cargas') return { enfileirado: false };
-    if (!estaConfigurado()) return { enfileirado: false };
+    if (!estaConfigurado()) return semServidor();
 
     const corpo = deLinhaParaApi(campos);
     try {
@@ -500,7 +658,12 @@ const SuincoSharePoint = (function () {
       if (e.status === 409 || e.status === 422 || e.status === 403) {
         // Recusa legítima do servidor. Enfileirar seria insistir para sempre.
         console.warn('[Suinco] gravação recusada:', e.message);
-        return { enfileirado: false, recusado: true, erro: e.message };
+        return {
+          enfileirado: false, recusado: true, erro: e.message, codigo: e.codigo,
+          // No conflito de versão o servidor manda a carga atual: vai junto,
+          // já no formato de linha, para o painel recarregar em vez de insistir.
+          atual: (e.codigo === 'CONFLITO_DE_VERSAO' && e.dados && e.dados.atual) ? daApiParaLinha(e.dados.atual) : null,
+        };
       }
       if (eFalhaDeRede(e)) return enfileirar({ tipo: 'carga', corpo });
       throw e;
@@ -518,7 +681,7 @@ const SuincoSharePoint = (function () {
      Falha de rede vai, porque a exclusão precisa acontecer mesmo que a rede
      tenha caído no instante do clique. */
   async function excluir(id, motivo, opcoes) {
-    if (!estaConfigurado()) return { enfileirado: false };
+    if (!estaConfigurado()) return semServidor();
     // forcarSeguiuViagem: exclusão de carga já finalizada, só depois que o
     // operador confirmou digitando a placa (excluirCargaSeguiuViagemUI,
     // app.js). Sem isso o servidor recusa com CARGA_JA_SAIU (cargas.js).
@@ -578,7 +741,7 @@ const SuincoSharePoint = (function () {
   }
 
   async function gravarFrota(campos) {
-    if (!estaConfigurado()) return { enfileirado: false };
+    if (!estaConfigurado()) return semServidor();
     try {
       /* Manda TODOS os campos, não só três.
 
@@ -608,7 +771,7 @@ const SuincoSharePoint = (function () {
   }
 
   async function gravarRota(campos) {
-    if (!estaConfigurado()) return { enfileirado: false };
+    if (!estaConfigurado()) return semServidor();
     try {
       await chamar('/api/rotas', {
         metodo: 'POST',
@@ -629,19 +792,102 @@ const SuincoSharePoint = (function () {
   /* Muda o status pela rota que valida a transição no servidor. É por aqui
      que o painel deve mover a carga — e é o que impede alguém com o token de
      marcar "Faturado" num caminhão que nunca chegou. */
-  async function mudarStatus(cargaId, statusNovo) {
-    if (!estaConfigurado()) return { enfileirado: false };
+  /* `extra` carrega a confirmação de transições que o servidor só aceita
+     com o gesto explícito — hoje `{ soDevolucao: true }`, a saída do
+     caminhão que entrou, entregou devolução e foi embora sem carregar
+     (08/09/2026). Sem ele o servidor devolve 422 com a explicação, e é
+     essa explicação que a tela mostra na pergunta ao porteiro. */
+  /* Cadastro da tabela de frete. Espelha gravarRota() — inclusive em NÃO
+     enfileirar: cadastro de tarifa não é operação de pátio, ninguém está
+     esperando o caminhão por causa dela, e uma tabela de preço subindo
+     horas depois pela fila offline poderia sobrescrever um valor que
+     alguém já corrigiu no meio. Sem conexão, avisa e não grava. */
+  /* Quem vê valor de frete, do lado do adaptador.
+
+     Terceira cópia da mesma regra, e é deliberado: o servidor decide
+     (podeVerValorDeFrete), o painel esconde (podeVerValorDeFreteUI) e aqui
+     ela serve só para NÃO GASTAR uma requisição que voltaria 403. As três
+     são comparadas pelo teste testes/test_frete_tabela_e_planilha.py — se
+     divergirem, o teste reprova antes de a divergência chegar na operação. */
+  function podeVerValorDeFreteNoCliente() {
+    const setor = (operadorLogado && operadorLogado.setor) || '';
+    return setor === 'Logística' || setor === 'Administração';
+  }
+
+  /* A tabela sob demanda — para a tela reler depois de gravar um cadastro,
+     sem arrastar uma leitura completa do pátio atrás. */
+  async function tabelaDeFrete() {
+    if (!estaConfigurado()) return null;
+    try {
+      return await chamar('/api/frete/tabela');
+    } catch (e) {
+      if (e.status !== 403) console.warn('[Suinco] tabela de frete:', e.message);
+      return null;
+    }
+  }
+
+  async function gravarTarifaFrete(campos) {
+    if (!estaConfigurado()) return semServidor();
+    try {
+      const r = await chamar('/api/frete/tarifas', { metodo: 'POST', corpo: campos });
+      mudarEstado('online');
+      return { enfileirado: false, item: r };
+    } catch (e) {
+      if (eFalhaDeRede(e)) mudarEstado('offline');
+      return { enfileirado: false, recusado: true, erro: e.message, codigo: e.codigo };
+    }
+  }
+
+  async function gravarDestinoFrete(campos) {
+    if (!estaConfigurado()) return semServidor();
+    try {
+      const r = await chamar('/api/frete/destinos', { metodo: 'POST', corpo: campos });
+      mudarEstado('online');
+      return { enfileirado: false, item: r };
+    } catch (e) {
+      if (eFalhaDeRede(e)) mudarEstado('offline');
+      return { enfileirado: false, recusado: true, erro: e.message, codigo: e.codigo };
+    }
+  }
+
+  async function mudarStatus(cargaId, statusNovo, extra) {
+    if (!estaConfigurado()) return semServidor();
     try {
       const c = await chamar(`/api/cargas/${encodeURIComponent(cargaId)}/status`, {
         metodo: 'POST',
-        corpo: { status: statusNovo },
+        corpo: { status: statusNovo, ...(extra || {}) },
       });
       mudarEstado('online');
       return { enfileirado: false, item: c };
     } catch (e) {
       if (eFalhaDeRede(e)) {
-        return enfileirar({ tipo: 'status', cargaId, status: statusNovo });
+        return enfileirar({ tipo: 'status', cargaId, status: statusNovo, extra: extra || null });
       }
+      return { enfileirado: false, recusado: true, erro: e.message };
+    }
+  }
+
+  /* REORDENAR A FILA DE CARREGAMENTO (08/09/2026).
+
+     Uma chamada só para a fila inteira, e não uma por carga: quinze
+     alterações separadas se cruzam com as de quem mais estiver mexendo, e
+     a fila embaralha. O servidor grava tudo numa transação.
+
+     NÃO ENTRA NA FILA OFFLINE de propósito. A ordem depende de ler a fila
+     inteira no momento da decisão; guardada para subir depois, ela seria
+     aplicada sobre uma fila que já mudou — e o resultado seria uma ordem
+     que ninguém pediu. Sem servidor, a resposta honesta é "não deu". */
+  async function sequenciar(cargaId, posicao) {
+    if (!estaConfigurado()) return semServidor();
+    try {
+      const r = await chamar('/api/cargas/sequenciar', {
+        metodo: 'POST',
+        corpo: { cargaId, posicao: Number(posicao) },
+      });
+      mudarEstado('online');
+      return { enfileirado: false, item: r };
+    } catch (e) {
+      if (eFalhaDeRede(e)) return { enfileirado: false, recusado: true, erro: e.message };
       return { enfileirado: false, recusado: true, erro: e.message };
     }
   }
@@ -708,6 +954,12 @@ const SuincoSharePoint = (function () {
   /* O histórico da programação de um dia — INCLUI as canceladas, que a
      leitura do pátio esconde. Consulta sob demanda, como listarExcluidas:
      controle não é estado vivo do painel. */
+  /* O passado que já não está neste navegador (09/09/2026). Ver a rota
+     /api/historico e JANELA_LOCAL_DIAS em data.js. */
+  async function historico(de, ate) {
+    return chamar('/api/historico?de=' + encodeURIComponent(de) + '&ate=' + encodeURIComponent(ate));
+  }
+
   async function programacaoDoDia(dia) {
     return chamar('/api/programacao-do-dia?dia=' + encodeURIComponent(dia));
   }
@@ -763,8 +1015,12 @@ const SuincoSharePoint = (function () {
             if (e2.status !== 404) throw e2;
           }
         } else if (item.tipo === 'status') {
+          /* `extra` viaja com o item da fila. Sem isto, a saída "só
+             devolução" registrada offline chegaria ao servidor sem a
+             confirmação e voltaria recusada com 422 — o porteiro teria
+             confirmado uma vez, e o caminhão continuaria no pátio. */
           await chamar(`/api/cargas/${encodeURIComponent(item.cargaId)}/status`, {
-            metodo: 'POST', corpo: { status: item.status },
+            metodo: 'POST', corpo: { status: item.status, ...(item.extra || {}) },
           });
         } else if (item.tipo === 'frota') {
           await gravarFrota(item.corpo);
@@ -871,6 +1127,36 @@ const SuincoSharePoint = (function () {
         }));
       } catch (e) {
         console.warn('[Suinco] rotas não carregaram:', e.message);
+      }
+
+      /* A TABELA DE FRETE, NA MESMA CADÊNCIA DAS ROTAS (09/09/2026).
+
+         Pelo mesmo motivo do comentário acima: rota cadastrada durante o dia
+         não aparecia em painel aberto desde antes, e tarifa e destino são a
+         mesma espécie de dado — pequenos, editáveis pela tela, lidos o dia
+         inteiro por painel que ninguém recarrega.
+
+         DUAS ECONOMIAS, as duas aprendidas de um vermelho. Na primeira
+         versão isto eram DUAS chamadas, feitas por TODO terminal, e
+         test_login_api reprovou com 429: o limite de requisições cai para o
+         IP quando a chamada não tem token (login, polling do Socket.IO), e
+         quatro terminais no mesmo IP já vinham perto da borda.
+
+           · uma chamada só (/api/frete/tabela), porque as duas listas são
+             lidas sempre juntas;
+           · e só para quem PODE ver valor de frete. A Portaria, a Expedição,
+             o Faturamento e o Comercial tomavam 403 — duas requisições
+             gastas por ciclo para receber "não pode". Perguntar antes de
+             chamar não é otimização: é não gastar o orçamento de quem está
+             com o caminhão no portão. */
+      if (podeVerValorDeFreteNoCliente()) {
+        try {
+          const t = await chamar('/api/frete/tabela');
+          dados.freteTarifas = (t && t.tarifas) || [];
+          dados.freteDestinos = (t && t.destinos) || [];
+        } catch (e) {
+          if (e.status !== 403) console.warn('[Suinco] tabela de frete não carregou:', e.message);
+        }
       }
     }
 
@@ -1670,12 +1956,13 @@ const SuincoSharePoint = (function () {
     aoDescartarDaFila, aoEditarCarga, aoExcluirCarga, aoAtualizarPresenca,
     aoFecharPrograma,
     login, sair, diagnosticarConexao,
-    push, upsert, excluir, mudarStatus, encerrarProgramacoesAnteriores, reterLacre,
-    recarregarRotas,
+    push, upsert, excluir, mudarStatus, sequenciar, encerrarProgramacoesAnteriores, reterLacre,
+    recarregarRotas, gravarTarifaFrete, gravarDestinoFrete, tabelaDeFrete,
     corrigirEtapa, corrigirDataProgramacao, desfazerExclusao, listarExcluidas,
-    programacaoDoDia, mfa,
+    programacaoDoDia, historico, mfa,
     modeloSemana, montagem,
-    pull, pullTudo, drenarFila, pendentes,
+    pull, pullTudo, drenarFila, pendentes, descartarFilaAntiga, estaOnline,
+    sessaoPerdida,
     listarOperadores, criarOperador, atualizarOperador, excluirOperador,
     sincronizarAgora, iniciarSincroniaPeriodica, pararSincronia, ultimaSincronia,
     renovarSessao, registrarInteracao,

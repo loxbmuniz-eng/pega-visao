@@ -23,6 +23,8 @@ let _devDiaCarregado = null;  // dia que a lista em memória representa
 let _devRotasNovas = [];
 /* Filtro da esteira (clique numa caixa de etapa) — null = todas. */
 let _devFiltroEtapa = null;
+/* O texto digitado na caixa de busca da lista. Vazio = lista inteira. */
+let _devBusca = '';
 
 function devRotulo(d) {
   if (d.tipo === 'SOBRA') return 'SOBRA';
@@ -61,17 +63,23 @@ const DEV_ETAPAS = [
      feitas depois, por eles ou pela Logística: elas nunca travaram o OK, e
      tirá-las apagaria a "falta", que é o que o checklist existe para
      apontar. */
-  { status: 'Conferida no Faturamento', proxima: 'Descarga Conferida',
-    botao: '📦 Descarga conferida (Expedição)', pede: 'expedicao',
-    setores: ['Expedição', 'Logística'] },
-  /* A SEGUNDA IDA À BALANÇA (27/08/2026). O dono: "depois que descarrega
-     o motorista volta pra balança e pesa o peso final com o caminhão
-     vazio". É do Faturamento, como a primeira, mas é outro momento e
-     outra assinatura. */
-  { status: 'Descarga Conferida',       proxima: 'Peso Final Registrado',
+  /* A SEGUNDA IDA À BALANÇA (27/08/2026), AGORA LOGO DEPOIS DA PRIMEIRA
+     (08/09/2026). O dono: "depois que descarrega o motorista volta pra
+     balança e pesa o peso final com o caminhão vazio". É do Faturamento,
+     como a primeira, mas é outro momento e outra assinatura.
+
+     A Expedição SAIU DO MEIO das duas pesagens por pedido do dono: "o
+     faturamento precisa conseguir dar continuidade antes da expedicao".
+     O OKzinho dela demora por desenho (foi criado assim em 28/08, porque
+     eles não conferem na hora) — e um passo que demora não pode ficar
+     entre o caminhão descarregar e o caminhão ir embora. */
+  { status: 'Conferida no Faturamento', proxima: 'Peso Final Registrado',
     botao: '⚖️ Registrar peso final (Faturamento)', pede: 'pesofinal',
     setores: ['Faturamento', 'Logística'] },
-  { status: 'Peso Final Registrado',    proxima: 'Destinada',
+  { status: 'Peso Final Registrado',    proxima: 'Descarga Conferida',
+    botao: '📦 Descarga conferida (Expedição)', pede: 'expedicao',
+    setores: ['Expedição', 'Logística'] },
+  { status: 'Descarga Conferida',       proxima: 'Destinada',
     /* "Destinações" — pedido do dono (26/08/2026): "alterar nome no painel,
        destinações", valendo SÓ para a etapa dos Controles Internos. O nome
        de tela muda; o STATUS gravado ('Destinada') fica: é dado, o servidor
@@ -87,11 +95,76 @@ const DEV_ETAPAS = [
     setores: ['Central de Notas', 'Logística'] },
 ];
 
+/* O ATALHO DA SOBRA MORA FORA DA ESTEIRA — e isso não é organização, é
+   correção de um defeito que eu criei em 08/09/2026.
+
+   A sobra pula a balança final: ela encerra no OK da Expedição e o
+   caminhão nunca volta a pesar. Quando a ordem mudou, ela ficou sem
+   caminho até o próprio fim, e eu resolvi acrescentando mais um item a
+   `DEV_ETAPAS` — com `soSobra: true` para não valer na devolução normal.
+
+   A permissão ficou certa e a esteira ficou errada. `DEV_ETAPAS` não é
+   só uma lista de transições: é A LISTA DAS SETE ETAPAS, e várias telas
+   a percorrem para desenhar a esteira. Com o oitavo item, o painel passou
+   a mostrar "Conferida no Faturamento" DUAS vezes, para todo mundo,
+   inclusive em devolução que não é sobra. Três suítes pegaram na mesma
+   rodada.
+
+   Aqui ele é o que sempre foi: uma exceção de UM tipo, consultada por
+   quem pergunta "qual o próximo passo desta devolução" e invisível para
+   quem desenha a esteira. */
+const DEV_ATALHO_SOBRA = {
+  status: 'Conferida no Faturamento', proxima: 'Descarga Conferida',
+  botao: '📦 Descarga conferida (Expedição)', pede: 'expedicao',
+  setores: ['Expedição', 'Logística'],
+};
+
 const DEV_ETAPA_ROTULO = {
   portaria: 'Portaria', faturamento: 'Balança (entrada)', expedicao: 'Expedição',
   pesofinal: 'Balança (peso final)',
   controles: 'Controles Internos', notas: 'Central de Notas',
 };
+
+/* A ORDEM NA TELA É OUTRA COISA QUE A ORDEM DO TRABALHO (02/09/2026).
+
+   A Bruna marcou num print a sequência que a operação enxerga:
+
+       1 Portaria · 2 Balança (entrada) · 3 Balança (PESO FINAL)
+       4 Expedição · 5 Controles Internos · 6 Central de Notas
+
+   A segunda pesagem vem ANTES da Expedição — e é assim no pátio mesmo: o
+   caminhão descarrega, volta na balança e vai embora; a conferência da
+   Expedição acontece depois, no ritmo deles. Foi por isso que em 28/08 a
+   etapa da Expedição virou só o "OKzinho".
+
+   O QUE NÃO MUDOU: a máquina de estados (DEV_ETAPAS, logo acima). Ninguém
+   ficou travado esperando ninguém — cada setor continua dando o OK quando
+   puder. Decisão do dono ao ser perguntado se era ordem de tela ou ordem
+   de trabalho: começar pela tela, porque mudar o fluxo deixaria as
+   devoluções em andamento com a pesagem final PULADA.
+
+   POR QUE ISTO É UMA LISTA COM NOME, e não a ordem das chaves do objeto
+   acima: agora as duas ordens são DIFERENTES de propósito. Deixar a de
+   tela implícita na declaração é convidar a próxima pessoa a "consertar"
+   uma para bater com a outra, e desfazer o pedido sem perceber. */
+/* EM 08/09/2026 AS DUAS ORDENS VOLTARAM A SER A MESMA — e é por isso que
+   esta lista continua existindo com nome próprio.
+
+   Em 02/09 elas foram separadas: a tela seguia a numeração da Bruna
+   (peso final antes da Expedição) e o trabalho seguia outra, porque
+   mudar o fluxo naquele dia deixaria as devoluções em andamento com a
+   pesagem final pulada. O dono voltou ao assunto depois de rodar o
+   processo com o Faturamento — "o faturamento precisa conseguir dar
+   continuidade antes da expedicao" — e aí o fluxo mudou de verdade, com
+   a migração 045 cuidando das que estavam no meio do caminho.
+
+   Ou seja: a Bruna estava certa desde o começo, e agora o servidor
+   concorda com ela. A lista fica porque a tela pode voltar a divergir do
+   fluxo (é decisão de operação, não consequência de código), e porque
+   apagá-la faria a próxima mudança de ordem mexer na máquina de estados
+   sem ninguém perceber. */
+const DEV_ORDEM_NA_TELA = ['portaria', 'faturamento', 'pesofinal',
+  'expedicao', 'controles', 'notas'];
 
 /* Dia local do pátio — NUNCA toISOString().slice(0,10): às 21h+ de Patos
    de Minas o UTC já virou o dia seguinte (guardião nº 2). */
@@ -111,6 +184,24 @@ function podeEditarDevolucao() {
   return setor === 'Logística' || setor === 'Administração';
 }
 
+/* CRIAR CHECKLIST: matriz E filial (02/09/2026).
+
+   `podeEditarDevolucao` continua sendo "manda em tudo" — é ele que libera
+   editar checklist alheio, excluir e mexer em qualquer campo. A filial não
+   é isso: ela cria o próprio checklist, lança os itens dele e acompanha.
+
+   Duas perguntas diferentes precisavam de duas funções. Reaproveitar
+   `podeEditarDevolucao` para liberar o botão de criar teria dado à filial,
+   de brinde, tudo o mais que ele libera. */
+function podeCriarDevolucao() {
+  return podeEditarDevolucao() || ehSetorFilial((DB.operador || {}).setor);
+}
+
+/* A filial não avança etapa: o ciclo é rodado pela matriz. */
+function podeAvancarEtapaDev() {
+  return !ehSetorFilial((DB.operador || {}).setor);
+}
+
 /* Papéis da fase 2, já valendo para os setores criados em 18/08/2026:
    Expedição confere o que chegou; Controles Internos destina. Cada um
    enxerga editável SÓ a própria coluna — o servidor confere de novo. */
@@ -125,9 +216,20 @@ function podeDestinarDev() {
 /* Alinhamento de 18/08/2026: a pesagem por item é do Faturamento (é a
    confirmação de que passou pela balança) e o tick de NOTA FINAL é da
    Central de Notas. */
+/* O PESO POR PRODUTO NÃO É DO FATURAMENTO (08/09/2026).
+
+   O dono, vendo a tela dele: "tá fazendo a sua linha o peso das
+   quantidades de produtos. Não pode (...) Ele só coloca o peso e pronto
+   acabou." E, confirmando: "nao digita nada por produto, so digita o
+   peso".
+
+   Os dois pesos do Faturamento são os do CAMINHÃO — cheio na chegada,
+   vazio no final — e ficam na capa, nas etapas dele. A coluna do item
+   continua para quem lança o checklist: é dela que sai o "não bate com o
+   lançado" na comparação com a balança. Apagá-la seria repetir a
+   ocorrência #23. */
 function podePesarItemDev() {
-  const setor = (DB.operador || {}).setor;
-  return podeEditarDevolucao() || setor === 'Faturamento';
+  return podeEditarDevolucao();
 }
 /* O Nº DA CARGA DE DEVOLUÇÃO é da PORTARIA (20/08/2026).
 
@@ -280,9 +382,9 @@ function renderDevolucoes() {
   // Criar checklist é da Logística/Administração; os demais setores veem
   // a esteira e a própria fila, sem um formulário que a API recusaria.
   const cardNovo = document.getElementById('dev-card-novo');
-  if (cardNovo) cardNovo.hidden = !podeEditarDevolucao();
+  if (cardNovo) cardNovo.hidden = !podeCriarDevolucao();
   const cardSobra = document.getElementById('dev-card-sobra');
-  if (cardSobra) cardSobra.hidden = !podeEditarDevolucao();
+  if (cardSobra) cardSobra.hidden = !podeCriarDevolucao();
   const sobraData = document.getElementById('sobra-data');
   if (sobraData && !sobraData.value) sobraData.value = diaLocalDev();
 
@@ -304,8 +406,10 @@ function renderDevolucoes() {
      Carga não tem nada a ver com checklist. A lista recarrega quando há
      motivo: a primeira vez, uma troca de dia, uma ação de quem está aqui,
      ou o aviso `devolucao:atualizada` — que tem caminho próprio. */
-  const diaPedido = (document.getElementById('dev-filtro-dia') || {}).value || diaLocalDev();
-  if (_devDiaCarregado !== diaPedido) carregarDevolucoes();
+  // Sem filtro de dia não existe mais "trocou o dia": carrega na primeira
+  // vez e, depois disso, só repinta — quem recarrega de verdade é o botão
+  // Atualizar, uma ação de quem está aqui, ou o aviso do servidor.
+  if (_devDiaCarregado !== 'todos') carregarDevolucoes();
   else renderListaDevolucoes();
 }
 
@@ -346,21 +450,40 @@ async function carregarCadastrosDev() {
   }
 }
 
+/* SEM FILTRO DE DIA (02/09/2026).
+
+   Pedido da Bruna, com as palavras dela: "seria possível remover a opção de
+   filtrar por dados no checklist, de modo que, em vez de filtrarmos, todos
+   os itens apareçam sequenciados na tela? Não precisamos filtrar por dia,
+   pois os demais setores acham complicado ficar filtrando por dia para
+   localizar".
+
+   A causa era esta função: ela pedia `listar(dia, dia)` — UM dia só. Um
+   checklist criado ontem sumia da tela hoje, e quem chegava para dar o OK
+   da própria etapa tinha que adivinhar a data para achar o próprio
+   trabalho. A Expedição e os Controles Internos trabalham exatamente
+   assim: entram depois, às vezes no dia seguinte.
+
+   O servidor NÃO precisou mudar: a rota GET /devolucoes já devolve os
+   últimos 30 dias quando ninguém manda período (ver o `else` do filtro em
+   rotas/devolucoes.js). O painel é que estava estreitando a resposta.
+
+   Trinta dias e não "tudo": lista que cresce para sempre recria a queixa
+   com outra cara, e daí sem filtro para socorrer. Para achar uma devolução
+   antiga existe o Histórico, que é busca — não rolagem. */
 async function carregarDevolucoes() {
   if (!devServidorOk()) return;
-  const dia = (document.getElementById('dev-filtro-dia') || {}).value || diaLocalDev();
   try {
-    DEVOLUCOES = await SuincoSharePoint.devolucoes.listar(dia, dia);
-    _devDiaCarregado = dia;
+    DEVOLUCOES = await SuincoSharePoint.devolucoes.listar();
+    _devDiaCarregado = 'todos';
     renderListaDevolucoes();
   } catch (e) {
     notify('Não consegui buscar as devoluções: ' + (e.message || 'erro desconhecido'), 'danger', 6000);
   }
 }
 
+/* Mantida para não quebrar chamada antiga: hoje ela só recarrega. */
 function filtroDevolucoesHoje() {
-  const f = document.getElementById('dev-filtro-dia');
-  if (f) f.value = diaLocalDev();
   carregarDevolucoes();
 }
 
@@ -459,9 +582,26 @@ function renderListaDevolucoes() {
   };
   let lista = DEVOLUCOES.slice();
   if (_devFiltroEtapa) lista = lista.filter((d) => d.status === _devFiltroEtapa);
+  lista = lista.filter(_devCasaComBusca);
   lista.sort((a, b) => (ehMinhaVezDev(b) - ehMinhaVezDev(a))
     || (posicao(a.status) - posicao(b.status)) || (b.numero - a.numero));
+  /* LISTA VAZIA PRECISA DIZER POR QUÊ.
+
+     O texto era fixo: "Nenhum checklist de devolução neste dia" — e mentia
+     duas vezes depois de 02/09. Não existe mais "neste dia" (o filtro de
+     data saiu), e com a busca ligada a lista fica vazia por um motivo
+     completamente diferente: o que foi digitado não casou com nada. Quem lê
+     "não há checklist" conclui que a devolução não existe, quando ela pode
+     estar ali com outro número. */
   vazio.hidden = lista.length > 0;
+  if (!vazio.hidden) {
+    vazio.textContent = _devBusca
+      ? `Nenhum checklist casa com "${_devBusca}". A busca olha os últimos 30 dias `
+        + '— devolução mais antiga que isso não aparece aqui.'
+      : (_devFiltroEtapa
+        ? `Nenhum checklist parado em "${_devFiltroEtapa}".`
+        : 'Nenhum checklist de devolução nos últimos 30 dias.');
+  }
 
   // Uma única pendência na minha fila: já abre — menos um clique no pátio.
   if (_devExpandida === null) {
@@ -486,7 +626,22 @@ function renderListaDevolucoes() {
         <div class="dev-card-id">
           ${ehMinhaVezDev(d) ? '<span class="dev-chip dev-chip-suavez">SUA VEZ</span>' : ''}
           ${d.tipo === 'SOBRA' ? '<span class="dev-chip dev-chip-sobra">SOBRA</span>' : ''}
-          <strong>Checklist Nº ${d.numero}</strong>
+          ${/* DE QUAL FILIAL VEIO (02/09/2026).
+
+                Pedido do dono: "é importante ter discriminado o que é da
+                filial". O processo é o mesmo — a Portaria recebe, a
+                Balança pesa, a Expedição confere, exatamente como numa
+                devolução da matriz. Mas quem está no pátio precisa
+                RECONHECER de onde veio, e o nome de quem criou fica no
+                rodapé do cartão, em letra pequena, longe do olho.
+
+                A marca mostra o SETOR e não a pessoa: "Filial 106 BAHIA"
+                diz de onde; "criada por Fulano" diz quem, e quem é a
+                pergunta que vem depois. */''}
+          ${ehSetorFilial(d.criadaSetor)
+            ? `<span class="dev-chip dev-chip-filial">${esc(d.criadaSetor.toUpperCase())}</span>` : ''}
+          <strong>Checklist Nº ${d.numero}</strong>${ehSetorFilial(d.criadaSetor)
+            ? ` <span class="dev-chip dev-chip-filial">${esc(d.criadaSetor.toUpperCase())}</span>` : ''}
           <span class="dev-card-rota">${d.tipo === 'SOBRA'
             ? 'Sobras' + (d.criadaPor ? ' / ' + esc(devIniciais(d.criadaPor)) : '')
             : `${d.regiao ? esc(d.regiao) + ' — ' : ''}${(d.rotas || []).map((r) => 'Rota ' + esc(r)).join(' · ') || 'sem rota'}${d.criadaPor ? ' / ' + esc(devIniciais(d.criadaPor)) : ''}`}</span>
@@ -854,7 +1009,7 @@ function carimbosDev(d) {
   // Sobra encerra na Expedição — mostrar Controles/Notas como "pendente"
   // para sempre só confundiria.
   const etapasVisiveis = d.tipo === 'SOBRA'
-    ? ['portaria', 'faturamento', 'expedicao'] : Object.keys(DEV_ETAPA_ROTULO);
+    ? ['portaria', 'faturamento', 'expedicao'] : DEV_ORDEM_NA_TELA;
   return `<div class="dev-carimbos">
     ${etapasVisiveis.map((chave) => [chave, DEV_ETAPA_ROTULO[chave]]).map(([chave, rotulo]) => {
       const c = d.carimbos[chave];
@@ -868,12 +1023,21 @@ function carimbosDev(d) {
   </div>`;
 }
 
+/* Qual passo esta devolução tem pela frente. De "Conferida no
+   Faturamento" saem dois caminhos — a balança final, na devolução
+   normal, e o atalho da sobra — então a resposta depende do tipo. Sem
+   isto a sobra veria o botão da balança, que o servidor recusa. */
+function etapaDeDev(d) {
+  if (d.tipo === 'SOBRA' && d.status === DEV_ATALHO_SOBRA.status) return DEV_ATALHO_SOBRA;
+  return DEV_ETAPAS.find((e) => e.status === d.status) || null;
+}
+
 function acaoEtapaDev(d) {
   /* SOBRA: três OKs e acabou — Portaria, Faturamento, Expedição. */
   if (d.tipo === 'SOBRA' && d.status === 'Descarga Conferida') {
     return '<div class="card-sub">✅ Sobra concluída — entrou, conferida e descarregada.</div>';
   }
-  const etapa = DEV_ETAPAS.find((e) => e.status === d.status);
+  const etapa = etapaDeDev(d);
   if (!etapa) return '<div class="card-sub">✅ Ciclo encerrado — nota fiscal finalizada.</div>';
   /* Espelho da allowlist do servidor: quem não assina este passo vê QUEM
      assina, em vez de um botão que a API recusaria. */
@@ -938,6 +1102,32 @@ function acaoEtapaDev(d) {
     </div>`;
 }
 
+/* AS TRÊS ÚLTIMAS ETAPAS AVANÇAM COM O CHECKLIST VAZIO (31/08/2026).
+
+   O dono, em duas mensagens: "a parte da expedicao e da destinacao precisam
+   ter so o campo para dar o OK: CHECK e um campo para escrever observacoes,
+   que sairao nos relatorios das devolucoes" e "central de notas tambem só
+   dar o ok check tambem e observacoes".
+
+   O QUE ISSO QUER DIZER, e o que NÃO quer.
+
+   Quer dizer: dar o OK da etapa não pode depender de preencher item nenhum.
+   A Expedição fecha a descarga sem conferir caixa por caixa, os Controles
+   Internos destinam depois, a Central de Notas encerra sem tique por item.
+   Cada um ganhou no cabeçalho um campo de observações que vai para a etapa
+   seguinte e sai no relatório — blocoExpedicao, blocoControles, blocoNotas.
+
+   NÃO quer dizer que a conferência sai da tela. Eu li assim na primeira
+   versão desta mudança e apaguei as três colunas de dentro da tabela de
+   itens. Como as colunas passaram a aparecer só quando já havia dado, e o
+   campo de digitar tinha sido apagado junto, o dado nunca podia existir:
+   ninguém mais tinha onde conferir quantidade, destinar caixa ou dar o
+   tique da nota. Subiu para produção e a Bruna viu na primeira abertura —
+   "sumiu a parte da expedição, controles internos e central de notas".
+
+   O código já dizia isso desde 28/08, no comentário da etapa da Expedição:
+   a conferência e a destinação "nunca travaram o OK, e tirá-las apagaria a
+   falta, que é o que o checklist existe para apontar". Ocorrência #23. */
 function renderDevolucaoAberta(d, editavel) {
   const linhaItem = (i) => {
     const faltaHtml = i.falta === null
@@ -1005,31 +1195,63 @@ function renderDevolucaoAberta(d, editavel) {
              title="Pesagem do Faturamento — é a confirmação de que a devolução passou pela balança."
              onchange="editarItemDevolucaoUI('${escJs(d.id)}',${i.itemId},'pesoFaturamento',this.value)">`
         : (i.pesoFaturamento ?? '—')}</td>
+      ${/* ESTAS TRÊS COLUNAS VOLTARAM (31/08/2026, mesmo dia em que saíram).
+
+            Eu as tinha tirado lendo o pedido do dono — "a parte da expedição
+            e da destinação precisam ter só o campo para dar o OK: CHECK e um
+            campo para escrever observações" — como "apague a conferência
+            item a item". Está errado, e o próprio código já dizia isso desde
+            28/08, no comentário da etapa da Expedição: "a conferência de
+            quantidade e a destinação continuam na tela e podem ser feitas
+            depois; elas nunca travaram o OK, e tirá-las apagaria a falta,
+            que é o que o checklist existe para apontar".
+
+            O pedido é sobre o que o OK EXIGE, não sobre o que a tela
+            OFERECE: avançar a etapa não pode depender de preencher item
+            nenhum. Isso continua valendo e tem teste.
+
+            O estrago da leitura errada: as colunas só apareciam se já
+            houvesse dado, e o campo de digitar tinha sido apagado junto —
+            então o dado nunca podia existir. Expedição sem onde conferir,
+            Controles Internos sem onde destinar, Central de Notas sem onde
+            dar o tique. A Bruna viu na primeira abertura: "sumiu a parte da
+            expedição, controles internos e central de notas".
+
+            Sinal que eu tinha na mão e não olhei: podeConferirQtdDev,
+            podeDestinarDev e podeNotaFinalDev ficaram com ZERO chamadores.
+            Permissão sem quem a consulte é tela sem o caminho. */''}
+      ${/* EXPEDIÇÃO: O TIQUE VEM PRIMEIRO, A QUANTIDADE FICA AO LADO
+            (31/08/2026).
+
+            O dono, apontando a coluna na tela: "precisa que expedição,
+            destinação fica igual da central de nota, só colocar um ok".
+
+            O OK é o que a Expedição precisa dar com o caminhão esperando.
+            A quantidade continua sendo oferecida porque a FALTA nasce dela
+            (`cx - qtdRecebida`) — decisão do dono ao ser avisado de que
+            tirá-la apagaria a coluna Falta: quem quiser conferir caixa a
+            caixa aponta a falta, quem não quiser só dá o OK. */''}
+      <td class="dev-cel-ok">${podeConferirQtdDev()
+        ? `<input type="checkbox" id="dev-it-${i.itemId}-okExpedicao" ${i.okExpedicao ? 'checked' : ''}
+             title="OK da Expedição: a descarga deste item foi conferida."
+             onchange="editarItemDevolucaoUI('${escJs(d.id)}',${i.itemId},'okExpedicao',this.checked)">`
+        : (i.okExpedicao ? '✔' : '—')}</td>
       <td class="c-peso">${podeConferirQtdDev()
         ? `<input type="number" min="0" step="1" id="dev-it-${i.itemId}-qtdRecebida"
              value="${i.qtdRecebida ?? ''}" placeholder="—"
-             title="Conferência da Expedição: quantidade que CHEGOU na descarga. A falta é apontada sozinha."
+             title="Opcional: quantidade que CHEGOU na descarga. Só preencha se quiser que a falta seja apontada."
              onchange="editarItemDevolucaoUI('${escJs(d.id)}',${i.itemId},'qtdRecebida',this.value)">`
         : (i.qtdRecebida ?? '—')}</td>
       <td>${faltaHtml}</td>
-      <td class="dev-cel-dest">${podeDestinarDev()
-        /* Destinação MÚLTIPLA (18/08/2026): caixas por destino — 3 caixas
-           podem virar 1 Estoque + 2 Descarte. */
-        ? `<span class="dev-dest-grupo">
-             <input type="number" min="0" step="1" id="dev-it-${i.itemId}-destEstoque"
-               value="${i.destEstoque ?? ''}" placeholder="E"
-               title="Caixas para ESTOQUE"
-               onchange="editarItemDevolucaoUI('${escJs(d.id)}',${i.itemId},'destEstoque',this.value)">
-             <input type="number" min="0" step="1" id="dev-it-${i.itemId}-destDescarte"
-               value="${i.destDescarte ?? ''}" placeholder="D"
-               title="Caixas para DESCARTE"
-               onchange="editarItemDevolucaoUI('${escJs(d.id)}',${i.itemId},'destDescarte',this.value)">
-             <input type="number" min="0" step="1" id="dev-it-${i.itemId}-destReprocesso"
-               value="${i.destReprocesso ?? ''}" placeholder="R"
-               title="Caixas para REPROCESSO"
-               onchange="editarItemDevolucaoUI('${escJs(d.id)}',${i.itemId},'destReprocesso',this.value)">
-           </span>`
-        : esc(devDestinoResumo(i)) || '—'}</td>
+      ${/* DESTINAÇÕES: SÓ O TIQUE. As três caixas por destino (E/D/R)
+            saíram da tela pelo mesmo pedido. As COLUNAS continuam no banco
+            e o que já foi distribuído continua saindo nos relatórios — dado
+            gravado não some porque a tela mudou (ocorrência #23). */''}
+      <td class="dev-cel-ok">${podeDestinarDev()
+        ? `<input type="checkbox" id="dev-it-${i.itemId}-okDestinacao" ${i.okDestinacao ? 'checked' : ''}
+             title="OK dos Controles Internos: a destinação deste item foi resolvida."
+             onchange="editarItemDevolucaoUI('${escJs(d.id)}',${i.itemId},'okDestinacao',this.checked)">`
+        : (i.okDestinacao ? '✔' : (esc(devDestinoResumo(i)) || '—'))}</td>
       <td class="dev-cel-notafinal">${podeNotaFinalDev()
         ? `<input type="checkbox" id="dev-it-${i.itemId}-notaFinal" ${i.notaFinal ? 'checked' : ''}
              title="NOTA FINAL — marque quando a nota deste item estiver finalizada (Central de Notas)."
@@ -1066,7 +1288,10 @@ function renderDevolucaoAberta(d, editavel) {
             onchange="completarMotivoDevUI('${escJs(d.id)}')"
             value="${d.tipo === 'SOBRA' ? '652 — Sobras' : ''}">
           <small class="text-dim dev-motivo-desc" id="dev-ni-${esc(d.id)}-motivodesc">${d.tipo === 'SOBRA' ? '652 — Sobras' : ''}</small></td>
-      <td colspan="5"></td>
+      ${/* Seis colunas no fim: OK Expedição · Qtd. · Falta · Destinações ·
+            Nota final, mais a Pesagem que vem antes. Conferido contra o
+            cabeçalho — colspan que não bate desalinha a linha inteira. */''}
+      <td colspan="6"></td>
       <td class="no-print"><button class="btn btn-sm" onclick="adicionarItemDevolucaoUI('${escJs(d.id)}')"
         title="Acrescentar esta linha ao checklist">➕</button></td>
     </tr>`;
@@ -1108,9 +1333,11 @@ function renderDevolucaoAberta(d, editavel) {
             <th title="Número da carga de devolução gerado pelo porteiro no SIS ATAK — não é o Nº DEV">Nº carga dev</th>
             <th title="Coluna DATA-DEV da capa">Data DEV</th><th>Motivo</th>
             <th title="Pesagem do Faturamento — confirma que passou pela balança">Pesagem</th>
-            <th title="Conferência da descarga: quantidade recebida">Expedição</th><th>Falta</th>
-            <th>Destinações</th>
-            <th title="Tick da Central de Notas: nota finalizada">Nota final</th>
+            <th title="OK da Expedição: descarga conferida">Expedição</th>
+            <th title="Opcional — só para apontar a falta: quantidade recebida">Qtd.</th>
+            <th title="Diferença entre o lançado e o recebido. Só aparece quando a quantidade é preenchida">Falta</th>
+            <th title="OK dos Controles Internos: destinação resolvida">Destinações</th>
+            <th title="Tique da Central de Notas: nota finalizada">Nota final</th>
             ${editavel ? '<th class="no-print"></th>' : ''}
           </tr></thead>
           <tbody>${d.itens.map(linhaItem).join('')}${novaLinha}</tbody>
@@ -1154,6 +1381,42 @@ async function acaoDev(promessa, aviso) {
     await carregarDevolucoes();   // mostra o estado REAL, não o otimista
     return false;
   }
+}
+
+/* BUSCA NA LISTA (02/09/2026).
+
+   Pedido do dono: "pode usar o numero do check list, ai nao precisa ser por
+   data para o operador identificar (...) fica melhor do q criar um
+   historico, pode ser so a lista mesmo".
+
+   Procura em três campos, e o rótulo da caixa diz os três — busca que
+   entende só um formato e ignora calada os outros faz a pessoa concluir
+   que a devolução não existe:
+
+     · Nº do checklist — como a operação se refere a ele entre setores
+     · Nº DEV do item  — como o SIS ATAK o conhece
+     · placa           — como a Portaria o reconhece no pátio
+
+   ONDE ELA PROCURA, e o limite está dito no `title` do campo: nos
+   checklists já carregados, que são os últimos 30 dias. Devolução mais
+   antiga não aparece nem digitando o número certo — para isso o servidor
+   precisaria aprender a buscar por número em qualquer data, e aí é rodada
+   com atualizar.sh. Fica anotado para o dia em que doer. */
+function buscarDevolucoesUI(texto) {
+  _devBusca = String(texto || '').trim().toUpperCase();
+  renderListaDevolucoes();
+}
+
+function _devCasaComBusca(d) {
+  if (!_devBusca) return true;
+  const alvos = [String(d.numero || ''), normalizarPlaca(d.placa || ''),
+    String(d.cargaNumero || '')];
+  (d.itens || []).forEach((i) => {
+    if (i.numDev) alvos.push(String(i.numDev).toUpperCase());
+    if (i.nota) alvos.push(String(i.nota).toUpperCase());
+    if (i.cargaDev) alvos.push(String(i.cargaDev).toUpperCase());
+  });
+  return alvos.some((v) => v && v.toUpperCase().includes(_devBusca));
 }
 
 /* Chips de rota do formulário de novo checklist. */
@@ -1371,7 +1634,13 @@ function editarItemDevolucaoUI(id, itemId, campo, valor) {
     // O cliente puxa o vínculo RCA/supervisor também na linha já gravada
     // (mesma lógica da placa→Frota). A busca é no servidor; o que a base
     // não sabe, não mexe.
-    (async () => {
+    /* DEVOLVE A PROMESSA. Sem o `return`, quem chama não tem como esperar
+       a gravação terminar — duas mudanças seguidas viram duas requisições
+       simultâneas, e a recarga da mais lenta apaga na tela o que a mais
+       rápida já tinha gravado. É a família da ocorrência #16 ("duas
+       escritas em voo, a velha ganha"), e apareceu ao travar os tiques de
+       31/08: o banco ficava com os dois OKs e a tela mostrava um só. */
+    return (async () => {
       const corpoCli = { codCliente: valor };
       const cli = await buscarClienteExatoDev(valor);
       if (cli) {
@@ -1381,9 +1650,8 @@ function editarItemDevolucaoUI(id, itemId, campo, valor) {
       }
       acaoDev(SuincoSharePoint.devolucoes.editarItem(id, itemId, corpoCli));
     })();
-    return;
   } else corpo = { [campo]: valor };
-  acaoDev(SuincoSharePoint.devolucoes.editarItem(id, itemId, corpo));
+  return acaoDev(SuincoSharePoint.devolucoes.editarItem(id, itemId, corpo));
 }
 
 function adicionarItemDevolucaoUI(id) {
@@ -1610,7 +1878,14 @@ async function comprovantePortariaUI(id) {
     <div class="print-page doc-normal">
       ${cabecalhoDocumento({
         titulo: 'Comprovante de Devolução — Portaria',
-        subtitulo: `Checklist Nº ${d.numero} · ${esc(devRotulo(d))} / ${esc(devIniciais(d.criadaPor))}`,
+        /* A ORIGEM VAI NO PAPEL, e vem primeiro (02/09/2026).
+
+           O dono: "essa informacao é importante, o processo é o mesmo, mas
+           por ser filial tem que ter essa identificacao". O documento é o
+           que anda com o caminhão e o que alguém confere semanas depois —
+           marca que só existe na tela não sobrevive à impressão. */
+        subtitulo: `${ehSetorFilial(d.criadaSetor) ? esc(d.criadaSetor.toUpperCase()) + ' · ' : ''}`
+          + `Checklist Nº ${d.numero} · ${esc(devRotulo(d))} / ${esc(devIniciais(d.criadaPor))}`,
       })}
       <div class="dev-comprovante">
         ${linha('Nº DA CARGA', d.cargaNumero)}
@@ -1671,8 +1946,8 @@ async function relatorioDevolucoesUI(diaParam) {
     <div class="dev-doc-checklist">
       ${tituloSecaoPdf(
         d.tipo === 'SOBRA'
-          ? `Checklist Nº ${d.numero} — SOBRA · ${esc(d.status)}`
-          : `Checklist Nº ${d.numero} — ${d.regiao ? esc(d.regiao) + ' · ' : ''}Rota(s) ${esc((d.rotas || []).join(', ') || '—')} · ${esc(d.status)}`,
+          ? `${ehSetorFilial(d.criadaSetor) ? esc(d.criadaSetor.toUpperCase()) + ' · ' : ''}Checklist Nº ${d.numero} — SOBRA · ${esc(d.status)}`
+          : `${ehSetorFilial(d.criadaSetor) ? esc(d.criadaSetor.toUpperCase()) + ' · ' : ''}Checklist Nº ${d.numero} — ${d.regiao ? esc(d.regiao) + ' · ' : ''}Rota(s) ${esc((d.rotas || []).join(', ') || '—')} · ${esc(d.status)}`,
         `Gerado por <strong>${esc(d.criadaPor)}</strong>`
         + `${d.regiao ? ' · Região ' + esc(d.regiao) : ''}`
         + `${d.transportadora ? ' · Transportadora ' + esc(d.transportadora) : ''}`
@@ -1696,7 +1971,13 @@ async function relatorioDevolucoesUI(diaParam) {
           <th>Supervisor</th><th title="Vendedor">RCA</th><th>Cliente</th>
           <th>CX</th><th title="Peso em QUILOS (kg)">Peso (kg)</th><th>Produto</th><th>Nº DEV</th>
           ${temCargaDev(d) ? '<th title="Carga de devolução do SIS ATAK">Nº carga dev</th>' : ''}<th>Data DEV</th><th>Motivo</th>
-          <th title="Pesagem do Faturamento, em QUILOS (kg)">Pesagem (kg)</th><th>Expedição</th><th>Falta</th><th>Destinações</th><th>Nota final</th>
+          ${/* O relatório mostra o OK e a quantidade SEPARADOS, como a tela.
+                Juntar os dois numa coluna só ("OK" ou o número) esconderia a
+                diferença entre "conferi e estava tudo certo" e "nem conferi"
+                — e é essa diferença que o checklist existe para registrar. */''}
+          <th title="Pesagem do Faturamento, em QUILOS (kg)">Pesagem (kg)</th>
+          <th title="OK da Expedição">Expedição</th><th title="Quantidade recebida, quando conferida">Qtd.</th>
+          <th>Falta</th><th title="OK dos Controles Internos">Destinações</th><th>Nota final</th>
         </tr></thead>
         <tbody>${d.itens.map((i) => `<tr${i.falta > 0 ? ' class="dev-doc-falta"' : ''}>
             <td>${esc(i.nota)}</td>
@@ -1711,9 +1992,12 @@ async function relatorioDevolucoesUI(diaParam) {
             <td>${i.dataItem ? esc(String(i.dataItem).slice(0, 10).split('-').reverse().join('/')) : '—'}</td>
             <td>${esc(i.motivo)}</td>
             <td class="c-peso">${i.pesoFaturamento !== null ? i.pesoFaturamento.toLocaleString('pt-BR') : '—'}</td>
+            <td>${i.okExpedicao ? '✔' : '—'}</td>
             <td class="c-peso">${i.qtdRecebida ?? '—'}</td>
             <td class="c-peso">${i.falta === null ? '—' : (i.falta > 0 ? 'FALTA ' + i.falta.toLocaleString('pt-BR') : 'OK')}</td>
-            <td>${esc(devDestinoResumo(i)) || '—'}</td>
+            ${/* O que já foi distribuído em caixas continua saindo, ao lado
+                  do tique: dado gravado não some porque a tela mudou. */''}
+            <td>${i.okDestinacao ? '✔' : '—'}${(() => { const r = devDestinoResumo(i); return r ? ' <small>' + esc(r) + '</small>' : ''; })()}</td>
             <td>${i.notaFinal ? '✔' : '—'}</td>
           </tr>`).join('')}</tbody>
         ${/* Somatório no pé da tabela, no padrão do Relatório Operacional
@@ -1736,7 +2020,9 @@ async function relatorioDevolucoesUI(diaParam) {
           ? `<div class="dev-doc-diverg"><strong>Lacre:</strong> chegou lacrado${d.lacre1 ? ' — nº ' + esc(d.lacre1) : ''}${d.lacre2 ? ' e ' + esc(d.lacre2) : ''}.</div>`
           : '')}
       <div class="dev-doc-carimbos">
-        ${Object.entries(DEV_ETAPA_ROTULO).map(([chave, rotulo]) => {
+        ${/* O relatório segue a MESMA ordem da tela: quem confere o papel na
+              mão é a mesma pessoa que olhou o painel. */''}
+        ${DEV_ORDEM_NA_TELA.map((chave) => [chave, DEV_ETAPA_ROTULO[chave]]).map(([chave, rotulo]) => {
           const c = d.carimbos[chave];
           return `<span class="dev-doc-carimbo">${rotulo}: ${c ? esc(c.por) + ' ' + esc(fmtDataHora(c.em)) : '—'}</span>`;
         }).join('')}
@@ -2052,6 +2338,11 @@ function somatorioItensDev(itens, colspanAntes, comCargaDev) {
       ${/* Produto, Nº DEV, [Nº carga dev], Data DEV e Motivo não somam. */''}
       <td colspan="${comCargaDev ? 5 : 4}"></td>
       <td class="tot-num">${pesagem ? fmt(pesagem, 2) + ' kg' : ''}</td>
+      ${/* O tique da Expedição não soma — é sim/não, não é quantidade.
+            A célula vazia existe para o rodapé continuar alinhado com o
+            cabeçalho: Pesagem · OK Expedição · Qtd. · Falta · Destinações ·
+            Nota final. Contado a partir do cabeçalho, não de cabeça. */''}
+      <td></td>
       <td class="tot-num">${recebidas ? fmt(recebidas, 0) : ''}</td>
       <td class="tot-num">${falta ? 'FALTA ' + fmt(falta, 0) : ''}</td>
       <td colspan="2"></td>

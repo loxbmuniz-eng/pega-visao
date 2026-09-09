@@ -1,0 +1,59 @@
+# =====================================================================
+# O CLAUDE ATENDE QUANDO CHAMADO — "@claude" em issue ou pull request
+# ---------------------------------------------------------------------
+# Escreva "@claude ..." num comentário de issue ou de PR e ele responde ali
+# mesmo: investiga, explica, e quando for o caso implementa e empurra o
+# commit no próprio PR.
+#
+# O QUE ELE JÁ SABE ao acordar aqui: o CLAUDE.md da raiz (as regras da casa,
+# o fluxo, o que nunca fazer) e o docs/REGISTRO_DE_OCORRENCIAS.md. Ele NÃO
+# tem a memória das conversas do chat — a memória compartilhada são os
+# arquivos do repositório. É por isso que eles precisam ficar em dia.
+#
+# QUEM PODE CHAMAR: só quem tem acesso de escrita no repositório. Bot não
+# dispara — é o que impede dois robôs conversando em laço.
+# =====================================================================
+name: Claude
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+  pull_request_review:
+    types: [submitted]
+  issues:
+    types: [opened]
+
+jobs:
+  claude:
+    # Filtro aqui para o runner nem subir em comentário que não chama o
+    # Claude. A própria action confere a frase de novo antes de responder.
+    if: |
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude')) ||
+      (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')))
+    runs-on: ubuntu-latest
+    # Teto de tempo: trabalho que não acaba em 30 min é trabalho que
+    # entendeu o pedido errado — melhor parar e alguém ler.
+    timeout-minutes: 30
+
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      id-token: write        # exigido pela autenticação do app do Claude
+      actions: read          # deixa ele LER o resultado do CI no PR
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # --max-turns segura a conta: sem teto, um pedido mal formulado
+          # vira dezenas de rodadas antes de alguém perceber.
+          claude_args: '--max-turns 25'

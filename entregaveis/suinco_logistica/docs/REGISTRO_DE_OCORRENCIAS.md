@@ -28,12 +28,811 @@ faz achar a próxima em minutos em vez de horas:
 | **Rótulo que mente** | O dado está certo no banco; o nome dado a ele na tela descreve outra coisa. | #04, #12 |
 | **Regra larga demais** | Trava criada para um caso real barra também o caso legítimo mais comum. | #05 |
 | **Trava sem o par na tela** | O servidor passa a exigir algo novo e a tela continua com o botão antigo: quem clica só descobre que não pode, e não tem por onde seguir. | #13 |
-| **A mesma decisão escrita em dois lugares** | A regra é copiada em vez de consultada. As cópias divergem e o comportamento fica errado sem que nenhuma linha esteja errada. | #14 |
+| **A mesma decisão escrita em dois lugares** | A regra é copiada em vez de consultada. As cópias divergem e o comportamento fica errado sem que nenhuma linha esteja errada. | #14, #26 |
 | **Duas escritas em voo, a velha ganha** | O painel manda a carga INTEIRA a cada alteração. Duas alterações seguidas viram duas requisições simultâneas, e a primeira carrega o valor velho do campo que ainda ia mudar. | #16 |
+| **A correção que outro setor desfaz sem saber** | Um setor corrige de propósito o que outro fez. A tela do segundo continua mostrando o estado como se nada tivesse sido decidido, e o gesto normal dele desfaz a correção — em silêncio, dos dois lados. | #21 |
 | **A proteção escrita para um posto só** | A regra certa existe, com comentário e tudo — mas vale para um caminho e não para os irmãos dele. Não é cópia divergente: é a cópia que nunca foi escrita. | #20 |
 | **A tela não oferece o que o servidor aceita** | A rota grava o campo, mas a coluna correspondente é texto. Quem precisa registrar o dado escreve no primeiro campo que aceita digitação — e ele vai parar onde ninguém procura. | #19 |
 | **Dois filtros para a mesma tela** | Duas filtragens paralelas sobre os mesmos dados. Uma move os números, a outra move os gráficos, e nada avisa que discordam. | #18 |
-| **Teste que mede o proxy, não a regra** | O teste confere um sintoma fácil de medir ("a aba aparece?", "quantas linhas?") em vez da garantia real. Quando o sintoma muda por um motivo legítimo, ele fica vermelho sem que nada tenha quebrado — e some do radar. | #15 |
+| **O teste que carimba a leitura errada do pedido** | O teste está novo e verde, e mede exatamente o que foi escrito — só que o pedido foi entendido ao contrário. Verde prova que o código faz o que o teste diz, não que a regra está certa. Mudança que REMOVE algo da tela precisa do teste que garante que o trabalho de quem usava aquilo ainda é possível. | #23 |
+| **Dois fatos com prazos diferentes tratados como um só** | Cada dado está certo no seu lugar; o defeito nasce de perguntar a um deles algo que só o outro sabe (`DB.operador` no localStorage vive para sempre; o token no sessionStorage morre com a aba). Reconhece-se assim: o mesmo relato volta com roupa nova depois de cada correção. Corrigir no nível do sintoma nunca fecha. | #25 |
+| **Teste que mede o proxy, não a regra** | O teste confere um sintoma fácil de medir ("a aba aparece?", "quantas linhas?") em vez da garantia real, ou monta um cenário que deixou de corresponder ao sistema. Quando o sintoma muda por um motivo legítimo, ele fica vermelho sem que nada tenha quebrado — e aponta para o lugar errado. | #15, #22 |
+
+---
+
+## #34 — Arrastar na Torre, sem repetir a #27 (09/09/2026)
+
+**Pedido do dono:** "quero conseguir arrastar a ordem do sequenciamento de
+carga na torre de controle". Perguntado se o campo de número deveria virar
+posição (A) ou continuar livre (B): *"a e b, se mudar o numero reordena se
+arrastar reordena, os 2 precisam funcionar, mantendo a logica e a sequencia"*.
+
+**Por que isso exigia cuidado.** De manhã, a #27: a Torre e a Fila
+compartilhavam `atualizarSequenciaUI`, mandei todo inteiro para a cascata, e
+a Torre parou de guardar o número digitado — o defeito de 14/08 de volta.
+Fazer os dois caminhos reordenarem na Torre é justamente reabrir aquela
+porta, se for feito do mesmo jeito.
+
+**A diferença que resolve.** Na #27 quem decidia era a TELA (Torre × Fila) e
+a pessoa não tinha como saber qual comportamento ia acontecer. Aqui quem
+decide é o **STATUS DA LINHA**, que está visível: a alça só aparece onde
+arrastar funciona, e o `title` do campo diz qual é a regra daquela linha.
+
+    ainda vai carregar  → digitar = posição, cascata no servidor
+                          (mesmo caminho do arrastar: uma conta só)
+                          arrasto com alça
+    já carregou         → o número é registro: guarda o valor, carimba para
+                          subir, e NÃO reordena ninguém · sem alça
+
+`definirSequenciaTorreUI` só delega — `definirPosicaoNaFilaUI` para a fila,
+`atualizarSequenciaUI` para o registro. Nenhuma conta nova, nenhuma rota
+nova: o servidor já fazia a cascata desde 08/09.
+
+**A guarda.** `testes/test_torre_arrasta_sequencia.py` — quem ainda carrega
+tem alça e arrasta; quem já carregou não tem e não arrasta; digitar 9 numa
+carga carregada guarda 9, carimba e não mexe em ninguém; sem servidor a fila
+não anda sozinha. Reprovava contra o publicado.
+
+**A correção do meu próprio teste, no meio do caminho.** Uma checagem lia o
+carimbo DENTRO de `definirSequenciaTorreUI` — mas ela delega, e o carimbo
+mora na função de destino. Era a causa nº 2 das quatro (o teste mede um
+atalho que mudou de forma), não regressão: a checagem de comportamento
+logo abaixo, com carga de verdade, já provava o carimbo.
+
+---
+
+## #33 — O painel ia encher o navegador sozinho, e podar sem buscar seria perder acesso (09/09/2026)
+
+**Não é defeito relatado: é defeito medido antes de acontecer.** A auditoria
+de arquitetura mediu, em Chromium: o painel nunca esquecia carga concluída.
+
+    300 cargas    → Indicadores 468 ms
+    1.500 cargas  → 5.073 ms A CADA SINCRONIA (6–8 semanas de operação)
+    5.000 cargas  → 10.927 ms, e o localStorage estoura a cota (9,4 MB)
+                    com o save() falhando SÓ NO CONSOLE
+
+O `catch` do `save()` era `console.error` e nada mais: a cópia local pararia
+de atualizar sem ninguém perceber, e depois de um F5 voltaria uma versão
+velha até a primeira leitura terminar.
+
+**A conversa que definiu a correção.** Proposta a poda, o dono respondeu
+*"nao da pra ter acesso a tudo no navegador"* e, em seguida, *"pode ser de
+30 dias mas se eu quiser buscar mais ele vai aparecer né?"*. É a regra da
+casa dita por ele: podar sem caminho de volta não é economia, é perda de
+acesso.
+
+**Correção.** `JANELA_LOCAL_DIAS = 30`. `podarLocal()` roda na fusão e tira
+da memória a carga **concluída** cuja saída passou da janela, com as
+movimentações dela — nunca carga aberta, nunca carga com gravação em voo
+(`_pendente`/`_statusPendentes`). O servidor ganhou
+`GET /api/historico?de=&ate=` (concluídas do período + linha do tempo, teto
+de 90 dias por consulta, filial barrada, leitura registrada em
+`log_leitura`). Na tela, `garantirPeriodoNoPainel()` — uma função, três
+chamadores (Histórico, Indicadores, Relatórios): pediu período anterior à
+janela, busca e funde **em memória**, marcado `_doServidor`. Com isso
+nenhum cálculo mudou — Raio-X, Gargalos, comparação por período e o PDF
+passaram a enxergar o passado sem saber de onde ele veio.
+
+**Os dois vazamentos que o teste pegou.** (1) O que vem do servidor não
+pode ser gravado nem reenviado: `save()` filtra e `sincronizarCargasAlteradas`
+ignora `_doServidor`. (2) Faltava filtrar `_sincronizado` — a MARCA de
+sincronização guarda id de carga, e sozinha ela traria de volta o
+crescimento que a poda fecha. O teste reprovou exatamente nisso antes da
+segunda correção.
+
+**A guarda.** `testes/test_poda_com_acesso_a_tudo.py` — a de 60 dias sai, a
+de 10 fica, a aberta de 90 nunca sai, sem servidor a tela DIZ que só tem 30
+dias, e com servidor a carga antiga volta com a linha do tempo, sem ser
+gravada nem reenviada.
+
+**A lição.** Toda economia de memória precisa vir com o caminho de volta, e
+o caminho de volta precisa ser *silencioso quando funciona e explícito
+quando não funciona*. Mostrar 30 dias calado para quem pediu 90 seria a
+família "número errado com cara de certo" — pior que a lentidão que a poda
+resolve.
+
+---
+
+## #32 — A carga dizia "Rodosousa", a Frota dizia "Denia" (09/09/2026)
+
+**Relato do dono (fotos):** carga 118675, placa JJB8946 — a Torre mostrava
+"Rodosousa / Truck"; o cadastro da Frota, "Denia Transportes / Truck".
+
+**A causa.** A transportadora da carga é uma CÓPIA feita quando a placa
+entra (`atualizarPlacaUI`, criação) e o campo continua editável à mão na
+expansão ("da Frota — dá para trocar"). Depois disso as duas podem
+divergir por dois caminhos, ambos silenciosos: alguém troca à mão na carga
+(sem nota no Histórico — a trilha por gatilho guarda, mas ninguém lê ali),
+ou a placa muda de transportadora na Frota (`POST /frota`, `ON CONFLICT DO
+UPDATE`) sem propagar às cargas abertas e sem registrar no log. E nenhuma
+tela mostrava a diferença: a Torre e a Fila mostram a cópia; o Cadastro
+mostra a Frota. Duas fontes da verdade, cada uma certa sozinha. As notas da
+base dizem que 85 placas mudaram de transportadora em 2 anos — é rotina.
+
+**Decisão do dono: opção A.** Quando a placa muda de transportadora na
+Frota, as cargas ABERTAS daquela placa acompanham, com log; as concluídas
+ficam como registro; trocar à mão na carga continua permitido, mas marcado
+e registrado.
+
+**Correção.** `POST /frota` numa transação: grava a Frota, atualiza a
+transportadora das cargas da placa que ainda não saíram, escreve uma nota
+no Histórico por carga e uma da troca em si (mesmo sem carga aberta), emite
+`carga:atualizada`; regravar a mesma transportadora não escreve nada.
+`PATCH /cargas/:id` que troca a transportadora escreve a nota "trocada à
+mão: de → para (Frota: X)". Na tela, `marcaTransportadoraHtml`: quando a
+carga ≠ Frota, o marcador "≠ Frota: X" na Torre e na Fila, com um clique
+"usar a da Frota". `gravarNota` (só log_eventos) é uma função exportada de
+cargas.js e usada por cadastros.js.
+
+**As guardas.** `api.test.js` bloco 41 (aberta acompanha, concluída fica,
+log da troca, eco não escreve, troca à mão registrada com o que a Frota
+diz) e `testes/test_transportadora_divergente.py` (marcador na Fila e na
+Torre; clique alinha; carga alinhada sem marcador). Ambos reprovando antes.
+
+**A lição.** Cópia de cadastro dentro do registro da viagem é decisão
+legítima (a viagem pode ter transportadora própria) — mas cópia sem
+marcador e sem rastro vira duas verdades. Quem copia precisa (1) mostrar
+quando divergiu, (2) registrar quem divergiu, e (3) decidir com o dono o
+que acontece quando a origem muda.
+
+---
+
+## #30 — A carga programada ontem sem veículo "sumia" da Fila (09/09/2026)
+
+**Relato do dono:** "A carga criada ontem, mas não contratada na programação
+de ontem (...) ela some da programação. Ela começou a ser montada, mas a
+placa não foi contratada, então vai sumir da programação. Isso não pode
+acontecer." E, em seguida: "seria bom conseguir acessar a fila de
+programados de cada dia."
+
+**Reproduzido em modo local:** a carga estava GRAVADA — servidor,
+observações digitadas, tudo — e aparecia na Torre em "Programação
+anterior". A Fila de Programados listava só o dia de hoje (`doDia`, decisão
+de 28/08 para a fila "ter a cara da Torre") e transformava as outras numa
+linha: "veja na Torre de Controle". Para quem programa — que trabalha na
+Fila — isso é sumir.
+
+**Correção.** A Fila ganhou o dia (`◀ [data] ▶ Hoje`, padrão hoje; a mesma
+linha editável e o mesmo arrasto, que o servidor já sequencia por dia) e um
+bloco fixo abaixo, "Ainda sem veículo — programadas em dias anteriores",
+que aparece independente do dia escolhido, com a data de cada carga,
+editável (placa e número — dá para contratar ali), sem arrasto (a sequência
+é do dia de cada uma). A linha da fila virou UMA função (`linhaFilaHtml`)
+usada pelas duas listas. Nada mudou no servidor: o dado sempre esteve lá.
+
+**A guarda.** `testes/test_fila_por_dia.py` — 7 checagens reprovando contra
+o painel publicado.
+
+**A lição.** "Está salvo" e "está onde a pessoa trabalha" são coisas
+diferentes. Um aviso apontando para outra aba não substitui a linha no
+lugar certo — quem programa não vai procurar na Torre o que sumiu da Fila.
+
+---
+
+## #31 — Trava de versão nunca acionada, reentrada com duas réguas, painel que congela (09/09/2026)
+
+**Onde apareceu:** auditoria de arquitetura pedida pelo dono. Três altos,
+todos medidos ou reproduzidos:
+
+1. **O servidor tinha bloqueio otimista por `versao` e o painel nunca a
+   mandava** — nos três pontos de sincronia (ida, volta, conversão) o campo
+   não existia. Dois terminais online editando a mesma carga era "o último
+   grava por cima", sem aviso: a Expedição põe 33 ganchos, a Logística com
+   cópia de 20 s atrás altera o peso, e o PATCH dela leva ganchos = 0.
+   Família da #16, entre terminais diferentes.
+2. **A regra de reentrada estava escrita duas vezes, diferente.** O servidor
+   compara com o dia de programação da carga que CHEGA; a tela comparava com
+   HOJE no relógio do aparelho — e nem chamava o servidor. Duas cargas
+   programadas ontem à noite para hoje (rotina, #07): a tela barrava a
+   segunda entrada num caso em que o servidor aceitaria. A #06 de volta.
+3. **O painel nunca esquecia carga concluída e redesenhava
+   O(cargas × movimentações)** — `historicoDaCarga` filtrava e ordenava tudo
+   a cada chamada, 5× por carga por render. Medido aqui: 1.500 cargas,
+   **11,3 s** para desenhar Indicadores (o agente mediu 5,1 s; a base
+   embaralhada piora). Ia chegar sozinho em ~6 semanas.
+
+**Correções.** `Versao` nos três pontos; o PATCH leva a versão lida; 409
+`CONFLITO_DE_VERSAO` recarrega a carga com o que está no servidor e avisa
+("confira e refaça"); a versão nova volta da resposta e substitui a local
+(sem isso a PRÓXIMA edição do mesmo terminal levaria 409). Reentrada: a
+régua da tela passa a ser o dia da carga que chega, como no servidor.
+Índice `cargaId → movimentações` reconstruído quando a lista muda, com
+invalidação explícita no caminho da sincronia (splice + push mantém o
+tamanho — o índice não perceberia). No mesmo lote, os médios de esforço P:
+"hoje" do Modelo/Montagem em São Paulo e não em UTC; sessão revogada cai
+do socket (mesma conferência do HTTP, e o bloqueio derruba as conexões);
+`|| null` apagando capacidade zero na ida da Frota; o botão de reset de 2º
+fator que tinha rota e função mas não tinha onde clicar.
+
+**As guardas.** `testes/test_trava_de_versao.py` (PATCH leva versão; cópia
+velha é recusada, recarregada e avisada; nada gravado por cima; com a
+versão certa grava), `testes/test_reentrada_mesma_programacao.py`,
+`testes/test_indicadores_nao_travam.py` (1.500 cargas: 11.368 ms → abaixo
+de 2.500 ms), `api.test.js` bloco 40 (socket recusa sessão revogada;
+`hojeISO` é o dia de São Paulo). Todas reprovando contra o publicado.
+
+**A lição.** Uma proteção que existe só de um lado não protege: a trava de
+versão estava no servidor havia semanas e nunca foi acionada porque o
+painel não mandava o campo. E a regra que precisa existir nos dois lados
+(a tela avisa sem esperar a rede) tem que ser a MESMA regra, com o mesmo
+dia de referência — senão a tela nega o que o servidor permitiria.
+
+---
+
+## #29 — O Relatório Executivo dizia "0 paradas" com um caminhão parado 17h47 (09/09/2026)
+
+**Onde apareceu:** na auditoria de fidelidade dos indicadores pedida pelo
+dono — 17 KPIs lidos da tela real e conferidos contra o SQL no mesmo
+instante. A aritmética acertou ao minuto em todos. O que mentia era a
+**guarda de entrada** e o **rótulo de recorte**. Cinco achados altos, todos
+reproduzidos em cenário controlado:
+
+    Parada há 17h47min  →  (uma observação escrita)  →  Parada há 0 min
+    PDF Executivo: "0 Paradas Além da Meta" duas linhas acima de "Aguardando Embarque 06:00"
+    Tempo Médio de Pátio — histórico: −243.504 min (a conta certa: 3h00min)
+
+**As causas.**
+1. `pendentesAntigas.paradaHaMin` (data.js) e `paradasAlemDaMeta` (PDF, app.js)
+   contavam por `atualizadoEm` — a hora da GRAVAÇÃO. Abrir o painel regrava
+   as cargas (eco de sincronização: 12 de 12 regravadas 6 s depois de abrir),
+   então o indicador lia zero justamente com o painel em uso. É a **#08** de
+   novo: a correção (`acao_em`, migração 026) nunca alcançou esses dois
+   pontos, e `entradaNoPatioDe()` — a definição certa — morava em `app.js`,
+   onde `data.js` não alcança.
+2. `minutosEntre` não tinha guarda de sinal; uma chegada carimbada em 2029
+   virava −243.504 min e entrava em toda média, sem contagem à parte. O "%
+   acima da meta" até *melhorava*, porque a carga impossível inflava o
+   denominador.
+3. `renderComparacaoPeriodos` chamava `indicadoresPorPeriodo(p.key)` sem o
+   filtro — a nota "só este recorte" era falsa para a maior tabela da aba
+   (família da **#18**).
+4. `renderGargalos` usava `DB.cargas` inteiro sob um subtítulo que prometia
+   "o período selecionado acima".
+5. Evento no futuro entrava nos cartões e sumia das tabelas de período —
+   a mesma tela dizia "5 cargas" num bloco e "sem dados" no outro.
+
+**Correções.** `entradaNoPatioDe` movida para `data.js` (uma definição para
+Torre, PDF e reconciliação da Portaria); `minutosNoPatioAgora(c)` e
+`paradasAlemDaMeta(cargas)` — uma função, dois chamadores; `minutosEntre`
+devolve null para duração negativa; `dataDeEventoPlausivel` + `carimbosDaCarga`
++ `cargasComDataInconsistente` — o que sai da conta **fica na tela** ("N
+carga(s) fora da conta por data inconsistente: …"); `indicadoresPorPeriodo`
+recebe o filtro; Gargalos = concluídas no período + abertas de agora;
+"sem registro de chegada" no lugar de zero. No mesmo lote, dois achados de
+UX da mesma auditoria: as 11 abas ganharam `role="tab"`/`tabindex`/Enter
+(teclado não as alcançava) e o `--gold-text` do tema claro subiu de 4,33:1
+para 4,83:1 na página e 6,79:1 no card.
+
+**A guarda.** `testes/test_indicadores_dizem_a_verdade.py` — 19 checagens,
+13 reprovando contra o build publicado (paradaHaMin=0 com 17h47; média
+−303.876; tabela idêntica com filtro; VELHA LTDA nos gargalos de "Semana";
+abas sem role; dourado 3,98 na página).
+
+**A lição.** Número errado com cara de certo é pior que número nenhum. A
+correção de um defeito (#08) precisa procurar TODOS os lugares que faziam
+a mesma conta errada — e a conta certa precisa morar onde todo mundo
+alcança. E: o que sai de uma média tem que aparecer na tela como
+"fora da conta", com o número da carga; esconder o descarte é trocar um
+número errado por um número sem explicação.
+
+---
+
+## #28 — A filial enxergava o pátio inteiro por fora da tela (09/09/2026)
+
+**Onde apareceu:** na auditoria de segurança pedida pelo dono para o
+refinamento geral — não na operação. Com o crachá de `filial@teste.local`,
+rota por rota:
+
+    GET /api/estado                          200 — 12 cargas, cliente, destino, motorista, placa
+    GET /api/montagem                        200
+    GET /api/modelo-semana                   200
+    GET /api/programacoes                    200
+    GET /api/devolucoes-cadastros/clientes-csv   200 — 77.099 linhas, sem registro
+
+A regra do dono (02/09/2026) é literal: filial "so vai ter acesso a aba
+devolucoes e escopo de devolucoes (...) as permissoes da filial sao restritas
+a isso". O painel escondia os botões; o servidor entregava tudo a quem
+pedisse pelo endereço.
+
+**A causa.** As rotas de LEITURA nasceram para os cinco setores operacionais,
+todas com `exigirLogin` e nada mais — um comentário em `dominio/documentos.js`
+até registra que "GET /estado devolve o pátio inteiro a todo mundo, e isso é
+FEATURE". Era, para cinco setores. As filiais entraram em 02/09 como exceção,
+e a exceção chegou às rotas de devolução (IDOR, listagem, etapa — tudo
+correto, conferido ao vivo) mas nunca às rotas de leitura geral. Família da
+#26: um setor novo precisa entrar em N lugares, e um deles ficou de fora.
+
+**Correção.**
+- `recusarFilial` (middleware, `auth.js`) em `/montagem`, `/modelo-semana` e
+  `/programacoes` — 403 com explicação.
+- `/estado` para filial devolve a **mesma forma** com o pátio vazio e
+  `escopo: 'devolucoes'`. Não é 403 de propósito: o painel chama essa rota
+  no sincronismo de todo setor, e um 403 viraria faixa de "recusado" na tela
+  da filial a cada poucos segundos.
+- `clientes-csv` passa a ser `exigirSetor('Logística')` e registra a
+  exportação em `log_leitura` (tipo `clientes-csv`). A busca por nome com
+  teto de 30 continua aberta — é o que o checklist precisa.
+- `/frota` e `/rotas` continuam abertas à filial: placa e rota são campos
+  do checklist.
+- No mesmo lote: `jwt.verify` com `algorithms:['HS256']` nos três lugares
+  (o script `token_de_login.mjs` reprovava HS512 → 200) e o Chromium do PDF
+  com rede bloqueada (`pagina.route('**/*', abort)`) — o relatório é
+  autossuficiente e o `networkidle` esperava por qualquer endereço que o
+  HTML pedisse.
+
+**A guarda.** `api.test.js` bloco 39 — oito casos, seis reprovando antes da
+correção (o pátio vazio para filial, os três 403, o CSV com registro, o
+HS512 recusado) e dois que travam o que NÃO pode mudar (Logística segue vendo
+tudo; filial segue lendo frota e rotas).
+
+**A lição.** Esconder botão não é permissão. Toda regra de "quem vê o quê"
+tem que existir no servidor, e o teste tem que bater no endereço, não na
+tela. A #26 ensinou que setor novo entra em N lugares; esta ensina que um
+desses lugares é a lista de rotas de LEITURA, que ninguém lembra porque
+"todo mundo pode ler".
+
+---
+
+## #27 — A Torre parou de guardar a sequência digitada (08/09/2026)
+
+**Onde apareceu:** no portão, não na operação. `test_edicao_marca_alterada`
+reprovou, foi rodado sozinho com banco limpo, reprovou de novo — vermelho de
+verdade, não contaminação. A publicação foi **cancelada pelo próprio portão**;
+nada disso chegou a subir.
+
+    [FALHA] a sequência mudou na tela de quem editou — {'seq': 1, 'ganchos': 33}
+    [FALHA] a SEQUÊNCIA chegou ao outro terminal — esperado 7, veio 1
+    [FALHA] a sequência continua 7 depois do sincronismo — {'seq': 1, ...}
+
+**A causa.** `atualizarSequenciaUI` tinha **dois chamadores querendo coisas
+diferentes**, e a implementação do sequenciamento novo só enxergou um:
+
+| Tela | Título do campo | O que significa |
+|---|---|---|
+| Torre de Controle (`app.js:3038`) | "Sequência livre." | o número que o programador escreve — 7 vale 7, mesmo numa lista de 2 |
+| Fila de Programados (`app.js:3437`) | "Digite a posição..." | posição na fila — o servidor renumera de 1 a N e as outras descem |
+
+Todo inteiro foi roteado para `moverNaFilaUI()`. Na Torre, digitar 7 numa
+fila de 1 carga virava "posição 7 não existe" → o servidor recusava (com
+aviso na tela, isso funcionou) e a sequência ficava no valor antigo. Ou
+seja: **o defeito de 14/08 de volta** — *"já alterei três vezes e ela não se
+mantém na torre de controle"*.
+
+**Correção.** Separar as duas perguntas: a Fila passou a chamar
+`definirPosicaoNaFilaUI()`, e `atualizarSequenciaUI()` voltou a ser só o
+editor de número livre da Torre, com o carimbo `atualizadoEm` intacto.
+
+**A guarda.** Em `testes/test_fila_reordena_em_cascata.py`, duas checagens
+novas que reprovam contra a versão quebrada (conferido no `git show`):
+`a Torre NÃO passa pela fila` e `a Torre continua carimbando a carga como
+alterada`. `test_edicao_marca_alterada` continua sendo a rede de baixo.
+
+**A lição, que é o inverso da #14.** "Uma função, dois chamadores" existe
+para impedir que a MESMA decisão seja copiada em dois lugares. Aqui foram
+duas decisões DIFERENTES forçadas na mesma função porque compartilhavam o
+nome do campo. Antes de unificar, a pergunta não é "é o mesmo campo?" — é
+"é a mesma pergunta?". Neste caso o próprio `title=` das duas telas já
+respondia que não.
+
+---
+
+## #26 — "Setor inválido" no cadastro do usuário de filial (02/09/2026)
+
+**Relato, do dono, tentando criar o usuário da filial depois de a entrega
+estar publicada:**
+
+    "nao apareceu a filial pra cadastrar usuarios"
+    "precisa ter esse setor pra eu poder cadastrar nao aparece"
+    "ta dando setor invaldio ainda"
+
+Três tentativas, três recusas — e a terceira **depois** de eu ter dito que
+estava corrigido. É a parte que mais importa aqui: a primeira correção
+resolveu o que eu tinha olhado, e eu afirmei "resolvido" sem ter feito o
+cadastro passar do início ao fim uma única vez.
+
+**A causa.** A lista de setores estava escrita em **seis lugares**:
+
+| # | Onde | Tinha as filiais? |
+|---|---|---|
+| 1 | `backend/src/dominio/fluxo.js` | sim (entrei nele) |
+| 2 | `backend/src/config.js` | **não** ← a recusa saía daqui |
+| 3 | `data.js` (`SETOR_PERMISSOES`) | sim |
+| 4 | `index_suinco.html`, cadastro de usuário | não (à mão) |
+| 5 | `index_suinco.html`, filtro do Histórico | não (à mão) |
+| 6 | `index_suinco.html`, login local | não (à mão) |
+
+Mais a `CHECK` da tabela `operadores`, no banco.
+
+A primeira correção fechou 4, 5 e 6 — os `<select>` passaram a ser montados
+por código a partir de `data.js`. O setor apareceu na tela, o banco aceitava
+(migração 043), e `POST /api/operadores` continuou recusando: ele valida
+contra `SETORES` de **`config.js`**, que é um arquivo cujo assunto é `.env`
+— host, senha, limite de requisição — e que ninguém pensa em abrir quando o
+assunto é permissão de setor.
+
+**O que eu fiz de errado, e não é o esquecimento.** No commit da primeira
+correção eu escrevi, com todas as letras: *"eram CINCO cópias da mesma
+lista. Criar um setor exigia lembrar das cinco, e eu lembrei de duas."*
+Nomeei o risco e mesmo assim não fui procurar a sexta — e entreguei sem
+executar o cadastro de ponta a ponta. A recusa que o dono levou é a que um
+único `POST` teria mostrado.
+
+**A correção.**
+
+- `dominio/fluxo.js` passa a ser a **única** lista do servidor, com os onze
+  setores e os comentários de cada um;
+- `config.js` virou `export { SETORES } from './dominio/fluxo.js'` — quem já
+  importava de lá não muda nada, e a cópia deixou de existir;
+- restam duas listas — servidor e painel — porque o painel é build de
+  arquivo único e não importa do backend. As duas ficaram travadas uma na
+  outra por teste.
+
+**O teste que trava.** Dois, e nenhum deles pergunta "a lista bate?":
+
+1. `backend/testes/api.test.js` → *"todo setor oferecido aceita cadastro e
+   login"*. Percorre `SETORES` e, para cada setor, **cria o operador pela
+   mesma rota que a tela usa e faz ele entrar**. É o percurso inteiro: rota
+   → validação → `CHECK` do banco → login. Contra o código com a lista velha
+   ele reprova com a frase exata do relato: `setor "Filial 105 BSB" recusado
+   no cadastro: {"erro":"Setor inválido..."}`.
+2. `testes/test_setor_novo_aparece_nas_telas.py`, bloco 6 → a lista do
+   painel tem que ser **idêntica** à do servidor, lida de `fluxo.js`.
+
+Setor acrescentado em um lugar só reprova antes de chegar em quem cadastra.
+
+**A lição, que é diferente da de #14.** Em #14 a lição foi "uma fonte, os
+outros perguntam". Aqui a fonte foi criada e ainda assim quebrou, porque a
+sexta cópia estava num arquivo cujo nome não tem nada a ver com o assunto.
+O que fecha esse tipo de furo não é lembrar melhor: é o teste percorrer a
+lista inteira pelo caminho de verdade. Enquanto o teste conferia se o setor
+**aparecia na tela**, ele mediu o proxy — e o proxy estava verde enquanto o
+dono levava "Setor inválido" na cara.
+
+---
+
+## #25 — CAUSA RAIZ: "já entrou uma vez" tratado como "está conectado agora" (31/08/2026)
+
+**Esta ocorrência é a mãe das #24, e das quatro correções de emergência do
+dia.** As outras descrevem sintomas; esta descreve por que eles existiam.
+
+**Relato final, o que fez o dono parar tudo.** No meio da operação: *"acabei
+de abrir aqui o painel e zerou tudo (...) zerou a programação que estava em
+andamento, a torre de controle"*. E, logo em seguida, o dado que resolveu:
+*"no celular tá aparecendo"*.
+
+Essa segunda frase é o que provou que nada tinha se perdido. O celular tinha
+sessão e lia do servidor; o desktop não tinha, e mostrava a cópia local —
+vazia.
+
+**A causa, em uma linha** (`app.js`, o revelar do painel):
+
+```js
+if(DB.operador && document.body.classList.contains('pre-login')){
+  revelarPainel();
+}
+```
+
+Dois fatos diferentes, guardados em lugares com PRAZOS diferentes, tratados
+como um só:
+
+| o que | onde mora | quanto dura |
+|---|---|---|
+| `DB.operador` (nome, setor, e-mail) | `localStorage` | para sempre |
+| o token (a sessão de verdade) | `sessionStorage` | morre quando a aba fecha |
+
+Quem entrou uma vez ficava "logado" para sempre aos olhos da tela. E no
+celular a aba morre sozinha o tempo todo: o Android descarta aba em segundo
+plano, e o 401 de sessão vencida chega ao mesmo lugar por outro caminho.
+
+**A cascata que isso produziu, toda em 31/08:**
+
+1. o painel revelava a tela de trabalho INTEIRA sem sessão nenhuma;
+2. sem sessão ele não lê o servidor → Torre e programação mostravam a cópia
+   local, ZERO num navegador limpo. O "zerou tudo";
+3. nada do que se digitasse subia — e até a manhã daquele dia, calado
+   (ocorrência #24);
+4. não havia login na tela para sair do estado, porque aos olhos do painel a
+   pessoa já estava logada;
+5. e a faixa de offline que eu tinha acabado de criar ficava no topo, por
+   cima da única saída — engolindo o toque no formulário.
+
+**O erro de método, meu, e é o que interessa para a próxima vez.** Corrigi
+os cinco itens acima um por um, ao longo do dia, cada um com teste. Todas as
+correções estavam certas. Nenhuma era suficiente: enquanto a decisão de
+revelar o painel olhasse um dado que sobrevive à sessão, o defeito voltava
+com outra cara. Voltou quatro vezes, cada uma delas com a operação parada.
+
+Quando o mesmo relato reaparece com roupa diferente no mesmo dia, o que está
+errado não é a correção — é o nível em que ela foi feita.
+
+**Correção.** `temSessaoParaOPainel()`: uma pergunta só, "esta pessoa pode
+ver a tela de trabalho AGORA?". Quem entrou pelo servidor precisa de token;
+quem escolheu "Entrar sem servidor" não tem e-mail e não depende de nenhum —
+é decisão de quem usa, não acidente. Sem sessão, o painel não revela nada:
+pede o login.
+
+**E um achado que veio junto, medido ao travar o teste.** No celular
+deitado (740x360), que é como o pátio segura o aparelho:
+
+```
+tela 360px · o bloco da marca ocupava 161px — 45% da tela
+caixa do login: 91px visíveis, precisando de 296
+botão "Entrar" em 388–440 → FORA DA TELA
+```
+
+O botão existia e era inalcançável. Abaixo de 480px de altura a marca sai e
+a caixa usa a tela inteira: entre mostrar o logotipo e conseguir entrar,
+entrar ganha.
+
+**Testes que travam.** `testes/test_sem_sessao_nao_mostra_painel.py` (sem
+sessão o painel não aparece; a Torre não fica visível zerada por trás; modo
+local continua entrando; e QUEM TEM SESSÃO ENTRA NORMAL — a trava não pode
+barrar quem está certo) e `testes/test_faixa_no_rodape_e_login_abre.py`, que
+passou a exigir o botão DENTRO da tela, não só existindo.
+
+**Família.** Nova, e é a mais cara da lista: **dois fatos com prazos
+diferentes tratados como um só**. Não é cópia divergente (#14) nem proteção
+escrita para um posto só (#20): os dois dados estão certos, cada um no seu
+lugar, e o defeito nasce de perguntar a um deles uma coisa que só o outro
+sabe. O sinal de reconhecimento é o relato voltar com roupa nova depois de
+cada correção.
+
+---
+
+## #24 — Sessão vencida gravava no vácuo, e a tela dizia "offline" (31/08/2026)
+
+**Relato.** Print do celular do Rene da Expedição, mandado pelo dono. Na
+tela: a faixa vermelha "VOCÊ ESTÁ OFFLINE — SISTEMA INDISPONÍVEL", os botões
+"Iniciar Embarque" e "Finalizar Embarque", a carga 118495 da placa MMJ9E91 —
+e, no alto do aparelho, o indicador de **5G**. Ele não estava offline.
+
+No rodapé, em letra pequena, o texto que denunciava o que era de verdade:
+*"Sem conexão com o servidor — entre de novo para voltar a compartilhar"*.
+Esse é o texto do estado `local`. A sessão dele tinha vencido.
+
+**Causa.** O token mora em `sessionStorage` — morre quando a aba fecha. No
+celular isso não é caso raro: o Android descarta aba em segundo plano o
+tempo todo, e o 401 de sessão vencida chega ao mesmo lugar por outro
+caminho. `DB.operador` fica no `localStorage` e sobrevive, então o painel
+reabre parecendo logado, no estado `local`.
+
+Sem token, `estaConfigurado()` responde não — e os CINCO caminhos de
+escrita (`upsert`, `excluir`, `gravarFrota`, `gravarRota`, `mudarStatus`)
+saíam com a mesma linha copiada cinco vezes: `return { enfileirado: false }`.
+Sem recusa, sem fila, sem aviso.
+
+Medido antes de mexer:
+
+```
+configurado: False        estado: local
+respostaDoUpsert: {'enfileirado': False}    <- nenhuma recusa
+cargaFicouNaTela: True    cargasDepois: 1
+filaOffline: 0            avisoNaTela: False
+```
+
+Carga criada, guardada só no aparelho, nada enviado, nada enfileirado, nada
+dito. O operador trabalha a tarde inteira gravando no vácuo.
+
+**Por que a trava de offline não pegou.** Ela foi escrita para "a rede
+caiu" e olhava o resultado da chamada de rede. "A sessão venceu" nunca chega
+a fazer chamada nenhuma — sai antes, na guarda. E no pátio a sessão vencida
+é o caso MUITO mais comum, porque o telefone fica com a aba aberta o dia
+inteiro. A trava cobria o caso raro e deixava passar o frequente.
+
+É o mesmo mecanismo do incidente do Alysson em 31/08 pela manhã ("alterei no
+computador e ao acessar pelo celular o sistema reverteu todas as
+alterações"): um aparelho com cópia local que ninguém sabia que estava
+isolado.
+
+**Correção.**
+
+- `semServidor()` em `suinco-api.js`: uma função para a decisão que estava
+  copiada em cinco lugares. Com a sessão perdida ela devolve
+  `{recusado:true, sessaoExpirada:true}` com o texto certo; em modo local
+  de propósito devolve o `{enfileirado:false}` de sempre.
+- `sessaoPerdida()` = entrou pelo servidor neste aparelho E não tem token.
+  A marca vive no `localStorage` porque precisa sobreviver ao token — é
+  justamente quando o token some que a pergunta importa. Marcada dentro de
+  `guardarToken` (ponto único do login E da renovação), apagada em `sair()`,
+  porque sair é decisão de quem usa e não pode virar bloqueio.
+- A faixa passa a dizer **SUA SESSÃO EXPIROU**, com a frase que faltava: *"o
+  aparelho tem internet; foi o acesso que venceu"*.
+- E ganha o botão **"Entrar de novo"** dentro dela, alvo de toque de 44px.
+  O caminho de volta existia só numa linha pequena no rodapé. Botão que só
+  nega não ensina o caminho.
+
+**Teste que trava.** `testes/test_sessao_vencida.py`: a recusa acontece e
+diz que foi a sessão; a fila continua vazia; a faixa não diz "offline" e
+afirma que há internet; o botão existe, tem 44px e ABRE o login; e o modo
+local escolhido de propósito continua funcionando — decisão de quem usa não
+pode ser confundida com acidente.
+
+**Família.** *Trava sem o par na tela* (#13), invertida: aqui a trava
+existia e estava certa, mas cobria um caminho e não o irmão dele — a mesma
+assinatura de #20, "a proteção escrita para um posto só". Cinco cópias da
+mesma linha de guarda são cinco lugares onde a regra nova precisa ser
+lembrada, e a memória falha. Vira uma função.
+
+---
+
+## #23 — Expedição, Controles Internos e Central de Notas sumiram do checklist (31/08/2026)
+
+**Relato.** A Bruna, testando logo depois da publicação, pelo Luis: *"sumiu a
+parte da expedição, controles internos e central de notas"*. No print, o
+cabeçalho da tabela de itens termina em "Pesagem" — as quatro colunas
+seguintes não existem mais.
+
+**Causa.** Leitura errada do pedido, minha, carimbada por um teste que eu
+mesmo escrevi para exigir o comportamento errado.
+
+O dono pediu, em duas mensagens: *"a parte da expedicao e da destinacao
+precisam ter so o campo para dar o OK: CHECK e um campo para escrever
+observacoes"* e *"central de notas tambem só dar o ok check tambem e
+observacoes"*.
+
+Isso é sobre o que o OK **exige**: avançar a etapa não pode depender de
+preencher item nenhum. Eu li como "apague a conferência item a item" e tirei
+de `renderDevolucaoAberta` as quatro colunas — quantidade recebida
+(Expedição), falta, destinação E/D/R (Controles Internos) e o tique da nota
+final (Central de Notas).
+
+Pior que tirar: eu as troquei por colunas que só apareciam **se já houvesse
+dado** (`temAlgum`), e apaguei os campos de digitação junto. Como o único
+jeito de o dado existir era digitando, ele nunca podia existir. Armadilha
+fechada: a coluna só nasce com o dado, e o dado só nasce pela coluna.
+
+O código já dizia o contrário desde 28/08, no comentário da própria etapa da
+Expedição: a conferência e a destinação *"nunca travaram o OK, e tirá-las
+apagaria a falta, que é o que o checklist existe para apontar"*. Eu escrevi
+esse comentário e passei por cima dele três dias depois.
+
+**O sinal que estava na mão.** `podeConferirQtdDev()`, `podeDestinarDev()` e
+`podeNotaFinalDev()` ficaram com **zero chamadores**. Três funções de
+permissão sem ninguém que as consulte é a assinatura exata de tela sem o
+caminho — o mesmo padrão de `mudarStatus`, `liberarPendencias` e da trava de
+versão nesta mesma semana. Uma varredura de "permissão sem chamador" teria
+pego isto antes do portão.
+
+**Por que o portão deixou passar.** Ele não deixou: ele fez o que mandei. O
+teste `test_tres_etapas_so_check_e_recado.py` exigia, em dois blocos, que os
+campos SUMISSEM. Ficou verde porque o código fazia exatamente o que o teste
+pedia. Portão só barra o que alguém escreveu que é errado.
+
+**Correção.** As quatro colunas voltaram, com os campos editáveis para quem
+tem permissão — a tabela de itens ficou byte a byte igual à versão que estava
+funcionando. O que o dono pediu de verdade continua: as três etapas avançam
+com o checklist vazio, e cada posto tem seu campo de observações no cabeçalho,
+que chega na etapa seguinte e sai no relatório.
+
+**Teste que trava.** `testes/test_tres_etapas_so_check_e_recado.py`, blocos 2
+e 3, invertidos: num checklist RECÉM-CRIADO (o estado em que a Bruna abriu),
+os campos de conferência, destinação e nota final precisam estar na tela, com
+cabeçalho. O bloco 1 continua exigindo que as etapas avancem com o checklist
+vazio — os dois juntos impedem tanto a volta do defeito quanto a volta da
+exigência que o dono mandou tirar.
+
+**Família.** Nova: **o teste que carimba a leitura errada do pedido**. Não é
+"teste velho" (#15) nem "teste que mede o proxy": o teste estava novo, verde e
+media exatamente o que eu tinha escrito — só que eu tinha entendido o pedido
+ao contrário. Verde não prova que a regra está certa; prova que o código faz o
+que o teste diz. Quando a mudança REMOVE algo da tela, o teste que garante a
+remoção precisa vir acompanhado do teste que garante que o trabalho de quem
+usava aquilo ainda é possível.
+
+---
+
+## #22 — Carga lançada sem sinal sumia da tela acusando "o servidor recusou" (31/08/2026)
+
+**Relato.** Não veio da operação — veio da bateria. Ao isolar
+`test_contador_torre`, 18 das 20 cargas criadas em um bloco tinham
+desaparecido no bloco seguinte, e o teste reprovava acusando a animação do
+contador da Torre.
+
+**Causa.** Duas coisas separadas, e só uma era defeito.
+
+A primeira NÃO era defeito. A trava de offline (31/08, pedido do dono:
+*"Off Line não tem conversa não!"*) fez `enfileirar()` deixar de responder
+"guardei na fila" e passar a responder `{recusado:true, offline:true}`.
+Criação nunca confirmada que é recusada sai da tela de propósito — é a
+correção da ocorrência de carga-fantasma de 07/08. Sem sinal, portanto, a
+carga é recusada e a linha sai. Isso está certo e é o que o dono pediu.
+
+O que fazia o teste reprovar era o CENÁRIO dele: o arquivo plantava um
+`suinco_token` falso no sessionStorage e depois entrava por "Entrar sem
+servidor". O token fazia `estaConfigurado()` responder SIM, e aí cada carga
+tentava subir para uma API que não existe naquele ambiente. O teste estava
+medindo a trava de offline sem saber, e culpando o contador.
+
+A segunda era defeito de verdade, e de honestidade: o aviso dizia
+*"o servidor recusou a criação desta carga (...) placa cadastrada na Frota?
+setor com permissão?"*. Quem está sem sinal ia procurar um problema de
+cadastro que não existe. Offline não é recusa do servidor — é ausência
+dele, e o conserto é reconectar e refazer.
+
+**Correção.**
+
+- `sincronizarCarga` (`data.js`) passa `r.offline` adiante;
+  `receberRecusaDeCarga` (`app.js`) escreve o texto de offline quando a
+  causa é falta de conexão, e mantém o texto de recusa quando o servidor
+  realmente respondeu não.
+- `test_contador_torre` deixou de plantar token falso. Ele roda em
+  `file://`, sem servidor, e é isso que sempre quis medir.
+
+**Teste que trava.** `testes/test_offline_nao_grava.py`, bloco 2b: a carga
+lançada offline não fica fantasma na tela E o aviso não diz que o servidor
+recusou. `testes/test_aviso_recusa_carga.py` continua exigindo o texto de
+recusa no caso em que o servidor de fato recusou — os dois juntos impedem
+que consertar um texto estrague o outro.
+
+**Família.** *Teste que mede o proxy, não a regra* (#15) — com um agravante
+novo: aqui o cenário do teste é que estava desatualizado, não a asserção. Um
+token falso plantado por conveniência transformou um teste de animação num
+teste de sincronização, e o vermelho apontou para o lugar errado por horas.
+
+---
+
+## #21 — A etapa corrigida voltava sozinha para "Aguardando Embarque" (29/08/2026)
+
+**Relato:** *"TO TENTANDO MUDAR O STATUS DE UMA CARGA QUE TA ERRADA EU TENTO
+COLOCAR AGUARDANDO VEICULO AO INVES DE AGUARDANDO EMBARQUE E NAO CONSIGO
+PPOIS FICA VOLTANDO PRA AGUARDANDO EMBARQUE FTZ2138"*
+
+**O que o sintoma sugeria, e não era.** "Volta sozinha" é a assinatura da
+ocorrência **#01** (eco de sincronização) e do defeito do botão "Chegou" que
+o comentário de `sincronizarCarga` descreve. Fui atrás disso primeiro e
+**descartei os três, com evidência**:
+
+- o servidor recusando a volta — **não**: `POST /cargas/:id/corrigir-etapa`
+  grava certo (conferido no banco: `versao 4, Aguardando Veículo`);
+- `_pendente` / fila travando a tela — **não**: `pendente=False`,
+  `statusPendentes=[]` em todos os ciclos de sincronia;
+- a absorção de entrada solta do pátio empurrando a carga — **não**: com a
+  linha órfã na mesma placa, a carga ficou em "Aguardando Veículo".
+
+**Causa:** ao voltar para "Aguardando Veículo", a carga **reaparece na fila
+da Portaria como "não chegou"** — com o botão "Chegou" ativo e nenhum sinal
+de que aquilo tinha sido uma correção deliberada. O porteiro vê um caminhão
+que ele mesmo deixou entrar listado como se não tivesse chegado, clica
+"Chegou" de boa-fé, e a carga volta para "Aguardando Embarque" na hora. Quem
+corrigiu não é avisado, tenta de novo, e o laço se fecha.
+
+Reprodução que fechou o diagnóstico, com dois painéis abertos ao mesmo tempo:
+
+```
+depois da correção, ADM vê:  Aguardando Veículo
+PORTARIA vê:                 Aguardando Veículo
+aviso de que foi correção:   []            <- nenhum
+porteiro clicou "Chegou":    atualizadas=1, bloqueada=False
+ADM vê agora:                Aguardando Embarque   <- voltou
+```
+
+**O que estava faltando não era permissão — era informação.** Os dois lados
+agiam certo com o que viam. O sistema é que não contava a nenhum dos dois o
+que o outro tinha feito.
+
+**Feito** — três pontos, todos lendo o MESMO fato (a movimentação que andou
+para trás na `STATUS_FLOW`), via `etapaDevolvida()`. Sem coluna nova, sem
+migração: a devolução já estava escrita, faltava alguém ler.
+
+1. **Marca visível** `↩ etapa devolvida` ao lado da placa, na Visão do Pátio,
+   na fila de programados e na lista da Portaria — some sozinha quando
+   alguém legitimamente move a carga.
+2. **O "Chegou" pergunta antes**, dizendo quem devolveu, quando e de onde
+   para onde. **Pergunta, não bloqueia**: a Portaria tem autoridade e o
+   caminhão pode ter chegado de novo — botão desabilitado não ensina o
+   caminho, só nega.
+3. **Quem corrigiu é avisado** quando a carga volta a andar, alto e com som.
+
+**Sem janela de tempo, de propósito.** A marca vale enquanto ninguém tirou a
+carga do lugar para onde ela foi devolvida — prazo mágico é controle que
+depende da memória de quem escreveu.
+
+**Guarda:** `testes/test_etapa_devolvida_nao_volta_sozinha.py` — devolve a
+etapa, confere que a Portaria VÊ a marca antes de clicar, que o "Chegou"
+pergunta, que **recusando a carga não anda (nem na tela nem no servidor)**,
+que **confirmando ela anda** (a autoridade da Portaria fica de pé) e que o
+painel de quem corrigiu avisa. Reprovou em 6 pontos contra o código
+publicado antes da correção.
 
 ---
 
@@ -675,3 +1474,79 @@ permitiu recuperar os lacres apagados de #09.
    melhores" de #14 pioraram o número, e só apareceram porque foram medidas
    antes e depois, no mesmo aparelho e com os mesmos dados — sem isso, a
    comparação mede o banco de teste, não a mudança.
+11. **Nomear o risco não é fechá-lo.** O commit da primeira correção de #26
+   dizia "eram cinco cópias e eu lembrei de duas" — e a sexta derrubou o
+   cadastro no dia seguinte. Escrever o risco no comentário deixa registro;
+   só o teste que percorre o caminho inteiro impede a repetição.
+12. **Entrega de cadastro só está pronta depois de cadastrar.** Em #26 a
+   tela mostrava o setor, o banco aceitava, e a rota recusava. Nenhuma
+   inspeção de código pegaria os três ao mesmo tempo; um `POST` pegaria.
+13. **Antes de unificar, pergunte se é a mesma PERGUNTA — não se é o mesmo
+   campo.** Em #27 duas telas escreviam em `sequencia` querendo coisas
+   opostas, e juntá-las numa função só quebrou tanto quanto copiar teria
+   quebrado. O `title=` de cada campo já dizia que eram perguntas
+   diferentes.
+
+---
+
+## #35 — "A Logística não vê o ciclo encerrado": era o limite de requisições (09/09/2026)
+
+**Sintoma.** `test_login_api` reprovou em TRÊS baterias seguidas, sempre na
+mesma linha: *"a Logística vê o ciclo encerrado sem recarregar a página —
+Aguardando Veículo"*. A carga andava os seis status com sucesso (cada
+`mudarStatus` respondia OK), mas o terminal da Logística ficava parado no
+primeiro. Tinha cara de regressão na propagação por socket — e eu havia
+mexido exatamente ali no mesmo dia, criando duas salas para esconder valor de
+frete do Comercial.
+
+**A armadilha.** Três sinais apontavam para mim: a suíte começou a falhar com
+o frete, eu tinha mexido no socket, e o sintoma é de propagação. Três sinais
+na mesma direção convencem.
+
+**A causa, medida.** Instrumentei o contador de requisições por chave e
+caminho. O que apareceu:
+
+```
+op:3548 /api/cargas   297        ← um operador, num limite de 300/minuto
+[429] op:3548 · POST /api/cargas  (11x)
+```
+
+O painel **reenvia toda carga aberta ao logar** — é o eco normal de
+sincronização. O banco de teste tinha 99 cargas acumuladas das rodadas do
+dia; três leituras completas × 99 = 297 POSTs. O limite é 300 por minuto.
+O resto da suíte tomava 429, a sincronização entrava em recuo exponencial, e
+a propagação parava. Nada a ver com socket.
+
+Com o banco limpo e a janela de 60s vazia, a suíte passa com o limite de
+produção (300). Reproduzido nos dois sentidos.
+
+**Por que a segunda chance não pegou.** `rodar_tudo.sh` já roda toda suíte
+reprovada de novo, sozinha e com o banco limpo — justamente para separar
+contaminação de regressão. Mas `limpar_banco` zera o BANCO e não zera o
+contador do limite, que vive na memória do servidor com janela de 60
+segundos. As suítes rodam encostadas e compartilham os mesmos operadores de
+teste: a segunda chance herdava o orçamento gasto pela anterior e dizia
+"vermelho de verdade" para contaminação — o contrário do que foi escrita para
+fazer, e a conclusão mais cara possível.
+
+**Correção.** A segunda chance passou a esperar a janela
+(`esperar_limite_de_requisicoes`). Custa um minuto por suíte reprovada, e só
+nelas.
+
+**A família.** É parente da #15 (sobra de uma suíte virando falha da
+seguinte), com uma diferença que importa: ali o estado compartilhado era o
+BANCO, que o script sabia limpar. Aqui é um contador **na memória do
+servidor**, que limpar banco não alcança. Ao caçar contaminação, a pergunta
+não é "o banco está limpo?" — é **"que estado compartilhado sobrou, e ele está
+dentro ou fora do banco?"**.
+
+**O que isto revelou de produção, e não é defeito meu.** Um login da Logística
+com 70 cargas abertas gasta 70 das 300 requisições do minuto dela. Está longe
+de estourar hoje, mas cresce com o movimento do dia e não está medido em lugar
+nenhum. Fica anotado como dívida, não corrigido nesta entrega: mexer em limite
+de requisição sem o dono pedir é mexer numa trava de segurança.
+
+**Teste que trava.** Nenhum teste novo — a guarda é no próprio harness, e ela
+é estrutural: a segunda chance agora só conclui "regressão" quando o estado
+compartilhado foi de fato esvaziado. Um teste que simulasse o 429 provaria
+menos do que o script passar a dizer a verdade.

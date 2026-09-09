@@ -66,9 +66,28 @@ SEED = """() => {
       const placa = (gi ? 'XYZ' : 'ABC') + (1+k%9) + 'D' + String(10+(k*7)%89);
       DB.frota.push({placa, transportadora:g.tr, tipoVeiculo:'Truck', uf:'SP',
                      capacidadeKg:14000, atualizadoEm:new Date().toISOString()});
-      // Espalha em 12 dias pra linha do tempo ter forma, e mistura status
-      // pra pizza ter mais de uma fatia.
-      const diasAtras = k % 12;
+      /* SETE DIAS, NÃO DOZE — e o teste escolhe o período "Semana"
+         explicitamente logo abaixo. Os dois juntos tiram o CALENDÁRIO da
+         medição (02/09/2026).
+
+         O que acontecia com doze: as cargas concluídas nasciam 5 e 11 dias
+         atrás, e o gráfico usava a janela "Mês", que em data.js é o mês do
+         CALENDÁRIO (`new Date(ano, mes, 1)`). Rodando dia 31, tudo cabia e
+         a suíte passava. Rodando dia 2, a janela começou anteontem e as
+         cargas ficaram em agosto: ZERO concluídas no período, o gráfico de
+         tempo médio por etapa desenhava vazio nos dois lados do filtro, e
+         os pixels davam idênticos. O teste acusava "o filtro não chega nos
+         gráficos" — e o filtro chegava; o que faltava era dado.
+
+         "Semana" é janela ROLANTE (`agora - 7 dias`), então sete dias
+         cabem nela em qualquer data do ano. Com k%7 as concluídas caem em
+         três dias distintos para ALFA e dois para BETA: a linha tem forma
+         e filtrar muda o desenho, sempre.
+
+         Teste que só passa em certos dias do mês não protege nada — ele
+         some do radar exatamente quando reprova por engano, e aí o dia em
+         que reprovar de verdade ninguém acredita. */
+      const diasAtras = k % 7;
       const nasce = agora - diasAtras*86400000 - (k%9)*3600000;
       const s = st[k % 6];
       const c = {
@@ -157,6 +176,13 @@ async def main():
            f"{opcoes} opções (1 'Todas' + 2)")
 
         print('\n=== 2. FILTRAR TRANSPORTADORA REDESENHA OS TRÊS GRÁFICOS ===')
+        # PERÍODO ESCOLHIDO NA MÃO, e não o padrão da tela. O padrão é
+        # "Todo o histórico" (value=""), mas os gráficos fazem
+        # `FILTRO_IND.periodo || 'mes'` — o vazio vira "Mês" no caminho. Não
+        # é o que este arquivo mede, e deixar implícito foi o que fez a
+        # suíte depender do dia do mês. Ver o comentário grande no SEED.
+        await pg.select_option('#ind-f-periodo', 'semana')
+        await pg.wait_for_timeout(600)
         antes = await tinta(pg)
         ck('os três gráficos desenharam alguma coisa antes de filtrar',
            all(v and v > 100 for v in antes.values()), str(antes))

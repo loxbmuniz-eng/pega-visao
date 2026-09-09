@@ -17,6 +17,9 @@ import jwt from 'jsonwebtoken';
 import { criarServidor, chaveDoLimiteGeral } from '../src/servidor.js';
 import { pool } from '../src/banco.js';
 import { config } from '../src/config.js';
+import { SETORES } from '../src/dominio/fluxo.js';
+import { validarTokenDeSocket } from '../src/tempo-real.js';
+import { hojeISO } from '../src/rotas/modelo_semana.js';
 
 function jwtAssinar(payload) {
   return jwt.sign(payload, config.jwtSegredo, { expiresIn: '1h' });
@@ -724,6 +727,36 @@ describe('7b. Gestão de operadores (só Administração)', () => {
     });
     assert.equal(login.status, 200, 'de nada adianta criar se a pessoa não entra');
     assert.equal(login.json.operador.setor, 'Portaria');
+  });
+
+  /* TODO SETOR DA LISTA ACEITA CADASTRO — a guarda que faltava.
+
+     Em 02/09/2026 as três filiais entraram na lista do domínio e na CHECK
+     do banco, apareceram no <select> da tela de Usuários, e mesmo assim o
+     cadastro voltava "Setor inválido": rotas/operadores.js validava contra
+     uma SEGUNDA lista, em config.js, que ninguém lembrou de atualizar. O
+     teste que existia conferia só se o setor aparecia na tela.
+
+     Este não confere uma lista contra a outra — ele CRIA um operador em
+     cada setor, pela mesma rota que a tela usa, e faz cada um entrar. É o
+     percurso inteiro: rota → validação → CHECK do banco → login. Setor
+     que estiver oferecido e não puder ser cadastrado reprova aqui, sem
+     ninguém precisar lembrar de nada. */
+  test('todo setor oferecido aceita cadastro e login', async () => {
+    for (const setor of SETORES) {
+      const email = `setor_${Date.now()}_${SETORES.indexOf(setor)}@teste.local`;
+      const r = await req('/api/operadores', {
+        metodo: 'POST', token: tokenAdmin,
+        corpo: { email, nome: `Operador ${setor}`, setor, senha: 'senha-inicial-1' },
+      });
+      assert.equal(r.status, 201, `setor "${setor}" recusado no cadastro: ${r.texto}`);
+
+      const login = await req('/auth/login', {
+        metodo: 'POST', corpo: { email, senha: 'senha-inicial-1' },
+      });
+      assert.equal(login.status, 200, `setor "${setor}" cadastrou mas não entra`);
+      assert.equal(login.json.operador.setor, setor);
+    }
   });
 
   test('e-mail duplicado é recusado', async () => {
@@ -4509,8 +4542,11 @@ describe('38. Carga sem placa — a Torre espera a contratação', () => {
     });
     assert.equal(ruim.status, 422);
 
+    // Pôr a placa É contratar, e contratar exige KM e observação desde
+    // 09/09/2026 (bloco 42) — é o que o painel manda junto no mesmo gesto.
     const boa = await req(`/api/cargas/${criada.json.id}`, {
-      metodo: 'PATCH', token: tokens['Logística'], corpo: { placa },
+      metodo: 'PATCH', token: tokens['Logística'],
+      corpo: { placa, kmDeslocamento: 100, observacoes: 'contratação de teste' },
     });
     assert.equal(boa.status, 200, JSON.stringify(boa.json));
     assert.equal(boa.json.placa, placa);
@@ -4535,7 +4571,8 @@ describe('38. Carga sem placa — a Torre espera a contratação', () => {
       corpo: { numeroCarga: 'SEMPLACA-5', peso: 13000 },
     });
     const r = await req(`/api/cargas/${criada.json.id}`, {
-      metodo: 'PATCH', token: tokens['Logística'], corpo: { placa },
+      metodo: 'PATCH', token: tokens['Logística'],
+      corpo: { placa, kmDeslocamento: 100, observacoes: 'contratação de teste' },
     });
     assert.equal(r.status, 200, JSON.stringify(r.json));
     assert.equal(r.json.status, 'Aguardando Embarque',
@@ -4629,5 +4666,888 @@ describe('10. A carga programada encontra o caminhão que já está no pátio', 
       `SELECT acao FROM log_eventos WHERE carga_id = $1 AND acao LIKE '%absorvida%'`,
       ['carga_orfa_1050']);
     assert.ok(log.rows.length >= 1, 'a absorção precisa estar no Histórico');
+  });
+});
+
+
+/* ------------------------------------------------------------------ */
+describe('7c. O caminhão que só trouxe devolução sai pela Portaria (08/09/2026)', () => {
+  /* O dono, trazendo o relato da Portaria:
+
+       "quando a devolução chega em um caminhão que não tá programado pra
+        carregar (...) ele tem que ter a opção só de depois colocar lá que
+        ele saiu, que é só devolução, então ele não vai carregar"
+
+     e, sobre a rotina real:
+
+       "muitas vezes chega, descarrega e vai embora e muitas vezes chega,
+        descarrega e fica no pátio aguardando carga novamente"
+
+     Até aqui o único caminho para "Seguiu Viagem" vinha de "Faturado".
+     Um caminhão que entrou só para entregar devolução nunca chega lá — e
+     ficava presa no pátio para sempre, contando na Torre como veículo
+     presente. */
+  let placaDaFrota;
+  before(async () => {
+    // A placa precisa existir na frota — é a trava do bloco 2.
+    const { rows } = await pool.query('SELECT placa FROM dim_veiculos LIMIT 1');
+    placaDaFrota = rows[0].placa;
+  });
+
+  async function cargaNoPatio() {
+    const c = await req('/api/cargas', {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { numeroCarga: `DEV-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+               placa: placaDaFrota },
+    });
+    assert.equal(c.status, 201, c.texto);
+    const ch = await req(`/api/cargas/${c.json.id}/status`, {
+      metodo: 'POST', token: tokens['Portaria'], corpo: { status: 'Aguardando Embarque' },
+    });
+    assert.equal(ch.status, 200, ch.texto);
+    return c.json.id;
+  }
+
+  test('sem confirmar, o servidor RECUSA e explica o que vai acontecer', async () => {
+    // Um toque errado no celular do porteiro não pode mandar embora um
+    // caminhão que ainda ia carregar.
+    const id = await cargaNoPatio();
+    const r = await req(`/api/cargas/${id}/status`, {
+      metodo: 'POST', token: tokens['Portaria'], corpo: { status: 'Seguiu Viagem' },
+    });
+    assert.equal(r.status, 422, r.texto);
+    assert.equal(r.json.codigo, 'CONFIRMACAO_NECESSARIA');
+    assert.match(r.json.erro, /ainda não carregou/i, 'a recusa ensina o caminho, não só nega');
+  });
+
+  test('confirmando, a Portaria encerra sem Expedição nem Faturamento', async () => {
+    const id = await cargaNoPatio();
+    const r = await req(`/api/cargas/${id}/status`, {
+      metodo: 'POST', token: tokens['Portaria'],
+      corpo: { status: 'Seguiu Viagem', soDevolucao: true },
+    });
+    assert.equal(r.status, 200, r.texto);
+    assert.equal(r.json.status, 'Seguiu Viagem');
+    assert.equal(r.json.saidaSemCarregar, true, 'a saída fica marcada como sem carregamento');
+  });
+
+  test('a saída NORMAL continua não sendo marcada como só devolução', async () => {
+    /* A guarda que impede a marca de vazar para a viagem de verdade: se
+       ela vazasse, "quantas cargas saíram" passaria a contar caminhão que
+       não levou nada, e o número mentiria a favor da operação. */
+    const id = await cargaNoPatio();
+    for (const [setor, status] of [
+      ['Expedição', 'Embarque Iniciado'],
+      ['Expedição', 'Embarque Finalizado'],
+      ['Faturamento', 'Faturado'],
+      ['Portaria', 'Seguiu Viagem'],
+    ]) {
+      const r = await req(`/api/cargas/${id}/status`, {
+        metodo: 'POST', token: tokens[setor], corpo: { status },
+      });
+      assert.equal(r.status, 200, `${status}: ${r.texto}`);
+      assert.equal(r.json.saidaSemCarregar, false, `${status} não é saída sem carregar`);
+    }
+  });
+
+  test('a Expedição não usa este atalho — a saída é da Portaria', async () => {
+    const id = await cargaNoPatio();
+    const r = await req(`/api/cargas/${id}/status`, {
+      metodo: 'POST', token: tokens['Expedição'],
+      corpo: { status: 'Seguiu Viagem', soDevolucao: true },
+    });
+    assert.equal(r.status, 403, r.texto);
+  });
+});
+
+
+/* ------------------------------------------------------------------ */
+describe('7d. Sequenciamento da fila: digitou 1, entra na frente (08/09/2026)', () => {
+  /* Pedido do Wemerson, trazido pelo dono: "se ele digitar 1 numa carga e já
+     tiver uma como 1, ela vai automaticamente pra dois, e a que ele colocou
+     1 entra no início da fila".
+
+     Antes disto a sequência era um número solto: duas cargas podiam ser 1 ao
+     mesmo tempo e o campo dizia "digite o número que quiser". Agora digitar
+     um número REORDENA a fila inteira do dia, em cascata.
+
+     ESCOLHA DO DONO, quando perguntado: renumera só as cargas que AINDA VÃO
+     CARREGAR. Caminhão que já está na doca não tem como ser empurrado para
+     trás na fila da vida real, e mexer no número de uma carga já faturada
+     faria o registro do que aconteceu mentir.
+
+     UMA TRANSAÇÃO SÓ, e não N chamadas: mandar quinze alterações separadas é
+     a família da ocorrência #16 — duas escritas em voo, a velha ganha. Com
+     duas pessoas reordenando ao mesmo tempo a fila embaralharia sem ninguém
+     entender por quê. */
+  let placa, ids = [];
+
+  before(async () => {
+    const { rows } = await pool.query('SELECT placa FROM dim_veiculos LIMIT 1');
+    placa = rows[0].placa;
+    for (let i = 1; i <= 4; i++) {
+      const r = await req('/api/cargas', {
+        metodo: 'POST', token: tokens['Logística'],
+        corpo: { numeroCarga: `SEQ-${Date.now()}-${i}`, placa, sequencia: i },
+      });
+      assert.equal(r.status, 201, r.texto);
+      ids.push(r.json.id);
+    }
+  });
+
+  async function fila() {
+    // /api/estado devolve a carga já em formato de painel (paraPainel):
+    // `id` e `sequencia`, não `Carga_ID`/`Sequencia`.
+    const r = await req('/api/estado', { token: tokens['Logística'] });
+    const mapa = {};
+    for (const c of (r.json.cargas || [])) mapa[String(c.id)] = c.sequencia;
+    return ids.map((id) => mapa[String(id)]);
+  }
+
+  test('a fila começa 1, 2, 3, 4', async () => {
+    assert.deepEqual(await fila(), [1, 2, 3, 4]);
+  });
+
+  test('pôr a QUARTA em 1 empurra as outras em cascata', async () => {
+    const r = await req('/api/cargas/sequenciar', {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { cargaId: ids[3], posicao: 1 },
+    });
+    assert.equal(r.status, 200, r.texto);
+    // a que era 4 vira 1; as três de cima descem uma casa
+    assert.deepEqual(await fila(), [2, 3, 4, 1]);
+  });
+
+  test('nenhuma sequência fica repetida', async () => {
+    const f = await fila();
+    assert.equal(new Set(f).size, f.length, `repetiu: ${f}`);
+  });
+
+  test('a Portaria não reordena a fila da Logística', async () => {
+    const r = await req('/api/cargas/sequenciar', {
+      metodo: 'POST', token: tokens['Portaria'],
+      corpo: { cargaId: ids[0], posicao: 1 },
+    });
+    assert.equal(r.status, 403, r.texto);
+  });
+
+  test('carga que JÁ ESTÁ CARREGANDO não entra na renumeração', async () => {
+    /* A escolha do dono: "só carga que vão carregar". Levamos a primeira da
+       lista até Embarque Iniciado e conferimos que ela guarda o número que
+       tinha — o número dela virou registro, não fila. */
+    const alvo = ids[0];
+    for (const [setor, status] of [
+      ['Portaria', 'Aguardando Embarque'],
+      ['Expedição', 'Embarque Iniciado'],
+    ]) {
+      const r = await req(`/api/cargas/${alvo}/status`, {
+        metodo: 'POST', token: tokens[setor], corpo: { status },
+      });
+      assert.equal(r.status, 200, `${status}: ${r.texto}`);
+    }
+    const antes = (await fila())[0];
+    const r = await req('/api/cargas/sequenciar', {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { cargaId: ids[2], posicao: 1 },
+    });
+    assert.equal(r.status, 200, r.texto);
+    assert.equal((await fila())[0], antes,
+      'a carga em Embarque Iniciado mudou de número — ela é registro, não fila');
+  });
+
+  test('posição fora da fila é recusada com explicação', async () => {
+    const r = await req('/api/cargas/sequenciar', {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { cargaId: ids[1], posicao: 999 },
+    });
+    assert.equal(r.status, 400, r.texto);
+    assert.match(String(r.json && r.json.erro), /posi/i);
+  });
+
+  /* O RELATO DO DONO, 08/09/2026: "ela ta deixando ficarem numeros repetidos
+     isso nao pode acontecer nunca".
+
+     O teste acima já garantia que a carga que JÁ CARREGOU não muda de
+     número. O que ele nunca perguntou é se OUTRA carga assume esse número —
+     e era exatamente o que acontecia: a fila era renumerada de 1 a N
+     ignorando os números que as cargas fora dela já ocupavam. Com uma carga
+     em Embarque Iniciado no número 1, mover uma da fila para a primeira
+     posição criava DOIS números 1 no mesmo dia.
+
+     Escolha do dono, perguntado: opção A — "a que já carregou fica 1, e a
+     fila vira 2, 3, 4". Quem saiu da fila guarda o número; a fila ocupa os
+     que sobraram, em ordem. */
+  test('NENHUM número se repete no dia, nem com carga já carregada na frente', async () => {
+    const r = await req('/api/estado', { token: tokens['Logística'] });
+    const doDia = (r.json.cargas || []).filter((c) => ids.includes(c.id));
+    const numeros = doDia.map((c) => c.sequencia).filter((n) => n != null);
+    const repetidos = numeros.filter((n, i) => numeros.indexOf(n) !== i);
+    assert.deepEqual(repetidos, [],
+      `número repetido no mesmo dia: ${JSON.stringify(doDia.map((c) => ({ seq: c.sequencia, st: c.status })))}`);
+  });
+
+  test('a fila ocupa os números que sobraram, sem passar por cima de quem já carregou', async () => {
+    // ids[0] está em Embarque Iniciado desde o teste anterior e guarda o
+    // número dele. As outras duas precisam ficar nos dois números seguintes.
+    const r = await req('/api/estado', { token: tokens['Logística'] });
+    const mapa = {};
+    for (const c of (r.json.cargas || [])) mapa[String(c.id)] = c;
+    const fora = mapa[String(ids[0])];
+    const naFila = [mapa[String(ids[1])], mapa[String(ids[2])]]
+      .map((c) => c.sequencia).sort((a, b) => a - b);
+    assert.ok(!naFila.includes(fora.sequencia),
+      `a fila (${naFila}) passou por cima do número ${fora.sequencia} de quem já carregou`);
+  });
+});
+
+describe('39. A filial não enxerga o pátio por fora da tela (09/09/2026)', () => {
+  /* Achado ALTO da auditoria de segurança de 09/09/2026: com o crachá de
+     uma filial, GET /api/estado devolvia o pátio inteiro (cargas, clientes,
+     destinos, motoristas), /montagem, /modelo-semana e /programacoes
+     respondiam 200, e /devolucoes-cadastros/clientes-csv entregava a base
+     inteira de clientes (77 mil linhas). Os botões estavam escondidos na
+     tela; o endereço, não.
+
+     A regra do dono (02/09/2026): filial "so vai ter acesso a aba devolucoes
+     e escopo de devolucoes (...) as permissoes da filial sao restritas a
+     isso". Regra que vale na tela e não no servidor não é regra.
+
+     /estado NÃO devolve 403: o painel chama essa rota no sincronismo de todo
+     setor, e um 403 ali viraria faixa de "recusado" na tela da filial a cada
+     poucos segundos. Ela recebe a mesma resposta, com o pátio VAZIO e o
+     escopo declarado. /frota e /rotas continuam abertas: o checklist de
+     devolução precisa da placa e da rota. */
+  let tokenFilial;
+  let tokenLogistica;
+
+  before(async () => {
+    const hash = await bcrypt.hash(SENHA, 4);
+    await pool.query("DELETE FROM operadores WHERE email = 'filial39@teste.local'");
+    await pool.query(
+      'INSERT INTO operadores (email, nome, setor, senha_hash) VALUES ($1,$2,$3,$4)',
+      ['filial39@teste.local', 'Filial Teste', 'Filial 105 BSB', hash]
+    );
+    const f = await req('/auth/login', { metodo: 'POST', corpo: { email: 'filial39@teste.local', senha: SENHA } });
+    assert.equal(f.status, 200, f.texto);
+    tokenFilial = f.json.token;
+    tokenLogistica = tokens['Logística'];
+  });
+
+  test('/estado responde à filial com o pátio VAZIO e o escopo declarado', async () => {
+    const r = await req('/api/estado', { token: tokenFilial });
+    assert.equal(r.status, 200, r.texto);
+    assert.deepEqual(r.json.cargas, [], 'a filial não pode ver carga nenhuma do pátio');
+    assert.deepEqual(r.json.movimentacoes, []);
+    assert.deepEqual(r.json.log, []);
+    assert.equal(r.json.escopo, 'devolucoes');
+    assert.ok(r.json.marca, 'a marca continua vindo — o sincronismo da filial não pode quebrar');
+  });
+
+  test('/estado continua entregando o pátio inteiro aos setores operacionais', async () => {
+    const r = await req('/api/estado', { token: tokenLogistica });
+    assert.equal(r.status, 200, r.texto);
+    assert.ok(Array.isArray(r.json.cargas));
+    assert.equal(r.json.escopo, undefined);
+  });
+
+  for (const rota of ['/api/montagem', '/api/modelo-semana', '/api/programacoes']) {
+    test(`${rota} recusa a filial com 403 e explica`, async () => {
+      const r = await req(rota, { token: tokenFilial });
+      assert.equal(r.status, 403, `${rota}: ${r.status} ${r.texto.slice(0, 120)}`);
+      assert.equal(r.json.codigo, 'SETOR_SEM_PERMISSAO');
+    });
+  }
+
+  test('a base inteira de clientes (CSV) só sai para Logística e Administração — e fica registrada', async () => {
+    const f = await req('/api/devolucoes-cadastros/clientes-csv', { token: tokenFilial });
+    assert.equal(f.status, 403, `filial: ${f.status}`);
+    const p = await req('/api/devolucoes-cadastros/clientes-csv', { token: tokens['Portaria'] });
+    assert.equal(p.status, 403, `portaria: ${p.status}`);
+    const antes = await pool.query("SELECT count(*)::int AS n FROM log_leitura WHERE tipo = 'clientes-csv'");
+    const l = await req('/api/devolucoes-cadastros/clientes-csv', { token: tokenLogistica });
+    assert.equal(l.status, 200, `logística: ${l.status}`);
+    const depois = await pool.query("SELECT count(*)::int AS n FROM log_leitura WHERE tipo = 'clientes-csv'");
+    assert.equal(depois.rows[0].n, antes.rows[0].n + 1, 'baixar a base inteira precisa deixar rastro');
+  });
+
+  test('a filial continua lendo frota e rotas — o checklist precisa da placa e da rota', async () => {
+    const f = await req('/api/frota', { token: tokenFilial });
+    assert.equal(f.status, 200, f.texto.slice(0, 120));
+    const r = await req('/api/rotas', { token: tokenFilial });
+    assert.equal(r.status, 200, r.texto.slice(0, 120));
+  });
+
+  /* Achado MÉDIO da mesma auditoria: os três jwt.verify aceitavam qualquer
+     algoritmo HMAC. O login assina em HS256; um crachá HS512 com o mesmo
+     segredo era aceito. Não é explorável sem o segredo — mas a própria
+     bateria de auditoria do projeto (token_de_login.mjs) já reprovava, e
+     vermelho com causa real não se publica. */
+  test('crachá assinado em HS512 é recusado, mesmo com o segredo certo', async () => {
+    const payload = jwt.decode(tokenLogistica);
+    delete payload.iat; delete payload.exp;
+    const forjado = jwt.sign(payload, config.jwtSegredo, { algorithm: 'HS512', expiresIn: '1h' });
+    const r = await req('/api/estado', { token: forjado });
+    assert.equal(r.status, 401, `HS512 devia ser recusado, veio ${r.status}`);
+  });
+});
+
+describe('40. Fundação: sessão revogada cai do socket, "hoje" é o de São Paulo (09/09/2026)', () => {
+  /* Auditoria de arquitetura de 09/09/2026, dois achados médios:
+
+     - O socket só fazia jwt.verify. Bloquear um operador derrubava o HTTP na
+       hora e o socket continuava entregando o pátio inteiro (placa, cliente,
+       motorista) até o token vencer, 12 h depois. A conferência de sessão
+       passa a ser a mesma do HTTP (sessaoAindaVale), e a revogação derruba
+       as conexões abertas.
+     - modelo_semana.js decidia "hoje" em UTC: entre 21h e meia-noite o
+       servidor achava que já era amanhã — o erro do relatório de 14/08, do
+       lado do servidor. */
+  test('"hoje" do Modelo/Montagem é o dia de São Paulo, não o UTC', () => {
+    const sp = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit',
+    }).format(new Date());
+    assert.match(hojeISO(), /^\d{4}-\d{2}-\d{2}$/);
+    assert.equal(hojeISO(), sp);
+  });
+
+  test('token válido entra no socket; sessão revogada é recusada com o motivo', async () => {
+    const hash = await bcrypt.hash(SENHA, 4);
+    await pool.query("DELETE FROM operadores WHERE email = 'socket40@teste.local'");
+    await pool.query(
+      'INSERT INTO operadores (email, nome, setor, senha_hash) VALUES ($1,$2,$3,$4)',
+      ['socket40@teste.local', 'Socket Teste', 'Portaria', hash]
+    );
+    const l = await req('/auth/login', { metodo: 'POST', corpo: { email: 'socket40@teste.local', senha: SENHA } });
+    assert.equal(l.status, 200, l.texto);
+    const op = await validarTokenDeSocket(l.json.token);
+    assert.equal(op.setor, 'Portaria');
+
+    // Revoga como o bloqueio e a troca de senha fazem: sessao_versao + 1.
+    await pool.query("UPDATE operadores SET sessao_versao = sessao_versao + 1 WHERE email = 'socket40@teste.local'");
+    await assert.rejects(() => validarTokenDeSocket(l.json.token), /SESSAO_REVOGADA/);
+    await assert.rejects(() => validarTokenDeSocket('nao-e-um-token'), /TOKEN_INVALIDO/);
+    await assert.rejects(() => validarTokenDeSocket(''), /SEM_TOKEN/);
+  });
+});
+
+describe('41. Frota muda de transportadora: as cargas abertas acompanham, as concluídas ficam (09/09/2026)', () => {
+  /* Relato do dono (fotos): carga 118675 / JJB8946 dizia "Rodosousa" na
+     Torre e "Denia Transportes" no cadastro da Frota. A transportadora da
+     carga é cópia feita quando a placa entra; mudar a Frota não avisava as
+     cargas, e trocar à mão não deixava rastro em lugar nenhum.
+
+     Decisão do dono: opção A — quando a placa muda de transportadora na
+     Frota, as cargas ABERTAS daquela placa acompanham (com log); as
+     concluídas ficam como registro do que aconteceu; trocar à mão na carga
+     continua permitido, e fica registrado. */
+  let placa, aberta, concluida, transpOriginal;
+
+  before(async () => {
+    const { rows } = await pool.query("SELECT placa, transportadora FROM dim_veiculos WHERE transportadora <> '' ORDER BY placa OFFSET 60 LIMIT 1");
+    placa = rows[0].placa; transpOriginal = rows[0].transportadora;
+    const a = await req('/api/cargas', { metodo: 'POST', token: tokens['Logística'], corpo: { placa, numeroCarga: 'TR-ABERTA-' + Date.now() } });
+    assert.equal(a.status, 201, a.texto); aberta = a.json.id;
+    const c = await req('/api/cargas', { metodo: 'POST', token: tokens['Logística'], corpo: { placa, numeroCarga: 'TR-CONCL-' + Date.now() } });
+    assert.equal(c.status, 201, c.texto); concluida = c.json.id;
+    for (const [status, setor] of [['Aguardando Embarque', 'Portaria'], ['Embarque Iniciado', 'Expedição'],
+      ['Embarque Finalizado', 'Expedição'], ['Faturado', 'Faturamento'], ['Seguiu Viagem', 'Portaria']]) {
+      const r = await req(`/api/cargas/${concluida}/status`, { metodo: 'POST', token: tokens[setor], corpo: { status, confirmado: true } });
+      assert.equal(r.status, 200, `${status}: ${r.texto}`);
+    }
+  });
+
+  async function transpDe(id) {
+    const { rows } = await pool.query('SELECT transportadora FROM fact_viagens WHERE carga_id = $1', [id]);
+    return rows[0].transportadora;
+  }
+
+  test('as duas cargas nascem com a transportadora da Frota', async () => {
+    assert.equal(await transpDe(aberta), transpOriginal);
+    assert.equal(await transpDe(concluida), transpOriginal);
+  });
+
+  test('mudar a transportadora da placa na Frota: a aberta acompanha, a concluída fica, e fica no log', async () => {
+    const r = await req('/api/frota', { metodo: 'POST', token: tokens['Logística'],
+      corpo: { placa, transportadora: 'NOVA TRANSPORTADORA TESTE', tipoVeiculo: 'Truck' } });
+    assert.equal(r.status, 201, r.texto);
+    assert.equal(await transpDe(aberta), 'NOVA TRANSPORTADORA TESTE', 'carga aberta tinha que acompanhar a Frota');
+    assert.equal(await transpDe(concluida), transpOriginal, 'carga concluída é registro — não muda');
+    // >= 1, não == 1: outras suítes podem ter deixado carga aberta nesta placa (contaminação, não defeito)
+    assert.ok(r.json.cargasAtualizadas >= 1, `a resposta diz quantas cargas abertas acompanharam: ${r.json.cargasAtualizadas}`);
+    const { rows } = await pool.query(
+      "SELECT acao FROM log_eventos WHERE placa = $1 AND acao LIKE 'Frota:%' ORDER BY data_evento DESC LIMIT 1", [placa]);
+    assert.ok(rows[0], 'a troca na Frota precisa deixar rastro no log');
+    assert.match(rows[0].acao, /NOVA TRANSPORTADORA TESTE/);
+  });
+
+  test('regravar a Frota com a MESMA transportadora não gera evento nem mexe em carga', async () => {
+    const antes = await pool.query("SELECT count(*)::int AS n FROM log_eventos WHERE placa = $1 AND acao LIKE 'Frota:%'", [placa]);
+    const r = await req('/api/frota', { metodo: 'POST', token: tokens['Logística'],
+      corpo: { placa, transportadora: 'NOVA TRANSPORTADORA TESTE', tipoVeiculo: 'Truck' } });
+    assert.equal(r.status, 201, r.texto);
+    assert.equal(r.json.cargasAtualizadas, 0);
+    const depois = await pool.query("SELECT count(*)::int AS n FROM log_eventos WHERE placa = $1 AND acao LIKE 'Frota:%'", [placa]);
+    assert.equal(depois.rows[0].n, antes.rows[0].n, 'eco de sincronização não é notícia');
+  });
+
+  test('trocar à mão na carga continua permitido — e deixa rastro dizendo que diverge da Frota', async () => {
+    const r = await req(`/api/cargas/${aberta}`, { metodo: 'PATCH', token: tokens['Logística'],
+      corpo: { transportadora: 'FRETEIRO DO DIA' } });
+    assert.equal(r.status, 200, r.texto);
+    assert.equal(await transpDe(aberta), 'FRETEIRO DO DIA');
+    const { rows } = await pool.query(
+      "SELECT acao FROM log_eventos WHERE carga_id = $1 AND acao LIKE 'Transportadora%' ORDER BY data_evento DESC LIMIT 1", [aberta]);
+    assert.ok(rows[0], 'a troca à mão precisa aparecer no Histórico');
+    assert.match(rows[0].acao, /FRETEIRO DO DIA/);
+    assert.match(rows[0].acao, /NOVA TRANSPORTADORA TESTE/, 'o evento diz qual é a da Frota');
+  });
+
+  after(async () => {
+    await pool.query('UPDATE dim_veiculos SET transportadora = $1 WHERE placa = $2', [transpOriginal, placa]);
+  });
+});
+
+describe('42. Tabela de frete: o valor sai da conta, e sem KM não se contrata (09/09/2026)', () => {
+  /* PEDIDO DO DONO, com a tabela oficial em PDF na mão:
+
+       "criar tabela de frete no embarquesuinco.com.br, cadastro possa ser
+        editavel e criada da mesma forma que funcionam os cadastros (...) na
+        verdade vao ser dois campos de KM, um de KM DESTINO, e KM
+        DESLOCAMENTO (precisa ser o valor certinho do valor que sera pago no
+        frete)"
+       "a tabela de frete deve fazer o calculo segundo a kilometragem e destino"
+       "valor kilometragem é por modalidade de veiculo"
+       "transportadora suinco ou FOB nao tem valor de frete"
+       "vamos incluir um campo de kilometragem obrigatoria na criacao de
+        qualquer carga KM"  → confirmado depois: "1 trava a contratacao".
+
+     A TABELA DO PDF É UMA CONTA. As 23 linhas × 5 tipos = 115 células foram
+     conferidas uma a uma: TODAS são `km × tarifa do tipo`. Por isso o
+     servidor guarda 5 tarifas e 23 km, e o valor sai calculado — e por isso
+     este bloco confere o resultado contra os números impressos do PDF, que
+     é a única fonte que o dono reconhece.
+
+     O QUE ESTE BLOCO TRAVA
+       1. as 5 tarifas e os 23 destinos existem com os valores do PDF;
+       2. o valor calculado bate com o PDF nas 5 modalidades;
+       3. SUINCO e FOB não têm valor de frete — e o motivo vem junto;
+       4. sem KM DESLOCAMENTO não se contrata placa (nem na criação, nem no
+          PATCH que coloca a placa depois);
+       5. KM divergente do destino é MARCADO, não recusado — desvio, retorno
+          e coleta no caminho existem;
+       6. o Comercial não enxerga valor de frete;
+       7. mudar a tarifa NÃO recalcula frete já contratado. */
+
+  const T = { '3/4': 5.04, Toco: 6.09, Truck: 7.75, Bitruck: 8.97, Carreta: 11.66 };
+  // GOIANIA = 583 km. Os cinco valores impressos no PDF, na coluna de Goiânia.
+  const PDF_GOIANIA = { '3/4': 2938.32, Toco: 3550.47, Truck: 4518.25, Bitruck: 5229.51, Carreta: 6797.78 };
+  const placas = {};
+  let placaSuinco, placaFob, semKm;
+
+  before(async () => {
+    /* Uma placa por modalidade, mais uma SUINCO e uma FOB. Placas de teste
+       próprias: pegar da base real amarraria o teste a um cadastro que muda. */
+    let i = 0;
+    for (const tipo of Object.keys(T)) {
+      const placa = `FRT${String(i).padStart(2, '0')}A${i}${i}`;
+      await pool.query(
+        `INSERT INTO dim_veiculos (placa, transportadora, tipo_veiculo, uf, origem)
+         VALUES ($1,'TRANSPORTES FRETE TESTE',$2,'MG','manual')
+         ON CONFLICT (placa) DO UPDATE SET transportadora = EXCLUDED.transportadora,
+           tipo_veiculo = EXCLUDED.tipo_veiculo`, [placa, tipo]);
+      placas[tipo] = placa; i++;
+    }
+    placaSuinco = 'FRTSUI9A9';
+    placaFob = 'FRTFOB8B8';
+    await pool.query(
+      `INSERT INTO dim_veiculos (placa, transportadora, tipo_veiculo, uf, origem)
+       VALUES ($1,'SUINCO','Truck','MG','manual'), ($2,'FOB','Carreta','MG','manual')
+       ON CONFLICT (placa) DO UPDATE SET transportadora = EXCLUDED.transportadora,
+         tipo_veiculo = EXCLUDED.tipo_veiculo`, [placaSuinco, placaFob]);
+  });
+
+  test('as cinco tarifas do PDF estão cadastradas', async () => {
+    const r = await req('/api/frete/tarifas', { token: tokens['Logística'] });
+    assert.equal(r.status, 200, r.texto);
+    const porTipo = Object.fromEntries(r.json.map((t) => [t.tipoVeiculo, Number(t.valorPorKm)]));
+    for (const [tipo, valor] of Object.entries(T)) {
+      assert.equal(porTipo[tipo], valor, `tarifa de ${tipo}`);
+    }
+  });
+
+  test('os destinos do PDF estão cadastrados, com o km de referência', async () => {
+    const r = await req('/api/frete/destinos', { token: tokens['Logística'] });
+    assert.equal(r.status, 200, r.texto);
+    const porNome = Object.fromEntries(r.json.map((d) => [d.destino, d.km]));
+    assert.equal(porNome['GOIANIA'], 583);
+    assert.equal(porNome['SALVADOR (COM DESVIO)'], 1570);
+    assert.equal(porNome['SALVADOR (SEM DESVIO)'], 1430);
+    // As variantes são destinos DIFERENTES — é o que decide o valor.
+    assert.equal(porNome['MONTES CLAROS (COM DESVIO)'], 585);
+    assert.equal(porNome['MONTES CLAROS (SEM DESVIO)'], 445);
+    assert.ok(r.json.length >= 23, `${r.json.length} destinos`);
+  });
+
+  test('o valor calculado bate com o PDF nas CINCO modalidades', async () => {
+    for (const [tipo, esperado] of Object.entries(PDF_GOIANIA)) {
+      const r = await req('/api/cargas', { metodo: 'POST', token: tokens['Logística'], corpo: {
+        placa: placas[tipo], numeroCarga: `FRT-${tipo}-${Date.now()}`,
+        freteDestino: 'GOIANIA', kmDeslocamento: 583, observacoes: 'tabela',
+      } });
+      assert.equal(r.status, 201, `${tipo}: ${r.texto}`);
+      assert.equal(Number(r.json.freteValor), esperado, `${tipo}: ${583} x ${T[tipo]}`);
+      assert.equal(Number(r.json.freteTarifaUsada), T[tipo], `${tipo}: a tarifa usada fica gravada`);
+      assert.equal(r.json.kmDestino, 583, 'o km do destino é copiado do cadastro');
+    }
+  });
+
+  test('SUINCO e FOB não têm valor de frete — e o painel recebe o motivo', async () => {
+    for (const [placa, rotulo] of [[placaSuinco, 'SUINCO'], [placaFob, 'FOB']]) {
+      const r = await req('/api/cargas', { metodo: 'POST', token: tokens['Logística'], corpo: {
+        placa, numeroCarga: `FRT-${rotulo}-${Date.now()}`,
+        freteDestino: 'GOIANIA', kmDeslocamento: 583, observacoes: 'sem frete',
+      } });
+      assert.equal(r.status, 201, `${rotulo}: ${r.texto}`);
+      assert.equal(r.json.freteValor, null, `${rotulo} não paga frete de tabela`);
+      assert.match(String(r.json.freteMotivo || ''), new RegExp(rotulo, 'i'),
+        `o painel precisa saber POR QUE está vazio — null calado é o defeito`);
+    }
+  });
+
+  test('SEM KM A CARGA NASCE IGUAL — e a ausência vem DECLARADA, não muda', async () => {
+    /* AQUI HAVIA UMA TRAVA, E ELA SAIU POR DECISÃO DO DONO (09/09/2026).
+
+       O pedido era "kilometragem obrigatoria" e ele confirmou "1 trava a
+       contratacao". A bateria mostrou o custo antes de a operação pagar:
+       a Montagem do Dia cria carga por outro caminho, EM LOTE, sem campo de
+       KM — e carga recusada na criação é apagada do painel (proteção de
+       07/08). O lote sumiria na frente da Logística. Levado a ele com a
+       evidência: "não põe a trava do quilômetro então".
+
+       O QUE ESTE TESTE GUARDA AGORA é o que sobrou no lugar da trava, e que
+       vale mais: a carga nasce, e a falta do KM é DITA. Célula vazia sem
+       explicação é lida como R$ 0,00 por quem confere o frete — foi assim
+       que o relatório passou meses saindo com "a preencher" sem ninguém
+       saber de quem era a pendência. */
+    const r = await req('/api/cargas', { metodo: 'POST', token: tokens['Logística'], corpo: {
+      placa: placas.Truck, numeroCarga: 'FRT-SEMKM-' + Date.now(), observacoes: 'x',
+    } });
+    assert.equal(r.status, 201, r.texto);
+    assert.equal(r.json.kmDeslocamento, null, 'null, não zero: não informado ≠ zero quilômetro');
+    assert.equal(r.json.freteValor, null, 'sem KM não há conta a fazer');
+    assert.match(r.json.freteMotivo, /Sem KM/i,
+      'e o painel recebe o motivo — a ausência é declarada, não silenciosa');
+  });
+
+  test('mas a carga SEM PLACA nasce sem KM — é programação, não contratação', async () => {
+    const r = await req('/api/cargas', { metodo: 'POST', token: tokens['Logística'], corpo: {
+      numeroCarga: 'FRT-SEMPLACA-' + Date.now(), rota: '500',
+    } });
+    assert.equal(r.status, 201, r.texto);
+    assert.equal(r.json.placa, '');
+    assert.equal(r.json.kmDeslocamento, null, 'null, não zero: km não informado ≠ km zero');
+    semKm = r.json.id;
+  });
+
+  test('e ao COLOCAR a placa nela, o frete é calculado com o que houver', async () => {
+    // Sem KM, contratar continua sendo possível — só não produz valor.
+    const sem = await req(`/api/cargas/${semKm}`, { metodo: 'PATCH', token: tokens['Logística'],
+      corpo: { placa: placas.Carreta } });
+    assert.equal(sem.status, 200, sem.texto);
+    assert.equal(sem.json.freteValor, null);
+    assert.match(sem.json.freteMotivo, /Sem KM/i);
+
+    const com = await req(`/api/cargas/${semKm}`, { metodo: 'PATCH', token: tokens['Logística'],
+      corpo: { placa: placas.Carreta, freteDestino: 'UBERLANDIA', kmDeslocamento: 220, observacoes: 'combinado' } });
+    assert.equal(com.status, 200, com.texto);
+    assert.equal(Number(com.json.freteValor), Number((220 * T.Carreta).toFixed(2)));
+  });
+
+  test('carga já contratada continua editável sem repetir o KM', async () => {
+    // A trava é do ATO de contratar. Reexigir KM em toda edição travaria a
+    // Portaria mudando motorista numa carga que já rodou.
+    const r = await req(`/api/cargas/${semKm}`, { metodo: 'PATCH', token: tokens['Logística'],
+      corpo: { motorista: 'José' } });
+    assert.equal(r.status, 200, r.texto);
+    assert.equal(r.json.motorista, 'José');
+  });
+
+  test('KM DESLOCAMENTO diferente do destino é MARCADO, não recusado', async () => {
+    // Desvio, retorno e coleta no caminho existem — e é o deslocamento que paga.
+    const r = await req('/api/cargas', { metodo: 'POST', token: tokens['Logística'], corpo: {
+      placa: placas.Truck, numeroCarga: 'FRT-DESVIO-' + Date.now(),
+      freteDestino: 'GOIANIA', kmDeslocamento: 640, observacoes: 'desvio combinado',
+    } });
+    assert.equal(r.status, 201, r.texto);
+    assert.equal(r.json.kmDestino, 583, 'a referência da tabela fica registrada');
+    assert.equal(r.json.kmDeslocamento, 640, 'o que será pago é o deslocamento');
+    assert.equal(Number(r.json.freteValor), Number((640 * T.Truck).toFixed(2)), 'quem multiplica é o deslocamento');
+    assert.equal(r.json.kmDivergente, true, 'a divergência é visível, não escondida');
+  });
+
+  test('destino fora do cadastro não impede a carga — só não traz km de referência', async () => {
+    const r = await req('/api/cargas', { metodo: 'POST', token: tokens['Logística'], corpo: {
+      placa: placas.Toco, numeroCarga: 'FRT-NOVO-' + Date.now(),
+      freteDestino: 'CIDADE QUE AINDA NAO ESTA NA TABELA', kmDeslocamento: 300, observacoes: 'combinado à parte',
+    } });
+    assert.equal(r.status, 201, r.texto);
+    assert.equal(r.json.kmDestino, null);
+    assert.equal(Number(r.json.freteValor), Number((300 * T.Toco).toFixed(2)),
+      'o deslocamento digitado calcula mesmo sem destino cadastrado');
+  });
+
+  test('o Comercial NÃO enxerga valor de frete', async () => {
+    const { rows } = await pool.query(
+      "SELECT senha_hash FROM operadores WHERE email = 'ana@teste.local'");
+    await pool.query(
+      `INSERT INTO operadores (email, nome, setor, senha_hash) VALUES ($1,'Cida','Comercial',$2)
+       ON CONFLICT (email) DO UPDATE SET setor = 'Comercial'`,
+      ['cida@teste.local', rows[0].senha_hash]);
+    const login = await req('/auth/login', { metodo: 'POST', corpo: { email: 'cida@teste.local', senha: SENHA } });
+    assert.equal(login.status, 200, login.texto);
+    const est = await req('/api/estado?desde=1970-01-01T00:00:00.000Z', { token: login.json.token });
+    assert.equal(est.status, 200, est.texto);
+    const comValor = (est.json.cargas || []).filter((c) => c.freteValor != null);
+    assert.equal(comValor.length, 0,
+      `o Comercial recebeu ${comValor.length} carga(s) com valor de frete — o valor é de Logística e Administração`);
+    // E a tabela de preço também não é dele.
+    const tar = await req('/api/frete/tarifas', { token: login.json.token });
+    assert.equal(tar.status, 403, tar.texto);
+  });
+
+  test('mudar a tarifa NÃO recalcula frete já contratado', async () => {
+    const r = await req('/api/cargas', { metodo: 'POST', token: tokens['Logística'], corpo: {
+      placa: placas.Bitruck, numeroCarga: 'FRT-CONGELA-' + Date.now(),
+      freteDestino: 'PASSOS', kmDeslocamento: 445, observacoes: 'congela',
+    } });
+    assert.equal(r.status, 201, r.texto);
+    const antes = Number(r.json.freteValor);
+    assert.equal(antes, Number((445 * T.Bitruck).toFixed(2)));
+
+    const up = await req('/api/frete/tarifas', { metodo: 'POST', token: tokens['Administração'],
+      corpo: { tipoVeiculo: 'Bitruck', valorPorKm: 99.99 } });
+    assert.equal(up.status, 201, up.texto);
+
+    const { rows } = await pool.query('SELECT frete_valor FROM fact_viagens WHERE carga_id = $1', [r.json.id]);
+    assert.equal(Number(rows[0].frete_valor), antes,
+      'recalcular o passado com a tarifa de hoje faria o relatório mentir');
+
+    await pool.query('UPDATE frete_tarifas SET valor_por_km = $1 WHERE tipo_veiculo = $2', [T.Bitruck, 'Bitruck']);
+  });
+
+  test('o cadastro de tarifa e destino é da Logística/Administração — a Portaria não mexe', async () => {
+    const t = await req('/api/frete/tarifas', { metodo: 'POST', token: tokens['Portaria'],
+      corpo: { tipoVeiculo: 'Truck', valorPorKm: 1 } });
+    assert.equal(t.status, 403, t.texto);
+    const d = await req('/api/frete/destinos', { metodo: 'POST', token: tokens['Portaria'],
+      corpo: { destino: 'X', km: 1 } });
+    assert.equal(d.status, 403, d.texto);
+  });
+
+  test('a Logística cadastra destino novo, e ele passa a valer no cálculo', async () => {
+    const d = await req('/api/frete/destinos', { metodo: 'POST', token: tokens['Logística'],
+      corpo: { destino: 'PATOS DE MINAS', km: 310, operador: 'Ana' } });
+    assert.equal(d.status, 201, d.texto);
+    assert.equal(d.json.km, 310);
+    const r = await req('/api/cargas', { metodo: 'POST', token: tokens['Logística'], corpo: {
+      placa: placas['3/4'], numeroCarga: 'FRT-PATOS-' + Date.now(),
+      freteDestino: 'PATOS DE MINAS', kmDeslocamento: 310, observacoes: 'destino novo',
+    } });
+    assert.equal(r.status, 201, r.texto);
+    assert.equal(r.json.kmDestino, 310);
+    assert.equal(Number(r.json.freteValor), Number((310 * T['3/4']).toFixed(2)));
+  });
+
+  test('km ZERO não vira frete de R$ 0,00 — é tratado como não informado', async () => {
+    /* `Number('') === 0` e `Number(null) === 0`. Sem kmValido(), um campo em
+       branco viraria "zero quilômetros" e o frete sairia R$ 0,00 sem ninguém
+       ver — a mesma família do `Number(0) || null` que já apagou capacidade
+       de veículo neste projeto, do outro lado da moeda. */
+    const r = await req('/api/cargas', { metodo: 'POST', token: tokens['Logística'], corpo: {
+      placa: placas.Truck, numeroCarga: 'FRT-ZERO-' + Date.now(), kmDeslocamento: 0, observacoes: 'x',
+    } });
+    assert.equal(r.status, 201, r.texto);
+    assert.equal(r.json.kmDeslocamento, null, 'zero digitado é guardado como NÃO INFORMADO');
+    assert.equal(r.json.freteValor, null, 'e não como frete de R$ 0,00');
+    assert.match(r.json.freteMotivo, /Sem KM/i);
+  });
+
+  after(async () => {
+    await pool.query("DELETE FROM operadores WHERE email = 'cida@teste.local'");
+    await pool.query("DELETE FROM frete_destinos WHERE destino = 'PATOS DE MINAS'");
+    /* AS PLACAS QUE ESTE BLOCO CRIOU SAEM JUNTO.
+
+       `dim_veiculos` é dimensão COMPARTILHADA: test_login_api e
+       test_adaptador_api conferem a contagem exata da frota (749) para
+       provar que a base inteira chega ao painel. Deixar 7 placas de teste
+       atrás fez as duas reprovarem com "756 placas" — contaminação, a causa
+       nº 3 das quatro, e não defeito nenhum nelas.
+
+       As cargas vão primeiro: fact_viagens referencia a placa. */
+    await pool.query("DELETE FROM fact_statusfrota WHERE carga_id IN (SELECT carga_id FROM fact_viagens WHERE placa LIKE 'FRT%')");
+    await pool.query("DELETE FROM log_eventos WHERE placa LIKE 'FRT%'");
+    await pool.query("DELETE FROM fact_viagens WHERE placa LIKE 'FRT%'");
+    await pool.query("DELETE FROM dim_veiculos WHERE placa LIKE 'FRT%'");
+  });
+});
+
+describe('43. Arrastar respeita os números que a fila JÁ TEM (09/09/2026)', () => {
+  /* RELATO DO DONO, em produção, hoje: "tentei arrastar as cargas de hoje
+     da torre de controle e não consegui, o arrasto elas não trocam de
+     lugar e aparece que essa ação é inválida".
+
+     REPRODUZIDO, e a causa é uma conta minha, de ontem. `filaReordenada`
+     montava o destino a partir dos PRIMEIROS N NÚMEROS LIVRES — como se a
+     fila sempre ocupasse 1,2,3... pulando só o que já carregou. No dia
+     real ela não ocupa: a Logística digita os números ao longo do dia e a
+     Portaria chama o caminhão que chegou, não o próximo da lista. Sobra
+     uma fila tipo 1, 7, 12.
+
+       fila 1, 7, 12 · já carregaram 2, 3, 4
+       primeiros 3 livres = 1, 5, 6
+       soltar em cima da linha que mostra 7  →  7 não está em [1,5,6]
+                                             →  RECUSADO, "ação inválida"
+
+     E o pior estava escondido atrás disso: quando por acaso o número
+     ESTAVA na lista (soltar na linha 1), a operação era aceita e
+     RENUMERAVA a fila de 1,7,12 para 1,5,6 — reescrevendo em silêncio
+     números que a Logística tinha digitado.
+
+     A REGRA CERTA: os números que a fila já tem são o tabuleiro. Arrastar
+     REORDENA quem ocupa cada número; não inventa numeração nova. Número
+     novo só entra para carga que ainda não tem nenhum. É o que o dono
+     pediu com "mantendo a logica e a sequencia". */
+  /* SEIS PLACAS NOVAS POR CENÁRIO. Reusar as mesmas faria o segundo
+     cenário esbarrar na trava de 19/08 ("caminhão que não saiu não chega de
+     novo") — que está certa e não é o assunto aqui. */
+  let proximaPlaca = 120;
+  async function seisPlacas() {
+    const { rows } = await pool.query(
+      `SELECT placa FROM dim_veiculos WHERE transportadora <> ''
+        ORDER BY placa OFFSET $1 LIMIT 6`, [proximaPlaca]);
+    proximaPlaca += 6;
+    return rows.map((r) => r.placa);
+  }
+
+  /* Monta um dia com a forma do relato: seis cargas, três já carregaram
+     segurando 2, 3 e 4, e a fila fica com 1, 7 e 12.
+
+     CADA CENÁRIO NUM DIA PRÓPRIO. A fila que o servidor monta é a do DIA da
+     carga arrastada, e outros blocos desta bateria deixam cargas em aberto
+     no dia de hoje — elas entrariam na mesma fila e o teste passaria a medir
+     um tabuleiro que não é o que ele montou (a causa nº 3 das quatro do
+     vermelho: contaminação entre suítes). Um dia por cenário isola. */
+  let diaSeq = 0;
+  async function montarDia(prefixo) {
+    const placas = await seisPlacas();
+    const ids = [];
+    for (let i = 0; i < 6; i++) {
+      const r = await req('/api/cargas', { metodo: 'POST', token: tokens['Logística'], corpo: {
+        placa: placas[i], numeroCarga: `${prefixo}-${i}-${Date.now()}`,
+      } });
+      assert.equal(r.status, 201, r.texto);
+      ids.push(r.json.id);
+    }
+    // Três saem da fila (Embarque Iniciado) e ficam com 2, 3, 4.
+    for (let i = 0; i < 3; i++) {
+      for (const [status, setor] of [['Aguardando Embarque', 'Portaria'], ['Embarque Iniciado', 'Expedição']]) {
+        const r = await req(`/api/cargas/${ids[i]}/status`, { metodo: 'POST', token: tokens[setor],
+          corpo: { status, confirmado: true } });
+        assert.equal(r.status, 200, `${status}: ${r.texto}`);
+      }
+    }
+    /* O dia próprio e os números, na MESMA escrita e DEPOIS de as etapas
+       terem andado — a rota de status carimba `programado_em` no
+       lançamento, e gravar antes seria desfeito por ela. */
+    diaSeq += 1;
+    const numeros = [2, 3, 4, 1, 7, 12];
+    for (let i = 0; i < 6; i++) {
+      await pool.query(
+        `UPDATE fact_viagens SET sequencia = $1,
+           programado_em = date_trunc('day', now()) - ($2 || ' days')::interval + interval '9 hours'
+         WHERE carga_id = $3`,
+        [numeros[i], String(200 + diaSeq), ids[i]]);
+    }
+    return { ids, fila: ids.slice(3) };  // fila = os que ainda vão carregar: 1, 7, 12
+  }
+
+  async function seqDe(ids) {
+    const { rows } = await pool.query(
+      'SELECT carga_id, sequencia FROM fact_viagens WHERE carga_id = ANY($1)', [ids]);
+    const m = new Map(rows.map((r) => [r.carga_id, r.sequencia]));
+    return ids.map((id) => m.get(id));
+  }
+
+  test('soltar em cima de um número que a fila TEM funciona — mesmo salteado', async () => {
+    const { fila } = await montarDia('ARR-A');
+    // fila: [1, 7, 12]. Arrasta a de 12 para cima da linha que mostra 7.
+    const r = await req('/api/cargas/sequenciar', { metodo: 'POST', token: tokens['Logística'],
+      corpo: { cargaId: fila[2], posicao: 7 } });
+    assert.equal(r.status, 200, r.texto);
+    assert.deepEqual(await seqDe(fila), [1, 12, 7],
+      'quem estava em 12 assume o 7; quem estava em 7 desce para o 12');
+  });
+
+  test('e NÃO reescreve os números que a Logística digitou', async () => {
+    const { fila } = await montarDia('ARR-B');
+    const r = await req('/api/cargas/sequenciar', { metodo: 'POST', token: tokens['Logística'],
+      corpo: { cargaId: fila[2], posicao: 1 } });
+    assert.equal(r.status, 200, r.texto);
+    const depois = await seqDe(fila);
+    assert.deepEqual([...depois].sort((a, b) => a - b), [1, 7, 12],
+      'o conjunto de números da fila é o mesmo — arrastar reordena, não renumera');
+    assert.deepEqual(depois, [7, 12, 1], 'a arrastada foi para o 1 e as outras subiram uma casa');
+  });
+
+  test('os números de quem já carregou continuam intocados', async () => {
+    const { ids, fila } = await montarDia('ARR-C');
+    await req('/api/cargas/sequenciar', { metodo: 'POST', token: tokens['Logística'],
+      corpo: { cargaId: fila[2], posicao: 7 } });
+    assert.deepEqual(await seqDe(ids.slice(0, 3)), [2, 3, 4],
+      'carga que já carregou é registro do que aconteceu');
+  });
+
+  test('pedir o número de quem já carregou continua recusado, com o motivo', async () => {
+    const { fila } = await montarDia('ARR-D');
+    const r = await req('/api/cargas/sequenciar', { metodo: 'POST', token: tokens['Logística'],
+      corpo: { cargaId: fila[2], posicao: 3 } });
+    assert.equal(r.status, 400, r.texto);
+    assert.equal(r.json.codigo, 'POSICAO_INVALIDA');
+    assert.match(r.json.erro, /já carregou/, 'a recusa diz QUAL das duas causas foi');
+  });
+
+  test('carga da fila SEM número recebe um livre, sem tomar o de ninguém', async () => {
+    const { fila } = await montarDia('ARR-E');
+    await pool.query('UPDATE fact_viagens SET sequencia = NULL WHERE carga_id = $1', [fila[1]]);
+    // fila agora: 1, (sem número), 12
+    const r = await req('/api/cargas/sequenciar', { metodo: 'POST', token: tokens['Logística'],
+      corpo: { cargaId: fila[2], posicao: 1 } });
+    assert.equal(r.status, 200, r.texto);
+    const depois = await seqDe(fila);
+    assert.equal(depois[2], 1, 'a arrastada foi para o 1');
+    assert.equal(new Set(depois).size, 3, 'ninguém ficou com número repetido');
+    assert.ok(depois.every((n) => ![2, 3, 4].includes(n)),
+      'e ninguém tomou o número de quem já carregou');
+  });
+
+  test('número solto, fora das casas da fila, CONTINUA recusado — e a recusa diz quais valem', async () => {
+    /* Decisão de 08/09, com teste próprio no bloco 7d: a fila tem casas, e
+       999 numa fila de 3 não é uma delas. O relato de hoje era sobre
+       ARRASTAR, que solta sempre em cima de um número que existe — alargar
+       a regra aqui consertaria o que ninguém pediu e apagaria a decisão de
+       ontem junto.
+
+       O QUE MUDA É A FRASE. "A fila tem 3 cargas" não explica por que 5 é
+       inválido quando as casas são 1, 7 e 12: o número é menor que o maior
+       e mesmo assim não serve. Agora a recusa DIZ quais são as casas — sem
+       isso o operador tenta 4, tenta 6, e conclui que o campo está quebrado. */
+    const { fila } = await montarDia('ARR-F');
+    const r = await req('/api/cargas/sequenciar', { metodo: 'POST', token: tokens['Logística'],
+      corpo: { cargaId: fila[2], posicao: 5 } });
+    assert.equal(r.status, 400, r.texto);
+    assert.equal(r.json.codigo, 'POSICAO_INVALIDA');
+    assert.match(r.json.erro, /1, 7 e 12|1, 7, 12/,
+      `a recusa precisa dizer quais números valem: ${r.json.erro}`);
+    assert.deepEqual(await seqDe(fila), [1, 7, 12], 'e nada foi renumerado');
   });
 });
