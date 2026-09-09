@@ -512,6 +512,11 @@ const SuincoSharePoint = (function () {
       lacreRetidoPor: campos.Lacre_Retido_Por || '',
       lacreRetidoEm: campos.Lacre_Retido_Em || null,
       programadoEm: campos.Programado_Em,
+      /* Frete — só o que o painel tem direito de gravar. O valor não sobe:
+         quem calcula é o servidor, contra a tabela (ver dominio/frete.js). */
+      freteDestino: campos.Frete_Destino || '',
+      kmDeslocamento: campos.Km_Deslocamento ?? null,
+      freteDocumento: campos.Frete_Documento || '',
       // Versão lida pelo terminal — bloqueio otimista (ver data.js, pacote de ida).
       versao: Number.isFinite(Number(campos.Versao)) ? Number(campos.Versao) : undefined,
       status: campos.Status_Atual,
@@ -569,6 +574,20 @@ const SuincoSharePoint = (function () {
       Status_Atual: c.status,
       Aguardando_Carga: c.aguardandoCarga,
       Saida_Sem_Carregar: c.saidaSemCarregar === true,
+      /* Frete, na volta. Os calculados (km do destino, valor, tarifa usada,
+         divergência e o motivo de não haver valor) só existem neste sentido
+         — mesmo padrão de Lacre_Retido_Por e Saida_Sem_Carregar.
+
+         `freteValor` chega NULO para quem não pode vê-lo: o servidor apaga
+         antes de enviar (paraPainelPara / emitirCarga), então o valor nem
+         viaja até o navegador do Comercial. */
+      Frete_Destino: c.freteDestino || '',
+      Km_Deslocamento: c.kmDeslocamento ?? null,
+      Frete_Documento: c.freteDocumento || '',
+      Km_Destino: c.kmDestino ?? null,
+      Frete_Valor: c.freteValor ?? null,
+      Frete_Tarifa_Usada: c.freteTarifaUsada ?? null,
+      Frete_Motivo: c.freteMotivo || '',
       Criado_Em: c.criadoEm,
       Programado_Em: c.programadoEm,
       Atualizado_Em: c.atualizadoEm,
@@ -778,6 +797,35 @@ const SuincoSharePoint = (function () {
      caminhão que entrou, entregou devolução e foi embora sem carregar
      (08/09/2026). Sem ele o servidor devolve 422 com a explicação, e é
      essa explicação que a tela mostra na pergunta ao porteiro. */
+  /* Cadastro da tabela de frete. Espelha gravarRota() — inclusive em NÃO
+     enfileirar: cadastro de tarifa não é operação de pátio, ninguém está
+     esperando o caminhão por causa dela, e uma tabela de preço subindo
+     horas depois pela fila offline poderia sobrescrever um valor que
+     alguém já corrigiu no meio. Sem conexão, avisa e não grava. */
+  async function gravarTarifaFrete(campos) {
+    if (!estaConfigurado()) return semServidor();
+    try {
+      const r = await chamar('/api/frete/tarifas', { metodo: 'POST', corpo: campos });
+      mudarEstado('online');
+      return { enfileirado: false, item: r };
+    } catch (e) {
+      if (eFalhaDeRede(e)) mudarEstado('offline');
+      return { enfileirado: false, recusado: true, erro: e.message, codigo: e.codigo };
+    }
+  }
+
+  async function gravarDestinoFrete(campos) {
+    if (!estaConfigurado()) return semServidor();
+    try {
+      const r = await chamar('/api/frete/destinos', { metodo: 'POST', corpo: campos });
+      mudarEstado('online');
+      return { enfileirado: false, item: r };
+    } catch (e) {
+      if (eFalhaDeRede(e)) mudarEstado('offline');
+      return { enfileirado: false, recusado: true, erro: e.message, codigo: e.codigo };
+    }
+  }
+
   async function mudarStatus(cargaId, statusNovo, extra) {
     if (!estaConfigurado()) return semServidor();
     try {
@@ -1055,6 +1103,30 @@ const SuincoSharePoint = (function () {
         }));
       } catch (e) {
         console.warn('[Suinco] rotas não carregaram:', e.message);
+      }
+
+      /* A TABELA DE FRETE VEM NA MESMA CADÊNCIA DAS ROTAS (09/09/2026).
+
+         Pelo mesmo motivo, e o comentário acima já conta a história: rota
+         cadastrada durante o dia não aparecia em painel que estava aberto
+         desde antes. Tarifa e destino são a mesma espécie de dado —
+         pequenos, editáveis pela tela, e lidos o dia inteiro por painel que
+         ninguém recarrega.
+
+         FALHA EM SILÊNCIO DE PROPÓSITO. Quem não pode ver valor de frete
+         (Portaria, Expedição, Comercial) recebe 403 aqui, e isso é o
+         esperado, não um defeito: o painel dessas pessoas simplesmente não
+         mostra a tabela. Derrubar a sincronização inteira por causa disso
+         tiraria a Portaria do ar. */
+      try {
+        const [tarifas, destinos] = await Promise.all([
+          chamar('/api/frete/tarifas'),
+          chamar('/api/frete/destinos'),
+        ]);
+        dados.freteTarifas = tarifas || [];
+        dados.freteDestinos = destinos || [];
+      } catch (e) {
+        if (e.status !== 403) console.warn('[Suinco] tabela de frete não carregou:', e.message);
       }
     }
 
@@ -1855,7 +1927,7 @@ const SuincoSharePoint = (function () {
     aoFecharPrograma,
     login, sair, diagnosticarConexao,
     push, upsert, excluir, mudarStatus, sequenciar, encerrarProgramacoesAnteriores, reterLacre,
-    recarregarRotas,
+    recarregarRotas, gravarTarifaFrete, gravarDestinoFrete,
     corrigirEtapa, corrigirDataProgramacao, desfazerExclusao, listarExcluidas,
     programacaoDoDia, historico, mfa,
     modeloSemana, montagem,

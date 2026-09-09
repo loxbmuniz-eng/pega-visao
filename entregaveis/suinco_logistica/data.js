@@ -526,6 +526,62 @@ let DB = {
   dark: true
 };
 
+/* =====================================================================
+   A TABELA DE FRETE NO PAINEL — cópia de leitura, nunca a fonte
+   ---------------------------------------------------------------------
+   Pedido do dono: "criar tabela de frete no embarquesuinco.com.br,
+   cadastro possa ser editavel e criada da mesma forma que funcionam os
+   cadastros" e "a tabela de frete deve fazer o calculo segundo a
+   kilometragem e destino".
+
+   O QUE ESTAS DUAS LISTAS SÃO, E O QUE NÃO SÃO. Elas existem para a tela
+   poder mostrar o km do destino no instante em que a pessoa escolhe, e
+   para o seletor ter o que listar. Elas NÃO decidem o valor: quem calcula
+   é o servidor, contra a tabela do banco (backend/src/dominio/frete.js).
+
+   Isso é decisão, não descuido. Duas contas de dinheiro — uma no navegador
+   e outra no servidor — divergem no primeiro caso de borda: um terminal
+   com a tabela velha calcularia um valor, o servidor gravaria outro, e a
+   diferença apareceria como frete pago errado, não como tela feia. Aqui a
+   tela ADIANTA o resultado; quem decide é a transação, como em todo o
+   resto do painel.
+   ===================================================================== */
+let TARIFAS_FRETE = [];   // {tipoVeiculo, valorPorKm, vigenteDesde}
+let DESTINOS_FRETE = [];  // {destino, km}
+const KM_POR_DESTINO = new Map();
+
+/* KM que vale: inteiro positivo, ou null. Nunca zero por engano.
+
+   Gêmea de kmValido() em backend/src/dominio/frete.js — de propósito, e é
+   a única coisa desta família duplicada nos dois lados. A alternativa era
+   o campo em branco chegar ao servidor como 0 e ser recusado lá, depois
+   de a pessoa já ter clicado. */
+function kmValidoLocal(v){
+  if(v === '' || v === null || v === undefined) return null;
+  const n = Number(v);
+  if(!Number.isFinite(n)) return null;
+  const i = Math.trunc(n);
+  return i > 0 ? i : null;
+}
+
+function kmDoDestino(destino){
+  const d = String(destino || '').trim().toUpperCase();
+  return d && KM_POR_DESTINO.has(d) ? KM_POR_DESTINO.get(d) : null;
+}
+
+/* Recebe a tabela do servidor. Substitui inteira em vez de mesclar: o
+   servidor é a fonte, e mesclar deixaria viva no navegador uma tarifa que
+   alguém apagou lá — exatamente o tipo de sobra que faz a tela mostrar um
+   preço que não existe mais. */
+function receberTabelaDeFrete({tarifas, destinos}){
+  if(Array.isArray(tarifas)) TARIFAS_FRETE = tarifas.slice();
+  if(Array.isArray(destinos)){
+    DESTINOS_FRETE = destinos.slice();
+    KM_POR_DESTINO.clear();
+    DESTINOS_FRETE.forEach(d => KM_POR_DESTINO.set(String(d.destino).toUpperCase(), d.km));
+  }
+}
+
 /* ---------- storage adapter (trocar aqui quando vier o SharePoint) ---------- */
 const SuincoStore = {
   load(){
@@ -760,6 +816,21 @@ const SuincoStore = {
       Lacre_2: carga.lacre2 || '',
       Lacre_3: carga.lacre3 || '',
       Lacre_Retido: carga.lacreRetido || '',
+      /* O FRETE (09/09/2026) — nos QUATRO pontos, como manda o guardião nº 1
+         (a família das ocorrências #02, #09 e #14): aqui (ida do painel),
+         deLinhaParaApi (ida para a API), daApiParaLinha (volta) e
+         cargaDeLinhaRemota (conversão). Faltando em UM deles, o campo some
+         sem erro nenhum em tela — foi assim que a observação passou meses
+         chegando vazia ao relatório de fretes.
+
+         SÓ ESTES TRÊS SOBEM. `km_destino`, `frete_valor` e
+         `frete_tarifa_usada` são do servidor: ele os calcula contra a
+         tabela. Mandá-los daqui seria oferecer ao painel um jeito de gravar
+         um preço que a tabela não produz — e a fila offline reenviaria um
+         valor velho por cima do calculado. */
+      Frete_Destino: carga.freteDestino || '',
+      Km_Deslocamento: carga.kmDeslocamento ?? null,
+      Frete_Documento: carga.freteDocumento || '',
       Status_Atual: carga.status,
       Aguardando_Carga: !!carga.aguardandoCarga,
       Criado_Em: carga.criadoEm,
@@ -1259,6 +1330,20 @@ function cargaDeLinhaRemota(r){
        erro nenhum em tela. Não entra no pacote de IDA de propósito: quem
        carimba a saída sem carregamento é o servidor, na transição. */
     saidaSemCarregar: r.Saida_Sem_Carregar === true,
+    /* FRETE. Os três primeiros o painel manda de volta; os quatro últimos
+       são só de leitura — quem os produz é o servidor.
+
+       `?? null` e NÃO `|| 0`: km é dinheiro aqui. `Number(0) || null` já
+       apagou capacidade de veículo neste projeto, e do outro lado da moeda
+       `|| 0` transformaria "não informado" em "zero quilômetro", que
+       calcularia frete R$ 0,00 sem ninguém ver. */
+    freteDestino: r.Frete_Destino || '',
+    kmDeslocamento: r.Km_Deslocamento ?? null,
+    freteDocumento: r.Frete_Documento || '',
+    kmDestino: r.Km_Destino ?? null,
+    freteValor: r.Frete_Valor ?? null,
+    freteTarifaUsada: r.Frete_Tarifa_Usada ?? null,
+    freteMotivo: r.Frete_Motivo || '',
     criadoEm: r.Criado_Em || nowISO(),
     /* Sem inventar com `criadoEm`: o modelo guarda o que o servidor tem, e
        quem exibe usa `programadoEm || criadoEm` como leitura. Preencher aqui
@@ -1889,7 +1974,7 @@ function getCarga(id){ return DB.cargas.find(c=>c.id===id) || null; }
 // se a placa não estiver cadastrada em Frota, a criação é recusada. A
 // Portaria continua podendo registrar a chegada de QUALQUER placa (mesmo
 // não cadastrada) via "Aguardando Carga" — a trava é só na Programação.
-function criarCargaProgramada({placa, transportadora, tipoVeiculo, numeroCarga, cliente, destino, produto, peso, doca, rota, sequencia, observacoes, motorista, praOnde, paletizada, qtdGanchos, qtdEntregas, operador}){
+function criarCargaProgramada({placa, transportadora, tipoVeiculo, numeroCarga, cliente, destino, produto, peso, doca, rota, sequencia, observacoes, motorista, praOnde, paletizada, qtdGanchos, qtdEntregas, freteDestino, kmDeslocamento, freteDocumento, operador}){
   const p = normalizarPlaca(placa);
   /* PLACA VAZIA = caminhão ainda não contratado (26/08/2026).
 
@@ -1923,6 +2008,19 @@ function criarCargaProgramada({placa, transportadora, tipoVeiculo, numeroCarga, 
     paletizada: paletizada === 'Sim' || paletizada === true ? 'Sim' : 'Não',
     qtdGanchos: qtdGanchos!==undefined && qtdGanchos!=='' ? Math.max(0, Number(qtdGanchos)||0) : 0,
     qtdEntregas: qtdEntregas!==undefined && qtdEntregas!=='' ? Math.max(1, Number(qtdEntregas)||1) : 1,
+    /* FRETE (09/09/2026). Os três que o painel preenche; os calculados
+       chegam do servidor na confirmação.
+
+       `kmValidoLocal` e não `Number(x)||0`: campo em branco tem que virar
+       null. Zero quilômetro calcularia frete R$ 0,00 — a mesma família do
+       `Number(0) || null` que apagou capacidade de veículo aqui. */
+    freteDestino: String(freteDestino || '').trim().toUpperCase(),
+    kmDeslocamento: kmValidoLocal(kmDeslocamento),
+    freteDocumento: String(freteDocumento || '').trim(),
+    kmDestino: kmDoDestino(freteDestino),
+    freteValor: null,
+    freteTarifaUsada: null,
+    freteMotivo: '',
     status: 'Aguardando Veículo',
     aguardandoCarga: false,
     criadoEm: nowISO(), criadoPor: operador||'(não identificado)',
@@ -3117,6 +3215,79 @@ function analiseGargalos(cargas){
    administração registra valor de frete, negociação e instruções — por
    isso a carga entra na lista mesmo sem observação nenhuma: é justamente
    a linha em branco que precisa ser preenchida. */
+/* A PLANILHA DE FRETES — as colunas que o dono ditou (09/09/2026)
+   ---------------------------------------------------------------------
+   Pedido dele, na ordem em que veio:
+
+     "Coluna A: sequência / Coluna B: número da carga / Coluna C: data do
+      faturamento da carga. Preciso de uma coluna adicional (pode ser a
+      última) (...) para inserir os números dos documentos de frete que
+      estou criando. Essa informação é minha e não está no sistema. A rota
+      deve incluir, conforme o tipo (cross ou entrega direta): placa,
+      transportadora, caminhão, tipo, peso, quilometragem, entrega e
+      motorista. Além disso, acrescentar: Quilometragem, Observação. A
+      parte 'palletizada' pode ser excluída; não é necessária para daniela.
+      (...) Nosso relatório de administração de fretes atualmente sai em
+      PDF; ele precisa ser disponibilizado em formato de planilha para
+      reduzir retrabalho."
+
+   DATA DO FATURAMENTO É O EVENTO, NÃO A GRAVAÇÃO. Perguntado, ele
+   confirmou: "data do faturamento precisa seguir a data que foi faturada".
+   É o primeiro instante em que a carga chegou a "Faturado" na trilha — o
+   mesmo princípio da fidelidade ao momento exato que já corrigiu o
+   Relatório Executivo. Carga que ainda não faturou fica em branco, e
+   branco aqui quer dizer "ainda não", não "hoje".
+
+   PALETIZADA SAIU. Ela continua existindo na carga e nos outros
+   relatórios; só não entra nesta planilha, que é da Daniela. */
+function dadosPlanilhaDeFretes(cargas){
+  const lista = (cargas || DB.cargas)
+    .filter(c => !c.aguardandoCarga)
+    .slice()
+    .sort((a,b)=>{
+      /* Sequência primeiro, porque a coluna A é a sequência e planilha se
+         lê de cima para baixo. Sem sequência vai para o fim — null não é
+         zero, e mandá-la para a frente como se fosse "0" inverteria a
+         ordem da montagem do dia. */
+      const sa = a.sequencia ?? Number.MAX_SAFE_INTEGER;
+      const sb = b.sequencia ?? Number.MAX_SAFE_INTEGER;
+      if(sa !== sb) return sa - sb;
+      return String(a.numeroCarga||'').localeCompare(String(b.numeroCarga||''), 'pt-BR', {numeric:true});
+    });
+
+  return lista.map(c => {
+    const f = buscarFrota(c.placa) || {};
+    return {
+      sequencia: c.sequencia ?? null,
+      numeroCarga: c.numeroCarga || '',
+      faturamento: primeiroTimestamp(c.id, 'Faturado'),
+      rota: rotaCurta(c.rota) || '',
+      praOnde: c.praOnde || '',
+      placa: c.placa || '',
+      /* A transportadora DA CARGA na frente da do cadastro — ocorrência
+         #32. Se a planilha mostrasse sempre a da Frota, a exceção que
+         alguém registrou de propósito (subcontratação, freteiro do dia)
+         sumiria justamente do papel que existe para conferir o pagamento. */
+      transportadora: c.transportadora || f.transportadora || '',
+      tipoVeiculo: c.tipoVeiculo || f.tipoVeiculo || '',
+      peso: c.peso || 0,
+      freteDestino: c.freteDestino || '',
+      kmDestino: c.kmDestino ?? null,
+      kmDeslocamento: c.kmDeslocamento ?? null,
+      kmDivergente: c.kmDestino != null && c.kmDeslocamento != null
+        && Number(c.kmDestino) !== Number(c.kmDeslocamento),
+      qtdEntregas: c.qtdEntregas ?? 1,
+      motorista: c.motorista || f.motorista || '',
+      freteValor: c.freteValor ?? null,
+      freteMotivo: c.freteMotivo || '',
+      observacoes: c.observacoes || '',
+      // Última coluna, por pedido explícito: é dele, preenchida fora do
+      // sistema, e o painel a carrega de volta.
+      freteDocumento: c.freteDocumento || ''
+    };
+  });
+}
+
 function dadosAdministracaoFretes(cargas){
   return (cargas || DB.cargas)
     .filter(c => !c.aguardandoCarga)
