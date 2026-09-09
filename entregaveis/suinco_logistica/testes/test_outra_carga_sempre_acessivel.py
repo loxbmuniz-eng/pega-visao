@@ -108,9 +108,6 @@ async def main():
 
             await pg.fill('#prog-numero-carga', '80002')
             await pg.fill('#prog-peso', '9000')
-            # Contratar exige KM e observação desde 09/09/2026.
-            await pg.fill('#prog-km-deslocamento', '100')
-            await pg.fill('#prog-obs', 'carga de teste')
             await pg.click('button:has-text("Criar Carga")')
             await pg.wait_for_timeout(400)
             total = await pg.evaluate("() => DB.cargas.length")
@@ -137,9 +134,6 @@ async def main():
             await pg.wait_for_timeout(400)
             await pg.fill('#prog-numero-carga', '80011')
             await pg.fill('#prog-peso', '7000')
-            # Contratar exige KM e observação desde 09/09/2026.
-            await pg.fill('#prog-km-deslocamento', '100')
-            await pg.fill('#prog-obs', 'carga de teste')
             await pg.click('button:has-text("Criar Carga")')
             await pg.wait_for_timeout(400)
             total = await pg.evaluate("() => DB.cargas.length")
@@ -156,11 +150,6 @@ async def main():
             abrirTab('programacao');
             document.getElementById('prog-placa').value = placa;
             document.getElementById('prog-numero-carga').value = '80099';
-            /* KM e observação preenchidos DE PROPÓSITO: sem eles a recusa de
-               KM chegaria antes e este teste mediria a trava errada — o que
-               ele prova é o aviso de PLACA DUPLICADA. */
-            document.getElementById('prog-km-deslocamento').value = '100';
-            document.getElementById('prog-obs').value = 'carga de teste';
             criarCargaProgramadaUI();
             window.notify = original;
             return capturados.join(' | ');

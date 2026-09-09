@@ -173,11 +173,6 @@ async def main():
         await pagina.fill('#prog-numero-carga', numero)
         await pagina.fill('#prog-peso', '12000')
         await pagina.select_option('#prog-rota', '500')
-        # KM e observação: desde 09/09/2026 pôr a placa É CONTRATAR, e contratar
-    # exige os dois (pedido do dono: "1 trava a contratacao", "2 observacao
-    # obrigatoria"). Uma pessoa preenche isso; o teste também precisa.
-        await pagina.fill('#prog-km-deslocamento', '100')
-        await pagina.fill('#prog-obs', 'carga de teste')
         await pagina.click("button:has-text('Criar Carga')")
         await pagina.wait_for_timeout(2500)
 

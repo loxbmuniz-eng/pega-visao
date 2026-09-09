@@ -3385,34 +3385,21 @@ function criarCargaProgramadaUI(){
     return;
   }
 
-  /* A TRAVA DA CONTRATAÇÃO, NA TELA (09/09/2026).
+  /* AQUI HAVIA UMA TRAVA DE KM E OBSERVAÇÃO, E ELA SAIU (09/09/2026).
 
-     O servidor recusa de qualquer jeito (KM_FALTANDO) — esta checagem
-     existe para a pessoa saber ANTES de clicar, e não depois de o painel
-     ter montado a carga e levado um 422 de volta.
+     O dono tinha pedido "kilometragem obrigatoria" e confirmado "1 trava a
+     contratacao". A bateria mostrou o custo antes de a operação pagar por
+     ele: a Montagem do Dia cria carga por outro caminho, em lote, sem campo
+     de KM — e carga recusada na criação é APAGADA do painel (proteção de
+     07/08/2026). O lote inteiro sumiria na frente da Logística.
 
-     PERGUNTA, NÃO BLOQUEIA O BOTÃO. "Botão desabilitado não ensina o
-     caminho, só nega": o campo em falta é dito pelo nome, com o motivo, e
-     o foco vai para ele. Sem placa não pergunta nada — carga sem caminhão
-     contratado é programação, e é assim que o dono pediu que ela nascesse. */
-  if(!semPlaca){
-    const faltaFrete = [];
-    if(kmValidoLocal(document.getElementById('prog-km-deslocamento').value) === null){
-      faltaFrete.push('KM de deslocamento');
-    }
-    if(!document.getElementById('prog-obs').value.trim()) faltaFrete.push('Observação');
-    if(faltaFrete.length){
-      notify(`Falta ${faltaFrete.join(' e ')} para contratar a placa ${pNorm}. `
-        + 'O KM de deslocamento é o que será pago no frete; a observação é onde a '
-        + 'Administração lê o valor combinado quando ele foge da tabela. '
-        + 'Sem placa, a carga pode ser criada assim mesmo e você contrata depois.',
-        'warn', 11000);
-      const foco = document.getElementById(
-        faltaFrete[0] === 'Observação' ? 'prog-obs' : 'prog-km-deslocamento');
-      if(foco) foco.focus();
-      return;
-    }
-  }
+     Decisão dele, com a evidência na mão: "não põe a trava do quilômetro
+     então".
+
+     O CAMPO CONTINUA, e continua se preenchendo sozinho pelo destino. O que
+     não existe mais é o portão. Carga sem KM nasce igual, e é o relatório
+     de fretes que cobra: a linha aparece com o motivo escrito em vez de uma
+     célula vazia. Cobrar onde o dado é usado, e não onde o caminhão passa. */
 
   try{
     const criada = criarCargaProgramada({

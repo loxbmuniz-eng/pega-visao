@@ -62,9 +62,6 @@ async def main():
         await pg.fill('#prog-motorista', 'José da Silva')
         await pg.fill('#prog-peso', '12000')
         await pg.select_option('#prog-rota', '500')
-        # Contratar (pôr a placa) exige KM e observação desde 09/09/2026.
-        await pg.fill('#prog-km-deslocamento', '100')
-        await pg.fill('#prog-obs', 'carga de teste')
         await pg.click('button:has-text("Criar Carga")')
         await pg.wait_for_timeout(400)
 
@@ -110,9 +107,6 @@ async def main():
         print('\n=== 3. SEGUNDA CARGA NA MESMA PLACA ===')
         await pg.fill('#prog-numero-carga', '90002')
         await pg.fill('#prog-peso', '9000')
-        # Contratar (pôr a placa) exige KM e observação desde 09/09/2026.
-        await pg.fill('#prog-km-deslocamento', '100')
-        await pg.fill('#prog-obs', 'carga de teste')
         await pg.click('button:has-text("Criar Carga")')
         await pg.wait_for_timeout(400)
 

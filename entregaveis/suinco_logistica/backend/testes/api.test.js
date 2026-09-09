@@ -49,32 +49,7 @@ const ADMINS = [
 ];
 const adm = {};
 
-/* TODA CARGA DE TESTE NASCE CONTRATADA — e contratar exige KM e observação
-   desde 09/09/2026 (a trava do bloco 42, pedido do dono: "1 trava a
-   contratacao" + "2 observacao obrigatoria").
-
-   Sem este ajudante, os ~70 blocos que criam uma carga para testar OUTRA
-   coisa (fluxo, permissão, lacre, exclusão) passariam a carregar dois
-   campos de frete que não têm nada a ver com o que eles provam — e a
-   próxima pessoa a escrever um teste copiaria o ruído sem saber por quê.
-
-   ELE NÃO ENFRAQUECE A TRAVA, e é isso que `freteCru` garante: quem quer
-   testar a AUSÊNCIA de KM manda o corpo cru e nada é acrescentado. A trava
-   continua sendo provada no único lugar onde ela é o assunto. E o ajudante
-   só age quando há PLACA — carga sem placa não é contratação, e é assim
-   que os testes de "programação sem caminhão" continuam nascendo secos. */
-function comFreteDeTeste(corpo) {
-  if (!corpo || !corpo.placa) return corpo;
-  const saida = { ...corpo };
-  if (!('kmDeslocamento' in saida)) saida.kmDeslocamento = 100;
-  if (!('observacoes' in saida)) saida.observacoes = 'carga de teste';
-  return saida;
-}
-
-async function req(caminho, { metodo = 'GET', token, corpo, cabecalhos = {}, freteCru = false } = {}) {
-  if (!freteCru && metodo === 'POST' && caminho.startsWith('/api/cargas')) {
-    corpo = comFreteDeTeste(corpo);
-  }
+async function req(caminho, { metodo = 'GET', token, corpo, cabecalhos = {} } = {}) {
   const r = await fetch(base + caminho, {
     method: metodo,
     headers: {
@@ -5239,13 +5214,29 @@ describe('42. Tabela de frete: o valor sai da conta, e sem KM não se contrata (
     }
   });
 
-  test('SEM KM NÃO SE CONTRATA: criar carga já com placa exige o deslocamento', async () => {
-    const r = await req('/api/cargas', { metodo: 'POST', token: tokens['Logística'], freteCru: true, corpo: {
+  test('SEM KM A CARGA NASCE IGUAL — e a ausência vem DECLARADA, não muda', async () => {
+    /* AQUI HAVIA UMA TRAVA, E ELA SAIU POR DECISÃO DO DONO (09/09/2026).
+
+       O pedido era "kilometragem obrigatoria" e ele confirmou "1 trava a
+       contratacao". A bateria mostrou o custo antes de a operação pagar:
+       a Montagem do Dia cria carga por outro caminho, EM LOTE, sem campo de
+       KM — e carga recusada na criação é apagada do painel (proteção de
+       07/08). O lote sumiria na frente da Logística. Levado a ele com a
+       evidência: "não põe a trava do quilômetro então".
+
+       O QUE ESTE TESTE GUARDA AGORA é o que sobrou no lugar da trava, e que
+       vale mais: a carga nasce, e a falta do KM é DITA. Célula vazia sem
+       explicação é lida como R$ 0,00 por quem confere o frete — foi assim
+       que o relatório passou meses saindo com "a preencher" sem ninguém
+       saber de quem era a pendência. */
+    const r = await req('/api/cargas', { metodo: 'POST', token: tokens['Logística'], corpo: {
       placa: placas.Truck, numeroCarga: 'FRT-SEMKM-' + Date.now(), observacoes: 'x',
     } });
-    assert.equal(r.status, 422, r.texto);
-    assert.equal(r.json.codigo, 'KM_FALTANDO');
-    assert.match(r.json.erro, /KM|quilometragem/i);
+    assert.equal(r.status, 201, r.texto);
+    assert.equal(r.json.kmDeslocamento, null, 'null, não zero: não informado ≠ zero quilômetro');
+    assert.equal(r.json.freteValor, null, 'sem KM não há conta a fazer');
+    assert.match(r.json.freteMotivo, /Sem KM/i,
+      'e o painel recebe o motivo — a ausência é declarada, não silenciosa');
   });
 
   test('mas a carga SEM PLACA nasce sem KM — é programação, não contratação', async () => {
@@ -5258,11 +5249,13 @@ describe('42. Tabela de frete: o valor sai da conta, e sem KM não se contrata (
     semKm = r.json.id;
   });
 
-  test('e ao COLOCAR a placa nela, o KM passa a ser exigido', async () => {
+  test('e ao COLOCAR a placa nela, o frete é calculado com o que houver', async () => {
+    // Sem KM, contratar continua sendo possível — só não produz valor.
     const sem = await req(`/api/cargas/${semKm}`, { metodo: 'PATCH', token: tokens['Logística'],
       corpo: { placa: placas.Carreta } });
-    assert.equal(sem.status, 422, sem.texto);
-    assert.equal(sem.json.codigo, 'KM_FALTANDO');
+    assert.equal(sem.status, 200, sem.texto);
+    assert.equal(sem.json.freteValor, null);
+    assert.match(sem.json.freteMotivo, /Sem KM/i);
 
     const com = await req(`/api/cargas/${semKm}`, { metodo: 'PATCH', token: tokens['Logística'],
       corpo: { placa: placas.Carreta, freteDestino: 'UBERLANDIA', kmDeslocamento: 220, observacoes: 'combinado' } });
@@ -5365,12 +5358,18 @@ describe('42. Tabela de frete: o valor sai da conta, e sem KM não se contrata (
     assert.equal(Number(r.json.freteValor), Number((310 * T['3/4']).toFixed(2)));
   });
 
-  test('km zero ou negativo é recusado — zero km não é viagem', async () => {
-    const r = await req('/api/cargas', { metodo: 'POST', token: tokens['Logística'], freteCru: true, corpo: {
+  test('km ZERO não vira frete de R$ 0,00 — é tratado como não informado', async () => {
+    /* `Number('') === 0` e `Number(null) === 0`. Sem kmValido(), um campo em
+       branco viraria "zero quilômetros" e o frete sairia R$ 0,00 sem ninguém
+       ver — a mesma família do `Number(0) || null` que já apagou capacidade
+       de veículo neste projeto, do outro lado da moeda. */
+    const r = await req('/api/cargas', { metodo: 'POST', token: tokens['Logística'], corpo: {
       placa: placas.Truck, numeroCarga: 'FRT-ZERO-' + Date.now(), kmDeslocamento: 0, observacoes: 'x',
     } });
-    assert.equal(r.status, 422, r.texto);
-    assert.equal(r.json.codigo, 'KM_FALTANDO');
+    assert.equal(r.status, 201, r.texto);
+    assert.equal(r.json.kmDeslocamento, null, 'zero digitado é guardado como NÃO INFORMADO');
+    assert.equal(r.json.freteValor, null, 'e não como frete de R$ 0,00');
+    assert.match(r.json.freteMotivo, /Sem KM/i);
   });
 
   after(async () => {

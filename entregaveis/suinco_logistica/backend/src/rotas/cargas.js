@@ -466,42 +466,32 @@ rotasCargas.post('/cargas', exigirLogin, async (req, res, next) => {
       ? saneiarCriacaoChegadaSemProgramacao(req.body, frotaRows[0])
       : saneiarCriacao(req.body, frotaRows[0]);
 
-    /* A TRAVA DA CONTRATAÇÃO — KM E OBSERVAÇÃO (09/09/2026).
+    /* O FRETE DA CARGA — CALCULADO, NUNCA EXIGIDO (09/09/2026).
        =================================================================
-       Pedido do dono: "vamos incluir um campo de kilometragem obrigatoria
-       na criacao de qualquer carga KM". Perguntado se isso impede criar a
-       carga ou impede contratar a placa, ele respondeu "1 trava a
-       contratacao" — e "2 observacao obrigatoria".
+       AQUI HAVIA UMA TRAVA, E ELA SAIU POR DECISÃO DO DONO.
 
-       CONTRATAR É PÔR A PLACA. A carga nasce sem caminhão (26/08/2026: a
-       Logística sabe rota e peso antes de saber quem leva); o que exige KM
-       é o instante em que uma transportadora passa a ter frete a receber.
-       Por isso a condição é `placa`, e não "sempre".
+       O pedido original era "kilometragem obrigatoria na criacao de
+       qualquer carga", e ele confirmou "1 trava a contratacao". Foi
+       implementado assim: pôr a placa sem KM e sem observação era recusado.
 
-       NÃO VALE PARA CHEGADA SEM PROGRAMAÇÃO. O porteiro registrando um
-       caminhão que encostou no portão não sabe km nem tem o que observar,
-       e travar ali seria exatamente o caminhão parado no portão. A carga
-       dele é lançada depois, pela Logística, e é NESSE lançamento que a
-       trava pega (ver o PATCH).
+       O QUE A BATERIA MOSTROU, antes de isso chegar perto da operação: a
+       Montagem do Dia cria carga por outro caminho (efetivarMontagemUI), em
+       LOTE, e não tem campo de KM. Com a trava de pé, as 39 cargas do lote
+       seriam recusadas — e carga recusada na criação é APAGADA do painel
+       (proteção de 07/08/2026 contra carga fantasma). A Logística veria as
+       cargas do dia sumirem na frente dela.
 
-       O QUE ISTO CUSTA, DITO EM VOZ ALTA: a partir da publicação, nenhuma
-       carga recebe placa sem KM e sem observação. É a regra que o dono
-       pediu; a tela preenche o KM sozinha quando o destino está na tabela,
-       para que o custo seja um clique e não uma consulta. */
-    if (!chegadaSemProgramacao && placa) {
-      const falta = faltaParaContratar({
-        kmDeslocamento: dados.km_deslocamento,
-        observacoes: dados.observacoes,
-      });
-      if (falta.length) {
-        return res.status(422).json({
-          erro: `Para contratar a placa ${placa} falta: ${falta.join(' e ')}. `
-            + 'O KM de deslocamento é o que será pago no frete; a observação é onde '
-            + 'a Administração lê o valor combinado quando ele foge da tabela.',
-          codigo: 'KM_FALTANDO',
-          faltando: falta,
-        });
-      }
+       Levado ao dono com a evidência, a decisão dele foi curta: "não põe a
+       trava do quilômetro então".
+
+       ENTÃO O KM É DADO, NÃO PORTÃO. Ele é pedido na tela, preenchido
+       sozinho pelo destino, e quando existe o valor sai calculado. Quando
+       não existe, a carga nasce igual e o relatório de fretes mostra a
+       linha com o MOTIVO escrito ("Sem KM de deslocamento") em vez de uma
+       célula muda — que é o que a Administração precisa para saber quais
+       completar. Ausência declarada em voz alta vale mais que um portão que
+       para caminhão. */
+    if (!chegadaSemProgramacao) {
       const preco = await precoDaCarga({
         transportadora: dados.transportadora,
         tipoVeiculo: dados.tipo_veiculo,
@@ -748,42 +738,13 @@ rotasCargas.patch('/cargas/:id', exigirLogin, async (req, res, next) => {
       delete mudancas.programado_em;
     }
 
-    /* A TRAVA DA CONTRATAÇÃO, DO OUTRO LADO (09/09/2026).
-
-       Aqui é o caminho que o dono descreveu como o normal: a carga foi
-       programada sem caminhão, a transportadora foi fechada mais tarde, e
-       alguém volta na carga para pôr a placa. Esse é o ato de contratar, e
-       é ele que exige KM e observação.
-
-       O QUE ENTRA NA CONTA é o valor EFETIVO — o que a carga terá depois
-       desta gravação: o que veio no pacote, e o que já estava lá para o
-       que não veio. Olhar só o pacote recusaria quem mandou apenas a placa
-       numa carga que já tinha KM; olhar só o banco deixaria passar a placa
-       sem KM nenhum.
-
-       SÓ NA PASSAGEM DE "SEM PLACA" PARA "COM PLACA". Trocar a placa de
-       uma carga já contratada não é contratar de novo — o frete já existe,
-       e reexigir os campos travaria uma correção de digitação no meio da
-       operação. */
+    /* O valor EFETIVO — o que a carga terá depois desta gravação: o que
+       veio no pacote, e o que já estava lá para o que não veio. É o que o
+       recálculo do frete precisa; olhar só o pacote reprecificaria a carga
+       com metade dos dados. */
     const efetivo = (col, chave) => (
       Object.prototype.hasOwnProperty.call(mudancas, col) ? mudancas[col] : antes.rows[0][chave || col]
     );
-    const contratandoAgora = !!mudancas.placa && !antes.rows[0].placa;
-    if (contratandoAgora) {
-      const falta = faltaParaContratar({
-        kmDeslocamento: efetivo('km_deslocamento'),
-        observacoes: efetivo('observacoes'),
-      });
-      if (falta.length) {
-        return res.status(422).json({
-          erro: `Para contratar a placa ${mudancas.placa} falta: ${falta.join(' e ')}. `
-            + 'O KM de deslocamento é o que será pago no frete; a observação é onde '
-            + 'a Administração lê o valor combinado quando ele foge da tabela.',
-          codigo: 'KM_FALTANDO',
-          faltando: falta,
-        });
-      }
-    }
 
     /* RECALCULA SÓ QUANDO UMA ENTRADA MUDA. Editar a observação de uma
        carga de três meses atrás não pode reprecificá-la com a tarifa de

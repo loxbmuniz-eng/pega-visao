@@ -105,11 +105,6 @@ async def main():
         await p_log.fill('#prog-placa', placa_a)
         await p_log.fill('#prog-numero-carga', numero)
         await p_log.fill('#prog-peso', '11000')
-        # KM e observação: desde 09/09/2026 pôr a placa É CONTRATAR, e contratar
-    # exige os dois (pedido do dono: "1 trava a contratacao", "2 observacao
-    # obrigatoria"). Uma pessoa preenche isso; o teste também precisa.
-        await p_log.fill('#prog-km-deslocamento', '100')
-        await p_log.fill('#prog-obs', 'carga de teste')
         await p_log.click("button:has-text('Criar Carga')")
         await p_log.wait_for_timeout(2500)
         ck('carga criada', await p_log.evaluate(

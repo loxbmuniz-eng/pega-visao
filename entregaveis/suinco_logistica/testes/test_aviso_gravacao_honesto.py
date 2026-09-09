@@ -47,10 +47,6 @@ async def criar_carga(pg, num, i=0):
         atualizarPreviewFrotaPrograma();
         document.getElementById('prog-numero-carga').value = num;
         document.getElementById('prog-peso').value = '9000';
-        // Pôr a placa é CONTRATAR desde 09/09/2026, e contratar exige KM e
-        // observação — é o que uma pessoa preenche na tela.
-        document.getElementById('prog-km-deslocamento').value = '100';
-        document.getElementById('prog-obs').value = 'carga de teste';
         criarCargaProgramadaUI();
     }""", [num, i])
     await pg.wait_for_timeout(600)
