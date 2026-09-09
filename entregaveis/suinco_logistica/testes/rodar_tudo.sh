@@ -100,6 +100,32 @@ export LOGS
 # O `sudo -u postgres` é o mesmo que cada suíte já usa para consultar o
 # banco. E a falha agora derruba a bateria: limpeza que falha calada é pior
 # que limpeza nenhuma, porque o verde seguinte não significa nada.
+# A JANELA DO LIMITE DE REQUISIÇÕES TAMBÉM PRECISA ESVAZIAR (09/09/2026)
+#
+# `limpar_banco` zera o banco e NÃO zera o contador do limite de requisições,
+# que vive na memória do servidor e tem janela de 60 segundos. As suítes
+# rodam encostadas e compartilham os mesmos operadores de teste, então a
+# seguinte herda o orçamento que a anterior gastou.
+#
+# Isso custou uma investigação inteira hoje. test_login_api reprovou em três
+# baterias seguidas com "a Logística vê o ciclo encerrado sem recarregar a
+# página", e a causa não era propagação nenhuma: o painel reenvia TODA carga
+# aberta ao logar (99 cargas acumuladas = 99 POSTs, x3 leituras = 297), o
+# limite é 300 por minuto, e o resto da suíte tomava 429. Com o banco limpo
+# E a janela vazia, ela passa.
+#
+# A segunda chance existe justamente para separar contaminação de regressão.
+# Sem esperar a janela, ela dava "vermelho de verdade" em contaminação — o
+# contrário do que foi escrita para fazer, e a conclusão mais cara possível.
+#
+# Espera só na SEGUNDA CHANCE: são poucas suítes, e lá o minuto vale a pena
+# para não mandar ninguém caçar uma regressão que não existe.
+esperar_limite_de_requisicoes(){
+  local janela=62
+  printf '  (esperando %ss pela janela do limite de requisições) ' "$janela"
+  sleep "$janela"
+}
+
 limpar_banco(){
   sudo -u postgres psql -q -d embarque_suinco -c \
     "DELETE FROM log_eventos; DELETE FROM fact_statusfrota;
@@ -178,6 +204,7 @@ if [ -f "$LOGS/.falhas" ]; then
       done
       [ -n "$arquivo" ] || { echo "$nome" >> "$LOGS/.falhas"; continue; }
       limpar_banco
+      esperar_limite_de_requisicoes
       if timeout 300 python3 "$arquivo" > "$LOGS/$nome.txt" 2>&1; then
         printf '  %-46s ok (sozinha) — era contaminação, não regressão\n' "$nome"
       else

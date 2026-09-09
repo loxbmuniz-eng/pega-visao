@@ -802,6 +802,30 @@ const SuincoSharePoint = (function () {
      esperando o caminhão por causa dela, e uma tabela de preço subindo
      horas depois pela fila offline poderia sobrescrever um valor que
      alguém já corrigiu no meio. Sem conexão, avisa e não grava. */
+  /* Quem vê valor de frete, do lado do adaptador.
+
+     Terceira cópia da mesma regra, e é deliberado: o servidor decide
+     (podeVerValorDeFrete), o painel esconde (podeVerValorDeFreteUI) e aqui
+     ela serve só para NÃO GASTAR uma requisição que voltaria 403. As três
+     são comparadas pelo teste testes/test_frete_tabela_e_planilha.py — se
+     divergirem, o teste reprova antes de a divergência chegar na operação. */
+  function podeVerValorDeFreteNoCliente() {
+    const setor = (operadorLogado && operadorLogado.setor) || '';
+    return setor === 'Logística' || setor === 'Administração';
+  }
+
+  /* A tabela sob demanda — para a tela reler depois de gravar um cadastro,
+     sem arrastar uma leitura completa do pátio atrás. */
+  async function tabelaDeFrete() {
+    if (!estaConfigurado()) return null;
+    try {
+      return await chamar('/api/frete/tabela');
+    } catch (e) {
+      if (e.status !== 403) console.warn('[Suinco] tabela de frete:', e.message);
+      return null;
+    }
+  }
+
   async function gravarTarifaFrete(campos) {
     if (!estaConfigurado()) return semServidor();
     try {
@@ -1105,28 +1129,34 @@ const SuincoSharePoint = (function () {
         console.warn('[Suinco] rotas não carregaram:', e.message);
       }
 
-      /* A TABELA DE FRETE VEM NA MESMA CADÊNCIA DAS ROTAS (09/09/2026).
+      /* A TABELA DE FRETE, NA MESMA CADÊNCIA DAS ROTAS (09/09/2026).
 
-         Pelo mesmo motivo, e o comentário acima já conta a história: rota
-         cadastrada durante o dia não aparecia em painel que estava aberto
-         desde antes. Tarifa e destino são a mesma espécie de dado —
-         pequenos, editáveis pela tela, e lidos o dia inteiro por painel que
-         ninguém recarrega.
+         Pelo mesmo motivo do comentário acima: rota cadastrada durante o dia
+         não aparecia em painel aberto desde antes, e tarifa e destino são a
+         mesma espécie de dado — pequenos, editáveis pela tela, lidos o dia
+         inteiro por painel que ninguém recarrega.
 
-         FALHA EM SILÊNCIO DE PROPÓSITO. Quem não pode ver valor de frete
-         (Portaria, Expedição, Comercial) recebe 403 aqui, e isso é o
-         esperado, não um defeito: o painel dessas pessoas simplesmente não
-         mostra a tabela. Derrubar a sincronização inteira por causa disso
-         tiraria a Portaria do ar. */
-      try {
-        const [tarifas, destinos] = await Promise.all([
-          chamar('/api/frete/tarifas'),
-          chamar('/api/frete/destinos'),
-        ]);
-        dados.freteTarifas = tarifas || [];
-        dados.freteDestinos = destinos || [];
-      } catch (e) {
-        if (e.status !== 403) console.warn('[Suinco] tabela de frete não carregou:', e.message);
+         DUAS ECONOMIAS, as duas aprendidas de um vermelho. Na primeira
+         versão isto eram DUAS chamadas, feitas por TODO terminal, e
+         test_login_api reprovou com 429: o limite de requisições cai para o
+         IP quando a chamada não tem token (login, polling do Socket.IO), e
+         quatro terminais no mesmo IP já vinham perto da borda.
+
+           · uma chamada só (/api/frete/tabela), porque as duas listas são
+             lidas sempre juntas;
+           · e só para quem PODE ver valor de frete. A Portaria, a Expedição,
+             o Faturamento e o Comercial tomavam 403 — duas requisições
+             gastas por ciclo para receber "não pode". Perguntar antes de
+             chamar não é otimização: é não gastar o orçamento de quem está
+             com o caminhão no portão. */
+      if (podeVerValorDeFreteNoCliente()) {
+        try {
+          const t = await chamar('/api/frete/tabela');
+          dados.freteTarifas = (t && t.tarifas) || [];
+          dados.freteDestinos = (t && t.destinos) || [];
+        } catch (e) {
+          if (e.status !== 403) console.warn('[Suinco] tabela de frete não carregou:', e.message);
+        }
       }
     }
 
@@ -1927,7 +1957,7 @@ const SuincoSharePoint = (function () {
     aoFecharPrograma,
     login, sair, diagnosticarConexao,
     push, upsert, excluir, mudarStatus, sequenciar, encerrarProgramacoesAnteriores, reterLacre,
-    recarregarRotas, gravarTarifaFrete, gravarDestinoFrete,
+    recarregarRotas, gravarTarifaFrete, gravarDestinoFrete, tabelaDeFrete,
     corrigirEtapa, corrigirDataProgramacao, desfazerExclusao, listarExcluidas,
     programacaoDoDia, historico, mfa,
     modeloSemana, montagem,

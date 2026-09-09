@@ -157,6 +157,40 @@ rotasCadastros.post('/rotas', exigirLogin, exigirSetor('Logística'), async (req
    da tabela pelo mesmo motivo que ficam de fora do valor na carga.
    ===================================================================== */
 
+/* AS DUAS LISTAS NUMA CHAMADA SÓ (09/09/2026).
+
+   Elas nasceram como duas rotas, e o painel buscava as duas a cada leitura
+   completa. Custou uma regressão que a bateria pegou: test_login_api
+   reprovou por LIMITE DE REQUISIÇÕES (429) — o limite cai para o IP quando
+   a chamada não tem token (login, polling do Socket.IO), e quatro terminais
+   no mesmo IP já vinham perto da borda. Duas chamadas a mais por terminal
+   empurraram por cima.
+
+   Tarifas e destinos são lidos sempre juntos, pela mesma tela, na mesma
+   hora. Duas chamadas para uma pergunta era desperdício antes de ser
+   defeito. As rotas individuais continuam existindo para o cadastro (POST)
+   e para quem quiser só uma das listas. */
+rotasCadastros.get('/frete/tabela', exigirLogin, exigirSetor('Logística'), async (req, res, next) => {
+  try {
+    const [tarifas, destinos] = await Promise.all([
+      consultar(`SELECT tipo_veiculo, valor_por_km, vigente_desde, operador, atualizado_em
+                   FROM frete_tarifas ORDER BY valor_por_km`),
+      consultar(`SELECT destino, km, ativo, operador, atualizado_em
+                   FROM frete_destinos WHERE ativo ORDER BY destino`),
+    ]);
+    res.json({
+      tarifas: tarifas.rows.map((t) => ({
+        tipoVeiculo: t.tipo_veiculo, valorPorKm: Number(t.valor_por_km),
+        vigenteDesde: t.vigente_desde, operador: t.operador, atualizadoEm: t.atualizado_em,
+      })),
+      destinos: destinos.rows.map((d) => ({
+        destino: d.destino, km: d.km, ativo: d.ativo,
+        operador: d.operador, atualizadoEm: d.atualizado_em,
+      })),
+    });
+  } catch (e) { next(e); }
+});
+
 rotasCadastros.get('/frete/tarifas', exigirLogin, exigirSetor('Logística'), async (req, res, next) => {
   try {
     const { rows } = await consultar(

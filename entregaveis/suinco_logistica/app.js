@@ -6574,11 +6574,17 @@ async function addDestinoFreteUI(){
    a transação, não a tela. Se o servidor normalizou o nome do destino ou
    recusou parte do que foi enviado, é a versão dele que aparece. */
 async function recarregarTabelaDeFrete(){
+  /* A TABELA, E SÓ A TABELA.
+
+     Isto chamava pullTudo() — uma leitura COMPLETA do pátio — para reler
+     cinco tarifas. Era o martelo errado: traz todas as cargas, a frota
+     inteira e as rotas, de propósito nenhum, a cada tarifa salva. E
+     requisição à toa custa caro aqui: o limite cai para o IP quando a
+     chamada não tem token, e quatro terminais no mesmo IP já deram 429 na
+     bateria (test_login_api). Agora pede a tabela, que é o que mudou. */
   try{
-    const dados = await SuincoSharePoint.pullTudo();
-    if(dados && (dados.freteTarifas || dados.freteDestinos)){
-      receberTabelaDeFrete({tarifas: dados.freteTarifas, destinos: dados.freteDestinos});
-    }
+    const t = await SuincoSharePoint.tabelaDeFrete();
+    if(t) receberTabelaDeFrete({tarifas: t.tarifas, destinos: t.destinos});
   }catch(e){ console.warn('[frete] recarga da tabela falhou:', e.message); }
   renderTabelaDeFrete();
   preencherSelectsDestinoFrete();
