@@ -512,6 +512,8 @@ const SuincoSharePoint = (function () {
       lacreRetidoPor: campos.Lacre_Retido_Por || '',
       lacreRetidoEm: campos.Lacre_Retido_Em || null,
       programadoEm: campos.Programado_Em,
+      // Versão lida pelo terminal — bloqueio otimista (ver data.js, pacote de ida).
+      versao: Number.isFinite(Number(campos.Versao)) ? Number(campos.Versao) : undefined,
       status: campos.Status_Atual,
       aguardandoCarga: campos.Aguardando_Carga === true || campos.Aguardando_Carga === 'Sim',
       /* Saiu sem carregar — só trouxe devolução (08/09/2026). SÓ NA VOLTA:
@@ -546,6 +548,7 @@ const SuincoSharePoint = (function () {
          lia de volta, então a observação vivia só no navegador de quem
          digitou e o relatório saía em branco para todo mundo. */
       Observacoes: c.observacoes,
+      Versao: c.versao,
       /* OS TRÊS PONTOS DE NOVO (20/08/2026). Ao acrescentar o 2º e o 3º
          lacre, este aqui — a VOLTA do servidor — ficou para trás, e o
          efeito foi idêntico ao da observação em 14/08: o painel mandava os
@@ -636,7 +639,12 @@ const SuincoSharePoint = (function () {
       if (e.status === 409 || e.status === 422 || e.status === 403) {
         // Recusa legítima do servidor. Enfileirar seria insistir para sempre.
         console.warn('[Suinco] gravação recusada:', e.message);
-        return { enfileirado: false, recusado: true, erro: e.message };
+        return {
+          enfileirado: false, recusado: true, erro: e.message, codigo: e.codigo,
+          // No conflito de versão o servidor manda a carga atual: vai junto,
+          // já no formato de linha, para o painel recarregar em vez de insistir.
+          atual: (e.codigo === 'CONFLITO_DE_VERSAO' && e.dados && e.dados.atual) ? daApiParaLinha(e.dados.atual) : null,
+        };
       }
       if (eFalhaDeRede(e)) return enfileirar({ tipo: 'carga', corpo });
       throw e;

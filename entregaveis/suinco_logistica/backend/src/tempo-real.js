@@ -12,6 +12,7 @@
 import { Server } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import { config } from './config.js';
+import { sessaoAindaVale } from './middleware/auth.js';
 
 let io = null;
 
@@ -44,15 +45,17 @@ export function iniciarTempoReal(servidorHttp) {
   /* Socket sem autenticação seria um vazamento silencioso: qualquer um na
      internet abriria uma conexão e receberia todo o movimento do pátio em
      tempo real, sem passar por nenhuma rota protegida. */
-  io.use((socket, next) => {
-    const token = socket.handshake.auth?.token;
-    if (!token) return next(new Error('SEM_TOKEN'));
+  /* A MESMA CONFERÊNCIA DE SESSÃO DO HTTP (09/09/2026). Só o jwt.verify
+     deixava um operador bloqueado — ou com a senha trocada — continuar
+     recebendo o pátio inteiro pelo socket até o token vencer (12 h), com
+     placa, cliente e motorista. validarTokenDeSocket confere sessao_versao
+     e ativo, como toda requisição HTTP. */
+  io.use(async (socket, next) => {
     try {
-      const p = jwt.verify(token, config.jwtSegredo, { algorithms: ['HS256'] });
-      socket.data.operador = { id: p.sub, nome: p.nome, setor: p.setor };
+      socket.data.operador = await validarTokenDeSocket(socket.handshake.auth?.token);
       return next();
-    } catch {
-      return next(new Error('TOKEN_INVALIDO'));
+    } catch (e) {
+      return next(e instanceof Error ? e : new Error(String(e)));
     }
   });
 
@@ -85,6 +88,30 @@ export function iniciarTempoReal(servidorHttp) {
   });
 
   return io;
+}
+
+export async function validarTokenDeSocket(token) {
+  if (!token) throw new Error('SEM_TOKEN');
+  let p;
+  try {
+    p = jwt.verify(token, config.jwtSegredo, { algorithms: ['HS256'] });
+  } catch {
+    throw new Error('TOKEN_INVALIDO');
+  }
+  const sessao = await sessaoAindaVale(p.sub, p.sv);
+  if (!sessao.vale) throw new Error(sessao.motivo || 'SESSAO_REVOGADA');
+  return { id: p.sub, nome: p.nome, setor: p.setor };
+}
+
+/* Derruba as conexões de quem foi bloqueado ou teve a sessão revogada —
+   o HTTP já recusa na hora; o socket precisava ser mandado embora. */
+export function desconectarOperador(id) {
+  if (!io) return 0;
+  let n = 0;
+  for (const s of io.sockets.sockets.values()) {
+    if (String(s.data?.operador?.id) === String(id)) { s.disconnect(true); n++; }
+  }
+  return n;
 }
 
 export function emitir(evento, dados) {

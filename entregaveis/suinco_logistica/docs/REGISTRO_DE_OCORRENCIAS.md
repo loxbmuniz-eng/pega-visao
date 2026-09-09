@@ -40,6 +40,88 @@ faz achar a próxima em minutos em vez de horas:
 
 ---
 
+## #30 — A carga programada ontem sem veículo "sumia" da Fila (09/09/2026)
+
+**Relato do dono:** "A carga criada ontem, mas não contratada na programação
+de ontem (...) ela some da programação. Ela começou a ser montada, mas a
+placa não foi contratada, então vai sumir da programação. Isso não pode
+acontecer." E, em seguida: "seria bom conseguir acessar a fila de
+programados de cada dia."
+
+**Reproduzido em modo local:** a carga estava GRAVADA — servidor,
+observações digitadas, tudo — e aparecia na Torre em "Programação
+anterior". A Fila de Programados listava só o dia de hoje (`doDia`, decisão
+de 28/08 para a fila "ter a cara da Torre") e transformava as outras numa
+linha: "veja na Torre de Controle". Para quem programa — que trabalha na
+Fila — isso é sumir.
+
+**Correção.** A Fila ganhou o dia (`◀ [data] ▶ Hoje`, padrão hoje; a mesma
+linha editável e o mesmo arrasto, que o servidor já sequencia por dia) e um
+bloco fixo abaixo, "Ainda sem veículo — programadas em dias anteriores",
+que aparece independente do dia escolhido, com a data de cada carga,
+editável (placa e número — dá para contratar ali), sem arrasto (a sequência
+é do dia de cada uma). A linha da fila virou UMA função (`linhaFilaHtml`)
+usada pelas duas listas. Nada mudou no servidor: o dado sempre esteve lá.
+
+**A guarda.** `testes/test_fila_por_dia.py` — 7 checagens reprovando contra
+o painel publicado.
+
+**A lição.** "Está salvo" e "está onde a pessoa trabalha" são coisas
+diferentes. Um aviso apontando para outra aba não substitui a linha no
+lugar certo — quem programa não vai procurar na Torre o que sumiu da Fila.
+
+---
+
+## #31 — Trava de versão nunca acionada, reentrada com duas réguas, painel que congela (09/09/2026)
+
+**Onde apareceu:** auditoria de arquitetura pedida pelo dono. Três altos,
+todos medidos ou reproduzidos:
+
+1. **O servidor tinha bloqueio otimista por `versao` e o painel nunca a
+   mandava** — nos três pontos de sincronia (ida, volta, conversão) o campo
+   não existia. Dois terminais online editando a mesma carga era "o último
+   grava por cima", sem aviso: a Expedição põe 33 ganchos, a Logística com
+   cópia de 20 s atrás altera o peso, e o PATCH dela leva ganchos = 0.
+   Família da #16, entre terminais diferentes.
+2. **A regra de reentrada estava escrita duas vezes, diferente.** O servidor
+   compara com o dia de programação da carga que CHEGA; a tela comparava com
+   HOJE no relógio do aparelho — e nem chamava o servidor. Duas cargas
+   programadas ontem à noite para hoje (rotina, #07): a tela barrava a
+   segunda entrada num caso em que o servidor aceitaria. A #06 de volta.
+3. **O painel nunca esquecia carga concluída e redesenhava
+   O(cargas × movimentações)** — `historicoDaCarga` filtrava e ordenava tudo
+   a cada chamada, 5× por carga por render. Medido aqui: 1.500 cargas,
+   **11,3 s** para desenhar Indicadores (o agente mediu 5,1 s; a base
+   embaralhada piora). Ia chegar sozinho em ~6 semanas.
+
+**Correções.** `Versao` nos três pontos; o PATCH leva a versão lida; 409
+`CONFLITO_DE_VERSAO` recarrega a carga com o que está no servidor e avisa
+("confira e refaça"); a versão nova volta da resposta e substitui a local
+(sem isso a PRÓXIMA edição do mesmo terminal levaria 409). Reentrada: a
+régua da tela passa a ser o dia da carga que chega, como no servidor.
+Índice `cargaId → movimentações` reconstruído quando a lista muda, com
+invalidação explícita no caminho da sincronia (splice + push mantém o
+tamanho — o índice não perceberia). No mesmo lote, os médios de esforço P:
+"hoje" do Modelo/Montagem em São Paulo e não em UTC; sessão revogada cai
+do socket (mesma conferência do HTTP, e o bloqueio derruba as conexões);
+`|| null` apagando capacidade zero na ida da Frota; o botão de reset de 2º
+fator que tinha rota e função mas não tinha onde clicar.
+
+**As guardas.** `testes/test_trava_de_versao.py` (PATCH leva versão; cópia
+velha é recusada, recarregada e avisada; nada gravado por cima; com a
+versão certa grava), `testes/test_reentrada_mesma_programacao.py`,
+`testes/test_indicadores_nao_travam.py` (1.500 cargas: 11.368 ms → abaixo
+de 2.500 ms), `api.test.js` bloco 40 (socket recusa sessão revogada;
+`hojeISO` é o dia de São Paulo). Todas reprovando contra o publicado.
+
+**A lição.** Uma proteção que existe só de um lado não protege: a trava de
+versão estava no servidor havia semanas e nunca foi acionada porque o
+painel não mandava o campo. E a regra que precisa existir nos dois lados
+(a tela avisa sem esperar a rede) tem que ser a MESMA regra, com o mesmo
+dia de referência — senão a tela nega o que o servidor permitiria.
+
+---
+
 ## #29 — O Relatório Executivo dizia "0 paradas" com um caminhão parado 17h47 (09/09/2026)
 
 **Onde apareceu:** na auditoria de fidelidade dos indicadores pedida pelo

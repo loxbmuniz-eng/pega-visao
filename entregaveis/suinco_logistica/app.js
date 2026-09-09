@@ -3083,6 +3083,70 @@ function renderTorre(){
       : 'Nenhuma carga em aberto no momento.';
   }
 }
+/* UMA LINHA DA FILA — usada pela fila do dia e pelo bloco de dias
+   anteriores. `arrastavel` decide alça e arrasto: a sequência é do dia de
+   cada carga, então só a fila do dia escolhido reordena por arrasto. No
+   bloco de anteriores a alça vira a DATA da programação (clicável: leva a
+   fila para aquele dia). */
+function linhaFilaHtml(c, lista, arrastavel){
+    const id = escJs(c.id);
+    const aberta = _progFilaAberta === c.id;
+    const linha = `
+    <tr class="prog-linha${aberta ? ' prog-linha-aberta' : ''}" data-carga="${esc(c.id)}"
+        ${arrastavel ? `draggable="true"
+        ondragstart="filaArrastarInicio(event,'${id}')"
+        ondragover="filaArrastarSobre(event)"
+        ondrop="filaArrastarSolta(event,'${id}')"
+        ondragend="filaArrastarFim(event)"` : `draggable="false"`}
+        onclick="alternarLinhaProgFilaUI('${id}')"
+        title="Clique para abrir os demais campos. Arraste para mudar a ordem de carregamento.">
+      <td onclick="event.stopPropagation()" class="cel-seq">
+        ${arrastavel ? `<span class="alca-arrastar" title="Arraste para mudar a posição na fila">⠿</span>` : `<span class="chip-dia-prog" title="Programada em ${esc(fmtData(c.programadoEm || c.criadoEm))}" onclick="event.stopPropagation(); mudarDiaFilaUI('${esc(isoDiaLocal(new Date(c.programadoEm || c.criadoEm)))}')">${esc(fmtData(c.programadoEm || c.criadoEm).slice(0,5))}</span>`}
+        <input type="number" min="1" class="seq-input" value="${c.sequencia ?? ''}" onchange="definirPosicaoNaFilaUI('${id}',this.value)" title="Digite a posição: a carga entra nela e as outras descem uma casa."></td>
+      <td class="col-identificacao" onclick="event.stopPropagation()">
+        <input type="text" class="numero-carga-input" value="${esc(c.numeroCarga)}" onchange="atualizarNumeroCargaUI('${id}',this.value)" title="Alterar o número desta carga.">
+      </td>
+      <td class="col-identificacao cel-veiculo" onclick="event.stopPropagation()">
+        <input type="text" class="placa-input" value="${esc(c.placa)}" onchange="atualizarPlacaUI('${id}',this.value)" title="Trocar a placa — a transportadora e o tipo de veículo são buscados na Frota automaticamente.">
+        <span class="veic-transp" id="transp-${esc(c.id)}">${esc(c.transportadora)||'—'}</span>
+        <span class="veic-tipo">${esc(c.tipoVeiculo)||'—'}</span>
+        ${marcaCargaDaPlaca(c, lista)}${chipNoPatioHtml(c)}${marcaEtapaDevolvidaHtml(c)}${marcaSaiuSemCarregarHtml(c)}</td>
+      <td onclick="event.stopPropagation()">
+        <input type="text" class="motorista-input" value="${esc(c.motorista||'')}" onchange="atualizarMotoristaUI('${id}',this.value)" title="Quem dirige ESTA viagem — não mexe no cadastro da placa."></td>
+      <td onclick="event.stopPropagation()">${rotaSelectHtml(c)}</td>
+      <td class="c-peso" onclick="event.stopPropagation()"><input type="number" class="peso-input" min="0" step="1" value="${c.peso ?? ''}" onchange="atualizarPesoUI('${id}',this.value)" title="Peso em kg."></td>
+      <td onclick="event.stopPropagation()">${paletizadaSelectHtml(c)}</td>
+      <td onclick="event.stopPropagation()">${praOndeSelectHtml(c)}</td>
+      <td class="no-print gap8" onclick="event.stopPropagation()">
+        <button class="btn btn-sec btn-sm" onclick="adicionarOutraCargaNaPlacaUI('${id}')"
+                title="Programar OUTRA carga para este mesmo caminhão — o formulário já vem com placa, transportadora, motorista e rota preenchidos.">➕ Outra carga</button>
+        <button class="btn btn-danger btn-sm" onclick="excluirCargaUI('${id}')">Excluir</button>
+        <span class="mont-seta${aberta ? ' aberta' : ''}" aria-hidden="true">▸</span>
+      </td>
+    </tr>`;
+    return aberta ? linha + `<tr class="prog-detalhe"><td colspan="9">${formCargaFilaHtml(c)}</td></tr>` : linha;
+}
+
+/* O dia que a Fila mostra. null = hoje (não guarda a data de hoje para não
+   envelhecer: quem deixa a aba aberta de madrugada vê o dia virar). */
+let _progFilaDia = null;
+function isoDiaLocal(d){
+  const p = (n)=>String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;
+}
+function diaFilaSelecionado(){ return _progFilaDia || isoDiaLocal(new Date()); }
+function mudarDiaFilaUI(v){
+  if(v === 'hoje' || v === '' || v === null || v === undefined){ _progFilaDia = null; }
+  else if(typeof v === 'number'){
+    const [a,m,d] = diaFilaSelecionado().split('-').map(Number);
+    const dt = new Date(a, m-1, d + v);
+    const iso = isoDiaLocal(dt);
+    _progFilaDia = iso === isoDiaLocal(new Date()) ? null : iso;
+  } else if(/^\d{4}-\d{2}-\d{2}$/.test(String(v))){
+    _progFilaDia = String(v) === isoDiaLocal(new Date()) ? null : String(v);
+  }
+  renderAll();
+}
 function ordenarPorSequenciaEAtualizacao(a,b){
   const sa = (a.sequencia===null||a.sequencia===undefined) ? Infinity : a.sequencia;
   const sb = (b.sequencia===null||b.sequencia===undefined) ? Infinity : b.sequencia;
@@ -3390,16 +3454,31 @@ function renderProgFila(){
      `programadoEm` é o carimbo de quando a carga foi programada/lançada, e
      é gravável uma vez só justamente para não escorregar depois. É ele que
      responde "isto é trabalho de hoje?". */
-  const hoje = new Date(); hoje.setHours(0,0,0,0);
-  const doDia = (c)=>{
+  /* A FILA TEM DIA (09/09/2026). Relato do dono: "a carga criada ontem, mas
+     não contratada (...) some da programação (...) não pode acontecer". Ela
+     não sumia do sistema — sumia DESTA lista, que só mostrava hoje e mandava
+     olhar a Torre. Agora: a fila do dia escolhido (padrão hoje), e um bloco
+     fixo abaixo com as de dias anteriores ainda sem veículo, editáveis, até
+     ganharem placa. */
+  const hojeISO = isoDiaLocal(new Date());
+  const diaSel = diaFilaSelecionado();
+  const diaDaCarga = (c)=>{
     const base = c.programadoEm || c.criadoEm || c.atualizadoEm;
-    if(!base) return true;   // sem data conhecida, melhor mostrar que sumir
-    const d = new Date(base); d.setHours(0,0,0,0);
-    return d.getTime() === hoje.getTime();
+    return base ? isoDiaLocal(new Date(base)) : null;
+  };
+  const doDia = (c)=>{
+    const d = diaDaCarga(c);
+    if(!d) return diaSel === hojeISO;   // sem data conhecida, melhor mostrar (em hoje) que sumir
+    return d === diaSel;
   };
   const todosAguardando = DB.cargas.filter(c=>c.status==='Aguardando Veículo');
   const lista = todosAguardando.filter(doDia).sort(ordenarPorSequenciaEAtualizacao);
-  const deOutrosDias = todosAguardando.length - lista.length;
+  const anteriores = todosAguardando
+    .filter(c => { const d = diaDaCarga(c); return d && d < hojeISO && d !== diaSel; })
+    .sort((a,b) => (diaDaCarga(a) < diaDaCarga(b) ? -1 : diaDaCarga(a) > diaDaCarga(b) ? 1 : ordenarPorSequenciaEAtualizacao(a,b)));
+  const deOutrosDias = anteriores.length;
+  const campoDia = document.getElementById('prog-fila-dia');
+  if(campoDia && campoDia.value !== diaSel) campoDia.value = diaSel;
 
   /* A FILA COM A CARA DA TORRE (28/08/2026).
 
@@ -3421,44 +3500,11 @@ function renderProgFila(){
      Os botões ficam NA LINHA, por decisão do dono — quem programa outra
      carga ou exclui está varrendo, não preenchendo. O stopPropagation
      impede que clicar neles abra a linha por tabela. */
-  document.getElementById('prog-fila-tbody').innerHTML = lista.map(c=>{
-    const id = escJs(c.id);
-    const aberta = _progFilaAberta === c.id;
-    const linha = `
-    <tr class="prog-linha${aberta ? ' prog-linha-aberta' : ''}" data-carga="${esc(c.id)}"
-        draggable="true"
-        ondragstart="filaArrastarInicio(event,'${id}')"
-        ondragover="filaArrastarSobre(event)"
-        ondrop="filaArrastarSolta(event,'${id}')"
-        ondragend="filaArrastarFim(event)"
-        onclick="alternarLinhaProgFilaUI('${id}')"
-        title="Clique para abrir os demais campos. Arraste para mudar a ordem de carregamento.">
-      <td onclick="event.stopPropagation()" class="cel-seq">
-        <span class="alca-arrastar" title="Arraste para mudar a posição na fila">⠿</span>
-        <input type="number" min="1" class="seq-input" value="${c.sequencia ?? ''}" onchange="definirPosicaoNaFilaUI('${id}',this.value)" title="Digite a posição: a carga entra nela e as outras descem uma casa."></td>
-      <td class="col-identificacao" onclick="event.stopPropagation()">
-        <input type="text" class="numero-carga-input" value="${esc(c.numeroCarga)}" onchange="atualizarNumeroCargaUI('${id}',this.value)" title="Alterar o número desta carga.">
-      </td>
-      <td class="col-identificacao cel-veiculo" onclick="event.stopPropagation()">
-        <input type="text" class="placa-input" value="${esc(c.placa)}" onchange="atualizarPlacaUI('${id}',this.value)" title="Trocar a placa — a transportadora e o tipo de veículo são buscados na Frota automaticamente.">
-        <span class="veic-transp" id="transp-${esc(c.id)}">${esc(c.transportadora)||'—'}</span>
-        <span class="veic-tipo">${esc(c.tipoVeiculo)||'—'}</span>
-        ${marcaCargaDaPlaca(c, lista)}${chipNoPatioHtml(c)}${marcaEtapaDevolvidaHtml(c)}${marcaSaiuSemCarregarHtml(c)}</td>
-      <td onclick="event.stopPropagation()">
-        <input type="text" class="motorista-input" value="${esc(c.motorista||'')}" onchange="atualizarMotoristaUI('${id}',this.value)" title="Quem dirige ESTA viagem — não mexe no cadastro da placa."></td>
-      <td onclick="event.stopPropagation()">${rotaSelectHtml(c)}</td>
-      <td class="c-peso" onclick="event.stopPropagation()"><input type="number" class="peso-input" min="0" step="1" value="${c.peso ?? ''}" onchange="atualizarPesoUI('${id}',this.value)" title="Peso em kg."></td>
-      <td onclick="event.stopPropagation()">${paletizadaSelectHtml(c)}</td>
-      <td onclick="event.stopPropagation()">${praOndeSelectHtml(c)}</td>
-      <td class="no-print gap8" onclick="event.stopPropagation()">
-        <button class="btn btn-sec btn-sm" onclick="adicionarOutraCargaNaPlacaUI('${id}')"
-                title="Programar OUTRA carga para este mesmo caminhão — o formulário já vem com placa, transportadora, motorista e rota preenchidos.">➕ Outra carga</button>
-        <button class="btn btn-danger btn-sm" onclick="excluirCargaUI('${id}')">Excluir</button>
-        <span class="mont-seta${aberta ? ' aberta' : ''}" aria-hidden="true">▸</span>
-      </td>
-    </tr>`;
-    return aberta ? linha + `<tr class="prog-detalhe"><td colspan="9">${formCargaFilaHtml(c)}</td></tr>` : linha;
-  }).join('');
+  document.getElementById('prog-fila-tbody').innerHTML = lista.map(c => linhaFilaHtml(c, lista, true)).join('');
+  const antTbody = document.getElementById('prog-fila-anteriores-tbody');
+  const antWrap = document.getElementById('prog-fila-anteriores');
+  if(antTbody) antTbody.innerHTML = anteriores.map(c => linhaFilaHtml(c, anteriores, false)).join('');
+  if(antWrap) antWrap.hidden = anteriores.length === 0;
   document.getElementById('prog-fila-empty').hidden = lista.length>0;
 
   // Some sem explicação é pior que não sumir: quem programou ontem
@@ -3467,8 +3513,8 @@ function renderProgFila(){
   if(aviso){
     aviso.hidden = deOutrosDias === 0;
     aviso.textContent = deOutrosDias === 1
-      ? '1 carga programada em outro dia continua aguardando veículo — veja na Torre de Controle.'
-      : `${deOutrosDias} cargas programadas em outros dias continuam aguardando veículo — veja na Torre de Controle.`;
+      ? '1 carga de dia anterior ainda sem veículo — está listada logo abaixo, até ganhar placa.'
+      : `${deOutrosDias} cargas de dias anteriores ainda sem veículo — estão listadas logo abaixo, até ganharem placa.`;
   }
 }
 
@@ -9154,6 +9200,8 @@ async function renderUsuarios(){
       <td class="no-print">
         <div class="gap8">
           <button class="btn btn-sec btn-sm" onclick="redefinirSenhaUsuarioUI('${escJs(u.id)}')">🔑 Senha</button>
+          ${sou ? '' : `<button class="btn btn-sec btn-sm" onclick="resetarMfaDeUI('${escJs(u.id)}','${escJs(u.nome)}')"
+              title="Remove o segundo fator de quem perdeu o celular — fica registrado e avisa os outros administradores">📵 2º fator</button>`}
           ${u.ativo
             ? `<button class="btn btn-danger btn-sm" onclick="bloquearUsuarioUI('${escJs(u.id)}', false)" ${sou?'disabled title="Você não pode bloquear a si mesmo"':''}>🚫 Bloquear</button>`
             : `<button class="btn btn-success btn-sm" onclick="bloquearUsuarioUI('${escJs(u.id)}', true)">✅ Reativar</button>`}

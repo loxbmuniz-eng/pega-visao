@@ -18,6 +18,8 @@ import { criarServidor, chaveDoLimiteGeral } from '../src/servidor.js';
 import { pool } from '../src/banco.js';
 import { config } from '../src/config.js';
 import { SETORES } from '../src/dominio/fluxo.js';
+import { validarTokenDeSocket } from '../src/tempo-real.js';
+import { hojeISO } from '../src/rotas/modelo_semana.js';
 
 function jwtAssinar(payload) {
   return jwt.sign(payload, config.jwtSegredo, { expiresIn: '1h' });
@@ -4982,5 +4984,44 @@ describe('39. A filial não enxerga o pátio por fora da tela (09/09/2026)', () 
     const forjado = jwt.sign(payload, config.jwtSegredo, { algorithm: 'HS512', expiresIn: '1h' });
     const r = await req('/api/estado', { token: forjado });
     assert.equal(r.status, 401, `HS512 devia ser recusado, veio ${r.status}`);
+  });
+});
+
+describe('40. Fundação: sessão revogada cai do socket, "hoje" é o de São Paulo (09/09/2026)', () => {
+  /* Auditoria de arquitetura de 09/09/2026, dois achados médios:
+
+     - O socket só fazia jwt.verify. Bloquear um operador derrubava o HTTP na
+       hora e o socket continuava entregando o pátio inteiro (placa, cliente,
+       motorista) até o token vencer, 12 h depois. A conferência de sessão
+       passa a ser a mesma do HTTP (sessaoAindaVale), e a revogação derruba
+       as conexões abertas.
+     - modelo_semana.js decidia "hoje" em UTC: entre 21h e meia-noite o
+       servidor achava que já era amanhã — o erro do relatório de 14/08, do
+       lado do servidor. */
+  test('"hoje" do Modelo/Montagem é o dia de São Paulo, não o UTC', () => {
+    const sp = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit',
+    }).format(new Date());
+    assert.match(hojeISO(), /^\d{4}-\d{2}-\d{2}$/);
+    assert.equal(hojeISO(), sp);
+  });
+
+  test('token válido entra no socket; sessão revogada é recusada com o motivo', async () => {
+    const hash = await bcrypt.hash(SENHA, 4);
+    await pool.query("DELETE FROM operadores WHERE email = 'socket40@teste.local'");
+    await pool.query(
+      'INSERT INTO operadores (email, nome, setor, senha_hash) VALUES ($1,$2,$3,$4)',
+      ['socket40@teste.local', 'Socket Teste', 'Portaria', hash]
+    );
+    const l = await req('/auth/login', { metodo: 'POST', corpo: { email: 'socket40@teste.local', senha: SENHA } });
+    assert.equal(l.status, 200, l.texto);
+    const op = await validarTokenDeSocket(l.json.token);
+    assert.equal(op.setor, 'Portaria');
+
+    // Revoga como o bloqueio e a troca de senha fazem: sessao_versao + 1.
+    await pool.query("UPDATE operadores SET sessao_versao = sessao_versao + 1 WHERE email = 'socket40@teste.local'");
+    await assert.rejects(() => validarTokenDeSocket(l.json.token), /SESSAO_REVOGADA/);
+    await assert.rejects(() => validarTokenDeSocket('nao-e-um-token'), /TOKEN_INVALIDO/);
+    await assert.rejects(() => validarTokenDeSocket(''), /SEM_TOKEN/);
   });
 });
