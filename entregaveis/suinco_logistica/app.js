@@ -3034,9 +3034,14 @@ function renderTorre(){
     : '';
   tbody.innerHTML = lista.map(c=>`
     ${faixa(c)}
-    <tr class="${ehProgramacaoAntiga(c) ? 'linha-prog-antiga' : ''}">
-      <td>${editavel
-        ? `<input type="number" class="seq-input" value="${c.sequencia ?? ''}" onchange="atualizarSequenciaUI('${escJs(c.id)}',this.value)" title="Sequência livre.">`
+    <tr class="${ehProgramacaoAntiga(c) ? 'linha-prog-antiga' : ''}" data-carga="${esc(c.id)}"
+        ${editavel && aindaVaiCarregar(c) ? `draggable="true"
+        ondragstart="filaArrastarInicio(event,'${escJs(c.id)}')"
+        ondragover="filaArrastarSobre(event)"
+        ondrop="filaArrastarSolta(event,'${escJs(c.id)}')"
+        ondragend="filaArrastarFim(event)"` : ''}>
+      <td class="cel-seq">${editavel
+        ? `${aindaVaiCarregar(c) ? `<span class="alca-arrastar" title="Arraste para mudar a posição na fila">⠿</span>` : ''}<input type="number" class="seq-input" value="${c.sequencia ?? ''}" onchange="definirSequenciaTorreUI('${escJs(c.id)}',this.value)" title="${aindaVaiCarregar(c) ? 'Digite a posição: a carga entra nela e as outras descem uma casa.' : 'Este caminhão já carregou — o número é registro do que aconteceu e NÃO reordena a fila.'}">`
         : (c.sequencia ?? '—')}</td>
       <td class="col-identificacao">${editavel
         ? `<input type="text" class="numero-carga-input" value="${esc(c.numeroCarga)}" onchange="atualizarNumeroCargaUI('${escJs(c.id)}',this.value)" title="Alterar o número desta carga.">`
@@ -4245,6 +4250,32 @@ function definirPosicaoNaFilaUI(id, val){
     return;
   }
   moverNaFilaUI(id, n);
+}
+
+/* ARRASTAR E DIGITAR NA TORRE (09/09/2026).
+
+   Pedido do dono: "quero conseguir arrastar a ordem do sequenciamento de
+   carga na torre de controle" e, sobre digitar × arrastar: "os 2 precisam
+   funcionar, mantendo a logica e a sequencia".
+
+   O CUIDADO É A OCORRÊNCIA #27, desta mesma manhã. Lá eu mandei TODO inteiro
+   para moverNaFilaUI porque a Torre e a Fila compartilhavam o nome do campo
+   — e a Torre parou de guardar a sequência digitada, o defeito de 14/08 de
+   volta. A diferença aqui: quem decide não é a TELA, é o STATUS DA LINHA,
+   que está visível na cor do selo, e a alça só aparece onde arrastar
+   funciona. A pessoa vê antes de tentar.
+
+     ainda vai carregar  → posição na fila, cascata no servidor (o mesmo
+                           caminho do arrastar: uma conta só)
+     já carregou         → o número é registro; guarda o valor, carimba
+                           para subir, e NÃO reordena ninguém */
+function aindaVaiCarregar(c){
+  return !!c && (c.status === 'Aguardando Veículo' || c.status === 'Aguardando Embarque');
+}
+function definirSequenciaTorreUI(id, val){
+  const c = getCarga(id); if(!c) return;
+  if(aindaVaiCarregar(c)) return definirPosicaoNaFilaUI(id, val);
+  return atualizarSequenciaUI(id, val);
 }
 
 function atualizarSequenciaUI(id, val){
