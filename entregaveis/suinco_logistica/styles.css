@@ -183,7 +183,11 @@
   --navy-lighter:#c2ccdf;
   --gold:#e9b954;
   --gold-dim:#a67f22;
-  --gold-text:#7a5c0d;
+  /* #7a5c0d dava 4,33:1 nos títulos de coluna (exige 4,5) e 3,98 no título
+     de gráfico — 56 reprovações só em Indicadores no tema claro, medido no
+     DOM em 09/09/2026. #6b5008 passa nas duas superfícies. O dourado de
+     PREENCHIMENTO (--gold) não muda. */
+  --gold-text:#6b5008;
   --wine:#8f1f26;
   --wine-light:#b3363f;
   --ok:#1d7a47;
@@ -411,6 +415,9 @@ body::before{
 }
 #header-title{display:flex;flex-direction:column;flex-shrink:0}
 #header-title strong{font-size:16px;font-weight:800;letter-spacing:.5px;color:var(--gold-text)}
+/* Nota de descarte dos indicadores (09/09/2026): o que saiu da conta fica dito. */
+.ind-descarte{grid-column:1/-1;margin-top:8px;padding:8px 12px;border-radius:8px;font-size:12.5px;
+  color:var(--warn-fg,#1a1200);background:var(--warn,#9a6a08)}
 #header-title span{font-size:11px;color:var(--text-dim)}
 #header-mid{flex:1;display:flex;align-items:center;gap:18px;flex-wrap:wrap;min-width:0}
 #clock-wrap{text-align:center}

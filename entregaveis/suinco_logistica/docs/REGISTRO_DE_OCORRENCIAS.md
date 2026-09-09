@@ -40,6 +40,64 @@ faz achar a próxima em minutos em vez de horas:
 
 ---
 
+## #29 — O Relatório Executivo dizia "0 paradas" com um caminhão parado 17h47 (09/09/2026)
+
+**Onde apareceu:** na auditoria de fidelidade dos indicadores pedida pelo
+dono — 17 KPIs lidos da tela real e conferidos contra o SQL no mesmo
+instante. A aritmética acertou ao minuto em todos. O que mentia era a
+**guarda de entrada** e o **rótulo de recorte**. Cinco achados altos, todos
+reproduzidos em cenário controlado:
+
+    Parada há 17h47min  →  (uma observação escrita)  →  Parada há 0 min
+    PDF Executivo: "0 Paradas Além da Meta" duas linhas acima de "Aguardando Embarque 06:00"
+    Tempo Médio de Pátio — histórico: −243.504 min (a conta certa: 3h00min)
+
+**As causas.**
+1. `pendentesAntigas.paradaHaMin` (data.js) e `paradasAlemDaMeta` (PDF, app.js)
+   contavam por `atualizadoEm` — a hora da GRAVAÇÃO. Abrir o painel regrava
+   as cargas (eco de sincronização: 12 de 12 regravadas 6 s depois de abrir),
+   então o indicador lia zero justamente com o painel em uso. É a **#08** de
+   novo: a correção (`acao_em`, migração 026) nunca alcançou esses dois
+   pontos, e `entradaNoPatioDe()` — a definição certa — morava em `app.js`,
+   onde `data.js` não alcança.
+2. `minutosEntre` não tinha guarda de sinal; uma chegada carimbada em 2029
+   virava −243.504 min e entrava em toda média, sem contagem à parte. O "%
+   acima da meta" até *melhorava*, porque a carga impossível inflava o
+   denominador.
+3. `renderComparacaoPeriodos` chamava `indicadoresPorPeriodo(p.key)` sem o
+   filtro — a nota "só este recorte" era falsa para a maior tabela da aba
+   (família da **#18**).
+4. `renderGargalos` usava `DB.cargas` inteiro sob um subtítulo que prometia
+   "o período selecionado acima".
+5. Evento no futuro entrava nos cartões e sumia das tabelas de período —
+   a mesma tela dizia "5 cargas" num bloco e "sem dados" no outro.
+
+**Correções.** `entradaNoPatioDe` movida para `data.js` (uma definição para
+Torre, PDF e reconciliação da Portaria); `minutosNoPatioAgora(c)` e
+`paradasAlemDaMeta(cargas)` — uma função, dois chamadores; `minutosEntre`
+devolve null para duração negativa; `dataDeEventoPlausivel` + `carimbosDaCarga`
++ `cargasComDataInconsistente` — o que sai da conta **fica na tela** ("N
+carga(s) fora da conta por data inconsistente: …"); `indicadoresPorPeriodo`
+recebe o filtro; Gargalos = concluídas no período + abertas de agora;
+"sem registro de chegada" no lugar de zero. No mesmo lote, dois achados de
+UX da mesma auditoria: as 11 abas ganharam `role="tab"`/`tabindex`/Enter
+(teclado não as alcançava) e o `--gold-text` do tema claro subiu de 4,33:1
+para 4,83:1 na página e 6,79:1 no card.
+
+**A guarda.** `testes/test_indicadores_dizem_a_verdade.py` — 19 checagens,
+13 reprovando contra o build publicado (paradaHaMin=0 com 17h47; média
+−303.876; tabela idêntica com filtro; VELHA LTDA nos gargalos de "Semana";
+abas sem role; dourado 3,98 na página).
+
+**A lição.** Número errado com cara de certo é pior que número nenhum. A
+correção de um defeito (#08) precisa procurar TODOS os lugares que faziam
+a mesma conta errada — e a conta certa precisa morar onde todo mundo
+alcança. E: o que sai de uma média tem que aparecer na tela como
+"fora da conta", com o número da carga; esconder o descarte é trocar um
+número errado por um número sem explicação.
+
+---
+
 ## #28 — A filial enxergava o pátio inteiro por fora da tela (09/09/2026)
 
 **Onde apareceu:** na auditoria de segurança pedida pelo dono para o

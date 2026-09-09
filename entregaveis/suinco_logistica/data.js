@@ -1262,9 +1262,26 @@ function fmtHora(iso){
 function normalizarPlaca(p){
   return (p||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
 }
+/* DURAÇÃO NEGATIVA NÃO EXISTE (09/09/2026). Fim antes do início é registro
+   inconsistente — carimbo fora de ordem, relógio de terminal errado, etapa
+   corrigida à mão — e não "menos tempo". Antes, uma carga com a chegada em
+   2029 levava a média de pátio da aba inteira para −243.504 min, publicada
+   no PDF com cara de número. Aqui devolve null: sai da conta. Quem precisa
+   saber QUAIS cargas saíram chama cargasComDataInconsistente(). */
 function minutosEntre(isoA, isoB){
   if(!isoA || !isoB) return null;
-  return Math.round((new Date(isoB) - new Date(isoA)) / 60000);
+  const m = Math.round((new Date(isoB) - new Date(isoA)) / 60000);
+  return Number.isFinite(m) && m >= 0 ? m : null;
+}
+/* Data de evento plausível: existe, não está no futuro (5 min de folga para
+   relógio de celular) e não é anterior a 2020. Evento no futuro entrava
+   nos cartões e sumia das tabelas de período — a mesma tela dizia "5
+   cargas" num bloco e "sem dados" no outro. */
+function dataDeEventoPlausivel(iso){
+  if(!iso) return false;
+  const t = Date.parse(iso);
+  if(!Number.isFinite(t)) return false;
+  return t <= Date.now() + 5*60000 && t >= Date.parse('2020-01-01T00:00:00Z');
 }
 function fmtDuracao(min){
   if(min===null || min===undefined || isNaN(min)) return '—';
@@ -1625,6 +1642,49 @@ function primeiroTimestamp(cargaId, status){
   return m ? m.timestamp : null;
 }
 
+/* ENTRADA NO PÁTIO — UMA DEFINIÇÃO SÓ (movida de app.js em 09/09/2026).
+
+   Três datas que não podem se misturar:
+     criadoEm     — quando o REGISTRO nasceu
+     programadoEm — quando a CARGA foi lançada/programada
+     entrada      — quando o CAMINHÃO encostou (esta função)
+
+   A entrada de verdade é o evento "Aguardando Embarque" na trilha. Quando a
+   Portaria registra a chegada sem programação (aguardandoCarga), a linha
+   nasce no instante da chegada — só aí criadoEm é a entrada. Sem nenhum dos
+   dois, devolve null: o caminhão ainda não chegou, e inventar uma data que
+   pareça uma é como o Executivo passou a imprimir "0 paradas". */
+function entradaNoPatioDe(c){
+  if(!c) return null;
+  const ev = primeiroTimestamp(c.id, 'Aguardando Embarque');
+  if(ev) return ev;
+  if(c.aguardandoCarga) return c.criadoEm || null;
+  return null;
+}
+/* Há quanto tempo o caminhão está no pátio AGORA — pela chegada, nunca pela
+   última gravação. `atualizadoEm` muda a cada observação escrita e a cada
+   eco de sincronização (abrir o painel regrava as cargas); contar por ele
+   zerava "Parada há" e "Paradas Além da Meta" justamente com o painel em
+   uso. Ocorrência #08, nos dois pontos que a correção não tinha alcançado. */
+function minutosNoPatioAgora(c){
+  const entrada = entradaNoPatioDe(c);
+  if(!entrada || !dataDeEventoPlausivel(entrada)) return null;
+  return minutosEntre(entrada, new Date().toISOString());
+}
+/* Uma função, dois chamadores: a lista de Gargalos e a caixa do Relatório
+   Executivo contam pela mesma régua. `semChegada` é o que a tela precisa
+   dizer em vez de somar zero. */
+function paradasAlemDaMeta(cargas){
+  const meta = metaTempoPatio();
+  let total = 0, semChegada = 0;
+  (cargas || cargasAbertas()).forEach(c => {
+    const m = minutosNoPatioAgora(c);
+    if(m === null) semChegada++;
+    else if(m > meta) total++;
+  });
+  return { total, semChegada, meta };
+}
+
 /* ---------- CARGAS ---------- */
 function cargasAbertas(){
   return DB.cargas.filter(c => c.status !== 'Seguiu Viagem');
@@ -1755,9 +1815,9 @@ function absorverEntradaDoPatio(carga, operador){
 
   const quem = (operador && (operador.nome || operador)) || (DB.operador && DB.operador.nome) || '(não identificado)';
   const setor = (operador && operador.setor) || (DB.operador && DB.operador.setor) || 'Logística';
-  // Mesma conta de entradaNoPatioDe (app.js): a linha da Portaria nasce no
-  // instante da chegada, então nela criadoEm É a entrada.
-  const entrada = primeiroTimestamp(orfa.id, 'Aguardando Embarque') || orfa.criadoEm || null;
+  // A entrada da linha da Portaria: a linha nasce no instante da chegada.
+  // Uma definição só — entradaNoPatioDe — para este ponto, a Torre e o PDF.
+  const entrada = entradaNoPatioDe(orfa) || orfa.criadoEm || null;
 
   if(carga.status === 'Aguardando Veículo'){
     const antes = carga.status;
@@ -2122,12 +2182,33 @@ function registrarSaidaPortaria(placa, operador, lacres){
      - tempoAguardandoSaida (NOVO): Faturado → Seguiu Viagem — preenche o
        intervalo que antes era coberto por "Liberado para Saída → Saída",
        mesma granularidade de antes, só reencaixada nos checkpoints reais. */
+/* Os carimbos da carga, já filtrados pela plausibilidade: um carimbo no
+   futuro ou antes de 2020 vira null aqui, e null nunca entra em média. */
+function carimbosDaCarga(cargaId){
+  const p = (st) => { const t = primeiroTimestamp(cargaId, st); return dataDeEventoPlausivel(t) ? t : null; };
+  return {
+    tChegada: p('Aguardando Embarque'), tIniciado: p('Embarque Iniciado'),
+    tFinalizado: p('Embarque Finalizado'), tFaturado: p('Faturado'), tSaida: p('Seguiu Viagem'),
+  };
+}
+/* A LISTA DO QUE FICOU FORA DA CONTA. Sai do cálculo, fica na tela: toda
+   caixa de média ganha a nota "N carga(s) fora da conta por data
+   inconsistente", com os números das cargas. Esconder o descarte seria
+   trocar um número errado por um número sem explicação. */
+function problemasDeDataDaCarga(cargaId){
+  const brutos = ['Aguardando Embarque','Embarque Iniciado','Embarque Finalizado','Faturado','Seguiu Viagem']
+    .map(st => primeiroTimestamp(cargaId, st)).filter(Boolean);
+  const problemas = [];
+  brutos.forEach(t => { if(!dataDeEventoPlausivel(t)) problemas.push('data impossível: ' + t); });
+  const ordem = brutos.filter(dataDeEventoPlausivel).map(t => Date.parse(t));
+  for(let i=1;i<ordem.length;i++){ if(ordem[i] < ordem[i-1]){ problemas.push('etapa fora de ordem'); break; } }
+  return problemas;
+}
+function cargasComDataInconsistente(cargas){
+  return (cargas || DB.cargas).filter(c => problemasDeDataDaCarga(c.id).length > 0);
+}
 function indicadoresDaCarga(cargaId){
-  const tChegada = primeiroTimestamp(cargaId,'Aguardando Embarque');
-  const tIniciado = primeiroTimestamp(cargaId,'Embarque Iniciado');
-  const tFinalizado = primeiroTimestamp(cargaId,'Embarque Finalizado');
-  const tFaturado = primeiroTimestamp(cargaId,'Faturado');
-  const tSaida = primeiroTimestamp(cargaId,'Seguiu Viagem');
+  const { tChegada, tIniciado, tFinalizado, tFaturado, tSaida } = carimbosDaCarga(cargaId);
   return {
     tempoAguardandoEmbarque: minutosEntre(tChegada, tIniciado),
     tempoCarregamento: minutosEntre(tIniciado, tFinalizado),
@@ -2295,8 +2376,12 @@ function cargasConcluidasNoPeriodo(periodoKey){
 // Médias dos indicadores de tempo dentro de um período, mais a contagem de
 // cargas concluídas nele — a UI usa totalCargas===0 pra distinguir "sem
 // dados suficientes" de "0 minutos" (que seria enganoso).
-function indicadoresPorPeriodo(periodoKey){
-  const concluidas = cargasConcluidasNoPeriodo(periodoKey);
+function indicadoresPorPeriodo(periodoKey, filtros){
+  // Com filtros, usa a MESMA função dos gráficos (cargasConcluidasNoPeriodoFiltrado).
+  // Sem isso a tabela de comparação por período ignorava o filtro do topo e a
+  // nota "só este recorte" era falsa para ela — família da ocorrência #18.
+  const concluidas = filtros ? cargasConcluidasNoPeriodoFiltrado(periodoKey, filtros)
+                             : cargasConcluidasNoPeriodo(periodoKey);
   const campos = ['tempoAguardandoEmbarque','tempoCarregamento','tempoFaturamento','tempoAguardandoSaida','tempoPatioTotal'];
   const somas = {}, contagens = {};
   campos.forEach(f=>{ somas[f]=0; contagens[f]=0; });
@@ -2819,9 +2904,11 @@ function analiseGargalos(cargas){
       placa: c.placa,
       transportadora: c.transportadora || '—',
       status: c.status,
-      paradaHaMin: Math.round((agora - (Date.parse(c.atualizadoEm || c.criadoEm) || agora))/60000)
+      // Pela CHEGADA (ver minutosNoPatioAgora). null = sem chegada registrada:
+      // a tela escreve isso em vez de fingir zero.
+      paradaHaMin: minutosNoPatioAgora(c)
     }))
-    .sort((a,b)=> b.paradaHaMin - a.paradaHaMin)
+    .sort((a,b)=> (b.paradaHaMin ?? -1) - (a.paradaHaMin ?? -1))
     .slice(0, 10);
 
   return {
