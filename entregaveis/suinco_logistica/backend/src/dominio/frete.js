@@ -94,28 +94,26 @@ export function calcularFrete({ transportadora, tipoVeiculo, kmDeslocamento, tar
   return { valor: Number((km * t).toFixed(2)), tarifa: t, motivo: '' };
 }
 
-/* A TRAVA DA CONTRATAÇÃO.
+/* NÃO EXISTE AQUI UMA VALIDAÇÃO DE "CAMPO OBRIGATÓRIO", E É DE PROPÓSITO.
 
-   Pergunta feita ao dono e respondida por ele: "1 KM" e "1 trava a
-   contratacao". A carga NASCE sem KM — a Logística sabe rota e peso antes
-   de saber o caminhão. O que exige KM é o ato de pôr a placa: é aí que
-   existe frete a pagar, e é a última hora em que alguém ainda lembra a
-   distância.
+   Existiu: `faltaParaContratar()` recusava contratar uma placa sem KM e sem
+   observação. Saiu em 09/09/2026, por decisão do dono — "não põe a trava do
+   quilômetro então" — depois de a bateria mostrar que a Montagem do Dia cria
+   carga EM LOTE por outro caminho, sem campo de KM, e que carga recusada na
+   criação é apagada do painel. As 39 cargas do dia sumiriam na frente da
+   Logística.
 
-   `observacoes` entra na mesma trava por decisão dele ("2 observacao
-   obrigatoria"): é o campo onde a Administração registra o valor combinado
-   quando ele foge da tabela, e o relatório de fretes existe para ser lido
-   por ela.
+   A função foi REMOVIDA, e não deixada sem uso: uma função exportada chamada
+   "o que falta para contratar" é um convite a religá-la, e quem religasse
+   estaria desfazendo uma decisão sem saber que era uma.
 
-   VALE PARA O ATO, NÃO PARA A CARGA. Carga já contratada continua
-   editável sem repetir nada — reexigir a cada PATCH travaria a Portaria
-   trocando o motorista de um caminhão que já rodou. */
-export function faltaParaContratar({ kmDeslocamento, observacoes }) {
-  const falta = [];
-  if (kmValido(kmDeslocamento) === null) falta.push('KM de deslocamento');
-  if (!String(observacoes ?? '').trim()) falta.push('Observação');
-  return falta;
-}
+   O KM continua sendo pedido na tela e preenchido sozinho pelo destino. A
+   cobrança mora onde o dado é usado: `motivoSemValor()` abaixo faz o
+   relatório de fretes dizer "Sem KM de deslocamento" em vez de mostrar uma
+   célula muda. Ausência declarada em voz alta vale mais que um portão que
+   para caminhão. */
+
+
 
 /* POR QUE ESTA CARGA NÃO TEM VALOR — respondido a partir da própria linha.
 
