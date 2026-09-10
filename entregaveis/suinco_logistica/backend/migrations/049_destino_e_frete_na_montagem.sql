@@ -33,6 +33,11 @@
 -- MESMOS TIPOS DE fact_viagens, de propósito: o valor viaja da linha para
 -- a carga sem conversão, e conversão silenciosa entre INTEGER e NUMERIC é
 -- de onde vem "o KM mudou sozinho".
+-- SEM ESTA MIGRAÇÃO: a Montagem do Dia mostra os campos Destino, KM e Frete
+-- na tela, mas o servidor recusa ao gravar — a coluna não existe. A linha
+-- nasce sem destino, a carga efetivada nasce sem destino, e o frete não
+-- calcula. É a metade do defeito que o dono relatou, com a tela dizendo o
+-- contrário.
 -- =====================================================================
 
 ALTER TABLE programacao_montagem
