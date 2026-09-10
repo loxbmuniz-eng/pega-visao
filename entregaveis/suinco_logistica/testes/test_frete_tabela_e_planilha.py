@@ -244,6 +244,100 @@ async def main():
         ck('a data do faturamento é a do EVENTO, não a de hoje',
            bool(dados[2]) and re.match(r'^\d{2}/\d{2}', dados[2]), str(dados[2:3]))
 
+        print('\n=== 5b. O EXCEL NÃO PODE TRANSFORMAR "3/4" EM 3 DE ABRIL ===')
+        # RELATO DO DONO, em produção (10/09/2026): "a coluna h do relatorio de
+        # fretes esta saindo em modo data entao caminhao 3/4 fica aparecendo
+        # 3 de abril".
+        #
+        # A coluna H é Tipo de Veículo, e "3/4" é um dos cinco tipos da tabela
+        # oficial. O Excel aplica detecção de tipo ao conteúdo INTEIRO da
+        # célula: "3/4" tem a forma de data e vira 3 de abril. Aspas de CSV não
+        # impedem — elas são sintaxe do arquivo, não instrução de tipo.
+        #
+        # A correção é marcar a célula como TEXTO com ="...". E ela não pode
+        # valer para a coluna C: a data do faturamento PRECISA chegar como data,
+        # senão a Daniela não ordena nem filtra por ela.
+        await pg.evaluate(seed())
+        await pg.evaluate(TABELA)
+        await pg.evaluate("""() => {
+            const c = DB.cargas.find(x=>x.id==='c_frete');
+            c.tipoVeiculo = '3/4';
+            const f = DB.frota.find(x=>x.placa===c.placa);
+            if(f) f.tipoVeiculo = '3/4';
+        }""")
+        csv34 = await pg.evaluate("""async () => {
+            let cap = null; const _B = window.Blob;
+            window.Blob = function(pt,o){ cap = String(pt.join('')); return new _B(pt,o); };
+            const _c=URL.createObjectURL; URL.createObjectURL=()=>'blob:x';
+            const _r=URL.revokeObjectURL; URL.revokeObjectURL=()=>{};
+            const _k=HTMLAnchorElement.prototype.click; HTMLAnchorElement.prototype.click=function(){};
+            await exportarPlanilhaFretes();
+            window.Blob=_B; URL.createObjectURL=_c; URL.revokeObjectURL=_r;
+            HTMLAnchorElement.prototype.click=_k; return cap;
+        }""")
+        linhas34 = (csv34 or '').replace('\ufeff','').split('\r\n')
+        dados34 = linhas34[1].split(';') if len(linhas34) > 1 else []
+        # Coluna H = índice 7. O campo no arquivo vira  "=""3/4"""  depois do
+        # escapamento de CSV; o Excel resolve para a célula de texto 3/4.
+        ck('a coluna H sai protegida como TEXTO, não como data',
+           dados34[7:8] == ['"=""3/4"""'], f"coluna H = {dados34[7:8]}")
+        ck('e a coluna C (data do faturamento) continua data de verdade',
+           dados34[2:3] and '=' not in dados34[2], f"coluna C = {dados34[2:3]}")
+
+        # Os outros quatro tipos não têm forma de data — não devem ser mexidos.
+        await pg.evaluate("""() => {
+            const c = DB.cargas.find(x=>x.id==='c_frete'); c.tipoVeiculo = 'Truck';
+        }""")
+        csvOk = await pg.evaluate("""async () => {
+            let cap=null; const _B=window.Blob;
+            window.Blob=function(pt,o){cap=String(pt.join('')); return new _B(pt,o);};
+            const _c=URL.createObjectURL; URL.createObjectURL=()=>'blob:x';
+            const _r=URL.revokeObjectURL; URL.revokeObjectURL=()=>{};
+            const _k=HTMLAnchorElement.prototype.click; HTMLAnchorElement.prototype.click=function(){};
+            await exportarPlanilhaFretes();
+            window.Blob=_B; URL.createObjectURL=_c; URL.revokeObjectURL=_r;
+            HTMLAnchorElement.prototype.click=_k; return cap;
+        }""")
+        dadosOk = (csvOk or '').replace('\ufeff','').split('\r\n')[1].split(';')
+        ck('"Truck" sai limpo — proteger o que não precisa suja o arquivo',
+           dadosOk[7:8] == ['Truck'], f"coluna H = {dadosOk[7:8]}")
+
+        print('\n=== 5c. A MESMA PROTEÇÃO NAS OUTRAS TRÊS EXPORTAÇÕES ===')
+        # É família: quatro exportações emitem tipo de veículo, e "3/4" é um
+        # deles em todas. Consertar só a que ele relatou é garantir que volta.
+        tabela34 = await pg.evaluate("""async () => {
+            let cap=null; const _B=window.Blob;
+            window.Blob=function(pt,o){cap=String(pt.join('')); return new _B(pt,o);};
+            const _c=URL.createObjectURL; URL.createObjectURL=()=>'blob:x';
+            const _r=URL.revokeObjectURL; URL.revokeObjectURL=()=>{};
+            const _k=HTMLAnchorElement.prototype.click; HTMLAnchorElement.prototype.click=function(){};
+            exportarTabelaFreteCsv();
+            window.Blob=_B; URL.createObjectURL=_c; URL.revokeObjectURL=_r;
+            HTMLAnchorElement.prototype.click=_k; return cap;
+        }""")
+        ck('a Tabela de Frete protege o 3/4 (ele é uma LINHA dela)',
+           '"=""3/4"""' in (tabela34 or ''),
+           [l for l in (tabela34 or '').split('\r\n') if '3' in l][:2])
+
+        frota34 = await pg.evaluate("""async () => {
+            DB.frota.push({placa:'TQ9Z99', transportadora:'ALFA', tipoVeiculo:'3/4',
+                           uf:'MG', capacidadeKg:8000, atualizadoEm:new Date().toISOString()});
+            let cap=null; const _B=window.Blob;
+            window.Blob=function(pt,o){cap=String(pt.join('')); return new _B(pt,o);};
+            const _c=URL.createObjectURL; URL.createObjectURL=()=>'blob:x';
+            const _r=URL.revokeObjectURL; URL.revokeObjectURL=()=>{};
+            const _k=HTMLAnchorElement.prototype.click; HTMLAnchorElement.prototype.click=function(){};
+            exportarFrotaCsv();
+            window.Blob=_B; URL.createObjectURL=_c; URL.revokeObjectURL=_r;
+            HTMLAnchorElement.prototype.click=_k; return cap;
+        }""")
+        ck('o cadastro de Frota também protege',
+           '"=""3/4"""' in (frota34 or ''),
+           [l for l in (frota34 or '').split('\r\n') if 'TQ9Z99' in l][:1])
+
+        ck('existe UMA função de célula de CSV, não duas',
+           await pg.evaluate("() => typeof celulaCsv === 'function'"))
+
         print('\n=== 6. QUEM NÃO PODE VER VALOR, NÃO VÊ ===')
         for setor in ['Portaria', 'Expedição', 'Comercial', 'Faturamento']:
             ve = await pg.evaluate("(s) => podeVerValorDeFreteUI(s)", setor)

@@ -6602,7 +6602,9 @@ function exportarTabelaFreteCsv(){
   TARIFAS_FRETE.forEach(t => linhas.push(['Tarifa', t.tipoVeiculo, '', String(t.valorPorKm).replace('.', ','), t.operador||'']));
   DESTINOS_FRETE.forEach(d => linhas.push(['Destino', '', d.destino, String(d.km), d.operador||'']));
   baixarCsvDoDia('Tabela_de_Frete',
-    ['O quê', 'Tipo de veículo', 'Destino', 'Valor por km / KM', 'Quem cadastrou'], linhas);
+    ['O quê', 'Tipo de veículo', 'Destino', 'Valor por km / KM', 'Quem cadastrou'], linhas,
+    // Aqui o "3/4" é uma LINHA da tabela, não um caso de borda.
+    ['O quê', 'Tipo de veículo', 'Destino', 'Quem cadastrou']);
 }
 
 /* Alimenta o <datalist> de destinos do formulário de carga. Chamado
@@ -7946,13 +7948,61 @@ function coletarCssDoPainel(){
    atualizado". CSV e não XLSX de propósito: sai do próprio navegador, sem
    biblioteca externa (a CSP barra CDN), e com BOM + ponto-e-vírgula o
    Excel em português abre com acento e coluna certos num duplo clique. */
-function baixarCsvCadastro(nome, cabecalhos, linhas){
-  const escapa = (v) => {
-    const s = String(v ?? '');
-    return /[";\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
-  };
-  const corpo = [cabecalhos, ...linhas]
-    .map((l) => l.map(escapa).join(';')).join('\r\n');
+/* =====================================================================
+   UMA CÉLULA DE CSV — e a defesa contra o Excel adivinhar tipo (10/09/2026)
+   ---------------------------------------------------------------------
+   RELATO DO DONO, em produção: "a coluna h do relatorio de fretes esta
+   saindo em modo data entao caminhao 3/4 fica aparecendo 3 de abril".
+
+   A coluna H é Tipo de Veículo, e "3/4" é um dos cinco tipos da tabela
+   oficial de frete. O Excel aplica detecção de tipo ao conteúdo INTEIRO da
+   célula: "3/4" tem forma de data e vira 3 de abril. Aspas de CSV não
+   impedem — elas são sintaxe do arquivo, não declaração de tipo.
+
+   A defesa é `="3/4"`, que o Excel resolve como texto. Fica feio num editor
+   de texto e é o preço de o arquivo abrir certo onde ele é usado: Excel,
+   LibreOffice e Google Planilhas entendem os três.
+
+   SÓ NAS COLUNAS DE TEXTO, E SÓ NO QUE PRECISA. A coluna C da planilha de
+   fretes é a data do faturamento e TEM de chegar como data — senão a
+   Administração não ordena nem filtra por ela. E proteger "Truck", que não
+   tem forma de data, só sujaria o arquivo. Por isso o chamador declara
+   quais colunas são texto, e o valor só é protegido se de fato for
+   ambíguo.
+
+   ERA UMA FUNÇÃO ESCRITA DUAS VEZES. `baixarCsvCadastro` e
+   `baixarCsvDoDia` tinham o mesmo escapamento copiado, palavra por palavra.
+   Quatro exportações emitem tipo de veículo — planilha de fretes, tabela de
+   frete, programação do dia e cadastro de Frota — e com duas cópias, o
+   "3/4" consertado numa volta pela outra. A regra da casa existe para isto:
+   uma função, dois chamadores.
+   ===================================================================== */
+
+/* Valor cujo conteúdo INTEIRO o Excel leria como data ou número: dígitos
+   separados por / - ou . Deixa passar "combinado 1/2 carga", que o Excel
+   não converte justamente porque a célula inteira não tem a forma. */
+const CELULA_AMBIGUA_NO_EXCEL = /^\s*\d{1,4}\s*[/\-.]\s*\d{1,4}(\s*[/\-.]\s*\d{1,4})?\s*$/;
+
+function celulaCsv(valor, ehTexto){
+  const cru = String(valor ?? '');
+  const conteudo = (ehTexto && CELULA_AMBIGUA_NO_EXCEL.test(cru)) ? `="${cru}"` : cru;
+  // Escapamento de CSV depois da proteção: o ="..." traz aspas, e elas
+  // precisam ser dobradas como qualquer outra.
+  return /[";\n\r]/.test(conteudo) ? '"' + conteudo.replace(/"/g, '""') + '"' : conteudo;
+}
+
+/* Monta o corpo do CSV. `colunasDeTexto` são NOMES de cabeçalho, não
+   índices: assim reordenar colunas não silenciosamente desprotege uma. */
+function corpoCsv(cabecalhos, linhas, colunasDeTexto){
+  const texto = new Set(colunasDeTexto || []);
+  const daColuna = cabecalhos.map((c) => texto.has(c));
+  return [cabecalhos.map((c) => celulaCsv(c, false)),
+          ...linhas.map((l) => l.map((v, i) => celulaCsv(v, daColuna[i])))]
+    .map((l) => l.join(';')).join('\r\n');
+}
+
+function baixarCsvCadastro(nome, cabecalhos, linhas, colunasDeTexto){
+  const corpo = corpoCsv(cabecalhos, linhas, colunasDeTexto);
   // BOM: sem ele o Excel pt-BR abre "Ç" como lixo — visto em campo.
   const blob = new Blob(['﻿' + corpo], { type: 'text/csv;charset=utf-8' });
   const d = new Date();
@@ -7971,7 +8021,9 @@ function exportarFrotaCsv(){
     ['Placa','Transportadora','Tipo de Veículo','Motorista','Capacidade (kg)','UF','Última Movimentação','Precisa Revisão'],
     DB.frota.map((f) => [f.placa, f.transportadora || '', f.tipoVeiculo || '',
       f.motorista || '', f.capacidadeKg ?? '', f.uf || '',
-      f.dataUltimaMovimentacao || '', f.precisaRevisao ? 'Sim' : 'Não']));
+      f.dataUltimaMovimentacao || '', f.precisaRevisao ? 'Sim' : 'Não']),
+    // "Última Movimentação" fica fora: é data e precisa continuar data.
+    ['Placa','Transportadora','Tipo de Veículo','Motorista','UF','Precisa Revisão']);
 }
 
 function exportarRotasCsv(){
@@ -9656,7 +9708,13 @@ async function exportarPlanilhaFretes(){
     'Entregas', 'Motorista',
     'Valor do Frete (R$)', 'Observação do Frete', 'Observações',
     'Documento de Frete',
-  ], linhas);
+  ], linhas,
+  /* AS COLUNAS DE TEXTO. "Data do Faturamento" fica FORA de propósito: ela
+     tem de chegar como data para a Administração ordenar e filtrar por ela.
+     Peso, KM e valor também ficam fora — são números que a Daniela soma. */
+  ['Nº da Carga', 'Rota', 'Tipo de Operação', 'Placa', 'Transportadora',
+   'Tipo de Veículo', 'Destino do Frete', 'Motorista',
+   'Observação do Frete', 'Observações', 'Documento de Frete']);
 }
 
 /* =====================================================================
@@ -10744,18 +10802,17 @@ async function exportarMontagemDoDiaUI(){
     'Sequência', 'Carga', 'Rota', 'Pra onde?', 'Placa', 'Transportadora',
     'Perfil', 'Peso (t)', 'Paletizada', 'Entregas', 'Ganchos',
     'Código da rota', 'Motorista', 'Observações', 'Situação',
-  ], linhas);
+  ], linhas,
+  // "Perfil" é o tipo de veículo — é por ela que o 3/4 entra aqui.
+  ['Carga', 'Rota', 'Pra onde?', 'Placa', 'Transportadora', 'Perfil',
+   'Paletizada', 'Código da rota', 'Motorista', 'Observações', 'Situação']);
 }
 
 /* Mesmo escapamento e mesmo BOM de baixarCsvCadastro — separado só porque
    o nome do arquivo é outro (o dia, não o cadastro) e porque este some se
    alguém mexer nos cadastros amanhã. */
-function baixarCsvDoDia(nome, cabecalhos, linhas){
-  const escapa = (v) => {
-    const t = String(v ?? '');
-    return /[";\n\r]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t;
-  };
-  const corpo = [cabecalhos, ...linhas].map(l => l.map(escapa).join(';')).join('\r\n');
+function baixarCsvDoDia(nome, cabecalhos, linhas, colunasDeTexto){
+  const corpo = corpoCsv(cabecalhos, linhas, colunasDeTexto);
   const blob = new Blob(['\ufeff' + corpo], { type: 'text/csv;charset=utf-8' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);

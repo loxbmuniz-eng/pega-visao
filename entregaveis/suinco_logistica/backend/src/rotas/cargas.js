@@ -17,7 +17,7 @@ import {
 import {
   avisarChegada, avisarSaida, avisarFimDaProgramacao, primeiraVezHoje, contarPatio,
 } from '../servicos/avisos.js';
-import { calcularFrete, faltaParaContratar, kmValido } from '../dominio/frete.js';
+import { calcularFrete } from '../dominio/frete.js';
 
 export const rotasCargas = Router();
 
