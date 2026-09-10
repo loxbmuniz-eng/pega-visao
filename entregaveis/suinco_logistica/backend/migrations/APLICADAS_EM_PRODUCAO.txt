@@ -1,4 +1,4 @@
-046
+048
 
 # ---------------------------------------------------------------------
 # ATÉ QUAL MIGRAÇÃO O SERVIDOR DE PRODUÇÃO ESTÁ.
@@ -35,3 +35,22 @@
 # pelo dono: commit f86cd3a, serviço active, /health 200, migrações 001 a 046
 # aplicadas. Estava parado em 037 desde 27/08 — nove migrações subiram de uma
 # vez (038 a 046), junto com seis lotes de código de servidor.
+
+# 10/09/2026 — 046 → 048.
+#
+# O dono colou o bloco COPIE DAQUI do atualizar.sh:
+#
+#     commit no servidor : 1286831
+#     serviço            : active
+#     /health local      : 200
+#     migrações aplicadas: (...) 047_frete_tabela_e_km.sql,048_setor_qualidade.sql
+#
+# Sobe por causa DESSA prova, não por dedução. Conferido também por
+# conteúdo: o commit 1286831 contém numerosDaFila (a correção do arrasto),
+# a rota /api/frete/tabela, soAcompanha (o setor Qualidade) e os campos de
+# KM na carga — e NÃO contém KM_FALTANDO, que é a trava que ele mandou
+# tirar.
+#
+# O portão estava imprimindo 047 e 048 como pendentes depois de elas já
+# terem rodado. Aviso falso gasta a credibilidade do aviso verdadeiro, que
+# é a única coisa que este arquivo existe para proteger.
