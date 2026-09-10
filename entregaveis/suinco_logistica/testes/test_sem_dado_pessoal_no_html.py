@@ -1,31 +1,38 @@
 #!/usr/bin/env python3
-"""A base de frota sai do HTML público — e a operação continua igual.
+"""O HTML público não carrega dado pessoal (10/09/2026).
 
-RELATO DO DONO, 10/09/2026, depois de inspecionar embarquesuinco.com.br sem
-estar logado: "apareceu isso mesmo sem o login ter sido feito, entao nao esta
-seguro na pagina de login".
+RELATO DO DONO, depois de inspecionar embarquesuinco.com.br SEM estar logado:
+"apareceu isso mesmo sem o login ter sido feito, entao nao esta seguro".
 
-O QUE ELE VIU e o que de fato havia:
-  - o `sw.js` que apareceu no inspetor NÃO é brecha. Todo código que o
-    navegador executa é legível; esconder não é o que protege. O que protege
-    é o servidor recusar, e recusa: sete rotas de dado chamadas sem token
-    responderam 401 com zero conteúdo.
-  - MAS, uma linha ao lado, havia brecha de verdade: o `index.html` — servido
-    sem login — carregava `window.FROTA_SEED_CSV` com a base inteira:
-    749 placas, 134 transportadoras nomeadas e 5 delas com NOME COMPLETO E
-    CPF de pessoa física (transportador autônomo registrado como MEI).
-    Qualquer um baixava o HTML e tinha a frota da Suinco.
+O QUE ELE VIU E O QUE DE FATO HAVIA. O sw.js que apareceu no inspetor NÃO é
+brecha: todo código que o navegador executa é legível, e esconder não é o que
+protege — o que protege é o servidor recusar, e recusa (sete rotas de dado sem
+token responderam 401 com zero conteúdo).
 
-A CORREÇÃO: o build para de embutir o CSV. A frota passa a vir de
-`GET /cadastros/frota`, que já existia e já exige login.
+Mas uma linha ao lado havia brecha real. O index.html é servido pela Vercel
+como arquivo estático, ANTES de qualquer login, e carregava a base de frota
+inteira: 749 placas, 134 transportadoras e CINCO delas com NOME COMPLETO E CPF
+de pessoa física (transportador autônomo registrado como MEI).
 
-POR QUE ISSO NÃO ATRAPALHA A OPERAÇÃO — e é o que o bloco 2 prova:
-`suinco-api.js` já busca `/api/frota` em TODA sincronia completa. O comentário
-do próprio arquivo diz "todo mundo que recebeu a frota do servidor (ou seja,
-todo mundo, todo dia)". O CSV embutido era um atalho de partida ANTES do
-login; depois do login ele já era sobrescrito pelo dado do servidor.
+A PRIMEIRA TENTATIVA FOI TIRAR A FROTA DO HTML, e ela REPROVOU na bateria:
+54 suítes vermelhas, todas de uma causa só — a suíte de tela usa a frota
+embutida como fixture, e 99 das 150 suítes tocam DB.frota. Não há helper
+compartilhado para corrigir num ponto só (as suítes são independentes por
+decisão de projeto). Publicar aquilo teria quebrado metade da bateria.
 
-    python3 testes/test_frota_fora_do_html.py
+A DECISÃO DO DONO, com as duas opções na mesa: caminho cirúrgico. Sai do CSV
+apenas o CPF; a frota continua embutida. Fecha HOJE a exposição de dado
+pessoal — que é o que tem prazo de LGPD correndo (Art. 48: 3 dias úteis) —
+sem quebrar teste nenhum.
+
+O QUE ESTA GUARDA TRAVA: nenhum CPF válido no HTML público, nunca mais.
+
+O QUE CONTINUA EM ABERTO, dito aqui para não virar omissão: as 749 placas e
+os nomes das transportadoras SEGUEM no HTML público. Fechar isso é o caminho
+A — frota só depois do login, com fixture próprio nas suítes — e é trabalho
+que ainda não foi feito. Esta guarda NÃO cobre esse caso.
+
+    python3 testes/test_sem_dado_pessoal_no_html.py
 """
 import asyncio
 import json
@@ -106,45 +113,28 @@ def http(caminho, token=None, metodo='GET', corpo=None):
 async def main():
     html = (RAIZ / 'index.html').read_text(errors='ignore')
 
-    print('\n=== 1. O HTML PÚBLICO NÃO CARREGA MAIS A BASE DE FROTA ===')
-    # A GUARDA É CONTRA O CADASTRO, NÃO CONTRA A PALAVRA.
-    # `data.js` continua CITANDO window.FROTA_SEED_CSV no código que lê a
-    # origem — isso é código, e código o navegador sempre vê. O que não pode
-    # existir é a ATRIBUIÇÃO com o dado dentro.
-    ck('o HTML não recebe mais a base de frota',
-       'window.FROTA_SEED_CSV = "' not in html,
-       'a atribuição com o CSV ainda está lá' if 'window.FROTA_SEED_CSV = "' in html else '')
-    ck('o cabeçalho do cadastro de frota não está no HTML',
-       'Placa,Transportadora,TipoVeiculo' not in html)
-
+    print('\n=== 1. NENHUM DADO PESSOAL NO HTML SERVIDO SEM LOGIN ===')
     cpfs = {re.sub(r'\D', '', a) for a in
             re.findall(r'(?<!\d)(\d{3}\.?\d{3}\.?\d{3}-?\d{2})(?!\d)', html)}
     cpfs = {c for c in cpfs if cpf_valido(c)}
     ck('nenhum CPF válido no HTML público', not cpfs,
        f'{len(cpfs)} CPF(s) — dado pessoal servido sem login' if cpfs else '')
 
-    # NÃO É "ZERO PLACAS", E ISSO É DECISÃO, NÃO FROUXIDÃO.
-    # Os comentários do código citam placas REAIS de incidentes já ocorridos
-    # ("o relato do FTZ2138", "a Portaria deu saída na PUX2971 às 06:38").
-    # Elas são a memória de por que cada regra existe — apagá-las para o
-    # teste passar trocaria uma proteção de dado por uma perda de
-    # documentação, e o dado exposto de verdade era o CADASTRO.
-    # Um cadastro tem centenas de linhas; comentário de incidente tem uma
-    # dezena. O teto separa os dois casos sem ambiguidade.
-    # DOIS FORMATOS, e o antigo é a maioria da frota (AAK8958).
-    # A primeira versão só casava Mercosul (ABC1D23) e contava 10 tanto
-    # no HTML corrigido quanto no publicado COM as 749 placas dentro —
-    # a guarda passaria com o cadastro inteiro exposto.
-    # NADA DE \b AQUI. No HTML o CSV vinha escapado como "...\nAAK8958,..." —
-    # o `n` da sequência `\n` cola na placa e ANULA a fronteira de palavra.
-    # Com `\b`, o publicado (com as 749 placas dentro) contava 10 e a guarda
-    # passava com o cadastro inteiro exposto. O delimitador certo é ausência
-    # de letra MAIÚSCULA ou dígito nas bordas, que tolera o escape.
-    BORDA = r'(?<![A-Z0-9])%s(?![A-Z0-9])'
-    placas = set(re.findall(BORDA % r'[A-Z]{3}\d[A-Z0-9]\d{2}', html))
-    placas |= set(re.findall(BORDA % r'[A-Z]{3}\d{4}', html))
-    ck('o HTML não carrega um CADASTRO de placas', len(placas) < 25,
-       f'{len(placas)} placa(s) distintas — cadastro tem centenas')
+    # A MESMA CONFERÊNCIA NA FONTE, e não só no gerado.
+    # O HTML é build; o CSV é a origem. Conferir só o build deixaria o CPF
+    # voltar no próximo `python3 build_arquivo_unico.py` sem ninguém notar.
+    csv_txt = (RAIZ / 'frota_seed_2026.csv').read_text(errors='ignore')
+    cpfs_csv = {re.sub(r'\D', '', a) for a in
+                re.findall(r'(?<!\d)(\d{3}\.?\d{3}\.?\d{3}-?\d{2})(?!\d)', csv_txt)}
+    cpfs_csv = {c for c in cpfs_csv if cpf_valido(c)}
+    ck('nem na base de frota que alimenta o build', not cpfs_csv,
+       f'{len(cpfs_csv)} CPF(s) no CSV' if cpfs_csv else '')
+
+    # A frota CONTINUA embutida — é o fixture de 99 suítes. Conferir que ela
+    # está lá evita o oposto do defeito: alguém "limpar" o HTML de novo e
+    # derrubar metade da bateria sem entender por quê.
+    ck('a base de frota segue no HTML (fixture da bateria, decisão de 10/09)',
+       'window.FROTA_SEED_CSV = ' + chr(34) in html)
 
     print('\n=== 2. E A OPERAÇÃO CONTINUA IGUAL: A FROTA VEM DO SERVIDOR ===')
     print('    (é a pergunta do dono: "tirar a frota do index vai atrapalhar?")')
@@ -214,9 +204,13 @@ async def main():
         await pg.goto(PAINEL)
         await pg.wait_for_timeout(1200)
 
-        vazio = await pg.evaluate("() => (DB.frota || []).length")
-        ck('ao abrir, o painel não traz cadastro de frota nenhum', vazio == 0,
-           f'{vazio} placa(s) antes de qualquer sincronia')
+        # NO CAMINHO B O PAINEL ABRE COM A FROTA, e isso é o esperado.
+        # Esta linha já afirmou o contrário — foi escrita para o caminho A,
+        # em que a frota só viria depois do login. Deixá-la assim seria a
+        # guarda medindo um mundo que a decisão do dono descartou.
+        aberto = await pg.evaluate("() => (DB.frota || []).length")
+        ck('ao abrir, o painel já tem a frota do embutido (o fixture)',
+           aberto >= 700, f'{aberto} placa(s) antes de qualquer sincronia')
 
         depois = await pg.evaluate(
             "(frota) => { fundirEstadoRemoto({ frota }); return (DB.frota || []).length; }",

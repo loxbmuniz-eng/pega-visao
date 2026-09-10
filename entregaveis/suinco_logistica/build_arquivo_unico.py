@@ -119,6 +119,7 @@ def main():
     app_js = ler('app.js')
     devolucoes_js = ler('devolucoes.js')
     qr_js = ler('qr.js')
+    csv = ler('frota_seed_2026.csv')
 
     logo_bytes = (BASE / 'assets' / 'logo_suinco.png').read_bytes()
     logo_uri = 'data:image/png;base64,' + base64.b64encode(logo_bytes).decode('ascii')
@@ -155,31 +156,10 @@ def main():
     if n_css != 1:
         sys.exit(f'ERRO: esperava 1 link para styles.css, encontrei {n_css}')
 
-    # 3. A BASE DE FROTA NÃO ENTRA MAIS NO HTML (10/09/2026).
-    #
-    #    RELATO DO DONO, depois de inspecionar embarquesuinco.com.br SEM
-    #    estar logado: "apareceu isso mesmo sem o login ter sido feito,
-    #    entao nao esta seguro".
-    #
-    #    Ele estava certo, e o arquivo era este. O index.html é servido pela
-    #    Vercel como arquivo estático, ANTES de qualquer login — e ele
-    #    carregava a base inteira: 749 placas, 134 transportadoras nomeadas
-    #    e CINCO delas com NOME COMPLETO E CPF de pessoa física
-    #    (transportador autônomo registrado como MEI). Bastava baixar o HTML.
-    #
-    #    O CSV embutido existia para o caso file://, onde o navegador bloqueia
-    #    fetch de arquivo local. Mas o caso file:// é desenvolvimento, não
-    #    produção — e em produção a frota JÁ vinha do servidor: suinco-api.js
-    #    busca /api/frota em toda sincronia completa ("todo mundo, todo dia",
-    #    diz o comentário de lá). O embutido era redundante e caro.
-    #
-    #    MEDIDO ANTES DE TIRAR (test_frota_fora_do_html.py, bloco 3):
-    #    navegador com localStorage zerado, login real contra a API, e a frota
-    #    chegou com as 749 placas pelo servidor. A operação não sente.
-    #
-    #    Quem abrir por file:// segue com Frota vazia até cadastrar ou
-    #    importar — que é exatamente o que init() em app.js já tratava.
-    seed = ''
+    # 3. A base de Frota entra como constante JS — em file:// o fetch do CSV
+    #    é bloqueado por CORS, então data.js lê window.FROTA_SEED_CSV.
+    seed = ('<script>window.FROTA_SEED_CSV = ' + json.dumps(csv, ensure_ascii=False)
+            + ';</script>')
 
     # 3b. Carimbo do build. app.js lê window.SUINCO_BUILD e mostra no rodapé,
     #     para dar para responder "atualizou?" olhando a tela.
@@ -260,10 +240,7 @@ def main():
 
     SAIDA.write_text(html, encoding='utf-8')
     kb = len(html.encode('utf-8')) / 1024
-    # Sem contagem de placas: elas não são mais embutidas. Dizer
-    # "N placas embutidas" depois da correção de 10/09 seria mentir
-    # no próprio comprovante do build.
-    print(f'OK: {SAIDA.name} gerado ({kb:.0f} KB, sem base de frota embutida)')
+    print(f'OK: {SAIDA.name} gerado ({kb:.0f} KB, {len(csv.splitlines()) - 1} placas embutidas)')
 
 
 if __name__ == '__main__':
