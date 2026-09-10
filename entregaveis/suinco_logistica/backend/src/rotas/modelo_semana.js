@@ -15,6 +15,7 @@ import { Router } from 'express';
 import { consultar, emTransacao } from '../banco.js';
 import { exigirLogin, exigirSetor, recusarFilial } from '../middleware/auth.js';
 import { emitir } from '../tempo-real.js';
+import { calcularFrete } from '../dominio/frete.js';
 
 export const rotasModeloSemana = Router();
 
@@ -164,16 +165,107 @@ rotasModeloSemana.get('/montagem', exigirLogin, recusarFilial, async (req, res, 
           ORDER BY m.ordem, m.rota_codigo`, [diaSemana]
       ),
       consultar(
-        `SELECT g.*, r.nome AS rota_nome
+        /* O TIPO DE VEÍCULO VEM DA FROTA, PELA PLACA (10/09/2026).
+           A tarifa do frete é por modalidade (3/4, Toco, Truck, Bitruck,
+           Carreta), e a linha da montagem não guarda modalidade — guarda
+           placa. O LEFT JOIN traz o tipo sem exigir placa: linha sem placa
+           continua aparecendo, só não tem como calcular valor ainda.
+
+           A transportadora da LINHA vence a da frota quando preenchida —
+           é a exceção do dia (subcontratação, freteiro), a mesma regra que
+           efetivarMontagemUI já aplica ao criar a carga. */
+        `SELECT g.*, r.nome AS rota_nome,
+                v.tipo_veiculo AS frota_tipo_veiculo,
+                v.transportadora AS frota_transportadora
            FROM programacao_montagem g
            JOIN dim_rotas r ON r.codigo = g.rota_codigo
+           LEFT JOIN dim_veiculos v ON v.placa = g.placa
           WHERE g.data_prog = $1
           ORDER BY g.sequencia NULLS LAST, g.criado_em`, [dia]
       ),
     ]);
-    res.json({ dia, diaSemana, modelo, montagens });
+
+    /* O VALOR DO FRETE É CALCULADO NA LEITURA, NÃO GUARDADO.
+       ---------------------------------------------------------------
+       Pedido do dono: "montagem do dia precisa seguir com destino valor
+       de frete".
+
+       Não criei coluna para o valor de propósito. Linha de montagem é
+       RASCUNHO: a placa muda, o destino muda, o KM é corrigido — e valor
+       guardado em rascunho é valor que envelhece calado. Na carga é o
+       oposto: lá ele é congelado, porque carga gravada é registro do que
+       foi contratado.
+
+       E a conta é a MESMA função do domínio que as cargas usam
+       (calcularFrete). Repetir a fórmula aqui daria dois lugares para o
+       preço do km divergir — que é exatamente o que a regra da casa
+       proíbe: uma função, dois chamadores. */
+    const { rows: tar } = await consultar('SELECT tipo_veiculo, valor_por_km FROM frete_tarifas');
+    const tarifas = new Map(tar.map((t) => [t.tipo_veiculo, Number(t.valor_por_km)]));
+    const comFrete = montagens.map((m) => {
+      const r = calcularFrete({
+        transportadora: m.transportadora || m.frota_transportadora,
+        tipoVeiculo: m.frota_tipo_veiculo,
+        kmDeslocamento: m.km_deslocamento,
+        tarifas,
+      });
+      return { ...m, frete_valor: r.valor, frete_tarifa_usada: r.tarifa, frete_motivo: r.motivo };
+    });
+
+    res.json({ dia, diaSemana, modelo, montagens: comFrete });
   } catch (e) { next(e); }
 });
+
+/* DESTINO E KM NA LINHA DA MONTAGEM (10/09/2026).
+   ---------------------------------------------------------------------
+   Relato do dono: "quando adiciona a linha ela nao aparece o destino", e o
+   pedido: "montagem do dia precisa seguir com destino valor de frete".
+
+   O KM DO DESTINO É RESOLVIDO AQUI, NO SERVIDOR, e não aceito do corpo da
+   requisição. É a mesma regra que precoDaCarga() já aplica às cargas: quem
+   diz quantos quilômetros tem um destino é o cadastro, não quem monta a
+   tela. Aceitar o número do cliente deixaria o valor do frete ser escolhido
+   por quem envia a requisição.
+
+   O KM DE DESLOCAMENTO, esse SIM vem de fora — é a correção do operador
+   (desvio, retorno, coleta no caminho), e é ele que o cálculo usa. Sem
+   correção, nasce igual ao do destino; é o painel que faz essa cópia, e o
+   servidor só guarda o que chegou.
+
+   `undefined` preserva o valor atual; string vazia LIMPA. Sem essa
+   distinção, editar o peso de uma linha apagaria o destino dela. */
+async function destinoEKm(corpo, atual, q) {
+  const temDestino = corpo?.freteDestino !== undefined;
+  const destino = temDestino
+    ? (String(corpo.freteDestino ?? '').trim() || null)
+    : (atual ? atual.frete_destino : null);
+
+  let kmDestino = atual ? atual.km_destino : null;
+  if (temDestino) {
+    kmDestino = null;
+    if (destino) {
+      const { rows } = await q('SELECT km FROM frete_destinos WHERE destino = $1', [destino]);
+      if (rows[0]) kmDestino = rows[0].km;
+    }
+  }
+
+  const kmDesl = corpo?.kmDeslocamento !== undefined
+    ? kmInteiroOuNulo(corpo.kmDeslocamento)
+    : (atual ? atual.km_deslocamento : null);
+
+  return { destino, kmDestino, kmDesl };
+}
+
+/* Mesma régua de kmValido() do domínio de frete: inteiro positivo ou nada.
+   Zero e negativo não são distância — viram nulo, e a coluna vazia diz "não
+   informado" em vez de mentir um número. */
+function kmInteiroOuNulo(v) {
+  if (v === '' || v === null || v === undefined) return null;
+  const n = Number(v);
+  if (!Number.isFinite(n)) return null;
+  const i = Math.trunc(n);
+  return i > 0 ? i : null;
+}
 
 rotasModeloSemana.post('/montagem', SO_LOGISTICA, async (req, res, next) => {
   try {
@@ -186,12 +278,14 @@ rotasModeloSemana.post('/montagem', SO_LOGISTICA, async (req, res, next) => {
       });
     }
     const dia = diaOu(hojeISO(), req.body?.dia);
+    const _dk = await destinoEKm(req.body, null, consultar);
     const { rows } = await consultar(
       `INSERT INTO programacao_montagem
          (montagem_id, data_prog, rota_codigo, sequencia, numero_carga, peso,
           qtd_entregas, qtd_ganchos, paletizada, tipo_operacao, motorista,
-          observacoes, apelido_rota, modelo_id, criado_por, criado_setor, operador_nome)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$15)
+          observacoes, apelido_rota, modelo_id, criado_por, criado_setor, operador_nome,
+          frete_destino, km_destino, km_deslocamento)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$15,$17,$18,$19)
        RETURNING *`,
       [novoId(), dia, rota,
        Number.isFinite(Number(req.body?.sequencia)) ? Number(req.body.sequencia) : null,
@@ -212,7 +306,8 @@ rotasModeloSemana.post('/montagem', SO_LOGISTICA, async (req, res, next) => {
           contagem nao resolve ambiguidade quando cinco destinos dividem o
           mesmo codigo. */
        Number.isFinite(Number(req.body?.modeloId)) ? Number(req.body.modeloId) : null,
-       req.operador.nome, req.operador.setor]
+       req.operador.nome, req.operador.setor,
+       _dk.destino, _dk.kmDestino, _dk.kmDesl]
     );
     emitir('montagem:criada', { dia, rota, por: req.operador.nome });
     res.status(201).json({ montagem: rows[0] });
@@ -253,12 +348,14 @@ rotasModeloSemana.patch('/montagem/:id', SO_LOGISTICA, async (req, res, next) =>
     }
 
     const campo = (nome, col, conv) => (req.body?.[nome] !== undefined ? conv(req.body[nome]) : atual[0][col]);
+    const _dk = await destinoEKm(req.body, atual[0], consultar);
     const { rows } = await consultar(
       `UPDATE programacao_montagem
           SET rota_codigo = $2, sequencia = $3, numero_carga = $4, peso = $5,
               qtd_entregas = $6, qtd_ganchos = $7, paletizada = $8,
               tipo_operacao = $9, motorista = $10, observacoes = $11,
               placa = $12, transportadora = $14, apelido_rota = $15,
+              frete_destino = $16, km_destino = $17, km_deslocamento = $18,
               operador_nome = $13, atualizado_em = now()
         WHERE montagem_id = $1
         RETURNING *`,
@@ -284,7 +381,8 @@ rotasModeloSemana.patch('/montagem/:id', SO_LOGISTICA, async (req, res, next) =>
           coisa — e era o texto em negrito da tela. Esta coluna ficava de
           fora do UPDATE, então não havia como limpá-lo junto: a linha
           mostrava a rota nova com o nome da velha. */
-       campo('apelidoRota', 'apelido_rota', v => String(v ?? '').trim())]
+       campo('apelidoRota', 'apelido_rota', v => String(v ?? '').trim()),
+       _dk.destino, _dk.kmDestino, _dk.kmDesl]
     );
     emitir('montagem:alterada', { dia: rows[0].data_prog, por: req.operador.nome });
     res.json({ montagem: rows[0] });
