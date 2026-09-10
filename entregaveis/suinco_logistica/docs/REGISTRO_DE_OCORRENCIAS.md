@@ -1550,3 +1550,58 @@ de requisição sem o dono pedir é mexer numa trava de segurança.
 é estrutural: a segunda chance agora só conclui "regressão" quando o estado
 compartilhado foi de fato esvaziado. Um teste que simulasse o 429 provaria
 menos do que o script passar a dizer a verdade.
+
+---
+
+## #36 — "3/4 aparece como 3 de abril": o Excel adivinha tipo (10/09/2026)
+
+**Relato do dono**, em produção, horas depois da planilha de fretes entrar no
+ar: *"a coluna h do relatorio de fretes esta saindo em modo data entao caminhao
+3/4 fica aparecendo 3 de abril"*.
+
+**Reproduzido.** A coluna H é Tipo de Veículo, e `3/4` é um dos cinco tipos da
+tabela oficial de frete. No arquivo ele saía cru:
+
+```
+Sequência;Nº da Carga;Data do Faturamento;…;Tipo de Veículo;…
+1;118900;10/09/2026;…;3/4;…
+```
+
+**A causa.** O Excel aplica detecção de tipo ao conteúdo **inteiro** da célula.
+`3/4` tem forma de data e vira 3 de abril. Aspas de CSV não impedem: elas são
+sintaxe do arquivo, não declaração de tipo — e foi por isso que o escapamento
+existente, que está correto como CSV, não protegia nada aqui.
+
+**Era família, não caso isolado.** Quatro exportações emitem tipo de veículo, e
+`3/4` é um deles em todas: planilha de fretes, Tabela de Frete (onde ele é uma
+LINHA), programação do dia (coluna "Perfil") e cadastro de Frota.
+
+**E a causa de fundo era uma função escrita duas vezes.** `baixarCsvCadastro` e
+`baixarCsvDoDia` tinham o mesmo escapamento copiado palavra por palavra.
+Consertar numa e não na outra era garantir que o defeito voltasse pela outra
+porta — a regra da casa ("uma função, dois chamadores") existe exatamente para
+isto, e aqui ela estava violada desde que o segundo CSV nasceu.
+
+**Correção.** Uma função de célula (`celulaCsv`) e um montador de corpo
+(`corpoCsv`), usados pelas duas. Valor cujo conteúdo inteiro o Excel leria como
+data ou número, **numa coluna declarada de texto**, sai como `="3/4"` — que o
+Excel, o LibreOffice e o Google Planilhas resolvem como texto.
+
+**Duas coisas que a correção NÃO faz, de propósito:**
+
+- **Não protege a coluna de data.** A data do faturamento tem de chegar como
+  data, senão a Administração não ordena nem filtra por ela. O chamador declara
+  quais colunas são texto; a data fica fora, junto de peso, KM e valor — que são
+  números que ela soma.
+- **Não protege o que não precisa.** `Truck` sai limpo. Marcar toda célula como
+  texto deixaria o arquivo cheio de `="..."` sem motivo e é o tipo de defesa
+  que vira sujeira.
+
+`combinado 1/2 carga` também fica limpo, e é o caso que mostra por que a regra é
+"conteúdo inteiro": o Excel não converte essa célula porque ela não tem forma de
+data — só o `1/2` sozinho teria.
+
+**Teste que trava.** Blocos 5b e 5c de `testes/test_frete_tabela_e_planilha.py`:
+a coluna H protegida, a coluna C ainda data, `Truck` intocado, as outras três
+exportações protegidas, e a existência de UMA função de célula — esta última é a
+guarda contra a terceira cópia aparecer.
