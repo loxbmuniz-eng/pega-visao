@@ -3329,22 +3329,46 @@ function cadastrarPlacaInlineUI(){
    Por isso avisa e NÃO bloqueia. Bloquear resolveria o engano e quebraria
    o caso legítimo; avisar resolve o engano e deixa o caso legítimo passar
    com um clique. Quem sabe o que está fazendo lê e segue. */
+/* A MESMA FRASE NOS DOIS LUGARES (10/09/2026).
+
+   A placa repetida aparece em dois pontos do dia: na Programação, quando
+   alguém cria a segunda carga do mesmo caminhão, e na Montagem do Dia,
+   quando a mesma placa vai para a segunda linha. É a MESMA situação — uma
+   carreta que carrega em duas praças da mesma rota — e por isso é a mesma
+   frase, escrita uma vez.
+
+   Escrita duas vezes, uma das duas ficaria para trás na próxima correção:
+   foi exatamente o que aconteceu com a TRAVA. A Programação abrandou a dela
+   em 11/08/2026 (avisa e deixa passar) e a Montagem ficou com o índice
+   único de 031 recusando no banco, até o relato de hoje — Ribeirão Preto e
+   Marília no mesmo caminhão, e a segunda linha impossível de montar.
+
+   `realce` existe porque um dos dois chamadores escreve HTML (a caixa do
+   formulário) e o outro escreve texto puro (o recado da Montagem). Quem
+   escreve HTML passa a função que marca e ESCAPA; quem escreve texto não
+   passa nada. */
+function fraseDePlacaRepetida(placa, ondeJaEsta, realce){
+  const p = normalizarPlaca(placa) || String(placa || '').toUpperCase();
+  const n = ondeJaEsta.length;
+  const cabeca = `${p} já está em ${n === 1 ? 'outro lugar' : n + ' outros lugares'} do dia`;
+  return `${realce ? realce(cabeca) : cabeca} (${ondeJaEsta.join(' · ')}). `
+    + 'Duas cargas no mesmo caminhão é PERMITIDO — é a carreta que carrega em '
+    + 'duas praças da mesma rota. Se não for isso, confira antes: pode ser '
+    + 'programação em duplicidade.';
+}
+
 function avisoPlacaJaProgramada(placa){
   const p = normalizarPlaca(placa);
   if(!p) return '';
   const abertas = cargasAbertasPorPlaca(p);
   if(!abertas.length) return '';
 
-  const numeros = abertas
-    .map(c => c.aguardandoCarga ? 'sem número ainda' : (c.numeroCarga || 'sem número'))
-    .join(' · ');
+  const lugares = abertas.map(c => esc(c.aguardandoCarga
+    ? 'sem número ainda'
+    : ('carga ' + (c.numeroCarga || 'sem número'))));
 
-  return `<div class="aviso-placa-repetida">
-      <strong>${p} já tem ${abertas.length} carga${abertas.length>1?'s':''} em aberto</strong>
-      (${esc(numeros)}).
-      Criar mais uma é permitido — é o mesmo caminhão levando duas cargas.
-      Se não for isso, confira antes: pode ser programação em duplicidade.
-    </div>`;
+  return `<div class="aviso-placa-repetida">${
+    fraseDePlacaRepetida(p, lugares, t => `<strong>${esc(t)}</strong>`)}</div>`;
 }
 /* Placa liberada para receber uma SEGUNDA carga nesta programação, por
    escolha explícita do operador (botão "➕ Outra carga"). Vale para uma
@@ -11441,10 +11465,36 @@ async function definirPlacaMontagemUI(id, valor){
   try {
     await SuincoSharePoint.montagem.alterar(id, mudanca);
     await carregarMontagemUI();
+    /* PLACA REPETIDA NO DIA AVISA, NÃO RECUSA (10/09/2026).
+
+       O recado vem DEPOIS de carregar: a conta é sobre o dia como o
+       servidor o devolveu, não sobre o que a tela achava antes de gravar.
+       E vem do mesmo texto da Programação — uma função, dois
+       chamadores. */
+    const outras = outrasLinhasComAPlaca(id, valor);
+    if(outras.length) notify(fraseDePlacaRepetida(valor, outras), 'warn', 11000);
   } catch(e){
     notify(e.message || String(e), 'erro', 9000);
     await carregarMontagemUI();
   }
+}
+
+/* Onde mais esta placa está hoje. Linha cancelada fica fora — ela não sai,
+   então o caminhão não está nela. Linha já efetivada fica DENTRO: ela virou
+   carga de verdade, e é justamente o caso em que a pessoa precisa saber que
+   o caminhão já tem serviço no dia. */
+function outrasLinhasComAPlaca(id, placa){
+  const p = normalizarPlaca(placa);
+  if(!p) return [];
+  return ((_montagemDia || {}).montagens || [])
+    .filter(m => m.montagem_id !== id
+              && !m.cancelada_em
+              && normalizarPlaca(m.placa) === p)
+    .map(m => {
+      const nome = m.apelido_rota || m.rota_nome || 'rota sem nome';
+      const num = String(m.numero_carga || '').trim();
+      return num ? `${nome} (carga ${num})` : `${nome} (sem número ainda)`;
+    });
 }
 
 async function cancelarMontagemUI(id){

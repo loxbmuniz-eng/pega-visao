@@ -388,12 +388,24 @@ rotasModeloSemana.patch('/montagem/:id', SO_LOGISTICA, async (req, res, next) =>
     emitir('montagem:alterada', { dia: rows[0].data_prog, por: req.operador.nome });
     res.json({ montagem: rows[0] });
   } catch (e) {
-    /* O índice único de placa por dia vira 409 com frase de gente: é o
-       caso "essa placa já está em outra linha de hoje", que acontece de
-       verdade quando duas pessoas montam ao mesmo tempo. */
+    /* ESTE 409 DEIXOU DE EXISTIR NA PRÁTICA EM 10/09/2026, e continua
+       escrito de propósito.
+
+       A migração 050 tira o UNIQUE do índice de placa por dia: a mesma
+       placa em duas linhas é caso REAL — a carreta que carrega em Ribeirão
+       Preto e em Marília na mesma rota — e recusar no banco tornava esse
+       dia impossível de montar. Quem trata a duplicidade por engano agora é
+       o aviso da tela, que diz onde a placa já está e deixa passar.
+
+       Fica aqui porque o servidor roda o código novo ANTES de rodar a
+       migração: nessa janela o índice antigo ainda recusa, e recusa sem
+       frase nenhuma seria um erro 500 na cara de quem está montando o dia.
+       Depois de 050 aplicada este ramo não é mais alcançado. */
     if (e && e.code === '23505') {
       return res.status(409).json({
-        erro: 'Esta placa já está em outra carga da programação de hoje.',
+        erro: 'Esta placa já está em outra carga da programação de hoje '
+          + '(o servidor ainda não recebeu a migração 050, que libera a '
+          + 'mesma placa em duas linhas).',
         codigo: 'PLACA_DUPLICADA',
       });
     }

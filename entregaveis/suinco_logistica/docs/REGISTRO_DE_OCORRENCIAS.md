@@ -1605,3 +1605,112 @@ data — só o `1/2` sozinho teria.
 a coluna H protegida, a coluna C ainda data, `Truck` intocado, as outras três
 exportações protegidas, e a existência de UMA função de célula — esta última é a
 guarda contra a terceira cópia aparecer.
+
+---
+
+## #37 — "No computador do Wemerson está dando umas travadas" (10/09/2026)
+
+**O relato.** Duas mensagens do dono no mesmo dia: *"eu quero conseguir arrumar
+e arrastar na montagem do dia"* e *"no computador do wemerson ta dando umas
+travadas sera que ta muito epsado ???"*.
+
+**Não era peso, e isso foi MEDIDO antes de tocar em código.** Com 39 linhas (uma
+sexta cheia) e o processador 4x mais lento para imitar a máquina dele: desenhar a
+tabela leva 187 ms, o DOM fica com 5.494 nós, o JS ocupa 10 MB. Nada disso trava.
+Computador novo não resolveria — e essa era a conclusão que a pergunta convidava
+a dar.
+
+**A causa.** `renderMontagem` era chamada DIRETO por `carregarMontagemUI`,
+passando por fora da proteção de digitação que `renderAll` já tinha. Reproduzido:
+digitar `215` no campo de peso e redesenhar deixava o campo VAZIO, com o elemento
+trocado e o foco perdido — e a tabela era refeita a cada campo alterado. A pessoa
+via o que acabou de escrever sumir, e chamou isso de travada. É o nome certo para
+o que ela viu.
+
+**A família.** É a mesma de sempre: *uma função, dois chamadores*. A proteção
+existia num caminho e não no outro. Quando a mesma tela tem duas portas de
+entrada, a que ninguém olhou é a que quebra.
+
+**Correção.** `renderMontagem` passou a capturar e restaurar a digitação como o
+`renderAll` faz — a mesma função, chamada pelos dois. E o campo de sequência
+passou a usar a cascata do servidor (`filaReordenada`, a MESMA conta da Torre):
+digitar 3 move a linha para a 3 e as outras descem uma casa, em vez de escrever
+3 cru e deixar duas linhas com o mesmo número sem aviso.
+
+**O que isso custou num teste antigo, e por que não foi regressão.**
+`test_montagem_expansivel` digitava `77` numa fila de 12 e exigia `77` no banco.
+Com a cascata, número fora da fila é recusado NOMEANDO as posições válidas
+(decisão de 08/09, com teste próprio). Era a **causa 1** das quatro: a regra
+mudou de propósito, e o teste media o mecanismo velho. O ponto continua medindo
+o que sempre quis — digitar na linha chega ao banco — com uma casa que a fila
+tem.
+
+**Teste que trava.** `testes/test_montagem_cascata_e_digitacao.py`, 16 pontos.
+
+**Dois erros meus no caminho, ambos de teste medindo o nada:** o primeiro bloco
+media o cartão da Montagem ESCONDIDO, e `focus()` não pega em elemento oculto —
+o teste concluía "a digitação some" e acusava um defeito inexistente; e rodei o
+teste contra um servidor de 1h31 antes, sem a rota nova, e li 404 como defeito.
+O servidor novo tinha morrido em silêncio porque a porta estava ocupada.
+
+---
+
+## #38 — A mesma placa em duas linhas do dia era recusada pelo banco (10/09/2026)
+
+**O relato, do dono.** *"Uma carga em Ribeirão Preto e uma em Marília. Não deixa
+duplicar as placas. Precisamos que sejam placas duplicadas, porque são duas
+placas: uma na carreta e uma em Marília, na mesma rota. Então o mesmo veículo vai
+carregar as duas cargas."*
+
+**A causa.** O índice `ux_prog_montagem_placa_dia`, criado na migração 031, era
+**UNIQUE**. A intenção era certa — pegar o acidente de duas pessoas montando o
+dia ao mesmo tempo e pondo a mesma placa em duas rotas, que só aparece na doca. A
+força era errada: UNIQUE não distingue o acidente do caso legítimo, e o caso
+legítimo é rotina.
+
+**A família: a mesma decisão escrita em dois lugares, e só um foi corrigido.** A
+Programação já havia abrandado a trava dela em **11/08/2026** — avisa, diz onde a
+placa já está, e deixa passar com um clique (regra da casa: *"botão desabilitado
+não ensina o caminho, só nega"*). A Montagem ficou com a recusa de banco por um
+mês, porque a decisão estava escrita duas vezes. É a ocorrência #06 voltando pela
+outra porta.
+
+**Correção.** Migração **050**: o índice continua (é ele que faz a busca de "onde
+mais esta placa está hoje" não varrer a tabela), sem o UNIQUE. E a tela passou a
+avisar com a **mesma frase** da Programação — `fraseDePlacaRepetida()`, uma
+função, dois chamadores. O 409 `PLACA_DUPLICADA` ficou no servidor de propósito:
+o código novo roda ANTES da migração, e nessa janela o índice antigo ainda
+recusa; sem a frase seria um 500 na cara de quem está montando o dia.
+
+**O que a Montagem NÃO passou a fazer.** Não herdou o botão "➕ Outra carga" da
+Programação nem a trava com escape dela. Lá a trava com saída foi pedido
+explícito de 11/08; aqui o movimento é pôr placa numa linha que já existe, e
+avisar depois de gravar é o que informa sem interromper.
+
+**Enquanto a migração não roda no servidor**, o caminho que desbloqueia quem está
+montando — e que foi verificado, 409 antes e 200 depois: pôr a placa na primeira
+linha, efetivar essa carga, e então a mesma placa é aceita na segunda linha.
+Linha já efetivada sai da fila de placas abertas.
+
+**Teste que trava.** `testes/test_placa_repetida_na_montagem.py`, 18 pontos — e o
+ponto 0 mede a CAUSA, não o sintoma: o índice existe e `indisunique = f`. Sem
+isso, alguém recria o UNIQUE amanhã e só a operação descobre.
+
+---
+
+## #39 — `pkill -f` matando o próprio terminal (10/09/2026)
+
+Não é defeito do painel, é defeito de quem o opera — e custou uma bateria.
+
+`pkill -f "node src/servidor"` casa com a **própria linha de comando** do shell
+que o executa: o padrão está escrito ali. O shell se mata, sai com 144, e o
+servidor que acabou de subir morre junto porque era filho dele. O sintoma
+seguinte foi um teste lendo 404 numa rota que existia.
+
+A armadilha já estava escrita para `publicar.sh` na regra da casa, e eu a repeti
+com outro alvo — o que mostra que a regra estava anotada como caso, não como
+família.
+
+**A forma certa, e são duas coisas:** colchete no padrão, para ele não casar
+consigo mesmo (`pkill -f "node src/[s]ervidor"`), e **matar numa chamada e subir
+noutra** — no mesmo comando, o que sobe morre com o que mata.
