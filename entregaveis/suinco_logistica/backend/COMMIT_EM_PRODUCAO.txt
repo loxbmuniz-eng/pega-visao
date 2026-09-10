@@ -1,4 +1,28 @@
-3226250
+05dbb0b
+
+# ---------------------------------------------------------------------
+# 10/09/2026 — 3226250 → 05dbb0b. CORREÇÃO DE UM REGISTRO QUE FICOU PARADO.
+#
+# Este arquivo ficou em 3226250 (27/08) enquanto o dono rodou o
+# atualizar.sh e colou o bloco COPIE DAQUI TRÊS vezes desde então —
+# f86cd3a (09/09), 1286831 (09/09) e 05dbb0b (10/09). O número de
+# APLICADAS_EM_PRODUCAO.txt subiu nessas vezes; este não. Falha minha.
+#
+# A CONSEQUÊNCIA, e é o que torna isso defeito e não desleixo: o portão
+# passou a imprimir como pendente nove arquivos de backend/src que o
+# servidor JÁ TINHA, em toda publicação. Aviso falso gasta a credibilidade
+# do aviso verdadeiro — e a credibilidade do aviso é a única coisa que
+# este arquivo existe para proteger. O mesmo diagnóstico que já foi
+# escrito para as migrações 047/048, agora na metade do código.
+#
+# A PROVA: bloco COPIE DAQUI colado pelo dono em 10/09, com
+# "commit no servidor : 05dbb0b". Conferido por conteúdo: 05dbb0b é o
+# estado da branch de entrega de 10/09 12:05, e entre ele e a publicação
+# do relatório do manobrista (25d063b) não há UMA linha alterada em
+# backend/src/ — conferido com git diff --name-only, saída vazia. Ou seja:
+# o painel do manobrista não depende de atualização de servidor, e agora
+# o portão consegue dizer isso.
+# ---------------------------------------------------------------------
 # ---------------------------------------------------------------------
 # EM QUE COMMIT O SERVIDOR DE PRODUÇÃO ESTÁ.
 #
