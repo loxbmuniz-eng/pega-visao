@@ -79,6 +79,21 @@ async def main():
             c._pendente = 1;
             c._statusPendentes = ['Aguardando Embarque'];
 
+            /* DESLIGA O TIQUE DE 15 SEGUNDOS ANTES DE MENTIR (10/09/2026).
+
+               O stub abaixo responde "o servidor não tem carga nenhuma".
+               Isso é o que este teste precisa para exercer o efeito
+               colateral do pull — mas a sincronia periódica dispara o MESMO
+               stub sozinha 15 s depois, e aí a leitura completa apaga a
+               carga local, que é o comportamento certo do produto.
+
+               Alone o tique não cabe na janela entre os dois blocos; na
+               bateria, com dezenas de navegadores na mesma máquina, cabe — e
+               o bloco seguinte lia DB.cargas[0] undefined. O teste chama
+               pull(true) explicitamente, então o tique não serve para nada
+               aqui além de introduzir tempo na medição. */
+            SuincoSharePoint.pararSincronia();
+
             window.fetch = async (url) => {
                 const u = String(url);
                 if (/\\/api\\/estado/.test(u)) {
@@ -119,6 +134,9 @@ async def main():
         # fundirEstadoRemoto bloqueava QUALQUER atualização remota desta
         # carga. Depois de liberada, uma leitura trazendo a carga com um
         # status mais novo (vindo de outro terminal) precisa ser aceita.
+        ck('a carga continua na lista para o segundo bloco medir',
+           await pg.evaluate('() => DB.cargas.length') == 1,
+           'sem carga, o bloco abaixo mediria o nada')
         d2 = await pg.evaluate("""() => {
             const c = DB.cargas[0];
             const remoto = {

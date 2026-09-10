@@ -135,21 +135,49 @@ async def main():
               (await SuincoSharePoint.montagem.alterar(id, {placa: ''})).montagem""", mid)
         ck('placa sai e a montagem continua viva', r['placa'] == '' and not r['carga_id'])
 
-        print('\n=== 4. PLACA REPETIDA NO MESMO DIA É RECUSADA COM FRASE DE GENTE ===')
+        print('\n=== 4. PLACA REPETIDA NO MESMO DIA PASSA, E A TELA AVISA ===')
+        # A REGRA MUDOU DE PROPÓSITO EM 10/09/2026, por ordem do dono:
+        #   "Uma carga em Ribeirão Preto e uma em Marília. Não deixa duplicar
+        #    as placas. Precisamos que sejam placas duplicadas, porque são
+        #    duas placas: uma na carreta e uma em Marília, na mesma rota.
+        #    Então o mesmo veículo vai carregar as duas cargas."
+        #
+        # Este bloco exigia o CONTRÁRIO: que o servidor recusasse. A recusa
+        # vinha do índice UNIQUE de 031, que não distingue o acidente (duas
+        # pessoas montando o dia ao mesmo tempo) do caso real, e o caso real é
+        # rotina. A migração 050 tira o UNIQUE e quem trata o engano passa a
+        # ser o aviso da tela — a MESMA frase que a Programação já usava desde
+        # 11/08, por isso numa função só.
+        #
+        # A guarda grande disso está em test_placa_repetida_na_montagem.py
+        # (18 pontos, inclusive o índice não ser mais único). Aqui fica só o
+        # que este teste existe para cobrir: o dia aceita as duas linhas.
         outra = await pg.evaluate(
             """async (rota) => (await SuincoSharePoint.montagem.criar({
                  rotaCodigo: rota, numeroCarga: 'MT-2'})).montagem""", rota[0])
         await pg.evaluate("""async ([id, placa]) =>
               SuincoSharePoint.montagem.alterar(id, {placa})""", [mid, p1])
-        recusa = await pg.evaluate(
+        segunda = await pg.evaluate(
             """async ([id, placa]) => {
-                 try { await SuincoSharePoint.montagem.alterar(id, {placa}); return null; }
-                 catch(e){ return String(e.message || e); }
+                 try { return { placa: (await SuincoSharePoint.montagem
+                          .alterar(id, {placa})).montagem.placa }; }
+                 catch(e){ return { erro: String(e.message || e) }; }
                }""", [outra['montagem_id'], p1])
-        ck('recusou a placa duplicada', recusa is not None, str(recusa))
-        ck('a mensagem explica o que houve, não é erro de banco',
-           recusa and 'já está em outra carga' in recusa and 'constraint' not in recusa.lower(),
-           str(recusa))
+        ck('a segunda linha aceita a mesma placa', segunda.get('placa') == p1,
+           str(segunda))
+        noDia = await pg.evaluate(
+            """async (placa) => (await SuincoSharePoint.montagem.doDia())
+                 .montagens.filter(m => m.placa === placa).length""", p1)
+        ck('o dia fica com as DUAS linhas na mesma placa', noDia == 2,
+           f'{noDia} linha(s)')
+        aviso = await pg.evaluate(
+            """async ([id, placa]) => {
+                 _montagemDia = await SuincoSharePoint.montagem.doDia();
+                 const outras = outrasLinhasComAPlaca(id, placa);
+                 return outras.length ? fraseDePlacaRepetida(placa, outras) : '';
+               }""", [outra['montagem_id'], p1])
+        ck('e a tela avisa, dizendo que é permitido', 'PERMITIDO' in aviso,
+           repr(aviso[:100]))
 
         print('\n=== 5. A MONTAGEM VIRA CARGA E VAI PARA A TORRE ===')
         antes = await pg.evaluate("() => DB.cargas.length")
