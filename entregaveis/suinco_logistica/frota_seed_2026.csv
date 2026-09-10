@@ -6,7 +6,7 @@ AJM6032,Logmaster Armazem e Logistica Ltda,Carreta,Nao
 AJY3407,TAC Transportes Armazenagem e Logistica,Carreta,Nao
 AMU5835,Sandra Campanholo Transportes-ME,Carreta,Nao
 ANA6563,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao
-ANE3214,Noelia de Sousa Machado 03794699521,3/4,Nao
+ANE3214,Noelia de Sousa Machado,3/4,Nao
 APA4111,Cooperativa de Transp e Logist de Sao Sebastiao do Oeste Mg,Carreta,Nao
 APA4B11,Cooperativa de Transp e Logist de Sao Sebastiao do Oeste Mg,Carreta,Nao
 APN0660,Tais Simoes Me,Carreta,Nao
@@ -36,7 +36,7 @@ AZC5B17,Cooperativa dos Transportadores Unidos Ltda.,Carreta,Nao
 AZI4219,Fidelis Transportes Ltda.,Bitruck,Nao
 AZS1H23,Cisne Branco Transportes Ltda EPP,Carreta,Nao
 AZV4440,Trans Thalia Transportes Ltda.,Carreta,Nao
-BAH8650,Renato Pereira Lima 03425721640,3/4,Nao
+BAH8650,Renato Pereira Lima,3/4,Nao
 BAW4341,Log SPM Ltda,Bitruck,Nao
 BBL9819,Fidelis Transportes Ltda.,Bitruck,Nao
 BBW1552,PH Fidelis Transportes e Representacoes Ltda,Carreta,Nao
@@ -83,7 +83,7 @@ CYR8983,Flay Logistica e Armazenagem Ltda,Truck,Nao
 CZX7719,Cisne Branco Transportes Ltda EPP,Carreta,Nao
 DAO0759,Gold Star,Container,Nao
 DAO2512,Trans Frios Transportes e Logistica Ltda ME,Truck,Nao
-DAO2888,Noelia de Sousa Machado 03794699521,Truck,Nao
+DAO2888,Noelia de Sousa Machado,Truck,Nao
 DAO2981,Friocargo Norte Ltda,3/4,Nao
 DAO2H44,Friocargo Norte Ltda,Carreta,Nao
 DAO4959,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao
@@ -246,7 +246,7 @@ HDI9336,TAC Transportes Armazenagem e Logistica,Carreta,Nao
 HDI9937,Cooperativa Riobranquense de Transprotes Ltda,3/4,Nao
 HDJ7625,Isavic Transporte e Armazenamento Ltda,Bitruck,Nao
 HEE9J46,Baixotes Transportes,Carreta,Nao
-HEH1386,Douglas Dornelas Figueiredo - 078331606-28,Toco,Nao
+HEH1386,Douglas Dornelas Figueiredo,Toco,Nao
 HFB9126,Washington L S Costa Junior - ME,Bitruck,Nao
 HFB9139,Cooperativa de Transp e Logist de Sao Sebastiao do Oeste Mg,Bitruck,Nao
 HFD4176,Coopertral,Carreta,Nao
@@ -462,7 +462,7 @@ MRU6E28,G S Puridade Transportes e Servicos Ltda,Carreta,Nao
 MTC4550,Cooperativa Riobranquense de Transportes Ltda,Toco,Nao
 MWA6634,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao
 MXA2G32,Transportadora Multi Express Ltda,Carreta,Nao
-MXB5208,Bruno Sergio Ferreira CPF 04625109647,Carreta,Nao
+MXB5208,Bruno Sergio Ferreira,Carreta,Nao
 MXB5C08,AC Armazenagem,Carreta,Nao
 MXD1E41,Coopertral,Carreta,Nao
 NAB8188,Transportadora Multi Express Ltda,Carreta,Nao
@@ -523,7 +523,7 @@ OQB1826,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao
 OQH3838,Cooperativa Riobranquense de Transportes Ltda.,Toco,Nao
 OQH4050,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao
 OQN4506,Logmaster Armazem e Logistica Ltda,Carreta,Nao
-OQO4469,Bruno Sergio Ferreira CPF 04625109647,Carreta,Nao
+OQO4469,Bruno Sergio Ferreira,Carreta,Nao
 OQP8538,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao
 OQQ2484,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao
 OQR5074,Cooperativa Riobranquense de Transportes Ltda,Carreta,Nao
@@ -588,7 +588,7 @@ PWQ8784,TAC Transportes Armazenagem e Logistica,Truck,Nao
 PXJ0726,M Braga & Sobrinho Ltda.,3/4,Nao
 PYF0280,Cooperativa dos Transportadores Unidos Ltda.,Truck,Nao
 PYP5755,Tais Simoes Me,Carreta,Nao
-PYV7I69,Telma Souza de Oliveira Santos 28574076880,3/4,Nao
+PYV7I69,Telma Souza de Oliveira Santos,3/4,Nao
 PYZ1D03,Baixotes Transportes,Bitruck,Nao
 PZR6754,Cooperativa Riobranquense de Transportes Ltda.,Bitruck,Nao
 PZR6H54,Denia Transportes,Bitruck,Nao
@@ -622,7 +622,7 @@ QNQ7021,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao
 QNQ7031,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao
 QNQ7041,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao
 QNQ7A11,Transportadora Multi Express Ltda,Carreta,Nao
-QNQ7A31,Bruno Sergio Ferreira CPF 04625109647,Carreta,Nao
+QNQ7A31,Bruno Sergio Ferreira,Carreta,Nao
 QNQ7A41,TAC Transportes Armazenagem e Logistica,Carreta,Nao
 QNV2963,Mult Service Montes Claros,Carreta,Nao
 QNV4183,Trans Frios Transportes e Logistica Ltda ME,Bitruck,Nao
@@ -659,7 +659,7 @@ QXY1F27,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao
 QXY4B02,Rodosousa,Bitruck,Nao
 RAG4A52,Cooperativa dos Transportadores Unidos Ltda.,Carreta,Nao
 RAI1G55,Canada Transportes e Comercio Ltda.,Carreta,Nao
-RAJ9J31,Bruno Sergio Ferreira CPF 04625109647,Carreta,Nao
+RAJ9J31,Bruno Sergio Ferreira,Carreta,Nao
 RCM4A73,MR Transportes,Carreta,Nao
 RCP3C74,Marizileia Transportes,Carreta,Nao
 REE0C39,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao

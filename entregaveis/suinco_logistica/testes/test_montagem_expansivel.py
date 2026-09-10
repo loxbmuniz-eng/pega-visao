@@ -150,8 +150,14 @@ async def main():
         # sem espremer, que era o defeito original ("dez inputs espremidos").
         # O número deixou de ser 9 porque a decisão mudou, não porque a guarda
         # incomodou.
-        ck('a tabela tem as colunas da Torre + Ganchos, Entregas e Ação',
-           d['colunas'] == 11, f"{d['colunas']} colunas")
+        # 11 -> 14 EM 10/09/2026, e de novo por decisão, não por incômodo.
+        # Entraram Destino, KM e Frete, a pedido do dono: "quando adiciona a
+        # linha ela nao aparece o destino" e "montagem do dia precisa seguir
+        # com destino valor de frete". A carga já tinha esses campos desde a
+        # migração 047; a Montagem, que é o SEGUNDO caminho de criar carga,
+        # não tinha — e sem destino não há KM, e sem KM não há frete.
+        ck('a tabela tem as colunas da Torre + Ganchos, Entregas, Destino, KM, Frete e Ação',
+           d['colunas'] == 14, f"{d['colunas']} colunas")
 
         print('\n=== 2. CLICAR ABRE O FORMULÁRIO COMPLETO ===')
         await pg.evaluate("(id) => alternarLinhaMontagemUI(id)", mid)

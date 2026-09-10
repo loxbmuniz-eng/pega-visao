@@ -415,6 +415,14 @@
             <th>Rota</th><th>Peso (kg)</th><th>Palet.</th><th>Tipo de Operação</th>
             <th title="Ganchos — 0 = Liso">Ganchos</th>
             <th title="Quantidade de entregas">Entregas</th>
+            <!-- DESTINO E FRETE NA MONTAGEM (10/09/2026). Relato do dono:
+                 "quando adiciona a linha ela nao aparece o destino" e
+                 "montagem do dia precisa seguir com destino valor de frete".
+                 O destino entra ANTES do frete de propósito: é ele que
+                 determina o valor, e ler causa depois de efeito confunde. -->
+            <th title="Destino da tabela de frete — define o KM">Destino</th>
+            <th title="KM do deslocamento — é o que o frete usa">KM</th>
+            <th class="cel-num" title="KM de deslocamento x tarifa do tipo de veículo">Frete</th>
             <th class="no-print">Ação</th>
           </tr></thead>
           <tbody id="mont-tbody"></tbody>

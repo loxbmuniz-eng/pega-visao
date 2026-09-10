@@ -10609,6 +10609,51 @@ function formCargaHtml(c, m){
     </div>`;
 }
 
+/* O DESTINO NA LINHA DA MONTAGEM.
+
+   Mesma lista de Cadastros → Tabela de Frete que a Programação usa, pela
+   MESMA constante (DESTINOS_FRETE). Duas listas seriam duas verdades sobre
+   para onde a carga vai.
+
+   Escolher o destino não preenche o KM aqui na tela: quem resolve a
+   distância é o SERVIDOR, a partir do cadastro, e ele devolve na leitura
+   seguinte. Preencher pelo painel abriria a porta para o número da tela
+   divergir do número que o frete usou. */
+function freteDestinoMontagemHtml(m, id){
+  const atual = m.frete_destino || '';
+  const lista = (typeof DESTINOS_FRETE !== 'undefined' ? DESTINOS_FRETE : []);
+  /* Destino que saiu do cadastro (desativado, renomeado) continua na linha
+     que já o tinha: sumir da lista apagaria em silêncio o destino de uma
+     carga montada ontem. */
+  const opcoes = atual && !lista.includes(atual) ? [atual, ...lista] : lista;
+  return `<select class="destino-inline" aria-label="Destino do frete"
+                  title="Destino da tabela de frete — define o KM"
+                  onchange="alterarMontagemUI('${id}','freteDestino',this.value)">
+            <option value=""${!atual ? ' selected' : ''}>—</option>
+            ${opcoes.map(d=>`<option${atual===d?' selected':''}>${esc(d)}</option>`).join('')}
+          </select>`;
+}
+
+/* O VALOR DO FRETE É SÓ LEITURA, E VEM DO SERVIDOR.
+
+   Não há conta nenhuma aqui — `frete_valor` chega calculado na leitura do
+   dia, pela mesma calcularFrete() do domínio que as cargas usam. Repetir a
+   fórmula no painel daria dois lugares para o preço do km divergir.
+
+   Quando não há valor, a célula diz POR QUE não há, em vez de ficar vazia:
+   célula vazia ao lado de um destino é lida como "o sistema não sabe", e
+   manda alguém perguntar. `frete_motivo` vem do servidor com a frase. */
+function freteMontagemHtml(m, carga){
+  const valor = carga ? carga.freteValor : m.frete_valor;
+  if(valor !== null && valor !== undefined && valor !== ''){
+    const n = Number(valor);
+    return `<strong title="${esc(m.km_deslocamento ?? '')} km x ${esc(m.frete_tarifa_usada ?? '')}/km">`
+      + `R$ ${n.toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2})}</strong>`;
+  }
+  const motivo = m.frete_motivo || 'Sem valor de frete.';
+  return `<span class="text-dim" title="${esc(motivo)}">—</span>`;
+}
+
 function linhaMontagemHtml(m){
   /* CANCELADA continua trancada: ela é histórico e não tem carga viva do
      outro lado. EFETIVADA deixa de trancar para quem pode editar — a
@@ -10739,6 +10784,29 @@ function linhaMontagemHtml(m){
                       value="${m.qtd_entregas ?? 1}" aria-label="Entregas"
                       title="Quantidade de entregas."
                       onchange="alterarMontagemUI('${id}','qtdEntregas',this.value)">`}</td>
+
+      ${/* DESTINO, KM E FRETE NA LINHA (10/09/2026).
+           Relato do dono: "quando adiciona a linha ela nao aparece o
+           destino"; e o pedido: "montagem do dia precisa seguir com destino
+           valor de frete".
+
+           VIROU CARGA, MOSTRA A CARGA. Depois de efetivada, quem manda é o
+           registro da carga — que tem trilha de revisões e valor congelado.
+           A linha vira leitura, como já acontece com peso e paletizada. */''}
+      <td class="c-destino" onclick="event.stopPropagation()">${comoCarga
+            ? `<span title="Destino da carga">${esc(cargaViva.freteDestino || '—')}</span>`
+            : freteDestinoMontagemHtml(m, id)}</td>
+
+      <td class="c-kmdesl" onclick="event.stopPropagation()">${comoCarga
+            ? `<span title="KM de deslocamento">${cargaViva.kmDeslocamento ?? '—'}</span>`
+            : `<input type="number" class="km-input" min="1" step="1"
+                      value="${m.km_deslocamento ?? ''}" aria-label="KM de deslocamento"
+                      placeholder="${m.km_destino ?? '—'}"
+                      title="KM que o frete usa. Vem do destino e pode ser corrigido — desvio, retorno, coleta no caminho."
+                      onchange="alterarMontagemUI('${id}','kmDeslocamento',this.value)">`}</td>
+
+      <td class="c-frete cel-num">${freteMontagemHtml(m, comoCarga ? cargaViva : null)}</td>
+
       <td class="no-print">${trancada
             ? acoesMontagemHtml(m, trancada)
             : comoCarga ? acoesCargaNaMontagemHtml(aberta)
@@ -10746,7 +10814,7 @@ function linhaMontagemHtml(m){
     </tr>`;
 
   if(!aberta) return resumo;
-  return resumo + `<tr class="mont-detalhe"><td colspan="11">${
+  return resumo + `<tr class="mont-detalhe"><td colspan="14">${
     comoCarga ? formCargaHtml(cargaViva, m) : formMontagemHtml(m)}</td></tr>`;
 }
 
@@ -11374,6 +11442,15 @@ async function efetivarMontagemUI(id, { silencioso = false } = {}){
          dela: quem lê a carga na Torre precisa saber que "517" é a Ômega,
          e a Logística precisa que o recado dela sobreviva. */
       observacoes: [m.apelido_rota, m.observacoes].filter(Boolean).join(' — '),
+      /* O DESTINO E O KM SEGUEM PARA A CARGA (10/09/2026).
+         Sem estas duas linhas a Montagem podia ter destino na tela e a
+         carga nascer sem — que é a metade do defeito que o dono relatou.
+         O KM que viaja é o de DESLOCAMENTO, porque é ele que o servidor
+         usa para calcular; o do destino o servidor resolve sozinho pelo
+         cadastro, e mandar daqui seria dar ao painel uma opinião sobre
+         distância que ele não deve ter. */
+      freteDestino: m.frete_destino || '',
+      kmDeslocamento: m.km_deslocamento ?? '',
       operador: DB.operador ? DB.operador.nome : '',
     });
   } catch(e){
