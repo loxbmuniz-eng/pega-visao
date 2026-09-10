@@ -16,6 +16,7 @@ import { consultar, emTransacao } from '../banco.js';
 import { exigirLogin, exigirSetor, recusarFilial } from '../middleware/auth.js';
 import { emitir } from '../tempo-real.js';
 import { calcularFrete } from '../dominio/frete.js';
+import { filaReordenada, numerosDaFila } from '../dominio/cargas.js';
 
 export const rotasModeloSemana = Router();
 
@@ -437,6 +438,98 @@ rotasModeloSemana.post('/montagem/:id/cancelar', SO_LOGISTICA, async (req, res, 
    frota, movimentação inicial, sincronização, aviso de recusa) que já
    estão testadas em POST /api/cargas. Duplicar isso aqui criaria um
    segundo caminho de criação — e dois caminhos divergem com o tempo. */
+/* REORDENAR A MONTAGEM DO DIA — A MESMA CASCATA DA TORRE (10/09/2026).
+   ---------------------------------------------------------------------
+   PEDIDO DO DONO: "eu quero conseguir arrumar e arrastar na montagem do
+   dia", depois de pedir "aplica o efeito cascata que ta na torre de
+   controle na programacao do dia".
+
+   O QUE A TORRE JÁ FAZIA E A MONTAGEM NÃO: digitar 3 numa linha fazia ela
+   entrar na posição 3 e as outras DESCEREM uma casa. Na Montagem, digitar
+   3 só escrevia 3 — e se já houvesse uma linha na 3, ficavam duas com o
+   mesmo número, sem ninguém avisar.
+
+   A CONTA É A MESMA FUNÇÃO, e isso não é economia de código: é a única
+   forma de a Torre e a Montagem concordarem sobre o que significa "entrar
+   na posição 3". `filaReordenada` já vive em dominio/cargas.js e já foi
+   corrigida uma vez (a renumeração silenciosa de 09/09). Reescrevê-la aqui
+   seria garantir que só uma das duas receba a próxima correção.
+
+   ORDEM ESTÁVEL, e ela importa: a fila é montada por `sequencia` e, no
+   empate, por `criado_em`. Sem o segundo critério, duas linhas com o mesmo
+   número trocam de lugar a cada leitura e o arrasto vira loteria. */
+rotasModeloSemana.post('/montagem/:id/sequenciar', SO_LOGISTICA, async (req, res, next) => {
+  try {
+    const posicao = Number(req.body?.posicao);
+    if (!Number.isInteger(posicao) || posicao < 1) {
+      return res.status(400).json({
+        erro: 'Posição precisa ser um número inteiro a partir de 1.',
+        codigo: 'POSICAO_INVALIDA',
+      });
+    }
+    const id = String(req.params.id);
+
+    const resultado = await emTransacao(async (cli) => {
+      const { rows: alvo } = await cli.query(
+        'SELECT data_prog FROM programacao_montagem WHERE montagem_id = $1', [id]
+      );
+      if (!alvo[0]) return { naoAchou: true };
+
+      /* SÓ AS LINHAS QUE AINDA VÃO CARREGAR ENTRAM NA FILA.
+         Linha já efetivada virou carga: o número dela é registro do que
+         aconteceu, e reordenar registro é reescrever história. É a mesma
+         distinção que a Torre faz entre "ainda vai carregar" e "já
+         carregou", e que nasceu da ocorrência #27. */
+      const { rows: fila } = await cli.query(
+        `SELECT montagem_id AS id, sequencia FROM programacao_montagem
+          WHERE data_prog = $1 AND efetivada_em IS NULL AND cancelada_em IS NULL
+          ORDER BY sequencia NULLS LAST, criado_em`,
+        [alvo[0].data_prog]
+      );
+      const { rows: fora } = await cli.query(
+        `SELECT sequencia FROM programacao_montagem
+          WHERE data_prog = $1 AND (efetivada_em IS NOT NULL OR cancelada_em IS NOT NULL)
+            AND sequencia IS NOT NULL`,
+        [alvo[0].data_prog]
+      );
+      const ocupados = fora.map((r) => r.sequencia);
+
+      const mudancas = filaReordenada(fila, id, posicao, ocupados);
+      if (mudancas === null) {
+        return { invalida: true, casas: numerosDaFila(fila, ocupados) };
+      }
+      for (const m of mudancas) {
+        await cli.query(
+          `UPDATE programacao_montagem
+              SET sequencia = $1, operador_nome = $2, atualizado_em = now()
+            WHERE montagem_id = $3`,
+          [m.sequencia, req.operador.nome, m.id]
+        );
+      }
+      return { dia: alvo[0].data_prog, mexidas: mudancas.length };
+    });
+
+    if (resultado.naoAchou) {
+      return res.status(404).json({ erro: 'Linha não encontrada.', codigo: 'NAO_ACHOU' });
+    }
+    if (resultado.invalida) {
+      /* A RECUSA NOMEIA AS CASAS VÁLIDAS, não só nega. Botão desabilitado
+         não ensina o caminho — e mensagem de erro sem o caminho também
+         não. É a correção de 10/09 na rota de cargas, aplicada aqui. */
+      const casas = resultado.casas || [];
+      return res.status(400).json({
+        erro: casas.length
+          ? `Posição fora da fila. As posições válidas hoje são: ${casas.join(', ')}.`
+          : 'Não há fila para reordenar hoje.',
+        codigo: 'POSICAO_FORA_DA_FILA',
+        casas,
+      });
+    }
+    emitir('montagem:alterada', { dia: resultado.dia, por: req.operador.nome });
+    res.json({ ok: true, mexidas: resultado.mexidas });
+  } catch (e) { next(e); }
+});
+
 rotasModeloSemana.post('/montagem/:id/efetivar', SO_LOGISTICA, async (req, res, next) => {
   try {
     const cargaId = String(req.body?.cargaId ?? '').trim();

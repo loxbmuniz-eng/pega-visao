@@ -10245,7 +10245,34 @@ async function carregarMontagemUI(){
   }
 }
 
+/* A DIGITAÇÃO SOBREVIVE AO REDESENHO (10/09/2026).
+   ---------------------------------------------------------------------
+   RELATO DO DONO: "no computador do wemerson ta dando umas travadas sera
+   que ta muito pesado???".
+
+   NÃO ERA PESO. Medido com 39 linhas — uma sexta cheia — e o processador
+   4x mais lento para imitar a máquina dele: desenhar a tabela leva 187ms,
+   o DOM fica com 5.494 nós e o JS ocupa 10 MB. Isso não trava nada.
+
+   O QUE TRAVAVA: `renderMontagem` era chamada DIRETO por
+   carregarMontagemUI, passando por fora da proteção de digitação que o
+   renderAll já tinha. Reproduzido: digitar "215" no campo de peso e
+   redesenhar deixava o campo VAZIO, com o elemento trocado e o foco
+   perdido. A cada campo alterado a tabela inteira era refeita — então
+   quem preenchia uma linha via o que acabou de digitar sumir.
+
+   A sensação de "travada" era essa: a tela pisca e engole o que a pessoa
+   escreveu. Trocar o computador não resolveria nada.
+
+   A proteção já existia e já sabia ancorar pelo id da linha da Montagem —
+   faltava esta função usá-la. Uma função, dois chamadores. */
 function renderMontagem(){
+  const _digitando = _capturarDigitacao();
+  try { _renderMontagemInterno(); }
+  finally { _restaurarDigitacao(_digitando); }
+}
+
+function _renderMontagemInterno(){
   if(!_montagemDia) return;
   const { diaSemana, modelo, montagens } = _montagemDia;
   const nomeDia = document.getElementById('mont-dia-nome');
@@ -10677,6 +10704,15 @@ function linhaMontagemHtml(m){
      ausência — foi assim que a checagem "toda linha traz uma ação de
      avanço" passou a contar uma linha que, com razão, não tem nenhuma. */
   const resumo = `<tr class="mont-linha${trancada ? ' linha-fraca' : ''}${comoCarga ? ' mont-linha-carga' : ''}${aberta ? ' mont-linha-aberta' : ''}"
+      data-id="${id}"
+      ${/* ARRASTÁVEL SÓ ENQUANTO É RASCUNHO (10/09/2026). Depois de virar
+           carga o número é registro — e a mesma regra vale para a alça,
+           que some junto. */''}
+      ${(!m.efetivada_em && !m.cancelada_em) ? `draggable="true"
+        ondragstart="montArrastarInicio(event,'${id}')"
+        ondragover="montArrastarSobre(event)"
+        ondrop="montArrastarSolta(event,'${id}')"
+        ondragend="montArrastarFim()"` : ''}
       ${trancada ? '' : `onclick="alternarLinhaMontagemUI('${id}')" title="Clique para abrir os campos desta carga"`}>
       <!-- SEQUENCIA EDITAVEL NA LINHA — pedido do dono (25/08/2026):
            "o campo sequencia precisa estar disponivel para edicao e
@@ -10687,11 +10723,21 @@ function linhaMontagemHtml(m){
            para mexer num numero e o que fazia isso ser feito no Excel.
            O stopPropagation impede que digitar abra/feche a linha. -->
       <td onclick="event.stopPropagation()">
+        ${/* A ALÇA SÓ APARECE ONDE ARRASTAR FUNCIONA (10/09/2026).
+              Linha já efetivada ou cancelada não reordena ninguém — o
+              número dela é registro. Mostrar a alça ali seria oferecer um
+              gesto que o servidor vai recusar, e botão que promete e nega
+              é pior que botão que não existe. */''}
+        ${(!m.efetivada_em && !m.cancelada_em)
+            ? `<span class="alca-arrastar" title="Arraste para mudar a posição do dia">⠿</span>` : ''}
         <input type="number" min="1" class="seq-input" value="${comoCarga ? (cargaViva.sequencia ?? '') : (m.sequencia ?? '')}"
                aria-label="Sequência"
+               title="${(!m.efetivada_em && !m.cancelada_em)
+                 ? 'Digite a posição: a linha entra nela e as outras descem uma casa.'
+                 : 'Esta linha já virou carga — o número é registro e NÃO reordena a fila.'}"
                onchange="${comoCarga
                  ? `atualizarSequenciaUI('${escJs(cargaViva.id)}',this.value)`
-                 : `alterarMontagemUI('${id}','sequencia',this.value)`}"></td>
+                 : `definirSequenciaMontagemUI('${id}',this.value)`}"></td>
       ${/* AS MESMAS COLUNAS DA TORRE E DA FILA (28/08/2026). Quando a linha
             já virou carga, cada célula grava na CARGA; enquanto é rascunho,
             grava na montagem. Mesma tela, mesmo lugar, dono diferente — e o
@@ -11290,6 +11336,72 @@ async function aplicarModeloDoDiaUI(){
   } else {
     notify(`${criadas} carga(s) montada(s) a partir do modelo.`, 'ok', 5000);
   }
+}
+
+/* CASCATA E ARRASTO NA MONTAGEM DO DIA (10/09/2026).
+   ---------------------------------------------------------------------
+   PEDIDO DO DONO: "aplica o efeito cascata que ta na torre de controle na
+   programacao do dia" e "eu quero conseguir arrumar e arrastar na montagem
+   do dia".
+
+   O QUE MUDA: digitar 3 numa linha fazia só escrever 3 — e se já houvesse
+   uma linha na 3, ficavam DUAS com o mesmo número. Agora a linha entra na
+   posição 3 e as outras descem uma casa, como na Torre.
+
+   QUEM DECIDE É O SERVIDOR, e a conta é a mesma função (filaReordenada).
+   O painel manda a posição desejada e redesenha com o que voltou — não
+   renumera nada por conta própria. Duas contas divergem. */
+let _montArrastando = null;
+
+function montArrastarInicio(ev, id){
+  _montArrastando = id;
+  if(ev.dataTransfer){ ev.dataTransfer.effectAllowed = 'move'; try{ ev.dataTransfer.setData('text/plain', id); }catch(e){} }
+  const tr = ev.target && ev.target.closest ? ev.target.closest('tr') : null;
+  if(tr) tr.classList.add('arrastando');
+}
+function montArrastarSobre(ev){ ev.preventDefault(); if(ev.dataTransfer) ev.dataTransfer.dropEffect = 'move'; }
+function montArrastarFim(){
+  _montArrastando = null;
+  document.querySelectorAll('#mont-tbody tr.arrastando').forEach(t => t.classList.remove('arrastando'));
+}
+async function montArrastarSolta(ev, idDestino){
+  ev.preventDefault(); ev.stopPropagation();
+  const movido = _montArrastando;
+  montArrastarFim();
+  if(!movido || movido === idDestino) return;
+  /* O NÚMERO DA LINHA DE DESTINO, não a posição dela na tela — mesma
+     lição de 08/09 na Fila: quando linhas efetivadas reservam números, o
+     índice da tela e o número deixam de ser a mesma coisa. Quem solta em
+     cima da linha que mostra "5" quer o 5. */
+  const alvo = (_montagemDia?.montagens || []).find(m => m.montagem_id === idDestino);
+  if(!alvo || !Number.isInteger(Number(alvo.sequencia))) return;
+  await moverMontagemUI(movido, Number(alvo.sequencia));
+}
+
+async function moverMontagemUI(id, posicao){
+  try {
+    await SuincoSharePoint.montagem.sequenciar(id, posicao);
+    await carregarMontagemUI();
+  } catch(e){
+    /* A RECUSA DO SERVIDOR NUNCA É SILENCIOSA, e aqui ela ensina o caminho:
+       a mensagem já vem com as posições válidas do dia. */
+    notify(e && e.message ? e.message : 'Não consegui reordenar.', 'erro', 8000);
+    await carregarMontagemUI();
+  }
+}
+
+/* Digitar o número: mesma cascata do arrasto, uma conta só. Linha já
+   efetivada não reordena ninguém — o número dela é registro, e para essas
+   o campo continua gravando direto na montagem. */
+function definirSequenciaMontagemUI(id, val){
+  const n = Number(val);
+  const m = (_montagemDia?.montagens || []).find(x => x.montagem_id === id);
+  if(!m) return;
+  if(m.efetivada_em || m.cancelada_em) return alterarMontagemUI(id, 'sequencia', val);
+  if(val === '' || !Number.isInteger(n) || n < 1){
+    return alterarMontagemUI(id, 'sequencia', val);
+  }
+  return moverMontagemUI(id, n);
 }
 
 async function alterarMontagemUI(id, campo, valor){
