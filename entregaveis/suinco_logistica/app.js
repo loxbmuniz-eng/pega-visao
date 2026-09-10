@@ -9587,11 +9587,19 @@ function renderEscopoDosRelatorios(){
    no servidor, e a geração fica registrada. Papel que sai do pátio é
    documento, e documento tem dono.
 
-   LAYOUT PRÓPRIO: duas colunas, letra GRANDE. Os outros relatórios são
-   calibrados para caber 13 colunas em A4 deitado — fonte de 7,6px, que no
-   celular de pátio e no papel pendurado na portaria é ilegível. Aqui são
-   duas colunas e sobra página inteira; usar a mesma densidade seria
-   economizar espaço que ninguém está disputando. */
+   O PADRÃO DA CASA, POR PEDIDO DO DONO (10/09/2026). Ele mandou os dois PDFs
+   lado a lado e escreveu: "faz do tamanho e padrao formato do administracao
+   de fretes por favor o dos manobristas".
+
+   Eu tinha feito com letra de 22px, argumentando que duas colunas sobram
+   página e que o papel é lido de pé. O argumento não era falso — e era
+   irrelevante: o manobrista recebe este papel junto dos outros relatórios da
+   casa, e um que sai com o dobro do tamanho dos outros não parece cuidado,
+   parece outro sistema. Consistência entre os documentos vale mais do que a
+   otimização de um deles, e quem lê os seis é quem decide isso.
+
+   Resultado medido: o meu estourava para 2 páginas; no padrão `doc-amplo`
+   (13px, A4 em pé, zebra nas linhas pares) a fila cabe em UMA. */
 async function exportarPdfManobrista(){
   await atualizarDadosAntesDoRelatorio();
   const el = document.getElementById('print-manobrista');
@@ -9617,7 +9625,7 @@ async function exportarPdfManobrista(){
   const comGancheira = dados.filter(d=>d.ganchos > 0).length;
 
   el.innerHTML = `
-    <div class="print-page doc-manobrista">
+    <div class="print-page doc-amplo doc-manobrista">
       ${cabecalhoDocumento({
         titulo: 'Manobrista — fila de carregamento',
         subtitulo: 'Caminhões esperando para carregar, na ordem da fila',
