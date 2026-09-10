@@ -3243,6 +3243,65 @@ function analiseGargalos(cargas){
    administração registra valor de frete, negociação e instruções — por
    isso a carga entra na lista mesmo sem observação nenhuma: é justamente
    a linha em branco que precisa ser preenchida. */
+/* O PAPEL DO MANOBRISTA (09/09/2026)
+   ---------------------------------------------------------------------
+   Pedido do dono: "eu quero poder gerar na programacao ou na torre de
+   controle um relatorio da programacao do dia que traga a placa, numero de
+   ganchos para o manobrista".
+
+   E as respostas dele: "so as que vao carregar" · "placa e numero de
+   ganchos" · "mandar no celular, da pra imprimir tambem, mesmo padrao dos
+   nossos relatorios" · "so a logistica e admisnistracao".
+
+   DUAS COLUNAS, E ISSO É A FEATURE. Ele pediu duas e eu perguntei se queria
+   doca, transportadora, peso — respondeu placa e ganchos. Está certo: o
+   manobrista lê este papel de pé, no pátio, com o caminhão chegando. Cada
+   coluna a mais é uma a menos de chance de ele achar a linha certa.
+
+   A ORDEM DAS LINHAS É A COLUNA QUE NÃO EXISTE. Ele não pediu a sequência
+   como coluna, e ela não entra — mas a lista sai ORDENADA por ela. É o que
+   transforma inventário em roteiro: a primeira linha é o próximo caminhão.
+
+   GANCHOS ZERO É INSTRUÇÃO, NÃO AUSÊNCIA. 0 quer dizer caminhão liso, e é
+   uma preparação física diferente da gancheira. Guardar 0 e imprimir vazio
+   faria o manobrista perguntar — que é exatamente o telefonema que este
+   papel existe para evitar. Por isso o dado sai como número e a tela é que
+   escreve "Liso". */
+function dadosManobrista(cargas){
+  return (cargas || DB.cargas)
+    .filter(c => !c.aguardandoCarga && STATUS_QUE_AINDA_CARREGAM_UI.includes(c.status))
+    .slice()
+    .sort((a,b)=>{
+      /* Sem sequência vai para o FIM. null não é zero: mandar para a frente
+         como se fosse 0 poria na primeira linha justamente a carga que
+         ninguém ordenou ainda. */
+      const sa = a.sequencia ?? Number.MAX_SAFE_INTEGER;
+      const sb = b.sequencia ?? Number.MAX_SAFE_INTEGER;
+      if(sa !== sb) return sa - sb;
+      return String(a.numeroCarga||'').localeCompare(String(b.numeroCarga||''), 'pt-BR', {numeric:true});
+    })
+    .map(c => ({
+      sequencia: c.sequencia ?? null,
+      numeroCarga: c.numeroCarga || '',
+      placa: c.placa || '',
+      /* `?? 0` e não `|| 0`: os dois dariam 0 aqui, mas o `??` diz o que se
+         quer dizer — só a AUSÊNCIA vira zero. É a regra da casa escrita no
+         operador, para a próxima pessoa não trocar por um `||` num campo em
+         que zero seja resposta diferente de nada. */
+      ganchos: c.qtdGanchos ?? 0,
+      status: c.status,
+    }));
+}
+
+/* Os status que ainda vão carregar, do lado da tela.
+
+   Gêmea de STATUS_QUE_AINDA_CARREGAM em backend/src/dominio/cargas.js. Ela
+   já existia como `aindaVaiCarregar(c)` em app.js — mas data.js não conhece
+   app.js (o build concatena nesta ordem), e dadosManobrista mora aqui
+   porque é dado, não tela. `aindaVaiCarregar` passa a ler DESTA lista, para
+   as duas não divergirem no dia em que um status entrar no fluxo. */
+const STATUS_QUE_AINDA_CARREGAM_UI = ['Aguardando Veículo', 'Aguardando Embarque'];
+
 /* A PLANILHA DE FRETES — as colunas que o dono ditou (09/09/2026)
    ---------------------------------------------------------------------
    Pedido dele, na ordem em que veio:
