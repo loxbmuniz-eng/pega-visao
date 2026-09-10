@@ -144,6 +144,82 @@ async def main():
         ck('o cabeçalho padrão da casa está lá (título e logo)',
            'doc-cabecalho' in html and 'Manobrista' in html)
 
+        # ---- 4b. O FORMATO É O DA CASA, NÃO UM FORMATO SÓ DESTE PAPEL ----
+        # RELATO DO DONO, 10/09/2026, com os dois PDFs em anexo: "faz do
+        # tamanho e padrao formato do administracao de fretes por favorf o
+        # dos manobristas".
+        #
+        # Ele estava certo, e o defeito era meu. Eu tinha escrito este
+        # relatório com fonte de 22px e recuo próprio, "porque é papel de
+        # pátio e se lê em pé". O resultado: com 14 cargas ele saía em DUAS
+        # folhas enquanto o de Fretes, com as MESMAS 14, saía em UMA — e
+        # um relatório com o dobro do tamanho dos outros seis não parece
+        # cuidado, parece outro sistema.
+        #
+        # Medido antes e depois, mesmas 14 cargas, pelo mesmo gerarPdf do
+        # servidor: Fretes 1 folha · Manobrista ANTES 2 folhas · DEPOIS 1
+        # folha, as três em A4 retrato 596x843pt.
+        #
+        # O que esta guarda trava: o container tem de carregar `doc-amplo`,
+        # que é de onde vêm fonte (13px), recuo (9px 10px) e largura de
+        # folha dos SEIS relatórios. E `.doc-manobrista` não pode voltar a
+        # redefinir fonte ou recuo — foi exatamente isso que dobrou o papel.
+        ck('o container usa doc-amplo, o padrão dos outros relatórios',
+           'doc-amplo' in html, html[html.find('print-page'):html.find('print-page')+40])
+        css_mb = await pg.evaluate("""() => {
+            // Só as regras de .doc-manobrista, para conferir o que elas mexem.
+            const fora = [];
+            for (const folha of document.styleSheets) {
+              let regras; try { regras = folha.cssRules } catch(e) { continue }
+              for (const r of regras || []) {
+                const varrer = (rr) => {
+                  /* A REGRA PRÓPRIA PRIMEIRO, o aninhamento depois — nesta
+                     ordem de propósito. Com CSS aninhado, TODA CSSStyleRule
+                     do Chromium tem `cssRules` (uma lista vazia, mas
+                     existente e portanto verdadeira). A versão que testava
+                     `if (rr.cssRules)` antes do seletor descia na lista vazia
+                     e voltava sem nunca olhar o seletor: varreu 1287 regras,
+                     achou 0, e a guarda passou sem medir nada. */
+                  if (rr.selectorText && rr.selectorText.includes('doc-manobrista'))
+                    fora.push(rr.selectorText + ' { ' + rr.style.cssText + ' }');
+                  if (rr.cssRules && rr.cssRules.length)
+                    for (const d of rr.cssRules) varrer(d);
+                };
+                varrer(r);
+              }
+            }
+            return fora;
+        }""")
+        proibidas = [r for r in css_mb
+                     if 'font-size' in r or 'padding' in r or 'line-height' in r]
+        # As regras de coluna TÊM de ser encontradas: se a varredura volta
+        # vazia, ela não provou que nada foi redefinido — provou que não
+        # mediu. Foi assim que esta guarda passou falsamente na primeira
+        # escrita, e é por isso que o mínimo está escrito aqui.
+        ck('a varredura achou as regras de coluna do manobrista',
+           len(css_mb) >= 3, f'{len(css_mb)} regra(s): ' + str(css_mb))
+        ck('.doc-manobrista não redefine fonte, recuo nem entrelinha',
+           not proibidas, str(proibidas) if proibidas else f'{len(css_mb)} regra(s), só de coluna')
+        # A fonte da célula tem de ser a mesma dos outros: 13px de doc-amplo.
+        # EM MODO DE IMPRESSÃO, que é onde as regras de doc-amplo valem — elas
+        # vivem dentro do @media print (styles.css). Medir na tela daria o
+        # tamanho do painel e o teste passaria por acidente, medindo nada.
+        await pg.emulate_media(media='print')
+        fonte = await pg.evaluate("""() => {
+            const d = document.createElement('div');
+            d.className = 'print-page doc-amplo doc-manobrista';
+            d.innerHTML = '<table><tbody><tr><td class="col-mb-placa">X</td></tr></tbody></table>';
+            const h = document.getElementById('print-manobrista');
+            h.style.display = 'block'; h.appendChild(d);
+            const cs = getComputedStyle(d.querySelector('td'));
+            const r = { fonte: cs.fontSize, recuo: cs.padding };
+            d.remove(); h.style.display = 'none';
+            return r;
+        }""")
+        ck('a célula sai na fonte da casa (13px) e no recuo da casa (9px 10px)',
+           fonte.get('fonte') == '13px' and fonte.get('recuo') == '9px 10px', str(fonte))
+        await pg.emulate_media(media='screen')
+
         print('\n=== 5. O BOTÃO NAS DUAS TELAS QUE ELE PEDIU ===')
         for tela, aba in [('Programação', 'programacao'), ('Torre de Controle', 'torre')]:
             await pg.evaluate("(a) => abrirTab(a)", aba)
