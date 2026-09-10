@@ -283,7 +283,31 @@ if [[ -n "$(git status --porcelain)" ]]; then
   falhou "os testes deixaram arquivos alterados que não são build."
 fi
 
+# A ENTREGA REMOTA PODE TER ANDADO ENQUANTO A BATERIA RODAVA (10/09/2026)
+#
+# O que aconteceu: a bateria levou 20 minutos, outra sessão empurrou dois
+# commits na branch de entrega nesse meio-tempo, e o `git push` daqui foi
+# rejeitado com "(fetch first)". A publicação caiu no ÚLTIMO passo, depois
+# de 152 suítes verdes — e a única saída era refazer a bateria inteira.
+#
+# Rejeitar foi o certo: empurrar por cima apagaria o trabalho de outra
+# pessoa. O que faltava era BUSCAR antes de mesclar.
+#
+# A entrega é branch DERIVADA: tudo nela é ou commit de outra sessão (que
+# precisa ser preservado) ou merge que este script fez a partir de
+# $TRABALHO (que é reproduzível em um comando). Por isso sincronizar com o
+# remoto é seguro aqui, e NUNCA seria em $TRABALHO — lá vive a fonte.
+#
+# `reset --hard` só depois de o fetch confirmar que o remoto existe e de a
+# árvore estar limpa (passo 2 já garantiu isso). Se o fetch falhar, para:
+# mesclar em cima de uma entrega velha é o que produz o push rejeitado.
+git fetch origin "$ENTREGA" || falhou "não consegui buscar $ENTREGA do remoto — sem isso o push seria rejeitado no fim."
 git checkout "$ENTREGA" || falhou "não consegui trocar para $ENTREGA."
+if [ -n "$(git rev-list "origin/$ENTREGA..$ENTREGA" 2>/dev/null)" ]; then
+  echo "  ·  a entrega local tinha commit que o remoto não tem — sincronizando com o remoto"
+  echo "     (é branch derivada: o merge de $TRABALHO é refeito logo abaixo)"
+fi
+git reset --hard "origin/$ENTREGA" || falhou "não consegui sincronizar $ENTREGA com o remoto."
 git merge "$TRABALHO" --no-edit || {
   git merge --abort 2>/dev/null || true
   git checkout "$TRABALHO" 2>/dev/null || true
