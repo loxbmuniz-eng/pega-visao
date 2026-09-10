@@ -738,17 +738,52 @@ async def main():
            d['tdBloqueiaClique'] is True, str(d))
 
         # Digitar na linha tem que CHEGAR AO BANCO — o resto e enfeite.
-        await pg.evaluate("""async (id) => {
+        #
+        # A REGRA MUDOU DE PROPOSITO EM 10/09/2026, e este bloco acompanhou.
+        # Antes, digitar um numero na linha gravava o numero CRU: digitar 77
+        # numa fila de 12 deixava a linha com 77, e duas linhas podiam acabar
+        # com o mesmo numero sem ninguem avisar. O dono pediu "eu quero
+        # conseguir arrumar e arrastar na montagem do dia", e o campo passou a
+        # usar a MESMA cascata da Torre (filaReordenada): a linha entra na
+        # posicao pedida e as outras descem uma casa. Numero solto fora da
+        # fila e recusado NOMEANDO as posicoes validas — decisao de 08/09,
+        # com teste proprio em test_montagem_cascata_e_digitacao.py.
+        #
+        # Entao o 77 daqui media o MECANISMO velho, nao a regra. O que este
+        # ponto sempre quis provar continua igual: digitar NA LINHA chega ao
+        # banco. Mudou so o numero que se digita — uma casa que a fila do dia
+        # realmente tem, e diferente da atual, para a gravacao ter o que
+        # provar.
+        escolha = await pg.evaluate("""(id) => {
+              const vivas = _montagemDia.montagens
+                .filter(m => !m.efetivada_em && !m.cancelada_em);
+              // Numero de linha ja efetivada e RESERVADO: aquilo e registro,
+              // e a cascata recusa mover alguem para cima dele.
+              const reservados = new Set(_montagemDia.montagens
+                .filter(m => m.efetivada_em)
+                .map(m => Number(m.sequencia)));
+              const atual = Number(
+                (vivas.find(m => m.montagem_id === id) || {}).sequencia);
+              const casas = vivas.map(m => Number(m.sequencia))
+                .filter(n => Number.isInteger(n) && n >= 1 && !reservados.has(n))
+                .sort((a, b) => a - b);
+              const outra = casas.find(n => n !== atual);
+              return outra === undefined ? null : outra;
+            }""", alvo3)
+        ck('o dia tem outra casa para onde mover a linha',
+           isinstance(escolha, int) and escolha >= 1, str(escolha))
+        await pg.evaluate("""async ([id, pos]) => {
               const tr = [...document.querySelectorAll('#mont-tbody tr.mont-linha')]
                 .find(t => t.outerHTML.includes(id));
               const inp = tr.querySelector('input.seq-input');
-              inp.value = '77';
+              inp.value = String(pos);
               inp.dispatchEvent(new Event('change', { bubbles: true }));
-            }""", alvo3)
+            }""", [alvo3, escolha])
         await pg.wait_for_timeout(1500)
         r = sql("SELECT sequencia FROM programacao_montagem WHERE montagem_id = '" + alvo3 + "'")
         ck('a sequencia digitada na linha chega ao banco',
-           bool(r) and str(r[0]) == '77', str(r))
+           bool(r) and str(r[0]) == str(escolha),
+           str(r) + ' (pedido: ' + str(escolha) + ')')
 
         # TRANSPORTADORA: vazio significa "o que a Frota disser"; preenchido
         # e a excecao do dia, e nao pode encostar no cadastro do veiculo.

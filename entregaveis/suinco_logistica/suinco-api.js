@@ -1606,6 +1606,12 @@ const SuincoSharePoint = (function () {
       return chamar('/api/montagem/' + encodeURIComponent(id) + '/cancelar',
         { metodo: 'POST', corpo: { motivo } });
     },
+    /* Reordenar com cascata — o mesmo contrato de sequenciar() das cargas:
+       manda a POSIÇÃO desejada, o servidor renumera quem precisa descer. */
+    sequenciar(id, posicao) {
+      return chamar('/api/montagem/' + encodeURIComponent(id) + '/sequenciar',
+        { metodo: 'POST', corpo: { posicao: Number(posicao) } });
+    },
     /* Avisa o servidor de que a montagem virou a carga `cargaId`. Quem cria
        a carga é o caminho de sempre — ver o comentário da rota no
        servidor sobre por que não há um segundo caminho de criação. */
