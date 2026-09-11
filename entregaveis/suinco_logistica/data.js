@@ -743,7 +743,17 @@ const SuincoStore = {
     DB.cargas.forEach(c => {
       if(ehCargaDoServidor(c)) return;   // leitura de período: nunca sobe de volta
       const marca = c.atualizadoEm || c.criadoEm || '';
-      if(this._ultimoSync.get(c.id) === marca) return;      // nada mudou nesta
+      /* CARGA AINDA NÃO CONFIRMADA IGNORA A MARCA (11/09/2026).
+
+         Sem isto, a mensagem "vou tentar de novo sozinho" (app.js,
+         receberRecusaDeCarga) seria mentira: esta função marca `_ultimoSync`
+         ANTES de saber se a subida deu certo, e como nada mais muda numa
+         carga que ficou "incerta" (o operador não mexeu nela de novo), a
+         marca nunca envelhece e ela nunca seria reenviada — ficaria presa
+         para sempre com `_nuncaConfirmada`, "Aguardando Veículo" na tela e
+         nada de verdade acontecendo. Enquanto não confirmar, toda sincronia
+         tenta de novo, marca ou não marca. */
+      if(!c._nuncaConfirmada && this._ultimoSync.get(c.id) === marca) return;      // nada mudou nesta
       if(this._emVoo.has(c.id)){
         /* Já existe uma subida desta carga em voo. NÃO marca como
            sincronizada: o estado atual ainda não chegou ao servidor, e
@@ -912,7 +922,28 @@ const SuincoStore = {
          Veículo", com aviso, mas invisível em qualquer outro terminal —
          achado em produção em 07/08/2026. */
       const eraCriacaoNuncaConfirmada = !!carga._nuncaConfirmada;
-      if(eraCriacaoNuncaConfirmada){
+      /* SÓ REMOVE QUANDO A REDE ESTÁ GENUINAMENTE FORA DO AR (11/09/2026).
+
+         Achado em produção com a RYV8G03, DUAS VEZES. A primeira vez,
+         `upsert()` passou a conferir com o servidor antes de declarar
+         offline numa criação (#48). Mas essa ÚNICA conferência também pode
+         falhar — servidor lento, não rede caída — e aí `r.offline` chegava
+         true sem o servidor ter recusado NADA. Remover apostava que "não
+         consegui perguntar" quer dizer "não existe" — pior que o defeito
+         original, porque acontece calado.
+
+         `r.incerta` (suinco-api.js) já fez a distinção que falta aqui: só é
+         false quando o POST original E a conferência falharam por REDE de
+         verdade (`motivo: 'transporte'` — DNS, TLS, conexão recusada, o
+         pedido nem saiu do aparelho). Se qualquer um dos dois foi TIMEOUT
+         (pedido enviado, resposta atrasada — o SERVIDOR pode ter
+         processado), fica incerta e a carga NÃO sai da tela.
+
+         Recusa de VERDADE (422/409/403) e rede genuinamente fora do ar
+         continuam removendo — são os dois casos em que dá para confiar que
+         a carga não existe no servidor. */
+      const removida = eraCriacaoNuncaConfirmada && !(r.offline && r.incerta);
+      if(removida){
         DB.cargas = DB.cargas.filter(c => c.id !== carga.id);
       }
       /* `r.offline` separa duas recusas que NÃO têm a mesma causa nem a
@@ -921,7 +952,7 @@ const SuincoStore = {
          houve servidor nenhum" (trava de offline, 31/08/2026 — basta
          reconectar e refazer). Dizer "o servidor recusou" quando o aparelho
          está sem rede manda o operador procurar um problema que não existe. */
-      if(_aoRecusarCarga) _aoRecusarCarga(carga, r.erro, eraCriacaoNuncaConfirmada, !!r.offline);
+      if(_aoRecusarCarga) _aoRecusarCarga(carga, r.erro, removida, !!r.offline, !!r.incerta);
     } else if(r && r.enfileirado === false){
       delete carga._nuncaConfirmada;
       // A versão nova volta na resposta do PATCH. Sem guardá-la, a PRÓXIMA

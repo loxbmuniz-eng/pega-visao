@@ -39,6 +39,7 @@ O QUE ESTE TESTE EXIGE:
 """
 import asyncio
 import os
+import subprocess
 import sys
 
 from playwright.async_api import async_playwright
@@ -49,6 +50,22 @@ SENHA = os.environ.get('SUINCO_SENHA', 'senha-de-teste-123')
 
 falhas = []
 
+JS_CONFIRMA_SOZINHA = """() => new Promise(resolve => {
+  const tentar = () => {
+    const c = DB.cargas.find(x => x.numeroCarga === 'OFF-1');
+    if (c && !c._nuncaConfirmada) return { confirmou: true, versao: c.versao };
+    if (!c) return { confirmou: false, sumiu: true };
+    return null;
+  };
+  SuincoStore.save();
+  const t0 = Date.now();
+  const iv = setInterval(() => {
+    const r = tentar();
+    if (r) { clearInterval(iv); resolve(r); return; }
+    if (Date.now() - t0 > 4000) { clearInterval(iv); resolve({ confirmou: false, esgotou: true }); }
+  }, 200);
+})"""
+
 
 def ck(nome, ok, detalhe=''):
     print(f"  [{'OK ' if ok else 'FALHA'}] {nome}" + (f" — {detalhe}" if detalhe else ''))
@@ -56,7 +73,22 @@ def ck(nome, ok, detalhe=''):
         falhas.append(nome)
 
 
+def _limpar_off1():
+    # O bloco 4b (11/09/2026) faz a carga OFF-1 virar REAL no servidor de
+    # propósito — é a prova de que a reconciliação automática funciona. Sem
+    # limpar, rodar o teste duas vezes acumula OFF-1 de verdade no banco, e
+    # o find() da rodada seguinte pega a de uma execução anterior, já
+    # confirmada, em vez da desta.
+    subprocess.run(['su', 'postgres', '-c',
+                    "psql -q -tA -d embarque_suinco -c "
+                    "\"DELETE FROM fact_statusfrota WHERE carga_id IN "
+                    "(SELECT carga_id FROM fact_viagens WHERE numero_carga = 'OFF-1'); "
+                    "DELETE FROM fact_viagens WHERE numero_carga = 'OFF-1';\""],
+                   capture_output=True, text=True)
+
+
 async def main():
+    _limpar_off1()
     async with async_playwright() as p:
         nav = await p.chromium.launch(executable_path='/opt/pw-browsers/chromium',
                                       headless=True)
@@ -104,23 +136,32 @@ async def main():
         ck('a tela avisa que está offline e que não gravou',
            'OFFLINE' in texto.upper(), 'nenhuma menção a OFFLINE na tela')
 
-        print('\n=== 2b. A CARGA NÃO FICA FANTASMA, E O AVISO NÃO CULPA O SERVIDOR ===')
-        # Achado ao isolar test_contador_torre (31/08/2026): a trava de
-        # offline devolve `{recusado:true, offline:true}`, e criação nunca
-        # confirmada que é recusada SAI da tela — certo, senão a carga fica
-        # visível só para quem lançou, como o fantasma de 07/08.
+        print('\n=== 2b. A CARGA FICA, INCERTA — E O AVISO NÃO CULPA O SERVIDOR ===')
+        # ESTA REGRA MUDOU DE PROPÓSITO (11/09/2026), na segunda volta do
+        # mesmo incidente que criou a família toda (RYV8G03). A versão
+        # original deste bloco exigia que a carga SAÍSSE da tela quando a
+        # rede caía por completo — parecia seguro porque "sem rede, nunca
+        # chegou". Mas não dá para o painel, de dentro do navegador,
+        # confiar cegamente nisso: a mesma classe de falha (`eFalhaDeRede`)
+        # cobre tanto rede genuinamente fora do ar quanto servidor lento — e
+        # foi exatamente essa confusão, tratando "não consegui confirmar"
+        # como "não existe", que apagou uma carga real da RYV8G03 duas
+        # vezes no mesmo dia.
         #
-        # O que estava errado era o TEXTO: dizia "o servidor recusou a
-        # criação desta carga", e quem está sem sinal ia procurar placa fora
-        # da frota ou falta de permissão — problema que não existe. Offline
-        # não é recusa do servidor, é ausência dele; o conserto é reconectar
-        # e refazer, não corrigir cadastro.
-        sumida = await pg.evaluate("""() => ({
-            aindaNaTela: DB.cargas.some(c => c.numeroCarga === 'OFF-1'),
-            texto: document.body.innerText
-        })""")
-        ck('a carga lançada offline não fica fantasma na tela',
-           sumida['aindaNaTela'] is False, 'OFF-1 continua em DB.cargas')
+        # A conta que decidiu a mudança: uma carga incerta ficando visível
+        # um pouco mais (e sumindo sozinha se de fato nunca existiu, ou
+        # virando real assim que a rede voltar — bloco 4b abaixo) custa
+        # muito menos que uma carga real desaparecer calada.
+        sumida = await pg.evaluate("""() => {
+          const c = DB.cargas.find(x => x.numeroCarga === 'OFF-1');
+          return { aindaNaTela: !!c, naoConfirmada: c ? c._nuncaConfirmada : null,
+                   chaves: c ? Object.keys(c).filter(k=>k.startsWith('_')) : null,
+                   texto: document.body.innerText };
+        }""")
+        ck('a carga CONTINUA na tela — incerteza nunca é "não existe"',
+           sumida['aindaNaTela'] is True, 'OFF-1 sumiu de DB.cargas')
+        ck('e segue marcada como não confirmada, pronta pra sincronia retomar',
+           sumida['naoConfirmada'] is True, str(sumida))
         ck('o aviso NÃO diz que o servidor recusou — ele nem foi consultado',
            'servidor recusou' not in sumida['texto'],
            'a tela culpa o servidor por uma falta de conexão')
@@ -147,6 +188,15 @@ async def main():
         })""")
         ck('voltou a conexão e a faixa saiu da tela',
            not sumiu['faixa'], str(sumiu))
+
+        print('\n=== 4b. A CARGA INCERTA DO BLOCO 2b VIRA REAL SOZINHA — SEM REDIGITAR NADA ===')
+        # O fechamento da promessa do bloco 2b: incerta nao e fantasma para
+        # sempre. Com a rede de volta (unroute ja rodou acima), o proximo
+        # save() dispara sincronizarCargasAlteradas(), que agora IGNORA a
+        # marca de "ja tentei" enquanto `_nuncaConfirmada` for true (data.js).
+        confirmou = await pg.evaluate(JS_CONFIRMA_SOZINHA)
+        ck('confirmou sozinha, sem o operador relançar nem redigitar',
+           confirmou.get('confirmou') is True, str(confirmou))
 
         print('\n=== 5. FILA VELHA NO APARELHO É DESCARTADA, E O PAINEL DIZ ===')
         # Planta uma fila como a que existe hoje nos aparelhos e recarrega.
