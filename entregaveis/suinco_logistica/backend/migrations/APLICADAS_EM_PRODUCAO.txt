@@ -1,4 +1,4 @@
-050
+051
 
 # ---------------------------------------------------------------------
 # ATÉ QUAL MIGRAÇÃO O SERVIDOR DE PRODUÇÃO ESTÁ.
@@ -70,3 +70,17 @@
 # placa repetida na montagem, a trava por dia da sequência (c57f166) e a
 # permissão de filial criar checklist (código antigo, de 02/09, presente
 # desde sempre nesta linha de commits).
+
+# 11/09/2026 — 050 → 051.
+#
+# O dono colou o bloco COPIE DAQUI do atualizar.sh:
+#
+#     commit no servidor : 8aeeb95
+#     serviço            : active
+#     /health local      : 200
+#     migrações aplicadas: (...) 051_movimentacao_apagada_da_vista.sql
+#
+# Sobe por causa DESSA prova. 8aeeb95 é a publicação do portão v17: a
+# migração que permite apagar da vista os lançamentos de uma placa no
+# Histórico (fact_statusfrota.apagada_em/apagada_por/apagada_motivo) e a
+# rota POST /api/movimentacoes/apagar, só para Administração.
