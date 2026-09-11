@@ -63,6 +63,10 @@ rotasEstado.get('/estado', exigirLogin, async (req, res, next) => {
       ? 'WHERE atualizado_em > $1'
       : 'WHERE excluida_em IS NULL';
     const filtroEvento = desdeValido ? 'WHERE data_evento > $1' : '';
+    /* MOVIMENTAÇÃO APAGADA DA VISTA (migração 051) não sai daqui. */
+    const filtroMovs = desdeValido
+      ? 'WHERE data_evento > $1 AND apagada_em IS NULL'
+      : 'WHERE apagada_em IS NULL';
 
     /* A leitura INCREMENTAL é um delta pequeno e recente — ordem ASC (na
        ordem em que aconteceu) é natural e nunca esbarra no LIMIT.
@@ -88,7 +92,7 @@ rotasEstado.get('/estado', exigirLogin, async (req, res, next) => {
       consultar(
         `SELECT movimentacao_id, carga_id, placa, status_anterior, status_novo,
                 setor, data_evento, operador_id, operador_nome
-           FROM fact_statusfrota ${filtroEvento} ORDER BY data_evento ${ordemEvento} LIMIT 5000`,
+           FROM fact_statusfrota ${filtroMovs} ORDER BY data_evento ${ordemEvento} LIMIT 5000`,
         params
       ),
       consultar(

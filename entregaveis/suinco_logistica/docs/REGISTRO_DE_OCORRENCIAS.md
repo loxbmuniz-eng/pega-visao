@@ -2155,3 +2155,36 @@ não reconstrói, o peso cai de forma mensurável, carga sumida continua
 avisando. Sete suítes correlatas (Histórico, cartão mobile, datas, lacres,
 esteira de devolução) seguem verdes — nenhuma dependia do detalhe vir
 pré-construído.
+
+---
+
+## #52 — Apagar da vista os lançamentos de uma placa, sem apagar a prova (11/09/2026)
+
+Pedido do dono em emergência (RYV8G03, ocorrência #48): *"EXCLUA TODOS OS
+LANÇAMENTOS PRA ESSA PLACA AGORA (...) eu preciso conseguir apagar do
+histórico e essa autorização é somente para o meu token"*.
+
+**Não é DELETE.** `fact_statusfrota` é append-only desde a migração 001 — é
+a base de todo indicador de tempo e do Power BI, e apagar de verdade
+destruiria a própria prova do defeito que a ocorrência #48 documenta.
+Migração 051 acrescenta `apagada_em/apagada_por/apagada_motivo`: a linha
+fica, marcada; toda leitura (`/api/estado`, `/api/historico`, entrada no
+pátio) passa a ignorar o que está marcado.
+
+**Só a Administração** (`POST /api/movimentacoes/apagar`, `exigirSetor()`
+sem argumento) apaga, com motivo obrigatório — sem motivo é 400, sem ser
+Administração é 403. O botão só aparece no Histórico com uma placa
+filtrada — apagar "tudo" sem filtro é o tipo de clique acidental que a tela
+não pode oferecer.
+
+**Guarda:** `testes/test_apagar_historico_da_placa.py` — Administração
+apaga e a linha continua na tabela (marcada); Logística é recusada; a
+leitura para de devolver a placa; apagar de novo não conta nada; o botão
+só existe para quem pode e só quando há placa no filtro.
+
+**Nota da pressa:** enquanto o código ainda não estava publicado, o dono
+pediu a via mais rápida — apagar a RYV8G03 direto por SQL no servidor
+(`DELETE FROM fact_viagens`). Foi orientado como a exceção explícita e já
+autorizada por ele (ele mesmo pediu "essa autorização é somente para o meu
+token" na emergência), separada desta função — que existe para as
+próximas vezes, sem precisar de mim nem de SSH.

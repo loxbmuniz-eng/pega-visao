@@ -1,4 +1,4 @@
-048
+050
 
 # ---------------------------------------------------------------------
 # ATÉ QUAL MIGRAÇÃO O SERVIDOR DE PRODUÇÃO ESTÁ.
@@ -54,3 +54,19 @@
 # O portão estava imprimindo 047 e 048 como pendentes depois de elas já
 # terem rodado. Aviso falso gasta a credibilidade do aviso verdadeiro, que
 # é a única coisa que este arquivo existe para proteger.
+
+# 11/09/2026 — 048 → 050.
+#
+# O dono colou o bloco COPIE DAQUI do atualizar.sh:
+#
+#     commit no servidor : cf272dd
+#     serviço            : active
+#     /health local      : 200
+#     migrações aplicadas: (...) 049_destino_e_frete_na_montagem.sql,050_placa_repetida_na_montagem_avisa.sql
+#
+# Sobe por causa DESSA prova. cf272dd é a publicação do portão v16 (o
+# Histórico mais leve + limite atrasado não é offline), que inclui também
+# as publicações anteriores do dia: as duas migrações de destino/frete/km e
+# placa repetida na montagem, a trava por dia da sequência (c57f166) e a
+# permissão de filial criar checklist (código antigo, de 02/09, presente
+# desde sempre nesta linha de commits).

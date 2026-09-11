@@ -2065,6 +2065,11 @@ const SuincoSharePoint = (function () {
     gerarRelatorioPdf, listarProgramacoes,
     listarRevisoes, restaurarRevisao,
     portariaSaida,
+    /* Apagar da vista os lançamentos de uma placa (migração 051) — só
+       Administração. O servidor decide; aqui só transporta. */
+    apagarMovimentacoesDaPlaca(placa, motivo) {
+      return chamar('/api/movimentacoes/apagar', { metodo: 'POST', corpo: { placa, motivo } });
+    },
     devolucoes: devolucoesApi, aoAtualizarDevolucao,
     avisos: avisosApi,
   };

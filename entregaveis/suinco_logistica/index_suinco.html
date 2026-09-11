@@ -1397,6 +1397,13 @@
       <div class="form-row">
         <div class="form-group"><label>Filtrar por placa</label><input type="text" id="hist-filtro-placa" oninput="renderHistorico()"></div>
         <div class="form-group">
+          <button class="btn btn-danger btn-sm" id="btn-apagar-historico-placa" hidden
+            onclick="apagarHistoricoDaPlacaUI()"
+            title="Some do Histórico e dos indicadores; fica guardado — pátio não se apaga.">
+            Apagar registros desta placa
+          </button>
+        </div>
+        <div class="form-group">
           <label>Filtrar por setor</label>
           <select id="hist-filtro-setor" onchange="renderHistorico()">
             <option value="">Todos</option>

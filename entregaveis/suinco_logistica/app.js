@@ -7588,6 +7588,30 @@ async function garantirPeriodoNoPainel(de, ate, ondeAvisar){
   return r;
 }
 
+/* APAGAR DA VISTA (11/09/2026) — botão só para Administração, e só quando
+   uma placa está filtrada: apagar "todo o histórico" sem filtro nenhum é
+   o tipo de clique acidental que a tela não pode permitir. O servidor
+   decide de novo (é ele quem checa o setor); esconder o botão aqui é só
+   o primeiro filtro, não o controle. */
+function podeApagarHistoricoUI(){
+  return (DB.operador || {}).setor === 'Administração';
+}
+async function apagarHistoricoDaPlacaUI(){
+  const placa = normalizarPlaca(document.getElementById('hist-filtro-placa')?.value || '');
+  if(!placa){ notify('Filtre por uma placa antes de apagar.', 'erro', 5000); return; }
+  const motivo = prompt(`Apagar da vista TODOS os lançamentos de ${placa}?\n\nA linha some do Histórico e dos indicadores, mas fica guardada — pátio não se apaga. Diga o motivo:`);
+  if(motivo === null) return;
+  if(!motivo.trim()){ notify('Precisa de um motivo para apagar.', 'erro', 5000); return; }
+  if(!confirm(`Confirma? ${placa} vai sumir do Histórico de todos os terminais.`)) return;
+  try {
+    const r = await SuincoSharePoint.apagarMovimentacoesDaPlaca(placa, motivo.trim());
+    notify(`${r.apagadas} lançamento(s) de ${placa} apagado(s) da vista.`, 'ok', 6000);
+    await SuincoSharePoint.sincronizarAgora();
+    renderAll();
+  } catch(e){
+    notify('Não consegui apagar: ' + (e && e.message || e), 'erro', 8000);
+  }
+}
 function renderHistorico(){
   const filtroPlaca = normalizarPlaca(document.getElementById('hist-filtro-placa')?.value || '');
   const filtroSetor = document.getElementById('hist-filtro-setor')?.value || '';
@@ -7657,6 +7681,8 @@ function renderHistorico(){
       ? `Mostrando as ${LIMITE} mais recentes de ${lista.length} — use os filtros pra ver outras.`
       : (lista.length ? `${lista.length} movimentação(ões).` : '');
   }
+  const btnApagar = document.getElementById('btn-apagar-historico-placa');
+  if(btnApagar) btnApagar.hidden = !(podeApagarHistoricoUI() && filtroPlaca);
 }
 
 /* A LINHA DO TEMPO DO PDF — a mesma jornada visual da tela (21/08/2026).
