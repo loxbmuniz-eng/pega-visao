@@ -109,10 +109,20 @@ async def main():
         ck('a linha sai da tela (nunca existiu no servidor)', d['continua'] is False, str(d))
         ck('e a pessoa é avisada para refazer', d['disseNadaGravado'] is True or d['disseOffline'] is True, str(d))
 
-        print('\n=== 3. DEMORA E O SERVIDOR NÃO RESPONDE À PERGUNTA: offline de verdade ===')
+        print('\n=== 3. A PRÓPRIA CONFERÊNCIA FALHA: fica INCERTA, não some (regra corrigida) ===')
+        # ESTA REGRA MUDOU DE PROPÓSITO no mesmo dia, com uma segunda volta do
+        # incidente. A versão original deste bloco dizia "offline de verdade,
+        # remove" — e foi exatamente essa decisão que apagou a carga de
+        # verdade quando aconteceu com a RYV8G03 outra vez: a conferência do
+        # #48 caiu por sua vez (servidor lento, não rede fora do ar), e "não
+        # consegui perguntar" foi tratado como "a resposta é não". Diferença
+        # que passou a importar: a conferência RESPONDEU e disse que não tem
+        # (bloco 2, continua removendo) × a conferência NEM CONSEGUIU
+        # responder (aqui — fica incerta, nunca remove).
         d = await criar_com({'postFalha': 'timeout', 'estadoTem': False, 'estadoFalha': True}, 2)
-        ck('a linha sai da tela', d['continua'] is False, str(d))
-        ck('avisa offline', d['disseOffline'] is True, str(d))
+        ck('a carga CONTINUA na tela — incerteza nunca é "não existe"', d['continua'] is True, str(d))
+        ck('e o painel avisa que vai tentar de novo, não que sumiu',
+           d['disseNadaGravado'] is False and d['disseOffline'] is False, str(d))
 
         print('\n=== 4. RECUSA DE VERDADE CONTINUA REMOVENDO (guarda de 07/08) ===')
         d = await criar_com({'postFalha': 422, 'estadoTem': True, 'estadoFalha': False}, 3)

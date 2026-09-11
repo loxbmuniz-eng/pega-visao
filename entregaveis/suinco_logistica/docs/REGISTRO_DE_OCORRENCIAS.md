@@ -2188,3 +2188,65 @@ pediu a via mais rápida — apagar a RYV8G03 direto por SQL no servidor
 autorizada por ele (ele mesmo pediu "essa autorização é somente para o meu
 token" na emergência), separada desta função — que existe para as
 próximas vezes, sem precisar de mim nem de SSH.
+
+---
+
+## #53 — Incerteza de rede nunca mais apaga carga: só recusa de verdade apaga (11/09/2026)
+
+Segunda volta do mesmo defeito, no mesmo dia. Relato do dono, ao vivo, testando
+a correção da ocorrência #48: *"deu o mesmo problema quando insiro a placa ryv
+na programação — ele fica offline e online e dá erro"*, e depois: *"ela não
+entra na fila de programados, ela some"*.
+
+**A CAUSA — a #48 tinha uma brecha estreita.** `upsert()` já conferia com o
+servidor uma vez antes de dizer "não gravou" numa criação. Mas essa ÚNICA
+conferência também podia falhar (servidor lento, não necessariamente rede
+caída) — e quando falhava, o código tratava "não consegui perguntar" como se
+fosse "a resposta é não", e apagava a carga mesmo assim. Era o defeito
+original, um degrau mais fundo.
+
+**A DISTINÇÃO CERTA não é sobre timeout × transporte** (cheguei a tentar essa
+via primeiro e reverti — os dois tipos de falha de rede podem, de fato, cobrir
+um servidor lento). **É sobre a conferência ter respondido de verdade ou ter
+falhado ao tentar:**
+
+- a conferência RESPONDEU e a carga não estava na lista → o servidor disse que
+  não tem, e aí vale a regra de 31/08: remove, avisa, refaça;
+- a conferência NEM CONSEGUIU responder (ela mesma caiu) → "não sei" nunca é
+  "não existe": a carga fica, marcada como incerta, e a sincronia seguinte
+  confirma sozinha.
+
+**O SEGUNDO BURACO, achado ao escrever o teste:** o motor de sincronia
+(`sincronizarCargasAlteradas`) marcava a carga como "já tentei" ANTES de saber
+se a tentativa deu certo. Uma carga incerta, sem ninguém mexer nela de novo,
+nunca teria `atualizadoEm` mudado — e por isso NUNCA seria reenviada. A
+mensagem "vou tentar de novo sozinho" seria mentira sem corrigir isso também:
+agora, enquanto `_nuncaConfirmada` for true, toda sincronia (inclusive a que
+roda a cada leitura do servidor — `fundirEstadoRemoto` chama `save()` sempre
+que chega algo novo, o que acontece o tempo todo num pátio ativo) tenta de
+novo, ignorando a marca.
+
+**A MENSAGEM também mentia.** Todo aviso de offline dizia "a linha saiu da
+tela" — mesmo quando não saía (edição, e agora a criação incerta). Passou a
+ter um texto próprio para a incerteza: "NÃO CONSEGUI CONFIRMAR COM O SERVIDOR
+(...) não relance nem exclua, ou pode duplicar".
+
+**DUAS SUÍTES ANTIGAS ficaram vermelhas contra a correção, e eram cause nº 1
+das quatro — a regra tinha mudado de propósito, eram elas que estavam
+desatualizadas, não regressão.** `test_demora_nao_apaga_carga` (bloco 3) e
+`test_offline_nao_grava` (bloco 2b) exigiam que a carga saísse da tela quando
+a conferência também falhava — exatamente a decisão que causou este incidente.
+Atualizadas com a explicação de por que a decisão mudou, e `test_offline_nao_grava`
+ganhou um bloco novo (4b) provando que a carga incerta vira real sozinha
+assim que a rede volta, sem o operador redigitar nada.
+
+**Teste novo:** `test_incerteza_nao_apaga_carga.py` — prova os três
+comportamentos juntos: incerteza nunca remove, a mensagem diz a verdade,
+recusa de verdade continua removendo (guarda de 07/08), e a sincronia
+seguinte confirma sozinha.
+
+**A lição, escrita para não se repeter uma terceira vez:** o custo de uma
+linha incerta ficando visível um pouco mais é sempre menor que o de uma carga
+real desaparecer calada. Toda vez que a dúvida for "remover ou manter", a
+resposta é manter — a sincronia converge para a verdade sozinha; a remoção
+não tem volta.

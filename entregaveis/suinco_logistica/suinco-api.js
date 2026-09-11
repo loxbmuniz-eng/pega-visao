@@ -231,6 +231,12 @@ const SuincoSharePoint = (function () {
       enfileirado: false,
       recusado: true,
       offline: true,
+      /* `incerta` (11/09/2026): só chega true quando `item.incerta` foi
+         passado explicitamente — a criação, ao concluir que não há como
+         saber se o servidor gravou (ver a nota no catch do upsert). Toda
+         outra chamada de enfileirar() continua sem essa chave, e vale a
+         regra antiga: sem rede é sem rede. */
+      incerta: !!(item && item.incerta),
       tipo: item && item.tipo,
       erro: 'VOCÊ ESTÁ OFFLINE — SISTEMA INDISPONÍVEL. CONECTE-SE PARA CONTINUAR. '
           + 'A alteração NÃO foi gravada.',
@@ -711,16 +717,35 @@ const SuincoSharePoint = (function () {
            mesma placa em meia hora, e o Histórico "completamente bugado".
 
            Antes de afirmar que nada foi gravado numa CRIAÇÃO, pergunta ao
-           servidor se a carga existe. Se existe, ela fica e vira confirmada
-           — o servidor é quem manda. Se ele diz que não, ou não responde,
-           aí vale a regra de 31/08: offline, a linha sai, a pessoa refaz.
-           Só a criação pergunta: numa edição o servidor já tinha uma versão
-           válida antes, e a recusa de edição nunca apagou nada. */
+           servidor se a carga existe. */
         if (criando) {
-          const salva = await cargaQueOServidorTem(corpo.id);
-          if (salva) {
+          const conferencia = await cargaQueOServidorTem(corpo.id);
+          if (conferencia.item) {
             mudarEstado('online');
-            return { enfileirado: false, item: salva, confirmadaDepoisDaDemora: true };
+            return { enfileirado: false, item: conferencia.item, confirmadaDepoisDaDemora: true };
+          }
+          /* A CONFERÊNCIA FALHAR NÃO É A CONFERÊNCIA DIZER "NÃO" (11/09/2026),
+             achado em produção de novo com a RYV8G03 — segunda volta do
+             mesmo defeito, um degrau mais fundo.
+
+             `cargaQueOServidorTem` chegou até aqui de duas formas bem
+             diferentes, e só uma delas é seguro tratar como "não existe":
+
+               · a pergunta FOI RESPONDIDA e a lista não trazia esta carga
+                 (`conferencia.falhou === false`) — aí sim o servidor disse
+                 que não tem, e vale a regra de 31/08: remove, avisa,
+                 refaça;
+               · a pergunta NÃO PÔDE SER RESPONDIDA — a própria conferência
+                 caiu (`conferencia.falhou === true`) — e "não consegui
+                 perguntar" nunca é "a resposta é não". Fica INCERTA: a
+                 carga NÃO sai da tela, e a sincronia seguinte confirma
+                 sozinha assim que der (ver `_nuncaConfirmada` em data.js).
+
+             O custo de uma linha incerta ficando visível um pouco mais é
+             sempre menor que o de uma carga real sumindo calada — foi essa
+             conta errada que causou o incidente duas vezes no mesmo dia. */
+          if (conferencia.falhou) {
+            return enfileirar({ tipo: 'carga', corpo, incerta: true });
           }
         }
         return enfileirar({ tipo: 'carga', corpo });
@@ -737,9 +762,12 @@ const SuincoSharePoint = (function () {
     try {
       const estado = await chamar('/api/estado', { timeoutMs: 15000 });
       const lista = (estado && Array.isArray(estado.cargas)) ? estado.cargas : [];
-      return lista.find((c) => String(c.id) === String(id)) || null;
+      // A pergunta FOI RESPONDIDA — `falhou: false` mesmo quando a carga não
+      // está na lista. É a diferença entre "o servidor disse não" e "não
+      // consegui perguntar", que upsert() usa para decidir se remove.
+      return { item: lista.find((c) => String(c.id) === String(id)) || null, falhou: false };
     } catch (e) {
-      return null;
+      return { item: null, falhou: true };
     }
   }
 

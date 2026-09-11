@@ -991,20 +991,30 @@ function receberRecusaDeStatus(carga, alvo, motivo){
    status, aqui não dá para saber com segurança se a carga já existia no
    servidor antes (edição) ou nunca chegou a existir (criação), e chutar
    errado apagaria dado de verdade. O aviso é alto e diz pra conferir. */
-function receberRecusaDeCarga(carga, motivo, removida, offline){
+function receberRecusaDeCarga(carga, motivo, removida, offline, incerta){
   const rotulo = carga.numeroCarga && carga.numeroCarga !== 'Aguardando Carga'
     ? carga.numeroCarga : (carga.placa || carga.id);
-  /* Offline não é recusa do servidor — é ausência dele. O caminho é o
-     mesmo (nada foi gravado, a linha sai da tela), mas o que o operador
-     precisa fazer é oposto: aqui ele reconecta e refaz; na recusa de
-     verdade ele corrige placa ou setor primeiro. */
   const sessaoVenceu = (typeof SuincoSharePoint !== 'undefined'
     && SuincoSharePoint.sessaoPerdida && SuincoSharePoint.sessaoPerdida());
+  /* A MENSAGEM PRECISA DIZER O QUE ACONTECEU DE VERDADE (11/09/2026).
+
+     Antes, todo `offline` dizia "a linha saiu da tela" — mesmo quando não
+     saía (edição, ou agora criação incerta: ver a nota em data.js). Ler
+     "saiu da tela" sobre uma linha que está bem ali na frente do operador
+     é o tipo de mentira pequena que corrói a confiança no aviso GRANDE, o
+     dia em que ele for verdade. `incerta` é o caso novo: criação que não
+     foi confirmada nem recusada — a carga fica, e o painel vai tentar de
+     novo sozinho na próxima sincronia. */
   notify(
     sessaoVenceu
       ? `⛔ ${rotulo}: SUA SESSÃO EXPIROU. NADA FOI GRAVADO e a linha saiu `
         + 'da tela. Entre de novo (o aviso vermelho no topo tem o botão) e '
         + 'lance outra vez.'
+      : (offline && incerta)
+      ? `⚠️ ${rotulo}: NÃO CONSEGUI CONFIRMAR COM O SERVIDOR. `
+        + 'A carga CONTINUA na tela e o painel vai tentar de novo sozinho '
+        + 'assim que a conexão melhorar — não relance nem exclua, ou pode '
+        + 'duplicar. Se sumir daqui a pouco, aí sim relance.'
       : offline
       ? `⛔ ${rotulo}: VOCÊ ESTÁ OFFLINE — SISTEMA INDISPONÍVEL. `
         + 'NADA FOI GRAVADO e a linha saiu da tela. '
