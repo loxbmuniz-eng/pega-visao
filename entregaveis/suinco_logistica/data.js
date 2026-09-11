@@ -1202,20 +1202,65 @@ function fundirEstadoRemoto(dados){
      chega: se a mesma transição aconteceu duas vezes de verdade (correção
      de etapa), a segunda continua lá esperando a sua. */
   const vistas = new Set(DB.movimentacoes.map(m => m.id));
+
+  /* AS PROVISÓRIAS ENTRAM NUM ÍNDICE, MONTADO UMA VEZ (11/09/2026).
+
+     O casamento acima continua sendo o mesmo, e é ele que não pode mudar:
+     (carga, de → para), UMA provisória por movimentação que chega. O que
+     mudou é COMO ela é achada.
+
+     Antes: `DB.movimentacoes.findIndex(...)` para CADA movimentação que
+     chegava — varrer a lista inteira, uma vez por item. Na leitura
+     completa, a que roda ao ENTRAR no painel, isso é M²/2 comparações.
+     Medido com o processador 4x mais lento, entrando com o histórico
+     local cheio:
+
+         600 movimentações ......    43 ms
+       1.200 movimentações ......    68 ms
+       2.400 movimentações ......   173 ms
+       4.800 movimentações ......   553 ms
+       7.200 movimentações ......  1.143 ms
+
+     Dobrar o volume QUADRUPLICA o tempo. É a curva que congela a aba de
+     quem tem histórico grande — e o "Page Unresponsive" relatado pelo dono
+     em duas máquinas, com o painel demorando para abrir.
+
+     Só as `_local` entram no índice: são as provisórias deste navegador,
+     sempre poucas. A fila por chave preserva o "sai UMA por vez": duas
+     transições iguais de verdade (correção de etapa) continuam esperando
+     cada uma a sua. */
+  const chaveDaProvisoria = (m) =>
+    m.cargaId + '\u0000' + (m.statusAnterior || '') + '\u0000' + m.statusNovo;
+  const provisorias = new Map();
+  DB.movimentacoes.forEach((x) => {
+    if(!x._local) return;
+    const k = chaveDaProvisoria(x);
+    const fila = provisorias.get(k);
+    if(fila) fila.push(x); else provisorias.set(k, [x]);
+  });
+
+  /* Removidas de uma vez no fim, não com splice dentro do laço: splice é
+     O(n) por chamada e traria a mesma conta quadrática de volta pela outra
+     porta. */
+  const substituidas = new Set();
   (dados.movimentacoes || []).forEach(r => {
     const mov = movimentacaoDeLinhaRemota(r);
     if(!mov || !mov.id || vistas.has(mov.id)) return;
-    const i = DB.movimentacoes.findIndex(x => x._local
-      && x.cargaId === mov.cargaId
-      && x.statusNovo === mov.statusNovo
-      && (x.statusAnterior || null) === (mov.statusAnterior || null));
-    if(i >= 0){
-      vistas.delete(DB.movimentacoes[i].id);
-      DB.movimentacoes.splice(i, 1);
+    const fila = provisorias.get(chaveDaProvisoria(mov));
+    const provisoria = (fila && fila.length) ? fila.shift() : null;
+    if(provisoria){
+      vistas.delete(provisoria.id);
+      substituidas.add(provisoria.id);
     }
     DB.movimentacoes.push(mov); vistas.add(mov.id); res.movimentacoesNovas++;
-    invalidarIndiceMovimentacoes();   // splice + push mantém o tamanho — o índice não perceberia
   });
+  if(substituidas.size){
+    DB.movimentacoes = DB.movimentacoes.filter(m => !substituidas.has(m.id));
+  }
+  /* UMA invalidação no fim, em vez de uma por item. O laço acima não lê o
+     índice, então invalidar a cada volta só repetia trabalho — e o
+     `push` sozinho já muda o tamanho, que é o que o índice compara. */
+  if(res.movimentacoesNovas || substituidas.size) invalidarIndiceMovimentacoes();
 
   // ---- frota (só na carga inicial; dimensão de leitura) ----
   if(Array.isArray(dados.frota) && dados.frota.length){

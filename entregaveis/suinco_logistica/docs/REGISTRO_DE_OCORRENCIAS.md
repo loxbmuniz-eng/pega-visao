@@ -1714,3 +1714,119 @@ família.
 **A forma certa, e são duas coisas:** colchete no padrão, para ele não casar
 consigo mesmo (`pkill -f "node src/[s]ervidor"`), e **matar numa chamada e subir
 noutra** — no mesmo comando, o que sobe morre com o que mata.
+
+---
+
+## #40 — "Page Unresponsive": a fusão do estado remoto crescia ao quadrado (11/09/2026)
+
+**O relato.** Print do dono com o aviso do Chrome, *"a página está aparecendo
+muito isso"*, depois *"ta demorando muito pra entrar no site"* e, quando
+perguntei se era só a máquina do Wemerson: *"travou no meu também"*.
+
+**A causa.** `fundirEstadoRemoto` fazia, para CADA movimentação que chegava do
+servidor, um `findIndex` sobre TODAS as movimentações locais, procurando a
+provisória do mesmo evento. Na leitura COMPLETA — a que roda ao entrar no
+painel — isso é M²/2 comparações. Medido, processador 4x mais lento:
+
+| movimentações | antes | depois |
+|---|---|---|
+| 600 | 43 ms | 36 ms |
+| 2.400 | 173 ms | 81 ms |
+| 4.800 | 553 ms | 141 ms |
+| 7.200 | 1.143 ms | 215 ms |
+
+Dobrar o volume quadruplicava o tempo. Extrapolando, 20 mil movimentações
+passam de 9 segundos de aba congelada — e é exatamente na entrada do painel.
+
+**A correção.** As provisórias entram num índice montado UMA vez, por chave
+`(carga, de → para)`, e a remoção acontece de uma vez no fim. `splice` dentro
+do laço traria a mesma conta de volta pela outra porta, porque splice é O(n)
+por chamada. O casamento — o que não podia mudar — continua idêntico: uma
+provisória por movimentação que chega, e o horário que fica é o do servidor.
+
+**DUAS HIPÓTESES MINHAS, ERRADAS ANTES DESTA, e é por isso que elas estão
+escritas aqui.**
+
+A primeira: acúmulo de carga em aberto na Torre. A Torre desenha uma linha por
+carga em aberto e com 600 delas leva 10,3 s — a cara do sintoma. Eu já ia
+propor publicar uma mudança de tela quando pedi o número ao dono: **18 cargas
+em aberto**. A hipótese morreu com o print dele, não com a minha medição.
+
+A segunda veio do buraco que isso revelou: **todas as minhas medições semeavam
+`DB.cargas` direto na memória**. O painel do dono não recebe dado assim — ele
+recebe pela fusão, que eu nunca tinha medido. Reconstrução que pula um
+componente não mede o sistema, mede a reconstrução.
+
+**O que destravou:** em vez de continuar adivinhando, o painel passou a medir
+sozinho (ocorrência #41). E a busca pela causa voltou ao componente que a
+reconstrução tinha pulado.
+
+**Teste que trava.** `testes/test_fusao_nao_e_quadratica.py`. Ele mede as duas
+metades, e a primeira importa mais: o casamento não mudou (três blocos), e a
+curva é de reta. O ponto da curva compara FORMA, não tempo absoluto — tempo em
+máquina ocupada é ruidoso. Vermelho-verde provado nas duas versões do painel:
+código antigo fator 9,1 (reprova), código novo fator 3,7 (passa).
+
+---
+
+## #41 — Quando não dá para reproduzir, o painel passa a medir (11/09/2026)
+
+Não é defeito: é o que se faz quando a investigação não fecha.
+
+Depois de descartar no código o vazamento de escuta, a lista de sugestão por
+linha, o redesenho ao arrastar e o redesenho a cada tique — e de duas
+hipóteses minhas caírem — a conclusão honesta era: **a causa está numa máquina
+que eu não enxergo daqui**. Meu contêiner é bloqueado para o domínio da
+operação; HTTP 000 daqui nunca é prova de nada.
+
+Então o painel registra sozinho toda tarefa que segura a tela por mais de meio
+segundo, com hora, duração, aba, qual desenho estava em curso, o volume do
+momento (cargas, em aberto, movimentações, linhas de montagem, elementos na
+tela) e a versão. Vinte e cinco últimos, por navegador, em chave própria do
+armazenamento local — apagar travamento nunca pode encostar em carga.
+
+O aviso no rodapé **só existe quando há travamento registrado**: alarme que
+sempre aparece deixa de ser alarme.
+
+**A lição, que vale para a próxima.** Eu gastei três hipóteses reconstruindo o
+ambiente do dono em vez de instrumentar o ambiente dele. A ordem certa, quando
+o sintoma não reproduz, é medir onde ele acontece — e só então formar
+hipótese. O medidor custou uma bateria; as três hipóteses custaram mais.
+
+**Teste que trava.** `testes/test_medidor_de_travamento.py`, 15 pontos —
+inclusive que o registro sobrevive a recarregar (a pessoa fecha a aba
+assustada e só mostra no dia seguinte), que o alarme não aparece sem
+travamento, e que medir nunca derruba a tela: com o armazenamento local
+bloqueado, o painel segue desenhando.
+
+---
+
+## #42 — O teste mentia para o painel, e o painel obedecia (11/09/2026)
+
+`test_libera_pendencias` reprovava na bateria e passava sozinho. Classifiquei
+como contaminação, culpei a sincronia periódica de 15 s, desliguei ela — e o
+vermelho voltou na bateria seguinte.
+
+**Rastreado com um observador em `DB.cargas`**, a pilha entregou o culpado:
+
+```
+DB.cargas trocada: 1 -> 0
+    at Object.sincronizarCarga (data.js)
+```
+
+O `window.fetch` de mentira do teste respondia `{}` a qualquer endereço que
+não fosse `/api/estado` ou `/api/frota` — **inclusive ao envio da carga**. O
+`upsert()` lê isso como recusa do servidor, e carga recusada na CRIAÇÃO é
+apagada do painel de propósito (proteção de 07/08/2026 contra carga fantasma).
+O painel estava certo; o teste é que mentia.
+
+**A raiz era a fixture contradizendo a própria história.** O comentário dela
+diz *"a gravação desta carga já foi enviada com sucesso"* — e carga enviada
+com sucesso não fica marcada como `_nuncaConfirmada`. Era a marca que
+transformava a recusa simulada em exclusão. Uma linha: `delete c._nuncaConfirmada`.
+
+**A lição:** "passa sozinha, falha na bateria" é conclusão preguiçosa. A
+segunda chance do portão existe para separar contaminação de regressão, não
+para arquivar o caso. Quando a correção baseada nessa conclusão falha, é
+porque a conclusão estava errada — e aí se volta à fase 1, não se tenta a
+segunda correção em cima da primeira.

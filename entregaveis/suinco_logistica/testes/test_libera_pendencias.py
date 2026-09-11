@@ -78,6 +78,17 @@ async def main():
             // marcas de proteção.
             c._pendente = 1;
             c._statusPendentes = ['Aguardando Embarque'];
+            /* E JÁ FOI CONFIRMADA PELO SERVIDOR — que é o que a história
+               deste teste diz: "a gravação já foi enviada com sucesso".
+
+               Sem apagar esta marca, a carga continua sendo "criação nunca
+               confirmada", e aí QUALQUER recusa a apaga do painel (proteção
+               de 07/08/2026 contra carga fantasma). Como o fetch de mentira
+               abaixo responde {} para o envio da carga, o upsert lia recusa
+               e a carga sumia no meio do teste — sob carga de bateria, antes
+               do segundo bloco medir. A fixture contradizia a própria
+               história; a marca é que estava sobrando. */
+            delete c._nuncaConfirmada;
 
             /* DESLIGA O TIQUE DE 15 SEGUNDOS ANTES DE MENTIR (10/09/2026).
 
