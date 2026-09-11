@@ -7627,6 +7627,18 @@ function renderHistorico(){
      precisa do resto — qual carga era, qual cliente, que peso, que lacre,
      o que estava escrito na observação — e tinha que ir procurar em outra
      aba, perdendo o filtro que acabou de montar. Agora abre ali mesmo. */
+  /* O DETALHE NASCE VAZIO — construído só quando alguém clica (11/09/2026).
+
+     MEDIDO: com 500 linhas na tela (o teto do desktop), o Histórico sozinho
+     respondia por 47.469 dos 57.196 elementos da página inteira — 83% do
+     peso, e o número que apareceu no registro de travamento do dia. A causa:
+     detalheHistoricoHtml(m) monta ~95 nós POR LINHA — grade de campos,
+     lacres, datas, dois botões — para as 500 linhas de uma vez, mesmo que
+     99% delas nunca sejam abertas.
+
+     `alternarDetalheHistoricoUI` só ALTERNA `hidden`; nunca construiu nada.
+     Agora ela constrói na primeira vez que a linha abre, e o resultado fica
+     guardado no próprio nó — abrir de novo não reconstrói. */
   document.getElementById('hist-tbody').innerHTML = exibidos.map(m=>`
     <tr class="hist-linha" onclick="alternarDetalheHistoricoUI('${escJs(m.id)}')"
         title="Clique para ver tudo o que se sabe sobre este registro.">
@@ -7636,7 +7648,7 @@ function renderHistorico(){
       <td>${esc(m.operador)}</td><td>${esc(m.setor)}</td>
     </tr>
     <tr class="hist-detalhe" id="hist-det-${esc(m.id)}" hidden>
-      <td colspan="6">${detalheHistoricoHtml(m)}</td>
+      <td colspan="6"></td>
     </tr>`).join('');
   document.getElementById('hist-empty').hidden = lista.length>0;
   const contagemEl = document.getElementById('hist-contagem');
@@ -7903,6 +7915,17 @@ function alternarDetalheHistoricoUI(movId){
   const alvo = document.getElementById('hist-det-' + movId);
   const seta = document.getElementById('hist-seta-' + movId);
   if(!alvo) return;
+  /* CONSTRÓI NA PRIMEIRA ABERTURA, uma vez só — ver a nota em renderHistorico.
+     `dataset.construido` é o carimbo: sem ele, fechar e abrir de novo
+     reconstruiria o mesmo HTML à toa. Achar a movimentação é busca linear
+     — cabe, porque só acontece no clique, nunca nas 500 linhas de uma vez. */
+  if(!alvo.dataset.construido){
+    const m = (DB.movimentacoes || []).find(x => x.id === movId);
+    const td = alvo.querySelector('td');
+    if(td) td.innerHTML = m ? detalheHistoricoHtml(m)
+      : '<div class="hist-det-aviso">Este registro não está mais na cópia local — role a página para recarregar.</div>';
+    alvo.dataset.construido = '1';
+  }
   alvo.hidden = !alvo.hidden;
   if(seta) seta.textContent = alvo.hidden ? '▸' : '▾';
 }

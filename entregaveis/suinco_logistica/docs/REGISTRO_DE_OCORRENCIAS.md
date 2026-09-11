@@ -2109,3 +2109,49 @@ já existia mudou de forma.
 
 **Ainda em aberto:** qual dos três é. Só o próximo travamento registrado
 nomeia — e a resposta chega sozinha, sem precisar reproduzir nada.
+
+---
+
+## #51 — O Histórico emagreceu: o detalhe nasce vazio, não mais pré-construído (11/09/2026)
+
+Resposta à pergunta do dono, direto: *"me explica o que realmente pode ser
+o fato isolado"*. Medido com o volume exato do relato (500 cargas, 2.813
+movimentações, 30 linhas de montagem), o peso da página inteira ficou assim
+por aba:
+
+```
+historico       47.469   <- 83% do total
+cadastros        3.717
+torre            1.629
+(demais 8 abas)  ~4.400
+TOTAL           57.196   (bate com o "57001 elementos na tela" do registro)
+```
+
+**A causa:** `detalheHistoricoHtml(m)` — a grade de campos, lacres, datas e
+dois botões que aparece ao abrir uma linha — era construída para as 500
+linhas do teto de desktop DE UMA VEZ, escondida (`hidden`), mesmo que quase
+nenhuma seja aberta. ~95 nós por linha × 500 = a conta bate.
+`alternarDetalheHistoricoUI` só alternava `hidden`; nunca construiu nada —
+o trabalho já tinha sido feito, à toa, no redesenho.
+
+**Correção:** o `<td>` do detalhe nasce vazio. `alternarDetalheHistoricoUI`
+constrói na primeira abertura (a mesma `detalheHistoricoHtml`, o mesmo
+conteúdo) e marca `dataset.construido` — fechar e abrir de novo reaproveita
+o nó, não reconstrói. Nada muda para quem usa a tela.
+
+**Medido, no teste:** 300 linhas fechadas = 6.050 elementos; as mesmas 300
+todas abertas = 30.890 — a diferença (24.840) é o que a tela deixa de
+carregar à toa quando ninguém abre a maioria das linhas, que é o caso
+normal de uso.
+
+**O que isto NÃO resolve sozinho:** não é a causa provada do travamento de
+21–46s (essa segue em aberto — ver #50, o medidor que vai nomear o
+suspeito no próximo registro). É garantidamente menos trabalho para o
+coletor de lixo fazer, e o Histórico deixa de ser 83% do peso da página.
+
+**Guarda:** `testes/test_historico_detalhe_preguicoso.py`, 5 blocos —
+nasce vazio, primeiro clique constrói com o conteúdo de sempre, fechar/abrir
+não reconstrói, o peso cai de forma mensurável, carga sumida continua
+avisando. Sete suítes correlatas (Histórico, cartão mobile, datas, lacres,
+esteira de devolução) seguem verdes — nenhuma dependia do detalhe vir
+pré-construído.
