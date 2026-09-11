@@ -51,10 +51,16 @@ SENHA = os.environ.get('SUINCO_SENHA', 'senha-de-teste-123')
 falhas = []
 
 JS_CONFIRMA_SOZINHA = """() => new Promise(resolve => {
+  // O RECUO ENTRE TENTATIVAS (11/09/2026, achado no mesmo dia — a carga
+  // "118684" virando aviso repetindo sem parar) segura a retentativa por
+  // alguns segundos de propósito. Adiantar o relógio da carga a cada
+  // rodada do polling é a forma correta de testar "o recuo já passou",
+  // sem esperar minutos de verdade.
   const tentar = () => {
     const c = DB.cargas.find(x => x.numeroCarga === 'OFF-1');
     if (c && !c._nuncaConfirmada) return { confirmou: true, versao: c.versao };
     if (!c) return { confirmou: false, sumiu: true };
+    if (c._proximaTentativaEm) c._proximaTentativaEm = Date.now() - 1;
     return null;
   };
   SuincoStore.save();
@@ -62,6 +68,7 @@ JS_CONFIRMA_SOZINHA = """() => new Promise(resolve => {
   const iv = setInterval(() => {
     const r = tentar();
     if (r) { clearInterval(iv); resolve(r); return; }
+    SuincoStore.save();
     if (Date.now() - t0 > 4000) { clearInterval(iv); resolve({ confirmou: false, esgotou: true }); }
   }, 200);
 })"""

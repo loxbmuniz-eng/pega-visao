@@ -754,6 +754,21 @@ const SuincoStore = {
          nada de verdade acontecendo. Enquanto não confirmar, toda sincronia
          tenta de novo, marca ou não marca. */
       if(!c._nuncaConfirmada && this._ultimoSync.get(c.id) === marca) return;      // nada mudou nesta
+      /* RECUO ENTRE TENTATIVAS DE UMA CARGA INCERTA (11/09/2026).
+
+         Achado no MESMO dia, na prática: sem isto, toda sincronia bate de
+         novo — e `fundirEstadoRemoto` dispara `save()` toda vez que chega
+         qualquer dado novo, o que num pátio ativo é o tempo todo. Uma carga
+         que nunca confirma vira dezenas de tentativas por minuto: mais
+         carga num servidor que já estava lento (o próprio motivo de ela
+         estar incerta), e um aviso repetindo sem parar para o operador.
+
+         O recuo cresce a cada tentativa (5s, 10s, 20s... até 60s), a mesma
+         régua do backoff da fila offline em suinco-api.js. Uma carga
+         ANTIGA, presa desde antes desta correção existir (a família do
+         "118684" reaparecendo), passa a bater de longe em longe, não em
+         rajada. */
+      if(c._nuncaConfirmada && c._proximaTentativaEm && Date.now() < c._proximaTentativaEm) return;
       if(this._emVoo.has(c.id)){
         /* Já existe uma subida desta carga em voo. NÃO marca como
            sincronizada: o estado atual ainda não chegou ao servidor, e
@@ -945,6 +960,13 @@ const SuincoStore = {
       const removida = eraCriacaoNuncaConfirmada && !(r.offline && r.incerta);
       if(removida){
         DB.cargas = DB.cargas.filter(c => c.id !== carga.id);
+      } else if(r.offline && r.incerta){
+        /* SEGUE INCERTA — MARCA O RECUO DA PRÓXIMA TENTATIVA.
+           Ver a nota em sincronizarCargasAlteradas: sem isto a retentativa
+           bate em toda sincronia, sem espaçamento. */
+        carga._tentativasIncerta = (carga._tentativasIncerta || 0) + 1;
+        carga._proximaTentativaEm = Date.now()
+          + Math.min(5000 * Math.pow(2, carga._tentativasIncerta - 1), 60000);
       }
       /* `r.offline` separa duas recusas que NÃO têm a mesma causa nem a
          mesma correção: "o servidor disse não" (placa fora da frota, setor
@@ -952,9 +974,11 @@ const SuincoStore = {
          houve servidor nenhum" (trava de offline, 31/08/2026 — basta
          reconectar e refazer). Dizer "o servidor recusou" quando o aparelho
          está sem rede manda o operador procurar um problema que não existe. */
-      if(_aoRecusarCarga) _aoRecusarCarga(carga, r.erro, removida, !!r.offline, !!r.incerta);
+      if(_aoRecusarCarga) _aoRecusarCarga(carga, r.erro, removida, !!r.offline, !!r.incerta, carga._tentativasIncerta || 0);
     } else if(r && r.enfileirado === false){
       delete carga._nuncaConfirmada;
+      delete carga._tentativasIncerta;
+      delete carga._proximaTentativaEm;
       // A versão nova volta na resposta do PATCH. Sem guardá-la, a PRÓXIMA
       // edição deste mesmo terminal iria com a versão velha e levaria 409.
       if(r.item && Number.isFinite(Number(r.item.versao))) carga.versao = Number(r.item.versao);

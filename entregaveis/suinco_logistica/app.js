@@ -991,7 +991,7 @@ function receberRecusaDeStatus(carga, alvo, motivo){
    status, aqui não dá para saber com segurança se a carga já existia no
    servidor antes (edição) ou nunca chegou a existir (criação), e chutar
    errado apagaria dado de verdade. O aviso é alto e diz pra conferir. */
-function receberRecusaDeCarga(carga, motivo, removida, offline, incerta){
+function receberRecusaDeCarga(carga, motivo, removida, offline, incerta, tentativas){
   const rotulo = carga.numeroCarga && carga.numeroCarga !== 'Aguardando Carga'
     ? carga.numeroCarga : (carga.placa || carga.id);
   const sessaoVenceu = (typeof SuincoSharePoint !== 'undefined'
@@ -1005,16 +1005,38 @@ function receberRecusaDeCarga(carga, motivo, removida, offline, incerta){
      dia em que ele for verdade. `incerta` é o caso novo: criação que não
      foi confirmada nem recusada — a carga fica, e o painel vai tentar de
      novo sozinho na próxima sincronia. */
+  if(offline && incerta){
+    /* NÃO REPETE O AVISO A CADA TENTATIVA (11/09/2026).
+
+       Achado no mesmo dia: uma carga que nunca confirma agora tenta de
+       novo sozinha (data.js), com recuo — mas sem isto aqui, cada
+       tentativa reabria o MESMO aviso, e uma carga presa virava alerta
+       repetindo sem parar. Notifica na primeira vez, e depois só de longe
+       em longe (a cada 6ª tentativa — com o recuo no máximo, ~1 a cada
+       minuto — é aviso a cada uns 6 minutos), com o texto mudando de tom
+       depois de muitas tentativas: aí já não é "espera", é "confira à
+       mão". A carga NUNCA some sozinha por isto — só o texto muda. */
+    const t = tentativas || 1;
+    if(t > 1 && t % 6 !== 0) return;
+    notify(
+      t >= 6
+        ? `⚠️ ${rotulo}: ainda não consegui confirmar com o servidor depois de `
+          + `${t} tentativas. A carga CONTINUA na tela e o painel segue tentando `
+          + 'sozinho — mas se isto persistir, confira à mão (placa, número) se '
+          + 'ela já existe no servidor antes de decidir o que fazer.'
+        : `⚠️ ${rotulo}: NÃO CONSEGUI CONFIRMAR COM O SERVIDOR. `
+          + 'A carga CONTINUA na tela e o painel vai tentar de novo sozinho '
+          + 'assim que a conexão melhorar — não relance nem exclua, ou pode '
+          + 'duplicar. Se sumir daqui a pouco, aí sim relance.',
+      'danger', 20000);
+    tocarAlertaAlteracao();
+    return;
+  }
   notify(
     sessaoVenceu
       ? `⛔ ${rotulo}: SUA SESSÃO EXPIROU. NADA FOI GRAVADO e a linha saiu `
         + 'da tela. Entre de novo (o aviso vermelho no topo tem o botão) e '
         + 'lance outra vez.'
-      : (offline && incerta)
-      ? `⚠️ ${rotulo}: NÃO CONSEGUI CONFIRMAR COM O SERVIDOR. `
-        + 'A carga CONTINUA na tela e o painel vai tentar de novo sozinho '
-        + 'assim que a conexão melhorar — não relance nem exclua, ou pode '
-        + 'duplicar. Se sumir daqui a pouco, aí sim relance.'
       : offline
       ? `⛔ ${rotulo}: VOCÊ ESTÁ OFFLINE — SISTEMA INDISPONÍVEL. `
         + 'NADA FOI GRAVADO e a linha saiu da tela. '
