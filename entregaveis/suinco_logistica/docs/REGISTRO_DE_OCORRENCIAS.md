@@ -2004,3 +2004,53 @@ eu lembrar de reiniciar o servidor deixou de depender (regra 3 do dono).
 do portão. Fica registrado porque a segunda chance do portão não distingue
 "servidor velho" de "regressão", e por isso o portão agora impede o servidor
 velho de existir.
+
+---
+
+## #48 — "NADA FOI GRAVADO" era mentira: a demora apagava carga que o servidor tinha (11/09/2026)
+
+Incidente em produção, relato do dono com prints, placa **RYV8G03**: *"criamos a
+carga, ficou offline, voltou, ela apareceu em Aguardando Carga sem carga, o
+histórico tá completamente bugado"*. O Histórico mostrava **quatro cargas**
+criadas para a mesma placa em meia hora (12:04, 12:14, 12:23, 12:31), todas
+"não está mais no painel". O rodapé registrava **16 travamentos, pior 46,5 s**
+numa máquina e 25 na outra. A tela alternava "Modo Offline" e "Conectado".
+
+**A cadeia, lida no código e reproduzida em teste:**
+
+1. a tela congela (46 s — o medidor ⏱ de ontem gravou; é dele a prova);
+2. o painel espera **20 s** por resposta; a resposta que chega durante o
+   congelamento vira `AbortError` → `motivo: 'timeout'`;
+3. `upsert()` tratava timeout igual a "sem rede" (`eFalhaDeRede`) e devolvia
+   `{recusado, offline}`;
+4. `sincronizarCarga` apagava a carga nunca-confirmada e a tela dizia
+   **"VOCÊ ESTÁ OFFLINE — NADA FOI GRAVADO e a linha saiu da tela"**;
+5. mas o POST **tinha chegado**: o servidor gravou. O operador, obedecendo ao
+   aviso, relançou — e a placa multiplicou. Cada relançamento, uma carga nova.
+
+**O painel mentiu com convicção.** A regra de 31/08 ("offline: a linha sai e a
+pessoa refaz") está certa quando não há servidor. Demora não é ausência de
+servidor — é o caso em que o painel **menos** sabe o que aconteceu, e era
+exatamente aí que ele afirmava com mais certeza.
+
+**Correção:** numa CRIAÇÃO que caiu por falha de rede, `upsert()` **pergunta**
+ao servidor (`/api/estado`, a rota que todo servidor em produção já tem) se a
+carga existe. Existe → fica, vira confirmada, com a versão do servidor. Não
+existe, ou o servidor não responde → aí vale a regra de 31/08. Só a criação
+pergunta: edição recusada nunca apagou nada. Recusa de verdade (422/409/403)
+continua removendo (#07/08, `test_carga_recusada_nao_fica_fantasma`).
+
+**O que esta correção NÃO faz:** não cura o congelamento de 46 s. Ela impede
+que o congelamento vire carga duplicada. A causa do congelamento está no
+registro do ⏱ (tela, desenho, volume) — pedido ao dono.
+
+**A hipótese do dono ("migrações e arrasto pesando o servidor")** foi
+respondida com a evidência dos próprios prints: o medidor mede o navegador; as
+migrações 049/050 criam colunas e trocam um índice; o arrasto no servidor é
+uma transação de até 40 linhas. Voltar o painel para antes do arrasto
+reintroduziria a fusão quadrática (#40), que congelava mais. Pedidas a ele as
+duas saídas que provam ou derrubam a hipótese do servidor (`uptime`, `free`,
+`journalctl`).
+
+**Guarda:** `testes/test_demora_nao_apaga_carga.py`, 4 cenários / 12 pontos —
+5 vermelhos contra o publicado, todos no cenário do incidente.

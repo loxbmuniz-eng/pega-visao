@@ -624,6 +624,7 @@ const SuincoSharePoint = (function () {
     if (!estaConfigurado()) return semServidor();
 
     const corpo = deLinhaParaApi(campos);
+    let criando = true;   // vira false assim que o POST responde — ver o catch
     try {
       /* Criar e editar são rotas diferentes, e por muito tempo só a
          primeira era usada.
@@ -638,6 +639,7 @@ const SuincoSharePoint = (function () {
          PATCH, que é onde o servidor valida campo por campo e anuncia a
          mudança para todo mundo. */
       const r = await chamar('/api/cargas', { metodo: 'POST', corpo, comStatus: true });
+      criando = false;
       mudarEstado('online');
       if (r.status !== 200) return { enfileirado: false, item: r.dados };
 
@@ -665,8 +667,46 @@ const SuincoSharePoint = (function () {
           atual: (e.codigo === 'CONFLITO_DE_VERSAO' && e.dados && e.dados.atual) ? daApiParaLinha(e.dados.atual) : null,
         };
       }
-      if (eFalhaDeRede(e)) return enfileirar({ tipo: 'carga', corpo });
+      if (eFalhaDeRede(e)) {
+        /* DEMORA NÃO É RECUSA (11/09/2026) — o incidente da RYV8G03.
+
+           A tela congelou 46 s (o medidor ⏱ gravou). O POST de criação
+           estourou os 20 s e caiu aqui como "falha de rede"; o painel se
+           declarou offline, apagou a carga nunca-confirmada e escreveu
+           "NADA FOI GRAVADO". Mas o POST TINHA CHEGADO: o servidor gravou.
+           O operador refez, obedecendo ao aviso — quatro cargas para a
+           mesma placa em meia hora, e o Histórico "completamente bugado".
+
+           Antes de afirmar que nada foi gravado numa CRIAÇÃO, pergunta ao
+           servidor se a carga existe. Se existe, ela fica e vira confirmada
+           — o servidor é quem manda. Se ele diz que não, ou não responde,
+           aí vale a regra de 31/08: offline, a linha sai, a pessoa refaz.
+           Só a criação pergunta: numa edição o servidor já tinha uma versão
+           válida antes, e a recusa de edição nunca apagou nada. */
+        if (criando) {
+          const salva = await cargaQueOServidorTem(corpo.id);
+          if (salva) {
+            mudarEstado('online');
+            return { enfileirado: false, item: salva, confirmadaDepoisDaDemora: true };
+          }
+        }
+        return enfileirar({ tipo: 'carga', corpo });
+      }
       throw e;
+    }
+  }
+
+  /* "Esta carga existe aí?" — pela leitura que o painel já usa (/api/estado),
+     porque é a rota que TODO servidor em produção tem; uma rota nova por id
+     só valeria depois do atualizar.sh, e este defeito não pode esperar por
+     ele. Falhou a pergunta? Devolve nulo, e quem chamou trata como offline. */
+  async function cargaQueOServidorTem(id) {
+    try {
+      const estado = await chamar('/api/estado', { timeoutMs: 15000 });
+      const lista = (estado && Array.isArray(estado.cargas)) ? estado.cargas : [];
+      return lista.find((c) => String(c.id) === String(id)) || null;
+    } catch (e) {
+      return null;
     }
   }
 
