@@ -2140,6 +2140,11 @@ document.addEventListener('click', (ev)=>{
      pessoa a não tocar. */
   if(ev.target.closest('button, a, input, select, textarea, label, [role="button"]')) return;
   if(tr.classList.contains('hist-linha') || tr.classList.contains('raiox-linha')) return;
+  /* Linha que se abre SOZINHA (Montagem e Fila têm onclick próprio que
+     redesenha o tbody) já nasce com `cartao-aberto` quando está aberta —
+     ver linhaFilaHtml e a linha da Montagem. Ligar a classe aqui de novo
+     cairia num nó que o redesenho acabou de descartar. */
+  if(tr.classList.contains('mont-linha') || tr.classList.contains('prog-linha')) return;
   tr.classList.toggle('cartao-aberto');
 });
 
@@ -3230,7 +3235,7 @@ function linhaFilaHtml(c, lista, arrastavel){
     const id = escJs(c.id);
     const aberta = _progFilaAberta === c.id;
     const linha = `
-    <tr class="prog-linha${aberta ? ' prog-linha-aberta' : ''}" data-carga="${esc(c.id)}"
+    <tr class="prog-linha${aberta ? ' prog-linha-aberta cartao-aberto' : ''}" data-carga="${esc(c.id)}"
         ${arrastavel ? `draggable="true"
         ondragstart="filaArrastarInicio(event,'${id}')"
         ondragover="filaArrastarSobre(event)"
@@ -10872,7 +10877,14 @@ function linhaMontagemHtml(m){
      classe própria a tela e os testes só conseguem descrevê-la por
      ausência — foi assim que a checagem "toda linha traz uma ação de
      avanço" passou a contar uma linha que, com razão, não tem nenhuma. */
-  const resumo = `<tr class="mont-linha${trancada ? ' linha-fraca' : ''}${comoCarga ? ' mont-linha-carga' : ''}${aberta ? ' mont-linha-aberta' : ''}"
+  /* `cartao-aberto` NASCE NO REDESENHO (11/09/2026). No celular os campos
+     secundários só aparecem com esta classe, e quem a ligava era o ouvinte
+     de toque do document — que aqui chegava tarde: o onclick da linha já
+     tinha redesenhado o tbody, e a classe caía num <tr> destacado do DOM.
+     Resultado medido: a coluna Seq. ficava escondida para sempre, e
+     reordenar de celular não existia. O estado (`aberta`) é quem sabe se o
+     cartão está aberto; ele desenha a classe. Mesma decisão na Fila. */
+  const resumo = `<tr class="mont-linha${trancada ? ' linha-fraca' : ''}${comoCarga ? ' mont-linha-carga' : ''}${aberta ? ' mont-linha-aberta cartao-aberto' : ''}"
       data-id="${id}"
       ${/* ARRASTÁVEL SÓ ENQUANTO É RASCUNHO (10/09/2026). Depois de virar
            carga o número é registro — e a mesma regra vale para a alça,

@@ -2889,6 +2889,10 @@ input,select,textarea{border-radius:5px}
   .btn-sm{ min-height:44px }
 
   input,select,textarea{ min-height:44px; font-size:16px }
+  /* O ⏱ do rodapé não é .btn e ficava com 18px de altura no celular —
+     o único jeito de alguém reportar um travamento não cabia num dedo
+     (auditoria de paridade de 11/09/2026). */
+  .rodape-travas{ min-height:44px; padding:8px 14px; font-size:14px }
   /* 16px não é estética: abaixo disso o iOS dá zoom ao focar o campo e
      desalinha a tela inteira.
 
