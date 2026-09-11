@@ -1830,3 +1830,57 @@ segunda chance do portão existe para separar contaminação de regressão, não
 para arquivar o caso. Quando a correção baseada nessa conclusão falha, é
 porque a conclusão estava errada — e aí se volta à fase 1, não se tenta a
 segunda correção em cima da primeira.
+
+---
+
+## #43 — Os dois caminhos por onde número de sequência repetido ainda entrava (11/09/2026)
+
+Pedido do dono: *"fecha dois buracos de numero repedido"*, depois de
+*"SEM DEIXAR QUE REPITA NUMEROS DA SEQUENCIA"*.
+
+A cascata de 10/09 fechou o caminho do meio: digitar o número numa linha que
+ainda vai carregar passa por `POST /montagem/:id/sequenciar`, e lá a fila do
+dia é renumerada inteira, numa transação só. **Sobravam os dois caminhos de
+fora, e os dois foram medidos antes de corrigir:**
+
+**Buraco 1 — `PATCH /montagem/:id` gravava `sequencia` crua.** Quem chega aqui
+é a linha CANCELADA (a tela manda o campo direto para cá quando a linha não
+vai mais carregar) e qualquer valor que não seja inteiro. Medido: três linhas
+em 1, 2 e 3; `PATCH` da primeira para 3 respondia **200** e o dia ficava
+`[2, 3, 3]`. E número de linha cancelada é *reservado*: ao virar o mesmo de
+uma linha viva, `numerosDaFila()` entende que o número é de quem saiu, tira a
+linha viva do pool e a renumera na cascata seguinte — a ordem do dia muda
+sozinha, sem ninguém ter pedido.
+
+**Buraco 2 — `POST /montagem` aceitava o número que o painel mandasse**, e o
+painel mandava `montagens.length + 1`. Contar linhas não é achar casa livre:
+dia com linha cancelada ou já reordenada tem buraco. Medido: com 1, 2 e 3 no
+dia, criar pedindo 2 nascia **2** e o dia ficava `[1, 2, 2, 3]`.
+
+**Um terceiro defeito apareceu ao medir, no mesmo campo:** `Number('')` é
+ZERO. O campo apagado na tela não limpava a coluna — gravava `sequencia = 0`.
+
+**A correção, toda no servidor:** a criação acha casa livre ACIMA da maior
+(honrando o número pedido quando está livre, que é o caso do "puxar rotas");
+a edição RECUSA com 409 `SEQUENCIA_EM_USO` e a mensagem diz em qual linha o
+número está e por onde se muda a ordem — recusa que ensina o caminho, não só
+nega. O painel parou de inventar número: não manda mais `sequencia` na
+criação.
+
+**Por que NÃO um índice único no banco:** é a lição da placa, da véspera
+(#38). O índice recusa no lugar mais fundo e mais cedo, sem saber do caso de
+uso, e o dia que ele torna impossível de montar só aparece na operação, com
+caminhão no portão. A regra mora na rota, que sabe o que fazer com o pedido.
+
+**A trava é o nó.** Ler os números ocupados e gravar o novo são duas coisas, e
+entre uma e outra o segundo computador lê o mesmo "livre". Medido com seis
+criações simultâneas pedindo a MESMA casa: as seis nasciam com `sequencia = 1`.
+`pg_advisory_xact_lock` por dia põe as duas pessoas na fila e solta no fim da
+transação — sem tabela de controle e sem índice. A mesma trava passou a valer
+para a cascata, que também lê a fila antes de gravá-la.
+
+**Teste que trava.** `testes/test_numero_de_sequencia_nao_repete.py`, 24
+pontos — inclusive que o caminho legítimo (`/sequenciar`) não foi fechado
+junto, que apagar o número continua apagando, que reenviar o PRÓPRIO número
+junto com outro campo não é conflito, e as seis criações simultâneas. Reprovou
+em 21 dos 24 contra o publicado antes da correção.

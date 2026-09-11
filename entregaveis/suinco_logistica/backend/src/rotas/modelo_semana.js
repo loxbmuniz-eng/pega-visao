@@ -268,6 +268,92 @@ function kmInteiroOuNulo(v) {
   return i > 0 ? i : null;
 }
 
+/* O NÚMERO DA SEQUÊNCIA NÃO REPETE NO DIA (11/09/2026).
+   ---------------------------------------------------------------------
+   PEDIDO DO DONO: "fecha dois buracos de numero repedido", depois de
+   "SEM DEIXAR QUE REPITA NUMEROS DA SEQUENCIA".
+
+   A cascata de 10/09 fechou o caminho do meio: digitar o número numa linha
+   que ainda vai carregar passa por /sequenciar, e lá a fila do dia é
+   renumerada inteira, numa transação só. Faltavam os dois caminhos de fora:
+
+     · PATCH gravava `sequencia` CRU. É por onde entra a linha CANCELADA —
+       a tela manda o campo direto para cá quando a linha não vai mais
+       carregar — e tudo que não é inteiro. E número de linha cancelada é
+       RESERVADO: se ele virar o mesmo de uma linha viva, numerosDaFila()
+       entende que o número é de quem saiu, tira a linha viva do pool e a
+       renumera na cascata seguinte. A ordem do dia muda sozinha, e ninguém
+       pediu.
+     · POST aceitava o número que o painel mandasse, e o painel mandava
+       `montagens.length + 1`. Contar linhas não é achar casa livre: dia com
+       linha cancelada ou já reordenada tem buraco, e a conta acerta um
+       número que já existe.
+
+   POR QUE NÃO UM ÍNDICE ÚNICO NO BANCO — é a lição da placa, de ontem. O
+   índice recusa no lugar mais fundo e mais cedo, sem saber do caso de uso,
+   e o dia que ele torna impossível de montar só aparece na operação, com
+   caminhão no portão. A regra mora na rota, que sabe o que fazer com o
+   pedido: na criação acha casa livre e segue em frente; na edição recusa e
+   ENSINA onde se muda a ordem.
+
+   E A TRAVA POR DIA É O NÓ. Ler os números ocupados e gravar o novo são
+   duas coisas, e entre uma e outra o segundo computador lê o mesmo "livre".
+   Duas pessoas puxando rotas ao mesmo tempo não é caso de borda — é a manhã
+   de sexta. `pg_advisory_xact_lock` põe as duas na fila e solta no fim da
+   transação, sem tabela de controle e sem índice. */
+async function travarSequenciasDoDia(cli, dia) {
+  await cli.query(
+    "SELECT pg_advisory_xact_lock(hashtext('montagem_sequencia'), hashtext($1::text))",
+    [String(dia)]
+  );
+}
+
+/* Inteiro a partir de 1, ou nada — mesma régua de kmInteiroOuNulo. E ela
+   faz falta por um motivo que só apareceu ao medir: `Number('')` é ZERO, e
+   o campo apagado na tela vinha gravando 0 em vez de limpar a coluna.
+   Quem apaga o número quer a coluna vazia, não uma linha na casa zero. */
+function sequenciaInteiraOuNula(v) {
+  if (v === '' || v === null || v === undefined) return null;
+  const n = Number(v);
+  if (!Number.isFinite(n)) return null;
+  const i = Math.trunc(n);
+  return i >= 1 ? i : null;
+}
+
+/* As linhas do dia que já têm número — vivas, efetivadas e canceladas, que
+   é o conjunto que reserva casa. Uma leitura, dois chamadores: a criação
+   usa para achar casa livre, a edição para recusar o número de outra. */
+async function linhasComNumero(cli, dia, exceto) {
+  const { rows } = await cli.query(
+    `SELECT montagem_id, sequencia, apelido_rota, rota_codigo, numero_carga,
+            efetivada_em, cancelada_em
+       FROM programacao_montagem
+      WHERE data_prog = $1 AND sequencia IS NOT NULL
+        AND ($2::text IS NULL OR montagem_id <> $2)`,
+    [dia, exceto ?? null]
+  );
+  return rows;
+}
+
+/* Casa livre ACIMA DA MAIOR, nunca por baixo: preencher buraco de baixo
+   mudaria a leitura de quem já estava numerado. Mesma decisão, e mesmo
+   motivo, de numerosDaFila() em dominio/cargas.js. */
+function primeiroNumeroLivre(ocupados) {
+  return ocupados.reduce((maior, n) => (n > maior ? n : maior), 0) + 1;
+}
+
+/* Como a linha aparece na recusa. Número sozinho não ajuda quem está com 39
+   linhas na tela — a mensagem precisa dizer em QUAL delas ele está, e por
+   que aquela linha guarda o número mesmo não saindo. */
+function nomeDaLinhaNaRecusa(l) {
+  const nome = String(l.apelido_rota || '').trim() || `rota ${l.rota_codigo}`;
+  const carga = String(l.numero_carga || '').trim();
+  const estado = l.efetivada_em
+    ? ', que já virou carga'
+    : (l.cancelada_em ? ', cancelada — o número dela fica reservado' : '');
+  return (carga ? `${nome} (carga ${carga})` : nome) + estado;
+}
+
 rotasModeloSemana.post('/montagem', SO_LOGISTICA, async (req, res, next) => {
   try {
     const rota = String(req.body?.rotaCodigo ?? '').trim();
@@ -279,8 +365,21 @@ rotasModeloSemana.post('/montagem', SO_LOGISTICA, async (req, res, next) => {
       });
     }
     const dia = diaOu(hojeISO(), req.body?.dia);
-    const _dk = await destinoEKm(req.body, null, consultar);
-    const { rows } = await consultar(
+    /* O NÚMERO DA LINHA NOVA É DECIDIDO AQUI, dentro da trava do dia — ver
+       a nota de travarSequenciasDoDia. O painel pode pedir um número; se
+       ele estiver livre, é honrado (é o caso do "puxar rotas", que cria as
+       linhas na ordem do modelo). Se estiver ocupado, ou se não vier
+       número nenhum, a linha entra ACIMA da maior casa do dia: ninguém que
+       já estava numerado muda de lugar por causa de uma linha nova. */
+    const montagem = await emTransacao(async (cli) => {
+      await travarSequenciasDoDia(cli, dia);
+      const ocupados = (await linhasComNumero(cli, dia)).map((l) => l.sequencia);
+      const pedida = sequenciaInteiraOuNula(req.body?.sequencia);
+      const sequencia = (pedida !== null && !ocupados.includes(pedida))
+        ? pedida
+        : primeiroNumeroLivre(ocupados);
+      const _dk = await destinoEKm(req.body, null, (q, v) => cli.query(q, v));
+      const { rows } = await cli.query(
       `INSERT INTO programacao_montagem
          (montagem_id, data_prog, rota_codigo, sequencia, numero_carga, peso,
           qtd_entregas, qtd_ganchos, paletizada, tipo_operacao, motorista,
@@ -288,8 +387,7 @@ rotasModeloSemana.post('/montagem', SO_LOGISTICA, async (req, res, next) => {
           frete_destino, km_destino, km_deslocamento)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$15,$17,$18,$19)
        RETURNING *`,
-      [novoId(), dia, rota,
-       Number.isFinite(Number(req.body?.sequencia)) ? Number(req.body.sequencia) : null,
+      [novoId(), dia, rota, sequencia,
        String(req.body?.numeroCarga ?? '').trim(),
        Number.isFinite(Number(req.body?.peso)) ? Number(req.body.peso) : null,
        Math.max(1, Number(req.body?.qtdEntregas) || 1),
@@ -309,9 +407,11 @@ rotasModeloSemana.post('/montagem', SO_LOGISTICA, async (req, res, next) => {
        Number.isFinite(Number(req.body?.modeloId)) ? Number(req.body.modeloId) : null,
        req.operador.nome, req.operador.setor,
        _dk.destino, _dk.kmDestino, _dk.kmDesl]
-    );
+      );
+      return rows[0];
+    });
     emitir('montagem:criada', { dia, rota, por: req.operador.nome });
-    res.status(201).json({ montagem: rows[0] });
+    res.status(201).json({ montagem });
   } catch (e) { next(e); }
 });
 
@@ -321,36 +421,55 @@ rotasModeloSemana.post('/montagem', SO_LOGISTICA, async (req, res, next) => {
 rotasModeloSemana.patch('/montagem/:id', SO_LOGISTICA, async (req, res, next) => {
   try {
     const id = String(req.params.id);
-    const { rows: atual } = await consultar(
-      'SELECT * FROM programacao_montagem WHERE montagem_id = $1', [id]
-    );
-    if (!atual[0]) return res.status(404).json({ erro: 'Montagem não encontrada.', codigo: 'NAO_ENCONTRADA' });
-    /* Depois de efetivada a linha é histórico. Quem quiser mudar mexe na
-       CARGA, que tem log de revisões — não aqui, onde a alteração passaria
-       sem registro e as duas verdades divergiriam em silêncio. */
-    if (atual[0].efetivada_em) {
-      return res.status(409).json({
-        erro: 'Esta montagem já virou carga. Altere pela Torre de Controle.',
-        codigo: 'JA_EFETIVADA',
-      });
-    }
+    /* DUAS LEITURAS, DE PROPÓSITO. A trava é por DIA, e para travar o dia
+       preciso saber qual é — então primeiro leio só a data, travo, e só
+       depois leio a linha inteira. Ler tudo antes da trava daria um valor
+       de `sequencia` velho: quem estava reordenando commitaria no meio, e
+       eu compararia o número novo com o antigo. */
+    const resultado = await emTransacao(async (cli) => {
+      const { rows: qualDia } = await cli.query(
+        'SELECT data_prog FROM programacao_montagem WHERE montagem_id = $1', [id]
+      );
+      if (!qualDia[0]) return { naoAchou: true };
+      await travarSequenciasDoDia(cli, qualDia[0].data_prog);
+      const { rows: atual } = await cli.query(
+        'SELECT * FROM programacao_montagem WHERE montagem_id = $1', [id]
+      );
+      if (!atual[0]) return { naoAchou: true };
+      /* Depois de efetivada a linha é histórico. Quem quiser mudar mexe na
+         CARGA, que tem log de revisões — não aqui, onde a alteração passaria
+         sem registro e as duas verdades divergiriam em silêncio. */
+      if (atual[0].efetivada_em) return { jaEfetivada: true };
 
-    const placa = req.body?.placa !== undefined ? normalizarPlaca(req.body.placa) : atual[0].placa;
-    if (placa && placa !== atual[0].placa) {
-      /* Trava de frota, a mesma da Programação: placa desconhecida não
-         gera movimento nenhum, e a mensagem ensina onde resolver. */
-      const { rows: f } = await consultar('SELECT placa FROM dim_veiculos WHERE placa = $1', [placa]);
-      if (!f[0]) {
-        return res.status(400).json({
-          erro: `Placa ${placa} não está cadastrada na Frota. Cadastre em Cadastros → Frota antes de vincular.`,
-          codigo: 'PLACA_SEM_CADASTRO',
-        });
+      const placa = req.body?.placa !== undefined ? normalizarPlaca(req.body.placa) : atual[0].placa;
+      if (placa && placa !== atual[0].placa) {
+        /* Trava de frota, a mesma da Programação: placa desconhecida não
+           gera movimento nenhum, e a mensagem ensina onde resolver. */
+        const { rows: f } = await cli.query('SELECT placa FROM dim_veiculos WHERE placa = $1', [placa]);
+        if (!f[0]) return { placaSemCadastro: placa };
       }
-    }
 
-    const campo = (nome, col, conv) => (req.body?.[nome] !== undefined ? conv(req.body[nome]) : atual[0][col]);
-    const _dk = await destinoEKm(req.body, atual[0], consultar);
-    const { rows } = await consultar(
+      /* O NÚMERO DA SEQUÊNCIA — o buraco 1, fechado aqui (ver a nota de
+         travarSequenciasDoDia). Gravar o número de outra linha é recusado,
+         e a recusa diz onde o número está e por onde se muda a ordem.
+
+         Reenviar o PRÓPRIO número passa: a tela manda campo a campo, e
+         quem está gravando a placa não está pedindo para mudar a fila.
+
+         LIMPAR CONTINUA PERMITIDO. Campo vazio é "esta linha ainda não tem
+         lugar na fila" — e `null` não colide com ninguém. */
+      const sequencia = req.body?.sequencia !== undefined
+        ? sequenciaInteiraOuNula(req.body.sequencia)
+        : atual[0].sequencia;
+      if (sequencia !== null && sequencia !== atual[0].sequencia) {
+        const dona = (await linhasComNumero(cli, atual[0].data_prog, id))
+          .find((l) => l.sequencia === sequencia);
+        if (dona) return { numeroEmUso: sequencia, dona };
+      }
+
+      const campo = (nome, col, conv) => (req.body?.[nome] !== undefined ? conv(req.body[nome]) : atual[0][col]);
+      const _dk = await destinoEKm(req.body, atual[0], (q, v) => cli.query(q, v));
+      const { rows } = await cli.query(
       `UPDATE programacao_montagem
           SET rota_codigo = $2, sequencia = $3, numero_carga = $4, peso = $5,
               qtd_entregas = $6, qtd_ganchos = $7, paletizada = $8,
@@ -362,7 +481,7 @@ rotasModeloSemana.patch('/montagem/:id', SO_LOGISTICA, async (req, res, next) =>
         RETURNING *`,
       [id,
        campo('rotaCodigo', 'rota_codigo', v => String(v ?? '').trim() || atual[0].rota_codigo),
-       campo('sequencia', 'sequencia', v => (Number.isFinite(Number(v)) ? Number(v) : null)),
+       sequencia,
        campo('numeroCarga', 'numero_carga', v => String(v ?? '').trim()),
        campo('peso', 'peso', v => (Number.isFinite(Number(v)) ? Number(v) : null)),
        campo('qtdEntregas', 'qtd_entregas', v => Math.max(1, Number(v) || 1)),
@@ -384,9 +503,39 @@ rotasModeloSemana.patch('/montagem/:id', SO_LOGISTICA, async (req, res, next) =>
           mostrava a rota nova com o nome da velha. */
        campo('apelidoRota', 'apelido_rota', v => String(v ?? '').trim()),
        _dk.destino, _dk.kmDestino, _dk.kmDesl]
-    );
-    emitir('montagem:alterada', { dia: rows[0].data_prog, por: req.operador.nome });
-    res.json({ montagem: rows[0] });
+      );
+      return { montagem: rows[0] };
+    });
+
+    if (resultado.naoAchou) {
+      return res.status(404).json({ erro: 'Montagem não encontrada.', codigo: 'NAO_ENCONTRADA' });
+    }
+    if (resultado.jaEfetivada) {
+      return res.status(409).json({
+        erro: 'Esta montagem já virou carga. Altere pela Torre de Controle.',
+        codigo: 'JA_EFETIVADA',
+      });
+    }
+    if (resultado.placaSemCadastro) {
+      return res.status(400).json({
+        erro: `Placa ${resultado.placaSemCadastro} não está cadastrada na Frota. `
+          + 'Cadastre em Cadastros → Frota antes de vincular.',
+        codigo: 'PLACA_SEM_CADASTRO',
+      });
+    }
+    if (resultado.numeroEmUso) {
+      /* A RECUSA ENSINA O CAMINHO, não só nega — regra da casa, e aqui ela
+         é o que evita a pessoa ficar tentando o mesmo número. */
+      return res.status(409).json({
+        erro: `O número ${resultado.numeroEmUso} já é de ${nomeDaLinhaNaRecusa(resultado.dona)}. `
+          + 'Para mudar a ordem, digite o número na coluna Seq. da linha que ainda vai '
+          + 'carregar: ela entra na posição e as outras descem uma casa.',
+        codigo: 'SEQUENCIA_EM_USO',
+        sequencia: resultado.numeroEmUso,
+      });
+    }
+    emitir('montagem:alterada', { dia: resultado.montagem.data_prog, por: req.operador.nome });
+    res.json({ montagem: resultado.montagem });
   } catch (e) {
     /* ESTE 409 DEIXOU DE EXISTIR NA PRÁTICA EM 10/09/2026, e continua
        escrito de propósito.
@@ -486,6 +635,10 @@ rotasModeloSemana.post('/montagem/:id/sequenciar', SO_LOGISTICA, async (req, res
         'SELECT data_prog FROM programacao_montagem WHERE montagem_id = $1', [id]
       );
       if (!alvo[0]) return { naoAchou: true };
+      /* A MESMA TRAVA DO DIA que a criação e a edição usam. A cascata lê a
+         fila e grava a fila nova; sem a trava, uma linha criada no meio
+         disso ganha um número que a renumeração não viu. */
+      await travarSequenciasDoDia(cli, alvo[0].data_prog);
 
       /* SÓ AS LINHAS QUE AINDA VÃO CARREGAR ENTRAM NA FILA.
          Linha já efetivada virou carga: o número dela é registro do que
