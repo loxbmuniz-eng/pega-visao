@@ -305,12 +305,34 @@ function registrarTravamento(ms, inicio){
       frota: (DB.frota || []).length,
       nos: document.getElementsByTagName('*').length,
     };
+    /* MEDIDOR V2 (11/09/2026). O registro de hoje mostrou travamentos de
+       21 s e 46 s "fora de desenho", com desenhos de 0,3 s dentro — o
+       código do painel não explica os outros 20 s. Sobraram três suspeitos
+       que só o próprio congelamento pode nomear: memória (o coletor de
+       lixo parando a página), rajada de eventos (30 avisos → 30 desenhos
+       em fila) e aba em segundo plano. Cada um deixa uma marca diferente
+       aqui. */
+    const porAba = {};
+    document.querySelectorAll('.tab-page').forEach(sec => {
+      porAba[(sec.id || '').replace(/^tab-/, '') || '?'] = sec.getElementsByTagName('*').length;
+    });
+    const mem = (performance && performance.memory) ? performance.memory : null;
+    const contexto = {
+      memoriaMB: mem ? Math.round(mem.usedJSHeapSize / 1048576) : null,
+      memoriaLimiteMB: mem ? Math.round(mem.jsHeapSizeLimit / 1048576) : null,
+      eventos30s: (typeof SuincoSharePoint !== 'undefined' && SuincoSharePoint.eventosNosUltimos)
+        ? SuincoSharePoint.eventosNosUltimos(30000) : null,
+      desenhos30s: _ultimosDesenhos.filter(d => d.fim >= inicio - 30000).length,
+      visivel: document.visibilityState,
+      porAba,
+    };
     _travamentos.push({
       em: new Date().toISOString(),
       ms: Math.round(ms),
       aba: (typeof TAB_ATUAL !== 'undefined') ? TAB_ATUAL : '?',
       desenho: _desenhoQueEncostou(inicio, inicio + ms),
       volume,
+      contexto,
       versao: BUILD_ID,
     });
     while(_travamentos.length > TRAVAS_GUARDADAS) _travamentos.shift();
@@ -352,9 +374,16 @@ function mostrarTravamentosUI(){
   const linhas = _travamentos.slice().reverse().map(t => {
     const h = new Date(t.em).toLocaleString('pt-BR');
     const v = t.volume || {};
+    const c = t.contexto || {};
+    const abas = c.porAba ? Object.entries(c.porAba).filter(([,n]) => n > 500)
+      .sort((a,b) => b[1]-a[1]).slice(0,4).map(([k,n]) => `${k} ${n}`).join(', ') : '';
     return `${h} \u00b7 ${(t.ms/1000).toFixed(1)}s \u00b7 aba "${t.aba}" \u00b7 ${t.desenho}\n`
       + `    cargas ${v.cargas} (${v.abertas} em aberto) \u00b7 ${v.movimentacoes} movimenta\u00e7\u00f5es`
-      + ` \u00b7 ${v.montagem} linhas de montagem \u00b7 ${v.nos} elementos na tela`;
+      + ` \u00b7 ${v.montagem} linhas de montagem \u00b7 ${v.nos} elementos na tela`
+      + (t.contexto ? `\n    mem\u00f3ria ${c.memoriaMB ?? '?'} MB de ${c.memoriaLimiteMB ?? '?'}`
+        + ` \u00b7 ${c.eventos30s ?? '?'} eventos e ${c.desenhos30s ?? '?'} desenhos nos 30 s antes`
+        + ` \u00b7 aba ${c.visivel === 'hidden' ? 'em segundo plano' : 'vis\u00edvel'}`
+        + (abas ? ` \u00b7 peso: ${abas}` : '') : '');
   }).join('\n');
   alert('TRAVAMENTOS REGISTRADOS NESTE NAVEGADOR\n'
     + 'vers\u00e3o ' + BUILD_ID + '\n\n' + linhas
@@ -7598,6 +7627,18 @@ function renderHistorico(){
      precisa do resto — qual carga era, qual cliente, que peso, que lacre,
      o que estava escrito na observação — e tinha que ir procurar em outra
      aba, perdendo o filtro que acabou de montar. Agora abre ali mesmo. */
+  /* O DETALHE NASCE VAZIO — construído só quando alguém clica (11/09/2026).
+
+     MEDIDO: com 500 linhas na tela (o teto do desktop), o Histórico sozinho
+     respondia por 47.469 dos 57.196 elementos da página inteira — 83% do
+     peso, e o número que apareceu no registro de travamento do dia. A causa:
+     detalheHistoricoHtml(m) monta ~95 nós POR LINHA — grade de campos,
+     lacres, datas, dois botões — para as 500 linhas de uma vez, mesmo que
+     99% delas nunca sejam abertas.
+
+     `alternarDetalheHistoricoUI` só ALTERNA `hidden`; nunca construiu nada.
+     Agora ela constrói na primeira vez que a linha abre, e o resultado fica
+     guardado no próprio nó — abrir de novo não reconstrói. */
   document.getElementById('hist-tbody').innerHTML = exibidos.map(m=>`
     <tr class="hist-linha" onclick="alternarDetalheHistoricoUI('${escJs(m.id)}')"
         title="Clique para ver tudo o que se sabe sobre este registro.">
@@ -7607,7 +7648,7 @@ function renderHistorico(){
       <td>${esc(m.operador)}</td><td>${esc(m.setor)}</td>
     </tr>
     <tr class="hist-detalhe" id="hist-det-${esc(m.id)}" hidden>
-      <td colspan="6">${detalheHistoricoHtml(m)}</td>
+      <td colspan="6"></td>
     </tr>`).join('');
   document.getElementById('hist-empty').hidden = lista.length>0;
   const contagemEl = document.getElementById('hist-contagem');
@@ -7874,6 +7915,17 @@ function alternarDetalheHistoricoUI(movId){
   const alvo = document.getElementById('hist-det-' + movId);
   const seta = document.getElementById('hist-seta-' + movId);
   if(!alvo) return;
+  /* CONSTRÓI NA PRIMEIRA ABERTURA, uma vez só — ver a nota em renderHistorico.
+     `dataset.construido` é o carimbo: sem ele, fechar e abrir de novo
+     reconstruiria o mesmo HTML à toa. Achar a movimentação é busca linear
+     — cabe, porque só acontece no clique, nunca nas 500 linhas de uma vez. */
+  if(!alvo.dataset.construido){
+    const m = (DB.movimentacoes || []).find(x => x.id === movId);
+    const td = alvo.querySelector('td');
+    if(td) td.innerHTML = m ? detalheHistoricoHtml(m)
+      : '<div class="hist-det-aviso">Este registro não está mais na cópia local — role a página para recarregar.</div>';
+    alvo.dataset.construido = '1';
+  }
   alvo.hidden = !alvo.hidden;
   if(seta) seta.textContent = alvo.hidden ? '▸' : '▾';
 }

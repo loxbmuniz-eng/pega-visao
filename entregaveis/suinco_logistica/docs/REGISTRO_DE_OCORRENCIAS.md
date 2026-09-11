@@ -2054,3 +2054,104 @@ duas saídas que provam ou derrubam a hipótese do servidor (`uptime`, `free`,
 
 **Guarda:** `testes/test_demora_nao_apaga_carga.py`, 4 cenários / 12 pontos —
 5 vermelhos contra o publicado, todos no cenário do incidente.
+
+---
+
+## #49 — Limite que dispara atrasado não é o servidor, é a página (11/09/2026)
+
+Mesmo incidente da RYV8G03 (#48), segunda metade. Provado em teste próprio:
+uma caixa de diálogo do navegador (`confirm`) ou um congelamento param o
+relógio da página inteira. A resposta do servidor que chegou em 0,3s só é
+processada quando a página volta — DEPOIS do temporizador de 20s, que
+dispara junto. `upsert()` já parava de culpar demora como recusa (#48); mas
+o `chamar()` de base ainda tratava esse `AbortError` como "servidor não
+respondeu", e isso valia para TODA chamada — inclusive as de leitura
+(`/api/estado`), que é o que fazia o painel piscar "Modo Offline" e
+"Conectado" com internet e servidor de pé.
+
+**A regra:** o temporizador sabe a que hora devia disparar. Se disparou 2s
+ou mais depois da hora certa, quem travou foi a PÁGINA — e a leitura é
+repetida uma vez, agora, em vez de virar offline. Se disparou na hora certa
+(sem atraso), o servidor demorou de verdade, e vale o comportamento de
+sempre. Gravação não repete às cegas (mudar status duas vezes não é
+idempotente) — sai etiquetada como `motivo: 'pagina-bloqueada'`.
+
+**Guarda:** `testes/test_limite_atrasado_nao_e_offline.py` — dois cenários,
+o atrasado (repete, fica online) e o normal (não repete, fica offline).
+
+## #50 — O medidor de travamento passa a nomear o suspeito (11/09/2026)
+
+Depois de #48/#49, ainda falta responder à pergunta do dono: *"me explica o
+que realmente pode ser o fato isolado que tá causando esse travamento"*. O
+registro v1 (ocorrência #41) media duração, aba, volume de dados e o
+desenho que encostou — e isso não bastava: os travamentos de 21s/46s do
+Alysson tinham desenho de só 0,25s dentro. Sobraram três suspeitos que só o
+PRÓXIMO congelamento pode nomear:
+
+1. coletor de lixo do navegador parando a página (mais provável — a máquina
+   mais fraca teve 46s contra 6s da mais forte, com o MESMO código);
+2. rajada de eventos de socket (30 avisos → 30 sincronias em fila);
+3. aba em segundo plano.
+
+**O que o registro passou a guardar:** memória usada e limite
+(`performance.memory`, quando o navegador expõe), quantos eventos de socket
+chegaram nos 30s antes (`eventosNosUltimos` no adaptador — um carimbo por
+evento, janela de 60s, nunca cresce), quantos desenhos aconteceram nos 30s
+antes, se a aba estava visível ou em segundo plano, e o peso (elementos) de
+CADA aba guardada na memória — não só a ativa, porque o painel mantém todas
+as abas desenhadas ao trocar (achado do dia: 57 mil elementos na tela).
+
+**Guarda:** `testes/test_medidor_v2_contexto.py` — confirma as chaves novas
+no registro, que `eventosNosUltimos` existe no adaptador sem quebrar nada
+sem socket real, e que o texto do diálogo (o que se manda por print) inclui
+o contexto. `test_medidor_de_travamento.py` (v1) segue verde — nada do que
+já existia mudou de forma.
+
+**Ainda em aberto:** qual dos três é. Só o próximo travamento registrado
+nomeia — e a resposta chega sozinha, sem precisar reproduzir nada.
+
+---
+
+## #51 — O Histórico emagreceu: o detalhe nasce vazio, não mais pré-construído (11/09/2026)
+
+Resposta à pergunta do dono, direto: *"me explica o que realmente pode ser
+o fato isolado"*. Medido com o volume exato do relato (500 cargas, 2.813
+movimentações, 30 linhas de montagem), o peso da página inteira ficou assim
+por aba:
+
+```
+historico       47.469   <- 83% do total
+cadastros        3.717
+torre            1.629
+(demais 8 abas)  ~4.400
+TOTAL           57.196   (bate com o "57001 elementos na tela" do registro)
+```
+
+**A causa:** `detalheHistoricoHtml(m)` — a grade de campos, lacres, datas e
+dois botões que aparece ao abrir uma linha — era construída para as 500
+linhas do teto de desktop DE UMA VEZ, escondida (`hidden`), mesmo que quase
+nenhuma seja aberta. ~95 nós por linha × 500 = a conta bate.
+`alternarDetalheHistoricoUI` só alternava `hidden`; nunca construiu nada —
+o trabalho já tinha sido feito, à toa, no redesenho.
+
+**Correção:** o `<td>` do detalhe nasce vazio. `alternarDetalheHistoricoUI`
+constrói na primeira abertura (a mesma `detalheHistoricoHtml`, o mesmo
+conteúdo) e marca `dataset.construido` — fechar e abrir de novo reaproveita
+o nó, não reconstrói. Nada muda para quem usa a tela.
+
+**Medido, no teste:** 300 linhas fechadas = 6.050 elementos; as mesmas 300
+todas abertas = 30.890 — a diferença (24.840) é o que a tela deixa de
+carregar à toa quando ninguém abre a maioria das linhas, que é o caso
+normal de uso.
+
+**O que isto NÃO resolve sozinho:** não é a causa provada do travamento de
+21–46s (essa segue em aberto — ver #50, o medidor que vai nomear o
+suspeito no próximo registro). É garantidamente menos trabalho para o
+coletor de lixo fazer, e o Histórico deixa de ser 83% do peso da página.
+
+**Guarda:** `testes/test_historico_detalhe_preguicoso.py`, 5 blocos —
+nasce vazio, primeiro clique constrói com o conteúdo de sempre, fechar/abrir
+não reconstrói, o peso cai de forma mensurável, carga sumida continua
+avisando. Sete suítes correlatas (Histórico, cartão mobile, datas, lacres,
+esteira de devolução) seguem verdes — nenhuma dependia do detalhe vir
+pré-construído.

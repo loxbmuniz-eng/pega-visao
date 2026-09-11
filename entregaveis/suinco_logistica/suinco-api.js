@@ -43,7 +43,23 @@ const SuincoSharePoint = (function () {
 
     // Deixe false para o painel abrir em modo local, sem tentar a rede.
     ativo: true,
+
+    // Quanto tempo esperar por uma resposta antes de desistir. Configurável
+    // para os testes encurtarem; em produção fica nos 20 s de sempre.
+    timeoutMs: 20000,
   };
+
+  /* LIMITE QUE DISPAROU ATRASADO NÃO É O SERVIDOR — É A PÁGINA (11/09/2026).
+
+     O temporizador sabe a que hora devia disparar. Se dispara 2 s ou mais
+     depois, a página esteve parada nesse meio-tempo — caixa de diálogo do
+     navegador (confirm/alert), congelamento, aba em segundo plano — e a
+     resposta do servidor pode muito bem ter chegado no prazo e ficado na
+     fila atrás do temporizador. Medido na prova do incidente da RYV8G03:
+     resposta chegada em 0,3 s processada aos 2,5 s, depois do "estourou".
+     Tratar isso como "servidor não respondeu" era o que fazia o painel
+     alternar Modo Offline e Conectado com tudo de pé. */
+  const ATRASO_QUE_DENUNCIA_A_PAGINA_MS = 2000;
 
   const CHAVE_TOKEN = 'suinco_token';
   const CHAVE_FILA = 'suinco_fila_api';
@@ -279,7 +295,9 @@ const SuincoSharePoint = (function () {
 
   async function chamar(caminho, opcoes = {}) {
     const t = lerToken();
-    const tempo = sinalDeTimeout(opcoes.timeoutMs || 20000);
+    const limiteMs = opcoes.timeoutMs || SP_CONFIG.timeoutMs || 20000;
+    const tempo = sinalDeTimeout(limiteMs);
+    const armadoEm = Date.now();
     let resposta;
     try {
       resposta = await fetch(SP_CONFIG.api + caminho, {
@@ -298,6 +316,21 @@ const SuincoSharePoint = (function () {
          estouro de tempo tem nome próprio (AbortError), o resto é falha de
          transporte (DNS, TLS, CORS, rede do celular). */
       const abortou = e && (e.name === 'AbortError' || e.name === 'TimeoutError');
+      if (abortou) {
+        /* Ver ATRASO_QUE_DENUNCIA_A_PAGINA_MS. Leitura repete uma vez, agora;
+           gravação não repete às cegas (mudança de status duas vezes não é
+           idempotente) — sai etiquetada, e a criação de carga já pergunta ao
+           servidor antes de apagar (upsert). */
+        const atraso = Date.now() - armadoEm - limiteMs;
+        const eLeitura = (opcoes.metodo || 'GET').toUpperCase() === 'GET';
+        if (atraso >= ATRASO_QUE_DENUNCIA_A_PAGINA_MS && !opcoes._repetida) {
+          if (eLeitura) return chamar(caminho, { ...opcoes, _repetida: true });
+          const err = new Error('A página ficou parada enquanto esperava o servidor; a resposta pode ter chegado.');
+          err.motivo = 'pagina-bloqueada';
+          err.causaOriginal = e;
+          throw err;
+        }
+      }
       const err = new Error(abortou
         ? 'O servidor não respondeu no tempo limite.'
         : 'Não foi possível alcançar o servidor.');
@@ -1299,6 +1332,17 @@ const SuincoSharePoint = (function () {
   const BACKOFF_MAXIMO_MS = 60000;
   let backoffAtualMs = BACKOFF_INICIAL_MS;
 
+  const _eventosRecebidos = [];
+  function marcarEventoRecebido() {
+    const agora = Date.now();
+    _eventosRecebidos.push(agora);
+    while (_eventosRecebidos.length && agora - _eventosRecebidos[0] > 60000) _eventosRecebidos.shift();
+  }
+  function eventosNosUltimos(ms) {
+    const corte = Date.now() - ms;
+    return _eventosRecebidos.filter((t) => t >= corte).length;
+  }
+
   async function sincronizarAgora() {
     if (Date.now() < bloqueadoAte) return;
     if (sincronizando) { reexecutarAoTerminar = true; return; }
@@ -1438,7 +1482,11 @@ const SuincoSharePoint = (function () {
       console.info('[Suinco] tempo real caiu — seguindo por consulta periódica.');
     });
 
-    const aplicar = () => sincronizarAgora();
+    /* Contagem dos eventos recebidos — o medidor de travamento lê isto
+       para dizer se o congelamento veio numa RAJADA (30 avisos em 10 s
+       viram 30 sincronias e 30 desenhos em fila). Só um carimbo por evento,
+       janela curta, nunca cresce. */
+    const aplicar = () => { marcarEventoRecebido(); sincronizarAgora(); };
     socket.on('carga:criada', aplicar);
     socket.on('carga:atualizada', aplicar);
     socket.on('movimentacao:nova', aplicar);
@@ -1999,6 +2047,7 @@ const SuincoSharePoint = (function () {
   return {
     SP_CONFIG,
     iniciar, estaConfigurado, enderecoDaApi, estado, conta, aoMudarEstado, aoReceberDados,
+    eventosNosUltimos,
     aoDescartarDaFila, aoEditarCarga, aoExcluirCarga, aoAtualizarPresenca,
     aoFecharPrograma,
     login, sair, diagnosticarConexao,
