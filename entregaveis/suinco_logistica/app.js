@@ -6766,11 +6766,20 @@ function exportarTabelaFreteCsv(){
    sempre que a tabela chega do servidor — mesmo padrão de
    preencherSelectsRota(), pelo mesmo motivo (painel de pátio fica aberto o
    dia inteiro e não pode ficar com a lista de ontem). */
+/* A TABELA DE DESTINOS, NA ORDEM EM QUE A TELA MOSTRA. Uma função, dois
+   chamadores (11/09/2026): o datalist da Programação e a célula da Montagem
+   leem a mesma lista pela mesma ordenação. A Montagem tinha a própria
+   leitura, e ela tratava os objetos {destino, km} como texto — a lista saía
+   como "[object Object]" (ver test_lista_de_destino_na_montagem.py). */
+function destinosFreteOrdenados(){
+  const lista = (typeof DESTINOS_FRETE !== 'undefined' ? DESTINOS_FRETE : []);
+  return lista.slice()
+    .sort((a,b)=> String(a.destino).localeCompare(String(b.destino), 'pt-BR'));
+}
 function preencherSelectsDestinoFrete(){
   const dl = document.getElementById('lista-destinos-frete');
   if(!dl) return;
-  dl.innerHTML = DESTINOS_FRETE.slice()
-    .sort((a,b)=> String(a.destino).localeCompare(String(b.destino), 'pt-BR'))
+  dl.innerHTML = destinosFreteOrdenados()
     .map(d=>`<option value="${esc(d.destino)}">${Number(d.km).toLocaleString('pt-BR')} km</option>`).join('');
 }
 
@@ -10806,7 +10815,9 @@ function formCargaHtml(c, m){
    divergir do número que o frete usou. */
 function freteDestinoMontagemHtml(m, id){
   const atual = m.frete_destino || '';
-  const lista = (typeof DESTINOS_FRETE !== 'undefined' ? DESTINOS_FRETE : []);
+  /* NOMES, não objetos. DESTINOS_FRETE guarda {destino, km}; a célula lista
+     o nome e o KM fica com o servidor, que o resolve pelo cadastro. */
+  const lista = destinosFreteOrdenados().map(d => String(d.destino));
   /* Destino que saiu do cadastro (desativado, renomeado) continua na linha
      que já o tinha: sumir da lista apagaria em silêncio o destino de uma
      carga montada ontem. */

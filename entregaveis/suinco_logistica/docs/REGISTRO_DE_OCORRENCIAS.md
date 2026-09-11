@@ -1884,3 +1884,61 @@ pontos — inclusive que o caminho legítimo (`/sequenciar`) não foi fechado
 junto, que apagar o número continua apagando, que reenviar o PRÓPRIO número
 junto com outro campo não é conflito, e as seis criações simultâneas. Reprovou
 em 21 dos 24 contra o publicado antes da correção.
+
+**Adendo, mesmo dia, achado pela revisão de código — a trava tinha um furo, e
+era meu.** A criação trancava a chave `'2026-09-11'`; a edição e a cascata
+liam `data_prog` do banco, que o driver devolve como `Date`, e `String(Date)` é
+`Fri Sep 11 2026 00:00:00 GMT…`. Medido: `hashtext` das duas dá **-1453919943**
+e **-435495344** — chaves diferentes, travas que **não se excluíam**. Meu
+teste de concorrência só disparou criação contra criação (mesma chave) e
+passou. Correção: `chaveDoDia()` formata sempre em ISO, e as consultas pedem
+`data_prog::text`. Guarda: bloco 6 do mesmo teste segura a trava com a chave
+ISO e prova que edição e cascata **esperam** (antes: respondiam 200 na hora).
+
+---
+
+## #44 — A lista de Destino da Montagem mostrava "[object Object]" (11/09/2026)
+
+Achado pela revisão de código dos commits de 09–11/09, reproduzido no
+navegador antes de mexer: `['—', 'MARÍLIA', '[object Object]', '[object Object]']`.
+
+`DESTINOS_FRETE` guarda **objetos** `{destino, km}` — é assim que
+`receberTabelaDeFrete()` a preenche e que a Programação (datalist) e o cálculo
+de KM a leem. A célula da Montagem tratava a lista como **texto**:
+`lista.includes(atual)` nunca achava o destino atual e `esc(d)` de um objeto
+imprime "[object Object]". Quem monta não escolhia destino pela lista; se
+escolhesse, gravava "[object Object]" no servidor, o KM ficava nulo e a carga
+nascia sem frete. É provavelmente o *"quando adiciona a linha ela não aparece
+o destino"* de 10/09 — corrigido "pela metade": as colunas entraram, a lista
+não funcionava.
+
+**Por que nenhum teste pegou:** `test_destino_frete_na_montagem.py` prova a
+rota (POST/PATCH gravam destino e KM) e nunca abre a célula. É a família do
+#42 e do "verde falso" da regra 7: a asserção media a camada errada.
+
+**Correção:** `destinosFreteOrdenados()` — uma função, dois chamadores: o
+datalist da Programação e a célula da Montagem leem a mesma lista pela mesma
+ordenação; a célula mapeia para nomes. **Guarda:**
+`testes/test_lista_de_destino_na_montagem.py`, 9 pontos — nomes ordenados,
+atual marcado, ordem igual ao datalist, o `change` manda o NOME, destino que
+saiu do cadastro continua na linha. Reprovou em 4 contra o publicado.
+
+---
+
+## #45 — O único botão que a Qualidade vê respondia 403 (11/09/2026)
+
+Achado pela revisão. O setor Qualidade nasceu em 09/09 com a decisão do dono
+*"qualidade so acompanha e exporta relatorio"*: a aba Relatórios mostra a ela
+só o card do checklist. Mas `DONOS_DO_DOCUMENTO` (documentos.js) não recebeu
+a Qualidade em `devolucoes-do-dia` nem em `devolucao-operador` — e é o
+servidor quem decide. Ela clicava, e voltava *"O setor Qualidade não gera este
+documento"*.
+
+**Por que nenhum teste pegou:** `test_setor_qualidade.py` provava que o card
+**aparece**; ninguém pedia o PDF em nome dela. Botão visível que sempre dá
+erro ensina o operador a ignorar mensagem — o próprio comentário de
+documentos.js diz isso.
+
+**Correção:** a Qualidade entra nos dois documentos do checklist, e só neles.
+**Guarda:** bloco 7 do mesmo teste — `podeGerar('Qualidade', …)` verdadeiro
+para os dois do checklist, falso para pátio e frete.

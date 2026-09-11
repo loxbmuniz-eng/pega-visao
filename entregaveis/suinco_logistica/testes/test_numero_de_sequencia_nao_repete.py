@@ -234,6 +234,51 @@ def main():
     ck('e o banco confirma: nenhum número repetido no dia',
        len(ns) == len(set(ns)), str(sorted(ns)))
 
+    print('\n=== 6. A TRAVA É A MESMA NOS TRÊS CAMINHOS (criar, editar, cascata) ===')
+    print('    (achado da revisão de 11/09: o POST trancava a data como texto ISO e o')
+    print('     PATCH e a cascata trancavam a mesma data no formato que o banco devolve —')
+    print('     duas chaves diferentes não se excluem, e a trava não travava nada)')
+    psql(f"DELETE FROM programacao_montagem WHERE data_prog = '{DIA}';")
+    ids = []
+    for i in (1, 2):
+        st, m = criar(token, rota, sequencia=i)
+        ids.append(m.get('montagem_id'))
+    # Alguém segura a trava do dia com a chave que o POST usa (a data em texto ISO).
+    dono_da_trava = subprocess.Popen(['su', 'postgres', '-c', 'psql -q -d embarque_suinco'],
+                                     stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                     stderr=subprocess.PIPE, text=True)
+    dono_da_trava.stdin.write(
+        "BEGIN; SELECT pg_advisory_xact_lock(hashtext('montagem_sequencia'), "
+        f"hashtext('{DIA}'));\n")
+    dono_da_trava.stdin.flush()
+    import time; time.sleep(0.8)
+
+    def bloqueou(caminho, metodo, corpo):
+        req = urllib.request.Request(f'{API}{caminho}', method=metodo,
+                                     data=json.dumps(corpo).encode())
+        req.add_header('Authorization', f'Bearer {token}')
+        req.add_header('Content-Type', 'application/json')
+        try:
+            with urllib.request.urlopen(req, timeout=3) as r:
+                return False, r.status
+        except urllib.error.URLError as e:
+            return 'timed out' in str(e.reason).lower() or isinstance(e.reason, TimeoutError), str(e.reason)[:40]
+        except TimeoutError:
+            return True, 'timeout'
+
+    b1, d1 = bloqueou(f'/api/montagem/{ids[0]}', 'PATCH', {'sequencia': 5})
+    ck('editar a sequência ESPERA quem segura a trava do dia', b1, f'{d1}')
+    b2, d2 = bloqueou(f'/api/montagem/{ids[1]}/sequenciar', 'POST', {'posicao': 2})
+    ck('a cascata também espera', b2, f'{d2}')
+
+    dono_da_trava.stdin.write('COMMIT;\n'); dono_da_trava.stdin.flush()
+    dono_da_trava.stdin.close(); dono_da_trava.wait(timeout=10)
+    time.sleep(1.0)     # as duas requisições presas terminam agora
+    st, _ = http(f'/api/montagem/{ids[0]}', token=token, metodo='PATCH', corpo={'peso': 900})
+    ck('solta a trava, o servidor volta a responder na hora', st == 200, f'HTTP {st}')
+    ns = numeros(dia_do_servidor(token))
+    ck('e o dia segue sem número repetido', len(ns) == len(set(ns)), str(sorted(ns)))
+
     psql(f"DELETE FROM programacao_montagem WHERE data_prog = '{DIA}';")
     psql(f"DELETE FROM operadores WHERE email = '{EMAIL}';")
     print('\n=== RESULTADO ===')

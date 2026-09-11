@@ -41,8 +41,14 @@ export const DONOS_DO_DOCUMENTO = {
      a imagem no celular) de quem montou a fila. Quem monta a fila é a
      Logística. */
   'programacao-manobrista': ['Logística'],
-  'devolucoes-do-dia': ['Logística', 'Controles Internos', 'Central de Notas'],
-  'devolucao-operador': ['Logística', 'Controles Internos', 'Central de Notas'],
+  /* A QUALIDADE ENTRA NOS DOIS DO CHECKLIST (11/09/2026). Decisão do dono
+     em 09/09: "qualidade so acompanha e exporta relatorio". O setor foi
+     criado, a aba Relatórios mostra a ela só o card do checklist — e esta
+     tabela ficou sem ela. Resultado: o único botão que a Qualidade vê
+     respondia 403 "seu setor não gera este documento". Achado pela revisão
+     de código; nenhum teste chegava a pedir o PDF em nome dela. */
+  'devolucoes-do-dia': ['Logística', 'Controles Internos', 'Central de Notas', 'Qualidade'],
+  'devolucao-operador': ['Logística', 'Controles Internos', 'Central de Notas', 'Qualidade'],
   'comprovante-portaria': ['Portaria', 'Logística'],
   'exportacao-csv': [],
 };
