@@ -2250,3 +2250,39 @@ linha incerta ficando visível um pouco mais é sempre menor que o de uma carga
 real desaparecer calada. Toda vez que a dúvida for "remover ou manter", a
 resposta é manter — a sincronia converge para a verdade sozinha; a remoção
 não tem volta.
+
+---
+
+## #54 — A correção da #53 podia virar rajada infinita numa carga antiga (11/09/2026)
+
+Minutos depois de publicada a #53, relato do dono: *"118684 sistema offline"*.
+118684 é o número da carga do **incidente original desta manhã** — uma carga
+que ficou presa como `_nuncaConfirmada` no navegador dele desde ANTES de
+qualquer correção de hoje existir.
+
+**A CAUSA:** a #53 fez a sincronia tentar de novo enquanto uma carga não
+confirmar (certo, é o que fecha a #53). Mas sem limite de frequência:
+`fundirEstadoRemoto` chama `save()` toda vez que chega qualquer dado novo do
+servidor — o que num pátio ativo é o tempo todo. Uma carga velha, presa e sem
+jeito de confirmar (o servidor genuinamente não tem mais aquele carga_id, ou
+o motivo pelo qual ela nunca confirmou continua valendo), virou dezenas de
+tentativas por minuto — mais carga num servidor que já estava sendo apontado
+como lento, e um aviso repetindo sem parar para o dono.
+
+**A CORREÇÃO:** recuo entre tentativas para cada carga, crescendo a cada
+falha (5s, 10s, 20s... até 60s — a mesma régua do backoff da fila offline em
+suinco-api.js). E o AVISO parou de repetir a cada tentativa: notifica na
+primeira vez, depois só a cada 6ª (de longe em longe, uma vez o recuo no
+teto), com o texto mudando de tom depois de muitas tentativas — de "vou
+tentar de novo" para "confira à mão". A carga nunca some sozinha por isto;
+só a frequência do aviso e da tentativa mudam.
+
+**Teste que trava:** `testes/test_recuo_carga_incerta.py` — simula a própria
+carga "118684": recuo segura a próxima tentativa, cresce a cada nova falha,
+o aviso não repete até a 6ª tentativa (e muda de tom quando repete), e
+confirmando de verdade os contadores somem.
+
+**A lição, novamente:** cada correção de hoje revelou o próximo degrau do
+mesmo poço. A #48 corrigiu apagar sem confirmar; a #53 corrigiu remover por
+incerteza; a #54 corrige a retentativa virar rajada. As três eram
+necessárias — nenhuma sozinha bastava.

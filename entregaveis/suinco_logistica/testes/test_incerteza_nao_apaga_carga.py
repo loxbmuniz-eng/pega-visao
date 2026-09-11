@@ -113,6 +113,14 @@ async def main():
           // que chega QUALQUER dado novo do servidor — o que acontece o tempo
           // todo num pátio ativo (outro operador mexendo em algo, o pull de
           // 15s). Simula exatamente esse gatilho, não uma chamada direta.
+          //
+          // O RECUO ENTRE TENTATIVAS (11/09/2026, achado no mesmo dia — a
+          // carga "118684" virando aviso repetindo sem parar) segura a
+          // PRIMEIRA retentativa por alguns segundos de propósito. Adiantar
+          // o relógio da carga é a forma correta de testar "depois que o
+          // recuo passar", sem esperar de verdade.
+          const alvo = DB.cargas[0];
+          if(alvo) alvo._proximaTentativaEm = Date.now() - 1;
           SuincoStore.save();
           await new Promise(r => setTimeout(r, 400));
           const c = DB.cargas[0];
