@@ -258,7 +258,8 @@ async function reconciliarPatioNaTrocaDePlaca({ id, placaNova, placaAntiga, stat
     if (!sobrou.rows[0]) {
       const ev = await consultar(
         `SELECT MIN(data_evento) AS entrada FROM fact_statusfrota
-          WHERE carga_id = $1 AND status_novo = 'Aguardando Embarque'`,
+          WHERE carga_id = $1 AND status_novo = 'Aguardando Embarque'
+            AND apagada_em IS NULL`,
         [id]
       );
       const entrada = ev.rows[0] && ev.rows[0].entrada ? ev.rows[0].entrada : new Date();
@@ -2137,6 +2138,49 @@ rotasCargas.post('/cargas/encerrar-anteriores', exigirLogin, exigirSetor('Logís
    19/08/2026 e não tinha onde ser clicado. Esta rota existe para essa tela,
    e por isso é enxuta: as últimas exclusões, com o essencial para
    reconhecer a carga. */
+/* APAGAR DA VISTA OS LANÇAMENTOS DE UMA PLACA (migração 051, 11/09/2026).
+   ---------------------------------------------------------------------
+   PEDIDO DO DONO, EM EMERGÊNCIA: a RYV8G03 multiplicou (ocorrência #48 — a
+   demora do servidor sendo lida como recusa) e o Histórico ficou com
+   lançamentos repetidos da mesma placa. "EXCLUA TODOS OS LANÇAMENTOS PRA
+   ESSA PLACA AGORA (...) eu preciso conseguir apagar do histórico e essa
+   autorização é somente para o meu token".
+
+   NÃO É DELETE. fact_statusfrota é append-only desde a 001 — é a base de
+   todo indicador de tempo e do Power BI, e apagar de verdade destruiria a
+   prova de que o defeito aconteceu (a mesma prova que fecha a ocorrência
+   #48). A linha fica; marca-se apagada_em/apagada_por/apagada_motivo, e
+   toda leitura (estado, histórico, entrada no pátio) passa a ignorá-la.
+   Só a Administração — exigirSetor() sem argumento libera só ela. */
+rotasCargas.post('/movimentacoes/apagar', exigirLogin, exigirSetor(), async (req, res, next) => {
+  try {
+    const placa = String(req.body?.placa ?? '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const motivo = String(req.body?.motivo ?? '').trim().slice(0, 500);
+    if (!placa) return res.status(400).json({ erro: 'Informe a placa.', codigo: 'PLACA_FALTANDO' });
+    if (!motivo) {
+      return res.status(400).json({
+        erro: 'Diga o motivo — apagar da vista precisa ficar explicado.',
+        codigo: 'MOTIVO_OBRIGATORIO',
+      });
+    }
+    const op = req.operador;
+    const { rows } = await consultar(
+      `UPDATE fact_statusfrota
+          SET apagada_em = now(), apagada_por = $2, apagada_motivo = $3
+        WHERE placa = $1 AND apagada_em IS NULL
+        RETURNING movimentacao_id`,
+      [placa, `${op.nome} (${op.setor})`, motivo]
+    );
+    if (rows.length) {
+      await gravarNota({ query: consultar }, {
+        cargaId: null, placa, operador: op,
+        acao: `${rows.length} lançamento(s) do Histórico apagado(s) da vista — motivo: ${motivo}`,
+      });
+    }
+    res.json({ ok: true, placa, apagadas: rows.length, ids: rows.map((r) => r.movimentacao_id) });
+  } catch (e) { next(e); }
+});
+
 rotasCargas.get('/cargas-excluidas', exigirLogin, exigirSetor(), async (req, res, next) => {
   try {
     const placa = String(req.query.placa || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10);
@@ -2221,7 +2265,7 @@ rotasCargas.get('/historico', exigirLogin, recusarFilial, async (req, res, next)
           AND status_atual = 'Seguiu Viagem'
           AND carga_id IN (
             SELECT DISTINCT carga_id FROM fact_statusfrota
-             WHERE status_novo = 'Seguiu Viagem'
+             WHERE status_novo = 'Seguiu Viagem' AND apagada_em IS NULL
                AND (data_evento AT TIME ZONE $1)::date BETWEEN $2::date AND $3::date)
         ORDER BY criado_em`,
       [FUSO, de, ate]
@@ -2233,7 +2277,7 @@ rotasCargas.get('/historico', exigirLogin, recusarFilial, async (req, res, next)
         `SELECT movimentacao_id, carga_id, placa, status_anterior, status_novo,
                 setor, data_evento, operador_nome
            FROM fact_statusfrota
-          WHERE carga_id = ANY($1)
+          WHERE carga_id = ANY($1) AND apagada_em IS NULL
           ORDER BY data_evento
           LIMIT 20000`,
         [ids]
