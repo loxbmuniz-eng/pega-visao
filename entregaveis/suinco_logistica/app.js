@@ -240,6 +240,132 @@ function abrirLoginDeNovo(){
   if(email) email.focus();
 }
 
+/* ===================================================================
+   O MEDIDOR DE TRAVAMENTO (10/09/2026)
+   -------------------------------------------------------------------
+   Relato do dono, com print: "Page Unresponsive", e depois "travou no meu
+   também" — duas máquinas diferentes.
+
+   MEDI AQUI COM O VOLUME REAL DELE E NÃO REPRODUZI. Com os números da
+   própria tela dele (18 cargas em aberto, 5 de programação anterior), a
+   Torre desenha em menos de 1 s; com 80 linhas de montagem, 80 rotas e
+   todos os selects, a Montagem desenha em 439 ms. Descartei vazamento de
+   escuta (as 12 são delegadas e criadas uma vez), lista de sugestão por
+   linha (são únicas), redesenho ao arrastar (o dragover só marca o
+   destino) e redesenho a cada tique (só acontece se algo mudou).
+
+   Nada disso explica dez segundos de aba congelada. E corrigir sem
+   enxergar é chute — chute em produção é o que esta casa não faz.
+
+   Então o painel passa a registrar SOZINHO: toda tarefa que segura a tela
+   por mais de meio segundo fica gravada com hora, duração, aba aberta,
+   o volume do momento e qual desenho estava em curso. Só leitura: não muda
+   nenhuma decisão, nenhum dado, nenhuma tela — acrescenta um aviso no
+   rodapé que só aparece quando há travamento registrado.
+
+   O registro é POR NAVEGADOR e fica no armazenamento local, separado do
+   cofre de dados: apagar os travamentos nunca pode encostar em carga. */
+const TRAVAS_CHAVE = 'suinco_travamentos';
+const TRAVA_MINIMA_MS = 500;
+const TRAVAS_GUARDADAS = 25;
+let _travamentos = [];
+let _ultimosDesenhos = [];
+
+function _lerTravamentos(){
+  try {
+    const bruto = localStorage.getItem(TRAVAS_CHAVE);
+    const lista = bruto ? JSON.parse(bruto) : [];
+    return Array.isArray(lista) ? lista : [];
+  } catch(e){ return []; }
+}
+
+/* Guarda quanto durou cada desenho e quando ele foi, para o travamento
+   poder dizer "foi a Torre desenhando" em vez de só "foi 8 segundos". */
+function _marcarDesenho(nome, fn){
+  const inicio = performance.now();
+  try { return fn(); }
+  finally {
+    _ultimosDesenhos.push({ nome, inicio, fim: performance.now() });
+    if(_ultimosDesenhos.length > 6) _ultimosDesenhos.shift();
+  }
+}
+
+function _desenhoQueEncostou(inicio, fim){
+  const d = _ultimosDesenhos.find(x => x.fim >= inicio && x.inicio <= fim);
+  return d ? `${d.nome} (${Math.round(d.fim - d.inicio)} ms)` : 'fora de desenho';
+}
+
+function registrarTravamento(ms, inicio){
+  try {
+    const volume = {
+      cargas: (DB.cargas || []).length,
+      abertas: (typeof cargasAbertas === 'function') ? cargasAbertas().length : null,
+      movimentacoes: (DB.movimentacoes || []).length,
+      montagem: (_montagemDia && _montagemDia.montagens) ? _montagemDia.montagens.length : 0,
+      frota: (DB.frota || []).length,
+      nos: document.getElementsByTagName('*').length,
+    };
+    _travamentos.push({
+      em: new Date().toISOString(),
+      ms: Math.round(ms),
+      aba: (typeof TAB_ATUAL !== 'undefined') ? TAB_ATUAL : '?',
+      desenho: _desenhoQueEncostou(inicio, inicio + ms),
+      volume,
+      versao: BUILD_ID,
+    });
+    while(_travamentos.length > TRAVAS_GUARDADAS) _travamentos.shift();
+    localStorage.setItem(TRAVAS_CHAVE, JSON.stringify(_travamentos));
+    if(typeof atualizarRodapeConexao === 'function'){
+      const est = (typeof SuincoSharePoint !== 'undefined') ? SuincoSharePoint.estado() : 'local';
+      atualizarRodapeConexao(est);
+    }
+  } catch(e){ /* medir nunca pode quebrar a tela que ele mede */ }
+}
+
+function ligarMedidorDeTravamento(){
+  _travamentos = _lerTravamentos();
+  try {
+    if(typeof PerformanceObserver !== 'function') return;
+    const tipos = (PerformanceObserver.supportedEntryTypes || []);
+    if(tipos.indexOf('longtask') === -1) return;   // navegador sem a medida
+    new PerformanceObserver((lista) => {
+      lista.getEntries().forEach((e) => {
+        if(e.duration >= TRAVA_MINIMA_MS) registrarTravamento(e.duration, e.startTime);
+      });
+    }).observe({ entryTypes: ['longtask'] });
+  } catch(e){ /* idem */ }
+}
+
+function _resumoTravamentosHtml(){
+  if(!_travamentos.length) return '';
+  const pior = Math.max(..._travamentos.map(t => t.ms));
+  return ` · <button type="button" class="rodape-travas" onclick="mostrarTravamentosUI()"`
+    + ` title="A tela congelou. Clique para ver o registro e mandar para quem cuida do painel.">`
+    + `\u23F1 ${_travamentos.length} travamento(s), pior ${(pior/1000).toFixed(1)}s</button>`;
+}
+
+/* Mostra em diálogo do navegador de propósito: é texto selecionável, não
+   depende de CSS nem de aba nenhuma, e a pessoa consegue fotografar ou
+   copiar direto para mandar. */
+function mostrarTravamentosUI(){
+  if(!_travamentos.length){ notify('Nenhum travamento registrado neste navegador.', '', 4000); return; }
+  const linhas = _travamentos.slice().reverse().map(t => {
+    const h = new Date(t.em).toLocaleString('pt-BR');
+    const v = t.volume || {};
+    return `${h} \u00b7 ${(t.ms/1000).toFixed(1)}s \u00b7 aba "${t.aba}" \u00b7 ${t.desenho}\n`
+      + `    cargas ${v.cargas} (${v.abertas} em aberto) \u00b7 ${v.movimentacoes} movimenta\u00e7\u00f5es`
+      + ` \u00b7 ${v.montagem} linhas de montagem \u00b7 ${v.nos} elementos na tela`;
+  }).join('\n');
+  alert('TRAVAMENTOS REGISTRADOS NESTE NAVEGADOR\n'
+    + 'vers\u00e3o ' + BUILD_ID + '\n\n' + linhas
+    + '\n\nMande esta tela para quem cuida do painel.');
+}
+
+function limparTravamentosUI(){
+  _travamentos = [];
+  try { localStorage.removeItem(TRAVAS_CHAVE); } catch(e){}
+}
+
 function atualizarRodapeConexao(estado, detalhe){
   /* SESSÃO MORTA ABRE O LOGIN. Não é aviso, é a única coisa que resolve.
 
@@ -308,6 +434,11 @@ function atualizarRodapeConexao(estado, detalhe){
     }
     if(badge) marcarBadgeConexao(badge, 'local', '⚙️', 'Modo Local');
   }
+  /* O aviso de travamento vai DEPOIS, uma vez só, nas três situações: ele
+     não descreve a conexão, descreve a máquina — e some sozinho quando não
+     há nada registrado. */
+  const travas = _resumoTravamentosHtml();
+  if(travas) rod.innerHTML += travas;
 }
 
 /* O ENCERRAR E ARQUIVAR CICLO foi removido em 05/08/2026.
@@ -2116,7 +2247,7 @@ function _restaurarDigitacao(e){
 
 function renderAll(){
   const _digitando = _capturarDigitacao();
-  try { _renderAllInterno(); }
+  try { _marcarDesenho('renderAll', _renderAllInterno); }
   finally { _restaurarDigitacao(_digitando); }
 }
 
@@ -9185,6 +9316,9 @@ async function init(){
       .catch(e=>{ console.warn('[Suinco] init:', e); atualizarRodapeConexao('local'); });
   }
   atualizarDatalists();
+  /* O medidor liga cedo: travamento que acontece durante a primeira pintura
+     é justamente o que ninguém consegue descrever depois. */
+  ligarMedidorDeTravamento();
   atualizarResumoFiltroRelatorio();  // resumo do filtro já na 1ª pintura
   // Mudar a data tem que refletir no resumo na hora: filtro cujo efeito só
   // aparece depois de gerar o PDF faz o gestor mandar o relatório errado.
@@ -10292,7 +10426,7 @@ async function carregarMontagemUI(){
    faltava esta função usá-la. Uma função, dois chamadores. */
 function renderMontagem(){
   const _digitando = _capturarDigitacao();
-  try { _renderMontagemInterno(); }
+  try { _marcarDesenho('renderMontagem', _renderMontagemInterno); }
   finally { _restaurarDigitacao(_digitando); }
 }
 

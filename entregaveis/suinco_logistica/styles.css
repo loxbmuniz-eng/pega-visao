@@ -5398,3 +5398,15 @@ tr.fila-alvo > td{ box-shadow:inset 0 3px 0 0 var(--gold) }
      da página em vez de arrasto da linha. */
   .alca-arrastar{ font-size:20px; padding:10px 8px 10px 0 }
 }
+
+/* O AVISO DE TRAVAMENTO NO RODAPÉ (10/09/2026).
+   Só existe na tela quando há travamento registrado. Vermelho de alerta,
+   não dourado: não é informação de acompanhamento, é defeito para alguém
+   olhar. Botão de verdade (não <span> clicável) para o teclado alcançar. */
+.rodape-travas{
+  margin-left:6px; padding:1px 8px; border-radius:999px; cursor:pointer;
+  border:1px solid var(--danger,#e05260); background:rgba(224,82,96,.14);
+  color:inherit; font:inherit; font-size:.95em;
+}
+.rodape-travas:hover{ background:rgba(224,82,96,.26) }
+.rodape-travas:focus-visible{ outline:2px solid var(--gold,#e9b954); outline-offset:2px }
