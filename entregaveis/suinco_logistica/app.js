@@ -305,12 +305,34 @@ function registrarTravamento(ms, inicio){
       frota: (DB.frota || []).length,
       nos: document.getElementsByTagName('*').length,
     };
+    /* MEDIDOR V2 (11/09/2026). O registro de hoje mostrou travamentos de
+       21 s e 46 s "fora de desenho", com desenhos de 0,3 s dentro — o
+       código do painel não explica os outros 20 s. Sobraram três suspeitos
+       que só o próprio congelamento pode nomear: memória (o coletor de
+       lixo parando a página), rajada de eventos (30 avisos → 30 desenhos
+       em fila) e aba em segundo plano. Cada um deixa uma marca diferente
+       aqui. */
+    const porAba = {};
+    document.querySelectorAll('.tab-page').forEach(sec => {
+      porAba[(sec.id || '').replace(/^tab-/, '') || '?'] = sec.getElementsByTagName('*').length;
+    });
+    const mem = (performance && performance.memory) ? performance.memory : null;
+    const contexto = {
+      memoriaMB: mem ? Math.round(mem.usedJSHeapSize / 1048576) : null,
+      memoriaLimiteMB: mem ? Math.round(mem.jsHeapSizeLimit / 1048576) : null,
+      eventos30s: (typeof SuincoSharePoint !== 'undefined' && SuincoSharePoint.eventosNosUltimos)
+        ? SuincoSharePoint.eventosNosUltimos(30000) : null,
+      desenhos30s: _ultimosDesenhos.filter(d => d.fim >= inicio - 30000).length,
+      visivel: document.visibilityState,
+      porAba,
+    };
     _travamentos.push({
       em: new Date().toISOString(),
       ms: Math.round(ms),
       aba: (typeof TAB_ATUAL !== 'undefined') ? TAB_ATUAL : '?',
       desenho: _desenhoQueEncostou(inicio, inicio + ms),
       volume,
+      contexto,
       versao: BUILD_ID,
     });
     while(_travamentos.length > TRAVAS_GUARDADAS) _travamentos.shift();
@@ -352,9 +374,16 @@ function mostrarTravamentosUI(){
   const linhas = _travamentos.slice().reverse().map(t => {
     const h = new Date(t.em).toLocaleString('pt-BR');
     const v = t.volume || {};
+    const c = t.contexto || {};
+    const abas = c.porAba ? Object.entries(c.porAba).filter(([,n]) => n > 500)
+      .sort((a,b) => b[1]-a[1]).slice(0,4).map(([k,n]) => `${k} ${n}`).join(', ') : '';
     return `${h} \u00b7 ${(t.ms/1000).toFixed(1)}s \u00b7 aba "${t.aba}" \u00b7 ${t.desenho}\n`
       + `    cargas ${v.cargas} (${v.abertas} em aberto) \u00b7 ${v.movimentacoes} movimenta\u00e7\u00f5es`
-      + ` \u00b7 ${v.montagem} linhas de montagem \u00b7 ${v.nos} elementos na tela`;
+      + ` \u00b7 ${v.montagem} linhas de montagem \u00b7 ${v.nos} elementos na tela`
+      + (t.contexto ? `\n    mem\u00f3ria ${c.memoriaMB ?? '?'} MB de ${c.memoriaLimiteMB ?? '?'}`
+        + ` \u00b7 ${c.eventos30s ?? '?'} eventos e ${c.desenhos30s ?? '?'} desenhos nos 30 s antes`
+        + ` \u00b7 aba ${c.visivel === 'hidden' ? 'em segundo plano' : 'vis\u00edvel'}`
+        + (abas ? ` \u00b7 peso: ${abas}` : '') : '');
   }).join('\n');
   alert('TRAVAMENTOS REGISTRADOS NESTE NAVEGADOR\n'
     + 'vers\u00e3o ' + BUILD_ID + '\n\n' + linhas
