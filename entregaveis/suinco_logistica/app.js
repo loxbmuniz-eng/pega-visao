@@ -11117,11 +11117,14 @@ async function adicionarCargaForaDoModeloUI(){
   if(!_montagemDia){ notify('Escolha o dia primeiro.', 'erro', 4000); return; }
   const rota = (document.getElementById('mont-rota-extra') || {}).value;
   if(!rota){ notify('Escolha a rota da carga.', 'erro', 4000); return; }
-  const { dia, montagens } = _montagemDia;
+  const { dia } = _montagemDia;
   try {
+    /* SEM NÚMERO NO PEDIDO (11/09/2026). Quem acha a casa livre é o
+       servidor, dentro da trava do dia. `montagens.length + 1` parecia a
+       próxima casa e não era: dia com linha cancelada ou já reordenada tem
+       buraco, e contar linhas acertava um número que já existia. */
     await SuincoSharePoint.montagem.criar({
       dia, rotaCodigo: rota,
-      sequencia: montagens.length + 1,
       qtdEntregas: 1, paletizada: 'Não',
     });
   } catch(e){
@@ -11475,8 +11478,11 @@ async function aplicarModeloDoDiaUI(){
   let criadas = 0, erros = [];
   for(const [i, m] of novas.entries()){
     try {
+      /* Sem número aqui também: as linhas nascem na ordem em que são
+         criadas, cada uma acima da maior casa do dia — ver a nota em
+         adicionarCargaForaDoModeloUI. */
       await SuincoSharePoint.montagem.criar({
-        dia, rotaCodigo: m.rota_codigo, sequencia: montagens.length + i + 1,
+        dia, rotaCodigo: m.rota_codigo,
         modeloId: m.modelo_id,
         tipoOperacao: m.tipo_operacao, qtdEntregas: m.qtd_entregas || 1,
         paletizada: m.paletizada || 'Não',
@@ -11556,9 +11562,14 @@ function definirSequenciaMontagemUI(id, val){
   const m = (_montagemDia?.montagens || []).find(x => x.montagem_id === id);
   if(!m) return;
   if(m.efetivada_em || m.cancelada_em) return alterarMontagemUI(id, 'sequencia', val);
-  if(val === '' || !Number.isInteger(n) || n < 1){
-    return alterarMontagemUI(id, 'sequencia', val);
-  }
+  /* Apagar o campo APAGA o número: campo vazio não é ordem de reordenar,
+     é "esta linha ainda não tem lugar na fila". */
+  if(val === '') return alterarMontagemUI(id, 'sequencia', '');
+  /* QUALQUER OUTRA COISA QUE NÃO SEJA CASA DA FILA NÃO SOBE (11/09/2026).
+     Isto ia para o servidor como `sequencia` crua e 2,7 chegava lá para ser
+     arredondado — podendo cair justo no número de outra linha. Número
+     quebrado não é posição: a tela devolve o que o servidor tem. */
+  if(!Number.isInteger(n) || n < 1) return carregarMontagemUI();
   return moverMontagemUI(id, n);
 }
 
