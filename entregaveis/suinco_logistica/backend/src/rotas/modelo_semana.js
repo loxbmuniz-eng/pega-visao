@@ -304,8 +304,32 @@ function kmInteiroOuNulo(v) {
 async function travarSequenciasDoDia(cli, dia) {
   await cli.query(
     "SELECT pg_advisory_xact_lock(hashtext('montagem_sequencia'), hashtext($1::text))",
-    [String(dia)]
+    [chaveDoDia(dia)]
   );
+}
+
+/* A CHAVE DA TRAVA É A DATA EM TEXTO ISO, SEMPRE — e isto é correção de um
+   furo meu, achado pela revisão de código no mesmo dia (11/09/2026).
+
+   A criação recebia o dia como texto ('2026-09-11'). A edição e a cascata
+   liam `data_prog` do banco, que o driver devolve como Date, e String(Date)
+   é 'Fri Sep 11 2026 00:00:00 GMT...'. Duas chaves diferentes para o mesmo
+   dia: hashtext não bate, e as travas NÃO SE EXCLUÍAM. Meu teste de
+   concorrência só disparou criação contra criação — mesma chave — e passou.
+   O bloco 6 de test_numero_de_sequencia_nao_repete.py mede os três caminhos
+   contra a mesma trava.
+
+   Aceita Date e texto porque os dois chegam aqui; as consultas que
+   alimentam a trava passaram a pedir `data_prog::text` para nem depender
+   desta conversão. Formata pelos componentes locais, não por toISOString():
+   num servidor fora de UTC, meia-noite local vira o dia anterior em UTC. */
+function chaveDoDia(dia) {
+  if (dia instanceof Date) {
+    const mm = String(dia.getMonth() + 1).padStart(2, '0');
+    const dd = String(dia.getDate()).padStart(2, '0');
+    return `${dia.getFullYear()}-${mm}-${dd}`;
+  }
+  return String(dia).slice(0, 10);
 }
 
 /* Inteiro a partir de 1, ou nada — mesma régua de kmInteiroOuNulo. E ela
@@ -428,10 +452,10 @@ rotasModeloSemana.patch('/montagem/:id', SO_LOGISTICA, async (req, res, next) =>
        eu compararia o número novo com o antigo. */
     const resultado = await emTransacao(async (cli) => {
       const { rows: qualDia } = await cli.query(
-        'SELECT data_prog FROM programacao_montagem WHERE montagem_id = $1', [id]
+        'SELECT data_prog::text AS dia FROM programacao_montagem WHERE montagem_id = $1', [id]
       );
       if (!qualDia[0]) return { naoAchou: true };
-      await travarSequenciasDoDia(cli, qualDia[0].data_prog);
+      await travarSequenciasDoDia(cli, qualDia[0].dia);
       const { rows: atual } = await cli.query(
         'SELECT * FROM programacao_montagem WHERE montagem_id = $1', [id]
       );
@@ -632,13 +656,13 @@ rotasModeloSemana.post('/montagem/:id/sequenciar', SO_LOGISTICA, async (req, res
 
     const resultado = await emTransacao(async (cli) => {
       const { rows: alvo } = await cli.query(
-        'SELECT data_prog FROM programacao_montagem WHERE montagem_id = $1', [id]
+        'SELECT data_prog, data_prog::text AS dia FROM programacao_montagem WHERE montagem_id = $1', [id]
       );
       if (!alvo[0]) return { naoAchou: true };
       /* A MESMA TRAVA DO DIA que a criação e a edição usam. A cascata lê a
          fila e grava a fila nova; sem a trava, uma linha criada no meio
          disso ganha um número que a renumeração não viu. */
-      await travarSequenciasDoDia(cli, alvo[0].data_prog);
+      await travarSequenciasDoDia(cli, alvo[0].dia);
 
       /* SÓ AS LINHAS QUE AINDA VÃO CARREGAR ENTRAM NA FILA.
          Linha já efetivada virou carga: o número dela é registro do que

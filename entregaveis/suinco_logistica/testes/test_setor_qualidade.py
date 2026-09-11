@@ -141,6 +141,25 @@ ck('a CHECK do banco tem os MESMOS setores do servidor',
    do_banco == set(dados['setores']),
    f"só no banco: {sorted(do_banco - set(dados['setores']))} · só no servidor: {sorted(set(dados['setores']) - do_banco)}")
 
+print('\n=== 7. O ÚNICO BOTÃO QUE ELA VÊ TEM QUE FUNCIONAR NO SERVIDOR ===')
+print('    (achado da revisão de 11/09: a aba mostrava o card do checklist e o')
+print('     servidor respondia 403 — a tabela de donos não tinha a Qualidade)')
+saida7 = no_no("""
+import('./backend/src/dominio/documentos.js').then(m => {
+  console.log(JSON.stringify({
+    dia: m.podeGerar('Qualidade', 'devolucoes-do-dia'),
+    operador: m.podeGerar('Qualidade', 'devolucao-operador'),
+    fretes: m.podeGerar('Qualidade', 'administracao-fretes'),
+    operacional: m.podeGerar('Qualidade', 'relatorio-operacional'),
+    manobrista: m.podeGerar('Qualidade', 'programacao-manobrista'),
+  }));
+});""")
+d7 = json.loads(saida7.splitlines()[-1])
+ck('gera o relatório de Devoluções do dia', d7['dia'] is True, str(d7))
+ck('gera o de Devolução por operador', d7['operador'] is True, str(d7))
+ck('e NÃO gera os de pátio nem o de frete',
+   not d7['fretes'] and not d7['operacional'] and not d7['manobrista'], str(d7))
+
 print('\n=== RESULTADO ===')
 print('  FALHAS: ' + (', '.join(falhas) if falhas else 'NENHUMA'))
 sys.exit(1 if falhas else 0)

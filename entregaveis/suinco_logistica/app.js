@@ -2140,6 +2140,11 @@ document.addEventListener('click', (ev)=>{
      pessoa a não tocar. */
   if(ev.target.closest('button, a, input, select, textarea, label, [role="button"]')) return;
   if(tr.classList.contains('hist-linha') || tr.classList.contains('raiox-linha')) return;
+  /* Linha que se abre SOZINHA (Montagem e Fila têm onclick próprio que
+     redesenha o tbody) já nasce com `cartao-aberto` quando está aberta —
+     ver linhaFilaHtml e a linha da Montagem. Ligar a classe aqui de novo
+     cairia num nó que o redesenho acabou de descartar. */
+  if(tr.classList.contains('mont-linha') || tr.classList.contains('prog-linha')) return;
   tr.classList.toggle('cartao-aberto');
 });
 
@@ -3230,7 +3235,7 @@ function linhaFilaHtml(c, lista, arrastavel){
     const id = escJs(c.id);
     const aberta = _progFilaAberta === c.id;
     const linha = `
-    <tr class="prog-linha${aberta ? ' prog-linha-aberta' : ''}" data-carga="${esc(c.id)}"
+    <tr class="prog-linha${aberta ? ' prog-linha-aberta cartao-aberto' : ''}" data-carga="${esc(c.id)}"
         ${arrastavel ? `draggable="true"
         ondragstart="filaArrastarInicio(event,'${id}')"
         ondragover="filaArrastarSobre(event)"
@@ -6766,11 +6771,20 @@ function exportarTabelaFreteCsv(){
    sempre que a tabela chega do servidor — mesmo padrão de
    preencherSelectsRota(), pelo mesmo motivo (painel de pátio fica aberto o
    dia inteiro e não pode ficar com a lista de ontem). */
+/* A TABELA DE DESTINOS, NA ORDEM EM QUE A TELA MOSTRA. Uma função, dois
+   chamadores (11/09/2026): o datalist da Programação e a célula da Montagem
+   leem a mesma lista pela mesma ordenação. A Montagem tinha a própria
+   leitura, e ela tratava os objetos {destino, km} como texto — a lista saía
+   como "[object Object]" (ver test_lista_de_destino_na_montagem.py). */
+function destinosFreteOrdenados(){
+  const lista = (typeof DESTINOS_FRETE !== 'undefined' ? DESTINOS_FRETE : []);
+  return lista.slice()
+    .sort((a,b)=> String(a.destino).localeCompare(String(b.destino), 'pt-BR'));
+}
 function preencherSelectsDestinoFrete(){
   const dl = document.getElementById('lista-destinos-frete');
   if(!dl) return;
-  dl.innerHTML = DESTINOS_FRETE.slice()
-    .sort((a,b)=> String(a.destino).localeCompare(String(b.destino), 'pt-BR'))
+  dl.innerHTML = destinosFreteOrdenados()
     .map(d=>`<option value="${esc(d.destino)}">${Number(d.km).toLocaleString('pt-BR')} km</option>`).join('');
 }
 
@@ -10806,7 +10820,9 @@ function formCargaHtml(c, m){
    divergir do número que o frete usou. */
 function freteDestinoMontagemHtml(m, id){
   const atual = m.frete_destino || '';
-  const lista = (typeof DESTINOS_FRETE !== 'undefined' ? DESTINOS_FRETE : []);
+  /* NOMES, não objetos. DESTINOS_FRETE guarda {destino, km}; a célula lista
+     o nome e o KM fica com o servidor, que o resolve pelo cadastro. */
+  const lista = destinosFreteOrdenados().map(d => String(d.destino));
   /* Destino que saiu do cadastro (desativado, renomeado) continua na linha
      que já o tinha: sumir da lista apagaria em silêncio o destino de uma
      carga montada ontem. */
@@ -10861,7 +10877,14 @@ function linhaMontagemHtml(m){
      classe própria a tela e os testes só conseguem descrevê-la por
      ausência — foi assim que a checagem "toda linha traz uma ação de
      avanço" passou a contar uma linha que, com razão, não tem nenhuma. */
-  const resumo = `<tr class="mont-linha${trancada ? ' linha-fraca' : ''}${comoCarga ? ' mont-linha-carga' : ''}${aberta ? ' mont-linha-aberta' : ''}"
+  /* `cartao-aberto` NASCE NO REDESENHO (11/09/2026). No celular os campos
+     secundários só aparecem com esta classe, e quem a ligava era o ouvinte
+     de toque do document — que aqui chegava tarde: o onclick da linha já
+     tinha redesenhado o tbody, e a classe caía num <tr> destacado do DOM.
+     Resultado medido: a coluna Seq. ficava escondida para sempre, e
+     reordenar de celular não existia. O estado (`aberta`) é quem sabe se o
+     cartão está aberto; ele desenha a classe. Mesma decisão na Fila. */
+  const resumo = `<tr class="mont-linha${trancada ? ' linha-fraca' : ''}${comoCarga ? ' mont-linha-carga' : ''}${aberta ? ' mont-linha-aberta cartao-aberto' : ''}"
       data-id="${id}"
       ${/* ARRASTÁVEL SÓ ENQUANTO É RASCUNHO (10/09/2026). Depois de virar
            carga o número é registro — e a mesma regra vale para a alça,

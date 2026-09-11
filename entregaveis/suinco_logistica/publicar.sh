@@ -175,10 +175,21 @@ PORTA_TESTE="${PORTA_TESTE:-3000}"
 # /health passou a dizer isso em `pdf.pronto`. Se estiver no ar mas capenga,
 # o portão derruba e sobe do jeito certo — meia dúvida aqui custa a bateria
 # inteira lá na frente.
+#
+# TERCEIRA LIÇÃO, 11/09/2026: "INTEIRA" TAMBÉM QUER DIZER "DO COMMIT CERTO".
+# O portão encontrou uma API no ar, com Chromium, respondendo pronto:true — e
+# rodando o commit ANTERIOR ao que estava sendo publicado. A bateria inteira
+# passou contra código velho, e a única suíte que reprovou (a da trava por
+# dia) reprovou porque o servidor não tinha a correção que ela medía. Vinte e
+# cinco minutos para descobrir que o vermelho era ambiente, não regressão.
+# O /health já diz qual commit o servidor carregou (`versao`): a pergunta agora
+# é "responde, gera PDF E é o HEAD?". Se não for, derruba e sobe o certo.
 api_inteira() {
-  local corpo
+  local corpo head_curto
   corpo="$(curl -sf --max-time 3 "http://127.0.0.1:$PORTA_TESTE/health" 2>/dev/null)" || return 1
-  [[ "$corpo" == *'"pronto":true'* ]]
+  [[ "$corpo" == *'"pronto":true'* ]] || return 1
+  head_curto="$(git -C "$AQUI" rev-parse --short HEAD 2>/dev/null)"
+  [[ -z "$head_curto" || "$corpo" == *"$head_curto"* ]]
 }
 
 subir_api() {
@@ -192,8 +203,8 @@ if api_inteira; then
   verde "  ok  API no ar na porta $PORTA_TESTE, com Chromium para os PDFs"
 else
   if curl -sf --max-time 3 "http://127.0.0.1:$PORTA_TESTE/health" >/dev/null 2>&1; then
-    echo "      API no ar, mas SEM Chromium — os relatórios em PDF falhariam."
-    echo "      Derrubando e subindo do jeito certo."
+    echo "      API no ar, mas SEM Chromium ou de OUTRO COMMIT — a bateria mediria"
+    echo "      um servidor que não é o que está sendo publicado. Derrubando e subindo o certo."
     # Padrão ANCORADO. Sem as âncoras, `pkill -f` casa com qualquer shell
     # que tenha esse texto na linha de comando — inclusive o próprio wrapper
     # que está rodando este script. Já aconteceu nesta bancada: o pkill matou

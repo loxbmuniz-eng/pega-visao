@@ -1884,3 +1884,123 @@ pontos — inclusive que o caminho legítimo (`/sequenciar`) não foi fechado
 junto, que apagar o número continua apagando, que reenviar o PRÓPRIO número
 junto com outro campo não é conflito, e as seis criações simultâneas. Reprovou
 em 21 dos 24 contra o publicado antes da correção.
+
+**Adendo, mesmo dia, achado pela revisão de código — a trava tinha um furo, e
+era meu.** A criação trancava a chave `'2026-09-11'`; a edição e a cascata
+liam `data_prog` do banco, que o driver devolve como `Date`, e `String(Date)` é
+`Fri Sep 11 2026 00:00:00 GMT…`. Medido: `hashtext` das duas dá **-1453919943**
+e **-435495344** — chaves diferentes, travas que **não se excluíam**. Meu
+teste de concorrência só disparou criação contra criação (mesma chave) e
+passou. Correção: `chaveDoDia()` formata sempre em ISO, e as consultas pedem
+`data_prog::text`. Guarda: bloco 6 do mesmo teste segura a trava com a chave
+ISO e prova que edição e cascata **esperam** (antes: respondiam 200 na hora).
+
+---
+
+## #44 — A lista de Destino da Montagem mostrava "[object Object]" (11/09/2026)
+
+Achado pela revisão de código dos commits de 09–11/09, reproduzido no
+navegador antes de mexer: `['—', 'MARÍLIA', '[object Object]', '[object Object]']`.
+
+`DESTINOS_FRETE` guarda **objetos** `{destino, km}` — é assim que
+`receberTabelaDeFrete()` a preenche e que a Programação (datalist) e o cálculo
+de KM a leem. A célula da Montagem tratava a lista como **texto**:
+`lista.includes(atual)` nunca achava o destino atual e `esc(d)` de um objeto
+imprime "[object Object]". Quem monta não escolhia destino pela lista; se
+escolhesse, gravava "[object Object]" no servidor, o KM ficava nulo e a carga
+nascia sem frete. É provavelmente o *"quando adiciona a linha ela não aparece
+o destino"* de 10/09 — corrigido "pela metade": as colunas entraram, a lista
+não funcionava.
+
+**Por que nenhum teste pegou:** `test_destino_frete_na_montagem.py` prova a
+rota (POST/PATCH gravam destino e KM) e nunca abre a célula. É a família do
+#42 e do "verde falso" da regra 7: a asserção media a camada errada.
+
+**Correção:** `destinosFreteOrdenados()` — uma função, dois chamadores: o
+datalist da Programação e a célula da Montagem leem a mesma lista pela mesma
+ordenação; a célula mapeia para nomes. **Guarda:**
+`testes/test_lista_de_destino_na_montagem.py`, 9 pontos — nomes ordenados,
+atual marcado, ordem igual ao datalist, o `change` manda o NOME, destino que
+saiu do cadastro continua na linha. Reprovou em 4 contra o publicado.
+
+---
+
+## #45 — O único botão que a Qualidade vê respondia 403 (11/09/2026)
+
+Achado pela revisão. O setor Qualidade nasceu em 09/09 com a decisão do dono
+*"qualidade so acompanha e exporta relatorio"*: a aba Relatórios mostra a ela
+só o card do checklist. Mas `DONOS_DO_DOCUMENTO` (documentos.js) não recebeu
+a Qualidade em `devolucoes-do-dia` nem em `devolucao-operador` — e é o
+servidor quem decide. Ela clicava, e voltava *"O setor Qualidade não gera este
+documento"*.
+
+**Por que nenhum teste pegou:** `test_setor_qualidade.py` provava que o card
+**aparece**; ninguém pedia o PDF em nome dela. Botão visível que sempre dá
+erro ensina o operador a ignorar mensagem — o próprio comentário de
+documentos.js diz isso.
+
+**Correção:** a Qualidade entra nos dois documentos do checklist, e só neles.
+**Guarda:** bloco 7 do mesmo teste — `podeGerar('Qualidade', …)` verdadeiro
+para os dois do checklist, falso para pátio e frete.
+
+---
+
+## #46 — No celular, a coluna Seq. nunca aparecia na Montagem nem na Fila (11/09/2026)
+
+Achado pela auditoria de paridade mobile, medida com **toque real** em 390px
+(o `.click()` sintético mascarava o defeito). Reproduzido em teste próprio antes
+de mexer: a linha abre (`mont-linha-aberta` / `prog-linha-aberta`), mas a Seq.
+segue `display:none` e o rodapé do cartão continua dizendo "toque para ver
+tudo". Na Torre funciona.
+
+**O mecanismo.** No cartão do celular os campos secundários (`data-sec`) só
+aparecem quando a linha tem `cartao-aberto`, ligada por um ouvinte de toque no
+`document`. Montagem e Fila têm `onclick` na própria linha que **redesenha o
+tbody inteiro** — ele roda antes do ouvinte do document, que então liga a
+classe num `<tr>` já destacado do DOM. A Torre não redesenha ao abrir, por
+isso lá o toggle sobrevive.
+
+**O que custava.** *"Digite ou arraste para reordenar, os dois precisam
+funcionar"* (pedido do dono, 09/09) valia só no computador. De celular, no
+pátio, a Logística não conseguia dar posição a caminhão nenhum nas duas telas
+onde passa a manhã — e a recusa nova de hoje (*"digite o número na coluna
+Seq."*) apontava para um campo invisível: trava sem o par na tela, família
+#13/#20. Junto: o botão ⏱ do rodapé tinha **18px** de altura — o único jeito
+de alguém reportar um travamento não cabia num dedo.
+
+**A correção é "o estado desenha a classe":** a linha aberta nasce com
+`cartao-aberto` no redesenho (`aberta` já era o estado), e o ouvinte do
+document deixa em paz as linhas que se abrem sozinhas. Mesma decisão na
+Montagem e na Fila. O ⏱ entra na regra de 44px de `pointer:coarse`.
+
+**A lição:** toggle de classe em cima de DOM que outra função reconstrói é
+promessa que não se cumpre. Quem sabe se o cartão está aberto é o estado —
+ele desenha. **Guarda:** `testes/test_sequencia_no_celular.py`, 15 pontos,
+com toque de `touchscreen` e rolagem até a linha (fora da tela o toque cai
+no vazio — meu primeiro vermelho foi esse, e não era o defeito).
+
+---
+
+## #47 — O portão mediu um servidor de outro commit (11/09/2026)
+
+Portão de `d5caf49` reprovou em UMA suíte: o bloco 6 de
+`test_numero_de_sequencia_nao_repete` (a trava por dia). Segunda chance,
+banco limpo: reprovou de novo — "vermelho de verdade", disse o portão.
+
+Não era. A API da porta 3010 estava no ar, com Chromium, `pronto:true` — e
+rodando **`c57f166`**, o commit anterior, sem a `chaveDoDia()` que o bloco
+medía. `/health` dizia isso desde o começo (`versao: "11/09 02:27 · c57f166"`);
+o portão só perguntava "responde e gera PDF?" e reaproveitou. Vinte e cinco
+minutos de bateria contra código velho, e um vermelho que parecia regressão.
+
+**É a terceira lição da mesma etapa 5**, e está escrita em cima das outras
+duas no `publicar.sh`: "no ar" não bastava (1ª), "inteira" tinha que incluir
+o Chromium (2ª) — e agora tem que incluir **o commit**. `api_inteira()` exige
+que o hash de `git rev-parse --short HEAD` apareça no `/health`; se não
+aparecer, o portão derruba e sobe o certo, sozinho. Controle que dependia de
+eu lembrar de reiniciar o servidor deixou de depender (regra 3 do dono).
+
+**Causa do vermelho, pelas quatro:** nenhuma das quatro — era o **ambiente**
+do portão. Fica registrado porque a segunda chance do portão não distingue
+"servidor velho" de "regressão", e por isso o portão agora impede o servidor
+velho de existir.
