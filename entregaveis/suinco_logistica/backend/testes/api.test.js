@@ -14,7 +14,10 @@ import bcrypt from 'bcryptjs';
 import { codigoDoMomento } from '../src/dominio/totp.js';
 import jwt from 'jsonwebtoken';
 
-import { criarServidor, chaveDoLimiteGeral } from '../src/servidor.js';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { tmpdir } from 'node:os';
+import { criarServidor, chaveDoLimiteGeral, versaoDoServidor } from '../src/servidor.js';
 import { pool } from '../src/banco.js';
 import { config } from '../src/config.js';
 import { SETORES } from '../src/dominio/fluxo.js';
@@ -5550,4 +5553,49 @@ describe('43. Arrastar respeita os números que a fila JÁ TEM (09/09/2026)', ()
       `a recusa precisa dizer quais números valem: ${r.json.erro}`);
     assert.deepEqual(await seqDe(fila), [1, 7, 12], 'e nada foi renumerado');
   });
+});
+
+describe('17. A versão que o /health informa não pode ficar cega (12/09/2026)', () => {
+  /* `versao` respondia "desconhecida" em PRODUÇÃO porque o serviço roda da
+     cópia publicada pelo rsync (/opt/embarque-suinco), que não tem .git. Com
+     isso ficavam cegos o aviso do painel "o servidor ficou para trás" (que
+     compara `versaoEm` com o build da tela) e o passo 5 do portão, que exige
+     a API no HEAD (ocorrência #47).
+
+     Foi encontrado lendo o /health do VPS durante a investigação de 12/09 —
+     não por um teste. Ninguém tinha percebido porque o controle que avisaria
+     era justamente o que estava cego. */
+
+  test('sem git, a versão vem do VERSAO.json que a publicação gravou', async () => {
+    const base = await fs.mkdtemp(path.join(tmpdir(), 'suinco-semgit-'));
+    try {
+      // A forma da produção: <publicação>/VERSAO.json e o código em <publicação>/src
+      const src = path.join(base, 'src');
+      await fs.mkdir(src, { recursive: true });
+      await fs.writeFile(path.join(base, 'VERSAO.json'), JSON.stringify({
+        texto: '12/09 16:04 · abc1234', em: '2026-09-12T16:04:00+00:00', commit: 'abc1234',
+      }));
+      const v = versaoDoServidor(src);
+      assert.equal(v.texto, '12/09 16:04 · abc1234',
+        'o /health tem que dizer a versão publicada, não "desconhecida"');
+      assert.equal(v.em, '2026-09-12T16:04:00+00:00',
+        'e o ISO tem que vir junto — é ele que deixa o painel comparar sozinho');
+    } finally {
+      await fs.rm(base, { recursive: true, force: true });
+    }
+  });
+
+  test('sem git E sem arquivo, responde "desconhecida" em vez de quebrar', async () => {
+    const base = await fs.mkdtemp(path.join(tmpdir(), 'suinco-semnada-'));
+    try {
+      const src = path.join(base, 'src');
+      await fs.mkdir(src, { recursive: true });
+      const v = versaoDoServidor(src);
+      assert.equal(v.texto, 'desconhecida');
+      assert.equal(v.em, null);
+    } finally {
+      await fs.rm(base, { recursive: true, force: true });
+    }
+  });
+
 });

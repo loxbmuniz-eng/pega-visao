@@ -5,7 +5,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import express from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
@@ -73,25 +73,49 @@ export function chaveDoLimiteGeral(req) {
    Lido UMA VEZ, na subida. Rodar git a cada /health seria pagar um
    processo por batida de monitoramento para um valor que não muda
    enquanto o serviço está no ar. */
-function versaoDoServidor() {
+export function versaoDoServidor(daqui = path.dirname(fileURLToPath(import.meta.url))) {
   try {
-    const daqui = path.dirname(fileURLToPath(import.meta.url));
     // backend/src -> backend -> suinco_logistica -> entregaveis -> raiz
     const raiz = path.resolve(daqui, '..', '..', '..', '..');
-    const curto = execFileSync('git', ['rev-parse', '--short', 'HEAD'],
-      { cwd: raiz, encoding: 'utf8', timeout: 3000 }).trim();
-    const quando = execFileSync('git', ['log', '-1', '--format=%cd', '--date=format:%d/%m %H:%M'],
-      { cwd: raiz, encoding: 'utf8', timeout: 3000 }).trim();
+    /* stderr IGNORADO de propósito (12/09/2026): em produção o diretório
+       publicado não é um repositório, e o git escrevia `fatal: not a git
+       repository` no journal a cada subida do serviço. Linha de erro que
+       não é erro suja exatamente o lugar onde se procura erro de verdade —
+       apareceu no diagnóstico desta data e custou leitura. */
+    const git = (args) => execFileSync('git', args,
+      { cwd: raiz, encoding: 'utf8', timeout: 3000, stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+    const curto = git(['rev-parse', '--short', 'HEAD']);
+    const quando = git(['log', '-1', '--format=%cd', '--date=format:%d/%m %H:%M']);
     /* A data em ISO vai junto para o painel poder COMPARAR, e não só
        mostrar. Texto "26/08 11:44" é para gente ler; o ISO é o que permite
        a tela perceber sozinha que o servidor ficou para trás. */
-    const iso = execFileSync('git', ['log', '-1', '--format=%cI'],
-      { cwd: raiz, encoding: 'utf8', timeout: 3000 }).trim();
+    const iso = git(['log', '-1', '--format=%cI']);
     return { texto: `${quando} · ${curto}`, em: iso };
   } catch {
-    /* Sem git (container, cópia sem .git): não é erro. O /health continua
-       respondendo tudo o mais — deixar de responder por causa disto seria
-       trocar um diagnóstico por um problema. */
+    /* PRODUÇÃO NÃO É UM REPOSITÓRIO, E O CONTROLE FICAVA CEGO (12/09/2026).
+
+       O serviço roda de /opt/embarque-suinco, que é a CÓPIA publicada pelo
+       rsync do instalar.sh — sem .git. O git falhava, `/health` respondia
+       `versao: "desconhecida"`, e com isso dois controles deixavam de
+       funcionar justamente em produção: o aviso do painel "o servidor ficou
+       para trás" (que compara `versaoEm` com o build da tela) e o passo 5 do
+       portão, que exige a API no HEAD (ocorrência #47). Foi encontrado no
+       `/health` do VPS enquanto se investigava a instabilidade de 12/09 —
+       ninguém tinha percebido porque o controle que avisaria era o próprio
+       que estava cego.
+
+       O instalar.sh passa a gravar VERSAO.json na publicação, com a versão
+       que o repositório de origem tinha naquele momento. Aqui ele é lido. */
+    try {
+      const gravado = JSON.parse(
+        readFileSync(path.resolve(daqui, '..', 'VERSAO.json'), 'utf8'));
+      if (gravado && gravado.texto) {
+        return { texto: String(gravado.texto), em: gravado.em || null };
+      }
+    } catch { /* sem arquivo também não é erro: cai no desconhecida abaixo */ }
+    /* Sem git e sem arquivo: não é erro. O /health continua respondendo tudo
+       o mais — deixar de responder por causa disto seria trocar um
+       diagnóstico por um problema. */
     return { texto: 'desconhecida', em: null };
   }
 }
