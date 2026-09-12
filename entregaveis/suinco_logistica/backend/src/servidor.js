@@ -297,6 +297,38 @@ export function criarApp() {
         codigo: 'CONTEUDO_GRANDE_DEMAIS',
       });
     }
+    /* CADASTRO QUE FALTA NÃO É ERRO DE SERVIDOR (12/09/2026).
+
+       Exatamente a mesma armadilha descrita acima para `entity.too.large`,
+       encontrada em produção: `POST /api/cargas` com código de rota que não
+       existe em `dim_rotas` viola a chave estrangeira e saía como 500. O
+       painel classifica TODO 500 como falha de rede (`eFalhaDeRede` em
+       suinco-api.js), então a carga sumia da tela dizendo "offline" e ia para
+       a fila tentar para sempre — contra uma recusa que nunca vai ser aceita.
+       Treze vezes em 11/09/2026, e o operador lendo "sistema offline" com o
+       servidor no ar.
+
+       Chave estrangeira violada é cadastro que falta, não defeito de
+       servidor: é recusa de cliente, e o operador tem que ler o motivo para
+       saber que refazer não resolve — cadastrar resolve. */
+    if (err?.code === '23503') {
+      const achado = /Key \(([^)]+)\)=\(([^)]*)\)/.exec(err.detail || '');
+      const campo = achado ? achado[1] : '';
+      const valor = achado ? achado[2] : '';
+      const oQue = /rota/.test(campo) ? 'rota'
+        : /placa|veiculo/.test(campo) ? 'placa'
+        : campo.replace(/_(codigo|id)$/, '').replace(/_/g, ' ');
+      console.warn('[recusa] cadastro inexistente em', req.method, req.path,
+        '—', err.constraint || campo);
+      return res.status(422).json({
+        erro: (oQue && valor)
+          ? `A ${oQue} "${valor}" não está cadastrada. Cadastre antes de gravar.`
+          : 'Esta gravação depende de um cadastro que não existe. Confira os dados.',
+        codigo: 'CADASTRO_INEXISTENTE',
+        campo: campo || null,
+        valor: valor || null,
+      });
+    }
     console.error('[erro]', req.method, req.path, '—', err?.stack || err);
     return res.status(500).json({ erro: 'Erro interno no servidor.', codigo: 'ERRO_INTERNO' });
   });

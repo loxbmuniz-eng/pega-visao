@@ -604,7 +604,11 @@ function _exibirNotif(el, ms, opcoes){
 
   if(container.querySelectorAll('.notif-item').length >= NOTIF_MAX_VISIVEL){
     if(!perecivel){
-      _notifFila.push({ el, ms, em: Date.now(), perecivel: false });
+      _notifFila.push({
+        el, ms, em: Date.now(), perecivel: false,
+        forte: el.classList.contains('forte'),
+      });
+      _apararFila();
       _atualizarContadorFila();
     }
     // PERECÍVEL NÃO ESPERA (pedido do dono, 27/08/2026): notícia de outro
@@ -613,6 +617,29 @@ function _exibirNotif(el, ms, opcoes){
     return;
   }
   _mostrarNotifAgora(el, ms);
+}
+
+/* FILA CURTA — a regra 1 do bloco no topo deste arquivo (25/08/2026), que
+   estava escrita, comentada e explicada, mas NUNCA implementada: até
+   12/09/2026 `NOTIF_MAX_FILA` era declarada e não era lida em lugar nenhum.
+
+   O custo apareceu em produção. Print do dono com "+41 aviso(s) aguardando"
+   no Faturamento e outro com "+67" no celular, em cargas diferentes — cada
+   carga aguardando confirmação abria o seu próprio aviso, sem fim, porque
+   nada descartava e esses avisos não são perecíveis (são resposta a uma ação
+   de quem está na frente da tela). Reprodução medida: 15 cargas + 13 leituras
+   remotas = 45 avisos, 42 ainda na fila. Uma tela com 67 avisos esperando não
+   informa o operador: cega ele.
+
+   Cai o MAIS ANTIGO. Aviso com som (`forte`) nunca cai: troca de placa é
+   segurança, o caminhão errado entra na doca por causa dele. Se só sobrarem
+   avisos de segurança esperando, a fila passa do teto de propósito. */
+function _apararFila(){
+  while(_notifFila.length > NOTIF_MAX_FILA){
+    const i = _notifFila.findIndex(x => !x.forte);
+    if(i < 0) return;
+    _notifFila.splice(i, 1);
+  }
 }
 
 /* Tira da fila o próximo que ainda VALE mostrar. Perecível vencido é
