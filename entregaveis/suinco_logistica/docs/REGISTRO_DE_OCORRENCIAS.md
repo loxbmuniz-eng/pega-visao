@@ -2462,16 +2462,27 @@ estar demonstrado no ambiente real.
 **b) Por que o Faturamento é forçado a logar — EM ABERTO.** A #55 explica a
 rajada de avisos e a recusa de gravação, não o logout. Pendente: medir.
 
-**c) `/health` de produção responde `"versao": "desconhecida"`.** Causa:
-`fatal: not a git repository` em `/opt/embarque-suinco` (aparece no journal a
-cada reinício do serviço). O controle que avisaria "o servidor ficou para
-trás" está **cego em produção** — e o passo 5 do portão, que exige a API no
-HEAD (#47), não tem como valer lá.
+**c) `/health` de produção responde `"versao": "desconhecida"`.**
+→ **CORRIGIDO no mesmo dia: ver #60.**
 
-**d) O gerador de PDF está desligado em produção** — `/health` responde
-`"pdf": {"pronto": false}`. Falta `PLAYWRIGHT_CHROMIUM_PATH` no serviço
-systemd. Relatório em PDF não sai, e nenhum teste pega isso porque localmente
-a variável é fornecida à mão.
+**d) `"pdf": {"pronto": false}` em produção — e a primeira leitura disto foi
+ERRADA.** Foi relatado ao dono como *"o gerador de PDF está desligado"*. Não
+está. O indicador mede `PLAYWRIGHT_CHROMIUM_PATH`, que é a variável de
+DESENVOLVIMENTO; o serviço systemd define `PLAYWRIGHT_BROWSERS_PATH` (ver
+instalar.sh) e o `gerarPdf` passa `executablePath: undefined`, deixando o
+Playwright achar o navegador — **que é o caminho de código da produção, e ele
+funciona**: medido em 12/09, PDF gerado sem a variável, 6118 bytes, assinatura
+`%PDF-` válida. O que existe é um **indicador que acusa defeito onde não
+tem** — e isso custa tempo de quem vai investigar.
+
+**Decisão do dono, 12/09: "deixa o pdf do jeito que tava".** Nada no PDF foi
+alterado. Fica registrado porque a tentativa de "consertar" o indicador quase
+publicou uma regressão de verdade: passar o caminho que
+`chromium.executablePath()` informa quebraria o PDF em ambiente cujo navegador
+instalado é de outra revisão que a do Playwright — o caso deste contêiner
+(1194 no disco, 1228 pedido), que é justamente o motivo de o CLAUDE.md exigir
+a variável aqui. **O indicador estar errado era mais barato que a correção
+dele.**
 
 **e) Medições do servidor que ficam de registro.** 2 núcleos, 7,8 GB (792 MB
 em uso), `NRestarts=0` e 18h no ar — **o serviço não estava caindo**.
@@ -2481,3 +2492,57 @@ contra `max_connections=100` do Postgres. Base real pequena (3.062
 movimentações, 761 viagens) — a medição de rajada feita com volume sintético
 40× maior **não vale para esta produção**, e foi relatada ao dono como se
 valesse. Erro de quem mediu, corrigido no mesmo dia.
+
+## #60 — O controle que avisaria estava cego justamente em produção (12/09/2026)
+
+Achado lendo o `/health` do VPS durante a investigação da instabilidade:
+
+```
+{"ok":true,...,"versao":"desconhecida","versaoEm":null,...}
+```
+
+E no journal, a cada subida do serviço: `fatal: not a git repository (or any
+of the parent directories): .git`.
+
+**A CAUSA:** `versaoDoServidor()` roda `git rev-parse` a partir do diretório
+do próprio arquivo. Em produção o serviço roda de `/opt/embarque-suinco`, que
+é a **cópia publicada pelo rsync** do `instalar.sh` — e o rsync não traz o
+`.git`. O repositório fica em `/opt/suinco-src`, que é outro lugar. O git
+falhava e o `/health` respondia "desconhecida".
+
+**O custo não é o texto feio.** Dois controles dependiam desse valor e ficavam
+cegos **só em produção**, que é exatamente onde precisavam funcionar:
+
+1. o aviso do painel *"o servidor está N horas atrás deste painel"*, que
+   compara `versaoEm` com o carimbo do build da tela — sem `versaoEm`, ele
+   nunca dispara;
+2. o passo 5 do portão, que exige a API no HEAD (ocorrência #47) — não tem
+   como valer contra um servidor que não sabe dizer em que commit está.
+
+Ninguém havia percebido em semanas porque **o controle que avisaria era o
+próprio que estava cego**. Só apareceu porque o dono colou a saída crua do
+`/health` no chat.
+
+**A CORREÇÃO, nas duas pontas:**
+
+- `instalar.sh` grava `VERSAO.json` na publicação, **depois** do rsync (ele
+  roda com `--delete` e apagaria o arquivo), com a versão que o repositório de
+  origem tinha naquele instante.
+- `versaoDoServidor()` lê esse arquivo quando o git não está disponível. Sem
+  git **e** sem arquivo, continua respondendo "desconhecida" em vez de
+  quebrar — deixar de responder por causa de um diagnóstico seria trocar o
+  diagnóstico por um problema.
+- E o `stderr` do git passou a ser ignorado: `fatal: not a git repository` não
+  é erro, e linha de erro que não é erro suja exatamente o lugar onde se
+  procura erro de verdade. Custou leitura neste mesmo dia.
+
+**Teste que trava:** `backend/testes/api.test.js`, suíte 17 — uma cópia sem
+git com `VERSAO.json` tem que informar a versão publicada (e o ISO junto, que
+é o que deixa o painel comparar sozinho); sem git e sem arquivo, "desconhecida"
+sem lançar.
+
+**A lição:** controle que só é exercitado em desenvolvimento não é controle.
+Os dois controles cegos aqui funcionavam perfeitamente em toda máquina de
+teste — porque em toda máquina de teste o código roda de dentro do
+repositório. O ambiente de produção era o único onde a pergunta importava, e o
+único onde ninguém a fazia.

@@ -139,6 +139,27 @@ rsync -a --delete \
 # O seed da frota mora um nível acima, junto do painel.
 cp "$PAINEL_DIR/frota_seed_2026.csv" "$APP_DIR/../frota_seed_2026.csv" 2>/dev/null || \
   cp "$PAINEL_DIR/frota_seed_2026.csv" "$APP_DIR/frota_seed_2026.csv"
+
+# A VERSÃO PUBLICADA, GRAVADA NA PUBLICAÇÃO (12/09/2026).
+#
+# O que roda é esta cópia, e ela não é um repositório git — o rsync não traz
+# o .git. Por isso o /health respondia `versao: "desconhecida"` em produção, e
+# com ele ficavam cegos DOIS controles: o aviso do painel "o servidor ficou
+# para trás" e o passo 5 do portão, que exige a API no HEAD (ocorrência #47).
+# O controle que avisaria era o próprio que estava cego, então ninguém viu.
+#
+# Tem que vir DEPOIS do rsync: ele roda com --delete e apagaria o arquivo.
+if VERSAO_COMMIT="$(git -C "$FONTE" rev-parse --short HEAD 2>/dev/null)"; then
+  VERSAO_TEXTO="$(git -C "$FONTE" log -1 --format='%cd' --date=format:'%d/%m %H:%M' 2>/dev/null)"
+  VERSAO_ISO="$(git -C "$FONTE" log -1 --format='%cI' 2>/dev/null)"
+  printf '{"texto":"%s · %s","em":"%s","commit":"%s"}\n' \
+    "$VERSAO_TEXTO" "$VERSAO_COMMIT" "$VERSAO_ISO" "$VERSAO_COMMIT" \
+    > "$APP_DIR/VERSAO.json"
+  ok "versão publicada registrada: $VERSAO_TEXTO · $VERSAO_COMMIT"
+else
+  aviso "não consegui ler a versão do git em $FONTE — /health vai dizer 'desconhecida'"
+fi
+
 chown -R "$APP_USER:$APP_USER" "$APP_DIR"
 ok "código em $APP_DIR"
 
