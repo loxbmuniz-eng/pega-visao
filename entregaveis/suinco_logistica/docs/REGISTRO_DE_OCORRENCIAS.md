@@ -2286,3 +2286,198 @@ confirmando de verdade os contadores somem.
 mesmo poço. A #48 corrigiu apagar sem confirmar; a #53 corrigiu remover por
 incerteza; a #54 corrige a retentativa virar rajada. As três eram
 necessárias — nenhuma sozinha bastava.
+
+## #55 — O login de um setor ecoava gravação e recusava a dos outros (12/09/2026)
+
+Relato do dono, com três prints: *"vamos lá acontecendo problemas de
+instabilidade e preciso da sua resolucao"*. No print do Faturamento, **41
+avisos de "conflito de versão"** empilhados. Transcrição do áudio do Alysson,
+no mesmo dia: *"o pessoal do faturamento também reclama. Eles precisam fazer
+login quase o tempo todo e recebem a mesma mensagem, **impossibilitando a
+inserção de informações**."*
+
+**O carimbo enganou primeiro.** O rodapé do print dizia `11/09 20:23 ·
+ac31f4f`, um commit ANTES da correção da #54 — e a primeira leitura foi
+"navegador com cache velho". Errado: `build_arquivo_unico.py` grava o carimbo
+ANTES do commit que o carrega, então o `index.html` do commit publicado
+`f275714` carrega exatamente `ac31f4f`. **O navegador estava na versão mais
+nova.** O defeito era real e estava no ar. *Carimbo de build não é prova de
+versão carregada — é prova da versão anterior.*
+
+**A CAUSA:** em `fundirEstadoRemoto`, o bloco que marca `_ultimoSync` (a
+proteção contra eco) rodava **no fim da função, depois** das mesclagens de
+frota e de rotas. E `upsertFrota`/`upsertRota` chamam `save()` sem condição.
+Nessa janela `_ultimoSync` ainda estava vazio para as cargas que a PRÓPRIA
+fusão acabara de empurrar, então o guard de `sincronizarCargasAlteradas` não
+reconhecia nenhuma e **toda carga levava um PATCH espontâneo**. O gatilho
+`tg_viagem_update` (001_schema.sql:181-191) incrementa `versao` em todo
+UPDATE, mesmo gravando valor idêntico — então os outros terminais, que tinham
+lido antes do eco, levavam **409 CONFLITO_DE_VERSAO** ao gravar edição
+legítima.
+
+**Medido:** 20 cargas na tela, login do Faturamento **sem editar nada** → 20
+PATCH enviados, versão de todas passando de 1 para 2. No cenário fiel ao
+relato: `{200: 69, 429: 157, 409: 45}` e a pílula "+43 aviso(s) aguardando". A
+Expedição, gravando em cargas **recém-criadas que ninguém havia tocado**, foi
+recusada em **45 de 45**.
+
+Por que o Faturamento e não os outros: ele loga mais vezes que todo mundo
+(família #24/#25) e mantém muitas cargas abertas. **Quem loga mais, ecoa
+mais — mas quem perde a gravação são os outros setores.**
+
+**A CORREÇÃO:** a estampagem passou para ANTES das mesclagens de frota e
+rotas, com o `save()` final ficando onde estava.
+
+**Teste que trava:** `testes/test_login_nao_regrava_carga_que_ninguem_editou.py`
+— leitura completa com cargas + frota + rotas tem que produzir **zero**
+POST/PATCH de carga.
+
+**A lição:** ordem dentro de uma função é contrato. Um `save()` no meio do
+caminho lê estado pela metade, e estado pela metade virou escrita que ninguém
+pediu.
+
+## #56 — Edição local dada como enviada sem nunca ter subido (12/09/2026)
+
+Achado investigando os mesmos prints da #55, e é o mais grave do dia: **não
+dá erro, não pisca vermelho, não some da tela.** O operador vê o que digitou,
+acha que gravou, e o servidor nunca recebeu.
+
+**A CAUSA, em dois lugares:**
+
+1. `fundirEstadoRemoto` estampava `_ultimoSync`/`DB._sincronizado` em **TODAS**
+   as cargas locais, inclusive as com gravação pendente. A própria fusão, uma
+   linha acima, **se recusa a sobrescrever** carga `_pendente` (regra 3) — e
+   em seguida a marcava como sincronizada. Contradição dentro da mesma função.
+2. `sincronizarCargasAlteradas` marca `_ultimoSync` **ANTES** de saber se a
+   subida deu certo. O código já conhecia o perigo: o ramo `_emVoo` se recusa
+   a marcar, com a frase *"marcar aqui faria a mudança sumir para sempre"*. O
+   que faltava era aplicar o mesmo raciocínio quando a pendência vinha de uma
+   gravação ANTERIOR que não confirmou.
+
+Com as duas juntas: edição de lacre na Portaria que não subiu + **uma
+atualização remota de qualquer OUTRA carga** (coisa de todo minuto num pátio
+ativo) = marca posta, e a sincronia seguinte **não tenta mais**. Dado preso
+naquele aparelho, para sempre, sem aviso.
+
+**A CORREÇÃO:** `temGravacaoLocalPendente(c)` — uma função, três chamadores
+(`podarLocal`, a estampagem da fusão, a estampagem da sincronia). Nenhum dos
+três marca como sincronizada uma carga cuja gravação não chegou. Tenta subir
+de qualquer forma; o que não pode é **dar por feito**.
+
+**Teste que trava:** `testes/test_pendencia_local_nao_e_dada_por_sincronizada.py`
+— carga pendente + atualização remota de OUTRA carga: a marca não pode ser
+posta, e a sincronia seguinte tem que tentar enviar.
+
+**A lição:** escrita otimista sem confirmação é como se perde dado — está
+escrito nas regras da casa, e aqui estava escrito duas vezes no próprio
+arquivo, nos comentários, enquanto o código fazia o contrário.
+
+## #57 — Rota não cadastrada virava "sistema offline" (12/09/2026)
+
+Encontrado no **log do VPS do dono**, treze vezes em 11/09 (15:09, 15:17,
+15:19, 15:27, 15:33, 19:07, 19:09, 20:18, 20:19, 20:23, 20:24, 20:26, 20:29):
+
+```
+[erro] POST /api/cargas — violates foreign key constraint "fact_viagens_rota_codigo_fkey"
+```
+
+**A CAUSA:** criar carga com código de rota fora de `dim_rotas` viola a chave
+estrangeira e saía como **500**. `eFalhaDeRede()` em `suinco-api.js` trata
+todo status ≥ 500 como rede fora do ar — correto para a maioria dos 500, e
+errado para este, que é recusa **permanente**. A conferência da #48/#53
+respondia (servidor de pé, rápido) que a carga não existe, e o painel
+enfileirava para tentar **para sempre** um erro que nunca vai ser aceito,
+mostrando *"VOCÊ ESTÁ OFFLINE — SISTEMA INDISPONÍVEL... CONECTE-SE PARA
+CONTINUAR"*. O operador obedecia o aviso e refazia com o mesmo código de
+rota. São as treze tentativas do log.
+
+O servidor **já conhecia esta armadilha**: o tratamento de
+`entity.too.large`, logo acima no mesmo arquivo, tem o raciocínio escrito por
+inteiro — *"diz 'erro interno no servidor' para uma requisição que o servidor
+recusou de propósito, e manda o painel tratar como falha de rede"*. Faltava
+aplicá-lo à chave estrangeira.
+
+**A CORREÇÃO:** `servidor.js` mapeia o código `23503` do Postgres para **422
+`CADASTRO_INEXISTENTE`**, com o nome do cadastro e o valor recusado na
+mensagem: *"A rota "011" não está cadastrada. Cadastre antes de gravar."* 422
+já cai no ramo de recusa legítima do `upsert()` — não enfileira, não insiste,
+e o operador lê o motivo verdadeiro. Vale para toda chave estrangeira, não só
+a da rota.
+
+**Teste que trava:** `testes/test_recusa_permanente_nao_e_offline.py` — bate
+no servidor de verdade; exige 4xx (não 500), proíbe a palavra "OFFLINE" e o
+"CONECTE-SE" no aviso, e confere que não ficou linha fantasma em
+`fact_viagens`.
+
+**A lição:** o status HTTP é a etiqueta com que o painel decide insistir ou
+desistir. Errar a etiqueta no servidor faz o painel mentir para o operador —
+e mandá-lo repetir o que nunca vai dar certo.
+
+## #58 — O teto da fila de avisos estava escrito e nunca foi implementado (12/09/2026)
+
+Print do dono com **"+41 aviso(s) aguardando"** no Faturamento e outro com
+**67** no celular do Alysson, em cargas diferentes (`PLI2A86`, `118021`,
+`117993`).
+
+**A CAUSA:** `NOTIF_MAX_FILA = 4` existe em `app.js:55` desde 25/08/2026, com
+um bloco de comentário de 35 linhas explicando as três regras da fila — e a
+regra 1 (*"Além de MAX_FILA, o mais antigo cai"*) **nunca foi escrita em
+código**. A constante era declarada e não era lida em lugar nenhum do
+arquivo. Avisos de recusa de carga não são perecíveis de propósito (são
+resposta a uma ação de quem está na frente da tela), então nada os
+descartava: cada carga aguardando confirmação abria o seu próprio aviso, sem
+fim. **Medido:** 15 cargas + 13 leituras remotas = 45 avisos, 42 ainda na
+fila.
+
+**A CORREÇÃO:** `_apararFila()` aplica o teto de verdade, descartando o mais
+antigo. Aviso com som (`forte`) nunca cai — troca de placa é segurança, o
+caminhão errado entra na doca por causa dele; se só sobrarem avisos de
+segurança, a fila passa do teto de propósito.
+
+**Teste que trava:** `testes/test_fila_de_avisos_tem_teto.py` — as duas
+famílias (incerteza e conflito de versão), separadas e juntas, não passam do
+teto declarado.
+
+**A lição, e é a que dói:** comentário não é controle. Havia 35 linhas
+explicando uma regra que o programa não cumpria, e a explicação sobreviveu
+quatro semanas lida por quem confiava nela. **Regra descrita e não
+implementada é pior que regra ausente** — ela engana quem revisa.
+
+## #59 — Achados do mesmo dia que NÃO foram corrigidos (12/09/2026)
+
+Escritos aqui para não dependerem da memória de ninguém.
+
+**a) A conferência de sessão falha FECHADA.** `middleware/auth.js:50-68`
+roda uma consulta ao banco **por requisição autenticada** e o `catch`
+genérico devolve `SESSAO_NAO_VERIFICAVEL` para **qualquer** falha — inclusive
+timeout de pool. Reproduzido em laboratório: token válido, `sessao_versao`
+batendo, `ativo=true`, e **401 em 5,004s** (exatamente o
+`connectionTimeoutMillis`). `chamar()` em `suinco-api.js:363-365` apaga o
+token sem olhar o `codigo`. Alcança **74 rotas**. **MAS: não há evidência de
+que tenha disparado em produção** — sete dias de `journalctl` não trazem
+nenhuma linha de falha da conferência. É risco provado, causa não provada.
+Não foi corrigido para não publicar mudança de autenticação sem o defeito
+estar demonstrado no ambiente real.
+
+**b) Por que o Faturamento é forçado a logar — EM ABERTO.** A #55 explica a
+rajada de avisos e a recusa de gravação, não o logout. Pendente: medir.
+
+**c) `/health` de produção responde `"versao": "desconhecida"`.** Causa:
+`fatal: not a git repository` em `/opt/embarque-suinco` (aparece no journal a
+cada reinício do serviço). O controle que avisaria "o servidor ficou para
+trás" está **cego em produção** — e o passo 5 do portão, que exige a API no
+HEAD (#47), não tem como valer lá.
+
+**d) O gerador de PDF está desligado em produção** — `/health` responde
+`"pdf": {"pronto": false}`. Falta `PLAYWRIGHT_CHROMIUM_PATH` no serviço
+systemd. Relatório em PDF não sai, e nenhum teste pega isso porque localmente
+a variável é fornecida à mão.
+
+**e) Medições do servidor que ficam de registro.** 2 núcleos, 7,8 GB (792 MB
+em uso), `NRestarts=0` e 18h no ar — **o serviço não estava caindo**.
+`PG_POOL_MAX` ausente do `.env`, logo **10** conexões, compartilhadas por
+painel + Power BI (`rotas/bi.js:46` faz `SELECT *` sem LIMIT) + robô de PDF,
+contra `max_connections=100` do Postgres. Base real pequena (3.062
+movimentações, 761 viagens) — a medição de rajada feita com volume sintético
+40× maior **não vale para esta produção**, e foi relatada ao dono como se
+valesse. Erro de quem mediu, corrigido no mesmo dia.

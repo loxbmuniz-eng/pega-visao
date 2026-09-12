@@ -776,9 +776,27 @@ const SuincoStore = {
         this._refazer.add(c.id);
         return;
       }
-      this._ultimoSync.set(c.id, marca);
-      if(!DB._sincronizado) DB._sincronizado = {};
-      DB._sincronizado[c.id] = marca;                       // sobrevive ao F5
+      /* GRAVAÇÃO ANTERIOR QUE NÃO CONFIRMOU NÃO PODE SER MARCADA COMO
+         SINCRONIZADA (12/09/2026).
+
+         Mesmo raciocínio que o `_emVoo` logo acima, e a mesma frase: marcar
+         aqui faria a mudança sumir para sempre. A diferença é o gatilho.
+         `_pendente` fica posto por `sincronizarCarga` e só é retirado quando
+         o servidor confirma; se ele ainda está aí, a gravação anterior NÃO
+         chegou. Esta função marca ANTES de saber se a subida deu certo, então
+         marcar uma carga nessa situação fechava a porta: a marca nunca
+         envelhecia (o operador não mexe de novo numa carga que ele acha que
+         gravou) e a edição nunca mais era reenviada — sem erro, sem aviso, só
+         perdida naquele aparelho.
+
+         Reproduzido em 12/09: lacre editado na Portaria, uma atualização
+         remota de OUTRA carga chegando, e a sincronia seguinte não tentava
+         mais. Tenta subir de qualquer forma — o que não pode é dar por feito. */
+      if(!temGravacaoLocalPendente(c)){
+        this._ultimoSync.set(c.id, marca);
+        if(!DB._sincronizado) DB._sincronizado = {};
+        DB._sincronizado[c.id] = marca;                     // sobrevive ao F5
+      }
       this._subirCarga(c.id);
     });
   },
@@ -1317,6 +1335,33 @@ function fundirEstadoRemoto(dados){
      `push` sozinho já muda o tamanho, que é o que o índice compara. */
   if(res.movimentacoesNovas || substituidas.size) invalidarIndiceMovimentacoes();
 
+  /* A ESTAMPAGEM VEM ANTES DE FROTA E ROTAS (12/09/2026).
+
+     Ela ficava no fim da função, depois das mesclagens de frota e de rotas —
+     e `upsertFrota`/`upsertRota` chamam `save()` sem condição. Nessa janela
+     `_ultimoSync` ainda estava vazio para as cargas que ESTA fusão acabou de
+     empurrar, então o guard de `sincronizarCargasAlteradas` não reconhecia
+     nenhuma delas e TODA carga levava um PATCH espontâneo. Medido: 20 cargas
+     na tela, um login sem editar nada, 20 gravações enviadas e a versão de
+     todas subindo no servidor. O gatilho `tg_viagem_update` incrementa
+     `versao` em todo UPDATE, então os outros terminais — que tinham lido
+     antes do eco — levavam 409 ao gravar edição LEGÍTIMA. Na reprodução, a
+     Expedição foi recusada em 45 de 45 cargas que ninguém havia tocado.
+
+     E NUNCA estampa carga com gravação local pendente: a fusão logo acima já
+     se recusa a sobrescrevê-la (regra 3), e marcá-la como sincronizada em
+     seguida era a contradição que fazia a edição nunca mais ser reenviada —
+     sem erro, sem aviso, só perdida naquele aparelho. */
+  if(res.cargasNovas || res.cargasAtualizadas || res.movimentacoesNovas){
+    if(!DB._sincronizado) DB._sincronizado = {};
+    DB.cargas.forEach(c => {
+      if(temGravacaoLocalPendente(c)) return;
+      const marca = c.atualizadoEm || c.criadoEm || '';
+      SuincoStore._ultimoSync.set(c.id, marca);
+      DB._sincronizado[c.id] = marca;
+    });
+  }
+
   // ---- frota (só na carga inicial; dimensão de leitura) ----
   if(Array.isArray(dados.frota) && dados.frota.length){
     dados.frota.forEach(r => {
@@ -1370,16 +1415,9 @@ function fundirEstadoRemoto(dados){
   }
 
   res.podadas = podarLocal();   // ver JANELA_LOCAL_DIAS
+  // A estampagem que protege contra o eco já rodou lá acima, antes de frota e
+  // rotas. Aqui só resta gravar a cópia local.
   if(res.cargasNovas || res.cargasAtualizadas || res.movimentacoesNovas){
-    // Marca como já sincronizado o que acabou de VIR do servidor, senão o
-    // save() abaixo devolveria tudo de volta — um eco infinito entre os
-    // terminais, cada leitura gerando uma escrita.
-    if(!DB._sincronizado) DB._sincronizado = {};
-    DB.cargas.forEach(c => {
-      const marca = c.atualizadoEm || c.criadoEm || '';
-      SuincoStore._ultimoSync.set(c.id, marca);
-      DB._sincronizado[c.id] = marca;
-    });
     SuincoStore.save();
   }
   return res;
@@ -2018,12 +2056,22 @@ function limiteDaJanelaLocal(){
    nunca é gravada no navegador e nunca sobe de volta. */
 function ehCargaDoServidor(c){ return !!(c && c._doServidor); }
 
+/* Tem gravação local que ainda não chegou ao servidor.
+
+   A mesma pergunta era feita por escrito em dois lugares, e o segundo
+   chamador (a estampagem de `fundirEstadoRemoto`) simplesmente não a fazia —
+   foi assim que edição de lacre virou dado perdido calado em 12/09/2026. */
+function temGravacaoLocalPendente(c){
+  return !!(c && (c._pendente || c._nuncaConfirmada
+    || (c._statusPendentes && c._statusPendentes.length)));
+}
+
 function podarLocal(){
   const limite = limiteDaJanelaLocal();
   const podadas = new Set();
   DB.cargas.forEach(c => {
     if(c.status !== 'Seguiu Viagem') return;
-    if(c._pendente || (c._statusPendentes && c._statusPendentes.length)) return;
+    if(temGravacaoLocalPendente(c)) return;
     if(ehCargaDoServidor(c)) return;
     const saida = primeiroTimestamp(c.id, 'Seguiu Viagem') || c.concluidoEm || c.atualizadoEm;
     const t = saida ? Date.parse(saida) : NaN;
