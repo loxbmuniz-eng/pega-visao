@@ -2614,3 +2614,50 @@ as palavras que o servidor de fato escreve (`sessão recusada`, `token
 inválido`) em vez de um filtro genérico de erro, o caso teria fechado horas
 antes. O filtro errado não devolve "não sei": devolve "não tem", que é
 diferente e muito mais caro.
+
+### #61 — PENDENTE: os 17 testes que criam sessão pelo lugar antigo (12/09/2026)
+
+A correção da #61 está commitada (`54f1332`) e **não publicada**: o portão
+reprovou e cancelou, corretamente. Isto fica escrito para segunda não
+recomeçar a investigação.
+
+**O que aconteceu:** 17 suítes ficaram vermelhas. Todas as 17 criam a sessão
+escrevendo o token à mão em `sessionStorage`:
+
+```
+test_status_sobe.py:81       sessionStorage.setItem('suinco_token', 'token-de-teste');
+test_trava_de_versao.py:113  const t = sessionStorage.getItem('suinco_token');
+```
+
+Com o token agora em `localStorage`, para esses testes a sessão deixou de
+existir — e tudo que depende dela recusa.
+
+**É a CAUSA 2 das quatro** (o teste mede um atalho que mudou de forma, não a
+regra). A prova é a correlação: **17 de 17 vermelhas mexem em
+`sessionStorage`, e nenhuma suíte fora dessa lista ficou vermelha.** A
+infraestrutura estava de pé no momento da falha (Postgres online, API de teste
+respondendo no commit `54f1332`), então não é a causa 3 nem falso vermelho de
+contêiner.
+
+**As 17:** test_adaptador_api, test_aviso_recusa_carga, test_backoff_sincronia,
+test_cadastro_frota_sincroniza, test_cadastro_inline_frota_programacao,
+test_carga_recusada_nao_fica_fantasma, test_demora_nao_apaga_carga,
+test_incerteza_nao_apaga_carga, test_libera_pendencias,
+test_limite_atrasado_nao_e_offline, test_login_api,
+test_pendencia_local_nao_e_dada_por_sincronizada, test_recuo_carga_incerta,
+test_sem_sessao_nao_mostra_painel, test_servidor_desatualizado,
+test_status_sobe, test_trava_de_versao.
+
+**O que falta fazer:** trocar `sessionStorage` por `localStorage` no preparo da
+sessão dessas 17. **Duas NÃO são mecânicas e pedem leitura:**
+
+- `test_sem_sessao_nao_mostra_painel` — a regra dela é "sem sessão, não mostra
+  painel", e ela precisa apagar o lugar certo. O comentário da linha 13 ainda
+  descreve o desenho antigo ("o token → sessionStorage → morre com a aba") e
+  tem que ser reescrito, senão a documentação passa a mentir.
+- `test_servidor_desatualizado` — mexe em dois pontos de storage; conferir se
+  algum é o carimbo de build e não o token.
+
+**Não trate como mecânica a terceira:** `test_pendencia_local_nao_e_dada_por_sincronizada`
+é guarda nova de hoje (#56). Ela tem que continuar provando a REGRA dela depois
+do ajuste, não só voltar ao verde.
