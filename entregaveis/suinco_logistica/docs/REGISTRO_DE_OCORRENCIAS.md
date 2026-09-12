@@ -2546,3 +2546,71 @@ Os dois controles cegos aqui funcionavam perfeitamente em toda máquina de
 teste — porque em toda máquina de teste o código roda de dentro do
 repositório. O ambiente de produção era o único onde a pergunta importava, e o
 único onde ninguém a fazia.
+
+## #61 — O painel apagava a própria sessão, e o servidor nunca soube (12/09/2026)
+
+Fecha o item (b) da #59, que ficou em aberto pela manhã.
+
+Relato, transcrito do áudio do Alysson: *"o pessoal do faturamento também
+reclama. **Eles precisam fazer login quase o tempo todo** e recebem a mesma
+mensagem, impossibilitando a inserção de informações."* E o print do celular
+dele: tela de login, com 67 avisos presos atrás.
+
+**O QUE FECHOU O CASO FOI UMA AUSÊNCIA.** O journal do VPS, 7 dias:
+
+```
+sessão recusada (SESSAO_REVOGADA)  →  1   (Daniela, revogação legítima)
+token inválido                     →  0
+falha ao conferir a sessão         →  0
+JWT_VALIDADE=12h
+```
+
+**UMA expulsão em sete dias**, contra "logo o tempo todo". O servidor nunca os
+expulsou. Quem apagava a sessão era o próprio aparelho — e não havia o que
+registrar, porque **nenhuma requisição é feita nesse momento**.
+
+**A CAUSA:** o token vivia em `sessionStorage`, que morre quando a aba fecha
+**e quando o sistema recicla a aba em segundo plano** — rotina no Android, e o
+próprio `suinco-api.js` já documentava isso desde 31/08 ao explicar o caso do
+Rene. A escolha tinha uma intenção certa, escrita no código: *"terminal de
+pátio é compartilhado; com localStorage a sessão do porteiro do turno da manhã
+continuaria válida para quem sentar ali à noite"*.
+
+**Mas a proteção só valia se alguém FECHASSE a aba.** Palavras do dono,
+12/09: *"portaria fica sempre aberto, faturamento tambem, expedicao tambem,
+os demais logam em horario de expediente normalmente, alysson loga do celular
+24 horas, e fica ligado com notificacoes push"*. Nessas estações ninguém fecha
+a aba. **Pagava-se o custo integral da proteção sem receber a proteção.**
+
+**A CORREÇÃO (decisão do dono, só painel, sem `atualizar.sh`):** o token passa
+a viver em `localStorage` e a proteção da troca de turno passa a ser o **tempo
+sem ninguém mexer — 14 h**, prazo escolhido por ele para cobrir a noite de quem
+usa o celular 24 h com notificação. A passagem de turno deliberada é o botão
+**"Trocar usuário"**, que continua apagando na hora.
+
+**O DETALHE QUE QUASE FEZ A PROTEÇÃO VIRAR ENFEITE:** `ultimaInteracao` era
+variável de memória, iniciada em `Date.now()`. Com o token sobrevivendo à aba
+mas o relógio reiniciando a cada reabertura, a janela de 14 h **nunca
+venceria** — e a estação abandonada reabriria logada para sempre. O carimbo
+passou a viver no `localStorage` ao lado do token (gravado de minuto em minuto,
+não a cada toque: seria uma escrita por `pointerdown` num terminal de pátio), e
+a janela é conferida **na leitura do token**, não só no temporizador de 3 h —
+esperar pelo temporizador deixaria a estação abandonada reabrir já logada.
+
+**Teste que trava:** `testes/test_sessao_sobrevive_reciclagem.py` — 7 blocos.
+O decisivo é o 4, que mede o VALOR do carimbo e não só o efeito: antes
+`1789233283592`, depois do reload `1789233283592`, diferença **0 ms** (se
+houvesse reiniciado, seria ~4000 ms). Sem essa medição, uma implementação de
+fachada passaria no teste. Também trava: abandono de >14 h expulsa **na
+abertura**; 13 h não expulsa; "Trocar usuário" apaga na hora; e a regra de
+31/08 continua de pé (sem token, gravação é recusada, não sai calada).
+
+**A lição, e vale mais que a correção:** o caso foi resolvido por uma coisa que
+NÃO estava no log. A manhã inteira foi gasta procurando o defeito que expulsava
+as pessoas, inclusive um real que eu reproduzi em laboratório (a conferência de
+sessão que falha fechada, #59a) — e que o log provou não ter disparado nenhuma
+vez. **Contar zero é evidência.** Se a primeira busca no journal tivesse usado
+as palavras que o servidor de fato escreve (`sessão recusada`, `token
+inválido`) em vez de um filtro genérico de erro, o caso teria fechado horas
+antes. O filtro errado não devolve "não sei": devolve "não tem", que é
+diferente e muito mais caro.

@@ -62,6 +62,10 @@ const SuincoSharePoint = (function () {
   const ATRASO_QUE_DENUNCIA_A_PAGINA_MS = 2000;
 
   const CHAVE_TOKEN = 'suinco_token';
+  // Carimbo da última interação. Vive ao lado do token e pelo mesmo motivo:
+  // se ele não sobrevivesse à aba, a janela de inatividade voltaria a "agora"
+  // em cada reabertura e NUNCA venceria — proteção de fachada.
+  const CHAVE_INTERACAO = 'suinco_ultima_interacao';
   const CHAVE_FILA = 'suinco_fila_api';
   const CHAVE_MARCA = 'suinco_marca_sync';
 
@@ -80,36 +84,94 @@ const SuincoSharePoint = (function () {
   let ouvintesDevolucao = [];
   let ouvintesFechamentoPrograma = [];
   let timerRenovacao = null;
-  let ultimaInteracao = Date.now();
+  /* NÃO começa em `Date.now()`: começar em "agora" é o que transformaria a
+     janela de inatividade em enfeite, porque cada reabertura de aba zeraria o
+     relógio e a estação abandonada nunca venceria. Parte do carimbo gravado;
+     só cai para "agora" quando não existe carimbo nenhum (primeira vez neste
+     aparelho, ou modo privado). */
+  let ultimaInteracao = lerUltimaInteracao();
+
+  function lerUltimaInteracao() {
+    try {
+      const bruto = Number(localStorage.getItem(CHAVE_INTERACAO));
+      if (Number.isFinite(bruto) && bruto > 0) return bruto;
+    } catch (e) { /* modo privado: cai no agora */ }
+    return Date.now();
+  }
 
   /* ---------------------------------------------------------------
      Sessão
 
-     O token fica em sessionStorage, não em localStorage. Terminal de pátio
-     é compartilhado: com localStorage a sessão do porteiro do turno da
-     manhã continuaria válida para quem sentar ali à noite.
+     O TOKEN SOBREVIVE À ABA (12/09/2026) — e quem protege a troca de turno
+     passa a ser o TEMPO SEM NINGUÉM MEXER, não o fechamento da aba.
+
+     Antes o token ficava em `sessionStorage`, com esta justificativa:
+     "terminal de pátio é compartilhado; com localStorage a sessão do
+     porteiro do turno da manhã continuaria válida para quem sentar ali à
+     noite". A intenção estava certa. O efeito, não:
+
+     · `sessionStorage` morre quando a aba fecha E quando o sistema RECICLA
+       a aba em segundo plano — rotina no Android. Nesse instante não há
+       requisição nenhuma, então o servidor não registra nada;
+     · medido no journal do VPS, 7 dias: UMA `sessão recusada` (revogação
+       legítima), ZERO `token inválido`, ZERO falhas de conferência —
+       enquanto o Faturamento relatava logar "quase o tempo todo". O
+       servidor nunca os expulsou: o aparelho apagava a sessão sozinho;
+     · e a proteção só valia se alguém FECHASSE a aba. Palavras do dono,
+       12/09: "portaria fica sempre aberto, faturamento tambem, expedicao
+       tambem". Nessas estações ninguém fecha. Pagava-se o custo da
+       proteção sem receber a proteção.
+
+     Agora: o token vive em `localStorage` e vence por INATIVIDADE
+     (JANELA_INATIVIDADE, 14 h — escolha do dono, cobre a noite de quem usa
+     o celular 24 h com push). Estação de fato abandonada vence sozinha ao
+     ser reaberta; quem está trabalhando não cai mais. A passagem de turno
+     deliberada é o botão "Trocar usuário", que apaga na hora.
      --------------------------------------------------------------- */
   function lerToken() {
     if (token) return token;
-    try { token = sessionStorage.getItem(CHAVE_TOKEN); } catch (e) { token = null; }
+    try { token = localStorage.getItem(CHAVE_TOKEN); } catch (e) { token = null; }
+    /* A JANELA É CONFERIDA NA LEITURA, não só no temporizador de renovação.
+
+       O temporizador roda a cada 3 h; esperar por ele deixaria uma estação
+       abandonada reabrir JÁ LOGADA e ficar assim até o próximo tique — que
+       é exatamente o buraco que a janela existe para fechar. Conferir aqui
+       faz a primeira leitura depois de reabrir decidir. */
+    if (token && passouDaJanelaDeInatividade()) {
+      limparToken();
+      return null;
+    }
     return token;
   }
 
   function guardarToken(t, operador) {
     token = t;
     operadorLogado = operador;
-    try { sessionStorage.setItem(CHAVE_TOKEN, t); } catch (e) { /* modo privado */ }
+    try { localStorage.setItem(CHAVE_TOKEN, t); } catch (e) { /* modo privado */ }
     /* A marca vai AQUI, e não no login: `guardarToken` é o ponto único por
        onde passa todo token de servidor — o do login e o da renovação de
        sessão. Marcar só no login deixaria de fora quem entrou de manhã e
        teve a sessão renovada durante o dia. Uma função, dois chamadores. */
     marcarEntradaPeloServidor();
+    // Entrar ou renovar É interação: sem isto, um login feito logo depois de
+    // uma janela vencida herdaria o carimbo velho e cairia na leitura seguinte.
+    registrarInteracao();
   }
 
   function limparToken() {
     token = null;
     operadorLogado = null;
-    try { sessionStorage.removeItem(CHAVE_TOKEN); } catch (e) { /* ignora */ }
+    try { localStorage.removeItem(CHAVE_TOKEN); } catch (e) { /* ignora */ }
+    try { localStorage.removeItem(CHAVE_INTERACAO); } catch (e) { /* ignora */ }
+  }
+
+  /* Passou tempo demais sem ninguém mexer? É esta pergunta que substituiu "a
+     aba fechou" como proteção da troca de turno. Lê o carimbo do disco, e não
+     a variável de memória: depois de uma reabertura é o disco que tem a
+     verdade sobre quando alguém mexeu pela última vez de fato. */
+  function passouDaJanelaDeInatividade() {
+    const quando = lerUltimaInteracao();
+    return (Date.now() - quando) > JANELA_INATIVIDADE;
   }
 
   function estaConfigurado() {
@@ -1420,10 +1482,25 @@ const SuincoSharePoint = (function () {
      vivo indefinidamente; terminal esquecido aberto vence sozinho e a
      próxima pessoa precisa se identificar. */
   const INTERVALO_RENOVACAO = 3 * 60 * 60 * 1000;   // 3 h — folga larga sobre as 12 h
-  const JANELA_INATIVIDADE  = 4 * 60 * 60 * 1000;   // 4 h sem ninguém = deixa vencer
+  /* 14 h sem ninguém = deixa vencer. Era 4 h, quando a proteção real da troca
+     de turno ainda era o fechamento da aba; desde 12/09/2026 a janela É a
+     proteção, e o prazo é escolha do dono: cobre a noite de quem usa o painel
+     pelo celular 24 h com notificação, sem deixar estação esquecida aberta
+     viva no dia seguinte. */
+  const JANELA_INATIVIDADE  = 14 * 60 * 60 * 1000;
+
+  /* Gravar em disco a cada toque seria uma escrita por `pointerdown` num
+     terminal de pátio — por isso o carimbo só desce de minuto em minuto. A
+     variável de memória continua exata para a renovação; o disco só precisa
+     ser bom o bastante para uma janela de 14 h. */
+  const PASSO_DO_CARIMBO_MS = 60 * 1000;
+  let carimbadoEm = 0;
 
   function registrarInteracao() {
     ultimaInteracao = Date.now();
+    if (ultimaInteracao - carimbadoEm < PASSO_DO_CARIMBO_MS) return;
+    carimbadoEm = ultimaInteracao;
+    try { localStorage.setItem(CHAVE_INTERACAO, String(ultimaInteracao)); } catch (e) { /* modo privado */ }
   }
 
   function ouvirInteracao() {
@@ -2089,6 +2166,12 @@ const SuincoSharePoint = (function () {
     listarOperadores, criarOperador, atualizarOperador, excluirOperador,
     sincronizarAgora, iniciarSincroniaPeriodica, pararSincronia, ultimaSincronia,
     renovarSessao, registrarInteracao,
+    /* Exposto para a guarda poder medir o VALOR do carimbo, e não só o
+       efeito dele: um teste que só observasse "caiu / não caiu" passaria
+       também numa implementação que deixasse o relógio voltar para "agora" a
+       cada reabertura — que é justamente o defeito de fachada que esta
+       mudança existe para não cometer. */
+    ultimaInteracaoEm: () => lerUltimaInteracao(),
     arquivarDia, fecharPrograma,
     gerarRelatorioPdf, listarProgramacoes,
     listarRevisoes, restaurarRevisao,
