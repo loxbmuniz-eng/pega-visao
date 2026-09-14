@@ -172,6 +172,20 @@ function rotaLabel(codigo){
 // Rótulo CURTO — usado nas tabelas e no relatório impresso. Sem o detalhe de
 // cidades: a rota 504 sozinha tem cinco municípios, e o nome completo esticava
 // a linha inteira do relatório para caber numa única célula.
+/* AS ROTAS QUE AINDA SE OFERECEM.
+
+   Uma função, seis chamadores: os seis seletores de rota do painel
+   (Programação, Completar, carga extra do modelo, montagem, modelo da
+   semana e devoluções). Escrever o filtro em cada um deles é como a rota
+   aposentada reaparece em UM seletor esquecido meses depois.
+
+   A LISTA DO CADASTRO NÃO USA ESTA FUNÇÃO, de propósito: lá a aposentada
+   precisa aparecer, marcada, senão ninguém descobre que ela existe nem
+   consegue trazê-la de volta. */
+function rotasParaEscolher(){
+  return ROTAS.filter(r => r.ativa !== false);
+}
+
 function rotaCurta(codigo){
   const r = rotaInfo(codigo);
   return r ? `${r.codigo} — ${r.nome}` : (codigo ? String(codigo) : '—');
@@ -224,6 +238,14 @@ function upsertRota(codigo, nome, detalhe, operador, extra){
     nome: (nome||'').trim(),
     detalhe: (detalhe||'').trim(),
     operador: (operador||'').trim(),
+    /* APOSENTADA CONTINUA EXISTINDO (14/09/2026). `ativa:false` tira a rota
+       dos seletores e NÃO a tira de ROTAS — `rotaInfo()` precisa dela para
+       resolver o nome da praça em toda carga, devolução e viagem que já
+       rodou. Rota que some do cadastro leva junto o nome de tudo que ela
+       carregou. Quem nunca foi usada é APAGADA no servidor e nem chega
+       aqui. Ausente = ativa: rota nova e servidor antigo continuam valendo. */
+    ativa: extra.ativa === false ? false : true,
+    aposentadaEm: extra.aposentadaEm || null,
   };
 
   const existente = ROTA_POR_CODIGO.get(codigo);
@@ -639,7 +661,8 @@ const SuincoStore = {
       // terminar. origem:'sharepoint' porque isto é reidratação de dado já
       // gravado, não uma gravação nova — sincronizar de novo aqui reenviaria
       // a mesma rota ao servidor a cada abertura do painel.
-      (DB.rotasExtras||[]).forEach(r => upsertRota(r.codigo, r.nome, r.detalhe, r.operador, {origem:'sharepoint'}));
+      (DB.rotasExtras||[]).forEach(r => upsertRota(r.codigo, r.nome, r.detalhe, r.operador,
+        {origem:'sharepoint', ativa: r.ativa, aposentadaEm: r.aposentadaEm}));
       const migradas = migrarPraOnde();
       if(migradas) console.info(`[Suinco] "Pra onde?" migrado em ${migradas} carga(s).`);
     }catch(e){ console.error('Falha ao carregar dados locais', e); }
@@ -1407,7 +1430,8 @@ function fundirEstadoRemoto(dados){
     dados.rotas.forEach(r => {
       const codigo = String(r.Codigo||'').trim();
       if(!codigo) return;
-      upsertRota(codigo, r.Nome || '', r.Detalhe || '', r.Operador || '', { origem:'sharepoint' });
+      upsertRota(codigo, r.Nome || '', r.Detalhe || '', r.Operador || '',
+        { origem:'sharepoint', ativa: r.Ativa, aposentadaEm: r.AposentadaEm });
     });
   }
 

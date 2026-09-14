@@ -933,6 +933,15 @@ const SuincoSharePoint = (function () {
     }
   }
 
+  /* Excluir rota: o SERVIDOR decide se apaga ou aposenta, contando o uso na
+     hora. A tela não decide porque trabalha com uma cópia que pode estar
+     velha — e a resposta diz qual dos dois aconteceu, para ela não ter de
+     adivinhar. */
+  async function excluirRota(codigo) {
+    if (!estaConfigurado()) return semServidor();
+    return chamar('/api/rotas/' + encodeURIComponent(codigo), { metodo: 'DELETE' });
+  }
+
   async function gravarRota(campos) {
     if (!estaConfigurado()) return semServidor();
     try {
@@ -1314,12 +1323,7 @@ const SuincoSharePoint = (function () {
       try {
         const rotas = await chamar('/api/rotas');
         ultimaBuscaDeRotas = agora;
-        dados.rotas = (rotas || []).map((rt) => ({
-          Codigo: rt.codigo,
-          Nome: rt.nome,
-          Detalhe: rt.detalhe,
-          Operador: rt.operador,
-        }));
+        dados.rotas = (rotas || []).map(linhaDeRota);
       } catch (e) {
         console.warn('[Suinco] rotas não carregaram:', e.message);
       }
@@ -1389,6 +1393,25 @@ const SuincoSharePoint = (function () {
      e já houve um defeito exatamente assim aqui: o mapeamento copiava só
      quatro chaves e o motorista chegava vazio para todo mundo. Uma função,
      três chamadores. */
+  /* Uma rota do servidor no formato do painel. Existe pelo mesmo motivo de
+     linhaDeFrota: a tradução vivia inline em dois lugares, e o dia em que
+     uma coluna nova entra (foi `ativa`, em 14/09/2026) só UM deles é
+     lembrado — a rota aposentada voltaria a aparecer nos seletores de quem
+     sincronizou pelo caminho esquecido. */
+  function linhaDeRota(rt) {
+    return {
+      Codigo: rt.codigo,
+      Nome: rt.nome,
+      Detalhe: rt.detalhe,
+      Operador: rt.operador,
+      /* Servidor antigo não manda o campo. `undefined` tem que valer ATIVA:
+         entre a publicação no Vercel e o atualizar.sh, tratar a ausência
+         como aposentada esvaziaria todos os seletores de rota. */
+      Ativa: rt.ativa === false ? false : true,
+      AposentadaEm: rt.aposentada_em || null,
+    };
+  }
+
   function linhaDeFrota(v) {
     return {
       Placa: v.placa,
@@ -1456,8 +1479,9 @@ const SuincoSharePoint = (function () {
       const dados = {
         incremental: true,
         cargas: [], movimentacoes: [], frota: [],
-        rotas: (rotas || []).map((rt) => ({
-          Codigo: rt.codigo, Nome: rt.nome, Detalhe: rt.detalhe, Operador: rt.operador,
+        rotas: (rotas || []).map(linhaDeRota).map((x) => ({
+          Codigo: x.Codigo, Nome: x.Nome, Detalhe: x.Detalhe, Operador: x.Operador,
+          Ativa: x.Ativa, AposentadaEm: x.AposentadaEm,
         })),
       };
       ouvintesDados.forEach((fn) => { try { fn(dados); } catch (e) { console.error(e); } });
@@ -2260,7 +2284,7 @@ const SuincoSharePoint = (function () {
     aoFecharPrograma,
     login, sair, diagnosticarConexao,
     push, upsert, excluir, mudarStatus, sequenciar, encerrarProgramacoesAnteriores, reterLacre,
-    recarregarRotas, gravarTarifaFrete, gravarDestinoFrete, tabelaDeFrete,
+    recarregarRotas, excluirRota, gravarTarifaFrete, gravarDestinoFrete, tabelaDeFrete,
     corrigirEtapa, corrigirDataProgramacao, desfazerExclusao, listarExcluidas,
     programacaoDoDia, historico, mfa,
     modeloSemana, montagem,

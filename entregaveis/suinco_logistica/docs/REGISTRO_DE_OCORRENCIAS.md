@@ -3107,3 +3107,71 @@ incluindo que Portaria, Expedição e Faturamento continuam vendo o número em
 texto, e que o ajuste pequeno NÃO pede confirmação (o dono citou "450 km ou
 44" como variação normal: perguntar a cada ajuste seria a mesma trava com
 outro nome).
+
+---
+
+## #70 — Excluir rota: dois verbos na mesma frase (14/09/2026)
+
+Pedido do dono: *"quero a funcionalidade de excluir rota também na parte do
+cadastro de rotas"*. Perguntado sobre como deveria funcionar, ele respondeu
+o que estava mesmo precisando: *"apagar o que tiver repetido, ou se
+aposentar uma rota e criar uma nova"*.
+
+**SÃO DOIS PEDIDOS, e tratar como um só teria dado errado dos dois jeitos.**
+
+**Apagar o repetido.** A repetição existe de verdade no cadastro oficial —
+conferido: **534 e 540 são as duas "Salvador", as duas LogMaster**. Rota
+duplicada, ou digitada com o código errado, nunca foi usada por ninguém.
+Deixá-la só escondida seria sujeira permanente no banco.
+
+**Aposentar a que rodou.** `rota_codigo` é chave estrangeira de **quatro**
+tabelas: `fact_viagens`, `devolucao_rotas`, `programacao_modelo` e
+`programacao_montagem`. O DELETE seria recusado pelo próprio banco — e se
+passasse, as cargas antigas ficariam com um código sem nome de praça no
+relatório que a Administração lê. É a regra da casa do pátio, aplicada ao
+cadastro: o que sai da operação continua no Histórico.
+
+**QUEM DECIDE QUAL DOS DOIS É O SERVIDOR**, contando o uso no instante do
+clique. A tela não decide porque trabalha com uma cópia que pode estar
+velha — e a resposta diz qual aconteceu e por quê, para ela não adivinhar:
+*"Rota ZQ2 aposentada: sai dos seletores e não é mais oferecida. Não foi
+apagada porque já foi usada (2 em devoluções) — esses registros continuam
+mostrando o nome da praça."*
+
+**A APOSENTADA NÃO SAI DE `ROTAS`, e isso é o ponto.** Ela sai dos
+SELETORES e continua resolvendo o nome da praça em toda carga, devolução e
+viagem que já rodou. São duas necessidades opostas no mesmo dado, e por
+isso existe `rotasParaEscolher()` — **uma função, seis chamadores**: os seis
+seletores de rota do painel. Escrever o filtro em cada um é como a rota
+aposentada reaparece em UM seletor esquecido meses depois.
+
+**A lista do cadastro NÃO usa essa função**, de propósito: lá a aposentada
+precisa aparecer, marcada. Escondê-la nos dois lugares seria a pior das
+duas — ela continuaria existindo no banco, fora de tudo, e ninguém
+descobriria que existe.
+
+**PRAÇA REPETIDA GANHOU MARCA na lista**, sem julgar: duas rotas com o
+mesmo nome recebem um chip âmbar. Não é erro — 534 e 540 podem ser duas
+rotas legítimas para Salvador. É o que faz o dono ENXERGAR o que ele
+queria limpar, com a decisão continuando dele.
+
+**SERVIDOR ANTIGO NÃO PODE ESVAZIAR OS SELETORES.** `ativa` ausente vale
+ATIVA, nos dois lados (`linhaDeRota` no adaptador e `upsertRota` em
+`data.js`). Entre a publicação no Vercel e o `atualizar.sh` o servidor não
+manda o campo; tratar a ausência como aposentada deixaria todo seletor de
+rota vazio — a versão de produção do defeito #64, com outro nome.
+
+**Um erro meu, no teste.** A primeira versão media `recarregarRotas()` duas
+vezes em menos de um minuto e batia na trava de 60 s do adaptador: a rota
+nunca chegava à cópia local, e o teste acusou "a aposentada sumiu do
+painel" — falso. O teste passou a exercitar `excluirRotaUI`, que é o que a
+pessoa clica. **Teste que mede o atalho em vez da regra inventa defeito** —
+é a causa 2 das quatro, e já tinha me pegado hoje com a chave `carimbos`.
+
+**Teste que trava:** `testes/test_excluir_rota_do_cadastro.py` — 17
+checagens: apaga a que nunca rodou (e some do servidor), aposenta a que
+rodou dizendo onde é usada, some dos seletores mas segue nomeando o
+histórico, aparece marcada na lista, 534/540 marcadas como praça repetida,
+e a Portaria é recusada na tela **e** no servidor.
+
+**Só vale depois do `atualizar.sh`:** migração **053** e rota nova.

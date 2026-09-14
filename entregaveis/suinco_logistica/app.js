@@ -3938,7 +3938,7 @@ function atualizarDestinoUI(id, val){
 function rotaSelectHtml(c){
   return `<select class="rota-inline" onchange="atualizarRotaUI('${escJs(c.id)}',this.value)">
     <option value="">—</option>
-    ${ROTAS.map(r=>`<option value="${esc(r.codigo)}" ${c.rota===r.codigo?'selected':''}>${esc(rotaCurta(r.codigo))}</option>`).join('')}
+    ${rotasParaEscolher().map(r=>`<option value="${esc(r.codigo)}" ${c.rota===r.codigo?'selected':''}>${esc(rotaCurta(r.codigo))}</option>`).join('')}
   </select>`;
 }
 function paletizadaSelectHtml(c){
@@ -4690,7 +4690,7 @@ function filaArrastarSolta(ev, idDestino){
 
 function preencherSelectsRota(){
   const opcoes = '<option value="">(rota não informada)</option>' +
-    ROTAS.map(r=>`<option value="${esc(r.codigo)}">${esc(rotaLabel(r.codigo))}</option>`).join('');
+    rotasParaEscolher().map(r=>`<option value="${esc(r.codigo)}">${esc(rotaLabel(r.codigo))}</option>`).join('');
   // Sempre reconstrói (não só na primeira vez): uma rota cadastrada em
   // Cadastros → Cadastrar Rota precisa aparecer aqui na hora, sem esperar
   // reload. Preserva o valor selecionado — chamar isto não pode limpar uma
@@ -6879,10 +6879,86 @@ function preencherSelectsDestinoFrete(){
 function renderRotasCadastro(){
   const tbody = document.getElementById('rotas-tbody');
   if(!tbody) return;
+  /* A LISTA MOSTRA TUDO, inclusive a aposentada — e por isso não usa
+     rotasParaEscolher(). Escondê-la aqui seria a pior das duas: ela
+     continuaria existindo no banco, fora dos seletores, e ninguém
+     descobriria que existe nem conseguiria trazê-la de volta. */
+  const podeExcluir = podeExcluirRotaUI();
+  /* O cabeçalho acompanha a coluna. Sem isto a tabela sai com quatro
+     títulos e cinco células, e o navegador desalinha a linha inteira. */
+  const th = document.getElementById('th-excluir-rota');
+  if(th){ th.hidden = !podeExcluir; th.textContent = podeExcluir ? 'Excluir' : ''; }
+  /* Praça repetida em dois códigos é o que o dono queria enxergar para
+     limpar — 534 e 540 são as duas "Salvador". A marca não julga: só
+     mostra que há duas, e deixa a decisão com quem conhece a operação. */
+  const porNome = new Map();
+  ROTAS.forEach(r => {
+    const chave = (r.nome||'').trim().toLowerCase();
+    if(!chave) return;
+    porNome.set(chave, (porNome.get(chave) || 0) + 1);
+  });
   tbody.innerHTML = ROTAS.slice()
     .sort((a,b)=> a.codigo.localeCompare(b.codigo, 'pt-BR', {numeric:true}))
-    .map(r=>`<tr><td>${esc(r.codigo)}</td><td>${esc(r.nome)||'—'}</td><td>${esc(r.detalhe)||'—'}</td><td>${esc(r.operador)||'—'}</td></tr>`)
+    .map(r=>{
+      const aposentada = r.ativa === false;
+      const repetida = porNome.get((r.nome||'').trim().toLowerCase()) > 1;
+      return `<tr${aposentada ? ' class="rota-aposentada"' : ''}>
+        <td>${esc(r.codigo)}</td>
+        <td>${esc(r.nome)||'—'}${repetida && !aposentada
+            ? ' <span class="rota-chip-rep" title="Outra rota tem o mesmo nome — confira se uma das duas pode sair">praça repetida</span>' : ''}
+          ${aposentada ? '<span class="rota-chip-apos" title="Fora dos seletores; continua nomeando os registros antigos">aposentada</span>' : ''}</td>
+        <td>${esc(r.detalhe)||'—'}</td>
+        <td>${esc(r.operador)||'—'}</td>
+        ${podeExcluir ? `<td class="no-print">${aposentada
+            ? '<span class="text-dim" title="Já está fora de circulação">—</span>'
+            : `<button class="btn btn-sec btn-sm" onclick="excluirRotaUI('${escJs(r.codigo)}')"
+                 title="Apaga se nunca foi usada; aposenta se já rodou">Excluir</button>`}</td>` : ''}
+      </tr>`;
+    })
     .join('');
+}
+
+/* Quem tira rota de circulação: a mesma mão que cadastra (o POST de rota já
+   exige Logística) mais a Administração, irrestrita. Decisão do dono.
+   Deixar criar numa mão e tirar noutra é como a lista cresce sem ninguém
+   poder limpá-la. */
+function podeExcluirRotaUI(){
+  const setor = (DB.operador || {}).setor;
+  return setor === 'Logística' || setor === 'Administração';
+}
+
+/* EXCLUIR PERGUNTA EXPLICANDO, E QUEM DECIDE O DESTINO É O SERVIDOR.
+
+   Pedido do dono: "apagar o que tiver repetido, ou se aposentar uma rota e
+   criar uma nova". São dois verbos, e qual deles vale depende do uso — que
+   só o servidor sabe contar na hora. A tela avisa que pode ser um ou outro
+   e mostra qual foi, em vez de prometer o que não controla. */
+async function excluirRotaUI(codigo){
+  const r = rotaInfo(codigo);
+  const nome = r ? `${codigo} — ${r.nome}` : codigo;
+  const ok = confirm(
+    `Excluir a rota ${nome}?\n\n`
+    + `Se ela nunca foi usada em carga, devolução ou programação, é apagada de vez.\n`
+    + `Se já rodou, é APOSENTADA: sai dos seletores e ninguém mais a escolhe, `
+    + `mas continua nomeando as cargas antigas — senão elas viram um código sem praça.\n\n`
+    + `Quem decide qual dos dois é o servidor, contando o uso agora.`);
+  if(!ok) return;
+  try {
+    const resposta = await SuincoSharePoint.excluirRota(codigo);
+    if(resposta && resposta.semServidor){
+      notify('Sem servidor agora — excluir rota precisa dele para contar o uso. Tente de novo quando voltar.',
+        'warn', 7000);
+      return;
+    }
+    if(resposta && resposta.apagada) removerRotaLocal(codigo);
+    else if(resposta && resposta.aposentada) upsertRota(codigo, r ? r.nome : '', r ? r.detalhe : '',
+      r ? r.operador : '', { origem:'sharepoint', ativa:false, aposentadaEm: new Date().toISOString() });
+    preencherSelectsRota();
+    renderRotasCadastro();
+    notifyGravacao((resposta && resposta.mensagem) || `Rota ${codigo} excluída.`);
+  } catch(e){
+    notify('Não excluiu: ' + (e.message || e), 'danger', 8000);
+  }
 }
 async function addRotaUI(){
   const codigo = document.getElementById('rota-codigo').value.trim();
@@ -10664,7 +10740,7 @@ function _renderMontagemInterno(){
      em Cadastros aparece aqui na hora, sem lista paralela para envelhecer. */
   const selExtra = document.getElementById('mont-rota-extra');
   if(selExtra && !selExtra.options.length){
-    selExtra.innerHTML = ROTAS.map(r =>
+    selExtra.innerHTML = rotasParaEscolher().map(r =>
       `<option value="${esc(r.codigo)}">${esc(rotaLabel(r.codigo))}</option>`).join('');
   }
 
@@ -10750,7 +10826,7 @@ function rotaMontagemSelectHtml(m){
         title="Trocar a rota desta linha"
         onchange="alterarRotaMontagemUI('${id}', this.value)">
       ${conhecida ? '' : `<option value="${esc(atual)}" selected>${esc(m.rota_nome || atual)} · ${esc(atual)}</option>`}
-      ${ROTAS.map(r => `<option value="${esc(r.codigo)}"${String(r.codigo)===atual?' selected':''}>${esc(rotaLabel(r.codigo))}</option>`).join('')}
+      ${rotasParaEscolher().map(r => `<option value="${esc(r.codigo)}"${String(r.codigo)===atual?' selected':''}>${esc(rotaLabel(r.codigo))}</option>`).join('')}
     </select>`;
 }
 
@@ -12112,7 +12188,7 @@ function renderModeloSemana(){
   const sel = document.getElementById('modelo-rota');
   if(sel){
     const atual = sel.value;
-    sel.innerHTML = ROTAS.map(r =>
+    sel.innerHTML = rotasParaEscolher().map(r =>
       `<option value="${esc(r.codigo)}">${esc(rotaLabel(r.codigo))}</option>`).join('');
     if(atual) sel.value = atual;
   }

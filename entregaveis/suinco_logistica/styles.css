@@ -5471,3 +5471,20 @@ tr.fila-alvo > td{ box-shadow:inset 0 3px 0 0 var(--gold) }
 }
 .rodape-travas:hover{ background:rgba(224,82,96,.26) }
 .rodape-travas:focus-visible{ outline:2px solid var(--gold,#e9b954); outline-offset:2px }
+
+/* ROTA APOSENTADA E PRAÇA REPETIDA NO CADASTRO (14/09/2026).
+
+   A aposentada continua na lista de propósito — escondê-la deixaria uma
+   rota existindo no banco que ninguém encontra nem consegue reativar. Mas
+   ela não pode competir visualmente com as que estão em uso. */
+#rotas-tbody tr.rota-aposentada{ opacity:.55; }
+#rotas-tbody .rota-chip-apos,
+#rotas-tbody .rota-chip-rep{
+  display:inline-block; margin-left:6px; padding:1px 7px; border-radius:99px;
+  font-size:10.5px; font-weight:700; letter-spacing:.02em; vertical-align:middle;
+  white-space:nowrap;
+}
+#rotas-tbody .rota-chip-apos{ background:rgba(154,166,188,.18); color:var(--text-dim); }
+/* Âmbar, e não vermelho: praça repetida não é erro — 534 e 540 podem ser
+   duas rotas legítimas para Salvador. É um convite a conferir. */
+#rotas-tbody .rota-chip-rep{ background:rgba(227,169,60,.16); color:#C99433; }

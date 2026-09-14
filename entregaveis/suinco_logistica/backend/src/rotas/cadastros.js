@@ -136,8 +136,13 @@ rotasCadastros.post('/frota', exigirLogin, exigirSetor('Logística'), async (req
    uma versão nova ser publicada. */
 rotasCadastros.get('/rotas', exigirLogin, async (req, res, next) => {
   try {
+    /* `ativa` viaja junto (14/09/2026). O painel precisa das DUAS coisas:
+       esconder a rota aposentada dos seletores e continuar resolvendo o
+       nome da praça nos registros antigos. Devolver só as ativas apagaria
+       o nome de toda carga que já rodou naquela rota. */
     const { rows } = await consultar(
-      'SELECT codigo, nome, detalhe, operador FROM dim_rotas ORDER BY codigo'
+      `SELECT codigo, nome, detalhe, operador, ativa, aposentada_em, aposentada_por
+         FROM dim_rotas ORDER BY codigo`
     );
     res.json(rows);
   } catch (e) { next(e); }
@@ -161,6 +166,74 @@ rotasCadastros.post('/rotas', exigirLogin, exigirSetor('Logística'), async (req
       ]
     );
     res.status(201).json(rows[0]);
+  } catch (e) { next(e); }
+});
+
+/* EXCLUIR ROTA — APAGA A QUE NUNCA RODOU, APOSENTA A QUE RODOU (14/09/2026).
+
+   Pedido do dono, e são dois na mesma frase: "apagar o que tiver repetido,
+   ou se aposentar uma rota e criar uma nova".
+
+   Repetição existe de verdade no cadastro oficial — 534 e 540 são as duas
+   "Salvador", as duas LogMaster. Rota duplicada ou digitada com o código
+   errado nunca foi usada por ninguém: essa sai do banco e some.
+
+   Rota que já rodou é outra história. `rota_codigo` é chave estrangeira de
+   QUATRO tabelas, e o DELETE seria recusado pelo próprio banco. Mesmo que
+   passasse, as cargas antigas ficariam com um código sem nome de praça no
+   relatório que a Administração lê. Regra da casa: o que sai da operação
+   continua no Histórico, dizendo para onde foi.
+
+   QUEM DECIDE QUAL DOS DOIS É O SERVIDOR, contando o uso na hora — e não a
+   tela, que trabalha com uma cópia que pode estar velha. A resposta diz
+   qual aconteceu e por quê, para a tela não ter de adivinhar. */
+const USO_DA_ROTA = [
+  ['fact_viagens',          'viagens'],
+  ['devolucao_rotas',       'devoluções'],
+  ['programacao_modelo',    'modelo da semana'],
+  ['programacao_montagem',  'montagem do dia'],
+];
+
+rotasCadastros.delete('/rotas/:codigo', exigirLogin, exigirSetor('Logística'), async (req, res, next) => {
+  try {
+    const codigo = String(req.params.codigo ?? '').trim().slice(0, 20);
+    const { rows: existe } = await consultar(
+      'SELECT codigo, nome, ativa FROM dim_rotas WHERE codigo = $1', [codigo]
+    );
+    if (!existe[0]) {
+      return res.status(404).json({ erro: `Rota "${codigo}" não está cadastrada.`, codigo: 'ROTA_NAO_ENCONTRADA' });
+    }
+
+    const uso = {};
+    let total = 0;
+    for (const [tabela, rotulo] of USO_DA_ROTA) {
+      const { rows } = await consultar(
+        `SELECT count(*)::int AS n FROM ${tabela} WHERE rota_codigo = $1`, [codigo]
+      );
+      if (rows[0].n > 0) { uso[rotulo] = rows[0].n; total += rows[0].n; }
+    }
+
+    if (total === 0) {
+      await consultar('DELETE FROM dim_rotas WHERE codigo = $1', [codigo]);
+      return res.json({
+        codigo, apagada: true, aposentada: false, uso: {},
+        mensagem: `Rota ${codigo} apagada — ela nunca foi usada em carga, devolução ou programação.`,
+      });
+    }
+
+    const onde = Object.entries(uso).map(([k, n]) => `${n} em ${k}`).join(', ');
+    await consultar(
+      `UPDATE dim_rotas
+          SET ativa = FALSE, aposentada_em = now(), aposentada_por = $2
+        WHERE codigo = $1`,
+      [codigo, req.operador?.nome || '']
+    );
+    res.json({
+      codigo, apagada: false, aposentada: true, uso,
+      mensagem: `Rota ${codigo} aposentada: sai dos seletores e não é mais oferecida. `
+        + `Não foi apagada porque já foi usada (${onde}) — esses registros continuam `
+        + `mostrando o nome da praça.`,
+    });
   } catch (e) { next(e); }
 });
 
