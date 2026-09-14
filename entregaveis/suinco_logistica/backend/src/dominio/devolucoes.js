@@ -144,6 +144,62 @@ export function validarTransicaoDevolucao(statusAtual, statusNovo, setor, tipo) 
   return regra;
 }
 
+/* O CAMINHO DE VOLTA — UMA etapa, a última (14/09/2026).
+
+   Levantado na auditoria de prontidão, antes de as devoluções entrarem em
+   operação oficial: o ciclo todo funcionava, e um clique errado não tinha
+   volta. Nem para quem carimbou, nem para a Logística, nem para a
+   Administração — a máquina de estados só conhecia o sentido de ida, e
+   409 era a resposta para todos. O único socorro era restaurar uma
+   revisão pela Administração, que a Logística não enxerga e que ninguém
+   procura quando o que houve foi um toque errado no celular.
+
+   A Portaria fica aberta 24 horas e o gestor carimba de madrugada. Uma
+   devolução travada até alguém acordar é caminhão parado no portão.
+
+   QUEM DESFAZ É QUEM PODIA TER FEITO. A permissão não é uma tabela nova:
+   é a MESMA allowlist do avanço. Assim o Faturamento desfaz a própria
+   pesagem, a Logística desfaz qualquer passo (ela está em todos), a
+   Administração passa em tudo — e a Central de Notas não apaga a balança
+   do Faturamento. Duas tabelas de permissão para o mesmo par de setores
+   divergiriam na primeira mudança; esta é a regra da casa de uma decisão,
+   um lugar.
+
+   UMA etapa por vez, e só a última. Desfazer em cadeia é reescrever o
+   histórico; quem precisa disso tem o "↩ Alterações" da Administração,
+   que continua existindo para exatamente esse caso.
+
+   O que volta é O CARIMBO, não o dado. Se o Faturamento errou o peso, ele
+   desfaz, corrige e carimba de novo — apagar o peso junto obrigaria a
+   redigitar o que estava certo. */
+export function validarDesfazerDevolucao(statusAtual, setor, tipo) {
+  if (statusAtual === DEV_STATUS_INICIAL) {
+    throw new ErroDeFluxoDevolucao(
+      'Esta devolução ainda não teve nenhuma etapa registrada — não há o que desfazer.',
+      'NADA_A_DESFAZER'
+    );
+  }
+  /* Qual transição TROUXE a devolução até aqui. O mesmo filtro de `soSobra`
+     do avanço, pelo mesmo motivo ao contrário: na sobra, "Descarga
+     Conferida" veio da balança de ENTRADA, e desfazer não pode devolvê-la
+     a um peso final que nunca existiu. */
+  const regra = TRANSICOES_DEV.find((t) => t.para === statusAtual
+    && (t.soSobra ? tipo === 'SOBRA' : !(tipo === 'SOBRA' && t.de === 'Peso Final Registrado')));
+  if (!regra) {
+    throw new ErroDeFluxoDevolucao(
+      `Não sei de onde "${statusAtual}" veio, então não sei para onde voltar.`,
+      'SEM_CAMINHO_DE_VOLTA'
+    );
+  }
+  if (setor !== SETOR_IRRESTRITO && !regra.setores.includes(setor)) {
+    throw new ErroDePermissaoDevolucao(
+      `O setor ${setor} não desfaz "${statusAtual}". `
+      + `Quem fez esse passo desfaz: ${regra.setores.join(' ou ')}.`
+    );
+  }
+  return regra;
+}
+
 /* Criar e editar o checklist é da Logística (Administração irrestrita) —
    "controle total das meninas", requisito nº 1 do pedido. */
 /* CRIAR CHECKLIST: a Logística e as três filiais (02/09/2026).

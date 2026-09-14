@@ -2965,3 +2965,79 @@ vermelho — essa é a causa 1 das quatro, e teste que confunde as duas apaga
 decisão.
 
 **Teste que trava:** `testes/test_operador_no_relatorio_operacional.py`.
+
+---
+
+## #68 — O ciclo de devolução só sabia andar para a frente (14/09/2026)
+
+Achado numa **auditoria de prontidão operacional**, não num relato. O dono
+definiu que as devoluções entram em operação oficial esta semana; antes de
+abrir, o ciclo inteiro foi rodado contra o servidor, setor por setor,
+incluindo o que acontece quando alguém erra.
+
+**O que já estava certo, e é a maior parte.** As 6 etapas rodam cada uma
+pelo seu setor dono. Setor errado é recusado com uma mensagem que ENSINA —
+*"O setor Central de Notas não registra 'Recebida na Portaria'. Quem faz
+esse passo: Portaria ou Logística."* Não dá para pular etapa. Dois
+carimbando ao mesmo tempo: um passa, o outro leva 409. A sobra pula a
+balança final. As 6 etapas guardam quem e quando. A filial cria e
+acompanha, mas não avança. Comercial e Qualidade não carimbam.
+
+**O QUE FALTAVA: desfazer.** Carimbada a etapa errada, ninguém conseguia
+voltar. Nem quem carimbou, nem a Logística, nem a Administração — os três
+recebiam `409 Não é possível ir de "Conferida no Faturamento" direto para
+"Recebida na Portaria"`, porque `validarTransicaoDevolucao` só conhecia o
+sentido de ida.
+
+**Por que isso reprova para operação oficial.** A Portaria fica aberta 24
+horas e o dono carimba pelo celular de madrugada. O único socorro era a
+Administração abrir *"↩ Alterações"* e restaurar uma revisão — que a
+Logística sequer enxerga (o botão é só de Administração, e "controle total
+das meninas" foi o requisito nº 1), que não se parece com desfazer, e que
+ninguém vai procurar às 2 da manhã. Devolução travada até alguém acordar é
+caminhão parado no portão. E a regra da casa já dizia: *botão desabilitado
+não ensina o caminho, só nega* — aqui nem botão havia.
+
+**QUEM DESFAZ É QUEM PODIA TER FEITO**, decisão do dono. E a permissão NÃO
+é uma tabela nova: é a **mesma allowlist do avanço**, lida ao contrário.
+O Faturamento desfaz a própria pesagem; a Logística desfaz qualquer passo
+(ela está em todos); a Administração passa em tudo; a Central de Notas não
+apaga a balança do Faturamento. Duas tabelas de permissão para o mesmo par
+de setores divergiriam na primeira mudança — regra da casa, uma decisão,
+um lugar.
+
+**UMA etapa, a última.** Desfazer em cadeia é reescrever histórico; para
+isso continua existindo o *"↩ Alterações"* da Administração.
+
+**Volta o CARIMBO, não o dado.** Errou o peso? Desfaz, corrige, carimba de
+novo. Apagar o número junto obrigaria a redigitar o que estava certo — é
+assim que se perde dado bom consertando dado ruim.
+
+**A sobra tem caminho de volta próprio.** Nela, "Descarga Conferida" veio
+da balança de ENTRADA, não do peso final. Desfazer sem o mesmo filtro
+`soSobra` do avanço devolveria a devolução a um passo que aquele caminhão
+nunca deu. O filtro é o espelho exato do que já existia na ida.
+
+**A pergunta explica antes de apagar:** qual carimbo sai, de quem era,
+quando foi, para onde a devolução volta — e que o peso e o recado
+continuam gravados.
+
+**Vermelho→verde provado contra o publicado:** `POST /devolucoes/:id/desfazer`
+devolvia **404**, e `blocoDesfazerDev` tinha **0 ocorrências** no
+`devolucoes.js` da branch de entrega.
+
+**Testes que travam:**
+`backend/testes/devolucoes.test.js` suíte 18 (8 casos: cada setor desfaz o
+próprio passo, a Logística desfaz qualquer um, um setor não desfaz o do
+outro, nada a desfazer em "Lançada", a filial não desfaz, a sobra volta
+para a balança de entrada, o passo pode ser redado, e a trilha registra
+quem desfez) e `testes/test_desfazer_etapa_de_devolucao.py` na tela.
+
+**Dois erros meus nesta auditoria, registrados porque explicam o método.**
+O primeiro relatório dizia "etapas sem registro de quem/quando" — eu
+procurei a chave como `etapas` e depois como `etapas` de novo; o nome é
+`carimbos`, e o registro sempre esteve completo. O número certo da
+auditoria é **8 ok, 0 atrito, 1 quebra**, não 7/1/1. Teste que procura o
+campo errado não acha defeito: inventa um.
+
+**Só vale depois do `atualizar.sh`:** a rota é de servidor.

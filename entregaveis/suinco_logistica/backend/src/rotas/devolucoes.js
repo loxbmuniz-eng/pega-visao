@@ -19,6 +19,7 @@ import { registrarLeitura } from '../servicos/registro_leitura.js';
 import {
   DEV_STATUS_INICIAL,
   validarTransicaoDevolucao,
+  validarDesfazerDevolucao,
   podeCriarDevolucao,
   devolucaoParaPainel,
   itemParaPainel,
@@ -681,6 +682,76 @@ rotasDevolucoes.post('/devolucoes/:id/etapa', exigirLogin, async (req, res, next
         });
       }
       void statusFinal;
+
+      return buscarCompleta(cli, req.params.id);
+    });
+
+    emitirAtualizada(req.params.id);
+    res.json(resultado);
+  } catch (e) { next(e); }
+});
+
+/* DESFAZER A ÚLTIMA ETAPA (14/09/2026).
+
+   Levantado na auditoria de prontidão operacional: o ciclo inteiro
+   funcionava e um clique errado não tinha volta — nem para quem carimbou,
+   nem para a Logística, nem para a Administração. A Portaria fica aberta
+   24 horas e o gestor carimba pelo celular de madrugada; uma devolução
+   travada até alguém acordar é caminhão parado no portão.
+
+   As guardas são AS MESMAS da rota de etapa, na mesma ordem e pelos mesmos
+   motivos: quem só acompanha não escreve, e a filial cria e acompanha mas
+   não roda o ciclo — desfazer é mexer no ciclo tanto quanto avançar.
+
+   O SELECT é FOR UPDATE como no avanço: dois desfazeres simultâneos
+   voltariam duas etapas em vez de uma, e a segunda apagaria um carimbo que
+   o operador nem viu na tela. */
+rotasDevolucoes.post('/devolucoes/:id/desfazer', exigirLogin, async (req, res, next) => {
+  try {
+    const op = req.operador;
+    if (soAcompanha(op.setor)) return res.status(403).json(RECUSA_SO_ACOMPANHA);
+    if (ehFilial(op.setor)) {
+      return res.status(403).json({
+        erro: 'A filial cria o checklist e acompanha; quem mexe nas etapas é a matriz.',
+        codigo: 'SETOR_SEM_PERMISSAO',
+      });
+    }
+
+    const resultado = await emTransacao(async (cli) => {
+      const { rows } = await cli.query(
+        'SELECT * FROM devolucoes WHERE devolucao_id = $1 AND excluida_em IS NULL FOR UPDATE',
+        [req.params.id]
+      );
+      if (!rows[0]) {
+        const e = new Error('Devolução não encontrada.');
+        e.status = 404; e.codigo = 'NAO_ENCONTRADA';
+        throw e;
+      }
+      const atual = rows[0].status;
+      const regra = validarDesfazerDevolucao(atual, op.setor, rows[0].tipo);
+
+      /* Sai o carimbo do passo desfeito; FICA o dado que aquele passo
+         gravou (peso, recado). Quem errou o peso desfaz, corrige e carimba
+         de novo — apagar o número junto obrigaria a redigitar o que já
+         estava certo, e é assim que se perde dado bom consertando dado
+         ruim. */
+      await cli.query(
+        `UPDATE devolucoes
+            SET status = $1, ${regra.carimbo}_por = NULL, ${regra.carimbo}_em = NULL,
+                atualizado_em = now(), versao = versao + 1
+          WHERE devolucao_id = $2`,
+        [regra.de, req.params.id]
+      );
+
+      const quem = rows[0][`${regra.carimbo}_por`] || 'alguém';
+      const quando = rows[0][`${regra.carimbo}_em`]
+        ? new Date(rows[0][`${regra.carimbo}_em`]).toISOString() : 'sem data';
+      await logDevolucao(cli, {
+        devolucaoId: req.params.id, operador: op,
+        acao: `Devolução nº ${rows[0].numero}: DESFEITA a etapa "${atual}" `
+            + `(carimbada por ${quem} em ${quando}) — voltou para "${regra.de}"`
+            + (req.body?.motivo ? ` · motivo: ${String(req.body.motivo).slice(0, 300)}` : ''),
+      });
 
       return buscarCompleta(cli, req.params.id);
     });
