@@ -56,7 +56,7 @@ const ROTAS = [
   ['518', 'Rio de Janeiro (Redes)', 'Canejo', ''],
   ['519', 'Brasília (Varejo)', '', 'Versatto Logística'],
   ['520', 'Goiás (Varejo)', '', 'AG Sestini'],
-  ['521', 'SP Ribeirão Preto', '', 'CargoFrio'],
+  ['521', 'São Paulo Interior', 'Ribeirão Preto', 'CargoFrio'],
   ['522', 'SP Capital', 'Osasco', 'SPM Log'],
   ['523', 'Vale do Aço', 'Governador Valadares', 'SS Log'],
   ['524', 'Zona da Mata', 'Juiz de Fora', 'BSF Logística'],
@@ -67,7 +67,7 @@ const ROTAS = [
   ['532', 'Bahia Interior', 'Vitória da Conquista', 'TransVieira'],
   ['534', 'Salvador', '', 'LogMaster'],
   ['536', 'Goiás', '', 'AG Sestini'],
-  ['538', 'SP Interior', 'Marília', 'CargoFrio'],
+  ['538', 'São Paulo Interior', 'Marília', 'CargoFrio'],
   ['540', 'Salvador', '', 'LogMaster'],
   ['541', 'Brasília (Redes)', '', 'Pantanal'],
 ];

@@ -141,7 +141,7 @@ const ROTAS = [
   { codigo:'518', nome:'Rio de Janeiro (Redes)',             detalhe:'Canejo', operador:'' },
   { codigo:'519', nome:'Brasília (Varejo)',                  operador:'Versatto Logística' },
   { codigo:'520', nome:'Goiás (Varejo)',                     operador:'AG Sestini' },
-  { codigo:'521', nome:'SP Ribeirão Preto',                  operador:'CargoFrio' },
+  { codigo:'521', nome:'São Paulo Interior',  detalhe:'Ribeirão Preto',                  operador:'CargoFrio' },
   { codigo:'522', nome:'SP Capital',                         detalhe:'Osasco', operador:'SPM Log' },
   { codigo:'523', nome:'Vale do Aço',                        detalhe:'Governador Valadares', operador:'SS Log' },
   { codigo:'524', nome:'Zona da Mata',                       detalhe:'Juiz de Fora', operador:'BSF Logística' },
@@ -152,7 +152,7 @@ const ROTAS = [
   { codigo:'532', nome:'Bahia Interior',                     detalhe:'Vitória da Conquista', operador:'TransVieira' },
   { codigo:'534', nome:'Salvador',                           operador:'LogMaster' },
   { codigo:'536', nome:'Goiás',                              operador:'AG Sestini' },
-  { codigo:'538', nome:'SP Interior',                        detalhe:'Marília', operador:'CargoFrio' },
+  { codigo:'538', nome:'São Paulo Interior',                        detalhe:'Marília', operador:'CargoFrio' },
   { codigo:'540', nome:'Salvador',                           operador:'LogMaster' },
   { codigo:'541', nome:'Brasília (Redes)',                   operador:'Pantanal' }
 ];
@@ -172,6 +172,20 @@ function rotaLabel(codigo){
 // Rótulo CURTO — usado nas tabelas e no relatório impresso. Sem o detalhe de
 // cidades: a rota 504 sozinha tem cinco municípios, e o nome completo esticava
 // a linha inteira do relatório para caber numa única célula.
+/* AS ROTAS QUE AINDA SE OFERECEM.
+
+   Uma função, seis chamadores: os seis seletores de rota do painel
+   (Programação, Completar, carga extra do modelo, montagem, modelo da
+   semana e devoluções). Escrever o filtro em cada um deles é como a rota
+   aposentada reaparece em UM seletor esquecido meses depois.
+
+   A LISTA DO CADASTRO NÃO USA ESTA FUNÇÃO, de propósito: lá a aposentada
+   precisa aparecer, marcada, senão ninguém descobre que ela existe nem
+   consegue trazê-la de volta. */
+function rotasParaEscolher(){
+  return ROTAS.filter(r => r.ativa !== false);
+}
+
 function rotaCurta(codigo){
   const r = rotaInfo(codigo);
   return r ? `${r.codigo} — ${r.nome}` : (codigo ? String(codigo) : '—');
@@ -192,6 +206,29 @@ function rotaCurta(codigo){
 function rotaOperador(codigo){
   const r = rotaInfo(codigo);
   return (r && r.operador) ? r.operador : '';
+}
+
+/* A LINHA DE APOIO DA ROTA NO IMPRESSO: o centro de distribuição e o
+   operador, nessa ordem (14/09/2026).
+
+   Pedido do dono: "quero que a rota funcione com a rota do operador,
+   mostrando São Paulo interior para Marília ou para Ribeirão Preto".
+
+   No cadastro comercial dele, 521 e 538 são A MESMA PRAÇA — "São Paulo
+   Interior" — e o que as separa é o centro de distribuição. Mostrar só o
+   nome deixava as duas idênticas na folha; mostrar só o operador também,
+   porque a CargoFrio atende as duas. É o CD que responde qual é qual.
+
+   O DETALHE SÓ ENTRA QUANDO É UM LUGAR. A 504 lista cinco municípios
+   ("Paracatu, Unaí, João Pinheiro, Arinos e Buritis") e foi exatamente por
+   isso que `rotaCurta()` nasceu sem detalhe: o nome completo estica a linha
+   inteira da folha. A vírgula é o sinal de que ali há uma LISTA de praças,
+   não um centro de distribuição. */
+function rotaApoio(codigo){
+  const r = rotaInfo(codigo);
+  if(!r) return '';
+  const cd = (r.detalhe || '').includes(',') ? '' : (r.detalhe || '').trim();
+  return [cd, rotaOperador(codigo)].filter(Boolean).join(' · ');
 }
 
 /* Cadastra ou atualiza uma rota (Cadastros → Cadastrar Rota, só
@@ -224,6 +261,14 @@ function upsertRota(codigo, nome, detalhe, operador, extra){
     nome: (nome||'').trim(),
     detalhe: (detalhe||'').trim(),
     operador: (operador||'').trim(),
+    /* APOSENTADA CONTINUA EXISTINDO (14/09/2026). `ativa:false` tira a rota
+       dos seletores e NÃO a tira de ROTAS — `rotaInfo()` precisa dela para
+       resolver o nome da praça em toda carga, devolução e viagem que já
+       rodou. Rota que some do cadastro leva junto o nome de tudo que ela
+       carregou. Quem nunca foi usada é APAGADA no servidor e nem chega
+       aqui. Ausente = ativa: rota nova e servidor antigo continuam valendo. */
+    ativa: extra.ativa === false ? false : true,
+    aposentadaEm: extra.aposentadaEm || null,
   };
 
   const existente = ROTA_POR_CODIGO.get(codigo);
@@ -639,7 +684,8 @@ const SuincoStore = {
       // terminar. origem:'sharepoint' porque isto é reidratação de dado já
       // gravado, não uma gravação nova — sincronizar de novo aqui reenviaria
       // a mesma rota ao servidor a cada abertura do painel.
-      (DB.rotasExtras||[]).forEach(r => upsertRota(r.codigo, r.nome, r.detalhe, r.operador, {origem:'sharepoint'}));
+      (DB.rotasExtras||[]).forEach(r => upsertRota(r.codigo, r.nome, r.detalhe, r.operador,
+        {origem:'sharepoint', ativa: r.ativa, aposentadaEm: r.aposentadaEm}));
       const migradas = migrarPraOnde();
       if(migradas) console.info(`[Suinco] "Pra onde?" migrado em ${migradas} carga(s).`);
     }catch(e){ console.error('Falha ao carregar dados locais', e); }
@@ -1407,7 +1453,8 @@ function fundirEstadoRemoto(dados){
     dados.rotas.forEach(r => {
       const codigo = String(r.Codigo||'').trim();
       if(!codigo) return;
-      upsertRota(codigo, r.Nome || '', r.Detalhe || '', r.Operador || '', { origem:'sharepoint' });
+      upsertRota(codigo, r.Nome || '', r.Detalhe || '', r.Operador || '',
+        { origem:'sharepoint', ativa: r.Ativa, aposentadaEm: r.AposentadaEm });
     });
   }
 
@@ -2479,6 +2526,58 @@ function completarCargaAguardando(cargaId, {numeroCarga, cliente, destino, produ
      ("a gente não perde o histórico da hora e do dia que o carro realmente
      chegou"). São duas datas diferentes porque são dois fatos diferentes. */
   c.programadoEm = nowISO();
+  c.atualizadoEm = nowISO();
+  SuincoStore.save();
+  return c;
+}
+
+/* CORRIGIR O KM DE UMA CARGA QUE JÁ EXISTE (14/09/2026).
+
+   Pedido do dono, com as palavras dele: "queremos poder alterar a
+   quilometragem (...) precisamos editar esse número exato, pois costuma
+   haver variações, como 450 km ou 44 (...) sem que o valor fique travado.
+   Como o valor do destino nunca será exatamente o esperado, sempre haverá
+   um ajuste a mais ou a menos".
+
+   O CAMINHO JÁ ESTAVA PROJETADO E NÃO EXISTIA. A linha da Montagem congela
+   em `efetivada_em` de propósito, e o comentário do servidor diz por quê:
+   "quem quiser mudar mexe na CARGA, que tem log de revisões — não aqui,
+   onde a alteração passaria sem registro". Só que nenhuma tela oferecia
+   esse "mexer na carga". O KM virava texto e acabava ali.
+
+   O SERVIDOR JÁ FAZ A PARTE DELE: `km_deslocamento` está em
+   ENTRADAS_DO_FRETE, então mudá-lo recalcula `frete_valor` na hora — e só
+   ele, o destino, o tipo de veículo, a transportadora e a placa recalculam.
+   Mudar a tarifa amanhã continua sem reprecificar carga nenhuma.
+
+   O VALOR NÃO É CALCULADO AQUI. A conta `km × tarifa` mora em
+   `dominio/frete.js`, no servidor, e copiá-la para cá seria plantar duas
+   verdades que divergem na primeira mudança de tarifa. A tela mostra o
+   valor que voltar da sincronia — o servidor é quem manda.
+
+   SEMPRE EDITÁVEL, decisão do dono: sem trava por status, sem trava por
+   mês. O controle é o REGISTRO, não o bloqueio — toda correção entra em
+   `alteracoes`, com o número velho, o novo, quem mudou e quando. */
+function corrigirKmDaCarga(cargaId, km, operador, setor){
+  const c = getCarga(cargaId);
+  if(!c) throw new Error('Carga não encontrada.');
+  const novo = kmValidoLocal(km);
+  if(novo === null){
+    throw new Error('O KM de deslocamento precisa ser um número inteiro maior que zero '
+      + '— é ele que multiplica a tarifa.');
+  }
+  const antigo = c.kmDeslocamento ?? null;
+  if(novo === antigo) return c;   // nada mudou: não suja o histórico
+  registrarAlteracao({
+    cargaId: c.id, placa: c.placa, campo: 'KM de deslocamento',
+    de: antigo === null ? '(sem KM)' : String(antigo), para: String(novo),
+    operador, setor
+  });
+  c.kmDeslocamento = novo;
+  /* A divergência com a tabela é recalculada JUNTO. Ela é o que faz quem
+     paga o frete enxergar que está pagando 640 numa rota de 583 — deixá-la
+     velha esconderia exatamente o que ela existe para mostrar. */
+  c.kmDivergente = c.kmDestino != null && Number(c.kmDestino) !== novo;
   c.atualizadoEm = nowISO();
   SuincoStore.save();
   return c;

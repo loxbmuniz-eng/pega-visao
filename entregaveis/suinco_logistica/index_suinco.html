@@ -1226,7 +1226,11 @@
         <div class="sep"></div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Código</th><th>Nome</th><th>Detalhe</th><th>Operador</th></tr></thead>
+            <!-- A coluna de excluir só existe para Logística e Administração;
+                 renderRotasCadastro() a omite para os outros setores, e o
+                 cabeçalho acompanha (th-excluir-rota). -->
+            <thead><tr><th>Código</th><th>Nome</th><th>Detalhe</th><th>Operador</th>
+              <th id="th-excluir-rota" class="no-print" hidden></th></tr></thead>
             <tbody id="rotas-tbody"></tbody>
           </table>
         </div>
