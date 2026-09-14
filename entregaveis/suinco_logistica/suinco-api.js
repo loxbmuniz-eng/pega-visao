@@ -1237,10 +1237,42 @@ const SuincoSharePoint = (function () {
     try { localStorage.setItem(CHAVE_MARCA, m); } catch (e) { /* ignora */ }
   }
 
+  /* A MARCA SEM A BASE É ESTADO IMPOSSÍVEL (14/09/2026) — ocorrência #64.
+
+     Relato do dono: "quando eu abro no computador da suinco ta aparecendo
+     zerada a torre de controle mas aqui do meu mac quando entro no painel ta
+     funcionando direito". Mesma base, mesmo servidor, máquinas diferentes:
+     era o estado LOCAL daquele computador.
+
+     A marca de sincronia e os dados do pátio moram em chaves SEPARADAS do
+     navegador, e `guardarMarca` engole erro. A marca é um carimbo; os dados
+     são megabytes. Quando a cota do navegador estoura, os dados falham ao
+     salvar — modo de falha já documentado em data.js ("o save() falhava SÓ NO
+     CONSOLE") — e a marca salva do mesmo jeito. Na abertura seguinte: pátio
+     vazio, marca presente, e toda leitura incremental pede só "o que mudou
+     desde a marca". A base NUNCA mais se enche.
+
+     E não havia recuperação: login() → iniciar() → sincronizarAgora() →
+     pull(true). Sair e entrar de novo não resolvia; só limpar os dados do
+     site. O terminal ficava cego, calado, e a Portaria não enxergava caminhão.
+
+     UMA VEZ POR ABERTURA, de propósito: um painel legitimamente sem carga
+     (operação parada, instalação nova) não pode virar leitura completa a cada
+     15 s — isso seria trocar um terminal cego por uma rajada em todos. */
+  let jaRecuperouBaseVazia = false;
+
   async function pull(incremental = true) {
     if (!estaConfigurado()) return null;
 
-    const desde = incremental ? lerMarca() : null;
+    const marca = lerMarca();
+    const baseSumiu = !!marca && !jaRecuperouBaseVazia
+      && typeof _baseLocalVazia === 'function' && _baseLocalVazia();
+    if (baseSumiu) {
+      jaRecuperouBaseVazia = true;
+      console.warn('[Suinco] base local vazia com marca de sincronia — '
+        + 'lendo o estado completo para recuperar o terminal');
+    }
+    const desde = (incremental && !baseSumiu) ? marca : null;
     const caminho = '/api/estado' + (desde ? '?desde=' + encodeURIComponent(desde) : '');
 
     const r = await chamar(caminho);
@@ -1663,6 +1695,12 @@ const SuincoSharePoint = (function () {
   function estado() { return estadoAtual; }
   function aoMudarEstado(fn) { if (typeof fn === 'function') ouvintesEstado.push(fn); }
   function aoReceberDados(fn) { if (typeof fn === 'function') ouvintesDados.push(fn); }
+
+  /* Quem sabe se a base local está vazia é a BASE, não o adaptador — ele não
+     conhece `DB` de propósito. Então a pergunta é injetada, no mesmo padrão
+     dos outros avisos daqui. Ver o bloco em pull(). */
+  let _baseLocalVazia = null;
+  function aoPerguntarSeBaseEstaVazia(fn) { if (typeof fn === 'function') _baseLocalVazia = fn; }
 
   /* Avisa quando um item da fila foi recusado de vez e descartado. O painel
      precisa disto para dizer ao operador que aquela gravação NÃO subiu —
@@ -2165,7 +2203,7 @@ const SuincoSharePoint = (function () {
     sessaoPerdida,
     listarOperadores, criarOperador, atualizarOperador, excluirOperador,
     sincronizarAgora, iniciarSincroniaPeriodica, pararSincronia, ultimaSincronia,
-    renovarSessao, registrarInteracao,
+    renovarSessao, registrarInteracao, aoPerguntarSeBaseEstaVazia,
     /* Exposto para a guarda poder medir o VALOR do carimbo, e não só o
        efeito dele: um teste que só observasse "caiu / não caiu" passaria
        também numa implementação que deixasse o relógio voltar para "agora" a
