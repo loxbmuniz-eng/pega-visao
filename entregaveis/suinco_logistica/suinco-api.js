@@ -1371,15 +1371,7 @@ const SuincoSharePoint = (function () {
            Descoberto ao investigar o relato do dono sobre a Montagem do
            Dia: "as placas que estão neles não estão puxando direto as
            infos da placa". A tela estava certa; o dado é que não chegava. */
-        dados.frota = (frota || []).map((v) => ({
-          Placa: v.placa,
-          Transportadora: v.transportadora,
-          Tipo_Veiculo: v.tipoVeiculo,
-          Motorista: v.motorista,
-          Capacidade_Kg: v.capacidadeKg,
-          UF: v.uf,
-          Precisa_Revisao: v.precisaRevisao,
-        }));
+        dados.frota = (frota || []).map(linhaDeFrota);
       } catch (e) {
         console.warn('[Suinco] frota não carregou:', e.message);
       }
@@ -1387,6 +1379,56 @@ const SuincoSharePoint = (function () {
 
     ouvintesDados.forEach((fn) => { try { fn(dados); } catch (e) { console.error(e); } });
     return dados;
+  }
+
+  /* A LINHA DE FROTA, NUM LUGAR SÓ (14/09/2026).
+
+     Esta conversão vivia inline dentro de pull(). Ao aparecer o segundo e o
+     terceiro chamador (o aviso `frota:atualizada` com o veículo dentro, e a
+     busca só-da-frota abaixo), copiá-la seria pedir para os três divergirem —
+     e já houve um defeito exatamente assim aqui: o mapeamento copiava só
+     quatro chaves e o motorista chegava vazio para todo mundo. Uma função,
+     três chamadores. */
+  function linhaDeFrota(v) {
+    return {
+      Placa: v.placa,
+      Transportadora: v.transportadora,
+      Tipo_Veiculo: v.tipoVeiculo,
+      Motorista: v.motorista,
+      Capacidade_Kg: v.capacidadeKg,
+      UF: v.uf,
+      Precisa_Revisao: v.precisaRevisao,
+    };
+  }
+
+  /* SÓ A FROTA — o caminho de recuo quando o servidor ainda é o antigo e o
+     aviso chega sem o veículo. É uma chamada pequena; o que não pode
+     acontecer é voltar a baixar o pátio inteiro, que é o defeito da #65. */
+  async function recarregarFrota() {
+    if (!estaConfigurado()) return 0;
+    const frota = await chamar('/api/frota');
+    const dados = { incremental: true, cargas: [], movimentacoes: [],
+                    frota: (frota || []).map(linhaDeFrota), rotas: [] };
+    ouvintesDados.forEach((fn) => { try { fn(dados); } catch (e) { console.error(e); } });
+    return dados.frota.length;
+  }
+
+  /* Com nome e fora do registro do socket, de propósito: é uma REGRA
+     ("placa cadastrada não faz ninguém reler o pátio"), e regra precisa de
+     teste. Dentro do `socket.on` só daria para exercitá-la com socket de
+     verdade no meio — teste acrobático que mede o encanamento em vez do que
+     importa. */
+  function receberFrotaAtualizada(aviso) {
+    if (aviso && aviso.veiculo && aviso.veiculo.placa) {
+      ouvintesDados.forEach((fn) => {
+        try {
+          fn({ incremental: true, cargas: [], movimentacoes: [],
+               frota: [linhaDeFrota(aviso.veiculo)], rotas: [] });
+        } catch (e) { console.error(e); }
+      });
+      return;
+    }
+    recarregarFrota().catch(() => {});
   }
 
   /* Ver o comentário em pull(): a lista de rotas é pequena e muda durante o
@@ -1648,7 +1690,23 @@ const SuincoSharePoint = (function () {
         try { fn(aviso); } catch (e) { console.warn('[Suinco] aviso de edição:', e); }
       });
     });
-    socket.on('frota:atualizada', () => pullTudo().catch(() => {}));
+    /* PLACA CADASTRADA NÃO PODE FAZER TODOS RELEREM O PÁTIO (14/09/2026).
+
+       Era `pullTudo()` — leitura COMPLETA, em TODO terminal, ao mesmo tempo.
+       Medido: 1,23 MB e 41 ms por operador conectado. Com 100, uma placa
+       digitada virava 123 MB no mesmo instante e 4 segundos de travamento
+       geral. O ciclo normal, esse, aguenta 150 operadores a 285 ms — o painel
+       não é lento; era esta linha.
+
+       As cargas afetadas JÁ CHEGAM sozinhas: a mesma rota emite
+       `carga:atualizada` para cada uma, com o conteúdo. O que faltava era só
+       o dado da FROTA, e agora ele vem dentro do aviso.
+
+       O caminho de baixo é para o servidor ANTIGO: entre a publicação no
+       Vercel e o `atualizar.sh`, o aviso chega sem o veículo. Aí busca SÓ a
+       frota — nunca o pátio inteiro. Não pode existir janela em que volte a
+       travar. */
+    socket.on('frota:atualizada', receberFrotaAtualizada);
 
     /* Devoluções são servidor-first (sem cópia local sincronizada), então o
        evento não dispara pull de cargas — só avisa a tela de Devoluções
@@ -2204,6 +2262,9 @@ const SuincoSharePoint = (function () {
     listarOperadores, criarOperador, atualizarOperador, excluirOperador,
     sincronizarAgora, iniciarSincroniaPeriodica, pararSincronia, ultimaSincronia,
     renovarSessao, registrarInteracao, aoPerguntarSeBaseEstaVazia,
+    // Exposto para a guarda medir a REGRA (placa cadastrada não faz ninguém
+    // reler o pátio) sem precisar de socket de verdade no meio. Ver #65.
+    receberFrotaAtualizada, recarregarFrota,
     /* Exposto para a guarda poder medir o VALOR do carimbo, e não só o
        efeito dele: um teste que só observasse "caiu / não caiu" passaria
        também numa implementação que deixasse o relógio voltar para "agora" a

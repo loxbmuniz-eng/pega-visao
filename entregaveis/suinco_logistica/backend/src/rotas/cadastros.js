@@ -102,7 +102,30 @@ rotasCadastros.post('/frota', exigirLogin, exigirSetor('Logística'), async (req
       }
       return { frota: rows[0], abertas };
     });
-    emitir('frota:atualizada', { placa });
+    /* O AVISO LEVA O VEÍCULO JUNTO (14/09/2026) — ocorrência #65.
+
+       Antes ia só `{ placa }`, e o painel, sem o dado, respondia baixando o
+       PÁTIO INTEIRO. Medido com o medidor de lotação, em banco semeado igual
+       ao de produção: cada operador conectado custava 1,23 MB e 41 ms nesse
+       instante. Com 100 operadores, UMA placa cadastrada virava 123 MB e 4
+       segundos de tela travada para todo mundo — e crescia em linha reta.
+
+       Mandando a linha do veículo aqui, o painel atualiza a frota na memória
+       e não faz chamada nenhuma. O formato é o MESMO que `GET /frota`
+       devolve: uma forma só para o mesmo dado, senão os dois divergem. */
+    emitir('frota:atualizada', {
+      placa,
+      veiculo: resultado.frota && {
+        placa: resultado.frota.placa,
+        transportadora: resultado.frota.transportadora,
+        tipoVeiculo: resultado.frota.tipo_veiculo,
+        capacidadeKg: resultado.frota.capacidade_kg,
+        uf: resultado.frota.uf,
+        motorista: resultado.frota.motorista,
+        precisaRevisao: resultado.frota.precisa_revisao,
+        atualizadoEm: resultado.frota.atualizado_em,
+      },
+    });
     resultado.abertas.forEach((c) => emitirCarga('carga:atualizada', paraPainel(c)));
     res.status(201).json({ ...resultado.frota, cargasAtualizadas: resultado.abertas.length });
   } catch (e) { next(e); }
