@@ -141,7 +141,7 @@ const ROTAS = [
   { codigo:'518', nome:'Rio de Janeiro (Redes)',             detalhe:'Canejo', operador:'' },
   { codigo:'519', nome:'Brasília (Varejo)',                  operador:'Versatto Logística' },
   { codigo:'520', nome:'Goiás (Varejo)',                     operador:'AG Sestini' },
-  { codigo:'521', nome:'SP Ribeirão Preto',                  operador:'CargoFrio' },
+  { codigo:'521', nome:'São Paulo Interior',  detalhe:'Ribeirão Preto',                  operador:'CargoFrio' },
   { codigo:'522', nome:'SP Capital',                         detalhe:'Osasco', operador:'SPM Log' },
   { codigo:'523', nome:'Vale do Aço',                        detalhe:'Governador Valadares', operador:'SS Log' },
   { codigo:'524', nome:'Zona da Mata',                       detalhe:'Juiz de Fora', operador:'BSF Logística' },
@@ -152,7 +152,7 @@ const ROTAS = [
   { codigo:'532', nome:'Bahia Interior',                     detalhe:'Vitória da Conquista', operador:'TransVieira' },
   { codigo:'534', nome:'Salvador',                           operador:'LogMaster' },
   { codigo:'536', nome:'Goiás',                              operador:'AG Sestini' },
-  { codigo:'538', nome:'SP Interior',                        detalhe:'Marília', operador:'CargoFrio' },
+  { codigo:'538', nome:'São Paulo Interior',                        detalhe:'Marília', operador:'CargoFrio' },
   { codigo:'540', nome:'Salvador',                           operador:'LogMaster' },
   { codigo:'541', nome:'Brasília (Redes)',                   operador:'Pantanal' }
 ];
@@ -206,6 +206,29 @@ function rotaCurta(codigo){
 function rotaOperador(codigo){
   const r = rotaInfo(codigo);
   return (r && r.operador) ? r.operador : '';
+}
+
+/* A LINHA DE APOIO DA ROTA NO IMPRESSO: o centro de distribuição e o
+   operador, nessa ordem (14/09/2026).
+
+   Pedido do dono: "quero que a rota funcione com a rota do operador,
+   mostrando São Paulo interior para Marília ou para Ribeirão Preto".
+
+   No cadastro comercial dele, 521 e 538 são A MESMA PRAÇA — "São Paulo
+   Interior" — e o que as separa é o centro de distribuição. Mostrar só o
+   nome deixava as duas idênticas na folha; mostrar só o operador também,
+   porque a CargoFrio atende as duas. É o CD que responde qual é qual.
+
+   O DETALHE SÓ ENTRA QUANDO É UM LUGAR. A 504 lista cinco municípios
+   ("Paracatu, Unaí, João Pinheiro, Arinos e Buritis") e foi exatamente por
+   isso que `rotaCurta()` nasceu sem detalhe: o nome completo estica a linha
+   inteira da folha. A vírgula é o sinal de que ali há uma LISTA de praças,
+   não um centro de distribuição. */
+function rotaApoio(codigo){
+  const r = rotaInfo(codigo);
+  if(!r) return '';
+  const cd = (r.detalhe || '').includes(',') ? '' : (r.detalhe || '').trim();
+  return [cd, rotaOperador(codigo)].filter(Boolean).join(' · ');
 }
 
 /* Cadastra ou atualiza uma rota (Cadastros → Cadastrar Rota, só

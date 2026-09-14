@@ -5485,6 +5485,15 @@ tr.fila-alvo > td{ box-shadow:inset 0 3px 0 0 var(--gold) }
   white-space:nowrap;
 }
 #rotas-tbody .rota-chip-apos{ background:rgba(154,166,188,.18); color:var(--text-dim); }
-/* Âmbar, e não vermelho: praça repetida não é erro — 534 e 540 podem ser
-   duas rotas legítimas para Salvador. É um convite a conferir. */
-#rotas-tbody .rota-chip-rep{ background:rgba(227,169,60,.16); color:#C99433; }
+/* Âmbar, e não vermelho: praça repetida não é erro — pode haver duas rotas
+   legítimas para a mesma região. É um convite a conferir.
+
+   ÂMBAR SÓLIDO COM `--warn-fg`, e não âmbar claro sobre fundo translúcido.
+   A primeira versão desta regra usava `#C99433` sobre uma lavagem de 16% e
+   o test_contraste reprovou o portão na hora: razão 4,33 no tema escuro e
+   2,08 no claro, contra o mínimo de 4,5. Foi regressão minha, e o par
+   `--warn`/`--warn-fg` existe exatamente para este caso — o comentário do
+   token já dizia "âmbar claro no escuro: texto escuro por cima". Cor
+   escolhida a olho não passa no escuro E no claro; token escolhido passa
+   nos dois porque alguém já fez essa conta. */
+#rotas-tbody .rota-chip-rep{ background:var(--warn); color:var(--warn-fg); }

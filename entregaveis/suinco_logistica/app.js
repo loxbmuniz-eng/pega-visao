@@ -8718,7 +8718,12 @@ async function montarRelatorioOperacional(){
              Rota sem operador não ganha linha nenhuma — 13 das 33 ainda não
              têm, e uma linha vazia em metade da folha é ruído. */''
       }<td class="c-rota"><span class="rota-praca">${esc(rotaCurta(c.rota))}</span>${
-        rotaOperador(c.rota) ? `<span class="rota-op">${esc(rotaOperador(c.rota))}</span>` : ''
+        /* O CENTRO DE DISTRIBUIÇÃO ENTROU JUNTO (14/09/2026). Sem ele, a
+           521 e a 538 saem idênticas na folha: as duas são "São Paulo
+           Interior" e as duas são CargoFrio. O que as distingue é o CD —
+           Ribeirão Preto numa, Marília na outra. Ver rotaApoio(). */''
+      }${rotaApoio(c.rota)
+        ? `<span class="rota-op">${esc(rotaApoio(c.rota))}</span>` : ''
       }</td>
       <td class="c-operacao" ${praOndeStyle}>${c.praOnde ? esc(PRA_ONDE_LABEL[c.praOnde]) : '—'}</td>
       <td class="c-placa">${c.placa ? esc(c.placa).toUpperCase()

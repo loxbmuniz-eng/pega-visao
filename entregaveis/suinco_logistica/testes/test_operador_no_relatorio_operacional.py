@@ -93,6 +93,36 @@ async def main():
         ck('sem separador pendurado no fim',
            not limpo.endswith(('·','—','-','/')), repr(limpo))
 
+        print('\n=== O CENTRO DE DISTRIBUIÇÃO SEPARA AS ROTAS IRMÃS ===')
+        # Pedido do dono (14/09/2026): "mostrando São Paulo interior para
+        # Marília ou para Ribeirão Preto". A 521 e a 538 têm o MESMO nome e
+        # o MESMO operador — só o CD responde qual é qual. Se a folha não
+        # trouxer o CD, as duas linhas ficam indistinguíveis.
+        irmas = await pg.evaluate("""() => {
+          const r = ROTAS.filter(x => x.codigo === '521' || x.codigo === '538');
+          return r.map(x => ({codigo:x.codigo, nome:x.nome, apoio: rotaApoio(x.codigo)}));
+        }""")
+        ck('521 e 538 existem no cadastro', len(irmas) == 2, str(irmas))
+        if len(irmas) == 2:
+            ck('as duas têm o MESMO nome de praça',
+               irmas[0]['nome'] == irmas[1]['nome'], str([x['nome'] for x in irmas]))
+            ck('e o apoio de cada uma é DIFERENTE — é o CD que separa',
+               irmas[0]['apoio'] != irmas[1]['apoio'], str([x['apoio'] for x in irmas]))
+            for x in irmas:
+                ck(f"{x['codigo']} mostra o CD antes do operador",
+                   ' · ' in x['apoio'], x['apoio'])
+
+        print('\n=== ROTA COM LISTA DE MUNICÍPIOS NÃO ESTICA A LINHA ===')
+        # A 504 lista cinco cidades; foi por isso que rotaCurta() nasceu sem
+        # detalhe. O CD entra, a LISTA não.
+        lista = await pg.evaluate("() => ({ detalhe: (rotaInfo('504')||{}).detalhe,"
+                                  " apoio: rotaApoio('504') })")
+        if lista['detalhe']:
+            ck('a 504 tem lista de municípios no detalhe',
+               ',' in lista['detalhe'], lista['detalhe'][:60])
+            ck('e essa lista NÃO vai para a folha',
+               ',' not in (lista['apoio'] or ''), repr(lista['apoio']))
+
         print('\n=== A TRANSPORTADORA CONTINUA NA FOLHA ===')
         # O pedido foi "transportadora E operador". A transportadora já tinha
         # coluna; esta asserção existe para que pôr o operador não a derrube.
