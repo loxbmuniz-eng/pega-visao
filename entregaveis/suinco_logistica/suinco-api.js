@@ -1237,10 +1237,42 @@ const SuincoSharePoint = (function () {
     try { localStorage.setItem(CHAVE_MARCA, m); } catch (e) { /* ignora */ }
   }
 
+  /* A MARCA SEM A BASE É ESTADO IMPOSSÍVEL (14/09/2026) — ocorrência #64.
+
+     Relato do dono: "quando eu abro no computador da suinco ta aparecendo
+     zerada a torre de controle mas aqui do meu mac quando entro no painel ta
+     funcionando direito". Mesma base, mesmo servidor, máquinas diferentes:
+     era o estado LOCAL daquele computador.
+
+     A marca de sincronia e os dados do pátio moram em chaves SEPARADAS do
+     navegador, e `guardarMarca` engole erro. A marca é um carimbo; os dados
+     são megabytes. Quando a cota do navegador estoura, os dados falham ao
+     salvar — modo de falha já documentado em data.js ("o save() falhava SÓ NO
+     CONSOLE") — e a marca salva do mesmo jeito. Na abertura seguinte: pátio
+     vazio, marca presente, e toda leitura incremental pede só "o que mudou
+     desde a marca". A base NUNCA mais se enche.
+
+     E não havia recuperação: login() → iniciar() → sincronizarAgora() →
+     pull(true). Sair e entrar de novo não resolvia; só limpar os dados do
+     site. O terminal ficava cego, calado, e a Portaria não enxergava caminhão.
+
+     UMA VEZ POR ABERTURA, de propósito: um painel legitimamente sem carga
+     (operação parada, instalação nova) não pode virar leitura completa a cada
+     15 s — isso seria trocar um terminal cego por uma rajada em todos. */
+  let jaRecuperouBaseVazia = false;
+
   async function pull(incremental = true) {
     if (!estaConfigurado()) return null;
 
-    const desde = incremental ? lerMarca() : null;
+    const marca = lerMarca();
+    const baseSumiu = !!marca && !jaRecuperouBaseVazia
+      && typeof _baseLocalVazia === 'function' && _baseLocalVazia();
+    if (baseSumiu) {
+      jaRecuperouBaseVazia = true;
+      console.warn('[Suinco] base local vazia com marca de sincronia — '
+        + 'lendo o estado completo para recuperar o terminal');
+    }
+    const desde = (incremental && !baseSumiu) ? marca : null;
     const caminho = '/api/estado' + (desde ? '?desde=' + encodeURIComponent(desde) : '');
 
     const r = await chamar(caminho);
@@ -1339,15 +1371,7 @@ const SuincoSharePoint = (function () {
            Descoberto ao investigar o relato do dono sobre a Montagem do
            Dia: "as placas que estão neles não estão puxando direto as
            infos da placa". A tela estava certa; o dado é que não chegava. */
-        dados.frota = (frota || []).map((v) => ({
-          Placa: v.placa,
-          Transportadora: v.transportadora,
-          Tipo_Veiculo: v.tipoVeiculo,
-          Motorista: v.motorista,
-          Capacidade_Kg: v.capacidadeKg,
-          UF: v.uf,
-          Precisa_Revisao: v.precisaRevisao,
-        }));
+        dados.frota = (frota || []).map(linhaDeFrota);
       } catch (e) {
         console.warn('[Suinco] frota não carregou:', e.message);
       }
@@ -1355,6 +1379,56 @@ const SuincoSharePoint = (function () {
 
     ouvintesDados.forEach((fn) => { try { fn(dados); } catch (e) { console.error(e); } });
     return dados;
+  }
+
+  /* A LINHA DE FROTA, NUM LUGAR SÓ (14/09/2026).
+
+     Esta conversão vivia inline dentro de pull(). Ao aparecer o segundo e o
+     terceiro chamador (o aviso `frota:atualizada` com o veículo dentro, e a
+     busca só-da-frota abaixo), copiá-la seria pedir para os três divergirem —
+     e já houve um defeito exatamente assim aqui: o mapeamento copiava só
+     quatro chaves e o motorista chegava vazio para todo mundo. Uma função,
+     três chamadores. */
+  function linhaDeFrota(v) {
+    return {
+      Placa: v.placa,
+      Transportadora: v.transportadora,
+      Tipo_Veiculo: v.tipoVeiculo,
+      Motorista: v.motorista,
+      Capacidade_Kg: v.capacidadeKg,
+      UF: v.uf,
+      Precisa_Revisao: v.precisaRevisao,
+    };
+  }
+
+  /* SÓ A FROTA — o caminho de recuo quando o servidor ainda é o antigo e o
+     aviso chega sem o veículo. É uma chamada pequena; o que não pode
+     acontecer é voltar a baixar o pátio inteiro, que é o defeito da #65. */
+  async function recarregarFrota() {
+    if (!estaConfigurado()) return 0;
+    const frota = await chamar('/api/frota');
+    const dados = { incremental: true, cargas: [], movimentacoes: [],
+                    frota: (frota || []).map(linhaDeFrota), rotas: [] };
+    ouvintesDados.forEach((fn) => { try { fn(dados); } catch (e) { console.error(e); } });
+    return dados.frota.length;
+  }
+
+  /* Com nome e fora do registro do socket, de propósito: é uma REGRA
+     ("placa cadastrada não faz ninguém reler o pátio"), e regra precisa de
+     teste. Dentro do `socket.on` só daria para exercitá-la com socket de
+     verdade no meio — teste acrobático que mede o encanamento em vez do que
+     importa. */
+  function receberFrotaAtualizada(aviso) {
+    if (aviso && aviso.veiculo && aviso.veiculo.placa) {
+      ouvintesDados.forEach((fn) => {
+        try {
+          fn({ incremental: true, cargas: [], movimentacoes: [],
+               frota: [linhaDeFrota(aviso.veiculo)], rotas: [] });
+        } catch (e) { console.error(e); }
+      });
+      return;
+    }
+    recarregarFrota().catch(() => {});
   }
 
   /* Ver o comentário em pull(): a lista de rotas é pequena e muda durante o
@@ -1616,7 +1690,23 @@ const SuincoSharePoint = (function () {
         try { fn(aviso); } catch (e) { console.warn('[Suinco] aviso de edição:', e); }
       });
     });
-    socket.on('frota:atualizada', () => pullTudo().catch(() => {}));
+    /* PLACA CADASTRADA NÃO PODE FAZER TODOS RELEREM O PÁTIO (14/09/2026).
+
+       Era `pullTudo()` — leitura COMPLETA, em TODO terminal, ao mesmo tempo.
+       Medido: 1,23 MB e 41 ms por operador conectado. Com 100, uma placa
+       digitada virava 123 MB no mesmo instante e 4 segundos de travamento
+       geral. O ciclo normal, esse, aguenta 150 operadores a 285 ms — o painel
+       não é lento; era esta linha.
+
+       As cargas afetadas JÁ CHEGAM sozinhas: a mesma rota emite
+       `carga:atualizada` para cada uma, com o conteúdo. O que faltava era só
+       o dado da FROTA, e agora ele vem dentro do aviso.
+
+       O caminho de baixo é para o servidor ANTIGO: entre a publicação no
+       Vercel e o `atualizar.sh`, o aviso chega sem o veículo. Aí busca SÓ a
+       frota — nunca o pátio inteiro. Não pode existir janela em que volte a
+       travar. */
+    socket.on('frota:atualizada', receberFrotaAtualizada);
 
     /* Devoluções são servidor-first (sem cópia local sincronizada), então o
        evento não dispara pull de cargas — só avisa a tela de Devoluções
@@ -1663,6 +1753,12 @@ const SuincoSharePoint = (function () {
   function estado() { return estadoAtual; }
   function aoMudarEstado(fn) { if (typeof fn === 'function') ouvintesEstado.push(fn); }
   function aoReceberDados(fn) { if (typeof fn === 'function') ouvintesDados.push(fn); }
+
+  /* Quem sabe se a base local está vazia é a BASE, não o adaptador — ele não
+     conhece `DB` de propósito. Então a pergunta é injetada, no mesmo padrão
+     dos outros avisos daqui. Ver o bloco em pull(). */
+  let _baseLocalVazia = null;
+  function aoPerguntarSeBaseEstaVazia(fn) { if (typeof fn === 'function') _baseLocalVazia = fn; }
 
   /* Avisa quando um item da fila foi recusado de vez e descartado. O painel
      precisa disto para dizer ao operador que aquela gravação NÃO subiu —
@@ -2165,7 +2261,10 @@ const SuincoSharePoint = (function () {
     sessaoPerdida,
     listarOperadores, criarOperador, atualizarOperador, excluirOperador,
     sincronizarAgora, iniciarSincroniaPeriodica, pararSincronia, ultimaSincronia,
-    renovarSessao, registrarInteracao,
+    renovarSessao, registrarInteracao, aoPerguntarSeBaseEstaVazia,
+    // Exposto para a guarda medir a REGRA (placa cadastrada não faz ninguém
+    // reler o pátio) sem precisar de socket de verdade no meio. Ver #65.
+    receberFrotaAtualizada, recarregarFrota,
     /* Exposto para a guarda poder medir o VALOR do carimbo, e não só o
        efeito dele: um teste que só observasse "caiu / não caiu" passaria
        também numa implementação que deixasse o relógio voltar para "agora" a

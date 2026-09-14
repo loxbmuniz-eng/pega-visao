@@ -9367,6 +9367,16 @@ async function init(){
       }
     }
     SuincoSharePoint.aoMudarEstado(atualizarRodapeConexao);
+    /* O adaptador não conhece `DB` de propósito, então quem responde "a cópia
+       local sumiu?" é daqui. Marca de sincronia com base vazia é estado
+       impossível num painel saudável: quer dizer que a gravação local falhou
+       (cota do navegador) e o painel ficaria pedindo só o que mudou desde uma
+       marca que não corresponde a dado nenhum — Torre zerada para sempre,
+       naquele computador. Ver ocorrência #64. */
+    if (SuincoSharePoint.aoPerguntarSeBaseEstaVazia) {
+      SuincoSharePoint.aoPerguntarSeBaseEstaVazia(
+        () => !Array.isArray(DB.cargas) || DB.cargas.length === 0);
+    }
     // Toda leitura das Listas cai aqui: funde no DB e redesenha se algo mudou.
     // É o que faz a Portaria enxergar a carga que a Logística acabou de criar.
     SuincoSharePoint.aoReceberDados(dados => {

@@ -2760,3 +2760,126 @@ navegador se a setinha estava escondida, lendo um pseudo-elemento — e
 MECANISMO, não a regra. A regra é "o número cabe"; a setinha é só um dos jeitos
 de atrapalhar. Teste que mede mecanismo reprova quando o mecanismo muda, e
 passa quando a regra quebra por outro caminho.
+
+## #64 — O terminal ficava cego para sempre, e ninguém avisava (14/09/2026)
+
+Relato do dono, em duas partes que só juntas dão a resposta:
+
+> *"a torre ta aparecendo zerada pra mim e na verdade tem 4 cargas em Barretos"*
+>
+> *"quando eu abro no computador da suinco ta aparecendo zerada a torre de
+> controle mas aqui do meu mac quando entro no painel ta funcionando direito"*
+
+**A primeira leitura foi minha e foi ERRADA.** Respondi que a Torre só conta
+carga com placa (regra de 26/08, palavras dele) e mandei conferir se as quatro
+tinham placa. Só que essa regra vale nas DUAS máquinas igual — se fosse ela, o
+Mac também estaria zerado. Foi a segunda mensagem dele que derrubou a minha
+hipótese. *Sintoma que aparece num aparelho e não noutro, com a mesma base e o
+mesmo servidor, nunca é regra de negócio: é estado local.*
+
+**A CAUSA:** a marca de sincronia (`suinco_marca_sync`) e os dados do pátio
+moram em **chaves separadas** do `localStorage`, e `guardarMarca` engole erro
+(`catch (e) { /* ignora */ }`). A marca é um carimbo de 24 bytes; os dados são
+megabytes. Quando a cota do navegador estoura, os dados falham ao salvar — modo
+de falha **já documentado em `data.js`** desde antes (*"estourava a cota (9,4
+MB) e o `save()` falhava SÓ NO CONSOLE — a cópia local parava de atualizar sem
+ninguém perceber"*) — e a marca salva do mesmo jeito, porque cabe.
+
+Na abertura seguinte: **base vazia, marca presente**. Toda leitura vira
+`?desde=<marca>` — só o que mudou desde então. A base nunca mais se enche, e a
+Torre, que desenha a partir dela, mostra zero com o pátio cheio.
+
+**E NÃO HAVIA SAÍDA.** `login()` → `iniciar()` → `sincronizarAgora()` →
+`pull(true)`, incremental. **Sair e entrar de novo não recuperava.** Só limpar
+os dados do site — coisa que nenhum operador sabe fazer, para um defeito que
+não dá erro, não pisca vermelho e não pede nada. O terminal ficava cego,
+calado, e a Portaria deixava de enxergar caminhão.
+
+**A CORREÇÃO:** marca sem base é **estado impossível** num painel saudável.
+Quando acontece, a leitura é COMPLETA em vez de incremental. Quem responde "a
+base está vazia?" é a tela, não o adaptador — ele não conhece `DB` de
+propósito, então a pergunta é injetada pelo mesmo padrão dos outros avisos.
+
+**UMA VEZ POR ABERTURA, de propósito.** Um painel legitimamente sem carga
+(operação parada, instalação nova) não pode virar leitura completa a cada 15 s:
+isso trocaria um terminal cego por uma rajada em todos — exatamente o defeito
+que está medido na tarefa da rajada, de 123 MB com 100 operadores. A
+recuperação acontece uma vez e devolve o ciclo ao normal.
+
+**Teste que trava:** `testes/test_base_vazia_se_recupera.py`. Provado que
+reprova contra o publicado: com a base vazia ele pedia
+`?desde=2026-09-14T10:00:00.000Z` — o defeito em uma linha.
+
+**A lição, e é sobre diagnóstico:** duas gavetas guardando dois pedaços do
+MESMO fato, com durabilidades diferentes, é uma bomba de relógio. A marca diz
+"já sei de tudo até aqui" e os dados são o "tudo"; separá-las permitiu que uma
+sobrevivesse sem a outra. Onde um dado descreve outro, os dois salvam juntos ou
+nenhum salva — e quem grava engolindo erro precisa, no mínimo, ser conferido
+por quem lê.
+
+## #65 — Uma placa digitada travava a tela de todo mundo (14/09/2026)
+
+Pedido do dono, ao definir o alvo da semana: *"eu nao quero travamento
+funcionando com 100 pessoas se eu quiser, por isso quero essa folga"*.
+
+**A PERGUNTA VIROU NÚMERO ANTES DE VIRAR CÓDIGO.** Construído o medidor de
+lotação (`medidor/`), contra banco semeado igual ao de produção — 761 cargas,
+3.044 movimentações, 77.095 clientes:
+
+| operadores | ciclo normal p95 | a rajada p95 | dados na rajada |
+|---:|---:|---:|---:|
+| 10 | 197 ms | 710 ms | 12,3 MB |
+| 50 | 130 ms | 2.192 ms | 61,3 MB |
+| 100 | 263 ms | **4.035 ms** | **122,6 MB** |
+| 150 | 285 ms | 6.656 ms | 183,9 MB |
+
+**A primeira coluna é a boa notícia: o painel NÃO é lento.** O ciclo de 15 s,
+que roda o dia inteiro, aguentava 150 operadores a 285 ms. Zero expulsões,
+zero erro de servidor, em todas as faixas.
+
+**A CAUSA estava em duas linhas.** `POST /frota` emitia `frota:atualizada`
+para a sala inteira (`rotas/cadastros.js`), e todo terminal respondia com
+`pullTudo()` — leitura COMPLETA do pátio (`suinco-api.js`). Linear e medido:
+**1,23 MB e 41 ms por operador conectado**. Uma placa digitada por UMA pessoa,
+com 100 na tela, virava 123 MB no mesmo instante e 4 segundos de travamento
+para todos. Era o defeito que se agrava justamente no pico — quanto mais gente
+trabalhando junto, pior.
+
+**E era desperdício puro:** a MESMA rota já emite `carga:atualizada` para cada
+carga afetada, com o conteúdo. As cargas já chegavam sozinhas. Faltava só o
+dado da FROTA — e o aviso mandava apenas `{ placa }`, sem o veículo.
+
+**A CORREÇÃO:** o aviso passa a levar o veículo junto, e o painel atualiza a
+frota na memória — **zero chamadas de rede**. Quando o servidor ainda é o
+antigo (entre a publicação no Vercel e o `atualizar.sh`), busca **só a frota**,
+nunca o pátio. Não podia existir janela em que voltasse a travar.
+
+**Uma função, três chamadores:** a conversão da linha de frota vivia inline
+dentro de `pull()`. Com o segundo e o terceiro chamador, copiá-la seria plantar
+a mesma armadilha em três lugares — e já houve um defeito exatamente aí (o
+mapeamento copiava só quatro chaves e o motorista chegava vazio, que foi o
+relato *"as placas não estão puxando direto as infos"*).
+
+**O RESULTADO, medido depois:**
+
+| operadores | ciclo normal p95 | expulsões | erros |
+|---:|---:|---:|---:|
+| 50 | 87 ms | 0 | 0 |
+| 100 | **91 ms** | 0 | 0 |
+| 150 | **148 ms** | 0 | 0 |
+
+**Teto medido: 150 operadores**, contra um alvo de 1 segundo. O pedido era 100
+sem travar.
+
+**Teste que trava:** `testes/test_placa_nao_faz_todos_relerem.py` — aviso com
+veículo produz ZERO chamadas de rede; aviso sem veículo busca só a frota e
+NUNCA `/api/estado`.
+
+**E O MEDIDOR TEVE QUE SER CORRIGIDO JUNTO, o que é a parte mais importante
+desta ocorrência.** A fase da rajada força a leitura completa à mão — ela
+imita o painel ANTIGO. Depois da correção ela continuava acusando 4 segundos e
+reprovando o sistema por um cenário que **não acontece mais**. O veredito
+passou a julgar o ciclo normal, que é o que a operação vive, e a fase da
+rajada ficou como referência do que se evitou e alarme se alguém reintroduzir.
+*Medição que não acompanha a mudança do sistema vira mentira com aparência de
+rigor* — e teria me feito reprovar a minha própria correção.
