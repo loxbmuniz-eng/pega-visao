@@ -128,33 +128,33 @@ const ROTAS = [
   { codigo:'502', nome:'Araxá',                              operador:'' },
   { codigo:'503', nome:'Patrocínio / Coromandel',            operador:'' },
   { codigo:'504', nome:'Alto Paranaíba',                     detalhe:'Paracatu, Unaí, João Pinheiro, Arinos e Buritis', operador:'' },
-  { codigo:'505', nome:'Triângulo Mineiro',                  detalhe:'Uberlândia', operador:'' },
+  { codigo:'505', nome:'Triângulo Mineiro',                  detalhe:'Uberlândia', operador:'Total Service' },
   { codigo:'506', nome:'Uberaba',                            operador:'' },
   { codigo:'507', nome:'Araguari',                           operador:'' },
-  { codigo:'508', nome:'Iturama',                            operador:'Total Service ou FrigoCargo' },
+  { codigo:'508', nome:'Iturama',                            operador:'Total Service' },
   { codigo:'509', nome:'Centro-Oeste',                       operador:'' },
-  { codigo:'510', nome:'Belo Horizonte',                     operador:'RP Logística' },
+  { codigo:'510', nome:'Belo Horizonte',                     operador:'RP Express' },
   { codigo:'512', nome:'Varginha',                           detalhe:'Sul de Minas', operador:'Brasfrios' },
   { codigo:'513', nome:'Passos',                             detalhe:'Sul de Minas', operador:'MaxFrios' },
-  { codigo:'516', nome:'Norte de Minas',                     detalhe:'Montes Claros', operador:'Total Services' },
-  { codigo:'517', nome:'Rio de Janeiro (Varejo)',            detalhe:'São João de Meriti', operador:'OmegaX' },
+  { codigo:'516', nome:'Norte de Minas',                     detalhe:'Montes Claros', operador:'Total Service' },
+  { codigo:'517', nome:'Rio de Janeiro (Varejo)',            detalhe:'São João de Meriti', operador:'Ômega X' },
   { codigo:'518', nome:'Rio de Janeiro (Redes)',             detalhe:'Canejo', operador:'' },
-  { codigo:'519', nome:'Brasília (Varejo)',                  operador:'RN Logística' },
+  { codigo:'519', nome:'Brasília (Varejo)',                  operador:'Versatto Logística' },
   { codigo:'520', nome:'Goiás (Varejo)',                     operador:'AG Sestini' },
   { codigo:'521', nome:'SP Ribeirão Preto',                  operador:'CargoFrio' },
-  { codigo:'522', nome:'SP Capital',                         detalhe:'Osasco', operador:'SPM LOG' },
-  { codigo:'523', nome:'Vale do Aço',                        detalhe:'Governador Valadares', operador:'SSLog' },
+  { codigo:'522', nome:'SP Capital',                         detalhe:'Osasco', operador:'SPM Log' },
+  { codigo:'523', nome:'Vale do Aço',                        detalhe:'Governador Valadares', operador:'SS Log' },
   { codigo:'524', nome:'Zona da Mata',                       detalhe:'Juiz de Fora', operador:'BSF Logística' },
   { codigo:'525', nome:'Bahia Capital',                      operador:'LogMaster' },
   { codigo:'527', nome:'Nordeste',                            operador:'' },
-  { codigo:'529', nome:'Espírito Santo',                     detalhe:'Serra-ES', operador:'Nacional Log' },
+  { codigo:'529', nome:'Espírito Santo',                     detalhe:'Serra-ES', operador:'Nacional Log / Bem Frios' },
   { codigo:'531', nome:'Paraná',                              operador:'' },
-  { codigo:'532', nome:'Bahia Interior',                     detalhe:'Vitória da Conquista', operador:'ConquistaLog' },
+  { codigo:'532', nome:'Bahia Interior',                     detalhe:'Vitória da Conquista', operador:'TransVieira' },
   { codigo:'534', nome:'Salvador',                           operador:'LogMaster' },
   { codigo:'536', nome:'Goiás',                              operador:'AG Sestini' },
   { codigo:'538', nome:'SP Interior',                        detalhe:'Marília', operador:'CargoFrio' },
   { codigo:'540', nome:'Salvador',                           operador:'LogMaster' },
-  { codigo:'541', nome:'Brasília (Redes)',                   operador:'Versatto Logística' }
+  { codigo:'541', nome:'Brasília (Redes)',                   operador:'Pantanal' }
 ];
 const ROTA_POR_CODIGO = new Map(ROTAS.map(r => [r.codigo, r]));
 function rotaInfo(codigo){ return ROTA_POR_CODIGO.get(String(codigo||'').trim()) || null; }
@@ -175,6 +175,23 @@ function rotaLabel(codigo){
 function rotaCurta(codigo){
   const r = rotaInfo(codigo);
   return r ? `${r.codigo} — ${r.nome}` : (codigo ? String(codigo) : '—');
+}
+
+/* Só o OPERADOR LOGÍSTICO da rota — quem faz a distribuição na praça
+   (Total Service, CargoFrio, Pantanal). Nada a ver com a transportadora,
+   que é do caminhão contratado e muda a cada carga.
+
+   Existe separado de `rotaLabel()` porque o relatório impresso precisa do
+   operador em OUTRA LINHA da mesma célula, não entre parênteses depois do
+   nome: a coluna Rota do Operacional tem 13,5% da folha, e juntar tudo numa
+   linha só esticava a tabela inteira.
+
+   Devolve string vazia, nunca "(sem operador)": 13 das 33 rotas ainda não
+   têm operador definido, e escrever isso em toda linha da folha gastaria a
+   coluna repetindo o que a ausência já diz. */
+function rotaOperador(codigo){
+  const r = rotaInfo(codigo);
+  return (r && r.operador) ? r.operador : '';
 }
 
 /* Cadastra ou atualiza uma rota (Cadastros → Cadastrar Rota, só
