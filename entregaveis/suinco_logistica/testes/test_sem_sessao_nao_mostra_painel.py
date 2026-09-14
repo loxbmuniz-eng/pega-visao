@@ -10,7 +10,13 @@ A CAUSA RAIZ DO DIA INTEIRO, em uma linha (app.js, o revelar do painel):
 Dois fatos diferentes, com PRAZOS diferentes, tratados como um só:
 
     DB.operador (nome, setor, e-mail)  →  localStorage   →  para sempre
-    o token (a sessão de verdade)      →  sessionStorage →  morre com a aba
+    o token (a sessão de verdade)      →  localStorage   →  vence por INATIVIDADE
+
+(Até 12/09/2026 o token morava em sessionStorage e morria com a aba. Mudou na
+ocorrência #61: morria também quando o sistema RECICLAVA a aba em segundo
+plano, e isso expulsava quem estava trabalhando. Hoje ele sobrevive à aba e
+quem protege o terminal compartilhado é a janela de 14 h sem uso, mais o botão
+"Trocar usuário". A REGRA DESTE TESTE não mudou: sem sessão, não mostra painel.)
 
 Quem entrou uma vez ficava "logado" para sempre aos olhos da tela.
 
@@ -78,6 +84,9 @@ async def main():
                             email:'rene@suinco.com.br' };
             SuincoStore.save();
             localStorage.setItem('suinco_entrou_pelo_servidor', '1');
+            // Apaga nos DOIS lugares: o que se quer simular é "não há sessão",
+            // e deixar resto em qualquer storage faria o teste medir outra coisa.
+            localStorage.removeItem('suinco_token');
             sessionStorage.removeItem('suinco_token');
         }""")
         await pg.reload()
@@ -142,7 +151,7 @@ async def main():
             DB.operador = { id:'u1', nome:'Rene', setor:'Expedição',
                             email:'rene@suinco.com.br' };
             localStorage.setItem('suinco_entrou_pelo_servidor', '1');
-            sessionStorage.setItem('suinco_token', 'token-vivo');
+            localStorage.setItem('suinco_token', 'token-vivo');
             document.body.classList.add('pre-login');
             renderAll();
             return { temSessao: temSessaoParaOPainel(),

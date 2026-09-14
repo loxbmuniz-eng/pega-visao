@@ -51,7 +51,7 @@ async def main():
         await pg.wait_for_timeout(900)
 
         # Sessão de servidor: sem ela pull()/aoReceberDados não fazem nada.
-        await pg.evaluate("() => { sessionStorage.setItem('suinco_token', 'token-de-teste'); }")
+        await pg.evaluate("() => { localStorage.setItem('suinco_token', 'token-de-teste'); }")
         await pg.evaluate("() => mostrarLoginLocal()")
         await pg.fill('#login-nome', 'Ana')
         await pg.select_option('#login-setor', 'Logística')

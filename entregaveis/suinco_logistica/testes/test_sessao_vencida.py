@@ -24,9 +24,11 @@ computador e ao acessar pelo celular o sistema reverteu todas as
 alterações"), e exatamente o que a trava de offline existe para impedir.
 
 POR QUE A TRAVA NÃO PEGAVA. Ela cobre "a rede caiu". Não cobria "a sessão
-venceu" — e no pátio esse é o caso MUITO mais comum, porque o token mora em
-sessionStorage e morre quando a aba fecha; no celular o Android descarta aba
-em segundo plano o tempo todo. Sem token, `estaConfigurado()` responde não e
+venceu" — e no pátio esse é o caso MUITO mais comum. (Em 31/08 o token morava
+em sessionStorage e morria toda vez que o Android descartava a aba, que é
+rotina. Desde 12/09/2026, ocorrência #61, ele sobrevive à aba e vence por 14 h
+de inatividade — a sessão acaba bem menos, mas quando acaba a regra deste teste
+vale igual.) Sem token, `estaConfigurado()` responde não e
 os cinco caminhos de escrita saíam com `{enfileirado:false}`, calados.
 
 O QUE ESTE TESTE EXIGE:
@@ -89,6 +91,7 @@ async def main():
             localStorage.setItem('suinco_entrou_pelo_servidor', '1');
             SuincoSharePoint.SP_CONFIG.ativo = true;
             SuincoSharePoint.SP_CONFIG.api = 'http://127.0.0.1:59999';
+            localStorage.removeItem('suinco_token');
             sessionStorage.removeItem('suinco_token');
             DB.operador = { id:'u1', nome:'Rene', setor:'Expedição',
                             email:'rene@suinco.com.br' };

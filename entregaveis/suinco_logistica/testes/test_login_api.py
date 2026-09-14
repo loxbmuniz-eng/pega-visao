@@ -322,7 +322,12 @@ async def main():
         # ninguém encostar: a renovação se recusa e a sessão morre no prazo.
         sem_uso = await pagina.evaluate("""async () => {
             const original = Date.now;
-            Date.now = () => original() + 5 * 60 * 60 * 1000;   // 5 h à frente
+            // 15 h à frente: a janela de inatividade passou de 4 h para 14 h em
+            // 12/09/2026 (ocorrência #61), quando ela deixou de ser um detalhe e
+            // virou A proteção da troca de turno — o token agora sobrevive à aba,
+            // então é o tempo sem uso que precisa expulsar. 5 h, que reprovava
+            // antes, hoje está DENTRO da janela e renovaria com razão.
+            Date.now = () => original() + 15 * 60 * 60 * 1000;
             try { return await SuincoSharePoint.renovarSessao(); }
             finally { Date.now = original; }
         }""")
@@ -332,7 +337,12 @@ async def main():
         print('\n=== 8. TROCAR USUÁRIO ENCERRA A SESSÃO ===')
         await pagina2.evaluate("() => trocarUsuario()")
         await pagina2.wait_for_timeout(600)
-        tem_token = await pagina2.evaluate("() => !!sessionStorage.getItem('suinco_token')")
+        # Confere os DOIS lugares: o token mora em localStorage desde a #61, e
+        # como a sessão agora sobrevive a fechar a aba, "Trocar usuário" é o que
+        # garante que o próximo turno não herde a sessão do anterior.
+        tem_token = await pagina2.evaluate(
+            "() => !!localStorage.getItem('suinco_token')"
+            " || !!sessionStorage.getItem('suinco_token')")
         ck('o token foi apagado', not tem_token,
            'sem isso o próximo operador herdaria a sessão de quem saiu')
         ck('voltou para o login', await pagina2.is_visible('#modal-operador'))

@@ -62,11 +62,12 @@ async def main():
         await pg.wait_for_timeout(900)
 
         # Sessão de mentira: excluir() sai cedo se não estiver configurado.
-        # O token mora em sessionStorage, e NÃO em localStorage — terminal de
-        # pátio é compartilhado, e a sessão do turno da manhã não pode valer
-        # para quem sentar ali à noite.
+        # O token mora em localStorage desde 12/09/2026 (ocorrência #61): ele
+        # precisa sobreviver à aba reciclada, e quem protege o terminal
+        # compartilhado passou a ser a janela de 14 h sem uso mais o botão
+        # "Trocar usuário".
         await pg.evaluate("""() => {
-            sessionStorage.setItem('suinco_token', 'token-de-teste');
+            localStorage.setItem('suinco_token', 'token-de-teste');
         }""")
 
         configurado = await pg.evaluate("() => SuincoSharePoint.estaConfigurado()")

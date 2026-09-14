@@ -38,6 +38,7 @@ async def main():
         # nenhum no ar, e entra por "Entrar sem servidor" — modo local puro.
         #
         # A versão anterior plantava `suinco_token` no sessionStorage antes
+        # (hoje o token mora em localStorage — ocorrência #61 de 12/09/2026)
         # de entrar. Isso fazia `estaConfigurado()` responder SIM (ativo +
         # api + token), e aí cada carga criada tentava subir para
         # api.embarquesuinco.com.br, que não existe neste ambiente. Depois

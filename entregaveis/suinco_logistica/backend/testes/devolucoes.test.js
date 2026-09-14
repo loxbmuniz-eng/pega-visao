@@ -37,6 +37,9 @@ const OPERADORES = [
   // Setores criados em 18/08/2026 — cada um assina UM passo do checklist.
   ['dev.controle@devteste.local', 'Controle Dev', 'Controles Internos'],
   ['dev.notas@devteste.local', 'Notas Dev', 'Central de Notas'],
+  // Duas filiais DIFERENTES: é com duas que se prova o isolamento de escopo.
+  ['dev.bsb@devteste.local', 'Posto BSB', 'Filial 105 BSB'],
+  ['dev.ba@devteste.local', 'Posto BA', 'Filial 106 BAHIA'],
 ];
 const SENHA = 'senha-de-teste-123';
 const ROTA = 'DEVT';
@@ -1353,5 +1356,125 @@ describe('16. O Faturamento digita o peso do CAMINHÃO, não do produto (08/09/2
     });
     assert.equal(r.status, 200, r.texto);
     assert.equal(r.json.pesoFaturamento, 12.5);
+  });
+});
+
+describe('17. A filial mexe no checklist DELA, e some sem sumir (14/09/2026)', () => {
+  /* Relato do dono, com print da tabela de itens: "esse campo precisa estar
+     liberado para as filiais preencherem suas devolucoes, filialbsb filialba
+     filiales". E, sobre o alcance: "cada filial so mexe no que for do seu
+     escopo" e "filial pode excluir checklist e editar".
+
+     O defeito era de TELA: `podeEditarDevolucao()` só respondia sim para
+     Logística e Administração, e era ela que ligava os campos — a filial
+     criava o checklist e via a tabela inteira como texto. O servidor já
+     deixava preencher; o que ele NÃO deixava era excluir, e é isso que muda
+     aqui, junto com a exclusão de item virar macia PARA TODOS.
+
+     Estes testes travam o lado do servidor. A tela tem guarda própria. */
+
+  let devBSB = null;
+  let itemBSB = null;
+
+  test('a filial cria o próprio checklist e lança item nele', async () => {
+    const r = await req('/api/devolucoes', { metodo: 'POST', token: tokens['Filial 105 BSB'],
+      corpo: novoChecklist() });
+    assert.equal(r.status, 201, r.texto);
+    devBSB = r.json.id || r.json.devolucaoId || r.json.devolucao_id;
+    assert.ok(devBSB, `o checklist precisa voltar com id: ${r.texto}`);
+
+    const it = await req(`/api/devolucoes/${devBSB}/itens`, { metodo: 'POST',
+      token: tokens['Filial 105 BSB'], corpo: { nota: '9001', cx: 3, peso: 120 } });
+    assert.equal(it.status, 201, it.texto);
+    itemBSB = it.json.itemId || it.json.item_id || (it.json.item && it.json.item.itemId);
+    assert.ok(itemBSB, `o item precisa voltar com id: ${it.texto}`);
+  });
+
+  test('e PREENCHE as colunas do lançamento dela', async () => {
+    const r = await req(`/api/devolucoes/${devBSB}/itens/${itemBSB}`, { metodo: 'PATCH',
+      token: tokens['Filial 105 BSB'], corpo: { motivo: 'AVARIA', cx: 5 } });
+    assert.equal(r.status, 200, `a filial precisa preencher o lançamento dela: ${r.texto}`);
+  });
+
+  test('mas NÃO escreve na coluna de outro posto (o Nº carga dev é da Portaria)', async () => {
+    const r = await req(`/api/devolucoes/${devBSB}/itens/${itemBSB}`, { metodo: 'PATCH',
+      token: tokens['Filial 105 BSB'], corpo: { cargaDev: '777' } });
+    assert.equal(r.status, 403, r.texto);
+    assert.equal(r.json.codigo, 'SETOR_SEM_PERMISSAO');
+  });
+
+  test('OUTRA filial não enxerga nem toca no checklist desta', async () => {
+    const patch = await req(`/api/devolucoes/${devBSB}/itens/${itemBSB}`, { metodo: 'PATCH',
+      token: tokens['Filial 106 BAHIA'], corpo: { motivo: 'INVASAO' } });
+    assert.equal(patch.status, 404, `a 106 não pode editar item da 105: ${patch.texto}`);
+
+    const delItem = await req(`/api/devolucoes/${devBSB}/itens/${itemBSB}`,
+      { metodo: 'DELETE', token: tokens['Filial 106 BAHIA'] });
+    assert.equal(delItem.status, 404, `a 106 não pode excluir item da 105: ${delItem.texto}`);
+
+    const delDev = await req(`/api/devolucoes/${devBSB}`,
+      { metodo: 'DELETE', token: tokens['Filial 106 BAHIA'] });
+    assert.equal(delDev.status, 404, `a 106 não pode excluir checklist da 105: ${delDev.texto}`);
+  });
+
+  test('exclui item do próprio checklist — e a linha SAI DA VISTA sem sumir do banco', async () => {
+    const r = await req(`/api/devolucoes/${devBSB}/itens/${itemBSB}`,
+      { metodo: 'DELETE', token: tokens['Filial 105 BSB'] });
+    assert.equal(r.status, 200, `a filial precisa excluir item do checklist dela: ${r.texto}`);
+
+    // Sai da vista:
+    const lido = await req(`/api/devolucoes/${devBSB}`, { token: tokens['Filial 105 BSB'] });
+    assert.equal(lido.status, 200, lido.texto);
+    const ids = (lido.json.itens || []).map((i) => String(i.itemId ?? i.item_id));
+    assert.ok(!ids.includes(String(itemBSB)),
+      'item excluído não pode voltar a aparecer no checklist');
+
+    // MAS NÃO SOME: é o ponto da migração 052. O checklist é a prova do que a
+    // devolução trouxe — linha apagada sem registro é nota que existiu e
+    // ninguém responde por ela.
+    const { rows } = await pool.query(
+      'SELECT excluido_em, excluido_por, excluido_setor FROM devolucao_itens WHERE item_id = $1',
+      [itemBSB]);
+    assert.equal(rows.length, 1, 'a linha tem que CONTINUAR no banco');
+    assert.ok(rows[0].excluido_em, 'com a marca de quando saiu');
+    assert.equal(rows[0].excluido_por, 'Posto BSB', 'e de QUEM apagou');
+    assert.equal(rows[0].excluido_setor, 'Filial 105 BSB', 'e de qual setor');
+  });
+
+  test('a exclusão de item ficou macia TAMBÉM para a Logística (defeito antigo)', async () => {
+    const d = await req('/api/devolucoes', { metodo: 'POST', token: tokens['Logística'],
+      corpo: novoChecklist() });
+    assert.equal(d.status, 201, d.texto);
+    const id = d.json.id || d.json.devolucaoId || d.json.devolucao_id;
+    const it = await req(`/api/devolucoes/${id}/itens`, { metodo: 'POST',
+      token: tokens['Logística'], corpo: { nota: '9002', cx: 1 } });
+    const itemId = it.json.itemId || it.json.item_id || (it.json.item && it.json.item.itemId);
+
+    const del = await req(`/api/devolucoes/${id}/itens/${itemId}`,
+      { metodo: 'DELETE', token: tokens['Logística'] });
+    assert.equal(del.status, 200, del.texto);
+
+    const { rows } = await pool.query(
+      'SELECT excluido_por FROM devolucao_itens WHERE item_id = $1', [itemId]);
+    assert.equal(rows.length, 1,
+      'até 14/09/2026 esta linha era DELETE de verdade e sumia sem rastro');
+    assert.equal(rows[0].excluido_por, 'Ana Dev');
+  });
+
+  test('a filial exclui o próprio checklist', async () => {
+    const r = await req(`/api/devolucoes/${devBSB}`,
+      { metodo: 'DELETE', token: tokens['Filial 105 BSB'] });
+    assert.equal(r.status, 200, `pedido do dono: "filial pode excluir checklist": ${r.texto}`);
+  });
+
+  test('mas continua SEM avançar etapa — o ciclo é da matriz, e a recusa explica', async () => {
+    const d = await req('/api/devolucoes', { metodo: 'POST', token: tokens['Filial 105 BSB'],
+      corpo: novoChecklist() });
+    const id = d.json.id || d.json.devolucaoId || d.json.devolucao_id;
+    const r = await req(`/api/devolucoes/${id}/etapa`, { metodo: 'POST',
+      token: tokens['Filial 105 BSB'], corpo: { para: 'Recebida na Portaria' } });
+    assert.equal(r.status, 403, r.texto);
+    assert.match(r.json.erro, /matriz/i,
+      'a recusa precisa DIZER por que, não ser um 403 seco');
   });
 });

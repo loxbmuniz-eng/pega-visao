@@ -2546,3 +2546,217 @@ Os dois controles cegos aqui funcionavam perfeitamente em toda máquina de
 teste — porque em toda máquina de teste o código roda de dentro do
 repositório. O ambiente de produção era o único onde a pergunta importava, e o
 único onde ninguém a fazia.
+
+## #61 — O painel apagava a própria sessão, e o servidor nunca soube (12/09/2026)
+
+Fecha o item (b) da #59, que ficou em aberto pela manhã.
+
+Relato, transcrito do áudio do Alysson: *"o pessoal do faturamento também
+reclama. **Eles precisam fazer login quase o tempo todo** e recebem a mesma
+mensagem, impossibilitando a inserção de informações."* E o print do celular
+dele: tela de login, com 67 avisos presos atrás.
+
+**O QUE FECHOU O CASO FOI UMA AUSÊNCIA.** O journal do VPS, 7 dias:
+
+```
+sessão recusada (SESSAO_REVOGADA)  →  1   (Daniela, revogação legítima)
+token inválido                     →  0
+falha ao conferir a sessão         →  0
+JWT_VALIDADE=12h
+```
+
+**UMA expulsão em sete dias**, contra "logo o tempo todo". O servidor nunca os
+expulsou. Quem apagava a sessão era o próprio aparelho — e não havia o que
+registrar, porque **nenhuma requisição é feita nesse momento**.
+
+**A CAUSA:** o token vivia em `sessionStorage`, que morre quando a aba fecha
+**e quando o sistema recicla a aba em segundo plano** — rotina no Android, e o
+próprio `suinco-api.js` já documentava isso desde 31/08 ao explicar o caso do
+Rene. A escolha tinha uma intenção certa, escrita no código: *"terminal de
+pátio é compartilhado; com localStorage a sessão do porteiro do turno da manhã
+continuaria válida para quem sentar ali à noite"*.
+
+**Mas a proteção só valia se alguém FECHASSE a aba.** Palavras do dono,
+12/09: *"portaria fica sempre aberto, faturamento tambem, expedicao tambem,
+os demais logam em horario de expediente normalmente, alysson loga do celular
+24 horas, e fica ligado com notificacoes push"*. Nessas estações ninguém fecha
+a aba. **Pagava-se o custo integral da proteção sem receber a proteção.**
+
+**A CORREÇÃO (decisão do dono, só painel, sem `atualizar.sh`):** o token passa
+a viver em `localStorage` e a proteção da troca de turno passa a ser o **tempo
+sem ninguém mexer — 14 h**, prazo escolhido por ele para cobrir a noite de quem
+usa o celular 24 h com notificação. A passagem de turno deliberada é o botão
+**"Trocar usuário"**, que continua apagando na hora.
+
+**O DETALHE QUE QUASE FEZ A PROTEÇÃO VIRAR ENFEITE:** `ultimaInteracao` era
+variável de memória, iniciada em `Date.now()`. Com o token sobrevivendo à aba
+mas o relógio reiniciando a cada reabertura, a janela de 14 h **nunca
+venceria** — e a estação abandonada reabriria logada para sempre. O carimbo
+passou a viver no `localStorage` ao lado do token (gravado de minuto em minuto,
+não a cada toque: seria uma escrita por `pointerdown` num terminal de pátio), e
+a janela é conferida **na leitura do token**, não só no temporizador de 3 h —
+esperar pelo temporizador deixaria a estação abandonada reabrir já logada.
+
+**Teste que trava:** `testes/test_sessao_sobrevive_reciclagem.py` — 7 blocos.
+O decisivo é o 4, que mede o VALOR do carimbo e não só o efeito: antes
+`1789233283592`, depois do reload `1789233283592`, diferença **0 ms** (se
+houvesse reiniciado, seria ~4000 ms). Sem essa medição, uma implementação de
+fachada passaria no teste. Também trava: abandono de >14 h expulsa **na
+abertura**; 13 h não expulsa; "Trocar usuário" apaga na hora; e a regra de
+31/08 continua de pé (sem token, gravação é recusada, não sai calada).
+
+**A lição, e vale mais que a correção:** o caso foi resolvido por uma coisa que
+NÃO estava no log. A manhã inteira foi gasta procurando o defeito que expulsava
+as pessoas, inclusive um real que eu reproduzi em laboratório (a conferência de
+sessão que falha fechada, #59a) — e que o log provou não ter disparado nenhuma
+vez. **Contar zero é evidência.** Se a primeira busca no journal tivesse usado
+as palavras que o servidor de fato escreve (`sessão recusada`, `token
+inválido`) em vez de um filtro genérico de erro, o caso teria fechado horas
+antes. O filtro errado não devolve "não sei": devolve "não tem", que é
+diferente e muito mais caro.
+
+### #61 — PENDENTE: os 17 testes que criam sessão pelo lugar antigo (12/09/2026)
+
+A correção da #61 está commitada (`54f1332`) e **não publicada**: o portão
+reprovou e cancelou, corretamente. Isto fica escrito para segunda não
+recomeçar a investigação.
+
+**O que aconteceu:** 17 suítes ficaram vermelhas. Todas as 17 criam a sessão
+escrevendo o token à mão em `sessionStorage`:
+
+```
+test_status_sobe.py:81       sessionStorage.setItem('suinco_token', 'token-de-teste');
+test_trava_de_versao.py:113  const t = sessionStorage.getItem('suinco_token');
+```
+
+Com o token agora em `localStorage`, para esses testes a sessão deixou de
+existir — e tudo que depende dela recusa.
+
+**É a CAUSA 2 das quatro** (o teste mede um atalho que mudou de forma, não a
+regra). A prova é a correlação: **17 de 17 vermelhas mexem em
+`sessionStorage`, e nenhuma suíte fora dessa lista ficou vermelha.** A
+infraestrutura estava de pé no momento da falha (Postgres online, API de teste
+respondendo no commit `54f1332`), então não é a causa 3 nem falso vermelho de
+contêiner.
+
+**As 17:** test_adaptador_api, test_aviso_recusa_carga, test_backoff_sincronia,
+test_cadastro_frota_sincroniza, test_cadastro_inline_frota_programacao,
+test_carga_recusada_nao_fica_fantasma, test_demora_nao_apaga_carga,
+test_incerteza_nao_apaga_carga, test_libera_pendencias,
+test_limite_atrasado_nao_e_offline, test_login_api,
+test_pendencia_local_nao_e_dada_por_sincronizada, test_recuo_carga_incerta,
+test_sem_sessao_nao_mostra_painel, test_servidor_desatualizado,
+test_status_sobe, test_trava_de_versao.
+
+**O que falta fazer:** trocar `sessionStorage` por `localStorage` no preparo da
+sessão dessas 17. **Duas NÃO são mecânicas e pedem leitura:**
+
+- `test_sem_sessao_nao_mostra_painel` — a regra dela é "sem sessão, não mostra
+  painel", e ela precisa apagar o lugar certo. O comentário da linha 13 ainda
+  descreve o desenho antigo ("o token → sessionStorage → morre com a aba") e
+  tem que ser reescrito, senão a documentação passa a mentir.
+- `test_servidor_desatualizado` — mexe em dois pontos de storage; conferir se
+  algum é o carimbo de build e não o token.
+
+**Não trate como mecânica a terceira:** `test_pendencia_local_nao_e_dada_por_sincronizada`
+é guarda nova de hoje (#56). Ela tem que continuar provando a REGRA dela depois
+do ajuste, não só voltar ao verde.
+
+## #62 — A filial criava o checklist e ficava olhando (14/09/2026)
+
+Relato do dono, com print do cabeçalho da tabela de itens (Nota, P/T, Nº
+parcial, Supervisor, RCA, Cód. Cliente, CX, Peso, Cód. Produto, Nº DEV, Nº
+carga dev, Data DEV, Motivo): *"esse campo precisa estar liberado para as
+filiais preencherem suas devolucoes, filialbsb filialba filiales"*.
+
+**Não era um campo. Era a linha inteira, e o cabeçalho junto.**
+
+**A CAUSA, e ela é de TELA:** `podeEditarDevolucao()` (`devolucoes.js:182`)
+responde sim só para Logística e Administração — e era ela que ligava TODOS os
+campos do checklist. A filial tinha ganhado o botão de CRIAR (02/09, função
+`podeCriarDevolucao`) e ninguém ligou os campos: ela criava o checklist e via
+a tabela como texto.
+
+**O servidor nunca foi o problema.** Ele já deixava a filial preencher item
+(a allowlist do lançamento em `rotas/devolucoes.js`), preencher cabeçalho (o
+que não é carimbo de etapa) e adicionar item (`POST itens` já tinha
+`exigirSetor('Logística', ...SETORES_FILIAL)`) — sempre conferindo
+`criada_setor`. Só a tela negava. O comentário do próprio código dizia a
+intenção: *"ela cria o próprio checklist, **lança os itens dele** e
+acompanha."*
+
+**A CORREÇÃO:** a pergunta deixou de ser "que setor é você?" e passou a ser
+"este checklist é seu?" — `podeMexerNoChecklist(d)`. Booleano de setor não
+serve aqui: palavras do dono, *"cada filial so mexe no que for do seu
+escopo"*. Quem decide é o checklist que está na frente.
+
+**E UM DEFEITO MAIOR APARECEU NO CAMINHO.** Ao perguntar ao dono sobre
+exclusão (*"filial pode excluir checklist e editar"*), descobriu-se que os
+dois "excluir" eram coisas diferentes:
+
+- excluir CHECKLIST já era macio (`excluida_em`), com quem excluiu;
+- excluir ITEM era `DELETE FROM devolucao_itens` — **a linha sumia do banco**,
+  sem registro de quem apagou nem do que estava escrito. E isso valia desde
+  sempre, **inclusive para a Logística**.
+
+O checklist é a prova do que a devolução trouxe. Linha apagada sem registro é
+nota que existiu e ninguém responde por ela — o contrário da regra que a #52
+aplicou ao pátio. Decisão do dono: *"macia para todo mundo, e a filial
+ganha"*. Migração **052** cria `excluido_em/excluido_por/excluido_setor`, a
+exclusão vira marca, e as duas leituras de itens filtram `excluido_em IS NULL`.
+
+**O que a filial CONTINUA sem fazer:** avançar etapa. O ciclo é rodado pela
+matriz, e a recusa daquela rota é explicada, não um 403 seco.
+
+**Teste que trava:** `backend/testes/devolucoes.test.js`, suíte 17 — oito
+casos. Provado que **4 reprovam contra o código publicado** e passam depois:
+a outra filial levar 404, a exclusão macia guardar quem apagou, a exclusão
+macia valer para a Logística, e a filial excluir o próprio checklist.
+
+**A lição:** permissão entregue pela metade é pior que permissão negada. A
+filial recebeu o botão de criar e a certeza de que podia trabalhar — e
+descobriu na frente do checklist que não podia. Quando se abre um caminho,
+abre-se o caminho inteiro, e o teste é o que prova que ele vai até o fim.
+
+## #63 — O campo de KM da Montagem tinha 37 pixels (14/09/2026)
+
+Relato do dono: *"na parte da montagem do dia eu preciso que voce aumente o
+tamanho dos campos editaveis na coluna KM, pois esta muito pequeno e fica
+confuso (...) ta so um quadradinho minusculo e nao da pra funcionar desse
+jeito, entao pra poder puxar certo a kilometragem precisa dessa alteracao"*.
+
+**MEDIDO ANTES DE MEXER**, no navegador, a 1440px — e o número era pior que a
+descrição: **37px de largura**. Desses, 14px de margem interna e ~18px das
+setinhas do campo numérico. Sobrava espaço para **zero dígitos legíveis**: um
+KM de "1250" não cabia. `.km-input` e `.c-kmdesl` não tinham UMA linha de CSS
+— o campo herdava `td input{padding:5px 7px}` e era espremido pelas outras
+quinze colunas da tabela.
+
+**O RISCO QUE SÓ APARECEU AO MEDIR, e é mais grave que o tamanho:** em
+`type="number"` com foco, a **roda do mouse altera o valor**. A Montagem é uma
+tabela larga, rolada com a roda. Passar por cima do KM já escolhido mudava a
+quilometragem **sem ninguém digitar nada** — e o frete é KM × tarifa, então
+número errado vira dinheiro errado, calado. Ninguém tinha relatado; foi a
+medição que encontrou.
+
+**A CORREÇÃO, nas duas pontas:** `min-width:86px` no campo e `102px` na coluna
+(86px é a mesma medida que o campo de placa desta tabela já usava — a casa já
+tinha a resposta), setinhas fora do caminho, número alinhado à direita com
+dígitos de largura fixa. E `onwheel="this.blur()"` no HTML: **o CSS sozinho
+não resolve a roda** — esconder a setinha é aparência, tirar o foco é o que
+impede a escrita. Os dois andam juntos, e está escrito nos dois arquivos.
+
+**Resultado medido:** 37px → 86px, de zero dígitos legíveis para o KM inteiro
+sem corte. No celular a tabela vira cartão e o campo já tinha 120px — não foi
+tocado.
+
+**Teste que trava:** `testes/test_campo_km_da_montagem.py` — largura mínima, o
+número aparecendo inteiro (`scrollWidth` contra `clientWidth`, que é o que
+detecta corte), e a roda do mouse não alterando o valor.
+
+**A lição, sobre a própria guarda:** a primeira versão do teste perguntava ao
+navegador se a setinha estava escondida, lendo um pseudo-elemento — e
+`getComputedStyle` não reporta isso de forma confiável. Estava medindo o
+MECANISMO, não a regra. A regra é "o número cabe"; a setinha é só um dos jeitos
+de atrapalhar. Teste que mede mecanismo reprova quando o mecanismo muda, e
+passa quando a regra quebra por outro caminho.

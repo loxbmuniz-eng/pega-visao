@@ -748,6 +748,35 @@ tbody tr:nth-child(even){ background:rgba(233,185,84,.045) }
 tr:hover td{background:rgba(233,185,84,.06)}
 td input,td select{padding:5px 7px;font-size:13px}
 
+/* O CAMPO DE KM DA MONTAGEM DO DIA (14/09/2026).
+
+   Relato do dono: "esta muito pequeno e fica confuso (...) ta so um
+   quadradinho minusculo e nao da pra funcionar desse jeito, entao pra poder
+   puxar certo a kilometragem precisa dessa alteracao".
+
+   MEDIDO no navegador antes de mexer, a 1440px: o campo tinha 37px de
+   largura. Desses, 14px são a margem interna e ~18px as setinhas do campo
+   numérico — sobrava espaço para ZERO dígitos legíveis. Um KM de "1250" não
+   cabia. A coluna é uma de dezesseis, e sem largura mínima ela era espremida
+   até o limite pelas vizinhas.
+
+   AS SETINHAS SAEM, e não é só por espaço: em `type=number` a RODA DO MOUSE
+   por cima do campo altera o valor. A Montagem é uma tabela larga, que se
+   rola com a roda — passar por cima do KM mudava a quilometragem sem ninguém
+   digitar, e o frete é KM × tarifa. ATENÇÃO: o CSS só tira a SETINHA — quem
+   impede a roda de escrever é o `onwheel="this.blur()"` no HTML (app.js), e
+   os dois andam juntos. O teclado numérico do celular fica por `inputmode`. */
+.km-input{
+  min-width:86px;                  /* 5 dígitos COM folga: a 76px cabia exato, e exato quebra */
+  text-align:right;                /* número se lê pela direita */
+  font-variant-numeric:tabular-nums;
+}
+.km-input::-webkit-outer-spin-button,
+.km-input::-webkit-inner-spin-button{ -webkit-appearance:none; margin:0 }
+.km-input{ -moz-appearance:textfield; appearance:textfield }
+/* A coluna precisa acompanhar, senão a tabela continua espremendo o campo. */
+#mont-tabela .c-kmdesl{ min-width:102px }
+
 /* Coluna de IDENTIFICAÇÃO da linha — Nº da Carga e Placa — mais escura e
    com peso maior que o resto da linha. É a coluna que a pessoa usa para
    achar "aquela carga" entre quinze parecidas; o resto (transportadora,
