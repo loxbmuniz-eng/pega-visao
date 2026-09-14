@@ -35,7 +35,7 @@ def ck(nome, ok, detalhe=''):
 
 
 async def entrar(pg, setor):
-    await pg.evaluate("() => { sessionStorage.setItem('suinco_token', 'token-de-teste'); }")
+    await pg.evaluate("() => { localStorage.setItem('suinco_token', 'token-de-teste'); }")
     await pg.evaluate("() => mostrarLoginLocal()")
     await pg.fill('#login-nome', 'Gestor')
     await pg.select_option('#login-setor', setor)

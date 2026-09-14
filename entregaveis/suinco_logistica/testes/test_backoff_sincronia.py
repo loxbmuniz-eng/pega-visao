@@ -54,7 +54,7 @@ async def main():
         await pg.evaluate("""(api) => {
             SuincoSharePoint.SP_CONFIG.ativo = true;
             SuincoSharePoint.SP_CONFIG.api = api;
-            sessionStorage.setItem('suinco_token', 'token-fake-de-teste');
+            localStorage.setItem('suinco_token', 'token-fake-de-teste');
         }""", API_FALSA)
 
         print('\n=== 1. VÁRIOS GATILHOS QUASE JUNTOS = SÓ 1 REQUISIÇÃO REAL (coalescimento) ===')

@@ -32,7 +32,7 @@ CENARIO = """async (travaAPagina) => {
   SuincoSharePoint.SP_CONFIG.ativo = true;
   SuincoSharePoint.SP_CONFIG.api = 'http://servidor.falso';
   SuincoSharePoint.SP_CONFIG.timeoutMs = 300;
-  sessionStorage.setItem('suinco_token', 'token-de-teste');
+  localStorage.setItem('suinco_token', 'token-de-teste');
   DB.operador = {nome:'Gestor', setor:'Logística'};
   let chamadasEstado = 0;
   window.fetch = async (url, opts) => {

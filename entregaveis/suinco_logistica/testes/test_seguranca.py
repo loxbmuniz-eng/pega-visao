@@ -193,7 +193,14 @@ async def main():
         print('\n=== 5. O TOKEN NÃO SOBREVIVE À TROCA DE OPERADOR ===')
         await pg.evaluate("()=>trocarUsuario()")
         await pg.wait_for_timeout(600)
-        sobrou = await pg.evaluate("()=>!!sessionStorage.getItem('suinco_token')")
+        # Confere os DOIS lugares. Desde 12/09/2026 o token mora em
+        # localStorage (ocorrência #61), e esta regra ficou MAIS crítica: como
+        # a sessão agora sobrevive a fechar a aba, "Trocar usuário" passou a ser
+        # o jeito certo de passar a estação para o próximo turno. Se ele não
+        # apagar, o turno seguinte herda a sessão do anterior.
+        sobrou = await pg.evaluate(
+            "()=>!!localStorage.getItem('suinco_token')"
+            " || !!sessionStorage.getItem('suinco_token')")
         if sobrou:
             vuln('ALTA','Sessão sobrevive à troca de usuário',
                  'Em terminal compartilhado o próximo operador herda a sessão do anterior.')

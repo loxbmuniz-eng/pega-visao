@@ -39,7 +39,7 @@ async def main():
         await pg.goto(PAINEL)
         await pg.wait_for_timeout(900)
 
-        await pg.evaluate("() => { sessionStorage.setItem('suinco_token', 'token-de-teste'); }")
+        await pg.evaluate("() => { localStorage.setItem('suinco_token', 'token-de-teste'); }")
         await pg.evaluate("() => mostrarLoginLocal()")
         await pg.fill('#login-nome', 'Zé')
         await pg.select_option('#login-setor', 'Portaria')

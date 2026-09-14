@@ -78,7 +78,7 @@ async def main():
         # Sessão de servidor: sem ela sincronizarCarga sai antes de chamar a
         # rede e o teste não mede nada.
         await pg.evaluate("""() => {
-            sessionStorage.setItem('suinco_token', 'token-de-teste');
+            localStorage.setItem('suinco_token', 'token-de-teste');
         }""")
         await pg.evaluate("() => mostrarLoginLocal()")
         await pg.fill('#login-nome', 'Zé')

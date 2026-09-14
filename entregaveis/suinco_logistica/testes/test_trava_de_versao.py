@@ -110,7 +110,7 @@ async def main():
         ck('a carga local foi recarregada com a versão do servidor',
            isinstance(estado['versao'], (int, float)) and estado['versao'] >= v1, str(estado))
         r = await pg.evaluate(f"""async () => {{
-            const t = sessionStorage.getItem('suinco_token');
+            const t = localStorage.getItem('suinco_token');
             const r = await fetch('{API}/api/estado', {{ headers: {{ authorization: 'Bearer ' + t }} }});
             const j = await r.json();
             const c = (j.cargas||[]).find(x => x.numeroCarga === '{num}');
@@ -122,7 +122,7 @@ async def main():
         await pg.evaluate("(n) => { const c = DB.cargas.find(x=>x.numeroCarga===n); atualizarPesoUI(c.id, '8888'); }", num)
         await pg.wait_for_timeout(5000)
         r2 = await pg.evaluate(f"""async () => {{
-            const t = sessionStorage.getItem('suinco_token');
+            const t = localStorage.getItem('suinco_token');
             const r = await fetch('{API}/api/estado', {{ headers: {{ authorization: 'Bearer ' + t }} }});
             const j = await r.json();
             const c = (j.cargas||[]).find(x => x.numeroCarga === '{num}');

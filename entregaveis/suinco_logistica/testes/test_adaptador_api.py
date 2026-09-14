@@ -86,12 +86,31 @@ async def main():
         ck('o SETOR veio do servidor, não do cliente', op.get('setor') == 'Logística', op.get('setor'))
         ck('estado = online', await pagina.evaluate("() => SuincoSharePoint.estado()") == 'online')
 
-        print('\n=== 4. TOKEN FICA EM sessionStorage (terminal compartilhado) ===')
-        em_session = await pagina.evaluate("() => !!sessionStorage.getItem('suinco_token')")
+        # A REGRA MUDOU DE PROPÓSITO EM 12/09/2026 — ver ocorrência #61.
+        #
+        # Este bloco exigia o token em sessionStorage e PROIBIA localStorage,
+        # para a sessão do turno da manhã não valer para quem sentasse à noite
+        # no mesmo terminal. A intenção continua certa; o mecanismo é que não
+        # entregava: sessionStorage também morre quando o sistema RECICLA a aba
+        # em segundo plano (rotina no Android), e a proteção só existia se
+        # alguém FECHASSE a aba — o que nas estações que importam (Portaria,
+        # Faturamento, Expedição, sempre abertas) nunca acontecia. Medido: o
+        # servidor recusou UMA sessão em sete dias enquanto o Faturamento
+        # relatava logar "quase o tempo todo".
+        #
+        # Agora o token sobrevive à aba, e quem protege a troca de turno é o
+        # TEMPO SEM NINGUÉM MEXER (14 h) mais o botão "Trocar usuário". Por isso
+        # este bloco passou a medir o desenho novo — e a proteção continua
+        # travada, em test_sessao_sobrevive_reciclagem.py e no bloco 5 de
+        # test_seguranca.py.
+        print('\n=== 4. TOKEN SOBREVIVE À ABA, E A JANELA DE INATIVIDADE PROTEGE ===')
         em_local = await pagina.evaluate("() => !!localStorage.getItem('suinco_token')")
-        ck('token em sessionStorage', em_session)
-        ck('token NÃO em localStorage', not em_local,
-           'localStorage sobreviveria ao próximo turno no mesmo terminal')
+        tem_carimbo = await pagina.evaluate(
+            "() => typeof SuincoSharePoint.ultimaInteracaoEm === 'function'"
+            " && Number.isFinite(SuincoSharePoint.ultimaInteracaoEm())")
+        ck('token em localStorage — não morre quando a aba é reciclada', em_local)
+        ck('e existe carimbo de inatividade, que é a proteção do turno', tem_carimbo,
+           'sem o carimbo persistido a janela de 14 h nunca venceria — proteção de fachada')
 
         print('\n=== 5. CARGA INICIAL TRAZ A FROTA E AS CARGAS ===')
         dados = await pagina.evaluate("() => SuincoSharePoint.pullTudo()") or {}

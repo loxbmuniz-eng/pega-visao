@@ -81,7 +81,7 @@ async def main():
         erros = []
         pg.on('pageerror', lambda e: erros.append(str(e)))
         await pg.goto(PAINEL); await pg.wait_for_timeout(900)
-        await pg.evaluate("() => { sessionStorage.setItem('suinco_token', 'token-de-teste'); }")
+        await pg.evaluate("() => { localStorage.setItem('suinco_token', 'token-de-teste'); }")
         await pg.evaluate("() => mostrarLoginLocal()")
         await pg.fill('#login-nome', 'Diego')
         await pg.select_option('#login-setor', 'Faturamento')
