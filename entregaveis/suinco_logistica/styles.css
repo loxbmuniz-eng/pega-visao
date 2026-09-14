@@ -3863,6 +3863,18 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
 
 .dev-etapa-acao{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin:10px 0; }
 .dev-etapa-acao input{ max-width:220px; }
+/* DESFAZER FICA ABAIXO DO AVANÇAR, E MAIS APAGADO (14/09/2026).
+
+   O botão de avançar é o que a operação usa cem vezes por dia; o de
+   desfazer é o socorro de quem errou. Lado a lado e do mesmo tamanho, o
+   dedo acha o errado — e no celular, que é onde a Portaria trabalha, a
+   distância entre um toque e outro é o que separa carimbar de apagar. */
+.dev-etapa-desfazer{ margin:2px 0 10px; }
+.dev-etapa-desfazer .btn{
+  opacity:.8; font-size:12px; padding:5px 10px;
+  min-height:38px;            /* menor que o de avançar, mas ainda alvo de dedo */
+}
+.dev-etapa-desfazer .btn:hover, .dev-etapa-desfazer .btn:focus-visible{ opacity:1; }
 
 /* Chips de status e de alerta. Cores dos tokens semânticos existentes. */
 .dev-chip{

@@ -2027,6 +2027,13 @@ const SuincoSharePoint = (function () {
     etapa(id, corpo) {
       return chamar('/api/devolucoes/' + encodeURIComponent(id) + '/etapa', { metodo: 'POST', corpo });
     },
+    /* Desfaz a ÚLTIMA etapa carimbada (14/09/2026). Sentido de volta da
+       mesma máquina de estados: um passo, o último, e a permissão é a
+       mesma de quem podia tê-lo dado. */
+    desfazerEtapa(id, motivo) {
+      return chamar('/api/devolucoes/' + encodeURIComponent(id) + '/desfazer',
+        { metodo: 'POST', corpo: motivo ? { motivo } : {} });
+    },
     criarItem(id, corpo) {
       return chamar('/api/devolucoes/' + encodeURIComponent(id) + '/itens', { metodo: 'POST', corpo });
     },

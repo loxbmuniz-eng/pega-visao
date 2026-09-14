@@ -1050,7 +1050,52 @@ function etapaDeDev(d) {
   return DEV_ETAPAS.find((e) => e.status === d.status) || null;
 }
 
+/* A ETAPA TEM DOIS SENTIDOS (14/09/2026): o de ir e o de voltar.
+
+   `acaoEtapaDev` juntava as duas coisas numa função só e saía cedo em três
+   situações — sobra encerrada, ciclo encerrado, e "este passo não é seu".
+   O botão de desfazer precisa aparecer NAS TRÊS: quem acabou de carimbar
+   por engano já não é o dono do passo seguinte, e é justamente ele quem
+   tem de consertar. Por isso as duas metades são funções separadas, e esta
+   aqui só as soma. */
 function acaoEtapaDev(d) {
+  return blocoAvancoDev(d) + blocoDesfazerDev(d);
+}
+
+/* Qual etapa seria desfeita — espelho de validarDesfazerDevolucao no
+   servidor: a transição que TROUXE a devolução até o status atual. */
+function etapaDesfeitaDev(d) {
+  if (!d || d.status === DEV_ETAPAS[0].status) return null;   // 'Lançada' — nada a desfazer
+  /* Na sobra, "Descarga Conferida" veio da balança de ENTRADA. Devolvê-la
+     ao peso final seria inventar um passo que o caminhão nunca deu. */
+  if (d.tipo === 'SOBRA' && d.status === DEV_ATALHO_SOBRA.proxima) return DEV_ATALHO_SOBRA;
+  return DEV_ETAPAS.find((e) => e.proxima === d.status
+    && !(d.tipo === 'SOBRA' && e.status === 'Peso Final Registrado')) || null;
+}
+
+/* Quem desfaz é quem podia ter feito — a MESMA allowlist do avanço, e não
+   uma segunda lista que divergiria dela na primeira mudança. */
+function podeDesfazerEtapaDev(d) {
+  const etapa = etapaDesfeitaDev(d);
+  if (!etapa) return false;
+  const setor = (DB.operador || {}).setor;
+  if (ehSetorFilial(setor)) return false;
+  return setor === 'Administração' || etapa.setores.includes(setor);
+}
+
+function blocoDesfazerDev(d) {
+  if (!podeDesfazerEtapaDev(d)) return '';
+  const etapa = etapaDesfeitaDev(d);
+  const c = (d.carimbos || {})[etapa.pede];
+  const quem = c && c.por ? ` · ${esc(c.por)}` : '';
+  return `<div class="dev-etapa-desfazer">
+      <button class="btn btn-sec btn-sm" onclick="desfazerEtapaDevolucaoUI('${escJs(d.id)}')"
+        title="Volta UMA etapa: ${esc(d.status)} → ${esc(etapa.status)}">
+        ↩ Desfazer "${esc(d.status)}"${quem}</button>
+    </div>`;
+}
+
+function blocoAvancoDev(d) {
   /* SOBRA: três OKs e acabou — Portaria, Faturamento, Expedição. */
   if (d.tipo === 'SOBRA' && d.status === 'Descarga Conferida') {
     return '<div class="card-sub">✅ Sobra concluída — entrou, conferida e descarregada.</div>';
@@ -1572,6 +1617,36 @@ function excluirDevolucaoUI(id) {
   if (!d) return;
   if (!confirm(`Excluir o checklist Nº ${d.numero} (${devRotulo(d)})? Ele some do painel e dos relatórios; o registro fica no histórico.`)) return;
   acaoDev(SuincoSharePoint.devolucoes.excluir(id), 'Checklist excluído.');
+}
+
+/* DESFAZER PERGUNTA EXPLICANDO, e não bloqueia (14/09/2026).
+
+   Regra da casa: "botão desabilitado não ensina o caminho, só nega. Quando
+   a ação é arriscada, PERGUNTE explicando". A pergunta diz as três coisas
+   que quem clicou precisa saber antes de confirmar: qual carimbo sai, de
+   quem era, e para onde a devolução volta. E diz o que NÃO sai — o peso e
+   o recado ficam, senão quem errou uma vírgula redigita tudo. */
+function desfazerEtapaDevolucaoUI(id) {
+  const d = getDevolucao(id);
+  if (!d) return;
+  const etapa = etapaDesfeitaDev(d);
+  if (!etapa) return;
+  const c = (d.carimbos || {})[etapa.pede] || {};
+  const quando = c.em ? new Date(c.em).toLocaleString('pt-BR') : 'sem data registrada';
+  const linhas = [
+    `Desfazer a etapa "${d.status}"?`,
+    '',
+    `Carimbada por ${c.por || 'alguém'} em ${quando}.`,
+    `A devolução volta para "${etapa.status}" e este carimbo é apagado.`,
+    '',
+    'O que foi digitado nesta etapa (peso, observações) CONTINUA gravado —',
+    'é só corrigir e carimbar de novo.',
+    '',
+    'Fica registrado quem desfez.',
+  ];
+  if (!confirm(linhas.join('\n'))) return;
+  acaoDev(SuincoSharePoint.devolucoes.desfazerEtapa(id),
+    `Etapa desfeita — a devolução voltou para "${etapa.status}".`);
 }
 
 function avancarEtapaDevolucaoUI(id) {

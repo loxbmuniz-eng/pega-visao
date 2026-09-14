@@ -1478,3 +1478,140 @@ describe('17. A filial mexe no checklist DELA, e some sem sumir (14/09/2026)', (
       'a recusa precisa DIZER por que, não ser um 403 seco');
   });
 });
+
+/* ===================================================================
+   18. UM CLIQUE ERRADO ÀS 2 DA MANHÃ TEM VOLTA (14/09/2026)
+
+   Auditoria de prontidão operacional, antes de as devoluções entrarem em
+   operação oficial: o ciclo inteiro rodava, cada setor no seu passo, a
+   recusa ensinava e a trilha guardava tudo. Faltava UMA coisa — desfazer.
+
+   Carimbada a etapa errada, NINGUÉM conseguia voltar: nem o setor que
+   carimbou, nem a Logística, nem a Administração. Todos recebiam
+   409 "Não é possível ir de X direto para Y", porque a máquina de estados
+   só conhecia o caminho para a frente. O único socorro era a Administração
+   abrir "↩ Alterações" e restaurar uma revisão — que a Logística nem
+   enxerga, e que ninguém procura quando o que aconteceu foi um clique
+   errado.
+
+   A Portaria fica aberta 24 horas e o gestor carimba pelo celular de
+   madrugada. Regra da casa: "botão desabilitado não ensina o caminho, só
+   nega" — e aqui nem botão havia.
+
+   QUEM DESFAZ, decisão do dono: quem carimbou desfaz o próprio passo,
+   e Logística e Administração desfazem qualquer um. Na prática é a MESMA
+   allowlist do avanço — quem podia dar o passo pode tirá-lo —, o que
+   evita uma segunda tabela de permissão que divergiria da primeira. */
+describe('18. Um clique errado às 2 da manhã tem volta (14/09/2026)', () => {
+  let dev;
+
+  async function novaDevolucaoNoPasso(passos) {
+    const c = await req('/api/devolucoes', { metodo: 'POST', token: tokens['Logística'],
+      corpo: novoChecklist() });
+    const id = c.json.id;
+    for (const [para, setor] of passos) {
+      const r = await req(`/api/devolucoes/${id}/etapa`, { metodo: 'POST',
+        token: tokens[setor], corpo: { para } });
+      assert.equal(r.status, 200, `preparo (${setor} → ${para}): ${r.texto}`);
+    }
+    return id;
+  }
+
+  test('o setor que carimbou desfaz o PRÓPRIO passo', async () => {
+    dev = await novaDevolucaoNoPasso([
+      ['Recebida na Portaria', 'Portaria'],
+      ['Conferida no Faturamento', 'Faturamento'],
+    ]);
+    const r = await req(`/api/devolucoes/${dev}/desfazer`, { metodo: 'POST',
+      token: tokens['Faturamento'] });
+    assert.equal(r.status, 200, `o Faturamento precisa conseguir desfazer o próprio carimbo: ${r.texto}`);
+    assert.equal(r.json.status, 'Recebida na Portaria',
+      'desfazer volta UMA etapa, não zera a devolução');
+  });
+
+  test('e o carimbo daquele passo é apagado — a linha não pode dizer duas coisas', async () => {
+    const { rows } = await pool.query(
+      'SELECT faturamento_por, faturamento_em, portaria_por FROM devolucoes WHERE devolucao_id = $1',
+      [dev]);
+    assert.equal(rows[0].faturamento_por, null, 'carimbo do passo desfeito tem que sair');
+    assert.equal(rows[0].faturamento_em, null);
+    assert.ok(rows[0].portaria_por, 'o carimbo das etapas ANTERIORES continua');
+  });
+
+  test('o passo desfeito pode ser dado de novo', async () => {
+    const r = await req(`/api/devolucoes/${dev}/etapa`, { metodo: 'POST',
+      token: tokens['Faturamento'], corpo: { para: 'Conferida no Faturamento' } });
+    assert.equal(r.status, 200, `desfazer não pode deixar a devolução travada: ${r.texto}`);
+  });
+
+  test('a Logística desfaz etapa de QUALQUER setor', async () => {
+    const id = await novaDevolucaoNoPasso([
+      ['Recebida na Portaria', 'Portaria'],
+      ['Conferida no Faturamento', 'Faturamento'],
+      ['Peso Final Registrado', 'Faturamento'],
+      ['Descarga Conferida', 'Expedição'],
+    ]);
+    const r = await req(`/api/devolucoes/${id}/desfazer`, { metodo: 'POST',
+      token: tokens['Logística'] });
+    assert.equal(r.status, 200, `"controle total das meninas" é o requisito nº 1: ${r.texto}`);
+    assert.equal(r.json.status, 'Peso Final Registrado');
+  });
+
+  test('mas um setor NÃO desfaz o passo do outro', async () => {
+    const id = await novaDevolucaoNoPasso([
+      ['Recebida na Portaria', 'Portaria'],
+      ['Conferida no Faturamento', 'Faturamento'],
+    ]);
+    const r = await req(`/api/devolucoes/${id}/desfazer`, { metodo: 'POST',
+      token: tokens['Central de Notas'] });
+    assert.equal(r.status, 403,
+      'a Central de Notas não pode apagar a pesagem do Faturamento');
+    assert.match(r.json.erro, /quem (fez|desfaz)|Faturamento/i,
+      'a recusa precisa DIZER quem desfaz, não ser um 403 seco');
+  });
+
+  test('não há o que desfazer numa devolução recém-lançada', async () => {
+    const c = await req('/api/devolucoes', { metodo: 'POST', token: tokens['Logística'],
+      corpo: novoChecklist() });
+    const r = await req(`/api/devolucoes/${c.json.id}/desfazer`, { metodo: 'POST',
+      token: tokens['Logística'] });
+    assert.equal(r.status, 409, r.texto);
+    assert.match(r.json.erro, /nenhuma etapa|ainda não/i);
+  });
+
+  test('a filial não desfaz — ela cria e acompanha', async () => {
+    const id = await novaDevolucaoNoPasso([['Recebida na Portaria', 'Portaria']]);
+    const r = await req(`/api/devolucoes/${id}/desfazer`, { metodo: 'POST',
+      token: tokens['Filial 105 BSB'] });
+    assert.equal(r.status, 403, r.texto);
+  });
+
+  test('na SOBRA, desfazer a Expedição volta para a balança de ENTRADA', async () => {
+    const c = await req('/api/devolucoes', { metodo: 'POST', token: tokens['Logística'],
+      corpo: { ...novoChecklist(), tipo: 'SOBRA', rotas: [] } });
+    const id = c.json.id;
+    for (const [para, setor] of [['Recebida na Portaria', 'Portaria'],
+                                 ['Conferida no Faturamento', 'Faturamento'],
+                                 ['Descarga Conferida', 'Expedição']]) {
+      const p = await req(`/api/devolucoes/${id}/etapa`, { metodo: 'POST',
+        token: tokens[setor], corpo: { para } });
+      assert.equal(p.status, 200, `preparo da sobra (${para}): ${p.texto}`);
+    }
+    const r = await req(`/api/devolucoes/${id}/desfazer`, { metodo: 'POST',
+      token: tokens['Expedição'] });
+    assert.equal(r.status, 200, r.texto);
+    assert.equal(r.json.status, 'Conferida no Faturamento',
+      'a sobra nunca passou pelo peso final — desfazer não pode inventar esse passo');
+  });
+
+  test('quem desfez fica registrado na trilha', async () => {
+    const id = await novaDevolucaoNoPasso([['Recebida na Portaria', 'Portaria']]);
+    await req(`/api/devolucoes/${id}/desfazer`, { metodo: 'POST', token: tokens['Logística'] });
+    const r = await req(`/api/devolucoes/${id}/revisoes`, { metodo: 'GET',
+      token: tokens['Administração'] });
+    assert.equal(r.status, 200, r.texto);
+    const revs = r.json.revisoes || r.json;
+    assert.ok(Array.isArray(revs) && revs.length,
+      'desfazer é alteração de dado: tem que deixar revisão');
+  });
+});
