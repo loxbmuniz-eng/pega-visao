@@ -2883,3 +2883,85 @@ passou a julgar o ciclo normal, que é o que a operação vive, e a fase da
 rajada ficou como referência do que se evitou e alarme se alguém reintroduzir.
 *Medição que não acompanha a mudança do sistema vira mentira com aparência de
 rigor* — e teria me feito reprovar a minha própria correção.
+
+---
+
+## #66 — A rota 171 existia na tela e não existia no banco (14/09/2026)
+
+Achado enquanto se aplicava a lista de operadores do dono. Não foi relatado
+por ninguém — e é exatamente por isso que entra aqui.
+
+**A rota mora em DOIS lugares, e eles divergiram.** `data.js` (constante
+`ROTAS`, o que o seletor oferece) tinha **33** rotas; `backend/scripts/seed.js`
+(o que o `instalar.sh` grava em `dim_rotas`) tinha **32**. A que faltava era a
+`171 — Buenos Aires`, a única internacional, fora da faixa 500 — e portanto a
+única que não cai no padrão de quem confere a lista batendo o olho.
+
+**O estrago:** `cargas.rota_codigo` é chave estrangeira para `dim_rotas`
+(`001_schema.sql:95`). O painel oferece a 171 no seletor, a Logística escolhe,
+e o servidor recusa por cadastro inexistente — 23503, que desde a #57 volta
+como 422 *"A rota 171 não está cadastrada"*. A pessoa vê uma opção que o
+sistema não aceita. Botão que não ensina o caminho, só nega — a regra da casa
+que esta ocorrência quebra.
+
+**Por que ninguém viu:** não é um erro de código, é um erro de CÓPIA. Os dois
+arquivos não podem ser uma função só (um é concatenado no navegador, o outro é
+módulo Node), então a regra "uma função, dois chamadores" não tinha como ser
+aplicada. O que faltava era a guarda.
+
+**A FAMÍLIA desta ocorrência — divergência silenciosa, e o servidor ganha.**
+No `load()`, o painel reaplica por cima da constante tudo que veio de
+`GET /cadastros/rotas` (`data.js` ~1393). Então divergir NÃO aparece como
+erro: aparece como o painel mostrando um operador e o relatório imprimindo
+outro depois da primeira sincronia. Quando duas cópias do mesmo dado existem e
+uma delas ganha na sincronia, a diferença não vira mensagem de erro — vira
+dado errado com cara de dado certo.
+
+**A correção:** a 171 entrou no `seed.js`, e agora existe o teste que compara
+as duas listas inteiras — código, nome, detalhe e operador. Ele não julga o
+CONTEÚDO da lista (o dono troca de operador quando quiser); exige só que os
+dois arquivos digam a mesma coisa.
+
+**Teste que trava:** `testes/test_rotas_painel_e_servidor_batem.py`. Reprovou
+contra o publicado nomeando o defeito — *"faltam: 171"* — antes de qualquer
+linha de correção.
+
+**Só vale depois do `atualizar.sh`:** `dim_rotas` é do servidor. Até o
+`instalar.sh` rodar o `seed.js` de novo, a 171 continua recusada em produção.
+
+---
+
+## #67 — O Faturamento lia a rota e não sabia quem entrega (14/09/2026)
+
+Pedido do dono: *"eu quero que apareça o nome da transportadora e do operador
+no relatório operacional... o operador tipo totalservice, montes claros, isso
+é pra aparecer no relatório operacional ali junto com a rota, essas
+informações são importantes para o faturamento e para a melhor fluidez e
+identificação"*.
+
+**Duas coisas diferentes com nomes parecidos.** *Transportadora* é do
+CAMINHÃO — muda a cada carga, e já tinha coluna. *Operador* é da ROTA — quem
+faz a distribuição na praça (Total Service, CargoFrio, Pantanal) — e não
+aparecia em lugar nenhum da folha: `rotaCurta()` devolve só
+`"510 — Belo Horizonte"`. O `rotaLabel()`, que já carregava o operador entre
+parênteses, era usado no `<select>` e na ficha, nunca no impresso.
+
+**Empilhado, não coluna nova.** A folha já tem 12 colunas em A4 deitado. A 13ª
+tiraria largura do Status, que precisa caber "AGUARDANDO EMBARQUE" em UMA
+linha — largura calibrada e travada por `test_relatorios.py`. A célula da Rota
+passou a empilhar praça e operador, o mesmo padrão que a célula de veículo já
+usava na tela. **Medido depois: a coluna continua com 101 px e o Status
+continua em uma linha em todas as linhas da folha.**
+
+**Rota sem operador não ganha linha nenhuma.** Treze das 33 ainda não têm
+operador definido; escrever "(sem operador)" em quase metade das linhas
+gastaria a coluna repetindo o que a ausência já diz. E nada de parêntese vazio
+pendurado — o teste mede isso.
+
+**O teste lê o operador de `rotaInfo()`, não de uma constante escrita nele.**
+Assim mede a REGRA ("o operador da rota sai na célula da rota") e não um nome
+de empresa. Trocar de operador é decisão do dono e não pode deixar teste
+vermelho — essa é a causa 1 das quatro, e teste que confunde as duas apaga
+decisão.
+
+**Teste que trava:** `testes/test_operador_no_relatorio_operacional.py`.

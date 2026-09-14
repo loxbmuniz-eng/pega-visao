@@ -2824,6 +2824,22 @@ input,select,textarea{border-radius:5px}
 }
 #print-operacional .c-operacao{ font-weight:800; text-align:center }
 #print-operacional .c-transp{ font-weight:600 }
+/* ROTA COM OPERADOR EMPILHADO (14/09/2026).
+
+   Mesma ideia da célula de veículo na tela: o que identifica manda (o
+   código e a praça), o apoio fica menor e mais claro logo abaixo. O olho
+   lê de cima pra baixo DENTRO da célula em vez de percorrer a folha pro
+   lado — e a coluna não precisou crescer nem um por cento.
+
+   O operador NÃO quebra no meio da palavra: "Versatto" partido em duas
+   linhas deixa de ser reconhecível na foto que vai pro grupo, que é onde
+   este documento é lido de verdade. */
+#print-operacional .c-rota{ line-height:1.2 }
+#print-operacional .c-rota .rota-praca{ display:block; font-weight:600 }
+#print-operacional .c-rota .rota-op{
+  display:block; font-size:.9em; font-weight:600; opacity:.85;
+  word-break:normal; overflow-wrap:normal; hyphens:none;
+}
 #print-operacional .c-seq,
 #print-operacional .c-palet,
 #print-operacional .c-entregas,

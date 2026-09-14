@@ -8626,7 +8626,24 @@ async function montarRelatorioOperacional(){
       <td class="c-seq">${c.sequencia ?? '—'}</td>
       <td class="c-carga">${esc(c.numeroCarga).toUpperCase()||'—'}</td>
       <td class="c-status" style="background:${cs.fundo};color:${cs.texto}">${esc(c.status)}</td>
-      <td class="c-rota">${esc(rotaCurta(c.rota))}</td>
+      ${/* ROTA + OPERADOR, empilhados na mesma célula (14/09/2026).
+
+             Pedido do dono: "o operador tipo totalservice, montes claros,
+             isso é pra aparecer no relatório operacional ali junto com a
+             rota". O Faturamento identifica a praça pelo operador, não pelo
+             número.
+
+             Empilhado, e não coluna nova: a folha já tem 12 colunas em A4
+             deitado e a 13ª tiraria largura do Status, que precisa caber
+             "AGUARDANDO EMBARQUE" em uma linha (ver styles.css). O mesmo
+             padrão da célula de veículo, onde placa manda e transportadora
+             e tipo ficam de apoio, menores.
+
+             Rota sem operador não ganha linha nenhuma — 13 das 33 ainda não
+             têm, e uma linha vazia em metade da folha é ruído. */''
+      }<td class="c-rota"><span class="rota-praca">${esc(rotaCurta(c.rota))}</span>${
+        rotaOperador(c.rota) ? `<span class="rota-op">${esc(rotaOperador(c.rota))}</span>` : ''
+      }</td>
       <td class="c-operacao" ${praOndeStyle}>${c.praOnde ? esc(PRA_ONDE_LABEL[c.praOnde]) : '—'}</td>
       <td class="c-placa">${c.placa ? esc(c.placa).toUpperCase()
         : '<span class="liso">a contratar</span>'}</td>

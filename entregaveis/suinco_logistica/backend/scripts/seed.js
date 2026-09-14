@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/* Carrega a base de Frota (749 placas) e as 32 rotas oficiais no banco.
+/* Carrega a base de Frota (749 placas) e as 33 rotas oficiais no banco.
 
    Lê exatamente o mesmo `frota_seed_2026.csv` e a mesma lista de rotas que o
    painel usa hoje. Uma única fonte para os dois — se divergirem, a trava de
@@ -33,38 +33,43 @@ const CAMINHOS_CSV = [
 const CSV = CAMINHOS_CSV.find((c) => fs.existsSync(c)) || CAMINHOS_CSV[0];
 
 const ROTAS = [
+  // A 171 é a única internacional e estava FORA daqui até 14/09/2026.
+  // O painel a oferecia no seletor, `dim_rotas` não a tinha, e
+  // `cargas.rota_codigo` é chave estrangeira: programar carga na 171
+  // voltava do servidor como cadastro inexistente (23503 → 422).
+  ['171', 'Buenos Aires', 'Argentina', ''],
   ['500', 'Patos de Minas', '', ''],
   ['501', 'São Gotardo', '', ''],
   ['502', 'Araxá', '', ''],
   ['503', 'Patrocínio / Coromandel', '', ''],
   ['504', 'Alto Paranaíba', 'Paracatu, Unaí, João Pinheiro, Arinos e Buritis', ''],
-  ['505', 'Triângulo Mineiro', 'Uberlândia', ''],
+  ['505', 'Triângulo Mineiro', 'Uberlândia', 'Total Service'],
   ['506', 'Uberaba', '', ''],
   ['507', 'Araguari', '', ''],
-  ['508', 'Iturama', '', 'Total Service ou FrigoCargo'],
+  ['508', 'Iturama', '', 'Total Service'],
   ['509', 'Centro-Oeste', '', ''],
-  ['510', 'Belo Horizonte', '', 'RP Logística'],
+  ['510', 'Belo Horizonte', '', 'RP Express'],
   ['512', 'Varginha', 'Sul de Minas', 'Brasfrios'],
   ['513', 'Passos', 'Sul de Minas', 'MaxFrios'],
-  ['516', 'Norte de Minas', 'Montes Claros', 'Total Services'],
-  ['517', 'Rio de Janeiro (Varejo)', 'São João de Meriti', 'OmegaX'],
+  ['516', 'Norte de Minas', 'Montes Claros', 'Total Service'],
+  ['517', 'Rio de Janeiro (Varejo)', 'São João de Meriti', 'Ômega X'],
   ['518', 'Rio de Janeiro (Redes)', 'Canejo', ''],
-  ['519', 'Brasília (Varejo)', '', 'RN Logística'],
+  ['519', 'Brasília (Varejo)', '', 'Versatto Logística'],
   ['520', 'Goiás (Varejo)', '', 'AG Sestini'],
   ['521', 'SP Ribeirão Preto', '', 'CargoFrio'],
-  ['522', 'SP Capital', 'Osasco', 'SPM LOG'],
-  ['523', 'Vale do Aço', 'Governador Valadares', 'SSLog'],
+  ['522', 'SP Capital', 'Osasco', 'SPM Log'],
+  ['523', 'Vale do Aço', 'Governador Valadares', 'SS Log'],
   ['524', 'Zona da Mata', 'Juiz de Fora', 'BSF Logística'],
   ['525', 'Bahia Capital', '', 'LogMaster'],
   ['527', 'Nordeste', '', ''],
-  ['529', 'Espírito Santo', 'Serra-ES', 'Nacional Log'],
+  ['529', 'Espírito Santo', 'Serra-ES', 'Nacional Log / Bem Frios'],
   ['531', 'Paraná', '', ''],
-  ['532', 'Bahia Interior', 'Vitória da Conquista', 'ConquistaLog'],
+  ['532', 'Bahia Interior', 'Vitória da Conquista', 'TransVieira'],
   ['534', 'Salvador', '', 'LogMaster'],
   ['536', 'Goiás', '', 'AG Sestini'],
   ['538', 'SP Interior', 'Marília', 'CargoFrio'],
   ['540', 'Salvador', '', 'LogMaster'],
-  ['541', 'Brasília (Redes)', '', 'Versatto Logística'],
+  ['541', 'Brasília (Redes)', '', 'Pantanal'],
 ];
 
 function normalizarPlaca(v) {
