@@ -11189,7 +11189,28 @@ function linhaMontagemHtml(m){
             : freteDestinoMontagemHtml(m, id)}</td>
 
       <td class="c-kmdesl" onclick="event.stopPropagation()">${comoCarga
-            ? `<span title="KM de deslocamento">${cargaViva.kmDeslocamento ?? '—'}</span>`
+            /* DEPOIS DE VIRAR CARGA, O KM CONTINUA CORRIGÍVEL (14/09/2026).
+
+               Pedido do dono: "o valor do destino nunca será exatamente o
+               esperado, sempre haverá um ajuste a mais ou a menos (...)
+               libere essa funcionalidade para que possamos ser mais
+               assertivos".
+
+               A gravação vai para a CARGA, não para a linha de montagem —
+               que congela em `efetivada_em` justamente para que a correção
+               passe por onde existe log de revisões. É o caminho que o
+               próprio servidor mandava seguir e que nenhuma tela oferecia.
+
+               Quem não corrige continua vendo o número, em texto: é dado
+               de conferência para a Portaria e a Expedição, não campo. */
+            ? (podeCorrigirKmDaCargaUI()
+              ? `<input type="number" inputmode="numeric" class="km-input" min="1" step="1"
+                        value="${cargaViva.kmDeslocamento ?? ''}" aria-label="KM de deslocamento"
+                        placeholder="${cargaViva.kmDestino ?? '—'}"
+                        title="KM que o frete usa. Corrigir aqui recalcula o valor e fica registrado em Histórico."
+                        onwheel="this.blur()"
+                        onchange="corrigirKmDaCargaUI('${escJs(cargaViva.id)}',this.value)">`
+              : `<span title="KM de deslocamento">${cargaViva.kmDeslocamento ?? '—'}</span>`)
             /* `onwheel` tira o foco ANTES de a roda escrever (14/09/2026).
                Esconder a setinha no CSS não resolve isto: num `type=number`
                com foco, a roda do mouse altera o valor. A Montagem é tabela
@@ -11765,6 +11786,52 @@ function definirSequenciaMontagemUI(id, val){
      quebrado não é posição: a tela devolve o que o servidor tem. */
   if(!Number.isInteger(n) || n < 1) return carregarMontagemUI();
   return moverMontagemUI(id, n);
+}
+
+/* Quem corrige o KM de uma carga já efetivada — decisão do dono: a
+   Logística, que é quem monta a carga e conhece o desvio, o retorno e a
+   coleta no caminho; e a Administração, irrestrita como no resto do
+   painel. Os outros setores continuam vendo o número. */
+function podeCorrigirKmDaCargaUI(){
+  const setor = (DB.operador || {}).setor;
+  return setor === 'Logística' || setor === 'Administração';
+}
+
+/* A CORREÇÃO PERGUNTA QUANDO MUDA MUITO, e nunca bloqueia.
+
+   Regra da casa: "botão desabilitado não ensina o caminho, só nega. Quando
+   a ação é arriscada, PERGUNTE explicando". Trocar 583 por 640 é rotina —
+   desvio, retorno, coleta. Trocar 583 por 58 é dedo no teclado, e o frete é
+   KM × tarifa: o erro vira dinheiro. A pergunta só aparece quando a
+   diferença passa da metade do número atual, e diz os dois números. */
+async function corrigirKmDaCargaUI(cargaId, valor){
+  const c = getCarga(cargaId);
+  if(!c) return;
+  const novo = kmValidoLocal(valor);
+  const antigo = c.kmDeslocamento ?? null;
+  if(novo === null){
+    notify('O KM precisa ser um número inteiro maior que zero — é ele que multiplica a tarifa.',
+      'warn', 6000);
+    renderAll();
+    return;
+  }
+  if(novo === antigo) return;
+  if(antigo !== null && Math.abs(novo - antigo) > antigo / 2){
+    const ok = confirm(
+      `Trocar o KM de ${antigo} para ${novo}?\n\n`
+      + `É mais que o dobro de diferença — confira antes, porque o frete é `
+      + `KM × tarifa e o valor vai ser recalculado.\n\n`
+      + `Fica registrado em Histórico quem mudou.`);
+    if(!ok){ renderAll(); return; }
+  }
+  try {
+    corrigirKmDaCarga(cargaId, novo, nomeOperadorAtual(), setorOperadorAtual());
+    notifyGravacao(`KM corrigido para ${novo}. O valor do frete é recalculado pelo servidor.`);
+    renderAll();
+  } catch(e){
+    notify(e.message || 'Não foi possível corrigir o KM.', 'danger', 7000);
+    renderAll();
+  }
 }
 
 async function alterarMontagemUI(id, campo, valor){

@@ -3041,3 +3041,69 @@ auditoria é **8 ok, 0 atrito, 1 quebra**, não 7/1/1. Teste que procura o
 campo errado não acha defeito: inventa um.
 
 **Só vale depois do `atualizar.sh`:** a rota é de servidor.
+
+---
+
+## #69 — O caminho existia no projeto e não existia na tela (14/09/2026)
+
+Pedido do dono: *"queremos poder alterar a quilometragem quando ela é
+inserida e calculada automaticamente pelo sistema (...) sem que o valor
+fique travado. Como o valor do destino nunca será exatamente o esperado,
+sempre haverá um ajuste a mais ou a menos."*
+
+**O DIAGNÓSTICO FOI MELHOR QUE O RELATO.** Quase tudo já existia:
+
+· o cadastro guarda **dois KM** — `km_destino` (o que a tabela diz) e
+  `km_deslocamento` (o que será pago) — exatamente porque desvio, retorno
+  e coleta no caminho fazem os dois divergirem;
+· na Programação o KM de deslocamento **já era livre**, sugerido pelo
+  destino e nunca sobrescrito, com aviso quando difere da tabela;
+· o servidor **já recalculava** `frete_valor` ao mudar o KM de uma carga
+  que já existe — `km_deslocamento` está em `ENTRADAS_DO_FRETE`.
+
+**A TRAVA ERA SÓ A TELA, e num lugar só.** Na Montagem do Dia, assim que a
+linha vira carga efetivada, o KM deixava de ser campo e virava texto.
+
+**E o motivo estava escrito, certo, no servidor:**
+
+> *"Depois de efetivada a linha é histórico. Quem quiser mudar mexe na
+> CARGA, que tem log de revisões — não aqui, onde a alteração passaria sem
+> registro e as duas verdades divergiriam em silêncio."*
+
+O raciocínio está correto. **O que faltou foi construir o "mexer na
+carga".** Nenhuma tela do painel oferecia corrigir o KM de uma carga
+efetivada. O caminho foi projetado, documentado, e nunca existiu — e para
+quem usa, isso é indistinguível de um valor travado.
+
+**A FAMÍLIA desta ocorrência: a regra que aponta para uma porta que ninguém
+abriu.** Não é bug de lógica nem de permissão; é uma decisão de projeto
+correta cuja outra metade não foi implementada. O sintoma chega como
+"travado", "não deixa", "preciso de autorização" — e procurar a trava não
+acha nada, porque não existe trava: existe ausência. Antes de caçar o que
+bloqueia, vale perguntar se o caminho alternativo que o código promete
+chegou a ser feito.
+
+**A CORREÇÃO:** o KM volta a ser campo na Montagem depois de efetivada, e a
+gravação vai para a CARGA — que é onde há revisão. Quem corrige: Logística
+e Administração, decisão do dono. Até quando: **sempre**, também decisão
+dele — *"o controle é o registro, não o bloqueio"*. Toda correção entra em
+`alteracoes` com o número velho, o novo, quem e quando.
+
+**O valor NÃO é calculado no painel.** A conta `km × tarifa` mora em
+`dominio/frete.js`, no servidor. Copiá-la para a tela plantaria duas
+verdades que divergem na primeira mudança de tarifa — a tela mostra o que
+voltar da sincronia.
+
+**Pergunta quando muda muito, nunca bloqueia.** Ajuste de rotina (583 → 640)
+grava direto; diferença acima da metade do número atual (640 → 58, dedo no
+teclado) pergunta mostrando os dois números, porque o frete é KM × tarifa e
+o erro vira dinheiro.
+
+**Vermelho→verde provado:** `corrigirKmDaCarga` e `podeCorrigirKmDaCargaUI`
+tinham **0 ocorrências** em `app.js` e `data.js` na branch de entrega.
+
+**Teste que trava:** `testes/test_km_da_carga_efetivada.py` — 21 checagens,
+incluindo que Portaria, Expedição e Faturamento continuam vendo o número em
+texto, e que o ajuste pequeno NÃO pede confirmação (o dono citou "450 km ou
+44" como variação normal: perguntar a cada ajuste seria a mesma trava com
+outro nome).

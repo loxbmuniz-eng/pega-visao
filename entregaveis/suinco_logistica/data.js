@@ -2484,6 +2484,58 @@ function completarCargaAguardando(cargaId, {numeroCarga, cliente, destino, produ
   return c;
 }
 
+/* CORRIGIR O KM DE UMA CARGA QUE JÁ EXISTE (14/09/2026).
+
+   Pedido do dono, com as palavras dele: "queremos poder alterar a
+   quilometragem (...) precisamos editar esse número exato, pois costuma
+   haver variações, como 450 km ou 44 (...) sem que o valor fique travado.
+   Como o valor do destino nunca será exatamente o esperado, sempre haverá
+   um ajuste a mais ou a menos".
+
+   O CAMINHO JÁ ESTAVA PROJETADO E NÃO EXISTIA. A linha da Montagem congela
+   em `efetivada_em` de propósito, e o comentário do servidor diz por quê:
+   "quem quiser mudar mexe na CARGA, que tem log de revisões — não aqui,
+   onde a alteração passaria sem registro". Só que nenhuma tela oferecia
+   esse "mexer na carga". O KM virava texto e acabava ali.
+
+   O SERVIDOR JÁ FAZ A PARTE DELE: `km_deslocamento` está em
+   ENTRADAS_DO_FRETE, então mudá-lo recalcula `frete_valor` na hora — e só
+   ele, o destino, o tipo de veículo, a transportadora e a placa recalculam.
+   Mudar a tarifa amanhã continua sem reprecificar carga nenhuma.
+
+   O VALOR NÃO É CALCULADO AQUI. A conta `km × tarifa` mora em
+   `dominio/frete.js`, no servidor, e copiá-la para cá seria plantar duas
+   verdades que divergem na primeira mudança de tarifa. A tela mostra o
+   valor que voltar da sincronia — o servidor é quem manda.
+
+   SEMPRE EDITÁVEL, decisão do dono: sem trava por status, sem trava por
+   mês. O controle é o REGISTRO, não o bloqueio — toda correção entra em
+   `alteracoes`, com o número velho, o novo, quem mudou e quando. */
+function corrigirKmDaCarga(cargaId, km, operador, setor){
+  const c = getCarga(cargaId);
+  if(!c) throw new Error('Carga não encontrada.');
+  const novo = kmValidoLocal(km);
+  if(novo === null){
+    throw new Error('O KM de deslocamento precisa ser um número inteiro maior que zero '
+      + '— é ele que multiplica a tarifa.');
+  }
+  const antigo = c.kmDeslocamento ?? null;
+  if(novo === antigo) return c;   // nada mudou: não suja o histórico
+  registrarAlteracao({
+    cargaId: c.id, placa: c.placa, campo: 'KM de deslocamento',
+    de: antigo === null ? '(sem KM)' : String(antigo), para: String(novo),
+    operador, setor
+  });
+  c.kmDeslocamento = novo;
+  /* A divergência com a tabela é recalculada JUNTO. Ela é o que faz quem
+     paga o frete enxergar que está pagando 640 numa rota de 583 — deixá-la
+     velha esconderia exatamente o que ela existe para mostrar. */
+  c.kmDivergente = c.kmDestino != null && Number(c.kmDestino) !== novo;
+  c.atualizadoEm = nowISO();
+  SuincoStore.save();
+  return c;
+}
+
 // Transição genérica no meio do fluxo (Embarque Iniciado/Finalizado,
 // Faturado). Valida que a carga está no status imediatamente anterior da
 // STATUS_FLOW.
