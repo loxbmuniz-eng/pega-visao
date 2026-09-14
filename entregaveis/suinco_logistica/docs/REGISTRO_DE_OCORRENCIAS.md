@@ -2661,3 +2661,102 @@ sessão dessas 17. **Duas NÃO são mecânicas e pedem leitura:**
 **Não trate como mecânica a terceira:** `test_pendencia_local_nao_e_dada_por_sincronizada`
 é guarda nova de hoje (#56). Ela tem que continuar provando a REGRA dela depois
 do ajuste, não só voltar ao verde.
+
+## #62 — A filial criava o checklist e ficava olhando (14/09/2026)
+
+Relato do dono, com print do cabeçalho da tabela de itens (Nota, P/T, Nº
+parcial, Supervisor, RCA, Cód. Cliente, CX, Peso, Cód. Produto, Nº DEV, Nº
+carga dev, Data DEV, Motivo): *"esse campo precisa estar liberado para as
+filiais preencherem suas devolucoes, filialbsb filialba filiales"*.
+
+**Não era um campo. Era a linha inteira, e o cabeçalho junto.**
+
+**A CAUSA, e ela é de TELA:** `podeEditarDevolucao()` (`devolucoes.js:182`)
+responde sim só para Logística e Administração — e era ela que ligava TODOS os
+campos do checklist. A filial tinha ganhado o botão de CRIAR (02/09, função
+`podeCriarDevolucao`) e ninguém ligou os campos: ela criava o checklist e via
+a tabela como texto.
+
+**O servidor nunca foi o problema.** Ele já deixava a filial preencher item
+(a allowlist do lançamento em `rotas/devolucoes.js`), preencher cabeçalho (o
+que não é carimbo de etapa) e adicionar item (`POST itens` já tinha
+`exigirSetor('Logística', ...SETORES_FILIAL)`) — sempre conferindo
+`criada_setor`. Só a tela negava. O comentário do próprio código dizia a
+intenção: *"ela cria o próprio checklist, **lança os itens dele** e
+acompanha."*
+
+**A CORREÇÃO:** a pergunta deixou de ser "que setor é você?" e passou a ser
+"este checklist é seu?" — `podeMexerNoChecklist(d)`. Booleano de setor não
+serve aqui: palavras do dono, *"cada filial so mexe no que for do seu
+escopo"*. Quem decide é o checklist que está na frente.
+
+**E UM DEFEITO MAIOR APARECEU NO CAMINHO.** Ao perguntar ao dono sobre
+exclusão (*"filial pode excluir checklist e editar"*), descobriu-se que os
+dois "excluir" eram coisas diferentes:
+
+- excluir CHECKLIST já era macio (`excluida_em`), com quem excluiu;
+- excluir ITEM era `DELETE FROM devolucao_itens` — **a linha sumia do banco**,
+  sem registro de quem apagou nem do que estava escrito. E isso valia desde
+  sempre, **inclusive para a Logística**.
+
+O checklist é a prova do que a devolução trouxe. Linha apagada sem registro é
+nota que existiu e ninguém responde por ela — o contrário da regra que a #52
+aplicou ao pátio. Decisão do dono: *"macia para todo mundo, e a filial
+ganha"*. Migração **052** cria `excluido_em/excluido_por/excluido_setor`, a
+exclusão vira marca, e as duas leituras de itens filtram `excluido_em IS NULL`.
+
+**O que a filial CONTINUA sem fazer:** avançar etapa. O ciclo é rodado pela
+matriz, e a recusa daquela rota é explicada, não um 403 seco.
+
+**Teste que trava:** `backend/testes/devolucoes.test.js`, suíte 17 — oito
+casos. Provado que **4 reprovam contra o código publicado** e passam depois:
+a outra filial levar 404, a exclusão macia guardar quem apagou, a exclusão
+macia valer para a Logística, e a filial excluir o próprio checklist.
+
+**A lição:** permissão entregue pela metade é pior que permissão negada. A
+filial recebeu o botão de criar e a certeza de que podia trabalhar — e
+descobriu na frente do checklist que não podia. Quando se abre um caminho,
+abre-se o caminho inteiro, e o teste é o que prova que ele vai até o fim.
+
+## #63 — O campo de KM da Montagem tinha 37 pixels (14/09/2026)
+
+Relato do dono: *"na parte da montagem do dia eu preciso que voce aumente o
+tamanho dos campos editaveis na coluna KM, pois esta muito pequeno e fica
+confuso (...) ta so um quadradinho minusculo e nao da pra funcionar desse
+jeito, entao pra poder puxar certo a kilometragem precisa dessa alteracao"*.
+
+**MEDIDO ANTES DE MEXER**, no navegador, a 1440px — e o número era pior que a
+descrição: **37px de largura**. Desses, 14px de margem interna e ~18px das
+setinhas do campo numérico. Sobrava espaço para **zero dígitos legíveis**: um
+KM de "1250" não cabia. `.km-input` e `.c-kmdesl` não tinham UMA linha de CSS
+— o campo herdava `td input{padding:5px 7px}` e era espremido pelas outras
+quinze colunas da tabela.
+
+**O RISCO QUE SÓ APARECEU AO MEDIR, e é mais grave que o tamanho:** em
+`type="number"` com foco, a **roda do mouse altera o valor**. A Montagem é uma
+tabela larga, rolada com a roda. Passar por cima do KM já escolhido mudava a
+quilometragem **sem ninguém digitar nada** — e o frete é KM × tarifa, então
+número errado vira dinheiro errado, calado. Ninguém tinha relatado; foi a
+medição que encontrou.
+
+**A CORREÇÃO, nas duas pontas:** `min-width:86px` no campo e `102px` na coluna
+(86px é a mesma medida que o campo de placa desta tabela já usava — a casa já
+tinha a resposta), setinhas fora do caminho, número alinhado à direita com
+dígitos de largura fixa. E `onwheel="this.blur()"` no HTML: **o CSS sozinho
+não resolve a roda** — esconder a setinha é aparência, tirar o foco é o que
+impede a escrita. Os dois andam juntos, e está escrito nos dois arquivos.
+
+**Resultado medido:** 37px → 86px, de zero dígitos legíveis para o KM inteiro
+sem corte. No celular a tabela vira cartão e o campo já tinha 120px — não foi
+tocado.
+
+**Teste que trava:** `testes/test_campo_km_da_montagem.py` — largura mínima, o
+número aparecendo inteiro (`scrollWidth` contra `clientWidth`, que é o que
+detecta corte), e a roda do mouse não alterando o valor.
+
+**A lição, sobre a própria guarda:** a primeira versão do teste perguntava ao
+navegador se a setinha estava escondida, lendo um pseudo-elemento — e
+`getComputedStyle` não reporta isso de forma confiável. Estava medindo o
+MECANISMO, não a regra. A regra é "o número cabe"; a setinha é só um dos jeitos
+de atrapalhar. Teste que mede mecanismo reprova quando o mecanismo muda, e
+passa quando a regra quebra por outro caminho.

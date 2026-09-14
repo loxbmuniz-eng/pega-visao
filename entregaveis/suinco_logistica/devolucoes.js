@@ -197,6 +197,25 @@ function podeCriarDevolucao() {
   return podeEditarDevolucao() || ehSetorFilial((DB.operador || {}).setor);
 }
 
+/* MEXER NESTE CHECKLIST — a pergunta é por CHECKLIST, não por setor
+   (14/09/2026, relato do dono com print da tabela de itens).
+
+   `podeEditarDevolucao` responde "manda em tudo", e era ele que ligava os
+   campos da tela. Resultado: a filial criava o checklist e via a tabela
+   inteira como TEXTO — criava e ficava olhando. O servidor nunca foi o
+   problema: ele já deixava a filial preencher item (a allowlist do
+   lançamento), preencher cabeçalho (o que não é carimbo de etapa) e
+   adicionar item, sempre conferindo `criada_setor`. Só a tela negava.
+
+   Por isso não dá para responder com um booleano de setor: a filial mexe no
+   checklist DELA e em mais nenhum — palavras do dono, "cada filial só mexe no
+   que for do seu escopo". Quem decide é o checklist que está na frente. */
+function podeMexerNoChecklist(d) {
+  if (podeEditarDevolucao()) return true;
+  const setor = (DB.operador || {}).setor;
+  return ehSetorFilial(setor) && !!d && d.criadaSetor === setor;
+}
+
 /* A filial não avança etapa: o ciclo é rodado pela matriz. */
 function podeAvancarEtapaDev() {
   return !ehSetorFilial((DB.operador || {}).setor);
@@ -571,7 +590,6 @@ function renderListaDevolucoes() {
   const vazio = document.getElementById('dev-empty');
   if (!box) return;
   renderPipelineDev();
-  const editavel = podeEditarDevolucao();
 
   /* Ordem da lista: primeiro a MINHA fila (o que espera a ação do meu
      setor), depois o resto na ordem do ciclo. Com o filtro da esteira
@@ -653,7 +671,7 @@ function renderListaDevolucoes() {
           <span class="dev-card-seta">${aberta ? '▾' : '▸'}</span>
         </div>
       </div>
-      ${aberta ? renderDevolucaoAberta(d, editavel) : ''}
+      ${aberta ? renderDevolucaoAberta(d, podeMexerNoChecklist(d)) : ''}
     </div>`;
   }).join('');
   _devRestaurarDigitacao(digitado);

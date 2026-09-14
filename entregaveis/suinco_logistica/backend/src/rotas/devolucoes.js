@@ -55,7 +55,11 @@ async function buscarCompleta(executor, id) {
     'SELECT rota_codigo FROM devolucao_rotas WHERE devolucao_id = $1 ORDER BY rota_codigo', [id]
   );
   const itens = await executor.query(
-    'SELECT * FROM devolucao_itens WHERE devolucao_id = $1 ORDER BY item_id', [id]
+    // `excluido_em IS NULL`: item excluído sai da vista mas continua no banco
+    // (migração 052). Sem este filtro, a linha apagada reapareceria no
+    // checklist, no relatório e no PDF.
+    'SELECT * FROM devolucao_itens WHERE devolucao_id = $1 AND excluido_em IS NULL'
+    + ' ORDER BY item_id', [id]
   );
   const divs = await executor.query(
     'SELECT * FROM devolucao_divergencias WHERE devolucao_id = $1 ORDER BY divergencia_id', [id]
@@ -227,7 +231,8 @@ rotasDevolucoes.get('/devolucoes', exigirLogin, async (req, res, next) => {
     let itens = [], divs = [], rotas = [];
     if (ids.length) {
       itens = (await consultar(
-        'SELECT * FROM devolucao_itens WHERE devolucao_id = ANY($1) ORDER BY item_id', [ids]
+        'SELECT * FROM devolucao_itens WHERE devolucao_id = ANY($1) AND excluido_em IS NULL'
+        + ' ORDER BY item_id', [ids]
       )).rows;
       divs = (await consultar(
         'SELECT * FROM devolucao_divergencias WHERE devolucao_id = ANY($1) ORDER BY divergencia_id', [ids]
@@ -483,9 +488,27 @@ rotasDevolucoes.patch('/devolucoes/:id', exigirLogin, async (req, res, next) => 
 
 /* Exclusão é soft (excluida_em) — some do painel e dos relatórios, mas o
    dado e as revisões ficam. */
-rotasDevolucoes.delete('/devolucoes/:id', exigirLogin, exigirSetor('Logística'), async (req, res, next) => {
+/* A FILIAL EXCLUI O CHECKLIST DELA (14/09/2026, pedido do dono: "filial pode
+   excluir checklist e editar").
+
+   Aqui a exclusão SEMPRE foi macia — marca `excluida_em` e guarda quem
+   excluiu —, então liberar não destrói prova nenhuma. O que continua fora do
+   alcance da filial é AVANÇAR ETAPA: o ciclo é rodado pela matriz, e a recusa
+   daquela rota é explicada, não um 403 seco. */
+rotasDevolucoes.delete('/devolucoes/:id', exigirLogin,
+  exigirSetor('Logística', ...SETORES_FILIAL), async (req, res, next) => {
   try {
     const op = req.operador;
+    // Cada filial só no escopo dela — mesma checagem de dono das demais rotas.
+    if (ehFilial(op.setor)) {
+      const dono = await consultar(
+        'SELECT criada_setor FROM devolucoes WHERE devolucao_id = $1 AND excluida_em IS NULL',
+        [req.params.id]
+      );
+      if (!dono.rows[0] || dono.rows[0].criada_setor !== op.setor) {
+        return res.status(404).json({ erro: 'Devolução não encontrada.', codigo: 'NAO_ENCONTRADA' });
+      }
+    }
     await emTransacao(async (cli) => {
       const upd = await cli.query(
         `UPDATE devolucoes
@@ -808,7 +831,7 @@ rotasDevolucoes.patch('/devolucoes/:id/itens/:itemId', exigirLogin, async (req, 
           SET ${sets.join(', ')},
               operador_nome = $${vals.length - 3}, operador_setor = $${vals.length - 2},
               atualizado_em = now()
-        WHERE devolucao_id = $${vals.length - 1} AND item_id = $${vals.length}
+        WHERE excluido_em IS NULL AND devolucao_id = $${vals.length - 1} AND item_id = $${vals.length}
         RETURNING *`,
       vals
     );
@@ -819,11 +842,37 @@ rotasDevolucoes.patch('/devolucoes/:id/itens/:itemId', exigirLogin, async (req, 
   } catch (e) { next(e); }
 });
 
-rotasDevolucoes.delete('/devolucoes/:id/itens/:itemId', exigirLogin, exigirSetor('Logística'), async (req, res, next) => {
+/* EXCLUSÃO DE ITEM: MACIA, E A FILIAL EXCLUI O QUE É DELA (14/09/2026).
+
+   Era `DELETE FROM` de verdade: a linha sumia do banco e ninguém conseguia
+   saber o que estava escrito nela nem quem apagou — inclusive para a
+   Logística, que é quem sempre teve o botão. O checklist é a prova do que a
+   devolução trouxe; linha apagada sem registro é nota que existiu e ninguém
+   responde por ela. Mesma regra que a 051 aplicou ao pátio.
+
+   Pedido do dono: "filial pode excluir checklist e editar" — e, vendo que o
+   item apagava de vez, "macia para todo mundo, e a filial ganha". */
+rotasDevolucoes.delete('/devolucoes/:id/itens/:itemId', exigirLogin,
+  exigirSetor('Logística', ...SETORES_FILIAL), async (req, res, next) => {
   try {
+    const op = req.operador;
+    // A filial só mexe no escopo dela. Mesma checagem de dono das outras
+    // rotas, e a mesma resposta: "não encontrada" não conta à 105 o que a 106 tem.
+    if (ehFilial(op.setor)) {
+      const dono = await consultar(
+        'SELECT criada_setor FROM devolucoes WHERE devolucao_id = $1 AND excluida_em IS NULL',
+        [req.params.id]
+      );
+      if (!dono.rows[0] || dono.rows[0].criada_setor !== op.setor) {
+        return res.status(404).json({ erro: 'Devolução não encontrada.', codigo: 'NAO_ENCONTRADA' });
+      }
+    }
     const del = await consultar(
-      'DELETE FROM devolucao_itens WHERE devolucao_id = $1 AND item_id = $2 RETURNING item_id',
-      [req.params.id, Number(req.params.itemId) || 0]
+      `UPDATE devolucao_itens
+          SET excluido_em = now(), excluido_por = $3, excluido_setor = $4
+        WHERE devolucao_id = $1 AND item_id = $2 AND excluido_em IS NULL
+        RETURNING item_id`,
+      [req.params.id, Number(req.params.itemId) || 0, op.nome, op.setor]
     );
     if (!del.rows[0]) return res.status(404).json({ erro: 'Item não encontrado.', codigo: 'NAO_ENCONTRADO' });
     emitirAtualizada(req.params.id);

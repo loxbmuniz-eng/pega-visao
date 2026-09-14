@@ -11163,10 +11163,17 @@ function linhaMontagemHtml(m){
 
       <td class="c-kmdesl" onclick="event.stopPropagation()">${comoCarga
             ? `<span title="KM de deslocamento">${cargaViva.kmDeslocamento ?? '—'}</span>`
-            : `<input type="number" class="km-input" min="1" step="1"
+            /* `onwheel` tira o foco ANTES de a roda escrever (14/09/2026).
+               Esconder a setinha no CSS não resolve isto: num `type=number`
+               com foco, a roda do mouse altera o valor. A Montagem é tabela
+               larga, rolada com a roda — passar por cima do KM já escolhido
+               mudava a quilometragem sem ninguém digitar, e o frete é KM ×
+               tarifa. `inputmode` mantém o teclado numérico no celular. */
+            : `<input type="number" inputmode="numeric" class="km-input" min="1" step="1"
                       value="${m.km_deslocamento ?? ''}" aria-label="KM de deslocamento"
                       placeholder="${m.km_destino ?? '—'}"
                       title="KM que o frete usa. Vem do destino e pode ser corrigido — desvio, retorno, coleta no caminho."
+                      onwheel="this.blur()"
                       onchange="alterarMontagemUI('${id}','kmDeslocamento',this.value)">`}</td>
 
       <td class="c-frete cel-num">${freteMontagemHtml(m, comoCarga ? cargaViva : null)}</td>
