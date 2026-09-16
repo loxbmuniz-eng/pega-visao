@@ -6076,6 +6076,283 @@ tr.mont-linha > td, tr.hist-linha > td, td[onclick], th[onclick]{
   .toque-recusado{ animation:none }
 }
 
+/* ═══ MOVIMENTO (agente de interação) ═══════════════════════════════════
+
+   Todo o movimento do painel, num bloco só, no fim do arquivo. O JavaScript
+   que liga e desliga estas classes é o bloco de mesmo nome no fim de
+   `app.js` — as duas metades são a MESMA decisão escrita uma vez de cada
+   lado, não duas cópias que divergem.
+
+   AS QUATRO REGRAS DURAS DESTE BLOCO
+
+   1. `--mov-ease-out` para entrar e sair. NUNCA `ease-in` em interface:
+      ele começa devagar justamente no instante em que o olho está
+      olhando, e faz 200 ms PARECEREM 400.
+   2. Teto de 300 ms. Realimentação de toque, 100–160 ms.
+   3. NUNCA `scale(0)`, e nenhum estado de REPOUSO invisível. Nada no mundo
+      real some do nada — e, mais concreto que a filosofia: o servidor gera
+      os PDFs com este mesmo arquivo de estilo. Elemento que espera
+      animação para aparecer sai BRANCO no papel. A ocorrência #72 é o
+      preço disso cobrado uma vez; não se paga duas.
+   4. O que se vê cem vezes por dia não se anima. Aba, sincronia de rotina,
+      o pátio recarregando: nada disso está aqui.
+
+   O FIM DO BLOCO desliga tudo em `@media print` e em
+   `prefers-reduced-motion: reduce`. Regra nova entra ANTES daquelas duas. */
+
+:root{
+  /* Nome próprio, com prefixo, de propósito: este bloco é acrescentado ao
+     fim de um arquivo que outra mão está reescrevendo. Uma variável de
+     nome genérico daqui apagaria a de lá sem ninguém ver. */
+  --mov-ease-out: cubic-bezier(.23,1,.32,1);
+}
+
+/* ---- 1. "SEGUIU VIAGEM": O CAMINHÃO SAI DO PÁTIO --------------------
+   150 ms andando + 90 ms fechando o espaço = 240 ms. O teto de 300 ms é do
+   que a PESSOA vê: entre o clique e a linha sumir ainda cabem o atraso do
+   relógio do navegador e o redesenho da tabela (~60 ms, medido).
+
+   O ANDAR é só `transform` e `opacity` — GPU, sem repaginar.
+   O FECHAR mexe em altura porque nenhuma outra propriedade devolve espaço
+   ao layout: `transform` move o pixel e deixa o buraco. É UMA linha, por
+   90 ms, ~31 vezes por dia — não é uma lista inteira repaginando a cada
+   quadro, que é o que a regra de "só transform e opacity" existe para
+   impedir. Quem vier depois: isto é deliberado, não descuido. */
+tr.linha-seguiu-viagem > *{
+  transition: transform 150ms var(--mov-ease-out), opacity 150ms var(--mov-ease-out);
+  transform: translateX(48px);
+  opacity: 0;
+}
+tr.linha-seguiu-viagem-fecha{
+  transition: height 90ms var(--mov-ease-out);
+}
+/* A altura só chega a zero se o conteúdo parar de empurrar por dentro:
+   sem padding, sem borda, sem linha de texto. Já está tudo em opacidade 0
+   neste ponto — esconder não muda nada do que se vê, só solta a altura. */
+tr.linha-seguiu-viagem-fecha > *{
+  padding-top:0 !important; padding-bottom:0 !important;
+  border-top-width:0 !important; border-bottom-width:0 !important;
+  font-size:0 !important; line-height:0 !important;
+  transition: padding 90ms var(--mov-ease-out);
+}
+/* `!important` medido, não por reflexo: a Torre tem regras de coluna
+   presas a `#torre-tabela` (seletor de id), e sem ele os botões e os
+   rótulos empilhados continuavam em `display:block` segurando 71 px de
+   altura — a linha andava, apagava e não fechava espaço nenhum. */
+tr.linha-seguiu-viagem-fecha > * > *{ display:none !important }
+
+/* ---- 2. LINHA NOVA ENTRA DESLIZANDO DE CIMA -------------------------
+   `translateY(-10px)` + opacidade, 260 ms. Carga nova cai na lista vinda
+   de cima, que é de onde ela vem na leitura da tabela. NUNCA `scale(0)`.
+
+   `animation` e não `transition` porque não há estado anterior para sair:
+   a linha nasce agora. `both` garante que ela já esteja no quadro inicial
+   antes do primeiro repinte — nunca um piscar de linha pronta. */
+tr.linha-nova{
+  animation: movLinhaEntra 260ms var(--mov-ease-out) both;
+}
+@keyframes movLinhaEntra{
+  from{ opacity:0; transform:translateY(-10px) }
+  to  { opacity:1; transform:none }
+}
+
+/* ---- 3. SEGURAR PARA CANCELAR --------------------------------------
+   `clip-path: inset(0 100% 0 0)` → `inset(0 0 0 0)`, 1,5 s LINEAR enquanto
+   o dedo está lá. Linear porque a barra é um relógio: acelerar ou frear
+   uma contagem é mentir sobre quanto falta.
+
+   Soltar volta em 200 ms com `--mov-ease-out`. Assimétrico de propósito:
+   devagar onde a pessoa está DECIDINDO, rápido onde o sistema RESPONDE.
+
+   `user-select`/`touch-callout` desligados porque segurar o dedo num botão
+   no celular seleciona o texto dele e abre o menu de copiar — o gesto
+   novo não pode brigar com o sistema operacional. */
+[data-segurar]{
+  position:relative; overflow:hidden;
+  -webkit-user-select:none; user-select:none;
+  -webkit-touch-callout:none; touch-action:manipulation;
+}
+[data-segurar]::after{
+  content:''; position:absolute; inset:0; pointer-events:none;
+  background:currentColor; opacity:.3;
+  clip-path: inset(0 100% 0 0);
+  transition: clip-path 200ms var(--mov-ease-out);
+}
+[data-segurar].segurando::after{
+  clip-path: inset(0 0 0 0);
+  transition: clip-path 1500ms linear;
+}
+/* Completou: a barra some na hora (a ação já foi) e o botão dá o pulinho
+   de confirmação — 160 ms, o teto da realimentação de toque. */
+[data-segurar].segurado::after{ clip-path: inset(0 100% 0 0); transition:none }
+[data-segurar].segurado{ animation: movSegurado 160ms var(--mov-ease-out) }
+@keyframes movSegurado{
+  0%{ transform:scale(.97) } 60%{ transform:scale(1.02) } 100%{ transform:none }
+}
+
+/* ---- 4. BOTÃO QUE CONTA O QUE ESTÁ FAZENDO -------------------------
+   Salvar → Salvando… → ✓ Salvo, com o texto trocando EMBAÇADO.
+
+   Sem o borrão o olho vê duas palavras sobrepostas — dois objetos. Com
+   ele, vê uma virando a outra. 2,6 px é o bastante para borrar o desenho
+   da letra sem virar mancha; acima de 20 px o custo em Safari aparece.
+
+   100 ms para embaçar, a troca no pico, 100 ms para voltar: 200 ms de
+   ponta a ponta, não 200 para cada metade. */
+.mov-conta{
+  transition: transform var(--t-rapida) ease, filter 100ms linear, opacity 100ms linear;
+}
+.mov-conta.mov-borrado{ filter: blur(2.6px); opacity:.55 }
+
+/* ---- 5. O AVISO ENTRA E SAI PELO MESMO LADO -------------------------
+   320 ms entrando, 240 ms saindo, pela borda direita — a mesma por onde a
+   pilha de avisos vive (rodapé à direita, decisão registrada no bloco
+   `#notif` deste arquivo: no topo eles tapavam o cabeçalho da tabela).
+
+   Entrar e sair pelo mesmo lado é o que faz o aviso ser UM objeto que vai
+   e volta, em vez de dois que aparecem e somem. Sair mais rápido que
+   entrar: entrar é o sistema pedindo atenção, sair é ele respondendo.
+
+   `translateX(110%)`, em porcentagem: o aviso muda de largura entre o
+   celular e o monitor, e a conta se ajusta sozinha. */
+.notif-item{
+  animation: movAvisoEntra 320ms var(--mov-ease-out) both;
+}
+/* Troca de placa continua pulsando duas vezes — é segurança, e a regra
+   dela já estava escrita. Só o slide de entrada é substituído. */
+.notif-item.aviso-alteracao.forte{
+  animation: movAvisoEntra 320ms var(--mov-ease-out) both, pulsoAviso .9s ease 2;
+}
+.notif-item.notif-saindo,
+.notif-item.aviso-alteracao.forte.notif-saindo{
+  animation: movAvisoSai 240ms var(--mov-ease-out) both;
+}
+@keyframes movAvisoEntra{
+  from{ opacity:0; transform:translateX(110%) }
+  to  { opacity:1; transform:none }
+}
+@keyframes movAvisoSai{
+  from{ opacity:1; transform:none }
+  to  { opacity:0; transform:translateX(110%) }
+}
+
+/* ---- 6. A ETAPA QUE SE CARIMBA -------------------------------------
+   O visto se DESENHA em 340 ms (`stroke-dashoffset`), como a mão passando
+   no papel. `pathLength="1"` no SVG deixa o traço medido em fração do
+   caminho: mudar o tamanho do desenho não obriga a recalcular número
+   nenhum aqui.
+
+   REPOUSO DESENHADO (`stroke-dashoffset:0`). Só o carimbo que acabou de
+   acontecer ganha `dev-carimbo-novo` e se desenha; todos os outros já
+   nascem prontos. É o que impede que a sincronia faça os seis vistos
+   riscarem a tela de novo a cada leitura — e é o que garante o visto no
+   papel, onde animação nenhuma roda. */
+.dev-visto{
+  width:1em; height:1em; vertical-align:-.13em; margin-right:.3em;
+  overflow:visible; flex:none;
+}
+.dev-visto path{
+  fill:none; stroke:var(--ok); stroke-width:2.2;
+  stroke-linecap:round; stroke-linejoin:round;
+  stroke-dasharray:1; stroke-dashoffset:0;
+}
+.dev-carimbo-novo .dev-visto path{
+  animation: movVistoDesenha 340ms var(--mov-ease-out) both;
+}
+@keyframes movVistoDesenha{
+  from{ stroke-dashoffset:1 } to{ stroke-dashoffset:0 }
+}
+
+/* ---- O PAPEL NÃO SE MEXE -------------------------------------------
+   O servidor manda ESTE arquivo junto com o HTML para o Chromium gerar os
+   PDFs (`backend/src/servicos/pdf.js`). Documento não é perfumaria: aqui
+   todo movimento deste bloco é desligado, e todo estado de repouso volta a
+   ser o VISÍVEL — nada de linha transparente, nada de traço por desenhar,
+   nada de barra de segurar cobrindo conteúdo.
+
+   Regra nova deste bloco entra ACIMA desta linha, nunca abaixo. */
+@media print{
+  tr.linha-seguiu-viagem > *,
+  tr.linha-seguiu-viagem-fecha,
+  tr.linha-seguiu-viagem-fecha > *,
+  tr.linha-nova,
+  .notif-item,
+  .notif-item.aviso-alteracao.forte,
+  .notif-item.notif-saindo,
+  .mov-conta,
+  .mov-conta.mov-borrado,
+  [data-segurar],
+  [data-segurar].segurado,
+  .dev-carimbo-novo .dev-visto path{
+    animation:none !important;
+    transition:none !important;
+    transform:none !important;
+    opacity:1 !important;
+    filter:none !important;
+  }
+  /* A LINHA QUE ESTAVA FECHANDO VOLTA INTEIRA NO PAPEL — altura, conteúdo,
+     espaçamento e borda. O teste pegou isto: com só o movimento desligado,
+     a linha ainda saía com ZERO de altura, ou seja, uma faixa em branco no
+     documento. É a ocorrência #72 outra vez, por outra porta.
+
+     `height` precisa de `!important` porque a altura de fechamento é
+     escrita como estilo em linha pelo JavaScript, e estilo em linha ganha
+     de folha de estilo — menos deste. */
+  tr.linha-seguiu-viagem-fecha{ height:auto !important }
+  tr.linha-seguiu-viagem-fecha > * > *{ display:revert !important }
+  tr.linha-seguiu-viagem-fecha > *{
+    font-size:revert !important; line-height:revert !important;
+    padding-top:revert !important; padding-bottom:revert !important;
+    border-top-width:revert !important; border-bottom-width:revert !important;
+  }
+  .dev-carimbo-novo .dev-visto path{ stroke-dashoffset:0 !important }
+  /* A barra de segurar é sobreposição de tela: no papel ela não existe. */
+  [data-segurar]::after{ display:none !important }
+}
+
+/* ---- QUEM PEDIU MENOS MOVIMENTO RECEBE MENOS ------------------------
+   Menos movimento, não menos informação: o que este trecho tira é
+   DESLOCAMENTO e borrão — o que pode embrulhar o estômago. O que
+   permanece é o resultado: a linha continua saindo, o visto continua
+   desenhado, o aviso continua aparecendo e sumindo.
+
+   A barra de segurar some porque sem ela o JavaScript já devolve o botão
+   ao clique simples: gesto que conta tempo sem mostrar a contagem seria um
+   botão que não responde. */
+@media (prefers-reduced-motion: reduce){
+  tr.linha-seguiu-viagem > *,
+  tr.linha-seguiu-viagem-fecha,
+  tr.linha-seguiu-viagem-fecha > *,
+  tr.linha-nova,
+  .notif-item,
+  .notif-item.aviso-alteracao.forte,
+  .notif-item.notif-saindo,
+  .mov-conta,
+  .mov-conta.mov-borrado,
+  [data-segurar].segurado,
+  .dev-carimbo-novo .dev-visto path{
+    animation:none !important;
+    transition:none !important;
+    transform:none !important;
+    filter:none !important;
+  }
+  /* NENHUM REPOUSO INVISÍVEL AQUI TAMBÉM. Sem movimento, a classe que
+     apagava a linha continuaria apagando-a — e para quem pediu menos
+     movimento a carga simplesmente desapareceria da tabela sem nada no
+     lugar. Desligar animação não pode virar esconder conteúdo. */
+  .notif-item, tr.linha-nova,
+  tr.linha-seguiu-viagem, tr.linha-seguiu-viagem > *{ opacity:1 !important }
+  tr.linha-seguiu-viagem-fecha{ height:auto !important }
+  tr.linha-seguiu-viagem-fecha > * > *{ display:revert !important }
+  tr.linha-seguiu-viagem-fecha > *{
+    font-size:revert !important; line-height:revert !important;
+    padding-top:revert !important; padding-bottom:revert !important;
+    border-top-width:revert !important; border-bottom-width:revert !important;
+  }
+  .dev-carimbo-novo .dev-visto path{ stroke-dashoffset:0 !important }
+  [data-segurar]::after{ display:none !important }
+}
+
 </style>
 <!-- PWA: instalável no Android e no iPhone, com ícone na tela inicial.
      Os dois arquivos são opcionais por construção — abrindo o painel por
@@ -10358,7 +10635,7 @@ const SuincoSharePoint = (function () {
 
 </script>
 <script>window.FROTA_SEED_CSV = "Placa,Transportadora,TipoVeiculo,PrecisaRevisao\nAAK8958,Cooperativa dos Transportadores Unidos Ltda.,Carreta,Nao\nAFZ8792,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nAHG5900,Coopertral,Carreta,Nao\nAJM6032,Logmaster Armazem e Logistica Ltda,Carreta,Nao\nAJY3407,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nAMU5835,Sandra Campanholo Transportes-ME,Carreta,Nao\nANA6563,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nANE3214,Noelia de Sousa Machado,3/4,Nao\nAPA4111,Cooperativa de Transp e Logist de Sao Sebastiao do Oeste Mg,Carreta,Nao\nAPA4B11,Cooperativa de Transp e Logist de Sao Sebastiao do Oeste Mg,Carreta,Nao\nAPN0660,Tais Simoes Me,Carreta,Nao\nAQP1978,R A de Castilho Transportes,Carreta,Nao\nARA0338,Fidelis Transportes Ltda.,Bitruck,Nao\nARF4702,Cisne Branco Transportes Ltda EPP,Carreta,Nao\nARF4H02,Cisne Branco,Carreta,Nao\nARX9505,Friocargo Triangulo Ltda,Carreta,Nao\nASE5007,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nASE5A07,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nASG3E42,Baixotes Transportes,Carreta,Nao\nASQ2913,Washington L S Costa Junior - ME,Truck,Nao\nATD5001,Transportadora Multi Express Ltda,Carreta,Nao\nATF4700,Fidelis Transportes Ltda.,Carreta,Nao\nATK3B08,Transportadora Multi Express Ltda,Carreta,Nao\nATM1380,Coopernova Coop Riobranquense de Transporte,Carreta,Nao\nATM1480,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nATO2450,Fidelis Transportes Ltda.,Bitruck,Nao\nATZ9H26,Omega X Solucoes em Logistica e Armazenagem Ltda,Carreta,Nao\nAUH8324,Transportadora Multi Express Ltda,Carreta,Nao\nAVD4546,Transportadora Multi Express Ltda,Bitruck,Nao\nAVD4F46,Giselda Aparecida Gomes Mundim Araujo,Bitruck,Nao\nAVT3222,Fidelis Transportes Ltda.,Carreta,Nao\nAVV3F98,Jorge Lemes da Silva Junior ME,Carreta,Nao\nAZC5116,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nAZC5B17,Cooperativa dos Transportadores Unidos Ltda.,Carreta,Nao\nAZI4219,Fidelis Transportes Ltda.,Bitruck,Nao\nAZS1H23,Cisne Branco Transportes Ltda EPP,Carreta,Nao\nAZV4440,Trans Thalia Transportes Ltda.,Carreta,Nao\nBAH8650,Renato Pereira Lima,3/4,Nao\nBAW4341,Log SPM Ltda,Bitruck,Nao\nBBL9819,Fidelis Transportes Ltda.,Bitruck,Nao\nBBW1552,PH Fidelis Transportes e Representacoes Ltda,Carreta,Nao\nBCH0685,Gold Star,Container,Nao\nBCN2B65,Fidelis Transportes Ltda.,Bitruck,Nao\nBDB2J69,Fidelis Transportes Ltda.,Truck,Nao\nBDF5110,Candido Ribeiro do Vale Neto Com de Bebidas e Transportes,Carreta,Nao\nBDZ3108,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nBDZ3B08,Miranda Lacerda Transportes Ltda.,Carreta,Nao\nBDZ7E36,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nBRY0423,Transmartyna Ltda ME,Carreta,Nao\nBRY3559,Transmartyna Ltda ME,Carreta,Nao\nBTR0404,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nBTR0D21,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nBTR2914,R A de Castilho Transportes,Carreta,Nao\nBUP9005,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nBWM8222,R A de Castilho Transportes,Carreta,Nao\nBWQ3386,R A de Castilho Transportes,Carreta,Nao\nBWV4948,Gold Star,Container,Nao\nCDM5889,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nCDM5I89,Cooperativa dos Transportadores Unidos Ltda.,Carreta,Nao\nCLH0866,R A de Castilho Transportes,Carreta,Nao\nCLH2450,Cargofrio Logística e Armazenamento Ltda,Carreta,Nao\nCLK5647,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nCNI9559,Gold Star,Container,Nao\nCNP5E57,Coopertral,Carreta,Nao\nCPG7D79,Candido Ribeiro do Vale Neto Com de Bebidas e Transportes,Carreta,Nao\nCPJ2722,Transmartyna Ltda ME,Carreta,Nao\nCPJ3104,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nCPJ5624,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nCUA4984,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nCUA6452,R A de Castilho Transportes,Carreta,Nao\nCUA7761,Transmartyna Ltda ME,Carreta,Nao\nCUB2232,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nCUC4J12,Rodosousa,Truck,Nao\nCUC9963,R A de Castilho Transportes,Carreta,Nao\nCUE2313,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nCUE2750,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nCUH6E50,Cooperativa dos Transportadores Unidos Ltda.,Carreta,Nao\nCVN0C42,Patos Logística Eirelli,Carreta,Nao\nCVN1345,R A de Castilho Transportes,Carreta,Nao\nCYN6310,R A de Castilho Transportes,Carreta,Nao\nCYR8983,Flay Logistica e Armazenagem Ltda,Truck,Nao\nCZX7719,Cisne Branco Transportes Ltda EPP,Carreta,Nao\nDAO0759,Gold Star,Container,Nao\nDAO2512,Trans Frios Transportes e Logistica Ltda ME,Truck,Nao\nDAO2888,Noelia de Sousa Machado,Truck,Nao\nDAO2981,Friocargo Norte Ltda,3/4,Nao\nDAO2H44,Friocargo Norte Ltda,Carreta,Nao\nDAO4959,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nDAO4J59,Transportadora Baixotes Transportes Ltda,Carreta,Nao\nDAO9753,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nDBB8B81,Transmartyna Ltda ME,Carreta,Nao\nDBB8E52,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nDBM4895,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nDBM8771,TAC Transportes Armazenagem e Logistica,Truck,Nao\nDBM9754,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nDBP3272,R A de Castilho Transportes,Carreta,Nao\nDBP3294,R A de Castilho Transportes,Carreta,Nao\nDBP4407,Transportes e Armazenagem Zilli Ltda,Truck,Nao\nDJB9549,Cisne Branco,Carreta,Nao\nDJB9651,Cisne Branco Transportes Ltda EPP,Carreta,Nao\nDJE1454,Cooperativa dos Transportadores Unidos Ltda.,Carreta,Nao\nDJF1B66,Omega X Solucoes em Logistica e Armazenagem Ltda,Carreta,Nao\nDJF7527,Cisne Branco,Carreta,Nao\nDJF8527,Cisne Branco,Carreta,Nao\nDKR6382,Solucao Transportes e Servicos Eireli,Carreta,Nao\nDKT5G89,AJB Transportes,Toco,Nao\nDPB0054,Cisne Branco Transportes Ltda EPP,Carreta,Nao\nDPB1843,Cooperativa dos Transportadores Unidos Ltda.,Carreta,Nao\nDPB1856,Mix Transportes Rodoviarios Ltda - ME,Carreta,Nao\nDPB1862,Cisne Branco,Carreta,Nao\nDPB1863,Cisne Branco Transportes Ltda EPP,Carreta,Nao\nDPB1864,Coopertral,Carreta,Nao\nDPC9846,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nDPE9545,Cisne Branco Transportes Ltda EPP,Carreta,Nao\nDPF3916,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nDPF9524,Maxfrios Distribuidora e Transporte Eireli,Truck,Nao\nDQS1031,Posto Vanete Ltda,Carreta,Nao\nDQS1041,Posto Vanete Ltda,Carreta,Nao\nDQS1048,Omega X Solucoes em Logistica e Armazenagem Ltda,Carreta,Nao\nDQS9035,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nDSG0571,Flay Logistica e Armazenagem Ltda,Truck,Nao\nDTA3156,Cisne Branco,Carreta,Nao\nDTB2717,Cisne Branco Transportes Ltda EPP,Carreta,Nao\nDTD8890,TAC Transportes Armazenagem e Logistica,Toco,Nao\nDTE9880,Giselda Aparecida Gomes Mundim Araujo,Bitruck,Nao\nDTV5836,R A de Castilho Transportes,Carreta,Nao\nDVS2609,Cisne Branco,Carreta,Nao\nDVS2685,Marizileia Transportes,Carreta,Nao\nDVS2708,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nDVS2765,Cisne Branco Transportes Ltda EPP,Carreta,Nao\nDVS2H08,Brasfrios Logistica e Transportes Ltda,Carreta,Nao\nDVS2H66,MMS Armazenagem e Logistica SA,Carreta,Nao\nDVS3653,Cisne Branco,Carreta,Nao\nDVT9G10,Baixotes Transportes,Carreta,Nao\nDXV8593,Transmartyna Ltda ME,Carreta,Nao\nEBQ6E39,Gold Star,Container,Nao\nECU2747,Transmartyna Ltda ME,Carreta,Nao\nEFO7220,Maria Hildete Santana de Matos,Toco,Nao\nEFO7709,Transmartyna Ltda ME,Carreta,Nao\nEFU0217,Isavic Transporte e Armazenamento Ltda,Truck,Nao\nEFW0G14,Tais Simoes Me,Carreta,Nao\nEFW8180,Cooperativa de Transp e Logist de Sao Sebastiao do Oeste Mg,Carreta,Nao\nEGK9135,Lacerda Barros Transportes Ltda.,Carreta,Nao\nEHH8269,Omega X Solucoes em Log e Armazenagem Ltda,Carreta,Nao\nELW5G48,Manoel Araujo Dantas Transportes,3/4,Nao\nEOA5B19,Cisne Branco,Carreta,Nao\nEOE2358,Transportes Zanini Ltda,Carreta,Nao\nEOE5228,Washington L S Costa Junior - ME,Bitruck,Nao\nEPG0A36,Suinco,3/4,Nao\nEPU7319,Transportadora Multi Express Ltda,Carreta,Nao\nEPU7D19,Transportes e Armazenagem Zilli Ltda,Carreta,Nao\nEPU9647,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nESU1150,TAC Transportes Armazenagem e Logistica,Truck,Nao\nESU2194,ASAPH Transportes Ltda.,Carreta,Nao\nESU4I15,Avila Transportes Ltda Me,3/4,Nao\nESU6032,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nESU6206,R A de Castilho Transportes,Carreta,Nao\nESU6906,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nESU6909,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nEVK0647,Matheus Gomes Mundim Araujo - ME,Toco,Nao\nEVK0G47,Marques e Silva,Toco,Nao\nEVO1H32,Gold Star,Container,Nao\nEVO4763,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nEVP6973,R A de Castilho Transportes,Carreta,Nao\nEWJ7D98,Gold Star,Container,Nao\nEWU5609,Transportes e Armazenagem Zilli Ltda,Carreta,Nao\nEYS5406,Transmartyna Ltda ME,Carreta,Nao\nEZL8720,Transportadora Multi Express Ltda,Carreta,Nao\nFCF5910,RN Transporte e Logistica Ltda,3/4,Nao\nFCT9179,Gold Star,Container,Nao\nFCZ2465,Gold Star,Container,Nao\nFDC2122,AC Transportes,Carreta,Nao\nFDC7122,AC Logística,Carreta,Nao\nFEI3101,R A de Castilho Transportes,Carreta,Nao\nFEI3956,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nFEI4913,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nFFI1091,Friocargo Norte Ltda,Toco,Nao\nFFI1G03,MMS Armazenagem e Logistica SA,Carreta,Nao\nFFN9122,Cisne Branco,Carreta,Nao\nFJX0166,Transmartyna Ltda ME,Carreta,Nao\nFKJ7020,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nFKS0886,R A de Castilho Transportes,Carreta,Nao\nFLI6857,Isavic Transporte e Armazenamento Ltda,Bitruck,Nao\nFLI6I57,Marques e Silva,Bitruck,Nao\nFOI8313,Transmartyna Ltda ME,Carreta,Nao\nFPI6789,R A de Castilho Transportes,Carreta,Nao\nFPJ8120,Roosevelt Marques da Silva,Bitruck,Nao\nFPJ8I20,Marques e Silva,Bitruck,Nao\nFQV1237,Transmartyna Ltda ME,Carreta,Nao\nFRS4F21,Marques e Silva,Bitruck,Nao\nFSH2870,Log SPM Ltda,Carreta,Nao\nFST8019,Gold Star,Container,Nao\nFSZ8297,Multi Express,Carreta,Nao\nFTY2826,Rodrigo A Rossi e Cia Ltda Me,Truck,Nao\nFTZ2138,AJB Transportes,Truck,Nao\nFVA0A95,Denia Transportes,Carreta,Nao\nFZZ8821,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nGBR3719,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nGFK8080,Friocargo Norte Ltda,Bitruck,Nao\nGFK8A80,Denia Transportes,Bitruck,Nao\nGHC0660,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nGHC3058,Cooperativa dos Transportadores Unidos Ltda.,Carreta,Nao\nGRA9825,Transportes e Armazenagem Zilli Ltda,Truck,Nao\nGRE3345,TAC Transportes Armazenagem e Logistica,Truck,Nao\nGRE4738,Denia Transportes,Truck,Nao\nGSW0386,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nGSW0509,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nGSW0709,Cooperativa Riobranquense de Transportes Ltda.,Truck,Nao\nGSW7938,Transportes e Armazenagem Zilli Ltda,Truck,Nao\nGVH1A92,Marques e Silva,Toco,Nao\nGVI5286,Flay Logistica e Armazenagem Ltda,Truck,Nao\nGVQ1260,Transportadora Multi Express Ltda,Carreta,Nao\nGVQ6746,Flay Logistica e Armazenagem Ltda,Truck,Nao\nGVQ8934,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nGWI3849,Flay Logistica e Armazenagem Ltda,Truck,Nao\nGWI4688,TAC Transportes Armazenagem e Logistica,Truck,Nao\nGWI4773,Posto Vanete Ltda,Carreta,Nao\nGWI4H60,Cirio Alves de Oliveira Junior - Transportes,3/4,Nao\nGWI8D40,Coopediesel,Carreta,Nao\nGXA0293,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nGXH6D13,Cirio Alves de Oliveira Junior - Transportes,Truck,Nao\nGXM5591,TAC Transportes Armazenagem e Logistica,Truck,Nao\nGXM5C08,Transportadora Multi Express Ltda,Bitruck,Nao\nGXS2438,Matheus Gomes Mundim Araujo - ME,3/4,Nao\nGXS7634,Lagam Transportes & Logistica Ltda,Bitruck,Nao\nGYS6028,Omega X Solucoes em Logistica e Armazenagem Ltda,Truck,Nao\nGYT1208,Trans Frios Transportes e Logistica Ltda ME,Truck,Nao\nGZG1203,Posto Vanete Ltda,Carreta,Nao\nGZG4309,TAC Transportes Armazenagem e Logistica,Bitruck,Nao\nHAX4227,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nHBC1622,Cooperativa de Transportes Montenegro Ltda,Truck,Nao\nHBG6828,Cooperativa Riobranquense de Transportes Ltda.,Toco,Nao\nHBK6688,Cargofrio Logística e Armazenamento Ltda,Truck,Nao\nHBN0986,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nHBN1461,TAC Transportes Armazenagem e Logistica,Truck,Nao\nHBN5086,TAC Transportes Armazenagem e Logistica Ltda,Truck,Nao\nHBN8111,Omega X Solucoes em Log e Armazenagem Ltda,Bitruck,Nao\nHBN8437,Cooperativa de Transportes Montenegro Ltda,Truck,Nao\nHBN9825,Omega X Solucoes em Logistica e Armazenagem Ltda,Truck,Nao\nHBZ0228,Transportes Horizonte Frios Ltda,Truck,Nao\nHCQ6715,Agnaldo Gomes de Souza,Truck,Nao\nHCS8947,Suinco Cooperativa de Suinocultores Ltda,3/4,Nao\nHCW8714,Suinco Cooperativa de Suinocultores Ltda,3/4,Nao\nHDI9336,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nHDI9937,Cooperativa Riobranquense de Transprotes Ltda,3/4,Nao\nHDJ7625,Isavic Transporte e Armazenamento Ltda,Bitruck,Nao\nHEE9J46,Baixotes Transportes,Carreta,Nao\nHEH1386,Douglas Dornelas Figueiredo,Toco,Nao\nHFB9126,Washington L S Costa Junior - ME,Bitruck,Nao\nHFB9139,Cooperativa de Transp e Logist de Sao Sebastiao do Oeste Mg,Bitruck,Nao\nHFD4176,Coopertral,Carreta,Nao\nHFD4I76,Coopertral,Carreta,Nao\nHFF5A12,Denia Transportes,Carreta,Nao\nHFF5F12,Denia Transportes,Carreta,Nao\nHGH1150,Trans Frios Transportes e Logistica Ltda ME,Truck,Nao\nHGJ8864,Matheus Gomes Mundim Araujo - ME,Bitruck,Nao\nHHE9J46,Baixotes Transportes,Carreta,Nao\nHHG1808,Cooperativa Riobranquense de Transprotes Ltda,3/4,Nao\nHHI2962,Coopdiesel Coop de PF e PJ Seg Transportes em Geral,Toco,Nao\nHHI2J62,Marques e Silva,Toco,Nao\nHHK1101,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nHHK1128,Flay Logistica e Armazenagem Ltda,3/4,Nao\nHHK1143,Sidelia de Fatima Costa ME,3/4,Nao\nHHK1682,Transportes e Armazenagem Zilli Ltda,3/4,Nao\nHHW5634,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nHIA4316,Cooperativa Riobranquense de Transportes Ltda,Carreta,Nao\nHIB9619,Trans Frios Transportes e Logistica Ltda ME,Truck,Nao\nHIG4415,TAC Transportes Armazenagem e Logistica,3/4,Nao\nHIG4J37,TAC Transportes Armazenagem e Logistica,3/4,Nao\nHIJ4272,Transportadora Multi Express Ltda,Truck,Nao\nHIM0845,Aparicio Valmir Ferreira,3/4,Nao\nHIV1702,Washington L S Costa Junior - ME,Bitruck,Nao\nHJA3D75,Marques e Silva,Toco,Nao\nHJI9573,Transportes e Armazenagem Zilli Ltda,Toco,Nao\nHJI9585,Comercial TIVI Ltda.,Toco,Nao\nHJM3916,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nHJZ4521,Washington L S Costa Junior - ME,Bitruck,Nao\nHKE0322,Ailton Benedito Transportes Ltda,Bitruck,Nao\nHKE0D22,TAC Transportes Armazenagem e Logistica,Bitruck,Nao\nHKE5008,Isavic Transporte e Armazenamento Ltda,Carreta,Nao\nHKF3605,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nHKH0223,Flay Logistica e Armazenagem Ltda,Truck,Nao\nHLI0380,TAC Transportes Armazenagem e Logistica,Bitruck,Nao\nHLM4H60,Marques e Silva,Bitruck,Nao\nHLM4J60,Marques e Silva,Bitruck,Nao\nHLY7349,Cooperativa Riobranquense de Transportes Ltda.,Toco,Nao\nHLY7350,TAC Transportes Armazenagem e Logistica,Toco,Nao\nHLY7631,Cooperativa Riobranquense de Transportes Ltda.,Toco,Nao\nHLY7632,Suinco Cooperativa de Suinocultores Ltda,Toco,Nao\nHLY7G32,TAC Transportes Armazenagem e Logistica Ltda,Toco,Nao\nHLY8107,Suinco,3/4,Nao\nHLY8150,Suinco Cooperativa de Suinocultores Ltda,Toco,Nao\nHMV4954,Logmaster Armazem e Logistica Ltda,Carreta,Nao\nHMV4D02,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nHMV6367,Avila Transportes Ltda Me,3/4,Nao\nHNX2274,Trans Frios Transportes e Logistica Ltda ME,Bitruck,Nao\nHOF4678,Cooperativa Riobranquense de Transportes Ltda,Toco,Nao\nHPY3441,Mix Transportes Rodoviarios Ltda - ME,Carreta,Nao\nHQR8499,Cooperativa Riobranquense de Transportes Ltda.,Truck,Nao\nHQR8E99,Rodosousa,Truck,Nao\nHRS6838,RA Transportes e Logistica Eireli,Carreta,Nao\nHRS7035,Posto Vanete Ltda,Carreta,Nao\nHRS8397,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nHRS8D97,Coopertral,Carreta,Nao\nHSJ4627,Friocargo Norte Ltda,Carreta,Nao\nIAH4303,Washington L S Costa Junior - ME,3/4,Nao\nIAH8003,Sidelia de Fatima Costa ME,3/4,Nao\nIKB9915,Posto Vanete Ltda,Carreta,Nao\nIKU9328,Isavic Transporte e Armazenamento Ltda,Carreta,Nao\nILI3703,RN Transporte e Logistica Ltda,Carreta,Nao\nILI3H03,Baixotes Transportes,Carreta,Nao\nINT7417,Transportadora Multi Express Ltda,Carreta,Nao\nIOM9374,Cooperativa de Transp e Logist de Sao Sebastiao do Oeste Mg,Carreta,Nao\nISA1925,Transportes Prigol Ltda,Carreta,Nao\nIUL0644,Transportes Prigol Ltda,Carreta,Nao\nIUR2A43,HDX Transportes e Servicos Ltda,Carreta,Nao\nIUR7491,Transportadora Spellmeier Ltda,Bitruck,Nao\nIWH8877,Flay Logistica e Armazenagem Ltda,Bitruck,Nao\nIYD3003,Tais Simoes Me,Carreta,Nao\nIYD4400,Foba Transportes Ltda - ME,Carreta,Nao\nIYX2917,Senio Transportes de cargas Rodoviaria Ltda,Carreta,Nao\nIYY1676,Transportes Prigol Ltda,Carreta,Nao\nJDD0140,Posto Vanete Ltda,Bitruck,Nao\nJGZ0468,Flay Logistica e Armazenagem Ltda,Bitruck,Nao\nJHJ6232,Friocargo Norte Ltda,3/4,Nao\nJHX6373,Transportadora Multi Express Ltda,Bitruck,Nao\nJIB3H29,Cirio Alves de Oliveira Junior - Transportes,3/4,Nao\nJIG4767,Friocargo Triangulo Ltda,3/4,Nao\nJJB8946,Denia Transportes,Truck,Nao\nJOC2635,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nJOK0854,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nJOK0I54,Denia Transportes,Carreta,Nao\nJRC5555,Trans Shirley Transportes Ltda.,Carreta,Nao\nJRR2673,Transportadora Sudoeste Ltda,Toco,Nao\nJXX9H64,Coopertral,Carreta,Nao\nJYJ8844,Transportadora Multi Express Ltda,Carreta,Nao\nJZS5651,Vivan Transportes Ltda,Carreta,Nao\nKAC3J94,Gold Star,Container,Nao\nKAN5655,Wandell Fabiano Jordao,3/4,Nao\nKBY1081,R A de Castilho Transportes,Carreta,Nao\nKDJ7A83,Patos Logística Eirelli,Carreta,Nao\nKEB0368,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nKER9906,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nKER9J06,Tais Simoes Me,Carreta,Nao\nKEY0318,Cooperativa de Transp e Logist de Sao Sebastiao do Oeste Mg,Carreta,Nao\nKJZ5157,MMS Armazenagem e Logistica SA,Truck,Nao\nKLA3D75,Baixotes Transportes,Carreta,Nao\nKLA7375,Transportadora Baixotes Transportes Ltda,Carreta,Nao\nKLA7D75,Baixotes Transportes,Carreta,Nao\nKTC4518,R A de Castilho Transportes,Carreta,Nao\nKWE2956,AC Armazenagem,Carreta,Nao\nKWE2J56,AC Transportes,Carreta,Nao\nKYP8147,Rodosousa Transportes Ltda,3/4,Nao\nKZR8291,Trans Frios Transportes e Logistica Ltda ME,Toco,Nao\nLBJ8963,Cooperativa dos Transportadores Unidos Ltda.,Carreta,Nao\nLMO2E88,AC Transportes,Truck,Nao\nLMO8E88,AC Transportes,Truck,Nao\nLRD9999,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nLUX5135,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nLWS0237,R A de Castilho Transportes,Carreta,Nao\nLXV1767,GTRANS ALVES TRANSPORTES DE CARGAS LTDA,Carreta,Nao\nLXV5629,Posto Vanete Ltda,Carreta,Nao\nLYL4634,Fidelis Transportes Ltda.,Carreta,Nao\nLYU2742,Posto Vanete Ltda,Carreta,Nao\nLZN2849,RA Transportes e Logistica Eireli,Carreta,Nao\nMBA1451,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nMBJ3588,Omega X Solucoes em Logistica e Armazenagem Ltda,Carreta,Nao\nMBK0133,GF Transportes Ltda.,Carreta,Nao\nMBS0127,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nMCA9D22,ASAPH Transportes Ltda.,Carreta,Nao\nMCI0D83,Coopertral,Carreta,Nao\nMCO2936,ASAPH Transportes Ltda.,Carreta,Nao\nMCT6033,Transportes e Armazenagem Zilli Ltda,Carreta,Nao\nMCV0B18,AC Logística,Carreta,Nao\nMCY1282,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nMDG5672,Tais Simoes Me,Carreta,Nao\nMDH7292,Omega X Solucoes em Log e Armazenagem Ltda,Carreta,Nao\nMDL8499,Christine Prodocimo Roesel Marciano ME,Carreta,Nao\nMDM9D65,Isavic Transportes e Armazenagem Ltda,Carreta,Nao\nMDY6143,Omega X Solucoes em Logistica e Armazenagem Ltda,Carreta,Nao\nMEC0238,ASAPH Transportes Ltda.,Carreta,Nao\nMEG4089,Omega X Solucoes em Logistica e Armazenagem Ltda,Carreta,Nao\nMEG4A89,Omega X Solucoes em Logistica e Armazenagem Ltda,Carreta,Nao\nMEJ7716,Coopertral,Carreta,Nao\nMEO7544,Isavic Transporte e Armazenamento Ltda,Carreta,Nao\nMEV8145,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nMEX6H74,Omega X Solucoes em Logistica e Armazenagem Ltda,Carreta,Nao\nMFC2421,Transportadora Baixotes Transportes Ltda,Carreta,Nao\nMFC8804,TAC Transportes Armazenagem e Logistica,Truck,Nao\nMFF8179,Baixotes Transportes,Carreta,Nao\nMFF8879,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nMFF8I79,Baixotes Transportes,Carreta,Nao\nMFI7684,Omega X Solucoes em Logistica e Armazenagem Ltda,Carreta,Nao\nMFJ7671,Transportadora Baixotes Transportes Ltda,Carreta,Nao\nMFJ7G71,Baixotes Transportes,Carreta,Nao\nMFL9816,Carla da Silva Bruneti Trasp. Rodoviarios ME,Carreta,Nao\nMFM4128,Canada Transportes e Comercio Ltda.,Carreta,Nao\nMFM7088,Transportadora Baixotes Transportes Ltda,Carreta,Nao\nMFM7A88,Baixotes Transportes,Carreta,Nao\nMFN4147,Transportadora Multi Express Ltda,Carreta,Nao\nMFR0J29,Coopertral,Carreta,Nao\nMFT1992,Baixotes Transportes,Carreta,Nao\nMFT1J92,Baixotes Transportes,Carreta,Nao\nMFT5258,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nMFV8569,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nMFY8607,Sergio Nava e Cia Ltda,Carreta,Nao\nMGD4806,Isavic Transportes e Armazenagem Ltda,Carreta,Nao\nMGE5276,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nMGF8544,Omega X Solucoes em Logistica e Armazenagem Ltda,Carreta,Nao\nMGF9902,R A de Castilho Transportes,Carreta,Nao\nMGI4566,Canada Transportes e Comercio Ltda.,Carreta,Nao\nMGN4810,G S Puridade Transportes e Servicos Ltda,Carreta,Nao\nMGQ3782,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nMGR4809,Transportadora Multi Express Ltda,Carreta,Nao\nMGS0639,Canada Transportes e Comercio Ltda.,Carreta,Nao\nMGS8048,G S Puridade Transportes e Servicos Ltda,Carreta,Nao\nMGW0189,Cooperativa dos Transportadores Unidos Ltda.,Carreta,Nao\nMGY4450,Coopertral,Carreta,Nao\nMHB1468,TRANSPORTES BASSANI LTDA.,Carreta,Nao\nMHE7188,MMS Armazenagem e Logistica SA,Carreta,Nao\nMHF3C63,Denia Transportes,Truck,Nao\nMHF6C63,Denia Transportes,Carreta,Nao\nMHH8G10,RP Express,Carreta,Nao\nMHJ2202,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nMHJ5726,Transportadora Multi Express Ltda,Carreta,Nao\nMHK7293,Isavic Transportes e Armazenagem Ltda,Carreta,Nao\nMHM6045,Christine Prodocimo Roesel Marciano ME,Carreta,Nao\nMHN3D66,TransOliveira,Carreta,Nao\nMHN3D99,TransOliveira,Carreta,Nao\nMHR4B55,Coopertral,Carreta,Nao\nMHW7I56,Coopertral,Bitruck,Nao\nMHW9911,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nMIM8459,Friocargo Norte Ltda,Carreta,Nao\nMIQ6927,Posto Vanete Ltda,Carreta,Nao\nMIV2712,Kaipper Continental Transportes Ltda,Carreta,Nao\nMIZ0B87,Silva e Reis Transporte de Cargas Eireli Me,Carreta,Nao\nMJE7248,Transportes e Armazenagem Zilli Ltda,Carreta,Nao\nMJE8477,Canada Transportes,Carreta,Nao\nMJG1727,R A de Castilho Transportes,Carreta,Nao\nMJN3680,Christine Prodocimo Roesel Marciano ME,Carreta,Nao\nMJN7006,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nMJW3158,Denia Transportes,Carreta,Nao\nMJW3B58,Denia Transportes,Carreta,Nao\nMJW3C63,Denia Transportes,Carreta,Nao\nMKA7F71,MR Transportes,Carreta,Nao\nMKC1529,Gilmar Scariot Transportes,Carreta,Nao\nMKL9848,Posto Vanete Ltda,Carreta,Nao\nMKP9C15,Coopediesel,Carreta,Nao\nMKZ2997,Coop. de Tra. de Cargas do E. Santa Catarina,Carreta,Nao\nMLC4834,JCRM TRANSPORTES E LOGISTICA LTDA,Carreta,Nao\nMLK4271,Transportes e Armazenagem Zilli Ltda,Carreta,Nao\nMLN5130,Coop. de Tra. de Cargas do E. Santa Catarina,Carreta,Nao\nMLW7G66,Multi Express,Carreta,Nao\nMME8413,Transportes Zanini Ltda,Carreta,Nao\nMMH6129,Transportes Tozzo Ltda.,Carreta,Nao\nMMJ7G71,Baixotes Transportes,Carreta,Nao\nMMJ9E91,TransOliveira,Carreta,Nao\nMMJ9E99,TransOliveira,Carreta,Nao\nMRN5529,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nMRU6E28,G S Puridade Transportes e Servicos Ltda,Carreta,Nao\nMTC4550,Cooperativa Riobranquense de Transportes Ltda,Toco,Nao\nMWA6634,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nMXA2G32,Transportadora Multi Express Ltda,Carreta,Nao\nMXB5208,Bruno Sergio Ferreira,Carreta,Nao\nMXB5C08,AC Armazenagem,Carreta,Nao\nMXD1E41,Coopertral,Carreta,Nao\nNAB8188,Transportadora Multi Express Ltda,Carreta,Nao\nNCH2H15,AC Transportes,Carreta,Nao\nNCX0I40,Coopediesel,Carreta,Nao\nNFC3660,Marcus Eduardo Andrades Peres,Truck,Nao\nNFO1928,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nNGF2954,Cooperativa dos Transportadores Unidos Ltda.,Carreta,Nao\nNJB2858,Galvão & Messias Ltda.,Carreta,Nao\nNKE0329,RN Transporte e Logistica Ltda,Carreta,Nao\nNKK7412,SS LOG Transportes e Logistica Ltda,Carreta,Nao\nNKO0192,Transmartyna Ltda ME,Carreta,Nao\nNLP0479,Lagam Transportes & Logistica Ltda,Bitruck,Nao\nNPJ2578,Transportadora Multi Express Ltda,Carreta,Nao\nNPJ2F58,Multi Express,Carreta,Nao\nNPJ2F78,Multi Express,Carreta,Nao\nNUE1B52,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nNVY0428,Posto Vanete Ltda,Carreta,Nao\nNYE9761,TAC Transportes Armazenagem e Logistica,Truck,Nao\nOBE9693,Baixotes Transportes,Carreta,Nao\nOBE9G93,Baixotes Transportes,Carreta,Nao\nOBL9073,Transportadora Multi Express Ltda,Carreta,Nao\nODA8650,Transportadora Multi Express Ltda,Carreta,Nao\nOFN0964,Baixotes Transportes,Carreta,Nao\nOFS2H37,Cooperativa Riobranquense de Transportes Ltda.,Bitruck,Nao\nOGY2586,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nOKF5239,Rubens Eugenio Fiorentin Transportes Ltda.,Bitruck,Nao\nOKG2369,Sergio Nava e Cia Ltda,Carreta,Nao\nOLI5344,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nOMB0200,Friocargo Triangulo Ltda,Carreta,Nao\nOMB0466,Cooperativa Riobranquense de Transportes Ltda,3/4,Nao\nOMF8787,Omega X Solucoes em Logistica e Armazenagem Ltda,Carreta,Nao\nOMS4B32,Transportadora E Armazenagem Zilli Ltda,Carreta,Nao\nONZ4C37,Cisne Branco Transportes Ltda EPP,Carreta,Nao\nOOF9544,Solucao Transportes e Servicos Eireli,Carreta,Nao\nOOH4498,TAC Transportes Armazenagem e Logistica Ltda,Bitruck,Nao\nOOH4976,Rodocunha Transportes Ltda - ME,Bitruck,Nao\nOOH5001,Rodocunha Transportes Ltda - ME,Bitruck,Nao\nOOV8H47,Marizileia Transportes,Carreta,Nao\nOOW1277,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nOOZ5927,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nOOZ5955,Cooperativa Riobranquense de Transprotes Ltda,3/4,Nao\nOPC4600,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nOPC6065,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nOPF8308,Cooperativa de Transp e Logist de Sao Sebastiao do Oeste Mg,Bitruck,Nao\nOPL2I85,Marques e Silva,Toco,Nao\nOPM7245,Denia Transportes,Carreta,Nao\nOPM7C45,Denia Transportes,Carreta,Nao\nOPM7C55,Denia Transportes,Carreta,Nao\nOPM9245,Denia Transportes,Carreta,Nao\nOPQ0668,TAC Transportes Armazenagem e Logistica,Toco,Nao\nOPQ0672,Transportadora Multi Express Ltda,Toco,Nao\nOPQ3989,Suinco,Toco,Nao\nOPS0605,Transportes e Armazenagem Zilli Ltda,Truck,Nao\nOPT4189,Suinco Cooperativa de Suinocultores Ltda,3/4,Nao\nOQA3631,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nOQB1826,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nOQH3838,Cooperativa Riobranquense de Transportes Ltda.,Toco,Nao\nOQH4050,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nOQN4506,Logmaster Armazem e Logistica Ltda,Carreta,Nao\nOQO4469,Bruno Sergio Ferreira,Carreta,Nao\nOQP8538,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nOQQ2484,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nOQR5074,Cooperativa Riobranquense de Transportes Ltda,Carreta,Nao\nOQS0440,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nOQS5031,Locação e Administração Betel Eireli,Bitruck,Nao\nORB4130,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nORB9881,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nOWI8132,Cooperativa Riobranquense de Transprotes Ltda,Toco,Nao\nOWO0091,Transportadora Multi Express Ltda,Truck,Nao\nOWS5001,RN Transporte e Logistica Ltda,Toco,Nao\nOXB7D48,MR Transportes,Carreta,Nao\nOXC1638,Transportes e Armazenagem Zilli Ltda,Carreta,Nao\nOXC9013,Maxfrios Distribuidora e Transporte Eireli,Bitruck,Nao\nOXE9439,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nOXE9E39,Coopertral,Carreta,Nao\nOXI0440,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nOXI2409,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nPLI2086,TAC Transportes Armazenagem e Logistica Ltda,Bitruck,Nao\nPLI2A56,AJB Transportes,Bitruck,Nao\nPLI2A86,AJB Transportes,Bitruck,Nao\nPQS3A09,Coopertral,Carreta,Nao\nPQT7204,TAC Transportes Armazenagem e Logistica Ltda,Carreta,Nao\nPQT7984,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nPQT8064,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nPQT8074,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nPQT8084,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nPRO2122,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nPRR9846,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nPRS0146,Transportadora E Armazenagem Zilli Ltda,Carreta,Nao\nPUA3I52,Marizileia Transportes,Carreta,Nao\nPUD2035,Friocargo Triangulo Ltda,3/4,Nao\nPUD5076,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nPUI0885,Cooperativa Riobranquense de Transprotes Ltda,3/4,Nao\nPUJ1134,Cirio Alves de Oliveira Junior - Transportes,3/4,Nao\nPUK7035,Coopernova Cooperativa Riobranquense de Transporte Ltda.,Carreta,Nao\nPUL1460,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nPUL1470,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nPUN3820,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nPUO3485,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nPUO3E85,Transportadora Multi Express Ltda,Carreta,Nao\nPUO6C29,Marques e Silva,Carreta,Nao\nPUQ8460,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nPUS8E44,Marques e Silva,Carreta,Nao\nPUT4870,Formoso,Carreta,Nao\nPUW9A61,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nPUX2971,G S Puridade Transportes e Servicos Ltda,Carreta,Nao\nPUZ9960,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nPVA4360,Trans Frios Transportes e Logistica Ltda ME,Bitruck,Nao\nPVC6654,Transportes e Armazenagem Zilli Ltda,Toco,Nao\nPVE6696,Transportadora Multi Express Ltda,Bitruck,Nao\nPVG4686,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nPVG7128,Cooperativa Riobranquense de Transprotes Ltda,3/4,Nao\nPWA3260,Transportadora Multi Express Ltda,Carreta,Nao\nPWC1358,Friocargo Triangulo Ltda,3/4,Nao\nPWE3893,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nPWG1739,Transportes e Armazenagem Zilli Ltda,Bitruck,Nao\nPWG1740,Cooperativa Riobranquense de Transportes Ltda.,Bitruck,Nao\nPWL6615,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nPWL8958,Omega X Solucoes em Log e Armazenagem Ltda,Truck,Nao\nPWP3047,Washington L S Costa Junior - ME,Bitruck,Nao\nPWQ8784,TAC Transportes Armazenagem e Logistica,Truck,Nao\nPXJ0726,M Braga & Sobrinho Ltda.,3/4,Nao\nPYF0280,Cooperativa dos Transportadores Unidos Ltda.,Truck,Nao\nPYP5755,Tais Simoes Me,Carreta,Nao\nPYV7I69,Telma Souza de Oliveira Santos,3/4,Nao\nPYZ1D03,Baixotes Transportes,Bitruck,Nao\nPZR6754,Cooperativa Riobranquense de Transportes Ltda.,Bitruck,Nao\nPZR6H54,Denia Transportes,Bitruck,Nao\nPZS5316,Flay Logistica e Armazenagem Ltda,Bitruck,Nao\nQBC5B40,Multi Express,Carreta,Nao\nQBH5J89,Multi Express,Carreta,Nao\nQCE5G23,Multi Express,Carreta,Nao\nQGJ0H09,Omega X Solucoes em Logistica e Armazenagem Ltda,Carreta,Nao\nQHA1470,R A de Castilho Transportes,Carreta,Nao\nQHF0778,Transportes Zanini Ltda,Carreta,Nao\nQHK7670,Transportes Zanini Ltda,Carreta,Nao\nQHT8275,Transportes Zanini Ltda,Carreta,Nao\nQHT8855,Transportes Zanini Ltda,Carreta,Nao\nQHT8885,Transportes Zanini Ltda,Carreta,Nao\nQHV8C67,Coopertral,Carreta,Nao\nQJI3576,Transportes Zanini Ltda,Carreta,Nao\nQJK1913,Transportes e Comércio Irmãos Albiero Ltda ME,Carreta,Nao\nQJM1037,Transportes Zanini Ltda,Carreta,Nao\nQJU6926,Kaipper Continental Transportes Ltda,Carreta,Nao\nQJZ7E76,Marques e Silva,Carreta,Nao\nQMR2C59,Cooperativa de Transp e Logist de Sao Sebastiao do Oeste Mg,Bitruck,Nao\nQMR2C75,Cooperativa de Transp e Logist de Sao Sebastiao do Oeste Mg,Bitruck,Nao\nQMX6767,AC Transportes,Truck,Nao\nQNA0693,Posto Vanete Ltda,Carreta,Nao\nQNA4729,Isavic Transporte e Armazenamento Ltda,Carreta,Nao\nQNK1999,Cooperativa Riobranquense de Transportes Ltda.,Truck,Nao\nQNK8591,Cooperativa dos Transportadores Unidos Ltda.,Carreta,Nao\nQNN3324,Transportadora Multi Express Ltda,Bitruck,Nao\nQNQ7011,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nQNQ7021,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nQNQ7031,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nQNQ7041,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nQNQ7A11,Transportadora Multi Express Ltda,Carreta,Nao\nQNQ7A31,Bruno Sergio Ferreira,Carreta,Nao\nQNQ7A41,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nQNV2963,Mult Service Montes Claros,Carreta,Nao\nQNV4183,Trans Frios Transportes e Logistica Ltda ME,Bitruck,Nao\nQNW7336,Cooperativa Riobranquense de Transportes Ltda,Toco,Nao\nQNZ7304,Logmaster Armazem e Logistica Ltda,Carreta,Nao\nQNZ7305,Friocargo Triangulo Ltda,Carreta,Nao\nQOC1193,Transportadora Multi Express Ltda,Bitruck,Nao\nQOC3718,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nQOI6463,Matheus Gomes Mundim Araujo - ME,3/4,Nao\nQON7112,Cooperativa Riobranquense de Transportes Ltda,Carreta,Nao\nQOW1672,Cooperativa Riobranquense de Transportes Ltda.,Bitruck,Nao\nQPA2533,AJB Transportes,Bitruck,Nao\nQPX7375,Posto Vanete,Carreta,Nao\nQPX7381,Posto Vanete,Carreta,Nao\nQPX7384,Posto Vanete,Carreta,Nao\nQPZ8I27,TransOliveira,Carreta,Nao\nQQG3946,SS LOG Transportes e Logistica Ltda,Carreta,Nao\nQQI3E51,MR Transportes,Carreta,Nao\nQQO5J16,Multi Express,Carreta,Nao\nQQO8876,Transportes Horizonte Frios Ltda,Carreta,Nao\nQQP6621,Coopertral,Carreta,Nao\nQQT1682,Transportadora Multi Express Ltda,Carreta,Nao\nQQT1G82,Coopertral,Carreta,Nao\nQRD1152,Tais Simoes Me,Carreta,Nao\nQUB9352,Cooperativa Riobranquense de Transprotes Ltda,3/4,Nao\nQUG1307,Transportadora Multi Express Ltda,Carreta,Nao\nQUU0926,Transportes e Armazenagem Zilli Ltda,Carreta,Nao\nQUU0940,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nQWV2926,Transfernata Ltda.,Carreta,Nao\nQXA2439,AC Logística,Carreta,Nao\nQXL7916,Maxfrios Distribuidora e Transporte Eireli,Carreta,Nao\nQXT8D43,MMS Armazenagem e Logistica SA,Carreta,Nao\nQXY1F27,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nQXY4B02,Rodosousa,Bitruck,Nao\nRAG4A52,Cooperativa dos Transportadores Unidos Ltda.,Carreta,Nao\nRAI1G55,Canada Transportes e Comercio Ltda.,Carreta,Nao\nRAJ9J31,Bruno Sergio Ferreira,Carreta,Nao\nRCM4A73,MR Transportes,Carreta,Nao\nRCP3C74,Marizileia Transportes,Carreta,Nao\nREE0C39,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nRFB3J59,Transportadora Multi Express Ltda,Carreta,Nao\nRFE0H49,Coopertral,Carreta,Nao\nRFZ7C00,Omega X Solucoes em Logistica e Armazenagem Ltda,Carreta,Nao\nRLA5H78,LNF Transporte,Carreta,Nao\nRLG6A98,Marvel,Container,Nao\nRMH8G11,Multi Express,Carreta,Nao\nRMM0C10,Coopertral,Carreta,Nao\nRMM0C17,Marizileia Transportes,Carreta,Nao\nRMS9H45,Multi Express,Carreta,Nao\nRMT0F38,Baixotes Transportes,Carreta,Nao\nRMT0F41,Baixotes Transportes,Carreta,Nao\nRMW1A91,Coopertral,Truck,Nao\nRMX0B03,Multi Express,Carreta,Nao\nRMY8J16,AJB Transportes,Bitruck,Nao\nRNC6F46,Transportadora Multi Express Ltda,Carreta,Nao\nRNC7B23,Marques e Silva,Bitruck,Nao\nRND3D90,MR Transportes,Carreta,Nao\nRNS2J03,Dorense Transportes de Cargas Ltda-ME,Bitruck,Nao\nRNS3G28,Suinco,3/4,Nao\nRNS3G61,Suinco,3/4,Nao\nRNS3J61,Suinco,3/4,Nao\nRNT5I98,Suinco,3/4,Nao\nRNT5J03,Suinco,3/4,Nao\nRNT8C00,Marizileia Transportes,Carreta,Nao\nRNU1H74,MR Transportes,Carreta,Nao\nRNV2A77,Suinco,3/4,Nao\nRNV4H60,Suinco,3/4,Nao\nRNV5G22,Suinco,3/4,Nao\nRNW4H60,Suinco,3/4,Nao\nRNW7J57,Suinco,3/4,Nao\nRNX0C26,Suinco,3/4,Nao\nRNX0C28,Suinco,3/4,Nao\nRNX3C26,Suinco,3/4,Nao\nRNX3C28,Suinco,3/4,Nao\nRNY8J16,AJB Transportes,Bitruck,Nao\nRTD7C55,MR Transportes,Carreta,Nao\nRTF6I71,Cargofrio Logística e Armazenamento Ltda,Bitruck,Nao\nRUG6B37,Max Frios,Bitruck,Nao\nRUM4A51,Coopertral,Carreta,Nao\nRUR5A00,Marizileia Transportes,Carreta,Nao\nRVI5B24,AC Armazenagem,Truck,Nao\nRVN5G22,Suinco,3/4,Nao\nRVO3A10,MR Transportes,Carreta,Nao\nSDB3F38,AJB Transportes,Bitruck,Nao\nSDB4F38,AJB Transportes,Bitruck,Nao\nSDX0G28,PH Fidelis,Bitruck,Nao\nSIW0E00,Marizileia Transportes,Carreta,Nao\nSIY0147,Suinco,3/4,Nao\nSIY0G36,Suinco,3/4,Nao\nSIY0G38,Suinco,3/4,Nao\nSIY0G39,Suinco,3/4,Nao\nSIY0G41,Suinco,3/4,Nao\nSIY0G43,Suinco,3/4,Nao\nSIY0I47,Suinco,3/4,Nao\nSIY7A00,Marizileia Transportes,Carreta,Nao\nSIYOG36,Suinco,3/4,Sim\nSJY7D76,Joyway Food,Container,Nao\nSRZ4E29,MR Transportes,Bitruck,Nao\nSXF8J27,LNF Transporte,Carreta,Nao\nSXT9B03,Marvel,Carreta,Nao\nSYC3C00,Marizileia Transportes,Carreta,Nao\nSYJ5J26,Coopertral,Carreta,Nao\nSYW0B00,Marizileia Transportes,Carreta,Nao\nSYW0E00,Marizileia Transportes,Carreta,Nao\nSYX4I27,MR Transportes,Carreta,Nao\nTCD2B57,Baixotes Transportes,Carreta,Nao\nTCG1A00,Marizileia Transportes,Carreta,Nao\nTCG9H61,MR Transportes,Carreta,Nao\nTCS9I99,Coopertral,Carreta,Nao\nTCY9J14,Pedro Ferreira Transportes,Carreta,Nao\nTDQ7I07,MR Transportes,Carreta,Nao\nTEW0A46,Multi Express,Carreta,Nao\nTEW0A97,Multi Express,Carreta,Nao\nTIX4J94,LNF Transporte,Carreta,Nao\nTIX8F93,LNF Transporte,Carreta,Nao\nTPO5I06,Marvel,Carreta,Nao\nTXE6E82,Coopertral,Truck,Nao\nTXT3J12,MR Transportes,Carreta,Nao\nTXU5G95,MR Transportes,Carreta,Nao\nTXX3C52,Max Frios,Bitruck,Nao\nTXZ6E13,MR Transportes,Carreta,Nao\nTXZ6E82,Coopertral,Truck,Nao\nTYZ4J12,Multi Express,Bitruck,Nao\nTZB6H99,Multi Express,Carreta,Nao\nTZE6E82,Coopertral,Truck,Nao\n";</script>
-<script>window.SUINCO_BUILD = "16/09 22:21 · 37d03e4";window.SUINCO_BUILD_EM = "2026-09-16T22:21:49.399576+00:00";</script>
+<script>window.SUINCO_BUILD = "16/09 23:48 · ca114a6";window.SUINCO_BUILD_EM = "2026-09-16T23:48:59.578817+00:00";</script>
 <script>
 /* =====================================================================
    PAINEL LOGÍSTICO SUINCO — camada de dados
@@ -15133,7 +15410,10 @@ function _exibirNotif(el, ms, opcoes){
   const perecivel = !!(opcoes && opcoes.perecivel) && !el.classList.contains('forte');
   if(perecivel && notifRecemChegado()) return;
 
-  if(container.querySelectorAll('.notif-item').length >= NOTIF_MAX_VISIVEL){
+  /* Aviso que já está SAINDO não ocupa vaga: ele fica 240 ms no ar só para
+     terminar o movimento, e contá-lo faria o aviso seguinte ir para a fila
+     sem necessidade. */
+  if(container.querySelectorAll('.notif-item:not(.notif-saindo)').length >= NOTIF_MAX_VISIVEL){
     if(!perecivel){
       _notifFila.push({
         el, ms, em: Date.now(), perecivel: false,
@@ -15198,12 +15478,29 @@ function _mostrarNotifAgora(el, ms){
   botaoFechar.textContent = '×';
   el.prepend(botaoFechar);
 
+  /* O AVISO SAI PELO MESMO LADO POR ONDE ENTROU (320 ms entra, 240 ms sai).
+
+     Entrar deslizando e depois sumir no lugar são dois objetos diferentes
+     para o olho: o que entrou não é o que saiu. Saindo pela mesma borda, é
+     o mesmo papel indo embora — e é isso que faz o gesto de dispensar
+     parecer natural em vez de arbitrário.
+
+     Sair é mais rápido que entrar de propósito: entrar é o sistema
+     chamando a atenção, sair é o sistema respondendo. Rápido onde o
+     sistema responde, calmo onde ele pede atenção.
+
+     O próximo da fila só entra DEPOIS que este terminou de sair — senão os
+     dois dividem o mesmo lugar na pilha e o de baixo pula. */
   const remover = () => {
     clearTimeout(temporizador);
-    el.remove();
-    const proximo = _proximoDaFila();   // tira da fila ANTES de contar — o contador reflete o que sobra
-    _atualizarContadorFila();
-    if(proximo) _mostrarNotifAgora(proximo.el, proximo.ms);
+    if(el.classList.contains('notif-saindo')) return;   // já está saindo
+    el.classList.add('notif-saindo');
+    setTimeout(() => {
+      el.remove();
+      const proximo = _proximoDaFila();   // tira da fila ANTES de contar — o contador reflete o que sobra
+      _atualizarContadorFila();
+      if(proximo) _mostrarNotifAgora(proximo.el, proximo.ms);
+    }, movReduzida() ? 0 : 240);
   };
   botaoFechar.onclick = remover;
 
@@ -17313,14 +17610,30 @@ function botaoCancelarHtml(c){
      intocável. Pedido direto do usuário (08/08/2026): dado de teste que
      passou pelo fluxo inteiro (ex.: DJF8527) ficava preso na Torre pra
      sempre, sem nenhuma ação disponível pra tirar de lá. */
+  /* SEGURAR PARA CANCELAR (`data-segurar`). O gesto é o que confirma: o
+     dedo fica 1,5 s no botão e a barra conta na frente dele. Solta antes e
+     nada acontece. É a pergunta que não dá para responder no automático —
+     "tem certeza?" todo mundo aprende a clicar sem ler.
+
+     O que vem DEPOIS do gesto não mudou uma linha: `excluirCargaUI`
+     continua pedindo o motivo de quem já andou, e a carga que seguiu
+     viagem continua pedindo a placa digitada. O gesto substitui o
+     "tem certeza?", não a pergunta que vira registro.
+
+     Teclado e chamada de programa passam direto (ver o porteiro no bloco
+     MOVIMENTO): o gesto novo é para a mão, e ninguém fica sem saída. */
   if(c.status === 'Seguiu Viagem'){
-    return `<button class="btn btn-danger btn-sm" onclick="excluirCargaSeguiuViagemUI('${escJs(c.id)}')"
-              title="Excluir mesmo já tendo seguido viagem — pede confirmação, some do histórico/relatórios.">Excluir</button>`;
+    return `<button class="btn btn-danger btn-sm" data-segurar="1"
+              data-segurar-dica="Segure 1,5s para excluir esta carga já finalizada."
+              onclick="excluirCargaSeguiuViagemUI('${escJs(c.id)}')"
+              title="SEGURE 1,5s para excluir mesmo já tendo seguido viagem — ainda pede a placa digitada, some do histórico/relatórios.">Excluir</button>`;
   }
   const cancelar = c.status !== 'Aguardando Veículo';
-  return `<button class="btn btn-danger btn-sm" onclick="excluirCargaUI('${escJs(c.id)}')"
-            title="${cancelar ? 'Cancelar esta carga (pede motivo e fica no log)'
-                              : 'Excluir esta carga programada'}">`
+  return `<button class="btn btn-danger btn-sm" data-segurar="1"
+            data-segurar-dica="Segure 1,5s para ${cancelar ? 'cancelar' : 'excluir'} a carga da placa ${esc(c.placa)}."
+            onclick="excluirCargaUI('${escJs(c.id)}')"
+            title="${cancelar ? 'SEGURE 1,5s para cancelar esta carga (depois pede o motivo e fica no log)'
+                              : 'SEGURE 1,5s para excluir esta carga programada'}">`
        + (cancelar ? 'Cancelar' : 'Excluir') + '</button>';
 }
 
@@ -17413,7 +17726,12 @@ function renderVisaoPatio(prefixo){
 
   const linhaCarga = (c)=>{
     const etapas = etapasDaCarga(c);
-    return `<tr class="linha-status-${esc((STATUS_META[c.status]||{}).cor || '')}">
+    /* `data-carga` NÃO desenha nada — é a etiqueta pela qual o movimento
+       encontra a linha desta carga quando ela entra no pátio ou sai dele
+       (ver o bloco MOVIMENTO no fim deste arquivo). A Torre e a Fila já
+       tinham a etiqueta; a Visão do Pátio é justamente onde o caminhão é
+       visto, e estava sem. */
+    return `<tr class="linha-status-${esc((STATUS_META[c.status]||{}).cor || '')}" data-carga="${esc(c.id)}">
       <td class="vp-carga">${esc(c.numeroCarga)||'—'}</td>
       <td class="vp-placa">${esc(c.placa)}${marcaCargaDaPlaca(c, lista)}${marcaEtapaDevolvidaHtml(c)}${marcaSaiuSemCarregarHtml(c)}</td>
       <td class="vp-transp">${esc(c.transportadora)||'—'}</td>
@@ -17441,6 +17759,7 @@ function renderVisaoPatio(prefixo){
   } else {
     tbody.innerHTML = lista.map(linhaCarga).join('');
   }
+  movLinhasNovas(tbody);
 
   /* Estado vazio que oferece a saída.
 
@@ -17955,6 +18274,7 @@ function renderTorre(){
         ${ultimaAcaoHtml(c)}</td>
       ${editavel ? `<td class="no-print">${botaoOutraCargaHtml(c)}${botaoRevisoesHtml(c)}${botaoCancelarHtml(c)}</td>` : ''}
     </tr>`).join('');
+  movLinhasNovas(tbody);
   const vazio = document.getElementById('torre-empty');
   vazio.hidden = lista.length>0;
   if(!vazio.hidden){
@@ -18491,6 +18811,7 @@ function renderProgFila(){
   const antWrap = document.getElementById('prog-fila-anteriores');
   if(antTbody) antTbody.innerHTML = anteriores.map(c => linhaFilaHtml(c, anteriores, false)).join('');
   if(antWrap) antWrap.hidden = anteriores.length === 0;
+  movLinhasNovas(document.getElementById('prog-fila-tbody'));
   document.getElementById('prog-fila-empty').hidden = lista.length>0;
 
   // Some sem explicação é pior que não sumir: quem programou ontem
@@ -19580,7 +19901,11 @@ async function excluirCargaUI(id){
       notify('Escreva um motivo com pelo menos 3 letras.', 'warn');
       return;
     }
-  } else if(!confirm(`Excluir a carga programada da placa ${c.placa}? Essa ação não pode ser desfeita.`)){
+  } else if(!movConfirmadoPorGesto()
+            && !confirm(`Excluir a carga programada da placa ${c.placa}? Essa ação não pode ser desfeita.`)){
+    /* Segurar o botão 1,5 s JÁ é a confirmação (ver movConfirmadoPorGesto).
+       A janela continua para quem chegou por teclado ou por outra porta —
+       uma pergunta, nunca zero. */
     return;
   }
 
@@ -19901,7 +20226,9 @@ async function acaoSaidaUI(){
     marcarSaidaNaoConfirmada(placa, r.liberadas.length,
       'este terminal está sem servidor');
     avisarPendentesDaSaida(placa, r);
-    input.value = ''; input.focus(); renderAll();
+    input.value = ''; input.focus();
+    await despedirCargas(_movIdsLiberados(r.liberadas));
+    renderAll();
     return;
   }
 
@@ -19947,7 +20274,20 @@ async function acaoSaidaUI(){
   avisarPendentesDaSaida(placa, { liberadas, pendentes });
   input.value = '';
   input.focus();
+  /* O caminhão sai do pátio ANTES do redesenho. Se `renderAll()` viesse
+     primeiro, a linha já teria sido apagada no primeiro quadro e não
+     sobraria nada para ver — quem confirmou a saída ficaria sem saber qual
+     das cargas da placa foi embora. Espera no máximo 240 ms. */
+  await despedirCargas(_movIdsLiberados(liberadas));
   renderAll();
+}
+
+/* Os ids das cargas que o servidor (ou o caminho local) declarou liberadas.
+   A resposta do servidor vem em snake_case e a local em camelCase — uma
+   função só lê as duas, em vez de duas listas que divergem na primeira
+   mudança de rota. */
+function _movIdsLiberados(liberadas){
+  return (liberadas || []).map(c => (c && (c.id || c.carga_id)) || c).filter(Boolean);
 }
 
 /* O caminhão sai UMA vez, mas a placa pode ter mais de uma carga. Carga que
@@ -20147,6 +20487,7 @@ async function portariaSaiuSoDevolucaoUI(cargaId){
   await SuincoSharePoint.sincronizarAgora();
   notifyGravacao(`Placa ${c.placa} saiu — só devolução, sem carregamento.`);
   tocarBeepConfirmacao();
+  await despedirCargas([cargaId]);
   renderAll();
 }
 
@@ -21444,12 +21785,18 @@ async function addTarifaFreteUI(){
   if(bruto === '' || !Number.isFinite(Number(bruto)) || Number(bruto) < 0){
     notify('Informe o valor por km (ex.: 7,75).', 'warn'); return;
   }
-  const r = await SuincoSharePoint.gravarTarifaFrete({
-    tipoVeiculo: tipo,
-    valorPorKm: Number(bruto),
-    vigenteDesde: document.getElementById('frete-tarifa-vigencia').value || undefined,
-    operador: (DB.operador && DB.operador.nome) || '',
-  });
+  /* O BOTÃO CONTA O QUE ESTÁ FAZENDO. Gravar tarifa é ida ao servidor: sem
+     isso o botão fica mudo entre o clique e a resposta, e quem não vê nada
+     acontecer clica de novo. "✓ Salvo" só aparece depois que a resposta
+     chegou — quem decide é a transação, não a tela. */
+  const r = await contarNoBotao(_movBotaoDaAcao('addTarifaFreteUI'),
+    { fazendo: 'Salvando…', feito: '✓ Salvo' },
+    () => SuincoSharePoint.gravarTarifaFrete({
+      tipoVeiculo: tipo,
+      valorPorKm: Number(bruto),
+      vigenteDesde: document.getElementById('frete-tarifa-vigencia').value || undefined,
+      operador: (DB.operador && DB.operador.nome) || '',
+    }));
   if(r && (r.recusado || r.enfileirado)){
     notify(`A tarifa de ${tipo} NÃO foi salva: ${r.erro || 'sem conexão com o servidor'}. `
       + 'Tabela de preço não fica em fila — tente de novo quando a conexão voltar.', 'erro', 9000);
@@ -21465,9 +21812,11 @@ async function addDestinoFreteUI(){
   const km = kmValidoLocal(document.getElementById('frete-destino-km').value);
   if(!destino){ notify('Informe o destino.', 'warn'); return; }
   if(km === null){ notify('Informe o KM do destino (maior que zero).', 'warn'); return; }
-  const r = await SuincoSharePoint.gravarDestinoFrete({
-    destino, km, operador: (DB.operador && DB.operador.nome) || '',
-  });
+  const r = await contarNoBotao(_movBotaoDaAcao('addDestinoFreteUI'),
+    { fazendo: 'Salvando…', feito: '✓ Salvo' },
+    () => SuincoSharePoint.gravarDestinoFrete({
+      destino, km, operador: (DB.operador && DB.operador.nome) || '',
+    }));
   if(r && (r.recusado || r.enfileirado)){
     notify(`O destino ${destino} NÃO foi salvo: ${r.erro || 'sem conexão com o servidor'}.`, 'erro', 9000);
     return;
@@ -21656,9 +22005,14 @@ async function addRotaUI(){
      Olhar o estado da conexão não bastava: no instante do clique ele ainda
      diz "online", porque só vira offline quando alguma requisição falha. O
      que decide é a resposta desta gravação, não o estado de antes dela. */
-  const r = await (rotaCriada && rotaCriada._promessa
-    ? rotaCriada._promessa.catch(() => ({ recusado: true }))
-    : Promise.resolve(null));
+  /* O botão conta a espera que já existia: este `await` é justamente o que
+     o comentário acima descreve — o painel para e escuta o servidor. Antes
+     ele parava calado. */
+  const r = await contarNoBotao(_movBotaoDaAcao('addRotaUI'),
+    { fazendo: 'Salvando…', feito: '✓ Salvo' },
+    () => (rotaCriada && rotaCriada._promessa
+      ? rotaCriada._promessa.catch(() => ({ recusado: true }))
+      : Promise.resolve(null)));
   if(r && r.recusado){
     // receberRecusaDeRota já falou — e com a frase certa para cada caso.
     renderAll();
@@ -26291,8 +26645,14 @@ function acoesMontagemHtml(m, trancada){
     ? `<button class="btn btn-primary btn-sm" onclick="efetivarMontagemUI('${id}')"
          title="Cria a carga e manda para a Torre de Controle.">➕ Criar carga</button>`
     : '';
+  /* Cancelar a linha da Montagem também é destrutivo: a rota deixa de sair
+     hoje. Mesmo gesto de segurar do botão de cancelar carga — uma regra de
+     confirmação só, não duas. O motivo continua sendo pedido depois. */
   return `${criar}
-    <button class="btn btn-sec btn-sm" onclick="cancelarMontagemUI('${id}')">Cancelar</button>`;
+    <button class="btn btn-sec btn-sm" data-segurar="1"
+      data-segurar-dica="Segure 1,5s para marcar esta rota como não programada hoje."
+      title="SEGURE 1,5s para cancelar — depois pede o motivo."
+      onclick="cancelarMontagemUI('${id}')">Cancelar</button>`;
 }
 
 /* Puxa do modelo as rotas deste dia da semana que ainda não têm carga.
@@ -27088,6 +27448,304 @@ document.addEventListener('keydown', (ev) => {
   if (window.innerWidth > 820) return;
   ev.preventDefault(); t.click();
 });
+
+/* ═══════════════════ MOVIMENTO (agente de interação) ═══════════════════
+
+   Tudo que se MEXE no painel mora aqui, num lugar só, e a folha de estilo
+   correspondente é o bloco de mesmo nome no fim de `styles.css`.
+
+   Três regras que valem para o bloco inteiro, e que não são gosto:
+
+   1. TETO DE 300 ms. A Torre despacha ~31 cargas por dia; uma saída de
+      700 ms multiplicada por 31 é meio minuto de gente olhando o painel
+      terminar de se mexer. Animação de interface acima de 300 ms não
+      informa, atrasa.
+   2. O QUE SE VÊ CEM VEZES POR DIA NÃO SE ANIMA. Troca de aba, a sincronia
+      redesenhando a Torre, o pátio recarregando: nada disso entra aqui. Se
+      cada sincronia animasse a tabela, a tela tremeria sozinha. Por isso a
+      entrada de linha só dispara para um `data-carga` que NÃO existia no
+      desenho anterior daquela tabela — redesenhar as mesmas 30 linhas não
+      é novidade nenhuma.
+   3. O PAPEL NÃO SE MEXE, E NÃO PODE NASCER INVISÍVEL. O servidor gera os
+      PDFs com ESTE mesmo CSS (`backend/src/servicos/pdf.js` manda
+      `{html, css}` para o Chromium). Toda regra daqui é desligada em
+      `@media print`, e nenhum estado de REPOUSO é invisível: quem espera
+      animação espera já visível, e a animação só tira e devolve. A
+      ocorrência #72 é o lembrete do preço de errar isso — uma regra de
+      papel escrita no nível errado fez o relatório sair com página em
+      branco.
+
+   Também respeita `prefers-reduced-motion: reduce`: o CSS desliga o
+   movimento e o JavaScript encurta as esperas para zero, para que nenhuma
+   ação fique presa atrás de uma animação que não vai acontecer. */
+
+function movReduzida(){
+  try{
+    return !!(window.matchMedia
+      && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  }catch(e){ return false; }
+}
+
+function movEsperar(ms){
+  return new Promise(r => setTimeout(r, movReduzida() ? 0 : ms));
+}
+
+/* ---------- 1. "SEGUIU VIAGEM": O CAMINHÃO SAI DO PÁTIO ----------
+
+   A linha não pode sumir seca. Some seca e a pessoa fica sem saber se
+   clicou no caminhão certo — e quando são duas cargas na mesma placa, sem
+   saber qual das duas saiu.
+
+   Duas metades dentro do teto de 300 ms:
+
+     0–150 ms   o conteúdo da linha ANDA para a direita e apaga
+                (só `transform` e `opacity`: roda na GPU, não repagina)
+     150–240 ms a linha fecha o próprio espaço e as de baixo sobem
+
+   240 ms e não 280: o teto de 300 ms é do que a PESSOA vê, não do que o
+   CSS declara. Entre o clique e a linha sumir ainda cabem os atrasos do
+   relógio do navegador e o redesenho da tabela — medido, ~60 ms. Gastar
+   os 300 inteiros em animação estoura o teto no relógio de quem olha.
+
+   A segunda metade mexe em altura, que é a única propriedade que fecha
+   espaço de verdade numa tabela — `transform` não devolve espaço nenhum ao
+   layout. A regra de "só transform e opacity" existe para não repaginar
+   uma LISTA inteira a cada quadro; aqui é UMA linha, por 110 ms, ~31 vezes
+   por dia. A conta fecha, e está escrita para quem vier depois não desfazer
+   achando que foi descuido.
+
+   A altura é medida antes e escrita em pixel porque `height:auto` não
+   transiciona — de `auto` para `0` o navegador pula direto, sem animar. */
+const MOV_SAIDA_ANDA = 150;
+const MOV_SAIDA_FECHA = 90;
+
+function _movSeletorCarga(id){
+  return `tr[data-carga="${(window.CSS && CSS.escape) ? CSS.escape(id) : id}"]`;
+}
+
+function _movLinhasDaCarga(id){
+  if(!id) return [];
+  try{ return Array.from(document.querySelectorAll(_movSeletorCarga(id))); }
+  catch(e){ return []; }
+}
+
+/* Anima a saída das cargas que acabaram de seguir viagem e SÓ ENTÃO deixa
+   a tela ser redesenhada. Devolve uma promessa: quem chama espera por ela
+   antes do `renderAll()`, senão o redesenho apaga a linha no primeiro
+   quadro e não sobra nada para ver.
+
+   Não é fonte de verdade de nada: se a linha não estiver na tela (outra
+   aba, filtro escondendo), resolve na hora e o painel segue igual. */
+async function despedirCargas(ids){
+  const linhas = (Array.isArray(ids) ? ids : [ids])
+    .reduce((acc, id) => acc.concat(_movLinhasDaCarga(id)), []);
+  if(!linhas.length || movReduzida()) return;
+
+  linhas.forEach((tr) => {
+    tr.style.height = tr.offsetHeight + 'px';   // congela a altura de hoje
+    tr.classList.add('linha-seguiu-viagem');
+  });
+  await movEsperar(MOV_SAIDA_ANDA);
+  linhas.forEach((tr) => {
+    tr.classList.add('linha-seguiu-viagem-fecha');
+    tr.style.height = '0px';
+  });
+  await movEsperar(MOV_SAIDA_FECHA);
+  /* Não removo a linha: quem redesenha é o `renderAll()` de quem chamou, e
+     é ele quem manda. Tirar daqui seria a tela decidindo sozinha o que só
+     o servidor confirma. */
+}
+
+/* ---------- 2. LINHA NOVA ENTRA DESLIZANDO DE CIMA ----------
+
+   `translateY(-10px)` + opacidade, 260 ms. NUNCA `scale(0)`: nada no mundo
+   real aparece do nada, e uma carga que surge de um ponto invisível parece
+   defeito de tela, não carga nova.
+
+   O QUE IMPEDE ISSO DE VIRAR TREMEDEIRA: a primeira pintura de cada tabela
+   só ANOTA os ids; não anima nada. Abrir a aba com 30 cargas não faz 30
+   linhas deslizarem. Depois disso, anima só o `data-carga` que apareceu
+   agora — a sincronia redesenha as mesmas linhas e não dispara nada,
+   porque redesenhar não é novidade. */
+const _movVistas = new Map();       // id do tbody -> Set de data-carga já visto
+
+function movLinhasNovas(tbody){
+  if(!tbody || !tbody.id) return;
+  const agora = new Set(
+    Array.from(tbody.querySelectorAll('tr[data-carga]'))
+      .map(tr => tr.getAttribute('data-carga')));
+  const antes = _movVistas.get(tbody.id);
+  _movVistas.set(tbody.id, agora);
+  if(!antes || !antes.size || movReduzida()) return;   // primeira pintura: só anota
+  agora.forEach((id) => {
+    if(antes.has(id)) return;
+    const tr = tbody.querySelector(_movSeletorCarga(id));
+    if(tr) tr.classList.add('linha-nova');
+  });
+}
+
+/* ---------- 3. SEGURAR PARA CANCELAR ----------
+
+   "Tem certeza?" é a pergunta que todo mundo aprende a responder sem ler.
+   Segurar não dá para responder no automático: o dedo fica lá 1,5 s e a
+   barra conta na frente dele. Solta antes, volta em 200 ms e NADA acontece
+   — que é a regra da casa pelo lado certo: a ação perigosa PERGUNTA, em vez
+   de um botão desabilitado que só nega.
+
+   COMO ISSO NÃO TRANCA NINGUÉM FORA (e é a parte que importa num painel em
+   produção): quem chega por TECLADO ou por chamada de programa continua
+   passando direto pelo caminho de sempre. Clique de dedo/mouse tem
+   `detail >= 1`; Enter numa tecla e `elemento.click()` têm `detail 0` — a
+   mesma distinção que o guarda do toque duplo já usa neste arquivo. Então
+   o gesto novo vale para a mão, e o teclado nunca fica sem saída.
+
+   Toque curto não fica mudo: explica o que fazer. Botão que só nega é o
+   defeito da ocorrência #13. */
+const MOV_SEGURAR_MS = 1500;
+let _movSegurando = null;           // { botao, relogio } enquanto o dedo está lá
+let _movGestoAte = 0;               // até quando o gesto recém-completado vale
+
+/* O GESTO É A CONFIRMAÇÃO — e é só isso que ele substitui.
+
+   Quem segurou 1,5 s já respondeu "tem certeza?" com o dedo; repetir a
+   pergunta numa janela do navegador seria cobrar duas vezes a mesma coisa,
+   e é assim que se ensina alguém a clicar em OK sem ler.
+
+   Quem chegou por teclado NÃO segurou nada, e para esse a janela continua
+   existindo. Uma pergunta, nunca zero: a confirmação não some, muda de
+   forma conforme a porta por onde a pessoa entrou.
+
+   O que NÃO é confirmação continua acontecendo nos dois caminhos: o motivo
+   do cancelamento é registro (alguém vai perguntar por ele daqui a três
+   meses) e a placa digitada da carga que já seguiu viagem é prova. */
+function movConfirmadoPorGesto(){
+  return Date.now() < _movGestoAte;
+}
+
+function _movLimparSegurar(){
+  if(!_movSegurando) return;
+  clearTimeout(_movSegurando.relogio);
+  _movSegurando.botao.classList.remove('segurando');
+  _movSegurando = null;
+}
+
+function _movBotaoDeSegurar(alvo){
+  return alvo && alvo.closest ? alvo.closest('[data-segurar]') : null;
+}
+
+document.addEventListener('pointerdown', (ev) => {
+  const botao = _movBotaoDeSegurar(ev.target);
+  if(!botao || botao.disabled) return;
+  _movLimparSegurar();
+  if(movReduzida()) return;   // sem barra para contar, o clique resolve
+  botao.classList.add('segurando');
+  const relogio = setTimeout(() => {
+    _movLimparSegurar();
+    botao.classList.add('segurado');
+    setTimeout(() => botao.classList.remove('segurado'), 300);
+    /* `click()` de programa tem `detail 0` e passa pelo porteiro abaixo —
+       é o mesmo caminho do teclado, então a ação executada aqui é
+       exatamente a do `onclick` da marcação, sem cópia paralela da regra. */
+    _movGestoAte = Date.now() + 2000;
+    try{ botao.click(); }catch(e){}
+  }, MOV_SEGURAR_MS);
+  _movSegurando = { botao, relogio };
+}, true);
+
+['pointerup', 'pointercancel', 'pointerleave'].forEach((evento) => {
+  document.addEventListener(evento, (ev) => {
+    if(!_movSegurando) return;
+    if(_movBotaoDeSegurar(ev.target) !== _movSegurando.botao) return;
+    _movLimparSegurar();
+  }, true);
+});
+
+/* O porteiro: clique de dedo em botão de segurar não age sozinho. */
+document.addEventListener('click', (ev) => {
+  const botao = _movBotaoDeSegurar(ev.target);
+  if(!botao) return;
+  if(!ev.detail) return;              // teclado e chamada de programa passam
+  if(movReduzida()) return;           // sem movimento, sem gesto novo
+  ev.preventDefault();
+  ev.stopImmediatePropagation();
+  notify(botao.getAttribute('data-segurar-dica')
+    || 'Segure o botão por 1,5 segundo para confirmar.', 'warn', 4000);
+}, true);
+
+/* ---------- 4. BOTÃO QUE CONTA O QUE ESTÁ FAZENDO ----------
+
+   Salvar → Salvando… → ✓ Salvo. O texto troca EMBAÇADO (`blur(2.6px)`)
+   para os dois estados não parecerem dois objetos: sem o borrão o olho vê
+   duas palavras se sobrepondo; com ele, vê uma virando a outra.
+
+   200 ms de ponta a ponta — 100 ms para embaçar, a troca no pico, 100 ms
+   para voltar. Não 200 para cada metade: o teto de interface é 300.
+
+   Quem chama passa a TAREFA, não o resultado. O botão só conta o que
+   realmente aconteceu: se a promessa falhar, ele volta ao texto original
+   sem nunca dizer "salvo". Esta é a regra da casa — a tela adianta, quem
+   decide é a transação. */
+const MOV_BORRAO_MS = 100;
+
+function _movBotaoDaAcao(nomeDaFuncao){
+  try{ return document.querySelector(`button[onclick*="${nomeDaFuncao}("]`); }
+  catch(e){ return null; }
+}
+
+/* Quem pediu a troca mais recente é quem manda. Um salvamento que responde
+   em 50 ms pede "Salvando…" e "✓ Salvo" quase juntos; sem esta senha, as
+   duas trocas se atropelam e o botão pode acabar parado no texto errado —
+   que é pior do que não animar. */
+const _movSenhaDoTexto = new WeakMap();
+
+async function _movTrocarTexto(botao, texto){
+  if(!botao) return;
+  if(movReduzida()){ botao.textContent = texto; return; }
+  const senha = (_movSenhaDoTexto.get(botao) || 0) + 1;
+  _movSenhaDoTexto.set(botao, senha);
+  botao.classList.add('mov-conta');   // declara a transição do borrão
+  botao.classList.add('mov-borrado');
+  await movEsperar(MOV_BORRAO_MS);
+  if(_movSenhaDoTexto.get(botao) !== senha) return;   // já pediram outra
+  botao.textContent = texto;
+  botao.classList.remove('mov-borrado');
+  await movEsperar(MOV_BORRAO_MS);
+}
+
+/* `tarefa` é uma função que devolve promessa. O botão fica `aria-busy`
+   enquanto ela corre — leitor de tela precisa saber que o painel está
+   ocupado tanto quanto o olho precisa ver "Salvando…". */
+/* O BOTÃO CONTA AO LADO DO TRABALHO, NUNCA NA FRENTE DELE.
+
+   Nenhuma troca de texto é esperada por quem chamou: a promessa que esta
+   função devolve resolve no instante em que a TAREFA resolve, e as trocas
+   acontecem por fora. Sem isso, os 400 ms de contação entrariam no caminho
+   da gravação e atrasariam o `renderAll()` que vem depois — o cadastro
+   inteiro ficaria quatro décimos mais lento por causa de um enfeite.
+
+   O teste `test_cadastrar_rota` foi quem mostrou isso, reprovando em "a
+   rota nova aparece na tabela": a rota estava certa, a tabela é que ainda
+   não tinha sido redesenhada. Vermelho de regressão de verdade, e a
+   correção é de projeto — animação não entra no caminho crítico. */
+async function contarNoBotao(botao, textos, tarefa){
+  if(!botao) return tarefa();
+  const original = botao.textContent;
+  botao.setAttribute('aria-busy', 'true');
+  _movTrocarTexto(botao, (textos && textos.fazendo) || 'Salvando…');
+  try{
+    const resultado = await tarefa();
+    _movTrocarTexto(botao, (textos && textos.feito) || '✓ Salvo');
+    setTimeout(() => {
+      botao.removeAttribute('aria-busy');
+      _movTrocarTexto(botao, original);
+    }, 900);
+    return resultado;
+  }catch(e){
+    botao.removeAttribute('aria-busy');
+    _movTrocarTexto(botao, original);
+    throw e;
+  }
+}
 
 </script>
 <script>
@@ -28124,6 +28782,24 @@ function previewPesoDevolvidoUI(id) {
   alvo.innerHTML = contaPesoDevHtml(d, campo.value);
 }
 
+/* A ETAPA QUE SE CARIMBA.
+
+   O visto se DESENHA (`stroke-dashoffset`, 340 ms) em vez de aparecer
+   pronto. Carimbo é gesto: no papel a mão passa e a marca fica. Aparecer
+   pronto faz parecer que sempre esteve lá — e o que a pessoa precisa
+   saber é justamente que ACABOU de acontecer, que foi ela quem fez.
+
+   SÓ NO QUE É NOVO, e isso é a regra e não detalhe: a lista de devoluções
+   é redesenhada a cada leitura do servidor e a cada expansão de linha. Se
+   todos os vistos se redesenhassem junto, a etapa carimbada ontem
+   pareceria ter sido carimbada agora — e seis vistos riscando a tela a
+   cada sincronia é tremedeira, não informação. `_devCarimbosVistos` guarda
+   o que esta aba já mostrou; só o que não estava lá antes se desenha.
+
+   O REPOUSO É VISÍVEL: o traço fica com `stroke-dashoffset:0`. Nada aqui
+   nasce invisível esperando animação — é o que a ocorrência #72 cobra. */
+const _devCarimbosVistos = new Set();
+
 function carimbosDev(d) {
   // Sobra encerra na Expedição — mostrar Controles/Notas como "pendente"
   // para sempre só confundiria.
@@ -28132,14 +28808,29 @@ function carimbosDev(d) {
   return `<div class="dev-carimbos">
     ${etapasVisiveis.map((chave) => [chave, DEV_ETAPA_ROTULO[chave]]).map(([chave, rotulo]) => {
       const c = d.carimbos[chave];
-      return `<div class="dev-carimbo${c ? ' dev-carimbo-ok' : ''}">
-          <span class="dev-carimbo-rot">${rotulo}</span>
+      let novo = false;
+      if (c) {
+        const marca = `${d.id}¦${chave}`;
+        novo = !_devCarimbosVistos.has(marca);
+        _devCarimbosVistos.add(marca);
+      }
+      return `<div class="dev-carimbo${c ? ' dev-carimbo-ok' : ''}${novo ? ' dev-carimbo-novo' : ''}">
+          <span class="dev-carimbo-rot">${c ? vistoDevHtml() : ''}${rotulo}</span>
           ${c ? `<span class="dev-carimbo-quem">${esc(c.por)}</span>
                  <span class="dev-carimbo-quando">${esc(fmtDataHora(c.em))}</span>`
               : '<span class="dev-carimbo-vazio">— pendente —</span>'}
         </div>`;
     }).join('')}
   </div>`;
+}
+
+/* O traço do visto. `pathLength="1"` deixa o dash em fração do caminho, e
+   não em pixels — muda o tamanho do desenho sem recalcular número nenhum.
+   `aria-hidden` porque o rótulo ao lado já diz a etapa: leitor de tela não
+   precisa ouvir "imagem". */
+function vistoDevHtml() {
+  return '<svg class="dev-visto" viewBox="0 0 14 14" aria-hidden="true" focusable="false">'
+    + '<path pathLength="1" d="M2.5 7.6 L5.6 10.7 L11.5 3.8"/></svg>';
 }
 
 /* Qual passo esta devolução tem pela frente. De "Conferida no
