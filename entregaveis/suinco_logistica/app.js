@@ -1163,6 +1163,71 @@ function receberExclusaoRemota(aviso){
   tocarAlertaAlteracao();
 }
 
+/* O SEGUNDO TOQUE NÃO PASSA (16/09/2026).
+
+   MEDIDO: o painel inteiro tem TRÊS botões que se desabilitam enquanto a
+   ação corre, e os três são do modal de avisos. Os da operação — "Seguiu
+   Viagem", "Criar carga", "Cancelar", "Chegou", "Saiu" — aceitam o segundo
+   toque de braços abertos.
+
+   POR QUE ISSO É DEFEITO E NÃO DETALHE. A própria folha de estilo já
+   registrava o comportamento, em 2026: "no celular não existe hover, e sem
+   resposta visual o operador aperta duas vezes achando que não pegou". A
+   resposta ao toque entrou hoje e resolve a percepção; ela NÃO resolve o
+   que acontece quando o segundo toque chega ao servidor. Duas chamadas de
+   "Seguiu Viagem" na mesma carga, dois checklists, duas cargas criadas.
+
+   POR QUE UM GUARDA ÚNICO, e não `disabled` em cada chamador. São mais de
+   cento e cinquenta botões com `onclick` na marcação, e a regra da casa é
+   clara: a mesma decisão escrita em dois lugares diverge. Escrever "trave o
+   botão" cento e cinquenta vezes é garantir que a próxima pessoa esqueça
+   numa. Aqui a decisão mora num lugar só.
+
+   COMO. Um ouvinte na FASE DE CAPTURA, antes de qualquer `onclick`: se o
+   MESMO botão for tocado de novo dentro da janela, o segundo toque morre
+   ali. Captura, e não borbulha, porque na borbulha o `onclick` do elemento
+   já rodou.
+
+   O QUE NÃO ENTRA, de propósito:
+
+     · campo de digitar, seletor, aba e alça de arrastar — nada disso é
+       ação de gravar, e travar ali atrapalharia quem usa rápido;
+     · botão de navegação e de filtro, que a pessoa PODE querer apertar em
+       sequência (marcados com `data-repetivel`);
+     · o teclado. Quem navega por teclado aperta uma vez.
+
+   400ms: acima do intervalo de toque acidental (o duplo-clique do sistema
+   é ~500ms, mas aqui o segundo toque é a mesma intenção repetida) e abaixo
+   de qualquer espera que a pessoa faria de propósito. */
+const _ULTIMO_TOQUE = new WeakMap();
+const JANELA_TOQUE_DUPLO = 400;
+
+document.addEventListener('click', (ev) => {
+  const alvo = ev.target && ev.target.closest
+    ? ev.target.closest('button, .btn')
+    : null;
+  if (!alvo) return;
+  /* Quem PODE ser apertado em sequência diz isso na marcação. */
+  if (alvo.hasAttribute('data-repetivel')) return;
+  if (alvo.type === 'submit' && alvo.form) return;
+  /* Toque de teclado tem `detail` 0 — quem navega por teclado aperta uma vez. */
+  if (!ev.detail) return;
+
+  const agora = Date.now();
+  const antes = _ULTIMO_TOQUE.get(alvo) || 0;
+  if (agora - antes < JANELA_TOQUE_DUPLO) {
+    ev.preventDefault();
+    ev.stopImmediatePropagation();
+    /* O botão pisca para a pessoa saber que o toque foi ouvido e recusado —
+       recusa silenciosa é o que fez ela apertar de novo em primeiro lugar. */
+    alvo.classList.remove('toque-recusado');
+    void alvo.offsetWidth;
+    alvo.classList.add('toque-recusado');
+    return;
+  }
+  _ULTIMO_TOQUE.set(alvo, agora);
+}, true);
+
 /* ---------- login / operador (placeholder até SSO) ---------- */
 function detectarTurnoPorHora(){
   const h = new Date().getHours();
