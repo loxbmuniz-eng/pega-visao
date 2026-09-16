@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Programação de Embarque — Suinco</title>
-<link rel="icon" href="assets/logo_suinco.png">
+<link rel="icon" href="assets/logo_suinco_icone.png">
 <link rel="stylesheet" href="styles.css">
 <!-- PWA: instalável no Android e no iPhone, com ícone na tela inicial.
      Os dois arquivos são opcionais por construção — abrindo o painel por
@@ -16,7 +16,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Embarque">
-<link rel="apple-touch-icon" href="assets/logo_suinco.png">
+<link rel="apple-touch-icon" href="assets/logo_suinco_icone.png">
 </head>
 <body class="pre-login">
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
@@ -60,7 +60,7 @@
        visível, sem gaveta nenhuma: o problema que a gaveta resolve
        (rolagem lateral difícil de usar com o dedo) não existe lá. -->
   <button id="btn-menu" onclick="alternarMenuMobile()" title="Abrir menu" aria-label="Abrir menu de navegação" aria-expanded="false">☰</button>
-  <div id="logo-chip"><img src="assets/logo_suinco.png" alt="Suinco"></div>
+  <div id="logo-chip"><span class="marca-suinco" role="img" aria-label="Suinco"></span></div>
   <div id="header-title">
     <strong>PROGRAMAÇÃO DE EMBARQUE</strong>
     <span>Programação · Portaria · Expedição · Faturamento</span>
@@ -1619,7 +1619,7 @@
        inteiro vazava atrás do formulário, expondo dados de operação a quem
        ainda não se identificou, num terminal que fica ligado o dia todo). -->
   <div id="login-marca">
-    <img src="assets/logo_suinco.png" alt="Suinco">
+    <span class="marca-suinco" role="img" aria-label="Suinco"></span>
     <strong>PROGRAMAÇÃO DE EMBARQUE</strong>
     <span>Suinco — Cooperativa Agroindustrial</span>
   </div>

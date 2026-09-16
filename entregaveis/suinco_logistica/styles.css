@@ -397,7 +397,30 @@ body::before{
   background:var(--logo-chip-bg);border-radius:8px;padding:4px 8px;flex-shrink:0;
   display:flex;align-items:center;height:52px;
 }
-#logo-chip img{height:44px;width:auto;display:block}
+/* A LOGO MORA NUMA VARIÁVEL, UMA VEZ SÓ (16/09/2026).
+
+   Ela era referenciada em cinco lugares (favicon, apple-touch-icon, chip do
+   cabeçalho, tela de entrada e cabeçalho do PDF) e o build troca o CAMINHO
+   pela imagem inteira em base64 — então o painel publicado carregava CINCO
+   cópias do mesmo arquivo de 92.909 bytes: 464.545 bytes, 28% do index.html.
+   O compressor não ajuda: a janela dele é de 32 KB e a logo tem 124 KB em
+   base64, então cada cópia viaja inteira pela rede.
+
+   Como variável de CSS, o caminho aparece uma vez e o build faz uma cópia
+   só. Os três usos visuais viram caixa com imagem de fundo em vez de <img>,
+   e mantêm `role="img"` + `aria-label` para o leitor de tela. O PDF também
+   funciona: `coletarCssDoPainel()` envia as folhas junto do documento.
+
+   A imagem em si também encolheu: 449x480 viravam 44 px de altura na tela.
+   `logo_suinco_web.png` tem 224x240 e paleta de 256 cores — 16.500 bytes,
+   conferido lado a lado com o original no tamanho de exibição. */
+:root{ --marca-suinco:url(assets/logo_suinco_web.png); }
+.marca-suinco{
+  display:block;
+  background:var(--marca-suinco) center/contain no-repeat;
+  aspect-ratio:224/240;
+}
+#logo-chip .marca-suinco{height:44px;width:auto;display:block}
 
 /* Logo na tela de login — pedido do usuário. Mesmo chip de fundo branco
    do cabeçalho (a logo tem cor própria fixa, não muda com o tema), só
@@ -2971,7 +2994,7 @@ input,select,textarea{border-radius:5px}
   #main{ margin-top:calc(var(--header-h) + 14px) }
   #header{ padding:0 10px; gap:10px }
   #logo-chip{ height:40px; padding:3px 6px }
-  #logo-chip img{ height:32px }
+  #logo-chip .marca-suinco{ height:32px }
   #header-title span{ display:none }          /* subtítulo é decoração aqui */
   #header-title strong{ font-size:13px }
   #date-display{ display:none }
@@ -3321,6 +3344,7 @@ input,select,textarea{border-radius:5px}
 }
 .doc-logo{
   height:56px; width:auto; flex:none;
+  aspect-ratio:224/240;
   background:#fff; border-radius:6px; padding:4px 8px;
 }
 .doc-identidade{ min-width:0; flex:1 }
@@ -3683,7 +3707,7 @@ body.pre-login #login-marca{
   text-align:center;
   animation: login-desce .5s ease both;
 }
-#login-marca img{
+#login-marca .marca-suinco{
   width:92px; height:auto;
   border-radius:14px;
   box-shadow: 0 8px 28px rgba(0,0,0,.45);
