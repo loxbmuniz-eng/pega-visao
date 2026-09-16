@@ -3957,7 +3957,8 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
 .dev-diverg-form input{ max-width:220px; }
 
 /* Relatório de Devoluções (impresso pelo servidor — cores de papel). */
-.dev-doc-checklist{ margin-bottom:14px; page-break-inside:avoid; }
+/* Mesmo defeito, mesmo remédio — ver o comentário em `.dev-doc-bloco`. */
+.dev-doc-checklist{ margin-bottom:14px; }
 .dev-doc-tabela{ width:100%; border-collapse:collapse; font-size:8.4pt; }
 .dev-doc-tabela th, .dev-doc-tabela td{
   border:1px solid #999; padding:2px 4px; text-align:left; color:#111;
@@ -4050,7 +4051,38 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
 
 /* Blocos por checklist na relação do operador, e os campos por posto no
    cabeçalho da devolução (19/08/2026). */
-.dev-doc-bloco{ margin-bottom:10px; break-inside:avoid; }
+/* A PROTEÇÃO DE QUEBRA É DA LINHA, NÃO DA TABELA (16/09/2026).
+
+   O dono, com duas fotos do papel na mão: "os relatórios de devoluções
+   estão saindo em branco, com a primeira página branca, e depois saem as
+   devoluções na página seguinte sem cabeçalho... preciso que siga o mesmo
+   padrão do relatório operacional, com cabeçalho em todas".
+
+   A causa era um `break-inside:avoid` envolvendo a TABELA INTEIRA. Ele
+   diz ao navegador "não parta isto". Com 12 linhas o bloco tem 1.274 px e
+   a folha A4 deitada tem 755 px úteis: não cabe, e não pode ser partido.
+   Sobra uma saída só — empurrar o bloco inteiro para a página seguinte, e
+   a primeira fica com o cabeçalho e nada embaixo. Medido: 3 páginas com a
+   regra, 2 sem ela, mesmo conteúdo.
+
+   O cabeçalho da tabela não repetia pelo MESMO motivo. A regra certa já
+   existe (`thead{display:table-header-group}`), mas ela só vale quando a
+   tabela pode ser partida — bloco indivisível, cabeçalho preso dentro.
+
+   O Relatório Operacional nunca teve isso: a tabela dele não está dentro
+   de um bloco com `avoid`. É o padrão que o dono pediu, e é este.
+
+   A proteção continua existindo, no nível certo: `.print-page tr` tem
+   `break-inside:avoid`, e é ela que garante que NENHUM REGISTRO saia
+   cortado ao meio. O que muda é a tabela poder continuar na página
+   seguinte, com o cabeçalho repetido — em vez de pular a página inteira.
+
+   `break-after:avoid` no título prende o título à sua tabela: título
+   sozinho no pé da página é a outra cara do mesmo defeito. */
+.dev-doc-bloco{ margin-bottom:10px; }
+.dev-doc-bloco-tit, .dev-doc-checklist > h3, .dev-doc-checklist > .dev-doc-bloco-tit{
+  break-after:avoid; page-break-after:avoid;
+}
 .dev-doc-bloco-tit{ font-weight:800; font-size:.82rem; margin:6px 0 3px; }
 .dev-cab-posto{ margin-top:10px; padding-top:8px; border-top:1px dashed var(--navy-lighter); }
 .dev-cab-posto-tit{ font-size:.78rem; font-weight:800; color:var(--text-dim);
