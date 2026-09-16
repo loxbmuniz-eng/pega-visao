@@ -54,11 +54,33 @@ MEDIR = r"""(alvoToque) => {
   };
   const rgb = (s) => { const m = String(s).match(/\d+(\.\d+)?/g); return m ? m.slice(0,3).map(Number) : null; };
   const alfa = (s) => { const m = String(s).match(/[\d.]+/g); return m && m.length > 3 ? parseFloat(m[3]) : 1; };
-  // Fundo real: sobe a árvore até achar quem pinta de verdade.
+  /* FUNDO REAL — e DEGRADÊ CONTA (16/09/2026).
+
+     A primeira versão só olhava `background-color`. Os botões de ação da
+     casa são degradê: `background-color` fica transparente e a cor vem de
+     `background-image: linear-gradient(...)`. A conta subia até o pai e
+     dizia que o botão "Chegou", branco sobre verde, tinha 1.57:1 — número
+     errado num botão perfeitamente legível.
+
+     Guarda que grita lobo é pior que guarda nenhuma: na terceira vez
+     ninguém olha mais o vermelho. Aqui o degradê entra, e entra pelo
+     PONTO MAIS CLARO dele — que é o pior caso para texto claro por cima. */
+  const doDegrade = (img) => {
+    if (!img || img === 'none' || !img.includes('gradient')) return null;
+    const cores = img.match(/rgba?\([^)]+\)/g);
+    if (!cores || !cores.length) return null;
+    const pontos = cores.map(rgb).filter(Boolean).filter(c => alfa(cores[0]) > .5);
+    if (!pontos.length) return null;
+    // O mais claro: é contra ele que texto claro sofre mais.
+    return pontos.reduce((a, b) => lum(a) >= lum(b) ? a : b);
+  };
   const fundoDe = (el) => {
     let n = el;
     while (n && n !== document.documentElement) {
-      const c = getComputedStyle(n).backgroundColor;
+      const cs = getComputedStyle(n);
+      const g = doDegrade(cs.backgroundImage);
+      if (g) return g;
+      const c = cs.backgroundColor;
       if (c && alfa(c) > .85 && rgb(c)) return rgb(c);
       n = n.parentElement;
     }
@@ -89,14 +111,36 @@ MEDIR = r"""(alvoToque) => {
       px, sel: el.tagName.toLowerCase() + (el.className ? '.' + String(el.className).split(' ')[0] : '')});
   });
 
-  // 3 — alvo de toque
+  /* 3 — ALVO DE TOQUE, MEDIDO PELO TOQUE (16/09/2026).
+
+     A primeira versão media o RETÂNGULO do elemento. Isso reprova uma
+     correção que funciona: dá para esticar a área de toque além da caixa
+     visível com um pseudo-elemento, e foi o que se fez nos títulos de
+     cartão — 44 px de alvo sem 26 px a mais de altura numa tela de
+     celular onde espaço é o que falta.
+
+     Medir geometria puniria a solução certa e premiaria a errada. Então
+     aqui a pergunta passa a ser a do operador: SE EU ENCOSTAR O DEDO
+     AQUI, PEGA? Quatro pontos nas bordas da faixa de 44x44 centrada no
+     controle, e `elementFromPoint` diz quem recebe o toque.
+
+     De quebra, isto pega um defeito que a geometria nunca pegaria:
+     controle do tamanho certo mas COBERTO por outra coisa. */
   if (alvoToque) {
+    const pega = (el, x, y) => {
+      const alvo = document.elementFromPoint(x, y);
+      return !!alvo && (alvo === el || el.contains(alvo) || alvo.contains(el));
+    };
     document.querySelectorAll('.tab-page.active button, .tab-page.active a, .tab-page.active [role=button], .tab-page.active input[type=checkbox]').forEach(el => {
       if (!visivel(el)) return;
       const r = el.getBoundingClientRect();
-      if (r.width < 44 || r.height < 44)
+      const cx = r.left + r.width/2, cy = r.top + r.height/2;
+      if (cy - 21 < 0 || cy + 21 > window.innerHeight) return;   // fora da vista: não dá para medir
+      const pontos = [[cx, cy-21], [cx, cy+21], [cx-21, cy], [cx+21, cy]];
+      const erram = pontos.filter(([x,y]) => !pega(el, x, y)).length;
+      if (erram > 0)
         out.toque.push({rot: (el.textContent || el.getAttribute('aria-label') || '?').trim().slice(0,30),
-                        w: Math.round(r.width), h: Math.round(r.height)});
+                        w: Math.round(r.width), h: Math.round(r.height), erram});
     });
   }
 
@@ -117,7 +161,36 @@ MEDIR = r"""(alvoToque) => {
       out.semTabular.push(t.slice(0,14));
   });
 
+  /* 6 — ROLAGEM LATERAL POR DENTRO (16/09/2026).
+
+     O dono: "tem hora que tem rolagem lateral sim e precisa mover a barra
+     pra ver o resto das informações, queria que não tivesse isso em lugar
+     nenhum".
+
+     Ele está certo e a minha conta estava cega: eu comparava só
+     `documentElement.scrollWidth` com a janela, que pega a PÁGINA rolando.
+     Tabela larga dentro de um `overflow-x:auto` rola por dentro, sem a
+     página rolar — e é exatamente isso que ele vê: arrastar uma barra para
+     achar o resto da coluna.
+
+     Aqui todo elemento que rola de lado é reportado, com quanto sobra e o
+     que ele é. */
+  const rolamPorDentro = [];
+  document.querySelectorAll('.tab-page.active *').forEach(el => {
+    if (!visivel(el)) return;
+    const sobra = el.scrollWidth - el.clientWidth;
+    if (sobra <= 2) return;
+    const cs = getComputedStyle(el);
+    if (!/auto|scroll/.test(cs.overflowX)) return;
+    rolamPorDentro.push({
+      sel: el.tagName.toLowerCase() + (el.className ? '.' + String(el.className).split(' ')[0] : ''),
+      visivel: el.clientWidth, precisa: el.scrollWidth, sobra,
+      dica: (el.querySelector('th') || el.querySelector('td') || el).textContent.trim().slice(0, 30),
+    });
+  });
+
   return {
+    rolamPorDentro: rolamPorDentro.slice(0, 6),
     contraste: out.contraste.slice(0, 8), toque: out.toque.slice(0, 8),
     semNome: out.semNome.slice(0, 6), semTabular: [...new Set(out.semTabular)].slice(0, 5),
     rolagem: {doc: document.documentElement.scrollWidth, janela: window.innerWidth},
@@ -137,7 +210,18 @@ async def main():
                 await pg.wait_for_function('typeof irParaTab === "function"')
                 await pg.evaluate("""(t) => {
                   document.body.classList.remove('pre-login');
-                  document.querySelectorAll('.modal,.modal-bg').forEach(e => e.style.display='none');
+                  /* TUDO que cobre a tela sai, não só `.modal`.
+                     A primeira versão escondia `.modal` e `.modal-bg` e
+                     deixava `.modal-overlay` de pé — uma camada invisível
+                     sobre a página inteira. Resultado: TODO controle
+                     reprovava no teste de toque, porque quem recebia o
+                     dedo era o overlay. 112 falhas que eram da bancada, e
+                     não do painel. Guarda que mede errado é pior que
+                     guarda nenhuma. */
+                  document.querySelectorAll('.modal, .modal-bg, .modal-overlay, .sync-overlay,'
+                    + ' [class*="overlay"], [class*="backdrop"],'
+                    + ' .notif-item, #notificacoes, [class*="notif"], [class*="toast"]')
+                    .forEach(e => e.style.display='none');
                   document.documentElement.setAttribute('data-theme', t === 'claro' ? 'claro' : 'escuro');
                 }""", tema)
                 for aba in abas:
@@ -154,8 +238,12 @@ async def main():
                         ck(False, onde, '~nome acessível', f'{n} sem rótulo')
                     for s in r['semTabular']:
                         ck(False, onde, '~tabular-nums', f'número "{s}" em coluna sem alinhamento')
-                    ck(r['rolagem']['doc'] <= r['rolagem']['janela'] + 1, onde, 'rolagem lateral',
+                    ck(r['rolagem']['doc'] <= r['rolagem']['janela'] + 1, onde, 'rolagem lateral da página',
                        f"{r['rolagem']['doc']} px numa janela de {r['rolagem']['janela']}")
+                    for x in r.get('rolamPorDentro', []):
+                        ck(False, onde, 'rolagem lateral por dentro',
+                           f"{x['sel']} mostra {x['visivel']} px e precisa de {x['precisa']} "
+                           f"(faltam {x['sobra']}) — \"{x['dica']}\"")
                 await pg.close()
         await nav.close()
 

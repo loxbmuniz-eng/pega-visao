@@ -721,6 +721,7 @@ body::before{
   background:linear-gradient(180deg, var(--gold), var(--gold-dim));
 }
 .card-title .icon{font-size:18px}
+
 /* O ícone do título herda o dourado do próprio título (currentColor) — o
    emoji colorido saiu de cena, então o vetor precisa se afirmar sozinho:
    um ponto maior que o texto e alinhado ao traço da esquerda. */
@@ -2511,7 +2512,21 @@ code{
    ele competia em peso com os secundários; com o gradiente lê como o botão
    da tela sem precisar ficar maior. */
 .btn-primary{ background:linear-gradient(180deg, #f2c766, var(--gold) 55%, var(--gold-dim)) }
-.btn-success{ background:linear-gradient(180deg, #24905a, #17683c) }
+/* O VERDE ESCURECEU 3 PONTOS (16/09/2026).
+
+   A guarda do padrão mediu branco sobre o topo do degradê: 4.03:1, abaixo
+   dos 4.5 da WCAG AA. Vale para "Chegou" na Portaria e "Finalizar
+   Embarque" na Expedição — os dois botões que mais se aperta no pátio, em
+   tela de celular sob sol.
+
+   Escureci o MÍNIMO que passa com folga, preservando matiz e saturação
+   (H=150° S=60%): L de 35% para 32%. Fica 4.74:1. Lado a lado ninguém
+   distingue; o que muda é o texto parar de raspar no limite.
+
+   O dourado (.btn-primary) NÃO mudou: ele usa texto escuro (#1a1200) e já
+   passa. Conferi antes de mexer — 1.60:1 era a conta com branco, que não
+   é o caso dele. */
+.btn-success{ background:linear-gradient(180deg, #218352, #145B35) }
 .btn-danger{  background:linear-gradient(180deg, #a82a32, var(--wine)) }
 .badge{border-radius:5px;letter-spacing:.4px}
 .status-pill{border-radius:5px}
@@ -4991,6 +5006,27 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
   .card:has(> .card-sub) > .card-title{
     cursor:pointer; -webkit-tap-highlight-color:transparent;
     padding-right:30px; position:relative;
+    /* 44 PX DE TOQUE SEM 26 PX DE ALTURA (16/09/2026).
+
+       O comentário acima já dizia "alvo grande" — e a largura era grande
+       mesmo, 340 px. Faltava a altura: a guarda mediu 18 px, metade do
+       mínimo para dedo com luva no pátio.
+
+       Dar `min-height:44px` resolveria a régua e criaria outro problema:
+       26 px a mais em cada um dos 66 títulos, numa tela de celular onde o
+       dono já reclamou de vazio sobrando.
+
+       Aqui o `padding` aumenta a CAIXA e a margem negativa DEVOLVE o
+       espaço: 18+13+13 = 44 px de alvo, e 44-13-3 = 28 px ocupados — os
+       mesmos 28 de antes (18 de altura + 10 de margem). O desenho não
+       muda um pixel.
+
+       `padding-block`/`margin-block`, nunca os atalhos `padding`/`margin`:
+       o atalho zeraria o `padding-right:30px` que abre espaço para o "?"
+       e o `padding-left:11px` da barra dourada. */
+    padding-block:13px;
+    margin-top:-13px;
+    margin-bottom:-3px;
   }
   .card:has(> .card-sub) > .card-title::after{
     content:'?'; position:absolute; right:0; top:50%; transform:translateY(-50%);
