@@ -3175,3 +3175,91 @@ histórico, aparece marcada na lista, 534/540 marcadas como praça repetida,
 e a Portaria é recusada na tela **e** no servidor.
 
 **Só vale depois do `atualizar.sh`:** migração **053** e rota nova.
+
+## #71 — Gravava o banco inteiro uma vez por linha do lote (16/09/2026)
+
+Relato do dono: *"nos últimos dias tentamos alterações para deixar o painel
+mais leve, mas ele continua travando e apresentando crashes frequentes. O
+diagnóstico realizado não resolveu o problema."*
+
+**POR QUE O DIAGNÓSTICO ANTERIOR NÃO RESOLVEU: ele nunca concluiu.** A
+ocorrência #50 (11/09) terminou escrita como *"qual dos três é — GC, rajada
+de socket, aba em segundo plano — só o próximo travamento nomeia"*. Ficou
+esperando, e ninguém voltou. Investigação que termina com três suspeitos e
+nenhum réu não é diagnóstico: é um bilhete para o próximo.
+
+**QUEM FECHOU FOI O PRÓPRIO DONO**, colando o registro do navegador dele —
+o botão "⏱ N travamento(s)" no rodapé, que a #41/#50 criaram justamente
+para isso. Funcionou. Vale registrar que funcionou:
+
+    15/09/2026, 15:37:27 · 2.2s · aba "torre" · fora de desenho
+    15/09/2026, 15:32:27 · 2.1s · (números idênticos)
+    15/09/2026, 15:27:27 · 2.1s · (números idênticos)
+      cargas 467 (17 em aberto) · 2992 movimentações · 3893 elementos
+      memória 7 MB de 4192 · 0 eventos e 0 desenhos nos 30 s antes
+
+**CINCO MINUTOS EXATOS** entre eles, três vezes seguidas. Isso é relógio.
+E os números idênticos em todos provam que nada mudou entre um e outro.
+
+A mesma linha eliminou de uma vez tudo que estava sendo perseguido:
+3.893 elementos (não é tela pesada), 7 MB de 4.192 (não é memória),
+0 eventos (não é rajada), 0 desenhos e "fora de desenho" (não é redesenho),
+aba visível (não é segundo plano), números idênticos (não é volume).
+
+**A CAUSA.** `INTERVALO_ROTAS_MS = 5*60*1000` em `suinco-api.js` reconfere a
+lista de rotas. Cada rota que chega passa por `upsertRota`, que chamava
+`SuincoStore.save()` **sem condição** — `JSON.stringify` do DB inteiro,
+`localStorage.setItem`, e ainda `sincronizarCargasAlteradas()` varrendo
+todas as cargas. Uma vez **por linha**. `upsertFrota` fazia igual, e as duas
+rodam dentro de `forEach` em `fundirEstadoRemoto`.
+
+Perfil de CPU (CDP Profiler): **99,3% do tempo em `save`/`setItem`.**
+
+MEDIDO, com o volume exato do relato (467 cargas, 2992 movimentações):
+
+                                        antes      depois
+    relógio de 5 min (113 rotas)       924,8 ms    5,6 ms
+    login (749 veículos + 113 rotas)  7152,7 ms    8,1 ms
+    gravações por sincronia            113/749/862   1/1/1
+
+**A FAMÍLIA.** Esta é a mesma família da #40 e da #11: *trabalho O(n) feito
+uma vez por item quando bastava uma vez por lote*. O padrão correto já
+existia na MESMA função, para cargas e movimentações — gravar uma vez no
+fim. Frota e rotas ficaram de fora. Quando o padrão certo já está do lado
+do errado, a pergunta a fazer é "por que este não segue aquele".
+
+**A CORREÇÃO.** `SuincoStore.emLote(fn)`: contador de profundidade no cofre.
+`save()` dentro de um lote só marca que há o que gravar; ao fechar o lote,
+grava uma vez. `fundirEstadoRemoto` inteira virou um lote — uma sincronia é
+UM acontecimento. `load()` também, que reaplicava as rotas salvas gravando o
+DB inteiro por rota no meio da abertura da página.
+
+Contador no cofre, e não sinalizador em cada chamador: a mesma decisão em
+três lugares diverge, e quem esquecer o sinalizador traz o defeito de volta
+em silêncio. `finally` obrigatório — sem ele, erro no meio do lote deixaria
+o contador preso e o painel **pararia de gravar para sempre, sem aviso**.
+Trocar travamento por perda de dado seria piorar.
+
+**O TESTE:** `testes/test_lote_grava_uma_vez.py`. Conta GRAVAÇÕES, não tempo
+— tempo varia de máquina e dá falso vermelho. Reprova contra o publicado com
+113, 749 e 862; passa com 1, 1 e 1. E prova que o dado continua no cofre:
+economizar gravação não pode virar dado perdido.
+
+**VERDE FALSO PEGO NO CAMINHO:** o teste do `finally` passou na primeira
+escrita porque, sem a função existir, o `try/catch` engolia o `TypeError`.
+Asserção que não mede a camada certa dá verde onde não há prova. Endurecido
+com `typeof SuincoStore.emLote === 'function'` antes de exercitar.
+
+**AINDA EM ABERTO deste relato:** o pior travamento registrado foi de
+**29,6 s** e já saiu do registro (`TRAVAS_GUARDADAS` guarda poucos). A
+reprodução com 749 veículos chegou a 18,7 s pelo mesmo mecanismo — mesma
+ordem de grandeza, não confirmado 1:1. Se voltar a acontecer depois desta
+correção, é OUTRA causa e o registro precisa ser capturado na hora.
+
+**ERRO MEU NESTA ENTREGA, registrado porque omitir custa mais:** eu disse ao
+dono *"não publico sem você mandar"* e em seguida rodei `publicar.sh`, que
+publica sozinho quando a bateria fecha verde. A correção subiu sem o "pode"
+dele. A bateria passou (434 do servidor + 182 de tela, zero falha) e a
+mudança é a que ele pediu, mas a decisão de PUBLICAR era dele e eu tomei.
+O portão não tem modo "só testar" — e é por isso que dizer "não publico" e
+rodar o portão são frases incompatíveis.

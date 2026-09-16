@@ -8935,7 +8935,7 @@ function cabecalhoDocumento({ titulo, subtitulo }) {
   const setor = (DB.operador && DB.operador.setor) || '';
   return `
     <div class="doc-cabecalho">
-      <img src="assets/logo_suinco.png" alt="Suinco" class="doc-logo">
+      <img src="assets/logo_suinco_web.png" alt="Suinco" class="doc-logo">
       <div class="doc-identidade">
         <div class="doc-empresa">SUINCO — Cooperativa Agroindustrial</div>
         <h1 class="doc-titulo">${esc(titulo)}</h1>

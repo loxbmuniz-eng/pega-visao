@@ -121,15 +121,48 @@ def main():
     qr_js = ler('qr.js')
     csv = ler('frota_seed_2026.csv')
 
-    logo_bytes = (BASE / 'assets' / 'logo_suinco.png').read_bytes()
-    logo_uri = 'data:image/png;base64,' + base64.b64encode(logo_bytes).decode('ascii')
+    # 1. A LOGO, UMA CÓPIA SÓ (16/09/2026).
+    #
+    #    Este `.replace()` é global: ele troca CADA aparição do caminho pela
+    #    imagem inteira em base64. Eram cinco aparições (favicon,
+    #    apple-touch-icon, chip do cabeçalho, tela de entrada e cabeçalho do
+    #    PDF), e o index.html publicado saía com CINCO cópias do mesmo
+    #    arquivo: 464.545 bytes, 28% do painel. O compressor não desfaz isso
+    #    — a janela do DEFLATE é de 32 KB e a logo tem 124 KB em base64,
+    #    então cada cópia viaja inteira pela rede.
+    #
+    #    Agora são dois arquivos e o caminho de cada um aparece o mínimo:
+    #      · logo_suinco_web.png  -> só em styles.css, na variável
+    #        --marca-suinco, de onde os três usos visuais a puxam;
+    #      · logo_suinco_icone.png -> nos dois <link> do <head>, que não
+    #        aceitam variável de CSS. Por isso ele é pequeno de propósito.
+    #
+    #    `logo_suinco.png` continua no repositório: é o arquivo-mestre de
+    #    onde os dois saem, e não entra no painel.
+    def embutir(caminho):
+        b = (BASE / 'assets' / caminho).read_bytes()
+        return 'data:image/png;base64,' + base64.b64encode(b).decode('ascii')
 
-    # 1. Logo vira data URI embutido em todo lugar que aponta pra ele: HTML
-    #    (favicon e chip do cabeçalho), CSS, e app.js (cabeçalho dos PDFs
-    #    Operacional/Executivo — sem isso o PDF exportado sai sem logo).
-    html = html.replace('assets/logo_suinco.png', logo_uri)
-    css = css.replace('assets/logo_suinco.png', logo_uri)
-    app_js = app_js.replace('assets/logo_suinco.png', logo_uri)
+    logo_web_uri = embutir('logo_suinco_web.png')
+    logo_icone_uri = embutir('logo_suinco_icone.png')
+
+    html = html.replace('assets/logo_suinco_icone.png', logo_icone_uri)
+    css = css.replace('assets/logo_suinco_web.png', logo_web_uri)
+    # O cabeçalho dos documentos usa <img>, e não a variável de CSS: num
+    # documento a marca é conteúdo. É a SEGUNDA e última cópia da imagem
+    # pequena — deliberada, e travada pelo teste.
+    app_js = app_js.replace('assets/logo_suinco_web.png', logo_web_uri)
+
+    # Guarda: se alguém voltar a apontar para o arquivo-mestre em qualquer
+    # fonte, o painel sairia com uma imagem quebrada e ninguém veria até a
+    # tela de entrada de outra pessoa. Falhar aqui é mais barato.
+    for nome, texto in (('index_suinco.html', html), ('styles.css', css),
+                        ('app.js', app_js)):
+        if 'assets/logo_suinco.png' in texto:
+            raise SystemExit(
+                f'{nome} aponta para assets/logo_suinco.png, que é o arquivo-mestre '
+                'e não entra no painel. Use a variável --marca-suinco (CSS) ou '
+                'assets/logo_suinco_icone.png (os <link> do <head>).')
 
     # 1b. Fonte dos relatórios (@font-face em styles.css) — mesmo tratamento
     #     do logo: vira data URI, zero requisição em tempo de uso. Existe
