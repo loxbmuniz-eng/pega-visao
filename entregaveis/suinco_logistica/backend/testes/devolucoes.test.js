@@ -1670,3 +1670,138 @@ describe('18. Um clique errado às 2 da manhã tem volta (14/09/2026)', () => {
       `a Logística cria antes do caminhão chegar e não tem a nota: ${r.texto}`);
   });
 });
+
+/* ------------------------------------------------------------------ */
+describe('19. Quem pesou finaliza a sobra (16/09/2026)', () => {
+  /* Relato do dono, com print de uma sobra pesada e parada:
+
+       "E NA PARTE DEVOLUÇÃO DE SOBRA, DEPOIS QUE PESA TEM QUE COLOCAR A
+        OPÇÃO DE FINALIZAR A ETAPA"
+
+     Ele estava logado no Faturamento. Para a SOBRA, "Descarga Conferida" é
+     o ÚLTIMO passo — ela não volta à balança nem passa por Controles
+     Internos e Central de Notas. Esse passo estava liberado só para
+     Expedição e Logística, então a sobra ficava pesada e parada esperando
+     outro setor aparecer. Pior: a esteira da tela já chamava o Faturamento
+     para ela ("SUA VEZ"), porque "Conferida no Faturamento" é o status onde
+     a segunda etapa dele começa na devolução normal.
+
+     O que NÃO muda, e é o ponto de metade dos testes abaixo: a devolução
+     NORMAL. Lá, "Descarga Conferida" sai de "Peso Final Registrado" e
+     continua sendo da Expedição — o Faturamento não ganhou atalho nenhum
+     para pular a balança final. */
+
+  async function sobraPesada() {
+    const c = await req('/api/devolucoes', { metodo: 'POST', token: tokens['Logística'],
+      corpo: { tipo: 'SOBRA', dataDev: HOJE, placa: 'SIY0G41', motorista: 'LEONARDO',
+        itens: [{ cx: 3, peso: 12.5, codProduto: '30110',
+                  produtoNome: 'LINGUIÇA', motivo: '652 — Sobras' }] } });
+    assert.equal(c.status, 201, c.texto);
+    const id = c.json.id;
+    const a = await req(`/api/devolucoes/${id}/etapa`, { metodo: 'POST',
+      token: tokens['Portaria'], corpo: { para: 'Recebida na Portaria', chegouLacrado: false } });
+    assert.equal(a.status, 200, a.texto);
+    const b = await req(`/api/devolucoes/${id}/etapa`, { metodo: 'POST',
+      token: tokens['Faturamento'], corpo: { para: 'Conferida no Faturamento', pesoEntrada: 21500 } });
+    assert.equal(b.status, 200, b.texto);
+    return id;
+  }
+
+  test('o Faturamento encerra a sobra que ele mesmo pesou', async () => {
+    const id = await sobraPesada();
+    const r = await req(`/api/devolucoes/${id}/etapa`, { metodo: 'POST',
+      token: tokens['Faturamento'],
+      corpo: { para: 'Descarga Conferida', obsExpedicao: 'sobra descarregada' } });
+    assert.equal(r.status, 200, `quem pesou precisa conseguir finalizar: ${r.texto}`);
+    assert.equal(r.json.status, 'Descarga Conferida');
+    assert.equal(r.json.obsExpedicao, 'sobra descarregada',
+      'o recado da etapa vai junto, como em qualquer outro passo');
+  });
+
+  test('o carimbo guarda QUEM finalizou — e o peso de entrada continua intacto', async () => {
+    const id = await sobraPesada();
+    await req(`/api/devolucoes/${id}/etapa`, { metodo: 'POST',
+      token: tokens['Faturamento'], corpo: { para: 'Descarga Conferida' } });
+    const { rows } = await pool.query(
+      `SELECT expedicao_por, expedicao_em, peso_entrada, operador_setor
+         FROM devolucoes WHERE devolucao_id = $1`, [id]);
+    assert.equal(rows[0].expedicao_por, 'Diego Dev',
+      'o carimbo é de quem deu o passo, não do setor dono dele — como já vale para a Logística');
+    assert.ok(rows[0].expedicao_em, 'sem instante não há assinatura');
+    assert.equal(rows[0].operador_setor, 'Faturamento',
+      'e o setor de quem agiu fica registrado na linha');
+    assert.equal(Number(rows[0].peso_entrada), 21500,
+      'finalizar não mexe no peso da balança de entrada');
+  });
+
+  test('a Expedição continua finalizando a sobra — nada foi tirado dela', async () => {
+    const id = await sobraPesada();
+    const r = await req(`/api/devolucoes/${id}/etapa`, { metodo: 'POST',
+      token: tokens['Expedição'], corpo: { para: 'Descarga Conferida' } });
+    assert.equal(r.status, 200, r.texto);
+    assert.equal(r.json.status, 'Descarga Conferida');
+  });
+
+  test('quem podia fazer, desfaz: o Faturamento desfaz o fecho da sobra', async () => {
+    /* A allowlist do desfazer é a MESMA do avanço (decisão de 14/09) — não
+       uma segunda tabela. Se o Faturamento pode encerrar, ele conserta o
+       clique errado sem acordar ninguém. */
+    const id = await sobraPesada();
+    await req(`/api/devolucoes/${id}/etapa`, { metodo: 'POST',
+      token: tokens['Faturamento'], corpo: { para: 'Descarga Conferida' } });
+    const r = await req(`/api/devolucoes/${id}/desfazer`, { metodo: 'POST',
+      token: tokens['Faturamento'] });
+    assert.equal(r.status, 200, r.texto);
+    assert.equal(r.json.status, 'Conferida no Faturamento',
+      'a sobra volta para a balança de ENTRADA — peso final ela nunca teve');
+  });
+
+  test('a devolução NORMAL não ganhou atalho: do peso de entrada não se pula para o fim', async () => {
+    const c = await req('/api/devolucoes', { metodo: 'POST', token: tokens['Logística'],
+      corpo: novoChecklist() });
+    const id = c.json.id;
+    for (const [para, setor] of [['Recebida na Portaria', 'Portaria'],
+      ['Conferida no Faturamento', 'Faturamento']]) {
+      const p = await req(`/api/devolucoes/${id}/etapa`, { metodo: 'POST',
+        token: tokens[setor], corpo: { para } });
+      assert.equal(p.status, 200, p.texto);
+    }
+    const r = await req(`/api/devolucoes/${id}/etapa`, { metodo: 'POST',
+      token: tokens['Faturamento'], corpo: { para: 'Descarga Conferida' } });
+    assert.equal(r.status, 409,
+      `pular a balança final na devolução normal é o que não pode acontecer: ${r.texto}`);
+  });
+
+  test('na devolução normal, o OK da descarga continua recusando o Faturamento', async () => {
+    const c = await req('/api/devolucoes', { metodo: 'POST', token: tokens['Logística'],
+      corpo: novoChecklist() });
+    const id = c.json.id;
+    for (const [para, setor] of [['Recebida na Portaria', 'Portaria'],
+      ['Conferida no Faturamento', 'Faturamento'],
+      ['Peso Final Registrado', 'Faturamento']]) {
+      const p = await req(`/api/devolucoes/${id}/etapa`, { metodo: 'POST',
+        token: tokens[setor], corpo: { para } });
+      assert.equal(p.status, 200, p.texto);
+    }
+    const r = await req(`/api/devolucoes/${id}/etapa`, { metodo: 'POST',
+      token: tokens['Faturamento'], corpo: { para: 'Descarga Conferida' } });
+    assert.equal(r.status, 403, `o OK da descarga é da Expedição: ${r.texto}`);
+    assert.equal(r.json.codigo, 'SETOR_SEM_PERMISSAO');
+  });
+
+  test('setor de fora continua recusado, e a recusa ENSINA quem faz', async () => {
+    const id = await sobraPesada();
+    const r = await req(`/api/devolucoes/${id}/etapa`, { metodo: 'POST',
+      token: tokens['Central de Notas'], corpo: { para: 'Descarga Conferida' } });
+    assert.equal(r.status, 403, r.texto);
+    assert.match(r.json.erro || '', /Expedição, Faturamento ou Logística/,
+      'com três setores a frase precisa ler como gente fala, não "A ou B ou C"');
+  });
+
+  test('a filial continua sem avançar etapa, nem na sobra', async () => {
+    const id = await sobraPesada();
+    const r = await req(`/api/devolucoes/${id}/etapa`, { metodo: 'POST',
+      token: tokens['Filial 105 BSB'], corpo: { para: 'Descarga Conferida' } });
+    assert.equal(r.status, 403, r.texto);
+  });
+});

@@ -112,11 +112,29 @@ const DEV_ETAPAS = [
 
    Aqui ele é o que sempre foi: uma exceção de UM tipo, consultada por
    quem pergunta "qual o próximo passo desta devolução" e invisível para
-   quem desenha a esteira. */
+   quem desenha a esteira.
+
+   QUEM CONSULTA É `etapaDeDev`, E TODO MUNDO PERGUNTA A ELA (16/09/2026).
+   `avancarEtapaDevolucaoUI` não perguntava: fazia `DEV_ETAPAS.find(...)`
+   por conta própria, e DEV_ETAPAS não conhece este atalho. A tela desenhava
+   o botão de encerrar a sobra e o clique mandava "Peso Final Registrado" —
+   409, para todos os setores. Ver a ocorrência #73.
+
+   `setores` É ESPELHO da linha `soSobra` de backend/src/dominio/devolucoes.js.
+   A cópia existe porque o painel é build de arquivo único e não importa do
+   servidor; quem impede as duas de divergirem é
+   testes/test_sobra_finaliza_quem_pesou.py, que lê as duas fontes e compara
+   a esteira inteira — mesma solução da lista de SETORES (ocorrência #26).
+
+   O FATURAMENTO ENTROU EM 16/09/2026, a pedido do dono: para a sobra este
+   é o ÚLTIMO passo, e quem pesou precisa conseguir encerrar em vez de
+   deixar o checklist parado esperando outro setor aparecer. O rótulo do
+   botão diz FINALIZAR — é a palavra dele — e não nomeia um setor só,
+   porque agora são três. */
 const DEV_ATALHO_SOBRA = {
   status: 'Conferida no Faturamento', proxima: 'Descarga Conferida',
-  botao: '📦 Descarga conferida (Expedição)', pede: 'expedicao',
-  setores: ['Expedição', 'Logística'],
+  botao: '✅ Finalizar sobra — descarga conferida', pede: 'expedicao',
+  setores: ['Expedição', 'Faturamento', 'Logística'],
 };
 
 const DEV_ETAPA_ROTULO = {
@@ -1103,6 +1121,18 @@ function blocoDesfazerDev(d) {
     </div>`;
 }
 
+/* "Expedição, Faturamento ou Logística" — e não "A ou B ou C".
+
+   Espelho de `listaDeSetores` em backend/src/dominio/fluxo.js: a mesma
+   frase sai do servidor na recusa e daqui no "próximo passo", e as duas
+   precisam ler igual. Virou função quando um passo passou a ter TRÊS
+   setores (16/09/2026). */
+function listaDeSetoresDev(setores) {
+  const nomes = (setores || []).filter(Boolean);
+  if (nomes.length <= 1) return nomes[0] || '';
+  return `${nomes.slice(0, -1).join(', ')} ou ${nomes[nomes.length - 1]}`;
+}
+
 function blocoAvancoDev(d) {
   /* SOBRA: três OKs e acabou — Portaria, Faturamento, Expedição. */
   if (d.tipo === 'SOBRA' && d.status === 'Descarga Conferida') {
@@ -1114,7 +1144,7 @@ function blocoAvancoDev(d) {
      assina, em vez de um botão que a API recusaria. */
   const setor = (DB.operador || {}).setor;
   if (setor !== 'Administração' && !etapa.setores.includes(setor)) {
-    return `<div class="card-sub">Próximo passo: <strong>${esc(etapa.proxima)}</strong> — feito por ${esc(etapa.setores.join(' ou '))}.</div>`;
+    return `<div class="card-sub">Próximo passo: <strong>${esc(etapa.proxima)}</strong> — feito por ${esc(listaDeSetoresDev(etapa.setores))}.</div>`;
   }
   const id = escJs(d.id);
   let extras = '';
@@ -1677,7 +1707,20 @@ function desfazerEtapaDevolucaoUI(id) {
 function avancarEtapaDevolucaoUI(id) {
   const d = getDevolucao(id);
   if (!d) return;
-  const etapa = DEV_ETAPAS.find((e) => e.status === d.status);
+  /* A MESMA PERGUNTA QUE DESENHOU O BOTÃO (16/09/2026).
+
+     Aqui estava `DEV_ETAPAS.find((e) => e.status === d.status)` — uma
+     segunda resposta para a pergunta que `etapaDeDev` já responde. Elas
+     divergiam exatamente onde importa: na SOBRA parada em "Conferida no
+     Faturamento", `blocoAvancoDev` desenhava (via `etapaDeDev`) o botão de
+     encerrar, e este clique mandava `para: 'Peso Final Registrado'` — o
+     caminho da devolução normal, que o servidor recusa com 409 "Sobra
+     encerra no OK da Expedição". A sobra não era finalizável por NINGUÉM
+     pela tela: nem Expedição, nem Logística, nem Administração.
+
+     Uma função, dois chamadores: quem desenha e quem clica perguntam ao
+     mesmo lugar. Ocorrência #73. */
+  const etapa = etapaDeDev(d);
   if (!etapa) return;
   const v = (sufixo) => (document.getElementById(`dev-et-${id}-${sufixo}`) || {}).value;
   const corpo = { para: etapa.proxima };
