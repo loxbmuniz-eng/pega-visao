@@ -465,7 +465,6 @@ body::before{
   font-size:14px;font-weight:700;transition:opacity .15s,transform .1s;
   min-height:40px;
 }
-.btn:active{transform:scale(.97)}
 .btn:hover{opacity:.85}
 .btn-primary{background:var(--gold);color:#1a1200}
 .btn-success{background:var(--ok);color:#fff}
@@ -557,7 +556,6 @@ body::before{
 .stat-box.stat-clicavel:hover{ border-color:var(--gold-dim); transform:translateY(-2px) }
 .raiox-barra{ transition:width .3s ease }
 .btn{ transition:transform .1s ease, filter .15s ease }
-.btn:active{ transform:scale(.97) }
 @media (prefers-reduced-motion: reduce){
   .tab-page.active, .raiox-det td, .hist-detalhe td{ animation:none }
   .stat-box, .raiox-barra, .btn, .nav-tab .ico{ transition:none }
@@ -1520,7 +1518,6 @@ select option{background:var(--campo-bg);color:var(--text)}
 /* Realimentação de toque: no celular não existe hover, e sem resposta
    visual o operador aperta duas vezes achando que não pegou. */
 .btn{ transition:transform var(--t-rapida) ease, filter var(--t-rapida) ease }
-.btn:active{ transform:scale(.97) }
 
 .nav-tab{ transition:background-color var(--t-media) ease, color var(--t-media) ease }
 
@@ -2507,7 +2504,6 @@ code{
 }
 .btn:hover{opacity:1;filter:brightness(1.07);
   box-shadow:0 4px 12px rgba(0,0,0,.28), 0 1px 0 rgba(255,255,255,.2) inset}
-.btn:active{transform:translateY(1px);box-shadow:0 1px 2px rgba(0,0,0,.2)}
 /* O botão de ação principal ganha profundidade no próprio dourado. Chapado
    ele competia em peso com os secundários; com o gradiente lê como o botão
    da tela sem precisar ficar maior. */
@@ -3829,9 +3825,22 @@ body.painel-entrando > :not(#modal-operador):not(#notif){
 .btn{
   transition: transform .15s ease, box-shadow .15s ease, filter .15s ease;
 }
+/* A RESPOSTA AO TOQUE DO BOTÃO MORA AQUI, E SÓ AQUI (16/09/2026).
+
+   Esta regra estava escrita CINCO vezes no arquivo, sem condição nenhuma,
+   com valores diferentes — cada tentativa empilhada sobre a anterior sem
+   apagar a de antes. Vencia a última, e as outras quatro eram código morto:
+   quem fosse ajustar o toque editando a versão do `translateY` mudaria nada
+   e juraria ter mudado. É a regra da casa violada quatro vezes seguidas —
+   a mesma decisão escrita em dois lugares diverge.
+
+   O `box-shadow` vinha da declaração de 2510, que perdia o `transform` para
+   esta mas ainda entregava a sombra (ninguém a sobrescrevia). Ele entra
+   aqui para o estado apertado continuar idêntico ao que já estava no ar. */
 .btn:active{
   transform: scale(.97);
   filter: brightness(.92);
+  box-shadow: 0 1px 2px rgba(0,0,0,.2);
 }
 .nav-tab{ transition: background-color .15s ease, color .15s ease; }
 
@@ -5759,4 +5768,140 @@ tr.fila-alvo > td{ box-shadow:inset 0 3px 0 0 var(--gold) }
    seria trocar barra de rolagem por adivinhação. */
 @media (min-width:821px) and (max-width:1399px){
   #mont-tabela .mont-rot{ display:none }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   O QUE SE CLICA TEM QUE RESPONDER AO DEDO (16/09/2026).
+
+   MEDIDO, não suposto. Varri o painel inteiro no navegador perguntando
+   quais seletores declaram `:active`. A resposta foram DOIS:
+
+       .btn
+       .alca-arrastar
+
+   E contei quem é clicável no HTML gerado:
+
+       button ... 159   respondem
+       a ........   2   respondem
+       td .......  22   MUDOS
+       div ......  13   MUDOS
+       th .......   6   MUDOS
+       tr .......   4   MUDOS
+       span .....   1   MUDO
+
+   Quarenta e seis elementos que aceitam clique e não dão sinal nenhum de
+   que ouviram. E não são elementos quaisquer — são justamente os dois que
+   mais se usam:
+
+     · os `div` são as caixas de filtro da Torre de Controle, que filtram a
+       tabela ao clique;
+     · os `tr` são a linha da Montagem do Dia, que abre ao clique.
+
+   A Portaria toca na tela no pátio, com luva, no frio. Hoje a tela fica
+   IGUAL até a ação terminar — e a pessoa toca de novo. O comentário da
+   linha 1523 deste mesmo arquivo já dizia isso, em 2026: "no celular não
+   existe hover, e sem resposta visual o operador aperta duas vezes achando
+   que não pegou". Estava escrito para o botão e nunca chegou no resto.
+
+   COMO, e por que assim:
+
+   · `[onclick]` em vez de uma lista de classes. Toda coisa clicável deste
+     painel tem onclick na marcação; uma lista de classes esqueceria as que
+     nascerem depois, e é exatamente assim que uma regra destas envelhece.
+
+   · CAIXA encolhe, LINHA e CÉLULA acendem. `transform` numa <tr> ou <td>
+     tem comportamento inconsistente entre navegadores e cria bloco de
+     contenção que bagunça tabela — nelas a resposta é cor, que é instantânea
+     e não mexe em layout nenhum.
+
+   · A cor é a MESMA linguagem que o painel já fala no `:hover`, um passo
+     mais forte. Dourado a 6% para passar o cursor, 13% para apertar.
+     `--vidro-bg-forte` já é redefinido no tema claro, então o toque
+     funciona nos dois temas sem uma segunda regra.
+
+   · 120ms. A faixa de realimentação de toque é 100–160ms: abaixo disso o
+     olho não registra, acima parece que a tela pensou antes de responder.
+
+   · `touch-action:manipulation` só no que é clicável — mata o zoom por
+     toque duplo em cima de um alvo de ação, que numa tabela densa é
+     acidente garantido. Fora dos alvos o zoom continua funcionando.
+
+   · `-webkit-tap-highlight-color:transparent` só onde ESTA regra entrega a
+     resposta. Tirar o realce do sistema sem pôr nada no lugar seria deixar
+     o elemento mudo — pior do que o quadrado cinza. */
+
+:is(div,span,label,li,summary,figure)[onclick],
+.stat-box.stat-clicavel, .nav-tab, .chip-dia-prog, .alca-arrastar{
+  touch-action:manipulation;
+  -webkit-tap-highlight-color:transparent;
+}
+tr[onclick], td[onclick], th[onclick]{
+  touch-action:manipulation;
+  -webkit-tap-highlight-color:transparent;
+}
+
+/* CAIXA: SÓ ENCOLHE. Sem tinta, e isso é decisão, não esquecimento.
+
+   Foram três tentativas de pintar a caixa, e as três esbarraram em estado
+   que já mora nela:
+
+     1. `background-color` — a caixa da Torre já descansa em
+        `--vidro-bg-forte`; medido apertado e em repouso, mesma cor. Nada.
+     2. `background-image` — `.bento.bi-faixa .stat-ativo` usa o ATALHO
+        `background`, que zera a tinta na disputa.
+     3. `box-shadow` — apagava o ANEL DOURADO da caixa que está filtrando
+        agora (`rgb(107,80,8) 0 0 0 1.5px`, medido). Resposta ao toque não
+        pode apagar estado.
+
+   E `::after`, que resolveria, já está ocupado nesta caixa (linha 4620).
+
+   A caixa da Torre carrega três estados ao mesmo tempo — destaque, alerta e
+   "é esta que está filtrando". Somar cor de toque a isso é criar a quarta
+   disputa. O encolhimento é a mesma resposta que o botão dá, não colide com
+   estado nenhum, e é o que o dedo procura. */
+:is(div,span,label,li,summary)[onclick]:not(.nav-tab),
+.stat-box.stat-clicavel, .chip-dia-prog{
+  transition:transform 120ms cubic-bezier(.23,1,.32,1), border-color 120ms ease;
+}
+:is(div,span,label,li,summary)[onclick]:not(.nav-tab):active,
+.stat-box.stat-clicavel:active, .chip-dia-prog:active{
+  transform:scale(.98);
+}
+
+/* LINHA E CÉLULA: acendem. A cor é o `:hover` da casa, um passo acima. */
+tr[onclick]:active > td, tr[onclick]:active > th,
+tr.mont-linha:active > td, tr.hist-linha:active > td{
+  background-color:rgba(233,185,84,.13);
+}
+td[onclick]:active, th[onclick]:active{
+  background-color:rgba(233,185,84,.13);
+}
+tr[onclick] > td, tr[onclick] > th,
+tr.mont-linha > td, tr.hist-linha > td, td[onclick], th[onclick]{
+  transition:background-color 120ms ease;
+}
+
+/* ABA: a mais apertada do painel, dezenas de vezes por dia. Aqui a resposta
+   é SÓ COR — encolher uma aba que se troca o tempo todo vira tique, e a
+   regra de frequência é clara: quanto mais vezes por dia, menos movimento.
+
+   O `:not(.nav-tab)` lá em cima existe por isto. Na primeira versão a aba
+   caía na regra das caixas e encolhia — o código fazia o contrário do que
+   este comentário dizia, e foi a medição que pegou. */
+.nav-tab{ transition:box-shadow 120ms ease, color 120ms ease }
+.nav-tab:active{ box-shadow:inset 0 0 0 999px rgba(233,185,84,.14) }
+
+/* Quem pediu menos movimento continua recebendo a resposta — ela só deixa
+   de ser movimento e passa a ser cor. Cor que ajuda a entender o que
+   aconteceu fica; é o que a própria regra de movimento reduzido manda. */
+@media (prefers-reduced-motion: reduce){
+  :is(div,span,label,li,summary)[onclick]:not(.nav-tab):active,
+  .stat-box.stat-clicavel:active, .chip-dia-prog:active{ transform:none }
+}
+
+/* Documento não tem dedo. */
+@media print{
+  :is(div,span,label,li,summary)[onclick],
+  tr[onclick] > td, td[onclick], th[onclick], .nav-tab{
+    transition:none !important; box-shadow:none !important; }
 }
