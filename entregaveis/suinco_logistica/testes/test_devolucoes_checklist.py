@@ -116,9 +116,15 @@ async def main():
         enxuto = await pgA.evaluate(
             "() => !document.getElementById('dev-placa')"
             " && !document.getElementById('dev-regiao')"
-            " && !document.getElementById('dev-transportadora')"
-            " && !document.getElementById('dev-nota-transf')")
+            " && !document.getElementById('dev-transportadora')")
         ck('lançamento sem os campos dos outros postos', enxuto)
+        # 16/09: a nota de transferência EXISTE no formulário, mas só a filial
+        # a enxerga. Para a matriz o campo fica escondido — quem lança daqui
+        # não tem transferência para amarrar.
+        nota_escondida = await pgA.evaluate(
+            "() => { const c = document.getElementById('dev-nota-transf-campo');"
+            " return !!c && c.hidden === true; }")
+        ck('a nota de transferência fica escondida para a matriz', nota_escondida)
         await pgA.fill('#dev-operador-cod', '102345')
         await pgA.select_option('#dev-rota', '500')
         await pgA.click('button:has-text("➕ Rota")')

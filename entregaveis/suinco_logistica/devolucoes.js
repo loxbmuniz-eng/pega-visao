@@ -404,6 +404,14 @@ function renderDevolucoes() {
   if (cardNovo) cardNovo.hidden = !podeCriarDevolucao();
   const cardSobra = document.getElementById('dev-card-sobra');
   if (cardSobra) cardSobra.hidden = !podeCriarDevolucao();
+  /* A NOTA DE TRANSFERÊNCIA SÓ EXISTE PARA A FILIAL (16/09/2026).
+
+     No mesmo lugar onde a aba já decide o que cada setor vê, e pela mesma
+     pergunta que o servidor faz (`ehSetorFilial` aqui, `ehFilial` lá). Some
+     de quem não é filial em vez de ficar cinza: campo desabilitado numa
+     tela que não é sua faz a pessoa se perguntar o que fez de errado. */
+  const campoNota = document.getElementById('dev-nota-transf-campo');
+  if (campoNota) campoNota.hidden = !ehSetorFilial((DB.operador || {}).setor);
   const sobraData = document.getElementById('sobra-data');
   if (sobraData && !sobraData.value) sobraData.value = diaLocalDev();
 
@@ -1517,9 +1525,26 @@ async function criarDevolucaoUI() {
      data, região, rotas e o código do operador do monitoramento. Placa,
      transportadora, motorista, nota de transferência, carga e lacres são da
      PORTARIA, no recebimento. */
+  /* A NOTA DE TRANSFERÊNCIA, SÓ PARA FILIAL (16/09/2026).
+
+     O servidor recusa com NOTA_TRANSFERENCIA_FALTANDO — esta guarda existe
+     para a pessoa saber ANTES de clicar, não depois de levar um erro. As
+     duas precisam existir: a tela avisa, o servidor garante. */
+  const ehFilial = ehSetorFilial((DB.operador || {}).setor);
+  const notaTransf = v('dev-nota-transf').trim();
+  if (ehFilial && !notaTransf) {
+    notify('Informe o número da nota de transferência — é ela que liga esta devolução '
+      + 'à transferência que saiu da filial.', 'warn', 6000);
+    const campo = document.getElementById('dev-nota-transf');
+    if (campo) campo.focus();
+    return;
+  }
   const corpo = {
     dataDev: v('dev-data') || diaLocalDev(),
     rotas,
+    /* Só a filial manda: em qualquer outro setor o campo nem existe na
+       tela, e mandar string vazia sobrescreveria o que a Portaria grava. */
+    ...(ehFilial ? { notaTransferencia: notaTransf } : {}),
     /* A região vem do CADASTRO da rota (500 = Patos de Minas). Antes era
        digitada ao lado da rota — duas fontes para a mesma informação, e a
        divergência de escrita ("BH", "Belo Horizonte", "B.HORIZONTE")
@@ -1531,7 +1556,7 @@ async function criarDevolucaoUI() {
   try {
     const d = await SuincoSharePoint.devolucoes.criar(corpo);
     notify(`Checklist Nº ${d.numero} criado (${devRotulo(d)}). Agora lance os itens na linha do próprio checklist.`, 'success', 6000);
-    ['dev-operador-cod']
+    ['dev-operador-cod', 'dev-nota-transf']
       .forEach((id) => { const e = document.getElementById(id); if (e) e.value = ''; });
     _devRotasNovas = [];
     renderRotasNovasDev();

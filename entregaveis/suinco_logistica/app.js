@@ -2193,6 +2193,56 @@ const ROTULOS_SECUNDARIOS = new Set([
   'Atualizado em', 'Operador', 'Setor', 'Linha do tempo',
 ]);
 
+/* A SEGUNDA LINHA DA MONTAGEM DO DIA (16/09/2026).
+
+   Relato do dono: "ta tendo barra de rolagem na montagem do dia, barra de
+   rolagem lateral". MEDIDO, com 20 linhas montadas:
+
+       monitor 1280 ... mostra 1.002 px, a tabela precisa de 1.541
+                        6 colunas fora da vista: Ganchos, Entregas,
+                        Destino, KM, Frete, Ação
+       notebook 1024 .. mostra 746 px
+                        8 fora: as seis acima + Palet. e Tipo de Operação
+
+   Ele perdia justamente DESTINO, KM e FRETE — as três colunas que ele
+   mandou acrescentar em 10/09 ("montagem do dia precisa seguir com destino
+   valor de frete") — e o botão de Ação. A tabela herdou as colunas da
+   Torre e da Fila a pedido dele em 28/08, depois ganhou mais três, e a
+   conta de largura nunca foi refeita.
+
+   A saída é a mesma que o celular já usa: a linha vira grade. Aqui em DUAS
+   faixas — em cima o que se OPERA, embaixo os NÚMEROS. Nada é escondido e
+   nada sai; a barra lateral é que some.
+
+   POR QUE UMA LISTA PRÓPRIA e não `ROTULOS_SECUNDARIOS`: lá 'Seq.' e
+   'Motorista' são secundários, o que está certo para o cartão do celular e
+   errado aqui — a sequência é o que o dono mais mexe nesta tela, com a alça
+   de arrastar e o campo digitável. Reusar aquela lista jogaria a sequência
+   para a segunda faixa.
+
+   Lista num lugar só, como a regra da casa manda: o CSS pergunta pelo
+   carimbo `data-faixa="2"` em vez de repetir os nomes. */
+const ROTULOS_SEGUNDA_FAIXA_MONTAGEM = new Set([
+  'Peso (kg)', 'Palet.', 'Tipo de Operação', 'Ganchos', 'Entregas',
+  'Destino', 'KM', 'Frete',
+]);
+
+/* RÓTULO CURTO PARA A VISÃO COMPACTA (16/09/2026).
+
+   Na Montagem em duas faixas o rótulo vive em cima do valor, e "Tipo de
+   Operação" pede 138 px numa coluna de 115 — medido. Alargar a coluna
+   roubaria de Destino, que precisa caber "BELO HORIZONTE/MG".
+
+   Encurtar o rótulo é a saída certa: quem está nesta tela sabe que
+   "Operação" é o tipo dela, e o cabeçalho completo continua existindo na
+   tabela em colunas e no `title` do <th>.
+
+   Só entra aqui rótulo que NÃO CABE medido — não é lugar de abreviar por
+   gosto. Cada linha tem a medida que a justifica. */
+const ROTULOS_CURTOS_MONTAGEM = new Map([
+  ['Tipo de Operação', 'Operação'],   // 138 px de rótulo numa coluna de 115
+]);
+
 /* Marca as linhas que TÊM algo escondido. Sem esta marca, o rodapé "toque
    para ver tudo" apareceria também em cartão que já mostra tudo — e aí a
    promessa da tela seria mentira.
@@ -10192,6 +10242,15 @@ function prepararTabelasMobile(raiz){
         else td.removeAttribute('data-larg');
         if(ROTULOS_SECUNDARIOS.has(rotulo)) td.setAttribute('data-sec', '1');
         else td.removeAttribute('data-sec');
+        /* A segunda faixa é só da Montagem do Dia: é a única tabela do
+           painel com 14 colunas. Carimbar em toda tabela mudaria telas que
+           não têm o problema. */
+        if(tab.id === 'mont-tabela' && ROTULOS_SEGUNDA_FAIXA_MONTAGEM.has(rotulo))
+          td.setAttribute('data-faixa', '2');
+        else td.removeAttribute('data-faixa');
+        const curto = (tab.id === 'mont-tabela') ? ROTULOS_CURTOS_MONTAGEM.get(rotulo) : null;
+        if(curto) td.setAttribute('data-curto', curto);
+        else td.removeAttribute('data-curto');
       });
     });
     // Carimbou, então já dá para dizer quais linhas têm algo escondido —
