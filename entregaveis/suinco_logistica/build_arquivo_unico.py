@@ -148,6 +148,10 @@ def main():
 
     html = html.replace('assets/logo_suinco_icone.png', logo_icone_uri)
     css = css.replace('assets/logo_suinco_web.png', logo_web_uri)
+    # O cabeçalho dos documentos usa <img>, e não a variável de CSS: num
+    # documento a marca é conteúdo. É a SEGUNDA e última cópia da imagem
+    # pequena — deliberada, e travada pelo teste.
+    app_js = app_js.replace('assets/logo_suinco_web.png', logo_web_uri)
 
     # Guarda: se alguém voltar a apontar para o arquivo-mestre em qualquer
     # fonte, o painel sairia com uma imagem quebrada e ninguém veria até a

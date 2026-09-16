@@ -3342,10 +3342,22 @@ input,select,textarea{border-radius:5px}
   content:''; position:absolute; left:0; right:0; bottom:-4px; height:1px;
   background:var(--gold-dim); opacity:.45;
 }
+/* `background-color`, NUNCA o atalho `background` (16/09/2026).
+
+   Eu tinha trocado esta logo por caixa com imagem de fundo, e o atalho
+   `background:#fff` daqui — que vem DEPOIS de `.marca-suinco` no arquivo,
+   com a mesma especificidade — APAGAVA a imagem junto. Na tela não deu
+   para ver, porque os outros dois usos têm seletor mais forte; no PDF a
+   marca sumia. Medido: 1 cor no recorte (branco puro) contra 1.563 com a
+   correção. O portão reprovou e a publicação foi cancelada.
+
+   A logo do documento voltou a ser <img>: num documento a marca é
+   CONTEÚDO, e conteúdo não pode ser apagado por uma regra de estilo que
+   alguém escreva daqui a seis meses. O custo é uma cópia a mais da imagem
+   pequena — 57 KB contra os 464 KB de antes. */
 .doc-logo{
   height:56px; width:auto; flex:none;
-  aspect-ratio:224/240;
-  background:#fff; border-radius:6px; padding:4px 8px;
+  background-color:#fff; border-radius:6px; padding:4px 8px;
 }
 .doc-identidade{ min-width:0; flex:1 }
 .doc-empresa{
