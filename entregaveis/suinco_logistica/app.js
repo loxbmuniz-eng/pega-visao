@@ -3179,7 +3179,21 @@ function renderTorre(){
     const linha = spark && spark.length > 1
       ? sparklineSvg(spark, corTema(alerta && num > 0 ? '--st-aguardando-veiculo-fg' : '--gold')) : '';
 
-    return `<div class="stat-box${destaque?' stat-destaque':''}${alerta && num>0?' stat-alerta':''}${clicavel?' stat-clicavel':''}${ativo?' stat-ativo':''}"
+    /* CAIXA EM ZERO PARA DE GRITAR (16/09/2026).
+
+       Medido na Torre com o pátio cheio: das nove caixas, TRÊS mostravam
+       zero, cada uma com o mesmo peso visual de uma com dado. Num painel
+       onde o olho procura o que exige ação, três zeros com peso igual são
+       três falsos chamados.
+
+       Ela NÃO SOME — "pátio não se apaga" vale aqui também. Continua no
+       lugar, clicável e contando; só para de competir. Virou 1, acende
+       sozinha. O passar do cursor também a acende, para quem foi olhar.
+
+       A decisão mora AQUI e não no CSS porque é o número que a define, e
+       folha de estilo não lê texto de elemento. */
+    const zerada = num === 0;
+    return `<div class="stat-box${destaque?' stat-destaque':''}${alerta && num>0?' stat-alerta':''}${clicavel?' stat-clicavel':''}${ativo?' stat-ativo':''}${zerada?' stat-zerada':''}"
        ${cor ? `style="--st-cor:var(--st-${cor}-bg)"` : ''}
        ${clicavel ? `onclick="filtrarTorrePorStatus('${escJs(filtro)}')"` : ''}
        ${titulo ? `title="${esc(titulo)}"` : ''}>
