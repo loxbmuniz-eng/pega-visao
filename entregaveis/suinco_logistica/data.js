@@ -684,18 +684,62 @@ const SuincoStore = {
       // terminar. origem:'sharepoint' porque isto é reidratação de dado já
       // gravado, não uma gravação nova — sincronizar de novo aqui reenviaria
       // a mesma rota ao servidor a cada abertura do painel.
-      (DB.rotasExtras||[]).forEach(r => upsertRota(r.codigo, r.nome, r.detalhe, r.operador,
-        {origem:'sharepoint', ativa: r.ativa, aposentadaEm: r.aposentadaEm}));
+      /* Em lote: são N rotas cadastradas pela tela, e cada uma gravava o DB
+         inteiro no meio da ABERTURA da página — o pior momento possível. */
+      SuincoStore.emLote(() => {
+        (DB.rotasExtras||[]).forEach(r => upsertRota(r.codigo, r.nome, r.detalhe, r.operador,
+          {origem:'sharepoint', ativa: r.ativa, aposentadaEm: r.aposentadaEm}));
+      });
       const migradas = migrarPraOnde();
       if(migradas) console.info(`[Suinco] "Pra onde?" migrado em ${migradas} carga(s).`);
     }catch(e){ console.error('Falha ao carregar dados locais', e); }
   },
+  /* GRAVAR UMA VEZ POR LOTE, NÃO UMA VEZ POR LINHA (16/09/2026).
+
+     O dono: "continua travando e apresentando crashes frequentes". O
+     registro do navegador dele fechou a pergunta: travamentos de 2,1 a
+     2,4 s, "fora de desenho", "0 eventos e 0 desenhos nos 30 s antes", e
+     CINCO MINUTOS EXATOS entre um e outro, três vezes seguidas. Relógio,
+     não volume — os números de cada registro eram idênticos.
+
+     A causa: `upsertRota` e `upsertFrota` chamam `save()` SEM CONDIÇÃO, e
+     as duas rodam dentro de `forEach` em `fundirEstadoRemoto`. A cada 5
+     minutos a lista de rotas inteira chega do servidor e cada linha manda
+     serializar o DB INTEIRO e gravar. Perfil de CPU: 99,3% do tempo em
+     `save`/`setItem`. Medido com o volume dele (467 cargas, 2992
+     movimentações): 10,1 ms por gravação, 113 rotas = 925 ms, e o login
+     (749 veículos + 113 rotas = 862 linhas) = 7,1 SEGUNDOS de tela morta.
+
+     Por que um contador e não um sinalizador em cada chamador: a mesma
+     decisão escrita em três lugares diverge, e o chamador que esquecer o
+     sinalizador traz o defeito de volta em silêncio. Aqui quem decide é o
+     cofre, uma vez só. Aninhar é seguro — o contador só grava ao voltar a
+     zero.
+
+     O `finally` não é detalhe: sem ele, um erro no meio do lote deixaria o
+     contador preso acima de zero e o painel PARARIA DE GRAVAR para sempre,
+     sem erro na tela. Trocar travamento por perda de dado seria piorar. */
+  _lote: 0,
+  _loteSujo: false,
+  emLote(fn){
+    this._lote++;
+    try { return fn(); }
+    finally {
+      this._lote--;
+      if(this._lote === 0 && this._loteSujo){ this._loteSujo = false; this.save(); }
+    }
+  },
+
   // Grava local e devolve imediatamente. A ida ao SharePoint acontece em
   // seguida, sem bloquear a tela — ver o comentário de "local-first" em
   // suinco-sharepoint.js. Mantida SÍNCRONA de propósito: é chamada em ~18
   // pontos das regras de negócio, e torná-la assíncrona obrigaria a mexer em
   // toda a máquina de estados, que a diretriz manda não alterar.
   save(){
+    /* Dentro de um lote não grava: anota que há o que gravar e deixa o
+       fecho do lote fazer isso UMA vez. Fora de lote, nada muda — é o
+       caminho de todo clique de operador. */
+    if(this._lote > 0){ this._loteSujo = true; return; }
     try{
       /* O que veio de uma consulta de período fica FORA do armazenamento:
          é leitura, não estado deste navegador. Gravar traria de volta o
@@ -1247,7 +1291,26 @@ function aoEnfileirarRota(fn){ _aoEnfileirarRota = fn; }
 
    O retorno diz o que mudou, para a interface avisar o operador em vez de a
    tela se alterar sozinha sem explicação. */
+/* A FUSÃO INTEIRA É UM LOTE (16/09/2026).
+
+   Envolver aqui, e não dentro de cada `forEach`, é de propósito: uma
+   sincronia é UM acontecimento, e o cofre local só precisa refletir o
+   resultado dela — não cada passo do caminho. Com isto, as gravações por
+   linha de frota, as por linha de rota e a gravação final das cargas viram
+   UMA gravação no fim.
+
+   Ganha também o caso que o guard antigo deixava passar: quando só rotas
+   chegam (o relógio de 5 minutos), nenhuma carga mudou e a gravação final
+   lá embaixo não dispara — quem persistia as rotas eram justamente as
+   gravações por linha. O lote resolve os dois: quem chamou save() marcou o
+   lote como sujo, e o fecho grava uma vez.
+
+   O corpo continua abaixo, sem reindentação, para o diff desta correção
+   mostrar a mudança de comportamento e não 240 linhas movidas de lugar. */
 function fundirEstadoRemoto(dados){
+  return SuincoStore.emLote(() => fundirEstadoRemotoInterno(dados));
+}
+function fundirEstadoRemotoInterno(dados){
   // `detalhes` alimenta a notificação de "atualizado por outro setor" com
   // o que mudou de verdade, em vez de só uma contagem — pedido do usuário
   // (08/08/2026): "que diga exatamente o que foi feito, ou indique o
