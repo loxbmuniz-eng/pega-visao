@@ -801,207 +801,6 @@ td input,td select{padding:5px 7px;font-size:13px}
 /* A coluna precisa acompanhar, senão a tabela continua espremendo o campo. */
 #mont-tabela .c-kmdesl{ min-width:102px }
 
-/* MONTAGEM DO DIA EM DUAS FAIXAS, SEM BARRA LATERAL (16/09/2026).
-
-   Só aqui, e só no monitor: no celular esta tabela já vira cartão pelo
-   `mobile-cartao` e cabe em 340 px. O problema é do computador, e foi
-   medido — 1.541 px de tabela em 1.002 px de tela, escondendo Ganchos,
-   Entregas, Destino, KM, Frete e Ação.
-
-   Quem decide o que desce é `ROTULOS_SEGUNDA_FAIXA_MONTAGEM` (app.js),
-   que carimba `data-faixa="2"`. Aqui só se pergunta pelo carimbo — a
-   mesma lista repetida em dois lugares já divergiu uma vez nesta casa.
-
-   O rótulo de cada campo vem de `data-rotulo`, que `prepararTabelasMobile`
-   já carimba a partir do <thead>. Por isso o cabeçalho da tabela some: ele
-   passa a viver em cima de cada valor, e coluna nova nasce rotulada
-   sozinha, sem ninguém lembrar de mexer aqui.
-
-   `min-width:0` em toda célula: item de grade nasce com `min-width:auto` e
-   não encolhe abaixo do conteúdo. Um nome de transportadora com `nowrap`
-   inflaria a coluna, a coluna inflaria a linha, e a barra lateral voltaria
-   pela porta dos fundos. É o mesmo defeito que já apareceu no cartão do
-   celular e no Pulso dos Indicadores. */
-@media (min-width:821px){
-  #mont-tabela{ min-width:0 }
-  #mont-tabela thead{ display:none }
-  #mont-tabela, #mont-tabela > tbody{ display:block; width:100% }
-
-  /* DOZE COLUNAS, E CADA CAMPO COM A SUA LARGURA (16/09/2026).
-
-     A primeira tentativa usou oito colunas iguais e ficou ruim de olhar:
-     como as duas faixas somam larguras diferentes, a grade criou uma
-     coluna implícita, o botão de ação foi parar no MEIO da linha, "Rota"
-     espremeu até mostrar só um ponto e "CROSS-DOCKING" saiu cortado.
-
-     VINTE E QUATRO COLUNAS, e a conta fecha nas duas faixas. A tentativa
-     anterior usou doze e eu errei a soma: a faixa 2 somava CATORZE, então
-     a grade abria trilhas implícitas de 42 px e os rótulos "GANCHOS" e
-     "ENTREGAS" saíam cortados na tela. Vinte e quatro dá o passo fino que
-     faltava para o campo de número ser estreito sem espremer o rótulo.
-
-       faixa 1:  Seq 2 · Nº Carga 4 · Veículo 4 · Motorista 6 · Rota 4 · Ação 4   = 24
-       faixa 2:  Peso 3 · Palet. 2 · Tipo 4 · Ganchos 3 · Entregas 3
-                 Destino 4 · KM 2 · Frete 3                                       = 24
-
-     Campo largo onde o texto é longo, estreito onde é número. Igual para
-     todos é o que parece justo e lê mal. */
-  #mont-tabela > tbody > tr.mont-linha{
-    display:grid;
-    grid-template-columns:repeat(24, minmax(0,1fr));
-    gap:2px 6px;
-    align-items:end;
-    border:1px solid var(--border-soft); border-radius:10px;
-    margin-bottom:8px; padding:8px 12px;
-    background:var(--navy-light);
-  }
-  /* A faixa de cima é o que se opera; a de baixo, os números. O
-     posicionamento explícito evita a grade escolher sozinha — e mudar de
-     escolha quando uma célula estiver vazia. */
-  #mont-tabela > tbody > tr.mont-linha > td{
-    grid-row:1;
-    display:flex; flex-direction:column; gap:1px;
-    border:none; padding:3px 0;
-    min-width:0;
-  }
-  #mont-tabela > tbody > tr.mont-linha > td[data-faixa="2"]{ grid-row:2 }
-
-  #mont-tabela > tbody > tr.mont-linha > td::before{
-    content:attr(data-rotulo);
-    font-size:9.5px; font-weight:700; text-transform:uppercase;
-    letter-spacing:.35px; color:var(--text-dim);
-    /* RÓTULO NÃO PARTE PALAVRA (16/09/2026).
-
-       A primeira tentativa usou `overflow-wrap:anywhere` para caber, e o
-       resultado na tela foi "GANCHO S" e "ENTREG AS" — a régua passou e a
-       leitura piorou. Palavra cortada ao meio é pior que rótulo curto.
-
-       Agora o rótulo não quebra e, se a coluna for estreita demais, ele
-       some com reticências — mas a coluna também ficou larga o bastante
-       para isso não acontecer (ver as larguras por campo abaixo). */
-    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
-  }
-  /* Ação não tem rótulo (o texto do botão já diz) e fica no canto da
-     primeira faixa, onde a mão procura. */
-  #mont-tabela > tbody > tr.mont-linha > td:not([data-rotulo])::before{ content:none }
-  /* Quem tem rótulo curto usa o curto. A lista mora em
-     ROTULOS_CURTOS_MONTAGEM (app.js), com a medida que justifica cada
-     abreviação — aqui só se pergunta pelo carimbo. */
-  #mont-tabela > tbody > tr.mont-linha > td[data-curto]::before{ content:attr(data-curto) }
-
-  /* A largura de cada campo. Duas faixas, doze colunas cada. */
-  /* AS LARGURAS SAÍRAM DA TELA, NÃO DO PALPITE (16/09/2026).
-
-     A primeira divisão foi feita de cabeça e a captura mostrou o estrago:
-     "Rota" com um ponto só, "CROSS-DOC…" cortado, "MONTES CL…" cortado.
-     Estes números vieram de medir o conteúdo real de cada campo. */
-  #mont-tabela > tbody > tr.mont-linha > td[data-rotulo="Seq."]{ grid-column:span 2 }
-  #mont-tabela > tbody > tr.mont-linha > td[data-rotulo="Nº Carga"]{ grid-column:span 4 }
-  #mont-tabela > tbody > tr.mont-linha > td[data-rotulo="Veículo"]{ grid-column:span 4 }
-  #mont-tabela > tbody > tr.mont-linha > td[data-rotulo="Motorista"]{ grid-column:span 6 }
-  #mont-tabela > tbody > tr.mont-linha > td[data-rotulo="Rota"]{ grid-column:span 4 }
-  /* A AÇÃO FECHA A PRIMEIRA FAIXA, no canto, onde a mão já procura. Sem
-     esta linha a grade a colocava onde sobrasse — e na primeira tentativa
-     ela caiu no meio da linha, entre Rota e Peso. */
-  #mont-tabela > tbody > tr.mont-linha > td:not([data-rotulo]){
-    grid-column:21 / span 4; grid-row:1;
-    flex-direction:row; flex-wrap:wrap; gap:4px;
-    justify-content:flex-end; align-items:center;
-  }
-  /* OS BOTÕES PRECISAM PODER ENCOLHER (16/09/2026).
-
-     `minmax(0,1fr)` deixa toda coluna encolher — menos quem tem dentro um
-     item que se recusa. "Criar carga" e "Excluir" lado a lado, com padding
-     e sem quebra, mediam mais que a coluna e empurravam a linha 3 px além
-     da tela: barra lateral de volta por 3 px, depois de todo o trabalho.
-     Medido: linha pedindo 748 px numa caixa de 744. */
-  #mont-tabela > tbody > tr.mont-linha > td:not([data-rotulo]) > *{
-    min-width:0; flex:0 1 auto;
-  }
-  /* O BOTÃO PAROU DE INFLAR A FAIXA (16/09/2026).
-
-     `white-space:normal` foi a primeira tentativa de fazer "Criar carga"
-     caber. Na tela ele quebrou em três linhas, virou um bloco alto e
-     desalinhou a faixa inteira. Botão de ação é alvo de clique, não
-     parágrafo: uma linha só, fonte um ponto menor, e a coluna dá conta. */
-  #mont-tabela > tbody > tr.mont-linha > td:not([data-rotulo]) .btn{
-    padding-inline:10px; white-space:nowrap; font-size:11.5px;
-    line-height:1.25; min-height:30px;
-  }
-
-  #mont-tabela > tbody > tr.mont-linha > td[data-rotulo="Peso (kg)"]{ grid-column:span 3 }
-  #mont-tabela > tbody > tr.mont-linha > td[data-rotulo="Palet."]{ grid-column:span 3 }
-  /* "CROSS-DOCKING" e "ENTREGA DIRETA" são as duas opções, e as duas
-     saíam cortadas em duas colunas. */
-  #mont-tabela > tbody > tr.mont-linha > td[data-rotulo="Tipo de Operação"]{ grid-column:span 3 }
-  #mont-tabela > tbody > tr.mont-linha > td[data-rotulo="Ganchos"]{ grid-column:span 3 }
-  #mont-tabela > tbody > tr.mont-linha > td[data-rotulo="Entregas"]{ grid-column:span 3 }
-  /* Destino é nome de cidade com UF: "BELO HORIZONTE/MG" não cabe em duas. */
-  #mont-tabela > tbody > tr.mont-linha > td[data-rotulo="Destino"]{ grid-column:span 3 }
-  #mont-tabela > tbody > tr.mont-linha > td[data-rotulo="KM"]{ grid-column:span 3 }
-  /* Frete: "R$ 3.611,00" mede 67 px, e a linha fecha em doze com ele
-     ocupando o que sobra da faixa. */
-  #mont-tabela > tbody > tr.mont-linha > td[data-rotulo="Frete"]{ grid-column:span 3; grid-row:2 }
-  /* O FRETE NÃO QUEBRA EM DUAS LINHAS. "R$ 3.611,00" mede 67 px e a
-     coluna dá 85 — mas sem esta linha o navegador quebrava depois do "R$"
-     e a faixa inteira crescia por causa de um campo. Valor em dinheiro se
-     lê de uma vez ou não se lê. */
-  #mont-tabela > tbody > tr.mont-linha > td[data-rotulo="Frete"]{ white-space:nowrap }
-
-  /* ALTURA: O QUE SE GANHA NA LARGURA NÃO PODE SE PERDER NA ROLAGEM
-     (16/09/2026).
-
-     Duas faixas tiram a barra lateral e cobram altura. Medido antes de
-     apertar: 145 px por carga, e a célula "Veículo" sozinha respondia por
-     75 deles — ela empilha a placa, o nome da transportadora e um traço,
-     cada um na sua linha.
-
-     Numa sexta de 42 cargas, cada 10 px por linha são 420 px de rolagem.
-     Então o que não é informação sai: o traço de vazio some, o nome da
-     transportadora encolhe e vai para uma linha só, e o espaço entre
-     rótulo e campo aperta. Nada de dado sai da tela — só ar. */
-  #mont-tabela > tbody > tr.mont-linha > td{ padding:1px 0 }
-  #mont-tabela > tbody > tr.mont-linha > td::before{ line-height:1.15 }
-  #mont-tabela > tbody > tr.mont-linha input,
-  #mont-tabela > tbody > tr.mont-linha select{ padding-block:3px; min-height:26px }
-
-  /* O secundário do Veículo (transportadora, tipo) numa linha só e menor:
-     é referência, não campo. */
-  #mont-tabela > tbody > tr.mont-linha > td[data-rotulo="Veículo"] span{
-    font-size:10px; line-height:1.2;
-    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
-  }
-  /* Traço de "sem valor" não é informação: ocupa linha e não diz nada. */
-  #mont-tabela > tbody > tr.mont-linha > td[data-rotulo="Veículo"] span:empty{ display:none }
-
-  #mont-tabela > tbody > tr.mont-linha{ padding-block:6px }
-
-  /* OITO CAMPOS DE LARGURA IGUAL NA FAIXA 2, e o porquê de não ser a
-     largura "justa" de cada um: o rótulo maior mede 73 px e o menor 24.
-     Dar a cada campo a largura do seu conteúdo espremeria GANCHOS e
-     ENTREGAS abaixo do próprio nome — foi o que aconteceu na tentativa
-     anterior, com "GANC…" e "ENTR…" na tela. Três colunas para cada um dá
-     85 px, que cabe o maior rótulo e o maior valor em dinheiro.
-
-     Destino e Operação continuam podendo cortar a opção escolhida: são
-     <select>, e o texto inteiro aparece ao abrir. Cortar a opção de um
-     seletor é o mesmo que a tabela em colunas já fazia; cortar um rótulo
-     seria novo, e é isso que esta divisão evita. */
-  #mont-tabela > tbody > tr.mont-linha input,
-  #mont-tabela > tbody > tr.mont-linha select{ width:100%; min-width:0 }
-  /* `#mont-tabela .c-kmdesl{ min-width:102px }` foi escrito para a tabela
-     em colunas, onde min-width era a única forma de o KM não espremer.
-     Na grade ele é a régua que estoura: num notebook de 1024 a coluna vale
-     62 px, e os 102 px empurravam a linha 3 px além da tela — barra
-     lateral de volta por 3 px. A largura agora é da grade. */
-  #mont-tabela > tbody > tr.mont-linha > td.c-kmdesl{ min-width:0 }
-
-  /* A linha de detalhe continua atravessando: ela é um contêiner, não um
-     campo — e o `colspan` não vale nada quando a linha virou grade. */
-  #mont-tabela > tbody > tr.mont-detalhe{ display:block }
-  #mont-tabela > tbody > tr.mont-detalhe > td{ display:block; width:100% }
-}
-
 /* Coluna de IDENTIFICAÇÃO da linha — Nº da Carga e Placa — mais escura e
    com peso maior que o resto da linha. É a coluna que a pessoa usa para
    achar "aquela carga" entre quinze parecidas; o resto (transportadora,
@@ -5802,3 +5601,162 @@ tr.fila-alvo > td{ box-shadow:inset 0 3px 0 0 var(--gold) }
    escolhida a olho não passa no escuro E no claro; token escolhido passa
    nos dois porque alguém já fez essa conta. */
 #rotas-tbody .rota-chip-rep{ background:var(--warn); color:var(--warn-fg); }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   MONTAGEM DO DIA: UMA LINHA POR CARGA, CABENDO NA TELA (16/09/2026).
+
+   HISTÓRICO, porque este é o segundo desenho:
+
+   Em 16/09 eu entreguei esta tabela em DUAS FAIXAS — a linha virava grade,
+   operação em cima, números embaixo. Passou na bateria e foi publicada. A
+   OPERAÇÃO REPROVOU: "nao ficou legal assim com duas linhas, pode fazer do
+   jeito que estava com as colunas mesmo cabendo na tela de forma
+   inteligente e organizada". Desfeito.
+
+   O PROBLEMA, medido de novo e agora coluna por coluna, com 12 montagens
+   reais e alguém logado:
+
+       monitor 1280 .... mostra 1.002 px, a tabela pedia 1.530
+       notebook 1024 ... mostra 746 px
+
+   E o laudo mostrou que eu tinha procurado a gordura no lugar errado. Ela
+   não estava no texto — estava nos CAMPOS e nos SELETORES, que nasceram com
+   a largura padrão do navegador e nunca foram medidos:
+
+       Ação .............. 186 px   dois botões com a palavra por extenso
+       Rota .............. 170 px   seletor do tamanho da opção mais longa
+       Tipo de Operação .. 170 px   idem
+       KM ................ 106 px   campo de número, guarda 3 dígitos
+       Peso .............. 102 px   campo de número
+       Palet. ............ 100 px   Não/Sim
+       Ganchos ........... 090 px   campo de número, guarda UM dígito
+       Entregas .......... 090 px   idem
+
+   A SAÍDA: `table-layout:fixed` e cada coluna com a largura do que ela
+   guarda. Sem isso o navegador dá à coluna a largura do maior conteúdo
+   possível — e um seletor com "SÃO PAULO INTERIOR · RIBEIRÃO PRETO" dentro
+   define a coluna inteira mesmo quando a linha mostra "500".
+
+   NADA SAI DA LINHA. Nenhuma coluna vira sublinha, nenhuma informação
+   desaparece: o que não couber na célula corta com reticências e o valor
+   inteiro fica no `title` e no seletor aberto.
+
+   Só no computador: no celular esta tabela já vira cartão pelo
+   `mobile-cartao` e cabe em 340 px. O problema é do monitor. */
+@media (min-width:821px){
+  #mont-tabela{ table-layout:fixed; width:100% }
+  #mont-tabela th, #mont-tabela > tbody > tr.mont-linha > td{
+    box-sizing:border-box; padding:6px 5px; }
+
+  /* A LARGURA DE CADA COLUNA É A DO QUE ELA GUARDA — não a do maior
+     conteúdo imaginável. Cada número aqui saiu da medição acima. */
+  #mont-tabela > thead > tr > th:nth-child(1){  width:60px  }  /* Seq.       alça + 3 dígitos */
+  #mont-tabela > thead > tr > th:nth-child(2){  width:68px  }  /* Nº Carga   6 dígitos */
+  #mont-tabela > thead > tr > th:nth-child(3){  width:86px  }  /* Veículo    placa + tipo */
+  #mont-tabela > thead > tr > th:nth-child(4){  width:82px  }  /* Motorista  nome, corta */
+  #mont-tabela > thead > tr > th:nth-child(5){  width:98px }  /* Rota       seletor */
+  #mont-tabela > thead > tr > th:nth-child(6){  width:68px  }  /* Peso (kg)  6 dígitos */
+  #mont-tabela > thead > tr > th:nth-child(7){  width:70px  }  /* Palet.     Não/Sim */
+  #mont-tabela > thead > tr > th:nth-child(8){  width:86px  }  /* Operação   seletor */
+  #mont-tabela > thead > tr > th:nth-child(9){  width:50px  }  /* Ganchos    2 dígitos */
+  #mont-tabela > thead > tr > th:nth-child(10){ width:52px  }  /* Entregas   2 dígitos */
+  #mont-tabela > thead > tr > th:nth-child(11){ width:74px  }  /* Destino    cidade/UF */
+  #mont-tabela > thead > tr > th:nth-child(12){ width:56px  }  /* KM         4 dígitos */
+  #mont-tabela > thead > tr > th:nth-child(13){ width:60px  }  /* Frete      R$ */
+  #mont-tabela > thead > tr > th:nth-child(14){ width:76px  }  /* Ação       ícones */
+  /* soma: 990 px de coluna em 1.002 px de área no monitor de 1280.
+     MEDIDO depois de aplicar: a primeira tentativa somou 1.016 e ainda
+     faltavam 14 px. Rota, Veículo, Motorista, Operação e Destino cederam
+     de 4 a 8 px cada — nenhuma perdeu conteúdo, todas cortam com
+     reticências e guardam o valor inteiro no `title`. */
+
+  /* CAMPO NÃO MANDA MAIS NA COLUNA: a coluna é que manda no campo.
+     `min-width:0` porque campo de formulário nasce com largura intrínseca
+     e ignora a célula — foi isso que inflou a tabela. */
+  #mont-tabela > tbody > tr.mont-linha input,
+  #mont-tabela > tbody > tr.mont-linha select{
+    width:100%; min-width:0; max-width:100%; box-sizing:border-box; }
+
+  /* As setinhas de cima/baixo do campo de número custam ~16 px por coluna e
+     ninguém clica nelas para digitar peso. O campo continua `type=number`:
+     teclado numérico no celular e validação de número seguem valendo. */
+  #mont-tabela > tbody > tr.mont-linha input[type=number]{
+    -moz-appearance:textfield; appearance:textfield; text-align:center; }
+  #mont-tabela input[type=number]::-webkit-outer-spin-button,
+  #mont-tabela input[type=number]::-webkit-inner-spin-button{
+    -webkit-appearance:none; margin:0; }
+  #mont-tabela .seq-input{ width:calc(100% - 14px) }
+  #mont-tabela .alca-arrastar{ font-size:11px; margin-right:1px }
+
+  /* O QUE NÃO CABE CORTA COM RETICÊNCIAS — não quebra a linha e não empurra
+     a coluna. O valor inteiro continua no `title` e dentro do seletor. */
+  /* A RETICÊNCIA É DO TEXTO, NUNCA DA CÉLULA (16/09/2026).
+
+     Primeira tentativa: `overflow:hidden;text-overflow:ellipsis` na própria
+     <td>. O print mostrou a coluna Seq. exibindo "…" no lugar do número — a
+     célula tem um campo dentro, e cortar a célula corta o campo. Régua dizia
+     que cabia; o olho disse que sumiu.
+
+     Agora corta só onde é TEXTO que transborda. Célula com campo apenas
+     esconde o que passar da borda, sem carimbar reticência por cima. */
+  #mont-tabela > tbody > tr.mont-linha > td{ overflow:hidden; white-space:nowrap; }
+  #mont-tabela .mont-praca, #mont-tabela .veic-transp, #mont-tabela .veic-tipo,
+  #mont-tabela .c-destino{
+    display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+    max-width:100%; }
+
+  /* Números que alinham na coluna. O "1" é mais estreito que o "8" na fonte
+     do painel, e sem isto a coluna de peso fica serrilhada. */
+  #mont-tabela .peso-input, #mont-tabela .km-input, #mont-tabela .seq-input,
+  #mont-tabela .numero-carga-input, #mont-tabela .ganchos-input,
+  #mont-tabela .entregas-input, #mont-tabela .c-frete{
+    font-variant-numeric:tabular-nums; }
+
+  /* O cabeçalho de 14 colunas estreitas precisa caber em duas alturas. */
+  #mont-tabela > thead > tr > th{
+    font-size:10px; white-space:normal; line-height:1.15; letter-spacing:0;
+    padding-right:6px; }
+
+  /* Três peças na célula de Ação — criar, excluir e a seta de abrir. Sem
+     `flex:none` a flex-box encolhe as três até uma cobrir a outra, e foi o
+     que o print mostrou: o ✕ saindo pela borda por cima da seta. */
+  #mont-tabela .mont-acoes{ gap:2px; justify-content:flex-end; flex-wrap:nowrap }
+  #mont-tabela .mont-acoes .btn{ padding:4px 5px; min-width:0; flex:none; font-size:12px }
+  #mont-tabela .mont-seta{ margin-left:0; flex:none }
+
+  /* O `min-width` que a coluna do KM ganhou em 10/09 era a defesa contra a
+     coluna espremer. Com largura fixa a defesa virou o próprio problema. */
+  #mont-tabela .c-kmdesl{ min-width:0 }
+
+  /* DUAS CÉLULAS EMPILHAM DE PROPÓSITO, E O `nowrap` AS QUEBROU (16/09/2026).
+
+     `white-space:nowrap` na célula inteira jogou para fora da vista o
+     seletor de rota, que mora EMBAIXO do nome. O print mostrou a coluna
+     Rota com o nome em negrito e nada mais — a pessoa perdia o jeito de
+     trocar a rota na linha. Régua dizia "cabe"; a função tinha sumido.
+
+     As duas células que empilham por desenho voltam a empilhar:
+
+       Rota ...... nome em cima para RECONHECER, seletor embaixo para TROCAR
+                   (a separação nasceu do relato "tão saindo duplicadas as
+                   rotas" — juntar as duas de novo traria o defeito de volta)
+       Veículo ... campo da placa em cima, transportadora e tipo embaixo
+
+     A linha volta de 67 para ~73 px, que é a altura que ela sempre teve.
+     O pedido era acabar com a barra de rolagem, não espremer a altura. */
+  #mont-tabela > tbody > tr.mont-linha > td:nth-child(5),
+  #mont-tabela > tbody > tr.mont-linha > td.cel-veiculo{ white-space:normal }
+  #mont-tabela .rota-inline{ display:block; margin-top:2px; font-size:11px }
+  #mont-tabela .cel-veiculo .placa-input{ display:block }
+}
+
+/* O RÓTULO DO BOTÃO SÓ RECOLHE QUANDO A LARGURA APERTA (16/09/2026).
+
+   Acima de 1400 px sobra espaço e a palavra aparece inteira — é sempre
+   melhor ler "Criar carga" do que decifrar um ícone. Abaixo disso a palavra
+   recolhe e o botão fica só com o ícone, mas NUNCA sem nome: `aria-label`
+   para o leitor de tela e `title` para o ponteiro parado em cima. Ícone mudo
+   seria trocar barra de rolagem por adivinhação. */
+@media (min-width:821px) and (max-width:1399px){
+  #mont-tabela .mont-rot{ display:none }
+}
