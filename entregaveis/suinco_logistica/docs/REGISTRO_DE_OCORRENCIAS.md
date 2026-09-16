@@ -3263,3 +3263,57 @@ dele. A bateria passou (434 do servidor + 182 de tela, zero falha) e a
 mudança é a que ele pediu, mas a decisão de PUBLICAR era dele e eu tomei.
 O portão não tem modo "só testar" — e é por isso que dizer "não publico" e
 rodar o portão são frases incompatíveis.
+
+## #72 — A tabela inteira proibida de quebrar vira página em branco (16/09/2026)
+
+Relato do dono, com duas fotos do papel na mão: *"os relatórios de
+devoluções estão saindo em branco, com a primeira página branca, e, depois
+da primeira página branca, saem as devoluções na página seguinte sem
+cabeçalho. Eu preciso que siga o mesmo padrão do relatório operacional... com
+cabeçalho em todas, sem quebra de dados, sem quebra de tabela."*
+
+**A CAUSA.** Duas regras, o mesmo erro de nível:
+
+    .dev-doc-bloco{ margin-bottom:10px; break-inside:avoid; }       (4053)
+    .dev-doc-checklist{ margin-bottom:14px; page-break-inside:avoid }  (3960)
+
+O `avoid` envolvia a **tabela inteira**. Ele diz ao navegador "não parta
+isto". Com 12 linhas o bloco tem **1.274 px** e a folha A4 deitada tem
+**755 px** úteis: não cabe, e não pode ser partido. Sobra ao navegador uma
+saída só — empurrar o bloco inteiro para a página seguinte, e a primeira
+fica com o cabeçalho e nada embaixo.
+
+E o cabeçalho da tabela não repetia **pelo mesmo motivo**. A regra certa já
+existia (`thead{display:table-header-group}`, linha 3561), mas ela só vale
+quando a tabela PODE ser partida. Bloco indivisível, cabeçalho preso dentro.
+
+MEDIDO, mesmo conteúdo, mesmos 12 registros:
+
+    com  break-inside:avoid ... 3 páginas   <- a do meio é a branca
+    sem  break-inside:avoid ... 2 páginas
+
+O Relatório Operacional nunca teve isso porque a tabela dele não está
+dentro de um bloco com `avoid`. É por isso que o dono pediu "o mesmo padrão
+do relatório operacional" — ele descreveu a correção sem saber.
+
+**A CORREÇÃO.** A proteção muda de nível, não desaparece: `break-inside:
+avoid` protege a **linha** (`.print-page tr`, já existente), para nenhum
+registro sair cortado ao meio; a tabela volta a poder continuar na página
+seguinte, com o cabeçalho repetido. `break-after:avoid` no título do bloco
+prende o título à sua tabela — título sozinho no pé da página é a outra
+cara do mesmo defeito.
+
+**A FAMÍLIA.** É parente da #71: *decisão aplicada no nível errado*. Lá,
+gravar por linha quando bastava por lote; aqui, proibir quebra na tabela
+quando bastava na linha. Nos dois casos a intenção estava certa e o alvo
+errado — e nos dois o sintoma aparece longe da causa.
+
+**O TESTE:** `testes/test_documento_nao_sai_pagina_em_branco.py`. Mede o
+RESULTADO, não a regra de CSS: gera o PDF de verdade, conta as páginas e
+compara com o mínimo que o conteúdo exige. Reprova com 3 onde cabem 2, nos
+dois documentos. Confere também que a tabela começa na primeira página, que
+o `thead` repete e que a linha continua protegida.
+
+**CONFERIDO QUE NÃO QUEBROU O PADRÃO:** `test_relatorios` (Operacional,
+Executivo e Fretes), `test_devolucoes_checklist` e
+`test_devolucoes_ordem_e_sem_filtro_de_dia` passam.
