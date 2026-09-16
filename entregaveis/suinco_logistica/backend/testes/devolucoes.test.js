@@ -40,6 +40,10 @@ const OPERADORES = [
   // Duas filiais DIFERENTES: é com duas que se prova o isolamento de escopo.
   ['dev.bsb@devteste.local', 'Posto BSB', 'Filial 105 BSB'],
   ['dev.ba@devteste.local', 'Posto BA', 'Filial 106 BAHIA'],
+  // A TERCEIRA filial entrou com a nota de transferência (16/09/2026): o
+  // dono citou as três — 105, 106 e 107 — e a regra precisa valer para as
+  // três, não para as duas que já estavam aqui.
+  ['dev.es@devteste.local', 'Posto ES', 'Filial 107 ES'],
 ];
 const SENHA = 'senha-de-teste-123';
 const ROTA = 'DEVT';
@@ -1613,5 +1617,56 @@ describe('18. Um clique errado às 2 da manhã tem volta (14/09/2026)', () => {
     const revs = r.json.revisoes || r.json;
     assert.ok(Array.isArray(revs) && revs.length,
       'desfazer é alteração de dado: tem que deixar revisão');
+  });
+
+  /* ──────────────────────────────────────────────────────────────────
+     A NOTA DE TRANSFERÊNCIA DA FILIAL (16/09/2026)
+
+     Pedido do dono: "quero um campo chamado checklist devolução das
+     filiais que registre a nota de transferência... só as filiais vão
+     precisar preencher isso, 106 105 107".
+
+     POR QUE SÓ PARA ELAS, e por que o campo tinha saído deste formulário
+     em 19/08: numa devolução comum quem preenche a nota é a PORTARIA, no
+     recebimento — na hora do lançamento o caminhão nem chegou. Numa
+     devolução de FILIAL a mercadoria sai de lá com nota de transferência
+     emitida na hora, então a filial TEM o número ao criar o checklist. O
+     motivo que tirou o campo não vale para elas.
+
+     O servidor é quem manda: a tela tem guarda própria, mas um checklist
+     de filial sem nota não pode nascer nem por chamada direta. */
+  test('filial NÃO cria checklist sem a nota de transferência', async () => {
+    /* `novoChecklist()` já traz uma nota — para provar a RECUSA é preciso
+       APAGÁ-LA. A primeira versão deste teste não apagava e passava com
+       201 achando que tinha reprovado: verde e vermelho pelos motivos
+       errados são o mesmo defeito. */
+    const r = await req('/api/devolucoes', { metodo: 'POST', token: tokens['Filial 106 BAHIA'],
+      corpo: { ...novoChecklist(), notaTransferencia: '' } });
+    assert.equal(r.status, 400, `esperava recusa, veio ${r.status}: ${r.texto}`);
+    assert.equal(r.json.codigo, 'NOTA_TRANSFERENCIA_FALTANDO', r.texto);
+    assert.match(r.json.erro || '', /nota de transfer/i,
+      'a recusa precisa DIZER o que falta, não só negar');
+  });
+
+  test('filial cria com a nota, e ela fica gravada', async () => {
+    const r = await req('/api/devolucoes', { metodo: 'POST', token: tokens['Filial 106 BAHIA'],
+      corpo: { ...novoChecklist(), notaTransferencia: '77123' } });
+    assert.equal(r.status, 201, r.texto);
+    assert.equal(r.json.notaTransferencia, '77123',
+      'a nota tem que voltar gravada, senão a filial digita e o dado se perde');
+  });
+
+  test('espaço em branco não vale como nota', async () => {
+    const r = await req('/api/devolucoes', { metodo: 'POST', token: tokens['Filial 107 ES'],
+      corpo: { ...novoChecklist(), notaTransferencia: '   ' } });
+    assert.equal(r.status, 400, `esperava recusa, veio ${r.status}: ${r.texto}`);
+    assert.equal(r.json.codigo, 'NOTA_TRANSFERENCIA_FALTANDO', r.texto);
+  });
+
+  test('quem NÃO é filial continua criando sem a nota', async () => {
+    const r = await req('/api/devolucoes', { metodo: 'POST', token: tokens['Logística'],
+      corpo: novoChecklist() });
+    assert.equal(r.status, 201,
+      `a Logística cria antes do caminhão chegar e não tem a nota: ${r.texto}`);
   });
 });

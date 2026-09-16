@@ -590,6 +590,27 @@
                (19/08/2026): quem preenche é a PORTARIA, no recebimento, e
                na hora do lançamento o caminhão nem chegou. Mesmo motivo de
                placa e motorista, que já não estavam aqui. -->
+          <!-- A NOTA DE TRANSFERÊNCIA DA FILIAL (16/09/2026).
+
+               Pedido do dono: "quero um campo chamado checklist devolução
+               das filiais que registre a nota de transferência... só as
+               filiais vão precisar preencher isso, 106 105 107".
+
+               Ela tinha SAÍDO deste formulário em 19/08, e com razão: numa
+               devolução comum quem preenche é a PORTARIA, no recebimento.
+               Para FILIAL é diferente — a mercadoria sai de lá com a nota
+               emitida na hora, e a filial tem o número em mãos ao criar.
+
+               `hidden` de nascença: quem não é filial nem vê o campo. Não
+               fica cinza, não fica desabilitado — some. Campo desabilitado
+               numa tela que não é sua é ruído que faz a pessoa se perguntar
+               o que está fazendo de errado. -->
+          <div id="dev-nota-transf-campo" hidden>
+            <label for="dev-nota-transf">Nota de transferência
+              <span class="hint">(obrigatória para filial)</span></label>
+            <input type="text" id="dev-nota-transf" maxlength="50"
+                   inputmode="numeric" autocomplete="off"
+                   title="Número da nota de transferência que saiu da filial — é ela que liga esta devolução à transferência."></div>
           <div><label for="dev-operador-cod">Cód. operador <span class="hint">(monitoramento)</span></label>
             <input type="text" id="dev-operador-cod"
                    title="Número informado pelo monitoramento — é sob ele que as devoluções são lançadas."></div>

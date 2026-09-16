@@ -278,6 +278,33 @@ rotasDevolucoes.post('/devolucoes', exigirLogin, async (req, res, next) => {
     if (!cab.data_dev || !/^\d{4}-\d{2}-\d{2}$/.test(cab.data_dev)) {
       return res.status(400).json({ erro: 'Informe a data da devolução (AAAA-MM-DD).', codigo: 'DATA_FALTANDO' });
     }
+    /* A NOTA DE TRANSFERÊNCIA É OBRIGATÓRIA PARA FILIAL (16/09/2026).
+
+       Pedido do dono: "quero um campo chamado checklist devolução das
+       filiais que registre a nota de transferência... só as filiais vão
+       precisar preencher isso, 106 105 107".
+
+       POR QUE SÓ PARA ELAS. Este campo esteve no formulário de criação e
+       saiu em 19/08, com razão: numa devolução comum quem preenche a nota
+       é a PORTARIA, no recebimento — na hora do lançamento o caminhão nem
+       chegou. Numa devolução de FILIAL a mercadoria sai de lá com nota de
+       transferência emitida na hora, e a filial tem o número em mãos ao
+       criar. O motivo que tirou o campo não vale para elas.
+
+       AQUI E NÃO SÓ NA TELA porque quem manda é o servidor: a tela tem
+       guarda própria, mas checklist de filial sem nota não pode nascer nem
+       por chamada direta. `ehFilial` é a mesma função que decide escopo de
+       filial no resto do domínio — uma decisão, um lugar.
+
+       Espaço em branco não vale: `camposCabecalho` já apara o texto, então
+       "   " chega aqui como string vazia. */
+    if (ehFilial(op.setor) && !String(cab.nota_transferencia || '').trim()) {
+      return res.status(400).json({
+        erro: 'Informe o número da nota de transferência — é ela que liga esta '
+          + 'devolução à transferência que saiu da filial.',
+        codigo: 'NOTA_TRANSFERENCIA_FALTANDO',
+      });
+    }
     const faltantes = await rotasDesconhecidas(rotas);
     if (faltantes.length) {
       return res.status(422).json({
