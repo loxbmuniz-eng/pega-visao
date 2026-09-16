@@ -6050,3 +6050,20 @@ tr.mont-linha > td, tr.hist-linha > td, td[onclick], th[onclick]{
 .bento .stat-box.stat-zerada:not(.stat-destaque):hover,
 .bento .stat-box.stat-zerada:not(.stat-destaque):focus-within{ opacity:1 }
 .bento .stat-box.stat-zerada:not(.stat-destaque):hover .stat-num{ color:var(--gold-text) }
+
+/* O PISCA DO TOQUE RECUSADO (16/09/2026).
+
+   Quando o segundo toque é barrado, o botão avisa que ouviu e negou. Sem
+   isso a pessoa acha que o painel travou e aperta uma terceira vez — que é
+   exatamente o comportamento que o guarda existe para acabar.
+
+   `animation`, e não `transition`, porque precisa poder repetir: o mesmo
+   botão barrado duas vezes seguidas tem que piscar duas vezes. Removo e
+   readiciono a classe no JavaScript para reiniciar a animação. */
+.toque-recusado{ animation:toqueRecusado 260ms cubic-bezier(.23,1,.32,1) }
+@keyframes toqueRecusado{
+  0%{ transform:scale(.97) } 55%{ transform:scale(1.015) } 100%{ transform:none }
+}
+@media (prefers-reduced-motion:reduce){
+  .toque-recusado{ animation:none }
+}
