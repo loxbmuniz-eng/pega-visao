@@ -45,24 +45,27 @@ def ck(nome, ok, detalhe=''):
 # Um botão de verdade do painel, com um contador no lugar da ação. Contar
 # quantas vezes o `onclick` ROLOU é a única medida que importa: é ele que
 # chama o servidor.
+# Dois botões de verdade do painel: um que chama uma AÇÃO QUE GRAVA e um
+# que só navega. Contar quantas vezes o `onclick` rolou é a única medida que
+# importa — é ele que chama o servidor.
 MONTAR = """() => {
   window.__contagem = 0;
   window.__conta = () => { window.__contagem++; };
-  const faz = (id, extra) => {
+  /* `efetivarMontagemUI` é uma das ações da lista; o segundo toque nela
+     cria uma SEGUNDA CARGA. O outro botão só navega. */
+  const faz = (id, acao, topo) => {
     const b = document.createElement('button');
     b.id = id; b.className = 'btn btn-primary';
-    b.setAttribute('onclick', '__conta()');
-    if (extra) b.setAttribute(extra, '');
+    b.setAttribute('onclick', acao);
     b.textContent = id;
-    b.style.cssText = 'position:fixed;left:20px;top:' + (id === 'pv-normal' ? 20 : 80)
+    b.style.cssText = 'position:fixed;left:20px;top:' + topo
       + 'px;z-index:2147483647;display:inline-flex;width:150px;height:44px';
     document.body.appendChild(b);
   };
-  faz('pv-normal');
-  faz('pv-repetivel', 'data-repetivel');
+  faz('pv-grava', '__conta(); void "efetivarMontagemUI(1)"', 20);
+  faz('pv-navega', '__conta()', 80);
   return true;
 }"""
-
 
 async def toques(pg, sel, n, intervalo_ms):
     el = await pg.query_selector(sel)
@@ -97,14 +100,14 @@ async def main():
 
         print('\n=== 1. DOIS TOQUES RÁPIDOS VIRAM UMA AÇÃO ===')
         await pg.evaluate("()=>{window.__contagem=0}")
-        await toques(pg, '#pv-normal', 3, 40)
+        await toques(pg, '#pv-grava', 3, 40)
         await pg.wait_for_timeout(200)
         n = await pg.evaluate("()=>window.__contagem")
         ck('três toques em rajada dispararam a ação UMA vez', n == 1, f'{n} disparo(s)')
 
         print('\n=== 2. O BOTÃO AVISA QUE BARROU ===')
         marcou = await pg.evaluate(
-            "()=>document.getElementById('pv-normal').classList.contains('toque-recusado')")
+            "()=>document.getElementById('pv-grava').classList.contains('toque-recusado')")
         ck('o botão barrado fica marcado para piscar', marcou, str(marcou))
 
         print('\n=== 3. DEPOIS DA JANELA, VOLTA A ACEITAR ===')
@@ -118,25 +121,29 @@ async def main():
         # passar, o bloco 3 começava dentro da trava que ele mesmo criou.
         await pg.wait_for_timeout(JANELA + 150)
         await pg.evaluate("()=>{window.__contagem=0}")
-        await toques(pg, '#pv-normal', 1, 0)
+        await toques(pg, '#pv-grava', 1, 0)
         await pg.wait_for_timeout(600)
-        await toques(pg, '#pv-normal', 1, 0)
+        await toques(pg, '#pv-grava', 1, 0)
         await pg.wait_for_timeout(200)
         n = await pg.evaluate("()=>window.__contagem")
         ck('dois toques separados por 600ms disparam DUAS vezes', n == 2, f'{n} disparo(s)')
 
-        print('\n=== 4. QUEM PODE REPETIR, REPETE ===')
+        print('\n=== 4. QUEM SÓ NAVEGA NÃO É BARRADO ===')
+        # O portão v38 reprovou a primeira versão deste guarda: ela barrava
+        # TODO botão, e no segundo fator o mesmo #btn-entrar é apertado duas
+        # vezes de propósito — o primeiro toque PEDE o código, o segundo
+        # ENVIA. Aba, menu e login são navegação, e navegação não se trava.
         await pg.evaluate("()=>{window.__contagem=0}")
-        await toques(pg, '#pv-repetivel', 3, 40)
+        await toques(pg, '#pv-navega', 3, 40)
         await pg.wait_for_timeout(200)
         n = await pg.evaluate("()=>window.__contagem")
-        ck('botão marcado como repetível não é barrado', n == 3, f'{n} disparo(s)')
+        ck('botão que não grava aceita toques em sequência', n == 3, f'{n} disparo(s)')
 
         # Quem navega por teclado aperta uma vez — travar ali seria resolver
         # um problema de dedo criando um de acessibilidade.
         await pg.evaluate("()=>{window.__contagem=0}")
         for _ in range(3):
-            await pg.evaluate("()=>document.getElementById('pv-normal').click()")
+            await pg.evaluate("()=>document.getElementById('pv-grava').click()")
         await pg.wait_for_timeout(200)
         n = await pg.evaluate("()=>window.__contagem")
         ck('acionamento por teclado/programa não é barrado', n == 3, f'{n} disparo(s)')

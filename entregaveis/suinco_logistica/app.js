@@ -1163,42 +1163,44 @@ function receberExclusaoRemota(aviso){
   tocarAlertaAlteracao();
 }
 
-/* O SEGUNDO TOQUE NÃO PASSA (16/09/2026).
+/* O SEGUNDO TOQUE NÃO VIRA SEGUNDA GRAVAÇÃO (16/09/2026).
 
-   MEDIDO: o painel inteiro tem TRÊS botões que se desabilitam enquanto a
-   ação corre, e os três são do modal de avisos. Os da operação — "Seguiu
-   Viagem", "Criar carga", "Cancelar", "Chegou", "Saiu" — aceitam o segundo
-   toque de braços abertos.
+   MEDIDO: o painel inteiro tinha TRÊS botões que se desabilitam enquanto a
+   ação corre, e os três eram do modal de avisos. Os da operação aceitavam
+   o segundo toque de braços abertos. A folha de estilo já registrava a
+   causa, em 2026: "no celular não existe hover, e sem resposta visual o
+   operador aperta duas vezes achando que não pegou". A resposta ao toque
+   entrou hoje e resolve a PERCEPÇÃO; não resolve o que o segundo toque faz
+   quando chega ao servidor.
 
-   POR QUE ISSO É DEFEITO E NÃO DETALHE. A própria folha de estilo já
-   registrava o comportamento, em 2026: "no celular não existe hover, e sem
-   resposta visual o operador aperta duas vezes achando que não pegou". A
-   resposta ao toque entrou hoje e resolve a percepção; ela NÃO resolve o
-   que acontece quando o segundo toque chega ao servidor. Duas chamadas de
-   "Seguiu Viagem" na mesma carga, dois checklists, duas cargas criadas.
+   A PRIMEIRA VERSÃO BARRAVA TODO BOTÃO, E O PORTÃO v38 A REPROVOU.
+   `test_segundo_fator` caiu em "um código de recuperação entra sem o
+   celular": no segundo fator o MESMO `#btn-entrar` é apertado duas vezes de
+   propósito — o primeiro toque PEDE o código, o segundo ENVIA. O guarda
+   comeu o segundo.
 
-   POR QUE UM GUARDA ÚNICO, e não `disabled` em cada chamador. São mais de
-   cento e cinquenta botões com `onclick` na marcação, e a regra da casa é
-   clara: a mesma decisão escrita em dois lugares diverge. Escrever "trave o
-   botão" cento e cinquenta vezes é garantir que a próxima pessoa esqueça
-   numa. Aqui a decisão mora num lugar só.
+   O levantamento nas suítes mostrou que isso é comum, não exceção: as abas,
+   o menu da gaveta e o botão de entrar são apertados em sequência o tempo
+   todo. A premissa "mesmo botão duas vezes é a mesma intenção repetida" é
+   FALSA neste painel.
 
-   COMO. Um ouvinte na FASE DE CAPTURA, antes de qualquer `onclick`: se o
-   MESMO botão for tocado de novo dentro da janela, o segundo toque morre
-   ali. Captura, e não borbulha, porque na borbulha o `onclick` do elemento
-   já rodou.
+   Então a regra inverteu: em vez de barrar tudo e abrir exceção, barra só
+   onde o repique CRIA REGISTRO — efetivar carga, cancelar, excluir, avançar
+   etapa, criar usuário, lançar lacre. Nesses, o segundo toque não é
+   impaciência: é uma segunda carga, um segundo cancelamento, uma segunda
+   exclusão. Em aba, menu e login o segundo toque é navegação, e navegação
+   não se trava.
 
-   O QUE NÃO ENTRA, de propósito:
+   A lista mora AQUI, num lugar só, e é por nome de função — não por id nem
+   por classe. Ação nova que grave entra nesta lista e ganha a trava; botão
+   que só navega nunca entra. */
+const ACOES_DE_UMA_VEZ = [
+  'efetivarMontagemUI', 'efetivarLoteMontagemUI', 'cancelarMontagemUI',
+  'excluirCargaUI', 'excluirCargaSeguiuViagemUI', 'excluirRotaUI',
+  'excluirUsuarioUI', 'criarCargaProgramadaUI', 'criarUsuarioUI',
+  'avancarStatusUI', 'registrarLacreRetidoUI',
+];
 
-     · campo de digitar, seletor, aba e alça de arrastar — nada disso é
-       ação de gravar, e travar ali atrapalharia quem usa rápido;
-     · botão de navegação e de filtro, que a pessoa PODE querer apertar em
-       sequência (marcados com `data-repetivel`);
-     · o teclado. Quem navega por teclado aperta uma vez.
-
-   400ms: acima do intervalo de toque acidental (o duplo-clique do sistema
-   é ~500ms, mas aqui o segundo toque é a mesma intenção repetida) e abaixo
-   de qualquer espera que a pessoa faria de propósito. */
 const _ULTIMO_TOQUE = new WeakMap();
 const JANELA_TOQUE_DUPLO = 400;
 
@@ -1207,24 +1209,30 @@ document.addEventListener('click', (ev) => {
     ? ev.target.closest('button, .btn')
     : null;
   if (!alvo) return;
-  /* Quem PODE ser apertado em sequência diz isso na marcação. */
-  if (alvo.hasAttribute('data-repetivel')) return;
-  if (alvo.type === 'submit' && alvo.form) return;
-  /* Toque de teclado tem `detail` 0 — quem navega por teclado aperta uma vez. */
+  /* Toque de teclado tem `detail` 0 — quem navega por teclado aperta uma
+     vez, e travar ali seria resolver um problema de dedo criando um de
+     acessibilidade. */
   if (!ev.detail) return;
+
+  /* Só grava quem chama uma das ações da lista. O `onclick` do painel é
+     texto na marcação, então dá para perguntar. */
+  const acao = alvo.getAttribute('onclick') || '';
+  if (!ACOES_DE_UMA_VEZ.some(nome => acao.includes(nome + '('))) return;
 
   const agora = Date.now();
   const antes = _ULTIMO_TOQUE.get(alvo) || 0;
   if (agora - antes < JANELA_TOQUE_DUPLO) {
     ev.preventDefault();
     ev.stopImmediatePropagation();
-    /* O botão pisca para a pessoa saber que o toque foi ouvido e recusado —
-       recusa silenciosa é o que fez ela apertar de novo em primeiro lugar. */
+    /* O botão pisca: recusa silenciosa é o que fez a pessoa apertar de novo
+       em primeiro lugar. */
     alvo.classList.remove('toque-recusado');
     void alvo.offsetWidth;
     alvo.classList.add('toque-recusado');
     return;
   }
+  /* Toque BARRADO não atualiza o relógio, de propósito: se atualizasse,
+     quem martelasse o botão renovaria a trava para sempre. */
   _ULTIMO_TOQUE.set(alvo, agora);
 }, true);
 
