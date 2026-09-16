@@ -2462,10 +2462,45 @@ function celulaEtapa(e){
    Mesma marca (●/✓/·) e o mesmo `title` com o nome completo do status de
    antes — nada de informação depende só da cor (acessibilidade já
    estabelecida no restante do painel). */
+/* O CAMINHÃO MARCA ONDE A CARGA ESTÁ (16/09/2026).
+
+   Pedido do dono: um caminhão no painel, "padrão logística", e ele mesmo
+   pediu o juízo de onde. A Visão do Pátio é o lugar, por quatro motivos:
+
+     · é o único onde TODA linha é um veículo de verdade, parado no pátio
+       agora — sem filtro de período a lista é `status !== 'Seguiu Viagem'`.
+       Na Montagem do Dia a linha nasce sem placa, e desenhar caminhão para
+       carga sem veículo seria mostrar na tela o que não existe;
+     · a trilha já existe. Caminhão em cima de trilha carrega significado —
+       a POSIÇÃO conta o quanto a carga andou. Caminhão numa coluna que não
+       é trilha é adesivo;
+     · serve quatro telas de uma vez: Torre, Portaria, Expedição e
+       Faturamento usam esta mesma função;
+     · custa ZERO de largura. Substitui a marca que já estava ali.
+
+   TROCA SÓ O `●`, e isso é decisão. O desenho que mostrei na proposta
+   virava a trilha inteira em pontos — mas as marcas `✓` e `·` são TEXTO, e
+   este painel decidiu que nenhuma informação depende só de cor. As cores
+   daqui também são calibradas por teste de contraste (test_contraste.py),
+   com dois achados escritos logo abaixo na folha de estilo. Jogar tudo
+   fora para pôr um desenho seria trocar acessibilidade por enfeite.
+
+   O caminhão usa `currentColor`: herda a cor já calibrada da etapa atual,
+   nos dois temas, sem uma segunda regra para manter em dia. */
+const CAMINHAO_ETAPA =
+  '<svg class="et-cam" viewBox="0 0 40 24" aria-hidden="true" focusable="false">'
+  + '<rect x="1" y="7" width="19" height="11" rx="1.5" fill="none"'
+  +   ' stroke="currentColor" stroke-width="2.2"/>'
+  + '<path d="M21 10h6l5 4.2V18H21z" fill="currentColor"/>'
+  + '<circle cx="8" cy="20" r="2.6" fill="currentColor"/>'
+  + '<circle cx="26" cy="20" r="2.6" fill="currentColor"/></svg>';
+
 function linhaDoTempoCompacta(etapas){
   const passos = etapas.map(e=>{
     const classe = e.atual ? 'et-mini-atual' : e.cumprida ? 'et-mini-ok' : 'et-mini-pendente';
-    const marca = e.atual ? '●' : e.cumprida ? '✓' : '·';
+    /* O caminhão entra no lugar do `●`, e o nome da etapa continua no
+       `title` do selo — quem lê por leitor de tela não perde nada. */
+    const marca = e.atual ? CAMINHAO_ETAPA : e.cumprida ? '✓' : '·';
     const titulo = e.atual ? `${e.status} — agora`
       : e.cumprida ? `${e.status}${e.operador ? ' — '+e.operador : ''}`
       : `${e.status} — ainda não`;

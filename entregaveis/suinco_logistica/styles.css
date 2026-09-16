@@ -5905,3 +5905,25 @@ tr.mont-linha > td, tr.hist-linha > td, td[onclick], th[onclick]{
   tr[onclick] > td, td[onclick], th[onclick], .nav-tab{
     transition:none !important; box-shadow:none !important; }
 }
+
+/* O CAMINHÃO DA ETAPA ATUAL (16/09/2026).
+
+   Ele mora dentro do mesmo <b> onde estava o `●`, então herda o tamanho da
+   linha e a COR já calibrada por contraste da etapa atual — `currentColor`
+   no SVG é o que faz isso valer nos dois temas sem uma segunda regra.
+
+   Largura de 17px contra os ~8px do `●`: o selo da etapa atual tem
+   `min-width:26px` e `padding:2px 3px`, então cabe sem empurrar nada. A
+   trilha continua com os mesmos seis selos e a mesma largura total.
+
+   `display:block` e `margin:0 auto` porque o <b> é flex-item de coluna: sem
+   isso o SVG ganharia a linha de base do texto e ficaria desalinhado do
+   `✓` dos selos vizinhos. */
+.et-mini b .et-cam{
+  display:block; width:17px; height:10px; margin:0 auto;
+}
+/* No documento a etapa atual perde o fundo colorido (regra de @media print
+   logo acima) e fica só com a borda — o caminhão vai junto, em traço. */
+@media print{
+  .et-mini b .et-cam{ width:15px; height:9px }
+}
