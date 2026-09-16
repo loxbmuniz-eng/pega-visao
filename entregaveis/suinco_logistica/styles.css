@@ -5927,3 +5927,126 @@ tr.mont-linha > td, tr.hist-linha > td, td[onclick], th[onclick]{
 @media print{
   .et-mini b .et-cam{ width:15px; height:9px }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   A TORRE DE CONTROLE CABE NA TELA (16/09/2026).
+
+   O relato do dono, de manhã, foi geral: "tem hora que tem rolagem lateral
+   sim e precisa mover a barra pra ver o resto das informações, queria que
+   não tivesse isso em lugar nenhum". Eu consertei a Montagem do Dia e
+   DEIXEI A TORRE PARA TRÁS — que é a tela que mais gente abre.
+
+   MEDIDO, com 14 cargas e alguém logado, no monitor de 1280:
+
+       mostra 1.002 px · a tabela pede 1.193 px · faltam 191 px
+
+   E onde a largura estava:
+
+       Status ................ 186 px   o selo mais a situação da placa
+       Veículo ............... 125 px   placa, transportadora e tipo
+       Tipo de Operação ...... 122 px   "CROSS-DOCKING" manda na coluna
+       Rota .................. 102 px
+
+   Mesma saída que resolveu a Montagem, e pelo mesmo motivo: sem
+   `table-layout:fixed` o navegador dá à coluna a largura do MAIOR conteúdo
+   possível, não do que a linha mostra.
+
+   NADA SAI DA LINHA. As doze colunas continuam lá; o que não couber corta
+   com reticências e o valor inteiro fica no `title`. */
+@media (min-width:821px){
+  #torre-tabela{ table-layout:fixed; width:100% }
+  #torre-tabela th,
+  #torre-tabela > tbody > tr > td{ box-sizing:border-box; padding:6px 5px }
+
+  #torre-tabela > thead > tr > th:nth-child(1){  width:56px  }  /* Seq.        */
+  #torre-tabela > thead > tr > th:nth-child(2){  width:76px  }  /* Nº Carga    */
+  #torre-tabela > thead > tr > th:nth-child(3){  width:90px  }  /* Veículo     */
+  #torre-tabela > thead > tr > th:nth-child(4){  width:88px  }  /* Motorista   */
+  #torre-tabela > thead > tr > th:nth-child(5){  width:90px  }  /* Rota        */
+  #torre-tabela > thead > tr > th:nth-child(6){  width:66px  }  /* Peso (kg)   */
+  #torre-tabela > thead > tr > th:nth-child(7){  width:58px  }  /* Palet.      */
+  #torre-tabela > thead > tr > th:nth-child(8){  width:80px  }  /* Operação    */
+  #torre-tabela > thead > tr > th:nth-child(9){  width:66px  }  /* Ganchos·Entr*/
+  #torre-tabela > thead > tr > th:nth-child(10){ width:144px }  /* Status      */
+  #torre-tabela > thead > tr > th:nth-child(11){ width:78px  }  /* Programação */
+  #torre-tabela > thead > tr > th:nth-child(12){ width:92px  }  /* Ação        */
+  /* soma: 984 px em 1.002 px de área.
+
+     A PRIMEIRA REPARTIÇÃO DEU 120 px AO STATUS E ESTAVA ERRADA. O print
+     mostrou o selo saindo como "AGUARDAND…" — e isso pode ser "Aguardando
+     Veículo" ou "Aguardando Embarque", duas etapas diferentes, de setores
+     diferentes. Coluna que corta no meio de um nome ambíguo não economiza
+     largura: troca largura por dúvida. A régua dizia que cabia; o olho
+     disse que mentia.
+
+     O Status subiu para 144 px e o selo passou a QUEBRAR em vez de cortar.
+     Os 24 px saíram de Veículo, Motorista, Rota, Operação, Peso, Palet. e
+     Programação, que cortam sem ambiguidade porque o valor inteiro fica no
+     `title`. */
+
+  /* Campo e seletor deixam de mandar na coluna — `min-width:0` porque
+     controle de formulário nasce com largura intrínseca e ignora a célula. */
+  #torre-tabela > tbody > tr > td input,
+  #torre-tabela > tbody > tr > td select{
+    width:100%; min-width:0; max-width:100%; box-sizing:border-box }
+  #torre-tabela > tbody > tr > td input[type=number]{
+    -moz-appearance:textfield; appearance:textfield; text-align:center }
+  #torre-tabela input[type=number]::-webkit-outer-spin-button,
+  #torre-tabela input[type=number]::-webkit-inner-spin-button{
+    -webkit-appearance:none; margin:0 }
+
+  /* A RETICÊNCIA É DO TEXTO, NUNCA DA CÉLULA. Na Montagem eu cortei a
+     célula inteira e engoli o campo da sequência — o print pegou o que a
+     régua não pegou. Aqui já entra certo. */
+  #torre-tabela > tbody > tr > td{ overflow:hidden }
+  #torre-tabela .cel-veiculo > *, #torre-tabela .veic-transp,
+  #torre-tabela .veic-tipo, #torre-tabela td > strong,
+  #torre-tabela .text-dim{
+    display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+    max-width:100% }
+  /* O selo de status QUEBRA, não corta: o nome inteiro tem que aparecer. */
+  #torre-tabela .badge{ max-width:100%; white-space:normal; line-height:1.15;
+    overflow:visible; text-overflow:clip }
+  #torre-tabela > tbody > tr > td:nth-child(10){ white-space:normal }
+  /* A coluna de Ação empilha dois botões; sem isto "Outra carga" quebra em
+     duas linhas e estica a linha inteira. */
+  #torre-tabela > tbody > tr > td:nth-child(12){ white-space:normal }
+  #torre-tabela > tbody > tr > td:nth-child(12) .btn{
+    display:block; width:100%; margin-bottom:3px; white-space:nowrap;
+    font-size:10.5px; padding:4px 3px; letter-spacing:-.01em;
+    overflow:hidden; text-overflow:ellipsis }
+  /* O seletor de paletizada guarda "Não"/"Sim" mais a seta — 58 px é o que
+     ele pede medido; abaixo disso saía "N" e o operador lia a coluna errada. */
+  #torre-tabela > tbody > tr > td:nth-child(7) select{ font-size:11.5px; padding-inline:2px }
+  #torre-tabela > thead > tr > th{
+    font-size:10px; white-space:normal; line-height:1.15; padding-right:6px }
+  #torre-tabela .btn{ padding:4px 6px; min-width:0; font-size:12px }
+}
+
+/* CAIXA EM ZERO PARA DE GRITAR (16/09/2026).
+
+   Medido na Torre com o pátio cheio: das nove caixas, TRÊS mostravam zero
+   — "Aguardando Veículo", "Programação anterior" e "Entradas sem carga" —
+   cada uma ocupando exatamente o mesmo peso visual de uma com dado. Num
+   painel onde o olho procura o que exige ação, três zeros com o mesmo peso
+   do resto são três falsos chamados.
+
+   ELA NÃO SOME, E ISSO É A REGRA DA CASA: "pátio não se apaga". A caixa
+   continua no lugar, continua clicável e continua contando — só para de
+   competir. Se o número virar 1, ela acende de novo sozinha.
+
+   O `:has()` faz a conta no CSS em vez de repetir a decisão no JavaScript:
+   quem decide que a caixa está zerada é o próprio número que ela mostra. */
+/* O NÚMERO-HERÓI NÃO RECOLHE, NEM EM ZERO (16/09/2026).
+
+   A primeira versão apagava "Seguiu Viagem hoje" quando o dia começava —
+   e zero ali, às sete da manhã, é RESPOSTA, não ausência de informação. A
+   caixa de destaque existe para ser lida primeiro, inclusive quando o
+   número dela é zero. Recolher só vale para as caixas de status, onde o
+   zero significa "não tem nada nessa fila". */
+.bento .stat-box.stat-zerada:not(.stat-destaque){ opacity:.55 }
+.bento .stat-box.stat-zerada:not(.stat-destaque) .stat-num{ color:var(--text-dim) }
+.bento .stat-box.stat-zerada:not(.stat-destaque)::before{ opacity:.3 }
+.bento .stat-box.stat-zerada:not(.stat-destaque):hover,
+.bento .stat-box.stat-zerada:not(.stat-destaque):focus-within{ opacity:1 }
+.bento .stat-box.stat-zerada:not(.stat-destaque):hover .stat-num{ color:var(--gold-text) }
