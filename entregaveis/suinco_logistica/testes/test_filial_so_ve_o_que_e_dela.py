@@ -126,11 +126,21 @@ def main():
         return 1
 
     print('\n=== 1. CADA FILIAL CRIA O PRÓPRIO CHECKLIST ===')
+    # 16/09: a filial passou a ser OBRIGADA a informar a nota de transferência
+    # — é ela que liga a devolução à transferência que saiu da filial. Sem a
+    # nota o servidor recusa, e é isso que a primeira conferência abaixo trava.
+    st_sem, d_sem = http('/api/devolucoes', tok105, 'POST',
+                         {'dataDev': '2026-09-02', 'regiao': 'Brasília', 'rotas': ['519']})
+    ck('a filial SEM a nota de transferência é recusada', st_sem == 400,
+       f'HTTP {st_sem} {str(d_sem)[:90]}')
+
     st105, d105 = http('/api/devolucoes', tok105, 'POST',
-                       {'dataDev': '2026-09-02', 'regiao': 'Brasília', 'rotas': ['519']})
+                       {'dataDev': '2026-09-02', 'regiao': 'Brasília', 'rotas': ['519'],
+                        'notaTransferencia': '171218'})
     ck('a 105 cria checklist', st105 == 201, f'HTTP {st105} {str(d105)[:90]}')
     st106, d106 = http('/api/devolucoes', tok106, 'POST',
-                       {'dataDev': '2026-09-02', 'regiao': 'Bahia', 'rotas': ['525']})
+                       {'dataDev': '2026-09-02', 'regiao': 'Bahia', 'rotas': ['525'],
+                        'notaTransferencia': '171219'})
     ck('a 106 cria checklist', st106 == 201, f'HTTP {st106} {str(d106)[:90]}')
     if st105 != 201 or st106 != 201:
         return 1
