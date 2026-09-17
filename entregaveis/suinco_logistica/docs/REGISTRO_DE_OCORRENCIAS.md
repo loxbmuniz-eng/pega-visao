@@ -3561,3 +3561,66 @@ Torre foram calibradas para caber em 1002px, que é o que sobra num monitor de
 1280px. Num tablet sobram 746. Fazer a Torre caber ali é redesenho de tabela,
 não ajuste — e não se muda a tela que a operação usa no meio do dia sem o dono
 dizer. Fica registrado, com número, para ser decidido.
+
+## #76 — A regra que escondia o rótulo tinha teto; a coluna que a motivou, não (17/09/2026)
+
+**Relato do dono, com print:** *"botao de criar carga precisa ficar abaixo do
+excluir nesa parte ele esta pequeno e horrivel"*. Depois, fechando a ordem:
+*"criar carga acima do excluir"*.
+
+**Sintoma.** No monitor grande, a ação principal da Montagem — o botão que
+transforma a linha em carga — aparecia como um pedaço de palavra sem sentido,
+cortado pela esquerda, ao lado de um "Excluir" inteiro.
+
+**Causa, e ela é da MESMA entrega de 16/09.** Naquele dia duas coisas foram
+feitas juntas:
+
+1. a tabela virou `table-layout:fixed`, com a coluna de Ação cravada em
+   **76px de 821px para cima, sem teto**;
+2. uma regra passou a esconder o rótulo do botão (`.mont-rot`) **entre 821 e
+   1399px**, com o comentário *"acima de 1400 px sobra espaço"*.
+
+A premissa (2) contradiz o fato (1), e as duas foram escritas no mesmo dia,
+uma perto da outra. Acima de 1400px o rótulo voltava para dentro de uma coluna
+que nunca crescia. Com `justify-content:flex-end` e a célula cortando o
+excesso, quem sobrava para fora era o PRIMEIRO botão — e ele era cortado pela
+esquerda, a borda que ninguém espera.
+
+**Medido no `index.html` publicado, viewport 1920:**
+
+```
+botão "Colocar placa"   largura 106px   dentro da célula: NÃO
+botão "Excluir"         largura  60px   dentro da célula: sim
+```
+
+**Família.** "Duas regras do mesmo dia com premissas opostas" — parente de #26
+e #14 (a mesma decisão escrita em dois lugares), mas com uma diferença que
+vale registrar: aqui as duas cópias não eram do mesmo VALOR, eram de uma
+SUPOSIÇÃO. Nenhuma linha estava errada isolada. O erro só existe na relação
+entre elas, e por isso nenhuma leitura de arquivo o encontraria — só medir a
+tela encontra.
+
+**Correção.** A célula empilha em vez de enfileirar, de 821px para cima: cada
+botão passa a ocupar a largura inteira da coluna. A ordem é a que o dono
+pediu, criar em cima e excluir embaixo, que também é a mais segura — o botão
+que apaga deixa de ser o primeiro que o dedo encontra ao varrer a linha. A
+regra do teto de 1400px sai: não existe mais faixa onde o rótulo não caiba.
+
+A seta `▸` sai da célula no computador. Não se perde informação: ela já era
+`aria-hidden="true"`, decoração declarada que o leitor de tela nunca viu, e a
+linha inteira continua clicando para abrir.
+
+**O custo, medido, e por que não ficou maior.** Empilhar com a altura padrão
+de botão levava a linha de 72px para 88px — 16px por linha, 670px de rolagem a
+mais numa sexta de 42 linhas. Trocar defeito de leitura por defeito de
+navegação é mudar o defeito de lugar. Com o botão em 28px **no ponteiro fino**,
+a linha fica em 80px: **8px de custo**, e o rótulo legível nas duas larguras.
+
+O `pointer:fine` ali não é enfeite: sem ele a regra venceria por
+especificidade de id a régua de 44px do dedo — que foi corrigida horas antes,
+neste mesmo dia, depois de a camada nova tê-la derrubado no tablet da Portaria.
+No toque nada muda.
+
+**Guarda.** `testes/test_montagem_acao_empilhada.py`. Contra o publicado
+reprova em 4 conferências, incluindo a que nomeia o defeito
+(*"Colocar placa tem 106px e sai da célula"*); contra o build novo, nenhuma.

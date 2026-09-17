@@ -5726,12 +5726,60 @@ tr.fila-alvo > td{ box-shadow:inset 0 3px 0 0 var(--gold) }
     font-size:10px; white-space:normal; line-height:1.15; letter-spacing:0;
     padding-right:6px; }
 
-  /* Três peças na célula de Ação — criar, excluir e a seta de abrir. Sem
-     `flex:none` a flex-box encolhe as três até uma cobrir a outra, e foi o
-     que o print mostrou: o ✕ saindo pela borda por cima da seta. */
-  #mont-tabela .mont-acoes{ gap:2px; justify-content:flex-end; flex-wrap:nowrap }
-  #mont-tabela .mont-acoes .btn{ padding:4px 5px; min-width:0; flex:none; font-size:12px }
-  #mont-tabela .mont-seta{ margin-left:0; flex:none }
+  /* A CÉLULA DE AÇÃO EMPILHA, NÃO ENFILEIRA (17/09/2026).
+
+     RELATO DO DONO, com print: "botao de criar carga precisa ficar abaixo
+     do excluir nesa parte ele esta pequeno e horrivel" — e depois, fechando
+     a ordem: "criar carga acima do excluir".
+
+     A CAUSA, E ELA É MINHA, DA ENTREGA DE 16/09. Esta coluna tem 76px
+     FIXOS de 821px para cima, sem teto. Mas a regra que recolhe o rótulo
+     do botão (`.mont-rot`) só valia ENTRE 821 e 1399px, escrita supondo
+     que "acima de 1400 sobra espaço". Não sobra: a tabela virou
+     `table-layout:fixed` com largura cravada por coluna no MESMO dia.
+     Então, no monitor grande, a palavra voltava para dentro de uma coluna
+     que nunca cresceu. Com `justify-content:flex-end` e a célula cortando
+     o excesso, o primeiro botão era cortado PELA ESQUERDA — sobrava um
+     pedaço ilegível no lugar da ação principal da tela.
+
+     Enfileirar três coisas em 76px não tem solução boa. Empilhar tem:
+     cada botão passa a ocupar os 76px inteiros e a palavra cabe.
+
+     A ORDEM É DECISÃO DO DONO: criar em cima, excluir embaixo. Também é a
+     ordem mais segura — o botão que apaga deixa de ser o primeiro que o
+     dedo encontra ao varrer a linha.
+
+     A SETA SAI daqui, e isso não perde informação: ela já é
+     `aria-hidden="true"` no `app.js`, ou seja, decoração declarada — o
+     leitor de tela nunca a viu. A linha inteira continua clicando para
+     abrir, e agora os dois botões dizem o próprio nome por extenso, que é
+     melhor sinal do que um triângulo. */
+  #mont-tabela .mont-acoes{
+    flex-direction:column; align-items:stretch; justify-content:center;
+    gap:3px; flex-wrap:nowrap }
+  #mont-tabela .mont-acoes .btn{
+    width:100%; min-width:0; flex:none; justify-content:center;
+    padding:4px 4px; font-size:11.5px; line-height:1.15;
+    white-space:normal }
+  #mont-tabela .mont-seta{ display:none }
+}
+
+/* EMPILHAR NÃO PODE CUSTAR ROLAGEM (17/09/2026).
+
+   Medido: com os botões na altura padrão de 36px, empilhar levou a linha
+   de 72px para 88px. São 16px POR LINHA — numa sexta de 42 linhas, 670px
+   a mais de rolagem. Trocar um defeito de leitura por um de navegação não
+   é conserto, é mudança de lugar.
+
+   No PONTEIRO FINO (mouse), 28px é alvo de sobra: a régua de 44px existe
+   para dedo, não para cursor. A linha volta para perto do que sempre foi.
+
+   O `pointer:fine` aqui NÃO é enfeite de media query: sem ele esta regra
+   venceria, por especificidade de id, a régua de 44px do dedo — que foi
+   corrigida hoje de manhã depois de a camada nova tê-la derrubado para
+   36px no tablet da Portaria. No toque, nada muda: os 44px continuam. */
+@media (min-width:821px) and (pointer:fine){
+  #mont-tabela .mont-acoes .btn{ min-height:28px }
 
   /* O `min-width` que a coluna do KM ganhou em 10/09 era a defesa contra a
      coluna espremer. Com largura fixa a defesa virou o próprio problema. */
@@ -5759,16 +5807,22 @@ tr.fila-alvo > td{ box-shadow:inset 0 3px 0 0 var(--gold) }
   #mont-tabela .cel-veiculo .placa-input{ display:block }
 }
 
-/* O RÓTULO DO BOTÃO SÓ RECOLHE QUANDO A LARGURA APERTA (16/09/2026).
+/* O RÓTULO DO BOTÃO VOLTA A APARECER SEMPRE (17/09/2026).
 
-   Acima de 1400 px sobra espaço e a palavra aparece inteira — é sempre
-   melhor ler "Criar carga" do que decifrar um ícone. Abaixo disso a palavra
-   recolhe e o botão fica só com o ícone, mas NUNCA sem nome: `aria-label`
-   para o leitor de tela e `title` para o ponteiro parado em cima. Ícone mudo
-   seria trocar barra de rolagem por adivinhação. */
-@media (min-width:821px) and (max-width:1399px){
-  #mont-tabela .mont-rot{ display:none }
-}
+   Havia aqui uma regra que escondia `.mont-rot` entre 821 e 1399px, escrita
+   em 16/09 com a premissa "acima de 1400 sobra espaço". A premissa era
+   falsa: a coluna de Ação tem 76px cravados de 821px para cima, e nunca
+   cresce. O resultado foi o defeito que o dono fotografou em 17/09 — acima
+   de 1400 a palavra voltava e era cortada pela metade.
+
+   Agora a célula EMPILHA (ver o bloco de `#mont-tabela .mont-acoes` acima),
+   e cada botão tem os 76px inteiros para si em QUALQUER largura de
+   computador. Não existe mais a faixa onde o rótulo não cabia, então não
+   existe mais motivo para escondê-lo: é sempre melhor ler "Criar carga" do
+   que decifrar um ícone.
+
+   Quem continua sem rótulo é o celular, onde a linha vira cartão e a regra
+   é outra. `aria-label` e `title` seguem no `app.js` de qualquer forma. */
 
 /* ═══════════════════════════════════════════════════════════════════════
    O QUE SE CLICA TEM QUE RESPONDER AO DEDO (16/09/2026).

@@ -1,0 +1,48 @@
+/* CONTROLE NEGATIVO — o hover caro, congelado.
+   =====================================================================
+
+   Esta é a regra de `.btn:hover` que o painel tinha ANTES do Tema 2027,
+   copiada de `styles.css` linhas 2505-2506 no commit 1793a1f. Ela anima
+   `box-shadow` e `filter`, que são as duas propriedades caras de repintar
+   — exatamente o defeito que a Etapa 5 do tema existe para tirar.
+
+   POR QUE ELA VIRA ARQUIVO, E POR QUE ISSO NÃO É DETALHE.
+
+   `test_tema2027_etapa5_acoes.py` tinha um caso de controle honesto: ele
+   media o build PUBLICADO e exigia que lá o hover REALMENTE animasse algo
+   caro. Sem isso, um teste que só afirma "no build novo o hover é barato"
+   pode estar cego — medindo errado e passando verde.
+
+   Só que o controle apontava para um alvo que se move. No dia em que o
+   Tema 2027 foi publicado, o "publicado" passou a SER o tema novo: o
+   hover caro deixou de existir lá, o controle parou de encontrar o defeito
+   e reprovou — por estar certo. O portão cancelou a publicação por isso,
+   em 17/09/2026.
+
+   É a causa 1 da lista da casa: a regra mudou de propósito, e o teste é
+   que ficou velho. Referência de "antes" não pode ser um lugar que a
+   própria entrega muda; tem de ser algo congelado, como já se fez com
+   `controle_stripe_camada.css`.
+
+   NÃO EDITE para "modernizar". O valor deste arquivo é justamente ser o
+   passado: se alguém o atualizar para o CSS de hoje, o controle deixa de
+   provar qualquer coisa e volta a passar sem enxergar nada. */
+.btn:hover{
+  opacity:1;
+  filter:brightness(1.07);
+  box-shadow:0 4px 12px rgba(0,0,0,.28), 0 1px 0 rgba(255,255,255,.2) inset;
+}
+
+/* E O CAMPO SEM ANEL DE FOCO — a outra metade do "antes".
+
+   Antes da Etapa 5, `styles.css` linha 955 tinha `input:focus{outline:none}`
+   e nenhuma regra de `:focus-visible`: quem andava de Tab pelo formulário
+   não via onde estava. O tema acrescentou o anel dourado (roubo aprovado da
+   Vercel), e a Portaria usa luva no tablet — o anel é função, não enfeite.
+
+   Aqui o anel é desligado de novo, para o controle poder conferir que o
+   teste ENXERGA a ausência dele. Mesma especificidade da regra do tema,
+   injetada depois: vence pela ordem, sem `!important`. */
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible{ outline:none }

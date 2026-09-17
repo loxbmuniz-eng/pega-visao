@@ -244,6 +244,9 @@ async def medir_contraste_pixel(pg, sel):
             'razao': razao_contraste(fundo_px, tuple(cor_texto))}
 
 
+CONTROLE_HOVER = pathlib.Path(__file__).parent / 'fixtures' / 'controle_hover_caro.css'
+
+
 async def testar_build(url, rotulo, exigir_hover_barato):
     async with async_playwright() as p:
         nav = await p.chromium.launch(executable_path=CHROMIUM)
@@ -251,6 +254,25 @@ async def testar_build(url, rotulo, exigir_hover_barato):
         await pg.goto(url)
         await pg.wait_for_timeout(600)
         await logar_e_semear(pg)
+
+        # O CONTROLE PASSA A VIR DE ARQUIVO CONGELADO (17/09/2026).
+        #
+        # Antes ele media o build publicado e exigia encontrar lá o hover
+        # caro. No dia em que o Tema 2027 foi publicado, o "publicado"
+        # passou a SER o tema novo: o defeito sumiu de lá, o controle não o
+        # achou mais e reprovou — por estar certo. O portão cancelou a
+        # publicação por isso.
+        #
+        # Causa 1 da lista da casa: a regra mudou de propósito, o teste é
+        # que ficou velho. Referência de "antes" não pode ser um lugar que
+        # a própria entrega muda. Agora o hover caro é injetado a partir de
+        # `fixtures/controle_hover_caro.css`, congelado no commit 1793a1f —
+        # mesmo caminho que `controle_stripe_camada.css` já seguia.
+        if not exigir_hover_barato:
+            if not CONTROLE_HOVER.exists():
+                sys.exit(f'falta o controle congelado: {CONTROLE_HOVER}')
+            await pg.add_style_tag(content=CONTROLE_HOVER.read_text(encoding='utf-8'))
+            await pg.wait_for_timeout(120)
 
         # ---- 1. hover barato (opacity/transform) vs caro (box-shadow/filter)
         hover = await medir_hover_caro(pg, rotulo)
