@@ -244,15 +244,61 @@ def comparar_ths(antes, depois, tolerancia=2):
     return problemas
 
 
+ENTREGA = 'claude/pega-visao-up19-deliverables-6cqhjb'
+
+
+def _extrair_publicado():
+    """Grava o index.html da branch de entrega num arquivo e devolve o caminho.
+
+    "O que está no ar" tem de vir do git, não de um arquivo do checkout —
+    o checkout é justamente o que a entrega muda.
+    """
+    import subprocess
+    import tempfile
+    alvo = pathlib.Path(tempfile.gettempdir()) / 'suinco_publicado_index.html'
+    caminho = 'entregaveis/suinco_logistica/index.html'
+    # O remoto primeiro: é ele que o Vercel serve. O local pode estar
+    # atrasado e faria o teste comparar contra um "publicado" que não é o
+    # que a operação está usando.
+    erro = ''
+    for ref in (f'origin/{ENTREGA}', ENTREGA):
+        r = subprocess.run(['git', 'show', f'{ref}:{caminho}'],
+                           cwd=BASE.parent.parent, capture_output=True)
+        if r.returncode == 0:
+            break
+        erro = r.stderr.decode()[:200]
+    else:
+        sys.exit(f'não consegui ler {caminho} da entrega: {erro}')
+    alvo.write_bytes(r.stdout)
+    return str(alvo)
+
+
 async def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--api', type=int, default=None)
-    ap.add_argument('--antes', required=True,
-                     help='index.html construído com tema2027/30_tabelas.css VAZIO '
-                          '(o publicado hoje — nenhuma outra etapa toca nestes seletores)')
-    ap.add_argument('--depois', required=True,
-                     help='index.html construído com o tema2027/30_tabelas.css real desta etapa')
+    ap.add_argument('--antes', default=None,
+                     help='index.html do ANTES. Sem isto, usa o da branch de '
+                          'entrega (o que está no ar).')
+    ap.add_argument('--depois', default=None,
+                     help='index.html do DEPOIS. Sem isto, usa o build local.')
     args = ap.parse_args()
+
+    # GUARDA QUE EXIGE ARGUMENTO NÃO É GUARDA (17/09/2026).
+    #
+    # Os dois eram `required=True`. Na mão do executor da etapa isso
+    # funcionava: ele construía os dois index.html e passava os caminhos.
+    # Mas `rodar_tudo.sh` roda toda suíte SEM argumento — então na bateria
+    # este arquivo morria no argparse, antes de medir um pixel, e entrava
+    # na lista de vermelhos como se tivesse encontrado defeito.
+    #
+    # Reprovar por falta de argumento é pior que não existir: gasta o tempo
+    # de quem investiga e ensina a ignorar vermelho. Agora os dois lados
+    # têm padrão — o ANTES vem do git, da branch que o Vercel serve, e o
+    # DEPOIS é o build local.
+    if not args.antes:
+        args.antes = _extrair_publicado()
+    if not args.depois:
+        args.depois = str(BASE / 'index.html')
 
     porta = descobrir_api(args.api)
     if porta is None:

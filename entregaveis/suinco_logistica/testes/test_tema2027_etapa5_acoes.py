@@ -66,7 +66,44 @@ from playwright.async_api import async_playwright
 BASE = pathlib.Path(__file__).parent.parent
 CHROMIUM = os.environ.get('PLAYWRIGHT_CHROMIUM_PATH', '/opt/pw-browsers/chromium')
 
-PUBLICADO = 'file:///home/user/pega-visao/entregaveis/suinco_logistica/index.html'
+ENTREGA = 'claude/pega-visao-up19-deliverables-6cqhjb'
+
+
+def _publicado():
+    """O index.html que está NO AR, extraído da branch de entrega.
+
+    ISTO JÁ QUEBROU (17/09/2026). A constante apontava para o index.html do
+    checkout local. Enquanto a camada Tema 2027 vivia só no worktree do
+    executor, o local ERA o publicado e o teste funcionava. Depois da
+    integração, o local passou a ter a camada — e o caso de controle
+    ("no publicado o hover REALMENTE anima algo caro, prova que este teste
+    enxerga o defeito") parou de achar o defeito, e reprovou por estar
+    certo.
+
+    Referência de "publicado" não pode ser um arquivo que a própria entrega
+    muda. Agora ela vem do git, da branch que o Vercel serve.
+    """
+    import subprocess
+    import tempfile
+    alvo = pathlib.Path(tempfile.gettempdir()) / 'suinco_publicado_index.html'
+    caminho = 'entregaveis/suinco_logistica/index.html'
+    # O remoto primeiro: é ele que o Vercel serve. O local pode estar
+    # atrasado e faria o teste comparar contra um "publicado" que não é o
+    # que a operação está usando.
+    erro = ''
+    for ref in (f'origin/{ENTREGA}', ENTREGA):
+        r = subprocess.run(['git', 'show', f'{ref}:{caminho}'],
+                           cwd=BASE.parent.parent, capture_output=True)
+        if r.returncode == 0:
+            break
+        erro = r.stderr.decode()[:200]
+    else:
+        sys.exit(f'não consegui ler {caminho} da entrega: {erro}')
+    alvo.write_bytes(r.stdout)
+    return f'file://{alvo}'
+
+
+PUBLICADO = _publicado()
 BUILD_NOVO = f'file://{BASE / "index.html"}'
 
 # Cada classe só tem instância visível numa aba específica com os dados
