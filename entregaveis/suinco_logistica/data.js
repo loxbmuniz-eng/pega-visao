@@ -3726,6 +3726,40 @@ function dadosAdministracaoFretes(cargas){
          filtro de período usa; `saida` é o evento real de "Seguiu Viagem". */
       programada: c.programadoEm || c.criadoEm || null,
       saida: primeiroTimestamp(c.id, 'Seguiu Viagem'),
-      observacoes: c.observacoes || ''
+      observacoes: observacaoDeFrete(c)
     }));
+}
+
+/* A COLUNA DE OBSERVAÇÃO DESTE RELATÓRIO CARREGA DINHEIRO (17/09/2026).
+
+   RELATO DO DONO: "no relatorio de administracao de fretes comecou a sair a
+   operadora no lugar das observacoes, que deve sair ou a observacao colocada
+   pelo programador com o valor do frete combinado, ou o nome do destino mais
+   valor do frete calculado pelo painel".
+
+   Repare no que as duas opções dele têm em comum: as duas terminam num
+   VALOR. Esta coluna não é um campo de recado — é onde quem confere
+   pagamento lê quanto a viagem custa, e de onde veio esse número. Ou o
+   valor foi combinado com a transportadora e está escrito por quem
+   negociou, ou o painel calculou pelo km, e aí quem responde é o destino.
+
+   Célula vazia ao lado de um destino é lida como "o sistema não sabe" e
+   manda alguém perguntar. Por isso, sem valor, sai o MOTIVO de não haver —
+   é a mesma decisão já tomada em `freteMontagemHtml()`, e o motivo vem
+   pronto do servidor. */
+function observacaoDeFrete(c){
+  const escrita = String(c.observacoes || '').trim();
+  if(escrita) return escrita;
+
+  const destino = String(c.freteDestino || '').trim();
+  const valor = c.freteValor;
+  if(valor !== null && valor !== undefined && valor !== ''){
+    const n = Number(valor);
+    const emReais = 'R$ ' + n.toLocaleString('pt-BR',
+      {minimumFractionDigits:2, maximumFractionDigits:2});
+    return [destino, emReais].filter(Boolean).join(' — ');
+  }
+  /* Sem valor: o destino sozinho não explica nada, e o motivo explica. */
+  const motivo = String(c.freteMotivo || '').trim();
+  return [destino, motivo].filter(Boolean).join(' — ');
 }

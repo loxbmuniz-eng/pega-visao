@@ -12292,10 +12292,28 @@ async function efetivarMontagemUI(id, { silencioso = false } = {}){
          placa). Preenchido = a exceção do dia — subcontratação, freteiro,
          veículo emprestado —, e aí é ela que vale. */
       transportadora: m.transportadora || '',
-      /* O apelido da rota entra na frente da observação, não no lugar
-         dela: quem lê a carga na Torre precisa saber que "517" é a Ômega,
-         e a Logística precisa que o recado dela sobreviva. */
-      observacoes: [m.apelido_rota, m.observacoes].filter(Boolean).join(' — '),
+      /* O APELIDO DA ROTA NÃO ENTRA MAIS NA OBSERVAÇÃO (17/09/2026).
+         Ocorrência #77.
+
+         Ele entrava desde 25/08 com uma intenção certa — "quem lê a carga
+         na Torre precisa saber que 517 é a Ômega" — e um efeito que só
+         apareceu 23 dias depois: o apelido do modelo é "Destino -
+         Operadora", e ele passou a ocupar a coluna de Observações do
+         relatório de Administração de Fretes, que é onde quem confere
+         pagamento lê o valor combinado.
+
+         Por que só agora: em 14/09 a lista de operadores do gestor foi
+         aplicada às rotas. O campo existia e vivia vazio; a partir dali
+         quase toda rota ganhou apelido, e quase toda carga nasceu com a
+         operadora colada na frente do recado.
+
+         O operador JÁ É DERIVÁVEL DA ROTA — `rotaOperador()` existe e
+         `rotaApoio()` já o desenha no impresso. Copiá-lo para dentro de um
+         campo de texto livre era a mesma decisão escrita em dois lugares,
+         e aqui a cópia não só divergia: ela APAGAVA o campo do outro dono.
+
+         A observação volta a ser só o que a pessoa escreveu. */
+      observacoes: m.observacoes || '',
       /* O DESTINO E O KM SEGUEM PARA A CARGA (10/09/2026).
          Sem estas duas linhas a Montagem podia ter destino na tela e a
          carga nascer sem — que é a metade do defeito que o dono relatou.
