@@ -1,5 +1,18 @@
 /* Tema 2027 — Etapa 6 (opcional): Acessibilidade de material.
    Dona só de blocos @media screen and (prefers-contrast: more).
-   Vazio até a Etapa 6 preencher. Ver VEREDITO.md seção 6. */
-@media screen{
+   Ver VEREDITO.md seção 6, "Etapa 6".
+
+   Roubo do apple/camada.css §6 (reforço de borda quando o sistema pede mais
+   contraste) — SEM o bloco `#nav{ border-right-width:2px }` da Apple. É o
+   MESMO seletor que eliminou a camada Apple no critério 1 (VEREDITO.md,
+   "Apple — critério 1": #nav virou position:relative e empurrou a tela
+   484px). Aquele bug era em position, não em border-width, e vive num outro
+   @media — mas a instrução de execução desta etapa foi explícita: nada de
+   #nav aqui, nem reforço de borda, por ser o mesmo seletor do incidente.
+   Divergência anotada no relato desta etapa: o bloco de exemplo na seção 6
+   do VEREDITO.md inclui `#nav{ border-right-width:2px }`; este arquivo
+   deliberadamente NÃO o reproduz. */
+@media screen and (prefers-contrast: more){
+  .card,.stat-box,.bento.bi-faixa{ border-width:1.5px; border-color:var(--border) }
+  th{ border-bottom-width:2px }
 }
