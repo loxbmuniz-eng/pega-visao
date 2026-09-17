@@ -3624,3 +3624,60 @@ No toque nada muda.
 **Guarda.** `testes/test_montagem_acao_empilhada.py`. Contra o publicado
 reprova em 4 conferências, incluindo a que nomeia o defeito
 (*"Colocar placa tem 106px e sai da célula"*); contra o build novo, nenhuma.
+
+## #77 — A operadora ocupou a coluna onde se confere pagamento de frete (17/09/2026)
+
+**Relato do dono:** *"no relatorio de administracao de fretes comecou a sair a
+operadora no lugar das observacoes, que deve sair ou a observacao colocada pelo
+programador com o valor do frete combinado, ou o nome do destino mais valor do
+frete calculado pelo painel"*.
+
+**Duas datas, e é isso que explica o "começou".**
+
+`app.js` colava o apelido da rota **na frente** da observação desde **25/08**,
+quando a linha da Montagem vira carga. A intenção estava escrita e era boa:
+*"quem lê a carga na Torre precisa saber que 517 é a Ômega"*.
+
+Em **14/09** a lista de operadores do gestor foi aplicada às rotas. O apelido
+do modelo é "Destino - Operadora". O campo existia e vivia vazio; dali em
+diante quase toda rota ganhou apelido, e quase toda carga nasceu com a
+operadora colada na frente do recado.
+
+**O código é de agosto. O sintoma é de setembro. Ninguém mexeu em nada no dia
+em que o defeito apareceu** — e é por isso que procurar a causa pela data do
+relato não encontraria nada.
+
+**Por que a coluna importa.** Repare no que as duas opções que o dono deu têm
+em comum: as duas terminam num VALOR. Aquela coluna não é campo de recado — é
+onde quem confere pagamento lê quanto a viagem custou e de onde veio o número.
+Ocupá-la com o nome da operadora não é só ruído: apaga a informação que a
+página existe para carregar.
+
+**Família — e é uma variação que vale nomear.** "A mesma decisão escrita em
+dois lugares" (#14, #26), mas aqui a segunda cópia não divergiu: ela **ocupou
+o lugar de outro dado**. O operador já era derivável da rota — `rotaOperador()`
+existe e `rotaApoio()` já o desenha no impresso. Copiá-lo para dentro de um
+campo de texto livre deu ao mesmo pedaço de tela dois donos, e o que chegou
+depois apagou o que estava lá.
+
+**Correção, nas duas pontas:**
+
+1. **Na origem** — a carga que nasce da Montagem não recebe mais o apelido
+   colado. A observação volta a ser só o que a pessoa escreveu.
+2. **No relatório** — a coluna passa a valer a regra do dono: observação de
+   quem negociou, se houver; senão destino + valor calculado pelo painel; e,
+   sem valor, destino + o MOTIVO de não haver. Célula vazia ao lado de um
+   destino é lida como "o sistema não sabe" e manda alguém perguntar — mesma
+   decisão já tomada em `freteMontagemHtml()`.
+
+**O que NÃO foi feito, e é decisão do dono.** As cargas criadas entre 25/08 e
+hoje têm o texto colado GRAVADO no banco. Corrigir o código para frente não
+desfaz o que já está lá: nessas linhas, quem escreveu observação vai ver o
+apelido antes dela. Limpar isso é migração de dado em produção, e não se
+reescreve observação de operador sem ele mandar.
+
+**Guarda.** `testes/test_fretes_observacao_e_valor.py`. Contra o painel
+publicado reprova em 5 conferências; contra o build novo, nenhuma. O item que
+confere a cola lê o PAINEL MEDIDO, não o `app.js` do checkout — a primeira
+versão lia o arquivo local e dava OK mesmo rodando contra o publicado, que é a
+mesma armadilha da ocorrência anterior deste mesmo dia.
