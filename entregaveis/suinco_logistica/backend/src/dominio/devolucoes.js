@@ -1,4 +1,4 @@
-import { ehFilial } from './fluxo.js';
+import { ehFilial, listaDeSetores } from './fluxo.js';
 /* Devoluções: máquina de estados, permissões e tradução banco ↔ painel.
 
    Mesma filosofia de dominio/fluxo.js e dominio/cargas.js: a regra mora no
@@ -75,7 +75,30 @@ const TRANSICOES_DEV = [
      sobra ficaria sem caminho até o próprio fim. `soSobra` existe para
      que este atalho NÃO fique aberto para a devolução normal: lá, pular a
      pesagem final é justamente o que não pode acontecer. */
-  { de: 'Conferida no Faturamento', para: 'Descarga Conferida',       setores: ['Expedição', 'Logística'],        carimbo: 'expedicao', soSobra: true },
+  /* QUEM PESOU FINALIZA A SOBRA (16/09/2026).
+
+     Relato do dono, com print de uma sobra pesada e parada: "E NA PARTE
+     DEVOLUÇÃO DE SOBRA, DEPOIS QUE PESA TEM QUE COLOCAR A OPÇÃO DE
+     FINALIZAR A ETAPA". Ele estava logado no Faturamento.
+
+     ESTE É O ÚLTIMO PASSO DA SOBRA, e ele estava liberado só para
+     Expedição e Logística. A sobra ficava pesada e parada esperando outro
+     setor aparecer — e a esteira ainda chamava o Faturamento para ela
+     ("SUA VEZ"), porque "Conferida no Faturamento" é o status onde a
+     segunda etapa dele começa na devolução NORMAL. Chamar e não dar
+     caminho é a regra da casa ao contrário.
+
+     O Faturamento entra AQUI e em nenhum outro lugar: é a linha `soSobra`,
+     que só existe para a sobra. Na devolução normal o passo continua sendo
+     de Expedição e Logística, saindo de "Peso Final Registrado" — pular a
+     balança final lá continua impossível.
+
+     A Expedição SEGUE PRIMEIRA na lista: ela continua sendo a dona do
+     passo (é o carimbo `expedicao`), é o nome que aparece na recusa de
+     quem não pode, e nada foi tirado dela. O Faturamento ganhou o direito
+     de encerrar o que ele mesmo pesou, como a Logística já tinha em todos
+     os passos. */
+  { de: 'Conferida no Faturamento', para: 'Descarga Conferida',       setores: ['Expedição', 'Faturamento', 'Logística'], carimbo: 'expedicao', soSobra: true },
   { de: 'Descarga Conferida',       para: 'Destinada',                setores: ['Controles Internos', 'Logística'], carimbo: 'controles' },
   { de: 'Destinada',                para: 'Nota Finalizada',          setores: ['Central de Notas', 'Logística'], carimbo: 'notas' },
 ];
@@ -138,7 +161,7 @@ export function validarTransicaoDevolucao(statusAtual, statusNovo, setor, tipo) 
   if (setor !== SETOR_IRRESTRITO && !regra.setores.includes(setor)) {
     throw new ErroDePermissaoDevolucao(
       `O setor ${setor} não registra "${statusNovo}". `
-      + `Quem faz esse passo: ${regra.setores.join(' ou ')}.`
+      + `Quem faz esse passo: ${listaDeSetores(regra.setores)}.`
     );
   }
   return regra;
@@ -194,7 +217,7 @@ export function validarDesfazerDevolucao(statusAtual, setor, tipo) {
   if (setor !== SETOR_IRRESTRITO && !regra.setores.includes(setor)) {
     throw new ErroDePermissaoDevolucao(
       `O setor ${setor} não desfaz "${statusAtual}". `
-      + `Quem fez esse passo desfaz: ${regra.setores.join(' ou ')}.`
+      + `Quem fez esse passo desfaz: ${listaDeSetores(regra.setores)}.`
     );
   }
   return regra;

@@ -36,7 +36,29 @@ PAINEL = 'file:///home/user/pega-visao/entregaveis/suinco_logistica/index.html'
 ABAS = ['torre','programacao','devolucoes','portaria','expedicao','faturamento',
         'indicadores','cadastros','historico','relatorios','usuarios']
 TEMAS = ['escuro','claro']
-TELAS = [('computador', 1280, 800, False), ('celular', 390, 844, True)]
+# (nome, largura, altura, emula_celular, tem_toque)
+#
+# O TERCEIRO PERFIL EXISTE POR CAUSA DE UM DEFEITO REAL (17/09/2026).
+#
+# Havia só dois: computador SEM toque e celular COM toque. Entre eles mora
+# o aparelho que a Portaria usa de verdade — tablet grande em paisagem,
+# tela larga E dedo (com luva). Nenhum dos dois perfis o representava.
+#
+# O que passou por esse buraco: uma regra do Tema 2027,
+# `@media screen and (min-width:821px){ .btn{ min-height:36px } }`, tem a
+# mesma especificidade que `@media (pointer:coarse){ .btn{ min-height:44px } }`
+# do styles.css e vence por vir depois na cascata. Em tela larga com toque o
+# alvo caía de 44px para 36px — e esta guarda dizia "verde", porque em 1280
+# ela não emula toque e em 390 a largura não alcança a regra.
+#
+# `tem_toque` é o que liga `pointer:coarse` no Chromium; `emula_celular`
+# mexe no viewport e no layout, e por isso é FALSO aqui: um tablet em
+# paisagem renderiza como tela larga, não como telefone.
+TELAS = [
+    ('computador', 1280, 800, False, False),
+    ('tablet',     1024, 768, False, True),
+    ('celular',     390, 844, True,  True),
+]
 
 falhas, avisos = [], []
 def ck(ok, onde, regra, detalhe):
@@ -135,7 +157,17 @@ MEDIR = r"""(alvoToque) => {
       if (!visivel(el)) return;
       const r = el.getBoundingClientRect();
       const cx = r.left + r.width/2, cy = r.top + r.height/2;
-      if (cy - 21 < 0 || cy + 21 > window.innerHeight) return;   // fora da vista: não dá para medir
+      /* "FORA DA VISTA" TERMINA ONDE O RODAPÉ FIXO COMEÇA (17/09/2026).
+         O rodapé de conexão é `position:fixed` no pé da janela. Um controle
+         que a rolagem deixou debaixo dele não está coberto — está fora da
+         vista, igual ao que passou do fim da janela. A régua media até
+         `innerHeight` e acusou o título "Painel do Gestor" (340x61, alvo
+         inteiro) porque a compactação do Tema 2027 o trouxe 26px para
+         cima, para dentro da faixa do rodapé. Medido, não hipótese. */
+      const rodape = document.querySelector('.rodape-conexao');
+      const fim = rodape && getComputedStyle(rodape).position === 'fixed'
+        ? Math.min(window.innerHeight, rodape.getBoundingClientRect().top) : window.innerHeight;
+      if (cy - 21 < 0 || cy + 21 > fim) return;   // fora da vista: não dá para medir
       const pontos = [[cx, cy-21], [cx, cy+21], [cx-21, cy], [cx+21, cy]];
       const erram = pontos.filter(([x,y]) => !pega(el, x, y)).length;
       if (erram > 0)
@@ -203,9 +235,10 @@ async def main():
     laudo = {}
     async with async_playwright() as p:
         nav = await p.chromium.launch(executable_path='/opt/pw-browsers/chromium')
-        for nome_tela, larg, alt, toque in TELAS:
+        for nome_tela, larg, alt, emula_celular, toque in TELAS:
             for tema in TEMAS:
-                pg = await nav.new_page(viewport={'width': larg, 'height': alt}, is_mobile=toque)
+                pg = await nav.new_page(viewport={'width': larg, 'height': alt},
+                                        is_mobile=emula_celular, has_touch=toque)
                 await pg.goto(PAINEL)
                 await pg.wait_for_function('typeof irParaTab === "function"')
                 await pg.evaluate("""(t) => {

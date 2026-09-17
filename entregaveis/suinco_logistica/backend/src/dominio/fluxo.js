@@ -138,6 +138,22 @@ export const RECUSA_SO_ACOMPANHA = {
   codigo: 'SETOR_SO_ACOMPANHA',
 };
 
+/* A LISTA DE SETORES DITA COMO GENTE FALA (16/09/2026).
+
+   Era `setores.join(' ou ')` em três mensagens de recusa. Com dois nomes
+   sai certo — "Expedição ou Logística". No dia em que um passo passou a ter
+   TRÊS setores (o Faturamento entrou no fecho da sobra), a mesma linha
+   produziu "Expedição ou Faturamento ou Logística", que quem lê no celular
+   do pátio tropeça.
+
+   Uma função, três chamadores: as duas recusas da devolução e a da carga.
+   Formatar não é decidir — mas escrito em três lugares, muda em um só. */
+export function listaDeSetores(setores) {
+  const nomes = (setores || []).filter(Boolean);
+  if (nomes.length <= 1) return nomes[0] || '';
+  return `${nomes.slice(0, -1).join(', ')} ou ${nomes[nomes.length - 1]}`;
+}
+
 /* Quem pode executar cada passo.
 
    A Logística aparece em TODOS os passos por decisão do gestor: ela cobre
@@ -243,7 +259,7 @@ export function validarTransicao(statusAtual, statusNovo, setor) {
   if (setor !== SETOR_IRRESTRITO && !regra.setores.includes(setor)) {
     throw new ErroDePermissao(
       `O setor ${setor} não registra "${statusNovo}". ` +
-      `Quem faz esse passo: ${regra.setores.join(' ou ')}.`
+      `Quem faz esse passo: ${listaDeSetores(regra.setores)}.`
     );
   }
   return true;

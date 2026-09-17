@@ -100,9 +100,16 @@ async def main():
         # O nome da coluna virou "Programação · Última etapa"; o dado é o
         # mesmo e continua nas duas células (.dt-prog e .dt-atu), conferidas
         # logo abaixo. Aceita os dois títulos para não travar num rótulo.
+        # CAIXA NÃO É REGRA (17/09/2026). O Tema 2027 pôs
+        # `text-transform:uppercase` no `th`, e `inner_text` devolve o texto
+        # JÁ TRANSFORMADO pelo navegador — "PROGRAMAÇÃO", não "Programação".
+        # O teste reprovou sem que nada tivesse sumido da tela. A regra aqui
+        # é "a coluna existe"; a caixa em que ela é desenhada é decisão de
+        # estilo e pode mudar de novo amanhã. Compara sem caixa.
         titulo_datas = await pg.inner_text('#torre-thead')
+        _t = titulo_datas.casefold()
         ck('coluna de datas existe na Torre',
-           'Datas' in titulo_datas or 'Programação' in titulo_datas, titulo_datas[:80])
+           'datas' in _t or 'programação' in _t, titulo_datas[:80])
         ck('a data da programação continua visível',
            await pg.is_visible('#torre-tbody .dt-prog'))
         ck('a última atualização continua visível',

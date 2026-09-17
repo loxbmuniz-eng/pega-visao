@@ -1,0 +1,764 @@
+{
+ "escuro": {
+  "torre": {
+   "pos": {
+    "header": [
+     0,
+     0,
+     1440,
+     72
+    ],
+    "nav": [
+     0,
+     72,
+     208,
+     828
+    ],
+    "main": [
+     208,
+     86,
+     1232,
+     2783
+    ],
+    "card1": [
+     226,
+     86,
+     1196,
+     1863
+    ],
+    "faixa": [
+     243,
+     241,
+     1162,
+     182
+    ],
+    "thead": [
+     243,
+     440,
+     1162,
+     36
+    ],
+    "tr1": [
+     243,
+     476,
+     1162,
+     92
+    ],
+    "tr2": [
+     243,
+     567,
+     1162,
+     103
+    ],
+    "btnFechar": null
+   },
+   "contraste": {
+    "statLabel": 7.63,
+    "statNum": 7.65,
+    "statNote": 7.63,
+    "th": 8.64,
+    "td": 14.28,
+    "textDim": 8.61,
+    "btnDanger": 15.73,
+    "btnSec": 9.93,
+    "navTab": 8.61,
+    "navActive": 8.64,
+    "cardTitle": 8.64,
+    "badgeAgV": 5.62,
+    "etMini": 2.72
+   },
+   "cortes": {
+    "badge": [],
+    "btn": [],
+    "statLabel": [],
+    "th": [],
+    "navTab": []
+   },
+   "input": {
+    "border": "rgba(233, 185, 84, 0.28)",
+    "bg": "rgb(16, 22, 37)"
+   },
+   "fonts": {
+    "body": "-apple-system, BlinkMacSystemFont, \"Sego",
+    "statNum": "30px",
+    "statLabel": "12px",
+    "td": "12.5px",
+    "th": "10px",
+    "lh": "21.75px"
+   },
+   "radius": {
+    "card": "8px",
+    "btn": "6px",
+    "badge": "5px"
+   },
+   "scroll": [
+    1440,
+    1440
+   ]
+  },
+  "programacao": {
+   "pos": {
+    "header": [
+     0,
+     0,
+     1440,
+     72
+    ],
+    "nav": [
+     0,
+     72,
+     208,
+     828
+    ],
+    "main": [
+     208,
+     86,
+     1232,
+     2259
+    ],
+    "card1": [
+     226,
+     86,
+     1196,
+     591
+    ],
+    "faixa": [
+     243,
+     1563,
+     1162,
+     2
+    ],
+    "thead": [
+     243,
+     235,
+     1162,
+     37
+    ],
+    "tr1": [
+     243,
+     272,
+     1162,
+     98
+    ],
+    "tr2": [
+     243,
+     370,
+     1162,
+     98
+    ],
+    "btnFechar": [
+     1127,
+     1312,
+     278,
+     40
+    ]
+   },
+   "contraste": {
+    "statLabel": null,
+    "statNum": null,
+    "statNote": null,
+    "th": 8.64,
+    "td": 14.28,
+    "textDim": 8.61,
+    "btnDanger": 15.73,
+    "btnSec": 9.93,
+    "navTab": 8.61,
+    "navActive": 8.64,
+    "cardTitle": 8.64,
+    "badgeAgV": 5.62,
+    "etMini": 2.72
+   },
+   "cortes": {
+    "badge": [],
+    "btn": [],
+    "statLabel": [],
+    "th": [],
+    "navTab": []
+   },
+   "input": {
+    "border": "rgba(233, 185, 84, 0.28)",
+    "bg": "rgb(16, 22, 37)"
+   },
+   "fonts": {
+    "body": "-apple-system, BlinkMacSystemFont, \"Sego",
+    "statNum": null,
+    "statLabel": null,
+    "td": "13.5px",
+    "th": "13.5px",
+    "lh": "21.75px"
+   },
+   "radius": {
+    "card": "8px",
+    "btn": "6px",
+    "badge": null
+   },
+   "scroll": [
+    1440,
+    1440
+   ]
+  },
+  "indicadores": {
+   "pos": {
+    "header": [
+     0,
+     0,
+     1440,
+     72
+    ],
+    "nav": [
+     0,
+     72,
+     208,
+     828
+    ],
+    "main": [
+     208,
+     86,
+     1232,
+     3102
+    ],
+    "card1": [
+     226,
+     86,
+     1196,
+     249
+    ],
+    "faixa": [
+     243,
+     232,
+     1162,
+     88
+    ],
+    "thead": [
+     243,
+     482,
+     1162,
+     37
+    ],
+    "tr1": [
+     243,
+     935,
+     1162,
+     38
+    ],
+    "tr2": [
+     243,
+     973,
+     1162,
+     38
+    ],
+    "btnFechar": [
+     450,
+     2330,
+     52,
+     32
+    ]
+   },
+   "contraste": {
+    "statLabel": 7.63,
+    "statNum": 7.65,
+    "statNote": 7.63,
+    "th": 8.64,
+    "td": 8.61,
+    "textDim": 8.61,
+    "btnDanger": null,
+    "btnSec": 9.93,
+    "navTab": 8.61,
+    "navActive": 8.64,
+    "cardTitle": 8.64,
+    "badgeAgV": 5.62,
+    "etMini": 2.72
+   },
+   "cortes": {
+    "badge": [],
+    "btn": [],
+    "statLabel": [],
+    "th": [],
+    "navTab": []
+   },
+   "input": {
+    "border": "rgba(233, 185, 84, 0.28)",
+    "bg": "rgb(16, 22, 37)"
+   },
+   "fonts": {
+    "body": "-apple-system, BlinkMacSystemFont, \"Sego",
+    "statNum": "21px",
+    "statLabel": "10.5px",
+    "td": "12px",
+    "th": "13.5px",
+    "lh": "21.75px"
+   },
+   "radius": {
+    "card": "8px",
+    "btn": "6px",
+    "badge": "5px"
+   },
+   "scroll": [
+    1440,
+    1440
+   ]
+  },
+  "devolucoes": {
+   "pos": {
+    "header": [
+     0,
+     0,
+     1440,
+     72
+    ],
+    "nav": [
+     0,
+     72,
+     208,
+     828
+    ],
+    "main": [
+     208,
+     86,
+     1232,
+     158
+    ],
+    "card1": [
+     226,
+     86,
+     1196,
+     82
+    ],
+    "faixa": [
+     0,
+     0,
+     0,
+     0
+    ],
+    "thead": null,
+    "tr1": null,
+    "tr2": null,
+    "btnFechar": null
+   },
+   "contraste": {
+    "statLabel": null,
+    "statNum": null,
+    "statNote": null,
+    "th": null,
+    "td": null,
+    "textDim": 8.61,
+    "btnDanger": null,
+    "btnSec": 9.93,
+    "navTab": 8.61,
+    "navActive": 8.64,
+    "cardTitle": 8.64,
+    "badgeAgV": 5.62,
+    "etMini": 2.72
+   },
+   "cortes": {
+    "badge": [],
+    "btn": [],
+    "statLabel": [],
+    "th": [],
+    "navTab": []
+   },
+   "input": {
+    "border": "rgba(233, 185, 84, 0.28)",
+    "bg": "rgb(16, 22, 37)"
+   },
+   "fonts": {
+    "body": "-apple-system, BlinkMacSystemFont, \"Sego",
+    "statNum": null,
+    "statLabel": null,
+    "td": null,
+    "th": null,
+    "lh": "21.75px"
+   },
+   "radius": {
+    "card": "8px",
+    "btn": "6px",
+    "badge": null
+   },
+   "scroll": [
+    1440,
+    1440
+   ]
+  }
+ },
+ "claro": {
+  "torre": {
+   "pos": {
+    "header": [
+     0,
+     0,
+     1440,
+     72
+    ],
+    "nav": [
+     0,
+     72,
+     208,
+     828
+    ],
+    "main": [
+     208,
+     86,
+     1232,
+     2783
+    ],
+    "card1": [
+     226,
+     86,
+     1196,
+     1863
+    ],
+    "faixa": [
+     243,
+     241,
+     1162,
+     182
+    ],
+    "thead": [
+     243,
+     440,
+     1162,
+     36
+    ],
+    "tr1": [
+     243,
+     476,
+     1162,
+     92
+    ],
+    "tr2": [
+     243,
+     567,
+     1162,
+     103
+    ],
+    "btnFechar": null
+   },
+   "contraste": {
+    "statLabel": 7.1,
+    "statNum": 7.13,
+    "statNote": 6.77,
+    "th": 6.37,
+    "td": 14.67,
+    "textDim": 6.34,
+    "btnDanger": 1.19,
+    "btnSec": 13.64,
+    "navTab": 6.34,
+    "navActive": 6.37,
+    "cardTitle": 6.37,
+    "badgeAgV": 5.62,
+    "etMini": 5.82
+   },
+   "cortes": {
+    "badge": [],
+    "btn": [],
+    "statLabel": [],
+    "th": [],
+    "navTab": []
+   },
+   "input": {
+    "border": "rgba(26, 32, 45, 0.22)",
+    "bg": "rgb(251, 252, 254)"
+   },
+   "fonts": {
+    "body": "-apple-system, BlinkMacSystemFont, \"Sego",
+    "statNum": "30px",
+    "statLabel": "12px",
+    "td": "12.5px",
+    "th": "10px",
+    "lh": "21.75px"
+   },
+   "radius": {
+    "card": "8px",
+    "btn": "6px",
+    "badge": "5px"
+   },
+   "scroll": [
+    1440,
+    1440
+   ]
+  },
+  "programacao": {
+   "pos": {
+    "header": [
+     0,
+     0,
+     1440,
+     72
+    ],
+    "nav": [
+     0,
+     72,
+     208,
+     828
+    ],
+    "main": [
+     208,
+     86,
+     1232,
+     2259
+    ],
+    "card1": [
+     226,
+     86,
+     1196,
+     591
+    ],
+    "faixa": [
+     243,
+     1563,
+     1162,
+     2
+    ],
+    "thead": [
+     243,
+     235,
+     1162,
+     37
+    ],
+    "tr1": [
+     243,
+     272,
+     1162,
+     98
+    ],
+    "tr2": [
+     243,
+     370,
+     1162,
+     98
+    ],
+    "btnFechar": [
+     1127,
+     1312,
+     278,
+     40
+    ]
+   },
+   "contraste": {
+    "statLabel": null,
+    "statNum": null,
+    "statNote": null,
+    "th": 6.37,
+    "td": 14.67,
+    "textDim": 6.34,
+    "btnDanger": 1.19,
+    "btnSec": 13.64,
+    "navTab": 6.34,
+    "navActive": 6.37,
+    "cardTitle": 6.37,
+    "badgeAgV": 5.62,
+    "etMini": 5.82
+   },
+   "cortes": {
+    "badge": [],
+    "btn": [],
+    "statLabel": [],
+    "th": [],
+    "navTab": []
+   },
+   "input": {
+    "border": "rgba(26, 32, 45, 0.22)",
+    "bg": "rgb(251, 252, 254)"
+   },
+   "fonts": {
+    "body": "-apple-system, BlinkMacSystemFont, \"Sego",
+    "statNum": null,
+    "statLabel": null,
+    "td": "13.5px",
+    "th": "13.5px",
+    "lh": "21.75px"
+   },
+   "radius": {
+    "card": "8px",
+    "btn": "6px",
+    "badge": null
+   },
+   "scroll": [
+    1440,
+    1440
+   ]
+  },
+  "indicadores": {
+   "pos": {
+    "header": [
+     0,
+     0,
+     1440,
+     72
+    ],
+    "nav": [
+     0,
+     72,
+     208,
+     828
+    ],
+    "main": [
+     208,
+     86,
+     1232,
+     3102
+    ],
+    "card1": [
+     226,
+     86,
+     1196,
+     249
+    ],
+    "faixa": [
+     243,
+     232,
+     1162,
+     88
+    ],
+    "thead": [
+     243,
+     482,
+     1162,
+     37
+    ],
+    "tr1": [
+     243,
+     935,
+     1162,
+     38
+    ],
+    "tr2": [
+     243,
+     973,
+     1162,
+     38
+    ],
+    "btnFechar": [
+     450,
+     2330,
+     52,
+     32
+    ]
+   },
+   "contraste": {
+    "statLabel": 6.77,
+    "statNum": 6.79,
+    "statNote": 6.77,
+    "th": 6.37,
+    "td": 6.34,
+    "textDim": 6.34,
+    "btnDanger": null,
+    "btnSec": 13.64,
+    "navTab": 6.34,
+    "navActive": 6.37,
+    "cardTitle": 6.37,
+    "badgeAgV": 5.62,
+    "etMini": 5.82
+   },
+   "cortes": {
+    "badge": [],
+    "btn": [],
+    "statLabel": [],
+    "th": [],
+    "navTab": []
+   },
+   "input": {
+    "border": "rgba(26, 32, 45, 0.22)",
+    "bg": "rgb(251, 252, 254)"
+   },
+   "fonts": {
+    "body": "-apple-system, BlinkMacSystemFont, \"Sego",
+    "statNum": "21px",
+    "statLabel": "10.5px",
+    "td": "12px",
+    "th": "13.5px",
+    "lh": "21.75px"
+   },
+   "radius": {
+    "card": "8px",
+    "btn": "6px",
+    "badge": "5px"
+   },
+   "scroll": [
+    1440,
+    1440
+   ]
+  },
+  "devolucoes": {
+   "pos": {
+    "header": [
+     0,
+     0,
+     1440,
+     72
+    ],
+    "nav": [
+     0,
+     72,
+     208,
+     828
+    ],
+    "main": [
+     208,
+     86,
+     1232,
+     158
+    ],
+    "card1": [
+     226,
+     86,
+     1196,
+     82
+    ],
+    "faixa": [
+     0,
+     0,
+     0,
+     0
+    ],
+    "thead": null,
+    "tr1": null,
+    "tr2": null,
+    "btnFechar": null
+   },
+   "contraste": {
+    "statLabel": null,
+    "statNum": null,
+    "statNote": null,
+    "th": null,
+    "td": null,
+    "textDim": 6.34,
+    "btnDanger": null,
+    "btnSec": 13.64,
+    "navTab": 6.34,
+    "navActive": 6.37,
+    "cardTitle": 6.37,
+    "badgeAgV": 5.62,
+    "etMini": 5.82
+   },
+   "cortes": {
+    "badge": [],
+    "btn": [],
+    "statLabel": [],
+    "th": [],
+    "navTab": []
+   },
+   "input": {
+    "border": "rgba(26, 32, 45, 0.22)",
+    "bg": "rgb(251, 252, 254)"
+   },
+   "fonts": {
+    "body": "-apple-system, BlinkMacSystemFont, \"Sego",
+    "statNum": null,
+    "statLabel": null,
+    "td": null,
+    "th": null,
+    "lh": "21.75px"
+   },
+   "radius": {
+    "card": "8px",
+    "btn": "6px",
+    "badge": null
+   },
+   "scroll": [
+    1440,
+    1440
+   ]
+  }
+ }
+}

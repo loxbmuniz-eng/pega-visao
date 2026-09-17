@@ -114,6 +114,19 @@ def main():
 
     html = ler(FONTE)
     css = ler('styles.css')
+
+    # Tema 2027 (VEREDITO.md, seção 6): camada construída em etapas, cada uma
+    # dona de UM arquivo em tema2027/. Concatenada ao FINAL do CSS base, em
+    # ordem alfabética de nome (00_, 10_, 20_... — a ordem numérica é a
+    # ordem alfabética por construção), sempre depois de styles.css: no
+    # empate de especificidade, quem vem por último na cascata vence, então
+    # a camada só sobrepõe o que targeta de propósito. Um único <style>
+    # continua saindo no index.html — não é um segundo bloco.
+    tema2027_dir = BASE / 'tema2027'
+    if tema2027_dir.is_dir():
+        for caminho in sorted(tema2027_dir.glob('*.css')):
+            css += '\n' + caminho.read_text(encoding='utf-8')
+
     adapter_js = ler('suinco-api.js')
     data_js = ler('data.js')
     app_js = ler('app.js')

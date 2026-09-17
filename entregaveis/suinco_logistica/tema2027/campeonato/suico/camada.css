@@ -1,0 +1,256 @@
+/* =====================================================================
+   CAMADA "SUÍÇO" — grade rigorosa + tipografia
+   =====================================================================
+   Escola: nenhuma moldura, nenhuma sombra, nenhum gradiente. A separação
+   entre peças vem da GRADE (linhas finas de 1px, do mesmo --border que o
+   arquivo já usa) e da TIPOGRAFIA (peso, caixa alta com entreletra,
+   alinhamento pela mesma linha de base) — nunca de uma caixa decorativa.
+
+   Esta é uma CAMADA por cima de styles.css. Não redefine cor nem lógica:
+   reusa exatamente as variáveis de tema, contraste e status já calibradas
+   no arquivo-base (--vidro-bg, --border, --st-*-txt, --gold-text). Onde o
+   arquivo-base media contraste num par cor-sobre-fundo, esta camada NÃO
+   troca o fundo — só remove o que sobra em cima dele (brilho, borda,
+   raio, sombra). Por isso nenhum número de contraste do styles.css muda
+   aqui: a superfície continua a mesma, só perde o acabamento de vidro.
+
+   NÃO mexe em nada dentro de @media print — os PDFs saem de styles.css
+   puro, esta camada só existe na tela.
+   ===================================================================== */
+
+/* ---------------------------------------------------------------------
+   1. O CANVAS FICA CHATO DE PROPÓSITO
+   O halo ambiente (body::before) é a última peça de "atmosfera" do tema
+   antigo — três gradientes radiais dourado/azul/vinho por trás do vidro.
+   Sem vidro pairando por cima, ele vira só uma mancha de cor. A grade
+   precisa de um fundo neutro para as linhas finas serem a única coisa que
+   organiza a página. */
+body::before{ display:none !important }
+
+/* ---------------------------------------------------------------------
+   2. SEM RAIO, SEM SOMBRA DE ELEVAÇÃO, SEM DESFOQUE DECORATIVO
+   Redefinindo estas variáveis uma vez só, toda peça que as usa (cards,
+   caixas de indicador, modal, botões, chips) fica reta e chapada sem
+   precisar reescrever cada seletor. O desfoque real do MODAL não usa
+   --vidro-borrao (é um blur() escrito direto na regra, porque ali o
+   desfoque tem função — apagar a tela de trás — não estilo); continua
+   intocado. */
+:root{
+  --radius:0;
+  --radius-sm:0;
+  --radius-lg:0;
+  --shadow:none;
+  --vidro-sombra:none;
+  --vidro-borrao:none;
+}
+
+/* ---------------------------------------------------------------------
+   3. CARD — o retângulo continua (é o módulo da grade), a moldura sai
+   Fundo, cor de texto e contraste são EXATAMENTE os do styles.css
+   (--vidro-bg, sem blur por trás para variar); só a borda inteira vira
+   UMA regra no topo — marca "aqui começa um bloco" como um filete de
+   caderno pautado, não como uma caixa fechada nos quatro lados. */
+.card{
+  border:0;
+  border-top:1px solid var(--border);
+  border-radius:0;
+  box-shadow:none;
+  padding:20px 0 18px;
+}
+.card::after{ display:none } /* o fio de luz do topo era o gradiente que a escola proíbe */
+
+/* Título: caixa alta com entreletra faz o trabalho que a caixa desenhada
+   fazia antes. O traço dourado à esquerda é o ÚNICO ponto de cor
+   decorativa desta camada inteira — mantém a marca (já era a única cor
+   "extra" do arquivo-base) e vira o ponto fixo que a grade referencia. */
+.card-title{
+  font-size:12.5px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;
+  padding-left:14px;padding-bottom:10px;margin-bottom:16px;
+  border-bottom:1px solid var(--border-soft);
+}
+.card-title::before{ width:3px;border-radius:0;background:var(--gold-text) }
+.card-sub{ letter-spacing:.01em }
+
+/* Estados vazios e caixas tracejadas: a linha tracejada JÁ é grade (não
+   é moldura sólida), então fica — só perde o raio e o fundo de "cartão
+   dentro do cartão", que duplicava a hierarquia. */
+.empty-state,.quick-box{ border-radius:0;background:transparent }
+
+/* ---------------------------------------------------------------------
+   4. INDICADORES — a faixa contínua (bi-faixa) vira o padrão, não a
+   exceção
+   O achado documentado no styles.css — cor na BORDA identifica, cor no
+   FUNDO apaga texto (razão 1,9) — fica óbvio quando se olha os cartões
+   soltos do padrão antigo: espaço sobrando embaixo do rótulo, porque o
+   texto fica centralizado num quadrado alto. Aplicando aqui o MESMO
+   formato de faixa (filetes de 1px, régua de cor à esquerda, texto
+   alinhado à base) em QUALQUER .bento — não só nas que já tinham a
+   classe .bi-faixa — a Esteira de Devoluções (#dev-pipeline) e os
+   cartões avulsos de Indicadores passam a preencher a própria caixa em
+   vez de deixar ar embaixo do rótulo. Nenhuma cor nova: o filete usa
+   --border-soft (o mesmo hairline do resto do arquivo) e a régua usa
+   --st-cor quando existe, senão o dourado — exatamente a regra que o
+   bloco bi-faixa já validava. */
+.bento{
+  gap:0;background:var(--vidro-bg);border:1px solid var(--border);
+  border-radius:0;box-shadow:none;overflow:hidden;
+  grid-template-columns:repeat(auto-fit,minmax(138px,1fr));
+}
+.bento .stat-box{
+  border:0;border-right:1px solid var(--border-soft);border-bottom:1px solid var(--border-soft);
+  border-radius:0;box-shadow:none;background:transparent;
+  text-align:left;padding:11px 13px 11px 15px;
+  display:flex;flex-direction:column;justify-content:flex-start;align-items:stretch;
+  min-height:64px;
+}
+/* O véu dourado do topo (::before) era desenhado pra caixa alta e
+   centralizada — na faixa ele cobria metade da célula. Sai em toda
+   parte, não só na bi-faixa. */
+.stat-box::before{ display:none }
+.stat-box::after{
+  content:'';position:absolute;left:0;top:0;bottom:0;width:3px;
+  background:var(--st-cor,var(--gold));pointer-events:none;
+}
+.stat-num{ font-size:21px;line-height:1.15;letter-spacing:-.01em }
+.stat-label{
+  font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+  margin-top:2px;line-height:1.25;
+}
+.stat-note{ font-size:10px;margin-top:2px }
+
+/* Destaque: já era duas colunas de largura — aqui ele também fica mais
+   alto que os vizinhos por TIPOGRAFIA (número maior), não por moldura. */
+.bento .stat-destaque .stat-num{ font-size:30px }
+.bento .stat-destaque .stat-label{ font-size:12px }
+
+/* Alerta: mesma correção que a faixa já fazia — perde o preenchimento
+   vermelho inteiro (o defeito de contraste 1,9 documentado no
+   styles.css nasce exatamente de pintar o fundo E escrever por cima) e
+   fica só com a régua + o número na cor de TEXTO do status, que já é a
+   calibrada contra este mesmo fundo. */
+.bento .stat-alerta{
+  background:transparent;border-top:0;
+  --st-cor:var(--st-aguardando-veiculo-bg);
+}
+.bento .stat-alerta .stat-num{ color:var(--st-aguardando-veiculo-txt) }
+.bento .stat-alerta .stat-label{ color:var(--text-dim) }
+
+.stat-clicavel:hover{ background:var(--vidro-bg-forte);border-top:0 }
+.stat-ativo{
+  background:var(--vidro-bg-forte);border-top:0;box-shadow:none;
+  outline:2px solid var(--gold-text);outline-offset:-2px;
+}
+
+@media(max-width:640px){
+  .bento{ grid-template-columns:repeat(3,1fr) }
+  .bento .stat-box{ padding:7px 6px 7px 9px;min-height:44px }
+  .bento .stat-num{ font-size:19px }
+  .bento .stat-label{ font-size:9px }
+}
+
+/* ---------------------------------------------------------------------
+   5. CABEÇALHO E NAVEGAÇÃO — plano, sem vidro real
+   Vira uma tira opaca com UMA régua embaixo. A régua-gradiente do
+   ::after (dourado esmaecendo pra transparente) some — um traço reto
+   de ponta a ponta é grade; esmaecer é o efeito de luz que a escola
+   não usa. */
+#header{
+  background:var(--vidro-bg);box-shadow:none;border-bottom:1px solid var(--border);
+}
+#header::after{ display:none }
+.badge-setor{
+  background:transparent;border:0;border-radius:0;
+  padding:0;letter-spacing:.06em;text-transform:uppercase;font-size:11.5px;
+  border-bottom:1px solid var(--border);padding-bottom:2px;
+}
+#nav{ background:var(--vidro-bg);box-shadow:none }
+@media(max-width:820px){ #nav{ box-shadow:none } }
+
+/* Aba ativa: era um halo dourado (gradiente + sombra interna) subindo
+   do sublinhado. Fica só o traço + o peso do texto — a MESMA
+   informação ("isto está aberto"), sem desenhar luz. */
+.nav-tab{ font-weight:600;letter-spacing:.01em }
+.nav-tab.active{
+  background:transparent;box-shadow:none;font-weight:800;
+}
+@media(min-width:821px){
+  .nav-tab{ letter-spacing:.02em;font-size:13.5px }
+  .nav-tab.active{ background:transparent }
+}
+@media(max-width:820px){
+  .nav-tab.active{ background:transparent }
+}
+
+/* ---------------------------------------------------------------------
+   6. TABELA — cabeçalho plano, versalete
+   O gradiente do <th> vira fundo sólido; o rótulo ganha entreletra pra
+   se diferenciar do dado só por tipografia, como o próprio arquivo já
+   faz no cabeçalho impresso (.print-page th, mais abaixo em styles.css)
+   — aqui é a versão de tela do mesmo raciocínio. */
+th{
+  background:var(--vidro-bg-forte);
+  font-size:11px;letter-spacing:.06em;text-transform:uppercase;font-weight:800;
+}
+
+/* ---------------------------------------------------------------------
+   7. BOTÕES — retos, sem relevo
+   O acabamento "Fluent" (gradiente + sombra de contato) sai; volta a
+   ser um retângulo de cor sólida com o peso do texto fazendo a ênfase.
+   Cor de cada botão não muda — é informação (primária/perigo/sucesso),
+   só o relevo em volta dela é que era decoração. */
+.btn{
+  border-radius:0;box-shadow:none;letter-spacing:.02em;
+  transition:opacity var(--t-rapida) ease, transform var(--t-rapida) ease;
+}
+.btn:hover{ box-shadow:none;filter:none;transform:translateY(-1px) }
+.btn-primary{ background:var(--gold) }
+.btn-success{ background:#1d7a47 }
+.btn-danger{ background:var(--wine) }
+@media (prefers-reduced-motion: reduce){ .btn:hover{ transform:none } }
+
+/* ---------------------------------------------------------------------
+   8. CHIPS, SELOS E PÍLULAS — quadrados, não arredondados
+   Continuam com a MESMA cor e o MESMO texto (nenhuma informação some);
+   só o raio sai, pra combinar com o resto da grade reta. */
+.badge,.status-pill,.pill-count,.badge-conexao,.chip-dia-prog,input,select,textarea{
+  border-radius:0;
+}
+.badge{ letter-spacing:.05em }
+
+/* ---------------------------------------------------------------------
+   9. MODAL — a caixa fica reta; o desfoque de fundo (funcional, apaga a
+   tela por trás pra prender o olho no formulário) continua igual,
+   porque não usa --vidro-borrao. */
+.modal-box{ border-radius:0;box-shadow:none;border:1px solid var(--border) }
+/* Tela de entrada: o mesmo raciocínio da marca (cor fixa, não token de
+   tema — comentário original do styles.css) continua valendo; só o
+   gradiente decorativo por trás do formulário sai, cor de base plana. */
+body.pre-login #modal-operador{ background-image:none }
+
+/* ---------------------------------------------------------------------
+   10. PEÇAS MENORES — mesmo raciocínio, sem exceção
+   Nenhuma delas muda de cor ou perde informação: só o raio e o gradiente
+   saem, pra nenhum canto do painel voltar a parecer botão de app de
+   celular no meio de uma grade reta. */
+
+/* Fio de luz genérico (usado por qualquer elemento .vidro-brilho) — é o
+   mesmo efeito de vidro do card/cabeçalho, só que reutilizável; sai pelo
+   mesmo motivo. */
+.vidro-brilho::after{ display:none }
+
+/* Controle segmentado (Rotas · Transportadoras · Placas, em Indicadores):
+   o estado ativo trocava de aba com um gradiente dourado — vira
+   preenchimento chapado, e os dois cantos arredondados (do controle e de
+   cada botão) somem, junto com o resto dos cantos desta camada. */
+.seg-control,.seg-btn{ border-radius:0 }
+.seg-btn.seg-ativo{ background:var(--gold) }
+
+/* Barra de magnitude do Raio-X: é dado (comprimento = participação), não
+   decoração — o gradiente ali não ajudava a ler o valor, só imitava
+   volume. Um tom sólido do MESMO dourado mostra o mesmo comprimento. */
+.raiox-barra{ background:var(--gold);border-radius:0 }
+
+/* "1 de 2" (mesma placa, mais de uma carga) e o chip de "pra onde foi"
+   no Histórico: pílulas arredondadas viram etiquetas retas, mesma cor,
+   mesmo texto. */
+.marca-multi,.chip-praonde{ border-radius:0 }

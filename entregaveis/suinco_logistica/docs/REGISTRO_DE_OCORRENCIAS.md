@@ -27,8 +27,8 @@ faz achar a próxima em minutos em vez de horas:
 | **Eco de sincronização** | Todo painel reenvia o que tem em memória. Cópia velha sobrescreve dado novo — inclusive com campo vazio. | #01, #03, #08, #10 |
 | **Rótulo que mente** | O dado está certo no banco; o nome dado a ele na tela descreve outra coisa. | #04, #12 |
 | **Regra larga demais** | Trava criada para um caso real barra também o caso legítimo mais comum. | #05 |
-| **Trava sem o par na tela** | O servidor passa a exigir algo novo e a tela continua com o botão antigo: quem clica só descobre que não pode, e não tem por onde seguir. | #13 |
-| **A mesma decisão escrita em dois lugares** | A regra é copiada em vez de consultada. As cópias divergem e o comportamento fica errado sem que nenhuma linha esteja errada. | #14, #26 |
+| **Trava sem o par na tela** | O servidor passa a exigir algo novo e a tela continua com o botão antigo: quem clica só descobre que não pode, e não tem por onde seguir. | #13, #73 |
+| **A mesma decisão escrita em dois lugares** | A regra é copiada em vez de consultada. As cópias divergem e o comportamento fica errado sem que nenhuma linha esteja errada. | #14, #26, #73 |
 | **Duas escritas em voo, a velha ganha** | O painel manda a carga INTEIRA a cada alteração. Duas alterações seguidas viram duas requisições simultâneas, e a primeira carrega o valor velho do campo que ainda ia mudar. | #16 |
 | **A correção que outro setor desfaz sem saber** | Um setor corrige de propósito o que outro fez. A tela do segundo continua mostrando o estado como se nada tivesse sido decidido, e o gesto normal dele desfaz a correção — em silêncio, dos dois lados. | #21 |
 | **A proteção escrita para um posto só** | A regra certa existe, com comentário e tudo — mas vale para um caminho e não para os irmãos dele. Não é cópia divergente: é a cópia que nunca foi escrita. | #20 |
@@ -37,6 +37,8 @@ faz achar a próxima em minutos em vez de horas:
 | **O teste que carimba a leitura errada do pedido** | O teste está novo e verde, e mede exatamente o que foi escrito — só que o pedido foi entendido ao contrário. Verde prova que o código faz o que o teste diz, não que a regra está certa. Mudança que REMOVE algo da tela precisa do teste que garante que o trabalho de quem usava aquilo ainda é possível. | #23 |
 | **Dois fatos com prazos diferentes tratados como um só** | Cada dado está certo no seu lugar; o defeito nasce de perguntar a um deles algo que só o outro sabe (`DB.operador` no localStorage vive para sempre; o token no sessionStorage morre com a aba). Reconhece-se assim: o mesmo relato volta com roupa nova depois de cada correção. Corrigir no nível do sintoma nunca fecha. | #25 |
 | **Teste que mede o proxy, não a regra** | O teste confere um sintoma fácil de medir ("a aba aparece?", "quantas linhas?") em vez da garantia real, ou monta um cenário que deixou de corresponder ao sistema. Quando o sintoma muda por um motivo legítimo, ele fica vermelho sem que nada tenha quebrado — e aponta para o lugar errado. | #15, #22 |
+| **Decisão aplicada no nível errado** | A intenção está certa e o alvo não. Proibir quebra na TABELA quando bastava na linha; gravar por LINHA quando bastava por lote; desligar `animation` quando o que apagava o conteúdo no papel era o estado de repouso. Reconhece-se assim: o sintoma aparece longe da causa, e a correção não é remover a regra — é descê-la um nível. | #71, #72, #74 |
+| **Enfeite no caminho crítico** | A animação espera, e o trabalho espera atrás dela. Nada fica errado: fica mais lento, e o teste reprova numa conferência de DADO ("a rota aparece na tabela?") que aponta para o lugar errado. Movimento anda ao lado do trabalho, nunca na frente. | #74 |
 
 ---
 
@@ -3317,3 +3319,245 @@ o `thead` repete e que a linha continua protegida.
 **CONFERIDO QUE NÃO QUEBROU O PADRÃO:** `test_relatorios` (Operacional,
 Executivo e Fretes), `test_devolucoes_checklist` e
 `test_devolucoes_ordem_e_sem_filtro_de_dia` passam.
+
+---
+
+## #73 — A sobra pesada não tinha como ser finalizada por ninguém (16/09/2026)
+
+**Relato do dono**, com print junto: *"E NA PARTE DEVOLUÇÃO DE SOBRA,
+DEPOIS QUE PESA TEM QUE COLOCAR A OPÇÃO DE FINALIZAR A ETAPA"*.
+
+O print: sobra, placa SIY0G41, motorista LEONARDO, chegou sem lacre.
+Carimbos PORTARIA ✓ e BALANÇA (ENTRADA) ✓ (Thiago Rafael), EXPEDIÇÃO
+pendente. Na tela, só o texto *"Próximo passo: Descarga Conferida — feito
+por Expedição ou Logística"* e nenhum botão. Ele estava logado como
+**Faturamento**.
+
+**SÃO DOIS DEFEITOS**, e o segundo é maior que o relatado.
+
+**DEFEITO 1 — o botão desenhado não era o que o clique mandava.** Duas
+funções respondiam à mesma pergunta ("qual o próximo passo desta
+devolução"): `blocoAvancoDev` perguntava a `etapaDeDev`, que CONHECE o
+atalho da sobra; `avancarEtapaDevolucaoUI` fazia `DEV_ETAPAS.find(...)` por
+conta própria, e `DEV_ETAPAS` só conhece o caminho da devolução normal.
+Medido no navegador, sobra parada em "Conferida no Faturamento", operador
+da **Expedição** — que TINHA a permissão:
+
+    botão desenhado ... '📦 Descarga conferida (Expedição)'  → Descarga Conferida
+    o clique enviou ... { para: 'Peso Final Registrado' }
+    o servidor ....... 409 'Sobra encerra no OK da Expedição — não volta
+                            à balança nem passa por Controles Internos e
+                            Central de Notas.'
+
+Ou seja: **a sobra não era finalizável pela tela por NINGUÉM** — nem
+Expedição, nem Logística, nem Administração. O dono viu a cara do problema
+que era dele (não tinha botão); quem tinha botão levava 409.
+
+O atalho da sobra mora fora de `DEV_ETAPAS` desde 08/09 — e por um bom
+motivo, registrado lá: dentro da lista ele fazia "Conferida no Faturamento"
+aparecer DUAS vezes na esteira, para todo mundo. A correção de então criou
+`etapaDeDev` para quem pergunta o próximo passo. Faltou o segundo chamador
+perguntar.
+
+**DEFEITO 2 — quem pesou não podia encerrar.** Para a sobra, "Descarga
+Conferida" é o ÚLTIMO passo (ela não volta à balança nem passa por
+Controles Internos e Central de Notas), e ele estava liberado só para
+Expedição e Logística. A sobra ficava pesada e parada esperando outro setor
+aparecer. **E a esteira já chamava o Faturamento para ela** — "SUA VEZ",
+porque "Conferida no Faturamento" é o status onde a segunda etapa dele
+começa na devolução normal. Chamar e não dar caminho é a regra da casa ao
+contrário: *botão desabilitado não ensina o caminho, só nega* — aqui nem
+botão havia.
+
+**A CORREÇÃO, nos dois lados.**
+
+- servidor (`backend/src/dominio/devolucoes.js`): o Faturamento entra na
+  linha `soSobra` da transição, ao lado de Expedição e Logística. **Só
+  nela** — na devolução normal o OK da descarga sai de "Peso Final
+  Registrado" e continua sendo de Expedição e Logística; pular a balança
+  final lá continua impossível. A Expedição segue PRIMEIRA na lista: é a
+  dona do passo e o nome que aparece na recusa.
+- painel (`devolucoes.js`): `avancarEtapaDevolucaoUI` passa a perguntar a
+  `etapaDeDev` — uma função, dois chamadores. `DEV_ATALHO_SOBRA` espelha a
+  allowlist nova e o rótulo do botão vira **"✅ Finalizar sobra — descarga
+  conferida"**: é a palavra do dono, e com três setores não dá para nomear
+  um só no botão.
+- a frase da recusa passou a ler como gente fala. `setores.join(' ou ')`
+  com três nomes produzia *"Expedição ou Faturamento ou Logística"*. Virou
+  `listaDeSetores()` em `dominio/fluxo.js`, chamada pelas duas recusas da
+  devolução e pela da carga: *"Expedição, Faturamento ou Logística"*.
+
+**O CARIMBO É DE QUEM DEU O PASSO.** Fechando a sobra, o Faturamento
+assina a coluna `expedicao_por` com o nome dele, e `operador_setor` guarda
+"Faturamento". É o mesmo desenho que já valia para a Logística, que cobre
+todos os postos — a assinatura diz quem agiu, não qual setor é o dono do
+passo.
+
+**QUEM PODE FAZER, DESFAZ.** A allowlist do desfazer é a MESMA do avanço
+(decisão de 14/09, ocorrência #68), então o Faturamento passou a poder
+desfazer o fecho da sobra sem que nada precisasse ser escrito para isso.
+Uma decisão, um lugar — funcionou como prometido.
+
+**Vermelho→verde provado contra o publicado.** Com a allowlist antiga, a
+suíte 19 do servidor reprova em 4 casos (`node --test
+testes/devolucoes.test.js` → 99/103); na tela, 6 verificações da suíte
+nova reprovam contra o `index.html` da branch de entrega, incluindo *"e o
+clique dela também finaliza (era 409 antes)"* com a Expedição.
+
+**Testes que travam:**
+`backend/testes/devolucoes.test.js` suíte 19 (8 casos: o Faturamento
+encerra a sobra que pesou; o carimbo guarda quem finalizou e o peso de
+entrada continua intacto; a Expedição continua finalizando; quem finaliza
+desfaz; a devolução normal não pula a balança final; nela o OK da descarga
+continua recusando o Faturamento; a recusa ENSINA com a frase nova; a
+filial continua sem avançar etapa) e
+`testes/test_sobra_finaliza_quem_pesou.py` na tela — que, além do botão e
+do clique, **lê as duas fontes e compara a esteira inteira**: as 7
+transições, o carimbo e a allowlist de cada uma, no painel e no
+`dominio/devolucoes.js`. É a mesma solução da lista de SETORES (#26): a
+cópia é inevitável enquanto o painel for build de arquivo único, mas ela
+não pode envelhecer calada.
+
+**O que NÃO foi feito, de propósito.** O placeholder do campo de recado da
+etapa diz "Observações para a próxima etapa" mesmo quando é o último passo
+(vale para a sobra e para a Central de Notas) — é anterior a isto e não
+tem relação com o relato. E `exigirSetor` (middleware/auth.js) ainda tem
+seu próprio `join(' ou ')`; hoje ele nunca recebe mais de um setor.
+
+**Não precisa de migração** — a mudança é de regra, não de schema, e
+nenhuma sobra em andamento precisa ser mexida.
+
+**Só vale depois do `atualizar.sh`:** a allowlist é do servidor. O painel
+publica antes pelo Vercel, e nessa janela o Faturamento vê o botão novo e
+leva a recusa **explicada** do servidor antigo (*"O setor Faturamento não
+registra 'Descarga Conferida'. Quem faz esse passo: Expedição ou
+Logística."*). A metade que NÃO depende do servidor — o clique mandar a
+transição certa — passa a valer assim que o painel publica, e já destrava a
+sobra para Expedição, Logística e Administração.
+## #74 — Dois defeitos que o movimento novo criou, pegos antes de subir (16/09/2026)
+
+**Pedido do dono:** *"quero um sistema com cara nova, COM ANIMAÇÕES,
+FLUIDEZ. Tudo de preview que você me mostrou seja aplicado em seu devido
+lugar."* E, no meio do trabalho, o aviso que mudou a forma da entrega:
+*"SEM MEXER NO RELATÓRIO. SEM ATRAPALHAR O RELATÓRIO."*
+
+Nenhum dos dois defeitos abaixo chegou à operação. Os dois foram achados
+pelo teste escrito junto com a mudança, e ficam registrados porque são de
+FAMÍLIA, não de detalhe: quem for animar a próxima tela vai tropeçar nos
+mesmos dois lugares.
+
+### DEFEITO 1 — repouso invisível é faixa em branco no papel
+
+A linha que "sai do pátio" fecha o próprio espaço: altura a zero, celas sem
+espaçamento, conteúdo escondido. Na tela isso dura 90 ms e some junto com a
+linha. No PAPEL não existe duração — só existe o estado.
+
+O servidor gera os PDFs com ESTE mesmo `styles.css`
+(`backend/src/servicos/pdf.js` manda `{html, css}` ao Chromium). Desligar só
+`animation` e `transition` em `@media print` NÃO bastava: o que deixava a
+linha com zero de altura não era a animação, eram as declarações de repouso
+(`height`, `padding`, `font-size`, `display:none` nos filhos) e o `height`
+escrito em linha pelo JavaScript. Medido no teste: **0 px de altura no
+papel**, ou seja, uma faixa em branco no lugar de um registro.
+
+É a **#72 por outra porta** — decisão de papel aplicada no nível errado —,
+e a regra que fica é mais curta que a explicação:
+
+> Em `@media print`, desligar o movimento NÃO é desligar `animation` e
+> `transition`. É devolver TODO estado de repouso ao visível: altura,
+> opacidade, deslocamento, espaçamento e conteúdo. E o estilo em linha só
+> se desfaz com `!important`.
+
+A mesma correção vale para `prefers-reduced-motion`, e pelo mesmo motivo:
+sem movimento, a classe que apagava a linha continuaria apagando-a — quem
+pediu menos movimento receberia menos PAINEL.
+
+### DEFEITO 2 — animação no caminho crítico atrasa o trabalho
+
+O botão que conta ("Salvar → Salvando… → ✓ Salvo") esperava as duas trocas
+de texto — 200 ms cada — antes de devolver o controle a quem chamou. Como o
+`renderAll()` do cadastro vem depois disso, a tabela de Rotas passou a ser
+redesenhada **400 ms mais tarde**.
+
+`test_cadastrar_rota` reprovou em "a rota nova aparece na tabela do card". A
+rota estava certa, gravada e no servidor: a TABELA é que ainda não tinha
+sido desenhada. Vermelho de **regressão de verdade** (causa 4 das quatro),
+com cara de teste velho — e tratar como teste velho teria publicado um
+painel quatro décimos mais lento em cada gravação.
+
+> Animação anda AO LADO do trabalho, nunca na frente dele. A promessa que a
+> função devolve resolve quando a TAREFA resolve; o botão conta por fora.
+
+Com trocas soltas, duas podem se atropelar quando o servidor responde em
+50 ms — por isso cada troca leva uma senha e só a mais recente escreve o
+texto. Botão parado no texto errado é pior que botão sem animação.
+
+### O TESTE
+
+`testes/test_movimento_do_painel.py`, em oito seções — uma por movimento,
+mais o papel e o movimento reduzido. Reprova em 32 conferências contra o
+painel publicado. As que importam para esta ocorrência:
+
+- *"no papel, a linha continua tendo altura — não sai como faixa em branco"*
+  (a tabela de prova fica FORA das abas: em impressão `.tab-page` inteira é
+  `display:none`, e medir lá responderia zero por outro motivo);
+- *"no papel, NADA nasce transparente"* e *"o visto sai DESENHADO"*;
+- *"com movimento reduzido, a linha não desliza nem some"*;
+- os tetos de tempo, medidos em quadros e não no que o CSS declara.
+
+**CONFERIDO QUE NÃO QUEBROU O PAPEL:** `test_documento_nao_sai_pagina_em_branco`,
+`guarda_do_padrao_papel`, `test_relatorios`, `test_relatorio_sem_paginas_brancas`,
+`test_relatorio_uma_pagina`, `test_css_do_relatorio`, `test_relatorio_fiel_ao_painel`,
+`test_relatorio_na_sequencia`, `test_relatorio_manobrista`,
+`test_fonte_relatorio_embutida`, `test_operador_no_relatorio_operacional` e
+`test_devolucoes_checklist` passam. E os PDFs foram gerados DE VERDADE pelo
+servidor, com 26 cargas: Operacional 2 páginas, Executivo 3, Fretes 2,
+Manobrista 1 — o MESMO número de páginas do painel publicado, e nenhuma
+página em branco nos dois.
+
+## #75 — A Torre sempre rolou de lado no tablet da Portaria, e ninguém media (17/09/2026)
+
+**Sintoma.** Em tablet de 1024px em paisagem — o aparelho que a Portaria usa
+no pátio, com luva —, a tabela da Torre de Controle mostra **746px** e precisa
+de **894px**. Faltam **148px**: a operação rola de lado para ver a coluna de
+peso, todos os dias.
+
+**Por que passou.** `guarda_do_padrao.py` tinha dois perfis: computador de
+1280px SEM toque, e celular de 390px COM toque. O tablet mora exatamente entre
+os dois — tem a largura de um e o dedo do outro — e não era nenhum deles. A
+largura de 1280 deixava a tabela caber; a de 390 virava cartão, que não tem
+coluna. O defeito existia no vão.
+
+**Como apareceu.** Não foi investigação: foi consequência. O Tema 2027 causou
+uma regressão de alvo de toque que só acontece em tela larga com toque (`.btn`
+caindo de 44px para 36px), e para pegá-la foi preciso criar o terceiro perfil.
+Criado o perfil, ele reprovou também nesta rolagem — que não era nova.
+
+**Prova de que é anterior, e não da camada.** A mesma guarda, contra o
+`index.html` da branch de entrega (o que está no ar agora):
+
+```
+publicado   tablet  div.table-wrap mostra 746 px e precisa de 894 (faltam 148)
+Tema 2027   tablet  div.table-wrap mostra 750 px e precisa de 907 (faltam 157)
+```
+
+A camada acrescenta 9px a um buraco de 148 que já existia. Acusar a camada por
+isto seria tratar causa 4 onde a causa é anterior — e deixaria o defeito de
+verdade sem dono.
+
+**Família.** "Medida que não existe não protege" — parente de #17 (bateria que
+não terminava não protegia ninguém) e da razão de existir da própria guarda: as
+~180 suítes provam que o painel FUNCIONA, nenhuma provava que ele está LEGÍVEL.
+Aqui o mesmo buraco aparece um nível acima: o perfil de aparelho que ninguém
+mede é um aparelho que ninguém protege.
+
+**O que foi feito agora.** Terceiro perfil (`tablet`, 1024×768, sem emulação de
+celular e COM toque) em `guarda_do_padrao.py`, com o porquê escrito no próprio
+arquivo. `has_touch` é o que liga `pointer:coarse`; `is_mobile` fica falso
+porque tablet em paisagem renderiza como tela larga, não como telefone.
+
+**O que NÃO foi feito, e é decisão de quem manda.** As larguras das colunas da
+Torre foram calibradas para caber em 1002px, que é o que sobra num monitor de
+1280px. Num tablet sobram 746. Fazer a Torre caber ali é redesenho de tabela,
+não ajuste — e não se muda a tela que a operação usa no meio do dia sem o dono
+dizer. Fica registrado, com número, para ser decidido.

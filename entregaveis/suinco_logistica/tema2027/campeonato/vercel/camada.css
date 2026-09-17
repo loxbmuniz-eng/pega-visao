@@ -1,0 +1,259 @@
+/* =====================================================================
+   CAMADA "VERCEL" — contraste e geometria
+   ---------------------------------------------------------------------
+   Camada aditiva, carregada DEPOIS de styles.css (mesma técnica do
+   tirar_prints.py: add_style_tag). Não redefine nenhuma cor de status,
+   nenhum texto, nenhuma marca ✓ ● · — só a pele: token de cor neutra,
+   forma, sombra e tipografia. Onde um seletor daqui empata em
+   especificidade com o original, esta folha vence por vir depois; por
+   isso a maior parte do trabalho é feita em VARIÁVEIS (--radius,
+   --vidro-*, --shadow, --border, --text-dim…), que styles.css já usa em
+   centenas de regras — mudar o valor uma vez muda o painel inteiro sem
+   reescrever cada componente.
+
+   ESCOLA: preto e branco ao extremo, cor só como acento raro. O dourado
+   da marca continua sendo esse acento — não foi substituído por nada.
+   As seis cores de status (mandato do gestor, ver styles.css linha ~76)
+   NÃO mudam de valor: só o desenho ao redor delas fica mais seco, o que
+   as faz LER como acento ainda mais claro sobre um painel monocromático.
+
+   Tudo dentro de @media screen: a folha inteira não pode alcançar
+   impressão, porque os PDFs usam styles.css e o limite duro é não tocar
+   @media print — a forma mais segura de cumprir isso é não deixar NADA
+   daqui se aplicar fora da tela. */
+@media screen{
+
+:root{
+  /* ---- Geometria: cantos retos ou quase ----
+     "Cantos pequenos ou retos": 2px é o suficiente para o navegador não
+     fazer bicudo no anti-aliasing, e pequeno o bastante para ler como
+     esquadro, não como pílula. */
+  --radius:2px;
+  --radius-sm:2px;
+  --radius-lg:2px;
+
+  /* ---- Vidro morre, superfície plana nasce ----
+     backdrop-filter era o item mais caro E o mais "macio" do painel —
+     os dois do jeito oposto à escola. --vidro-borrao:none desliga o
+     blur em TODO lugar que o lê (#header, #nav) sem precisar reescrever
+     cada regra. A opacidade também sai: painel de contraste não deixa o
+     conteúdo de trás vazar por baixo do card. */
+  --vidro-borrao:none;
+  --vidro-bg:#0a0a0a;
+  --vidro-bg-forte:#141414;
+  --vidro-borda:rgba(255,255,255,.30);
+  --vidro-brilho:rgba(255,255,255,0);   /* apaga o fio de luz — decoração macia */
+  --vidro-sombra:none;                  /* sombra difusa sai; a que fica é DECLARADA, ver abaixo */
+
+  --navy-deep:#000000;
+  --navy:#0a0a0a;
+  --navy-light:#141414;
+  --navy-lighter:#1f1f1f;
+  --text:#ffffff;
+  /* #a3a3a3 sobre #000/#0a0a0a mede 8,3:1 e 7,8:1 — testado antes de
+     entrar aqui (script de contraste ad-hoc, mesmo método do
+     test_contraste.py do projeto), bem acima do piso AA de 4,5:1. */
+  --text-dim:#a3a3a3;
+  /* Borda como LINHA, não como sugestão: 0,30 de alfa em branco sobre
+     preto mede ~3,5:1 — acima do piso de 3:1 que a WCAG pede pra
+     contorno de componente (não é texto). Abaixo disso a borda "nítida"
+     do briefing começa a sumir no monitor do pátio. */
+  --border:rgba(255,255,255,.34);
+  --border-soft:rgba(255,255,255,.16);
+  --shadow:none;
+  --campo-bg:#141414;      /* campo continua distinto do card, sem virar branco-sobre-preto */
+  --amb-ouro:transparent;  /* os três halos de cor do ambiente saem: */
+  --amb-azul:transparent;  /*   "cor só como acento raro" também vale */
+  --amb-vinho:transparent; /*   pro fundo — nenhuma cor de decoração */
+
+  /* Sombra DECLARADA: usada a conta-gotas (modal, CTA primário, indicador
+     em destaque) — offset sólido, zero blur. "Se há profundidade, ela é
+     declarada": ou a peça tem essa sombra de bloco, ou não tem sombra
+     nenhuma. Nunca um meio-termo esfumaçado. */
+  --sombra-dura:4px 4px 0 rgba(255,255,255,.9);
+}
+
+:root[data-tema="claro"]{
+  --vidro-bg:#ffffff;
+  --vidro-bg-forte:#f4f4f4;
+  --vidro-borda:rgba(0,0,0,.28);
+  --vidro-brilho:rgba(0,0,0,0);
+  --vidro-sombra:none;
+
+  --navy-deep:#ffffff;
+  --navy:#ffffff;
+  --navy-light:#f2f2f2;
+  --navy-lighter:#e6e6e6;
+  --text:#000000;
+  /* #4a4a4a sobre branco mede 8,9:1 — mesma checagem do bloco escuro. */
+  --text-dim:#4a4a4a;
+  /* 0,46 de alfa em preto sobre branco mede ~3,3:1 — mesmo raciocínio do
+     tema escuro, alfa maior porque preto sobre branco precisa de mais
+     peso pra ler igual de "linha nítida" a olho nu. */
+  --border:rgba(0,0,0,.46);
+  --border-soft:rgba(0,0,0,.18);
+  --shadow:none;
+  --campo-bg:#f4f4f4;
+  --amb-ouro:transparent;
+  --amb-azul:transparent;
+  --amb-vinho:transparent;
+
+  --sombra-dura:4px 4px 0 rgba(0,0,0,.9);
+}
+
+/* ---- Ambiente: halo de cor vira grade geométrica monocromática ----
+   Era três manchas radiais em ouro/azul/vinho. "Formas geométricas
+   puras" não é mancha, é linha — uma grade fininha, na cor de borda do
+   próprio tema (logo já correta nos dois), baixíssima opacidade pra não
+   competir com o conteúdo. Continua fixed + pointer-events:none, mesma
+   razão de desempenho do original (composição de camada uma vez só). */
+body::before{
+  background:
+    repeating-linear-gradient(0deg,  var(--border-soft) 0 1px, transparent 1px 72px),
+    repeating-linear-gradient(90deg, var(--border-soft) 0 1px, transparent 1px 72px);
+  opacity:.55;
+}
+
+/* ===== CABEÇALHO / NAVEGAÇÃO — placas planas, linha de 1px no lugar do vidro ===== */
+#header{
+  background:var(--navy);
+  box-shadow:none;
+  border-bottom:1px solid var(--border);
+}
+/* A régua de cima era um gradiente esmaecendo — luz. Vira uma linha
+   sólida cheia: a mesma informação (marca/acento dourado), sem esfumaçado. */
+#header::after{
+  background:var(--gold);
+}
+#logo-chip{ border-radius:var(--radius-sm) }
+
+#nav{
+  border-right:1px solid var(--border);
+  box-shadow:none;
+  background:var(--navy);
+  -webkit-backdrop-filter:none;backdrop-filter:none;
+}
+@media(max-width:820px){
+  #nav{ box-shadow:none } /* a gaveta perde o esfumaçado lateral, fica só a linha de borda */
+}
+.nav-tab.active{
+  /* O halo de gradiente + glow interno sai; o traço de 3px que já
+     existia (embaixo no desktop-horizontal antigo, à esquerda na
+     coluna) continua sendo o único sinal — sólido, sem gradiente. */
+  background:none;
+  box-shadow:none;
+}
+.nav-tab:hover{ background:var(--navy-light) }
+
+/* ===== CARD — vidro pintado vira placa opaca com contorno de 1px ===== */
+.card{
+  border-radius:var(--radius);
+  box-shadow:none;
+  border-color:var(--border);
+}
+/* O fio de brilho no topo do card era luz de vidro; nesta escola não há
+   vidro, então não há luz — a régua de --vidro-brilho já ficou
+   transparente no token, isto só evita um pixel fantasma de gradiente. */
+.card::after{ display:none }
+.card-title{
+  /* Contraste de peso DECLARADO entre título e corpo: título vira
+     caixa-alta, peso máximo, rastreado — bem mais pesado que o --fs-corpo
+     normal do card, que continua exatamente como estava. */
+  text-transform:uppercase;
+  letter-spacing:.06em;
+  font-weight:900;
+}
+.card-title::before{
+  /* Traço de título deixa de ser gradiente dourado e vira acento sólido —
+     mesmo dourado, sem degradê, mais "régua desenhada" que "luz". */
+  background:var(--gold);
+  border-radius:0;
+}
+
+/* ===== INDICADORES (.bento / .stat-box) — a régua de cor já é o acento;
+   só perde o vidro, o brilho de topo e a sombra difusa no hover. ===== */
+.stat-box{
+  box-shadow:none;
+  border-color:var(--border);
+}
+.stat-box::before{ display:none }   /* o "reflexo" de luz descendo do topo era vidro */
+.stat-box:hover{ box-shadow:none }  /* eleva só por transform, sem sombra difusa a mais */
+/* O indicador em destaque (.stat-destaque) é o único ponto do painel que
+   ganha a sombra dura declarada — é DE PROPÓSITO o número que mais
+   importa na tela, e a escola pede que profundidade, quando existe,
+   seja um bloco sólido, não um blur. */
+.bento .stat-destaque,
+.bento.bi-faixa .stat-destaque{
+  box-shadow:var(--sombra-dura);
+}
+
+/* ===== BOTÕES — sem gradiente "Fluent", sem brilho interno.
+   Cores mantidas nas variantes já validadas por contraste no próprio
+   projeto (o comentário original documenta 4,74:1 pro topo do degradê
+   de "Sucesso" — uso aqui o mesmo tom, chapado, sem degradê). ===== */
+.btn{
+  border-radius:var(--radius-sm);
+  box-shadow:none;
+  border:1.5px solid transparent;
+  transition:transform .1s ease, opacity .1s ease;  /* só transform/opacity */
+}
+.btn:hover{ filter:none; box-shadow:none; opacity:.82; transform:translateY(-1px) }
+.btn:active{ transform:translateY(0) }
+.btn-primary{ background:var(--gold); color:#1a1200 }
+/* Mesmo tom que a correção de contraste do projeto já usa no topo do
+   degradê (4,74:1 medido lá) — aqui chapado, sem degradê. */
+.btn-success{ background:#218352; color:#fff }
+.btn-danger{ background:#a82a32; color:#fff }
+.btn-sec{ background:transparent; color:var(--text); border-color:var(--border) }
+.btn-sec:hover{ background:var(--navy-light) }
+
+/* ===== CAMPOS — contorno nítido, sem sombra de "vidro digitável" ===== */
+input,select,textarea{
+  border-radius:var(--radius-sm);
+  border:1.5px solid var(--border);
+  background:var(--campo-bg);
+}
+input:focus-visible,select:focus-visible,textarea:focus-visible{
+  outline:2.5px solid var(--gold);outline-offset:1px;
+}
+
+/* ===== BADGES / PÍLULAS — continuam com a MESMA cor e o MESMO texto de
+   sempre (mandato do gestor, contraste medido pelo próprio projeto).
+   Só o contorno fica reto e um pouco mais grosso — é isso que lê como
+   "placa", não "etiqueta arredondada". ===== */
+.badge,.status-pill{
+  border-radius:var(--radius-sm);
+  border-width:1.5px;
+}
+.chip-dia-prog,.marca-multi,.legenda-chip,.dev-chip{
+  border-radius:var(--radius-sm);
+}
+
+/* ===== TABELA — cabeçalho vira placa sólida, régua inferior sólida
+   (era gradiente + régua dourada; a régua fica, o gradiente sai). ===== */
+th{
+  background:var(--navy);
+  border-bottom:2px solid var(--gold);
+  text-transform:uppercase;letter-spacing:.04em;font-size:12px;
+}
+td{ border-bottom-color:var(--border-soft) }
+
+/* ===== MODAL — placa opaca, sombra declarada em vez de halo difuso ===== */
+.modal-box{
+  border-radius:var(--radius);
+  box-shadow:var(--sombra-dura);
+  border-color:var(--border);
+}
+.modal-list-item{ border-radius:var(--radius) }
+
+/* ===== FOCO — quadrado, sem arredondar por herança de radius ===== */
+:focus-visible{ outline-offset:1px }
+
+/* Qualquer transform que esta camada adiciona respeita o mesmo teto do
+   projeto (prefers-reduced-motion) — igual em espírito ao bloco que já
+   existe em styles.css, só cobrindo o que É desta camada. */
+@media (prefers-reduced-motion:reduce){
+  .btn,.btn:hover,.btn:active{ transition:none; transform:none }
+}
+
+} /* fim @media screen — nada acima alcança impressão */

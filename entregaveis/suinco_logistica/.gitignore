@@ -1,0 +1,6 @@
+
+# Saída que o próprio teste reescreve a cada rodada. Versionar isto faz a
+# árvore ficar suja depois de rodar a bateria, e o portão reclamar de uma
+# mudança que não é de ninguém. Medida é resultado, não fonte.
+testes/tema2027_etapa4_resultado.json
+testes/tema2027_resultado_*.json

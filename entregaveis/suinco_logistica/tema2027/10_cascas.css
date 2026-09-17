@@ -1,0 +1,59 @@
+/* Tema 2027 — Etapa 2: Cascas (header, nav, card, modal).
+   Dona de: #header, #header::after, #logo-chip, #nav, .nav-tab, .nav-tab.active,
+   .nav-tab:hover, .card, .card::after, .card-title, .card-title::before, .card-sub,
+   .modal-box, .modal-overlay, .badge-setor, .funcao-aba.
+   Não toca: .stat-*, .bento*, table/th/td, .btn*, input/select/textarea, .badge.
+   Valores copiados literalmente de VEREDITO.md, seção 6, Etapa 2 — nenhuma decisão
+   de design tomada aqui. #nav e #header NUNCA recebem `position`: a base
+   (styles.css) já os define `position:fixed`; competidor Apple foi eliminado por
+   escrever `#nav{position:relative}` e empurrar a página inteira 484px. */
+@media screen{
+#header{ background:var(--navy); box-shadow:none; border-bottom:1px solid var(--border);
+  -webkit-backdrop-filter:none; backdrop-filter:none }
+#header::after{ background:var(--gold) }               /* régua sólida de ponta a ponta */
+#logo-chip{ border-radius:var(--radius-sm) }
+.badge-setor{ border-radius:var(--radius-sm); padding:5px 12px }
+
+#nav{ background:var(--navy); box-shadow:none; -webkit-backdrop-filter:none; backdrop-filter:none }
+.nav-tab{ font-size:13.5px; font-weight:600; letter-spacing:.01em;
+  transition:background-color var(--t-media) var(--curva), color var(--t-media) var(--curva) }
+.nav-tab:hover{ background:var(--acento-hover) }
+.nav-tab.active{ background:var(--acento-ativo); font-weight:700 }
+/* RODADA 2. O brilho do celular (`.nav-tab.active{box-shadow:0 -1px 12px …
+   inset}`, styles.css ~575) sai — mas NÃO com `.nav-tab.active{box-shadow:none}`:
+   `.nav-tab:active` (o toque, styles.css ~5892) tem a MESMA especificidade,
+   e esta camada vem depois, então o `none` daqui apagava a resposta ao dedo
+   na aba selecionada (test_toque_responde.py reprovou). `:not(:active)`
+   desliga o brilho só em repouso; apertada, a aba volta a cair na regra da
+   base. Nenhum valor copiado. */
+.nav-tab.active:not(:active){ box-shadow:none }
+
+/* border-radius:var(--radius) aqui não é redundante: styles.css tem uma regra solta
+   `.card{border-radius:8px}` (linha ~2529, fora de qualquer media query, seção
+   "Acabamento Fluent") que hoje VENCE a `.card{border-radius:var(--radius)}` da linha
+   ~700 por vir depois no arquivo — achado pela Etapa 1. Como tema2027/*.css carrega
+   DEPOIS de styles.css inteiro, esta linha vence as duas, e o --radius da Etapa 1
+   passa a valer de verdade no card. Sem isto, o card ficaria preso em 8px. */
+.card{ background:var(--vidro-bg); border:1px solid var(--border-soft); border-radius:var(--radius);
+  box-shadow:var(--vidro-sombra); padding:10px 14px; margin-bottom:8px }
+.card::after{ display:none }                              /* fio de brilho do vidro */
+.funcao-aba{ border-color:var(--border-soft); border-left-color:var(--gold); padding:8px 12px }
+
+.modal-overlay{ -webkit-backdrop-filter:blur(6px); backdrop-filter:blur(6px) }  /* o único desfoque: apaga a tela de trás, é função */
+.modal-box{ border-radius:var(--radius-lg); border:1px solid var(--border);
+  box-shadow:0 2px 6px rgba(4,8,18,.35), 0 24px 48px -16px rgba(4,8,18,.6) }
+}
+@media screen and (min-width:821px){
+  .nav-tab.active{ border-left-color:var(--gold) }   /* a régua fica: estado não depende só de cor */
+
+  /* RODADA 2: o título de card SÓ muda no computador. No celular ele é o
+     botão do acordeão de Indicadores e Cadastros, calibrado à mão em 44px
+     de alvo com `font-size:14px` (styles.css ~4555 e ~5047): 13px derrubava
+     o alvo para 42,3px, e a caixa alta com .06em fazia "Visão do Pátio —
+     linha do tempo" crescer de 44 para 64px. Abaixo de 821px vale a base. */
+  .card-title{ font-size:13px; font-weight:800; text-transform:uppercase; letter-spacing:.06em;
+    margin-bottom:8px; padding-left:10px }
+  .card-title::before{ background:var(--gold); width:3px; border-radius:0 }
+  .card-title .ico-card{ width:16px; height:16px }
+  .card-sub{ font-size:11.5px; margin-top:-4px; margin-bottom:6px; letter-spacing:.01em }
+}

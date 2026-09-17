@@ -55,8 +55,25 @@ async def main():
         ck('contador mostra os 2 que ainda faltam', contador and '2' in contador, str(contador))
 
         print('\n=== 2. FECHAR UM NA MÃO LIBERA A VEZ DO PRÓXIMO DA FILA ===')
+        # ESPERA A CONDIÇÃO, NÃO UM INSTANTE (17/09/2026).
+        #
+        # Havia um `wait_for_timeout(200)` aqui. O aviso que sai agora leva
+        # 240 ms para terminar o movimento, e o próximo da fila só entra
+        # DEPOIS disso — de propósito, senão os dois dividem o mesmo lugar
+        # na pilha e o de baixo pula (app.js, `_mostrarNotifAgora`).
+        #
+        # Medido: aos 200 ms o contador ainda diz 2; aos 260 ms diz 1. Nada
+        # se perde — a fila anda 60 ms depois da janela que o teste olhava.
+        # Cravar um instante faz o teste medir a VELOCIDADE do movimento em
+        # vez da REGRA ("um saiu, o da fila entrou no lugar"), e qualquer
+        # ajuste de animação passa a reprovar sem defeito. Mesma correção
+        # de test_carga_dev_e_lacres em 23/08.
         await pg.evaluate("() => document.querySelector('#notif .notif-fechar').click()")
-        await pg.wait_for_timeout(200)
+        await pg.wait_for_function(
+            """() => {
+                const el = document.getElementById('notif-fila-contador');
+                return !el || !/2\\s*aviso/.test(el.textContent);
+            }""", timeout=5000)
         visiveis_depois = await pg.evaluate("() => document.querySelectorAll('#notif .notif-item').length")
         ck('continua em 3 visíveis (um saiu, o da fila entrou no lugar)', visiveis_depois == 3, str(visiveis_depois))
         contador_depois = await pg.evaluate("""() => {
@@ -70,8 +87,13 @@ async def main():
         # Estado ao entrar aqui: 3 visíveis, 1 ainda na fila ("Aviso número
         # 4"). Fecha só UM pra abrir vaga pra ele e confere ANTES de fechar
         # mais nada — fechar de mais apagaria a prova que o teste busca.
+        # Mesma razão do bloco acima: espera o ÚLTIMO da fila chegar à tela,
+        # em vez de cravar o instante em que ele deveria ter chegado.
         await pg.evaluate("() => document.querySelector('#notif .notif-fechar').click()")
-        await pg.wait_for_timeout(200)
+        await pg.wait_for_function(
+            """() => [...document.querySelectorAll('#notif .notif-item')]
+                     .some(e => e.textContent.includes('Aviso número 4'))""",
+            timeout=5000)
         textos = await pg.evaluate(
             "() => [...document.querySelectorAll('#notif .notif-item')].map(e => e.textContent)")
         ck('o aviso "Aviso número 4" (o último da fila) chegou a aparecer',

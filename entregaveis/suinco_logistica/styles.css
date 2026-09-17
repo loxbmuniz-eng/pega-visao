@@ -6067,3 +6067,280 @@ tr.mont-linha > td, tr.hist-linha > td, td[onclick], th[onclick]{
 @media (prefers-reduced-motion:reduce){
   .toque-recusado{ animation:none }
 }
+
+/* ═══ MOVIMENTO (agente de interação) ═══════════════════════════════════
+
+   Todo o movimento do painel, num bloco só, no fim do arquivo. O JavaScript
+   que liga e desliga estas classes é o bloco de mesmo nome no fim de
+   `app.js` — as duas metades são a MESMA decisão escrita uma vez de cada
+   lado, não duas cópias que divergem.
+
+   AS QUATRO REGRAS DURAS DESTE BLOCO
+
+   1. `--mov-ease-out` para entrar e sair. NUNCA `ease-in` em interface:
+      ele começa devagar justamente no instante em que o olho está
+      olhando, e faz 200 ms PARECEREM 400.
+   2. Teto de 300 ms. Realimentação de toque, 100–160 ms.
+   3. NUNCA `scale(0)`, e nenhum estado de REPOUSO invisível. Nada no mundo
+      real some do nada — e, mais concreto que a filosofia: o servidor gera
+      os PDFs com este mesmo arquivo de estilo. Elemento que espera
+      animação para aparecer sai BRANCO no papel. A ocorrência #72 é o
+      preço disso cobrado uma vez; não se paga duas.
+   4. O que se vê cem vezes por dia não se anima. Aba, sincronia de rotina,
+      o pátio recarregando: nada disso está aqui.
+
+   O FIM DO BLOCO desliga tudo em `@media print` e em
+   `prefers-reduced-motion: reduce`. Regra nova entra ANTES daquelas duas. */
+
+:root{
+  /* Nome próprio, com prefixo, de propósito: este bloco é acrescentado ao
+     fim de um arquivo que outra mão está reescrevendo. Uma variável de
+     nome genérico daqui apagaria a de lá sem ninguém ver. */
+  --mov-ease-out: cubic-bezier(.23,1,.32,1);
+}
+
+/* ---- 1. "SEGUIU VIAGEM": O CAMINHÃO SAI DO PÁTIO --------------------
+   150 ms andando + 90 ms fechando o espaço = 240 ms. O teto de 300 ms é do
+   que a PESSOA vê: entre o clique e a linha sumir ainda cabem o atraso do
+   relógio do navegador e o redesenho da tabela (~60 ms, medido).
+
+   O ANDAR é só `transform` e `opacity` — GPU, sem repaginar.
+   O FECHAR mexe em altura porque nenhuma outra propriedade devolve espaço
+   ao layout: `transform` move o pixel e deixa o buraco. É UMA linha, por
+   90 ms, ~31 vezes por dia — não é uma lista inteira repaginando a cada
+   quadro, que é o que a regra de "só transform e opacity" existe para
+   impedir. Quem vier depois: isto é deliberado, não descuido. */
+tr.linha-seguiu-viagem > *{
+  transition: transform 150ms var(--mov-ease-out), opacity 150ms var(--mov-ease-out);
+  transform: translateX(48px);
+  opacity: 0;
+}
+tr.linha-seguiu-viagem-fecha{
+  transition: height 90ms var(--mov-ease-out);
+}
+/* A altura só chega a zero se o conteúdo parar de empurrar por dentro:
+   sem padding, sem borda, sem linha de texto. Já está tudo em opacidade 0
+   neste ponto — esconder não muda nada do que se vê, só solta a altura. */
+tr.linha-seguiu-viagem-fecha > *{
+  padding-top:0 !important; padding-bottom:0 !important;
+  border-top-width:0 !important; border-bottom-width:0 !important;
+  font-size:0 !important; line-height:0 !important;
+  transition: padding 90ms var(--mov-ease-out);
+}
+/* `!important` medido, não por reflexo: a Torre tem regras de coluna
+   presas a `#torre-tabela` (seletor de id), e sem ele os botões e os
+   rótulos empilhados continuavam em `display:block` segurando 71 px de
+   altura — a linha andava, apagava e não fechava espaço nenhum. */
+tr.linha-seguiu-viagem-fecha > * > *{ display:none !important }
+
+/* ---- 2. LINHA NOVA ENTRA DESLIZANDO DE CIMA -------------------------
+   `translateY(-10px)` + opacidade, 260 ms. Carga nova cai na lista vinda
+   de cima, que é de onde ela vem na leitura da tabela. NUNCA `scale(0)`.
+
+   `animation` e não `transition` porque não há estado anterior para sair:
+   a linha nasce agora. `both` garante que ela já esteja no quadro inicial
+   antes do primeiro repinte — nunca um piscar de linha pronta. */
+tr.linha-nova{
+  animation: movLinhaEntra 260ms var(--mov-ease-out) both;
+}
+@keyframes movLinhaEntra{
+  from{ opacity:0; transform:translateY(-10px) }
+  to  { opacity:1; transform:none }
+}
+
+/* ---- 3. SEGURAR PARA CANCELAR --------------------------------------
+   `clip-path: inset(0 100% 0 0)` → `inset(0 0 0 0)`, 1,5 s LINEAR enquanto
+   o dedo está lá. Linear porque a barra é um relógio: acelerar ou frear
+   uma contagem é mentir sobre quanto falta.
+
+   Soltar volta em 200 ms com `--mov-ease-out`. Assimétrico de propósito:
+   devagar onde a pessoa está DECIDINDO, rápido onde o sistema RESPONDE.
+
+   `user-select`/`touch-callout` desligados porque segurar o dedo num botão
+   no celular seleciona o texto dele e abre o menu de copiar — o gesto
+   novo não pode brigar com o sistema operacional. */
+[data-segurar]{
+  position:relative; overflow:hidden;
+  -webkit-user-select:none; user-select:none;
+  -webkit-touch-callout:none; touch-action:manipulation;
+}
+[data-segurar]::after{
+  content:''; position:absolute; inset:0; pointer-events:none;
+  background:currentColor; opacity:.3;
+  clip-path: inset(0 100% 0 0);
+  transition: clip-path 200ms var(--mov-ease-out);
+}
+[data-segurar].segurando::after{
+  clip-path: inset(0 0 0 0);
+  transition: clip-path 1500ms linear;
+}
+/* Completou: a barra some na hora (a ação já foi) e o botão dá o pulinho
+   de confirmação — 160 ms, o teto da realimentação de toque. */
+[data-segurar].segurado::after{ clip-path: inset(0 100% 0 0); transition:none }
+[data-segurar].segurado{ animation: movSegurado 160ms var(--mov-ease-out) }
+@keyframes movSegurado{
+  0%{ transform:scale(.97) } 60%{ transform:scale(1.02) } 100%{ transform:none }
+}
+
+/* ---- 4. BOTÃO QUE CONTA O QUE ESTÁ FAZENDO -------------------------
+   Salvar → Salvando… → ✓ Salvo, com o texto trocando EMBAÇADO.
+
+   Sem o borrão o olho vê duas palavras sobrepostas — dois objetos. Com
+   ele, vê uma virando a outra. 2,6 px é o bastante para borrar o desenho
+   da letra sem virar mancha; acima de 20 px o custo em Safari aparece.
+
+   100 ms para embaçar, a troca no pico, 100 ms para voltar: 200 ms de
+   ponta a ponta, não 200 para cada metade. */
+.mov-conta{
+  transition: transform var(--t-rapida) ease, filter 100ms linear, opacity 100ms linear;
+}
+.mov-conta.mov-borrado{ filter: blur(2.6px); opacity:.55 }
+
+/* ---- 5. O AVISO ENTRA E SAI PELO MESMO LADO -------------------------
+   320 ms entrando, 240 ms saindo, pela borda direita — a mesma por onde a
+   pilha de avisos vive (rodapé à direita, decisão registrada no bloco
+   `#notif` deste arquivo: no topo eles tapavam o cabeçalho da tabela).
+
+   Entrar e sair pelo mesmo lado é o que faz o aviso ser UM objeto que vai
+   e volta, em vez de dois que aparecem e somem. Sair mais rápido que
+   entrar: entrar é o sistema pedindo atenção, sair é ele respondendo.
+
+   `translateX(110%)`, em porcentagem: o aviso muda de largura entre o
+   celular e o monitor, e a conta se ajusta sozinha. */
+.notif-item{
+  animation: movAvisoEntra 320ms var(--mov-ease-out) both;
+}
+/* Troca de placa continua pulsando duas vezes — é segurança, e a regra
+   dela já estava escrita. Só o slide de entrada é substituído. */
+.notif-item.aviso-alteracao.forte{
+  animation: movAvisoEntra 320ms var(--mov-ease-out) both, pulsoAviso .9s ease 2;
+}
+.notif-item.notif-saindo,
+.notif-item.aviso-alteracao.forte.notif-saindo{
+  animation: movAvisoSai 240ms var(--mov-ease-out) both;
+}
+@keyframes movAvisoEntra{
+  from{ opacity:0; transform:translateX(110%) }
+  to  { opacity:1; transform:none }
+}
+@keyframes movAvisoSai{
+  from{ opacity:1; transform:none }
+  to  { opacity:0; transform:translateX(110%) }
+}
+
+/* ---- 6. A ETAPA QUE SE CARIMBA -------------------------------------
+   O visto se DESENHA em 340 ms (`stroke-dashoffset`), como a mão passando
+   no papel. `pathLength="1"` no SVG deixa o traço medido em fração do
+   caminho: mudar o tamanho do desenho não obriga a recalcular número
+   nenhum aqui.
+
+   REPOUSO DESENHADO (`stroke-dashoffset:0`). Só o carimbo que acabou de
+   acontecer ganha `dev-carimbo-novo` e se desenha; todos os outros já
+   nascem prontos. É o que impede que a sincronia faça os seis vistos
+   riscarem a tela de novo a cada leitura — e é o que garante o visto no
+   papel, onde animação nenhuma roda. */
+.dev-visto{
+  width:1em; height:1em; vertical-align:-.13em; margin-right:.3em;
+  overflow:visible; flex:none;
+}
+.dev-visto path{
+  fill:none; stroke:var(--ok); stroke-width:2.2;
+  stroke-linecap:round; stroke-linejoin:round;
+  stroke-dasharray:1; stroke-dashoffset:0;
+}
+.dev-carimbo-novo .dev-visto path{
+  animation: movVistoDesenha 340ms var(--mov-ease-out) both;
+}
+@keyframes movVistoDesenha{
+  from{ stroke-dashoffset:1 } to{ stroke-dashoffset:0 }
+}
+
+/* ---- O PAPEL NÃO SE MEXE -------------------------------------------
+   O servidor manda ESTE arquivo junto com o HTML para o Chromium gerar os
+   PDFs (`backend/src/servicos/pdf.js`). Documento não é perfumaria: aqui
+   todo movimento deste bloco é desligado, e todo estado de repouso volta a
+   ser o VISÍVEL — nada de linha transparente, nada de traço por desenhar,
+   nada de barra de segurar cobrindo conteúdo.
+
+   Regra nova deste bloco entra ACIMA desta linha, nunca abaixo. */
+@media print{
+  tr.linha-seguiu-viagem > *,
+  tr.linha-seguiu-viagem-fecha,
+  tr.linha-seguiu-viagem-fecha > *,
+  tr.linha-nova,
+  .notif-item,
+  .notif-item.aviso-alteracao.forte,
+  .notif-item.notif-saindo,
+  .mov-conta,
+  .mov-conta.mov-borrado,
+  [data-segurar],
+  [data-segurar].segurado,
+  .dev-carimbo-novo .dev-visto path{
+    animation:none !important;
+    transition:none !important;
+    transform:none !important;
+    opacity:1 !important;
+    filter:none !important;
+  }
+  /* A LINHA QUE ESTAVA FECHANDO VOLTA INTEIRA NO PAPEL — altura, conteúdo,
+     espaçamento e borda. O teste pegou isto: com só o movimento desligado,
+     a linha ainda saía com ZERO de altura, ou seja, uma faixa em branco no
+     documento. É a ocorrência #72 outra vez, por outra porta.
+
+     `height` precisa de `!important` porque a altura de fechamento é
+     escrita como estilo em linha pelo JavaScript, e estilo em linha ganha
+     de folha de estilo — menos deste. */
+  tr.linha-seguiu-viagem-fecha{ height:auto !important }
+  tr.linha-seguiu-viagem-fecha > * > *{ display:revert !important }
+  tr.linha-seguiu-viagem-fecha > *{
+    font-size:revert !important; line-height:revert !important;
+    padding-top:revert !important; padding-bottom:revert !important;
+    border-top-width:revert !important; border-bottom-width:revert !important;
+  }
+  .dev-carimbo-novo .dev-visto path{ stroke-dashoffset:0 !important }
+  /* A barra de segurar é sobreposição de tela: no papel ela não existe. */
+  [data-segurar]::after{ display:none !important }
+}
+
+/* ---- QUEM PEDIU MENOS MOVIMENTO RECEBE MENOS ------------------------
+   Menos movimento, não menos informação: o que este trecho tira é
+   DESLOCAMENTO e borrão — o que pode embrulhar o estômago. O que
+   permanece é o resultado: a linha continua saindo, o visto continua
+   desenhado, o aviso continua aparecendo e sumindo.
+
+   A barra de segurar some porque sem ela o JavaScript já devolve o botão
+   ao clique simples: gesto que conta tempo sem mostrar a contagem seria um
+   botão que não responde. */
+@media (prefers-reduced-motion: reduce){
+  tr.linha-seguiu-viagem > *,
+  tr.linha-seguiu-viagem-fecha,
+  tr.linha-seguiu-viagem-fecha > *,
+  tr.linha-nova,
+  .notif-item,
+  .notif-item.aviso-alteracao.forte,
+  .notif-item.notif-saindo,
+  .mov-conta,
+  .mov-conta.mov-borrado,
+  [data-segurar].segurado,
+  .dev-carimbo-novo .dev-visto path{
+    animation:none !important;
+    transition:none !important;
+    transform:none !important;
+    filter:none !important;
+  }
+  /* NENHUM REPOUSO INVISÍVEL AQUI TAMBÉM. Sem movimento, a classe que
+     apagava a linha continuaria apagando-a — e para quem pediu menos
+     movimento a carga simplesmente desapareceria da tabela sem nada no
+     lugar. Desligar animação não pode virar esconder conteúdo. */
+  .notif-item, tr.linha-nova,
+  tr.linha-seguiu-viagem, tr.linha-seguiu-viagem > *{ opacity:1 !important }
+  tr.linha-seguiu-viagem-fecha{ height:auto !important }
+  tr.linha-seguiu-viagem-fecha > * > *{ display:revert !important }
+  tr.linha-seguiu-viagem-fecha > *{
+    font-size:revert !important; line-height:revert !important;
+    padding-top:revert !important; padding-bottom:revert !important;
+    border-top-width:revert !important; border-bottom-width:revert !important;
+  }
+  .dev-carimbo-novo .dev-visto path{ stroke-dashoffset:0 !important }
+  [data-segurar]::after{ display:none !important }
+}

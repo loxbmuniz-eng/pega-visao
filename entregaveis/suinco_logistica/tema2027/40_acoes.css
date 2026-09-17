@@ -1,0 +1,55 @@
+/* Tema 2027 — Etapa 5: Ações (botões, campos, selos).
+   Dona de: .btn*, input, select, textarea, :focus-visible, .badge, .status-pill,
+   .chip-*, .marca-multi, .legenda-chip, .dev-chip*, .pill-count, #btn-menu,
+   ::-webkit-scrollbar*.
+   Ver VEREDITO.md seção 6, Etapa 5. Valores copiados exatamente do veredito;
+   ver relato do executor para o que foi conferido. */
+@media screen{
+.btn{ border-radius:var(--radius-sm); box-shadow:none; font-size:13.5px; letter-spacing:0;
+  transition:opacity var(--t-rapida) var(--curva), transform var(--t-rapida) var(--curva) }
+.btn:hover{ filter:none; box-shadow:none; opacity:.88; transform:translateY(-1px) }
+.btn:active{ transform:translateY(0) }
+.btn-primary{ background:var(--gold); color:#1a1200 }
+.btn-success{ background:#1d7a47; color:#fff }          /* 4,74:1 medido no styles.css — não reabrir */
+.btn-danger{ background:var(--wine); color:#fff }
+.btn-sec{ background:var(--navy-light); color:var(--text); border:1px solid var(--border) }
+.btn-sec:hover{ background:var(--navy-lighter) }
+.btn-sm{ font-size:12.5px }
+#btn-menu{ border-radius:var(--radius-sm) }
+
+input,select,textarea{ border-radius:var(--radius-sm); border:1px solid var(--border); background:var(--campo-bg) }
+input:focus,select:focus,textarea:focus{ border-color:var(--gold-dim) }
+:focus-visible{ outline:2.5px solid var(--gold); outline-offset:1px }
+/* `input:focus,select:focus,textarea:focus{outline:none;...}` já existe no
+   styles.css (linha 955) com a MESMA especificidade da regra acima — e
+   como vem ANTES na cascata, o `outline:none` dele perderia para qualquer
+   coisa que eu escrevesse depois, EXCETO que a regra universal
+   `:focus-visible` (especificidade 0-1-0) é mais fraca que `input:focus`
+   (0-1-1) e nunca vence. Resultado sem esta linha: o campo nunca mostra
+   anel nenhum, nem clicando nem tabulando — reproduzi e medi
+   (getComputedStyle: outlineStyle:'none', outlineWidth:'0px') antes de
+   escrever isto. Repito aqui, com a MESMA especificidade do `outline:none`
+   de origem e por vir depois na ordem de concatenação, só para o caso que
+   interessa (`:focus-visible`, foco por teclado) — o clique de mouse
+   continua sem anel, como já era. Valores iguais aos da regra universal
+   acima, não é cor nem largura nova. */
+input:focus-visible,select:focus-visible,textarea:focus-visible{
+  outline:2.5px solid var(--gold); outline-offset:1px }
+
+.badge,.status-pill{ border-radius:3px; letter-spacing:.04em; padding:3px 9px }
+.chip-dia-prog,.marca-multi,.legenda-chip,.dev-chip,.chip-no-patio,.chip-devolvida,.pill-count{ border-radius:3px }
+
+::-webkit-scrollbar{ width:8px; height:8px }
+::-webkit-scrollbar-thumb{ background:var(--border); border-radius:4px }
+::-webkit-scrollbar-track{ background:transparent }
+}
+/* RODADA 2: `and (pointer:fine)`. Sem isso, esta regra empatava em
+   especificidade com `@media (pointer:coarse){.btn{min-height:44px}}` da base
+   e vencia por vir depois — no tablet da Portaria (1024px, toque, luva) o
+   alvo caía de 44 para 36px (medido). Largura não diz se há dedo; `pointer` diz. */
+@media screen and (min-width:821px) and (pointer:fine){
+  .btn{ min-height:36px; padding:7px 14px }     /* com toque, em qualquer largura, fica 44 */
+}
+@media screen and (prefers-reduced-motion: reduce){
+  .btn{ transition:none !important } .btn:hover,.btn:active{ transform:none !important }
+}

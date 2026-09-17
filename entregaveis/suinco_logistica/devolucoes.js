@@ -112,11 +112,29 @@ const DEV_ETAPAS = [
 
    Aqui ele é o que sempre foi: uma exceção de UM tipo, consultada por
    quem pergunta "qual o próximo passo desta devolução" e invisível para
-   quem desenha a esteira. */
+   quem desenha a esteira.
+
+   QUEM CONSULTA É `etapaDeDev`, E TODO MUNDO PERGUNTA A ELA (16/09/2026).
+   `avancarEtapaDevolucaoUI` não perguntava: fazia `DEV_ETAPAS.find(...)`
+   por conta própria, e DEV_ETAPAS não conhece este atalho. A tela desenhava
+   o botão de encerrar a sobra e o clique mandava "Peso Final Registrado" —
+   409, para todos os setores. Ver a ocorrência #73.
+
+   `setores` É ESPELHO da linha `soSobra` de backend/src/dominio/devolucoes.js.
+   A cópia existe porque o painel é build de arquivo único e não importa do
+   servidor; quem impede as duas de divergirem é
+   testes/test_sobra_finaliza_quem_pesou.py, que lê as duas fontes e compara
+   a esteira inteira — mesma solução da lista de SETORES (ocorrência #26).
+
+   O FATURAMENTO ENTROU EM 16/09/2026, a pedido do dono: para a sobra este
+   é o ÚLTIMO passo, e quem pesou precisa conseguir encerrar em vez de
+   deixar o checklist parado esperando outro setor aparecer. O rótulo do
+   botão diz FINALIZAR — é a palavra dele — e não nomeia um setor só,
+   porque agora são três. */
 const DEV_ATALHO_SOBRA = {
   status: 'Conferida no Faturamento', proxima: 'Descarga Conferida',
-  botao: '📦 Descarga conferida (Expedição)', pede: 'expedicao',
-  setores: ['Expedição', 'Logística'],
+  botao: '✅ Finalizar sobra — descarga conferida', pede: 'expedicao',
+  setores: ['Expedição', 'Faturamento', 'Logística'],
 };
 
 const DEV_ETAPA_ROTULO = {
@@ -1031,6 +1049,24 @@ function previewPesoDevolvidoUI(id) {
   alvo.innerHTML = contaPesoDevHtml(d, campo.value);
 }
 
+/* A ETAPA QUE SE CARIMBA.
+
+   O visto se DESENHA (`stroke-dashoffset`, 340 ms) em vez de aparecer
+   pronto. Carimbo é gesto: no papel a mão passa e a marca fica. Aparecer
+   pronto faz parecer que sempre esteve lá — e o que a pessoa precisa
+   saber é justamente que ACABOU de acontecer, que foi ela quem fez.
+
+   SÓ NO QUE É NOVO, e isso é a regra e não detalhe: a lista de devoluções
+   é redesenhada a cada leitura do servidor e a cada expansão de linha. Se
+   todos os vistos se redesenhassem junto, a etapa carimbada ontem
+   pareceria ter sido carimbada agora — e seis vistos riscando a tela a
+   cada sincronia é tremedeira, não informação. `_devCarimbosVistos` guarda
+   o que esta aba já mostrou; só o que não estava lá antes se desenha.
+
+   O REPOUSO É VISÍVEL: o traço fica com `stroke-dashoffset:0`. Nada aqui
+   nasce invisível esperando animação — é o que a ocorrência #72 cobra. */
+const _devCarimbosVistos = new Set();
+
 function carimbosDev(d) {
   // Sobra encerra na Expedição — mostrar Controles/Notas como "pendente"
   // para sempre só confundiria.
@@ -1039,14 +1075,29 @@ function carimbosDev(d) {
   return `<div class="dev-carimbos">
     ${etapasVisiveis.map((chave) => [chave, DEV_ETAPA_ROTULO[chave]]).map(([chave, rotulo]) => {
       const c = d.carimbos[chave];
-      return `<div class="dev-carimbo${c ? ' dev-carimbo-ok' : ''}">
-          <span class="dev-carimbo-rot">${rotulo}</span>
+      let novo = false;
+      if (c) {
+        const marca = `${d.id}¦${chave}`;
+        novo = !_devCarimbosVistos.has(marca);
+        _devCarimbosVistos.add(marca);
+      }
+      return `<div class="dev-carimbo${c ? ' dev-carimbo-ok' : ''}${novo ? ' dev-carimbo-novo' : ''}">
+          <span class="dev-carimbo-rot">${c ? vistoDevHtml() : ''}${rotulo}</span>
           ${c ? `<span class="dev-carimbo-quem">${esc(c.por)}</span>
                  <span class="dev-carimbo-quando">${esc(fmtDataHora(c.em))}</span>`
               : '<span class="dev-carimbo-vazio">— pendente —</span>'}
         </div>`;
     }).join('')}
   </div>`;
+}
+
+/* O traço do visto. `pathLength="1"` deixa o dash em fração do caminho, e
+   não em pixels — muda o tamanho do desenho sem recalcular número nenhum.
+   `aria-hidden` porque o rótulo ao lado já diz a etapa: leitor de tela não
+   precisa ouvir "imagem". */
+function vistoDevHtml() {
+  return '<svg class="dev-visto" viewBox="0 0 14 14" aria-hidden="true" focusable="false">'
+    + '<path pathLength="1" d="M2.5 7.6 L5.6 10.7 L11.5 3.8"/></svg>';
 }
 
 /* Qual passo esta devolução tem pela frente. De "Conferida no
@@ -1103,6 +1154,18 @@ function blocoDesfazerDev(d) {
     </div>`;
 }
 
+/* "Expedição, Faturamento ou Logística" — e não "A ou B ou C".
+
+   Espelho de `listaDeSetores` em backend/src/dominio/fluxo.js: a mesma
+   frase sai do servidor na recusa e daqui no "próximo passo", e as duas
+   precisam ler igual. Virou função quando um passo passou a ter TRÊS
+   setores (16/09/2026). */
+function listaDeSetoresDev(setores) {
+  const nomes = (setores || []).filter(Boolean);
+  if (nomes.length <= 1) return nomes[0] || '';
+  return `${nomes.slice(0, -1).join(', ')} ou ${nomes[nomes.length - 1]}`;
+}
+
 function blocoAvancoDev(d) {
   /* SOBRA: três OKs e acabou — Portaria, Faturamento, Expedição. */
   if (d.tipo === 'SOBRA' && d.status === 'Descarga Conferida') {
@@ -1114,7 +1177,7 @@ function blocoAvancoDev(d) {
      assina, em vez de um botão que a API recusaria. */
   const setor = (DB.operador || {}).setor;
   if (setor !== 'Administração' && !etapa.setores.includes(setor)) {
-    return `<div class="card-sub">Próximo passo: <strong>${esc(etapa.proxima)}</strong> — feito por ${esc(etapa.setores.join(' ou '))}.</div>`;
+    return `<div class="card-sub">Próximo passo: <strong>${esc(etapa.proxima)}</strong> — feito por ${esc(listaDeSetoresDev(etapa.setores))}.</div>`;
   }
   const id = escJs(d.id);
   let extras = '';
@@ -1677,7 +1740,20 @@ function desfazerEtapaDevolucaoUI(id) {
 function avancarEtapaDevolucaoUI(id) {
   const d = getDevolucao(id);
   if (!d) return;
-  const etapa = DEV_ETAPAS.find((e) => e.status === d.status);
+  /* A MESMA PERGUNTA QUE DESENHOU O BOTÃO (16/09/2026).
+
+     Aqui estava `DEV_ETAPAS.find((e) => e.status === d.status)` — uma
+     segunda resposta para a pergunta que `etapaDeDev` já responde. Elas
+     divergiam exatamente onde importa: na SOBRA parada em "Conferida no
+     Faturamento", `blocoAvancoDev` desenhava (via `etapaDeDev`) o botão de
+     encerrar, e este clique mandava `para: 'Peso Final Registrado'` — o
+     caminho da devolução normal, que o servidor recusa com 409 "Sobra
+     encerra no OK da Expedição". A sobra não era finalizável por NINGUÉM
+     pela tela: nem Expedição, nem Logística, nem Administração.
+
+     Uma função, dois chamadores: quem desenha e quem clica perguntam ao
+     mesmo lugar. Ocorrência #73. */
+  const etapa = etapaDeDev(d);
   if (!etapa) return;
   const v = (sufixo) => (document.getElementById(`dev-et-${id}-${sufixo}`) || {}).value;
   const corpo = { para: etapa.proxima };

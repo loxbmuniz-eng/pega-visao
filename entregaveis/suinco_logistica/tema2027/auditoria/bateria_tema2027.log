@@ -1,0 +1,258 @@
+  198 suíte(s): 128 isolada(s) em até 4 em paralelo,
+  70 com servidor, uma a uma.
+
+test_aguardando_carga_sem_residuo                ok
+test_auto_atualizacao                            ok
+test_auditoria_refino                            ok
+test_auditoria_filtro_relatorios                 ok
+test_aviso_recusa_carga                          ok
+test_aviso_gravacao_honesto                      ok
+test_base_vazia_se_recupera                      ok
+test_botao_avanco                                ok
+test_backoff_sincronia                           ok
+test_avisos_celular                              ok
+test_cadastro_clientes_nao_piora_o_dado          ok
+test_cadastro_frota_sincroniza                   ok
+test_cadastro_inline_frota_programacao           ok
+test_cadastrar_rota                              ok
+test_campo_km_da_montagem                        ok
+test_calendario_data                             ok
+test_auditoria_mobile                            FALHA
+        [FALHA] indicadores: nenhum texto abaixo de 11px — [{'t': 'Cargas Concluídas', 'f': 10.5}, {'t': 'Tempo Aguardando E', 'f': 10.5}, {'t': 'Tempo de Carregame', 'f': 10.5}]
+        [FALHA] indicadores: nenhum texto abaixo de 11px — [{'t': 'Cargas Concluídas', 'f': 10.5}, {'t': 'Tempo Aguardando E', 'f': 10.5}, {'t': 'Tempo de Carregame', 'f': 10.5}]
+        [FALHA] cadastros: página não rola de lado — 4px · culpado: None
+test_cadastros_no_celular                        ok
+test_cancelar_no_historico                       ok
+test_carga_programada_encontra_patio             ok
+test_comentarios_vazados                         ok
+test_carga_recusada_nao_fica_fantasma            ok
+test_contador_torre                              ok
+test_comercial_e_excluir_aguardando              ok
+test_contraste                                   FALHA
+        [FALHA] torre: todo texto legível sobre o próprio fundo — 1 abaixo do mínimo
+        [FALHA] torre: todo texto legível sobre o próprio fundo — 1 abaixo do mínimo
+        FALHAS: 2 aba(s)
+test_confirmar_faturamento                       ok
+test_data_de_programacao                         ok
+test_desktop_compacto                            ok
+test_diagnostico_login                           ok
+test_demora_nao_apaga_carga                      ok
+test_custo_frete_clique_nao_apaga_grafico        ok
+test_documento_nao_sai_pagina_em_branco          ok
+test_digitacao_nao_perde_foco                    ok
+test_editar_numero_carga                         ok
+test_exportar_cadastros                          ok
+test_etapa3_indicadores                          ok
+test_editar_carga_do_dia_na_programacao          ok
+test_faixa_indicadores_bi                        ok
+test_fila_avisos_ao_vivo                         ok
+test_fila_de_avisos_tem_teto                     ok
+test_fila_igual_a_torre                          ok
+test_faixa_no_rodape_e_login_abre                ok
+test_fila_e_campos_editaveis                     FALHA
+        [FALHA] coluna de datas existe na Torre — SEQ.	Nº CARGA	VEÍCULO	MOTORISTA	ROTA	PESO (KG)	PALET.	TIPO DE OPERAÇÃO	GANCHOS ·
+        FALHAS: coluna de datas existe na Torre
+test_fila_notificacoes                           ok
+test_fila_por_dia                                ok
+test_faixa_offline_nao_tranca_o_login            ok
+test_fila_por_acao_do_setor                      ok
+test_fila_reordena_em_cascata                    ok
+test_fonte_relatorio_embutida                    ok
+test_filtro_torre_por_status                     ok
+test_frete_tabela_e_planilha                     ok
+test_fusao_nao_e_quadratica                      ok
+test_guardioes                                   ok
+test_fuso_horario_relatorio                      ok
+test_grafico_altura_dpr                          ok
+test_historico_detalhe_preguicoso                ok
+test_filtro_indicadores_move_graficos            ok
+test_incerteza_nao_apaga_carga                   ok
+test_historico_lista_mobile                      ok
+test_indicadores_nao_travam                      ok
+test_indicadores_dizem_a_verdade                 ok
+test_libera_pendencias                           ok
+test_limite_atrasado_nao_e_offline               ok
+test_lacres_saida                                ok
+test_lista_de_destino_na_montagem                ok
+test_linha_do_tempo_compacta                     ok
+test_km_da_carga_efetivada                       ok
+test_login_nao_regrava_carga_que_ninguem_editou  ok
+test_logo_uma_copia_so                           ok
+test_listas_grandes_mobile                       ok
+test_login_limpo                                 ok
+test_medidor_v2_contexto                         ok
+test_lote_grava_uma_vez                          ok
+test_medidor_de_travamento                       ok
+test_menu_gaveta_mobile                          ok
+test_modelo_da_semana_bate_com_a_planilha        ok
+test_mobile                                      ok
+test_nome_arquivo_periodo                        ok
+test_motorista_frota                             ok
+test_multi_carga_placa                           ok
+test_numero_carga_confiavel                      ok
+test_operador_no_relatorio_operacional           ok
+test_outra_carga_sempre_acessivel                ok
+test_pdf_mobile_retrato                          ok
+test_nota_transferencia_da_filial                ok
+test_pendencia_local_nao_e_dada_por_sincronizada ok
+test_placa_nao_faz_todos_relerem                 ok
+test_placa_precisa_estar_cadastrada              ok
+test_praonde_sugerido                            ok
+test_painel_cabe_no_celular                      ok
+test_placa_duplicada                             ok
+test_qr_segundo_fator                            ok
+test_reentrada_mesma_programacao                 ok
+test_recuo_carga_incerta                         ok
+test_relatorio_manobrista                        ok
+test_refino                                      ok
+test_relatorio_fiel_ao_painel                    ok
+test_relatorio_na_sequencia                      ok
+test_rotas_painel_e_servidor_batem               ok
+test_relatorio_sem_paginas_brancas               ok
+test_relatorio_uma_pagina                        ok
+test_seguiu_viagem_hoje                          ok
+test_relatorios                                  ok
+test_servidor_desatualizado                      ok
+test_sequencia_no_celular                        ok
+test_setor_qualidade                             ok
+test_setor_novo_aparece_nas_telas                ok
+test_sem_sessao_nao_mostra_painel                ok
+test_saida_confirmada_pelo_servidor              ok
+test_tema2027_etapa1_tokens                      ok
+test_status_sobe                                 ok
+test_tema2027_etapa2_cascas                      ok
+test_tela_login                                  ok
+test_tema2027_so_tela                            ok
+test_tema2027_etapa6_contraste                   ok
+test_tema2027_papel                              ok
+test_teste_conexao                               ok
+test_torre_arrasta_sequencia                     ok
+test_torre_editavel_e_forcar_exclusao            ok
+test_transportadora_divergente                   ok
+test_torre_cabe_no_celular                       ok
+test_vidro                                       ok
+test_visao_patio_na_torre                        ok
+test_visao_patio                                 ok
+auditoria_mobile_hoje                            ok
+test_visao_patio_sem_rolagem_infinita            ok
+test_tema2027_etapa5_acoes                       FALHA
+        [FALHA] [publicado] CONTROLE: .btn-primary hover herdado REALMENTE anima algo caro — se isto falhar, o teste está cego para o defeito
+        [FALHA] [publicado] CONTROLE: .btn-success hover herdado REALMENTE anima algo caro — se isto falhar, o teste está cego para o defeito
+        [FALHA] [publicado] CONTROLE: .btn-danger hover herdado REALMENTE anima algo caro — se isto falhar, o teste está cego para o defeito
+auditoria_painel_frete                           ok
+test_adaptador_api                               ok
+test_admin_historico                             ok
+test_apagar_historico_da_placa                   ok
+test_aviso_alteracao                             ok
+test_busca_na_lista_de_devolucoes                ok
+test_cadastro_rota_honesto                       ok
+test_caminhao_na_linha_do_tempo                  ok
+test_carga_dev_e_lacres                          ok
+test_carga_sem_placa                             ok
+test_cartao_mobile_uma_lista                     ok
+test_checklist_nao_apaga                         ok
+test_css_do_relatorio                            ok
+test_data_programacao                            ok
+test_datas_da_carga                              ok
+test_desfazer_etapa_de_devolucao                 ok
+test_destino_frete_na_montagem                   ok
+test_devolucoes_checklist                        ok
+test_devolucoes_ordem_e_sem_filtro_de_dia        ok
+test_edicao_marca_alterada                       ok
+test_entrada_sem_carga                           ok
+test_esteira_devolucao_duas_balancas             ok
+test_etapa_devolvida_nao_volta_sozinha           ok
+test_etapa_nao_apaga_de_outro_setor              ok
+test_excluir_rota_do_cadastro                    ok
+test_fechar_com_senha                            ok
+test_fechar_programacao                          ok
+test_filial_so_ve_o_que_e_dela                   ok
+test_ganchos_entregas_na_montagem                ok
+test_hora_entrada_fonte_unica                    ok
+test_lacres_e_historico                          ok
+test_login_api                                   ok
+test_montagem_cabe_em_colunas                    ok
+test_montagem_cascata_e_digitacao                ok
+test_montagem_do_dia                             ok
+test_montagem_expansivel                         ok
+test_montagem_linha_editavel                     ok
+test_numero_de_sequencia_nao_repete              ok
+test_observacoes_sobem                           ok
+test_offline_nao_grava                           ok
+test_ok_expedicao_e_destinacao                   ok
+test_patio_frota_propria                         ok
+test_placa_repetida_na_montagem                  ok
+test_poda_com_acesso_a_tudo                      ok
+test_presenca_online                             ok
+test_programacao_do_dia                          ok
+test_qualidade_dados_relatorios                  ok
+test_raiox_indicadores                           ok
+test_recarregar_nao_apaga                        ok
+test_recusa_permanente_nao_e_offline             ok
+test_reentrada_portaria                          ok
+test_restaurar_revisao                           ok
+test_restaurar_sem_aprovacao                     ok
+test_rota_cadastrada_aparece                     ok
+test_segunda_carga_com_veiculo_no_patio          ok
+test_segundo_fator                               ok
+test_seguranca                                   ok
+test_sem_dado_pessoal_no_html                    ok
+test_sessao_sobrevive_reciclagem                 ok
+test_sessao_vencida                              ok
+test_setor_comercial                             ok
+test_sobras_parciais_relatorio                   FALHA
+        [FALHA] coluna "Nº parcial" existe na tela — NOTA | P/T | Nº PARCIAL | SUPERVISOR | RCA | CÓD. CLIENTE
+        FALHAS: coluna "Nº parcial" existe na tela
+test_tema2027_etapa4_tabelas                     FALHA
+test_todos_campos_sobem                          ok
+test_toque_duplo_nao_passa                       ok
+test_toque_responde                              FALHA
+        [FALHA] a aba RESPONDE ao toque
+        FALHAS: a aba RESPONDE ao toque
+test_torre_acao_e_encerramento                   ok
+test_torre_cabe_e_le                             ok
+test_trava_de_versao                             ok
+test_tres_etapas_so_check_e_recado               ok
+test_troca_placa_patio                           ok
+
+  7 suíte(s) reprovaram. Segunda chance, uma a uma, com banco limpo:
+  (esperando 62s pela janela do limite de requisições)   test_auditoria_mobile                          FALHA de novo — é vermelho de verdade
+        [FALHA] indicadores: nenhum texto abaixo de 11px — [{'t': 'Cargas Concluídas', 'f': 10.5}, {'t': 'Tempo Aguardando E', 'f': 10.5}, {'t': 'Tempo de Carregame', 'f': 10.5}]
+        [FALHA] indicadores: nenhum texto abaixo de 11px — [{'t': 'Cargas Concluídas', 'f': 10.5}, {'t': 'Tempo Aguardando E', 'f': 10.5}, {'t': 'Tempo de Carregame', 'f': 10.5}]
+        [FALHA] cadastros: página não rola de lado — 4px · culpado: None
+  (esperando 62s pela janela do limite de requisições)   test_contraste                                 FALHA de novo — é vermelho de verdade
+        [FALHA] torre: todo texto legível sobre o próprio fundo — 1 abaixo do mínimo
+        [FALHA] torre: todo texto legível sobre o próprio fundo — 1 abaixo do mínimo
+        FALHAS: 2 aba(s)
+  (esperando 62s pela janela do limite de requisições)   test_fila_e_campos_editaveis                   FALHA de novo — é vermelho de verdade
+        [FALHA] coluna de datas existe na Torre — SEQ.	Nº CARGA	VEÍCULO	MOTORISTA	ROTA	PESO (KG)	PALET.	TIPO DE OPERAÇÃO	GANCHOS ·
+        FALHAS: coluna de datas existe na Torre
+  (esperando 62s pela janela do limite de requisições)   test_tema2027_etapa5_acoes                     FALHA de novo — é vermelho de verdade
+        [FALHA] [publicado] CONTROLE: .btn-primary hover herdado REALMENTE anima algo caro — se isto falhar, o teste está cego para o defeito
+        [FALHA] [publicado] CONTROLE: .btn-success hover herdado REALMENTE anima algo caro — se isto falhar, o teste está cego para o defeito
+        [FALHA] [publicado] CONTROLE: .btn-danger hover herdado REALMENTE anima algo caro — se isto falhar, o teste está cego para o defeito
+  (esperando 62s pela janela do limite de requisições)   test_sobras_parciais_relatorio                 FALHA de novo — é vermelho de verdade
+        [FALHA] coluna "Nº parcial" existe na tela — NOTA | P/T | Nº PARCIAL | SUPERVISOR | RCA | CÓD. CLIENTE
+        FALHAS: coluna "Nº parcial" existe na tela
+  (esperando 62s pela janela do limite de requisições)   test_tema2027_etapa4_tabelas                   FALHA de novo — é vermelho de verdade
+  (esperando 62s pela janela do limite de requisições)   test_toque_responde                            FALHA de novo — é vermelho de verdade
+        [FALHA] a aba RESPONDE ao toque
+        FALHAS: a aba RESPONDE ao toque
+
+===================================================
+  191 verde(s), 7 falha(s)
+  test_auditoria_mobile
+  test_contraste
+  test_fila_e_campos_editaveis
+  test_tema2027_etapa5_acoes
+  test_sobras_parciais_relatorio
+  test_tema2027_etapa4_tabelas
+  test_toque_responde
+
+  Saída completa em: /tmp/tmp.WrxdDQsRnu
+
+  Vermelho tem QUATRO causas. Descubra qual antes de mexer no código:
+    1. a regra mudou de propósito  -> o teste é que está velho
+    2. o teste mede um atalho que mudou de forma, não a regra
+    3. contaminação de outra suíte -> rode ela sozinha e confirme
+    4. regressão de verdade        -> só aqui se as três acima caírem

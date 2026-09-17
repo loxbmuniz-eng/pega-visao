@@ -1,0 +1,70 @@
+/* Tema 2027 — Etapa 1: Tokens (cor de estrutura, raio, sombra, escala).
+   Dona de: :root, :root[data-tema="claro"], body, body::before.
+   Valores exatos de VEREDITO.md, seção 6, Etapa 1. Não editar sem
+   atualizar lá também. */
+@media screen{
+:root{
+  /* superfície opaca: o vidro sai (custa GPU no tablet do pátio e não é 2027) */
+  --vidro-bg:#1e2a52;
+  --vidro-bg-forte:#2a3a6c;
+  --vidro-borda:rgba(151,168,214,.22);
+  --vidro-brilho:rgba(255,255,255,0);
+  --vidro-sombra:0 1px 2px rgba(4,8,18,.45);
+  --vidro-borrao:none;
+  /* estrutura (grade, divisória, contorno) em azul-acinzentado — dourado vira significado */
+  --border:rgba(151,168,214,.28);
+  --border-soft:rgba(151,168,214,.14);
+  --linha-fio:rgba(151,168,214,.09);
+  --shadow:0 2px 8px rgba(4,8,18,.45);
+  /* preenchimento de estado (hover / ativo), dourado da marca em véu.
+     RODADA 2: .16 -> .12. O véu clareia o fundo, e "▲ 10 vs. ontem" (vermelho
+     --st-aguardando-veiculo-txt, 10,5px) na caixa ativa "Cargas em aberto" —
+     que é a caixa ativa POR PADRÃO, o pixel mais visto do painel — media
+     4,41:1 sobre o .16. Com .12, 4,84:1 (test_contraste.py). O anel de 1,5px
+     continua sendo o que marca o estado; o véu é reforço. */
+  --acento-hover:rgba(233,185,84,.09);
+  --acento-ativo:rgba(233,185,84,.12);
+  /* linha da Torre com caminhão parado no portão (30_tabelas.css). No escuro
+     o véu vermelho escurece um fundo já escuro: texto claro ganha. */
+  --t27-acesa:rgba(198,40,40,.10);
+  --t27-acesa-hover:rgba(198,40,40,.14);
+  /* geometria: canto vivo, não pílula */
+  --radius:6px;
+  --radius-sm:4px;
+  --radius-lg:10px;
+  /* ambiente quase mudo — presença de marca, não decoração */
+  --amb-ouro:rgba(233,185,84,.05);
+  --amb-azul:rgba(55,74,134,.10);
+  --amb-vinho:rgba(143,31,38,.03);
+  /* escala numérica um degrau abaixo (compactação) */
+  --fs-numero:24px;
+  --fs-numero-grande:30px;
+  /* --sp-* NÃO mudam nesta rodada: gap de grade desloca campo de formulário no eixo x (chão 1) */
+  --curva:cubic-bezier(.22,.61,.36,1);
+}
+:root[data-tema="claro"]{
+  --vidro-bg:#eff3f9;
+  --vidro-bg-forte:#f6f9fc;
+  --vidro-borda:rgba(32,44,74,.16);
+  --vidro-brilho:rgba(255,255,255,0);
+  --vidro-sombra:0 1px 2px rgba(16,22,37,.10);
+  --vidro-borrao:none;
+  --border:rgba(32,44,74,.22);
+  --border-soft:rgba(32,44,74,.11);
+  --linha-fio:rgba(32,44,74,.065);
+  --shadow:0 2px 8px rgba(16,22,37,.10);
+  --acento-hover:rgba(26,32,45,.05);
+  --acento-ativo:rgba(233,185,84,.20);
+  /* RODADA 2: no claro o véu vermelho ESCURECE um fundo quase branco, e o
+     tipo de veículo (--text-dim com opacity .9, 10,5px) caiu a 4,03:1 sobre
+     .14. Aqui o estado tem de carregar menos tinta: .07 em repouso, .10 no
+     hover — a barra de 3px e o selo vermelho continuam dizendo o mesmo. */
+  --t27-acesa:rgba(198,40,40,.07);
+  --t27-acesa-hover:rgba(198,40,40,.10);
+  --amb-ouro:rgba(233,185,84,.03);
+  --amb-azul:rgba(55,74,134,.02);
+  --amb-vinho:rgba(143,31,38,.015);
+}
+body{ line-height:1.35 }
+body::before{ opacity:.5 }
+}

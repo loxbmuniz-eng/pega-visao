@@ -1,0 +1,168 @@
+/* =====================================================================
+   CAMADA STRIPE — hierarquia tipográfica e tabela impecável
+   ---------------------------------------------------------------------
+   Carregada DEPOIS de styles.css (add_style_tag / <link> ao final do
+   <head>). Não redefine nenhuma variável de cor, não toca nas SEIS cores
+   de status (decisão do gestor, "não deve ser alterada sem novo aval"),
+   não escreve @media print (o PDF usa o CSS-base intocado — .print-page
+   th/td já vencem por !important, então nada aqui vaza pro relatório).
+
+   O que muda: como o TEXTO se organiza. Três pesos, nunca dois:
+     nível 1 — o DADO que identifica a linha (placa, nº carga, número de
+               indicador): peso 800, tamanho normal ou maior, --text.
+     nível 2 — a ESTRUTURA (rótulo de coluna, título de card): caixa alta,
+               entreletra aberta, corpo pequeno, --text-dim.
+     nível 3 — o CONTEXTO (hora, participação, nota): o menor corpo, o
+               mesmo --text-dim, sem negrito.
+   Cor continua reservada a ESTADO (as seis já existentes) — nada aqui
+   introduz cor nova para decorar.
+
+   Movimento: só transform e opacity, e só onde o arquivo-base já animava.
+   As trocas de aparência abaixo (campo de tabela virando campo) acontecem
+   SEM transition — troca instantânea de estado, não animação — para não
+   abrir uma propriedade fora da lista permitida nem custar repintura em
+   máquina de pátio.
+===================================================================== */
+
+/* ---- 1. CABEÇALHO DE TABELA = RÓTULO, NÃO CAIXA -----------------------
+   O th de tela tinha fundo em gradiente + régua dourada de 2px: competia
+   em peso visual com o PRÓPRIO DADO. Vira rótulo discreto — caixa alta,
+   entreletra aberta, --text-dim — e a separação encolhe para um fio.
+   Sem background próprio o cabeçalho mostra o vidro do card por trás,
+   igual ao corpo da tabela: o rótulo se distingue pela TIPOGRAFIA, não
+   por uma caixa ao redor. --text-dim já está calibrado (comentário do
+   arquivo-base, linha ~1861) contra a superfície do card nos dois temas,
+   então a leitura continua acima do piso AA sem novo cálculo de cor. */
+th{
+  background:transparent;
+  color:var(--text-dim);
+  font-weight:600;
+  letter-spacing:.06em;
+  text-transform:uppercase;
+  border-bottom:1px solid var(--border);
+}
+/* Tabelas com cabeçalho já dimensionado por pixel (Torre, linha do tempo)
+   mantêm o próprio tamanho — aqui só a FORMA do rótulo muda, a largura
+   calibrada em produção (comentário "16/09/2026" no arquivo-base) não. */
+
+/* ---- 2. CORPO DA TABELA — A LINHA RESPIRA, O FIO SEPARA ---------------
+   6px de padding vertical era o piso de uma tabela pensada pra caber
+   linha demais numa tela pequena. Onde não há essa pressão (Programação,
+   Montagem, relatórios) a linha ganha ar. As tabelas com largura calibrada
+   por coluna (Torre: `#torre-tabela > tbody > tr > td{padding:6px 5px}`)
+   têm especificidade maior nesta MESMA propriedade e não mudam — de
+   propósito, para não reabrir a rolagem lateral que o gestor já cobrou
+   corrigida (16/09/2026). */
+td{
+  padding:9px 10px;
+  border-bottom:1px solid var(--border-soft);
+}
+/* O fio de separação, não a grade: sem borda vertical nunca existiu aqui
+   (border-collapse sem regra de borda lateral) — só reforçando que
+   continua assim; nenhuma borda de coluna é adicionada. */
+
+/* ---- 3. IDENTIFICAÇÃO DA LINHA = NÍVEL 1 -------------------------------
+   `.col-identificacao` já cobria Torre/Visão do Pátio. As mesmas duas
+   colunas (placa, nº carga) aparecem sob outro nome de classe em
+   Montagem e nos relatórios (`.c-carga`, `.c-placa`) — reforçam aqui pela
+   mesma razão: é a coluna que a pessoa usa para achar ESTA carga entre
+   quinze parecidas. */
+.c-carga, .c-placa{
+  font-weight:800;
+  color:var(--text);
+  letter-spacing:.02em;
+}
+
+/* ---- 4. NÚMEROS TABULARES À DIREITA QUANDO SÃO QUANTIDADE -------------
+   O relatório impresso já faz isto (`.print-page td.c-peso` etc., só que
+   truncado a @media print). A tela nunca recebeu o mesmo tratamento nas
+   MESMAS colunas — mesma classe, mesma coluna, mesmo motivo: dígito bate
+   com dígito, e o olho compara duas linhas sem ler número por número.
+   `.cel-num`/`.tot-num` já alinhavam à direita fora do print (achado no
+   próprio arquivo-base); só faltavam peso/entregas/ganchos na tela. */
+.c-peso, .c-entregas, .c-ganchos, .num-forte{
+  text-align:right;
+  font-variant-numeric:tabular-nums;
+}
+th.c-peso, th.c-entregas, th.c-ganchos{
+  text-align:right;
+}
+/* Os campos de quantidade dentro da própria célula seguem a mesma régua
+   do `.km-input` que já existia (peso e ganchos são a mesma família de
+   dado: um número que se soma e se compara). A Torre mantém o PRÓPRIO
+   `text-align:center` para `input[type=number]` — regra por id, mais
+   específica, intocada — porque a coluna ali é estreita demais para o
+   sinal de "alinhado à direita" valer o espaço perdido. */
+.peso-input, .ganchos-input{
+  text-align:right;
+  font-variant-numeric:tabular-nums;
+}
+
+/* ---- 5. CAMPO DE FORMULÁRIO DENTRO DE TABELA = DADO --------------------
+   "Só vira campo quando o cursor chega": moldura e fundo próprio somem em
+   repouso, e o valor lê como QUALQUER OUTRA célula da linha — o operador
+   que só está CONFERINDO não vê quinze retângulos de input onde deveria
+   ver quinze números. A troca é instantânea (sem transition): mudar
+   border/background na hora não é animação, e por isso não entra na
+   régua de "só transform e opacity" — nada aqui é transicionado.
+   Exclusões: campo de data (calendário nativo precisa da moldura pra se
+   anunciar como clicável) e os inputs já com convenção própria de campo
+   sempre visível fora de tabela (não tocados, pois o seletor exige `td`). */
+td > input:not([type="date"]):not([type="checkbox"]):not([disabled]),
+td > select:not([disabled]){
+  background:transparent;
+  border-color:transparent;
+}
+td > input:not([type="date"]):not([type="checkbox"]):not([disabled]):hover,
+td > select:not([disabled]):hover{
+  border-color:var(--border);
+}
+td > input:not([type="date"]):not([type="checkbox"]):not([disabled]):focus,
+td > select:not([disabled]):focus{
+  background:var(--campo-bg);
+  border-color:var(--gold-dim);
+  box-shadow:0 0 0 3px var(--border);
+}
+/* Campo desabilitado (dado que vem de outro cadastro, só leitura) já não
+   parece campo em lugar nenhum do painel — aqui seria redundante e a
+   opacidade própria dele (`.mont-form input[disabled]`) continua valendo
+   por cima, sem conflito: o seletor acima já ignora `[disabled]`. */
+
+/* ---- 6. INDICADOR (KPI) — O MESMO RÓTULO DISCRETO ----------------------
+   Mesma gramática do cabeçalho de tabela: o rótulo da caixa de indicador
+   é ESTRUTURA (nível 2), o número é o DADO (nível 1, já em --gold-text e
+   maior — não mexido). A cor do rótulo não muda (seria recalibrar
+   contraste de novo); só a forma do texto marca que ele é rótulo, não
+   frase. */
+.stat-label{
+  text-transform:uppercase;
+  letter-spacing:.04em;
+  font-weight:600;
+}
+/* Participação e variação são o CONTEXTO do número (nível 3): ficam onde
+   já estavam, só perdem qualquer peso que competisse com o rótulo. */
+.stat-share{ font-weight:500 }
+
+/* No celular a caixa já é apertada (44px de altura mínima, régua do
+   próprio arquivo-base) — entreletra de rótulo mais estreita evita que
+   "AGUARDANDO..." raspe na borda da caixa em 3 colunas de ~120px. */
+@media (max-width:640px){
+  .stat-label{ letter-spacing:.02em }
+}
+/* Cabeçalho de tabela também recua a entreletra onde a coluna já nasce
+   comprimida (Torre, calibrada a 66-144px por coluna) — sem isso "GANCHOS
+   · ENTR" quebraria em mais linhas do que a altura calibrada da linha
+   permite. */
+@media (max-width:820px){
+  th{ letter-spacing:.03em }
+}
+
+/* ---- 7. BADGE — CHIP, NÃO BOLHA ----------------------------------------
+   Cor e texto do status continuam INTOCADOS (seis variáveis, escala do
+   gestor). Só a forma do selo aperta — de bolha de pílula (14px de raio)
+   para chip de dado (o mesmo --radius-sm que já nomeia célula de etapa e
+   campo pequeno no arquivo-base), a única mudança sendo geométrica. */
+.badge{
+  border-radius:var(--radius-sm);
+  letter-spacing:.04em;
+}

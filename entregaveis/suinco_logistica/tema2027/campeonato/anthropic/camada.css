@@ -1,0 +1,137 @@
+/* =====================================================================
+   PROGRAMAÇÃO DE EMBARQUE SUINCO — CAMADA "CALMA EDITORIAL"
+   =====================================================================
+   Isto é uma CAMADA sobre o design system existente (styles.css), não uma
+   reescrita. Nenhuma cor de marca, de status ou de contraste testado é
+   redefinida aqui — os seis --st-*, --gold, --navy, --text e --text-dim
+   continuam exatamente como testes/test_contraste.py mediu. O que muda é
+   a TEMPERATURA decorativa: quanta borda, sombra, brilho e ênfase cada
+   superfície carrega por cima do dado. A ideia central: a tela deve
+   parecer lida, não escaneada — hierarquia por peso e tamanho de fonte,
+   não por caixa alta, gradiente e contorno.
+
+   Tudo abaixo mora dentro de `@media screen`. É a garantia mecânica do
+   limite "@media print intocado": a folha de estilo do relatório
+   (styles.css) nunca entra em `@media screen`, e esta camada nunca entra
+   em `@media print` — as duas cascatas não se cruzam, sem precisar
+   caçar regra por regra o que "poderia vazar" pro PDF.
+   ===================================================================== */
+@media screen {
+
+/* ---------------------------------------------------------------------
+   1) TOKENS DECORATIVOS — a mesma variável, um valor mais quieto
+   ---------------------------------------------------------------------
+   Só toca ALPHA de borda, sombra e do halo de ambiente atrás do vidro.
+   Nunca cor de texto, preenchimento de status ou --border (a borda
+   "cheia", 1px, que também desenha o contorno de input/select sobre o
+   MESMO fundo da página no tema escuro — apagá-la também apagaria onde
+   clicar para digitar; por isso ela fica de fora e só --vidro-borda e
+   --border-soft, usadas em contorno de cartão/caixa que já tem fundo
+   próprio, afinam). Nada aqui muda um único número de contraste
+   texto/fundo — só o que cerca o texto. */
+:root{
+  --vidro-borda:rgba(233,185,84,.13);              /* era .22 — contorno de sugestão, não de caixa */
+  --vidro-sombra:0 1px 2px rgba(4,8,18,.30), 0 8px 20px rgba(4,8,18,.16); /* profundidade rasa em vez de vidro brilhando */
+  --border-soft:rgba(233,185,84,.08);              /* era .14 — divisória de tabela mais discreta */
+  --amb-ouro:rgba(233,185,84,.07);                 /* halos de fundo mais quietos: a superfície */
+  --amb-azul:rgba(55,74,134,.17);                  /* fala pelo conteúdo, o ambiente só sugere */
+  --amb-vinho:rgba(143,31,38,.05);                 /* profundidade, não decoração competindo */
+}
+:root[data-tema="claro"]{
+  --vidro-borda:rgba(26,32,45,.07);
+  --vidro-sombra:0 1px 2px rgba(30,42,82,.05), 0 6px 16px rgba(30,42,82,.06);
+  --border-soft:rgba(26,32,45,.06);
+  --amb-ouro:rgba(233,185,84,.05);
+  --amb-azul:rgba(55,74,134,.045);
+  --amb-vinho:rgba(143,31,38,.02);
+}
+
+/* ---------------------------------------------------------------------
+   2) CAIXAS DE INDICADOR — o brilho do topo, mais baixo
+   ---------------------------------------------------------------------
+   O véu dourado de `.stat-box::before` (styles.css) é a MESMA opacidade
+   repetida em toda caixa de uma grade de dez — numa Torre com Programação
+   e tempos médios juntos, isso é uma fileira de véus acesos ao mesmo
+   tempo competindo com o número, que é a única coisa que precisa ganhar
+   a primeira olhada. Reduzo a opacidade à metade: o reflexo de quina
+   continua lendo como vidro, só que sem se anunciar sozinho.
+   NÃO toco em `.bento.bi-faixa .stat-box::after` (a régua de cor à
+   esquerda) — essa é a peça que resolveu o vermelho-sobre-vermelho de
+   contraste 1,9 na nota da caixa "Programação anterior", e ela já é
+   exatamente a decisão desta escola: cor na BORDA que identifica, nunca
+   no fundo que compete com o número. */
+.stat-box::before{
+  background:linear-gradient(180deg, rgba(233,185,84,.08), transparent);
+}
+:root[data-tema="claro"] .stat-box::before{
+  background:linear-gradient(180deg, rgba(233,185,84,.045), transparent);
+}
+
+/* ---------------------------------------------------------------------
+   3) CABEÇALHO — o nome da tela, não o painel inteiro, é o que grita
+   ---------------------------------------------------------------------
+   `letter-spacing` mais fechado no título: a versão anterior (.5px) lê
+   como rótulo de botão; isto é o nome do sistema, não uma ação. Peso
+   continua 800 — a hierarquia é o peso, o espaçamento apenas para de
+   competir com ele. */
+#header-title strong{ letter-spacing:.2px }
+
+/* ---------------------------------------------------------------------
+   4) NAVEGAÇÃO — a aba ativa se anuncia uma vez, não duas
+   ---------------------------------------------------------------------
+   styles.css já marca a aba ativa com a borda inferior dourada — isso
+   BASTA para dizer "você está aqui". O gradiente vertical + a sombra
+   dourada por dentro (`box-shadow ... inset`) empilhavam um segundo e um
+   terceiro sinal por cima do primeiro. Fica só o essencial: a borda, e um
+   verniz de fundo tão baixo que é textura, não cor. O hover troca o
+   preenchimento azul-marinho sólido por um verniz dourado translúcido —
+   mesma lógica de "sugestão, não bloco" do restante da camada. */
+.nav-tab.active{
+  background:rgba(233,185,84,.07);
+  box-shadow:none;
+}
+.nav-tab:hover{ background:rgba(233,185,84,.055) }
+
+/* ---------------------------------------------------------------------
+   5) BOTÕES — peso vem do rótulo e da cor sólida, não do brilho
+   ---------------------------------------------------------------------
+   O acabamento "Fluent" (styles.css) dá volume com duas sombras e um
+   brilho interno, e o primário ainda ganha um degradê de três paradas.
+   Nesta escola a hierarquia dos botões já está resolvida por COR (dourado
+   = ação principal, verde/vinho = destino do status, cinza = secundário)
+   — o relevo por cima é reforço que a paleta reduzida não precisa. Achato
+   para preenchimento sólido e devolvo o toque de resposta só em
+   transform+opacity (a regra de movimento da casa), nunca em box-shadow
+   ou filter — assim a transição de :hover já herdada do styles.css
+   (que inclui box-shadow/filter) não anima mais nada de fato: os dois
+   ficam parados em "none" nos dois estados.
+   --btn-success e --btn-danger NÃO mudam de cor: os tons ali foram
+   medidos a dedo contra texto branco (ver comentário "O VERDE ESCURECEU
+   3 PONTOS" em styles.css) e eu não tenho como reconferir cada um aqui —
+   só a camada de brilho por cima sai, a cor certificada fica. */
+.btn{
+  box-shadow:none;
+}
+.btn:hover{
+  filter:none;
+  box-shadow:none;
+  opacity:.88;
+  transform:translateY(-1px);
+}
+.btn:active{ transform:translateY(0) }
+.btn-primary{ background:var(--gold) }
+
+/* ---------------------------------------------------------------------
+   6) TABELAS — o filete de cabeçalho afina, o peso faz a diferença
+   ---------------------------------------------------------------------
+   2px sólidos de --gold-dim sob CADA cabeçalho, em tabelas de treze
+   colunas lado a lado (Torre, Programação), somam uma faixa dourada
+   contínua no topo da tela. Um fio de 1px já separa cabeçalho de dado; o
+   peso 600 (em vez de 700) no rótulo da coluna mantém a leitura sem
+   pedir tanta tinta. */
+th{
+  border-bottom:1px solid var(--gold-dim);
+  font-weight:600;
+}
+
+} /* fim de @media screen */

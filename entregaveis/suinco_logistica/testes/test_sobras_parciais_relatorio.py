@@ -160,7 +160,14 @@ async def main():
         cab = await pg.evaluate(
             "() => [...document.querySelectorAll('.dev-card.dev-aberta thead th')]"
             ".map((t) => t.innerText.trim())")
-        ck('coluna "Nº parcial" existe na tela', 'Nº parcial' in cab, ' | '.join(cab[:6]))
+        # CAIXA NÃO É REGRA (17/09/2026). `innerText` devolve o texto já
+        # transformado pelo navegador, e o Tema 2027 pôs `text-transform:
+        # uppercase` no `th`: a coluna passou a ser desenhada "Nº PARCIAL".
+        # Nada saiu da tela. As conferências do DOCUMENTO abaixo continuam
+        # com caixa exata de propósito — a camada vive dentro de
+        # `@media screen` e o papel não é transformado.
+        ck('coluna "Nº parcial" existe na tela',
+           any('nº parcial' in c.casefold() for c in cab), ' | '.join(cab[:6]))
 
         # Uma linha TOTAL, para provar que o campo trava quando não há parcial.
         await pg.evaluate(

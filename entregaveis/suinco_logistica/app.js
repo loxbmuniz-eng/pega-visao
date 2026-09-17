@@ -602,7 +602,10 @@ function _exibirNotif(el, ms, opcoes){
   const perecivel = !!(opcoes && opcoes.perecivel) && !el.classList.contains('forte');
   if(perecivel && notifRecemChegado()) return;
 
-  if(container.querySelectorAll('.notif-item').length >= NOTIF_MAX_VISIVEL){
+  /* Aviso que já está SAINDO não ocupa vaga: ele fica 240 ms no ar só para
+     terminar o movimento, e contá-lo faria o aviso seguinte ir para a fila
+     sem necessidade. */
+  if(container.querySelectorAll('.notif-item:not(.notif-saindo)').length >= NOTIF_MAX_VISIVEL){
     if(!perecivel){
       _notifFila.push({
         el, ms, em: Date.now(), perecivel: false,
@@ -667,12 +670,29 @@ function _mostrarNotifAgora(el, ms){
   botaoFechar.textContent = '×';
   el.prepend(botaoFechar);
 
+  /* O AVISO SAI PELO MESMO LADO POR ONDE ENTROU (320 ms entra, 240 ms sai).
+
+     Entrar deslizando e depois sumir no lugar são dois objetos diferentes
+     para o olho: o que entrou não é o que saiu. Saindo pela mesma borda, é
+     o mesmo papel indo embora — e é isso que faz o gesto de dispensar
+     parecer natural em vez de arbitrário.
+
+     Sair é mais rápido que entrar de propósito: entrar é o sistema
+     chamando a atenção, sair é o sistema respondendo. Rápido onde o
+     sistema responde, calmo onde ele pede atenção.
+
+     O próximo da fila só entra DEPOIS que este terminou de sair — senão os
+     dois dividem o mesmo lugar na pilha e o de baixo pula. */
   const remover = () => {
     clearTimeout(temporizador);
-    el.remove();
-    const proximo = _proximoDaFila();   // tira da fila ANTES de contar — o contador reflete o que sobra
-    _atualizarContadorFila();
-    if(proximo) _mostrarNotifAgora(proximo.el, proximo.ms);
+    if(el.classList.contains('notif-saindo')) return;   // já está saindo
+    el.classList.add('notif-saindo');
+    setTimeout(() => {
+      el.remove();
+      const proximo = _proximoDaFila();   // tira da fila ANTES de contar — o contador reflete o que sobra
+      _atualizarContadorFila();
+      if(proximo) _mostrarNotifAgora(proximo.el, proximo.ms);
+    }, movReduzida() ? 0 : 240);
   };
   botaoFechar.onclick = remover;
 
@@ -2782,14 +2802,30 @@ function botaoCancelarHtml(c){
      intocável. Pedido direto do usuário (08/08/2026): dado de teste que
      passou pelo fluxo inteiro (ex.: DJF8527) ficava preso na Torre pra
      sempre, sem nenhuma ação disponível pra tirar de lá. */
+  /* SEGURAR PARA CANCELAR (`data-segurar`). O gesto é o que confirma: o
+     dedo fica 1,5 s no botão e a barra conta na frente dele. Solta antes e
+     nada acontece. É a pergunta que não dá para responder no automático —
+     "tem certeza?" todo mundo aprende a clicar sem ler.
+
+     O que vem DEPOIS do gesto não mudou uma linha: `excluirCargaUI`
+     continua pedindo o motivo de quem já andou, e a carga que seguiu
+     viagem continua pedindo a placa digitada. O gesto substitui o
+     "tem certeza?", não a pergunta que vira registro.
+
+     Teclado e chamada de programa passam direto (ver o porteiro no bloco
+     MOVIMENTO): o gesto novo é para a mão, e ninguém fica sem saída. */
   if(c.status === 'Seguiu Viagem'){
-    return `<button class="btn btn-danger btn-sm" onclick="excluirCargaSeguiuViagemUI('${escJs(c.id)}')"
-              title="Excluir mesmo já tendo seguido viagem — pede confirmação, some do histórico/relatórios.">Excluir</button>`;
+    return `<button class="btn btn-danger btn-sm" data-segurar="1"
+              data-segurar-dica="Segure 1,5s para excluir esta carga já finalizada."
+              onclick="excluirCargaSeguiuViagemUI('${escJs(c.id)}')"
+              title="SEGURE 1,5s para excluir mesmo já tendo seguido viagem — ainda pede a placa digitada, some do histórico/relatórios.">Excluir</button>`;
   }
   const cancelar = c.status !== 'Aguardando Veículo';
-  return `<button class="btn btn-danger btn-sm" onclick="excluirCargaUI('${escJs(c.id)}')"
-            title="${cancelar ? 'Cancelar esta carga (pede motivo e fica no log)'
-                              : 'Excluir esta carga programada'}">`
+  return `<button class="btn btn-danger btn-sm" data-segurar="1"
+            data-segurar-dica="Segure 1,5s para ${cancelar ? 'cancelar' : 'excluir'} a carga da placa ${esc(c.placa)}."
+            onclick="excluirCargaUI('${escJs(c.id)}')"
+            title="${cancelar ? 'SEGURE 1,5s para cancelar esta carga (depois pede o motivo e fica no log)'
+                              : 'SEGURE 1,5s para excluir esta carga programada'}">`
        + (cancelar ? 'Cancelar' : 'Excluir') + '</button>';
 }
 
@@ -2882,7 +2918,12 @@ function renderVisaoPatio(prefixo){
 
   const linhaCarga = (c)=>{
     const etapas = etapasDaCarga(c);
-    return `<tr class="linha-status-${esc((STATUS_META[c.status]||{}).cor || '')}">
+    /* `data-carga` NÃO desenha nada — é a etiqueta pela qual o movimento
+       encontra a linha desta carga quando ela entra no pátio ou sai dele
+       (ver o bloco MOVIMENTO no fim deste arquivo). A Torre e a Fila já
+       tinham a etiqueta; a Visão do Pátio é justamente onde o caminhão é
+       visto, e estava sem. */
+    return `<tr class="linha-status-${esc((STATUS_META[c.status]||{}).cor || '')}" data-carga="${esc(c.id)}">
       <td class="vp-carga">${esc(c.numeroCarga)||'—'}</td>
       <td class="vp-placa">${esc(c.placa)}${marcaCargaDaPlaca(c, lista)}${marcaEtapaDevolvidaHtml(c)}${marcaSaiuSemCarregarHtml(c)}</td>
       <td class="vp-transp">${esc(c.transportadora)||'—'}</td>
@@ -2910,6 +2951,7 @@ function renderVisaoPatio(prefixo){
   } else {
     tbody.innerHTML = lista.map(linhaCarga).join('');
   }
+  movLinhasNovas(tbody);
 
   /* Estado vazio que oferece a saída.
 
@@ -3424,6 +3466,7 @@ function renderTorre(){
         ${ultimaAcaoHtml(c)}</td>
       ${editavel ? `<td class="no-print">${botaoOutraCargaHtml(c)}${botaoRevisoesHtml(c)}${botaoCancelarHtml(c)}</td>` : ''}
     </tr>`).join('');
+  movLinhasNovas(tbody);
   const vazio = document.getElementById('torre-empty');
   vazio.hidden = lista.length>0;
   if(!vazio.hidden){
@@ -3960,6 +4003,7 @@ function renderProgFila(){
   const antWrap = document.getElementById('prog-fila-anteriores');
   if(antTbody) antTbody.innerHTML = anteriores.map(c => linhaFilaHtml(c, anteriores, false)).join('');
   if(antWrap) antWrap.hidden = anteriores.length === 0;
+  movLinhasNovas(document.getElementById('prog-fila-tbody'));
   document.getElementById('prog-fila-empty').hidden = lista.length>0;
 
   // Some sem explicação é pior que não sumir: quem programou ontem
@@ -5049,7 +5093,11 @@ async function excluirCargaUI(id){
       notify('Escreva um motivo com pelo menos 3 letras.', 'warn');
       return;
     }
-  } else if(!confirm(`Excluir a carga programada da placa ${c.placa}? Essa ação não pode ser desfeita.`)){
+  } else if(!movConfirmadoPorGesto()
+            && !confirm(`Excluir a carga programada da placa ${c.placa}? Essa ação não pode ser desfeita.`)){
+    /* Segurar o botão 1,5 s JÁ é a confirmação (ver movConfirmadoPorGesto).
+       A janela continua para quem chegou por teclado ou por outra porta —
+       uma pergunta, nunca zero. */
     return;
   }
 
@@ -5370,7 +5418,9 @@ async function acaoSaidaUI(){
     marcarSaidaNaoConfirmada(placa, r.liberadas.length,
       'este terminal está sem servidor');
     avisarPendentesDaSaida(placa, r);
-    input.value = ''; input.focus(); renderAll();
+    input.value = ''; input.focus();
+    await despedirCargas(_movIdsLiberados(r.liberadas));
+    renderAll();
     return;
   }
 
@@ -5416,7 +5466,20 @@ async function acaoSaidaUI(){
   avisarPendentesDaSaida(placa, { liberadas, pendentes });
   input.value = '';
   input.focus();
+  /* O caminhão sai do pátio ANTES do redesenho. Se `renderAll()` viesse
+     primeiro, a linha já teria sido apagada no primeiro quadro e não
+     sobraria nada para ver — quem confirmou a saída ficaria sem saber qual
+     das cargas da placa foi embora. Espera no máximo 240 ms. */
+  await despedirCargas(_movIdsLiberados(liberadas));
   renderAll();
+}
+
+/* Os ids das cargas que o servidor (ou o caminho local) declarou liberadas.
+   A resposta do servidor vem em snake_case e a local em camelCase — uma
+   função só lê as duas, em vez de duas listas que divergem na primeira
+   mudança de rota. */
+function _movIdsLiberados(liberadas){
+  return (liberadas || []).map(c => (c && (c.id || c.carga_id)) || c).filter(Boolean);
 }
 
 /* O caminhão sai UMA vez, mas a placa pode ter mais de uma carga. Carga que
@@ -5616,6 +5679,7 @@ async function portariaSaiuSoDevolucaoUI(cargaId){
   await SuincoSharePoint.sincronizarAgora();
   notifyGravacao(`Placa ${c.placa} saiu — só devolução, sem carregamento.`);
   tocarBeepConfirmacao();
+  await despedirCargas([cargaId]);
   renderAll();
 }
 
@@ -6913,12 +6977,18 @@ async function addTarifaFreteUI(){
   if(bruto === '' || !Number.isFinite(Number(bruto)) || Number(bruto) < 0){
     notify('Informe o valor por km (ex.: 7,75).', 'warn'); return;
   }
-  const r = await SuincoSharePoint.gravarTarifaFrete({
-    tipoVeiculo: tipo,
-    valorPorKm: Number(bruto),
-    vigenteDesde: document.getElementById('frete-tarifa-vigencia').value || undefined,
-    operador: (DB.operador && DB.operador.nome) || '',
-  });
+  /* O BOTÃO CONTA O QUE ESTÁ FAZENDO. Gravar tarifa é ida ao servidor: sem
+     isso o botão fica mudo entre o clique e a resposta, e quem não vê nada
+     acontecer clica de novo. "✓ Salvo" só aparece depois que a resposta
+     chegou — quem decide é a transação, não a tela. */
+  const r = await contarNoBotao(_movBotaoDaAcao('addTarifaFreteUI'),
+    { fazendo: 'Salvando…', feito: '✓ Salvo' },
+    () => SuincoSharePoint.gravarTarifaFrete({
+      tipoVeiculo: tipo,
+      valorPorKm: Number(bruto),
+      vigenteDesde: document.getElementById('frete-tarifa-vigencia').value || undefined,
+      operador: (DB.operador && DB.operador.nome) || '',
+    }));
   if(r && (r.recusado || r.enfileirado)){
     notify(`A tarifa de ${tipo} NÃO foi salva: ${r.erro || 'sem conexão com o servidor'}. `
       + 'Tabela de preço não fica em fila — tente de novo quando a conexão voltar.', 'erro', 9000);
@@ -6934,9 +7004,11 @@ async function addDestinoFreteUI(){
   const km = kmValidoLocal(document.getElementById('frete-destino-km').value);
   if(!destino){ notify('Informe o destino.', 'warn'); return; }
   if(km === null){ notify('Informe o KM do destino (maior que zero).', 'warn'); return; }
-  const r = await SuincoSharePoint.gravarDestinoFrete({
-    destino, km, operador: (DB.operador && DB.operador.nome) || '',
-  });
+  const r = await contarNoBotao(_movBotaoDaAcao('addDestinoFreteUI'),
+    { fazendo: 'Salvando…', feito: '✓ Salvo' },
+    () => SuincoSharePoint.gravarDestinoFrete({
+      destino, km, operador: (DB.operador && DB.operador.nome) || '',
+    }));
   if(r && (r.recusado || r.enfileirado)){
     notify(`O destino ${destino} NÃO foi salvo: ${r.erro || 'sem conexão com o servidor'}.`, 'erro', 9000);
     return;
@@ -7125,9 +7197,14 @@ async function addRotaUI(){
      Olhar o estado da conexão não bastava: no instante do clique ele ainda
      diz "online", porque só vira offline quando alguma requisição falha. O
      que decide é a resposta desta gravação, não o estado de antes dela. */
-  const r = await (rotaCriada && rotaCriada._promessa
-    ? rotaCriada._promessa.catch(() => ({ recusado: true }))
-    : Promise.resolve(null));
+  /* O botão conta a espera que já existia: este `await` é justamente o que
+     o comentário acima descreve — o painel para e escuta o servidor. Antes
+     ele parava calado. */
+  const r = await contarNoBotao(_movBotaoDaAcao('addRotaUI'),
+    { fazendo: 'Salvando…', feito: '✓ Salvo' },
+    () => (rotaCriada && rotaCriada._promessa
+      ? rotaCriada._promessa.catch(() => ({ recusado: true }))
+      : Promise.resolve(null)));
   if(r && r.recusado){
     // receberRecusaDeRota já falou — e com a frase certa para cada caso.
     renderAll();
@@ -11760,8 +11837,14 @@ function acoesMontagemHtml(m, trancada){
     ? `<button class="btn btn-primary btn-sm" onclick="efetivarMontagemUI('${id}')"
          title="Cria a carga e manda para a Torre de Controle.">➕ Criar carga</button>`
     : '';
+  /* Cancelar a linha da Montagem também é destrutivo: a rota deixa de sair
+     hoje. Mesmo gesto de segurar do botão de cancelar carga — uma regra de
+     confirmação só, não duas. O motivo continua sendo pedido depois. */
   return `${criar}
-    <button class="btn btn-sec btn-sm" onclick="cancelarMontagemUI('${id}')">Cancelar</button>`;
+    <button class="btn btn-sec btn-sm" data-segurar="1"
+      data-segurar-dica="Segure 1,5s para marcar esta rota como não programada hoje."
+      title="SEGURE 1,5s para cancelar — depois pede o motivo."
+      onclick="cancelarMontagemUI('${id}')">Cancelar</button>`;
 }
 
 /* Puxa do modelo as rotas deste dia da semana que ainda não têm carga.
@@ -12557,3 +12640,301 @@ document.addEventListener('keydown', (ev) => {
   if (window.innerWidth > 820) return;
   ev.preventDefault(); t.click();
 });
+
+/* ═══════════════════ MOVIMENTO (agente de interação) ═══════════════════
+
+   Tudo que se MEXE no painel mora aqui, num lugar só, e a folha de estilo
+   correspondente é o bloco de mesmo nome no fim de `styles.css`.
+
+   Três regras que valem para o bloco inteiro, e que não são gosto:
+
+   1. TETO DE 300 ms. A Torre despacha ~31 cargas por dia; uma saída de
+      700 ms multiplicada por 31 é meio minuto de gente olhando o painel
+      terminar de se mexer. Animação de interface acima de 300 ms não
+      informa, atrasa.
+   2. O QUE SE VÊ CEM VEZES POR DIA NÃO SE ANIMA. Troca de aba, a sincronia
+      redesenhando a Torre, o pátio recarregando: nada disso entra aqui. Se
+      cada sincronia animasse a tabela, a tela tremeria sozinha. Por isso a
+      entrada de linha só dispara para um `data-carga` que NÃO existia no
+      desenho anterior daquela tabela — redesenhar as mesmas 30 linhas não
+      é novidade nenhuma.
+   3. O PAPEL NÃO SE MEXE, E NÃO PODE NASCER INVISÍVEL. O servidor gera os
+      PDFs com ESTE mesmo CSS (`backend/src/servicos/pdf.js` manda
+      `{html, css}` para o Chromium). Toda regra daqui é desligada em
+      `@media print`, e nenhum estado de REPOUSO é invisível: quem espera
+      animação espera já visível, e a animação só tira e devolve. A
+      ocorrência #72 é o lembrete do preço de errar isso — uma regra de
+      papel escrita no nível errado fez o relatório sair com página em
+      branco.
+
+   Também respeita `prefers-reduced-motion: reduce`: o CSS desliga o
+   movimento e o JavaScript encurta as esperas para zero, para que nenhuma
+   ação fique presa atrás de uma animação que não vai acontecer. */
+
+function movReduzida(){
+  try{
+    return !!(window.matchMedia
+      && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  }catch(e){ return false; }
+}
+
+function movEsperar(ms){
+  return new Promise(r => setTimeout(r, movReduzida() ? 0 : ms));
+}
+
+/* ---------- 1. "SEGUIU VIAGEM": O CAMINHÃO SAI DO PÁTIO ----------
+
+   A linha não pode sumir seca. Some seca e a pessoa fica sem saber se
+   clicou no caminhão certo — e quando são duas cargas na mesma placa, sem
+   saber qual das duas saiu.
+
+   Duas metades dentro do teto de 300 ms:
+
+     0–150 ms   o conteúdo da linha ANDA para a direita e apaga
+                (só `transform` e `opacity`: roda na GPU, não repagina)
+     150–240 ms a linha fecha o próprio espaço e as de baixo sobem
+
+   240 ms e não 280: o teto de 300 ms é do que a PESSOA vê, não do que o
+   CSS declara. Entre o clique e a linha sumir ainda cabem os atrasos do
+   relógio do navegador e o redesenho da tabela — medido, ~60 ms. Gastar
+   os 300 inteiros em animação estoura o teto no relógio de quem olha.
+
+   A segunda metade mexe em altura, que é a única propriedade que fecha
+   espaço de verdade numa tabela — `transform` não devolve espaço nenhum ao
+   layout. A regra de "só transform e opacity" existe para não repaginar
+   uma LISTA inteira a cada quadro; aqui é UMA linha, por 110 ms, ~31 vezes
+   por dia. A conta fecha, e está escrita para quem vier depois não desfazer
+   achando que foi descuido.
+
+   A altura é medida antes e escrita em pixel porque `height:auto` não
+   transiciona — de `auto` para `0` o navegador pula direto, sem animar. */
+const MOV_SAIDA_ANDA = 150;
+const MOV_SAIDA_FECHA = 90;
+
+function _movSeletorCarga(id){
+  return `tr[data-carga="${(window.CSS && CSS.escape) ? CSS.escape(id) : id}"]`;
+}
+
+function _movLinhasDaCarga(id){
+  if(!id) return [];
+  try{ return Array.from(document.querySelectorAll(_movSeletorCarga(id))); }
+  catch(e){ return []; }
+}
+
+/* Anima a saída das cargas que acabaram de seguir viagem e SÓ ENTÃO deixa
+   a tela ser redesenhada. Devolve uma promessa: quem chama espera por ela
+   antes do `renderAll()`, senão o redesenho apaga a linha no primeiro
+   quadro e não sobra nada para ver.
+
+   Não é fonte de verdade de nada: se a linha não estiver na tela (outra
+   aba, filtro escondendo), resolve na hora e o painel segue igual. */
+async function despedirCargas(ids){
+  const linhas = (Array.isArray(ids) ? ids : [ids])
+    .reduce((acc, id) => acc.concat(_movLinhasDaCarga(id)), []);
+  if(!linhas.length || movReduzida()) return;
+
+  linhas.forEach((tr) => {
+    tr.style.height = tr.offsetHeight + 'px';   // congela a altura de hoje
+    tr.classList.add('linha-seguiu-viagem');
+  });
+  await movEsperar(MOV_SAIDA_ANDA);
+  linhas.forEach((tr) => {
+    tr.classList.add('linha-seguiu-viagem-fecha');
+    tr.style.height = '0px';
+  });
+  await movEsperar(MOV_SAIDA_FECHA);
+  /* Não removo a linha: quem redesenha é o `renderAll()` de quem chamou, e
+     é ele quem manda. Tirar daqui seria a tela decidindo sozinha o que só
+     o servidor confirma. */
+}
+
+/* ---------- 2. LINHA NOVA ENTRA DESLIZANDO DE CIMA ----------
+
+   `translateY(-10px)` + opacidade, 260 ms. NUNCA `scale(0)`: nada no mundo
+   real aparece do nada, e uma carga que surge de um ponto invisível parece
+   defeito de tela, não carga nova.
+
+   O QUE IMPEDE ISSO DE VIRAR TREMEDEIRA: a primeira pintura de cada tabela
+   só ANOTA os ids; não anima nada. Abrir a aba com 30 cargas não faz 30
+   linhas deslizarem. Depois disso, anima só o `data-carga` que apareceu
+   agora — a sincronia redesenha as mesmas linhas e não dispara nada,
+   porque redesenhar não é novidade. */
+const _movVistas = new Map();       // id do tbody -> Set de data-carga já visto
+
+function movLinhasNovas(tbody){
+  if(!tbody || !tbody.id) return;
+  const agora = new Set(
+    Array.from(tbody.querySelectorAll('tr[data-carga]'))
+      .map(tr => tr.getAttribute('data-carga')));
+  const antes = _movVistas.get(tbody.id);
+  _movVistas.set(tbody.id, agora);
+  if(!antes || !antes.size || movReduzida()) return;   // primeira pintura: só anota
+  agora.forEach((id) => {
+    if(antes.has(id)) return;
+    const tr = tbody.querySelector(_movSeletorCarga(id));
+    if(tr) tr.classList.add('linha-nova');
+  });
+}
+
+/* ---------- 3. SEGURAR PARA CANCELAR ----------
+
+   "Tem certeza?" é a pergunta que todo mundo aprende a responder sem ler.
+   Segurar não dá para responder no automático: o dedo fica lá 1,5 s e a
+   barra conta na frente dele. Solta antes, volta em 200 ms e NADA acontece
+   — que é a regra da casa pelo lado certo: a ação perigosa PERGUNTA, em vez
+   de um botão desabilitado que só nega.
+
+   COMO ISSO NÃO TRANCA NINGUÉM FORA (e é a parte que importa num painel em
+   produção): quem chega por TECLADO ou por chamada de programa continua
+   passando direto pelo caminho de sempre. Clique de dedo/mouse tem
+   `detail >= 1`; Enter numa tecla e `elemento.click()` têm `detail 0` — a
+   mesma distinção que o guarda do toque duplo já usa neste arquivo. Então
+   o gesto novo vale para a mão, e o teclado nunca fica sem saída.
+
+   Toque curto não fica mudo: explica o que fazer. Botão que só nega é o
+   defeito da ocorrência #13. */
+const MOV_SEGURAR_MS = 1500;
+let _movSegurando = null;           // { botao, relogio } enquanto o dedo está lá
+let _movGestoAte = 0;               // até quando o gesto recém-completado vale
+
+/* O GESTO É A CONFIRMAÇÃO — e é só isso que ele substitui.
+
+   Quem segurou 1,5 s já respondeu "tem certeza?" com o dedo; repetir a
+   pergunta numa janela do navegador seria cobrar duas vezes a mesma coisa,
+   e é assim que se ensina alguém a clicar em OK sem ler.
+
+   Quem chegou por teclado NÃO segurou nada, e para esse a janela continua
+   existindo. Uma pergunta, nunca zero: a confirmação não some, muda de
+   forma conforme a porta por onde a pessoa entrou.
+
+   O que NÃO é confirmação continua acontecendo nos dois caminhos: o motivo
+   do cancelamento é registro (alguém vai perguntar por ele daqui a três
+   meses) e a placa digitada da carga que já seguiu viagem é prova. */
+function movConfirmadoPorGesto(){
+  return Date.now() < _movGestoAte;
+}
+
+function _movLimparSegurar(){
+  if(!_movSegurando) return;
+  clearTimeout(_movSegurando.relogio);
+  _movSegurando.botao.classList.remove('segurando');
+  _movSegurando = null;
+}
+
+function _movBotaoDeSegurar(alvo){
+  return alvo && alvo.closest ? alvo.closest('[data-segurar]') : null;
+}
+
+document.addEventListener('pointerdown', (ev) => {
+  const botao = _movBotaoDeSegurar(ev.target);
+  if(!botao || botao.disabled) return;
+  _movLimparSegurar();
+  if(movReduzida()) return;   // sem barra para contar, o clique resolve
+  botao.classList.add('segurando');
+  const relogio = setTimeout(() => {
+    _movLimparSegurar();
+    botao.classList.add('segurado');
+    setTimeout(() => botao.classList.remove('segurado'), 300);
+    /* `click()` de programa tem `detail 0` e passa pelo porteiro abaixo —
+       é o mesmo caminho do teclado, então a ação executada aqui é
+       exatamente a do `onclick` da marcação, sem cópia paralela da regra. */
+    _movGestoAte = Date.now() + 2000;
+    try{ botao.click(); }catch(e){}
+  }, MOV_SEGURAR_MS);
+  _movSegurando = { botao, relogio };
+}, true);
+
+['pointerup', 'pointercancel', 'pointerleave'].forEach((evento) => {
+  document.addEventListener(evento, (ev) => {
+    if(!_movSegurando) return;
+    if(_movBotaoDeSegurar(ev.target) !== _movSegurando.botao) return;
+    _movLimparSegurar();
+  }, true);
+});
+
+/* O porteiro: clique de dedo em botão de segurar não age sozinho. */
+document.addEventListener('click', (ev) => {
+  const botao = _movBotaoDeSegurar(ev.target);
+  if(!botao) return;
+  if(!ev.detail) return;              // teclado e chamada de programa passam
+  if(movReduzida()) return;           // sem movimento, sem gesto novo
+  ev.preventDefault();
+  ev.stopImmediatePropagation();
+  notify(botao.getAttribute('data-segurar-dica')
+    || 'Segure o botão por 1,5 segundo para confirmar.', 'warn', 4000);
+}, true);
+
+/* ---------- 4. BOTÃO QUE CONTA O QUE ESTÁ FAZENDO ----------
+
+   Salvar → Salvando… → ✓ Salvo. O texto troca EMBAÇADO (`blur(2.6px)`)
+   para os dois estados não parecerem dois objetos: sem o borrão o olho vê
+   duas palavras se sobrepondo; com ele, vê uma virando a outra.
+
+   200 ms de ponta a ponta — 100 ms para embaçar, a troca no pico, 100 ms
+   para voltar. Não 200 para cada metade: o teto de interface é 300.
+
+   Quem chama passa a TAREFA, não o resultado. O botão só conta o que
+   realmente aconteceu: se a promessa falhar, ele volta ao texto original
+   sem nunca dizer "salvo". Esta é a regra da casa — a tela adianta, quem
+   decide é a transação. */
+const MOV_BORRAO_MS = 100;
+
+function _movBotaoDaAcao(nomeDaFuncao){
+  try{ return document.querySelector(`button[onclick*="${nomeDaFuncao}("]`); }
+  catch(e){ return null; }
+}
+
+/* Quem pediu a troca mais recente é quem manda. Um salvamento que responde
+   em 50 ms pede "Salvando…" e "✓ Salvo" quase juntos; sem esta senha, as
+   duas trocas se atropelam e o botão pode acabar parado no texto errado —
+   que é pior do que não animar. */
+const _movSenhaDoTexto = new WeakMap();
+
+async function _movTrocarTexto(botao, texto){
+  if(!botao) return;
+  if(movReduzida()){ botao.textContent = texto; return; }
+  const senha = (_movSenhaDoTexto.get(botao) || 0) + 1;
+  _movSenhaDoTexto.set(botao, senha);
+  botao.classList.add('mov-conta');   // declara a transição do borrão
+  botao.classList.add('mov-borrado');
+  await movEsperar(MOV_BORRAO_MS);
+  if(_movSenhaDoTexto.get(botao) !== senha) return;   // já pediram outra
+  botao.textContent = texto;
+  botao.classList.remove('mov-borrado');
+  await movEsperar(MOV_BORRAO_MS);
+}
+
+/* `tarefa` é uma função que devolve promessa. O botão fica `aria-busy`
+   enquanto ela corre — leitor de tela precisa saber que o painel está
+   ocupado tanto quanto o olho precisa ver "Salvando…". */
+/* O BOTÃO CONTA AO LADO DO TRABALHO, NUNCA NA FRENTE DELE.
+
+   Nenhuma troca de texto é esperada por quem chamou: a promessa que esta
+   função devolve resolve no instante em que a TAREFA resolve, e as trocas
+   acontecem por fora. Sem isso, os 400 ms de contação entrariam no caminho
+   da gravação e atrasariam o `renderAll()` que vem depois — o cadastro
+   inteiro ficaria quatro décimos mais lento por causa de um enfeite.
+
+   O teste `test_cadastrar_rota` foi quem mostrou isso, reprovando em "a
+   rota nova aparece na tabela": a rota estava certa, a tabela é que ainda
+   não tinha sido redesenhada. Vermelho de regressão de verdade, e a
+   correção é de projeto — animação não entra no caminho crítico. */
+async function contarNoBotao(botao, textos, tarefa){
+  if(!botao) return tarefa();
+  const original = botao.textContent;
+  botao.setAttribute('aria-busy', 'true');
+  _movTrocarTexto(botao, (textos && textos.fazendo) || 'Salvando…');
+  try{
+    const resultado = await tarefa();
+    _movTrocarTexto(botao, (textos && textos.feito) || '✓ Salvo');
+    setTimeout(() => {
+      botao.removeAttribute('aria-busy');
+      _movTrocarTexto(botao, original);
+    }, 900);
+    return resultado;
+  }catch(e){
+    botao.removeAttribute('aria-busy');
+    _movTrocarTexto(botao, original);
+    throw e;
+  }
+}
