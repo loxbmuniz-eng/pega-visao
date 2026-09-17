@@ -1064,6 +1064,29 @@ const SuincoSharePoint = (function () {
     }
   }
 
+  /* REORGANIZAR A FILA DO DIA — FECHAR OS BURACOS (17/09/2026).
+
+     Pedido do dono: um botão de "reorganizar por sequência" que funcione.
+     O que existia no painel só redesenhava a tela e avisava sucesso.
+
+     UMA CHAMADA PARA A FILA INTEIRA, e fora da fila offline, pelos MESMOS
+     dois motivos de `sequenciar()` logo acima — a decisão depende de ler a
+     fila no momento em que ela é tomada, e aplicada meia hora depois ela
+     reorganizaria uma fila que já mudou. */
+  async function reorganizarFila(dia) {
+    if (!estaConfigurado()) return semServidor();
+    try {
+      const r = await chamar('/api/cargas/fila/reorganizar', {
+        metodo: 'POST',
+        corpo: { dia: String(dia) },
+      });
+      mudarEstado('online');
+      return { enfileirado: false, item: r };
+    } catch (e) {
+      return { enfileirado: false, recusado: true, erro: e.message };
+    }
+  }
+
   /* SAÍDA DO PÁTIO — PELA ROTA PRÓPRIA DO SERVIDOR (28/08/2026).
 
      A rota `POST /api/portaria/saida` existe desde 20/08 e estava sendo
@@ -1925,6 +1948,13 @@ const SuincoSharePoint = (function () {
       return chamar('/api/montagem/' + encodeURIComponent(id) + '/sequenciar',
         { metodo: 'POST', corpo: { posicao: Number(posicao) } });
     },
+    /* O mesmo botão da fila, na Montagem. A conta é a mesma função no
+       servidor — "reorganizar" precisa significar a mesma coisa nas três
+       telas, senão o dono aprende uma regra por tela. */
+    reorganizar(dia) {
+      return chamar('/api/montagem/reorganizar',
+        { metodo: 'POST', corpo: { dia: String(dia) } });
+    },
     /* Avisa o servidor de que a montagem virou a carga `cargaId`. Quem cria
        a carga é o caminho de sempre — ver o comentário da rota no
        servidor sobre por que não há um segundo caminho de criação. */
@@ -2283,7 +2313,8 @@ const SuincoSharePoint = (function () {
     aoDescartarDaFila, aoEditarCarga, aoExcluirCarga, aoAtualizarPresenca,
     aoFecharPrograma,
     login, sair, diagnosticarConexao,
-    push, upsert, excluir, mudarStatus, sequenciar, encerrarProgramacoesAnteriores, reterLacre,
+    push, upsert, excluir, mudarStatus, sequenciar, reorganizarFila,
+    encerrarProgramacoesAnteriores, reterLacre,
     recarregarRotas, excluirRota, gravarTarifaFrete, gravarDestinoFrete, tabelaDeFrete,
     corrigirEtapa, corrigirDataProgramacao, desfazerExclusao, listarExcluidas,
     programacaoDoDia, historico, mfa,

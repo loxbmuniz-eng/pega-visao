@@ -7,7 +7,7 @@ import { programacaoAtual } from '../dominio/programacoes.js';
 import {
   COLUNAS_CARGA, paraPainel, saneiarCriacao, saneiarCriacaoChegadaSemProgramacao,
   saneiarEdicao, normalizarPlaca, idSeguro, camposDeAviso,
-  podeSequenciar, filaReordenada, numerosDaFila, STATUS_QUE_AINDA_CARREGAM, paraPainelPara,
+  podeSequenciar, filaReordenada, filaNormalizada, numerosDaFila, STATUS_QUE_AINDA_CARREGAM, paraPainelPara,
 } from '../dominio/cargas.js';
 import {
   validarTransicao, podeCriarCarga, podeRegistrarChegadaSemProgramacao,
@@ -20,15 +20,6 @@ import {
 import { calcularFrete } from '../dominio/frete.js';
 
 export const rotasCargas = Router();
-
-/* "1, 7 e 12" — do jeito que uma pessoa escreve, não "1,7,12".
-   A mensagem é lida por quem está no pátio com o caminhão na frente. */
-function listaEmPortugues(ns) {
-  const v = (ns || []).map(Number).filter(Number.isFinite);
-  if (!v.length) return '';
-  if (v.length === 1) return String(v[0]);
-  return `${v.slice(0, -1).join(', ')} e ${v[v.length - 1]}`;
-}
 
 export function novoId(prefixo) {
   return `${prefixo}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
@@ -1119,12 +1110,15 @@ rotasCargas.post('/cargas/sequenciar', exigirLogin, async (req, res, next) => {
            ser recusado sendo menor que o 12, tenta o 4, tenta o 6, e conclui
            que o campo está quebrado. Dizer QUAIS casas existem é o que
            transforma a negativa em instrução. */
+        /* A LISTA DE CASAS SAIU DA FRASE (17/09/2026), porque ela deixou de
+           ser verdade. Com a terceira porta, digitar um número que a fila
+           não tem é ACEITO — dizer "digite um desses" mandaria a pessoa de
+           volta para a trava que acabou de ser removida. Sobrou a recusa
+           que continua real: o número é de quem já carregou. Frase de
+           recusa que descreve uma regra morta é pior que nenhuma. */
         erro: (resultado.ocupados || []).map(Number).includes(Number(req.body?.posicao))
-          ? `O número ${Number(req.body?.posicao)} é de uma carga que já carregou — esse número não volta para a fila. Escolha outro.`
-          : (resultado.casas || []).length
-            ? `Posição inválida. As casas desta fila são ${listaEmPortugues(resultado.casas)} `
-              + `— arraste a carga para a linha que você quer, ou digite um desses números.`
-            : `Posição inválida. A fila do dia tem ${resultado.posicaoInvalida} carga(s) esperando para carregar.`,
+          ? `O número ${Number(req.body?.posicao)} é de uma carga que já carregou hoje — esse número é registro do que aconteceu e não volta para a fila. Escolha outro.`
+          : `Posição inválida. Digite um número inteiro a partir de 1.`,
         codigo: 'POSICAO_INVALIDA',
         casas: resultado.casas || [],
       });
@@ -1133,6 +1127,116 @@ rotasCargas.post('/cargas/sequenciar', exigirLogin, async (req, res, next) => {
     const payload = resultado.linhas.map(paraPainel);
     payload.forEach((c) => emitirCarga('carga:atualizada', c));
     return res.json({ cargas: payload, renumeradas: resultado.mudancas });
+  } catch (e) { return next(e); }
+});
+
+/* ---------------------------------------------------------------------
+   POST /api/cargas/fila/reorganizar — fechar os buracos da fila do dia
+   ---------------------------------------------------------------------
+   PEDIDO DO DONO (17/09/2026): "um botão de 'reorganizar por sequência' em
+   todas essas áreas, que funcione corretamente".
+
+   O BOTÃO JÁ EXISTIA NA PROGRAMAÇÃO DO DIA e não reorganizava nada — só
+   redesenhava a tela (que já desenhava ordenada) e avisava sucesso. Ver
+   `filaNormalizada` em dominio/cargas.js para a decisão inteira.
+
+   UMA TRANSAÇÃO, PELO MESMO MOTIVO DE /sequenciar: renumerar quinze cargas
+   em quinze requisições é a família da ocorrência #16, e com duas pessoas
+   mexendo a fila embaralha. Ou a fila inteira fica na ordem nova, ou nada
+   muda.
+
+   O DIA VEM NO CORPO, não da carga: aqui não há carga movida. É o dia que a
+   tela está mostrando — e por isso ele é obrigatório: reorganizar "o dia de
+   hoje" quando a pessoa está olhando amanhã renumeraria uma fila que ela
+   não está vendo. */
+rotasCargas.post('/cargas/fila/reorganizar', exigirLogin, async (req, res, next) => {
+  try {
+    const op = req.operador;
+    if (!podeSequenciar(op.setor)) {
+      return res.status(403).json({
+        erro: `O setor ${op.setor} não reordena a fila de carregamento.`,
+        codigo: 'SETOR_SEM_PERMISSAO',
+      });
+    }
+    const dia = String(req.body?.dia ?? '').trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dia)) {
+      return res.status(400).json({
+        erro: 'Informe o dia da fila (AAAA-MM-DD).', codigo: 'DIA_INVALIDO',
+      });
+    }
+
+    const resultado = await emTransacao(async (cli) => {
+      /* A MESMA FILA, LIDA DO MESMO JEITO E COM A MESMA TRAVA que
+         /sequenciar usa. Ler diferente aqui faria o botão reorganizar uma
+         fila que não é a que o arrasto move. */
+      const { rows: fila } = await cli.query(
+        `SELECT carga_id AS id, sequencia
+           FROM fact_viagens
+          WHERE excluida_em IS NULL
+            AND status_atual = ANY($1)
+            AND date(COALESCE(programado_em, criado_em)) = date($2)
+          ORDER BY sequencia NULLS LAST, criado_em
+          FOR UPDATE`,
+        [STATUS_QUE_AINDA_CARREGAM, dia]
+      );
+      if (!fila.length) return { vazia: true };
+
+      const { rows: fora } = await cli.query(
+        `SELECT sequencia
+           FROM fact_viagens
+          WHERE excluida_em IS NULL
+            AND NOT (status_atual = ANY($1))
+            AND sequencia IS NOT NULL
+            AND date(COALESCE(programado_em, criado_em)) = date($2)`,
+        [STATUS_QUE_AINDA_CARREGAM, dia]
+      );
+
+      const mudancas = filaNormalizada(fila, fora.map((r) => r.sequencia));
+      for (const m of mudancas) {
+        await cli.query(
+          `UPDATE fact_viagens
+              SET sequencia = $1, operador_id = $2, operador_nome = $3, operador_setor = $4
+            WHERE carga_id = $5`,
+          [m.sequencia, op.id, op.nome, op.setor, m.id]
+        );
+      }
+      /* NOTA, NÃO MOVIMENTAÇÃO — e isto não é detalhe.
+
+         `gravarEvento` escreve nas DUAS tabelas: o log e a
+         `fact_statusfrota`, que é a tabela FATO do Power BI e a base de
+         todo indicador de tempo do pátio. Reorganizar a fila não é o
+         caminhão andando: gravar "fila reorganizada" como status faria
+         cada clique neste botão virar uma movimentação inventada nos
+         indicadores da diretoria.
+
+         (A rota /sequenciar ainda grava `posição N` como status. É um
+         defeito conhecido e anterior a esta mudança — tem linhas em
+         produção e a limpeza precisa de decisão do dono. Não vou aumentá-lo
+         aqui.)
+
+         UM registro para a fila inteira, preso à PRIMEIRA carga renumerada:
+         `log_eventos.carga_id` aceita nulo, mas `acao` sozinha sem âncora
+         não aparece em histórico nenhum. Quinze linhas esconderiam a
+         decisão em vez de registrá-la. */
+      if (mudancas.length) {
+        await gravarNota(cli, {
+          cargaId: mudancas[0].id, placa: '', operador: op,
+          acao: `Fila de ${dia} reorganizada por sequência: ${mudancas.length} de ${fila.length} carga(s) renumerada(s)`,
+        });
+      }
+      const { rows } = await cli.query(
+        `SELECT ${COLUNAS_CARGA} FROM fact_viagens WHERE carga_id = ANY($1)`,
+        [mudancas.map((m) => m.id)]
+      );
+      return { linhas: rows, mudancas: mudancas.length, total: fila.length };
+    });
+
+    if (resultado.vazia) {
+      return res.json({ cargas: [], renumeradas: 0, total: 0 });
+    }
+    const payload = resultado.linhas.map(paraPainel);
+    payload.forEach((c) => emitirCarga('carga:atualizada', c));
+    return res.json({ cargas: payload, renumeradas: resultado.mudancas, total: resultado.total });
   } catch (e) { return next(e); }
 });
 

@@ -175,12 +175,41 @@ async def main():
     ck('e ninguém ficou com número repetido',
        len(set(pos.values())) == len(pos), str(sorted(pos.values())))
 
-    print('\n=== 4. POSIÇÃO FORA DA FILA É RECUSADA, DIZENDO AS VÁLIDAS ===')
+    print('\n=== 4. DIGITAR UM NÚMERO QUE A FILA NÃO TEM (17/09/2026) ===')
+    # A REGRA MUDOU POR ORDEM DO DONO — causa 1, teste velho. Ate 17/09 este
+    # teste exigia que 999 fosse RECUSADO com a lista de posicoes validas.
+    # Foi essa trava que parou a operacao: "ele esta tentando mudar o 9 para
+    # o 7, mas nao funciona. Ate o 6 funciona na sequencia". A Montagem usa a
+    # MESMA filaReordenada da Torre, entao a trava valia aqui tambem.
     st, e = http(f'/api/montagem/{ids[0]}/sequenciar', token=token,
-                 metodo='POST', corpo={'posicao': 999})
-    ck('recusa a posição solta', st == 400, f'HTTP {st}')
-    ck('e a mensagem nomeia as posições válidas',
-       'válidas' in str((e or {}).get('erro', '')), str((e or {}).get('erro'))[:90])
+                 metodo='POST', corpo={'posicao': 9})
+    ck('digitar um numero que a fila nao tem e ACEITO', st == 200, f'HTTP {st} {e}')
+    st, dia = http(f'/api/montagem?dia={DIA}', token=token)
+    pos = {m['montagem_id']: m['sequencia'] for m in (dia or {}).get('montagens', [])}
+    ck('a linha ficou exatamente com o numero digitado', pos.get(ids[0]) == 9, str(pos.get(ids[0])))
+    ck('e ninguem mais foi renumerado',
+       pos.get(ids[2]) == 1 and pos.get(ids[1]) == 3,
+       f"esperado 1 e 3, veio {pos.get(ids[2])} e {pos.get(ids[1])}")
+    ck('sem numero repetido', len(set(pos.values())) == len(pos), str(sorted(pos.values())))
+
+    print('\n=== 5. O BOTAO "REORGANIZAR POR SEQUENCIA" FECHA OS BURACOS ===')
+    # Pedido do dono: "um botao de reorganizar por sequencia em todas essas
+    # areas, que funcione corretamente". A fila esta 1, 3, 9 depois do passo
+    # acima — tem que virar 1, 2, 3.
+    st, r = http('/api/montagem/reorganizar', token=token,
+                 metodo='POST', corpo={'dia': DIA})
+    ck('reorganizar responde ok', st == 200, f'HTTP {st} {r}')
+    st, dia = http(f'/api/montagem?dia={DIA}', token=token)
+    pos2 = {m['montagem_id']: m['sequencia'] for m in (dia or {}).get('montagens', [])}
+    ck('a fila virou 1, 2, 3 sem buraco', sorted(pos2.values()) == [1, 2, 3], str(sorted(pos2.values())))
+    ck('e a ordem foi preservada (quem era 1 continua 1)', pos2.get(ids[2]) == 1, str(pos2.get(ids[2])))
+    ck('quem era 3 virou 2', pos2.get(ids[1]) == 2, str(pos2.get(ids[1])))
+    ck('quem era 9 virou 3', pos2.get(ids[0]) == 3, str(pos2.get(ids[0])))
+
+    st, r2 = http('/api/montagem/reorganizar', token=token,
+                  metodo='POST', corpo={'dia': DIA})
+    ck('rodar de novo nao muda nada, e DIZ que nao mudou',
+       st == 200 and (r2 or {}).get('mexidas') == 0, f"HTTP {st} mexidas={(r2 or {}).get('mexidas')}")
 
     psql(f"DELETE FROM programacao_montagem WHERE data_prog = '{DIA}';")
     psql(f"DELETE FROM operadores WHERE email = '{EMAIL}';")

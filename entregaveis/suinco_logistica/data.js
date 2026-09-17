@@ -186,6 +186,88 @@ function rotasParaEscolher(){
   return ROTAS.filter(r => r.ativa !== false);
 }
 
+/* QUANTIDADE DIGITADA POR GENTE QUE ESCREVE EM PORTUGUÊS (17/09/2026).
+
+   RELATO DO DONO: "Não estou conseguindo inserir o valor completo, 27.284;
+   está aparecendo apenas 27".
+
+   MEDIDO num `<input type="number" step="1">`, que é o que o painel usava
+   em TODO campo de quantidade:
+
+     digitado "27.284"  ->  value "27.284"  ->  Number 27.284  ->  27
+     digitado "27,284"  ->  value ""        ->  o campo esvazia
+     digitado "1.250"   ->  value "1.250"   ->  Number 1.25    ->  1
+
+   As DUAS formas que um brasileiro escreve número quebram. Num campo
+   `type=number` o navegador usa a convenção inglesa: o PONTO é separador
+   decimal, e a VÍRGULA é caractere inválido — ele apaga o conteúdo. Não é
+   defeito de navegador; é o campo errado para o dado.
+
+   O ESTRAGO É SILENCIOSO, que é o pior tipo. Ninguém vê erro: o peso de
+   27 toneladas fica gravado como 27 quilos, e segue para o relatório, para
+   o cálculo de frete e para o indicador como se fosse verdade.
+
+   POR QUE SÓ OS DÍGITOS. Todo campo que chama esta função é INTEIRO no
+   banco — peso em kg, km, ganchos, entregas, sequência. Não existe meio
+   quilo nem meio gancho. Sendo inteiro, "27.284" e "27,284" e "27284" só
+   podem querer dizer a mesma coisa, e jogar fora o que não é dígito é a
+   leitura certa, não um chute.
+
+   NÃO USE ISTO PARA DINHEIRO. Valor em reais tem centavos, e ali o
+   separador decide se são vinte e sete mil ou vinte e sete reais e vinte e
+   oito centavos — é outra função, com outra regra. */
+function quantidadeDigitada(valor){
+  if(valor === null || valor === undefined) return null;
+  const texto = String(valor).trim();
+  if(texto === '') return null;
+  const negativo = texto.startsWith('-');
+  const digitos = texto.replace(/\D+/g, '');
+  if(digitos === '') return null;
+  const n = Number(digitos);
+  if(!Number.isFinite(n)) return null;
+  return negativo ? -n : n;
+}
+
+/* O MESMO PROBLEMA EM CAMPO COM CASAS DECIMAIS (17/09/2026).
+
+   O campo da tarifa de frete tem, escrito nele, `placeholder="Ex: 7,75"` —
+   ensina a digitar com vírgula. E num `type=number` a vírgula é caractere
+   inválido: o navegador ESVAZIA o campo. O painel ensinava a escrever de um
+   jeito e recusava esse jeito em silêncio, numa tela de dinheiro.
+
+   AQUI A REGRA NÃO PODE SER "SÓ OS DÍGITOS", como na quantidade: em
+   dinheiro o separador decide se são sete mil e setenta e cinco ou sete
+   reais e setenta e cinco centavos.
+
+   O QUE ESTA FUNÇÃO MUDA, E O QUE ELA DELIBERADAMENTE NÃO MUDA:
+
+     "7,75"      passa a valer 7.75   — hoje esvazia o campo
+     "1.234,56"  passa a valer 1234.56 — hoje esvazia o campo
+     "7.75"      continua valendo 7.75 — é o que já acontecia
+
+   O último caso é o cuidado. Com vírgula presente, o ponto só pode ser
+   milhar e a leitura é certa. SEM vírgula, "1.234" é ambíguo de verdade —
+   mil duzentos e trinta e quatro para quem escreve em português, um vírgula
+   duzentos e trinta e quatro para o campo de hoje. Adivinhar mudaria em
+   silêncio o valor de quem já digita assim há meses, e mudar preço calado é
+   pior que recusar. Fica como está, e a vírgula passa a ser o caminho certo
+   — que é o que o próprio placeholder já mandava fazer. */
+function valorDigitado(valor){
+  if(valor === null || valor === undefined) return null;
+  let texto = String(valor).trim();
+  if(texto === '') return null;
+  const negativo = texto.startsWith('-');
+  texto = texto.replace(/[^\d.,]/g, '');
+  if(texto === '') return null;
+  if(texto.includes(',')){
+    // Vírgula manda: ela é o decimal, e todo ponto vira separador de milhar.
+    texto = texto.replace(/\./g, '').replace(/,/g, '.');
+  }
+  const n = Number(texto);
+  if(!Number.isFinite(n)) return null;
+  return negativo ? -n : n;
+}
+
 function rotaCurta(codigo){
   const r = rotaInfo(codigo);
   return r ? `${r.codigo} — ${r.nome}` : (codigo ? String(codigo) : '—');
@@ -640,8 +722,11 @@ const KM_POR_DESTINO = new Map();
    de a pessoa já ter clicado. */
 function kmValidoLocal(v){
   if(v === '' || v === null || v === undefined) return null;
-  const n = Number(v);
-  if(!Number.isFinite(n)) return null;
+  /* Passa por `quantidadeDigitada` porque "1.250" é mil duzentos e
+     cinquenta quilômetros para quem digita, e era UM para o `Number()`.
+     Ver o bloco daquela função: o estrago não dava erro, gravava. */
+  const n = quantidadeDigitada(v);
+  if(n === null || !Number.isFinite(n)) return null;
   const i = Math.trunc(n);
   return i > 0 ? i : null;
 }
