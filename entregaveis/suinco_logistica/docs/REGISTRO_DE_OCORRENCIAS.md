@@ -37,6 +37,8 @@ faz achar a próxima em minutos em vez de horas:
 | **O teste que carimba a leitura errada do pedido** | O teste está novo e verde, e mede exatamente o que foi escrito — só que o pedido foi entendido ao contrário. Verde prova que o código faz o que o teste diz, não que a regra está certa. Mudança que REMOVE algo da tela precisa do teste que garante que o trabalho de quem usava aquilo ainda é possível. | #23 |
 | **Dois fatos com prazos diferentes tratados como um só** | Cada dado está certo no seu lugar; o defeito nasce de perguntar a um deles algo que só o outro sabe (`DB.operador` no localStorage vive para sempre; o token no sessionStorage morre com a aba). Reconhece-se assim: o mesmo relato volta com roupa nova depois de cada correção. Corrigir no nível do sintoma nunca fecha. | #25 |
 | **Teste que mede o proxy, não a regra** | O teste confere um sintoma fácil de medir ("a aba aparece?", "quantas linhas?") em vez da garantia real, ou monta um cenário que deixou de corresponder ao sistema. Quando o sintoma muda por um motivo legítimo, ele fica vermelho sem que nada tenha quebrado — e aponta para o lugar errado. | #15, #22 |
+| **Decisão aplicada no nível errado** | A intenção está certa e o alvo não. Proibir quebra na TABELA quando bastava na linha; gravar por LINHA quando bastava por lote; desligar `animation` quando o que apagava o conteúdo no papel era o estado de repouso. Reconhece-se assim: o sintoma aparece longe da causa, e a correção não é remover a regra — é descê-la um nível. | #71, #72, #74 |
+| **Enfeite no caminho crítico** | A animação espera, e o trabalho espera atrás dela. Nada fica errado: fica mais lento, e o teste reprova numa conferência de DADO ("a rota aparece na tabela?") que aponta para o lugar errado. Movimento anda ao lado do trabalho, nunca na frente. | #74 |
 
 ---
 
@@ -3432,3 +3434,83 @@ registra 'Descarga Conferida'. Quem faz esse passo: Expedição ou
 Logística."*). A metade que NÃO depende do servidor — o clique mandar a
 transição certa — passa a valer assim que o painel publica, e já destrava a
 sobra para Expedição, Logística e Administração.
+## #74 — Dois defeitos que o movimento novo criou, pegos antes de subir (16/09/2026)
+
+**Pedido do dono:** *"quero um sistema com cara nova, COM ANIMAÇÕES,
+FLUIDEZ. Tudo de preview que você me mostrou seja aplicado em seu devido
+lugar."* E, no meio do trabalho, o aviso que mudou a forma da entrega:
+*"SEM MEXER NO RELATÓRIO. SEM ATRAPALHAR O RELATÓRIO."*
+
+Nenhum dos dois defeitos abaixo chegou à operação. Os dois foram achados
+pelo teste escrito junto com a mudança, e ficam registrados porque são de
+FAMÍLIA, não de detalhe: quem for animar a próxima tela vai tropeçar nos
+mesmos dois lugares.
+
+### DEFEITO 1 — repouso invisível é faixa em branco no papel
+
+A linha que "sai do pátio" fecha o próprio espaço: altura a zero, celas sem
+espaçamento, conteúdo escondido. Na tela isso dura 90 ms e some junto com a
+linha. No PAPEL não existe duração — só existe o estado.
+
+O servidor gera os PDFs com ESTE mesmo `styles.css`
+(`backend/src/servicos/pdf.js` manda `{html, css}` ao Chromium). Desligar só
+`animation` e `transition` em `@media print` NÃO bastava: o que deixava a
+linha com zero de altura não era a animação, eram as declarações de repouso
+(`height`, `padding`, `font-size`, `display:none` nos filhos) e o `height`
+escrito em linha pelo JavaScript. Medido no teste: **0 px de altura no
+papel**, ou seja, uma faixa em branco no lugar de um registro.
+
+É a **#72 por outra porta** — decisão de papel aplicada no nível errado —,
+e a regra que fica é mais curta que a explicação:
+
+> Em `@media print`, desligar o movimento NÃO é desligar `animation` e
+> `transition`. É devolver TODO estado de repouso ao visível: altura,
+> opacidade, deslocamento, espaçamento e conteúdo. E o estilo em linha só
+> se desfaz com `!important`.
+
+A mesma correção vale para `prefers-reduced-motion`, e pelo mesmo motivo:
+sem movimento, a classe que apagava a linha continuaria apagando-a — quem
+pediu menos movimento receberia menos PAINEL.
+
+### DEFEITO 2 — animação no caminho crítico atrasa o trabalho
+
+O botão que conta ("Salvar → Salvando… → ✓ Salvo") esperava as duas trocas
+de texto — 200 ms cada — antes de devolver o controle a quem chamou. Como o
+`renderAll()` do cadastro vem depois disso, a tabela de Rotas passou a ser
+redesenhada **400 ms mais tarde**.
+
+`test_cadastrar_rota` reprovou em "a rota nova aparece na tabela do card". A
+rota estava certa, gravada e no servidor: a TABELA é que ainda não tinha
+sido desenhada. Vermelho de **regressão de verdade** (causa 4 das quatro),
+com cara de teste velho — e tratar como teste velho teria publicado um
+painel quatro décimos mais lento em cada gravação.
+
+> Animação anda AO LADO do trabalho, nunca na frente dele. A promessa que a
+> função devolve resolve quando a TAREFA resolve; o botão conta por fora.
+
+Com trocas soltas, duas podem se atropelar quando o servidor responde em
+50 ms — por isso cada troca leva uma senha e só a mais recente escreve o
+texto. Botão parado no texto errado é pior que botão sem animação.
+
+### O TESTE
+
+`testes/test_movimento_do_painel.py`, em oito seções — uma por movimento,
+mais o papel e o movimento reduzido. Reprova em 32 conferências contra o
+painel publicado. As que importam para esta ocorrência:
+
+- *"no papel, a linha continua tendo altura — não sai como faixa em branco"*
+  (a tabela de prova fica FORA das abas: em impressão `.tab-page` inteira é
+  `display:none`, e medir lá responderia zero por outro motivo);
+- *"no papel, NADA nasce transparente"* e *"o visto sai DESENHADO"*;
+- *"com movimento reduzido, a linha não desliza nem some"*;
+- os tetos de tempo, medidos em quadros e não no que o CSS declara.
+
+**CONFERIDO QUE NÃO QUEBROU O PAPEL:** `test_documento_nao_sai_pagina_em_branco`,
+`guarda_do_padrao_papel`, `test_relatorios`, `test_relatorio_sem_paginas_brancas`,
+`test_relatorio_uma_pagina`, `test_css_do_relatorio`, `test_relatorio_fiel_ao_painel`,
+`test_relatorio_na_sequencia`, `test_relatorio_manobrista`,
+`test_fonte_relatorio_embutida`, `test_operador_no_relatorio_operacional` e
+`test_devolucoes_checklist` passam. E os PDFs foram gerados DE VERDADE pelo
+servidor, com 26 cargas: Operacional 2 páginas, Executivo 3, Fretes 2,
+Manobrista 1 — o MESMO número de páginas do painel publicado, e nenhuma
+página em branco nos dois.
