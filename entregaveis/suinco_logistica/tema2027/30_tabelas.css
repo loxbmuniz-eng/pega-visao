@@ -1,6 +1,36 @@
 /* Tema 2027 — Etapa 4: Tabelas.
    Dona de: table, th, td, tbody tr:nth-child(even), tr:hover td, #torre-tbody,
    .c-peso/.c-entregas/.c-ganchos/.num-forte, .table-wrap.
-   Vazio até a Etapa 4 preencher. Ver VEREDITO.md seção 6. */
+   Não toca: #torre-tabela th/td (padding calibrado, styles.css linha 5958 —
+   vence por id), td input/td select (Etapa 5), .mobile-cartao.
+   Valores exatos do VEREDITO.md, seção 6, Etapa 4. */
 @media screen{
+table{ font-size:13px }
+th{ background:var(--vidro-bg-forte); color:var(--gold-text); padding:6px 8px;
+  font-size:10.5px; font-weight:800; letter-spacing:0; text-transform:uppercase;
+  border-bottom:1px solid var(--gold-dim) }
+  /* letter-spacing:0 em vez do .03em do VEREDITO — conferido (ver relato):
+     com .03em, "Programação · Última etapa" (Torre, coluna calibrada de
+     92px) e "Ganchos"/"Entregas" (Montagem) cortavam (scrollWidth >
+     clientWidth). O próprio VEREDITO.md, Etapa 4, "Conferir", já previa
+     este caso e manda esta correção: "se estourar, letter-spacing:0 e
+     relatar". Medido de novo com 0: nenhum corte nas duas tabelas, nos
+     dois temas (testes/test_tema2027_etapa4_tabelas.py). */
+td{ padding:5px 8px; border-bottom:1px solid var(--linha-fio) }
+tbody tr:nth-child(even){ background:var(--linha-fio) }
+tr:hover td{ background:var(--acento-hover) }
+
+/* 4b — a linha com caminhão parado no portão acende: fundo da linha + barra SÓ na primeira célula */
+#torre-tbody tr:has(.badge-aguardando-veiculo) > td{ background:rgba(198,40,40,.10) }
+#torre-tbody tr:has(.badge-aguardando-veiculo):hover > td{ background:rgba(198,40,40,.14) }
+#torre-tbody tr:has(.badge-aguardando-veiculo) > td:first-child{
+  box-shadow:inset 3px 0 0 var(--st-aguardando-veiculo-bg) }
+}
+@media screen and (min-width:821px){
+  /* 4c OPCIONAL — quantidade alinhada à direita, como o PDF já faz. Nunca na Torre (inputs centrados por id). */
+  td.c-peso, td.c-entregas, td.c-ganchos, td.num-forte, th.c-peso, th.c-entregas, th.c-ganchos{
+    text-align:right; font-variant-numeric:tabular-nums }
+}
+@media screen and (max-width:820px){
+  #torre-tbody tr:has(.badge-aguardando-veiculo) > td:first-child{ box-shadow:none }  /* no cartão do celular a barra some; fica o fundo */
 }
