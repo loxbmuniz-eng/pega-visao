@@ -1,5 +1,55 @@
 /* Tema 2027 — Etapa 1: Tokens (cor de estrutura, raio, sombra, escala).
    Dona de: :root, :root[data-tema="claro"], body, body::before.
-   Vazio até a Etapa 1 preencher. Ver VEREDITO.md seção 6. */
+   Valores exatos de VEREDITO.md, seção 6, Etapa 1. Não editar sem
+   atualizar lá também. */
 @media screen{
+:root{
+  /* superfície opaca: o vidro sai (custa GPU no tablet do pátio e não é 2027) */
+  --vidro-bg:#1e2a52;
+  --vidro-bg-forte:#2a3a6c;
+  --vidro-borda:rgba(151,168,214,.22);
+  --vidro-brilho:rgba(255,255,255,0);
+  --vidro-sombra:0 1px 2px rgba(4,8,18,.45);
+  --vidro-borrao:none;
+  /* estrutura (grade, divisória, contorno) em azul-acinzentado — dourado vira significado */
+  --border:rgba(151,168,214,.28);
+  --border-soft:rgba(151,168,214,.14);
+  --linha-fio:rgba(151,168,214,.09);
+  --shadow:0 2px 8px rgba(4,8,18,.45);
+  /* preenchimento de estado (hover / ativo), dourado da marca em véu */
+  --acento-hover:rgba(233,185,84,.09);
+  --acento-ativo:rgba(233,185,84,.16);
+  /* geometria: canto vivo, não pílula */
+  --radius:6px;
+  --radius-sm:4px;
+  --radius-lg:10px;
+  /* ambiente quase mudo — presença de marca, não decoração */
+  --amb-ouro:rgba(233,185,84,.05);
+  --amb-azul:rgba(55,74,134,.10);
+  --amb-vinho:rgba(143,31,38,.03);
+  /* escala numérica um degrau abaixo (compactação) */
+  --fs-numero:24px;
+  --fs-numero-grande:30px;
+  /* --sp-* NÃO mudam nesta rodada: gap de grade desloca campo de formulário no eixo x (chão 1) */
+  --curva:cubic-bezier(.22,.61,.36,1);
+}
+:root[data-tema="claro"]{
+  --vidro-bg:#eff3f9;
+  --vidro-bg-forte:#f6f9fc;
+  --vidro-borda:rgba(32,44,74,.16);
+  --vidro-brilho:rgba(255,255,255,0);
+  --vidro-sombra:0 1px 2px rgba(16,22,37,.10);
+  --vidro-borrao:none;
+  --border:rgba(32,44,74,.22);
+  --border-soft:rgba(32,44,74,.11);
+  --linha-fio:rgba(32,44,74,.065);
+  --shadow:0 2px 8px rgba(16,22,37,.10);
+  --acento-hover:rgba(26,32,45,.05);
+  --acento-ativo:rgba(233,185,84,.20);
+  --amb-ouro:rgba(233,185,84,.03);
+  --amb-azul:rgba(55,74,134,.02);
+  --amb-vinho:rgba(143,31,38,.015);
+}
+body{ line-height:1.35 }
+body::before{ opacity:.5 }
 }
