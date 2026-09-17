@@ -6,23 +6,31 @@
    Valores exatos do VEREDITO.md, seção 6, Etapa 4. */
 @media screen{
 table{ font-size:13px }
+/* RODADA 2 — O CABEÇALHO VOLTA À CAIXA NORMAL, E O PORQUÊ FICA AQUI.
+   A caixa alta com peso 800 alargava "Programação · Última etapa" para 93px
+   numa coluna de 92 (a 1440) e de 80 (a 1280), e "Ganchos"/"Entregas" da
+   Montagem em 10 e 12px — colunas que o dono calibrou à mão e que já
+   estavam com folga zero. Mais: `text-transform` muda o que `innerText`
+   devolve, e `'Cliente' not in cabecalhos` (test_auditoria_refino.py) passa
+   a ficar CEGO — uma asserção negativa que passa mentindo. Rótulo de
+   estrutura aqui é cor + tamanho + peso, nunca caixa. Peso 700 e nada de
+   letter-spacing: são os valores da base, então nenhum `th` fica mais largo
+   do que o publicado, em nenhuma tabela. 11px é o piso do celular
+   (test_auditoria_mobile.py) — a Torre e a Montagem têm 10px por id e não
+   mudam; as tabelas sem id (Indicadores, Cadastros, Histórico) descem de
+   13,5px para 11px, que é a compactação pedida. */
 th{ background:var(--vidro-bg-forte); color:var(--gold-text); padding:6px 8px;
-  font-size:10.5px; font-weight:800; letter-spacing:0; text-transform:uppercase;
-  border-bottom:1px solid var(--gold-dim) }
-  /* letter-spacing:0 em vez do .03em do VEREDITO — conferido (ver relato):
-     com .03em, "Programação · Última etapa" (Torre, coluna calibrada de
-     92px) e "Ganchos"/"Entregas" (Montagem) cortavam (scrollWidth >
-     clientWidth). O próprio VEREDITO.md, Etapa 4, "Conferir", já previa
-     este caso e manda esta correção: "se estourar, letter-spacing:0 e
-     relatar". Medido de novo com 0: nenhum corte nas duas tabelas, nos
-     dois temas (testes/test_tema2027_etapa4_tabelas.py). */
+  font-size:11px; font-weight:700; border-bottom:1px solid var(--gold-dim) }
 td{ padding:5px 8px; border-bottom:1px solid var(--linha-fio) }
 tbody tr:nth-child(even){ background:var(--linha-fio) }
 tr:hover td{ background:var(--acento-hover) }
 
-/* 4b — a linha com caminhão parado no portão acende: fundo da linha + barra SÓ na primeira célula */
-#torre-tbody tr:has(.badge-aguardando-veiculo) > td{ background:rgba(198,40,40,.10) }
-#torre-tbody tr:has(.badge-aguardando-veiculo):hover > td{ background:rgba(198,40,40,.14) }
+/* 4b — a linha com caminhão parado no portão acende: fundo da linha + barra SÓ na primeira célula.
+   Valores por tema em 00_tokens.css (--t27-acesa*). A zebra é cancelada NA LINHA ACESA:
+   dois véus empilhados (zebra + vermelho) foi o que derrubou o tipo de veículo a 4,03:1 no claro. */
+#torre-tbody tr:has(.badge-aguardando-veiculo){ background:transparent }
+#torre-tbody tr:has(.badge-aguardando-veiculo) > td{ background:var(--t27-acesa) }
+#torre-tbody tr:has(.badge-aguardando-veiculo):hover > td{ background:var(--t27-acesa-hover) }
 #torre-tbody tr:has(.badge-aguardando-veiculo) > td:first-child{
   box-shadow:inset 3px 0 0 var(--st-aguardando-veiculo-bg) }
 }

@@ -13,7 +13,11 @@
 .stat-box::before{ display:none }                          /* véu dourado do topo sai */
 .stat-box:hover{ box-shadow:var(--vidro-sombra) }
 .stat-num{ letter-spacing:-.02em; line-height:1.05 }
-.stat-label{ font-size:11px; font-weight:700; letter-spacing:.02em }
+/* RODADA 2: sem letter-spacing. O .02em era genérico e alcançava o rótulo da
+   faixa (a base só fixa o tamanho lá): "Aguardando Embarque" passou a quebrar
+   em duas linhas na caixa de 166px a 1440 — no publicado cabia numa. A ordem
+   da Etapa 3 já era "se quebrar, letter-spacing 0". */
+.stat-label{ font-size:11px; font-weight:700 }
 .stat-note{ font-size:10px }
 .stat-clicavel:hover{ background:var(--acento-hover) }
 .stat-ativo{ background:var(--acento-ativo);
@@ -52,6 +56,20 @@
    Com o bloco, a faixa do celular usa a compactação de sempre e o desktop
    recebe exatamente os valores do VEREDITO. */
 @media screen and (min-width:641px){
+  /* RODADA 2 — O BURACO DA FAIXA. A grade `auto-fit` da base dá 7 colunas
+     a 1162px; a Torre põe 11 células (dois destaques de 2 + sete caixas), e a
+     segunda linha fica com 4 delas e 3 vazias — um retângulo morto de ~500px
+     ao lado de "Entradas sem carga". Grade não estica a última linha; flex
+     estica. Aqui o `grid-template-columns` da base NÃO é tocado: a faixa
+     vira flex-wrap só a partir de 641px, com a mesma base de 134px por caixa
+     e o dobro no destaque, então a PRIMEIRA linha sai pixel-igual à grade
+     (332/166px medidos) e só a última cresce até a borda. No celular
+     (≤640px) continua a grade de 3 colunas da base. `stat-destaque` mantém o
+     `display:grid` interno (número | traço); `grid-column` é ignorado em flex. */
+  .bento.bi-faixa{ display:flex; flex-wrap:wrap }
+  .bento.bi-faixa .stat-box{ flex:1 1 134px; min-width:0 }
+  .bento.bi-faixa .stat-destaque{ flex:2 1 268px }
+
   .bento.bi-faixa .stat-box{ padding:8px 12px 8px 14px }
   .bento.bi-faixa .stat-num{ font-size:22px }
   .bento.bi-faixa .stat-destaque .stat-label{ font-size:11.5px }

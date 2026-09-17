@@ -1,0 +1,4467 @@
+{
+ "1440": {
+  "escuro": {
+   "torre": {
+    "pos": {
+     "header": [
+      0,
+      0,
+      1440,
+      72
+     ],
+     "nav": [
+      0,
+      72,
+      208,
+      828
+     ],
+     "main": [
+      208,
+      86,
+      1232,
+      2762
+     ],
+     "card1": [
+      226,
+      86,
+      1196,
+      1893
+     ],
+     "thead": [
+      241,
+      427,
+      1166,
+      36
+     ],
+     "tr1": [
+      241,
+      463,
+      1166,
+      91
+     ]
+    },
+    "posFixo": {
+     "header": "fixed",
+     "nav": "fixed",
+     "headerBlur": "none",
+     "navBlur": "none"
+    },
+    "thTorre": [
+     {
+      "i": 0,
+      "txt": "Seq.",
+      "x": 241,
+      "w": 66,
+      "h": 36,
+      "sw": 66,
+      "cw": 66,
+      "fs": "10px",
+      "fw": "700",
+      "tt": "none",
+      "ls": "normal",
+      "linhas": 3
+     },
+     {
+      "i": 1,
+      "txt": "Nº Carga",
+      "x": 307,
+      "w": 90,
+      "h": 36,
+      "sw": 90,
+      "cw": 90,
+      "fs": "10px",
+      "fw": "700",
+      "tt": "none",
+      "ls": "normal",
+      "linhas": 3
+     },
+     {
+      "i": 2,
+      "txt": "Veículo",
+      "x": 397,
+      "w": 107,
+      "h": 36,
+      "sw": 107,
+      "cw": 107,
+      "fs": "10px",
+      "fw": "700",
+      "tt": "none",
+      "ls": "normal",
+      "linhas": 3
+     },
+     {
+      "i": 3,
+      "txt": "Motorista",
+      "x": 504,
+      "w": 104,
+      "h": 36,
+      "sw": 104,
+      "cw": 104,
+      "fs": "10px",
+      "fw": "700",
+      "tt": "none",
+      "ls": "normal",
+      "linhas": 3
+     },
+     {
+      "i": 4,
+      "txt": "Rota",
+      "x": 608,
+      "w": 107,
+      "h": 36,
+      "sw": 107,
+      "cw": 107,
+      "fs": "10px",
+      "fw": "700",
+      "tt": "none",
+      "ls": "normal",
+      "linhas": 3
+     },
+     {
+      "i": 5,
+      "txt": "Peso (kg)",
+      "x": 715,
+      "w": 78,
+      "h": 36,
+      "sw": 78,
+      "cw": 78,
+      "fs": "10px",
+      "fw": "700",
+      "tt": "none",
+      "ls": "normal",
+      "linhas": 3
+     },
+     {
+      "i": 6,
+      "txt": "Palet.",
+      "x": 793,
+      "w": 69,
+      "h": 36,
+      "sw": 69,
+      "cw": 69,
+      "fs": "10px",
+      "fw": "700",
+      "tt": "none",
+      "ls": "normal",
+      "linhas": 3
+     },
+     {
+      "i": 7,
+      "txt": "Tipo de Operação",
+      "x": 862,
+      "w": 95,
+      "h": 36,
+      "sw": 95,
+      "cw": 95,
+      "fs": "10px",
+      "fw": "700",
+      "tt": "none",
+      "ls": "normal",
+      "linhas": 3
+     },
+     {
+      "i": 8,
+      "txt": "Ganchos · Entr.",
+      "x": 957,
+      "w": 78,
+      "h": 36,
+      "sw": 78,
+      "cw": 78,
+      "fs": "10px",
+      "fw": "700",
+      "tt": "none",
+      "ls": "normal",
+      "linhas": 3
+     },
+     {
+      "i": 9,
+      "txt": "Status",
+      "x": 1035,
+      "w": 171,
+      "h": 36,
+      "sw": 171,
+      "cw": 171,
+      "fs": "10px",
+      "fw": "700",
+      "tt": "none",
+      "ls": "normal",
+      "linhas": 3
+     },
+     {
+      "i": 10,
+      "txt": "Programação · Última etapa",
+      "x": 1205,
+      "w": 92,
+      "h": 36,
+      "sw": 92,
+      "cw": 92,
+      "fs": "10px",
+      "fw": "700",
+      "tt": "none",
+      "ls": "normal",
+      "linhas": 3
+     },
+     {
+      "i": 11,
+      "txt": "Ação",
+      "x": 1298,
+      "w": 109,
+      "h": 36,
+      "sw": 109,
+      "cw": 109,
+      "fs": "10px",
+      "fw": "700",
+      "tt": "none",
+      "ls": "normal",
+      "linhas": 3
+     }
+    ],
+    "thMont": [],
+    "cortes": {
+     "badge": [],
+     "btn": [],
+     "statLabel": [],
+     "th": [],
+     "navTab": []
+    },
+    "wraps": [
+     {
+      "sw": 1166,
+      "cw": 1166,
+      "tabela": "torre-tabela"
+     },
+     {
+      "sw": 1166,
+      "cw": 1166,
+      "tabela": ""
+     }
+    ],
+    "faixa": {
+     "h": 175,
+     "caixas": 9,
+     "cols": 3,
+     "linhas": 2,
+     "buracos": -1,
+     "rotulos": [
+      [
+       "Cargas em aberto",
+       1,
+       false,
+       333
+      ],
+      [
+       "Aguardando Veículo",
+       1,
+       false,
+       166
+      ],
+      [
+       "Aguardando Embarque",
+       1,
+       false,
+       166
+      ],
+      [
+       "Embarque Iniciado",
+       1,
+       false,
+       166
+      ],
+      [
+       "Embarque Finalizado",
+       1,
+       false,
+       166
+      ],
+      [
+       "Faturado",
+       1,
+       false,
+       166
+      ],
+      [
+       "Seguiu Viagem hoje",
+       1,
+       false,
+       582
+      ],
+      [
+       "Programação anterior",
+       1,
+       false,
+       291
+      ],
+      [
+       "Entradas sem carga",
+       1,
+       false,
+       291
+      ]
+     ]
+    },
+    "pequenos": [
+     {
+      "t": "= igual a ontem",
+      "f": 10.5
+     },
+     {
+      "t": "Aguardando Veículo",
+      "f": 10.5
+     },
+     {
+      "t": "25% do pátio",
+      "f": 10
+     },
+     {
+      "t": "Aguardando Embarque",
+      "f": 10.5
+     },
+     {
+      "t": "19% do pátio",
+      "f": 10
+     },
+     {
+      "t": "Embarque Iniciado",
+      "f": 10.5
+     },
+     {
+      "t": "19% do pátio",
+      "f": 10
+     },
+     {
+      "t": "Embarque Finalizado",
+      "f": 10.5
+     }
+    ],
+    "titulos": [
+     {
+      "t": "Torre de Controle — todas as",
+      "h": 18,
+      "fs": "13px",
+      "linhas": 1
+     },
+     {
+      "t": "Visão do Pátio — linha do te",
+      "h": 18,
+      "fs": "13px",
+      "linhas": 1
+     }
+    ],
+    "fonts": {
+     "th": "10px",
+     "td": "12.5px",
+     "cardTitle": "13px",
+     "statNum": "30px",
+     "body": "-apple-system, BlinkMacSystemF"
+    },
+    "scroll": [
+     1440,
+     1440
+    ],
+    "cardBg": "rgb(30, 42, 82)",
+    "contraste_baixo": []
+   },
+   "programacao": {
+    "pos": {
+     "header": [
+      0,
+      0,
+      1440,
+      72
+     ],
+     "nav": [
+      0,
+      72,
+      208,
+      828
+     ],
+     "main": [
+      208,
+      86,
+      1232,
+      2069
+     ],
+     "card1": [
+      226,
+      86,
+      1196,
+      547
+     ],
+     "thead": [
+      241,
+      226,
+      1166,
+      27
+     ],
+     "tr1": [
+      241,
+      253,
+      1166,
+      95
+     ]
+    },
+    "posFixo": {
+     "header": "fixed",
+     "nav": "fixed",
+     "headerBlur": "none",
+     "navBlur": "none"
+    },
+    "thTorre": [],
+    "thMont": [
+     {
+      "i": 0,
+      "txt": "Seq.",
+      "x": 241,
+      "w": 71,
+      "h": 36,
+      "sw": 71,
+      "cw": 71,
+      "fs": "10px",
+      "fw": "700",
+      "tt": "none",
+      "ls": "normal",
+      "linhas": 3
+     },
+     {
+      "i": 1,
+      "txt": "Nº Carga",
+      "x": 312,
+      "w": 80,
+      "h": 36,
+      "sw": 80,
+      "cw": 80,
+      "fs": "10px",
+      "fw": "700",
+      "tt": "none",
+      "ls": "normal",
+      "linhas": 3
+     },
+     {
+      "i": 2,
+      "txt": "Veículo",
+      "x": 392,
+      "w": 102,
+      "h": 36,
+      "sw": 102,
+      "cw": 102,
+      "fs": "10px",
+      "fw": "700",
+      "tt": "none",
+      "ls": "normal",
+      "linhas": 3
+     },
+     {
+      "i": 3,
+      "txt": "Motorista",
+      "x": 494,
+      "w": 97,
+      "h": 36,
+      "sw": 97,
+      "cw": 97,
+      "fs": "10px",
+      "fw": "700",
+      "tt": "none",
+      "ls": "normal",
+      "linhas": 3
+     },
+     {
+      "i": 4,
+      "txt": "Rota",
+      "x": 591,
+      "w": 116,
+      "h": 36,
+      "sw": 116,
+      "cw": 116,
+      "fs": "10px",
+      "fw": "700",
+      "tt": "none",
+      "ls": "normal",
+      "linhas": 3
+     },
+     {
+      "i": 5,
+      "txt": "Peso (kg)",
+      "x": 707,
+      "w": 80,
+      "h": 36,
+      "sw": 80,
+      "cw": 80,
+      "fs": "10px",
+      "fw": "700",
+      "tt": "none",
+      "ls": "normal",
+      "linhas": 3
+     },
+     {
+      "i": 6,
+      "txt": "Palet.",
+      "x": 787,
+      "w": 83,
+      "h": 36,
+      "sw": 83,
+      "cw": 83,
+      "fs": "10px",
+      "fw": "700",
+      "tt": "none",
+      "ls": "normal",
+      "linhas": 3
+     },
+     {
+      "i": 7,
+      "txt": "Tipo de Operação",
+      "x": 870,
+      "w": 102,
+      "h": 36,
+      "sw": 102,
+      "cw": 102,
+      "fs": "10px",
+      "fw": "700",
+      "tt": "none",
+      "ls": "normal",
+      "linhas": 3
+     },
+     {
+      "i": 8,
+      "txt": "Ganchos",
+      "x": 972,
+      "w": 59,
+      "h": 36,
+      "sw": 59,
+      "cw": 59,
+      "fs": "10px",
+      "fw": "700",
+      "tt": "none",
+      "ls": "normal",
+      "linhas": 3
+     },
+     {
+      "i": 9,
+      "txt": "Entregas",
+      "x": 1031,
+      "w": 61,
+      "h": 36,
+      "sw": 61,
+      "cw": 61,
+      "fs": "10px",
+      "fw": "700",
+      "tt": "none",
+      "ls": "normal",
+      "linhas": 3
+     },
+     {
+      "i": 10,
+      "txt": "Destino",
+      "x": 1092,
+      "w": 88,
+      "h": 36,
+      "sw": 88,
+      "cw": 88,
+      "fs": "10px",
+      "fw": "700",
+      "tt": "none",
+      "ls": "normal",
+      "linhas": 3
+     },
+     {
+      "i": 11,
+      "txt": "KM",
+      "x": 1180,
+      "w": 66,
+      "h": 36,
+      "sw": 66,
+      "cw": 66,
+      "fs": "10px",
+      "fw": "700",
+      "tt": "none",
+      "ls": "normal",
+      "linhas": 3
+     },
+     {
+      "i": 12,
+      "txt": "Frete",
+      "x": 1246,
+      "w": 71,
+      "h": 36,
+      "sw": 71,
+      "cw": 71,
+      "fs": "10px",
+      "fw": "700",
+      "tt": "none",
+      "ls": "normal",
+      "linhas": 3
+     },
+     {
+      "i": 13,
+      "txt": "Ação",
+      "x": 1317,
+      "w": 90,
+      "h": 36,
+      "sw": 90,
+      "cw": 90,
+      "fs": "10px",
+      "fw": "700",
+      "tt": "none",
+      "ls": "normal",
+      "linhas": 3
+     }
+    ],
+    "cortes": {
+     "badge": [],
+     "btn": [],
+     "statLabel": [],
+     "th": [],
+     "navTab": []
+    },
+    "wraps": [
+     {
+      "sw": 1166,
+      "cw": 1166,
+      "tabela": ""
+     },
+     {
+      "sw": 1166,
+      "cw": 1166,
+      "tabela": "mont-tabela"
+     },
+     {
+      "sw": 1166,
+      "cw": 1166,
+      "tabela": ""
+     },
+     {
+      "sw": 1166,
+      "cw": 1166,
+      "tabela": ""
+     }
+    ],
+    "faixa": {
+     "h": 2,
+     "caixas": 0,
+     "cols": 3,
+     "linhas": 0,
+     "buracos": 3,
+     "rotulos": []
+    },
+    "pequenos": [
+     {
+      "t": "Suinco 3/4",
+      "f": 10.5
+     },
+     {
+      "t": "1 de 2",
+      "f": 10
+     },
+     {
+      "t": "Suinco 3/4",
+      "f": 10.5
+     },
+     {
+      "t": "1 de 2",
+      "f": 10
+     },
+     {
+      "t": "Suinco 3/4",
+      "f": 10.5
+     },
+     {
+      "t": "2 de 2",
+      "f": 10
+     },
+     {
+      "t": "Suinco 3/4",
+      "f": 10.5
+     },
+     {
+      "t": "2 de 2",
+      "f": 10
+     }
+    ],
+    "titulos": [
+     {
+      "t": "Fila de Programados",
+      "h": 18,
+      "fs": "13px",
+      "linhas": 1
+     },
+     {
+      "t": "Nova Carga Programada",
+      "h": 18,
+      "fs": "13px",
+      "linhas": 1
+     },
+     {
+      "t": "Montagem do dia",
+      "h": 18,
+      "fs": "13px",
+      "linhas": 1
+     },
+     {
+      "t": "Rotas por dia da semana",
+      "h": 18,
+      "fs": "13px",
+      "linhas": 1
+     },
+     {
+      "t": "Aguardando Carga 0",
+      "h": 18,
+      "fs": "13px",
+      "linhas": 1
+     }
+    ],
+    "fonts": {
+     "th": "11px",
+     "td": "13px",
+     "cardTitle": "13px",
+     "statNum": null,
+     "body": "-apple-system, BlinkMacSystemF"
+    },
+    "scroll": [
+     1440,
+     1440
+    ],
+    "cardBg": "rgb(30, 42, 82)",
+    "contraste_baixo": []
+   },
+   "indicadores": {
+    "pos": {
+     "header": [
+      0,
+      0,
+      1440,
+      72
+     ],
+     "nav": [
+      0,
+      72,
+      208,
+      828
+     ],
+     "main": [
+      208,
+      86,
+      1232,
+      2773
+     ],
+     "card1": [
+      226,
+      86,
+      1196,
+      231
+     ],
+     "thead": [
+      241,
+      444,
+      1166,
+      27
+     ],
+     "tr1": [
+      241,
+      829,
+      1166,
+      35
+     ]
+    },
+    "posFixo": {
+     "header": "fixed",
+     "nav": "fixed",
+     "headerBlur": "none",
+     "navBlur": "none"
+    },
+    "thTorre": [],
+    "thMont": [],
+    "cortes": {
+     "badge": [],
+     "btn": [],
+     "statLabel": [],
+     "th": [],
+     "navTab": []
+    },
+    "wraps": [
+     {
+      "sw": 1166,
+      "cw": 1166,
+      "tabela": ""
+     },
+     {
+      "sw": 1166,
+      "cw": 1166,
+      "tabela": ""
+     },
+     {
+      "sw": 1166,
+      "cw": 1166,
+      "tabela": ""
+     },
+     {
+      "sw": 1166,
+      "cw": 1166,
+      "tabela": ""
+     },
+     {
+      "sw": 1166,
+      "cw": 1166,
+      "tabela": ""
+     }
+    ],
+    "faixa": {
+     "h": 85,
+     "caixas": 6,
+     "cols": 3,
+     "linhas": 1,
+     "buracos": -3,
+     "rotulos": [
+      [
+       "Tempo Aguardando Embarqu",
+       2,
+       false,
+       194
+      ],
+      [
+       "Tempo de Carregamento",
+       1,
+       false,
+       194
+      ],
+      [
+       "Tempo de Faturamento",
+       1,
+       false,
+       194
+      ],
+      [
+       "Tempo Aguardando Saída",
+       1,
+       false,
+       194
+      ],
+      [
+       "Tempo em Pátio (total)",
+       1,
+       false,
+       194
+      ],
+      [
+       "Lead Time Total",
+       1,
+       false,
+       194
+      ]
+     ]
+    },
+    "pequenos": [
+     {
+      "t": "Tempo Aguardando Embar",
+      "f": 10.5
+     },
+     {
+      "t": "Tempo de Carregamento",
+      "f": 10.5
+     },
+     {
+      "t": "Tempo de Faturamento",
+      "f": 10.5
+     },
+     {
+      "t": "Tempo Aguardando Saída",
+      "f": 10.5
+     },
+     {
+      "t": "Tempo em Pátio (total)",
+      "f": 10.5
+     },
+     {
+      "t": "Lead Time Total",
+      "f": 10.5
+     },
+     {
+      "t": "criação da carga → Seg",
+      "f": 10
+     },
+     {
+      "t": "Logística",
+      "f": 10
+     }
+    ],
+    "titulos": [
+     {
+      "t": "Tempos Médios — Histórico Co",
+      "h": 18,
+      "fs": "13px",
+      "linhas": 1
+     },
+     {
+      "t": "Raio-X da Operação",
+      "h": 18,
+      "fs": "13px",
+      "linhas": 1
+     },
+     {
+      "t": "Pulso do Pátio",
+      "h": 18,
+      "fs": "13px",
+      "linhas": 1
+     },
+     {
+      "t": "Painel do Gestor — comparaçã",
+      "h": 18,
+      "fs": "13px",
+      "linhas": 1
+     },
+     {
+      "t": "Gráficos",
+      "h": 18,
+      "fs": "13px",
+      "linhas": 1
+     },
+     {
+      "t": "Sobre o OTIF",
+      "h": 18,
+      "fs": "13px",
+      "linhas": 1
+     }
+    ],
+    "fonts": {
+     "th": "11px",
+     "td": "12px",
+     "cardTitle": "13px",
+     "statNum": "22px",
+     "body": "-apple-system, BlinkMacSystemF"
+    },
+    "scroll": [
+     1440,
+     1440
+    ],
+    "cardBg": "rgb(30, 42, 82)",
+    "contraste_baixo": []
+   },
+   "devolucoes": {
+    "pos": {
+     "header": [
+      0,
+      0,
+      1440,
+      72
+     ],
+     "nav": [
+      0,
+      72,
+      208,
+      828
+     ],
+     "main": [
+      208,
+      86,
+      1232,
+      137
+     ],
+     "card1": [
+      226,
+      86,
+      1196,
+      65
+     ],
+     "thead": null,
+     "tr1": null
+    },
+    "posFixo": {
+     "header": "fixed",
+     "nav": "fixed",
+     "headerBlur": "none",
+     "navBlur": "none"
+    },
+    "thTorre": [],
+    "thMont": [],
+    "cortes": {
+     "badge": [],
+     "btn": [],
+     "statLabel": [],
+     "th": [],
+     "navTab": []
+    },
+    "wraps": [],
+    "faixa": null,
+    "pequenos": [],
+    "titulos": [
+     {
+      "t": "Devoluções",
+      "h": 18,
+      "fs": "13px",
+      "linhas": 1
+     }
+    ],
+    "fonts": {
+     "th": null,
+     "td": null,
+     "cardTitle": "13px",
+     "statNum": null,
+     "body": "-apple-system, BlinkMacSystemF"
+    },
+    "scroll": [
+     1440,
+     1440
+    ],
+    "cardBg": "rgb(30, 42, 82)",
+    "contraste_baixo": []
+   }
+  },
+  "claro": {
+   "torre": {
+    "pos": {
+     "header": [
+      0,
+      0,
+      1440,
+      72
+     ],
+     "nav": [
+      0,
+      72,
+      208,
+      828
+     ],
+     "main": [
+      208,
+      86,
+      1232,
+      2762
+     ],
+     "card1": [
+      226,
+      86,
+      1196,
+      1893
+     ],
+     "thead": [
+      241,
+      427,
+      1166,
+      36
+     ],
+     "tr1": [
+      241,
+      463,
+      1166,
+      91
+     ]
+    },
+    "posFixo": {
+     "header": "fixed",
+     "nav": "fixed",
+     "headerBlur": "none",
+     "navBlur": "none"
+    },
+    "thTorre": [
+     {
+      "i": 0,
+      "txt": "Seq.",
+      "x": 241,
+      "w": 66,
+      "h": 36,
+      "sw": 66,
+      "cw": 66,
+      "fs": "10px",
+      "fw": "700",
+      "tt": "none",
+      "ls": "normal",
+      "linhas": 3
+     },
+     {
+      "i": 1,
+      "txt": "Nº Carga",
+      "x": 307,
+      "w": 90,
+      "h": 36,
+      "sw": 90,
+      "cw": 90,
+      "fs": "10px",
+      "fw": "700",
+      "tt": "none",
+      "ls": "normal",
+      "linhas": 3
+     },
+     {
+      "i": 2,
+      "txt": "Veículo",
+      "x": 397,
+      "w": 107,
+      "h": 36,
+      "sw": 107,
+      "cw": 107,
+      "fs": "10px",
+      "fw": "700",
+      "tt": "none",
+      "ls": "normal",
+      "linhas": 3
+     },
+     {
+      "i": 3,
+      "txt": "Motorista",
+      "x": 504,
+      "w": 104,
+      "h": 36,
+      "sw": 104,
+      "cw": 104,
+      "fs": "10px",
+      "fw": "700",
+      "tt": "none",
+      "ls": "normal",
+      "linhas": 3
+     },
+     {
+      "i": 4,
+      "txt": "Rota",
+      "x": 608,
+      "w": 107,
+      "h": 36,
+      "sw": 107,
+      "cw": 107,
+      "fs": "10px",
+      "fw": "700",
+      "tt": "none",
+      "ls": "normal",
+      "linhas": 3
+     },
+     {
+      "i": 5,
+      "txt": "Peso (kg)",
+      "x": 715,
+      "w": 78,
+      "h": 36,
+      "sw": 78,
+      "cw": 78,
+      "fs": "10px",
+      "fw": "700",
+      "tt": "none",
+      "ls": "normal",
+      "linhas": 3
+     },
+     {
+      "i": 6,
+      "txt": "Palet.",
+      "x": 793,
+      "w": 69,
+      "h": 36,
+      "sw": 69,
+      "cw": 69,
+      "fs": "10px",
+      "fw": "700",
+      "tt": "none",
+      "ls": "normal",
+      "linhas": 3
+     },
+     {
+      "i": 7,
+      "txt": "Tipo de Operação",
+      "x": 862,
+      "w": 95,
+      "h": 36,
+      "sw": 95,
+      "cw": 95,
+      "fs": "10px",
+      "fw": "700",
+      "tt": "none",
+      "ls": "normal",
+      "linhas": 3
+     },
+     {
+      "i": 8,
+      "txt": "Ganchos · Entr.",
+      "x": 957,
+      "w": 78,
+      "h": 36,
+      "sw": 78,
+      "cw": 78,
+      "fs": "10px",
+      "fw": "700",
+      "tt": "none",
+      "ls": "normal",
+      "linhas": 3
+     },
+     {
+      "i": 9,
+      "txt": "Status",
+      "x": 1035,
+      "w": 171,
+      "h": 36,
+      "sw": 171,
+      "cw": 171,
+      "fs": "10px",
+      "fw": "700",
+      "tt": "none",
+      "ls": "normal",
+      "linhas": 3
+     },
+     {
+      "i": 10,
+      "txt": "Programação · Última etapa",
+      "x": 1205,
+      "w": 92,
+      "h": 36,
+      "sw": 92,
+      "cw": 92,
+      "fs": "10px",
+      "fw": "700",
+      "tt": "none",
+      "ls": "normal",
+      "linhas": 3
+     },
+     {
+      "i": 11,
+      "txt": "Ação",
+      "x": 1298,
+      "w": 109,
+      "h": 36,
+      "sw": 109,
+      "cw": 109,
+      "fs": "10px",
+      "fw": "700",
+      "tt": "none",
+      "ls": "normal",
+      "linhas": 3
+     }
+    ],
+    "thMont": [],
+    "cortes": {
+     "badge": [],
+     "btn": [],
+     "statLabel": [],
+     "th": [],
+     "navTab": []
+    },
+    "wraps": [
+     {
+      "sw": 1166,
+      "cw": 1166,
+      "tabela": "torre-tabela"
+     },
+     {
+      "sw": 1166,
+      "cw": 1166,
+      "tabela": ""
+     }
+    ],
+    "faixa": {
+     "h": 175,
+     "caixas": 9,
+     "cols": 3,
+     "linhas": 2,
+     "buracos": -1,
+     "rotulos": [
+      [
+       "Cargas em aberto",
+       1,
+       false,
+       333
+      ],
+      [
+       "Aguardando Veículo",
+       1,
+       false,
+       166
+      ],
+      [
+       "Aguardando Embarque",
+       1,
+       false,
+       166
+      ],
+      [
+       "Embarque Iniciado",
+       1,
+       false,
+       166
+      ],
+      [
+       "Embarque Finalizado",
+       1,
+       false,
+       166
+      ],
+      [
+       "Faturado",
+       1,
+       false,
+       166
+      ],
+      [
+       "Seguiu Viagem hoje",
+       1,
+       false,
+       582
+      ],
+      [
+       "Programação anterior",
+       1,
+       false,
+       291
+      ],
+      [
+       "Entradas sem carga",
+       1,
+       false,
+       291
+      ]
+     ]
+    },
+    "pequenos": [
+     {
+      "t": "= igual a ontem",
+      "f": 10.5
+     },
+     {
+      "t": "Aguardando Veículo",
+      "f": 10.5
+     },
+     {
+      "t": "25% do pátio",
+      "f": 10
+     },
+     {
+      "t": "Aguardando Embarque",
+      "f": 10.5
+     },
+     {
+      "t": "19% do pátio",
+      "f": 10
+     },
+     {
+      "t": "Embarque Iniciado",
+      "f": 10.5
+     },
+     {
+      "t": "19% do pátio",
+      "f": 10
+     },
+     {
+      "t": "Embarque Finalizado",
+      "f": 10.5
+     }
+    ],
+    "titulos": [
+     {
+      "t": "Torre de Controle — todas as",
+      "h": 18,
+      "fs": "13px",
+      "linhas": 1
+     },
+     {
+      "t": "Visão do Pátio — linha do te",
+      "h": 18,
+      "fs": "13px",
+      "linhas": 1
+     }
+    ],
+    "fonts": {
+     "th": "10px",
+     "td": "12.5px",
+     "cardTitle": "13px",
+     "statNum": "30px",
+     "body": "-apple-system, BlinkMacSystemF"
+    },
+    "scroll": [
+     1440,
+     1440
+    ],
+    "cardBg": "rgb(239, 243, 249)",
+    "contraste_baixo": [
+     {
+      "texto": "outra(s): 118810: Aguardando Veícu",
+      "classe": "sit-outras",
+      "tag": "span",
+      "cor": "rgb(75, 85, 101)",
+      "fundo": "rgb(236, 228, 234)",
+      "razao": 4.35,
+      "minimo": 4.5,
+      "px": 10
+     },
+     {
+      "texto": "Caminhão NO PÁTIO",
+      "classe": "",
+      "tag": "strong",
+      "cor": "rgb(127, 214, 164)",
+      "fundo": "rgb(225, 229, 237)",
+      "razao": 1.39,
+      "minimo": 4.5,
+      "px": 10
+     },
+     {
+      "texto": "outra(s): 118811: Aguardando Embar",
+      "classe": "sit-outras",
+      "tag": "span",
+      "cor": "rgb(75, 85, 101)",
+      "fundo": "rgb(225, 229, 237)",
+      "razao": 4.3,
+      "minimo": 4.5,
+      "px": 10
+     },
+     {
+      "texto": "Caminhão NO PÁTIO",
+      "classe": "",
+      "tag": "strong",
+      "cor": "rgb(127, 214, 164)",
+      "fundo": "rgb(239, 243, 249)",
+      "razao": 1.56,
+      "minimo": 4.5,
+      "px": 10
+     },
+     {
+      "texto": "Caminhão NO PÁTIO",
+      "classe": "",
+      "tag": "strong",
+      "cor": "rgb(127, 214, 164)",
+      "fundo": "rgb(225, 229, 237)",
+      "razao": 1.39,
+      "minimo": 4.5,
+      "px": 10
+     },
+     {
+      "texto": "outra(s): 118813: Embarque Finaliz",
+      "classe": "sit-outras",
+      "tag": "span",
+      "cor": "rgb(75, 85, 101)",
+      "fundo": "rgb(225, 229, 237)",
+      "razao": 4.3,
+      "minimo": 4.5,
+      "px": 10
+     },
+     {
+      "texto": "Caminhão NO PÁTIO",
+      "classe": "",
+      "tag": "strong",
+      "cor": "rgb(127, 214, 164)",
+      "fundo": "rgb(239, 243, 249)",
+      "razao": 1.56,
+      "minimo": 4.5,
+      "px": 10
+     },
+     {
+      "texto": "outra(s): 118815: Aguardando Veícu",
+      "classe": "sit-outras",
+      "tag": "span",
+      "cor": "rgb(75, 85, 101)",
+      "fundo": "rgb(236, 228, 234)",
+      "razao": 4.35,
+      "minimo": 4.5,
+      "px": 10
+     },
+     {
+      "texto": "outra(s): 118800: Aguardando Veícu",
+      "classe": "sit-outras",
+      "tag": "span",
+      "cor": "rgb(75, 85, 101)",
+      "fundo": "rgb(236, 228, 234)",
+      "razao": 4.35,
+      "minimo": 4.5,
+      "px": 10
+     },
+     {
+      "texto": "Caminhão NO PÁTIO",
+      "classe": "",
+      "tag": "strong",
+      "cor": "rgb(127, 214, 164)",
+      "fundo": "rgb(225, 229, 237)",
+      "razao": 1.39,
+      "minimo": 4.5,
+      "px": 10
+     },
+     {
+      "texto": "outra(s): 118801: Aguardando Embar",
+      "classe": "sit-outras",
+      "tag": "span",
+      "cor": "rgb(75, 85, 101)",
+      "fundo": "rgb(225, 229, 237)",
+      "razao": 4.3,
+      "minimo": 4.5,
+      "px": 10
+     },
+     {
+      "texto": "Caminhão NO PÁTIO",
+      "classe": "",
+      "tag": "strong",
+      "cor": "rgb(127, 214, 164)",
+      "fundo": "rgb(239, 243, 249)",
+      "razao": 1.56,
+      "minimo": 4.5,
+      "px": 10
+     },
+     {
+      "texto": "Caminhão NO PÁTIO",
+      "classe": "",
+      "tag": "strong",
+      "cor": "rgb(127, 214, 164)",
+      "fundo": "rgb(225, 229, 237)",
+      "razao": 1.39,
+      "minimo": 4.5,
+      "px": 10
+     },
+     {
+      "texto": "outra(s): 118803: Embarque Finaliz",
+      "classe": "sit-outras",
+      "tag": "span",
+      "cor": "rgb(75, 85, 101)",
+      "fundo": "rgb(225, 229, 237)",
+      "razao": 4.3,
+      "minimo": 4.5,
+      "px": 10
+     },
+     {
+      "texto": "Caminhão NO PÁTIO",
+      "classe": "",
+      "tag": "strong",
+      "cor": "rgb(127, 214, 164)",
+      "fundo": "rgb(239, 243, 249)",
+      "razao": 1.56,
+      "minimo": 4.5,
+      "px": 10
+     },
+     {
+      "texto": "outra(s): 118805: Aguardando Veícu",
+      "classe": "sit-outras",
+      "tag": "span",
+      "cor": "rgb(75, 85, 101)",
+      "fundo": "rgb(236, 228, 234)",
+      "razao": 4.35,
+      "minimo": 4.5,
+      "px": 10
+     }
+    ]
+   },
+   "programacao": {
+    "pos": {
+     "header": [
+      0,
+      0,
+      1440,
+      72
+     ],
+     "nav": [
+      0,
+      72,
+      208,
+      828
+     ],
+     "main": [
+      208,
+      86,
+      1232,
+      2069
+     ],
+     "card1": [
+      226,
+      86,
+      1196,
+      547
+     ],
+     "thead": [
+      241,
+      226,
+      1166,
+      27
+     ],
+     "tr1": [
+      241,
+      253,
+      1166,
+      95
+     ]
+    },
+    "posFixo": {
+     "header": "fixed",
+     "nav": "fixed",
+     "headerBlur": "none",
+     "navBlur": "none"
+    },
+    "thTorre": [],
+    "thMont": [
+     {
+      "i": 0,
+      "txt": "Seq.",
+      "x": 241,
+      "w": 71,
+      "h": 36,
+      "sw": 71,
+      "cw": 71,
+      "fs": "10px",
+      "fw": "700",
+      "tt": "none",
+      "ls": "normal",
+      "linhas": 3
+     },
+     {
+      "i": 1,
+      "txt": "Nº Carga",
+      "x": 312,
+      "w": 80,
+      "h": 36,
+      "sw": 80,
+      "cw": 80,
+      "fs": "10px",
+      "fw": "700",
+      "tt": "none",
+      "ls": "normal",
+      "linhas": 3
+     },
+     {
+      "i": 2,
+      "txt": "Veículo",
+      "x": 392,
+      "w": 102,
+      "h": 36,
+      "sw": 102,
+      "cw": 102,
+      "fs": "10px",
+      "fw": "700",
+      "tt": "none",
+      "ls": "normal",
+      "linhas": 3
+     },
+     {
+      "i": 3,
+      "txt": "Motorista",
+      "x": 494,
+      "w": 97,
+      "h": 36,
+      "sw": 97,
+      "cw": 97,
+      "fs": "10px",
+      "fw": "700",
+      "tt": "none",
+      "ls": "normal",
+      "linhas": 3
+     },
+     {
+      "i": 4,
+      "txt": "Rota",
+      "x": 591,
+      "w": 116,
+      "h": 36,
+      "sw": 116,
+      "cw": 116,
+      "fs": "10px",
+      "fw": "700",
+      "tt": "none",
+      "ls": "normal",
+      "linhas": 3
+     },
+     {
+      "i": 5,
+      "txt": "Peso (kg)",
+      "x": 707,
+      "w": 80,
+      "h": 36,
+      "sw": 80,
+      "cw": 80,
+      "fs": "10px",
+      "fw": "700",
+      "tt": "none",
+      "ls": "normal",
+      "linhas": 3
+     },
+     {
+      "i": 6,
+      "txt": "Palet.",
+      "x": 787,
+      "w": 83,
+      "h": 36,
+      "sw": 83,
+      "cw": 83,
+      "fs": "10px",
+      "fw": "700",
+      "tt": "none",
+      "ls": "normal",
+      "linhas": 3
+     },
+     {
+      "i": 7,
+      "txt": "Tipo de Operação",
+      "x": 870,
+      "w": 102,
+      "h": 36,
+      "sw": 102,
+      "cw": 102,
+      "fs": "10px",
+      "fw": "700",
+      "tt": "none",
+      "ls": "normal",
+      "linhas": 3
+     },
+     {
+      "i": 8,
+      "txt": "Ganchos",
+      "x": 972,
+      "w": 59,
+      "h": 36,
+      "sw": 59,
+      "cw": 59,
+      "fs": "10px",
+      "fw": "700",
+      "tt": "none",
+      "ls": "normal",
+      "linhas": 3
+     },
+     {
+      "i": 9,
+      "txt": "Entregas",
+      "x": 1031,
+      "w": 61,
+      "h": 36,
+      "sw": 61,
+      "cw": 61,
+      "fs": "10px",
+      "fw": "700",
+      "tt": "none",
+      "ls": "normal",
+      "linhas": 3
+     },
+     {
+      "i": 10,
+      "txt": "Destino",
+      "x": 1092,
+      "w": 88,
+      "h": 36,
+      "sw": 88,
+      "cw": 88,
+      "fs": "10px",
+      "fw": "700",
+      "tt": "none",
+      "ls": "normal",
+      "linhas": 3
+     },
+     {
+      "i": 11,
+      "txt": "KM",
+      "x": 1180,
+      "w": 66,
+      "h": 36,
+      "sw": 66,
+      "cw": 66,
+      "fs": "10px",
+      "fw": "700",
+      "tt": "none",
+      "ls": "normal",
+      "linhas": 3
+     },
+     {
+      "i": 12,
+      "txt": "Frete",
+      "x": 1246,
+      "w": 71,
+      "h": 36,
+      "sw": 71,
+      "cw": 71,
+      "fs": "10px",
+      "fw": "700",
+      "tt": "none",
+      "ls": "normal",
+      "linhas": 3
+     },
+     {
+      "i": 13,
+      "txt": "Ação",
+      "x": 1317,
+      "w": 90,
+      "h": 36,
+      "sw": 90,
+      "cw": 90,
+      "fs": "10px",
+      "fw": "700",
+      "tt": "none",
+      "ls": "normal",
+      "linhas": 3
+     }
+    ],
+    "cortes": {
+     "badge": [],
+     "btn": [],
+     "statLabel": [],
+     "th": [],
+     "navTab": []
+    },
+    "wraps": [
+     {
+      "sw": 1166,
+      "cw": 1166,
+      "tabela": ""
+     },
+     {
+      "sw": 1166,
+      "cw": 1166,
+      "tabela": "mont-tabela"
+     },
+     {
+      "sw": 1166,
+      "cw": 1166,
+      "tabela": ""
+     },
+     {
+      "sw": 1166,
+      "cw": 1166,
+      "tabela": ""
+     }
+    ],
+    "faixa": {
+     "h": 2,
+     "caixas": 0,
+     "cols": 3,
+     "linhas": 0,
+     "buracos": 3,
+     "rotulos": []
+    },
+    "pequenos": [
+     {
+      "t": "Suinco 3/4",
+      "f": 10.5
+     },
+     {
+      "t": "1 de 2",
+      "f": 10
+     },
+     {
+      "t": "Suinco 3/4",
+      "f": 10.5
+     },
+     {
+      "t": "1 de 2",
+      "f": 10
+     },
+     {
+      "t": "Suinco 3/4",
+      "f": 10.5
+     },
+     {
+      "t": "2 de 2",
+      "f": 10
+     },
+     {
+      "t": "Suinco 3/4",
+      "f": 10.5
+     },
+     {
+      "t": "2 de 2",
+      "f": 10
+     }
+    ],
+    "titulos": [
+     {
+      "t": "Fila de Programados",
+      "h": 18,
+      "fs": "13px",
+      "linhas": 1
+     },
+     {
+      "t": "Nova Carga Programada",
+      "h": 18,
+      "fs": "13px",
+      "linhas": 1
+     },
+     {
+      "t": "Montagem do dia",
+      "h": 18,
+      "fs": "13px",
+      "linhas": 1
+     },
+     {
+      "t": "Rotas por dia da semana",
+      "h": 18,
+      "fs": "13px",
+      "linhas": 1
+     },
+     {
+      "t": "Aguardando Carga 0",
+      "h": 18,
+      "fs": "13px",
+      "linhas": 1
+     }
+    ],
+    "fonts": {
+     "th": "11px",
+     "td": "13px",
+     "cardTitle": "13px",
+     "statNum": null,
+     "body": "-apple-system, BlinkMacSystemF"
+    },
+    "scroll": [
+     1440,
+     1440
+    ],
+    "cardBg": "rgb(239, 243, 249)",
+    "contraste_baixo": []
+   },
+   "indicadores": {
+    "pos": {
+     "header": [
+      0,
+      0,
+      1440,
+      72
+     ],
+     "nav": [
+      0,
+      72,
+      208,
+      828
+     ],
+     "main": [
+      208,
+      86,
+      1232,
+      2773
+     ],
+     "card1": [
+      226,
+      86,
+      1196,
+      231
+     ],
+     "thead": [
+      241,
+      444,
+      1166,
+      27
+     ],
+     "tr1": [
+      241,
+      829,
+      1166,
+      35
+     ]
+    },
+    "posFixo": {
+     "header": "fixed",
+     "nav": "fixed",
+     "headerBlur": "none",
+     "navBlur": "none"
+    },
+    "thTorre": [],
+    "thMont": [],
+    "cortes": {
+     "badge": [],
+     "btn": [],
+     "statLabel": [],
+     "th": [],
+     "navTab": []
+    },
+    "wraps": [
+     {
+      "sw": 1166,
+      "cw": 1166,
+      "tabela": ""
+     },
+     {
+      "sw": 1166,
+      "cw": 1166,
+      "tabela": ""
+     },
+     {
+      "sw": 1166,
+      "cw": 1166,
+      "tabela": ""
+     },
+     {
+      "sw": 1166,
+      "cw": 1166,
+      "tabela": ""
+     },
+     {
+      "sw": 1166,
+      "cw": 1166,
+      "tabela": ""
+     }
+    ],
+    "faixa": {
+     "h": 85,
+     "caixas": 6,
+     "cols": 3,
+     "linhas": 1,
+     "buracos": -3,
+     "rotulos": [
+      [
+       "Tempo Aguardando Embarqu",
+       2,
+       false,
+       194
+      ],
+      [
+       "Tempo de Carregamento",
+       1,
+       false,
+       194
+      ],
+      [
+       "Tempo de Faturamento",
+       1,
+       false,
+       194
+      ],
+      [
+       "Tempo Aguardando Saída",
+       1,
+       false,
+       194
+      ],
+      [
+       "Tempo em Pátio (total)",
+       1,
+       false,
+       194
+      ],
+      [
+       "Lead Time Total",
+       1,
+       false,
+       194
+      ]
+     ]
+    },
+    "pequenos": [
+     {
+      "t": "Tempo Aguardando Embar",
+      "f": 10.5
+     },
+     {
+      "t": "Tempo de Carregamento",
+      "f": 10.5
+     },
+     {
+      "t": "Tempo de Faturamento",
+      "f": 10.5
+     },
+     {
+      "t": "Tempo Aguardando Saída",
+      "f": 10.5
+     },
+     {
+      "t": "Tempo em Pátio (total)",
+      "f": 10.5
+     },
+     {
+      "t": "Lead Time Total",
+      "f": 10.5
+     },
+     {
+      "t": "criação da carga → Seg",
+      "f": 10
+     },
+     {
+      "t": "Logística",
+      "f": 10
+     }
+    ],
+    "titulos": [
+     {
+      "t": "Tempos Médios — Histórico Co",
+      "h": 18,
+      "fs": "13px",
+      "linhas": 1
+     },
+     {
+      "t": "Raio-X da Operação",
+      "h": 18,
+      "fs": "13px",
+      "linhas": 1
+     },
+     {
+      "t": "Pulso do Pátio",
+      "h": 18,
+      "fs": "13px",
+      "linhas": 1
+     },
+     {
+      "t": "Painel do Gestor — comparaçã",
+      "h": 18,
+      "fs": "13px",
+      "linhas": 1
+     },
+     {
+      "t": "Gráficos",
+      "h": 18,
+      "fs": "13px",
+      "linhas": 1
+     },
+     {
+      "t": "Sobre o OTIF",
+      "h": 18,
+      "fs": "13px",
+      "linhas": 1
+     }
+    ],
+    "fonts": {
+     "th": "11px",
+     "td": "12px",
+     "cardTitle": "13px",
+     "statNum": "22px",
+     "body": "-apple-system, BlinkMacSystemF"
+    },
+    "scroll": [
+     1440,
+     1440
+    ],
+    "cardBg": "rgb(239, 243, 249)",
+    "contraste_baixo": []
+   },
+   "devolucoes": {
+    "pos": {
+     "header": [
+      0,
+      0,
+      1440,
+      72
+     ],
+     "nav": [
+      0,
+      72,
+      208,
+      828
+     ],
+     "main": [
+      208,
+      86,
+      1232,
+      137
+     ],
+     "card1": [
+      226,
+      86,
+      1196,
+      65
+     ],
+     "thead": null,
+     "tr1": null
+    },
+    "posFixo": {
+     "header": "fixed",
+     "nav": "fixed",
+     "headerBlur": "none",
+     "navBlur": "none"
+    },
+    "thTorre": [],
+    "thMont": [],
+    "cortes": {
+     "badge": [],
+     "btn": [],
+     "statLabel": [],
+     "th": [],
+     "navTab": []
+    },
+    "wraps": [],
+    "faixa": null,
+    "pequenos": [],
+    "titulos": [
+     {
+      "t": "Devoluções",
+      "h": 18,
+      "fs": "13px",
+      "linhas": 1
+     }
+    ],
+    "fonts": {
+     "th": null,
+     "td": null,
+     "cardTitle": "13px",
+     "statNum": null,
+     "body": "-apple-system, BlinkMacSystemF"
+    },
+    "scroll": [
+     1440,
+     1440
+    ],
+    "cardBg": "rgb(239, 243, 249)",
+    "contraste_baixo": []
+   }
+  }
+ },
+ "390": {
+  "escuro": {
+   "torre": {
+    "pos": {
+     "header": [
+      0,
+      0,
+      390,
+      56
+     ],
+     "nav": [
+      -300,
+      0,
+      300,
+      900
+     ],
+     "main": [
+      0,
+      70,
+      390,
+      7137
+     ],
+     "card1": [
+      10,
+      70,
+      370,
+      4545
+     ],
+     "thead": [
+      0,
+      0,
+      0,
+      0
+     ],
+     "tr1": [
+      25,
+      590,
+      340,
+      264
+     ]
+    },
+    "posFixo": {
+     "header": "fixed",
+     "nav": "fixed",
+     "headerBlur": "none",
+     "navBlur": "none"
+    },
+    "thTorre": [],
+    "thMont": [],
+    "cortes": {
+     "badge": [],
+     "btn": [],
+     "statLabel": [],
+     "th": [],
+     "navTab": []
+    },
+    "wraps": [
+     {
+      "sw": 340,
+      "cw": 340,
+      "tabela": "torre-tabela"
+     },
+     {
+      "sw": 340,
+      "cw": 340,
+      "tabela": ""
+     }
+    ],
+    "faixa": {
+     "h": 315,
+     "caixas": 9,
+     "cols": 3,
+     "linhas": 5,
+     "buracos": 1,
+     "rotulos": [
+      [
+       "Cargas em aberto",
+       1,
+       false,
+       338
+      ],
+      [
+       "Aguardando Veículo",
+       2,
+       false,
+       113
+      ],
+      [
+       "Aguardando Embarque",
+       2,
+       false,
+       113
+      ],
+      [
+       "Embarque Iniciado",
+       2,
+       false,
+       113
+      ],
+      [
+       "Embarque Finalizado",
+       2,
+       false,
+       113
+      ],
+      [
+       "Faturado",
+       1,
+       false,
+       113
+      ],
+      [
+       "Seguiu Viagem hoje",
+       1,
+       false,
+       338
+      ],
+      [
+       "Programação anterior",
+       2,
+       false,
+       113
+      ],
+      [
+       "Entradas sem carga",
+       2,
+       false,
+       113
+      ]
+     ]
+    },
+    "pequenos": [
+     {
+      "t": "= igual a ontem",
+      "f": 9.5
+     },
+     {
+      "t": "Aguardando Veículo",
+      "f": 9.5
+     },
+     {
+      "t": "Aguardando Embarque",
+      "f": 9.5
+     },
+     {
+      "t": "Embarque Iniciado",
+      "f": 9.5
+     },
+     {
+      "t": "Embarque Finalizado",
+      "f": 9.5
+     },
+     {
+      "t": "Faturado",
+      "f": 9.5
+     },
+     {
+      "t": "= igual a ontem",
+      "f": 9.5
+     },
+     {
+      "t": "Programação anterior",
+      "f": 9.5
+     }
+    ],
+    "titulos": [
+     {
+      "t": "Torre de Controle — todas as",
+      "h": 82,
+      "fs": "14px",
+      "linhas": 5
+     },
+     {
+      "t": "Visão do Pátio — linha do te",
+      "h": 44,
+      "fs": "14px",
+      "linhas": 2
+     }
+    ],
+    "fonts": {
+     "th": "11px",
+     "td": "12.5px",
+     "cardTitle": "14px",
+     "statNum": "24px",
+     "body": "-apple-system, BlinkMacSystemF"
+    },
+    "scroll": [
+     390,
+     390
+    ],
+    "cardBg": "rgb(30, 42, 82)",
+    "acordeao": [
+     {
+      "t": "Tempos Médios — Históric",
+      "h": 0,
+      "fs": "14px"
+     },
+     {
+      "t": "Raio-X da Operação",
+      "h": 0,
+      "fs": "14px"
+     },
+     {
+      "t": "Pulso do Pátio",
+      "h": 0,
+      "fs": "14px"
+     },
+     {
+      "t": "Painel do Gestor — compa",
+      "h": 0,
+      "fs": "14px"
+     }
+    ],
+    "maisLargo": null
+   },
+   "programacao": {
+    "pos": {
+     "header": [
+      0,
+      0,
+      390,
+      56
+     ],
+     "nav": [
+      -300,
+      0,
+      300,
+      900
+     ],
+     "main": [
+      0,
+      70,
+      390,
+      3413
+     ],
+     "card1": [
+      10,
+      70,
+      370,
+      1003
+     ],
+     "thead": [
+      0,
+      0,
+      0,
+      0
+     ],
+     "tr1": [
+      25,
+      269,
+      340,
+      190
+     ]
+    },
+    "posFixo": {
+     "header": "fixed",
+     "nav": "fixed",
+     "headerBlur": "none",
+     "navBlur": "none"
+    },
+    "thTorre": [],
+    "thMont": [],
+    "cortes": {
+     "badge": [],
+     "btn": [],
+     "statLabel": [],
+     "th": [],
+     "navTab": []
+    },
+    "wraps": [
+     {
+      "sw": 340,
+      "cw": 340,
+      "tabela": ""
+     }
+    ],
+    "faixa": {
+     "h": 2,
+     "caixas": 0,
+     "cols": 3,
+     "linhas": 0,
+     "buracos": 3,
+     "rotulos": []
+    },
+    "pequenos": [
+     {
+      "t": "1 de 2",
+      "f": 10
+     },
+     {
+      "t": "1 de 2",
+      "f": 10
+     },
+     {
+      "t": "2 de 2",
+      "f": 10
+     },
+     {
+      "t": "2 de 2",
+      "f": 10
+     }
+    ],
+    "titulos": [
+     {
+      "t": "Fila de Programados",
+      "h": 44,
+      "fs": "14px",
+      "linhas": 2
+     },
+     {
+      "t": "Nova Carga Programada",
+      "h": 44,
+      "fs": "14px",
+      "linhas": 2
+     },
+     {
+      "t": "Montagem do dia",
+      "h": 44,
+      "fs": "14px",
+      "linhas": 2
+     },
+     {
+      "t": "Rotas por dia da semana",
+      "h": 44,
+      "fs": "14px",
+      "linhas": 2
+     },
+     {
+      "t": "Aguardando Carga 0",
+      "h": 44,
+      "fs": "14px",
+      "linhas": 2
+     }
+    ],
+    "fonts": {
+     "th": "11px",
+     "td": "13px",
+     "cardTitle": "14px",
+     "statNum": null,
+     "body": "-apple-system, BlinkMacSystemF"
+    },
+    "scroll": [
+     390,
+     390
+    ],
+    "cardBg": "rgb(30, 42, 82)",
+    "acordeao": [
+     {
+      "t": "Tempos Médios — Históric",
+      "h": 0,
+      "fs": "14px"
+     },
+     {
+      "t": "Raio-X da Operação",
+      "h": 0,
+      "fs": "14px"
+     },
+     {
+      "t": "Pulso do Pátio",
+      "h": 0,
+      "fs": "14px"
+     },
+     {
+      "t": "Painel do Gestor — compa",
+      "h": 0,
+      "fs": "14px"
+     }
+    ],
+    "maisLargo": null
+   },
+   "indicadores": {
+    "pos": {
+     "header": [
+      0,
+      0,
+      390,
+      56
+     ],
+     "nav": [
+      -300,
+      0,
+      300,
+      900
+     ],
+     "main": [
+      0,
+      70,
+      390,
+      1276
+     ],
+     "card1": [
+      10,
+      70,
+      370,
+      453
+     ],
+     "thead": [
+      0,
+      0,
+      0,
+      0
+     ],
+     "tr1": [
+      25,
+      848,
+      340,
+      156
+     ]
+    },
+    "posFixo": {
+     "header": "fixed",
+     "nav": "fixed",
+     "headerBlur": "none",
+     "navBlur": "none"
+    },
+    "thTorre": [],
+    "thMont": [],
+    "cortes": {
+     "badge": [],
+     "btn": [],
+     "statLabel": [],
+     "th": [],
+     "navTab": []
+    },
+    "wraps": [
+     {
+      "sw": 340,
+      "cw": 340,
+      "tabela": ""
+     }
+    ],
+    "faixa": {
+     "h": 143,
+     "caixas": 6,
+     "cols": 3,
+     "linhas": 2,
+     "buracos": 0,
+     "rotulos": [
+      [
+       "Tempo Aguardando Embarqu",
+       3,
+       false,
+       113
+      ],
+      [
+       "Tempo de Carregamento",
+       2,
+       false,
+       113
+      ],
+      [
+       "Tempo de Faturamento",
+       2,
+       false,
+       113
+      ],
+      [
+       "Tempo Aguardando Saída",
+       3,
+       false,
+       113
+      ],
+      [
+       "Tempo em Pátio (total)",
+       2,
+       false,
+       113
+      ],
+      [
+       "Lead Time Total",
+       1,
+       false,
+       113
+      ]
+     ]
+    },
+    "pequenos": [
+     {
+      "t": "Tempo Aguardando Embar",
+      "f": 9.5
+     },
+     {
+      "t": "Tempo de Carregamento",
+      "f": 9.5
+     },
+     {
+      "t": "Tempo de Faturamento",
+      "f": 9.5
+     },
+     {
+      "t": "Tempo Aguardando Saída",
+      "f": 9.5
+     },
+     {
+      "t": "Tempo em Pátio (total)",
+      "f": 9.5
+     },
+     {
+      "t": "Lead Time Total",
+      "f": 9.5
+     }
+    ],
+    "titulos": [
+     {
+      "t": "Tempos Médios — Histórico Co",
+      "h": 53,
+      "fs": "14px",
+      "linhas": 3
+     },
+     {
+      "t": "Raio-X da Operação",
+      "h": 44,
+      "fs": "14px",
+      "linhas": 2
+     },
+     {
+      "t": "Pulso do Pátio",
+      "h": 44,
+      "fs": "14px",
+      "linhas": 2
+     },
+     {
+      "t": "Painel do Gestor — comparaçã",
+      "h": 61,
+      "fs": "14px",
+      "linhas": 3
+     },
+     {
+      "t": "Gráficos",
+      "h": 44,
+      "fs": "14px",
+      "linhas": 2
+     },
+     {
+      "t": "Sobre o OTIF",
+      "h": 44,
+      "fs": "14px",
+      "linhas": 2
+     }
+    ],
+    "fonts": {
+     "th": "11px",
+     "td": "12px",
+     "cardTitle": "14px",
+     "statNum": "19px",
+     "body": "-apple-system, BlinkMacSystemF"
+    },
+    "scroll": [
+     390,
+     390
+    ],
+    "cardBg": "rgb(30, 42, 82)",
+    "acordeao": [
+     {
+      "t": "Tempos Médios — Históric",
+      "h": 52.5,
+      "fs": "14px"
+     },
+     {
+      "t": "Raio-X da Operação",
+      "h": 43.5,
+      "fs": "14px"
+     },
+     {
+      "t": "Pulso do Pátio",
+      "h": 43.5,
+      "fs": "14px"
+     },
+     {
+      "t": "Painel do Gestor — compa",
+      "h": 61,
+      "fs": "14px"
+     }
+    ],
+    "maisLargo": {
+     "r": 545,
+     "tag": "TABLE",
+     "cls": "tabela-status-h mobile-cartao",
+     "t": "Aguardando VeículoLo"
+    }
+   },
+   "devolucoes": {
+    "pos": {
+     "header": [
+      0,
+      0,
+      390,
+      56
+     ],
+     "nav": [
+      -300,
+      0,
+      300,
+      900
+     ],
+     "main": [
+      0,
+      70,
+      390,
+      90
+     ],
+     "card1": [
+      10,
+      70,
+      370,
+      50
+     ],
+     "thead": null,
+     "tr1": null
+    },
+    "posFixo": {
+     "header": "fixed",
+     "nav": "fixed",
+     "headerBlur": "none",
+     "navBlur": "none"
+    },
+    "thTorre": [],
+    "thMont": [],
+    "cortes": {
+     "badge": [],
+     "btn": [],
+     "statLabel": [],
+     "th": [],
+     "navTab": []
+    },
+    "wraps": [],
+    "faixa": null,
+    "pequenos": [],
+    "titulos": [
+     {
+      "t": "Devoluções",
+      "h": 44,
+      "fs": "14px",
+      "linhas": 2
+     }
+    ],
+    "fonts": {
+     "th": null,
+     "td": null,
+     "cardTitle": "14px",
+     "statNum": null,
+     "body": "-apple-system, BlinkMacSystemF"
+    },
+    "scroll": [
+     390,
+     390
+    ],
+    "cardBg": "rgb(30, 42, 82)",
+    "acordeao": [
+     {
+      "t": "Tempos Médios — Históric",
+      "h": 0,
+      "fs": "14px"
+     },
+     {
+      "t": "Raio-X da Operação",
+      "h": 0,
+      "fs": "14px"
+     },
+     {
+      "t": "Pulso do Pátio",
+      "h": 0,
+      "fs": "14px"
+     },
+     {
+      "t": "Painel do Gestor — compa",
+      "h": 0,
+      "fs": "14px"
+     }
+    ],
+    "maisLargo": null
+   },
+   "cadastros": {
+    "pos": {
+     "header": [
+      0,
+      0,
+      390,
+      56
+     ],
+     "nav": [
+      -300,
+      0,
+      300,
+      900
+     ],
+     "main": [
+      0,
+      70,
+      390,
+      1553
+     ],
+     "card1": [
+      10,
+      70,
+      370,
+      1250
+     ],
+     "thead": [
+      0,
+      0,
+      0,
+      0
+     ],
+     "tr1": null
+    },
+    "posFixo": {
+     "header": "fixed",
+     "nav": "fixed",
+     "headerBlur": "none",
+     "navBlur": "none"
+    },
+    "thTorre": [],
+    "thMont": [],
+    "cortes": {
+     "badge": [],
+     "btn": [],
+     "statLabel": [],
+     "th": [],
+     "navTab": []
+    },
+    "wraps": [],
+    "faixa": null,
+    "pequenos": [],
+    "titulos": [
+     {
+      "t": "Frota (Placa → Transportador",
+      "h": 61,
+      "fs": "14px",
+      "linhas": 3
+     },
+     {
+      "t": "Transportadoras\n          ⬇ ",
+      "h": 44,
+      "fs": "14px",
+      "linhas": 3
+     },
+     {
+      "t": "Tabela de Frete",
+      "h": 44,
+      "fs": "14px",
+      "linhas": 2
+     },
+     {
+      "t": "Cadastros de Devoluções",
+      "h": 44,
+      "fs": "14px",
+      "linhas": 2
+     }
+    ],
+    "fonts": {
+     "th": "11px",
+     "td": null,
+     "cardTitle": "14px",
+     "statNum": null,
+     "body": "-apple-system, BlinkMacSystemF"
+    },
+    "scroll": [
+     390,
+     390
+    ],
+    "cardBg": "rgb(30, 42, 82)",
+    "acordeao": [
+     {
+      "t": "Tempos Médios — Históric",
+      "h": 0,
+      "fs": "14px"
+     },
+     {
+      "t": "Raio-X da Operação",
+      "h": 0,
+      "fs": "14px"
+     },
+     {
+      "t": "Pulso do Pátio",
+      "h": 0,
+      "fs": "14px"
+     },
+     {
+      "t": "Painel do Gestor — compa",
+      "h": 0,
+      "fs": "14px"
+     }
+    ],
+    "maisLargo": null
+   }
+  },
+  "claro": {
+   "torre": {
+    "pos": {
+     "header": [
+      0,
+      0,
+      390,
+      56
+     ],
+     "nav": [
+      -300,
+      0,
+      300,
+      900
+     ],
+     "main": [
+      0,
+      70,
+      390,
+      7137
+     ],
+     "card1": [
+      10,
+      70,
+      370,
+      4545
+     ],
+     "thead": [
+      0,
+      0,
+      0,
+      0
+     ],
+     "tr1": [
+      25,
+      590,
+      340,
+      264
+     ]
+    },
+    "posFixo": {
+     "header": "fixed",
+     "nav": "fixed",
+     "headerBlur": "none",
+     "navBlur": "none"
+    },
+    "thTorre": [],
+    "thMont": [],
+    "cortes": {
+     "badge": [],
+     "btn": [],
+     "statLabel": [],
+     "th": [],
+     "navTab": []
+    },
+    "wraps": [
+     {
+      "sw": 340,
+      "cw": 340,
+      "tabela": "torre-tabela"
+     },
+     {
+      "sw": 340,
+      "cw": 340,
+      "tabela": ""
+     }
+    ],
+    "faixa": {
+     "h": 315,
+     "caixas": 9,
+     "cols": 3,
+     "linhas": 5,
+     "buracos": 1,
+     "rotulos": [
+      [
+       "Cargas em aberto",
+       1,
+       false,
+       338
+      ],
+      [
+       "Aguardando Veículo",
+       2,
+       false,
+       113
+      ],
+      [
+       "Aguardando Embarque",
+       2,
+       false,
+       113
+      ],
+      [
+       "Embarque Iniciado",
+       2,
+       false,
+       113
+      ],
+      [
+       "Embarque Finalizado",
+       2,
+       false,
+       113
+      ],
+      [
+       "Faturado",
+       1,
+       false,
+       113
+      ],
+      [
+       "Seguiu Viagem hoje",
+       1,
+       false,
+       338
+      ],
+      [
+       "Programação anterior",
+       2,
+       false,
+       113
+      ],
+      [
+       "Entradas sem carga",
+       2,
+       false,
+       113
+      ]
+     ]
+    },
+    "pequenos": [
+     {
+      "t": "= igual a ontem",
+      "f": 9.5
+     },
+     {
+      "t": "Aguardando Veículo",
+      "f": 9.5
+     },
+     {
+      "t": "Aguardando Embarque",
+      "f": 9.5
+     },
+     {
+      "t": "Embarque Iniciado",
+      "f": 9.5
+     },
+     {
+      "t": "Embarque Finalizado",
+      "f": 9.5
+     },
+     {
+      "t": "Faturado",
+      "f": 9.5
+     },
+     {
+      "t": "= igual a ontem",
+      "f": 9.5
+     },
+     {
+      "t": "Programação anterior",
+      "f": 9.5
+     }
+    ],
+    "titulos": [
+     {
+      "t": "Torre de Controle — todas as",
+      "h": 82,
+      "fs": "14px",
+      "linhas": 5
+     },
+     {
+      "t": "Visão do Pátio — linha do te",
+      "h": 44,
+      "fs": "14px",
+      "linhas": 2
+     }
+    ],
+    "fonts": {
+     "th": "11px",
+     "td": "12.5px",
+     "cardTitle": "14px",
+     "statNum": "24px",
+     "body": "-apple-system, BlinkMacSystemF"
+    },
+    "scroll": [
+     390,
+     390
+    ],
+    "cardBg": "rgb(239, 243, 249)",
+    "acordeao": [
+     {
+      "t": "Tempos Médios — Históric",
+      "h": 0,
+      "fs": "14px"
+     },
+     {
+      "t": "Raio-X da Operação",
+      "h": 0,
+      "fs": "14px"
+     },
+     {
+      "t": "Pulso do Pátio",
+      "h": 0,
+      "fs": "14px"
+     },
+     {
+      "t": "Painel do Gestor — compa",
+      "h": 0,
+      "fs": "14px"
+     }
+    ],
+    "maisLargo": null
+   },
+   "programacao": {
+    "pos": {
+     "header": [
+      0,
+      0,
+      390,
+      56
+     ],
+     "nav": [
+      -300,
+      0,
+      300,
+      900
+     ],
+     "main": [
+      0,
+      70,
+      390,
+      3413
+     ],
+     "card1": [
+      10,
+      70,
+      370,
+      1003
+     ],
+     "thead": [
+      0,
+      0,
+      0,
+      0
+     ],
+     "tr1": [
+      25,
+      269,
+      340,
+      190
+     ]
+    },
+    "posFixo": {
+     "header": "fixed",
+     "nav": "fixed",
+     "headerBlur": "none",
+     "navBlur": "none"
+    },
+    "thTorre": [],
+    "thMont": [],
+    "cortes": {
+     "badge": [],
+     "btn": [],
+     "statLabel": [],
+     "th": [],
+     "navTab": []
+    },
+    "wraps": [
+     {
+      "sw": 340,
+      "cw": 340,
+      "tabela": ""
+     }
+    ],
+    "faixa": {
+     "h": 2,
+     "caixas": 0,
+     "cols": 3,
+     "linhas": 0,
+     "buracos": 3,
+     "rotulos": []
+    },
+    "pequenos": [
+     {
+      "t": "1 de 2",
+      "f": 10
+     },
+     {
+      "t": "1 de 2",
+      "f": 10
+     },
+     {
+      "t": "2 de 2",
+      "f": 10
+     },
+     {
+      "t": "2 de 2",
+      "f": 10
+     }
+    ],
+    "titulos": [
+     {
+      "t": "Fila de Programados",
+      "h": 44,
+      "fs": "14px",
+      "linhas": 2
+     },
+     {
+      "t": "Nova Carga Programada",
+      "h": 44,
+      "fs": "14px",
+      "linhas": 2
+     },
+     {
+      "t": "Montagem do dia",
+      "h": 44,
+      "fs": "14px",
+      "linhas": 2
+     },
+     {
+      "t": "Rotas por dia da semana",
+      "h": 44,
+      "fs": "14px",
+      "linhas": 2
+     },
+     {
+      "t": "Aguardando Carga 0",
+      "h": 44,
+      "fs": "14px",
+      "linhas": 2
+     }
+    ],
+    "fonts": {
+     "th": "11px",
+     "td": "13px",
+     "cardTitle": "14px",
+     "statNum": null,
+     "body": "-apple-system, BlinkMacSystemF"
+    },
+    "scroll": [
+     390,
+     390
+    ],
+    "cardBg": "rgb(239, 243, 249)",
+    "acordeao": [
+     {
+      "t": "Tempos Médios — Históric",
+      "h": 0,
+      "fs": "14px"
+     },
+     {
+      "t": "Raio-X da Operação",
+      "h": 0,
+      "fs": "14px"
+     },
+     {
+      "t": "Pulso do Pátio",
+      "h": 0,
+      "fs": "14px"
+     },
+     {
+      "t": "Painel do Gestor — compa",
+      "h": 0,
+      "fs": "14px"
+     }
+    ],
+    "maisLargo": null
+   },
+   "indicadores": {
+    "pos": {
+     "header": [
+      0,
+      0,
+      390,
+      56
+     ],
+     "nav": [
+      -300,
+      0,
+      300,
+      900
+     ],
+     "main": [
+      0,
+      70,
+      390,
+      1276
+     ],
+     "card1": [
+      10,
+      70,
+      370,
+      453
+     ],
+     "thead": [
+      0,
+      0,
+      0,
+      0
+     ],
+     "tr1": [
+      25,
+      848,
+      340,
+      156
+     ]
+    },
+    "posFixo": {
+     "header": "fixed",
+     "nav": "fixed",
+     "headerBlur": "none",
+     "navBlur": "none"
+    },
+    "thTorre": [],
+    "thMont": [],
+    "cortes": {
+     "badge": [],
+     "btn": [],
+     "statLabel": [],
+     "th": [],
+     "navTab": []
+    },
+    "wraps": [
+     {
+      "sw": 340,
+      "cw": 340,
+      "tabela": ""
+     }
+    ],
+    "faixa": {
+     "h": 143,
+     "caixas": 6,
+     "cols": 3,
+     "linhas": 2,
+     "buracos": 0,
+     "rotulos": [
+      [
+       "Tempo Aguardando Embarqu",
+       3,
+       false,
+       113
+      ],
+      [
+       "Tempo de Carregamento",
+       2,
+       false,
+       113
+      ],
+      [
+       "Tempo de Faturamento",
+       2,
+       false,
+       113
+      ],
+      [
+       "Tempo Aguardando Saída",
+       3,
+       false,
+       113
+      ],
+      [
+       "Tempo em Pátio (total)",
+       2,
+       false,
+       113
+      ],
+      [
+       "Lead Time Total",
+       1,
+       false,
+       113
+      ]
+     ]
+    },
+    "pequenos": [
+     {
+      "t": "Tempo Aguardando Embar",
+      "f": 9.5
+     },
+     {
+      "t": "Tempo de Carregamento",
+      "f": 9.5
+     },
+     {
+      "t": "Tempo de Faturamento",
+      "f": 9.5
+     },
+     {
+      "t": "Tempo Aguardando Saída",
+      "f": 9.5
+     },
+     {
+      "t": "Tempo em Pátio (total)",
+      "f": 9.5
+     },
+     {
+      "t": "Lead Time Total",
+      "f": 9.5
+     }
+    ],
+    "titulos": [
+     {
+      "t": "Tempos Médios — Histórico Co",
+      "h": 53,
+      "fs": "14px",
+      "linhas": 3
+     },
+     {
+      "t": "Raio-X da Operação",
+      "h": 44,
+      "fs": "14px",
+      "linhas": 2
+     },
+     {
+      "t": "Pulso do Pátio",
+      "h": 44,
+      "fs": "14px",
+      "linhas": 2
+     },
+     {
+      "t": "Painel do Gestor — comparaçã",
+      "h": 61,
+      "fs": "14px",
+      "linhas": 3
+     },
+     {
+      "t": "Gráficos",
+      "h": 44,
+      "fs": "14px",
+      "linhas": 2
+     },
+     {
+      "t": "Sobre o OTIF",
+      "h": 44,
+      "fs": "14px",
+      "linhas": 2
+     }
+    ],
+    "fonts": {
+     "th": "11px",
+     "td": "12px",
+     "cardTitle": "14px",
+     "statNum": "19px",
+     "body": "-apple-system, BlinkMacSystemF"
+    },
+    "scroll": [
+     390,
+     390
+    ],
+    "cardBg": "rgb(239, 243, 249)",
+    "acordeao": [
+     {
+      "t": "Tempos Médios — Históric",
+      "h": 52.5,
+      "fs": "14px"
+     },
+     {
+      "t": "Raio-X da Operação",
+      "h": 43.5,
+      "fs": "14px"
+     },
+     {
+      "t": "Pulso do Pátio",
+      "h": 43.5,
+      "fs": "14px"
+     },
+     {
+      "t": "Painel do Gestor — compa",
+      "h": 61,
+      "fs": "14px"
+     }
+    ],
+    "maisLargo": {
+     "r": 545,
+     "tag": "TABLE",
+     "cls": "tabela-status-h mobile-cartao",
+     "t": "Aguardando VeículoLo"
+    }
+   },
+   "devolucoes": {
+    "pos": {
+     "header": [
+      0,
+      0,
+      390,
+      56
+     ],
+     "nav": [
+      -300,
+      0,
+      300,
+      900
+     ],
+     "main": [
+      0,
+      70,
+      390,
+      90
+     ],
+     "card1": [
+      10,
+      70,
+      370,
+      50
+     ],
+     "thead": null,
+     "tr1": null
+    },
+    "posFixo": {
+     "header": "fixed",
+     "nav": "fixed",
+     "headerBlur": "none",
+     "navBlur": "none"
+    },
+    "thTorre": [],
+    "thMont": [],
+    "cortes": {
+     "badge": [],
+     "btn": [],
+     "statLabel": [],
+     "th": [],
+     "navTab": []
+    },
+    "wraps": [],
+    "faixa": null,
+    "pequenos": [],
+    "titulos": [
+     {
+      "t": "Devoluções",
+      "h": 44,
+      "fs": "14px",
+      "linhas": 2
+     }
+    ],
+    "fonts": {
+     "th": null,
+     "td": null,
+     "cardTitle": "14px",
+     "statNum": null,
+     "body": "-apple-system, BlinkMacSystemF"
+    },
+    "scroll": [
+     390,
+     390
+    ],
+    "cardBg": "rgb(239, 243, 249)",
+    "acordeao": [
+     {
+      "t": "Tempos Médios — Históric",
+      "h": 0,
+      "fs": "14px"
+     },
+     {
+      "t": "Raio-X da Operação",
+      "h": 0,
+      "fs": "14px"
+     },
+     {
+      "t": "Pulso do Pátio",
+      "h": 0,
+      "fs": "14px"
+     },
+     {
+      "t": "Painel do Gestor — compa",
+      "h": 0,
+      "fs": "14px"
+     }
+    ],
+    "maisLargo": null
+   },
+   "cadastros": {
+    "pos": {
+     "header": [
+      0,
+      0,
+      390,
+      56
+     ],
+     "nav": [
+      -300,
+      0,
+      300,
+      900
+     ],
+     "main": [
+      0,
+      70,
+      390,
+      1553
+     ],
+     "card1": [
+      10,
+      70,
+      370,
+      1250
+     ],
+     "thead": [
+      0,
+      0,
+      0,
+      0
+     ],
+     "tr1": null
+    },
+    "posFixo": {
+     "header": "fixed",
+     "nav": "fixed",
+     "headerBlur": "none",
+     "navBlur": "none"
+    },
+    "thTorre": [],
+    "thMont": [],
+    "cortes": {
+     "badge": [],
+     "btn": [],
+     "statLabel": [],
+     "th": [],
+     "navTab": []
+    },
+    "wraps": [],
+    "faixa": null,
+    "pequenos": [],
+    "titulos": [
+     {
+      "t": "Frota (Placa → Transportador",
+      "h": 61,
+      "fs": "14px",
+      "linhas": 3
+     },
+     {
+      "t": "Transportadoras\n          ⬇ ",
+      "h": 44,
+      "fs": "14px",
+      "linhas": 3
+     },
+     {
+      "t": "Tabela de Frete",
+      "h": 44,
+      "fs": "14px",
+      "linhas": 2
+     },
+     {
+      "t": "Cadastros de Devoluções",
+      "h": 44,
+      "fs": "14px",
+      "linhas": 2
+     }
+    ],
+    "fonts": {
+     "th": "11px",
+     "td": null,
+     "cardTitle": "14px",
+     "statNum": null,
+     "body": "-apple-system, BlinkMacSystemF"
+    },
+    "scroll": [
+     390,
+     390
+    ],
+    "cardBg": "rgb(239, 243, 249)",
+    "acordeao": [
+     {
+      "t": "Tempos Médios — Históric",
+      "h": 0,
+      "fs": "14px"
+     },
+     {
+      "t": "Raio-X da Operação",
+      "h": 0,
+      "fs": "14px"
+     },
+     {
+      "t": "Pulso do Pátio",
+      "h": 0,
+      "fs": "14px"
+     },
+     {
+      "t": "Painel do Gestor — compa",
+      "h": 0,
+      "fs": "14px"
+     }
+    ],
+    "maisLargo": null
+   }
+  }
+ },
+ "1280": {
+  "torre": {
+   "wraps": [
+    {
+     "sw": 1006,
+     "cw": 1006,
+     "tabela": "torre-tabela"
+    },
+    {
+     "sw": 1006,
+     "cw": 1006,
+     "tabela": ""
+    }
+   ],
+   "thTorre": [
+    {
+     "i": 0,
+     "txt": "Seq.",
+     "x": 241,
+     "w": 57,
+     "h": 47,
+     "sw": 57,
+     "cw": 57,
+     "fs": "10px",
+     "fw": "700",
+     "tt": "none",
+     "ls": "normal",
+     "linhas": 4
+    },
+    {
+     "i": 1,
+     "txt": "Nº Carga",
+     "x": 298,
+     "w": 78,
+     "h": 47,
+     "sw": 78,
+     "cw": 78,
+     "fs": "10px",
+     "fw": "700",
+     "tt": "none",
+     "ls": "normal",
+     "linhas": 4
+    },
+    {
+     "i": 2,
+     "txt": "Veículo",
+     "x": 376,
+     "w": 92,
+     "h": 47,
+     "sw": 92,
+     "cw": 92,
+     "fs": "10px",
+     "fw": "700",
+     "tt": "none",
+     "ls": "normal",
+     "linhas": 4
+    },
+    {
+     "i": 3,
+     "txt": "Motorista",
+     "x": 468,
+     "w": 90,
+     "h": 47,
+     "sw": 90,
+     "cw": 90,
+     "fs": "10px",
+     "fw": "700",
+     "tt": "none",
+     "ls": "normal",
+     "linhas": 4
+    },
+    {
+     "i": 4,
+     "txt": "Rota",
+     "x": 558,
+     "w": 92,
+     "h": 47,
+     "sw": 92,
+     "cw": 92,
+     "fs": "10px",
+     "fw": "700",
+     "tt": "none",
+     "ls": "normal",
+     "linhas": 4
+    },
+    {
+     "i": 5,
+     "txt": "Peso (kg)",
+     "x": 650,
+     "w": 67,
+     "h": 47,
+     "sw": 67,
+     "cw": 67,
+     "fs": "10px",
+     "fw": "700",
+     "tt": "none",
+     "ls": "normal",
+     "linhas": 4
+    },
+    {
+     "i": 6,
+     "txt": "Palet.",
+     "x": 717,
+     "w": 59,
+     "h": 47,
+     "sw": 59,
+     "cw": 59,
+     "fs": "10px",
+     "fw": "700",
+     "tt": "none",
+     "ls": "normal",
+     "linhas": 4
+    },
+    {
+     "i": 7,
+     "txt": "Tipo de Operação",
+     "x": 777,
+     "w": 82,
+     "h": 47,
+     "sw": 82,
+     "cw": 82,
+     "fs": "10px",
+     "fw": "700",
+     "tt": "none",
+     "ls": "normal",
+     "linhas": 4
+    },
+    {
+     "i": 8,
+     "txt": "Ganchos · Entr.",
+     "x": 858,
+     "w": 67,
+     "h": 47,
+     "sw": 67,
+     "cw": 67,
+     "fs": "10px",
+     "fw": "700",
+     "tt": "none",
+     "ls": "normal",
+     "linhas": 4
+    },
+    {
+     "i": 9,
+     "txt": "Status",
+     "x": 926,
+     "w": 147,
+     "h": 47,
+     "sw": 147,
+     "cw": 147,
+     "fs": "10px",
+     "fw": "700",
+     "tt": "none",
+     "ls": "normal",
+     "linhas": 4
+    },
+    {
+     "i": 10,
+     "txt": "Programação · Última etapa",
+     "x": 1073,
+     "w": 80,
+     "h": 47,
+     "sw": 80,
+     "cw": 80,
+     "fs": "10px",
+     "fw": "700",
+     "tt": "none",
+     "ls": "normal",
+     "linhas": 4
+    },
+    {
+     "i": 11,
+     "txt": "Ação",
+     "x": 1153,
+     "w": 94,
+     "h": 47,
+     "sw": 94,
+     "cw": 94,
+     "fs": "10px",
+     "fw": "700",
+     "tt": "none",
+     "ls": "normal",
+     "linhas": 4
+    }
+   ],
+   "thMont": [],
+   "cortes": {
+    "badge": [],
+    "btn": [],
+    "statLabel": [],
+    "th": [],
+    "navTab": []
+   },
+   "faixa": {
+    "h": 175,
+    "caixas": 9,
+    "cols": 3,
+    "linhas": 2,
+    "buracos": -1,
+    "rotulos": [
+     [
+      "Cargas em aberto",
+      1,
+      false,
+      287
+     ],
+     [
+      "Aguardando Veículo",
+      2,
+      false,
+      143
+     ],
+     [
+      "Aguardando Embarque",
+      2,
+      false,
+      143
+     ],
+     [
+      "Embarque Iniciado",
+      1,
+      false,
+      143
+     ],
+     [
+      "Embarque Finalizado",
+      2,
+      false,
+      143
+     ],
+     [
+      "Faturado",
+      1,
+      false,
+      143
+     ],
+     [
+      "Seguiu Viagem hoje",
+      1,
+      false,
+      502
+     ],
+     [
+      "Programação anterior",
+      1,
+      false,
+      251
+     ],
+     [
+      "Entradas sem carga",
+      1,
+      false,
+      251
+     ]
+    ]
+   },
+   "scroll": [
+    1280,
+    1280
+   ],
+   "pos": {
+    "header": [
+     0,
+     0,
+     1280,
+     72
+    ],
+    "nav": [
+     0,
+     72,
+     208,
+     828
+    ],
+    "main": [
+     208,
+     86,
+     1072,
+     38965
+    ],
+    "card1": [
+     226,
+     86,
+     1036,
+     34841
+    ],
+    "thead": [
+     241,
+     427,
+     1006,
+     47
+    ],
+    "tr1": [
+     241,
+     474,
+     1006,
+     306
+    ]
+   }
+  },
+  "programacao": {
+   "wraps": [
+    {
+     "sw": 1006,
+     "cw": 1006,
+     "tabela": ""
+    },
+    {
+     "sw": 1006,
+     "cw": 1006,
+     "tabela": "mont-tabela"
+    },
+    {
+     "sw": 1006,
+     "cw": 1006,
+     "tabela": ""
+    },
+    {
+     "sw": 1006,
+     "cw": 1006,
+     "tabela": ""
+    }
+   ],
+   "thTorre": [],
+   "thMont": [
+    {
+     "i": 0,
+     "txt": "Seq.",
+     "x": 241,
+     "w": 61,
+     "h": 36,
+     "sw": 61,
+     "cw": 61,
+     "fs": "10px",
+     "fw": "700",
+     "tt": "none",
+     "ls": "normal",
+     "linhas": 3
+    },
+    {
+     "i": 1,
+     "txt": "Nº Carga",
+     "x": 302,
+     "w": 69,
+     "h": 36,
+     "sw": 69,
+     "cw": 69,
+     "fs": "10px",
+     "fw": "700",
+     "tt": "none",
+     "ls": "normal",
+     "linhas": 3
+    },
+    {
+     "i": 2,
+     "txt": "Veículo",
+     "x": 372,
+     "w": 88,
+     "h": 36,
+     "sw": 88,
+     "cw": 88,
+     "fs": "10px",
+     "fw": "700",
+     "tt": "none",
+     "ls": "normal",
+     "linhas": 3
+    },
+    {
+     "i": 3,
+     "txt": "Motorista",
+     "x": 459,
+     "w": 84,
+     "h": 36,
+     "sw": 84,
+     "cw": 84,
+     "fs": "10px",
+     "fw": "700",
+     "tt": "none",
+     "ls": "normal",
+     "linhas": 3
+    },
+    {
+     "i": 4,
+     "txt": "Rota",
+     "x": 543,
+     "w": 100,
+     "h": 36,
+     "sw": 100,
+     "cw": 100,
+     "fs": "10px",
+     "fw": "700",
+     "tt": "none",
+     "ls": "normal",
+     "linhas": 3
+    },
+    {
+     "i": 5,
+     "txt": "Peso (kg)",
+     "x": 643,
+     "w": 69,
+     "h": 36,
+     "sw": 69,
+     "cw": 69,
+     "fs": "10px",
+     "fw": "700",
+     "tt": "none",
+     "ls": "normal",
+     "linhas": 3
+    },
+    {
+     "i": 6,
+     "txt": "Palet.",
+     "x": 712,
+     "w": 71,
+     "h": 36,
+     "sw": 71,
+     "cw": 71,
+     "fs": "10px",
+     "fw": "700",
+     "tt": "none",
+     "ls": "normal",
+     "linhas": 3
+    },
+    {
+     "i": 7,
+     "txt": "Tipo de Operação",
+     "x": 784,
+     "w": 88,
+     "h": 36,
+     "sw": 88,
+     "cw": 88,
+     "fs": "10px",
+     "fw": "700",
+     "tt": "none",
+     "ls": "normal",
+     "linhas": 3
+    },
+    {
+     "i": 8,
+     "txt": "Ganchos",
+     "x": 871,
+     "w": 51,
+     "h": 36,
+     "sw": 53,
+     "cw": 51,
+     "fs": "10px",
+     "fw": "700",
+     "tt": "none",
+     "ls": "normal",
+     "linhas": 3
+    },
+    {
+     "i": 9,
+     "txt": "Entregas",
+     "x": 922,
+     "w": 53,
+     "h": 36,
+     "sw": 55,
+     "cw": 53,
+     "fs": "10px",
+     "fw": "700",
+     "tt": "none",
+     "ls": "normal",
+     "linhas": 3
+    },
+    {
+     "i": 10,
+     "txt": "Destino",
+     "x": 976,
+     "w": 76,
+     "h": 36,
+     "sw": 76,
+     "cw": 76,
+     "fs": "10px",
+     "fw": "700",
+     "tt": "none",
+     "ls": "normal",
+     "linhas": 3
+    },
+    {
+     "i": 11,
+     "txt": "KM",
+     "x": 1051,
+     "w": 57,
+     "h": 36,
+     "sw": 57,
+     "cw": 57,
+     "fs": "10px",
+     "fw": "700",
+     "tt": "none",
+     "ls": "normal",
+     "linhas": 3
+    },
+    {
+     "i": 12,
+     "txt": "Frete",
+     "x": 1108,
+     "w": 61,
+     "h": 36,
+     "sw": 61,
+     "cw": 61,
+     "fs": "10px",
+     "fw": "700",
+     "tt": "none",
+     "ls": "normal",
+     "linhas": 3
+    },
+    {
+     "i": 13,
+     "txt": "Ação",
+     "x": 1169,
+     "w": 78,
+     "h": 36,
+     "sw": 78,
+     "cw": 78,
+     "fs": "10px",
+     "fw": "700",
+     "tt": "none",
+     "ls": "normal",
+     "linhas": 3
+    }
+   ],
+   "cortes": {
+    "badge": [],
+    "btn": [],
+    "statLabel": [],
+    "th": [
+     [
+      "Ganchos",
+      53,
+      51
+     ],
+     [
+      "Entregas",
+      55,
+      53
+     ]
+    ],
+    "navTab": []
+   },
+   "faixa": {
+    "h": 2,
+    "caixas": 0,
+    "cols": 3,
+    "linhas": 0,
+    "buracos": 3,
+    "rotulos": []
+   },
+   "scroll": [
+    1280,
+    1280
+   ],
+   "pos": {
+    "header": [
+     0,
+     0,
+     1280,
+     72
+    ],
+    "nav": [
+     0,
+     72,
+     208,
+     828
+    ],
+    "main": [
+     208,
+     86,
+     1072,
+     5194
+    ],
+    "card1": [
+     226,
+     86,
+     1036,
+     3626
+    ],
+    "thead": [
+     241,
+     226,
+     1006,
+     27
+    ],
+    "tr1": [
+     241,
+     253,
+     1006,
+     144
+    ]
+   }
+  }
+ },
+ "tablet": {
+  "coarse": true,
+  "fine": false,
+  "btn": {
+   "h": 44,
+   "minH": "44px",
+   "t": "🚜 Papel do mano"
+  },
+  "btnSm": {
+   "h": 44,
+   "minH": "44px",
+   "t": "🚜 Papel do mano"
+  },
+  "input": {
+   "h": 44,
+   "minH": "44px",
+   "t": ""
+  },
+  "navTab": {
+   "h": 44,
+   "minH": "44px",
+   "t": "Torre de Control"
+  }
+ },
+ "filtrando": {
+  "ativoBg": "rgba(233, 185, 84, 0.12)",
+  "ativoSombra": "rgb(233, 185, 84) 0px 0px 0px 1.5px inset",
+  "ativoRotulo": "Aguardando Veículo",
+  "linhaAcesa": true,
+  "tdComBarra": 1,
+  "tdBg": "rgba(198, 40, 40, 0.1)",
+  "carga": "⠿\n      \n   ",
+  "contraste_baixo": []
+ },
+ "foco": {
+  "outline": "solid 2px rgb(233, 185, 84)",
+  "borda": "rgba(151, 168, 214, 0.28)",
+  "fv": true
+ },
+ "linhaAcesaClaro": {
+  "repouso": {
+   "tdBg": "rgba(198, 40, 40, 0.07)",
+   "trBg": "rgba(0, 0, 0, 0)",
+   "veic": [],
+   "todos": 16
+  },
+  "hover": {
+   "tdBg": "rgba(198, 40, 40, 0.1)",
+   "trBg": "rgba(0, 0, 0, 0)",
+   "veic": [],
+   "todos": 16
+  }
+ },
+ "botoes": {
+  "escuro": {
+   ".btn-danger": {
+    "repouso": 8.78,
+    "hover": 7.58,
+    "fundoHover": [
+     132,
+     34,
+     43
+    ]
+   },
+   ".btn-success": null,
+   ".btn-primary": {
+    "repouso": 10.2,
+    "hover": 8.12,
+    "fundoHover": [
+     207,
+     167,
+     83
+    ]
+   },
+   ".btn-sec": {
+    "repouso": 9.93,
+    "hover": 6.53,
+    "fundoHover": [
+     51,
+     70,
+     127
+    ]
+   }
+  },
+  "claro": {
+   ".btn-danger": {
+    "repouso": 8.78,
+    "hover": 6.9,
+    "fundoHover": [
+     153,
+     55,
+     61
+    ]
+   },
+   ".btn-success": null,
+   ".btn-primary": {
+    "repouso": 10.2,
+    "hover": 7.95,
+    "fundoHover": [
+     233,
+     192,
+     104
+    ]
+   },
+   ".btn-sec": {
+    "repouso": 13.64,
+    "hover": 8.05,
+    "fundoHover": [
+     199,
+     208,
+     226
+    ]
+   }
+  }
+ },
+ "toqueAba": {
+  "antes": {
+   "ativa": true,
+   "sombra": "none",
+   "fundo": "rgba(233, 185, 84, 0.2)",
+   "transform": "none"
+  },
+  "durante": {
+   "ativa": true,
+   "sombra": "rgba(233, 185, 84, 0.14) 0px 0px 0px 999px inset",
+   "fundo": "rgba(233, 185, 84, 0.2)",
+   "transform": "none"
+  },
+  "responde": true
+ }
+}

@@ -18,7 +18,15 @@
 .nav-tab{ font-size:13.5px; font-weight:600; letter-spacing:.01em;
   transition:background-color var(--t-media) var(--curva), color var(--t-media) var(--curva) }
 .nav-tab:hover{ background:var(--acento-hover) }
-.nav-tab.active{ background:var(--acento-ativo); box-shadow:none; font-weight:700 }
+.nav-tab.active{ background:var(--acento-ativo); font-weight:700 }
+/* RODADA 2. O brilho do celular (`.nav-tab.active{box-shadow:0 -1px 12px …
+   inset}`, styles.css ~575) sai — mas NÃO com `.nav-tab.active{box-shadow:none}`:
+   `.nav-tab:active` (o toque, styles.css ~5892) tem a MESMA especificidade,
+   e esta camada vem depois, então o `none` daqui apagava a resposta ao dedo
+   na aba selecionada (test_toque_responde.py reprovou). `:not(:active)`
+   desliga o brilho só em repouso; apertada, a aba volta a cair na regra da
+   base. Nenhum valor copiado. */
+.nav-tab.active:not(:active){ box-shadow:none }
 
 /* border-radius:var(--radius) aqui não é redundante: styles.css tem uma regra solta
    `.card{border-radius:8px}` (linha ~2529, fora de qualquer media query, seção
@@ -29,11 +37,6 @@
 .card{ background:var(--vidro-bg); border:1px solid var(--border-soft); border-radius:var(--radius);
   box-shadow:var(--vidro-sombra); padding:10px 14px; margin-bottom:8px }
 .card::after{ display:none }                              /* fio de brilho do vidro */
-.card-title{ font-size:13px; font-weight:800; text-transform:uppercase; letter-spacing:.06em;
-  margin-bottom:8px; padding-left:10px }
-.card-title::before{ background:var(--gold); width:3px; border-radius:0 }
-.card-title .ico-card{ width:16px; height:16px }
-.card-sub{ font-size:11.5px; margin-top:-4px; margin-bottom:6px; letter-spacing:.01em }
 .funcao-aba{ border-color:var(--border-soft); border-left-color:var(--gold); padding:8px 12px }
 
 .modal-overlay{ -webkit-backdrop-filter:blur(6px); backdrop-filter:blur(6px) }  /* o único desfoque: apaga a tela de trás, é função */
@@ -42,4 +45,15 @@
 }
 @media screen and (min-width:821px){
   .nav-tab.active{ border-left-color:var(--gold) }   /* a régua fica: estado não depende só de cor */
+
+  /* RODADA 2: o título de card SÓ muda no computador. No celular ele é o
+     botão do acordeão de Indicadores e Cadastros, calibrado à mão em 44px
+     de alvo com `font-size:14px` (styles.css ~4555 e ~5047): 13px derrubava
+     o alvo para 42,3px, e a caixa alta com .06em fazia "Visão do Pátio —
+     linha do tempo" crescer de 44 para 64px. Abaixo de 821px vale a base. */
+  .card-title{ font-size:13px; font-weight:800; text-transform:uppercase; letter-spacing:.06em;
+    margin-bottom:8px; padding-left:10px }
+  .card-title::before{ background:var(--gold); width:3px; border-radius:0 }
+  .card-title .ico-card{ width:16px; height:16px }
+  .card-sub{ font-size:11.5px; margin-top:-4px; margin-bottom:6px; letter-spacing:.01em }
 }

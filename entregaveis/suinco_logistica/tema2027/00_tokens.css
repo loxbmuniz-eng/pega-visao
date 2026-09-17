@@ -16,9 +16,18 @@
   --border-soft:rgba(151,168,214,.14);
   --linha-fio:rgba(151,168,214,.09);
   --shadow:0 2px 8px rgba(4,8,18,.45);
-  /* preenchimento de estado (hover / ativo), dourado da marca em véu */
+  /* preenchimento de estado (hover / ativo), dourado da marca em véu.
+     RODADA 2: .16 -> .12. O véu clareia o fundo, e "▲ 10 vs. ontem" (vermelho
+     --st-aguardando-veiculo-txt, 10,5px) na caixa ativa "Cargas em aberto" —
+     que é a caixa ativa POR PADRÃO, o pixel mais visto do painel — media
+     4,41:1 sobre o .16. Com .12, 4,84:1 (test_contraste.py). O anel de 1,5px
+     continua sendo o que marca o estado; o véu é reforço. */
   --acento-hover:rgba(233,185,84,.09);
-  --acento-ativo:rgba(233,185,84,.16);
+  --acento-ativo:rgba(233,185,84,.12);
+  /* linha da Torre com caminhão parado no portão (30_tabelas.css). No escuro
+     o véu vermelho escurece um fundo já escuro: texto claro ganha. */
+  --t27-acesa:rgba(198,40,40,.10);
+  --t27-acesa-hover:rgba(198,40,40,.14);
   /* geometria: canto vivo, não pílula */
   --radius:6px;
   --radius-sm:4px;
@@ -46,6 +55,12 @@
   --shadow:0 2px 8px rgba(16,22,37,.10);
   --acento-hover:rgba(26,32,45,.05);
   --acento-ativo:rgba(233,185,84,.20);
+  /* RODADA 2: no claro o véu vermelho ESCURECE um fundo quase branco, e o
+     tipo de veículo (--text-dim com opacity .9, 10,5px) caiu a 4,03:1 sobre
+     .14. Aqui o estado tem de carregar menos tinta: .07 em repouso, .10 no
+     hover — a barra de 3px e o selo vermelho continuam dizendo o mesmo. */
+  --t27-acesa:rgba(198,40,40,.07);
+  --t27-acesa-hover:rgba(198,40,40,.10);
   --amb-ouro:rgba(233,185,84,.03);
   --amb-azul:rgba(55,74,134,.02);
   --amb-vinho:rgba(143,31,38,.015);

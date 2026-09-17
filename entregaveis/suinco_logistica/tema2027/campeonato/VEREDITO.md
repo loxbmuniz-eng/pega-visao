@@ -600,3 +600,67 @@ e se alguém escreveu `font-family`, `position` ou `text-transform` onde eu diss
 
 ⬜ Tudo neste documento é proposta. Nenhum arquivo em `/home/user/pega-visao` foi editado por mim.
 ⬜ Nenhum `camada.css` de competidor foi alterado.
+
+---
+
+## 10. RODADA 2 — auditoria de volta e decisões finais (17/09/2026)
+
+Estado: 🟡 tudo abaixo está no working tree da branch de trabalho, medido
+(`tema2027/auditoria/tema2027_delta.md`), não commitado, não publicado.
+
+### O que eu escrevi na seção 6 e se provou errado contra o código real
+
+1. **`th` em caixa alta.** Alargou "Programação · Última etapa" para 93px numa coluna
+   de 92 (1440) e de 80 (1280), e "Ganchos"/"Entregas" da Montagem em 10–12px — colunas
+   que já estavam com folga zero (o publicado corta 1–2px ali). E `text-transform`
+   muda `innerText`: dois testes quebraram e `'Cliente' not in cabecalhos`
+   (test_auditoria_refino.py) ficou cego. Rótulo de estrutura é cor + tamanho + peso.
+   **Caixa alta no `th` sai. 11px, peso 700, cor dourada, fundo chapado, fio de 1px.**
+2. **`.card-title` a 13px sem trava de largura.** No celular ele é o botão do acordeão,
+   calibrado em 44px. **O bloco inteiro do título vai para `min-width:821px`.**
+3. **`.btn{min-height:36px}` só por largura.** Tablet com toque caiu para 36px.
+   **`and (pointer:fine)`.**
+4. **`.nav-tab.active{box-shadow:none}`** — a minha própria regra da seção 5, violada no
+   arquivo ao lado. E o zero (`0 0 0 0 rgba(0,0,0,0)`) mataria o toque do mesmo jeito,
+   porque o problema é a ordem, não o valor. **`.nav-tab.active:not(:active){box-shadow:none}`.**
+5. **`--acento-ativo` .16 no escuro** clareia o fundo da caixa ativa por padrão e derruba
+   "▲ 10 vs. ontem" a 4,41. **.12** (4,84 medido).
+6. **Linha acesa a .10/.14 no claro** escurece um fundo quase branco e, somada à zebra,
+   derruba o tipo de veículo a 4,03. **Tokens por tema (`--t27-acesa` .10/.14 escuro,
+   .07/.10 claro) e zebra cancelada na linha acesa.**
+7. **`.stat-label{letter-spacing:.02em}`** genérico alcançava a faixa: "Aguardando
+   Embarque" quebrava em duas linhas a 1440. **Sem letter-spacing.**
+
+### Decisões reservadas (seção 7)
+
+- **Fonte:** nenhuma `font-family` nova — decisão final, não só desta rodada. O painel
+  roda offline (fila do `suinco-api.js`) e em máquina lenta (#37); fonte de rede é
+  dependência e FOUT num painel vivo. `tabular-nums` já alinha.
+- **Ícones:** `.ico-card` 16px só no computador; celular fica na base (15px). Aba ativa
+  já pinta o ícone de dourado na base. Nada mais.
+- **Fundo do tema claro:** `#c6cfe0` fica. A camada tirou a sombra do vidro; hoje é a
+  diferença página/card que dá estrutura à tela clara (test_vidro ≥ 1,08). Clarear a
+  página sem devolver sombra faz o card flutuar sem borda. Só se revisita com orçamento
+  de sombra.
+- **Densidade horizontal de formulário:** fica (`--sp-*` intocado, eixo x é chão 1).
+- **Buraco da faixa:** fechado. `.bento.bi-faixa` vira `flex-wrap` a partir de 641px,
+  base 134px por caixa e 268 no destaque: a primeira linha sai pixel-igual à grade
+  (332/166px) e a última estica até a borda. `grid-template-columns` da base intocado;
+  celular continua na grade de 3 colunas. Altura 182 → 175 (1440), 192 → 175 (1280).
+
+### Guarda corrigida
+
+`testes/guarda_do_padrao.py`: "fora da vista" passa a terminar onde o rodapé fixo
+começa. A régua acusava um alvo de 340×61 porque três dos quatro pontos caíam
+debaixo de `.rodape-conexao`. Publicado e novo: 18 falhas cada, o mesmo conjunto,
+todas pré-existentes.
+
+### O que fica ⬜ (proposta, fora desta rodada)
+
+- `.sit-outras` 4,3 e "Caminhão NO PÁTIO" 1,39 no claro — herança da base, presente no
+  publicado com os mesmos números.
+- 18 falhas da guarda (Torre rola 144px no tablet; "?" de 13px; segmentos de 44px por
+  0,x px) — todas do publicado.
+- `test_tema2027_papel.py` grava no scratchpad de UMA sessão (caminho fixo) e
+  `test_tema2027_etapa4_tabelas.py` reescreve um JSON versionado a cada rodada: os dois
+  sujam ou dependem do ambiente. Uma linha cada.

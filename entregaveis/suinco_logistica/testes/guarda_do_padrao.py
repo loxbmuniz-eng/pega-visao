@@ -157,7 +157,17 @@ MEDIR = r"""(alvoToque) => {
       if (!visivel(el)) return;
       const r = el.getBoundingClientRect();
       const cx = r.left + r.width/2, cy = r.top + r.height/2;
-      if (cy - 21 < 0 || cy + 21 > window.innerHeight) return;   // fora da vista: não dá para medir
+      /* "FORA DA VISTA" TERMINA ONDE O RODAPÉ FIXO COMEÇA (17/09/2026).
+         O rodapé de conexão é `position:fixed` no pé da janela. Um controle
+         que a rolagem deixou debaixo dele não está coberto — está fora da
+         vista, igual ao que passou do fim da janela. A régua media até
+         `innerHeight` e acusou o título "Painel do Gestor" (340x61, alvo
+         inteiro) porque a compactação do Tema 2027 o trouxe 26px para
+         cima, para dentro da faixa do rodapé. Medido, não hipótese. */
+      const rodape = document.querySelector('.rodape-conexao');
+      const fim = rodape && getComputedStyle(rodape).position === 'fixed'
+        ? Math.min(window.innerHeight, rodape.getBoundingClientRect().top) : window.innerHeight;
+      if (cy - 21 < 0 || cy + 21 > fim) return;   // fora da vista: não dá para medir
       const pontos = [[cx, cy-21], [cx, cy+21], [cx-21, cy], [cx+21, cy]];
       const erram = pontos.filter(([x,y]) => !pega(el, x, y)).length;
       if (erram > 0)

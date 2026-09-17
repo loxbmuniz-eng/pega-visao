@@ -43,8 +43,12 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{
 ::-webkit-scrollbar-thumb{ background:var(--border); border-radius:4px }
 ::-webkit-scrollbar-track{ background:transparent }
 }
-@media screen and (min-width:821px){
-  .btn{ min-height:36px; padding:7px 14px }     /* no celular fica 40/44 — dedo com luva */
+/* RODADA 2: `and (pointer:fine)`. Sem isso, esta regra empatava em
+   especificidade com `@media (pointer:coarse){.btn{min-height:44px}}` da base
+   e vencia por vir depois — no tablet da Portaria (1024px, toque, luva) o
+   alvo caía de 44 para 36px (medido). Largura não diz se há dedo; `pointer` diz. */
+@media screen and (min-width:821px) and (pointer:fine){
+  .btn{ min-height:36px; padding:7px 14px }     /* com toque, em qualquer largura, fica 44 */
 }
 @media screen and (prefers-reduced-motion: reduce){
   .btn{ transition:none !important } .btn:hover,.btn:active{ transform:none !important }
