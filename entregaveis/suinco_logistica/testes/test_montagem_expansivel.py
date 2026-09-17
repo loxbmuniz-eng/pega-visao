@@ -279,9 +279,27 @@ async def main():
                 "WHERE numero_carga = 'MX-1'")
         ck('a carga existe na Torre com os dados do formulário',
            r and r[0] == placa[0] and r[1] == 'Jose da Silva', str(r))
-        ck('a observação da carga traz o apelido E o recado da Logística',
-           r and 'carregar por ultimo' in (r[3] or '') and ' — ' in (r[3] or ''),
-           str(r[3] if r else None))
+        # A REGRA MUDOU DE PROPÓSITO (17/09/2026) — ocorrência #77.
+        #
+        # Este teste cobrava que a observação da carga trouxesse o apelido da
+        # rota E o recado, colados com " — ". Era a decisão de 25/08, tomada
+        # para que "quem lê a carga na Torre saiba que 517 é a Ômega".
+        #
+        # O dono derrubou essa decisão hoje: o apelido é "Destino -
+        # Operadora", e ele estava ocupando a coluna de Observações do
+        # relatório de Administração de Fretes — a coluna onde se confere
+        # quanto a viagem custou. O operador já é derivável da rota
+        # (`rotaOperador()`, e `rotaApoio()` já o desenha no impresso).
+        #
+        # Causa 1 da lista da casa: a regra mudou, o teste é que ficou velho.
+        # O que ele protegia e CONTINUA protegido é a outra metade — o recado
+        # de quem digitou não pode se perder no caminho. Agora ele tem de
+        # chegar SOZINHO, sem nada colado na frente.
+        obs = (r[3] if r else '') or ''
+        ck('o recado da Logística chega inteiro à carga',
+           'carregar por ultimo' in obs, repr(obs))
+        ck('e chega SOZINHO — o apelido da rota não é mais colado nele',
+           obs.strip() == 'carregar por ultimo', repr(obs))
         efet = sql(f"SELECT efetivada_em IS NOT NULL FROM programacao_montagem "
                    f"WHERE montagem_id = '{mid}'")
         ck('e a linha da montagem virou histórico, não sumiu',
