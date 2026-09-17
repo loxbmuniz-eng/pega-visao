@@ -27,8 +27,8 @@ faz achar a próxima em minutos em vez de horas:
 | **Eco de sincronização** | Todo painel reenvia o que tem em memória. Cópia velha sobrescreve dado novo — inclusive com campo vazio. | #01, #03, #08, #10 |
 | **Rótulo que mente** | O dado está certo no banco; o nome dado a ele na tela descreve outra coisa. | #04, #12 |
 | **Regra larga demais** | Trava criada para um caso real barra também o caso legítimo mais comum. | #05 |
-| **Trava sem o par na tela** | O servidor passa a exigir algo novo e a tela continua com o botão antigo: quem clica só descobre que não pode, e não tem por onde seguir. | #13 |
-| **A mesma decisão escrita em dois lugares** | A regra é copiada em vez de consultada. As cópias divergem e o comportamento fica errado sem que nenhuma linha esteja errada. | #14, #26 |
+| **Trava sem o par na tela** | O servidor passa a exigir algo novo e a tela continua com o botão antigo: quem clica só descobre que não pode, e não tem por onde seguir. | #13, #73 |
+| **A mesma decisão escrita em dois lugares** | A regra é copiada em vez de consultada. As cópias divergem e o comportamento fica errado sem que nenhuma linha esteja errada. | #14, #26, #73 |
 | **Duas escritas em voo, a velha ganha** | O painel manda a carga INTEIRA a cada alteração. Duas alterações seguidas viram duas requisições simultâneas, e a primeira carrega o valor velho do campo que ainda ia mudar. | #16 |
 | **A correção que outro setor desfaz sem saber** | Um setor corrige de propósito o que outro fez. A tela do segundo continua mostrando o estado como se nada tivesse sido decidido, e o gesto normal dele desfaz a correção — em silêncio, dos dois lados. | #21 |
 | **A proteção escrita para um posto só** | A regra certa existe, com comentário e tudo — mas vale para um caminho e não para os irmãos dele. Não é cópia divergente: é a cópia que nunca foi escrita. | #20 |
@@ -3317,3 +3317,118 @@ o `thead` repete e que a linha continua protegida.
 **CONFERIDO QUE NÃO QUEBROU O PADRÃO:** `test_relatorios` (Operacional,
 Executivo e Fretes), `test_devolucoes_checklist` e
 `test_devolucoes_ordem_e_sem_filtro_de_dia` passam.
+
+---
+
+## #73 — A sobra pesada não tinha como ser finalizada por ninguém (16/09/2026)
+
+**Relato do dono**, com print junto: *"E NA PARTE DEVOLUÇÃO DE SOBRA,
+DEPOIS QUE PESA TEM QUE COLOCAR A OPÇÃO DE FINALIZAR A ETAPA"*.
+
+O print: sobra, placa SIY0G41, motorista LEONARDO, chegou sem lacre.
+Carimbos PORTARIA ✓ e BALANÇA (ENTRADA) ✓ (Thiago Rafael), EXPEDIÇÃO
+pendente. Na tela, só o texto *"Próximo passo: Descarga Conferida — feito
+por Expedição ou Logística"* e nenhum botão. Ele estava logado como
+**Faturamento**.
+
+**SÃO DOIS DEFEITOS**, e o segundo é maior que o relatado.
+
+**DEFEITO 1 — o botão desenhado não era o que o clique mandava.** Duas
+funções respondiam à mesma pergunta ("qual o próximo passo desta
+devolução"): `blocoAvancoDev` perguntava a `etapaDeDev`, que CONHECE o
+atalho da sobra; `avancarEtapaDevolucaoUI` fazia `DEV_ETAPAS.find(...)` por
+conta própria, e `DEV_ETAPAS` só conhece o caminho da devolução normal.
+Medido no navegador, sobra parada em "Conferida no Faturamento", operador
+da **Expedição** — que TINHA a permissão:
+
+    botão desenhado ... '📦 Descarga conferida (Expedição)'  → Descarga Conferida
+    o clique enviou ... { para: 'Peso Final Registrado' }
+    o servidor ....... 409 'Sobra encerra no OK da Expedição — não volta
+                            à balança nem passa por Controles Internos e
+                            Central de Notas.'
+
+Ou seja: **a sobra não era finalizável pela tela por NINGUÉM** — nem
+Expedição, nem Logística, nem Administração. O dono viu a cara do problema
+que era dele (não tinha botão); quem tinha botão levava 409.
+
+O atalho da sobra mora fora de `DEV_ETAPAS` desde 08/09 — e por um bom
+motivo, registrado lá: dentro da lista ele fazia "Conferida no Faturamento"
+aparecer DUAS vezes na esteira, para todo mundo. A correção de então criou
+`etapaDeDev` para quem pergunta o próximo passo. Faltou o segundo chamador
+perguntar.
+
+**DEFEITO 2 — quem pesou não podia encerrar.** Para a sobra, "Descarga
+Conferida" é o ÚLTIMO passo (ela não volta à balança nem passa por
+Controles Internos e Central de Notas), e ele estava liberado só para
+Expedição e Logística. A sobra ficava pesada e parada esperando outro setor
+aparecer. **E a esteira já chamava o Faturamento para ela** — "SUA VEZ",
+porque "Conferida no Faturamento" é o status onde a segunda etapa dele
+começa na devolução normal. Chamar e não dar caminho é a regra da casa ao
+contrário: *botão desabilitado não ensina o caminho, só nega* — aqui nem
+botão havia.
+
+**A CORREÇÃO, nos dois lados.**
+
+- servidor (`backend/src/dominio/devolucoes.js`): o Faturamento entra na
+  linha `soSobra` da transição, ao lado de Expedição e Logística. **Só
+  nela** — na devolução normal o OK da descarga sai de "Peso Final
+  Registrado" e continua sendo de Expedição e Logística; pular a balança
+  final lá continua impossível. A Expedição segue PRIMEIRA na lista: é a
+  dona do passo e o nome que aparece na recusa.
+- painel (`devolucoes.js`): `avancarEtapaDevolucaoUI` passa a perguntar a
+  `etapaDeDev` — uma função, dois chamadores. `DEV_ATALHO_SOBRA` espelha a
+  allowlist nova e o rótulo do botão vira **"✅ Finalizar sobra — descarga
+  conferida"**: é a palavra do dono, e com três setores não dá para nomear
+  um só no botão.
+- a frase da recusa passou a ler como gente fala. `setores.join(' ou ')`
+  com três nomes produzia *"Expedição ou Faturamento ou Logística"*. Virou
+  `listaDeSetores()` em `dominio/fluxo.js`, chamada pelas duas recusas da
+  devolução e pela da carga: *"Expedição, Faturamento ou Logística"*.
+
+**O CARIMBO É DE QUEM DEU O PASSO.** Fechando a sobra, o Faturamento
+assina a coluna `expedicao_por` com o nome dele, e `operador_setor` guarda
+"Faturamento". É o mesmo desenho que já valia para a Logística, que cobre
+todos os postos — a assinatura diz quem agiu, não qual setor é o dono do
+passo.
+
+**QUEM PODE FAZER, DESFAZ.** A allowlist do desfazer é a MESMA do avanço
+(decisão de 14/09, ocorrência #68), então o Faturamento passou a poder
+desfazer o fecho da sobra sem que nada precisasse ser escrito para isso.
+Uma decisão, um lugar — funcionou como prometido.
+
+**Vermelho→verde provado contra o publicado.** Com a allowlist antiga, a
+suíte 19 do servidor reprova em 4 casos (`node --test
+testes/devolucoes.test.js` → 99/103); na tela, 6 verificações da suíte
+nova reprovam contra o `index.html` da branch de entrega, incluindo *"e o
+clique dela também finaliza (era 409 antes)"* com a Expedição.
+
+**Testes que travam:**
+`backend/testes/devolucoes.test.js` suíte 19 (8 casos: o Faturamento
+encerra a sobra que pesou; o carimbo guarda quem finalizou e o peso de
+entrada continua intacto; a Expedição continua finalizando; quem finaliza
+desfaz; a devolução normal não pula a balança final; nela o OK da descarga
+continua recusando o Faturamento; a recusa ENSINA com a frase nova; a
+filial continua sem avançar etapa) e
+`testes/test_sobra_finaliza_quem_pesou.py` na tela — que, além do botão e
+do clique, **lê as duas fontes e compara a esteira inteira**: as 7
+transições, o carimbo e a allowlist de cada uma, no painel e no
+`dominio/devolucoes.js`. É a mesma solução da lista de SETORES (#26): a
+cópia é inevitável enquanto o painel for build de arquivo único, mas ela
+não pode envelhecer calada.
+
+**O que NÃO foi feito, de propósito.** O placeholder do campo de recado da
+etapa diz "Observações para a próxima etapa" mesmo quando é o último passo
+(vale para a sobra e para a Central de Notas) — é anterior a isto e não
+tem relação com o relato. E `exigirSetor` (middleware/auth.js) ainda tem
+seu próprio `join(' ou ')`; hoje ele nunca recebe mais de um setor.
+
+**Não precisa de migração** — a mudança é de regra, não de schema, e
+nenhuma sobra em andamento precisa ser mexida.
+
+**Só vale depois do `atualizar.sh`:** a allowlist é do servidor. O painel
+publica antes pelo Vercel, e nessa janela o Faturamento vê o botão novo e
+leva a recusa **explicada** do servidor antigo (*"O setor Faturamento não
+registra 'Descarga Conferida'. Quem faz esse passo: Expedição ou
+Logística."*). A metade que NÃO depende do servidor — o clique mandar a
+transição certa — passa a valer assim que o painel publica, e já destrava a
+sobra para Expedição, Logística e Administração.
