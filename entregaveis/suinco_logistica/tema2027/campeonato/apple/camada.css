@@ -1,0 +1,206 @@
+/* =====================================================================
+   CAMADA "APPLE" — profundidade e material, por cima do styles.css
+   =====================================================================
+   Não é redesign: é uma segunda folha, carregada DEPOIS de styles.css,
+   que só ajusta peso de material, sombra de contexto, cantos e tracking
+   óptico. Nenhuma cor de status muda, nenhuma marca (✓ ● ·) muda, nenhum
+   texto some.
+
+   TUDO aqui vive dentro de `@media screen`. É a garantia mais simples e
+   mais forte de que `@media print` fica intocado: o PDF nem carrega estas
+   regras, porque a condição de mídia nunca casa na impressão. Não precisei
+   tocar em nenhuma regra de print para cumprir "@media print intocado" —
+   bastou nunca competir com ela.
+
+   A escolha de escola é PROFUNDIDADE E MATERIAL, mas o painel já resolveu
+   a parte cara disso (backdrop-filter só em 3 elementos fixos e únicos:
+   header, nav de desktop, overlay de modal — ver comentário de
+   "VIDRO REAL vs VIDRO PINTADO" em styles.css). Esta camada NÃO adiciona
+   nenhum backdrop-filter novo. Hierarquia de material aqui é feita com o
+   que já é barato: opacidade de fundo, sombra em camadas e o filete de luz
+   que o arquivo já chama de --vidro-brilho. Isso é literalmente a
+   diferença que o house style documentou entre vidro real e vidro
+   pintado — eu só estico a régua de peso que já existe, não crio uma nova
+   técnica cara.
+===================================================================== */
+@media screen{
+
+/* =====================================================================
+   1. ESCALA DE PESO — três camadas, não duas
+   =====================================================================
+   O painel já tinha DOIS pesos (vidro real fixo / vidro pintado que se
+   repete). Para hierarquia de material fazer sentido (regra da escola:
+   "material mais pesado separa região estrutural, mais leve chama atenção
+   para o interativo"), a barra de navegação — a única superfície que fica
+   plantada na tela o dia inteiro, em toda aba — precisa ler mais pesada
+   que o cabeçalho, que por sua vez é mais pesado que um card de conteúdo,
+   que é mais pesado que uma caixa de indicador ou um chip.
+
+   Os tokens abaixo são NOVOS (prefixo --ap-, "apple", para nunca colidir
+   com --vidro-* do arquivo base) mas são compostos a partir dos tokens
+   que já existem — trocar o vidro geral continua repintando esta camada
+   também, como o comentário original de styles.css promete. */
+:root{
+  --ap-sombra-estrutural: 0 14px 34px rgba(4,8,18,.55);
+  --ap-sombra-cheia:      0 10px 26px rgba(4,8,18,.46), 0 1px 0 rgba(255,255,255,.05) inset;
+  --ap-sombra-leve:       0 3px 10px rgba(4,8,18,.30);
+  --ap-sombra-chip:       0 1px 3px rgba(4,8,18,.30);
+}
+:root[data-tema="claro"]{
+  /* Mesma escala, mas na proporção que styles.css já usa para o claro:
+     bem mais fraca — halo forte sobre fundo claro tinge a página em vez
+     de dar profundidade (é a mesma lição que o arquivo já escreveu para
+     --amb-*, só que aplicada às minhas sombras novas). */
+  --ap-sombra-estrutural: 0 10px 24px rgba(30,42,82,.18);
+  --ap-sombra-cheia:      0 8px 20px rgba(30,42,82,.14), 0 1px 0 rgba(255,255,255,.6) inset;
+  --ap-sombra-leve:       0 2px 7px rgba(30,42,82,.10);
+  --ap-sombra-chip:       0 1px 2px rgba(30,42,82,.09);
+}
+
+/* ---- Nav de desktop: a região MAIS PESADA do painel ----
+   Só na faixa >=821px, onde a barra é a coluna fixa lateral (no celular a
+   gaveta já é sólida por decisão documentada — "translúcido deixaria o
+   conteúdo por trás lendo através dela" — e essa exceção continua valendo,
+   eu não toco nela).
+   Troquei o fundo achatado (--vidro-bg) por um degradê para --vidro-bg-forte:
+   é o MESMO par de tokens que o cabeçalho já usa, só que aqui a leitura
+   fica mais densa por cima (nav = espinha dorsal, sempre visível) e o
+   cabeçalho continua mais leve (barra de trânsito, não permanência). */
+@media(min-width:821px){
+  #nav{
+    background:linear-gradient(180deg, var(--vidro-bg-forte), var(--vidro-bg-forte) 40%, var(--vidro-bg));
+    box-shadow:var(--ap-sombra-estrutural);
+    position:relative; /* já é fixed; só precisa ser positioning context pro ::after */
+  }
+  /* O fio de luz na quina de cima é o que já faz o header e os cards
+     lerem como vidro (.vidro-brilho::after em styles.css). A nav de
+     desktop não tinha nenhum — ela é uma coluna vertical, então o brilho
+     que faz sentido é na quina INTERNA de cima, onde a barra encontra o
+     cabeçalho, não numa borda que já é a lateral da tela. */
+  #nav::after{
+    content:'';position:absolute;left:0;right:0;top:0;height:1px;
+    pointer-events:none;
+    background:linear-gradient(90deg,
+      transparent, var(--vidro-brilho) 12%, var(--vidro-brilho) 88%, transparent);
+  }
+}
+
+/* =====================================================================
+   2. SOMBRA CONTEXTUAL — mais forte sobre conteúdo cheio
+   =====================================================================
+   A regra da escola é literal: "sombra contextual, mais forte sobre
+   conteúdo cheio, mais leve sobre fundo liso". `.card` hoje usa a MESMA
+   sombra (--vidro-sombra) esteja ele cheio de tabela ou vazio com um
+   parágrafo. `:has()` deixa reconhecer os dois casos sem tocar em HTML
+   nem JS — se o navegador não suportar (nenhum dos que rodam neste
+   painel, mas por garantia), a regra simplesmente não casa e o card
+   volta a usar --vidro-sombra do arquivo base. Degrada sozinho, sem
+   `@supports`. */
+.card:has(.table-wrap), .card:has(table){
+  box-shadow:var(--ap-sombra-cheia);
+}
+/* Card raso — texto solto, aviso, formulário curto — fica mais leve que
+   antes. Ele não compete por atenção com a tabela ao lado. */
+.card:not(:has(.table-wrap)):not(:has(table)){
+  box-shadow:var(--ap-sombra-leve);
+}
+
+/* ---- Caixa de indicador e chip: a camada mais LEVE ----
+   Hoje .stat-box usa a MESMA sombra do card (--vidro-sombra) — mesmo
+   peso que uma superfície bem maior. "Superfície grande lê como mais
+   espessa que chip pequeno" pede o oposto: aqui reduzo, não aumento. A
+   régua dourada de cima (.stat-box::before) e a cor do status continuam
+   exatamente como estavam — só a sombra muda de peso. */
+.stat-box{ box-shadow:var(--ap-sombra-leve) }
+/* Chip de verdade (crachá de placa, dia, devolução) é ainda mais raso —
+   do tamanho de uma etiqueta, não de um cartão. */
+.badge, .chip-dia-prog, .chip-no-patio, .chip-devolvida, .badge-setor{
+  box-shadow:var(--ap-sombra-chip);
+}
+
+/* No celular a grade de indicadores já virou "chip de app" (regra
+   original, 08/08/2026). Ela pede a sombra mais rasa da escala — chip
+   pequeno não é onde a profundidade importa, e sombra pesada em 3
+   colunas apertadas vira ruído visual. */
+@media(max-width:640px){
+  .bento .stat-box{ box-shadow:var(--ap-sombra-chip) }
+}
+
+/* =====================================================================
+   3. CANTOS GENEROSOS E CONSISTENTES
+   =====================================================================
+   O arquivo já declara --radius-lg e já diz para o que serve no
+   comentário: "modais e caixas de destaque". Só que nenhuma das duas
+   coisas usava — .modal-box e .stat-destaque ficaram com --radius (10px),
+   o mesmo raio de um card comum. Estou só cumprindo o que o próprio
+   token já prometia: superfície maior ganha canto maior, e a régua dos
+   três tamanhos (--radius-sm / --radius / --radius-lg) passa a valer de
+   verdade, do menor pro maior, sem eu inventar um quarto valor. */
+.modal-box{ border-radius:var(--radius-lg) }
+.bento .stat-destaque{ border-radius:var(--radius-lg); overflow:hidden }
+
+/* =====================================================================
+   4. TIPOGRAFIA ÓPTICA — tracking por tamanho, nunca um valor só
+   =====================================================================
+   .stat-num já tem letter-spacing:-.01em fixo para QUALQUER tamanho de
+   número — o normal (26px) e o de destaque (34px) recebem o mesmo aperto.
+   A regra da escola é o contrário: texto maior precisa de tracking mais
+   negativo. Aqui eu só aperto MAIS o número que já é maior — nunca deixo
+   nenhum positivo, e tracking negativo só ENCOLHE a caixa de texto, nunca
+   estoura largura, então não há risco de rolagem lateral em 1440 nem em
+   390. Number de indicador do relatório BI (.st-num, 30px) ganha o mesmo
+   tratamento por ser do mesmo family de "número grande e sozinho". */
+.bento .stat-destaque .stat-num{ letter-spacing:-.02em }
+.st-num{ letter-spacing:-.015em }
+
+/* =====================================================================
+   5. VIBRÂNCIA — texto sobre vidro nunca fica cinza-chapado
+   =====================================================================
+   A régua de contraste do painel (--st-*-txt, testes/test_contraste.py)
+   já resolveu o problema difícil (status como texto solto). O ajuste que
+   falta é pequeno: --text-dim sobre vidro pintado (cards, stat-box) ganha
+   um fiapo a mais de peso e tracking, exatamente a receita da escola para
+   "não usar cinza chapado sobre superfície translúcida que muda de fundo".
+   Não troco a cor (ela já passa em contraste) — só reforço a legibilidade
+   óptica sobre uma superfície que tem ambiente colorido atrás. */
+.card-sub, .stat-label{
+  letter-spacing:.01em;
+}
+
+/* =====================================================================
+   6. DEGRADAÇÃO — as três preferências do usuário que a escola pede
+   =====================================================================
+   Nada disto existia antes. É a parte que só faz sentido justamente
+   porque a escola é "material": um painel de vidro que não sabe reagir a
+   "reduzir transparência" ou "mais contraste" do sistema operacional não
+   é robusto, é só bonito. Todo o bloco é opt-in — só entra em vigor para
+   quem já pediu isso no aparelho, então não muda nenhum print padrão. */
+@media (prefers-reduced-transparency: reduce){
+  /* Vidro vira quase opaco e o desfoque cai — a MESMA saída que o arquivo
+     já usa para navegador sem suporte a backdrop-filter (comentário
+     "Navegador sem backdrop-filter... as superfícies voltam a ser
+     opacas"), só que aqui por pedido explícito da pessoa, não por
+     limitação do navegador. */
+  #header, #nav{
+    -webkit-backdrop-filter:none; backdrop-filter:none;
+    background:var(--vidro-bg-forte);
+  }
+  .card, .stat-box{ background:var(--vidro-bg-forte) }
+}
+@media (prefers-contrast: more){
+  /* Borda visível e opaca no lugar do fio de luz sutil — mesma ideia do
+     :focus-visible que o arquivo já usa: reforço só para quem pediu. */
+  .card, .stat-box{ border-width:1.5px; border-color:var(--border) }
+  #nav{ border-right-width:2px }
+}
+
+/* Nenhuma regra nova acima anima nada além do que styles.css já anima. Eu
+   não criei transição nova — só sombra, raio e tracking estáticos — então
+   não preciso desligar nada em prefers-reduced-motion: não há o que
+   desligar. Onde o arquivo base JÁ anima (.stat-box, .btn, .nav-tab), a
+   régua de @media(prefers-reduced-motion:reduce) dele continua a única
+   dona da resposta, do jeito que o comentário de 16/09/2026 exige ("mora
+   aqui, e SÓ aqui") — eu não dupliquei transform em hover/active de botão
+   em lugar nenhum desta camada. */
+
+} /* fim @media screen */

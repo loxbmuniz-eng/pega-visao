@@ -1,0 +1,202 @@
+/* =====================================================================
+   CAMADA "META" — SUPERFÍCIE MACIA E AGRUPAMENTO CLARO
+   =====================================================================
+   Escola: elevação suave no lugar de borda; cantos generosos; o que é do
+   mesmo assunto compartilha o MESMO fundo; estado muda por preenchimento,
+   nunca por contorno. Carrega DEPOIS de styles.css — mesma especificidade,
+   últimas regras vencem no empate — e não inventa markup nem classe nova:
+   só redecora o que já existe.
+
+   TUDO dentro de @media screen de propósito: o dono usa este CSS também
+   para os PDFs (coletarCssDoPainel), e a regra do campeonato é clara —
+   @media print INTOCADO. Embrulhando a camada inteira, um relatório
+   impresso nunca vê uma linha desta folha, sem precisar caçar cada
+   seletor por seletor dentro do arquivo de 6 mil linhas.
+
+   O que NÃO mudou, de propósito:
+   - nenhuma cor de status (--st-*-bg/-fg/-br/-txt) — são a régua do
+     gestor, calibrada por contraste, e o card já avisa: não mexer sem
+     novo aval.
+   - a borda das badges/pílulas de status — parte da calibragem de
+     contraste, não decoração de card.
+   - `.table-wrap{overflow-x:auto}` — é o que impede rolagem lateral da
+     PÁGINA jogando a rolagem pra DENTRO da tabela; virar `hidden` pra
+     arredondar canto quebraria exatamente a garantia que o dono cobrou.
+   - `✓ ● ·` — são texto, não decoração; nenhuma regra aqui os esconde
+     ou troca por ícone.
+===================================================================== */
+@media screen{
+
+/* ---- Vocabulário da escola, em cima do vocabulário que já existe ----
+   `--vidro-sombra` já é a variável que .card, .stat-box, .bento.bi-faixa
+   e #header leem pra sombra — trocar SÓ o valor já eleva as quatro
+   superfícies de uma vez, sem tocar seletor por seletor (mesma lógica de
+   "uma função, dois chamadores" que o projeto já pede). Duas camadas de
+   sombra (contato fino + alcance largo) é o que lê como "objeto solto
+   pousando", não "retângulo com filtro". */
+:root{
+  --radius:14px;       /* era 10px — card, botão, stat-box, input */
+  --radius-sm:9px;      /* era 6px — pílula, célula, .cel-filtro-ativa */
+  --radius-lg:20px;     /* era 14px, sem uso — passa a valer no modal */
+  --vidro-sombra:
+    0 1px 2px rgba(4,8,18,.30),
+    0 16px 36px -14px rgba(4,8,18,.55);
+  --meta-elev-modal:
+    0 2px 6px rgba(4,8,18,.35),
+    0 34px 70px -20px rgba(4,8,18,.68);
+  /* Estado por preenchimento: um par claro/forte, dourado da marca em
+     opacidade baixa — a mesma linguagem que .row-highlight e o hover de
+     tabela já usam, só nomeada pra reaproveitar em nav, filtro e caixa
+     ativa sem repetir o valor solto em cada regra. */
+  --meta-fill-hover: rgba(233,185,84,.09);
+  --meta-fill-active: rgba(233,185,84,.17);
+}
+:root[data-tema="claro"]{
+  /* Sombra mais rasa e mais fria no claro — sombra de card escuro sobre
+     fundo claro pesa; a mesma dupla camada, só com alcance menor e menos
+     opacidade, do jeito que o resto do tema claro já baixa intensidade
+     (ver comentário de --amb-* em styles.css). */
+  --vidro-sombra:
+    0 1px 2px rgba(16,22,37,.05),
+    0 12px 26px -10px rgba(30,42,82,.20);
+  --meta-elev-modal:
+    0 2px 6px rgba(16,22,37,.08),
+    0 28px 56px -16px rgba(30,42,82,.26);
+  --meta-fill-hover: rgba(26,32,45,.05);
+  --meta-fill-active: rgba(233,185,84,.16);
+}
+
+/* ---- CARD: a borda sai, a sombra fica de fato responsável por separar
+   card de fundo. box-shadow já vinha de var(--vidro-sombra) — só apagar
+   a cor da borda (não o border, que ocuparia layout de novo) já entrega
+   a elevação. Padding cai 2px: o canto maior dá a sensação de "macio"
+   sozinho, então o respiro extra que a borda antes "gastava" pode virar
+   altura de tela em vez de estofamento — é o pedido do dono, "sem espaço
+   sobrando", andando junto com o cantinho generoso. */
+.card{
+  border-color:transparent;
+  padding:12px 16px;
+}
+
+/* ---- STAT-BOX (indicador solto, fora da faixa BI): mesma ideia, mas só
+   nos três lados que não carregam identidade. O topo continua com os 4px
+   de cor — é o que diz QUE TIPO de indicador é este (normal, alerta),
+   antes mesmo de ler o número; apagar junto tiraria informação, não só
+   estilo. `border-color` sozinho reescreveria os quatro lados de uma vez
+   e comeria esse acento — por isso três propriedades, não uma. */
+.stat-box{
+  border-left-color:transparent;
+  border-right-color:transparent;
+  border-bottom-color:transparent;
+  padding:10px;
+}
+/* Preenchimento no lugar do contorno ao passar o mouse — a régua de cor
+   do topo já muda de tom (regra original); isto soma um véu no corpo
+   inteiro, pra "isto responde ao toque" não depender só da borda fina. */
+.stat-clicavel:hover{ background:var(--meta-fill-hover) }
+/* A caixa SELECIONADA trocava o contorno por um anel (box-shadow inset —
+   ainda é contorno, só que por dentro). Aqui vira preenchimento cheio:
+   mesma pergunta que a escola faz — "isto está ativo" por causa da COR
+   que preenche, não da linha que risca a borda. */
+.stat-ativo{
+  box-shadow:var(--vidro-sombra);
+  background:var(--meta-fill-active);
+}
+
+/* ---- FAIXA BI (Torre / Tempos Médios): já era uma superfície contínua
+   agrupando os indicadores por um fundo só, com friso fino separando —
+   exatamente o "mesmo assunto, mesmo fundo" que a escola pede. Só a
+   borda EXTERNA vira sombra; os frisos internos entre caixas continuam
+   (são o que permite separar "Aguardando Veículo" de "Faturado" sem
+   virar uma mancha única) e a largura da faixa não muda um pixel — a
+   Torre já vive no limite medido em styles.css (1.002px pra 1.193px
+   pedidos), border-color:transparent só DEVOLVE os 2px que a borda
+   antes tomava, nunca tira. */
+.bento.bi-faixa{ border-color:transparent }
+.bento.bi-faixa .stat-ativo{
+  box-shadow:none;             /* a variante bi-faixa usa inset por padrão — troca por fundo puro */
+  background:var(--meta-fill-active);
+}
+
+/* ---- FUNÇÃO DA ABA: perde o contorno fino, mantém o traço à esquerda —
+   esse traço é CATEGORIA (é uma nota informativa, não estado que liga e
+   desliga), então continua. `border-color` primeiro apaga os quatro
+   lados, `border-left-color` devolve só o que é identidade. */
+.funcao-aba{
+  border-color:transparent;
+  border-left-color:var(--gold);
+  padding:10px 14px;
+}
+
+/* ---- GRÁFICOS (aba Indicadores): não tinha sombra nenhuma — só fundo e
+   contorno reto. Ganha a mesma elevação do card, pra os três gráficos
+   lerem como peças da MESMA família visual que os cards ao redor, não
+   como caixas de outro sistema. */
+.grafico-box{
+  border-color:transparent;
+  box-shadow:var(--vidro-sombra);
+}
+
+/* ---- BOTÕES: cantos generosos por causa do --radius de cima. O
+   secundário já é preenchido (var(--navy-light)) — só a borda ao redor
+   dele saía do vocabulário de preenchimento; apagando a cor, o botão
+   continua se destacando pelo PRÓPRIO fundo, igual ao primário. */
+.btn-sec{ border-color:transparent }
+
+/* ---- MODAL: contorno reto vira elevação de verdade (é a única
+   superfície que fica sozinha por cima de tudo — merece a sombra mais
+   funda do painel) e ganha --radius-lg, que já existia na folha
+   original só que sem nenhum seletor usando. */
+.modal-box{
+  border-color:transparent;
+  border-radius:var(--radius-lg);
+  box-shadow:var(--meta-elev-modal);
+}
+.modal-list-item{ border-color:transparent }
+
+/* ---- CÉLULA DE FILTRO ATIVO (Indicadores): a marca de "isto está
+   filtrando" era uma barra de 3px encostada na borda esquerda — um
+   contorno parcial. Vira preenchimento da célula inteira, cor e "✕" de
+   remover continuam exatamente onde estavam (não são tocados aqui). */
+.cel-filtro-ativa{
+  box-shadow:none;
+  background:var(--meta-fill-active);
+  border-radius:var(--radius-sm);
+}
+
+/* ---- NAVEGAÇÃO: nos dois formatos que o painel usa de fato (gaveta do
+   celular e barra lateral do desktop — a barra horizontal de topo sem
+   media query nunca chega a aparecer, as duas faixas abaixo cobrem 100%
+   das larguras), a aba ativa marcava presença com uma REGRA colorida na
+   lateral. Vira um preenchimento sólido com canto arredondado do lado de
+   fora — a mesma leitura ("estou aqui"), sem linha nenhuma. A largura da
+   régua (3px, transparente agora) fica reservada, então nada pula de
+   lugar ao trocar de aba. */
+@media(max-width:820px){
+  .nav-tab.active{
+    border-left-color:transparent;
+    border-bottom-color:transparent;
+    background:var(--meta-fill-active);
+    border-radius:0 var(--radius-sm) var(--radius-sm) 0;
+    box-shadow:none;
+  }
+  .nav-tab:hover{ border-radius:0 var(--radius-sm) var(--radius-sm) 0 }
+}
+@media(min-width:821px){
+  .nav-tab.active{
+    border-left-color:transparent;
+    border-bottom-color:transparent;
+    background:var(--meta-fill-active);
+    border-radius:0 var(--radius-sm) var(--radius-sm) 0;
+    box-shadow:none;
+  }
+  .nav-tab:hover{ border-radius:0 var(--radius-sm) var(--radius-sm) 0 }
+}
+
+/* `prefers-reduced-motion` já é respeitado por construção: esta camada
+   não declara nenhuma `transition` nova — todo hover/ativo acima troca
+   `background`/`box-shadow` na hora, sem animação própria, e as únicas
+   transições em jogo continuam sendo as que styles.css já guarda atrás
+   do media query de movimento reduzido. */
+
+} /* fim @media screen */

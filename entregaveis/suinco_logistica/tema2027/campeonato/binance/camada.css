@@ -1,0 +1,229 @@
+/* =====================================================================
+   CAMADA "BINANCE" — TERMINAL DE OPERAÇÃO
+   Competidor: BINANCE. Escola: mesa de trading — densidade máxima, zero
+   moldura decorativa, cor só com significado, números tabulares alinhados.
+
+   COMO ISTO FOI CONSTRUÍDO EM CIMA DO QUE JÁ EXISTE (e não por cima dele):
+
+   1) TUDO dentro de `@media screen`. O servidor gera os PDFs com o MESMO
+      styles.css (Playwright renderiza com a mídia `print`, que já tem uma
+      folha de regras própria — fundo branco, sem vidro, sem sombra — e
+      `.tab-page{display:none}` já esconde a tela operacional inteira do
+      papel). Colocando a camada inteira em `@media screen`, nenhuma regra
+      daqui pode, por definição, aparecer numa folha impressa: a pergunta
+      "isto vaza pro PDF?" fica resolvida no topo do arquivo, uma vez, em
+      vez de checada regra por regra. É o `hidden{!important}` deste
+      arquivo: fecha a classe inteira do problema.
+
+   2) A "vidraça" do painel (--vidro-bg, --vidro-bg-forte, --vidro-sombra,
+      --vidro-brilho) é definida em UM lugar no styles.css original e lida
+      por dezenas de seletores (card, stat-box, header, nav, th...) — é a
+      "fonte única de verdade" que o próprio arquivo já usa para as cores
+      de status. Achatar a mesa não é reescrever cada seletor: é apontar
+      esses quatro nomes para valores planos. Onde precisava de um tom
+      opaco (sem transparência, sem desfoque), reaproveitei --navy e
+      --navy-light — tokens que o autor original já tinha criado com esse
+      propósito exato (ver comentário de --navy no tema claro: "superfície
+      opaca, onde translucidez atrapalha"). Não inventei cor nova para
+      "modo terminal": usei a que a casa já tinha para exatamente este
+      caso.
+
+   3) `--vidro-sombra` vira `0 0 0 0 rgba(0,0,0,0)`, NUNCA `none`. Achei em
+      `.stat-ativo` (linha ~1655 do styles.css) um box-shadow composto:
+      `0 0 0 2px var(--gold-text) inset, var(--vidro-sombra)`. Se a
+      variável virasse `none`, a lista inteira de sombras fica inválida
+      (CSS não aceita `none` misturado com outra sombra na mesma
+      declaração) e o navegador descarta a propriedade INTEIRA — o anel
+      dourado que marca "este indicador está filtrando a tabela agora"
+      (cor com significado, não decoração) desapareceria como efeito
+      colateral de eu tentar tirar uma sombra decorativa em outro lugar.
+      Uma sombra "zerada" (raio e espalhamento 0, cor transparente) soma
+      visualmente a mesma coisa que `none` mas continua sendo um item de
+      lista válido — o anel do filtro ativo sobrevive.
+
+   O QUE ESTA CAMADA NÃO TOCA, DE PROPÓSITO (ver porque.md):
+   - a régua de cor de 3px à esquerda das caixas da faixa BI
+     (`.bento.bi-faixa .stat-box::after`) — existe para resolver um
+     contraste de 1,9 já documentado; mexer aqui sem medir de novo é
+     reabrir o defeito;
+   - as marcas `✓ ● ·` da linha do tempo — são TEXTO por decisão do
+     projeto (leitor de tela, WhatsApp em preto-e-branco), não estilo;
+   - `#torre-tabela` e `#mont-tabela` no desktop (>=821px) — a largura de
+     cada coluna já foi calibrada em pixels exatos para caber sem rolagem
+     lateral; eu só reduzo o padding GENÉRICO de `td`/`th`, que essas duas
+     tabelas sobrescrevem com o próprio padding (mais específico, então a
+     minha regra nunca chega lá).
+===================================================================== */
+
+@media screen{
+
+  /* ---- 1. A MESA ACHATADA (uma mudança, dezenas de superfícies) ----
+     Ver nota 2 no cabeçalho. Escuro e claro são blocos separados porque
+     `:root[data-tema="claro"]` no styles.css original tem mais
+     especificidade que um `:root` solto — preciso repetir a mesma
+     receita nos dois lugares para vencer o tema claro também. */
+  :root{
+    --vidro-bg:var(--navy);
+    --vidro-bg-forte:var(--navy-light);
+    --vidro-sombra:0 0 0 0 rgba(0,0,0,0);
+    --vidro-brilho:transparent;
+    /* O halo de fundo (body::before) é ambiente, não informação — numa
+       mesa de operação ele só rouba contraste do que importa: os
+       números. Fica bem mais fraco, não em zero, pra não apagar de vez a
+       identidade Suinco (a régua não é banco). */
+    --amb-ouro:rgba(233,185,84,.04);
+    --amb-azul:rgba(55,74,134,.07);
+    --amb-vinho:rgba(143,31,38,.025);
+  }
+  :root[data-tema="claro"]{
+    --vidro-bg:var(--navy);
+    --vidro-bg-forte:var(--navy-light);
+    --vidro-sombra:0 0 0 0 rgba(0,0,0,0);
+    --vidro-brilho:transparent;
+    --amb-ouro:rgba(233,185,84,.03);
+    --amb-azul:rgba(55,74,134,.02);
+    --amb-vinho:rgba(143,31,38,.015);
+  }
+
+  /* Fonte monoespaçada só para o que É número — mesma pilha que o próprio
+     styles.css já usa em campos de placa/lote (ui-monospace/Menlo), então
+     nenhuma fonte nova é baixada (o painel continua offline-first). Dígito
+     de largura fixa é o que faz duas linhas de uma tabela alinharem pela
+     casa decimal sem o olho precisar procurar. */
+  :root{ --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
+
+  /* ---- 2. TIPOGRAFIA E RITMO — mais linhas na mesma tela ----
+     Só `line-height`, nunca `font-size` do body: a base em 15px é lida por
+     seletores próprios em quase todo componente (cada um já define o
+     próprio tamanho), então mexer nela não ganharia densidade — só
+     arriscaria destimbrar algum cálculo de largura feito em px. Encolher
+     o espaço ENTRE linhas é onde a densidade real mora. */
+  body{ line-height:1.32; }
+
+  /* ---- 3. CARD: painel liso, separado por fio, não por sombra ---- */
+  .card{
+    padding:10px 14px;
+    margin-bottom:8px;
+    border-radius:4px;
+    border-color:var(--border);
+  }
+  /* O acabamento Fluent (styles.css, ~2529) fixa `.card{border-radius:8px}`
+     depois da regra base — como esta camada carrega por último, a regra
+     acima já vence; repito aqui só para documentar que é intencional, não
+     esquecimento. */
+
+  /* Título de card = cabeçalho de painel de mesa: versalete, compacto,
+     traço fino e CHAPADO (era gradiente dourado com brilho) — a cor ainda
+     marca "aqui começa um bloco nomeado", só que sem parecer luz. */
+  .card-title{
+    font-size:11.5px;
+    font-weight:800;
+    text-transform:uppercase;
+    letter-spacing:.07em;
+    margin-bottom:8px;
+    padding-left:9px;
+  }
+  .card-title::before{
+    background:var(--gold-dim);
+    width:2px;
+  }
+  .card-title .ico-card{ width:14px;height:14px }
+  .card-sub{
+    font-size:10.5px;
+    margin-top:-4px;
+    margin-bottom:6px;
+    letter-spacing:.01em;
+  }
+
+  /* ---- 4. STAT-BOX: tira o brilho de topo, mantém a régua de cor ----
+     `.bento.bi-faixa .stat-box::after` (a régua de 3px que resolveu o
+     contraste 1,9) usa outro pseudo-elemento (`::after`) e não é tocada
+     aqui — só o `::before` (o verniz dourado decorativo) some. */
+  .stat-box::before{ display:none }
+  .stat-box{ padding:8px 10px; border-radius:4px }
+  .stat-box:hover, .stat-box.stat-clicavel:hover{
+    /* Só cor de borda avisa "isto responde ao clique" — sem levantar
+       (transform) nem acender sombra nova; a mesa não pode ter elemento
+       flutuando toda hora debaixo do olho de quem está sentado 8 horas. */
+    transform:none;
+  }
+  .stat-num{
+    font-family:var(--mono);
+    font-size:22px;
+    letter-spacing:-.02em;
+  }
+  .bento{ gap:8px }
+
+  /* ---- 5. NAV: aba ativa marcada por linha, não por halo ---- */
+  .nav-tab.active{
+    background:var(--vidro-bg-forte);
+  }
+  .nav-tab{ font-size:13px }
+
+  /* ---- 6. BOTÕES: sem verniz, sem gradiente, cantos quase retos ----
+     Os gradientes de `.btn-primary/success/danger` (styles.css, "Fluent")
+     existem para dar volume a um botão chapado. Numa mesa densa, volume é
+     ruído: o botão volta à cor sólida que o PRÓPRIO arquivo já usava antes
+     do gradiente (linha ~469-475), e para o verde eu uso o tom mais
+     ESCURO do degradê (o extremo que a guarda de contraste validou em
+     16/09/2026 — 4,74:1 —, nunca o mais claro, que tinha reprovado). */
+  .btn{
+    border-radius:3px;
+    box-shadow:none;
+    font-variant-numeric:tabular-nums;
+  }
+  .btn:hover{ box-shadow:none }
+  .btn-primary{ background:var(--gold) }
+  .btn-success{ background:#145b35 }
+  .btn-danger{ background:var(--wine) }
+  .badge,.status-pill{ border-radius:3px }
+  input,select,textarea{ border-radius:3px }
+
+  /* ---- 7. TABELA: cabeçalho em versalete, linha mais baixa ----
+     Só o `td`/`th` GENÉRICO. `#torre-tabela` e `#mont-tabela` (>=821px)
+     têm padding próprio, mais específico — continuam com o valor
+     calibrado deles, sem risco de eu reabrir a rolagem lateral que o
+     dono já cobrou por escrito duas vezes. */
+  table{ font-size:12.5px }
+  th{
+    padding:5px 8px;
+    font-size:10.5px;
+    letter-spacing:.05em;
+    text-transform:uppercase;
+    font-weight:800;
+  }
+  td{ padding:4px 8px }
+  .num-forte,.cel-num,.vp-tempo,.et-hora,.tl-hora,#clock,
+  .timeline-quando,.timeline-info-item .v{
+    font-family:var(--mono);
+  }
+
+  /* ---- 8. AMBIENTE: presença de marca, não decoração de fundo ---- */
+  body::before{ opacity:.5 }
+
+  /* ---- 9. DEVOLUÇÕES: os cartões de etapa seguem a mesma régua de
+     densidade e cantos retos do resto da mesa. `.dev-card` já usa
+     --campo-bg (opaco, não vidro) — não precisa de nada da nota 1 acima,
+     só do mesmo tratamento de padding/raio que dei ao `.card`. */
+  .dev-card{ border-radius:4px; margin-bottom:6px }
+  .dev-card-topo{ padding:8px 12px }
+  .dev-card-corpo{ padding:0 12px 10px }
+
+  /* ---- 10. RÉGUA FINA DE ROLAGEM — mesma linguagem de "fio, não moldura"
+     em quem opera com mouse; onde não existir (a maioria dos toques em
+     tablet de pátio), o navegador ignora sem quebrar nada. Só WebKit —
+     Firefox mantém a barra padrão do sistema, o que é aceitável: não é
+     informação, é conforto de quem usa mouse. */
+  ::-webkit-scrollbar{ width:8px; height:8px }
+  ::-webkit-scrollbar-thumb{ background:var(--border); border-radius:4px }
+  ::-webkit-scrollbar-track{ background:transparent }
+}
+
+/* Nenhuma transição nova foi criada por esta camada — só troquei valores
+   finais (cor, padding, sombra zerada) em cima de transições que o próprio
+   styles.css já declarava. Ainda assim, reforço a guarda: se alguém herdar
+   este arquivo e adicionar movimento aqui dentro no futuro, o gatilho de
+   redução de movimento já está pronto para desligá-lo. */
+@media screen and (prefers-reduced-motion: reduce){
+  .stat-box, .card, .nav-tab, .btn{ transition:none !important }
+}

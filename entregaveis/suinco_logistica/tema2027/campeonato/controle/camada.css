@@ -1,0 +1,151 @@
+/* =========================================================================
+   CAMADA "SALA DE CONTROLE" — competidor de design para o painel Suinco
+   =========================================================================
+   Não é um redesenho: é uma camada por cima do CSS de produção, pensada
+   para o cenário descrito no briefing — um monitor de PAREDE, lido de uns
+   três metros, onde a pergunta que importa é "o que eu tenho que fazer
+   AGORA". Tudo aqui reforça essa leitura: o que exige ação ganha peso e
+   movimento; o que já está resolvido fica quieto, do jeito que já estava.
+
+   REGRA DE OURO DESTA CAMADA: só DUAS coisas nesta tela deveriam chamar o
+   olho por conta própria — "Aguardando Veículo" (caminhão parado no
+   portão) e "Rotas/Programação sem carga" (buraco na malha). Todo o
+   resto (inclusive os outros 5 status) fica com a MESMA hierarquia visual
+   de antes. Se eu tivesse feito todo status "brilhar", nenhum brilharia —
+   é a advertência do próprio briefing, e é o motivo de quase nada aqui
+   usar cor nova: eu uso PESO, TIPOGRAFIA e (com muita economia) MOVIMENTO.
+
+   Tudo fica dentro de `@media screen`: o `@media print` do arquivo
+   original — usado pelos PDFs — não é tocado, nem por engano de
+   especificidade. Isso também resolve muitas frentes de segurança do
+   arquivo original: a texture de fundo, o mono nos números, etc. nunca
+   aparecem no papel.
+   ========================================================================= */
+@media screen {
+
+/* -------------------------------------------------------------------
+   1. TOKENS DA CAMADA
+   Cores próprias só onde precisam de nome; o resto reaproveita os tokens
+   do arquivo original (--st-aguardando-veiculo-bg etc.), que já são os
+   mesmos nos dois temas — não preciso duplicar isso por tema.
+   ------------------------------------------------------------------- */
+:root{
+  --sala-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  /* Véu de urgência sobre a LINHA da tabela — não sobre o texto, para não
+     mexer num único contraste já calibrado (ver docs/REGISTRO e os
+     comentários de razão de contraste no styles.css original: cada opacity
+     empilhada em cima de texto já derrubou AA aqui pelo menos três vezes).
+     Fica só no FUNDO da célula. */
+  --sala-alerta-fundo: rgba(198,40,40,.14);
+  --sala-alerta-borda: rgba(198,40,40,.55);
+  /* Textura de fundo — grade de pontos muito fraca, o "vidro de
+     instrumento" atrás dos cards. Dourado no escuro (combina com o
+     ambiente já existente), grafite no claro (dourado sobre fundo claro
+     vira mancha amarela — o mesmo defeito que o arquivo original já
+     documentou para o brilho da stat-box). */
+  --sala-grade-cor: rgba(233,185,84,.05);
+  --sala-grade-tam: 26px;
+}
+:root[data-tema="claro"]{
+  --sala-alerta-fundo: rgba(180,32,32,.09);
+  --sala-alerta-borda: rgba(180,32,32,.35);
+  --sala-grade-cor: rgba(26,32,45,.055);
+}
+
+/* -------------------------------------------------------------------
+   2. O FUNDO DA SALA
+   `body::before` já existe no arquivo original para os três halos da
+   marca (z-index:-1, position:fixed). Uso `body::after` — está livre —
+   para uma segunda camada, uma grade de pontos bem fraca por trás dos
+   cards de vidro. Sozinha ela é quase invisível; por trás do vidro
+   translúcido ela é o que faz a superfície ler como painel de
+   instrumento, não como cartão de site. Mesmo truque de `position:fixed`
+   do original (composta uma vez, não repinta ao rolar).
+   ------------------------------------------------------------------- */
+body::after{
+  content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;
+  background-image:radial-gradient(circle, var(--sala-grade-cor) 1px, transparent 1px);
+  background-size:var(--sala-grade-tam) var(--sala-grade-tam);
+}
+
+/* -------------------------------------------------------------------
+   3. NÚMEROS COMO LEITURA DE INSTRUMENTO
+   Só os números GRANDES e livres (não os de dentro de coluna estreita de
+   tabela — lá o app já usa tabular-nums, e monoespaçada é mais larga por
+   caractere: trocar a fonte ali é o tipo exato de mudança que já reabriu
+   rolagem lateral neste projeto, documentado no próprio styles.css em
+   16/09/2026). `.stat-num` e o relógio do cabeçalho vivem em caixas
+   flexíveis, não em coluna de largura fixa — trocam de fonte sem
+   consequência de layout. */
+.stat-num, #clock{
+  font-family:var(--sala-mono);
+  font-variant-numeric:tabular-nums;
+}
+/* Rótulo como PLACA DE PAINEL: caixa alta, mais espaçado. Não muda cor —
+   só forma — então não mexe em nenhuma razão de contraste já medida. */
+.stat-label{
+  text-transform:uppercase;
+  letter-spacing:.05em;
+}
+
+/* -------------------------------------------------------------------
+   4. A RÉGUA DE STATUS FICA MAIS GROSSA
+   Só a largura do traço lateral da faixa de indicadores (Torre,
+   Montagem, Indicadores — é a mesma faixa .bento.bi-faixa nas três
+   abas). De 3px para 5px: continua identificação, nunca preenchimento —
+   a régua nunca carrega texto por cima, então grossura não é razão de
+   contraste, é só "dá para ver de longe qual é qual".
+   ------------------------------------------------------------------- */
+.bento.bi-faixa .stat-box::after{ width:5px }
+
+/* -------------------------------------------------------------------
+   5. A ÚNICA ANIMAÇÃO DESTA CAMADA
+   Pulso de opacidade (nada de cor, nada de tamanho) na régua lateral —
+   já existente — das DUAS caixas que representam algo estagnado sem
+   ninguém agir: "Aguardando Veículo" na Torre (e no mesmo padrão, onde
+   quer que a mesma cor apareça na faixa, ex.: Montagem) e "Programação
+   anterior" (.stat-alerta). Cada uma só pulsa quando o número é > 0 —
+   `.stat-zerada` (classe que o próprio app.js já aplica a caixa com
+   valor zero) desliga o pulso: pátio limpo não deve parecer alarme
+   soando. Gancho por atributo `[style*=...]`, não por texto: o app.js
+   grava literalmente essa string no atributo `style` de cada caixa de
+   status (conferido lendo o HTML gerado antes de escrever esta regra) —
+   é o mesmo dado que já é fonte única de verdade da cor, só reaproveitado
+   aqui.
+   ------------------------------------------------------------------- */
+@keyframes sala-pulso-regua{
+  0%, 100% { opacity:1 }
+  50%      { opacity:.32 }
+}
+.bento.bi-faixa .stat-alerta:not(.stat-zerada)::after,
+.bento.bi-faixa .stat-box[style*="--st-cor:var(--st-aguardando-veiculo-bg)"]:not(.stat-zerada)::after{
+  animation:sala-pulso-regua 2.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce){
+  .bento.bi-faixa .stat-alerta::after,
+  .bento.bi-faixa .stat-box[style*="--st-cor:var(--st-aguardando-veiculo-bg)"]::after{
+    animation:none;
+  }
+}
+
+/* -------------------------------------------------------------------
+   6. A LINHA DA TABELA "ACENDE" QUANDO O CAMINHÃO NÃO CHEGOU
+   Só na Torre de Controle (#torre-tbody) — é a tela que mais gente abre
+   (o próprio styles.css documenta isso) e a única onde
+   `.badge-aguardando-veiculo` significa de fato "caminhão parado no
+   portão". A MESMA classe de badge é reaproveitada em outras telas para
+   "precisa revisão" e "cancelada" (conferido em app.js) — carimbar a
+   linha inteira nessas telas mudaria o sentido (cancelada não é "aja
+   agora", é "está morta"). Por isso o escopo fica em `#torre-tbody`, e
+   não numa regra genérica por classe.
+   Só FUNDO da célula — nunca cor de texto — então nenhuma razão de
+   contraste já medida no arquivo muda. */
+#torre-tbody tr:has(.badge-aguardando-veiculo) > td{
+  background:var(--sala-alerta-fundo);
+  box-shadow:inset 3px 0 0 var(--sala-alerta-borda);
+}
+#torre-tbody tr:has(.badge-aguardando-veiculo):hover > td{
+  background:var(--sala-alerta-fundo);
+}
+
+} /* fim @media screen */

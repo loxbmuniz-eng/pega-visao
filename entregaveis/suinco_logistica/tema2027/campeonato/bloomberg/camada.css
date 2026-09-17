@@ -1,0 +1,306 @@
+/* =====================================================================
+   CAMPEONATO DE DESIGN — competidor BLOOMBERG
+   Escola: BRUTALISMO FUNCIONAL — densidade máxima, zero decoração, grade
+   explícita em linhas finas. Referência de gênero: terminal financeiro —
+   fundo quase-preto, texto claro e âmbar, sem vidro, sem sombra, sem
+   curva.
+
+   ESTRATÉGIA (por que isto é uma CAMADA e não uma reescrita):
+   Este arquivo entra DEPOIS de styles.css (add_style_tag / <link> ao
+   final do <head>). A maior parte do trabalho é feita reescrevendo os
+   TOKENS (--navy-*, --gold-*, --text*, --border*, --vidro-*, --radius*)
+   em vez de caçar seletor por seletor — como quase toda cor e forma do
+   painel já sai de variável, isto sozinho reskina header, nav, card,
+   tabela, formulário e botão sem duplicar decisão de layout nenhuma. Só a
+   CASCA (raio de canto, sombra, vidro, tipografia, densidade de grade)
+   recebe seletor explícito, e cada um copia o seletor exato do original
+   — sem `!important` de emergência.
+
+   O QUE NÃO MUDA, DE PROPÓSITO:
+   - As seis cores de status (--st-*-bg/-fg/-txt): é a régua do gestor,
+     medida a 4,99:1 no mínimo nos dois temas (comentário do styles.css,
+     linha ~110). Reskin de casca não é aval para mexer em régua
+     operacional.
+   - --ok / --warn / --warn-fg: mesmo motivo — o verde de "Chegou" e
+     "Finalizar Embarque" foi escurecido 3 pontos por uma medição de
+     contraste específica (styles.css, linha ~2511). Trocar aqui reabre
+     aquele defeito.
+   - As marcas ✓ ● · continuam TEXTO, herdando cor de --st-*-txt/-fg ou de
+     currentColor. Nenhuma vira ícone, imagem ou content:'' decorativo.
+   - --header-h / --nav-h / --nav-w: várias regras fazem
+     calc(var(--header-h) + var(--nav-h) + Npx) para posicionar filtro
+     sticky e a margem do conteúdo. Mexer nelas aqui quebraria essas
+     contas sem eu tocar numa vírgula delas.
+
+   TUDO dentro de `@media screen`: @media print é o CSS que gera o PDF do
+   relatório (backend/src/servicos/pdf.js manda html+css prontos para um
+   Chromium isolado — esta camada nem chega lá) e também o que roda se
+   alguém der Ctrl+P na tela viva. Embrulhar a régua toda em `screen`
+   garante contraste zero com a folha impressa sem precisar decorar quais
+   das dezenas de regras @media print do arquivo original eu poderia
+   ferir. */
+
+@media screen {
+
+/* ---------------------------------------------------------------------
+   1) TOKENS — a pele do terminal (tema escuro, que é o padrão da casa)
+--------------------------------------------------------------------- */
+:root{
+  --navy-deep:#050505;   /* fundo da página */
+  --navy:#0b0b0c;        /* superfície opaca — card, cabeçalho, tabela */
+  --navy-light:#18181a;  /* hover, chip, listra */
+  --navy-lighter:#2a2a2d;/* borda de destaque, hover de nav */
+
+  --gold:#ffb020;        /* âmbar de preenchimento — botão primário, régua */
+  --gold-dim:#c9860a;
+  --gold-text:#ffb020;   /* âmbar como cor de texto sobre fundo escuro:
+                             contraste medido contra --navy (#0b0b0c) e
+                             --navy-deep (#050505) ≈ 11:1 nos dois — folga
+                             grande sobre o mínimo de 4,5:1 */
+
+  --text:#e8e8e8;
+  --text-dim:#9a9a9a;    /* ≈7,2:1 sobre --navy-deep, ≈7,0:1 sobre --navy */
+
+  --border:rgba(255,176,32,.35);
+  --border-soft:rgba(255,176,32,.15);
+  --shadow:none;         /* brutalismo não tem profundidade fingida */
+
+  --campo-bg:#000000;    /* input mais escuro que o card — continua sendo
+                             "aqui você digita", só que sem depender de
+                             branco puro (que aqui seria um furo de luz) */
+  --placeholder:#6a6a6a;
+  --logo-chip-bg:#fff;   /* intocado: a logo tem fundo branco fixo, nos
+                             dois temas — não é decisão de tema, é ativo */
+
+  --radius:0;
+  --radius-sm:0;
+  --radius-lg:0;
+
+  /* "Vidro" deixa de existir: as duas classes utilitárias (.vidro-real,
+     .vidro-brilho) e todo #header/#nav/.card que hoje leem estas
+     variáveis passam a virar superfície opaca e chapada só por tabela de
+     token, sem eu reescrever cada regra que as consome. */
+  --vidro-bg:#0b0b0c;
+  --vidro-bg-forte:#050505;
+  --vidro-borda:rgba(255,176,32,.4);
+  --vidro-brilho:rgba(0,0,0,0);
+  --vidro-sombra:none;
+  --vidro-borrao:none;
+
+  /* Os três halos ambientais (body::before) somem: brutalismo não tem
+     atmosfera, tem grade. */
+  --amb-ouro:rgba(0,0,0,0);
+  --amb-azul:rgba(0,0,0,0);
+  --amb-vinho:rgba(0,0,0,0);
+}
+
+/* ---------------------------------------------------------------------
+   2) TOKENS — tema claro ("papel de terminal": cinza-claro e preto, não
+   branco-sobre-branco)
+--------------------------------------------------------------------- */
+:root[data-tema="claro"]{
+  --navy-deep:#eeeeee;
+  --navy:#ffffff;
+  --navy-light:#e4e4e4;
+  --navy-lighter:#cfcfcf;
+
+  --gold:#ffb020;
+  --gold-dim:#c9860a;
+  --gold-text:#8a5a00;  /* ≈5,9:1 sobre branco — o âmbar de preenchimento
+                            não muda, só o de TEXTO precisa escurecer,
+                            mesma lógica que o próprio styles.css já usa
+                            para --gold-text no tema claro */
+
+  --text:#111111;
+  --text-dim:#555555;   /* ≈7,5:1 sobre --navy, ≈6,7:1 sobre --navy-deep */
+
+  --border:rgba(17,17,17,.28);
+  --border-soft:rgba(17,17,17,.14);
+  --shadow:none;
+
+  --campo-bg:#ffffff;
+  --placeholder:#7a7a7a;
+  --logo-chip-bg:#fff;
+
+  --vidro-bg:#ffffff;
+  --vidro-bg-forte:#ffffff;
+  --vidro-borda:rgba(17,17,17,.22);
+  --vidro-brilho:rgba(0,0,0,0);
+  --vidro-sombra:none;
+  --vidro-borrao:none;
+
+  --amb-ouro:rgba(0,0,0,0);
+  --amb-azul:rgba(0,0,0,0);
+  --amb-vinho:rgba(0,0,0,0);
+}
+
+/* ---------------------------------------------------------------------
+   3) TIPOGRAFIA — monoespaçada, corpo curto de entrelinha
+   Pilha só de fontes de sistema (o painel continua offline-first, mesmo
+   motivo que já vale para a pilha original): ui-monospace é a Menlo/SF
+   Mono do Mac, 'Cascadia Code'/Consolas no Windows moderno, o Android cai
+   em monospace genérica. Números tabulares continuam ativos (herdado do
+   styles.css) — em monoespaçada eles já nascem de largura igual, então
+   colunas de peso/hora/km alinham ainda melhor que na fonte original. */
+body{
+  font-family:ui-monospace,'Cascadia Code','Roboto Mono',Menlo,Consolas,
+              monospace;
+  line-height:1.32;             /* era 1.45 — entrelinha curta é a marca
+                                    do gênero, mas sem sair do que ainda
+                                    se lê: corpo continua 15px, ninguém
+                                    encolheu o texto, só o respiro */
+}
+.card-title, #header-title strong, .nav-tab, .btn, th, .badge,
+.badge-setor, .stat-label{
+  letter-spacing:.02em;         /* levemente mais aberto — compensa a
+                                    monoespaçada em maiúsculas ficando
+                                    "grudada" em corpo pequeno */
+}
+
+/* Fundo de ambiente (halos) já é transparente pelas variáveis acima; a
+   regra continua existindo no styles.css mas pinta nada — não preciso
+   apagar a regra, só os valores que ela lê. */
+
+/* ---------------------------------------------------------------------
+   4) HEADER / NAV — opacos, sem desfoque, régua de baixo em vez de brilho
+--------------------------------------------------------------------- */
+#header{
+  background:var(--navy);
+  -webkit-backdrop-filter:none;
+  backdrop-filter:none;
+  box-shadow:none;
+  border-bottom:2px solid var(--gold);
+}
+/* A régua de baixo do cabeçalho era um gradiente de 2px imitando luz
+   descendo da logo. Aqui a régua É a informação: uma linha sólida cheia,
+   sem degradê — grade explícita em vez de efeito de luz. */
+#header::after{ display:none }
+
+#nav{
+  background:var(--navy);
+  -webkit-backdrop-filter:none;
+  backdrop-filter:none;
+  border-bottom:1px solid var(--border);
+}
+.nav-tab.active{
+  background:transparent;
+  box-shadow:none;
+  border-bottom-color:var(--gold);
+}
+.nav-tab:hover{ background:var(--navy-light) }
+
+#logo-chip{ border-radius:0 }
+#login-logo img{ border-radius:0 }
+.badge-setor{ border-radius:0 }
+
+/* ---------------------------------------------------------------------
+   5) CARD — retângulo com borda fina, sem vidro, sem brilho de quina
+--------------------------------------------------------------------- */
+.card{
+  border-radius:0;
+  box-shadow:none;
+  border:1px solid var(--border);
+}
+.card::after{ display:none }         /* era o fio de brilho no topo */
+/* Título de card: a barra vertical em gradiente vira um traço sólido de
+   2px — âncora do olho continua existindo, só que sem o degradê. */
+.card-title::before{
+  border-radius:0;
+  background:var(--gold);
+  width:2px;
+}
+
+/* ---------------------------------------------------------------------
+   6) STAT-BOX (indicadores) — a régua de cor DO FUNDO não muda
+   O comentário do styles.css (linha ~4586) registra que cor no FUNDO da
+   caixa de indicador já deu 1,9 de contraste e foi corrigido para cor
+   como TEXTO (--st-*-txt). Esta camada respeita isso à risca: a caixa
+   continua neutra (--navy) e a cor do status entra só como número/rótulo
+   herdado das variáveis originais — eu não pinto nenhum --st-*-bg aqui
+   por trás de texto. */
+.stat-box{
+  border-radius:0;
+  box-shadow:none;
+  border:1px solid var(--border);
+  border-top:2px solid var(--gold);   /* era 4px + halo; agora é a régua
+                                          seca, sem o gradiente de luz */
+}
+.stat-box::before{ display:none }     /* era o halo de luz descendo */
+.stat-ativo{
+  border-top-color:var(--gold-text);
+  box-shadow:inset 0 0 0 1px var(--gold-text);
+}
+.stat-num{ letter-spacing:0 }          /* monoespaçada não precisa do
+                                          aperto negativo da fonte original */
+
+/* ---------------------------------------------------------------------
+   7) TABELA — grade explícita: linha E coluna, não só linha
+   O original só tinha borda horizontal (border-bottom em td/th) — típico
+   de painel "card". Bloomberg é o oposto: cada célula é uma casa fechada.
+   Mantenho a listra zebra (ela já existe por bom motivo documentado no
+   styles.css — orientar o olho em tabelas de 13 colunas) só que mais
+   discreta, porque a grade de linhas verticais agora faz parte do
+   trabalho de "achar a linha". */
+table{ border:1px solid var(--border) }
+th{
+  background:var(--navy);
+  border-bottom:2px solid var(--gold);
+  border-right:1px solid var(--border-soft);
+}
+th:last-child{ border-right:none }
+td{
+  border-bottom:1px solid var(--border-soft);
+  border-right:1px solid var(--border-soft);
+}
+td:last-child{ border-right:none }
+tbody tr:nth-child(even){ background:rgba(255,176,32,.05) }
+tr:hover td{ background:rgba(255,176,32,.08) }
+
+/* ---------------------------------------------------------------------
+   8) BADGES — quadradas, mesma cor (a régua do gestor não muda)
+--------------------------------------------------------------------- */
+.badge, .status-pill{ border-radius:0; letter-spacing:.05em }
+.marca-multi, .chip-dia-prog, .chip-no-patio, .chip-devolvida,
+.chip-praonde, .aviso-placa-repetida, .badge-conexao{ border-radius:0 }
+.et-mini{ border-radius:0 }
+.et-atual{ border-radius:0 }
+
+/* ---------------------------------------------------------------------
+   9) BOTÕES / CAMPOS — quadrados, sem gradiente, sem elevação Fluent
+   O styles.css tem uma seção posterior ("Acabamento Fluent") que dá
+   gradiente e sombra dupla ao .btn — é exatamente a decoração que este
+   gênero rejeita. Eu reviro os MESMOS seletores, na mesma especificidade,
+   para chapado e reto. */
+.btn{
+  border-radius:0;
+  box-shadow:none;
+  text-transform:uppercase;
+  letter-spacing:.04em;
+}
+.btn:hover{ box-shadow:none; filter:brightness(1.12) }
+.btn-primary{ background:var(--gold) }
+.btn-success{ background:#1d7a47 }     /* mesmo valor já calibrado a 4,74:1
+                                           no styles.css — não reabro essa
+                                           conta, só tiro o gradiente */
+.btn-danger{ background:var(--wine) }
+input, select, textarea{ border-radius:0 }
+#btn-menu{ border-radius:0 }
+
+/* ---------------------------------------------------------------------
+   10) MODAL — opaco, sem desfoque, canto reto
+--------------------------------------------------------------------- */
+.modal-overlay{
+  -webkit-backdrop-filter:none;
+  backdrop-filter:none;
+  background:rgba(0,0,0,.72);
+}
+.modal-box{ border-radius:0; box-shadow:none; border:1px solid var(--border) }
+
+/* ---------------------------------------------------------------------
+   11) MOVIMENTO — nada de novo. Os keyframes do styles.css já usam só
+   transform/opacity (ou box-shadow, que aqui só alterna com `none`, um
+   valor válido) e já desligam com prefers-reduced-motion — esta camada
+   não adiciona nenhuma animação própria, então respeita a regra dos dois
+   lados sem precisar repetir a media query. */
+
+}

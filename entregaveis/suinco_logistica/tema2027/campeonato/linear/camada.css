@@ -1,0 +1,205 @@
+/* =====================================================================
+   CAMADA "LINEAR" — escola PRECISÃO
+   =====================================================================
+   Regra de segurança #1: TUDO aqui mora dentro de @media screen. O painel
+   gera os PDFs de relatório com este mesmo CSS (@media print), e a marca
+   d'água do briefing é clara: aquele bloco fica intocado. Envolver a
+   camada inteira em `screen` garante isso por construção — nenhuma regra
+   daqui pode vazar para o papel, mesmo que eu erre uma especificidade.
+
+   Regra de segurança #2: nada que já carrega contraste calibrado
+   (--text, --text-dim, --st-*-fg/-bg/-txt, --gold-text, --warn-fg) é
+   redefinido aqui. Esta camada mexe em geometria, espaçamento, tipografia
+   e nas cores ESTRUTURAIS (bordas, divisórias) — nunca nas cores que
+   carregam leitura de status ou texto. As marcas ✓ ● · da linha do tempo
+   e a régua de cor das caixas de indicador (.bi-faixa) não têm a cor
+   tocada — só ajustes de grade/alinhamento em volta delas.
+
+   Ideia central: separar COR DE ESTRUTURA (cinza com viés azul-frio, para
+   grades e divisórias) de COR DE MARCA (o dourado, reservado para o que é
+   interativo ou é status) — hoje as duas se misturam porque toda borda do
+   tema escuro usa --border em dourado. Ao dar à estrutura sua própria cor,
+   o dourado passa a significar uma coisa só: "isto é ação ou seleção".
+===================================================================== */
+@media screen{
+
+/* ---------------------------------------------------------------------
+   1. TOKENS — a grade de 4px e a cor estrutural
+   --------------------------------------------------------------------- */
+:root{
+  /* Cantos: 3 tamanhos, sempre múltiplos de 2, sempre os mesmos em todo
+     lugar. --radius já tinha 10px como único valor "grande" — desço para
+     8px, que é o valor que .card e input já usavam por override local
+     (styles.css:2528-2530). Uma variável, sem exceção por elemento. */
+  --radius:8px;
+  --radius-lg:12px;
+
+  /* Estrutura vs. marca. --border/--border-soft viravam dourado no tema
+     escuro (a mesma cor do texto-título e da régua de destaque) — toda
+     borda do painel "brilhava" um pouco, e brilho difuso é o oposto de
+     fio calibrado. Aqui a estrutura ganha um azul-acinzentado neutro,
+     próximo do que já é --navy-lighter, e o dourado fica livre para
+     significar só interação/seleção/status. */
+  --border:rgba(151,168,214,.26);
+  --border-soft:rgba(151,168,214,.13);
+  /* Divisória mais fina que --border-soft, para listras de tabela e
+     filetes entre células — precisa ser quase subliminar. */
+  --linha-fio:rgba(151,168,214,.09);
+
+  /* Luz de topo (o "fio de cabelo" que separa uma superfície da outra
+     sem sombra pesada). Ligeiramente mais forte que o --vidro-brilho já
+     existente porque aqui ela também marca o TOPO de botões e badges,
+     que não tinham nenhum. */
+  --luz-topo:rgba(255,255,255,.05);
+  --luz-topo-forte:rgba(255,255,255,.09);
+
+  /* Curva de movimento única — "instrumento calibrado", não "elástico". */
+  --ease-precisa:cubic-bezier(.22,.61,.36,1);
+}
+:root[data-tema="claro"]{
+  --border:rgba(32,44,74,.17);
+  --border-soft:rgba(32,44,74,.09);
+  --linha-fio:rgba(32,44,74,.065);
+  --luz-topo:rgba(255,255,255,.75);
+  --luz-topo-forte:rgba(255,255,255,.92);
+}
+
+/* Zebra da tabela: era dourado fixo (rgba(233,185,84,.045)) — passa a
+   usar a MESMA cor estrutural das bordas, coerente com a ideia de que
+   dourado = ação/status, cinza-azulado = grade. Opacidade oitava do
+   --border-soft: mais discreta que uma borda, mais presente que nada. */
+tbody tr:nth-child(even){ background:var(--linha-fio) }
+
+/* ---------------------------------------------------------------------
+   2. TIPOGRAFIA — tracking negativo nos TÍTULOS, nunca no dado
+   ---------------------------------------------------------------------
+   Só em texto de caixa-mista, corpo >= 13px, que já teria peso 700+.
+   Rótulo maiúsculo (nav, badge, cabeçalho de coluna) fica de fora de
+   propósito: letra maiúscula precisa de MAIS respiro entre caracteres,
+   não menos — apertar caixa-alta pequena é a receita para "grudado" em
+   vez de "preciso". Número de indicador também fica de fora: dígito
+   grudado no vizinho é dígito difícil de diferenciar rápido, no pátio,
+   de longe — e --fs-numero já usava -.01em, que é o teto que mantenho. */
+.card-title,
+.modal-box h2,
+.aviso-titulo,
+.teste-titulo,
+.gargalo-titulo,
+.mont-form-tit,
+.admin-carga-tit{
+  letter-spacing:-.012em;
+}
+
+/* O título do cabeçalho é a exceção: caixa-alta ("PROGRAMAÇÃO DE
+   EMBARQUE"). Em vez de negativo, só reduzo o tracking positivo que já
+   tinha (.5px → .2px) — mais denso sem cruzar para o ilegível. */
+#header-title strong{ letter-spacing:.2px }
+
+/* As abas de navegação também são texto corrido em caixa mista — um
+   tracking quase imperceptível (-.005em) tensiona a linha sem afetar
+   leitura a essa distância de tela. */
+.nav-tab{ letter-spacing:-.005em }
+
+/* ---------------------------------------------------------------------
+   3. SUPERFÍCIES — fio de luz no topo de quem ainda não tinha
+   ---------------------------------------------------------------------
+   .card e .stat-box já ganham o filete de luz por ::after/::before
+   (vidro-brilho, styles.css). Botões, badges e cabeçalho de tabela não
+   tinham nada — pareciam vetorial chapado ao lado das superfícies de
+   vidro. Uma única linha de gradiente por cima do fundo já existente
+   (multi-background, não troca a cor de baixo) resolve, sem custar uma
+   segunda camada de blur. */
+.btn,
+th,
+.filtro-periodo,
+.fat-conf-linha,
+.aviso-placa-repetida,
+.dev-chip-filial,
+.dev-chip-sobra{
+  background-image:linear-gradient(180deg, var(--luz-topo), transparent 60%);
+  background-blend-mode:normal;
+}
+/* .btn tem cor sólida própria por classe (.btn-primary, .btn-sec...):
+   o gradiente entra como CAMADA ADICIONAL sobre a cor, não a substitui —
+   por isso background-image (soma) e não background (troca). */
+
+/* Botões: cantos e peso de traço únicos. --radius já cai para 8px pelo
+   token acima; aqui só reforço a borda de --border em quem ainda usava
+   cor solta, e adiciono a curva de movimento calibrada aos que já tinham
+   transição (mantendo transform/opacity, exigência da casa). */
+.btn{ transition:transform .1s var(--ease-precisa), filter .15s var(--ease-precisa), opacity .15s var(--ease-precisa) }
+.btn:hover{ transform:translateY(-1px) }
+.btn:active{ transform:translateY(0) }
+
+/* Cartão: o ::after de luz já existe; só afino a borda (estrutural, não
+   dourada) e uso a curva calibrada na transição que já existia. */
+.card{ transition:border-color var(--t-media) var(--ease-precisa), box-shadow var(--t-media) var(--ease-precisa) }
+
+/* ---------------------------------------------------------------------
+   4. TABELAS — fio de cabelo em vez de traço grosso
+   ---------------------------------------------------------------------
+   O cabeçalho tinha `border-bottom:2px solid var(--gold-dim)` — um traço
+   quase de botão. Um fio estrutural fino por baixo do dourado (que
+   continua ali, mais fino) lê como régua de precisão, não como sublinhado
+   de destaque. Mantenho o dourado (é ele que diz "isto é cabeçalho de
+   dado", consistente com o resto do painel) só reduzo a espessura. */
+th{ border-bottom:1px solid var(--gold-dim) }
+td{ border-bottom:1px solid var(--linha-fio) }
+
+/* ---------------------------------------------------------------------
+   5. FAIXA DE INDICADORES (.bi-faixa) — grade mais fina, régua intocada
+   ---------------------------------------------------------------------
+   A régua de cor à esquerda (.stat-box::after, var(--st-cor)) NÃO é
+   tocada — é a correção de contraste 1,9→calibrado descrita no arquivo
+   base. Só reduzo o filete que separa as células (era --border-soft
+   dourado a .14 de opacidade; passa a ser a mesma cor estrutural usada
+   em tabela, mais fina) e alinho o padding interno à grade de 4px. */
+.bento.bi-faixa{ border-color:var(--border) }
+.bento.bi-faixa .stat-box{
+  border-right-color:var(--linha-fio);
+  border-bottom-color:var(--linha-fio);
+  padding:8px 12px 8px 14px; /* era 9/11/9/13 — múltiplos de 4, régua de 3px + 1px de fio */
+}
+.bento.bi-faixa .stat-destaque{ column-gap:12px }
+
+/* .bento "puro" (não-faixa) — usado pela esteira de Devoluções
+   (#dev-pipeline), que o próprio arquivo base pede para NÃO mudar de
+   comportamento. Aqui só reforço o fio de luz de topo que .stat-box já
+   tem via ::before dourado — sem tocar nele — e uso a cor estrutural na
+   borda em vez do dourado, para a caixa não competir com a régua de
+   status que fica embaixo do número. */
+.stat-box{ border-color:var(--border) }
+
+/* ---------------------------------------------------------------------
+   6. LINHA DO TEMPO — a marca (✓ ● ·) é texto, e continua sendo
+   ---------------------------------------------------------------------
+   Nenhuma regra aqui toca `color` de .et-mini*, .et-ok, .et-pendente,
+   .et-atual — são os valores medidos pelo test_contraste.py. Only
+   ajuste é de respiro: o selo ganha 1px a mais de padding lateral (grade
+   de 4px) para os três símbolos (✓, ●, o número da hora) não brigarem
+   entre si visualmente numa faixa tão estreita. */
+.et-mini{ padding:2px 4px }
+.tabela-patio .et{ padding:6px 4px }
+
+/* ---------------------------------------------------------------------
+   7. FORMULÁRIOS — mesma borda estrutural, mesmo raio
+   --------------------------------------------------------------------- */
+input,select,textarea{ border-color:var(--border) }
+input:focus,select:focus,textarea:focus{
+  border-color:var(--gold-dim);
+  transition:border-color .12s var(--ease-precisa);
+}
+
+/* ---------------------------------------------------------------------
+   8. MOVIMENTO — só transform/opacity, e a régua de sempre respeita
+      prefers-reduced-motion (o painel já desliga a própria; a camada
+      desliga a que ela mesma acrescentou).
+   --------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce){
+  .btn{ transition:none !important }
+  .btn:hover, .btn:active{ transform:none !important }
+  .card{ transition:none !important }
+  input:focus,select:focus,textarea:focus{ transition:none !important }
+}
+
+} /* fim @media screen */
