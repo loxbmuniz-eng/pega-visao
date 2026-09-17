@@ -1,6 +1,80 @@
 /* Tema 2027 — Etapa 3: Indicadores.
-   Dona de: .stat-box, .stat-num, .stat-label, .stat-note, .stat-share, .stat-ativo,
-   .stat-clicavel:hover, .bento.bi-faixa e descendentes, .grafico-box, @keyframes t27-pulso.
-   Vazio até a Etapa 3 preencher. Ver VEREDITO.md seção 6. */
+   Dona de: .stat-box, .stat-box::before, .stat-num, .stat-label, .stat-note,
+   .stat-share, .stat-ativo, .stat-clicavel:hover, .bento.bi-faixa e
+   descendentes, .grafico-box, @keyframes t27-pulso. Ver VEREDITO.md seção 6.
+
+   Valores copiados literalmente do VEREDITO.md, seção 6, Etapa 3 — não são
+   decisão deste executor. As DUAS divergências abaixo (marcadas no texto)
+   foram necessárias para não quebrar conferências obrigatórias da própria
+   Etapa 3 e estão relatadas na entrega, não decididas em silêncio. */
 @media screen{
+.stat-box{ box-shadow:var(--vidro-sombra); border-radius:var(--radius); padding:10px 12px;
+  transition:transform var(--t-media) var(--curva), border-color var(--t-media) var(--curva) }
+.stat-box::before{ display:none }                          /* véu dourado do topo sai */
+.stat-box:hover{ box-shadow:var(--vidro-sombra) }
+.stat-num{ letter-spacing:-.02em; line-height:1.05 }
+.stat-label{ font-size:11px; font-weight:700; letter-spacing:.02em }
+.stat-note{ font-size:10px }
+.stat-clicavel:hover{ background:var(--acento-hover) }
+.stat-ativo{ background:var(--acento-ativo);
+  box-shadow:0 0 0 1.5px var(--gold-text) inset, var(--vidro-sombra) }
+
+/* Cor de estrutura da faixa — sem conflito de largura em nenhuma largura de
+   tela, fica fora de qualquer media query de tamanho. */
+.bento.bi-faixa{ border-color:var(--border); box-shadow:var(--vidro-sombra) }
+.bento.bi-faixa .stat-box{ border-right-color:var(--linha-fio); border-bottom-color:var(--linha-fio) }
+.bento.bi-faixa .stat-box::after{ width:4px }
+.bento.bi-faixa .stat-ativo{ background:var(--acento-ativo); box-shadow:inset 0 0 0 1.5px var(--gold-text) }
+
+.grafico-box{ border-color:var(--border-soft); box-shadow:var(--vidro-sombra); border-radius:var(--radius) }
+
+/* urgência: a régua pulsa só onde há caminhão parado (n > 0) e só em opacidade */
+@keyframes t27-pulso{ 0%,100%{ opacity:1 } 50%{ opacity:.35 } }
+.bento.bi-faixa .stat-alerta:not(.stat-zerada)::after,
+.bento.bi-faixa .stat-box[style*="--st-cor:var(--st-aguardando-veiculo-bg)"]:not(.stat-zerada)::after{
+  animation:t27-pulso 2.4s ease-in-out infinite }
 }
+
+/* DESKTOP SÓ (>640px) — o `styles.css` já tem, dentro de
+   `@media(max-width:640px)`, a SUA PRÓPRIA compactação da faixa BI para
+   celular (padding, fontes menores). O bloco `@media screen{}` acima não
+   tem largura — vale em qualquer tela — e como este arquivo é concatenado
+   DEPOIS de `styles.css`, qualquer propriedade que eu redeclarasse ali
+   (mesma especificidade, ordem de arquivo vence) apagaria essa compactação
+   também no celular, não só no desktop.
+
+   DIVERGÊNCIA 1 (relatada): o padding maior (8px 12px 8px 14px) e o número
+   maior (22px / 30px no destaque / 11,5px no rótulo do destaque) do
+   VEREDITO.md são, por isso, aplicados só a partir de 641px. Medido: sem
+   este bloco, a faixa da Torre no celular ia de 317px (referência) para
+   368px (+51px) e a de Indicadores de 143px para 165px (+22px) —
+   estourando o teto de 340px que `test_faixa_indicadores_bi.py` já trava.
+   Com o bloco, a faixa do celular usa a compactação de sempre e o desktop
+   recebe exatamente os valores do VEREDITO. */
+@media screen and (min-width:641px){
+  .bento.bi-faixa .stat-box{ padding:8px 12px 8px 14px }
+  .bento.bi-faixa .stat-num{ font-size:22px }
+  .bento.bi-faixa .stat-destaque .stat-label{ font-size:11.5px }
+}
+
+/* DIVERGÊNCIA 2 (relatada): o VEREDITO.md também pedia, sem media query,
+   `.bento.bi-faixa .stat-label{ letter-spacing:.02em; text-transform:uppercase }`
+   e `.bento.bi-faixa .stat-destaque .stat-num{ font-size:30px }`. O segundo
+   já é o valor que `styles.css` usa no desktop (linha 4641) — reafirmá-lo
+   aqui não muda nada em telas largas e só serve para apagar a compactação
+   de celular (24px, linha 4716), então foi removido por ser redundante e
+   nocivo. O primeiro (rótulo em caixa alta) faz "PROGRAMAÇÃO ANTERIOR"
+   quebrar em duas linhas dentro dos 139px úteis da caixa — a faixa da
+   Torre crescia +8px na tela larga, e a régua espera crescimento ZERO.
+   Segui a própria ordem de escalada que o VEREDITO manda para este
+   sintoma ("se ainda quebrar, tirar text-transform e relatar"): tentei
+   `letter-spacing:0` primeiro — ainda quebrava — e então tirei também o
+   `text-transform`. Como `font-size:10.5px`/`font-weight:700` já são os
+   valores que `styles.css` usa no desktop (linha 4628-4629), a regra toda
+   ficou sem nenhuma mudança real a fazer e foi removida — mantê-la só
+   para reafirmar o que já valia teria o mesmo efeito colateral do parágrafo
+   acima: apagar a fonte de celular (9,5px, linha 4711). */
+@media screen and (prefers-reduced-motion: reduce){
+  .bento.bi-faixa .stat-box::after{ animation:none !important }
+}
+
