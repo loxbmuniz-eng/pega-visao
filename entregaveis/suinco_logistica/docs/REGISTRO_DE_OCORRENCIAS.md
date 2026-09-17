@@ -3514,3 +3514,50 @@ painel publicado. As que importam para esta ocorrência:
 servidor, com 26 cargas: Operacional 2 páginas, Executivo 3, Fretes 2,
 Manobrista 1 — o MESMO número de páginas do painel publicado, e nenhuma
 página em branco nos dois.
+
+## #75 — A Torre sempre rolou de lado no tablet da Portaria, e ninguém media (17/09/2026)
+
+**Sintoma.** Em tablet de 1024px em paisagem — o aparelho que a Portaria usa
+no pátio, com luva —, a tabela da Torre de Controle mostra **746px** e precisa
+de **894px**. Faltam **148px**: a operação rola de lado para ver a coluna de
+peso, todos os dias.
+
+**Por que passou.** `guarda_do_padrao.py` tinha dois perfis: computador de
+1280px SEM toque, e celular de 390px COM toque. O tablet mora exatamente entre
+os dois — tem a largura de um e o dedo do outro — e não era nenhum deles. A
+largura de 1280 deixava a tabela caber; a de 390 virava cartão, que não tem
+coluna. O defeito existia no vão.
+
+**Como apareceu.** Não foi investigação: foi consequência. O Tema 2027 causou
+uma regressão de alvo de toque que só acontece em tela larga com toque (`.btn`
+caindo de 44px para 36px), e para pegá-la foi preciso criar o terceiro perfil.
+Criado o perfil, ele reprovou também nesta rolagem — que não era nova.
+
+**Prova de que é anterior, e não da camada.** A mesma guarda, contra o
+`index.html` da branch de entrega (o que está no ar agora):
+
+```
+publicado   tablet  div.table-wrap mostra 746 px e precisa de 894 (faltam 148)
+Tema 2027   tablet  div.table-wrap mostra 750 px e precisa de 907 (faltam 157)
+```
+
+A camada acrescenta 9px a um buraco de 148 que já existia. Acusar a camada por
+isto seria tratar causa 4 onde a causa é anterior — e deixaria o defeito de
+verdade sem dono.
+
+**Família.** "Medida que não existe não protege" — parente de #17 (bateria que
+não terminava não protegia ninguém) e da razão de existir da própria guarda: as
+~180 suítes provam que o painel FUNCIONA, nenhuma provava que ele está LEGÍVEL.
+Aqui o mesmo buraco aparece um nível acima: o perfil de aparelho que ninguém
+mede é um aparelho que ninguém protege.
+
+**O que foi feito agora.** Terceiro perfil (`tablet`, 1024×768, sem emulação de
+celular e COM toque) em `guarda_do_padrao.py`, com o porquê escrito no próprio
+arquivo. `has_touch` é o que liga `pointer:coarse`; `is_mobile` fica falso
+porque tablet em paisagem renderiza como tela larga, não como telefone.
+
+**O que NÃO foi feito, e é decisão de quem manda.** As larguras das colunas da
+Torre foram calibradas para caber em 1002px, que é o que sobra num monitor de
+1280px. Num tablet sobram 746. Fazer a Torre caber ali é redesenho de tabela,
+não ajuste — e não se muda a tela que a operação usa no meio do dia sem o dono
+dizer. Fica registrado, com número, para ser decidido.
