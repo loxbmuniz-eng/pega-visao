@@ -126,7 +126,15 @@ async def main():
         await renderizar(pg, css_tema2027, t27)
 
         diff_t27 = diferem(ref, t27)
-        ck('tema2027/*.css (vazio) não vaza para o papel', diff_t27 is None, diff_t27 or '')
+        # O rótulo diz o TAMANHO do que foi medido, não um adjetivo fixo.
+        # Ele nasceu escrito "(vazio)", quando as seis camadas ainda eram
+        # arquivos em branco. Quando elas encheram, o teste continuou certo
+        # (lê os arquivos na hora, logo acima) mas passou a IMPRIMIR uma
+        # mentira — "vazio" sobre 285 linhas de CSS. Saída que mente é pior
+        # que teste que falta: ela é lida como prova.
+        quantos = len(list(CAMADA.glob('*.css')))
+        ck(f'tema2027/*.css ({quantos} arquivos, {len(css_tema2027)} bytes) '
+           f'não vaza para o papel', diff_t27 is None, diff_t27 or '')
 
         if STRIPE_CONTROLE.exists():
             stripe_css = STRIPE_CONTROLE.read_text(encoding='utf-8')
