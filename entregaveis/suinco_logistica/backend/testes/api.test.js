@@ -4858,13 +4858,39 @@ describe('7d. Sequenciamento da fila: digitou 1, entra na frente (08/09/2026)', 
       'a carga em Embarque Iniciado mudou de número — ela é registro, não fila');
   });
 
-  test('posição fora da fila é recusada com explicação', async () => {
+  /* A REGRA MUDOU POR ORDEM DO DONO (17/09/2026) — CAUSA 1, TESTE VELHO.
+
+     Este teste dizia que 999 numa fila de 4 era recusado. Era uma defesa
+     MINHA, de 08/09: ninguém tinha pedido, e ela existia porque o arrasto
+     nunca precisa de um número que a fila não tem.
+
+     O QUE ELA CUSTOU NA OPERAÇÃO, nas palavras dele: "ele está tentando
+     mudar o 9 para o 7, mas não funciona. ATÉ O 6 FUNCIONA na sequência".
+     A fila era 1..6 mais uma no 9; 7 e 8 não existiam como casa e eram
+     recusados. Nada estava errado com a operação — a trava era esta regra.
+
+     Ordem dele, com todas as letras: "Independentemente do número, você vai
+     resolver". Então digitar um número que a fila não tem agora ENTRA: a
+     casa nova aparece, a casa que a carga deixou some, e ninguém mais é
+     renumerado. O que continua recusado está no teste seguinte. */
+  test('digitar um número que a fila NÃO TEM entra, e só mexe nessa carga', async () => {
+    const antes = await fila();
     const r = await req('/api/cargas/sequenciar', {
       metodo: 'POST', token: tokens['Logística'],
       corpo: { cargaId: ids[1], posicao: 999 },
     });
-    assert.equal(r.status, 400, r.texto);
-    assert.match(String(r.json && r.json.erro), /posi/i);
+    assert.equal(r.status, 200, r.texto);
+    const depois = await fila();
+    assert.equal(depois[1], 999, `a carga tinha que ficar com 999: ${depois}`);
+    for (let i = 0; i < ids.length; i++) {
+      if (i === 1) continue;
+      assert.equal(depois[i], antes[i],
+        `a carga ${i} foi renumerada de ${antes[i]} para ${depois[i]} sem ninguém pedir`);
+    }
+    // e volta para onde estava, para não contaminar os testes seguintes
+    await req('/api/cargas/sequenciar', { metodo: 'POST', token: tokens['Logística'],
+      corpo: { cargaId: ids[1], posicao: antes[1] } });
+    assert.deepEqual(await fila(), antes, 'o cenário volta ao estado em que estava');
   });
 
   /* O RELATO DO DONO, 08/09/2026: "ela ta deixando ficarem numeros repetidos
@@ -5533,25 +5559,265 @@ describe('43. Arrastar respeita os números que a fila JÁ TEM (09/09/2026)', ()
       'e ninguém tomou o número de quem já carregou');
   });
 
-  test('número solto, fora das casas da fila, CONTINUA recusado — e a recusa diz quais valem', async () => {
-    /* Decisão de 08/09, com teste próprio no bloco 7d: a fila tem casas, e
-       999 numa fila de 3 não é uma delas. O relato de hoje era sobre
-       ARRASTAR, que solta sempre em cima de um número que existe — alargar
-       a regra aqui consertaria o que ninguém pediu e apagaria a decisão de
-       ontem junto.
-
-       O QUE MUDA É A FRASE. "A fila tem 3 cargas" não explica por que 5 é
-       inválido quando as casas são 1, 7 e 12: o número é menor que o maior
-       e mesmo assim não serve. Agora a recusa DIZ quais são as casas — sem
-       isso o operador tenta 4, tenta 6, e conclui que o campo está quebrado. */
+  /* A REGRA DAS CASAS VALE PARA O ARRASTO E NÃO VALE MAIS PARA A DIGITAÇÃO
+     (17/09/2026). Este teste media as duas juntas porque elas eram a mesma
+     coisa; deixaram de ser. Ver o bloco 44 para o porquê. O que ele guarda
+     agora é a metade que continua de pé: o arrasto NÃO renumera ninguém
+     além de quem trocou de lugar. */
+  test('número que a fila não tem é ACEITO, e não renumera o resto da fila', async () => {
     const { fila } = await montarDia('ARR-F');
+    // fila 1, 7, 12 · já carregaram 2, 3, 4. O 5 não é casa de ninguém.
     const r = await req('/api/cargas/sequenciar', { metodo: 'POST', token: tokens['Logística'],
       corpo: { cargaId: fila[2], posicao: 5 } });
+    assert.equal(r.status, 200, r.texto);
+    assert.deepEqual(await seqDe(fila), [1, 7, 5],
+      'a carga do 12 vira 5; as do 1 e do 7 não podem ter sido tocadas');
+  });
+
+  test('mas o número de quem JÁ CARREGOU continua recusado — e a recusa diz por quê', async () => {
+    /* Esta é a metade que NÃO mudou, e não pode mudar: 2, 3 e 4 são de
+       cargas que já saíram da fila. Número de quem carregou é registro do
+       que aconteceu, e registro não é casa de fila. */
+    const { fila } = await montarDia('ARR-G');
+    const r = await req('/api/cargas/sequenciar', { metodo: 'POST', token: tokens['Logística'],
+      corpo: { cargaId: fila[2], posicao: 3 } });
     assert.equal(r.status, 400, r.texto);
     assert.equal(r.json.codigo, 'POSICAO_INVALIDA');
-    assert.match(r.json.erro, /1, 7 e 12|1, 7, 12/,
-      `a recusa precisa dizer quais números valem: ${r.json.erro}`);
+    assert.match(r.json.erro, /já carregou/, `a recusa tem que dizer o motivo: ${r.json.erro}`);
     assert.deepEqual(await seqDe(fila), [1, 7, 12], 'e nada foi renumerado');
+  });
+});
+
+describe('44. Digitar o número que a fila NÃO TEM (17/09/2026)', () => {
+  /* RELATO DO DONO, com a operação parada e a fila na tela:
+
+       "Ele está tentando mudar o 9 para o 7, mas não funciona. ATÉ O 6
+        FUNCIONA na sequência. Hoje não há 14 cargas, apenas o número 14.
+        Não conseguimos alterar isso."
+
+     "ATÉ O 6 FUNCIONA" É A ASSINATURA DO DEFEITO, e foi ela que deu a causa
+     em minutos. A fila daquele dia era 1, 2, 3, 4, 5, 6 e uma carga no 9.
+     `numerosDaFila` devolvia exatamente [1,2,3,4,5,6,9] — as CASAS — e
+     `filaReordenada` recusava tudo que não estivesse nessa lista. Tudo até
+     6 entrava. O 7 e o 8 não existiam como casa e eram negados. Não havia
+     nada de errado com a operação: a trava era minha, escrita em 08/09.
+
+     E ELA CONTRADIZIA O PRÓPRIO COMENTÁRIO. `numerosDaFila` já descrevia
+     DUAS portas para um número novo entrar — a carga sem número nenhum, e
+     alguém que DIGITA um número que a fila não tem. A segunda porta estava
+     escrita em prosa e nunca foi implementada. Regra documentada que o
+     código não cumpre é ponto sem nó, e quem pagou foi o pátio.
+
+     A DIFERENÇA QUE FALTAVA: arrastar × digitar. Arrastar solta sempre em
+     cima de uma linha que já tem número, então o "tabuleiro" nunca o
+     atrapalha — e é por isso que ele existe, para o arrasto não renumerar
+     em silêncio o que a Logística digitou. Digitar é a pessoa DIZENDO qual
+     número quer; não há nada de silencioso nisso.
+
+     SETE CARGAS PARA O BLOCO INTEIRO, e não sete por cenário. A primeira
+     versão deste bloco criava 36 cargas e estourou o limite de requisições
+     do servidor — 429 — derrubando os seis últimos testes sem haver defeito
+     nenhum. A causa nº 3 das quatro do vermelho, e produzida por mim. Aqui
+     as cargas são criadas UMA vez e cada cenário só reposiciona os números
+     por SQL, que não passa pela rota. */
+  const PREFIXO = 'SEQ17';
+  let ids = [];
+  let dia = null;
+
+  before(async () => {
+    const { rows: placas } = await pool.query(
+      `SELECT placa FROM dim_veiculos WHERE transportadora <> ''
+        ORDER BY placa OFFSET 300 LIMIT 7`);
+    for (let i = 0; i < 7; i++) {
+      const r = await req('/api/cargas', { metodo: 'POST', token: tokens['Logística'], corpo: {
+        placa: placas[i].placa, numeroCarga: `${PREFIXO}-${i}-${Date.now()}`,
+      } });
+      assert.equal(r.status, 201, r.texto);
+      ids.push(r.json.id);
+    }
+    /* UM DIA PRÓPRIO, longe de hoje. A fila que o servidor monta é a do DIA
+       da carga, e outros blocos desta bateria deixam cargas abertas em hoje
+       — elas entrariam nesta fila e o teste mediria um tabuleiro que não é
+       o que ele montou. É a causa nº 3 das quatro do vermelho. */
+    await pool.query(
+      `UPDATE fact_viagens
+          SET programado_em = date_trunc('day', now()) - interval '311 days' + interval '9 hours'
+        WHERE carga_id = ANY($1)`, [ids]);
+    const { rows } = await pool.query(
+      `SELECT to_char(date(programado_em), 'YYYY-MM-DD') AS d
+         FROM fact_viagens WHERE carga_id = $1`, [ids[0]]);
+    dia = rows[0].d;
+  });
+
+  /* Reposiciona por SQL: a rota não é o assunto de montar o cenário, e cada
+     chamada a mais é orçamento do limitador gasto à toa. `usados` diz
+     quantas das sete entram na fila; as demais saem de cena com sequência
+     nula e status intocado... e por isso ELAS TAMBÉM estão na fila. Então
+     todas as sete recebem número, e o cenário usa as primeiras. */
+  async function posicionar(numeros) {
+    for (let i = 0; i < ids.length; i++) {
+      await pool.query('UPDATE fact_viagens SET sequencia = $1 WHERE carga_id = $2',
+        [numeros[i] ?? (1000 + i), ids[i]]);
+    }
+  }
+
+  async function seqDe(quantos) {
+    const alvo = ids.slice(0, quantos);
+    const { rows } = await pool.query(
+      'SELECT carga_id, sequencia FROM fact_viagens WHERE carga_id = ANY($1)', [alvo]);
+    const m = new Map(rows.map((r) => [r.carga_id, r.sequencia]));
+    return alvo.map((id) => m.get(id));
+  }
+
+  test('O CASO DELE: mover a carga do 9 para o 7 — e só ela muda', async () => {
+    await posicionar([1, 2, 3, 4, 5, 6, 9]);
+    const r = await req('/api/cargas/sequenciar', { metodo: 'POST', token: tokens['Logística'],
+      corpo: { cargaId: ids[6], posicao: 7 } });
+    assert.equal(r.status, 200, `"mudar o 9 para o 7" tem que funcionar: ${r.texto}`);
+    assert.deepEqual(await seqDe(7), [1, 2, 3, 4, 5, 6, 7],
+      'a do 9 vira 7 e NINGUÉM MAIS é renumerado');
+  });
+
+  test('O OUTRO CASO DELE: "não há 14 cargas, apenas o número 14"', async () => {
+    await posicionar([1, 2, 14, 20, 21, 22, 23]);
+    const r = await req('/api/cargas/sequenciar', { metodo: 'POST', token: tokens['Logística'],
+      corpo: { cargaId: ids[2], posicao: 3 } });
+    assert.equal(r.status, 200, `"não conseguimos alterar isso" — agora consegue: ${r.texto}`);
+    assert.deepEqual(await seqDe(3), [1, 2, 3], 'a do 14 vira 3, e o 1 e o 2 ficam onde estavam');
+  });
+
+  test('o número digitado é SEMPRE o que a carga fica — mesmo bem acima da fila', async () => {
+    await posicionar([1, 2, 3, 20, 21, 22, 23]);
+    const r = await req('/api/cargas/sequenciar', { metodo: 'POST', token: tokens['Logística'],
+      corpo: { cargaId: ids[0], posicao: 40 } });
+    assert.equal(r.status, 200, r.texto);
+    assert.deepEqual(await seqDe(3), [40, 2, 3],
+      'ordem do dono: "independentemente do número, você vai resolver"');
+  });
+
+  test('e a cascata de 08/09 continua inteira: digitar um número que EXISTE empurra', async () => {
+    /* A porta nova não podia custar a regra do Wemerson — "se ele digitar 1
+       numa carga e já tiver uma como 1, ela vai automaticamente pra dois". */
+    await posicionar([1, 2, 3, 20, 21, 22, 23]);
+    const r = await req('/api/cargas/sequenciar', { metodo: 'POST', token: tokens['Logística'],
+      corpo: { cargaId: ids[2], posicao: 1 } });
+    assert.equal(r.status, 200, r.texto);
+    assert.deepEqual(await seqDe(3), [2, 3, 1],
+      'a que recebeu o 1 entra na frente e as outras descem uma casa');
+  });
+
+  test('nunca, em nenhum caminho, dois números iguais no mesmo dia', async () => {
+    await posicionar([1, 2, 3, 4, 20, 21, 22]);
+    for (const [i, pos] of [[3, 2], [0, 9], [1, 1], [2, 40]]) {
+      const r = await req('/api/cargas/sequenciar', { metodo: 'POST', token: tokens['Logística'],
+        corpo: { cargaId: ids[i], posicao: pos } });
+      assert.equal(r.status, 200, `posicao ${pos}: ${r.texto}`);
+      const atual = await seqDe(7);
+      assert.equal(new Set(atual).size, atual.length,
+        `repetiu depois de mandar ${pos}: ${atual}`);
+    }
+  });
+
+  /* ------------------------------------------------------------------ */
+  describe('e o botão "Reorganizar por Sequência", que antes só avisava sucesso', () => {
+    /* PEDIDO DO DONO: "um botão de reorganizar por sequência em todas essas
+       áreas, QUE FUNCIONE CORRETAMENTE".
+
+       O que existia no painel chamava o redesenho da tela — que já desenhava
+       ordenada — e notificava "Fila reordenada por Sequência". O aviso era
+       verdadeiro sobre a tela e mentiroso sobre a fila. */
+
+    test('1, 2, 14 vira 1, 2, 3 — que é o que o dono estava tentando fazer à mão', async () => {
+      await posicionar([1, 2, 14, 15, 16, 17, 18]);
+      const r = await req('/api/cargas/fila/reorganizar', { metodo: 'POST',
+        token: tokens['Logística'], corpo: { dia } });
+      assert.equal(r.status, 200, r.texto);
+      assert.deepEqual(await seqDe(7), [1, 2, 3, 4, 5, 6, 7],
+        'a fila inteira fecha os buracos, preservando a ordem');
+      assert.equal(r.json.total, 7);
+    });
+
+    test('fila já em ordem: não renumera nada, e o aviso NÃO diz que fez', async () => {
+      await posicionar([1, 2, 3, 4, 5, 6, 7]);
+      const r = await req('/api/cargas/fila/reorganizar', { metodo: 'POST',
+        token: tokens['Logística'], corpo: { dia } });
+      assert.equal(r.status, 200, r.texto);
+      assert.equal(r.json.renumeradas, 0,
+        'zero escritas é a resposta certa — e é ela que o painel usa para não mentir');
+      assert.deepEqual(await seqDe(7), [1, 2, 3, 4, 5, 6, 7]);
+    });
+
+    test('a Portaria não reorganiza a fila da Logística', async () => {
+      const r = await req('/api/cargas/fila/reorganizar', { metodo: 'POST',
+        token: tokens['Portaria'], corpo: { dia } });
+      assert.equal(r.status, 403, r.texto);
+    });
+
+    test('sem o dia, recusa — reorganizar o dia errado é renumerar quem ninguém está vendo', async () => {
+      const r = await req('/api/cargas/fila/reorganizar', { metodo: 'POST',
+        token: tokens['Logística'], corpo: {} });
+      assert.equal(r.status, 400, r.texto);
+      assert.equal(r.json.codigo, 'DIA_INVALIDO');
+    });
+
+    test('NÃO grava movimentação falsa na tabela fato do Power BI', async () => {
+      /* `gravarEvento` escreve também em `fact_statusfrota`, que é a base de
+         todo indicador de tempo do pátio. Reorganizar a fila não é o
+         caminhão andando: cada clique viraria uma movimentação inventada
+         nos números que vão para a diretoria. Por isso aqui é `gravarNota`,
+         que só escreve no log. */
+      await posicionar([1, 2, 9, 10, 11, 12, 13]);
+      const { rows: antes } = await pool.query(
+        'SELECT count(*)::int AS n FROM fact_statusfrota WHERE carga_id = ANY($1)', [ids]);
+      const r = await req('/api/cargas/fila/reorganizar', { metodo: 'POST',
+        token: tokens['Logística'], corpo: { dia } });
+      assert.equal(r.status, 200, r.texto);
+      assert.ok(r.json.renumeradas > 0, 'o cenário precisa ter renumerado algo para o teste valer');
+      const { rows: depois } = await pool.query(
+        'SELECT count(*)::int AS n FROM fact_statusfrota WHERE carga_id = ANY($1)', [ids]);
+      assert.equal(depois[0].n, antes[0].n,
+        'reorganizar a fila criou movimentação de pátio que não aconteceu');
+      const { rows: log } = await pool.query(
+        "SELECT acao FROM log_eventos WHERE carga_id = ANY($1) AND acao LIKE '%reorganizada%'", [ids]);
+      assert.ok(log.length >= 1, 'e o histórico tem que guardar a decisão');
+    });
+
+    /* ÚLTIMO DE PROPÓSITO: este cenário tira duas cargas da fila para
+       sempre, e os testes acima precisam das sete. */
+    test('a fila desvia dos números de quem já carregou', async () => {
+      await posicionar([1, 7, 12, 90, 91, 2, 3]);
+      for (const id of ids.slice(5)) {
+        for (const [status, setor] of [['Aguardando Embarque', 'Portaria'],
+                                       ['Embarque Iniciado', 'Expedição']]) {
+          const r = await req(`/api/cargas/${id}/status`, { metodo: 'POST',
+            token: tokens[setor], corpo: { status, confirmado: true } });
+          assert.equal(r.status, 200, `${status}: ${r.texto}`);
+        }
+      }
+      /* A rota de status recarimba `programado_em` — as duas voltam para o
+         dia do cenário DEPOIS de as etapas terem andado, e reassumem o 2 e
+         o 3 que a rota não mexeu. */
+      await pool.query(
+        `UPDATE fact_viagens
+            SET programado_em = (SELECT programado_em FROM fact_viagens WHERE carga_id = $1)
+          WHERE carga_id = ANY($2)`, [ids[0], ids.slice(5)]);
+      await pool.query('UPDATE fact_viagens SET sequencia = 2 WHERE carga_id = $1', [ids[5]]);
+      await pool.query('UPDATE fact_viagens SET sequencia = 3 WHERE carga_id = $1', [ids[6]]);
+
+      const r = await req('/api/cargas/fila/reorganizar', { metodo: 'POST',
+        token: tokens['Logística'], corpo: { dia } });
+      assert.equal(r.status, 200, r.texto);
+      const depois = await seqDe(7);
+      assert.deepEqual(depois.slice(5), [2, 3], 'quem já carregou não muda de número');
+      assert.deepEqual(depois.slice(0, 5), [1, 4, 5, 6, 7],
+        'a fila ocupa os menores que sobraram, pulando o 2 e o 3');
+    });
+  });
+
+  after(async () => {
+    await pool.query("DELETE FROM fact_statusfrota WHERE carga_id = ANY($1)", [ids]);
+    await pool.query("DELETE FROM log_eventos WHERE carga_id = ANY($1)", [ids]);
+    await pool.query("DELETE FROM fact_viagens WHERE carga_id = ANY($1)", [ids]);
   });
 });
 

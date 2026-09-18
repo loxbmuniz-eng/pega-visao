@@ -742,6 +742,7 @@ async def main():
               return {
                 temCampo: !!inp,
                 tipo: inp ? inp.type : null,
+                inputmode: inp ? (inp.getAttribute('inputmode') || '') : null,
                 // O <td> em volta precisa engolir o clique: a linha inteira
                 // abre ao ser clicada, e sem isso digitar a sequencia
                 // abriria/fecharia o formulario a cada toque.
@@ -751,7 +752,22 @@ async def main():
               };
             }""", alvo3)
         ck('a sequencia e um campo na propria linha', d['temCampo'] is True, str(d))
-        ck('e um campo numerico', d['tipo'] == 'number', str(d))
+        # CAUSA 2 (17/09/2026): este check media `type === 'number'` — o
+        # MECANISMO, nao a regra. A regra e' "o campo de sequencia chama o
+        # teclado numerico de quem digita", e o mecanismo TEVE que mudar:
+        # num `type=number` o navegador trata o ponto como decimal e a
+        # virgula como caractere invalido, entao 27.284 virava 27 e 27,284
+        # virava zero (ocorrencia #80). Agora e' `type=text` com
+        # `inputmode=numeric`, que da' o mesmo teclado no celular do patio
+        # sem deixar o navegador reescrever o numero.
+        #
+        # O check ficou MAIS forte, nao mais fraco: exige teclado numerico E
+        # proibe a volta do type=number, que e' o que causou o defeito.
+        ck('e um campo numerico (teclado numerico no celular)',
+           d['tipo'] == 'number' or (d['tipo'] == 'text' and d['inputmode'] == 'numeric'),
+           str(d))
+        ck('e NAO voltou a ser type=number, que destroi 27.284',
+           d['tipo'] != 'number', str(d))
         ck('o clique nele nao abre a linha por tabela',
            d['tdBloqueiaClique'] is True, str(d))
 

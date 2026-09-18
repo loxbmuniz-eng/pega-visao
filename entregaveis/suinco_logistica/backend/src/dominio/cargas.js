@@ -537,14 +537,58 @@ export function filaReordenada(fila, cargaId, posicao, ocupados = []) {
     .map(Number).filter((n) => Number.isInteger(n) && n >= 1));
   if (reservados.has(alvo)) return null;
 
-  /* SÓ AS CASAS QUE A FILA TEM. Número solto (999 numa fila de 3) continua
-     recusado — é decisão de 08/09, com teste próprio, e o relato de hoje
-     era sobre ARRASTAR, que sempre solta em cima de um número existente.
-     Alargar isso aqui consertaria o que ninguém pediu e apagaria a decisão
-     de ontem de quebra. */
-  const casas = numerosDaFila(fila, ocupados);
-  const k = casas.indexOf(alvo);
-  if (k === -1) return null;
+  /* A TERCEIRA PORTA — DIGITAR UM NÚMERO QUE A FILA NÃO TEM (17/09/2026).
+
+     RELATO DO DONO, com a fila na tela: "ele está tentando mudar o 9 para o
+     7, mas não funciona. Até o 6 funciona na sequência. Hoje não há 14
+     cargas, apenas o número 14. Não conseguimos alterar isso."
+
+     A ASSINATURA "ATÉ O 6 FUNCIONA" É A PROVA. A fila daquele dia era
+     1,2,3,4,5,6 mais uma carga no 9. As casas eram exatamente [1..6, 9] —
+     tudo até 6 entrava, 7 e 8 não existiam como casa e eram recusados. Não
+     havia nada de errado com a operação: a trava era esta linha.
+
+     E A CULPA É MINHA, de 08/09. `numerosDaFila` já descrevia DUAS portas
+     para um número novo — a carga sem número nenhum, e alguém que DIGITA um
+     número que a fila não tem ("digitar 1 numa carga e já tiver uma como 1",
+     o pedido do Wemerson). A segunda porta estava escrita no comentário e
+     NUNCA foi implementada aqui: `filaReordenada` recusava tudo que não
+     estivesse nas casas. Regra documentada que o código não cumpre é ponto
+     sem nó — e foi a operação que pagou.
+
+     POR QUE A REGRA DO TABULEIRO EXISTE, E POR QUE ELA CONTINUA. Ela nasceu
+     para o ARRASTAR: soltar em cima de uma linha não pode renumerar em
+     silêncio os números que a Logística digitou (ocorrência de 09/09).
+     Arrastar solta sempre em cima de um número que existe, então o arrasto
+     nunca passa por aqui — o tabuleiro continua intacto para ele.
+
+     DIGITAR É OUTRA PERGUNTA. Quem digita 7 está DIZENDO qual número quer;
+     não há nada de silencioso nisso. Então a casa 7 entra, e a casa que a
+     carga deixou sai — uma entra, uma sai, o tamanho da fila não muda e
+     NINGUÉM MAIS É RENUMERADO. É a diferença entre reescrever o número dos
+     outros (proibido) e escrever o próprio (que é o campo inteiro).
+
+       fila 1,2,3,4,5,6 + 9 · digitar 7 na carga do 9
+         casas  [1,2,3,4,5,6,9] → sai o 9 (que ela deixou), entra o 7
+         casas  [1,2,3,4,5,6,7] → só ela muda: 9 vira 7
+
+       fila 1,2,14 · digitar 3 na carga do 14
+         casas  [1,2,14] → sai o 14, entra o 3 → [1,2,3]
+
+     O QUE NÃO MUDA: número de quem já carregou continua recusado logo
+     acima — aquilo é registro, e registro não é casa de fila. E dois
+     números iguais no mesmo dia continuam impossíveis, porque o número que
+     entra não estava nas casas e o que sai era só desta carga. */
+  const casasAtuais = numerosDaFila(fila, ocupados);
+  let casas = casasAtuais;
+  let k = casas.indexOf(alvo);
+  if (k === -1) {
+    casas = casasAtuais
+      .filter((_, i) => i !== de)          // a casa que esta carga deixa
+      .concat(alvo)                        // a casa que ela pediu
+      .sort((a, b) => a - b);
+    k = casas.indexOf(alvo);
+  }
 
   const nova = ids.slice();
   nova.splice(de, 1);
@@ -556,5 +600,52 @@ export function filaReordenada(fila, cargaId, posicao, ocupados = []) {
     const seq = casas[i];
     if (antes.get(id) !== seq) mudou.push({ id, sequencia: seq });
   });
+  return mudou;
+}
+
+/* REORGANIZAR POR SEQUÊNCIA — FECHAR OS BURACOS DA FILA (17/09/2026).
+   ---------------------------------------------------------------------
+   PEDIDO DO DONO: "um botão de 'reorganizar por sequência' em todas essas
+   áreas, que funcione corretamente".
+
+   O BOTÃO EXISTIA E NÃO REORGANIZAVA NADA. `reordenarPorSequenciaUI()` no
+   painel chamava o redesenho da tela e avisava "Fila reordenada por
+   Sequência" — mas a tela JÁ desenhava ordenada por sequência. Ou seja: o
+   aviso de sucesso era verdadeiro sobre a tela e mentiroso sobre a fila.
+   Quem clicava via 1, 2, 14 continuar 1, 2, 14 e concluía, com razão, que o
+   painel estava quebrado. Botão que afirma ter feito e não fez é pior do
+   que botão que não existe.
+
+   O QUE ELE FAZ AGORA: a fila do dia, na ordem em que está na tela, passa a
+   ocupar os MENORES números disponíveis — 1, 2, 3... pulando os que cargas
+   fora da fila já seguram. 1, 2, 14 vira 1, 2, 3. Carga sem número nenhum
+   ganha o seu lugar aqui também.
+
+   POR QUE RENUMERAR EM MASSA É PERMITIDO AQUI E PROIBIDO NO ARRASTO. A
+   objeção de 09/09 nunca foi à renumeração: foi ao SILÊNCIO dela. Arrastar
+   uma carga não é pedir para mexer no número das outras, e fazer isso de
+   lambuja reescreve o que alguém digitou sem que ninguém tenha pedido.
+   Aqui a pessoa APERTOU UM BOTÃO que diz exatamente isto. É o mesmo
+   princípio da casa: não bloqueie quem tem autoridade — pergunte, explique,
+   e faça o que foi pedido.
+
+   A ORDEM DE ENTRADA É A VERDADE. Esta função não ordena nada: ela recebe a
+   fila já na ordem que a tela mostra (sequencia, e no empate criado_em) e
+   só distribui os números. Ordenar aqui de novo seria a mesma decisão em
+   dois lugares — e o dia em que as duas divergirem, o botão reorganiza para
+   uma ordem que ninguém está vendo. */
+export function filaNormalizada(fila, ocupados = []) {
+  const reservados = new Set((ocupados || [])
+    .map(Number).filter((n) => Number.isInteger(n) && n >= 1));
+  const mudou = [];
+  let proximo = 1;
+  for (const c of fila) {
+    while (reservados.has(proximo)) proximo++;
+    const id = String(c.id ?? c.carga_id);
+    const atual = (c.sequencia === null || c.sequencia === undefined)
+      ? null : Number(c.sequencia);
+    if (atual !== proximo) mudou.push({ id, sequencia: proximo });
+    proximo++;
+  }
   return mudou;
 }

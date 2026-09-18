@@ -3681,3 +3681,292 @@ publicado reprova em 5 conferências; contra o build novo, nenhuma. O item que
 confere a cola lê o PAINEL MEDIDO, não o `app.js` do checkout — a primeira
 versão lia o arquivo local e dava OK mesmo rodando contra o publicado, que é a
 mesma armadilha da ocorrência anterior deste mesmo dia.
+
+---
+
+## #78 — A regra estava escrita no comentário e nunca foi implementada (17/09/2026)
+
+**Relato do dono, com a operação parada:** *"Ele está tentando mudar o 9 para
+o 7, mas não funciona. **Até o 6 funciona** na sequência. Hoje não há 14
+cargas, apenas o número 14. Não conseguimos alterar isso."*
+
+**"Até o 6 funciona" foi o que deu a causa em minutos.** A fila daquele dia
+era 1, 2, 3, 4, 5, 6 e uma carga no 9. `numerosDaFila()` devolvia exatamente
+`[1,2,3,4,5,6,9]` — as **casas** — e `filaReordenada()` recusava qualquer
+número fora dessa lista. Tudo até 6 entrava. O 7 e o 8 não existiam como casa
+e eram negados. Não havia nada de errado com a operação: a trava era minha.
+
+Reproduzido antes de tocar em qualquer linha, direto na função:
+
+```
+fila 1,2,3,4,5,6,9  → digitar 7  → RECUSADO (null)
+fila 1,2,3,4,5,6,9  → digitar 6  → aceito          ("até o 6 funciona")
+fila 1,2,14         → digitar 3  → RECUSADO (null) ("só o número 14")
+```
+
+E a mensagem que a operação via na tela, medida contra o servidor publicado:
+
+> *"Posição inválida. As casas desta fila são 1, 2, 3, 4, 5, 6 e 9 — arraste a
+> carga para a linha que você quer, ou digite um desses números."*
+
+**A causa raiz não é um erro de conta: é uma regra documentada que o código
+nunca cumpriu.** O comentário de `numerosDaFila()`, escrito por mim em 08/09,
+descrevia **duas portas** para um número novo entrar na fila:
+
+> *"NÚMERO NOVO SÓ ENTRA POR DUAS PORTAS, as duas explícitas: · carga da fila
+> que ainda não tem número nenhum (...); · alguém DIGITA um número que não
+> existe na fila (é o caso do campo da Torre). Aí a casa nova entra e a que a
+> carga deixou sai."*
+
+A segunda porta está ali em prosa, com o caso de uso e tudo. **Ela nunca foi
+escrita em código.** `filaReordenada()` fazia `casas.indexOf(alvo)` e devolvia
+`null` no `-1`, sem exceção. Passaram nove dias entre escrever a regra e a
+operação bater nela.
+
+**Por que a trava existia, e por que ela estava certa para o arrasto.** Ela
+nasceu da ocorrência de 09/09: arrastar renumerava em silêncio números que a
+Logística tinha digitado. Arrastar solta **sempre** em cima de uma linha que
+já tem número — então o tabuleiro nunca atrapalha o arrasto, e continua
+valendo para ele.
+
+**Digitar é outra pergunta, e foi essa distinção que faltou.** Quem digita 7
+está *dizendo* qual número quer; não há nada de silencioso nisso. A correção:
+a casa digitada entra, a casa que a carga deixou sai — uma entra, uma sai, o
+tamanho da fila não muda e **ninguém mais é renumerado**.
+
+```
+fila 1,2,3,4,5,6,9 · digitar 7 na carga do 9   →  1,2,3,4,5,6,7  (1 escrita)
+fila 1,2,14        · digitar 3 na carga do 14  →  1,2,3          (1 escrita)
+```
+
+**Uma função, três chamadores — e desta vez a favor.** `filaReordenada()` é a
+mesma na Torre, na Programação do Dia e na Montagem. A correção num lugar só
+conserta as três telas, e nenhuma delas pode divergir depois.
+
+**Família.** Não é a de "a mesma decisão em dois lugares" (#14, #26) nem a de
+"duas escritas em voo" (#16). É uma nova, e ela merece nome porque vai voltar:
+**regra escrita em prosa que o código não cumpre**. O comentário passa a
+funcionar como documentação de algo que não existe — e o próximo a ler (eu,
+nove dias depois) confia nele em vez de conferir. Ponto sem nó com aparência
+de nó dado.
+
+**O que continua recusado, e não pode mudar:** número de carga que já
+carregou. Aquilo é registro do que aconteceu, e registro não é casa de fila.
+
+**Guardas:**
+
+- `backend/testes/api.test.js` bloco 44 — 11 testes, com os dois cenários do
+  dono nos números dele. Contra o servidor publicado, os três primeiros
+  reprovam com a mensagem real da tela.
+- `testes/test_montagem_cascata_e_digitacao.py` seções 4 e 5 — a mesma regra
+  pela porta da Montagem.
+- `testes/test_sequenciamento_e_reorganizar.py` — o lado do painel.
+- Força bruta, 200.000 cenários: o número digitado é sempre o que fica · nunca
+  repete · a fila nunca toma o número de quem já carregou · e a porta nova não
+  renumera ninguém que já tinha número.
+
+**Dois testes meus foram atualizados, e isso é causa 1, não regressão.** O
+bloco 7d (`posição fora da fila é recusada`, 999) e o bloco 43 (`número solto
+CONTINUA recusado`, 5) guardavam a trava. Ordem do dono, com todas as letras:
+*"Independentemente do número, você vai resolver"*. Tratar causa 1 como causa
+4 teria me feito "consertar" o código para manter o defeito.
+
+---
+
+## #79 — O botão "Reordenar por Sequência" avisava sucesso sem fazer nada (17/09/2026)
+
+**Pedido do dono:** *"Um botão de 'reorganizar por sequência' em todas essas
+áreas, **que funcione corretamente**."*
+
+Ele existia na Programação do Dia desde sempre. Inteiro:
+
+```js
+function reordenarPorSequenciaUI(){
+  renderProgFila();
+  notify('Fila reordenada por Sequência.', 'success');
+}
+```
+
+Redesenhava a tela — que **já** desenhava ordenada por sequência — e anunciava
+sucesso. O aviso era verdadeiro sobre a tela e mentiroso sobre a fila. Quem
+clicava via 1, 2, 14 continuar 1, 2, 14 com um "pronto!" verde em cima.
+
+Flagrado contra o painel publicado, com a fila semeada em 1, 2, 14 e sem
+servidor nenhum:
+
+```
+avisou sucesso: ['Fila reordenada por Sequência.']
+sequências depois do clique: [1, 2, 14, None]
+```
+
+**Por que isso é pior que um botão ausente.** Botão que não existe manda a
+pessoa procurar outro caminho. Botão que afirma ter feito e não fez gasta a
+confiança em **tudo o mais** que o painel diz — inclusive nos avisos que estão
+certos. Foi provavelmente ele que fez o dono concluir que "não conseguimos
+reorganizar" antes mesmo de chegar no defeito do 7.
+
+**Correção.** Rota nova (`POST /api/cargas/fila/reorganizar` e
+`POST /api/montagem/reorganizar`), uma transação, a fila do dia passando a
+ocupar os menores números livres e desviando dos que cargas fora da fila já
+seguram. Botão nas três áreas. O aviso agora diz o número, **e diz quando o
+número é zero** — "a fila já estava em ordem, nada mudou" é uma resposta, não
+um fracasso a ser escondido atrás de um "pronto!".
+
+**Por que renumerar em massa é permitido aqui e proibido no arrasto.** A
+objeção de 09/09 nunca foi à renumeração: foi ao **silêncio** dela. Aqui a
+pessoa apertou um botão que diz exatamente isto, depois de uma pergunta que
+explica o que vai acontecer. É a regra da casa: não bloqueie quem tem
+autoridade — pergunte e explique.
+
+**Um defeito pego antes de subir.** A primeira versão da rota chamava
+`gravarEvento()`, que escreve também em `fact_statusfrota` — a tabela **fato**
+do Power BI e base de todo indicador de tempo do pátio. Duas coisas:
+`carga_id` é `NOT NULL` com FK, então a rota teria quebrado na primeira
+chamada; e, se não tivesse, cada clique no botão viraria uma **movimentação de
+pátio inventada** nos números que vão para a diretoria. Trocado por
+`gravarNota()`, que só escreve no log. Tem teste próprio.
+
+**Ainda de pé, e precisa de decisão do dono:** a rota `/cargas/sequenciar`
+grava `posição N` como `status_novo` em `fact_statusfrota` desde 08/09. É o
+mesmo defeito, com linhas já em produção — limpar exige mexer em dado
+gravado, e a coluna não tem CHECK que impeça a próxima.
+
+**Arrastar, a terceira metade do mesmo pedido.** *"O filtro de arrastar para o
+local desejado deve operar sem falhas."* Soltar em cima de uma linha **sem
+número** era um `return` mudo: a pessoa arrastava, soltava, não acontecia nada,
+e a conclusão razoável era "o arrasto está quebrado". A regra da casa diz que
+recusa do servidor nunca pode ser silenciosa; a da tela também não pode. Agora
+diz o motivo e ensina o caminho.
+
+**Guardas:** `testes/test_sequenciamento_e_reorganizar.py` (reprova em 9
+conferências contra o publicado), `backend/testes/api.test.js` bloco 44,
+`testes/test_montagem_cascata_e_digitacao.py` seção 5.
+
+---
+
+## #80 — 27.284 kg virava 27 kg, e 27,284 virava zero (17/09/2026)
+
+**Relato do dono:** *"Não estou conseguindo inserir o valor completo, 27.284;
+está aparecendo apenas 27, com duas casas decimais. Preciso colocar o valor
+que quiser."*
+
+Reproduzido no Chromium, antes de qualquer correção:
+
+```
+digitado "27.284"  →  value "27.284"  →  Number 27.284  →  guardado 27
+digitado "27,284"  →  value ""        →  campo esvazia  →  guardado 0
+digitado "1.250"   →  value "1.250"   →  Number 1.25    →  guardado 1
+```
+
+**`<input type="number">` fala inglês.** O **ponto** é separador decimal e a
+**vírgula** é caractere inválido — e caractere inválido num campo numérico faz
+o navegador devolver string vazia em `.value`, sem avisar ninguém. Quem digita
+peso em quilo no Brasil escreve 27.284 querendo vinte e sete mil.
+
+**O que torna isto grave não é o campo recusar: é ele ACEITAR e guardar outra
+coisa.** Ninguém vê erro. A carga fica com 27 kg, ou com 0 kg, e segue para o
+relatório de peso e para o indicador da diretoria como se fosse verdade.
+
+**Família — e ela já tem duas entradas aqui.** `Number(0) || null`, que apagou
+capacidade de veículo; e `kmValido()`, que existe porque `Number('') === 0`
+faria frete de R$ 0,00. É sempre a mesma coisa: **conversão silenciosa que
+troca o dado por um parente dele**. `null ≠ zero` está no CLAUDE.md por causa
+desta família, e ela voltou pelo lado do navegador em vez do lado do código.
+
+**Correção.** 40 campos: 38 viraram `type="text" inputmode="numeric"` (o
+teclado do celular continua numérico no pátio) e passam por
+`quantidadeDigitada()`, que lê os dígitos e ignora qualquer separador. Os dois
+que são dinheiro ou fração — tarifa de frete em R$/km e kg de produto na
+devolução — usam `valorDigitado()`, que entende vírgula como decimal, do jeito
+que se escreve aqui. Campo apagado continua guardando `null`, nunca zero.
+
+**O campo de sequência estava nessa lista**, e é por isso que esta correção
+sobe junto com as #78 e #79: é o mesmo campo, o mesmo dia, a mesma tela.
+
+**Guarda.** `testes/test_numero_digitado_com_ponto.py`. Contra o painel
+publicado reprova em 9 conferências, incluindo a primeira — que conta quantos
+`type="number"` sobraram na tela, porque enquanto o campo for `type=number`
+**não existe função de leitura que conserte**: o `.value` já chega vazio ou
+truncado do navegador.
+
+---
+
+## #81 — Três relógios, e a bateria só é confiável em 21 das 24 horas (18/09/2026)
+
+**Como apareceu.** O portão reprovou com três suítes vermelhas de uma vez —
+`test_montagem_acao_empilhada`, `test_montagem_cabe_em_colunas` e
+`test_toque_responde` — todas com o mesmo sintoma: *"nenhuma linha de montagem
+na tela"*. As **mesmas três** tinham passado verdes na bateria de uma hora
+antes, sem nenhuma mudança de código entre as duas.
+
+**A medição que deu a causa**, feita no navegador, no caminho que o teste usa:
+
+```
+o servidor criou a linha em   data_prog: 2026-09-17
+a tela da Montagem estava em  dia:       2026-09-18
+```
+
+Eram 21h31 no Brasil, 00h31 em UTC. A data tinha virado **no meio da
+bateria**.
+
+**São TRÊS relógios, não dois** — e essa foi a parte que eu errei na primeira
+leitura, antes de conferir:
+
+1. **`hojeISO()` no servidor** — fixado em `America/Sao_Paulo` por `Intl`, de
+   propósito e corretamente: o pátio fica no Brasil e o dia da programação é o
+   de lá.
+2. **O painel** — `isoDiaLocal(new Date())`, o relógio do **aparelho de quem
+   está olhando**.
+3. **O Postgres** — `now()` e `current_date`, no fuso do cluster (UTC aqui).
+
+Em produção os três calham de concordar. Num container em UTC, não: entre 21h
+e a meia-noite do Brasil o relógio 1 ainda está no dia 17 e os relógios 2 e 3
+já viraram para o 18.
+
+**O que eu tentei, e por que desfiz.** Primeiro aliinhei só o navegador
+(`TZ=America/Sao_Paulo` na bateria). Não resolveu: **trocou** aquelas três
+suítes por outras quatro — `test_data_programacao`,
+`test_devolucoes_checklist`, `test_esteira_devolucao_duas_balancas`,
+`test_montagem_linha_editavel` — porque agora eram os relógios 1 e 2 contra o
+3. Depois alinhei também o Postgres do banco de teste. Ainda sobraram duas.
+
+Desfiz as duas tentativas. Não porque a direção esteja errada — ela está
+certa — mas porque **alinhar os três relógios não é um ajuste de uma linha**, e
+empurrar mudança meio-entendida na malha de testes na véspera de uma entrega
+urgente é trocar um problema conhecido por um desconhecido. Fica escrito aqui
+em vez de ficar meio-feito no código.
+
+**O estado real, dito sem maquiagem:** a bateria de tela é confiável em ~21 das
+24 horas. Nas três horas entre 21h e a meia-noite do Brasil ela produz
+vermelhos que **não são defeito**, e produz vermelhos **diferentes** conforme o
+fuso em que rodar. É a causa nº 3 vestida de causa nº 4, e custa a noite de
+quem for investigar sem saber disto.
+
+**Como reconhecer, se acontecer de novo:** várias suítes reprovando de uma vez
+com sintoma de "não tem linha/carga na tela", **e** as mesmas suítes tendo
+passado verdes numa rodada recente sem mudança de código. Confira as horas
+antes de mexer em qualquer coisa:
+
+```bash
+date -u '+UTC %F %H:%M'; TZ=America/Sao_Paulo date '+Brasil %F %H:%M'
+```
+
+Datas diferentes = é isto. Espere a meia-noite do Brasil passar e rode de novo.
+
+**A correção certa, quando for a hora, e ela vale para os dois lados.** O dia
+operacional é uma decisão do servidor, como qualquer outra. O `/health` já
+devolve a hora dele; basta devolver junto o **dia operacional**, e o painel
+obedecer em vez de adivinhar — a mesma regra da casa que vale para a fila:
+*o servidor é quem manda; a tela adianta o resultado*. Com isso caem juntos o
+vermelho de bateria E o risco de produção.
+
+**O risco de produção, que continua de pé.** Quem abrir o painel num aparelho
+com o fuso errado — um celular que voltou ao padrão de fábrica, um acesso de
+fora do país — vê um "hoje" que não é o do servidor: a Montagem do Dia aparece
+vazia, e a carga que ele criar cai num dia que ninguém está olhando. Não há
+evidência de que já tenha acontecido, e por isso não mexi nisso hoje. Falta
+também conferir em que fuso está o Postgres da produção, o que não dá para
+fazer deste ambiente — a rede de produção é bloqueada daqui.
+
+**Família.** "Duas fontes para a mesma verdade" (#14, #26, #77). Aqui são
+três, e uma delas é o aparelho do usuário — a única que ninguém controla.

@@ -144,6 +144,14 @@
                 title="Só funciona quando não há nenhuma carga em andamento.">
           🔒 Fechar Programação e Iniciar Nova
         </button>
+        <!-- O RÓTULO DIZ "DE HOJE" DE PROPÓSITO (17/09/2026). A Torre mostra
+             cargas de vários dias e não tem dia selecionado como a Fila e a
+             Montagem têm; um botão que renumerasse "a fila" sem dizer qual
+             mexeria numa lista que a pessoa talvez nem esteja olhando. -->
+        <button class="btn btn-sec btn-sm" onclick="reorganizarSequenciaTorreUI()"
+                title="As cargas de hoje que ainda vão carregar passam a ocupar 1, 2, 3... fechando os buracos. Quem já carregou mantém o número.">
+          ↕️ Reorganizar sequência de hoje
+        </button>
       </div>
       <div class="bento bi-faixa" id="torre-stats" style="margin-bottom:16px"></div>
       <div class="table-wrap">
@@ -220,7 +228,8 @@
         <input type="date" id="prog-fila-dia" onchange="mudarDiaFilaUI(this.value)" title="Fila de programados deste dia">
         <button class="btn btn-sec btn-sm" onclick="mudarDiaFilaUI(1)" title="Dia seguinte">▶</button>
         <button class="btn btn-sec btn-sm" onclick="mudarDiaFilaUI('hoje')">Hoje</button>
-        <button class="btn btn-sec btn-sm" onclick="reordenarPorSequenciaUI()">↕️ Reordenar por Sequência</button>
+        <button class="btn btn-sec btn-sm" onclick="reordenarPorSequenciaUI()"
+                title="As cargas deste dia que ainda vão carregar passam a ocupar 1, 2, 3... fechando os buracos. Quem já carregou mantém o número.">↕️ Reorganizar por Sequência</button>
       </div>
       <div class="aviso-inline no-print" id="prog-fila-outros-dias" hidden></div>
       <div class="table-wrap">
@@ -290,7 +299,7 @@
         <input type="hidden" id="prog-destino" value="">
       </div>
       <div class="form-row">
-        <div class="form-group"><label>Peso (kg)</label><input type="number" id="prog-peso" min="0"></div>
+        <div class="form-group"><label>Peso (kg)</label><input type="text" inputmode="numeric" id="prog-peso" min="0"></div>
       </div>
       <!-- FRETE (09/09/2026). O DESTINO puxa o KM da tabela; o KM DE
            DESLOCAMENTO é o que de fato será pago e pode divergir (desvio,
@@ -306,12 +315,12 @@
         </div>
         <div class="form-group">
           <label>KM destino <span class="hint">referência da tabela</span></label>
-          <input type="number" id="prog-km-destino" min="1" step="1" readonly
+          <input type="text" inputmode="numeric" id="prog-km-destino" min="1" step="1" readonly
                  title="Vem da Tabela de Frete. Só de leitura: para mudar, edite o destino em Cadastros.">
         </div>
         <div class="form-group">
           <label>KM deslocamento <span class="hint">o que será pago</span></label>
-          <input type="number" id="prog-km-deslocamento" min="1" step="1"
+          <input type="text" inputmode="numeric" id="prog-km-deslocamento" min="1" step="1"
                  oninput="kmDeslocamentoMudouUI()"
                  title="O KM que multiplica a tarifa. Diferente do KM do destino quando há desvio, retorno ou coleta no caminho.">
         </div>
@@ -320,7 +329,7 @@
       <div class="form-row">
         <div class="form-group">
           <label>Sequência <span class="hint">(prioridade de montagem do dia)</span></label>
-          <input type="number" id="prog-sequencia" min="1">
+          <input type="text" inputmode="numeric" id="prog-sequencia" min="1">
         </div>
       </div>
       <div class="form-row">
@@ -330,11 +339,11 @@
         </div>
         <div class="form-group">
           <label>Qtd. Ganchos (Gancheira) <span class="hint">0 = Liso</span></label>
-          <input type="number" id="prog-ganchos" min="0" step="1" value="0">
+          <input type="text" inputmode="numeric" id="prog-ganchos" min="0" step="1" value="0">
         </div>
         <div class="form-group">
           <label>Qtd. Entregas</label>
-          <input type="number" id="prog-entregas" min="1" step="1" value="1">
+          <input type="text" inputmode="numeric" id="prog-entregas" min="1" step="1" value="1">
         </div>
       </div>
       <div class="form-group" style="margin-bottom:10px"><label>Observações</label><textarea id="prog-obs"></textarea></div>
@@ -381,6 +390,12 @@
         <!-- O dia em planilha: o painel substituiu o Excel na OPERAÇÃO, mas
              a planilha também era o ARQUIVO do dia. Tirar sem repor troca
              um problema por outro. -->
+        <div class="form-group filtro-acoes">
+          <button class="btn btn-sec btn-sm" onclick="reorganizarMontagemUI()"
+            title="As linhas que ainda não viraram carga passam a ocupar 1, 2, 3... fechando os buracos. Linha já efetivada mantém o número.">
+            ↕️ Reorganizar por Sequência
+          </button>
+        </div>
         <div class="form-group filtro-acoes">
           <button class="btn btn-sec btn-sm" onclick="exportarMontagemDoDiaUI()"
             title="Baixa a programação deste dia em planilha (abre no Excel).">
@@ -461,7 +476,7 @@
           </select>
         </div>
         <div class="form-group" style="max-width:120px">
-          <label>Entregas</label><input type="number" id="modelo-entregas" min="1">
+          <label>Entregas</label><input type="text" inputmode="numeric" id="modelo-entregas" min="1">
         </div>
         <div class="form-group filtro-acoes">
           <button class="btn btn-primary btn-sm" onclick="adicionarAoModeloUI()">➕ Adicionar</button>
@@ -1180,7 +1195,7 @@
       </div>
       <div class="form-row">
         <div class="form-group"><label>Motorista <span class="hint">opcional</span></label><input type="text" id="frota-motorista" placeholder="Preenche sozinho ao programar esta placa"></div>
-        <div class="form-group"><label>Capacidade (kg) <span class="hint">opcional</span></label><input type="number" id="frota-capacidade" min="0"></div>
+        <div class="form-group"><label>Capacidade (kg) <span class="hint">opcional</span></label><input type="text" inputmode="numeric" id="frota-capacidade" min="0"></div>
         <div class="form-group"><label>UF <span class="hint">opcional</span></label><input type="text" id="frota-uf" maxlength="2" placeholder="Ex: PR"></div>
         <div class="form-group"><label>Última Movimentação <span class="hint">opcional</span></label><input type="date" id="frota-ultima-mov"></div>
         <div class="form-group">
@@ -1272,7 +1287,7 @@
           <div class="form-group"><label>Tipo de veículo</label>
             <input type="text" id="frete-tarifa-tipo" list="lista-tipos-veiculo" placeholder="Ex: Truck"></div>
           <div class="form-group"><label>Valor por km (R$)</label>
-            <input type="number" id="frete-tarifa-valor" min="0" step="0.0001" placeholder="Ex: 7,75"></div>
+            <input type="text" inputmode="decimal" id="frete-tarifa-valor" min="0" step="0.0001" placeholder="Ex: 7,75"></div>
           <div class="form-group"><label>Vigente desde <span class="hint">opcional</span></label>
             <input type="date" id="frete-tarifa-vigencia"></div>
           <div class="form-group" style="align-self:end">
@@ -1291,7 +1306,7 @@
           <div class="form-group" style="flex:2"><label>Destino</label>
             <input type="text" id="frete-destino-nome" placeholder="Ex: GOIANIA · MONTES CLAROS (COM DESVIO)"></div>
           <div class="form-group"><label>KM</label>
-            <input type="number" id="frete-destino-km" min="1" step="1" placeholder="Ex: 583"></div>
+            <input type="text" inputmode="numeric" id="frete-destino-km" min="1" step="1" placeholder="Ex: 583"></div>
           <div class="form-group" style="align-self:end">
             <button class="btn btn-primary btn-sm" onclick="addDestinoFreteUI()">➕ Salvar destino</button></div>
         </div>
@@ -1334,7 +1349,7 @@
           <div class="form-group"><label>Nome do produto</label>
             <input type="text" id="cad-dev-prod-nome" placeholder="Ex: LINGUIÇA"></div>
           <div class="form-group"><label>Quilo por caixa <span class="hint">opcional</span></label>
-            <input type="number" min="0" step="0.001" id="cad-dev-prod-kg" placeholder="Ex: 3.5"></div>
+            <input type="text" inputmode="decimal" min="0" step="0.001" id="cad-dev-prod-kg" placeholder="Ex: 3.5"></div>
           <div class="form-group" style="align-self:end">
             <button class="btn btn-sec btn-sm" onclick="cadastrarProdutoDevUI()">➕ Produto</button></div>
         </div>
@@ -1814,7 +1829,7 @@
       <input type="hidden" id="completar-destino" value="">
     </div>
     <div class="form-row">
-      <div class="form-group"><label>Peso (kg)</label><input type="number" id="completar-peso" min="0"></div>
+      <div class="form-group"><label>Peso (kg)</label><input type="text" inputmode="numeric" id="completar-peso" min="0"></div>
     </div>
     <!-- FRETE, também aqui (09/09/2026). Os mesmos três campos, na mesma
          ordem — a regra do card acima vale: quem mexe numa tela mexe na
@@ -1839,19 +1854,19 @@
       </div>
       <div class="form-group">
         <label>KM destino <span class="hint">referência da tabela</span></label>
-        <input type="number" id="completar-km-destino" min="1" step="1" readonly
+        <input type="text" inputmode="numeric" id="completar-km-destino" min="1" step="1" readonly
                title="Vem da Tabela de Frete. Só de leitura: para mudar, edite o destino em Cadastros.">
       </div>
       <div class="form-group">
         <label>KM deslocamento <span class="hint">o que será pago</span></label>
-        <input type="number" id="completar-km-deslocamento" min="1" step="1"
+        <input type="text" inputmode="numeric" id="completar-km-deslocamento" min="1" step="1"
                title="O KM que multiplica a tarifa. Diferente do KM do destino quando há desvio, retorno ou coleta no caminho.">
       </div>
     </div>
     <div class="form-row">
       <div class="form-group">
         <label>Sequência <span class="hint">(prioridade de montagem do dia)</span></label>
-        <input type="number" id="completar-sequencia" min="1">
+        <input type="text" inputmode="numeric" id="completar-sequencia" min="1">
       </div>
     </div>
     <div class="form-row">
@@ -1861,11 +1876,11 @@
       </div>
       <div class="form-group">
         <label>Qtd. Ganchos (Gancheira) <span class="hint">0 = Liso</span></label>
-        <input type="number" id="completar-ganchos" min="0" step="1" value="0">
+        <input type="text" inputmode="numeric" id="completar-ganchos" min="0" step="1" value="0">
       </div>
       <div class="form-group">
         <label>Qtd. Entregas</label>
-        <input type="number" id="completar-entregas" min="1" step="1" value="1">
+        <input type="text" inputmode="numeric" id="completar-entregas" min="1" step="1" value="1">
       </div>
     </div>
     <div class="form-group" style="margin-bottom:10px"><label>Observações</label><textarea id="completar-obs"></textarea></div>

@@ -16,7 +16,7 @@ import { consultar, emTransacao } from '../banco.js';
 import { exigirLogin, exigirSetor, recusarFilial } from '../middleware/auth.js';
 import { emitir } from '../tempo-real.js';
 import { calcularFrete } from '../dominio/frete.js';
-import { filaReordenada, numerosDaFila } from '../dominio/cargas.js';
+import { filaReordenada, filaNormalizada, numerosDaFila } from '../dominio/cargas.js';
 
 export const rotasModeloSemana = Router();
 
@@ -716,6 +716,52 @@ rotasModeloSemana.post('/montagem/:id/sequenciar', SO_LOGISTICA, async (req, res
     }
     emitir('montagem:alterada', { dia: resultado.dia, por: req.operador.nome });
     res.json({ ok: true, mexidas: resultado.mexidas });
+  } catch (e) { next(e); }
+});
+
+/* REORGANIZAR A MONTAGEM DO DIA — O MESMO BOTÃO DA FILA (17/09/2026).
+   ---------------------------------------------------------------------
+   PEDIDO DO DONO: "um botão de 'reorganizar por sequência' em todas essas
+   áreas, que funcione corretamente" — Montagem, Programação do Dia e Torre.
+
+   A CONTA É A MESMA FUNÇÃO da fila de cargas (`filaNormalizada`), pelo
+   mesmo motivo que a cascata é: é a única forma de "reorganizar" significar
+   a mesma coisa nas três telas. Escrever de novo aqui garantiria que só uma
+   das duas receba a próxima correção. */
+rotasModeloSemana.post('/montagem/reorganizar', SO_LOGISTICA, async (req, res, next) => {
+  try {
+    const dia = String(req.body?.dia ?? '').trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dia)) {
+      return res.status(400).json({ erro: 'Informe o dia (AAAA-MM-DD).', codigo: 'DIA_INVALIDO' });
+    }
+    const resultado = await emTransacao(async (cli) => {
+      await travarSequenciasDoDia(cli, dia);
+      const { rows: fila } = await cli.query(
+        `SELECT montagem_id AS id, sequencia FROM programacao_montagem
+          WHERE data_prog = $1 AND efetivada_em IS NULL AND cancelada_em IS NULL
+          ORDER BY sequencia NULLS LAST, criado_em`,
+        [dia]
+      );
+      if (!fila.length) return { mexidas: 0, total: 0 };
+      const { rows: fora } = await cli.query(
+        `SELECT sequencia FROM programacao_montagem
+          WHERE data_prog = $1 AND (efetivada_em IS NOT NULL OR cancelada_em IS NOT NULL)
+            AND sequencia IS NOT NULL`,
+        [dia]
+      );
+      const mudancas = filaNormalizada(fila, fora.map((r) => r.sequencia));
+      for (const m of mudancas) {
+        await cli.query(
+          `UPDATE programacao_montagem
+              SET sequencia = $1, operador_nome = $2, atualizado_em = now()
+            WHERE montagem_id = $3`,
+          [m.sequencia, req.operador.nome, m.id]
+        );
+      }
+      return { mexidas: mudancas.length, total: fila.length };
+    });
+    if (resultado.mexidas) emitir('montagem:alterada', { dia, por: req.operador.nome });
+    res.json({ ok: true, mexidas: resultado.mexidas, total: resultado.total });
   } catch (e) { next(e); }
 });
 

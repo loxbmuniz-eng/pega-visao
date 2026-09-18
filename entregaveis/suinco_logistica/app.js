@@ -3431,7 +3431,7 @@ function renderTorre(){
         ondrop="filaArrastarSolta(event,'${escJs(c.id)}')"
         ondragend="filaArrastarFim(event)"` : ''}>
       <td class="cel-seq">${editavel
-        ? `${aindaVaiCarregar(c) ? `<span class="alca-arrastar" title="Arraste para mudar a posição na fila">⠿</span>` : ''}<input type="number" class="seq-input" value="${c.sequencia ?? ''}" onchange="definirSequenciaTorreUI('${escJs(c.id)}',this.value)" title="${aindaVaiCarregar(c) ? 'Digite a posição: a carga entra nela e as outras descem uma casa.' : 'Este caminhão já carregou — o número é registro do que aconteceu e NÃO reordena a fila.'}">`
+        ? `${aindaVaiCarregar(c) ? `<span class="alca-arrastar" title="Arraste para mudar a posição na fila">⠿</span>` : ''}<input type="text" inputmode="numeric" class="seq-input" value="${c.sequencia ?? ''}" onchange="definirSequenciaTorreUI('${escJs(c.id)}',this.value)" title="${aindaVaiCarregar(c) ? 'Digite a posição: a carga entra nela e as outras descem uma casa.' : 'Este caminhão já carregou — o número é registro do que aconteceu e NÃO reordena a fila.'}">`
         : (c.sequencia ?? '—')}</td>
       <td class="col-identificacao">${editavel
         ? `<input type="text" class="numero-carga-input" value="${esc(c.numeroCarga)}" onchange="atualizarNumeroCargaUI('${escJs(c.id)}',this.value)" title="Alterar o número desta carga.">`
@@ -3447,7 +3447,7 @@ function renderTorre(){
         : (esc(c.motorista)||'—')}</td>
       <td>${editavel ? rotaSelectHtml(c) : esc(rotaCurta(c.rota))}</td>
       <td class="c-peso">${editavel
-        ? `<input type="number" class="peso-input" min="0" step="1" value="${c.peso ?? ''}" onchange="atualizarPesoUI('${escJs(c.id)}',this.value)" title="Peso em kg.">`
+        ? `<input type="text" inputmode="numeric" class="peso-input" min="0" step="1" value="${c.peso ?? ''}" onchange="atualizarPesoUI('${escJs(c.id)}',this.value)" title="Peso em kg.">`
         : (c.peso ? c.peso.toLocaleString('pt-BR') : '—')}</td>
       <td>${editavel ? paletizadaSelectHtml(c) : paletizadaDaCarga(c)}</td>
       <td>${editavel ? praOndeSelectHtml(c)
@@ -3457,8 +3457,8 @@ function renderTorre(){
            campo da carga sem edição aqui. Empilhado com Ganchos de
            propósito: coluna nova alargaria a tabela e traria de volta a
            rolagem lateral que foi eliminada em 11/08. */
-        ? `<input type="number" class="ganchos-input" min="0" step="1" value="${c.qtdGanchos ?? 0}" onchange="atualizarGanchosUI('${escJs(c.id)}',this.value)" title="Ganchos — 0 = Liso">
-           <input type="number" class="entregas-input" min="0" step="1" value="${c.qtdEntregas ?? 1}" onchange="atualizarEntregasUI('${escJs(c.id)}',this.value)" title="Quantidade de entregas.">`
+        ? `<input type="text" inputmode="numeric" class="ganchos-input" min="0" step="1" value="${c.qtdGanchos ?? 0}" onchange="atualizarGanchosUI('${escJs(c.id)}',this.value)" title="Ganchos — 0 = Liso">
+           <input type="text" inputmode="numeric" class="entregas-input" min="0" step="1" value="${c.qtdEntregas ?? 1}" onchange="atualizarEntregasUI('${escJs(c.id)}',this.value)" title="Quantidade de entregas.">`
         : `${c.qtdGanchos ? c.qtdGanchos : '<span class="text-dim">Liso</span>'} · <span title="Entregas">${c.qtdEntregas ?? 1}</span>`}</td>
       <td>${badgeHtml(c.status)}${situacaoPlacaHtml(c)}</td>
       <td class="cel-datas">
@@ -3498,7 +3498,7 @@ function linhaFilaHtml(c, lista, arrastavel){
         title="Clique para abrir os demais campos. Arraste para mudar a ordem de carregamento.">
       <td onclick="event.stopPropagation()" class="cel-seq">
         ${arrastavel ? `<span class="alca-arrastar" title="Arraste para mudar a posição na fila">⠿</span>` : `<span class="chip-dia-prog" title="Programada em ${esc(fmtData(c.programadoEm || c.criadoEm))}" onclick="event.stopPropagation(); mudarDiaFilaUI('${esc(isoDiaLocal(new Date(c.programadoEm || c.criadoEm)))}')">${esc(fmtData(c.programadoEm || c.criadoEm).slice(0,5))}</span>`}
-        <input type="number" min="1" class="seq-input" value="${c.sequencia ?? ''}" onchange="definirPosicaoNaFilaUI('${id}',this.value)" title="Digite a posição: a carga entra nela e as outras descem uma casa."></td>
+        <input type="text" inputmode="numeric" min="1" class="seq-input" value="${c.sequencia ?? ''}" onchange="definirPosicaoNaFilaUI('${id}',this.value)" title="Digite a posição: a carga entra nela e as outras descem uma casa."></td>
       <td class="col-identificacao" onclick="event.stopPropagation()">
         <input type="text" class="numero-carga-input" value="${esc(c.numeroCarga)}" onchange="atualizarNumeroCargaUI('${id}',this.value)" title="Alterar o número desta carga.">
       </td>
@@ -3510,7 +3510,7 @@ function linhaFilaHtml(c, lista, arrastavel){
       <td onclick="event.stopPropagation()">
         <input type="text" class="motorista-input" value="${esc(c.motorista||'')}" onchange="atualizarMotoristaUI('${id}',this.value)" title="Quem dirige ESTA viagem — não mexe no cadastro da placa."></td>
       <td onclick="event.stopPropagation()">${rotaSelectHtml(c)}</td>
-      <td class="c-peso" onclick="event.stopPropagation()"><input type="number" class="peso-input" min="0" step="1" value="${c.peso ?? ''}" onchange="atualizarPesoUI('${id}',this.value)" title="Peso em kg."></td>
+      <td class="c-peso" onclick="event.stopPropagation()"><input type="text" inputmode="numeric" class="peso-input" min="0" step="1" value="${c.peso ?? ''}" onchange="atualizarPesoUI('${id}',this.value)" title="Peso em kg."></td>
       <td onclick="event.stopPropagation()">${paletizadaSelectHtml(c)}</td>
       <td onclick="event.stopPropagation()">${praOndeSelectHtml(c)}</td>
       <td class="no-print gap8" onclick="event.stopPropagation()">
@@ -4045,10 +4045,10 @@ function formCargaFilaHtml(c){
              não existir o mesmo campo em dois lugares da mesma tela. */''}
         <div class="form-group">
           <label>Qtd. Ganchos <span class="hint">0 = Liso</span></label>
-          <input type="number" min="0" step="1" value="${c.qtdGanchos ?? 0}"
+          <input type="text" inputmode="numeric" min="0" step="1" value="${c.qtdGanchos ?? 0}"
                  onchange="atualizarGanchosUI('${id}',this.value)"></div>
         <div class="form-group"><label>Qtd. Entregas</label>
-          <input type="number" min="0" step="1" value="${c.qtdEntregas ?? 1}"
+          <input type="text" inputmode="numeric" min="0" step="1" value="${c.qtdEntregas ?? 1}"
                  onchange="atualizarEntregasUI('${id}',this.value)"></div>
       </div>
 
@@ -4129,14 +4129,19 @@ function atualizarPaletizadaUI(id, val){
 }
 function atualizarPesoUI(id, val){
   const c = getCarga(id); if(!c) return;
-  c.peso = val === '' ? null : Math.max(0, Number(val)||0);
+  /* `quantidadeDigitada`, não `Number`: "27.284" é vinte e sete mil
+     duzentos e oitenta e quatro quilos, e o `Number` lia 27. Ver o bloco
+     da função em data.js. */
+  const nPeso = quantidadeDigitada(val);
+  c.peso = nPeso === null ? null : Math.max(0, nPeso);
   c.atualizadoEm = nowISO();
   SuincoStore.save();
   renderAll();
 }
 function atualizarEntregasUI(id, val){
   const c = getCarga(id); if(!c) return;
-  c.qtdEntregas = val === '' ? 1 : Math.max(0, Number(val)||0);
+  const nEnt = quantidadeDigitada(val);
+  c.qtdEntregas = nEnt === null ? 1 : Math.max(0, nEnt);
   c.atualizadoEm = nowISO();
   SuincoStore.save();
   renderAll();
@@ -4736,7 +4741,7 @@ function devServidorOk_paraFila(){
    não se mantém". Juntar decisões diferentes quebra tanto quanto copiar
    a mesma decisão em dois lugares. */
 function definirPosicaoNaFilaUI(id, val){
-  const n = Number(val);
+  const n = quantidadeDigitada(val);
   if(val === '' || !Number.isInteger(n) || n < 1){
     /* Campo vazio não é ordem de apagar a ordem: só redesenha e devolve
        o valor que o servidor tem. */
@@ -4780,7 +4785,7 @@ function definirSequenciaTorreUI(id, val){
 
 function atualizarSequenciaUI(id, val){
   const c = getCarga(id); if(!c) return;
-  c.sequencia = val==='' ? null : Number(val);
+  c.sequencia = quantidadeDigitada(val);
   /* Sem este carimbo a alteração NÃO SOBE ao servidor.
 
      `sincronizarCargasAlteradas` decide o que enviar comparando
@@ -4850,7 +4855,22 @@ function filaArrastarSolta(ev, idDestino){
      valor que ela digitaria no campo — e por isso arrastar e digitar
      continuam sendo a mesma operação. */
   const alvo = getCarga(idDestino);
-  if(!alvo || alvo.sequencia == null) return;
+  if(!alvo) return;
+  /* RECUSA CALADA É RECUSA QUE ENSINA A DESCONFIAR DO PAINEL (17/09/2026).
+
+     Isto era `if(!alvo || alvo.sequencia == null) return;` — um `return`
+     mudo. A pessoa arrastava a carga, soltava em cima de uma linha SEM
+     número, não acontecia absolutamente nada, e a conclusão razoável era
+     "o arrasto está quebrado". Não estava: ela tinha soltado no único tipo
+     de linha que não é um destino, e o painel não contou.
+
+     A regra da casa é "recusa do servidor nunca pode ser silenciosa". A da
+     tela também não pode — e aqui ela ainda ensina o caminho. */
+  if(alvo.sequencia == null){
+    notify('Essa linha ainda não tem número na fila, então não dá para soltar em cima dela. '
+      + 'Digite o número que você quer no campo Sequência da carga que está movendo.', 'warn', 8000);
+    return;
+  }
   moverNaFilaUI(movido, alvo.sequencia);
 }
 
@@ -5045,14 +5065,85 @@ function atualizarNumeroCargaUI(id, val){
 }
 function atualizarGanchosUI(id, val){
   const c = getCarga(id); if(!c) return;
-  c.qtdGanchos = val==='' ? 0 : Math.max(0, Number(val)||0);
+  const nGan = quantidadeDigitada(val);
+  c.qtdGanchos = nGan === null ? 0 : Math.max(0, nGan);
   c.atualizadoEm = nowISO();   // sem isto a mudança não sobe — ver atualizarSequenciaUI
   SuincoStore.save();
   renderAll();   // campo aparece na Fila de Programados E na Torre editável
 }
+/* REORGANIZAR POR SEQUÊNCIA — O BOTÃO QUE AVISAVA SUCESSO SEM FAZER NADA.
+   =====================================================================
+
+   RELATO DO DONO (17/09/2026): "um botão de 'reorganizar por sequência' em
+   todas essas áreas, QUE FUNCIONE CORRETAMENTE".
+
+   O QUE ESTAVA AQUI, inteiro:
+
+       function reordenarPorSequenciaUI(){
+         renderProgFila();
+         notify('Fila reordenada por Sequência.', 'success');
+       }
+
+   Ele redesenhava a tela — que JÁ desenhava ordenada por sequência — e
+   anunciava sucesso. O aviso era verdadeiro sobre a tela e mentiroso sobre
+   a fila: quem clicava via 1, 2, 14 continuar 1, 2, 14 com um "pronto!"
+   verde em cima. Botão que afirma ter feito e não fez gasta a confiança de
+   quem opera em tudo o mais que o painel diz.
+
+   QUEM FAZ A CONTA É O SERVIDOR, numa transação só — a mesma regra do
+   arrasto e da digitação, pelo mesmo motivo: renumerar quinze cargas em
+   quinze chamadas é a família da ocorrência #16.
+
+   PERGUNTA ANTES, PORQUE MEXE EM TODO MUNDO. Digitar um número mexe numa
+   carga; este botão mexe na fila inteira. Regra da casa: quando a ação é
+   arriscada, PERGUNTE explicando — não bloqueie quem tem autoridade. */
+async function reorganizarFilaDoDiaUI(dia, ondeEstou){
+  if(!devServidorOk_paraFila()){
+    notify('Sem servidor agora — quem renumera a fila é o servidor, e isso não pode ser feito offline.', 'warn', 8000);
+    return;
+  }
+  const ok = confirm(
+    `Reorganizar a sequência de ${fmtData(dia)}?\n\n`
+    + `As cargas que ainda vão carregar passam a ocupar 1, 2, 3... na ordem `
+    + `em que estão na tela, fechando os buracos.\n\n`
+    + `Quem JÁ carregou não muda de número — aqueles números ficam reservados `
+    + `e a fila desvia deles.`);
+  if(!ok) return;
+
+  const r = await SuincoSharePoint.reorganizarFila(dia);
+  /* A recusa do servidor NUNCA é silenciosa, e `reorganizarFila` devolve a
+     recusa em vez de lançar — quem chama tem que olhar o valor. */
+  if(r && r.recusado){
+    notify(r.erro || 'O servidor recusou a reorganização.', 'error', 8000);
+    await SuincoSharePoint.sincronizarAgora();
+    renderAll();
+    return;
+  }
+  await SuincoSharePoint.sincronizarAgora();
+  const n = (r && r.item && r.item.renumeradas) || 0;
+  const total = (r && r.item && r.item.total) || 0;
+  /* O AVISO DIZ O NÚMERO, e diz quando o número é zero. "Pronto!" depois de
+     nada ter mudado é exatamente o defeito que este botão tinha. */
+  notify(
+    total === 0 ? `Não há carga esperando para carregar em ${fmtData(dia)}.`
+    : n === 0   ? `A fila de ${fmtData(dia)} já estava em ordem — nada mudou.`
+                : `Fila de ${fmtData(dia)} reorganizada: ${n} de ${total} carga(s) renumerada(s).`,
+    n ? 'success' : 'info', 7000);
+  renderAll();
+}
+
 function reordenarPorSequenciaUI(){
-  renderProgFila();
-  notify('Fila reordenada por Sequência.', 'success');
+  return reorganizarFilaDoDiaUI(diaFilaSelecionado(), 'fila');
+}
+
+/* NA TORRE O BOTÃO É EXPLICITAMENTE DE HOJE, e o rótulo diz isso.
+
+   A Torre mostra TODAS as cargas em aberto, de vários dias — ela não tem
+   um "dia selecionado" como a Fila e a Montagem têm. Reorganizar sem
+   dizer qual dia renumeraria uma fila que a pessoa talvez nem esteja
+   olhando. Então o botão se compromete com um: hoje. */
+function reorganizarSequenciaTorreUI(){
+  return reorganizarFilaDoDiaUI(isoDiaLocal(new Date()), 'torre');
 }
 /* Excluir carga programada.
 
@@ -11120,7 +11211,7 @@ function celulaCargaHtml(carga, tipo){
       title="Trocar a placa. Se o caminhão novo já estiver no pátio, a carga assume a entrada dele.">`;
   }
   if(tipo === 'peso'){
-    return `<input type="number" class="peso-input" min="0" step="1" value="${carga.peso ?? ''}"
+    return `<input type="text" inputmode="numeric" class="peso-input" min="0" step="1" value="${carga.peso ?? ''}"
       onchange="atualizarPesoUI('${id}',this.value)" title="Peso em kg.">`;
   }
   return '';
@@ -11213,11 +11304,11 @@ function formCargaHtml(c, m){
 
       <div class="form-row">
         <div class="form-group"><label>Peso (kg)</label>
-          <input type="number" min="0" value="${c.peso ?? ''}"
+          <input type="text" inputmode="numeric" min="0" value="${c.peso ?? ''}"
                  onchange="atualizarPesoUI('${id}',this.value)"></div>
         <div class="form-group">
           <label>Sequência <span class="hint">(prioridade de montagem do dia)</span></label>
-          <input type="number" min="1" value="${c.sequencia ?? ''}"
+          <input type="text" inputmode="numeric" min="1" value="${c.sequencia ?? ''}"
                  onchange="atualizarSequenciaUI('${id}',this.value)"></div>
         <div class="form-group"><label>Paletizada?</label>
           ${paletizadaSelectHtml(c)}</div>
@@ -11229,10 +11320,10 @@ function formCargaHtml(c, m){
               já sumiram daqui uma vez, o que virou guarda de teste. */''}
         <div class="form-group">
           <label>Qtd. Ganchos (Gancheira) <span class="hint">0 = Liso</span></label>
-          <input type="number" min="0" step="1" value="${c.qtdGanchos ?? 0}"
+          <input type="text" inputmode="numeric" min="0" step="1" value="${c.qtdGanchos ?? 0}"
                  onchange="atualizarGanchosUI('${id}',this.value)"></div>
         <div class="form-group"><label>Qtd. Entregas</label>
-          <input type="number" min="1" step="1" value="${c.qtdEntregas ?? 1}"
+          <input type="text" inputmode="numeric" min="1" step="1" value="${c.qtdEntregas ?? 1}"
                  onchange="atualizarEntregasUI('${id}',this.value)"></div>
 
         <div class="form-group">
@@ -11355,7 +11446,7 @@ function linhaMontagemHtml(m){
               é pior que botão que não existe. */''}
         ${(!m.efetivada_em && !m.cancelada_em)
             ? `<span class="alca-arrastar" title="Arraste para mudar a posição do dia">⠿</span>` : ''}
-        <input type="number" min="1" class="seq-input" value="${comoCarga ? (cargaViva.sequencia ?? '') : (m.sequencia ?? '')}"
+        <input type="text" inputmode="numeric" min="1" class="seq-input" value="${comoCarga ? (cargaViva.sequencia ?? '') : (m.sequencia ?? '')}"
                aria-label="Sequência"
                title="${(!m.efetivada_em && !m.cancelada_em)
                  ? 'Digite a posição: a linha entra nela e as outras descem uma casa.'
@@ -11409,7 +11500,7 @@ function linhaMontagemHtml(m){
             : `${rotaMontagemSelectHtml(m)} ${marca}`}</td>
       <td onclick="event.stopPropagation()">${comoCarga
             ? celulaCargaHtml(cargaViva, 'peso')
-            : `<input type="number" min="0" class="peso-input" value="${m.peso ?? ''}"
+            : `<input type="text" inputmode="numeric" min="0" class="peso-input" value="${m.peso ?? ''}"
                       placeholder="—" aria-label="Peso em quilos"
                       onchange="alterarMontagemUI('${id}','peso',this.value)">`}</td>
 
@@ -11438,20 +11529,20 @@ function linhaMontagemHtml(m){
             Como nas outras: virou carga, grava na CARGA (que tem log de
             revisões); ainda rascunho, grava na montagem. */''}
       <td class="c-ganchos" onclick="event.stopPropagation()">${comoCarga
-            ? `<input type="number" class="ganchos-input" min="0" step="1"
+            ? `<input type="text" inputmode="numeric" class="ganchos-input" min="0" step="1"
                       value="${cargaViva.qtdGanchos ?? 0}" aria-label="Ganchos"
                       title="Ganchos — 0 = Liso"
                       onchange="atualizarGanchosUI('${escJs(cargaViva.id)}',this.value)">`
-            : `<input type="number" class="ganchos-input" min="0" step="1"
+            : `<input type="text" inputmode="numeric" class="ganchos-input" min="0" step="1"
                       value="${m.qtd_ganchos ?? 0}" aria-label="Ganchos"
                       title="Ganchos — 0 = Liso"
                       onchange="alterarMontagemUI('${id}','qtdGanchos',this.value)">`}</td>
       <td class="c-entregas" onclick="event.stopPropagation()">${comoCarga
-            ? `<input type="number" class="entregas-input" min="1" step="1"
+            ? `<input type="text" inputmode="numeric" class="entregas-input" min="1" step="1"
                       value="${cargaViva.qtdEntregas ?? 1}" aria-label="Entregas"
                       title="Quantidade de entregas."
                       onchange="atualizarEntregasUI('${escJs(cargaViva.id)}',this.value)">`
-            : `<input type="number" class="entregas-input" min="1" step="1"
+            : `<input type="text" inputmode="numeric" class="entregas-input" min="1" step="1"
                       value="${m.qtd_entregas ?? 1}" aria-label="Entregas"
                       title="Quantidade de entregas."
                       onchange="alterarMontagemUI('${id}','qtdEntregas',this.value)">`}</td>
@@ -11484,7 +11575,7 @@ function linhaMontagemHtml(m){
                Quem não corrige continua vendo o número, em texto: é dado
                de conferência para a Portaria e a Expedição, não campo. */
             ? (podeCorrigirKmDaCargaUI()
-              ? `<input type="number" inputmode="numeric" class="km-input" min="1" step="1"
+              ? `<input type="text" inputmode="numeric" inputmode="numeric" class="km-input" min="1" step="1"
                         value="${cargaViva.kmDeslocamento ?? ''}" aria-label="KM de deslocamento"
                         placeholder="${cargaViva.kmDestino ?? '—'}"
                         title="KM que o frete usa. Corrigir aqui recalcula o valor e fica registrado em Histórico."
@@ -11497,7 +11588,7 @@ function linhaMontagemHtml(m){
                larga, rolada com a roda — passar por cima do KM já escolhido
                mudava a quilometragem sem ninguém digitar, e o frete é KM ×
                tarifa. `inputmode` mantém o teclado numérico no celular. */
-            : `<input type="number" inputmode="numeric" class="km-input" min="1" step="1"
+            : `<input type="text" inputmode="numeric" inputmode="numeric" class="km-input" min="1" step="1"
                       value="${m.km_deslocamento ?? ''}" aria-label="KM de deslocamento"
                       placeholder="${m.km_destino ?? '—'}"
                       title="KM que o frete usa. Vem do destino e pode ser corrigido — desvio, retorno, coleta no caminho."
@@ -11760,10 +11851,10 @@ function formMontagemHtml(m){
 
       <div class="form-row">
         <div class="form-group"><label>Peso (kg)</label>
-          <input type="number" min="0" value="${m.peso ?? ''}" ${alt('peso')}></div>
+          <input type="text" inputmode="numeric" min="0" value="${m.peso ?? ''}" ${alt('peso')}></div>
         <div class="form-group">
           <label>Sequência <span class="hint">(prioridade de montagem do dia)</span></label>
-          <input type="number" min="1" value="${m.sequencia ?? ''}" ${alt('sequencia')}></div>
+          <input type="text" inputmode="numeric" min="1" value="${m.sequencia ?? ''}" ${alt('sequencia')}></div>
         <div class="form-group"><label>Paletizada?</label>
           <select ${alt('paletizada')}>
             <option${m.paletizada === 'Não' ? ' selected' : ''}>Não</option>
@@ -11787,9 +11878,9 @@ function formMontagemHtml(m){
       <div class="form-row">
         <div class="form-group">
           <label>Qtd. Ganchos (Gancheira) <span class="hint">0 = Liso</span></label>
-          <input type="number" min="0" step="1" value="${m.qtd_ganchos ?? 0}" ${alt('qtdGanchos')}></div>
+          <input type="text" inputmode="numeric" min="0" step="1" value="${m.qtd_ganchos ?? 0}" ${alt('qtdGanchos')}></div>
         <div class="form-group"><label>Qtd. Entregas</label>
-          <input type="number" min="1" step="1" value="${m.qtd_entregas ?? 1}" ${alt('qtdEntregas')}></div>
+          <input type="text" inputmode="numeric" min="1" step="1" value="${m.qtd_entregas ?? 1}" ${alt('qtdEntregas')}></div>
       </div>
 
       <div class="form-group" style="margin-bottom:10px"><label>Observações</label>
@@ -12039,7 +12130,14 @@ async function montArrastarSolta(ev, idDestino){
      índice da tela e o número deixam de ser a mesma coisa. Quem solta em
      cima da linha que mostra "5" quer o 5. */
   const alvo = (_montagemDia?.montagens || []).find(m => m.montagem_id === idDestino);
-  if(!alvo || !Number.isInteger(Number(alvo.sequencia))) return;
+  if(!alvo) return;
+  // Mesma correção de 17/09 da Fila: soltar em linha sem número não pode
+  // ser um `return` mudo — ver filaArrastarSolta.
+  if(!Number.isInteger(Number(alvo.sequencia))){
+    notify('Essa linha ainda não tem número, então não dá para soltar em cima dela. '
+      + 'Digite o número que você quer no campo Sequência da linha que está movendo.', 'warn', 8000);
+    return;
+  }
   await moverMontagemUI(movido, Number(alvo.sequencia));
 }
 
@@ -12051,6 +12149,36 @@ async function moverMontagemUI(id, posicao){
     /* A RECUSA DO SERVIDOR NUNCA É SILENCIOSA, e aqui ela ensina o caminho:
        a mensagem já vem com as posições válidas do dia. */
     notify(e && e.message ? e.message : 'Não consegui reordenar.', 'erro', 8000);
+    await carregarMontagemUI();
+  }
+}
+
+/* O MESMO BOTÃO DA FILA, NA MONTAGEM (17/09/2026) — pedido do dono: "um
+   botão de 'reorganizar por sequência' EM TODAS ESSAS ÁREAS". A conta é a
+   mesma função no servidor; aqui muda só de onde vem o dia. */
+async function reorganizarMontagemUI(){
+  const dia = (document.getElementById('mont-data') || {}).value || '';
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(dia)){
+    notify('Escolha o dia da montagem primeiro.', 'warn');
+    return;
+  }
+  const ok = confirm(
+    `Reorganizar a sequência da montagem de ${fmtData(dia)}?\n\n`
+    + `As linhas que ainda não viraram carga passam a ocupar 1, 2, 3... na `
+    + `ordem em que estão na tela, fechando os buracos.\n\n`
+    + `Linha já efetivada não muda de número — ela virou registro.`);
+  if(!ok) return;
+  try {
+    const r = await SuincoSharePoint.montagem.reorganizar(dia);
+    await carregarMontagemUI();
+    const n = (r && r.mexidas) || 0, total = (r && r.total) || 0;
+    notify(
+      total === 0 ? `Não há linha aberta na montagem de ${fmtData(dia)}.`
+      : n === 0   ? `A montagem de ${fmtData(dia)} já estava em ordem — nada mudou.`
+                  : `Montagem de ${fmtData(dia)} reorganizada: ${n} de ${total} linha(s) renumerada(s).`,
+      n ? 'success' : 'info', 7000);
+  } catch(e){
+    notify(e && e.message ? e.message : 'Não consegui reorganizar.', 'erro', 8000);
     await carregarMontagemUI();
   }
 }
