@@ -3891,7 +3891,7 @@ truncado do navegador.
 
 ---
 
-## #81 — O painel e o servidor discordam sobre que dia é hoje (18/09/2026)
+## #81 — Três relógios, e a bateria só é confiável em 21 das 24 horas (18/09/2026)
 
 **Como apareceu.** O portão reprovou com três suítes vermelhas de uma vez —
 `test_montagem_acao_empilhada`, `test_montagem_cabe_em_colunas` e
@@ -3909,42 +3909,64 @@ a tela da Montagem estava em  dia:       2026-09-18
 Eram 21h31 no Brasil, 00h31 em UTC. A data tinha virado **no meio da
 bateria**.
 
-**Onde exatamente nasce a divergência.** O servidor fixa o dia operacional no
-fuso do pátio, e isso está certo e é deliberado:
+**São TRÊS relógios, não dois** — e essa foi a parte que eu errei na primeira
+leitura, antes de conferir:
 
-```js
-export function hojeISO() {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/Sao_Paulo', year:'numeric', month:'2-digit', day:'2-digit',
-  }).format(new Date());
-}
+1. **`hojeISO()` no servidor** — fixado em `America/Sao_Paulo` por `Intl`, de
+   propósito e corretamente: o pátio fica no Brasil e o dia da programação é o
+   de lá.
+2. **O painel** — `isoDiaLocal(new Date())`, o relógio do **aparelho de quem
+   está olhando**.
+3. **O Postgres** — `now()` e `current_date`, no fuso do cluster (UTC aqui).
+
+Em produção os três calham de concordar. Num container em UTC, não: entre 21h
+e a meia-noite do Brasil o relógio 1 ainda está no dia 17 e os relógios 2 e 3
+já viraram para o 18.
+
+**O que eu tentei, e por que desfiz.** Primeiro aliinhei só o navegador
+(`TZ=America/Sao_Paulo` na bateria). Não resolveu: **trocou** aquelas três
+suítes por outras quatro — `test_data_programacao`,
+`test_devolucoes_checklist`, `test_esteira_devolucao_duas_balancas`,
+`test_montagem_linha_editavel` — porque agora eram os relógios 1 e 2 contra o
+3. Depois alinhei também o Postgres do banco de teste. Ainda sobraram duas.
+
+Desfiz as duas tentativas. Não porque a direção esteja errada — ela está
+certa — mas porque **alinhar os três relógios não é um ajuste de uma linha**, e
+empurrar mudança meio-entendida na malha de testes na véspera de uma entrega
+urgente é trocar um problema conhecido por um desconhecido. Fica escrito aqui
+em vez de ficar meio-feito no código.
+
+**O estado real, dito sem maquiagem:** a bateria de tela é confiável em ~21 das
+24 horas. Nas três horas entre 21h e a meia-noite do Brasil ela produz
+vermelhos que **não são defeito**, e produz vermelhos **diferentes** conforme o
+fuso em que rodar. É a causa nº 3 vestida de causa nº 4, e custa a noite de
+quem for investigar sem saber disto.
+
+**Como reconhecer, se acontecer de novo:** várias suítes reprovando de uma vez
+com sintoma de "não tem linha/carga na tela", **e** as mesmas suítes tendo
+passado verdes numa rodada recente sem mudança de código. Confira as horas
+antes de mexer em qualquer coisa:
+
+```bash
+date -u '+UTC %F %H:%M'; TZ=America/Sao_Paulo date '+Brasil %F %H:%M'
 ```
 
-O painel **não pergunta ao servidor**: ele calcula `isoDiaLocal(new Date())`,
-que é o relógio do aparelho de quem está olhando. Os dois só concordam porque
-em produção as duas máquinas costumam estar no mesmo fuso.
+Datas diferentes = é isto. Espere a meia-noite do Brasil passar e rode de novo.
 
-**Corrigi primeiro o que mediu errado.** Confundir isto com defeito de código
-teria me feito mexer na Montagem para "consertar" algo que estava certo.
-`testes/rodar_tudo.sh` passa a exportar `TZ=America/Sao_Paulo`: a bateria mede
-o fuso em que a operação vive, não o do container. Bateria cujo resultado
-depende da **hora** em que roda é a causa nº 3 vestida de causa nº 4, e custa
-a noite de quem for investigar.
+**A correção certa, quando for a hora, e ela vale para os dois lados.** O dia
+operacional é uma decisão do servidor, como qualquer outra. O `/health` já
+devolve a hora dele; basta devolver junto o **dia operacional**, e o painel
+obedecer em vez de adivinhar — a mesma regra da casa que vale para a fila:
+*o servidor é quem manda; a tela adianta o resultado*. Com isso caem juntos o
+vermelho de bateria E o risco de produção.
 
-**O que continua de pé, e precisa de decisão do dono.** O descompasso não é do
-teste — é do painel. Quem abrir o painel num aparelho com o fuso errado (um
-celular que voltou do padrão de fábrica, um acesso de fora do país) vê um
-"hoje" que não é o do servidor: a Montagem do Dia aparece vazia, e a carga que
-ele criar cai num dia que ninguém está olhando. Não há evidência de que isso
-já tenha acontecido em produção, e por isso **não** mexi nisso hoje junto de
-uma entrega urgente.
+**O risco de produção, que continua de pé.** Quem abrir o painel num aparelho
+com o fuso errado — um celular que voltou ao padrão de fábrica, um acesso de
+fora do país — vê um "hoje" que não é o do servidor: a Montagem do Dia aparece
+vazia, e a carga que ele criar cai num dia que ninguém está olhando. Não há
+evidência de que já tenha acontecido, e por isso não mexi nisso hoje. Falta
+também conferir em que fuso está o Postgres da produção, o que não dá para
+fazer deste ambiente — a rede de produção é bloqueada daqui.
 
-**A correção certa, quando for a hora:** o dia operacional é uma decisão do
-servidor, como qualquer outra. O `/health` já devolve a hora dele; basta
-devolver junto o dia operacional, e o painel obedecer em vez de adivinhar. É a
-mesma regra da casa que vale para a fila — *o servidor é quem manda; a tela
-adianta o resultado*.
-
-**Família.** "Duas fontes para a mesma verdade" (#14, #26, #77). Aqui as duas
-fontes são dois relógios, e a segunda fonte é o aparelho do usuário — que é a
-única das duas que ninguém controla.
+**Família.** "Duas fontes para a mesma verdade" (#14, #26, #77). Aqui são
+três, e uma delas é o aparelho do usuário — a única que ninguém controla.

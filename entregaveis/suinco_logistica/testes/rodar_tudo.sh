@@ -1,28 +1,4 @@
 #!/usr/bin/env bash
-# O RELÓGIO DA BATERIA É O DO PÁTIO, NÃO O DO CONTAINER (18/09/2026)
-#
-# `hojeISO()` no servidor fixa o dia operacional em America/Sao_Paulo, de
-# propósito: o pátio fica no Brasil e o dia da programação é o dia de lá.
-# O PAINEL, por outro lado, pergunta ao relógio do NAVEGADOR — e o navegador
-# deste container roda em UTC.
-#
-# Nas três horas entre 21h e a meia-noite do Brasil os dois discordam: o
-# servidor grava a linha em 17/09 e a tela da Montagem procura o dia 18.
-# Foi exatamente isso que aconteceu num portão de 17/09 às 21h31: três
-# suítes (montagem_acao_empilhada, montagem_cabe_em_colunas, toque_responde)
-# reprovaram com "nenhuma linha de montagem na tela", e as MESMAS três
-# tinham passado verdes na bateria de uma hora antes. Nenhum defeito no
-# código; a bateria estava medindo o relógio errado.
-#
-# Bateria cujo resultado depende da HORA em que roda não protege ninguém —
-# é a causa nº 3 do vermelho vestida de causa nº 4, e custa a noite de quem
-# for investigar. Aqui ela passa a medir o fuso em que a operação vive.
-#
-# (O descompasso em si é real e continua de pé fora do teste: quem abrir o
-# painel num aparelho com fuso diferente vê um "hoje" que não é o do
-# servidor. Está registrado como ocorrência #81 — a correção é o servidor
-# dizer qual é o dia operacional, e o painel obedecer em vez de adivinhar.)
-export TZ=America/Sao_Paulo
 # Roda a bateria inteira de navegador, com o banco LIMPO antes de cada suíte
 # que encosta nele — e as demais em paralelo.
 #
