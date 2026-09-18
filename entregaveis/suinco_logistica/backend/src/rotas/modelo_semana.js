@@ -210,7 +210,39 @@ rotasModeloSemana.get('/montagem', exigirLogin, recusarFilial, async (req, res, 
         kmDeslocamento: m.km_deslocamento,
         tarifas,
       });
-      return { ...m, frete_valor: r.valor, frete_tarifa_usada: r.tarifa, frete_motivo: r.motivo };
+      /* O FRETE COMBINADO À MÃO MANDA — E O CALCULADO NÃO SE PERDE.
+
+         Pedido do dono (17/09/2026): "caso eu precise alterar o valor do
+         frete, ele também deve ser editável". Frete fechado no telefone não
+         é frete de tabela, e antes disto quem negociava escrevia o valor
+         num campo de observação — o mesmo lugar que a ocorrência #77 acabou
+         de desentupir.
+
+         A saída não é escolher uma das duas verdades: é marcar qual é qual.
+         `frete_valor_calculado` continua saindo da conta para todo mundo,
+         e a conferência compara o combinado com a tabela em vez de perder
+         a tabela.
+
+         O AVISO DE KM É A DECISÃO (a) DO DONO, perguntado o que fazer
+         quando alguém muda o KM DEPOIS de o valor ter sido digitado: o
+         valor digitado FICA, e a linha avisa que o KM mudou e o frete não
+         acompanhou. É para isso que existe `frete_manual_km` — sem saber em
+         que quilometragem o combinado foi fechado, não há como distinguir
+         "combinado ainda válido" de "combinado de outra viagem". */
+      const manual = m.frete_valor_manual === null || m.frete_valor_manual === undefined
+        ? null : Number(m.frete_valor_manual);
+      const kmMudouDesdeOCombinado = manual !== null
+        && m.frete_manual_km !== null && m.frete_manual_km !== undefined
+        && Number(m.frete_manual_km) !== Number(m.km_deslocamento ?? NaN);
+      return {
+        ...m,
+        frete_valor: manual !== null ? manual : r.valor,
+        frete_valor_calculado: r.valor,
+        frete_e_manual: manual !== null,
+        frete_km_mudou: kmMudouDesdeOCombinado,
+        frete_tarifa_usada: r.tarifa,
+        frete_motivo: manual !== null ? '' : r.motivo,
+      };
     });
 
     res.json({ dia, diaSemana, modelo, montagens: comFrete });
@@ -250,11 +282,102 @@ async function destinoEKm(corpo, atual, q) {
     }
   }
 
-  const kmDesl = corpo?.kmDeslocamento !== undefined
+  let kmDesl = corpo?.kmDeslocamento !== undefined
     ? kmInteiroOuNulo(corpo.kmDeslocamento)
     : (atual ? atual.km_deslocamento : null);
 
+  /* ESCOLHER O DESTINO PASSA A PREENCHER O KM (18/09/2026).
+
+     RELATO DO DONO: "o campo KM não está? e a somatória automática quando é
+     colocado o km, ou alterado após ter colocado o destino e ele calcular o
+     km sozinho". E antes: "sempre que um destino for inserido, o cálculo de
+     KM deve ser feito automaticamente na coluna KM".
+
+     O QUE ACONTECIA, medido na Montagem antes de mexer:
+
+       escolher SALVADOR (COM DESVIO)  ->  km_destino = 1570
+                                           km_deslocamento = NULO
+                                           frete = nada, "Sem KM de deslocamento"
+       digitar 1570 à mão              ->  frete = R$ 18.306,20
+
+     Ou seja: a conta sempre funcionou. O que faltava era o KM chegar nela.
+     O cadastro do destino resolvia `km_destino`, mas quem multiplica a
+     tarifa é `km_deslocamento` — e esse ficava vazio. Na tela o número do
+     cadastro aparecia como DICA CINZA dentro do campo vazio, então a
+     Logística via "1570" escrito ali, não digitava nada, e o frete não saía.
+     Placeholder tem cara de valor preenchido; foi isso que enganou.
+
+     A REGRA, e ela é a que o próprio cabeçalho da coluna já prometia
+     ("Destino da tabela de frete — define o KM"): trocar o destino traz o
+     KM do cadastro junto. Depois disso o campo continua editável, e o que
+     a pessoa digitar manda — desvio, retorno, coleta no caminho.
+
+     DUAS COISAS QUE ESTE PREENCHIMENTO NÃO FAZ:
+
+     · não atropela quem está digitando. Se a mesma gravação traz um KM
+       (`corpo.kmDeslocamento` presente), é ele que vale — o preenchimento
+       só age quando ninguém informou KM naquela escrita;
+     · não APAGA número nenhum. Destino sem KM no cadastro, ou destino
+       removido, deixa o KM como está. Apagar em silêncio um número que
+       alguém digitou é a família de defeito que este projeto já pagou caro
+       (`Number(0) || null`). Preencher vazio é ajudar; limpar preenchido é
+       destruir. */
+  const pediuKmNestaEscrita = corpo?.kmDeslocamento !== undefined;
+  if (temDestino && !pediuKmNestaEscrita && kmDestino !== null) {
+    kmDesl = kmDestino;
+  }
+
   return { destino, kmDestino, kmDesl };
+}
+
+/* O FRETE COMBINADO À MÃO (18/09/2026).
+
+   Pedido do dono: "o campo frete ainda nao ta editavel". Ele já tinha
+   pedido em 17/09 — "caso eu precise alterar o valor do frete, ele também
+   deve ser editável" — e eu escrevi a migração e não implementei.
+
+   TRÊS GESTOS, TRÊS SIGNIFICADOS, e a diferença importa:
+
+     campo ausente  (undefined)  nada muda — a tela grava campo a campo, e
+                                 quem está salvando a placa não está
+                                 mexendo no frete;
+     campo vazio    ('')         APAGA o combinado; a linha volta a valer o
+                                 calculado. É como se desfaz, e sem isso o
+                                 valor digitado por engano ficaria para
+                                 sempre;
+     número                      vale o combinado, e fica carimbado COM O KM
+                                 do momento — é esse carimbo que permite a
+                                 linha avisar depois "este valor foi fechado
+                                 em outra quilometragem".
+
+   VÍRGULA É DECIMAL, ponto é milhar. Quem digita frete escreve "2.450,00",
+   e `Number('2.450,00')` é NaN — a mesma família do 27.284 que virou 27.
+   Aqui a leitura é explícita.
+
+   NEGATIVO E ZERO NÃO SÃO FRETE. Viram nulo, e a linha volta ao calculado
+   em vez de gravar um valor que ninguém combinou. */
+function valorEmReaisOuNulo(v) {
+  if (v === '' || v === null || v === undefined) return null;
+  let t = String(v).trim().replace(/[^\d.,-]/g, '');
+  if (t === '') return null;
+  if (t.includes(',')) t = t.replace(/\./g, '').replace(/,/g, '.');
+  const n = Number(t);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return Math.round(n * 100) / 100;
+}
+
+function freteManualResolvido(corpo, atual, kmDeslAgora, operador) {
+  if (corpo?.freteValorManual === undefined) {
+    return {
+      valor: atual ? atual.frete_valor_manual : null,
+      km: atual ? atual.frete_manual_km : null,
+      por: atual ? atual.frete_manual_por : null,
+      em: atual ? atual.frete_manual_em : null,
+    };
+  }
+  const valor = valorEmReaisOuNulo(corpo.freteValorManual);
+  if (valor === null) return { valor: null, km: null, por: null, em: null };
+  return { valor, km: kmDeslAgora, por: operador, em: new Date() };
 }
 
 /* Mesma régua de kmValido() do domínio de frete: inteiro positivo ou nada.
@@ -493,6 +616,10 @@ rotasModeloSemana.patch('/montagem/:id', SO_LOGISTICA, async (req, res, next) =>
 
       const campo = (nome, col, conv) => (req.body?.[nome] !== undefined ? conv(req.body[nome]) : atual[0][col]);
       const _dk = await destinoEKm(req.body, atual[0], (q, v) => cli.query(q, v));
+      /* O carimbo do combinado usa o KM QUE VAI FICAR gravado nesta mesma
+         escrita (`_dk.kmDesl`), não o que estava antes — senão o aviso de
+         "KM mudou" dispararia já na primeira digitação. */
+      const _fm = freteManualResolvido(req.body, atual[0], _dk.kmDesl, req.operador.nome);
       const { rows } = await cli.query(
       `UPDATE programacao_montagem
           SET rota_codigo = $2, sequencia = $3, numero_carga = $4, peso = $5,
@@ -500,6 +627,8 @@ rotasModeloSemana.patch('/montagem/:id', SO_LOGISTICA, async (req, res, next) =>
               tipo_operacao = $9, motorista = $10, observacoes = $11,
               placa = $12, transportadora = $14, apelido_rota = $15,
               frete_destino = $16, km_destino = $17, km_deslocamento = $18,
+              frete_valor_manual = $19, frete_manual_km = $20,
+              frete_manual_por = $21, frete_manual_em = $22,
               operador_nome = $13, atualizado_em = now()
         WHERE montagem_id = $1
         RETURNING *`,
@@ -526,7 +655,8 @@ rotasModeloSemana.patch('/montagem/:id', SO_LOGISTICA, async (req, res, next) =>
           fora do UPDATE, então não havia como limpá-lo junto: a linha
           mostrava a rota nova com o nome da velha. */
        campo('apelidoRota', 'apelido_rota', v => String(v ?? '').trim()),
-       _dk.destino, _dk.kmDestino, _dk.kmDesl]
+       _dk.destino, _dk.kmDestino, _dk.kmDesl,
+       _fm.valor, _fm.km, _fm.por, _fm.em]
       );
       return { montagem: rows[0] };
     });

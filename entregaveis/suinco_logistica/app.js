@@ -11379,15 +11379,90 @@ function freteDestinoMontagemHtml(m, id){
    Quando não há valor, a célula diz POR QUE não há, em vez de ficar vazia:
    célula vazia ao lado de um destino é lida como "o sistema não sabe", e
    manda alguém perguntar. `frete_motivo` vem do servidor com a frase. */
+function reais(n){
+  return Number(n).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2});
+}
+
+/* O FRETE AGORA É EDITÁVEL — E O CALCULADO CONTINUA À VISTA (18/09/2026).
+
+   RELATO DO DONO: "o campo frete ainda nao ta editavel". Ele tinha pedido
+   em 17/09 e eu não implementei — a migração ficou escrita e parada.
+
+   A CONTA CONTINUA SENDO DO SERVIDOR. Não há fórmula nenhuma aqui: o campo
+   manda o que a pessoa digitou e o dia volta relido. Repetir `km × tarifa`
+   no painel daria dois lugares para o preço divergir, que é a regra da casa
+   que este projeto mais paga caro quando quebra.
+
+   O QUE A CÉLULA MOSTRA, e por quê:
+
+     · sem combinado  — o valor calculado, como antes, e o campo vazio com
+                        ele de dica: quem não negociou nada não digita nada;
+     · com combinado  — o valor digitado, marcado com ✎, e o calculado
+                        embaixo em cinza. A conferência compara os dois em
+                        vez de perder a tabela;
+     · KM mudou depois — a linha AVISA. É a decisão (a) do dono: o valor
+                        digitado fica, e a linha diz que foi fechado em
+                        outra quilometragem. Sem esse aviso, um combinado de
+                        583 km seguiria calado numa viagem de 640.
+
+   APAGAR O CAMPO DESFAZ: volta a valer o calculado. Sem isso, um valor
+   digitado por engano ficaria para sempre. */
 function freteMontagemHtml(m, carga){
-  const valor = carga ? carga.freteValor : m.frete_valor;
-  if(valor !== null && valor !== undefined && valor !== ''){
-    const n = Number(valor);
-    return `<strong title="${esc(m.km_deslocamento ?? '')} km x ${esc(m.frete_tarifa_usada ?? '')}/km">`
-      + `R$ ${n.toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2})}</strong>`;
+  if(carga){
+    const v = carga.freteValor;
+    return (v === null || v === undefined || v === '')
+      ? `<span class="text-dim" title="${esc(m.frete_motivo || 'Sem valor de frete.')}">—</span>`
+      : `<strong>R$ ${reais(v)}</strong>`;
   }
-  const motivo = m.frete_motivo || 'Sem valor de frete.';
-  return `<span class="text-dim" title="${esc(motivo)}">—</span>`;
+  const id = escJs(m.montagem_id);
+  const manual = !!m.frete_e_manual;
+  const calculado = m.frete_valor_calculado;
+  const temCalculado = calculado !== null && calculado !== undefined && calculado !== '';
+  const dica = temCalculado ? `R$ ${reais(calculado)}` : (m.frete_motivo || 'sem valor');
+
+  /* A COLUNA TEM 60px, E ISSO NÃO É DESCUIDO — é medida.
+     A largura de cada coluna desta tabela foi calculada para o dia inteiro
+     caber num monitor de 1280 sem rolagem lateral, e há teste guardando
+     (test_montagem_cabe_em_colunas). Então o que é NÚMERO fica na célula e
+     o que é EXPLICAÇÃO fica no title: mostrar o calculado numa segunda
+     linha cortava o valor no meio — e número de dinheiro cortado é pior que
+     número ausente, porque parece completo. */
+  const explicacao = manual
+    ? `Frete combinado à mão${m.frete_manual_por ? ' por ' + m.frete_manual_por : ''}.`
+      + (temCalculado ? ` Pela tabela seriam R$ ${reais(calculado)}.` : '')
+      + ' Apague o campo para voltar ao calculado.'
+    : `Frete calculado: ${m.km_deslocamento ?? '—'} km × tarifa.`
+      + ' Digite aqui para gravar um valor combinado.';
+
+  const campo = `<input type="text" inputmode="decimal" class="frete-input"
+      value="${manual ? reais(m.frete_valor) : ''}"
+      placeholder="${esc(temCalculado ? reais(calculado) : (m.frete_motivo ? 'sem valor' : ''))}"
+      aria-label="Valor do frete"
+      title="${esc(explicacao)}"
+      onchange="definirFreteManualMontagemUI('${id}', this.value)">`;
+
+  if(!manual) return campo;
+
+  /* O ⚠ é o único que ganha espaço próprio, e ganha porque significa
+     dinheiro errado: o valor foi fechado numa quilometragem e a linha está
+     em outra. Decisão (a) do dono — o combinado fica, mas não fica calado. */
+  const aviso = m.frete_km_mudou
+    ? `<span class="frete-aviso" title="Combinado com ${esc(m.frete_manual_km)} km; `
+      + `a linha está com ${esc(m.km_deslocamento ?? '—')} km — o frete não acompanhou.">⚠</span>`
+    : '';
+  return `${campo}<span class="frete-marca" title="${esc(explicacao)}">✎</span>${aviso}`;
+}
+
+/* O valor vai cru para o servidor, que é quem lê vírgula e ponto — uma
+   função, um lugar. Ler aqui também daria duas réguas para o mesmo número. */
+async function definirFreteManualMontagemUI(id, valor){
+  try {
+    await SuincoSharePoint.montagem.alterar(id, { freteValorManual: String(valor ?? '') });
+    await carregarMontagemUI();
+  } catch(e){
+    notify(e && e.message ? e.message : 'Não consegui gravar o valor do frete.', 'erro', 8000);
+    await carregarMontagemUI();
+  }
 }
 
 function linhaMontagemHtml(m){

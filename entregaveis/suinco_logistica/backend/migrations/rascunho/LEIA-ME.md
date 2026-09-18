@@ -28,10 +28,6 @@ Aqui ela fica versionada, legível e inerte.
 
 ## O que está aqui hoje
 
-- **`054_frete_combinado_a_mao.sql`** — frete combinado no telefone, digitado
-  à mão, guardado ao lado do calculado em vez de no lugar dele. Pedido do
-  dono em 17/09/2026: *"caso eu precise alterar o valor do frete, ele também
-  deve ser editável"*. A decisão (a) dele já está registrada no cabeçalho do
-  arquivo: o valor digitado FICA quando o KM muda depois, e a linha avisa que
-  o KM mudou — é por isso que existe a coluna `frete_manual_km`.
-  Falta: domínio, rota, painel, relatório e testes.
+Nada. A 054 saiu daqui em 18/09/2026, quando o recurso do frete editável foi
+implementado — migração, rota, painel e teste. A pasta fica para o próximo
+caso.

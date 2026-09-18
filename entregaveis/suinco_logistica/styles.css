@@ -5665,13 +5665,20 @@ tr.fila-alvo > td{ box-shadow:inset 0 3px 0 0 var(--gold) }
   #mont-tabela > thead > tr > th:nth-child(4){  width:82px  }  /* Motorista  nome, corta */
   #mont-tabela > thead > tr > th:nth-child(5){  width:98px }  /* Rota       seletor */
   #mont-tabela > thead > tr > th:nth-child(6){  width:68px  }  /* Peso (kg)  6 dígitos */
-  #mont-tabela > thead > tr > th:nth-child(7){  width:70px  }  /* Palet.     Não/Sim */
+  #mont-tabela > thead > tr > th:nth-child(7){  width:62px  }  /* Palet.     Não/Sim */
   #mont-tabela > thead > tr > th:nth-child(8){  width:86px  }  /* Operação   seletor */
   #mont-tabela > thead > tr > th:nth-child(9){  width:50px  }  /* Ganchos    2 dígitos */
-  #mont-tabela > thead > tr > th:nth-child(10){ width:52px  }  /* Entregas   2 dígitos */
+  #mont-tabela > thead > tr > th:nth-child(10){ width:46px  }  /* Entregas   2 dígitos */
   #mont-tabela > thead > tr > th:nth-child(11){ width:74px  }  /* Destino    cidade/UF */
   #mont-tabela > thead > tr > th:nth-child(12){ width:56px  }  /* KM         4 dígitos */
-  #mont-tabela > thead > tr > th:nth-child(13){ width:60px  }  /* Frete      R$ */
+  /* FRETE GANHOU 26px (18/09/2026), tirados de Palet. (-8), Entregas (-6) e
+     da folga de 12 que já existia. O motivo: a coluna deixou de ser texto e
+     virou CAMPO — o dono passou a digitar o frete combinado aqui. Em 60px o
+     valor "18.306,20" era cortado dentro do campo, e número de dinheiro
+     pela metade dentro de uma caixa editável é convite a gravar errado.
+     Palet. guarda Não/Sim e Entregas guarda 2 dígitos: nenhuma das duas
+     perdeu conteúdo. Medido depois de aplicar, com o teste de largura. */
+  #mont-tabela > thead > tr > th:nth-child(13){ width:86px  }  /* Frete      R$ editável */
   #mont-tabela > thead > tr > th:nth-child(14){ width:76px  }  /* Ação       ícones */
   /* soma: 990 px de coluna em 1.002 px de área no monitor de 1280.
      MEDIDO depois de aplicar: a primeira tentativa somou 1.016 e ainda
@@ -6398,3 +6405,19 @@ tr.linha-nova{
   .dev-carimbo-novo .dev-visto path{ stroke-dashoffset:0 !important }
   [data-segurar]::after{ display:none !important }
 }
+
+/* O FRETE EDITÁVEL NA MONTAGEM (18/09/2026) — ver freteMontagemHtml.
+   A célula carrega três informações e elas têm pesos diferentes: o valor
+   que vale (campo), de onde ele veio (✎) e o que a tabela diria (cinza,
+   menor). Tudo do mesmo tamanho faria a pessoa ler o número errado na
+   pressa, e aqui o número errado é dinheiro pago a mais. */
+#mont-tabela .frete-input{ text-align:right; font-variant-numeric:tabular-nums }
+/* ✎ e ⚠ ficam SOBRE a célula, não ao lado: a coluna tem 60px medidos e
+   qualquer coisa ao lado do campo empurraria o número para fora. */
+#mont-tabela .c-frete{ position:relative }
+#mont-tabela .frete-marca,
+#mont-tabela .frete-aviso{
+  position:absolute; top:1px; font-size:10px; line-height:1; pointer-events:auto;
+}
+#mont-tabela .frete-marca{ left:2px; opacity:.6 }
+#mont-tabela .frete-aviso{ left:12px; color:var(--aviso, #d08700); font-weight:700 }
