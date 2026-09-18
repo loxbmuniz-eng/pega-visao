@@ -5821,6 +5821,258 @@ describe('44. Digitar o número que a fila NÃO TEM (17/09/2026)', () => {
   });
 });
 
+describe('45. Destino preenche o KM, e o frete combinado à mão (18/09/2026)', () => {
+  /* RELATO DO DONO, na Montagem do Dia: "o campo frete ainda nao ta editavel
+     e o km quando é colocado nao calcula direto no campo frete".
+
+     MEDIDO ANTES DE MEXER, e é o que estes testes travam:
+
+       escolher o destino  ->  km_destino = 1570
+                               km_deslocamento = NULO
+                               frete = nada, "Sem KM de deslocamento"
+       digitar 1570 à mão  ->  frete = R$ 18.306,20
+
+     A conta sempre funcionou. O que faltava era o KM chegar nela: o cadastro
+     resolvia `km_destino`, mas quem multiplica a tarifa é `km_deslocamento`.
+     Na tela o número do cadastro aparecia como DICA CINZA dentro do campo
+     vazio — tinha cara de preenchido, e não estava. */
+  const PREFIXO = 'FRT18';
+  let dia = null, placa = null, destino = null, kmDoDestino = null;
+
+  before(async () => {
+    const { rows: v } = await pool.query(
+      `SELECT placa FROM dim_veiculos
+        WHERE transportadora <> '' AND tipo_veiculo IN (SELECT tipo_veiculo FROM frete_tarifas)
+        ORDER BY placa LIMIT 1`);
+    placa = v[0].placa;
+    const { rows: d } = await pool.query(
+      'SELECT destino, km FROM frete_destinos WHERE km IS NOT NULL ORDER BY km DESC LIMIT 1');
+    destino = d[0].destino; kmDoDestino = Number(d[0].km);
+    dia = new Date(Date.now() - 400 * 86400000).toISOString().slice(0, 10);
+  });
+
+  after(async () => {
+    await pool.query("DELETE FROM programacao_montagem WHERE numero_carga LIKE $1", [PREFIXO + '%']);
+  });
+
+  /* UMA LINHA PARA O BLOCO INTEIRO, e cada cenário a devolve ao zero por SQL.
+
+     A primeira versão criava uma linha por teste — onze linhas, e cada uma
+     custava duas requisições. Rodando sozinho passava; na bateria estourava
+     o limite de requisições do servidor (429) e derrubava nove testes sem
+     defeito nenhum. É a causa nº 3 das quatro do vermelho, e é a segunda vez
+     que a cometo: o bloco 44 caiu nisso ontem.
+
+     SQL não passa pela rota, então zerar por ali não gasta orçamento. */
+  let linha = null;
+  async function novaLinha() {
+    if (!linha) {
+      const r = await req('/api/montagem', { metodo: 'POST', token: tokens['Logística'], corpo: {
+        dia, rotaCodigo: '500', numeroCarga: `${PREFIXO}-UNICA`, qtdEntregas: 1,
+      } });
+      assert.equal(r.status, 201, r.texto);
+      linha = r.json.montagem.montagem_id;
+      // a placa entra por PATCH (a criação não a grava) — sem ela não há tipo
+      // de veículo, e sem tipo de veículo não há tarifa nem frete
+      const p = await req(`/api/montagem/${linha}`, { metodo: 'PATCH', token: tokens['Logística'],
+        corpo: { placa } });
+      assert.equal(p.status, 200, p.texto);
+    }
+    await pool.query(
+      `UPDATE programacao_montagem
+          SET frete_destino = NULL, km_destino = NULL, km_deslocamento = NULL,
+              frete_valor_manual = NULL, frete_manual_km = NULL,
+              frete_manual_por = NULL, frete_manual_em = NULL
+        WHERE montagem_id = $1`, [linha]);
+    return linha;
+  }
+
+  /* DUAS LEITURAS, E A ESCOLHA ENTRE ELAS É ORÇAMENTO DE REQUISIÇÃO.
+
+     `ler()` chama a rota, e é a única que enxerga o que o servidor CALCULA
+     (frete_valor, frete_valor_calculado, frete_e_manual, frete_km_mudou).
+     `guardado()` vai direto ao banco e só vê o que está gravado — serve
+     para conferir coluna, e não gasta o limite de requisições que derrubou
+     este bloco na bateria. */
+  async function ler(id) {
+    const r = await req(`/api/montagem?dia=${dia}`, { token: tokens['Logística'] });
+    assert.equal(r.status, 200, r.texto);
+    return (r.json.montagens || []).find((m) => m.montagem_id === id);
+  }
+
+  async function guardado(id) {
+    const { rows } = await pool.query(
+      `SELECT km_destino, km_deslocamento, frete_valor_manual, frete_manual_km, frete_manual_por
+         FROM programacao_montagem WHERE montagem_id = $1`, [id]);
+    return rows[0];
+  }
+
+  test('O CASO DELE: escolher o destino preenche o KM e o frete sai na hora', async () => {
+    const id = await novaLinha();
+    const zerada = await guardado(id);
+    assert.equal(zerada.km_deslocamento, null, 'a linha começa sem KM');
+
+    const r = await req(`/api/montagem/${id}`, { metodo: 'PATCH', token: tokens['Logística'],
+      corpo: { freteDestino: destino } });
+    assert.equal(r.status, 200, r.texto);
+
+    const depois = await ler(id);
+    assert.equal(Number(depois.km_destino), kmDoDestino, 'o cadastro resolve o KM do destino');
+    assert.equal(Number(depois.km_deslocamento), kmDoDestino,
+      'e o KM de deslocamento passa a vir preenchido — era isto que faltava');
+    assert.ok(depois.frete_valor > 0,
+      `o frete tem que sair sem ninguém digitar KM: ${JSON.stringify(depois.frete_motivo)}`);
+  });
+
+  test('corrigir o KM à mão manda, e o frete recalcula', async () => {
+    const id = await novaLinha();
+    await req(`/api/montagem/${id}`, { metodo: 'PATCH', token: tokens['Logística'],
+      corpo: { freteDestino: destino } });
+    const comCadastro = await ler(id);
+
+    const outro = kmDoDestino + 30;   // desvio, retorno, coleta no caminho
+    await req(`/api/montagem/${id}`, { metodo: 'PATCH', token: tokens['Logística'],
+      corpo: { kmDeslocamento: String(outro) } });
+    const corrigido = await ler(id);
+
+    assert.equal(Number(corrigido.km_deslocamento), outro, 'o que a pessoa digitou manda');
+    assert.ok(corrigido.frete_valor > comCadastro.frete_valor,
+      'mais quilômetro tem que dar mais frete');
+  });
+
+  test('o KM digitado na MESMA gravação não é atropelado pelo destino', async () => {
+    /* A tela grava campo a campo, mas nada impede as duas coisas virem
+       juntas. Se o preenchimento automático passasse por cima, o número que
+       a pessoa acabou de digitar sumiria na frente dela. */
+    const id = await novaLinha();
+    await req(`/api/montagem/${id}`, { metodo: 'PATCH', token: tokens['Logística'],
+      corpo: { freteDestino: destino, kmDeslocamento: '777' } });
+    assert.equal(Number((await guardado(id)).km_deslocamento), 777,
+      'o KM informado na escrita vence o do cadastro');
+  });
+
+  test('quando o cadastro não resolve o KM, o que estava digitado CONTINUA lá', async () => {
+    /* Preencher vazio é ajudar; limpar preenchido é destruir — família do
+       `Number(0) || null`, que já apagou capacidade de veículo aqui.
+
+       DOIS CENÁRIOS REAIS, e são os dois em que `km_destino` sai nulo.
+       (A primeira versão deste teste cadastrava um destino com km NULL; o
+        banco recusa, porque `frete_destinos.km` é NOT NULL. Cenário que o
+        esquema proíbe não prova nada — trocado pelos que acontecem.) */
+    const id = await novaLinha();
+    await req(`/api/montagem/${id}`, { metodo: 'PATCH', token: tokens['Logística'],
+      corpo: { kmDeslocamento: '432' } });
+
+    // 1. destino que NÃO está no cadastro — o que sobra numa linha cujo
+    //    destino foi removido ou renomeado depois de montada.
+    await req(`/api/montagem/${id}`, { metodo: 'PATCH', token: tokens['Logística'],
+      corpo: { freteDestino: 'DESTINO FORA DO CADASTRO ' + Date.now() } });
+    assert.equal(Number((await guardado(id)).km_deslocamento), 432,
+      'destino sem KM no cadastro não pode apagar o KM digitado');
+
+    // 2. LIMPAR o destino — escolher o "—" da lista.
+    await req(`/api/montagem/${id}`, { metodo: 'PATCH', token: tokens['Logística'],
+      corpo: { freteDestino: '' } });
+    assert.equal(Number((await guardado(id)).km_deslocamento), 432,
+      'limpar o destino também não apaga o KM');
+  });
+
+  /* ------------------------------------------------------------------ */
+  describe('e o frete combinado à mão', () => {
+    test('digitar um valor manda, e o calculado continua guardado', async () => {
+      const id = await novaLinha();
+      await req(`/api/montagem/${id}`, { metodo: 'PATCH', token: tokens['Logística'],
+        corpo: { freteDestino: destino } });
+      const calculado = (await ler(id)).frete_valor;
+      assert.ok(calculado > 0);
+
+      const r = await req(`/api/montagem/${id}`, { metodo: 'PATCH', token: tokens['Logística'],
+        corpo: { freteValorManual: '12.500,00' } });
+      assert.equal(r.status, 200, r.texto);
+
+      const m = await ler(id);
+      assert.equal(Number(m.frete_valor), 12500, 'o combinado é o que vale');
+      assert.equal(Number(m.frete_valor_calculado), Number(calculado),
+        'e a tabela não se perde — a conferência compara os dois');
+      assert.equal(m.frete_e_manual, true);
+      assert.ok(m.frete_manual_por, 'fica registrado quem digitou');
+    });
+
+    test('vírgula é decimal e ponto é milhar — 12.500,00 não é doze e meio', async () => {
+      /* Mesma família do 27.284 que virava 27: `Number('12.500,00')` é NaN. */
+      const id = await novaLinha();
+      await req(`/api/montagem/${id}`, { metodo: 'PATCH', token: tokens['Logística'],
+        corpo: { freteValorManual: '2.450,75' } });
+      assert.equal(Number((await guardado(id)).frete_valor_manual), 2450.75);
+    });
+
+    test('mudar o KM depois NÃO apaga o combinado — e a linha avisa', async () => {
+      /* Decisão (a) do dono, 17/09: o valor digitado fica, e a linha diz que
+         o KM mudou e o frete não acompanhou. */
+      const id = await novaLinha();
+      await req(`/api/montagem/${id}`, { metodo: 'PATCH', token: tokens['Logística'],
+        corpo: { freteDestino: destino } });
+      await req(`/api/montagem/${id}`, { metodo: 'PATCH', token: tokens['Logística'],
+        corpo: { freteValorManual: '9.900,00' } });
+      const antes = await ler(id);
+      assert.equal(antes.frete_km_mudou, false, 'recém-digitado não avisa nada');
+
+      await req(`/api/montagem/${id}`, { metodo: 'PATCH', token: tokens['Logística'],
+        corpo: { kmDeslocamento: String(kmDoDestino + 100) } });
+      const depois = await ler(id);
+      assert.equal(Number(depois.frete_valor), 9900, 'o combinado FICA');
+      assert.equal(depois.frete_km_mudou, true,
+        'mas a linha precisa avisar que foi fechado em outra quilometragem');
+    });
+
+    test('apagar o campo desfaz e volta a valer o calculado', async () => {
+      const id = await novaLinha();
+      await req(`/api/montagem/${id}`, { metodo: 'PATCH', token: tokens['Logística'],
+        corpo: { freteDestino: destino } });
+      const calculado = (await ler(id)).frete_valor;
+      await req(`/api/montagem/${id}`, { metodo: 'PATCH', token: tokens['Logística'],
+        corpo: { freteValorManual: '100,00' } });
+      assert.equal(Number((await ler(id)).frete_valor), 100);
+
+      await req(`/api/montagem/${id}`, { metodo: 'PATCH', token: tokens['Logística'],
+        corpo: { freteValorManual: '' } });
+      const m = await ler(id);
+      assert.equal(Number(m.frete_valor), Number(calculado), 'volta ao calculado');
+      assert.equal(m.frete_e_manual, false);
+      assert.equal(m.frete_manual_por, null, 'e o carimbo sai junto');
+    });
+
+    test('zero e negativo não são frete — viram "sem combinado"', async () => {
+      const id = await novaLinha();
+      for (const v of ['0', '0,00', '-500']) {
+        await req(`/api/montagem/${id}`, { metodo: 'PATCH', token: tokens['Logística'],
+          corpo: { freteValorManual: v } });
+        assert.equal((await guardado(id)).frete_valor_manual, null,
+          `"${v}" não podia virar frete combinado`);
+      }
+    });
+
+    test('gravar OUTRO campo não mexe no combinado', async () => {
+      /* A tela grava campo a campo. Quem está salvando o peso não está
+         desfazendo a negociação. */
+      const id = await novaLinha();
+      await req(`/api/montagem/${id}`, { metodo: 'PATCH', token: tokens['Logística'],
+        corpo: { freteValorManual: '3.333,00' } });
+      await req(`/api/montagem/${id}`, { metodo: 'PATCH', token: tokens['Logística'],
+        corpo: { peso: 12345 } });
+      assert.equal(Number((await guardado(id)).frete_valor_manual), 3333,
+        'o combinado sobreviveu à gravação do peso');
+    });
+
+    test('a Portaria não digita frete na montagem', async () => {
+      const id = await novaLinha();
+      const r = await req(`/api/montagem/${id}`, { metodo: 'PATCH', token: tokens['Portaria'],
+        corpo: { freteValorManual: '1,00' } });
+      assert.equal(r.status, 403, r.texto);
+    });
+  });
+});
+
 describe('17. A versão que o /health informa não pode ficar cega (12/09/2026)', () => {
   /* `versao` respondia "desconhecida" em PRODUÇÃO porque o serviço roda da
      cópia publicada pelo rsync (/opt/embarque-suinco), que não tem .git. Com
