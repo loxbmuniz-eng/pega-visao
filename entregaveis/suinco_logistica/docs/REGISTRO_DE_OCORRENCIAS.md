@@ -3888,3 +3888,63 @@ publicado reprova em 9 conferências, incluindo a primeira — que conta quantos
 `type="number"` sobraram na tela, porque enquanto o campo for `type=number`
 **não existe função de leitura que conserte**: o `.value` já chega vazio ou
 truncado do navegador.
+
+---
+
+## #81 — O painel e o servidor discordam sobre que dia é hoje (18/09/2026)
+
+**Como apareceu.** O portão reprovou com três suítes vermelhas de uma vez —
+`test_montagem_acao_empilhada`, `test_montagem_cabe_em_colunas` e
+`test_toque_responde` — todas com o mesmo sintoma: *"nenhuma linha de montagem
+na tela"*. As **mesmas três** tinham passado verdes na bateria de uma hora
+antes, sem nenhuma mudança de código entre as duas.
+
+**A medição que deu a causa**, feita no navegador, no caminho que o teste usa:
+
+```
+o servidor criou a linha em   data_prog: 2026-09-17
+a tela da Montagem estava em  dia:       2026-09-18
+```
+
+Eram 21h31 no Brasil, 00h31 em UTC. A data tinha virado **no meio da
+bateria**.
+
+**Onde exatamente nasce a divergência.** O servidor fixa o dia operacional no
+fuso do pátio, e isso está certo e é deliberado:
+
+```js
+export function hojeISO() {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo', year:'numeric', month:'2-digit', day:'2-digit',
+  }).format(new Date());
+}
+```
+
+O painel **não pergunta ao servidor**: ele calcula `isoDiaLocal(new Date())`,
+que é o relógio do aparelho de quem está olhando. Os dois só concordam porque
+em produção as duas máquinas costumam estar no mesmo fuso.
+
+**Corrigi primeiro o que mediu errado.** Confundir isto com defeito de código
+teria me feito mexer na Montagem para "consertar" algo que estava certo.
+`testes/rodar_tudo.sh` passa a exportar `TZ=America/Sao_Paulo`: a bateria mede
+o fuso em que a operação vive, não o do container. Bateria cujo resultado
+depende da **hora** em que roda é a causa nº 3 vestida de causa nº 4, e custa
+a noite de quem for investigar.
+
+**O que continua de pé, e precisa de decisão do dono.** O descompasso não é do
+teste — é do painel. Quem abrir o painel num aparelho com o fuso errado (um
+celular que voltou do padrão de fábrica, um acesso de fora do país) vê um
+"hoje" que não é o do servidor: a Montagem do Dia aparece vazia, e a carga que
+ele criar cai num dia que ninguém está olhando. Não há evidência de que isso
+já tenha acontecido em produção, e por isso **não** mexi nisso hoje junto de
+uma entrega urgente.
+
+**A correção certa, quando for a hora:** o dia operacional é uma decisão do
+servidor, como qualquer outra. O `/health` já devolve a hora dele; basta
+devolver junto o dia operacional, e o painel obedecer em vez de adivinhar. É a
+mesma regra da casa que vale para a fila — *o servidor é quem manda; a tela
+adianta o resultado*.
+
+**Família.** "Duas fontes para a mesma verdade" (#14, #26, #77). Aqui as duas
+fontes são dois relógios, e a segunda fonte é o aparelho do usuário — que é a
+única das duas que ninguém controla.
