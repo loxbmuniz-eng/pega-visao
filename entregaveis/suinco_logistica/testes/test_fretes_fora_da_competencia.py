@@ -59,8 +59,10 @@ def test_extrato_bate_com_a_regra_do_painel():
     assert E['meta']['total_recorte'] == sum(D['L']['v'])
     assert E['meta']['linhas_recorte'] == len(D['L']['v'])
 
-    # linha a linha, na mesma ordem: valor, embarque, movimento e carga
-    for coluna in ('v', 'de', 'dm', 'nc', 'nd'):
+    # linha a linha, na mesma ordem: valor, embarque, movimento e carga.
+    # 'tr' entra aqui de propósito: o nome da transportadora é mascarado, mas
+    # o ÍNDICE tem de continuar apontando para a mesma empresa do painel.
+    for coluna in ('v', 'de', 'dm', 'nc', 'nd', 'tr', 'it', 'rg', 'fi'):
         assert E['L'][coluna] == [D['L'][coluna][i] for i in fora], \
             'coluna %s do extrato divergiu do painel' % coluna
 
@@ -82,6 +84,21 @@ def test_extrato_publicado_e_o_que_o_gerador_produz():
         'build_fora_da_competencia.py gera — rode o gerador em vez de editar à mão')
 
 
+def test_nenhum_cpf_por_extenso_sai_no_arquivo():
+    """LGPD — este extrato circula fora da Suinco.
+
+    O cadastro do ERP grava o transportador autônomo com o CPF dentro do nome.
+    No painel interno isso passou; num anexo de e-mail, não. O gerador mascara
+    por FORMATO, e este teste é quem cobra o resultado — inclusive de um
+    cadastro novo que ninguém lembrou de conferir.
+    """
+    texto = open(EXTRATO, encoding='utf-8').read()
+    # o logo é base64: uma sequência de dígitos lá dentro não é CPF de ninguém
+    texto = re.sub(r'data:image/[a-z]+;base64,[A-Za-z0-9+/=]+', '', texto)
+    achado = re.search(r'(?<!\d)(\d{3})[.\s]?(\d{3})[.\s]?(\d{3})[-\s]?(\d{2})(?!\d)', texto)
+    assert not achado, 'CPF por extenso no extrato que vai para fora: %s' % achado.group(0)
+
+
 def test_nenhum_lancamento_dentro_da_competencia_vazou():
     E = _dados(EXTRATO)
     L = E['L']
@@ -99,6 +116,7 @@ if __name__ == '__main__':
     for nome, prova in [
         ('o extrato bate com a regra do painel', test_extrato_bate_com_a_regra_do_painel),
         ('o publicado é o que o gerador produz', test_extrato_publicado_e_o_que_o_gerador_produz),
+        ('nenhum CPF por extenso sai no arquivo', test_nenhum_cpf_por_extenso_sai_no_arquivo),
         ('nada de dentro da competência vazou', test_nenhum_lancamento_dentro_da_competencia_vazou),
     ]:
         try:

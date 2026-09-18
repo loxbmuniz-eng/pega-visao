@@ -31,6 +31,38 @@ LOGO = m.group(1)
 
 L = D['L']
 NL = len(L['v'])
+
+
+# ---------------------------------------------------------------------------
+# LGPD — ESTE ARQUIVO SAI DA SUINCO.
+#
+# No cadastro do ERP, o transportador autônomo é gravado com o CPF dentro do
+# NOME ("Fulano de Tal CPF 04625109647"). No painel gerencial, que roda dentro
+# de casa, isso passou. Num extrato que vai por e-mail para a contabilidade e
+# fica anexado em caixa de entrada, CPF por extenso é dado pessoal circulando
+# sem necessidade: quem recebe precisa saber QUEM transportou, não o número do
+# documento dele.
+#
+# A máscara guarda os três dígitos do meio — o suficiente para distinguir dois
+# homônimos, nada perto do suficiente para identificar alguém.
+#
+# A regra é por FORMATO, não por lista de nomes: cadastro novo com CPF novo
+# entra mascarado sozinho, sem ninguém precisar lembrar de vir aqui.
+# ---------------------------------------------------------------------------
+_CPF = re.compile(r'(?<!\d)(\d{3})[.\s]?(\d{3})[.\s]?(\d{3})[-\s]?(\d{2})(?!\d)')
+
+
+def sem_cpf(nome):
+    def mascara(m):
+        return '***.%s.***-**' % m.group(2)
+    limpo = _CPF.sub(mascara, nome)
+    # "Fulano CPF ***.251.***-**" -> "Fulano (CPF ***.251.***-**)"
+    limpo = re.sub(r'\s*CPF\s+(\*{3}\.\d{3}\.\*{3}-\*{2})', r' (CPF \1)', limpo, flags=re.I)
+    limpo = re.sub(r'\s+(\*{3}\.\d{3}\.\*{3}-\*{2})$', r' (CPF \1)', limpo)
+    return re.sub(r'\s{2,}', ' ', limpo).strip()
+
+
+MASCARADOS = [t['d'] for t in D['transportadoras'] if sem_cpf(t['d']) != t['d']]
 BASE = datetime.date(*[int(x) for x in D['meta']['base_iso'].split('-')])
 d_de = lambda i: BASE + datetime.timedelta(days=L['de'][i])
 d_dm = lambda i: BASE + datetime.timedelta(days=L['dm'][i])
@@ -53,7 +85,8 @@ P = {
         'mes_incompleto': D['meta']['mes_incompleto'],
     },
     'itens': D['itens'], 'regionais': D['regionais'],
-    'transportadoras': D['transportadoras'], 'filiais': D['filiais'],
+    'transportadoras': [{'c': t['c'], 'd': sem_cpf(t['d'])} for t in D['transportadoras']],
+    'filiais': D['filiais'],
     'doctos': D['doctos'], 'principais': D['principais'],
     'retrabalho': D['retrabalho'],
     'L': {k: [L[k][i] for i in fora] for k in ('dm','de','fi','do','nd','nc','it','rg','tr','v')},
@@ -68,6 +101,7 @@ CSS = """
   --navy:#33507e; --blue:#5B84C4; --green:#5FB57A;
   --text:#F1EDE3; --muted:#9AA6BC; --focus:#FFD97A;
   --fs:16px;
+  color-scheme:dark;
 }
 *{box-sizing:border-box;margin:0;padding:0}
 html{font-size:var(--fs)}
@@ -128,6 +162,13 @@ main{padding:1.3rem 2rem 0;max-width:1680px;margin:0 auto}
 .filter select,.filter input{background:var(--surface2);border:1px solid var(--line);color:var(--text);
   border-radius:8px;padding:.45rem .6rem;font-size:.85rem;min-height:2.3rem}
 .filter.wide{flex:1;min-width:230px}
+.filter.periodo{min-width:auto}
+.periodo-campos{display:flex;align-items:center;gap:.4rem}
+.periodo-campos input[type=date]{background:var(--surface2);border:1px solid var(--line);color:var(--text);
+  border-radius:8px;padding:.45rem .5rem;font-size:.85rem;min-height:2.3rem;width:9.2rem;max-width:100%}
+.periodo-campos span{color:var(--muted);font-size:.8rem;font-weight:700}
+.faixa-aviso{font-size:.7rem;color:var(--muted);margin-top:.25rem}
+.faixa-aviso.ativo{color:var(--gold);font-weight:700}
 .btn{background:var(--surface2);border:1px solid var(--line);color:var(--text);border-radius:8px;
   padding:.5rem .95rem;font-size:.82rem;font-weight:700;cursor:pointer;min-height:2.3rem;
   transition:transform 140ms cubic-bezier(.23,1,.32,1),border-color 140ms ease}
@@ -147,7 +188,14 @@ svg{display:block;max-width:100%}
 svg text{font-family:"Segoe UI",Roboto,Arial,sans-serif}
 
 .tabela-topo{display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;margin-bottom:.6rem}
+.tabela-topo>*{min-width:0}
 .tabela-topo .cnt{font-size:.8rem;color:var(--muted)}
+.soma-strip{background:var(--surface2);border:1px solid var(--gold-soft);border-radius:10px;
+  padding:.5rem .9rem;font-size:.9rem;font-variant-numeric:tabular-nums;max-width:100%}
+.soma-strip b{color:var(--gold);font-size:1.15rem;font-weight:800}
+tfoot td{position:sticky;bottom:0;background:var(--surface2);border-top:2px solid var(--gold-soft);
+  padding:.55rem .6rem;font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap}
+tfoot td.rot{color:var(--gold);letter-spacing:.06em;text-transform:uppercase;font-size:.7rem}
 .tw{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
 table{border-collapse:collapse;width:100%;font-size:.8rem}
 thead th{position:sticky;top:0;background:var(--surface2);color:var(--gold);text-align:left;
@@ -167,9 +215,16 @@ td.txt{white-space:normal;min-width:170px}
 
 footer{max-width:1680px;margin:1.6rem auto 0;padding:0 2rem;color:var(--muted);font-size:.76rem;line-height:1.6}
 footer strong{color:var(--gold)}
+footer .nota-lgpd{border-left:3px solid var(--line);padding-left:.7rem;margin-top:.5rem}
 
 @media (max-width:760px){
   header{padding:1rem}
+  /* flex:1 tem base 0 — sem a base 100% o campo de busca fica espremido ao
+     lado dos botões em vez de ocupar a linha dele. */
+  .filter,.filter.wide,.filter.periodo{flex:1 1 100%;min-width:0;width:100%}
+  .periodo-campos{flex-wrap:wrap}
+  .periodo-campos input[type=date]{flex:1 1 8rem;width:auto}
+  .btn{flex:1 1 calc(50% - .35rem)}
   main{padding:1rem 1rem 0}
   footer{padding:0 1rem}
   .logo-chip img{height:44px}
@@ -216,8 +271,19 @@ function caso(i){
 }
 const CASO_ROT = {atraso:'Atraso de lançamento', antigo:'Embarque antes de 2026', impossivel:'Data impossível'};
 
-const F = {mesDm:'', caso:'', filial:'', item:'', tra:'', reg:'', busca:''};
+const F = {deIni:'', deFim:'', mesDm:'', caso:'', filial:'', item:'', tra:'', reg:'', busca:''};
+
+/* Data em ISO (aaaa-mm-dd) porque é assim que o <input type=date> entrega o
+   valor, e comparação de texto em ISO é a mesma coisa que comparação de data
+   — sem construir Date nenhum dentro do laço, que roda 3.211 vezes por filtro. */
+const isoDe = i => { const d = dDe(i);
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
+const ISO_DE = Array.from({length:N},(_,i)=>isoDe(i));
 const soma = idx => idx.reduce((a,i)=>a+L.v[i],0);
+/* Algum filtro está de pé? É o que decide se o número mostrado é "o total"
+   ou "a soma do que você pediu" — dizer "total" com filtro ligado é a forma
+   mais rápida de alguém levar um número errado para uma reunião. */
+const filtrado = () => Object.values(F).some(v => v !== '');
 
 function porChave(idx, f){
   const m = new Map();
@@ -229,6 +295,10 @@ function filtrar(){
   const b = F.busca.trim().toLowerCase();
   const out = [];
   for(let i=0;i<N;i++){
+    /* Intervalo de EMBARQUE, e só de embarque. As duas pontas entram: pedir
+       "01/03 até 31/03" tem que trazer o que embarcou dia 31. */
+    if(F.deIni && ISO_DE[i] < F.deIni) continue;
+    if(F.deFim && ISO_DE[i] > F.deFim) continue;
     if(F.mesDm && mesDm(i) !== F.mesDm) continue;
     if(F.caso && caso(i) !== F.caso) continue;
     if(F.filial && D.filiais[L.fi[i]] !== F.filial) continue;
@@ -297,8 +367,11 @@ function barrasH(el, dados, opts){
 /* ---------- KPIs ---------- */
 function kpis(idx){
   const v = soma(idx);
-  $('kValor').textContent = fmtBRL(v);
-  $('kValorSub').innerHTML = `<strong>${fmtPct(v / D.meta.total_recorte)}</strong> dos ${fmtBRL(D.meta.total_recorte)} de frete do recorte`;
+  $('kValor').textContent = fmtBRL2(v);
+  $('kValorLabel').textContent = filtrado() ? 'Valor somado no filtro' : 'Valor fora da competência';
+  $('kValorSub').innerHTML = filtrado()
+    ? `<strong>${fmtPct(v / D.meta.total_fora)}</strong> dos ${fmtBRL(D.meta.total_fora)} fora da competência · ${fmtPct(v / D.meta.total_recorte)} de todo o frete do recorte`
+    : `<strong>${fmtPct(v / D.meta.total_recorte)}</strong> dos ${fmtBRL(D.meta.total_recorte)} de frete do recorte`;
   $('kLanc').textContent = fmtN(idx.length);
   const cargas = new Set(idx.map(i=>L.nc[i])).size;
   const docs = new Set(idx.map(i=>D.doctos[L.do[i]] + L.nd[i])).size;
@@ -406,6 +479,16 @@ function gTabela(idx){
     <td>${esc(r.fil)}</td><td>${esc(r.doc)}</td><td class="num">${esc(r.carga)}</td>
     <td class="txt">${esc(r.item)}</td><td class="txt">${esc(r.reg)}</td><td class="txt">${esc(r.tra)}</td>
     <td class="num">${fmtBRL2(r.v)}</td></tr>`).join('');
+  const somaTudo = rs.reduce((a,r)=>a+r.v, 0);
+  /* A soma é de TODAS as linhas do filtro — não das 500 que estão na tela.
+     Somar só o que está visível é como um painel mente sem querer. */
+  $('tSoma').innerHTML = `Soma do que está filtrado: <b>${fmtBRL2(somaTudo)}</b>` +
+    ` <span style="color:var(--muted)">em ${fmtN(rs.length)} lançamento(s)</span>`;
+  $('tRodape').innerHTML =
+    `<td class="rot" colspan="3">Soma de ${fmtN(rs.length)} lançamento(s)</td>` +
+    `<td colspan="7" style="color:var(--muted);font-weight:400">` +
+      (filtrado() ? 'todas as linhas do filtro, não só as que estão na tela' : 'tudo que está fora da competência') +
+    `</td><td class="num" style="text-align:right;color:var(--gold)">${fmtBRL2(somaTudo)}</td>`;
   $('tCnt').textContent = rs.length > LIMITE
     ? `mostrando ${fmtN(LIMITE)} de ${fmtN(rs.length)} linha(s) — o CSV traz todas`
     : `${fmtN(rs.length)} linha(s)`;
@@ -424,7 +507,10 @@ function baixarCSV(){
   const txt = '﻿' + [cab.map(c=>`"${c}"`).join(';'), ...ULTIMAS.map(linha)].join('\r\n');
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([txt], {type:'text/csv;charset=utf-8'}));
-  a.download = 'Suinco_fretes_fora_da_competencia.csv';
+  const faixa = (F.deIni || F.deFim)
+    ? '_embarque_' + (F.deIni || 'inicio').replace(/-/g,'') + '_a_' + (F.deFim || 'fim').replace(/-/g,'')
+    : '';
+  a.download = 'Suinco_fretes_fora_da_competencia' + faixa + '.csv';
   a.click();
   setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
 }
@@ -455,15 +541,40 @@ function iniciar(){
   opcoes('fTra',  usados(L.tr, D.transportadoras), 'Todas');
   opcoes('fReg',  usados(L.rg, D.regionais), 'Todas');
 
-  const liga = (id, campo) => $(id).addEventListener('change', e=>{ F[campo] = e.target.value; render(); });
+  /* Os limites vêm do próprio dado: o embarque mais antigo e o mais novo que
+     existem nesta lista. Assim ninguém escolhe um intervalo que não existe. */
+  const MIN = ISO_DE.reduce((a,b)=>a<b?a:b), MAX = ISO_DE.reduce((a,b)=>a>b?a:b);
+  const brISO = s => s.split('-').reverse().join('/');
+  ['fDeIni','fDeFim'].forEach(id=>{ $(id).min = MIN; $(id).max = MAX; });
+  function avisoFaixa(){
+    const el = $('faixaAviso');
+    const ativo = F.deIni || F.deFim;
+    el.classList.toggle('ativo', !!ativo);
+    if(!ativo){ el.textContent = `embarques de ${brISO(MIN)} a ${brISO(MAX)}`; return; }
+    el.textContent = 'embarque ' + (F.deIni ? 'de ' + brISO(F.deIni) + ' ' : 'até ') +
+      (F.deIni && F.deFim ? 'até ' + brISO(F.deFim) : (F.deFim && !F.deIni ? brISO(F.deFim) : 'em diante'));
+  }
+  const ligaData = (id, campo) => $(id).addEventListener('change', e=>{
+    F[campo] = e.target.value;
+    /* Intervalo invertido não é erro do usuário para punir com lista vazia:
+       a outra ponta acompanha, e ele vê o que pediu. */
+    if(F.deIni && F.deFim && F.deIni > F.deFim){
+      if(campo === 'deIni'){ F.deFim = F.deIni; $('fDeFim').value = F.deFim; }
+      else { F.deIni = F.deFim; $('fDeIni').value = F.deIni; }
+    }
+    LIMITE = 500; avisoFaixa(); render();
+  });
+  ligaData('fDeIni','deIni'); ligaData('fDeFim','deFim');
+
+  const liga = (id, campo) => $(id).addEventListener('change', e=>{ F[campo] = e.target.value; LIMITE = 500; render(); });
   liga('fMes','mesDm'); liga('fCaso','caso'); liga('fFilial','filial');
   liga('fItem','item'); liga('fTra','tra'); liga('fReg','reg');
   let t; $('fBusca').addEventListener('input', e=>{
     clearTimeout(t); t = setTimeout(()=>{ F.busca = e.target.value; LIMITE = 500; render(); }, 220); });
   $('btLimpar').addEventListener('click', ()=>{
     Object.keys(F).forEach(k=>F[k]='');
-    ['fMes','fCaso','fFilial','fItem','fTra','fReg','fBusca'].forEach(id=>$(id).value='');
-    LIMITE = 500; render();
+    ['fDeIni','fDeFim','fMes','fCaso','fFilial','fItem','fTra','fReg','fBusca'].forEach(id=>$(id).value='');
+    LIMITE = 500; avisoFaixa(); render();
   });
   $('btCSV').addEventListener('click', baixarCSV);
   $('tMais').addEventListener('click', ()=>{ LIMITE += 500; render(); });
@@ -480,6 +591,7 @@ function iniciar(){
   $('fontPlus').addEventListener('click', ()=>setFs(fs+1));
   $('fontReset').addEventListener('click', ()=>setFs(16));
 
+  avisoFaixa();
   let r; addEventListener('resize', ()=>{ clearTimeout(r); r = setTimeout(render, 180); });
   render();
 }
@@ -535,7 +647,7 @@ HTML = """<!DOCTYPE html>
 
 <section class="kpis">
   <div class="card kpi wine">
-    <div class="k-label">Valor fora da competência</div>
+    <div class="k-label" id="kValorLabel">Valor fora da competência</div>
     <div class="k-value" id="kValor">–</div>
     <div class="k-sub" id="kValorSub">–</div>
   </div>
@@ -557,6 +669,15 @@ HTML = """<!DOCTYPE html>
 </section>
 
 <section class="filters" id="filters">
+  <div class="filter periodo">
+    <label for="fDeIni">Data de embarque — de … até</label>
+    <div class="periodo-campos">
+      <input id="fDeIni" type="date" aria-label="Embarque a partir de">
+      <span>até</span>
+      <input id="fDeFim" type="date" aria-label="Embarque até">
+    </div>
+    <div class="faixa-aviso" id="faixaAviso">–</div>
+  </div>
   <div class="filter"><label for="fMes">Mês do lançamento</label><select id="fMes"></select></div>
   <div class="filter"><label for="fCaso">Caso</label><select id="fCaso"></select></div>
   <div class="filter"><label for="fFilial">Filial</label><select id="fFilial"></select></div>
@@ -611,12 +732,16 @@ HTML = """<!DOCTYPE html>
       <h3>Lançamento por lançamento</h3>
       <div class="hint">clique no cabeçalho para ordenar · o CSV sai com <strong>todas</strong> as linhas do filtro atual</div>
     </div>
+    <div class="soma-strip" id="tSoma">–</div>
+  </div>
+  <div class="tabela-topo">
     <div class="cnt" id="tCnt">–</div>
   </div>
   <div class="tw">
     <table>
       <thead><tr id="tCabec"></tr></thead>
       <tbody id="tCorpo"></tbody>
+      <tfoot><tr id="tRodape"></tr></tfoot>
     </table>
     <div class="mais"><button class="btn" id="tMais">Mostrar mais</button></div>
   </div>
@@ -631,6 +756,7 @@ HTML = """<!DOCTYPE html>
   <p>Arquivo gerado a partir do <em>Painel de Despesas de Frete por Item</em> da Suinco. Funciona sem internet:
      abra em qualquer navegador. Nenhum valor foi recalculado, arredondado ou estimado aqui — os números são
      os mesmos do painel, apenas recortados pela regra acima.</p>
+  <p class="nota-lgpd">__LGPD__</p>
   <p>Gerado em __HOJE__ · Suinco Logística</p>
 </footer>
 
@@ -651,7 +777,19 @@ saida = (HTML
     .replace('__VF__', 'R$ ' + '{:,.2f}'.format(total_fora/100).replace(',', 'X').replace('.', ',').replace('X', '.'))
     .replace('__PCT__', ('%.2f' % (100*pct)).replace('.', ',') + '%')
     .replace('__HOJE__', datetime.date.today().strftime('%d/%m/%Y'))
+    .replace('__LGPD__',
+             ('Proteção de dados: o cadastro do ERP grava o transportador autônomo com o CPF dentro do nome. '
+              'Neste extrato, que circula fora da empresa, %d nome(s) saem com o CPF mascarado '
+              '(***.000.***-**) — o transportador continua identificado pelo nome, o número do documento não '
+              'viaja junto.' % len(MASCARADOS)) if MASCARADOS else
+             'Proteção de dados: nenhum CPF no conjunto — nada a mascarar.')
     .replace('__JS__', JS.replace('__DADOS__', dados)))
 
 open(SAIDA, 'w', encoding='utf-8').write(saida)
 print('OK', SAIDA, len(saida), 'bytes ·', len(fora), 'linhas · R$ %.2f' % (total_fora/100), '· %.2f%%' % (100*pct))
+print('CPF mascarado em %d transportadora(s):' % len(MASCARADOS), '; '.join(sem_cpf(n) for n in MASCARADOS) or '—')
+
+# Cinto e suspensório: o arquivo não sai daqui com CPF por extenso.
+_sobrou = _CPF.search(re.sub(r'data:image/[a-z]+;base64,[A-Za-z0-9+/=]+', '', saida))
+if _sobrou:
+    raise SystemExit('ABORTADO: CPF por extenso no arquivo gerado -> %s' % _sobrou.group(0))
