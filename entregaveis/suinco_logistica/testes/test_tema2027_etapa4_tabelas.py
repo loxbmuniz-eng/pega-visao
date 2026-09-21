@@ -224,13 +224,68 @@ async def medir_barra_mobile(pg, api, arquivo_html):
     }""")
 
 
-def comparar_ths(antes, depois, tolerancia=2):
+# ---------------------------------------------------------------------
+# GEOMETRIA QUE MUDOU DE PROPÓSITO — E POR QUE ISSO PRECISA SER DECLARADO.
+#
+# O "antes" desta suíte é o index.html PUBLICADO (veja _extrair_publicado).
+# Isso a torna uma guarda de regressão visual contra a operação: nenhuma
+# coluna se move sem alguém mandar.
+#
+# Só que uma guarda ancorada no que está no ar tem um buraco: quando a
+# mudança é intencional, ela reprova, e depois da publicação ela passa a
+# concordar com a mudança sozinha — inclusive se a mudança tiver sido um
+# defeito. Guarda que se auto-atualiza não guarda nada.
+#
+# Por isso a mudança intencional entra AQUI, com número, data e motivo. O
+# efeito é o inverso de afrouxar: a coluna declarada deixa de ser comparada
+# com o publicado e passa a ser comparada com o VALOR DECIDIDO. Se eu
+# errar a conta, reprova do mesmo jeito; se alguém mexer sem declarar,
+# reprova; e depois de publicado o valor continua sendo conferido contra a
+# decisão, não contra "o que quer que esteja no ar".
+#
+# 21/09/2026 — a Montagem do Dia ganhou o campo de Frete editável (pedido
+# do dono: "preciso conseguir editar quando eu precisar"). A coluna Frete
+# deixou de ser texto e virou caixa de digitação: em 60px o valor
+# "18.306,20" era cortado dentro do campo. Os 24px vieram das colunas com
+# folga medida, e duas colunas GANHARAM largura porque o rótulo de uma
+# palavra só não quebra, corta: "Ganchos" exige 59px e "Entregas" 62px sob
+# o Tema 2027 (caixa alta com espaçamento entre letras). Medido a 1440px,
+# no navegador, com o tema aplicado.
+GEOMETRIA_DECIDIDA = {
+    'programacao': {
+        # rótulo:            (x,    w)   medidos a 1440px no build novo
+        'Veículo':          (389,  96),
+        'Motorista':        (485,  92),
+        'Rota':             (577, 103),
+        'Peso (kg)':        (681,  78),
+        'Palet.':           (758,  66),
+        'Tipo de Operação': (824,  99),
+        'Ganchos':          (923,  71),
+        'Entregas':         (993,  75),
+        'Destino':          (1068, 82),
+        'KM':               (1151, 59),
+        'Frete':            (1209, 99),
+        'Ação':             (1308, 99),
+    },
+}
+
+
+def comparar_ths(antes, depois, tolerancia=2, aba=None):
     problemas = []
+    decididas = GEOMETRIA_DECIDIDA.get(aba or '', {})
     if len(antes) != len(depois):
         problemas.append(f'número de colunas mudou: {len(antes)} -> {len(depois)}')
         return problemas
     for a, d in zip(antes, depois):
-        if abs(a['x'] - d['x']) > tolerancia or abs(a['w'] - d['w']) > tolerancia:
+        alvo = decididas.get(d['txt'])
+        if alvo is not None:
+            # Comparada com a DECISÃO, não com o publicado.
+            if abs(d['x'] - alvo[0]) > tolerancia or abs(d['w'] - alvo[1]) > tolerancia:
+                problemas.append(
+                    f"coluna {a['i']} \"{d['txt']}\": mudou de propósito, mas não bateu com o "
+                    f"decidido — x {d['x']} (esperado {alvo[0]}) w {d['w']} (esperado {alvo[1]}), "
+                    f"tolerância ±{tolerancia}px")
+        elif abs(a['x'] - d['x']) > tolerancia or abs(a['w'] - d['w']) > tolerancia:
             problemas.append(
                 f"coluna {a['i']} \"{a['txt']}\": x {a['x']}->{d['x']} "
                 f"w {a['w']}->{d['w']} (tolerância ±{tolerancia}px)")
@@ -344,7 +399,7 @@ async def main():
 
         # 2 e 3 — x/width/linhas de cada th da Torre e da Programação
         for aba in ['torre', 'programacao']:
-            problemas = comparar_ths(antes[tema][aba]['ths'], depois[tema][aba]['ths'])
+            problemas = comparar_ths(antes[tema][aba]['ths'], depois[tema][aba]['ths'], aba=aba)
             ck(f'{tema}/{aba}: x/width/linhas de cada th dentro da tolerância e sem corte',
                not problemas, '; '.join(problemas))
 

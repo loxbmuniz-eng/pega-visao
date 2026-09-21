@@ -5660,20 +5660,45 @@ tr.fila-alvo > td{ box-shadow:inset 0 3px 0 0 var(--gold) }
   /* A LARGURA DE CADA COLUNA É A DO QUE ELA GUARDA — não a do maior
      conteúdo imaginável. Cada número aqui saiu da medição acima. */
   #mont-tabela > thead > tr > th:nth-child(1){  width:60px  }  /* Seq.       alça + 3 dígitos */
-  #mont-tabela > thead > tr > th:nth-child(2){  width:68px  }  /* Nº Carga   6 dígitos */
-  #mont-tabela > thead > tr > th:nth-child(3){  width:86px  }  /* Veículo    placa + tipo */
-  #mont-tabela > thead > tr > th:nth-child(4){  width:82px  }  /* Motorista  nome, corta */
-  #mont-tabela > thead > tr > th:nth-child(5){  width:98px }  /* Rota       seletor */
-  #mont-tabela > thead > tr > th:nth-child(6){  width:68px  }  /* Peso (kg)  6 dígitos */
-  #mont-tabela > thead > tr > th:nth-child(7){  width:70px  }  /* Palet.     Não/Sim */
-  #mont-tabela > thead > tr > th:nth-child(8){  width:86px  }  /* Operação   seletor */
-  #mont-tabela > thead > tr > th:nth-child(9){  width:50px  }  /* Ganchos    2 dígitos */
-  #mont-tabela > thead > tr > th:nth-child(10){ width:52px  }  /* Entregas   2 dígitos */
-  #mont-tabela > thead > tr > th:nth-child(11){ width:74px  }  /* Destino    cidade/UF */
-  #mont-tabela > thead > tr > th:nth-child(12){ width:56px  }  /* KM         4 dígitos */
-  #mont-tabela > thead > tr > th:nth-child(13){ width:60px  }  /* Frete      R$ */
-  #mont-tabela > thead > tr > th:nth-child(14){ width:76px  }  /* Ação       ícones */
-  /* soma: 990 px de coluna em 1.002 px de área no monitor de 1280.
+  #mont-tabela > thead > tr > th:nth-child(2){  width:66px  }  /* Nº Carga   6 dígitos */
+  #mont-tabela > thead > tr > th:nth-child(3){  width:82px  }  /* Veículo    placa + tipo */
+  #mont-tabela > thead > tr > th:nth-child(4){  width:78px  }  /* Motorista  nome, corta */
+  #mont-tabela > thead > tr > th:nth-child(5){  width:88px  }  /* Rota       seletor */
+  #mont-tabela > thead > tr > th:nth-child(6){  width:66px  }  /* Peso (kg)  6 dígitos */
+  #mont-tabela > thead > tr > th:nth-child(7){  width:56px  }  /* Palet.     Não/Sim */
+  #mont-tabela > thead > tr > th:nth-child(8){  width:84px  }  /* Operação   seletor */
+  #mont-tabela > thead > tr > th:nth-child(9){  width:60px  }  /* Ganchos    rótulo exige 59 */
+  #mont-tabela > thead > tr > th:nth-child(10){ width:64px  }  /* Entregas   rótulo exige 62 */
+  #mont-tabela > thead > tr > th:nth-child(11){ width:70px  }  /* Destino    cidade/UF */
+  #mont-tabela > thead > tr > th:nth-child(12){ width:50px  }  /* KM         4 dígitos */
+  /* O FRETE VIROU CAMPO (18/09/2026) e precisa de 84px: em 60 o valor
+     "18.306,20" era cortado DENTRO da caixa editável, e número de dinheiro
+     pela metade num campo é convite a gravar errado.
+
+     DE ONDE SAEM OS 24px, corrigido em 21/09 depois de MEDIR — a primeira
+     versão tirou de Palet. e Entregas e reprovou o portão em duas suítes.
+     Duas coisas eu tinha ignorado:
+
+     1. RÓTULO DE UMA PALAVRA SÓ NÃO QUEBRA, ELE CORTA. Sob o Tema 2027 o
+        `th` é caixa alta com espaçamento entre letras, então "Entregas"
+        exige 62px e "Ganchos" 59px — medidos no navegador, com o tema. Eu
+        tinha deixado 46 e 50. "Tipo de Operação" e "Peso (kg)" têm espaço
+        no meio e quebram em duas linhas sem cortar; estes dois, não.
+     2. A COLUNA AÇÃO TEM UM LIMIAR, e ele não perdoa 1px. Em 77px o botão
+        "Colocar placa" quebra em duas linhas e a LINHA INTEIRA passa de
+        80 para 94px; em 80px cabe. Numa sexta de 42 linhas, isso é 588px
+        de rolagem a mais. Ficou em 84px, com 4px de folga para fonte de
+        sistema diferente.
+
+     Os 24px agora vêm de onde havia folga de verdade, medida rótulo a
+     rótulo: Rota (-11), Veículo (-5), Motorista (-5), KM (-6), Destino
+     (-5), Palet. (-6), Nº Carga (-3), Peso (-3), Operação (-3). Nenhuma
+     ficou abaixo do próprio rótulo. */
+  #mont-tabela > thead > tr > th:nth-child(13){ width:84px  }  /* Frete      R$ editável */
+  #mont-tabela > thead > tr > th:nth-child(14){ width:84px  }  /* Ação       limiar 80 + folga */
+  /* soma: 992 px de coluna em 1.006 px de área no monitor de 1280 — a
+     folga de 14px é de propósito: é ela que segura o limiar da Ação
+     quando o navegador redistribui o que sobra.
      MEDIDO depois de aplicar: a primeira tentativa somou 1.016 e ainda
      faltavam 14 px. Rota, Veículo, Motorista, Operação e Destino cederam
      de 4 a 8 px cada — nenhuma perdeu conteúdo, todas cortam com
@@ -6398,3 +6423,19 @@ tr.linha-nova{
   .dev-carimbo-novo .dev-visto path{ stroke-dashoffset:0 !important }
   [data-segurar]::after{ display:none !important }
 }
+
+/* O FRETE EDITÁVEL NA MONTAGEM (18/09/2026) — ver freteMontagemHtml.
+   A célula carrega três informações e elas têm pesos diferentes: o valor
+   que vale (campo), de onde ele veio (✎) e o que a tabela diria (cinza,
+   menor). Tudo do mesmo tamanho faria a pessoa ler o número errado na
+   pressa, e aqui o número errado é dinheiro pago a mais. */
+#mont-tabela .frete-input{ text-align:right; font-variant-numeric:tabular-nums }
+/* ✎ e ⚠ ficam SOBRE a célula, não ao lado: a coluna tem 60px medidos e
+   qualquer coisa ao lado do campo empurraria o número para fora. */
+#mont-tabela .c-frete{ position:relative }
+#mont-tabela .frete-marca,
+#mont-tabela .frete-aviso{
+  position:absolute; top:1px; font-size:10px; line-height:1; pointer-events:auto;
+}
+#mont-tabela .frete-marca{ left:2px; opacity:.6 }
+#mont-tabela .frete-aviso{ left:12px; color:var(--aviso, #d08700); font-weight:700 }

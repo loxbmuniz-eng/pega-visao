@@ -43,6 +43,10 @@
 -- O QUE QUEBRA SEM ESTA MIGRAÇÃO: o campo de frete na Montagem recusa a
 -- gravação (coluna inexistente) e a linha continua só de leitura. Nada
 -- existente para de funcionar — as colunas são todas opcionais.
+-- SEM ESTA MIGRAÇÃO: o campo de frete na Montagem do Dia recusa a gravação
+-- (coluna frete_valor_manual inexistente) e o valor continua só de leitura —
+-- quem negocia frete por telefone não tem onde guardar o combinado. Nada
+-- existente para de funcionar: as quatro colunas são opcionais.
 -- =====================================================================
 
 ALTER TABLE programacao_montagem
