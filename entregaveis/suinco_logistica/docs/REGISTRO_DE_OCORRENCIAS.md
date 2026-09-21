@@ -3970,3 +3970,73 @@ fazer deste ambiente — a rede de produção é bloqueada daqui.
 
 **Família.** "Duas fontes para a mesma verdade" (#14, #26, #77). Aqui são
 três, e uma delas é o aparelho do usuário — a única que ninguém controla.
+
+---
+
+## #82 — O KM do cadastro parecia preenchido e não estava (21/09/2026)
+
+**Relato do dono**, na Montagem do Dia:
+
+> "o campo frete ainda nao ta editavel e o km quando é colocado nao calcula
+> direto no campo frete"
+
+São dois pedidos numa frase, e o primeiro instinto foi tratá-los como um só
+defeito. São dois, com causas diferentes.
+
+**A medição, feita ANTES de mexer em qualquer linha:**
+
+```
+escolher o destino  ->  km_destino       = 1570
+                        km_deslocamento  = NULO
+                        frete            = nada, "Sem KM de deslocamento"
+digitar 1570 à mão  ->  frete            = R$ 18.306,20
+```
+
+**A conta nunca esteve quebrada.** `dominio/frete.js` multiplicava km × tarifa
+certinho, e o resultado com 1570 digitado à mão prova isso. O que faltava era
+o KM **chegar** na conta: o cadastro de destinos resolvia `km_destino`, e quem
+a conta multiplica é `km_deslocamento`. Duas colunas, uma preenchida e a outra
+não, e nada ligando uma à outra.
+
+**Por que ninguém viu antes, e é aqui que está a lição.** Na tela, o número do
+cadastro aparecia como **dica cinza dentro do campo vazio** (`placeholder`).
+Para quem olha, campo com número dentro é campo preenchido. Para o servidor,
+era `NULL`.
+
+> **Dica cinza não é valor.** Um `placeholder` que mostra um número real ensina
+> a tela a mentir: ele tem a forma do dado sem ser o dado. Se o número existe e
+> vale, ele entra no campo como valor; se não vale, não se mostra número nenhum.
+
+**O segundo pedido — frete editável — não era defeito, era ausência.** O valor
+do frete nunca foi gravado na Montagem: saía calculado na leitura, de
+propósito, porque "valor guardado em rascunho é valor que envelhece calado". A
+regra da casa continua valendo; o que mudou é que agora existe **uma coluna
+própria para o combinado à mão**, e o calculado continua calculável ao lado.
+Não se escolheu uma das duas verdades — marcou-se qual é qual (migração 054).
+
+**A decisão do dono que virou coluna.** Perguntado o que fazer quando alguém
+muda o KM DEPOIS de o valor ter sido digitado, ele escolheu: o valor digitado
+FICA, e a linha avisa que o KM mudou e o frete não acompanhou. É para isso que
+existe `frete_manual_km` — sem guardar em que KM o combinado foi feito, não há
+como saber que ele ficou para trás.
+
+**O que trava:** bloco 45 de `backend/testes/api.test.js`, 13 testes. Sete
+deles reprovam contra o servidor publicado em 05dbb0b.
+
+**Uma armadilha que este bloco pagou duas vezes.** A primeira versão criava uma
+linha de montagem por teste — onze linhas, duas requisições cada. Sozinho
+passava; na bateria inteira estourava o limite de requisições por minuto (429)
+e derrubava nove testes sem defeito nenhum. Foi a segunda vez seguida: o bloco
+44 tinha caído nisso na véspera.
+
+A correção definitiva **não** foi encolher o teste mais uma vez. Foi reconhecer
+que o limite de 300/janela é proteção de PRODUÇÃO contra tráfego real, e que
+uma bateria — um processo martelando um servidor — não é tráfego real. O
+`npm run teste` agora roda com `RATE_LIMIT=20000`. Isso não apaga cobertura: o
+único teste que mede o limitador de verdade sobe um servidor **isolado** com
+`porJanela = 3` e restaura o valor no `finally`, sem ler a variável de
+ambiente.
+
+**Como reconhecer a família, se voltar:** vários testes de um mesmo bloco
+reprovando em sequência, com 429 na resposta, e o bloco passando verde quando
+rodado sozinho. É a causa nº 3 — contaminação de ambiente —, nunca a nº 4.

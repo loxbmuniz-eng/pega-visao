@@ -8,6 +8,17 @@
    Rode com:  npm run teste
    Exige as variáveis do .env apontando para um banco DESCARTÁVEL. */
 
+/* O LIMITE DE REQUISIÇÕES FICA AFROUXADO NESTA BATERIA — DE PROPÓSITO.
+   `npm run teste` roda com RATE_LIMIT=20000 (veja package.json). O limite
+   de 300/janela é proteção de PRODUÇÃO contra tráfego real; a bateria é um
+   processo só martelando um servidor só, o que não é tráfego real. Com o
+   valor de produção, blocos inteiros tomavam 429 e reprovavam SEM defeito
+   nenhum — aconteceu no bloco 44 e de novo no 45, e é a causa nº 3 das
+   quatro do vermelho: contaminação de ambiente.
+   Isso não apaga cobertura: o único teste que mede o limitador de verdade
+   ("dois operadores no MESMO IP não dividem o orçamento") sobe um servidor
+   ISOLADO com porJanela = 3 e restaura o valor no finally. Ele não lê a
+   variável de ambiente, então continua medindo o que sempre mediu. */
 import { test, before, after, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import bcrypt from 'bcryptjs';
