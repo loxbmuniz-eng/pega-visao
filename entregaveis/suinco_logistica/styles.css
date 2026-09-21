@@ -2874,6 +2874,23 @@ input,select,textarea{border-radius:5px}
   display:block; font-size:.9em; font-weight:600; opacity:.85;
   word-break:normal; overflow-wrap:normal; hyphens:none;
 }
+/* A CIDADE DA CARGA, NA FOLHA E NA TELA (21/09/2026).
+
+   Mais forte que o apoio (`rota-op`) e mais fraca que a rota: é a segunda
+   coisa que o olho pega na célula, e é o que o motorista procura. Na folha
+   ela não pode quebrar no meio da palavra — "Parac atu" numa folha de pátio
+   parece erro de digitação. */
+#print-operacional .c-rota .rota-destino{
+  display:block; font-size:.95em; font-weight:700; opacity:1;
+  word-break:normal; overflow-wrap:normal; hyphens:none;
+}
+/* Na Torre a mesma informação, no tom de apoio do tema: a linha já é densa
+   e a rota continua sendo o que identifica a carga para quem programa. */
+#torre-tabela .rota-destino{
+  display:block; font-size:.86em; font-weight:600;
+  color:var(--texto-2, #9AA6BC); white-space:nowrap;
+  overflow:hidden; text-overflow:ellipsis; max-width:100%;
+}
 #print-operacional .c-seq,
 #print-operacional .c-palet,
 #print-operacional .c-entregas,
