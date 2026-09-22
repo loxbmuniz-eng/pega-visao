@@ -10953,11 +10953,29 @@ async function garantirCatalogoDeDestinos(){
     const r = await SuincoSharePoint.modeloSemana.listar();
     registrarDestinosDoModelo((r && r.modelo) || []);
     _destinosCarregados = true;
+    /* Chegou depois do desenho: repovoa só o seletor de destino. Não
+       redesenha a Montagem — quem está preenchendo uma linha perderia o
+       campo em foco, e o catálogo não muda linha nenhuma. */
+    popularDestinoExtraUI();
   } catch(e){ /* cadastro da rota ainda responde sozinho */ }
 }
 
 async function carregarMontagemUI(){
-  await garantirCatalogoDeDestinos();
+  /* O CATÁLOGO NÃO SEGURA O DESENHO DA TELA (corrigido em 22/09/2026).
+
+     A primeira versão disto era `await garantirCatalogoDeDestinos()` aqui,
+     nesta linha, antes de qualquer coisa aparecer. O portão reprovou
+     test_sequencia_no_celular com "sem linha", e a bateria estava certa: eu
+     tinha posto uma chamada de REDE na frente do desenho da Montagem.
+
+     No celular do pátio, com sinal ruim, isso significa a tela em branco
+     esperando um dado que ela não precisa para desenhar linha nenhuma — o
+     catálogo serve só ao seletor de destino da linha extra.
+
+     Agora ele carrega ATRÁS: a tela desenha na hora e o seletor melhora
+     quando o modelo chega. Antes de chegar, `destinosDaRota()` ainda
+     responde pelo cadastro da rota, então o seletor nunca está vazio. */
+  garantirCatalogoDeDestinos();
   const card = document.getElementById('card-montagem');
   if(!card) return;
   /* Só quem programa monta. Os demais setores continuam vendo a Fila e a
