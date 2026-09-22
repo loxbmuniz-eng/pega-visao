@@ -155,6 +155,35 @@ describe('SEGURANÇA 3 — autenticação e privilégio', () => {
   });
 });
 
+describe('SEGURANÇA 3b — o instalador não cria usuário de banco privilegiado', () => {
+  /* CORREÇÃO DE UM ACHADO MEU, 22/09/2026.
+
+     Eu reportei ao dono que "a API fala com o Postgres como superusuário",
+     medido neste container de desenvolvimento. Ele foi ao servidor conferir e
+     a resposta foi `f`: em PRODUÇÃO o usuário nunca foi superusuário. Eu
+     extrapolei do ambiente descartável para a produção sem confirmar, e ele
+     quase rodou um ALTER ROLE que não precisava.
+
+     A razão está no instalar.sh: ele cria o papel com `CREATE ROLE $DB_USER
+     LOGIN PASSWORD`, e nada mais. A produção está certa POR CONSTRUÇÃO — e o
+     superusuário daqui é sujeira local.
+
+     O que se pode travar, então, não é o estado do banco de produção (este
+     teste não o alcança, e teste que mede o ambiente errado ensina a ignorar
+     vermelho): é o INSTALADOR, que é quem constrói a produção. Se alguém
+     acrescentar SUPERUSER ali, a próxima instalação nasce errada e esta
+     suíte reprova antes. */
+  test('o instalar.sh cria o papel do banco SEM privilégio elevado', () => {
+    const txt = fs.readFileSync(path.join(BACKEND, 'instalar.sh'), 'utf8');
+    const criacao = txt.split('\n').filter((l) => /CREATE ROLE|CREATE USER|createuser/.test(l));
+    assert.ok(criacao.length > 0, 'não achei a criação do papel no instalar.sh');
+    for (const linha of criacao) {
+      assert.ok(!/SUPERUSER|CREATEDB|CREATEROLE|BYPASSRLS|--superuser/i.test(linha),
+        `o instalador daria privilégio elevado ao banco:\n${linha.trim()}`);
+    }
+  });
+});
+
 describe('SEGURANÇA 4 — a resposta não entrega mais do que deve', () => {
   test('o hash da senha nunca entra numa resposta', () => {
     const achados = [];

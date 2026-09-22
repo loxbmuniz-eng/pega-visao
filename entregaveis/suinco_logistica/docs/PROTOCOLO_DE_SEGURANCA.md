@@ -39,64 +39,83 @@ impressão.
 
 ---
 
-## O achado mais grave, e ele não estava na lista
+## Um achado meu que estava ERRADO — e o registro fica
 
-**A API fala com o Postgres como SUPERUSUÁRIO.**
+Eu reportei ao dono: *"a API fala com o Postgres como superusuário"*. Ele foi
+ao servidor conferir, em 22/09/2026, e a resposta foi:
 
 ```
-role  suinco   superuser = true   dono das 28 tabelas
+SELECT rolsuper FROM pg_roles WHERE rolname='suinco'   ->  f
+SELECT count(*) FROM fact_viagens                      ->  933
 ```
 
-Duas consequências:
+**Em produção o usuário nunca foi superusuário.** Eu medi neste container de
+desenvolvimento, onde ele é, e extrapolei para a produção sem confirmar. O
+dono quase rodou um `ALTER ROLE` que não precisava.
 
-1. **RLS ali seria decorativa.** Dono de tabela e superusuário passam por cima
-   de política de linha. Ligar RLS sem trocar o usuário dá trabalho e não
-   protege nada — pior, dá a sensação de que protege.
-2. **Se a string de conexão vazar, o atacante leva o cluster**, não só os
-   dados do painel: pode criar usuário, ler qualquer banco, escrever arquivo.
+A razão está no `instalar.sh`, linha 114:
 
-**A aplicação não precisa disso.** Conferido: as migrações só fazem
-`CREATE/ALTER TABLE`, `INDEX`, `TRIGGER` e `FUNCTION` nos próprios objetos —
-nenhuma `CREATE EXTENSION`, nenhum `COPY FROM` de arquivo, nenhum `ALTER
-SYSTEM`. Tirar o superusuário não muda comportamento nenhum.
+```bash
+psql -qc "CREATE ROLE $DB_USER LOGIN PASSWORD '$DB_PASS'"
+```
+
+`LOGIN` e senha, nada mais. **A produção está certa por construção**, e o
+superusuário deste container é sujeira local — ambiente descartável, não
+importa.
+
+**O que ficou travado por teste:** não o estado do banco de produção (esta
+suíte não o alcança, e teste que mede o ambiente errado ensina a ignorar
+vermelho) — e sim o **instalador**, que é quem constrói a produção. Se alguém
+acrescentar `SUPERUSER`, `CREATEROLE` ou `BYPASSRLS` ali, a bateria reprova
+antes de a próxima instalação nascer errada.
+
+**Lição para mim, escrita onde não se perde:** achado medido em ambiente de
+desenvolvimento é hipótese sobre produção, não fato. Só o servidor responde
+sobre o servidor.
 
 ---
+
+## Por que RLS aqui não é um interruptor
+
+Com o superusuário fora da conta, sobra o que realmente faz RLS ser ignorada:
+**`suinco` é DONO das tabelas** — ele as criou rodando as migrações. Dono de
+tabela passa por cima de política de linha, a não ser com `FORCE ROW LEVEL
+SECURITY`.
+
+E aí vem a pergunta que ninguém faz antes de marcar o item: **RLS protegeria
+de quê, aqui?**
+
+No Supabase, onde essa lista nasceu, o navegador fala direto com o banco: um
+usuário só de banco para milhares de pessoas, e a política separa os dados de
+cada uma pelo token. **Aqui não existe essa situação** — o navegador nunca
+alcança o Postgres, só a API, e é a API que decide setor e filial.
+
+Para RLS significar algo, a sessão do banco teria de carregar quem é o
+operador (`SET LOCAL app.setor = ...` em cada requisição) e as políticas
+lerem isso. É defesa em profundidade de verdade: se uma injeção de SQL
+escapasse, ela limitaria o estrago. Mas:
+
+- todo o SQL é parametrizado, e isso agora é **travado por teste** (nenhuma
+  expressão interpolada menciona `req`);
+- é mudança de arquitetura de acesso, não configuração.
+
+**Recomendação honesta:** RLS aqui é projeto próprio, com janela e teste, e
+está atrás de outras coisas na fila. Marcar o item hoje ligando RLS numa
+tabela cujo dono a ignora seria relatório verde protegendo nada — o oposto de
+alto nível.
 
 ## Etapa 2 — o que depende do servidor
 
 Nada abaixo foi aplicado. Cada item tem o comando, a conferência e a volta
-atrás. **Ordem recomendada: 1 → 2 → 3.** O item 1 é o de maior retorno.
+atrás. **Ordem recomendada: 1 → 2.**
 
-### 1. Tirar o superusuário da aplicação
+### 1. ~~Tirar o superusuário da aplicação~~ — JÁ ESTAVA CERTO
 
-Risco à operação: **nenhum**, se a conferência passar. É um atributo do
-usuário, não uma mudança de esquema, e a aplicação não usa privilégio de
-superusuário em lugar nenhum.
+Conferido em produção em 22/09/2026: `rolsuper = f`. O `ALTER ROLE ...
+NOSUPERUSER` foi rodado de todo modo (é idempotente) e a leitura seguiu
+respondendo — 933 cargas. Nada a fazer aqui.
 
-```bash
-ssh root@2.25.95.253
-su - postgres -c "psql -c 'ALTER ROLE suinco NOSUPERUSER;'"
-
-# CONFERIR na hora (tem de responder 'f' e depois um número):
-su - postgres -c "psql -At -c \"SELECT rolsuper FROM pg_roles WHERE rolname='suinco'\""
-su - postgres -c "psql -At -d embarque_suinco -c 'SELECT count(*) FROM fact_viagens'"
-
-# E o painel: abrir a Torre e criar uma carga de teste.
-```
-
-**Volta atrás**, se algo recusar:
-
-```bash
-su - postgres -c "psql -c 'ALTER ROLE suinco SUPERUSER;'"
-```
-
-Depois disso o dono das tabelas continua sendo `suinco`, o que ainda faz RLS
-ser ignorada por ele. **RLS de verdade exige um segundo usuário, só de
-aplicação, que não seja dono** — é mudança de arquitetura de acesso, precisa
-de janela fora de operação e troca do `PGUSER` no `.env`. Fica proposto, não
-aplicado.
-
-### 2. Redirect 80 → 443 no Nginx
+### 2. Redirect 80 → 443 no Nginx  ← **o único que ainda falta no servidor**
 
 O HSTS já está na resposta, mas ele só vale **depois** da primeira visita em
 HTTPS. Sem redirect, a primeira requisição de um aparelho novo pode sair em
