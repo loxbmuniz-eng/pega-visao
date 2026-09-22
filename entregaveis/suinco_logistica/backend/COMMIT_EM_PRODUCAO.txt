@@ -1,4 +1,4 @@
-05dbb0b
+6edfcec
 
 # ---------------------------------------------------------------------
 # 10/09/2026 — 3226250 → 05dbb0b. CORREÇÃO DE UM REGISTRO QUE FICOU PARADO.
@@ -51,4 +51,14 @@
 #
 # Prova do valor atual: bloco colado em 27/08/2026, com commit no
 # servidor 3226250, serviço active e /health local 200.
+# ---------------------------------------------------------------------
+
+# ---------------------------------------------------------------------
+# 22/09/2026 — 05dbb0b → 6edfcec. Bloco COPIE DAQUI colado pelo dono, com
+# "commit no servidor : 6edfcec", serviço active e /health local 200.
+#
+# 6edfcec é o merge da entrega de 21/09: sequenciamento (terceira porta),
+# KM que o destino preenche, frete combinado à mão, e o extrato dos fretes
+# fora da competência. Com este registro no lugar, o portão para de
+# imprimir como pendente o código de servidor que o servidor JÁ TEM.
 # ---------------------------------------------------------------------
