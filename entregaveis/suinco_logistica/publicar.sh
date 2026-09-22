@@ -159,6 +159,43 @@ verde "  ok  $(grep -E '^# pass' /tmp/suinco-teste-backend.txt | head -1)"
 # Vinte e cinco minutos para descobrir que faltava ligar o servidor, e uma
 # suíte vermelha que parecia regressão de verdade. O portão precisa
 # responder isso em dois segundos, antes de começar.
+# ---------------------------------------------------------------------
+# 4b. DEPENDÊNCIA VULNERÁVEL BARRA A PUBLICAÇÃO (22/09/2026)
+#
+# Pedido do dono: "adequar nosso protocolo de seguranca a alto nivel". A
+# auditoria dos 20 itens achou `npm audit` limpo — mas limpo HOJE. Sem esta
+# checagem, a próxima dependência com falha conhecida sobe junto com a
+# entrega e ninguém fica sabendo.
+#
+# `--omit=dev` de propósito: ferramenta de teste não roda em produção, e
+# reprovar por ela treinaria qualquer um a ignorar este passo. O corte é em
+# `high`: `moderate` em biblioteca de desenvolvimento gera ruído semanal, e
+# portão que grita lobo é portão que alguém desliga.
+# ---------------------------------------------------------------------
+titulo "4b. Nenhuma dependência com falha conhecida"
+AUDIT_SAIDA="$(cd "$AQUI/backend" && npm audit --omit=dev --audit-level=high 2>&1)" || {
+  printf '%s\n' "$AUDIT_SAIDA" | tail -20 | sed 's/^/      /'
+  falhou "há dependência com falha ALTA ou CRÍTICA. Rode 'npm audit fix' no backend."
+}
+verde "  ok  $(printf '%s' "$AUDIT_SAIDA" | grep -iE 'found|vulnerabilit' | head -1 | sed 's/^ *//')"
+
+# ---------------------------------------------------------------------
+# 4c. SEGREDO NÃO SOBE JUNTO COM A ENTREGA (22/09/2026)
+#
+# A suíte de segurança já confere o HISTÓRICO do git. Este passo confere o
+# que está SENDO PUBLICADO agora, que é outra pergunta: um .env criado no
+# diretório de trabalho e adicionado num commit apressado passaria pelo
+# teste de histórico na hora exata em que deixa de ser verdade.
+# ---------------------------------------------------------------------
+titulo "4c. Nenhum segredo entrando na entrega"
+SEGREDOS="$(git diff --name-only "origin/$ENTREGA...$TRABALHO" 2>/dev/null \
+  | grep -E '(^|/)\.env$|(^|/)\.env\.(local|production|prod)$|\.pem$|\.p12$|id_rsa' || true)"
+if [[ -n "$SEGREDOS" ]]; then
+  printf '%s\n' "$SEGREDOS" | sed 's/^/      /'
+  falhou "estes arquivos parecem segredo e estão na entrega."
+fi
+verde "  ok  nenhum arquivo de segredo na entrega"
+
 titulo "5. Servidor de teste no ar"
 PORTA_TESTE="$(grep -E '^PORT=' "$AQUI/backend/.env" 2>/dev/null | cut -d= -f2 | tr -d '[:space:]')"
 PORTA_TESTE="${PORTA_TESTE:-3000}"

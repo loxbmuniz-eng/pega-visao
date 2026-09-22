@@ -516,9 +516,13 @@ async def main():
               const sel = document.getElementById('mont-rota-extra');
               const opcoes = sel.options.length;
               sel.value = '500';
+              sel.dispatchEvent(new Event('change'));
+              const dest = document.getElementById('mont-destino-extra');
+              const destinos = dest ? [...dest.options].map(o => o.value).filter(Boolean) : [];
+              if (dest && destinos.length) dest.value = destinos[0];
               await adicionarCargaForaDoModeloUI();
               const aberta = document.querySelector('#mont-tbody tr.mont-detalhe');
-              return { opcoes, depois: _montagemDia.montagens.length,
+              return { opcoes, destinos, depois: _montagemDia.montagens.length,
                        abriuSozinha: !!aberta };
             }""")
         ck('o seletor traz as rotas do cadastro oficial', d['opcoes'] > 10, str(d['opcoes']))
@@ -527,8 +531,27 @@ async def main():
         ck('e já abre para preencher', d['abriuSozinha'], str(d))
         nova = sql(f"SELECT apelido_rota, rota_codigo FROM programacao_montagem "
                    f"WHERE data_prog = '{DIA}' ORDER BY criado_em DESC LIMIT 1")
-        ck('a linha avulsa nasce SEM apelido — não veio de planilha nenhuma',
-           nova and nova[0] == '' and nova[1] == '500', str(nova))
+        # A REGRA MUDOU DE PROPÓSITO EM 21/09/2026 — e este teste guardava a antiga.
+        #
+        # Ele exigia que a linha avulsa nascesse SEM apelido, com um motivo
+        # certo para a época: "inventar um apelido faria uma carga avulsa
+        # parecer parte do template".
+        #
+        # O dono pediu o contrário, com o defeito na mão: "quando sao criadas
+        # novas na montagem do dia ela os mantem a rota e nao puxa o nome das
+        # cidades". A linha nova saía "Alto Paranaíba" e ninguém sabia se ia
+        # para Paracatu ou para Unaí.
+        #
+        # O apelido não é mais INVENTADO: ele é ESCOLHIDO, num seletor que só
+        # oferece destinos que já existem (os do modelo, ou as cidades do
+        # cadastro). A preocupação original — avulsa se passar por linha de
+        # template — continua guardada, e agora de forma explícita: quem
+        # separa as duas é o `modelo_id`, e
+        # test_destino_da_rota_na_linha.py prova que a avulsa com destino NÃO
+        # consome a linha prevista do modelo.
+        ck('a linha avulsa nasce com o destino ESCOLHIDO, nunca inventado',
+           nova and nova[1] == '500' and (not d['destinos'] or nova[0] in d['destinos']),
+           f"gravou {nova}, destinos oferecidos: {d['destinos']}")
 
         print('\n=== 12. DESTINOS DIFERENTES NAO LEEM COMO DUPLICATA ===')
         # Relato do dono: "tao saindo duplicadas as rotas". Nao eram

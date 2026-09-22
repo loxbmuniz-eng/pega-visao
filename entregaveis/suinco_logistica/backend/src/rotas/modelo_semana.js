@@ -472,7 +472,7 @@ function sequenciaInteiraOuNula(v) {
    usa para achar casa livre, a edição para recusar o número de outra. */
 async function linhasComNumero(cli, dia, exceto) {
   const { rows } = await cli.query(
-    `SELECT montagem_id, sequencia, apelido_rota, rota_codigo, numero_carga,
+    `SELECT montagem_id, sequencia, apelido_rota, rota_codigo, numero_carga, avulsa,
             efetivada_em, cancelada_em
        FROM programacao_montagem
       WHERE data_prog = $1 AND sequencia IS NOT NULL
@@ -531,8 +531,8 @@ rotasModeloSemana.post('/montagem', SO_LOGISTICA, async (req, res, next) => {
          (montagem_id, data_prog, rota_codigo, sequencia, numero_carga, peso,
           qtd_entregas, qtd_ganchos, paletizada, tipo_operacao, motorista,
           observacoes, apelido_rota, modelo_id, criado_por, criado_setor, operador_nome,
-          frete_destino, km_destino, km_deslocamento)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$15,$17,$18,$19)
+          frete_destino, km_destino, km_deslocamento, avulsa)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$15,$17,$18,$19,$20)
        RETURNING *`,
       [novoId(), dia, rota, sequencia,
        String(req.body?.numeroCarga ?? '').trim(),
@@ -553,7 +553,13 @@ rotasModeloSemana.post('/montagem', SO_LOGISTICA, async (req, res, next) => {
           mesmo codigo. */
        Number.isFinite(Number(req.body?.modeloId)) ? Number(req.body.modeloId) : null,
        req.operador.nome, req.operador.setor,
-       _dk.destino, _dk.kmDestino, _dk.kmDesl]
+       _dk.destino, _dk.kmDestino, _dk.kmDesl,
+       /* AVULSA É QUEM NASCE SEM LINHA DE MODELO (migração 055).
+          Marcado na gravação, e não deduzido na leitura, porque linha
+          antiga e avulsa nova ficam idênticas no dado — as duas com
+          `modelo_id` nulo e apelido preenchido. Só quem estava presente no
+          momento da criação sabe a diferença. */
+       !Number.isFinite(Number(req.body?.modeloId))]
       );
       return rows[0];
     });

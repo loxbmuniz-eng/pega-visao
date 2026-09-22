@@ -1,4 +1,4 @@
-053
+054
 
 # ---------------------------------------------------------------------
 # ATÉ QUAL MIGRAÇÃO O SERVIDOR DE PRODUÇÃO ESTÁ.
@@ -84,3 +84,20 @@
 # migração que permite apagar da vista os lançamentos de uma placa no
 # Histórico (fact_statusfrota.apagada_em/apagada_por/apagada_motivo) e a
 # rota POST /api/movimentacoes/apagar, só para Administração.
+
+# ---------------------------------------------------------------------
+# 22/09/2026 — 053 → 054. Bloco COPIE DAQUI colado pelo dono:
+#
+#   commit no servidor : 6edfcec
+#   serviço            : active
+#   /health local      : 200
+#   migrações aplicadas: ... 054_frete_combinado_a_mao.sql
+#
+# O QUE ISSO DESTRAVA: o campo de Frete da Montagem do Dia. Ele foi
+# publicado em 6edfcec e, até este momento, RECUSAVA a gravação — a coluna
+# `frete_valor_manual` não existia no servidor. Era a pendência que o
+# portão imprimiu na publicação e que ficou em aberto por um dia.
+#
+# A 055 (marca da carga avulsa) continua PENDENTE: ela está commitada na
+# branch de trabalho e ainda não foi publicada.
+# ---------------------------------------------------------------------

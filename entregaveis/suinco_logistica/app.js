@@ -3445,7 +3445,24 @@ function renderTorre(){
       <td>${editavel
         ? `<input type="text" class="motorista-input" value="${esc(c.motorista||'')}" onchange="atualizarMotoristaUI('${escJs(c.id)}',this.value)" title="Trocar o motorista desta carga.">`
         : (esc(c.motorista)||'—')}</td>
-      <td>${editavel ? rotaSelectHtml(c) : esc(rotaCurta(c.rota))}</td>
+      ${/* A CIDADE EMBAIXO DA ROTA, NA MESMA CÉLULA (21/09/2026).
+
+             Pedido do dono: "na torre de controle precisa aparecer o destino
+             também de cada carga, ao invés de sair alto paranaiba por
+             exemplo, que saia a cidade exata que a carga esta indo".
+
+             Empilhado, e não coluna nova: a Torre já teve 15 colunas medindo
+             1870px numa área de 1162px, e a redução para 11 foi pedido dele
+             ("otimize para que tudo apareca por completo sem precisar de
+             rolagem"). Uma 12ª coluna desfaria aquilo. Mesmo padrão da
+             célula de Veículo, onde a placa manda e o resto fica de apoio.
+
+             Carga sem destino não ganha linha nenhuma: linha vazia em metade
+             da Torre é ruído, e a ausência já diz o que precisa dizer. */''
+      }<td>${editavel ? rotaSelectHtml(c) : esc(rotaCurta(c.rota))}${
+        destinoDaCarga(c)
+          ? `<span class="rota-destino">${esc(destinoDaCarga(c))}</span>` : ''
+      }</td>
       <td class="c-peso">${editavel
         ? `<input type="text" inputmode="numeric" class="peso-input" min="0" step="1" value="${c.peso ?? ''}" onchange="atualizarPesoUI('${escJs(c.id)}',this.value)" title="Peso em kg.">`
         : (c.peso ? c.peso.toLocaleString('pt-BR') : '—')}</td>
@@ -9012,6 +9029,22 @@ async function montarRelatorioOperacional(){
            521 e a 538 saem idênticas na folha: as duas são "São Paulo
            Interior" e as duas são CargoFrio. O que as distingue é o CD —
            Ribeirão Preto numa, Marília na outra. Ver rotaApoio(). */''
+      }${/* A CIDADE DA CARGA VEM ANTES DO APOIO (21/09/2026).
+
+             Pedido do dono: "na coluna rota, precisa sair o destino também,
+             além do codigo da rota, pois só a regiao deixa confuso para os
+             motoristas e acaba atrapalhando a operacao".
+
+             Ordem pensada para quem lê a folha no pátio: rota em cima (é por
+             ela que a Logística fala), cidade no meio (é o que o motorista
+             precisa), CD e operadora embaixo (é o que o Faturamento usa).
+
+             Sem destino, nada é escrito — nunca "(sem destino)". A folha vai
+             para reunião e para o pátio; campo dizendo que falta cadastro é
+             conversa de quem mantém o sistema, e a pendência já aparece na
+             tela de Cadastros, onde dá para resolver. */''
+      }${destinoDaCarga(c)
+        ? `<span class="rota-destino">${esc(destinoDaCarga(c))}</span>` : ''
       }${rotaApoio(c.rota)
         ? `<span class="rota-op">${esc(rotaApoio(c.rota))}</span>` : ''
       }</td>
@@ -10907,7 +10940,42 @@ function montagemHojeUI(){
   carregarMontagemUI();
 }
 
+/* O CATÁLOGO PRECISA ESTAR DE PÉ ANTES DE A MONTAGEM DESENHAR.
+
+   Quem abre a Montagem direto nunca passou pela aba do modelo, e sem isto
+   `destinosDaRota()` devolveria vazio para todas as rotas — a tela diria
+   "sem destino cadastrado" com o cadastro cheio. Lê uma vez por sessão;
+   falha de leitura não derruba a Montagem, só deixa o catálogo menor. */
+let _destinosCarregados = false;
+async function garantirCatalogoDeDestinos(){
+  if(_destinosCarregados) return;
+  try {
+    const r = await SuincoSharePoint.modeloSemana.listar();
+    registrarDestinosDoModelo((r && r.modelo) || []);
+    _destinosCarregados = true;
+    /* Chegou depois do desenho: repovoa só o seletor de destino. Não
+       redesenha a Montagem — quem está preenchendo uma linha perderia o
+       campo em foco, e o catálogo não muda linha nenhuma. */
+    popularDestinoExtraUI();
+  } catch(e){ /* cadastro da rota ainda responde sozinho */ }
+}
+
 async function carregarMontagemUI(){
+  /* O CATÁLOGO NÃO SEGURA O DESENHO DA TELA (corrigido em 22/09/2026).
+
+     A primeira versão disto era `await garantirCatalogoDeDestinos()` aqui,
+     nesta linha, antes de qualquer coisa aparecer. O portão reprovou
+     test_sequencia_no_celular com "sem linha", e a bateria estava certa: eu
+     tinha posto uma chamada de REDE na frente do desenho da Montagem.
+
+     No celular do pátio, com sinal ruim, isso significa a tela em branco
+     esperando um dado que ela não precisa para desenhar linha nenhuma — o
+     catálogo serve só ao seletor de destino da linha extra.
+
+     Agora ele carrega ATRÁS: a tela desenha na hora e o seletor melhora
+     quando o modelo chega. Antes de chegar, `destinosDaRota()` ainda
+     responde pelo cadastro da rota, então o seletor nunca está vazio. */
+  garantirCatalogoDeDestinos();
   const card = document.getElementById('card-montagem');
   if(!card) return;
   /* Só quem programa monta. Os demais setores continuam vendo a Fila e a
@@ -11037,7 +11105,9 @@ function _renderMontagemInterno(){
   if(selExtra && !selExtra.options.length){
     selExtra.innerHTML = rotasParaEscolher().map(r =>
       `<option value="${esc(r.codigo)}">${esc(rotaLabel(r.codigo))}</option>`).join('');
+    selExtra.addEventListener('change', () => popularDestinoExtraUI());
   }
+  popularDestinoExtraUI();
 
   const tbody = document.getElementById('mont-tbody');
   const vazio = document.getElementById('mont-empty');
@@ -11774,10 +11844,49 @@ function baixarCsvDoDia(nome, cabecalhos, linhas, colunasDeTexto){
    A linha nasce SEM apelido de rota: ela não veio de planilha nenhuma, e
    inventar um apelido faria uma carga avulsa parecer parte do template na
    hora de conferir o dia. */
+/* O SELETOR DE DESTINO ACOMPANHA A ROTA ESCOLHIDA.
+
+   Rota com um destino só já vem marcada — não se faz ninguém escolher entre
+   uma opção. Rota com vários começa VAZIA e obriga a escolha: é o ponto do
+   pedido do dono, e preencher o primeiro da lista seria a mesma adivinhação
+   que ele reclamou.
+
+   Rota sem destino conhecido diz isso em voz alta, com o caminho para
+   resolver. Campo desabilitado que só nega é o que a casa não faz. */
+function popularDestinoExtraUI(){
+  const selRota = document.getElementById('mont-rota-extra');
+  const selDest = document.getElementById('mont-destino-extra');
+  const hint = document.getElementById('mont-destino-hint');
+  if(!selRota || !selDest) return;
+  const rota = selRota.value;
+  const destinos = destinosDaRota(rota);
+  if(!destinos.length){
+    selDest.innerHTML = '<option value="">(sem destino cadastrado)</option>';
+    if(hint) hint.textContent = '— cadastre as cidades desta rota em Cadastros → Rota';
+    return;
+  }
+  const unico = destinos.length === 1;
+  selDest.innerHTML = (unico ? '' : '<option value="">— escolha a cidade —</option>')
+    + destinos.map(d => `<option value="${esc(d)}">${esc(d)}</option>`).join('');
+  if(hint){
+    hint.textContent = unico ? '' : `${destinos.length} destinos nesta rota`;
+  }
+}
+
 async function adicionarCargaForaDoModeloUI(){
   if(!_montagemDia){ notify('Escolha o dia primeiro.', 'erro', 4000); return; }
   const rota = (document.getElementById('mont-rota-extra') || {}).value;
   if(!rota){ notify('Escolha a rota da carga.', 'erro', 4000); return; }
+  /* O DESTINO É OBRIGATÓRIO QUANDO A ROTA TEM MAIS DE UM (21/09/2026).
+     Deixar passar em branco recria o defeito relatado: a linha nasceria com
+     "Alto Paranaíba" e ninguém saberia se vai para Paracatu ou para Unaí. */
+  const destinos = destinosDaRota(rota);
+  const destino = (document.getElementById('mont-destino-extra') || {}).value || '';
+  if(destinos.length > 1 && !destino){
+    notify(`A rota ${rotaCurta(rota)} atende ${destinos.length} destinos. Escolha a cidade.`,
+           'erro', 6000);
+    return;
+  }
   const { dia } = _montagemDia;
   try {
     /* SEM NÚMERO NO PEDIDO (11/09/2026). Quem acha a casa livre é o
@@ -11786,6 +11895,10 @@ async function adicionarCargaForaDoModeloUI(){
        buraco, e contar linhas acertava um número que já existia. */
     await SuincoSharePoint.montagem.criar({
       dia, rotaCodigo: rota,
+      /* MESMO CAMPO QUE O MODELO USA. A linha avulsa passa a se parecer com
+         uma linha de modelo da mesma cidade — que é o pedido. O que separa
+         avulsa de modelo continua sendo o `modelo_id`, não o apelido. */
+      apelidoRota: destino,
       qtdEntregas: 1, paletizada: 'Não',
     });
   } catch(e){
@@ -11804,7 +11917,7 @@ async function adicionarCargaForaDoModeloUI(){
     const foco = document.getElementById(`montf-placa-${nova.montagem_id}`);
     if(foco) foco.focus();
   }
-  notify(`Linha de ${rotaLabel(rota)} adicionada ao dia.`, 'ok', 4000);
+  notify(`Linha de ${destino || rotaCurta(rota)} adicionada ao dia.`, 'ok', 4000);
 }
 
 /* O BOTÃO DE CRIAR CARGA MORA NA LINHA, não só dentro do formulário.
@@ -12107,7 +12220,37 @@ function linhasDoModeloQueFaltam(modelo, montagens){
 
        Vale a mesma razao do 504 mais abaixo — sem apelido nao da para saber
        QUAL destino a avulsa atende, e escolher um no chute e o defeito que
-       a contagem por codigo produzia. */
+       a contagem por codigo produzia.
+
+       A EXCLUSAO VIROU EXPLICITA EM 21/09/2026, E POR POUCO.
+
+       Ate aqui a avulsa escapava por ACIDENTE: ela nascia sem apelido, e a
+       chave de destino do modelo tem um ("rt:504¦Unai"), entao as duas nunca
+       casavam. No mesmo dia a avulsa passou a PERGUNTAR o destino — pedido
+       do dono, para a linha nova parar de sair como "Alto Paranaiba" — e com
+       isso ela ganhou apelido. A chave passaria a casar, a avulsa consumiria
+       a linha prevista, e uma saida do dia sumiria da oferta em silencio.
+       Exatamente o defeito que o paragrafo acima existe para impedir.
+
+       Agora quem decide e o `modelo_id`, que e o campo que RESPONDE a
+       pergunta ("de qual linha do modelo esta carga veio; NULL para
+       avulsa"), em vez de um efeito colateral de um campo de texto.
+
+       O casamento por destino fica para a linha ANTIGA, anterior ao
+       modelo_id. Se um dia velho passar a oferecer uma linha ja montada, o
+       erro cai do lado seguro — e e o proprio raciocinio acima: oferta a
+       mais a pessoa ve e cancela; linha que some da oferta nao aparece em
+       lugar nenhum. */
+    if(g.avulsa){
+      /* A MARCA VEM DO BANCO (migracao 055), nao de uma deducao aqui.
+
+         Tentei deduzir por "sem modelo_id e com apelido" e a bateria
+         reprovou, com razao: linha ANTIGA do modelo — anterior ao
+         modelo_id — tem exatamente essa cara, e ela PRECISA casar por
+         destino. As duas sao identicas no dado; so quem estava presente na
+         criacao sabe a diferenca, e agora ela fica gravada. */
+      continue;
+    }
     const k = g.modelo_id != null ? chaveExata(g) : chaveDestino(g);
     contagem.set(k, (contagem.get(k) || 0) + 1);
   }
@@ -12525,6 +12668,18 @@ async function efetivarMontagemUI(id, { silencioso = false } = {}){
          cadastro, e mandar daqui seria dar ao painel uma opinião sobre
          distância que ele não deve ter. */
       freteDestino: m.frete_destino || '',
+      /* O DESTINO ESCOLHIDO SEGUE PARA A CARGA (21/09/2026).
+         Sem esta linha a cidade morre na Montagem: a Torre e o Relatório
+         Operacional leem a CARGA, não a linha de montagem, e voltariam a
+         mostrar só a região — que é metade do defeito relatado.
+
+         Vai no campo `destino`, que já existe na carga e já é exibido nos
+         relatórios. Ele ficou vazio desde que o Destino saiu do formulário
+         da Programação (virou campo oculto, e o comentário de lá diz por
+         quê: "o Destino ainda é exibido nos relatórios"). Reaproveitar o
+         campo certo é melhor que criar coluna nova para o mesmo conceito —
+         e não exige migração nenhuma. */
+      destino: m.apelido_rota || '',
       kmDeslocamento: m.km_deslocamento ?? '',
       operador: DB.operador ? DB.operador.nome : '',
     });
@@ -12585,6 +12740,10 @@ async function carregarModeloSemanaUI(){
   }
   try {
     const r = await SuincoSharePoint.modeloSemana.listar();
+    /* O MODELO É O CATÁLOGO DE DESTINOS. Os apelidos que o dono digitou
+       linha a linha são a única lista de cidades por rota que existe — e é
+       de onde `destinosDaRota()` tira a maior parte do que oferece. */
+    registrarDestinosDoModelo((r && r.modelo) || []);
     _modeloCache = r.modelo || [];
     renderModeloSemana();
   } catch(e){

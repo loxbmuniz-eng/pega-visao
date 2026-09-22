@@ -306,6 +306,122 @@ function rotaOperador(codigo){
    isso que `rotaCurta()` nasceu sem detalhe: o nome completo estica a linha
    inteira da folha. A vírgula é o sinal de que ali há uma LISTA de praças,
    não um centro de distribuição. */
+/* ===================================================================
+   O DESTINO DE UMA ROTA — UMA FUNÇÃO, TODOS OS CHAMADORES (21/09/2026)
+
+   RELATO DO DONO, em duas mensagens do mesmo dia:
+
+     "na torre de controle precisa aparecer o destino também de cada carga,
+      ao invés de sair alto paranaiba por exemplo, que saia a cidade exata"
+
+     "na hora de pegar o template da montagem do dia ela ta puxando os nomes
+      das cidades e quando sao criadas novas na montagem do dia ela os mantem
+      a rota e nao puxa o nome das cidades"
+
+   O QUE EU ACHEI MEDINDO, e que mudou o desenho da correção:
+
+   O nome da rota NUNCA traz cidade — `dim_rotas.nome` da 504 é
+   "Alto Paranaíba", e ponto. Quem traz a cidade é o `apelido_rota`, que o
+   dono digitou linha a linha no modelo da semana. Linha vinda do modelo tem
+   apelido; linha criada na Montagem nasce sem. Era a divergência inteira.
+
+   E A 504 TEM CINCO APELIDOS NO MODELO, um por cidade:
+
+     Paracatu · Unaí · João Pinheiro · Arinos / Buritis · Riachinho
+
+   Não existe "o apelido da rota". Preencher a linha nova com um deles seria
+   escolher, no lugar de quem programa, para qual cidade a carga vai — que é
+   inventar dado. Por isso a correção OFERECE a escolha em vez de adivinhar.
+
+   O catálogo sai de duas fontes reais, nesta ordem, sem inventar nenhuma:
+     1. os apelidos distintos que o MODELO usa para aquela rota;
+     2. as cidades do CADASTRO da rota (`detalhe`), quebradas na vírgula e
+        no " e " — "Paracatu, Unaí, João Pinheiro, Arinos e Buritis" são
+        cinco lugares, não um.
+
+   Rota sem nenhuma das duas fica sem destino, e isso APARECE em vez de
+   sumir: `rotasSemDestino()` devolve a lista, e a tela a mostra. Cadastro
+   incompleto vira pendência visível, não um branco que ninguém nota. */
+let DESTINOS_DO_MODELO = new Map();
+
+/* Chamada quando o painel lê o modelo da semana. Guarda só o par
+   rota -> apelidos; o resto da linha do modelo não interessa aqui. */
+function registrarDestinosDoModelo(linhas){
+  const mapa = new Map();
+  for(const l of (linhas || [])){
+    const rota = String(l.rota_codigo || l.rotaCodigo || '').trim();
+    const ap = String(l.apelido_rota || l.apelidoRota || '').trim();
+    if(!rota || !ap) continue;
+    if(!mapa.has(rota)) mapa.set(rota, new Set());
+    mapa.get(rota).add(ap);
+  }
+  DESTINOS_DO_MODELO = mapa;
+  return mapa.size;
+}
+
+/* "Paracatu, Unaí, João Pinheiro, Arinos e Buritis" -> cinco itens.
+   A barra NÃO quebra: "Arinos / Buritis" é um destino só no modelo do dono,
+   e separá-lo criaria duas linhas que ele nunca escreveu. */
+function cidadesDoDetalhe(texto){
+  return String(texto || '')
+    .split(/,| e (?=[A-ZÁÂÃÀÉÊÍÓÔÕÚÇ])/)
+    .map(x => x.trim())
+    .filter(Boolean);
+}
+
+/* Os destinos conhecidos de uma rota, sem repetir e em ordem alfabética.
+   Devolve [] quando não há nenhum — o chamador decide o que dizer. */
+function destinosDaRota(codigo){
+  const cod = String(codigo || '').trim();
+  if(!cod) return [];
+  /* O MODELO MANDA, E O CADASTRO SÓ FALA QUANDO ELE NÃO SABE.
+
+     Misturar as duas fontes duplicava: o modelo tem "Arinos / Buritis" como
+     UM destino e o cadastro da 504 diz "...Arinos e Buritis", que quebra em
+     dois. A lista saía com "Arinos", "Buritis" E "Arinos / Buritis" — três
+     opções para duas cidades, e quem programa teria de adivinhar qual usar.
+
+     O modelo vence porque é a lista que o dono escreveu linha a linha, é a
+     que já aparece hoje nas linhas puxadas do template, e é com ela que a
+     linha nova precisa ficar idêntica. O cadastro atende as rotas que o
+     modelo não cobre — sem ele, 117 rotas ficariam sem destino nenhum. */
+  const doModelo = [...(DESTINOS_DO_MODELO.get(cod) || [])];
+  if(doModelo.length) return doModelo.sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  const r = rotaInfo(cod);
+  const vistos = new Map();            // minúsculo -> forma original
+  for(const c of cidadesDoDetalhe(r && r.detalhe)){
+    const chave = c.toLocaleLowerCase('pt-BR');
+    if(!vistos.has(chave)) vistos.set(chave, c);
+  }
+  return [...vistos.values()].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+}
+
+/* O destino de UMA carga, que é outra pergunta: aqui não se lista o que a
+   rota atende, diz-se para onde ESTA carga vai.
+
+   `destino` primeiro porque é o campo que a carga carrega desde sempre e é
+   onde a Montagem grava o destino escolhido. `frete_destino` depois: ele
+   existe para a tarifa e às vezes traz a transportadora colada
+   ("BRASILIA (RN TRANSP)"), então serve de segunda opção, não de primeira.
+
+   Vazio quando não há nenhum dos dois. Nunca o nome da rota: quem chama já
+   mostra a rota ao lado, e repetir a região no lugar da cidade é
+   exatamente o que o dono pediu para acabar. */
+function destinoDaCarga(c){
+  if(!c) return '';
+  return String(c.destino || '').trim()
+      || String(c.freteDestino || c.frete_destino || '').trim();
+}
+
+/* As rotas ativas que não têm destino em lugar nenhum. É a lista de
+   pendência de cadastro — sem ela, "falta destino" depende de alguém
+   reparar num campo vazio no meio de 139 rotas. */
+function rotasSemDestino(){
+  return rotasParaEscolher()
+    .filter(r => destinosDaRota(r.codigo).length === 0)
+    .map(r => ({ codigo: r.codigo, nome: r.nome }));
+}
+
 function rotaApoio(codigo){
   const r = rotaInfo(codigo);
   if(!r) return '';

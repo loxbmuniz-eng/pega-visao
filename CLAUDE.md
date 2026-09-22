@@ -123,6 +123,35 @@ Tratar (1) como (4) apaga uma decisão. Tratar (4) como (1) publica o defeito.
 
 ---
 
+## O raio-X é lei
+
+**https://claude.ai/artifact/WTXUCKLXH81K1r68vawzyK**
+
+O mapa vivo da estrutura: camadas, barreiras, as sete frentes, as duas máquinas
+de estado, e a faixa que diz o que está no ar. Pedido do Luis em 22/09/2026,
+com estas palavras: *"isso vai ficar pra sempre no meu artifacts e voce sempre
+vai atualizar esse artefato com a atual versao publicada e online, sempre,
+voce vai ser fiel a isso como uma lei maxima"*.
+
+**Mapa desatualizado é pior que nenhum** — ele faz procurar defeito no lugar
+errado. Então, sem exceção:
+
+1. **Toda publicação que passa pelo portão** atualiza a faixa "O que está no
+   ar agora" (commit do painel, commit do servidor, migração, data).
+2. **Todo bloco `COPIE DAQUI`** colado por ele atualiza a mesma faixa — é o
+   único momento em que se sabe que o servidor mudou.
+3. **Frente que ganha arquivo, rota, tabela ou barreira** entra no raio-X na
+   MESMA entrega, não na seguinte.
+4. **Número ali é medido**, nunca estimado. Não deu para medir, não entra.
+5. **Commitado-e-não-publicado aparece separado do que está no ar.** Misturar
+   os dois é o que faz alguém caçar no servidor um código que não subiu.
+
+Para atualizar de outra conversa: `Artifact` com `action:"read"` nessa URL
+primeiro, depois `publish` passando a mesma URL em `url`. Publicar sem a `url`
+cria um artefato PARALELO e quebra a lei.
+
+---
+
 ## Fluxo de trabalho
 
 **Demanda nova:** PROMPT → aprovação → teste que REPROVA contra o publicado
