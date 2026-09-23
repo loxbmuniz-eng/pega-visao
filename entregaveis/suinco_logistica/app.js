@@ -1797,7 +1797,12 @@ async function entrarNoServidor(){
     const op = await SuincoSharePoint.login(email, senha, codigo);
     // O id vem junto para o painel saber distinguir "eu editei" de "outro
     // editou" — dois operadores podem ter o mesmo primeiro nome.
-    DB.operador = { id: op.id, nome: op.nome, setor: op.setor, email: op.email, turno: detectarTurnoPorHora() };
+    DB.operador = { id: op.id, nome: op.nome, setor: op.setor, email: op.email,
+      /* O QUE ESTE SETOR PODE GERAR, dito pelo servidor (23/09/2026). É a
+         lista que decide qual botão de relatório aparece. Ver
+         `podeGerarDocumentoUI` para o que acontece quando ela não vem. */
+      documentos: op.documentos,
+      turno: detectarTurnoPorHora() };
     SuincoStore.save();
 
     // Limpa a senha do DOM assim que ela deixa de ser necessária. Terminal de
@@ -2062,6 +2067,56 @@ function atualizarHeaderOperador(){
 // Para operar outro posto — cobertura de turno, por exemplo — usa-se
 // "Trocar usuário" no cabeçalho e entra-se com o setor correspondente; o
 // modal de login explica isso, para ninguém concluir que a tela não existe.
+/* ESTE SETOR PODE GERAR ESTE DOCUMENTO? (23/09/2026)
+   ---------------------------------------------------------------
+   PEDIDO DO DONO, escolhendo entre três saídas: "a" — esconder o botão que a
+   filial não pode usar.
+
+   A REGRA NÃO MORA AQUI. Ela mora em `backend/src/dominio/documentos.js`, e
+   quem a aplica de verdade é `podeGerar` na rota do PDF. O painel só RECEBE
+   a resposta pronta, no login e na restauração de sessão, e usa para decidir
+   o que desenhar. Escrever a lista de setores aqui seria a segunda cópia da
+   mesma decisão — e a primeira divergência já custou três ocorrências: a
+   Qualidade em 11/09 e as duas filiais em 23/09, todas com o mesmo formato
+   (botão visível, servidor respondendo 403).
+
+   LISTA AUSENTE NÃO ESCONDE NADA. Quem entrou por "Entrar só neste aparelho"
+   não tem servidor, e um painel ligado a um servidor ainda não atualizado
+   também não recebe a lista. Nos dois casos o botão continua aparecendo
+   exatamente como aparecia antes desta mudança: quem decide é o servidor, e
+   esconder por falta de informação tiraria da Logística um relatório que ela
+   sempre teve. Some o botão quando se SABE que ele seria recusado, nunca
+   quando não se sabe. */
+/* A LISTA NÃO PODE ENVELHECER NA CÓPIA LOCAL. `DB.operador` vem do disco e
+   sobrevive a reaberturas; se o dono mudar o que um setor gera, quem não
+   fizer login de novo ficaria com a lista de ontem. `iniciar()` já pergunta
+   ao servidor quem você é (`/auth/eu`) — aqui só copiamos a resposta por
+   cima, e só quando ela existe, para não apagar o que já estava valendo. */
+function sincronizarDocumentosDoSetor(){
+  if(!DB.operador || typeof SuincoSharePoint === 'undefined') return;
+  const conta = SuincoSharePoint.conta && SuincoSharePoint.conta();
+  if(!conta || !Array.isArray(conta.documentos)) return;
+  const antes = JSON.stringify(DB.operador.documentos || null);
+  DB.operador.documentos = conta.documentos;
+  if(JSON.stringify(conta.documentos) !== antes) SuincoStore.save();
+  aplicarDonosDeDocumentoUI();
+}
+
+function podeGerarDocumentoUI(tipo){
+  const lista = DB.operador && DB.operador.documentos;
+  if(!Array.isArray(lista)) return true;
+  return lista.includes(tipo);
+}
+
+/* Aplica a lista aos botões marcados com data-documento. A marcação fica no
+   HTML, junto do botão, para que acrescentar um relatório novo seja um
+   atributo — e não mais uma linha de JavaScript que alguém esquece. */
+function aplicarDonosDeDocumentoUI(){
+  document.querySelectorAll('[data-documento]').forEach(el=>{
+    el.hidden = !podeGerarDocumentoUI(el.dataset.documento);
+  });
+}
+
 function aplicarPermissoesSetor(){
   if(!DB.operador) return;
   const doSetor = SETOR_PERMISSOES[DB.operador.setor] || [];
@@ -2083,6 +2138,9 @@ function aplicarPermissoesSetor(){
     card.hidden = !admin;
   });
   if(!doSetor.includes(TAB_ATUAL) && TAB_ATUAL !== 'usuarios') irParaTab(doSetor[0] || 'torre');
+  // Mesmo funil das abas: quem já chama isto no login, na restauração e na
+  // troca de usuário passa a acertar os botões de relatório junto.
+  aplicarDonosDeDocumentoUI();
   atualizarAvisoSetorAba();
 }
 
@@ -9894,7 +9952,7 @@ async function init(){
     if(typeof aoRecusarRota === 'function') aoRecusarRota(receberRecusaDeRota);
     if(typeof aoEnfileirarRota === 'function') aoEnfileirarRota(receberEnfileiramentoDeRota);
     SuincoSharePoint.iniciar()
-      .then(()=>{ atualizarRodapeConexao(SuincoSharePoint.estado()); renderAll(); })
+      .then(()=>{ atualizarRodapeConexao(SuincoSharePoint.estado()); sincronizarDocumentosDoSetor(); renderAll(); })
       .catch(e=>{ console.warn('[Suinco] init:', e); atualizarRodapeConexao('local'); });
   }
   atualizarDatalists();

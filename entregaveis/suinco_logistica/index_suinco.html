@@ -687,7 +687,12 @@
               title="Filtra a lista abaixo. Procura nos checklists dos últimos 30 dias."></div>
           <div style="align-self:end" class="gap8">
             <button class="btn btn-sec btn-sm" onclick="carregarDevolucoes()">↻ Atualizar</button>
-            <button class="btn btn-sec btn-sm" onclick="relatorioDevolucoesUI()">📄 Relatório do dia</button>
+            <!-- data-documento: quem NÃO gera este PDF não vê o botão
+                 (23/09/2026). O nome é o mesmo tipo que a rota do PDF
+                 valida, e a lista de quem gera vem do servidor no login —
+                 ver `podeGerarDocumentoUI` em app.js. -->
+            <button class="btn btn-sec btn-sm" data-documento="devolucoes-do-dia"
+              onclick="relatorioDevolucoesUI()">📄 Relatório do dia</button>
             <!-- A relação para o operador virou botão de CADA checklist
                  (19/08/2026): é o papel que acompanha aquela devolução. O
                  relatório do dia inteiro continua sendo o daqui do lado. -->

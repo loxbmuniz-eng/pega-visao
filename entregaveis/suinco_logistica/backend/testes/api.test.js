@@ -31,7 +31,8 @@ import { tmpdir } from 'node:os';
 import { criarServidor, chaveDoLimiteGeral, versaoDoServidor } from '../src/servidor.js';
 import { pool } from '../src/banco.js';
 import { config } from '../src/config.js';
-import { SETORES } from '../src/dominio/fluxo.js';
+import { SETORES, SETORES_FILIAL } from '../src/dominio/fluxo.js';
+import { podeGerar, documentosDoSetor } from '../src/dominio/documentos.js';
 import { validarTokenDeSocket } from '../src/tempo-real.js';
 import { hojeISO } from '../src/rotas/modelo_semana.js';
 
@@ -6081,6 +6082,132 @@ describe('45. Destino preenche o KM, e o frete combinado à mão (18/09/2026)', 
         corpo: { freteValorManual: '1,00' } });
       assert.equal(r.status, 403, r.texto);
     });
+  });
+});
+
+describe('46. A filial gera a Relação para o Operador (23/09/2026)', () => {
+  /* PEDIDO DO DONO: "todas as filiais precisam ter acesso a gerar relatorio
+     para o operador, filiales filialbsb filialba".
+
+     O DEFEITO, MEDIDO ANTES DE MEXER. O botão "📤 Relação para o operador" é
+     desenhado no cartão do checklist SEM nenhuma condição de setor
+     (devolucoes.js:1494) — a filial vê. Mas `DONOS_DO_DOCUMENTO` não tinha
+     os setores de filial em `devolucao-operador`, então o servidor recusava
+     com 403. Botão que promete e servidor que nega.
+
+     É A SEGUNDA VEZ NESTE MESMO ARQUIVO. O comentário de 11/09 registra a
+     primeira: a Qualidade foi criada, viu o botão, e ele respondia "seu
+     setor não gera este documento". Achado por revisão de código, porque
+     nenhum teste pedia o PDF em nome dela. Este bloco existe para não haver
+     uma terceira.
+
+     `devolucoes-do-dia` FICOU DE FORA por decisão do dono, perguntado
+     explicitamente: "somente relacao para o operador". */
+  const FILIAIS = ['Filial 105 BSB', 'Filial 106 BAHIA', 'Filial 107 ES'];
+
+  test('as três filiais geram devolucao-operador', () => {
+    for (const setor of FILIAIS) {
+      assert.equal(podeGerar(setor, 'devolucao-operador'), true,
+        `${setor} precisa gerar a Relação para o Operador`);
+    }
+  });
+
+  test('e a lista sai de SETORES_FILIAL — filial nova entra sozinha', () => {
+    /* Escrever os três nomes à mão aqui seria o quarto lugar com a mesma
+       lista, e o dia em que nascer a Filial 108 alguém esquece um deles.
+       Esta prova falha se a tabela voltar a listar nome por nome. */
+    for (const setor of SETORES_FILIAL) {
+      assert.equal(podeGerar(setor, 'devolucao-operador'), true,
+        `${setor} está em SETORES_FILIAL e tem de gerar o documento`);
+    }
+    assert.ok(SETORES_FILIAL.length >= 3);
+  });
+
+  test('o que a filial NÃO ganhou continua negado', () => {
+    /* A prova negativa é a que importa: soltar um documento não pode soltar
+       os vizinhos. `devolucoes-do-dia` é decisão do dono; os outros três são
+       de outras áreas. */
+    for (const setor of FILIAIS) {
+      for (const doc of ['devolucoes-do-dia', 'comprovante-portaria',
+        'relatorio-operacional', 'relatorio-executivo', 'programacao-do-dia']) {
+        assert.equal(podeGerar(setor, doc), false,
+          `${setor} NÃO pode gerar ${doc}`);
+      }
+    }
+  });
+
+  test('quem já podia continua podendo', () => {
+    for (const setor of ['Logística', 'Controles Internos', 'Central de Notas', 'Qualidade']) {
+      assert.equal(podeGerar(setor, 'devolucao-operador'), true,
+        `${setor} perdeu um documento que já tinha`);
+    }
+    assert.equal(podeGerar('Administração', 'devolucao-operador'), true);
+  });
+
+  test('a filial vê o botão porque o painel pergunta a MESMA função', () => {
+    /* `documentosDoSetor` é o que o painel usa para decidir o que mostrar.
+       Se ela e `podeGerar` divergirem, volta o botão que promete e nega. */
+    for (const setor of FILIAIS) {
+      const lista = documentosDoSetor(setor);
+      assert.ok(lista.includes('devolucao-operador'),
+        `${setor}: o painel não ofereceria o botão`);
+      assert.ok(!lista.includes('devolucoes-do-dia'),
+        `${setor}: o painel ofereceria um botão que o servidor nega`);
+    }
+  });
+
+  test('a rota do PDF abre para a filial no documento dela e fecha nos outros', async () => {
+    /* A PROVA DE PONTA A PONTA, PELA PORTA DE VERDADE. Os testes acima medem
+       a função; este mede a ROTA, que é quem de fato barra.
+
+       PRECISA DE UM LOGIN DE FILIAL, e a bancada não tinha nenhum — a
+       primeira versão deste teste usou `tokens['Filial 105 BSB']`, que é
+       `undefined`, e a rota respondeu 401 SEM_TOKEN. Teste que reprova pelo
+       motivo errado passa pelo motivo errado no dia seguinte: 401 e 403 são
+       recusas diferentes, e só uma delas é a regra que estamos guardando.
+
+       POR QUE O POSITIVO ESPERA 400 E NÃO 200. A rota confere a permissão
+       ANTES de exigir html e css (relatorios.js:71). Mandar sem conteúdo
+       atravessa a barreira de setor e para na validação seguinte — a prova
+       de que a filial passou pela porta, sem subir um Chromium por teste. */
+    const email = 'filial105@teste.local';
+    await pool.query(
+      `INSERT INTO operadores (email, nome, setor, senha_hash) VALUES ($1,$2,$3,$4)
+         ON CONFLICT (email) DO UPDATE SET setor = EXCLUDED.setor`,
+      [email, 'Operador da Filial 105', 'Filial 105 BSB', await bcrypt.hash(SENHA, 4)]
+    );
+    const login = await req('/auth/login', { metodo: 'POST', corpo: { email, senha: SENHA } });
+    assert.equal(login.status, 200, login.texto);
+    const token = login.json.token;
+
+    /* E o login já entrega ao painel a lista do que este setor gera — é ela
+       que decide qual botão aparece. Vai DENTRO do operador porque é esse o
+       objeto que o painel guarda no funil único (`guardarToken`). */
+    assert.ok(Array.isArray(login.json.operador.documentos),
+      'o login não mandou a lista de documentos');
+    assert.ok(login.json.operador.documentos.includes('devolucao-operador'));
+    assert.ok(!login.json.operador.documentos.includes('devolucoes-do-dia'));
+
+    /* E as outras duas portas de sessão dizem a MESMA coisa. Se uma delas
+       esquecer a lista, quem restaura a sessão de manhã perde os botões. */
+    const eu = await req('/auth/eu', { token });
+    assert.deepEqual(eu.json.operador.documentos, login.json.operador.documentos, eu.texto);
+    const renovado = await req('/auth/renovar', { metodo: 'POST', token });
+    assert.deepEqual(renovado.json.operador.documentos, login.json.operador.documentos,
+      renovado.texto);
+
+    const dela = await req('/api/relatorios/pdf', {
+      metodo: 'POST', token, corpo: { tipo: 'devolucao-operador', nomeArquivo: 'x' },
+    });
+    assert.equal(dela.status, 400, `a filial foi barrada no documento dela: ${dela.texto}`);
+    assert.equal(dela.json.codigo, 'HTML_FALTANDO', dela.texto);
+
+    const alheio = await req('/api/relatorios/pdf', {
+      metodo: 'POST', token,
+      corpo: { html: '<p>x</p>', css: 'p{}', tipo: 'relatorio-operacional', nomeArquivo: 'x' },
+    });
+    assert.equal(alheio.status, 403, alheio.texto);
+    assert.equal(alheio.json.codigo, 'DOCUMENTO_SEM_PERMISSAO', alheio.texto);
   });
 });
 
