@@ -4,6 +4,34 @@ import rateLimit from 'express-rate-limit';
 import { consultar, emTransacao } from '../banco.js';
 import { config } from '../config.js';
 import { assinarToken, exigirLogin } from '../middleware/auth.js';
+import { documentosDoSetor } from '../dominio/documentos.js';
+
+/* QUEM VOCÊ É, E O QUE O SEU SETOR PODE GERAR — num objeto só (23/09/2026).
+
+   `documentosDoSetor()` existe desde 22/08 e o comentário dela diz, com todas
+   as letras: "a lista que o PAINEL usa para decidir quais botões mostrar". Só
+   que o painel nunca a recebeu. Resultado: o botão aparecia para quem o
+   servidor depois recusava com 403 — a Qualidade em 11/09, e as filiais nos
+   dois botões do checklist em 23/09. O próprio arquivo já avisava por que
+   isso é problema de segurança e não de estética: "botão visível que sempre
+   dá erro ensina o operador a ignorar mensagem de permissão".
+
+   Isto NÃO é o controle. O controle é `podeGerar` na rota do PDF, e ele
+   continua lá, intacto. Isto é o painel parando de prometer o que o servidor
+   nega, lendo a MESMA função em vez de repetir a regra do lado de cá.
+
+   POR QUE DENTRO DO `operador` E NÃO AO LADO DELE. As três portas que
+   devolvem sessão — login, renovação e `/eu` — já entregam este objeto, e o
+   painel já tem um funil único que o guarda (`guardarToken`). Pendurar a
+   lista num campo irmão obrigaria a mexer nos três chamadores do painel e
+   abriria a chance de um deles esquecer. Dentro, ela chega sozinha até quem
+   desenha o botão. */
+function sessaoDoOperador(op) {
+  return {
+    id: String(op.id), nome: op.nome, email: op.email, setor: op.setor,
+    documentos: documentosDoSetor(op.setor),
+  };
+}
 import {
   conferirCodigo, hashDoCodigo, gerarSegredo, gerarCodigosRecuperacao,
   enderecoParaAplicativo,
@@ -196,7 +224,7 @@ rotasAuth.post('/login', limiteLogin, async (req, res, next) => {
 
     return res.json({
       token: assinarToken(op),
-      operador: { id: String(op.id), nome: op.nome, email: op.email, setor: op.setor },
+      operador: sessaoDoOperador(op),
     });
   } catch (e) {
     return next(e);
@@ -207,7 +235,9 @@ rotasAuth.post('/login', limiteLogin, async (req, res, next) => {
    restaurar a sessão sem pedir senha de novo, e para descobrir o setor —
    que ele deixa de guardar no localStorage. */
 rotasAuth.get('/eu', exigirLogin, (req, res) => {
-  res.json({ operador: req.operador });
+  /* A mesma lista do login: quem restaura a sessão na abertura precisa dela
+     tanto quanto quem acabou de digitar a senha. */
+  res.json({ operador: sessaoDoOperador(req.operador) });
 });
 
 /* Renova a sessão de quem está trabalhando.
@@ -243,7 +273,7 @@ rotasAuth.post('/renovar', exigirLogin, async (req, res, next) => {
     }
     return res.json({
       token: assinarToken(op),
-      operador: { id: String(op.id), nome: op.nome, email: op.email, setor: op.setor },
+      operador: sessaoDoOperador(op),
     });
   } catch (e) {
     return next(e);

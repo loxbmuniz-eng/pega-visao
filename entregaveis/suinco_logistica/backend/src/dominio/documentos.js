@@ -14,6 +14,8 @@
    o grupo, o CSV que vai para o pen drive. É nele que entra dono, e é a
    geração dele que fica registrada. */
 
+import { SETORES_FILIAL } from './fluxo.js';
+
 /* Administração NÃO aparece nas listas: `podeGerar` a inclui sempre, do
    mesmo jeito que o middleware `exigirSetor` faz. Repetir em nove linhas
    seria nove lugares para esquecer no dia em que a regra mudar. */
@@ -48,7 +50,27 @@ export const DONOS_DO_DOCUMENTO = {
      respondia 403 "seu setor não gera este documento". Achado pela revisão
      de código; nenhum teste chegava a pedir o PDF em nome dela. */
   'devolucoes-do-dia': ['Logística', 'Controles Internos', 'Central de Notas', 'Qualidade'],
-  'devolucao-operador': ['Logística', 'Controles Internos', 'Central de Notas', 'Qualidade'],
+  /* AS FILIAIS ENTRAM NA RELAÇÃO PARA O OPERADOR (23/09/2026). Pedido do
+     dono: "todas as filiais precisam ter acesso a gerar relatorio para o
+     operador, filiales filialbsb filialba".
+
+     E É A TERCEIRA VEZ DESTA MESMA OCORRÊNCIA NESTE ARQUIVO. O botão
+     "📤 Relação para o operador" é desenhado no cartão do checklist SEM
+     condição de setor: a filial via, clicava, e levava 403. Igualzinho à
+     Qualidade em 11/09, registrado no comentário acima.
+
+     POR QUE `...SETORES_FILIAL` E NÃO OS TRÊS NOMES. Escrever
+     'Filial 105 BSB', 'Filial 106 BAHIA', 'Filial 107 ES' aqui seria o
+     quarto lugar do código com a mesma lista, e no dia da Filial 108 alguém
+     esquece um deles — que é exatamente como esta ocorrência nasce. A fonte
+     é `fluxo.js`, onde os setores de filial já são definidos; filial nova
+     passa a gerar o documento sozinha.
+
+     `devolucoes-do-dia` NÃO entrou, por decisão do dono perguntado
+     explicitamente: "somente relacao para o operador". A filial continua
+     sem o relatório do dia. */
+  'devolucao-operador': ['Logística', 'Controles Internos', 'Central de Notas',
+    'Qualidade', ...SETORES_FILIAL],
   'comprovante-portaria': ['Portaria', 'Logística'],
   'exportacao-csv': [],
 };

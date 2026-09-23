@@ -4040,3 +4040,113 @@ ambiente.
 **Como reconhecer a família, se voltar:** vários testes de um mesmo bloco
 reprovando em sequência, com 429 na resposta, e o bloco passando verde quando
 rodado sozinho. É a causa nº 3 — contaminação de ambiente —, nunca a nº 4.
+
+---
+
+## #83 — A rota dizia a região, e o motorista precisava da cidade (22/09/2026)
+
+**Relato do dono, em três mensagens:**
+
+> "na torre de controle precisa aparecer o destino tambem de cada carga, ao
+> inves de sair alto paranaiba por exemplpo, que saia a cidade exta que a
+> carga esta indo"
+
+> "no relatorio operacional, na coluna rota, precisa sair o destino tambem,
+> além do codigo da rota, pois so a regiao deixa confuso para os motoristas e
+> acabca atrapalhando a operacao"
+
+> "na hora de pegar o template da montagem do dia ela ta puxando os nomes das
+> cidades e quando sao criadas novas na montagem do dia ela os mantem a rota e
+> nao pux o nome das cidades"
+
+**Não era uma tela com defeito, eram duas fontes de verdade.** O nome da
+cidade existia em dois lugares: no **modelo de semana**, digitado por quem
+monta a programação, e no **cadastro da rota**, no campo de detalhe. As telas
+liam um ou outro conforme quem as escreveu, e o resultado era o que o dono
+descreveu: a mesma carga saía "Alto Paranaíba" num lugar e "Patos de Minas,
+Carmo do Paranaíba" no outro.
+
+> **Uma função, dois chamadores.** `destinosDaRota()` em `data.js` passou a
+> ser a única resposta para "para onde esta rota vai": o modelo ganha, o
+> cadastro é a reserva. Torre, Relatório Operacional e Montagem perguntam a
+> ela. Antes, cada uma respondia sozinha.
+
+**A armadilha do separador.** O detalhe do cadastro separa cidades por vírgula
+e por " e " — mas **não** por barra. "Patos de Minas/MG" é UMA cidade com o
+estado junto; quebrar na barra inventaria uma cidade chamada "MG". Está
+escrito em `cidadesDoDetalhe()` porque não é óbvio olhando o dado.
+
+**O defeito que a correção quase criou, e que a bateria pegou.** A primeira
+versão punha `await garantirCatalogoDeDestinos()` na frente do desenho da
+Montagem: uma chamada de rede ANTES de pintar a tela. `test_sequencia_no_celular`
+reprovou com "sem linha". No celular do pátio, com sinal fraco, a tela ficaria
+**em branco** — e ninguém relacionaria isso a um campo de destino.
+
+> **O catálogo não segura o desenho da tela.** Dado de apoio carrega atrás; o
+> que a operação precisa ver aparece primeiro. Vale para qualquer leitura de
+> rede posta na frente de um `render`.
+
+**O que trava:** `testes/test_destino_da_carga.py` e o bloco de destino em
+`backend/testes/api.test.js`; e `test_sequencia_no_celular`, que já existia e
+foi quem pegou a regressão.
+
+---
+
+## #84 — Terceira vez: o botão prometia, o servidor negava (23/09/2026)
+
+**Relato do dono:**
+
+> "vamos la todas as filiais precisam ter acesso a gerar relatorio para o
+> operador, filiales filialbsb filialba"
+
+E, perguntado se o outro botão do mesmo cartão entrava junto:
+
+> "somente relacao para o operador"
+
+**A mesma família, pela terceira vez no mesmo arquivo.** `DONOS_DO_DOCUMENTO`
+em `backend/src/dominio/documentos.js` diz quem gera cada PDF. Os botões do
+cartão de checklist são desenhados **sem condição de setor**. Resultado: quem
+não está na tabela vê o botão, clica, e leva 403 "seu setor não gera este
+documento".
+
+| quando | quem | o que via |
+|---|---|---|
+| 11/09/2026 | Qualidade | o único botão que ela tinha respondia 403 |
+| 23/09/2026 | as três filiais | os dois botões do cartão respondiam 403 |
+
+**A causa não era a tabela — era o painel nunca ter recebido a resposta.** A
+função `documentosDoSetor()` existe desde 22/08/2026 e o comentário dela diz,
+com todas as letras: *"a lista que o PAINEL usa para decidir quais botões
+mostrar"*. Ela nunca foi mandada para o painel. Cada correção anterior
+acrescentou um setor na tabela e deixou o mecanismo intacto para a próxima.
+
+> **Botão visível que sempre dá erro é problema de segurança, não de estética.**
+> Está escrito no próprio arquivo desde agosto: ele ensina o operador a ignorar
+> mensagem de permissão. Operador que ignora aviso passa reto pelo aviso que
+> importa.
+
+**O que mudou agora, e por que fecha a família:** as três portas de sessão —
+login, `/auth/eu` e renovação — devolvem a lista **dentro** do objeto do
+operador, por uma função só (`sessaoDoOperador`). O painel guarda em
+`DB.operador.documentos` e esconde os botões marcados com `data-documento`.
+Documento novo é um atributo no HTML, não mais uma linha de JavaScript que
+alguém esquece.
+
+**O que NÃO mudou:** o controle continua sendo `podeGerar` na rota do PDF.
+Esconder botão não é permissão — é o painel parar de prometer o que o servidor
+nega.
+
+**Lista ausente não esconde nada.** Quem entra por "Entrar só neste aparelho",
+ou num painel ligado a servidor ainda não atualizado, continua vendo tudo como
+antes. Esconder por falta de informação tiraria da Logística um relatório que
+ela sempre teve — e quem decide é o servidor, de qualquer forma.
+
+**Como reconhecer a família, se voltar:** setor novo + botão que aparece +
+403 na primeira vez que alguém clica. Antes de acrescentar o setor na tabela,
+pergunte se o botão tem `data-documento` — se não tiver, a próxima ocorrência
+já está escrita.
+
+**O que trava:** `testes/test_botao_de_relatorio_por_setor.py` (17 conferências,
+8 reprovam contra o publicado) e o bloco 46 de `backend/testes/api.test.js`
+(6 testes, 4 reprovam contra o publicado), incluindo a prova de que a lista
+sai de `SETORES_FILIAL` — filial nova entra sozinha, sem ninguém lembrar.
