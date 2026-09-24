@@ -3069,15 +3069,35 @@ function abreviarEtapa(status){
    programação: carga programada na véspera não passou a noite no pátio, e
    contar assim inflaria o número que o gestor usa para cobrar. */
 function tempoNoPatioTexto(carga){
-  const chegada = primeiroTimestamp(carga.id, 'Aguardando Embarque');
-  if(!chegada) return '<span class="text-dim">—</span>';
-  const saida = primeiroTimestamp(carga.id, 'Seguiu Viagem');
-  const fim = saida ? new Date(saida) : new Date();
-  const min = Math.max(0, Math.round((fim - new Date(chegada)) / 60000));
-  const h = Math.floor(min/60), m = min%60;
-  const texto = h ? `${h}h${String(m).padStart(2,'0')}` : `${m}min`;
+  /* A CONTA NÃO MORA MAIS AQUI (24/09/2026). Esta função refazia a conta
+     por conta própria, lendo o carimbo cru — e era a única das três que
+     não conferia se o carimbo prestava. Carga com data lá na frente saía
+     `0min`: um caminhão parado há horas aparecia como recém-chegado, e
+     nunca ganhava o destaque de acima da meta. Agora ela só DESENHA o que
+     `tempoDePatioDe` respondeu. */
+  const t = tempoDePatioDe(carga);
+  /* Sem chegada é traço limpo: o caminhão não entrou, não há o que contar. */
+  if(t.minutos === null && !t.suspeito) return '<span class="text-dim">—</span>';
+  /* COM CARIMBO FURADO PODE NÃO HAVER DURAÇÃO NENHUMA — chegada no futuro
+     não produz intervalo. A versão antiga desta tela resolvia com
+     `Math.max(0, ...)` e escrevia `0min`, que é o pior resultado possível:
+     um caminhão parado há horas passando por recém-chegado. Aqui a coluna
+     assume que não sabe. */
+  const h = t.minutos === null ? 0 : Math.floor(t.minutos/60);
+  const m = t.minutos === null ? 0 : t.minutos%60;
+  const texto = t.minutos === null ? '?'
+    : (h ? `${h}h${String(m).padStart(2,'0')}` : `${m}min`);
+  /* CARIMBO RUIM MOSTRA O RELÓGIO E SE DECLARA — decisão do dono. Esconder
+     o número (traço) apagaria junto o destaque de atrasado de um caminhão
+     que ESTÁ no pátio; é melhor ver o número sabendo que ele é duvidoso do
+     que não ver o caminhão. */
+  if(t.suspeito){
+    return `<span class="vp-suspeito" title="Carimbo suspeito: a data desta carga não fecha, `
+      + `então este tempo pode estar errado. O número fica à vista para o caminhão não sumir `
+      + `da tela, mas ele está fora das médias dos Indicadores.">${texto} <b>?</b></span>`;
+  }
   // Acima da meta, destaca. É o número que faz alguém levantar da cadeira.
-  const acima = !saida && min > META_TEMPO_PATIO_MIN;
+  const acima = t.emAndamento && t.minutos > META_TEMPO_PATIO_MIN;
   return acima ? `<b class="vp-atrasado">${texto}</b>` : texto;
 }
 

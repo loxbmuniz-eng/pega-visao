@@ -1811,6 +1811,14 @@ code{
 .tabela-patio .vp-transp{max-width:220px}
 .tabela-patio .vp-tempo{white-space:nowrap;text-align:right;font-variant-numeric:tabular-nums}
 .vp-atrasado{color:var(--st-aguardando-veiculo-fg)}
+/* CARIMBO SUSPEITO (24/09/2026). Não é alarme — é ressalva: o tempo está à
+   vista para o caminhão não sumir da tela, com a marca de que a data dele
+   não fecha. Cor de texto secundária de propósito: competir com o vermelho
+   de "acima da meta" faria o olho parar no duvidoso em vez de parar no
+   caminhão que está de fato atrasado. */
+.vp-suspeito{color:var(--text-dim); text-decoration:underline dotted; text-underline-offset:3px;
+  cursor:help}
+.vp-suspeito b{font-weight:700; text-decoration:none}
 
 /* Colunas de etapa: estreitas e centradas. A hora fica abaixo da marca,
    em corpo menor — presente para quem procura, discreta para quem só quer

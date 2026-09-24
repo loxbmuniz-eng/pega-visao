@@ -4,3 +4,8 @@
 # mudança que não é de ninguém. Medida é resultado, não fonte.
 testes/tema2027_etapa4_resultado.json
 testes/tema2027_resultado_*.json
+
+# A vitrine é gerada (vitrine/gerar_vitrine.py) — como o index.html, mas
+# esta nem é publicada pelo Vercel: vive no artefato. 2 MB por commit sem
+# ninguém precisar dela no repositório.
+vitrine/vitrine.html
