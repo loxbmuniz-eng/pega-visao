@@ -395,7 +395,49 @@ function limparTravamentosUI(){
   try { localStorage.removeItem(TRAVAS_CHAVE); } catch(e){}
 }
 
+/* A CONEXÃO VOLTOU: REENVIA O QUE FICOU PARA TRÁS (24/09/2026).
+   ---------------------------------------------------------------------
+   RISCO R1 DO RAIO-X, medido e fechado. A carga criada enquanto o servidor
+   estava fora do ar era aceita pela tela e NUNCA chegava ao servidor — nem
+   depois de voltar. Medido em `testes/test_escrita_offline_chega_ao_servidor.py`:
+   120 segundos e 10 sincronias forçadas depois da reconexão, a carga
+   continuava só na cópia local. Quem lançou viu a tela aceitar e foi embora.
+
+   A CAUSA, confirmada cutucando uma função de propósito: quem reenvia carga
+   é `SuincoStore.sincronizarCargasAlteradas()`, e ela só roda DENTRO de
+   `SuincoStore.save()`. E `sincronizarAgora()` não é isso — ela drena a fila
+   e LÊ o pátio. Com a fila vazia (carga não entra na fila, vai pelo caminho
+   próprio dela) e nada mudando na cópia local depois da queda, ninguém
+   chamava `save()`. A carga ficava parada para sempre.
+
+   No instante em que o `save()` foi forçado, a carga subiu — é esta a prova
+   que nomeia a causa.
+
+   POR QUE CHAMAR A SINCRONIA E NÃO `save()`. `save()` grava o banco local
+   inteiro; aqui não há nada novo para gravar, só para reenviar. Chamar a
+   parte certa evita uma escrita de disco à toa no momento em que o painel
+   acabou de voltar — que é justamente quando o aparelho do pátio está mais
+   ocupado se reconectando.
+
+   POR QUE SÓ NA SUBIDA PARA `online`. Chamar em toda mudança de estado
+   faria a tentativa se repetir durante a queda, contra um servidor que já
+   não responde — o oposto do recuo de 11/09/2026, que existe justamente
+   para não martelar servidor doente. */
+let _estadoConexaoAnterior = null;
+function reenviarPendentesAoVoltar(estado){
+  const voltou = estado === 'online' && _estadoConexaoAnterior !== 'online';
+  _estadoConexaoAnterior = estado;
+  if(!voltou) return;
+  if(typeof SuincoStore === 'undefined' || !SuincoStore.sincronizarCargasAlteradas) return;
+  try{ SuincoStore.sincronizarCargasAlteradas(); }
+  catch(e){ console.warn('[Suinco] reenvio ao voltar:', e); }
+}
+
 function atualizarRodapeConexao(estado, detalhe){
+  // A conexão voltando é o gatilho de reenviar o que a queda deixou para
+  // trás. Fica aqui porque este é o ponto por onde TODA mudança de estado
+  // passa — um lugar só, como manda a casa.
+  reenviarPendentesAoVoltar(estado);
   /* SESSÃO MORTA ABRE O LOGIN. Não é aviso, é a única coisa que resolve.
 
      O que a operação relatou em 31/08/2026, com todo mundo parado: "quem tá
