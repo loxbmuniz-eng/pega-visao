@@ -4150,3 +4150,87 @@ já está escrita.
 8 reprovam contra o publicado) e o bloco 46 de `backend/testes/api.test.js`
 (6 testes, 4 reprovam contra o publicado), incluindo a prova de que a lista
 sai de `SETORES_FILIAL` — filial nova entra sozinha, sem ninguém lembrar.
+
+---
+
+## #85 — O carimbo furado virava "0min", e o caminhão parado passava por recém-chegado (24/09/2026)
+
+**Não foi relato — foi achado medindo**, ao atender o pedido de ter uma
+definição só para "tempo de pátio".
+
+**A medição, antes de mexer.** A pergunta era respondida em TRÊS lugares:
+
+| onde | confere o carimbo? |
+|---|---|
+| `minutosNoPatioAgora` — Gargalos, Relatório Executivo | sim, devolve nulo se não presta |
+| `indicadoresDaCarga` — médias dos Indicadores | sim, via `carimbosDaCarga` |
+| `tempoNoPatioTexto` — **a Torre** | **não** |
+
+**O que a terceira produzia.** Carga com carimbo lá na frente: o
+`Math.max(0, ...)` engolia o intervalo negativo e a Torre escrevia **`0min`**.
+Um caminhão parado há horas aparecia como se tivesse acabado de encostar — e
+nunca cruzava a meta de 3h, então nunca ganhava o destaque de atrasado. A
+mesma carga sumia da média dos Indicadores.
+
+> **Piso em zero esconde data impossível.** `Math.max(0, x)` numa duração não
+> conserta carimbo ruim: transforma "esta data é impossível" em "acabou de
+> chegar", que é a resposta mais tranquilizadora e a mais errada.
+
+**A decisão do dono, perguntado qual era o preço.** Corrigir pelo caminho
+óbvio — a Torre mostrar traço quando o carimbo não presta — apagaria o
+relógio e, junto, o destaque de atrasado de um caminhão que ESTÁ no pátio. Ele
+escolheu a outra saída: **mostrar e se declarar**. A linha fica à vista com a
+marca de suspeita, e continua fora das médias.
+
+**E quando a data nem produz duração** (chegada no futuro), a coluna escreve
+`?`, não um número. Inventar um seria repetir a mentira que a mudança veio
+tirar.
+
+**O que NÃO mudou, de propósito:** `minutosNoPatioAgora` continua olhando
+`entradaPlausivel` e não `suspeito`. `suspeito` é mais amplo (inclui etapa
+fora de ordem); apertar aquela conta junto mudaria calado o número do
+Relatório Executivo, e ninguém pediu isso.
+
+**O que trava:** `testes/test_tempo_de_patio_uma_definicao.py`, 14
+conferências — 8 reprovam contra o publicado.
+
+---
+
+## #86 — A vitrine dizia "sem ligação com o servidor" e pedia um arquivo a ele (24/09/2026)
+
+**Achado pelo próprio teste da vitrine, antes de ela ser publicada.**
+
+A vitrine é uma cópia do painel com o modo local ligado (`SP_CONFIG.ativo =
+false`), para o dono olhar antes de publicar. A primeira versão do gerador
+trocava isso, desligava o service worker, e parava aí.
+
+**O que passou.** O painel carrega a biblioteca de tempo real por
+
+```html
+<script src="https://api.embarquesuinco.com.br/socket.io/socket.io.js" ...>
+```
+
+Uma **tag de script é buscada pelo navegador antes de qualquer linha de
+JavaScript nosso rodar**. `SP_CONFIG.ativo` não alcança uma tag. A vitrine
+abria com uma tarja escrita "sem ligação com o servidor" e, na mesma abertura,
+fazia um GET ao servidor de produção.
+
+> **Interruptor de configuração não desliga tag de script.** Toda decisão de
+> "não fale com a rede" que mora em variável só vale depois que o script roda.
+> O que está no HTML sai antes.
+
+**Por que isto é família, e não caso isolado:** qualquer cópia do painel feita
+para olhar — vitrine, artefato de apresentação, anexo de e-mail — repete o
+mesmo formato. Parece desligada, e tem uma tag apontando para produção.
+
+**O que trava:** `testes/test_vitrine_nao_fala_com_producao.py`. Ele adultera
+o `index.html` de três jeitos diferentes e exige que o gerador **ABORTE** em
+cada um — porque o modo de falha perigoso não é o gerador quebrar, é ele
+produzir uma cópia que parece a vitrine e mexe no pátio de verdade. E abre a
+vitrine num navegador conferindo que **nenhuma requisição sai** para o domínio
+de produção.
+
+**Uma armadilha de medição que este teste pagou:** a primeira versão lia
+`window.DB` e achava a base vazia. `let DB` no topo de um `<script>` **não**
+vira propriedade de `window` — o teste acusou defeito que não existia. O nome
+nu resolve pelo escopo, que é o que o painel usa.

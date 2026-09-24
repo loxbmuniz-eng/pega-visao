@@ -2314,15 +2314,75 @@ function entradaNoPatioDe(c){
   if(c.aguardandoCarga) return c.criadoEm || null;
   return null;
 }
+/* QUANTO TEMPO DE PÁTIO — A RESPOSTA ÚNICA (24/09/2026).
+   ---------------------------------------------------------------------
+   Antes disto a pergunta era respondida em TRÊS lugares, e um deles
+   respondia diferente:
+
+     · `minutosNoPatioAgora` (logo abaixo) — Gargalos e Relatório
+       Executivo. Confere se o carimbo é plausível, devolve nulo se não é.
+     · `indicadoresDaCarga` — médias dos Indicadores. Usa
+       `carimbosDaCarga`, que descarta carimbo implausível.
+     · `tempoNoPatioTexto` (app.js) — a TORRE. Não conferia nada.
+
+   O QUE ISSO PRODUZIA, medido: uma carga com carimbo lá na frente mostrava
+   `0min` na Torre — `Math.max(0, ...)` engolia o negativo —, ou seja, um
+   caminhão parado há horas aparecia como se tivesse ACABADO de chegar, e
+   nunca ganhava o destaque de acima da meta. E a mesma carga sumia da
+   média dos Indicadores. Dois números do mesmo dia que não batem, e
+   olhando a tela não dava para saber qual estava certo.
+
+   A DECISÃO DO DONO, perguntado qual era o preço aceitável. Corrigir pelo
+   caminho óbvio — a Torre passar a mostrar traço quando o carimbo é ruim —
+   apagaria o relógio e, junto, o destaque de "acima de 3h" de um caminhão
+   que ESTÁ no pátio. Ele escolheu a outra saída: mostrar o relógio E
+   marcar que o carimbo é suspeito. Vê-se o caminhão atrasado, e sabe-se
+   que aquele número não é de confiar.
+
+   POR QUE DEVOLVE UM OBJETO E NÃO UM NÚMERO. Quem desenha a Torre precisa
+   de três coisas que um número só não carrega: quanto tempo, se ainda
+   está correndo, e se dá para confiar. Devolver só os minutos obrigaria
+   cada chamador a refazer as outras duas perguntas — que é exatamente
+   como as três contas se separaram. */
+function tempoDePatioDe(c){
+  const vazio = { minutos:null, emAndamento:false, suspeito:false,
+                  entrada:null, entradaPlausivel:false, saida:null };
+  if(!c) return vazio;
+  const entrada = entradaNoPatioDe(c);
+  if(!entrada) return vazio;
+  const saida = primeiroTimestamp(c.id, 'Seguiu Viagem');
+  const entradaPlausivel = dataDeEventoPlausivel(entrada);
+  const suspeito = !entradaPlausivel
+    || (!!saida && !dataDeEventoPlausivel(saida))
+    || problemasDeDataDaCarga(c.id).length > 0;
+  const bruto = minutosEntre(entrada, saida || new Date().toISOString());
+  return {
+    /* O piso em zero fica: carimbo no futuro daria tempo negativo, e
+       número negativo numa coluna de duração é ruído. O que mudou é que
+       agora ele vem acompanhado da marca de suspeito, em vez de passar
+       por um caminhão recém-chegado. */
+    minutos: bruto === null ? null : Math.max(0, bruto),
+    emAndamento: !saida,
+    suspeito, entrada, entradaPlausivel, saida,
+  };
+}
 /* Há quanto tempo o caminhão está no pátio AGORA — pela chegada, nunca pela
    última gravação. `atualizadoEm` muda a cada observação escrita e a cada
    eco de sincronização (abrir o painel regrava as cargas); contar por ele
    zerava "Parada há" e "Paradas Além da Meta" justamente com o painel em
    uso. Ocorrência #08, nos dois pontos que a correção não tinha alcançado. */
 function minutosNoPatioAgora(c){
-  const entrada = entradaNoPatioDe(c);
-  if(!entrada || !dataDeEventoPlausivel(entrada)) return null;
-  return minutosEntre(entrada, new Date().toISOString());
+  /* Pergunta a mesma função a chegada e se dá para confiar nela — era esta
+     a parte que estava repetida. O FIM aqui é sempre AGORA, mesmo se o
+     caminhão já saiu: é o que "Paradas Além da Meta" mede, e trocar isso
+     mudaria o indicador sem ninguém ter pedido.
+
+     Repara que a condição é `entradaPlausivel`, não `suspeito`: `suspeito`
+     é mais amplo (inclui etapa fora de ordem), e apertar esta conta junto
+     mudaria calado o número do Relatório Executivo. */
+  const t = tempoDePatioDe(c);
+  if(!t.entrada || !t.entradaPlausivel) return null;
+  return minutosEntre(t.entrada, new Date().toISOString());
 }
 /* Uma função, dois chamadores: a lista de Gargalos e a caixa do Relatório
    Executivo contam pela mesma régua. `semChegada` é o que a tela precisa
