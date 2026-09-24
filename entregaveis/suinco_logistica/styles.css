@@ -6464,3 +6464,165 @@ tr.linha-nova{
 }
 #mont-tabela .frete-marca{ left:2px; opacity:.6 }
 #mont-tabela .frete-aviso{ left:12px; color:var(--aviso, #d08700); font-weight:700 }
+
+/* =====================================================================
+   GRÁFICOS 2027 — o acabamento do motor SVG (graficos2027.js)
+   =====================================================================
+   Pedido do dono em 24/09/2026: "eu quero um painel de indicadores muito
+   mais sofisticado, com qualidade, animacoes, interacoes".
+
+   A regra que manda aqui: o movimento tem que ter função. Entrada conta a
+   ordem de leitura; barra que cresce conta a comparação. Nada pisca só
+   para parecer vivo — Indicadores é tela que o gestor abre dezenas de
+   vezes por dia, e animação em coisa repetida vira atraso. */
+
+/* A DICA QUE SEGUE O DEDO. Fica no <body> e não dentro do gráfico: dentro,
+   o `overflow` do cartão a cortaria justamente nas bordas, que é onde ela
+   mais aparece. */
+.graf-dica{
+  position:fixed; z-index:9000; pointer-events:none;
+  background:var(--navy-deep,#101625);
+  border:1px solid var(--border,rgba(233,185,84,.28));
+  border-radius:var(--radius-sm,6px);
+  box-shadow:0 6px 20px rgba(0,0,0,.45);
+  padding:6px 10px; font-size:12px; line-height:1.35; color:var(--text,#f2f4f8);
+  display:flex; flex-direction:column; gap:1px; max-width:70vw;
+}
+.graf-dica b{ color:var(--gold-text,#e9b954); font-size:11px; font-weight:600 }
+.graf-dica span{ font-variant-numeric:tabular-nums; font-size:14px; font-weight:700 }
+
+.graf-vazio{
+  margin:0; padding:18px 12px; text-align:center;
+  color:var(--text-dim,#b7c0d4); font-size:13px;
+}
+
+/* ---- RANKING ---------------------------------------------------- */
+.graf-rank{ display:flex; flex-direction:column; gap:6px }
+.graf-rank-item{
+  display:grid; grid-template-columns:minmax(78px,1.1fr) 2.2fr auto;
+  align-items:center; gap:10px; min-height:32px;
+}
+.graf-rank-nome{
+  font-size:12px; color:var(--text,#f2f4f8);
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.graf-rank-nome b{ color:var(--wine-light,#b3363f); font-size:10px }
+.graf-rank-trilho{
+  background:var(--border-soft,rgba(233,185,84,.14));
+  border-radius:999px; height:10px; overflow:hidden;
+}
+.graf-rank-trilho i{
+  display:block; height:100%; width:0;
+  /* 4px na ponta do dado, ancorado na base: a marca termina onde o valor
+     termina, e a ponta arredondada não inventa comprimento. */
+  border-radius:0 4px 4px 0;
+  background:linear-gradient(90deg,var(--gold-dim,#b9903f),var(--gold,#e9b954));
+}
+.graf-rank-trilho i.grave{
+  background:linear-gradient(90deg,var(--wine,#8f1f26),var(--wine-light,#b3363f));
+}
+.graf-rank.entrou .graf-rank-trilho i{
+  width:var(--w); transition:width 420ms cubic-bezier(.23,1,.32,1) var(--atraso,0ms);
+}
+.graf-rank-valor{
+  font-variant-numeric:tabular-nums; font-size:13px; font-weight:700;
+  color:var(--text,#f2f4f8); text-align:right; white-space:nowrap;
+}
+/* O alerta é palavra, não só cor. */
+.graf-rank-tag{
+  display:block; font-style:normal; font-size:10px; font-weight:600;
+  color:var(--wine-light,#b3363f); letter-spacing:.02em;
+}
+
+/* ---- FILA DO PÁTIO ---------------------------------------------- */
+.graf-fila{
+  display:flex; width:100%; border-radius:var(--radius-sm,6px); overflow:hidden;
+  /* 2px de respiro entre as partes: sem ele, duas etapas vizinhas da mesma
+     rampa viram uma mancha só. */
+  gap:2px; background:transparent; min-height:56px;
+}
+.graf-fila-parte{
+  flex:0 0 0%; background:var(--c); color:#1a1200;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  padding:6px 2px; min-width:0; overflow:hidden; cursor:default;
+  transition:flex-basis 460ms cubic-bezier(.23,1,.32,1) var(--atraso,0ms),
+             filter 160ms ease;
+}
+.graf-fila.entrou .graf-fila-parte{ flex-basis:var(--w) }
+.graf-fila-parte:hover,.graf-fila-parte:focus-visible{ filter:brightness(1.12) }
+.graf-fila-parte b{ font-size:17px; font-variant-numeric:tabular-nums; line-height:1 }
+.graf-fila-parte span{
+  font-size:9px; line-height:1.15; text-align:center; margin-top:3px;
+  opacity:.85; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  max-width:100%;
+}
+/* NO CELULAR O RÓTULO NÃO SOME — ELE ENCURTA (24/09/2026).
+   A primeira versão escondia o texto abaixo de 820px. Ficavam cinco
+   blocos dourados com números e nada dizendo qual etapa era qual — e o
+   desenho inteiro foi decidido em cima de "a etapa é lida por POSIÇÃO e
+   RÓTULO, nunca por cor". Tirar o rótulo devolvia a leitura para a cor,
+   que é exatamente o que o validador de paleta reprovou. */
+@media (max-width:820px){
+  .graf-fila-parte b{ font-size:15px }
+  .graf-fila-parte span{ font-size:8px; line-height:1.1 }
+}
+/* Abaixo de uma largura mínima não cabe texto nenhum sem virar rabisco.
+   Aí a faixa vira coluna: cada etapa numa linha, com nome inteiro. */
+@media (max-width:520px){
+  .graf-fila{ flex-direction:column; min-height:0; gap:3px }
+  .graf-fila-parte{
+    flex-direction:row; justify-content:flex-start; gap:8px;
+    padding:5px 9px; min-height:30px;
+  }
+  .graf-fila.entrou .graf-fila-parte{ flex-basis:auto }
+  .graf-fila-parte span{ font-size:11px; margin-top:0; opacity:.9 }
+  .graf-fila-parte b{ font-size:14px; min-width:22px; text-align:right }
+}
+
+@media (prefers-reduced-motion:reduce){
+  .graf-rank.entrou .graf-rank-trilho i,
+  .graf-fila.entrou .graf-fila-parte{ transition:none }
+}
+
+/* ---- PULSO DO DIA — o topo que decide (24/09/2026) --------------- */
+.pulso-quando{
+  margin-left:auto; font-size:11px; font-weight:400;
+  color:var(--text-dim,#b7c0d4); font-variant-numeric:tabular-nums;
+}
+/* Poucos números, grandes. Tile de número só se paga quando AQUELE número
+   é o motivo de a tela existir — cinco deles competindo viram parede. */
+.pulso-numeros{
+  display:grid; gap:8px; margin-bottom:14px;
+  grid-template-columns:repeat(auto-fit,minmax(124px,1fr));
+}
+.pulso-num{
+  background:var(--campo-bg,#101625);
+  border:1px solid var(--border-soft,rgba(233,185,84,.14));
+  border-left:3px solid var(--gold-dim,#b9903f);
+  border-radius:var(--radius-sm,6px); padding:9px 11px; min-width:0;
+}
+.pulso-num.alerta{ border-left-color:var(--wine-light,#b3363f) }
+.pulso-num .v{
+  display:block; font-size:24px; font-weight:700; line-height:1.05;
+  font-variant-numeric:tabular-nums; color:var(--text,#f2f4f8);
+  letter-spacing:-.02em;
+}
+.pulso-num.alerta .v{ color:var(--wine-light,#b3363f) }
+.pulso-num .r{
+  display:block; font-size:10px; margin-top:3px; letter-spacing:.06em;
+  text-transform:uppercase; color:var(--text-dim,#b7c0d4); font-weight:600;
+}
+.pulso-num .d{ display:block; font-size:11px; margin-top:3px; color:var(--text-dim,#b7c0d4) }
+
+.pulso-secao{ margin-top:14px }
+.pulso-rot{
+  margin:0 0 7px; font-size:11px; font-weight:600; letter-spacing:.07em;
+  text-transform:uppercase; color:var(--gold-text,#e9b954);
+  display:flex; align-items:baseline; gap:8px; flex-wrap:wrap;
+}
+.pulso-rot small{
+  text-transform:none; letter-spacing:0; font-weight:400; font-size:11px;
+  color:var(--text-dim,#b7c0d4);
+}
+.pulso-grafico{ height:190px }
+.pulso-duplo{ display:grid; gap:14px; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)) }

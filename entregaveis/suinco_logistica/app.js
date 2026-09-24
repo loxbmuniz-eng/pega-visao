@@ -6667,7 +6667,105 @@ function renderPulsoDoPatio(){
   evoEl.innerHTML = evolucaoPatioSvg(entradas);
 }
 
+/* PULSO DO DIA — o topo que decide (24/09/2026)
+   ---------------------------------------------------------------------
+   Pedido do dono: Indicadores "muito mais sofisticado, com qualidade,
+   animacoes, interacoes, facilidade, visual surpreendente", e compacto o
+   bastante para caber na tela.
+
+   NENHUMA CONTA NOVA MORA AQUI. Tudo o que este bloco mostra vem de
+   função que já existe e já é testada: `tempoDePatioDe` (a resposta única
+   de quanto tempo de pátio, unificada hoje), `minutosNoPatioAgora`,
+   `paradasAlemDaMeta` e `cargasAbertas`. Indicador que recalcula por
+   conta própria é como dois números do mesmo dia deixam de bater — foi
+   exatamente o defeito do tempo de pátio, corrigido nesta mesma manhã. */
+function renderPulsoDoDia(){
+  if(typeof Graf === 'undefined') return;
+  const abertas = cargasAbertas();
+  const meta = metaTempoPatio();
+  const paradas = paradasAlemDaMeta(abertas);
+
+  const quando = document.getElementById('pulso-quando');
+  if(quando) quando.textContent = 'agora · ' + new Date().toLocaleTimeString('pt-BR',
+    { hour:'2-digit', minute:'2-digit' });
+
+  /* ---- os números que fazem levantar da cadeira ---- */
+  const tempos = abertas.map(c => minutosNoPatioAgora(c)).filter(m => m !== null);
+  const maior = tempos.length ? Math.max(...tempos) : null;
+  const medio = tempos.length ? Math.round(tempos.reduce((a,b)=>a+b,0)/tempos.length) : null;
+  const caixa = document.getElementById('pulso-numeros');
+  if(caixa){
+    const num = (v, r, d, alerta) =>
+      `<div class="pulso-num${alerta ? ' alerta' : ''}">`
+      + `<span class="v">${v}</span><span class="r">${r}</span>`
+      + (d ? `<span class="d">${d}</span>` : '') + '</div>';
+    caixa.innerHTML =
+      num(abertas.length, 'no pátio', 'cargas em aberto')
+      + num(paradas.total, 'acima da meta', `passaram de ${fmtDuracao(meta)}`, paradas.total > 0)
+      + num(maior === null ? '—' : fmtDuracao(maior), 'o mais parado',
+            maior !== null && maior > meta ? 'precisa de atenção' : 'dentro da meta',
+            maior !== null && maior > meta)
+      + num(medio === null ? '—' : fmtDuracao(medio), 'média no pátio', 'das que estão lá agora')
+      /* A carga SEM CHEGADA não é zero: é desconhecida, e some se a gente
+         calar. Só aparece quando existe. */
+      + (paradas.semChegada
+          ? num(paradas.semChegada, 'sem chegada', 'não dá para contar o tempo', true) : '');
+  }
+
+  /* ---- onde estão os caminhões: posição e rótulo, nunca cor sozinha ---- */
+  const alvoFila = document.getElementById('pulso-fila');
+  if(alvoFila){
+    const etapas = STATUS_FLOW.map(st => ({
+      rotulo: st, valor: abertas.filter(c => c.status === st).length
+    })).filter(e => e.valor > 0);
+    Graf.fila(alvoFila, { etapas });
+  }
+
+  /* ---- o dia por hora ---- */
+  const alvoHora = document.getElementById('pulso-hora');
+  if(alvoHora){
+    const porHora = new Array(24).fill(0);
+    abertas.forEach(c => {
+      const t = tempoDePatioDe(c);
+      if(!t.entrada || !t.entradaPlausivel) return;
+      porHora[new Date(t.entrada).getHours()]++;
+    });
+    /* Só as horas com movimento, e da primeira à última: mostrar 24 barras
+       de madrugada vazia é gastar a tela com o que não aconteceu. */
+    let ini = porHora.findIndex(v => v > 0);
+    let fim = porHora.length - 1 - [...porHora].reverse().findIndex(v => v > 0);
+    const pontos = (ini < 0) ? [] : porHora.slice(ini, fim + 1)
+      .map((v, i) => ({ rotulo: String(ini + i).padStart(2,'0') + 'h', valor: v }));
+    Graf.area(alvoHora, { pontos, rotulo:'entradas no pátio por hora',
+      formato: v => Math.round(v) + (Math.round(v) === 1 ? ' carga' : ' cargas') });
+  }
+
+  /* ---- rankings: quem está segurando o pátio ---- */
+  const porChave = (fn) => {
+    const m = new Map();
+    abertas.forEach(c => {
+      const min = minutosNoPatioAgora(c);
+      if(min === null) return;
+      const k = (fn(c) || '').trim() || '(sem informação)';
+      const a = m.get(k) || { rotulo:k, valor:0, n:0 };
+      a.valor = Math.max(a.valor, min); a.n++;
+      m.set(k, a);
+    });
+    return [...m.values()].sort((a,b) => b.valor - a.valor);
+  };
+  const fmt = v => fmtDuracao(v);
+  const grave = it => it.valor > meta;
+  const r1 = document.getElementById('pulso-rank-rota');
+  if(r1) Graf.ranking(r1, { itens: porChave(c => c.rota), formato: fmt,
+                            rotulo:'tempo parado por rota', alerta: grave });
+  const r2 = document.getElementById('pulso-rank-transp');
+  if(r2) Graf.ranking(r2, { itens: porChave(c => c.transportadora), formato: fmt,
+                            rotulo:'tempo parado por transportadora', alerta: grave });
+}
+
 function renderIndicadores(){
+  // O pulso desenha junto com o resto da aba, do mesmo estado.
+  try{ renderPulsoDoDia(); }catch(e){ console.warn('[Suinco] pulso:', e); }
   preencherFiltrosIndicadores();
   renderDistribuicaoStatus();
   renderTempoMedioPatio();

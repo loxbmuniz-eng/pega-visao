@@ -111,7 +111,12 @@ const Graf = (function(){
                    'stroke-width':1 }, svg);
       const t = el('text', { x:L-6, y:yy+4, 'text-anchor':'end',
                              fill:cor('--text-dim','#b7c0d4'), 'font-size':10 }, svg);
-      t.textContent = (formato ? formato(max*(1-f)) : Math.round(max*(1-f)));
+      /* SÓ O NÚMERO NO EIXO. A primeira versão usava o mesmo `formato` da
+         dica, que traz a unidade junto ("3 cargas") — e o texto ficou
+         largo demais para a margem, empurrando o número para fora do
+         desenho: sobrava "cargas" sem número nenhum. A unidade é do
+         TÍTULO da seção; o eixo é só a escala. */
+      t.textContent = Math.round(max*(1-f));
     });
 
     if(meta){

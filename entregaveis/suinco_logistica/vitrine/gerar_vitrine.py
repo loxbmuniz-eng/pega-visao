@@ -45,31 +45,36 @@ SAIDA = RAIZ / 'vitrine' / 'vitrine.html'
 CHAVE = 'suinco_painel_v1'
 
 TARJA = """
-<div id="vitrine-tarja" role="status">
-  <b>VITRINE</b>
-  <span>não é o painel · sem servidor · dados de demonstração · baixar arquivo não funciona aqui</span>
-  <span class="vitrine-commit">%(commit)s</span>
+<div id="vitrine-tarja" role="status"
+     title="NÃO é o painel: é uma cópia para olhar antes de publicar. Sem ligação com o servidor; os dados são de demonstração. Baixar PDF e CSV não funciona aqui.">
+  <b>VITRINE</b><span>dados de demonstração · sem servidor</span><i>%(commit)s</i>
 </div>
 <style>
-  /* A TARJA PRECISA SER PEQUENA (24/09/2026). A primeira versão ocupava
-     208px no celular — um quarto da tela — e foi medida ATRAPALHANDO
-     exatamente o que a vitrine existe para fazer: julgar a tela. Aviso que
-     rouba a tela que ele deveria deixar ver é aviso que se volta contra o
-     próprio dono. Agora é uma linha, e ela rola junto com a página em vez
-     de ficar grudada no topo. */
+  /* ONDE A TARJA PODE FICAR (24/09/2026), e isto foi medido duas vezes.
+     1ª: faixa no topo, 208px — um quarto do celular, tapando a tela que a
+         vitrine existe para deixar julgar;
+     2ª: faixa fina no topo, 46px — e o cabeçalho do painel, que é FIXO com
+         z-index 1000, cobria os 56px de cima dela. Sobrava só o commit, e
+         eu cheguei a achar que o texto tinha sumido.
+     Subir o z-index resolveria a sobreposição tapando o menu, que é pior.
+     Então ela sai da briga: pílula fixa no canto, por cima de nada. */
   #vitrine-tarja{
-    display:flex; align-items:baseline; gap:.5rem; flex-wrap:wrap;
-    padding:.3rem .7rem; background:#7a1224; color:#fff;
-    font:600 12px/1.35 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
-    border-bottom:2px solid #ffd97a;
+    position:fixed; left:8px; bottom:8px; z-index:99998;
+    display:flex; align-items:center; gap:6px; max-width:calc(100vw - 16px);
+    padding:5px 10px; border-radius:999px;
+    background:#7a1224; color:#fff; border:1px solid #ffd97a;
+    box-shadow:0 4px 14px rgba(0,0,0,.45);
+    font:700 11px/1 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    letter-spacing:.04em; pointer-events:auto; cursor:help;
   }
-  #vitrine-tarja span{font-weight:400; opacity:.9; font-size:11px}
-  #vitrine-tarja .vitrine-commit{margin-left:auto; font-family:ui-monospace,monospace}
-  /* O ALARME DE OFFLINE NÃO CABE AQUI. A vitrine é offline POR
-     CONSTRUÇÃO, então a faixa "VOCÊ ESTÁ OFFLINE — SISTEMA INDISPONÍVEL"
-     fica acesa para sempre, toma o rodapé inteiro e faz quem abre achar
-     que está quebrado. Ela é um alarme de verdade no painel de verdade; na
-     cópia para olhar, é ruído que esconde a tela. */
+  #vitrine-tarja span{ font-weight:400; opacity:.9; letter-spacing:0 }
+  #vitrine-tarja i{ font-style:normal; opacity:.75; font-family:ui-monospace,monospace }
+  /* No celular o rodapé do painel já ocupa a base — a pílula sobe um pouco
+     para não se sentar em cima do aviso de modo local. */
+  @media (max-width:820px){ #vitrine-tarja{ bottom:58px } #vitrine-tarja span{ display:none } }
+  /* O ALARME DE OFFLINE NÃO CABE AQUI. A vitrine é offline POR CONSTRUÇÃO:
+     a faixa fica acesa para sempre, toma o rodapé inteiro e faz quem abre
+     achar que está quebrado. É alarme de verdade no painel de verdade. */
   #faixa-offline{display:none!important}
 </style>
 """
@@ -140,10 +145,21 @@ def main():
         + json.dumps(json.dumps(dados, ensure_ascii=False)) + '); }catch(e){}\n'
         '</script>\n'
     )
-    corpo = re.search(r'<body[^>]*>', html)
-    if not corpo:
-        erro('não achei a abertura do <body>.')
-    ponto = corpo.end()
+    # O <body> DE VERDADE, NÃO O PRIMEIRO QUE APARECER (24/09/2026).
+    #
+    # A primeira versão procurava `<body[^>]*>` e pegava a primeira
+    # ocorrência. Bastou eu escrever a palavra `<body>` dentro de um
+    # COMENTÁRIO de CSS para a semente ser injetada lá — num lugar onde ela
+    # nunca executa. A vitrine passou a abrir pedindo login, com o pátio
+    # vazio, e sem UM erro de JavaScript para denunciar.
+    #
+    # Agora a âncora é exata. Se a classe do body mudar, este gerador PARA
+    # com mensagem, em vez de produzir uma vitrine silenciosamente vazia.
+    ANCORA_BODY = '<body class="pre-login">'
+    if html.count(ANCORA_BODY) != 1:
+        erro(f'esperava exatamente um {ANCORA_BODY}, achei {html.count(ANCORA_BODY)}. '
+             'Sem âncora exata a semente cai no lugar errado e a vitrine abre vazia.')
+    ponto = html.index(ANCORA_BODY) + len(ANCORA_BODY)
     html = html[:ponto] + '\n' + semente + (TARJA % {'commit': commit}) + html[ponto:]
 
     # A conferência que vale: depois de tudo, não pode ter sobrado nada

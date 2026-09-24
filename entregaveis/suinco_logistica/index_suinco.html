@@ -988,6 +988,54 @@
   <!-- ===== INDICADORES ===== -->
   <div class="tab-page" id="tab-indicadores">
     <div class="funcao-aba" data-tab="indicadores"></div>
+
+    <!-- ===== PULSO DO DIA (24/09/2026) =========================
+         Pedido do dono: "eu quero um painel de indicadores muito mais
+         sofisticado, com qualidade, animacoes, interacoes, facilidade,
+         visual surpreendente". E a referência que ele deu: compacto, que
+         CABE NA TELA, sem rolar sem fim.
+
+         POR QUE ESTE BLOCO VEM ANTES DE TUDO. A aba abria por "Tempos
+         Médios — Histórico Completo": média de tudo que já aconteceu.
+         Média histórica não faz ninguém levantar da cadeira. O que faz é
+         o caminhão que está parado AGORA. O histórico continua logo
+         abaixo, inteiro, para quem foi olhar histórico.
+
+         A COR NÃO IDENTIFICA ETAPA. Decidido no validador de paleta, não
+         no gosto: seis etapas são uma sequência, e sequência vizinha não
+         se separa por cor. Aqui a etapa é lida por POSIÇÃO e RÓTULO. -->
+    <div class="card" id="card-pulso-dia">
+      <div class="card-title">
+        <svg class="ico ico-card" aria-hidden="true"><use href="#i-indicadores"/></svg>
+        Pulso do dia
+        <span class="pulso-quando" id="pulso-quando"></span>
+      </div>
+
+      <div class="pulso-numeros" id="pulso-numeros"></div>
+
+      <div class="pulso-secao">
+        <h4 class="pulso-rot">Onde estão os caminhões agora</h4>
+        <div id="pulso-fila"></div>
+      </div>
+
+      <div class="pulso-secao">
+        <h4 class="pulso-rot">Entradas no pátio, por hora
+          <small>a linha pontilhada é a meta de tempo de pátio</small></h4>
+        <div id="pulso-hora" class="pulso-grafico"></div>
+      </div>
+
+      <div class="pulso-duplo">
+        <div class="pulso-secao">
+          <h4 class="pulso-rot">Mais tempo parado — por rota</h4>
+          <div id="pulso-rank-rota"></div>
+        </div>
+        <div class="pulso-secao">
+          <h4 class="pulso-rot">Mais tempo parado — por transportadora</h4>
+          <div id="pulso-rank-transp"></div>
+        </div>
+      </div>
+    </div>
+
     <div class="card">
       <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-indicadores"/></svg> Tempos Médios — Histórico Completo (cargas concluídas — Seguiu Viagem)</div>
       <!-- FILTROS DOS INDICADORES
@@ -1997,6 +2045,10 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
 <script src="suinco-api.js"></script>
 <script src="data.js"></script>
 <script src="qr.js"></script>
+<!-- O motor de gráfico entra ANTES do app.js: é ele quem desenha, e o
+     app.js só manda os dados. Depois de data.js porque lê os mesmos
+     tokens de tema. -->
+<script src="graficos2027.js"></script>
 <script src="app.js"></script>
 <script src="devolucoes.js"></script>
 </body>
