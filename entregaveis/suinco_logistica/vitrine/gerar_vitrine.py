@@ -46,24 +46,31 @@ CHAVE = 'suinco_painel_v1'
 
 TARJA = """
 <div id="vitrine-tarja" role="status">
-  <b>VITRINE — não é o painel</b>
-  <span>Cópia para olhar antes de publicar. Sem ligação com o servidor;
-  os dados são de demonstração. <b>Baixar PDF e CSV não funciona aqui</b> —
-  a vitrine não tem permissão de entregar arquivo; no painel funciona.</span>
+  <b>VITRINE</b>
+  <span>não é o painel · sem servidor · dados de demonstração · baixar arquivo não funciona aqui</span>
   <span class="vitrine-commit">%(commit)s</span>
 </div>
 <style>
+  /* A TARJA PRECISA SER PEQUENA (24/09/2026). A primeira versão ocupava
+     208px no celular — um quarto da tela — e foi medida ATRAPALHANDO
+     exatamente o que a vitrine existe para fazer: julgar a tela. Aviso que
+     rouba a tela que ele deveria deixar ver é aviso que se volta contra o
+     próprio dono. Agora é uma linha, e ela rola junto com a página em vez
+     de ficar grudada no topo. */
   #vitrine-tarja{
-    position:sticky; top:0; z-index:99999;
-    display:flex; align-items:baseline; gap:.6rem; flex-wrap:wrap;
-    padding:.45rem .9rem;
-    background:#7a1224; color:#fff;
-    font:600 13px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    display:flex; align-items:baseline; gap:.5rem; flex-wrap:wrap;
+    padding:.3rem .7rem; background:#7a1224; color:#fff;
+    font:600 12px/1.35 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
     border-bottom:2px solid #ffd97a;
   }
-  #vitrine-tarja span{font-weight:400; opacity:.92; font-size:12px}
+  #vitrine-tarja span{font-weight:400; opacity:.9; font-size:11px}
   #vitrine-tarja .vitrine-commit{margin-left:auto; font-family:ui-monospace,monospace}
-  @media (max-width:640px){ #vitrine-tarja .vitrine-commit{margin-left:0} }
+  /* O ALARME DE OFFLINE NÃO CABE AQUI. A vitrine é offline POR
+     CONSTRUÇÃO, então a faixa "VOCÊ ESTÁ OFFLINE — SISTEMA INDISPONÍVEL"
+     fica acesa para sempre, toma o rodapé inteiro e faz quem abre achar
+     que está quebrado. Ela é um alarme de verdade no painel de verdade; na
+     cópia para olhar, é ruído que esconde a tela. */
+  #faixa-offline{display:none!important}
 </style>
 """
 
