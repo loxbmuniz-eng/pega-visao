@@ -4234,3 +4234,71 @@ de produção.
 `window.DB` e achava a base vazia. `let DB` no topo de um `<script>` **não**
 vira propriedade de `window` — o teste acusou defeito que não existia. O nome
 nu resolve pelo escopo, que é o que o painel usa.
+
+---
+
+## #87 — A carga lançada com o servidor fora do ar nunca chegava (24/09/2026)
+
+**Risco R1 do raio-X.** Pedido do dono: *"traga solucoes e tirem de risco
+nossa operacao com todas as observacoes em vermelho"*.
+
+**O QUE ESTAVA ERRADO.** Com a API fora do ar, o painel aceitava a criação de
+uma carga — tela normal, sem erro, rodapé dizendo "offline". Quando o servidor
+voltava, **a carga não subia**. Medido: 120 segundos depois da reconexão, com
+dez sincronias forçadas no meio, `fact_viagens` continuava sem ela. Quem
+lançou viu a tela aceitar e foi embora tranquilo.
+
+**A CAUSA, e ela só apareceu depois de três hipóteses caírem.**
+
+| hipótese | como caiu |
+|---|---|
+| a marca otimista de "já enviado" | `_sincronizado` não tinha a carga |
+| a fila offline não drenava | a fila estava **vazia** — não há o que drenar |
+| o recuo entre tentativas | esperei além do recuo máximo; não chegou |
+
+A causa é outra: **quem reenvia carga é `SuincoStore.sincronizarCargasAlteradas()`,
+e ela só roda DENTRO de `SuincoStore.save()`.** E `sincronizarAgora()` não é
+isso — ela drena a fila e LÊ o pátio. Com a fila vazia e nada mudando na cópia
+local depois da queda, ninguém chamava `save()`.
+
+A prova que nomeia a causa: forcei um `SuincoStore.save()` de propósito no
+meio da medição, e a carga subiu na sequência.
+
+> **Caminho de volta precisa de gatilho próprio.** Não basta a reconexão
+> existir: alguém tem de CHAMAR o reenvio. Sincronia que só lê não reenvia
+> nada, e cópia local parada não gera evento — então o pior caso (pátio
+> quieto depois da queda) é justamente o que fica preso.
+
+**A CORREÇÃO.** Um gatilho, no ponto por onde toda mudança de estado de
+conexão passa: quando o estado sobe para `online`, chama
+`sincronizarCargasAlteradas()`.
+
+- **Não** chama `save()`: não há nada novo para gravar, só para reenviar, e
+  gravar o banco local inteiro logo na reconexão é escrita à toa no momento
+  em que o aparelho do pátio está mais ocupado.
+- **Só na subida** para `online`. Chamar em toda mudança de estado tentaria
+  de novo durante a queda, contra um servidor que já não responde — o oposto
+  do recuo de 11/09/2026.
+
+**O QUE JÁ ESTAVA CERTO, e a medição confirmou:** avançar etapa é **recusado**
+com o servidor fora. Eu tinha escrito o teste esperando o contrário e errei —
+é a regra "o servidor é quem manda" funcionando. A etapa não se perde porque
+nunca foi aceita, e tela e banco continuam contando a mesma história.
+
+**Medido depois da correção:** a carga chega **12 segundos** após a API voltar,
+sem intervenção.
+
+**O que trava:** `testes/test_escrita_offline_chega_ao_servidor.py` — derruba a
+API, escreve pela TELA, espera passar do tempo limite de 20s, sobe a API e
+confere **no banco**, não na tela. Perguntar à tela seria perguntar ao réu: a
+cópia local mostra a carga de qualquer jeito.
+
+**Três erros de medição meus, no caminho**, anotados dentro do arquivo para
+não voltarem: as duas cargas na mesma placa (esbarrava na trava de placa
+duplicada, que é regra e está certa); avançar etapa pela função de dados em
+vez do botão; e consultar `status`/`criado_em` quando as colunas são
+`status_novo`/`data_evento` — o psql errava calado, a lista voltava vazia e
+parecia "não chegou" sem eu ter perguntado.
+
+> **Consulta errada parece defeito.** Antes de acusar o código, confira se a
+> pergunta chegou a ser feita.

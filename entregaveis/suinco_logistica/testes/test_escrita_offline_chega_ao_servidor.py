@@ -195,6 +195,17 @@ async def main():
                  nunca chega, sem erro e sem aviso. */
               marcadaComoJaEnviada: !!(c && DB._sincronizado && DB._sincronizado[c.id]),
               pendenteLocal: !!(c && c._pendente),
+              /* QUAL GUARDA BARRA O REENVIO — cada uma destas é um `return`
+                 dentro de `sincronizarCargasAlteradas`. */
+              marcaDaCarga: c ? (c.atualizadoEm || c.criadoEm || '') : null,
+              ultimoSync: c ? (SuincoStore._ultimoSync.get(c.id) || null) : null,
+              nuncaConfirmada: !!(c && c._nuncaConfirmada),
+              proximaTentativaEm: c ? (c._proximaTentativaEm || null) : null,
+              emVoo: !!(c && SuincoStore._emVoo && SuincoStore._emVoo.has(c.id)),
+              refazer: !!(c && SuincoStore._refazer && SuincoStore._refazer.has(c.id)),
+              ehDoServidor: c ? (typeof ehCargaDoServidor === 'function'
+                                 ? ehCargaDoServidor(c) : 'sem função') : null,
+              configurado: SuincoSharePoint.estaConfigurado(),
             };
         }""", [b['id']])
         ck('o painel sabe que está offline', durante['estado'] != 'online', str(durante))
@@ -205,10 +216,21 @@ async def main():
         print('\n=== 3. O SERVIDOR VOLTA. O QUE FOI DIGITADO CHEGOU? ===')
         subir_api()
         ck('a API voltou', api_viva())
-        await pg.evaluate("() => SuincoSharePoint.sincronizarAgora()")
-        await pg.wait_for_timeout(12000)
-        await pg.evaluate("() => SuincoSharePoint.sincronizarAgora()")
-        await pg.wait_for_timeout(12000)
+        # PACIÊNCIA SUFICIENTE PARA O RECUO. A carga incerta tem
+        # `_proximaTentativaEm` — o recuo de 11/09/2026, que cresce até 60s.
+        # Uma medição curta pega a carga DENTRO da janela de espera e conclui
+        # "perdida" quando ela só estava aguardando a vez. Aqui esperamos
+        # além do recuo máximo, cutucando a sincronia no caminho.
+        # SEM CUTUCÃO NENHUM. A versão de investigação forçava um
+        # `SuincoStore.save()` para achar a causa; aqui o painel tem de se
+        # virar sozinho, que é o que a operação faz.
+        for volta in range(6):
+            await pg.evaluate("() => SuincoSharePoint.sincronizarAgora()")
+            await pg.wait_for_timeout(12000)
+            chegou = sql(f"SELECT numero_carga FROM fact_viagens WHERE placa = '{placa2}'")
+            if '900002' in chegou:
+                print(f'    chegou na volta {volta + 1} (~{(volta + 1) * 12}s após a volta da API)')
+                break
 
         depois = sql(f"SELECT numero_carga FROM fact_viagens WHERE placa = '{placa2}'")
         estado_a = sql(f"SELECT status_atual FROM fact_viagens WHERE placa = '{placa}'")
