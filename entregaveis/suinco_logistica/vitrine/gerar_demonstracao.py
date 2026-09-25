@@ -81,6 +81,13 @@ async def main():
             roteiro.forEach(([etapa, rota, horas, peso], i) => {
               const c = criarCargaProgramada({
                 placa: placas[i], rota, peso,
+                /* NÚMERO DE CARGA NA DEMONSTRAÇÃO (25/09/2026). A base
+                   nascia sem número, e o Histórico da vitrine ficava com a
+                   coluna vazia — não dava para julgar a tela que a coluna
+                   existe para mostrar. A faixa 9000xx é deliberadamente
+                   fora do padrão da operação, e a vitrine avisa em todas
+                   as letras que os dados são de demonstração. */
+                numeroCarga: String(900001 + i),
                 motorista: 'Motorista ' + (i + 1),
                 cliente: 'Cliente de demonstração',
                 operador: 'Demonstração',

@@ -8272,6 +8272,49 @@ async function apagarHistoricoDaPlacaUI(){
     notify('Não consegui apagar: ' + (e && e.message || e), 'erro', 8000);
   }
 }
+/* O NÚMERO DA CARGA DE UMA MOVIMENTAÇÃO (25/09/2026)
+   ---------------------------------------------------------------------
+   Pedido do dono: "eu quero que apareca o numero da carga em uma coluna
+   do historico e fique mais facil".
+
+   O BURACO ERA ESTE, e ele já existia com a busca do lado: o campo de
+   procura do Histórico aceita número de carga desde sempre (o rótulo diz
+   "Ex: ABC1D23 ou 10245") — mas nenhuma coluna mostrava o número. A
+   pessoa procurava, vinham as linhas, e não dava para confirmar QUAL
+   carga era cada uma. Procurar sem poder conferir é pior que não
+   procurar: dá a resposta sem dar a prova.
+
+   POR QUE O NÚMERO NÃO ESTÁ NO REGISTRO. A movimentação guarda `cargaId`,
+   não o número — e está certo: o número pode ser corrigido depois, e um
+   registro de auditoria que guardasse uma CÓPIA dele passaria a mentir no
+   dia da correção. O número se resolve pela carga, sempre.
+
+   QUANDO NÃO DÁ PARA RESOLVER. Se a carga não está na cópia local (fora
+   da janela de 30 dias, e ainda não trazida por um filtro de período),
+   devolve nulo — e a tela escreve o motivo em vez de um traço mudo.
+   Traço sozinho faz a pessoa achar que a carga não tinha número. */
+function numeroDaCargaDaMovimentacao(m){
+  if(!m || !m.cargaId) return null;
+  const c = (typeof getCarga === 'function') ? getCarga(m.cargaId) : null;
+  if(!c) return null;
+  const n = String(c.numeroCarga || '').trim();
+  /* "Aguardando Carga" é a marca da entrada sem programação, não um
+     número. Mostrá-la na coluna de número faria procurar por ela. */
+  if(!n || n === 'Aguardando Carga') return null;
+  return n;
+}
+
+/* Clique no número: joga o número na busca que JÁ EXISTE e redesenha.
+   Não é busca nova — é a mesma, preenchida sem digitação. Uma busca,
+   dois caminhos de entrada. */
+function filtrarHistoricoPorCarga(numero){
+  const campo = document.getElementById('hist-busca-carga');
+  if(!campo) return;
+  campo.value = numero;
+  campo.dispatchEvent(new Event('input', { bubbles:true }));
+  campo.scrollIntoView({ block:'center', behavior: Graf && Graf.semMovimento && Graf.semMovimento() ? 'auto' : 'smooth' });
+}
+
 function renderHistorico(){
   const filtroPlaca = normalizarPlaca(document.getElementById('hist-filtro-placa')?.value || '');
   const filtroSetor = document.getElementById('hist-filtro-setor')?.value || '';
@@ -8328,11 +8371,25 @@ function renderHistorico(){
         title="Clique para ver tudo o que se sabe sobre este registro.">
       <td><span class="hist-seta" id="hist-seta-${esc(m.id)}">▸</span> ${fmtDataHora(m.timestamp)}</td>
       <td>${esc(m.placa)}</td>
+      <td class="hist-carga">${(() => {
+        const n = numeroDaCargaDaMovimentacao(m);
+        /* CLICAR NO NÚMERO ABRE A LINHA DO TEMPO DELA — é o "fique mais
+           fácil" do pedido. A busca do Histórico não filtra a tabela: ela
+           desenha a jornada completa da carga, que é o que quem investiga
+           está procurando. Achar a linha no meio de 500 e ter de digitar o
+           número à mão é trabalho que a tela pode poupar.
+           `stopPropagation` porque a linha inteira já abre o detalhe. */
+        return n
+          ? `<button type="button" class="hist-carga-btn"
+               onclick="event.stopPropagation(); filtrarHistoricoPorCarga('${escJs(n)}')"
+               title="Ver a linha do tempo completa da carga ${esc(n)}">${esc(n)}</button>`
+          : `<span class="text-dim" title="Esta carga está fora do período carregado. Use o filtro de datas para trazê-la.">fora do período</span>`;
+      })()}</td>
       <td>${m.statusAnterior ? badgeHtml(m.statusAnterior) : '—'}</td><td>${badgeHtml(m.statusNovo)}</td>
       <td>${esc(m.operador)}</td><td>${esc(m.setor)}</td>
     </tr>
     <tr class="hist-detalhe" id="hist-det-${esc(m.id)}" hidden>
-      <td colspan="6"></td>
+      <td colspan="7"></td>
     </tr>`).join('');
   document.getElementById('hist-empty').hidden = lista.length>0;
   const contagemEl = document.getElementById('hist-contagem');
