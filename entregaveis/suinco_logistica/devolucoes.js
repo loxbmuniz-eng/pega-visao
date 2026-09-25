@@ -126,14 +126,19 @@ const DEV_ETAPAS = [
    testes/test_sobra_finaliza_quem_pesou.py, que lê as duas fontes e compara
    a esteira inteira — mesma solução da lista de SETORES (ocorrência #26).
 
-   O FATURAMENTO ENTROU EM 16/09/2026, a pedido do dono: para a sobra este
-   é o ÚLTIMO passo, e quem pesou precisa conseguir encerrar em vez de
-   deixar o checklist parado esperando outro setor aparecer. O rótulo do
-   botão diz FINALIZAR — é a palavra dele — e não nomeia um setor só,
-   porque agora são três. */
+   O FATURAMENTO ENTROU EM 16/09/2026, a pedido do dono: quem pesou precisa
+   conseguir dar este OK em vez de deixar o checklist parado esperando
+   outro setor aparecer. O rótulo não nomeia um setor só, porque são três.
+
+   O RÓTULO DEIXOU DE DIZER "FINALIZAR" (25/09/2026). Ele dizia, e estava
+   certo enquanto este era o último passo da sobra. O dono acrescentou
+   Controles Internos ao fim da esteira — "agora a sobra vai passar" — e
+   um botão que promete finalizar o que ainda tem um passo pela frente é
+   exatamente o tipo de texto que faz a operação parar de conferir. Agora
+   ele diz para onde a sobra vai. */
 const DEV_ATALHO_SOBRA = {
   status: 'Conferida no Faturamento', proxima: 'Descarga Conferida',
-  botao: '✅ Finalizar sobra — descarga conferida', pede: 'expedicao',
+  botao: '📦 Descarga conferida — segue para Controles Internos', pede: 'expedicao',
   setores: ['Expedição', 'Faturamento', 'Logística'],
 };
 
@@ -1068,10 +1073,12 @@ function previewPesoDevolvidoUI(id) {
 const _devCarimbosVistos = new Set();
 
 function carimbosDev(d) {
-  // Sobra encerra na Expedição — mostrar Controles/Notas como "pendente"
-  // para sempre só confundiria.
+  /* A SOBRA PASSOU A TER QUATRO CARIMBOS (25/09/2026) — decisão do dono
+     revendo a dele: "agora a sobra vai passar". Central de Notas continua
+     de fora, porque a sobra não gera nota, e mostrá-la pendente para
+     sempre só confundiria. */
   const etapasVisiveis = d.tipo === 'SOBRA'
-    ? ['portaria', 'faturamento', 'expedicao'] : DEV_ORDEM_NA_TELA;
+    ? ['portaria', 'faturamento', 'expedicao', 'controles'] : DEV_ORDEM_NA_TELA;
   return `<div class="dev-carimbos">
     ${etapasVisiveis.map((chave) => [chave, DEV_ETAPA_ROTULO[chave]]).map(([chave, rotulo]) => {
       const c = d.carimbos[chave];
@@ -1118,6 +1125,10 @@ function etapaDeDev(d) {
    tem de consertar. Por isso as duas metades são funções separadas, e esta
    aqui só as soma. */
 function acaoEtapaDev(d) {
+  /* A conferência de Controles Internos entra DEPOIS do desfazer, e só na
+     sobra. Fica por último de propósito: ela não é o próximo passo de
+     ninguém, e pôr um campo acima do botão da etapa faria parecer que
+     precisa ser preenchido antes de avançar. */
   return blocoAvancoDev(d) + blocoDesfazerDev(d);
 }
 
@@ -1167,9 +1178,10 @@ function listaDeSetoresDev(setores) {
 }
 
 function blocoAvancoDev(d) {
-  /* SOBRA: três OKs e acabou — Portaria, Faturamento, Expedição. */
-  if (d.tipo === 'SOBRA' && d.status === 'Descarga Conferida') {
-    return '<div class="card-sub">✅ Sobra concluída — entrou, conferida e descarregada.</div>';
+  /* SOBRA: quatro OKs — Portaria, Faturamento, Expedição e Controles
+     Internos. Até 25/09/2026 ela fechava no terceiro; o dono mudou. */
+  if (d.tipo === 'SOBRA' && d.status === 'Destinada') {
+    return '<div class="card-sub">✅ Sobra concluída — conferida por Controles Internos.</div>';
   }
   const etapa = etapaDeDev(d);
   if (!etapa) return '<div class="card-sub">✅ Ciclo encerrado — nota fiscal finalizada.</div>';

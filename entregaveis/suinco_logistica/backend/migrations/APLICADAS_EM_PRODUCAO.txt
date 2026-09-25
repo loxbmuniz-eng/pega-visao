@@ -1,4 +1,13 @@
-054
+055
+# ^^^ ESTA LINHA É A ÚNICA QUE O PORTÃO LÊ. Todo o resto deste arquivo é
+# explicação para gente. Em 25/09/2026 o dono aplicou a 055, eu escrevi
+# isso no texto abaixo e ESQUECI DE MUDAR O NÚMERO — e o portão passou a
+# anunciar, em toda publicação, uma pendência que não existia mais. Ele
+# me corrigiu: "ja subi a 055".
+#
+# Pendência falsa custa mais que pendência esquecida: ela ensina a ignorar
+# o bloco inteiro, e um dia o que está ali é de verdade.
+
 
 # ---------------------------------------------------------------------
 # ATÉ QUAL MIGRAÇÃO O SERVIDOR DE PRODUÇÃO ESTÁ.

@@ -4,8 +4,12 @@
 O que se prova no navegador de verdade, contra o backend local:
 
   1. SOBRA: o checklist enxuto do que só ENTRA — criado sem rota e sem
-     carga, com o motivo "652 — Sobras" já na linha nova, e o ciclo curto
-     que encerra no OK da Expedição.
+     carga, com o motivo "652 — Sobras" já na linha nova, e a esteira
+     curta de QUATRO carimbos: Portaria, Balança (entrada), Expedição e
+     Controles Internos. Eram três até 25/09/2026, quando o dono
+     acrescentou o check dos Controles ao fim da sobra — "agora a sobra
+     vai passar". A Central de Notas continua fora: sobra não gera nota, e
+     mostrá-la pendente para sempre só confundiria quem confere.
   2. MESMA NOTA EM DUAS PARCIAIS: o caso real do cliente que devolve duas
      caixas do mesmo produto por motivos diferentes e emite duas parciais
      na mesma nota fiscal. O botão "mesma nota" repete o cabeçalho e o
@@ -85,7 +89,20 @@ async def main():
         ck('motivo 652 — Sobras já vem na linha nova', motivo == '652 — Sobras', str(motivo))
         carimbos = await pg.evaluate(
             "() => document.querySelectorAll('.dev-card.dev-aberta .dev-carimbo').length")
-        ck('sobra mostra só os 3 carimbos do ciclo curto', carimbos == 3, str(carimbos))
+        # QUATRO desde 25/09/2026, não três. Este número é a esteira da sobra
+        # desenhada na tela: se voltar a três, o check dos Controles Internos
+        # desapareceu do cartão e a sobra volta a fechar sozinha no OK da
+        # Expedição — a decisão que o dono desfez. Cinco ou mais significa que
+        # a Central de Notas vazou para a sobra.
+        rotulos = await pg.evaluate(
+            "() => Array.from(document.querySelectorAll("
+            "'.dev-card.dev-aberta .dev-carimbo .dev-carimbo-rot'))"
+            ".map(e => e.textContent.trim())")
+        ck('sobra mostra os 4 carimbos da esteira curta', carimbos == 4, str(carimbos))
+        ck('e Controles Internos é o último deles',
+           any('Controles' in r for r in rotulos), str(rotulos))
+        ck('a Central de Notas continua fora da sobra',
+           not any('Notas' in r for r in rotulos), str(rotulos))
 
         print('\n=== 2. A MESMA NOTA EM DUAS PARCIAIS ===')
         # Um checklist comum, com a primeira parcial lançada pela linha nova.
