@@ -4967,30 +4967,42 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
     padding:0; border:none; min-width:0; width:auto;
     display:flex; align-items:center;
   }
-  /* Ordem das colunas na tabela: 1 Data/Hora · 2 Placa · 3 St. anterior
-     · 4 St. novo · 5 Operador · 6 Setor. A grade reordena sem tocar no
-     HTML, que continua servindo o desktop e a impressão.
+  /* Ordem das colunas na tabela: 1 Data/Hora · 2 Placa · 3 Nº da Carga
+     · 4 St. anterior · 5 St. novo · 6 Operador · 7 Setor. A grade
+     reordena sem tocar no HTML, que continua servindo o desktop e a
+     impressão.
 
-       linha 1 — placa e quando
+       linha 1 — placa, nº da carga e quando
        linha 2 — o que mudou (o dado do log, com espaço para caber)
-       linha 3 — quem fez */
+       linha 3 — quem fez
+
+     O Nº DA CARGA ENTROU NA LINHA 1, DE PROPÓSITO (25/09/2026). A
+     primeira versão deixou a grade como estava e a célula nova foi parar
+     numa QUARTA linha: a altura passou de 85 para 95px e estourou o
+     orçamento de lista do celular — que não é capricho, é quantas
+     movimentações cabem na tela de quem procura uma. Ao lado da placa ela
+     não custa altura nenhuma: é a mesma linha, já existente. */
   #tab-historico tr.hist-linha td:nth-child(2){          /* placa */
     grid-area:1/1; font-weight:800; font-size:14.5px; letter-spacing:.02em;
+  }
+  #tab-historico tr.hist-linha td:nth-child(3){          /* nº da carga */
+    grid-area:1/1; justify-content:flex-start; padding-left:92px;
+    font-size:12px; pointer-events:auto;
   }
   #tab-historico tr.hist-linha td:nth-child(1){          /* data/hora */
     grid-area:1/2; justify-content:flex-end;
   }
   /* Os dois badges se encontram no meio da linha: o anterior encosta à
      direita da sua metade, o novo começa à esquerda da dele. */
-  #tab-historico tr.hist-linha td:nth-child(3){ grid-area:2/1; justify-content:flex-end }
-  #tab-historico tr.hist-linha td:nth-child(4){ grid-area:2/2; justify-content:flex-start }
-  #tab-historico tr.hist-linha td:nth-child(5){ grid-area:3/1 }  /* operador */
-  #tab-historico tr.hist-linha td:nth-child(6){ grid-area:3/2 }  /* setor */
+  #tab-historico tr.hist-linha td:nth-child(4){ grid-area:2/1; justify-content:flex-end }
+  #tab-historico tr.hist-linha td:nth-child(5){ grid-area:2/2; justify-content:flex-start }
+  #tab-historico tr.hist-linha td:nth-child(6){ grid-area:3/1 }  /* operador */
+  #tab-historico tr.hist-linha td:nth-child(7){ grid-area:3/2 }  /* setor */
 
   /* Contexto em tom de apoio. */
   #tab-historico tr.hist-linha td:nth-child(1),
-  #tab-historico tr.hist-linha td:nth-child(5),
-  #tab-historico tr.hist-linha td:nth-child(6){
+  #tab-historico tr.hist-linha td:nth-child(6),
+  #tab-historico tr.hist-linha td:nth-child(7){
     font-size:11.5px; color:var(--text-dim); white-space:nowrap;
     overflow:hidden; text-overflow:ellipsis;
   }
@@ -6542,7 +6554,9 @@ tr.linha-nova{
   gap:2px; background:transparent; min-height:56px;
 }
 .graf-fila-parte{
-  flex:0 0 0%; background:var(--c); color:#1a1200;
+  /* A tinta vem do próprio passo da rampa — ver RAMPA em graficos2027.js.
+     Fixar uma cor só aqui foi o que reprovou o teste de contraste. */
+  flex:0 0 0%; background:var(--c); color:var(--t,#1a1200);
   display:flex; flex-direction:column; align-items:center; justify-content:center;
   padding:6px 2px; min-width:0; overflow:hidden; cursor:default;
   transition:flex-basis 460ms cubic-bezier(.23,1,.32,1) var(--atraso,0ms),
@@ -6631,7 +6645,15 @@ tr.linha-nova{
    parecer um. Texto que age sem parecer clicável é armadilha: quem não
    descobre, digita à mão; quem descobre por acaso, desconfia. */
 .hist-carga-btn{
-  background:none; border:none; padding:0; font:inherit; cursor:pointer;
+  /* ALVO DE TOQUE DE 44px SEM ENGORDAR A LINHA (25/09/2026).
+     A primeira versão tinha 45x16 e reprovou no teste do celular: 16px de
+     altura é erro de dedo garantido no pátio, e quem erra o toque abre o
+     detalhe da linha sem querer. O empurrão da área de toque vem do
+     `padding`, e a `margin` negativa devolve o espaço ao layout — o dedo
+     ganha 44px, a linha não ganha um pixel. */
+  padding:14px 8px; margin:-14px -8px; min-height:44px;
+  display:inline-flex; align-items:center;
+  background:none; border:none; font:inherit; cursor:pointer;
   color:var(--gold-text,#e9b954); font-variant-numeric:tabular-nums;
   font-weight:600; text-decoration:underline; text-underline-offset:3px;
   text-decoration-thickness:1px;

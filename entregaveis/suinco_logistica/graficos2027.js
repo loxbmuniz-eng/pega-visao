@@ -45,7 +45,21 @@ const Graf = (function(){
   /* A RAMPA DA FILA — uma cor só, do claro ao escuro, na ordem das etapas.
      Sequencial, como manda a régua: magnitude/ordem é uma rampa; categoria
      é que são hues diferentes. */
-  const RAMPA = ['#f4d489','#e9b954','#d4a23f','#b9903f','#9a762f','#7a5d24'];
+  /* CADA PASSO CARREGA O TEXTO QUE LÊ NELE (25/09/2026, medido).
+     A primeira rampa reprovou no teste de contraste, e a medição mostrou
+     por quê: o quinto passo (#9a762f) ficava num meio-termo onde NENHUM
+     texto passava — 4,43 com escuro, 3,81 com claro, e o mínimo é 4,5.
+     Rampa não é só bonita de olhar: cada degrau precisa de um texto que
+     se leia nele. Os quatro primeiros usam tinta escura, os dois últimos
+     tinta clara, e os seis foram conferidos um a um. */
+  const RAMPA = [
+    { fundo:'#f7dc9b', tinta:'#1a1200' },   // 13,86
+    { fundo:'#edc468', tinta:'#1a1200' },   // 11,23
+    { fundo:'#dcab45', tinta:'#1a1200' },   //  8,81
+    { fundo:'#c3963c', tinta:'#1a1200' },   //  6,85
+    { fundo:'#6d5220', tinta:'#f7f3ea' },   //  6,59
+    { fundo:'#4a3714', tinta:'#f7f3ea' },   // 10,26
+  ];
 
   /* Uma dica só para a tela inteira. Criar uma por gráfico multiplicaria
      elemento à toa e deixaria duas abertas ao mesmo tempo no celular. */
@@ -224,7 +238,9 @@ const Graf = (function(){
       const pedaco = document.createElement('div');
       pedaco.className = 'graf-fila-parte';
       pedaco.style.setProperty('--w', (e.valor/total*100).toFixed(2) + '%');
-      pedaco.style.setProperty('--c', RAMPA[i % RAMPA.length]);
+      const passo = RAMPA[i % RAMPA.length];
+      pedaco.style.setProperty('--c', passo.fundo);
+      pedaco.style.setProperty('--t', passo.tinta);
       pedaco.style.setProperty('--atraso', (i*45) + 'ms');
       /* O RÓTULO FICA NA MARCA. Legenda separada obriga o olho a ir e
          voltar, e no celular ela é a primeira coisa que quebra a linha. */
