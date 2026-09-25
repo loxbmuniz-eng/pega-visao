@@ -184,13 +184,21 @@ async def main():
         await entrar(pg2)
         d = await pg2.evaluate("""() => {
               const tr = document.querySelector('#hist-tbody tr.hist-linha');
+              const ths = document.querySelectorAll('#tab-historico thead th');
               return { display: getComputedStyle(tr).display,
                        colunas: [...tr.children].length,
+                       cabecalho: ths.length,
                        altura: Math.round(tr.getBoundingClientRect().height) };
             }""")
         ck('a linha continua sendo linha de tabela',
            d['display'].startswith('table-row'), str(d))
-        ck('com as seis colunas', d['colunas'] == 6, str(d))
+        # ANTES ESTE TESTE EXIGIA SEIS. Em 25/09/2026 o dono pediu a coluna
+        # "Nº da Carga" e passaram a ser sete — a regra mudou de propósito,
+        # e o número solto aqui era um atalho que envelheceu (causa 1 das
+        # quatro do vermelho). O que importa é a linha ter tantas células
+        # quanto o cabeçalho: menos que isso desalinha a tabela inteira.
+        ck('a linha tem uma célula para cada coluna do cabeçalho',
+           d['colunas'] == d['cabecalho'], str(d))
         ck('e altura de linha, não de cartão', d['altura'] < 60, f"{d['altura']}px")
         await ctx2.close()
 

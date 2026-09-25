@@ -85,9 +85,31 @@ primeiro rodou. Continuam em aberto:
   não efetivadas, não canceladas, com irmã mais antiga do mesmo dia, mesma
   rota e mesmo destino — linha com placa, número, peso ou motorista nunca
   sai, e o script MOSTRA antes de apagar e pergunta;
-- **a prova de que o backup restaura**. O `instalar.sh` carrega desde o
-  primeiro dia a frase "backup que nunca foi restaurado não é backup".
-  Continua sem prova.
+- ~~**a prova de que o backup restaura**~~ — **FEITO em 24/09/2026**, com
+  saída colada pelo dono. O `instalar.sh` carrega desde o primeiro dia a
+  frase "backup que nunca foi restaurado não é backup". Agora foi:
+
+  ```
+  arquivo : embarque_suinco_20260924.sql.gz  ·  3.2M  ·  gerado há 1h
+  o .gz abre sem erro          ·  SQL descompactado: 25M
+  restaurou sem NENHUM erro    ·  13 tabelas conferidas
+  última migração no backup    :  055_avulsa_marcada.sql
+  VEREDITO: O BACKUP PRESTA
+  ```
+
+  **O que isto prova:** o arquivo não está corrompido, restaura num banco
+  limpo sem um único erro, e as 13 tabelas chegam com as contagens certas.
+  As pequenas diferenças entre "no backup" e "hoje" (985 contra 981 cargas,
+  por exemplo) são a operação tendo continuado durante a hora que separa o
+  backup da conferência — é o sinal de que o backup é de um instante, não
+  de que falta dado.
+
+  **O que NÃO ficou provado, e está anotado de propósito:** a conferência
+  campo a campo foi PULADA. Ela compara cargas com mais de sete dias, e
+  não existe nenhuma no banco. Conferido: `criado_em` existe e a consulta
+  está certa, e não há nada no código do servidor que apague carga. Ou
+  seja, o banco realmente só tem carga da última semana. Fica como
+  pergunta para o dono, não como suposição minha.
 
 Os dois são o mesmo comando, e ele pergunta antes de apagar qualquer coisa:
 
@@ -185,3 +207,4 @@ Fica registrado como dívida conhecida, não como tarefa pendente.
 | 26/08/2026 | Lista criada. Teste de restauração de backup entregue; comando de conferência de migração corrigido. |
 | 26/08/2026 | Avisos no celular entregues. P1, P2, P3 e P5 viraram um comando só (atualizar_tudo.sh). |
 | 26/08/2026 | R1 decidido (push no celular) e guia escrito. `pg` subiu para 8.23; `playwright` adiado com motivo registrado. |
+| 24/09/2026 | Backup PROVADO no servidor (veredito "o backup presta"). Primeira base real de produção medida: 981 cargas em 7 dias = 140/dia, e o crescimento do banco projetado em ~680 MB/ano com índices. |

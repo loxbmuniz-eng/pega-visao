@@ -98,6 +98,11 @@
 # `frete_valor_manual` não existia no servidor. Era a pendência que o
 # portão imprimiu na publicação e que ficou em aberto por um dia.
 #
-# A 055 (marca da carga avulsa) continua PENDENTE: ela está commitada na
-# branch de trabalho e ainda não foi publicada.
+# A 055 (marca da carga avulsa) FOI APLICADA em 24/09/2026 — bloco COPIE
+# DAQUI colado pelo dono, com o servidor em 956442a, serviço active e
+# /health 200. Ela é a marca explícita da linha avulsa: sem ela, a linha
+# criada fora do modelo na Montagem do Dia voltava a consumir uma saída
+# prevista do dia, em silêncio.
+#
+# Com ela, NÃO HÁ MIGRAÇÃO PENDENTE. Servidor e painel alinhados.
 # ---------------------------------------------------------------------

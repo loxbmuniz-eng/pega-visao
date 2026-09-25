@@ -45,25 +45,37 @@ SAIDA = RAIZ / 'vitrine' / 'vitrine.html'
 CHAVE = 'suinco_painel_v1'
 
 TARJA = """
-<div id="vitrine-tarja" role="status">
-  <b>VITRINE — não é o painel</b>
-  <span>Cópia para olhar antes de publicar. Sem ligação com o servidor;
-  os dados são de demonstração. <b>Baixar PDF e CSV não funciona aqui</b> —
-  a vitrine não tem permissão de entregar arquivo; no painel funciona.</span>
-  <span class="vitrine-commit">%(commit)s</span>
+<div id="vitrine-tarja" role="status"
+     title="NÃO é o painel: é uma cópia para olhar antes de publicar. Sem ligação com o servidor; os dados são de demonstração. Baixar PDF e CSV não funciona aqui.">
+  <b>VITRINE</b><span>dados de demonstração · sem servidor</span><i>%(commit)s</i>
 </div>
 <style>
+  /* ONDE A TARJA PODE FICAR (24/09/2026), e isto foi medido duas vezes.
+     1ª: faixa no topo, 208px — um quarto do celular, tapando a tela que a
+         vitrine existe para deixar julgar;
+     2ª: faixa fina no topo, 46px — e o cabeçalho do painel, que é FIXO com
+         z-index 1000, cobria os 56px de cima dela. Sobrava só o commit, e
+         eu cheguei a achar que o texto tinha sumido.
+     Subir o z-index resolveria a sobreposição tapando o menu, que é pior.
+     Então ela sai da briga: pílula fixa no canto, por cima de nada. */
   #vitrine-tarja{
-    position:sticky; top:0; z-index:99999;
-    display:flex; align-items:baseline; gap:.6rem; flex-wrap:wrap;
-    padding:.45rem .9rem;
-    background:#7a1224; color:#fff;
-    font:600 13px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
-    border-bottom:2px solid #ffd97a;
+    position:fixed; left:8px; bottom:8px; z-index:99998;
+    display:flex; align-items:center; gap:6px; max-width:calc(100vw - 16px);
+    padding:5px 10px; border-radius:999px;
+    background:#7a1224; color:#fff; border:1px solid #ffd97a;
+    box-shadow:0 4px 14px rgba(0,0,0,.45);
+    font:700 11px/1 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    letter-spacing:.04em; pointer-events:auto; cursor:help;
   }
-  #vitrine-tarja span{font-weight:400; opacity:.92; font-size:12px}
-  #vitrine-tarja .vitrine-commit{margin-left:auto; font-family:ui-monospace,monospace}
-  @media (max-width:640px){ #vitrine-tarja .vitrine-commit{margin-left:0} }
+  #vitrine-tarja span{ font-weight:400; opacity:.9; letter-spacing:0 }
+  #vitrine-tarja i{ font-style:normal; opacity:.75; font-family:ui-monospace,monospace }
+  /* No celular o rodapé do painel já ocupa a base — a pílula sobe um pouco
+     para não se sentar em cima do aviso de modo local. */
+  @media (max-width:820px){ #vitrine-tarja{ bottom:58px } #vitrine-tarja span{ display:none } }
+  /* O ALARME DE OFFLINE NÃO CABE AQUI. A vitrine é offline POR CONSTRUÇÃO:
+     a faixa fica acesa para sempre, toma o rodapé inteiro e faz quem abre
+     achar que está quebrado. É alarme de verdade no painel de verdade. */
+  #faixa-offline{display:none!important}
 </style>
 """
 
@@ -81,8 +93,48 @@ def main():
              'python3 vitrine/gerar_demonstracao.py')
 
     html = PAINEL.read_text(encoding='utf-8')
-    commit = subprocess.run(['git', 'rev-parse', '--short', 'HEAD'], cwd=str(RAIZ),
-                            capture_output=True, text=True).stdout.strip() or 'sem commit'
+
+    # A VITRINE NÃO PODE NASCER DE UM BUILD VELHO (24/09/2026).
+    #
+    # O dono abriu a vitrine e disse "não vi diferença nenhuma". Não era
+    # cache dele: o `index.html` era de um commit anterior, porque eu
+    # regerei a vitrine sem rodar o build antes. A página rodava código
+    # velho e nada reclamava. Julgar tela é o ÚNICO motivo de a vitrine
+    # existir — mostrar código velho como novo gasta a confiança de quem
+    # olha e manda o trabalho para o lugar errado.
+    #
+    # POR QUE COMPARAR CONTEÚDO E NÃO O COMMIT DO CARIMBO. A primeira
+    # versão desta guarda comparava o commit dentro de `SUINCO_BUILD` com
+    # o HEAD do git — e reprovaria em TODA árvore limpa. Motivo: o
+    # `publicar.sh` descarta o carimbo novo de propósito (ele muda a cada
+    # build e sujaria a árvore), então o index.html commitado carrega
+    # sempre o commit ANTERIOR. Guarda que acusa sempre é guarda que
+    # alguém desliga na terceira vez — está escrito no próprio portão.
+    #
+    # Então aqui se faz o que o portão faz: regera, e compara o resultado
+    # com o que está no disco IGNORANDO as linhas de carimbo. Se qualquer
+    # outra linha mudar, o build estava velho de verdade.
+    r = subprocess.run([sys.executable, 'build_arquivo_unico.py'], cwd=str(RAIZ),
+                       capture_output=True, text=True)
+    if r.returncode != 0:
+        erro('o build falhou: ' + (r.stderr or r.stdout).strip()[:200])
+    refeito = PAINEL.read_text(encoding='utf-8')
+    def sem_carimbo(t):
+        return [l for l in t.splitlines()
+                if 'SUINCO_BUILD' not in l and 'const BUILD =' not in l]
+    if sem_carimbo(refeito) != sem_carimbo(html):
+        erro('o index.html estava desatualizado em relação às fontes e foi '
+             'regerado agora. Confira o que mudou e rode de novo — a vitrine '
+             'não nasce de build velho.')
+    html = refeito
+
+    m = re.search(r'window\.SUINCO_BUILD\s*=\s*"([^"]+)"', html)
+    if not m:
+        erro('não achei o carimbo SUINCO_BUILD no index.html.')
+    # O carimbo da pílula vem de DENTRO da página — a mesma fonte que o
+    # rodapé do painel usa. Duas fontes para "qual versão é esta" é como
+    # nasce fantasma: foi assim que a pílula e o rodapé discordaram.
+    commit = m.group(1).split('·')[-1].strip()
 
     # 1. modo local — sem servidor, sem rede.
     html, n = re.subn(r'\n(\s*)ativo: true,', r'\n\1ativo: false,', html, count=1)
@@ -133,10 +185,21 @@ def main():
         + json.dumps(json.dumps(dados, ensure_ascii=False)) + '); }catch(e){}\n'
         '</script>\n'
     )
-    corpo = re.search(r'<body[^>]*>', html)
-    if not corpo:
-        erro('não achei a abertura do <body>.')
-    ponto = corpo.end()
+    # O <body> DE VERDADE, NÃO O PRIMEIRO QUE APARECER (24/09/2026).
+    #
+    # A primeira versão procurava `<body[^>]*>` e pegava a primeira
+    # ocorrência. Bastou eu escrever a palavra `<body>` dentro de um
+    # COMENTÁRIO de CSS para a semente ser injetada lá — num lugar onde ela
+    # nunca executa. A vitrine passou a abrir pedindo login, com o pátio
+    # vazio, e sem UM erro de JavaScript para denunciar.
+    #
+    # Agora a âncora é exata. Se a classe do body mudar, este gerador PARA
+    # com mensagem, em vez de produzir uma vitrine silenciosamente vazia.
+    ANCORA_BODY = '<body class="pre-login">'
+    if html.count(ANCORA_BODY) != 1:
+        erro(f'esperava exatamente um {ANCORA_BODY}, achei {html.count(ANCORA_BODY)}. '
+             'Sem âncora exata a semente cai no lugar errado e a vitrine abre vazia.')
+    ponto = html.index(ANCORA_BODY) + len(ANCORA_BODY)
     html = html[:ponto] + '\n' + semente + (TARJA % {'commit': commit}) + html[ponto:]
 
     # A conferência que vale: depois de tudo, não pode ter sobrado nada

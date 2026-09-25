@@ -81,6 +81,13 @@ async def main():
             roteiro.forEach(([etapa, rota, horas, peso], i) => {
               const c = criarCargaProgramada({
                 placa: placas[i], rota, peso,
+                /* NÚMERO DE CARGA NA DEMONSTRAÇÃO (25/09/2026). A base
+                   nascia sem número, e o Histórico da vitrine ficava com a
+                   coluna vazia — não dava para julgar a tela que a coluna
+                   existe para mostrar. A faixa 9000xx é deliberadamente
+                   fora do padrão da operação, e a vitrine avisa em todas
+                   as letras que os dados são de demonstração. */
+                numeroCarga: String(900001 + i),
                 motorista: 'Motorista ' + (i + 1),
                 cliente: 'Cliente de demonstração',
                 operador: 'Demonstração',
@@ -117,14 +124,19 @@ async def main():
         print('o painel não gravou nada no localStorage'); return 1
 
     dados = json.loads(retrato['bruto'])
-    # A FROTA NÃO VIAJA NO RETRATO. O painel já embute as 749 placas e as
-    # recarrega sozinho quando a cópia local está vazia
-    # (`carregarFrotaSeedSeVazia`). Guardá-las aqui criaria uma SEGUNDA
-    # cópia da frota no repositório — e duas listas da mesma coisa é como
-    # nasce a trava recusando placa que a tela aceita (ocorrência #17).
-    # Sem elas o arquivo cai de 208 KB para alguns poucos.
-    for campo in ('frota', 'frotaSeedVersao'):
-        dados.pop(campo, None)
+    # A FROTA VIAJA NO RETRATO, e eu já tentei o contrário (24/09/2026).
+    #
+    # Tirar as 749 placas daqui parecia limpeza: o painel as reembute e as
+    # recarrega sozinho quando a cópia local está vazia. Só que aí
+    # `carregarFrotaSeedSeVazia` dispara na abertura da VITRINE, grava o
+    # banco local por cima, e o retrato inteiro — cargas e operador — vai
+    # junto. A vitrine passou a abrir pedindo login, com o pátio vazio.
+    #
+    # E o receio que me levou a tirar (duas cópias da frota divergindo,
+    # ocorrência #17) não se aplica: este arquivo é GERADO pelo painel a
+    # cada rodada, não mantido à mão. Cópia que nasce da fonte não diverge
+    # da fonte. O custo é o arquivo ir de 20 KB para ~208 KB.
+    pass
     SAIDA.parent.mkdir(exist_ok=True)
     SAIDA.write_text(json.dumps(dados, ensure_ascii=False, indent=1), encoding='utf-8')
     print(f'OK: {SAIDA.name} — {retrato["cargas"]} carga(s), '

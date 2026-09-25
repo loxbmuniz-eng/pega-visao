@@ -131,6 +131,13 @@ async def main():
             const t = document.getElementById('vitrine-tarja');
             return {
               tarja: t ? (t.innerText || '').replace(/\\s+/g,' ').trim() : null,
+              /* O AVISO INTEIRO MORA NO `title` DESDE 24/09/2026. A tarja
+                 virou pílula de canto porque o cabeçalho FIXO do painel
+                 cobria a faixa do topo. O que a regra exige continua o
+                 mesmo: a página se identifica à vista, e o aviso completo
+                 está a um toque. Medir a frase exata na área visível era
+                 medir o atalho, não a regra. */
+              titulo: t ? (t.getAttribute('title') || '') : '',
               /* `let DB` no topo de um <script> NÃO vira `window.DB` — ler
                  por `window.` dava zero com a base carregada, e foi assim que
                  a primeira versão deste teste acusou defeito que não existia.
@@ -139,12 +146,19 @@ async def main():
               movimentacoes: (typeof DB === 'undefined' ? [] : DB.movimentacoes || []).length,
             };
         }""")
-        ck('a tarja aparece e diz que não é o painel',
-           bool(visto['tarja']) and 'não é o painel' in visto['tarja'], str(visto['tarja']))
+        ck('a página se identifica à vista como vitrine',
+           'VITRINE' in (visto['tarja'] or ''), str(visto['tarja']))
+        # Sem diferenciar maiúscula: a regra é o aviso existir, não a caixa
+        # da letra. A primeira versão reprovou porque o texto passou a dizer
+        # "NÃO é o painel" — mais enfático, e o teste leu como ausência.
+        _aviso = ((visto['titulo'] or '') + ' ' + (visto['tarja'] or '')).lower()
+        ck('e o aviso completo diz que não é o painel',
+           'não é o painel' in _aviso, str(visto['titulo'])[:90])
         # Sem este aviso, a primeira coisa que acontece é alguém relatar como
         # defeito do painel uma limitação do lugar onde a vitrine mora.
         ck('e avisa que baixar arquivo não funciona na vitrine',
-           'não funciona aqui' in (visto['tarja'] or ''), str(visto['tarja']))
+           'não funciona aqui' in _aviso,
+           str(visto['titulo'])[:90])
         ck('a base de demonstração chegou na tela', visto['cargas'] >= 5, str(visto))
         ck('com movimento — a Torre tem relógio para mostrar',
            visto['movimentacoes'] >= 5, str(visto))

@@ -1,4 +1,26 @@
-6edfcec
+956442a
+
+# ---------------------------------------------------------------------
+# 24/09/2026 — 6edfcec → 956442a. O SERVIDOR ALCANÇOU O PAINEL.
+#
+# Bloco COPIE DAQUI colado pelo dono: serviço active, /health 200,
+# migrações até 055_avulsa_marcada.sql.
+#
+# O QUE PASSOU A VALER COM ESTE COMMIT:
+#   · as três filiais geram a Relação para o Operador
+#     (dominio/documentos.js + rotas/auth.js);
+#   · o painel recebe a lista de documentos do setor no login, e o botão
+#     que o setor não gera deixa de aparecer;
+#   · rotas/modelo_semana.js;
+#   · migração 055: a linha criada fora do modelo na Montagem do Dia para
+#     de consumir uma saída prevista do dia.
+#
+# E UMA CONFERÊNCIA QUE VALE REGISTRAR: o painel publicado hoje está em
+# 7d3ce4d, um commit à FRENTE deste. Não é pendência — `git diff` entre
+# os dois não toca em nenhum arquivo de `src/` nem de `migrations/`. A
+# entrega de hoje (a carga lançada com o servidor fora do ar passa a
+# chegar) é correção só de painel.
+
 
 # ---------------------------------------------------------------------
 # 10/09/2026 — 3226250 → 05dbb0b. CORREÇÃO DE UM REGISTRO QUE FICOU PARADO.

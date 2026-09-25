@@ -6667,7 +6667,105 @@ function renderPulsoDoPatio(){
   evoEl.innerHTML = evolucaoPatioSvg(entradas);
 }
 
+/* PULSO DO DIA — o topo que decide (24/09/2026)
+   ---------------------------------------------------------------------
+   Pedido do dono: Indicadores "muito mais sofisticado, com qualidade,
+   animacoes, interacoes, facilidade, visual surpreendente", e compacto o
+   bastante para caber na tela.
+
+   NENHUMA CONTA NOVA MORA AQUI. Tudo o que este bloco mostra vem de
+   função que já existe e já é testada: `tempoDePatioDe` (a resposta única
+   de quanto tempo de pátio, unificada hoje), `minutosNoPatioAgora`,
+   `paradasAlemDaMeta` e `cargasAbertas`. Indicador que recalcula por
+   conta própria é como dois números do mesmo dia deixam de bater — foi
+   exatamente o defeito do tempo de pátio, corrigido nesta mesma manhã. */
+function renderPulsoDoDia(){
+  if(typeof Graf === 'undefined') return;
+  const abertas = cargasAbertas();
+  const meta = metaTempoPatio();
+  const paradas = paradasAlemDaMeta(abertas);
+
+  const quando = document.getElementById('pulso-quando');
+  if(quando) quando.textContent = 'agora · ' + new Date().toLocaleTimeString('pt-BR',
+    { hour:'2-digit', minute:'2-digit' });
+
+  /* ---- os números que fazem levantar da cadeira ---- */
+  const tempos = abertas.map(c => minutosNoPatioAgora(c)).filter(m => m !== null);
+  const maior = tempos.length ? Math.max(...tempos) : null;
+  const medio = tempos.length ? Math.round(tempos.reduce((a,b)=>a+b,0)/tempos.length) : null;
+  const caixa = document.getElementById('pulso-numeros');
+  if(caixa){
+    const num = (v, r, d, alerta) =>
+      `<div class="pulso-num${alerta ? ' alerta' : ''}">`
+      + `<span class="v">${v}</span><span class="r">${r}</span>`
+      + (d ? `<span class="d">${d}</span>` : '') + '</div>';
+    caixa.innerHTML =
+      num(abertas.length, 'no pátio', 'cargas em aberto')
+      + num(paradas.total, 'acima da meta', `passaram de ${fmtDuracao(meta)}`, paradas.total > 0)
+      + num(maior === null ? '—' : fmtDuracao(maior), 'o mais parado',
+            maior !== null && maior > meta ? 'precisa de atenção' : 'dentro da meta',
+            maior !== null && maior > meta)
+      + num(medio === null ? '—' : fmtDuracao(medio), 'média no pátio', 'das que estão lá agora')
+      /* A carga SEM CHEGADA não é zero: é desconhecida, e some se a gente
+         calar. Só aparece quando existe. */
+      + (paradas.semChegada
+          ? num(paradas.semChegada, 'sem chegada', 'não dá para contar o tempo', true) : '');
+  }
+
+  /* ---- onde estão os caminhões: posição e rótulo, nunca cor sozinha ---- */
+  const alvoFila = document.getElementById('pulso-fila');
+  if(alvoFila){
+    const etapas = STATUS_FLOW.map(st => ({
+      rotulo: st, valor: abertas.filter(c => c.status === st).length
+    })).filter(e => e.valor > 0);
+    Graf.fila(alvoFila, { etapas });
+  }
+
+  /* ---- o dia por hora ---- */
+  const alvoHora = document.getElementById('pulso-hora');
+  if(alvoHora){
+    const porHora = new Array(24).fill(0);
+    abertas.forEach(c => {
+      const t = tempoDePatioDe(c);
+      if(!t.entrada || !t.entradaPlausivel) return;
+      porHora[new Date(t.entrada).getHours()]++;
+    });
+    /* Só as horas com movimento, e da primeira à última: mostrar 24 barras
+       de madrugada vazia é gastar a tela com o que não aconteceu. */
+    let ini = porHora.findIndex(v => v > 0);
+    let fim = porHora.length - 1 - [...porHora].reverse().findIndex(v => v > 0);
+    const pontos = (ini < 0) ? [] : porHora.slice(ini, fim + 1)
+      .map((v, i) => ({ rotulo: String(ini + i).padStart(2,'0') + 'h', valor: v }));
+    Graf.area(alvoHora, { pontos, rotulo:'entradas no pátio por hora',
+      formato: v => Math.round(v) + (Math.round(v) === 1 ? ' carga' : ' cargas') });
+  }
+
+  /* ---- rankings: quem está segurando o pátio ---- */
+  const porChave = (fn) => {
+    const m = new Map();
+    abertas.forEach(c => {
+      const min = minutosNoPatioAgora(c);
+      if(min === null) return;
+      const k = (fn(c) || '').trim() || '(sem informação)';
+      const a = m.get(k) || { rotulo:k, valor:0, n:0 };
+      a.valor = Math.max(a.valor, min); a.n++;
+      m.set(k, a);
+    });
+    return [...m.values()].sort((a,b) => b.valor - a.valor);
+  };
+  const fmt = v => fmtDuracao(v);
+  const grave = it => it.valor > meta;
+  const r1 = document.getElementById('pulso-rank-rota');
+  if(r1) Graf.ranking(r1, { itens: porChave(c => c.rota), formato: fmt,
+                            rotulo:'tempo parado por rota', alerta: grave });
+  const r2 = document.getElementById('pulso-rank-transp');
+  if(r2) Graf.ranking(r2, { itens: porChave(c => c.transportadora), formato: fmt,
+                            rotulo:'tempo parado por transportadora', alerta: grave });
+}
+
 function renderIndicadores(){
+  // O pulso desenha junto com o resto da aba, do mesmo estado.
+  try{ renderPulsoDoDia(); }catch(e){ console.warn('[Suinco] pulso:', e); }
   preencherFiltrosIndicadores();
   renderDistribuicaoStatus();
   renderTempoMedioPatio();
@@ -8174,6 +8272,49 @@ async function apagarHistoricoDaPlacaUI(){
     notify('Não consegui apagar: ' + (e && e.message || e), 'erro', 8000);
   }
 }
+/* O NÚMERO DA CARGA DE UMA MOVIMENTAÇÃO (25/09/2026)
+   ---------------------------------------------------------------------
+   Pedido do dono: "eu quero que apareca o numero da carga em uma coluna
+   do historico e fique mais facil".
+
+   O BURACO ERA ESTE, e ele já existia com a busca do lado: o campo de
+   procura do Histórico aceita número de carga desde sempre (o rótulo diz
+   "Ex: ABC1D23 ou 10245") — mas nenhuma coluna mostrava o número. A
+   pessoa procurava, vinham as linhas, e não dava para confirmar QUAL
+   carga era cada uma. Procurar sem poder conferir é pior que não
+   procurar: dá a resposta sem dar a prova.
+
+   POR QUE O NÚMERO NÃO ESTÁ NO REGISTRO. A movimentação guarda `cargaId`,
+   não o número — e está certo: o número pode ser corrigido depois, e um
+   registro de auditoria que guardasse uma CÓPIA dele passaria a mentir no
+   dia da correção. O número se resolve pela carga, sempre.
+
+   QUANDO NÃO DÁ PARA RESOLVER. Se a carga não está na cópia local (fora
+   da janela de 30 dias, e ainda não trazida por um filtro de período),
+   devolve nulo — e a tela escreve o motivo em vez de um traço mudo.
+   Traço sozinho faz a pessoa achar que a carga não tinha número. */
+function numeroDaCargaDaMovimentacao(m){
+  if(!m || !m.cargaId) return null;
+  const c = (typeof getCarga === 'function') ? getCarga(m.cargaId) : null;
+  if(!c) return null;
+  const n = String(c.numeroCarga || '').trim();
+  /* "Aguardando Carga" é a marca da entrada sem programação, não um
+     número. Mostrá-la na coluna de número faria procurar por ela. */
+  if(!n || n === 'Aguardando Carga') return null;
+  return n;
+}
+
+/* Clique no número: joga o número na busca que JÁ EXISTE e redesenha.
+   Não é busca nova — é a mesma, preenchida sem digitação. Uma busca,
+   dois caminhos de entrada. */
+function filtrarHistoricoPorCarga(numero){
+  const campo = document.getElementById('hist-busca-carga');
+  if(!campo) return;
+  campo.value = numero;
+  campo.dispatchEvent(new Event('input', { bubbles:true }));
+  campo.scrollIntoView({ block:'center', behavior: Graf && Graf.semMovimento && Graf.semMovimento() ? 'auto' : 'smooth' });
+}
+
 function renderHistorico(){
   const filtroPlaca = normalizarPlaca(document.getElementById('hist-filtro-placa')?.value || '');
   const filtroSetor = document.getElementById('hist-filtro-setor')?.value || '';
@@ -8230,11 +8371,25 @@ function renderHistorico(){
         title="Clique para ver tudo o que se sabe sobre este registro.">
       <td><span class="hist-seta" id="hist-seta-${esc(m.id)}">▸</span> ${fmtDataHora(m.timestamp)}</td>
       <td>${esc(m.placa)}</td>
+      <td class="hist-carga">${(() => {
+        const n = numeroDaCargaDaMovimentacao(m);
+        /* CLICAR NO NÚMERO ABRE A LINHA DO TEMPO DELA — é o "fique mais
+           fácil" do pedido. A busca do Histórico não filtra a tabela: ela
+           desenha a jornada completa da carga, que é o que quem investiga
+           está procurando. Achar a linha no meio de 500 e ter de digitar o
+           número à mão é trabalho que a tela pode poupar.
+           `stopPropagation` porque a linha inteira já abre o detalhe. */
+        return n
+          ? `<button type="button" class="hist-carga-btn"
+               onclick="event.stopPropagation(); filtrarHistoricoPorCarga('${escJs(n)}')"
+               title="Ver a linha do tempo completa da carga ${esc(n)}">${esc(n)}</button>`
+          : `<span class="text-dim" title="Esta carga está fora do período carregado. Use o filtro de datas para trazê-la.">fora do período</span>`;
+      })()}</td>
       <td>${m.statusAnterior ? badgeHtml(m.statusAnterior) : '—'}</td><td>${badgeHtml(m.statusNovo)}</td>
       <td>${esc(m.operador)}</td><td>${esc(m.setor)}</td>
     </tr>
     <tr class="hist-detalhe" id="hist-det-${esc(m.id)}" hidden>
-      <td colspan="6"></td>
+      <td colspan="7"></td>
     </tr>`).join('');
   document.getElementById('hist-empty').hidden = lista.length>0;
   const contagemEl = document.getElementById('hist-contagem');

@@ -259,6 +259,15 @@ def main():
     if n_app != 1:
         sys.exit(f'ERRO: esperava 1 script para app.js, encontrei {n_app}')
 
+    # 5a-. Motor de gráfico — antes do app.js, que é quem o chama.
+    html, n_graf = re.subn(
+        r'<script src="graficos2027\.js"></script>',
+        lambda _: '<script>\n' + ler('graficos2027.js') + '\n</script>',
+        html,
+    )
+    if n_graf != 1:
+        sys.exit(f'ERRO: esperava 1 script para graficos2027.js, encontrei {n_graf}')
+
     # 5b. Módulo de Devoluções — depois de app.js (usa os globais dele).
     html, n_dev = re.subn(
         r'<script src="devolucoes\.js"></script>',
