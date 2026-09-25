@@ -98,36 +98,43 @@ def main():
     #
     # O dono abriu a vitrine e disse "não vi diferença nenhuma". Não era
     # cache dele: o `index.html` era de um commit anterior, porque eu
-    # regerei a vitrine sem rodar o build antes. A pílula mostrava o commit
-    # do GIT e a página rodava o código de outro — dois números diferentes
-    # para a mesma coisa, e nenhum deles reclamando.
+    # regerei a vitrine sem rodar o build antes. A página rodava código
+    # velho e nada reclamava. Julgar tela é o ÚNICO motivo de a vitrine
+    # existir — mostrar código velho como novo gasta a confiança de quem
+    # olha e manda o trabalho para o lugar errado.
     #
-    # Julgar tela é o único motivo de a vitrine existir. Mostrar código
-    # velho como se fosse novo é pior do que não mostrar nada: gasta a
-    # confiança de quem olha e manda o trabalho para o lugar errado.
+    # POR QUE COMPARAR CONTEÚDO E NÃO O COMMIT DO CARIMBO. A primeira
+    # versão desta guarda comparava o commit dentro de `SUINCO_BUILD` com
+    # o HEAD do git — e reprovaria em TODA árvore limpa. Motivo: o
+    # `publicar.sh` descarta o carimbo novo de propósito (ele muda a cada
+    # build e sujaria a árvore), então o index.html commitado carrega
+    # sempre o commit ANTERIOR. Guarda que acusa sempre é guarda que
+    # alguém desliga na terceira vez — está escrito no próprio portão.
     #
-    # Agora o carimbo vem de DENTRO da página — a mesma fonte que o rodapé
-    # do painel usa —, e se ele não bater com o commit atual, isto PARA.
+    # Então aqui se faz o que o portão faz: regera, e compara o resultado
+    # com o que está no disco IGNORANDO as linhas de carimbo. Se qualquer
+    # outra linha mudar, o build estava velho de verdade.
+    r = subprocess.run([sys.executable, 'build_arquivo_unico.py'], cwd=str(RAIZ),
+                       capture_output=True, text=True)
+    if r.returncode != 0:
+        erro('o build falhou: ' + (r.stderr or r.stdout).strip()[:200])
+    refeito = PAINEL.read_text(encoding='utf-8')
+    def sem_carimbo(t):
+        return [l for l in t.splitlines()
+                if 'SUINCO_BUILD' not in l and 'const BUILD =' not in l]
+    if sem_carimbo(refeito) != sem_carimbo(html):
+        erro('o index.html estava desatualizado em relação às fontes e foi '
+             'regerado agora. Confira o que mudou e rode de novo — a vitrine '
+             'não nasce de build velho.')
+    html = refeito
+
     m = re.search(r'window\.SUINCO_BUILD\s*=\s*"([^"]+)"', html)
     if not m:
         erro('não achei o carimbo SUINCO_BUILD no index.html.')
-    carimbo = m.group(1)                       # ex.: "24/09 19:35 · b27275e"
-    commit = carimbo.split('·')[-1].strip()
-
-    atual = subprocess.run(['git', 'rev-parse', '--short', 'HEAD'], cwd=str(RAIZ),
-                           capture_output=True, text=True).stdout.strip()
-    sujo = subprocess.run(['git', 'status', '--porcelain', '--',
-                           'app.js', 'data.js', 'styles.css', 'graficos2027.js',
-                           'devolucoes.js', 'suinco-api.js', 'index_suinco.html'],
-                          cwd=str(RAIZ), capture_output=True, text=True).stdout.strip()
-    if atual and commit != atual:
-        erro(f'o index.html é do commit {commit} e o código está em {atual}. '
-             'Rode `python3 build_arquivo_unico.py` antes — senão a vitrine '
-             'mostra código velho como se fosse novo.')
-    if sujo:
-        erro('há fonte alterada e não commitada; o carimbo do build apontaria '
-             'para um commit que não contém o que você quer olhar. '
-             'Rode `python3 build_arquivo_unico.py` e commite antes.')
+    # O carimbo da pílula vem de DENTRO da página — a mesma fonte que o
+    # rodapé do painel usa. Duas fontes para "qual versão é esta" é como
+    # nasce fantasma: foi assim que a pílula e o rodapé discordaram.
+    commit = m.group(1).split('·')[-1].strip()
 
     # 1. modo local — sem servidor, sem rede.
     html, n = re.subn(r'\n(\s*)ativo: true,', r'\n\1ativo: false,', html, count=1)
