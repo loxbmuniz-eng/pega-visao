@@ -93,8 +93,41 @@ def main():
              'python3 vitrine/gerar_demonstracao.py')
 
     html = PAINEL.read_text(encoding='utf-8')
-    commit = subprocess.run(['git', 'rev-parse', '--short', 'HEAD'], cwd=str(RAIZ),
-                            capture_output=True, text=True).stdout.strip() or 'sem commit'
+
+    # A VITRINE NÃO PODE NASCER DE UM BUILD VELHO (24/09/2026).
+    #
+    # O dono abriu a vitrine e disse "não vi diferença nenhuma". Não era
+    # cache dele: o `index.html` era de um commit anterior, porque eu
+    # regerei a vitrine sem rodar o build antes. A pílula mostrava o commit
+    # do GIT e a página rodava o código de outro — dois números diferentes
+    # para a mesma coisa, e nenhum deles reclamando.
+    #
+    # Julgar tela é o único motivo de a vitrine existir. Mostrar código
+    # velho como se fosse novo é pior do que não mostrar nada: gasta a
+    # confiança de quem olha e manda o trabalho para o lugar errado.
+    #
+    # Agora o carimbo vem de DENTRO da página — a mesma fonte que o rodapé
+    # do painel usa —, e se ele não bater com o commit atual, isto PARA.
+    m = re.search(r'window\.SUINCO_BUILD\s*=\s*"([^"]+)"', html)
+    if not m:
+        erro('não achei o carimbo SUINCO_BUILD no index.html.')
+    carimbo = m.group(1)                       # ex.: "24/09 19:35 · b27275e"
+    commit = carimbo.split('·')[-1].strip()
+
+    atual = subprocess.run(['git', 'rev-parse', '--short', 'HEAD'], cwd=str(RAIZ),
+                           capture_output=True, text=True).stdout.strip()
+    sujo = subprocess.run(['git', 'status', '--porcelain', '--',
+                           'app.js', 'data.js', 'styles.css', 'graficos2027.js',
+                           'devolucoes.js', 'suinco-api.js', 'index_suinco.html'],
+                          cwd=str(RAIZ), capture_output=True, text=True).stdout.strip()
+    if atual and commit != atual:
+        erro(f'o index.html é do commit {commit} e o código está em {atual}. '
+             'Rode `python3 build_arquivo_unico.py` antes — senão a vitrine '
+             'mostra código velho como se fosse novo.')
+    if sujo:
+        erro('há fonte alterada e não commitada; o carimbo do build apontaria '
+             'para um commit que não contém o que você quer olhar. '
+             'Rode `python3 build_arquivo_unico.py` e commite antes.')
 
     # 1. modo local — sem servidor, sem rede.
     html, n = re.subn(r'\n(\s*)ativo: true,', r'\n\1ativo: false,', html, count=1)
