@@ -1,0 +1,31 @@
+-- =====================================================================
+-- 056 — CONTROLES INTERNOS CONFERE A SOBRA
+-- ---------------------------------------------------------------------
+-- SEM ESTA MIGRAÇÃO: o check de Controles Internos na sobra é aceito
+-- pela tela e recusado pelo banco — a coluna da observação não existe, e
+-- o operador vê erro depois de já ter digitado.
+--
+-- Pedido do dono (25/09/2026): "no checklist de sobras voce libere um
+-- campo para controles internos dar check e fazer observacao tambem".
+--
+-- O QUE MUDA E O QUE NÃO MUDA. A sobra continua ENCERRANDO no OK da
+-- Expedição — decisão do dono de 18/08/2026, ainda valendo e ainda
+-- escrita em `dominio/devolucoes.js`. Esta conferência é PARALELA: pode
+-- vir antes, depois, ou nunca, e não segura o ciclo. Nenhuma sobra fica
+-- pendente esperando Controles Internos.
+--
+-- A escolha entre "etapa que trava" e "carimbo paralelo" foi minha, dita
+-- ao dono: travar machuca se eu tiver entendido errado (sobras empilham
+-- pendentes no pátio), o carimbo não machuca em nenhum dos dois casos.
+--
+-- POR QUE UMA COLUNA PRÓPRIA E NÃO A `observacoes`. A `observacoes` é do
+-- checklist inteiro e qualquer setor escreve nela. Misturar a conferência
+-- de Controles Internos ali tiraria a AUTORIA — não daria para saber quem
+-- escreveu o quê, que é o motivo de a conferência existir.
+--
+-- `controles_por` e `controles_em` JÁ EXISTEM (a devolução normal usa na
+-- etapa "Destinada"). Na sobra elas nunca eram preenchidas.
+-- =====================================================================
+
+ALTER TABLE devolucoes
+  ADD COLUMN IF NOT EXISTS controles_observacao TEXT NOT NULL DEFAULT '';

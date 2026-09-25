@@ -2102,6 +2102,13 @@ const SuincoSharePoint = (function () {
     criarDivergencia(id, corpo) {
       return chamar('/api/devolucoes/' + encodeURIComponent(id) + '/divergencias', { metodo: 'POST', corpo });
     },
+    /* A conferência de Controles Internos na SOBRA (25/09/2026). Porta
+       própria, de propósito: ela NÃO move o checklist de etapa — quem
+       move é `mudarEtapa`. Ver a rota no servidor para o porquê. */
+    conferenciaControles(id, observacao) {
+      return chamar('/api/devolucoes/' + encodeURIComponent(id) + '/conferencia-controles',
+        { metodo: 'POST', corpo: { observacao } });
+    },
     excluirDivergencia(id, divId) {
       return chamar('/api/devolucoes/' + encodeURIComponent(id) + '/divergencias/' + encodeURIComponent(divId),
         { metodo: 'DELETE' });

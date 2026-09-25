@@ -1118,7 +1118,11 @@ function etapaDeDev(d) {
    tem de consertar. Por isso as duas metades são funções separadas, e esta
    aqui só as soma. */
 function acaoEtapaDev(d) {
-  return blocoAvancoDev(d) + blocoDesfazerDev(d);
+  /* A conferência de Controles Internos entra DEPOIS do desfazer, e só na
+     sobra. Fica por último de propósito: ela não é o próximo passo de
+     ninguém, e pôr um campo acima do botão da etapa faria parecer que
+     precisa ser preenchido antes de avançar. */
+  return blocoAvancoDev(d) + blocoDesfazerDev(d) + blocoConferenciaControlesDev(d);
 }
 
 /* Qual etapa seria desfeita — espelho de validarDesfazerDevolucao no
@@ -1164,6 +1168,69 @@ function listaDeSetoresDev(setores) {
   const nomes = (setores || []).filter(Boolean);
   if (nomes.length <= 1) return nomes[0] || '';
   return `${nomes.slice(0, -1).join(', ')} ou ${nomes[nomes.length - 1]}`;
+}
+
+/* A CONFERÊNCIA DE CONTROLES INTERNOS NA SOBRA (25/09/2026)
+   ---------------------------------------------------------------------
+   Pedido do dono: "no checklist de sobras voce libere um campo para
+   controles internos dar check e fazer observacao tambem".
+
+   É CARIMBO, NÃO ETAPA. A sobra encerra no OK da Expedição — decisão do
+   dono de 18/08/2026, ainda valendo. Por isso este bloco aparece SEMPRE
+   que a devolução é sobra, em qualquer altura do ciclo, e nunca diz
+   "próximo passo": ele não é passo. Chamar de etapa na tela e de carimbo
+   no servidor faria a operação esperar que a sobra travasse aqui.
+
+   QUEM NÃO É DELE VÊ O QUE FOI CONFERIDO, mas não o campo. Espelho da
+   allowlist do servidor — botão que sempre dá erro ensina o operador a
+   ignorar mensagem de permissão. */
+function blocoConferenciaControlesDev(d) {
+  if (d.tipo !== 'SOBRA') return '';
+  const c = d.carimbos && d.carimbos.controles;
+  const setor = (DB.operador || {}).setor;
+  const podeConferir = setor === 'Controles Internos' || setor === 'Administração';
+
+  const feito = c
+    ? `<div class="dev-conf-feito">
+         <b>✔ Conferido por ${esc(c.por)}</b>
+         <span>${fmtDataHora(c.em)}</span>
+         ${c.observacao ? `<p class="dev-conf-obs">${esc(c.observacao)}</p>` : ''}
+       </div>`
+    : '<div class="card-sub dev-conf-pendente">Ainda sem conferência de Controles Internos.</div>';
+
+  if (!podeConferir) {
+    /* Não é pendência que cobra ninguém: a sobra fecha sem isto. O texto
+       diz de quem é, e para. */
+    return `<div class="dev-conferencia">
+      <h5 class="dev-conf-tit">Conferência — Controles Internos</h5>${feito}</div>`;
+  }
+  return `<div class="dev-conferencia">
+    <h5 class="dev-conf-tit">Conferência — Controles Internos</h5>
+    ${feito}
+    <label class="dev-conf-rot" for="dev-conf-obs-${esc(d.id)}">
+      Observação <small>(opcional — fica com o seu nome e a hora)</small></label>
+    <textarea id="dev-conf-obs-${esc(d.id)}" class="dev-conf-campo" rows="2"
+      maxlength="500" placeholder="O que você conferiu"
+      >${c && c.observacao ? esc(c.observacao) : ''}</textarea>
+    <button type="button" class="btn btn-primary btn-sm"
+      onclick="conferirSobraUI('${escJs(d.id)}')">
+      ${c ? '↻ Atualizar conferência' : '✔ Dar o check'}</button>
+  </div>`;
+}
+
+/* O SERVIDOR É QUEM MANDA, também aqui: a tela só redesenha depois de a
+   gravação confirmar. Escrita otimista faria o check aparecer carimbado
+   num aparelho e não existir no banco. */
+async function conferirSobraUI(id) {
+  const campo = document.getElementById('dev-conf-obs-' + id);
+  const obs = campo ? campo.value.trim() : '';
+  try {
+    await SuincoSharePoint.devolucoes.conferenciaControles(id, obs);
+    notify('Conferência registrada.', 'success');
+    await carregarDevolucoes();
+  } catch (e) {
+    notify((e && e.message) || 'Não consegui registrar a conferência.', 'danger', 7000);
+  }
 }
 
 function blocoAvancoDev(d) {

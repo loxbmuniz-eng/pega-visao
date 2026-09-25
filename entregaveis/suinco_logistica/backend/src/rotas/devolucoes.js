@@ -983,6 +983,64 @@ rotasDevolucoes.delete('/devolucoes/:id/itens/:itemId', exigirLogin,
 /* Divergentes são escopo EXCLUSIVO dos Controles Internos (decisão do
    usuário, 18/08/2026) — nem a Logística lança por eles. Administração
    continua irrestrita, como em todo o painel. */
+/* CONTROLES INTERNOS CONFERE A SOBRA (25/09/2026)
+   ---------------------------------------------------------------------
+   Pedido do dono: "no checklist de sobras voce libere um campo para
+   controles internos dar check e fazer observacao tambem".
+
+   POR QUE UMA ROTA PRÓPRIA E NÃO A DE ETAPA. A sobra encerra no OK da
+   Expedição — decisão do dono de 18/08/2026, que continua valendo, e o
+   domínio RECUSA ativamente Controles Internos como etapa da sobra
+   (`ETAPA_NAO_EXISTE_PARA_SOBRA`). Esta conferência é outra coisa: um
+   carimbo PARALELO, que não move o checklist de lugar. Passá-la pela
+   rota de etapa exigiria afrouxar aquela recusa — e aí a sobra poderia
+   ficar pendente esperando um passo que o dono nunca pediu que travasse.
+
+   SÓ PARA SOBRA. Na devolução normal, Controles Internos já tem a etapa
+   "Destinada", que escreve nas MESMAS colunas. Deixar as duas portas
+   abertas para o mesmo registro é a receita de dois caminhos gravando a
+   mesma coisa com regras diferentes. */
+rotasDevolucoes.post('/devolucoes/:id/conferencia-controles', exigirLogin,
+  exigirSetor('Controles Internos'), async (req, res, next) => {
+    try {
+      const op = req.operador;
+      const obs = String(req.body?.observacao ?? '').trim().slice(0, 500);
+      const dev = await consultar(
+        `SELECT devolucao_id, tipo, controles_por FROM devolucoes
+          WHERE devolucao_id = $1 AND excluida_em IS NULL`,
+        [req.params.id]
+      );
+      const atual = dev.rows[0];
+      if (!atual) {
+        return res.status(404).json({ erro: 'Devolução não encontrada.', codigo: 'NAO_ENCONTRADA' });
+      }
+      if (atual.tipo !== 'SOBRA') {
+        return res.status(409).json({
+          erro: 'Esta conferência é da SOBRA. Na devolução, Controles Internos '
+            + 'registra na etapa "Destinada".',
+          codigo: 'CONFERENCIA_SO_DE_SOBRA',
+        });
+      }
+      /* REGISTRAR DE NOVO É PERMITIDO, e é decisão: a observação é o que
+         Controles Internos apurou, e apuração muda. O que não pode é
+         sumir com a anterior sem deixar rastro — e não some: o banco tem
+         o gatilho `trg_revisao_devolucao`, que guarda uma revisão a cada
+         alteração da linha. Quem registra o rastro é o BANCO, não a rota;
+         a primeira versão desta função chamava uma
+         `registrarRevisaoDevolucao()` que eu inventei e que não existe. */
+      const upd = await consultar(
+        `UPDATE devolucoes
+            SET controles_por = $2, controles_em = now(),
+                controles_observacao = $3, atualizado_em = now()
+          WHERE devolucao_id = $1
+        RETURNING *`,
+        [req.params.id, op.nome, obs]
+      );
+      emitirAtualizada(req.params.id);
+      res.json(devolucaoParaPainel(upd.rows[0]));
+    } catch (e) { next(e); }
+  });
+
 rotasDevolucoes.post('/devolucoes/:id/divergencias', exigirLogin, exigirSetor('Controles Internos'), async (req, res, next) => {
   try {
     const op = req.operador;

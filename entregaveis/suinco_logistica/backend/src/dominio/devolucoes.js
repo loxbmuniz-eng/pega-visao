@@ -329,7 +329,12 @@ export function devolucaoParaPainel(linha, itens = [], divergencias = [], rotas 
       faturamento: linha.faturamento_em ? { por: linha.faturamento_por, em: linha.faturamento_em } : null,
       expedicao:   linha.expedicao_em   ? { por: linha.expedicao_por,   em: linha.expedicao_em }   : null,
       pesofinal:   linha.pesofinal_em   ? { por: linha.pesofinal_por,   em: linha.pesofinal_em }   : null,
-      controles:   linha.controles_em   ? { por: linha.controles_por,   em: linha.controles_em }   : null,
+      /* A observação de Controles Internos viaja JUNTO do carimbo dele
+         (25/09/2026). Separá-la em outro campo obrigaria a tela a juntar
+         os dois de novo, e a primeira vez que alguém esquecesse mostraria
+         um carimbo sem o que foi apurado — que é a parte que interessa. */
+      controles:   linha.controles_em   ? { por: linha.controles_por,   em: linha.controles_em,
+                                            observacao: linha.controles_observacao || '' } : null,
       notas:       linha.notas_em       ? { por: linha.notas_por,       em: linha.notas_em }       : null,
     },
     criadoEm: linha.criado_em,

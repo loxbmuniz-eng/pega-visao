@@ -6085,6 +6085,101 @@ describe('45. Destino preenche o KM, e o frete combinado à mão (18/09/2026)', 
   });
 });
 
+describe('47. Controles Internos confere a SOBRA (25/09/2026)', () => {
+  /* PEDIDO DO DONO: "no checklist de sobras voce libere um campo para
+     controles internos dar check e fazer observacao tambem".
+
+     A DECISÃO, e ela foi minha, dita a ele: carimbo PARALELO, não etapa.
+     A sobra continua encerrando no OK da Expedição (decisão dele de
+     18/08/2026). Travar o ciclo machucaria se eu tivesse entendido
+     errado — sobras empilhariam pendentes no pátio; o carimbo não
+     machuca em nenhum dos dois casos.
+
+     O QUE ESTE BLOCO TRAVA
+       1. Controles Internos carimba a sobra e a observação fica gravada;
+       2. o carimbo NÃO move o checklist de lugar — a sobra continua
+          encerrada onde estava. É a prova de que é paralelo mesmo;
+       3. a conferência é SÓ da sobra: na devolução normal a porta é
+          outra (a etapa "Destinada"), e duas portas gravando o mesmo
+          campo com regras diferentes é como se perde consistência;
+       4. quem não é Controles Internos é recusado;
+       5. registrar de novo substitui a observação — apuração muda. */
+  let idSobra = null;
+  let tokenCI = null;
+
+  /* A BANCADA NÃO TEM CONTROLES INTERNOS, e isso já me derrubou hoje no
+     bloco 46: usar `tokens['Controles Internos']` (undefined) faz a rota
+     responder 401 SEM_TOKEN, e o teste reprova pelo motivo errado — que
+     no dia seguinte passa pelo motivo errado. Aqui o operador é criado. */
+  before(async () => {
+    const email = 'controles@teste.local';
+    await pool.query(
+      `INSERT INTO operadores (email, nome, setor, senha_hash) VALUES ($1,$2,$3,$4)
+         ON CONFLICT (email) DO UPDATE SET setor = EXCLUDED.setor`,
+      [email, 'Rene (Controles)', 'Controles Internos', await bcrypt.hash(SENHA, 4)]
+    );
+    const r = await req('/auth/login', { metodo: 'POST', corpo: { email, senha: SENHA } });
+    assert.equal(r.status, 200, r.texto);
+    tokenCI = r.json.token;
+  });
+
+  test('Controles Internos carimba a sobra e a observação fica gravada', async () => {
+    const criada = await req('/api/devolucoes', {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { dataDev: '2026-09-25', regiao: 'Sobras', tipo: 'SOBRA', rotas: ['500'] },
+    });
+    assert.equal(criada.status, 201, criada.texto);
+    idSobra = criada.json.id;
+
+    const r = await req(`/api/devolucoes/${idSobra}/conferencia-controles`, {
+      metodo: 'POST', token: tokenCI,
+      corpo: { observacao: 'Conferido: caixa batendo com o peso.' },
+    });
+    assert.equal(r.status, 200, r.texto);
+    assert.ok(r.json.carimbos.controles, 'o carimbo de Controles não foi gravado');
+    assert.equal(r.json.carimbos.controles.observacao,
+      'Conferido: caixa batendo com o peso.');
+  });
+
+  test('e o carimbo NÃO move a sobra de etapa — é paralelo', async () => {
+    const antes = await req(`/api/devolucoes/${idSobra}`, { token: tokens['Logística'] });
+    assert.equal(antes.json.status, 'Lançada',
+      'a conferência mexeu no andamento do checklist — devia ser paralela');
+  });
+
+  test('a conferência é só da SOBRA, não da devolução normal', async () => {
+    const dev = await req('/api/devolucoes', {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { dataDev: '2026-09-25', regiao: 'Brasília', rotas: ['500'] },
+    });
+    assert.equal(dev.status, 201, dev.texto);
+    const r = await req(`/api/devolucoes/${dev.json.id}/conferencia-controles`, {
+      metodo: 'POST', token: tokenCI,
+      corpo: { observacao: 'x' },
+    });
+    assert.equal(r.status, 409, r.texto);
+    assert.equal(r.json.codigo, 'CONFERENCIA_SO_DE_SOBRA', r.texto);
+  });
+
+  test('quem não é Controles Internos é recusado', async () => {
+    for (const setor of ['Portaria', 'Expedição', 'Faturamento']) {
+      const r = await req(`/api/devolucoes/${idSobra}/conferencia-controles`, {
+        metodo: 'POST', token: tokens[setor], corpo: { observacao: 'x' },
+      });
+      assert.equal(r.status, 403, `${setor} conseguiu conferir: ${r.texto}`);
+    }
+  });
+
+  test('registrar de novo substitui a observação — apuração muda', async () => {
+    const r = await req(`/api/devolucoes/${idSobra}/conferencia-controles`, {
+      metodo: 'POST', token: tokenCI,
+      corpo: { observacao: 'Reconferido: faltava uma caixa.' },
+    });
+    assert.equal(r.status, 200, r.texto);
+    assert.equal(r.json.carimbos.controles.observacao, 'Reconferido: faltava uma caixa.');
+  });
+});
+
 describe('46. A filial gera a Relação para o Operador (23/09/2026)', () => {
   /* PEDIDO DO DONO: "todas as filiais precisam ter acesso a gerar relatorio
      para o operador, filiales filialbsb filialba".
