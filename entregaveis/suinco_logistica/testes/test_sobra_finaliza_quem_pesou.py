@@ -34,9 +34,10 @@ do dono: quem pesou finaliza a sobra.
 
 O QUE ESTE TESTE TRAVA, na TELA (o servidor tem a suíte 19):
 
-  1. o Faturamento vê o botão de FINALIZAR a sobra depois de pesar;
-  2. o clique finaliza de verdade — a sobra vai para "Descarga Conferida";
-  3. a Expedição continua finalizando a sobra (nada foi tirado dela);
+  1. o Faturamento vê o botão do OK da descarga depois de pesar;
+  2. o clique registra de verdade — a sobra vai para "Descarga Conferida",
+     e a tela chama Controles Internos, que é quem fecha desde 25/09/2026;
+  3. a Expedição continua dando esse OK (nada foi tirado dela);
   4. a devolução NORMAL não ganhou atalho: no mesmo status, o Faturamento
      continua indo para a balança final, não para o fim;
   5. a allowlist do atalho da sobra na tela é EXATAMENTE a do servidor —
@@ -184,16 +185,30 @@ async def main():
         }""", id1)
         ck('o Faturamento vê um BOTÃO, não só o texto do próximo passo',
            '<button' in bloco, bloco[:160])
-        ck('o botão fala em FINALIZAR a sobra',
-           'inaliz' in bloco.lower(), bloco[:160])
+        # O RÓTULO MUDOU EM 25/09/2026 e o teste mudou junto. Ele dizia
+        # FINALIZAR, e estava certo enquanto este era o último passo. O
+        # dono acrescentou Controles Internos ao fim da esteira — "agora
+        # a sobra vai passar" —, e prometer "finalizar" num passo que tem
+        # outro pela frente é o texto que faz a operação parar de
+        # conferir. O botão agora diz para onde a sobra VAI.
+        ck('o botão diz que a sobra segue para Controles Internos',
+           'controles internos' in bloco.lower(), bloco[:200])
+        ck('e não promete mais FINALIZAR — ainda falta um passo',
+           'inaliz' not in bloco.lower(), bloco[:200])
 
-        print('\n=== 2. O CLIQUE FINALIZA DE VERDADE ===')
+        print('\n=== 2. O CLIQUE REGISTRA A DESCARGA DE VERDADE ===')
         await pgF.evaluate("(id) => avancarEtapaDevolucaoUI(id)", id1)
         await pgF.wait_for_timeout(1800)
         st = await status_de(pgF, id1)
         ck('a sobra foi para "Descarga Conferida"', st == 'Descarga Conferida', st)
         fim = await pgF.evaluate("(id) => blocoAvancoDev(getDevolucao(id))", id1)
-        ck('e a tela diz que a sobra está concluída', 'concluída' in fim, fim[:140])
+        # NÃO É MAIS O FIM. Aqui a tela precisa chamar Controles Internos,
+        # e não dizer "concluída" — dizer concluída é o que faria a sobra
+        # sumir da fila de quem ainda tem de conferi-la.
+        ck('a tela NÃO diz mais que a sobra está concluída',
+           'concluída' not in fim, fim[:200])
+        ck('e chama Controles Internos para o passo que falta',
+           'Controles Internos' in fim, fim[:200])
 
         print('\n=== 3. A EXPEDIÇÃO CONTINUA FINALIZANDO A SOBRA ===')
         id2 = await nova(['Recebida na Portaria', 'Conferida no Faturamento'])
@@ -206,7 +221,7 @@ async def main():
         await pgE.evaluate("(id) => avancarEtapaDevolucaoUI(id)", id2)
         await pgE.wait_for_timeout(1800)
         st2 = await status_de(pgE, id2)
-        ck('e o clique dela também finaliza (era 409 antes)',
+        ck('e o clique dela também registra a descarga (era 409 antes)',
            st2 == 'Descarga Conferida', st2)
 
         print('\n=== 4. A DEVOLUÇÃO NORMAL NÃO GANHOU ATALHO ===')

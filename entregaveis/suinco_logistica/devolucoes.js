@@ -126,14 +126,19 @@ const DEV_ETAPAS = [
    testes/test_sobra_finaliza_quem_pesou.py, que lê as duas fontes e compara
    a esteira inteira — mesma solução da lista de SETORES (ocorrência #26).
 
-   O FATURAMENTO ENTROU EM 16/09/2026, a pedido do dono: para a sobra este
-   é o ÚLTIMO passo, e quem pesou precisa conseguir encerrar em vez de
-   deixar o checklist parado esperando outro setor aparecer. O rótulo do
-   botão diz FINALIZAR — é a palavra dele — e não nomeia um setor só,
-   porque agora são três. */
+   O FATURAMENTO ENTROU EM 16/09/2026, a pedido do dono: quem pesou precisa
+   conseguir dar este OK em vez de deixar o checklist parado esperando
+   outro setor aparecer. O rótulo não nomeia um setor só, porque são três.
+
+   O RÓTULO DEIXOU DE DIZER "FINALIZAR" (25/09/2026). Ele dizia, e estava
+   certo enquanto este era o último passo da sobra. O dono acrescentou
+   Controles Internos ao fim da esteira — "agora a sobra vai passar" — e
+   um botão que promete finalizar o que ainda tem um passo pela frente é
+   exatamente o tipo de texto que faz a operação parar de conferir. Agora
+   ele diz para onde a sobra vai. */
 const DEV_ATALHO_SOBRA = {
   status: 'Conferida no Faturamento', proxima: 'Descarga Conferida',
-  botao: '✅ Finalizar sobra — descarga conferida', pede: 'expedicao',
+  botao: '📦 Descarga conferida — segue para Controles Internos', pede: 'expedicao',
   setores: ['Expedição', 'Faturamento', 'Logística'],
 };
 
@@ -1068,10 +1073,12 @@ function previewPesoDevolvidoUI(id) {
 const _devCarimbosVistos = new Set();
 
 function carimbosDev(d) {
-  // Sobra encerra na Expedição — mostrar Controles/Notas como "pendente"
-  // para sempre só confundiria.
+  /* A SOBRA PASSOU A TER QUATRO CARIMBOS (25/09/2026) — decisão do dono
+     revendo a dele: "agora a sobra vai passar". Central de Notas continua
+     de fora, porque a sobra não gera nota, e mostrá-la pendente para
+     sempre só confundiria. */
   const etapasVisiveis = d.tipo === 'SOBRA'
-    ? ['portaria', 'faturamento', 'expedicao'] : DEV_ORDEM_NA_TELA;
+    ? ['portaria', 'faturamento', 'expedicao', 'controles'] : DEV_ORDEM_NA_TELA;
   return `<div class="dev-carimbos">
     ${etapasVisiveis.map((chave) => [chave, DEV_ETAPA_ROTULO[chave]]).map(([chave, rotulo]) => {
       const c = d.carimbos[chave];
@@ -1122,7 +1129,7 @@ function acaoEtapaDev(d) {
      sobra. Fica por último de propósito: ela não é o próximo passo de
      ninguém, e pôr um campo acima do botão da etapa faria parecer que
      precisa ser preenchido antes de avançar. */
-  return blocoAvancoDev(d) + blocoDesfazerDev(d) + blocoConferenciaControlesDev(d);
+  return blocoAvancoDev(d) + blocoDesfazerDev(d);
 }
 
 /* Qual etapa seria desfeita — espelho de validarDesfazerDevolucao no
@@ -1170,73 +1177,11 @@ function listaDeSetoresDev(setores) {
   return `${nomes.slice(0, -1).join(', ')} ou ${nomes[nomes.length - 1]}`;
 }
 
-/* A CONFERÊNCIA DE CONTROLES INTERNOS NA SOBRA (25/09/2026)
-   ---------------------------------------------------------------------
-   Pedido do dono: "no checklist de sobras voce libere um campo para
-   controles internos dar check e fazer observacao tambem".
-
-   É CARIMBO, NÃO ETAPA. A sobra encerra no OK da Expedição — decisão do
-   dono de 18/08/2026, ainda valendo. Por isso este bloco aparece SEMPRE
-   que a devolução é sobra, em qualquer altura do ciclo, e nunca diz
-   "próximo passo": ele não é passo. Chamar de etapa na tela e de carimbo
-   no servidor faria a operação esperar que a sobra travasse aqui.
-
-   QUEM NÃO É DELE VÊ O QUE FOI CONFERIDO, mas não o campo. Espelho da
-   allowlist do servidor — botão que sempre dá erro ensina o operador a
-   ignorar mensagem de permissão. */
-function blocoConferenciaControlesDev(d) {
-  if (d.tipo !== 'SOBRA') return '';
-  const c = d.carimbos && d.carimbos.controles;
-  const setor = (DB.operador || {}).setor;
-  const podeConferir = setor === 'Controles Internos' || setor === 'Administração';
-
-  const feito = c
-    ? `<div class="dev-conf-feito">
-         <b>✔ Conferido por ${esc(c.por)}</b>
-         <span>${fmtDataHora(c.em)}</span>
-         ${c.observacao ? `<p class="dev-conf-obs">${esc(c.observacao)}</p>` : ''}
-       </div>`
-    : '<div class="card-sub dev-conf-pendente">Ainda sem conferência de Controles Internos.</div>';
-
-  if (!podeConferir) {
-    /* Não é pendência que cobra ninguém: a sobra fecha sem isto. O texto
-       diz de quem é, e para. */
-    return `<div class="dev-conferencia">
-      <h5 class="dev-conf-tit">Conferência — Controles Internos</h5>${feito}</div>`;
-  }
-  return `<div class="dev-conferencia">
-    <h5 class="dev-conf-tit">Conferência — Controles Internos</h5>
-    ${feito}
-    <label class="dev-conf-rot" for="dev-conf-obs-${esc(d.id)}">
-      Observação <small>(opcional — fica com o seu nome e a hora)</small></label>
-    <textarea id="dev-conf-obs-${esc(d.id)}" class="dev-conf-campo" rows="2"
-      maxlength="500" placeholder="O que você conferiu"
-      >${c && c.observacao ? esc(c.observacao) : ''}</textarea>
-    <button type="button" class="btn btn-primary btn-sm"
-      onclick="conferirSobraUI('${escJs(d.id)}')">
-      ${c ? '↻ Atualizar conferência' : '✔ Dar o check'}</button>
-  </div>`;
-}
-
-/* O SERVIDOR É QUEM MANDA, também aqui: a tela só redesenha depois de a
-   gravação confirmar. Escrita otimista faria o check aparecer carimbado
-   num aparelho e não existir no banco. */
-async function conferirSobraUI(id) {
-  const campo = document.getElementById('dev-conf-obs-' + id);
-  const obs = campo ? campo.value.trim() : '';
-  try {
-    await SuincoSharePoint.devolucoes.conferenciaControles(id, obs);
-    notify('Conferência registrada.', 'success');
-    await carregarDevolucoes();
-  } catch (e) {
-    notify((e && e.message) || 'Não consegui registrar a conferência.', 'danger', 7000);
-  }
-}
-
 function blocoAvancoDev(d) {
-  /* SOBRA: três OKs e acabou — Portaria, Faturamento, Expedição. */
-  if (d.tipo === 'SOBRA' && d.status === 'Descarga Conferida') {
-    return '<div class="card-sub">✅ Sobra concluída — entrou, conferida e descarregada.</div>';
+  /* SOBRA: quatro OKs — Portaria, Faturamento, Expedição e Controles
+     Internos. Até 25/09/2026 ela fechava no terceiro; o dono mudou. */
+  if (d.tipo === 'SOBRA' && d.status === 'Destinada') {
+    return '<div class="card-sub">✅ Sobra concluída — conferida por Controles Internos.</div>';
   }
   const etapa = etapaDeDev(d);
   if (!etapa) return '<div class="card-sub">✅ Ciclo encerrado — nota fiscal finalizada.</div>';

@@ -6085,32 +6085,35 @@ describe('45. Destino preenche o KM, e o frete combinado à mão (18/09/2026)', 
   });
 });
 
-describe('47. Controles Internos confere a SOBRA (25/09/2026)', () => {
-  /* PEDIDO DO DONO: "no checklist de sobras voce libere um campo para
-     controles internos dar check e fazer observacao tambem".
+describe('47. A SOBRA passa por Controles Internos (25/09/2026)', () => {
+  /* PEDIDO DO DONO, em duas mensagens. A primeira: "no checklist de sobras
+     voce libere um campo para controles internos dar check e fazer
+     observacao tambem". Eu li como carimbo PARALELO — a sobra continuaria
+     encerrando no OK da Expedição e o check ficaria de lado, sem travar.
+     A segunda corrigiu, e é ela que vale: "agora a sobra vai passar".
 
-     A DECISÃO, e ela foi minha, dita a ele: carimbo PARALELO, não etapa.
-     A sobra continua encerrando no OK da Expedição (decisão dele de
-     18/08/2026). Travar o ciclo machucaria se eu tivesse entendido
-     errado — sobras empilhariam pendentes no pátio; o carimbo não
-     machuca em nenhum dos dois casos.
+     A ESTEIRA DA SOBRA passa a ser: Portaria OK → Faturamento OK →
+     Expedição OK → Controles Internos, e PARA AÍ. A Central de Notas
+     continua fora (sobra não gera nota) e a balança final também (o
+     caminhão da sobra não volta a pesar).
 
-     O QUE ESTE BLOCO TRAVA
-       1. Controles Internos carimba a sobra e a observação fica gravada;
-       2. o carimbo NÃO move o checklist de lugar — a sobra continua
-          encerrada onde estava. É a prova de que é paralelo mesmo;
-       3. a conferência é SÓ da sobra: na devolução normal a porta é
-          outra (a etapa "Destinada"), e duas portas gravando o mesmo
-          campo com regras diferentes é como se perde consistência;
-       4. quem não é Controles Internos é recusado;
-       5. registrar de novo substitui a observação — apuração muda. */
+     O QUE MUDA NA OPERAÇÃO, e é a parte que machuca se estiver errada:
+     sobra sem o check de Controles Internos fica EM ABERTO. Antes ela
+     fechava sozinha no terceiro OK. Por isso este bloco trava o ponto 1
+     antes de qualquer outro.
+
+     NÃO EXISTE CAMPO NOVO. A observação é a MESMA `obs_controles` que a
+     devolução normal já grava na etapa "Destinada". A primeira versão
+     disto criou uma coluna `controles_observacao` e uma rota própria —
+     duas portas gravando o mesmo conceito, que é como diverge. A
+     migração 056 foi apagada antes de subir; o banco não tem a coluna. */
   let idSobra = null;
   let tokenCI = null;
 
-  /* A BANCADA NÃO TEM CONTROLES INTERNOS, e isso já me derrubou hoje no
-     bloco 46: usar `tokens['Controles Internos']` (undefined) faz a rota
-     responder 401 SEM_TOKEN, e o teste reprova pelo motivo errado — que
-     no dia seguinte passa pelo motivo errado. Aqui o operador é criado. */
+  /* A BANCADA DESTE ARQUIVO NÃO TEM CONTROLES INTERNOS, e isso já me
+     derrubou no bloco 46: usar `tokens['Controles Internos']` (undefined)
+     faz a rota responder 401 SEM_TOKEN, e o teste reprova pelo motivo
+     errado — que no dia seguinte passa pelo motivo errado. */
   before(async () => {
     const email = 'controles@teste.local';
     await pool.query(
@@ -6121,9 +6124,7 @@ describe('47. Controles Internos confere a SOBRA (25/09/2026)', () => {
     const r = await req('/auth/login', { metodo: 'POST', corpo: { email, senha: SENHA } });
     assert.equal(r.status, 200, r.texto);
     tokenCI = r.json.token;
-  });
 
-  test('Controles Internos carimba a sobra e a observação fica gravada', async () => {
     const criada = await req('/api/devolucoes', {
       metodo: 'POST', token: tokens['Logística'],
       corpo: { dataDev: '2026-09-25', regiao: 'Sobras', tipo: 'SOBRA', rotas: ['500'] },
@@ -6131,52 +6132,80 @@ describe('47. Controles Internos confere a SOBRA (25/09/2026)', () => {
     assert.equal(criada.status, 201, criada.texto);
     idSobra = criada.json.id;
 
-    const r = await req(`/api/devolucoes/${idSobra}/conferencia-controles`, {
-      metodo: 'POST', token: tokenCI,
-      corpo: { observacao: 'Conferido: caixa batendo com o peso.' },
-    });
-    assert.equal(r.status, 200, r.texto);
-    assert.ok(r.json.carimbos.controles, 'o carimbo de Controles não foi gravado');
-    assert.equal(r.json.carimbos.controles.observacao,
-      'Conferido: caixa batendo com o peso.');
-  });
-
-  test('e o carimbo NÃO move a sobra de etapa — é paralelo', async () => {
-    const antes = await req(`/api/devolucoes/${idSobra}`, { token: tokens['Logística'] });
-    assert.equal(antes.json.status, 'Lançada',
-      'a conferência mexeu no andamento do checklist — devia ser paralela');
-  });
-
-  test('a conferência é só da SOBRA, não da devolução normal', async () => {
-    const dev = await req('/api/devolucoes', {
-      metodo: 'POST', token: tokens['Logística'],
-      corpo: { dataDev: '2026-09-25', regiao: 'Brasília', rotas: ['500'] },
-    });
-    assert.equal(dev.status, 201, dev.texto);
-    const r = await req(`/api/devolucoes/${dev.json.id}/conferencia-controles`, {
-      metodo: 'POST', token: tokenCI,
-      corpo: { observacao: 'x' },
-    });
-    assert.equal(r.status, 409, r.texto);
-    assert.equal(r.json.codigo, 'CONFERENCIA_SO_DE_SOBRA', r.texto);
-  });
-
-  test('quem não é Controles Internos é recusado', async () => {
-    for (const setor of ['Portaria', 'Expedição', 'Faturamento']) {
-      const r = await req(`/api/devolucoes/${idSobra}/conferencia-controles`, {
-        metodo: 'POST', token: tokens[setor], corpo: { observacao: 'x' },
+    for (const [setor, para] of [['Portaria', 'Recebida na Portaria'],
+                                 ['Faturamento', 'Conferida no Faturamento'],
+                                 ['Expedição', 'Descarga Conferida']]) {
+      const e = await req(`/api/devolucoes/${idSobra}/etapa`, {
+        metodo: 'POST', token: tokens[setor], corpo: { para },
       });
-      assert.equal(r.status, 403, `${setor} conseguiu conferir: ${r.texto}`);
+      assert.equal(e.status, 200, `${setor} não conseguiu carimbar: ${e.texto}`);
     }
   });
 
-  test('registrar de novo substitui a observação — apuração muda', async () => {
-    const r = await req(`/api/devolucoes/${idSobra}/conferencia-controles`, {
+  test('o OK da Expedição não encerra mais a sobra — ela fica em aberto', async () => {
+    /* É O PONTO QUE MUDOU. Até 25/09/2026 "Descarga Conferida" era o fim
+       da sobra. Agora é o penúltimo passo, e quem fecha é Controles
+       Internos. Se este teste voltar a passar com a sobra encerrada, a
+       decisão do dono foi desfeita sem ninguém perceber. */
+    const r = await req(`/api/devolucoes/${idSobra}`, { token: tokens['Logística'] });
+    assert.equal(r.status, 200, r.texto);
+    assert.equal(r.json.status, 'Descarga Conferida');
+    assert.equal(r.json.carimbos.controles, null,
+      'a sobra não pode nascer com o carimbo de Controles Internos');
+  });
+
+  test('Controles Internos fecha a sobra, e o recado dele fica gravado', async () => {
+    const r = await req(`/api/devolucoes/${idSobra}/etapa`, {
       metodo: 'POST', token: tokenCI,
-      corpo: { observacao: 'Reconferido: faltava uma caixa.' },
+      corpo: { para: 'Destinada', obsControles: 'Conferido: caixa batendo com o peso.' },
     });
     assert.equal(r.status, 200, r.texto);
-    assert.equal(r.json.carimbos.controles.observacao, 'Reconferido: faltava uma caixa.');
+    assert.equal(r.json.status, 'Destinada');
+    assert.ok(r.json.carimbos.controles, 'o carimbo de Controles não foi gravado');
+    assert.equal(r.json.carimbos.controles.por, 'Rene (Controles)');
+    /* MESMO CAMPO DA DEVOLUÇÃO NORMAL — a prova de que não nasceu uma
+       segunda coluna para o mesmo recado. */
+    assert.equal(r.json.obsControles, 'Conferido: caixa batendo com o peso.');
+  });
+
+  test('a Central de Notas continua fora — a sobra não gera nota', async () => {
+    const r = await req(`/api/devolucoes/${idSobra}/etapa`, {
+      metodo: 'POST', token: tokens['Logística'], corpo: { para: 'Nota Finalizada' },
+    });
+    assert.equal(r.status, 409, r.texto);
+    assert.equal(r.json.codigo, 'ETAPA_NAO_EXISTE_PARA_SOBRA', r.texto);
+  });
+
+  test('quem não é Controles Internos não fecha a sobra', async () => {
+    const outra = await req('/api/devolucoes', {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { dataDev: '2026-09-25', regiao: 'Sobras', tipo: 'SOBRA', rotas: ['500'] },
+    });
+    for (const [setor, para] of [['Portaria', 'Recebida na Portaria'],
+                                 ['Faturamento', 'Conferida no Faturamento'],
+                                 ['Expedição', 'Descarga Conferida']]) {
+      await req(`/api/devolucoes/${outra.json.id}/etapa`, {
+        metodo: 'POST', token: tokens[setor], corpo: { para },
+      });
+    }
+    for (const setor of ['Portaria', 'Expedição', 'Faturamento']) {
+      const r = await req(`/api/devolucoes/${outra.json.id}/etapa`, {
+        metodo: 'POST', token: tokens[setor], corpo: { para: 'Destinada' },
+      });
+      assert.equal(r.status, 403, `${setor} conseguiu fechar a sobra: ${r.texto}`);
+      assert.equal(r.json.codigo, 'SETOR_SEM_PERMISSAO', r.texto);
+    }
+  });
+
+  test('desfazer devolve a sobra para o OK da Expedição', async () => {
+    /* Quem carimbou por engano precisa conseguir voltar — a mesma regra
+       de 14/09/2026, valendo também para o passo que a sobra ganhou. */
+    const r = await req(`/api/devolucoes/${idSobra}/desfazer`, {
+      metodo: 'POST', token: tokenCI,
+    });
+    assert.equal(r.status, 200, r.texto);
+    assert.equal(r.json.status, 'Descarga Conferida');
+    assert.equal(r.json.carimbos.controles, null, 'o carimbo tinha de sair junto');
   });
 });
 

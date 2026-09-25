@@ -614,7 +614,7 @@ describe('6. Cadastros de apoio e exclusão', () => {
 });
 
 /* ------------------------------------------------------------------ */
-describe('7. Sobras: ciclo curto — entra, três OKs, acabou (18/08/2026)', () => {
+describe('7. Sobras: entra, três OKs e o check de Controles Internos (25/09/2026)', () => {
   let id;
 
   test('sobra nasce sem rota e sem carga — só caixa/peso/produto/motivo', async () => {
@@ -639,7 +639,10 @@ describe('7. Sobras: ciclo curto — entra, três OKs, acabou (18/08/2026)', () 
     assert.ok(r.json.motivos.includes('652 — Sobras'), 'motivo 652 semeado');
   });
 
-  test('Portaria OK → Faturamento OK → Expedição OK, e a sobra encerra aí', async () => {
+  test('Portaria OK → Faturamento OK → Expedição OK, e a sobra NÃO encerra aí', async () => {
+    /* A ESTEIRA DA SOBRA GANHOU UM QUARTO PASSO (25/09/2026), por decisão
+       do dono revendo a dele própria de 18/08: "agora a sobra vai passar".
+       Até aqui o OK da Expedição era o fim. Agora é o penúltimo passo. */
     const a = await req(`/api/devolucoes/${id}/etapa`, {
       metodo: 'POST', token: tokens['Portaria'], corpo: { para: 'Recebida na Portaria' },
     });
@@ -653,22 +656,33 @@ describe('7. Sobras: ciclo curto — entra, três OKs, acabou (18/08/2026)', () 
     });
     assert.equal(c.status, 200, c.texto);
     assert.equal(c.json.status, 'Descarga Conferida');
+    assert.equal(c.json.carimbos.controles, null,
+      'a sobra ainda espera o check de Controles Internos');
   });
 
-  test('sobra não passa por Controles Internos nem Central de Notas', async () => {
-    /* Nem volta à balança (27/08/2026): o caminhão da sobra não é pesado
-       vazio, e pedir esse peso seria pedir um número que ninguém tem. */
+  test('Controles Internos fecha a sobra, com o recado dele', async () => {
+    const r = await req(`/api/devolucoes/${id}/etapa`, {
+      metodo: 'POST', token: tokens['Controles Internos'],
+      corpo: { para: 'Destinada', obsControles: 'Sobra conferida e destinada.' },
+    });
+    assert.equal(r.status, 200, r.texto);
+    assert.equal(r.json.status, 'Destinada');
+    assert.ok(r.json.carimbos.controles, 'o carimbo de Controles é o fecho da sobra');
+    /* O recado vai para a MESMA `obs_controles` da devolução normal: é o
+       mesmo conceito, e duas colunas para um conceito divergem. */
+    assert.equal(r.json.obsControles, 'Sobra conferida e destinada.');
+  });
+
+  test('sobra não volta à balança nem passa pela Central de Notas', async () => {
+    /* A balança final continua fora (27/08/2026): o caminhão da sobra não
+       é pesado vazio, e pedir esse peso seria pedir um número que ninguém
+       tem. A Central de Notas também, porque a sobra não gera nota. */
     const peso = await req(`/api/devolucoes/${id}/etapa`, {
       metodo: 'POST', token: tokens['Faturamento'], corpo: { para: 'Peso Final Registrado' },
     });
     assert.equal(peso.status, 409);
     assert.equal(peso.json.codigo, 'ETAPA_NAO_EXISTE_PARA_SOBRA');
-    const r = await req(`/api/devolucoes/${id}/etapa`, {
-      metodo: 'POST', token: tokens['Controles Internos'], corpo: { para: 'Destinada' },
-    });
-    assert.equal(r.status, 409);
-    assert.equal(r.json.codigo, 'ETAPA_NAO_EXISTE_PARA_SOBRA');
-    // Nem a Administração fura o ciclo curto — a etapa não existe pra sobra.
+    // Nem a Administração fura: a etapa não existe pra sobra.
     const adm = await req(`/api/devolucoes/${id}/etapa`, {
       metodo: 'POST', token: tokens['Administração'], corpo: { para: 'Nota Finalizada' },
     });

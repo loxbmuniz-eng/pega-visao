@@ -129,17 +129,25 @@ export function validarTransicaoDevolucao(statusAtual, statusNovo, setor, tipo) 
   if (!DEV_STATUS_FLOW.includes(statusNovo)) {
     throw new ErroDeFluxoDevolucao(`Etapa desconhecida: "${statusNovo}".`, 'STATUS_DESCONHECIDO');
   }
-  /* SOBRA (18/08/2026): ciclo curto — Portaria OK, Faturamento OK,
-     Expedição OK, acabou. Não passa por Controles Internos nem Central
-     de Notas. */
-  /* A SOBRA NÃO GANHA A SEGUNDA PESAGEM: ela encerra no OK da Expedição,
-     e o caminhão da sobra não volta à balança. Acrescentar a etapa aqui
-     seria pedir um peso que ninguém tem para dar. */
+  /* SOBRA: A ESTEIRA GANHOU CONTROLES INTERNOS (25/09/2026).
+     Decisão do dono, revendo a dele própria de 18/08/2026: "agora a
+     sobra vai passar". Até aqui a sobra encerrava no OK da Expedição.
+
+     Passa a ser: Portaria OK → Faturamento OK → Expedição OK →
+     Controles Internos. E PARA AÍ — Central de Notas continua fora,
+     porque a sobra não gera nota.
+
+     O QUE ISSO MUDA NA OPERAÇÃO, e é o ponto: sobra sem o check de
+     Controles Internos fica EM ABERTO e aparece na fila "sua vez" dele.
+     Antes ela fechava sozinha. */
+  /* A SOBRA CONTINUA SEM A SEGUNDA PESAGEM: o caminhão da sobra não
+     volta à balança. Pedir esse peso seria pedir um número que ninguém
+     tem para dar. */
   if (tipo === 'SOBRA'
-      && ['Peso Final Registrado', 'Destinada', 'Nota Finalizada'].includes(statusNovo)) {
+      && ['Peso Final Registrado', 'Nota Finalizada'].includes(statusNovo)) {
     throw new ErroDeFluxoDevolucao(
-      'Sobra encerra no OK da Expedição — não volta à balança nem passa por '
-      + 'Controles Internos e Central de Notas.',
+      'Sobra não volta à balança e não passa pela Central de Notas — '
+      + 'ela encerra na conferência de Controles Internos.',
       'ETAPA_NAO_EXISTE_PARA_SOBRA'
     );
   }
@@ -329,12 +337,7 @@ export function devolucaoParaPainel(linha, itens = [], divergencias = [], rotas 
       faturamento: linha.faturamento_em ? { por: linha.faturamento_por, em: linha.faturamento_em } : null,
       expedicao:   linha.expedicao_em   ? { por: linha.expedicao_por,   em: linha.expedicao_em }   : null,
       pesofinal:   linha.pesofinal_em   ? { por: linha.pesofinal_por,   em: linha.pesofinal_em }   : null,
-      /* A observação de Controles Internos viaja JUNTO do carimbo dele
-         (25/09/2026). Separá-la em outro campo obrigaria a tela a juntar
-         os dois de novo, e a primeira vez que alguém esquecesse mostraria
-         um carimbo sem o que foi apurado — que é a parte que interessa. */
-      controles:   linha.controles_em   ? { por: linha.controles_por,   em: linha.controles_em,
-                                            observacao: linha.controles_observacao || '' } : null,
+      controles:   linha.controles_em   ? { por: linha.controles_por,   em: linha.controles_em }   : null,
       notas:       linha.notas_em       ? { por: linha.notas_por,       em: linha.notas_em }       : null,
     },
     criadoEm: linha.criado_em,
