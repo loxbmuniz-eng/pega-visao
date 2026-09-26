@@ -86,7 +86,13 @@ async def main():
         ck('"Menor e maior tempo" removido', not r['menorMaior'])
         ck('ranking de transportadoras removido', not r['rankingTransp'])
         ck('Tempo Médio de Pátio presente', r['tempoMedio'])
-        ck('Ranking de Veículos com Maior Atraso presente', r['atraso'])
+        # A META DE 3 HORAS SAIU DOS INDICADORES (26/09/2026, pedido do dono,
+        # "por enquanto"). O ranking de atraso É a meta — segue a chave
+        # metaNosIndicadores() de data.js: presente com ela ligada, fora com
+        # ela desligada. Causa 1: a regra mudou, o teste acompanhou.
+        meta_on = await pg.evaluate("() => metaNosIndicadores()")
+        ck('Ranking de Veículos com Maior Atraso segue a chave da meta',
+           r['atraso'] == meta_on, f"chave={meta_on} ranking={r['atraso']}")
         ck('Gargalos e Pontos Críticos presente', r['gargalos'])
         print('  seções:', r['secoes'])
 

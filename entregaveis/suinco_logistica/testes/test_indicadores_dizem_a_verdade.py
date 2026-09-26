@@ -188,7 +188,18 @@ async def main():
         await pg.select_option('#ind-f-periodo', '')
         await pg.wait_for_timeout(600)
         tudo = await texto(pg, '#ind-gargalos')
-        ck('com "todo o histórico", ela aparece', 'VELHA LTDA' in tudo, 'VELHA LTDA sumiu do histórico')
+        # Até 26/09/2026 a VELHA LTDA aparecia pelo bloco "Transportadoras
+        # com concentração de atraso". Esse bloco é a meta de 3h, e a meta
+        # saiu dos indicadores a pedido do dono (chave metaNosIndicadores,
+        # data.js). A REGRA guardada aqui continua — Gargalos obedecem ao
+        # período — e passa a ser provada pelos blocos que ficaram: a carga
+        # de 600 min de 10 dias atrás muda a permanência média e as chegadas
+        # por hora quando o período vira "todo o histórico".
+        if await pg.evaluate("() => metaNosIndicadores()"):
+            ck('com "todo o histórico", ela aparece', 'VELHA LTDA' in tudo, 'VELHA LTDA sumiu do histórico')
+        else:
+            ck('com "todo o histórico", os gargalos mudam (a carga antiga entra na conta)',
+               semana != tudo, 'gargalos idênticos em Semana e em todo o histórico')
         ck('a carga parada continua listada nos dois casos',
            'PARADA' in semana and 'PARADA' in tudo)
 

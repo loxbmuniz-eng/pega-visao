@@ -38,3 +38,22 @@ de um servidor Playwright que esta sessão não tem, e traz princípios de
 design genéricos. Virou `.claude/agents/suinco-revisao-de-design.md`, com o
 nosso Playwright, a identidade navy/dourado, os dois temas, e as regras que
 já custaram caro aqui.
+
+## anthropics/skills — Apache 2.0, © Anthropic
+
+https://github.com/anthropics/skills/tree/main/skills/frontend-design
+
+Trazida a pedido do dono em 26/09/2026 ("as melhores skills de UI
+disponíveis e trending do github"). **Uma entrou: `frontend-design`**, a
+skill de direção visual da própria Anthropic — a de maior peso entre as de
+UI no GitHub, e a única do grupo que faltava aqui.
+
+Lida inteira antes de entrar: é só orientação de design, sem comando, sem
+chamada externa, sem dependência. Copiada sem alteração, com a licença ao
+lado (`frontend-design/LICENSE.txt`).
+
+Ela CONFRONTA as outras em um ponto, e isso é bom: lista os vícios de
+página gerada por IA — rótulo em CAIXA ALTA espaçada sobre cada título,
+metadado ligado por ponto médio ("A · B · C"), fonte mono para rotulinho,
+tudo picado em cartão arredondado igual com a mesma sombra. Quem desenhar
+tela nova aqui passa por essa lista antes de escrever CSS.

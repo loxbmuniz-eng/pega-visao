@@ -127,12 +127,25 @@ async def medir_arquivo(nav, url):
 
 
 async def main():
-    if not pathlib.Path('/tmp/publicado_index.html').exists():
-        ck('/tmp/publicado_index.html existe (extraído da branch de entrega)', False,
-           'rode: git show claude/pega-visao-up19-deliverables-6cqhjb:'
-           'entregaveis/suinco_logistica/index.html > /tmp/publicado_index.html')
+    # O "PUBLICADO" É UMA VERSÃO FIXA, NÃO O QUE SOBROU EM /tmp (26/09/2026).
+    # Este teste mede a camada da Etapa 3 contra o painel de ANTES dela. Até
+    # aqui ele lia /tmp/publicado_index.html, tirado da branch de entrega em
+    # 17/09 — e só passava porque ninguém apagava o arquivo. A reinicialização
+    # do container apagou; recriado com a entrega de hoje (que JÁ tem a
+    # camada), o teste reprovou sem defeito nenhum. Controle que depende de um
+    # arquivo que alguém precisa lembrar de preservar é defeito aqui.
+    # 9284b72 é o último publicado sem @keyframes t27-pulso (16/09/2026).
+    import subprocess
+    raiz = subprocess.run(['git', 'rev-parse', '--show-toplevel'], capture_output=True,
+                          text=True, cwd=pathlib.Path(__file__).parent).stdout.strip()
+    antes = subprocess.run(['git', 'show', '9284b72:entregaveis/suinco_logistica/index.html'],
+                           capture_output=True, cwd=raiz)
+    if antes.returncode != 0 or not antes.stdout:
+        ck('a versão publicada de antes da Etapa 3 (9284b72) existe no git', False,
+           antes.stderr.decode(errors='replace')[:200])
         print('\n=== RESULTADO ===\n  FALHAS: publicado ausente')
         return 1
+    pathlib.Path('/tmp/publicado_index.html').write_bytes(antes.stdout)
 
     async with async_playwright() as p:
         nav = await p.chromium.launch(executable_path='/opt/pw-browsers/chromium', headless=True)

@@ -4302,3 +4302,68 @@ parecia "não chegou" sem eu ter perguntado.
 
 > **Consulta errada parece defeito.** Antes de acusar o código, confira se a
 > pergunta chegou a ser feita.
+
+## #88 — Eu decidi por ele, e a decisão era dele (25/09/2026)
+
+**Como apareceu.** O dono pediu: *"eu preciso que no checklist de sobras voxe
+libere um campo para controles internos dar check e fazer observacao tambem"*.
+Eu entreguei um **carimbo paralelo**: Controles Internos assinava a sobra, a
+observação ficava gravada, e nada disso movia o checklist — a sobra continuava
+encerrando no OK da Expedição, como estava desde 18/08/2026.
+
+A resposta dele foi: *"agora a sobra **vai passar**, voce ta cometendo muitos
+erros e demorando muito pra me entregar pedisos simmplss que eu estou te
+fazendo"*.
+
+**A causa, e ela não é técnica.** A frase dele tinha duas leituras — etapa que
+trava, ou carimbo que não trava — e eu escolhi uma sozinho. Escolhi a que
+*parecia* mais segura, e escrevi isso no comentário do código como se fosse
+argumento: travar machuca se eu tiver entendido errado, o carimbo não machuca
+em nenhum dos dois casos.
+
+O raciocínio está errado na premissa. **A pergunta que faltava custava uma
+linha** — "esse check trava a sobra ou é só registro?" —, e a regra da casa diz
+que toda demanda vira um PROMPT com *"a pergunta que falta"* antes do código.
+Eu pulei o PROMPT porque o pedido parecia pequeno. O resultado foi entregar a
+coisa errada, ele ter de corrigir, e a correção custar uma segunda rodada
+inteira — exatamente a demora que ele cobrou na mesma mensagem.
+
+**O segundo defeito, dentro do primeiro.** Para o carimbo paralelo eu criei uma
+migração 056 com a coluna `controles_observacao` e uma rota própria
+`/devolucoes/:id/conferencia-controles`. A coluna **já existia**:
+`obs_controles`, criada na migração 010, e a etapa de Controles Internos da
+devolução normal já gravava nela. Eram duas colunas e duas portas para um
+conceito só — a regra da casa ao contrário ("uma função, dois chamadores").
+
+Não chegou à operação por um detalhe de sorte: a marca de produção estava em
+055, então a coluna nunca existiu no banco. A rota teria respondido erro de
+banco na primeira vez que alguém clicasse.
+
+**O que trava.** A esteira da sobra agora é Portaria → Faturamento → Expedição
+→ Controles Internos, e a sobra fica **em aberto** até o check dele.
+
+| Guarda | O que reprova se a regra voltar |
+|---|---|
+| `api.test.js` bloco 47 | o OK da Expedição encerrando a sobra; o recado indo para outra coluna que não `obs_controles`; a Central de Notas voltando a aceitar; quem não é Controles Internos fechando; desfazer não voltando ao OK da Expedição |
+| `devolucoes.test.js` bloco 7 | o ciclo curto de três OKs |
+| `test_sobra_finaliza_quem_pesou.py` | a tela dizendo "concluída" no OK da Expedição, e o botão prometendo "Finalizar" |
+| `test_sobras_parciais_relatorio.py` | o cartão da sobra com 3 carimbos (o check dos Controles sumiu) ou com 5 (a Central de Notas vazou para a sobra) |
+
+**O portão pegou uma quarta suíte que eu não tinha achado na varredura.**
+`test_sobras_parciais_relatorio` cobrava *"sobra mostra só os 3 carimbos do
+ciclo curto"* e mediu 4. Causa 1 de novo — e a lição de método é que eu procurei
+pelos NOMES dos status (`Descarga Conferida`, `Destinada`) e essa suíte contava
+elementos na tela, sem citar status nenhum. Ao mudar a forma de uma esteira,
+procurar também por quem CONTA seus passos, não só por quem os nomeia.
+
+Aproveitei para trocar a contagem por leitura de rótulos: número trocado é um
+vermelho mudo, rótulo errado diz qual etapa sumiu ou vazou.
+
+Vermelho provado antes de fechar: com a regra antiga de volta no domínio,
+**4 testes reprovam**; com a nova, 503 passam e 0 reprovam.
+
+**A família.** É a mesma de #84 e das duas que ele cita lá — *o botão prometia,
+o servidor negava*: uma decisão minha tomada no lugar de uma pergunta. Só que
+aqui não foi código divergindo de código, foi **eu divergindo dele**. A
+prevenção não é um teste: é o PROMPT antes do código, e não pular o PROMPT
+porque o pedido cabe numa frase.

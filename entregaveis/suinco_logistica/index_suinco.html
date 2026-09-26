@@ -1019,8 +1019,11 @@
       </div>
 
       <div class="pulso-secao">
-        <h4 class="pulso-rot">Entradas no pátio, por hora
-          <small>a linha pontilhada é a meta de tempo de pátio</small></h4>
+        <!-- A legenda dizia "a linha pontilhada é a meta de tempo de pátio",
+             e a linha nunca foi desenhada: este gráfico conta caminhões por
+             hora, não minutos. Saiu em 26/09/2026 — legenda que descreve o
+             que não está na tela ensina a desconfiar da tela. -->
+        <h4 class="pulso-rot">Entradas no pátio, por hora</h4>
         <div id="pulso-hora" class="pulso-grafico"></div>
       </div>
 
@@ -1215,7 +1218,7 @@
          é pontual ou estrutural. -->
     <div class="card">
       <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-historico"/></svg> Tempo Médio de Pátio</div>
-      <div class="card-sub">Da chegada física até a saída — o tempo que a operação e o motorista sentem. Comparado com a meta de 3 horas.</div>
+      <div class="card-sub">Da chegada física até a saída — o tempo que a operação e o motorista sentem.<span data-meta-patio> Comparado com a meta de 3 horas.</span></div>
       <div id="ind-patio-medio"></div>
     </div>
 
