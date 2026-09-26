@@ -96,3 +96,96 @@
   .bento.bi-faixa .stat-box::after{ animation:none !important }
 }
 
+
+/* =====================================================================
+   INDICADORES COM A QUALIDADE DA DEMONSTRAÇÃO (26/09/2026)
+   Pedido do dono, com a tela "Pátio ao vivo" como referência.
+   ===================================================================== */
+/* Só tela: esta folha também vai para o PDF dos relatórios, e nada daqui
+   pode vazar para o papel (test_tema2027_so_tela.py). */
+@media screen{
+
+/* O NÚMERO NA LETRA CONDENSADA. É a letra de placa: cabe mais número na
+   mesma largura, e o dígito fica alto o bastante para ler de longe. */
+.stat-num, .pulso-num .v, .graf-rank-valor, .graf-fila-parte b{
+  font-family:'Barlow Condensed','Barlow',system-ui,sans-serif;
+  font-variant-numeric:tabular-nums; letter-spacing:0;
+}
+.pulso-num .v{ font-size:30px; font-weight:600; line-height:1 }
+.graf-rank-valor{ font-size:16px; font-weight:600 }
+/* o dígito que rola precisa de uma janela: o que sobe de baixo aparece
+   só quando entra na linha */
+.pulso-num .v, .graf-rank-num{ display:inline-block; overflow:hidden; vertical-align:bottom }
+.graf-dig{ display:inline-block }
+
+/* A BARRA DO RANKING CRESCE POR RECORTE, NÃO POR LARGURA. Animar `width`
+   refaz o layout a cada quadro; o recorte anda na placa de vídeo. E como
+   a lista agora é atualizada no lugar, a barra vai do valor antigo ao
+   novo — não do zero, como fazia a cada sincronia. */
+.graf-rank-trilho i{
+  width:100%;
+  clip-path:inset(0 calc(100% - var(--w, 0%)) 0 0 round 0 4px 4px 0);
+  transition:clip-path 460ms cubic-bezier(.23,1,.32,1) var(--atraso,0ms);
+}
+.graf-rank.entrou .graf-rank-trilho i{ width:100% }
+
+/* A LINHA DO RANKING QUE ABRE O DETALHE: botão de verdade, com alvo de
+   toque cheio e resposta na hora do toque. */
+.graf-rank-tocavel{
+  appearance:none; background:none; border:0; color:inherit; font:inherit; text-align:left;
+  width:100%; min-height:44px; padding:4px 6px; margin:0 -6px; border-radius:var(--radius-sm,6px);
+  cursor:pointer; touch-action:manipulation; -webkit-user-select:none; user-select:none;
+  transition:transform 110ms cubic-bezier(.23,1,.32,1), background-color 160ms ease;
+}
+.graf-rank-tocavel:active{ transform:scale(.98) }
+.graf-rank-tocavel[aria-expanded="true"]{ background:color-mix(in srgb,var(--gold) 12%,transparent) }
+@media (hover:hover) and (pointer:fine){
+  .graf-rank-tocavel:hover{ background:color-mix(in srgb,var(--gold) 8%,transparent) }
+}
+.graf-toque:focus-visible{ outline:2px solid var(--gold); outline-offset:-2px }
+
+/* ---- A GAVETA DE DETALHE ------------------------------------------ */
+.gv-veu{ position:fixed; inset:0; z-index:8000; background:rgba(5,8,16,.5); touch-action:none; opacity:0 }
+.gv{
+  position:fixed; z-index:8001; display:flex; flex-direction:column; color:var(--text);
+  background:color-mix(in srgb,var(--navy) 90%,transparent);
+  -webkit-backdrop-filter:blur(22px) saturate(160%); backdrop-filter:blur(22px) saturate(160%);
+  border:1px solid var(--border); box-shadow:0 30px 80px -24px rgba(0,0,0,.65);
+  will-change:transform;
+}
+@media (prefers-reduced-transparency: reduce){ .gv{ background:var(--navy); -webkit-backdrop-filter:none; backdrop-filter:none } }
+.gv-alca{ display:none }
+.gv-cab{ display:flex; align-items:flex-start; gap:12px; padding:16px 18px 12px; touch-action:none; cursor:grab }
+.gv-cab-txt{ flex:1; min-width:0 }
+.gv-olho{ margin:0; font-size:13px; color:var(--text-dim) }
+.gv-titulo{ margin:2px 0 0; font:700 30px/1.05 'Barlow Condensed','Barlow',system-ui,sans-serif; color:var(--gold-text); text-wrap:balance }
+.gv-sub{ margin:4px 0 0; font-size:14px; color:var(--text-dim) }
+.gv-fechar{
+  flex:none; width:44px; height:44px; border-radius:50%; border:1px solid var(--border);
+  background:var(--navy-deep); color:var(--text); display:grid; place-items:center; cursor:pointer;
+  transition:transform 110ms cubic-bezier(.23,1,.32,1);
+}
+.gv-fechar:active{ transform:scale(.94) }
+.gv-fechar svg{ width:16px; height:16px; stroke:currentColor; stroke-width:2; fill:none }
+.gv-miolo{ overflow-y:auto; overscroll-behavior:contain; padding:2px 18px 22px; flex:1 }
+.gv-lista{ list-style:none; margin:0; padding:0 }
+.gv-carga{ padding:11px 0; border-top:1px solid var(--border-soft) }
+.gv-carga:first-child{ border-top:0 }
+.gv-carga-topo{ display:flex; align-items:baseline; justify-content:space-between; gap:10px }
+.gv-carga-topo b{ font-size:16px; font-weight:600 }
+.gv-carga-tempo{ font:600 20px/1 'Barlow Condensed','Barlow',system-ui,sans-serif; font-variant-numeric:tabular-nums }
+.gv-carga-sub{ display:flex; flex-wrap:wrap; align-items:center; gap:4px 10px; margin-top:5px; font-size:13.5px; color:var(--text-dim) }
+.gv-vazio{ color:var(--text-dim); font-size:14px; margin:6px 0 }
+@media (min-width:721px){
+  /* começa abaixo do cabeçalho do painel: relógio e usuário ficam à vista */
+  .gv{ top:calc(var(--gv-topo, 72px) + 10px); right:14px; bottom:14px; width:min(420px, calc(100vw - 28px)); border-radius:18px }
+  .gv-veu{ display:none }
+}
+@media (max-width:720px){
+  .gv{ left:0; right:0; bottom:0; max-height:86dvh; border-radius:20px 20px 0 0; border-bottom:0;
+       padding-bottom:env(safe-area-inset-bottom,0px) }
+  .gv-alca{ display:flex; justify-content:center; padding:10px 0 2px; touch-action:none; cursor:grab }
+  .gv-alca span{ width:38px; height:5px; border-radius:3px; background:var(--border) }
+  .gv-cab{ padding-top:6px }
+}
+}
