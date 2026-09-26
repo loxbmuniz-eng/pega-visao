@@ -3539,6 +3539,24 @@ function metaTempoPatio(){
   return Number.isFinite(salvo) && salvo > 0 ? salvo : META_TEMPO_PATIO_MIN;
 }
 
+/* A META DE 3 HORAS SAI DOS INDICADORES — POR ENQUANTO (26/09/2026).
+
+   O dono: "esquece esse kpi de 3 horas por enquanto ele so ta ai sujando
+   nossos indicadores". Perguntado de onde ela sai, escolheu: a aba
+   Indicadores e o relatório executivo em PDF.
+
+   A VISÃO DO PÁTIO CONTINUA DESTACANDO a carga parada há mais de 3h, e não
+   passa por esta chave de propósito: ali o vermelho é alerta para agir
+   agora, não indicador. Quem decidiu foi ele, com as três opções na mesa.
+
+   UMA CHAVE, NÃO SETE `if`. "Por enquanto" quer dizer que isto volta, e
+   o dia da volta não pode depender de alguém lembrar onde estava cada
+   pedaço. Todo lugar que mostra a meta como indicador pergunta a esta
+   função. Para trazer de volta: `true`. O teste
+   testes/test_meta_patio_fora_dos_indicadores.py prova os dois sentidos. */
+const META_PATIO_NOS_INDICADORES = false;
+function metaNosIndicadores(){ return META_PATIO_NOS_INDICADORES; }
+
 /* Minutos acima da meta. Devolve null quando o tempo não é calculável
    (carga ainda em andamento, ou sem registro de chegada) — null é
    diferente de zero, e tratá-los igual inflaria a amostra com cargas que

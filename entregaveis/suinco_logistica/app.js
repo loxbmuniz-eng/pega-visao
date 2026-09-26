@@ -6684,6 +6684,10 @@ function renderPulsoDoDia(){
   const abertas = cargasAbertas();
   const meta = metaTempoPatio();
   const paradas = paradasAlemDaMeta(abertas);
+  /* Sem a meta nos indicadores (26/09/2026 — ver metaNosIndicadores em
+     data.js), o pulso deixa de julgar o tempo: mostra quanto, não se está
+     "dentro" ou "acima". */
+  const comMeta = metaNosIndicadores();
 
   const quando = document.getElementById('pulso-quando');
   if(quando) quando.textContent = 'agora · ' + new Date().toLocaleTimeString('pt-BR',
@@ -6701,10 +6705,11 @@ function renderPulsoDoDia(){
       + (d ? `<span class="d">${d}</span>` : '') + '</div>';
     caixa.innerHTML =
       num(abertas.length, 'no pátio', 'cargas em aberto')
-      + num(paradas.total, 'acima da meta', `passaram de ${fmtDuracao(meta)}`, paradas.total > 0)
+      + (comMeta ? num(paradas.total, 'acima da meta', `passaram de ${fmtDuracao(meta)}`, paradas.total > 0) : '')
       + num(maior === null ? '—' : fmtDuracao(maior), 'o mais parado',
-            maior !== null && maior > meta ? 'precisa de atenção' : 'dentro da meta',
-            maior !== null && maior > meta)
+            !comMeta ? 'desde a chegada'
+              : (maior !== null && maior > meta ? 'precisa de atenção' : 'dentro da meta'),
+            comMeta && maior !== null && maior > meta)
       + num(medio === null ? '—' : fmtDuracao(medio), 'média no pátio', 'das que estão lá agora')
       /* A carga SEM CHEGADA não é zero: é desconhecida, e some se a gente
          calar. Só aparece quando existe. */
@@ -6754,7 +6759,7 @@ function renderPulsoDoDia(){
     return [...m.values()].sort((a,b) => b.valor - a.valor);
   };
   const fmt = v => fmtDuracao(v);
-  const grave = it => it.valor > meta;
+  const grave = comMeta ? (it => it.valor > meta) : undefined;
   const r1 = document.getElementById('pulso-rank-rota');
   if(r1) Graf.ranking(r1, { itens: porChave(c => c.rota), formato: fmt,
                             rotulo:'tempo parado por rota', alerta: grave });
@@ -6764,6 +6769,9 @@ function renderPulsoDoDia(){
 }
 
 function renderIndicadores(){
+  /* Texto fixo que cita a meta obedece à mesma chave (metaNosIndicadores,
+     data.js): basta marcar o trecho com data-meta-patio. */
+  document.querySelectorAll('[data-meta-patio]').forEach(el => { el.hidden = !metaNosIndicadores(); });
   // O pulso desenha junto com o resto da aba, do mesmo estado.
   try{ renderPulsoDoDia(); }catch(e){ console.warn('[Suinco] pulso:', e); }
   preencherFiltrosIndicadores();
@@ -6989,6 +6997,11 @@ function desenharSparklines(raiz){
 // ficaria densa demais — aqui um clique troca o período, mas a tabela em
 // si já mostra todas as transportadoras daquele período de uma vez.
 function renderRankingPeriodos(){
+  /* O cartão inteiro é a meta: "atraso" é o que passa de 3h. Sem a meta
+     nos indicadores, ele some da aba — escondido, não apagado. */
+  const cartaoRk = document.getElementById('ind-ranking-tbody')?.closest('.card');
+  if(cartaoRk) cartaoRk.hidden = !metaNosIndicadores();
+  if(!metaNosIndicadores()) return;
   const tabs = [...PERIODOS_INDICADOR, { key:'todos', label:'Histórico completo' }];
   document.getElementById('ind-ranking-periodos').innerHTML = tabs.map(p=>`
     <button class="btn btn-sm ${p.key===indRankingPeriodoAtivo ? 'btn-primary' : 'btn-sec'}" onclick="selecionarRankingPeriodo('${escJs(p.key)}')">${esc(p.label)}</button>
@@ -9895,7 +9908,7 @@ async function exportarPdfExecutivo(){
       <div class="print-bloco-tit">1 · O que exige ação agora</div>
 
       <div class="grid4" style="margin-bottom:18px">
-        <div class="stat-box"><div class="stat-num">${paradasAlemDaMeta_}</div><div class="stat-label">Paradas Além da Meta</div></div>
+        ${metaNosIndicadores() ? `<div class="stat-box"><div class="stat-num">${paradasAlemDaMeta_}</div><div class="stat-label">Paradas Além da Meta</div></div>` : ''}
         <div class="stat-box"><div class="stat-num">${aguardandoDados.length}</div><div class="stat-label">Aguardando Dados da Carga</div></div>
         <div class="stat-box"><div class="stat-num">${abertas.length}</div><div class="stat-label">Cargas em Aberto</div></div>
         <div class="stat-box"><div class="stat-num">${fmtDuracao(nHoje?Math.round(somaHoje/nHoje):null)}</div><div class="stat-label">Lead Time Médio (período)</div></div>
@@ -10236,6 +10249,15 @@ function renderTempoMedioPatio(){
         <div class="stat-label">${rotulo}</div>
         <div class="stat-note">Sem dados suficientes</div></div>`;
     }
+    /* Sem a meta nos indicadores, o número fica na cor do texto: verde e
+       vermelho só significam alguma coisa contra uma referência. */
+    if(!metaNosIndicadores()){
+      return `<div class="stat-box">
+          <div class="stat-num">${fmtDuracao(dados.media)}</div>
+          <div class="stat-label">${rotulo}</div>
+          <div class="stat-note">${nota} · base: ${dados.amostra} carga(s)</div>
+        </div>`;
+    }
     const dentro = dados.media <= dados.meta;
     // -txt, e não -fg: este número fica solto no card, não dentro de um
     // preenchimento colorido. Com -fg saía #06210f (quase preto) sobre o
@@ -10287,6 +10309,11 @@ function renderGargalos(){
                                : DB.cargas.filter(c => c.status === 'Seguiu Viagem');
   const g = analiseGargalos(filtrarPorFiltroIndicadores(concluidasG.concat(cargasAbertas())));
   const blocos = [];
+  /* Três blocos só existem por causa da meta: "atraso" é o que passa de
+     3h. Sem ela nos indicadores, eles saem; os que medem tempo e volume
+     sem julgar ficam. */
+  const comMeta = metaNosIndicadores();
+  const soComMeta = (html) => comMeta ? html : '';
 
   const tabela = (titulo, explicacao, cabecalhos, linhas) => {
     if(!linhas.length) return '';
@@ -10300,7 +10327,7 @@ function renderGargalos(){
       </div>`;
   };
 
-  blocos.push(tabela(
+  blocos.push(soComMeta(tabela(
     '🔁 Veículos com atraso recorrente',
     'Dois ou mais atrasos. Um atraso é acaso; dois viram padrão.',
     ['Placa','Transportadora','Atrasos','Atraso Médio'],
@@ -10308,7 +10335,7 @@ function renderGargalos(){
       <td><strong>${esc(v.placa)}</strong></td>${celFiltro('transportadora', v.transportadora)}
       <td class="cel-num">${v.atrasos} de ${v.totalCargas}</td>
       <td class="cel-num">${fmtDuracao(v.tempoMedioAtraso)}</td></tr>`)
-  ));
+  )));
 
   blocos.push(tabela(
     '⏳ Operações com maior permanência no pátio',
@@ -10320,7 +10347,7 @@ function renderGargalos(){
       <td class="cel-num">${o.amostra}</td></tr>`)
   ));
 
-  blocos.push(tabela(
+  blocos.push(soComMeta(tabela(
     '🚚 Transportadoras com concentração de atraso',
     'Informativo, sem ranking principal — parte do atraso é do pátio, não da transportadora.',
     ['Transportadora','Cargas Atrasadas','% do Total'],
@@ -10328,7 +10355,7 @@ function renderGargalos(){
       ${celFiltro('transportadora', t.transportadora)}
       <td class="cel-num">${t.atrasadas} de ${t.total}</td>
       <td class="cel-num">${t.percentual}%</td></tr>`)
-  ));
+  )));
 
   blocos.push(tabela(
     '🕐 Horários de maior congestionamento',
@@ -10340,7 +10367,7 @@ function renderGargalos(){
       <td class="cel-num">${fmtDuracao(h.tempoMedioPatio)}</td></tr>`)
   ));
 
-  blocos.push(tabela(
+  blocos.push(soComMeta(tabela(
     '🛣️ Rotas com maior incidência de atraso',
     'Rota que atrasa sempre costuma ser problema de janela ou de sequenciamento.',
     ['Rota','Cargas Atrasadas','Atraso Médio'],
@@ -10348,7 +10375,7 @@ function renderGargalos(){
       ${celFiltro('rota', r.rota, r.rotulo || r.rota)}
       <td class="cel-num">${r.atrasadas} de ${r.total}</td>
       <td class="cel-num">${fmtDuracao(r.atrasoMedio)}</td></tr>`)
-  ));
+  )));
 
   blocos.push(tabela(
     '⚠️ Cargas paradas há mais tempo',
@@ -10362,9 +10389,11 @@ function renderGargalos(){
   ));
 
   const conteudo = blocos.filter(Boolean).join('');
-  wrap.innerHTML = conteudo || `<div class="empty-state">
+  wrap.innerHTML = conteudo || (comMeta
+    ? `<div class="empty-state">
       Nenhum gargalo detectado — nenhuma carga passou da meta de ${fmtDuracao(g.meta)} em pátio.
-    </div>`;
+    </div>`
+    : `<div class="empty-state">Nenhum gargalo detectado no período.</div>`);
 }
 
 /* ---------- FILTRO DE PERÍODO DOS RELATÓRIOS ----------
@@ -11003,6 +11032,17 @@ function blocoTempoMedioPatioPdf(cargas){
       'Da chegada física do caminhão até a saída.') +
       `<div class="print-vazio">Nenhuma carga concluída com tempo calculável no período.</div>`;
   }
+  if(!metaNosIndicadores()){
+    return tituloSecaoPdf('Tempo Médio de Pátio',
+        'Da chegada física do caminhão até a saída — o tempo que a operação e o motorista sentem.') +
+      `<table>
+        <thead><tr><th>Tempo Médio</th><th>Base</th></tr></thead>
+        <tbody><tr>
+          <td class="num-forte">${fmtDuracao(t.media)}</td>
+          <td>${t.amostra} carga(s)</td>
+        </tr></tbody>
+      </table>`;
+  }
   const dentro = t.media <= t.meta;
   // No papel a cor sozinha não basta: impressão em preto e branco existe,
   // e daltonismo também. O texto diz o mesmo que a cor.
@@ -11024,6 +11064,7 @@ function blocoTempoMedioPatioPdf(cargas){
 }
 
 function blocoRankingAtrasoPdf(cargas){
+  if(!metaNosIndicadores()) return '';   // o bloco inteiro é a meta
   const rk = rankingVeiculosAtraso(cargas).slice(0, 10);
   const cabecalho = tituloSecaoPdf('Veículos com Maior Atraso',
     'Do maior para o menor atraso médio. Atraso = tempo em pátio acima da meta de 3 h. ' +
@@ -11072,7 +11113,7 @@ function blocoPendentesAntigasPdf(cargas){
       <tbody>${g.pendentesAntigas.map(c=>{
         // Acima da meta ganha marca no texto, e não só na cor: este
         // documento é impresso em preto e branco com frequência.
-        const critica = c.paradaHaMin !== null && c.paradaHaMin > g.meta;
+        const critica = metaNosIndicadores() && c.paradaHaMin !== null && c.paradaHaMin > g.meta;
         return `<tr>
           <td class="id-cel">${esc(c.numeroCarga)}</td>
           <td class="id-cel">${esc(c.placa)}</td>
@@ -11082,7 +11123,9 @@ function blocoPendentesAntigasPdf(cargas){
         </tr>`;
       }).join('')}</tbody>
     </table>` +
-    fonteDocumento(`registros de movimentação do pátio · ⚠ = acima da meta de ${fmtDuracao(g.meta)}`);
+    fonteDocumento(metaNosIndicadores()
+      ? `registros de movimentação do pátio · ⚠ = acima da meta de ${fmtDuracao(g.meta)}`
+      : 'registros de movimentação do pátio');
 }
 
 function blocoGargalosPdf(cargas){
@@ -11096,7 +11139,8 @@ function blocoGargalosPdf(cargas){
       <tbody>${linhas.join('')}</tbody></table>`;
   };
 
-  partes.push(tabela('Gargalos — veículos com atraso recorrente',
+  const comMeta = metaNosIndicadores();
+  partes.push(!comMeta ? '' : tabela('Gargalos — veículos com atraso recorrente',
     'Dois ou mais atrasos no período. Um atraso é acaso; dois viram padrão.',
     ['Placa','Transportadora','Atrasos','Atraso Médio'],
     g.veiculosRecorrentes.map(v=>`<tr>
@@ -11110,7 +11154,7 @@ function blocoGargalosPdf(cargas){
       <td>${String(h.hora).padStart(2,'0')}:00 — ${String(h.hora).padStart(2,'0')}:59</td>
       <td>${h.chegadas}</td><td>${fmtDuracao(h.tempoMedioPatio)}</td></tr>`)));
 
-  partes.push(tabela('Gargalos — rotas com maior incidência de atraso',
+  partes.push(!comMeta ? '' : tabela('Gargalos — rotas com maior incidência de atraso',
     'Rota que atrasa sempre costuma ser problema de janela ou de sequenciamento.',
     ['Rota','Cargas Atrasadas','Atraso Médio'],
     g.rotasAtraso.map(r=>`<tr>
@@ -11130,7 +11174,9 @@ function blocoGargalosPdf(cargas){
   const conteudo = partes.filter(Boolean).join('');
   return conteudo || (tituloSecaoPdf('Gargalos e Pontos Críticos',
     'Leitura automática do período.') +
-    `<div class="print-vazio">Nenhum gargalo detectado — nenhuma carga passou da meta de ${fmtDuracao(g.meta)} em pátio.</div>`);
+    (comMeta
+      ? `<div class="print-vazio">Nenhum gargalo detectado — nenhuma carga passou da meta de ${fmtDuracao(g.meta)} em pátio.</div>`
+      : `<div class="print-vazio">Nenhum gargalo detectado no período.</div>`));
 }
 
 /* Painel de status na horizontal: um status por coluna, o número embaixo.
