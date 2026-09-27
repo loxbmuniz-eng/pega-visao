@@ -121,6 +121,22 @@ async def main():
                     headers: {'content-type':'application/json'} });
             };
 
+            /* ESPERA O ENVIO DA PRÓPRIA CARGA TERMINAR (27/09/2026).
+               Criar a carga agenda, um instante depois, o envio dela ao
+               servidor — e esse envio põe `_pendente` (sincronizarCarga).
+               Se ele saísse DEPOIS da liberação abaixo, a marca voltava e o
+               teste lia como defeito: 1 vez em 4 rodando sozinho, e dois
+               portões cancelados. A história deste teste é "a gravação já
+               subiu", então ela precisa ter subido: dispara o envio agora e
+               espera todos os que estão em voo, e só então põe as marcas
+               que sobraram indevidamente. */
+            SuincoStore.sincronizarCargasAlteradas();
+            await Promise.allSettled([...SuincoStore._emVoo.values()]);
+            await new Promise(r => setTimeout(r, 50));
+            c._pendente = 1;
+            c._statusPendentes = ['Aguardando Embarque'];
+            delete c._nuncaConfirmada;
+
             const filaVazia = SuincoSharePoint.pendentes() === 0;
             await SuincoSharePoint.pull(true);
             await new Promise(r => setTimeout(r, 200));
