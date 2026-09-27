@@ -269,6 +269,22 @@
    `hidden` é decisão do código, não sugestão de estilo, e nenhuma classe
    pode contrariá-la sem dizer isso explicitamente. */
 [hidden]{display:none !important}
+/* A LETRA DO PAINEL — Barlow e Barlow Condensed, licença SIL OFL
+   (assets/BARLOW_LICENCA_OFL.txt). Os arquivos viram dado embutido no
+   build; `swap` mostra o texto na hora com a letra de sistema e troca
+   quando a Barlow chega — que, embutida, é no mesmo instante.
+
+   TRÊS FACES, RECORTADAS PARA O PORTUGUÊS (27/09/2026). A primeira versão
+   trazia seis pesos com o alfabeto latino inteiro, e o painel passou do
+   teto de 700 KB comprimidos (test_logo_uma_copia_so) — o teto que existe
+   para o painel abrir rápido no celular do pátio. O teto ficou; a letra
+   encolheu: 134 KB viraram 43 KB. Normal cobre até o peso 500, negrito do
+   600 em diante, e o número condensado vai sempre em negrito. Os glifos são
+   os do português (acentos, ç, ª º °), mais as setas e aspas que o painel
+   escreve; um caractere de fora cai na letra de sistema, sem sumir. */
+@font-face{font-family:'Barlow';font-style:normal;font-weight:100 500;font-display:swap;src:url('assets/barlow-400-pt.woff2') format('woff2')}
+@font-face{font-family:'Barlow';font-style:normal;font-weight:600 900;font-display:swap;src:url('assets/barlow-700-pt.woff2') format('woff2')}
+@font-face{font-family:'Barlow Condensed';font-style:normal;font-weight:100 900;font-display:swap;src:url('assets/barlowcondensed-700-pt.woff2') format('woff2')}
 html,body{
   background:var(--navy-deep);
   color:var(--text);
@@ -288,7 +304,13 @@ body{
      Mac, 'Segoe UI' no Windows, 'Roboto' já cobre a maioria do Android via
      system-ui. Cada SO mostra a própria fonte nativa de interface — que é
      desenhada exatamente para isto: telas densas de dado em corpo pequeno. */
-  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Roboto',
+  /* A BARLOW ENTROU (26/09/2026) — decisão do dono, "no painel inteiro",
+     depois de ver a tela de demonstração "Pátio ao vivo". Ela é a letra de
+     placa de estrada: larga no texto, condensada no número. E NÃO quebra
+     a garantia de cima: vai EMBUTIDA no arquivo pelo build, como a letra
+     dos relatórios — nenhuma requisição, funciona sem internet. A pilha
+     de sistema continua atrás, para o caso de a letra não carregar. */
+  font-family:'Barlow',-apple-system,BlinkMacSystemFont,'Segoe UI','Roboto',
               system-ui,sans-serif;
   font-size:15px;
   line-height:1.45;

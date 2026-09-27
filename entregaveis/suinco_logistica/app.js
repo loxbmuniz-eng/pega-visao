@@ -6699,11 +6699,13 @@ function renderPulsoDoDia(){
   const medio = tempos.length ? Math.round(tempos.reduce((a,b)=>a+b,0)/tempos.length) : null;
   const caixa = document.getElementById('pulso-numeros');
   if(caixa){
-    const num = (v, r, d, alerta) =>
-      `<div class="pulso-num${alerta ? ' alerta' : ''}">`
-      + `<span class="v">${v}</span><span class="r">${r}</span>`
-      + (d ? `<span class="d">${d}</span>` : '') + '</div>';
-    caixa.innerHTML =
+    /* OS NÚMEROS ROLAM, NÃO RENASCEM (26/09/2026). Antes esta caixa era
+       refeita inteira a cada sincronia. Agora cada número é guardado pelo
+       rótulo e só o valor muda — e só os dígitos que mudaram rolam
+       (Graf.rolar). O número parado fica parado. */
+    const itens = [];
+    const num = (v, r, d, alerta) => { itens.push({ v:String(v), r, d, alerta }); return ''; };
+    void (
       num(abertas.length, 'no pátio', 'cargas em aberto')
       + (comMeta ? num(paradas.total, 'acima da meta', `passaram de ${fmtDuracao(meta)}`, paradas.total > 0) : '')
       + num(maior === null ? '—' : fmtDuracao(maior), 'o mais parado',
@@ -6714,7 +6716,21 @@ function renderPulsoDoDia(){
       /* A carga SEM CHEGADA não é zero: é desconhecida, e some se a gente
          calar. Só aparece quando existe. */
       + (paradas.semChegada
-          ? num(paradas.semChegada, 'sem chegada', 'não dá para contar o tempo', true) : '');
+          ? num(paradas.semChegada, 'sem chegada', 'não dá para contar o tempo', true) : ''));
+    const chaveNums = itens.map(i => i.r).join('|');
+    if(caixa._chave !== chaveNums){
+      caixa._chave = chaveNums;
+      caixa.innerHTML = itens.map(i => `<div class="pulso-num"><span class="v"></span>`
+        + `<span class="r">${esc(i.r)}</span><span class="d"></span></div>`).join('');
+    }
+    [...caixa.children].forEach((box, k) => {
+      const i = itens[k];
+      box.classList.toggle('alerta', !!i.alerta);
+      Graf.rolar(box.querySelector('.v'), i.v);
+      const d = box.querySelector('.d');
+      if(d.textContent !== (i.d || '')) d.textContent = i.d || '';
+      d.hidden = !i.d;
+    });
   }
 
   /* ---- onde estão os caminhões: posição e rótulo, nunca cor sozinha ---- */
@@ -6762,10 +6778,62 @@ function renderPulsoDoDia(){
   const grave = comMeta ? (it => it.valor > meta) : undefined;
   const r1 = document.getElementById('pulso-rank-rota');
   if(r1) Graf.ranking(r1, { itens: porChave(c => c.rota), formato: fmt,
-                            rotulo:'tempo parado por rota', alerta: grave });
+                            rotulo:'tempo parado por rota', alerta: grave,
+                            aoTocar: (it, el) => abrirDetalhePulso('rota', it.rotulo, el) });
   const r2 = document.getElementById('pulso-rank-transp');
   if(r2) Graf.ranking(r2, { itens: porChave(c => c.transportadora), formato: fmt,
-                            rotulo:'tempo parado por transportadora', alerta: grave });
+                            rotulo:'tempo parado por transportadora', alerta: grave,
+                            aoTocar: (it, el) => abrirDetalhePulso('transportadora', it.rotulo, el) });
+  /* Gaveta aberta acompanha o pátio: se a sincronia trouxe mudança, o
+     conteúdo dela é refeito com as mesmas cargas de agora. */
+  const aberta = Graf.gavetaAberta();
+  if(aberta && aberta.startsWith('pulso|')){
+    const [, campo, chave] = aberta.split('|');
+    abrirDetalhePulso(campo, chave, null, true);
+  }
+}
+
+/* O DETALHE DE UMA LINHA DO RANKING (26/09/2026).
+   O ranking diz QUAL rota ou transportadora está segurando o pátio; a
+   pergunta seguinte é sempre "quais caminhões?". Tocar na linha abre a
+   gaveta com as cargas em aberto dela, da mais parada para a menos. Só
+   leitura: a ação continua nos botões de cada etapa, onde sempre esteve.
+
+   A conta é a mesma do ranking (minutosNoPatioAgora), então a gaveta e a
+   barra nunca discordam. */
+function abrirDetalhePulso(campo, chave, origem, soAtualizar){
+  const semInfo = '(sem informação)';
+  const abertas = cargasAbertas().filter(c => {
+    const k = (c[campo] || '').trim() || semInfo;
+    return k === chave;
+  }).map(c => ({ c, min: minutosNoPatioAgora(c) }))
+    .sort((a, b) => (b.min ?? -1) - (a.min ?? -1));
+  const nome = campo === 'rota'
+    ? (typeof rotaCurta === 'function' && chave !== semInfo ? rotaCurta(chave) : chave) : chave;
+  const linhas = abertas.map(({ c, min }) => `<li class="gv-carga">
+      <div class="gv-carga-topo"><b>${esc(c.placa || '—')}</b>
+        <span class="gv-carga-tempo">${min === null ? 'sem chegada' : esc(fmtDuracao(min))}</span></div>
+      <div class="gv-carga-sub">${badgeHtml(c.status)}
+        <span>Carga ${esc(c.numeroCarga || '—')}</span>
+        ${campo === 'rota' ? `<span>${esc(c.transportadora || '—')}</span>` : `<span>${esc(rotaCurta(c.rota) || '—')}</span>`}</div>
+    </li>`).join('');
+  const html = abertas.length
+    ? `<ol class="gv-lista">${linhas}</ol>`
+    : '<p class="gv-vazio">Nenhuma carga em aberto aqui agora. Ela pode ter seguido viagem desde a última leitura.</p>';
+  if(soAtualizar){
+    const miolo = document.getElementById('gv-miolo');
+    if(miolo && miolo.innerHTML !== html) miolo.innerHTML = html;
+    const sub = document.getElementById('gv-sub');
+    if(sub) sub.textContent = abertas.length === 1 ? '1 carga em aberto' : `${abertas.length} cargas em aberto`;
+    return;
+  }
+  Graf.abrirGaveta({
+    chave: `pulso|${campo}|${chave}`,
+    olho: campo === 'rota' ? 'Rota' : 'Transportadora',
+    titulo: nome,
+    sub: abertas.length === 1 ? '1 carga em aberto' : `${abertas.length} cargas em aberto`,
+    html, origem,
+  });
 }
 
 function renderIndicadores(){

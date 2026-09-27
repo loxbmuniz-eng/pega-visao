@@ -186,6 +186,19 @@ def main():
     fonte_uri = 'data:font/woff2;base64,' + base64.b64encode(fonte_bytes).decode('ascii')
     css = css.replace('assets/inter-variable-latin.woff2', fonte_uri)
 
+    # 1c. A Barlow, letra do painel inteiro (26/09/2026, decisão do dono —
+    #     "no painel inteiro"). MESMO tratamento da Inter, e pelo mesmo
+    #     motivo: o painel precisa abrir sem internet (é PWA, a Portaria usa
+    #     no pátio) e sem depender de servidor de terceiro. Se um arquivo
+    #     faltar, o build PARA — letra que some em silêncio vira fonte de
+    #     sistema no celular de alguém e ninguém percebe.
+    for nome in ['barlow-400', 'barlow-700', 'barlowcondensed-700']:
+        rel = f'assets/{nome}-pt.woff2'
+        if rel not in css:
+            raise SystemExit(f'ERRO: styles.css não referencia {rel} — a letra do painel ficaria faltando.')
+        uri = 'data:font/woff2;base64,' + base64.b64encode((BASE / rel).read_bytes()).decode('ascii')
+        css = css.replace(rel, uri)
+
     # NOTA: todas as substituições abaixo passam o conteúdo via `lambda _: ...`
     # em vez de string literal. Isso é obrigatório: re.sub() interpreta
     # sequências de escape no texto de substituição, e o JS está cheio delas
