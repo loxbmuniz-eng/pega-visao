@@ -158,38 +158,42 @@ const Graf = (function(){
     const L = 38, R = 14, T = 14, B = 26;
     const W = Math.max(280, alvo.clientWidth || 320), H = alvo.clientHeight || 190;
     let st = alvo._area;
-    const nasce = !st || st.W !== W || st.H !== H || !alvo.contains(st.svg);
+    /* TAMANHO NOVO NÃO RECRIA (27/09/2026). A primeira versão recriava o
+       gráfico quando a largura mudava — e a largura muda por um pixel à
+       toa: uma barra de rolagem que aparece, a letra que termina de
+       carregar. A guarda pegou. Agora o tamanho é só mais um valor que o
+       gráfico ajusta no lugar. */
+    const nasce = !st || !alvo.contains(st.svg);
     if(nasce){
       limpar(alvo);
-      st = alvo._area = { W, H };
-      const svg = st.svg = el('svg', { viewBox:`0 0 ${W} ${H}`, width:'100%', height:H, class:'graf-area' }, alvo);
+      st = alvo._area = {};
+      const svg = st.svg = el('svg', { class:'graf-area' }, alvo);
       const gid = 'graf-area-g-' + Math.random().toString(36).slice(2, 8);
       const grad = el('linearGradient', { id:gid, x1:0,y1:0,x2:0,y2:1 }, svg);
       el('stop', { offset:'0%', 'stop-color':cor('--gold','#e9b954'), 'stop-opacity':.28 }, grad);
       el('stop', { offset:'100%','stop-color':cor('--gold','#e9b954'), 'stop-opacity':0 }, grad);
-      st.grade = [0, .5, 1].map(f=>{
-        const yy = T + (H-T-B)*f;
-        el('line', { x1:L, x2:W-R, y1:yy, y2:yy, stroke:cor('--border-soft','#2a3a6c'), 'stroke-width':1 }, svg);
+      st.grade = [0, .5, 1].map(()=>({
+        linha: el('line', { stroke:cor('--border-soft','#2a3a6c'), 'stroke-width':1 }, svg),
         /* SÓ O NÚMERO NO EIXO — a unidade é do título da seção. */
-        return el('text', { x:L-6, y:yy+4, 'text-anchor':'end', fill:cor('--text-dim','#b7c0d4'), 'font-size':11 }, svg);
-      });
+        texto: el('text', { 'text-anchor':'end', fill:cor('--text-dim','#b7c0d4'), 'font-size':11 }, svg),
+      }));
       st.eixoX = el('g', {}, svg);
-      st.metaL = el('line', { x1:L, x2:W-R, stroke:cor('--gold','#e9b954'), 'stroke-width':1.5, 'stroke-dasharray':'4 4', opacity:0 }, svg);
+      st.metaL = el('line', { stroke:cor('--gold','#e9b954'), 'stroke-width':1.5, 'stroke-dasharray':'4 4', opacity:0 }, svg);
       st.areaP = el('path', { fill:`url(#${gid})` }, svg);
       st.linha = el('path', { fill:'none', stroke:cor('--gold','#e9b954'), 'stroke-width':2,
                               'stroke-linejoin':'round', 'stroke-linecap':'round' }, svg);
       /* A PONTA VIVA: o último valor é o que a pessoa procura primeiro. */
       st.ponta = el('circle', { r:4.5, fill:cor('--gold','#e9b954'), stroke:cor('--card','#1e2a52'), 'stroke-width':2 }, svg);
-      st.cruz = el('line', { y1:T, y2:H-B, stroke:cor('--text-dim','#b7c0d4'), 'stroke-width':1, 'stroke-dasharray':'3 3', opacity:0 }, svg);
+      st.cruz = el('line', { stroke:cor('--text-dim','#b7c0d4'), 'stroke-width':1, 'stroke-dasharray':'3 3', opacity:0 }, svg);
       st.bola = el('circle', { r:5, fill:cor('--card','#1e2a52'), stroke:cor('--gold','#e9b954'), 'stroke-width':2, opacity:0 }, svg);
       /* UMA ÁREA DE TOQUE SÓ, O GRÁFICO INTEIRO. Antes era uma faixa por
          ponto, cada uma parada no Tab do teclado — doze paradas para ler
          um gráfico. E o toque no celular mostrava a dica e nunca a tirava. */
-      const toque = st.toque = el('rect', { x:L, y:T, width:W-L-R, height:H-T-B, fill:'transparent',
+      const toque = st.toque = el('rect', { fill:'transparent',
                                             'pointer-events':'all', tabindex:'0', class:'graf-toque' }, svg);
       const perto = (clientX)=>{
         const r = svg.getBoundingClientRect();
-        const xx = (clientX - r.left) * (W / r.width);
+        const xx = (clientX - r.left) * (st.W / r.width);
         let melhor = 0, dist = Infinity;
         st.pontos.forEach((p,i)=>{ const d = Math.abs(st.x(i) - xx); if(d < dist){ dist = d; melhor = i; } });
         return melhor;
@@ -199,7 +203,7 @@ const Graf = (function(){
         const p = st.pontos[i];
         st.cruz.setAttribute('x1', st.x(i)); st.cruz.setAttribute('x2', st.x(i)); st.cruz.setAttribute('opacity', 1);
         st.bola.setAttribute('cx', st.x(i)); st.bola.setAttribute('cy', st.y(p.valor)); st.bola.setAttribute('opacity', 1);
-        const r = svg.getBoundingClientRect(), esc = r.width / W;
+        const r = svg.getBoundingClientRect(), esc = r.width / st.W;
         mostrarDica(`<b>${p.rotulo}</b><span>${st.formato ? st.formato(p.valor) : p.valor}</span>`,
                     r.left + st.x(i)*esc, r.top + st.y(p.valor)*esc);
       };
@@ -220,6 +224,19 @@ const Graf = (function(){
       });
     }
     st.pontos = pontos; st.formato = formato;
+    if(st.W !== W || st.H !== H){
+      st.W = W; st.H = H;
+      st.svg.setAttribute('viewBox', `0 0 ${W} ${H}`); st.svg.setAttribute('width', '100%'); st.svg.setAttribute('height', H);
+      st.grade.forEach((g, k)=>{
+        const yy = T + (H-T-B)*[0,.5,1][k];
+        g.linha.setAttribute('x1', L); g.linha.setAttribute('x2', W-R); g.linha.setAttribute('y1', yy); g.linha.setAttribute('y2', yy);
+        g.texto.setAttribute('x', L-6); g.texto.setAttribute('y', yy+4);
+      });
+      st.metaL.setAttribute('x1', L); st.metaL.setAttribute('x2', W-R);
+      st.cruz.setAttribute('y1', T); st.cruz.setAttribute('y2', H-B);
+      st.toque.setAttribute('x', L); st.toque.setAttribute('y', T);
+      st.toque.setAttribute('width', W-L-R); st.toque.setAttribute('height', H-T-B);
+    }
     st.svg.setAttribute('role','img');
     st.svg.setAttribute('aria-label', (rotulo || 'gráfico') + '. Última leitura: ' + pontos[pontos.length-1].rotulo
       + ', ' + (formato ? formato(pontos[pontos.length-1].valor) : pontos[pontos.length-1].valor) + '.');
@@ -227,7 +244,7 @@ const Graf = (function(){
     const max = Math.max(meta || 0, ...vals) * 1.15 || 1;
     st.x = i => L + i * (W-L-R) / (pontos.length-1);
     st.y = v => T + (H-T-B) * (1 - v/max);
-    st.grade.forEach((t, k)=>{ t.textContent = Math.round(max*(1 - [0,.5,1][k])); });
+    st.grade.forEach((g, k)=>{ g.texto.textContent = Math.round(max*(1 - [0,.5,1][k])); });
     while(st.eixoX.firstChild) st.eixoX.removeChild(st.eixoX.firstChild);
     const passo = Math.max(1, Math.ceil(pontos.length / Math.max(2, Math.floor((W-L-R) / 54))));
     pontos.forEach((p,i)=>{

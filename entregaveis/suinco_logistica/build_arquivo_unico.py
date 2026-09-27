@@ -192,9 +192,8 @@ def main():
     #     no pátio) e sem depender de servidor de terceiro. Se um arquivo
     #     faltar, o build PARA — letra que some em silêncio vira fonte de
     #     sistema no celular de alguém e ninguém percebe.
-    for nome in ['barlow-400', 'barlow-500', 'barlow-600', 'barlow-700',
-                 'barlowcondensed-600', 'barlowcondensed-700']:
-        rel = f'assets/{nome}-latin.woff2'
+    for nome in ['barlow-400', 'barlow-700', 'barlowcondensed-700']:
+        rel = f'assets/{nome}-pt.woff2'
         if rel not in css:
             raise SystemExit(f'ERRO: styles.css não referencia {rel} — a letra do painel ficaria faltando.')
         uri = 'data:font/woff2;base64,' + base64.b64encode((BASE / rel).read_bytes()).decode('ascii')

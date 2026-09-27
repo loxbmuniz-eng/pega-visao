@@ -272,13 +272,19 @@
 /* A LETRA DO PAINEL — Barlow e Barlow Condensed, licença SIL OFL
    (assets/BARLOW_LICENCA_OFL.txt). Os arquivos viram dado embutido no
    build; `swap` mostra o texto na hora com a letra de sistema e troca
-   quando a Barlow chega — que, embutida, é no mesmo instante. */
-@font-face{font-family:'Barlow';font-style:normal;font-weight:400;font-display:swap;src:url('assets/barlow-400-latin.woff2') format('woff2')}
-@font-face{font-family:'Barlow';font-style:normal;font-weight:500;font-display:swap;src:url('assets/barlow-500-latin.woff2') format('woff2')}
-@font-face{font-family:'Barlow';font-style:normal;font-weight:600;font-display:swap;src:url('assets/barlow-600-latin.woff2') format('woff2')}
-@font-face{font-family:'Barlow';font-style:normal;font-weight:700 900;font-display:swap;src:url('assets/barlow-700-latin.woff2') format('woff2')}
-@font-face{font-family:'Barlow Condensed';font-style:normal;font-weight:500 600;font-display:swap;src:url('assets/barlowcondensed-600-latin.woff2') format('woff2')}
-@font-face{font-family:'Barlow Condensed';font-style:normal;font-weight:700 900;font-display:swap;src:url('assets/barlowcondensed-700-latin.woff2') format('woff2')}
+   quando a Barlow chega — que, embutida, é no mesmo instante.
+
+   TRÊS FACES, RECORTADAS PARA O PORTUGUÊS (27/09/2026). A primeira versão
+   trazia seis pesos com o alfabeto latino inteiro, e o painel passou do
+   teto de 700 KB comprimidos (test_logo_uma_copia_so) — o teto que existe
+   para o painel abrir rápido no celular do pátio. O teto ficou; a letra
+   encolheu: 134 KB viraram 43 KB. Normal cobre até o peso 500, negrito do
+   600 em diante, e o número condensado vai sempre em negrito. Os glifos são
+   os do português (acentos, ç, ª º °), mais as setas e aspas que o painel
+   escreve; um caractere de fora cai na letra de sistema, sem sumir. */
+@font-face{font-family:'Barlow';font-style:normal;font-weight:100 500;font-display:swap;src:url('assets/barlow-400-pt.woff2') format('woff2')}
+@font-face{font-family:'Barlow';font-style:normal;font-weight:600 900;font-display:swap;src:url('assets/barlow-700-pt.woff2') format('woff2')}
+@font-face{font-family:'Barlow Condensed';font-style:normal;font-weight:100 900;font-display:swap;src:url('assets/barlowcondensed-700-pt.woff2') format('woff2')}
 html,body{
   background:var(--navy-deep);
   color:var(--text);

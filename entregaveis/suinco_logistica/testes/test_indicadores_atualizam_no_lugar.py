@@ -84,6 +84,19 @@ async def main():
         ck('o index.html não aponta para servidor de fonte', 'fonts.googleapis' not in html and 'fonts.gstatic' not in html)
 
         print('\n=== 2. SINCRONIA SEM MUDANÇA NÃO RECRIA NADA ===')
+        # O gráfico de entradas por hora só existe com chegadas em DUAS horas
+        # ou mais. A base de exemplo chega toda perto do mesmo horário, então
+        # o gráfico às vezes nem nascia — e o teste passava ou reprovava
+        # conforme a hora em que rodava. Espalha as chegadas por quatro horas.
+        await pg.evaluate("""() => {
+          cargasAbertas().forEach((c, k) => {
+            const m = DB.movimentacoes.find(x => x.cargaId === c.id && x.statusNovo === 'Aguardando Embarque');
+            if(m) m.timestamp = new Date(Date.now() - (3 + (k % 4)) * 3600000).toISOString();
+          });
+          renderIndicadores();
+        }""")
+        ck('o gráfico de entradas por hora existe (senão a comparação abaixo mediria o nada)',
+           await pg.evaluate("() => !!document.querySelector('#pulso-hora svg')"))
         await pg.evaluate(GUARDAR)
         mesmos = await pg.evaluate("""() => { renderIndicadores(); const a = window._antes; return {
             svg: !!a.svg && a.svg === document.querySelector('#pulso-hora svg'),

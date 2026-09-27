@@ -86,7 +86,17 @@ OLHAR = """() => {
       pontos: selos.filter(s => (s.textContent || '').includes('·')).length,
       /* O ponto preto `●` não pode ter sobrado em lugar nenhum. */
       bolinhas: selos.filter(s => (s.textContent || '').includes('●')).length,
-      larguraTrilha: Math.round(tr.querySelector('.et-linha').getBoundingClientRect().width),
+      /* A LARGURA DOS SELOS, NÃO DA CÉLULA (27/09/2026). Media-se a caixa
+         .et-linha, que é flex de bloco e ocupa a célula inteira — ou seja,
+         media a COLUNA que a tabela reparte, não a trilha. Com a Barlow, as
+         outras colunas estreitaram, a tabela deu a sobra para esta, e o
+         teste reprovou com cada selo em 26–27px, exatamente como antes.
+         A regra guardada é a do comentário lá embaixo: seis selos + cinco
+         vãos + padding. É isso que se mede agora. */
+      larguraTrilha: (() => { const ss = [...tr.querySelectorAll('.et-mini')];
+        const lin = tr.querySelector('.et-linha'), cs = getComputedStyle(lin);
+        return Math.round(ss[ss.length-1].getBoundingClientRect().right - ss[0].getBoundingClientRect().left
+          + parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight)); })(),
       corCam: (() => { const c = tr.querySelector('.et-cam');
         return c ? getComputedStyle(c.parentElement).color : null; })(),
       corSelo: (() => { const s = selos[selos.findIndex(x => x.classList.contains('et-mini-atual'))];
