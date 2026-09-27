@@ -4367,3 +4367,45 @@ o servidor negava*: uma decisão minha tomada no lugar de uma pergunta. Só que
 aqui não foi código divergindo de código, foi **eu divergindo dele**. A
 prevenção não é um teste: é o PROMPT antes do código, e não pular o PROMPT
 porque o pedido cabe numa frase.
+
+## #89 — O que se digitava na Torre ia para o campo de outra carga (27/09/2026)
+
+**Como apareceu.** Não foi relato: foi achado ao preparar a Torre deslizando,
+lendo a proteção de digitação para saber se uma linha em movimento fugiria de
+quem estava escrevendo nela. Ela já fugia — sem animação nenhuma.
+
+**Reproduzido no painel publicado, antes de qualquer correção:**
+
+```
+Ana estava digitando na carga: mt_3
+o cursor foi parar na carga:   mt_5
+campos com o texto dela:       [['mt_5', '40103XYZ']]
+```
+
+A Logística digita no Nº da carga da segunda linha; outro setor muda a
+sequência; a Torre se redesenha (toda sincronia faz isso); o texto dela e o
+cursor vão para o campo da carga que AGORA ocupa a segunda linha. Ao sair do
+campo, o `onchange` grava — **o número de outra carga é sobrescrito**, sem
+aviso, com um valor que parece legítimo.
+
+**A causa.** `_capturarDigitacao` / `_restaurarDigitacao` (app.js) acham o
+campo de volta pelo `id` e, sem id, pela POSIÇÃO: linha N, coluna M. Os campos
+da Torre não têm id. Posição de linha não é identidade de carga.
+
+**A família.** É a #20 outra vez, no avesso: a proteção certa existia, foi
+generalizada para o painel inteiro em 27/08, e a generalização trouxe junto
+uma premissa que só valia onde ela nasceu (a lista de devoluções, cujas
+linhas não trocam de lugar enquanto se digita).
+
+**A correção.** O campo é achado pela carga da linha (`data-carga` /
+`data-id`). Se a carga saiu da tela, o texto em curso se perde — é melhor do
+que gravá-lo na carga errada. A posição só vale para linha sem dono.
+
+**A guarda.** `testes/test_digitacao_nao_troca_de_carga.py` — reprovou 4
+vezes contra o publicado; passa agora. Prova os dois lados: a linha muda de
+lugar e o texto acompanha a carga certa; a carga sai da tela e o texto não
+cai em nenhuma outra.
+
+> **Posição não é identidade.** Toda vez que algo é guardado para ser achado
+> depois de um redesenho, a chave tem de ser o dono do dado, nunca o lugar
+> onde ele estava.

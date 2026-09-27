@@ -2500,6 +2500,9 @@ function _capturarDigitacao(){
     ini: typeof foco.selectionStart === 'number' ? foco.selectionStart : null,
     fim: typeof foco.selectionEnd === 'number' ? foco.selectionEnd : null,
     linhaId: linha ? (linha.dataset && linha.dataset.id) || null : null,
+    /* A CARGA DA LINHA, não a posição dela (27/09/2026). Ver o comentário
+       em _restaurarDigitacao: posição de linha não é identidade de carga. */
+    chaveLinha: linha && linha.dataset ? (linha.dataset.carga || linha.dataset.id || null) : null,
     idxLinha: linha && linha.parentElement
       ? [...linha.parentElement.children].indexOf(linha) : -1,
     idxCel: cel && cel.parentElement ? [...cel.parentElement.children].indexOf(cel) : -1,
@@ -2510,7 +2513,30 @@ function _capturarDigitacao(){
 function _restaurarDigitacao(e){
   if(!e) return;
   let el = e.id ? document.getElementById(e.id) : null;
-  if(!el && e.tabelaId && e.idxLinha >= 0 && e.idxCel >= 0){
+  /* O CAMPO É ACHADO PELA CARGA, NUNCA PELA POSIÇÃO (27/09/2026).
+
+     Achado ao preparar a Torre deslizando, e reproduzido no painel
+     publicado: a Logística digitava no Nº da carga da segunda linha, outro
+     setor mudava a sequência, a Torre se redesenhava — e o texto e o cursor
+     iam para o campo da carga que AGORA estava na segunda linha. Ao sair do
+     campo, o número daquela outra carga era sobrescrito. Os campos da Torre
+     não têm id, então o caminho era "linha 2, coluna 2"; basta a ordem
+     mudar para a linha 2 ser outra carga.
+
+     Agora, quando a linha tem dono (data-carga ou data-id), é por ele que
+     se procura. Se a carga saiu da tela, o texto em curso se perde — é
+     melhor do que gravá-lo na carga errada. A posição só vale para linha
+     sem dono. Guarda: testes/test_digitacao_nao_troca_de_carga.py. */
+  if(!el && e.chaveLinha && e.tabelaId && e.idxCel >= 0){
+    const tb = document.getElementById(e.tabelaId);
+    const tr = tb && [...tb.children].find(x => x.dataset
+      && (x.dataset.carga === e.chaveLinha || x.dataset.id === e.chaveLinha));
+    if(!tr) return;   // a carga saiu da tela: não devolve em outra
+    const td = tr.children[e.idxCel];
+    el = td ? td.querySelector('input, select, textarea') : null;
+    if(!el) return;
+  }
+  if(!el && !e.chaveLinha && e.tabelaId && e.idxLinha >= 0 && e.idxCel >= 0){
     const tb = document.getElementById(e.tabelaId);
     const tr = tb && tb.children[e.idxLinha];
     const td = tr && tr.children[e.idxCel];
