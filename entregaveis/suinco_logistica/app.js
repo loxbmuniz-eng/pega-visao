@@ -3515,6 +3515,9 @@ function renderTorre(){
     }
     return ordenarPorSequenciaEAtualizacao(a,b);
   });
+  /* Com o cursor num campo da Torre, a ordem que a pessoa está vendo não
+     muda por baixo dela — ver "A TORRE DESLIZA" no bloco MOVIMENTO. */
+  lista = movSegurarOrdemEmEdicao(document.getElementById('torre-tbody'), lista);
 
   const thead = document.getElementById('torre-thead');
   if(thead){
@@ -3568,6 +3571,7 @@ function renderTorre(){
         : '')
       + `</td></tr>`
     : '';
+  const _posAntes = movFlipAntes(tbody);
   tbody.innerHTML = lista.map(c=>`
     ${faixa(c)}
     <tr class="${ehProgramacaoAntiga(c) ? 'linha-prog-antiga' : ''}" data-carga="${esc(c.id)}"
@@ -3630,6 +3634,7 @@ function renderTorre(){
       ${editavel ? `<td class="no-print">${botaoOutraCargaHtml(c)}${botaoRevisoesHtml(c)}${botaoCancelarHtml(c)}</td>` : ''}
     </tr>`).join('');
   movLinhasNovas(tbody);
+  movFlipDepois(tbody, _posAntes, lista);
   const vazio = document.getElementById('torre-empty');
   vazio.hidden = lista.length>0;
   if(!vazio.hidden){
@@ -13732,4 +13737,139 @@ async function contarNoBotao(botao, textos, tarefa){
     _movTrocarTexto(botao, original);
     throw e;
   }
+}
+
+/* ---------- 5. A TORRE DESLIZA (27/09/2026) ----------
+
+   Pedido do dono, depois de tocar na "Torre de brinquedo": a linha que muda
+   de lugar desliza até a posição nova. Com uma condição dele, que é a que
+   manda: "as partes principais precisam manter sua estrutura (...) torre de
+   controle editável seguindo o formato de colunas e campos editáveis".
+
+   Por isso nada disto mexe no HTML da linha. A Torre continua sendo a mesma
+   tabela de 12 colunas, redesenhada inteira a cada sincronia; o movimento é
+   só uma camada por cima (FLIP): mede onde cada linha estava, deixa a
+   tabela nascer na ordem nova, e faz cada linha que mudou de lugar partir
+   de onde estava. `transform` e nada mais — não repagina, não toca campo.
+
+   QUATRO REGRAS, cada uma com um porquê:
+
+   1. SÓ SE MOVE QUANDO A ORDEM MUDOU. Sincronia que redesenha as mesmas
+      linhas na mesma ordem não anima nada (regra 2 do bloco: o que se vê
+      cem vezes por dia não se anima). Linha que entra ou sai não conta
+      como mudança de ordem: a entrada já tem animação própria (seção 2) e
+      a saída também (seção 1).
+   2. A LINHA EM EDIÇÃO NÃO FOGE. Com o cursor num campo da Torre, uma
+      mudança de ordem vinda de OUTRO setor espera: a tabela fica como a
+      pessoa está vendo e se reorganiza quando ela sai da tabela. Mudança
+      feita pela própria pessoa naquele campo (ela digitou a posição) vale
+      na hora — foi ela quem pediu. Tudo isso sem prazo nem relógio: quem
+      decide é onde o cursor está.
+   3. MUDOU DE ETAPA, O SELO PULSA. Etapa não muda a ordem da Torre; o que
+      muda é o selo de status, e é ele que se mexe — só o daquela carga.
+   4. Movimento reduzido no sistema: a ordem muda, nada anima. */
+const MOV_DESLIZA_MS = 260;
+const _movOrdem = new Map();     // tbody.id → ids na ordem em que foram desenhados
+const _movEtapa = new Map();     // tbody.id → Map(id → status)
+
+function _movChaveDoCampo(el){
+  const tr = el && el.closest ? el.closest('tr[data-carga]') : null;
+  const td = el && el.closest ? el.closest('td') : null;
+  if(!tr || !td) return null;
+  return tr.dataset.carga + '|' + [...tr.children].indexOf(td);
+}
+
+function _movCampoEmEdicao(tbody){
+  const f = document.activeElement;
+  return !!(f && tbody && tbody.contains(f)
+    && (f.tagName === 'INPUT' || f.tagName === 'TEXTAREA' || f.tagName === 'SELECT'));
+}
+
+/* Regra 2. Devolve a lista na ordem que a pessoa está vendo, se for o caso
+   de segurar; senão, a lista como veio. */
+function movSegurarOrdemEmEdicao(tbody, lista){
+  if(!tbody || !tbody.id) return lista;
+  if(!tbody._movOuvindo){
+    tbody._movOuvindo = true;
+    /* A mudança feita no próprio campo libera AQUELE campo: a linha vai
+       para onde a pessoa mandou. Andar para outro campo arma de novo. */
+    tbody.addEventListener('change', (ev) => {
+      tbody._movLivre = _movChaveDoCampo(ev.target);
+    }, true);
+    tbody.addEventListener('focusin', (ev) => {
+      if(_movChaveDoCampo(ev.target) !== tbody._movLivre) tbody._movLivre = null;
+    });
+    tbody.addEventListener('focusout', () => setTimeout(() => {
+      if(!tbody._movSegurou || _movCampoEmEdicao(tbody)) return;
+      tbody._movSegurou = false;
+      renderAll();
+    }, 0));
+  }
+  const vista = _movOrdem.get(tbody.id);
+  const emEdicao = _movCampoEmEdicao(tbody)
+    && _movChaveDoCampo(document.activeElement) !== tbody._movLivre;
+  if(!vista || !emEdicao) return lista;
+  const pos = new Map(vista.map((id, i) => [id, i]));
+  const segurada = lista.slice().sort((a, b) =>
+    (pos.has(a.id) ? pos.get(a.id) : 1e9) - (pos.has(b.id) ? pos.get(b.id) : 1e9));
+  if(segurada.some((c, i) => c !== lista[i])) tbody._movSegurou = true;
+  return segurada;
+}
+
+/* Antes de redesenhar: onde cada linha está, medido a partir do topo do
+   próprio corpo da tabela — as caixas de cima mudam de altura com os
+   números, e medir pela página faria todas as linhas "andarem" juntas. */
+function movFlipAntes(tbody){
+  if(!tbody || movReduzida() || !tbody.getClientRects().length) return null;
+  const topo = tbody.getBoundingClientRect().top;
+  const pos = new Map();
+  tbody.querySelectorAll('tr[data-carga]').forEach(tr => {
+    pos.set(tr.dataset.carga, tr.getBoundingClientRect().top - topo);
+  });
+  return pos.size ? pos : null;
+}
+
+function movFlipDepois(tbody, antes, lista){
+  if(!tbody || !tbody.id) return;
+  const ordemAntes = _movOrdem.get(tbody.id);
+  const etapaAntes = _movEtapa.get(tbody.id);
+  const ordem = lista.map(c => c.id);
+  _movOrdem.set(tbody.id, ordem);
+  _movEtapa.set(tbody.id, new Map(lista.map(c => [c.id, c.status])));
+  if(!ordemAntes || movReduzida()) return;
+
+  // Regra 3: o selo de quem mudou de etapa.
+  if(etapaAntes){
+    lista.forEach(c => {
+      if(!etapaAntes.has(c.id) || etapaAntes.get(c.id) === c.status) return;
+      const selo = tbody.querySelector(_movSeletorCarga(c.id) + ' .badge');
+      if(selo && selo.animate){
+        selo.animate([{ transform: 'scale(.86)', opacity: .35 },
+                      { transform: 'none', opacity: 1 }],
+                     { duration: MOV_DESLIZA_MS, easing: 'cubic-bezier(.23,1,.32,1)' });
+      }
+    });
+  }
+
+  // Regra 1: a ordem relativa de quem estava e continua mudou?
+  if(!antes) return;
+  const ficaram = new Set(ordem);
+  const a = ordemAntes.filter(id => ficaram.has(id) && antes.has(id));
+  const tinha = new Set(a);
+  const b = ordem.filter(id => tinha.has(id));
+  if(a.every((id, i) => id === b[i])) return;
+
+  const topo = tbody.getBoundingClientRect().top;
+  const medidas = [];
+  tbody.querySelectorAll('tr[data-carga]').forEach(tr => {
+    const id = tr.dataset.carga;
+    if(!antes.has(id)) return;
+    const dy = antes.get(id) - (tr.getBoundingClientRect().top - topo);
+    if(Math.abs(dy) >= 1) medidas.push([tr, dy]);
+  });
+  medidas.forEach(([tr, dy]) => {
+    if(!tr.animate) return;
+    tr.animate([{ transform: `translateY(${dy}px)` }, { transform: 'none' }],
+               { duration: MOV_DESLIZA_MS, easing: 'cubic-bezier(.23,1,.32,1)' });
+  });
 }
