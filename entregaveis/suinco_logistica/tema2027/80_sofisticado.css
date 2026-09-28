@@ -1,0 +1,166 @@
+/* =====================================================================
+   O PAINEL INTEIRO NA LINGUAGEM DO PÁTIO AO VIVO (28/09/2026)
+   ---------------------------------------------------------------------
+   Pedido do dono: "EU PEDI UMA REFORMA COMPLETA UM REBRANDING DO UI
+   DESIGN MOTION COMPLETO DE TODAS AS ABAS" / "EU QUERO QUE TODO O PAINEL
+   SUINCO FIQUE MAIS SOFISTICADO". A referência é a tela que ele aprovou:
+   a aba Pátio ao vivo (70_patio_ao_vivo.css).
+
+   A linguagem dela, em quatro regras, aplicadas aqui a todas as abas:
+     1. TÍTULO É LETRA, NÃO ENFEITE. Condensada, grande, em caixa normal e
+        na cor do texto. A barrinha dourada e a caixa alta miúda saem.
+     2. NÚMERO NA LETRA DE PLACA. Condensada, alta, dígito de largura fixa.
+     3. SUPERFÍCIE QUIETA. Canto de 12px, fio fino, sombra curta. O dourado
+        fica para o que é marca ou estado (aba ativa, foco, selo).
+     4. MOVIMENTO SÓ PARA RESPONDER. A aba entra deslizando, o botão afunda
+        no toque, a janela abre de perto. Nada anda sozinho. Tudo desliga
+        com "reduzir movimento".
+
+   O QUE ESTE ARQUIVO NÃO FAZ — a regra do dono por cima de tudo: "as
+   partes principais precisam manter sua estrutura (...) todos os campos
+   que são de edição precisam seguir firmes a mesma estrutura":
+     · nenhum campo, coluna, botão ou texto nasce, some ou muda de ordem;
+     · `th` NUNCA ganha caixa alta (30_tabelas.css explica: muda o
+       innerText que os testes leem e alarga colunas calibradas à mão);
+     · o título de cartão só muda no computador (≥821px): no celular ele é
+       o botão do acordeão, calibrado em 44px (10_cascas.css);
+     · #header e #nav nunca recebem `position` (10_cascas.css);
+     · a Torre mantém as 12 colunas, os campos e as larguras por id.
+
+   Dentro de @media screen como todo o tema2027: o relatório impresso lê
+   o mesmo CSS e não pode mudar (test_tema2027_so_tela).
+   ===================================================================== */
+@media screen{
+  :root{
+    --sf-cond:'Barlow Condensed','Barlow',system-ui,sans-serif;
+    --sf-saida:cubic-bezier(.23,1,.32,1);
+    --sf-raio:12px;
+    --sf-sombra:0 1px 0 rgba(255,255,255,.035) inset, 0 8px 22px -14px rgba(0,0,0,.65);
+    --sf-anel:color-mix(in srgb, var(--gold) 26%, transparent);
+  }
+  :root[data-tema="claro"]{
+    --sf-sombra:0 1px 2px rgba(19,25,39,.05), 0 8px 20px -14px rgba(19,25,39,.30);
+    --sf-anel:color-mix(in srgb, var(--gold) 34%, transparent);
+  }
+
+  /* ---- a Barlow chega aos botões e campos ----
+     O navegador NÃO passa a letra da página para botão, campo e lista de
+     escolha: cada um usa a letra dele (Arial, medido). A Barlow entrou "no
+     painel inteiro" em 26/09 e parava na borda de todo botão e de todo
+     campo. `:where` deixa a regra sem peso nenhum: qualquer campo que já
+     escolhe a própria letra (a placa e a carga em monoespaçada) continua
+     com a dele. */
+  :where(button, input, select, textarea){ font-family:inherit }
+
+  /* ---- cabeçalho: a marca em letra de placa ---- */
+  #header-title strong{ font-family:var(--sf-cond); font-size:21px; font-weight:700; letter-spacing:.045em; line-height:1.05 }
+  #header-title span{ font-size:11.5px; letter-spacing:.01em }
+  #clock{ font-family:var(--sf-cond); font-size:28px; font-weight:600; letter-spacing:.01em; line-height:1 }
+  #date-display{ font-size:12px }
+
+  /* ---- menu: condensada, e o estado anda suave ---- */
+  .nav-tab{ font-family:var(--sf-cond); font-size:16.5px; font-weight:600; letter-spacing:.015em;
+    transition:background-color 160ms ease, color 160ms ease, border-color 160ms ease }
+  .nav-tab .ico{ transition:transform 160ms var(--sf-saida) }
+  .nav-tab:active .ico{ transform:scale(.9) }
+
+  /* ---- cartão: superfície quieta ---- */
+  .card{ border-radius:var(--sf-raio); border-color:var(--border-soft); box-shadow:var(--sf-sombra) }
+  /* Relatórios é UM painel de seções (50_abas_formularios.css): os cantos
+     arredondados só nas pontas, agora no raio novo. */
+  #tab-relatorios .card:first-of-type{ border-radius:var(--sf-raio) var(--sf-raio) 0 0 }
+  #tab-relatorios .card:last-of-type{ border-radius:0 0 var(--sf-raio) var(--sf-raio) }
+  .funcao-aba{ border-radius:0 var(--sf-raio) var(--sf-raio) 0; background:transparent;
+    border-top:0; border-right:0; border-bottom:0; border-left-width:3px; box-shadow:none }
+
+  /* ---- número: sempre na letra de placa ---- */
+  .stat-num{ font-family:var(--sf-cond); font-weight:700; letter-spacing:0 }
+
+  /* ---- Indicadores: o Pulso fala como os fatos do Pátio ao vivo ----
+     O rótulo miúdo em caixa alta ("NO PÁTIO", "ONDE ESTÃO OS CAMINHÕES
+     AGORA") vira frase: o número diz, a frase explica. Os testes leem
+     esses textos em minúscula, então a caixa não muda nenhuma leitura. */
+  .pulso-num .r{ font-size:14px; font-weight:500; letter-spacing:0; text-transform:none; color:var(--text) }
+  .pulso-num .d{ font-size:13px }
+  .pulso-secao{ margin-top:22px }
+  .pulso-rot{ font-family:var(--sf-cond); font-size:20px; font-weight:600; letter-spacing:0; line-height:1.15;
+    text-transform:none; color:var(--text); margin-bottom:10px }
+  .pulso-rot small{ font-family:'Barlow',system-ui,sans-serif; font-size:13px }
+
+  /* ---- selo de status: condensado, canto vivo, sem mudar o texto ---- */
+  .badge, .status-pill{ font-family:var(--sf-cond); font-weight:700; letter-spacing:.035em; border-radius:4px }
+  .badge{ font-size:12.5px }
+
+  /* ---- tabela: cabeçalho em letra de placa (caixa normal, sempre) ---- */
+  /* A Torre e a Montagem ficam fora: o cabeçalho delas tem 10px por id e
+     colunas calibradas à mão — condensada nesse corpo não se lê. */
+  table:not(#torre-tabela):not(#mont-tabela) th{ font-family:var(--sf-cond); font-weight:600; font-size:13px;
+    letter-spacing:.01em; border-bottom-color:var(--border) }
+  td{ transition:background-color 120ms ease }
+
+  /* ---- botão: afunda no toque, não levanta no mouse ---- */
+  /* O botão fica na Barlow larga: condensada em 10,5px (a coluna Ação da
+     Torre) vira um borrão. A letra de placa é para título e número. */
+  .btn{ font-weight:600;
+    transition:transform 140ms var(--sf-saida), background-color 160ms ease, opacity 160ms ease, border-color 160ms ease }
+  .btn:hover{ transform:none }
+  .btn:active{ transform:scale(.97) }
+  .btn-sec{ background:transparent; border-color:var(--border) }
+  .btn-sec:hover{ background:var(--acento-hover); opacity:1 }
+
+  /* ---- campo: o foco acende um anel macio além da borda ---- */
+  input, select, textarea{ transition:border-color 160ms ease, box-shadow 160ms ease }
+  input:focus, select:focus, textarea:focus{ box-shadow:0 0 0 3px var(--sf-anel) }
+
+  /* ---- a aba entra; os blocos dela chegam em sequência curta ---- */
+  .tab-page.active{ animation:sfAbaEntra 260ms var(--sf-saida) both }
+  .tab-page.active > .card,
+  .tab-page.active > .funcao-aba{ animation:sfBlocoEntra 320ms var(--sf-saida) both }
+  .tab-page.active > :nth-child(2){ animation-delay:30ms }
+  .tab-page.active > :nth-child(3){ animation-delay:60ms }
+  .tab-page.active > :nth-child(4){ animation-delay:90ms }
+  .tab-page.active > :nth-child(n+5){ animation-delay:120ms }
+  @keyframes sfAbaEntra{ from{ opacity:0 } to{ opacity:1 } }
+  @keyframes sfBlocoEntra{ from{ opacity:0; transform:translateY(8px) } to{ opacity:1; transform:none } }
+
+  /* ---- a janela abre de perto, não aparece do nada ---- */
+  .modal-overlay.open .modal-box{ animation:sfJanela 220ms var(--sf-saida) both }
+  @keyframes sfJanela{ from{ opacity:0; transform:scale(.965) translateY(6px) } to{ opacity:1; transform:none } }
+}
+
+/* O título de cartão e a faixa de números só mudam no computador. No
+   celular o título é o botão do acordeão (44px de alvo) e a faixa é a
+   grade compacta de chips — as duas calibradas à mão. */
+@media screen and (min-width:821px){
+  .card{ padding:14px 18px 16px; margin-bottom:14px }
+  .card-title{ font-family:var(--sf-cond); font-size:23px; font-weight:600; line-height:1.15;
+    text-transform:none; letter-spacing:-.003em; color:var(--text); padding-left:0; margin-bottom:4px; gap:10px }
+  .card-title::before{ display:none }
+  .card-title .ico-card{ width:20px; height:20px; color:var(--gold-text) }
+  .card-sub{ font-size:13.5px; line-height:1.45; margin:0 0 12px; max-width:120ch }
+
+  .bento.bi-faixa{ border-radius:var(--sf-raio); box-shadow:var(--sf-sombra) }
+  /* 27px é o teto do número comum no computador (test_desktop_compacto,
+     pedido do dono de 08/08: "mais compacto"). Condensada, 27px já lê maior
+     que os 21px da Barlow larga de antes. */
+  .bento.bi-faixa .stat-num{ font-size:27px; font-weight:700; line-height:1 }
+  .bento.bi-faixa .stat-destaque .stat-num{ font-size:36px }
+  .bento.bi-faixa .stat-label{ font-size:12.5px; font-weight:500; margin-top:3px }
+  .bento.bi-faixa .stat-destaque .stat-label{ font-size:13.5px }
+}
+
+/* No celular o título continua sendo o botão do acordeão, com a mesma
+   caixa: 14px × 1,25 = 17,5px de linha, que o padding transforma em 44px
+   de alvo (styles.css ~5117). A condensada a 17px × 1,06 dá 18px — a
+   mesma linha, então o alvo e o espaço ocupado não mudam. Muda a letra e
+   a cor; a barra dourada e o "?" ficam onde estão. */
+@media screen and (max-width:820px){
+  .card-title{ font-family:var(--sf-cond); font-size:17px; line-height:1.06; font-weight:600;
+    color:var(--text); letter-spacing:0 }
+}
+
+@media screen and (prefers-reduced-motion: reduce){
+  .tab-page.active, .tab-page.active > .card, .tab-page.active > .funcao-aba,
+  .modal-overlay.open .modal-box{ animation:none !important }
+  .btn:active, .nav-tab:active .ico{ transform:none !important }
+}
