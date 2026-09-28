@@ -214,6 +214,12 @@
   }
   .pulso-num:first-child{ border-left:0; padding-left:2px }
   .pulso-num.alerta{ border-left-color:var(--border-soft) }
+  /* Sem a caixa, o número em alerta passa a ficar sobre o CARTÃO, não mais
+     sobre o fundo escuro dela — e o vinho de preenchimento caiu para 2,33
+     de contraste no tema escuro (test_contraste pegou). O vermelho "como
+     texto" (-txt) é o medido para ficar sobre a superfície do painel nos
+     dois temas. */
+  .pulso-num.alerta .v{ color:var(--st-aguardando-veiculo-txt) }
   .pulso-num .v{ font-size:38px; line-height:1 }
   .pulso-num .r{ margin-top:6px }
   /* No celular a faixa vira duas colunas: o fio só separa vizinhos da
