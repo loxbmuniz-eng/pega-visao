@@ -4496,3 +4496,39 @@ em `backend/testes/api.test.js` (servidor), com a mesma tabela.
 
 > **Número mal lido não dá erro: grava.** Todo campo que recebe número digitado
 > passa pela régua que sabe ler português — nunca por `Number()` cru.
+
+## #92 — Servidor instalado do zero nascia sem o modelo da semana (28/09/2026)
+
+**Como apareceu.** Achado ao reconstruir o banco local depois de um reinício do
+contêiner (26/09): o modelo da semana só apareceu depois de aplicar à mão as
+migrações 041/042 uma segunda vez.
+
+**Reproduzido num banco descartável, na ordem do instalar.sh:**
+
+```
+migrar.js (56 migrações) → seed.js (749 placas, 33 rotas)
+programacao_modelo: 0 linhas        (produção: 80)
+```
+
+**A causa.** A 041 grava o modelo do dono com
+`WHERE EXISTS (SELECT 1 FROM dim_rotas WHERE codigo = ...)` — só para rotas que
+já existem. As 33 rotas oficiais entram no `seed.js`, que o instalador roda
+DEPOIS das migrações. Em produção isso nunca apareceu porque as rotas já
+existiam quando a 041 rodou; num servidor novo (a migração para o VPS no CNPJ
+da Suinco, por exemplo) a Montagem do Dia nasceria sem modelo nenhum.
+
+**A família.** A de "controle que depende da memória": a ordem certa existia
+no dia em que a 041 foi escrita, e nada garantia que continuaria existindo.
+
+**A correção.** `scripts/modelo_inicial.js`, chamado pelo instalador depois do
+seed: se o modelo está VAZIO, aplica a 041 e a 042 numa transação. Só vazio,
+e isso é o ponto: a 041 começa com `DELETE FROM programacao_modelo`, e o
+`atualizar.sh` chama o instalador em produção — rodá-la com modelo existente
+apagaria o que a Logística editou.
+
+**A guarda.** `testes/test_instalacao_nova_tem_modelo.py` — banco descartável
+próprio: a ordem no instalador, as 80 linhas com a correção da 042, a segunda
+execução que não mexe, e o modelo editado que não é apagado.
+
+> **Migração que depende de dado de seed precisa de um passo depois do seed.**
+> Ordem de instalação não é garantia; é coincidência até ter teste.

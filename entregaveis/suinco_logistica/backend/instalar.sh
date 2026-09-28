@@ -228,6 +228,12 @@ ok "dependências instaladas"
 
 su -s /bin/bash "$APP_USER" -c "cd '$APP_DIR' && node scripts/migrar.js"
 su -s /bin/bash "$APP_USER" -c "cd '$APP_DIR' && node scripts/seed.js"
+# O modelo da semana DEPOIS do seed (28/09/2026): as migrações 041/042 só
+# gravam o modelo para rotas que já existem, e as rotas entram no seed. Num
+# servidor novo o modelo nascia vazio. Este passo só age com o modelo VAZIO
+# — em produção ele encontra as linhas e sai sem tocar em nada. Ver o
+# comentário de scripts/modelo_inicial.js.
+su -s /bin/bash "$APP_USER" -c "cd '$APP_DIR' && node scripts/modelo_inicial.js"
 
 # --- 6c. Chaves do aviso no celular ------------------------------------
 # As duas chaves do padrão VAPID, que é como o navegador confere que quem
