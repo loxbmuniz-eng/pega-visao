@@ -4409,3 +4409,40 @@ cai em nenhuma outra.
 > **Posição não é identidade.** Toda vez que algo é guardado para ser achado
 > depois de um redesenho, a chave tem de ser o dono do dado, nunca o lugar
 > onde ele estava.
+
+## #90 — A nota de transferência da filial não saía na linha do relatório de devolução (28/09/2026)
+
+**Como apareceu.** Relato do dono: "no relatório de devoluções não está
+aparecendo o número da nota de transferência que é colocado pelo pessoal das
+filiais, e precisa aparecer no relatório de dev na mesma linha onde falam o
+número da devolução e a data".
+
+**Reproduzido no painel publicado, antes de qualquer correção** — checklist de
+filial com nota de transferência, os dois PDFs de devolução:
+
+```
+Relação para o Operador   colunas: … Nº DEV · Data DEV · Motivo      (NT em lugar nenhum)
+Relatório de Devoluções   colunas: … Nº DEV · Data DEV · Motivo …    (NT só no subtítulo)
+```
+
+**A causa.** A nota de transferência nasceu em 16/09 como campo do CABEÇALHO do
+checklist (é uma por checklist, e o servidor a exige da filial). Os relatórios
+foram montados item a item, e o que é do cabeçalho só entrou no subtítulo do
+Relatório do dia — a Relação para o Operador, que é justamente o PDF que a
+filial gera, nunca a recebeu. Quem confere o papel lê a LINHA, não o subtítulo.
+
+**A família.** A mesma do Nº da carga de devolução (#11): dado do checklist que o papel
+precisa repetir em cada linha, porque é por linha que se confere.
+
+**A correção.** Coluna "Nota transf." entre o Nº DEV e a Data DEV, nos DOIS
+relatórios, pelas mesmas funções (`temNotaTransfDev`, `tdNotaTransfDev`,
+`colunasOpcionaisDev` em devolucoes.js). Checklist sem nota de transferência
+(os da matriz) não ganha coluna vazia, a mesma regra do Nº carga dev. A linha
+de TOTAL passou a contar as colunas opcionais pela mesma função.
+
+**A guarda.** `testes/test_nota_transferencia_no_relatorio_dev.py` — reprovou
+13 vezes contra o publicado; passa agora. Prova filial, matriz, e filial com
+Nº carga dev (as duas colunas opcionais juntas, com o TOTAL alinhado).
+
+> **O que é do cabeçalho e se confere por linha vai para a linha.** Subtítulo é
+> lido uma vez; a conferência é feita linha a linha, com o dedo.
