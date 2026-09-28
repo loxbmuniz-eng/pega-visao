@@ -1345,7 +1345,8 @@ function renderDevolucaoAberta(d, editavel) {
       <td>${cel('vendedor', i.vendedor, 'text', 'list="dl-dev-rcas"')}</td>
       <td>${cel('codCliente', i.codCliente, 'text', 'list="dl-dev-clientes" oninput="sugerirClientesDevUI(this.value)"')}
           ${i.clienteNome ? `<small class="text-dim">${esc(i.clienteNome)}</small>` : ''}</td>
-      <td class="c-peso">${cel('cx', i.cx, 'number', 'min="0" step="1"')}</td>
+      <td class="c-peso${editavel && !Number(i.cx) ? ' dev-preencher' : ''}"
+          ${editavel && !Number(i.cx) ? 'title="Falta a quantidade de caixas desta linha."' : ''}>${cel('cx', i.cx, 'number', 'min="0" step="1"')}</td>
       <td class="c-peso">${cel('peso', i.peso, 'number', 'min="0" step="0.01"')}</td>
       <td>${cel('codProduto', i.codProduto, 'text', 'list="dl-dev-produtos"')}
           ${i.produtoNome ? `<small class="text-dim">${esc(i.produtoNome)}</small>` : ''}</td>
@@ -1534,6 +1535,8 @@ function renderDevolucaoAberta(d, editavel) {
           : '')}
       ${divergencias}
       <div class="flex-end gap8 no-print" style="margin-top:10px">
+        ${editavel ? `<button class="btn btn-sec btn-sm" onclick="importarSisatakUI('${escJs(d.id)}')"
+          title="Lê o relatório WRMVE790 exportado do Sisatak (.xls) e mostra as linhas de devolução física para você escolher. Nada é gravado antes de você confirmar.">📥 Importar do Sisatak</button>` : ''}
         <button class="btn btn-sec btn-sm" onclick="relatorioOperadorDevolucoesUI('${escJs(d.id)}')"
           title="PDF deste checklist para o operador do monitoramento: nota, parcial, supervisor, RCA, cliente, caixa, peso, produto, Nº DEV, data e motivo. É o papel que acompanha a devolução até a Portaria.">📤 Relação para o operador</button>
         ${d.carimbos.portaria ? `<button class="btn btn-sec btn-sm" onclick="comprovantePortariaUI('${escJs(d.id)}')"
@@ -1865,6 +1868,19 @@ function editarItemDevolucaoUI(id, itemId, campo, valor) {
   if (campo === 'parcial') corpo = valor ? { parcial: true } : { parcial: false, parcialDesc: '' };
   // Digitou "607" numa linha já lançada: grava a linha inteira do catálogo.
   else if (campo === 'motivo') corpo = { motivo: motivoOficialDev(valor) };
+  /* A CX PREENCHIDA DEPOIS TRAZ O PESO (28/09/2026). A linha importada do
+     Sisatak entra sem caixa e sem peso; quando alguém digita a CX aqui, o
+     peso sai da conta do cadastro — só se o peso estiver VAZIO: número
+     digitado nunca é sobrescrito por conta. */
+  else if (campo === 'cx') {
+    corpo = { cx: valor };
+    const dev = (DEVOLUCOES || []).find((x) => x.id === id);
+    const it = dev && dev.itens.find((x) => x.itemId === itemId);
+    if (it && (it.peso === null || it.peso === undefined || it.peso === '')) {
+      const peso = devPesoSugerido(it.codProduto, valor);
+      if (peso !== null) corpo.peso = peso;
+    }
+  }
   else if (campo === 'codProduto') {
     corpo = { codProduto: valor, produtoNome: devProdutoNomePorCodigo(valor) };
   } else if (campo === 'codCliente') {
@@ -1919,6 +1935,145 @@ function adicionarItemDevolucaoUI(id) {
     return;
   }
   acaoDev(SuincoSharePoint.devolucoes.criarItem(id, corpo));
+}
+
+/* IMPORTAR DO SISATAK (28/09/2026).
+
+   Pedido do dono: trazer o relatório WRMVE790 para dentro do checklist "e
+   facilitar o retrabalho de ficar colocando item por item, coluna por
+   coluna, célula por célula". Decisões dele: só DEVOLUÇÃO FÍSICA entra;
+   linha sem documento (DDO) fica fora; Nº DEV inteiro; a CX o operador
+   digita — o relatório não traz quantidade.
+
+   O FLUXO: escolher o .xls → o servidor devolve a PRÉVIA (nada gravado) →
+   a pessoa marca as linhas, digita a CX de cada uma → cada linha marcada
+   entra pela MESMA rota da digitação à mão (`criarItem`). Um caminho só de
+   gravação: o checklist não sabe se a linha veio do teclado ou do arquivo.
+
+   O MOTIVO ENTRA COMO O SISATAK ESCREVEU. `motivoOficialDev` casa pelo
+   código numérico, e o "05" do Sisatak não é o "05" do cadastro do painel —
+   casar os dois trocaria o motivo em silêncio. */
+let _sisatak = null;   // { id, itens }
+
+function importarSisatakUI(id) {
+  const campo = document.createElement('input');
+  campo.type = 'file';
+  campo.accept = '.xls,application/vnd.ms-excel';
+  campo.onchange = () => {
+    const arq = campo.files && campo.files[0];
+    if (!arq) return;
+    const leitor = new FileReader();
+    leitor.onload = async () => {
+      const b64 = String(leitor.result || '').split(',')[1] || '';
+      let previa;
+      try {
+        previa = await SuincoSharePoint.devolucoes.previaSisatak(id, b64);
+      } catch (e) {
+        notify((e && e.message) || 'Não consegui ler o relatório do Sisatak.', 'danger', 9000);
+        return;
+      }
+      _sisatak = { id, itens: previa.itens || [] };
+      desenharPreviaSisatak(previa, arq.name);
+    };
+    leitor.readAsDataURL(arq);
+  };
+  campo.click();
+}
+
+function desenharPreviaSisatak(previa, nomeArquivo) {
+  let modal = document.getElementById('modal-sisatak');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.className = 'modal-overlay';
+    modal.id = 'modal-sisatak';
+    document.body.appendChild(modal);
+  }
+  const fora = previa.fora || {};
+  const partesFora = Object.entries(fora.outroTipo || {})
+    .map(([tipo, n]) => `${n} de ${esc(/^\d+\s*-/.test(tipo)
+      ? tipo.replace(/^\d+\s*-\s*/, '').toLowerCase() : tipo)}`);
+  if (fora.semDocumento) partesFora.push(`${fora.semDocumento} sem documento de devolução`);
+  const itens = _sisatak.itens;
+  /* A planilha limpa não traz data: a linha fica com a data do checklist,
+     que é o que a digitação à mão já faz. */
+  const devAtual = (DEVOLUCOES || []).find((x) => x.id === _sisatak.id) || {};
+  const dataDoChecklist = String(devAtual.dataDev || diaLocalDev()).slice(0, 10);
+  _sisatak.data = dataDoChecklist;
+  const linha = (it, k) => {
+    const ja = it.jaNoChecklist !== null && it.jaNoChecklist !== undefined;
+    return `<tr class="${ja ? 'sis-ja' : ''}">
+      <td><input type="checkbox" id="sis-${k}-ok" ${ja ? '' : 'checked'}
+            aria-label="Importar esta linha"></td>
+      <td>${esc(it.nota)}</td>
+      <td>${esc(it.codCliente)}${it.clienteNome ? ' — ' + esc(it.clienteNome) : ''}</td>
+      <td>${esc(it.codProduto)}${it.produtoNome ? '-' + esc(it.produtoNome) : ''}</td>
+      <td class="sis-dev">${esc(it.numDev)}${ja ? `<br><small class="text-warn">já está no checklist Nº ${esc(it.jaNoChecklist)}</small>` : ''}</td>
+      <td>${esc((it.dataItem || dataDoChecklist).split('-').reverse().join('/'))}</td>
+      <td><small>${esc(it.motivo)}</small></td>
+    </tr>`;
+  };
+  modal.innerHTML = `<div class="modal-box modal-box-sisatak">
+      <h2>Importar do Sisatak</h2>
+      <div class="card-sub">${esc(nomeArquivo || '')} · <strong>${itens.length} linha(s) de devolução física</strong>
+        ${partesFora.length ? ` · ficaram fora: ${partesFora.join(', ')}` : ''}</div>
+      ${itens.length ? `<div class="table-wrap"><table class="dev-tabela sis-tabela">
+        <thead><tr><th></th><th>Nota</th><th>Cliente</th><th>Produto</th><th>Nº DEV</th>
+          <th>Data DEV</th><th>Motivo</th></tr></thead>
+        <tbody>${itens.map(linha).join('')}</tbody></table></div>
+        <div class="card-sub">A <strong>CX</strong> e o <strong>Parcial/Total</strong> vocês preenchem depois, direto
+          no checklist — as linhas entram com a CX zerada e marcada para preencher. Ao digitar a CX, o peso
+          sai sozinho (CX × quilo da caixa do cadastro).</div>`
+        : '<div class="card-sub">Nenhuma linha de devolução física neste arquivo.</div>'}
+      <div class="flex-end gap8" style="margin-top:12px">
+        <button class="btn btn-sec" onclick="fecharPreviaSisatak()">Cancelar</button>
+        ${itens.length ? `<button class="btn btn-primary" onclick="confirmarImportacaoSisatakUI()">📥 Lançar as linhas marcadas</button>` : ''}
+      </div>
+    </div>`;
+  modal.classList.add('open');
+}
+
+function fecharPreviaSisatak() {
+  const modal = document.getElementById('modal-sisatak');
+  if (modal) modal.classList.remove('open');
+  _sisatak = null;
+}
+
+async function confirmarImportacaoSisatakUI() {
+  if (!_sisatak) return;
+  const { id, itens } = _sisatak;
+  /* A CX e o Parcial/Total ficam para depois, no próprio checklist
+     (decisão do dono, 28/09/2026: "deixa pra que elas preencham o número
+     de caixas e se é total ou parcial depois"). A linha entra com o que o
+     banco dá de partida — CX 0 e Parcial, o mesmo da linha nova digitada —
+     e a CX zerada aparece marcada no checklist até alguém preencher. */
+  const escolhidas = itens.filter((_, k) => (document.getElementById(`sis-${k}-ok`) || {}).checked)
+    .map((it) => ({ it }));
+  if (!escolhidas.length) { notify('Nenhuma linha marcada.', 'warn'); return; }
+  /* Uma por vez, na ordem do relatório: é a ordem em que a capa de papel
+     chega, e duas gravações em voo no mesmo checklist já deram a #16. */
+  let lancadas = 0;
+  for (const e of escolhidas) {
+    const it = e.it;
+    try {
+      await SuincoSharePoint.devolucoes.criarItem(id, {
+        nota: it.nota,
+        supervisor: it.supervisor, vendedor: it.vendedor,
+        codCliente: it.codCliente, clienteNome: it.clienteNome,
+        codProduto: it.codProduto, produtoNome: it.produtoNome,
+        numDev: it.numDev, motivo: it.motivo, dataItem: it.dataItem || _sisatak.data,
+      });
+      lancadas++;
+    } catch (err) {
+      notify(`Lancei ${lancadas} de ${escolhidas.length}. A linha ${it.numDev} foi recusada: `
+        + ((err && err.message) || 'erro do servidor') + '. As seguintes não foram lançadas.', 'danger', 12000);
+      fecharPreviaSisatak();
+      await carregarDevolucoes();
+      return;
+    }
+  }
+  fecharPreviaSisatak();
+  await carregarDevolucoes();
+  notify(`${lancadas} linha(s) do Sisatak lançada(s). Falta preencher a CX e o Parcial/Total de cada uma.`, 'success', 8000);
 }
 
 /* Outra parcial da MESMA nota (18/08/2026). O caso real: o cliente devolve

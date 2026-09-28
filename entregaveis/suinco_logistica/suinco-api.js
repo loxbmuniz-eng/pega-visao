@@ -2088,6 +2088,12 @@ const SuincoSharePoint = (function () {
       return chamar('/api/devolucoes/' + encodeURIComponent(id) + '/desfazer',
         { metodo: 'POST', corpo: motivo ? { motivo } : {} });
     },
+    /* A prévia do relatório WRMVE790 do Sisatak: o servidor lê o .xls e
+       devolve as linhas que entrariam. Não grava nada. */
+    previaSisatak(id, arquivoBase64) {
+      return chamar('/api/devolucoes/' + encodeURIComponent(id) + '/sisatak',
+        { metodo: 'POST', corpo: { arquivo: arquivoBase64 }, timeoutMs: 60000 });
+    },
     criarItem(id, corpo) {
       return chamar('/api/devolucoes/' + encodeURIComponent(id) + '/itens', { metodo: 'POST', corpo });
     },
