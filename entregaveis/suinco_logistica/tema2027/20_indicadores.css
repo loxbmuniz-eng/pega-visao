@@ -189,3 +189,40 @@
   .gv-cab{ padding-top:6px }
 }
 }
+
+/* O PULSO SEM CAIXINHA (28/09/2026).
+
+   Pedido do dono: "menos caixinha" no Pulso. Os três números nasciam cada
+   um num cartão com fundo, borda e filete — três molduras para três
+   números, dentro de um cartão que já é moldura. Aqui viram uma FAIXA
+   aberta: números grandes, separados por um fio, sem fundo nem borda.
+
+   O "mais parado" que passou do limite continua gritando, mas só pela cor
+   do NÚMERO — o filete vinho à esquerda sai junto com a caixa.
+
+   Dentro de @media screen como todo o tema2027: o relatório impresso lê o
+   mesmo CSS e não muda (test_tema2027_so_tela). */
+@media screen{
+  .pulso-numeros{
+    gap:0; margin-bottom:18px;
+    grid-template-columns:repeat(auto-fit,minmax(140px,1fr));
+  }
+  .pulso-num{
+    background:none; border:0; border-radius:0;
+    border-left:1px solid var(--border-soft);
+    padding:2px 18px 4px;
+  }
+  .pulso-num:first-child{ border-left:0; padding-left:2px }
+  .pulso-num.alerta{ border-left-color:var(--border-soft) }
+  .pulso-num .v{ font-size:38px; line-height:1 }
+  .pulso-num .r{ margin-top:6px }
+  /* No celular a faixa vira duas colunas: o fio só separa vizinhos da
+     MESMA linha — o primeiro de cada linha não tem ninguém à esquerda. */
+  @media (max-width:560px){
+    .pulso-numeros{ grid-template-columns:1fr 1fr; row-gap:14px }
+    .pulso-num{ padding:2px 10px 4px }
+    .pulso-num:nth-child(odd){ border-left:0; padding-left:2px }
+    .pulso-num .v{ font-size:28px }
+  }
+}
+
