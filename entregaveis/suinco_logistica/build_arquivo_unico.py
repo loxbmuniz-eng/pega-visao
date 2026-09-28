@@ -290,6 +290,16 @@ def main():
     if n_dev != 1:
         sys.exit(f'ERRO: esperava 1 script para devolucoes.js, encontrei {n_dev}')
 
+    # 5c. Pátio ao vivo (28/09/2026) — depois de app.js e do motor de
+    # gráfico, que ele usa.
+    html, n_pv = re.subn(
+        r'<script src="patio_vivo\.js"></script>',
+        lambda _: '<script>\n' + ler('patio_vivo.js') + '\n</script>',
+        html,
+    )
+    if n_pv != 1:
+        sys.exit(f'ERRO: esperava 1 script para patio_vivo.js, encontrei {n_pv}')
+
     # Nada pode sobrar apontando para arquivo externo, senão quebra offline.
     #
     # Exceção única: o manifest do PWA. Ele não pode ser embutido — o
