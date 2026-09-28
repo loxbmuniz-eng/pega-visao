@@ -20,16 +20,33 @@
    ===================================================================== */
 
 /* As colunas pelo NOME do cabeçalho, nunca pela posição: se o Sisatak
-   acrescentar uma coluna no meio, a leitura continua certa — ou recusa
-   dizendo qual coluna faltou, em vez de ler o campo vizinho. */
-const COLUNAS = {
-  nf: 'Documento_NF', cliente: 'Cliente', supervisor: 'Supervisor',
-  representante: 'Representante', valorNf: 'Valor_Total_NF',
-  dev: 'Documento_DEN-DEV', dataDev: 'Data_DEN-DEV', produto: 'Produto',
-  valorDev: 'Valor_Total_DEN-DEV', tipo: 'Tipo_Devolucao', motivo: 'Motivo_Devolucao',
+   acrescentar ou tirar uma coluna, a leitura continua certa — ou recusa
+   dizendo qual coluna faltou, em vez de ler o campo vizinho.
+
+   DOIS FORMATOS, o mesmo leitor. O relatório completo tem 23 colunas; o
+   que o operador de fato vai trazer (28/09/2026, pedido do dono) é a
+   planilha LIMPA, com 7: nota, cliente, supervisor, representante, Nº DEV,
+   produto e motivo. Só as três primeiras abaixo são obrigatórias. */
+const OBRIGATORIAS = { nf: 'Documento_NF', dev: 'Documento_DEN-DEV', produto: 'Produto' };
+const OPCIONAIS = {
+  cliente: 'Cliente', supervisor: 'Supervisor', representante: 'Representante',
+  motivo: 'Motivo_Devolucao', dataDev: 'Data_DEN-DEV', tipo: 'Tipo_Devolucao',
+  valorNf: 'Valor_Total_NF', valorDev: 'Valor_Total_DEN-DEV',
 };
 
-export const TIPO_QUE_ENTRA = '01';   // "01 - DEVOLUÇÃO FÍSICA"
+export const TIPO_QUE_ENTRA = '01';   // "01 - DEVOLUÇÃO FÍSICA", quando a coluna existe
+
+/* SEM A COLUNA DE TIPO (planilha limpa), quem separa é o documento.
+   No relatório completo de 28/09/2026 a separação foi exata: as 5 linhas
+   de DEVOLUÇÃO FÍSICA eram todas "-DEV"; as 34 de refaturamento e quebra
+   de peso, todas "-DEN". Então: "-DEV" entra, "-DEN" fica fora — e a
+   prévia diz quantas ficaram fora por isso. */
+export const SUFIXO_QUE_ENTRA = 'DEV';
+
+/* O documento do Sisatak: 103-001-53188-DEV. É também o que separa linha
+   de dado de linha de rodapé ("Cod. Representante:", "Página -1 de 1"):
+   rodapé não tem este formato. */
+const DOCUMENTO = /^\d+-\d+-\d+-([A-Z]+)$/;
 
 const txt = (v) => String(v ?? '').trim();
 
@@ -58,30 +75,39 @@ export function dataIso(v) {
    fora e por quê: quem importa precisa ver que 39 linhas não entraram de
    propósito, e não achar que a importação perdeu dado. */
 export function previaDoSisatak(linhas) {
-  const iCab = linhas.findIndex((l) => l.some((c) => txt(c) === COLUNAS.dev));
+  const iCab = linhas.findIndex((l) => l.some((c) => txt(c) === OBRIGATORIAS.dev));
   if (iCab < 0) {
     throw new Error('Este arquivo não é o relatório WRMVE790 do Sisatak: não achei a coluna '
-      + `"${COLUNAS.dev}".`);
+      + `"${OBRIGATORIAS.dev}".`);
   }
   const cab = linhas[iCab].map(txt);
   const pos = {};
-  for (const [chave, nome] of Object.entries(COLUNAS)) {
+  for (const [chave, nome] of Object.entries(OBRIGATORIAS)) {
     pos[chave] = cab.indexOf(nome);
     if (pos[chave] < 0) {
-      throw new Error(`O relatório do Sisatak veio sem a coluna "${nome}". Exporte o WRMVE790 completo.`);
+      throw new Error(`O relatório do Sisatak veio sem a coluna "${nome}". Ela é obrigatória.`);
     }
   }
+  for (const [chave, nome] of Object.entries(OPCIONAIS)) pos[chave] = cab.indexOf(nome);
+  const temTipo = pos.tipo >= 0;
+  const temValores = pos.valorNf >= 0 && pos.valorDev >= 0;
   const fora = { outroTipo: {}, semDocumento: 0 };
   const itens = [];
   for (const l of linhas.slice(iCab + 1)) {
-    const c = (k) => l[pos[k]];
+    const c = (k) => (pos[k] >= 0 ? l[pos[k]] : '');
     const doc = txt(c('dev'));
-    if (!txt(c('nf')) && !doc) continue;                        // linha vazia
-    if (/^filtros/i.test(txt(l[0])) || /^tic\b/i.test(txt(l[0]))) break;   // o rodapé
-    if (!doc || /^n[ãa]o possui$/i.test(doc)) { fora.semDocumento++; continue; }
-    const tipo = txt(c('tipo'));
-    if (!tipo.startsWith(TIPO_QUE_ENTRA)) {
-      const rotulo = tipo || 'Não informado';
+    if (/^n[ãa]o possui$/i.test(doc)) { fora.semDocumento++; continue; }
+    const m = doc.match(DOCUMENTO);
+    if (!m || !DOCUMENTO.test(txt(c('nf')))) continue;          // vazia ou rodapé
+    if (temTipo) {
+      const tipo = txt(c('tipo'));
+      if (!tipo.startsWith(TIPO_QUE_ENTRA)) {
+        const rotulo = tipo || 'Não informado';
+        fora.outroTipo[rotulo] = (fora.outroTipo[rotulo] || 0) + 1;
+        continue;
+      }
+    } else if (m[1] !== SUFIXO_QUE_ENTRA) {
+      const rotulo = `documento ${m[1]} (não é devolução física)`;
       fora.outroTipo[rotulo] = (fora.outroTipo[rotulo] || 0) + 1;
       continue;
     }
@@ -99,11 +125,13 @@ export function previaDoSisatak(linhas) {
       codProduto: produto.codigo,
       produtoNome: produto.nome,
       numDev: doc,
-      dataItem: dataIso(c('dataDev')),
+      dataItem: dataIso(c('dataDev')),      // null na planilha limpa: vale a data do checklist
       motivo: txt(c('motivo')),
-      /* SUGESTÃO, não decisão: devolveu menos do que a nota daquele produto
-         vendeu, então é parcial. A pessoa confirma na prévia. */
-      parcialSugerido: Number.isFinite(valorNf) && Number.isFinite(valorDev) && valorDev < valorNf,
+      /* SUGESTÃO, não decisão, e só quando há valores para comparar:
+         devolveu menos do que a nota daquele produto vendeu → parcial.
+         Sem valores (planilha limpa) é null, e a pessoa escolhe. */
+      parcialSugerido: temValores && Number.isFinite(valorNf) && Number.isFinite(valorDev)
+        ? valorDev < valorNf : null,
     });
   }
   return { itens, fora };

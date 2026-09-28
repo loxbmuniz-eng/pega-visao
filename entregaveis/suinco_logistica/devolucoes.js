@@ -1976,9 +1976,15 @@ function desenharPreviaSisatak(previa, nomeArquivo) {
   }
   const fora = previa.fora || {};
   const partesFora = Object.entries(fora.outroTipo || {})
-    .map(([tipo, n]) => `${n} de ${esc(tipo.replace(/^\d+\s*-\s*/, '').toLowerCase())}`);
+    .map(([tipo, n]) => `${n} de ${esc(/^\d+\s*-/.test(tipo)
+      ? tipo.replace(/^\d+\s*-\s*/, '').toLowerCase() : tipo)}`);
   if (fora.semDocumento) partesFora.push(`${fora.semDocumento} sem documento de devolução`);
   const itens = _sisatak.itens;
+  /* A planilha limpa não traz data: a linha fica com a data do checklist,
+     que é o que a digitação à mão já faz. */
+  const devAtual = (DEVOLUCOES || []).find((x) => x.id === _sisatak.id) || {};
+  const dataDoChecklist = String(devAtual.dataDev || diaLocalDev()).slice(0, 10);
+  _sisatak.data = dataDoChecklist;
   const linha = (it, k) => {
     const ja = it.jaNoChecklist !== null && it.jaNoChecklist !== undefined;
     return `<tr class="${ja ? 'sis-ja' : ''}">
@@ -1988,12 +1994,14 @@ function desenharPreviaSisatak(previa, nomeArquivo) {
       <td>${esc(it.codCliente)}${it.clienteNome ? ' — ' + esc(it.clienteNome) : ''}</td>
       <td>${esc(it.codProduto)}${it.produtoNome ? '-' + esc(it.produtoNome) : ''}</td>
       <td class="sis-dev">${esc(it.numDev)}${ja ? `<br><small class="text-warn">já está no checklist Nº ${esc(it.jaNoChecklist)}</small>` : ''}</td>
-      <td>${it.dataItem ? esc(it.dataItem.split('-').reverse().join('/')) : '—'}</td>
+      <td>${esc((it.dataItem || dataDoChecklist).split('-').reverse().join('/'))}</td>
       <td><small>${esc(it.motivo)}</small></td>
-      <td><select id="sis-${k}-parcial" onchange="document.getElementById('sis-${k}-pdesc').hidden = !this.value">
-            <option value="1" ${it.parcialSugerido ? 'selected' : ''}>Parcial</option>
-            <option value="" ${it.parcialSugerido ? '' : 'selected'}>Total</option></select>
-          <input type="text" id="sis-${k}-pdesc" placeholder="Nº parcial" ${it.parcialSugerido ? '' : 'hidden'}></td>
+      <td><select id="sis-${k}-parcial" onchange="document.getElementById('sis-${k}-pdesc').hidden = this.value !== 'P'">
+            ${it.parcialSugerido === null || it.parcialSugerido === undefined
+              ? '<option value="" selected>— escolha —</option>' : ''}
+            <option value="P" ${it.parcialSugerido === true ? 'selected' : ''}>Parcial</option>
+            <option value="T" ${it.parcialSugerido === false ? 'selected' : ''}>Total</option></select>
+          <input type="text" id="sis-${k}-pdesc" placeholder="Nº parcial" ${it.parcialSugerido === true ? '' : 'hidden'}></td>
       <td class="c-peso"><input type="text" inputmode="numeric" id="sis-${k}-cx" placeholder="CX"
             aria-label="Caixas desta linha"></td>
     </tr>`;
@@ -2036,7 +2044,17 @@ async function confirmarImportacaoSisatakUI() {
       if (campo) campo.focus();
       return;
     }
-    const parcial = !!(document.getElementById(`sis-${k}-parcial`) || {}).value;
+    /* Parcial ou Total: sem os valores da nota (planilha limpa) o painel
+       não sugere, e a linha não entra sem a escolha — adivinhar aqui é
+       gravar parcial numa devolução total. */
+    const pt = (document.getElementById(`sis-${k}-parcial`) || {}).value;
+    if (pt !== 'P' && pt !== 'T') {
+      notify(`Escolha Parcial ou Total na linha ${k + 1} (${itens[k].numDev}).`, 'warn', 7000);
+      const campo = document.getElementById(`sis-${k}-parcial`);
+      if (campo) campo.focus();
+      return;
+    }
+    const parcial = pt === 'P';
     escolhidas.push({ it: itens[k], cx, parcial,
       parcialDesc: parcial ? ((document.getElementById(`sis-${k}-pdesc`) || {}).value || '').trim() : '' });
   }
@@ -2053,7 +2071,7 @@ async function confirmarImportacaoSisatakUI() {
         codCliente: it.codCliente, clienteNome: it.clienteNome,
         cx: e.cx, peso: devPesoSugerido(it.codProduto, e.cx) ?? '',
         codProduto: it.codProduto, produtoNome: it.produtoNome,
-        numDev: it.numDev, motivo: it.motivo, dataItem: it.dataItem,
+        numDev: it.numDev, motivo: it.motivo, dataItem: it.dataItem || _sisatak.data,
       });
       lancadas++;
     } catch (err) {
