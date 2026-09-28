@@ -104,7 +104,10 @@ async def main():
     dest = psql("SELECT destino || '|' || km FROM frete_destinos "
                 "WHERE ativo AND km > 0 LIMIT 1;").stdout.strip()
     destino, km_cad = dest.split('|')
-    km_cad = int(km_cad)
+    # float, não int: desde a migração 056 (28/09/2026) o KM é NUMERIC(10,2)
+    # e o psql devolve "475.00". A API devolve número; comparar número com
+    # número continua exato para KM inteiro.
+    km_cad = float(km_cad)
     tarifa = float(psql(f"SELECT valor_por_km FROM frete_tarifas "
                         f"WHERE tipo_veiculo = '{tipo}';").stdout.strip())
     ck('cadastro tem destino, placa e tarifa', True,
