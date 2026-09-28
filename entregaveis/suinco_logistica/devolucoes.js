@@ -1345,7 +1345,8 @@ function renderDevolucaoAberta(d, editavel) {
       <td>${cel('vendedor', i.vendedor, 'text', 'list="dl-dev-rcas"')}</td>
       <td>${cel('codCliente', i.codCliente, 'text', 'list="dl-dev-clientes" oninput="sugerirClientesDevUI(this.value)"')}
           ${i.clienteNome ? `<small class="text-dim">${esc(i.clienteNome)}</small>` : ''}</td>
-      <td class="c-peso">${cel('cx', i.cx, 'number', 'min="0" step="1"')}</td>
+      <td class="c-peso${editavel && !Number(i.cx) ? ' dev-preencher' : ''}"
+          ${editavel && !Number(i.cx) ? 'title="Falta a quantidade de caixas desta linha."' : ''}>${cel('cx', i.cx, 'number', 'min="0" step="1"')}</td>
       <td class="c-peso">${cel('peso', i.peso, 'number', 'min="0" step="0.01"')}</td>
       <td>${cel('codProduto', i.codProduto, 'text', 'list="dl-dev-produtos"')}
           ${i.produtoNome ? `<small class="text-dim">${esc(i.produtoNome)}</small>` : ''}</td>
@@ -1867,6 +1868,19 @@ function editarItemDevolucaoUI(id, itemId, campo, valor) {
   if (campo === 'parcial') corpo = valor ? { parcial: true } : { parcial: false, parcialDesc: '' };
   // Digitou "607" numa linha já lançada: grava a linha inteira do catálogo.
   else if (campo === 'motivo') corpo = { motivo: motivoOficialDev(valor) };
+  /* A CX PREENCHIDA DEPOIS TRAZ O PESO (28/09/2026). A linha importada do
+     Sisatak entra sem caixa e sem peso; quando alguém digita a CX aqui, o
+     peso sai da conta do cadastro — só se o peso estiver VAZIO: número
+     digitado nunca é sobrescrito por conta. */
+  else if (campo === 'cx') {
+    corpo = { cx: valor };
+    const dev = (DEVOLUCOES || []).find((x) => x.id === id);
+    const it = dev && dev.itens.find((x) => x.itemId === itemId);
+    if (it && (it.peso === null || it.peso === undefined || it.peso === '')) {
+      const peso = devPesoSugerido(it.codProduto, valor);
+      if (peso !== null) corpo.peso = peso;
+    }
+  }
   else if (campo === 'codProduto') {
     corpo = { codProduto: valor, produtoNome: devProdutoNomePorCodigo(valor) };
   } else if (campo === 'codCliente') {
@@ -1996,14 +2010,6 @@ function desenharPreviaSisatak(previa, nomeArquivo) {
       <td class="sis-dev">${esc(it.numDev)}${ja ? `<br><small class="text-warn">já está no checklist Nº ${esc(it.jaNoChecklist)}</small>` : ''}</td>
       <td>${esc((it.dataItem || dataDoChecklist).split('-').reverse().join('/'))}</td>
       <td><small>${esc(it.motivo)}</small></td>
-      <td><select id="sis-${k}-parcial" onchange="document.getElementById('sis-${k}-pdesc').hidden = this.value !== 'P'">
-            ${it.parcialSugerido === null || it.parcialSugerido === undefined
-              ? '<option value="" selected>— escolha —</option>' : ''}
-            <option value="P" ${it.parcialSugerido === true ? 'selected' : ''}>Parcial</option>
-            <option value="T" ${it.parcialSugerido === false ? 'selected' : ''}>Total</option></select>
-          <input type="text" id="sis-${k}-pdesc" placeholder="Nº parcial" ${it.parcialSugerido === true ? '' : 'hidden'}></td>
-      <td class="c-peso"><input type="text" inputmode="numeric" id="sis-${k}-cx" placeholder="CX"
-            aria-label="Caixas desta linha"></td>
     </tr>`;
   };
   modal.innerHTML = `<div class="modal-box modal-box-sisatak">
@@ -2012,10 +2018,11 @@ function desenharPreviaSisatak(previa, nomeArquivo) {
         ${partesFora.length ? ` · ficaram fora: ${partesFora.join(', ')}` : ''}</div>
       ${itens.length ? `<div class="table-wrap"><table class="dev-tabela sis-tabela">
         <thead><tr><th></th><th>Nota</th><th>Cliente</th><th>Produto</th><th>Nº DEV</th>
-          <th>Data DEV</th><th>Motivo</th><th>P/T</th><th>CX</th></tr></thead>
+          <th>Data DEV</th><th>Motivo</th></tr></thead>
         <tbody>${itens.map(linha).join('')}</tbody></table></div>
-        <div class="card-sub">Digite a CX de cada linha marcada — o relatório do Sisatak não traz a quantidade.
-          O peso sai da CX × quilo da caixa do cadastro, como na digitação.</div>`
+        <div class="card-sub">A <strong>CX</strong> e o <strong>Parcial/Total</strong> vocês preenchem depois, direto
+          no checklist — as linhas entram com a CX zerada e marcada para preencher. Ao digitar a CX, o peso
+          sai sozinho (CX × quilo da caixa do cadastro).</div>`
         : '<div class="card-sub">Nenhuma linha de devolução física neste arquivo.</div>'}
       <div class="flex-end gap8" style="margin-top:12px">
         <button class="btn btn-sec" onclick="fecharPreviaSisatak()">Cancelar</button>
@@ -2034,30 +2041,13 @@ function fecharPreviaSisatak() {
 async function confirmarImportacaoSisatakUI() {
   if (!_sisatak) return;
   const { id, itens } = _sisatak;
-  const escolhidas = [];
-  for (let k = 0; k < itens.length; k++) {
-    if (!(document.getElementById(`sis-${k}-ok`) || {}).checked) continue;
-    const cx = quantidadeDigitada((document.getElementById(`sis-${k}-cx`) || {}).value);
-    if (!cx || cx <= 0) {
-      notify(`Falta a CX da linha ${k + 1} (${itens[k].numDev}). Digite as caixas ou desmarque a linha.`, 'warn', 7000);
-      const campo = document.getElementById(`sis-${k}-cx`);
-      if (campo) campo.focus();
-      return;
-    }
-    /* Parcial ou Total: sem os valores da nota (planilha limpa) o painel
-       não sugere, e a linha não entra sem a escolha — adivinhar aqui é
-       gravar parcial numa devolução total. */
-    const pt = (document.getElementById(`sis-${k}-parcial`) || {}).value;
-    if (pt !== 'P' && pt !== 'T') {
-      notify(`Escolha Parcial ou Total na linha ${k + 1} (${itens[k].numDev}).`, 'warn', 7000);
-      const campo = document.getElementById(`sis-${k}-parcial`);
-      if (campo) campo.focus();
-      return;
-    }
-    const parcial = pt === 'P';
-    escolhidas.push({ it: itens[k], cx, parcial,
-      parcialDesc: parcial ? ((document.getElementById(`sis-${k}-pdesc`) || {}).value || '').trim() : '' });
-  }
+  /* A CX e o Parcial/Total ficam para depois, no próprio checklist
+     (decisão do dono, 28/09/2026: "deixa pra que elas preencham o número
+     de caixas e se é total ou parcial depois"). A linha entra com o que o
+     banco dá de partida — CX 0 e Parcial, o mesmo da linha nova digitada —
+     e a CX zerada aparece marcada no checklist até alguém preencher. */
+  const escolhidas = itens.filter((_, k) => (document.getElementById(`sis-${k}-ok`) || {}).checked)
+    .map((it) => ({ it }));
   if (!escolhidas.length) { notify('Nenhuma linha marcada.', 'warn'); return; }
   /* Uma por vez, na ordem do relatório: é a ordem em que a capa de papel
      chega, e duas gravações em voo no mesmo checklist já deram a #16. */
@@ -2066,10 +2056,9 @@ async function confirmarImportacaoSisatakUI() {
     const it = e.it;
     try {
       await SuincoSharePoint.devolucoes.criarItem(id, {
-        nota: it.nota, parcial: e.parcial, parcialDesc: e.parcialDesc,
+        nota: it.nota,
         supervisor: it.supervisor, vendedor: it.vendedor,
         codCliente: it.codCliente, clienteNome: it.clienteNome,
-        cx: e.cx, peso: devPesoSugerido(it.codProduto, e.cx) ?? '',
         codProduto: it.codProduto, produtoNome: it.produtoNome,
         numDev: it.numDev, motivo: it.motivo, dataItem: it.dataItem || _sisatak.data,
       });
@@ -2084,7 +2073,7 @@ async function confirmarImportacaoSisatakUI() {
   }
   fecharPreviaSisatak();
   await carregarDevolucoes();
-  notify(`${lancadas} linha(s) do Sisatak lançada(s) no checklist.`, 'success', 6000);
+  notify(`${lancadas} linha(s) do Sisatak lançada(s). Falta preencher a CX e o Parcial/Total de cada uma.`, 'success', 8000);
 }
 
 /* Outra parcial da MESMA nota (18/08/2026). O caso real: o cliente devolve

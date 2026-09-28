@@ -3839,6 +3839,9 @@ body.painel-entrando > :not(#modal-operador):not(#notif){
 .sis-tabela select{ width: 92px; }
 .sis-tabela tr.sis-ja{ opacity: .62; }
 .sis-tabela td.sis-dev{ white-space: nowrap; }
+/* CX que ainda falta preencher (linha vinda do Sisatak): borda âmbar, a
+   mesma cor de "atenção" do painel. Some quando a caixa é digitada. */
+td.dev-preencher input{ border-color: var(--warn); box-shadow: 0 0 0 1px var(--warn); }
 #revisoes-lista{ display:flex; flex-direction:column; gap:10px; max-height:52vh; overflow-y:auto; margin:10px 0; }
 .revisao-item{
   border:1px solid var(--borda, rgba(255,255,255,.12));

@@ -12,8 +12,9 @@ teste dela em backend/testes/devolucoes.test.js, bloco 20):
   1. quem lança item vê o botão; a Portaria não;
   2. a prévia diz quantas linhas entram e quantas ficaram fora, e por quê;
   3. linha que já está noutro checklist vem DESMARCADA, dizendo qual;
-  4. sem a CX, ou sem escolher Parcial/Total, nada é gravado — e o aviso
-     diz qual linha falta;
+  4. a prévia NÃO pede CX nem Parcial/Total: isso se preenche depois, no
+     checklist (decisão do dono) — a CX zerada vem marcada, e digitá-la
+     traz o peso da conta quando o peso está vazio;
   5. o que entra vai pela MESMA rota da digitação (`criarItem`), com o Nº
      DEV inteiro, o motivo como o Sisatak escreveu e a data do checklist;
   6. cancelar não grava nada.
@@ -115,38 +116,56 @@ async def main():
         ck('as novas marcadas, a repetida não', marc == [True, True, False], str(marc))
         ck('e diz em qual checklist ela está', 'checklist Nº 900777' in await pg.inner_text('#modal-sisatak'))
 
-        print('\n=== 4. SEM CX OU SEM PARCIAL/TOTAL, NADA É GRAVADO ===')
-        avisos = await pg.evaluate("""async () => { const a = []; const o = window.notify;
-            window.notify = (m) => a.push(String(m));
-            try { await confirmarImportacaoSisatakUI(); } finally { window.notify = o; } return a; }""")
-        ck('sem CX: não grava', await pg.evaluate("window.__lancadas.length") == 0)
-        ck('e o aviso diz a linha', any('CX' in a and 'linha 1' in a for a in avisos), str(avisos)[:120])
-        await pg.fill('#sis-0-cx', '4')
-        await pg.fill('#sis-1-cx', '2')
-        avisos = await pg.evaluate("""async () => { const a = []; const o = window.notify;
-            window.notify = (m) => a.push(String(m));
-            try { await confirmarImportacaoSisatakUI(); } finally { window.notify = o; } return a; }""")
-        ck('sem escolher Parcial/Total: não grava', await pg.evaluate("window.__lancadas.length") == 0)
-        ck('e o aviso pede a escolha', any('Parcial ou Total' in a for a in avisos), str(avisos)[:120])
+        print('\n=== 4. A PRÉVIA NÃO PEDE CX NEM PARCIAL/TOTAL — ISSO É DEPOIS ===')
+        campos = await pg.evaluate("() => document.querySelectorAll('#modal-sisatak input[id$=\"-cx\"], #modal-sisatak select').length")
+        ck('a prévia não tem campo de CX nem de Parcial/Total', campos == 0, str(campos))
 
         print('\n=== 5. O QUE ENTRA VAI PELA ROTA DE SEMPRE, COMO VEIO ===')
-        await pg.select_option('#sis-0-parcial', 'T')
-        await pg.select_option('#sis-1-parcial', 'P')
-        await pg.fill('#sis-1-pdesc', '123')
         await pg.evaluate("() => confirmarImportacaoSisatakUI()")
         await pg.wait_for_timeout(300)
         lan = await pg.evaluate("window.__lancadas")
         ck('duas linhas lançadas, no checklist certo', len(lan) == 2 and all(x[0] == 'dev-sis' for x in lan), str(len(lan)))
         if len(lan) == 2:
-            a, b = lan[0][1], lan[1][1]
+            a = lan[0][1]
             ck('Nº DEV inteiro', a['numDev'] == '103-001-990001-DEV', a['numDev'])
             ck('motivo como o Sisatak escreveu (não trocado pelo cadastro do painel)',
                a['motivo'] == '05 - TRANSPORTE/FALTA DE MERCADORIA', a['motivo'])
             ck('data do checklist', a['dataItem'] == '2026-09-28', str(a['dataItem']))
-            ck('CX digitada', a['cx'] == 4 and b['cx'] == 2, f"{a['cx']} {b['cx']}")
-            ck('Total e Parcial como escolhidos, com o Nº parcial',
-               a['parcial'] is False and b['parcial'] is True and b['parcialDesc'] == '123', str(b))
+            ck('sem CX e sem Parcial/Total — ficam para o checklist',
+               'cx' not in a and 'parcial' not in a, str(sorted(a.keys())))
         ck('a prévia fecha', not await pg.evaluate("document.getElementById('modal-sisatak').classList.contains('open')"))
+
+        print('\n=== 5b. NO CHECKLIST: A CX ZERADA APARECE PARA PREENCHER, E TRAZ O PESO ===')
+        marcada = await pg.evaluate("""() => {
+          const d = DEVOLUCOES[0];
+          d.itens = [{ itemId: 7, nota: '900101', parcial: true, parcialDesc: '', supervisor: '', vendedor: '',
+            codCliente: '900001', clienteNome: '', cx: 0, peso: null, codProduto: '900501', produtoNome: '',
+            numDev: '103-001-990001-DEV', cargaDev: '', dataItem: '2026-09-28', motivo: 'X', qtdRecebida: null,
+            falta: null, pesoFaturamento: null, notaFinal: false, okExpedicao: false, okDestinacao: false }];
+          DEV_CADASTROS.produtos = [{ codigo: '900501', nome: 'PRODUTO TESTE', pesoCaixaKg: 12.5 }];
+          renderListaDevolucoes();
+          const cel = document.getElementById('dev-it-7-cx');
+          return !!cel && cel.closest('td').classList.contains('dev-preencher');
+        }""")
+        ck('a CX zerada vem marcada para preencher', marcada)
+        editado = await pg.evaluate("""async () => {
+          let pedido = null;
+          const o = SuincoSharePoint.devolucoes.editarItem;
+          SuincoSharePoint.devolucoes.editarItem = async (id, itemId, corpo) => { pedido = corpo; return corpo; };
+          try { await editarItemDevolucaoUI('dev-sis', 7, 'cx', '4'); } finally { SuincoSharePoint.devolucoes.editarItem = o; }
+          return pedido;
+        }""")
+        ck('digitar a CX depois grava a CX e o peso da conta (4 × 12,5 = 50)',
+           editado and str(editado.get('cx')) == '4' and editado.get('peso') == 50, str(editado))
+        manual = await pg.evaluate("""async () => {
+          DEVOLUCOES[0].itens[0].peso = 33;
+          let pedido = null;
+          const o = SuincoSharePoint.devolucoes.editarItem;
+          SuincoSharePoint.devolucoes.editarItem = async (id, itemId, corpo) => { pedido = corpo; return corpo; };
+          try { await editarItemDevolucaoUI('dev-sis', 7, 'cx', '4'); } finally { SuincoSharePoint.devolucoes.editarItem = o; }
+          return pedido;
+        }""")
+        ck('peso já digitado não é sobrescrito', manual and 'peso' not in manual, str(manual))
 
         print('\n=== 6. CANCELAR NÃO GRAVA NADA ===')
         await pg.evaluate("window.__lancadas = []")
