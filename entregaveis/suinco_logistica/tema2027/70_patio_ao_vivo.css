@@ -100,7 +100,7 @@
   .pv-card[data-sla="critico"] .pv-selo{ display:inline-block }
   .pv-card[data-sla="previsto"] .a-fundo{ stroke-dasharray:2.4 4.6 }
   .pv-card[data-sla="previsto"] .a-prog{ opacity:0 }
-  .pv-card[data-sla="previsto"] .pv-tempo{ font:500 13.5px/1 inherit; color:var(--text-dim) }
+  .pv-card[data-sla="previsto"] .pv-tempo{ font-family:inherit; font-size:13px; font-weight:500; color:var(--text-dim) }
   .pv-card[data-fim="1"]{ opacity:.8 }
   .pv-card.alarme::after{ content:""; position:absolute; inset:-3px; border-radius:12px; pointer-events:none;
     border:2px solid var(--pv-critico); animation:pvAlarme 900ms ease-out 2 }
