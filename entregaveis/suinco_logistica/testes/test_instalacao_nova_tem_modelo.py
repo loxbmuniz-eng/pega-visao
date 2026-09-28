@@ -35,7 +35,12 @@ def ck(nome, ok, detalhe=''):
 
 
 def postgres(cmd):
-    return subprocess.run(['su', 'postgres', '-c', cmd], capture_output=True, text=True)
+    # SEM as variáveis PG* do ambiente. A bateria roda com as do banco da
+    # aplicação carregadas (PGUSER=suinco), e o `su` as passa adiante: o
+    # createdb rodava como `suinco`, que não cria banco — e o portão
+    # reprovou por isso (28/09/2026), não por defeito do instalador.
+    env = {k: v for k, v in os.environ.items() if not k.startswith('PG')}
+    return subprocess.run(['su', 'postgres', '-c', cmd], capture_output=True, text=True, env=env)
 
 
 def sql(q):
