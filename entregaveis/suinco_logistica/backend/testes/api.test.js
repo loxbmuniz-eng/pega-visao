@@ -35,6 +35,7 @@ import { SETORES, SETORES_FILIAL } from '../src/dominio/fluxo.js';
 import { podeGerar, documentosDoSetor } from '../src/dominio/documentos.js';
 import { validarTokenDeSocket } from '../src/tempo-real.js';
 import { hojeISO } from '../src/rotas/modelo_semana.js';
+import { kmValido } from '../src/dominio/frete.js';
 
 function jwtAssinar(payload) {
   return jwt.sign(payload, config.jwtSegredo, { expiresIn: '1h' });
@@ -5397,6 +5398,37 @@ describe('42. Tabela de frete: o valor sai da conta, e sem KM não se contrata (
     assert.equal(r.status, 201, r.texto);
     assert.equal(r.json.kmDestino, 310);
     assert.equal(Number(r.json.freteValor), Number((310 * T['3/4']).toFixed(2)));
+  });
+
+  /* O KM COM CASAS DECIMAIS (28/09/2026, ocorrência #91). Relato do dono:
+     pagou R$ 36 mil a R$ 11,66/km, e "o número que precisa estar lá precisa
+     ser o número exato". Até aqui kmValido() cortava os decimais
+     (Math.trunc) e recusava a vírgula. A tabela abaixo é a MESMA que
+     testes/test_km_com_casas_decimais.py confere em kmValidoLocal() no
+     painel: régua única nas duas pontas. */
+  test('o KM é lido com vírgula, ponto e duas casas — a mesma régua do painel', () => {
+    const TABELA = [
+      ['3087,48', 3087.48], ['3.087,48', 3087.48], ['3087.48', 3087.48],
+      ['1.250', 1250], ['12.500', 12500], ['3087', 3087], ['1,5', 1.5],
+      ['3087,4786', 3087.48], ['310 km', 310],
+      ['0', null], ['', null], ['abc', null], ['-40', null],
+    ];
+    for (const [digitado, esperado] of TABELA) {
+      assert.equal(kmValido(digitado), esperado, `"${digitado}"`);
+    }
+  });
+
+  test('carga com KM 3087,48 numa Carreta: o banco guarda o exato e o frete sai no centavo', async () => {
+    const r = await req('/api/cargas', { metodo: 'POST', token: tokens['Logística'], corpo: {
+      placa: placas.Carreta, numeroCarga: 'FRT-KMDEC-' + Date.now(),
+      kmDeslocamento: '3087,48', observacoes: 'km com casas decimais',
+    } });
+    assert.equal(r.status, 201, r.texto);
+    assert.equal(r.json.kmDeslocamento, 3087.48, 'o KM exato, sem cortar e sem multiplicar');
+    assert.equal(Number(r.json.freteValor), Number((3087.48 * T.Carreta).toFixed(2)),
+      '3087,48 × 11,66 = 36.000,02 — o centavo exato do combinado vem pelo frete à mão');
+    const b = await pool.query('SELECT km_deslocamento FROM fact_viagens WHERE carga_id = $1', [r.json.id]);
+    assert.equal(Number(b.rows[0].km_deslocamento), 3087.48, 'a coluna guarda as duas casas (migração 056)');
   });
 
   test('km ZERO não vira frete de R$ 0,00 — é tratado como não informado', async () => {

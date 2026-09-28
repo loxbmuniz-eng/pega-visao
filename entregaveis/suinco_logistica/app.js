@@ -3515,6 +3515,9 @@ function renderTorre(){
     }
     return ordenarPorSequenciaEAtualizacao(a,b);
   });
+  /* Com o cursor num campo da Torre, a ordem que a pessoa está vendo não
+     muda por baixo dela — ver "A TORRE DESLIZA" no bloco MOVIMENTO. */
+  lista = movSegurarOrdemEmEdicao(document.getElementById('torre-tbody'), lista);
 
   const thead = document.getElementById('torre-thead');
   if(thead){
@@ -3568,6 +3571,7 @@ function renderTorre(){
         : '')
       + `</td></tr>`
     : '';
+  const _posAntes = movFlipAntes(tbody);
   tbody.innerHTML = lista.map(c=>`
     ${faixa(c)}
     <tr class="${ehProgramacaoAntiga(c) ? 'linha-prog-antiga' : ''}" data-carga="${esc(c.id)}"
@@ -3630,6 +3634,7 @@ function renderTorre(){
       ${editavel ? `<td class="no-print">${botaoOutraCargaHtml(c)}${botaoRevisoesHtml(c)}${botaoCancelarHtml(c)}</td>` : ''}
     </tr>`).join('');
   movLinhasNovas(tbody);
+  movFlipDepois(tbody, _posAntes, lista);
   const vazio = document.getElementById('torre-empty');
   vazio.hidden = lista.length>0;
   if(!vazio.hidden){
@@ -4045,8 +4050,8 @@ function destinoFreteMudouUI(){
   const km = kmDoDestino(campo.value);
   const alvoKm = document.getElementById('prog-km-destino');
   const alvoDesl = document.getElementById('prog-km-deslocamento');
-  alvoKm.value = km ?? '';
-  if(km !== null && !alvoDesl.value) alvoDesl.value = km;
+  alvoKm.value = kmTexto(km);
+  if(km !== null && !alvoDesl.value) alvoDesl.value = kmTexto(km);
   avisarSobreKmUI();
 }
 
@@ -4057,9 +4062,9 @@ function kmDeslocamentoMudouUI(){ avisarSobreKmUI(); }
    que é do servidor. */
 function destinoFreteCompletarUI(){
   const km = kmDoDestino(document.getElementById('completar-frete-destino').value);
-  document.getElementById('completar-km-destino').value = km ?? '';
+  document.getElementById('completar-km-destino').value = kmTexto(km);
   const desl = document.getElementById('completar-km-deslocamento');
-  if(km !== null && !desl.value) desl.value = km;
+  if(km !== null && !desl.value) desl.value = kmTexto(km);
 }
 
 /* DIVERGÊNCIA É AVISO, NÃO ERRO. Desvio, retorno e coleta no caminho
@@ -4079,9 +4084,9 @@ function avisarSobreKmUI(){
     return;
   }
   if(kmRef !== null && kmDesl !== null && kmRef !== kmDesl){
-    const dif = kmDesl - kmRef;
-    aviso.innerHTML = `<span class="text-warn">KM de deslocamento <strong>${kmDesl}</strong> difere `
-      + `dos <strong>${kmRef}</strong> da tabela (${dif > 0 ? '+' : ''}${dif} km). `
+    const dif = Math.round((kmDesl - kmRef) * 100) / 100;
+    aviso.innerHTML = `<span class="text-warn">KM de deslocamento <strong>${kmTexto(kmDesl)}</strong> difere `
+      + `dos <strong>${kmTexto(kmRef)}</strong> da tabela (${dif > 0 ? '+' : ''}${kmTexto(dif)} km). `
       + `É o deslocamento que será pago — explique o motivo na Observação.</span>`;
     return;
   }
@@ -5491,8 +5496,8 @@ function abrirCompletar(id){
   document.getElementById('completar-ganchos').value = '0';
   document.getElementById('completar-entregas').value = '1';
   document.getElementById('completar-frete-destino').value = c.freteDestino || '';
-  document.getElementById('completar-km-destino').value = c.kmDestino ?? '';
-  document.getElementById('completar-km-deslocamento').value = c.kmDeslocamento ?? '';
+  document.getElementById('completar-km-destino').value = kmTexto(c.kmDestino);
+  document.getElementById('completar-km-deslocamento').value = kmTexto(c.kmDeslocamento);
   document.getElementById('modal-completar').classList.add('open');
 }
 function fecharModalCompletar(){ document.getElementById('modal-completar').classList.remove('open'); }
@@ -7396,7 +7401,7 @@ function editarDestinoFreteUI(destino){
   const d = DESTINOS_FRETE.find(x => String(x.destino) === String(destino));
   if(!d) return;
   document.getElementById('frete-destino-nome').value = d.destino;
-  document.getElementById('frete-destino-km').value = d.km;
+  document.getElementById('frete-destino-km').value = kmTexto(d.km);
   document.getElementById('frete-destino-nome').focus();
 }
 
@@ -7407,7 +7412,13 @@ async function addTarifaFreteUI(){
   /* Campo em branco NÃO é zero. `Number('')` é 0, e cadastrar tarifa zero
      sem querer é frete de graça gravado em silêncio para toda uma
      modalidade. */
-  if(bruto === '' || !Number.isFinite(Number(bruto)) || Number(bruto) < 0){
+  /* COM VÍRGULA (28/09/2026). Até aqui era `Number(bruto)`, e
+     `Number('11,66')` não é número: a tarifa digitada como o próprio campo
+     ensina ("ex.: 7,75") era recusada. `valorDigitado` (data.js) é a
+     leitura de dinheiro do painel — vírgula decimal, ponto de milhar
+     quando há vírgula. Ocorrência #91. */
+  const valorPorKm = valorDigitado(bruto);
+  if(valorPorKm === null || valorPorKm < 0){
     notify('Informe o valor por km (ex.: 7,75).', 'warn'); return;
   }
   /* O BOTÃO CONTA O QUE ESTÁ FAZENDO. Gravar tarifa é ida ao servidor: sem
@@ -7418,7 +7429,7 @@ async function addTarifaFreteUI(){
     { fazendo: 'Salvando…', feito: '✓ Salvo' },
     () => SuincoSharePoint.gravarTarifaFrete({
       tipoVeiculo: tipo,
-      valorPorKm: Number(bruto),
+      valorPorKm,
       vigenteDesde: document.getElementById('frete-tarifa-vigencia').value || undefined,
       operador: (DB.operador && DB.operador.nome) || '',
     }));
@@ -7448,7 +7459,7 @@ async function addDestinoFreteUI(){
   }
   ['frete-destino-nome','frete-destino-km'].forEach(id=>document.getElementById(id).value='');
   await recarregarTabelaDeFrete();
-  notifyGravacao(`Destino ${destino}: ${km} km.`);
+  notifyGravacao(`Destino ${destino}: ${kmTexto(km)} km.`);
 }
 
 /* Relê a tabela do servidor depois de gravar, em vez de mexer na lista
@@ -7475,7 +7486,7 @@ async function recarregarTabelaDeFrete(){
 function exportarTabelaFreteCsv(){
   const linhas = [];
   TARIFAS_FRETE.forEach(t => linhas.push(['Tarifa', t.tipoVeiculo, '', String(t.valorPorKm).replace('.', ','), t.operador||'']));
-  DESTINOS_FRETE.forEach(d => linhas.push(['Destino', '', d.destino, String(d.km), d.operador||'']));
+  DESTINOS_FRETE.forEach(d => linhas.push(['Destino', '', d.destino, kmTexto(d.km), d.operador||'']));
   baixarCsvDoDia('Tabela_de_Frete',
     ['O quê', 'Tipo de veículo', 'Destino', 'Valor por km / KM', 'Quem cadastrou'], linhas,
     // Aqui o "3/4" é uma LINHA da tabela, não um caso de borda.
@@ -10830,8 +10841,8 @@ async function exportarPlanilhaFretes(){
     // planilha antiga trazia.
     d.peso ? num((Number(d.peso)/1000).toFixed(1)) : '',
     d.freteDestino,
-    d.kmDestino ?? '',
-    d.kmDeslocamento ?? '',
+    kmTexto(d.kmDestino),
+    kmTexto(d.kmDeslocamento),
     /* A divergência vira COLUNA, e não só uma cor. Cor não sobrevive ao
        CSV, e é exatamente esta linha que alguém precisa justificar quando
        o frete pago não bate com a tabela. */
@@ -11916,7 +11927,7 @@ function freteMontagemHtml(m, carga){
     ? `Frete combinado à mão${m.frete_manual_por ? ' por ' + m.frete_manual_por : ''}.`
       + (temCalculado ? ` Pela tabela seriam R$ ${reais(calculado)}.` : '')
       + ' Apague o campo para voltar ao calculado.'
-    : `Frete calculado: ${m.km_deslocamento ?? '—'} km × tarifa.`
+    : `Frete calculado: ${kmTexto(m.km_deslocamento) || '—'} km × tarifa.`
       + ' Digite aqui para gravar um valor combinado.';
 
   const campo = `<input type="text" inputmode="decimal" class="frete-input"
@@ -11932,8 +11943,8 @@ function freteMontagemHtml(m, carga){
      dinheiro errado: o valor foi fechado numa quilometragem e a linha está
      em outra. Decisão (a) do dono — o combinado fica, mas não fica calado. */
   const aviso = m.frete_km_mudou
-    ? `<span class="frete-aviso" title="Combinado com ${esc(m.frete_manual_km)} km; `
-      + `a linha está com ${esc(m.km_deslocamento ?? '—')} km — o frete não acompanhou.">⚠</span>`
+    ? `<span class="frete-aviso" title="Combinado com ${esc(kmTexto(m.frete_manual_km))} km; `
+      + `a linha está com ${esc(kmTexto(m.km_deslocamento) || '—')} km — o frete não acompanhou.">⚠</span>`
     : '';
   return `${campo}<span class="frete-marca" title="${esc(explicacao)}">✎</span>${aviso}`;
 }
@@ -12135,25 +12146,25 @@ function linhaMontagemHtml(m){
                Quem não corrige continua vendo o número, em texto: é dado
                de conferência para a Portaria e a Expedição, não campo. */
             ? (podeCorrigirKmDaCargaUI()
-              ? `<input type="text" inputmode="numeric" inputmode="numeric" class="km-input" min="1" step="1"
-                        value="${cargaViva.kmDeslocamento ?? ''}" aria-label="KM de deslocamento"
-                        placeholder="${cargaViva.kmDestino ?? '—'}"
+              ? `<input type="text" inputmode="decimal" class="km-input"
+                        value="${kmTexto(cargaViva.kmDeslocamento)}" aria-label="KM de deslocamento"
+                        placeholder="${kmTexto(cargaViva.kmDestino) || '—'}"
                         title="KM que o frete usa. Corrigir aqui recalcula o valor e fica registrado em Histórico."
                         onwheel="this.blur()"
                         onchange="corrigirKmDaCargaUI('${escJs(cargaViva.id)}',this.value)">`
-              : `<span title="KM de deslocamento">${cargaViva.kmDeslocamento ?? '—'}</span>`)
+              : `<span title="KM de deslocamento">${kmTexto(cargaViva.kmDeslocamento) || '—'}</span>`)
             /* `onwheel` tira o foco ANTES de a roda escrever (14/09/2026).
                Esconder a setinha no CSS não resolve isto: num `type=number`
                com foco, a roda do mouse altera o valor. A Montagem é tabela
                larga, rolada com a roda — passar por cima do KM já escolhido
                mudava a quilometragem sem ninguém digitar, e o frete é KM ×
                tarifa. `inputmode` mantém o teclado numérico no celular. */
-            : `<input type="text" inputmode="numeric" inputmode="numeric" class="km-input" min="1" step="1"
-                      value="${m.km_deslocamento ?? ''}" aria-label="KM de deslocamento"
-                      placeholder="${m.km_destino ?? '—'}"
+            : `<input type="text" inputmode="decimal" class="km-input"
+                      value="${kmTexto(m.km_deslocamento)}" aria-label="KM de deslocamento"
+                      placeholder="${kmTexto(m.km_destino) || '—'}"
                       title="KM que o frete usa. Vem do destino e pode ser corrigido — desvio, retorno, coleta no caminho."
                       onwheel="this.blur()"
-                      onchange="alterarMontagemUI('${id}','kmDeslocamento',this.value)">`}</td>
+                      onchange="alterarMontagemUI('${id}','kmDeslocamento',kmValidoLocal(this.value) ?? this.value)">`}</td>
 
       <td class="c-frete cel-num">${freteMontagemHtml(m, comoCarga ? cargaViva : null)}</td>
 
@@ -12857,7 +12868,7 @@ async function corrigirKmDaCargaUI(cargaId, valor){
   const novo = kmValidoLocal(valor);
   const antigo = c.kmDeslocamento ?? null;
   if(novo === null){
-    notify('O KM precisa ser um número inteiro maior que zero — é ele que multiplica a tarifa.',
+    notify('O KM precisa ser um número maior que zero (pode ter vírgula: 3087,48) — é ele que multiplica a tarifa.',
       'warn', 6000);
     renderAll();
     return;
@@ -12865,7 +12876,7 @@ async function corrigirKmDaCargaUI(cargaId, valor){
   if(novo === antigo) return;
   if(antigo !== null && Math.abs(novo - antigo) > antigo / 2){
     const ok = confirm(
-      `Trocar o KM de ${antigo} para ${novo}?\n\n`
+      `Trocar o KM de ${kmTexto(antigo)} para ${kmTexto(novo)}?\n\n`
       + `É mais que o dobro de diferença — confira antes, porque o frete é `
       + `KM × tarifa e o valor vai ser recalculado.\n\n`
       + `Fica registrado em Histórico quem mudou.`);
@@ -12873,7 +12884,7 @@ async function corrigirKmDaCargaUI(cargaId, valor){
   }
   try {
     corrigirKmDaCarga(cargaId, novo, nomeOperadorAtual(), setorOperadorAtual());
-    notifyGravacao(`KM corrigido para ${novo}. O valor do frete é recalculado pelo servidor.`);
+    notifyGravacao(`KM corrigido para ${kmTexto(novo)}. O valor do frete é recalculado pelo servidor.`);
     renderAll();
   } catch(e){
     notify(e.message || 'Não foi possível corrigir o KM.', 'danger', 7000);
@@ -13732,4 +13743,139 @@ async function contarNoBotao(botao, textos, tarefa){
     _movTrocarTexto(botao, original);
     throw e;
   }
+}
+
+/* ---------- 5. A TORRE DESLIZA (27/09/2026) ----------
+
+   Pedido do dono, depois de tocar na "Torre de brinquedo": a linha que muda
+   de lugar desliza até a posição nova. Com uma condição dele, que é a que
+   manda: "as partes principais precisam manter sua estrutura (...) torre de
+   controle editável seguindo o formato de colunas e campos editáveis".
+
+   Por isso nada disto mexe no HTML da linha. A Torre continua sendo a mesma
+   tabela de 12 colunas, redesenhada inteira a cada sincronia; o movimento é
+   só uma camada por cima (FLIP): mede onde cada linha estava, deixa a
+   tabela nascer na ordem nova, e faz cada linha que mudou de lugar partir
+   de onde estava. `transform` e nada mais — não repagina, não toca campo.
+
+   QUATRO REGRAS, cada uma com um porquê:
+
+   1. SÓ SE MOVE QUANDO A ORDEM MUDOU. Sincronia que redesenha as mesmas
+      linhas na mesma ordem não anima nada (regra 2 do bloco: o que se vê
+      cem vezes por dia não se anima). Linha que entra ou sai não conta
+      como mudança de ordem: a entrada já tem animação própria (seção 2) e
+      a saída também (seção 1).
+   2. A LINHA EM EDIÇÃO NÃO FOGE. Com o cursor num campo da Torre, uma
+      mudança de ordem vinda de OUTRO setor espera: a tabela fica como a
+      pessoa está vendo e se reorganiza quando ela sai da tabela. Mudança
+      feita pela própria pessoa naquele campo (ela digitou a posição) vale
+      na hora — foi ela quem pediu. Tudo isso sem prazo nem relógio: quem
+      decide é onde o cursor está.
+   3. MUDOU DE ETAPA, O SELO PULSA. Etapa não muda a ordem da Torre; o que
+      muda é o selo de status, e é ele que se mexe — só o daquela carga.
+   4. Movimento reduzido no sistema: a ordem muda, nada anima. */
+const MOV_DESLIZA_MS = 260;
+const _movOrdem = new Map();     // tbody.id → ids na ordem em que foram desenhados
+const _movEtapa = new Map();     // tbody.id → Map(id → status)
+
+function _movChaveDoCampo(el){
+  const tr = el && el.closest ? el.closest('tr[data-carga]') : null;
+  const td = el && el.closest ? el.closest('td') : null;
+  if(!tr || !td) return null;
+  return tr.dataset.carga + '|' + [...tr.children].indexOf(td);
+}
+
+function _movCampoEmEdicao(tbody){
+  const f = document.activeElement;
+  return !!(f && tbody && tbody.contains(f)
+    && (f.tagName === 'INPUT' || f.tagName === 'TEXTAREA' || f.tagName === 'SELECT'));
+}
+
+/* Regra 2. Devolve a lista na ordem que a pessoa está vendo, se for o caso
+   de segurar; senão, a lista como veio. */
+function movSegurarOrdemEmEdicao(tbody, lista){
+  if(!tbody || !tbody.id) return lista;
+  if(!tbody._movOuvindo){
+    tbody._movOuvindo = true;
+    /* A mudança feita no próprio campo libera AQUELE campo: a linha vai
+       para onde a pessoa mandou. Andar para outro campo arma de novo. */
+    tbody.addEventListener('change', (ev) => {
+      tbody._movLivre = _movChaveDoCampo(ev.target);
+    }, true);
+    tbody.addEventListener('focusin', (ev) => {
+      if(_movChaveDoCampo(ev.target) !== tbody._movLivre) tbody._movLivre = null;
+    });
+    tbody.addEventListener('focusout', () => setTimeout(() => {
+      if(!tbody._movSegurou || _movCampoEmEdicao(tbody)) return;
+      tbody._movSegurou = false;
+      renderAll();
+    }, 0));
+  }
+  const vista = _movOrdem.get(tbody.id);
+  const emEdicao = _movCampoEmEdicao(tbody)
+    && _movChaveDoCampo(document.activeElement) !== tbody._movLivre;
+  if(!vista || !emEdicao) return lista;
+  const pos = new Map(vista.map((id, i) => [id, i]));
+  const segurada = lista.slice().sort((a, b) =>
+    (pos.has(a.id) ? pos.get(a.id) : 1e9) - (pos.has(b.id) ? pos.get(b.id) : 1e9));
+  if(segurada.some((c, i) => c !== lista[i])) tbody._movSegurou = true;
+  return segurada;
+}
+
+/* Antes de redesenhar: onde cada linha está, medido a partir do topo do
+   próprio corpo da tabela — as caixas de cima mudam de altura com os
+   números, e medir pela página faria todas as linhas "andarem" juntas. */
+function movFlipAntes(tbody){
+  if(!tbody || movReduzida() || !tbody.getClientRects().length) return null;
+  const topo = tbody.getBoundingClientRect().top;
+  const pos = new Map();
+  tbody.querySelectorAll('tr[data-carga]').forEach(tr => {
+    pos.set(tr.dataset.carga, tr.getBoundingClientRect().top - topo);
+  });
+  return pos.size ? pos : null;
+}
+
+function movFlipDepois(tbody, antes, lista){
+  if(!tbody || !tbody.id) return;
+  const ordemAntes = _movOrdem.get(tbody.id);
+  const etapaAntes = _movEtapa.get(tbody.id);
+  const ordem = lista.map(c => c.id);
+  _movOrdem.set(tbody.id, ordem);
+  _movEtapa.set(tbody.id, new Map(lista.map(c => [c.id, c.status])));
+  if(!ordemAntes || movReduzida()) return;
+
+  // Regra 3: o selo de quem mudou de etapa.
+  if(etapaAntes){
+    lista.forEach(c => {
+      if(!etapaAntes.has(c.id) || etapaAntes.get(c.id) === c.status) return;
+      const selo = tbody.querySelector(_movSeletorCarga(c.id) + ' .badge');
+      if(selo && selo.animate){
+        selo.animate([{ transform: 'scale(.86)', opacity: .35 },
+                      { transform: 'none', opacity: 1 }],
+                     { duration: MOV_DESLIZA_MS, easing: 'cubic-bezier(.23,1,.32,1)' });
+      }
+    });
+  }
+
+  // Regra 1: a ordem relativa de quem estava e continua mudou?
+  if(!antes) return;
+  const ficaram = new Set(ordem);
+  const a = ordemAntes.filter(id => ficaram.has(id) && antes.has(id));
+  const tinha = new Set(a);
+  const b = ordem.filter(id => tinha.has(id));
+  if(a.every((id, i) => id === b[i])) return;
+
+  const topo = tbody.getBoundingClientRect().top;
+  const medidas = [];
+  tbody.querySelectorAll('tr[data-carga]').forEach(tr => {
+    const id = tr.dataset.carga;
+    if(!antes.has(id)) return;
+    const dy = antes.get(id) - (tr.getBoundingClientRect().top - topo);
+    if(Math.abs(dy) >= 1) medidas.push([tr, dy]);
+  });
+  medidas.forEach(([tr, dy]) => {
+    if(!tr.animate) return;
+    tr.animate([{ transform: `translateY(${dy}px)` }, { transform: 'none' }],
+               { duration: MOV_DESLIZA_MS, easing: 'cubic-bezier(.23,1,.32,1)' });
+  });
 }

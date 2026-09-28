@@ -50,18 +50,45 @@ export function semFreteDeTabela(transportadora) {
   return null;
 }
 
-/* KM que vale: inteiro positivo, ou null. NUNCA zero por engano.
+/* KM que vale: positivo, com até duas casas, ou null. NUNCA zero por engano.
 
    `Number('') === 0` e `Number(null) === 0`: sem esta função, um campo em
    branco viraria "zero quilômetros" e o frete sairia R$ 0,00 sem ninguém
    perceber. É o mesmo defeito que já apagou capacidade de veículo aqui
-   (`Number(0) || null`), do outro lado da moeda. */
+   (`Number(0) || null`), do outro lado da moeda.
+
+   COM CASAS DECIMAIS DESDE 28/09/2026 (migração 056). Pedido do dono: o KM
+   "precisa poder ter quebra com vírgulas" — pagou R$ 36 mil a R$ 11,66/km,
+   e o número que vale é o exato. Até ali esta função cortava tudo depois
+   do ponto (`Math.trunc`) e recusava a vírgula (`Number('3087,48')` é NaN).
+
+   COMO SE LÊ O QUE FOI DIGITADO — a mesma régua de `kmValidoLocal` no
+   painel (data.js), travada pela mesma tabela nos dois testes:
+     "3087,48"   → 3087.48   vírgula é sempre o decimal
+     "3.087,48"  → 3087.48   com vírgula, o ponto é milhar
+     "3087.48"   → 3087.48   ponto com 1 ou 2 dígitos depois é decimal
+     "1.250"     → 1250      ponto com exatamente 3 dígitos é milhar — é
+                             como quem já digita KM aqui escreve mil
+                             duzentos e cinquenta, e mudar isso calado
+                             multiplicaria o frete dele por mil
+   Mais de duas casas arredonda no centésimo: é o que o banco guarda. */
 export function kmValido(v) {
   if (v === '' || v === null || v === undefined) return null;
-  const n = Number(v);
+  const n = typeof v === 'number' ? v : lerKmDigitado(v);
   if (!Number.isFinite(n)) return null;
-  const i = Math.trunc(n);
-  return i > 0 ? i : null;
+  const km = Math.round(n * 100) / 100;
+  return km > 0 ? km : null;
+}
+
+function lerKmDigitado(v) {
+  let t = String(v).trim().replace(/\s+/g, '').replace(/km$/i, '');
+  if (!/^\d[\d.,]*$/.test(t)) return NaN;
+  if (t.includes(',')) {
+    t = t.replace(/\./g, '').replace(',', '.');
+  } else if (/^\d{1,3}(\.\d{3})+$/.test(t)) {
+    t = t.replace(/\./g, '');
+  }
+  return Number(t);
 }
 
 /* O VALOR. `km × tarifa`, com duas casas, ou null com o motivo.

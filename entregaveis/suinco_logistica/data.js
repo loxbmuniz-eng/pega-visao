@@ -836,15 +836,50 @@ const KM_POR_DESTINO = new Map();
    a única coisa desta família duplicada nos dois lados. A alternativa era
    o campo em branco chegar ao servidor como 0 e ser recusado lá, depois
    de a pessoa já ter clicado. */
+/* O KM COM CASAS DECIMAIS (28/09/2026).
+
+   Pedido do dono: o KM "precisa poder ter quebra com vírgulas" — pagou
+   R$ 36 mil a R$ 11,66/km, e o número que vale é o exato.
+
+   O DEFEITO QUE ISTO FECHA, reproduzido no painel publicado: esta função
+   passava o texto por `quantidadeDigitada`, que joga fora tudo que não é
+   dígito. "3087,48" virava 308748 — CEM vezes o KM, e o frete é KM ×
+   tarifa. Ocorrência #91.
+
+   A régua é a MESMA de `kmValido()` no servidor (dominio/frete.js), e os
+   dois testes conferem a mesma tabela:
+     "3087,48"  → 3087.48    vírgula é sempre o decimal
+     "3.087,48" → 3087.48    com vírgula, o ponto é milhar
+     "3087.48"  → 3087.48    ponto com 1 ou 2 dígitos depois é decimal
+     "1.250"    → 1250       ponto com exatamente 3 dígitos é milhar — é
+                             como se escreve mil duzentos e cinquenta aqui
+   Duas casas no máximo: é o que o banco guarda (migração 056). */
 function kmValidoLocal(v){
   if(v === '' || v === null || v === undefined) return null;
-  /* Passa por `quantidadeDigitada` porque "1.250" é mil duzentos e
-     cinquenta quilômetros para quem digita, e era UM para o `Number()`.
-     Ver o bloco daquela função: o estrago não dava erro, gravava. */
-  const n = quantidadeDigitada(v);
-  if(n === null || !Number.isFinite(n)) return null;
-  const i = Math.trunc(n);
-  return i > 0 ? i : null;
+  let n;
+  if(typeof v === 'number'){
+    n = v;
+  } else {
+    let t = String(v).trim().replace(/\s+/g, '').replace(/km$/i, '');
+    if(!/^\d[\d.,]*$/.test(t)) return null;
+    if(t.includes(',')) t = t.replace(/\./g, '').replace(',', '.');
+    else if(/^\d{1,3}(\.\d{3})+$/.test(t)) t = t.replace(/\./g, '');
+    n = Number(t);
+  }
+  if(!Number.isFinite(n)) return null;
+  const km = Math.round(n * 100) / 100;
+  return km > 0 ? km : null;
+}
+
+/* O KM COMO SE LÊ E COMO SE DIGITA: vírgula decimal, sem ponto de milhar.
+   Sem o ponto de milhar de propósito — o mesmo texto volta para o campo, e
+   "3087,48" relido dá 3087.48, enquanto "3.087" seria mil vezes menor para
+   quem lê com a régua antiga. */
+function kmTexto(v){
+  if(v === '' || v === null || v === undefined) return '';
+  const n = Number(v);
+  if(!Number.isFinite(n)) return String(v);
+  return n.toLocaleString('pt-BR', { useGrouping: false, maximumFractionDigits: 2 });
 }
 
 function kmDoDestino(destino){
@@ -2887,14 +2922,14 @@ function corrigirKmDaCarga(cargaId, km, operador, setor){
   if(!c) throw new Error('Carga não encontrada.');
   const novo = kmValidoLocal(km);
   if(novo === null){
-    throw new Error('O KM de deslocamento precisa ser um número inteiro maior que zero '
-      + '— é ele que multiplica a tarifa.');
+    throw new Error('O KM de deslocamento precisa ser um número maior que zero '
+      + '(pode ter vírgula: 3087,48) — é ele que multiplica a tarifa.');
   }
   const antigo = c.kmDeslocamento ?? null;
   if(novo === antigo) return c;   // nada mudou: não suja o histórico
   registrarAlteracao({
     cargaId: c.id, placa: c.placa, campo: 'KM de deslocamento',
-    de: antigo === null ? '(sem KM)' : String(antigo), para: String(novo),
+    de: antigo === null ? '(sem KM)' : kmTexto(antigo), para: kmTexto(novo),
     operador, setor
   });
   c.kmDeslocamento = novo;

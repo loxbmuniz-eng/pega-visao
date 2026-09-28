@@ -15,7 +15,7 @@ import { Router } from 'express';
 import { consultar, emTransacao } from '../banco.js';
 import { exigirLogin, exigirSetor, recusarFilial } from '../middleware/auth.js';
 import { emitir } from '../tempo-real.js';
-import { calcularFrete } from '../dominio/frete.js';
+import { calcularFrete, kmValido } from '../dominio/frete.js';
 import { filaReordenada, filaNormalizada, numerosDaFila } from '../dominio/cargas.js';
 
 export const rotasModeloSemana = Router();
@@ -283,7 +283,7 @@ async function destinoEKm(corpo, atual, q) {
   }
 
   let kmDesl = corpo?.kmDeslocamento !== undefined
-    ? kmInteiroOuNulo(corpo.kmDeslocamento)
+    ? kmValido(corpo.kmDeslocamento)
     : (atual ? atual.km_deslocamento : null);
 
   /* ESCOLHER O DESTINO PASSA A PREENCHER O KM (18/09/2026).
@@ -380,16 +380,10 @@ function freteManualResolvido(corpo, atual, kmDeslAgora, operador) {
   return { valor, km: kmDeslAgora, por: operador, em: new Date() };
 }
 
-/* Mesma régua de kmValido() do domínio de frete: inteiro positivo ou nada.
-   Zero e negativo não são distância — viram nulo, e a coluna vazia diz "não
-   informado" em vez de mentir um número. */
-function kmInteiroOuNulo(v) {
-  if (v === '' || v === null || v === undefined) return null;
-  const n = Number(v);
-  if (!Number.isFinite(n)) return null;
-  const i = Math.trunc(n);
-  return i > 0 ? i : null;
-}
+/* O KM da linha passa por kmValido(), do domínio de frete — a mesma
+   função que lê o KM da carga. Até 28/09/2026 havia aqui uma cópia dela
+   (`kmInteiroOuNulo`), e as duas precisariam aprender casas decimais ao
+   mesmo tempo; cópia é como a Montagem aceitaria um KM que a carga corta. */
 
 /* O NÚMERO DA SEQUÊNCIA NÃO REPETE NO DIA (11/09/2026).
    ---------------------------------------------------------------------
@@ -455,7 +449,7 @@ function chaveDoDia(dia) {
   return String(dia).slice(0, 10);
 }
 
-/* Inteiro a partir de 1, ou nada — mesma régua de kmInteiroOuNulo. E ela
+/* Inteiro a partir de 1, ou nada. E ela
    faz falta por um motivo que só apareceu ao medir: `Number('')` é ZERO, e
    o campo apagado na tela vinha gravando 0 em vez de limpar a coluna.
    Quem apaga o número quer a coluna vazia, não uma linha na casa zero. */
