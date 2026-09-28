@@ -4446,3 +4446,53 @@ Nº carga dev (as duas colunas opcionais juntas, com o TOTAL alinhado).
 
 > **O que é do cabeçalho e se confere por linha vai para a linha.** Subtítulo é
 > lido uma vez; a conferência é feita linha a linha, com o dedo.
+
+## #91 — KM com vírgula virava cem vezes o KM, e a tarifa com vírgula era recusada (28/09/2026)
+
+**Como apareceu.** Relato do dono: "a quilometragem quando é colocada de forma
+exata precisa poder ter quebra com vírgulas... pagou 36 mil reais, o valor do
+km foi 11,66, o número que precisa estar lá precisa ser o número exato".
+
+**Reproduzido no código publicado, antes de corrigir:**
+
+```
+painel    KM "3087,48"   → 308748 km     (100 vezes)
+painel    KM "3087.48"   → 308748 km
+servidor  KM "3087.48"   → 3087 km       (Math.trunc)  → R$ 35.994,42
+servidor  KM "3087,48"   → null          (Number('3087,48') é NaN)
+painel    tarifa "11,66" → recusada      (o campo diz "ex.: 7,75")
+```
+
+**A causa.** O KM nasceu inteiro em 09/09 (migração 047) — banco `INTEGER`,
+servidor com `Math.trunc`, painel lendo por `quantidadeDigitada`, que joga
+fora tudo que não é dígito para que "1.250" valha mil duzentos e cinquenta.
+Isso era certo para inteiro e virou multiplicação por cem no primeiro KM com
+vírgula. A tarifa lia com `Number()`, que não conhece vírgula — a função certa
+(`valorDigitado`, 17/09) existia em data.js e não foi usada ali.
+
+**A família.** A da #20 e da #89: a regra certa existe num lugar e não vale
+no irmão. E a do "null ≠ zero" pelo outro lado: número mal lido que não dá
+erro, grava.
+
+**A correção.**
+- Migração 056: KM em `NUMERIC(10,2)` (deslocamento, destino, o KM do frete
+  combinado e o KM da tabela de destinos).
+- Uma régua só, escrita nas duas pontas e conferida pela MESMA tabela nos
+  dois testes: vírgula é decimal; com vírgula, ponto é milhar; ponto com
+  três dígitos é milhar ("1.250" = 1250, como sempre foi); duas casas.
+- A cópia `kmInteiroOuNulo` da Montagem saiu: ela chama `kmValido()`.
+- O painel mostra o KM com vírgula e manda NÚMERO ao servidor — com o
+  servidor ainda velho, o KM é cortado nos decimais como antes, mas nunca
+  mais multiplicado.
+- A tarifa passa por `valorDigitado`. Os campos de KM abrem teclado decimal.
+
+**O que a conta ainda não faz, e é de propósito.** 3087,48 × 11,66 =
+36.000,02. Nenhum KM de duas casas dá R$ 36.000,00 com essa tarifa. O valor
+exato do que foi pago vai pelo **frete combinado à mão** (migração 054), que
+já existia e continua sendo o caminho do centavo.
+
+**A guarda.** `testes/test_km_com_casas_decimais.py` (painel) e o bloco do KM
+em `backend/testes/api.test.js` (servidor), com a mesma tabela.
+
+> **Número mal lido não dá erro: grava.** Todo campo que recebe número digitado
+> passa pela régua que sabe ler português — nunca por `Number()` cru.

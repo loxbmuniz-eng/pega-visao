@@ -4050,8 +4050,8 @@ function destinoFreteMudouUI(){
   const km = kmDoDestino(campo.value);
   const alvoKm = document.getElementById('prog-km-destino');
   const alvoDesl = document.getElementById('prog-km-deslocamento');
-  alvoKm.value = km ?? '';
-  if(km !== null && !alvoDesl.value) alvoDesl.value = km;
+  alvoKm.value = kmTexto(km);
+  if(km !== null && !alvoDesl.value) alvoDesl.value = kmTexto(km);
   avisarSobreKmUI();
 }
 
@@ -4062,9 +4062,9 @@ function kmDeslocamentoMudouUI(){ avisarSobreKmUI(); }
    que é do servidor. */
 function destinoFreteCompletarUI(){
   const km = kmDoDestino(document.getElementById('completar-frete-destino').value);
-  document.getElementById('completar-km-destino').value = km ?? '';
+  document.getElementById('completar-km-destino').value = kmTexto(km);
   const desl = document.getElementById('completar-km-deslocamento');
-  if(km !== null && !desl.value) desl.value = km;
+  if(km !== null && !desl.value) desl.value = kmTexto(km);
 }
 
 /* DIVERGÊNCIA É AVISO, NÃO ERRO. Desvio, retorno e coleta no caminho
@@ -4084,9 +4084,9 @@ function avisarSobreKmUI(){
     return;
   }
   if(kmRef !== null && kmDesl !== null && kmRef !== kmDesl){
-    const dif = kmDesl - kmRef;
-    aviso.innerHTML = `<span class="text-warn">KM de deslocamento <strong>${kmDesl}</strong> difere `
-      + `dos <strong>${kmRef}</strong> da tabela (${dif > 0 ? '+' : ''}${dif} km). `
+    const dif = Math.round((kmDesl - kmRef) * 100) / 100;
+    aviso.innerHTML = `<span class="text-warn">KM de deslocamento <strong>${kmTexto(kmDesl)}</strong> difere `
+      + `dos <strong>${kmTexto(kmRef)}</strong> da tabela (${dif > 0 ? '+' : ''}${kmTexto(dif)} km). `
       + `É o deslocamento que será pago — explique o motivo na Observação.</span>`;
     return;
   }
@@ -5496,8 +5496,8 @@ function abrirCompletar(id){
   document.getElementById('completar-ganchos').value = '0';
   document.getElementById('completar-entregas').value = '1';
   document.getElementById('completar-frete-destino').value = c.freteDestino || '';
-  document.getElementById('completar-km-destino').value = c.kmDestino ?? '';
-  document.getElementById('completar-km-deslocamento').value = c.kmDeslocamento ?? '';
+  document.getElementById('completar-km-destino').value = kmTexto(c.kmDestino);
+  document.getElementById('completar-km-deslocamento').value = kmTexto(c.kmDeslocamento);
   document.getElementById('modal-completar').classList.add('open');
 }
 function fecharModalCompletar(){ document.getElementById('modal-completar').classList.remove('open'); }
@@ -7401,7 +7401,7 @@ function editarDestinoFreteUI(destino){
   const d = DESTINOS_FRETE.find(x => String(x.destino) === String(destino));
   if(!d) return;
   document.getElementById('frete-destino-nome').value = d.destino;
-  document.getElementById('frete-destino-km').value = d.km;
+  document.getElementById('frete-destino-km').value = kmTexto(d.km);
   document.getElementById('frete-destino-nome').focus();
 }
 
@@ -7412,7 +7412,13 @@ async function addTarifaFreteUI(){
   /* Campo em branco NÃO é zero. `Number('')` é 0, e cadastrar tarifa zero
      sem querer é frete de graça gravado em silêncio para toda uma
      modalidade. */
-  if(bruto === '' || !Number.isFinite(Number(bruto)) || Number(bruto) < 0){
+  /* COM VÍRGULA (28/09/2026). Até aqui era `Number(bruto)`, e
+     `Number('11,66')` não é número: a tarifa digitada como o próprio campo
+     ensina ("ex.: 7,75") era recusada. `valorDigitado` (data.js) é a
+     leitura de dinheiro do painel — vírgula decimal, ponto de milhar
+     quando há vírgula. Ocorrência #91. */
+  const valorPorKm = valorDigitado(bruto);
+  if(valorPorKm === null || valorPorKm < 0){
     notify('Informe o valor por km (ex.: 7,75).', 'warn'); return;
   }
   /* O BOTÃO CONTA O QUE ESTÁ FAZENDO. Gravar tarifa é ida ao servidor: sem
@@ -7423,7 +7429,7 @@ async function addTarifaFreteUI(){
     { fazendo: 'Salvando…', feito: '✓ Salvo' },
     () => SuincoSharePoint.gravarTarifaFrete({
       tipoVeiculo: tipo,
-      valorPorKm: Number(bruto),
+      valorPorKm,
       vigenteDesde: document.getElementById('frete-tarifa-vigencia').value || undefined,
       operador: (DB.operador && DB.operador.nome) || '',
     }));
@@ -7453,7 +7459,7 @@ async function addDestinoFreteUI(){
   }
   ['frete-destino-nome','frete-destino-km'].forEach(id=>document.getElementById(id).value='');
   await recarregarTabelaDeFrete();
-  notifyGravacao(`Destino ${destino}: ${km} km.`);
+  notifyGravacao(`Destino ${destino}: ${kmTexto(km)} km.`);
 }
 
 /* Relê a tabela do servidor depois de gravar, em vez de mexer na lista
@@ -7480,7 +7486,7 @@ async function recarregarTabelaDeFrete(){
 function exportarTabelaFreteCsv(){
   const linhas = [];
   TARIFAS_FRETE.forEach(t => linhas.push(['Tarifa', t.tipoVeiculo, '', String(t.valorPorKm).replace('.', ','), t.operador||'']));
-  DESTINOS_FRETE.forEach(d => linhas.push(['Destino', '', d.destino, String(d.km), d.operador||'']));
+  DESTINOS_FRETE.forEach(d => linhas.push(['Destino', '', d.destino, kmTexto(d.km), d.operador||'']));
   baixarCsvDoDia('Tabela_de_Frete',
     ['O quê', 'Tipo de veículo', 'Destino', 'Valor por km / KM', 'Quem cadastrou'], linhas,
     // Aqui o "3/4" é uma LINHA da tabela, não um caso de borda.
@@ -10835,8 +10841,8 @@ async function exportarPlanilhaFretes(){
     // planilha antiga trazia.
     d.peso ? num((Number(d.peso)/1000).toFixed(1)) : '',
     d.freteDestino,
-    d.kmDestino ?? '',
-    d.kmDeslocamento ?? '',
+    kmTexto(d.kmDestino),
+    kmTexto(d.kmDeslocamento),
     /* A divergência vira COLUNA, e não só uma cor. Cor não sobrevive ao
        CSV, e é exatamente esta linha que alguém precisa justificar quando
        o frete pago não bate com a tabela. */
@@ -11921,7 +11927,7 @@ function freteMontagemHtml(m, carga){
     ? `Frete combinado à mão${m.frete_manual_por ? ' por ' + m.frete_manual_por : ''}.`
       + (temCalculado ? ` Pela tabela seriam R$ ${reais(calculado)}.` : '')
       + ' Apague o campo para voltar ao calculado.'
-    : `Frete calculado: ${m.km_deslocamento ?? '—'} km × tarifa.`
+    : `Frete calculado: ${kmTexto(m.km_deslocamento) || '—'} km × tarifa.`
       + ' Digite aqui para gravar um valor combinado.';
 
   const campo = `<input type="text" inputmode="decimal" class="frete-input"
@@ -11937,8 +11943,8 @@ function freteMontagemHtml(m, carga){
      dinheiro errado: o valor foi fechado numa quilometragem e a linha está
      em outra. Decisão (a) do dono — o combinado fica, mas não fica calado. */
   const aviso = m.frete_km_mudou
-    ? `<span class="frete-aviso" title="Combinado com ${esc(m.frete_manual_km)} km; `
-      + `a linha está com ${esc(m.km_deslocamento ?? '—')} km — o frete não acompanhou.">⚠</span>`
+    ? `<span class="frete-aviso" title="Combinado com ${esc(kmTexto(m.frete_manual_km))} km; `
+      + `a linha está com ${esc(kmTexto(m.km_deslocamento) || '—')} km — o frete não acompanhou.">⚠</span>`
     : '';
   return `${campo}<span class="frete-marca" title="${esc(explicacao)}">✎</span>${aviso}`;
 }
@@ -12140,25 +12146,25 @@ function linhaMontagemHtml(m){
                Quem não corrige continua vendo o número, em texto: é dado
                de conferência para a Portaria e a Expedição, não campo. */
             ? (podeCorrigirKmDaCargaUI()
-              ? `<input type="text" inputmode="numeric" inputmode="numeric" class="km-input" min="1" step="1"
-                        value="${cargaViva.kmDeslocamento ?? ''}" aria-label="KM de deslocamento"
-                        placeholder="${cargaViva.kmDestino ?? '—'}"
+              ? `<input type="text" inputmode="decimal" class="km-input"
+                        value="${kmTexto(cargaViva.kmDeslocamento)}" aria-label="KM de deslocamento"
+                        placeholder="${kmTexto(cargaViva.kmDestino) || '—'}"
                         title="KM que o frete usa. Corrigir aqui recalcula o valor e fica registrado em Histórico."
                         onwheel="this.blur()"
                         onchange="corrigirKmDaCargaUI('${escJs(cargaViva.id)}',this.value)">`
-              : `<span title="KM de deslocamento">${cargaViva.kmDeslocamento ?? '—'}</span>`)
+              : `<span title="KM de deslocamento">${kmTexto(cargaViva.kmDeslocamento) || '—'}</span>`)
             /* `onwheel` tira o foco ANTES de a roda escrever (14/09/2026).
                Esconder a setinha no CSS não resolve isto: num `type=number`
                com foco, a roda do mouse altera o valor. A Montagem é tabela
                larga, rolada com a roda — passar por cima do KM já escolhido
                mudava a quilometragem sem ninguém digitar, e o frete é KM ×
                tarifa. `inputmode` mantém o teclado numérico no celular. */
-            : `<input type="text" inputmode="numeric" inputmode="numeric" class="km-input" min="1" step="1"
-                      value="${m.km_deslocamento ?? ''}" aria-label="KM de deslocamento"
-                      placeholder="${m.km_destino ?? '—'}"
+            : `<input type="text" inputmode="decimal" class="km-input"
+                      value="${kmTexto(m.km_deslocamento)}" aria-label="KM de deslocamento"
+                      placeholder="${kmTexto(m.km_destino) || '—'}"
                       title="KM que o frete usa. Vem do destino e pode ser corrigido — desvio, retorno, coleta no caminho."
                       onwheel="this.blur()"
-                      onchange="alterarMontagemUI('${id}','kmDeslocamento',this.value)">`}</td>
+                      onchange="alterarMontagemUI('${id}','kmDeslocamento',kmValidoLocal(this.value) ?? this.value)">`}</td>
 
       <td class="c-frete cel-num">${freteMontagemHtml(m, comoCarga ? cargaViva : null)}</td>
 
@@ -12862,7 +12868,7 @@ async function corrigirKmDaCargaUI(cargaId, valor){
   const novo = kmValidoLocal(valor);
   const antigo = c.kmDeslocamento ?? null;
   if(novo === null){
-    notify('O KM precisa ser um número inteiro maior que zero — é ele que multiplica a tarifa.',
+    notify('O KM precisa ser um número maior que zero (pode ter vírgula: 3087,48) — é ele que multiplica a tarifa.',
       'warn', 6000);
     renderAll();
     return;
@@ -12870,7 +12876,7 @@ async function corrigirKmDaCargaUI(cargaId, valor){
   if(novo === antigo) return;
   if(antigo !== null && Math.abs(novo - antigo) > antigo / 2){
     const ok = confirm(
-      `Trocar o KM de ${antigo} para ${novo}?\n\n`
+      `Trocar o KM de ${kmTexto(antigo)} para ${kmTexto(novo)}?\n\n`
       + `É mais que o dobro de diferença — confira antes, porque o frete é `
       + `KM × tarifa e o valor vai ser recalculado.\n\n`
       + `Fica registrado em Histórico quem mudou.`);
@@ -12878,7 +12884,7 @@ async function corrigirKmDaCargaUI(cargaId, valor){
   }
   try {
     corrigirKmDaCarga(cargaId, novo, nomeOperadorAtual(), setorOperadorAtual());
-    notifyGravacao(`KM corrigido para ${novo}. O valor do frete é recalculado pelo servidor.`);
+    notifyGravacao(`KM corrigido para ${kmTexto(novo)}. O valor do frete é recalculado pelo servidor.`);
     renderAll();
   } catch(e){
     notify(e.message || 'Não foi possível corrigir o KM.', 'danger', 7000);
