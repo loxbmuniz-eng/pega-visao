@@ -350,6 +350,37 @@ function temCargaDev(d) {
   return (d.itens || []).some((i) => String(i.cargaDev || '').trim());
 }
 
+/* A NOTA DE TRANSFERÊNCIA NA LINHA DO RELATÓRIO (28/09/2026).
+
+   Relato do dono: "no relatório de devoluções não está aparecendo o número
+   da nota de transferência que é colocado pelo pessoal das filiais, e
+   precisa aparecer no relatório de dev na mesma linha onde falam o número
+   da devolução e a data".
+
+   Ela existia no checklist desde 16/09, mas no papel só saía no subtítulo
+   do Relatório do dia — e na Relação para o Operador, que é o PDF que a
+   própria filial gera, não saía em lugar nenhum. Agora é coluna, entre o
+   Nº DEV e a Data DEV, nos DOIS relatórios, pelas mesmas funções.
+
+   Só existe quando o checklist tem nota de transferência (os de filial —
+   para eles o servidor a exige). Os da matriz não ganham coluna vazia:
+   mesma regra do Nº carga dev. Guarda:
+   testes/test_nota_transferencia_no_relatorio_dev.py */
+function temNotaTransfDev(d) {
+  return !!(d && String(d.notaTransferencia || '').trim());
+}
+const TH_NOTA_TRANSF_DEV =
+  '<th title="Nota de transferência informada pela filial">Nota transf.</th>';
+function tdNotaTransfDev(d) {
+  return `<td>${esc(String(d.notaTransferencia || '').trim())}</td>`;
+}
+/* Quantas colunas opcionais o checklist tem no meio da linha (Nº carga dev
+   e Nota transf.) — é o que a linha de TOTAL precisa pular para fechar
+   alinhada com o cabeçalho. */
+function colunasOpcionaisDev(d) {
+  return (temCargaDev(d) ? 1 : 0) + (temNotaTransfDev(d) ? 1 : 0);
+}
+
 function parcialTotalTexto(item) {
   return item && item.parcial ? 'PARCIAL' : 'TOTAL';
 }
@@ -2176,7 +2207,7 @@ async function relatorioDevolucoesUI(diaParam) {
           <th>Nota</th><th title="A devolução é parcial ou total">Parcial / Total</th><th title="Número da nota parcial">Nº parcial</th>
           <th>Supervisor</th><th title="Vendedor">RCA</th><th>Cliente</th>
           <th>CX</th><th title="Peso em QUILOS (kg)">Peso (kg)</th><th>Produto</th><th>Nº DEV</th>
-          ${temCargaDev(d) ? '<th title="Carga de devolução do SIS ATAK">Nº carga dev</th>' : ''}<th>Data DEV</th><th>Motivo</th>
+          ${temCargaDev(d) ? '<th title="Carga de devolução do SIS ATAK">Nº carga dev</th>' : ''}${temNotaTransfDev(d) ? TH_NOTA_TRANSF_DEV : ''}<th>Data DEV</th><th>Motivo</th>
           ${/* O relatório mostra o OK e a quantidade SEPARADOS, como a tela.
                 Juntar os dois numa coluna só ("OK" ou o número) esconderia a
                 diferença entre "conferi e estava tudo certo" e "nem conferi"
@@ -2195,6 +2226,7 @@ async function relatorioDevolucoesUI(diaParam) {
             <td>${esc(i.codProduto)}${i.produtoNome ? '-' + esc(i.produtoNome) : ''}</td>
             <td>${esc(i.numDev)}</td>
             ${temCargaDev(d) ? `<td>${esc(cargaDevDoItem(i, d)) || '—'}</td>` : ''}
+            ${temNotaTransfDev(d) ? tdNotaTransfDev(d) : ''}
             <td>${i.dataItem ? esc(String(i.dataItem).slice(0, 10).split('-').reverse().join('/')) : '—'}</td>
             <td>${esc(i.motivo)}</td>
             <td class="c-peso">${i.pesoFaturamento !== null ? i.pesoFaturamento.toLocaleString('pt-BR') : '—'}</td>
@@ -2210,7 +2242,7 @@ async function relatorioDevolucoesUI(diaParam) {
               (pedido de 18/08/2026): as colunas CX e PESO fecham a conta do
               checklist, e a pesagem do Faturamento fecha a dela ao lado —
               é o número que a conferência procura primeiro. */''}
-        <tfoot>${somatorioItensDev(d.itens, 6, temCargaDev(d))}</tfoot>
+        <tfoot>${somatorioItensDev(d.itens, 6, colunasOpcionaisDev(d))}</tfoot>
       </table>
       ${d.divergencias.length ? `<div class="dev-doc-diverg">
           <strong>Divergentes (fora do checklist):</strong>
@@ -2529,7 +2561,7 @@ async function cadastrarClienteDevUI() {
    entra depois que a Portaria gera o número no SIS ATAK. Cada coluna que
    aparece ou some no meio da tabela precisa entrar nesta conta, senão o
    total escorrega uma casa para o lado. */
-function somatorioItensDev(itens, colspanAntes, comCargaDev) {
+function somatorioItensDev(itens, colspanAntes, opcionais) {
   const num = (v) => (v === null || v === undefined ? 0 : Number(v) || 0);
   const cx = itens.reduce((s, i) => s + num(i.cx), 0);
   const peso = itens.reduce((s, i) => s + num(i.peso), 0);
@@ -2541,8 +2573,9 @@ function somatorioItensDev(itens, colspanAntes, comCargaDev) {
       <td colspan="${colspanAntes}" class="tot-rotulo">TOTAL — ${itens.length} linha(s)</td>
       <td class="tot-num">${fmt(cx, 0)}</td>
       <td class="tot-num">${fmt(peso, 2)} kg</td>
-      ${/* Produto, Nº DEV, [Nº carga dev], Data DEV e Motivo não somam. */''}
-      <td colspan="${comCargaDev ? 5 : 4}"></td>
+      ${/* Produto, Nº DEV, [Nº carga dev], [Nota transf.], Data DEV e
+            Motivo não somam. */''}
+      <td colspan="${4 + (opcionais || 0)}"></td>
       <td class="tot-num">${pesagem ? fmt(pesagem, 2) + ' kg' : ''}</td>
       ${/* O tique da Expedição não soma — é sim/não, não é quantidade.
             A célula vazia existe para o rodapé continuar alinhado com o
@@ -2555,7 +2588,7 @@ function somatorioItensDev(itens, colspanAntes, comCargaDev) {
     </tr>`;
 }
 
-function somatorioLinhasOperadorDev(linhas, comCargaDev) {
+function somatorioLinhasOperadorDev(linhas, opcionais) {
   const num = (v) => (v === null || v === undefined ? 0 : Number(v) || 0);
   const cx = linhas.reduce((s, { i }) => s + num(i.cx), 0);
   const peso = linhas.reduce((s, { i }) => s + num(i.peso), 0);
@@ -2564,8 +2597,8 @@ function somatorioLinhasOperadorDev(linhas, comCargaDev) {
       <td colspan="6" class="tot-rotulo">TOTAL — ${linhas.length} linha(s)</td>
       <td class="tot-num">${fmt(cx, 0)}</td>
       <td class="tot-num">${fmt(peso, 2)} kg</td>
-      ${/* Produto, Nº DEV, [Nº carga dev], Data DEV e Motivo. */''}
-      <td colspan="${comCargaDev ? 5 : 4}"></td>
+      ${/* Produto, Nº DEV, [Nº carga dev], [Nota transf.], Data DEV e Motivo. */''}
+      <td colspan="${4 + (opcionais || 0)}"></td>
     </tr>`;
 }
 
@@ -2653,6 +2686,7 @@ async function relatorioOperadorDevolucoesUI(idChecklist) {
             <th>Cliente</th><th>CX</th><th title="Peso em QUILOS (kg)">Peso (kg)</th><th>Produto</th>
             <th>Nº DEV</th>
             ${temCargaDev(d) ? '<th title="Carga de devolução do SIS ATAK">Nº carga dev</th>' : ''}
+            ${temNotaTransfDev(d) ? TH_NOTA_TRANSF_DEV : ''}
             <th>Data DEV</th><th>Motivo</th>
           </tr></thead>
           <tbody>${d.itens.map((i) => `
@@ -2668,10 +2702,11 @@ async function relatorioOperadorDevolucoesUI(idChecklist) {
               <td>${esc(i.codProduto)}${i.produtoNome ? '-' + esc(i.produtoNome) : ''}</td>
               <td>${esc(i.numDev)}</td>
               ${temCargaDev(d) ? `<td>${esc(cargaDevDoItem(i, d)) || '—'}</td>` : ''}
+              ${temNotaTransfDev(d) ? tdNotaTransfDev(d) : ''}
               <td>${i.dataItem ? esc(String(i.dataItem).slice(0, 10).split('-').reverse().join('/')) : '—'}</td>
               <td>${esc(i.motivo)}</td>
             </tr>`).join('')}</tbody>
-          <tfoot>${somatorioLinhasOperadorDev(d.itens.map((i) => ({ i })), temCargaDev(d))}</tfoot>
+          <tfoot>${somatorioLinhasOperadorDev(d.itens.map((i) => ({ i })), colunasOpcionaisDev(d))}</tfoot>
         </table>
       </div>`).join('') : '<div class="card-sub">Nenhuma devolução lançada neste dia.</div>'}
       ${rodapeDocumento(
