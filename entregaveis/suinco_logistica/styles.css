@@ -3831,6 +3831,14 @@ body.painel-entrando > :not(#modal-operador):not(#notif){
 
 /* Revisões de carga (Bloco B, 16/08/2026) */
 .modal-box-larga{ max-width: 560px; }
+/* A prévia do Sisatak é uma tabela de nove colunas: precisa da largura da
+   tela, não da de um formulário. Linha que já está noutro checklist fica
+   apagada — continua legível, mas não chama a mão. */
+.modal-box-sisatak{ max-width: 1180px; width: 96vw; }
+.sis-tabela input[type=text]{ width: 84px; }
+.sis-tabela select{ width: 92px; }
+.sis-tabela tr.sis-ja{ opacity: .62; }
+.sis-tabela td.sis-dev{ white-space: nowrap; }
 #revisoes-lista{ display:flex; flex-direction:column; gap:10px; max-height:52vh; overflow-y:auto; margin:10px 0; }
 .revisao-item{
   border:1px solid var(--borda, rgba(255,255,255,.12));

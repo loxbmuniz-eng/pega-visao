@@ -16,6 +16,8 @@ import { exigirLogin, exigirSetor } from '../middleware/auth.js';
 import { ehFilial, SETORES_FILIAL, soAcompanha, RECUSA_SO_ACOMPANHA } from '../dominio/fluxo.js';
 import { emitir } from '../tempo-real.js';
 import { registrarLeitura } from '../servicos/registro_leitura.js';
+import { lerPrimeiraAbaXls } from '../servicos/planilha_xls.js';
+import { previaDoSisatak } from '../dominio/sisatak.js';
 import {
   DEV_STATUS_INICIAL,
   validarTransicaoDevolucao,
@@ -826,6 +828,57 @@ rotasDevolucoes.post('/devolucoes/:id/itens', exigirLogin,
     await aprenderCliente({ query: consultar }, ins.rows[0]);
     emitirAtualizada(req.params.id);
     res.status(201).json(itemParaPainel(ins.rows[0]));
+  } catch (e) { next(e); }
+});
+
+/* A PRÉVIA DO RELATÓRIO DO SISATAK (28/09/2026).
+
+   Recebe o .xls do WRMVE790 (em base64, dentro do JSON — 34 KB viram 46 KB,
+   longe do limite de 1 MB) e devolve as linhas que ENTRARIAM, sem gravar
+   nada. Quem grava é a rota de item acima, uma linha por vez, com a caixa
+   que o operador digitou: a importação não tem caminho próprio de gravação.
+
+   Mesma porta da rota de item — Logística e filiais, cada filial só no
+   próprio checklist —, porque a prévia só serve para lançar item.
+
+   DUPLICIDADE: a linha cujo Nº DEV + produto já está em algum checklist
+   vem marcada com o número dele. Importar duas vezes o mesmo arquivo é o
+   erro mais provável que existe, e a prévia é o lugar de pegá-lo. */
+rotasDevolucoes.post('/devolucoes/:id/sisatak', exigirLogin,
+  exigirSetor('Logística', ...SETORES_FILIAL), async (req, res, next) => {
+  try {
+    const op = req.operador;
+    const dev = await consultar(
+      'SELECT devolucao_id, criada_setor FROM devolucoes WHERE devolucao_id = $1 AND excluida_em IS NULL',
+      [req.params.id]
+    );
+    if (!dev.rows[0] || (ehFilial(op.setor) && dev.rows[0].criada_setor !== op.setor)) {
+      return res.status(404).json({ erro: 'Devolução não encontrada.', codigo: 'NAO_ENCONTRADA' });
+    }
+    const bruto = String((req.body || {}).arquivo || '');
+    if (!bruto) {
+      return res.status(400).json({ erro: 'Escolha o arquivo .xls do relatório WRMVE790.', codigo: 'SEM_ARQUIVO' });
+    }
+    let previa;
+    try {
+      previa = previaDoSisatak(lerPrimeiraAbaXls(Buffer.from(bruto, 'base64')));
+    } catch (e) {
+      return res.status(422).json({ erro: e.message, codigo: 'ARQUIVO_SISATAK_INVALIDO' });
+    }
+    if (previa.itens.length) {
+      const ja = await consultar(
+        `SELECT i.num_dev, i.cod_produto, d.numero
+           FROM devolucao_itens i JOIN devolucoes d ON d.devolucao_id = i.devolucao_id
+          WHERE d.excluida_em IS NULL AND i.num_dev = ANY($1::text[])`,
+        [previa.itens.map((i) => i.numDev)]
+      );
+      const onde = new Map(ja.rows.map((r) => [`${r.num_dev}|${r.cod_produto}`, Number(r.numero)]));
+      for (const it of previa.itens) {
+        const n = onde.get(`${it.numDev}|${it.codProduto}`);
+        it.jaNoChecklist = n === undefined ? null : n;
+      }
+    }
+    res.json(previa);
   } catch (e) { next(e); }
 });
 
