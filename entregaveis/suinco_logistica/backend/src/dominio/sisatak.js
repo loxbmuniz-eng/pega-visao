@@ -30,17 +30,20 @@
 const OBRIGATORIAS = { nf: 'Documento_NF', dev: 'Documento_DEN-DEV', produto: 'Produto' };
 const OPCIONAIS = {
   cliente: 'Cliente', supervisor: 'Supervisor', representante: 'Representante',
-  motivo: 'Motivo_Devolucao', dataDev: 'Data_DEN-DEV', tipo: 'Tipo_Devolucao',
+  motivo: 'Motivo_Devolucao', dataDev: 'Data_DEN-DEV',
   valorNf: 'Valor_Total_NF', valorDev: 'Valor_Total_DEN-DEV',
 };
 
-export const TIPO_QUE_ENTRA = '01';   // "01 - DEVOLUÇÃO FÍSICA", quando a coluna existe
+/* A REGRA É UMA SÓ, NOS DOIS FORMATOS: entra a linha cujo documento de
+   devolução termina com DEV. Palavras do dono (28/09/2026): "você sempre
+   vai importar pro painel somente as linhas onde as células da coluna E
+   terminam com DEV" — e antes: "DEN não entra, só o que é DEV".
 
-/* SEM A COLUNA DE TIPO (planilha limpa), quem separa é o documento.
-   No relatório completo de 28/09/2026 a separação foi exata: as 5 linhas
-   de DEVOLUÇÃO FÍSICA eram todas "-DEV"; as 34 de refaturamento e quebra
-   de peso, todas "-DEN". Então: "-DEV" entra, "-DEN" fica fora — e a
-   prévia diz quantas ficaram fora por isso. */
+   No relatório completo daquele dia a separação coincidia com o tipo (as 5
+   de DEVOLUÇÃO FÍSICA eram todas DEV; as 34 de refaturamento e quebra de
+   peso, todas DEN). Mesmo assim o tipo NÃO é usado como filtro: duas regras
+   para a mesma decisão divergem no primeiro arquivo em que discordarem, e
+   a regra que o dono deu é a do documento. */
 export const SUFIXO_QUE_ENTRA = 'DEV';
 
 /* O documento do Sisatak: 103-001-53188-DEV. É também o que separa linha
@@ -89,7 +92,6 @@ export function previaDoSisatak(linhas) {
     }
   }
   for (const [chave, nome] of Object.entries(OPCIONAIS)) pos[chave] = cab.indexOf(nome);
-  const temTipo = pos.tipo >= 0;
   const temValores = pos.valorNf >= 0 && pos.valorDev >= 0;
   const fora = { outroTipo: {}, semDocumento: 0 };
   const itens = [];
@@ -99,14 +101,7 @@ export function previaDoSisatak(linhas) {
     if (/^n[ãa]o possui$/i.test(doc)) { fora.semDocumento++; continue; }
     const m = doc.match(DOCUMENTO);
     if (!m || !DOCUMENTO.test(txt(c('nf')))) continue;          // vazia ou rodapé
-    if (temTipo) {
-      const tipo = txt(c('tipo'));
-      if (!tipo.startsWith(TIPO_QUE_ENTRA)) {
-        const rotulo = tipo || 'Não informado';
-        fora.outroTipo[rotulo] = (fora.outroTipo[rotulo] || 0) + 1;
-        continue;
-      }
-    } else if (m[1] !== SUFIXO_QUE_ENTRA) {
+    if (m[1] !== SUFIXO_QUE_ENTRA) {
       const rotulo = `documento ${m[1]} (não é devolução física)`;
       fora.outroTipo[rotulo] = (fora.outroTipo[rotulo] || 0) + 1;
       continue;

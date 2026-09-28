@@ -23,6 +23,9 @@ import bcrypt from 'bcryptjs';
 
 import { criarServidor } from '../src/servidor.js';
 import { pool } from '../src/banco.js';
+import fs from 'node:fs';
+import { lerPrimeiraAbaXls } from '../src/servicos/planilha_xls.js';
+import { previaDoSisatak } from '../src/dominio/sisatak.js';
 
 let servidor;
 let base;
@@ -1817,5 +1820,82 @@ describe('19. Quem pesou finaliza a sobra (16/09/2026)', () => {
     const r = await req(`/api/devolucoes/${id}/etapa`, { metodo: 'POST',
       token: tokens['Filial 105 BSB'], corpo: { para: 'Descarga Conferida' } });
     assert.equal(r.status, 403, r.texto);
+  });
+});
+
+describe('20. O relatório do Sisatak vira linhas do checklist (28/09/2026)', () => {
+  /* Pedido do dono: importar o WRMVE790 "e trazer os dados dentro das
+     devs". Decisões dele: só devolução física; "DEN não entra, só o que é
+     DEV"; linha sem documento fica fora; Nº DEV inteiro; a CX o operador
+     digita. As planilhas são INVENTADAS (testes/fixtures/gerar_sisatak_
+     exemplo.py): o arquivo real tem cliente e representante e não entra no
+     repositório. */
+  const arq = (nome) => fs.readFileSync(new URL(`./fixtures/${nome}`, import.meta.url));
+
+  test('planilha LIMPA (7 colunas): só -DEV entra; -DEN e "Não Possui" ficam fora, com a conta', () => {
+    const p = previaDoSisatak(lerPrimeiraAbaXls(arq('sisatak_limpo_exemplo.xls')));
+    assert.deepEqual(p.itens.map((i) => i.numDev), ['103-001-990001-DEV', '103-001-990002-DEV']);
+    assert.deepEqual(p.fora, { outroTipo: { 'documento DEN (não é devolução física)': 2 }, semDocumento: 2 });
+    const [a] = p.itens;
+    assert.equal(a.nota, '900101', 'a Nota é o número da nota fiscal');
+    assert.equal(a.codCliente, '900001');
+    assert.equal(a.clienteNome, 'CLIENTE TESTE AÇOUGUE UM', 'acento sobrevive à leitura');
+    assert.equal(a.codProduto, '900501');
+    assert.equal(a.supervisor, 'SUPERVISOR TESTE', 'supervisor sem o código do Sisatak');
+    assert.equal(a.vendedor, 'REPRESENTANTE TESTE (REGIÃO)');
+    assert.equal(a.motivo, '05 - TRANSPORTE/FALTA DE MERCADORIA', 'o motivo como o Sisatak escreveu');
+    assert.equal(a.dataItem, null, 'sem data na planilha limpa: vale a do checklist');
+    assert.equal(a.parcialSugerido, null, 'sem valores, não há sugestão de parcial');
+  });
+
+  test('relatório COMPLETO: a mesma regra do documento, e sugere parcial pelo valor', () => {
+    const p = previaDoSisatak(lerPrimeiraAbaXls(arq('sisatak_completo_exemplo.xls')));
+    assert.deepEqual(p.itens.map((i) => [i.numDev, i.parcialSugerido, i.dataItem]), [
+      ['103-001-990001-DEV', false, '2026-09-28'],
+      ['103-001-990002-DEV', true, '2026-09-28'],
+    ]);
+    assert.deepEqual(p.fora.outroTipo, { 'documento DEN (não é devolução física)': 2 },
+      'o filtro é o documento terminar com DEV, não a coluna de tipo');
+  });
+
+  test('a rota devolve a prévia SEM gravar, e marca o que já está em algum checklist', async () => {
+    const c = await req('/api/devolucoes', { metodo: 'POST', token: tokens['Logística'],
+      corpo: novoChecklist({ itens: [] }) });
+    assert.equal(c.status, 201, c.texto);
+    const id = c.json.id;
+    const b64 = arq('sisatak_limpo_exemplo.xls').toString('base64');
+    const r = await req(`/api/devolucoes/${id}/sisatak`, { metodo: 'POST',
+      token: tokens['Logística'], corpo: { arquivo: b64 } });
+    assert.equal(r.status, 200, r.texto);
+    assert.equal(r.json.itens.length, 2);
+    assert.deepEqual(r.json.itens.map((i) => i.jaNoChecklist), [null, null]);
+    const itens = await pool.query('SELECT count(*)::int AS n FROM devolucao_itens WHERE devolucao_id = $1', [id]);
+    assert.equal(itens.rows[0].n, 0, 'a prévia não grava nada');
+
+    // Lança a primeira pela rota de sempre; a segunda importação a aponta.
+    const it = r.json.itens[0];
+    const lan = await req(`/api/devolucoes/${id}/itens`, { metodo: 'POST', token: tokens['Logística'],
+      corpo: { nota: it.nota, codProduto: it.codProduto, numDev: it.numDev, cx: 3, motivo: it.motivo } });
+    assert.equal(lan.status, 201, lan.texto);
+    const r2 = await req(`/api/devolucoes/${id}/sisatak`, { metodo: 'POST',
+      token: tokens['Logística'], corpo: { arquivo: b64 } });
+    assert.equal(r2.json.itens[0].jaNoChecklist, c.json.numero, 'a linha já lançada aponta o checklist');
+    assert.equal(r2.json.itens[1].jaNoChecklist, null);
+  });
+
+  test('arquivo que não é o relatório é recusado COM o motivo, e setor sem lançamento não passa', async () => {
+    const c = await req('/api/devolucoes', { metodo: 'POST', token: tokens['Logística'],
+      corpo: novoChecklist({ itens: [] }) });
+    const lixo = Buffer.from('isto não é uma planilha').toString('base64');
+    const r = await req(`/api/devolucoes/${c.json.id}/sisatak`, { metodo: 'POST',
+      token: tokens['Logística'], corpo: { arquivo: lixo } });
+    assert.equal(r.status, 422, r.texto);
+    assert.match(r.json.erro, /\.xls/);
+    const vazio = await req(`/api/devolucoes/${c.json.id}/sisatak`, { metodo: 'POST',
+      token: tokens['Logística'], corpo: {} });
+    assert.equal(vazio.status, 400, vazio.texto);
+    const port = await req(`/api/devolucoes/${c.json.id}/sisatak`, { metodo: 'POST',
+      token: tokens['Portaria'], corpo: { arquivo: lixo } });
+    assert.equal(port.status, 403, 'a Portaria não lança item — não importa');
   });
 });
