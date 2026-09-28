@@ -1,0 +1,73 @@
+/* =====================================================================
+   RELATÓRIOS, HISTÓRICO E PROGRAMAÇÃO — MENOS CAIXINHA, CAMPO NO TAMANHO
+   DO QUE CABE NELE (28/09/2026)
+   ---------------------------------------------------------------------
+   Pedido do dono: a mesma qualidade do Pulso nas outras abas, na ordem
+   Relatórios → Histórico → Programação → Torre — com a regra dele por cima
+   de tudo: "as partes principais precisam manter sua estrutura (...)
+   todos os campos que são de edição precisam seguir firmes a mesma
+   estrutura".
+
+   Por isso este arquivo é SÓ de arrumação. Nenhum campo nasce, some,
+   muda de nome ou de ordem; nenhuma coluna de tabela muda. O que muda:
+
+   1. RELATÓRIOS — sete cartões empilhados viram UM painel, com um fio
+      entre as seções. Sete molduras para sete documentos era o "muita
+      caixinha": a tela parecia um formulário quebrado em pedaços.
+   2. CAMPO DE DATA NA LARGURA DE UMA DATA. "De" e "Até" ocupavam a tela
+      inteira — 1.100 px para escrever 28/09/2026. Ficam com 200 px, lado a
+      lado com os atalhos (Relatórios) e com os outros filtros (Histórico).
+   3. PROGRAMAÇÃO — Peso e Sequência, sozinhos numa linha, também ocupavam
+      a tela inteira para um número de até cinco dígitos. Ficam do tamanho
+      do número.
+   4. TORRE — nada aqui. Ela ganhou o deslizar hoje, e as colunas e campos
+      dela são exatamente os de antes (test_torre_desliza_sem_mudar_colunas).
+
+   Dentro de @media screen como todo o tema2027: o relatório impresso lê o
+   mesmo CSS e não pode mudar (test_tema2027_so_tela).
+   ===================================================================== */
+@media screen{
+
+  /* ---- 1. Relatórios: um painel só ---- */
+  #tab-relatorios .card{
+    margin:0; border-radius:0; box-shadow:none;
+    border-top-width:0; border-left-width:1px; border-right-width:1px;
+  }
+  #tab-relatorios .card + .card{ border-top:1px solid var(--border-soft) }
+  #tab-relatorios .card:first-of-type{
+    border-top-width:1px; border-radius:var(--radius) var(--radius) 0 0;
+  }
+  #tab-relatorios .card:last-of-type{ border-radius:0 0 var(--radius) var(--radius) }
+
+  /* ---- 2. Data do tamanho de uma data ---- */
+  #tab-relatorios input[type=date],
+  #tab-historico input[type=date]{ max-width:200px }
+  #tab-relatorios .form-group:has(> input[type=date]),
+  #tab-historico .form-group:has(> input[type=date]){ flex:0 0 auto; min-width:0 }
+  #tab-historico .form-group:has(> #hist-filtro-placa){ flex:0 1 320px }
+  /* O período dos relatórios mora num .form-grid (uma coluna): De, Até e
+     os atalhos viram uma linha só, que quebra sozinha se faltar espaço. */
+  #tab-relatorios .form-grid:has(> .form-group > #rel-data-de){
+    display:flex; flex-wrap:wrap; gap:10px 14px; align-items:flex-end;
+  }
+  #tab-relatorios .form-grid:has(> .form-group > #rel-data-de) > .form-group{ flex:0 0 auto }
+  #tab-historico .form-group.flex-end{ flex:0 0 auto; min-width:0 }
+  #tab-historico .form-group.flex-end .btn{ width:auto }
+
+  /* ---- 3. Programação: número do tamanho do número ---- */
+  #tab-programacao .form-group:has(> #prog-peso),
+  #tab-programacao .form-group:has(> #prog-sequencia){ flex:0 1 240px; max-width:240px }
+
+  /* O celular continua empilhando tudo na largura toda: é lá que o dedo
+     precisa de alvo grande, e 200 px ali seriam metade da tela à toa. */
+  @media (max-width:720px){
+    #tab-relatorios .form-grid:has(> .form-group > #rel-data-de) > .form-group{ flex:1 1 100% }
+    #tab-relatorios input[type=date],
+    #tab-historico input[type=date]{ max-width:none }
+    #tab-relatorios .form-group:has(> input[type=date]),
+    #tab-historico .form-group:has(> input[type=date]),
+    #tab-historico .form-group:has(> #hist-filtro-placa),
+    #tab-programacao .form-group:has(> #prog-peso),
+    #tab-programacao .form-group:has(> #prog-sequencia){ flex:1 1 100%; max-width:none }
+  }
+}
