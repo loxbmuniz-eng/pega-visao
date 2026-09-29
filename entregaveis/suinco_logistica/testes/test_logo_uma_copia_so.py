@@ -34,7 +34,9 @@ O QUE ESTE TESTE TRAVA:
      (os <link> do <head>, que não aceitam variável de CSS) e duas da logo
      (a variável do CSS e o <img> do cabeçalho do documento);
   2. nenhuma imagem embutida passa de 40 KB;
-  3. o peso comprimido do painel não volta a passar de 700 KB;
+  3. o peso comprimido do painel não volta a passar de 760 KB (era 700 até
+     28/09/2026; o dono subiu para caber o Pátio ao vivo e a reforma visual
+     de todas as abas — "MARCHA");
   4. a logo continua VISÍVEL — E ISSO SE MEDE EM PIXEL, NÃO EM NOME DE
      CLASSE. Na primeira versão deste teste eu conferi se a classe estava
      no arquivo. Estava — e a logo NÃO aparecia no PDF, porque `.doc-logo`
@@ -70,7 +72,7 @@ ck('a maior imagem embutida cabe em 40 KB', maior <= 40 * 1024, f'{maior} bytes'
 print('\n=== 3. O PESO QUE VIAJA PELA REDE ===')
 cru = len(html.encode('utf-8'))
 comprimido = len(gzip.compress(html.encode('utf-8'), 9))
-ck('o painel comprimido cabe em 700 KB', comprimido <= 700 * 1024,
+ck('o painel comprimido cabe em 760 KB', comprimido <= 760 * 1024,
    f'{comprimido} bytes ({cru} crus)')
 
 print('\n=== 4. A MARCA CONTINUA NA TELA E NO PAPEL ===')

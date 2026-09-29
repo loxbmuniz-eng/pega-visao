@@ -2281,6 +2281,8 @@ function renderTabAtual(){
     case 'expedicao': renderExpedicao(); renderVisaoPatio('expedicao'); break;
     case 'faturamento': renderFaturamento(); renderVisaoPatio('faturamento'); break;
     case 'indicadores': renderIndicadores(); break;
+    // Módulo próprio (patio_vivo.js, carregado depois deste arquivo).
+    case 'patio': if(typeof renderPatioVivo === 'function') renderPatioVivo(); break;
     case 'cadastros':
       renderCadastros();
       // A tabela de produtos (base oficial de 18/08/2026) vive no módulo

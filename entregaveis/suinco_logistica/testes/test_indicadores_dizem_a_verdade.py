@@ -206,8 +206,9 @@ async def main():
         print('\n=== 5. AS ABAS EXISTEM PARA O TECLADO ===')
         abas = await pg.evaluate("""() => [...document.querySelectorAll('.nav-tab')].map(t => ({
             role: t.getAttribute('role'), tab: t.tabIndex, sel: t.getAttribute('aria-selected') }))""")
-        ck('as 11 abas têm role="tab" e entram na ordem do Tab',
-           len(abas) == 11 and all(a['role'] == 'tab' and a['tab'] == 0 for a in abas), str(abas[:3]))
+        # 12 desde 28/09/2026: a aba Pátio ao vivo, pedida pelo dono.
+        ck('as 12 abas têm role="tab" e entram na ordem do Tab',
+           len(abas) == 12 and all(a['role'] == 'tab' and a['tab'] == 0 for a in abas), str(abas[:3]))
         ck('a aba ativa declara aria-selected', any(a['sel'] == 'true' for a in abas))
         await pg.focus('.nav-tab[data-tab="historico"]')
         await pg.keyboard.press('Enter')

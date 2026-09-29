@@ -102,6 +102,7 @@
 <div id="menu-overlay" onclick="fecharMenuMobile()"></div>
 <div id="nav" role="tablist" aria-label="Abas do painel">
   <div class="nav-tab active" role="tab" tabindex="0" aria-selected="true" data-tab="torre" onclick="abrirTab('torre')"><svg class="ico" aria-hidden="true"><use href="#i-torre"/></svg> Torre de Controle</div>
+  <div class="nav-tab" role="tab" tabindex="0" aria-selected="false" data-tab="patio" onclick="abrirTab('patio')"><svg class="ico" aria-hidden="true"><use href="#i-torre"/></svg> Pátio ao vivo</div>
   <div class="nav-tab" role="tab" tabindex="0" aria-selected="false" data-tab="programacao" onclick="abrirTab('programacao')"><svg class="ico" aria-hidden="true"><use href="#i-programacao"/></svg> Programação</div>
   <div class="nav-tab" role="tab" tabindex="0" aria-selected="false" data-tab="devolucoes" onclick="abrirTab('devolucoes')"><svg class="ico" aria-hidden="true"><use href="#i-devolucoes"/></svg> Devoluções</div>
   <div class="nav-tab" role="tab" tabindex="0" aria-selected="false" data-tab="portaria" onclick="abrirTab('portaria')"><svg class="ico" aria-hidden="true"><use href="#i-portaria"/></svg> Portaria</div>
@@ -203,6 +204,39 @@
   </div>
 
   <!-- ===== PROGRAMAÇÃO ===== -->
+  <!-- PÁTIO AO VIVO (28/09/2026) — a tela de demonstração com a operação de
+       verdade. Só leitura; a lógica mora em patio_vivo.js e o estilo em
+       tema2027/70_patio_ao_vivo.css. -->
+  <div class="tab-page" id="tab-patio">
+    <div class="pv-cab"><h2>Pátio ao vivo</h2><span class="pv-legenda" id="pv-relogio"></span></div>
+    <div class="pv-fatos">
+      <p class="pv-fato"><strong id="pv-k-patio">—</strong><span>caminhões no pátio agora</span><em id="pv-k-patio-sub"></em></p>
+      <p class="pv-fato"><strong id="pv-k-media">—</strong><span>de pátio, em média, nas cargas que saíram hoje</span></p>
+      <p class="pv-fato"><strong id="pv-k-saiu">—</strong><span>seguiram viagem hoje</span></p>
+      <p class="pv-fato"><strong id="pv-k-prog">—</strong><span>programadas esperando o caminhão</span></p>
+    </div>
+    <div class="pv-cab">
+      <h2>O pátio agora</h2>
+      <span class="pv-legenda"><span><i style="color:var(--st-faturado-txt)"></i>até 2 horas</span>
+        <span><i style="color:var(--st-embarque-iniciado-txt)"></i>de 2 a 3 horas</span>
+        <span><i style="color:var(--st-aguardando-veiculo-txt)"></i>acima de 3 horas</span>
+        <span><i style="border-style:dotted"></i>ainda não chegou</span></span>
+    </div>
+    <div class="pv-pista" id="pv-pista"></div>
+    <div class="pv-baixo">
+      <section class="pv-painel"><h2>Caminhões no pátio ao longo do dia</h2>
+        <p>Quantos estavam dentro em cada hora de hoje. Passe o dedo ou o mouse para ler.</p>
+        <div class="pv-grafico" id="pv-grafico"></div></section>
+      <section class="pv-painel"><h2>Tempo médio de pátio por rota</h2>
+        <p>Só as cargas que já saíram hoje.</p>
+        <div id="pv-rank"></div></section>
+      <section class="pv-painel"><h2>Rádio do pátio</h2>
+        <p>Cada carimbo de hoje, na hora em que aconteceu.</p>
+        <ol class="pv-radio" id="pv-radio"></ol>
+        <p class="pv-vazio" id="pv-radio-vazio" hidden>Nenhum carimbo ainda hoje.</p></section>
+    </div>
+  </div>
+
   <div class="tab-page" id="tab-programacao">
     <div class="funcao-aba" data-tab="programacao"></div>
     <div class="card">
@@ -2054,5 +2088,6 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
 <script src="graficos2027.js"></script>
 <script src="app.js"></script>
 <script src="devolucoes.js"></script>
+<script src="patio_vivo.js"></script>
 </body>
 </html>

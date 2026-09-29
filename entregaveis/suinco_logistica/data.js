@@ -642,7 +642,9 @@ const STATUS_ORDEM_EXPORT = STATUS_FLOW.slice();
    quem alimenta e audita o checklist digital antes de abrir para os outros
    setores (decisão da reunião com o gestor). A fase 2 é acrescentar a aba
    às listas dos setores — nada além disso. */
-const ABAS_OPERACIONAIS = ['torre','programacao','devolucoes','portaria',
+/* 'patio' (28/09/2026): o Pátio ao vivo, só de leitura — ao lado da Torre
+   para quem já tem a Torre. */
+const ABAS_OPERACIONAIS = ['torre','patio','programacao','devolucoes','portaria',
                            'expedicao','faturamento','indicadores','cadastros',
                            'historico','relatorios'];
 
@@ -704,7 +706,10 @@ const SETOR_PERMISSOES = {
      mora dentro da Torre (ver ABAS_OPERACIONAIS acima), por isso 'torre'
      continua: é o caminho para ela, não acesso a mais poder (a Torre é
      leitura pura, e os campos editáveis dela só aparecem para quem pode
-     cancelar carga — Logística/Administração). */
+     cancelar carga — Logística/Administração).
+     O Pátio ao vivo (28/09/2026) NÃO entra aqui sem o dono decidir: a lista
+     do Comercial foi fechada por ele em 11/08, e os testes a travam
+     (test_setor_comercial, test_comercial_e_excluir_aguardando). */
   'Comercial':    ['torre','historico'],
   /* Setores da devolução (18/08/2026): cada um assina um passo do
      checklist digital — Controles Internos destina os produtos, Central

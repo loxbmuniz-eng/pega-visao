@@ -1,0 +1,144 @@
+/* =====================================================================
+   PÁTIO AO VIVO — a tela de demonstração, agora com a operação de verdade
+   (28/09/2026)
+   ---------------------------------------------------------------------
+   Pedido do dono, depois de ver a demonstração: "cadê o pátio ao vivo?".
+   É a mesma tela — uma coluna por etapa, um cartão por caminhão, o anel
+   do tempo de pátio, o cartão que voa de coluna quando a etapa muda — lendo
+   as cargas do painel em vez de uma simulação.
+
+   Aba própria e só de leitura: a Torre com as 12 colunas editáveis, a
+   Montagem e a Visão do Pátio ficam exatamente como estão.
+
+   Cores: as do painel (tokens de styles.css), para valer nos dois temas.
+   Dentro de @media screen como todo o tema2027 — nada disto vai ao papel.
+   ===================================================================== */
+@media screen{
+  #tab-patio{
+    --pv-card: var(--navy);
+    --pv-card-2: var(--navy-light);
+    --pv-linha: var(--border-soft);
+    --pv-linha-forte: var(--border);
+    --pv-ok: var(--st-faturado-txt);
+    --pv-atencao: var(--st-embarque-iniciado-txt);
+    --pv-critico: var(--st-aguardando-veiculo-txt);
+    --pv-cond: 'Barlow Condensed','Barlow',system-ui,sans-serif;
+    --pv-sombra: 0 1px 0 rgba(255,255,255,.04) inset, 0 6px 16px -10px rgba(0,0,0,.6);
+    --pv-voo: 0 22px 44px -16px rgba(0,0,0,.7);
+  }
+  :root[data-tema="claro"] #tab-patio{
+    --pv-card: #ffffff;
+    --pv-card-2: #f1f5fb;
+    --pv-sombra: 0 1px 2px rgba(19,25,39,.06), 0 6px 14px -10px rgba(19,25,39,.28);
+    --pv-voo: 0 22px 40px -18px rgba(19,25,39,.45);
+  }
+
+  /* ---- os fatos do topo: faixa aberta, sem caixa ---- */
+  .pv-fatos{ display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); margin:4px 0 22px }
+  .pv-fato{ margin:0; padding:2px 18px; border-left:1px solid var(--pv-linha-forte);
+    display:flex; flex-direction:column; gap:2px; min-width:0 }
+  .pv-fato:first-child{ border-left:0; padding-left:2px }
+  .pv-fato strong{ font:600 40px/1.05 var(--pv-cond); letter-spacing:-.01em; font-variant-numeric:tabular-nums; color:var(--text) }
+  .pv-fato span{ font-size:14.5px; color:var(--text-dim); text-wrap:balance }
+  .pv-fato em{ font-style:normal; font-size:13.5px; font-weight:500; color:var(--text-dim) }
+  .pv-fato em[data-tom="critico"]{ color:var(--pv-critico) }
+
+  .pv-cab{ display:flex; align-items:baseline; justify-content:space-between; gap:10px 20px; flex-wrap:wrap; margin:0 0 12px }
+  .pv-cab h2{ font:600 24px/1.1 var(--pv-cond); margin:0; color:var(--text); letter-spacing:-.005em }
+  .pv-legenda{ display:flex; gap:14px; flex-wrap:wrap; font-size:13px; color:var(--text-dim) }
+  .pv-legenda i{ display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:5px;
+    border:2px solid currentColor; vertical-align:-1px }
+
+  /* ---- a pista: uma coluna por etapa, faixa amarela tracejada entre elas ---- */
+  .pv-pista{ display:grid; grid-auto-flow:column; grid-auto-columns:minmax(0,1fr); align-items:stretch;
+    background:color-mix(in srgb, var(--navy-deep) 70%, transparent); border:1px solid var(--pv-linha);
+    border-radius:14px; padding:12px 6px }
+  .pv-col{ padding:0 8px; min-width:0;
+    background-image:linear-gradient(var(--gold-dim) 50%, transparent 0);
+    background-size:2px 14px; background-repeat:repeat-y; background-position:left top }
+  .pv-col:first-child{ background:none }
+  .pv-col-cab{ display:grid; grid-template-columns:auto 1fr auto; align-items:center; gap:2px 8px; padding:0 2px 10px }
+  .pv-col-num{ width:22px; height:22px; border-radius:50%; display:grid; place-items:center;
+    font:600 13px/1 var(--pv-cond); border:1.5px solid var(--pv-linha-forte); color:var(--text-dim) }
+  .pv-col-cab h3{ margin:0; font:600 17px/1.1 var(--pv-cond); color:var(--text); min-width:0 }
+  .pv-col-qtd{ font:600 26px/1 var(--pv-cond); color:var(--text); font-variant-numeric:tabular-nums }
+  .pv-col-quem{ grid-column:2 / -1; margin:0; font-size:13px; color:var(--text-dim) }
+  .pv-col.vazia .pv-col-qtd{ color:var(--text-dim) }
+  .pv-col-lista{ position:relative; display:flex; flex-direction:column; gap:7px; min-height:60px }
+  .pv-col-vazio{ margin:6px 2px 0; font-size:13.5px; color:var(--text-dim) }
+  .pv-col:not(.vazia) .pv-col-vazio{ display:none }
+
+  /* ---- o cartão do caminhão ---- */
+  .pv-card{ position:relative; display:grid; grid-template-areas:"rota anel" "praca anel" "rod rod";
+    grid-template-columns:1fr auto; text-align:left; width:100%; cursor:pointer;
+    background:var(--pv-card); border:1px solid var(--pv-linha); border-radius:10px;
+    padding:10px 11px 9px; box-shadow:var(--pv-sombra); color:var(--text); font:inherit;
+    transition:transform 140ms cubic-bezier(.23,1,.32,1), border-color 160ms ease, background-color 160ms ease }
+  .pv-card:active{ transform:scale(.97) }
+  @media (hover:hover) and (pointer:fine){ .pv-card:hover{ border-color:var(--pv-linha-forte); background:var(--pv-card-2) } }
+  .pv-card[aria-expanded="true"]{ border-color:var(--gold); box-shadow:var(--pv-sombra), 0 0 0 1px var(--gold) }
+  .pv-card.voando{ z-index:5; box-shadow:var(--pv-voo) }
+  .pv-card.saindo{ pointer-events:none }
+  .pv-rota{ grid-area:rota; font:700 28px/1 var(--pv-cond); color:var(--gold-text); letter-spacing:.01em }
+  .pv-praca{ grid-area:praca; font-size:14px; line-height:1.25; color:var(--text-dim); margin-top:3px;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+  .pv-rod{ grid-area:rod; display:flex; align-items:center; gap:6px; margin-top:6px; min-width:0 }
+  .pv-carga{ font-size:13px; color:var(--text-dim); margin-right:auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+  .pv-tempo{ font:600 18px/1 var(--pv-cond); font-variant-numeric:tabular-nums; color:var(--text); white-space:nowrap }
+  .pv-selo{ display:none; font:600 12.5px/1 var(--pv-cond); letter-spacing:.02em; color:#fff;
+    background:var(--pv-critico); border-radius:4px; padding:3px 5px }
+  .pv-anel{ grid-area:anel; width:34px; height:34px; align-self:start }
+  .pv-anel .a-fundo{ fill:none; stroke:var(--pv-linha-forte); stroke-width:3.2 }
+  .pv-anel .a-prog{ fill:none; stroke:var(--pv-ok); stroke-width:3.2; stroke-linecap:round;
+    stroke-dasharray:100; stroke-dashoffset:100; transform:rotate(-90deg); transform-origin:50% 50%;
+    transition:stroke-dashoffset 600ms cubic-bezier(.23,1,.32,1), stroke 300ms ease }
+  .pv-card[data-sla="atencao"] .a-prog{ stroke:var(--pv-atencao) }
+  .pv-card[data-sla="atencao"] .pv-tempo{ color:var(--pv-atencao) }
+  .pv-card[data-sla="critico"] .a-prog{ stroke:var(--pv-critico) }
+  .pv-card[data-sla="critico"] .pv-tempo{ color:var(--pv-critico) }
+  .pv-card[data-sla="critico"]{ border-color:color-mix(in srgb, var(--pv-critico) 55%, transparent) }
+  .pv-card[data-sla="critico"] .pv-selo{ display:inline-block }
+  .pv-card[data-sla="previsto"] .a-fundo{ stroke-dasharray:2.4 4.6 }
+  .pv-card[data-sla="previsto"] .a-prog{ opacity:0 }
+  .pv-card[data-sla="previsto"] .pv-tempo{ font-family:inherit; font-size:13px; font-weight:500; color:var(--text-dim) }
+  .pv-card[data-fim="1"]{ opacity:.8 }
+  .pv-card.alarme::after{ content:""; position:absolute; inset:-3px; border-radius:12px; pointer-events:none;
+    border:2px solid var(--pv-critico); animation:pvAlarme 900ms ease-out 2 }
+  @keyframes pvAlarme{ 0%{ opacity:1; transform:scale(1) } 100%{ opacity:0; transform:scale(1.06) } }
+
+  /* ---- o fundo: gráfico do dia, tempo por rota, rádio ---- */
+  .pv-baixo{ display:grid; grid-template-columns:1.25fr 1fr 1fr; gap:22px; margin-top:26px }
+  .pv-painel{ min-width:0; border-top:1px solid var(--pv-linha-forte); padding-top:12px }
+  .pv-painel h2{ font:600 21px/1.15 var(--pv-cond); margin:0; color:var(--text) }
+  .pv-painel > p{ margin:4px 0 12px; font-size:13.5px; color:var(--text-dim) }
+  .pv-grafico{ height:220px }
+  .pv-radio{ list-style:none; margin:0; padding:0; display:flex; flex-direction:column }
+  .pv-radio li{ border-bottom:1px solid var(--pv-linha); padding:7px 2px; display:grid;
+    grid-template-columns:3.2rem 1fr; gap:8px; font-size:13.5px; color:var(--text-dim) }
+  .pv-radio li:last-child{ border-bottom:0 }
+  .pv-radio time{ font:600 16px/1.2 var(--pv-cond); color:var(--text); font-variant-numeric:tabular-nums }
+  .pv-radio b{ color:var(--text); font-weight:600 }
+  .pv-radio li.novo{ transition:opacity 280ms cubic-bezier(.23,1,.32,1), transform 280ms cubic-bezier(.23,1,.32,1) }
+  @starting-style{ .pv-radio li.novo{ opacity:0; transform:translateY(-6px) } }
+  .pv-vazio{ font-size:13.5px; color:var(--text-dim) }
+
+  /* ---- telas menores: a pista rola de lado, coluna a coluna ---- */
+  @media (max-width:1179px){
+    .pv-pista{ grid-auto-columns:min(290px,80vw); overflow-x:auto; scroll-snap-type:x mandatory;
+      scroll-padding-inline:8px; scrollbar-width:none }
+    .pv-pista::-webkit-scrollbar{ display:none }
+    .pv-col{ scroll-snap-align:start }
+    .pv-baixo{ grid-template-columns:1fr }
+  }
+  @media (max-width:720px){
+    .pv-fatos{ grid-template-columns:1fr 1fr; row-gap:14px }
+    .pv-fato{ padding:2px 10px }
+    .pv-fato:nth-child(odd){ border-left:0; padding-left:2px }
+    .pv-fato strong{ font-size:32px }
+  }
+  @media (prefers-reduced-motion: reduce){
+    .pv-anel .a-prog{ transition:none }
+    .pv-card.alarme::after{ animation:none }
+    .pv-radio li.novo{ transition:opacity 180ms ease }
+  }
+}
