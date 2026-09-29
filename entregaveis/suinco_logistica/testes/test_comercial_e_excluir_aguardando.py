@@ -87,8 +87,12 @@ async def main():
         # como todo mundo, então precisa poder ativar o dele — o que não muda
         # é que ele não administra ninguém, e isso é conferido logo abaixo,
         # olhando o CONTEÚDO da aba e não só o nome dela.
-        ck('Comercial vê pátio, histórico e a própria segurança',
-           sorted(abas) == ['historico', 'torre', 'usuarios'], str(abas))
+        # TROCADO em 29/09/2026, decisão do dono: "vai liberar a visão do
+        # pátio ao vivo pro comercial e ele só vai poder ver isso e o
+        # histórico". O Pátio ao vivo entra, a Torre sai.
+        ck('Comercial vê Pátio ao vivo, Histórico e a própria segurança',
+           sorted(abas) == ['historico', 'patio', 'usuarios'], str(abas))
+        ck('a Torre saiu da visão do Comercial', 'torre' not in abas, str(abas))
         ck('Relatórios saiu da visão do Comercial', 'relatorios' not in abas, str(abas))
         for proibida in ['programacao', 'portaria', 'expedicao', 'faturamento',
                          'cadastros', 'indicadores']:

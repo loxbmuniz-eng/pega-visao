@@ -84,10 +84,17 @@ async def main():
         # protege a própria conta, e o Comercial tem login e senha como todo
         # mundo. O que ele não pode continua sendo o que ele ENCONTRA lá
         # dentro — conferido logo abaixo, que é onde a regra de fato vale.
-        esperado_visivel = {'torre', 'historico', 'usuarios'}
+        #
+        # TROCADO em 29/09/2026, decisão do dono: "vai liberar a visão do
+        # pátio ao vivo pro comercial e ele só vai poder ver isso e o
+        # histórico". O Pátio ao vivo entra, a Torre sai.
+        esperado_visivel = {'patio', 'historico', 'usuarios'}
         visiveis = {k for k, v in abas.items() if v}
-        ck('exatamente torre + historico + a própria segurança',
+        ck('exatamente Pátio ao vivo + Histórico + a própria segurança',
            visiveis == esperado_visivel, str(abas))
+        ck('a Torre saiu da visão do Comercial', not abas.get('torre'), str(abas))
+        aba_inicial = await pg2.evaluate("() => TAB_ATUAL")
+        ck('ao entrar, o Comercial cai no Pátio ao vivo', aba_inicial == 'patio', aba_inicial)
 
         await pg2.evaluate("()=>abrirTab('usuarios')")
         await pg2.wait_for_timeout(1200)
