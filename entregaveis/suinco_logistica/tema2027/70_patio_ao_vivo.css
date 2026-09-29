@@ -136,6 +136,38 @@
     .pv-fato:nth-child(odd){ border-left:0; padding-left:2px }
     .pv-fato strong{ font-size:32px }
   }
+  /* ---- celular: o pátio inteiro numa rolagem só ----
+     Pedido do dono (29/09/2026), olhando no celular: "achei o pátio ao vivo
+     muito grande no celular, só consigo ver 1 tela de etapa por vez, isso
+     precisa ser dinâmico no celular também" — e, na vitrine, "APROVADO". Até 720px as etapas deixam de
+     ser colunas lado a lado (uma por tela, arrastando de lado) e viram
+     blocos empilhados; os caminhões de cada etapa ficam dois por linha, em
+     cartão compacto. A etapa vazia encolhe para uma linha só. O cartão que
+     muda de etapa continua voando — agora para cima ou para baixo. */
+  @media (max-width:720px){
+    .pv-pista{ display:flex; flex-direction:column; overflow:visible; scroll-snap-type:none;
+      padding:4px 12px; border-radius:12px }
+    .pv-col{ background:none; padding:12px 0; border-top:1px dashed var(--gold-dim); scroll-snap-align:none }
+    .pv-col:first-child{ border-top:0 }
+    .pv-col-cab{ padding:0 0 8px }
+    .pv-col-cab h3{ font-size:18px }
+    .pv-col-qtd{ font-size:24px }
+    .pv-col-quem{ font-size:12.5px }
+    .pv-col.vazia .pv-col-cab{ padding-bottom:0 }
+    .pv-col.vazia .pv-col-quem, .pv-col.vazia .pv-col-vazio{ display:none }
+    .pv-col.vazia h3, .pv-col.vazia .pv-col-qtd{ color:var(--text-dim) }
+    .pv-col-lista{ display:grid; grid-template-columns:1fr 1fr; gap:7px; min-height:0 }
+    .pv-card{ padding:8px 9px 7px; border-radius:9px }
+    .pv-rota{ font-size:23px }
+    .pv-praca{ font-size:12.5px; margin-top:2px }
+    .pv-rod{ margin-top:5px; gap:4px }
+    .pv-carga{ font-size:12px }
+    .pv-tempo{ font-size:15.5px }
+    .pv-card[data-sla="previsto"] .pv-tempo{ font-size:12px }
+    .pv-selo{ font-size:11px; padding:2px 4px }
+    .pv-anel{ width:26px; height:26px }
+    .pv-legenda{ gap:6px 12px; font-size:12.5px }
+  }
   @media (prefers-reduced-motion: reduce){
     .pv-anel .a-prog{ transition:none }
     .pv-card.alarme::after{ animation:none }

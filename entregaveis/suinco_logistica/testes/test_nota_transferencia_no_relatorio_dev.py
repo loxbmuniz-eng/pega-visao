@@ -131,6 +131,18 @@ async def main():
             else:
                 ck('matriz: sem nota de transferência, o cabeçalho não ganha "NT"', ' NT ' not in f' {cab} ', cab)
 
+        print('\n=== O COMPROVANTE DA PORTARIA (29/09/2026) ===')
+        # Perguntado se o comprovante também devia trazer a NT, o dono: "sim".
+        for com_nt in (True, False):
+            await pg.evaluate(PREPARAR, com_nt)
+            await pg.evaluate("() => comprovantePortariaUI('dev-teste')")
+            linhas = await pg.evaluate("""() => Object.fromEntries([...document.querySelectorAll('#print-devolucoes .dev-comp-linha')]
+                .map(l => [l.querySelector('.dev-comp-rot').textContent.trim(), l.querySelector('.dev-comp-val').textContent.trim()]))""")
+            if com_nt:
+                ck('filial: o comprovante traz a linha NOTA DE TRANSFERÊNCIA', linhas.get('NOTA DE TRANSFERÊNCIA') == 'NT-TESTE-777', str(linhas))
+            else:
+                ck('matriz: sem NT, o comprovante não ganha a linha', 'NOTA DE TRANSFERÊNCIA' not in linhas, str(list(linhas)))
+
         print('\n=== FILIAL COM Nº CARGA DEV: AS DUAS COLUNAS OPCIONAIS JUNTAS ===')
         await pg.evaluate(PREPARAR, True)
         await pg.evaluate("() => { getDevolucao().cargaNumero = 'CARGA-TESTE'; }")
