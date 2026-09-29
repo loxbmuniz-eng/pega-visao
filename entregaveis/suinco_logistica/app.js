@@ -4002,7 +4002,7 @@ function criarCargaProgramadaUI(){
       paletizada: document.getElementById('prog-paletizada').value,
       qtdGanchos: document.getElementById('prog-ganchos').value,
       qtdEntregas: document.getElementById('prog-entregas').value,
-      freteDestino: document.getElementById('prog-frete-destino').value,
+      freteDestino: destinoFreteNormalizado(document.getElementById('prog-frete-destino').value),
       kmDeslocamento: document.getElementById('prog-km-deslocamento').value,
       operador: nomeOperadorAtual()
     });
@@ -5521,7 +5521,7 @@ function salvarCompletarCarga(){
       paletizada: document.getElementById('completar-paletizada').value,
       qtdGanchos: document.getElementById('completar-ganchos').value,
       qtdEntregas: document.getElementById('completar-entregas').value,
-      freteDestino: document.getElementById('completar-frete-destino').value,
+      freteDestino: destinoFreteNormalizado(document.getElementById('completar-frete-destino').value),
       kmDeslocamento: document.getElementById('completar-km-deslocamento').value,
       operador: nomeOperadorAtual()
     });
@@ -7461,7 +7461,18 @@ async function addDestinoFreteUI(){
   }
   ['frete-destino-nome','frete-destino-km'].forEach(id=>document.getElementById(id).value='');
   await recarregarTabelaDeFrete();
-  notifyGravacao(`Destino ${destino}: ${kmTexto(km)} km.`);
+  /* A MENSAGEM DIZ O QUE O SERVIDOR GRAVOU, não o que foi digitado
+     (29/09/2026). Servidor sem a migração 056 corta as casas decimais:
+     "123,45" vira 123, e a tela dizia 123,45. Recusa nunca é silenciosa —
+     corte também não. */
+  const kmGravado = (r && r.item && r.item.km !== null && r.item.km !== undefined)
+    ? Number(r.item.km) : km;
+  if(kmGravado !== km){
+    notify(`Destino ${destino}: ${kmTexto(kmGravado)} km. Você digitou ${kmTexto(km)} — o servidor `
+      + `ainda grava sem as casas decimais (passam a valer com a atualização do servidor).`, 'warn', 12000);
+    return;
+  }
+  notifyGravacao(`Destino ${destino}: ${kmTexto(kmGravado)} km.`);
 }
 
 /* Relê a tabela do servidor depois de gravar, em vez de mexer na lista
@@ -12288,14 +12299,31 @@ function popularDestinoExtraUI(){
   if(!selRota || !selDest) return;
   const rota = selRota.value;
   const destinos = destinosDaRota(rota);
+  /* A TABELA DE FRETE TAMBÉM ENTRA (29/09/2026). O dono: "precisamos às
+     vezes colocar destinos novos e fazer o cálculo, e isso está nos
+     impedindo". A lista vinha só do modelo e do cadastro da ROTA — o
+     destino que a Logística acabou de cadastrar na Tabela de Frete não
+     aparecia aqui. Agora vem num grupo próprio, sem repetir o que a rota
+     já lista (test_destino_novo_em_todo_lugar.py). */
+  const jaNaRota = new Set(destinos.map(destinoFreteNormalizado));
+  const daTabela = destinosFreteOrdenados().map(d => String(d.destino))
+    .filter(d => !jaNaRota.has(destinoFreteNormalizado(d)));
+  const grupoTabela = daTabela.length
+    ? `<optgroup label="Tabela de Frete">${daTabela.map(d =>
+        `<option value="${esc(d)}">${esc(d)}</option>`).join('')}</optgroup>`
+    : '';
   if(!destinos.length){
-    selDest.innerHTML = '<option value="">(sem destino cadastrado)</option>';
-    if(hint) hint.textContent = '— cadastre as cidades desta rota em Cadastros → Rota';
+    selDest.innerHTML = `<option value="">${daTabela.length ? '— escolha o destino —' : '(sem destino cadastrado)'}</option>`
+      + grupoTabela;
+    if(hint) hint.textContent = daTabela.length
+      ? '— esta rota não tem cidades próprias; escolha na Tabela de Frete'
+      : '— cadastre o destino em Cadastros → Tabela de Frete';
     return;
   }
   const unico = destinos.length === 1;
+  const daRota = destinos.map(d => `<option value="${esc(d)}">${esc(d)}</option>`).join('');
   selDest.innerHTML = (unico ? '' : '<option value="">— escolha a cidade —</option>')
-    + destinos.map(d => `<option value="${esc(d)}">${esc(d)}</option>`).join('');
+    + (grupoTabela ? `<optgroup label="Cidades da rota">${daRota}</optgroup>${grupoTabela}` : daRota);
   if(hint){
     hint.textContent = unico ? '' : `${destinos.length} destinos nesta rota`;
   }
@@ -12327,6 +12355,11 @@ async function adicionarCargaForaDoModeloUI(){
          uma linha de modelo da mesma cidade — que é o pedido. O que separa
          avulsa de modelo continua sendo o `modelo_id`, não o apelido. */
       apelidoRota: destino,
+      /* Destino que está na Tabela de Frete já vira o destino do FRETE da
+         linha: o servidor acha o KM e calcula o valor na hora, em vez de a
+         linha nascer sem KM esperando alguém escolher de novo na célula. */
+      ...(destino && kmDoDestino(destino) !== null
+        ? { freteDestino: destinoFreteNormalizado(destino) } : {}),
       qtdEntregas: 1, paletizada: 'Não',
     });
   } catch(e){

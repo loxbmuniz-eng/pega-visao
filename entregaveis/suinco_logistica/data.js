@@ -891,8 +891,16 @@ function kmTexto(v){
   return n.toLocaleString('pt-BR', { useGrouping: false, maximumFractionDigits: 2 });
 }
 
+/* O NOME DO DESTINO COMO A TABELA DE FRETE O GUARDA (29/09/2026): sem espaço
+   nas pontas e em MAIÚSCULA. O servidor procura o KM pelo nome exato; o que
+   a pessoa digita ("goiania") tem de ir como a tabela guarda ("GOIANIA"),
+   senão a tela acha o KM e o servidor não. Uma função, todos os chamadores
+   (test_destino_novo_em_todo_lugar.py). */
+function destinoFreteNormalizado(v){
+  return String(v || '').trim().toUpperCase();
+}
 function kmDoDestino(destino){
-  const d = String(destino || '').trim().toUpperCase();
+  const d = destinoFreteNormalizado(destino);
   return d && KM_POR_DESTINO.has(d) ? KM_POR_DESTINO.get(d) : null;
 }
 
