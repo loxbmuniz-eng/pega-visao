@@ -2300,6 +2300,9 @@ async function comprovantePortariaUI(id) {
         ${linha('PLACA', d.placa)}
         ${linha('MOTORISTA', d.motorista)}
         ${linha('TRANSPORTADORA', d.transportadora)}
+        ${/* A NT DA FILIAL NO COMPROVANTE (29/09/2026) — o dono, perguntado:
+              "sim". Só quando a filial informou: o da matriz fica como era. */''}
+        ${temNotaTransfDev(d) ? linha('NOTA DE TRANSFERÊNCIA', String(d.notaTransferencia).trim()) : ''}
         ${linha('REGIÃO / ROTAS', `${d.regiao ? d.regiao + ' — ' : ''}${(d.rotas || []).join(' · ')}`)}
         ${linha('LACRE(S)', d.chegouLacrado === false
           ? 'CHEGOU SEM LACRE'

@@ -76,7 +76,7 @@ do CLAUDE.md), não copiadas:
 |---|---|---|
 | `usuario-hostil` | `adversarial-ux-test` (Omni @ Comelse) | o porteiro de luva e com pressa acha o atrito que teste nenhum pega |
 | `qa-exploratorio` | `dogfood` (Teknium) | QA de usuário com print e passos — acha o que a bateria não sabe testar |
-| `consulta-periodica` | `watchers` (Hermes Agent) | o desenho do vigia com marca d'água — a integração do Delivery B2B por consulta |
+| `consulta-periodica` | `watchers` (Hermes Agent) | o desenho do vigia com marca d'água, para uma fonte que precise de consulta periódica (a ATAK ficou fora: §26 das decisões) |
 | `depurar-api` | `rest-graphql-debug` (eren-karakus0) | depuração de API em camadas; a leitura dos códigos HTTP no painel |
 | `questionario-de-decisao` | `decision-questionnaire` (← `to-questionnaire`, mattpocock/skills, MIT) | decisão travada em alguém de fora vira questionário para mandar |
 | `busca-estrutural` | `ast-grep` (← code-yeongyu/ast-grep-skill, MIT) | busca pela forma do código: regra "uma função, dois chamadores" |

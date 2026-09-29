@@ -810,3 +810,33 @@ nenhum. O que a integridade protegeria (um MITM alterando o script em
 trânsito) já é coberto pelo HTTPS; o que sobraria (o próprio servidor
 comprometido) já dá a um atacante acesso a tudo o resto do sistema.
 Raciocínio completo em `ARQUITETURA_E_OPERACAO.md` §6.4.
+
+## 26. ATAK: nenhuma integração por API — do ERP, só relatório exportado e importado (29/09/2026)
+
+Decisão do dono, em duas mensagens do mesmo dia:
+
+- Sobre o **Delivery B2B**: *"o que é colocado no Delivery B2B muitas vezes é
+  preenchido por um motorista e não são dados fiéis, só então caiu essa ideia
+  de integrar ao Delivery B2B, pois o nosso processo de dev já resolve"*.
+- Sobre o **ERP Atak ("Sisatak")**: *"sai, tudo que formos pegar do Atak ERP
+  vai ser exportando relatório deles e importando no sistema, como estamos
+  fazendo com as devs agora"*.
+
+**O que vale daqui em diante:**
+
+1. O painel **não** se conecta à API de nenhum sistema da ATAK — nem Delivery
+   B2B, nem ERP. Não há chamado de integração aberto.
+2. A **fonte da verdade da devolução é o ciclo do painel** (carimbo de cada
+   setor, pesagem, destinação, nota), não a ocorrência registrada pelo
+   motorista.
+3. Todo dado do ERP entra pelo caminho do WRMVE790 (`POST
+   /api/devolucoes/:id/sisatak`, `dominio/sisatak.js`,
+   `servicos/planilha_xls.js`): alguém **exporta o relatório no Sisatak** e
+   **importa no painel**, com prévia antes de gravar, marcação do que já foi
+   importado (não duplica) e recusa explicada na tela. O próximo relatório
+   (frota, clientes, rotas…) chega do mesmo jeito: o dono manda o arquivo.
+
+**O que foi avaliado e descartado**, para ninguém reabrir sem saber o motivo:
+a proposta de 29/09 de ler por API a ocorrência de entrega do Delivery B2B e
+abrir o checklist sozinha (apresentação "Devolução integrada ao Delivery B2B"
+e rascunho de chamado). Caiu pela fidelidade do dado, não por custo ou prazo.
