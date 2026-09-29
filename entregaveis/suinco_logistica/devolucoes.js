@@ -2257,6 +2257,20 @@ async function restaurarRevisaoDevolucaoUI(id, revisaoId) {
    balança sabia QUAL devolução estava chegando. O papel continua (o
    motorista precisa levar algo na mão), mas agora sai impresso do
    sistema, com os dados que a Portaria acabou de carimbar. */
+/* O Nº DEV CURTO NOS PAPÉIS (29/09/2026). O dono: "prefiro que apareça
+   somente a última sequência de 5 números-dev, como por exemplo 53193-dev"
+   — na Relação para o Operador, no Relatório de Devoluções e no
+   Comprovante da Portaria. `103-001-53193-DEV` sai `53193-DEV`; o que não
+   estiver nesse formato (digitado à mão) sai como foi digitado. É SÓ
+   exibição: o item guarda o número inteiro, e é o inteiro que a busca, o
+   "já está no checklist" e a importação do Sisatak usam. Uma função, três
+   chamadores (test_num_dev_curto_nos_relatorios.py). */
+function numDevCurto(v) {
+  const t = String(v || '').trim();
+  const m = /^\d+-\d+-(\d+)-([A-Za-z]+)$/.exec(t);
+  return m ? `${m[1]}-${m[2].toUpperCase()}` : t;
+}
+
 async function comprovantePortariaUI(id) {
   const d = getDevolucao(id);
   if (!d) return;
@@ -2281,7 +2295,7 @@ async function comprovantePortariaUI(id) {
       })}
       <div class="dev-comprovante">
         ${linha('Nº DA CARGA', d.cargaNumero)}
-        ${linha('Nº(S) DEV', (d.itens || []).map((i) => i.numDev).filter(Boolean)
+        ${linha('Nº(S) DEV', (d.itens || []).map((i) => numDevCurto(i.numDev)).filter(Boolean)
           .filter((v, ix, arr) => arr.indexOf(v) === ix).join(' · '))}
         ${linha('PLACA', d.placa)}
         ${linha('MOTORISTA', d.motorista)}
@@ -2379,7 +2393,7 @@ async function relatorioDevolucoesUI(diaParam) {
             <td class="c-peso">${i.cx.toLocaleString('pt-BR')}</td>
             <td class="c-peso">${i.peso !== null ? i.peso.toLocaleString('pt-BR') : '—'}</td>
             <td>${esc(i.codProduto)}${i.produtoNome ? '-' + esc(i.produtoNome) : ''}</td>
-            <td>${esc(i.numDev)}</td>
+            <td>${esc(numDevCurto(i.numDev))}</td>
             ${temCargaDev(d) ? `<td>${esc(cargaDevDoItem(i, d)) || '—'}</td>` : ''}
             ${temNotaTransfDev(d) ? tdNotaTransfDev(d) : ''}
             <td>${i.dataItem ? esc(String(i.dataItem).slice(0, 10).split('-').reverse().join('/')) : '—'}</td>
@@ -2855,7 +2869,7 @@ async function relatorioOperadorDevolucoesUI(idChecklist) {
               <td class="c-peso">${(Number(i.cx) || 0).toLocaleString('pt-BR')}</td>
               <td class="c-peso">${i.peso !== null ? Number(i.peso).toLocaleString('pt-BR') : '—'}</td>
               <td>${esc(i.codProduto)}${i.produtoNome ? '-' + esc(i.produtoNome) : ''}</td>
-              <td>${esc(i.numDev)}</td>
+              <td>${esc(numDevCurto(i.numDev))}</td>
               ${temCargaDev(d) ? `<td>${esc(cargaDevDoItem(i, d)) || '—'}</td>` : ''}
               ${temNotaTransfDev(d) ? tdNotaTransfDev(d) : ''}
               <td>${i.dataItem ? esc(String(i.dataItem).slice(0, 10).split('-').reverse().join('/')) : '—'}</td>
