@@ -1,6 +1,6 @@
 ---
 name: consulta-periodica
-description: O desenho de um "vigia" que consulta outro sistema de tempos em tempos (a API do Delivery B2B, uma exportação do ERP Atak) e só reage ao que é NOVO — com marca d'água, primeira rodada sem disparo, gravação atômica e silêncio quando não há novidade. Use ao planejar ou implementar qualquer integração por consulta periódica no servidor do painel, ou um vigia avulso de terminal.
+description: O desenho de um "vigia" que consulta outro sistema de tempos em tempos e só reage ao que é NOVO — com marca d'água, primeira rodada sem disparo, gravação atômica e silêncio quando não há novidade. Use ao planejar ou implementar qualquer integração por consulta periódica no servidor do painel, ou um vigia avulso de terminal.
 ---
 
 # Consulta periódica (vigia com marca d'água)
@@ -9,6 +9,11 @@ Adaptada de `watchers` (Hermes Agent, Nous Research, licença MIT). Ver
 `ORIGEM_DAS_SKILLS_DE_DESIGN.md`. O original traz scripts Python de terminal;
 aqui fica o DESENHO, porque no painel isto vive no servidor Node, junto das
 regras de integração de `.claude/agents/suinco-integrador-atak.md`.
+
+**ATENÇÃO — ATAK fora (29/09/2026):** o dono decidiu que nada da ATAK
+(Delivery B2B ou ERP) entra por consulta a API; do ERP, só relatório
+exportado e importado (`docs/DECISOES_CONFIRMADAS.md` §26). Esta skill vale
+para OUTRA fonte que um dia precise de consulta periódica.
 
 ## O modelo mental
 
@@ -49,8 +54,8 @@ Um vigia é só isto, a cada rodada:
   repositório, nem em exemplo.
 - **"Reprocessar" é um botão, não um chamado**: apagar a marca de um vigia
   (ou rodar com "reprocessar desde X") tem de ser uma ação registrada.
-- **Intervalo** combinado com o limite da fonte (confirme com a ATAK: quantas
-  consultas por minuto?). Sem esse número, não escolha um.
+- **Intervalo** combinado com o limite da fonte (confirme com o dono da fonte:
+  quantas consultas por minuto?). Sem esse número, não escolha um.
 
 ## Teste que prova (antes de ligar)
 
