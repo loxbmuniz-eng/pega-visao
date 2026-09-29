@@ -57,3 +57,37 @@ página gerada por IA — rótulo em CAIXA ALTA espaçada sobre cada título,
 metadado ligado por ponto médio ("A · B · C"), fonte mono para rotulinho,
 tudo picado em cartão arredondado igual com a mesma sombra. Quem desenhar
 tela nova aqui passa por essa lista antes de escrever CSS.
+
+## NousResearch/hermes-agent — MIT, © 2025 Nous Research
+
+https://github.com/NousResearch/hermes-agent · trazidas a pedido do dono em
+29/09/2026 ("processar meu projeto no hermes e utilizar tudo que for
+benéfico"). Garimpadas do repositório OFICIAL (210 skills; lidas as
+descrições das ~110 de software, web, servidor, segurança, produtividade e
+design). As coleções da comunidade (900+ skills de autores desconhecidos)
+NÃO foram usadas: skill é instrução que o agente segue, e instrução de fonte
+desconhecida não entra num sistema em produção. Texto da licença:
+`LICENCA_HERMES_AGENT.txt`.
+
+**Sete entraram, ADAPTADAS** (português, ferramentas deste ambiente, regras
+do CLAUDE.md), não copiadas:
+
+| skill da casa | original (autor) | para quê |
+|---|---|---|
+| `usuario-hostil` | `adversarial-ux-test` (Omni @ Comelse) | o porteiro de luva e com pressa acha o atrito que teste nenhum pega |
+| `qa-exploratorio` | `dogfood` (Teknium) | QA de usuário com print e passos — acha o que a bateria não sabe testar |
+| `consulta-periodica` | `watchers` (Hermes Agent) | o desenho do vigia com marca d'água — a integração do Delivery B2B por consulta |
+| `depurar-api` | `rest-graphql-debug` (eren-karakus0) | depuração de API em camadas; a leitura dos códigos HTTP no painel |
+| `questionario-de-decisao` | `decision-questionnaire` (← `to-questionnaire`, mattpocock/skills, MIT) | decisão travada em alguém de fora vira questionário para mandar |
+| `busca-estrutural` | `ast-grep` (← code-yeongyu/ast-grep-skill, MIT) | busca pela forma do código: regra "uma função, dois chamadores" |
+| `depurar-servidor-node` | `node-inspect-debugger` (Hermes Agent) | inspetor do Node no backend, só no ambiente de teste |
+
+**Recusadas de propósito:** `godmode` (desbloquear IA contra as próprias
+regras); `sherlock` e `unbroker` (caçam dado pessoal — LGPD);
+`pinggy-tunnel`, `cloudflare-temporary-deploy`, `here-now`, `publish-site`
+(expõem o servidor ou publicam fora do portão); `1password` (credencial);
+`page-agent` (IA dentro do painel); `har-derived-api-client` (tirar a API
+gravando o tráfego do site da ATAK — contrato); `web-pentest` (só com
+autorização formal). As que já tínhamos equivalente (TDD, depuração
+sistemática, revisão de código, subagentes, grilling, wizard, simplify,
+cartographer, docx/xlsx/pdf/pptx) não foram duplicadas.

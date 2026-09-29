@@ -2847,6 +2847,13 @@ async function relatorioOperadorDevolucoesUI(idChecklist) {
               checklist aquele papel se refere. */''}
         <div class="dev-doc-bloco-tit">Checklist Nº ${d.numero} · ${esc(devRotulo(d))}${d.tipo === 'SOBRA' ? ' · SOBRA' : ''}
           ${d.operadorCodigo ? ' · Cód. operador ' + esc(d.operadorCodigo) : ''}
+          ${/* A NT NO CABEÇALHO DO CHECKLIST (29/09/2026). O dono, de novo: "o
+                número da nota de transferência que é colocado pelas filiais não
+                está aparecendo no cabeçalho do checklist como eu te pedi". O
+                pedido de 28/09 era "na mesma linha onde falam o número da
+                devolução e a data" — ESTA linha. A coluna nas linhas ficou;
+                faltava aqui (test_nota_transferencia_no_relatorio_dev). */''}
+          ${temNotaTransfDev(d) ? ' · NT ' + esc(String(d.notaTransferencia).trim()) : ''}
           ${d.dataDev ? ' · ' + esc(String(d.dataDev).slice(0, 10).split('-').reverse().join('/')) : ''}</div>
         <table class="doc-tabela dev-doc-tabela">
           <thead><tr>
