@@ -707,10 +707,14 @@ const SETOR_PERMISSOES = {
      continua: é o caminho para ela, não acesso a mais poder (a Torre é
      leitura pura, e os campos editáveis dela só aparecem para quem pode
      cancelar carga — Logística/Administração).
-     O Pátio ao vivo (28/09/2026) NÃO entra aqui sem o dono decidir: a lista
-     do Comercial foi fechada por ele em 11/08, e os testes a travam
-     (test_setor_comercial, test_comercial_e_excluir_aguardando). */
-  'Comercial':    ['torre','historico'],
+     TROCADO em 29/09/2026, decisão do dono: "vai liberar a visão do pátio
+     ao vivo pro comercial e ele só vai poder ver isso e o histórico". O
+     Pátio ao vivo (só leitura) entra no lugar da Torre, e a Torre sai. É
+     a primeira da lista, então é onde o Comercial cai ao entrar. A aba
+     Usuários continua aparecendo só com "Minha segurança" (segundo fator),
+     como para todo setor. Travado por test_setor_comercial e
+     test_comercial_e_excluir_aguardando. */
+  'Comercial':    ['patio','historico'],
   /* Setores da devolução (18/08/2026): cada um assina um passo do
      checklist digital — Controles Internos destina os produtos, Central
      de Notas finaliza a NF. Só veem a aba Devoluções e o Histórico; o
