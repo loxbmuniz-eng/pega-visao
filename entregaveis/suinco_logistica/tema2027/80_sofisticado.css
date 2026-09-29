@@ -47,10 +47,16 @@
      O navegador NÃO passa a letra da página para botão, campo e lista de
      escolha: cada um usa a letra dele (Arial, medido). A Barlow entrou "no
      painel inteiro" em 26/09 e parava na borda de todo botão e de todo
-     campo. `:where` deixa a regra sem peso nenhum: qualquer campo que já
+     campo (a lista de escolha tem nota logo abaixo). `:where` deixa a regra sem peso nenhum: qualquer campo que já
      escolhe a própria letra (a placa e a carga em monoespaçada) continua
      com a dele. */
-  :where(button, input, select, textarea){ font-family:inherit }
+  /* A linha da Barlow é mais alta que a da Arial: sem fixar 1,15 (o normal
+     da Arial), cada campo crescia 1px e a Programação, com dezenas deles,
+     crescia inteira (test_tema2027_etapa4_tabelas: #main não cresce). */
+  :where(button, input, textarea){ font-family:inherit; line-height:1.15 }
+  /* A lista de escolha fica de fora: ela ignora line-height e mede a altura
+     pela letra — com a Barlow cada uma crescia 1px (medido), e a regra das
+     telas de operação é não crescer. */
 
   /* ---- cabeçalho: a marca em letra de placa ---- */
   #header-title strong{ font-family:var(--sf-cond); font-size:21px; font-weight:700; letter-spacing:.045em; line-height:1.05 }
@@ -94,8 +100,10 @@
   /* ---- tabela: cabeçalho em letra de placa (caixa normal, sempre) ---- */
   /* A Torre e a Montagem ficam fora: o cabeçalho delas tem 10px por id e
      colunas calibradas à mão — condensada nesse corpo não se lê. */
+  /* 13px condensada numa linha de 15px, a mesma altura dos 11px de antes:
+     a letra cresce, o cabeçalho não. */
   table:not(#torre-tabela):not(#mont-tabela) th{ font-family:var(--sf-cond); font-weight:600; font-size:13px;
-    letter-spacing:.01em; border-bottom-color:var(--border) }
+    line-height:15px; letter-spacing:.01em; border-bottom-color:var(--border) }
   td{ transition:background-color 120ms ease }
 
   /* ---- botão: afunda no toque, não levanta no mouse ---- */
@@ -132,21 +140,26 @@
    celular o título é o botão do acordeão (44px de alvo) e a faixa é a
    grade compacta de chips — as duas calibradas à mão. */
 @media screen and (min-width:821px){
-  .card{ padding:14px 18px 16px; margin-bottom:14px }
+  /* Folga maior só nas abas de consulta. Torre e Programação são telas de
+     operação com colunas calibradas à mão: ali o cartão mantém a folga da
+     Etapa 2 (10px × 14px), a coluna não anda e a tela não cresce
+     (test_tema2027_etapa4_tabelas: x de cada th ±2px, #main não cresce). */
+  .tab-page:not(#tab-torre):not(#tab-programacao) .card{ padding:14px 18px 16px; margin-bottom:14px }
   .card-title{ font-family:var(--sf-cond); font-size:23px; font-weight:600; line-height:1.15;
     text-transform:none; letter-spacing:-.003em; color:var(--text); padding-left:0; margin-bottom:4px; gap:10px }
+  /* Nas duas telas de operação o título ocupa os mesmos 18px de linha do
+     título miúdo de antes: a letra é maior, a caixa é a mesma. */
+  #tab-torre .card-title, #tab-programacao .card-title{ font-size:20px; line-height:18px }
+  #tab-torre .card-title .ico-card, #tab-programacao .card-title .ico-card{ width:18px; height:18px }
   .card-title::before{ display:none }
   .card-title .ico-card{ width:20px; height:20px; color:var(--gold-text) }
   .card-sub{ font-size:13.5px; line-height:1.45; margin:0 0 12px; max-width:120ch }
+  #tab-torre .card-sub, #tab-programacao .card-sub{ font-size:11.5px; line-height:inherit; margin:-4px 0 6px; max-width:none }
 
+  /* A faixa de números fica no tamanho da Etapa 3 (22px, já condensado por
+     20_indicadores.css): é ela que segura a Torre dentro da tela. Muda só a
+     superfície. */
   .bento.bi-faixa{ border-radius:var(--sf-raio); box-shadow:var(--sf-sombra) }
-  /* 27px é o teto do número comum no computador (test_desktop_compacto,
-     pedido do dono de 08/08: "mais compacto"). Condensada, 27px já lê maior
-     que os 21px da Barlow larga de antes. */
-  .bento.bi-faixa .stat-num{ font-size:27px; font-weight:700; line-height:1 }
-  .bento.bi-faixa .stat-destaque .stat-num{ font-size:36px }
-  .bento.bi-faixa .stat-label{ font-size:12.5px; font-weight:500; margin-top:3px }
-  .bento.bi-faixa .stat-destaque .stat-label{ font-size:13.5px }
 }
 
 /* No celular o título continua sendo o botão do acordeão, com a mesma
