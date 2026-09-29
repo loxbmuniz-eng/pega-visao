@@ -4566,3 +4566,42 @@ cabeçalho do checklist.
 cabeçalho do checklist na Relação para o Operador" — reprovou contra `89ec418`
 (cabeçalho sem "NT NT-TESTE-777") e passa com a correção; e confere que o da
 matriz não ganha "NT".
+
+## #94 — O destino novo gravava na Tabela de Frete, mas não chegava a todo lugar (29/09/2026)
+
+**Como apareceu.** Relato do dono: "cadastrar destino precisa ser possível no
+cadastro e o destino precisa funcionar, pois precisamos às vezes colocar
+destinos novos e fazer o cálculo, e isso está nos impedindo". Perguntado onde
+travava: "resolve em tudo".
+
+**Reproduzido em DOIS servidores** — o de teste com o código de hoje e uma
+RÉPLICA do servidor de produção (`956442a`, banco na migração 055, montada
+num banco descartável). Nos dois, o cadastro na Tabela de Frete grava e a
+Programação acha o KM. Onde o destino novo não chegava, ou chegava torto:
+
+1. **Montagem do Dia, "Adicionar carga"** — a lista de destino vinha só do
+   modelo da semana e do cadastro da ROTA (que só a Administração edita). O
+   destino recém-cadastrado na Tabela de Frete não aparecia, e a linha nascia
+   sem destino de frete, sem KM e sem valor.
+2. **Programação e Completar** — o destino digitado ia como foi digitado
+   ("goiania"). O servidor procura o KM pelo nome exato e a tabela guarda em
+   maiúscula: a tela achava o KM (compara em maiúscula) e o servidor não.
+3. **Tabela de Frete** — a mensagem de "salvo" repetia o KM digitado. Na
+   réplica da produção, "123,45" foi gravado 123 (o servidor sem a 056 corta
+   as casas decimais) e a tela dizia "123,45 km".
+
+**A família.** Uma decisão escrita em mais de um lugar (a lista de destinos
+da Montagem com fonte própria; a comparação em maiúscula só na tela) — a
+regra "uma função, dois chamadores". E "recusa nunca é silenciosa" estendida
+ao corte: número que o servidor mudou tem de aparecer mudado.
+
+**A correção (só painel — vale com o servidor de hoje).**
+`destinoFreteNormalizado()` em data.js, usada por `kmDoDestino` e por tudo que
+MANDA destino ao servidor (Programação, Completar, Montagem). A lista de
+"Adicionar carga" ganha o grupo "Tabela de Frete"; escolher um destino da
+tabela já manda o `freteDestino` da linha nova, e o servidor calcula KM e
+valor na hora. A mensagem de "salvo" diz o KM que o servidor devolveu e avisa
+quando as casas decimais foram cortadas.
+
+**A guarda.** `testes/test_destino_novo_em_todo_lugar.py` — reprovou nos sete
+pontos contra o publicado (`1029464`) e passa com a correção.
