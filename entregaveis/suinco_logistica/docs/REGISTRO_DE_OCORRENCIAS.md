@@ -4532,3 +4532,37 @@ execução que não mexe, e o modelo editado que não é apagado.
 
 > **Migração que depende de dado de seed precisa de um passo depois do seed.**
 > Ordem de instalação não é garantia; é coincidência até ter teste.
+
+## #93 — A NT entrou na linha do item, mas faltou no cabeçalho do checklist (29/09/2026)
+
+**Como apareceu.** Relato do dono, um dia depois da #90: "o número da nota de
+transferência que é colocado pelas filiais não está aparecendo no cabeçalho do
+checklist como eu te pedi".
+
+**Reproduzido no publicado (`89ec418`)** — Relação para o Operador de um
+checklist de filial com NT:
+
+```
+cabeçalho do bloco:  Checklist Nº 900001 · REGIAO TESTE · rota(s) TESTE · 28/09/2026   (sem NT)
+linhas:              … Nº DEV · Nota transf. NT-TESTE-777 · Data DEV …                 (com NT)
+```
+
+**A causa: o pedido foi lido pela metade.** "Na mesma linha onde falam o número
+da devolução e a data" é a linha de CABEÇALHO de cada checklist na Relação para
+o Operador — a que diz o Nº do checklist e a data. A #90 pôs a NT como coluna
+em cada item e parou ali; o cabeçalho, que era o lugar pedido, ficou sem.
+
+**A família.** Pedido de lugar interpretado como pedido de dado: o dado
+apareceu, no lugar errado. A defesa é a mesma de sempre — o PROMPT diz ONDE,
+com a frase do dono, e o teste mede aquele lugar, não "o dado está no papel".
+
+**A correção.** A linha `dev-doc-bloco-tit` da Relação para o Operador ganha
+`· NT <número>` entre o Cód. operador e a data, pela mesma função da coluna
+(`temNotaTransfDev`). Checklist da matriz, sem NT, fica como estava. A coluna
+nas linhas continua. No Relatório de Devoluções do dia a NT já estava no
+cabeçalho do checklist.
+
+**A guarda.** `testes/test_nota_transferencia_no_relatorio_dev.py`, seção "O
+cabeçalho do checklist na Relação para o Operador" — reprovou contra `89ec418`
+(cabeçalho sem "NT NT-TESTE-777") e passa com a correção; e confere que o da
+matriz não ganha "NT".

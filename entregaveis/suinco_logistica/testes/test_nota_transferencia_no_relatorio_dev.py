@@ -114,6 +114,23 @@ async def main():
             await pg.evaluate("() => relatorioDevolucoesUI('2026-09-28')")
             conferir(await pg.evaluate(LER, '#print-devolucoes'), f'Relatório de Devoluções ({quem})', com_nt)
 
+        print('\n=== O CABEÇALHO DO CHECKLIST NA RELAÇÃO PARA O OPERADOR (29/09/2026) ===')
+        # O dono, de novo: "o número da nota de transferência que é colocado
+        # pelas filiais não está aparecendo no cabeçalho do checklist como eu
+        # te pedi". O pedido de 28/09 era "na mesma linha onde falam o número
+        # da devolução e a data" — a linha "Checklist Nº … · data" de cada
+        # bloco. A coluna nas linhas entrou; o cabeçalho tinha ficado sem.
+        for com_nt in (True, False):
+            await pg.evaluate(PREPARAR, com_nt)
+            await pg.evaluate("() => relatorioOperadorDevolucoesUI('dev-teste')")
+            cab = await pg.evaluate("() => (document.querySelector('#print-devolucoes-operador .dev-doc-bloco-tit') || {}).textContent || ''")
+            cab = ' '.join(cab.split())
+            if com_nt:
+                ck('filial: o cabeçalho do checklist traz "NT NT-TESTE-777"', 'NT NT-TESTE-777' in cab, cab)
+                ck('filial: junto do Nº do checklist e da data', 'Checklist Nº 900001' in cab and '28/09/2026' in cab, cab)
+            else:
+                ck('matriz: sem nota de transferência, o cabeçalho não ganha "NT"', ' NT ' not in f' {cab} ', cab)
+
         print('\n=== FILIAL COM Nº CARGA DEV: AS DUAS COLUNAS OPCIONAIS JUNTAS ===')
         await pg.evaluate(PREPARAR, True)
         await pg.evaluate("() => { getDevolucao().cargaNumero = 'CARGA-TESTE'; }")
