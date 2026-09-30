@@ -4704,3 +4704,33 @@ CLAUDE.md passou a mandar ler as DUAS versões: a do servidor
 mentira uma versão atrás, passos pesados trocados por dublês. Reprovou contra
 o publicado em 5 pontos (os dois scripts rodavam a versão velha) e passa com a
 correção, sem laço quando não há nada novo.
+
+## #98 — A prova do backup nunca conferiu o conteúdo no servidor (30/09/2026)
+
+**Como apareceu.** Primeira rodada do `testar_restauracao_backup.sh` no
+servidor: restauração sem erro, 13 tabelas batendo na contagem — e o passo 6
+dizendo "não há carga com mais de 7 dias para comparar (banco novo?)". O banco
+opera desde agosto (1.113 cargas; o modelo da semana tem 84).
+
+**A causa, reproduzida.** O servidor não tem sudo; o script vira o usuário
+postgres com `su -s /bin/sh`. A função `pg` monta o comando com
+`printf '%q'`, que escreve quebra de linha como `$'\n'` — sintaxe do bash. O
+/bin/sh do Ubuntu é o dash: "Unterminated quoted string". Toda consulta de
+VÁRIAS linhas quebrava; o erro ia para `/dev/null`; a resposta vazia virava
+"não há carga antiga". A contagem por tabela é de uma linha só e funcionava —
+por isso o relatório parecia são e o veredito saiu "o backup presta".
+
+**A família.** Erro engolido que vira conclusão (a mesma do `upsert()` que
+recusa em silêncio): "não consegui perguntar" foi lido como "a resposta é
+nenhuma". E teste que só rodou onde havia `sudo` — o caminho do `su` nunca
+tinha sido exercitado com consulta de várias linhas.
+
+**A correção.** `pg()` usa `su -s /bin/bash` (o `%q` é do bash). E a consulta
+da amostra que falha agora é FALHA, com a mensagem do erro — nunca mais "banco
+novo?". Conferido: nenhum outro script do servidor usa esse padrão.
+
+**A guarda.** `testes/test_restauracao_confere_conteudo.py` — banco
+descartável com cinco cargas de 10 dias atrás, backup gerado como o cron do
+servidor gera, o script roda contra ele. Reprovou contra o publicado com a
+mesma frase do servidor e passa com a correção ("5 carga(s) antiga(s)
+conferidas, todas idênticas").
