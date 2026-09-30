@@ -4605,3 +4605,30 @@ quando as casas decimais foram cortadas.
 
 **A guarda.** `testes/test_destino_novo_em_todo_lugar.py` — reprovou nos sete
 pontos contra o publicado (`1029464`) e passa com a correção.
+
+## #95 — O script de "duplicadas" ia apagar a segunda carga planejada do dia (30/09/2026)
+
+**Como apareceu.** Rodando o `atualizar_tudo.sh` no servidor, o passo 2 listou
+47 linhas "duplicadas" da Montagem do Dia e perguntou "digite SIM para apagar".
+Entre elas, duas de HOJE: Patos de Minas e São Gotardo. Nada foi apagado — o
+dono não confirmou.
+
+**A evidência.** O modelo da semana do dono (migração 041) tem, de propósito,
+cargas repetidas com o mesmo destino no mesmo dia: quarta, duas Patos de Minas e
+duas São Gotardo; 18 pares na semana inteira. O script chamava de duplicata
+"mesma rota, mesmo destino, mesmo dia, linha vazia" — exatamente a forma da
+segunda carga de cada par antes de ganhar placa.
+
+**A causa.** O critério foi escrito em 26/08 olhando o incidente de 25/08
+(o dia inteiro recriado a cada clique), sem conferir se o próprio modelo tinha
+repetições legítimas. Critério de "igual" sem perguntar ao dono o que é igual.
+
+**A decisão do dono.** "Não é minha intenção apagar destino nenhum."
+
+**A correção.** O passo saiu do `atualizar_tudo.sh`; o
+`limpar_montagem_duplicada.sql` ficou como registro, com `\quit` na primeira
+linha — rodado à mão, com `apagar=1`, não lê nem apaga nada (provado). As
+linhas vazias antigas ficam: não atrapalham e não se apagam.
+
+**A guarda.** `testes/test_atualizar_tudo_nao_apaga_montagem.py` (estático) —
+reprovou contra o script anterior em 4 pontos e passa com a correção.

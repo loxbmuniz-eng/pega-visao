@@ -1,4 +1,4 @@
-055
+056
 # ^^^ ESTA LINHA É A ÚNICA QUE O PORTÃO LÊ. Todo o resto deste arquivo é
 # explicação para gente. Em 25/09/2026 o dono aplicou a 055, eu escrevi
 # isso no texto abaixo e ESQUECI DE MUDAR O NÚMERO — e o portão passou a

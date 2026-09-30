@@ -12,20 +12,18 @@
 #   1. atualizar.sh — puxa o código, aplica as migrações pendentes, gera as
 #      chaves do aviso no celular se ainda não existirem, reinstala o que
 #      mudou, reinicia o serviço e roda o diagnóstico;
-#   2. limpa as linhas duplicadas da Montagem do dia — MOSTRA primeiro e só
-#      apaga se você confirmar;
-#   3. prova que o backup restaura de verdade, num banco descartável;
-#   4. imprime um bloco pronto para mandar de volta.
+#   2. prova que o backup restaura de verdade, num banco descartável;
+#   3. imprime um bloco pronto para mandar de volta.
 #
-# POR QUE OS TRÊS JUNTOS E NÃO NO atualizar.sh. O passo 1 é rotina de
-# toda publicação. O passo 2 APAGA linha, e apagar sem olhar antes é o que
-# este painel existe para acabar — por isso pergunta. O passo 3 é conferência
-# de vez em quando, não de toda vez. Juntar tudo no atualizar.sh faria a
-# rotina pedir confirmação todo dia, e confirmação que se repete todo dia é
-# confirmação que ninguém lê.
+# O PASSO QUE APAGAVA LINHA DA MONTAGEM SAIU (30/09/2026). Ele tratava
+# "mesma rota e mesmo destino no mesmo dia" como duplicata — e o modelo da
+# semana do dono tem, de propósito, duas cargas iguais em vários dias
+# (quarta: duas Patos de Minas e duas São Gotardo). Na rodada de 30/09 ele
+# propôs apagar a SEGUNDA carga de Patos de Minas e a de São Gotardo do
+# próprio dia. Nada foi apagado. Decisão do dono: "não é minha intenção
+# apagar destino nenhum". Travado por test_atualizar_tudo_nao_apaga_montagem.
 #
-# NADA AQUI APAGA DADO DE CARGA. O passo 2 só remove linha de programação
-# VAZIA e repetida; o passo 3 só lê a produção.
+# NADA AQUI APAGA DADO. O passo 2 só lê a produção.
 # =====================================================================
 
 set -uo pipefail
@@ -82,7 +80,7 @@ echo "Log completo desta execução: $LOG"
 PROBLEMAS=()
 
 # ---------------------------------------------------------------------
-azul "PASSO 1 de 3 — código, migrações e reinício"
+azul "PASSO 1 de 2 — código, migrações e reinício"
 if bash "$SRC/$BASE/atualizar.sh"; then
   ok "servidor atualizado"
 else
@@ -91,39 +89,7 @@ else
 fi
 
 # ---------------------------------------------------------------------
-azul "PASSO 2 de 3 — linhas duplicadas da Montagem do dia"
-LIMPEZA="$SRC/$BASE/scripts/limpar_montagem_duplicada.sql"
-if [[ ! -f "$LIMPEZA" ]]; then
-  aviso "não achei $LIMPEZA — pulei"
-else
-  echo "   Primeiro, o que SAIRIA (nada foi apagado ainda):"
-  como_postgres "psql -d embarque_suinco -f '$LIMPEZA'" 2>&1 | sed 's/^/   /'
-
-  # Sem terminal (rodando por cron, por exemplo) não se apaga nada. Uma
-  # exclusão que acontece sem ninguém olhando é exatamente o que o script
-  # de limpeza foi escrito para evitar.
-  if [[ ! -t 0 ]]; then
-    aviso "sem terminal interativo — não apaguei nada."
-    aviso "para apagar, rode este script à mão, ou:"
-    echo  "        su -s /bin/sh postgres -c \"psql -d embarque_suinco -v apagar=1 -f $LIMPEZA\""
-  else
-    echo
-    read -r -p "   Apagar as linhas listadas acima? (digite SIM para apagar) " RESPOSTA
-    if [[ "$RESPOSTA" == "SIM" ]]; then
-      if como_postgres "psql -d embarque_suinco -v apagar=1 -f '$LIMPEZA'" 2>&1 | sed 's/^/   /'; then
-        ok "duplicadas removidas"
-      else
-        falha "a limpeza deu erro"
-        PROBLEMAS+=("limpeza")
-      fi
-    else
-      aviso "nada apagado (você não digitou SIM). Pode rodar de novo quando quiser."
-    fi
-  fi
-fi
-
-# ---------------------------------------------------------------------
-azul "PASSO 3 de 3 — o backup restaura mesmo?"
+azul "PASSO 2 de 2 — o backup restaura mesmo?"
 TESTE="$SRC/$BASE/scripts/testar_restauracao_backup.sh"
 if [[ ! -f "$TESTE" ]]; then
   aviso "não achei $TESTE — pulei"
@@ -150,14 +116,6 @@ SQL
 AVISOS="$(grep -qE '^VAPID_PRIVADA=.+' /opt/embarque-suinco/.env 2>/dev/null \
           && echo 'ligado' || echo 'DESLIGADO')"
 
-DUPES="$(consulta <<'SQL' || true
-SELECT count(*) FROM programacao_montagem m
- WHERE m.efetivada_em IS NULL AND m.cancelada_em IS NULL
-   AND coalesce(m.placa,'') = '' AND coalesce(m.numero_carga,'') = ''
-   AND coalesce(m.motorista,'') = '' AND coalesce(m.peso,0) = 0
-SQL
-)"
-[[ -n "$DUPES" ]] || DUPES='?'
 
 echo
 echo "--------- COPIE DAQUI ---------"
@@ -166,7 +124,6 @@ echo "serviço             : $ATIVO"
 echo "/health local       : ${SAUDE:-000}"
 echo "última migração     : $MIG"
 echo "aviso no celular    : $AVISOS"
-echo "linhas de montagem vazias que sobraram : $DUPES"
 echo "problemas nesta rodada : ${PROBLEMAS[*]:-nenhum}"
 echo "-------- ATÉ AQUI -------------"
 echo

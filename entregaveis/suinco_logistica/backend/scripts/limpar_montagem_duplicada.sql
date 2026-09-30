@@ -1,4 +1,16 @@
 -- =====================================================================
+-- APOSENTADO EM 30/09/2026 — NÃO RODE.
+-- O critério abaixo ("mesma rota e mesmo destino no mesmo dia") apaga a
+-- SEGUNDA carga que o modelo da semana prevê de propósito (quarta: duas
+-- Patos de Minas, duas São Gotardo — 18 pares na semana). Decisão do dono:
+-- "não é minha intenção apagar destino nenhum". O arquivo fica como
+-- registro; as duas linhas abaixo fazem o psql parar antes de qualquer
+-- consulta (test_atualizar_tudo_nao_apaga_montagem.py).
+-- =====================================================================
+\echo 'limpar_montagem_duplicada.sql está APOSENTADO (30/09/2026): nada foi lido nem apagado.'
+\quit
+
+-- =====================================================================
 -- LIMPAR AS LINHAS DUPLICADAS DA MONTAGEM DO DIA
 -- ---------------------------------------------------------------------
 -- Relato do dono (25 e 26/08/2026): "está tudo duplicado ainda na montagem

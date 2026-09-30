@@ -1,4 +1,29 @@
-956442a
+e87ed1c
+
+# ---------------------------------------------------------------------
+# 30/09/2026 — 956442a → e87ed1c. O SERVIDOR ALCANÇOU O PAINEL DE NOVO.
+#
+# Bloco COPIE DAQUI colado pelo dono: serviço active, /health 200,
+# migrações até 056_km_com_casas_decimais.sql, commit no servidor e87ed1c.
+#
+# O QUE PASSOU A VALER NO SERVIDOR COM ESTE COMMIT:
+#   · migração 056 — KM com duas casas decimais (fact_viagens,
+#     programacao_montagem e frete_destinos); dominio/frete.js aceita a
+#     vírgula (3087,48 deixa de virar 3087);
+#   · importação do Sisatak: POST /api/devolucoes/:id/sisatak,
+#     dominio/sisatak.js, servicos/planilha_xls.js e a dependência cfb;
+#   · a sobra com Controles Internos (dominio/devolucoes.js);
+#   · rotas/modelo_semana.js com o KM decimal pela mesma kmValido.
+#
+# CONFERIDO: `git diff e87ed1c HEAD -- backend` não mostra NENHUM arquivo.
+# Tudo o que subiu depois (Nº DEV curto, NT no cabeçalho e no comprovante,
+# Pátio no celular, Comercial, destino novo em todo lugar) é só painel.
+# Servidor e painel alinhados.
+#
+# EM ABERTO: a conexão SSH caiu logo depois do bloco. Se o comando era o
+# atualizar_tudo.sh, os passos 2 (duplicadas da Montagem) e 3 (prova de
+# restauração) não chegaram a rodar — ficam para a próxima vez.
+
 
 # ---------------------------------------------------------------------
 # 24/09/2026 — 6edfcec → 956442a. O SERVIDOR ALCANÇOU O PAINEL.

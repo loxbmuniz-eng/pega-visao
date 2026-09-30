@@ -80,7 +80,11 @@ Fica aberta até isso acontecer.
 O `atualizar.sh` faz um passo. O `atualizar_tudo.sh` faz três, e só o
 primeiro rodou. Continuam em aberto:
 
-- **as 53 linhas duplicadas** já gravadas na Montagem. A correção evita
+- ~~**as 53 linhas duplicadas** já gravadas na Montagem~~ — **CANCELADO em
+  30/09/2026, decisão do dono** ("não é minha intenção apagar destino nenhum").
+  O critério apagaria a segunda carga que o modelo prevê de propósito
+  (ocorrência #95). As linhas vazias antigas ficam.
+  Texto original, como registro: as 53 linhas duplicadas já gravadas na Montagem. A correção evita
   duplicata NOVA; não apaga o que já está lá. Só saem linhas **vazias**,
   não efetivadas, não canceladas, com irmã mais antiga do mesmo dia, mesma
   rota e mesmo destino — linha com placa, número, peso ou motorista nunca
