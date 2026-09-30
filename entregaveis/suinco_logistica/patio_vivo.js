@@ -67,6 +67,122 @@ function pvEstado(c){
            pct: Math.min(100, (m || 0) / PV_LIMITE * 100), fim: !t.emAndamento };
 }
 
+/* =====================================================================
+   PARADO ALÉM DO NORMAL, E PASSADA NA FILA (30/09/2026)
+   ---------------------------------------------------------------------
+   Pedido do dono: o Pátio ao vivo "mais dinâmico", "algo lógico inteligente
+   logístico". Das oito ideias, a #2 e a #5, com as respostas dele
+   ("pergunta 1 B, pergunta 2 A").
+
+   #2 — O NORMAL DE CADA ETAPA vem da própria operação: quanto tempo cada
+   passagem pela etapa levou (da entrada nela até o carimbo seguinte, na
+   trilha de movimentações), nos últimos JANELA_LOCAL_DIAS dias. "Além do
+   normal" é passar do que 9 em cada 10 caminhões levaram ali — o percentil
+   90, de posto mais próximo (resposta 1-B). Com menos de PV_AMOSTRA_MIN
+   passagens, o cartão diz "sem histórico suficiente" e não marca nada:
+   comparar com três casos é chute, e chute não acende alerta.
+
+   #5 — NÃO EXISTE HORA PREVISTA DE CHEGADA na carga; existe a sequência do
+   dia (resposta 2-A). A carga em Aguardando Veículo "foi passada" quando
+   cargas do MESMO dia — o dia da programação, a mesma regra da fila do
+   servidor — com sequência MAIOR já entraram no pátio. Sem sequência, não
+   se compara.
+
+   Só leitura, como o resto da tela. O tempo de pátio do cartão continua
+   sendo tempoDePatioDe; isto é o tempo NA ETAPA, outra pergunta.
+   ===================================================================== */
+const PV_ETAPAS_DO_PATIO = ['Aguardando Embarque', 'Embarque Iniciado', 'Embarque Finalizado', 'Faturado'];
+const PV_AMOSTRA_MIN = 10;   // passagens na janela abaixo das quais não se compara (aprovado na proposta de 30/09)
+
+function pvPercentil90(v){
+  const s = v.slice().sort((a, b) => a - b);
+  return s[Math.ceil(0.9 * s.length) - 1];
+}
+
+/* Quanto tempo cada etapa costuma levar: { status -> { p90, n } }. Uma
+   passagem vai da primeira movimentação para a etapa até a primeira
+   movimentação para OUTRA etapa — carimbo repetido não é saída. A
+   passagem ainda aberta (o caminhão está lá agora) não entra. */
+function pvNormalDasEtapas(){
+  const desde = Date.now() - JANELA_LOCAL_DIAS * 86400000;
+  const dur = new Map();
+  indiceMovimentacoes().forEach(lista => {
+    let i = 0;
+    while(i < lista.length){
+      let j = i + 1;
+      while(j < lista.length && lista[j].statusNovo === lista[i].statusNovo) j++;
+      if(j < lista.length){
+        const t0 = Date.parse(lista[i].timestamp), t1 = Date.parse(lista[j].timestamp);
+        if(Number.isFinite(t0) && Number.isFinite(t1) && t0 >= desde && t1 >= t0){
+          const k = lista[i].statusNovo;
+          if(!dur.has(k)) dur.set(k, []);
+          dur.get(k).push((t1 - t0) / 60000);
+        }
+      }
+      i = j;
+    }
+  });
+  const out = new Map();
+  dur.forEach((v, k) => out.set(k, { p90: v.length >= PV_AMOSTRA_MIN ? pvPercentil90(v) : null, n: v.length }));
+  return out;
+}
+
+/* Quando a carga entrou na etapa em que está: a última vez que ela chegou
+   nessa etapa (voltar etapa e retornar conta do retorno). */
+function pvEntradaNaEtapa(c){
+  const h = historicoDaCarga(c.id);
+  let i = h.length - 1;
+  while(i >= 0 && h[i].statusNovo !== c.status) i--;
+  if(i < 0) return null;
+  while(i > 0 && h[i - 1].statusNovo === c.status) i--;
+  return h[i].timestamp;
+}
+
+function pvDiaDaFila(c){
+  const base = c.programadoEm || c.criadoEm;
+  const d = base ? new Date(base) : null;
+  return d && !isNaN(d) ? isoDiaLocal(d) : null;
+}
+
+/* Quantas cargas do mesmo dia, com sequência maior, já entraram na frente
+   de cada programada que ainda espera o caminhão: { id -> n }. */
+function pvPassadasNaFila(){
+  const entraram = new Map();   // dia -> [sequências que já entraram]
+  DB.cargas.forEach(y => {
+    if(y.aguardandoCarga || y.sequencia === null || y.sequencia === undefined || !entradaNoPatioDe(y)) return;
+    const dia = pvDiaDaFila(y);
+    if(!dia) return;
+    if(!entraram.has(dia)) entraram.set(dia, []);
+    entraram.get(dia).push(Number(y.sequencia));
+  });
+  const out = new Map();
+  DB.cargas.forEach(c => {
+    if(c.status !== 'Aguardando Veículo' || c.aguardandoCarga || c.sequencia === null || c.sequencia === undefined) return;
+    const n = (entraram.get(pvDiaDaFila(c)) || []).filter(s => s > Number(c.sequencia)).length;
+    if(n) out.set(c.id, n);
+  });
+  return out;
+}
+
+/* A linha de baixo do cartão: o tempo na etapa, ou a fila que passou. */
+function pvNotaDoCartao(c, ctx){
+  if(PV_ETAPAS_DO_PATIO.includes(c.status)){
+    const ent = pvEntradaNaEtapa(c);
+    if(!ent) return { texto:'' };
+    const m = minutosEntre(ent, new Date().toISOString());
+    if(m === null || m < 0) return { texto:'' };
+    const norm = ctx.normal.get(c.status);
+    if(!norm || norm.p90 === null) return { texto: pvDur(m) + ' nesta etapa · sem histórico suficiente' };
+    if(m > norm.p90) return { texto: pvDur(m) + ' nesta etapa · 9 em 10 saem em até ' + pvDur(norm.p90), parado:true };
+    return { texto: pvDur(m) + ' nesta etapa' };
+  }
+  if(c.status === 'Aguardando Veículo'){
+    const n = ctx.passadas.get(c.id) || 0;
+    if(n) return { texto: n === 1 ? '1 da fila já entrou na frente' : n + ' da fila já entraram na frente', passada:n };
+  }
+  return { texto:'' };
+}
+
 function pvMontar(){
   const pista = document.getElementById('pv-pista');
   if(!pista) return false;
@@ -95,13 +211,14 @@ function pvCriarCard(c){
     + `<svg class="pv-anel" viewBox="0 0 36 36" aria-hidden="true"><circle class="a-fundo" cx="18" cy="18" r="15" pathLength="100"/>`
     + `<circle class="a-prog" cx="18" cy="18" r="15" pathLength="100"/></svg>`
     + `<span class="pv-praca"></span>`
-    + `<span class="pv-rod"><span class="pv-carga"></span><span class="pv-selo">3h+</span><span class="pv-tempo"></span></span>`;
+    + `<span class="pv-rod"><span class="pv-carga"></span><span class="pv-selo">3h+</span><span class="pv-tempo"></span></span>`
+    + `<span class="pv-nota"></span>`;
   el.addEventListener('click', () => pvAbrirCarga(c.id, el));
   return el;
 }
 
 /* O conteúdo do cartão, só onde mudou — texto igual não é regravado. */
-function pvPreencher(el, c){
+function pvPreencher(el, c, ctx){
   const rota = String(c.rota || '—');
   const praca = destinoDaCarga(c) || ((rotaInfo(c.rota) || {}).nome) || '';
   const carga = 'Carga ' + (c.numeroCarga || '—');
@@ -121,8 +238,14 @@ function pvPreencher(el, c){
     }
   }
   el.dataset.fim = c.status === 'Seguiu Viagem' ? '1' : '';
+  const nota = ctx ? pvNotaDoCartao(c, ctx) : { texto:'' };
+  const nNota = el.querySelector('.pv-nota');
+  if(nNota.textContent !== nota.texto) nNota.textContent = nota.texto;
+  if(nota.parado) el.dataset.parado = '1'; else delete el.dataset.parado;
+  if(nota.passada) el.dataset.passada = String(nota.passada); else delete el.dataset.passada;
   el.setAttribute('aria-label', `Carga ${c.numeroCarga || ''}, rota ${rota} ${praca}, ${c.status}, `
-    + (e.min === null ? 'caminhão ainda não chegou' : pvDur(e.min) + ' de pátio'));
+    + (e.min === null ? 'caminhão ainda não chegou' : pvDur(e.min) + ' de pátio')
+    + (nota.texto ? ', ' + nota.texto : ''));
 }
 
 /* O VOO (FLIP), a mesma peça da demonstração: mede onde o cartão está NA
@@ -157,6 +280,8 @@ function pvSincronizarPista(){
     if(i >= 0) porEtapa[i].push(c);
   });
   const vivos = new Set(), novos = [];
+  const ctx = { normal: pvNormalDasEtapas(), passadas: pvPassadasNaFila() };
+  let parados = 0;
   porEtapa.forEach((lista, i) => {
     /* Dentro da etapa, quem chegou primeiro fica em cima: é quem está
        esperando há mais tempo. Sem chegada, pela sequência do dia. */
@@ -171,7 +296,8 @@ function pvSincronizarPista(){
       vivos.add(c.id);
       let el = _pv.cards.get(c.id);
       if(!el){ el = pvCriarCard(c); _pv.cards.set(c.id, el); novos.push(el); }
-      pvPreencher(el, c);
+      pvPreencher(el, c, ctx);
+      if(el.dataset.parado) parados++;
       while(ref && ref.classList.contains('saindo')) ref = ref.nextElementSibling;
       if(ref === el) ref = ref.nextElementSibling;
       else cont.insertBefore(el, ref);
@@ -180,6 +306,11 @@ function pvSincronizarPista(){
     if(_pv.qtds[i].textContent !== n) _pv.qtds[i].textContent = n;
     _pv.cols[i].classList.toggle('vazia', !lista.length);
   });
+  pvFatoSub('pv-k-parado-sub', parados === 0 ? 'nenhum além do normal da etapa'
+    : parados + ' além do normal da etapa', parados ? 'atencao' : 'ok');
+  const passadas = ctx.passadas.size;
+  pvFatoSub('pv-k-prog-sub', passadas === 0 ? 'nenhuma passada na fila'
+    : passadas === 1 ? '1 passada na fila' : passadas + ' passadas na fila', passadas ? 'atencao' : 'ok');
   // Quem não está mais no quadro sai (excluída, ou saída de outro dia).
   _pv.cards.forEach((el, id) => {
     if(vivos.has(id)) return;
@@ -204,6 +335,11 @@ function pvSincronizarPista(){
       { opacity:1, transform:'none', filter:'blur(0)' }
     ], { duration:320, easing:'cubic-bezier(.23,1,.32,1)' }));
   }
+}
+
+function pvFatoSub(id, texto, tom){
+  const el = document.getElementById(id);
+  if(el && el.textContent !== texto){ el.textContent = texto; el.dataset.tom = tom; }
 }
 
 /* Os fatos do topo. Números que mudam rolam (Graf.rolar, o odômetro dos

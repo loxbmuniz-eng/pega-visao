@@ -36,6 +36,11 @@ falha() { printf '   \033[0;31mX\033[0m    %s\n' "$*"; }
 
 [[ $EUID -eq 0 ]] || { echo "precisa ser root. Entre como root e rode: bash $0"; exit 1; }
 
+# Ocorrência #97: a versão que roda é a que acabou de ser baixada, não a
+# que estava no disco. Ver scripts/codigo_novo_primeiro.sh.
+source "$SRC/$BASE/scripts/codigo_novo_primeiro.sh"
+codigo_novo_primeiro "$BASE/atualizar.sh" "$@"
+
 # COMO VIRAR O USUÁRIO postgres, nesta máquina.
 #
 # O VPS da Suinco NÃO tem sudo instalado — descoberto em 26/08/2026, com o
@@ -67,7 +72,8 @@ echo "Log completo desta execução: $LOG"
 
 azul "1. Código"
 cd "$SRC" || { falha "não achei $SRC — o código está clonado em outro lugar?"; exit 1; }
-ANTES="$(git rev-parse --short HEAD)"
+# O commit de ANTES vem de codigo_novo_primeiro, que já puxou o código.
+ANTES="${SUINCO_ANTES_DO_PULL:-$(git rev-parse --short HEAD)}"
 # core.editor=true evita o pull abrir o editor de mensagem de merge e
 # travar a sessão SSH esperando um :wq que ninguém vai digitar.
 git -c core.editor=true pull --no-edit

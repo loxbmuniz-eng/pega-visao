@@ -42,8 +42,11 @@ releitura ofereceu apagar a segunda carga planejada do dia (ocorrência #95).
 Ele disse: *"você me mandou um comando e o próprio comando causou esse
 problema, nunca mais faça isso"*. Então, sempre:
 
-1. Ler o script inteiro — e os que ele chama — na versão que está
-   PUBLICADA (a branch de entrega), não na de trabalho.
+1. Ler o script inteiro — e os que ele chama — em DUAS versões: a que
+   está no SERVIDOR (`backend/COMMIT_EM_PRODUCAO.txt`), porque é ela que
+   começa rodando, e a PUBLICADA (branch de entrega), que é a que o pull
+   traz. Nunca a de trabalho. (Ocorrência #97: o bash roda até o fim o
+   script que abriu, mesmo depois do pull trocar o arquivo.)
 2. Dizer a ele, em uma linha por passo, tudo o que o comando altera, apaga
    ou reinicia.
 3. Script que apaga ou altera dado só vai se um teste tiver provado o

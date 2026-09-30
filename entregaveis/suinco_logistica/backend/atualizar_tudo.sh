@@ -39,6 +39,11 @@ aviso() { printf '   \033[0;33m!\033[0m    %s\n' "$*"; }
 
 [[ $EUID -eq 0 ]] || { echo "precisa ser root. Entre como root e rode: bash $0"; exit 1; }
 
+# Ocorrência #97: a versão que roda é a que acabou de ser baixada, não a
+# que estava no disco. Ver scripts/codigo_novo_primeiro.sh.
+source "$SRC/$BASE/scripts/codigo_novo_primeiro.sh"
+codigo_novo_primeiro "$BASE/atualizar_tudo.sh" "$@"
+
 # COMO VIRAR O USUÁRIO postgres, nesta máquina.
 #
 # O VPS da Suinco NÃO tem sudo instalado — descoberto em 26/08/2026, com o
