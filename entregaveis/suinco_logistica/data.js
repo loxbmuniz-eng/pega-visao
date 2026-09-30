@@ -713,8 +713,12 @@ const SETOR_PERMISSOES = {
      a primeira da lista, então é onde o Comercial cai ao entrar. A aba
      Usuários continua aparecendo só com "Minha segurança" (segundo fator),
      como para todo setor. Travado por test_setor_comercial e
-     test_comercial_e_excluir_aguardando. */
-  'Comercial':    ['patio','historico'],
+     test_comercial_e_excluir_aguardando.
+     REDUZIDO em 30/09/2026, decisão do dono: "deixa a visão do comercial
+     somente o pátio ao vivo, tira as outras abas". Sai o Histórico, e sai
+     também a aba Usuários ("Minha segurança") — ver
+     SETORES_SEM_MINHA_SEGURANCA logo abaixo. */
+  'Comercial':    ['patio'],
   /* Setores da devolução (18/08/2026): cada um assina um passo do
      checklist digital — Controles Internos destina os produtos, Central
      de Notas finaliza a NF. Só veem a aba Devoluções e o Histórico; o
@@ -735,6 +739,15 @@ const SETOR_PERMISSOES = {
      qualquer jeito (podeVerValorDeFrete). */
   'Qualidade':    ['devolucoes','historico','relatorios'],
 };
+
+/* QUEM NÃO VÊ A ABA USUÁRIOS (30/09/2026).
+   A aba Usuários aparece para TODO setor desde 22/08/2026, só com "Minha
+   segurança" para quem não é Administração: é onde cada pessoa liga o
+   próprio segundo fator. O Comercial saiu dela por decisão do dono ("somente
+   o pátio ao vivo, tira as outras abas"). A conta dele continua protegida
+   sem o segundo fator: 5 senhas erradas seguram o login por 15 minutos
+   (rotas/auth.js). */
+const SETORES_SEM_MINHA_SEGURANCA = ['Comercial'];
 
 /* Gêmea de soAcompanha() em backend/src/dominio/fluxo.js — duplicada
    porque o painel é build de arquivo único e não importa do servidor. O

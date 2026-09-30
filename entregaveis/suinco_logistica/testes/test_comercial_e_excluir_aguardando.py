@@ -74,7 +74,7 @@ async def main():
         nav = await p.chromium.launch(executable_path='/opt/pw-browsers/chromium', headless=True)
         erros = []
 
-        print('\n=== 1. COMERCIAL: PÁTIO, HISTÓRICO E A PRÓPRIA SEGURANÇA ===')
+        print('\n=== 1. COMERCIAL: SÓ O PÁTIO AO VIVO ===')
         pg = await nav.new_page()
         pg.on('pageerror', lambda e: erros.append(str(e)))
         await entrar(pg, 'Comercial')
@@ -90,17 +90,20 @@ async def main():
         # TROCADO em 29/09/2026, decisão do dono: "vai liberar a visão do
         # pátio ao vivo pro comercial e ele só vai poder ver isso e o
         # histórico". O Pátio ao vivo entra, a Torre sai.
-        ck('Comercial vê Pátio ao vivo, Histórico e a própria segurança',
-           sorted(abas) == ['historico', 'patio', 'usuarios'], str(abas))
+        # REDUZIDO em 30/09/2026, decisão do dono: "deixa a visão do
+        # comercial somente o pátio ao vivo, tira as outras abas". Saem o
+        # Histórico e a aba Usuários ("Minha segurança").
+        ck('Comercial vê só o Pátio ao vivo', sorted(abas) == ['patio'], str(abas))
+        ck('o Histórico saiu da visão do Comercial', 'historico' not in abas, str(abas))
+        ck('a aba Usuários saiu da visão do Comercial', 'usuarios' not in abas, str(abas))
         ck('a Torre saiu da visão do Comercial', 'torre' not in abas, str(abas))
         ck('Relatórios saiu da visão do Comercial', 'relatorios' not in abas, str(abas))
         for proibida in ['programacao', 'portaria', 'expedicao', 'faturamento',
                          'cadastros', 'indicadores']:
             ck(f'Comercial NÃO vê {proibida}', proibida not in abas)
 
-        # A parte que importa: dentro de Usuários ele só encontra a própria
-        # segurança. Aba visível não pode virar porta de entrada para a lista
-        # de operadores nem para as aprovações de ação crítica.
+        # Mesmo que alguém force a aba Usuários pelo console, gerenciar gente
+        # continua fechado para ele — e o servidor recusa de qualquer jeito.
         await pg.evaluate("()=>abrirTab('usuarios')")
         await pg.wait_for_timeout(1500)
         dentro = await pg.evaluate("""()=>{
@@ -113,11 +116,8 @@ async def main():
             minhaSeguranca: vis(document.getElementById('card-minha-seguranca')),
           };
         }""")
-        ck('na aba Usuários ele vê só "Minha segurança"',
-           dentro['cards'] == ['card-minha-seguranca'], str(dentro['cards']))
         ck('Comercial NÃO vê a lista de operadores', not dentro['listaOperadores'])
         ck('Comercial NÃO vê os pedidos de aprovação', not dentro['aprovacoes'])
-        ck('mas PODE ativar o próprio segundo fator', dentro['minhaSeguranca'])
 
         print('\n=== 2. COMERCIAL NÃO GANHA CAMPO EDITÁVEL NA TORRE ===')
         await pg.evaluate("""() => {

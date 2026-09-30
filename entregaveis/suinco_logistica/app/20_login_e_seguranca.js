@@ -863,6 +863,8 @@ function aplicarPermissoesSetor(){
   if(!DB.operador) return;
   const doSetor = SETOR_PERMISSOES[DB.operador.setor] || [];
   const admin = DB.operador.setor === 'Administração';
+  // Comercial não vê nem "Minha segurança" (30/09/2026) — ver SETORES_SEM_MINHA_SEGURANCA.
+  const usuariosLiberada = !SETORES_SEM_MINHA_SEGURANCA.includes(DB.operador.setor);
   document.querySelectorAll('.nav-tab').forEach(el=>{
     /* A aba Usuários passa a ser de TODOS (22/08/2026, etapa 4).
 
@@ -871,7 +873,7 @@ function aplicarPermissoesSetor(){
        ali só "Minha segurança" — os cards de gerenciar usuários continuam
        escondidos, e o servidor recusa as rotas de qualquer jeito. */
     const liberada = doSetor.includes(el.dataset.tab)
-      || (el.dataset.tab === 'usuarios');
+      || (el.dataset.tab === 'usuarios' && usuariosLiberada);
     el.hidden = !liberada;
   });
   // Dentro da aba Usuários: gerenciar gente é só da Administração.
@@ -879,7 +881,7 @@ function aplicarPermissoesSetor(){
     if(card.id === 'card-minha-seguranca') return;
     card.hidden = !admin;
   });
-  if(!doSetor.includes(TAB_ATUAL) && TAB_ATUAL !== 'usuarios') irParaTab(doSetor[0] || 'torre');
+  if(!doSetor.includes(TAB_ATUAL) && !(TAB_ATUAL === 'usuarios' && usuariosLiberada)) irParaTab(doSetor[0] || 'torre');
   // Mesmo funil das abas: quem já chama isto no login, na restauração e na
   // troca de usuário passa a acertar os botões de relatório junto.
   aplicarDonosDeDocumentoUI();
