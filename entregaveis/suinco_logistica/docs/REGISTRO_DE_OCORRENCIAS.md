@@ -4772,3 +4772,62 @@ que conta.
 
 **A guarda.** `testes/test_patio_vivo_grafico_so_patio.py` — relógio fixo às
 16h30. Reprovou contra o publicado em 6 pontos e passa com a correção.
+
+## #100 — A data de programação virava o dia seguinte depois das 21h (30/09/2026)
+
+**Como apareceu.** Debugging preventivo pedido pelo dono, varrendo a família
+da #81 (fuso). Três telas tiravam o dia da programação cortando o texto UTC
+(`programadoEm.slice(0,10)`): o painel de correção da Administração (que
+ABRE com essa data preenchida), a tabela do raio-X dos Indicadores e a lista
+de cargas excluídas do Histórico. Programar à noite para o dia seguinte é
+rotina: uma carga de 30/09 às 21h30 aparecia como 01/10.
+
+**Reproduzido** com o navegador no fuso de Brasília: `2026-10-01` onde é 30/09.
+
+**A correção.** `diaDaProgramacao(c)` e `diaLocalISO(d)` em `data.js`. As
+três cópias da conta de dia local (Torre, Montagem, Devoluções) passam a
+chamar a única. **Guarda:** `test_data_de_programacao_no_fuso.py`.
+
+## #101 — Na Torre, "Cargas em aberto" e o mini-gráfico dele contavam diferente (30/09/2026)
+
+**Como apareceu.** Debugging preventivo, família da #99 ("uma pergunta, duas
+contas"). O número não conta a chegada sem programação nem carga sem placa;
+`serieDoPatio` (mini-gráfico e seta "vs. ontem") contava. Reproduzido: número
+2, gráfico 3. **A correção:** a série usa o mesmo filtro do número.
+**Guarda:** `test_torre_numero_e_grafico_batem.py`.
+
+## #102 — "Quando a carga saiu" tinha três respostas, uma delas a hora da edição (30/09/2026)
+
+**Como apareceu.** Mesma varredura. O número "Seguiu Viagem hoje" usa o
+carimbo; o mini-gráfico dele, a série de 14 dias dos Indicadores e o ranking
+de atraso por placa caíam para `concluidoEm || atualizadoEm` — e
+`concluidoEm` o servidor nunca preenche. Carga em Seguiu Viagem sem carimbo,
+editada hoje, "saía hoje" no gráfico e não no número. Reproduzido: "1 Seguiu
+Viagem hoje ▲ 2 vs. ontem".
+
+**A família.** Fidelidade ao momento exato: carimbar a hora da edição faz o
+indicador mentir.
+
+**A correção.** `saidaDaCarga(c)` em `data.js`: o carimbo e mais nada; sem
+carimbo, a carga não é saída de dia nenhum e também não é aberta. A única
+queda para a hora da edição que fica é a faxina do navegador (`podarLocal`),
+que não alimenta número nenhum — está comentado lá. **Guarda:**
+`test_torre_numero_e_grafico_batem.py`.
+
+## #103 — O assistente do servidor dizia coisas falsas (30/09/2026)
+
+**Como apareceu.** Debugging preventivo, frente dos scripts do servidor.
+No `assistente_servidor.sh`, que o dono roda como root:
+1. a saúde era conferida na porta 3010 (a de TESTE); produção é 3000 —
+   diria "HTTP 000", servidor fora, com ele no ar;
+2. o passo 3 ainda anunciava "Limpar as linhas duplicadas da Montagem — este
+   passo APAGA linha de programação", contra a decisão da #95, e o bloco final
+   dizia "limpeza duplicadas: sim";
+3. o bloco COPIE DAQUI dizia "migrações aplicadas" lendo o último ARQUIVO da
+   pasta, não o banco — e é o bloco que move a marca APLICADAS_EM_PRODUCAO.
+
+**A correção.** Porta de produção; o passo 3 virou "Provar que o backup
+restaura", sem prometer apagar nada; a migração vem de `_migrations`.
+**Guarda:** `test_scripts_do_servidor_dizem_a_verdade.py` (estático) —
+reprovou em 4 pontos contra o publicado; também trava a porta de todos os
+scripts do servidor contra a do `instalar.sh`.

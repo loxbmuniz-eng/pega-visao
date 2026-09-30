@@ -191,10 +191,7 @@ const DEV_ORDEM_NA_TELA = ['portaria', 'faturamento', 'pesofinal',
 
 /* Dia local do pátio — NUNCA toISOString().slice(0,10): às 21h+ de Patos
    de Minas o UTC já virou o dia seguinte (guardião nº 2). */
-function diaLocalDev(d = new Date()) {
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
+function diaLocalDev(d = new Date()) { return diaLocalISO(d); }   // a conta mora em data.js (#100)
 
 function devServidorOk() {
   return typeof SuincoSharePoint !== 'undefined'

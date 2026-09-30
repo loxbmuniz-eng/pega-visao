@@ -4,8 +4,8 @@
 #
 # Existe porque quatro coisas só o Luis pode fazer, e todas as vezes elas
 # viraram comando colado por mensagem: subir a metade de servidor de uma
-# correção, limpar as duplicadas da Montagem, provar que o backup restaura
-# e trocar a senha de root.
+# correção, provar que o backup restaura e trocar a senha de root. (Limpar
+# as "duplicadas" da Montagem saiu em 30/09/2026 — decisão do dono, #95.)
 #
 # Rode DENTRO do servidor, logado como root:
 #
@@ -204,8 +204,17 @@ TOTAL_STAGES=6
 
 SRC="/opt/suinco-src"
 BASE="$SRC/entregaveis/suinco_logistica/backend"
+# A porta do serviço em PRODUÇÃO é a do instalar.sh (PORTA_APP=3000). Este
+# script conferia a 3010 — a do ambiente de teste — e no servidor diria
+# "HTTP 000", servidor fora, com ele no ar (30/09/2026, ocorrência #103).
+PORTA_APP=3000
+# A última migração APLICADA vem do banco, não da pasta: arquivo presente
+# não é migração aplicada (#103).
+ultima_migracao_aplicada() {
+  su -s /bin/bash postgres -c "psql -d embarque_suinco -tAc 'SELECT arquivo FROM _migrations ORDER BY arquivo DESC LIMIT 1'" 2>/dev/null \
+    || echo '(não consegui ler do banco)'
+}
 FEITO_ATUALIZAR="não"
-FEITO_LIMPEZA="não"
 FEITO_BACKUP="não"
 FEITO_SENHA="não"
 FEITO_MONITOR="não"
@@ -225,9 +234,9 @@ say "  $(cd "$SRC" 2>/dev/null && git log -1 --format='%h  %s' 2>/dev/null || ec
 step "Serviço:"
 say "  $(systemctl is-active embarque-suinco 2>/dev/null || echo '(não consegui ler)')"
 step "Saúde local:"
-say "  HTTP $(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3010/health 2>/dev/null || echo '000')"
-step "Última migração registrada no repositório:"
-say "  $(head -1 "$BASE/migrations/APLICADAS_EM_PRODUCAO.txt" 2>/dev/null || echo '(não consegui ler)')"
+say "  HTTP $(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:$PORTA_APP/health 2>/dev/null || echo '000')"
+step "Última migração aplicada no banco:"
+say "  $(ultima_migracao_aplicada)"
 printf '\n'
 pause
 
@@ -254,30 +263,28 @@ fi
 printf '\n'
 pause
 
-# ── 3. As linhas duplicadas da Montagem ───────────────────────────────────
-stage "Limpar as linhas duplicadas da Montagem"
-say "São as linhas repetidas que entraram na Montagem do dia antes da"
-say "correção. A correção impede duplicata NOVA; não apaga o que já está lá."
+# ── 3. A prova do backup ──────────────────────────────────────────────────
+# Até 30/09/2026 este passo se chamava "Limpar as linhas duplicadas da
+# Montagem" e dizia que APAGAVA linha de programação. A limpeza saiu (#95:
+# "não é minha intenção apagar destino nenhum"); o atualizar_tudo.sh não
+# apaga nada. O texto continuava prometendo apagar (#103).
+stage "Provar que o backup restaura"
+say "Roda o atualizar_tudo.sh: confere o código (se o passo anterior já"
+say "atualizou, não muda nada) e restaura o backup de hoje num banco de teste,"
+say "comparando com a produção. O banco de teste é apagado no fim."
 printf '\n'
-step "Só sai linha VAZIA: sem placa, sem número, sem peso, sem motorista,"
-step "não efetivada, não cancelada, e com irmã mais antiga do mesmo dia,"
-step "mesma rota e mesmo destino."
-step "O script MOSTRA a lista e pergunta antes de apagar qualquer coisa."
+step "NADA aqui apaga dado da operação. Da produção, só lê."
 printf '\n'
-warn "Este passo APAGA linha de programação. Nenhum dado de carga é tocado."
-printf '\n'
-if confirm "Abrir a limpeza (ela ainda vai te mostrar antes de apagar)?"; then
+if confirm "Rodar a prova do backup agora?"; then
   printf '\n'
   if bash "$BASE/atualizar_tudo.sh"; then
-    FEITO_LIMPEZA="sim"
     FEITO_BACKUP="sim"
   else
-    warn "O passo a passo parou. Leia a saída acima."
+    warn "A prova parou. Leia a saída acima."
     pause "Enter quando tiver lido"
   fi
-  say "O atualizar_tudo.sh faz a limpeza E a prova do backup, em sequência."
 else
-  say "Pulado. As duplicadas continuam na Montagem."
+  say "Pulado. O backup continua sem prova de restauração."
 fi
 printf '\n'
 pause
@@ -348,10 +355,9 @@ printf -- '--------- COPIE DAQUI ---------\n'
 printf 'assistente rodado em : %s\n' "$(date '+%d/%m/%Y %H:%M')"
 printf 'commit no servidor   : %s\n' "$(cd "$SRC" 2>/dev/null && git log -1 --format=%h 2>/dev/null || echo '?')"
 printf 'serviço              : %s\n' "$(systemctl is-active embarque-suinco 2>/dev/null || echo '?')"
-printf '/health local        : %s\n' "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3010/health 2>/dev/null || echo '000')"
-printf 'migrações aplicadas  : %s\n' "$(cd "$BASE" 2>/dev/null && ls migrations/*.sql 2>/dev/null | tail -1 | xargs -r basename || echo '?')"
+printf '/health local        : %s\n' "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:$PORTA_APP/health 2>/dev/null || echo '000')"
+printf 'última migração      : %s\n' "$(ultima_migracao_aplicada)"
 printf 'atualizar.sh         : %s\n' "$FEITO_ATUALIZAR"
-printf 'limpeza duplicadas   : %s\n' "$FEITO_LIMPEZA"
 printf 'prova do backup      : %s\n' "$FEITO_BACKUP"
 printf 'senha de root trocada: %s\n' "$FEITO_SENHA"
 printf 'monitor externo      : %s\n' "$FEITO_MONITOR"

@@ -310,7 +310,7 @@ function detalheRaioXHtml(item, mediasGeral, colunas){
     return `<tr>
       <td>${esc(c.numeroCarga) || '—'}</td>
       <td>${_raioxVisao === 'placa' ? esc(rotaCurta(c.rota)) : esc(c.placa)}</td>
-      <td>${esc(String(c.programadoEm || c.criadoEm || '').slice(0,10).split('-').reverse().join('/'))}</td>
+      <td>${esc(diaDaProgramacao(c).split('-').reverse().join('/'))}</td>
       <td class="c-peso">${c.peso ? c.peso.toLocaleString('pt-BR') : '—'}</td>
       <td class="c-peso">${fmtDuracao(ind.tempoPatioTotal)}</td>
       <td class="c-peso">${fmtDuracao(ind.leadTimeTotal)}</td>
@@ -791,7 +791,7 @@ function renderIndicadores(){
     balde[f] = { soma:new Array(DIAS_SERIE).fill(0), n:new Array(DIAS_SERIE).fill(0) };
   });
   const diaDaCarga = (c) => {
-    const q = primeiroTimestamp(c.id, 'Seguiu Viagem') || c.concluidoEm || c.atualizadoEm;
+    const q = saidaDaCarga(c);   // só o carimbo — sem ele, não se sabe o dia (#102)
     if(!q) return -1;
     const i = Math.floor((new Date(q).getTime() - t0Serie) / 86400000);
     return (i >= 0 && i < DIAS_SERIE) ? i : -1;

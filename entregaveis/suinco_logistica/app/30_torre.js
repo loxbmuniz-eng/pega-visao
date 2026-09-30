@@ -691,11 +691,16 @@ function serieDoPatio(dias = 14){
   const abertas = new Array(dias).fill(0);
   const seguiu  = new Array(dias).fill(0);
   DB.cargas.forEach(c => {
+    /* A MESMA CONTA DO NÚMERO DO QUADRO (30/09/2026, #101). "Cargas em
+       aberto" não conta a chegada sem programação nem carga sem placa; o
+       mini-gráfico e a seta contavam, e diziam 3 ao lado de um 2. */
+    if(c.aguardandoCarga || !c.placa) return;
     const nasceuEm = new Date(c.programadoEm || c.criadoEm || 0).getTime();
     if(!Number.isFinite(nasceuEm)) return;
-    const saidaISO = c.status === 'Seguiu Viagem'
-      ? (primeiroTimestamp(c.id, 'Seguiu Viagem') || c.concluidoEm || c.atualizadoEm)
-      : null;
+    /* Quando saiu: só o carimbo (#102). Seguiu Viagem SEM carimbo não é
+       aberta (o número não a conta) nem saída de dia nenhum. */
+    const saidaISO = c.status === 'Seguiu Viagem' ? saidaDaCarga(c) : null;
+    if(c.status === 'Seguiu Viagem' && !saidaISO) return;
     const saiuEm = saidaISO ? new Date(saidaISO).getTime() : null;
     for(let i = 0; i < dias; i++){
       const fim = fins[i];
@@ -1075,10 +1080,7 @@ function linhaFilaHtml(c, lista, arrastavel){
 /* O dia que a Fila mostra. null = hoje (não guarda a data de hoje para não
    envelhecer: quem deixa a aba aberta de madrugada vê o dia virar). */
 let _progFilaDia = null;
-function isoDiaLocal(d){
-  const p = (n)=>String(n).padStart(2,'0');
-  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;
-}
+function isoDiaLocal(d){ return diaLocalISO(d); }   // a conta mora em data.js (#100)
 function diaFilaSelecionado(){ return _progFilaDia || isoDiaLocal(new Date()); }
 function mudarDiaFilaUI(v){
   if(v === 'hoje' || v === '' || v === null || v === undefined){ _progFilaDia = null; }
