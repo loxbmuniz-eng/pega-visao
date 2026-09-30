@@ -54,6 +54,9 @@ ok()     { verde    "  ok  $*"; }
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --arquivo) ARQUIVO="${2:-}"; shift 2 ;;
+    # --banco: com qual banco comparar. Padrão: o da produção. Existe para o
+    # teste (test_restauracao_confere_conteudo) usar um banco descartável.
+    --banco) BANCO_REAL="${2:-}"; shift 2 ;;
     *) vermelho "opção desconhecida: $1"; exit 2 ;;
   esac
 done
@@ -70,6 +73,12 @@ fi
 # 'sudo' from deb sudo... Try: apt install". O `su` vem no sistema base.
 # O sudo fica como segunda tentativa, para uma máquina onde o postgres não
 # aceite su.
+# E SEM AS VARIÁVEIS PG* DE QUEM CHAMOU (30/09/2026). Com PGUSER/PGHOST no
+# ambiente (um backend/.env carregado, como faz a bateria de testes), o psql
+# entraria como o usuário da APLICAÇÃO pela rede — que não cria banco — e a
+# prova pararia em "não consegui criar o banco temporário". Esta prova é
+# sempre do usuário postgres, pelo socket local.
+unset PGHOST PGPORT PGUSER PGPASSWORD PGDATABASE PGSERVICE
 COMO_POSTGRES=""
 if su -s /bin/sh postgres -c 'true' 2>/dev/null; then
   COMO_POSTGRES="su"
@@ -80,9 +89,15 @@ else
   exit 2
 fi
 
+#
+# COM /bin/bash, NÃO /bin/sh (ocorrência #98, 30/09/2026). O `printf '%q'`
+# escreve quebra de linha como $'\n' — sintaxe do bash. O /bin/sh do Ubuntu
+# (dash) não a entende, e toda consulta de VÁRIAS linhas quebrava em
+# silêncio: o passo 6 dizia "não há carga com mais de 7 dias" num banco que
+# opera desde agosto, e a conferência de conteúdo nunca rodou no servidor.
 pg() {
   if [[ "$COMO_POSTGRES" == "su" ]]; then
-    su -s /bin/sh postgres -c "psql $(printf '%q ' "$@")"
+    su -s /bin/bash postgres -c "psql $(printf '%q ' "$@")"
   else
     sudo -u postgres psql "$@"
   fi
@@ -256,14 +271,20 @@ titulo "6. O conteúdo confere? (não só a contagem)"
 # encerradas — campo a campo entre o backup e a produção. Carga do dia
 # ficaria de fora de propósito: ela muda o tempo todo, e uma diferença ali
 # seria trabalho normal, não defeito de backup.
+# Consulta que FALHA não é banco novo (#98): antes o erro ia para /dev/null e
+# a resposta vazia virava "não há carga antiga". Agora falha diz que falhou.
+AMOSTRA_OK=1
 AMOSTRA="$(pg -d "$TEMP" -tAc "
   SELECT carga_id
     FROM fact_viagens
    WHERE criado_em < now() - interval '7 days'
    ORDER BY carga_id
-   LIMIT 5" 2>/dev/null || echo '')"
+   LIMIT 5" 2>&1)" || AMOSTRA_OK=0
 
-if [[ -z "$AMOSTRA" ]]; then
+if (( ! AMOSTRA_OK )); then
+  falha "a consulta das cargas antigas deu erro — a conferência de conteúdo NÃO foi feita:"
+  echo "        $AMOSTRA"
+elif [[ -z "$AMOSTRA" ]]; then
   alerta "não há carga com mais de 7 dias para comparar (banco novo?). Conferência de conteúdo pulada."
 else
   linha() {
