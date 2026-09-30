@@ -2354,6 +2354,30 @@ function ultimaMovimentacaoDaCarga(cargaId){
   const h = historicoDaCarga(cargaId);
   return h.length ? h[h.length - 1] : null;
 }
+/* O DIA LOCAL — UMA FUNÇÃO SÓ (30/09/2026, ocorrência #100).
+   Nunca `toISOString().slice(0,10)`: a partir das 21h de Brasília o UTC já
+   virou o dia seguinte, e programar à noite para amanhã é rotina. Havia três
+   cópias desta conta (Torre, Montagem, Devoluções); elas agora chamam esta. */
+function diaLocalISO(d = new Date()){
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+/* O dia da programação da carga, no fuso de quem olha. '' sem data. */
+function diaDaProgramacao(c){
+  const base = c && (c.programadoEm || c.criadoEm);
+  const d = base ? new Date(base) : null;
+  return d && !isNaN(d) ? diaLocalISO(d) : '';
+}
+/* QUANDO A CARGA SAIU — UMA FUNÇÃO SÓ (30/09/2026, ocorrência #102).
+   O carimbo de Seguiu Viagem, e mais nada. Havia três respostas: o carimbo;
+   o carimbo || concluidoEm || atualizadoEm; o carimbo || atualizadoEm. O
+   `concluidoEm` o servidor nunca preenche, então a queda ia para a HORA DA
+   ÚLTIMA EDIÇÃO — e a carga "saía" no dia em que alguém a editou. Sem
+   carimbo, não se sabe quando saiu: null, e ela não é contada como saída
+   em dia nenhum (fidelidade ao momento exato). */
+function saidaDaCarga(c){
+  return c ? primeiroTimestamp(c.id, 'Seguiu Viagem') : null;
+}
 // Primeiro instante em que a carga atingiu determinado status (usado pelos indicadores).
 function primeiroTimestamp(cargaId, status){
   const m = historicoDaCarga(cargaId).find(x=>x.statusNovo===status);
@@ -2415,7 +2439,7 @@ function tempoDePatioDe(c){
   if(!c) return vazio;
   const entrada = entradaNoPatioDe(c);
   if(!entrada) return vazio;
-  const saida = primeiroTimestamp(c.id, 'Seguiu Viagem');
+  const saida = saidaDaCarga(c);
   const entradaPlausivel = dataDeEventoPlausivel(entrada);
   const suspeito = !entradaPlausivel
     || (!!saida && !dataDeEventoPlausivel(saida))
@@ -2526,7 +2550,10 @@ function podarLocal(){
     if(c.status !== 'Seguiu Viagem') return;
     if(temGravacaoLocalPendente(c)) return;
     if(ehCargaDoServidor(c)) return;
-    const saida = primeiroTimestamp(c.id, 'Seguiu Viagem') || c.concluidoEm || c.atualizadoEm;
+    /* A ÚNICA queda para a hora da edição que fica (30/09/2026): aqui não é
+       indicador, é faxina do navegador — sem ela, Seguiu Viagem sem carimbo
+       nunca sairia da memória local. Nenhum número da tela passa por aqui. */
+    const saida = saidaDaCarga(c) || c.concluidoEm || c.atualizadoEm;
     const t = saida ? Date.parse(saida) : NaN;
     if(Number.isFinite(t) && t < limite) podadas.add(c.id);
   });
@@ -3751,7 +3778,7 @@ function rankingVeiculosAtraso(cargas){
       r.somaAtraso += atraso;
       // "Seguiu Viagem" acontece uma vez por carga, então o primeiro
       // registro é o único — não existe "último" diferente aqui.
-      const quando = primeiroTimestamp(c.id,'Seguiu Viagem') || c.atualizadoEm;
+      const quando = saidaDaCarga(c);   // só o carimbo (#102)
       if(!r.ultimoAtraso || Date.parse(quando) > Date.parse(r.ultimoAtraso)) r.ultimoAtraso = quando;
     }
   });

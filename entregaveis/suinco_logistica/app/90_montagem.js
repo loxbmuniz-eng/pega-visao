@@ -27,11 +27,6 @@ const NOMES_DIA = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 
    amanhã, e o botão "Hoje" abriria a programação do dia seguinte para
    quem monta o dia à noite. O guardião em testes/test_guardioes.py existe
    exatamente para impedir que isso volte — e pegou este código. */
-function diaLocalISO(d = new Date()){
-  const p = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
-}
-
 function montagemHojeUI(){
   const el = document.getElementById('mont-data');
   if(el) el.value = diaLocalISO();

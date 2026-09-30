@@ -146,7 +146,7 @@ function renderTimelineCarga(id){
    corrigiu, de quando para quando e por quê. */
 function painelAdminDaCargaHtml(c){
   if((DB.operador||{}).setor !== 'Administração') return '';
-  const dia = String(c.programadoEm || c.criadoEm || '').slice(0,10);
+  const dia = diaDaProgramacao(c);   // dia de Brasília, não do UTC (#100)
   return `
     <div class="admin-carga no-print">
       <div class="admin-carga-tit">🛠 Correções da Administração</div>
@@ -496,7 +496,7 @@ async function carregarCargasExcluidasUI(){
             <td>${badgeHtml(c.status)}</td>
             <td>${esc(c.cliente||'—')}</td>
             <td>${esc(c.destino||'—')}</td>
-            <td>${esc(String(c.programadoEm||c.criadoEm||'').slice(0,10).split('-').reverse().join('/'))}</td>
+            <td>${esc(diaDaProgramacao(c).split('-').reverse().join('/'))}</td>
             <td class="no-print"><button class="btn btn-sec btn-sm"
               onclick="devolverCargaExcluidaUI('${escJs(c.id)}')">↩ Devolver</button></td>
           </tr>`).join('')}</tbody>
