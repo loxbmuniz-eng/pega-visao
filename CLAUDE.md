@@ -36,6 +36,22 @@ Disso saem quatro regras que valem para todo mundo aqui:
 **Nunca peça a ele para rodar `atualizar.sh`.** Ele já roda. Diga o que
 depende do servidor e siga.
 
+**Comando que vai para ele rodar no servidor é conferido antes, linha por
+linha.** Regra de 30/09/2026, depois que um `atualizar_tudo.sh` mandado sem
+releitura ofereceu apagar a segunda carga planejada do dia (ocorrência #95).
+Ele disse: *"você me mandou um comando e o próprio comando causou esse
+problema, nunca mais faça isso"*. Então, sempre:
+
+1. Ler o script inteiro — e os que ele chama — na versão que está
+   PUBLICADA (a branch de entrega), não na de trabalho.
+2. Dizer a ele, em uma linha por passo, tudo o que o comando altera, apaga
+   ou reinicia.
+3. Script que apaga ou altera dado só vai se um teste tiver provado o
+   critério contra o dado real (modelo da semana, banco). Sem essa prova,
+   o comando não é mandado.
+4. Um comando por linha, na ordem: primeiro o `ssh`, esperar o prompt
+   `root@…#`, depois o script. Colados juntos, o segundo vira senha.
+
 ---
 
 ## Onde as coisas estão

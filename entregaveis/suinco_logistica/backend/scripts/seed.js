@@ -111,9 +111,13 @@ async function main() {
   console.log('Rotas...');
   for (const [codigo, nome, detalhe, operador] of ROTAS) {
     await pool.query(
+      /* SÓ COMPLETA O QUE FALTA (30/09/2026). Era `DO UPDATE`: todo
+         atualizar.sh roda o instalar.sh, que roda este seed — e a cada
+         atualização o nome e as cidades de toda rota voltavam ao valor da
+         lista de agosto, desfazendo o que a Administração editou em
+         Cadastros (test_seed_nao_desfaz_cadastro.py). */
       `INSERT INTO dim_rotas (codigo, nome, detalhe, operador) VALUES ($1,$2,$3,$4)
-       ON CONFLICT (codigo) DO UPDATE
-         SET nome = EXCLUDED.nome, detalhe = EXCLUDED.detalhe, operador = EXCLUDED.operador`,
+       ON CONFLICT (codigo) DO NOTHING`,
       [codigo, nome, detalhe, operador]
     );
   }
@@ -136,11 +140,12 @@ async function main() {
     await pool.query(
       `INSERT INTO dim_veiculos (placa, transportadora, tipo_veiculo, precisa_revisao, origem)
        VALUES ($1,$2,$3,$4,'seed')
-       ON CONFLICT (placa) DO UPDATE
-         SET transportadora  = EXCLUDED.transportadora,
-             tipo_veiculo    = EXCLUDED.tipo_veiculo,
-             precisa_revisao = EXCLUDED.precisa_revisao,
-             atualizado_em   = now()`,
+       ON CONFLICT (placa) DO NOTHING`,
+      /* SÓ COMPLETA O QUE FALTA (30/09/2026). Era `DO UPDATE`: a cada
+         atualizar.sh, a transportadora, o tipo de veículo e o "precisa
+         revisão" de toda placa da planilha de agosto voltavam — desfazendo
+         a edição feita em Cadastros → Frota. O tipo de veículo decide a
+         tarifa do frete. Placa nova da planilha continua entrando. */
       [placa, r.Transportadora || '', r.TipoVeiculo || '',
        String(r.PrecisaRevisao || '').toLowerCase().startsWith('s')]
     );
