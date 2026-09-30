@@ -4632,3 +4632,39 @@ linhas vazias antigas ficam: não atrapalham e não se apagam.
 
 **A guarda.** `testes/test_atualizar_tudo_nao_apaga_montagem.py` (estático) —
 reprovou contra o script anterior em 4 pontos e passa com a correção.
+
+## #96 — Todo atualizar.sh desfazia o que foi editado em Cadastros (30/09/2026)
+
+**Como apareceu.** Não foi relato: foi achado ao cumprir a regra nova do
+CLAUDE.md (30/09) — conferir linha por linha, na versão publicada, o comando
+que vai para o dono rodar. O `atualizar.sh` chama o `instalar.sh`, que roda
+`scripts/seed.js` em TODA atualização.
+
+**Reproduzido no banco de teste:** placa `AAK8958` editada para outra
+transportadora e rota `171` com as cidades editadas, como a tela de Cadastros
+faz; `node scripts/seed.js`, como o atualizar.sh faz; as duas voltaram ao
+valor da planilha de agosto.
+
+**A causa.** O seed gravava com `ON CONFLICT … DO UPDATE`: transportadora,
+tipo de veículo e "precisa revisão" de toda placa de `frota_seed_2026.csv`, e
+nome, detalhe e operador de toda rota da lista inicial, eram regravados a
+cada atualização. O seed nasceu para servidor NOVO e virou, sem ninguém
+reparar, uma sobrescrita periódica da produção. O tipo de veículo decide a
+tarifa do frete.
+
+**A família.** "Controle não pode depender da memória de quem escreveu": o
+seed foi escrito sabendo que rodaria uma vez; o instalar.sh passou a ser
+chamado pelo atualizar.sh, e o seed junto.
+
+**O que NÃO se sabe e fica dito:** quantas edições foram desfeitas em produção
+desde agosto. O servidor não guarda o valor anterior de `dim_veiculos` nem de
+`dim_rotas`. Quem editou uma placa ou uma rota em Cadastros e viu voltar,
+viu isto.
+
+**A correção.** O seed passa a `ON CONFLICT … DO NOTHING` nas duas tabelas:
+completa o que falta (placa ou rota nova da planilha entra), nunca grava por
+cima.
+
+**A guarda.** `testes/test_seed_nao_desfaz_cadastro.py` — banco descartável:
+migrar → seed → editar → seed de novo. Reprovou contra o publicado (as duas
+edições voltaram) e passa com a correção.
