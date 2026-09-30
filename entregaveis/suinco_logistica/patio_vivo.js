@@ -421,7 +421,9 @@ function pvFatoSub(id, texto, tom){
    Indicadores); null não é zero — sem saída hoje, a média é traço. */
 function pvFatos(){
   const hoje = pvHoje();
-  const noPatio = DB.cargas.filter(c => ['Aguardando Embarque','Embarque Iniciado','Embarque Finalizado','Faturado'].includes(c.status));
+  // a mesma conta do gráfico, no instante de agora
+  const agoraFato = new Date();
+  const noPatio = DB.cargas.filter(c => pvNoPatioEm(c, agoraFato));
   const acima = noPatio.filter(c => { const m = tempoDePatioDe(c).minutos; return m !== null && m > PV_LIMITE; }).length;
   const saidas = DB.cargas.filter(c => { const s = primeiroTimestamp(c.id, 'Seguiu Viagem'); return s && new Date(s) >= hoje; });
   const tempos = saidas.map(c => tempoDePatioDe(c)).filter(t => t.minutos !== null && !t.suspeito).map(t => t.minutos);
@@ -439,25 +441,56 @@ function pvFatos(){
   }
 }
 
-/* O pátio ao longo do dia: quantos caminhões estavam dentro em cada hora,
-   da primeira chegada de hoje até agora. */
+/* NO PÁTIO NUM INSTANTE — UMA CONTA SÓ (30/09/2026).
+   Relato do dono: "às 14h tem 27 caminhões no pátio... só estão no pátio os
+   Aguardando Embarque até o Faturado; o resto, Aguardando Veículo e Seguiu
+   Viagem, não conta como NO PÁTIO".
+
+   O gráfico contava quem TOCOU o pátio em qualquer momento da hora, pelo
+   período "entrada → saída" do tempo de pátio: quem chegou às 14h30 e saiu
+   às 14h50 contava "às 14h"; Seguiu Viagem sem o carimbo da saída e quem
+   voltou para Aguardando Veículo ficavam "no pátio" até agora. E o último
+   ponto não batia com "caminhões no pátio agora", do topo.
+
+   Agora: a etapa da carga NAQUELE instante, pela trilha de movimentações —
+   no pátio é Aguardando Embarque até Faturado (PV_ETAPAS_DO_PATIO). Depois
+   da última movimentação vale a etapa atual da carga, que é a que o topo
+   conta. A chegada sem programação (aguardandoCarga) nasce no pátio, no
+   instante em que foi registrada. */
+function pvNoPatioEm(c, instante){
+  const t = instante.getTime();
+  const h = historicoDaCarga(c.id);
+  let ultima = null;
+  for(const m of h){ const tm = Date.parse(m.timestamp); if(Number.isFinite(tm) && tm <= t) ultima = m; else break; }
+  // no instante do último carimbo vale a etapa dele; só DEPOIS vale a etapa atual
+  const depoisDaUltima = !h.length || (ultima && ultima === h[h.length - 1] && Date.parse(ultima.timestamp) < t);
+  if(depoisDaUltima){
+    if(!h.length){
+      const nasceu = Date.parse(c.criadoEm || '');
+      if(!(c.aguardandoCarga && Number.isFinite(nasceu) && nasceu <= t)) return false;
+    }
+    return PV_ETAPAS_DO_PATIO.includes(c.status);
+  }
+  if(ultima) return PV_ETAPAS_DO_PATIO.includes(ultima.statusNovo);
+  // antes da primeira movimentação: só a chegada sem programação já estava lá
+  const nasceu = Date.parse(c.criadoEm || '');
+  return !!c.aguardandoCarga && Number.isFinite(nasceu) && nasceu <= t;
+}
+
+/* O pátio ao longo do dia: quantos caminhões estavam no pátio em cada hora
+   cheia de hoje, e o último ponto é AGORA — o mesmo número do topo. */
 function pvGrafico(){
   const alvo = document.getElementById('pv-grafico');
   if(!alvo) return;
   const hoje = pvHoje(), agora = new Date();
-  const periodos = DB.cargas.map(c => {
-    const t = tempoDePatioDe(c);
-    if(!t.entrada || !t.entradaPlausivel) return null;
-    return { ini:new Date(t.entrada), fim: t.saida ? new Date(t.saida) : agora };
-  }).filter(p => p && p.fim >= hoje);
+  const conta = (instante) => DB.cargas.filter(c => pvNoPatioEm(c, instante)).length;
   const pontos = [];
   for(let h = 5; h <= agora.getHours(); h++){
     const t = new Date(hoje); t.setHours(h, 0, 0, 0);
-    if(t > agora) break;
-    const fimDaHora = new Date(t); fimDaHora.setHours(h + 1);
-    const n = periodos.filter(p => p.ini < fimDaHora && p.fim >= t).length;
-    pontos.push({ rotulo: String(h).padStart(2, '0') + 'h', valor:n });
+    if(t >= agora) break;
+    pontos.push({ rotulo: String(h).padStart(2, '0') + 'h', valor: conta(t) });
   }
+  pontos.push({ rotulo: 'agora', valor: conta(agora) });
   Graf.area(alvo, { pontos, rotulo:'caminhões no pátio por hora, hoje',
     formato: v => Math.round(v) + (Math.round(v) === 1 ? ' caminhão' : ' caminhões') });
 }

@@ -4742,3 +4742,33 @@ banco ("não consegui criar o banco temporário"). Causa 3 (ambiente), mas a
 correção é no script: a prova é sempre do usuário postgres pelo socket, e
 agora ela apaga as variáveis `PG*` de quem a chamou. A guarda passa com e sem
 o `.env` carregado.
+
+## #99 — O gráfico do Pátio ao vivo contava quem não estava no pátio (30/09/2026)
+
+**Relato do dono:** "no gráfico do pátio ao vivo tá aparecendo que às 14h tem
+27 caminhões no pátio. Você precisa entender que só estão no pátio os
+Aguardando Embarque até o Faturado; o resto, Aguardando Veículo e Seguiu
+Viagem, não conta como NO PÁTIO."
+
+**A causa, reproduzida.** `pvGrafico` não olhava a etapa de cada caminhão em
+cada hora: pegava o período "entrada → saída" do tempo de pátio e contava
+quem TOCOU o pátio em qualquer momento daquela hora. Três jeitos de contar
+quem não estava lá: quem chegou às 14h30 e saiu às 14h50 contava "às 14h";
+Seguiu Viagem sem o carimbo da saída ficava "no pátio" até agora; quem voltou
+para Aguardando Veículo depois de entrar também. Com dados inventados: 7 às
+14h onde eram 4, e o último ponto dizia 5 enquanto o topo dizia 3.
+
+**A família.** Uma pergunta, duas contas: "quantos no pátio" era respondida
+pela etapa no topo e pelo período no gráfico — e as duas divergiam.
+
+**O que NÃO se sabe e fica dito:** quantos dos 27 de produção eram cada um
+dos três casos. Não vejo o banco de produção; a correção cobre os três.
+
+**A correção.** `pvNoPatioEm(carga, instante)`: a etapa NAQUELE instante pela
+trilha de movimentações, no pátio de Aguardando Embarque a Faturado; depois
+do último carimbo vale a etapa atual. O gráfico conta em cada hora cheia e o
+último ponto é "agora"; o topo usa a mesma função. A legenda do gráfico diz o
+que conta.
+
+**A guarda.** `testes/test_patio_vivo_grafico_so_patio.py` — relógio fixo às
+16h30. Reprovou contra o publicado em 6 pontos e passa com a correção.
