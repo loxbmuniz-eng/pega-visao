@@ -105,24 +105,38 @@ function pvPercentil(v, q){
    passagem vai da primeira movimentação para a etapa até a primeira
    movimentação para OUTRA etapa — carimbo repetido não é saída. A
    passagem ainda aberta (o caminhão está lá agora) não entra. */
+/* As passagens de UMA carga pelas etapas, a partir da trilha já em ordem:
+   { status, ini, fim (null se ainda está nela), mov (o carimbo da entrada) }.
+   Carimbo repetido não abre passagem nova. Uma função, três chamadores: o
+   normal das etapas, a linha do tempo do cartão aberto e o rádio. */
+function pvPassagensDaTrilha(lista){
+  const out = [];
+  let i = 0;
+  while(i < lista.length){
+    let j = i + 1;
+    while(j < lista.length && lista[j].statusNovo === lista[i].statusNovo) j++;
+    out.push({ status: lista[i].statusNovo, ini: lista[i].timestamp,
+               fim: j < lista.length ? lista[j].timestamp : null, mov: lista[i] });
+    i = j;
+  }
+  return out;
+}
+function pvMinutosDaPassagem(p, ate){
+  const t0 = Date.parse(p.ini), t1 = Date.parse(p.fim || ate || '');
+  return Number.isFinite(t0) && Number.isFinite(t1) && t1 >= t0 ? (t1 - t0) / 60000 : null;
+}
+
 function pvNormalDasEtapas(){
   const desde = Date.now() - JANELA_LOCAL_DIAS * 86400000;
   const dur = new Map();
   indiceMovimentacoes().forEach(lista => {
-    let i = 0;
-    while(i < lista.length){
-      let j = i + 1;
-      while(j < lista.length && lista[j].statusNovo === lista[i].statusNovo) j++;
-      if(j < lista.length){
-        const t0 = Date.parse(lista[i].timestamp), t1 = Date.parse(lista[j].timestamp);
-        if(Number.isFinite(t0) && Number.isFinite(t1) && t0 >= desde && t1 >= t0){
-          const k = lista[i].statusNovo;
-          if(!dur.has(k)) dur.set(k, []);
-          dur.get(k).push((t1 - t0) / 60000);
-        }
-      }
-      i = j;
-    }
+    pvPassagensDaTrilha(lista).forEach(p => {
+      if(!p.fim || !(Date.parse(p.ini) >= desde)) return;
+      const m = pvMinutosDaPassagem(p);
+      if(m === null) return;
+      if(!dur.has(p.status)) dur.set(p.status, []);
+      dur.get(p.status).push(m);
+    });
   });
   const out = new Map();
   dur.forEach((v, k) => {
@@ -512,45 +526,148 @@ function pvRanking(){
   Graf.ranking(alvo, { itens, formato: pvDur, rotulo:'tempo médio de pátio por rota, hoje' });
 }
 
-/* O rádio: cada carimbo de hoje, o mais novo em cima. */
+/* =====================================================================
+   O CARTÃO ABERTO E O RÁDIO CONTAM A HISTÓRIA (30/09/2026)
+   ---------------------------------------------------------------------
+   Pedido do dono: "melhore a qualidade das informações que aparecem quando
+   eu clico em cada cartão e ... no rádio do pátio", com as respostas dele:
+   nome e setor de quem carimbou (1-A) e o rádio com as 15 últimas de hoje
+   (2-A). Tudo sai da trilha de movimentações que já existe — nada novo é
+   gravado —, e o "normal" é o mesmo das etapas (pvNormalDasEtapas).
+   ===================================================================== */
+const PV_RADIO_MAX = 15;
+/* O que o caminhão fazia na etapa que acabou — para "levou X embarcando". */
+const PV_FAZENDO = { 'Aguardando Embarque':'esperando o embarque', 'Embarque Iniciado':'embarcando',
+  'Embarque Finalizado':'esperando o faturamento', 'Faturado':'esperando a saída' };
+
+function pvQuem(m){
+  const nome = String(m.operador || '').trim();
+  const setor = m.setor && m.setor !== '—' ? m.setor : '';
+  if(nome && !/não identificado/i.test(nome)) return setor ? `${nome} (${setor})` : nome;
+  return setor ? 'A ' + setor : 'Alguém';
+}
+function pvPraca(c){ return destinoDaCarga(c) || ((rotaInfo(c.rota) || {}).nome) || ''; }
+
+/* O rádio: os carimbos de hoje, o mais novo em cima. */
 function pvRadio(){
   const ol = document.getElementById('pv-radio');
   if(!ol) return;
+  if(!ol._ouvindo){
+    ol._ouvindo = true;
+    ol.addEventListener('click', ev => {
+      const b = ev.target.closest('button[data-carga]');
+      if(b) pvAbrirCarga(b.dataset.carga, b);
+    });
+  }
   const hoje = pvHoje();
-  const verbo = { 'Aguardando Veículo':'programou', 'Aguardando Embarque':'liberou a entrada da',
+  const verbo = { 'Aguardando Veículo':'programou a', 'Aguardando Embarque':'liberou a entrada da',
     'Embarque Iniciado':'iniciou o embarque da', 'Embarque Finalizado':'finalizou o embarque da',
     'Faturado':'faturou a', 'Seguiu Viagem':'liberou a saída da' };
+  const normal = pvNormalDasEtapas();
   const itens = (DB.movimentacoes || []).filter(m => m.timestamp && new Date(m.timestamp) >= hoje)
-    .sort((a, b) => String(b.timestamp).localeCompare(String(a.timestamp))).slice(0, 8);
+    .sort((a, b) => String(b.timestamp).localeCompare(String(a.timestamp))).slice(0, PV_RADIO_MAX);
   const vazio = document.getElementById('pv-radio-vazio');
   if(vazio) vazio.hidden = itens.length > 0;
   const html = itens.map(m => {
     const c = DB.cargas.find(x => x.id === m.cargaId) || {};
     const novo = !_pv.radioVisto.has(m.id) && _pv.radioVisto.size ? ' class="novo"' : '';
-    return `<li${novo} data-id="${esc(m.id)}"><time>${esc(horaCurta(m.timestamp))}</time><span>A ${esc(m.setor || '—')} `
+    // a etapa que acabou com este carimbo
+    const antes = c.id ? pvPassagensDaTrilha(historicoDaCarga(c.id))
+      .find(p => p.fim === m.timestamp && p.status !== m.statusNovo) : null;
+    const d = antes ? pvMinutosDaPassagem(antes) : null;
+    const norm = antes ? normal.get(antes.status) : null;
+    const alem = d !== null && norm && norm.p90 !== null && d > norm.p90;
+    let extra = '';
+    if(d !== null && PV_FAZENDO[antes.status]) extra += ` · levou ${pvDur(d)} ${PV_FAZENDO[antes.status]}`;
+    if(m.statusNovo === 'Seguiu Viagem'){
+      const t = tempoDePatioDe(c);
+      if(t.minutos !== null) extra += ` · ${pvDur(t.minutos)} de pátio`;
+    }
+    const tipo = m.statusNovo === 'Aguardando Embarque' ? 'chegada' : m.statusNovo === 'Seguiu Viagem' ? 'saida' : '';
+    const onde = [c.rota ? c.rota + (pvPraca(c) ? ' ' + pvPraca(c) : '') : '', (c.placa || m.placa) ? 'placa ' + (c.placa || m.placa) : '']
+      .filter(Boolean).join(', ');
+    return `<li${novo} data-id="${esc(m.id)}"${tipo ? ` data-tipo="${tipo}"` : ''}${alem ? ' data-alem="1"' : ''}>`
+      + `<button type="button" class="pv-radio-item"${c.id ? ` data-carga="${esc(c.id)}"` : ' disabled'}>`
+      + `<time>${esc(horaCurta(m.timestamp))}</time><span>${esc(pvQuem(m))} `
       + `${esc(verbo[m.statusNovo] || 'moveu a')} carga <b>${esc(c.numeroCarga || m.placa || '—')}</b>`
-      + `${c.rota ? ', rota ' + esc(c.rota) : ''}.</span></li>`;
+      + `${onde ? ' — ' + esc(onde) : ''}<em>${esc(extra)}</em></span></button></li>`;
   }).join('');
   if(ol._html !== html){ ol._html = html; ol.innerHTML = html; }
   itens.forEach(m => _pv.radioVisto.add(m.id));
 }
 
-/* Tocar no cartão abre a carga na gaveta dos Indicadores: a linha do tempo
-   das seis etapas, com hora de cada carimbo. */
+/* Tocar no cartão (ou numa linha do rádio) abre a carga na gaveta dos
+   Indicadores: a ficha, o "agora" e a linha do tempo com quem carimbou cada
+   etapa e quanto tempo ela ficou em cada uma. */
 function pvAbrirCarga(id, origem){
   const c = DB.cargas.find(x => x.id === id);
   if(!c) return;
   const e = pvEstado(c);
-  const passos = PV_ETAPAS.map(et => {
-    const ts = primeiroTimestamp(c.id, et.status);
-    return `<li class="gv-carga"><div class="gv-carga-topo"><b>${esc(et.status)}</b>`
-      + `<span class="gv-carga-tempo">${ts ? esc(horaCurta(ts)) : '—'}</span></div></li>`;
-  }).join('');
+  const ctx = { normal: pvNormalDasEtapas(), passadas: pvPassadasNaFila() };
+  const agoraIso = new Date().toISOString();
+  const passagens = pvPassagensDaTrilha(historicoDaCarga(c.id));
+  const alemTexto = (st, min) => {
+    const n = ctx.normal.get(st);
+    return n && n.p90 !== null && min > n.p90 ? 'além do normal: 9 em 10 em até ' + pvDur(n.p90) : '';
+  };
+
+  // A FICHA — só o que estiver preenchido
+  const peso = Number(c.peso) > 0 ? Number(c.peso).toLocaleString('pt-BR') + ' kg' : '';
+  const ficha = [['Placa', c.placa], ['Veículo', c.tipoVeiculo], ['Transportadora', c.transportadora],
+    ['Motorista', c.motorista], ['Peso', peso],
+    ['Sequência', c.sequencia !== null && c.sequencia !== undefined && c.sequencia !== '' ? String(c.sequencia) : ''],
+    ['Doca', c.doca ? String(c.doca) : '']]
+    .filter(([, v]) => v).map(([k, v]) => `<div><dt>${esc(k)}</dt> <dd>${esc(v)}</dd></div>`).join('');
+
+  // AGORA
+  let agora = '';
+  if(PV_ETAPAS_DO_PATIO.includes(c.status)){
+    const ent = pvEntradaNaEtapa(c);
+    const m = ent ? minutosEntre(ent, agoraIso) : null;
+    const alem = m !== null ? alemTexto(c.status, m) : '';
+    const prev = pvTextoDaPrevisao(pvPrevisaoDeSaida(c, ctx));
+    agora = `<p><b>${esc(c.status)}</b>${m !== null ? ' há ' + esc(pvDur(m)) : ''}</p>`
+      + (alem ? `<p class="pv-gv-alem">${esc(alem)}</p>` : '')
+      + (prev ? `<p>${esc(prev)}</p>` : '');   // o tempo de pátio já está no subtítulo
+  } else if(c.status === 'Aguardando Veículo'){
+    const n = ctx.passadas.get(c.id) || 0;
+    agora = '<p><b>Aguardando Veículo</b> — o caminhão ainda não chegou</p>'
+      + (n ? `<p class="pv-gv-alem">${n === 1 ? '1 da fila já entrou na frente' : n + ' da fila já entraram na frente'}</p>` : '');
+  } else if(c.status === 'Seguiu Viagem'){
+    const s = primeiroTimestamp(c.id, 'Seguiu Viagem');
+    agora = `<p><b>Seguiu viagem</b>${s ? ' às ' + esc(horaCurta(s)) : ''}</p>`
+      + (e.min !== null ? `<p>${esc(pvDur(e.min))} de pátio</p>` : '');
+  }
+
+  // A LINHA DO TEMPO — cada passagem, na ordem em que aconteceu
+  const ordem = st => PV_ETAPAS.findIndex(x => x.status === st);
+  const itens = passagens.map((p, k) => {
+    const voltou = k > 0 && ordem(p.status) < ordem(passagens[k - 1].status);
+    const aindaNela = !p.fim && p.status === c.status && p.status !== 'Seguiu Viagem';
+    const min = pvMinutosDaPassagem(p, aindaNela ? agoraIso : null);
+    const dur = p.status === 'Seguiu Viagem' ? '' : aindaNela ? (min !== null ? 'em andamento há ' + pvDur(min) : '')
+      : (min !== null ? 'ficou ' + pvDur(min) : '');
+    const alem = min !== null && p.status !== 'Seguiu Viagem' ? alemTexto(p.status, min) : '';
+    return `<li class="gv-carga"${alem ? ' data-alem="1"' : ''}><div class="gv-carga-topo">`
+      + `<b>${voltou ? '↩ voltou para ' : ''}${esc(p.status)}</b> <span class="gv-carga-tempo">${esc(horaCurta(p.ini))}</span></div>`
+      + `<div class="gv-carga-sub"><span>${esc(pvQuem(p.mov))}</span>${dur ? `<span>${esc(dur)}</span>` : ''}`
+      + `${alem ? `<span class="pv-gv-alem">${esc(alem)}</span>` : ''}</div></li>`;
+  });
+  // as etapas que ainda faltam, apagadas
+  if(c.status !== 'Seguiu Viagem'){
+    const atual = ordem(c.status);
+    PV_ETAPAS.forEach((et, k) => {
+      if(k > atual) itens.push(`<li class="gv-carga futura"><div class="gv-carga-topo"><b>${esc(et.status)}</b> `
+        + `<span class="gv-carga-tempo">—</span></div></li>`);
+    });
+  }
+
   Graf.abrirGaveta({ chave:'patio|' + id, olho:'Carga ' + (c.numeroCarga || '—'),
-    titulo: (c.rota || '—') + ' ' + (destinoDaCarga(c) || ((rotaInfo(c.rota) || {}).nome) || ''),
-    sub: [c.placa, c.transportadora, c.motorista].filter(Boolean).join(' · ')
-      + (e.min === null ? '' : ' · ' + pvDur(e.min) + ' de pátio'),
-    html: `<ol class="gv-lista">${passos}</ol>`, origem });
+    titulo: (c.rota || '—') + ' ' + pvPraca(c),
+    sub: e.min === null ? (c.status === 'Aguardando Veículo' ? 'programada' : '') : pvDur(e.min) + ' de pátio',
+    html: (ficha ? `<dl class="pv-gv-ficha">${ficha}</dl>` : '')
+      + (agora ? `<div class="pv-gv-agora">${agora}</div>` : '')
+      + `<ol class="gv-lista">${itens.join('')}</ol>`, origem });
 }
 
 function renderPatioVivo(){

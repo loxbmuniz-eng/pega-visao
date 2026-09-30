@@ -144,6 +144,13 @@ async def main():
                 const passos = DB.movimentacoes.filter(m => m.cargaId === c.id && m.statusNovo !== 'Aguardando Veículo');
                 const fatia = (horas * H) / (passos.length + (etapa === 'Seguiu Viagem' ? 0 : 1));
                 passos.forEach((m, j) => { m.timestamp = new Date(chegou + j * fatia).toISOString(); });
+                /* a programação vem ANTES da chegada: sem isto o carimbo
+                   "programou" ficava na hora da geração, depois de todos os
+                   outros, e o cartão aberto mostrava a carga "voltando" */
+                const prog = new Date(chegou - 30 * 60e3).toISOString();
+                DB.movimentacoes.filter(m => m.cargaId === c.id && m.statusNovo === 'Aguardando Veículo')
+                  .forEach(m => { m.timestamp = prog; });
+                c.criadoEm = prog; c.programadoEm = prog;
               }
             });
             SuincoStore.save();
