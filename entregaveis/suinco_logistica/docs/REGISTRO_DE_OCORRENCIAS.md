@@ -4668,3 +4668,39 @@ cima.
 **A guarda.** `testes/test_seed_nao_desfaz_cadastro.py` — banco descartável:
 migrar → seed → editar → seed de novo. Reprovou contra o publicado (as duas
 edições voltaram) e passa com a correção.
+
+## #97 — O atualizar rodava a versão VELHA dele mesmo na primeira rodada (30/09/2026)
+
+**Como apareceu.** O dono rodou o `atualizar_tudo.sh` com o servidor em
+`e87ed1c` e a entrega em `9fab33c`. O passo "linhas duplicadas da Montagem —
+digite SIM para apagar" tinha saído do script em `c989d87` (#95), eu tinha
+dito a ele que tinha saído — e o passo apareceu e perguntou.
+
+**A causa.** O bash lê o script do arquivo que abriu no começo. O `git pull`
+(feito lá dentro, pelo `atualizar.sh`) troca o arquivo no disco, mas o bash
+continua lendo o antigo até o fim. A primeira rodada depois de qualquer
+mudança no `atualizar_tudo.sh` ou no `atualizar.sh` executa a versão que
+estava no SERVIDOR, não a publicada. O `atualizar.sh` chamado por ele também
+era o velho, porque era chamado antes do pull.
+
+**Por que nada foi apagado.** O `.sql` que o passo velho chamava já era o
+novo (trocado pelo pull) e para na primeira linha (`\echo … \quit`, #95). O
+dono apertou Enter. Foi desenho de proteção em duas camadas, não sorte — mas
+a primeira camada, a que eu tinha anunciado, não estava lá.
+
+**A família.** A mesma da regra de 30/09: "conferir na versão publicada" não
+bastava, porque a primeira rodada não é a publicada.
+
+**A correção.** `backend/scripts/codigo_novo_primeiro.sh`, chamado pelos dois
+scripts logo depois da checagem de root: puxa o código ANTES de qualquer
+passo e troca o processo (`exec`) pela versão recém-baixada do próprio
+script. O "atualizado: ANTES -> DEPOIS" continua certo (o commit de antes vai
+junto). Vale a partir da rodada SEGUINTE à que levar este arquivo ao
+servidor — a rodada que o leva ainda começa pelo script antigo. E a regra do
+CLAUDE.md passou a mandar ler as DUAS versões: a do servidor
+(`COMMIT_EM_PRODUCAO.txt`), que é a que começa rodando, e a publicada.
+
+**A guarda.** `testes/test_atualizar_roda_a_versao_nova.py` — repositório de
+mentira uma versão atrás, passos pesados trocados por dublês. Reprovou contra
+o publicado em 5 pontos (os dois scripts rodavam a versão velha) e passa com a
+correção, sem laço quando não há nada novo.
