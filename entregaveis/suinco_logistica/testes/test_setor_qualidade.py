@@ -57,6 +57,9 @@ import('./backend/src/dominio/fluxo.js').then(m => {
   }));
 });""")
 import json
+import sys as _sys, os as _os
+_sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+from fonte_do_painel import texto_do_app
 dados = json.loads(saida.splitlines()[-1])
 ck('o servidor conhece o setor Qualidade', 'Qualidade' in dados['setores'], str(dados['setores']))
 
@@ -95,7 +98,7 @@ ck('o de Fretes está marcado como de frete (não é do checklist)',
 n_patio = html.count('data-relatorio="patio"')
 ck('Operacional, Executivo, Power BI e o filtro de período são de pátio',
    n_patio == 4, f'{n_patio} marcados')
-app = (RAIZ / 'app.js').read_text(encoding='utf-8')
+app = texto_do_app(RAIZ)
 fn = re.search(r'function renderEscopoDosRelatorios\(\)\{(.*?)\n\}', app, re.S)
 ck('existe a função que esconde o que não é dela', bool(fn))
 ck('e ela é chamada ao abrir a aba', "renderEscopoDosRelatorios();" in app)

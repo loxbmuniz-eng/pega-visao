@@ -57,6 +57,28 @@ def carimbo_do_build():
     return data
 
 
+def ler_app():
+    """O app.js virou a pasta app/ (30/09/2026), um arquivo por assunto.
+
+    Pedido do dono: dividir o arquivo de 13.916 linhas "do jeito mais seguro
+    possível". Os arquivos são pedaços CONSECUTIVOS do app.js antigo, cortados
+    nas divisões que ele já tinha, e a ordem é a do nome (00_, 10_, … 99_).
+    Juntos, dão o mesmo código, byte a byte — e é esse texto único que entra
+    no index.html, num <script> só, exatamente como o app.js entrava.
+
+    Duas travas: o app.js antigo não pode voltar (alguém editaria o arquivo
+    que o build não lê mais), e o index_suinco.html tem de listar os mesmos
+    arquivos, na mesma ordem (test_app_dividido.py).
+    """
+    if (BASE / 'app.js').exists():
+        sys.exit('ERRO: app.js voltou. O código do painel mora em app/ — '
+                 'edite o arquivo do assunto lá e apague o app.js.')
+    arquivos = sorted((BASE / 'app').glob('*.js'))
+    if not arquivos:
+        sys.exit('ERRO: a pasta app/ está vazia ou não existe.')
+    return arquivos, ''.join(a.read_text(encoding='utf-8') for a in arquivos)
+
+
 def ler(nome):
     caminho = BASE / nome
     if not caminho.exists():
@@ -129,7 +151,7 @@ def main():
 
     adapter_js = ler('suinco-api.js')
     data_js = ler('data.js')
-    app_js = ler('app.js')
+    arquivos_app, app_js = ler_app()
     devolucoes_js = ler('devolucoes.js')
     qr_js = ler('qr.js')
     csv = ler('frota_seed_2026.csv')
@@ -264,13 +286,21 @@ def main():
     if n_qr != 1:
         sys.exit(f'ERRO: esperava 1 script para qr.js, encontrei {n_qr}')
 
+    # O index_suinco.html lista os arquivos de app/ um por um (assim ele
+    # ainda abre direto no navegador para editar). No arquivo único, o bloco
+    # inteiro vira UM <script> com o texto junto — como era o app.js.
+    listados = re.findall(r'<script src="app/([^"]+)"></script>', html)
+    esperados = [a.name for a in arquivos_app]
+    if listados != esperados:
+        sys.exit('ERRO: o index_suinco.html não lista os arquivos de app/ na ordem certa.\n'
+                 f'  listados : {listados}\n  na pasta : {esperados}')
     html, n_app = re.subn(
-        r'<script src="app\.js"></script>',
-        lambda _: '<script>\n' + app_js + '\n</script>',
+        r'(?:<script src="app/[^"]+"></script>\s*)+',
+        lambda _: '<script>\n' + app_js + '\n</script>\n',
         html,
     )
     if n_app != 1:
-        sys.exit(f'ERRO: esperava 1 script para app.js, encontrei {n_app}')
+        sys.exit(f'ERRO: esperava 1 bloco de scripts de app/, encontrei {n_app}')
 
     # 5a-. Motor de gráfico — antes do app.js, que é quem o chama.
     html, n_graf = re.subn(

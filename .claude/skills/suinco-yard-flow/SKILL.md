@@ -71,7 +71,7 @@ Ao trabalhar no SLA, o alvo é (ver `MIGRATION-GAPS.md` G5, skill `beacon`):
 | Lead time | criação da carga | tempo de pátio |
 | Data de programação | dia para o qual foi programada | dia em que foi digitada |
 
-`entradaNoPatioDe(c)` (app.js) é a função que sabe a diferença: lê o evento
+`entradaNoPatioDe(c)` (`data.js`) é a função que sabe a diferença: lê o evento
 'Aguardando Embarque' da trilha; sem chegada registrada devolve `null` — e
 `null` é resposta legítima ("o caminhão não chegou"), nunca preencher com a
 data de criação.

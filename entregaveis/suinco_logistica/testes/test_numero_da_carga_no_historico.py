@@ -40,6 +40,9 @@ import sys
 from pathlib import Path
 
 from playwright.async_api import async_playwright
+import sys as _sys, os as _os
+_sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+from fonte_do_painel import texto_do_app
 
 RAIZ = Path('/home/user/pega-visao/entregaveis/suinco_logistica')
 falhas = []
@@ -62,7 +65,7 @@ async def main():
         ck('e vem logo depois da Placa',
            colunas.index('Nº da Carga') == colunas.index('Placa') + 1, str(colunas))
 
-    app = (RAIZ / 'app.js').read_text(encoding='utf-8')
+    app = texto_do_app(RAIZ)
     ck('a resolução do número mora numa função só',
        'function numeroDaCargaDaMovimentacao(' in app)
     ck('e o detalhe da linha acompanha a coluna nova (colspan)',

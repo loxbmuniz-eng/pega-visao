@@ -1,6 +1,6 @@
 ---
 name: busca-estrutural
-description: Busca e reescrita pela ESTRUTURA do código (ast-grep), não pelo texto — para achar no app.js, data.js, devolucoes.js e no backend a mesma decisão escrita em dois lugares, todo chamador de uma função, todo `Number(x) || null`, todo `upsert()` cujo retorno ninguém olha. Use quando a pergunta depende da forma do código; para texto (comentário, string, nome de arquivo) use o Grep.
+description: Busca e reescrita pela ESTRUTURA do código (ast-grep), não pelo texto — para achar no app/, data.js, devolucoes.js e no backend a mesma decisão escrita em dois lugares, todo chamador de uma função, todo `Number(x) || null`, todo `upsert()` cujo retorno ninguém olha. Use quando a pergunta depende da forma do código; para texto (comentário, string, nome de arquivo) use o Grep.
 ---
 
 # Busca estrutural (ast-grep)
@@ -15,7 +15,7 @@ O binário `sg` deste container NÃO é o ast-grep (é um comando do sistema).
 Use sempre pelo npx, que não mexe no projeto (conferido em 29/09/2026: ast-grep 0.45.3):
 
 ```bash
-npx --yes --package @ast-grep/cli ast-grep run --lang js -p 'PADRÃO' entregaveis/suinco_logistica/app.js
+npx --yes --package @ast-grep/cli ast-grep run --lang js -p 'PADRÃO' entregaveis/suinco_logistica/app/
 npx --yes --package @ast-grep/cli ast-grep run --lang js -p 'PADRÃO' --json=compact ARQUIVOS   # para processar
 ```
 
@@ -37,7 +37,7 @@ trabalho, não de produção.
 
 | Regra da casa | Padrão |
 |---|---|
-| "null ≠ zero" — `Number(0) \|\| null` já apagou capacidade de veículo | `Number($X) \|\| null` (29/09/2026: zero ocorrências em app.js, data.js e devolucoes.js — deve continuar zero) |
+| "null ≠ zero" — `Number(0) \|\| null` já apagou capacidade de veículo | `Number($X) \|\| null` (29/09/2026: zero ocorrências em app/, data.js e devolucoes.js — deve continuar zero) |
 | "Recusa nunca é silenciosa" — `upsert()` sem olhar o retorno | `await $API.upsert($$$)` e confira se o resultado é lido |
 | "Uma função, dois chamadores" — quem chama uma decisão | `tempoDePatioDe($C)` · `kmValidoLocal($V)` · `numDevCurto($V)` |
 | Carimbar a hora da edição no lugar da hora do fato | `new Date().toISOString()` perto de status/entrada |

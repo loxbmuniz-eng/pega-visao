@@ -29,6 +29,9 @@ backend/testes/api.test.js (suíte 13, mede o MediaBox dos bytes do PDF).
 import asyncio
 import sys
 from playwright.async_api import async_playwright
+import sys as _sys, os as _os
+_sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+from fonte_do_painel import texto_do_app
 
 PAINEL = 'file:///home/user/pega-visao/entregaveis/suinco_logistica/index.html'
 falhas = []
@@ -76,8 +79,7 @@ async def main():
         ck('regra de encolhimento por orientação foi removida', not tem_regra)
 
         print('\n=== 2. O PAINEL SEMPRE DECIDE A ORIENTAÇÃO (não o aparelho) ===')
-        app = open('/home/user/pega-visao/entregaveis/suinco_logistica/app.js',
-                   encoding='utf-8').read()
+        app = texto_do_app()
         # Virou RETRATO em 11/08/2026, a pedido do usuário: "prefiro que
         # seja na vertical mesmo, no formato a4". O que este teste guarda
         # não é a orientação em si — é que ela seja decidida por NÓS, no

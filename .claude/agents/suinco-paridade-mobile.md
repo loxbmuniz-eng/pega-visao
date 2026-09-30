@@ -25,7 +25,7 @@ Breakpoint: `max-width: 820px`. Viewport de referência: **390 × 844**.
    com 30-34px.
 
 3. **Campo escondido no cartão fechado.** As tabelas viram cartão e os rótulos em
-   `ROTULOS_SECUNDARIOS` (app.js) somem até o toque abrir. Pergunte sempre: *o
+   `ROTULOS_SECUNDARIOS` (`app/25_navegacao.js`) somem até o toque abrir. Pergunte sempre: *o
    campo que essa pessoa precisa preencher está à mão, ou exige abrir o cartão
    antes?* Se for um campo de trabalho, ele fica visível.
 

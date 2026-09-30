@@ -43,6 +43,9 @@ import sys
 from pathlib import Path
 
 from playwright.async_api import async_playwright
+import sys as _sys, os as _os
+_sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+from fonte_do_painel import texto_do_app
 
 RAIZ = Path('/home/user/pega-visao/entregaveis/suinco_logistica')
 PAINEL = RAIZ / 'index.html'
@@ -58,7 +61,7 @@ def ck(nome, ok, detalhe=''):
 
 async def main():
     print('\n=== 1. A TORRE NÃO REFAZ A CONTA ===')
-    app_js = (RAIZ / 'app.js').read_text(encoding='utf-8')
+    app_js = texto_do_app(RAIZ)
     corpo = re.search(r'function tempoNoPatioTexto\(carga\)\{(.*?)\n\}', app_js, re.S)
     ck('a função da Torre existe', bool(corpo))
     if corpo:
