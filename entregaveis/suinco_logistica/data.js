@@ -2355,7 +2355,7 @@ function ultimaMovimentacaoDaCarga(cargaId){
   return h.length ? h[h.length - 1] : null;
 }
 /* O DIA LOCAL — UMA FUNÇÃO SÓ (30/09/2026, ocorrência #100).
-   Nunca `toISOString().slice(0,10)`: a partir das 21h de Brasília o UTC já
+   Nunca cortar os 10 primeiros caracteres da data em UTC: das 21h de Brasília o UTC já
    virou o dia seguinte, e programar à noite para amanhã é rotina. Havia três
    cópias desta conta (Torre, Montagem, Devoluções); elas agora chamam esta. */
 function diaLocalISO(d = new Date()){
