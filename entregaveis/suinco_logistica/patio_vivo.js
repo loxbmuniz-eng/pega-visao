@@ -94,9 +94,11 @@ function pvEstado(c){
 const PV_ETAPAS_DO_PATIO = ['Aguardando Embarque', 'Embarque Iniciado', 'Embarque Finalizado', 'Faturado'];
 const PV_AMOSTRA_MIN = 10;   // passagens na janela abaixo das quais não se compara (aprovado na proposta de 30/09)
 
-function pvPercentil90(v){
+/* Percentil de posto mais próximo: q = 0,9 é "9 em 10 levaram até aqui";
+   q = 0,5 é a mediana, o tempo típico. */
+function pvPercentil(v, q){
   const s = v.slice().sort((a, b) => a - b);
-  return s[Math.ceil(0.9 * s.length) - 1];
+  return s[Math.ceil(q * s.length) - 1];
 }
 
 /* Quanto tempo cada etapa costuma levar: { status -> { p90, n } }. Uma
@@ -123,7 +125,10 @@ function pvNormalDasEtapas(){
     }
   });
   const out = new Map();
-  dur.forEach((v, k) => out.set(k, { p90: v.length >= PV_AMOSTRA_MIN ? pvPercentil90(v) : null, n: v.length }));
+  dur.forEach((v, k) => {
+    const basta = v.length >= PV_AMOSTRA_MIN;
+    out.set(k, { p90: basta ? pvPercentil(v, 0.9) : null, p50: basta ? pvPercentil(v, 0.5) : null, n: v.length });
+  });
   return out;
 }
 
@@ -162,6 +167,70 @@ function pvPassadasNaFila(){
     if(n) out.set(c.id, n);
   });
   return out;
+}
+
+/* =====================================================================
+   PREVISÃO DE SAÍDA E GARGALO AGORA (30/09/2026)
+   ---------------------------------------------------------------------
+   As ideias #1 e #3, com as respostas do dono: "pergunta 1 a pergunta 2 a".
+
+   #1 — A PREVISÃO usa o tempo TÍPICO (resposta 1-A): a mediana de cada
+   etapa nos últimos 30 dias, a mesma base do "normal da etapa". O que falta
+   da etapa atual é a mediana dela menos o tempo já passado — se já passou da
+   mediana, falta zero —, somado à mediana de cada etapa seguinte até a
+   saída. Sai em múltiplos de PV_ARREDONDA_MIN minutos: é "por volta de", e
+   um minuto exato prometeria uma precisão que a média não tem. Se alguma
+   etapa que falta tem menos de PV_AMOSTRA_MIN passagens, não há previsão.
+
+   #3 — O GARGALO é a etapa com MAIS caminhões além do normal (resposta
+   2-A); empate, a que tem mais caminhões; empate de novo, a que vem primeiro
+   no fluxo. Ninguém além do normal: sem gargalo.
+   ===================================================================== */
+const PV_ARREDONDA_MIN = 5;
+
+function pvPrevisaoDeSaida(c, ctx){
+  const i = PV_ETAPAS_DO_PATIO.indexOf(c.status);
+  if(i < 0) return null;
+  const ent = pvEntradaNaEtapa(c);
+  const t0 = ent ? Date.parse(ent) : NaN;
+  if(!Number.isFinite(t0)) return null;
+  const medianas = PV_ETAPAS_DO_PATIO.slice(i).map(st => (ctx.normal.get(st) || {}).p50);
+  if(medianas.some(m => m === null || m === undefined)) return null;
+  let t = Math.max(t0 + medianas[0] * 60000, Date.now());
+  medianas.slice(1).forEach(m => { t += m * 60000; });
+  const passo = PV_ARREDONDA_MIN * 60000;
+  return new Date(Math.round(t / passo) * passo);
+}
+
+function pvTextoDaPrevisao(d){
+  if(!d) return '';
+  const hoje = pvHoje(), amanha = new Date(hoje); amanha.setDate(amanha.getDate() + 1);
+  const hm = String(d.getHours()).padStart(2, '0') + 'h' + String(d.getMinutes()).padStart(2, '0');
+  return 'sai por volta de ' + (d >= amanha ? 'amanhã, ' : '') + hm;
+}
+
+function pvGargalo(porEtapa){
+  let melhor = null;
+  PV_ETAPAS_DO_PATIO.forEach(st => {
+    const i = PV_ETAPAS.findIndex(e => e.status === st);
+    const lista = porEtapa[i] || [];
+    const parados = lista.filter(c => { const el = _pv.cards.get(c.id); return el && el.dataset.parado; }).length;
+    if(!parados) return;
+    if(!melhor || parados > melhor.parados || (parados === melhor.parados && lista.length > melhor.total)){
+      melhor = { status: st, indice: i, parados, total: lista.length };
+    }
+  });
+  return melhor;
+}
+
+function pvMostrarGargalo(g){
+  const el = document.getElementById('pv-gargalo');
+  _pv.cols.forEach((col, i) => col.classList.toggle('gargalo', !!g && g.indice === i));
+  if(!el) return;
+  const texto = g
+    ? `Gargalo agora: ${g.status} — ${g.total} ${g.total === 1 ? 'caminhão' : 'caminhões'}, ${g.parados} além do normal`
+    : 'Sem gargalo agora — nenhuma etapa com caminhão além do normal';
+  if(el.textContent !== texto){ el.textContent = texto; el.dataset.tom = g ? 'atencao' : 'ok'; }
 }
 
 /* A linha de baixo do cartão: o tempo na etapa, ou a fila que passou. */
@@ -212,7 +281,8 @@ function pvCriarCard(c){
     + `<circle class="a-prog" cx="18" cy="18" r="15" pathLength="100"/></svg>`
     + `<span class="pv-praca"></span>`
     + `<span class="pv-rod"><span class="pv-carga"></span><span class="pv-selo">3h+</span><span class="pv-tempo"></span></span>`
-    + `<span class="pv-nota"></span>`;
+    + `<span class="pv-nota"></span>`
+    + `<span class="pv-previsao"></span>`;
   el.addEventListener('click', () => pvAbrirCarga(c.id, el));
   return el;
 }
@@ -243,9 +313,13 @@ function pvPreencher(el, c, ctx){
   if(nNota.textContent !== nota.texto) nNota.textContent = nota.texto;
   if(nota.parado) el.dataset.parado = '1'; else delete el.dataset.parado;
   if(nota.passada) el.dataset.passada = String(nota.passada); else delete el.dataset.passada;
+  const previsao = ctx ? pvTextoDaPrevisao(pvPrevisaoDeSaida(c, ctx)) : '';
+  const nPrev = el.querySelector('.pv-previsao');
+  if(nPrev.textContent !== previsao) nPrev.textContent = previsao;
   el.setAttribute('aria-label', `Carga ${c.numeroCarga || ''}, rota ${rota} ${praca}, ${c.status}, `
     + (e.min === null ? 'caminhão ainda não chegou' : pvDur(e.min) + ' de pátio')
-    + (nota.texto ? ', ' + nota.texto : ''));
+    + (nota.texto ? ', ' + nota.texto : '')
+    + (previsao ? ', ' + previsao : ''));
 }
 
 /* O VOO (FLIP), a mesma peça da demonstração: mede onde o cartão está NA
@@ -306,6 +380,7 @@ function pvSincronizarPista(){
     if(_pv.qtds[i].textContent !== n) _pv.qtds[i].textContent = n;
     _pv.cols[i].classList.toggle('vazia', !lista.length);
   });
+  pvMostrarGargalo(pvGargalo(porEtapa));
   pvFatoSub('pv-k-parado-sub', parados === 0 ? 'nenhum além do normal da etapa'
     : parados + ' além do normal da etapa', parados ? 'atencao' : 'ok');
   const passadas = ctx.passadas.size;
