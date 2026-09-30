@@ -183,3 +183,9 @@ portão → **ocorrência escrita em `docs/REGISTRO_DE_OCORRENCIAS.md`**.
 
 Uma correção só está encerrada quando tem o teste que a trava. Correção sem
 guarda é correção que volta.
+
+**Teste novo roda como a bateria antes do portão:** `bash testes/rodar_tudo.sh
+<nome_da_suite>` — carrega o `backend/.env` e o mesmo ambiente de todas as
+outras. Rodar com `python3 testes/…` sozinho não basta: em 30/09/2026 o
+portão 26 foi cancelado por um teste que passava fora da bateria e reprovava
+dentro dela (as variáveis `PG*` do `.env`, ocorrência #98).
