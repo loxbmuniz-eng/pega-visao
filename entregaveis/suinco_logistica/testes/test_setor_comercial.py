@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Setor Comercial: vê Torre/Histórico/Relatórios, não altera nada.
+"""Setor Comercial: vê só o Pátio ao vivo, não altera nada (30/09/2026).
 
 Pedido do usuário (08/08/2026): "acesso a visualizacao de tudo que a
 logistica e administração ve mas sem alterar nada, tipo relatorios,
@@ -88,10 +88,12 @@ async def main():
         # TROCADO em 29/09/2026, decisão do dono: "vai liberar a visão do
         # pátio ao vivo pro comercial e ele só vai poder ver isso e o
         # histórico". O Pátio ao vivo entra, a Torre sai.
-        esperado_visivel = {'patio', 'historico', 'usuarios'}
+        # REDUZIDO em 30/09/2026, decisão do dono: "deixa a visão do
+        # comercial somente o pátio ao vivo, tira as outras abas". Saem o
+        # Histórico e a aba Usuários ("Minha segurança").
+        esperado_visivel = {'patio'}
         visiveis = {k for k, v in abas.items() if v}
-        ck('exatamente Pátio ao vivo + Histórico + a própria segurança',
-           visiveis == esperado_visivel, str(abas))
+        ck('exatamente o Pátio ao vivo', visiveis == esperado_visivel, str(abas))
         ck('a Torre saiu da visão do Comercial', not abas.get('torre'), str(abas))
         aba_inicial = await pg2.evaluate("() => TAB_ATUAL")
         ck('ao entrar, o Comercial cai no Pátio ao vivo', aba_inicial == 'patio', aba_inicial)
@@ -108,11 +110,10 @@ async def main():
             minhaSeguranca: vis(document.getElementById('card-minha-seguranca')),
           };
         }""")
-        ck('na aba Usuários ele vê só "Minha segurança"',
-           dentro['cards'] == ['card-minha-seguranca'], str(dentro['cards']))
+        # a aba Usuários não aparece mais (30/09); forçada pelo console,
+        # gerenciar gente continua fechado
         ck('Comercial NÃO vê a lista de operadores', not dentro['listaOperadores'])
         ck('Comercial NÃO vê os pedidos de aprovação', not dentro['aprovacoes'])
-        ck('mas PODE ativar o próprio segundo fator', dentro['minhaSeguranca'])
 
         print('\n=== 3. TORRE: SEM COLUNA DE AÇÃO, SEM CAMPO EDITÁVEL ===')
         await pg2.evaluate("() => abrirTab('torre')")
