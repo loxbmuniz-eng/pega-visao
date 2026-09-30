@@ -22,7 +22,7 @@ aceito vira retrabalho, e este painel está em produção em oito setores.
 
 Painel de arquivo único em `entregaveis/suinco_logistica/`, sem framework.
 `index.html` é **gerado** por `build_arquivo_unico.py` — nunca o edite à
-mão; leia `index_suinco.html`, `app.js`, `devolucoes.js` e `styles.css`.
+mão; leia `index_suinco.html`, `app/*.js`, `devolucoes.js` e `styles.css`.
 
 Como abrir:
 

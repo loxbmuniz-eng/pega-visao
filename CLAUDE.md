@@ -59,9 +59,10 @@ problema, nunca mais faça isso"*. Então, sempre:
 ```
 entregaveis/suinco_logistica/
 ├── index.html          GERADO — não editar à mão
-├── build_arquivo_unico.py   junta data.js + app.js + styles.css em index.html
+├── build_arquivo_unico.py   junta data.js + app/*.js + styles.css em index.html
 ├── data.js             estado, máquina de estados, sincronia, fusão
-├── app.js              telas e ações
+├── app/                telas e ações, um arquivo por assunto (00_base … 99_movimento);
+│                        o build junta na ordem do nome — nunca recrie o app.js
 ├── devolucoes.js       o ciclo de devolução (6 etapas)
 ├── suinco-api.js       cliente da API (fila offline, upsert, mudarStatus)
 ├── styles.css
@@ -114,7 +115,7 @@ bash publicar.sh                                # o portão: bateria + merge
   arriscada, PERGUNTE explicando — não bloqueie quem tem autoridade.
 - **Recusa do servidor nunca pode ser silenciosa.** `upsert()` devolve
   `{recusado:true}` em vez de lançar — quem chama precisa olhar o valor.
-- **`data.js` não conhece `app.js`.** O build concatena nessa ordem.
+- **`data.js` não conhece `app/`.** O build concatena nessa ordem.
 
 ### Vermelho tem QUATRO causas — descubra qual antes de mexer
 

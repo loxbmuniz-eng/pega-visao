@@ -52,6 +52,9 @@ import urllib.request
 from pathlib import Path
 
 from playwright.async_api import async_playwright
+import sys as _sys, os as _os
+_sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+from fonte_do_painel import texto_do_app
 
 RAIZ = Path('/home/user/pega-visao/entregaveis/suinco_logistica')
 API = os.environ.get('SUINCO_API', 'http://127.0.0.1:3010')
@@ -155,7 +158,7 @@ async def main():
        str((renovado.get('operador') or {}).get('documentos')))
 
     print('\n=== 2. A REGRA NÃO ESTÁ COPIADA NO PAINEL ===')
-    app_js = (RAIZ / 'app.js').read_text(encoding='utf-8')
+    app_js = texto_do_app(RAIZ)
     corpo = re.search(r'function podeGerarDocumentoUI\(tipo\)\{(.*?)\n\}', app_js, re.S)
     ck('a função que decide o botão existe', bool(corpo))
     if corpo:

@@ -23,6 +23,9 @@ que alguém reintroduzir o padrão de erro, antes de chegar ao pátio.
 """
 import re
 import sys
+import sys as _sys, os as _os
+_sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+from fonte_do_painel import texto_do_app
 
 BASE = '/home/user/pega-visao/entregaveis/suinco_logistica'
 falhas = []
@@ -46,7 +49,7 @@ def bloco(texto, inicio, fim='};'):
 def main():
     data = ler('data.js')
     api = ler('suinco-api.js')
-    app = ler('app.js')
+    app = texto_do_app()
     rotas = ler('backend/src/rotas/cargas.js')
 
     print('\n=== 1. CAMPO DE CARGA EXISTE NOS TRÊS PONTOS DE SINCRONIZAÇÃO ===')

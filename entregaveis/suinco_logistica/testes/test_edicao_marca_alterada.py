@@ -39,6 +39,9 @@ import os
 import re
 import sys
 from playwright.async_api import async_playwright
+import sys as _sys, os as _os
+_sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+from fonte_do_painel import texto_do_app
 
 API = os.environ.get('SUINCO_API', 'http://127.0.0.1:3010')
 PAINEL_ARQ = '/home/user/pega-visao/entregaveis/suinco_logistica/index.html'
@@ -76,8 +79,7 @@ async def main():
     print('\n=== 0. NENHUMA FUNÇÃO DE EDIÇÃO PODE ESQUECER O CARIMBO ===')
     # Checagem de código: pega qualquer função nova que nasça com o mesmo
     # defeito, sem depender de alguém lembrar de escrever um teste de tela.
-    app = open('/home/user/pega-visao/entregaveis/suinco_logistica/app.js',
-               encoding='utf-8').read()
+    app = texto_do_app()
     sem_carimbo = []
     for m in re.finditer(r'^function (atualizar\w*UI)\(', app, re.MULTILINE):
         nome = m.group(1)

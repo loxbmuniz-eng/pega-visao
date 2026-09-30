@@ -89,6 +89,9 @@ ck('o cabeçalho do documento usa <img>, não fundo de CSS',
 import asyncio
 from playwright.async_api import async_playwright
 from PIL import Image
+import sys as _sys, os as _os
+_sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+from fonte_do_painel import arquivos_do_app
 
 async def _marca_no_papel():
     async with async_playwright() as pw:
@@ -125,8 +128,8 @@ ck('a marca tem rótulo para leitor de tela', html.count('aria-label="Suinco"') 
    or html.count('alt="Suinco"') >= 1)
 
 print('\n=== 5. NINGUÉM APONTA PARA O ARQUIVO-MESTRE ===')
-sobrou = [f for f in ('index_suinco.html', 'styles.css', 'app.js')
-          if 'assets/logo_suinco.png' in (BASE / f).read_text(encoding='utf-8')]
+sobrou = [str(f) for f in [BASE / 'index_suinco.html', BASE / 'styles.css'] + arquivos_do_app(BASE)
+          if 'assets/logo_suinco.png' in f.read_text(encoding='utf-8')]
 ck('nenhuma fonte cita assets/logo_suinco.png', not sobrou, ', '.join(sobrou))
 # E a guarda do build precisa REPROVAR se alguém citar — não basta não citar.
 sujo = (BASE / 'styles.css').read_text(encoding='utf-8')
