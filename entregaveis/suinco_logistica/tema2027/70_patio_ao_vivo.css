@@ -128,8 +128,26 @@
   .pv-painel > p{ margin:4px 0 12px; font-size:13.5px; color:var(--text-dim) }
   .pv-grafico{ height:220px }
   .pv-radio{ list-style:none; margin:0; padding:0; display:flex; flex-direction:column }
-  .pv-radio li{ border-bottom:1px solid var(--pv-linha); padding:7px 2px; display:grid;
-    grid-template-columns:3.2rem 1fr; gap:8px; font-size:13.5px; color:var(--text-dim) }
+  .pv-radio li{ border-bottom:1px solid var(--pv-linha) }
+  /* cada linha é um botão: tocar abre o cartão da carga (30/09/2026) */
+  .pv-radio-item{ all:unset; box-sizing:border-box; width:100%; cursor:pointer; padding:7px 2px; display:grid;
+    grid-template-columns:3.2rem 1fr; gap:8px; font-size:13.5px; color:var(--text-dim); border-radius:6px }
+  .pv-radio-item:focus-visible{ outline:2px solid var(--gold); outline-offset:1px }
+  @media (hover:hover) and (pointer:fine){ .pv-radio-item:hover{ background:var(--pv-card-2) } }
+  .pv-radio-item em{ font-style:normal }
+  .pv-radio li[data-alem="1"] .pv-radio-item em{ color:var(--pv-atencao); font-weight:600 }
+  .pv-radio li[data-tipo="chegada"] time, .pv-radio li[data-tipo="saida"] time{ color:var(--gold-text) }
+  /* o cartão aberto: ficha, agora, linha do tempo */
+  .pv-gv-ficha{ display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:8px 16px; margin:0 0 14px }
+  .pv-gv-ficha div{ min-width:0 }
+  .pv-gv-ficha dt{ font-size:11.5px; letter-spacing:.06em; text-transform:uppercase; color:var(--text-dim) }
+  .pv-gv-ficha dd{ margin:1px 0 0; font-size:15px; color:var(--text); overflow-wrap:anywhere }
+  .pv-gv-agora{ border:1px solid var(--pv-linha-forte); border-radius:10px; padding:10px 12px; margin:0 0 12px;
+    display:flex; flex-direction:column; gap:3px; font-size:14px; color:var(--text-dim) }
+  .pv-gv-agora b{ color:var(--text) }
+  .pv-gv-alem{ color:var(--pv-atencao); font-weight:600 }
+  .gv-carga[data-alem="1"] .gv-carga-sub span:nth-child(2){ color:var(--pv-atencao); font-weight:600 }
+  .gv-carga.futura{ opacity:.5 }
   .pv-radio li:last-child{ border-bottom:0 }
   .pv-radio time{ font:600 16px/1.2 var(--pv-cond); color:var(--text); font-variant-numeric:tabular-nums }
   .pv-radio b{ color:var(--text); font-weight:600 }
