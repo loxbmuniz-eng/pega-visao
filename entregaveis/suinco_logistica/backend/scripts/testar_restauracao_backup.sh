@@ -73,6 +73,12 @@ fi
 # 'sudo' from deb sudo... Try: apt install". O `su` vem no sistema base.
 # O sudo fica como segunda tentativa, para uma máquina onde o postgres não
 # aceite su.
+# E SEM AS VARIÁVEIS PG* DE QUEM CHAMOU (30/09/2026). Com PGUSER/PGHOST no
+# ambiente (um backend/.env carregado, como faz a bateria de testes), o psql
+# entraria como o usuário da APLICAÇÃO pela rede — que não cria banco — e a
+# prova pararia em "não consegui criar o banco temporário". Esta prova é
+# sempre do usuário postgres, pelo socket local.
+unset PGHOST PGPORT PGUSER PGPASSWORD PGDATABASE PGSERVICE
 COMO_POSTGRES=""
 if su -s /bin/sh postgres -c 'true' 2>/dev/null; then
   COMO_POSTGRES="su"

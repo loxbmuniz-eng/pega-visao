@@ -4734,3 +4734,11 @@ descartável com cinco cargas de 10 dias atrás, backup gerado como o cron do
 servidor gera, o script roda contra ele. Reprovou contra o publicado com a
 mesma frase do servidor e passa com a correção ("5 carga(s) antiga(s)
 conferidas, todas idênticas").
+
+**Depois, no portão (30/09).** A guarda reprovou dentro da bateria e passou
+sozinha: a bateria carrega o `backend/.env`, e com `PGUSER`/`PGHOST` no
+ambiente o `psql` do script entrava como o usuário da aplicação, que não cria
+banco ("não consegui criar o banco temporário"). Causa 3 (ambiente), mas a
+correção é no script: a prova é sempre do usuário postgres pelo socket, e
+agora ela apaga as variáveis `PG*` de quem a chamou. A guarda passa com e sem
+o `.env` carregado.
