@@ -236,11 +236,6 @@ function podeMexerNoChecklist(d) {
   return ehSetorFilial(setor) && !!d && d.criadaSetor === setor;
 }
 
-/* A filial não avança etapa: o ciclo é rodado pela matriz. */
-function podeAvancarEtapaDev() {
-  return !ehSetorFilial((DB.operador || {}).setor);
-}
-
 /* Papéis da fase 2, já valendo para os setores criados em 18/08/2026:
    Expedição confere o que chegou; Controles Internos destina. Cada um
    enxerga editável SÓ a própria coluna — o servidor confere de novo. */
@@ -415,14 +410,6 @@ function minhasEtapasDev() {
   return DEV_ETAPAS.filter((e) => e.setores[0] === setor);
 }
 
-/* A etapa da minha fila que está ACONTECENDO agora, se houver. */
-function minhaEtapaDev(status) {
-  const minhas = minhasEtapasDev();
-  if (!minhas.length) return null;
-  if (status !== undefined) return minhas.find((e) => e.status === status) || null;
-  return minhas[0];
-}
-
 function ehMinhaVezDev(d) {
   return minhasEtapasDev().some((e) => e.status === d.status);
 }
@@ -558,11 +545,6 @@ async function carregarDevolucoes() {
   } catch (e) {
     notify('Não consegui buscar as devoluções: ' + (e.message || 'erro desconhecido'), 'danger', 6000);
   }
-}
-
-/* Mantida para não quebrar chamada antiga: hoje ela só recarrega. */
-function filtroDevolucoesHoje() {
-  carregarDevolucoes();
 }
 
 /* ---------- a lista de checklists ---------- */

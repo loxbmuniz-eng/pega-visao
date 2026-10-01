@@ -34,7 +34,7 @@
    Trocar o nome do cache junto é de propósito: o `activate` apaga os caches
    de versões anteriores, e com isso a cópia velha do index.html sai de cena
    em vez de sobreviver a um deploy. */
-const BUILD = "01/10 17:27 · 8926af7";
+const BUILD = "01/10 17:31 · 2ead5b8";
 const VERSAO = 'suinco-' + BUILD;
 const ESSENCIAIS = [
   './',

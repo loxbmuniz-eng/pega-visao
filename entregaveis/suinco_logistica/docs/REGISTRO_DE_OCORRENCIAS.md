@@ -4831,3 +4831,24 @@ restaura", sem prometer apagar nada; a migração vem de `_migrations`.
 **Guarda:** `test_scripts_do_servidor_dizem_a_verdade.py` (estático) —
 reprovou em 4 pontos contra o publicado; também trava a porta de todos os
 scripts do servidor contra a do `instalar.sh`.
+
+## #104 — Duas fmtHora; a que vencia escrevia "21:00" para hora vazia (01/10/2026)
+
+**Como apareceu.** Limpeza de código morto (item 4 da fila de evolução). A
+varredura de "função declarada em dois arquivos" achou `fmtHora` em `data.js`
+e em `app/30_torre.js`. No arquivo único, a de baixo vence em silêncio — e ela
+não tratava o vazio: `fmtHora(null)` virava "21:00" (o zero do relógio, no
+fuso de Brasília). A de `data.js` tratava.
+
+**Por que não apareceu na tela.** Todos os chamadores de hoje conferem a hora
+antes de chamar. Era defeito escondido, esperando o primeiro chamador
+desatento.
+
+**A família.** Uma função, dois lugares — a mesma decisão escrita duas vezes
+diverge.
+
+**A correção.** Uma `fmtHora` só, em `data.js`, que trata vazio e data
+inválida. Junto, 13 funções sem chamador nenhum foram removidas (lista na
+guarda). **Guarda:** `testes/test_sem_codigo_morto.py` — toda função tem quem
+a chame, nenhuma em dois arquivos, e `fmtHora` de vazio/lixo dá "—". Reprovou
+contra o publicado nos três pontos.

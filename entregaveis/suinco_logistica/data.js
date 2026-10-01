@@ -88,9 +88,6 @@ function praOndeSugerido(transportadora){
 function paletizadaDaCarga(carga){
   return (carga && carga.paletizada === 'Sim') ? 'Sim' : 'Não';
 }
-function compartilhadaDaCarga(carga){
-  return (carga && (carga.praOnde === 'CROSS-DOCKING' || carga.praOnde === 'RET FRIGO')) ? 'Sim' : 'Não';
-}
 
 /* Migração dos registros gravados antes desta renomeação. Sem isto, uma carga
    antiga com praOnde='CROSS' deixaria de ser contada como Compartilhada, o que
@@ -543,20 +540,6 @@ const STATUS_CARREGAMENTO_META = {
 function statusCarregamentoInfo(status){
   return STATUS_CARREGAMENTO_META[status] || { texto: status||'—', cor:'#374a86', classe:'' };
 }
-// Cor de texto legível sobre um fundo colorido, escolhida pelo brilho do
-// fundo (luminância relativa, fórmula do WCAG). Necessário porque as células
-// coloridas do PDF Operacional usavam texto quase preto fixo: sobre o amarelo
-// e o verde funcionava, mas sobre o vinho de "NÃO ESTÁ NA SUINCO" o texto
-// praticamente sumia — e cor de status em relatório impresso é informação,
-// então precisa ser legível em todas as faixas.
-function textoSobre(corHex){
-  const m = /^#?([0-9a-f]{6})$/i.exec(String(corHex||'').trim());
-  if(!m) return '#06210f';
-  const n = parseInt(m[1], 16);
-  const canal = v => { const c = v/255; return c <= .03928 ? c/12.92 : Math.pow((c+.055)/1.055, 2.4); };
-  const L = .2126*canal((n>>16)&255) + .7152*canal((n>>8)&255) + .0722*canal(n&255);
-  return L > .45 ? '#06210f' : '#ffffff';
-}
 
 /* ---------- CORES DOS 6 STATUS PARA OS RELATÓRIOS ----------
    STATUS_CARREGAMENTO_META acima colapsa 3 status em "CARREGADO" verde —
@@ -605,11 +588,6 @@ function corStatusRelatorio(status){
        use `texto`. Se vai sozinha, use `destaque`. */
     destaque: ler('txt', ler('bg', '#b7c0d4'))
   };
-}
-// "Faturado" ou além no fluxo (Faturado, Seguiu Viagem) -> célula verde no PDF.
-function estaFaturado(carga){
-  const idx = STATUS_FLOW.indexOf(carga.status);
-  return idx >= STATUS_FLOW.indexOf('Faturado');
 }
 // Ordem do fluxo — usada pelo export Dim_Status. Só os 6 status reais (sem
 // "Aguardando Carga", que não é mais um valor de status, é só o texto que
@@ -1943,9 +1921,14 @@ function fmtDataHora(iso){
 // Só a hora (HH:MM), sem a data — usado na matriz de linha do tempo do
 // relatório executivo, onde a data já está no cabeçalho e repetir em toda
 // célula só tiraria espaço da informação que importa.
+/* UMA fmtHora SÓ (01/10/2026). Havia uma cópia em app/30_torre.js que, por
+   vir depois no arquivo, vencia — e ela não tratava o vazio: fmtHora(null)
+   virava "21:00" (o zero do relógio, no fuso de Brasília). Esta trata os
+   dois: vazio e data inválida dão "—". */
 function fmtHora(iso){
   if(!iso) return '—';
-  return new Date(iso).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+  const d = new Date(iso);
+  return isNaN(d) ? '—' : d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
 }
 function normalizarPlaca(p){
   return (p||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
@@ -2298,11 +2281,6 @@ function registrarMovimentacao({cargaId, placa, statusAnterior, statusNovo, oper
   if(typeof SuincoStore.sincronizarMovimentacao === 'function'){
     SuincoStore.sincronizarMovimentacao(mov, DB.operador).catch(e=>console.warn('[Suinco] sync movimentação:', e));
   }
-}
-// Monta o snapshot padrão a partir do objeto de carga corrente — evita
-// repetir os mesmos 4 campos em toda chamada de registrarMovimentacao.
-function snapshotCarga(c){
-  return { cliente: c.cliente, motorista: c.motorista, tipoVeiculo: c.tipoVeiculo, qtdEntregas: c.qtdEntregas };
 }
 /* ÍNDICE cargaId → movimentações ordenadas (09/09/2026).
 
@@ -3273,29 +3251,6 @@ function metricasPorEntidade(tipo, cargas){
   })).sort((a,b)=> b.cargas - a.cargas);
 }
 
-function rankingTransportadoras(cargas){
-  const base = cargas || DB.cargas.filter(c=>c.status==='Seguiu Viagem');
-  const porTransp = {};
-  base.filter(c=>c.transportadora).forEach(c=>{
-    const t = c.transportadora;
-    if(!porTransp[t]) porTransp[t] = {transportadora:t, cargas:0, somaLead:0, nLead:0, somaPatio:0, nPatio:0};
-    const ind = indicadoresDaCarga(c.id);
-    porTransp[t].cargas++;
-    if(ind.leadTimeTotal!==null){ porTransp[t].somaLead+=ind.leadTimeTotal; porTransp[t].nLead++; }
-    if(ind.tempoPatioTotal!==null){ porTransp[t].somaPatio+=ind.tempoPatioTotal; porTransp[t].nPatio++; }
-  });
-  return Object.values(porTransp).map(t=>({
-    transportadora: t.transportadora,
-    cargas: t.cargas,
-    leadTimeMedio: t.nLead ? Math.round(t.somaLead/t.nLead) : null,
-    tempoPatioMedio: t.nPatio ? Math.round(t.somaPatio/t.nPatio) : null
-  })).sort((a,b)=>{
-    if(a.leadTimeMedio===null) return 1;
-    if(b.leadTimeMedio===null) return -1;
-    return a.leadTimeMedio - b.leadTimeMedio;
-  });
-}
-
 /* ---------- ANÁLISES DOS RELATÓRIOS EXECUTIVOS ----------
    Pedido do usuário: o executivo precisa detalhar por status de carga,
    ranking do dia, menor tempo e maior tempo. As funções abaixo são a camada
@@ -3317,13 +3272,6 @@ function distribuicaoPorStatus(cargas){
     cor: corStatusRelatorio(s),
     setor: (STATUS_META[s] || {}).setor || '—'
   }));
-}
-
-// Ranking de transportadoras considerando SÓ as cargas concluídas hoje (dia
-// calendário) — é o "ranking do dia" pedido, diferente do ranking histórico
-// que rankingTransportadoras() devolve quando chamado sem argumento.
-function rankingDoDia(){
-  return rankingTransportadoras(cargasConcluidasNoPeriodo('hoje'));
 }
 
 /* ---------- PAINEL DO GESTOR — quebra de indicadores por período ----------

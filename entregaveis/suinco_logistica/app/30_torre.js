@@ -39,16 +39,6 @@ function etapasDaCarga(carga){
   });
 }
 
-function celulaEtapa(e){
-  if(e.atual)    return `<td class="et et-atual" title="${esc(e.status)} — agora">
-                           <span class="et-marca">●</span>
-                           <span class="et-hora">${e.quando ? fmtHora(e.quando) : 'agora'}</span></td>`;
-  if(e.cumprida) return `<td class="et et-ok" title="${esc(e.status)}${e.operador?' — '+esc(e.operador):''}">
-                           <span class="et-marca">✓</span>
-                           <span class="et-hora">${e.quando ? fmtHora(e.quando) : '—'}</span></td>`;
-  return `<td class="et et-pendente" title="${esc(e.status)} — ainda não"><span class="et-marca">·</span></td>`;
-}
-
 /* Linha do tempo COMPACTA — uma célula só, não seis.
    Pedido do usuário (08/08/2026, depois de reportar que a Visão do Pátio
    "não aparece mais" no celular): as seis colunas de etapa (uma por
@@ -500,20 +490,6 @@ function renderVisaoPatio(prefixo){
   }
 }
 
-/* Rótulo curto para o cabeçalho das seis colunas de etapa. O nome inteiro
-   não cabe, e cortar no meio ("Aguardando Emb…") é pior que abreviar com
-   critério — o título completo continua no `title` de cada coluna. */
-function abreviarEtapa(status){
-  return ({
-    'Aguardando Veículo':  'Programada',
-    'Aguardando Embarque': 'Chegou',
-    'Embarque Iniciado':   'Iniciou',
-    'Embarque Finalizado': 'Finalizou',
-    'Faturado':            'Faturou',
-    'Seguiu Viagem':       'Saiu',
-  })[status] || status;
-}
-
 /* Há quanto tempo a carga está no pátio. Conta da CHEGADA, não da
    programação: carga programada na véspera não passou a noite no pátio, e
    contar assim inflaria o número que o gestor usa para cobrar. */
@@ -548,11 +524,6 @@ function tempoNoPatioTexto(carga){
   // Acima da meta, destaca. É o número que faz alguém levantar da cadeira.
   const acima = t.emAndamento && t.minutos > META_TEMPO_PATIO_MIN;
   return acima ? `<b class="vp-atrasado">${texto}</b>` : texto;
-}
-
-function fmtHora(iso){
-  const d = new Date(iso);
-  return isNaN(d) ? '—' : d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
 }
 
 /* Contagem crescente nos números da Torre de Controle — só quando o valor
@@ -1142,17 +1113,6 @@ function ordenarPorSequenciaDeCarregamento(a, b){
   // cada geração e confundir quem compara duas impressões.
   return String(a.numeroCarga || '').localeCompare(
     String(b.numeroCarga || ''), 'pt-BR', {numeric: true});
-}
-
-function ordenarPorEtapaDaTimeline(a,b){
-  const ia = STATUS_FLOW.indexOf(a.status);
-  const ib = STATUS_FLOW.indexOf(b.status);
-  // Status desconhecido (dado antigo) vai para o fim, em vez de virar -1 e
-  // subir para o topo por engano.
-  const pa = ia === -1 ? STATUS_FLOW.length : ia;
-  const pb = ib === -1 ? STATUS_FLOW.length : ib;
-  if(pa !== pb) return pa - pb;
-  return ordenarPorSequenciaEAtualizacao(a,b);
 }
 
 /* Fila de cada setor: primeiro o que espera a AÇÃO daquele setor.
