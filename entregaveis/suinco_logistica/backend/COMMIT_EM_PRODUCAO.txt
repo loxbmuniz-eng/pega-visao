@@ -1,4 +1,27 @@
-9fab33c
+7cf0236
+
+# ---------------------------------------------------------------------
+# 01/10/2026 — 9fab33c → 7cf0236. O SERVIDOR ALCANÇOU O PAINEL, NO NODE 24.
+#
+# Bloco COPIE DAQUI colado pelo dono (atualizar_tudo.sh): commit no servidor
+# 7cf0236, serviço active, /health 200, última migração
+# 056_km_com_casas_decimais.sql, aviso no celular ligado, node no servidor
+# v24.21.0, problemas nesta rodada: nenhum.
+#
+# O QUE PASSOU A VALER NO SERVIDOR:
+#   · Node 24.21.0 (instalar.sh, bloco NODE_MAJOR) — o Node 22 saía de
+#     suporte em abril/2027; provado antes com os 509 testes e a bateria;
+#   · #97: atualizar.sh e atualizar_tudo.sh se trocam pela versão recém-
+#     baixada antes de qualquer passo (scripts/codigo_novo_primeiro.sh);
+#   · #98: a prova do backup confere cargas antigas campo a campo, com o
+#     ambiente PG* limpo — rodou nesta rodada sem problema reportado;
+#   · #103: assistente_servidor.sh na porta 3000, sem prometer apagar, e a
+#     migração lida do banco;
+#   · scripts/consultas/devolucoes_por_motivo.sql (só leitura).
+# Nenhuma migração nova. O dono já tinha rodado o atualizar_tudo.sh mais
+# cedo no mesmo dia (bloco não colado); este é o registro que vale.
+# EM ABERTO, fora do painel: o Ubuntu pede reinício (40 atualizações
+# pendentes, "System restart required" no login de 01/10).
 
 # ---------------------------------------------------------------------
 # 30/09/2026 — e87ed1c → 9fab33c. O SERVIDOR ALCANÇOU O PAINEL.
