@@ -30,6 +30,13 @@ Senha, chave e token **não** estão no repositório (o portão confere a cada
 publicação). Tornar privado protege daqui para a frente; o que já foi público
 pode ter sido copiado — isso não se desfaz.
 
+## Passo zero — o e-mail titular (01/10/2026)
+
+O dono definiu o e-mail que será titular e contato de todos os serviços:
+**embarquelog@suinco.com.br**. O chamado para a TI criá-lo está em
+`docs/CHAMADO_TI_EMAIL_EMBARQUELOG.md`. Vale para GitHub, Vercel, Registro.br
+(domínio, em nome do CNPJ) e Hostinger (servidor).
+
 ## A ordem segura (aprovada como ideia, não executada)
 
 1. **Organização da Suinco no GitHub** (o dono cria; grátis). Dois donos:
