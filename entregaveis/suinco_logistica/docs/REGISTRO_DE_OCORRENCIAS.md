@@ -4848,7 +4848,21 @@ desatento.
 diverge.
 
 **A correção.** Uma `fmtHora` só, em `data.js`, que trata vazio e data
-inválida. Junto, 13 funções sem chamador nenhum foram removidas (lista na
+inválida. Junto, 12 funções sem chamador nenhum foram removidas (lista na
 guarda). **Guarda:** `testes/test_sem_codigo_morto.py` — toda função tem quem
 a chame, nenhuma em dois arquivos, e `fmtHora` de vazio/lixo dá "—". Reprovou
 contra o publicado nos três pontos.
+
+**O que a primeira guarda deixou passar (pego antes de publicar).** A conta de
+"quem chama" ignorava `obj.nome` — e, sem querer, também `...nome(c)`, porque
+o espalhamento termina em ponto. `snapshotCarga`, chamada assim em 5 lugares
+(criar carga, chegada, e toda mudança de etapa), entrou na lista de mortas e
+foi removida. Quem pegou foi o gerador da vitrine, que cria carga de
+demonstração: `snapshotCarga is not defined`. Não chegou ao portão. A função
+voltou; a conta passou a tratar `...` como espaço, e a guarda confere a
+própria conta (`...f(x)` é chamada; `obj.f(x)` não). Prova: a conta velha,
+rodada no código de antes da limpeza, lista `snapshotCarga`; a nova, não.
+
+**A família.** Ferramenta de varredura com ponto cego que vira decisão — a
+mesma de "erro engolido que vira conclusão" (F2): o resultado da conta foi
+tratado como verdade sem conferir cada nome contra o código.

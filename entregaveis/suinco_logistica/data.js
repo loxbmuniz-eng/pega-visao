@@ -63,8 +63,8 @@ const STATUS_META = {
    NOTA: até 02/08/2026 existia aqui um campo "Compartilhada?", DERIVADO deste.
    Foi substituído por "Paletizada", que é informação independente e EDITÁVEL —
    não dá para inferir do tipo de operação se a carga é paletizada. A função
-   compartilhadaDaCarga() foi mantida apenas para ler registros antigos e
-   converter o export; nenhuma tela nova a usa. */
+   compartilhadaDaCarga(), que lia o campo antigo, saiu em 01/10/2026 sem
+   nenhum chamador (#104). */
 const PRA_ONDE_OPCOES = ['CROSS-DOCKING', 'ENTREGA DIRETA', 'RET FRIGO'];
 const PRA_ONDE_LABEL = {
   'CROSS-DOCKING':'CROSS-DOCKING',
@@ -2281,6 +2281,11 @@ function registrarMovimentacao({cargaId, placa, statusAnterior, statusNovo, oper
   if(typeof SuincoStore.sincronizarMovimentacao === 'function'){
     SuincoStore.sincronizarMovimentacao(mov, DB.operador).catch(e=>console.warn('[Suinco] sync movimentação:', e));
   }
+}
+// Monta o snapshot padrão a partir do objeto de carga corrente — evita
+// repetir os mesmos 4 campos em toda chamada de registrarMovimentacao.
+function snapshotCarga(c){
+  return { cliente: c.cliente, motorista: c.motorista, tipoVeiculo: c.tipoVeiculo, qtdEntregas: c.qtdEntregas };
 }
 /* ÍNDICE cargaId → movimentações ordenadas (09/09/2026).
 

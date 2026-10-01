@@ -5,8 +5,10 @@ PEDIDO DO DONO: item 4 da fila de evolução — limpar "restos de código" de
 muitas atualizações. Levantamento medido em 01/10/2026: 12 funções que
 ninguém chamava (celulaEtapa, abreviarEtapa, ordenarPorEtapaDaTimeline,
 corTextoSobre, compartilhadaDaCarga, textoSobre, estaFaturado,
-snapshotCarga, rankingDoDia, podeAvancarEtapaDev, minhaEtapaDev,
-filtroDevolucoesHoje) — removidas.
+rankingDoDia e rankingTransportadoras, que só ela chamava,
+podeAvancarEtapaDev, minhaEtapaDev, filtroDevolucoesHoje) — removidas.
+`snapshotCarga` chegou a ser removida por engano: a primeira versão desta
+conta não via a chamada `...snapshotCarga(c)`. Voltou antes de publicar.
 
 E uma função em DOIS arquivos: `fmtHora` em data.js e em app/30_torre.js. A
 de baixo vencia em silêncio, e ela não tratava o vazio — fmtHora(null)
@@ -14,7 +16,8 @@ virava "21:00". Ficou uma só, em data.js, que trata vazio e data inválida.
 
 O QUE ESTE TESTE TRAVA, em todas as fontes do painel (não no index.html):
   1. toda função declarada é chamada ou citada em algum lugar além da
-     própria definição (comentário não conta). Exceção declarada abaixo;
+     própria definição (comentário não conta; `...f(x)` conta). Exceção
+     declarada abaixo;
   2. nenhuma função é declarada em dois arquivos;
   3. fmtHora(null) e fmtHora('lixo') dão "—".
 
@@ -50,6 +53,15 @@ html = open(os.path.join(BASE, 'index_suinco.html'), encoding='utf-8').read()
 tudo = '\n'.join(textos.values()) + '\n' + html
 sem_comentario = re.sub(r'(?m)//.*$', '', re.sub(r'/\*.*?\*/', '', tudo, flags=re.S))
 
+
+def usos(nome, texto):
+    """Quantas vezes o nome aparece como ele mesmo — não como `obj.nome`.
+    O espalhamento `...nome(c)` É chamada: os três pontos viram espaço antes
+    da conta. Sem isso, `snapshotCarga`, chamada em 5 lugares assim, contou
+    como morta e foi removida — e criar carga e mudar de etapa quebravam
+    (pego antes de publicar, 01/10/2026, #104)."""
+    return len(re.findall(r'(?<![\w$.])' + re.escape(nome) + r'(?![\w$])', texto.replace('...', '... ')))
+
 defs = {}
 for f, t in textos.items():
     for m in re.finditer(r'(?m)^(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*\(', t):
@@ -60,10 +72,11 @@ mortas = []
 for n, fs in defs.items():
     if n in CHAMADAS_DE_FORA:
         continue
-    usos = len(re.findall(r'(?<![\w$.])' + re.escape(n) + r'(?![\w$])', sem_comentario))
-    if usos <= len(fs) and not re.search(r'["\'`]\s*' + re.escape(n) + r'\b', tudo):
+    if usos(n, sem_comentario) <= len(fs) and not re.search(r'["\'`]\s*' + re.escape(n) + r'\b', tudo):
         mortas.append(f'{fs[0]}:{n}')
 ck('nenhuma função sem chamador', not mortas, ', '.join(mortas))
+ck('a conta enxerga chamada por espalhamento (`...f(x)`) e ignora `obj.f(x)`',
+   usos('f', 'const a = {...f(x)};') == 1 and usos('f', 'obj.f(x);') == 0)
 
 print('\n=== 2. NENHUMA FUNÇÃO EM DOIS ARQUIVOS ===')
 duplas = {n: fs for n, fs in defs.items() if len(fs) > 1}
