@@ -75,11 +75,28 @@ apt-get install -y -qq curl ca-certificates gnupg git ufw rsync iproute2 nginx \
                        postgresql postgresql-contrib certbot python3-certbot-nginx >/dev/null
 ok "nginx, postgresql, certbot, ufw"
 
-# Node 20+ pelo repositório oficial. O do Ubuntu costuma ser antigo demais
-# para o `node --test` e para o socket.io atual.
-if ! command -v node >/dev/null || [[ $(node -v | sed 's/v\([0-9]*\).*/\1/') -lt 20 ]]; then
-  curl -fsSL https://deb.nodesource.com/setup_22.x | bash - >/dev/null 2>&1
-  apt-get install -y -qq nodejs >/dev/null
+# NODE 24 (01/10/2026). Pedido do dono: "não vamos esperar abril" — o Node 22
+# sai de suporte em abril/2027. Provado antes de mudar aqui: os 509 testes do
+# servidor e a bateria de tela inteira com a API rodando no Node 24 (nenhum
+# módulo nativo: bcryptjs, pg e o resto são JavaScript puro).
+#
+# A TROCA NÃO PODE DERRUBAR NADA. Este passo vem ANTES de o código novo ser
+# copiado e do reinício do serviço. Se o repositório do Node não responder,
+# o servidor segue no Node que tem (22 ainda é suportado) e o atualizar
+# continua — com um aviso, não com erro. Só sem Node nenhum, ou abaixo do 22,
+# é que para.
+NODE_MAJOR=24
+NODE_ATUAL="$(node -v 2>/dev/null | sed 's/v\([0-9]*\).*/\1/' || true)"
+NODE_ATUAL="${NODE_ATUAL:-0}"
+if (( NODE_ATUAL < NODE_MAJOR )); then
+  if curl -fsSL "https://deb.nodesource.com/setup_${NODE_MAJOR}.x" | bash - >/dev/null 2>&1 \
+     && apt-get install -y -qq nodejs >/dev/null 2>&1; then
+    ok "Node atualizado: v$NODE_ATUAL -> $(node -v)"
+  elif (( NODE_ATUAL >= 22 )); then
+    aviso "não consegui instalar o Node $NODE_MAJOR agora — segue no $(node -v), ainda suportado. Tenta de novo no próximo atualizar."
+  else
+    erro "não há Node 22 ou mais nesta máquina e não consegui instalar o $NODE_MAJOR. Sem ele o serviço não sobe."
+  fi
 fi
 ok "node $(node -v), npm $(npm -v)"
 

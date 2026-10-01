@@ -129,6 +129,7 @@ echo "serviço             : $ATIVO"
 echo "/health local       : ${SAUDE:-000}"
 echo "última migração     : $MIG"
 echo "aviso no celular    : $AVISOS"
+echo "node no servidor    : $(node -v 2>/dev/null || echo '?')"
 echo "problemas nesta rodada : ${PROBLEMAS[*]:-nenhum}"
 echo "-------- ATÉ AQUI -------------"
 echo

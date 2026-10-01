@@ -5,7 +5,7 @@
   "type": "module",
   "main": "src/servidor.js",
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "scripts": {
     "start": "node src/servidor.js",
@@ -13,7 +13,7 @@
     "migrar": "node scripts/migrar.js",
     "seed:frota": "node scripts/seed_frota.js",
     "operador": "node scripts/criar_operador.js",
-    "teste": "RATE_LIMIT=20000 node --test testes/*.test.js"
+    "teste": "RATE_LIMIT=20000 node --test --test-reporter=tap testes/*.test.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
