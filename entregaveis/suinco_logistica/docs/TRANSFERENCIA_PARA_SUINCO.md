@@ -37,6 +37,12 @@ O dono definiu o e-mail que será titular e contato de todos os serviços:
 `docs/CHAMADO_TI_EMAIL_EMBARQUELOG.md`. Vale para GitHub, Vercel, Registro.br
 (domínio, em nome do CNPJ) e Hostinger (servidor).
 
+**Chamado aberto pelo dono em 01/10/2026: nº 43978**, com o título "Criação do
+e-mail **embarquesuinco**@suinco.com.br — conta titular dos serviços do painel
+de embarque". O nome no título difere do pedido original
+(`embarquelog@`). **Em aberto:** qual dos dois vale — confirmar com o dono e,
+se o corpo do chamado disser outro nome, avisar a TI para não criar o errado.
+
 ## A ordem segura (aprovada como ideia, não executada)
 
 1. **Organização da Suinco no GitHub** (o dono cria; grátis). Dois donos:
