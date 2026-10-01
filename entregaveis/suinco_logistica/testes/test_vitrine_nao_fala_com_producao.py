@@ -30,6 +30,7 @@ O QUE ESTE TESTE TRAVA
 """
 import asyncio
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -66,10 +67,12 @@ async def main():
     print('\n=== 1. O GERADOR ABORTA QUANDO A ÂNCORA SOME ===')
     painel = (RAIZ / 'index.html').read_text(encoding='utf-8')
     for nome, adulterado in [
-        ('o modo local', painel.replace('ativo: true,', 'ativo: /*mudou*/ true,', 1)),
-        ('o service worker', painel.replace(
-            "if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {",
-            "if ('serviceWorker' in navigator) { // reescrito", 1)),
+        # o painel publicado sai enxuto (01/10/2026): `ativo:true,`, aspas duplas, sem
+        # espaço — a adulteração casa os dois formatos, senão ela não adultera nada
+        ('o modo local', re.sub(r'ativo:\s*true,', 'ativo: /*mudou*/ true,', painel, count=1)),
+        ('o service worker', re.sub(
+            r"if\s*\(\s*['\"]serviceWorker['\"]\s*in\s*navigator\s*&&\s*location\.protocol\.startsWith\(\s*['\"]http['\"]\s*\)\s*\)\s*\{",
+            "if ('serviceWorker' in navigator) { // reescrito", painel, count=1)),
         ('o socket.io', painel.replace(
             '<script src="https://api.embarquesuinco.com.br/socket.io/socket.io.js"',
             '<script defer src="https://api.embarquesuinco.com.br/socket.io/socket.io.js"', 1)),
@@ -88,8 +91,8 @@ async def main():
 
     print('\n=== 2. NO ARQUIVO: MODO LOCAL E SEM SERVICE WORKER ===')
     html = VITRINE.read_text(encoding='utf-8')
-    ck('o painel está em modo local', 'ativo: false,' in html)
-    ck('e não sobrou `ativo: true`', 'ativo: true,' not in html)
+    ck('o painel está em modo local', re.search(r'ativo:\s*false,', html) is not None)
+    ck('e não sobrou `ativo: true`', re.search(r'ativo:\s*true,', html) is None)
     ck('o service worker não é registrado',
        "if (false) { /* vitrine: sem service worker */" in html)
     ck('a tarja está no arquivo', 'id="vitrine-tarja"' in html)

@@ -205,8 +205,9 @@ def main():
 
     # A conferência que vale: depois de tudo, não pode ter sobrado nada
     # apontando para a API de produção fora de comentário.
-    if re.search(r"api:\s*'https://api\.embarquesuinco\.com\.br'", html) and \
-       not re.search(r'ativo: false,', html):
+    # aspas e espaço livres: o painel publicado sai enxuto (01/10/2026)
+    if re.search(r"""api:\s*['"]https://api\.embarquesuinco\.com\.br['"]""", html) and \
+       not re.search(r'ativo:\s*false,', html):
         erro('a vitrine ficou com o modo servidor ligado.')
 
     SAIDA.parent.mkdir(exist_ok=True)
