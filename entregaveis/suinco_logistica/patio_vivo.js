@@ -247,6 +247,74 @@ function pvMostrarGargalo(g){
   if(el.textContent !== texto){ el.textContent = texto; el.dataset.tom = g ? 'atencao' : 'ok'; }
 }
 
+/* =====================================================================
+   PRÓXIMO A CARREGAR E SAÍDAS PREVISTAS (01/10/2026)
+   ---------------------------------------------------------------------
+   As ideias #4 e #6, com as respostas do dono: "pergunta 1 a pergunta b a".
+
+   #4 — PRÓXIMO A CARREGAR pela SEQUÊNCIA DO DIA (resposta 1-A): entre os
+   caminhões em Aguardando Embarque — os que já chegaram; quem não chegou
+   está em Aguardando Veículo e não entra —, o do dia de programação mais
+   antigo (pvDiaDaFila, a regra de dia da fila do servidor) e, dentro dele,
+   o de menor sequência. Sem sequência não se compara; ninguém com
+   sequência, ninguém marcado. Uma marca só.
+
+   #6 — SAÍDAS PREVISTAS (resposta 2-A): não existe hora prevista de
+   CHEGADA, então a conta é só de quem já está no pátio, pela MESMA
+   pvPrevisaoDeSaida do cartão. Janelas de PV_JANELA_SAIDA_MIN a partir de
+   agora; quem não tem previsão é contado à parte, nunca como zero.
+   ===================================================================== */
+const PV_JANELA_SAIDA_MIN = 60;
+const PV_JANELAS_SAIDA = ['próxima hora', 'de 1 a 2 h', 'de 2 a 3 h'];
+
+function pvProximoACarregar(porEtapa){
+  const i = PV_ETAPAS.findIndex(e => e.status === 'Aguardando Embarque');
+  let melhor = null, diaMelhor = null;
+  (porEtapa[i] || []).forEach(c => {
+    if(c.sequencia === null || c.sequencia === undefined || c.sequencia === '' || !Number.isFinite(Number(c.sequencia))) return;
+    const dia = pvDiaDaFila(c) || '';
+    if(!melhor || dia < diaMelhor || (dia === diaMelhor && ordenarPorSequenciaEAtualizacao(c, melhor) < 0)){
+      melhor = c; diaMelhor = dia;
+    }
+  });
+  return melhor ? melhor.id : null;
+}
+
+function pvSaidasPrevistas(porEtapa, ctx){
+  const janelas = PV_JANELAS_SAIDA.map(() => 0);
+  let depois = 0, semPrevisao = 0, total = 0;
+  const agora = Date.now();
+  PV_ETAPAS_DO_PATIO.forEach(st => {
+    const i = PV_ETAPAS.findIndex(e => e.status === st);
+    (porEtapa[i] || []).forEach(c => {
+      total++;
+      const d = pvPrevisaoDeSaida(c, ctx);
+      if(!d){ semPrevisao++; return; }
+      const k = Math.floor(Math.max(0, d.getTime() - agora) / (PV_JANELA_SAIDA_MIN * 60000));
+      if(k < janelas.length) janelas[k]++; else depois++;
+    });
+  });
+  return { janelas, depois, semPrevisao, total };
+}
+
+function pvTextoDasSaidas(s){
+  if(!s.total) return 'Saídas previstas — nenhum caminhão no pátio agora';
+  if(s.semPrevisao === s.total){
+    return 'Saídas previstas — sem histórico suficiente para prever ' + (s.total === 1 ? 'o 1 no pátio' : 'os ' + s.total + ' no pátio');
+  }
+  const partes = PV_JANELAS_SAIDA.map((rot, k) => rot + ': ' + s.janelas[k]);
+  if(s.depois) partes.push('depois de 3 h: ' + s.depois);
+  if(s.semPrevisao) partes.push('sem previsão: ' + s.semPrevisao);
+  return 'Saídas previstas — ' + partes.join(' · ');
+}
+
+function pvMostrarSaidas(s){
+  const el = document.getElementById('pv-saidas');
+  if(!el) return;
+  const texto = pvTextoDasSaidas(s);
+  if(el.textContent !== texto) el.textContent = texto;
+}
+
 /* A linha de baixo do cartão: o tempo na etapa, ou a fila que passou. */
 function pvNotaDoCartao(c, ctx){
   if(PV_ETAPAS_DO_PATIO.includes(c.status)){
@@ -290,7 +358,7 @@ function pvMontar(){
 function pvCriarCard(c){
   const el = document.createElement('button');
   el.type = 'button'; el.className = 'pv-card'; el.dataset.id = c.id;
-  el.innerHTML = `<span class="pv-rota"></span>`
+  el.innerHTML = `<span class="pv-proximo"></span><span class="pv-rota"></span>`
     + `<svg class="pv-anel" viewBox="0 0 36 36" aria-hidden="true"><circle class="a-fundo" cx="18" cy="18" r="15" pathLength="100"/>`
     + `<circle class="a-prog" cx="18" cy="18" r="15" pathLength="100"/></svg>`
     + `<span class="pv-praca"></span>`
@@ -327,10 +395,15 @@ function pvPreencher(el, c, ctx){
   if(nNota.textContent !== nota.texto) nNota.textContent = nota.texto;
   if(nota.parado) el.dataset.parado = '1'; else delete el.dataset.parado;
   if(nota.passada) el.dataset.passada = String(nota.passada); else delete el.dataset.passada;
+  const proximo = !!ctx && ctx.proximo === c.id;
+  const nProx = el.querySelector('.pv-proximo');
+  const tProx = proximo ? 'próximo a carregar' : '';
+  if(nProx.textContent !== tProx) nProx.textContent = tProx;
+  if(proximo) el.dataset.proximo = '1'; else delete el.dataset.proximo;
   const previsao = ctx ? pvTextoDaPrevisao(pvPrevisaoDeSaida(c, ctx)) : '';
   const nPrev = el.querySelector('.pv-previsao');
   if(nPrev.textContent !== previsao) nPrev.textContent = previsao;
-  el.setAttribute('aria-label', `Carga ${c.numeroCarga || ''}, rota ${rota} ${praca}, ${c.status}, `
+  el.setAttribute('aria-label', (proximo ? 'Próximo a carregar: ' : '') + `Carga ${c.numeroCarga || ''}, rota ${rota} ${praca}, ${c.status}, `
     + (e.min === null ? 'caminhão ainda não chegou' : pvDur(e.min) + ' de pátio')
     + (nota.texto ? ', ' + nota.texto : '')
     + (previsao ? ', ' + previsao : ''));
@@ -369,6 +442,7 @@ function pvSincronizarPista(){
   });
   const vivos = new Set(), novos = [];
   const ctx = { normal: pvNormalDasEtapas(), passadas: pvPassadasNaFila() };
+  ctx.proximo = pvProximoACarregar(porEtapa);
   let parados = 0;
   porEtapa.forEach((lista, i) => {
     /* Dentro da etapa, quem chegou primeiro fica em cima: é quem está
@@ -395,6 +469,7 @@ function pvSincronizarPista(){
     _pv.cols[i].classList.toggle('vazia', !lista.length);
   });
   pvMostrarGargalo(pvGargalo(porEtapa));
+  pvMostrarSaidas(pvSaidasPrevistas(porEtapa, ctx));
   pvFatoSub('pv-k-parado-sub', parados === 0 ? 'nenhum além do normal da etapa'
     : parados + ' além do normal da etapa', parados ? 'atencao' : 'ok');
   const passadas = ctx.passadas.size;

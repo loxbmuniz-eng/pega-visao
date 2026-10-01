@@ -1011,14 +1011,6 @@ function selecionarRankingPeriodo(key){
    acessibilidade do painel (usuário monocular, zoom, alto contraste): uma
    pizza sozinha seria ilegível pra esse público, por isso ela sempre vem
    acompanhada de uma legenda em lista com números explícitos ao lado. */
-function corTextoSobre(corFundo){
-  // Preto ou branco conforme o brilho do fundo, pra garantir contraste de
-  // texto em qualquer cor de barra/fatia (mesmo requisito de acessibilidade).
-  const c = corFundo.replace('#','');
-  const r = parseInt(c.substr(0,2),16), g = parseInt(c.substr(2,2),16), b = parseInt(c.substr(4,2),16);
-  const luminancia = (0.299*r + 0.587*g + 0.114*b);
-  return luminancia > 150 ? '#101625' : '#f2f4f8';
-}
 function prepararCanvas(canvas){
   const dpr = window.devicePixelRatio || 1;
   const cssW = canvas.clientWidth || canvas.parentElement.clientWidth || 400;

@@ -31,10 +31,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # 22 é o que roda no VPS hoje. 20 é o mínimo declarado no
-        # package.json — testar os dois evita descobrir em produção que
-        # alguém usou uma sintaxe que o servidor não entende.
-        node: ['20', '22']
+        # 24 é para onde o VPS vai (01/10/2026); 22 é o que roda nele até o
+        # próximo atualizar, e o mínimo aceito. Testar os dois evita descobrir
+        # em produção que alguém usou algo que uma das versões não entende.
+        node: ['22', '24']
 
     services:
       postgres:
@@ -98,7 +98,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: '22' }
+        with: { node-version: '24' }
       # Só ALTA e CRÍTICA reprovam. Vulnerabilidade baixa em dependência de
       # desenvolvimento não pode travar uma correção de pátio às 6 da manhã.
       - name: npm audit

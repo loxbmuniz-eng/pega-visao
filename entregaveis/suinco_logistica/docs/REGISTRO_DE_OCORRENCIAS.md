@@ -4831,3 +4831,66 @@ restaura", sem prometer apagar nada; a migração vem de `_migrations`.
 **Guarda:** `test_scripts_do_servidor_dizem_a_verdade.py` (estático) —
 reprovou em 4 pontos contra o publicado; também trava a porta de todos os
 scripts do servidor contra a do `instalar.sh`.
+
+## #104 — Duas fmtHora; a que vencia escrevia "21:00" para hora vazia (01/10/2026)
+
+**Como apareceu.** Limpeza de código morto (item 4 da fila de evolução). A
+varredura de "função declarada em dois arquivos" achou `fmtHora` em `data.js`
+e em `app/30_torre.js`. No arquivo único, a de baixo vence em silêncio — e ela
+não tratava o vazio: `fmtHora(null)` virava "21:00" (o zero do relógio, no
+fuso de Brasília). A de `data.js` tratava.
+
+**Por que não apareceu na tela.** Todos os chamadores de hoje conferem a hora
+antes de chamar. Era defeito escondido, esperando o primeiro chamador
+desatento.
+
+**A família.** Uma função, dois lugares — a mesma decisão escrita duas vezes
+diverge.
+
+**A correção.** Uma `fmtHora` só, em `data.js`, que trata vazio e data
+inválida. Junto, 12 funções sem chamador nenhum foram removidas (lista na
+guarda). **Guarda:** `testes/test_sem_codigo_morto.py` — toda função tem quem
+a chame, nenhuma em dois arquivos, e `fmtHora` de vazio/lixo dá "—". Reprovou
+contra o publicado nos três pontos.
+
+**O que a primeira guarda deixou passar (pego antes de publicar).** A conta de
+"quem chama" ignorava `obj.nome` — e, sem querer, também `...nome(c)`, porque
+o espalhamento termina em ponto. `snapshotCarga`, chamada assim em 5 lugares
+(criar carga, chegada, e toda mudança de etapa), entrou na lista de mortas e
+foi removida. Quem pegou foi o gerador da vitrine, que cria carga de
+demonstração: `snapshotCarga is not defined`. Não chegou ao portão. A função
+voltou; a conta passou a tratar `...` como espaço, e a guarda confere a
+própria conta (`...f(x)` é chamada; `obj.f(x)` não). Prova: a conta velha,
+rodada no código de antes da limpeza, lista `snapshotCarga`; a nova, não.
+
+**A família.** Ferramenta de varredura com ponto cego que vira decisão — a
+mesma de "erro engolido que vira conclusão" (F2): o resultado da conta foi
+tratado como verdade sem conferir cada nome contra o código.
+
+## #105 — O painel enxuto tirou os testes do servidor de teste (01/10/2026)
+
+**Como apareceu.** Portão 33, bateria de tela: as suítes isoladas passaram e
+as que falam com o servidor reprovaram TODAS ("admin logado — None", "Não foi
+possível alcançar o servidor"). Nada foi publicado.
+
+**A causa, com evidência.** O painel enxuto (item 1 da fila de evolução)
+passa o `index.html` pelo esbuild, que normaliza as aspas:
+`api: 'https://api.embarquesuinco.com.br'` vira
+`api:"https://api.embarquesuinco.com.br"`. 69 testes apontam o painel para o
+servidor de teste trocando esse texto EXATO; a troca não achou nada, não
+avisou, e o painel do teste continuou mirando a PRODUÇÃO. Daqui a produção
+não responde (`curl` à API pública: sem conexão), então nenhuma requisição
+chegou lá — mas, numa máquina com internet, a bateria tentaria entrar na
+produção com usuário de teste.
+
+**Por que a prova anterior não pegou.** As 12 abas foram comparadas em modo
+local, sem servidor; e a bateria inteira do Node 24 rodou no painel de antes
+do enxuto.
+
+**A família.** Teste que mede um atalho que mudou de forma (causa 2 do
+vermelho) — e troca de texto que falha em silêncio.
+
+**A correção.** O painel enxuto saiu do portão (revertido); o resto da
+publicação segue. Ele só volta com um ajudante ÚNICO nos testes que troca o
+endereço em qualquer formato e REPROVA se não trocou — e nunca mais teste
+mirando a produção por engano. Registrado na fila de evolução, item 1.
