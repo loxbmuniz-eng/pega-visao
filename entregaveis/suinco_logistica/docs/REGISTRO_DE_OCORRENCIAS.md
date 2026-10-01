@@ -4866,3 +4866,31 @@ rodada no código de antes da limpeza, lista `snapshotCarga`; a nova, não.
 **A família.** Ferramenta de varredura com ponto cego que vira decisão — a
 mesma de "erro engolido que vira conclusão" (F2): o resultado da conta foi
 tratado como verdade sem conferir cada nome contra o código.
+
+## #105 — O painel enxuto tirou os testes do servidor de teste (01/10/2026)
+
+**Como apareceu.** Portão 33, bateria de tela: as suítes isoladas passaram e
+as que falam com o servidor reprovaram TODAS ("admin logado — None", "Não foi
+possível alcançar o servidor"). Nada foi publicado.
+
+**A causa, com evidência.** O painel enxuto (item 1 da fila de evolução)
+passa o `index.html` pelo esbuild, que normaliza as aspas:
+`api: 'https://api.embarquesuinco.com.br'` vira
+`api:"https://api.embarquesuinco.com.br"`. 69 testes apontam o painel para o
+servidor de teste trocando esse texto EXATO; a troca não achou nada, não
+avisou, e o painel do teste continuou mirando a PRODUÇÃO. Daqui a produção
+não responde (`curl` à API pública: sem conexão), então nenhuma requisição
+chegou lá — mas, numa máquina com internet, a bateria tentaria entrar na
+produção com usuário de teste.
+
+**Por que a prova anterior não pegou.** As 12 abas foram comparadas em modo
+local, sem servidor; e a bateria inteira do Node 24 rodou no painel de antes
+do enxuto.
+
+**A família.** Teste que mede um atalho que mudou de forma (causa 2 do
+vermelho) — e troca de texto que falha em silêncio.
+
+**A correção.** O painel enxuto saiu do portão (revertido); o resto da
+publicação segue. Ele só volta com um ajudante ÚNICO nos testes que troca o
+endereço em qualquer formato e REPROVA se não trocou — e nunca mais teste
+mirando a produção por engano. Registrado na fila de evolução, item 1.

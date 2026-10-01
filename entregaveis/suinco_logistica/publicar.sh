@@ -105,7 +105,7 @@ python3 build_arquivo_unico.py >/dev/null || falhou "o build falhou."
 cd "$RAIZ"
 DIFERENCA="$(git diff --unified=0 -- '*/index.html' '*/sw.js' \
              | grep -E '^[+-]' | grep -vE '^(\+\+\+|---)' \
-             | grep -vE '^[+-]<script>window\.SUINCO_BUILD = |^[+-]const BUILD = ' || true)"
+             | grep -vE 'SUINCO_BUILD|SUINCO_BUILD_EM|const BUILD =' || true)"
 if [[ -n "$DIFERENCA" ]]; then
   printf '%s\n' "$DIFERENCA" | head -12 | sed 's/^/      /'
   falhou "o index.html/sw.js mudou ao regerar — faltou rodar o build antes de commitar."

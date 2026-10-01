@@ -30,12 +30,12 @@ Nenhum deles altera dado da operação.
 
 ## 3. Propostas, por ordem de valor
 
-Aprovados pelo dono em 01/10/2026 ("12345"): 1, 4 e 7 feitos; 5 levantado (nada movido);
+Aprovados pelo dono em 01/10/2026 ("12345"): 4 e 7 feitos; 1 retirado do portão 33 (#105); 5 levantado (nada movido);
 2 e 3 viraram perguntas, respondidas no mesmo dia ("pergunta 1 a pergunta b a").
 
 | # | Item | Situação | Medido em 01/10 |
 |---|---|---|---|
-| 🟡 1 | **Painel mais leve** — o `index.html` publicado sai sem comentário e sem espaço sobrando (esbuild, versão fixa, nenhum nome trocado); as fontes continuam comentadas | portão 33 | 708 → 379 KB comprimidos (−46%); as 12 abas com o mesmo texto e 0 erro. Trava: `test_painel_enxuto` |
+| ⬜ 1 | **Painel mais leve** — o `index.html` publicado sairia sem comentário e sem espaço (esbuild) | **retirado do portão 33** | 708 → 379 KB medidos. O portão 33 reprovou: o esbuild troca `api: '…'` por `api:"…"`, e 69 testes apontam o painel para o servidor de teste trocando esse texto EXATO — sem a troca, o painel do teste mira a produção (daqui ela nem responde; nada chegou lá). Volta só com um ajudante único nos testes que troca o endereço em qualquer formato e REPROVA se não trocou (#105) |
 | 🟡 4 | **Código morto** — 13 funções sem chamador removidas; `fmtHora` em dois arquivos virou uma só, que trata vazio (#104) | portão 33 | Trava: `test_sem_codigo_morto` |
 | ⬜ 5 | **Arquivo morto da documentação** | levantado, NADA movido | 10 arquivos de `docs/` sem nenhuma citação. Não movi: `AVISOS_NO_CELULAR.md` descreve recurso vivo, e os `.html`/`.pdf` são endereços públicos do site (mover quebra link enviado à TI/diretoria). Mover só com a lista conferida um a um com o dono |
 | 🟡 7 | **Node 24** | portão 33; vale no próximo `atualizar_tudo.sh` | 509/509 testes do servidor e a bateria de tela inteira no Node 24.21.0. CI roda 22 e 24. Trava: `test_servidor_vai_para_node_24` |

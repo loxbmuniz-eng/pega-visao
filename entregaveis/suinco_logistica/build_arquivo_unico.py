@@ -23,7 +23,6 @@ derivada, não a fonte.
 
 import base64
 import datetime
-import gzip
 import json
 import pathlib
 import re
@@ -122,69 +121,6 @@ def carimbar_service_worker(carimbo):
                  f"de funcionar em silêncio — corrija antes de publicar.")
     if novo != texto:
         caminho.write_text(novo, encoding='utf-8')
-
-
-# =====================================================================
-# O ARQUIVO PUBLICADO SAI ENXUTO (01/10/2026)
-# ---------------------------------------------------------------------
-# Pedido do dono, item 1 da fila de evolução: o painel mais leve. Medido:
-# 708 KB comprimidos com os comentários, 379 KB sem — 46% menos para o
-# celular do pátio baixar e o navegador ler.
-#
-# SÓ O index.html MUDA. As fontes (data.js, app/, styles.css…) continuam
-# comentadas — é onde se lê e se mexe. Aqui sai só o que o navegador
-# executa: sem comentário e sem espaço sobrando. Nenhum nome é trocado
-# (`--minify-whitespace` apenas): uma função chamada `tempoDePatioDe` no
-# código continua com esse nome no painel e numa mensagem de erro.
-#
-# POR QUE O ESBUILD E NÃO UM REMOVEDOR DE COMENTÁRIOS EM PYTHON. O primeiro
-# candidato (rjsmin) foi testado contra os casos difíceis do painel e
-# CORTOU um texto entre crases dentro de outro (`${ `...` }`) — que o painel
-# usa às centenas. O esbuild lê o código com um analisador de JavaScript de
-# verdade; acertou os mesmos casos. Versão fixa em ferramentas/package.json.
-#
-# O QUE NÃO É MEXIDO: o carimbo (`window.SUINCO_BUILD`, numa linha própria —
-# o portão compara o build ignorando SÓ essa linha) e a base de frota
-# embutida (é dado, não código).
-# =====================================================================
-FERRAMENTAS = BASE / 'ferramentas'
-ESBUILD = FERRAMENTAS / 'node_modules' / '.bin' / 'esbuild'
-
-
-def esbuild_pronto():
-    if ESBUILD.exists():
-        return
-    print('   instalando a ferramenta do build (esbuild, versão fixa)…')
-    r = subprocess.run(['npm', 'ci', '--no-audit', '--no-fund', '--silent'], cwd=FERRAMENTAS,
-                       capture_output=True, text=True)
-    if r.returncode or not ESBUILD.exists():
-        sys.exit('ERRO: não consegui instalar o esbuild. Rode: cd ferramentas && npm ci\n'
-                 + (r.stderr or r.stdout)[-400:])
-
-
-def enxugar(codigo, carregador):
-    r = subprocess.run([str(ESBUILD), f'--loader={carregador}', '--minify-whitespace',
-                        '--legal-comments=none', '--charset=utf8', '--log-level=error'],
-                       input=codigo, capture_output=True, text=True)
-    if r.returncode:
-        sys.exit(f'ERRO: o esbuild recusou um bloco {carregador} — o código tem erro de sintaxe?\n'
-                 + r.stderr[:800])
-    return r.stdout.rstrip('\n')
-
-
-def enxugar_html(html):
-    esbuild_pronto()
-    def js(m):
-        attrs, corpo = m.group(1), m.group(2)
-        if ('src=' in attrs or ('type=' in attrs and 'javascript' not in attrs)
-                or not corpo.strip()
-                or corpo.lstrip().startswith(('window.SUINCO_BUILD', 'window.FROTA_SEED_CSV'))):
-            return m.group(0)
-        return f'<script{attrs}>{enxugar(corpo, "js")}</script>'
-    def css(m):
-        return f'<style{m.group(1)}>{enxugar(m.group(2), "css")}</style>'
-    html = re.sub(r'<script([^>]*)>(.*?)</script>', js, html, flags=re.S)
-    return re.sub(r'<style([^>]*)>(.*?)</style>', css, html, flags=re.S)
 
 
 def main():
@@ -410,12 +346,9 @@ def main():
     if sobras:
         sys.exit(f'ERRO: ainda há referências a arquivos externos: {sobras}')
 
-    html = enxugar_html(html)
     SAIDA.write_text(html, encoding='utf-8')
     kb = len(html.encode('utf-8')) / 1024
-    kb_gz = len(gzip.compress(html.encode('utf-8'), 9)) / 1024
-    print(f'OK: {SAIDA.name} gerado ({kb:.0f} KB, {kb_gz:.0f} KB comprimido, '
-          f'{len(csv.splitlines()) - 1} placas embutidas)')
+    print(f'OK: {SAIDA.name} gerado ({kb:.0f} KB, {len(csv.splitlines()) - 1} placas embutidas)')
 
 
 if __name__ == '__main__':
