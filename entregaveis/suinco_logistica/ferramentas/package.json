@@ -1,0 +1,9 @@
+{
+  "name": "suinco-painel-ferramentas",
+  "private": true,
+  "description": "Ferramentas do build do painel (só para gerar o index.html; nada daqui vai para a produção).",
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "esbuild": "0.25.12"
+  }
+}

@@ -137,16 +137,17 @@ def main():
     commit = m.group(1).split('·')[-1].strip()
 
     # 1. modo local — sem servidor, sem rede.
-    html, n = re.subn(r'\n(\s*)ativo: true,', r'\n\1ativo: false,', html, count=1)
+    # O painel publicado sai enxuto (01/10/2026): `ativo:true,` sem espaço.
+    html, n = re.subn(r'(api\.embarquesuinco\.com\.br[^}]*?\bativo:\s*)true,', r'\1false,', html, count=1)
     if n != 1:
         erro('não achei `ativo: true` no SP_CONFIG. O painel mudou de forma — '
              'sem esta troca a vitrine falaria com o servidor de produção.')
 
     # 2. o service worker não acompanha a vitrine.
-    alvo = "if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {"
-    if alvo not in html:
+    html, n = re.subn(r"if\s*\(\s*['\"]serviceWorker['\"]\s*in\s*navigator\s*&&\s*location\.protocol\.startsWith\(\s*['\"]http['\"]\s*\)\s*\)\s*\{",
+                      "if (false) { /* vitrine: sem service worker */", html, count=1)
+    if n != 1:
         erro('não achei o registro do service worker para desligar.')
-    html = html.replace(alvo, "if (false) { /* vitrine: sem service worker */", 1)
 
     # 2b. O SOCKET.IO VINHA DO SERVIDOR DE PRODUÇÃO, e foi o teste que pegou.
     #

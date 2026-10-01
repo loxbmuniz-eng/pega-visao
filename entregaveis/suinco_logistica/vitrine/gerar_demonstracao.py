@@ -20,6 +20,7 @@ propósito: a vitrine pode ser compartilhada, e empresa real aparecendo
 """
 import asyncio
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -57,7 +58,8 @@ async def main():
         erros = []
         pg.on('pageerror', lambda e: erros.append(str(e)))
 
-        html = PAINEL.read_text(encoding='utf-8').replace('ativo: true,', 'ativo: false,', 1)
+        html = re.sub(r'(api\.embarquesuinco\.com\.br[^}]*?\bativo:\s*)true,', r'\1false,',
+                      PAINEL.read_text(encoding='utf-8'), count=1)
         url = 'https://vitrine.local/painel'
         await pg.route(url, lambda r: asyncio.ensure_future(
             r.fulfill(status=200, content_type='text/html; charset=utf-8', body=html)))
