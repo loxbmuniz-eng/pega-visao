@@ -70,7 +70,7 @@
   .pv-col:not(.vazia) .pv-col-vazio{ display:none }
 
   /* ---- o cartão do caminhão ---- */
-  .pv-card{ position:relative; display:grid; grid-template-areas:"rota anel" "praca anel" "rod rod" "nota nota" "prev prev";
+  .pv-card{ position:relative; display:grid; grid-template-areas:"prox prox" "rota anel" "praca anel" "rod rod" "nota nota" "prev prev";
     grid-template-columns:1fr auto; text-align:left; width:100%; cursor:pointer;
     background:var(--pv-card); border:1px solid var(--pv-linha); border-radius:10px;
     padding:10px 11px 9px; box-shadow:var(--pv-sombra); color:var(--text); font:inherit;
@@ -95,6 +95,15 @@
   .pv-previsao:empty{ display:none }
   .pv-gargalo{ margin:-4px 0 12px; font-size:14.5px; line-height:1.35; color:var(--text-dim); text-wrap:balance }
   .pv-gargalo:empty{ display:none }
+  /* saídas previstas (#6) e próximo a carregar (#4) — 01/10/2026 */
+  .pv-saidas{ margin:-6px 0 12px; font-size:14px; line-height:1.35; color:var(--text-dim);
+    font-variant-numeric:tabular-nums; text-wrap:balance }
+  .pv-saidas:empty{ display:none }
+  .pv-proximo{ grid-area:prox; justify-self:start; margin-bottom:6px; padding:3px 6px; border-radius:4px;
+    font:600 12.5px/1 var(--pv-cond); letter-spacing:.04em; text-transform:uppercase;
+    color:#101625; background:var(--gold) }  /* o dourado é o mesmo nos dois temas; o texto escuro fica 9:1 */
+  .pv-proximo:empty{ display:none }
+  .pv-card[data-proximo="1"]{ border-color:var(--gold) }
   .pv-gargalo[data-tom="atencao"]{ color:var(--pv-atencao); font-weight:600 }
   .pv-col.gargalo .pv-col-cab h3, .pv-col.gargalo .pv-col-qtd{ color:var(--pv-atencao) }
   .pv-col.gargalo .pv-col-num{ border-color:var(--pv-atencao); color:var(--pv-atencao) }
@@ -198,6 +207,8 @@
     .pv-nota{ font-size:11.5px; margin-top:4px }
     .pv-previsao{ font-size:11.5px }
     .pv-gargalo{ font-size:13.5px; margin:0 0 10px }
+    .pv-saidas{ font-size:13px; margin:-4px 0 10px }
+    .pv-proximo{ font-size:11px; margin-bottom:5px }
     .pv-tempo{ font-size:15.5px }
     .pv-card[data-sla="previsto"] .pv-tempo{ font-size:12px }
     .pv-selo{ font-size:11px; padding:2px 4px }
