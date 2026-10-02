@@ -1068,10 +1068,10 @@ function acoesLinhaMontagemHtml(m, aberta){
   const criar = m.placa
     ? `<button class="btn btn-primary btn-sm mont-btn-criar"
          onclick="event.stopPropagation(); efetivarMontagemUI('${id}')"
-         title="Cria a carga e manda para a Torre de Controle." aria-label="Criar carga">➕<span class="mont-rot">Criar carga</span></button>`
+         title="Cria a carga e manda para a Torre de Controle." aria-label="Criar carga"><svg class="ico ico-btn" aria-hidden="true"><use href="#i-mais"/></svg><span class="mont-rot">Criar carga</span></button>`
     : `<button class="btn btn-sec btn-sm mont-btn-placa"
          onclick="event.stopPropagation(); abrirParaColocarPlacaUI('${id}')"
-         title="A carga so existe com placa cadastrada na Frota. Clique para colocar." aria-label="Colocar placa">🚚<span class="mont-rot">Colocar placa</span></button>`;
+         title="A carga so existe com placa cadastrada na Frota. Clique para colocar." aria-label="Colocar placa"><svg class="ico ico-btn" aria-hidden="true"><use href="#i-caminhao"/></svg><span class="mont-rot">Colocar placa</span></button>`;
   /* EXCLUIR NA PRÓPRIA LINHA — pedido do dono (25/08/2026).
 
      A linha que não vai rodar hoje (rota que não saiu, carga que a
@@ -1194,14 +1194,14 @@ function formMontagemHtml(m){
         <button class="btn btn-sec btn-sm" onclick="alternarLinhaMontagemUI('${id}')">Fechar</button>
         ${m.placa
           ? `<button class="btn btn-primary btn-sm mont-btn-criar" onclick="efetivarMontagemUI('${id}')"
-               title="Cria a carga e manda para a Torre de Controle.">➕ Criar carga</button>`
+               title="Cria a carga e manda para a Torre de Controle."><svg class="ico ico-btn" aria-hidden="true"><use href="#i-mais"/></svg>Criar carga</button>`
           /* Mesmo motivo da linha (ver acoesLinhaMontagemHtml): botao
              desabilitado nega sem ensinar. Aqui o campo da placa esta a
              quatro linhas de distancia, entao o botao leva o cursor ate
              ele em vez de so ficar apagado. */
           : `<button class="btn btn-sec btn-sm mont-btn-placa"
                onclick="abrirParaColocarPlacaUI('${id}')"
-               title="A carga so existe com placa cadastrada na Frota. Clique para colocar.">🚚 Colocar placa</button>`}
+               title="A carga so existe com placa cadastrada na Frota. Clique para colocar."><svg class="ico ico-btn" aria-hidden="true"><use href="#i-caminhao"/></svg>Colocar placa</button>`}
       </div>
     </div>`;
 }
@@ -1229,7 +1229,7 @@ function acoesMontagemHtml(m, trancada){
      para dizer "não" — o defeito que a ocorrência #13 registrou. */
   const criar = m.placa
     ? `<button class="btn btn-primary btn-sm" onclick="efetivarMontagemUI('${id}')"
-         title="Cria a carga e manda para a Torre de Controle.">➕ Criar carga</button>`
+         title="Cria a carga e manda para a Torre de Controle."><svg class="ico ico-btn" aria-hidden="true"><use href="#i-mais"/></svg>Criar carga</button>`
     : '';
   /* Cancelar a linha da Montagem também é destrutivo: a rota deixa de sair
      hoje. Mesmo gesto de segurar do botão de cancelar carga — uma regra de

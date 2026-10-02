@@ -112,7 +112,7 @@ async def main():
         await pg.wait_for_timeout(1800)
         await pg.fill('#dev-operador-cod', '700001')
         await pg.select_option('#dev-rota', '500')
-        await pg.click('button:has-text("➕ Criar checklist")')
+        await pg.click('button:text-is("Criar checklist")')
         await pg.wait_for_timeout(2500)
         d = await pg.evaluate(
             "() => DEVOLUCOES.length ? { id: DEVOLUCOES[0].id } : null")

@@ -13,7 +13,8 @@ e, junto, as fronteiras que ela NÃO pode cruzar:
      caixa alta miúda com barra);
   2. no celular, o título continua sendo o botão do acordeão: alvo ≥ 44px;
   3. `th` nunca em caixa alta, em nenhuma tabela, nas duas larguras;
-  4. o cabeçalho da Torre continua na letra larga (10px condensado não se lê);
+  4. o cabeçalho da Torre se lê: letra larga, ou condensada com 12px ou mais
+     (10px condensado não se lia; mudou em 01/10/2026 com o redesenho);
   5. botão na letra larga, e afunda no toque (scale), não sobe no hover;
   6. "reduzir movimento" desliga a entrada da aba e dos blocos;
   7. a Torre continua com as 12 colunas.
@@ -56,7 +57,7 @@ MEDIR = """(aba) => {
       titCor: cs(tit, 'color'), textoCor: getComputedStyle(document.body).color,
       barra: barra ? barra.display : null, titAltura: r.height,
       thCaixaAlta: ths.filter(t => getComputedStyle(t).textTransform === 'uppercase').length,
-      thTorreFamilia: cs(thTorre, 'fontFamily'),
+      thTorreFamilia: cs(thTorre, 'fontFamily'), thTorreTam: parseFloat(cs(thTorre, 'fontSize') || '0'),
       colunasTorre: document.querySelectorAll('#torre-tabela thead th').length,
       btnFamilia: cs(btn, 'fontFamily'),
       animAba: cs(document.querySelector('.tab-page.active'), 'animationName'),
@@ -82,8 +83,11 @@ async def main():
         ck('título de cartão na cor do texto, não dourado', d['titCor'] == d['textoCor'], f"{d['titCor']} vs {d['textoCor']}")
         ck('a barrinha dourada do título saiu', d['barra'] == 'none', d['barra'])
         ck('nenhum th em caixa alta', d['thCaixaAlta'] == 0, str(d['thCaixaAlta']))
-        ck('cabeçalho da Torre continua na letra larga', not (d['thTorreFamilia'] or '').startswith('"Barlow Condensed"'),
-           d['thTorreFamilia'])
+        # Mudou de propósito em 01/10/2026 (redesenho, "1 b"): o que não se lia
+        # era a condensada a 10px. Agora a regra é: condensada só com 12px ou mais.
+        cond = (d['thTorreFamilia'] or '').startswith('"Barlow Condensed"')
+        ck('cabeçalho da Torre legível: letra larga, ou condensada com 12px ou mais',
+           (not cond) or (d.get('thTorreTam') or 0) >= 12, f"{d['thTorreFamilia']} {d.get('thTorreTam')}px")
         ck('a Torre continua com 12 colunas', d['colunasTorre'] == 12, str(d['colunasTorre']))
         ck('botão na Barlow larga (era Arial: o navegador não passa a letra ao botão)',
            (d['btnFamilia'] or '').startswith('Barlow'), d['btnFamilia'])

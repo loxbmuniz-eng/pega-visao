@@ -31,9 +31,13 @@ O QUE FICOU PROVADO AQUI:
    o defeito que eliminou a Bloomberg (`text-transform:uppercase` em
    `.btn`), que a Etapa 5 explicitamente não usa.
 
-4. `input` da Torre (`.peso-input`) com `border-color` de alfa > 0 nos
-   dois temas — o defeito que eliminou a Stripe (campo de tabela
-   invisível).
+4. `input` da Torre (`.peso-input`) com borda de alfa > 0 nos dois temas
+   — o defeito que eliminou a Stripe (campo de tabela invisível).
+   MUDOU DE PROPÓSITO em 01/10/2026 (redesenho aprovado pelo dono, "1 b"):
+   a célula da Torre parece texto e mostra a borda inteira só com o cursor,
+   o dedo ou o foco; em repouso fica o fio de BAIXO, que diz "dá para
+   mexer". A conferência passou a ser desse fio — continua reprovando campo
+   invisível.
 
 5. `Tab` até o campo Peso da primeira linha da Torre mostra o anel de foco
    dourado (`:focus-visible`, 2.5px, cor `--gold`) — o roubo aprovado da
@@ -330,11 +334,11 @@ async def testar_build(url, rotulo, exigir_hover_barato):
             alfa = await pg.evaluate("""() => {
                 const el = document.querySelector('.peso-input');
                 if(!el) return null;
-                const c = getComputedStyle(el).borderColor;
+                const c = getComputedStyle(el).borderBottomColor;
                 const n = (c.match(/[\\d.]+/g) || []).map(Number);
                 return n.length > 3 ? n[3] : 1;
             }""")
-            ck(f'[{rotulo}] {tema}: .peso-input com borda visível (alfa > 0)',
+            ck(f'[{rotulo}] {tema}: .peso-input com o fio de baixo visível (alfa > 0)',
                alfa is not None and alfa > 0, f'alfa={alfa}')
 
         # ---- 5. foco por TAB DE VERDADE mostra anel dourado

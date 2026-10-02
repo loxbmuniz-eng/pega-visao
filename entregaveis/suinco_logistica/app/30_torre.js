@@ -180,7 +180,7 @@ async function fecharProgramacaoUI(senhaJaInformada){
 function botaoRevisoesHtml(c){
   if(!DB.operador || DB.operador.setor !== 'Administração') return '';
   return `<button class="btn btn-sec btn-sm btn-revisoes" onclick="abrirRevisoesUI('${escJs(c.id)}')"
-            title="Ver alterações desta carga e restaurar uma versão anterior">↩</button>`;
+            title="Ver alterações desta carga e restaurar uma versão anterior"><svg class="ico ico-btn" aria-hidden="true"><use href="#i-desfazer"/></svg></button>`;
 }
 
 async function abrirRevisoesUI(id){
@@ -290,7 +290,7 @@ function botaoOutraCargaHtml(c){
   // placa de novo sem autorização nenhuma — o botão aqui seria ruído.
   if(c.status === 'Seguiu Viagem') return '';
   return `<button class="btn btn-sec btn-sm" onclick="adicionarOutraCargaNaPlacaUI('${escJs(c.id)}')"
-            title="Programar OUTRA carga para este mesmo caminhão — abre a Programação com placa, transportadora, motorista e rota preenchidos.">➕ Outra carga</button>`;
+            title="Programar OUTRA carga para este mesmo caminhão — abre a Programação com placa, transportadora, motorista e rota preenchidos."><svg class="ico ico-btn" aria-hidden="true"><use href="#i-mais"/></svg>Outra carga</button>`;
 }
 
 function botaoCancelarHtml(c){
@@ -708,8 +708,14 @@ function animarContadoresTorre(){
 }
 
 function renderTorre(){
-  const btnFechar = document.getElementById('btn-fechar-programacao-wrap');
-  if(btnFechar) btnFechar.hidden = !podeFecharProgramacao();
+  /* O Fechar (no fim da lista) e o Reorganizar (junto da ação de rotina)
+     moravam no mesmo bloco até 01/10/2026; separados, aparecem pela MESMA
+     conta — uma decisão, dois botões. */
+  const podeFechar = podeFecharProgramacao();
+  ['btn-fechar-programacao-wrap', 'btn-reorganizar-torre-wrap'].forEach(id => {
+    const el = document.getElementById(id);
+    if(el) el.hidden = !podeFechar;
+  });
 
   /* A TORRE MOSTRA CARGA LANÇADA (19/08/2026).
 
@@ -924,7 +930,7 @@ function renderTorre(){
          número no botão é o mesmo número da faixa. */
       + (editavel
         ? ` <button class="btn btn-sec btn-sm no-print" onclick="encerrarProgramacaoAnteriorUI()"
-              title="Fecha estas cargas de dias anteriores (leva cada uma a Seguiu Viagem, com motivo registrado) para a Torre ficar só com a programação de hoje.">🧹 Encerrar as ${antigasNaLista}</button>`
+              title="Fecha estas cargas de dias anteriores (leva cada uma a Seguiu Viagem, com motivo registrado) para a Torre ficar só com a programação de hoje."><svg class="ico ico-btn" aria-hidden="true"><use href="#i-limpar"/></svg>Encerrar as ${antigasNaLista}</button>`
         : '')
       + `</td></tr>`
     : '';
@@ -1040,7 +1046,7 @@ function linhaFilaHtml(c, lista, arrastavel){
       <td onclick="event.stopPropagation()">${praOndeSelectHtml(c)}</td>
       <td class="no-print gap8" onclick="event.stopPropagation()">
         <button class="btn btn-sec btn-sm" onclick="adicionarOutraCargaNaPlacaUI('${id}')"
-                title="Programar OUTRA carga para este mesmo caminhão — o formulário já vem com placa, transportadora, motorista e rota preenchidos.">➕ Outra carga</button>
+                title="Programar OUTRA carga para este mesmo caminhão — o formulário já vem com placa, transportadora, motorista e rota preenchidos."><svg class="ico ico-btn" aria-hidden="true"><use href="#i-mais"/></svg>Outra carga</button>
         <button class="btn btn-danger btn-sm" onclick="excluirCargaUI('${id}')">Excluir</button>
         <span class="mont-seta${aberta ? ' aberta' : ''}" aria-hidden="true">▸</span>
       </td>

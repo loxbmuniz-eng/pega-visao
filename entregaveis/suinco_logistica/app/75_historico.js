@@ -159,14 +159,14 @@ function painelAdminDaCargaHtml(c){
           ${STATUS_FLOW.map(st=>`<option value="${esc(st)}" ${st===c.status?'selected':''}>${esc(st)}</option>`).join('')}
         </select>
         <input type="text" id="adm-etapa-motivo-${esc(c.id)}" placeholder="Motivo da correção de etapa">
-        <button class="btn btn-sec btn-sm" onclick="corrigirEtapaCargaUI('${escJs(c.id)}')">↩ Aplicar etapa</button>
+        <button class="btn btn-sec btn-sm" onclick="corrigirEtapaCargaUI('${escJs(c.id)}')"><svg class="ico ico-btn" aria-hidden="true"><use href="#i-desfazer"/></svg>Aplicar etapa</button>
       </div>
 
       <div class="admin-carga-linha">
         <label>Data da programação</label>
         <input type="date" id="adm-data-${esc(c.id)}" value="${esc(dia)}">
         <input type="text" id="adm-data-motivo-${esc(c.id)}" placeholder="Motivo da correção de data">
-        <button class="btn btn-sec btn-sm" onclick="corrigirDataProgramacaoUI('${escJs(c.id)}')">📅 Aplicar data</button>
+        <button class="btn btn-sec btn-sm" onclick="corrigirDataProgramacaoUI('${escJs(c.id)}')"><svg class="ico ico-btn" aria-hidden="true"><use href="#i-calendario"/></svg>Aplicar data</button>
       </div>
     </div>`;
 }
@@ -498,7 +498,7 @@ async function carregarCargasExcluidasUI(){
             <td>${esc(c.destino||'—')}</td>
             <td>${esc(diaDaProgramacao(c).split('-').reverse().join('/'))}</td>
             <td class="no-print"><button class="btn btn-sec btn-sm"
-              onclick="devolverCargaExcluidaUI('${escJs(c.id)}')">↩ Devolver</button></td>
+              onclick="devolverCargaExcluidaUI('${escJs(c.id)}')"><svg class="ico ico-btn" aria-hidden="true"><use href="#i-desfazer"/></svg>Devolver</button></td>
           </tr>`).join('')}</tbody>
       </table>
     </div>`;

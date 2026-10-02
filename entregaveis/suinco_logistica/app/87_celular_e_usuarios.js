@@ -117,15 +117,15 @@ async function renderUsuarios(){
       <td>${acesso}</td>
       <td class="no-print">
         <div class="gap8">
-          <button class="btn btn-sec btn-sm" onclick="redefinirSenhaUsuarioUI('${escJs(u.id)}')">🔑 Senha</button>
+          <button class="btn btn-sec btn-sm" onclick="redefinirSenhaUsuarioUI('${escJs(u.id)}')"><svg class="ico ico-btn" aria-hidden="true"><use href="#i-chave"/></svg>Senha</button>
           ${sou ? '' : `<button class="btn btn-sec btn-sm" onclick="resetarMfaDeUI('${escJs(u.id)}','${escJs(u.nome)}')"
-              title="Remove o segundo fator de quem perdeu o celular — fica registrado e avisa os outros administradores">📵 2º fator</button>`}
+              title="Remove o segundo fator de quem perdeu o celular — fica registrado e avisa os outros administradores"><svg class="ico ico-btn" aria-hidden="true"><use href="#i-sem-celular"/></svg>2º fator</button>`}
           ${u.ativo
-            ? `<button class="btn btn-danger btn-sm" onclick="bloquearUsuarioUI('${escJs(u.id)}', false)" ${sou?'disabled title="Você não pode bloquear a si mesmo"':''}>🚫 Bloquear</button>`
-            : `<button class="btn btn-success btn-sm" onclick="bloquearUsuarioUI('${escJs(u.id)}', true)">✅ Reativar</button>`}
+            ? `<button class="btn btn-danger btn-sm" onclick="bloquearUsuarioUI('${escJs(u.id)}', false)" ${sou?'disabled title="Você não pode bloquear a si mesmo"':''}><svg class="ico ico-btn" aria-hidden="true"><use href="#i-proibido"/></svg>Bloquear</button>`
+            : `<button class="btn btn-success btn-sm" onclick="bloquearUsuarioUI('${escJs(u.id)}', true)"><svg class="ico ico-btn" aria-hidden="true"><use href="#i-ok"/></svg>Reativar</button>`}
           ${sou ? '' : `<button class="btn btn-danger btn-sm btn-excluir-usuario"
               onclick="excluirUsuarioUI('${escJs(u.id)}')"
-              title="Apaga a conta de vez. O histórico do que a pessoa registrou continua.">🗑️ Excluir</button>`}
+              title="Apaga a conta de vez. O histórico do que a pessoa registrou continua."><svg class="ico ico-btn" aria-hidden="true"><use href="#i-lixeira"/></svg>Excluir</button>`}
         </div>
       </td>
     </tr>`;
