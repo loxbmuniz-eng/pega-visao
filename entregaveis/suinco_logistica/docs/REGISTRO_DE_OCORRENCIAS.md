@@ -4927,3 +4927,28 @@ Aguardando Embarque a Faturado; último ponto do gráfico = topo; as entradas se
 carga aparecem; "parados há mais de 3 horas" só do quadro. Reprovou contra o
 publicado (topo 5, quadro 2). `test_patio_vivo_grafico_so_patio` atualizado à
 regra nova.
+
+## #107 — Programação: o campo vazio sumia na tela (02/10/2026)
+
+**Como apareceu.** No dia em que o redesenho subiu (398f61f), o dono: "na
+programação o contraste e margem dos campos não preenchidos a serem editados,
+como motorista, placa, tá aparecendo meio apagado", "meio translúcido".
+
+**A causa, medida.** O redesenho (`tema2027/90_hierarquia.css`, seção 6) deu à
+célula da Torre o visual de leitura — fundo transparente, borda só embaixo — e
+estendeu o mesmo visual à Montagem da Programação. A borda que sobrou era
+translúcida (alfa 0,28 no escuro, 0,22 no claro). Na Torre isso serve: é
+leitura com edição de passagem. Na Programação é onde se digita, e o campo
+vazio desaparecia.
+
+**A família.** O tema que apaga o que a operação precisa ver. E uma lição
+sobre a guarda do redesenho: `test_tema2027_etapa5_acoes` passou a conferir só
+a borda de baixo, porque a regra mudou de propósito na Torre — e a mudança
+vazou para a Programação sem nenhum teste olhar ali.
+
+**A correção.** A Torre continua com a célula que parece texto. Na Programação,
+todo campo de digitar tem borda nos quatro lados (#6b7aa3 no escuro, #5b6680 no
+claro) e fundo sólido, com contraste de 3:1 ou mais contra o campo e contra o
+cartão. **Guarda:** `testes/test_programacao_campos_visiveis.py` — todos os
+campos visíveis da aba (31 na base de demonstração), nos dois temas; e a Torre
+sem borda em cima. Reprovou contra o publicado (bordas alfa 0,28/0,22).

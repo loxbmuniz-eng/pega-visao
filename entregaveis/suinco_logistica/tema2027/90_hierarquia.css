@@ -226,16 +226,27 @@
      6. A CÉLULA DA TORRE PARECE TEXTO — e continua campo
      Repouso: sem caixa, só um fio embaixo dizendo "dá para mexer".
      Cursor ou dedo em cima: a borda aparece. Foco: anel dourado.
+     SÓ NA TORRE (02/10/2026). Na Programação o dono reclamou no mesmo dia:
+     "o contraste e margem dos campos não preenchidos (...) tá meio apagado
+     (...) meio translúcido (...) precisa estar bem destacado a margem de
+     cada campo". Lá é onde se DIGITA: o campo vazio tem de ser caixa.
      --------------------------------------------------------------- */
-  #torre-tabela > tbody > tr > td :is(input, select),
-  #mont-tabela > tbody > tr > td :is(input, select){
+  #torre-tabela > tbody > tr > td :is(input, select){
     background-color:transparent; border-color:transparent;
     border-bottom-color:var(--border); box-shadow:none }
-  #torre-tabela > tbody > tr:hover > td :is(input, select),
-  #mont-tabela > tbody > tr:hover > td :is(input, select){ border-color:var(--border) }
-  #torre-tabela > tbody > tr > td :is(input, select):focus,
-  #mont-tabela > tbody > tr > td :is(input, select):focus{
+  #torre-tabela > tbody > tr:hover > td :is(input, select){ border-color:var(--border) }
+  #torre-tabela > tbody > tr > td :is(input, select):focus{
     border-color:var(--gold); background-color:var(--campo-bg, transparent) }
+
+  /* PROGRAMAÇÃO: o campo é caixa sólida, com borda nos quatro lados de
+     contraste 3:1 ou mais (o mínimo para a borda de um campo), contra o
+     cartão e contra o próprio campo, nos dois temas — medido. */
+  :root{ --campo-borda:#6b7aa3 }
+  :root[data-tema="claro"]{ --campo-borda:#5b6680 }
+  #tab-programacao :is(input:not([type=checkbox]):not([type=radio]), select, textarea){
+    background-color:var(--campo-bg); border:1px solid var(--campo-borda); box-shadow:none }
+  #tab-programacao :is(input, select, textarea):focus{ border-color:var(--gold) }
+
   /* a placa é a identidade da linha: maior e mais forte que o resto */
   #torre-tabela .cel-veiculo input, #mont-tabela .cel-veiculo input{
     font-size:var(--hq-forte); font-weight:700; letter-spacing:.04em }
