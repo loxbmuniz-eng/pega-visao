@@ -63,6 +63,12 @@ jobs:
       ORIGENS_PERMITIDAS: https://embarquesuinco.com.br,https://www.embarquesuinco.com.br
       RATE_LIMIT: '300'
       RATE_LIMIT_LOGIN: '30'
+      # Os dois abaixo faltavam e derrubavam 13 testes (BI respondendo 503
+      # "não configurado"; fechamento recusando "senha não configurada").
+      # São valores DE TESTE, como o JWT_SECRET acima: o token é o mesmo que
+      # o api.test.js usa, e nenhum dos dois vale em lugar nenhum de verdade.
+      BI_TOKEN: token-de-teste-do-bi
+      SENHA_FECHAMENTO: senha-de-fechamento-so-do-ci
 
     defaults:
       run:
