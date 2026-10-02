@@ -45,7 +45,7 @@ jobs:
           POSTGRES_DB: embarque_suinco
         ports: ['5432:5432']
         options: >-
-          --health-cmd "pg_isready -U suinco"
+          --health-cmd "pg_isready -U suinco -d embarque_suinco"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
@@ -85,6 +85,20 @@ jobs:
 
       - name: Aplicar as migrações
         run: npm run migrar
+
+      # A BATERIA NUNCA PASSOU AQUI até 02/10/2026 — 412 rodadas vermelhas
+      # desde 26/08, e ninguém viu, porque o portão (publicar.sh) roda num
+      # banco que JÁ TEM rotas e frota. Num banco recém-migrado, a carga de
+      # teste na rota 500 batia na chave estrangeira de dim_rotas (46 falhas,
+      # 141 canceladas). O servidor de verdade carrega esses dados no
+      # instalar.sh com o seed.js; aqui faz o mesmo, pelo mesmo script.
+      - name: Carregar rotas e frota (o mesmo seed do instalar.sh)
+        run: node scripts/seed.js
+
+      # Os 6 testes de PDF precisam de um Chromium — no servidor ele vem
+      # pelo PLAYWRIGHT_CHROMIUM_PATH; aqui, o do próprio Playwright.
+      - name: Instalar o Chromium dos relatórios em PDF
+        run: npx playwright install --with-deps chromium
 
       - name: Rodar a bateria da API
         run: npm run teste
