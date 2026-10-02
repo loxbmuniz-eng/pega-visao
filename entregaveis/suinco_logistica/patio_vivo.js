@@ -523,6 +523,10 @@ function pvFatos(){
   pon('pv-k-media', media === null ? '—' : pvDur(media));
   pon('pv-k-saiu', String(saidas.length));
   pon('pv-k-prog', String(programadas));
+  const semCarga = DB.cargas.filter(c => c.aguardandoCarga && c.status !== 'Seguiu Viagem').length;
+  pvFatoSub('pv-k-sem-carga', semCarga === 0 ? ''
+    : (semCarga === 1 ? '+ 1 entrada sem carga, fora da conta' : '+ ' + semCarga + ' entradas sem carga, fora da conta')
+      + ' — resolver na Programação', 'atencao');
   const sub = document.getElementById('pv-k-patio-sub');
   if(sub){
     const t = acima ? (acima === 1 ? '1 parado há mais de 3 horas' : acima + ' parados há mais de 3 horas') : 'nenhum parado há mais de 3 horas';
@@ -544,9 +548,18 @@ function pvFatos(){
    Agora: a etapa da carga NAQUELE instante, pela trilha de movimentações —
    no pátio é Aguardando Embarque até Faturado (PV_ETAPAS_DO_PATIO). Depois
    da última movimentação vale a etapa atual da carga, que é a que o topo
-   conta. A chegada sem programação (aguardandoCarga) nasce no pátio, no
-   instante em que foi registrada. */
+   conta.
+
+   ENTRADA SEM CARGA FICA FORA (02/10/2026). Relato do dono, com print: o
+   topo dizia 10 e o quadro mostrava 1 — "já apontei o erro uma vez e você
+   não arrumou", "e no gráfico também". A regra de 30/09 fazia a chegada sem
+   programação (aguardandoCarga) "nascer no pátio"; o quadro não a mostra e
+   a Torre a conta à parte ("Entradas sem carga — resolver na Programação").
+   Agora o topo e o gráfico contam o que o quadro mostra, e as entradas sem
+   carga aparecem contadas à parte no topo (pvFatos) — fora da conta, não
+   escondidas. */
 function pvNoPatioEm(c, instante){
+  if(c.aguardandoCarga) return false;
   const t = instante.getTime();
   const h = historicoDaCarga(c.id);
   let ultima = null;
@@ -554,16 +567,11 @@ function pvNoPatioEm(c, instante){
   // no instante do último carimbo vale a etapa dele; só DEPOIS vale a etapa atual
   const depoisDaUltima = !h.length || (ultima && ultima === h[h.length - 1] && Date.parse(ultima.timestamp) < t);
   if(depoisDaUltima){
-    if(!h.length){
-      const nasceu = Date.parse(c.criadoEm || '');
-      if(!(c.aguardandoCarga && Number.isFinite(nasceu) && nasceu <= t)) return false;
-    }
+    if(!h.length) return false;   // sem nenhum carimbo, nunca entrou
     return PV_ETAPAS_DO_PATIO.includes(c.status);
   }
   if(ultima) return PV_ETAPAS_DO_PATIO.includes(ultima.statusNovo);
-  // antes da primeira movimentação: só a chegada sem programação já estava lá
-  const nasceu = Date.parse(c.criadoEm || '');
-  return !!c.aguardandoCarga && Number.isFinite(nasceu) && nasceu <= t;
+  return false;                    // antes da primeira movimentação
 }
 
 /* O pátio ao longo do dia: quantos caminhões estavam no pátio em cada hora
