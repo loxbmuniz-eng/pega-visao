@@ -61,9 +61,10 @@
      (test_tema2027_etapa4_tabelas). A condensada a 12 px cabe na largura
      calibrada e se lê — o que não se lia era a condensada a 10 px. */
   #torre-tabela > thead > tr > th, #mont-tabela > thead > tr > th, #fila-tabela > thead > tr > th{
-    font-size:var(--hq-meta); font-family:var(--sf-cond, inherit); font-weight:600; letter-spacing:.01em }
+    font-size:var(--hq-meta); font-family:var(--sf-cond, inherit); font-weight:600; letter-spacing:.01em;
+    line-height:1 }  /* 12 px × 1 cabe na altura que 10 px × 1,15 ocupava */
   @media (min-width:821px){
-    #torre-tabela > thead > tr > th{ font-size:var(--hq-meta); font-family:var(--sf-cond, inherit) }
+    #torre-tabela > thead > tr > th{ font-size:var(--hq-meta); font-family:var(--sf-cond, inherit); line-height:1 }
     #torre-tabela > tbody > tr > td:nth-child(12) .btn{ font-size:var(--hq-meta) }
     #torre-tabela .btn{ font-size:var(--hq-meta) }
   }
@@ -84,9 +85,24 @@
   .form-group .hint, .form-group label .hint{ font-size:var(--hq-meta) }
   .cel-veiculo .veic-tipo, .cel-veiculo .veic-transp, .cel-datas .dt-atu, .cel-datas .dt-quem,
   #torre-tabela small, #tab-programacao .col-identificacao > span{ font-size:var(--hq-meta) }
+  /* Entrelinha 1,15 nas linhas pequenas da célula (transportadora, tipo,
+     datas): a letra sobe para 12 px e a linha da tabela não cresce
+     (medido na Fila: +5,6 px sem isto; test_tema2027_etapa4_tabelas). */
+  .col-identificacao > span, .cel-veiculo .veic-transp,
+  .cel-datas .dt-atu, .cel-datas .dt-quem{ line-height:1.15 }
+  .cel-veiculo .veic-tipo{ line-height:1.1 }
+  /* "1 de 2" (mesma placa, mais de uma carga) estava a 10 px. */
+  .marca-multi{ font-size:var(--hq-meta); line-height:1.1; padding:0 6px }
+  /* A situação do caminhão quando a placa tem mais de uma carga aberta
+     ("relato real de produção, não pode sumir") estava a 10 px na tabela e
+     11 px no cartão do celular. */
+  .sit-placa{ font-size:var(--hq-meta); line-height:1.25 }
+  @media (max-width:820px){
+    .table-wrap table.mobile-cartao .sit-placa{ font-size:var(--hq-meta); line-height:1.25 }
+  }
   .bento.bi-faixa .stat-note, .bento .stat-destaque .stat-label{ font-size:var(--hq-meta) }
   .tab-page .hist-linha > td{ font-size:12.5px }
-  .hist-campo dt, .hist-campo code, .vp-chip, #rotas-tbody .rota-chip-rep{ font-size:var(--hq-meta) }
+  .hist-campo dt, .hist-campo code, .vp-chip, #rotas-tbody .rota-chip-rep, .chip-dia-prog{ font-size:var(--hq-meta) }
   #torre-tbody .badge:is(.badge-aguardando-veiculo, .badge-aguardando-embarque, .badge-embarque-iniciado,
             .badge-embarque-finalizado, .badge-faturado, .badge-seguiu-viagem),
   .tab-page .badge:is(.badge-aguardando-veiculo, .badge-aguardando-embarque, .badge-embarque-iniciado,
@@ -126,8 +142,8 @@
      3. MOLDURA SÓ ONDE SEPARA
      --------------------------------------------------------------- */
   .card{ box-shadow:none }
-  .card .bento.bi-faixa, .card .grafico-box, .card .quick-box{
-    box-shadow:none; background:transparent }
+  .card .bento.bi-faixa{ box-shadow:none }   /* o fundo da faixa fica: é o do cartão, e o contraste do alerta é medido contra ele */
+  .card .grafico-box, .card .quick-box{ box-shadow:none; background:transparent }
   .card .grafico-box{ border:0; padding-inline:0 }
   .card .quick-box{ border:0; padding:0 }
 
@@ -138,7 +154,7 @@
      fino entre um e outro. O número-herói fica maior; zero continua no
      lugar, apagado (a decisão mora em renderTorre, .stat-zerada).
      --------------------------------------------------------------- */
-  .bento.bi-faixa{ border:0; border-radius:0; background:transparent; box-shadow:none;
+  .bento.bi-faixa{ border:0; border-radius:0; background:var(--vidro-bg); box-shadow:none;
     border-block:1px solid var(--border-soft) }
   .bento.bi-faixa .stat-box{ background:transparent; box-shadow:none; border:0; border-radius:0;
     border-left:1px solid var(--border-soft) }
@@ -150,7 +166,10 @@
     background:var(--st-cor); margin-right:6px; vertical-align:0 }
   .bento.bi-faixa .stat-num{ font-family:var(--sf-cond, inherit); font-variant-numeric:tabular-nums }
   .bento.bi-faixa .stat-destaque{ background:transparent }
-  .bento.bi-faixa .stat-alerta{ background:transparent }
+  /* A caixa de alerta guarda o fundo próprio (o mesmo do cartão): sem ele o
+     vermelho do número era medido contra o fundo errado e caía a 2,87:1 no
+     tema claro (test_faixa_indicadores_bi). */
+  .bento.bi-faixa .stat-alerta{ background:var(--vidro-bg) }
   /* filtro ligado: um traço dourado embaixo, não uma caixa em volta */
   .bento.bi-faixa .stat-ativo{ background:var(--acento-hover); box-shadow:inset 0 -3px 0 var(--gold) }
   .bento.bi-faixa .stat-clicavel:hover{ background:var(--acento-hover) }
@@ -188,6 +207,9 @@
   .badge-aguardando-embarque{ --b:var(--st-aguardando-embarque-bg); --bt:var(--st-aguardando-embarque-txt) }
   .badge-embarque-iniciado{ --b:var(--st-embarque-iniciado-bg); --bt:var(--st-embarque-iniciado-txt) }
   .badge-embarque-finalizado{ --b:var(--st-embarque-finalizado-bg); --bt:var(--st-embarque-finalizado-txt) }
+  /* No tema claro, sem a pílula, o verde do texto fica sobre o fundo da
+     linha: 4,26:1 medido (test_contraste). Um tom mais escuro passa de 4,5. */
+  :root[data-tema="claro"] .badge-embarque-finalizado{ --bt:#17633a }
   .badge-faturado{ --b:var(--st-faturado-bg); --bt:var(--st-faturado-txt) }
   .badge-seguiu-viagem{ --b:var(--st-seguiu-viagem-bg); --bt:var(--st-seguiu-viagem-txt) }
   .badge:is(.badge-aguardando-veiculo, .badge-aguardando-embarque, .badge-embarque-iniciado,
@@ -274,7 +296,9 @@
 /* O ÍCONE DO BOTÃO — traço do sprite no lugar do emoji (item 9 da
    auditoria). Mesmo tamanho do texto, colado nele. */
 @media screen{
-  .ico.ico-btn{ width:1.15em; height:1.15em; vertical-align:-.2em; margin-right:.35em; stroke-width:2 }
+  /* 1em de altura, alinhado por dentro da linha do texto: o ícone não pode
+     empurrar a altura do botão (medido: 1,15em/-0,2em crescia 1,4 px). */
+  .ico.ico-btn{ width:1em; height:1em; vertical-align:-.14em; margin-right:.35em; stroke-width:2 }
   #btn-menu .ico.ico-btn, .badge-conexao .ico.ico-btn{ margin-right:0 }
   #btn-menu .ico.ico-btn{ width:22px; height:22px }
 }

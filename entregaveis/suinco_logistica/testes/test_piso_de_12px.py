@@ -44,6 +44,10 @@ def ck(nome, ok, detalhe=''):
 SEMEAR = """(demo) => {
   ['cargas','movimentacoes','frota','transportadoras','rotasExtras','alteracoes'].forEach(k => {
     if(demo[k] !== undefined) DB[k] = demo[k]; });
+  /* Casos que a demonstração não tem e que têm letra própria: a mesma placa
+     com duas cargas (chip "1 de 2"). Sem isto a régua não vê o chip. */
+  const base = (DB.cargas || []).find(c => c.status !== 'Seguiu Viagem' && c.placa);
+  if(base) DB.cargas.push(Object.assign({}, base, { id: base.id + '-dupla', numeroCarga: '900999', sequencia: 99 }));
   DB.operador = {nome:'Teste', setor:'Administração'};
   document.getElementById('modal-operador')?.classList.remove('open');
   if(typeof invalidarIndiceMovimentacoes === 'function') invalidarIndiceMovimentacoes();
