@@ -151,9 +151,14 @@ em `docs/ALERTA_DE_QUEDA.md` — cadastro no serviço externo, o que preencher,
 a configuração por palavra-chave que pega "banco caiu mas o site abriu", e o
 teste de parar o serviço de propósito uma vez para ver o alarme tocar.
 
-**Falta o Luis fazer o cadastro e o teste.** Enquanto isso não acontecer,
-continua valendo o de sempre: a gente descobre que caiu quando alguém do
-pátio avisa.
+**Situação em 02/10/2026.** O dono informou em 30/09 que o alerta no celular
+está configurado e testado (não conferido daqui). Como segunda linha, em
+outra infraestrutura, entrou o **vigia de fora** no GitHub
+(`.github/workflows/vigia.yml`): a cada 30 minutos confere o site e o
+`/health`, e a cada publicação confere que o build publicado é o que está no
+ar — reprovou, o GitHub manda e-mail ao dono do repositório. Dentro do
+servidor, o vigia de travamento (`scripts/vigia_servidor.mjs`) reinicia o
+processo que trava sem morrer e avisa a Administração no celular.
 
 ### R3. Pacotes atrasados
 

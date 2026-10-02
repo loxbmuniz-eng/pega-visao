@@ -69,12 +69,77 @@ function prepararTabelasMobile(raiz){
    Toda a validação de verdade está no servidor (rotas/operadores.js). Aqui
    é conveniência: a tela não decide nada que o servidor não confirme. */
 
+/* =====================================================================
+   VIGIAS DO SISTEMA (02/10/2026) — só Administração
+   =====================================================================
+   Pedido do dono: "no raio-X, tudo que fala 'se quebrar', você vai criar
+   uma prevenção de quebra pra cada possibilidade apontada".
+
+   Mostra o que o servidor conferiu sozinho (backend/scripts/
+   vigia_servidor.mjs) e a conferência do dado, rodada na hora em que a
+   caixa abre. A tela não decide nada: só mostra o que o servidor viu,
+   com a hora em que viu. Servidor que ainda não tem os vigias responde 404
+   — a caixa diz isso em vez de ficar vazia, para ninguém achar que vazio
+   é "tudo certo". */
+async function renderVigias(){
+  const card = document.getElementById('card-vigias');
+  const alvo = document.getElementById('vigias-painel');
+  if(!card || !alvo) return;
+  const admin = !!(DB.operador && DB.operador.setor === 'Administração');
+  card.hidden = !admin;
+  if(!admin) return;
+  if(typeof SuincoSharePoint === 'undefined' || !SuincoSharePoint.estaConfigurado()){
+    alvo.innerHTML = '<div class="text-dim">Os vigias moram no servidor — entre com seu usuário para ver.</div>';
+    return;
+  }
+  let r;
+  try{
+    r = await SuincoSharePoint.vigia();
+  }catch(e){
+    alvo.innerHTML = '<div class="text-dim">' + (e.status === 404
+      ? 'O servidor ainda não tem os vigias — eles começam a valer na próxima atualização do servidor.'
+      : 'Não consegui ler os vigias: ' + esc(e.message)) + '</div>';
+    return;
+  }
+  const quando = iso => iso ? fmtDataHora(iso) : '—';
+  const item = (ok, nome, detalhe, rodape) =>
+    `<li class="vigia-item ${ok ? 'vigia-ok' : 'vigia-problema'}">
+       <span class="vigia-nome">${esc(nome)} <span class="vigia-estado">${ok ? 'ok' : 'com problema'}</span></span>
+       <span class="vigia-detalhe">${detalhe}</span>
+       ${rodape ? `<span class="vigia-quando">${rodape}</span>` : ''}
+     </li>`;
+
+  let servidor;
+  if(r.semTabela){
+    servidor = '<div class="text-dim">O servidor tem os vigias mas ainda não aplicou a migração 057 — as conferências não têm onde ser anotadas.</div>';
+  }else if(!r.verificacoes.length){
+    servidor = '<div class="text-dim">Os vigias ainda não rodaram neste servidor. A primeira conferência acontece na próxima atualização dele.</div>';
+  }else{
+    servidor = '<ul class="vigia-lista">' + r.verificacoes.map(v => item(v.ok, v.nome, esc(v.detalhe),
+      'conferido em ' + quando(v.conferidoEm) + (v.ok || !v.problemaDesde ? '' : ' · com problema desde ' + quando(v.problemaDesde))
+    )).join('') + '</ul>';
+  }
+
+  const dado = '<ul class="vigia-lista">' + (r.dado || []).map(a => {
+    const ok = a.quantidade === 0;
+    const exemplos = ok ? '' : '<ul class="vigia-exemplos">' + a.exemplos.map(x =>
+      `<li>Carga <strong>${esc(x.carga || '—')}</strong> · ${esc(x.placa || 'sem placa')}${x.detalhe ? ' — ' + esc(x.detalhe) : ''}</li>`
+    ).join('') + (a.quantidade > a.exemplos.length ? `<li class="text-dim">e mais ${a.quantidade - a.exemplos.length}</li>` : '') + '</ul>';
+    return item(ok, a.titulo, ok ? 'nenhuma nos últimos 30 dias' : `${a.quantidade} carga(s). ${esc(a.explicacao)}${exemplos}`, '');
+  }).join('') + '</ul>';
+
+  alvo.innerHTML =
+    '<div class="vigia-bloco"><div class="vigia-titulo">O servidor</div>' + servidor + '</div>'
+    + '<div class="vigia-bloco"><div class="vigia-titulo">O dado gravado <span class="text-dim">— conferido agora, ' + quando(r.agora) + '</span></div>' + dado + '</div>';
+}
+
 let _usuarios = [];
 
 async function renderUsuarios(){
   const tbody = document.getElementById('usr-tbody');
   const vazio = document.getElementById('usr-empty');
   if(!tbody) return;
+  renderVigias();
 
   if(typeof SuincoSharePoint === 'undefined' || !SuincoSharePoint.estaConfigurado()){
     tbody.innerHTML = '';

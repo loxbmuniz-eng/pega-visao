@@ -1,0 +1,82 @@
+# =====================================================================
+# O VIGIA DE FORA — o painel e o servidor, vistos de fora do servidor
+# ---------------------------------------------------------------------
+# Pedido do dono (02/10/2026): "no raio-X, tudo que fala 'se quebrar', você
+# vai criar uma prevenção de quebra pra cada possibilidade apontada".
+#
+# Dois trabalhos, o mesmo script (backend/scripts/vigia_externo.mjs):
+#
+#   publicado — a cada publicação (push na branch de entrega): espera o
+#               embarquesuinco.com.br servir o build que acabou de ser
+#               publicado e abre a tela num navegador de verdade. Até aqui,
+#               quem conferia o Vercel depois do portão era uma pessoa.
+#
+#   no-ar     — a cada 30 minutos: o site responde e é o painel; o /health
+#               do servidor responde ok com o banco conectado.
+#
+# QUANDO REPROVA, o GitHub manda e-mail para a conta dona do repositório.
+# Não substitui o alerta de queda no celular (docs/ALERTA_DE_QUEDA.md) — é
+# a segunda linha, em outra infraestrutura.
+#
+# LIMITES DO GITHUB, escritos para ninguém descobrir do pior jeito:
+#   · o agendado roda só na branch padrão (a de entrega) e pode atrasar
+#     alguns minutos em horário de pico do GitHub;
+#   · o GitHub DESLIGA agendamento de repositório sem nenhum commit há 60
+#     dias, e avisa por e-mail antes. Repositório com publicação toda semana
+#     não chega perto — mas se o painel ficar parado dois meses, reativar em
+#     Actions → Vigia → Enable workflow.
+# =====================================================================
+name: Vigia
+
+on:
+  push:
+    branches: ['claude/pega-visao-up19-deliverables-6cqhjb']
+    paths: ['entregaveis/suinco_logistica/index.html']
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+
+# Duas publicações seguidas: só a última interessa.
+concurrency:
+  group: vigia-${{ github.event_name }}
+  cancel-in-progress: true
+
+jobs:
+  publicado:
+    if: github.event_name == 'push'
+    name: O que foi publicado está no ar
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: entregaveis/suinco_logistica/backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: entregaveis/suinco_logistica/backend/package-lock.json
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: O site serve o build publicado e a tela abre sem erro
+        run: node scripts/vigia_externo.mjs --publicado ../index.html
+
+  no-ar:
+    if: github.event_name != 'push'
+    name: O painel e o servidor estão no ar
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: entregaveis/suinco_logistica/backend
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: entregaveis/suinco_logistica/backend/scripts
+      - uses: actions/setup-node@v4
+        with: { node-version: '24' }
+      # Sem npm ci: este modo só usa o fetch do próprio Node. Roda 48 vezes
+      # por dia; quanto menos peças, menos alarme falso.
+      - name: Site e /health respondendo
+        run: node scripts/vigia_externo.mjs --no-ar

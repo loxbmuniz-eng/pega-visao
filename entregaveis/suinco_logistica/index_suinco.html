@@ -1718,6 +1718,16 @@
       <div id="mfa-painel"></div>
     </div>
 
+    <!-- VIGIAS DO SISTEMA (02/10/2026) — só Administração. O que o servidor
+         confere sozinho e a conferência do dado gravado. Pedido do dono:
+         uma prevenção para cada "se quebrar" do raio-X. Ver
+         renderVigias em app/87_celular_e_usuarios.js. -->
+    <div class="card" id="card-vigias" hidden>
+      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-alerta"/></svg> Vigias do sistema</div>
+      <div class="card-sub">O que o servidor confere sozinho: se está respondendo, se o backup de hoje saiu e restaura, o disco, o certificado e o dado gravado. Quando algo fica ruim, quem é da Administração recebe aviso no celular — e outro quando volta ao normal.</div>
+      <div id="vigias-painel"></div>
+    </div>
+
     <div class="card">
       <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-usuarios"/></svg> Novo Usuário</div>
       <div class="card-sub">O setor define o que a pessoa vê e o que consegue registrar. Isso é validado no servidor — não dá para contornar pela tela.</div>
