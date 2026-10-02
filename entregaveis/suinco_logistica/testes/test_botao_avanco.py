@@ -13,7 +13,8 @@ do destino.
 O que se prova aqui:
 
 1. A cor de fundo do botão é IDÊNTICA à cor da badge do status de destino —
-   comparadas por valor calculado, não por nome de classe. Nome de classe
+   comparadas por valor calculado, não por nome de classe. Desde 01/10/2026
+   a cor da badge está na marca quadrada (::before), não no fundo. Nome de classe
    igual não garante cor igual; valor calculado garante.
 2. Vale nos dois temas.
 3. O texto do botão tem contraste suficiente sobre o próprio preenchimento.
@@ -110,7 +111,13 @@ async def main():
                         rotulo: botao.textContent.trim(),
                         classe: botao.className,
                         fundoBotao: gx.backgroundColor,
-                        fundoBadge: gb.backgroundColor,
+                        // Desde o redesenho de 01/10/2026 a cor da etapa mora na
+                        // MARCA da badge (::before), não no fundo dela — a badge
+                        // virou marca + nome, sem a pílula. A regra é a mesma:
+                        // o botão tem a cor da etapa de destino.
+                        fundoBadge: (gb.backgroundColor === 'rgba(0, 0, 0, 0)'
+                                     ? getComputedStyle(badge, '::before').backgroundColor
+                                     : gb.backgroundColor),
                         textoBotao: gx.color,
                         textoBadge: gb.color
                     };
