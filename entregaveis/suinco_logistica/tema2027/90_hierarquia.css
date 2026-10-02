@@ -73,6 +73,39 @@
     .stat-box .stat-label, .stat-box .stat-delta{ font-size:var(--hq-meta) }
   }
 
+  /* O PISO COM O PESO DOS SELETORES ANTIGOS. Medido depois da primeira
+     passada: a regra genérica acima perdia para regras presas a uma aba ou
+     tabela (#tab-torre .card-sub, #torre-tbody .badge, .cel-datas .dt-quem,
+     .bento .stat-destaque .stat-label…). Mesmo peso, sem !important. */
+  /* 12 px com entrelinha 1,3 ocupa o mesmo que os 11,5 px com 1,35 de antes:
+     a Torre e a Programação não crescem (test_tema2027_etapa4_tabelas). */
+  #tab-torre .card-sub, #tab-programacao .card-sub{ font-size:var(--hq-meta); line-height:1.3 }
+  #tab-programacao .card-sub strong{ font-size:var(--hq-meta) }
+  .form-group .hint, .form-group label .hint{ font-size:var(--hq-meta) }
+  .cel-veiculo .veic-tipo, .cel-veiculo .veic-transp, .cel-datas .dt-atu, .cel-datas .dt-quem,
+  #torre-tabela small, #tab-programacao .col-identificacao > span{ font-size:var(--hq-meta) }
+  .bento.bi-faixa .stat-note, .bento .stat-destaque .stat-label{ font-size:var(--hq-meta) }
+  .tab-page .hist-linha > td{ font-size:12.5px }
+  .hist-campo dt, .hist-campo code, .vp-chip, #rotas-tbody .rota-chip-rep{ font-size:var(--hq-meta) }
+  #torre-tbody .badge:is(.badge-aguardando-veiculo, .badge-aguardando-embarque, .badge-embarque-iniciado,
+            .badge-embarque-finalizado, .badge-faturado, .badge-seguiu-viagem),
+  .tab-page .badge:is(.badge-aguardando-veiculo, .badge-aguardando-embarque, .badge-embarque-iniciado,
+            .badge-embarque-finalizado, .badge-faturado, .badge-seguiu-viagem){ font-size:12.5px; padding:0 }
+  @media (min-width:641px){
+    .bento.bi-faixa .stat-destaque .stat-label{ font-size:12.5px }
+  }
+  /* Celular: os cartões de tabela (mobile-cartao) e o Histórico têm regras
+     próprias, presas ao rótulo da célula. O Histórico tinha 9,5 px de
+     propósito — "AGUARDANDO EMBARQUE" precisava caber em 140 px com a
+     pílula; sem a pílula e na letra condensada, cabe em 12 px (medido). */
+  @media (max-width:820px){
+    .table-wrap table.mobile-cartao td[data-rotulo="Status"] .badge{ font-size:12.5px }
+    .table-wrap table.mobile-cartao td[data-rotulo="Veículo"] .veic-transp{ font-size:var(--hq-meta) }
+    #tab-historico tr.hist-linha td:nth-child(1), #tab-historico tr.hist-linha td:nth-child(6),
+    #tab-historico tr.hist-linha td:nth-child(7){ font-size:var(--hq-meta) }
+    #tab-historico tr.hist-linha .badge{ font-size:var(--hq-meta); padding:0 }
+  }
+
   /* ---------------------------------------------------------------
      2. COR É SIGNIFICADO — o gradiente sai
      --------------------------------------------------------------- */
