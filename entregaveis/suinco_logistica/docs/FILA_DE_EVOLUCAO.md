@@ -24,7 +24,7 @@ da operação.
 
 | Item | O que falta |
 |---|---|
-| ⬜ Reinício do Ubuntu | 40 atualizações e "System restart required" no login de 01/10. Fora do painel; 1–2 min fora do ar; num horário sem operação |
+| ✅ Reinício do Ubuntu | feito em 02/10/2026 pelo dono. Conferido depois: embarque-suinco, postgresql e nginx `active`, /health 200, node v24.21.0, "reinicio aplicado". As 40 atualizações pendentes (`apt upgrade`) NÃO foram aplicadas — decisão à parte, com conferência própria |
 | ⬜ R5 | confirmar no diagnóstico que http → https já redireciona |
 
 ## 3. Propostas, por ordem de valor
