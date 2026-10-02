@@ -24,7 +24,7 @@ da operação.
 
 | Item | O que falta |
 |---|---|
-| ✅ Reinício do Ubuntu | feito em 02/10/2026 pelo dono. Conferido depois: embarque-suinco, postgresql e nginx `active`, /health 200, node v24.21.0, "reinicio aplicado". As 40 atualizações pendentes (`apt upgrade`) NÃO foram aplicadas — decisão à parte, com conferência própria |
+| ✅ Ubuntu em dia | 02/10/2026: reinício + 35 de 36 atualizações de pacote (kernel 6.8.0-142 → 6.8.0-146, krb5, audit, apparmor, libxpm, netplan, docker…) e segundo reinício. Conferido depois: embarque-suinco, postgresql e nginx `active`, /health 200, node v24.21.0, kernel 6.8.0-146-generic. Nenhum pacote do painel (banco, nginx, Node) estava na lista; nada roda em Docker. Ficou só o `cloud-init` (24.1 → 26.1), liberado aos poucos pelo Ubuntu; não é usado pelo painel |
 | ⬜ R5 | confirmar no diagnóstico que http → https já redireciona |
 
 ## 3. Propostas, por ordem de valor
