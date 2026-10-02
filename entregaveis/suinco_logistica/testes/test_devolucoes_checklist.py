@@ -127,11 +127,11 @@ async def main():
         ck('a nota de transferência fica escondida para a matriz', nota_escondida)
         await pgA.fill('#dev-operador-cod', '102345')
         await pgA.select_option('#dev-rota', '500')
-        await pgA.click('button:has-text("➕ Rota")')
+        await pgA.click('button:text-is("Rota")')
         # A segunda rota fica SÓ no seletor — esquecer o clique no ➕ não
         # pode custar a rota (o criar inclui a selecionada).
         await pgA.select_option('#dev-rota', '501')
-        await pgA.click('button:has-text("➕ Criar checklist")')
+        await pgA.click('button:text-is("Criar checklist")')
         await pgA.wait_for_timeout(2500)
         d0 = await pgA.evaluate("""() => DEVOLUCOES.length ? {
             id: DEVOLUCOES[0].id, numero: DEVOLUCOES[0].numero,

@@ -30,7 +30,7 @@ function atualizarPreviewFrotaPrograma(){
     // Veículo que o operador já digitou nesta mesma tela.
     hint.innerHTML = '<span style="color:var(--wine-light)">⛔ Placa não cadastrada na Frota — a criação da carga será BLOQUEADA.</span>'
       + '<div class="gap8" style="margin-top:6px">'
-      + '<button type="button" class="btn btn-sec btn-sm" onclick="cadastrarPlacaInlineUI()">➕ Cadastrar esta placa na Frota agora</button>'
+      + '<button type="button" class="btn btn-sec btn-sm" onclick="cadastrarPlacaInlineUI()"><svg class="ico ico-btn" aria-hidden="true"><use href="#i-mais"/></svg>Cadastrar esta placa na Frota agora</button>'
       + '</div>';
   } else {
     hint.innerHTML = '';
@@ -1642,7 +1642,7 @@ function renderProgAguardando(){
              CRIANDO a carga daquele veículo, não preenchendo lacunas de
              algo que já existia. O botão é o mesmo, o fluxo é o mesmo; o
              nome é que estava contando outra história. -->
-        <button class="btn btn-primary btn-sm" onclick="abrirCompletar('${escJs(c.id)}')">➕ Criar carga</button>
+        <button class="btn btn-primary btn-sm" onclick="abrirCompletar('${escJs(c.id)}')"><svg class="ico ico-btn" aria-hidden="true"><use href="#i-mais"/></svg>Criar carga</button>
         <!-- Excluir aqui — pedido do usuário (11/08/2026): "ADICIONAR UM
              BOTAO DE EXCLUIR NO AGUARDANDO CARGA". Caminhão que a Portaria
              registrou por engano (placa errada, veículo que só passou)

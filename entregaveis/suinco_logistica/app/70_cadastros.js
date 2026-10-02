@@ -65,7 +65,7 @@ function renderTabelaDeFrete(){
         <td>${esc(d.operador)||'—'}</td>
         <td class="no-print"><button class="btn btn-sec btn-xs"
           onclick="editarDestinoFreteUI(${JSON.stringify(String(d.destino)).replace(/"/g,'&quot;')})"
-          title="Traz este destino para o formulário acima">✎ Editar</button></td></tr>`).join('');
+          title="Traz este destino para o formulário acima"><svg class="ico ico-btn" aria-hidden="true"><use href="#i-lapis"/></svg>Editar</button></td></tr>`).join('');
     const vazio = document.getElementById('frete-destinos-empty');
     if(vazio) vazio.hidden = lista.length > 0;
     const cont = document.getElementById('frete-destinos-contagem');

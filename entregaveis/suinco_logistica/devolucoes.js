@@ -818,14 +818,14 @@ function cabecalhoEditavelDev(d, editavel) {
   const rotasChips = `<div class="dev-rotas-chips">
       ${(d.rotas || []).map((r) => `<span class="dev-rota-chip">Rota ${esc(r)}
         ${editavel ? `<button type="button" title="Tirar esta rota do checklist"
-          onclick="tirarRotaDevolucaoUI('${escJs(d.id)}','${escJs(r)}')">✕</button>` : ''}</span>`).join('')}
+          onclick="tirarRotaDevolucaoUI('${escJs(d.id)}','${escJs(r)}')"><svg class="ico ico-btn" aria-hidden="true"><use href="#i-x"/></svg></button>` : ''}</span>`).join('')}
       ${editavel ? `<span class="gap8">
         <select id="dev-addrota-${esc(d.id)}">
           <option value="">(incluir rota…)</option>
           ${ROTAS.filter((r) => !(d.rotas || []).includes(r.codigo))
             .map((r) => `<option value="${esc(r.codigo)}">${esc(rotaLabel(r.codigo))}</option>`).join('')}
         </select>
-        <button class="btn btn-sec btn-sm" onclick="incluirRotaDevolucaoUI('${escJs(d.id)}')">➕</button>
+        <button class="btn btn-sec btn-sm" onclick="incluirRotaDevolucaoUI('${escJs(d.id)}')"><svg class="ico ico-btn" aria-hidden="true"><use href="#i-mais"/></svg></button>
       </span>` : ''}
     </div>`;
 
@@ -1171,7 +1171,7 @@ function blocoDesfazerDev(d) {
   return `<div class="dev-etapa-desfazer">
       <button class="btn btn-sec btn-sm" onclick="desfazerEtapaDevolucaoUI('${escJs(d.id)}')"
         title="Volta UMA etapa: ${esc(d.status)} → ${esc(etapa.status)}">
-        ↩ Desfazer "${esc(d.status)}"${quem}</button>
+        <svg class="ico ico-btn" aria-hidden="true"><use href="#i-desfazer"/></svg>Desfazer "${esc(d.status)}"${quem}</button>
     </div>`;
 }
 
@@ -1417,9 +1417,9 @@ function renderDevolucaoAberta(d, editavel) {
       ${editavel ? `<td class="no-print dev-cel-acoes">
         <button class="btn btn-sec btn-sm"
           title="Outra parcial DESTA nota — repete nota, cliente, RCA, supervisor e produto; o Nº DEV, o motivo, as caixas e o nº da parcial você preenche."
-          onclick="repetirNotaDevolucaoUI('${escJs(d.id)}',${i.itemId})">➕ mesma nota</button>
+          onclick="repetirNotaDevolucaoUI('${escJs(d.id)}',${i.itemId})"><svg class="ico ico-btn" aria-hidden="true"><use href="#i-mais"/></svg>mesma nota</button>
         <button class="btn btn-danger btn-sm"
-          onclick="excluirItemDevolucaoUI('${escJs(d.id)}',${i.itemId})">✕</button></td>` : ''}
+          onclick="excluirItemDevolucaoUI('${escJs(d.id)}',${i.itemId})"><svg class="ico ico-btn" aria-hidden="true"><use href="#i-x"/></svg></button></td>` : ''}
     </tr>`;
   };
 
@@ -1450,7 +1450,7 @@ function renderDevolucaoAberta(d, editavel) {
             cabeçalho — colspan que não bate desalinha a linha inteira. */''}
       <td colspan="6"></td>
       <td class="no-print"><button class="btn btn-sm" onclick="adicionarItemDevolucaoUI('${escJs(d.id)}')"
-        title="Acrescentar esta linha ao checklist">➕</button></td>
+        title="Acrescentar esta linha ao checklist"><svg class="ico ico-btn" aria-hidden="true"><use href="#i-mais"/></svg></button></td>
     </tr>`;
 
   const divergencias = `
@@ -1462,14 +1462,14 @@ function renderDevolucaoAberta(d, editavel) {
           ${v.observacao ? `<span class="text-dim">— ${esc(v.observacao)}</span>` : ''}
           <span class="text-dim">(${esc(v.lancadaPor)})</span>
           ${podeDivergenciaDev() ? `<button class="btn btn-danger btn-sm"
-            onclick="excluirDivergenciaDevolucaoUI('${escJs(d.id)}',${v.divergenciaId})">✕</button>` : ''}
+            onclick="excluirDivergenciaDevolucaoUI('${escJs(d.id)}',${v.divergenciaId})"><svg class="ico ico-btn" aria-hidden="true"><use href="#i-x"/></svg></button>` : ''}
         </li>`).join('')}</ul>`
       : '<div class="card-sub">Nenhum — o que chegou fora da lista entra aqui (lançado pelos CONTROLES INTERNOS) e NÃO cancela a falta do item substituído.</div>'}
       ${podeDivergenciaDev() ? `<div class="dev-diverg-form">
           <input type="text" id="dev-dv-${esc(d.id)}-produto" list="dl-dev-produtos" placeholder="Cód. produto">
           <input type="number" min="0" step="1" id="dev-dv-${esc(d.id)}-cx" placeholder="CX">
           <input type="text" id="dev-dv-${esc(d.id)}-obs" placeholder="Observação (ex: veio no lugar do 30110)">
-          <button class="btn btn-sec btn-sm" onclick="adicionarDivergenciaDevolucaoUI('${escJs(d.id)}')">➕ Lançar divergente</button>
+          <button class="btn btn-sec btn-sm" onclick="adicionarDivergenciaDevolucaoUI('${escJs(d.id)}')"><svg class="ico ico-btn" aria-hidden="true"><use href="#i-mais"/></svg>Lançar divergente</button>
         </div>` : ''}
     </div>`;
 
@@ -1515,14 +1515,14 @@ function renderDevolucaoAberta(d, editavel) {
       ${divergencias}
       <div class="flex-end gap8 no-print" style="margin-top:10px">
         ${editavel ? `<button class="btn btn-sec btn-sm" onclick="importarSisatakUI('${escJs(d.id)}')"
-          title="Lê o relatório WRMVE790 exportado do Sisatak (.xls) e mostra as linhas de devolução física para você escolher. Nada é gravado antes de você confirmar.">📥 Importar do Sisatak</button>` : ''}
+          title="Lê o relatório WRMVE790 exportado do Sisatak (.xls) e mostra as linhas de devolução física para você escolher. Nada é gravado antes de você confirmar."><svg class="ico ico-btn" aria-hidden="true"><use href="#i-baixar"/></svg>Importar do Sisatak</button>` : ''}
         <button class="btn btn-sec btn-sm" onclick="relatorioOperadorDevolucoesUI('${escJs(d.id)}')"
-          title="PDF deste checklist para o operador do monitoramento: nota, parcial, supervisor, RCA, cliente, caixa, peso, produto, Nº DEV, data e motivo. É o papel que acompanha a devolução até a Portaria.">📤 Relação para o operador</button>
+          title="PDF deste checklist para o operador do monitoramento: nota, parcial, supervisor, RCA, cliente, caixa, peso, produto, Nº DEV, data e motivo. É o papel que acompanha a devolução até a Portaria."><svg class="ico ico-btn" aria-hidden="true"><use href="#i-enviar"/></svg>Relação para o operador</button>
         ${d.carimbos.portaria ? `<button class="btn btn-sec btn-sm" onclick="comprovantePortariaUI('${escJs(d.id)}')"
-          title="PDF pequeno com carga, placa e lacres — o motorista entrega na balança e o Faturamento sabe QUAL devolução é. Substitui o papel escrito à mão pelo porteiro.">🖨 Comprovante do motorista</button>` : ''}
+          title="PDF pequeno com carga, placa e lacres — o motorista entrega na balança e o Faturamento sabe QUAL devolução é. Substitui o papel escrito à mão pelo porteiro."><svg class="ico ico-btn" aria-hidden="true"><use href="#i-impressora"/></svg>Comprovante do motorista</button>` : ''}
         ${admin ? `<button class="btn btn-sec btn-sm" onclick="abrirRevisoesDevolucaoUI('${escJs(d.id)}')"
-          title="Ver alterações deste checklist e restaurar uma versão">↩ Alterações</button>` : ''}
-        ${editavel ? `<button class="btn btn-danger btn-sm" onclick="excluirDevolucaoUI('${escJs(d.id)}')">🗑 Excluir checklist</button>` : ''}
+          title="Ver alterações deste checklist e restaurar uma versão"><svg class="ico ico-btn" aria-hidden="true"><use href="#i-desfazer"/></svg>Alterações</button>` : ''}
+        ${editavel ? `<button class="btn btn-danger btn-sm" onclick="excluirDevolucaoUI('${escJs(d.id)}')"><svg class="ico ico-btn" aria-hidden="true"><use href="#i-lixeira"/></svg>Excluir checklist</button>` : ''}
       </div>
     </div>`;
 }
@@ -1584,7 +1584,7 @@ function renderRotasNovasDev() {
   if (!box) return;
   box.innerHTML = _devRotasNovas.map((r) => `<span class="dev-rota-chip">Rota ${esc(r)}
       <button type="button" title="Tirar esta rota"
-        onclick="removerRotaNovaDevUI('${escJs(r)}')">✕</button></span>`).join('');
+        onclick="removerRotaNovaDevUI('${escJs(r)}')"><svg class="ico ico-btn" aria-hidden="true"><use href="#i-x"/></svg></button></span>`).join('');
 }
 
 function adicionarRotaNovaDevUI() {
@@ -2005,7 +2005,7 @@ function desenharPreviaSisatak(previa, nomeArquivo) {
         : '<div class="card-sub">Nenhuma linha de devolução física neste arquivo.</div>'}
       <div class="flex-end gap8" style="margin-top:12px">
         <button class="btn btn-sec" onclick="fecharPreviaSisatak()">Cancelar</button>
-        ${itens.length ? `<button class="btn btn-primary" onclick="confirmarImportacaoSisatakUI()">📥 Lançar as linhas marcadas</button>` : ''}
+        ${itens.length ? `<button class="btn btn-primary" onclick="confirmarImportacaoSisatakUI()"><svg class="ico ico-btn" aria-hidden="true"><use href="#i-baixar"/></svg>Lançar as linhas marcadas</button>` : ''}
       </div>
     </div>`;
   modal.classList.add('open');

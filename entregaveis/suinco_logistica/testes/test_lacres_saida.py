@@ -58,7 +58,7 @@ async def main():
         await pg.wait_for_timeout(400)
         await pg.fill('#portaria-placa', placa)
         await pg.fill('#portaria-lacre', '133476')
-        await pg.click('button:has-text("🏁 Saiu")')
+        await pg.click('button:text-is("Saiu")')
         await pg.wait_for_timeout(500)
         d = await pg.evaluate("""() => DB.cargas.map(c => ({s: c.status, l: c.lacre}))""")
         ck('as duas cargas seguiram viagem', all(x['s'] == 'Seguiu Viagem' for x in d), str(d))

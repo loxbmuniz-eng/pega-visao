@@ -131,12 +131,18 @@ const BUILD_ID = (typeof window !== 'undefined' && window.SUINCO_BUILD) || 'font
 
    Quem tirar o .rot-btn daqui devolve o estouro. Existe teste que reprova:
    testes/test_auditoria_mobile.py, "cabeçalho não transborda a largura". */
+/* Ícone de traço do sprite (index_suinco.html, <symbol id="i-…">). Emoji
+   muda de desenho em cada aparelho; o traço é o mesmo do menu em todo lugar
+   (hierarquia, 01/10/2026). */
+function icoSvg(id){
+  return `<svg class="ico ico-btn" aria-hidden="true"><use href="#${esc(id)}"/></svg>`;
+}
 function marcarBadgeConexao(badge, classe, icone, frase){
   badge.hidden = false;
   badge.className = 'badge-conexao ' + classe;
   badge.title = frase;
   badge.setAttribute('aria-label', frase);
-  badge.innerHTML = esc(icone) + '<span class="rot-btn">&nbsp;' + esc(frase) + '</span>';
+  badge.innerHTML = icoSvg(icone) + '<span class="rot-btn">&nbsp;' + esc(frase) + '</span>';
 }
 
 /* A FAIXA DE OFFLINE — texto do dono, 31/08/2026.
@@ -486,7 +492,7 @@ function atualizarRodapeConexao(estado, detalhe){
        a rede voltar". Isso deixou de ser verdade em 31/08: offline não grava
        mais nada. Rótulo que mente é a família da ocorrência #04. */
     rod.innerHTML = `⛔ OFFLINE — o sistema não aceita alteração sem conexão${esc(carimbo)}`;
-    if(badge) marcarBadgeConexao(badge, 'offline', '⚠️', 'Modo Offline');
+    if(badge) marcarBadgeConexao(badge, 'offline', 'i-alerta', 'Modo Offline');
   } else {
     /* 'local' cobre TRÊS situações diferentes, e mostrá-las com o mesmo
        texto engana. "Sem conexão com o servidor" antes de alguém fazer
@@ -503,7 +509,7 @@ function atualizarRodapeConexao(estado, detalhe){
       // Sem e-mail: escolheu o modo local de propósito.
       rod.innerHTML = '⚠️ Modo Local — os dados ficam SÓ neste navegador e não são vistos pelos outros setores.' + esc(carimbo);
     }
-    if(badge) marcarBadgeConexao(badge, 'local', '⚙️', 'Modo Local');
+    if(badge) marcarBadgeConexao(badge, 'local', 'i-engrenagem', 'Modo Local');
   }
   /* O aviso de travamento vai DEPOIS, uma vez só, nas três situações: ele
      não descreve a conexão, descreve a máquina — e some sozinho quando não
@@ -556,8 +562,8 @@ function aplicarTema(tema){
   // ser um elemento próprio. Escrito como textContent, não havia como
   // separar um do outro sem apagar o botão inteiro.
   if(btn) btn.innerHTML = claro
-    ? '☀️<span class="rot-btn">Claro</span>'
-    : '🌙<span class="rot-btn">Escuro</span>';
+    ? icoSvg('i-sol') + '<span class="rot-btn">Claro</span>'
+    : icoSvg('i-lua') + '<span class="rot-btn">Escuro</span>';
   // Gráficos são desenhados em canvas: pixels já pintados não reagem a CSS,
   // então precisam ser redesenhados na cor nova.
   if(typeof TAB_ATUAL !== 'undefined' && TAB_ATUAL === 'indicadores'){

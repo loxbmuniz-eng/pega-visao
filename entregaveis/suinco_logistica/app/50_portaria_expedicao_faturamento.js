@@ -321,9 +321,9 @@ function renderPortariaProgramadas(){
   tb.innerHTML = lista.map(c=>{
     let acao = '<span class="text-dim">—</span>';
     if(c.status === 'Aguardando Veículo'){
-      acao = `<button class="btn btn-success btn-sm" onclick="portariaChegouCarga('${escJs(c.placa)}')">🚚 Chegou</button>`;
+      acao = `<button class="btn btn-success btn-sm" onclick="portariaChegouCarga('${escJs(c.placa)}')"><svg class="ico ico-btn" aria-hidden="true"><use href="#i-caminhao"/></svg>Chegou</button>`;
     } else if(c.status === 'Faturado'){
-      acao = `<button class="btn btn-warn btn-sm" onclick="portariaSaiuCarga('${escJs(c.placa)}')">🏁 Saiu</button>`;
+      acao = `<button class="btn btn-warn btn-sm" onclick="portariaSaiuCarga('${escJs(c.placa)}')"><svg class="ico ico-btn" aria-hidden="true"><use href="#i-bandeira"/></svg>Saiu</button>`;
     } else if(c.status === 'Aguardando Embarque'){
       /* O CAMINHÃO QUE SÓ TROUXE DEVOLUÇÃO (08/09/2026).
 
@@ -339,7 +339,7 @@ function renderPortariaProgramadas(){
          única saída que faltava. */
       acao = `<button class="btn btn-sm btn-saida-devolucao"
         title="O caminhão entregou devolução e vai embora sem carregar."
-        onclick="portariaSaiuSoDevolucaoUI('${escJs(c.id)}')">↩️ Só devolução — saiu</button>`;
+        onclick="portariaSaiuSoDevolucaoUI('${escJs(c.id)}')"><svg class="ico ico-btn" aria-hidden="true"><use href="#i-desfazer"/></svg>Só devolução — saiu</button>`;
     }
     return `<tr>
       <td class="col-identificacao">${esc(c.placa)}${marcaCargaDaPlaca(c, lista)}${marcaEtapaDevolvidaHtml(c)}${marcaSaiuSemCarregarHtml(c)}</td>

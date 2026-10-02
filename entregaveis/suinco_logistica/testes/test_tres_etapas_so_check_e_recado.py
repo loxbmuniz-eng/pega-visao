@@ -84,7 +84,7 @@ async def criar_checklist(pg, nota):
     await pg.wait_for_timeout(1600)
     await pg.fill('#dev-operador-cod', '700001')
     await pg.select_option('#dev-rota', '500')
-    await pg.click('button:has-text("➕ Criar checklist")')
+    await pg.click('button:text-is("Criar checklist")')
     await pg.wait_for_timeout(2200)
     d = await pg.evaluate("() => DEVOLUCOES.length ? DEVOLUCOES[0].id : null")
     if not d:

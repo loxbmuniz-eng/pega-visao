@@ -103,7 +103,7 @@ async def main():
         await pgA.wait_for_timeout(1800)
         await pgA.fill('#dev-operador-cod', '900123')
         await pgA.select_option('#dev-rota', '500')
-        await pgA.click('button:has-text("➕ Criar checklist")')
+        await pgA.click('button:text-is("Criar checklist")')
         await pgA.wait_for_timeout(2500)
         dev = await pgA.evaluate(
             "() => DEVOLUCOES.length ? { id: DEVOLUCOES[0].id, numero: DEVOLUCOES[0].numero } : null")
