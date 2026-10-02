@@ -6411,3 +6411,103 @@ describe('17. A versão que o /health informa não pode ficar cega (12/09/2026)'
   });
 
 });
+
+/* ------------------------------------------------------------------ */
+describe('48. Vigias do sistema — a conferência do dado (02/10/2026)', () => {
+  /* Pedido do dono: uma prevenção para cada "se quebrar" do raio-X. F3 diz
+     "o dano é silencioso e cumulativo". A conferência procura no banco
+     estados que o próprio servidor garante que não existem — então ela
+     precisa (1) achar cada um quando ele existe e (2) NÃO acusar a carga
+     certa, senão vira barulho e ninguém mais olha.
+
+     Os estados impossíveis são plantados direto no banco, porque a API não
+     deixa criá-los — que é justamente o ponto. Números 9xxxxx, rota nula. */
+  const CERTA = '904801';
+  const SEM_SAIDA = '904802';
+  const AO_CONTRARIO = '904803';
+  const FUTURO = '904804';
+  const ids = [];
+
+  async function plantar(numero, status, movs) {
+    const id = `vigia-${numero}`;
+    ids.push(id);
+    await pool.query(
+      `INSERT INTO fact_viagens (carga_id, numero_carga, placa, status_atual)
+       VALUES ($1, $2, $3, $4)`, [id, numero, `TST${numero.slice(-4)}`, status]);
+    for (const [i, [st, minutosAtras]] of movs.entries()) {
+      await pool.query(
+        `INSERT INTO fact_statusfrota (movimentacao_id, carga_id, placa, status_novo, setor, data_evento)
+         VALUES ($1, $2, $3, $4, 'Portaria', now() - ($5 || ' minutes')::interval)`,
+        [`${id}-${i}`, id, `TST${numero.slice(-4)}`, st, String(minutosAtras)]);
+    }
+  }
+
+  before(async () => {
+    await plantar(CERTA, 'Seguiu Viagem', [['Aguardando Embarque', 300], ['Seguiu Viagem', 60]]);
+    await plantar(SEM_SAIDA, 'Seguiu Viagem', [['Aguardando Embarque', 300]]);
+    await plantar(AO_CONTRARIO, 'Seguiu Viagem', [['Aguardando Embarque', 30], ['Seguiu Viagem', 120]]);
+    await plantar(FUTURO, 'Aguardando Embarque', [['Aguardando Embarque', -180]]);
+  });
+
+  after(async () => {
+    await pool.query('DELETE FROM fact_viagens WHERE carga_id = ANY($1)', [ids]);
+  });
+
+  const achado = (r, codigo) => r.json.dado.find((a) => a.codigo === codigo);
+  const cargas = (a) => a.exemplos.map((e) => e.carga);
+
+  test('só a Administração vê os vigias', async () => {
+    assert.equal((await req('/api/vigia')).status, 401);
+    assert.equal((await req('/api/vigia', { token: tokens['Logística'] })).status, 403);
+    assert.equal((await req('/api/vigia', { token: tokens['Administração'] })).status, 200);
+  });
+
+  test('acha a carga que seguiu viagem sem o registro da saída', async () => {
+    const r = await req('/api/vigia', { token: tokens['Administração'] });
+    assert.ok(cargas(achado(r, 'saida_sem_registro')).includes(SEM_SAIDA));
+  });
+
+  test('acha a saída registrada antes da chegada, e diz as duas horas', async () => {
+    const r = await req('/api/vigia', { token: tokens['Administração'] });
+    const a = achado(r, 'saida_antes_da_chegada');
+    assert.ok(cargas(a).includes(AO_CONTRARIO));
+    assert.match(a.exemplos.find((e) => e.carga === AO_CONTRARIO).detalhe, /^entrou .+, saiu .+$/);
+  });
+
+  test('acha a movimentação com hora no futuro', async () => {
+    const r = await req('/api/vigia', { token: tokens['Administração'] });
+    assert.ok(cargas(achado(r, 'evento_no_futuro')).includes(FUTURO));
+  });
+
+  test('a carga CERTA não aparece em regra nenhuma', async () => {
+    const r = await req('/api/vigia', { token: tokens['Administração'] });
+    for (const a of r.json.dado) {
+      assert.ok(!cargas(a).includes(CERTA), `a carga certa foi acusada em "${a.titulo}"`);
+    }
+  });
+
+  test('saída apagada do histórico (apagada_em) conta como saída que não existe', async () => {
+    await pool.query(
+      `UPDATE fact_statusfrota SET apagada_em = now(), apagada_por = 'teste'
+        WHERE carga_id = $1 AND status_novo = 'Seguiu Viagem'`, [`vigia-${CERTA}`]);
+    const r = await req('/api/vigia', { token: tokens['Administração'] });
+    assert.ok(cargas(achado(r, 'saida_sem_registro')).includes(CERTA));
+    await pool.query(
+      `UPDATE fact_statusfrota SET apagada_em = NULL, apagada_por = NULL
+        WHERE carga_id = $1`, [`vigia-${CERTA}`]);
+  });
+
+  test('carga excluída não entra na conta', async () => {
+    await pool.query('UPDATE fact_viagens SET excluida_em = now() WHERE carga_id = $1', [`vigia-${SEM_SAIDA}`]);
+    const r = await req('/api/vigia', { token: tokens['Administração'] });
+    assert.ok(!cargas(achado(r, 'saida_sem_registro')).includes(SEM_SAIDA));
+    await pool.query('UPDATE fact_viagens SET excluida_em = NULL WHERE carga_id = $1', [`vigia-${SEM_SAIDA}`]);
+  });
+
+  test('a conferência só LÊ: nada no banco muda por consultar', async () => {
+    const antes = await pool.query('SELECT count(*)::int n, max(atualizado_em) m FROM fact_viagens');
+    await req('/api/vigia', { token: tokens['Administração'] });
+    const depois = await pool.query('SELECT count(*)::int n, max(atualizado_em) m FROM fact_viagens');
+    assert.deepEqual(depois.rows[0], antes.rows[0]);
+  });
+});

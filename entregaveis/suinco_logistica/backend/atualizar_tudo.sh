@@ -121,6 +121,15 @@ SQL
 AVISOS="$(grep -qE '^VAPID_PRIVADA=.+' /opt/embarque-suinco/.env 2>/dev/null \
           && echo 'ligado' || echo 'DESLIGADO')"
 
+# Os vigias do servidor (02/10/2026): quantos estão bem e quais não estão.
+VIGIAS="$(consulta <<'SQL' || true
+SELECT count(*) FILTER (WHERE ok) || ' ok, ' || count(*) FILTER (WHERE NOT ok) || ' com problema'
+       || COALESCE(' (' || string_agg(verificacao, ', ') FILTER (WHERE NOT ok) || ')', '')
+  FROM vigia_registros
+SQL
+)"
+[[ -n "$VIGIAS" ]] || VIGIAS='não consegui ler'
+
 
 echo
 echo "--------- COPIE DAQUI ---------"
@@ -129,6 +138,7 @@ echo "serviço             : $ATIVO"
 echo "/health local       : ${SAUDE:-000}"
 echo "última migração     : $MIG"
 echo "aviso no celular    : $AVISOS"
+echo "vigias              : $VIGIAS"
 echo "node no servidor    : $(node -v 2>/dev/null || echo '?')"
 echo "problemas nesta rodada : ${PROBLEMAS[*]:-nenhum}"
 echo "-------- ATÉ AQUI -------------"

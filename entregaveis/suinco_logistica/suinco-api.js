@@ -1155,6 +1155,12 @@ const SuincoSharePoint = (function () {
     return chamar('/api/historico?de=' + encodeURIComponent(de) + '&ate=' + encodeURIComponent(ate));
   }
 
+  /* Os vigias do sistema (02/10/2026) — só Administração. Leitura sob
+     demanda, como o histórico: é controle, não estado vivo do pátio. */
+  async function vigia() {
+    return chamar('/api/vigia');
+  }
+
   async function programacaoDoDia(dia) {
     return chamar('/api/programacao-do-dia?dia=' + encodeURIComponent(dia));
   }
@@ -2323,7 +2329,7 @@ const SuincoSharePoint = (function () {
     encerrarProgramacoesAnteriores, reterLacre,
     recarregarRotas, excluirRota, gravarTarifaFrete, gravarDestinoFrete, tabelaDeFrete,
     corrigirEtapa, corrigirDataProgramacao, desfazerExclusao, listarExcluidas,
-    programacaoDoDia, historico, mfa,
+    programacaoDoDia, historico, mfa, vigia,
     modeloSemana, montagem,
     pull, pullTudo, drenarFila, pendentes, descartarFilaAntiga, estaOnline,
     sessaoPerdida,

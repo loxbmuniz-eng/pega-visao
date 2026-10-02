@@ -4952,3 +4952,37 @@ claro) e fundo sólido, com contraste de 3:1 ou mais contra o campo e contra o
 cartão. **Guarda:** `testes/test_programacao_campos_visiveis.py` — todos os
 campos visíveis da aba (31 na base de demonstração), nos dois temas; e a Torre
 sem borda em cima. Reprovou contra o publicado (bordas alfa 0,28/0,22).
+
+## #108 — A bateria do GitHub nunca passou, e ninguém viu (02/10/2026)
+
+**Como apareceu.** Montando as prevenções que o dono pediu para cada "se
+quebrar" do raio-X ("resolve tudo como um dev sênior"). Ao olhar o que já
+vigiava o código, a bateria da API no GitHub ("Testes do servidor",
+`.github/workflows/testes.yml`) estava vermelha — e não só agora: **as 413
+rodadas desde que ela foi criada, em 26/08, falharam todas.** O portão
+(`publicar.sh`) passava 509 de 509 a cada publicação, e por isso ninguém
+desconfiou.
+
+**A causa, reproduzida aqui.** O portão roda num banco que JÁ TEM rotas e
+frota; o GitHub começa de um banco recém-migrado.
+1. Sem `dim_rotas`, a carga de teste na rota 500 batia na chave estrangeira:
+   num banco vazio, aqui, 46 falhas e 141 canceladas (no GitHub, 53 e 141).
+   O servidor de verdade carrega rotas e frota no `instalar.sh` com o
+   `seed.js` — o workflow não carregava.
+2. Os 6 testes de PDF precisam de um Chromium, que o workflow não instalava.
+3. Faltavam `BI_TOKEN` e `SENHA_FECHAMENTO` de teste: 13 falhas (o BI
+   respondia 503 "não configurado").
+Com os três: 509 de 509 aqui, com o ambiente exato do workflow, e **a
+rodada 414 foi a primeira verde da história do arquivo.**
+
+**A família.** O controle que existe no papel. Um alarme que está sempre
+vermelho é pior que nenhum: ensina a ignorar o e-mail, e o dia em que ele
+vermelhar por um defeito de verdade vai passar igual. Mesma família da #47
+(o /health cego que ninguém via porque o controle que avisaria era o cego).
+
+**A correção.** O workflow carrega rotas e frota pelo mesmo `seed.js` do
+servidor, instala o Chromium e declara os dois valores de teste.
+**Guarda:** ela mesma — a partir de agora fica verde, e vermelho voltou a
+significar alguma coisa. E o vigia de fora (`.github/workflows/vigia.yml`)
+roda na mesma infraestrutura: se o GitHub Actions parar de rodar, os dois
+param juntos e o e-mail de "workflow desligado" do próprio GitHub avisa.

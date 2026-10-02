@@ -504,6 +504,45 @@ EOF
 chmod +x /etc/cron.daily/backup-embarque-suinco
 /etc/cron.daily/backup-embarque-suinco && ok "backup diário ativo (primeiro já rodou)"
 
+# --- 11b. Vigias -----------------------------------------------------
+# Pedido do dono (02/10/2026): uma prevenção para cada "se quebrar" do
+# raio-X. O que cada vigia confere está em scripts/vigia_servidor.mjs; o
+# aviso vai para o celular de quem é da Administração, só na virada (ficou
+# ruim / voltou ao normal).
+#
+# REESCRITO A CADA INSTALAÇÃO, como o cron do backup logo acima: o atualizar
+# passa por aqui, então horário ou caminho novo chega sozinho ao servidor —
+# ninguém precisa lembrar de mexer no cron.
+#
+# Horários: o backup diário (cron.daily) roda por volta das 06h25 do relógio
+# do servidor; a conferência diária vem às 10h40, depois dele em qualquer
+# fuso que a máquina use. A semanal, domingo 04h10, fora do horário do pátio
+# — o teste de restauração sobe um banco descartável e ocupa a máquina por
+# alguns minutos.
+azul "11b. Vigias"
+mkdir -p /var/lib/embarque-suinco
+cat > /etc/cron.d/embarque-suinco-vigia <<CRON
+# Gerado pelo instalar.sh — não edite à mão: é reescrito a cada atualização.
+SHELL=/bin/sh
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+VIGIA_HEALTH_URL=http://127.0.0.1:$PORTA_APP/health
+VIGIA_CERT=/etc/letsencrypt/live/$DOMINIO_API/fullchain.pem
+*  *  * * * root cd $APP_DIR && node scripts/vigia_servidor.mjs travamento >> /var/log/embarque-suinco-vigia.log 2>&1
+40 10 * * * root cd $APP_DIR && node scripts/vigia_servidor.mjs diario     >> /var/log/embarque-suinco-vigia.log 2>&1
+10 4  * * 0 root cd $APP_DIR && node scripts/vigia_servidor.mjs semanal    >> /var/log/embarque-suinco-vigia.log 2>&1
+CRON
+chmod 644 /etc/cron.d/embarque-suinco-vigia
+cat > /etc/logrotate.d/embarque-suinco-vigia <<'ROTA'
+/var/log/embarque-suinco-vigia.log {
+  weekly
+  rotate 4
+  compress
+  missingok
+  notifempty
+}
+ROTA
+ok "vigias agendados: travamento a cada minuto, diário às 10h40, semanal domingo 04h10"
+
 # --- 12. Verificação final -------------------------------------------
 azul "12. Verificação"
 # 12a. O Node responde? (direto, sem Nginx)
@@ -551,6 +590,18 @@ fi
 PLACAS="$(su - postgres -c "psql -tAd $DB_NAME -c 'SELECT count(*) FROM dim_veiculos'")"
 ROTAS="$(su - postgres -c "psql -tAd $DB_NAME -c 'SELECT count(*) FROM dim_rotas'")"
 ok "base carregada: $PLACAS placas, $ROTAS rotas"
+
+# A primeira conferência diária roda AGORA, e não amanhã às 10h40: vigia
+# instalado que ninguém viu rodar é exatamente o "controle que existe no
+# papel" que ele veio substituir. Problema encontrado aqui também avisa no
+# celular da Administração. Não interrompe a instalação.
+if ( cd "$APP_DIR" && VIGIA_HEALTH_URL="http://127.0.0.1:$PORTA_APP/health" \
+       VIGIA_CERT="/etc/letsencrypt/live/$DOMINIO_API/fullchain.pem" \
+       node scripts/vigia_servidor.mjs diario ) >> /var/log/embarque-suinco-vigia.log 2>&1; then
+  ok "primeira conferência dos vigias feita — resultado na caixa Vigias do sistema (aba Usuários)"
+else
+  aviso "a primeira conferência dos vigias não rodou — veja /var/log/embarque-suinco-vigia.log"
+fi
 
 
 # Quantos operadores já existem. O bloco "crie o primeiro operador" só faz
