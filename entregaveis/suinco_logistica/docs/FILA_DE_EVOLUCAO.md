@@ -42,6 +42,12 @@ Aprovados pelo dono em 01/10/2026 ("12345"): 4 e 7 feitos; 1 retirado do portão
 | ✅ 3 | **Pátio #6 — saídas previstas** — faixa "Saídas previstas — próxima hora: N · de 1 a 2 h: N · de 2 a 3 h: N", pela mesma previsão do cartão; quem não tem previsão é contado à parte (resposta 2-A) | ✅ no ar (portão 34, `7cf0236`) | Trava: `test_patio_vivo_proximo_e_saidas` |
 | ⬜ 6 | Crescimento do repositório | `index.html` gerado entra em todo commit | 182 MB de histórico |
 
+## 3b. Redesenho das 12 abas (auditoria de 01/10/2026)
+
+| ✅ | O quê | Trava |
+|---|---|---|
+| ✅ no ar (portão 36, `398f61f`, 02/10) | Números antes dos botões na Torre; "Fechar Programação" no fim da lista (2-b); faixa de números como régua; status como marca + nome; célula da Torre que parece texto e continua campo (linha 89 → 73 px); piso de 12 px nas 12 abas; Portaria com Chegou/Saiu grandes; sem gradiente de enfeite; 78 emojis de botão viraram ícones de traço | `test_piso_de_12px` (reprova no publicado anterior em 23 pontos) e as guardas de tema ajustadas à regra nova |
+
 ## 4. Guardado a pedido do dono
 
 - Transferência de titularidade para a Suinco (GitHub, Vercel, Registro.br,

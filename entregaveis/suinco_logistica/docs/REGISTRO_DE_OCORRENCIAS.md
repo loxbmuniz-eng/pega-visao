@@ -4894,3 +4894,36 @@ vermelho) — e troca de texto que falha em silêncio.
 publicação segue. Ele só volta com um ajudante ÚNICO nos testes que troca o
 endereço em qualquer formato e REPROVA se não trocou — e nunca mais teste
 mirando a produção por engano. Registrado na fila de evolução, item 1.
+
+## #106 — Pátio ao vivo: o topo dizia 10 e o quadro mostrava 1 (02/10/2026)
+
+**Como apareceu.** Print do dono: "10 caminhões no pátio agora" e, no quadro,
+um único cartão entre Aguardando Embarque e Faturado. "Tá errado isso aí", "já
+apontei o erro uma vez e você não arrumou", "e no gráfico também".
+
+**A primeira vez.** Em 30/09 o dono apontou o gráfico contando caminhão que não
+estava no pátio. A correção daquele dia (pvNoPatioEm) fez o gráfico e o topo
+contarem IGUAL — mas não igual ao QUADRO. Ela manteve a regra "a chegada sem
+programação nasce no pátio", e o teste daquele dia travou essa regra. A
+correção ficou pela metade, e o teste certificou a metade.
+
+**A causa, reproduzida.** pvNoPatioEm somava as entradas sem carga (caminhão
+registrado na Portaria sem programação, `aguardandoCarga`). O quadro não as
+mostra e a Torre as conta à parte ("Entradas sem carga — resolver na
+Programação"). Com 1 carga no quadro e 3 entradas sem carga, o topo mostrava 4;
+com 2 no quadro, mostrava 5. "Parados há mais de 3 horas" também contava as
+entradas sem carga.
+
+**A família.** F1 — uma pergunta, duas contas. E uma lição sobre a guarda: ela
+comparava o topo com o gráfico, as duas contas que vinham da MESMA função. Para
+travar "o número diz o que a tela mostra", a guarda tem de comparar o número com
+o que a tela MOSTRA.
+
+**A correção.** O topo e o gráfico contam o que o quadro mostra; as entradas sem
+carga aparecem contadas à parte no topo ("+ N entradas sem carga, fora da conta
+— resolver na Programação"), sem sumir. **Guarda:**
+`testes/test_patio_vivo_topo_igual_quadro.py` — topo = cartões nas colunas de
+Aguardando Embarque a Faturado; último ponto do gráfico = topo; as entradas sem
+carga aparecem; "parados há mais de 3 horas" só do quadro. Reprovou contra o
+publicado (topo 5, quadro 2). `test_patio_vivo_grafico_so_patio` atualizado à
+regra nova.

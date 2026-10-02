@@ -100,14 +100,17 @@ async def main():
         pontos = dict(r['pontos'] or [])
 
         print('\n=== ÀS 14H: SÓ QUEM ESTAVA ENTRE AGUARDANDO EMBARQUE E FATURADO ===')
-        ck('às 14h eram 4 no pátio (P1, P2, a chegada sem programação, e quem saiu às 14h05)',
-           pontos.get('14h') == 4, str(pontos.get('14h')))
+        # MUDOU EM 02/10/2026 (relato do dono: o topo dizia 10 e o quadro mostrava
+        # 1): a chegada sem programação (A1) fica FORA da conta — o quadro não a
+        # mostra e a Torre a conta à parte. Era 4 com ela; é 3 sem ela.
+        ck('às 14h eram 3 no pátio (P1, P2 e quem saiu às 14h05; a chegada sem programação fica fora)',
+           pontos.get('14h') == 3, str(pontos.get('14h')))
         ck('às 12h era 1: quem entrou às 12h (Seguiu Viagem sem carimbo e quem voltou para Aguardando Veículo não contam)',
            pontos.get('12h') == 1, str(pontos.get('12h')))
 
         print('\n=== O ÚLTIMO PONTO É AGORA, E BATE COM O TOPO ===')
         ck('o último ponto se chama "agora"', r['pontos'] and r['pontos'][-1][0] == 'agora', str(r['pontos'] and r['pontos'][-1]))
-        ck('agora são 3 no pátio', r['pontos'] and r['pontos'][-1][1] == 3, str(r['pontos'] and r['pontos'][-1]))
+        ck('agora são 2 no pátio (a chegada sem programação fica fora)', r['pontos'] and r['pontos'][-1][1] == 2, str(r['pontos'] and r['pontos'][-1]))
         ck('o gráfico e "caminhões no pátio agora" dizem o mesmo número',
            r['pontos'] and str(r['pontos'][-1][1]) == r['agora'], f"{r['pontos'] and r['pontos'][-1][1]} x {r['agora']}")
         ck('a legenda do gráfico diz o que conta', 'Aguardando Embarque' in r['titulo'] and 'Faturado' in r['titulo'], r['titulo'])
