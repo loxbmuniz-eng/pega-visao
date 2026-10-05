@@ -115,7 +115,10 @@ export function montarGrade(cargas) {
       } else {
         c[IX.situacao] = { v: ind.situacao, f: FORMULAS.situacaoRepetida(primeiraLinha) };
       }
-      linhas.push({ carga: Number(carga.numero), primeira, nota: p?.nota ?? null, categoria: p?.categoria ?? null, celulas: c });
+      linhas.push({
+        carga: Number(carga.numero), primeira, nota: p?.nota ?? null, categoria: p?.categoria ?? null,
+        cliente: p?.cliente ?? '', cidade: p?.cidade ?? '', celulas: c,
+      });
     }
   }
   return { colunas: COLUNAS, linhas, resumo: resumoDaGrade(ordenadas) };

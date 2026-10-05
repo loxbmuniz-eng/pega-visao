@@ -5,6 +5,7 @@ import { consultar, emTransacao } from '../banco.js';
 import { config } from '../config.js';
 import { assinarToken, exigirLogin } from '../middleware/auth.js';
 import { documentosDoSetor } from '../dominio/documentos.js';
+import { acessoFreteDe } from '../middleware/acesso_frete.js';
 
 /* QUEM VOCÊ É, E O QUE O SEU SETOR PODE GERAR — num objeto só (23/09/2026).
 
@@ -26,10 +27,18 @@ import { documentosDoSetor } from '../dominio/documentos.js';
    lista num campo irmão obrigaria a mexer nos três chamadores do painel e
    abriria a chance de um deles esquecer. Dentro, ela chega sozinha até quem
    desenha o botão. */
-function sessaoDoOperador(op) {
+/* `acessoFrete` (05/10/2026): a marca POR PESSOA da aba Pagamento de Frete.
+   O painel só usa para mostrar ou esconder a aba — o controle é
+   `exigirAcessoFrete` em cada rota, lendo do banco. Se a leitura falhar, a aba
+   fica escondida (false) e o login segue: uma marca que não carregou não pode
+   derrubar a entrada de ninguém. */
+async function sessaoDoOperador(op) {
+  let acessoFrete = false;
+  try { acessoFrete = await acessoFreteDe(op); } catch (e) { console.warn('[auth] não li o acesso ao frete:', e.message); }
   return {
     id: String(op.id), nome: op.nome, email: op.email, setor: op.setor,
     documentos: documentosDoSetor(op.setor),
+    acessoFrete,
   };
 }
 import {
@@ -224,7 +233,7 @@ rotasAuth.post('/login', limiteLogin, async (req, res, next) => {
 
     return res.json({
       token: assinarToken(op),
-      operador: sessaoDoOperador(op),
+      operador: await sessaoDoOperador(op),
     });
   } catch (e) {
     return next(e);
@@ -234,10 +243,12 @@ rotasAuth.post('/login', limiteLogin, async (req, res, next) => {
 /* Devolve quem o token diz que você é. O painel usa isto na abertura para
    restaurar a sessão sem pedir senha de novo, e para descobrir o setor —
    que ele deixa de guardar no localStorage. */
-rotasAuth.get('/eu', exigirLogin, (req, res) => {
-  /* A mesma lista do login: quem restaura a sessão na abertura precisa dela
-     tanto quanto quem acabou de digitar a senha. */
-  res.json({ operador: sessaoDoOperador(req.operador) });
+rotasAuth.get('/eu', exigirLogin, async (req, res, next) => {
+  try {
+    /* A mesma lista do login: quem restaura a sessão na abertura precisa dela
+       tanto quanto quem acabou de digitar a senha. */
+    res.json({ operador: await sessaoDoOperador(req.operador) });
+  } catch (e) { next(e); }
 });
 
 /* Renova a sessão de quem está trabalhando.
@@ -273,7 +284,7 @@ rotasAuth.post('/renovar', exigirLogin, async (req, res, next) => {
     }
     return res.json({
       token: assinarToken(op),
-      operador: sessaoDoOperador(op),
+      operador: await sessaoDoOperador(op),
     });
   } catch (e) {
     return next(e);

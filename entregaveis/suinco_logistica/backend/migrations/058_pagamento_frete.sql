@@ -17,7 +17,9 @@
 --
 -- O QUE FICA GUARDADO — e o que não:
 --   · da carga, as CONTAGENS da conferência (as colunas C a I da planilha
---     dela) e os campos que a pessoa preenche (transportadora, CT-e, obs);
+--     dela) e os campos que a pessoa preenche (transportadora, CT-e, obs).
+--     O "% entregue" NÃO é guardado: sai das pendências abertas, na hora —
+--     um número guardado e outro calculado acabariam divergindo;
 --   · só as PENDÊNCIAS, nota a nota (o que não está Finalizado no B2B, o
 --     que está no sistema e não no B2B, e o inverso). A nota finalizada é
 --     contada e pronto: reconstruí-la só serviria para guardar 100 linhas
@@ -52,12 +54,6 @@ CREATE TABLE IF NOT EXISTS pgfrete_cargas (
   aguardando          INTEGER NOT NULL DEFAULT 0,
   nao_entregue        INTEGER NOT NULL DEFAULT 0,
   outros              INTEGER NOT NULL DEFAULT 0,
-  -- Finalizadas que também estão no sistema: é a base do "% entregue".
-  -- Igual a `finalizadas` quando as contagens batem; menor quando o B2B
-  -- traz nota que o sistema não tem.
-  finalizadas_no_sist INTEGER NOT NULL DEFAULT 0,
-  origem              TEXT NOT NULL DEFAULT 'relatorios'
-                      CHECK (origem IN ('relatorios', 'planilha')),
   transportadora      TEXT NOT NULL DEFAULT '',
   cte                 TEXT NOT NULL DEFAULT '',
   obs                 TEXT NOT NULL DEFAULT '',
@@ -93,7 +89,6 @@ CREATE TABLE IF NOT EXISTS pgfrete_pagamentos (
   pct              NUMERIC(5,2) NOT NULL CHECK (pct > 0 AND pct <= 100),
   data_pagamento   DATE,                      -- em branco = "ainda sem data"
   entregue_pct     NUMERIC(5,2),              -- o % entregue no momento do registro
-  estimado         BOOLEAN NOT NULL DEFAULT FALSE, -- veio da planilha, que só dizia "PARCIAL"
   obs              TEXT NOT NULL DEFAULT '',
   criado_em        TIMESTAMPTZ NOT NULL DEFAULT now(),
   criado_por_id    TEXT NOT NULL DEFAULT '',
@@ -109,13 +104,13 @@ CREATE INDEX IF NOT EXISTS ix_pgfrete_pag_carga ON pgfrete_pagamentos (numero_ca
 -- leu — a tela não devolve dado nenhum para ser gravado. Passa de um dia,
 -- some sozinha (a importação seguinte limpa).
 CREATE TABLE IF NOT EXISTS pgfrete_leituras (
-  lote          TEXT NOT NULL,
+  lote          TEXT NOT NULL,   -- gerado pelo servidor na primeira leitura do lote
   tipo          TEXT NOT NULL CHECK (tipo IN ('B2B', 'SIST')),
   numero_carga  TEXT NOT NULL,
   arquivo       TEXT NOT NULL DEFAULT '',
   conteudo      JSONB NOT NULL,
   criado_em     TIMESTAMPTZ NOT NULL DEFAULT now(),
-  criado_por    TEXT NOT NULL DEFAULT '',
+  criado_por    TEXT NOT NULL DEFAULT '',   -- id do operador: só quem leu confirma
   PRIMARY KEY (lote, tipo, numero_carga)
 );
 CREATE INDEX IF NOT EXISTS ix_pgfrete_leituras_data ON pgfrete_leituras (criado_em);

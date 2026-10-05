@@ -30,6 +30,9 @@ export class ErroDeLeitura extends Error {
 
 const MAX_BYTES = 6 * 1024 * 1024;
 const MAX_PAGINAS = 300;
+/* PDF montado para travar o leitor não pode travar o servidor do pátio: passou
+   disto, a leitura é abandonada e a pessoa recebe a explicação. */
+const TEMPO_MAXIMO_MS = 20000;
 
 let _pdfjs = null;
 async function carregarPdfjs() {
@@ -77,25 +80,33 @@ export async function lerPaginasDoPdf(buffer) {
     throw new ErroDeLeitura('PDF_ILEGIVEL', 'Não consegui abrir este PDF (está corrompido ou protegido por senha).');
   }
 
+  let relogio;
   try {
     if (doc.numPages > MAX_PAGINAS) {
       throw new ErroDeLeitura('PDF_GRANDE', `O PDF tem ${doc.numPages} páginas — passa do limite de ${MAX_PAGINAS}.`);
     }
-    const paginas = [];
-    for (let n = 1; n <= doc.numPages; n += 1) {
-      const pg = await doc.getPage(n);
-      const vp = pg.getViewport({ scale: 1 });
-      const tc = await pg.getTextContent();
-      const itens = [];
-      for (const i of tc.items) {
-        const s = String(i.str ?? '');
-        if (!s.trim()) continue;
-        itens.push({ s, x: Math.round(i.transform[4] * 10) / 10, y: Math.round(i.transform[5] * 10) / 10 });
+    const ler = async () => {
+      const paginas = [];
+      for (let n = 1; n <= doc.numPages; n += 1) {
+        const pg = await doc.getPage(n);
+        const vp = pg.getViewport({ scale: 1 });
+        const tc = await pg.getTextContent();
+        const itens = [];
+        for (const i of tc.items) {
+          const s = String(i.str ?? '');
+          if (!s.trim()) continue;
+          itens.push({ s, x: Math.round(i.transform[4] * 10) / 10, y: Math.round(i.transform[5] * 10) / 10 });
+        }
+        paginas.push({ largura: vp.width, altura: vp.height, itens });
       }
-      paginas.push({ largura: vp.width, altura: vp.height, itens });
-    }
-    return paginas;
+      return paginas;
+    };
+    const demorou = new Promise((_, rejeitar) => {
+      relogio = setTimeout(() => rejeitar(new ErroDeLeitura('PDF_DEMOROU', 'A leitura deste PDF demorou demais e foi cancelada.')), TEMPO_MAXIMO_MS);
+    });
+    return await Promise.race([ler(), demorou]);
   } finally {
+    clearTimeout(relogio);
     await tarefa.destroy().catch(() => {});
   }
 }

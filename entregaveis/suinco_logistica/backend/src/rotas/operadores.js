@@ -41,10 +41,25 @@ const EMAIL_OK = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 rotasOperadores.get('/operadores', SO_ADMIN, async (req, res, next) => {
   try {
-    const { rows } = await consultar(
-      `SELECT id, email, nome, setor, ativo, criado_em, ultimo_acesso
-         FROM operadores ORDER BY ativo DESC, setor, nome`
-    );
+    /* `acesso_frete` (migração 058): a marca da aba Pagamento de Frete. Se a
+       coluna ainda não existe (servidor sem o `atualizar`), a lista sai igual,
+       sem a marca (`acessoFrete: null`) — a tela de Usuários nunca quebra por
+       causa de uma coluna que falta. */
+    let rows;
+    let comFrete = true;
+    try {
+      ({ rows } = await consultar(
+        `SELECT id, email, nome, setor, ativo, criado_em, ultimo_acesso, acesso_frete
+           FROM operadores ORDER BY ativo DESC, setor, nome`
+      ));
+    } catch (e) {
+      if (e.code !== '42703') throw e;
+      comFrete = false;
+      ({ rows } = await consultar(
+        `SELECT id, email, nome, setor, ativo, criado_em, ultimo_acesso
+           FROM operadores ORDER BY ativo DESC, setor, nome`
+      ));
+    }
     // senha_hash NUNCA sai daqui. Mesmo sendo hash, exportá-lo permitiria
     // ataque de dicionário offline com todo o tempo do mundo.
     res.json(rows.map((o) => ({
@@ -55,6 +70,7 @@ rotasOperadores.get('/operadores', SO_ADMIN, async (req, res, next) => {
       ativo: o.ativo,
       criadoEm: o.criado_em,
       ultimoAcesso: o.ultimo_acesso,
+      acessoFrete: comFrete ? o.acesso_frete === true : null,
     })));
   } catch (e) { next(e); }
 });
@@ -128,6 +144,7 @@ rotasOperadores.patch('/operadores/:id', SO_ADMIN, async (req, res, next) => {
       campos.setor = req.body.setor;
     }
     if (req.body?.ativo !== undefined) campos.ativo = req.body.ativo === true;
+    if (req.body?.acessoFrete !== undefined) campos.acesso_frete = req.body.acessoFrete === true;
     if (req.body?.senha !== undefined) {
       const senha = String(req.body.senha);
       if (senha.length < SENHA_MINIMA) {
@@ -210,18 +227,31 @@ rotasOperadores.patch('/operadores/:id', SO_ADMIN, async (req, res, next) => {
     const setSql = cols.map((c, i) => `${c} = $${i + 1}`)
       .concat(revoga ? ['sessao_versao = sessao_versao + 1'] : [])
       .join(', ');
-    const { rows } = await consultar(
-      `UPDATE operadores SET ${setSql}
-        WHERE id = $${cols.length + 1}
-        RETURNING id, email, nome, setor, ativo, criado_em, ultimo_acesso, sessao_versao`,
-      [...Object.values(campos), id]
-    );
+    let rows;
+    try {
+      ({ rows } = await consultar(
+        `UPDATE operadores SET ${setSql}
+          WHERE id = $${cols.length + 1}
+          RETURNING id, email, nome, setor, ativo, criado_em, ultimo_acesso, sessao_versao`,
+        [...Object.values(campos), id]
+      ));
+    } catch (e) {
+      // Marcar o acesso à aba de frete num servidor que ainda não rodou a migração 058.
+      if (e.code === '42703' && campos.acesso_frete !== undefined) {
+        return res.status(503).json({
+          erro: 'O servidor ainda não tem a função Pagamento de Frete. Rode a atualização do servidor e tente de novo.',
+          codigo: 'FRETE_SEM_MIGRACAO',
+        });
+      }
+      throw e;
+    }
     if (revoga) {
       console.log(`[seguranca] sessões de ${atual[0].email} revogadas por ${req.operador.nome}`);
       desconectarOperador(id);   // o socket também cai, não só o HTTP
     }
 
     const oque = cols.filter((c) => c !== 'senha_hash');
+    // (acesso_frete não revoga sessão: a marca é lida do banco a cada requisição)
     if (cols.includes('senha_hash')) oque.push('senha');
     console.log(`[operadores] ${req.operador.nome} alterou ${atual[0].email}: ${oque.join(', ')}`);
 
