@@ -64,7 +64,9 @@ export const COLUNAS_DA_PLANILHA = COLUNAS.map((c) => c.t);
 const K_PEND = `$K:$K,"<>${SEM_PENDENCIA}",$K:$K,"<>*(Só no B2B)",$K:$K,"<>"`;
 export const FORMULAS = {
   diferenca: (x) => `C${x}-D${x}`,
-  situacao: (x) => `IF(OR(C${x}<>D${x},F${x}=0,COUNTIFS($B:$B,B${x},$K:$K,"*(Não localizada no B2B)")+COUNTIFS($B:$B,B${x},$K:$K,"*(Só no B2B)")>0),"VERIFICAR",IF(F${x}=C${x},"LIBERADA","PENDENTE"))`,
+  /* VERIFICAR só com nota só no B2B, B2B com mais notas que o sistema, ou nada
+     finalizado — nota faltando no B2B é pendência, não trava (05/10, tarde). */
+  situacao: (x) => `IF(OR(D${x}>C${x},F${x}=0,COUNTIFS($B:$B,B${x},$K:$K,"*(Só no B2B)")>0),"VERIFICAR",IF(F${x}>=C${x},"LIBERADA","PENDENTE"))`,
   situacaoRepetida: (primeira) => `J${primeira}`,
   statusPagamento: (x) => `IF(J${x}="VERIFICAR","conferir",IF(N(T${x})>0,"A PAGAR",IF(AND(N(R${x})>=0.99995,N(S${x})>=0.99995),"INTEGRAL",IF(N(R${x})>0,"PARCIAL",""))))`,
   entregue: (x) => `IF(C${x}>0,(C${x}-COUNTIFS($B:$B,B${x},${K_PEND}))/C${x},"")`,
@@ -89,7 +91,13 @@ export const diaLocal = (iso) => {
               naoEntregue, outros, transportadora, cte, obs, pctPago (0–100), dataPagamento,
               pendencias:[{ nota, categoria, statusB2b, tratativa, tratativaEm, obs }] }]
    → { colunas, linhas, resumo } */
-export function montarGrade(cargas) {
+/* Dias corridos entre uma data (AAAA-MM-DD ou ISO) e hoje; null se não houver data. */
+export function idadeEmDias(desde, hoje = diaLocal(new Date().toISOString())) {
+  const d = diaLocal(desde); if (!d || !hoje) return null;
+  return Math.max(0, Math.round((Date.parse(`${hoje}T00:00:00Z`) - Date.parse(`${d}T00:00:00Z`)) / 86400000));
+}
+
+export function montarGrade(cargas, hoje = diaLocal(new Date().toISOString())) {
   const ordenadas = [...cargas].sort((a, b) => String(a.dataConsulta ?? '').localeCompare(String(b.dataConsulta ?? '')) || Number(a.numero) - Number(b.numero));
   const linhas = [];
 
@@ -137,14 +145,18 @@ export function montarGrade(cargas) {
         carga: Number(carga.numero), primeira, nota: p?.nota ?? null, categoria: p?.categoria ?? null,
         cliente: p?.cliente ?? '', cidade: p?.cidade ?? '',
         obsNota: p?.obs ?? '', obsCarga: primeira ? (carga.obs ?? '') : '', celulas: c,
+        /* Idade da pendência SEM tratativa: dias desde que entrou no controle
+           (rodada 45 — "por onde a Daniela começa na semana"). */
+        vistoEm: p?.vistoEm ?? null,
+        idadeDias: p && !p.tratativa ? idadeEmDias(p.vistoEm ?? carga.dataConsulta, hoje) : null,
       });
     }
   }
-  return { colunas: COLUNAS, linhas, resumo: resumoDaGrade(ordenadas) };
+  return { colunas: COLUNAS, linhas, resumo: resumoDaGrade(ordenadas, hoje) };
 }
 
 /* O RESUMO — as mesmas contas da aba RESUMO do arquivo, e dos cartões da tela. */
-export function resumoDaGrade(cargas) {
+export function resumoDaGrade(cargas, hoje = diaLocal(new Date().toISOString())) {
   const ind = cargas.map((c) => ({ c, i: indicadoresDaCarga(c) }));
   const total = ind.length;
   const por = (sit) => ind.filter((x) => x.i.situacao === sit).length;
@@ -177,8 +189,34 @@ export function resumoDaGrade(cargas) {
     };
   });
 
+  /* FECHAMENTO (rodada 45, contabilidade sem R$): idade das pendências sem
+     tratativa, provisão (liberado e não pago, em notas) e pagamentos por mês. */
+  const semOlhar = cargas.flatMap((c) => (c.pendencias ?? []).filter((p) => !p.tratativa).map((p) => idadeEmDias(p.vistoEm ?? c.dataConsulta, hoje) ?? 0));
+  const idade = {
+    ate7: semOlhar.filter((d) => d <= 7).length, de8a14: semOlhar.filter((d) => d >= 8 && d <= 14).length,
+    mais15: semOlhar.filter((d) => d >= 15).length, maisDe7: semOlhar.filter((d) => d > 7).length,
+    maisAntiga: semOlhar.length ? Math.max(...semOlhar) : null,
+  };
+  const notasDe = (x, frac) => Math.round((frac ?? 0) * num(x.c.qtdSist) * 10) / 10;
+  const provisao = {
+    cargas: ind.filter((x) => (x.i.aPagar ?? 0) > 0).length,
+    notas: Math.round(ind.reduce((s, x) => s + notasDe(x, x.i.aPagar), 0) * 10) / 10,
+  };
+  const meses = new Map();
+  for (const x of ind) {
+    const lanc = Array.isArray(x.c.pagamentos) ? x.c.pagamentos : (num(x.c.pctPago) > 0 ? [{ pct: num(x.c.pctPago), data: x.c.dataPagamento ?? null }] : []);
+    for (const l of lanc) {
+      const mes = l.data ? String(l.data).slice(0, 7) : 'sem data';
+      if (!meses.has(mes)) meses.set(mes, { mes, pagamentos: 0, cargas: new Set(), notas: 0 });
+      const m = meses.get(mes); m.pagamentos += 1; m.cargas.add(x.c.numero); m.notas += notasDe(x, num(l.pct) / 100);
+    }
+  }
+  const porMes = [...meses.values()].sort((a, b) => (a.mes === 'sem data') - (b.mes === 'sem data') || b.mes.localeCompare(a.mes))
+    .map((m) => ({ mes: m.mes, pagamentos: m.pagamentos, cargas: m.cargas.size, notas: Math.round(m.notas * 10) / 10 }));
+
   return {
     cargas: total, liberadas: por('LIBERADA'), pendentes: por('PENDENTE'), verificar: por('VERIFICAR'),
+    idade, provisao, porMes, semOlhar: semOlhar.length,
     integral, parcial, semPagamento: total - integral - parcial,
     comSaldo: ind.filter((x) => (x.i.aPagar ?? 0) > 0).length,
     comCanhoto: ind.filter((x) => x.c.canhotoOriginal === true).length,

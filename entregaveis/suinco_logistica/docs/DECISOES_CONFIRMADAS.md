@@ -881,6 +881,24 @@ e rascunho de chamado). Caiu pela fidelidade do dado, não por custo ou prazo.
     um que não siga"). O leitor lê pela estrutura e recusa o que foge dela;
     o campo CARGA do B2B pode vir "103-001-118771" — o número é o último
     trecho (#112).
+12. **Rodada 45 (05/10, fim de tarde).** (a) Nota do sistema que FALTA no B2B é
+    pendência normal ("Não localizada no B2B"): não entra no liberado e não
+    trava a carga — a 118771 (31 × 30) ficou PENDENTE · A PAGAR 74,2%; "ela
+    fica pendente, não libera a carga integral". VERIFICAR só com nota só no
+    B2B, B2B com mais notas que o sistema, ou nada finalizado. (b) "Todo estado
+    é um selo com texto e cor" — situação, o que fazer, tratativa, resumo das
+    pendências, canhoto. (c) A aba é uma fila de trabalho: topo "O que fazer
+    hoje" (A PAGAR · Pendências sem olhar · Conferir) e "Panorama"; ordem por
+    prioridade; idade das pendências sem tratativa (dias desde que entraram,
+    destaque acima de 7); pagamento em lote das A PAGAR (um lançamento por
+    carga); Fechamento por mês do pagamento, provisão e idade — contagem de
+    notas, sem R$. (d) Filtros amplos (carga, transportadora, data do
+    pagamento, data da consulta, pendências, situação, status) e exportação do
+    recorte da tela, com o filtro escrito no topo do arquivo. (e) Sem lembrete
+    de reimportar: "ela decide; se não for preciso, altera manualmente; se
+    for, reimporta". SUMIU DO B2B fica (a nota estava e depois não aparece).
+    (f) Governança: reimportar sobrescreve com memória e deixa trilha do antes;
+    pagamento repetido em 2 min pergunta; vigia diário de integridade da aba.
 9. **Canhoto original: uma caixinha por carga, sim ou não** — "isso não
    interfere na questão do fechamento do digital, é só para acompanhamento".
    Não entra em liberado, pago nem a pagar. Marcar carimba o dia e quem marcou

@@ -143,10 +143,19 @@ export function categoriaDoRotulo(rotulo) {
    único acréscimo ao que a planilha mostra: com as duas contagens iguais
    mas notas diferentes (uma falta num lado, outra sobra no outro), a
    carga NÃO pode sair LIBERADA — é VERIFICAR. */
-export function situacaoDaCarga({ qtdSist, qtdB2b, finalizadas, semCorrespondencia = 0 }) {
-  if (qtdSist !== qtdB2b || semCorrespondencia > 0) return 'VERIFICAR';
+/* O que é VERIFICAR (decisão do dono, 05/10/2026, à tarde — carga 118771 real):
+   só o que é suspeito de verdade — nota que está no B2B e NÃO está no sistema
+   (`soB2b`: carga de outro embarque misturada), ou nada finalizado no B2B.
+   Nota do sistema que FALTA no B2B é uma pendência normal ("Não localizada no
+   B2B"): não entra no liberado, mas não trava a carga — "pode estar aguardando
+   entrega ou outro motivo" (Daniela). De manhã a regra travava a carga inteira
+   por uma nota faltando; a 118771 (31 × 30) ficava sem poder pagar as 23
+   finalizadas. `semCorrespondencia` continua aceito pelos chamadores antigos,
+   mas só o `soB2b` decide. */
+export function situacaoDaCarga({ qtdSist, qtdB2b, finalizadas, soB2b = 0 }) {
+  if (soB2b > 0 || qtdB2b > qtdSist) return 'VERIFICAR';
   if (!finalizadas) return 'VERIFICAR';
-  if (finalizadas === qtdSist) return 'LIBERADA';
+  if (finalizadas >= qtdSist) return 'LIBERADA';
   return 'PENDENTE';
 }
 
@@ -204,12 +213,13 @@ export function conferirCarga({ sist, b2b }) {
   const qtdSist = porNotaSist.size;
   const qtdB2b = porNotaB2b.size;
   const semCorrespondencia = pendencias.filter((p) => p.categoria === 'nao_localizada' || p.categoria === 'so_b2b').length;
+  const soB2b = pendencias.filter((p) => p.categoria === 'so_b2b').length;
   const out = {
     qtdSist, qtdB2b, diferenca: qtdSist - qtdB2b,
     finalizadas: cont.finalizada, aguardando: cont.aguardando, naoEntregue: cont.nao_entregue, outros: cont.outro,
     finalizadasNoSist, semCorrespondencia, pendencias, avisos,
   };
-  out.situacao = situacaoDaCarga({ qtdSist, qtdB2b, finalizadas: cont.finalizada, semCorrespondencia });
+  out.situacao = situacaoDaCarga({ qtdSist, qtdB2b, finalizadas: cont.finalizada, soB2b });
   return out;
 }
 
@@ -241,10 +251,10 @@ export function indicadoresDaCarga(carga) {
   const qtdSist = Number(carga.qtdSist) || 0;
   const pend = carga.pendencias ?? [];
   const doSist = pend.filter((p) => p.categoria !== 'so_b2b');
-  const semCorrespondencia = pend.filter((p) => p.categoria === 'nao_localizada' || p.categoria === 'so_b2b').length;
+  const soB2b = pend.filter((p) => p.categoria === 'so_b2b').length;
   const liberadasPorTratativa = doSist.filter((p) => TRATATIVAS_QUE_LIBERAM.includes(p.tratativa)).length;
   const situacao = situacaoDaCarga({
-    qtdSist, qtdB2b: Number(carga.qtdB2b) || 0, finalizadas: Number(carga.finalizadas) || 0, semCorrespondencia,
+    qtdSist, qtdB2b: Number(carga.qtdB2b) || 0, finalizadas: Number(carga.finalizadas) || 0, soB2b,
   });
   const conferir = situacao === 'VERIFICAR';
   const pago = Math.min(1, Math.max(0, (Number(carga.pctPago) || 0) / 100));

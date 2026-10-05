@@ -175,8 +175,8 @@ export function lerPlanilhaDeControle(abas, escolhidas = null) {
     }
     const r = c.resumo;
     const pendencias = [...c.pendencias.values()];
-    const semCorrespondencia = pendencias.filter((p) => p.categoria === 'nao_localizada' || p.categoria === 'so_b2b').length;
-    const situacao = situacaoDaCarga({ qtdSist: r.qtdSist, qtdB2b: r.qtdB2b, finalizadas: r.finalizadas, semCorrespondencia });
+    const soB2b = pendencias.filter((p) => p.categoria === 'so_b2b').length;
+    const situacao = situacaoDaCarga({ qtdSist: r.qtdSist, qtdB2b: r.qtdB2b, finalizadas: r.finalizadas, soB2b });
     const avisos = [...c.avisos];
     if (r.situacao && r.situacao !== situacao) {
       avisos.push(`A planilha dizia ${r.situacao}; pela regra do painel é ${situacao}. Vale a regra do painel.`);
