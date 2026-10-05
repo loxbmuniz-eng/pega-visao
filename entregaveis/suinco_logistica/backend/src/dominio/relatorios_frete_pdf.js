@@ -278,6 +278,12 @@ export function lerSist(paginas) {
       if (!colunas) continue;
       const primeiro = linha.itens[0];
       if (!/^\d{2}\/\d{2}\/\d{4}$/.test(primeiro.s.trim())) continue; // rodapé, filtros, título
+      /* A data e hora de emissão ("21/09/2026 14:29:38") se repetem no topo de
+         CADA página do WRVDA501 — da 2ª em diante já há carga e colunas, e a
+         linha passava por nota sem número ("não tem número de nota legível"),
+         um aviso falso no relatório real da 118771 (05/10/2026). Linha só com
+         data e hora não é nota. */
+      if (linha.itens.length <= 2 && linha.itens.slice(1).every((i) => /^\d{2}:\d{2}:\d{2}$/.test(i.s.trim()))) continue;
       if (!atual) {
         throw new ErroDeLeitura('SIST_SEM_CARGA', 'As notas do sistema vêm antes do número da carga — o formato mudou?');
       }

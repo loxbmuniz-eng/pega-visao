@@ -175,6 +175,7 @@ describe('leitura dos PDFs (exemplos inventados)', () => {
     const { b, s, r } = await confere('900805');
     assert.equal(b.linhas.length, 40, 'o B2B tem de trazer as 40 linhas (a 31 caía no corte do rodapé)');
     assert.equal(s.notas.length, 40);
+    assert.deepEqual(s.avisos, [], 'a data/hora de emissão no topo da 2ª página não é nota (aviso falso na 118771 real, 05/10)');
     assert.deepEqual([r.qtdSist, r.qtdB2b, r.finalizadas, r.aguardando, r.naoEntregue, r.semCorrespondencia], [40, 40, 36, 3, 1, 0]);
     assert.equal(r.situacao, 'PENDENTE');
     assert.deepEqual(b.linhas.map((l) => l.seq).sort((x, y) => x - y), Array.from({ length: 40 }, (_, i) => i + 1));

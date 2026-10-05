@@ -214,13 +214,14 @@ def main():
                 continue
             gerar(pg, f'b2b_{numero}.pdf', html_b2b([numero]),
                   cabecalho='DeliveryB2B - Plataforma de controle de entregas e recebimentos - Gerado em 05/10/2026 09:30')
-            gerar(pg, f'sist_{numero}.pdf', html_sist([numero]), landscape=True, cabecalho='')
+            # o Atak repete a data e hora de emissão no topo de cada página — o leitor não pode tomá-la por nota
+            gerar(pg, f'sist_{numero}.pdf', html_sist([numero]), landscape=True, cabecalho='05/10/2026 09:30:00')
         if so:
             nav.close()
             return
         gerar(pg, 'b2b_varias.pdf', html_b2b(['900807', '900808']),
               cabecalho='DeliveryB2B - Plataforma de controle de entregas e recebimentos - Gerado em 05/10/2026 09:30')
-        gerar(pg, 'sist_varias.pdf', html_sist(['900807', '900808']), cabecalho='')
+        gerar(pg, 'sist_varias.pdf', html_sist(['900807', '900808']), cabecalho='05/10/2026 09:30:00')
         gerar(pg, 'outro_relatorio.pdf', html_outro(), landscape=False)
         nav.close()
 
