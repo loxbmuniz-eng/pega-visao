@@ -180,6 +180,13 @@ def main():
 
     # 3 e 4. a base de demonstração e a tarja, antes de qualquer script rodar.
     dados = json.loads(BASE.read_text(encoding='utf-8'))
+    # QUEM OLHA A VITRINE É A ADMINISTRAÇÃO (05/10/2026). O roteiro da base foi
+    # jogado como Logística (é quem cria carga e dá os passos do fluxo), mas a
+    # pessoa que ABRE a vitrine precisa ver TODAS as abas — inclusive Pagamento
+    # de Frete, que é só do setor dela e da Administração. Com a persona
+    # Logística a aba nova ficava escondida, e o dono abriu a vitrine e não
+    # achou o que tinha pedido.
+    dados['operador'] = {**dados.get('operador', {}), 'nome': 'Demonstração', 'setor': 'Administração'}
     semente = (
         '<script>/* vitrine: a base de demonstração entra antes de o painel ler o disco */\n'
         'try{ localStorage.setItem(' + json.dumps(CHAVE) + ', '

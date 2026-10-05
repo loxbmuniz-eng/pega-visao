@@ -5078,3 +5078,34 @@ classe `.doc-amplo`, que também veste o **papel do manobrista** — ele saiu a
 12px em vez de 13. `test_relatorio_manobrista` acusou. A tipografia nova
 ficou escopada em `#print-fretes`; o manobrista voltou ao que era, e o PDF de
 fretes continua cabendo (748 de 748px medidos).
+
+## #111 — A vitrine não tinha a aba que o dono pediu, e a "prova" era uma foto forçada (05/10/2026)
+
+**Relato.** Depois de publicar a caixinha do canhoto original (portão 41), mandei
+ao dono uma foto da aba Pagamento de Frete "na vitrine". Ele abriu a vitrine:
+*"o que exatamente você tá me mostrando nessa vitrine sendo que não tem uma
+aba pra função que eu pedi"*. Não tinha.
+
+**Causa raiz (reproduzida).** A vitrine entra como "Demonstração · Logística"
+(`vitrine/gerar_demonstracao.py` joga o roteiro como Logística, e a persona ia
+junto na base). A aba Pagamento de Frete é só do setor Pagamento de Frete e da
+Administração (`data.js`, `ABAS_POR_SETOR`) — então na vitrine ela ficava
+`display:none`. A foto foi tirada por um `click()` de código num botão
+escondido: o navegador obedece, a pessoa não consegue. Isso valia desde a
+v28 da vitrine, no mesmo dia.
+
+**Família.** "Prova por atalho": a conferência usa um caminho que o usuário
+não tem (clique em elemento escondido, chamada direta de função, estado
+injetado) e afirma o que a tela não mostra. Parente de #110 (teste que vence
+sozinho) e de todo relato "deve funcionar".
+
+**Correção.** `vitrine/gerar_vitrine.py` troca a persona de quem ABRE a vitrine
+para Administração (vê todas as abas); o roteiro da base continua como
+Logística. Vitrine republicada (v30).
+
+**Guarda.** `testes/test_vitrine_mostra_todas_as_abas.py`: gera a vitrine
+agora, exige persona Administração, 13 abas todas VISÍVEIS, cada uma aberta
+com clique de verdade e ativa, a de Pagamento de Frete com as caixinhas, zero
+erro de página. Reprovou contra a persona Logística (2 falhas: persona e
+"escondidas: ['frete']") e passou com a correção. Regra nova em `CLAUDE.md`:
+prova é tirada como o usuário vê.
