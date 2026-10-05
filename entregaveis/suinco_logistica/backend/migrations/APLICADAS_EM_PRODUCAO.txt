@@ -1,4 +1,17 @@
-056
+059
+# ---------------------------------------------------------------------
+# 05/10/2026 — 056 → 059. Bloco COPIE DAQUI colado pelo dono
+# (atualizar_tudo.sh): commit no servidor e6e3d7f, serviço active,
+# /health local 200, última migração 059_canhoto_original.sql, vigias
+# 4 ok, node v24.21.0, problemas nesta rodada: nenhum.
+#
+# O QUE ISSO DESTRAVA: a aba Pagamento de Frete inteira (057 vigias, 058
+# setor + cinco tabelas pgfrete_*, 059 canhoto original). Até aqui a aba
+# respondia 503 "o servidor ainda não tem esta função" e o setor novo era
+# recusado no cadastro de usuário.
+#
+# Com ela, NÃO HÁ MIGRAÇÃO PENDENTE. A próxima é a 060 (rodada 2).
+# ---------------------------------------------------------------------
 # ^^^ ESTA LINHA É A ÚNICA QUE O PORTÃO LÊ. Todo o resto deste arquivo é
 # explicação para gente. Em 25/09/2026 o dono aplicou a 055, eu escrevi
 # isso no texto abaixo e ESQUECI DE MUDAR O NÚMERO — e o portão passou a
