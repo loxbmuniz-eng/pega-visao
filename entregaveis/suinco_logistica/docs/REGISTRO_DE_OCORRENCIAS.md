@@ -5068,3 +5068,13 @@ Pagamento de Frete) e `test_relatorios` esperava as 6 colunas antigas do PDF de
 fretes (são 9, #109). E um achado real da conferência de layout do mesmo
 `test_relatorios`: as colunas de data do PDF de fretes com 9% transbordavam
 ("05/10/2026", "PROGRAMAÇÃO") — larguras MEDIDAS em mídia de impressão (a folha é retrato, 748px úteis; as nove colunas pediam 819px a 13px): corpo a 12px, cabeçalho a 10px, recuo 16px, "R$" só no cabeçalho, a hora da Saída na segunda linha, Placa 10%. Soma medida: 750px.
+
+**Segunda rodada do portão 40 (mesmo dia).** Dois vermelhos: (1)
+`test_frete_tabela_e_planilha` lia a planilha de fretes por POSIÇÃO fixa
+(coluna C, índices 7, 12, 15) e a Data da Programação entrou na C — teste
+atualizado para as 20 colunas; (2) **regressão minha, pega antes de
+publicar**: a letra e o recuo que diminuí para o PDF de fretes estavam na
+classe `.doc-amplo`, que também veste o **papel do manobrista** — ele saiu a
+12px em vez de 13. `test_relatorio_manobrista` acusou. A tipografia nova
+ficou escopada em `#print-fretes`; o manobrista voltou ao que era, e o PDF de
+fretes continua cabendo (748 de 748px medidos).

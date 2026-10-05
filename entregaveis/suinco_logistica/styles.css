@@ -3693,12 +3693,17 @@ input,select,textarea{border-radius:5px}
 
      A leitura não perde nada — em A4 deitado a coluna de Observações fica
      MAIS larga do que era em pé, e é a coluna que carrega o texto. */
-  /* MEDIDO EM 05/10/2026 (ocorrência #109): a folha é retrato, 748px úteis, e
-     com nove colunas a 13px/recuo 20px elas pediam 819px. A 12px, recuo 16px e
-     cabeçalho a 10px a conta fecha com folga — e 12px continua acima do piso. */
-  .doc-amplo table{ font-size:12px !important; table-layout:fixed }
-  .doc-amplo th, .doc-amplo td{ padding:8px 8px !important; vertical-align:top }
-  .doc-amplo th{ font-size:10px !important; letter-spacing:.02em }
+  .doc-amplo table{ font-size:13px !important; table-layout:fixed }
+  .doc-amplo th, .doc-amplo td{ padding:9px 10px !important; vertical-align:top }
+  .doc-amplo th{ font-size:11px !important; letter-spacing:.04em }
+  /* SÓ O PDF DE FRETES, MEDIDO EM 05/10/2026 (ocorrência #109/#110): a folha é
+     retrato, 748px úteis, e com nove colunas a 13px/recuo 20px elas pediam 819px.
+     A 12px, recuo 16px e cabeçalho a 10px a conta fecha (750px medidos). Escopado
+     em #print-fretes porque .doc-amplo também veste o papel do manobrista, que
+     continua a 13px / 9px 10px (test_relatorio_manobrista). */
+  #print-fretes .doc-amplo table{ font-size:12px !important }
+  #print-fretes .doc-amplo th, #print-fretes .doc-amplo td{ padding:8px 8px !important }
+  #print-fretes .doc-amplo th{ font-size:10px !important; letter-spacing:.02em }
   /* Zebra: com linhas altas e três colunas largas, o olho perde a linha ao
      atravessar a página. */
   .doc-amplo tbody tr:nth-child(even) td{ background:#f4f5f7 !important }
