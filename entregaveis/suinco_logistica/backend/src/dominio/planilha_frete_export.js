@@ -34,9 +34,12 @@
    teste reprova.
    ===================================================================== */
 import { escreverXlsx } from '../servicos/planilha_xlsx_escrita.js';
+import { TRATATIVAS } from './pagamento_frete.js';
 import {
-  indicadoresDaCarga, rotuloDaPendencia, TRATATIVAS, TRATATIVAS_QUE_LIBERAM,
-} from './pagamento_frete.js';
+  COLUNAS, COLUNAS_DA_PLANILHA, SEM_PENDENCIA, montarGrade,
+} from './planilha_frete_grade.js';
+
+export { COLUNAS_DA_PLANILHA };
 
 const C = {
   navy: '1E2A52', navyFundo: '101625', ouro: 'E9B954', ouroEscuro: 'B9903F', aco: '3E5C86',
@@ -46,35 +49,6 @@ const C = {
 };
 const FONTE = 'Calibri';
 
-/* AS COLUNAS — A a P são as dela, na ordem dela; Q em diante é acréscimo.
-   tipo: 'rel' vem dos relatórios · 'manual' alguém preenche · 'calc' é fórmula. */
-const COLUNAS = [
-  { t: 'Data Consulta', tipo: 'rel', larg: 13.5 },
-  { t: 'Carga', tipo: 'rel', larg: 10.5 },
-  { t: 'Qtde SIST', tipo: 'rel', larg: 10 },
-  { t: 'Qtde B2B', tipo: 'rel', larg: 10 },
-  { t: 'Diferença', tipo: 'calc', larg: 11 },
-  { t: 'Finalizadas', tipo: 'rel', larg: 11.5 },
-  { t: 'Aguardando', tipo: 'rel', larg: 11.5 },
-  { t: 'Não Entregue', tipo: 'rel', larg: 12.5 },
-  { t: 'Outros Status', tipo: 'rel', larg: 12 },
-  { t: 'Situação', tipo: 'calc', larg: 14 },
-  { t: 'Resumo Pendências', tipo: 'rel', larg: 32 },
-  { t: 'Status Pendência', tipo: 'manual', larg: 19 },
-  { t: 'Status p/ pagamento', tipo: 'calc', larg: 15.5 },
-  { t: 'Data Pagamento', tipo: 'manual', larg: 14.5 },
-  { t: 'Transportadora', tipo: 'manual', larg: 24 },
-  { t: 'CT-E', tipo: 'manual', larg: 12 },
-  { t: '% Entregue', tipo: 'calc', larg: 12 },
-  { t: '% Liberado', tipo: 'calc', larg: 12 },
-  { t: '% Pago', tipo: 'manual', larg: 10.5 },
-  { t: 'A pagar agora', tipo: 'calc', larg: 13 },
-  { t: 'Data Tratativa', tipo: 'manual', larg: 14 },
-  { t: 'Observação', tipo: 'manual', larg: 38 },
-];
-export const COLUNAS_DA_PLANILHA = COLUNAS.map((c) => c.t);
-
-const SEM_PENDENCIA = 'SEM PENDÊNCIA';
 const ABA_CONTROLE = 'CONTROLE_CARGAS';
 const LIMITE = 20000;
 const rng = (col) => `${ABA_CONTROLE}!$${col}$2:$${col}$${LIMITE}`;
@@ -108,63 +82,34 @@ const horaBr = (d, tz = 'America/Sao_Paulo') => new Intl.DateTimeFormat('pt-BR',
 
 /* ---------------------------------------------------------- CONTROLE_CARGAS */
 
-function abaControle(cargas) {
+function abaControle(grade) {
   const linhas = [{ altura: 40, c: COLUNAS.map((c) => ({ v: c.t, e: cabecalho(c.tipo) })) }];
-  const L = (n) => n + 1; // índice 0-based da lista → número da linha do Excel
-  const K_PEND = `$K:$K,"<>${SEM_PENDENCIA}",$K:$K,"<>*(Só no B2B)",$K:$K,"<>"`;
+  const centroNeg = com({ alin: { h: 'center' }, fonte: { neg: true } });
+  const centroNegMudo = com({ alin: { h: 'center' }, ...mudo });
 
-  for (const carga of cargas) {
-    const ind = indicadoresDaCarga(carga);
-    const pend = carga.pendencias ?? [];
-    const n = Math.max(1, pend.length);
-    const r = L(linhas.length); // linha do Excel da primeira linha da carga
-    const qtdSist = Number(carga.qtdSist) || 0;
-
-    for (let i = 0; i < n; i += 1) {
-      const p = pend[i];
-      const resumo = p ? `${p.nota} (${rotuloDaPendencia(p)})` : SEM_PENDENCIA;
-      const primeira = i === 0;
-      const x = L(linhas.length);
-      const cel = new Array(COLUNAS.length).fill(null).map(() => ({ e: ESTILO.vazio }));
-
-      cel[0] = { v: carga.dataConsulta ?? null, t: 'd', e: primeira ? ESTILO.data : ESTILO.dataMuda };
-      cel[1] = { v: Number(carga.numero), t: 'n', e: primeira ? ESTILO.carga : ESTILO.cargaMuda };
-      cel[10] = { v: resumo, e: ESTILO.texto };
-      cel[11] = { v: p?.tratativa || null, e: ESTILO.centro };
-      cel[14] = { v: carga.transportadora || null, e: primeira ? ESTILO.texto : ESTILO.textoMudo };
-      cel[20] = { v: p?.tratativaEm ?? null, t: 'd', e: ESTILO.data };
-      cel[21] = { v: (primeira ? [carga.obs, p?.obs] : [p?.obs]).filter(Boolean).join(' · ') || null, e: ESTILO.texto };
-
-      if (primeira) {
-        cel[2] = { v: qtdSist, e: ESTILO.centro };
-        cel[3] = { v: Number(carga.qtdB2b) || 0, e: ESTILO.centro };
-        cel[4] = { f: `C${x}-D${x}`, v: qtdSist - (Number(carga.qtdB2b) || 0), e: ESTILO.centro };
-        cel[5] = { v: Number(carga.finalizadas) || 0, e: ESTILO.centro };
-        cel[6] = { v: Number(carga.aguardando) || 0, e: ESTILO.centro };
-        cel[7] = { v: Number(carga.naoEntregue) || 0, e: ESTILO.centro };
-        cel[8] = { v: Number(carga.outros) || 0, e: ESTILO.centro };
-        cel[9] = {
-          f: `IF(OR(C${x}<>D${x},F${x}=0,COUNTIFS($B:$B,B${x},$K:$K,"*(Não localizada no B2B)")+COUNTIFS($B:$B,B${x},$K:$K,"*(Só no B2B)")>0),"VERIFICAR",IF(F${x}=C${x},"LIBERADA","PENDENTE"))`,
-          v: ind.situacao, e: com({ alin: { h: 'center' }, fonte: { neg: true } }),
-        };
-        cel[12] = { f: `IF(S${x}>=0.99995,"INTEGRAL",IF(S${x}>0,"PARCIAL",""))`, v: ind.statusPagamento, e: com({ alin: { h: 'center' }, fonte: { neg: true } }) };
-        cel[13] = { v: carga.dataPagamento ?? null, t: 'd', e: ESTILO.data };
-        cel[15] = { v: carga.cte || null, t: 's', e: ESTILO.centro };
-        cel[16] = { f: `IF(C${x}>0,(C${x}-COUNTIFS($B:$B,B${x},${K_PEND}))/C${x},"")`, v: ind.entregue ?? '', e: ESTILO.pct };
-        cel[17] = {
-          f: `IF(C${x}>0,IF(J${x}="VERIFICAR","conferir",MIN(1,Q${x}+(COUNTIFS($B:$B,B${x},$K:$K,"<>*(Só no B2B)",$L:$L,"OK")+COUNTIFS($B:$B,B${x},$K:$K,"<>*(Só no B2B)",$L:$L,"OK B2B"))/C${x})),"")`,
-          v: ind.conferir ? 'conferir' : (ind.liberado ?? ''), e: ESTILO.pct,
-        };
-        cel[18] = { v: ind.pago > 0 ? ind.pago : null, e: ESTILO.pct };
-        cel[19] = {
-          f: `IF(C${x}>0,IF(J${x}="VERIFICAR","conferir",MAX(0,ROUND(R${x}-S${x},4))),"")`,
-          v: ind.conferir ? 'conferir' : (ind.aPagar ?? ''), e: com({ fmt: '0.0%', alin: { h: 'center' }, fonte: { neg: true } }),
-        };
-      } else {
-        cel[9] = { f: `J${r}`, v: ind.situacao, e: com({ alin: { h: 'center' }, ...mudo }) };
-      }
-      linhas.push({ altura: 20, c: cel });
+  /* O estilo de cada célula depende só da COLUNA e de a linha ser a primeira
+     da carga ou uma repetição (cinza). O valor e a fórmula vêm da grade. */
+  const estiloDe = (chave, primeira) => {
+    switch (chave) {
+      case 'data': return primeira ? ESTILO.data : ESTILO.dataMuda;
+      case 'dataPagamento': case 'dataTratativa': return ESTILO.data;
+      case 'carga': return primeira ? ESTILO.carga : ESTILO.cargaMuda;
+      case 'situacao': return primeira ? centroNeg : centroNegMudo;
+      case 'statusPagamento': return centroNeg;
+      case 'resumo': case 'observacao': return ESTILO.texto;
+      case 'transportadora': return primeira ? ESTILO.texto : ESTILO.textoMudo;
+      case 'entregue': case 'liberado': case 'pago': return ESTILO.pct;
+      case 'aPagar': return com({ fmt: '0.0%', alin: { h: 'center' }, fonte: { neg: true } });
+      case 'tratativa': case 'cte': case 'qtdSist': case 'qtdB2b': case 'diferenca': case 'finalizadas':
+      case 'aguardando': case 'naoEntregue': case 'outros': return ESTILO.centro;
+      default: return ESTILO.vazio;
     }
+  };
+  for (const l of grade.linhas) {
+    linhas.push({
+      altura: 20,
+      c: l.celulas.map((cel, j) => ({ ...cel, e: estiloDe(COLUNAS[j].chave, l.primeira) })),
+    });
   }
 
   const ultima = Math.max(linhas.length, 2);
@@ -258,17 +203,11 @@ const TONS = {
   azul: { fundo: 'E8EEF9', cor: '2B4C8C' },
 };
 
-function abaResumo(cargas, { geradoEm, exemplo }) {
-  const ind = cargas.map((c) => ({ c, i: indicadoresDaCarga(c) }));
-  const total = ind.length;
-  const por = (sit) => ind.filter((x) => x.i.situacao === sit).length;
-  const integral = ind.filter((x) => x.i.statusPagamento === 'INTEGRAL').length;
-  const parcial = ind.filter((x) => x.i.statusPagamento === 'PARCIAL').length;
-  const comSaldo = ind.filter((x) => (x.i.aPagar ?? 0) > 0).length;
-  const emitidas = ind.reduce((s, x) => s + (Number(x.c.qtdSist) || 0), 0);
-  const finalizadas = ind.reduce((s, x) => s + (Number(x.c.finalizadas) || 0), 0);
-  const entregues = ind.reduce((s, x) => s + (x.i.entregue ?? 0) * (Number(x.c.qtdSist) || 0), 0);
-  const pendAbertas = ind.reduce((s, x) => s + (x.c.pendencias ?? []).length, 0);
+function abaResumo(r, { geradoEm, exemplo }) {
+  const {
+    cargas: total, liberadas, pendentes, verificar, integral, parcial, semPagamento, comSaldo,
+    emitidas, finalizadas, entregue, pendAbertas,
+  } = r;
 
   const linhas = [];
   const mesclar = [];
@@ -318,9 +257,9 @@ function abaResumo(cargas, { geradoEm, exemplo }) {
   secao(4, 'CARGAS');
   cartoes(5, [
     { rotulo: 'Cargas no controle', f: `COUNT(${rng('C')})`, v: total, legenda: 'cada carga conta uma vez', tom: 'neutro' },
-    { rotulo: 'Liberadas', f: `COUNTIFS(${rng('J')},"LIBERADA",${rng('C')},">=0")`, v: por('LIBERADA'), legenda: 'tudo entregue no B2B', tom: 'verde' },
-    { rotulo: 'Pendentes', f: `COUNTIFS(${rng('J')},"PENDENTE",${rng('C')},">=0")`, v: por('PENDENTE'), legenda: 'parte ainda sem entrega', tom: 'vermelho' },
-    { rotulo: 'Verificar', f: `COUNTIFS(${rng('J')},"VERIFICAR",${rng('C')},">=0")`, v: por('VERIFICAR'), legenda: 'a contagem não bate — nada se paga até conferir', tom: 'amarelo' },
+    { rotulo: 'Liberadas', f: `COUNTIFS(${rng('J')},"LIBERADA",${rng('C')},">=0")`, v: liberadas, legenda: 'tudo entregue no B2B', tom: 'verde' },
+    { rotulo: 'Pendentes', f: `COUNTIFS(${rng('J')},"PENDENTE",${rng('C')},">=0")`, v: pendentes, legenda: 'parte ainda sem entrega', tom: 'vermelho' },
+    { rotulo: 'Verificar', f: `COUNTIFS(${rng('J')},"VERIFICAR",${rng('C')},">=0")`, v: verificar, legenda: 'a contagem não bate — nada se paga até conferir', tom: 'amarelo' },
   ]);
   linha(8, 12);
   secao(9, 'PAGAMENTO (pela quantidade de notas)');
@@ -329,7 +268,7 @@ function abaResumo(cargas, { geradoEm, exemplo }) {
     { rotulo: 'Pagas em parte', f: `COUNTIFS(${rng('M')},"PARCIAL",${rng('C')},">=0")`, v: parcial, legenda: 'falta pagar o restante', tom: 'azul' },
     {
       rotulo: 'Sem pagamento', f: `COUNT(${rng('C')})-COUNTIFS(${rng('M')},"INTEGRAL",${rng('C')},">=0")-COUNTIFS(${rng('M')},"PARCIAL",${rng('C')},">=0")`,
-      v: total - integral - parcial, legenda: 'nada pago ainda', tom: 'neutro',
+      v: semPagamento, legenda: 'nada pago ainda', tom: 'neutro',
     },
     { rotulo: 'Com saldo a pagar', f: `COUNTIF(${rng('T')},">0")`, v: comSaldo, legenda: 'liberado e ainda não pago', tom: 'amarelo' },
   ]);
@@ -339,7 +278,7 @@ function abaResumo(cargas, { geradoEm, exemplo }) {
     { rotulo: 'Emitidas no sistema', f: `SUM(${rng('C')})`, v: emitidas, legenda: 'notas do relatório Atak', tom: 'neutro' },
     { rotulo: 'Finalizadas no B2B', f: `SUM(${rng('F')})`, v: finalizadas, legenda: 'entrega comprovada', tom: 'verde' },
     {
-      rotulo: 'Entregues', f: `IFERROR(SUMPRODUCT(${rng('Q')},${rng('C')})/SUM(${rng('C')}),"")`, v: emitidas ? entregues / emitidas : '',
+      rotulo: 'Entregues', f: `IFERROR(SUMPRODUCT(${rng('Q')},${rng('C')})/SUM(${rng('C')}),"")`, v: entregue ?? '',
       legenda: 'finalizadas ÷ emitidas', tom: 'verde', fmt: '0.0%',
     },
     {
@@ -357,39 +296,39 @@ function abaResumo(cargas, { geradoEm, exemplo }) {
   ch[0] = { v: 'Tratativa', e: eCabEsq }; ch[1] = { e: eCabEsq }; ch[2] = { v: 'Pendências', e: eCab }; ch[3] = { v: '% do total', e: eCab };
   ch[4] = { v: 'O que significa', e: eCabEsq }; for (let j = 5; j < 8; j += 1) ch[j] = { e: eCabEsq };
   mesclar.push('A21:B21', 'E21:H21');
-  const SENTIDOS = [
-    ['Sem olhar (em branco)', null, 'Ninguém consultou ainda — é o que falta olhar.'],
-    ['SEM TRATATIVA', 'SEM TRATATIVA', 'Olhei e não há o que fazer por enquanto.'],
-    ['DEV', 'DEV', 'Nota devolvida — não libera o pagamento.'],
-    ['DEV NO SISTEMA', 'DEV NO SISTEMA', 'Devolução já lançada no sistema — não libera.'],
-    ['OK B2B', 'OK B2B', 'Conferido no B2B — libera o pagamento da nota.'],
-    ['OK', 'OK', 'Consultado no sistema, está certo — libera o pagamento da nota.'],
-    ['SUMIU DO B2B', 'SUMIU DO B2B', 'A nota sumiu do B2B — não libera até aparecer.'],
-  ];
-  const todasPend = cargas.flatMap((c) => c.pendencias ?? []);
-  const conta = (trat) => todasPend.filter((p) => (trat === null ? !p.tratativa : p.tratativa === trat)).length;
+  const SENTIDO = {
+    '': 'Ninguém consultou ainda — é o que falta olhar.',
+    'SEM TRATATIVA': 'Olhei e não há o que fazer por enquanto.',
+    DEV: 'Nota devolvida — não libera o pagamento.',
+    'DEV NO SISTEMA': 'Devolução já lançada no sistema — não libera.',
+    'OK B2B': 'Conferido no B2B — libera o pagamento da nota.',
+    OK: 'Consultado no sistema, está certo — libera o pagamento da nota.',
+    'SUMIU DO B2B': 'A nota sumiu do B2B — não libera até aparecer.',
+  };
+  const SENTIDOS = r.tratativas;
   const eCorpo = { fonte: { nome: FONTE, tam: 11, cor: C.tinta }, alin: { h: 'center', v: 'center' }, borda: { base: { estilo: 'thin', cor: C.linha } } };
   const eEsq = { ...eCorpo, alin: { h: 'left', v: 'center', recuo: 1 } };
   const ePct = { ...eCorpo, fmt: '0.0%' };
   const primeiraT = 21; // índice da primeira linha de tratativa
   const totalT = primeiraT + SENTIDOS.length;
-  SENTIDOS.forEach(([nome, chave, sentido], k) => {
+  SENTIDOS.forEach(({ nome, chave, qtd, pct, libera }, k) => {
     const i = primeiraT + k;
     const l = linha(i, 22);
-    const liberam = chave && TRATATIVAS_QUE_LIBERAM.includes(chave);
+    const sentido = SENTIDO[chave ?? ''];
+    const liberam = libera;
     l[0] = { v: nome, e: { ...eEsq, fonte: { ...eEsq.fonte, neg: !!liberam } } }; l[1] = { e: eEsq };
     l[2] = chave === null
-      ? { f: `COUNTIFS(${rng('K')},"<>${SEM_PENDENCIA}",${rng('K')},"<>",${rng('L')},"")`, v: conta(null), e: eCorpo }
-      : { f: `COUNTIFS(${rng('L')},"${chave}")`, v: conta(chave), e: eCorpo };
-    l[3] = { f: `IF(C$${totalT + 1}>0,C${i + 1}/C$${totalT + 1},0)`, v: todasPend.length ? conta(chave) / todasPend.length : 0, e: ePct };
+      ? { f: `COUNTIFS(${rng('K')},"<>${SEM_PENDENCIA}",${rng('K')},"<>",${rng('L')},"")`, v: qtd, e: eCorpo }
+      : { f: `COUNTIFS(${rng('L')},"${chave}")`, v: qtd, e: eCorpo };
+    l[3] = { f: `IF(C$${totalT + 1}>0,C${i + 1}/C$${totalT + 1},0)`, v: pct, e: ePct };
     l[4] = { v: sentido, e: eEsq }; for (let j = 5; j < 8; j += 1) l[j] = { e: eEsq };
     mesclar.push(`A${i + 1}:B${i + 1}`, `E${i + 1}:H${i + 1}`);
   });
   const eTot = { ...eCorpo, fonte: { ...eCorpo.fonte, neg: true }, borda: { topo: { estilo: 'medium', cor: C.navy }, base: { estilo: 'thin', cor: C.linha } } };
   const lt = linha(totalT, 24);
   lt[0] = { v: 'Total', e: { ...eTot, alin: { h: 'left', v: 'center', recuo: 1 } } }; lt[1] = { e: eTot };
-  lt[2] = { f: `SUM(C${primeiraT + 1}:C${totalT})`, v: todasPend.length, e: eTot };
-  lt[3] = { f: `SUM(D${primeiraT + 1}:D${totalT})`, v: todasPend.length ? 1 : 0, e: { ...eTot, fmt: '0.0%' } };
+  lt[2] = { f: `SUM(C${primeiraT + 1}:C${totalT})`, v: pendAbertas, e: eTot };
+  lt[3] = { f: `SUM(D${primeiraT + 1}:D${totalT})`, v: pendAbertas ? 1 : 0, e: { ...eTot, fmt: '0.0%' } };
   lt[4] = { v: 'Tem de bater com "Pendências abertas" acima.', e: { ...eTot, alin: { h: 'left', v: 'center', recuo: 1 }, fonte: { ...eTot.fonte, neg: false, it: true, cor: C.muda } } };
   for (let j = 5; j < 8; j += 1) lt[j] = { e: eTot };
   mesclar.push(`A${totalT + 1}:B${totalT + 1}`, `E${totalT + 1}:H${totalT + 1}`);
@@ -403,37 +342,32 @@ function abaResumo(cargas, { geradoEm, exemplo }) {
     hh[j] = { v, e: j < 2 ? eCabEsq : eCab };
   });
   mesclar.push(`A${iSec + 2}:B${iSec + 2}`);
-  const nomes = [...new Set(cargas.map((c) => (c.transportadora || '').trim()))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
-  if (nomes.includes('')) { nomes.splice(nomes.indexOf(''), 1); nomes.push(''); }
   const primeiraTr = iSec + 2;
-  nomes.forEach((nome, k) => {
+  r.transportadoras.forEach((tr, k) => {
     const i = primeiraTr + k; const x = i + 1;
     const l = linha(i, 22);
-    const crit = nome ? `$A${x}` : '""';
-    const dele = ind.filter((y) => (y.c.transportadora || '').trim() === nome);
-    const qs = dele.reduce((s, y) => s + (Number(y.c.qtdSist) || 0), 0);
-    const ent = dele.reduce((s, y) => s + (y.i.entregue ?? 0) * (Number(y.c.qtdSist) || 0), 0);
-    l[0] = { v: nome || '(sem transportadora)', e: eEsq }; l[1] = { e: eEsq };
-    l[2] = { f: `COUNTIFS(${rng('O')},${crit},${rng('C')},">=0")`, v: dele.length, e: eCorpo };
-    ['LIBERADA', 'PENDENTE', 'VERIFICAR'].forEach((sit, q) => {
-      l[3 + q] = { f: `COUNTIFS(${rng('O')},${crit},${rng('J')},"${sit}",${rng('C')},">=0")`, v: dele.filter((y) => y.i.situacao === sit).length, e: eCorpo };
+    const crit = tr.nome ? `$A${x}` : '""';
+    l[0] = { v: tr.nome || '(sem transportadora)', e: eEsq }; l[1] = { e: eEsq };
+    l[2] = { f: `COUNTIFS(${rng('O')},${crit},${rng('C')},">=0")`, v: tr.cargas, e: eCorpo };
+    [['LIBERADA', tr.liberadas], ['PENDENTE', tr.pendentes], ['VERIFICAR', tr.verificar]].forEach(([sit, qtd], q) => {
+      l[3 + q] = { f: `COUNTIFS(${rng('O')},${crit},${rng('J')},"${sit}",${rng('C')},">=0")`, v: qtd, e: eCorpo };
     });
-    l[6] = { f: `COUNTIFS(${rng('O')},${crit},${rng('K')},"<>${SEM_PENDENCIA}",${rng('K')},"<>")`, v: dele.reduce((s, y) => s + (y.c.pendencias ?? []).length, 0), e: eCorpo };
+    l[6] = { f: `COUNTIFS(${rng('O')},${crit},${rng('K')},"<>${SEM_PENDENCIA}",${rng('K')},"<>")`, v: tr.pendAbertas, e: eCorpo };
     l[7] = {
       f: `IFERROR(SUMPRODUCT(--(${rng('O')}=${crit}),${rng('Q')},${rng('C')})/SUMIFS(${rng('C')},${rng('O')},${crit}),"")`,
-      v: qs ? ent / qs : '', e: ePct,
+      v: tr.entregue ?? '', e: ePct,
     };
     mesclar.push(`A${x}:B${x}`);
   });
-  const ultimaTr = primeiraTr + nomes.length - 1;
+  const ultimaTr = primeiraTr + r.transportadoras.length - 1;
   const totTr = ultimaTr + 1;
   const ltr = linha(totTr, 24);
   ltr[0] = { v: 'Total', e: { ...eTot, alin: { h: 'left', v: 'center', recuo: 1 } } }; ltr[1] = { e: eTot };
   const somaCol = (col, valor) => ({ f: `SUM(${col}${primeiraTr + 1}:${col}${ultimaTr + 1})`, v: valor, e: eTot });
   ltr[2] = somaCol('C', total);
-  ltr[3] = somaCol('D', por('LIBERADA')); ltr[4] = somaCol('E', por('PENDENTE')); ltr[5] = somaCol('F', por('VERIFICAR'));
+  ltr[3] = somaCol('D', liberadas); ltr[4] = somaCol('E', pendentes); ltr[5] = somaCol('F', verificar);
   ltr[6] = somaCol('G', pendAbertas);
-  ltr[7] = { f: `IFERROR(SUMPRODUCT(${rng('Q')},${rng('C')})/SUM(${rng('C')}),"")`, v: emitidas ? entregues / emitidas : '', e: { ...eTot, fmt: '0.0%' } };
+  ltr[7] = { f: `IFERROR(SUMPRODUCT(${rng('Q')},${rng('C')})/SUM(${rng('C')}),"")`, v: entregue ?? '', e: { ...eTot, fmt: '0.0%' } };
   mesclar.push(`A${totTr + 1}:B${totTr + 1}`);
   linha(totTr + 1, 14);
 
@@ -533,10 +467,10 @@ function abaLeiaMe({ exemplo }) {
               pendencias:[{ nota, categoria, statusB2b, tratativa, tratativaEm, obs }] }] */
 export function montarPlanilhaDeFrete({ cargas, geradoEm = new Date(), exemplo = false }) {
   const quando = geradoEm instanceof Date ? geradoEm : new Date(geradoEm);
-  const ordenadas = [...cargas].sort((a, b) => String(a.dataConsulta ?? '').localeCompare(String(b.dataConsulta ?? '')) || Number(a.numero) - Number(b.numero));
+  const grade = montarGrade(cargas);
   return escreverXlsx({
     titulo: exemplo ? 'Controle de Pagamento de Frete (modelo de exemplo)' : 'Controle de Pagamento de Frete',
     geradoEm: quando,
-    abas: [abaControle(ordenadas), abaResumo(ordenadas, { geradoEm: quando, exemplo }), abaLeiaMe({ exemplo })],
+    abas: [abaControle(grade), abaResumo(grade.resumo, { geradoEm: quando, exemplo }), abaLeiaMe({ exemplo })],
   });
 }

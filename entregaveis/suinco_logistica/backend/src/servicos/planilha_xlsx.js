@@ -17,7 +17,7 @@
    não conhece (erro, tipo estranho) sai vazio — nunca inventado.
 
    DATA É DATA PELO FORMATO DA CÉLULA. O Excel guarda data como um número
-   (dias desde 1899-12-30); só o formato da célula diz que aquele 46285 é o
+   (dias desde 1899-12-30); só o formato da célula diz que aquele 46286 é o
    dia 21/09/2026. Por isso o leitor lê o styles.xml.
 
    LIMITES, porque o arquivo vem de fora: 8 MB compactado, 60 MB aberto,

@@ -1,6 +1,16 @@
 /* =====================================================================
-   A PLANILHA DE CONTROLE DA LOGÍSTICA VIRA CARGAS DO PAINEL — 05/10/2026
+   O PAINEL ENTENDE A PLANILHA DE CONTROLE — 05/10/2026
    ---------------------------------------------------------------------
+   DECISÃO DO DONO (05/10/2026): o painel NÃO importa XLSX — a entrada são os
+   PDFs do B2B e do Atak. Mas "se precisar importar o xlsx alguma vez, é bom
+   que você consiga entender a linguagem". Por isso este leitor FICA, sem botão:
+   ele entende a planilha da Daniela (a original) E a que o painel exporta (o
+   modelo novo, com % Pago, Data Tratativa e Observação), e o teste
+   `pagamento_frete_leitura.test.js` exporta, lê de volta e confere que nada
+   se perde. Ligar um botão de importar é questão de uma rota, não de entender
+   o formato.
+
+   (texto original, de quando o plano era migrar a planilha dela:)
    Pedido do dono: "nós faremos a migração dessa planilha para essa aba,
    então tudo funcionará no nosso sistema". A planilha é a
    Controle_Cargas__B2B.xlsx da Daniela: uma aba por rodada de conferência,
@@ -37,6 +47,8 @@ const COLUNAS = {
   outros: 'outros status', situacao: 'situacao', resumo: 'resumo pendencias',
   tratativa: 'status pendencia', pagamento: 'status p/ pagamento', dataPagamento: 'data pagamento',
   transportadora: 'transportadora', cte: 'ct-e',
+  // acréscimos do modelo novo (a planilha original não tem):
+  pago: '% pago', dataTratativa: 'data tratativa', observacao: 'observacao',
 };
 const OBRIGATORIAS = ['carga', 'qtdSist', 'qtdB2b', 'finalizadas', 'resumo'];
 
@@ -141,20 +153,25 @@ export function lerPlanilhaDeControle(abas, escolhidas = null) {
         const cte = linha[ix.cte];
         const ant = c.pendencias.get(pend.nota);
         const categoria = categoriaDoRotulo(pend.rotulo);
-        const obsCte = typeof cte === 'string' && cte.trim() ? `CT-E na planilha: ${cte.trim()}` : '';
+        // CT-E com texto (na planilha original: "MANDAR FOTO") é observação; no modelo novo há coluna própria.
+        const obsCte = ix.observacao === undefined && typeof cte === 'string' && cte.trim() && !/^\d{3,}$/.test(cte.trim()) ? `CT-E na planilha: ${cte.trim()}` : '';
+        const obsColuna = ix.observacao === undefined ? '' : texto(linha[ix.observacao]);
         c.pendencias.set(pend.nota, {
           nota: pend.nota, categoria, statusB2b: categoria === 'outro' ? pend.rotulo : '',
-          tratativa: trat.tratativa || ant?.tratativa || '', tratativaEm: trat.em || ant?.tratativaEm || null,
-          obs: [trat.obs, obsCte].filter(Boolean).join(' · ') || ant?.obs || '',
+          tratativa: trat.tratativa || ant?.tratativa || '',
+          tratativaEm: (ix.dataTratativa !== undefined ? dataIso(linha[ix.dataTratativa]) : null) || trat.em || ant?.tratativaEm || null,
+          obs: [trat.obs, obsColuna, obsCte].filter(Boolean).join(' · ') || ant?.obs || '',
         });
       }
 
       const cteVal = linha[ix.cte];
       if (typeof cteVal === 'number') c.ctes.add(String(Math.trunc(cteVal)));
       else if (typeof cteVal === 'string' && /^\d{3,}$/.test(cteVal.trim())) c.ctes.add(cteVal.trim());
-      else if (typeof cteVal === 'string' && cteVal.trim() && !pend) c.avisos.push(`CT-E na planilha: ${cteVal.trim()}`);
+      else if (ix.observacao === undefined && typeof cteVal === 'string' && cteVal.trim() && !pend) c.avisos.push(`CT-E na planilha: ${cteVal.trim()}`);
 
       if (c.pagamentoBruto === null && linha[ix.pagamento] !== undefined && linha[ix.pagamento] !== null) c.pagamentoBruto = linha[ix.pagamento];
+      // % Pago (modelo novo) é número exato — vale mais que o texto PARCIAL, que só dá a ideia.
+      if (c.pctPagoExato === undefined && ix.pago !== undefined && typeof linha[ix.pago] === 'number' && linha[ix.pago] > 0) c.pctPagoExato = linha[ix.pago];
       if (!c.dataPagamento && dataIso(linha[ix.dataPagamento])) c.dataPagamento = dataIso(linha[ix.dataPagamento]);
     }
     for (const [numero, c] of atual) porCarga.set(numero, c);
@@ -178,8 +195,10 @@ export function lerPlanilhaDeControle(abas, escolhidas = null) {
     if (somaB2b !== r.qtdB2b) avisos.push(`As contagens por status somam ${somaB2b}, e a planilha diz ${r.qtdB2b} no B2B.`);
     const finalizadasNoSist = Math.min(r.finalizadas, r.qtdSist);
     const entreguePct = r.qtdSist ? arredondar2((finalizadasNoSist / r.qtdSist) * 100) : null;
-    const pg = lerStatusDePagamento(c.pagamentoBruto, entreguePct);
-    if (c.pagamentoBruto !== null && !pg) avisos.push(`Status de pagamento "${c.pagamentoBruto}" não reconhecido; não importei pagamento.`);
+    const pg = c.pctPagoExato !== undefined
+      ? { pct: arredondar2(Math.min(1, c.pctPagoExato) * 100), estimado: false }
+      : lerStatusDePagamento(c.pagamentoBruto, entreguePct);
+    if (c.pctPagoExato === undefined && c.pagamentoBruto !== null && !pg) avisos.push(`Status de pagamento "${c.pagamentoBruto}" não reconhecido; não importei pagamento.`);
     cargas.push({
       numero: c.numero, dataConsulta: c.dataConsulta, ...r, situacao, finalizadasNoSist,
       transportadora: c.transportadora, cte: [...c.ctes].join(', '),

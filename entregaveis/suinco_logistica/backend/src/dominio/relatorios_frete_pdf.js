@@ -23,10 +23,25 @@
 import { ErroDeLeitura } from '../servicos/pdf_texto.js';
 import { semAcento, chaveDaNota } from './pagamento_frete.js';
 
-/* O rodapé ("1", "Página 1 de 1") fica nos ~8% de baixo da folha, longe do
-   último dado (medido nos relatórios reais: rodapé em y=28, última linha em
-   y≥64, folha de 595). */
-const FRACAO_DO_RODAPE = 0.085;
+/* O RODAPÉ É RECONHECIDO PELO QUE É, NÃO PELO LUGAR. Primeira versão cortava
+   os 8,5% de baixo da folha (rodapé real em y=28, dado em y≥64). Mas o PDF de
+   uma carga longa desce até a margem da página, e um corte fixo derrubou a
+   linha 31 de um relatório de 40 notas — sem erro nenhum, só uma nota a menos
+   (o teste com 40 notas em 2 páginas pegou). Agora só sai o que é número de
+   página: uma linha SOZINHA (no máximo 2 pedaços) embaixo da folha, com só
+   "1" ou "Página 1 de 3". Linha de dado tem status, tipo, nota… e nunca é
+   confundida com isso. */
+const ZONA_DO_RODAPE = 0.15;
+const ehNumeroDePagina = (s) => /^(\d{1,4}|pagina \d+ de \d+)$/.test(semAcento(s));
+
+function semRodape(pg) {
+  const linhas = agruparEmLinhas(pg.itens.filter((i) => i.y < pg.altura * ZONA_DO_RODAPE));
+  const rodape = new Set();
+  for (const l of linhas) {
+    if (l.itens.length <= 2 && l.itens.every((i) => ehNumeroDePagina(i.s))) l.itens.forEach((i) => rodape.add(i));
+  }
+  return pg.itens.filter((i) => !rodape.has(i));
+}
 
 const por = (a, b) => b.y - a.y || a.x - b.x;
 
@@ -112,7 +127,7 @@ export function lerB2B(paginas) {
   let colunas = null;
 
   for (const pg of paginas) {
-    const itens = pg.itens.filter((i) => i.y > pg.altura * FRACAO_DO_RODAPE);
+    const itens = semRodape(pg);
     const eventos = [];
     for (const i of itens) {
       const t = semAcento(i.s);
@@ -141,7 +156,7 @@ export function lerB2B(paginas) {
         }
         colunas = colunasDoCabecalho(itens, ev.y);
         const proximo = eventos.slice(k + 1).find((e) => e.tipo === 'bloco');
-        const yFim = proximo ? proximo.y + 2 : pg.altura * FRACAO_DO_RODAPE;
+        const yFim = proximo ? proximo.y + 2 : -Infinity;
         atual.linhas.push(...lerLinhasDoB2b(itens, ev.y, yFim, colunas));
       }
     }
