@@ -160,11 +160,11 @@ async def main():
 
         print('\n=== 3. A GRADE É A PLANILHA ===')
         cab = await pg.evaluate("() => [...document.querySelectorAll('#frete-thead th')].map(t => t.textContent.trim())")
-        ck('as 22 colunas da planilha, na ordem dela (+ Ações)', cab[:16] == [
+        ck('as 24 colunas da planilha, na ordem dela (+ Ações)', cab[:16] == [
             'Data Consulta', 'Carga', 'Qtde SIST', 'Qtde B2B', 'Diferença', 'Finalizadas', 'Aguardando', 'Não Entregue',
             'Outros Status', 'Situação', 'Resumo Pendências', 'Status Pendência', 'Status p/ pagamento', 'Data Pagamento',
             'Transportadora', 'CT-E'] and cab[16:22] == ['% Entregue', '% Liberado', '% Pago', 'A pagar agora', 'Data Tratativa', 'Observação']
-            and cab[-1] == 'Ações', str(cab))
+            and cab[22:24] == ['Canhoto original', 'Canhoto marcado em'] and cab[-1] == 'Ações', str(cab))
         linhas = await pg.evaluate("""() => [...document.querySelectorAll('#frete-tbody tr')].map(tr => ({
             primeira: tr.classList.contains('frete-primeira'),
             v: Object.fromEntries([...tr.querySelectorAll('td[data-col]')].map(td => [td.dataset.col, td.textContent.trim()])) }))""")
@@ -181,6 +181,32 @@ async def main():
         stats = await pg.evaluate("() => Object.fromEntries([...document.querySelectorAll('#frete-stats .stat-box')].map(b => [b.querySelector('.stat-label').textContent.trim(), b.querySelector('.stat-num').textContent.trim()]))")
         ck('as caixas do topo: 1 carga, 1 pendente, 4 pendências abertas',
            stats.get('Cargas no controle') == '1' and stats.get('Pendentes') == '1' and stats.get('Pendências abertas') == '4', str(stats))
+
+        print('\n=== 3b. A CAIXINHA DO CANHOTO ORIGINAL ===')
+        can = await pg.evaluate("() => document.querySelector('#frete-tbody tr.frete-primeira td[data-col=\"canhoto\"]').textContent.trim()")
+        ck('a carga nasce com o canhoto NÃO', can == 'NÃO', can)
+        ck('só a linha da carga tem a caixinha', await pg.evaluate("() => document.querySelectorAll('#frete-tbody td[data-col=\"canhoto\"] input[type=checkbox]').length") == 1)
+        lib_antes = await pg.evaluate("() => document.querySelector('#frete-tbody tr.frete-primeira td[data-col=\"liberado\"]').textContent.trim()")
+        await pg.click('#frete-tbody tr.frete-primeira td[data-col="canhoto"] input[type=checkbox]')
+        await pg.wait_for_timeout(1500)
+        can = await pg.evaluate("() => document.querySelector('#frete-tbody tr.frete-primeira td[data-col=\"canhoto\"]').textContent.trim()")
+        em = await pg.evaluate("() => document.querySelector('#frete-tbody tr.frete-primeira td[data-col=\"canhotoEm\"]').textContent.trim()")
+        ck('um clique: SIM, com a data de hoje ao lado', can == 'SIM' and len(em) == 10, f'{can} {em}')
+        ck('gravou no servidor, com quem marcou', psql("SELECT canhoto_original::text || '|' || canhoto_por FROM pgfrete_cargas WHERE numero_carga='900802';") == 'true|Admin Um')
+        lib_depois = await pg.evaluate("() => document.querySelector('#frete-tbody tr.frete-primeira td[data-col=\"liberado\"]').textContent.trim()")
+        ck('o canhoto NÃO mexe no liberado (só acompanhamento)', lib_antes == lib_depois, f'{lib_antes} -> {lib_depois}')
+        stats = await pg.evaluate("() => Object.fromEntries([...document.querySelectorAll('#frete-stats .stat-box')].map(b => [b.querySelector('.stat-label').textContent.trim(), b.querySelector('.stat-num').textContent.trim()]))")
+        ck('a caixa do topo diz 1 de 1', stats.get('Canhoto original') == '1 de 1', str(stats.get('Canhoto original')))
+        await pg.click('.frete-chip:has-text("Sem canhoto original")')
+        await pg.wait_for_timeout(400)
+        ck('o filtro "Sem canhoto original" esconde a carga que já veio', await pg.evaluate("() => document.querySelectorAll('#frete-tbody tr').length") == 0)
+        await pg.click('.frete-chip:has-text("Sem canhoto original")')
+        await pg.wait_for_timeout(400)
+        await pg.click('#frete-tbody tr.frete-primeira td[data-col="canhoto"] input[type=checkbox]')
+        await pg.wait_for_timeout(1500)
+        can = await pg.evaluate("() => document.querySelector('#frete-tbody tr.frete-primeira td[data-col=\"canhoto\"]').textContent.trim()")
+        em = await pg.evaluate("() => document.querySelector('#frete-tbody tr.frete-primeira td[data-col=\"canhotoEm\"]').textContent.trim()")
+        ck('desmarcar volta a NÃO e apaga a data', can == 'NÃO' and em == '', f'{can} {em!r}')
 
         print('\n=== 4. TRATATIVA PELA LISTA ===')
         await pg.select_option('#frete-tbody tr:nth-child(1) select.frete-sel', 'OK')

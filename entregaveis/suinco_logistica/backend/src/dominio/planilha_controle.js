@@ -49,6 +49,7 @@ const COLUNAS = {
   transportadora: 'transportadora', cte: 'ct-e',
   // acréscimos do modelo novo (a planilha original não tem):
   pago: '% pago', dataTratativa: 'data tratativa', observacao: 'observacao',
+  canhoto: 'canhoto original',
 };
 const OBRIGATORIAS = ['carga', 'qtdSist', 'qtdB2b', 'finalizadas', 'resumo'];
 
@@ -173,6 +174,10 @@ export function lerPlanilhaDeControle(abas, escolhidas = null) {
       // % Pago (modelo novo) é número exato — vale mais que o texto PARCIAL, que só dá a ideia.
       if (c.pctPagoExato === undefined && ix.pago !== undefined && typeof linha[ix.pago] === 'number' && linha[ix.pago] > 0) c.pctPagoExato = linha[ix.pago];
       if (!c.dataPagamento && dataIso(linha[ix.dataPagamento])) c.dataPagamento = dataIso(linha[ix.dataPagamento]);
+      // Canhoto original (modelo novo): SIM na linha da carga. Só acompanhamento.
+      if (ix.canhoto !== undefined && c.canhotoOriginal === undefined && texto(linha[ix.canhoto])) {
+        c.canhotoOriginal = texto(linha[ix.canhoto]).toUpperCase() === 'SIM';
+      }
     }
     for (const [numero, c] of atual) porCarga.set(numero, c);
   }
@@ -203,6 +208,7 @@ export function lerPlanilhaDeControle(abas, escolhidas = null) {
       numero: c.numero, dataConsulta: c.dataConsulta, ...r, situacao, finalizadasNoSist,
       transportadora: c.transportadora, cte: [...c.ctes].join(', '),
       pagamento: pg ? { ...pg, dataPagamento: c.dataPagamento, entreguePct } : null,
+      canhotoOriginal: c.canhotoOriginal === true,
       pendencias, avisos,
     });
   }

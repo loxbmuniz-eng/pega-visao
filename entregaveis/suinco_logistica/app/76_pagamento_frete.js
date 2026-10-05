@@ -25,7 +25,7 @@
    ===================================================================== */
 const FRETE = {
   dados: null, carregando: false, erro: null, carregadoEm: 0,
-  busca: '', situacao: null, soSaldo: false, soSemTratativa: false,
+  busca: '', situacao: null, soSaldo: false, soSemTratativa: false, soSemCanhoto: false,
 };
 const FRETE_VALIDADE_MS = 30000;   // reabrir a aba depois disto relê, sem esconder a tela
 
@@ -112,7 +112,7 @@ function freteIx(chave){ return FRETE.dados.colunas.findIndex((c) => c.chave ===
 function freteLinhasVisiveis(){
   const d = FRETE.dados;
   if(!d) return { linhas: [], cargas: 0, total: 0 };
-  const iSit = freteIx('situacao'), iAp = freteIx('aPagar'), iTr = freteIx('tratativa'), iTp = freteIx('transportadora');
+  const iSit = freteIx('situacao'), iAp = freteIx('aPagar'), iTr = freteIx('tratativa'), iTp = freteIx('transportadora'), iCan = freteIx('canhoto');
   const porCarga = new Map();
   for(const l of d.linhas){
     if(!porCarga.has(l.carga)) porCarga.set(l.carga, []);
@@ -126,6 +126,7 @@ function freteLinhasVisiveis(){
     if(FRETE.situacao && p.v[iSit] !== FRETE.situacao) continue;
     if(FRETE.soSaldo && !(typeof p.v[iAp] === 'number' && p.v[iAp] > 0)) continue;
     if(FRETE.soSemTratativa && !ls.some((l) => l.nota && !l.v[iTr])) continue;
+    if(FRETE.soSemCanhoto && p.v[iCan] === 'SIM') continue;
     if(q){
       const bate = String(carga).includes(q)
         || ls.some((l) => l.nota && String(l.nota).includes(q))
@@ -197,7 +198,8 @@ function freteDesenharStats(){
     + caixa(r.parcial, 'Pagas em parte')
     + caixa(r.semPagamento, 'Sem pagamento')
     + caixa(r.entregue === null ? '—' : fretePct(r.entregue), 'Entregues', { nota: 'finalizadas ÷ emitidas' })
-    + caixa(r.pendAbertas, 'Pendências abertas', { alerta: true, nota: 'notas ainda sem entrega' });
+    + caixa(r.pendAbertas, 'Pendências abertas', { alerta: true, nota: 'notas ainda sem entrega' })
+    + caixa(`${r.comCanhoto ?? 0} de ${r.cargas}`, 'Canhoto original', { clicavel: true, ativo: FRETE.soSemCanhoto, clique: "freteAlternar('soSemCanhoto')", titulo: 'Cargas cujo canhoto em papel já chegou. Só acompanhamento: não mexe no pagamento. Clique para ver as que ainda não vieram.', nota: 'papel que já chegou' });
 }
 
 function freteDesenharFiltros(){
@@ -213,6 +215,7 @@ function freteDesenharFiltros(){
       ${chip('Verificar', FRETE.situacao === 'VERIFICAR', "freteFiltrarSituacao('VERIFICAR')")}
       ${chip('Com saldo a pagar', FRETE.soSaldo, "freteAlternar('soSaldo')")}
       ${chip('Pendência sem tratativa', FRETE.soSemTratativa, "freteAlternar('soSemTratativa')")}
+      ${chip('Sem canhoto original', FRETE.soSemCanhoto, "freteAlternar('soSemCanhoto')")}
     </div>
     <div class="frete-contagem" id="frete-contagem" aria-live="polite"></div>`;
 }
@@ -228,8 +231,16 @@ function freteCelula(l, col, j){
   const chave = col.chave;
   const k = ` data-col="${chave}"`;
   switch(chave){
-    case 'data': case 'dataPagamento': case 'dataTratativa':
+    case 'data': case 'dataPagamento': case 'dataTratativa': case 'canhotoEm':
       return `<td${k} class="${primeira || chave !== 'data' ? '' : 'frete-mudo'}">${esc(freteData(v))}</td>`;
+    case 'canhoto': {
+      /* A caixinha do papel: só acompanhamento, nunca entra no pagamento. */
+      if(!primeira) return `<td${k}></td>`;
+      const veio = v === 'SIM';
+      return `<td${k} class="frete-canhoto frete-canhoto-${veio ? 'sim' : 'nao'}"><label class="frete-check">
+          <input type="checkbox"${veio ? ' checked' : ''} aria-label="Canhoto original da carga ${esc(l.carga)} veio"
+                 onchange="freteCanhoto('${escJs(l.carga)}', this.checked, this)"><span>${veio ? 'SIM' : 'NÃO'}</span></label></td>`;
+    }
     case 'carga':
       return `<td${k} class="frete-carga${primeira ? '' : ' frete-mudo'}">${esc(v)}</td>`;
     case 'diferenca':
@@ -389,6 +400,18 @@ function freteEditarCarga(carga, campo){
     [{ rotulo: 'Cancelar', clique: 'freteFecharModal()' },
      { rotulo: 'Salvar', classe: 'btn-primary', icone: 'i-ok', clique: `freteSalvarCarga('${escJs(carga)}','${campo}')` }]);
 }
+/* Marca/desmarca o canhoto original. O servidor decide e carimba a hora;
+   a tela só adianta o visual e volta atrás se ele recusar. */
+async function freteCanhoto(carga, marcado, input){
+  if(input) input.disabled = true;
+  try{
+    await SuincoSharePoint.frete.editarCarga(carga, { canhotoOriginal: !!marcado });
+    await freteRecarregarSemPiscar();
+  }catch(e){
+    if(input){ input.checked = !marcado; input.disabled = false; }
+    notify(freteMensagemDeErro(e), 'danger', 8000);
+  }
+}
 async function freteSalvarCarga(carga, campo){
   const valor = (document.getElementById('frete-campo-valor') || {}).value || '';
   try{
@@ -500,8 +523,9 @@ async function freteHistoricoUI(carga){
         <td>${esc(p.cliente)}</td><td>${esc(freteData(p.vistoEm))}</td>
         <td>${esc(p.tratativa || '—')}${p.tratativaEm ? ` · ${esc(freteData(p.tratativaEm))}` : ''}</td>
         <td>${esc(p.resolvidaEm ? freteData(p.resolvidaEm) : '')}</td></tr>`).join('')}</tbody></table></div>` : '<div class="card-sub">Nenhuma pendência.</div>';
-  const ROTULO = { conferencia: 'Conferência dos relatórios', editou_carga: 'Editou a carga', tratativa: 'Tratativa', pagamento: 'Pagamento', anulou_pagamento: 'Anulou pagamento', exportou: 'Exportou a planilha' };
-  const eventos = h.eventos.length ? `<ul class="frete-eventos">${h.eventos.map((e) => `<li><strong>${esc(ROTULO[e.acao] || e.acao)}</strong>${e.nota ? ` · nota ${esc(e.nota)}` : ''}
+  const ROTULO = { conferencia: 'Conferência dos relatórios', editou_carga: 'Editou a carga', tratativa: 'Tratativa', pagamento: 'Pagamento', anulou_pagamento: 'Anulou pagamento', exportou: 'Exportou a planilha', canhoto: 'Canhoto original' };
+  const detalhe = (e) => (e.acao === 'canhoto' && e.detalhe ? (e.detalhe.para ? ' · marcou: veio' : ' · desmarcou') : '');
+  const eventos = h.eventos.length ? `<ul class="frete-eventos">${h.eventos.map((e) => `<li><strong>${esc(ROTULO[e.acao] || e.acao)}</strong>${esc(detalhe(e))}${e.nota ? ` · nota ${esc(e.nota)}` : ''}
       <span>${esc(e.por)} · ${esc(dt(e.em))}</span></li>`).join('')}</ul>` : '<div class="card-sub">Sem eventos.</div>';
   document.getElementById('frete-modal-corpo').innerHTML =
     `<h3 class="frete-h3">Pagamentos</h3>${pagamentos}<h3 class="frete-h3">Notas (pendências desta carga)</h3>${pend}<h3 class="frete-h3">Quem mexeu</h3>${eventos}`;

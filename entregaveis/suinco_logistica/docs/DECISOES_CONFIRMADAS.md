@@ -866,6 +866,11 @@ e rascunho de chamado). Caiu pela fidelidade do dado, não por custo ou prazo.
    NO SISTEMA, OK B2B, OK, SUMIU DO B2B). O sentido escrito no LEIA-ME ainda
    depende da confirmação da Daniela; a transportadora é preenchida à mão
    (os PDFs não a trazem).
+9. **Canhoto original: uma caixinha por carga, sim ou não** — "isso não
+   interfere na questão do fechamento do digital, é só para acompanhamento".
+   Não entra em liberado, pago nem a pagar. Marcar carimba o dia e quem marcou
+   (migração 059; colunas W–X da planilha; cartões no RESUMO, inclusive
+   "Pagas sem canhoto" — 100% pago e o papel não chegou).
 
 ## Relatório de Administração de Fretes (05/10/2026) — dono
 
