@@ -7073,6 +7073,40 @@ describe('49. Pagamento de Frete — a planilha dentro do painel (05/10/2026)', 
       assert.equal(linhasDa(g, 103001900810).length, 0, 'o número colado não vira carga');
     });
 
+    test('exportar o RECORTE da tela: só as cargas pedidas, com o texto do filtro no topo (rodada 45)', async () => {
+      const r = await fetch(`${base}${FRETE}/exportar.xlsx?cargas=900802,777777&filtros=${encodeURIComponent('situação PENDENTE')}`, { headers: { authorization: `Bearer ${tokens['Administração']}` } });
+      assert.equal(r.status, 200);
+      const { abas } = lerPlanilhaXlsx(Buffer.from(await r.arrayBuffer()));
+      const cargasNoArquivo = [...new Set(abas[0].linhas.slice(1).map((l) => l[1]).filter(Boolean))];
+      assert.deepEqual(cargasNoArquivo, [900802], 'só a carga pedida; a inexistente é ignorada, não inventada');
+      assert.match(String(abas[1].linhas[1][0]), /Filtro aplicado na tela: situação PENDENTE — 1 de \d+ carga/);
+      assert.equal(abas[2].nome, 'FECHAMENTO');
+    });
+
+    test('pagamento repetido em menos de 2 minutos PERGUNTA; com confirmação, registra (governança)', async () => {
+      const a = tokens['Administração'];
+      await importar('900809');   // a 900809 só tinha passado pela prévia (#112); agora entra no controle
+      const p1 = await req(`${FRETE}/cargas/900809/pagamentos`, { metodo: 'POST', token: a, corpo: { pct: 10 } });
+      assert.equal(p1.status, 201, p1.texto);
+      const p2 = await req(`${FRETE}/cargas/900809/pagamentos`, { metodo: 'POST', token: a, corpo: { pct: 10 } });
+      assert.equal(p2.status, 409, p2.texto);
+      assert.equal(p2.json.codigo, 'PAGAMENTO_REPETIDO');
+      assert.equal(p2.json.podeConfirmar, true);
+      const p3 = await req(`${FRETE}/cargas/900809/pagamentos`, { metodo: 'POST', token: a, corpo: { pct: 10, confirmar: true } });
+      assert.equal(p3.status, 201, p3.texto);
+      const { rows } = await pool.query("SELECT count(*)::int AS n FROM pgfrete_pagamentos WHERE numero_carga = '900809' AND anulado_em IS NULL");
+      assert.equal(rows[0].n, 2);
+    });
+
+    test('reimportar deixa trilha: o evento de conferência guarda as contagens de ANTES (governança)', async () => {
+      await importar('900809');
+      const { rows } = await pool.query("SELECT detalhe FROM pgfrete_eventos WHERE numero_carga = '900809' AND acao = 'conferencia' ORDER BY id DESC LIMIT 1");
+      assert.deepEqual(rows[0].detalhe.antes, { qtdSist: 4, qtdB2b: 4, finalizadas: 3, aguardando: 1, naoEntregue: 0, outros: 0 });
+      assert.equal(rows[0].detalhe.nova, false);
+      const g = await grade();
+      assert.equal(linhasDa(g, 900809).filter((l) => l.nota).length, 1, 'reimportar não duplica pendência');
+    });
+
     test('#112 — B2B em 3 blocos (cabeçalho repetido a cada grupo) é UMA carga na prévia', async () => {
       const a = tokens['Administração'];
       const up = await subir('b2b_900809.pdf', null, a);
@@ -7149,7 +7183,7 @@ describe('49. Pagamento de Frete — a planilha dentro do painel (05/10/2026)', 
 
       const g = await grade();
       const { abas } = lerPlanilhaXlsx(buf);
-      assert.deepEqual(abas.map((x) => x.nome), ['CONTROLE_CARGAS', 'RESUMO', 'LEIA-ME']);
+      assert.deepEqual(abas.map((x) => x.nome), ['CONTROLE_CARGAS', 'RESUMO', 'FECHAMENTO', 'LEIA-ME']);
       const linhas = abas[0].linhas;
       assert.equal(linhas.length, g.linhas.length + 1);
       assert.deepEqual(linhas[0].slice(0, g.colunas.length), g.colunas.map((c) => c.t));

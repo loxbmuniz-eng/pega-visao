@@ -94,7 +94,7 @@ rotasPagamentoFrete.get(BASE, ACESSO, rota(async (req, res) => {
     colunas: grade.colunas.map(({ chave, t, tipo }) => ({ chave, t, tipo })),
     linhas: grade.linhas.map((l) => ({
       carga: l.carga, primeira: l.primeira, nota: l.nota, categoria: l.categoria, cliente: l.cliente, cidade: l.cidade,
-      obsNota: l.obsNota, obsCarga: l.obsCarga, v: l.celulas.map((c) => c.v),
+      obsNota: l.obsNota, obsCarga: l.obsCarga, vistoEm: l.vistoEm, idadeDias: l.idadeDias, v: l.celulas.map((c) => c.v),
     })),
     resumo: grade.resumo,
   });
@@ -102,10 +102,18 @@ rotasPagamentoFrete.get(BASE, ACESSO, rota(async (req, res) => {
 
 /* ------------------------------------------------------------ o arquivo */
 rotasPagamentoFrete.get(`${BASE}/exportar.xlsx`, ACESSO, rota(async (req, res) => {
-  const cargas = await lerCargas({ query: consultar });
+  const todas = await lerCargas({ query: consultar });
+  /* O ARQUIVO É O QUE ESTÁ NA TELA (decisão do dono, 05/10): a tela manda as
+     cargas que ficaram depois do filtro e o texto do filtro; o arquivo sai só
+     com elas, o RESUMO e o FECHAMENTO calculados sobre elas, e o texto no
+     topo. Sem `cargas`, sai tudo. Carga pedida que não existe é ignorada —
+     nunca inventada. */
+  const pedidas = req.query.cargas ? new Set(String(req.query.cargas).split(',').map((s) => s.trim()).filter(numeroValido)) : null;
+  const cargas = pedidas ? todas.filter((c) => pedidas.has(String(c.numero))) : todas;
+  const filtros = texto(req.query.filtros, 200);
   const agora = new Date();
-  const buf = montarPlanilhaDeFrete({ cargas, geradoEm: agora });
-  await registrarEvento({ query: consultar }, { acao: 'exportou', detalhe: { cargas: cargas.length }, operador: req.operador });
+  const buf = montarPlanilhaDeFrete({ cargas, geradoEm: agora, filtros: pedidas ? (filtros || 'recorte da tela') : '', totalSemFiltro: todas.length });
+  await registrarEvento({ query: consultar }, { acao: 'exportou', detalhe: { cargas: cargas.length, de: todas.length, filtros: pedidas ? filtros : '' }, operador: req.operador });
   res.set({
     'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     'Content-Disposition': `attachment; filename="Controle_Pagamento_Frete_${hojeISO()}.xlsx"`,
@@ -407,6 +415,18 @@ rotasPagamentoFrete.post(`${BASE}/cargas/:numero/pagamentos`, ACESSO, rota(async
     const ind = indicadoresDaCarga(carga);
     const pagoAtual = arred2(carga.pctPago);
     const depois = arred2(pagoAtual + pct);
+    /* Clique duplo não vira dois lançamentos (governança, 05/10): o mesmo % na
+       mesma carga, pela mesma pessoa, em menos de 2 minutos, PERGUNTA antes. */
+    if (!confirmar) {
+      const { rows: rep } = await cx.query(
+        `SELECT 1 FROM pgfrete_pagamentos WHERE numero_carga = $1 AND pct = $2 AND criado_por_id = $3
+            AND anulado_em IS NULL AND criado_em > now() - interval '2 minutes' LIMIT 1`,
+        [numero, pct, req.operador.id]);
+      if (rep[0]) {
+        return { erro: [409, 'PAGAMENTO_REPETIDO',
+          `Um pagamento de ${pct}% desta carga acabou de ser registrado por você. Registrar outro igual?`, { pagoAtual, podeConfirmar: true }] };
+      }
+    }
 
     /* 100% é teto duro: pagar mais que a carga inteira não tem como estar certo. */
     if (depois > 100) {

@@ -21,7 +21,7 @@ import {
   lerResumoDePendencia, lerTratativaDaPlanilha, TRATATIVAS, TRATATIVAS_QUE_LIBERAM, normalizarTratativa, statusParaPagamento,
   parearPeloNumeroDoSistema,
 } from '../src/dominio/pagamento_frete.js';
-import { montarGrade, COLUNAS, COLUNAS_DA_PLANILHA } from '../src/dominio/planilha_frete_grade.js';
+import { montarGrade, COLUNAS, COLUNAS_DA_PLANILHA, idadeEmDias } from '../src/dominio/planilha_frete_grade.js';
 import { montarPlanilhaDeFrete } from '../src/dominio/planilha_frete_export.js';
 import { escreverXlsx, serialDaData } from '../src/servicos/planilha_xlsx_escrita.js';
 import { lerPlanilhaXlsx } from '../src/servicos/planilha_xlsx.js';
@@ -51,9 +51,11 @@ describe('regras da conferência', () => {
   test('situação da carga: LIBERADA / PENDENTE / VERIFICAR', () => {
     assert.equal(situacaoDaCarga({ qtdSist: 6, qtdB2b: 6, finalizadas: 6 }), 'LIBERADA');
     assert.equal(situacaoDaCarga({ qtdSist: 8, qtdB2b: 8, finalizadas: 4 }), 'PENDENTE');
-    assert.equal(situacaoDaCarga({ qtdSist: 8, qtdB2b: 7, finalizadas: 7 }), 'VERIFICAR', 'contagem não bate');
+    assert.equal(situacaoDaCarga({ qtdSist: 8, qtdB2b: 7, finalizadas: 7 }), 'PENDENTE', 'nota do sistema faltando no B2B é pendência, não trava (118771 real, 05/10 à tarde)');
+    assert.equal(situacaoDaCarga({ qtdSist: 31, qtdB2b: 30, finalizadas: 23 }), 'PENDENTE', 'a 118771: paga-se as 23, a que falta espera');
+    assert.equal(situacaoDaCarga({ qtdSist: 7, qtdB2b: 8, finalizadas: 7 }), 'VERIFICAR', 'B2B com mais notas que o sistema: suspeito');
     assert.equal(situacaoDaCarga({ qtdSist: 3, qtdB2b: 3, finalizadas: 0 }), 'VERIFICAR', 'nada finalizado');
-    assert.equal(situacaoDaCarga({ qtdSist: 5, qtdB2b: 5, finalizadas: 5, semCorrespondencia: 2 }), 'VERIFICAR', 'mesma contagem, notas diferentes');
+    assert.equal(situacaoDaCarga({ qtdSist: 5, qtdB2b: 5, finalizadas: 5, soB2b: 1 }), 'VERIFICAR', 'mesma contagem, mas uma nota só existe no B2B');
   });
 
   test('número da nota: "725494-3", "725494" e "000725494" são a mesma nota; sem dígito, vazio', () => {
@@ -92,6 +94,32 @@ describe('regras da conferência', () => {
     assert.equal(i.statusPagamento, 'A PAGAR', 'há liberado ainda não pago');
     assert.deepEqual(TRATATIVAS, ['SEM TRATATIVA', 'DEVOLUÇÃO', 'OK', 'SUMIU DO B2B'], 'vocabulário da rodada 2');
     assert.deepEqual(TRATATIVAS_QUE_LIBERAM, ['OK', 'DEVOLUÇÃO']);
+  });
+
+  test('fechamento e idade (rodada 45): provisão em notas, pagamentos por mês, dias sem olhar', () => {
+    const hoje = '2026-10-12';
+    const cargas = [
+      { numero: 1, dataConsulta: '2026-09-28', qtdSist: 10, qtdB2b: 10, finalizadas: 8, pctPago: 80,
+        pagamentos: [{ pct: 50, data: '2026-09-30' }, { pct: 30, data: '2026-10-02' }],
+        pendencias: [{ nota: 'a', categoria: 'aguardando', tratativa: '', vistoEm: '2026-09-28' }, { nota: 'b', categoria: 'aguardando', tratativa: 'OK', tratativaEm: '2026-10-01', vistoEm: '2026-09-28' }] },
+      { numero: 2, dataConsulta: '2026-10-10', qtdSist: 4, qtdB2b: 4, finalizadas: 4, pctPago: 0, pagamentos: [], pendencias: [] },
+      { numero: 3, dataConsulta: '2026-10-11', qtdSist: 6, qtdB2b: 6, finalizadas: 3, pctPago: 50, pagamentos: [{ pct: 50, data: null }],
+        pendencias: [{ nota: 'c', categoria: 'aguardando', tratativa: '', vistoEm: '2026-10-11' }, { nota: 'd', categoria: 'nao_entregue', tratativa: '', vistoEm: '2026-09-20' }, { nota: 'e', categoria: 'outro', tratativa: 'SEM TRATATIVA', vistoEm: '2026-10-11' }] },
+    ];
+    const g = montarGrade(cargas, hoje);
+    const r = g.resumo;
+    assert.deepEqual(r.idade, { ate7: 1, de8a14: 1, mais15: 1, maisDe7: 2, maisAntiga: 22 }, 'a: 14 dias; c: 1 dia; d: 22 dias (só as SEM tratativa contam)');
+    assert.equal(r.semOlhar, 3);
+    // provisão: carga 1 liberado 0.9 (8 + OK) − pago 0.8 = 0.1 × 10 = 1 nota; carga 2 liberada 100% e nada pago = 4 notas; carga 3 liberado 0.5 − 0.5 = 0
+    assert.deepEqual(r.provisao, { cargas: 2, notas: 5 });
+    assert.deepEqual(r.porMes, [
+      { mes: '2026-10', pagamentos: 1, cargas: 1, notas: 3 },
+      { mes: '2026-09', pagamentos: 1, cargas: 1, notas: 5 },
+      { mes: 'sem data', pagamentos: 1, cargas: 1, notas: 3 },
+    ], 'mais recente primeiro; sem data por último; notas = % × emitidas');
+    const linhaA = g.linhas.find((l) => l.nota === 'a'); const linhaB = g.linhas.find((l) => l.nota === 'b');
+    assert.equal(linhaA.idadeDias, 14); assert.equal(linhaB.idadeDias, null, 'com tratativa não tem idade');
+    assert.equal(idadeEmDias('2026-10-05', '2026-10-12'), 7);
   });
 
   test('status p/ pagamento é O QUE FAZER: conferir · A PAGAR · PARCIAL · INTEGRAL (fluxo da Daniela)', () => {
@@ -159,6 +187,20 @@ describe('leitura dos PDFs (exemplos inventados)', () => {
     );
     assert.deepEqual(r.pendencias.map((p) => p.categoria), ['aguardando', 'nao_entregue', 'outro', 'outro']);
     assert.deepEqual(r.pendencias.filter((p) => p.categoria === 'outro').map((p) => p.statusB2b).sort(), ['A caminho', 'Cancelado']);
+  });
+
+  test('nota do sistema que falta no B2B: PENDENTE, com a pendência "não localizada" esperando (regra de 05/10 à tarde)', () => {
+    const r = conferirCarga({
+      sist: [{ nota: '1' }, { nota: '2' }, { nota: '3' }, { nota: '4' }],
+      b2b: [{ seq: 1, nota: '1', status: 'Finalizado' }, { seq: 2, nota: '2', status: 'Finalizado' }, { seq: 3, nota: '3', status: 'Finalizado' }],
+    });
+    assert.deepEqual([r.qtdSist, r.qtdB2b, r.finalizadas, r.situacao], [4, 3, 3, 'PENDENTE']);
+    assert.deepEqual(r.pendencias.map((p) => p.categoria), ['nao_localizada']);
+    const i = indicadoresDaCarga(r);
+    assert.equal(i.liberado, 0.75, 'as 3 finalizadas liberam; a que falta espera');
+    assert.equal(i.statusPagamento, 'A PAGAR');
+    const r2 = conferirCarga({ sist: [{ nota: '1' }], b2b: [{ seq: 1, nota: '1', status: 'Finalizado' }, { seq: 2, nota: '9', status: 'Finalizado' }] });
+    assert.equal(r2.situacao, 'VERIFICAR', 'nota que só existe no B2B continua travando');
   });
 
   test('mesma contagem, notas diferentes: uma falta no B2B, outra sobra nele → VERIFICAR', async () => {
@@ -277,7 +319,7 @@ describe('a tela e o arquivo são a MESMA planilha', () => {
   test('exportar e ler de volta: CADA célula do arquivo é a célula da grade da tela', () => {
     const grade = montarGrade(CARGAS_DE_EXEMPLO);
     const { abas } = exportada();
-    assert.deepEqual(abas.map((a) => a.nome), ['CONTROLE_CARGAS', 'RESUMO', 'LEIA-ME']);
+    assert.deepEqual(abas.map((a) => a.nome), ['CONTROLE_CARGAS', 'RESUMO', 'FECHAMENTO', 'LEIA-ME']);
     const linhas = abas[0].linhas;
     assert.equal(linhas.length, grade.linhas.length + 1, 'cabeçalho + uma linha por pendência');
     assert.deepEqual(linhas[0].slice(0, COLUNAS.length), COLUNAS.map((c) => c.t));
@@ -352,7 +394,7 @@ describe('a tela e o arquivo são a MESMA planilha', () => {
 
   test('exportação VAZIA (sem carga nenhuma) ainda gera um arquivo abrível', () => {
     const { abas } = lerPlanilhaXlsx(montarPlanilhaDeFrete({ cargas: [], geradoEm: new Date('2026-10-05T12:00:00Z') }));
-    assert.equal(abas.length, 3);
+    assert.equal(abas.length, 4);
     assert.equal(abas[0].linhas.length, 1, 'só o cabeçalho');
   });
 });
@@ -398,7 +440,8 @@ describe('o painel entende a linguagem da planilha (sem botão de importar)', ()
     ].map((l) => l.map((c) => (c && typeof c === 'object' && c.t ? c : { v: c })));
     const buf = escreverXlsx({ abas: [{ nome: 'Controle Cargas Revisado', linhas: linhasOriginais }] });
     const lido = lerPlanilhaDeControle(lerPlanilhaXlsx(buf).abas);
-    assert.deepEqual(lido.cargas.map((c) => [c.numero, c.situacao]), [['900901', 'PENDENTE'], ['900902', 'VERIFICAR'], ['900903', 'LIBERADA']]);
+    assert.deepEqual(lido.cargas.map((c) => [c.numero, c.situacao]), [['900901', 'PENDENTE'], ['900902', 'PENDENTE'], ['900903', 'LIBERADA']],
+      'a 900902 (3 no sistema, 2 no B2B, uma não localizada) deixou de ser VERIFICAR na rodada 45: a nota que falta é pendência');
     const [c1, c2, c3] = lido.cargas;
     assert.deepEqual(c1.pendencias.map((p) => [p.nota, p.tratativa, p.tratativaEm]), [['900011', 'OK', '2026-09-30'], ['900012', 'SEM TRATATIVA', null]]);
     // "Status p/ pagamento" é o que estava LIBERADO, não o pago (decisão do dono, 05/10/2026,
@@ -414,7 +457,7 @@ describe('o painel entende a linguagem da planilha (sem botão de importar)', ()
 
   test('aba que não é de controle (o RESUMO, a LEIA-ME) é ignorada, não vira carga', () => {
     const lido = lerPlanilhaDeControle(exportada().abas);
-    assert.deepEqual(lido.abas.filter((a) => !a.ehControle).map((a) => a.nome).sort(), ['LEIA-ME', 'RESUMO']);
+    assert.deepEqual(lido.abas.filter((a) => !a.ehControle).map((a) => a.nome).sort(), ['FECHAMENTO', 'LEIA-ME', 'RESUMO']);
   });
 });
 

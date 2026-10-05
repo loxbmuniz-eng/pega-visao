@@ -224,7 +224,7 @@ const TONS = {
   azul: { fundo: 'E8EEF9', cor: '2B4C8C' },
 };
 
-function abaResumo(r, { geradoEm, exemplo }) {
+function abaResumo(r, { geradoEm, exemplo, recorte = '' }) {
   const {
     cargas: total, liberadas, pendentes, verificar, integral, parcial, semPagamento, comSaldo,
     emitidas, finalizadas, entregue, pendAbertas, comCanhoto, semCanhoto, pagasSemCanhoto,
@@ -242,7 +242,7 @@ function abaResumo(r, { geradoEm, exemplo }) {
   mesclar.push('A1:H1');
   const sub = exemplo
     ? 'MODELO COM DADOS DE EXEMPLO — as cargas 9008xx e os números desta cópia são inventados, só para mostrar o desenho.'
-    : `Atualizado em ${dataBr(geradoEm)} às ${horaBr(geradoEm)} · dados dos relatórios B2B e Atak importados no painel`;
+    : (recorte || `Atualizado em ${dataBr(geradoEm)} às ${horaBr(geradoEm)} · dados dos relatórios B2B e Atak importados no painel`);
   const s2 = linha(1, 24);
   const subE = { fonte: { nome: FONTE, tam: 11, cor: C.ouro, neg: !!exemplo }, fundo: C.navy, alin: { h: 'left', v: 'center', recuo: 1 } };
   s2[0] = { v: sub, e: subE };
@@ -464,7 +464,7 @@ function abaLeiaMe({ exemplo }) {
   secao('SITUAÇÃO DA CARGA');
   item('LIBERADA', 'Tudo que o sistema emitiu está Finalizado no B2B.', chip(C.verdeFundo, C.verdeTexto));
   item('PENDENTE', 'A contagem bate e parte das notas está Finalizada, parte não. Paga-se a parte finalizada; o resto espera.', chip(C.vermelhoFundo, C.vermelhoTexto));
-  item('VERIFICAR', 'A contagem NÃO bate (Qtde SIST ≠ Qtde B2B), há nota que existe de um lado só, ou nada foi finalizado. Antes de pagar, alguém precisa olhar se o B2B está certo.', chip(C.amareloFundo, C.amareloTexto));
+  item('VERIFICAR', 'O B2B tem nota que o sistema não emitiu ("Só no B2B" — carga de outro embarque misturada?), o B2B tem mais notas que o sistema, ou nada foi finalizado. Antes de pagar, alguém precisa olhar. Nota do sistema que FALTA no B2B não trava a carga: vira pendência "Não localizada no B2B" e espera.', chip(C.amareloFundo, C.amareloTexto));
   espaco();
   secao('STATUS PENDÊNCIA — O QUE FOI FEITO COM A NOTA');
   item('(em branco)', 'Ninguém consultou ainda. A célula fica destacada em amarelo para mostrar o que falta olhar.');
@@ -487,6 +487,7 @@ function abaLeiaMe({ exemplo }) {
   secao('DICAS');
   item('Achar o que está para pagar', 'Na coluna "A pagar agora", filtre os valores maiores que zero. Para ver só as pendências que ninguém olhou, filtre "Status Pendência" por (Vazias).');
   item('Acrescentar uma carga à mão', 'Copie as linhas de uma carga existente e troque os números: as fórmulas e as cores acompanham.');
+  item('Aba FECHAMENTO', 'Por mês do pagamento: lançamentos, cargas e notas pagas (% pago × notas emitidas). Provisão = notas liberadas e ainda não pagas. Pendências sem tratativa por idade. Tudo em contagem de notas, sem valor em R$. Quando o arquivo sai de uma tela filtrada, o filtro aparece no topo do RESUMO e do FECHAMENTO.');
   if (exemplo) {
     espaco();
     secao('SOBRE ESTA CÓPIA');
@@ -503,12 +504,62 @@ function abaLeiaMe({ exemplo }) {
 /* cargas: [{ numero, dataConsulta:'AAAA-MM-DD', qtdSist, qtdB2b, finalizadas, aguardando,
               naoEntregue, outros, transportadora, cte, obs, pctPago (0–100), dataPagamento,
               pendencias:[{ nota, categoria, statusB2b, tratativa, tratativaEm, obs }] }] */
-export function montarPlanilhaDeFrete({ cargas, geradoEm = new Date(), exemplo = false }) {
+export function montarPlanilhaDeFrete({ cargas, geradoEm = new Date(), exemplo = false, filtros = '', totalSemFiltro = null }) {
   const quando = geradoEm instanceof Date ? geradoEm : new Date(geradoEm);
   const grade = montarGrade(cargas);
+  const recorte = filtros ? `Filtro aplicado na tela: ${filtros} — ${cargas.length} de ${totalSemFiltro ?? cargas.length} carga(s)` : '';
   return escreverXlsx({
     titulo: exemplo ? 'Controle de Pagamento de Frete (modelo de exemplo)' : 'Controle de Pagamento de Frete',
     geradoEm: quando,
-    abas: [abaControle(grade), abaResumo(grade.resumo, { geradoEm: quando, exemplo }), abaLeiaMe({ exemplo })],
+    abas: [abaControle(grade), abaResumo(grade.resumo, { geradoEm: quando, exemplo, recorte }), abaFechamento(grade.resumo, { geradoEm: quando, recorte }), abaLeiaMe({ exemplo })],
   });
+}
+
+/* ------------------------------------------------------------- FECHAMENTO */
+/* Contabilidade sem R$ (decisão do dono): por mês do pagamento, quantas cargas
+   e notas foram pagas; provisão = notas liberadas e ainda não pagas; e a idade
+   das pendências sem tratativa. Tudo contagem de notas. */
+function abaFechamento(r, { geradoEm, recorte }) {
+  const linhas = [];
+  const mesclar = [];
+  const colunas = new Array(6).fill(null).map(() => ({ larg: 20 }));
+  const linha = (i, altura) => { linhas[i] ??= { altura, c: new Array(6).fill(null) }; if (altura) linhas[i].altura = altura; return linhas[i].c; };
+  const faixa = { fonte: { nome: FONTE, tam: 22, neg: true, cor: C.branco }, fundo: C.navy, alin: { h: 'left', v: 'center', recuo: 1 } };
+  const t = linha(0, 44); t[0] = { v: 'Pagamento de Frete — Fechamento', e: faixa }; for (let j = 1; j < 6; j += 1) t[j] = { e: faixa };
+  mesclar.push('A1:F1');
+  const subE = { fonte: { nome: FONTE, tam: 11, cor: C.ouro }, fundo: C.navy, alin: { h: 'left', v: 'center', recuo: 1 } };
+  const s2 = linha(1, 24); s2[0] = { v: recorte || `Atualizado em ${dataBr(geradoEm)} às ${horaBr(geradoEm)} · contagem de notas, sem valor em R$`, e: subE };
+  for (let j = 1; j < 6; j += 1) s2[j] = { e: subE };
+  mesclar.push('A2:F2');
+  const fio = linha(2, 5); for (let j = 0; j < 6; j += 1) fio[j] = { e: { fundo: C.ouro } };
+  const eSec = { fonte: { nome: FONTE, tam: 11, neg: true, cor: C.navy }, alin: { h: 'left', v: 'bottom' }, borda: { base: { estilo: 'medium', cor: C.ouroEscuro } } };
+  const eCab = { fonte: { nome: FONTE, tam: 10, neg: true, cor: C.branco }, fundo: C.navy, alin: { h: 'center', v: 'center', quebrar: true } };
+  const eCorpo = { fonte: { nome: FONTE, tam: 11, cor: C.tinta }, alin: { h: 'center', v: 'center' }, borda: { base: { estilo: 'thin', cor: C.linha } } };
+  const eEsq = { ...eCorpo, alin: { h: 'left', v: 'center', recuo: 1 } };
+  let i = 4;
+  const secao = (texto) => { const s = linha(i, 24); s[0] = { v: texto, e: eSec }; for (let j = 1; j < 6; j += 1) s[j] = { e: eSec }; mesclar.push(`A${i + 1}:F${i + 1}`); i += 1; };
+  const cab = (cols) => { const l = linha(i, 24); cols.forEach((v, j) => { l[j] = { v, e: j === 0 ? { ...eCab, alin: { h: 'left', v: 'center', recuo: 1 } } : eCab }; }); i += 1; };
+  const lin = (vals, e = eCorpo) => { const l = linha(i, 22); vals.forEach((v, j) => { l[j] = { v, e: j === 0 ? { ...e, alin: { h: 'left', v: 'center', recuo: 1 } } : e }; }); i += 1; };
+  const mesBr = (m) => (m === 'sem data' ? 'Sem data de pagamento' : `${m.slice(5, 7)}/${m.slice(0, 4)}`);
+
+  secao('PAGAMENTOS POR MÊS (pela data do pagamento)');
+  cab(['Mês', 'Lançamentos', 'Cargas', 'Notas pagas', '', '']);
+  if (!r.porMes.length) lin(['Nenhum pagamento registrado', '', '', '', '', '']);
+  for (const m of r.porMes) lin([mesBr(m.mes), m.pagamentos, m.cargas, m.notas, '', '']);
+  i += 1;
+  secao('PROVISÃO — liberado e ainda não pago');
+  cab(['', 'Cargas', 'Notas', '', '', '']);
+  lin(['A pagar agora', r.provisao.cargas, r.provisao.notas, '', '', '']);
+  i += 1;
+  secao('PENDÊNCIAS SEM TRATATIVA, POR IDADE (dias desde que entraram no controle)');
+  cab(['Faixa', 'Pendências', '', '', '', '']);
+  lin(['0 a 7 dias', r.idade.ate7, '', '', '', '']);
+  lin(['8 a 14 dias', r.idade.de8a14, '', '', '', '']);
+  lin(['15 dias ou mais', r.idade.mais15, '', '', '', '']);
+  lin(['Mais antiga (dias)', r.idade.maisAntiga ?? '—', '', '', '', '']);
+  i += 1;
+  const nota = linha(i, 30); nota[0] = { v: 'Notas pagas = % pago × notas emitidas no sistema (arredondado a 1 casa). A provisão é o que já pode ser pago e não foi. Nada aqui é valor em R$.', e: { fonte: { nome: FONTE, tam: 9, it: true, cor: C.muda }, alin: { h: 'left', v: 'top', quebrar: true } } };
+  for (let j = 1; j < 6; j += 1) nota[j] = { e: nota[0].e };
+  mesclar.push(`A${i + 1}:F${i + 1}`);
+  return { nome: 'FECHAMENTO', corAba: C.aco, grade: false, zoom: 100, colunas, linhas: linhas.map((l) => l ?? { altura: 12, c: [] }), mesclar, ignorarAvisos: true, impressao: { orientacao: 'portrait', ajustarLargura: true } };
 }

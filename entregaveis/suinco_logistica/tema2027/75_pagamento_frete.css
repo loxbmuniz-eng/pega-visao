@@ -125,11 +125,19 @@
   #tab-frete td.frete-canhoto-sim .frete-check span{ color:var(--fr-lib-txt) }
   #tab-frete td.frete-canhoto-nao .frete-check span{ color:var(--fr-mudo) }
   /* Status p/ pagamento é o que FAZER: A PAGAR chama a atenção */
-  #tab-frete td.frete-sp-apagar{ background:var(--fr-ver-bg); color:var(--fr-ver-txt) }
-  #tab-frete td.frete-sp-integral{ color:var(--fr-lib-txt) }
-  #tab-frete td.frete-sp-parcial{ color:#8fb4ff }
-  :root[data-tema="claro"] #tab-frete td.frete-sp-parcial{ color:#1f5fbf }
-  #tab-frete td.frete-sp-conferir{ color:var(--fr-ver-txt); font-style:italic }
+  /* selos do "o que fazer" — mesmo desenho da situação */
+  #tab-frete .frete-selo-apagar{ background:var(--fr-ver-bg); color:var(--fr-ver-txt) }
+  #tab-frete .frete-selo-integral{ background:var(--fr-lib-bg); color:var(--fr-lib-txt) }
+  #tab-frete .frete-selo-parcial{ background:rgba(63,110,200,.22); color:#8fb4ff }
+  :root[data-tema="claro"] #tab-frete .frete-selo-parcial{ background:#e8eef9; color:#1f5fbf }
+  #tab-frete .frete-selo-conferir{ background:var(--fr-ver-bg); color:var(--fr-ver-txt); font-style:italic }
+  /* selo da tratativa, acima da lista: a cor diz o estado antes de ler */
+  #tab-frete .frete-selo-t{ display:block; font-size:12px; font-weight:800; letter-spacing:.02em; padding:2px 8px; border-radius:999px; margin:0 0 4px; width:max-content; max-width:100% }
+  #tab-frete .frete-selo-t-ok{ background:var(--fr-lib-bg); color:var(--fr-lib-txt) }
+  #tab-frete .frete-selo-t-sumiu{ background:var(--fr-pend-bg); color:var(--fr-pend-txt) }
+  #tab-frete .frete-selo-t-sem{ background:var(--surface-2, rgba(255,255,255,.08)); color:var(--fr-mudo) }
+  #tab-frete .frete-selo-t-falta{ background:var(--fr-ver-bg); color:var(--fr-ver-txt) }
+  #tab-frete .frete-selo-t-dev{ background:rgba(63,110,200,.22); color:#8fb4ff }
   /* a 2ª, 3ª… linha de uma carga é uma nota pendente — diz isso, para não
      parecer que "não carregou" (o dono achou isso em 05/10) */
   #tab-frete tr.frete-seg td[data-col="qtdSist"]{ position:relative }
@@ -146,6 +154,20 @@
   #tab-frete .frete-pill-pend:hover{ border-color:var(--gold-dim) }
   #tab-frete tr.frete-fechada td{ background:var(--surface-2, transparent) }
   #tab-frete .frete-sel-transp{ min-height:36px; width:100%; font:inherit; font-size:14px }
+  /* rodada 45: dois grupos de caixas (Hoje / Panorama), filtros amplos, idade, fechamento */
+  #tab-frete .frete-grupos{ display:grid; gap:12px }
+  #tab-frete .frete-grupo-t{ font-size:12px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; color:var(--fr-mudo); margin:0 0 6px }
+  #tab-frete .frete-grupo-hoje .bento{ border-left:4px solid var(--gold); padding-left:8px }
+  #tab-frete .frete-filtros-linha{ display:flex; flex-wrap:wrap; gap:8px 12px; align-items:center; margin-bottom:8px }
+  #tab-frete .frete-f{ display:inline-flex; align-items:center; gap:6px; font-size:13px; color:var(--text-dim) }
+  #tab-frete .frete-f select, #tab-frete .frete-f input{ font:inherit; font-size:13px; min-height:36px; padding:4px 8px }
+  #tab-frete .frete-idade{ display:block; font-size:12px; color:var(--fr-mudo); font-style:italic }
+  #tab-frete .frete-idade-velha{ color:var(--fr-pend-txt); font-weight:700; font-style:normal }
+  #tab-frete .frete-pill-velha{ border-color:var(--fr-pend-txt) }
+  #tab-frete .frete-fechamento{ grid-column:1 / -1 }
+  #tab-frete tr.frete-fech-prov td{ border-top:2px solid var(--gold-dim) }
+  #tab-frete .frete-fech-idade b{ color:var(--text) }
+  .modal-box-frete tr.frete-lote-ok td{ color:var(--fr-lib-txt, #7fe0a6) }
   #tab-frete td.frete-acoes{ white-space:nowrap }
   #tab-frete td.frete-acoes .btn{ margin:0 2px }
 

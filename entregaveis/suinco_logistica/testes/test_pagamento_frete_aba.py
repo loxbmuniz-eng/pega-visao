@@ -24,6 +24,7 @@ Exige o backend no ar (SUINCO_API) e o banco de teste.
 """
 import asyncio
 import json
+import re
 import os
 import subprocess
 import sys
@@ -196,7 +197,7 @@ async def main():
                == ['8', '8', '0', '4', '1', '1', '2', 'PENDENTE'], str(p1))
             ck('as seguintes repetem só carga e situação', linhas[1]['v']['qtdSist'] == '' and linhas[1]['v']['situacao'] == 'PENDENTE' and linhas[1]['v']['carga'] == '900802')
             ck('entregue 50% e liberado 50%', p1['entregue'] == '50,0%' and p1['liberado'] == '50,0%', f"{p1['entregue']} {p1['liberado']}")
-            resumos = sorted(l['v']['resumo'].split(' ', 1)[1] for l in linhas)
+            resumos = sorted(re.sub(r'sem olhar há.*$', '', l['v']['resumo'].split(' ', 1)[1]).strip() for l in linhas)   # a idade ("sem olhar há N dias") é texto da célula, não da nota
             ck('as pendências com o status do B2B, como na planilha', resumos == ['(A caminho)', '(Aguardando)', '(Cancelado)', '(Não entregue)'], str(resumos))
         stats = await pg.evaluate("() => Object.fromEntries([...document.querySelectorAll('#frete-stats .stat-box')].map(b => [b.querySelector('.stat-label').textContent.trim(), b.querySelector('.stat-num').textContent.trim()]))")
         ck('as caixas do topo: 1 carga, 1 pendente, 4 pendências abertas',
@@ -290,6 +291,27 @@ async def main():
         seg = await pg.evaluate("() => getComputedStyle(document.querySelector('#frete-tbody tr.frete-seg td[data-col=\"qtdSist\"]'), '::before').content")
         ck('a 2ª linha da carga diz que é uma nota pendente (não parece vazia)', 'nota pendente' in seg, seg)
 
+        print('\n=== 5c. FILA DE TRABALHO: HOJE, PRIORIDADE, IDADE, LOTE, FECHAMENTO ===')
+        stats = await pg.evaluate("() => Object.fromEntries([...document.querySelectorAll('#frete-stats .stat-box')].map(b => [b.querySelector('.stat-label').textContent.trim(), b.querySelector('.stat-num').textContent.trim()]))")
+        ck('o topo tem o grupo "O que fazer hoje" com A PAGAR, Pendências sem olhar e Conferir', stats.get('A PAGAR') == '1' and stats.get('Pendências sem olhar') == '3' and stats.get('Conferir') == '0', str(stats))
+        ck('a pendência sem tratativa diz há quantos dias está sem olhar', await pg.evaluate("() => [...document.querySelectorAll('#frete-tbody .frete-idade')].some(e => /sem olhar há \\d+ dia/.test(e.textContent))"))
+        await pg.click('.frete-chip:has-text("INTEGRAL")')
+        await pg.wait_for_timeout(400)
+        ck('o filtro por status p/ pagamento funciona (INTEGRAL: nenhuma)', await pg.evaluate("() => document.querySelectorAll('#frete-tbody tr').length") == 0)
+        await pg.click('.frete-chip:has-text("A PAGAR")')
+        await pg.wait_for_timeout(400)
+        ck('A PAGAR: a 900802 volta', await pg.evaluate("() => document.querySelectorAll('#frete-tbody tr.frete-primeira').length") == 1)
+        ck('o botão "Pagar as liberadas" conta a carga A PAGAR da tela', await pg.inner_text('#frete-btn-lote') == 'Pagar as liberadas (1)', await pg.inner_text('#frete-btn-lote'))
+        await pg.click('#frete-btn-lote')
+        await pg.wait_for_selector('#frete-lote-tab')
+        lote = await pg.evaluate("() => [...document.querySelectorAll('#frete-lote-tab tbody tr')].map(tr => [...tr.querySelectorAll('td')].map(td => td.textContent.trim()))")
+        ck('o lote lista a 900802 com 12,5% a pagar (liberado 62,5 − pago 50)', lote == [['900802', 'Transp. Teste Tela', '62,5%', '50,0%', '12,5%']], str(lote))
+        await pg.click('#modal-frete button:has-text("Cancelar")')
+        fech = await pg.inner_text('#frete-res-fechamento')
+        ck('o Fechamento mostra o pagamento de 10/2026 e a provisão de 1 nota (12,5% de 8)', '10/2026' in fech and 'Provisão' in fech and '1' in fech, fech[:200])
+        await pg.click('.frete-chip:has-text("A PAGAR")')
+        await pg.wait_for_timeout(300)
+
         print('\n=== 6. EXPORTAR: O ARQUIVO É A TELA ===')
         async with pg.expect_download(timeout=30000) as dl:
             await pg.click('#frete-btn-exportar')
@@ -307,7 +329,7 @@ async def main():
         """], capture_output=True, text=True, cwd=str(RAIZ / 'backend'))
         try:
             x = json.loads(comparacao.stdout.strip())
-            ck('o .xlsx tem as 3 abas e o mesmo cabeçalho da tela', x['abas'] == ['CONTROLE_CARGAS', 'RESUMO', 'LEIA-ME'] and x['cab'] == cab[:22], str(x['cab'])[:200])
+            ck('o .xlsx tem as 4 abas e o mesmo cabeçalho da tela', x['abas'] == ['CONTROLE_CARGAS', 'RESUMO', 'FECHAMENTO', 'LEIA-ME'] and x['cab'] == cab[:22], str(x['cab'])[:200])
             ck('a mesma carga: 4 linhas, PENDENTE, 50% pago', x['qtd'] == 4 and x['sit'] == 'PENDENTE' and abs(float(x['pago']) - 0.5) < 1e-9, str(x))
         except Exception as e:
             ck('o .xlsx abre', False, (comparacao.stderr or str(e))[:300])

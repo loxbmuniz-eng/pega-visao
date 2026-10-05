@@ -224,6 +224,16 @@ async function diario() {
   const achados = await vigia.auditarDado(pool);
   const total = achados.reduce((s, a) => s + a.quantidade, 0);
   await registrar('dado', total === 0, vigia.resumoDoDado(achados));
+  /* Integridade da aba Pagamento de Frete (05/10). Servidor sem a 058 não tem as
+     tabelas: aí não há o que conferir, e o vigia diz isso em vez de falhar. */
+  try {
+    const frete = await vigia.auditarDado(pool, vigia.REGRAS_DO_FRETE);
+    const tf = frete.reduce((s, a) => s + a.quantidade, 0);
+    await registrar('frete', tf === 0, tf === 0 ? 'cargas, pendências e pagamentos coerentes' : vigia.resumoDoDado(frete));
+  } catch (e) {
+    if (e.code !== '42P01') throw e;
+    await registrar('frete', true, 'aba ainda não instalada no servidor (migração 058)');
+  }
 }
 
 /* ------------------------------------------------------------ semanal */
