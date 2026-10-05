@@ -394,7 +394,7 @@ describe('a tela e o arquivo são a MESMA planilha', () => {
 
   test('exportação VAZIA (sem carga nenhuma) ainda gera um arquivo abrível', () => {
     const { abas } = lerPlanilhaXlsx(montarPlanilhaDeFrete({ cargas: [], geradoEm: new Date('2026-10-05T12:00:00Z') }));
-    assert.equal(abas.length, 3);
+    assert.equal(abas.length, 4);
     assert.equal(abas[0].linhas.length, 1, 'só o cabeçalho');
   });
 });
@@ -440,7 +440,8 @@ describe('o painel entende a linguagem da planilha (sem botão de importar)', ()
     ].map((l) => l.map((c) => (c && typeof c === 'object' && c.t ? c : { v: c })));
     const buf = escreverXlsx({ abas: [{ nome: 'Controle Cargas Revisado', linhas: linhasOriginais }] });
     const lido = lerPlanilhaDeControle(lerPlanilhaXlsx(buf).abas);
-    assert.deepEqual(lido.cargas.map((c) => [c.numero, c.situacao]), [['900901', 'PENDENTE'], ['900902', 'VERIFICAR'], ['900903', 'LIBERADA']]);
+    assert.deepEqual(lido.cargas.map((c) => [c.numero, c.situacao]), [['900901', 'PENDENTE'], ['900902', 'PENDENTE'], ['900903', 'LIBERADA']],
+      'a 900902 (3 no sistema, 2 no B2B, uma não localizada) deixou de ser VERIFICAR na rodada 45: a nota que falta é pendência');
     const [c1, c2, c3] = lido.cargas;
     assert.deepEqual(c1.pendencias.map((p) => [p.nota, p.tratativa, p.tratativaEm]), [['900011', 'OK', '2026-09-30'], ['900012', 'SEM TRATATIVA', null]]);
     // "Status p/ pagamento" é o que estava LIBERADO, não o pago (decisão do dono, 05/10/2026,
@@ -456,7 +457,7 @@ describe('o painel entende a linguagem da planilha (sem botão de importar)', ()
 
   test('aba que não é de controle (o RESUMO, a LEIA-ME) é ignorada, não vira carga', () => {
     const lido = lerPlanilhaDeControle(exportada().abas);
-    assert.deepEqual(lido.abas.filter((a) => !a.ehControle).map((a) => a.nome).sort(), ['LEIA-ME', 'RESUMO']);
+    assert.deepEqual(lido.abas.filter((a) => !a.ehControle).map((a) => a.nome).sort(), ['FECHAMENTO', 'LEIA-ME', 'RESUMO']);
   });
 });
 

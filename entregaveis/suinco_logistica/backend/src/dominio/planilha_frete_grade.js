@@ -93,7 +93,11 @@ export const diaLocal = (iso) => {
    → { colunas, linhas, resumo } */
 /* Dias corridos entre uma data (AAAA-MM-DD ou ISO) e hoje; null se não houver data. */
 export function idadeEmDias(desde, hoje = diaLocal(new Date().toISOString())) {
-  const d = diaLocal(desde); if (!d || !hoje) return null;
+  /* Data pura (AAAA-MM-DD, como o banco devolve) é tomada como está: passar
+     pelo fuso faria 28/09 virar 27/09 e cada idade sair um dia maior. Só um
+     instante completo (ISO com hora) é convertido para o dia de São Paulo. */
+  const puro = /^\d{4}-\d{2}-\d{2}$/.test(String(desde ?? '').trim());
+  const d = puro ? String(desde).trim() : diaLocal(desde); if (!d || !hoje) return null;
   return Math.max(0, Math.round((Date.parse(`${hoje}T00:00:00Z`) - Date.parse(`${d}T00:00:00Z`)) / 86400000));
 }
 

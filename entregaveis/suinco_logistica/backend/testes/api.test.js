@@ -7085,6 +7085,7 @@ describe('49. Pagamento de Frete — a planilha dentro do painel (05/10/2026)', 
 
     test('pagamento repetido em menos de 2 minutos PERGUNTA; com confirmação, registra (governança)', async () => {
       const a = tokens['Administração'];
+      await importar('900809');   // a 900809 só tinha passado pela prévia (#112); agora entra no controle
       const p1 = await req(`${FRETE}/cargas/900809/pagamentos`, { metodo: 'POST', token: a, corpo: { pct: 10 } });
       assert.equal(p1.status, 201, p1.texto);
       const p2 = await req(`${FRETE}/cargas/900809/pagamentos`, { metodo: 'POST', token: a, corpo: { pct: 10 } });

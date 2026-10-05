@@ -24,6 +24,7 @@ Exige o backend no ar (SUINCO_API) e o banco de teste.
 """
 import asyncio
 import json
+import re
 import os
 import subprocess
 import sys
@@ -196,7 +197,7 @@ async def main():
                == ['8', '8', '0', '4', '1', '1', '2', 'PENDENTE'], str(p1))
             ck('as seguintes repetem só carga e situação', linhas[1]['v']['qtdSist'] == '' and linhas[1]['v']['situacao'] == 'PENDENTE' and linhas[1]['v']['carga'] == '900802')
             ck('entregue 50% e liberado 50%', p1['entregue'] == '50,0%' and p1['liberado'] == '50,0%', f"{p1['entregue']} {p1['liberado']}")
-            resumos = sorted(l['v']['resumo'].split(' ', 1)[1] for l in linhas)
+            resumos = sorted(re.sub(r'sem olhar há.*$', '', l['v']['resumo'].split(' ', 1)[1]).strip() for l in linhas)   # a idade ("sem olhar há N dias") é texto da célula, não da nota
             ck('as pendências com o status do B2B, como na planilha', resumos == ['(A caminho)', '(Aguardando)', '(Cancelado)', '(Não entregue)'], str(resumos))
         stats = await pg.evaluate("() => Object.fromEntries([...document.querySelectorAll('#frete-stats .stat-box')].map(b => [b.querySelector('.stat-label').textContent.trim(), b.querySelector('.stat-num').textContent.trim()]))")
         ck('as caixas do topo: 1 carga, 1 pendente, 4 pendências abertas',
