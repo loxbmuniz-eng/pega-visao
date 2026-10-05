@@ -325,7 +325,7 @@ async function exportarPdfFretes(){
           ? `<span class="km-tabela" title="KM da tabela de frete para o destino">tab. ${esc(kmTexto(d.kmDestino))}</span>` : '')}</td>
       <td class="col-valor">${d.freteValor === null || d.freteValor === undefined
         ? '<span class="text-dim">—</span>'
-        : 'R$ ' + esc(Number(d.freteValor).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2}))}</td>
+        : esc(Number(d.freteValor).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2}))}</td>
       <td class="col-obs">${d.observacoes
         ? esc(d.observacoes)
         : '<span class="obs-pendente">a preencher</span>'}</td>

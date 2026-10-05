@@ -3530,26 +3530,31 @@ input,select,textarea{border-radius:5px}
      linha. Medido — "26/08/2026 17:16" não cabia e saía cortado. */
   padding-left:6px !important; padding-right:6px !important;
 }
-.tab-fretes .col-data{ width:9% }
-.tab-fretes .col-fat{ width:9% }
-.tab-fretes .col-saida{ width:13% }
+/* LARGURAS MEDIDAS (05/10/2026): a conferência de layout do test_relatorios
+   acusou "05/10/2026" e "PROGRAMAÇÃO" transbordando a coluna de 9%. Com 11%
+   as duas datas cabem com folga; o valor ("R$ 18.306,20") pede 11%. */
+.tab-fretes .col-data{ width:12% }
+.tab-fretes .col-fat{ width:12% }
+/* A Saída traz data E hora: a hora pode ir para a segunda linha. */
+.tab-fretes .col-saida{ width:13%; white-space:normal }
+.doc-amplo th.col-data, .doc-amplo th.col-fat, .doc-amplo th.col-valor{ letter-spacing:0 !important }
 /* KM E FRETE (05/10/2026): números, alinhados à direita, sem quebrar. */
 .tab-fretes .col-km, .tab-fretes .col-valor{
   white-space:nowrap; font-variant-numeric:tabular-nums; text-align:right;
   padding-left:6px !important; padding-right:8px !important;
 }
-.tab-fretes .col-km{ width:9% }
-.tab-fretes .col-valor{ width:10%; font-weight:700 }
+.tab-fretes .col-km{ width:8% }
+.tab-fretes .col-valor{ width:11%; font-weight:700 }
 .tab-fretes .km-tabela{ display:block; font-size:.8em; font-weight:400; opacity:.75 }
 .tab-fretes .col-carga{
-  width:10%; font-weight:800; font-variant-numeric:tabular-nums;
+  width:9%; font-weight:800; font-variant-numeric:tabular-nums;
   background:rgba(185,144,63,.16);
 }
 .tab-fretes .col-placa{
-  width:9%; font-weight:800; letter-spacing:.4px; text-transform:uppercase;
+  width:10%; font-weight:800; letter-spacing:.4px; text-transform:uppercase;
   white-space:nowrap;
 }
-.tab-fretes .col-rota{ width:12% }
+.tab-fretes .col-rota{ width:11% }
 .tab-fretes .col-obs{ white-space:normal; line-height:1.5 }
 /* CABEÇALHO DE DIA (05/10/2026): período de vários dias sai um dia depois do
    outro. A faixa fica com o PRIMEIRO registro do dia (não pode ficar sozinha no
@@ -3688,9 +3693,12 @@ input,select,textarea{border-radius:5px}
 
      A leitura não perde nada — em A4 deitado a coluna de Observações fica
      MAIS larga do que era em pé, e é a coluna que carrega o texto. */
-  .doc-amplo table{ font-size:13px !important; table-layout:fixed }
-  .doc-amplo th, .doc-amplo td{ padding:9px 10px !important; vertical-align:top }
-  .doc-amplo th{ font-size:11px !important; letter-spacing:.04em }
+  /* MEDIDO EM 05/10/2026 (ocorrência #109): a folha é retrato, 748px úteis, e
+     com nove colunas a 13px/recuo 20px elas pediam 819px. A 12px, recuo 16px e
+     cabeçalho a 10px a conta fecha com folga — e 12px continua acima do piso. */
+  .doc-amplo table{ font-size:12px !important; table-layout:fixed }
+  .doc-amplo th, .doc-amplo td{ padding:8px 8px !important; vertical-align:top }
+  .doc-amplo th{ font-size:10px !important; letter-spacing:.02em }
   /* Zebra: com linhas altas e três colunas largas, o olho perde a linha ao
      atravessar a página. */
   .doc-amplo tbody tr:nth-child(even) td{ background:#f4f5f7 !important }

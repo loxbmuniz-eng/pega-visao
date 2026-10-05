@@ -5040,3 +5040,31 @@ publicado em 5 pontos: ordem, coluna Sequência, Data da Programação, PDF sem
 Programação/Faturamento) e `testes/test_fretes_km_no_relatorio.py` (carga de
 duas semanas atrás com KM e valor no PDF; desvio; sem KM = "—"; correção na
 Montagem; planilha e PDF leem o mesmo número).
+
+## #110 — Um teste venceu sozinho: data fixa fora da janela de 30 dias (05/10/2026)
+
+**Como apareceu.** Portão 40 vermelho em `test_filial_so_ve_o_que_e_dela`
+("a 105 vê o próprio checklist", "a matriz vê o checklist da 105"), nas duas
+chances, com banco limpo — e a entrega não tocava em devolução nem em filial.
+
+**A causa.** O teste criava os checklists com `dataDev: '2026-09-02'` fixo, e
+a listagem de devoluções, sem período, traz só os últimos 30 dias
+(`data_dev >= hoje − 30`, rotas/devolucoes.js). Em 05/10 o dia 02/09 ficou
+fora da janela: o checklist existia, estava certo, e não aparecia na lista.
+Teste vermelho sem defeito nenhum — a causa 1 das quatro ("o teste é que
+está velho"), na variante mais traiçoeira: ele era verde até ontem.
+
+**A família.** Datas (#81, #100): aqui não é fuso, é o calendário andando.
+Todo teste que escreve uma data fixa e lê por uma janela relativa a "hoje"
+tem prazo de validade, e ninguém sabe qual.
+
+**A correção.** A data passa a ser a de hoje (`HOJE_DEV`, calculada em UTC−3).
+**O que fica de regra:** teste não escreve data fixa quando a tela ou a rota
+filtram por "hoje"; usa a data do dia e explica por quê.
+
+**Também neste portão** (e corrigidos na mesma rodada, todos "a regra mudou de
+propósito"): `test_indicadores_dizem_a_verdade` contava 12 abas (são 13 com a
+Pagamento de Frete) e `test_relatorios` esperava as 6 colunas antigas do PDF de
+fretes (são 9, #109). E um achado real da conferência de layout do mesmo
+`test_relatorios`: as colunas de data do PDF de fretes com 9% transbordavam
+("05/10/2026", "PROGRAMAÇÃO") — larguras MEDIDAS em mídia de impressão (a folha é retrato, 748px úteis; as nove colunas pediam 819px a 13px): corpo a 12px, cabeçalho a 10px, recuo 16px, "R$" só no cabeçalho, a hora da Saída na segunda linha, Placa 10%. Soma medida: 750px.

@@ -102,8 +102,9 @@ async def main():
         ck('o PDF tem as colunas KM e Frete (R$)', 'KM' in r['cab'] and 'Frete (R$)' in r['cab'], str(r['cab']))
         L = r['linhas']
         ck('carga de duas semanas atrás está no PDF', set(L) >= {'KM-1', 'KM-2', 'KM-3'}, str(list(L)))
-        ck('KM-1: o KM da Programação (583) e o valor (R$ 1.749,00)',
-           L.get('KM-1', {}).get('km') == '583' and L['KM-1']['valor'] == 'R$ 1.749,00', str(L.get('KM-1')))
+        # O "R$" fica no cabeçalho da coluna ("Frete (R$)"): a célula traz só o número.
+        ck('KM-1: o KM da Programação (583) e o valor (1.749,00)',
+           L.get('KM-1', {}).get('km') == '583' and L['KM-1']['valor'] == '1.749,00', str(L.get('KM-1')))
         ck('KM-2 com desvio: 640, e a tabela (583) ao lado',
            L.get('KM-2', {}).get('km', '').startswith('640') and 'tab. 583' in L['KM-2']['tab'], str(L.get('KM-2')))
         ck('KM-3 sem KM: sai "—", não zero', L.get('KM-3', {}).get('km') == '—', str(L.get('KM-3')))
