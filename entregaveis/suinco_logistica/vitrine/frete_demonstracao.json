@@ -146,6 +146,8 @@
    "cidade": "",
    "obsNota": "",
    "obsCarga": "",
+   "vistoEm": null,
+   "idadeDias": null,
    "v": [
     "2026-09-28",
     900801,
@@ -182,6 +184,8 @@
    "cidade": "",
    "obsNota": "",
    "obsCarga": "",
+   "vistoEm": null,
+   "idadeDias": null,
    "v": [
     "2026-09-28",
     900802,
@@ -218,6 +222,8 @@
    "cidade": "",
    "obsNota": "Cliente recusou",
    "obsCarga": "",
+   "vistoEm": null,
+   "idadeDias": null,
    "v": [
     "2026-09-28",
     900802,
@@ -254,6 +260,8 @@
    "cidade": "",
    "obsNota": "",
    "obsCarga": "",
+   "vistoEm": null,
+   "idadeDias": 8,
    "v": [
     "2026-09-28",
     900802,
@@ -290,6 +298,8 @@
    "cidade": "",
    "obsNota": "",
    "obsCarga": "",
+   "vistoEm": null,
+   "idadeDias": null,
    "v": [
     "2026-09-28",
     900802,
@@ -326,6 +336,8 @@
    "cidade": "",
    "obsNota": "",
    "obsCarga": "",
+   "vistoEm": null,
+   "idadeDias": 7,
    "v": [
     "2026-09-29",
     900803,
@@ -362,6 +374,8 @@
    "cidade": "",
    "obsNota": "Não tem no B2B (mandar foto)",
    "obsCarga": "",
+   "vistoEm": null,
+   "idadeDias": null,
    "v": [
     "2026-09-29",
     900803,
@@ -398,6 +412,8 @@
    "cidade": "",
    "obsNota": "Nota só aparece no B2B",
    "obsCarga": "",
+   "vistoEm": null,
+   "idadeDias": 7,
    "v": [
     "2026-09-29",
     900803,
@@ -434,6 +450,8 @@
    "cidade": "",
    "obsNota": "",
    "obsCarga": "",
+   "vistoEm": null,
+   "idadeDias": null,
    "v": [
     "2026-09-29",
     900805,
@@ -470,6 +488,8 @@
    "cidade": "",
    "obsNota": "",
    "obsCarga": "",
+   "vistoEm": null,
+   "idadeDias": null,
    "v": [
     "2026-09-29",
     900805,
@@ -506,6 +526,8 @@
    "cidade": "",
    "obsNota": "",
    "obsCarga": "",
+   "vistoEm": null,
+   "idadeDias": 7,
    "v": [
     "2026-09-29",
     900805,
@@ -542,6 +564,8 @@
    "cidade": "",
    "obsNota": "",
    "obsCarga": "",
+   "vistoEm": null,
+   "idadeDias": null,
    "v": [
     "2026-09-29",
     900805,
@@ -578,6 +602,8 @@
    "cidade": "",
    "obsNota": "",
    "obsCarga": "Canhotos ainda não chegaram",
+   "vistoEm": null,
+   "idadeDias": 6,
    "v": [
     "2026-09-30",
     900806,
@@ -614,6 +640,8 @@
    "cidade": "",
    "obsNota": "",
    "obsCarga": "",
+   "vistoEm": null,
+   "idadeDias": 6,
    "v": [
     "2026-09-30",
     900806,
@@ -650,6 +678,8 @@
    "cidade": "",
    "obsNota": "",
    "obsCarga": "",
+   "vistoEm": null,
+   "idadeDias": 6,
    "v": [
     "2026-09-30",
     900806,
@@ -686,6 +716,8 @@
    "cidade": "",
    "obsNota": "",
    "obsCarga": "",
+   "vistoEm": null,
+   "idadeDias": null,
    "v": [
     "2026-10-01",
     900807,
@@ -722,6 +754,8 @@
    "cidade": "",
    "obsNota": "",
    "obsCarga": "",
+   "vistoEm": null,
+   "idadeDias": 5,
    "v": [
     "2026-10-01",
     900808,
@@ -758,6 +792,8 @@
    "cidade": "",
    "obsNota": "Perguntei à Portaria",
    "obsCarga": "",
+   "vistoEm": null,
+   "idadeDias": null,
    "v": [
     "2026-10-02",
     900809,
@@ -768,17 +804,17 @@
     0,
     0,
     0,
-    "VERIFICAR",
+    "PENDENTE",
     "810909 (Não localizada no B2B)",
     "SUMIU DO B2B",
-    "conferir",
+    "A PAGAR",
     null,
     "Transp. Exemplo B",
     "18509",
     0.9166666666666666,
-    "conferir",
+    0.9166666666666666,
     null,
-    "conferir",
+    0.9167,
     "2026-10-02",
     "Perguntei à Portaria",
     "NÃO",
@@ -794,6 +830,8 @@
    "cidade": "",
    "obsNota": "",
    "obsCarga": "",
+   "vistoEm": null,
+   "idadeDias": 1,
    "v": [
     "2026-10-05",
     900810,
@@ -830,6 +868,8 @@
    "cidade": "",
    "obsNota": "",
    "obsCarga": "",
+   "vistoEm": null,
+   "idadeDias": 1,
    "v": [
     "2026-10-05",
     900810,
@@ -866,6 +906,8 @@
    "cidade": "",
    "obsNota": "",
    "obsCarga": "",
+   "vistoEm": null,
+   "idadeDias": null,
    "v": [
     "2026-10-05",
     900811,
@@ -897,16 +939,36 @@
  "resumo": {
   "cargas": 10,
   "liberadas": 3,
-  "pendentes": 4,
-  "verificar": 3,
+  "pendentes": 5,
+  "verificar": 2,
+  "idade": {
+   "ate7": 9,
+   "de8a14": 1,
+   "mais15": 0,
+   "maisDe7": 1,
+   "maisAntiga": 8
+  },
+  "provisao": {
+   "cargas": 7,
+   "notas": 44
+  },
+  "porMes": [
+   {
+    "mes": "2026-10",
+    "pagamentos": 4,
+    "cargas": 4,
+    "notas": 55
+   }
+  ],
+  "semOlhar": 10,
   "integral": 1,
   "parcial": 3,
   "semPagamento": 6,
-  "comSaldo": 6,
+  "comSaldo": 7,
   "comCanhoto": 1,
   "semCanhoto": 9,
   "pagasSemCanhoto": 0,
-  "aPagarAgora": 6,
+  "aPagarAgora": 7,
   "emitidas": 114,
   "finalizadas": 98,
   "entregue": 0.8508771929824561,
@@ -962,8 +1024,8 @@
     "nome": "Transp. Exemplo B",
     "cargas": 3,
     "liberadas": 0,
-    "pendentes": 1,
-    "verificar": 2,
+    "pendentes": 2,
+    "verificar": 1,
     "pendAbertas": 8,
     "entregue": 0.8771929824561403
    },

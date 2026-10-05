@@ -69,6 +69,15 @@ export async function lerCargas(cx, { numero = null, desde = null } = {}) {
     });
   }
   const pagoDe = new Map(pag.map((p) => [p.numero_carga, p]));
+  /* Cada lançamento válido, para o Fechamento (por mês do pagamento). */
+  const { rows: lanc } = await cx.query(
+    `SELECT numero_carga, pct, ${DATA('data_pagamento', 'data')} FROM pgfrete_pagamentos
+      WHERE anulado_em IS NULL AND numero_carga = ANY($1::text[]) ORDER BY id`, [numeros]);
+  const lancDe = new Map();
+  for (const l of lanc) {
+    if (!lancDe.has(l.numero_carga)) lancDe.set(l.numero_carga, []);
+    lancDe.get(l.numero_carga).push({ pct: Number(l.pct), data: l.data });
+  }
 
   return cargas.map((c) => {
     const pg = pagoDe.get(c.numero_carga);
@@ -79,6 +88,7 @@ export async function lerCargas(cx, { numero = null, desde = null } = {}) {
       canhotoOriginal: c.canhoto_original === true, canhotoEm: c.canhoto_em ? new Date(c.canhoto_em).toISOString() : null,
       canhotoPor: c.canhoto_por || '',
       pctPago: pg ? Math.min(100, Number(pg.pct)) : 0, dataPagamento: pg?.ultima ?? null,
+      pagamentos: lancDe.get(c.numero_carga) ?? [],
       pendencias: pendDe.get(c.numero_carga) ?? [],
     };
   });
@@ -115,7 +125,8 @@ export async function compararComExistente(cx, numero, pendenciasNovas) {
 /* `conf` é o resultado de `conferirCarga`. Devolve o que mudou. */
 export async function gravarConferencia(cx, { numero, conf, hoje, operador }) {
   const nome = String(operador?.nome ?? '');
-  const { rows: ja } = await cx.query('SELECT 1 FROM pgfrete_cargas WHERE numero_carga = $1 FOR UPDATE', [numero]);
+  const { rows: ja } = await cx.query(
+    'SELECT qtd_sist, qtd_b2b, finalizadas, aguardando, nao_entregue, outros FROM pgfrete_cargas WHERE numero_carga = $1 FOR UPDATE', [numero]);
   if (ja[0]) {
     await cx.query(
       `UPDATE pgfrete_cargas SET data_consulta = $2, qtd_sist = $3, qtd_b2b = $4, finalizadas = $5, aguardando = $6,
@@ -161,6 +172,8 @@ export async function gravarConferencia(cx, { numero, conf, hoje, operador }) {
     detalhe: {
       situacao: conf.situacao, qtdSist: conf.qtdSist, qtdB2b: conf.qtdB2b, finalizadas: conf.finalizadas,
       pendencias: conf.pendencias.length, novas, resolvidas, reabertas, nova: !ja[0],
+      /* Reimportação deixa trilha do que a carga dizia ANTES (governança, 05/10). */
+      antes: ja[0] ? { qtdSist: ja[0].qtd_sist, qtdB2b: ja[0].qtd_b2b, finalizadas: ja[0].finalizadas, aguardando: ja[0].aguardando, naoEntregue: ja[0].nao_entregue, outros: ja[0].outros } : null,
     },
   });
   return { nova: !ja[0], novas, resolvidas, reabertas };

@@ -2102,9 +2102,10 @@ const SuincoSharePoint = (function () {
       return chamar('/api/pagamento-frete/cargas/' + encodeURIComponent(numero) + '/historico');
     },
     /* O .xlsx não é JSON: vai direto pelo fetch, com o mesmo crachá. */
-    async baixarPlanilha() {
+    async baixarPlanilha(params) {
       const t = lerToken();
-      const r = await fetch(SP_CONFIG.api + '/api/pagamento-frete/exportar.xlsx',
+      const q = params ? '?' + new URLSearchParams(params).toString() : '';
+      const r = await fetch(SP_CONFIG.api + '/api/pagamento-frete/exportar.xlsx' + q,
         { headers: t ? { authorization: 'Bearer ' + t } : {} });
       if (!r.ok) {
         let dados = null;

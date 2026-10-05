@@ -23,6 +23,9 @@ planilha — no mesmo formato da dela, aprovado pelo dono.
 | Status p/ pagamento (rodada 2) | É **o que fazer**: `conferir` (VERIFICAR) · `A PAGAR` (há liberado ainda não pago) · `PARCIAL` (pagou o liberado; há nota pendente) · `INTEGRAL` (100% liberado e 100% pago). Não é "quanto foi pago" — isso é o % Pago. |
 | Campos editáveis (rodada 2) | Data Pagamento (do último pagamento válido; sem pagamento, abre o Pagar), Data Tratativa (por nota), Observação, Transportadora **só das cadastradas na Frota** (servidor confere em `dim_veiculos`). |
 | Vitrine | Nada grava; toda ação avisa e diz o que faria no painel. |
+| Situação (rodada 45) | **VERIFICAR** só com nota só no B2B, B2B com mais notas que o sistema, ou nada finalizado. Nota do sistema que falta no B2B é **pendência** ("Não localizada no B2B"): não libera, não trava. |
+| Fila de trabalho (rodada 45) | Topo "O que fazer hoje" (A PAGAR · Pendências sem olhar · Conferir) e "Panorama"; ordem por prioridade; idade das pendências sem tratativa; **pagamento em lote**; **Fechamento** (por mês, provisão, idade — notas, sem R$); filtros amplos e **exportação do recorte** com o filtro no topo do arquivo (aba FECHAMENTO no .xlsx). |
+| Governança (rodada 45) | Reimportar sobrescreve com memória (tratativas ficam) e grava o "antes" no evento; pagamento igual em 2 min pergunta (`PAGAMENTO_REPETIDO`); vigia diário `frete` (pago > 100%, contagens que não fecham, pendência em carga fechada, leitura esquecida). |
 | Canhoto original | Uma **caixinha por carga** (SIM/NÃO) para dizer se o canhoto em papel chegou. **Só acompanhamento**: não entra no % liberado, no % pago nem em "A pagar agora" — o fechamento continua pelo digital. Marcar carimba o dia e quem marcou; desmarcar apaga. Colunas W–X da planilha, migração 059. |
 
 ## Os dois relatórios, campo a campo — o modelo que SEMPRE chega

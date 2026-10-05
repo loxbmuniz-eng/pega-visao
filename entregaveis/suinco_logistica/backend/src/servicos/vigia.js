@@ -95,9 +95,53 @@ export const REGRAS_DO_DADO = [
 
 const EXEMPLOS = 5;
 
-export async function auditarDado(runner) {
+/* INTEGRIDADE DO PAGAMENTO DE FRETE (governança, pedido do dono em 05/10/2026):
+   "travas para impedir qualquer erro relacionado à qualidade dos dados". As
+   regras do banco (chave única de carga e de pendência, pct ≤ 100 por
+   lançamento) impedem a duplicata; estas pegam o que uma regra de linha não
+   vê — a soma, a contagem que não fecha, a leitura que não foi consumida. */
+export const REGRAS_DO_FRETE = [
+  {
+    codigo: 'frete_pago_acima_de_100',
+    titulo: 'Carga de frete com mais de 100% pago',
+    explicacao: 'A soma dos pagamentos válidos de uma carga passa de 100% — a rota recusa isso; se aconteceu, alguém mexeu fora do painel.',
+    sql: `
+      SELECT numero_carga, '' AS placa, 'pago ' || sum(pct) || '%' AS detalhe
+        FROM pgfrete_pagamentos WHERE anulado_em IS NULL
+       GROUP BY numero_carga HAVING sum(pct) > 100.005 ORDER BY numero_carga`,
+  },
+  {
+    codigo: 'frete_contagens_nao_fecham',
+    titulo: 'Carga de frete com contagens que não fecham',
+    explicacao: 'Finalizadas + aguardando + não entregue + outros é diferente da quantidade do B2B — o relatório mudou de forma ou a leitura perdeu linha.',
+    sql: `
+      SELECT numero_carga, '' AS placa,
+             finalizadas || '+' || aguardando || '+' || nao_entregue || '+' || outros || ' ≠ ' || qtd_b2b AS detalhe
+        FROM pgfrete_cargas WHERE finalizadas + aguardando + nao_entregue + outros <> qtd_b2b ORDER BY numero_carga`,
+  },
+  {
+    codigo: 'frete_pendencia_em_carga_fechada',
+    titulo: 'Carga de frete toda finalizada com pendência aberta',
+    explicacao: 'Todas as notas do sistema estão finalizadas no B2B, mas ainda há pendência aberta: a reimportação não resolveu o que devia.',
+    sql: `
+      SELECT c.numero_carga, '' AS placa, count(p.nota) || ' pendência(s) aberta(s)' AS detalhe
+        FROM pgfrete_cargas c JOIN pgfrete_pendencias p ON p.numero_carga = c.numero_carga AND p.resolvida_em IS NULL
+       WHERE c.finalizadas >= c.qtd_sist AND c.qtd_b2b = c.qtd_sist
+       GROUP BY c.numero_carga ORDER BY c.numero_carga`,
+  },
+  {
+    codigo: 'frete_leitura_esquecida',
+    titulo: 'Leitura de PDF de frete com mais de 1 dia sem confirmar',
+    explicacao: 'Alguém importou e não confirmou; a leitura deveria ter sido apagada no dia seguinte.',
+    sql: `
+      SELECT numero_carga, '' AS placa, tipo || ' · ' || arquivo || ' · ' || to_char(criado_em AT TIME ZONE 'America/Sao_Paulo', 'DD/MM HH24:MI') AS detalhe
+        FROM pgfrete_leituras WHERE criado_em < now() - interval '1 day' ORDER BY criado_em`,
+  },
+];
+
+export async function auditarDado(runner, regras = REGRAS_DO_DADO) {
   const achados = [];
-  for (const r of REGRAS_DO_DADO) {
+  for (const r of regras) {
     const { rows } = await runner.query(r.sql);
     achados.push({
       codigo: r.codigo,
@@ -161,4 +205,5 @@ export const NOMES = {
   certificado: 'Certificado de segurança',
   bibliotecas: 'Falhas conhecidas nas bibliotecas',
   dado: 'Conferência do dado',
+  frete: 'Pagamento de Frete: integridade',
 };
