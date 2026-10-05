@@ -66,9 +66,13 @@ export const FORMULAS = {
   diferenca: (x) => `C${x}-D${x}`,
   situacao: (x) => `IF(OR(C${x}<>D${x},F${x}=0,COUNTIFS($B:$B,B${x},$K:$K,"*(Não localizada no B2B)")+COUNTIFS($B:$B,B${x},$K:$K,"*(Só no B2B)")>0),"VERIFICAR",IF(F${x}=C${x},"LIBERADA","PENDENTE"))`,
   situacaoRepetida: (primeira) => `J${primeira}`,
-  statusPagamento: (x) => `IF(S${x}>=0.99995,"INTEGRAL",IF(S${x}>0,"PARCIAL",""))`,
+  statusPagamento: (x) => `IF(J${x}="VERIFICAR","conferir",IF(N(T${x})>0,"A PAGAR",IF(AND(N(R${x})>=0.99995,N(S${x})>=0.99995),"INTEGRAL",IF(N(R${x})>0,"PARCIAL",""))))`,
   entregue: (x) => `IF(C${x}>0,(C${x}-COUNTIFS($B:$B,B${x},${K_PEND}))/C${x},"")`,
-  liberado: (x) => `IF(C${x}>0,IF(J${x}="VERIFICAR","conferir",MIN(1,Q${x}+(COUNTIFS($B:$B,B${x},$K:$K,"<>*(Só no B2B)",$L:$L,"OK")+COUNTIFS($B:$B,B${x},$K:$K,"<>*(Só no B2B)",$L:$L,"OK B2B"))/C${x})),"")`,
+  /* As tratativas que liberam vêm de TRATATIVAS_QUE_LIBERAM — uma regra, dois
+     chamadores (a conta do painel e a fórmula do Excel). Em 05/10 a fórmula
+     ainda somava "OK" e "OK B2B" com a lista já em OK e DEVOLUÇÃO: a prova no
+     LibreOffice pegou 4 células divergindo antes de publicar. */
+  liberado: (x) => `IF(C${x}>0,IF(J${x}="VERIFICAR","conferir",MIN(1,Q${x}+(${TRATATIVAS_QUE_LIBERAM.map((t) => `COUNTIFS($B:$B,B${x},$K:$K,"<>*(Só no B2B)",$L:$L,"${t}")`).join('+')})/C${x})),"")`,
   aPagar: (x) => `IF(C${x}>0,IF(J${x}="VERIFICAR","conferir",MAX(0,ROUND(R${x}-S${x},4))),"")`,
 };
 
@@ -144,8 +148,10 @@ export function resumoDaGrade(cargas) {
   const ind = cargas.map((c) => ({ c, i: indicadoresDaCarga(c) }));
   const total = ind.length;
   const por = (sit) => ind.filter((x) => x.i.situacao === sit).length;
-  const integral = ind.filter((x) => x.i.statusPagamento === 'INTEGRAL').length;
-  const parcial = ind.filter((x) => x.i.statusPagamento === 'PARCIAL').length;
+  /* Pagas integral/em parte são pelo % PAGO (o que já foi pago); o Status p/
+     pagamento é outra coisa — o que fazer (statusParaPagamento). */
+  const integral = ind.filter((x) => x.i.pago >= 0.99995).length;
+  const parcial = ind.filter((x) => x.i.pago > 0 && x.i.pago < 0.99995).length;
   const emitidas = ind.reduce((s, x) => s + num(x.c.qtdSist), 0);
   const entregues = ind.reduce((s, x) => s + (x.i.entregue ?? 0) * num(x.c.qtdSist), 0);
   const todasPend = cargas.flatMap((c) => c.pendencias ?? []);
@@ -177,7 +183,8 @@ export function resumoDaGrade(cargas) {
     comSaldo: ind.filter((x) => (x.i.aPagar ?? 0) > 0).length,
     comCanhoto: ind.filter((x) => x.c.canhotoOriginal === true).length,
     semCanhoto: ind.filter((x) => x.c.canhotoOriginal !== true).length,
-    pagasSemCanhoto: ind.filter((x) => x.i.statusPagamento === 'INTEGRAL' && x.c.canhotoOriginal !== true).length,
+    pagasSemCanhoto: ind.filter((x) => x.i.pago >= 0.99995 && x.c.canhotoOriginal !== true).length,
+    aPagarAgora: ind.filter((x) => x.i.statusPagamento === 'A PAGAR').length,
     emitidas, finalizadas: ind.reduce((s, x) => s + num(x.c.finalizadas), 0),
     entregue: emitidas ? entregues / emitidas : null,
     pendAbertas: todasPend.length,

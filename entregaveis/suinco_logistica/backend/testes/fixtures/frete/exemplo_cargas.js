@@ -11,7 +11,7 @@ export const CARGAS_DE_EXEMPLO = [
     transportadora: 'Transp. Exemplo A', cte: '18502', pctPago: 50, dataPagamento: '2026-10-02',
     pendencias: [
       p(810203, 'aguardando', { tratativa: 'OK', tratativaEm: '2026-09-30' }),
-      p(810205, 'nao_entregue', { tratativa: 'DEV', tratativaEm: '2026-09-30', obs: 'Cliente recusou' }),
+      p(810205, 'nao_entregue', { tratativa: 'DEVOLUÇÃO', tratativaEm: '2026-09-30', obs: 'Cliente recusou' }),
       p(810207, 'outro', { statusB2b: 'Cancelado' }),
       p(810208, 'outro', { statusB2b: 'A caminho', tratativa: 'SEM TRATATIVA' }),
     ] },
@@ -26,9 +26,9 @@ export const CARGAS_DE_EXEMPLO = [
     transportadora: 'Transp. Exemplo B', cte: '18505', pctPago: 90, dataPagamento: '2026-10-02',
     pendencias: [
       p(810511, 'aguardando', { tratativa: 'OK', tratativaEm: '2026-10-01' }),
-      p(810518, 'aguardando', { tratativa: 'OK B2B', tratativaEm: '2026-10-01' }),
+      p(810518, 'aguardando', { tratativa: 'OK', tratativaEm: '2026-10-01' }),
       p(810522, 'aguardando'),
-      p(810530, 'nao_entregue', { tratativa: 'DEV NO SISTEMA', tratativaEm: '2026-10-01' }),
+      p(810530, 'nao_entregue', { tratativa: 'DEVOLUÇÃO', tratativaEm: '2026-10-01' }),
     ] },
   { numero: 900806, dataConsulta: '2026-09-30', qtdSist: 3, qtdB2b: 3, finalizadas: 0, aguardando: 3, naoEntregue: 0, outros: 0,
     transportadora: 'Transp. Exemplo C', cte: '', pctPago: 0, dataPagamento: null, obs: 'Canhotos ainda não chegaram',

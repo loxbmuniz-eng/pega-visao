@@ -19,7 +19,57 @@ planilha — no mesmo formato da dela, aprovado pelo dono.
 | O que se paga | Direto, só a nota **Finalizada** no B2B. As outras precisam de consulta no sistema: só a tratativa **OK** / **OK B2B** libera. DEV, DEV NO SISTEMA, SEM TRATATIVA e SUMIU DO B2B não liberam. |
 | Carga VERIFICAR | Contagem não bate, nota de um lado só, ou nada finalizado: **nada é liberado** ("conferir") até alguém olhar o B2B. Registrar pagamento assim PERGUNTA e exige confirmação. |
 | Data do pagamento | Manual, pode ficar em branco. |
+| Status Pendência (rodada 2) | **SEM TRATATIVA · DEVOLUÇÃO · OK · SUMIU DO B2B**. OK e DEVOLUÇÃO **liberam** a nota ("se for devolução, finalizo 100% integral" — Daniela). As palavras antigas (DEV, DEV NO SISTEMA, OK B2B) continuam entendidas e viram as atuais (migração 060). |
+| Status p/ pagamento (rodada 2) | É **o que fazer**: `conferir` (VERIFICAR) · `A PAGAR` (há liberado ainda não pago) · `PARCIAL` (pagou o liberado; há nota pendente) · `INTEGRAL` (100% liberado e 100% pago). Não é "quanto foi pago" — isso é o % Pago. |
+| Campos editáveis (rodada 2) | Data Pagamento (do último pagamento válido; sem pagamento, abre o Pagar), Data Tratativa (por nota), Observação, Transportadora **só das cadastradas na Frota** (servidor confere em `dim_veiculos`). |
+| Vitrine | Nada grava; toda ação avisa e diz o que faria no painel. |
 | Canhoto original | Uma **caixinha por carga** (SIM/NÃO) para dizer se o canhoto em papel chegou. **Só acompanhamento**: não entra no % liberado, no % pago nem em "A pagar agora" — o fechamento continua pelo digital. Marcar carimba o dia e quem marcou; desmarcar apaga. Colunas W–X da planilha, migração 059. |
+
+## Os dois relatórios, campo a campo — o modelo que SEMPRE chega
+
+Decisão do dono (05/10/2026): *"este é o modelo do B2B e do Sisatak, e sempre
+será assim; nunca deve chegar um relatório que não siga esse modelo"*. O
+leitor lê pela ESTRUTURA (títulos e colunas achados pelo nome, não pela
+posição) e recusa, com explicação, o que fugir dela — nunca adivinha.
+
+**DeliveryB2B — "RELATÓRIO DE STATUS DAS ENTREGAS"** (`lerB2B`), paisagem,
+uma ou várias cargas, várias páginas:
+- Rodapé reconhecido pelo conteúdo (linha só com o número da página), não
+  por altura fixa (#110 do rodapé: a linha 31 caía no corte).
+- **Bloco da carga**, títulos `MOTORISTA · PLACA · CARGA · CARGA EXTERNA ·
+  EMBARQUE · INICIO VIAGEM · KM PERCORRIDOS · PESO TOTAL`, valores na linha
+  de baixo. O bloco **se repete a cada grupo de entregas** (a 118771: 6
+  páginas, 12 blocos) — blocos com o mesmo número são UMA carga.
+- **CARGA** vem "118882" ou "103-001-118771" (filial-operação-carga). O
+  número da carga é o **último trecho de dígitos**; o texto como veio fica
+  em `identificador` e aparece na prévia. CARGA EXTERNA, quando vier, é
+  guardada à parte (nunca colada ao número). Ocorrência #112.
+- **Tabela**, títulos `SEQ · STATUS · TIPO · NUMERO · CLIENTE · REENTREGA …`:
+  as colunas são achadas pelo título; falta de qualquer uma das cinco
+  recusa o arquivo (`B2B_LAYOUT`). A nota é `NUMERO` sem o sufixo "-3"; o
+  status (Finalizado, Aguardando, Não entregue…) é o que decide.
+- Sem número de carga → `B2B_SEM_CARGA`; carga sem linha → `B2B_SEM_NOTAS`.
+
+**Atak — "WRVDA501 - Relatório de Notas por Carga"** (`lerSIST`), uma ou
+várias cargas:
+- `Número Carga: 118771` antes da tabela de cada carga; a tabela traz
+  `Data · NE · Cliente · CNPJ/CPF · Cidade · UF · Chave_de_Acesso · Valor NE ·
+  Peso_Liquido · Peso_Bruto`. Entram só a nota (NE) e o cliente; CNPJ e
+  chave de acesso NÃO ficam no resultado (teste garante).
+- Notas antes do número → `SIST_SEM_CARGA`; carga sem nota → `SIST_SEM_NOTAS`.
+
+**O par.** As duas leituras entram num LOTE e pareiam pelo número da carga.
+Se um B2B sozinho não casar, a segunda rede (`parearPeloNumeroDoSistema`)
+pareia com o Atak sozinho cujo número é a carga externa dele ou o final do
+número dele — só com um candidato, e dizendo na prévia. Qualquer outro PDF
+(`RELATORIO_DESCONHECIDO`), arquivo que não é PDF, vazio, truncado ou com
+mais de 6 MB / 300 páginas é recusado com a razão.
+
+**O que "jamais errar" quer dizer aqui:** o painel não grava nada que não
+tenha conferido nota a nota, e tudo o que foge do modelo vira recusa ou
+aviso visível na prévia — nunca número inventado, nunca dedução em
+silêncio. Um formato novo de terceiro é recusado com explicação até ser
+ensinado aqui, com exemplo e teste.
 
 ## Como funciona
 
@@ -53,6 +103,7 @@ backend/src/servicos/pdf_texto.js             texto do PDF com posição (6 MB, 
 backend/src/servicos/planilha_xlsx.js / planilha_xlsx_escrita.js   ler / escrever .xlsx (fflate; sem `xlsx` do npm)
 backend/migrations/058_pagamento_frete.sql    o setor na CHECK + 5 tabelas pgfrete_*
 backend/migrations/059_canhoto_original.sql   a caixinha do canhoto (3 colunas em pgfrete_cargas)
+backend/migrations/060_tratativas_rodada2.sql  o vocabulário das tratativas (CHECK + conversão)
 app/76_pagamento_frete.js · tema2027/75_pagamento_frete.css   a aba
 vitrine/frete_demonstracao.json               a demonstração (saída de montarGrade com as cargas 9008xx)
 ```

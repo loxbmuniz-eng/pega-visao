@@ -31,7 +31,8 @@ import { hojeISO } from './modelo_semana.js';
 import { lerPaginasDoPdf, ErroDeLeitura } from '../servicos/pdf_texto.js';
 import { lerRelatorioDeFrete } from '../dominio/relatorios_frete_pdf.js';
 import {
-  conferirCarga, indicadoresDaCarga, rotuloDaPendencia, TRATATIVAS, TRATATIVAS_QUE_LIBERAM,
+  conferirCarga, indicadoresDaCarga, rotuloDaPendencia, TRATATIVAS, TRATATIVAS_QUE_LIBERAM, normalizarTratativa,
+  parearPeloNumeroDoSistema,
 } from '../dominio/pagamento_frete.js';
 import { montarGrade } from '../dominio/planilha_frete_grade.js';
 import { montarPlanilhaDeFrete } from '../dominio/planilha_frete_export.js';
@@ -148,7 +149,7 @@ rotasPagamentoFrete.post(`${BASE}/leituras`, ACESSO, rota(async (req, res) => {
     await cx.query("DELETE FROM pgfrete_leituras WHERE criado_em < now() - interval '1 day'");
     for (const c of relatorio.cargas) {
       const conteudo = relatorio.tipo === 'B2B'
-        ? { linhas: c.linhas, avisos: c.avisos, embarque: c.embarque, pesoTotal: c.pesoTotal }
+        ? { linhas: c.linhas, avisos: c.avisos, embarque: c.embarque, pesoTotal: c.pesoTotal, externa: c.externa ?? '', identificador: c.identificador ?? c.numero }
         : { notas: c.notas, avisos: c.avisos };
       await cx.query(
         `INSERT INTO pgfrete_leituras (lote, tipo, numero_carga, arquivo, conteudo, criado_por)
@@ -178,6 +179,21 @@ async function lerLote(res, req, lote) {
     if (!porCarga.has(r.numero_carga)) porCarga.set(r.numero_carga, {});
     porCarga.get(r.numero_carga)[r.tipo] = r;
   }
+  /* SEGUNDA REDE DE PAREAMENTO (ocorrência #112, 05/10/2026). O leitor já tira o
+     número da carga do último trecho do campo do B2B ("103-001-118771" → 118771).
+     Se mesmo assim um B2B sozinho não casar com nenhum Atak do lote, ele é
+     pareado com o Atak sozinho cujo número é a "carga externa" dele ou o FINAL
+     do número dele (5+ dígitos) — só se houver UM candidato — e a prévia diz
+     isso em aviso. Nada é deduzido em silêncio. A regra é pura e testada em
+     dominio/pagamento_frete.js (parearPeloNumeroDoSistema). */
+  for (const { numB2b, numSist, aviso } of parearPeloNumeroDoSistema(
+    [...porCarga].map(([numero, p]) => ({ numero, temB2b: !!p.B2B, temSist: !!p.SIST, externa: String(p.B2B?.conteudo?.externa ?? '') })),
+  )) {
+    const alvo = porCarga.get(numSist);
+    alvo.B2B = porCarga.get(numB2b).B2B;
+    alvo.pareamento = aviso;
+    porCarga.delete(numB2b);
+  }
   return porCarga;
 }
 
@@ -185,7 +201,7 @@ const MAX_PENDENCIAS_NA_PREVIA = 300;
 
 function conferenciaDoPar(par) {
   const conf = conferirCarga({ sist: par.SIST.conteudo.notas, b2b: par.B2B.conteudo.linhas });
-  conf.avisos = [...(par.B2B.conteudo.avisos ?? []), ...(par.SIST.conteudo.avisos ?? []), ...conf.avisos];
+  conf.avisos = [...(par.pareamento ? [par.pareamento] : []), ...(par.B2B.conteudo.avisos ?? []), ...(par.SIST.conteudo.avisos ?? []), ...conf.avisos];
   return conf;
 }
 
@@ -198,6 +214,9 @@ rotasPagamentoFrete.get(`${BASE}/lotes/:lote/previa`, ACESSO, rota(async (req, r
       cargas.push({
         numero, estado: par.B2B ? 'falta_sist' : 'falta_b2b',
         arquivoB2b: par.B2B?.arquivo ?? '', arquivoSist: par.SIST?.arquivo ?? '',
+        aviso: par.B2B && numero.length > 8
+          ? `O número lido no B2B (${numero}) tem mais de 8 dígitos — parece outro campo colado ao número da carga. Mande o PDF do Atak desta carga: o painel pareia pelo número do sistema.`
+          : '',
       });
       continue;
     }
@@ -234,7 +253,8 @@ rotasPagamentoFrete.post(`${BASE}/lotes/:lote/confirmar`, ACESSO, rota(async (re
       const conf = conferenciaDoPar(par);
       const r = await gravarConferencia(cx, { numero, conf, hoje, operador: req.operador });
       gravadas.push({ numero, situacao: conf.situacao, ...r });
-      await cx.query('DELETE FROM pgfrete_leituras WHERE lote = $1 AND numero_carga = $2', [req.params.lote, numero]);
+      await cx.query('DELETE FROM pgfrete_leituras WHERE lote = $1 AND numero_carga IN ($2, $3)',
+        [req.params.lote, numero, par.B2B.numero_carga]);   // o B2B pareado pelo número do sistema estava guardado com o número dele
     }
     return { gravadas, ignoradas };
   });
@@ -256,15 +276,30 @@ rotasPagamentoFrete.patch(`${BASE}/cargas/:numero`, ACESSO, rota(async (req, res
   if (canhoto !== undefined && typeof canhoto !== 'boolean') {
     return recusa(res, 400, 'CANHOTO_INVALIDO', 'Canhoto original: use true (veio) ou false (não veio).');
   }
-  if (!Object.keys(campos).length && canhoto === undefined) return recusa(res, 400, 'SEM_CAMPOS', 'Nada a alterar.');
+  /* Data do pagamento editável (decisão do dono, 05/10/2026, rodada 2): é a data do
+     ÚLTIMO pagamento válido. Sem pagamento não há o que datar — 409, e a tela abre o Pagar. */
+  const mexeuData = req.body?.dataPagamento !== undefined;
+  const dataPagamento = mexeuData ? (req.body.dataPagamento || null) : undefined;
+  if (mexeuData && dataPagamento !== null && !dataValida(dataPagamento)) {
+    return recusa(res, 400, 'DATA_INVALIDA', 'Use a data no formato AAAA-MM-DD.');
+  }
+  if (!Object.keys(campos).length && canhoto === undefined && !mexeuData) return recusa(res, 400, 'SEM_CAMPOS', 'Nada a alterar.');
 
   const cols = Object.keys(campos);
   const r = await emTransacao(async (cx) => {
-    /* A coluna do canhoto só entra na consulta quando a pedido é dela: num servidor
+    /* A coluna do canhoto só entra na consulta quando o pedido é dela: num servidor
        com a 058 e sem a 059, transportadora/CT-e/obs continuam editáveis. */
     const { rows } = await cx.query(
       `SELECT transportadora, cte, obs${canhoto === undefined ? '' : ', canhoto_original'} FROM pgfrete_cargas WHERE numero_carga = $1 FOR UPDATE`, [numero]);
-    if (!rows[0]) return null;
+    if (!rows[0]) return { erro: [404, 'CARGA_NAO_ENCONTRADA', 'Esta carga não está no controle.'] };
+    /* Transportadora só das cadastradas (decisão do dono, 05/10/2026): o cadastro é a
+       Frota (dim_veiculos.transportadora). Nome novo se cadastra em Cadastros primeiro. */
+    if (campos.transportadora) {
+      const { rows: tr } = await cx.query('SELECT 1 FROM dim_veiculos WHERE transportadora = $1 LIMIT 1', [campos.transportadora]);
+      if (!tr[0]) {
+        return { erro: [400, 'TRANSPORTADORA_DESCONHECIDA', `"${campos.transportadora}" não está no cadastro da Frota. Cadastre em Cadastros e escolha na lista.`] };
+      }
+    }
     if (cols.length) {
       await cx.query(
         `UPDATE pgfrete_cargas SET ${cols.map((c, i) => `${c} = $${i + 2}`).join(', ')}, atualizado_em = now(), atualizado_por = $${cols.length + 2}
@@ -287,9 +322,21 @@ rotasPagamentoFrete.patch(`${BASE}/cargas/:numero`, ACESSO, rota(async (req, res
         detalhe: { de: rows[0].canhoto_original === true, para: canhoto },
       });
     }
-    return true;
+    if (mexeuData) {
+      const { rows: ult } = await cx.query(
+        `SELECT id, to_char(data_pagamento, 'YYYY-MM-DD') AS data FROM pgfrete_pagamentos
+          WHERE numero_carga = $1 AND anulado_em IS NULL ORDER BY id DESC LIMIT 1 FOR UPDATE`, [numero]);
+      if (!ult[0]) return { erro: [409, 'SEM_PAGAMENTO', 'Esta carga ainda não tem pagamento registrado — registre o pagamento com a data.'] };
+      await cx.query('UPDATE pgfrete_pagamentos SET data_pagamento = $2 WHERE id = $1', [ult[0].id, dataPagamento]);
+      await cx.query('UPDATE pgfrete_cargas SET atualizado_em = now(), atualizado_por = $2 WHERE numero_carga = $1', [numero, req.operador.nome]);
+      await registrarEvento(cx, {
+        numero, acao: 'editou_carga', operador: req.operador,
+        detalhe: { dataPagamento: { de: ult[0].data, para: dataPagamento, pagamento: ult[0].id } },
+      });
+    }
+    return { ok: true };
   });
-  if (!r) return recusa(res, 404, 'CARGA_NAO_ENCONTRADA', 'Esta carga não está no controle.');
+  if (r.erro) return recusa(res, ...r.erro);
   return res.json({ ok: true });
 }));
 
@@ -303,8 +350,8 @@ rotasPagamentoFrete.patch(`${BASE}/cargas/:numero/pendencias/:nota`, ACESSO, rot
 
   let tratativa = null;
   if (mexeuTratativa) {
-    tratativa = String(req.body.tratativa ?? '');
-    if (tratativa !== '' && !TRATATIVAS.includes(tratativa)) {
+    tratativa = normalizarTratativa(req.body.tratativa);   // as palavras antigas (DEV, OK B2B…) viram as atuais
+    if (tratativa === null) {
       return recusa(res, 400, 'TRATATIVA_INVALIDA', `Tratativa inválida. Use: ${TRATATIVAS.join(', ')}.`);
     }
   }

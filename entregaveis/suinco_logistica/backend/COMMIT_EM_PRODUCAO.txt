@@ -1,4 +1,24 @@
-7cf0236
+e6e3d7f
+
+# ---------------------------------------------------------------------
+# 05/10/2026 — 7cf0236 → e6e3d7f. O SERVIDOR ALCANÇOU O PAINEL.
+#
+# Bloco COPIE DAQUI colado pelo dono (atualizar_tudo.sh): commit no servidor
+# e6e3d7f, serviço active, /health 200, última migração
+# 059_canhoto_original.sql, aviso no celular ligado, vigias 4 ok e 0 com
+# problema, node v24.21.0, problemas nesta rodada: nenhum.
+#
+# O QUE PASSOU A VALER NO SERVIDOR:
+#   · migrações 057 (vigia_registros), 058 (setor "Pagamento de Frete" na
+#     CHECK de operadores + cinco tabelas pgfrete_*) e 059 (canhoto original
+#     em pgfrete_cargas);
+#   · as 10 rotas da aba Pagamento de Frete (rotas/pagamento_frete.js), a
+#     leitura de PDF (servicos/pdf_texto.js, pdfjs-dist) e o .xlsx
+#     (planilha_xlsx_escrita.js, fflate);
+#   · os vigias (scripts/vigia_servidor.mjs, rotas/vigia.js) agendados no
+#     cron e a primeira conferência feita;
+#   · dominio/fluxo.js com o setor novo.
+# Servidor e painel no mesmo commit.
 
 # ---------------------------------------------------------------------
 # 01/10/2026 — 9fab33c → 7cf0236. O SERVIDOR ALCANÇOU O PAINEL, NO NODE 24.

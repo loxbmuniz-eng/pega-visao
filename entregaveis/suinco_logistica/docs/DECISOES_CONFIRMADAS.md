@@ -866,6 +866,21 @@ e rascunho de chamado). Caiu pela fidelidade do dado, não por custo ou prazo.
    NO SISTEMA, OK B2B, OK, SUMIU DO B2B). O sentido escrito no LEIA-ME ainda
    depende da confirmação da Daniela; a transportadora é preenchida à mão
    (os PDFs não a trazem).
+10. **Rodada 2 (05/10, tarde).** Tratativas: SEM TRATATIVA · DEVOLUÇÃO · OK ·
+    SUMIU DO B2B — "tira o OK B2B e DEV NO SISTEMA e substitui a DEV por
+    DEVOLUÇÃO"; OK e DEVOLUÇÃO liberam ("quando for dado OK, ou mudado pra
+    DEVOLUÇÃO, o status precisa mudar pra A PAGAR"). Status p/ pagamento é o
+    que fazer: conferir / A PAGAR / PARCIAL / INTEGRAL (INTEGRAL = 100% liberado
+    e 100% pago; LIBERADA ainda não paga mostra A PAGAR — proposta aceita).
+    Data Pagamento, Data Tratativa e Observação editáveis; Transportadora só
+    das cadastradas na Frota ("melhora o relacionamento com o nosso banco").
+    Pagar em carga 100% liberada já vem 100%. Vitrine avisa que não grava.
+    Fluxo da Daniela (99 finalizadas + 1 pendente → parcial hoje → semana que
+    vem OK/DEVOLUÇÃO → A PAGAR → INTEGRAL) coberto por teste de ponta a ponta.
+11. **Os dois relatórios são O modelo** ("sempre será assim; nunca deve chegar
+    um que não siga"). O leitor lê pela estrutura e recusa o que foge dela;
+    o campo CARGA do B2B pode vir "103-001-118771" — o número é o último
+    trecho (#112).
 9. **Canhoto original: uma caixinha por carga, sim ou não** — "isso não
    interfere na questão do fechamento do digital, é só para acompanhamento".
    Não entra em liberado, pago nem a pagar. Marcar carimba o dia e quem marcou

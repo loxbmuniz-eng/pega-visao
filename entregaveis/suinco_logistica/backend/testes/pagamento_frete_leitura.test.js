@@ -15,10 +15,11 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { unzipSync, strFromU8 } from 'fflate';
 import { lerPaginasDoPdf } from '../src/servicos/pdf_texto.js';
-import { lerRelatorioDeFrete, tipoDoRelatorio } from '../src/dominio/relatorios_frete_pdf.js';
+import { lerRelatorioDeFrete, tipoDoRelatorio, numeroDaCargaB2b } from '../src/dominio/relatorios_frete_pdf.js';
 import {
   categoriaDoStatus, situacaoDaCarga, conferirCarga, indicadoresDaCarga, chaveDaNota,
-  lerResumoDePendencia, lerTratativaDaPlanilha, TRATATIVAS_QUE_LIBERAM,
+  lerResumoDePendencia, lerTratativaDaPlanilha, TRATATIVAS, TRATATIVAS_QUE_LIBERAM, normalizarTratativa, statusParaPagamento,
+  parearPeloNumeroDoSistema,
 } from '../src/dominio/pagamento_frete.js';
 import { montarGrade, COLUNAS, COLUNAS_DA_PLANILHA } from '../src/dominio/planilha_frete_grade.js';
 import { montarPlanilhaDeFrete } from '../src/dominio/planilha_frete_export.js';
@@ -79,17 +80,40 @@ describe('regras da conferência', () => {
     const i = indicadoresDaCarga({
       qtdSist: 8, qtdB2b: 8, finalizadas: 4, pctPago: 50,
       pendencias: [
-        { categoria: 'aguardando', tratativa: 'OK' }, { categoria: 'nao_entregue', tratativa: 'DEV' },
+        { categoria: 'aguardando', tratativa: 'OK' }, { categoria: 'nao_entregue', tratativa: 'DEVOLUÇÃO' },
         { categoria: 'outro', tratativa: '' }, { categoria: 'outro', tratativa: 'SEM TRATATIVA' },
       ],
     });
     assert.equal(i.situacao, 'PENDENTE');
     assert.equal(i.entregue, 0.5);
-    assert.equal(i.liberado, 0.625);
+    assert.equal(i.liberado, 0.75, 'OK e DEVOLUÇÃO liberam: (4 finalizadas + 2) de 8');
     assert.equal(i.pago, 0.5);
-    assert.equal(i.aPagar, 0.125);
-    assert.equal(i.statusPagamento, 'PARCIAL');
-    assert.deepEqual(TRATATIVAS_QUE_LIBERAM, ['OK', 'OK B2B']);
+    assert.equal(i.aPagar, 0.25);
+    assert.equal(i.statusPagamento, 'A PAGAR', 'há liberado ainda não pago');
+    assert.deepEqual(TRATATIVAS, ['SEM TRATATIVA', 'DEVOLUÇÃO', 'OK', 'SUMIU DO B2B'], 'vocabulário da rodada 2');
+    assert.deepEqual(TRATATIVAS_QUE_LIBERAM, ['OK', 'DEVOLUÇÃO']);
+  });
+
+  test('status p/ pagamento é O QUE FAZER: conferir · A PAGAR · PARCIAL · INTEGRAL (fluxo da Daniela)', () => {
+    const s = (liberado, pago, conferir = false) => statusParaPagamento({ conferir, liberado, pago });
+    assert.equal(s(null, 0, true), 'conferir', 'carga VERIFICAR');
+    assert.equal(s(0.99, 0), 'A PAGAR', '99 de 100 finalizadas, nada pago: paga-se as 99');
+    assert.equal(s(0.99, 0.99), 'PARCIAL', 'pagou as 99; a pendente espera');
+    assert.equal(s(1, 0.99), 'A PAGAR', 'a pendente recebeu OK ou DEVOLUÇÃO: falta pagar 1');
+    assert.equal(s(1, 1), 'INTEGRAL', '100% liberado e 100% pago');
+    assert.equal(s(1, 0), 'A PAGAR', 'carga LIBERADA ainda não paga');
+    assert.equal(s(0.5, 0.5), 'PARCIAL');
+    assert.equal(s(null, 0), '', 'sem notas no sistema: nada a dizer');
+  });
+
+  test('as palavras antigas da planilha viram as atuais; palavra desconhecida é recusada', () => {
+    assert.equal(normalizarTratativa('DEV'), 'DEVOLUÇÃO');
+    assert.equal(normalizarTratativa('dev no sistema'), 'DEVOLUÇÃO');
+    assert.equal(normalizarTratativa('Devolucao'), 'DEVOLUÇÃO');
+    assert.equal(normalizarTratativa('OK B2B'), 'OK');
+    assert.equal(normalizarTratativa('ok'), 'OK');
+    assert.equal(normalizarTratativa('  '), '');
+    assert.equal(normalizarTratativa('falar com o Zé'), null);
   });
 
   test('carga VERIFICAR não libera nada: sem "a pagar", marcada para conferir', () => {
@@ -113,7 +137,7 @@ describe('regras da conferência', () => {
     assert.equal(lerResumoDePendencia('SEM PENDÊNCIA'), null);
     assert.equal(lerResumoDePendencia(''), null);
     assert.deepEqual(lerTratativaDaPlanilha('OK 30/09', '2026-09-22'), { tratativa: 'OK', em: '2026-09-30', obs: '' });
-    assert.deepEqual(lerTratativaDaPlanilha('dev no sistema', null), { tratativa: 'DEV NO SISTEMA', em: null, obs: '' });
+    assert.deepEqual(lerTratativaDaPlanilha('dev no sistema', null), { tratativa: 'DEVOLUÇÃO', em: null, obs: '' });
     assert.deepEqual(lerTratativaDaPlanilha('falar com o Zé', null), { tratativa: '', em: null, obs: 'Planilha: falar com o Zé' });
   });
 });
@@ -151,6 +175,7 @@ describe('leitura dos PDFs (exemplos inventados)', () => {
     const { b, s, r } = await confere('900805');
     assert.equal(b.linhas.length, 40, 'o B2B tem de trazer as 40 linhas (a 31 caía no corte do rodapé)');
     assert.equal(s.notas.length, 40);
+    assert.deepEqual(s.avisos, [], 'a data/hora de emissão no topo da 2ª página não é nota (aviso falso na 118771 real, 05/10)');
     assert.deepEqual([r.qtdSist, r.qtdB2b, r.finalizadas, r.aguardando, r.naoEntregue, r.semCorrespondencia], [40, 40, 36, 3, 1, 0]);
     assert.equal(r.situacao, 'PENDENTE');
     assert.deepEqual(b.linhas.map((l) => l.seq).sort((x, y) => x - y), Array.from({ length: 40 }, (_, i) => i + 1));
@@ -168,6 +193,43 @@ describe('leitura dos PDFs (exemplos inventados)', () => {
     assert.equal(s.tipo, 'SIST');
     assert.deepEqual(b.cargas.map((c) => [c.numero, c.linhas.length]), [['900807', 3], ['900808', 2]]);
     assert.deepEqual(s.cargas.map((c) => [c.numero, c.notas.length]), [['900807', 3], ['900808', 2]]);
+  });
+
+  test('REGRESSÃO #112 — o B2B repete o cabeçalho a cada grupo de entregas: é UMA carga, e CARGA EXTERNA não cola no número', async () => {
+    const b = await lerPdf('b2b_900809.pdf');
+    assert.deepEqual(b.cargas.map((c) => [c.numero, c.externa, c.linhas.length]), [['900809', '103001', 4]], 'três blocos, uma carga, quatro notas');
+    const { r } = await confere('900809');
+    assert.deepEqual([r.qtdSist, r.qtdB2b, r.finalizadas, r.aguardando, r.situacao], [4, 4, 3, 1, 'PENDENTE']);
+  });
+
+  test('#112 — o B2B escreve a carga como "103-001-900810": o número é o último trecho, e a prévia fica sabendo', async () => {
+    const b = await lerPdf('b2b_900810.pdf');
+    assert.deepEqual(b.cargas.map((c) => [c.numero, c.identificador, c.linhas.length]), [['900810', '103-001-900810', 3]], 'dois blocos, uma carga');
+    assert.ok(b.cargas[0].avisos.some((a) => /103-001-900810/.test(a) && /900810/.test(a)), String(b.cargas[0].avisos));
+    assert.deepEqual(numeroDaCargaB2b('118882'), { numero: '118882', identificador: '118882' });
+    assert.deepEqual(numeroDaCargaB2b('103-001-118771'), { numero: '118771', identificador: '103-001-118771' });
+    assert.deepEqual(numeroDaCargaB2b(' 103 - 001 - 118771 '), { numero: '118771', identificador: '103-001-118771' });
+    assert.deepEqual(numeroDaCargaB2b(''), { numero: '', identificador: '' });
+  });
+
+  test('#112 — segunda rede: B2B sozinho pareia com o Atak sozinho pelo final do número ou pela carga externa, nunca com dois candidatos', () => {
+    const pares = parearPeloNumeroDoSistema([
+      { numero: '103001118771', temB2b: true, temSist: false, externa: '' },
+      { numero: '118771', temB2b: false, temSist: true },
+      { numero: '900802', temB2b: true, temSist: true },
+    ]);
+    assert.deepEqual(pares.map((p) => [p.numB2b, p.numSist]), [['103001118771', '118771']]);
+    assert.match(pares[0].aviso, /103001118771.*118771/);
+    assert.deepEqual(parearPeloNumeroDoSistema([
+      { numero: '555', temB2b: true, temSist: false, externa: '900811' }, { numero: '900811', temB2b: false, temSist: true },
+    ]).map((p) => p.numSist), ['900811'], 'pela carga externa');
+    assert.deepEqual(parearPeloNumeroDoSistema([
+      { numero: '103001118771', temB2b: true, temSist: false, externa: '' },
+      { numero: '118771', temB2b: false, temSist: true }, { numero: '1118771', temB2b: false, temSist: true },
+    ]), [], 'dois candidatos: ninguém pareia, a prévia mostra os dois faltando');
+    assert.deepEqual(parearPeloNumeroDoSistema([
+      { numero: '1234', temB2b: true, temSist: false, externa: '' }, { numero: '234', temB2b: false, temSist: true },
+    ]), [], 'final curto (menos de 5 dígitos) não vale');
   });
 
   test('a mesma nota é a mesma nos dois relatórios (B2B "810203-3" × Atak "810203")', async () => {
@@ -339,14 +401,15 @@ describe('o painel entende a linguagem da planilha (sem botão de importar)', ()
     assert.deepEqual(lido.cargas.map((c) => [c.numero, c.situacao]), [['900901', 'PENDENTE'], ['900902', 'VERIFICAR'], ['900903', 'LIBERADA']]);
     const [c1, c2, c3] = lido.cargas;
     assert.deepEqual(c1.pendencias.map((p) => [p.nota, p.tratativa, p.tratativaEm]), [['900011', 'OK', '2026-09-30'], ['900012', 'SEM TRATATIVA', null]]);
-    assert.equal(c1.pagamento.pct, 80, 'PARCIAL vira o que estava finalizado (8 de 10) — e é marcado estimado');
-    assert.equal(c1.pagamento.estimado, true);
-    assert.equal(c1.pagamento.dataPagamento, '2026-10-09');
+    // "Status p/ pagamento" é o que estava LIBERADO, não o pago (decisão do dono, 05/10/2026,
+    // rodada 2): a planilha original não diz quanto foi pago — nenhum pagamento é inventado.
+    assert.equal(c1.pagamento, null, 'PARCIAL não vira pagamento');
+    assert.ok(c1.avisos.some((a) => /PARCIAL.*liberado, não o pago/.test(a)), String(c1.avisos));
     assert.equal(c1.cte, '17792');
     assert.equal(c2.pendencias[0].categoria, 'nao_localizada');
     assert.match(c2.pendencias[0].obs, /MANDAR FOTO/, 'texto no CT-E não se perde: vai para a observação');
-    assert.equal(c3.pagamento.pct, 100);
-    assert.equal(c3.pagamento.estimado, false);
+    assert.equal(c3.pagamento, null, 'o "1" da coluna também não vira pagamento');
+    assert.ok(c3.avisos.some((a) => /liberado, não o pago/.test(a)), String(c3.avisos));
   });
 
   test('aba que não é de controle (o RESUMO, a LEIA-ME) é ignorada, não vira carga', () => {

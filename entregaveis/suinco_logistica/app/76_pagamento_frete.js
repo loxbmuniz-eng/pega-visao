@@ -26,6 +26,7 @@
 const FRETE = {
   dados: null, carregando: false, erro: null, carregadoEm: 0,
   busca: '', situacao: null, soSaldo: false, soSemTratativa: false, soSemCanhoto: false,
+  demonstracao: false,   // true só na vitrine/provas: a grade veio de window.FRETE_DEMONSTRACAO, nada grava
 };
 const FRETE_VALIDADE_MS = 30000;   // reabrir a aba depois disto relê, sem esconder a tela
 
@@ -59,6 +60,7 @@ function renderFrete(){
        que a API usa. Quem a injeta é quem testa; na operação não existe. */
     if(window.FRETE_DEMONSTRACAO && window.FRETE_DEMONSTRACAO.linhas){
       FRETE.dados = window.FRETE_DEMONSTRACAO;
+      FRETE.demonstracao = true;
       FRETE.erro = null;
       FRETE.carregadoEm = Date.now();
       freteDesenhar();
@@ -79,6 +81,7 @@ async function freteCarregar(){
   freteMarcarOcupado(true);
   try{
     FRETE.dados = await SuincoSharePoint.frete.grade();
+    FRETE.demonstracao = false;
     FRETE.erro = null;
     FRETE.carregadoEm = Date.now();
   }catch(e){
@@ -231,8 +234,21 @@ function freteCelula(l, col, j){
   const chave = col.chave;
   const k = ` data-col="${chave}"`;
   switch(chave){
-    case 'data': case 'dataPagamento': case 'dataTratativa': case 'canhotoEm':
+    case 'data': case 'canhotoEm':
       return `<td${k} class="${primeira || chave !== 'data' ? '' : 'frete-mudo'}">${esc(freteData(v))}</td>`;
+    case 'dataPagamento': {
+      /* Editável (decisão do dono, 05/10/2026): é a data do último pagamento válido. */
+      if(!primeira) return `<td${k}></td>`;
+      const pagoV = l.v[freteIx('pago')];
+      const temPago = typeof pagoV === 'number' && pagoV > 0;
+      return `<td${k}><button type="button" class="frete-edit frete-edit-data" onclick="freteEditarDataPagamento('${escJs(l.carga)}')"
+          aria-label="Data do pagamento da carga ${esc(l.carga)}: ${esc(freteData(v) || 'em branco')}. Editar">${v ? esc(freteData(v)) : `<span class="frete-vazio">${temPago ? 'sem data' : '—'}</span>`}</button></td>`;
+    }
+    case 'dataTratativa': {
+      if(!l.nota) return `<td${k}></td>`;
+      return `<td${k}><button type="button" class="frete-edit frete-edit-data" onclick="freteEditarDataTratativa('${escJs(l.carga)}','${escJs(l.nota)}')"
+          aria-label="Data da tratativa da nota ${esc(l.nota)}: ${esc(freteData(v) || 'em branco')}. Editar">${v ? esc(freteData(v)) : '<span class="frete-vazio">—</span>'}</button></td>`;
+    }
     case 'canhoto': {
       /* A caixinha do papel: só acompanhamento, nunca entra no pagamento. */
       if(!primeira) return `<td${k}></td>`;
@@ -270,8 +286,11 @@ function freteCelula(l, col, j){
           ${vocab.map((t) => `<option value="${esc(t)}"${t === v ? ' selected' : ''}>${esc(t)}</option>`).join('')}
         </select></td>`;
     }
-    case 'statusPagamento':
-      return `<td${k} class="frete-forte">${esc(v || '')}</td>`;
+    case 'statusPagamento': {
+      /* O QUE FAZER com a carga (statusParaPagamento, no servidor): A PAGAR chama a atenção. */
+      const cls = v === 'A PAGAR' ? 'apagar' : v === 'INTEGRAL' ? 'integral' : v === 'PARCIAL' ? 'parcial' : v === 'conferir' ? 'conferir' : 'vazio';
+      return `<td${k} class="frete-forte frete-sp frete-sp-${cls}">${esc(v || '')}</td>`;
+    }
     case 'transportadora': case 'cte': {
       if(!primeira) return `<td${k} class="frete-mudo">${chave === 'transportadora' ? esc(v || '') : ''}</td>`;
       const rotulo = chave === 'transportadora' ? 'Transportadora' : 'CT-E';
@@ -364,7 +383,17 @@ function freteFecharModal(){
 }
 
 /* ----------------------------------------------- editar: tratativa/campos */
+/* NA VITRINE NADA GRAVA (05/10/2026): o dono mexeu na demonstração achando que
+   era o painel e viu "não acontece nada". Toda ação diz isso, e diz o que
+   faria no painel de verdade. */
+function freteSoDemonstracao(oQueFaria){
+  if(!FRETE.demonstracao) return false;
+  notify(`Vitrine: aqui nada grava. No painel, ${oQueFaria}.`, 'warn', 7000);
+  return true;
+}
+
 async function freteTratar(carga, nota, valor){
+  if(freteSoDemonstracao('a tratativa é gravada e o % Liberado e o Status p/ pagamento mudam na hora')){ freteDesenhar(); return; }
   try{
     await SuincoSharePoint.frete.tratar(carga, nota, { tratativa: valor });
     await freteRecarregarSemPiscar();
@@ -387,22 +416,48 @@ function freteLinhaDaCarga(carga){
   return FRETE.dados.linhas.find((l) => String(l.carga) === String(carga) && l.primeira);
 }
 
+/* As transportadoras CADASTRADAS: as da Frota (Cadastros), mais a lista legada.
+   Decisão do dono (05/10/2026): "deixar a seleção apenas para as cadastradas;
+   se surgir uma nova, basta cadastrá-la e selecioná-la". O servidor confere
+   o mesmo (dim_veiculos). */
+function freteTransportadorasConhecidas(){
+  const nomes = new Set();
+  const frota = (typeof DB !== 'undefined' && Array.isArray(DB.frota)) ? DB.frota : [];
+  frota.forEach((f) => { const n = String(f.transportadora || '').trim(); if(n) nomes.add(n); });
+  const legado = (typeof DB !== 'undefined' && Array.isArray(DB.transportadoras)) ? DB.transportadoras : [];
+  legado.forEach((t) => { const n = String(t.nome || '').trim(); if(n) nomes.add(n); });
+  return [...nomes].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+}
+
 function freteEditarCarga(carga, campo){
+  if(freteSoDemonstracao(campo === 'transportadora' ? 'a transportadora é escolhida entre as cadastradas' : 'o CT-E é gravado')) return;
   const l = freteLinhaDaCarga(carga);
   if(!l) return;
   const atual = l.v[freteIx(campo)] || '';
   const rotulo = campo === 'transportadora' ? 'Transportadora' : 'CT-E';
+  const lista = campo === 'transportadora' ? freteTransportadorasConhecidas() : null;
+  const campoHtml = lista
+    ? `<select id="frete-campo-valor" data-foco class="frete-sel-transp">
+         <option value="">— em branco —</option>
+         ${atual && !lista.includes(atual) ? `<option value="${esc(atual)}" selected>${esc(atual)} (não está no cadastro)</option>` : ''}
+         ${lista.map((n) => `<option value="${esc(n)}"${n === atual ? ' selected' : ''}>${esc(n)}</option>`).join('')}
+       </select>`
+    : `<input type="text" id="frete-campo-valor" data-foco maxlength="40" value="${esc(atual)}"
+         onkeydown="if(event.key==='Enter'){freteSalvarCarga('${escJs(carga)}','${campo}')}">`;
+  const ajuda = lista
+    ? (lista.length ? 'Só transportadoras cadastradas (Cadastros → Frota). Nova transportadora? Cadastre lá primeiro e escolha aqui.' : 'Nenhuma transportadora cadastrada na Frota ainda — cadastre em Cadastros → Frota e volte aqui.')
+    : 'Mais de um CT-E? Separe por vírgula.';
   freteModal(`${rotulo} da carga ${carga}`,
     `<label class="frete-campo">${rotulo}
-       <input type="text" id="frete-campo-valor" data-foco maxlength="${campo === 'cte' ? 40 : 80}" value="${esc(atual)}"
-         onkeydown="if(event.key==='Enter'){freteSalvarCarga('${escJs(carga)}','${campo}')}"></label>
-     <div class="card-sub">${campo === 'cte' ? 'Mais de um CT-E? Separe por vírgula.' : 'Escreva como a Logística conhece (ex.: o nome curto).'}</div>`,
+       ${campoHtml}</label>
+     <div class="card-sub">${ajuda}</div>`,
     [{ rotulo: 'Cancelar', clique: 'freteFecharModal()' },
      { rotulo: 'Salvar', classe: 'btn-primary', icone: 'i-ok', clique: `freteSalvarCarga('${escJs(carga)}','${campo}')` }]);
 }
 /* Marca/desmarca o canhoto original. O servidor decide e carimba a hora;
    a tela só adianta o visual e volta atrás se ele recusar. */
 async function freteCanhoto(carga, marcado, input){
+  if(freteSoDemonstracao('o canhoto é marcado com o dia e quem marcou')){ if(input) input.checked = !marcado; return; }
   if(input) input.disabled = true;
   try{
     await SuincoSharePoint.frete.editarCarga(carga, { canhotoOriginal: !!marcado });
@@ -421,7 +476,53 @@ async function freteSalvarCarga(carga, campo){
   }catch(e){ notify(freteMensagemDeErro(e), 'danger', 8000); }
 }
 
+/* Data do pagamento e data da tratativa, editáveis (decisão do dono, 05/10/2026). */
+function freteEditarDataPagamento(carga){
+  if(freteSoDemonstracao('a data do último pagamento é editada')) return;
+  const l = freteLinhaDaCarga(carga);
+  if(!l) return;
+  const pago = l.v[freteIx('pago')];
+  if(!(typeof pago === 'number' && pago > 0)){ fretePagarUI(carga); return; }   // sem pagamento, a data nasce no Pagar
+  const atual = l.v[freteIx('dataPagamento')] || '';
+  freteModal(`Data do pagamento — carga ${carga}`,
+    `<label class="frete-campo">Data do último pagamento
+       <input type="date" id="frete-campo-data" data-foco value="${esc(atual)}"></label>
+     <div class="card-sub">Muda a data do último pagamento registrado (${esc(fretePct(pago))} pago). Em branco = sem data.</div>`,
+    [{ rotulo: 'Cancelar', clique: 'freteFecharModal()' },
+     { rotulo: 'Salvar', classe: 'btn-primary', icone: 'i-ok', clique: `freteSalvarDataPagamento('${escJs(carga)}')` }]);
+}
+async function freteSalvarDataPagamento(carga){
+  const valor = (document.getElementById('frete-campo-data') || {}).value || null;
+  try{
+    await SuincoSharePoint.frete.editarCarga(carga, { dataPagamento: valor });
+    freteFecharModal();
+    await freteRecarregarSemPiscar();
+  }catch(e){ notify(freteMensagemDeErro(e), 'danger', 8000); }
+}
+function freteEditarDataTratativa(carga, nota){
+  if(freteSoDemonstracao('a data da tratativa é editada')) return;
+  const l = FRETE.dados.linhas.find((x) => String(x.carga) === String(carga) && x.nota === nota);
+  if(!l) return;
+  const atual = l.v[freteIx('dataTratativa')] || '';
+  const trat = l.v[freteIx('tratativa')] || '';
+  freteModal(`Data da tratativa — nota ${nota}`,
+    `<label class="frete-campo">Data da tratativa${trat ? ` (${esc(trat)})` : ''}
+       <input type="date" id="frete-campo-data" data-foco value="${esc(atual)}"></label>
+     <div class="card-sub">${trat ? 'O dia em que a nota foi consultada ou tratada.' : 'Esta nota ainda não tem tratativa: ao escolher uma na lista a data fica a do dia — ou informe a data aqui.'}</div>`,
+    [{ rotulo: 'Cancelar', clique: 'freteFecharModal()' },
+     { rotulo: 'Salvar', classe: 'btn-primary', icone: 'i-ok', clique: `freteSalvarDataTratativa('${escJs(carga)}','${escJs(nota)}')` }]);
+}
+async function freteSalvarDataTratativa(carga, nota){
+  const valor = (document.getElementById('frete-campo-data') || {}).value || null;
+  try{
+    await SuincoSharePoint.frete.tratar(carga, nota, { tratativaEm: valor });
+    freteFecharModal();
+    await freteRecarregarSemPiscar();
+  }catch(e){ notify(freteMensagemDeErro(e), 'danger', 8000); }
+}
+
 function freteEditarObs(carga, nota){
+  if(freteSoDemonstracao('a observação é gravada')) return;
   const l = nota ? FRETE.dados.linhas.find((x) => String(x.carga) === String(carga) && x.nota === nota) : freteLinhaDaCarga(carga);
   if(!l) return;
   const daCarga = l.primeira ? `<label class="frete-campo">Observação da carga ${esc(carga)}
@@ -444,6 +545,7 @@ async function freteSalvarObs(carga, nota){
 
 /* ------------------------------------------------------------ pagamento */
 function fretePagarUI(carga){
+  if(freteSoDemonstracao('o pagamento é registrado e o Status p/ pagamento muda')) return;
   const l = freteLinhaDaCarga(carga);
   if(!l) return;
   const v = (k) => l.v[freteIx(k)];
@@ -504,6 +606,7 @@ async function freteRegistrarPagamento(carga, confirmar){
 
 /* ------------------------------------------------------------ histórico */
 async function freteHistoricoUI(carga){
+  if(freteSoDemonstracao('o histórico mostra pagamentos, notas e quem mexeu')) return;
   freteModal(`Histórico — carga ${carga}`, '<div class="card-sub">Carregando…</div>', [{ rotulo: 'Fechar', clique: 'freteFecharModal()' }], true);
   let h;
   try{ h = await SuincoSharePoint.frete.historico(carga); }
@@ -552,6 +655,7 @@ async function freteConfirmarAnular(carga, id){
 
 /* ------------------------------------------------------------- exportar */
 async function freteExportar(){
+  if(freteSoDemonstracao('o .xlsx idêntico à tela é baixado')) return;
   try{
     const { blob, nome } = await SuincoSharePoint.frete.baixarPlanilha();
     const url = URL.createObjectURL(blob);
@@ -568,6 +672,7 @@ let _freteImp = null;   // { lote, itens:[{ nome, estado, msg }], previa, fila }
 const FRETE_MAX_PDF = 6 * 1024 * 1024;
 
 function freteAbrirImportacao(){
+  if(freteSoDemonstracao('os PDFs do B2B e do Atak são lidos e a planilha é montada')) return;
   _freteImp = { lote: null, itens: [], previa: null, lendo: false };
   freteDesenharImportacao();
 }
@@ -659,7 +764,7 @@ function freteHtmlPrevia(previa){
     if(c.estado !== 'pronta'){
       return `<tr class="frete-prev-falta"><td></td><td><strong>${esc(c.numero)}</strong></td>
         <td colspan="10">Falta o relatório do <strong>${c.estado === 'falta_sist' ? 'Atak' : 'B2B'}</strong> desta carga — não dá para conferir ainda.
-        Mande o PDF que falta (a leitura fica guardada por um dia).</td></tr>`;
+        Mande o PDF que falta (a leitura fica guardada por um dia).${c.aviso ? `<div class="frete-prev-avisos">⚠ ${esc(c.aviso)}</div>` : ''}</td></tr>`;
     }
     const ex = c.existente;
     const mudanca = ex ? `Já estava no controle (${esc(freteData(ex.dataConsulta))}): <strong>${ex.novas}</strong> nova(s), <strong>${ex.resolvidas}</strong> resolvida(s)${ex.pctPago ? `, ${esc(String(ex.pctPago).replace('.', ','))}% já pago` : ''}` : 'Carga nova';
