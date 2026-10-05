@@ -1,0 +1,190 @@
+/* =====================================================================
+   PAGAMENTO DE FRETE — a planilha de controle dentro do painel (05/10/2026)
+   ---------------------------------------------------------------------
+   Pedido do dono: a aba tem de corresponder à planilha da Logística — as
+   mesmas colunas, na mesma ordem, uma carga em várias linhas. As cores
+   seguem a planilha aprovada: título azul-marinho = vem dos relatórios,
+   azul-aço = calculado, dourado = preenchimento manual; situação em verde,
+   vermelho e amarelo; linha repetida da carga em cinza.
+
+   A tabela tem 22 colunas e ROLA DE LADO dentro do próprio quadro (é a
+   exceção permitida: tabela larga rola no seu contêiner, a página não).
+   Cores pelos tokens de styles.css, para valer nos dois temas; dentro de
+   @media screen como todo o tema2027 — nada disto vai ao papel.
+   ===================================================================== */
+@media screen{
+  #tab-frete{
+    /* OS CABEÇALHOS SÃO A COR DA MARCA, FIXA NOS DOIS TEMAS (05/10/2026).
+       A prova de contraste pegou: no tema claro `--navy` vira a superfície
+       clara (#eff3f9) e o texto branco do cabeçalho ficou a 1,11:1. Aqui a
+       cor é a da planilha aprovada — azul-marinho, azul-aço, dourado — e o
+       texto por cima é escolhido para cada uma (branco / branco / escuro). */
+    --fr-rel: #1e2a52;
+    --fr-calc: #3e5c86;
+    --fr-acao: #2a3a6c;
+    --fr-man: #e9b954;
+    --fr-man-txt: #1a1200;
+    /* O cinza da linha repetida da carga: o `--text-dim` do tema, que já é
+       medido contra o fundo (o #6b7280 fixo dava 3,85:1 no claro). */
+    --fr-mudo: var(--text-dim);
+    --fr-lib-bg: rgba(63,166,106,.22);  --fr-lib-txt: #7fe0a6;
+    --fr-pend-bg: rgba(179,54,63,.26);  --fr-pend-txt: #ffb3b8;
+    --fr-ver-bg: rgba(217,154,43,.26);  --fr-ver-txt: #ffd98a;
+    --fr-falta-bg: rgba(233,185,84,.14);
+    --fr-faixa: rgba(233,185,84,.06);
+  }
+  :root[data-tema="claro"] #tab-frete{
+    --fr-lib-bg: #c6efce; --fr-lib-txt: #0b5d2a;
+    --fr-pend-bg: #ffc7ce; --fr-pend-txt: #9c0006;
+    --fr-ver-bg: #ffeb9c; --fr-ver-txt: #7a5200;
+    --fr-falta-bg: #fff4d6;
+    --fr-faixa: rgba(30,42,82,.05);
+  }
+
+  /* cabeçalho da aba: título, atualizado, ações */
+  #tab-frete .frete-topo{ display:flex; flex-wrap:wrap; gap:var(--sp-2) var(--sp-4); align-items:center; justify-content:space-between; margin-bottom:var(--sp-3) }
+  #tab-frete .frete-topo .card-sub{ margin:0 }
+  #tab-frete .frete-acoes-topo{ display:flex; flex-wrap:wrap; gap:var(--sp-2) }
+  #tab-frete .frete-aviso{ padding:10px 14px; border:1.5px solid var(--warn); border-radius:var(--radius); background:var(--fr-falta-bg); color:var(--text); margin-bottom:var(--sp-3) }
+
+  /* filtros: busca + chips + contagem */
+  #tab-frete #frete-filtros{ display:flex; flex-wrap:wrap; gap:var(--sp-2) var(--sp-3); align-items:center; margin:var(--sp-3) 0 }
+  #tab-frete .frete-busca{ flex:1 1 260px; min-width:0 }
+  #tab-frete .frete-busca input{ width:100%; min-height:40px }
+  #tab-frete .frete-chips{ display:flex; flex-wrap:wrap; gap:6px }
+  #tab-frete .frete-chip{
+    min-height:36px; padding:6px 12px; border-radius:999px; border:1.5px solid var(--border);
+    background:transparent; color:var(--text); font:inherit; font-size:13px; font-weight:600; cursor:pointer;
+    transition:transform var(--t-rapida) ease, border-color var(--t-media) ease, background var(--t-media) ease;
+  }
+  #tab-frete .frete-chip:hover{ border-color:var(--gold-dim) }
+  #tab-frete .frete-chip:active{ transform:scale(.97) }
+  #tab-frete .frete-chip.ativo{ background:var(--gold); color:var(--fr-man-txt); border-color:var(--gold) }
+  #tab-frete .frete-contagem{ color:var(--text-dim); font-size:13px; margin-left:auto }
+
+  /* A PLANILHA */
+  #tab-frete .frete-wrap{ overflow:auto; max-height:70vh; border:1px solid var(--border-soft); border-radius:var(--radius) }
+  #tab-frete table.frete-tab{ border-collapse:separate; border-spacing:0; min-width:2050px; font-size:13px }
+  #tab-frete .frete-tab th.frete-h{
+    position:sticky; top:0; z-index:2; color:#fff; font-weight:700; text-align:center; white-space:normal;
+    line-height:1.2; padding:8px 8px; min-width:92px; border-bottom:2px solid var(--navy-deep);
+  }
+  #tab-frete .frete-tab th.frete-h-rel{ background:var(--fr-rel) }
+  #tab-frete .frete-tab th.frete-h-calc{ background:var(--fr-calc) }
+  #tab-frete .frete-tab th.frete-h-manual{ background:var(--fr-man); color:var(--fr-man-txt) }
+  #tab-frete .frete-tab th.frete-h-acao{ background:var(--fr-acao); min-width:170px }
+  #tab-frete .frete-tab th[data-col="resumo"]{ min-width:220px }
+  #tab-frete .frete-tab th[data-col="transportadora"]{ min-width:170px }
+  #tab-frete .frete-tab th[data-col="observacao"]{ min-width:220px }
+  #tab-frete .frete-tab th[data-col="tratativa"]{ min-width:168px }
+  #tab-frete .frete-tab td{ padding:6px 8px; text-align:center; white-space:nowrap; vertical-align:middle; border-bottom:1px solid var(--border-soft) }
+  #tab-frete .frete-tab td[data-col="resumo"], #tab-frete .frete-tab td[data-col="observacao"],
+  #tab-frete .frete-tab td[data-col="transportadora"]{ text-align:left }
+  #tab-frete .frete-tab td[data-col="observacao"]{ white-space:normal; max-width:320px }
+  /* a primeira linha de cada carga é a linha das contagens */
+  #tab-frete .frete-tab tr.frete-primeira td{ border-top:1px solid var(--navy-lighter); background:var(--fr-faixa) }
+  #tab-frete .frete-tab tr.frete-primeira td[data-col="carga"]{ font-weight:800; color:var(--gold-text); font-variant-numeric:tabular-nums }
+  #tab-frete .frete-tab td.frete-mudo{ color:var(--fr-mudo); font-weight:400 }
+  #tab-frete .frete-tab td.frete-forte{ font-weight:800 }
+  #tab-frete .frete-tab td.frete-dif-ok{ background:var(--fr-lib-bg); color:var(--fr-lib-txt); font-weight:700 }
+  #tab-frete .frete-tab td.frete-dif-ruim{ background:var(--fr-pend-bg); color:var(--fr-pend-txt); font-weight:800 }
+  #tab-frete .frete-sit{ display:inline-block; min-width:96px; padding:3px 10px; border-radius:var(--radius-sm); font-weight:800; letter-spacing:.02em }
+  #tab-frete .frete-sit-lib{ background:var(--fr-lib-bg); color:var(--fr-lib-txt) }
+  #tab-frete .frete-sit-pend{ background:var(--fr-pend-bg); color:var(--fr-pend-txt) }
+  #tab-frete .frete-sit-verif{ background:var(--fr-ver-bg); color:var(--fr-ver-txt) }
+  /* o rótulo da pendência, com a cor do B2B */
+  #tab-frete td.frete-r-ok{ color:var(--fr-lib-txt) }
+  #tab-frete td.frete-r-aguardando{ color:var(--fr-ver-txt) }
+  #tab-frete td.frete-r-nao_entregue{ color:var(--fr-pend-txt) }
+  #tab-frete td.frete-r-nao_localizada, #tab-frete td.frete-r-so_b2b{ color:#c9a7ff }
+  :root[data-tema="claro"] #tab-frete td.frete-r-nao_localizada, :root[data-tema="claro"] #tab-frete td.frete-r-so_b2b{ color:#6d3fc4 }
+  /* a tratativa: lista de escolha; sem tratativa fica destacada (é o que falta olhar) */
+  #tab-frete td.frete-t-falta{ background:var(--fr-falta-bg) }
+  #tab-frete .frete-sel{ min-height:34px; width:100%; min-width:150px; font:inherit; font-size:13px; font-weight:700 }
+  #tab-frete td.frete-t-ok .frete-sel{ color:var(--fr-lib-txt) }
+  #tab-frete td.frete-t-dev .frete-sel{ color:#8fb4ff }
+  :root[data-tema="claro"] #tab-frete td.frete-t-dev .frete-sel{ color:#1f5fbf }
+  #tab-frete td.frete-t-sumiu .frete-sel{ color:var(--fr-pend-txt) }
+  #tab-frete td.frete-t-sem .frete-sel{ color:var(--fr-mudo); font-style:italic; font-weight:600 }
+  /* percentuais com barra ao fundo */
+  #tab-frete td.frete-barra{ background:linear-gradient(90deg, var(--fr-lib-bg) var(--p), transparent var(--p)); font-variant-numeric:tabular-nums }
+  #tab-frete td.frete-barra-pago{ background:linear-gradient(90deg, rgba(142,164,216,.35) var(--p), transparent var(--p)) }
+  #tab-frete td.frete-apagar{ background:var(--fr-ver-bg); color:var(--fr-ver-txt) }
+  #tab-frete td.frete-conferir{ color:var(--fr-ver-txt); font-style:italic; font-weight:800 }
+  /* célula editável parece campo */
+  #tab-frete .frete-edit{
+    font:inherit; font-size:13px; color:var(--text); background:transparent; border:1px dashed var(--border); border-radius:var(--radius-sm);
+    min-height:32px; padding:4px 8px; cursor:pointer; text-align:left; max-width:100%; white-space:normal;
+  }
+  #tab-frete .frete-edit:hover{ border-color:var(--gold-dim); border-style:solid }
+  #tab-frete .frete-vazio{ color:var(--fr-mudo); font-style:italic }
+  #tab-frete td.frete-acoes{ white-space:nowrap }
+  #tab-frete td.frete-acoes .btn{ margin:0 2px }
+
+  /* O piso de 12px vale para o <small> também (a régua test_piso_de_12px pegou 10,8px). */
+  #tab-frete small, .modal-box-frete small{ font-size:12px }
+
+  /* RESUMO (as tabelas da aba RESUMO do arquivo) */
+  #tab-frete .frete-detalhes{ display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:var(--sp-5); margin-top:var(--sp-4) }
+  #tab-frete .frete-mini{ width:100%; font-size:13px }
+  #tab-frete .frete-mini th{ text-align:left; white-space:normal }
+  #tab-frete .frete-mini td{ white-space:normal }
+  #tab-frete tr.frete-total td{ font-weight:800; border-top:2px solid var(--navy-lighter) }
+
+  /* MODAIS da aba */
+  .modal-box-frete.larga{ max-width:1100px }
+  .modal-box-frete .frete-h3{ color:var(--gold-text); font-size:14px; margin:14px 0 6px; text-transform:uppercase; letter-spacing:.04em }
+  .modal-box-frete .frete-campo{ display:flex; flex-direction:column; gap:4px; font-weight:600; margin:8px 0 }
+  .modal-box-frete .frete-campo input, .modal-box-frete .frete-campo textarea{ font:inherit; min-height:40px; width:100% }
+  .modal-box-frete .frete-form{ display:grid; grid-template-columns:1fr 1fr; gap:var(--sp-3) }
+  .modal-box-frete .frete-resumo-carga{ display:flex; flex-wrap:wrap; gap:var(--sp-2) var(--sp-4); align-items:center; margin-bottom:var(--sp-3); font-size:14px }
+  .modal-box-frete .frete-alerta{ padding:10px 12px; border-radius:var(--radius); background:var(--fr-ver-bg, rgba(217,154,43,.26)); color:var(--text); margin-top:var(--sp-3); line-height:1.45 }
+  .modal-box-frete .frete-modal-botoes{ margin-top:var(--sp-4) }
+  .modal-box-frete .frete-drop{
+    display:flex; flex-direction:column; align-items:center; gap:6px; padding:22px 16px; margin:var(--sp-3) 0;
+    border:2px dashed var(--border); border-radius:var(--radius-lg); cursor:pointer; text-align:center; color:var(--text);
+    transition:border-color var(--t-media) ease, background var(--t-media) ease;
+  }
+  .modal-box-frete .frete-drop:hover, .modal-box-frete .frete-drop.sobre{ border-color:var(--gold); background:rgba(233,185,84,.08) }
+  .modal-box-frete .frete-drop .ico{ width:28px; height:28px }
+  .modal-box-frete .frete-arqs{ list-style:none; padding:0; margin:0 0 var(--sp-3); display:flex; flex-direction:column; gap:4px }
+  .modal-box-frete .frete-arq{ display:flex; justify-content:space-between; gap:10px; padding:6px 10px; border-radius:var(--radius-sm); background:var(--navy-deep); font-size:13px }
+  :root[data-tema="claro"] .modal-box-frete .frete-arq{ background:var(--navy-light) }
+  .modal-box-frete .frete-arq-nome{ font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+  .modal-box-frete .frete-arq-msg{ color:var(--text-dim); text-align:right }
+  .modal-box-frete .frete-arq-ok .frete-arq-msg{ color:var(--fr-lib-txt, #7fe0a6) }
+  .modal-box-frete .frete-arq-erro .frete-arq-msg{ color:var(--fr-pend-txt, #ffb3b8); font-weight:700 }
+  .modal-box-frete .frete-prev-tab td, .modal-box-frete .frete-prev-tab th{ white-space:normal; vertical-align:top }
+  .modal-box-frete .frete-prev-falta td{ color:var(--text-dim) }
+  .modal-box-frete .frete-prev-avisos{ color:var(--fr-ver-txt, #ffd98a); font-size:12px; margin-top:4px }
+  .modal-box-frete .frete-prev-det summary{ cursor:pointer; color:var(--gold-text); font-weight:600 }
+  .modal-box-frete .frete-prev-det ul{ margin:4px 0 0 16px; font-size:12px }
+  .modal-box-frete .frete-eventos{ list-style:none; padding:0; margin:0; display:flex; flex-direction:column; gap:4px; font-size:13px }
+  .modal-box-frete .frete-eventos li{ display:flex; justify-content:space-between; gap:10px; padding:4px 0; border-bottom:1px solid var(--border-soft) }
+  .modal-box-frete .frete-eventos li span{ color:var(--text-dim); white-space:nowrap }
+  .modal-box-frete tr.frete-anulado td{ color:var(--text-dim); text-decoration:line-through }
+  .modal-box-frete tr.frete-anulado td:nth-child(5){ text-decoration:none }
+  .modal-box-frete tr.frete-resolvida td{ color:var(--text-dim) }
+  .modal-box-frete .frete-sit{ display:inline-block; min-width:96px; padding:3px 10px; border-radius:var(--radius-sm); font-weight:800 }
+  .modal-box-frete .frete-sit-lib{ background:rgba(63,166,106,.22); color:#7fe0a6 }
+  .modal-box-frete .frete-sit-pend{ background:rgba(179,54,63,.26); color:#ffb3b8 }
+  .modal-box-frete .frete-sit-verif{ background:rgba(217,154,43,.26); color:#ffd98a }
+  :root[data-tema="claro"] .modal-box-frete .frete-sit-lib{ background:#c6efce; color:#0b5d2a }
+  :root[data-tema="claro"] .modal-box-frete .frete-sit-pend{ background:#ffc7ce; color:#9c0006 }
+  :root[data-tema="claro"] .modal-box-frete .frete-sit-verif{ background:#ffeb9c; color:#7a5200 }
+  .modal-box-frete td.frete-dif-ok{ color:#7fe0a6; font-weight:700 }
+  .modal-box-frete td.frete-dif-ruim{ color:#ffb3b8; font-weight:800 }
+  :root[data-tema="claro"] .modal-box-frete td.frete-dif-ok{ color:#0b5d2a }
+  :root[data-tema="claro"] .modal-box-frete td.frete-dif-ruim{ color:#9c0006 }
+
+  @media (max-width:820px){
+    #tab-frete .frete-wrap{ max-height:none }
+    #tab-frete table.frete-tab{ min-width:1900px }
+    #tab-frete .frete-contagem{ margin-left:0; flex-basis:100% }
+    .modal-box-frete .frete-form{ grid-template-columns:1fr }
+    .modal-box-frete.larga{ max-width:none }
+  }
+  @media (prefers-reduced-motion: reduce){
+    #tab-frete .frete-chip, .modal-box-frete .frete-drop{ transition:none }
+  }
+}

@@ -28,7 +28,11 @@ from playwright.async_api import async_playwright
 PAINEL = 'file:///home/user/pega-visao/entregaveis/suinco_logistica/index.html'
 
 ABAS = ['torre', 'programacao', 'portaria', 'expedicao', 'faturamento',
-        'indicadores', 'cadastros', 'historico', 'relatorios', 'usuarios']
+        'indicadores', 'cadastros', 'historico', 'relatorios', 'frete', 'usuarios']
+# A aba Pagamento de Frete (05/10/2026) desenha, sem servidor, a demonstração
+# gerada pela mesma função da API — é o que a régua mede.
+import json as _json, os as _os
+FRETE_DEMO = _json.load(open(_os.path.join(_os.path.dirname(_os.path.abspath(__file__)), '..', 'vitrine', 'frete_demonstracao.json'), encoding='utf-8'))
 
 falhas = []
 
@@ -157,8 +161,10 @@ async def main():
 
         # Dados em TODAS as etapas: um status sem carga não pinta célula, e
         # a etapa que não aparece é justamente a que pode estar invisível.
+        await pg.evaluate("(d) => { window.__freteDemo = d; }", FRETE_DEMO)
         await pg.evaluate("""() => {
             DB.operador.setor = 'Administração'; aplicarPermissoesSetor();
+            window.FRETE_DEMONSTRACAO = window.__freteDemo;
             DB.cargas = []; DB.movimentacoes = [];
             const ordem = ['Aguardando Veículo','Aguardando Embarque','Embarque Iniciado',
                            'Embarque Finalizado','Faturado','Seguiu Viagem'];

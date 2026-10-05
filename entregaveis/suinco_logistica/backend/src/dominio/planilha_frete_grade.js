@@ -117,7 +117,8 @@ export function montarGrade(cargas) {
       }
       linhas.push({
         carga: Number(carga.numero), primeira, nota: p?.nota ?? null, categoria: p?.categoria ?? null,
-        cliente: p?.cliente ?? '', cidade: p?.cidade ?? '', celulas: c,
+        cliente: p?.cliente ?? '', cidade: p?.cidade ?? '',
+        obsNota: p?.obs ?? '', obsCarga: primeira ? (carga.obs ?? '') : '', celulas: c,
       });
     }
   }

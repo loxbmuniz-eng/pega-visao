@@ -6525,6 +6525,11 @@ describe('49. Pagamento de Frete — a planilha dentro do painel (05/10/2026)', 
     }
   };
   const FRETE = '/api/pagamento-frete';
+  /* DUAS pessoas do setor novo, criadas aqui: o acesso é POR SETOR (decisão
+     do dono, 05/10/2026 — "as permissões são definidas na aba de usuários"),
+     e duas porque o lote de leitura é de quem o abriu. */
+  const DO_SETOR = [['daniela@teste.local', 'Daniela Teste'], ['ana.paula@teste.local', 'Ana Paula Teste']];
+  const tk = {};
   const grade = async (token = tokens['Administração']) => {
     const r = await req(FRETE, { token });
     assert.equal(r.status, 200, r.texto);
@@ -6547,30 +6552,61 @@ describe('49. Pagamento de Frete — a planilha dentro do painel (05/10/2026)', 
     return c.json;
   };
 
-  before(limpar);
+  before(async () => {
+    await limpar();
+    const hash = await bcrypt.hash(SENHA, 4);
+    for (const [email, nome] of DO_SETOR) {
+      await pool.query("INSERT INTO operadores (email, nome, setor, senha_hash) VALUES ($1,$2,'Pagamento de Frete',$3)", [email, nome, hash]);
+      const r = await req('/auth/login', { metodo: 'POST', corpo: { email, senha: SENHA } });
+      assert.equal(r.status, 200, `login de ${email}: ${r.texto}`);
+      tk[email] = r.json.token;
+    }
+  });
   after(async () => {
     await limpar();
-    await pool.query("UPDATE operadores SET acesso_frete = FALSE WHERE email LIKE '%@teste.local'");
+    await pool.query("DELETE FROM operadores WHERE setor = 'Pagamento de Frete' AND email LIKE '%@teste.local'");
   });
 
   describe('quem entra', () => {
-    test('sem login: 401; sem a marca de acesso: 403 SEM_ACESSO_FRETE; Administração entra sempre', async () => {
+    test('sem login: 401; outro setor: 403 SETOR_SEM_PERMISSAO; o setor Pagamento de Frete e a Administração entram', async () => {
       assert.equal((await req(FRETE)).status, 401);
-      const portaria = await req(FRETE, { token: tokens.Portaria });
-      assert.equal(portaria.status, 403);
-      assert.equal(portaria.json.codigo, 'SEM_ACESSO_FRETE');
+      for (const setor of ['Portaria', 'Logística', 'Expedição', 'Faturamento']) {
+        const r = await req(FRETE, { token: tokens[setor] });
+        assert.equal(r.status, 403, setor);
+        assert.equal(r.json.codigo, 'SETOR_SEM_PERMISSAO');
+        assert.match(r.json.erro, /Pagamento de Frete/);
+      }
+      assert.equal((await req(FRETE, { token: tk['daniela@teste.local'] })).status, 200);
       assert.equal((await req(FRETE, { token: tokens['Administração'] })).status, 200);
     });
 
-    test('a marca é POR PESSOA, vale na hora, e tirá-la fecha a porta na hora (sem sair e entrar)', async () => {
-      await pool.query("UPDATE operadores SET acesso_frete = TRUE WHERE email = 'ana@teste.local'");
-      assert.equal((await req(FRETE, { token: tokens['Logística'] })).status, 200);
-      assert.equal((await req(FRETE, { token: tokens.Portaria })).status, 403, 'outra pessoa, mesmo setor de operação, continua de fora');
-      await pool.query("UPDATE operadores SET acesso_frete = FALSE WHERE email = 'ana@teste.local'");
-      assert.equal((await req(FRETE, { token: tokens['Logística'] })).status, 403);
+    test('o setor existe no servidor, na CHECK do banco e no cadastro pela tela de Usuários', async () => {
+      assert.ok(SETORES.includes('Pagamento de Frete'), 'fluxo.js SETORES');
+      const r = await req('/api/operadores', { metodo: 'POST', token: tokens['Administração'],
+        corpo: { email: 'karen@teste.local', nome: 'Karen Teste', setor: 'Pagamento de Frete', senha: SENHA } });
+      assert.equal(r.status, 201, r.texto);
+      const login = await req('/auth/login', { metodo: 'POST', corpo: { email: 'karen@teste.local', senha: SENHA } });
+      assert.equal(login.status, 200);
+      assert.equal(login.json.operador.setor, 'Pagamento de Frete');
+      assert.equal((await req(FRETE, { token: login.json.token })).status, 200, 'entra na aba na hora');
+      await pool.query("DELETE FROM operadores WHERE email = 'karen@teste.local'");
     });
 
-    test('toda rota da aba exige a marca (não só a grade)', async () => {
+    test('mudar a pessoa de setor na tela de Usuários fecha (ou abre) a aba na hora', async () => {
+      const id = (await pool.query("SELECT id FROM operadores WHERE email = 'ana.paula@teste.local'")).rows[0].id;
+      const tira = await req(`/api/operadores/${id}`, { metodo: 'PATCH', token: tokens['Administração'], corpo: { setor: 'Portaria' } });
+      assert.equal(tira.status, 200, tira.texto);
+      // trocar o setor revoga a sessão (o setor viaja no token): a pessoa entra de novo e já não vê a aba
+      const r1 = await req('/auth/login', { metodo: 'POST', corpo: { email: 'ana.paula@teste.local', senha: SENHA } });
+      assert.equal((await req(FRETE, { token: r1.json.token })).status, 403);
+      const volta = await req(`/api/operadores/${id}`, { metodo: 'PATCH', token: tokens['Administração'], corpo: { setor: 'Pagamento de Frete' } });
+      assert.equal(volta.status, 200);
+      const r2 = await req('/auth/login', { metodo: 'POST', corpo: { email: 'ana.paula@teste.local', senha: SENHA } });
+      assert.equal((await req(FRETE, { token: r2.json.token })).status, 200);
+      tk['ana.paula@teste.local'] = r2.json.token;
+    });
+
+    test('toda rota da aba exige o setor (não só a grade)', async () => {
       const pdf = pdf64('b2b_900801.pdf');
       const tentativas = [
         ['GET', `${FRETE}/exportar.xlsx`], ['POST', `${FRETE}/leituras`, { arquivo: pdf }],
@@ -6580,40 +6616,19 @@ describe('49. Pagamento de Frete — a planilha dentro do painel (05/10/2026)', 
         ['GET', `${FRETE}/cargas/1/historico`],
       ];
       for (const [metodo, caminho, corpo] of tentativas) {
-        const r = await req(caminho, { metodo, token: tokens.Portaria, corpo });
+        const r = await req(caminho, { metodo, token: tokens['Logística'], corpo });
         assert.equal(r.status, 403, `${metodo} ${caminho}`);
-        assert.equal(r.json.codigo, 'SEM_ACESSO_FRETE');
+        assert.equal(r.json.codigo, 'SETOR_SEM_PERMISSAO');
       }
     });
 
-    test('a sessão informa acessoFrete ao painel (login e /auth/eu), e a tela de Usuários liga e desliga', async () => {
-      const eu = await req('/auth/eu', { token: tokens['Administração'] });
-      assert.equal(eu.json.operador.acessoFrete, true, 'a Administração sempre');
-      assert.equal((await req('/auth/eu', { token: tokens.Portaria })).json.operador.acessoFrete, false);
-
-      const idBruno = await idDe('bruno@teste.local');
-      const lista0 = await req('/api/operadores', { token: tokens['Administração'] });
-      assert.equal(lista0.json.find((o) => o.email === 'bruno@teste.local').acessoFrete, false);
-
-      const liga = await req(`/api/operadores/${idBruno}`, { metodo: 'PATCH', token: tokens['Administração'], corpo: { acessoFrete: true } });
-      assert.equal(liga.status, 200, liga.texto);
-      assert.equal((await req('/auth/eu', { token: tokens.Portaria })).json.operador.acessoFrete, true);
-      assert.equal((await req(FRETE, { token: tokens.Portaria })).status, 200);
-      const lista1 = await req('/api/operadores', { token: tokens['Administração'] });
-      assert.equal(lista1.json.find((o) => o.email === 'bruno@teste.local').acessoFrete, true);
-
-      // ligar o acesso NÃO derruba a sessão da pessoa (não é mudança de senha nem de setor)
-      assert.equal((await req('/auth/eu', { token: tokens.Portaria })).status, 200);
-
-      const desliga = await req(`/api/operadores/${idBruno}`, { metodo: 'PATCH', token: tokens['Administração'], corpo: { acessoFrete: false } });
-      assert.equal(desliga.status, 200);
-      assert.equal((await req(FRETE, { token: tokens.Portaria })).status, 403);
-    });
-
-    test('quem não é Administração não mexe na marca de ninguém', async () => {
-      const idBruno = await idDe('bruno@teste.local');
-      const r = await req(`/api/operadores/${idBruno}`, { metodo: 'PATCH', token: tokens['Logística'], corpo: { acessoFrete: true } });
-      assert.equal(r.status, 403);
+    test('o setor Pagamento de Frete NÃO mexe no pátio: nenhuma allowlist de carga ou devolução o inclui', async () => {
+      const t = tk['daniela@teste.local'];
+      const cria = await req('/api/cargas', { metodo: 'POST', token: t, corpo: { id: 'frete-x', placa: 'ZZZ9Z99', numeroCarga: '900900' } });
+      assert.equal(cria.status, 403, cria.texto);
+      const dev = await req('/api/devolucoes', { metodo: 'POST', token: t, corpo: {} });
+      assert.equal(dev.status, 403, dev.texto);
+      assert.equal((await req('/api/operadores', { token: t })).status, 403);
     });
   });
 
@@ -6729,17 +6744,14 @@ describe('49. Pagamento de Frete — a planilha dentro do painel (05/10/2026)', 
       assert.equal(grande.json.codigo, 'ARQUIVO_GRANDE');
       assert.equal((await req(`${FRETE}/leituras`, { metodo: 'POST', token: tokens['Administração'], corpo: { arquivo: 'x', lote: 'nao-e-lote' } })).json.codigo, 'LOTE_INVALIDO');
 
-      // o lote de uma pessoa não é lido nem confirmado por outra que não seja da Administração
-      await pool.query("UPDATE operadores SET acesso_frete = TRUE WHERE email = 'ana@teste.local'");
-      const dele = await subir('b2b_900801.pdf', null, tokens['Logística']);
-      assert.equal(dele.status, 200);
-      const alheio = await req(`${FRETE}/lotes/${dele.json.lote}/previa`, { token: tokens.Portaria });
-      assert.equal(alheio.status, 403, 'quem não tem a marca nem chega');
-      await pool.query("UPDATE operadores SET acesso_frete = TRUE WHERE email = 'bruno@teste.local'");
-      const alheio2 = await req(`${FRETE}/lotes/${dele.json.lote}/previa`, { token: tokens.Portaria });
-      assert.equal(alheio2.status, 403);
-      assert.equal(alheio2.json.codigo, 'LOTE_DE_OUTRA_PESSOA');
-      await pool.query("UPDATE operadores SET acesso_frete = FALSE WHERE email IN ('ana@teste.local','bruno@teste.local')");
+      // o lote de uma pessoa não é lido nem confirmado por outra (a Administração pode)
+      const dele = await subir('b2b_900801.pdf', null, tk['daniela@teste.local']);
+      assert.equal(dele.status, 200, dele.texto);
+      const alheio = await req(`${FRETE}/lotes/${dele.json.lote}/previa`, { token: tk['ana.paula@teste.local'] });
+      assert.equal(alheio.status, 403);
+      assert.equal(alheio.json.codigo, 'LOTE_DE_OUTRA_PESSOA');
+      assert.equal((await req(`${FRETE}/lotes/${dele.json.lote}/previa`, { token: tokens['Administração'] })).status, 200);
+      await pool.query('DELETE FROM pgfrete_leituras WHERE lote = $1', [dele.json.lote]);
     });
 
     test('lote que não existe: 404 explicado', async () => {
@@ -7017,25 +7029,9 @@ describe('49. Pagamento de Frete — a planilha dentro do painel (05/10/2026)', 
       }
     });
 
-    test('sem a COLUNA acesso_frete: login e lista de usuários seguem, a aba fica fechada e ligar o acesso explica', async () => {
-      await pool.query('ALTER TABLE operadores RENAME COLUMN acesso_frete TO acesso_frete_off');
-      try {
-        const eu = await req('/auth/eu', { token: tokens.Portaria });
-        assert.equal(eu.status, 200);
-        assert.equal(eu.json.operador.acessoFrete, false);
-        assert.equal((await req(FRETE, { token: tokens.Portaria })).status, 403);
-        const lista = await req('/api/operadores', { token: tokens['Administração'] });
-        assert.equal(lista.status, 200);
-        assert.equal(lista.json[0].acessoFrete, null, 'a tela de Usuários sabe que a marca não existe ainda');
-        const idBruno = await idDe('bruno@teste.local');
-        const liga = await req(`/api/operadores/${idBruno}`, { metodo: 'PATCH', token: tokens['Administração'], corpo: { acessoFrete: true } });
-        assert.equal(liga.status, 503);
-        assert.equal(liga.json.codigo, 'FRETE_SEM_MIGRACAO');
-        const outra = await req(`/api/operadores/${idBruno}`, { metodo: 'PATCH', token: tokens['Administração'], corpo: { nome: 'Bruno' } });
-        assert.equal(outra.status, 200, 'o resto da tela de Usuários segue funcionando');
-      } finally {
-        await pool.query('ALTER TABLE operadores RENAME COLUMN acesso_frete_off TO acesso_frete');
-      }
+    test('sem o setor na CHECK do banco (migração 058 ainda não rodou): cadastrar explica, nada derruba', async () => {
+      const { rows } = await pool.query("SELECT pg_get_constraintdef(oid) AS d FROM pg_constraint WHERE conname = 'operadores_setor_check'");
+      assert.match(rows[0].d, /Pagamento de Frete/, 'a 058 põe o setor na CHECK');
     });
   });
 });

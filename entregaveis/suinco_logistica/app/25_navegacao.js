@@ -81,6 +81,8 @@ function renderTabAtual(){
       { const rd=document.getElementById('rel-dev-dia'); if(rd && !rd.value && typeof diaLocalDev==='function') rd.value=diaLocalDev(); }
       break;
     case 'usuarios': renderUsuarios(); renderMinhaSegurancaUI(); renderPedidosAprovacaoUI(); break;
+    // Módulo próprio (app/76_pagamento_frete.js). O typeof protege a ordem de carga.
+    case 'frete': if(typeof renderFrete === 'function') renderFrete(); break;
   }
   // Depois de pintar, e não antes: os rótulos são derivados das células
   // que acabaram de ser criadas.

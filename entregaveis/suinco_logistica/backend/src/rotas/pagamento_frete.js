@@ -14,9 +14,9 @@
    colunas da planilha, uma linha por pendência, e o resumo. Nada é calculado
    na tela — o servidor manda.
 
-   TODA ROTA exige login E a marca de acesso (exigirAcessoFrete). Escrever é
-   só para quem tem a marca; não há "só leitura" porque a aba inteira é de
-   quem a Administração liberou.
+   TODA ROTA exige login E o setor Pagamento de Frete (ou Administração).
+   Escrever é de quem entra; não há "só leitura" porque a aba inteira é do
+   setor.
 
    SE O SERVIDOR AINDA NÃO TEM A MIGRAÇÃO 058 (painel novo no ar antes do
    `atualizar`), toda rota responde 503 FRETE_SEM_MIGRACAO com a explicação —
@@ -25,12 +25,14 @@
 import { Router } from 'express';
 import { randomUUID } from 'node:crypto';
 import { consultar, emTransacao } from '../banco.js';
-import { exigirLogin } from '../middleware/auth.js';
-import { exigirAcessoFrete } from '../middleware/acesso_frete.js';
+import { exigirLogin, exigirSetor } from '../middleware/auth.js';
+import { SETOR_PAGAMENTO_FRETE } from '../dominio/fluxo.js';
 import { hojeISO } from './modelo_semana.js';
 import { lerPaginasDoPdf, ErroDeLeitura } from '../servicos/pdf_texto.js';
 import { lerRelatorioDeFrete } from '../dominio/relatorios_frete_pdf.js';
-import { conferirCarga, indicadoresDaCarga, rotuloDaPendencia, TRATATIVAS } from '../dominio/pagamento_frete.js';
+import {
+  conferirCarga, indicadoresDaCarga, rotuloDaPendencia, TRATATIVAS, TRATATIVAS_QUE_LIBERAM,
+} from '../dominio/pagamento_frete.js';
 import { montarGrade } from '../dominio/planilha_frete_grade.js';
 import { montarPlanilhaDeFrete } from '../dominio/planilha_frete_export.js';
 import {
@@ -39,7 +41,10 @@ import {
 
 export const rotasPagamentoFrete = Router();
 
-const ACESSO = [exigirLogin, exigirAcessoFrete];
+/* O MESMO MECANISMO DE TODOS OS SETORES: quem entra é o setor Pagamento de
+   Frete — e a Administração, que `exigirSetor` deixa passar sempre. As pessoas
+   são colocadas no setor na tela de Usuários que já existe. */
+const ACESSO = [exigirLogin, exigirSetor(SETOR_PAGAMENTO_FRETE)];
 const BASE = '/pagamento-frete';
 
 /* Migração ausente → 503 explicado. Qualquer outro erro segue para o handler global. */
@@ -82,10 +87,13 @@ rotasPagamentoFrete.get(BASE, ACESSO, rota(async (req, res) => {
   res.json({
     geradoEm: new Date().toISOString(),
     hoje: hojeISO(),
+    /* O vocabulário das tratativas vem DAQUI: a tela monta a lista de escolha
+       com ele em vez de repetir as palavras (uma regra, um lugar). */
+    vocabulario: { tratativas: TRATATIVAS, liberam: TRATATIVAS_QUE_LIBERAM },
     colunas: grade.colunas.map(({ chave, t, tipo }) => ({ chave, t, tipo })),
     linhas: grade.linhas.map((l) => ({
       carga: l.carga, primeira: l.primeira, nota: l.nota, categoria: l.categoria, cliente: l.cliente, cidade: l.cidade,
-      v: l.celulas.map((c) => c.v),
+      obsNota: l.obsNota, obsCarga: l.obsCarga, v: l.celulas.map((c) => c.v),
     })),
     resumo: grade.resumo,
   });

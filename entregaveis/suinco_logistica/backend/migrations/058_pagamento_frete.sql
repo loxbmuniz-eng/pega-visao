@@ -2,10 +2,12 @@
 -- 058 — Pagamento de Frete: a conferência entrega × nota e o controle do
 --       que ficou para pagar
 -- ---------------------------------------------------------------------
--- SEM ESTA MIGRAÇÃO: a aba "Pagamento de Frete" do painel responde "o
--- servidor ainda não tem esta função" e nenhuma importação é gravada, e a
--- tela de Usuários não consegue liberar o acesso à aba para ninguém. Nada
--- da operação (carga, pátio, devolução, vigias) muda ou para.
+-- SEM ESTA MIGRAÇÃO: a tela de Usuários oferece o setor "Pagamento de Frete",
+-- mas o banco RECUSA o cadastro com erro de CHECK (que na tela vira "Setor
+-- inválido" e não explica nada — o que aconteceu com as filiais em
+-- 02/09/2026); a aba Pagamento de Frete responde "o servidor ainda não tem
+-- esta função" e nenhuma importação é gravada. Nada da operação (carga,
+-- pátio, devolução, vigias) muda ou para.
 --
 -- Pedido da Logística (Daniela, via Alysson, 05/10/2026): o frete é pago
 -- POR CARGA, e só o que foi entregue de verdade. Hoje ela exporta dois
@@ -34,15 +36,35 @@
 -- checklist de controle ("valor agora não"). Também não guarda CNPJ/CPF
 -- de ninguém.
 --
--- O ACESSO É POR PESSOA, e não por setor ("só a Daniela, a Ana Paula, a
--- Karen e a Andressa"): a coluna operadores.acesso_frete é marcada pela
--- Administração na tela de Usuários. A Administração entra sempre.
+-- O ACESSO É POR SETOR, o mesmo mecanismo de todos: o setor novo "Pagamento
+-- de Frete" (e a Administração, sempre) entra na aba; a Administração coloca
+-- as pessoas nele na tela de Usuários que já existe. Primeira versão tinha
+-- uma marca por pessoa (operadores.acesso_frete) — o dono recusou: "os
+-- usuários permanecem na aba de usuários, e as permissões são definidas lá".
 --
--- Só ACRESCENTA: uma coluna com padrão FALSE e cinco tabelas novas. Nenhum
--- dado existente é lido, alterado ou apagado.
+-- Só ACRESCENTA: cinco tabelas novas e um setor a mais na CHECK de
+-- operadores (a lista antiga continua toda aceita). Nenhum dado existente
+-- é lido, alterado ou apagado.
 -- =====================================================================
 
-ALTER TABLE operadores ADD COLUMN IF NOT EXISTS acesso_frete BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE operadores DROP CONSTRAINT IF EXISTS operadores_setor_check;
+
+ALTER TABLE operadores ADD CONSTRAINT operadores_setor_check
+  CHECK (setor = ANY (ARRAY[
+    'Logística',
+    'Portaria',
+    'Expedição',
+    'Faturamento',
+    'Administração',
+    'Comercial',
+    'Controles Internos',
+    'Central de Notas',
+    'Qualidade',
+    'Pagamento de Frete',
+    'Filial 105 BSB',
+    'Filial 106 BAHIA',
+    'Filial 107 ES'
+  ]));
 
 CREATE TABLE IF NOT EXISTS pgfrete_cargas (
   numero_carga        TEXT PRIMARY KEY,

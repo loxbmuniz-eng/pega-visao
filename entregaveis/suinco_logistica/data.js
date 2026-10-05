@@ -663,7 +663,8 @@ const SETOR_PERMISSOES = {
      Fretes (valor negociado do frete) e a exportação CSV — decisão
      tomada de propósito, não efeito colateral não notado. */
   'Faturamento':  ['faturamento','devolucoes','historico','relatorios'],
-  'Administração':ABAS_OPERACIONAIS.concat(['usuarios']),
+  /* A Administração entra em tudo — inclusive na aba Pagamento de Frete (05/10/2026). */
+  'Administração':ABAS_OPERACIONAIS.concat(['frete','usuarios']),
   /* Comercial — só leitura, pedido do usuário (08/08/2026): "acesso a
      visualizacao de tudo que a logistica e administração ve mas sem
      alterar nada... relatorios, historico, busca de cargas no historico,
@@ -716,6 +717,13 @@ const SETOR_PERMISSOES = {
      esconde os três é renderRelatorios(); o servidor recusa o valor de
      qualquer jeito (podeVerValorDeFrete). */
   'Qualidade':    ['devolucoes','historico','relatorios'],
+  /* PAGAMENTO DE FRETE (05/10/2026). Decisão do dono: sem marca por pessoa e
+     sem tela nova — "os usuários permanecem na aba de usuários, e as
+     permissões são definidas lá". Então é um SETOR, escolhido no mesmo
+     seletor de todos, e a aba é a única dele (mais a Minha segurança, que é
+     de todo setor). Gêmea de SETOR_PAGAMENTO_FRETE em dominio/fluxo.js; o
+     servidor confere o setor em toda rota da aba (rotas/pagamento_frete.js). */
+  'Pagamento de Frete': ['frete'],
 };
 
 /* QUEM NÃO VÊ A ABA USUÁRIOS (30/09/2026).
@@ -750,7 +758,8 @@ const TAB_FUNCAO = {
      quatro setores estourava a página em celular de 320-390px. "Todos,
      exceto Portaria" diz a mesma coisa em menos caracteres. */
   relatorios:  { setor:'Todos, exceto Portaria', oque:'Gerar o PDF operacional (para o pátio) e o executivo (para a gestão).', move:'Não altera nada — exporta o que já existe.' },
-  usuarios:    { setor:'Administração', oque:'Criar, bloquear e redefinir senha dos operadores de todos os setores.',                            move:'Não altera cargas — define quem entra e o que cada um pode registrar.' }
+  usuarios:    { setor:'Administração', oque:'Criar, bloquear e redefinir senha dos operadores de todos os setores.',                            move:'Não altera cargas — define quem entra e o que cada um pode registrar.' },
+  frete:       { setor:'Pagamento de Frete', oque:'Conferir, carga a carga, o que o B2B diz que foi entregue contra o que o Atak emitiu, e controlar o pagamento do frete.', move:'Não altera cargas do pátio — é a planilha de controle, importada dos dois relatórios.' }
 };
 
 /* AS TRÊS FILIAIS VEEM UMA ABA SÓ (02/09/2026).

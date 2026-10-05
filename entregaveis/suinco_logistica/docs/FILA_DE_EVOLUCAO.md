@@ -48,6 +48,13 @@ Aprovados pelo dono em 01/10/2026 ("12345"): 4 e 7 feitos; 1 retirado do portão
 |---|---|---|
 | ✅ no ar (portão 36, `398f61f`, 02/10) | Números antes dos botões na Torre; "Fechar Programação" no fim da lista (2-b); faixa de números como régua; status como marca + nome; célula da Torre que parece texto e continua campo (linha 89 → 73 px); piso de 12 px nas 12 abas; Portaria com Chegou/Saiu grandes; sem gradiente de enfeite; 78 emojis de botão viraram ícones de traço | `test_piso_de_12px` (reprova no publicado anterior em 23 pontos) e as guardas de tema ajustadas à regra nova |
 
+## 3c. Pagamento de Frete e o relatório de fretes (05/10/2026)
+
+| ✅ | O quê | Trava |
+|---|---|---|
+| 🟡 commitado, não publicado | Aba **Pagamento de Frete**: importa os PDFs do B2B e do Atak, cruza nota a nota, monta a planilha (22 colunas, uma carga em várias linhas), tratativa por nota, pagamento por carga com pergunta, exporta o XLSX idêntico ao modelo aprovado; setor novo "Pagamento de Frete" (migração 058) | `pagamento_frete_leitura.test.js` (31), `api.test.js` bloco 49 (31), `test_pagamento_frete_aba.py` (29), 12px e contraste com a aba |
+| 🟡 commitado, não publicado | Administração de Fretes: separado por dia com cabeçalho, Data da Programação e do Faturamento, KM e Frete no PDF (ocorrência #109) | `test_fretes_ordem_por_dia_e_datas.py`, `test_fretes_km_no_relatorio.py` |
+
 ## 4. Guardado a pedido do dono
 
 - Transferência de titularidade para a Suinco (GitHub, Vercel, Registro.br,

@@ -138,6 +138,10 @@
   <div class="nav-tab" role="tab" tabindex="0" aria-selected="false" data-tab="cadastros" onclick="abrirTab('cadastros')"><svg class="ico" aria-hidden="true"><use href="#i-cadastros"/></svg> Cadastros</div>
   <div class="nav-tab" role="tab" tabindex="0" aria-selected="false" data-tab="historico" onclick="abrirTab('historico')"><svg class="ico" aria-hidden="true"><use href="#i-historico"/></svg> Histórico</div>
   <div class="nav-tab" role="tab" tabindex="0" aria-selected="false" data-tab="relatorios" onclick="abrirTab('relatorios')"><svg class="ico" aria-hidden="true"><use href="#i-relatorios"/></svg> Relatórios</div>
+  <!-- PAGAMENTO DE FRETE (05/10/2026): a planilha de controle da Logística dentro
+       do painel. Aba do setor "Pagamento de Frete" e da Administração
+       (SETOR_PERMISSOES em data.js); o servidor confere o setor em toda rota. -->
+  <div class="nav-tab" role="tab" tabindex="0" aria-selected="false" data-tab="frete" onclick="abrirTab('frete')"><svg class="ico" aria-hidden="true"><use href="#i-fretes"/></svg> Pagamento de Frete</div>
   <div class="nav-tab" role="tab" tabindex="0" aria-selected="false" data-tab="usuarios" onclick="abrirTab('usuarios')"><svg class="ico" aria-hidden="true"><use href="#i-usuarios"/></svg> Usuários</div>
 </div>
 
@@ -1701,6 +1705,51 @@
        porteiro exigia terminal, a operação dependia de alguém com acesso
        ao servidor toda vez que entrasse gente nova — e isso acaba virando
        senha compartilhada. -->
+  <!-- ===================== PAGAMENTO DE FRETE (05/10/2026) =====================
+       A planilha de controle de pagamento de frete, no formato da planilha
+       aprovada pelo dono: 22 colunas (A–P as da planilha da Logística, na ordem
+       dela; Q–V acréscimos), uma carga em várias linhas, o RESUMO embaixo.
+       Nada é calculado aqui: o servidor manda a grade pronta — a MESMA que vira
+       o arquivo Excel do botão "Exportar planilha" (app/76_pagamento_frete.js). -->
+  <div class="tab-page" id="tab-frete">
+    <div class="funcao-aba" data-tab="frete"></div>
+    <div class="card">
+      <div class="frete-topo">
+        <div>
+          <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-fretes"/></svg> Pagamento de Frete — controle por carga</div>
+          <div class="card-sub">Importe o relatório do <strong>B2B</strong> e o do <strong>Atak</strong> de cada carga; o painel cruza nota a nota e monta a planilha. <span id="frete-atualizado" class="text-dim"></span></div>
+        </div>
+        <div class="frete-acoes-topo no-print">
+          <button class="btn btn-primary" id="frete-btn-importar" onclick="freteAbrirImportacao()"
+                  title="Escolha os PDFs do B2B (Relatório de Status das Entregas) e do Atak (WRVDA501). Nada é gravado antes de você confirmar."><svg class="ico ico-btn" aria-hidden="true"><use href="#i-enviar"/></svg>Importar relatórios (PDF)</button>
+          <button class="btn btn-sec" id="frete-btn-exportar" onclick="freteExportar()"
+                  title="Baixa a planilha Excel com exatamente o que está nesta tela (CONTROLE_CARGAS, RESUMO e LEIA-ME)."><svg class="ico ico-btn" aria-hidden="true"><use href="#i-baixar"/></svg>Exportar planilha</button>
+          <button class="btn btn-sec" onclick="freteCarregar()" title="Relê do servidor"><svg class="ico ico-btn" aria-hidden="true"><use href="#i-atualizar"/></svg>Atualizar</button>
+        </div>
+      </div>
+      <div class="frete-aviso" id="frete-aviso" role="status" hidden></div>
+      <div class="bento bi-faixa" id="frete-stats"></div>
+      <div id="frete-filtros"></div>
+      <div class="frete-wrap">
+        <table class="frete-tab" id="frete-tabela" aria-label="Controle de pagamento de frete, no formato da planilha">
+          <thead><tr id="frete-thead"></tr></thead>
+          <tbody id="frete-tbody"></tbody>
+        </table>
+      </div>
+      <div class="empty-state" id="frete-empty" data-icone="📄" hidden></div>
+      <div class="frete-detalhes" id="frete-detalhes" hidden>
+        <div>
+          <div class="card-title">Pendências por tratativa</div>
+          <div class="table-wrap"><table class="frete-mini" id="frete-res-tratativas"></table></div>
+        </div>
+        <div>
+          <div class="card-title">Por transportadora</div>
+          <div class="table-wrap"><table class="frete-mini" id="frete-res-transportadoras"></table></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="tab-page" id="tab-usuarios">
     <div class="funcao-aba" data-tab="usuarios"></div>
 
@@ -2141,6 +2190,7 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
 <script src="app/60_indicadores.js"></script>
 <script src="app/70_cadastros.js"></script>
 <script src="app/75_historico.js"></script>
+<script src="app/76_pagamento_frete.js"></script>
 <script src="app/80_relatorios.js"></script>
 <script src="app/85_inicio.js"></script>
 <script src="app/86_relatorios_filtrados_e_fretes.js"></script>
