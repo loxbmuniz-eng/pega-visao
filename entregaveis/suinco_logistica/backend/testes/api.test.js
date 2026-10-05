@@ -6913,6 +6913,58 @@ describe('49. Pagamento de Frete — a planilha dentro do painel (05/10/2026)', 
       assert.equal(rows[0].detalhe.cte.para, '18502');
       assert.equal(rows[0].por_nome, 'Admin Um');
     });
+
+    test('canhoto original: a caixinha marca, carimba o dia e quem; desmarcar apaga; não mexe no pagamento', async () => {
+      const a = tokens['Administração'];
+      const antes = await grade();
+      const p0 = linhasDa(antes, 900802)[0];
+      assert.equal(valor(antes, p0, 'canhoto'), 'NÃO', 'nasce NÃO');
+      assert.equal(valor(antes, p0, 'canhotoEm'), null);
+      const liberadoAntes = valor(antes, p0, 'liberado');
+      const pagoAntes = valor(antes, p0, 'pago');
+      const aPagarAntes = valor(antes, p0, 'aPagar');
+
+      const r = await req(`${FRETE}/cargas/900802`, { metodo: 'PATCH', token: a, corpo: { canhotoOriginal: true } });
+      assert.equal(r.status, 200, r.texto);
+      const g = await grade();
+      const p = linhasDa(g, 900802)[0];
+      assert.equal(valor(g, p, 'canhoto'), 'SIM');
+      assert.equal(valor(g, p, 'canhotoEm'), g.hoje, 'o dia é o de hoje, no fuso da operação');
+      assert.equal(valor(g, linhasDa(g, 900802)[1], 'canhoto'), null, 'só a linha da carga tem a caixinha');
+      assert.equal(valor(g, p, 'liberado'), liberadoAntes, 'o canhoto não libera nada');
+      assert.equal(valor(g, p, 'pago'), pagoAntes, 'nem paga');
+      assert.equal(valor(g, p, 'aPagar'), aPagarAntes, 'nem muda o a pagar');
+      assert.equal(g.resumo.comCanhoto, 1);
+      assert.equal(g.resumo.comCanhoto + g.resumo.semCanhoto, g.resumo.cargas);
+      const { rows: c } = await pool.query("SELECT canhoto_original, canhoto_em, canhoto_por FROM pgfrete_cargas WHERE numero_carga = '900802'");
+      assert.equal(c[0].canhoto_original, true);
+      assert.ok(c[0].canhoto_em, 'carimbo do momento');
+      assert.equal(c[0].canhoto_por, 'Admin Um');
+
+      // marcar de novo não duplica nem muda o carimbo original? (muda: é um novo "veio" — mas o estado é o mesmo)
+      const r2 = await req(`${FRETE}/cargas/900802`, { metodo: 'PATCH', token: a, corpo: { canhotoOriginal: false } });
+      assert.equal(r2.status, 200, r2.texto);
+      const g2 = await grade();
+      assert.equal(valor(g2, linhasDa(g2, 900802)[0], 'canhoto'), 'NÃO');
+      assert.equal(valor(g2, linhasDa(g2, 900802)[0], 'canhotoEm'), null, 'desmarcar apaga o carimbo');
+      const { rows: c2 } = await pool.query("SELECT canhoto_original, canhoto_em, canhoto_por FROM pgfrete_cargas WHERE numero_carga = '900802'");
+      assert.equal(c2[0].canhoto_original, false);
+      assert.equal(c2[0].canhoto_em, null);
+      assert.equal(c2[0].canhoto_por, '');
+
+      assert.equal((await req(`${FRETE}/cargas/900802`, { metodo: 'PATCH', token: a, corpo: { canhotoOriginal: 'sim' } })).json.codigo, 'CANHOTO_INVALIDO');
+      assert.equal((await req(`${FRETE}/cargas/777777`, { metodo: 'PATCH', token: a, corpo: { canhotoOriginal: true } })).status, 404);
+      const { rows: ev } = await pool.query("SELECT detalhe, por_nome FROM pgfrete_eventos WHERE numero_carga = '900802' AND acao = 'canhoto' ORDER BY id");
+      assert.equal(ev.length, 2, 'marcou e desmarcou: dois eventos');
+      assert.deepEqual(ev[0].detalhe, { de: false, para: true });
+      assert.deepEqual(ev[1].detalhe, { de: true, para: false });
+      // quem é do setor também marca
+      const r3 = await req(`${FRETE}/cargas/900802`, { metodo: 'PATCH', token: tk.daniela, corpo: { canhotoOriginal: true } });
+      assert.equal(r3.status, 200, r3.texto);
+      const { rows: c3 } = await pool.query("SELECT canhoto_por FROM pgfrete_cargas WHERE numero_carga = '900802'");
+      assert.equal(c3[0].canhoto_por, 'Daniela Teste');
+      await req(`${FRETE}/cargas/900802`, { metodo: 'PATCH', token: a, corpo: { canhotoOriginal: false } });
+    });
   });
 
   describe('reimportar: a pendência que finaliza sai da fila e a tratativa fica guardada', () => {

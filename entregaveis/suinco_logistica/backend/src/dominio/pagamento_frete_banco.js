@@ -32,10 +32,22 @@ export async function lerCargas(cx, { numero = null, desde = null } = {}) {
   if (desde) { par.push(desde); filtro.push(`data_consulta >= $${par.length}`); }
   const onde = filtro.length ? `WHERE ${filtro.join(' AND ')}` : '';
 
-  const { rows: cargas } = await cx.query(
-    `SELECT numero_carga, ${DATA('data_consulta', 'data_consulta')}, qtd_sist, qtd_b2b, finalizadas, aguardando,
-            nao_entregue, outros, transportadora, cte, obs
-       FROM pgfrete_cargas ${onde} ORDER BY data_consulta, numero_carga`, par);
+  /* O canhoto original (migração 059) é lido junto; num servidor que já tem a
+     058 e ainda não a 059, a leitura cai para a lista sem ele — a aba não pode
+     parar por uma coluna de acompanhamento. */
+  let cargas;
+  try {
+    ({ rows: cargas } = await cx.query(
+      `SELECT numero_carga, ${DATA('data_consulta', 'data_consulta')}, qtd_sist, qtd_b2b, finalizadas, aguardando,
+              nao_entregue, outros, transportadora, cte, obs, canhoto_original, canhoto_em, canhoto_por
+         FROM pgfrete_cargas ${onde} ORDER BY data_consulta, numero_carga`, par));
+  } catch (e) {
+    if (e.code !== '42703') throw e;
+    ({ rows: cargas } = await cx.query(
+      `SELECT numero_carga, ${DATA('data_consulta', 'data_consulta')}, qtd_sist, qtd_b2b, finalizadas, aguardando,
+              nao_entregue, outros, transportadora, cte, obs, FALSE AS canhoto_original, NULL AS canhoto_em, '' AS canhoto_por
+         FROM pgfrete_cargas ${onde} ORDER BY data_consulta, numero_carga`, par));
+  }
   if (!cargas.length) return [];
   const numeros = cargas.map((c) => c.numero_carga);
 
@@ -64,6 +76,8 @@ export async function lerCargas(cx, { numero = null, desde = null } = {}) {
       numero: c.numero_carga, dataConsulta: c.data_consulta, qtdSist: c.qtd_sist, qtdB2b: c.qtd_b2b,
       finalizadas: c.finalizadas, aguardando: c.aguardando, naoEntregue: c.nao_entregue, outros: c.outros,
       transportadora: c.transportadora, cte: c.cte, obs: c.obs,
+      canhotoOriginal: c.canhoto_original === true, canhotoEm: c.canhoto_em ? new Date(c.canhoto_em).toISOString() : null,
+      canhotoPor: c.canhoto_por || '',
       pctPago: pg ? Math.min(100, Number(pg.pct)) : 0, dataPagamento: pg?.ultima ?? null,
       pendencias: pendDe.get(c.numero_carga) ?? [],
     };

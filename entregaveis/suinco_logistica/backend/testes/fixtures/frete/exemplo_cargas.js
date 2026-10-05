@@ -5,7 +5,8 @@ const p = (nota, categoria, extra = {}) => ({ nota: String(nota), categoria, sta
 
 export const CARGAS_DE_EXEMPLO = [
   { numero: 900801, dataConsulta: '2026-09-28', qtdSist: 6, qtdB2b: 6, finalizadas: 6, aguardando: 0, naoEntregue: 0, outros: 0,
-    transportadora: 'Transp. Exemplo A', cte: '18501', pctPago: 100, dataPagamento: '2026-10-02', pendencias: [] },
+    transportadora: 'Transp. Exemplo A', cte: '18501', pctPago: 100, dataPagamento: '2026-10-02', pendencias: [],
+    canhotoOriginal: true, canhotoEm: '2026-10-02T14:10:00.000Z', canhotoPor: 'Exemplo' },
   { numero: 900802, dataConsulta: '2026-09-28', qtdSist: 8, qtdB2b: 8, finalizadas: 4, aguardando: 1, naoEntregue: 1, outros: 2,
     transportadora: 'Transp. Exemplo A', cte: '18502', pctPago: 50, dataPagamento: '2026-10-02',
     pendencias: [

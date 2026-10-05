@@ -19,6 +19,7 @@ planilha — no mesmo formato da dela, aprovado pelo dono.
 | O que se paga | Direto, só a nota **Finalizada** no B2B. As outras precisam de consulta no sistema: só a tratativa **OK** / **OK B2B** libera. DEV, DEV NO SISTEMA, SEM TRATATIVA e SUMIU DO B2B não liberam. |
 | Carga VERIFICAR | Contagem não bate, nota de um lado só, ou nada finalizado: **nada é liberado** ("conferir") até alguém olhar o B2B. Registrar pagamento assim PERGUNTA e exige confirmação. |
 | Data do pagamento | Manual, pode ficar em branco. |
+| Canhoto original | Uma **caixinha por carga** (SIM/NÃO) para dizer se o canhoto em papel chegou. **Só acompanhamento**: não entra no % liberado, no % pago nem em "A pagar agora" — o fechamento continua pelo digital. Marcar carimba o dia e quem marcou; desmarcar apaga. Colunas W–X da planilha, migração 059. |
 
 ## Como funciona
 
@@ -51,6 +52,7 @@ backend/src/rotas/pagamento_frete.js          as rotas (setor Pagamento de Frete
 backend/src/servicos/pdf_texto.js             texto do PDF com posição (6 MB, 300 páginas, 20 s)
 backend/src/servicos/planilha_xlsx.js / planilha_xlsx_escrita.js   ler / escrever .xlsx (fflate; sem `xlsx` do npm)
 backend/migrations/058_pagamento_frete.sql    o setor na CHECK + 5 tabelas pgfrete_*
+backend/migrations/059_canhoto_original.sql   a caixinha do canhoto (3 colunas em pgfrete_cargas)
 app/76_pagamento_frete.js · tema2027/75_pagamento_frete.css   a aba
 vitrine/frete_demonstracao.json               a demonstração (saída de montarGrade com as cargas 9008xx)
 ```

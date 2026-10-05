@@ -92,7 +92,8 @@ function abaControle(grade) {
   const estiloDe = (chave, primeira) => {
     switch (chave) {
       case 'data': return primeira ? ESTILO.data : ESTILO.dataMuda;
-      case 'dataPagamento': case 'dataTratativa': return ESTILO.data;
+      case 'dataPagamento': case 'dataTratativa': case 'canhotoEm': return ESTILO.data;
+      case 'canhoto': return primeira ? centroNeg : ESTILO.vazio;
       case 'carga': return primeira ? ESTILO.carga : ESTILO.cargaMuda;
       case 'situacao': return primeira ? centroNeg : centroNegMudo;
       case 'statusPagamento': return centroNeg;
@@ -133,13 +134,18 @@ function abaControle(grade) {
         erroTitulo: 'Fora da lista', erro: `Use uma destas: ${lista}. Para outro assunto, escreva na coluna Observação.`,
       },
       {
-        intervalo: `N2:N${ate} U2:U${ate}`, tipo: 'date', operador: 'greaterThan', de: 36526, estilo: 'stop',
+        intervalo: `N2:N${ate} U2:U${ate} X2:X${ate}`, tipo: 'date', operador: 'greaterThan', de: 36526, estilo: 'stop',
         erroTitulo: 'Data inválida', erro: 'Digite uma data, como 09/10/2026.',
       },
       {
         intervalo: `S2:S${ate}`, tipo: 'decimal', operador: 'between', de: 0, ate: 1, estilo: 'stop',
         dicaTitulo: '% pago', dica: 'Quanto da carga já foi pago, pela quantidade de notas. Ex.: 62,5%.',
         erroTitulo: '% pago inválido', erro: 'Digite de 0% a 100% (por exemplo 62,5%).',
+      },
+      {
+        intervalo: `W2:W${ate}`, tipo: 'list', lista: ['SIM', 'NÃO'], estilo: 'stop',
+        dicaTitulo: 'Canhoto original', dica: 'SIM quando o canhoto em papel chegou. É só acompanhamento: não mexe no pagamento.',
+        erroTitulo: 'Fora da lista', erro: 'Use SIM ou NÃO.',
       },
     ],
     condicionais: [
@@ -183,7 +189,14 @@ function abaControle(grade) {
       { intervalo: `Q2:Q${ate}`, regras: [{ barra: { cor: '7FC99A', min: 0, max: 1 } }] },
       { intervalo: `S2:S${ate}`, regras: [{ barra: { cor: '8EA4D8', min: 0, max: 1 } }] },
       {
-        intervalo: `A2:V${ate}`,
+        intervalo: `W2:W${ate}`,
+        regras: [
+          { formula: 'AND($C2<>"",$W2="SIM")', estilo: { fundo: C.verdeFundo, fonte: { cor: C.verdeTexto, neg: true } } },
+          { formula: 'AND($C2<>"",$W2="NÃO")', estilo: { fundo: 'FFF4D6', fonte: { cor: C.muda, neg: true } } },
+        ],
+      },
+      {
+        intervalo: `A2:X${ate}`,
         regras: [
           { formula: '$B2<>$B1', estilo: { borda: { topo: { estilo: 'thin', cor: C.navy } } } },
           { formula: '$C2<>""', estilo: { fundo: C.faixa } },
@@ -206,7 +219,7 @@ const TONS = {
 function abaResumo(r, { geradoEm, exemplo }) {
   const {
     cargas: total, liberadas, pendentes, verificar, integral, parcial, semPagamento, comSaldo,
-    emitidas, finalizadas, entregue, pendAbertas,
+    emitidas, finalizadas, entregue, pendAbertas, comCanhoto, semCanhoto, pagasSemCanhoto,
   } = r;
 
   const linhas = [];
@@ -287,15 +300,30 @@ function abaResumo(r, { geradoEm, exemplo }) {
     },
   ]);
   linha(18, 14);
+  /* Canhoto original: acompanhamento do papel, fora do pagamento. */
+  secao(19, 'CANHOTO ORIGINAL (só acompanhamento — não entra no pagamento)');
+  cartoes(20, [
+    { rotulo: 'Canhoto veio', f: `COUNTIFS(${rng('W')},"SIM",${rng('C')},">=0")`, v: comCanhoto, legenda: 'papel já chegou', tom: 'verde' },
+    { rotulo: 'Canhoto não veio', f: `COUNTIFS(${rng('W')},"NÃO",${rng('C')},">=0")`, v: semCanhoto, legenda: 'ainda sem o papel', tom: 'amarelo' },
+    {
+      rotulo: '% com canhoto', f: `IFERROR(COUNTIFS(${rng('W')},"SIM",${rng('C')},">=0")/COUNT(${rng('C')}),"")`,
+      v: total ? comCanhoto / total : '', legenda: 'veio ÷ cargas', tom: 'neutro', fmt: '0.0%',
+    },
+    {
+      rotulo: 'Pagas sem canhoto', f: `COUNTIFS(${rng('M')},"INTEGRAL",${rng('W')},"NÃO",${rng('C')},">=0")`,
+      v: pagasSemCanhoto, legenda: '100% pago e o papel não chegou', tom: 'vermelho',
+    },
+  ]);
+  linha(23, 14);
 
   /* Pendências por tratativa */
-  secao(19, 'PENDÊNCIAS POR TRATATIVA');
+  secao(24, 'PENDÊNCIAS POR TRATATIVA');
   const eCab = { fonte: { nome: FONTE, tam: 10, neg: true, cor: C.branco }, fundo: C.navy, alin: { h: 'center', v: 'center', quebrar: true } };
   const eCabEsq = { ...eCab, alin: { h: 'left', v: 'center', recuo: 1 } };
-  const ch = linha(20, 24);
+  const ch = linha(25, 24);
   ch[0] = { v: 'Tratativa', e: eCabEsq }; ch[1] = { e: eCabEsq }; ch[2] = { v: 'Pendências', e: eCab }; ch[3] = { v: '% do total', e: eCab };
   ch[4] = { v: 'O que significa', e: eCabEsq }; for (let j = 5; j < 8; j += 1) ch[j] = { e: eCabEsq };
-  mesclar.push('A21:B21', 'E21:H21');
+  mesclar.push('A26:B26', 'E26:H26');
   const SENTIDO = {
     '': 'Ninguém consultou ainda — é o que falta olhar.',
     'SEM TRATATIVA': 'Olhei e não há o que fazer por enquanto.',
@@ -309,7 +337,7 @@ function abaResumo(r, { geradoEm, exemplo }) {
   const eCorpo = { fonte: { nome: FONTE, tam: 11, cor: C.tinta }, alin: { h: 'center', v: 'center' }, borda: { base: { estilo: 'thin', cor: C.linha } } };
   const eEsq = { ...eCorpo, alin: { h: 'left', v: 'center', recuo: 1 } };
   const ePct = { ...eCorpo, fmt: '0.0%' };
-  const primeiraT = 21; // índice da primeira linha de tratativa
+  const primeiraT = 26; // índice da primeira linha de tratativa (logo abaixo do cabeçalho da linha 25)
   const totalT = primeiraT + SENTIDOS.length;
   SENTIDOS.forEach(({ nome, chave, qtd, pct, libera }, k) => {
     const i = primeiraT + k;
@@ -425,7 +453,7 @@ function abaLeiaMe({ exemplo }) {
   secao('A COR DO TÍTULO DE CADA COLUNA');
   item('Azul-marinho', 'Vem dos relatórios (B2B e Atak). Não digite.', chip(C.navy, C.branco));
   item('Azul-aço', 'Calculado por fórmula. Não digite — se o número parecer errado, o erro está em outra coluna.', chip(C.aco, C.branco));
-  item('Dourado', 'Preenchimento manual: é aqui que se trabalha (tratativa, data do pagamento, % pago, observação).', chip(C.ouro, C.navy));
+  item('Dourado', 'Preenchimento manual: é aqui que se trabalha (tratativa, data do pagamento, % pago, observação, canhoto original).', chip(C.ouro, C.navy));
   espaco();
   secao('SITUAÇÃO DA CARGA');
   item('LIBERADA', 'Tudo que o sistema emitiu está Finalizado no B2B.', chip(C.verdeFundo, C.verdeTexto));
@@ -445,6 +473,10 @@ function abaLeiaMe({ exemplo }) {
   item('% Pago', 'Quanto da carga já foi pago (digite como 62,5%). Vazio = nada pago.');
   item('A pagar agora', '% Liberado − % Pago. Fica dourado quando há saldo: é a lista do que ficou para trás. Em carga VERIFICAR aparece "conferir".');
   item('Status p/ pagamento', 'Vazio (nada pago) · PARCIAL (parte paga) · INTEGRAL (100%). É fórmula, sai do % Pago.');
+  espaco();
+  secao('CANHOTO ORIGINAL — SÓ ACOMPANHAMENTO');
+  item('Canhoto original', 'SIM quando o canhoto em papel chegou; NÃO enquanto não chegou. A coluna ao lado guarda o dia em que alguém marcou. Não entra no % liberado, no % pago nem em "A pagar agora": o fechamento continua pelo digital (B2B e tratativas).', chip(C.verdeFundo, C.verdeTexto));
+  item('Pagas sem canhoto', 'No RESUMO: cargas com 100% pago cujo papel ainda não chegou — a lista de quem cobrar o canhoto.');
   espaco();
   secao('DICAS');
   item('Achar o que está para pagar', 'Na coluna "A pagar agora", filtre os valores maiores que zero. Para ver só as pendências que ninguém olhou, filtre "Status Pendência" por (Vazias).');

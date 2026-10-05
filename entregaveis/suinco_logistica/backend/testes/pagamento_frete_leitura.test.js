@@ -209,7 +209,7 @@ describe('a tela e o arquivo são a MESMA planilha', () => {
       'Outros Status', 'Situação', 'Resumo Pendências', 'Status Pendência', 'Status p/ pagamento', 'Data Pagamento',
       'Transportadora', 'CT-E',
     ]);
-    assert.equal(COLUNAS.length, 22);
+    assert.equal(COLUNAS.length, 24);
   });
 
   test('exportar e ler de volta: CADA célula do arquivo é a célula da grade da tela', () => {
@@ -247,6 +247,10 @@ describe('a tela e o arquivo são a MESMA planilha', () => {
     assert.equal(achar('FINALIZADAS NO B2B'), resumo.finalizadas);
     assert.ok(Math.abs(achar('ENTREGUES') - resumo.entregue) < 1e-9);
     assert.equal(achar('PENDÊNCIAS ABERTAS'), resumo.pendAbertas);
+    assert.equal(achar('CANHOTO VEIO'), resumo.comCanhoto);
+    assert.equal(achar('CANHOTO NÃO VEIO'), resumo.semCanhoto);
+    assert.equal(achar('PAGAS SEM CANHOTO'), resumo.pagasSemCanhoto);
+    assert.equal(resumo.comCanhoto + resumo.semCanhoto, resumo.cargas, 'toda carga ou veio ou não veio');
     assert.equal(resumo.cargas, CARGAS_DE_EXEMPLO.length, 'cada carga conta UMA vez, mesmo com várias linhas');
     assert.equal(resumo.tratativas.reduce((s, t) => s + t.qtd, 0), resumo.pendAbertas, 'a tabela de tratativas fecha com as pendências abertas');
   });
@@ -276,7 +280,8 @@ describe('a tela e o arquivo são a MESMA planilha', () => {
     const s1 = strFromU8(z['xl/worksheets/sheet1.xml']);
     assert.match(s1, /<pane xSplit="2" ySplit="1" topLeftCell="C2" activePane="bottomRight" state="frozen"\/>/);
     const linhas = montarGrade(CARGAS_DE_EXEMPLO).linhas.length + 1;
-    assert.match(s1, new RegExp(`<autoFilter ref="A1:V${linhas}"/>`), 'o filtro cobre até a coluna V (a planilha dela deixava o CT-E de fora)');
+    const ultimaColuna = String.fromCharCode(64 + COLUNAS.length); // X com o canhoto (W–X); era V
+    assert.match(s1, new RegExp(`<autoFilter ref="A1:${ultimaColuna}${linhas}"/>`), `o filtro cobre até a última coluna, ${ultimaColuna} (a planilha dela deixava o CT-E de fora)`);
     assert.match(strFromU8(z['xl/workbook.xml']), /fullCalcOnLoad="1"/);
     assert.match(s1, /<dataValidation type="list"/, 'lista de escolha no Status Pendência');
     assert.ok(!/ mm-dd-yy|numFmtId="14"/.test(strFromU8(z['xl/styles.xml'])), 'data em formato americano não');

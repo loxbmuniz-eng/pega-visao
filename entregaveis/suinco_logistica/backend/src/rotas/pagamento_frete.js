@@ -249,20 +249,44 @@ rotasPagamentoFrete.patch(`${BASE}/cargas/:numero`, ACESSO, rota(async (req, res
   if (req.body?.transportadora !== undefined) campos.transportadora = texto(req.body.transportadora, 80);
   if (req.body?.cte !== undefined) campos.cte = texto(req.body.cte, 40);
   if (req.body?.obs !== undefined) campos.obs = texto(req.body.obs, 500);
-  if (!Object.keys(campos).length) return recusa(res, 400, 'SEM_CAMPOS', 'Nada a alterar.');
+  /* Canhoto original: a caixinha "o papel veio?" (migração 059). Só acompanhamento —
+     não mexe em liberado, pago nem a pagar. Marcar carimba o momento e quem marcou;
+     desmarcar apaga o carimbo. */
+  const canhoto = req.body?.canhotoOriginal;
+  if (canhoto !== undefined && typeof canhoto !== 'boolean') {
+    return recusa(res, 400, 'CANHOTO_INVALIDO', 'Canhoto original: use true (veio) ou false (não veio).');
+  }
+  if (!Object.keys(campos).length && canhoto === undefined) return recusa(res, 400, 'SEM_CAMPOS', 'Nada a alterar.');
 
   const cols = Object.keys(campos);
   const r = await emTransacao(async (cx) => {
-    const { rows } = await cx.query('SELECT transportadora, cte, obs FROM pgfrete_cargas WHERE numero_carga = $1 FOR UPDATE', [numero]);
+    /* A coluna do canhoto só entra na consulta quando a pedido é dela: num servidor
+       com a 058 e sem a 059, transportadora/CT-e/obs continuam editáveis. */
+    const { rows } = await cx.query(
+      `SELECT transportadora, cte, obs${canhoto === undefined ? '' : ', canhoto_original'} FROM pgfrete_cargas WHERE numero_carga = $1 FOR UPDATE`, [numero]);
     if (!rows[0]) return null;
-    await cx.query(
-      `UPDATE pgfrete_cargas SET ${cols.map((c, i) => `${c} = $${i + 2}`).join(', ')}, atualizado_em = now(), atualizado_por = $${cols.length + 2}
-        WHERE numero_carga = $1`,
-      [numero, ...Object.values(campos), req.operador.nome]);
-    await registrarEvento(cx, {
-      numero, acao: 'editou_carga', operador: req.operador,
-      detalhe: Object.fromEntries(cols.map((c) => [c, { de: rows[0][c], para: campos[c] }])),
-    });
+    if (cols.length) {
+      await cx.query(
+        `UPDATE pgfrete_cargas SET ${cols.map((c, i) => `${c} = $${i + 2}`).join(', ')}, atualizado_em = now(), atualizado_por = $${cols.length + 2}
+          WHERE numero_carga = $1`,
+        [numero, ...Object.values(campos), req.operador.nome]);
+      await registrarEvento(cx, {
+        numero, acao: 'editou_carga', operador: req.operador,
+        detalhe: Object.fromEntries(cols.map((c) => [c, { de: rows[0][c], para: campos[c] }])),
+      });
+    }
+    if (canhoto !== undefined) {
+      await cx.query(
+        `UPDATE pgfrete_cargas
+            SET canhoto_original = $2, canhoto_em = CASE WHEN $2 THEN now() ELSE NULL END, canhoto_por = CASE WHEN $2 THEN $3 ELSE '' END,
+                atualizado_em = now(), atualizado_por = $3
+          WHERE numero_carga = $1`,
+        [numero, canhoto, req.operador.nome]);
+      await registrarEvento(cx, {
+        numero, acao: 'canhoto', operador: req.operador,
+        detalhe: { de: rows[0].canhoto_original === true, para: canhoto },
+      });
+    }
     return true;
   });
   if (!r) return recusa(res, 404, 'CARGA_NAO_ENCONTRADA', 'Esta carga não está no controle.');
