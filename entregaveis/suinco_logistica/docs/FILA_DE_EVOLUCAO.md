@@ -52,8 +52,8 @@ Aprovados pelo dono em 01/10/2026 ("12345"): 4 e 7 feitos; 1 retirado do portão
 
 | ✅ | O quê | Trava |
 |---|---|---|
-| 🟡 commitado, não publicado | Aba **Pagamento de Frete**: importa os PDFs do B2B e do Atak, cruza nota a nota, monta a planilha (22 colunas, uma carga em várias linhas), tratativa por nota, pagamento por carga com pergunta, exporta o XLSX idêntico ao modelo aprovado; setor novo "Pagamento de Frete" (migração 058) | `pagamento_frete_leitura.test.js` (31), `api.test.js` bloco 49 (31), `test_pagamento_frete_aba.py` (29), 12px e contraste com a aba |
-| 🟡 commitado, não publicado | Administração de Fretes: separado por dia com cabeçalho, Data da Programação e do Faturamento, KM e Frete no PDF (ocorrência #109) | `test_fretes_ordem_por_dia_e_datas.py`, `test_fretes_km_no_relatorio.py` |
+| ✅ no ar (portão 40, `3e4b157`, 05/10) — vale no servidor depois do atualizar_tudo.sh (migração 058) | Aba **Pagamento de Frete**: importa os PDFs do B2B e do Atak, cruza nota a nota, monta a planilha (22 colunas, uma carga em várias linhas), tratativa por nota, pagamento por carga com pergunta, exporta o XLSX idêntico ao modelo aprovado; setor novo "Pagamento de Frete" (migração 058) | `pagamento_frete_leitura.test.js` (31), `api.test.js` bloco 49 (31), `test_pagamento_frete_aba.py` (29), 12px e contraste com a aba |
+| ✅ no ar (portão 40, `3e4b157`, 05/10) | Administração de Fretes: separado por dia com cabeçalho, Data da Programação e do Faturamento, KM e Frete no PDF (ocorrência #109) | `test_fretes_ordem_por_dia_e_datas.py`, `test_fretes_km_no_relatorio.py` |
 
 ## 4. Guardado a pedido do dono
 
