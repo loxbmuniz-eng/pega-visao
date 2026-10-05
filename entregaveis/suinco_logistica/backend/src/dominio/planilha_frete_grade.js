@@ -49,6 +49,11 @@ export const COLUNAS = [
   { chave: 'aPagar', t: 'A pagar agora', tipo: 'calc', larg: 13 },
   { chave: 'dataTratativa', t: 'Data Tratativa', tipo: 'manual', larg: 14 },
   { chave: 'observacao', t: 'Observação', tipo: 'manual', larg: 38 },
+  /* Canhoto original: SÓ acompanhamento (pedido do dono, 05/10/2026). Não
+     entra em % liberado, % pago nem em "A pagar agora" — é a caixinha de
+     "o papel chegou?", e a data é a de quando alguém marcou. */
+  { chave: 'canhoto', t: 'Canhoto original', tipo: 'manual', larg: 12 },
+  { chave: 'canhotoEm', t: 'Canhoto marcado em', tipo: 'calc', larg: 13 },
 ];
 export const IX = Object.fromEntries(COLUNAS.map((c, i) => [c.chave, i]));
 export const COLUNAS_DA_PLANILHA = COLUNAS.map((c) => c.t);
@@ -68,6 +73,13 @@ export const FORMULAS = {
 };
 
 const num = (v) => Number(v) || 0;
+/* Dia (AAAA-MM-DD) de um instante, no fuso da operação — o carimbo é UTC no banco. */
+const DIA_LOCAL = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' });
+export const diaLocal = (iso) => {
+  if (!iso) return null;
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? null : DIA_LOCAL.format(d);
+};
 
 /* cargas: [{ numero, dataConsulta:'AAAA-MM-DD', qtdSist, qtdB2b, finalizadas, aguardando,
               naoEntregue, outros, transportadora, cte, obs, pctPago (0–100), dataPagamento,
@@ -112,6 +124,8 @@ export function montarGrade(cargas) {
         c[IX.liberado] = { v: ind.conferir ? 'conferir' : (ind.liberado ?? ''), f: FORMULAS.liberado(x), t: 'n' };
         c[IX.pago] = { v: ind.pago > 0 ? ind.pago : null, t: 'n' };
         c[IX.aPagar] = { v: ind.conferir ? 'conferir' : (ind.aPagar ?? ''), f: FORMULAS.aPagar(x), t: 'n' };
+        c[IX.canhoto] = { v: carga.canhotoOriginal === true ? 'SIM' : 'NÃO' };
+        c[IX.canhotoEm] = { v: carga.canhotoOriginal === true ? diaLocal(carga.canhotoEm) : null, t: 'd' };
       } else {
         c[IX.situacao] = { v: ind.situacao, f: FORMULAS.situacaoRepetida(primeiraLinha) };
       }
@@ -161,6 +175,9 @@ export function resumoDaGrade(cargas) {
     cargas: total, liberadas: por('LIBERADA'), pendentes: por('PENDENTE'), verificar: por('VERIFICAR'),
     integral, parcial, semPagamento: total - integral - parcial,
     comSaldo: ind.filter((x) => (x.i.aPagar ?? 0) > 0).length,
+    comCanhoto: ind.filter((x) => x.c.canhotoOriginal === true).length,
+    semCanhoto: ind.filter((x) => x.c.canhotoOriginal !== true).length,
+    pagasSemCanhoto: ind.filter((x) => x.i.statusPagamento === 'INTEGRAL' && x.c.canhotoOriginal !== true).length,
     emitidas, finalizadas: ind.reduce((s, x) => s + num(x.c.finalizadas), 0),
     entregue: emitidas ? entregues / emitidas : null,
     pendAbertas: todasPend.length,

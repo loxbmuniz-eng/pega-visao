@@ -126,6 +126,16 @@
    "chave": "observacao",
    "t": "Observação",
    "tipo": "manual"
+  },
+  {
+   "chave": "canhoto",
+   "t": "Canhoto original",
+   "tipo": "manual"
+  },
+  {
+   "chave": "canhotoEm",
+   "t": "Canhoto marcado em",
+   "tipo": "calc"
   }
  ],
  "linhas": [
@@ -160,7 +170,9 @@
     1,
     0,
     null,
-    null
+    null,
+    "SIM",
+    "2026-10-02"
    ]
   },
   {
@@ -194,6 +206,8 @@
     0.5,
     0.125,
     "2026-09-30",
+    null,
+    "NÃO",
     null
    ]
   },
@@ -228,7 +242,9 @@
     null,
     null,
     "2026-09-30",
-    "Cliente recusou"
+    "Cliente recusou",
+    null,
+    null
    ]
   },
   {
@@ -256,6 +272,8 @@
     null,
     null,
     "Transp. Exemplo A",
+    null,
+    null,
     null,
     null,
     null,
@@ -296,6 +314,8 @@
     null,
     null,
     null,
+    null,
+    null,
     null
    ]
   },
@@ -330,6 +350,8 @@
     null,
     "conferir",
     null,
+    null,
+    "NÃO",
     null
    ]
   },
@@ -364,7 +386,9 @@
     null,
     null,
     null,
-    "Não tem no B2B (mandar foto)"
+    "Não tem no B2B (mandar foto)",
+    null,
+    null
    ]
   },
   {
@@ -398,7 +422,9 @@
     null,
     null,
     null,
-    "Nota só aparece no B2B"
+    "Nota só aparece no B2B",
+    null,
+    null
    ]
   },
   {
@@ -432,6 +458,8 @@
     0.9,
     0.05,
     "2026-10-01",
+    null,
+    "NÃO",
     null
    ]
   },
@@ -466,6 +494,8 @@
     null,
     null,
     "2026-10-01",
+    null,
+    null,
     null
    ]
   },
@@ -494,6 +524,8 @@
     null,
     null,
     "Transp. Exemplo B",
+    null,
+    null,
     null,
     null,
     null,
@@ -534,6 +566,8 @@
     null,
     null,
     "2026-10-01",
+    null,
+    null,
     null
    ]
   },
@@ -568,7 +602,9 @@
     null,
     "conferir",
     null,
-    "Canhotos ainda não chegaram"
+    "Canhotos ainda não chegaram",
+    "NÃO",
+    null
    ]
   },
   {
@@ -596,6 +632,8 @@
     null,
     null,
     "Transp. Exemplo C",
+    null,
+    null,
     null,
     null,
     null,
@@ -636,6 +674,8 @@
     null,
     null,
     null,
+    null,
+    null,
     null
    ]
   },
@@ -670,6 +710,8 @@
     null,
     1,
     null,
+    null,
+    "NÃO",
     null
    ]
   },
@@ -704,6 +746,8 @@
     null,
     0.5,
     null,
+    null,
+    "NÃO",
     null
    ]
   },
@@ -738,7 +782,9 @@
     null,
     "conferir",
     "2026-10-02",
-    "Perguntei à Portaria"
+    "Perguntei à Portaria",
+    "NÃO",
+    null
    ]
   },
   {
@@ -772,6 +818,8 @@
     null,
     0.9,
     null,
+    null,
+    "NÃO",
     null
    ]
   },
@@ -796,6 +844,8 @@
     null,
     "PENDENTE",
     "811004 (Aguardando)",
+    null,
+    null,
     null,
     null,
     null,
@@ -840,6 +890,8 @@
     0.6,
     0.4,
     null,
+    null,
+    "NÃO",
     null
    ]
   }
@@ -853,6 +905,9 @@
   "parcial": 3,
   "semPagamento": 6,
   "comSaldo": 6,
+  "comCanhoto": 1,
+  "semCanhoto": 9,
+  "pagasSemCanhoto": 0,
   "emitidas": 114,
   "finalizadas": 98,
   "entregue": 0.8508771929824561,
