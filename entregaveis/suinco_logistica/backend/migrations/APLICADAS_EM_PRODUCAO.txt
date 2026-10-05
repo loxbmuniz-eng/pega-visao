@@ -1,4 +1,14 @@
-059
+060
+# ---------------------------------------------------------------------
+# 05/10/2026 (15h50) — 059 → 060. Bloco COPIE DAQUI colado pelo dono
+# (atualizar_tudo.sh): commit no servidor 1cb3799, serviço active,
+# /health 200, última migração 060_tratativas_rodada2.sql, vigias 5 ok.
+#
+# O QUE ISSO DESTRAVA: a lista de tratativas nova (DEVOLUÇÃO libera) — sem
+# ela, escolher DEVOLUÇÃO era recusado pelo banco (503 explicado).
+#
+# Com ela, NÃO HÁ MIGRAÇÃO PENDENTE. Servidor e painel alinhados.
+# ---------------------------------------------------------------------
 # ---------------------------------------------------------------------
 # 05/10/2026 — 056 → 059. Bloco COPIE DAQUI colado pelo dono
 # (atualizar_tudo.sh): commit no servidor e6e3d7f, serviço active,
