@@ -107,6 +107,9 @@ async def entrar(pg, email):
 
 async def main():
     limpar_frete()
+    # uma transportadora CADASTRADA na Frota: a transportadora da carga só sai dessa lista
+    psql("DELETE FROM dim_veiculos WHERE placa = 'TST9A01';")
+    psql("INSERT INTO dim_veiculos (placa, transportadora, tipo_veiculo, origem) VALUES ('TST9A01', 'Transp. Teste Tela', 'Truck', 'teste');")
     tok_frete = operador('frete.tela@teste.local', 'Pagamento de Frete')
     tok_port = operador('portaria.tela@teste.local', 'Portaria')
     tok_adm = operador('admin.tela@teste.local', 'Administração')
@@ -228,8 +231,8 @@ async def main():
         await pg.click('#frete-btn-registrar')
         await pg.wait_for_timeout(1800)
         p1 = await pg.evaluate("() => Object.fromEntries([...document.querySelectorAll('#frete-tbody tr.frete-primeira td[data-col]')].map(td => [td.dataset.col, td.textContent.trim()]))")
-        ck('a linha mostra 50% pago, PARCIAL, data 09/10/2026 e 12,5% a pagar',
-           p1['pago'] == '50,0%' and p1['statusPagamento'] == 'PARCIAL' and p1['dataPagamento'] == '09/10/2026' and p1['aPagar'] == '12,5%', str(p1))
+        ck('a linha mostra 50% pago, A PAGAR (ainda há 12,5% liberado sem pagar), data 09/10/2026',
+           p1['pago'] == '50,0%' and p1['statusPagamento'] == 'A PAGAR' and p1['dataPagamento'] == '09/10/2026' and p1['aPagar'] == '12,5%', str(p1))
         await pg.click('#frete-tbody tr.frete-primeira button:has-text("Pagar")')
         await pg.wait_for_selector('#frete-pg-pct')
         await pg.fill('#frete-pg-pct', '30')
@@ -239,6 +242,36 @@ async def main():
         ck('acima do liberado o painel PERGUNTA, dizendo os números', '62.5%' in pergunta and 'Registrar mesmo assim' in pergunta, pergunta[:120])
         await pg.click('#frete-pergunta button:has-text("Voltar")')
         await pg.click('#modal-frete button:has-text("Cancelar")')
+
+        print('\n=== 5b. CAMPOS EDITÁVEIS: DATA DO PAGAMENTO, DATA DA TRATATIVA, TRANSPORTADORA ===')
+        await pg.click('#frete-tbody tr.frete-primeira td[data-col="dataPagamento"] button')
+        await pg.wait_for_selector('#frete-campo-data')
+        await pg.fill('#frete-campo-data', '2026-10-10')
+        await pg.click('#modal-frete button:has-text("Salvar")')
+        await pg.wait_for_timeout(1500)
+        dp = await pg.evaluate("() => document.querySelector('#frete-tbody tr.frete-primeira td[data-col=\"dataPagamento\"]').textContent.trim()")
+        ck('a data do pagamento é editável: 09/10 → 10/10', dp == '10/10/2026', dp)
+        ck('e mudou no último pagamento gravado', psql("SELECT to_char(data_pagamento,'YYYY-MM-DD') FROM pgfrete_pagamentos WHERE numero_carga='900802' AND anulado_em IS NULL ORDER BY id DESC LIMIT 1;") == '2026-10-10')
+        await pg.click('#frete-tbody tr:nth-child(1) td[data-col="dataTratativa"] button')
+        await pg.wait_for_selector('#frete-campo-data')
+        await pg.fill('#frete-campo-data', '2026-10-01')
+        await pg.click('#modal-frete button:has-text("Salvar")')
+        await pg.wait_for_timeout(1500)
+        dt2 = await pg.evaluate("() => document.querySelector('#frete-tbody tr:nth-child(1) td[data-col=\"dataTratativa\"]').textContent.trim()")
+        ck('a data da tratativa é editável: hoje → 01/10/2026', dt2 == '01/10/2026', dt2)
+        await pg.click('#frete-tbody tr.frete-primeira td[data-col="transportadora"] button')
+        await pg.wait_for_selector('#frete-campo-valor')
+        opcoes = await pg.evaluate("() => [...document.querySelectorAll('#frete-campo-valor option')].map(o => o.value)")
+        ck('a transportadora é uma LISTA das cadastradas na Frota (não texto livre)', 'Transp. Teste Tela' in opcoes and await pg.evaluate("() => document.querySelector('#frete-campo-valor').tagName") == 'SELECT', str(opcoes[:6]))
+        await pg.select_option('#frete-campo-valor', 'Transp. Teste Tela')
+        await pg.click('#modal-frete button:has-text("Salvar")')
+        await pg.wait_for_timeout(1500)
+        tr = await pg.evaluate("() => document.querySelector('#frete-tbody tr.frete-primeira td[data-col=\"transportadora\"]').textContent.trim()")
+        ck('escolhida da lista, gravou', tr == 'Transp. Teste Tela', tr)
+        sp = await pg.evaluate("() => document.querySelector('#frete-tbody tr.frete-primeira td[data-col=\"statusPagamento\"]').className")
+        ck('o Status p/ pagamento A PAGAR vem destacado', 'frete-sp-apagar' in sp, sp)
+        seg = await pg.evaluate("() => getComputedStyle(document.querySelector('#frete-tbody tr.frete-seg td[data-col=\"qtdSist\"]'), '::before').content")
+        ck('a 2ª linha da carga diz que é uma nota pendente (não parece vazia)', 'nota pendente' in seg, seg)
 
         print('\n=== 6. EXPORTAR: O ARQUIVO É A TELA ===')
         async with pg.expect_download(timeout=30000) as dl:
@@ -282,6 +315,7 @@ async def main():
         await nav.close()
 
     limpar_frete()
+    psql("DELETE FROM dim_veiculos WHERE placa = 'TST9A01';")
     for e in ['frete.tela@teste.local', 'portaria.tela@teste.local', 'admin.tela@teste.local']:
         psql(f"DELETE FROM operadores WHERE email = '{e}';")
     print('\n' + ('FALHAS: ' + '; '.join(falhas) if falhas else 'TUDO OK'))

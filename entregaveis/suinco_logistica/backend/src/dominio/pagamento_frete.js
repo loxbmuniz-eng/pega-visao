@@ -25,18 +25,62 @@
    `situacaoDaCarga` em 63 das 65 (as 2 exceções foram marcadas à mão).
    ===================================================================== */
 
-/* O QUE A PESSOA FAZ COM UMA PENDÊNCIA — o vocabulário da planilha dela,
-   como estava ('Status Pendência'). '' é "ninguém olhou ainda"; 'SEM
-   TRATATIVA' é "olhei e não há o que fazer por enquanto" — a planilha
-   distingue os dois, e a diferença é o que mostra o que falta olhar. */
-export const TRATATIVAS = ['SEM TRATATIVA', 'DEV', 'DEV NO SISTEMA', 'OK B2B', 'OK', 'SUMIU DO B2B'];
+/* O QUE A PESSOA FAZ COM UMA PENDÊNCIA ('Status Pendência'). Vocabulário
+   enxugado pelo dono em 05/10/2026 (rodada 2): "tira o OK B2B e DEV NO
+   SISTEMA e substitui a DEV por DEVOLUÇÃO". '' é "ninguém olhou ainda";
+   'SEM TRATATIVA' é "olhei e não há o que fazer por enquanto" — a diferença
+   é o que mostra o que falta olhar. */
+export const TRATATIVAS = ['SEM TRATATIVA', 'DEVOLUÇÃO', 'OK', 'SUMIU DO B2B'];
 
-/* QUEM LIBERA O PAGAMENTO. Decisão do dono (05/10/2026): "tratativa direta
-   somente as com status finalizado; as demais, necessidade de consulta no
-   sistema para liberação". Consultar o sistema e achar tudo certo é o 'OK'
-   (e o 'OK B2B', que a planilha também usa). Devolução e "sumiu do B2B" NÃO
-   liberam: a nota continua sem entrega comprovada. */
-export const TRATATIVAS_QUE_LIBERAM = ['OK', 'OK B2B'];
+/* As palavras da planilha antiga (e do vocabulário de manhã) continuam
+   entendidas — "para o painel entender a linguagem" — e viram as atuais. */
+export const TRATATIVAS_ANTIGAS = { DEV: 'DEVOLUÇÃO', 'DEV NO SISTEMA': 'DEVOLUÇÃO', DEVOLUCAO: 'DEVOLUÇÃO', 'OK B2B': 'OK' };
+
+/* QUEM LIBERA O PAGAMENTO. Fluxo da Daniela, trazido pelo dono (05/10/2026):
+   "se a nota pendente for devolução, ou se eu confirmar que está correta,
+   finalizo a carga como 100% integral" — e "quando for dado OK, ou mudado
+   pra DEVOLUÇÃO, o status precisa mudar pra A PAGAR". Então OK (consultei,
+   está certo) e DEVOLUÇÃO (a nota voltou: a transportadora fez a parte
+   dela) liberam. SUMIU DO B2B e SEM TRATATIVA não. */
+export const TRATATIVAS_QUE_LIBERAM = ['OK', 'DEVOLUÇÃO'];
+
+/* PAREAR PELO NÚMERO DO SISTEMA (ocorrência #112). Entra a lista das leituras
+   de um lote — { numero, temB2b, temSist, externa } — e sai quem pareia com
+   quem: um B2B SOZINHO com um Atak SOZINHO cujo número é a "carga externa" do
+   B2B ou o final (5+ dígitos) do número do B2B. Só com UM candidato; dois
+   candidatos é ambiguidade, e ambiguidade não se resolve em silêncio. */
+export function parearPeloNumeroDoSistema(leituras) {
+  const pares = [];
+  const sistSozinhos = leituras.filter((l) => l.temSist && !l.temB2b);
+  for (const b of leituras.filter((l) => l.temB2b && !l.temSist)) {
+    const numB2b = String(b.numero);
+    const externa = String(b.externa ?? '');
+    const candidatos = sistSozinhos.filter((s) => {
+      const numSist = String(s.numero);
+      return numSist !== numB2b && (numSist === externa
+        || (numSist.length >= 5 && numB2b.length > numSist.length && numB2b.endsWith(numSist)));
+    });
+    if (candidatos.length !== 1) continue;
+    const numSist = String(candidatos[0].numero);
+    pares.push({
+      numB2b, numSist,
+      aviso: `O B2B identifica esta carga como ${numB2b}${externa ? ` (carga externa ${externa})` : ''}; o sistema, como ${numSist}. Pareada pelo número do sistema.`,
+    });
+  }
+  return pares;
+}
+
+/* Texto → tratativa do vocabulário atual: '' para vazio, null para palavra
+   desconhecida. Aceita acento/caixa diferentes e as palavras antigas. */
+export function normalizarTratativa(texto) {
+  const t = String(texto ?? '').trim();
+  if (!t) return '';
+  const norm = semAcento(t);
+  const atual = TRATATIVAS.find((x) => semAcento(x) === norm);
+  if (atual) return atual;
+  const antiga = Object.keys(TRATATIVAS_ANTIGAS).find((x) => semAcento(x) === norm);
+  return antiga ? TRATATIVAS_ANTIGAS[antiga] : null;
+}
 
 export const semAcento = (s) => String(s ?? '')
   .normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
@@ -204,24 +248,34 @@ export function indicadoresDaCarga(carga) {
   });
   const conferir = situacao === 'VERIFICAR';
   const pago = Math.min(1, Math.max(0, (Number(carga.pctPago) || 0) / 100));
-  const statusPagamento = statusDoPagamento(pago * 100);
   if (!qtdSist) {
-    return { situacao, conferir, entregue: null, liberado: null, pago, aPagar: null, liberadasPorTratativa, statusPagamento };
+    return { situacao, conferir, entregue: null, liberado: null, pago, aPagar: null, liberadasPorTratativa, statusPagamento: statusParaPagamento({ conferir, liberado: null, pago }) };
   }
   const entregue = (qtdSist - doSist.length) / qtdSist;
   if (conferir) {
-    return { situacao, conferir, entregue, liberado: null, pago, aPagar: null, liberadasPorTratativa, statusPagamento };
+    return { situacao, conferir, entregue, liberado: null, pago, aPagar: null, liberadasPorTratativa, statusPagamento: statusParaPagamento({ conferir, liberado: null, pago }) };
   }
   const liberado = Math.min(1, entregue + liberadasPorTratativa / qtdSist);
   const aPagar = Math.max(0, Math.round((liberado - pago) * 10000) / 10000);
-  return { situacao, conferir, entregue, liberado, pago, aPagar, liberadasPorTratativa, statusPagamento };
+  return { situacao, conferir, entregue, liberado, pago, aPagar, liberadasPorTratativa, statusPagamento: statusParaPagamento({ conferir, liberado, pago }) };
 }
 
-/* "Status p/ pagamento" da planilha: vazio, PARCIAL ou 100%. */
-export function statusDoPagamento(pctPago) {
-  const p = Number(pctPago) || 0;
-  if (p <= 0) return '';
-  return p >= 99.995 ? 'INTEGRAL' : 'PARCIAL';
+/* "STATUS P/ PAGAMENTO" — O QUE FAZER COM A CARGA (decisão do dono, 05/10/2026,
+   rodada 2). Não é "quanto já foi pago" (isso é o % Pago); é o passo:
+     · 'conferir'  — carga VERIFICAR: nada liberado até olhar o B2B;
+     · 'A PAGAR'   — há liberado ainda não pago (a carga inteira recém-liberada,
+                     ou a nota pendente que acabou de receber OK/DEVOLUÇÃO);
+     · 'PARCIAL'   — pagou tudo que estava liberado; ainda há nota pendente;
+     · 'INTEGRAL'  — 100% liberado e 100% pago.
+   A fórmula da coluna M do .xlsx (FORMULAS.statusPagamento) repete isto. */
+export function statusParaPagamento({ conferir, liberado, pago }) {
+  if (conferir) return 'conferir';
+  if (liberado == null) return '';
+  const l = Number(liberado) || 0;
+  const p = Number(pago) || 0;
+  if (Math.round((l - p) * 10000) / 10000 > 0) return 'A PAGAR';
+  if (l >= 0.99995 && p >= 0.99995) return 'INTEGRAL';
+  return l > 0 ? 'PARCIAL' : '';
 }
 
 /* Quanto ainda dá para pagar HOJE: o liberado menos o que já foi pago. */
@@ -259,8 +313,7 @@ export function lerTratativaDaPlanilha(texto, dataConsultaISO) {
     }
     return { tratativa: 'OK', em, obs: '' };
   }
-  const norm = semAcento(t);
-  const achada = TRATATIVAS.find((x) => semAcento(x) === norm);
+  const achada = normalizarTratativa(t);
   if (achada) return { tratativa: achada, em: null, obs: '' };
   return { tratativa: '', em: null, obs: `Planilha: ${t}` };
 }

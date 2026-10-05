@@ -5109,3 +5109,58 @@ com clique de verdade e ativa, a de Pagamento de Frete com as caixinhas, zero
 erro de página. Reprovou contra a persona Logística (2 falhas: persona e
 "escondidas: ['frete']") e passou com a correção. Regra nova em `CLAUDE.md`:
 prova é tirada como o usuário vê.
+
+## #112 — O B2B da carga 118771 virou 12 cargas "103001118771" e não pareou com o Atak (05/10/2026)
+
+**Relato.** Primeira importação real da aba Pagamento de Frete, pelo dono, no
+mesmo dia da publicação. A 118882 entrou certa (20 notas). A 118771, não: a
+prévia mostrou o Atak com 31 notas e o B2B como doze cargas "103001118771"
+(12, 1, 1, 3, 1, 2, 4, 1, 2, 1, 1, 1 notas), cada uma "falta o relatório do
+Atak" e a 118771 "falta o relatório do B2B". *"Isso não pode acontecer."*
+Nada foi gravado — a prévia não deixou.
+
+**Causa raiz (reproduzida com o PDF real, fora do repositório).** Duas, no
+leitor do B2B (`dominio/relatorios_frete_pdf.js`):
+
+1. **O campo CARGA do B2B vem de dois jeitos.** Na 118882, "118882". Na
+   118771, **"103-001-118771"** (filial-operação-carga). O leitor tirava tudo
+   que não era dígito e ficava com 103001118771 — número que o Atak não
+   conhece. CARGA EXTERNA estava vazia nas duas; não era ela.
+2. **O B2B repete o cabeçalho (Motorista/Placa/Carga…) a cada grupo de
+   entregas.** A 118771 tem 6 páginas e 12 blocos (1, 3, 2, 2, 3, 1 por
+   página). O leitor abria uma carga nova a cada bloco, sem juntar as de
+   mesmo número.
+
+**Família.** "Formato que só apareceu no segundo exemplo": o leitor foi
+provado contra UM relatório real (118882) e contra exemplos gerados a partir
+dele; o segundo relatório real trouxe duas variações que o primeiro não
+tinha. Parente de #109 (a regra só aparece com mais de um dia) — a prova
+precisa de mais de um exemplar quando o formato é de terceiro.
+
+**Correção.**
+- `numeroDaCargaB2b`: o número da carga é o **último trecho de dígitos** do
+  campo ("103-001-118771" → 118771); o texto como veio fica em
+  `identificador`, e a prévia avisa: "No B2B a carga aparece como
+  103-001-118771; o número da carga é o último trecho, 118771".
+- Blocos com o mesmo número viram **uma carga** (as linhas se somam).
+- `lerBlocoDaCarga` deixa de usar "o rótulo mais perto, até 45 pt": o valor
+  que começa debaixo do título é do título; senão vale o centro do pedaço
+  (os pedaços passaram a trazer a largura, `w`) entre os pontos médios dos
+  títulos — um valor largo centralizado não cai no vizinho.
+- Segunda rede, pura e testada (`parearPeloNumeroDoSistema`): se ainda
+  assim um B2B sozinho não casar, pareia com o Atak sozinho cujo número é a
+  carga externa dele ou o final (5+ dígitos) do número dele — só com UM
+  candidato, e dizendo na prévia. Dois candidatos: ninguém pareia.
+- Prévia: carga B2B sozinha com número de mais de 8 dígitos ganha aviso.
+
+**Guardas.** `b2b_900809.pdf` (3 blocos + CARGA EXTERNA preenchida → uma
+carga, 4 notas) e `b2b_900810.pdf` ("103-001-900810", 2 blocos → carga
+900810), gerados por `gerar_pagamento_frete_exemplo.py` imitando o
+relatório real; testes em `pagamento_frete_leitura.test.js` (leitor,
+`numeroDaCargaB2b`, pareamento) e `api.test.js` bloco 49 (prévia e
+confirmação). Contra o leitor publicado, o PDF real dava 12 cargas; com a
+correção, 1 carga de 30 notas, número 118771. A 118882 continua lendo igual.
+
+**O que a 118771 vai mostrar, e é dado, não defeito:** o Atak tem 31 notas e
+o B2B 30 — uma nota do sistema não está no B2B. Pela regra do dono, carga
+com contagem diferente é **VERIFICAR**: nada é liberado até alguém olhar.

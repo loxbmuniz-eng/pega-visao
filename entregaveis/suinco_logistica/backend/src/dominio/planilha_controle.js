@@ -73,21 +73,6 @@ const inteiro = (v) => (v === null || v === undefined || v === '' ? null : (Numb
 const texto = (v) => (v === null || v === undefined ? '' : String(v).trim());
 const dataIso = (v) => (/^\d{4}-\d{2}-\d{2}/.test(String(v ?? '')) ? String(v).slice(0, 10) : null);
 
-/* "Status p/ pagamento" → { pct, estimado }. Número até 1 é fração (o `1`
-   formatado como 100%); maior que 1 já é percentual. */
-function lerStatusDePagamento(v, entreguePct) {
-  if (v === null || v === undefined || v === '') return null;
-  if (typeof v === 'number') {
-    if (!(v > 0)) return null;
-    return { pct: arredondar2(v <= 1 ? v * 100 : Math.min(v, 100)), estimado: false };
-  }
-  const t = semAcento(v);
-  if (/^parcial/.test(t)) return entreguePct == null ? null : { pct: entreguePct, estimado: true };
-  if (/^(integral|100\s*%?)$/.test(t)) return { pct: 100, estimado: false };
-  const m = t.match(/^(\d+(?:[.,]\d+)?)\s*%$/);
-  return m ? { pct: arredondar2(Number(m[1].replace(',', '.'))), estimado: false } : null;
-}
-
 export function lerPlanilhaDeControle(abas, escolhidas = null) {
   const resumoDasAbas = [];
   const candidatas = [];
@@ -200,10 +185,14 @@ export function lerPlanilhaDeControle(abas, escolhidas = null) {
     if (somaB2b !== r.qtdB2b) avisos.push(`As contagens por status somam ${somaB2b}, e a planilha diz ${r.qtdB2b} no B2B.`);
     const finalizadasNoSist = Math.min(r.finalizadas, r.qtdSist);
     const entreguePct = r.qtdSist ? arredondar2((finalizadasNoSist / r.qtdSist) * 100) : null;
+    /* "Status p/ pagamento" é o que estava LIBERADO para pagar (decisão do dono,
+       05/10/2026, rodada 2), não o que foi pago: pagamento só vem do % Pago. */
     const pg = c.pctPagoExato !== undefined
       ? { pct: arredondar2(Math.min(1, c.pctPagoExato) * 100), estimado: false }
-      : lerStatusDePagamento(c.pagamentoBruto, entreguePct);
-    if (c.pctPagoExato === undefined && c.pagamentoBruto !== null && !pg) avisos.push(`Status de pagamento "${c.pagamentoBruto}" não reconhecido; não importei pagamento.`);
+      : null;
+    if (c.pctPagoExato === undefined && c.pagamentoBruto !== null && c.pagamentoBruto !== '') {
+      avisos.push(`A planilha dizia "${c.pagamentoBruto}" em Status p/ pagamento — é o que estava liberado, não o pago; nenhum pagamento importado.`);
+    }
     cargas.push({
       numero: c.numero, dataConsulta: c.dataConsulta, ...r, situacao, finalizadasNoSist,
       transportadora: c.transportadora, cte: [...c.ctes].join(', '),

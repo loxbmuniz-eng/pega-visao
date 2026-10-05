@@ -130,7 +130,7 @@ function abaControle(grade) {
     validacoes: [
       {
         intervalo: `L2:L${ate}`, tipo: 'list', lista: TRATATIVAS, estilo: 'warning',
-        dicaTitulo: 'Status da pendência', dica: 'Escolha na lista. OK e OK B2B = consultei no sistema e libera o pagamento da nota.',
+        dicaTitulo: 'Status da pendência', dica: 'Escolha na lista. OK (conferi, está certo) e DEVOLUÇÃO (a nota voltou) liberam o pagamento da nota; SUMIU DO B2B e SEM TRATATIVA não.',
         erroTitulo: 'Fora da lista', erro: `Use uma destas: ${lista}. Para outro assunto, escreva na coluna Observação.`,
       },
       {
@@ -167,11 +167,19 @@ function abaControle(grade) {
       {
         intervalo: `L2:L${ate}`,
         regras: [
-          { formula: 'OR($L2="OK",$L2="OK B2B")', estilo: { fonte: { cor: '1E7A3C', neg: true } } },
-          { formula: 'OR($L2="DEV",$L2="DEV NO SISTEMA")', estilo: { fonte: { cor: '1F5FBF', neg: true } } },
+          { formula: 'OR($L2="OK",$L2="DEVOLUÇÃO")', estilo: { fonte: { cor: '1E7A3C', neg: true } } },
           { formula: '$L2="SUMIU DO B2B"', estilo: { fonte: { cor: 'B42318', neg: true } } },
           { formula: '$L2="SEM TRATATIVA"', estilo: { fonte: { cor: C.muda, it: true } } },
           { formula: `AND($L2="",$K2<>"",$K2<>"${SEM_PENDENCIA}")`, estilo: { fundo: 'FFF4D6' } },
+        ],
+      },
+      {
+        intervalo: `M2:M${ate}`,
+        regras: [
+          { formula: '$M2="A PAGAR"', estilo: { fundo: 'FDEBB0', fonte: { cor: C.amareloTexto, neg: true } } },
+          { formula: '$M2="INTEGRAL"', estilo: { fonte: { cor: C.verdeTexto, neg: true } } },
+          { formula: '$M2="PARCIAL"', estilo: { fonte: { cor: '2B4C8C', neg: true } } },
+          { formula: '$M2="conferir"', estilo: { fonte: { cor: C.amareloTexto, it: true, neg: true } } },
         ],
       },
       {
@@ -277,10 +285,10 @@ function abaResumo(r, { geradoEm, exemplo }) {
   linha(8, 12);
   secao(9, 'PAGAMENTO (pela quantidade de notas)');
   cartoes(10, [
-    { rotulo: 'Pagas integralmente', f: `COUNTIFS(${rng('M')},"INTEGRAL",${rng('C')},">=0")`, v: integral, legenda: 'cargas com 100% pago', tom: 'verde' },
-    { rotulo: 'Pagas em parte', f: `COUNTIFS(${rng('M')},"PARCIAL",${rng('C')},">=0")`, v: parcial, legenda: 'falta pagar o restante', tom: 'azul' },
+    { rotulo: 'Pagas integralmente', f: `COUNTIFS(${rng('S')},">=0.99995",${rng('C')},">=0")`, v: integral, legenda: 'cargas com 100% pago', tom: 'verde' },
+    { rotulo: 'Pagas em parte', f: `COUNTIFS(${rng('S')},">0",${rng('S')},"<0.99995",${rng('C')},">=0")`, v: parcial, legenda: 'falta pagar o restante', tom: 'azul' },
     {
-      rotulo: 'Sem pagamento', f: `COUNT(${rng('C')})-COUNTIFS(${rng('M')},"INTEGRAL",${rng('C')},">=0")-COUNTIFS(${rng('M')},"PARCIAL",${rng('C')},">=0")`,
+      rotulo: 'Sem pagamento', f: `COUNT(${rng('C')})-COUNTIFS(${rng('S')},">0",${rng('C')},">=0")`,
       v: semPagamento, legenda: 'nada pago ainda', tom: 'neutro',
     },
     { rotulo: 'Com saldo a pagar', f: `COUNTIF(${rng('T')},">0")`, v: comSaldo, legenda: 'liberado e ainda não pago', tom: 'amarelo' },
@@ -310,7 +318,7 @@ function abaResumo(r, { geradoEm, exemplo }) {
       v: total ? comCanhoto / total : '', legenda: 'veio ÷ cargas', tom: 'neutro', fmt: '0.0%',
     },
     {
-      rotulo: 'Pagas sem canhoto', f: `COUNTIFS(${rng('M')},"INTEGRAL",${rng('W')},"NÃO",${rng('C')},">=0")`,
+      rotulo: 'Pagas sem canhoto', f: `COUNTIFS(${rng('S')},">=0.99995",${rng('W')},"NÃO",${rng('C')},">=0")`,
       v: pagasSemCanhoto, legenda: '100% pago e o papel não chegou', tom: 'vermelho',
     },
   ]);
@@ -327,9 +335,7 @@ function abaResumo(r, { geradoEm, exemplo }) {
   const SENTIDO = {
     '': 'Ninguém consultou ainda — é o que falta olhar.',
     'SEM TRATATIVA': 'Olhei e não há o que fazer por enquanto.',
-    DEV: 'Nota devolvida — não libera o pagamento.',
-    'DEV NO SISTEMA': 'Devolução já lançada no sistema — não libera.',
-    'OK B2B': 'Conferido no B2B — libera o pagamento da nota.',
+    DEVOLUÇÃO: 'A nota voltou: a transportadora fez a parte dela — libera o pagamento da nota.',
     OK: 'Consultado no sistema, está certo — libera o pagamento da nota.',
     'SUMIU DO B2B': 'A nota sumiu do B2B — não libera até aparecer.',
   };
@@ -462,17 +468,17 @@ function abaLeiaMe({ exemplo }) {
   espaco();
   secao('STATUS PENDÊNCIA — O QUE FOI FEITO COM A NOTA');
   item('(em branco)', 'Ninguém consultou ainda. A célula fica destacada em amarelo para mostrar o que falta olhar.');
-  item('SEM TRATATIVA', 'Olhei e não há o que fazer por enquanto.');
-  item('DEV  ·  DEV NO SISTEMA', 'Nota devolvida; "no sistema" é a devolução já lançada. Não libera o pagamento.');
-  item('OK  ·  OK B2B', 'Consultei no sistema e está tudo certo. É o único jeito de uma nota que não está Finalizada entrar no pagamento.');
+  item('SEM TRATATIVA', 'Olhei e não há o que fazer por enquanto. Não libera.');
+  item('DEVOLUÇÃO', 'A nota foi devolvida — a transportadora fez a parte dela. Libera o pagamento da nota.');
+  item('OK', 'Consultei no sistema e está tudo certo (o canhoto existe; o status do B2B é que estava errado). Libera o pagamento da nota.');
   item('SUMIU DO B2B', 'A nota não aparece mais no B2B. Não libera até aparecer.');
   espaco();
   secao('PAGAMENTO — PELA QUANTIDADE DE NOTAS, SEM VALOR EM R$');
   item('% Entregue', 'Notas Finalizadas no B2B ÷ notas emitidas no sistema. É o que o B2B comprova.');
-  item('% Liberado', '% Entregue + as notas que alguém consultou no sistema e marcou OK / OK B2B. É o máximo que pode ser pago hoje. Em carga VERIFICAR aparece "conferir": nada é liberado até alguém olhar se o B2B está certo.');
+  item('% Liberado', '% Entregue + as notas pendentes marcadas OK ou DEVOLUÇÃO. É o máximo que pode ser pago hoje. Em carga VERIFICAR aparece "conferir": nada é liberado até alguém olhar se o B2B está certo.');
   item('% Pago', 'Quanto da carga já foi pago (digite como 62,5%). Vazio = nada pago.');
   item('A pagar agora', '% Liberado − % Pago. Fica dourado quando há saldo: é a lista do que ficou para trás. Em carga VERIFICAR aparece "conferir".');
-  item('Status p/ pagamento', 'Vazio (nada pago) · PARCIAL (parte paga) · INTEGRAL (100%). É fórmula, sai do % Pago.');
+  item('Status p/ pagamento', 'O que fazer com a carga: A PAGAR (há liberado ainda não pago — a carga inteira recém-liberada, ou a nota pendente que acabou de receber OK/DEVOLUÇÃO) · PARCIAL (pagou tudo que estava liberado; ainda há nota pendente) · INTEGRAL (100% liberado e 100% pago) · "conferir" (carga VERIFICAR). É fórmula: sai do % Liberado e do % Pago.');
   espaco();
   secao('CANHOTO ORIGINAL — SÓ ACOMPANHAMENTO');
   item('Canhoto original', 'SIM quando o canhoto em papel chegou; NÃO enquanto não chegou. A coluna ao lado guarda o dia em que alguém marcou. Não entra no % liberado, no % pago nem em "A pagar agora": o fechamento continua pelo digital (B2B e tratativas).', chip(C.verdeFundo, C.verdeTexto));

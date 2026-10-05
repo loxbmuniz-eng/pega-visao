@@ -95,7 +95,9 @@ export async function lerPaginasDoPdf(buffer) {
         for (const i of tc.items) {
           const s = String(i.str ?? '');
           if (!s.trim()) continue;
-          itens.push({ s, x: Math.round(i.transform[4] * 10) / 10, y: Math.round(i.transform[5] * 10) / 10 });
+          // w: a largura do pedaço, para saber até onde ele vai (um valor largo e
+          // centralizado começa antes do título da coluna dele — ocorrência #112)
+          itens.push({ s, x: Math.round(i.transform[4] * 10) / 10, y: Math.round(i.transform[5] * 10) / 10, w: Math.round((Number(i.width) || 0) * 10) / 10 });
         }
         paginas.push({ largura: vp.width, altura: vp.height, itens });
       }

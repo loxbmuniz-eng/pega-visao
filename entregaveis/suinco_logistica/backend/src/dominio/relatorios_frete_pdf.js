@@ -57,17 +57,43 @@ export function tipoDoRelatorio(paginas) {
    --------------------------------------------------------------------- */
 const ROTULOS_DO_BLOCO = ['motorista', 'placa', 'carga', 'carga externa', 'embarque', 'inicio viagem', 'km percorridos', 'peso total'];
 
+/* O CAMPO "CARGA" DO B2B (ocorrência #112, 05/10/2026). Vem de dois jeitos:
+   "118882" (só o número) ou "103-001-118771" (filial-operação-carga). O número
+   da carga — o mesmo que o Atak chama de "Número Carga" — é o ÚLTIMO trecho
+   de dígitos. Tirar todos os traços e colar ("103001118771") foi o erro que
+   fez a carga 118771 não parear com o próprio Atak. Devolve também o texto
+   como veio, para a prévia dizer o que leu. */
+export function numeroDaCargaB2b(texto) {
+  const identificador = String(texto ?? '').trim().replace(/\s+/g, '');
+  const trechos = identificador.match(/\d+/g) ?? [];
+  const numero = trechos.length ? trechos[trechos.length - 1] : '';
+  return { numero, identificador: identificador || numero };
+}
+
 function lerBlocoDaCarga(itens, yRotulos) {
-  const rotulos = itens.filter((i) => Math.abs(i.y - yRotulos) <= 2.5 && ROTULOS_DO_BLOCO.includes(semAcento(i.s)));
+  const rotulos = itens
+    .filter((i) => Math.abs(i.y - yRotulos) <= 2.5 && ROTULOS_DO_BLOCO.includes(semAcento(i.s)))
+    .sort((a, b) => a.x - b.x);
   const valores = itens.filter((i) => i.y < yRotulos - 2.5 && i.y > yRotulos - 28);
+  /* DE QUEM É CADA VALOR (ocorrência #112, 05/10/2026). Duas regras, na ordem:
+     1. o valor que COMEÇA debaixo do título (de 3 pt antes a 25 pt depois do x
+        do título) é daquele título — é o relatório real, alinhado à esquerda;
+     2. senão, vale o CENTRO do pedaço (x + largura/2), e cada título é dono da
+        faixa entre os pontos médios até os vizinhos — é o valor largo e
+        centralizado, que começa antes do próprio título.
+     Antes era "o título mais perto do início, até 45 pt": um valor largo ou
+     deslocado caía no vizinho e CARGA EXTERNA colava em CARGA. */
+  const faixas = rotulos.map((r, k) => ({
+    nome: semAcento(r.s), x: r.x,
+    de: k === 0 ? -Infinity : (rotulos[k - 1].x + r.x) / 2,
+    ate: k + 1 < rotulos.length ? (r.x + rotulos[k + 1].x) / 2 : Infinity,
+  }));
   const campo = {};
   for (const v of valores.sort(por)) {
-    let melhor = null;
-    for (const r of rotulos) {
-      const d = Math.abs(r.x - v.x);
-      if (!melhor || d < melhor.d) melhor = { d, nome: semAcento(r.s) };
-    }
-    if (melhor && melhor.d <= 45) campo[melhor.nome] = `${campo[melhor.nome] ?? ''} ${v.s}`.trim();
+    const sob = faixas.filter((f) => v.x >= f.x - 3 && v.x <= f.x + 25).pop();
+    const centro = v.x + (v.w > 0 ? v.w / 2 : 10);
+    const f = sob ?? faixas.find((x) => centro >= x.de && centro < x.ate);
+    if (f) campo[f.nome] = `${campo[f.nome] ?? ''} ${v.s}`.trim();
   }
   return campo;
 }
@@ -142,14 +168,29 @@ export function lerB2B(paginas) {
       const ev = eventos[k];
       if (ev.tipo === 'bloco') {
         const campo = lerBlocoDaCarga(itens, ev.y);
-        const numero = (campo.carga ?? '').replace(/\D/g, '');
+        const { numero, identificador } = numeroDaCargaB2b(campo.carga);
+        const externa = (campo['carga externa'] ?? '').replace(/\D/g, '');
         if (!numero) {
           throw new ErroDeLeitura('B2B_SEM_CARGA', 'Não achei o número da carga no cabeçalho do relatório do B2B.');
         }
-        atual = {
-          numero, embarque: campo.embarque ?? '', pesoTotal: campo['peso total'] ?? '', linhas: [], avisos: [],
-        };
-        cargas.push(atual);
+        /* O MESMO número em vários blocos é UMA carga: o B2B repete o cabeçalho a
+           cada grupo de entregas. Em 05/10/2026 uma carga de 31 notas (6 páginas,
+           12 blocos) virou 12 "cargas" de 12, 1, 1, 3… notas e não pareou com o
+           Atak (ocorrência #112). */
+        atual = cargas.find((c) => c.numero === numero);
+        if (!atual) {
+          atual = {
+            numero, identificador, externa, embarque: campo.embarque ?? '', pesoTotal: campo['peso total'] ?? '', linhas: [], avisos: [],
+          };
+          if (identificador !== numero) {
+            atual.avisos.push(`No B2B a carga aparece como ${identificador}; o número da carga é o último trecho, ${numero} — o mesmo do Atak.`);
+          }
+          if (numero.length > 8) {
+            atual.avisos.push(`O número da carga no B2B tem ${numero.length} dígitos (${numero}) — mais que o normal. `
+              + 'O painel pareia com o Atak pelo número do sistema; confira o par na prévia.');
+          }
+          cargas.push(atual);
+        }
       } else {
         if (!atual) {
           throw new ErroDeLeitura('B2B_SEM_CARGA', 'A tabela do B2B vem antes do número da carga — o formato mudou?');

@@ -124,6 +124,21 @@
   #tab-frete .frete-check input:disabled{ cursor:progress }
   #tab-frete td.frete-canhoto-sim .frete-check span{ color:var(--fr-lib-txt) }
   #tab-frete td.frete-canhoto-nao .frete-check span{ color:var(--fr-mudo) }
+  /* Status p/ pagamento é o que FAZER: A PAGAR chama a atenção */
+  #tab-frete td.frete-sp-apagar{ background:var(--fr-ver-bg); color:var(--fr-ver-txt) }
+  #tab-frete td.frete-sp-integral{ color:var(--fr-lib-txt) }
+  #tab-frete td.frete-sp-parcial{ color:#8fb4ff }
+  :root[data-tema="claro"] #tab-frete td.frete-sp-parcial{ color:#1f5fbf }
+  #tab-frete td.frete-sp-conferir{ color:var(--fr-ver-txt); font-style:italic }
+  /* a 2ª, 3ª… linha de uma carga é uma nota pendente — diz isso, para não
+     parecer que "não carregou" (o dono achou isso em 05/10) */
+  #tab-frete tr.frete-seg td[data-col="qtdSist"]{ position:relative }
+  #tab-frete tr.frete-seg td[data-col="qtdSist"]::before{
+    content:'↳ nota pendente desta carga'; position:absolute; left:8px; top:50%; transform:translateY(-50%);
+    color:var(--fr-mudo); font-style:italic; font-size:12px; white-space:nowrap; pointer-events:none;
+  }
+  #tab-frete .frete-edit-data{ min-width:112px; text-align:center }
+  #tab-frete .frete-sel-transp{ min-height:36px; width:100%; font:inherit; font-size:14px }
   #tab-frete td.frete-acoes{ white-space:nowrap }
   #tab-frete td.frete-acoes .btn{ margin:0 2px }
 

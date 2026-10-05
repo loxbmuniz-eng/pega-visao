@@ -26,6 +26,7 @@ repositório (a bateria não regenera):
 """
 import html
 import os
+import sys
 from playwright.sync_api import sync_playwright
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
@@ -58,6 +59,12 @@ CARGAS = {
     '900806': dict(sist=notas(810601, ['Aguardando'] * 3)),
     '900807': dict(sist=notas(810701, ['Finalizado'] * 3)),
     '900808': dict(sist=notas(810801, ['Finalizado', 'Aguardando'])),
+    # #112 (05/10/2026): o B2B repete o cabeçalho a cada grupo de entregas e
+    # preenche CARGA EXTERNA — tem de dar UMA carga, com o número certo.
+    '900809': dict(sist=notas(810901, ['Finalizado'] * 3 + ['Aguardando']), externa='103001', blocos=[2, 1, 1]),
+    # #112: o B2B escreve a carga como filial-operação-carga ("103-001-900810"),
+    # como no relatório real da 118771 — o número da carga é o último trecho.
+    '900810': dict(sist=notas(811001, ['Finalizado'] * 3), exibido='103-001-900810', blocos=[2, 1]),
 }
 # 900803: cinco no sistema; o B2B perde a 5ª e ganha uma que o sistema não tem
 s903 = notas(810301, ['Finalizado'] * 5)
@@ -87,25 +94,50 @@ def peso_b2b(n):
 def html_b2b(cargas):
     blocos = []
     for numero in cargas:
-        linhas = []
-        for seq, (nota, cliente, cidade, uf, st) in enumerate(b2b_da_carga(numero), 1):
+        c = CARGAS[numero]
+        todas = b2b_da_carga(numero)
+        partes = c.get('blocos') or [len(todas)]
+        grupos, k = [], 0
+        for n in partes:
+            grupos.append(todas[k:k + n]); k += n
+        if k < len(todas):
+            grupos.append(todas[k:])
+        seq0 = 0
+        for grupo in grupos:
+            linhas = []
+            for seq, (nota, cliente, cidade, uf, st) in enumerate(grupo, seq0 + 1):
+                linhas.append(linha_b2b(seq, nota, cliente, st))
+            seq0 += len(grupo)
+            blocos.append(bloco_b2b(c.get('exibido', numero), c.get('externa', ''), linhas))
+    return pagina_b2b(blocos)
+
+
+def linha_b2b(seq, nota, cliente, st):
+    if True:
+        if True:
             finalizado = st == 'Finalizado'
             ini = '22/09/2026<br>09:%02d:11' % (seq % 60) if finalizado else ''
             chk = '<b class="r">NAO<br>REALIZADO</b>' if finalizado else ''
             fim = ini
             km = '<b class="r">NAO<br>REGISTRADO</b>' if finalizado else ''
             tv = '00:00:00' if finalizado else ''
-            linhas.append(
+            return (
                 f'<tr><td>{seq}</td><td>{esc(st)}</td><td>NF</td><td>{nota}-3</td>'
                 f'<td class="cli">{esc(cliente)}</td><td>NAO</td><td>{ini}</td><td>{chk}</td><td>{fim}</td>'
                 f'<td></td><td></td><td></td><td>{tv}</td><td>{km}</td><td>{peso_b2b(nota)}</td><td></td></tr>'
             )
-        blocos.append(f'''
+
+
+def bloco_b2b(numero_exibido, externa, linhas):
+    return f'''
 <table class="cab"><tr><th>MOTORISTA</th><th>PLACA</th><th>CARGA</th><th>CARGA EXTERNA</th><th>EMBARQUE</th><th>INICIO VIAGEM</th><th>KM PERCORRIDOS</th><th>PESO TOTAL</th></tr>
-<tr><td>-</td><td></td><td>{numero}</td><td></td><td>19/09/2026</td><td>22/09/2026 09:43:31</td><td>Nao registrado</td><td>18,49 t</td></tr></table>
+<tr><td>-</td><td></td><td>{numero_exibido}</td><td>{externa}</td><td>19/09/2026</td><td>22/09/2026 09:43:31</td><td>Nao registrado</td><td>18,49 t</td></tr></table>
 <table class="notas"><thead><tr><th>SEQ</th><th>STATUS</th><th>TIPO</th><th>NUMERO</th><th>CLIENTE</th><th>REENTREGA</th><th>INICIO</th><th>CHECK-IN</th><th>FIM</th>
 <th>DIST. CHECK-<br>IN/CLIENTE</th><th>DIST.<br>FIM/CLIENTE</th><th>TEMPO<br>CHECK-IN/FIM</th><th>TEMPO<br>VIAGEM</th><th>KM<br>PERCORRIDO</th><th>PESO</th><th>OBS.</th></tr></thead>
-<tbody>{''.join(linhas)}</tbody></table><div class="quebra"></div>''')
+<tbody>{''.join(linhas)}</tbody></table><div class="quebra"></div>'''
+
+
+def pagina_b2b(blocos):
     return f'''<!doctype html><meta charset="utf-8"><style>
 body{{font-family:'DejaVu Sans',sans-serif;font-size:8pt;margin:0}} h1{{text-align:center;font-size:11pt;margin:18px 0 4px}}
 h2{{text-align:center;font-size:10pt;margin:0 0 14px}} table{{border-collapse:collapse;width:100%;table-layout:fixed}}
@@ -176,10 +208,16 @@ def main():
     with sync_playwright() as p:
         nav = p.chromium.launch(executable_path=os.environ.get('PLAYWRIGHT_CHROMIUM_PATH') or '/opt/pw-browsers/chromium')
         pg = nav.new_page()
-        for numero in ['900801', '900802', '900803', '900805', '900806']:
+        so = set(sys.argv[1:])   # gerar só estas cargas (ex.: 900809 900810); sem argumento, tudo
+        for numero in ['900801', '900802', '900803', '900805', '900806', '900809', '900810']:
+            if so and numero not in so:
+                continue
             gerar(pg, f'b2b_{numero}.pdf', html_b2b([numero]),
                   cabecalho='DeliveryB2B - Plataforma de controle de entregas e recebimentos - Gerado em 05/10/2026 09:30')
             gerar(pg, f'sist_{numero}.pdf', html_sist([numero]), landscape=True, cabecalho='')
+        if so:
+            nav.close()
+            return
         gerar(pg, 'b2b_varias.pdf', html_b2b(['900807', '900808']),
               cabecalho='DeliveryB2B - Plataforma de controle de entregas e recebimentos - Gerado em 05/10/2026 09:30')
         gerar(pg, 'sist_varias.pdf', html_sist(['900807', '900808']), cabecalho='')
