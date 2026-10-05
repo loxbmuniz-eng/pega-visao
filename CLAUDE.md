@@ -119,6 +119,10 @@ bash publicar.sh                                # o portão: bateria + merge
 - **Recusa do servidor nunca pode ser silenciosa.** `upsert()` devolve
   `{recusado:true}` em vez de lançar — quem chama precisa olhar o valor.
 - **`data.js` não conhece `app/`.** O build concatena nessa ordem.
+- **Prova é tirada como o usuário vê.** Print ou conferência feita forçando
+  por código um botão escondido, chamando função direto ou injetando estado
+  não é prova — é atalho que a pessoa não tem (ocorrência #111: a vitrine
+  não tinha a aba, e a foto mostrava a aba).
 
 ### Vermelho tem QUATRO causas — descubra qual antes de mexer
 
