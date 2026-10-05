@@ -5,3 +5,4 @@ __pycache__/
 # Segredos do backend — nunca versionar
 entregaveis/suinco_logistica/backend/.env
 entregaveis/suinco_logistica/backend/node_modules/
+entregaveis/suinco_logistica/backend/node_modules

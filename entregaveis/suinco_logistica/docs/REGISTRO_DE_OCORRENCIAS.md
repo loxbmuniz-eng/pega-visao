@@ -5164,3 +5164,24 @@ correção, 1 carga de 30 notas, número 118771. A 118882 continua lendo igual.
 **O que a 118771 vai mostrar, e é dado, não defeito:** o Atak tem 31 notas e
 o B2B 30 — uma nota do sistema não está no B2B. Pela regra do dono, carga
 com contagem diferente é **VERIFICAR**: nada é liberado até alguém olhar.
+
+## #113 — Um link simbólico de node_modules entrou no commit e apagou os pacotes do servidor de teste (05/10/2026)
+
+**Relato.** Para rodar testes num worktree auxiliar, criei `backend/node_modules`
+como link para o node_modules da árvore principal. O `.gitignore` ignorava
+`backend/node_modules/` (com a barra: só diretório) — o LINK não é diretório
+e entrou no `git add -A` do commit 1c39ac5. No merge para a árvore principal
+o git trocou o diretório real (ignorado) pelo link, que apontava para o
+próprio caminho: a API de teste parou de subir ("Cannot find package
+'express'") e a bateria não rodou. Nada chegou ao servidor nem à entrega: o
+portão exige a API no ar e teria cancelado.
+
+**Família.** Arquivo que não é fonte entrando no commit — parente do carimbo
+de build (regra §10) e do `index.html` editado à mão. A causa de fundo é
+regra de ignorar escrita para um só formato (diretório).
+
+**Correção.** `git rm --cached` do link; `.gitignore` passa a ter também a
+linha sem barra (ignora o caminho em qualquer formato); `npm ci` restaura os
+pacotes pelo `package-lock.json`. Worktree auxiliar NÃO ganha mais link de
+node_modules: roda o node com o `node_modules` da árvore principal por
+`NODE_PATH`, ou os testes rodam na árvore principal fora do portão.
