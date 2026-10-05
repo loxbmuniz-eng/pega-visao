@@ -487,6 +487,7 @@ function abaLeiaMe({ exemplo }) {
   secao('DICAS');
   item('Achar o que está para pagar', 'Na coluna "A pagar agora", filtre os valores maiores que zero. Para ver só as pendências que ninguém olhou, filtre "Status Pendência" por (Vazias).');
   item('Acrescentar uma carga à mão', 'Copie as linhas de uma carga existente e troque os números: as fórmulas e as cores acompanham.');
+  item('Aba FECHAMENTO', 'Por mês do pagamento: lançamentos, cargas e notas pagas (% pago × notas emitidas). Provisão = notas liberadas e ainda não pagas. Pendências sem tratativa por idade. Tudo em contagem de notas, sem valor em R$. Quando o arquivo sai de uma tela filtrada, o filtro aparece no topo do RESUMO e do FECHAMENTO.');
   if (exemplo) {
     espaco();
     secao('SOBRE ESTA CÓPIA');
