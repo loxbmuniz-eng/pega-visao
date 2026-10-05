@@ -30,7 +30,10 @@ BASE = os.path.dirname(AQUI)
 PAINEL = os.environ.get('PAINEL') or ('file://' + os.path.join(BASE, 'index.html'))
 DEMO = json.load(open(os.path.join(BASE, 'vitrine', 'demonstracao.json'), encoding='utf-8'))
 ABAS = ['torre', 'patio', 'programacao', 'devolucoes', 'portaria', 'expedicao', 'faturamento',
-        'indicadores', 'cadastros', 'historico', 'relatorios', 'usuarios']
+        'indicadores', 'cadastros', 'historico', 'relatorios', 'frete', 'usuarios']
+# A aba Pagamento de Frete (05/10/2026) não lê o localStorage: sem servidor ela
+# desenha a demonstração gerada pela mesma função da API (vitrine/frete_demonstracao.json).
+DEMO['frete'] = json.load(open(os.path.join(BASE, 'vitrine', 'frete_demonstracao.json'), encoding='utf-8'))
 PISO = 12
 falhas = []
 
@@ -49,6 +52,7 @@ SEMEAR = """(demo) => {
   const base = (DB.cargas || []).find(c => c.status !== 'Seguiu Viagem' && c.placa);
   if(base) DB.cargas.push(Object.assign({}, base, { id: base.id + '-dupla', numeroCarga: '900999', sequencia: 99 }));
   DB.operador = {nome:'Teste', setor:'Administração'};
+  if(demo.frete) window.FRETE_DEMONSTRACAO = demo.frete;
   document.getElementById('modal-operador')?.classList.remove('open');
   if(typeof invalidarIndiceMovimentacoes === 'function') invalidarIndiceMovimentacoes();
   renderAll();

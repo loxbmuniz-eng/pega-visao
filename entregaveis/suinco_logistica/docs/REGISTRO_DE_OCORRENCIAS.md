@@ -4986,3 +4986,95 @@ servidor, instala o Chromium e declara os dois valores de teste.
 significar alguma coisa. E o vigia de fora (`.github/workflows/vigia.yml`)
 roda na mesma infraestrutura: se o GitHub Actions parar de rodar, os dois
 param juntos e o e-mail de "workflow desligado" do próprio GitHub avisa.
+
+## #109 — Administração de Fretes: a sequência é por dia, e o KM não chegava ao PDF (05/10/2026)
+
+**Como apareceu.** Três relatos do dono no mesmo dia, sobre o mesmo relatório.
+*"As cargas estão sendo duplicadas: em vez de 1, 2, 3, 4, 5, aparecem como 1,
+1, 1, 2, 2. O processo deveria gerar, no dia 1, a sequência 1 a 30; no dia 2,
+a sequência 1 a 10."* Depois: *"inclua a data de programação da carga tanto na
+planilha quanto no PDF do relatório de administração de fretes"* e *"a cada
+mudança de dia insira um novo cabeçalho indicando o novo dia"*. E: *"a
+quilometragem não está indo para o relatório de administração de fretes, e a
+Daniela está sentindo falta disso"*.
+
+**A causa, medida.** (1) `dadosPlanilhaDeFretes()` ordenava só por
+`sequencia`. A sequência de carregamento recomeça no 1 a cada dia (é a regra
+de `/sequenciar`, por dia), então um período de vários dias juntava todos os
+"1", depois todos os "2". Nenhuma carga duplicou: o que parecia duplicata eram
+dias diferentes, e a planilha não tinha a data da programação para
+distingui-los. Reproduzido com seis cargas inventadas em dois dias: saiu
+`A1, B1, A2, B2, A3`. (2) O PDF tinha Data (programação), Saída, Nº Carga,
+Placa, Rota e Observações — sem KM. A planilha (CSV) já levava `KM Destino` e
+`KM Deslocamento`; a Daniela trabalha com o PDF. O KM sempre chegou à carga: a
+linha da Montagem o entrega ao lançar (`app/90_montagem.js`, `kmDeslocamento:
+m.km_deslocamento`), o servidor guarda em `fact_viagens.km_deslocamento` e o
+`/api/estado` completo devolve todas as cargas não excluídas, sem janela de
+dias. Faltava a coluna, não o dado.
+
+**A família.** "Uma pergunta, duas contas" (#99, #101) e "a decisão escrita
+em dois lugares" (#14): a ordem da planilha era uma, a da fila do dia era
+outra. E a família do KM (#63, #82, #91): o número existia e não aparecia
+onde se paga.
+
+**A correção.**
+- `ordenarPorDiaESequencia()`, `separarPorDia()`, `rotuloDoDia()` e
+  `cabecalhoDoDia()` em `data.js` — uma função, dois chamadores (planilha e
+  PDF). Ordem: dia da programação (no fuso de quem olha, #100) → sequência
+  (sem sequência vai ao fim DO DIA) → número da carga.
+- Período de mais de um dia sai "dia 1, dia 2, dia 3", cada dia com um
+  cabeçalho ("Dia 28/09/2026 — segunda-feira · 4 cargas") e a sua lista, na
+  planilha e no PDF. Um dia só sai como sempre saiu.
+- Planilha: colunas `Data da Programação` e `Data do Faturamento`, lado a
+  lado, como data (fora das colunas de texto, para a Administração ordenar).
+- PDF: colunas Programação, Faturamento, Saída, Nº Carga, Placa, Rota, **KM**
+  (deslocamento; com desvio, o KM da tabela sai pequeno ao lado), **Frete
+  (R$)** e Observações. O KM é o mesmo campo da Programação, lido da carga —
+  sem segunda cópia; corrigido na Montagem, o próximo relatório lê o novo.
+  Carga sem KM sai "—", nunca zero.
+- Só este relatório muda (decisão do dono). O Operacional continua na ordem
+  da sequência: ele é do dia.
+
+**Guarda:** `testes/test_fretes_ordem_por_dia_e_datas.py` (reprovou contra o
+publicado em 5 pontos: ordem, coluna Sequência, Data da Programação, PDF sem
+Programação/Faturamento) e `testes/test_fretes_km_no_relatorio.py` (carga de
+duas semanas atrás com KM e valor no PDF; desvio; sem KM = "—"; correção na
+Montagem; planilha e PDF leem o mesmo número).
+
+## #110 — Um teste venceu sozinho: data fixa fora da janela de 30 dias (05/10/2026)
+
+**Como apareceu.** Portão 40 vermelho em `test_filial_so_ve_o_que_e_dela`
+("a 105 vê o próprio checklist", "a matriz vê o checklist da 105"), nas duas
+chances, com banco limpo — e a entrega não tocava em devolução nem em filial.
+
+**A causa.** O teste criava os checklists com `dataDev: '2026-09-02'` fixo, e
+a listagem de devoluções, sem período, traz só os últimos 30 dias
+(`data_dev >= hoje − 30`, rotas/devolucoes.js). Em 05/10 o dia 02/09 ficou
+fora da janela: o checklist existia, estava certo, e não aparecia na lista.
+Teste vermelho sem defeito nenhum — a causa 1 das quatro ("o teste é que
+está velho"), na variante mais traiçoeira: ele era verde até ontem.
+
+**A família.** Datas (#81, #100): aqui não é fuso, é o calendário andando.
+Todo teste que escreve uma data fixa e lê por uma janela relativa a "hoje"
+tem prazo de validade, e ninguém sabe qual.
+
+**A correção.** A data passa a ser a de hoje (`HOJE_DEV`, calculada em UTC−3).
+**O que fica de regra:** teste não escreve data fixa quando a tela ou a rota
+filtram por "hoje"; usa a data do dia e explica por quê.
+
+**Também neste portão** (e corrigidos na mesma rodada, todos "a regra mudou de
+propósito"): `test_indicadores_dizem_a_verdade` contava 12 abas (são 13 com a
+Pagamento de Frete) e `test_relatorios` esperava as 6 colunas antigas do PDF de
+fretes (são 9, #109). E um achado real da conferência de layout do mesmo
+`test_relatorios`: as colunas de data do PDF de fretes com 9% transbordavam
+("05/10/2026", "PROGRAMAÇÃO") — larguras MEDIDAS em mídia de impressão (a folha é retrato, 748px úteis; as nove colunas pediam 819px a 13px): corpo a 12px, cabeçalho a 10px, recuo 16px, "R$" só no cabeçalho, a hora da Saída na segunda linha, Placa 10%. Soma medida: 750px.
+
+**Segunda rodada do portão 40 (mesmo dia).** Dois vermelhos: (1)
+`test_frete_tabela_e_planilha` lia a planilha de fretes por POSIÇÃO fixa
+(coluna C, índices 7, 12, 15) e a Data da Programação entrou na C — teste
+atualizado para as 20 colunas; (2) **regressão minha, pega antes de
+publicar**: a letra e o recuo que diminuí para o PDF de fretes estavam na
+classe `.doc-amplo`, que também veste o **papel do manobrista** — ele saiu a
+12px em vez de 13. `test_relatorio_manobrista` acusou. A tipografia nova
+ficou escopada em `#print-fretes`; o manobrista voltou ao que era, e o PDF de
+fretes continua cabendo (748 de 748px medidos).

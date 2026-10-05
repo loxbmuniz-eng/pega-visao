@@ -29,6 +29,7 @@ import { rotasModeloSemana } from './rotas/modelo_semana.js';
 import { rotasVigia } from './rotas/vigia.js';
 import { rotasRelatorios } from './rotas/relatorios.js';
 import { rotasDevolucoes } from './rotas/devolucoes.js';
+import { rotasPagamentoFrete } from './rotas/pagamento_frete.js';
 
 /* Chave do limite geral: por OPERADOR autenticado, não por IP.
 
@@ -197,6 +198,11 @@ export function criarApp() {
   }));
 
   app.use(compression());
+  /* O PDF do relatório de frete viaja em base64 dentro do JSON e passa de 1 MB
+     (até 6 MB de PDF = 8,5 MB). Só esta rota ganha o teto maior, e ele tem de
+     vir ANTES do parser geral: o primeiro que lê o corpo vale. Os dois formatos
+     (json e text/plain, o que evita pedido prévio de CORS) têm o mesmo teto. */
+  app.use('/api/pagamento-frete/leituras', express.json({ limit: '9mb' }), express.text({ type: 'text/plain', limit: '9mb' }));
   // 1 MB cobre a carga inicial com folga e barra corpo gigante como negação
   // de serviço barata.
   app.use(express.json({ limit: '1mb' }));
@@ -290,6 +296,7 @@ export function criarApp() {
   app.use('/api', rotasModeloSemana);
   app.use('/api', rotasRelatorios);
   app.use('/api', rotasDevolucoes);
+  app.use('/api', rotasPagamentoFrete);
   app.use('/api', rotasVigia);
   app.use('/bi', rotasBI);
   // Robô de relatórios (n8n → WhatsApp) — leitura, token próprio.

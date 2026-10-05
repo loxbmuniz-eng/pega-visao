@@ -6511,3 +6511,527 @@ describe('48. Vigias do sistema — a conferência do dado (02/10/2026)', () => 
     assert.deepEqual(depois.rows[0], antes.rows[0]);
   });
 });
+
+/* ------------------------------------------------------------------ */
+describe('49. Pagamento de Frete — a planilha dentro do painel (05/10/2026)', async () => {
+  const { readFileSync } = await import('node:fs');
+  const { randomUUID } = await import('node:crypto');
+  const { lerPlanilhaXlsx } = await import('../src/servicos/planilha_xlsx.js');
+  const pdf64 = (nome) => readFileSync(new URL(`./fixtures/frete/${nome}`, import.meta.url)).toString('base64');
+  const idDe = async (email) => (await pool.query('SELECT id FROM operadores WHERE email = $1', [email])).rows[0].id;
+  const limpar = async () => {
+    for (const t of ['pgfrete_eventos', 'pgfrete_leituras', 'pgfrete_pagamentos', 'pgfrete_pendencias', 'pgfrete_cargas']) {
+      await pool.query(`DELETE FROM ${t}`);
+    }
+  };
+  const FRETE = '/api/pagamento-frete';
+  /* DUAS pessoas do setor novo, criadas aqui: o acesso é POR SETOR (decisão
+     do dono, 05/10/2026 — "as permissões são definidas na aba de usuários"),
+     e duas porque o lote de leitura é de quem o abriu. */
+  const DO_SETOR = [['daniela@teste.local', 'Daniela Teste'], ['ana.paula@teste.local', 'Ana Paula Teste']];
+  const tk = {};
+  const grade = async (token = tokens['Administração']) => {
+    const r = await req(FRETE, { token });
+    assert.equal(r.status, 200, r.texto);
+    return r.json;
+  };
+  const col = (g, chave) => g.colunas.findIndex((c) => c.chave === chave);
+  const linhasDa = (g, carga) => g.linhas.filter((l) => l.carga === carga);
+  const valor = (g, linha, chave) => linha.v[col(g, chave)];
+  const subir = async (arquivo, lote, token = tokens['Administração']) => req(`${FRETE}/leituras`, {
+    metodo: 'POST', token, corpo: { arquivo: pdf64(arquivo), nome: arquivo, ...(lote ? { lote } : {}) },
+  });
+  /* Importa o par de PDFs de uma carga inteiro, do upload à confirmação. */
+  const importar = async (n, token = tokens['Administração']) => {
+    const a = await subir(`b2b_${n}.pdf`, null, token);
+    assert.equal(a.status, 200, a.texto);
+    const b = await subir(`sist_${n}.pdf`, a.json.lote, token);
+    assert.equal(b.status, 200, b.texto);
+    const c = await req(`${FRETE}/lotes/${a.json.lote}/confirmar`, { metodo: 'POST', token, corpo: {} });
+    assert.equal(c.status, 200, c.texto);
+    return c.json;
+  };
+
+  before(async () => {
+    await limpar();
+    const hash = await bcrypt.hash(SENHA, 4);
+    for (const [email, nome] of DO_SETOR) {
+      await pool.query("INSERT INTO operadores (email, nome, setor, senha_hash) VALUES ($1,$2,'Pagamento de Frete',$3)", [email, nome, hash]);
+      const r = await req('/auth/login', { metodo: 'POST', corpo: { email, senha: SENHA } });
+      assert.equal(r.status, 200, `login de ${email}: ${r.texto}`);
+      tk[email] = r.json.token;
+    }
+  });
+  after(async () => {
+    await limpar();
+    await pool.query("DELETE FROM operadores WHERE setor = 'Pagamento de Frete' AND email LIKE '%@teste.local'");
+  });
+
+  describe('quem entra', () => {
+    test('sem login: 401; outro setor: 403 SETOR_SEM_PERMISSAO; o setor Pagamento de Frete e a Administração entram', async () => {
+      assert.equal((await req(FRETE)).status, 401);
+      for (const setor of ['Portaria', 'Logística', 'Expedição', 'Faturamento']) {
+        const r = await req(FRETE, { token: tokens[setor] });
+        assert.equal(r.status, 403, setor);
+        assert.equal(r.json.codigo, 'SETOR_SEM_PERMISSAO');
+        assert.match(r.json.erro, /Pagamento de Frete/);
+      }
+      assert.equal((await req(FRETE, { token: tk['daniela@teste.local'] })).status, 200);
+      assert.equal((await req(FRETE, { token: tokens['Administração'] })).status, 200);
+    });
+
+    test('o setor existe no servidor, na CHECK do banco e no cadastro pela tela de Usuários', async () => {
+      assert.ok(SETORES.includes('Pagamento de Frete'), 'fluxo.js SETORES');
+      const r = await req('/api/operadores', { metodo: 'POST', token: tokens['Administração'],
+        corpo: { email: 'karen@teste.local', nome: 'Karen Teste', setor: 'Pagamento de Frete', senha: SENHA } });
+      assert.equal(r.status, 201, r.texto);
+      const login = await req('/auth/login', { metodo: 'POST', corpo: { email: 'karen@teste.local', senha: SENHA } });
+      assert.equal(login.status, 200);
+      assert.equal(login.json.operador.setor, 'Pagamento de Frete');
+      assert.equal((await req(FRETE, { token: login.json.token })).status, 200, 'entra na aba na hora');
+      await pool.query("DELETE FROM operadores WHERE email = 'karen@teste.local'");
+    });
+
+    test('mudar a pessoa de setor na tela de Usuários fecha (ou abre) a aba na hora', async () => {
+      const id = (await pool.query("SELECT id FROM operadores WHERE email = 'ana.paula@teste.local'")).rows[0].id;
+      const tira = await req(`/api/operadores/${id}`, { metodo: 'PATCH', token: tokens['Administração'], corpo: { setor: 'Portaria' } });
+      assert.equal(tira.status, 200, tira.texto);
+      // trocar o setor revoga a sessão (o setor viaja no token): a pessoa entra de novo e já não vê a aba
+      const r1 = await req('/auth/login', { metodo: 'POST', corpo: { email: 'ana.paula@teste.local', senha: SENHA } });
+      assert.equal((await req(FRETE, { token: r1.json.token })).status, 403);
+      const volta = await req(`/api/operadores/${id}`, { metodo: 'PATCH', token: tokens['Administração'], corpo: { setor: 'Pagamento de Frete' } });
+      assert.equal(volta.status, 200);
+      const r2 = await req('/auth/login', { metodo: 'POST', corpo: { email: 'ana.paula@teste.local', senha: SENHA } });
+      assert.equal((await req(FRETE, { token: r2.json.token })).status, 200);
+      tk['ana.paula@teste.local'] = r2.json.token;
+    });
+
+    test('toda rota da aba exige o setor (não só a grade)', async () => {
+      const pdf = pdf64('b2b_900801.pdf');
+      const tentativas = [
+        ['GET', `${FRETE}/exportar.xlsx`], ['POST', `${FRETE}/leituras`, { arquivo: pdf }],
+        ['GET', `${FRETE}/lotes/${randomUUID()}/previa`], ['POST', `${FRETE}/lotes/${randomUUID()}/confirmar`, {}],
+        ['PATCH', `${FRETE}/cargas/1`, { cte: '1' }], ['PATCH', `${FRETE}/cargas/1/pendencias/2`, { tratativa: 'OK' }],
+        ['POST', `${FRETE}/cargas/1/pagamentos`, { pct: 10 }], ['POST', `${FRETE}/pagamentos/1/anular`, { motivo: 'x' }],
+        ['GET', `${FRETE}/cargas/1/historico`],
+      ];
+      for (const [metodo, caminho, corpo] of tentativas) {
+        const r = await req(caminho, { metodo, token: tokens['Logística'], corpo });
+        assert.equal(r.status, 403, `${metodo} ${caminho}`);
+        assert.equal(r.json.codigo, 'SETOR_SEM_PERMISSAO');
+      }
+    });
+
+    test('o setor Pagamento de Frete NÃO mexe no pátio: nenhuma allowlist de carga ou devolução o inclui', async () => {
+      const t = tk['daniela@teste.local'];
+      const cria = await req('/api/cargas', { metodo: 'POST', token: t, corpo: { id: 'frete-x', placa: 'ZZZ9Z99', numeroCarga: '900900' } });
+      assert.equal(cria.status, 403, cria.texto);
+      const dev = await req('/api/devolucoes', { metodo: 'POST', token: t, corpo: {} });
+      assert.equal(dev.status, 403, dev.texto);
+      assert.equal((await req('/api/operadores', { token: t })).status, 403);
+    });
+  });
+
+  describe('importar os PDFs: ler, ver a prévia, confirmar', () => {
+    test('carga LIBERADA: o par entra, a prévia mostra antes e nada é gravado até confirmar', async () => {
+      const a = await subir('b2b_900801.pdf');
+      assert.equal(a.status, 200, a.texto);
+      assert.equal(a.json.tipo, 'B2B');
+      assert.deepEqual(a.json.cargas.map((c) => [c.numero, c.notas]), [['900801', 6]]);
+      assert.match(a.json.lote, /^[0-9a-f-]{36}$/);
+
+      const so1 = await req(`${FRETE}/lotes/${a.json.lote}/previa`, { token: tokens['Administração'] });
+      assert.equal(so1.json.cargas[0].estado, 'falta_sist', 'só um dos dois relatórios: a prévia avisa o que falta');
+
+      const b = await subir('sist_900801.pdf', a.json.lote);
+      assert.equal(b.json.tipo, 'SIST');
+      const previa = await req(`${FRETE}/lotes/${a.json.lote}/previa`, { token: tokens['Administração'] });
+      const c = previa.json.cargas[0];
+      assert.deepEqual([c.numero, c.estado, c.qtdSist, c.qtdB2b, c.finalizadas, c.situacao, c.existente], ['900801', 'pronta', 6, 6, 6, 'LIBERADA', null]);
+
+      assert.equal(linhasDa(await grade(), 900801).length, 0, 'prévia não grava');
+      const conf = await req(`${FRETE}/lotes/${a.json.lote}/confirmar`, { metodo: 'POST', token: tokens['Administração'], corpo: {} });
+      assert.deepEqual(conf.json.gravadas.map((g) => [g.numero, g.situacao, g.nova]), [['900801', 'LIBERADA', true]]);
+
+      const g = await grade();
+      const [l] = linhasDa(g, 900801);
+      assert.equal(valor(g, l, 'situacao'), 'LIBERADA');
+      assert.equal(valor(g, l, 'resumo'), 'SEM PENDÊNCIA');
+      assert.equal(valor(g, l, 'data'), hojeISO());
+      assert.equal(valor(g, l, 'entregue'), 1);
+      assert.equal(valor(g, l, 'aPagar'), 1, 'liberada e sem pagamento: 100% a pagar');
+    });
+
+    test('confirmar duas vezes não duplica nada: o lote some depois de gravado', async () => {
+      const a = await subir('b2b_900801.pdf');
+      await subir('sist_900801.pdf', a.json.lote);
+      const c1 = await req(`${FRETE}/lotes/${a.json.lote}/confirmar`, { metodo: 'POST', token: tokens['Administração'], corpo: {} });
+      assert.equal(c1.json.gravadas[0].nova, false, 'a carga já existia');
+      assert.deepEqual([c1.json.gravadas[0].novas, c1.json.gravadas[0].resolvidas], [0, 0], 'reimportar o mesmo par não muda nada');
+      const c2 = await req(`${FRETE}/lotes/${a.json.lote}/confirmar`, { metodo: 'POST', token: tokens['Administração'], corpo: {} });
+      assert.equal(c2.status, 404);
+      assert.equal(c2.json.codigo, 'LOTE_VAZIO');
+      assert.equal(linhasDa(await grade(), 900801).length, 1);
+    });
+
+    test('carga PENDENTE: uma linha por pendência, com a nota e o status do B2B (como na planilha)', async () => {
+      await importar('900802');
+      const g = await grade();
+      const ls = linhasDa(g, 900802);
+      assert.equal(ls.length, 4);
+      assert.deepEqual(ls.map((l) => l.primeira), [true, false, false, false]);
+      const [p] = ls;
+      assert.deepEqual(
+        ['qtdSist', 'qtdB2b', 'diferenca', 'finalizadas', 'aguardando', 'naoEntregue', 'outros', 'situacao'].map((k) => valor(g, p, k)),
+        [8, 8, 0, 4, 1, 1, 2, 'PENDENTE'],
+      );
+      assert.match(valor(g, p, 'resumo'), /^\d+ \(Aguardando\)$/);
+      assert.deepEqual(ls.map((l) => valor(g, l, 'resumo').replace(/^\d+ /, '')).sort(), ['(A caminho)', '(Aguardando)', '(Cancelado)', '(Não entregue)']);
+      assert.equal(valor(g, p, 'entregue'), 0.5);
+      assert.equal(valor(g, p, 'liberado'), 0.5);
+      for (const l of ls.slice(1)) assert.equal(valor(g, l, 'situacao'), 'PENDENTE', 'a situação se repete em todas as linhas do bloco (filtro)');
+      assert.equal(valor(g, ls[1], 'qtdSist'), null, 'as contagens ficam só na primeira linha');
+    });
+
+    test('contagem igual mas notas diferentes → VERIFICAR, com a nota que falta e a que sobra nas pendências', async () => {
+      await importar('900803');
+      const g = await grade();
+      const ls = linhasDa(g, 900803);
+      assert.equal(valor(g, ls[0], 'situacao'), 'VERIFICAR');
+      const rotulos = ls.map((l) => valor(g, l, 'resumo'));
+      assert.ok(rotulos.includes('810305 (Não localizada no B2B)'), rotulos.join('|'));
+      assert.ok(rotulos.includes('810399 (Só no B2B)'));
+      assert.equal(valor(g, ls[0], 'liberado'), 'conferir');
+      assert.equal(valor(g, ls[0], 'aPagar'), 'conferir');
+    });
+
+    test('um PDF com VÁRIAS cargas (e o outro também) vira várias cargas num lote só', async () => {
+      const a = await subir('b2b_varias.pdf');
+      assert.deepEqual(a.json.cargas.map((c) => c.numero), ['900807', '900808']);
+      await subir('sist_varias.pdf', a.json.lote);
+      const conf = await req(`${FRETE}/lotes/${a.json.lote}/confirmar`, { metodo: 'POST', token: tokens['Administração'], corpo: {} });
+      assert.deepEqual(conf.json.gravadas.map((g) => [g.numero, g.situacao]), [['900807', 'LIBERADA'], ['900808', 'PENDENTE']]);
+    });
+
+    test('confirmar só ALGUMAS cargas do lote: as outras ficam guardadas', async () => {
+      const a = await subir('b2b_varias.pdf');
+      await subir('sist_varias.pdf', a.json.lote);
+      const conf = await req(`${FRETE}/lotes/${a.json.lote}/confirmar`, { metodo: 'POST', token: tokens['Administração'], corpo: { cargas: ['900807'] } });
+      assert.deepEqual(conf.json.gravadas.map((g) => g.numero), ['900807']);
+      assert.deepEqual(conf.json.ignoradas, [{ numero: '900808', motivo: 'NAO_ESCOLHIDA' }]);
+      const resto = await req(`${FRETE}/lotes/${a.json.lote}/previa`, { token: tokens['Administração'] });
+      assert.deepEqual(resto.json.cargas.map((c) => c.numero), ['900808']);
+    });
+
+    test('confirmar com um relatório só NÃO grava a carga (falta o outro)', async () => {
+      const a = await subir('b2b_900806.pdf');
+      const conf = await req(`${FRETE}/lotes/${a.json.lote}/confirmar`, { metodo: 'POST', token: tokens['Administração'], corpo: {} });
+      assert.deepEqual(conf.json.gravadas, []);
+      assert.deepEqual(conf.json.ignoradas, [{ numero: '900806', motivo: 'FALTA_ATAK' }]);
+      assert.equal(linhasDa(await grade(), 900806).length, 0);
+    });
+
+    test('recusas com explicação: outro relatório, não-PDF, vazio, grande demais, lote alheio', async () => {
+      const outro = await subir('outro_relatorio.pdf');
+      assert.equal(outro.status, 422);
+      assert.equal(outro.json.codigo, 'RELATORIO_DESCONHECIDO');
+      const texto = await req(`${FRETE}/leituras`, { metodo: 'POST', token: tokens['Administração'], corpo: { arquivo: Buffer.from('isto não é pdf').toString('base64') } });
+      assert.equal(texto.status, 422);
+      assert.equal(texto.json.codigo, 'NAO_E_PDF');
+      assert.equal((await req(`${FRETE}/leituras`, { metodo: 'POST', token: tokens['Administração'], corpo: {} })).json.codigo, 'SEM_ARQUIVO');
+      const grande = await req(`${FRETE}/leituras`, { metodo: 'POST', token: tokens['Administração'], corpo: { arquivo: 'A'.repeat(8.8 * 1024 * 1024) } });
+      assert.equal(grande.status, 413);
+      assert.equal(grande.json.codigo, 'ARQUIVO_GRANDE');
+      assert.equal((await req(`${FRETE}/leituras`, { metodo: 'POST', token: tokens['Administração'], corpo: { arquivo: 'x', lote: 'nao-e-lote' } })).json.codigo, 'LOTE_INVALIDO');
+
+      // o lote de uma pessoa não é lido nem confirmado por outra (a Administração pode)
+      const dele = await subir('b2b_900801.pdf', null, tk['daniela@teste.local']);
+      assert.equal(dele.status, 200, dele.texto);
+      const alheio = await req(`${FRETE}/lotes/${dele.json.lote}/previa`, { token: tk['ana.paula@teste.local'] });
+      assert.equal(alheio.status, 403);
+      assert.equal(alheio.json.codigo, 'LOTE_DE_OUTRA_PESSOA');
+      assert.equal((await req(`${FRETE}/lotes/${dele.json.lote}/previa`, { token: tokens['Administração'] })).status, 200);
+      await pool.query('DELETE FROM pgfrete_leituras WHERE lote = $1', [dele.json.lote]);
+    });
+
+    test('lote que não existe: 404 explicado', async () => {
+      const r = await req(`${FRETE}/lotes/${randomUUID()}/previa`, { token: tokens['Administração'] });
+      assert.equal(r.status, 404);
+      assert.equal(r.json.codigo, 'LOTE_VAZIO');
+    });
+  });
+
+  describe('trabalhar a planilha: tratativa, pagamento, campos da carga', () => {
+    test('tratativa por nota: libera pagamento só OK / OK B2B, e a data fica a do dia', async () => {
+      let g = await grade();
+      const ls = linhasDa(g, 900802);
+      const aguardando = ls.find((l) => valor(g, l, 'resumo').endsWith('(Aguardando)'));
+      const dev = ls.find((l) => valor(g, l, 'resumo').endsWith('(Não entregue)'));
+
+      const r1 = await req(`${FRETE}/cargas/900802/pendencias/${aguardando.nota}`, { metodo: 'PATCH', token: tokens['Administração'], corpo: { tratativa: 'DEV' } });
+      assert.equal(r1.status, 200, r1.texto);
+      g = await grade();
+      assert.equal(valor(g, linhasDa(g, 900802)[0], 'liberado'), 0.5, 'DEV não libera pagamento');
+
+      const r2 = await req(`${FRETE}/cargas/900802/pendencias/${aguardando.nota}`, { metodo: 'PATCH', token: tokens['Administração'], corpo: { tratativa: 'OK' } });
+      assert.equal(r2.status, 200);
+      g = await grade();
+      const linha = linhasDa(g, 900802).find((l) => l.nota === aguardando.nota);
+      assert.equal(valor(g, linha, 'tratativa'), 'OK');
+      assert.equal(valor(g, linha, 'dataTratativa'), hojeISO());
+      assert.equal(valor(g, linhasDa(g, 900802)[0], 'liberado'), 0.625, 'OK libera: (4 finalizadas + 1 consultada) de 8');
+      assert.equal(valor(g, linhasDa(g, 900802)[0], 'entregue'), 0.5, 'o entregue não muda — é o que o B2B comprova');
+
+      const r3 = await req(`${FRETE}/cargas/900802/pendencias/${dev.nota}`, { metodo: 'PATCH', token: tokens['Administração'], corpo: { tratativa: 'OK B2B', obs: 'conferido no B2B' } });
+      assert.equal(r3.status, 200);
+      g = await grade();
+      assert.equal(valor(g, linhasDa(g, 900802)[0], 'liberado'), 0.75);
+      assert.equal(valor(g, linhasDa(g, 900802).find((l) => l.nota === dev.nota), 'observacao'), 'conferido no B2B');
+
+      const limpa = await req(`${FRETE}/cargas/900802/pendencias/${dev.nota}`, { metodo: 'PATCH', token: tokens['Administração'], corpo: { tratativa: '' } });
+      assert.equal(limpa.status, 200);
+      g = await grade();
+      assert.equal(valor(g, linhasDa(g, 900802).find((l) => l.nota === dev.nota), 'dataTratativa'), null, 'sem tratativa, sem data');
+    });
+
+    test('tratativa inválida, nota inexistente e ids malformados são recusados', async () => {
+      const a = tokens['Administração'];
+      const g = await grade();
+      const nota = linhasDa(g, 900802)[0].nota;
+      assert.equal((await req(`${FRETE}/cargas/900802/pendencias/${nota}`, { metodo: 'PATCH', token: a, corpo: { tratativa: 'PAGO!' } })).json.codigo, 'TRATATIVA_INVALIDA');
+      assert.equal((await req(`${FRETE}/cargas/900802/pendencias/999999`, { metodo: 'PATCH', token: a, corpo: { tratativa: 'OK' } })).json.codigo, 'PENDENCIA_NAO_ENCONTRADA');
+      assert.equal((await req(`${FRETE}/cargas/abc/pendencias/1`, { metodo: 'PATCH', token: a, corpo: { tratativa: 'OK' } })).json.codigo, 'ID_INVALIDO');
+      assert.equal((await req(`${FRETE}/cargas/900802/pendencias/${nota}`, { metodo: 'PATCH', token: a, corpo: {} })).json.codigo, 'SEM_CAMPOS');
+      assert.equal((await req(`${FRETE}/cargas/900802/pendencias/${nota}`, { metodo: 'PATCH', token: a, corpo: { tratativa: 'OK', tratativaEm: '31/02/2026' } })).json.codigo, 'DATA_INVALIDA');
+    });
+
+    test('pagamento: dentro do liberado passa; acima dele PERGUNTA (409) e só vai com confirmação; passar de 100% nunca', async () => {
+      const a = tokens['Administração'];
+      // 900802: liberado = 62,5% (a tratativa OK do teste anterior), nada pago
+      const r1 = await req(`${FRETE}/cargas/900802/pagamentos`, { metodo: 'POST', token: a, corpo: { pct: 50, dataPagamento: '2026-10-09' } });
+      assert.equal(r1.status, 201, r1.texto);
+      assert.equal(r1.json.pagoTotal, 50);
+
+      const r2 = await req(`${FRETE}/cargas/900802/pagamentos`, { metodo: 'POST', token: a, corpo: { pct: 20 } });
+      assert.equal(r2.status, 409);
+      assert.equal(r2.json.codigo, 'ACIMA_DO_LIBERADO');
+      assert.equal(r2.json.podeConfirmar, true);
+      assert.equal(r2.json.pagoAtual, 50);
+      assert.equal(r2.json.liberado, 62.5);
+      assert.match(r2.json.erro, /62\.5%/, 'a pergunta diz o número');
+
+      const r3 = await req(`${FRETE}/cargas/900802/pagamentos`, { metodo: 'POST', token: a, corpo: { pct: 20, confirmar: true } });
+      assert.equal(r3.status, 201, 'quem tem autoridade decide, depois de perguntado');
+
+      const r4 = await req(`${FRETE}/cargas/900802/pagamentos`, { metodo: 'POST', token: a, corpo: { pct: 40, confirmar: true } });
+      assert.equal(r4.status, 409);
+      assert.equal(r4.json.codigo, 'PAGAMENTO_PASSA_DE_100', 'passar de 100% não tem confirmação que valha');
+
+      const g = await grade();
+      const p = linhasDa(g, 900802)[0];
+      assert.equal(valor(g, p, 'pago'), 0.7);
+      assert.equal(valor(g, p, 'statusPagamento'), 'PARCIAL');
+      assert.equal(valor(g, p, 'dataPagamento'), '2026-10-09', 'a data do último pagamento que tem data');
+    });
+
+    test('pagamento: percentual inválido, data inválida, carga inexistente', async () => {
+      const a = tokens['Administração'];
+      for (const pct of [0, -5, 101, 'abc', null]) {
+        const r = await req(`${FRETE}/cargas/900802/pagamentos`, { metodo: 'POST', token: a, corpo: { pct } });
+        assert.equal(r.status, 400, `pct=${pct}`);
+        assert.equal(r.json.codigo, 'PCT_INVALIDO');
+      }
+      assert.equal((await req(`${FRETE}/cargas/900802/pagamentos`, { metodo: 'POST', token: a, corpo: { pct: 5, dataPagamento: '2026-02-30' } })).json.codigo, 'DATA_INVALIDA');
+      assert.equal((await req(`${FRETE}/cargas/777777/pagamentos`, { metodo: 'POST', token: a, corpo: { pct: 5 } })).status, 404);
+    });
+
+    test('pagamento SEM data é permitido ("não tem uma data específica")', async () => {
+      const r = await req(`${FRETE}/cargas/900807/pagamentos`, { metodo: 'POST', token: tokens['Administração'], corpo: { pct: 100 } });
+      assert.equal(r.status, 201, r.texto);
+      const g = await grade();
+      const p = linhasDa(g, 900807)[0];
+      assert.equal(valor(g, p, 'statusPagamento'), 'INTEGRAL');
+      assert.equal(valor(g, p, 'dataPagamento'), null);
+      assert.equal(valor(g, p, 'aPagar'), 0);
+    });
+
+    test('carga VERIFICAR: registrar pagamento PERGUNTA antes ("nada está liberado") — e com confirmação passa', async () => {
+      const a = tokens['Administração'];
+      const r = await req(`${FRETE}/cargas/900803/pagamentos`, { metodo: 'POST', token: a, corpo: { pct: 10 } });
+      assert.equal(r.status, 409);
+      assert.equal(r.json.codigo, 'CARGA_PARA_CONFERIR');
+      assert.equal(r.json.podeConfirmar, true);
+      const ok = await req(`${FRETE}/cargas/900803/pagamentos`, { metodo: 'POST', token: a, corpo: { pct: 10, confirmar: true } });
+      assert.equal(ok.status, 201);
+      const { rows } = await pool.query("SELECT detalhe FROM pgfrete_eventos WHERE numero_carga = '900803' AND acao = 'pagamento'");
+      assert.equal(rows[0].detalhe.acimaDoLiberado, true, 'a trilha guarda que foi pago por cima da pergunta');
+    });
+
+    test('anular: exige motivo, não apaga (continua no histórico), não anula duas vezes, e o saldo volta', async () => {
+      const a = tokens['Administração'];
+      const hist = await req(`${FRETE}/cargas/900807/historico`, { token: a });
+      const id = hist.json.pagamentos[0].id;
+      assert.equal((await req(`${FRETE}/pagamentos/${id}/anular`, { metodo: 'POST', token: a, corpo: {} })).json.codigo, 'MOTIVO_FALTANDO');
+      const ok = await req(`${FRETE}/pagamentos/${id}/anular`, { metodo: 'POST', token: a, corpo: { motivo: 'lançado na carga errada' } });
+      assert.equal(ok.status, 200, ok.texto);
+      assert.equal((await req(`${FRETE}/pagamentos/${id}/anular`, { metodo: 'POST', token: a, corpo: { motivo: 'de novo' } })).json.codigo, 'JA_ANULADO');
+      assert.equal((await req(`${FRETE}/pagamentos/999999/anular`, { metodo: 'POST', token: a, corpo: { motivo: 'x' } })).status, 404);
+
+      const g = await grade();
+      const p = linhasDa(g, 900807)[0];
+      assert.equal(valor(g, p, 'pago'), null);
+      assert.equal(valor(g, p, 'aPagar'), 1, 'anulado: a carga volta a ter 100% a pagar');
+
+      const depois = await req(`${FRETE}/cargas/900807/historico`, { token: a });
+      assert.equal(depois.json.pagamentos.length, 1, 'o pagamento anulado NÃO some');
+      assert.equal(depois.json.pagamentos[0].anuladoMotivo, 'lançado na carga errada');
+      assert.ok(depois.json.eventos.some((e) => e.acao === 'anulou_pagamento'));
+    });
+
+    test('dois pagamentos AO MESMO TEMPO não passam de 100% (a carga é travada na transação)', async () => {
+      const a = tokens['Administração'];
+      const rs = await Promise.all([1, 2, 3, 4].map(() => req(`${FRETE}/cargas/900808/pagamentos`, { metodo: 'POST', token: a, corpo: { pct: 40, confirmar: true } })));
+      const ok = rs.filter((r) => r.status === 201).length;
+      assert.equal(ok, 2, `40% + 40% cabem; o terceiro (120%) não — passaram ${ok}: ${rs.map((r) => r.status)}`);
+      const { rows } = await pool.query("SELECT coalesce(sum(pct),0) AS t FROM pgfrete_pagamentos WHERE numero_carga = '900808' AND anulado_em IS NULL");
+      assert.ok(rows[0].t <= 100);
+    });
+
+    test('campos da carga: transportadora, CT-e e observação; trilha de auditoria', async () => {
+      const a = tokens['Administração'];
+      const r = await req(`${FRETE}/cargas/900802`, { metodo: 'PATCH', token: a, corpo: { transportadora: 'Transp. Exemplo A', cte: '18502', obs: 'ligar segunda' } });
+      assert.equal(r.status, 200, r.texto);
+      const g = await grade();
+      const p = linhasDa(g, 900802)[0];
+      assert.equal(valor(g, p, 'transportadora'), 'Transp. Exemplo A');
+      assert.equal(valor(g, p, 'cte'), '18502');
+      assert.match(valor(g, p, 'observacao'), /ligar segunda/);
+      assert.equal(valor(g, linhasDa(g, 900802)[1], 'transportadora'), 'Transp. Exemplo A', 'a transportadora se repete no bloco (filtro)');
+      assert.equal((await req(`${FRETE}/cargas/900802`, { metodo: 'PATCH', token: a, corpo: {} })).json.codigo, 'SEM_CAMPOS');
+      assert.equal((await req(`${FRETE}/cargas/777777`, { metodo: 'PATCH', token: a, corpo: { cte: '1' } })).status, 404);
+      const { rows } = await pool.query("SELECT detalhe, por_nome FROM pgfrete_eventos WHERE numero_carga = '900802' AND acao = 'editou_carga'");
+      assert.equal(rows[0].detalhe.cte.para, '18502');
+      assert.equal(rows[0].por_nome, 'Admin Um');
+    });
+  });
+
+  describe('reimportar: a pendência que finaliza sai da fila e a tratativa fica guardada', () => {
+    const N = '990001';
+    const lerLote = async (lote, sist, b2b, quem) => {
+      const dono = String(await idDe('admin1@teste.local'));
+      await pool.query(
+        "INSERT INTO pgfrete_leituras (lote, tipo, numero_carga, arquivo, conteudo, criado_por) VALUES ($1,'SIST',$2,'x',$3::jsonb,$4)",
+        [lote, '990990', JSON.stringify({ notas: sist, avisos: [] }), quem ?? dono]);
+      await pool.query(
+        "INSERT INTO pgfrete_leituras (lote, tipo, numero_carga, arquivo, conteudo, criado_por) VALUES ($1,'B2B',$2,'x',$3::jsonb,$4)",
+        [lote, '990990', JSON.stringify({ linhas: b2b, avisos: [] }), quem ?? dono]);
+    };
+    const notas = [{ nota: `${N}0`, cliente: 'CLIENTE TESTE', cidade: 'Cidade Teste' }, { nota: `${N}1`, cliente: 'CLIENTE TESTE', cidade: 'Cidade Teste' }];
+
+    test('1ª conferência: uma nota Finalizada e uma Aguardando', async () => {
+      const lote = randomUUID();
+      await lerLote(lote, notas, [{ seq: 1, status: 'Finalizado', nota: `${N}0-3` }, { seq: 2, status: 'Aguardando', nota: `${N}1-3` }]);
+      const conf = await req(`${FRETE}/lotes/${lote}/confirmar`, { metodo: 'POST', token: tokens['Administração'], corpo: {} });
+      assert.equal(conf.status, 200, conf.texto);
+      assert.equal(conf.json.gravadas[0].situacao, 'PENDENTE');
+      const t = await req(`${FRETE}/cargas/990990/pendencias/${N}1`, { metodo: 'PATCH', token: tokens['Administração'], corpo: { tratativa: 'OK', obs: 'consultei no sistema' } });
+      assert.equal(t.status, 200);
+    });
+
+    test('2ª conferência: a nota virou Finalizado → sai das pendências, e a tratativa continua no histórico', async () => {
+      const lote = randomUUID();
+      await lerLote(lote, notas, [{ seq: 1, status: 'Finalizado', nota: `${N}0-3` }, { seq: 2, status: 'Finalizado', nota: `${N}1-3` }]);
+      const previa = await req(`${FRETE}/lotes/${lote}/previa`, { token: tokens['Administração'] });
+      assert.deepEqual([previa.json.cargas[0].existente.novas, previa.json.cargas[0].existente.resolvidas], [0, 1], 'a prévia diz o que vai mudar');
+      const conf = await req(`${FRETE}/lotes/${lote}/confirmar`, { metodo: 'POST', token: tokens['Administração'], corpo: {} });
+      assert.deepEqual([conf.json.gravadas[0].situacao, conf.json.gravadas[0].resolvidas], ['LIBERADA', 1]);
+      const g = await grade();
+      const [l] = linhasDa(g, 990990);
+      assert.equal(valor(g, l, 'resumo'), 'SEM PENDÊNCIA');
+      assert.equal(valor(g, l, 'entregue'), 1);
+      const h = await req(`${FRETE}/cargas/990990/historico`, { token: tokens['Administração'] });
+      const p = h.json.pendencias.find((x) => x.nota === `${N}1`);
+      assert.equal(p.tratativa, 'OK', 'quem consultou fica registrado');
+      assert.equal(p.obs, 'consultei no sistema');
+      assert.equal(p.resolvidaEm, hojeISO());
+      assert.equal((await req(`${FRETE}/cargas/990990/pendencias/${N}1`, { metodo: 'PATCH', token: tokens['Administração'], corpo: { tratativa: 'DEV' } })).json.codigo, 'PENDENCIA_RESOLVIDA');
+    });
+
+    test('3ª conferência: a nota VOLTA a ficar pendente → reabre, e a tratativa antiga é mantida', async () => {
+      const lote = randomUUID();
+      await lerLote(lote, notas, [{ seq: 1, status: 'Finalizado', nota: `${N}0-3` }, { seq: 2, status: 'Não entregue', nota: `${N}1-3` }]);
+      const conf = await req(`${FRETE}/lotes/${lote}/confirmar`, { metodo: 'POST', token: tokens['Administração'], corpo: {} });
+      assert.equal(conf.json.gravadas[0].reabertas, 1);
+      const g = await grade();
+      const l = linhasDa(g, 990990)[0];
+      assert.equal(valor(g, l, 'resumo'), `${N}1 (Não entregue)`);
+      assert.equal(valor(g, l, 'tratativa'), 'OK');
+    });
+  });
+
+  describe('o arquivo Excel é a MESMA planilha da tela', () => {
+    test('exportar: .xlsx de verdade, e cada célula é a célula que a tela recebeu', async () => {
+      const r = await fetch(`${base}${FRETE}/exportar.xlsx`, { headers: { authorization: `Bearer ${tokens['Administração']}` } });
+      assert.equal(r.status, 200);
+      assert.equal(r.headers.get('content-type'), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      assert.match(r.headers.get('content-disposition'), /^attachment; filename="Controle_Pagamento_Frete_\d{4}-\d{2}-\d{2}\.xlsx"$/);
+      const buf = Buffer.from(await r.arrayBuffer());
+      assert.equal(buf.subarray(0, 2).toString('latin1'), 'PK');
+
+      const g = await grade();
+      const { abas } = lerPlanilhaXlsx(buf);
+      assert.deepEqual(abas.map((x) => x.nome), ['CONTROLE_CARGAS', 'RESUMO', 'LEIA-ME']);
+      const linhas = abas[0].linhas;
+      assert.equal(linhas.length, g.linhas.length + 1);
+      assert.deepEqual(linhas[0].slice(0, g.colunas.length), g.colunas.map((c) => c.t));
+      const igual = (x, y) => (x === '' || x == null ? y === '' || y == null : (typeof x === 'number' && typeof y === 'number' ? Math.abs(x - y) < 1e-9 : x === y));
+      g.linhas.forEach((l, i) => l.v.forEach((v, j) => {
+        assert.ok(igual(v, linhas[i + 1][j]), `linha ${i + 2}, ${g.colunas[j].t}: tela=${JSON.stringify(v)} arquivo=${JSON.stringify(linhas[i + 1][j])}`);
+      }));
+      const { rows } = await pool.query("SELECT 1 FROM pgfrete_eventos WHERE acao = 'exportou'");
+      assert.ok(rows.length >= 1, 'quem exportou fica na trilha');
+    });
+
+    test('o resumo da tela conta CARGAS (não linhas) e fecha com a grade', async () => {
+      const g = await grade();
+      const cargas = new Set(g.linhas.map((l) => l.carga)).size;
+      assert.equal(g.resumo.cargas, cargas);
+      assert.ok(g.linhas.length > cargas, 'há cargas com várias linhas — é aí que a planilha original errava o total');
+      assert.equal(g.resumo.liberadas + g.resumo.pendentes + g.resumo.verificar, cargas);
+      assert.equal(g.resumo.tratativas.reduce((s, t) => s + t.qtd, 0), g.resumo.pendAbertas);
+      assert.equal(g.resumo.pendAbertas, g.linhas.filter((l) => l.nota && l.categoria).length);
+    });
+
+    test('filtro por data (?desde=) e data inválida', async () => {
+      const a = tokens['Administração'];
+      const hoje = hojeISO();
+      const todas = await req(`${FRETE}?desde=2000-01-01`, { token: a });
+      assert.ok(todas.json.linhas.length > 0);
+      const futuro = await req(`${FRETE}?desde=2099-01-01`, { token: a });
+      assert.equal(futuro.json.linhas.length, 0);
+      assert.equal(futuro.json.resumo.cargas, 0);
+      assert.equal((await req(`${FRETE}?desde=ontem`, { token: a })).json.codigo, 'DATA_INVALIDA');
+      assert.equal(typeof hoje, 'string');
+    });
+  });
+
+  describe('servidor sem a migração 058', () => {
+    test('toda rota responde 503 FRETE_SEM_MIGRACAO explicado (nunca 500), e o login segue', async () => {
+      await pool.query('ALTER TABLE pgfrete_cargas RENAME TO pgfrete_cargas_off');
+      try {
+        const r = await req(FRETE, { token: tokens['Administração'] });
+        assert.equal(r.status, 503);
+        assert.equal(r.json.codigo, 'FRETE_SEM_MIGRACAO');
+        assert.match(r.json.erro, /atualiza/i);
+        assert.equal((await req('/auth/eu', { token: tokens['Administração'] })).status, 200);
+      } finally {
+        await pool.query('ALTER TABLE pgfrete_cargas_off RENAME TO pgfrete_cargas');
+      }
+    });
+
+    test('sem o setor na CHECK do banco (migração 058 ainda não rodou): cadastrar explica, nada derruba', async () => {
+      const { rows } = await pool.query("SELECT pg_get_constraintdef(oid) AS d FROM pg_constraint WHERE conname = 'operadores_setor_check'");
+      assert.match(rows[0].d, /Pagamento de Frete/, 'a 058 põe o setor na CHECK');
+    });
+  });
+});

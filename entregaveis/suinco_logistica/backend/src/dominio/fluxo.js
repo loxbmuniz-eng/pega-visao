@@ -83,6 +83,19 @@ export const SETORES = [
      Bahia é justamente o que ela precisa enxergar. Isso sai de graça por
      ela NÃO ser filial: nenhum filtro por `criada_setor` a alcança. */
   'Qualidade',
+  /* PAGAMENTO DE FRETE (05/10/2026).
+
+     Pedido do dono: o controle do pagamento de frete (a planilha da
+     Logística, agora dentro do painel) é de um grupo pequeno, e a regra dele
+     é a de sempre: "os usuários permanecem na aba de usuários, e as
+     permissões são definidas lá" — ou seja, um SETOR, escolhido no mesmo
+     seletor de todos. Nada de marca por pessoa nem tela nova.
+
+     VÊ SÓ A ABA PAGAMENTO DE FRETE (e a Minha segurança, que é de todo
+     setor). Não aparece em NENHUMA allowlist de carga ou de devolução, então
+     — como o Comercial — é barrado por padrão em tudo que mexe no pátio.
+     Quem precisar de mais alguma aba, é uma linha em SETOR_PERMISSOES. */
+  'Pagamento de Frete',
   /* AS FILIAIS (02/09/2026).
 
      Pedido do dono: "isso é um setor novo, so vai ter acesso a aba
@@ -106,6 +119,11 @@ export const SETORES = [
   'Filial 106 BAHIA',
   'Filial 107 ES',
 ];
+
+/* O setor da aba Pagamento de Frete. O nome também está escrito na lista
+   acima (o teste test_setor_novo_aparece_nas_telas.py lê as aspas dali) e em
+   data.js; as rotas da aba usam esta constante para não repetir o texto. */
+export const SETOR_PAGAMENTO_FRETE = 'Pagamento de Frete';
 
 /* As filiais, num lugar só. Quem precisa saber "este operador é de
    filial?" pergunta aqui — a alternativa é repetir a lista em cinco

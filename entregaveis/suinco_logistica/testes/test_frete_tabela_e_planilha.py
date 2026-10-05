@@ -19,7 +19,7 @@ O QUE ESTE TESTE TRAVA
   3. sem KM e sem observação, a tela não deixa contratar a placa — e DIZ
      o que falta, com foco no campo (botão desabilitado não ensina);
   4. sem placa, a carga nasce sem KM — é programação, não contratação;
-  5. a planilha sai com as 19 colunas na ordem que ele ditou, sem
+  5. a planilha sai com as 20 colunas na ordem que ele ditou (a Data da Programação entrou em 05/10), sem
      paletizada, com o documento de frete por último;
   6. quem não pode ver valor de frete não vê o card de cadastro nem o
      valor na planilha;
@@ -221,25 +221,27 @@ async def main():
         ck('a planilha foi gerada', bool(csv), str(csv)[:60])
         linhas = (csv or '').replace('﻿', '').split('\r\n')
         cab = linhas[0].split(';') if linhas else []
-        esperado = ['Sequência', 'Nº da Carga', 'Data do Faturamento', 'Rota', 'Tipo de Operação',
+        # 20 desde 05/10/2026 (ocorrência #109): a Data da Programação entrou ao
+        # lado da do Faturamento — pedido do dono; as demais seguem na ordem ditada.
+        esperado = ['Sequência', 'Nº da Carga', 'Data da Programação', 'Data do Faturamento', 'Rota', 'Tipo de Operação',
                     'Placa', 'Transportadora', 'Tipo de Veículo', 'Peso (t)',
                     'Destino do Frete', 'KM Destino', 'KM Deslocamento', 'KM Divergente',
                     'Entregas', 'Motorista', 'Valor do Frete (R$)', 'Observação do Frete',
                     'Observações', 'Documento de Frete']
         ck('coluna A é a Sequência', cab[:1] == ['Sequência'], str(cab[:3]))
         ck('coluna B é o Nº da Carga', cab[1:2] == ['Nº da Carga'], str(cab[:3]))
-        ck('coluna C é a Data do Faturamento', cab[2:3] == ['Data do Faturamento'], str(cab[:3]))
+        ck('coluna C é a Data da Programação e D a do Faturamento', cab[2:4] == ['Data da Programação', 'Data do Faturamento'], str(cab[:4]))
         ck('a ÚLTIMA coluna é o Documento de Frete', cab[-1:] == ['Documento de Frete'], str(cab[-2:]))
-        ck('as 19 colunas na ordem exata', cab == esperado,
+        ck('as 20 colunas na ordem exata', cab == esperado,
            f"faltando/sobrando: {set(esperado) ^ set(cab)}" if cab != esperado else '')
         ck('PALETIZADA foi excluída, como ele pediu',
            not any('aletizad' in c for c in cab), str([c for c in cab if 'aletizad' in c]))
 
         dados = linhas[1].split(';') if len(linhas) > 1 else []
-        ck('a linha traz a carga com os dois KM', dados[10:12] == ['583', '640'], str(dados[9:13]))
-        ck('e marca a divergência como coluna, não como cor', dados[12:13] == ['SIM'], str(dados[12:13]))
+        ck('a linha traz a carga com os dois KM', dados[11:13] == ['583', '640'], str(dados[10:14]))
+        ck('e marca a divergência como coluna, não como cor', dados[13:14] == ['SIM'], str(dados[13:14]))
         ck('o valor sai com vírgula decimal (o Excel pt-BR soma a coluna)',
-           dados[15:16] == ['4960,00'], str(dados[15:16]))
+           dados[16:17] == ['4960,00'], str(dados[16:17]))
         ck('e o documento de frete dele vem junto', dados[-1] == 'DOC-771', str(dados[-1:]))
         ck('a data do faturamento é a do EVENTO, não a de hoje',
            bool(dados[2]) and re.match(r'^\d{2}/\d{2}', dados[2]), str(dados[2:3]))
@@ -249,7 +251,7 @@ async def main():
         # fretes esta saindo em modo data entao caminhao 3/4 fica aparecendo
         # 3 de abril".
         #
-        # A coluna H é Tipo de Veículo, e "3/4" é um dos cinco tipos da tabela
+        # A coluna I (H até 05/10) é Tipo de Veículo, e "3/4" é um dos cinco tipos da tabela
         # oficial. O Excel aplica detecção de tipo ao conteúdo INTEIRO da
         # célula: "3/4" tem a forma de data e vira 3 de abril. Aspas de CSV não
         # impedem — elas são sintaxe do arquivo, não instrução de tipo.
@@ -277,12 +279,12 @@ async def main():
         }""")
         linhas34 = (csv34 or '').replace('\ufeff','').split('\r\n')
         dados34 = linhas34[1].split(';') if len(linhas34) > 1 else []
-        # Coluna H = índice 7. O campo no arquivo vira  "=""3/4"""  depois do
+        # Coluna I = índice 8 (era H até 05/10/2026, antes da Data da Programação).
         # escapamento de CSV; o Excel resolve para a célula de texto 3/4.
-        ck('a coluna H sai protegida como TEXTO, não como data',
-           dados34[7:8] == ['"=""3/4"""'], f"coluna H = {dados34[7:8]}")
-        ck('e a coluna C (data do faturamento) continua data de verdade',
-           dados34[2:3] and '=' not in dados34[2], f"coluna C = {dados34[2:3]}")
+        ck('a coluna I (Tipo de Veículo) sai protegida como TEXTO, não como data',
+           dados34[8:9] == ['"=""3/4"""'], f"coluna I = {dados34[8:9]}")
+        ck('e a coluna D (data do faturamento) continua data de verdade',
+           dados34[3:4] and '=' not in dados34[3], f"coluna D = {dados34[3:4]}")
 
         # Os outros quatro tipos não têm forma de data — não devem ser mexidos.
         await pg.evaluate("""() => {
@@ -300,7 +302,7 @@ async def main():
         }""")
         dadosOk = (csvOk or '').replace('\ufeff','').split('\r\n')[1].split(';')
         ck('"Truck" sai limpo — proteger o que não precisa suja o arquivo',
-           dadosOk[7:8] == ['Truck'], f"coluna H = {dadosOk[7:8]}")
+           dadosOk[8:9] == ['Truck'], f"coluna I = {dadosOk[8:9]}")
 
         print('\n=== 5c. A MESMA PROTEÇÃO NAS OUTRAS TRÊS EXPORTAÇÕES ===')
         # É família: quatro exportações emitem tipo de veículo, e "3/4" é um

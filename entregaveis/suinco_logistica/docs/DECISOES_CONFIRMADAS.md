@@ -840,3 +840,37 @@ Decisão do dono, em duas mensagens do mesmo dia:
 a proposta de 29/09 de ler por API a ocorrência de entrega do Delivery B2B e
 abrir o checklist sozinha (apresentação "Devolução integrada ao Delivery B2B"
 e rascunho de chamado). Caiu pela fidelidade do dado, não por custo ou prazo.
+
+## Pagamento de Frete (05/10/2026) — Daniela da Logística, via Alysson; decisões do dono
+
+1. **Só PDFs entram**: DeliveryB2B ("Relatório de Status das Entregas") e Atak
+   (WRVDA501 — Notas por Carga), um por carga ou vários numa vez. **Nada de
+   importar XLSX**; o leitor de XLSX fica no código, sem botão, "para o painel
+   entender a linguagem" (`dominio/planilha_controle.js`).
+2. **A aba é a planilha**: as colunas A–P da planilha da Daniela, na ordem,
+   mais Q–V (% Entregue, % Liberado, % Pago, A pagar agora, Data Tratativa,
+   Observação). O arquivo exportado é **idêntico ao modelo aprovado**
+   (CONTROLE_CARGAS, RESUMO, LEIA-ME), gerado da MESMA grade da tela.
+3. **Acesso por setor** — "os usuários permanecem na aba de usuários, e as
+   permissões são definidas lá": setor "Pagamento de Frete" (migração 058,
+   CHECK + `fluxo.js` + `data.js`). Sem marca por pessoa, sem tela nova.
+   A Administração entra sempre.
+4. **Percentual pela quantidade de notas**, sem valor em R$ ("mais o
+   checklist mesmo para controle").
+5. **Paga-se direto só a nota Finalizada** no B2B; as outras precisam de
+   consulta no sistema — só a tratativa OK / OK B2B libera.
+6. **Carga VERIFICAR não libera nada** ("conferir"); pagar assim pergunta e
+   exige confirmação. 100% é teto; anular exige motivo e não apaga.
+7. **Data do pagamento manual**, pode ficar em branco.
+8. Vocabulário das tratativas = o da planilha dela (SEM TRATATIVA, DEV, DEV
+   NO SISTEMA, OK B2B, OK, SUMIU DO B2B). O sentido escrito no LEIA-ME ainda
+   depende da confirmação da Daniela; a transportadora é preenchida à mão
+   (os PDFs não a trazem).
+
+## Relatório de Administração de Fretes (05/10/2026) — dono
+
+- Período de mais de um dia sai **separado por dia**, cada dia com cabeçalho
+  e a sua lista, na planilha e no PDF; a sequência recomeça no 1 por dia.
+- **Data da Programação e Data do Faturamento** nos dois; **KM e Frete** no
+  PDF (a planilha já tinha o KM). Só este relatório muda.
+

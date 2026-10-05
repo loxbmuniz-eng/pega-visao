@@ -186,6 +186,16 @@ def main():
         + json.dumps(json.dumps(dados, ensure_ascii=False)) + '); }catch(e){}\n'
         '</script>\n'
     )
+    # A ABA PAGAMENTO DE FRETE (05/10/2026) não lê o localStorage: sem servidor
+    # ela desenha a demonstração gerada pela MESMA função da API
+    # (vitrine/frete_demonstracao.json, saída de montarGrade com cargas 9008xx).
+    FRETE = RAIZ / 'vitrine' / 'frete_demonstracao.json'
+    if FRETE.exists():
+        semente += (
+            '<script>/* vitrine: a demonstração da aba Pagamento de Frete */\n'
+            'window.FRETE_DEMONSTRACAO = ' + json.dumps(json.loads(FRETE.read_text(encoding='utf-8')), ensure_ascii=False) + ';\n'
+            '</script>\n'
+        )
     # O <body> DE VERDADE, NÃO O PRIMEIRO QUE APARECER (24/09/2026).
     #
     # A primeira versão procurava `<body[^>]*>` e pegava a primeira

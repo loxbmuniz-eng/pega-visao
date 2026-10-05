@@ -915,7 +915,7 @@ async function exportarMontagemDoDiaUI(){
 /* Mesmo escapamento e mesmo BOM de baixarCsvCadastro — separado só porque
    o nome do arquivo é outro (o dia, não o cadastro) e porque este some se
    alguém mexer nos cadastros amanhã. */
-function baixarCsvDoDia(nome, cabecalhos, linhas, colunasDeTexto){
+function baixarCsvDoDia(nome, cabecalhos, linhas, colunasDeTexto, qtdCargas){
   const corpo = corpoCsv(cabecalhos, linhas, colunasDeTexto);
   const blob = new Blob(['\ufeff' + corpo], { type: 'text/csv;charset=utf-8' });
   const a = document.createElement('a');
@@ -923,7 +923,8 @@ function baixarCsvDoDia(nome, cabecalhos, linhas, colunasDeTexto){
   a.download = `Suinco_${nome}.csv`;
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   URL.revokeObjectURL(a.href);
-  notifyGravacao(`Programação do dia exportada: ${linhas.length} carga(s).`);
+  // `qtdCargas` existe porque a planilha de fretes por período tem linhas de cabeçalho de dia.
+  notifyGravacao(`Programação do dia exportada: ${qtdCargas ?? linhas.length} carga(s).`);
 }
 
 /* CARGA FORA DO MODELO — porque frete extra não é exceção rara.

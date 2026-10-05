@@ -203,8 +203,10 @@ async def main():
         # Rótulos CURTOS: "Programada" e "Número da Carga" por extenso não
         # cabiam na largura das colunas e saíam cortados no cabeçalho — achado
         # pela conferência de layout logo abaixo, não pelo olho.
-        ck('seis colunas — as datas entraram em 26/08',
-           f['colunas'] == ['Data','Saída','Nº Carga','Placa','Rota','Observações'],
+        # Nove desde 05/10/2026 (ocorrência #109): a data de FATURAMENTO ao lado
+        # da de programação, e KM e Frete — pedido do dono, a Daniela sentia falta.
+        ck('nove colunas — as datas entraram em 26/08, faturamento, KM e frete em 05/10',
+           f['colunas'] == ['Programação','Faturamento','Saída','Nº Carga','Placa','Rota','KM','Frete (R$)','Observações'],
            str(f['colunas']))
         ck('fonte de leitura na tela', f['fonteTela'] >= 12, f"{f['fonteTela']}px")
 

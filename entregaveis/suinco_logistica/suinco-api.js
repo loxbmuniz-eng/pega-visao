@@ -2070,6 +2070,54 @@ const SuincoSharePoint = (function () {
     });
   }
 
+  /* PAGAMENTO DE FRETE (05/10/2026). Só transporta: quem decide é o servidor
+     (acesso por pessoa, regras de pagamento, o que a conferência grava). */
+  const freteApi = {
+    grade(desde) { return chamar('/api/pagamento-frete' + (desde ? '?desde=' + encodeURIComponent(desde) : '')); },
+    /* Um PDF por chamada (até 6 MB): o servidor lê e guarda no lote; a
+       primeira resposta traz o `lote`, que as seguintes devolvem. */
+    enviarPdf(arquivoBase64, nome, lote) {
+      return chamar('/api/pagamento-frete/leituras',
+        { metodo: 'POST', corpo: { arquivo: arquivoBase64, nome, ...(lote ? { lote } : {}) }, timeoutMs: 90000 });
+    },
+    previa(lote) { return chamar('/api/pagamento-frete/lotes/' + encodeURIComponent(lote) + '/previa', { timeoutMs: 60000 }); },
+    confirmar(lote, cargas) {
+      return chamar('/api/pagamento-frete/lotes/' + encodeURIComponent(lote) + '/confirmar',
+        { metodo: 'POST', corpo: cargas ? { cargas } : {}, timeoutMs: 90000 });
+    },
+    editarCarga(numero, corpo) {
+      return chamar('/api/pagamento-frete/cargas/' + encodeURIComponent(numero), { metodo: 'PATCH', corpo });
+    },
+    tratar(numero, nota, corpo) {
+      return chamar('/api/pagamento-frete/cargas/' + encodeURIComponent(numero) + '/pendencias/' + encodeURIComponent(nota),
+        { metodo: 'PATCH', corpo });
+    },
+    pagar(numero, corpo) {
+      return chamar('/api/pagamento-frete/cargas/' + encodeURIComponent(numero) + '/pagamentos', { metodo: 'POST', corpo });
+    },
+    anular(id, motivo) {
+      return chamar('/api/pagamento-frete/pagamentos/' + encodeURIComponent(id) + '/anular', { metodo: 'POST', corpo: { motivo } });
+    },
+    historico(numero) {
+      return chamar('/api/pagamento-frete/cargas/' + encodeURIComponent(numero) + '/historico');
+    },
+    /* O .xlsx não é JSON: vai direto pelo fetch, com o mesmo crachá. */
+    async baixarPlanilha() {
+      const t = lerToken();
+      const r = await fetch(SP_CONFIG.api + '/api/pagamento-frete/exportar.xlsx',
+        { headers: t ? { authorization: 'Bearer ' + t } : {} });
+      if (!r.ok) {
+        let dados = null;
+        try { dados = await r.json(); } catch (e) { /* sem corpo */ }
+        const e = new Error((dados && dados.erro) || `Erro ${r.status}`);
+        e.status = r.status; e.codigo = dados && dados.codigo;
+        throw e;
+      }
+      const m = /filename="([^"]+)"/.exec(r.headers.get('content-disposition') || '');
+      return { blob: await r.blob(), nome: m ? m[1] : 'Controle_Pagamento_Frete.xlsx' };
+    },
+  };
+
   const devolucoesApi = {
     listar(de, ate) {
       const q = [];
@@ -2356,5 +2404,6 @@ const SuincoSharePoint = (function () {
     },
     devolucoes: devolucoesApi, aoAtualizarDevolucao,
     avisos: avisosApi,
+    frete: freteApi,
   };
 })();
