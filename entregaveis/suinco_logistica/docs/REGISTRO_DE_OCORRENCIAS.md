@@ -4986,3 +4986,57 @@ servidor, instala o Chromium e declara os dois valores de teste.
 significar alguma coisa. E o vigia de fora (`.github/workflows/vigia.yml`)
 roda na mesma infraestrutura: se o GitHub Actions parar de rodar, os dois
 param juntos e o e-mail de "workflow desligado" do próprio GitHub avisa.
+
+## #109 — Administração de Fretes: a sequência é por dia, e o KM não chegava ao PDF (05/10/2026)
+
+**Como apareceu.** Três relatos do dono no mesmo dia, sobre o mesmo relatório.
+*"As cargas estão sendo duplicadas: em vez de 1, 2, 3, 4, 5, aparecem como 1,
+1, 1, 2, 2. O processo deveria gerar, no dia 1, a sequência 1 a 30; no dia 2,
+a sequência 1 a 10."* Depois: *"inclua a data de programação da carga tanto na
+planilha quanto no PDF do relatório de administração de fretes"* e *"a cada
+mudança de dia insira um novo cabeçalho indicando o novo dia"*. E: *"a
+quilometragem não está indo para o relatório de administração de fretes, e a
+Daniela está sentindo falta disso"*.
+
+**A causa, medida.** (1) `dadosPlanilhaDeFretes()` ordenava só por
+`sequencia`. A sequência de carregamento recomeça no 1 a cada dia (é a regra
+de `/sequenciar`, por dia), então um período de vários dias juntava todos os
+"1", depois todos os "2". Nenhuma carga duplicou: o que parecia duplicata eram
+dias diferentes, e a planilha não tinha a data da programação para
+distingui-los. Reproduzido com seis cargas inventadas em dois dias: saiu
+`A1, B1, A2, B2, A3`. (2) O PDF tinha Data (programação), Saída, Nº Carga,
+Placa, Rota e Observações — sem KM. A planilha (CSV) já levava `KM Destino` e
+`KM Deslocamento`; a Daniela trabalha com o PDF. O KM sempre chegou à carga: a
+linha da Montagem o entrega ao lançar (`app/90_montagem.js`, `kmDeslocamento:
+m.km_deslocamento`), o servidor guarda em `fact_viagens.km_deslocamento` e o
+`/api/estado` completo devolve todas as cargas não excluídas, sem janela de
+dias. Faltava a coluna, não o dado.
+
+**A família.** "Uma pergunta, duas contas" (#99, #101) e "a decisão escrita
+em dois lugares" (#14): a ordem da planilha era uma, a da fila do dia era
+outra. E a família do KM (#63, #82, #91): o número existia e não aparecia
+onde se paga.
+
+**A correção.**
+- `ordenarPorDiaESequencia()`, `separarPorDia()`, `rotuloDoDia()` e
+  `cabecalhoDoDia()` em `data.js` — uma função, dois chamadores (planilha e
+  PDF). Ordem: dia da programação (no fuso de quem olha, #100) → sequência
+  (sem sequência vai ao fim DO DIA) → número da carga.
+- Período de mais de um dia sai "dia 1, dia 2, dia 3", cada dia com um
+  cabeçalho ("Dia 28/09/2026 — segunda-feira · 4 cargas") e a sua lista, na
+  planilha e no PDF. Um dia só sai como sempre saiu.
+- Planilha: colunas `Data da Programação` e `Data do Faturamento`, lado a
+  lado, como data (fora das colunas de texto, para a Administração ordenar).
+- PDF: colunas Programação, Faturamento, Saída, Nº Carga, Placa, Rota, **KM**
+  (deslocamento; com desvio, o KM da tabela sai pequeno ao lado), **Frete
+  (R$)** e Observações. O KM é o mesmo campo da Programação, lido da carga —
+  sem segunda cópia; corrigido na Montagem, o próximo relatório lê o novo.
+  Carga sem KM sai "—", nunca zero.
+- Só este relatório muda (decisão do dono). O Operacional continua na ordem
+  da sequência: ele é do dia.
+
+**Guarda:** `testes/test_fretes_ordem_por_dia_e_datas.py` (reprovou contra o
+publicado em 5 pontos: ordem, coluna Sequência, Data da Programação, PDF sem
+Programação/Faturamento) e `testes/test_fretes_km_no_relatorio.py` (carga de
+duas semanas atrás com KM e valor no PDF; desvio; sem KM = "—"; correção na
+Montagem; planilha e PDF leem o mesmo número).

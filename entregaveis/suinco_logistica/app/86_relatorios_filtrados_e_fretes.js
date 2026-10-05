@@ -310,18 +310,34 @@ async function exportarPdfFretes(){
 
   const semObs = dados.filter(d=>!d.observacoes).length;
 
-  const linhas = dados.map(d=>`<tr>
+  const linhaHtml = d=>`<tr>
       <td class="col-data">${dataCurtaLocal(d.programada) || '—'}</td>
+      <td class="col-fat">${d.faturamento ? dataCurtaLocal(d.faturamento) : '<span class="text-dim">—</span>'}</td>
       <td class="col-saida">${d.saida
         ? fmtDataHora(d.saida)
         : '<span class="text-dim">ainda no pátio</span>'}</td>
       <td class="col-carga">${esc(d.numeroCarga)}</td>
       <td class="col-placa">${esc(d.placa)}</td>
       <td class="col-rota">${esc(d.rota)}</td>
+      <td class="col-km">${d.kmDeslocamento === null
+        ? '<span class="text-dim">—</span>'
+        : esc(kmTexto(d.kmDeslocamento)) + (d.kmDivergente
+          ? `<span class="km-tabela" title="KM da tabela de frete para o destino">tab. ${esc(kmTexto(d.kmDestino))}</span>` : '')}</td>
+      <td class="col-valor">${d.freteValor === null || d.freteValor === undefined
+        ? '<span class="text-dim">—</span>'
+        : 'R$ ' + esc(Number(d.freteValor).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2}))}</td>
       <td class="col-obs">${d.observacoes
         ? esc(d.observacoes)
         : '<span class="obs-pendente">a preencher</span>'}</td>
-    </tr>`).join('');
+    </tr>`;
+  /* SEPARAÇÃO POR DIA (05/10/2026): período de vários dias sai um dia depois do
+     outro, cada um com o seu cabeçalho e a sua lista. Um dia só sai como
+     sempre saiu, sem cabeçalho. A ordem dentro do dia é a de sempre (número
+     da carga) — o que mudou é só o agrupamento. */
+  const grupos = separarPorDia(dados, d => diaDaProgramacao({ programadoEm: d.programada }));
+  const linhas = grupos.map(g => (grupos.length > 1
+    ? `<tr class="linha-dia"><th colspan="9" scope="colgroup">${esc(cabecalhoDoDia(g.dia, g.itens.length))}</th></tr>`
+    : '') + g.itens.map(linhaHtml).join('')).join('');
 
   el.innerHTML = `
     <div class="print-page doc-amplo">
@@ -331,11 +347,13 @@ async function exportarPdfFretes(){
       })}
       <table class="tab-fretes">
         <thead><tr>
-          <!-- DUAS datas, e não uma: "Programada" é o dia a que a viagem
-               pertence e é o campo que o filtro de período usa; "Saída" é
-               quando o caminhão de fato seguiu viagem. Elas divergem
-               exatamente nos casos que dão problema na conferência. -->
-          <th class="col-data">Data</th>
+          <!-- TRÊS datas (05/10/2026), e não uma: "Programação" é o dia a que a
+               viagem pertence e é o campo que o filtro de período usa;
+               "Faturamento" é quando a nota foi emitida; "Saída" é quando o
+               caminhão de fato seguiu viagem. Elas divergem exatamente nos
+               casos que dão problema na conferência. -->
+          <th class="col-data">Programação</th>
+          <th class="col-fat">Faturamento</th>
           <th class="col-saida">Saída</th>
           <!-- "Nº Carga", como no Operacional. "Número da Carga" por extenso
                não cabia na largura da coluna e saía cortado no cabeçalho —
@@ -343,14 +361,19 @@ async function exportarPdfFretes(){
           <th class="col-carga">Nº Carga</th>
           <th class="col-placa">Placa</th>
           <th class="col-rota">Rota</th>
+          <!-- KM E FRETE (05/10/2026): o KM de deslocamento da carga (o da
+               Programação) e o valor do frete, lado a lado — é a conta que a
+               Administração faz. Com desvio, o KM da tabela sai pequeno ao lado. -->
+          <th class="col-km">KM</th>
+          <th class="col-valor">Frete (R$)</th>
           <th class="col-obs">Observações</th>
         </tr></thead>
-        <tbody>${linhas || '<tr><td colspan="6" class="text-center text-dim">Nenhuma carga no período selecionado.</td></tr>'}</tbody>
+        <tbody>${linhas || '<tr><td colspan="9" class="text-center text-dim">Nenhuma carga no período selecionado.</td></tr>'}</tbody>
       </table>
       ${rodapeDocumento(
-        'O campo <strong>Observações</strong> é onde a administração registra valor do frete, ' +
-        'negociação e instruções. As linhas marcadas como <strong>a preencher</strong> são as ' +
-        'cargas ainda sem registro administrativo.',
+        'O <strong>KM</strong> é o de deslocamento da carga, o mesmo da Programação (com desvio, o KM da tabela sai ao lado); ' +
+        '<strong>Frete</strong> é o valor calculado ou combinado. O campo <strong>Observações</strong> é onde a administração registra ' +
+        'negociação e instruções. As linhas marcadas como <strong>a preencher</strong> são as cargas ainda sem registro administrativo.',
         'Uma linha por carga do período, com os campos administrativos '
         + 'registrados até o momento da emissão. Campos em branco significam '
         + 'não preenchido, e não zero.',
@@ -501,9 +524,12 @@ async function exportarPlanilhaFretes(){
   const veValor = podeVerValorDeFreteUI((DB.operador||{}).setor);
   const num = (v) => (v === null || v === undefined || v === '') ? '' : String(v).replace('.', ',');
 
-  const linhas = dados.map(d => [
+  const linhaDaCarga = d => [
     d.sequencia ?? '',
     d.numeroCarga,
+    // Os dois dias lado a lado: o da PROGRAMAÇÃO (a que a sequência pertence) e o
+    // do FATURAMENTO. Ficam fora das colunas de texto: chegam como data.
+    d.programada ? dataCurtaLocal(d.programada) : '',
     d.faturamento ? dataCurtaLocal(d.faturamento) : '',
     d.rota,
     d.praOnde,
@@ -529,21 +555,36 @@ async function exportarPlanilhaFretes(){
     veValor ? d.freteMotivo : '',
     d.observacoes,
     d.freteDocumento,
-  ]);
+  ];
+
+  /* SEPARAÇÃO POR DIA (05/10/2026). Pedido do dono: período de vários dias sai
+     "dia 1, dia 2, dia 3…", cada dia com o seu cabeçalho e a sua lista, e a
+     sequência recomeça no 1 em cada um. Dia só tem cabeçalho quando há MAIS DE
+     UM; um dia só sai como sempre saiu. A linha de cabeçalho tem só a primeira
+     célula preenchida — quem filtra a planilha reconhece pela coluna "Nº da
+     Carga" vazia. */
+  const grupos = separarPorDia(dados, d => diaDaProgramacao({ programadoEm: d.programada }));
+  const linhas = [];
+  grupos.forEach(g => {
+    if(grupos.length > 1) linhas.push([cabecalhoDoDia(g.dia, g.itens.length)]);
+    g.itens.forEach(d => linhas.push(linhaDaCarga(d)));
+  });
 
   baixarCsvDoDia(`Administracao_de_Fretes_${isoDiaLocal(new Date())}`, [
-    'Sequência', 'Nº da Carga', 'Data do Faturamento', 'Rota', 'Tipo de Operação',
+    'Sequência', 'Nº da Carga', 'Data da Programação', 'Data do Faturamento', 'Rota', 'Tipo de Operação',
     'Placa', 'Transportadora', 'Tipo de Veículo', 'Peso (t)',
     'Destino do Frete', 'KM Destino', 'KM Deslocamento', 'KM Divergente',
     'Entregas', 'Motorista',
     'Valor do Frete (R$)', 'Observação do Frete', 'Observações',
     'Documento de Frete',
   ], linhas,
-  /* AS COLUNAS DE TEXTO. "Data do Faturamento" fica FORA de propósito: ela
-     tem de chegar como data para a Administração ordenar e filtrar por ela.
-     Peso, KM e valor também ficam fora — são números que a Daniela soma. */
+  /* AS COLUNAS DE TEXTO. "Data da Programação" e "Data do Faturamento" ficam
+     FORA de propósito: têm de chegar como data para a Administração ordenar e
+     filtrar por elas. Peso, KM e valor também ficam fora — são números que a
+     Daniela soma. */
   ['Nº da Carga', 'Rota', 'Tipo de Operação', 'Placa', 'Transportadora',
    'Tipo de Veículo', 'Destino do Frete', 'Motorista',
-   'Observação do Frete', 'Observações', 'Documento de Frete']);
+   'Observação do Frete', 'Observações', 'Documento de Frete'],
+  dados.length);
 }
 

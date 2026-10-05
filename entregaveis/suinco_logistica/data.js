@@ -2351,6 +2351,59 @@ function diaDaProgramacao(c){
   const d = base ? new Date(base) : null;
   return d && !isNaN(d) ? diaLocalISO(d) : '';
 }
+/* A ORDEM DA FILA E A SEPARAÇÃO POR DIA — UMA FUNÇÃO SÓ (05/10/2026).
+
+   A sequência de carregamento é POR DIA: cada programação recomeça no 1.
+   Ordenar um período de vários dias só por sequência junta os dias — todos os
+   "1", depois todos os "2" ("1, 1, 1, 2, 2"), e ninguém mais sabe qual carga
+   é de qual dia. Relato do dono na planilha de Administração de Fretes.
+
+   A ordem certa é: o DIA da programação (no fuso de quem olha, ocorrência
+   #100), depois a sequência — sem sequência vai para o fim DO DIA, e não para
+   o fim do relatório —, depois o número da carga para desempatar. Carga sem
+   data vai para o fim de tudo. */
+function ordenarPorDiaESequencia(a, b){
+  const da = diaDaProgramacao(a), db = diaDaProgramacao(b);
+  if(da !== db){
+    if(!da) return 1;
+    if(!db) return -1;
+    return da < db ? -1 : 1;
+  }
+  const sa = (a.sequencia === null || a.sequencia === undefined || a.sequencia === '') ? Infinity : Number(a.sequencia);
+  const sb = (b.sequencia === null || b.sequencia === undefined || b.sequencia === '') ? Infinity : Number(b.sequencia);
+  if(sa !== sb) return sa < sb ? -1 : 1;
+  return String(a.numeroCarga || '').localeCompare(String(b.numeroCarga || ''), 'pt-BR', {numeric: true});
+}
+
+/* Agrupa uma lista por DIA, na ordem dos dias (sem data por último), e DENTRO
+   do dia mantém a ordem em que a lista veio. `diaDe(item)` devolve o dia
+   'AAAA-MM-DD' (ou ''). Quem decide se mostra cabeçalho é quem chama: só faz
+   sentido quando há mais de um grupo. */
+function separarPorDia(itens, diaDe){
+  const grupos = [];
+  const porDia = new Map();
+  for(const it of itens){
+    const dia = diaDe(it) || '';
+    if(!porDia.has(dia)){ const g = { dia, itens: [] }; porDia.set(dia, g); grupos.push(g); }
+    porDia.get(dia).itens.push(it);
+  }
+  return grupos.sort((a, b) => (a.dia === b.dia ? 0 : !a.dia ? 1 : !b.dia ? -1 : (a.dia < b.dia ? -1 : 1)));
+}
+
+/* "28/09/2026 — segunda-feira". O dia da semana ajuda quem confere uma
+   programação de uma semana inteira. Meio-dia local: nunca muda de dia por
+   causa de fuso. */
+function rotuloDoDia(dia){
+  if(!dia) return 'Sem data de programação';
+  const [a, m, d] = dia.split('-').map(Number);
+  const sem = new Date(a, m - 1, d, 12).toLocaleDateString('pt-BR', { weekday: 'long' });
+  return `${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}/${a} — ${sem}`;
+}
+/* O texto do cabeçalho do dia, igual na planilha e no PDF. */
+function cabecalhoDoDia(dia, qtd){
+  return `Dia ${rotuloDoDia(dia)} · ${qtd} carga${qtd === 1 ? '' : 's'}`;
+}
+
 /* QUANDO A CARGA SAIU — UMA FUNÇÃO SÓ (30/09/2026, ocorrência #102).
    O carimbo de Seguiu Viagem, e mais nada. Havia três respostas: o carimbo;
    o carimbo || concluidoEm || atualizadoEm; o carimbo || atualizadoEm. O
@@ -3982,22 +4035,20 @@ function dadosPlanilhaDeFretes(cargas){
   const lista = (cargas || DB.cargas)
     .filter(c => !c.aguardandoCarga)
     .slice()
-    .sort((a,b)=>{
-      /* Sequência primeiro, porque a coluna A é a sequência e planilha se
-         lê de cima para baixo. Sem sequência vai para o fim — null não é
-         zero, e mandá-la para a frente como se fosse "0" inverteria a
-         ordem da montagem do dia. */
-      const sa = a.sequencia ?? Number.MAX_SAFE_INTEGER;
-      const sb = b.sequencia ?? Number.MAX_SAFE_INTEGER;
-      if(sa !== sb) return sa - sb;
-      return String(a.numeroCarga||'').localeCompare(String(b.numeroCarga||''), 'pt-BR', {numeric:true});
-    });
+    /* DIA primeiro, depois sequência (05/10/2026): a sequência recomeça no 1
+       a cada dia, e só por ela os dias de um período se embaralhavam — "1, 1,
+       1, 2, 2". Sem sequência vai para o fim DO DIA — null não é zero, e
+       mandá-la para a frente como se fosse "0" inverteria a ordem da
+       montagem do dia. */
+    .sort(ordenarPorDiaESequencia);
 
   return lista.map(c => {
     const f = buscarFrota(c.placa) || {};
     return {
       sequencia: c.sequencia ?? null,
       numeroCarga: c.numeroCarga || '',
+      // O dia a que a viagem pertence — o MESMO campo que o filtro de período usa.
+      programada: c.programadoEm || c.criadoEm || null,
       faturamento: primeiroTimestamp(c.id, 'Faturado'),
       rota: rotaCurta(c.rota) || '',
       praOnde: c.praOnde || '',
@@ -4049,7 +4100,22 @@ function dadosAdministracaoFretes(cargas){
          trinta dias assim não se confere. `programada` é o mesmo campo que o
          filtro de período usa; `saida` é o evento real de "Seguiu Viagem". */
       programada: c.programadoEm || c.criadoEm || null,
+      // O carimbo de "Faturado" e mais nada (fidelidade ao momento exato);
+      // vazio é "ainda não faturou".
+      faturamento: primeiroTimestamp(c.id, 'Faturado'),
       saida: primeiroTimestamp(c.id, 'Seguiu Viagem'),
+      /* O KM E O VALOR (05/10/2026). Relato do dono: "a quilometragem não está
+         indo para o relatório de administração de fretes, e a Daniela está
+         sentindo falta". A planilha (CSV) já levava o KM; o PDF não. É o
+         MESMO campo da Programação (km_deslocamento da carga, que nasce da
+         linha da Montagem e pode ser corrigido na própria Montagem): sem
+         segunda cópia, o relatório de qualquer semana lê o que a carga tem.
+         `kmDestino` é a referência da tabela; diverge quando houve desvio. */
+      kmDeslocamento: c.kmDeslocamento ?? null,
+      kmDestino: c.kmDestino ?? null,
+      kmDivergente: c.kmDestino != null && c.kmDeslocamento != null
+        && Number(c.kmDestino) !== Number(c.kmDeslocamento),
+      freteValor: c.freteValor ?? null,
       observacoes: observacaoDeFrete(c)
     }));
 }
