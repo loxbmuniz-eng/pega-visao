@@ -6959,7 +6959,7 @@ describe('49. Pagamento de Frete — a planilha dentro do painel (05/10/2026)', 
       assert.deepEqual(ev[0].detalhe, { de: false, para: true });
       assert.deepEqual(ev[1].detalhe, { de: true, para: false });
       // quem é do setor também marca
-      const r3 = await req(`${FRETE}/cargas/900802`, { metodo: 'PATCH', token: tk.daniela, corpo: { canhotoOriginal: true } });
+      const r3 = await req(`${FRETE}/cargas/900802`, { metodo: 'PATCH', token: tk['daniela@teste.local'], corpo: { canhotoOriginal: true } });
       assert.equal(r3.status, 200, r3.texto);
       const { rows: c3 } = await pool.query("SELECT canhoto_por FROM pgfrete_cargas WHERE numero_carga = '900802'");
       assert.equal(c3[0].canhoto_por, 'Daniela Teste');
