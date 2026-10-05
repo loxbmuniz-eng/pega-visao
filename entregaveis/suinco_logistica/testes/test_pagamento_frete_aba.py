@@ -168,10 +168,27 @@ async def main():
             'Outros Status', 'Situação', 'Resumo Pendências', 'Status Pendência', 'Status p/ pagamento', 'Data Pagamento',
             'Transportadora', 'CT-E'] and cab[16:22] == ['% Entregue', '% Liberado', '% Pago', 'A pagar agora', 'Data Tratativa', 'Observação']
             and cab[22:24] == ['Canhoto original', 'Canhoto marcado em'] and cab[-1] == 'Ações', str(cab))
-        linhas = await pg.evaluate("""() => [...document.querySelectorAll('#frete-tbody tr')].map(tr => ({
+        ler_linhas = """() => [...document.querySelectorAll('#frete-tbody tr')].map(tr => ({
             primeira: tr.classList.contains('frete-primeira'),
-            v: Object.fromEntries([...tr.querySelectorAll('td[data-col]')].map(td => [td.dataset.col, td.textContent.trim()])) }))""")
-        ck('a carga 900802 ocupa 4 linhas: uma por pendência', len(linhas) == 4, str(len(linhas)))
+            v: Object.fromEntries([...tr.querySelectorAll('td[data-col]')].map(td => [td.dataset.col, td.textContent.trim()])) }))"""
+        linhas = await pg.evaluate(ler_linhas)
+        ck('a carga nasce FECHADA: uma linha só, dizendo quantas pendências tem (pedido do dono, 05/10)',
+           len(linhas) == 1 and '4 pendências' in linhas[0]['v']['resumo'] and '4 sem olhar' in linhas[0]['v']['resumo'], str(linhas[0]['v'].get('resumo') if linhas else linhas))
+        ck('fechada, a linha é da carga: sem lista de tratativa', await pg.evaluate("() => document.querySelectorAll('#frete-tbody select.frete-sel').length") == 0)
+        await pg.click('#frete-tbody tr.frete-primeira .frete-toggle')
+        await pg.wait_for_timeout(400)
+        linhas = await pg.evaluate(ler_linhas)
+        ck('um clique no número abre: a carga 900802 ocupa 4 linhas, uma por pendência', len(linhas) == 4, str(len(linhas)))
+        await pg.click('#frete-tbody tr.frete-primeira .frete-toggle')
+        await pg.wait_for_timeout(400)
+        ck('outro clique fecha de novo', await pg.evaluate("() => document.querySelectorAll('#frete-tbody tr').length") == 1)
+        await pg.fill('#frete-busca', '810105')
+        await pg.wait_for_timeout(500)
+        ck('buscar pela nota abre a carga dela', await pg.evaluate("() => document.querySelectorAll('#frete-tbody tr').length") == 4)
+        await pg.fill('#frete-busca', '')
+        await pg.wait_for_timeout(500)
+        linhas = await pg.evaluate(ler_linhas)
+        ck('e ela continua aberta depois (quem abriu, trata)', len(linhas) == 4, str(len(linhas)))
         if len(linhas) == 4:
             p1 = linhas[0]['v']
             ck('a primeira linha traz as contagens 8 · 8 · 0 · 4 · 1 · 1 · 2 e PENDENTE',

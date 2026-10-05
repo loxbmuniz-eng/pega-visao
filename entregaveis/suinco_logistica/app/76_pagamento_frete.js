@@ -27,6 +27,11 @@ const FRETE = {
   dados: null, carregando: false, erro: null, carregadoEm: 0,
   busca: '', situacao: null, soSaldo: false, soSemTratativa: false, soSemCanhoto: false,
   demonstracao: false,   // true só na vitrine/provas: a grade veio de window.FRETE_DEMONSTRACAO, nada grava
+  /* CARGA FECHADA POR PADRÃO (pedido do dono, 05/10/2026): "trabalharemos carga
+     por carga e há muitas delas". Uma linha por carga; as pendências só
+     aparecem quando a carga é aberta (clique no número ou no ▸), como no
+     Histórico. O conjunto sobrevive às recargas: tratar uma nota não fecha. */
+  abertas: new Set(),
 };
 const FRETE_VALIDADE_MS = 30000;   // reabrir a aba depois disto relê, sem esconder a tela
 
@@ -131,10 +136,10 @@ function freteLinhasVisiveis(){
     if(FRETE.soSemTratativa && !ls.some((l) => l.nota && !l.v[iTr])) continue;
     if(FRETE.soSemCanhoto && p.v[iCan] === 'SIM') continue;
     if(q){
-      const bate = String(carga).includes(q)
-        || ls.some((l) => l.nota && String(l.nota).includes(q))
-        || String(p.v[iTp] || '').toLowerCase().includes(q);
+      const porNota = ls.some((l) => l.nota && String(l.nota).includes(q));
+      const bate = String(carga).includes(q) || porNota || String(p.v[iTp] || '').toLowerCase().includes(q);
       if(!bate) continue;
+      if(porNota && !String(carga).includes(q)) FRETE.abertas.add(String(carga));   // achou pela nota: mostra a nota
     }
     cargas += 1;
     linhas.push(...ls);
@@ -153,6 +158,11 @@ function freteBuscar(valor){
 function freteAlternar(chave){
   FRETE[chave] = !FRETE[chave];
   freteDesenhar();
+}
+function freteAlternarCarga(carga){
+  const k = String(carga);
+  if(FRETE.abertas.has(k)) FRETE.abertas.delete(k); else FRETE.abertas.add(k);
+  freteDesenharTabela();
 }
 
 /* ------------------------------------------------------------- desenhar */
@@ -245,7 +255,7 @@ function freteCelula(l, col, j){
           aria-label="Data do pagamento da carga ${esc(l.carga)}: ${esc(freteData(v) || 'em branco')}. Editar">${v ? esc(freteData(v)) : `<span class="frete-vazio">${temPago ? 'sem data' : '—'}</span>`}</button></td>`;
     }
     case 'dataTratativa': {
-      if(!l.nota) return `<td${k}></td>`;
+      if(!l.nota || (primeira && l._dobravel && !l._aberta)) return `<td${k}></td>`;
       return `<td${k}><button type="button" class="frete-edit frete-edit-data" onclick="freteEditarDataTratativa('${escJs(l.carga)}','${escJs(l.nota)}')"
           aria-label="Data da tratativa da nota ${esc(l.nota)}: ${esc(freteData(v) || 'em branco')}. Editar">${v ? esc(freteData(v)) : '<span class="frete-vazio">—</span>'}</button></td>`;
     }
@@ -258,6 +268,11 @@ function freteCelula(l, col, j){
                  onchange="freteCanhoto('${escJs(l.carga)}', this.checked, this)"><span>${veio ? 'SIM' : 'NÃO'}</span></label></td>`;
     }
     case 'carga':
+      if(primeira && l._dobravel){
+        return `<td${k} class="frete-carga"><button type="button" class="frete-toggle" aria-expanded="${l._aberta ? 'true' : 'false'}"
+            onclick="freteAlternarCarga('${escJs(l.carga)}')" title="${l._aberta ? 'Fechar as pendências desta carga' : 'Abrir as pendências desta carga'}">
+            <span class="frete-seta" aria-hidden="true">${l._aberta ? '▾' : '▸'}</span>${esc(v)}</button></td>`;
+      }
       return `<td${k} class="frete-carga${primeira ? '' : ' frete-mudo'}">${esc(v)}</td>`;
     case 'diferenca':
       if(!primeira) return `<td${k}></td>`;
@@ -271,12 +286,17 @@ function freteCelula(l, col, j){
         : `<td${k} class="frete-mudo">${esc(v)}</td>`;
     }
     case 'resumo': {
+      if(primeira && l._dobravel && !l._aberta){
+        const semOlhar = l._semOlhar ? ` · ${l._semOlhar} sem olhar` : '';
+        return `<td${k} class="frete-r frete-r-fechada"><button type="button" class="frete-pill-pend" onclick="freteAlternarCarga('${escJs(l.carga)}')"
+            aria-label="Abrir as ${l._pend} pendências da carga ${esc(l.carga)}">▸ ${l._pend} pendências${esc(semOlhar)}</button></td>`;
+      }
       const cls = v === 'SEM PENDÊNCIA' ? 'ok' : (l.categoria || 'outro');
       const dica = l.cliente ? ` title="${esc(l.cliente + (l.cidade ? ' — ' + l.cidade : ''))}"` : '';
       return `<td${k} class="frete-r frete-r-${cls}"${dica}>${esc(v)}</td>`;
     }
     case 'tratativa': {
-      if(!l.nota) return `<td${k}></td>`;
+      if(!l.nota || (primeira && l._dobravel && !l._aberta)) return `<td${k}></td>`;   // fechada: a linha é da CARGA, não da 1ª nota
       const vocab = freteTratativas();
       const lib = (FRETE.dados.vocabulario.liberam || []).includes(v);
       const cls = !v ? 'falta' : lib ? 'ok' : v === 'SUMIU DO B2B' ? 'sumiu' : v === 'SEM TRATATIVA' ? 'sem' : 'dev';
@@ -308,9 +328,11 @@ function freteCelula(l, col, j){
       return `<td${k} class="${chave === 'aPagar' ? 'frete-forte' + (v > 0 ? ' frete-apagar' : '') : ''}">${esc(fretePct(v))}</td>`;
     }
     case 'observacao': {
-      const rotulo = v ? esc(v) : '<span class="frete-vazio">anotar</span>';
-      return `<td${k} class="frete-obs"><button type="button" class="frete-edit" onclick="freteEditarObs('${escJs(l.carga)}','${escJs(l.nota || '')}')"
-          aria-label="Observação da ${l.nota ? 'nota ' + esc(l.nota) : 'carga ' + esc(l.carga)}. Editar">${rotulo}</button></td>`;
+      const fechada = primeira && l._dobravel && !l._aberta;   // fechada: só a observação da CARGA
+      const texto = fechada ? (l.obsCarga || '') : v;
+      const rotulo = texto ? esc(texto) : '<span class="frete-vazio">anotar</span>';
+      return `<td${k} class="frete-obs"><button type="button" class="frete-edit" onclick="freteEditarObs('${escJs(l.carga)}','${escJs(fechada ? '' : (l.nota || ''))}')"
+          aria-label="Observação da ${!fechada && l.nota ? 'nota ' + esc(l.nota) : 'carga ' + esc(l.carga)}. Editar">${rotulo}</button></td>`;
     }
     default:
       return `<td${k}>${esc(freteNum(v))}</td>`;
@@ -324,7 +346,23 @@ function freteDesenharTabela(){
   const cabecalho = d.colunas.map((c) => `<th scope="col" class="frete-h frete-h-${c.tipo}" data-col="${c.chave}">${esc(c.t)}</th>`).join('')
     + '<th scope="col" class="frete-h frete-h-acao no-print">Ações</th>';
   document.getElementById('frete-thead').innerHTML = cabecalho;
-  document.getElementById('frete-tbody').innerHTML = linhas.map((l) => `<tr class="${l.primeira ? 'frete-primeira' : 'frete-seg'}" data-carga="${esc(l.carga)}">
+  /* Quantas pendências cada carga tem, e se está aberta — a primeira linha
+     desenha o resumo fechado ("▸ 8 pendências · 6 sem olhar") ou a sua nota. */
+  const iTr = freteIx('tratativa');
+  const porCarga = new Map();
+  for(const l of linhas){
+    const k = String(l.carga);
+    if(!porCarga.has(k)) porCarga.set(k, { n: 0, semOlhar: 0 });
+    if(l.nota){ porCarga.get(k).n += 1; if(!l.v[iTr]) porCarga.get(k).semOlhar += 1; }
+  }
+  for(const l of linhas){
+    const k = String(l.carga); const c = porCarga.get(k);
+    l._pend = c.n; l._semOlhar = c.semOlhar;
+    l._dobravel = c.n >= 2;                         // com 1 pendência não há o que esconder
+    l._aberta = !l._dobravel || FRETE.abertas.has(k);
+  }
+  const visiveis = linhas.filter((l) => l.primeira || l._aberta);
+  document.getElementById('frete-tbody').innerHTML = visiveis.map((l) => `<tr class="${l.primeira ? 'frete-primeira' : 'frete-seg'}${l._dobravel ? (l._aberta ? ' frete-aberta' : ' frete-fechada') : ''}" data-carga="${esc(l.carga)}">
       ${d.colunas.map((c, j) => freteCelula(l, c, j)).join('')}
       <td class="frete-acoes no-print">${l.primeira ? `
         <button type="button" class="btn btn-sec btn-sm" onclick="fretePagarUI('${escJs(l.carga)}')" title="Registrar um pagamento desta carga"><svg class="ico ico-btn" aria-hidden="true"><use href="#i-faturamento"/></svg>Pagar</button>

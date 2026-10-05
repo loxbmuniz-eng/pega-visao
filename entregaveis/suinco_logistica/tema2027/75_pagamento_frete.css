@@ -138,6 +138,13 @@
     color:var(--fr-mudo); font-style:italic; font-size:12px; white-space:nowrap; pointer-events:none;
   }
   #tab-frete .frete-edit-data{ min-width:112px; text-align:center }
+  /* carga fechada/aberta: o número é o botão (como a seta do Histórico) */
+  #tab-frete .frete-toggle{ font:inherit; font-weight:800; color:var(--gold); background:transparent; border:0; padding:6px 4px; min-height:44px; cursor:pointer; display:inline-flex; align-items:center; gap:6px }
+  #tab-frete .frete-toggle:hover .frete-seta{ color:var(--text) }
+  #tab-frete .frete-seta{ display:inline-block; width:14px; color:var(--fr-mudo); font-size:13px }
+  #tab-frete .frete-pill-pend{ font:inherit; font-size:13px; font-weight:700; color:var(--fr-pend-txt); background:var(--fr-pend-bg); border:1px solid transparent; border-radius:999px; padding:6px 12px; min-height:34px; cursor:pointer; white-space:nowrap }
+  #tab-frete .frete-pill-pend:hover{ border-color:var(--gold-dim) }
+  #tab-frete tr.frete-fechada td{ background:var(--surface-2, transparent) }
   #tab-frete .frete-sel-transp{ min-height:36px; width:100%; font:inherit; font-size:14px }
   #tab-frete td.frete-acoes{ white-space:nowrap }
   #tab-frete td.frete-acoes .btn{ margin:0 2px }
