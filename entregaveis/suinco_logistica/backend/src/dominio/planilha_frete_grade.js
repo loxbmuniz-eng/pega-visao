@@ -21,6 +21,7 @@
 import {
   indicadoresDaCarga, rotuloDaPendencia, TRATATIVAS, TRATATIVAS_QUE_LIBERAM,
 } from './pagamento_frete.js';
+import { FUSO } from './fuso.js';
 
 export const SEM_PENDENCIA = 'SEM PENDÊNCIA';
 
@@ -80,7 +81,7 @@ export const FORMULAS = {
 
 const num = (v) => Number(v) || 0;
 /* Dia (AAAA-MM-DD) de um instante, no fuso da operação — o carimbo é UTC no banco. */
-const DIA_LOCAL = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' });
+const DIA_LOCAL = new Intl.DateTimeFormat('en-CA', { timeZone: FUSO, year: 'numeric', month: '2-digit', day: '2-digit' });
 export const diaLocal = (iso) => {
   if (!iso) return null;
   const d = new Date(iso);

@@ -26,6 +26,7 @@
 import webpush from 'web-push';
 import { consultar } from '../banco.js';
 import { config } from '../config.js';
+import { FUSO } from '../dominio/fuso.js';
 
 const { chavePublica, chavePrivada, contato } = config.avisos;
 
@@ -210,7 +211,6 @@ export async function enviarParaOperador(operadorId, mensagem) {
    a operação parar de confiar no painel. Carga programada para AMANHÃ fica
    de fora, senão o aviso nunca sairia. */
 export async function contarPatio(runner) {
-  const FUSO = 'America/Sao_Paulo';
   const { rows } = await runner.query(
     `SELECT
        count(*) FILTER (WHERE status_atual <> 'Seguiu Viagem')::int AS abertas,
@@ -239,7 +239,7 @@ export async function contarPatio(runner) {
    caminhões saindo no mesmo segundo geram aviso dobrado. */
 export async function primeiraVezHoje(assunto) {
   try {
-    const hoje = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' });
+    const hoje = new Date().toLocaleDateString('sv-SE', { timeZone: FUSO });
     const r = await consultar(
       'INSERT INTO avisos_enviados (chave) VALUES ($1) ON CONFLICT DO NOTHING',
       [`${assunto}:${hoje}`]

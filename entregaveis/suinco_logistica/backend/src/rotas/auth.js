@@ -112,26 +112,50 @@ rotasAuth.post('/login', limiteLogin, async (req, res, next) => {
     const naJanela = Boolean(desde) && (Date.now() - desde) < JANELA_MS;
     const falhas = naJanela ? Number(op?.falhas_senha || 0) : 0;
 
-    if (!op || !confere || !op.ativo) {
-      if (op && !op.ativo) console.warn('[auth] login de operador inativo:', email);
-      if (op) {
-        await consultar(
-          `UPDATE operadores SET falhas_senha = $2, falhas_desde = COALESCE($3, now())
-            WHERE id = $1`,
-          [op.id, falhas + 1, naJanela ? op.falhas_desde : null]
-        );
-      }
-      return res.status(401).json({ erro: 'E-mail ou senha incorretos.', codigo: 'CREDENCIAL_INVALIDA' });
+    /* O LOGIN NÃO PODE DENUNCIAR A SENHA CERTA (auditoria de 06/10/2026).
+       Até aqui o bloqueio era conferido DEPOIS da senha, para não dizer quais
+       contas estão sob ataque — e isso abria a porta pior: com a conta
+       "bloqueada", a senha certa respondia 429 "bloqueio" e a errada 401.
+       Quem tentava adivinhar SABIA quando tinha acertado, e as tentativas
+       erradas nunca eram barradas pela conta. Provado contra a API local.
+
+       Agora as três situações que podem denunciar algo respondem IGUAL:
+       e-mail que não existe, senha errada e conta em espera recebem o mesmo
+       401 com o mesmo texto — e o texto já diz o que fazer (esperar 15
+       minutos), porque recusa sem caminho não ensina quem tem a senha certa.
+       A quinta senha errada é que põe a conta em espera, e não a sexta certa.
+
+       Com o segundo fator ativo e sob suspeita, o código é pedido SEJA A
+       SENHA CERTA OU ERRADA — pedir só para a certa seria o mesmo oráculo. */
+    const RECUSA = {
+      erro: 'E-mail ou senha incorretos. Depois de cinco tentativas erradas, a conta espera 15 minutos.',
+      codigo: 'CREDENCIAL_INVALIDA',
+    };
+    const SUSPEITO = falhas >= 5;
+    const emEspera = Boolean(op?.bloqueado_ate) && new Date(op.bloqueado_ate).getTime() > Date.now();
+
+    if (op && op.ativo && op.mfa_ativo && SUSPEITO && !String(req.body?.codigo ?? '').trim()) {
+      return res.status(401).json({
+        erro: 'Digite o código do seu aplicativo autenticador.',
+        codigo: 'MFA_NECESSARIO',
+      });
     }
 
-    /* Bloqueio conferido DEPOIS da senha, pelo mesmo motivo de sempre:
-       responder antes diria a um atacante quais contas estão sob ataque. */
-    if (op.bloqueado_ate && new Date(op.bloqueado_ate).getTime() > Date.now()) {
-      const faltam = Math.ceil((new Date(op.bloqueado_ate).getTime() - Date.now()) / 60000);
-      return res.status(429).json({
-        erro: `Muitas senhas erradas nesta conta. Tente de novo em ${faltam} minuto(s).`,
-        codigo: 'BLOQUEIO_TEMPORARIO',
-      });
+    if (!op || !confere || !op.ativo || (emEspera && !op.mfa_ativo)) {
+      if (op && !op.ativo) console.warn('[auth] login de operador inativo:', email);
+      if (op && !confere) {
+        const n = falhas + 1;
+        const entraEmEspera = n >= 5 && !op.mfa_ativo && !emEspera;
+        await consultar(
+          entraEmEspera
+            ? `UPDATE operadores SET bloqueado_ate = now() + interval '15 minutes',
+                                     falhas_senha = 0, falhas_desde = NULL WHERE id = $1`
+            : `UPDATE operadores SET falhas_senha = $2, falhas_desde = COALESCE($3, now())
+                WHERE id = $1`,
+          entraEmEspera ? [op.id] : [op.id, n, naJanela ? op.falhas_desde : null]
+        );
+      }
+      return res.status(401).json(RECUSA);
     }
 
     /* SEGUNDO FATOR (etapa 4 do protocolo de segurança, 22/08/2026).
@@ -139,32 +163,12 @@ rotasAuth.post('/login', limiteLogin, async (req, res, next) => {
        Só cobra de quem ATIVOU. Quem não ativou entra como sempre — a adesão
        é por pessoa, e o dia da atualização não pode derrubar o pátio.
 
-       A senha já foi conferida quando chegamos aqui. Isso é de propósito:
-       pedir o código antes da senha diria a um atacante quais e-mails têm
-       segundo fator, que é informação que ele não precisa ter.
-
        DESDE 24/08/2026 O CÓDIGO SÓ É PEDIDO DEPOIS DE CINCO SENHAS
        ERRADAS. Decisão do dono do projeto: "2FA não deve aparecer no
        login, somente caso erre a senha mais de 5x". Quem digita a senha
        certa entra como sempre — é isso que torna possível manter a
        proteção ligada sem parar o pátio. O que ela pega e o que não pega
        está na migração 032. */
-    const SUSPEITO = falhas >= 5;
-
-    if (SUSPEITO && !op.mfa_ativo) {
-      /* Sem segundo fator não há código para pedir; o que resta é uma
-         espera curta — inviabiliza a força bruta sem virar chamado. */
-      await consultar(
-        `UPDATE operadores SET bloqueado_ate = now() + interval '15 minutes',
-                               falhas_senha = 0, falhas_desde = NULL
-          WHERE id = $1`, [op.id]
-      );
-      return res.status(429).json({
-        erro: 'Muitas senhas erradas nesta conta. Tente de novo em 15 minutos.',
-        codigo: 'BLOQUEIO_TEMPORARIO',
-      });
-    }
-
     if (SUSPEITO && op.mfa_ativo) {
       const codigo = String(req.body?.codigo ?? '').trim();
       if (!codigo) {

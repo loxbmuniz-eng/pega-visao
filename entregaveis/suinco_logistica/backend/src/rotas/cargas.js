@@ -18,6 +18,7 @@ import {
   avisarChegada, avisarSaida, avisarFimDaProgramacao, primeiraVezHoje, contarPatio,
 } from '../servicos/avisos.js';
 import { calcularFrete, conferirFreteParaContratar, semFreteDeTabela } from '../dominio/frete.js';
+import { FUSO } from '../dominio/fuso.js';
 
 export const rotasCargas = Router();
 
@@ -1376,7 +1377,6 @@ rotasCargas.post('/cargas/:id/status', exigirLogin, async (req, res, next) => {
          quando a carga já no pátio é de uma programação ANTERIOR à que está
          chegando. Mesmo dia = mesmo caminhão, mesma visita, segue livre. */
       if (statusNovo === 'Aguardando Embarque') {
-        const FUSO = 'America/Sao_Paulo';
         const { rows: noPatio } = await cli.query(
           `SELECT carga_id, numero_carga, status_atual
              FROM fact_viagens
@@ -1760,8 +1760,6 @@ rotasCargas.post('/portaria/lacre-retido', exigirLogin, async (req, res, next) =
     }
     const novoLacre = String(req.body?.novoLacre ?? '').trim().slice(0, 50);
     const motivo = String(req.body?.motivo ?? '').trim().slice(0, 500);
-
-    const FUSO = 'America/Sao_Paulo';
     const resultado = await emTransacao(async (cli) => {
       /* Alvo: quem saiu HOJE com essa placa. Se ninguém saiu ainda, as
          cargas em aberto — é o caso do porteiro que retém o lacre antes de
@@ -2228,8 +2226,6 @@ rotasCargas.post('/cargas/encerrar-anteriores', exigirLogin, exigirSetor('Logís
     const ids = Array.isArray(req.body?.ids)
       ? req.body.ids.map(idSeguro).filter(Boolean)
       : null;
-
-    const FUSO = 'America/Sao_Paulo';
     const resultado = await emTransacao(async (cli) => {
       const { rows: pendentes } = await cli.query(
         `SELECT ${COLUNAS_CARGA} FROM fact_viagens
@@ -2418,7 +2414,6 @@ rotasCargas.get('/historico', exigirLogin, recusarFilial, async (req, res, next)
         codigo: 'PERIODO_LONGO',
       });
     }
-    const FUSO = 'America/Sao_Paulo';
     const { rows: cargas } = await consultar(
       `SELECT ${COLUNAS_CARGA} FROM fact_viagens
         WHERE excluida_em IS NULL
@@ -2471,7 +2466,6 @@ rotasCargas.get('/programacao-do-dia', exigirLogin, exigirSetor('Logística'), a
         codigo: 'DIA_INVALIDO',
       });
     }
-    const FUSO = 'America/Sao_Paulo';
     const { rows } = await consultar(
       `SELECT ${COLUNAS_CARGA} FROM fact_viagens
         WHERE aguardando_carga = FALSE

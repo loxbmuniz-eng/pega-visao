@@ -30,6 +30,7 @@ import {
   camposItem,
   normalizarRotas,
 } from '../dominio/devolucoes.js';
+import { FUSO } from '../dominio/fuso.js';
 
 export const rotasDevolucoes = Router();
 
@@ -224,7 +225,7 @@ rotasDevolucoes.get('/devolucoes', exigirLogin, async (req, res, next) => {
       filtro += ` AND criada_setor = $${params.length}`;
     }
     if (/^\d{4}-\d{2}-\d{2}$/.test(de)) { params.push(de); filtro += ` AND data_dev >= $${params.length}`; }
-    else { filtro += " AND data_dev >= (now() AT TIME ZONE 'America/Sao_Paulo')::date - 30"; }
+    else { filtro += ` AND data_dev >= (now() AT TIME ZONE '${FUSO}')::date - 30`; }
     if (/^\d{4}-\d{2}-\d{2}$/.test(ate)) { params.push(ate); filtro += ` AND data_dev <= $${params.length}`; }
 
     const { rows } = await consultar(

@@ -15,7 +15,7 @@ import jwt from 'jsonwebtoken';
 
 import { config } from './config.js';
 import { verificarConexao, encerrar, consultar } from './banco.js';
-import { iniciarTempoReal, conectados } from './tempo-real.js';
+import { iniciarTempoReal, conectados, encerrarTempoReal } from './tempo-real.js';
 import { rotasAuth } from './rotas/auth.js';
 import { rotasEstado } from './rotas/estado.js';
 import { rotasCargas } from './rotas/cargas.js';
@@ -125,6 +125,31 @@ export function versaoDoServidor(daqui = path.dirname(fileURLToPath(import.meta.
 /* Uma vez por processo: o valor não muda enquanto o serviço está no ar. */
 const VERSAO_SERVIDOR = versaoDoServidor();
 
+/* AS OUTRAS RECUSAS DO BANCO (auditoria de 06/10/2026). Só a chave
+   estrangeira (23503, cadastro que falta) era traduzida; toda outra recusa
+   do banco — valor repetido onde não pode, valor fora da lista permitida,
+   número ou data que não é número ou data — saía como 500, e o painel trata
+   500 como falha de REDE: enfileira e tenta para sempre uma gravação que
+   nunca vai ser aceita, com "sistema offline" na tela (família da #57).
+   Recusa do banco é recusa do pedido: 4xx com o motivo, para quem está com
+   o dedo no botão saber que repetir não resolve. Pura e exportada: o teste
+   confere cada código sem precisar provocar o erro no banco. */
+const RECUSAS_DO_BANCO = {
+  '23505': [409, 'VALOR_REPETIDO', 'Este registro já existe com o mesmo valor. Confira se não foi lançado antes.'],
+  '23514': [422, 'VALOR_FORA_DA_REGRA', 'Um dos valores está fora do que o sistema aceita. Confira os campos e tente de novo.'],
+  '23502': [422, 'CAMPO_OBRIGATORIO', 'Falta um campo obrigatório para gravar.'],
+  '22P02': [422, 'VALOR_INVALIDO', 'Um dos valores não está no formato esperado (número, data ou código).'],
+  '22001': [422, 'TEXTO_LONGO_DEMAIS', 'Um dos textos passou do tamanho que o sistema guarda.'],
+  '22003': [422, 'NUMERO_FORA_DO_LIMITE', 'Um dos números está fora do limite aceito.'],
+  '22007': [422, 'DATA_INVALIDA', 'Uma das datas não é válida.'],
+  '22008': [422, 'DATA_INVALIDA', 'Uma das datas está fora do intervalo aceito.'],
+};
+export function recusaDoBanco(err) {
+  const r = RECUSAS_DO_BANCO[err?.code];
+  if (!r) return null;
+  return { status: r[0], corpo: { erro: r[2], codigo: r[1], restricao: err.constraint || null } };
+}
+
 export function criarApp() {
   const app = express();
 
@@ -205,6 +230,13 @@ export function criarApp() {
   app.use('/api/pagamento-frete/leituras', express.json({ limit: '9mb' }), express.text({ type: 'text/plain', limit: '9mb' }));
   // 1 MB cobre a carga inicial com folga e barra corpo gigante como negação
   // de serviço barata.
+  /* O RELATÓRIO EM PDF LEVA O ESTILO INTEIRO DO PAINEL (563 KB medidos em
+     06/10/2026) — com o teto geral de 1 MB sobravam ~460 KB para o conteúdo,
+     e o PDF do frete sem filtro quebrava perto de 100 cargas (provado: 1.033
+     KB → 413). O teto desta rota é o que a própria rota já declarava aceitar
+     (LARGURA_MAX_HTML 3 MB + LARGURA_MAX_CSS 1 MB), com folga do envelope
+     JSON. O Nginx (instalar.sh) tem de deixar passar o mesmo tamanho. */
+  app.use('/api/relatorios/pdf', express.json({ limit: '5mb' }), express.text({ type: 'text/plain', limit: '5mb' }));
   app.use(express.json({ limit: '1mb' }));
 
   /* Corpo em text/plain, aceito e convertido para JSON.
@@ -282,7 +314,11 @@ export function criarApp() {
         },
       });
     } catch (e) {
-      res.status(503).json({ ok: false, banco: 'inacessível', erro: e.message });
+      /* A mensagem crua do banco vai para o log, não para a resposta: este
+         endereço é público, e "password authentication failed for user X"
+         entrega o nome do usuário do banco a quem sondar (auditoria 06/10). */
+      console.error('[health] banco inacessível —', e.message);
+      res.status(503).json({ ok: false, banco: 'inacessível' });
     }
   });
 
@@ -361,6 +397,11 @@ export function criarApp() {
         campo: campo || null,
         valor: valor || null,
       });
+    }
+    const recusa = recusaDoBanco(err);
+    if (recusa) {
+      console.warn('[recusa do banco]', req.method, req.path, '—', err.code, err.constraint || '', err.message);
+      return res.status(recusa.status).json(recusa.corpo);
     }
     console.error('[erro]', req.method, req.path, '—', err?.stack || err);
     return res.status(500).json({ erro: 'Erro interno no servidor.', codigo: 'ERRO_INTERNO' });
@@ -447,6 +488,11 @@ if (executadoDireto) {
   for (const sinal of ['SIGTERM', 'SIGINT']) {
     process.on(sinal, () => {
       console.log(`\n${sinal} recebido, encerrando...`);
+      /* O TEMPO REAL FECHA PRIMEIRO (auditoria de 06/10/2026). As conexões
+         abertas do painel seguravam o servidor.close() até o limite de 10 s
+         e a saída era com erro — a cada atualização, 10 s a mais de pátio
+         sem servidor. Fechando as conexões, o close() termina na hora. */
+      encerrarTempoReal();
       servidor.close(async () => {
         await encerrar();
         process.exit(0);

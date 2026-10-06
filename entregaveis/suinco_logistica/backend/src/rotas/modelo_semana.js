@@ -17,6 +17,7 @@ import { exigirLogin, exigirSetor, recusarFilial } from '../middleware/auth.js';
 import { emitir } from '../tempo-real.js';
 import { calcularFrete, kmValido, valorEmReaisOuNulo, observacaoDoFrete } from '../dominio/frete.js';
 import { filaReordenada, filaNormalizada, numerosDaFila } from '../dominio/cargas.js';
+import { FUSO } from '../dominio/fuso.js';
 
 export const rotasModeloSemana = Router();
 
@@ -49,7 +50,7 @@ function diaOu(hoje, v) {
    lado do servidor. Exportada para o teste conferir. */
 export function hojeISO() {
   return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit',
+    timeZone: FUSO, year: 'numeric', month: '2-digit', day: '2-digit',
   }).format(new Date());
 }
 

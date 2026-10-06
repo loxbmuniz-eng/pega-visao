@@ -1469,15 +1469,30 @@ describe('10. Cinco senhas erradas', () => {
     assert.equal(rows[0].falhas_senha, 0);
   });
 
-  test('sem segundo fator, a quinta falha leva a bloqueio curto', async () => {
+  /* A REGRA MUDOU NA AUDITORIA DE 06/10/2026. Até ali a SEXTA tentativa,
+     com a senha CERTA, respondia 429 "bloqueio" — e a errada 401: quem
+     tentava adivinhar sabia quando tinha acertado. Agora a quinta errada põe
+     a conta em espera, e durante a espera TODA resposta é igual. */
+  test('sem segundo fator, a quinta falha põe a conta em espera — e a senha certa não denuncia nada', async () => {
     await zerar();
     for (let i = 0; i < 5; i += 1) {
       await req('/auth/login', { metodo: 'POST', corpo: { email: EMAIL, senha: 'errada' } });
     }
+    const { rows } = await pool.query('SELECT bloqueado_ate FROM operadores WHERE id = $1', [id]);
+    assert.ok(rows[0].bloqueado_ate && new Date(rows[0].bloqueado_ate) > new Date(), 'a quinta errada põe a conta em espera');
+    const certa = await req('/auth/login', { metodo: 'POST', corpo: { email: EMAIL, senha: SENHA } });
+    const errada = await req('/auth/login', { metodo: 'POST', corpo: { email: EMAIL, senha: 'errada-de-novo' } });
+    const ninguem = await req('/auth/login', { metodo: 'POST', corpo: { email: 'ninguem@teste.local', senha: SENHA } });
+    assert.equal(certa.status, 401, 'a senha certa durante a espera não entra');
+    assert.deepEqual([certa.status, certa.json], [errada.status, errada.json], 'certa e errada respondem IGUAL');
+    assert.deepEqual([certa.status, certa.json], [ninguem.status, ninguem.json], 'e igual ao e-mail que não existe');
+    assert.match(certa.json.erro, /15 minutos/, 'a mensagem diz o que fazer');
+  });
+
+  test('passada a espera, a senha certa entra', async () => {
+    await pool.query("UPDATE operadores SET bloqueado_ate = now() - interval '1 minute' WHERE id = $1", [id]);
     const r = await req('/auth/login', { metodo: 'POST', corpo: { email: EMAIL, senha: SENHA } });
-    assert.equal(r.status, 429);
-    assert.equal(r.json.codigo, 'BLOQUEIO_TEMPORARIO');
-    assert.match(r.json.erro, /minuto/, 'a mensagem precisa dizer quanto esperar');
+    assert.equal(r.status, 200, r.texto);
   });
 
   test('a resposta a senha errada continua idêntica à de e-mail inexistente', async () => {
@@ -7448,5 +7463,141 @@ describe('50. A observação do frete é obrigatória para contratar (06/10/2026
     assert.equal(t.json.montagem.frete_observacao, 'TABELA');
     assert.equal(t.json.montagem.frete_valor_manual, null, 'TABELA limpa o combinado da linha');
     await pool.query('DELETE FROM programacao_montagem WHERE montagem_id = $1', [id]);
+  });
+});
+
+describe('51. Achados da auditoria da API (06/10/2026)', () => {
+  /* Pedido do dono: "resolve qualquer problema que pode existir nas coisas
+     que você indicou". Cada teste trava um achado; os que dependem do
+     navegador (a filial e o tempo real) estão em
+     testes/test_filial_nao_recebe_patio_pelo_tempo_real.py. */
+  const fsSync = () => import('node:fs');
+  const criar = async (email, setor) => {
+    const hash = await bcrypt.hash(SENHA, 4);
+    await pool.query(`INSERT INTO operadores (email, nome, setor, senha_hash) VALUES ($1,$2,$3,$4)
+      ON CONFLICT (email) DO UPDATE SET setor = EXCLUDED.setor, senha_hash = EXCLUDED.senha_hash, ativo = true,
+        falhas_senha = 0, falhas_desde = NULL, bloqueado_ate = NULL`, [email, `Auditoria ${setor}`, setor, hash]);
+    return (await req('/auth/login', { metodo: 'POST', corpo: { email, senha: SENHA } })).json.token;
+  };
+  after(async () => {
+    await pool.query("DELETE FROM operadores WHERE email LIKE 'aud51.%@teste.local'");
+  });
+
+  test('3. o limite de PDF é por PESSOA: quem gerou 20 não trava o colega no mesmo endereço', async () => {
+    const a = await criar('aud51.a@teste.local', 'Logística');
+    const b = await criar('aud51.b@teste.local', 'Logística');
+    const ca = [];
+    for (let i = 0; i < 20; i += 1) {
+      ca.push((await req('/api/relatorios/pdf', { metodo: 'POST', token: a, corpo: { tipo: 'relatorio-operacional' } })).status);
+    }
+    assert.deepEqual([...new Set(ca)], [400], 'os 20 da pessoa A param na validação (sem conteúdo)');
+    const rb = await req('/api/relatorios/pdf', { metodo: 'POST', token: b, corpo: { tipo: 'relatorio-operacional' } });
+    assert.notEqual(rb.status, 429, 'a pessoa B não pode pagar pelo limite da A: ' + rb.texto);
+    assert.equal(rb.json.codigo, 'HTML_FALTANDO');
+  });
+
+  test('4. relatório grande passa: 563 KB de estilo + 600 KB de conteúdo não são recusados por tamanho', async () => {
+    const t = await criar('aud51.c@teste.local', 'Logística');
+    const corpo = { tipo: 'tipo-que-nao-existe', html: '<div>' + 'x'.repeat(600 * 1024) + '</div>', css: 'a{}'.repeat(563 * 1024 / 3) };
+    const r = await req('/api/relatorios/pdf', { metodo: 'POST', token: t, corpo });
+    assert.notEqual(r.status, 413, 'o envio de ~1,1 MB não pode morrer no teto de 1 MB');
+    assert.equal(r.json.codigo, 'DOCUMENTO_DESCONHECIDO', 'chegou à rota, que é quem decide');
+  });
+
+  test('5. recusa do banco vira recusa com motivo, não 500 (que o painel trata como "sem rede")', async () => {
+    const { recusaDoBanco } = await import('../src/servidor.js');
+    assert.equal(typeof recusaDoBanco, 'function', 'o servidor precisa traduzir as recusas do banco');
+    for (const [code, status] of [['23505', 409], ['23514', 422], ['23502', 422], ['22P02', 422], ['22001', 422], ['22003', 422], ['22007', 422]]) {
+      const r = recusaDoBanco({ code, constraint: 'x' });
+      assert.ok(r, `código ${code} precisa ser traduzido`);
+      assert.equal(r.status, status, code);
+      assert.ok(r.corpo.erro && r.corpo.codigo, code);
+    }
+    assert.equal(recusaDoBanco({ code: '57P01' }), null, 'falha do servidor de banco continua sendo 500');
+  });
+
+  test('6. a sincronia completa traz as abertas e as concluídas de 30 dias — não o histórico inteiro', async () => {
+    const t = tokens['Logística'];
+    const n = Date.now();
+    const velhaConcluida = `carga_aud51_vc_${n}`, velhaAberta = `carga_aud51_va_${n}`, recenteConcluida = `carga_aud51_rc_${n}`;
+    /* Criadas por INSERT, e não por API + UPDATE: o gatilho de UPDATE
+       (fn_viagem_antes_update) carimba acao_em = agora em toda mudança de
+       status — é o que ele existe para fazer —, então o teste não teria como
+       envelhecer uma carga. INSERT não passa por ele. */
+    const inserir = (id, status, dias) => pool.query(
+      `INSERT INTO fact_viagens (carga_id, numero_carga, placa, status_atual, acao_em, criado_em, programado_em)
+       VALUES ($1, $2, '', $3, now() - ($4 || ' days')::interval, now() - ($4 || ' days')::interval,
+               now() - ($4 || ' days')::interval)`, [id, id.slice(-12), status, String(dias)]);
+    await inserir(velhaConcluida, 'Seguiu Viagem', 40);
+    await inserir(velhaAberta, 'Aguardando Veículo', 40);
+    await inserir(recenteConcluida, 'Seguiu Viagem', 2);
+    const e = await req('/api/estado', { token: t });
+    const ids = new Set(e.json.cargas.map((c) => c.id));
+    assert.ok(!ids.has(velhaConcluida), 'concluída há 40 dias fica no Histórico, não na sincronia');
+    assert.ok(ids.has(velhaAberta), 'carga ABERTA vem sempre, de qualquer idade');
+    assert.ok(ids.has(recenteConcluida), 'concluída recente vem');
+    await pool.query('DELETE FROM log_eventos WHERE carga_id = ANY($1)', [[velhaConcluida, velhaAberta, recenteConcluida]]);
+    await pool.query('DELETE FROM fact_statusfrota WHERE carga_id = ANY($1)', [[velhaConcluida, velhaAberta, recenteConcluida]]);
+    await pool.query('DELETE FROM fact_viagens WHERE carga_id = ANY($1)', [[velhaConcluida, velhaAberta, recenteConcluida]]);
+  });
+
+  test('7 e 8. o Nginx aceita o que o servidor aceita, e o log não grava o token do endereço', async () => {
+    const { readFileSync } = await fsSync();
+    const inst = readFileSync(new URL('../instalar.sh', import.meta.url), 'utf8');
+    const teto = /client_max_body_size\s+(\d+)m;/.exec(inst);
+    assert.ok(teto && Number(teto[1]) >= 10, 'o Nginx precisa deixar passar os 9 MB da importação e os 5 MB do relatório');
+    assert.match(inst, /log_format suinco_sem_consulta [^;]*\\\$uri/, 'o formato do log usa o caminho SEM a consulta');
+    assert.match(inst, /access_log \/var\/log\/nginx\/access\.log suinco_sem_consulta;/);
+    assert.doesNotMatch(inst.split('log_format suinco_sem_consulta')[1].split(';')[0], /\\\$request[^_]|\\\$request_uri|\\\$args/,
+      'o formato não pode gravar o endereço inteiro');
+  });
+
+  test('9. a verificação de saúde não devolve a mensagem crua do banco', async () => {
+    const { readFileSync } = await fsSync();
+    const src = readFileSync(new URL('../src/servidor.js', import.meta.url), 'utf8');
+    const bloco = src.slice(src.indexOf("app.get('/health'"), src.indexOf("app.use('/auth'"));
+    assert.doesNotMatch(bloco, /json\(\{[^}]*erro:\s*e\.message/, 'e.message não pode ir para a resposta pública');
+  });
+
+  test('10. desligar o serviço com o painel conectado é imediato e sem erro', async () => {
+    const { spawn } = await import('node:child_process');
+    const porta = 3900 + Math.floor(Math.random() * 90);
+    const filho = spawn(process.execPath, ['src/servidor.js'], {
+      cwd: new URL('..', import.meta.url).pathname, env: { ...process.env, PORT: String(porta) }, stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    await new Promise((ok, falha) => {
+      const t = setTimeout(() => falha(new Error('o servidor não subiu')), 15000);
+      filho.stdout.on('data', (d) => { if (String(d).includes('porta')) { clearTimeout(t); ok(); } });
+    });
+    const ws = new WebSocket(`ws://127.0.0.1:${porta}/socket.io/?EIO=4&transport=websocket`);
+    await new Promise((ok) => { ws.onopen = ok; setTimeout(ok, 3000); });
+    const inicio = Date.now();
+    filho.kill('SIGTERM');
+    const codigo = await new Promise((ok) => filho.on('exit', (c) => ok(c)));
+    const ms = Date.now() - inicio;
+    try { ws.close(); } catch { /* já caiu */ }
+    assert.equal(codigo, 0, 'sai sem erro');
+    assert.ok(ms < 5000, `desligou em ${ms} ms — antes esperava os 10 s do limite`);
+  });
+
+  test('11. o contato padrão das notificações não é um e-mail pessoal', async () => {
+    const { readFileSync } = await fsSync();
+    const src = readFileSync(new URL('../src/config.js', import.meta.url), 'utf8');
+    assert.doesNotMatch(src, /mailto:[a-z0-9._-]+@gmail\.com/i);
+  });
+
+  test('12. o fuso mora em um lugar só', async () => {
+    const { readdirSync, readFileSync } = await fsSync();
+    const raiz = new URL('../src/', import.meta.url).pathname;
+    const achados = [];
+    const varre = (dir) => {
+      for (const e of readdirSync(dir, { withFileTypes: true })) {
+        const p = path.join(dir, e.name);
+        if (e.isDirectory()) varre(p);
+        else if (p.endsWith('.js') && !p.endsWith('fuso.js') && /'America\/Sao_Paulo'/.test(readFileSync(p, 'utf8'))) achados.push(p);
+      }
+    };
+    varre(raiz);
+    assert.deepEqual(achados, [], 'use FUSO de dominio/fuso.js');
   });
 });

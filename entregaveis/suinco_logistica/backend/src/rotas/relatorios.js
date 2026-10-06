@@ -39,7 +39,12 @@ const limitadorRelatorios = rateLimit({
 const LARGURA_MAX_HTML = 3_000_000; // ~3MB: CSS+fonte embutida (~190KB) tem folga enorme; acima disso é corpo suspeito, não relatório real
 const LARGURA_MAX_CSS = 1_000_000;
 
-rotasRelatorios.post('/relatorios/pdf', limitadorRelatorios, exigirLogin, async (req, res, next) => {
+/* LOGIN ANTES DO LIMITE (auditoria de 06/10/2026). Com o limitador na
+   frente, `req.operador` ainda não existia e a chave caía no endereço de
+   rede — e o pátio inteiro sai pelo mesmo endereço. Provado: a pessoa A
+   gerou 20 pedidos e a pessoa B foi recusada no primeiro dela. É a mesma
+   família da ocorrência #35. Logado primeiro, cada pessoa tem o seu teto. */
+rotasRelatorios.post('/relatorios/pdf', exigirLogin, limitadorRelatorios, async (req, res, next) => {
   const { html, css, orientacao, nomeArquivo, tipo, recorte } = req.body || {};
   const op = req.operador;
 
