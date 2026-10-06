@@ -65,7 +65,30 @@ const ADMINS = [
 ];
 const adm = {};
 
+/* PREPARO DE CENÁRIO COM FRETE (06/10/2026). Desde a migração 061 contratar
+   (pôr placa) exige a observação do frete. Os testes que só PREPARAM uma
+   carga contratada — e são dezenas, de bloco 1 em diante — não estão medindo
+   o frete: aqui a carga contratada nasce com TABELA, como a Logística faria.
+   Quem mede a regra (bloco 50) manda `freteObservacao` explícito — inclusive
+   '' para provar a recusa —, e aí nada é acrescentado. */
+function comFreteDePreparo(caminho, metodo, corpo) {
+  if (!corpo || typeof corpo !== 'object' || corpo.freteObservacao !== undefined) return corpo;
+  if (metodo === 'POST' && caminho === '/api/cargas') {
+    if (corpo.aguardandoCarga === true || !String(corpo.placa ?? '').trim()) return corpo;
+    return { ...corpo, freteObservacao: 'TABELA' };
+  }
+  /* Na edição, contratam: a placa entrando, a chegada da Portaria virando
+     carga (aguardandoCarga:false) e a troca de transportadora. */
+  if (metodo === 'PATCH' && /^\/api\/cargas\/[^/]+$/.test(caminho)) {
+    const contrata = String(corpo.placa ?? '').trim() || corpo.aguardandoCarga === false
+      || corpo.transportadora !== undefined;
+    return contrata ? { ...corpo, freteObservacao: 'TABELA' } : corpo;
+  }
+  return corpo;
+}
+
 async function req(caminho, { metodo = 'GET', token, corpo, cabecalhos = {} } = {}) {
+  corpo = comFreteDePreparo(caminho, metodo, corpo);
   const r = await fetch(base + caminho, {
     method: metodo,
     headers: {
@@ -6022,8 +6045,14 @@ describe('45. Destino preenche o KM, e o frete combinado à mão (18/09/2026)', 
   });
 
   /* ------------------------------------------------------------------ */
+  /* A REGRA MUDOU EM 06/10/2026, por decisão do dono: "o valor do frete não
+     pode ser alterável, somente o KM". Até ali o digitado ENTRAVA no lugar
+     do calculado (`frete_valor`). Agora `frete_valor` é sempre a conta, e o
+     negociado vive à parte, como `frete_combinado` da observação COMBINADO.
+     Estes testes foram reescritos para a regra nova — o que eles guardam
+     continua: o combinado não se perde, não vira zero, e o KM que muda avisa. */
   describe('e o frete combinado à mão', () => {
-    test('digitar um valor manda, e o calculado continua guardado', async () => {
+    test('digitar um valor guarda o combinado, e o frete exibido continua sendo a tabela', async () => {
       const id = await novaLinha();
       await req(`/api/montagem/${id}`, { metodo: 'PATCH', token: tokens['Logística'],
         corpo: { freteDestino: destino } });
@@ -6035,9 +6064,9 @@ describe('45. Destino preenche o KM, e o frete combinado à mão (18/09/2026)', 
       assert.equal(r.status, 200, r.texto);
 
       const m = await ler(id);
-      assert.equal(Number(m.frete_valor), 12500, 'o combinado é o que vale');
-      assert.equal(Number(m.frete_valor_calculado), Number(calculado),
-        'e a tabela não se perde — a conferência compara os dois');
+      assert.equal(Number(m.frete_combinado), 12500, 'o combinado fica guardado');
+      assert.equal(Number(m.frete_valor), Number(calculado),
+        'e o valor do frete não é editável: continua sendo a conta da tabela');
       assert.equal(m.frete_e_manual, true);
       assert.ok(m.frete_manual_por, 'fica registrado quem digitou');
     });
@@ -6064,24 +6093,25 @@ describe('45. Destino preenche o KM, e o frete combinado à mão (18/09/2026)', 
       await req(`/api/montagem/${id}`, { metodo: 'PATCH', token: tokens['Logística'],
         corpo: { kmDeslocamento: String(kmDoDestino + 100) } });
       const depois = await ler(id);
-      assert.equal(Number(depois.frete_valor), 9900, 'o combinado FICA');
+      assert.equal(Number(depois.frete_combinado), 9900, 'o combinado FICA');
       assert.equal(depois.frete_km_mudou, true,
         'mas a linha precisa avisar que foi fechado em outra quilometragem');
     });
 
-    test('apagar o campo desfaz e volta a valer o calculado', async () => {
+    test('apagar o campo desfaz o combinado', async () => {
       const id = await novaLinha();
       await req(`/api/montagem/${id}`, { metodo: 'PATCH', token: tokens['Logística'],
         corpo: { freteDestino: destino } });
       const calculado = (await ler(id)).frete_valor;
       await req(`/api/montagem/${id}`, { metodo: 'PATCH', token: tokens['Logística'],
         corpo: { freteValorManual: '100,00' } });
-      assert.equal(Number((await ler(id)).frete_valor), 100);
+      assert.equal(Number((await ler(id)).frete_combinado), 100);
 
       await req(`/api/montagem/${id}`, { metodo: 'PATCH', token: tokens['Logística'],
         corpo: { freteValorManual: '' } });
       const m = await ler(id);
-      assert.equal(Number(m.frete_valor), Number(calculado), 'volta ao calculado');
+      assert.equal(m.frete_combinado, null, 'sem combinado');
+      assert.equal(Number(m.frete_valor), Number(calculado), 'o frete exibido nunca deixou de ser o calculado');
       assert.equal(m.frete_e_manual, false);
       assert.equal(m.frete_manual_por, null, 'e o carimbo sai junto');
     });
@@ -7256,5 +7286,167 @@ describe('49. Pagamento de Frete — a planilha dentro do painel (05/10/2026)', 
       const { rows } = await pool.query("SELECT pg_get_constraintdef(oid) AS d FROM pg_constraint WHERE conname = 'operadores_setor_check'");
       assert.match(rows[0].d, /Pagamento de Frete/, 'a 058 põe o setor na CHECK');
     });
+  });
+});
+
+describe('50. A observação do frete é obrigatória para contratar (06/10/2026)', () => {
+  /* Decisão do dono: "o valor do frete não pode ser alterável, somente o KM
+     (...) o que seguir o valor da tabela vai ser colocado na observação como
+     tabela, e o que não seguir a tabela vai ser colocado o valor combinado" —
+     e "só consegue contratar carga com frete combinado (...) sem exceções".
+     Contratar é pôr a placa. Todo corpo aqui manda `freteObservacao`
+     EXPLÍCITO — é o que desliga o preparo automático do ajudante req(). */
+  const A = 'OBF0A01', B = 'OBF0B02', S = 'OBF0S03';
+  const LOG = () => tokens['Logística'];
+  const nova = (extra) => req('/api/cargas', { metodo: 'POST', token: LOG(),
+    corpo: { id: `carga_obf_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      numeroCarga: 'OBF-' + Date.now(), rota: '', ...extra } });
+  const ler = async (id) => (await pool.query(
+    'SELECT frete_observacao, frete_valor_manual, frete_valor, placa FROM fact_viagens WHERE carga_id = $1', [id])).rows[0];
+
+  before(async () => {
+    await pool.query(
+      `INSERT INTO dim_veiculos (placa, transportadora, tipo_veiculo, uf, origem)
+       VALUES ($1,'TRANSPORTADORA OBS A','Truck','MG','manual'),
+              ($2,'TRANSPORTADORA OBS B','Truck','MG','manual'),
+              ($3,'SUINCO','Truck','MG','manual')
+       ON CONFLICT (placa) DO UPDATE SET transportadora = EXCLUDED.transportadora,
+         tipo_veiculo = EXCLUDED.tipo_veiculo`, [A, B, S]);
+  });
+
+  test('com placa e SEM observação: recusado, dizendo o que falta', async () => {
+    const r = await nova({ placa: A, freteObservacao: '' });
+    assert.equal(r.status, 422, r.texto);
+    assert.equal(r.json.codigo, 'FRETE_OBRIGATORIO');
+    assert.match(r.json.erro, /TABELA.*COMBINADO/);
+  });
+
+  test('COMBINADO sem valor também é recusado', async () => {
+    const r = await nova({ placa: A, freteObservacao: 'COMBINADO', freteCombinado: '' });
+    assert.equal(r.status, 422, r.texto);
+    assert.equal(r.json.codigo, 'FRETE_COMBINADO_SEM_VALOR');
+  });
+
+  test('TABELA contrata, e o valor é a conta — ninguém digita o preço', async () => {
+    const r = await nova({ placa: A, freteObservacao: 'TABELA', kmDeslocamento: '100', freteCombinado: '99999' });
+    assert.equal(r.status, 201, r.texto);
+    const g = await ler(r.json.id);
+    assert.equal(g.frete_observacao, 'TABELA');
+    assert.equal(g.frete_valor_manual, null, 'TABELA não guarda valor digitado, nem se vier no pacote');
+    assert.ok(Number(g.frete_valor) > 0, 'o valor é o calculado pelo KM');
+  });
+
+  test('COMBINADO contrata com o valor negociado, e o calculado continua de referência', async () => {
+    const r = await nova({ placa: A, freteObservacao: 'COMBINADO', freteCombinado: '14.000,00', kmDeslocamento: '100' });
+    assert.equal(r.status, 201, r.texto);
+    assert.equal(r.json.freteObservacao, 'COMBINADO');
+    assert.equal(r.json.freteCombinado, 14000);
+    assert.notEqual(Number(r.json.freteValor), 14000, 'o valor do frete continua sendo a conta');
+  });
+
+  test('sem placa ainda não é contratação: nasce sem observação', async () => {
+    const r = await nova({ placa: '', freteObservacao: '' });
+    assert.equal(r.status, 201, r.texto);
+  });
+
+  test('frota própria (SUINCO) não tem frete a pagar: contrata sem observação', async () => {
+    const r = await nova({ placa: S, freteObservacao: '' });
+    assert.equal(r.status, 201, r.texto);
+  });
+
+  test('pôr a placa depois é contratar: sem observação recusa, com observação passa', async () => {
+    const c = await nova({ placa: '', freteObservacao: '' });
+    const sem = await req(`/api/cargas/${c.json.id}`, { metodo: 'PATCH', token: LOG(),
+      corpo: { placa: A, transportadora: 'TRANSPORTADORA OBS A', freteObservacao: '' } });
+    assert.equal(sem.status, 422, sem.texto);
+    assert.equal(sem.json.codigo, 'FRETE_OBRIGATORIO');
+    assert.equal((await ler(c.json.id)).placa, '', 'a placa não entrou');
+    const com = await req(`/api/cargas/${c.json.id}`, { metodo: 'PATCH', token: LOG(),
+      corpo: { placa: A, transportadora: 'TRANSPORTADORA OBS A', freteObservacao: 'TABELA' } });
+    assert.equal(com.status, 200, com.texto);
+    assert.equal((await ler(c.json.id)).frete_observacao, 'TABELA');
+  });
+
+  test('trocar de transportadora pede a observação de NOVO', async () => {
+    const c = await nova({ placa: A, freteObservacao: 'TABELA' });
+    const sem = await req(`/api/cargas/${c.json.id}`, { metodo: 'PATCH', token: LOG(),
+      corpo: { placa: B, transportadora: 'TRANSPORTADORA OBS B', freteObservacao: '' } });
+    assert.equal(sem.status, 422, sem.texto);
+    assert.equal(sem.json.codigo, 'FRETE_DA_NOVA_TRANSPORTADORA');
+    const com = await req(`/api/cargas/${c.json.id}`, { metodo: 'PATCH', token: LOG(),
+      corpo: { placa: B, transportadora: 'TRANSPORTADORA OBS B', freteObservacao: 'COMBINADO', freteCombinado: '9.500' } });
+    assert.equal(com.status, 200, com.texto);
+    const g = await ler(c.json.id);
+    assert.equal(g.frete_observacao, 'COMBINADO');
+    assert.equal(Number(g.frete_valor_manual), 9500);
+  });
+
+  test('eco sem a observação não apaga a decisão; TABELA limpa o combinado', async () => {
+    const c = await nova({ placa: A, freteObservacao: 'COMBINADO', freteCombinado: '8000' });
+    const eco = await req(`/api/cargas/${c.json.id}`, { metodo: 'PATCH', token: LOG(),
+      corpo: { observacoes: 'recado', freteObservacao: '' } });
+    assert.equal(eco.status, 200, eco.texto);
+    let g = await ler(c.json.id);
+    assert.equal(g.frete_observacao, 'COMBINADO', 'vazio não apaga');
+    assert.equal(Number(g.frete_valor_manual), 8000);
+    await req(`/api/cargas/${c.json.id}`, { metodo: 'PATCH', token: LOG(), corpo: { freteObservacao: 'TABELA' } });
+    g = await ler(c.json.id);
+    assert.equal(g.frete_observacao, 'TABELA');
+    assert.equal(g.frete_valor_manual, null, 'TABELA: quem vale é o calculado');
+  });
+
+  test('a chegada da Portaria entra sem frete, e completá-la é contratar', async () => {
+    const id = `carga_obf_port_${Date.now()}`;
+    await pool.query("UPDATE fact_viagens SET status_atual = 'Seguiu Viagem' WHERE placa = $1", [B]);
+    const ch = await req('/api/cargas', { metodo: 'POST', token: tokens['Portaria'],
+      corpo: { id, placa: B, aguardandoCarga: true } });
+    assert.equal(ch.status, 201, ch.texto);
+    const sem = await req(`/api/cargas/${id}`, { metodo: 'PATCH', token: LOG(),
+      corpo: { aguardandoCarga: false, numeroCarga: 'OBF-PORT', freteObservacao: '' } });
+    assert.equal(sem.status, 422, sem.texto);
+    assert.equal(sem.json.codigo, 'FRETE_OBRIGATORIO');
+    const com = await req(`/api/cargas/${id}`, { metodo: 'PATCH', token: LOG(),
+      corpo: { aguardandoCarga: false, numeroCarga: 'OBF-PORT', freteObservacao: 'TABELA' } });
+    assert.equal(com.status, 200, com.texto);
+  });
+
+  test('quem não vê dinheiro não vê o combinado nem a observação', async () => {
+    const c = await nova({ placa: A, freteObservacao: 'COMBINADO', freteCombinado: '7777' });
+    const hash = await bcrypt.hash(SENHA, 4);
+    await pool.query(`INSERT INTO operadores (email, nome, setor, senha_hash) VALUES ('obf.comercial@teste.local','Comercial OBF','Comercial',$1)
+      ON CONFLICT (email) DO UPDATE SET setor = 'Comercial', senha_hash = EXCLUDED.senha_hash, ativo = true`, [hash]);
+    const login = await req('/auth/login', { metodo: 'POST', corpo: { email: 'obf.comercial@teste.local', senha: SENHA } });
+    const e = await req('/api/estado', { token: login.json.token });
+    await pool.query("DELETE FROM operadores WHERE email = 'obf.comercial@teste.local'");
+    const vista = e.json.cargas.find((x) => x.id === c.json.id);
+    assert.ok(vista, 'o Comercial vê a carga');
+    assert.equal(vista.freteCombinado, null);
+    assert.equal(vista.freteObservacao, '');
+  });
+
+  test('só Logística e Administração mudam a observação do frete', async () => {
+    const c = await nova({ placa: A, freteObservacao: 'TABELA' });
+    await req(`/api/cargas/${c.json.id}`, { metodo: 'PATCH', token: tokens['Portaria'],
+      corpo: { freteObservacao: 'COMBINADO', freteCombinado: '1' } });
+    assert.equal((await ler(c.json.id)).frete_observacao, 'TABELA', 'a Portaria não altera');
+    const adm = await req(`/api/cargas/${c.json.id}`, { metodo: 'PATCH', token: tokens['Administração'],
+      corpo: { freteObservacao: 'COMBINADO', freteCombinado: '1500' } });
+    assert.equal(adm.status, 200, adm.texto);
+    assert.equal((await ler(c.json.id)).frete_observacao, 'COMBINADO');
+  });
+
+  test('na Montagem: o frete exibido é a tabela, e a observação fica na linha', async () => {
+    const rota = (await pool.query('SELECT codigo FROM dim_rotas ORDER BY codigo LIMIT 1')).rows[0].codigo;
+    const m = await req('/api/montagem', { metodo: 'POST', token: LOG(), corpo: { rotaCodigo: rota, numeroCarga: 'OBF-M' } });
+    assert.equal(m.status, 201, m.texto);
+    const id = m.json.montagem.montagem_id;
+    const r = await req(`/api/montagem/${id}`, { metodo: 'PATCH', token: LOG(),
+      corpo: { freteObservacao: 'COMBINADO', freteValorManual: '14.000,00' } });
+    assert.equal(r.status, 200, r.texto);
+    assert.equal(r.json.montagem.frete_observacao, 'COMBINADO');
+    const t = await req(`/api/montagem/${id}`, { metodo: 'PATCH', token: LOG(), corpo: { freteObservacao: 'TABELA' } });
+    assert.equal(t.json.montagem.frete_observacao, 'TABELA');
+    assert.equal(t.json.montagem.frete_valor_manual, null, 'TABELA limpa o combinado da linha');
+    await pool.query('DELETE FROM programacao_montagem WHERE montagem_id = $1', [id]);
   });
 });

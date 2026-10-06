@@ -15,7 +15,7 @@ import { Router } from 'express';
 import { consultar, emTransacao } from '../banco.js';
 import { exigirLogin, exigirSetor, recusarFilial } from '../middleware/auth.js';
 import { emitir } from '../tempo-real.js';
-import { calcularFrete, kmValido } from '../dominio/frete.js';
+import { calcularFrete, kmValido, valorEmReaisOuNulo, observacaoDoFrete } from '../dominio/frete.js';
 import { filaReordenada, filaNormalizada, numerosDaFila } from '../dominio/cargas.js';
 
 export const rotasModeloSemana = Router();
@@ -236,7 +236,12 @@ rotasModeloSemana.get('/montagem', exigirLogin, recusarFilial, async (req, res, 
         && Number(m.frete_manual_km) !== Number(m.km_deslocamento ?? NaN);
       return {
         ...m,
-        frete_valor: manual !== null ? manual : r.valor,
+        /* O VALOR NÃO É EDITÁVEL (decisão do dono, 06/10/2026): a coluna de
+           frete mostra sempre a conta — KM × tarifa —, que é a referência do
+           relatório. O combinado vive na observação do frete. */
+        frete_valor: r.valor,
+        frete_combinado: manual,
+        frete_observacao: m.frete_observacao || '',
         frete_valor_calculado: r.valor,
         frete_e_manual: manual !== null,
         frete_km_mudou: kmMudouDesdeOCombinado,
@@ -356,17 +361,14 @@ async function destinoEKm(corpo, atual, q) {
 
    NEGATIVO E ZERO NÃO SÃO FRETE. Viram nulo, e a linha volta ao calculado
    em vez de gravar um valor que ninguém combinou. */
-function valorEmReaisOuNulo(v) {
-  if (v === '' || v === null || v === undefined) return null;
-  let t = String(v).trim().replace(/[^\d.,-]/g, '');
-  if (t === '') return null;
-  if (t.includes(',')) t = t.replace(/\./g, '').replace(/,/g, '.');
-  const n = Number(t);
-  if (!Number.isFinite(n) || n <= 0) return null;
-  return Math.round(n * 100) / 100;
-}
+/* valorEmReaisOuNulo mudou para dominio/frete.js (06/10/2026): a carga
+   passou a ler o mesmo combinado, e régua de dinheiro é uma só. */
 
 function freteManualResolvido(corpo, atual, kmDeslAgora, operador) {
+  /* TABELA limpa o combinado: quem vale é o calculado (06/10/2026). */
+  if (observacaoDoFrete(corpo?.freteObservacao) === 'TABELA') {
+    return { valor: null, km: null, por: null, em: null };
+  }
   if (corpo?.freteValorManual === undefined) {
     return {
       valor: atual ? atual.frete_valor_manual : null,
@@ -629,6 +631,7 @@ rotasModeloSemana.patch('/montagem/:id', SO_LOGISTICA, async (req, res, next) =>
               frete_destino = $16, km_destino = $17, km_deslocamento = $18,
               frete_valor_manual = $19, frete_manual_km = $20,
               frete_manual_por = $21, frete_manual_em = $22,
+              frete_observacao = $23,
               operador_nome = $13, atualizado_em = now()
         WHERE montagem_id = $1
         RETURNING *`,
@@ -656,7 +659,12 @@ rotasModeloSemana.patch('/montagem/:id', SO_LOGISTICA, async (req, res, next) =>
           mostrava a rota nova com o nome da velha. */
        campo('apelidoRota', 'apelido_rota', v => String(v ?? '').trim()),
        _dk.destino, _dk.kmDestino, _dk.kmDesl,
-       _fm.valor, _fm.km, _fm.por, _fm.em]
+       _fm.valor, _fm.km, _fm.por, _fm.em,
+       /* Vazio não apaga: a tela grava campo a campo, e quem grava a placa
+          não está mexendo no frete. '' explícito também não apaga — trocar
+          a observação é escolher a outra palavra. */
+       req.body?.freteObservacao !== undefined && observacaoDoFrete(req.body.freteObservacao)
+         ? observacaoDoFrete(req.body.freteObservacao) : (atual[0].frete_observacao || null)]
       );
       return { montagem: rows[0] };
     });

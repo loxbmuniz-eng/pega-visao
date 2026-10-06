@@ -318,6 +318,9 @@ const CAMPOS_EDITAVEIS = {
        calculados pelo servidor contra a tabela; deixá-los editáveis
        abriria um caminho para gravar um preço que a tabela não produz. */
     'frete_destino', 'km_deslocamento',
+    /* A OBSERVAÇÃO DO FRETE (06/10/2026): TABELA ou COMBINADO + valor. É da
+       Logística (contrata) e da Administração (herda). Decisão do dono. */
+    'frete_observacao', 'frete_valor_manual',
     /* O número do documento de frete é da Administração, que o cria fora
        do sistema. Ela herda esta lista inteira (SETOR_IRRESTRITO). */
     'frete_documento',

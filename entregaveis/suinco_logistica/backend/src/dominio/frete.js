@@ -102,7 +102,7 @@ export function calcularFrete({ transportadora, tipoVeiculo, kmDeslocamento, tar
 
   const km = kmValido(kmDeslocamento);
   if (km === null) {
-    return { valor: null, tarifa: null, motivo: 'Sem KM de deslocamento — o valor não pode ser calculado.' };
+    return { valor: null, tarifa: null, motivo: 'Sem KM — o valor não pode ser calculado.' };
   }
 
   const tipo = String(tipoVeiculo ?? '').trim();
@@ -159,8 +159,75 @@ export function motivoSemValor({ transportadora, kmDeslocamento, tipoVeiculo, fr
   const isento = semFreteDeTabela(transportadora);
   if (isento) return isento.motivo;
   if (kmValido(kmDeslocamento) === null) {
-    return 'Sem KM de deslocamento — o valor não pode ser calculado.';
+    return 'Sem KM — o valor não pode ser calculado.';
   }
   return `Tipo de veículo "${String(tipoVeiculo || '').trim() || '—'}" não está na tabela de frete. `
     + 'Cadastre a tarifa em Cadastros → Tabela de Frete.';
+}
+
+/* =====================================================================
+   A OBSERVAÇÃO DO FRETE — obrigatória para contratar (06/10/2026)
+   ---------------------------------------------------------------------
+   Decisão do dono: "o valor do frete não pode ser alterável, somente o KM
+   pode ser editável e ele faz a conta sozinho (...) o que seguir o valor da
+   tabela vai ser colocado na observação como tabela, e o que não seguir a
+   tabela vai ser colocado o valor combinado" — e "só consegue contratar
+   carga com frete combinado (...) sempre, sem exceções".
+
+   CONTRATAR É PÔR A PLACA. Carga sem placa ainda não foi contratada e passa
+   sem observação. A placa entra por quatro portas (Programação, Montagem,
+   Torre/Fila, completar a chegada da Portaria) e as quatro chegam a uma das
+   duas rotas de carga — que perguntam AQUI, numa função só.
+
+   A ÚNICA PASSAGEM SEM OBSERVAÇÃO é a transportadora sem frete de tabela
+   (SUINCO, frota própria; FOB, o cliente retira): não há frete a pagar, e
+   travar a frota própria pararia o caminhão da casa por um valor que não
+   existe. É a mesma pergunta que calcularFrete() já faz — semFreteDeTabela.
+
+   O PAINEL TEM A MESMA REGRA (data.js, freteFaltandoParaContratar) para
+   perguntar ANTES de criar: carga recusada na criação é apagada do painel,
+   e foi exatamente isso que derrubou a trava do KM em 09/09 (39 cargas do
+   lote sumindo). As duas cópias são travadas pelos mesmos casos nos testes
+   de API e de tela. */
+export const FRETE_OBSERVACOES = ['TABELA', 'COMBINADO'];
+
+/* "R$ 14.000,00", "14000", "14.000" → 14000. Vazio, zero ou negativo → null:
+   frete combinado de R$ 0 não é combinado, é campo esquecido. Morava em
+   rotas/modelo_semana.js; mudou para cá porque a carga passou a ler o mesmo
+   valor — uma régua só para a Montagem e para a carga. */
+export function valorEmReaisOuNulo(v) {
+  if (v === '' || v === null || v === undefined) return null;
+  if (typeof v === 'number') return Number.isFinite(v) && v > 0 ? Math.round(v * 100) / 100 : null;
+  let t = String(v).trim().replace(/[^\d.,-]/g, '');
+  if (t === '') return null;
+  if (t.includes(',')) t = t.replace(/\./g, '').replace(/,/g, '.');
+  else if (/^\d{1,3}(\.\d{3})+$/.test(t)) t = t.replace(/\./g, '');
+  const n = Number(t);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return Math.round(n * 100) / 100;
+}
+
+export function observacaoDoFrete(v) {
+  const t = String(v ?? '').trim().toUpperCase();
+  return FRETE_OBSERVACOES.includes(t) ? t : null;
+}
+
+export function conferirFreteParaContratar({ placa, transportadora, freteObservacao, freteCombinado }) {
+  if (!String(placa ?? '').trim()) return null;               // sem placa: ainda não contratou
+  if (semFreteDeTabela(transportadora)) return null;          // frota própria / FOB: não há frete
+  const obs = observacaoDoFrete(freteObservacao);
+  if (!obs) {
+    return {
+      codigo: 'FRETE_OBRIGATORIO',
+      erro: 'Para contratar a carga, informe a observação do frete: TABELA (vale o valor calculado '
+        + 'pelo KM) ou COMBINADO, com o valor negociado.',
+    };
+  }
+  if (obs === 'COMBINADO' && valorEmReaisOuNulo(freteCombinado) === null) {
+    return {
+      codigo: 'FRETE_COMBINADO_SEM_VALOR',
+      erro: 'Frete COMBINADO precisa do valor negociado (ex.: 14.000,00).',
+    };
+  }
+  return null;
 }

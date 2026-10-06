@@ -17,7 +17,7 @@ import {
 import {
   avisarChegada, avisarSaida, avisarFimDaProgramacao, primeiraVezHoje, contarPatio,
 } from '../servicos/avisos.js';
-import { calcularFrete } from '../dominio/frete.js';
+import { calcularFrete, conferirFreteParaContratar, semFreteDeTabela } from '../dominio/frete.js';
 
 export const rotasCargas = Router();
 
@@ -457,6 +457,18 @@ rotasCargas.post('/cargas', exigirLogin, async (req, res, next) => {
     const dados = chegadaSemProgramacao
       ? saneiarCriacaoChegadaSemProgramacao(req.body, frotaRows[0])
       : saneiarCriacao(req.body, frotaRows[0]);
+    /* SEM OBSERVAÇÃO DO FRETE, NÃO CONTRATA (06/10/2026). Decisão do dono:
+       "só consegue contratar carga com frete combinado (...) sempre, sem
+       exceções". Contratar é nascer COM placa. Reenvio da fila offline
+       (`jaExistia`) não é contratação nova, e a chegada da Portaria também
+       não — quem a contrata é a Logística, ao completá-la (PATCH). */
+    if (!jaExistia && !chegadaSemProgramacao) {
+      const falta = conferirFreteParaContratar({
+        placa: dados.placa, transportadora: dados.transportadora,
+        freteObservacao: dados.frete_observacao, freteCombinado: dados.frete_valor_manual,
+      });
+      if (falta) return res.status(422).json(falta);
+    }
 
     /* O FRETE DA CARGA — CALCULADO, NUNCA EXIGIDO (09/09/2026).
        =================================================================
@@ -737,6 +749,50 @@ rotasCargas.patch('/cargas/:id', exigirLogin, async (req, res, next) => {
     const efetivo = (col, chave) => (
       Object.prototype.hasOwnProperty.call(mudancas, col) ? mudancas[col] : antes.rows[0][chave || col]
     );
+
+    /* A OBSERVAÇÃO DO FRETE NA EDIÇÃO (06/10/2026).
+       · VAZIO NÃO APAGA — mesma defesa dos lacres e da placa: um terminal com
+         a cópia de antes reenvia a carga sem a observação, e isso não pode
+         desfazer o que a Logística decidiu.
+       · TABELA limpa o combinado: quem vale é o calculado.
+       · CONTRATAR (placa entrando, chegada da Portaria virando carga) e
+         TROCAR DE TRANSPORTADORA pedem a observação — a troca pede de NOVO,
+         no mesmo pacote: o frete da transportadora que saiu não é o da que
+         entrou (pedido do dono: "se tiver que trocar de transportadora (...)
+         o valor do frete combinado precisa ser colocado"). */
+    if (mudancas.frete_observacao === null) delete mudancas.frete_observacao;
+    if (efetivo('frete_observacao') === 'TABELA') {
+      if (Object.prototype.hasOwnProperty.call(mudancas, 'frete_observacao')) mudancas.frete_valor_manual = null;
+      else delete mudancas.frete_valor_manual;
+    } else if (mudancas.frete_valor_manual === null) {
+      delete mudancas.frete_valor_manual;
+    }
+    {
+      const a = antes.rows[0];
+      const placaDepois = efetivo('placa');
+      const transpDepois = efetivo('transportadora');
+      const norm = (t) => String(t ?? '').trim().toUpperCase();
+      const placaEntrando = !String(a.placa || '').trim() && String(placaDepois || '').trim();
+      const trocouTransportadora = String(a.placa || '').trim() && String(placaDepois || '').trim()
+        && norm(transpDepois) !== norm(a.transportadora) && !semFreteDeTabela(transpDepois);
+      const contratando = placaEntrando || estaVirandoCarga || trocouTransportadora;
+      const mexeuNoFrete = Object.prototype.hasOwnProperty.call(mudancas, 'frete_observacao')
+        || Object.prototype.hasOwnProperty.call(mudancas, 'frete_valor_manual');
+      if (trocouTransportadora && !Object.prototype.hasOwnProperty.call(mudancas, 'frete_observacao')) {
+        return res.status(422).json({
+          codigo: 'FRETE_DA_NOVA_TRANSPORTADORA',
+          erro: `A transportadora mudou (${a.transportadora || '—'} → ${transpDepois || '—'}). `
+            + 'Informe a observação do frete da nova: TABELA ou COMBINADO, com o valor.',
+        });
+      }
+      if (contratando || (mexeuNoFrete && String(placaDepois || '').trim())) {
+        const falta = conferirFreteParaContratar({
+          placa: placaDepois, transportadora: transpDepois,
+          freteObservacao: efetivo('frete_observacao'), freteCombinado: efetivo('frete_valor_manual'),
+        });
+        if (falta) return res.status(422).json(falta);
+      }
+    }
 
     /* RECALCULA SÓ QUANDO UMA ENTRADA MUDA. Editar a observação de uma
        carga de três meses atrás não pode reprecificá-la com a tarifa de
