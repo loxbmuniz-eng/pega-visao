@@ -205,7 +205,10 @@ async def preparar_cenario(pg):
                const passos = [
                  ['Recebida na Portaria', {chegouLacrado: true, lacre1: '133476',
                    placa: 'RRP5F95', motorista: 'GILMAR SOUZA', cargaNumero: '2484'}],
-                 ['Conferida no Faturamento', {pesoFinal: 47}],
+                 /* O fluxo de hoje (16/09/2026): a balança pesa o caminhão CHEIO na
+                    chegada e o VAZIO depois da descarga; a diferença é o devolvido. */
+                 ['Conferida no Faturamento', {pesoEntrada: 18450}],
+                 ['Peso Final Registrado', {pesoFinal: 18403}],
                  ['Descarga Conferida', {}],
                  ['Destinada', {obsControles: 'Romaneio conferido', gerouRdc: true}],
                ];
@@ -314,7 +317,7 @@ def pagina_passo(n, total, passo, img_rel, setor):
         {bloco('QUANDO FAZER', passo['quando'])}
       </div>
       {atencao}
-      <footer class="rodape"><span>Uso interno · Suinco Cooperativa Agroindustrial</span>
+      <footer class="rodape"><span>Uso interno · Suinco - Cooperativa de Suinocultores Ltda</span>
         <span>{HOJE_BR}</span></footer>
     </section>"""
 
@@ -463,7 +466,7 @@ def documento(setor, guia, imagens):
     <div>
       {pipo_img}
       <div class="meta" style="margin-top:8mm">
-        <span>Suinco Cooperativa Agroindustrial · Patos de Minas — MG</span>
+        <span>Suinco - Cooperativa de Suinocultores Ltda · Patos de Minas — MG</span>
         <span>Emitido em {HOJE_BR} · Uso interno</span>
       </div>
     </div>
@@ -476,7 +479,7 @@ def documento(setor, guia, imagens):
     <ul class="resumo">{resumo}</ul>
     <h2>O que você vai aprender</h2>
     <ol class="indice">{indice}</ol>
-    <footer class="rodape"><span>Uso interno · Suinco Cooperativa Agroindustrial</span>
+    <footer class="rodape"><span>Uso interno · Suinco - Cooperativa de Suinocultores Ltda</span>
       <span>{HOJE_BR}</span></footer>
   </section>
 
@@ -498,7 +501,7 @@ def documento(setor, guia, imagens):
       <li>Dúvida de acesso, usuário ou senha: Administração.</li>
       <li>Problema no sistema: Administração abre o chamado.</li>
     </ul>
-    <footer class="rodape"><span>Uso interno · Suinco Cooperativa Agroindustrial</span>
+    <footer class="rodape"><span>Uso interno · Suinco - Cooperativa de Suinocultores Ltda</span>
       <span>{HOJE_BR}</span></footer>
   </section>
 </body></html>"""

@@ -140,7 +140,7 @@ partes = []
 partes.append(f'''
 <section class="slide s-capa">
   <img class="logo" src="{LOGO64}" alt="Suinco">
-  <p class="eyebrow">SUINCO — COOPERATIVA AGROINDUSTRIAL</p>
+  <p class="eyebrow">SUINCO - COOPERATIVA DE SUINOCULTORES LTDA</p>
   <h1>Programação de Embarque</h1>
   <p class="sub">O sistema que mostra, em tempo real, onde está cada caminhão,
   quem registrou cada movimento e a que horas.</p>

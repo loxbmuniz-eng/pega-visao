@@ -319,7 +319,7 @@ td.num {{ width:14mm; font-family:'Poppins',sans-serif; font-weight:800; color:v
         teve tempo de digitar. Vale para chegada, descarga, pesagem, destinação e reentrega.</p></div>
   </div>
 
-  <p class="rodape-capa">Suinco Cooperativa Agroindustrial · Patos de Minas — MG ·
+  <p class="rodape-capa">Suinco - Cooperativa de Suinocultores Ltda · Patos de Minas — MG ·
     Programação de Embarque · Uso interno</p>
 </section>
 

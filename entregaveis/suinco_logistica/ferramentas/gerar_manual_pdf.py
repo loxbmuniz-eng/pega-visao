@@ -113,7 +113,7 @@ async def main():
     html = f"""<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">
 <title>{titulo}</title><style>{CSS}</style></head><body>
 <div class="capa">
-  <div class="selo">Suinco &middot; Cooperativa Agroindustrial &middot; Uso interno</div>
+  <div class="selo">Suinco - Cooperativa de Suinocultores Ltda &middot; Uso interno</div>
   <h1>{titulo}</h1>
   <div class="sub">{subtitulo}</div>
   <div class="meta">

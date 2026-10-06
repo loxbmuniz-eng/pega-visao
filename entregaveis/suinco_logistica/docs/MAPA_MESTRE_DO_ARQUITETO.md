@@ -352,6 +352,6 @@ a operação; todos merecem data.
 
 ---
 
-*Programação de Embarque · Suinco Cooperativa Agroindustrial · documento de uso
+*Programação de Embarque · Suinco - Cooperativa de Suinocultores Ltda · documento de uso
 interno. Versão em página navegável, com botões de copiar comando, no artifact
 correspondente.*
