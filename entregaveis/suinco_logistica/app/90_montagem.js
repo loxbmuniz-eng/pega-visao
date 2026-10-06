@@ -1740,6 +1740,9 @@ async function efetivarMontagemUI(id, { silencioso = false } = {}){
   let carga;
   try {
     carga = criarCargaProgramada({
+      /* O dia é o da MONTAGEM, não o do clique (#114): montar amanhã hoje
+         põe a carga na Fila de amanhã. */
+      dia: _montagemDia && _montagemDia.dia,
       placa: m.placa,
       numeroCarga: m.numero_carga,
       rota: m.rota_codigo,
