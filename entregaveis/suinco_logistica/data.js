@@ -2667,7 +2667,22 @@ function getCarga(id){ return DB.cargas.find(c=>c.id===id) || null; }
 // se a placa não estiver cadastrada em Frota, a criação é recusada. A
 // Portaria continua podendo registrar a chegada de QUALQUER placa (mesmo
 // não cadastrada) via "Aguardando Carga" — a trava é só na Programação.
-function criarCargaProgramada({placa, transportadora, tipoVeiculo, numeroCarga, cliente, destino, produto, peso, doca, rota, sequencia, observacoes, motorista, praOnde, paletizada, qtdGanchos, qtdEntregas, freteDestino, kmDeslocamento, freteDocumento, operador}){
+/* O DIA DA PROGRAMAÇÃO DE UMA CARGA CRIADA PARA OUTRO DIA (06/10/2026, #114).
+   Relato do dono: a carga criada na Montagem do dia 7 aparecia na Montagem
+   do dia 7 e não na Fila de programados do dia 7. Ela nascia com o instante
+   do clique (dia 6), e a Fila — como todo relatório por dia de programação —
+   lê esse carimbo.
+
+   Hoje = o instante real (fidelidade ao momento). Outro dia = meio-dia de
+   Brasília daquele dia, a MESMA regra da correção de data no Histórico
+   (rotas/cargas.js, /data-programacao): meia-noite cairia no dia anterior
+   em UTC, que é o erro de fuso que a data de programação já teve (#100). */
+function programadoEmDoDia(dia){
+  if(!dia || !/^\d{4}-\d{2}-\d{2}$/.test(String(dia)) || String(dia) === diaLocalISO(new Date())) return nowISO();
+  return new Date(`${dia}T12:00:00-03:00`).toISOString();
+}
+
+function criarCargaProgramada({placa, transportadora, tipoVeiculo, numeroCarga, cliente, destino, produto, peso, doca, rota, sequencia, observacoes, motorista, praOnde, paletizada, qtdGanchos, qtdEntregas, freteDestino, kmDeslocamento, freteDocumento, operador, dia}){
   const p = normalizarPlaca(placa);
   /* PLACA VAZIA = caminhão ainda não contratado (26/08/2026).
 
@@ -2719,8 +2734,9 @@ function criarCargaProgramada({placa, transportadora, tipoVeiculo, numeroCarga, 
     criadoEm: nowISO(), criadoPor: operador||'(não identificado)',
     // Programada agora: aqui as duas datas coincidem. Elas só se separam
     // quando o caminhão chegou ANTES de a carga existir — ver
-    // completarCargaAguardando.
-    programadoEm: nowISO(),
+    // completarCargaAguardando. Criada para OUTRO dia (Montagem), vale o
+    // dia dela — ver programadoEmDoDia (#114).
+    programadoEm: programadoEmDoDia(dia),
     atualizadoEm: nowISO(),
     // Marca a carga como "ainda não existe no servidor" — permite que uma
     // recusa na primeira sincronia remova a carga localmente em vez de só

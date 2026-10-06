@@ -5185,3 +5185,38 @@ linha sem barra (ignora o caminho em qualquer formato); `npm ci` restaura os
 pacotes pelo `package-lock.json`. Worktree auxiliar NÃO ganha mais link de
 node_modules: roda o node com o `node_modules` da árvore principal por
 `NODE_PATH`, ou os testes rodam na árvore principal fora do portão.
+
+## #114 — A carga criada na Montagem de amanhã nascia com o dia de hoje (06/10/2026)
+
+**Relato do dono, em produção:** "foi criada uma carga para amanhã dia 7 no
+adicionar linha da montagem do dia (...) ela aparece na montagem do dia 7
+porém quando clico na fila de programados e coloco o dia 7 ela ainda não
+aparece".
+
+**Reproduzido pela tela**, do jeito dele (Montagem em 07/10 → Adicionar
+linha → número e placa → Criar carga): o banco gravou `programado_em`
+06/10 13:17. A Montagem de 07/10 mostrava "virou carga"; a Fila de
+programados de 07/10 não mostrava; a de 06/10 mostrava; a Torre mostrava
+(tem placa).
+
+**Causa.** `efetivarMontagemUI` chamava `criarCargaProgramada` sem o dia da
+Montagem, e ela carimbava `programadoEm: nowISO()`. A Fila — e todo
+relatório por dia de programação — lê esse carimbo. Montar amanhã hoje
+datava todas as cargas com hoje; o lote "criar todas" pelo mesmo caminho.
+
+**Família:** *Rótulo que mente* — a Montagem dizia "dia 7", o dado dizia
+"dia 6".
+
+**Correção.** `programadoEmDoDia(dia)` em `data.js`, uma função só: hoje =
+o instante real; outro dia = meio-dia de Brasília daquele dia, a mesma regra
+da correção de data no Histórico (`/data-programacao`). A Montagem passa o
+dia dela. A Programação comum não tem escolha de dia e segue criando para
+hoje.
+
+**Carga já criada errada em produção:** corrige-se pelo Histórico →
+"Corrigir data de programação" (Administração), que grava com motivo e trilha.
+
+**A guarda.** `testes/test_montagem_de_outro_dia_vai_para_o_dia_certo.py` —
+pela tela: Montagem de amanhã nasce amanhã, aparece na Fila de amanhã e não
+na de hoje, continua na Torre; Montagem de hoje continua nascendo hoje.
+Datas relativas (lição da #110). Reprovou em 3 pontos antes da correção.
