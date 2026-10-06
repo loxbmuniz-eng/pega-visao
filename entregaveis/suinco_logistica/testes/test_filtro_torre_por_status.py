@@ -44,11 +44,11 @@ async def main():
             DB.cargas = []; DB.movimentacoes = [];
             const f = DB.frota;
             // 2 em Aguardando Veículo, 1 em Aguardando Embarque, 1 Seguiu Viagem hoje.
-            criarCargaProgramada({ placa: f[0].placa, numeroCarga: 'AV1', peso: 9000, rota: '500', operador: 'Ana' });
-            criarCargaProgramada({ placa: f[1].placa, numeroCarga: 'AV2', peso: 9000, rota: '500', operador: 'Ana' });
-            const c3 = criarCargaProgramada({ placa: f[2].placa, numeroCarga: 'AE1', peso: 9000, rota: '500', operador: 'Ana' });
+            criarCargaProgramada({freteObservacao:'TABELA',  placa: f[0].placa, numeroCarga: 'AV1', peso: 9000, rota: '500', operador: 'Ana' });
+            criarCargaProgramada({freteObservacao:'TABELA',  placa: f[1].placa, numeroCarga: 'AV2', peso: 9000, rota: '500', operador: 'Ana' });
+            const c3 = criarCargaProgramada({freteObservacao:'TABELA',  placa: f[2].placa, numeroCarga: 'AE1', peso: 9000, rota: '500', operador: 'Ana' });
             avancarStatusCarga(c3.id, 'Aguardando Embarque', 'Ana', 'Logística');
-            const c4 = criarCargaProgramada({ placa: f[3].placa, numeroCarga: 'SV1', peso: 9000, rota: '500', operador: 'Ana' });
+            const c4 = criarCargaProgramada({freteObservacao:'TABELA',  placa: f[3].placa, numeroCarga: 'SV1', peso: 9000, rota: '500', operador: 'Ana' });
             ['Aguardando Embarque','Embarque Iniciado','Embarque Finalizado','Faturado','Seguiu Viagem']
                 .forEach(st => avancarStatusCarga(c4.id, st, 'Ana', 'Logística'));
             abrirTab('torre'); renderAll();

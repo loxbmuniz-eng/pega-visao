@@ -64,7 +64,7 @@ async def main():
                     headers: {'content-type':'application/json'} });
             };
 
-            const carga = criarCargaProgramada({
+            const carga = criarCargaProgramada({freteObservacao:'TABELA', 
                 placa: f.placa, numeroCarga: '77001', peso: 9000, rota: '500', operador: 'Gestor'
             });
             const idCriado = carga.id;
@@ -92,7 +92,7 @@ async def main():
             // Primeira sincronia: sucesso — a carga fica "confirmada".
             window.fetch = async () => new Response(JSON.stringify({ id: 'x' }), { status: 200,
                 headers: {'content-type':'application/json'} });
-            const carga = criarCargaProgramada({
+            const carga = criarCargaProgramada({freteObservacao:'TABELA', 
                 placa: f.placa, numeroCarga: '77002', peso: 8000, rota: '500', operador: 'Gestor'
             });
             await new Promise(r => setTimeout(r, 400));

@@ -53,7 +53,7 @@ async def preparar(pg, n):
     await pg.wait_for_timeout(400)
     await pg.evaluate("""(n) => {
         for(let i=0;i<n;i++){
-            criarCargaProgramada({placa: DB.frota[i].placa, numeroCarga:'M'+i,
+            criarCargaProgramada({freteObservacao:'TABELA', placa: DB.frota[i].placa, numeroCarga:'M'+i,
                 peso:9000, rota:'500', operador:'Ana'});
         }
         exportarPdfOperacional();

@@ -74,7 +74,7 @@ async def entrar(pg, setor):
 # formulário só existem depois do clique.
 MONTA = """(setor) => {
   const placa = (DB.frota && DB.frota[0] && DB.frota[0].placa) || '';
-  const carga = criarCargaProgramada({
+  const carga = criarCargaProgramada({freteObservacao:'TABELA', 
     placa, numeroCarga: '880001', cliente: 'C', destino: 'D',
     rota: '500', peso: 8000, sequencia: 3,
     operador: {nome:'Ana', setor:'Logística'} });
@@ -165,7 +165,7 @@ async def main():
         print('\n=== A ALTERAÇÃO CHEGA NA CARGA ===')
         d = await pg.evaluate("""() => {
               const placa = (DB.frota && DB.frota[0] && DB.frota[0].placa) || '';
-              const c = criarCargaProgramada({ placa, numeroCarga: '880002',
+              const c = criarCargaProgramada({freteObservacao:'TABELA',  placa, numeroCarga: '880002',
                 cliente: 'C', destino: 'D', rota: '500', peso: 8000,
                 operador: {nome:'Ana', setor:'Logística'} });
               const antes = c.atualizadoEm;

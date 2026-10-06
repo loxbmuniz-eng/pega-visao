@@ -84,7 +84,7 @@ async def main():
                 d = await pg.evaluate("""([aba, origem, destino, ordem]) => {
                     DB.cargas = []; DB.movimentacoes = [];
                     const f = DB.frota[0];
-                    criarCargaProgramada({ placa:f.placa, numeroCarga:'77001',
+                    criarCargaProgramada({freteObservacao:'TABELA',  placa:f.placa, numeroCarga:'77001',
                         peso:12000, rota:'500', operador:'Ana' });
                     const c = DB.cargas[0];
                     for(let i = 1; i <= ordem.indexOf(origem); i++){
@@ -184,7 +184,7 @@ async def main():
             DB.operador = { nome:'Ana', setor:'Logística', turno:'Manhã' };
             aplicarPermissoesSetor();
             DB.cargas = []; DB.movimentacoes = [];
-            criarCargaProgramada({ placa: DB.frota[0].placa, numeroCarga:'99001',
+            criarCargaProgramada({freteObservacao:'TABELA',  placa: DB.frota[0].placa, numeroCarga:'99001',
                                    peso:10000, rota:'500', operador:'Ana' });
             abrirTab('programacao'); renderAll();
             return [...document.querySelectorAll('#prog-fila-tbody button')]

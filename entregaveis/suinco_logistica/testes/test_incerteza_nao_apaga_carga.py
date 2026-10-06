@@ -84,7 +84,7 @@ async def main():
           DB.cargas = []; DB.movimentacoes = []; window.__avisos = [];
           const f = DB.frota[0];
           window.__cenario = 'timeout-depois-incerto';
-          const carga = criarCargaProgramada({ placa: f.placa, numeroCarga: '99001', peso: 9000, rota: '500', operador: 'Gestor' });
+          const carga = criarCargaProgramada({freteObservacao:'TABELA',  placa: f.placa, numeroCarga: '99001', peso: 9000, rota: '500', operador: 'Gestor' });
           const id = carga.id;
           await new Promise(r => setTimeout(r, 900));
           const c = DB.cargas.find(x => x.id === id);
@@ -140,7 +140,7 @@ async def main():
             if (/\\/api\\/cargas$/.test(u) && m === 'POST') return json({ erro: 'Placa não está cadastrada na Frota.', codigo: 'PLACA_FORA_DA_FROTA' }, 422);
             return json({});
           };
-          const carga = criarCargaProgramada({ placa: f.placa, numeroCarga: '99002', peso: 9000, rota: '500', operador: 'Gestor' });
+          const carga = criarCargaProgramada({freteObservacao:'TABELA',  placa: f.placa, numeroCarga: '99002', peso: 9000, rota: '500', operador: 'Gestor' });
           const id = carga.id;
           await new Promise(r => setTimeout(r, 500));
           return { continua: !!DB.cargas.find(x => x.id === id),

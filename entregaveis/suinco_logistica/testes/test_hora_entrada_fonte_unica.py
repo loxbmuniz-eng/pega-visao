@@ -101,7 +101,7 @@ async def main():
             return 1
 
         cargaId = await pgA.evaluate("""async (p) => {
-              const c = criarCargaProgramada({placa: p, numeroCarga: 'HR-1',
+              const c = criarCargaProgramada({freteObservacao:'TABELA', placa: p, numeroCarga: 'HR-1',
                 peso: 9000, rota: '500', operador: 'Ana'});
               SuincoStore.save();
               await SuincoSharePoint.sincronizarAgora();
@@ -265,7 +265,7 @@ async def main():
                      f"WHERE v.transportadora <> '' AND f.carga_id IS NULL AND v.placa <> '{placa[0]}' "
                      "ORDER BY v.placa LIMIT 1")
         d = await pgA.evaluate("""(p) => {
-              const c = criarCargaProgramada({placa: p, numeroCarga: 'HR-2',
+              const c = criarCargaProgramada({freteObservacao:'TABELA', placa: p, numeroCarga: 'HR-2',
                 peso: 9000, rota: '500', operador: 'Ana'});
               // Uma carga programada ONTEM que ainda não chegou.
               const ontem = new Date(Date.now() - 20 * 3600 * 1000).toISOString();

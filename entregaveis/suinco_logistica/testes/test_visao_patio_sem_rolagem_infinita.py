@@ -45,7 +45,7 @@ async def preparar(pg, n_cargas):
         const placas = DB.frota.slice(0, 50).map(f=>f.placa);
         for(let i=0;i<n;i++){
             const p = placas[i % placas.length];
-            const c = criarCargaProgramada({placa:p, numeroCarga:'H'+i, peso:9000,
+            const c = criarCargaProgramada({freteObservacao:'TABELA', placa:p, numeroCarga:'H'+i, peso:9000,
               rota:'500', operador:'Chefe'});
             ['Aguardando Embarque','Embarque Iniciado','Embarque Finalizado','Faturado','Seguiu Viagem']
               .forEach(st => avancarStatusCarga(c.id, st, 'Chefe', 'Logística'));

@@ -98,7 +98,7 @@ async def main():
         # contra a Frota) — pega a primeira da base sincronizada.
         placa = await pg_log.evaluate("() => DB.frota[0].placa")
         await pg_log.evaluate("""(placa) => {
-            criarCargaProgramada({placa, numeroCarga:'FECH-1', peso:9000, rota:'500', operador:'Ana'});
+            criarCargaProgramada({freteObservacao:'TABELA', placa, numeroCarga:'FECH-1', peso:9000, rota:'500', operador:'Ana'});
         }""", placa)
         await pg_log.wait_for_timeout(600)  # sobe pro servidor
 

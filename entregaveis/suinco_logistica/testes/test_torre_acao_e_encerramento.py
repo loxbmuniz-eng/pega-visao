@@ -87,9 +87,9 @@ async def main():
         ids = await pgL.evaluate(
             """async ([pOntem, pHoje]) => {
                  await SuincoSharePoint.sincronizarAgora();
-                 const a = criarCargaProgramada({numeroCarga: 'TORRE-ONTEM', placa: pOntem,
+                 const a = criarCargaProgramada({freteObservacao:'TABELA', numeroCarga: 'TORRE-ONTEM', placa: pOntem,
                    cliente: 'C', destino: 'D', peso: 1000, rota: '500', operador: 'Ana'});
-                 const b = criarCargaProgramada({numeroCarga: 'TORRE-HOJE', placa: pHoje,
+                 const b = criarCargaProgramada({freteObservacao:'TABELA', numeroCarga: 'TORRE-HOJE', placa: pHoje,
                    cliente: 'C', destino: 'D', peso: 2000, rota: '500', operador: 'Ana'});
                  SuincoStore.save();
                  await SuincoSharePoint.sincronizarAgora();

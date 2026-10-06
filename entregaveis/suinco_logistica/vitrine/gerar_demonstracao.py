@@ -89,7 +89,7 @@ async def main():
                9001xx, rota e placa do cadastro, motorista genérico. */
             const ROTAS_H = ['500', '501', '502', '503', '504', '505'];
             for (let k = 0; k < HISTORICO; k++) {
-              const c = criarCargaProgramada({
+              const c = criarCargaProgramada({freteObservacao:'TABELA', 
                 placa: placas[roteiro.length + k], rota: ROTAS_H[k % ROTAS_H.length], peso: 24000 + (k % 7) * 400,
                 numeroCarga: String(900101 + k), motorista: 'Motorista H' + (k + 1),
                 cliente: 'Cliente de demonstração', operador: 'Demonstração',
@@ -113,7 +113,7 @@ async def main():
             }
 
             roteiro.forEach(([etapa, rota, horas, peso], i) => {
-              const c = criarCargaProgramada({
+              const c = criarCargaProgramada({freteObservacao:'TABELA', 
                 placa: placas[i], rota, peso,
                 /* sequência do dia: a primeira espera o caminhão enquanto
                    as de trás já entraram — é o "passada na fila" */

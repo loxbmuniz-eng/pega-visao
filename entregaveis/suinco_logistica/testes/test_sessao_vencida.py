@@ -95,7 +95,7 @@ async def main():
             sessionStorage.removeItem('suinco_token');
             DB.operador = { id:'u1', nome:'Rene', setor:'Expedição',
                             email:'rene@suinco.com.br' };
-            const c = criarCargaProgramada({ placa: DB.frota[0].placa,
+            const c = criarCargaProgramada({freteObservacao:'TABELA',  placa: DB.frota[0].placa,
               numeroCarga:'SESSAO-1', peso:9000, rota:'500', operador:'Rene' });
             const resp = await SuincoSharePoint.upsert('cargas', 'x',
               { ID: c.id, Placa: c.placa, Numero_Carga: 'SESSAO-1' }, 'Rene');
@@ -158,7 +158,7 @@ async def main():
         ctx2, pg2 = await painel(nav)
         pg2.on('pageerror', lambda e: erros.append(str(e)))
         local = await pg2.evaluate("""async () => {
-            const c = criarCargaProgramada({ placa: DB.frota[0].placa,
+            const c = criarCargaProgramada({freteObservacao:'TABELA',  placa: DB.frota[0].placa,
               numeroCarga:'LOCAL-1', peso:9000, rota:'500', operador:'Rene' });
             const resp = await SuincoSharePoint.upsert('cargas','x',
               { ID: c.id, Placa: c.placa, Numero_Carga:'LOCAL-1' }, 'Rene');

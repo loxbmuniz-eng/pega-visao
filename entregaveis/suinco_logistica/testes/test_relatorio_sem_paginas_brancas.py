@@ -49,7 +49,7 @@ async def preparar(pg, n_cargas, qual='exportarPdfExecutivo'):
     placas = await pg.evaluate("""([n, qual]) => {
         const placas = DB.frota.slice(0, n).map(f=>f.placa);
         placas.forEach((p,i)=>{
-            const c = criarCargaProgramada({placa:p, numeroCarga:'R'+i, peso:9000+i*100,
+            const c = criarCargaProgramada({freteObservacao:'TABELA', placa:p, numeroCarga:'R'+i, peso:9000+i*100,
               rota:'500', operador:'Ana'});
             avancarStatusCarga(c.id, 'Aguardando Embarque', 'Ana', 'Logística');
         });

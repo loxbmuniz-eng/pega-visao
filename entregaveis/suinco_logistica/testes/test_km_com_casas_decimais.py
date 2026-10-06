@@ -75,7 +75,7 @@ async def main():
         print('\n=== 3. CORRIGIR O KM COM VÍRGULA GRAVA O NÚMERO EXATO ===')
         cid = await pg.evaluate("""() => {
           const pl = DB.frota[0].placa;
-          return criarCargaProgramada({placa: pl, numeroCarga:'KMDEC', peso:12000, rota:'510',
+          return criarCargaProgramada({freteObservacao:'TABELA', placa: pl, numeroCarga:'KMDEC', peso:12000, rota:'510',
             freteDestino:'GOIANIA', kmDeslocamento:3087, operador:'Ana'}).id;
         }""")
         await pg.evaluate("""async (id) => {
@@ -87,7 +87,7 @@ async def main():
         alt = await pg.evaluate("""(id) => (DB.alteracoes||[]).filter(a => a.cargaId === id && /KM/i.test(a.campo))
             .map(a => [a.de, a.para])""", cid)
         ck('o Histórico registra "3087" → "3087,48"', alt == [['3087', '3087,48']], str(alt))
-        nasce = await pg.evaluate("""() => criarCargaProgramada({placa: DB.frota[1].placa, numeroCarga:'KMDEC2',
+        nasce = await pg.evaluate("""() => criarCargaProgramada({freteObservacao:'TABELA', placa: DB.frota[1].placa, numeroCarga:'KMDEC2',
             peso:12000, rota:'510', kmDeslocamento:'3087,48', operador:'Ana'}).kmDeslocamento""")
         ck('carga que NASCE com "3087,48" também grava 3087,48', nasce == 3087.48, str(nasce))
 

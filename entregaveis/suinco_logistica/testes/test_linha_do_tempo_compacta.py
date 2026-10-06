@@ -50,7 +50,7 @@ async def main():
         }""")
         await pg.wait_for_timeout(300)
         await pg.evaluate("""() => {
-            criarCargaProgramada({placa: DB.frota[0].placa, numeroCarga:'D0', peso:9000, rota:'500', operador:'Chefe'});
+            criarCargaProgramada({freteObservacao:'TABELA', placa: DB.frota[0].placa, numeroCarga:'D0', peso:9000, rota:'500', operador:'Chefe'});
         }""")
         await pg.wait_for_timeout(300)
         await pg.evaluate("() => abrirTab('torre')")
@@ -96,7 +96,7 @@ async def main():
         }""")
         await pg2.wait_for_timeout(300)
         await pg2.evaluate("""() => {
-            criarCargaProgramada({placa: DB.frota[0].placa, numeroCarga:'D0', peso:9000, rota:'500', operador:'Chefe'});
+            criarCargaProgramada({freteObservacao:'TABELA', placa: DB.frota[0].placa, numeroCarga:'D0', peso:9000, rota:'500', operador:'Chefe'});
         }""")
         await pg2.wait_for_timeout(300)
         await pg2.evaluate("() => abrirTab('torre')")

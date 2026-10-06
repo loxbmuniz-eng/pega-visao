@@ -49,9 +49,9 @@ async def main():
         # Uma carga de hoje e uma "programada" há 3 dias.
         await pg.evaluate("""() => {
             const p1 = DB.frota[0].placa, p2 = DB.frota[1].placa;
-            const a = criarCargaProgramada({placa:p1, numeroCarga:'HOJE1', peso:9000,
+            const a = criarCargaProgramada({freteObservacao:'TABELA', placa:p1, numeroCarga:'HOJE1', peso:9000,
                 rota:'500', operador:'Ana'});
-            const b = criarCargaProgramada({placa:p2, numeroCarga:'VELHA1', peso:8000,
+            const b = criarCargaProgramada({freteObservacao:'TABELA', placa:p2, numeroCarga:'VELHA1', peso:8000,
                 rota:'500', operador:'Ana'});
             const tresDias = new Date(Date.now() - 3*86400000).toISOString();
             /* `programadoEm` também, e é ele que decide: a fila do dia

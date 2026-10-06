@@ -40,7 +40,7 @@ async def main():
         await pg.evaluate("""() => {
           DB.operador = {nome:'Ana', setor:'Logística'};
           const p = DB.frota.slice(0,2).map(f=>f.placa);
-          p.forEach((pl,i)=>criarCargaProgramada({placa:pl, numeroCarga:'M'+i, peso:9000, operador:'Ana'}));
+          p.forEach((pl,i)=>criarCargaProgramada({freteObservacao:'TABELA', placa:pl, numeroCarga:'M'+i, peso:9000, operador:'Ana'}));
           renderAll();
         }""")
         await pg.evaluate("() => abrirTab('torre')"); await pg.wait_for_timeout(400)

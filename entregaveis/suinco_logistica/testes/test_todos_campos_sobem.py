@@ -102,7 +102,7 @@ async def main():
         dados = await pgA.evaluate("""(esp) => {
             const n = 'TC' + Date.now().toString().slice(-6);
             const placa = DB.frota[7].placa;
-            const c = criarCargaProgramada({
+            const c = criarCargaProgramada({freteObservacao:'TABELA', 
                 placa, numeroCarga: n,
                 cliente: esp.cliente, destino: esp.destino, peso: esp.peso,
                 doca: esp.doca, rota: esp.rota, sequencia: esp.sequencia,

@@ -101,7 +101,7 @@ async def main():
         print('\n=== 4. PROGRAMAR CARGA COM PLACA NÃO CADASTRADA CONTINUA BLOQUEADO ===')
         r2 = await pg.evaluate("""(placa) => {
             let erro = null;
-            try { criarCargaProgramada({placa, numeroCarga:'X1', peso:1000,
+            try { criarCargaProgramada({freteObservacao:'TABELA', placa, numeroCarga:'X1', peso:1000,
                     rota:'500', operador:'Ana'}); }
             catch(e){ erro = e.message; }
             return erro;

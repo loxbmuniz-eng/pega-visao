@@ -49,7 +49,7 @@ ATE_FINALIZADO = ['Aguardando Embarque', 'Embarque Iniciado', 'Embarque Finaliza
 MONTAR = """([ate]) => {
     DB.cargas = []; DB.movimentacoes = [];
     const f = DB.frota[0];
-    criarCargaProgramada({ placa: f.placa, numeroCarga: '77123', peso: 12500,
+    criarCargaProgramada({freteObservacao:'TABELA',  placa: f.placa, numeroCarga: '77123', peso: 12500,
       rota: '500', destino: 'UBERLANDIA', transportadora: 'TRANSP TESTE',
       operador: 'Ana' });
     const c = DB.cargas[0];

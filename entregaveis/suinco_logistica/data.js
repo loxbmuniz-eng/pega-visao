@@ -4213,6 +4213,12 @@ function dadosAdministracaoFretes(cargas){
       kmDivergente: c.kmDestino != null && c.kmDeslocamento != null
         && Number(c.kmDestino) !== Number(c.kmDeslocamento),
       freteValor: c.freteValor ?? null,
+      /* A OBSERVAÇÃO DO FRETE (06/10/2026): TABELA ou COMBINADO com o valor —
+         a coluna "Obs. do frete" do PDF. A planilha (CSV) já a levava; o PDF
+         lê daqui, e sem estas linhas a coluna saía "—" em toda carga. */
+      freteObservacao: c.freteObservacao || '',
+      freteCombinado: c.freteCombinado ?? null,
+      freteADefinir: freteADefinir(c),
       observacoes: observacaoDeFrete(c)
     }));
 }

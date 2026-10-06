@@ -64,7 +64,7 @@ async def main():
 
         num = await pgA.evaluate("""() => {
             const n = 'RV' + Date.now().toString().slice(-6);
-            criarCargaProgramada({placa: DB.frota[45].placa, numeroCarga:n,
+            criarCargaProgramada({freteObservacao:'TABELA', placa: DB.frota[45].placa, numeroCarga:n,
                 peso:21500, rota:'500', qtdEntregas:44, operador:'Chefe'});
             SuincoStore.save();
             return n;

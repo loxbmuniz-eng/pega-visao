@@ -54,7 +54,7 @@ async def main():
         print('\n=== 1. UMA CARGA PERCORRE O FLUXO ===')
         dados = await pagina.evaluate("""() => {
             const placa = DB.frota[5].placa;
-            criarCargaProgramada({placa, numeroCarga:'VP001', peso:14000, rota:'500',
+            criarCargaProgramada({freteObservacao:'TABELA', placa, numeroCarga:'VP001', peso:14000, rota:'500',
                 praOnde:'ENTREGA DIRETA', paletizada:'Sim', qtdGanchos:20,
                 qtdEntregas:1, operador:'Logística Teste'});
             registrarChegadaPortaria(placa, 'Porteiro');
@@ -183,7 +183,7 @@ async def main():
         await entrar(pagina, 'Logística')
         travada = await pagina.evaluate("""() => {
             const placa = DB.frota[7].placa;
-            criarCargaProgramada({placa, numeroCarga:'VP900', peso:9000, rota:'500',
+            criarCargaProgramada({freteObservacao:'TABELA', placa, numeroCarga:'VP900', peso:9000, rota:'500',
                 praOnde:'ENTREGA DIRETA', paletizada:'Não', qtdGanchos:0,
                 qtdEntregas:1, operador:'Log'});
             registrarChegadaPortaria(placa, 'Porteiro');

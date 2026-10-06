@@ -43,7 +43,7 @@ async def main():
 
         idc = await pg.evaluate("""() => {
             DB.cargas = []; DB.movimentacoes = [];
-            const c = criarCargaProgramada({ placa: DB.frota[0].placa, numeroCarga: 'R1',
+            const c = criarCargaProgramada({freteObservacao:'TABELA',  placa: DB.frota[0].placa, numeroCarga: 'R1',
               peso: 9000, rota: '500', operador: 'Ana' });
             renderTorre(); abrirTab('programacao'); renderProgFila();
             return c.id;

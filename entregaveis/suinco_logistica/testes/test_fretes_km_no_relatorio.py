@@ -55,7 +55,7 @@ async def main():
         print('\n=== TRÊS CARGAS DE DUAS SEMANAS ATRÁS: COM KM, COM DESVIO, SEM KM ===')
         await pg.evaluate("""() => {
             const mk = (num, km, extra) => {
-                const c = criarCargaProgramada({ placa: DB.frota[41 + Number(num.slice(-1))].placa, numeroCarga: num,
+                const c = criarCargaProgramada({freteObservacao:'TABELA',  placa: DB.frota[41 + Number(num.slice(-1))].placa, numeroCarga: num,
                     peso: 9000, rota: '500', sequencia: Number(num.slice(-1)), operador: 'Alysson',
                     kmDeslocamento: km, ...extra });
                 c.programadoEm = new Date(2026, 8, 21, 9, 0).toISOString();   // 21/09, duas semanas antes de 05/10

@@ -39,7 +39,7 @@ PREPARAR = """() => {
             if(p === ate) break;
         }
     };
-    const nova = (num, i) => criarCargaProgramada({placa: DB.frota[i].placa,
+    const nova = (num, i) => criarCargaProgramada({freteObservacao:'TABELA', placa: DB.frota[i].placa,
         numeroCarga: num, peso: 9000, rota: '500', operador: 'Ana'});
 
     const antiga = nova('QXY-ANTEONTEM', 0);

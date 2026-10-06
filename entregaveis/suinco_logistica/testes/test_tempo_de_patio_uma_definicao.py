@@ -93,7 +93,7 @@ async def main():
         r = await pg.evaluate("""() => {
             DB.operador = { nome:'Teste', setor:'Logística', turno:'A' };
             const placas = DB.frota.slice(0, 4).map(f => f.placa);
-            const fazer = (rota) => criarCargaProgramada({
+            const fazer = (rota) => criarCargaProgramada({freteObservacao:'TABELA', 
               placa: placas.shift(), rota, peso: 25000, operador:'Teste' });
             const chegar = (c, quando) => {
               avancarStatusCarga(c.id, 'Aguardando Embarque', 'Teste', 'Logística');

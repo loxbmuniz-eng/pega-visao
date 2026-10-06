@@ -6610,6 +6610,7 @@ describe('49. Pagamento de Frete — a planilha dentro do painel (05/10/2026)', 
   after(async () => {
     await limpar();
     await pool.query("DELETE FROM operadores WHERE setor = 'Pagamento de Frete' AND email LIKE '%@teste.local'");
+    await pool.query("DELETE FROM dim_veiculos WHERE placa = 'TST9A01'");   // a Frota volta ao que era
   });
 
   describe('quem entra', () => {
@@ -7329,6 +7330,15 @@ describe('50. A observação do frete é obrigatória para contratar (06/10/2026
               ($3,'SUINCO','Truck','MG','manual')
        ON CONFLICT (placa) DO UPDATE SET transportadora = EXCLUDED.transportadora,
          tipo_veiculo = EXCLUDED.tipo_veiculo`, [A, B, S]);
+  });
+  /* Sai como entrou: as placas e as cargas deste bloco não ficam no banco
+     (deixadas, mudam a contagem da Frota que as suítes de tela conferem). */
+  after(async () => {
+    const ids = "SELECT carga_id FROM fact_viagens WHERE placa = ANY($1::text[]) OR numero_carga LIKE 'OBF-%'";
+    await pool.query(`DELETE FROM fact_statusfrota WHERE carga_id IN (${ids})`, [[A, B, S]]);
+    await pool.query(`DELETE FROM log_eventos WHERE carga_id IN (${ids})`, [[A, B, S]]);
+    await pool.query("DELETE FROM fact_viagens WHERE placa = ANY($1::text[]) OR numero_carga LIKE 'OBF-%'", [[A, B, S]]);
+    await pool.query('DELETE FROM dim_veiculos WHERE placa = ANY($1::text[])', [[A, B, S]]);
   });
 
   test('com placa e SEM observação: recusado, dizendo o que falta', async () => {

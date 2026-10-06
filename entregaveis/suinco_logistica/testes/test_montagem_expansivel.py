@@ -39,6 +39,7 @@ import os
 import subprocess
 import sys
 from playwright.async_api import async_playwright
+from _frete_resposta import responder_frete
 
 API = os.environ.get('SUINCO_API', 'http://127.0.0.1:3010')
 PAINEL_ARQ = '/home/user/pega-visao/entregaveis/suinco_logistica/index.html'
@@ -271,7 +272,8 @@ async def main():
            naTorre and naTorre[0] == '0', f"cargas na Torre: {naTorre}")
 
         print('\n=== 6. O CLIQUE CRIA A CARGA E ELA VAI PARA A TORRE ===')
-        await pg.evaluate("(id) => efetivarMontagemUI(id)", mid)
+        await pg.evaluate("(id) => { efetivarMontagemUI(id); }", mid)
+        await responder_frete(pg)   # linha sem frete: Criar carga pergunta (#115)
         await pg.wait_for_timeout(2500)
         await pg.evaluate("() => SuincoSharePoint.sincronizarAgora()")
         await pg.wait_for_timeout(1500)
@@ -881,7 +883,13 @@ async def main():
         # CARGA. Se ficasse so na linha da montagem, quem confere o frete
         # continuaria vendo a transportadora do cadastro — e o campo seria
         # enfeite.
-        await pg.evaluate("(id) => efetivarMontagemUI(id, { silencioso: true })", alvo3)
+        # O lote (silencioso) PULA a linha sem frete (#115): a linha recebe a
+        # observação antes, como a pessoa faria na coluna Frete.
+        await pg.evaluate("""async (id) => {
+              await SuincoSharePoint.montagem.alterar(id, { freteObservacao: 'TABELA' });
+              _montagemDia = await SuincoSharePoint.montagem.doDia(_montagemDia && _montagemDia.dia);
+              await efetivarMontagemUI(id, { silencioso: true });
+            }""", alvo3)
         await pg.wait_for_timeout(2500)
         r = sql("SELECT f.transportadora FROM fact_viagens f "
                 "JOIN programacao_montagem g ON g.carga_id = f.carga_id "

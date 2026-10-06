@@ -110,6 +110,7 @@ async def main():
     for e in EMAILS.values():
         psql(f"DELETE FROM operadores WHERE email = '{e}';")
     print('\n' + ('FALHAS: ' + '; '.join(falhas) if falhas else 'TUDO OK'))
+    psql(f"DELETE FROM dim_veiculos WHERE placa = '{PLACA}';")   # a Frota volta ao que era
     sys.exit(1 if falhas else 0)
 
 

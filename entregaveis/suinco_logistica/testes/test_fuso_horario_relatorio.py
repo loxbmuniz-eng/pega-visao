@@ -66,7 +66,7 @@ async def main():
         print('\n=== CARGAS EM VOLTA DA VIRADA DO DIA ===')
         r = await pg.evaluate("""() => {
             const nova = (n, i, isoUTC) => {
-                const c = criarCargaProgramada({placa: DB.frota[i].placa,
+                const c = criarCargaProgramada({freteObservacao:'TABELA', placa: DB.frota[i].placa,
                     numeroCarga:n, peso:9000, rota:'500', operador:'Alysson'});
                 c.programadoEm = isoUTC;
                 c.criadoEm = isoUTC;

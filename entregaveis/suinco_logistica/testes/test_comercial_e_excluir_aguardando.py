@@ -122,7 +122,7 @@ async def main():
         print('\n=== 2. COMERCIAL NÃO GANHA CAMPO EDITÁVEL NA TORRE ===')
         await pg.evaluate("""() => {
             DB.operador.setor = 'Logística';
-            criarCargaProgramada({placa:DB.frota[0].placa, numeroCarga:'COM1',
+            criarCargaProgramada({freteObservacao:'TABELA', placa:DB.frota[0].placa, numeroCarga:'COM1',
                 peso:9000, rota:'500', operador:'Teste'});
             DB.operador.setor = 'Comercial';
             SuincoStore.save();

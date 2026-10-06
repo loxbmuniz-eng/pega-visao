@@ -45,12 +45,12 @@ async def main():
 
         d0 = await pg.evaluate("""() => {
             DB.cargas = []; DB.movimentacoes = [];
-            const aguardando = criarCargaProgramada({ placa: DB.frota[0].placa, numeroCarga: 'R1',
+            const aguardando = criarCargaProgramada({freteObservacao:'TABELA',  placa: DB.frota[0].placa, numeroCarga: 'R1',
               peso: 9000, rota: '500', operador: 'Ana' });
-            const jaAndou = criarCargaProgramada({ placa: DB.frota[1].placa, numeroCarga: 'R2',
+            const jaAndou = criarCargaProgramada({freteObservacao:'TABELA',  placa: DB.frota[1].placa, numeroCarga: 'R2',
               peso: 9000, rota: '500', operador: 'Ana' });
             avancarStatusCarga(jaAndou.id, 'Aguardando Embarque', 'Ana', 'Logística');
-            const concluida = criarCargaProgramada({ placa: DB.frota[2].placa, numeroCarga: 'R3',
+            const concluida = criarCargaProgramada({freteObservacao:'TABELA',  placa: DB.frota[2].placa, numeroCarga: 'R3',
               peso: 9000, rota: '500', operador: 'Ana' });
             ['Aguardando Embarque','Embarque Iniciado','Embarque Finalizado','Faturado','Seguiu Viagem']
               .forEach(st => avancarStatusCarga(concluida.id, st, 'Ana', 'Logística'));

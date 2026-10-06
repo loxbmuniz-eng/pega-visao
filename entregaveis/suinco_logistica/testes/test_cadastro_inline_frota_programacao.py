@@ -61,7 +61,7 @@ async def main():
         botao = pg.locator('button:has-text("Cadastrar esta placa na Frota agora")')
         ck('botão de cadastro inline apareceu', await botao.count() > 0)
         bloqueado = await pg.evaluate("""() => {
-            try { criarCargaProgramada({placa:'NEW1234', numeroCarga:'1', peso:1, rota:'', operador:'x'}); return false; }
+            try { criarCargaProgramada({freteObservacao:'TABELA', placa:'NEW1234', numeroCarga:'1', peso:1, rota:'', operador:'x'}); return false; }
             catch(e) { return true; }
         }""")
         ck('criar carga continua bloqueado antes de cadastrar', bloqueado)
@@ -91,7 +91,7 @@ async def main():
         print('\n=== AGORA A CARGA CRIA NORMALMENTE, SEM PERDER O QUE JÁ ESTAVA DIGITADO ===')
         criada = await pg.evaluate("""() => {
             try {
-                const c = criarCargaProgramada({placa:'NEW1234', numeroCarga:'99999', peso:5000, rota:'', operador:'Gestor'});
+                const c = criarCargaProgramada({freteObservacao:'TABELA', placa:'NEW1234', numeroCarga:'99999', peso:5000, rota:'', operador:'Gestor'});
                 return { ok:true, transportadora: c.transportadora, tipoVeiculo: c.tipoVeiculo };
             } catch(e) { return { ok:false, erro: e.message }; }
         }""")

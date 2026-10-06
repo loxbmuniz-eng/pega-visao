@@ -71,7 +71,7 @@ async def main():
             """async () => {
                  const usadas = new Set(DB.cargas.map((c) => c.placa));
                  const f = DB.frota.find((x) => x.placa && x.transportadora && !usadas.has(x.placa));
-                 const c = criarCargaProgramada({placa: f.placa, numeroCarga: 'ADM-1',
+                 const c = criarCargaProgramada({freteObservacao:'TABELA', placa: f.placa, numeroCarga: 'ADM-1',
                    cliente: 'CLIENTE', destino: 'DESTINO', peso: 3000, operador: 'Chefe'});
                  SuincoStore.save();
                  await SuincoSharePoint.sincronizarAgora();
@@ -170,7 +170,7 @@ async def main():
             """async () => {
                  const usadas = new Set(DB.cargas.map((c) => c.placa));
                  const f = DB.frota.find((x) => x.placa && x.transportadora && !usadas.has(x.placa));
-                 const c = criarCargaProgramada({placa: f.placa, numeroCarga: 'ADM-EXC',
+                 const c = criarCargaProgramada({freteObservacao:'TABELA', placa: f.placa, numeroCarga: 'ADM-EXC',
                    cliente: 'CLIENTE', destino: 'DESTINO', peso: 1000, operador: 'Chefe'});
                  SuincoStore.save();
                  await SuincoSharePoint.sincronizarAgora();

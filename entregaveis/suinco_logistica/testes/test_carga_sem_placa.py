@@ -11,6 +11,7 @@ import asyncio
 import os
 import sys
 from playwright.async_api import async_playwright
+from _frete_resposta import responder_frete
 
 API = os.environ.get('SUINCO_API', 'http://127.0.0.1:3010')
 PAINEL_ARQ = '/home/user/pega-visao/entregaveis/suinco_logistica/index.html'
@@ -96,6 +97,7 @@ async def main():
         await pgL.evaluate(
             """(placa) => { const c = DB.cargas.find(x => x.numeroCarga === 'SP-UI-1');
                  atualizarPlacaUI(c.id, placa); }""", placa)
+        await responder_frete(pgL)   # a placa entrando é contratar (#115)
         await pgL.wait_for_timeout(2000)
 
         depois = await pgL.evaluate(

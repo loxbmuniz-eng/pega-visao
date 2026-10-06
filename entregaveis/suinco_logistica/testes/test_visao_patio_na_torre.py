@@ -40,9 +40,9 @@ async def main():
 
         await pg.evaluate("""() => {
             DB.cargas = []; DB.movimentacoes = [];
-            const c1 = criarCargaProgramada({ placa: DB.frota[0].placa, numeroCarga: 'R1',
+            const c1 = criarCargaProgramada({freteObservacao:'TABELA',  placa: DB.frota[0].placa, numeroCarga: 'R1',
               peso: 9000, rota: '500', operador: 'Ana' });
-            const c2 = criarCargaProgramada({ placa: DB.frota[1].placa, numeroCarga: 'R2',
+            const c2 = criarCargaProgramada({freteObservacao:'TABELA',  placa: DB.frota[1].placa, numeroCarga: 'R2',
               peso: 9000, rota: '500', operador: 'Ana' });
             avancarStatusCarga(c2.id, 'Aguardando Embarque', 'Ana', 'Logística');
             abrirTab('torre'); renderAll();

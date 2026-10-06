@@ -50,7 +50,7 @@ async def main():
         await entrar(pg)
         await pg.evaluate("""() => {
             DB.cargas = []; DB.movimentacoes = [];
-            criarCargaProgramada({ placa: DB.frota[0].placa, numeroCarga: 'R1',
+            criarCargaProgramada({freteObservacao:'TABELA',  placa: DB.frota[0].placa, numeroCarga: 'R1',
               peso: 9000, rota: '500', operador: 'Ana' });
             window.print = () => {};
             exportarPdfOperacional();
@@ -77,7 +77,7 @@ async def main():
             // Bem mais linhas do que cabem numa folha A4 deitada com a
             // fonte calibrada — força o estouro que o pedido quer evitar.
             for (let i = 0; i < 80; i++) {
-                criarCargaProgramada({ placa: DB.frota[i].placa, numeroCarga: 'R'+i,
+                criarCargaProgramada({freteObservacao:'TABELA',  placa: DB.frota[i].placa, numeroCarga: 'R'+i,
                   peso: 9000, rota: '500', operador: 'Ana' });
             }
             window.print = () => {};

@@ -82,7 +82,7 @@ async def main():
         # Cria uma carga com um tempo de etapa razoável e confere que a barra
         # desenhada cabe dentro da altura do canvas — não vaza pra fora dele.
         await pg.evaluate("""() => {
-            const id = criarCargaProgramada({placa: DB.frota[0].placa, numeroCarga:'R1',
+            const id = criarCargaProgramada({freteObservacao:'TABELA', placa: DB.frota[0].placa, numeroCarga:'R1',
               peso:9000, rota:'500', operador:'Chefe'}).id;
             avancarStatusCarga(id, 'Aguardando Embarque', 'Chefe', 'Logística');
         }""")

@@ -67,7 +67,7 @@ async def main():
         # real do relato: a fila do dia não mostra a linha (comportamento
         # correto e mantido), mas a opção de segunda carga não pode ir junto.
         await pg.evaluate("""(placa) => {
-            criarCargaProgramada({placa, numeroCarga:'80001', peso:15000,
+            criarCargaProgramada({freteObservacao:'TABELA', placa, numeroCarga:'80001', peso:15000,
                 rota:'500', motorista:'José da Silva', operador:'Ana'});
             const c = DB.cargas[0];
             const ontem = new Date(Date.now() - 24*3600*1000);
@@ -117,7 +117,7 @@ async def main():
         print('\n=== 2. CAMINHÃO JÁ CHEGOU: O CAMINHO PELA TORRE FUNCIONA ===')
         await pg.evaluate("""(placa) => {
             DB.cargas = []; DB.movimentacoes = []; SuincoStore.save();
-            criarCargaProgramada({placa, numeroCarga:'80010', peso:12000,
+            criarCargaProgramada({freteObservacao:'TABELA', placa, numeroCarga:'80010', peso:12000,
                 rota:'500', operador:'Ana'});
             registrarChegadaPortaria(placa, 'Porteiro');
             renderAll();

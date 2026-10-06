@@ -80,7 +80,7 @@ async def main():
         cargaId = await pgL.evaluate(
             """async (placa) => {
                  await SuincoSharePoint.sincronizarAgora();
-                 const c = criarCargaProgramada({numeroCarga: 'LACRE-UI2', placa, cliente: 'CLI',
+                 const c = criarCargaProgramada({freteObservacao:'TABELA', numeroCarga: 'LACRE-UI2', placa, cliente: 'CLI',
                    destino: 'DEST', peso: 3000, rota: '500', operador: 'Ana'});
                  SuincoStore.save();
                  await SuincoSharePoint.sincronizarAgora();

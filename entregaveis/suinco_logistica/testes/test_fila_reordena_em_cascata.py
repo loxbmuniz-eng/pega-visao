@@ -53,7 +53,7 @@ async def main():
         await pg.evaluate("""() => {
             DB.cargas = []; DB.movimentacoes = [];
             for (let i = 1; i <= 4; i++) {
-              criarCargaProgramada({ placa: DB.frota[i].placa, numeroCarga: '90' + i,
+              criarCargaProgramada({freteObservacao:'TABELA',  placa: DB.frota[i].placa, numeroCarga: '90' + i,
                 transportadora: 'T', tipoVeiculo: 'Truck', peso: 9000, rota: '500',
                 sequencia: i, praOnde: 'ENTREGA DIRETA', paletizada: 'Não',
                 qtdGanchos: 0, qtdEntregas: 1, motorista: 'M', observacoes: '',

@@ -77,7 +77,7 @@ async def main():
             """async ([p1, p2]) => {
                  const ids = [];
                  for (const [placa, rota, num] of [[p1, '500', 'RX-1'], [p2, '517', 'RX-2']]) {
-                   const c = criarCargaProgramada({numeroCarga: num, placa, cliente: 'C',
+                   const c = criarCargaProgramada({freteObservacao:'TABELA', numeroCarga: num, placa, cliente: 'C',
                      destino: 'D', peso: 2000, rota, operador: 'Chefe'});
                    SuincoStore.save();
                    await SuincoSharePoint.sincronizarAgora();

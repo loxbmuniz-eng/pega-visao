@@ -37,7 +37,7 @@ API = os.environ.get('SUINCO_API', 'http://127.0.0.1:3010')
 RAIZ = '/home/user/pega-visao/entregaveis/suinco_logistica'
 SENHA = os.environ.get('SUINCO_SENHA', 'senha-de-teste-123')
 EMAIL = 'frete.obrigatorio@teste.local'
-NUMEROS = ['FO-PROG', 'FO-SEMPLACA', 'FO-ANTIGA', 'FO-MONT-COMB', 'FO-MONT-PERG', 'FO-LOTE-OK', 'FO-LOTE-SEM']
+NUMEROS = ['FO-PROG', 'FO-SEMPLACA', 'FO-CHEGADA', 'FO-ANTIGA', 'FO-MONT-COMB', 'FO-MONT-PERG', 'FO-LOTE-OK', 'FO-LOTE-SEM']
 falhas = []
 
 
@@ -120,11 +120,11 @@ async def main():
     livres = psql("SELECT string_agg(placa || ':' || transportadora, '|') FROM (SELECT DISTINCT ON (v.transportadora) v.placa, v.transportadora "
                   "FROM dim_veiculos v LEFT JOIN fact_viagens f ON f.placa = v.placa AND f.excluida_em IS NULL "
                   "WHERE v.transportadora <> '' AND upper(v.transportadora) NOT LIKE '%SUINCO%' AND upper(v.transportadora) NOT LIKE '%FOB%' "
-                  "AND f.carga_id IS NULL ORDER BY v.transportadora, v.placa LIMIT 8) t").split('|')
+                  "AND f.carga_id IS NULL ORDER BY v.transportadora, v.placa LIMIT 9) t").split('|')
     P = [x.split(':')[0] for x in livres if x]
     T = [x.split(':', 1)[1] for x in livres if x]
     rota = psql("SELECT codigo FROM dim_rotas ORDER BY codigo LIMIT 1")
-    ck('oito placas livres de transportadoras diferentes e uma rota', len(P) == 8 and bool(rota), f'{P} {rota}')
+    ck('nove placas livres de transportadoras diferentes e uma rota', len(P) == 9 and bool(rota), f'{P} {rota}')
 
     async with async_playwright() as p:
         nav = await p.chromium.launch(executable_path='/opt/pw-browsers/chromium')
@@ -198,6 +198,32 @@ async def main():
         ck('sem placa não pergunta', not await pergunta_aberta(pg))
         b = frete_no_banco('FO-SEMPLACA')
         ck('e a carga nasce aguardando veículo, sem frete', b is not None and b[0] == '' and b[1] == '', str(b))
+
+        print('\n=== 2b. CHEGADA DA PORTARIA: COMPLETAR PERGUNTA, POR CIMA DA JANELA ===')
+        # Achado da bateria antes de publicar: a pergunta abria ATRÁS da janela
+        # de completar (mesmo z-index, e o Completar vem depois no HTML) — sem
+        # clique possível. A prova é o que está por cima no ponto do botão.
+        await pg.evaluate(f"() => {{ registrarChegadaPortaria('{P[8]}', 'Portaria Teste'); renderAll(); }}")
+        await pg.wait_for_timeout(2500)
+        await ir(pg, 'programacao')
+        linha = pg.locator('#prog-aguardando-tbody tr').filter(has_text=P[8])
+        ck('a chegada sem programação aparece para completar', await linha.count() >= 1)
+        if await linha.count():
+            await linha.first.locator('button:has-text("Criar carga")').click()
+            await pg.wait_for_timeout(500)
+            await pg.fill('#completar-numero-carga', 'FO-CHEGADA')
+            await pg.click('#modal-completar .btn-primary')
+            await pg.wait_for_timeout(800)
+            ck('completar a chegada pergunta o frete', await pergunta_aberta(pg))
+            por_cima = await pg.evaluate("""() => {
+                const b = document.getElementById('frete-c-confirmar').getBoundingClientRect();
+                const el = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2);
+                return !!el && !!el.closest('#modal-frete-contratar');
+            }""")
+            ck('e a pergunta está POR CIMA da janela de completar (dá para clicar)', por_cima)
+            await responder(pg, 'TABELA')
+            b = frete_no_banco('FO-CHEGADA')
+            ck('TABELA: a chegada vira carga com o frete gravado', b is not None and b[0] == P[8] and b[1] == 'TABELA', str(b))
 
         print('\n=== 3. FILA DE PROGRAMADOS: A PLACA ENTRANDO PERGUNTA ===')
         await pg.fill('#prog-fila-dia', hoje)
@@ -310,11 +336,12 @@ async def main():
         await pg.wait_for_timeout(4000)
         doc = pdfs[-1] if pdfs else {}
         corpo_pdf = json.dumps(doc, ensure_ascii=False)
+        html_pdf = next((v for v in doc.values() if isinstance(v, str) and '<table' in v), '') if isinstance(doc, dict) else ''
         ck('o PDF foi pedido ao servidor', bool(pdfs))
         ck('com a coluna "Obs. do frete"', 'Obs. do frete' in corpo_pdf)
         ck('a carga combinada sai como COMBINADO R$ 14.000,00', 'COMBINADO R$ 14.000,00' in corpo_pdf)
         ck('a carga da Montagem sai como COMBINADO R$ 12.345,00', 'COMBINADO R$ 12.345,00' in corpo_pdf)
-        ck('e as de tabela saem como TABELA', '>TABELA<' in corpo_pdf)
+        ck('e as de tabela saem como TABELA, na coluna da observação', 'class="col-obsfrete">TABELA<' in html_pdf)
         for n in ('FO-PROG', 'FO-MONT-COMB'):
             i = corpo_pdf.find(n)
             if i < 0 or 'COMBINADO R$' not in corpo_pdf[i:i + 1500]:

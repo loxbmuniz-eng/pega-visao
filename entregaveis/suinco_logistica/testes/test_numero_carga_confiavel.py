@@ -61,7 +61,7 @@ async def main():
         print('\n=== 1. A ASPA DA DIGITAÇÃO NÃO ENTRA MAIS ===')
         # Caso literal da produção: 118176'
         r = await pg.evaluate("""() => {
-            const c = criarCargaProgramada({placa: DB.frota[30].placa,
+            const c = criarCargaProgramada({freteObservacao:'TABELA', placa: DB.frota[30].placa,
                 numeroCarga: "118176'", peso:9000, rota:'500', operador:'Ana'});
             return c.numeroCarga;
         }""")
@@ -78,9 +78,9 @@ async def main():
         print('\n=== 3. NÚMERO REPETIDO É DETECTADO ===')
         p_ = await pg.evaluate("""() => {
             // Duas cargas diferentes com o mesmo número, como 118105 na base.
-            criarCargaProgramada({placa: DB.frota[31].placa, numeroCarga:'118105',
+            criarCargaProgramada({freteObservacao:'TABELA', placa: DB.frota[31].placa, numeroCarga:'118105',
                 peso:10000, rota:'500', operador:'Ana'});
-            criarCargaProgramada({placa: DB.frota[32].placa, numeroCarga:'118105',
+            criarCargaProgramada({freteObservacao:'TABELA', placa: DB.frota[32].placa, numeroCarga:'118105',
                 peso:12000, rota:'500', operador:'Ana'});
             const prob = problemasDeNumeracao(DB.cargas.filter(c=>!c.aguardandoCarga));
             const d = prob.duplicados.find(x => x.numero === '118105');

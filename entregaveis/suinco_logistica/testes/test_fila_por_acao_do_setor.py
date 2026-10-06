@@ -51,7 +51,7 @@ PREPARAR = """() => {
         ['H-veic',  null],
     ];
     plano.forEach(([num, alvo], i) => {
-        const c = criarCargaProgramada({placa: DB.frota[i].placa, numeroCarga: num,
+        const c = criarCargaProgramada({freteObservacao:'TABELA', placa: DB.frota[i].placa, numeroCarga: num,
             peso: 9000, rota: '500', operador: 'Ana'});
         c.sequencia = plano.length - i;   // sequência ao contrário, de propósito
         if(alvo) ate(c, alvo);

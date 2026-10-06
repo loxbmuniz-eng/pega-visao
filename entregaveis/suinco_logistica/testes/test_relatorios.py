@@ -19,7 +19,7 @@ async def main():
         # 3 cargas, uma percorrendo o fluxo inteiro para gerar tempos
         await pg.evaluate("""() => {
           const pl = DB.frota.slice(0,3).map(f=>f.placa);
-          const ids = pl.map((p,i)=>criarCargaProgramada({placa:p, numeroCarga:'R'+i,
+          const ids = pl.map((p,i)=>criarCargaProgramada({freteObservacao:'TABELA', placa:p, numeroCarga:'R'+i,
             peso:9000+i*1000, qtdEntregas:2, rota:'500', observacoes:'Frete '+i, operador:'Ana'}).id);
           ['Aguardando Embarque','Embarque Iniciado','Embarque Finalizado','Faturado','Seguiu Viagem']
             .forEach(st => avancarStatusCarga(ids[0], st, 'Ana', 'Logística'));

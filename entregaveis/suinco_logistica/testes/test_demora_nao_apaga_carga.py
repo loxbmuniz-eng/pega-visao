@@ -84,7 +84,7 @@ async def main():
               DB.cargas = []; DB.movimentacoes = []; window.__avisos = [];
               const f = DB.frota[idx];
               window.__fetchFalso(cen);
-              const carga = criarCargaProgramada({ placa: f.placa, numeroCarga: '9900' + idx, peso: 9000, rota: '500', operador: 'Gestor' });
+              const carga = criarCargaProgramada({freteObservacao:'TABELA',  placa: f.placa, numeroCarga: '9900' + idx, peso: 9000, rota: '500', operador: 'Gestor' });
               const id = carga.id;
               // o servidor "tem" a carga com o id que acabou de nascer
               if (cen.estadoTem === true) window.__fetchFalso(Object.assign({}, cen, { estadoTem: id }));

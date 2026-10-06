@@ -32,7 +32,7 @@ async def main():
 
         print('\n=== 3. PALETIZADA (editável) ===')
         await pg.evaluate("()=>{DB.cargas=[];DB.movimentacoes=[];SuincoStore.save();}")
-        await pg.evaluate("""()=>{criarCargaProgramada({placa:'AAK8958',transportadora:'Coopertral',
+        await pg.evaluate("""()=>{criarCargaProgramada({freteObservacao:'TABELA', placa:'AAK8958',transportadora:'Coopertral',
           tipoVeiculo:'Truck',numeroCarga:'55001',cliente:'',destino:'',peso:9000,rota:'527',
           sequencia:1,praOnde:'ENTREGA DIRETA',paletizada:'Sim',qtdGanchos:0,qtdEntregas:2,
           motorista:'M',observacoes:'',operador:DB.operador}); renderAll();}""")
@@ -82,7 +82,7 @@ async def main():
         await pg.evaluate("""() => {
             const f = DB.frota;
             for (let i = 0; i < 4; i++) {
-                criarCargaProgramada({placa:f[i].placa, numeroCarga:'IF'+i, peso:10000,
+                criarCargaProgramada({freteObservacao:'TABELA', placa:f[i].placa, numeroCarga:'IF'+i, peso:10000,
                     rota: i < 2 ? '500' : '501',
                     praOnde: i < 2 ? 'ENTREGA DIRETA' : 'CROSS-DOCKING',
                     paletizada:'Sim', qtdGanchos:5, qtdEntregas:1, operador:'A'});

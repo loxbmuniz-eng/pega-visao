@@ -117,7 +117,7 @@ async def main():
 
         await pgL2.evaluate(
             """async (id) => {
-                 completarCargaAguardando(id, {numeroCarga: 'DATA-1', cliente: 'CLIENTE',
+                 completarCargaAguardando(id, {freteObservacao:'TABELA', numeroCarga: 'DATA-1', cliente: 'CLIENTE',
                    destino: 'DESTINO', peso: 1000, rota: '500', operador: 'Ana'});
                  SuincoStore.save();
                  await SuincoSharePoint.sincronizarAgora();

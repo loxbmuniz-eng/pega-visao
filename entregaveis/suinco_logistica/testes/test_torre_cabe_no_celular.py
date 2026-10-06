@@ -41,7 +41,7 @@ def ck(nome, ok, detalhe=''):
 MONTAR = """() => {
     DB.cargas = []; DB.movimentacoes = [];
     for(let i = 0; i < 5; i++){
-      const c = criarCargaProgramada({placa: DB.frota[i].placa,
+      const c = criarCargaProgramada({freteObservacao:'TABELA', placa: DB.frota[i].placa,
         numeroCarga: '11835' + i, peso: 9000, rota: '521', operador: 'Ana'});
       avancarStatusCarga(c.id, 'Aguardando Embarque', 'PORTARIA', 'Portaria');
     }

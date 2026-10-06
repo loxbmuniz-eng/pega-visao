@@ -49,13 +49,13 @@ async def main():
 
             // 2 cargas que seguem viagem HOJE.
             for (let i = 0; i < 2; i++) {
-                const c = criarCargaProgramada({ placa: f[i].placa, numeroCarga: 'HOJE'+i,
+                const c = criarCargaProgramada({freteObservacao:'TABELA',  placa: f[i].placa, numeroCarga: 'HOJE'+i,
                     peso: 9000, rota: '500', operador: 'Ana' });
                 ['Aguardando Embarque','Embarque Iniciado','Embarque Finalizado','Faturado','Seguiu Viagem']
                     .forEach(st => avancarStatusCarga(c.id, st, 'Ana', 'Logística'));
             }
             // 1 carga ainda em aberto (não deve contar na nova caixa).
-            criarCargaProgramada({ placa: f[2].placa, numeroCarga: 'ABERTA',
+            criarCargaProgramada({freteObservacao:'TABELA',  placa: f[2].placa, numeroCarga: 'ABERTA',
                 peso: 9000, rota: '500', operador: 'Ana' });
 
             renderTorre();
@@ -69,7 +69,7 @@ async def main():
         d2 = await pg.evaluate("""() => {
             DB.cargas = []; DB.movimentacoes = [];
             const f = DB.frota;
-            const c = criarCargaProgramada({ placa: f[0].placa, numeroCarga: 'ONTEM',
+            const c = criarCargaProgramada({freteObservacao:'TABELA',  placa: f[0].placa, numeroCarga: 'ONTEM',
                 peso: 9000, rota: '500', operador: 'Ana' });
             ['Aguardando Embarque','Embarque Iniciado','Embarque Finalizado','Faturado','Seguiu Viagem']
                 .forEach(st => avancarStatusCarga(c.id, st, 'Ana', 'Logística'));
@@ -87,7 +87,7 @@ async def main():
         print('\n=== 3. NÃO ENTRA NA CONTAGEM DE "CARGAS EM ABERTO" ===')
         d3 = await pg.evaluate("""() => {
             DB.cargas = []; DB.movimentacoes = [];
-            const c = criarCargaProgramada({ placa: DB.frota[0].placa, numeroCarga: 'X1',
+            const c = criarCargaProgramada({freteObservacao:'TABELA',  placa: DB.frota[0].placa, numeroCarga: 'X1',
                 peso: 9000, rota: '500', operador: 'Ana' });
             ['Aguardando Embarque','Embarque Iniciado','Embarque Finalizado','Faturado','Seguiu Viagem']
                 .forEach(st => avancarStatusCarga(c.id, st, 'Ana', 'Logística'));

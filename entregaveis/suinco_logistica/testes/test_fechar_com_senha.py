@@ -88,7 +88,7 @@ async def main():
         print('\n=== 2. COM CARGA EM ABERTO: PEDE A SENHA ===')
         placa = await pg.evaluate("() => DB.frota[0].placa")
         await pg.evaluate("""([placa, num]) => {
-            criarCargaProgramada({placa, numeroCarga: num, peso:9000,
+            criarCargaProgramada({freteObservacao:'TABELA', placa, numeroCarga: num, peso:9000,
                 rota:'500', operador:'Ana'});
         }""", [placa, NUM])
         await pg.wait_for_timeout(1500)

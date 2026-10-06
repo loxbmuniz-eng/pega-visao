@@ -15,6 +15,7 @@ import os
 import sys
 import uuid
 from playwright.async_api import async_playwright
+from _frete_resposta import responder_frete
 
 API = os.environ.get('SUINCO_API', 'http://127.0.0.1:3010')
 SENHA = os.environ.get('SUINCO_SENHA', 'senha-de-teste-123')
@@ -174,6 +175,7 @@ async def main():
         await pagina.fill('#prog-peso', '12000')
         await pagina.select_option('#prog-rota', '500')
         await pagina.click("button:has-text('Criar Carga')")
+        await responder_frete(pagina)   # com placa é contratar: a pergunta do frete (#115)
         await pagina.wait_for_timeout(2500)
 
         criada = await pagina.evaluate("n => DB.cargas.some(c=>c.numeroCarga===n)", numero)

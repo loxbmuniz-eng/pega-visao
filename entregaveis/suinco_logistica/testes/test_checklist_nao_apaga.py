@@ -142,7 +142,7 @@ async def main():
         pgB.on('pageerror', lambda e: erros.append(str(e)))
         r = await pgB.evaluate("""async () => {
               const placa = (DB.frota && DB.frota[0] && DB.frota[0].placa) || '';
-              const c = criarCargaProgramada({
+              const c = criarCargaProgramada({freteObservacao:'TABELA', 
                 placa, numeroCarga: 'CHK-' + Date.now().toString().slice(-6),
                 cliente: 'C', destino: 'D', rota: '500', peso: 7000,
                 operador: { nome: 'Logistica', setor: 'Logística' } });

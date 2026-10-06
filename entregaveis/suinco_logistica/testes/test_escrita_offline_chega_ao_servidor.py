@@ -41,6 +41,7 @@ import time
 from pathlib import Path
 
 from playwright.async_api import async_playwright
+from _frete_resposta import responder_frete
 
 RAIZ = Path('/home/user/pega-visao/entregaveis/suinco_logistica')
 API = os.environ.get('SUINCO_API', 'http://127.0.0.1:3010')
@@ -134,7 +135,7 @@ async def main():
 
         async def criar_pela_tela(qual_placa, num, rota):
             """Pelo MESMO caminho da Logística: preenche o formulário e clica."""
-            return await pg.evaluate("""async ([placa, num, rota]) => {
+            await pg.evaluate("""([placa, num, rota]) => {
                 abrirTab('programacao');
                 const por = (id, v) => { const e = document.getElementById(id);
                                          if(e) e.value = v; };
@@ -142,11 +143,14 @@ async def main():
                 por('prog-rota', rota);   por('prog-peso', '25000');
                 por('prog-motorista', 'Motorista de teste');
                 criarCargaProgramadaUI();
-                await new Promise(s => setTimeout(s, 800));
+            }""", [qual_placa, num, rota])
+            await responder_frete(pg)   # com placa é contratar: a pergunta do frete (#115)
+            await pg.wait_for_timeout(800)
+            return await pg.evaluate("""(num) => {
                 const c = DB.cargas.find(x => String(x.numeroCarga) === String(num));
                 return { criou: !!c, id: c ? c.id : null,
                          estado: SuincoSharePoint.estado() };
-            }""", [qual_placa, num, rota])
+            }""", num)
 
         print('\n=== 1. COM O SERVIDOR NO AR, O QUE A TELA CRIA CHEGA AO BANCO ===')
         a = await criar_pela_tela(placa, '900001', '500')

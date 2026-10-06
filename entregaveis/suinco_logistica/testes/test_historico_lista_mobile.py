@@ -57,7 +57,7 @@ MONTAR = """() => {
     const O = ['Aguardando Embarque','Embarque Iniciado','Embarque Finalizado',
                'Faturado','Seguiu Viagem'];
     DB.frota.slice(0, 5).forEach((f, i) => {
-      const c = criarCargaProgramada({placa: f.placa, numeroCarga: 'HL' + i,
+      const c = criarCargaProgramada({freteObservacao:'TABELA', placa: f.placa, numeroCarga: 'HL' + i,
         peso: 9000, rota: '500', operador: 'Ana'});
       O.forEach(s => avancarStatusCarga(c.id, s, 'Ana', 'Logística'));
     });

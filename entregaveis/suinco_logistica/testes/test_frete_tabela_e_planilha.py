@@ -32,6 +32,7 @@ import re
 import sys
 from pathlib import Path
 from playwright.async_api import async_playwright
+from _frete_resposta import responder_frete
 
 RAIZ = Path('/home/user/pega-visao/entregaveis/suinco_logistica')
 PAINEL = 'file://' + str(RAIZ / 'index.html')
@@ -130,15 +131,23 @@ async def main():
         ck('o KM de referência é só de leitura (muda no cadastro, não aqui)',
            await pg.evaluate("() => document.getElementById('prog-km-destino').readOnly"))
 
-        print('\n=== 2. KM DIVERGENTE AVISA — NÃO RECUSA ===')
+        print('\n=== 2. UM KM SÓ: EDITAR O KM NÃO GERA AVISO ===')
+        # A REGRA MUDOU DE PROPÓSITO (06/10/2026, causa nº 1): havia dois
+        # campos (KM do destino e de deslocamento) e um aviso quando divergiam.
+        # O dono decidiu: "KM de deslocamento não é necessário. KM divergente
+        # não é necessário" e "somente o KM pode ser editável". Fica um campo,
+        # editável, sem aviso de divergência.
         r = await pg.evaluate("""() => {
             document.getElementById('prog-km-deslocamento').value = '640';
             kmDeslocamentoMudouUI();
-            return document.getElementById('prog-frete-aviso').textContent.trim();
+            return { aviso: document.getElementById('prog-frete-aviso').textContent.trim(),
+                     rotulo: document.querySelector('label[for], #prog-km-deslocamento') &&
+                       document.getElementById('prog-km-deslocamento').closest('.form-group').querySelector('label').textContent.trim(),
+                     refVisivel: !!document.getElementById('prog-km-destino').offsetParent };
         }""")
-        ck('avisa a diferença, com os dois números e o saldo',
-           '640' in r and '583' in r and '57' in r, r[:110])
-        ck('e diz que quem paga é o deslocamento', 'deslocamento' in r.lower(), r[:110])
+        ck('o KM editado (640 ≠ 583) não gera aviso de divergência', r['aviso'] == '', r['aviso'][:110])
+        ck('o campo se chama KM e diz que vem do destino', r['rotulo'].startswith('KM') and 'destino' in r['rotulo'], r['rotulo'])
+        ck('o KM de referência não aparece mais na tela (um KM só)', not r['refVisivel'])
 
         r = await pg.evaluate("""() => {
             document.getElementById('prog-frete-destino').value = 'CIDADE NOVA QUE NAO ESTA NA TABELA';
@@ -160,15 +169,18 @@ async def main():
         # O que este bloco guarda agora é o que ficou no lugar, e vale mais:
         # a carga nasce, e a ausência do KM é DECLARADA. Célula vazia sem
         # explicação é lida como R$ 0,00 por quem confere frete.
-        r = await pg.evaluate("""() => {
+        await pg.evaluate("""() => {
             ['prog-frete-destino','prog-km-destino','prog-km-deslocamento','prog-obs']
               .forEach(id=>document.getElementById(id).value='');
             document.getElementById('prog-placa').value = 'FRT3C33';
             document.getElementById('prog-numero-carga').value = 'SEM-KM';
-            const antes = DB.cargas.length;
+            window.__antes = DB.cargas.length;
             criarCargaProgramadaUI();
-            const nova = DB.cargas[DB.cargas.length-1];
-            return { criou: DB.cargas.length > antes,
+        }""")
+        await responder_frete(pg)   # com placa é contratar: a pergunta do frete (#115)
+        r = await pg.evaluate("""() => {
+            const nova = DB.cargas.find(x => x.numeroCarga === 'SEM-KM');
+            return { criou: DB.cargas.length > window.__antes && !!nova,
                      km: nova && nova.kmDeslocamento,
                      valor: nova && nova.freteValor };
         }""")
@@ -225,9 +237,14 @@ async def main():
         # lado da do Faturamento — pedido do dono; as demais seguem na ordem ditada.
         esperado = ['Sequência', 'Nº da Carga', 'Data da Programação', 'Data do Faturamento', 'Rota', 'Tipo de Operação',
                     'Placa', 'Transportadora', 'Tipo de Veículo', 'Peso (t)',
-                    'Destino do Frete', 'KM Destino', 'KM Deslocamento', 'KM Divergente',
-                    'Entregas', 'Motorista', 'Valor do Frete (R$)', 'Observação do Frete',
+                    'Destino do Frete', 'KM',
+                    'Entregas', 'Motorista',
+                    'Frete pela Tabela (R$)', 'Observação do Frete', 'Frete Combinado (R$)', 'Motivo sem Valor',
                     'Observações', 'Documento de Frete']
+        # A REGRA MUDOU DE PROPÓSITO (06/10/2026, #115): um KM só ("KM de
+        # deslocamento não é necessário. KM divergente não é necessário"); o
+        # valor é o da tabela, e a Observação do Frete diz TABELA ou COMBINADO,
+        # com o combinado na coluna dele. Continuam 20 colunas.
         ck('coluna A é a Sequência', cab[:1] == ['Sequência'], str(cab[:3]))
         ck('coluna B é o Nº da Carga', cab[1:2] == ['Nº da Carga'], str(cab[:3]))
         ck('coluna C é a Data da Programação e D a do Faturamento', cab[2:4] == ['Data da Programação', 'Data do Faturamento'], str(cab[:4]))
@@ -238,10 +255,9 @@ async def main():
            not any('aletizad' in c for c in cab), str([c for c in cab if 'aletizad' in c]))
 
         dados = linhas[1].split(';') if len(linhas) > 1 else []
-        ck('a linha traz a carga com os dois KM', dados[11:13] == ['583', '640'], str(dados[10:14]))
-        ck('e marca a divergência como coluna, não como cor', dados[13:14] == ['SIM'], str(dados[13:14]))
-        ck('o valor sai com vírgula decimal (o Excel pt-BR soma a coluna)',
-           dados[16:17] == ['4960,00'], str(dados[16:17]))
+        ck('a linha traz a carga com o KM dela (um KM só)', dados[11:12] == ['640'], str(dados[10:13]))
+        ck('o valor da tabela sai com vírgula decimal (o Excel pt-BR soma a coluna)',
+           dados[14:15] == ['4960,00'], str(dados[14:15]))
         ck('e o documento de frete dele vem junto', dados[-1] == 'DOC-771', str(dados[-1:]))
         ck('a data do faturamento é a do EVENTO, não a de hoje',
            bool(dados[2]) and re.match(r'^\d{2}/\d{2}', dados[2]), str(dados[2:3]))
