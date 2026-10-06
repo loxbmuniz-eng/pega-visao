@@ -1724,6 +1724,8 @@
                   title="Escolha os PDFs do B2B (Relatório de Status das Entregas) e do Atak (WRVDA501). Nada é gravado antes de você confirmar."><svg class="ico ico-btn" aria-hidden="true"><use href="#i-enviar"/></svg>Importar relatórios (PDF)</button>
           <button class="btn btn-sec" id="frete-btn-exportar" onclick="freteExportar()"
                   title="Baixa a planilha Excel com exatamente o que está nesta tela (CONTROLE_CARGAS, RESUMO e LEIA-ME)."><svg class="ico ico-btn" aria-hidden="true"><use href="#i-baixar"/></svg>Exportar planilha</button>
+          <button class="btn btn-sec" id="frete-btn-pdf" data-documento="pagamento-frete" onclick="freteExportarPdf()"
+                  title="Gera o PDF detalhado do que está nesta tela: o filtro escrito no topo, uma linha por carga e as notas pendentes de cada uma, com a tratativa."><svg class="ico ico-btn" aria-hidden="true"><use href="#i-baixar"/></svg>Exportar PDF</button>
           <button class="btn btn-sec" onclick="freteCarregar()" title="Relê do servidor"><svg class="ico ico-btn" aria-hidden="true"><use href="#i-atualizar"/></svg>Atualizar</button>
         </div>
       </div>
@@ -2096,6 +2098,9 @@
 <!-- Container próprio do relatório de Fretes. Compartilhar o do Operacional
      fazia ele herdar a densidade de 13 colunas e sair com fonte de 7,6px. -->
 <div id="print-fretes" class="print-only"></div>
+<!-- PDF detalhado da aba Pagamento de Frete (06/10/2026): container próprio,
+     folha deitada — 15 colunas não cabem na folha em pé dos outros relatórios. -->
+<div id="print-pagamento-frete" class="print-only"></div>
 <!-- Container PRÓPRIO (09/09/2026): duas colunas e letra grande. Dividir o
      do Operacional herdaria a regra de impressão calibrada para 13 colunas
      em A4 deitado — fonte de 7,6px, ilegível no papel do pátio. -->

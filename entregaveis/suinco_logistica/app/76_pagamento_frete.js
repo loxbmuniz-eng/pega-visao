@@ -856,6 +856,143 @@ async function freteExportar(){
   }catch(e){ notify(freteMensagemDeErro(e), 'danger', 8000); }
 }
 
+/* --------------------------------------------------------- exportar PDF */
+/* O PDF DETALHADO (06/10/2026). Pedido do dono: os relatórios do pagamento de
+   frete ficam NESTA aba, saem com o filtro aplicado, e "preciso que seja
+   detalhado". Então o PDF é a tela em papel: as mesmas cargas que o filtro
+   deixou, na mesma ordem, cada uma com as notas pendentes embaixo — o status
+   da nota no B2B, a tratativa, quando e por quê.
+
+   NADA É CALCULADO AQUI. Situação, percentuais e status vêm prontos do
+   servidor (a mesma grade do .xlsx); o PDF só conta quantas cargas e quantas
+   notas estão na folha. Quem gera é o servidor, como todo PDF do painel, e
+   quem pode gerar é o setor Pagamento de Frete e a Administração
+   (`pagamento-frete` em backend/src/dominio/documentos.js). */
+async function freteExportarPdf(){
+  if(freteSoDemonstracao('o PDF detalhado, com o filtro e as notas de cada carga, é gerado pelo servidor')) return;
+  const el = document.getElementById('print-pagamento-frete');
+  if(!el) return;
+  /* Relê antes de imprimir: papel é o que vai para a reunião, e precisa ser o
+     estado de agora — não o de quando a aba foi aberta. */
+  await freteCarregar();
+  if(FRETE.erro || !FRETE.dados){ notify(FRETE.erro || 'Não consegui ler o controle no servidor.', 'danger', 8000); return; }
+  const doc = freteMontarPdf();
+  el.innerHTML = doc.html;
+  await exportarViaServidor(el, 'Pagamento de Frete', 'pagamento-frete', {
+    orientacao: 'paisagem', carimbo: isoDiaLocal(new Date()), recorte: doc.recorte,
+  });
+}
+
+/* As cargas da tela (filtro e ordem), cada uma com as suas linhas. */
+function freteGruposVisiveis(){
+  const { linhas, cargas, total } = freteLinhasVisiveis();
+  const grupos = [];
+  for(const l of linhas){
+    const ultimo = grupos[grupos.length - 1];
+    if(ultimo && String(ultimo.carga) === String(l.carga)) ultimo.linhas.push(l);
+    else grupos.push({ carga: l.carga, linhas: [l] });
+  }
+  return { grupos, cargas, total };
+}
+
+function freteMontarPdf(){
+  const I = {};
+  for(const k of ['data', 'carga', 'qtdSist', 'qtdB2b', 'finalizadas', 'situacao', 'resumo', 'tratativa', 'statusPagamento', 'dataPagamento',
+                  'transportadora', 'cte', 'entregue', 'liberado', 'pago', 'aPagar', 'dataTratativa', 'observacao', 'canhoto', 'canhotoEm']) I[k] = freteIx(k);
+  const { grupos, cargas, total } = freteGruposVisiveis();
+  const filtro = freteTemFiltro() ? freteDescreverFiltro() : '';
+  const recorte = `${filtro || 'sem filtro — todas as cargas do controle'} · ${cargas} de ${total} carga(s)`;
+  const traco = '<span class="text-dim">—</span>';
+  const pctOuTexto = (v) => (typeof v === 'number' ? esc(fretePct(v)) : (v ? esc(String(v)) : traco));
+  const cls = (v) => String(v || 'vazio').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-');
+
+  let pendencias = 0, semTratativa = 0;
+  const conta = { LIBERADA: 0, PENDENTE: 0, VERIFICAR: 0 };
+  const corpo = grupos.map((g) => {
+    const p = g.linhas[0].v;
+    const notas = g.linhas.filter((l) => l.nota);
+    pendencias += notas.length;
+    if(conta[p[I.situacao]] !== undefined) conta[p[I.situacao]] += 1;
+    const canhoto = p[I.canhoto] === 'SIM'
+      ? `SIM${p[I.canhotoEm] ? `<span class="fpdf-sub">${esc(freteData(p[I.canhotoEm]))}</span>` : ''}`
+      : (p[I.canhoto] ? esc(p[I.canhoto]) : traco);
+    const linhaCarga = `<tr class="fpdf-carga">
+        <td>${esc(freteData(p[I.data])) || traco}</td>
+        <td class="fpdf-num-carga">${esc(String(g.carga))}</td>
+        <td class="fpdf-transp">${p[I.transportadora] ? esc(p[I.transportadora]) : traco}</td>
+        <td>${p[I.cte] ? esc(String(p[I.cte])) : traco}</td>
+        <td class="fpdf-n">${esc(freteNum(p[I.qtdSist])) || traco}</td>
+        <td class="fpdf-n">${esc(freteNum(p[I.qtdB2b])) || traco}</td>
+        <td class="fpdf-n">${esc(freteNum(p[I.finalizadas])) || traco}</td>
+        <td><span class="fpdf-selo fpdf-sit-${cls(p[I.situacao])}">${esc(p[I.situacao] || '—')}</span></td>
+        <td>${p[I.statusPagamento] ? `<span class="fpdf-selo fpdf-sp-${cls(p[I.statusPagamento])}">${esc(p[I.statusPagamento])}</span>` : traco}</td>
+        <td class="fpdf-n">${pctOuTexto(p[I.entregue])}</td>
+        <td class="fpdf-n">${pctOuTexto(p[I.liberado])}</td>
+        <td class="fpdf-n">${pctOuTexto(p[I.pago])}</td>
+        <td class="fpdf-n fpdf-apagar">${pctOuTexto(p[I.aPagar])}</td>
+        <td>${esc(freteData(p[I.dataPagamento])) || traco}</td>
+        <td>${canhoto}</td>
+      </tr>`;
+    const linhasNotas = notas.map((l) => {
+      const resumo = String(l.v[I.resumo] || '');
+      const m = resumo.match(/^\S+\s*\((.*)\)\s*$/);
+      const statusNota = m ? m[1] : (resumo || '—');
+      const tr = l.v[I.tratativa];
+      if(!tr) semTratativa += 1;
+      const obs = l.v[I.observacao] || l.obsNota || '';
+      const quem = [l.cliente, l.cidade].filter(Boolean).join(' — ');
+      const idade = !tr && l.idadeDias != null ? (l.idadeDias === 0 ? 'hoje' : `${l.idadeDias} dia${l.idadeDias === 1 ? '' : 's'}`) : '';
+      return `<tr>
+          <td class="fpdf-nota">${esc(String(l.nota))}</td>
+          <td>${esc(statusNota)}</td>
+          <td>${quem ? esc(quem) : traco}</td>
+          <td class="fpdf-trat fpdf-trat-${cls(tr)}">${tr ? esc(tr) : '<em>sem tratativa</em>'}</td>
+          <td>${esc(freteData(l.v[I.dataTratativa])) || traco}</td>
+          <td class="fpdf-obs">${obs ? esc(obs) : traco}</td>
+          <td class="fpdf-n">${idade ? `<strong>${esc(idade)}</strong>` : traco}</td>
+        </tr>`;
+    }).join('');
+    const detalhe = notas.length
+      ? `<tr class="fpdf-det"><td colspan="15">
+          <div class="fpdf-det-tit">${notas.length} nota(s) pendente(s) da carga ${esc(String(g.carga))}</div>
+          <table class="fpdf-notas"><thead><tr>
+            <th>Nota</th><th>Status no B2B</th><th>Cliente — cidade</th><th>Tratativa</th><th>Data da tratativa</th><th>Observação</th><th>Sem olhar há</th>
+          </tr></thead><tbody>${linhasNotas}</tbody></table></td></tr>`
+      : `<tr class="fpdf-det fpdf-det-vazio"><td colspan="15">Nenhuma nota pendente: todas as notas do sistema estão finalizadas no B2B.</td></tr>`;
+    return `<tbody class="fpdf-grupo">${linhaCarga}${detalhe}</tbody>`;
+  }).join('');
+
+  const geradoEm = FRETE.dados.geradoEm ? fmtDataHora(FRETE.dados.geradoEm) : '';
+  const html = `
+    <div class="print-page doc-paisagem frete-pdf">
+      ${cabecalhoDocumento({ titulo: 'Pagamento de Frete', subtitulo: 'Controle por carga — conferência das entregas e liberação do pagamento' })}
+      <div class="fpdf-recorte"><span><strong>Filtro aplicado:</strong> ${esc(filtro || 'nenhum — todas as cargas do controle')}</span>
+        <span class="fpdf-recorte-n"><strong>${cargas} de ${total} carga(s)</strong></span></div>
+      <div class="fpdf-resumo">
+        <span><strong>${conta.LIBERADA}</strong> liberada(s)</span>
+        <span><strong>${conta.PENDENTE}</strong> pendente(s)</span>
+        <span><strong>${conta.VERIFICAR}</strong> a verificar</span>
+        <span><strong>${pendencias}</strong> nota(s) pendente(s)</span>
+        <span><strong>${semTratativa}</strong> sem tratativa</span>
+      </div>
+      <table class="fpdf-tab">
+        <thead><tr>
+          <th>Consulta</th><th>Carga</th><th>Transportadora</th><th>CT-e</th><th>Notas SIST</th><th>Notas B2B</th><th>Finali&shy;zadas</th>
+          <th>Situação</th><th>Status p/ pagamento</th><th>% Entregue</th><th>% Liberado</th><th>% Pago</th><th>A pagar agora</th><th>Data pagamento</th><th>Canhoto original</th>
+        </tr></thead>
+        ${corpo || '<tbody><tr><td colspan="15" class="text-center text-dim">Nenhuma carga com este filtro.</td></tr></tbody>'}
+      </table>
+      ${rodapeDocumento(
+        '<strong>Situação</strong>, percentuais e <strong>status para pagamento</strong> são os mesmos da aba e da planilha Excel: '
+        + 'liberado é o que está entregue no B2B ou tratado como OK ou DEVOLUÇÃO; <strong>a pagar agora</strong> é o liberado menos o já pago. '
+        + 'Cada carga traz embaixo as notas que ainda não estão finalizadas no B2B, com a tratativa registrada.',
+        `Uma linha por carga do filtro, na ordem da tela, com os dados dos relatórios B2B e Atak importados${geradoEm ? ` (controle lido em ${esc(geradoEm)})` : ''}. `
+        + 'Campo com traço significa não preenchido, e não zero.',
+        fichaDocumento({ titulo: 'Pagamento de Frete', contagem: cargas, recorte: filtro || 'todas as cargas' }))}
+    </div>`;
+  return { html, recorte };
+}
+
 /* ------------------------------------------------------------- importar */
 let _freteImp = null;   // { lote, itens:[{ nome, estado, msg }], previa, fila }
 const FRETE_MAX_PDF = 6 * 1024 * 1024;

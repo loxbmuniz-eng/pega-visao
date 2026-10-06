@@ -84,8 +84,18 @@ async def main():
         # seja na vertical mesmo, no formato a4". O que este teste guarda
         # não é a orientação em si — é que ela seja decidida por NÓS, no
         # código, e não pelo aparelho de quem exporta.
-        ck("exportarViaServidor envia orientacao:'retrato'",
-           "orientacao: 'retrato'" in app)
+        # 06/10/2026: o PDF detalhado do Pagamento de Frete (15 colunas) pede
+        # folha DEITADA, a pedido do dono ("preciso que seja detalhado"). A
+        # regra continua a mesma — a folha é decidida no código, não pelo
+        # aparelho: o padrão segue 'retrato' para todos os relatórios, e a
+        # única exceção é um valor ESCRITO no código, não lido do aparelho.
+        ck("exportarViaServidor envia 'retrato' por padrão",
+           "orientacao: opcoes.orientacao || 'retrato'" in app)
+        excecoes = re.findall(r"orientacao:\s*'(\w+)'", app)
+        ck("a única exceção é o PDF do frete, deitado por escrito no código",
+           excecoes == ['paisagem'] and "'pagamento-frete', {\n    orientacao: 'paisagem'" in app, str(excecoes))
+        ck("nenhuma orientação vem do aparelho (matchMedia/screen.orientation)",
+           'screen.orientation' not in app and "matchMedia('(orientation" not in app)
 
         print('\n=== 3. CELULAR: O RELATÓRIO MONTA IGUAL, SEM DEPENDER DA FOLHA ===')
         pg = await nav.new_page(viewport={'width': 390, 'height': 844},

@@ -14,7 +14,7 @@
    o grupo, o CSV que vai para o pen drive. É nele que entra dono, e é a
    geração dele que fica registrada. */
 
-import { SETORES_FILIAL } from './fluxo.js';
+import { SETORES_FILIAL, SETOR_PAGAMENTO_FRETE } from './fluxo.js';
 
 /* Administração NÃO aparece nas listas: `podeGerar` a inclui sempre, do
    mesmo jeito que o middleware `exigirSetor` faz. Repetir em nove linhas
@@ -72,6 +72,12 @@ export const DONOS_DO_DOCUMENTO = {
   'devolucao-operador': ['Logística', 'Controles Internos', 'Central de Notas',
     'Qualidade', ...SETORES_FILIAL],
   'comprovante-portaria': ['Portaria', 'Logística'],
+  /* O PDF DETALHADO DO PAGAMENTO DE FRETE (06/10/2026). Pedido do dono, com o
+     filtro da tela: "preciso que seja detalhado". Ele leva o que foi pago e o
+     que falta pagar de cada carga — quem precisa dele para operar é quem paga.
+     A Logística não entra: ela não vê a aba (SETOR_PERMISSOES), e um botão que
+     ela não alcança não deve ter porta aberta no servidor. */
+  'pagamento-frete': [SETOR_PAGAMENTO_FRETE],
   'exportacao-csv': [],
 };
 
