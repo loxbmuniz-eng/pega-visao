@@ -334,6 +334,50 @@ async def main():
         except Exception as e:
             ck('o .xlsx abre', False, (comparacao.stderr or str(e))[:300])
 
+        print('\n=== 6b. PDF DETALHADO: O RECORTE DA TELA, COM AS NOTAS (06/10/2026) ===')
+        # Pedido do dono: "preciso que seja detalhado". Uma SEGUNDA carga entra
+        # pela API para o filtro ter o que tirar: o PDF tem de levar só a 900802.
+        import base64
+        lote = None
+        for arq in ['b2b_900801.pdf', 'sist_900801.pdf']:
+            st, r = http('/api/pagamento-frete/leituras', tok_frete, 'POST',
+                         {'arquivo': base64.b64encode((PDFS / arq).read_bytes()).decode(), 'nome': arq, **({'lote': lote} if lote else {})})
+            lote = (r or {}).get('lote', lote)
+        st, _ = http(f'/api/pagamento-frete/lotes/{lote}/confirmar', tok_frete, 'POST', {})
+        ck('a 900801 entrou pela API (segunda carga no controle)', st == 200, str(st))
+        await pg.evaluate("() => freteCarregar()")
+        await pg.wait_for_timeout(800)
+        ck('o botão "Exportar PDF" aparece para quem paga', await pg.is_visible('#frete-btn-pdf'))
+        await pg.fill('#frete-busca', '900802')
+        await pg.wait_for_timeout(400)
+        notas = await pg.evaluate("() => FRETE.dados.linhas.filter(l => String(l.carga) === '900802' && l.nota).map(l => String(l.nota))")
+        pedido = {}
+        def guardar(rq):
+            if '/relatorios/pdf' in rq.url and rq.method == 'POST':
+                pedido.update(json.loads(rq.post_data or '{}'))
+        pg.on('request', guardar)
+        async with pg.expect_response(lambda r: '/relatorios/pdf' in r.url, timeout=60000) as resp_info:
+            async with pg.expect_download(timeout=60000) as dl_pdf:
+                await pg.click('#frete-btn-pdf')
+        resp = await resp_info.value
+        download = await dl_pdf.value
+        caminho_pdf = Path('/tmp/claude-0/-home-user-pega-visao/82f87c99-e223-5c72-91d0-65150266c838/scratchpad') / 'pagamento_frete_detalhado.pdf'
+        await download.save_as(str(caminho_pdf))
+        ck('o servidor gerou o PDF (200, application/pdf)', resp.status == 200 and 'application/pdf' in (resp.headers.get('content-type') or ''), f"{resp.status} {resp.headers.get('content-type')}")
+        ck('o arquivo é um PDF de verdade', caminho_pdf.read_bytes()[:4] == b'%PDF', str(caminho_pdf.read_bytes()[:8]))
+        ck('o nome do arquivo diz o que é', download.suggested_filename.startswith('Suinco_Pagamento-de-Frete_') and download.suggested_filename.endswith('.pdf'), download.suggested_filename)
+        ck('vai como documento do Pagamento de Frete, em folha deitada', pedido.get('tipo') == 'pagamento-frete' and pedido.get('orientacao') == 'paisagem', f"{pedido.get('tipo')} {pedido.get('orientacao')}")
+        html = pedido.get('html') or ''
+        ck('o filtro da tela vai escrito no PDF', 'busca &quot;900802&quot;' in html or 'busca "900802"' in html, re.sub(r'<[^>]+>', ' ', html)[:300])
+        ck('e a contagem do recorte: 1 de 2 cargas', '1 de 2 carga' in html)
+        ck('só a carga filtrada: 900802 sim, 900801 não', '900802' in html and '900801' not in html)
+        ck('DETALHADO: cada nota pendente da 900802 está no PDF', bool(notas) and all(n in html for n in notas), str([n for n in notas if n not in html]))
+        ck('com a tratativa de cada nota: a marcada (OK) e as que ninguém olhou', '>OK<' in html.replace(' ', '') and 'sem tratativa' in html)
+        ck('e o status para pagamento e o % a pagar da carga', 'A PAGAR' in html or 'PARCIAL' in html)
+        pg.remove_listener('request', guardar)
+        await pg.fill('#frete-busca', '')
+        await pg.wait_for_timeout(300)
+
         print('\n=== 7. CELULAR ===')
         cel = await painel_de('frete.tela@teste.local', viewport={'width': 390, 'height': 844})
         await cel.wait_for_timeout(1500)

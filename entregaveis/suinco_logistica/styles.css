@@ -6746,3 +6746,92 @@ tr.linha-nova{
 .vigia-detalhe{ font-size:13px }
 .vigia-quando{ font-size:12px; color:var(--text-dim) }
 .vigia-exemplos{ margin:var(--sp-1) 0 0; padding-left:18px; font-size:13px }
+
+/* =====================================================================
+   PDF DETALHADO DO PAGAMENTO DE FRETE (06/10/2026)
+   ---------------------------------------------------------------------
+   Pedido do dono: o relatório da aba, com o filtro aplicado, "detalhado".
+   Folha A4 DEITADA (o servidor pede paisagem): 297 − 2×5mm de margem =
+   287mm úteis. 15 colunas por carga e, embaixo de cada uma, a tabela das
+   notas pendentes. Papel tem cor fixa — não segue o tema da tela.
+
+   A carga e as suas notas NÃO se separam de página (break-inside: avoid no
+   <tbody> do grupo): nota pendente numa folha e a carga dela na outra é o
+   tipo de papel que faz pagar a transportadora errada.
+   ===================================================================== */
+@media print{
+  .print-page.doc-paisagem{ width:287mm !important; max-width:287mm !important }
+}
+.frete-pdf{ color:#1c2433; font-size:9.5px }
+.frete-pdf .fpdf-recorte{
+  display:flex; justify-content:space-between; gap:12px; align-items:baseline;
+  margin:6px 0 4px; padding:6px 10px; border:1px solid #b9903f; border-radius:4px;
+  background:#fbf6ea; font-size:10.5px;
+}
+.frete-pdf .fpdf-recorte-n{ white-space:nowrap }
+.frete-pdf .fpdf-resumo{ display:flex; flex-wrap:wrap; gap:6px 18px; margin:0 0 8px; font-size:10px; color:#3d4a5c }
+.frete-pdf .fpdf-resumo strong{ color:#1c2433; font-size:11px }
+.frete-pdf table.fpdf-tab{ width:100%; border-collapse:collapse; table-layout:fixed }
+.frete-pdf .fpdf-tab > thead th{
+  background:#1f2b4d !important; color:#ffffff !important; font-size:8px; font-weight:700;
+  text-transform:uppercase; letter-spacing:.02em; line-height:1.2; padding:5px 3px;
+  text-align:center; vertical-align:bottom; white-space:normal;
+}
+.frete-pdf .fpdf-tab > thead{ display:table-header-group }   /* repete o cabeçalho em cada folha */
+.frete-pdf tbody.fpdf-grupo{ break-inside:avoid; page-break-inside:avoid }
+.frete-pdf tr.fpdf-carga td{
+  padding:5px 3px; border-top:1.5px solid #1f2b4d; background:#eef1f6;
+  text-align:center; vertical-align:middle; font-weight:600;
+}
+.frete-pdf tr.fpdf-carga td.fpdf-transp{ text-align:left; font-weight:500; overflow-wrap:anywhere }
+.frete-pdf .fpdf-num-carga{ font-weight:800 !important; font-size:10.5px; color:#1f2b4d }
+.frete-pdf .fpdf-n{ font-variant-numeric:tabular-nums; white-space:nowrap }
+.frete-pdf .fpdf-apagar{ font-weight:800 !important }
+.frete-pdf .fpdf-sub{ display:block; font-size:8px; font-weight:400; color:#3d4a5c }
+.frete-pdf .fpdf-selo{
+  display:inline-block; padding:2px 5px; border-radius:3px; font-size:8px; font-weight:800;
+  letter-spacing:.02em; white-space:nowrap; border:1px solid transparent;
+}
+.frete-pdf .fpdf-sit-liberada, .frete-pdf .fpdf-sp-integral{ background:#c6efce; color:#0b5d2a }
+.frete-pdf .fpdf-sit-pendente{ background:#ffc7ce; color:#8b1a24 }
+.frete-pdf .fpdf-sit-verificar, .frete-pdf .fpdf-sp-a-pagar, .frete-pdf .fpdf-sp-conferir{ background:#ffeb9c; color:#6b4a00 }
+.frete-pdf .fpdf-sp-a-pagar{ border-color:#b9903f }
+.frete-pdf .fpdf-sp-conferir{ font-style:italic }
+.frete-pdf .fpdf-sp-parcial{ background:#dde7f8; color:#1f4f9f }
+.frete-pdf tr.fpdf-det > td{ padding:3px 3px 8px 22px; border-bottom:1px solid #c9d4e8 }
+.frete-pdf .fpdf-det-tit{ font-size:8.5px; font-weight:700; color:#3d4a5c; margin:2px 0 3px; text-transform:uppercase; letter-spacing:.03em }
+.frete-pdf tr.fpdf-det-vazio > td{ color:#3d4a5c; font-style:italic; font-size:9px }
+.frete-pdf table.fpdf-notas{ width:100%; border-collapse:collapse; table-layout:fixed }
+.frete-pdf .fpdf-notas th{
+  background:#f4f6fa !important; color:#2a3446 !important; font-size:8px; font-weight:700; text-align:left;
+  padding:3px 5px; border-bottom:1px solid #c9d4e8; text-transform:none; letter-spacing:0;
+}
+.frete-pdf .fpdf-notas td{ font-size:9px; padding:3px 5px; border-bottom:1px solid #e3e8f0; vertical-align:top; overflow-wrap:anywhere }
+.frete-pdf .fpdf-notas th:nth-child(1), .frete-pdf .fpdf-notas td:nth-child(1){ width:9% }
+.frete-pdf .fpdf-notas th:nth-child(2), .frete-pdf .fpdf-notas td:nth-child(2){ width:12% }
+.frete-pdf .fpdf-notas th:nth-child(3), .frete-pdf .fpdf-notas td:nth-child(3){ width:26% }
+.frete-pdf .fpdf-notas th:nth-child(4), .frete-pdf .fpdf-notas td:nth-child(4){ width:12% }
+.frete-pdf .fpdf-notas th:nth-child(5), .frete-pdf .fpdf-notas td:nth-child(5){ width:10% }
+.frete-pdf .fpdf-notas th:nth-child(7), .frete-pdf .fpdf-notas td:nth-child(7){ width:9%; text-align:right }
+.frete-pdf .fpdf-nota{ font-weight:700; font-variant-numeric:tabular-nums }
+.frete-pdf .fpdf-trat{ font-weight:700 }
+.frete-pdf .fpdf-trat-ok{ color:#0b5d2a }
+.frete-pdf .fpdf-trat-devolucao{ color:#1f4f9f }
+.frete-pdf .fpdf-trat-sumiu-do-b2b{ color:#8b1a24 }
+.frete-pdf .fpdf-trat-vazio em{ color:#8b1a24; font-weight:700 }
+/* Larguras das 15 colunas da carga (somam 100%). */
+.frete-pdf .fpdf-tab > thead th:nth-child(1){ width:6.5% }
+.frete-pdf .fpdf-tab > thead th:nth-child(2){ width:6% }
+.frete-pdf .fpdf-tab > thead th:nth-child(3){ width:13% }
+.frete-pdf .fpdf-tab > thead th:nth-child(4){ width:6% }
+.frete-pdf .fpdf-tab > thead th:nth-child(5),
+.frete-pdf .fpdf-tab > thead th:nth-child(6){ width:5% }
+.frete-pdf .fpdf-tab > thead th:nth-child(7){ width:6.5% }
+.frete-pdf .fpdf-tab > thead th:nth-child(8){ width:8% }
+.frete-pdf .fpdf-tab > thead th:nth-child(9){ width:8.5% }
+.frete-pdf .fpdf-tab > thead th:nth-child(10),
+.frete-pdf .fpdf-tab > thead th:nth-child(11),
+.frete-pdf .fpdf-tab > thead th:nth-child(12),
+.frete-pdf .fpdf-tab > thead th:nth-child(13){ width:5.5% }
+.frete-pdf .fpdf-tab > thead th:nth-child(14){ width:7% }
+.frete-pdf .fpdf-tab > thead th:nth-child(15){ width:6.5% }

@@ -279,7 +279,10 @@ function exportarTransportadorasCsv(){
     [...porNome.entries()].sort((a, b) => a[0].localeCompare(b[0])));
 }
 
-async function exportarViaServidor(el, nomeDoRelatorio, tipo){
+/* `opcoes` (06/10/2026): o PDF do Pagamento de Frete sai em folha DEITADA e
+   leva no nome a data do dia, não o período da aba Relatórios — que ele não
+   usa. Os outros relatórios não passam nada e saem como sempre saíram. */
+async function exportarViaServidor(el, nomeDoRelatorio, tipo, opcoes = {}){
   /* `tipo` identifica o documento para o servidor decidir se o SEU setor
      pode gerá-lo (etapa 1 do protocolo de segurança, 22/08/2026). Não é
      opcional: documento sem tipo é recusado, de propósito — assim um
@@ -313,7 +316,8 @@ async function exportarViaServidor(el, nomeDoRelatorio, tipo){
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .replace(/[^A-Za-z0-9]+/g, '-')
     .replace(/^-|-$/g, '');
-  const nomeArquivo = `Suinco_${limpo}_${carimboDoPeriodo()}`;
+  const carimbo = opcoes.carimbo || carimboDoPeriodo();
+  const nomeArquivo = `Suinco_${limpo}_${carimbo}`;
 
   const limpar = ()=>{
     el.style.display='none';
@@ -341,8 +345,8 @@ async function exportarViaServidor(el, nomeDoRelatorio, tipo){
     }
     const html = el.outerHTML;
     const blob = await SuincoSharePoint.gerarRelatorioPdf({
-      html, css, orientacao: 'retrato', nomeArquivo, tipo,
-      recorte: carimboDoPeriodo(),
+      html, css, orientacao: opcoes.orientacao || 'retrato', nomeArquivo, tipo,
+      recorte: opcoes.recorte || carimbo,
     });
 
     const url = URL.createObjectURL(blob);
@@ -828,7 +832,11 @@ function cabecalhoDocumento({ titulo, subtitulo }) {
    coisas que NÃO se identificam sozinhas: "SUI-EXE-20260806-1744" sem a
    palavra "Referência" é ruído, e um número solto não diz se são cargas,
    dias ou quilos. */
-function fichaDocumento({ titulo, contagem, extra }) {
+/* `recorte` (06/10/2026): documento que não usa o período da aba Relatórios
+   (o do Pagamento de Frete usa os filtros da própria aba) troca a linha
+   "Período" por "Filtro" — escrever ali um período que ele não aplicou seria
+   a ficha mentindo sobre o que o documento contém. */
+function fichaDocumento({ titulo, contagem, extra, recorte }) {
   const agora = new Date();
   const operador = (DB.operador && DB.operador.nome) || '—';
   const setor = (DB.operador && DB.operador.setor) || '';
@@ -836,7 +844,7 @@ function fichaDocumento({ titulo, contagem, extra }) {
   const campos = [
     ['Entidade',   'Suinco — Cooperativa Agroindustrial'],
     ['Referência',  referenciaDocumento(titulo)],
-    ['Período',     rotuloPeriodoRelatorio()],
+    recorte !== undefined ? ['Filtro', recorte] : ['Período', rotuloPeriodoRelatorio()],
     contagem !== undefined ? ['Registros', String(contagem)] : null,
   ].filter(Boolean);
 

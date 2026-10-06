@@ -6580,6 +6580,26 @@ describe('49. Pagamento de Frete — a planilha dentro do painel (05/10/2026)', 
       assert.equal((await req(FRETE, { token: tokens['Administração'] })).status, 200);
     });
 
+    test('o PDF detalhado do Pagamento de Frete: só o setor dele e a Administração geram (06/10/2026)', async () => {
+      /* Pedido do dono: "preciso que seja detalhado" — o PDF da aba, com o
+         filtro da tela. Ele carrega pagamento por carga, então o dono é o
+         setor que paga; a Logística e a Portaria não levam esse papel. */
+      assert.equal(podeGerar('Pagamento de Frete', 'pagamento-frete'), true);
+      assert.equal(podeGerar('Administração', 'pagamento-frete'), true);
+      for (const setor of ['Portaria', 'Logística', 'Expedição', 'Faturamento']) {
+        assert.equal(podeGerar(setor, 'pagamento-frete'), false, `${setor} NÃO gera o PDF do frete`);
+      }
+      assert.ok(documentosDoSetor('Pagamento de Frete').includes('pagamento-frete'), 'o painel mostra o botão a quem paga');
+      /* Pela PORTA DE VERDADE: a rota confere o setor antes do conteúdo —
+         sem html, quem pode passa da barreira e para no 400 HTML_FALTANDO. */
+      const nega = await req('/api/relatorios/pdf', { metodo: 'POST', token: tokens['Portaria'], corpo: { tipo: 'pagamento-frete' } });
+      assert.equal(nega.status, 403, nega.texto);
+      assert.equal(nega.json.codigo, 'DOCUMENTO_SEM_PERMISSAO');
+      const passa = await req('/api/relatorios/pdf', { metodo: 'POST', token: tk['daniela@teste.local'], corpo: { tipo: 'pagamento-frete' } });
+      assert.equal(passa.status, 400, passa.texto);
+      assert.equal(passa.json.codigo, 'HTML_FALTANDO');
+    });
+
     test('o setor existe no servidor, na CHECK do banco e no cadastro pela tela de Usuários', async () => {
       assert.ok(SETORES.includes('Pagamento de Frete'), 'fluxo.js SETORES');
       const r = await req('/api/operadores', { metodo: 'POST', token: tokens['Administração'],
