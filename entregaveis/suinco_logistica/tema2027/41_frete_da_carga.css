@@ -1,0 +1,39 @@
+/* =====================================================================
+   A OBSERVAÇÃO DO FRETE NA TELA (06/10/2026)
+   ---------------------------------------------------------------------
+   A pergunta antes de contratar (#modal-frete-contratar), o selo da Torre e
+   da Fila e o botão da coluna Frete da Montagem. Cores fixas por tema para
+   o contraste valer nos dois (a lição do portão 44: dourado sobre claro deu
+   1,33). Só tela — no papel quem fala é o relatório.
+   ===================================================================== */
+@media screen{
+  #modal-frete-contratar .frete-c-opcoes{ border:0; padding:0; margin:12px 0 4px; display:flex; flex-direction:column; gap:8px }
+  #modal-frete-contratar .frete-c-op{ display:flex; gap:10px; align-items:flex-start; padding:10px 12px; border:1px solid var(--border);
+    border-radius:var(--radius-sm, 6px); cursor:pointer; line-height:1.4 }
+  #modal-frete-contratar .frete-c-op:has(input:checked){ border-color:var(--gold); box-shadow:0 0 0 1px var(--gold) inset }
+  #modal-frete-contratar .frete-c-op input{ margin-top:3px; width:18px; height:18px; flex:none }
+  #modal-frete-contratar .frete-c-valor{ display:flex; flex-direction:column; gap:4px; padding-left:40px; font-weight:600 }
+  #modal-frete-contratar .frete-c-valor[hidden]{ display:none }
+  #modal-frete-contratar .frete-c-valor input{ max-width:220px; font-size:16px }
+  #modal-frete-contratar .frete-c-erro{ margin-top:8px; padding:8px 10px; border-radius:6px; background:#5a1f22; color:#ffd6d9; font-weight:600 }
+  :root[data-tema="claro"] #modal-frete-contratar .frete-c-erro{ background:#fde2e4; color:#8b1a24 }
+
+  /* O selo na célula do veículo — mesmo desenho dos chips de lacre. */
+  .selo-frete{ display:inline-block; margin-top:3px; margin-right:4px; padding:1px 7px; border-radius:4px; font:inherit;
+    font-size:11px; font-weight:700; letter-spacing:.01em; white-space:nowrap; cursor:pointer; border:1px solid var(--border);
+    background:transparent; color:var(--text-dim) }
+  .selo-frete-definir{ background:#5a1f22; border-color:#c05a62; color:#ffd6d9 }
+  :root[data-tema="claro"] .selo-frete-definir{ background:#fde2e4; border-color:#c05a62; color:#8b1a24 }
+  .selo-frete-combinado{ border-color:var(--gold-dim); color:var(--gold-text, var(--gold)) }
+  .selo-frete:focus-visible{ outline:2px solid var(--gold); outline-offset:1px }
+
+  /* A coluna Frete da Montagem: valor da tabela em cima, observação embaixo. */
+  .frete-mont-btn{ display:inline-flex; flex-direction:column; align-items:flex-end; gap:1px; width:100%; padding:2px 4px;
+    border:1px solid transparent; border-radius:4px; background:transparent; color:inherit; font:inherit; cursor:pointer; line-height:1.15 }
+  .frete-mont-btn:hover, .frete-mont-btn:focus-visible{ border-color:var(--border) }
+  .frete-mont-valor{ font-variant-numeric:tabular-nums; font-weight:600 }
+  .frete-mont-obs{ font-size:10.5px; font-weight:700; color:var(--text-dim); white-space:nowrap }
+  .frete-mont-combinado .frete-mont-obs{ color:var(--gold-text, var(--gold)) }
+  .frete-mont-definir .frete-mont-obs{ color:#ff9aa2 }
+  :root[data-tema="claro"] .frete-mont-definir .frete-mont-obs{ color:#a3202c }
+}

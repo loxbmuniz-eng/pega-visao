@@ -374,28 +374,30 @@
       <div class="form-row">
         <div class="form-group"><label>Peso (kg)</label><input type="text" inputmode="numeric" id="prog-peso" min="0"></div>
       </div>
-      <!-- FRETE (09/09/2026). O DESTINO puxa o KM da tabela; o KM DE
-           DESLOCAMENTO é o que de fato será pago e pode divergir (desvio,
-           retorno, coleta no caminho). Os dois existem porque são duas
-           perguntas — a referência e o efetivo.
-           Sem KM e sem observação a carga não recebe placa: decisão do dono
-           ("1 trava a contratacao", "2 observacao obrigatoria"). -->
+      <!-- FRETE (06/10/2026). Um KM só: o DESTINO puxa o KM da tabela e ele
+           continua editável. O valor não se digita — é KM × tarifa, conta do
+           servidor. Decisão do dono: "somente o KM pode ser editavel" e "KM
+           de deslocamento não é necessário. KM divergente não é necessário".
+           O campo de referência continua no formulário, escondido, porque é
+           ele que guarda o KM da tabela na carga (kmDestino).
+           Ao receber placa, a carga pergunta a observação do frete (TABELA
+           ou COMBINADO com o valor) — app/41_frete_da_carga.js. -->
       <div class="form-row">
         <div class="form-group" style="flex:2">
           <label>Destino do frete <span class="hint">(puxa o KM da tabela)</span></label>
           <input type="text" id="prog-frete-destino" list="lista-destinos-frete"
                  placeholder="Ex: GOIANIA" oninput="destinoFreteMudouUI()">
         </div>
-        <div class="form-group">
+        <div class="form-group" hidden>
           <label>KM destino <span class="hint">referência da tabela</span></label>
           <input type="text" inputmode="numeric" id="prog-km-destino" min="1" step="1" readonly
                  title="Vem da Tabela de Frete. Só de leitura: para mudar, edite o destino em Cadastros.">
         </div>
         <div class="form-group">
-          <label>KM deslocamento <span class="hint">o que será pago</span></label>
+          <label>KM <span class="hint">vem do destino; editável</span></label>
           <input type="text" inputmode="decimal" id="prog-km-deslocamento"
                  oninput="kmDeslocamentoMudouUI()"
-                 title="O KM que multiplica a tarifa. Diferente do KM do destino quando há desvio, retorno ou coleta no caminho.">
+                 title="O KM que multiplica a tarifa. Vem da Tabela de Frete pelo destino; corrija aqui se a viagem for outra.">
         </div>
       </div>
       <div class="form-group" id="prog-frete-aviso" style="margin-bottom:10px"></div>
@@ -1726,6 +1728,8 @@
                   title="Baixa a planilha Excel com exatamente o que está nesta tela (CONTROLE_CARGAS, RESUMO e LEIA-ME)."><svg class="ico ico-btn" aria-hidden="true"><use href="#i-baixar"/></svg>Exportar planilha</button>
           <button class="btn btn-sec" id="frete-btn-pdf" data-documento="pagamento-frete" onclick="freteExportarPdf()"
                   title="Gera o PDF detalhado do que está nesta tela: o filtro escrito no topo, uma linha por carga e as notas pendentes de cada uma, com a tratativa."><svg class="ico ico-btn" aria-hidden="true"><use href="#i-baixar"/></svg>Exportar PDF</button>
+          <button class="btn btn-sec" id="frete-btn-excluidas" onclick="freteExcluidasUI()"
+                  title="As cargas excluídas do controle: quem excluiu, quando e por quê — e o botão para restaurar."><svg class="ico ico-btn" aria-hidden="true"><use href="#i-lixeira"/></svg>Excluídas</button>
           <button class="btn btn-sec" onclick="freteCarregar()" title="Relê do servidor"><svg class="ico ico-btn" aria-hidden="true"><use href="#i-atualizar"/></svg>Atualizar</button>
         </div>
       </div>
@@ -1976,6 +1980,31 @@
   </div>
 </div>
 
+<!-- A OBSERVAÇÃO DO FRETE (06/10/2026). Uma janela só para todos os pontos
+     de contratação (Programação, Montagem, Torre/Fila, chegada da Portaria):
+     pergunta em vez de bloquear, como manda a regra da casa. app/41_frete_da_carga.js -->
+<div class="modal-overlay" id="modal-frete-contratar" role="dialog" aria-modal="true" aria-labelledby="frete-c-titulo">
+  <div class="modal-box">
+    <h2 id="frete-c-titulo">Observação do frete</h2>
+    <div class="card-sub" id="frete-c-contexto"></div>
+    <div class="fat-conf" id="frete-c-resumo"></div>
+    <fieldset class="frete-c-opcoes">
+      <legend class="sr-only">O que vale para o pagamento</legend>
+      <label class="frete-c-op"><input type="radio" name="frete-c-obs" id="frete-c-tabela" value="TABELA" onchange="freteContratarOpcaoUI()">
+        <span><strong>TABELA</strong> — vale o valor calculado pelo KM <span id="frete-c-valor-tabela"></span></span></label>
+      <label class="frete-c-op"><input type="radio" name="frete-c-obs" id="frete-c-combinado" value="COMBINADO" onchange="freteContratarOpcaoUI()">
+        <span><strong>COMBINADO</strong> — foi negociado outro valor</span></label>
+      <label class="frete-c-valor" id="frete-c-valor-wrap" hidden>Valor combinado (R$)
+        <input type="text" inputmode="decimal" id="frete-c-valor" placeholder="ex.: 14.000,00" autocomplete="off"></label>
+    </fieldset>
+    <div class="frete-c-erro" id="frete-c-erro" role="alert" hidden></div>
+    <div class="flex-end">
+      <button class="btn btn-sec" id="frete-c-cancelar" onclick="freteContratarResponder(null)">Cancelar</button>
+      <button class="btn btn-primary" id="frete-c-confirmar" onclick="freteContratarConfirmarUI()">Confirmar frete</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="modal-faturar">
   <div class="modal-box">
     <h2>Confirmar faturamento</h2>
@@ -2029,36 +2058,32 @@
     <div class="form-row">
       <div class="form-group"><label>Peso (kg)</label><input type="text" inputmode="numeric" id="completar-peso" min="0"></div>
     </div>
-    <!-- FRETE, também aqui (09/09/2026). Os mesmos três campos, na mesma
-         ordem — a regra do card acima vale: quem mexe numa tela mexe na
-         outra, e existe teste que reprova se divergirem.
+    <!-- FRETE, também aqui. Os mesmos campos, na mesma ordem do formulário
+         da Programação — quem mexe numa tela mexe na outra, e existe teste
+         que reprova se divergirem.
 
-         AQUI NÃO TRAVA. O caminhão JÁ ESTÁ no pátio: a placa foi digitada
-         pela Portaria na chegada, então este lançamento não é o ato de
-         contratar, e o servidor não exige (a trava é a passagem de "sem
-         placa" para "com placa"). Travar uma carga de caminhão que já
-         encostou seria literalmente caminhão parado no portão.
-
-         O campo existe para o KM ser informado NA HORA em que alguém sabe
-         dele. Se ficar vazio, o relatório de fretes mostra a linha com o
-         motivo escrito ("Sem KM de deslocamento") em vez de uma célula
-         muda — visível para a Administração completar, e não um zero
-         silencioso. -->
+         Até 06/10/2026 esta tela NÃO travava, porque o caminhão já está no
+         pátio. Mudou por decisão do dono ("sempre, sem excessoes o valor do
+         frete combinado precisa ser colocado"): completar a chegada é o
+         momento em que a carga vira contratada, então a observação do frete
+         é perguntada aqui também (salvarCompletarCarga). A pergunta não
+         bloqueia o portão — o caminhão já entrou; ela só não deixa a carga
+         virar carga sem dizer como o frete foi fechado. -->
     <div class="form-row">
       <div class="form-group" style="flex:2">
         <label>Destino do frete <span class="hint">(puxa o KM da tabela)</span></label>
         <input type="text" id="completar-frete-destino" list="lista-destinos-frete"
                placeholder="Ex: GOIANIA" oninput="destinoFreteCompletarUI()">
       </div>
-      <div class="form-group">
+      <div class="form-group" hidden>
         <label>KM destino <span class="hint">referência da tabela</span></label>
         <input type="text" inputmode="numeric" id="completar-km-destino" min="1" step="1" readonly
                title="Vem da Tabela de Frete. Só de leitura: para mudar, edite o destino em Cadastros.">
       </div>
       <div class="form-group">
-        <label>KM deslocamento <span class="hint">o que será pago</span></label>
+        <label>KM <span class="hint">vem do destino; editável</span></label>
         <input type="text" inputmode="decimal" id="completar-km-deslocamento"
-               title="O KM que multiplica a tarifa. Diferente do KM do destino quando há desvio, retorno ou coleta no caminho.">
+               title="O KM que multiplica a tarifa. Vem da Tabela de Frete pelo destino; corrija aqui se a viagem for outra.">
       </div>
     </div>
     <div class="form-row">
@@ -2195,6 +2220,7 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
 <script src="app/25_navegacao.js"></script>
 <script src="app/30_torre.js"></script>
 <script src="app/40_programacao.js"></script>
+<script src="app/41_frete_da_carga.js"></script>
 <script src="app/50_portaria_expedicao_faturamento.js"></script>
 <script src="app/60_indicadores.js"></script>
 <script src="app/70_cadastros.js"></script>

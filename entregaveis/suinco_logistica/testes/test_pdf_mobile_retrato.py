@@ -92,8 +92,11 @@ async def main():
         ck("exportarViaServidor envia 'retrato' por padrão",
            "orientacao: opcoes.orientacao || 'retrato'" in app)
         excecoes = re.findall(r"orientacao:\s*'(\w+)'", app)
-        ck("a única exceção é o PDF do frete, deitado por escrito no código",
-           excecoes == ['paisagem'] and "'pagamento-frete', {\n    orientacao: 'paisagem'" in app, str(excecoes))
+        # 06/10/2026: a Administração de Fretes também ficou deitada (10 colunas
+        # com a observação do frete). Continuam exceções ESCRITAS no código.
+        ck("as exceções são os PDFs de frete, deitados por escrito no código",
+           excecoes == ['paisagem', 'paisagem'] and "'pagamento-frete', {\n    orientacao: 'paisagem'" in app
+           and "'administracao-fretes', { orientacao: 'paisagem' }" in app, str(excecoes))
         ck("nenhuma orientação vem do aparelho (matchMedia/screen.orientation)",
            'screen.orientation' not in app and "matchMedia('(orientation" not in app)
 

@@ -3564,6 +3564,10 @@ input,select,textarea{border-radius:5px}
 }
 .tab-fretes .col-rota{ width:11% }
 .tab-fretes .col-obs{ white-space:normal; line-height:1.5 }
+/* A OBSERVAÇÃO DO FRETE (06/10/2026): TABELA / COMBINADO R$ x (dif.) / a
+   definir. Folha deitada a partir daqui — as larguras em % passam a valer
+   sobre 287mm, e sobra para a coluna nova sem apertar as datas. */
+.tab-fretes .col-obsfrete{ width:14%; white-space:normal; line-height:1.35 }
 /* CABEÇALHO DE DIA (05/10/2026): período de vários dias sai um dia depois do
    outro. A faixa fica com o PRIMEIRO registro do dia (não pode ficar sozinha no
    pé da página). */
@@ -7312,6 +7316,46 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{
 }
 
 /* =====================================================================
+   A OBSERVAÇÃO DO FRETE NA TELA (06/10/2026)
+   ---------------------------------------------------------------------
+   A pergunta antes de contratar (#modal-frete-contratar), o selo da Torre e
+   da Fila e o botão da coluna Frete da Montagem. Cores fixas por tema para
+   o contraste valer nos dois (a lição do portão 44: dourado sobre claro deu
+   1,33). Só tela — no papel quem fala é o relatório.
+   ===================================================================== */
+@media screen{
+  #modal-frete-contratar .frete-c-opcoes{ border:0; padding:0; margin:12px 0 4px; display:flex; flex-direction:column; gap:8px }
+  #modal-frete-contratar .frete-c-op{ display:flex; gap:10px; align-items:flex-start; padding:10px 12px; border:1px solid var(--border);
+    border-radius:var(--radius-sm, 6px); cursor:pointer; line-height:1.4 }
+  #modal-frete-contratar .frete-c-op:has(input:checked){ border-color:var(--gold); box-shadow:0 0 0 1px var(--gold) inset }
+  #modal-frete-contratar .frete-c-op input{ margin-top:3px; width:18px; height:18px; flex:none }
+  #modal-frete-contratar .frete-c-valor{ display:flex; flex-direction:column; gap:4px; padding-left:40px; font-weight:600 }
+  #modal-frete-contratar .frete-c-valor[hidden]{ display:none }
+  #modal-frete-contratar .frete-c-valor input{ max-width:220px; font-size:16px }
+  #modal-frete-contratar .frete-c-erro{ margin-top:8px; padding:8px 10px; border-radius:6px; background:#5a1f22; color:#ffd6d9; font-weight:600 }
+  :root[data-tema="claro"] #modal-frete-contratar .frete-c-erro{ background:#fde2e4; color:#8b1a24 }
+
+  /* O selo na célula do veículo — mesmo desenho dos chips de lacre. */
+  .selo-frete{ display:inline-block; margin-top:3px; margin-right:4px; padding:1px 7px; border-radius:4px; font:inherit;
+    font-size:11px; font-weight:700; letter-spacing:.01em; white-space:nowrap; cursor:pointer; border:1px solid var(--border);
+    background:transparent; color:var(--text-dim) }
+  .selo-frete-definir{ background:#5a1f22; border-color:#c05a62; color:#ffd6d9 }
+  :root[data-tema="claro"] .selo-frete-definir{ background:#fde2e4; border-color:#c05a62; color:#8b1a24 }
+  .selo-frete-combinado{ border-color:var(--gold-dim); color:var(--gold-text, var(--gold)) }
+  .selo-frete:focus-visible{ outline:2px solid var(--gold); outline-offset:1px }
+
+  /* A coluna Frete da Montagem: valor da tabela em cima, observação embaixo. */
+  .frete-mont-btn{ display:inline-flex; flex-direction:column; align-items:flex-end; gap:1px; width:100%; padding:2px 4px;
+    border:1px solid transparent; border-radius:4px; background:transparent; color:inherit; font:inherit; cursor:pointer; line-height:1.15 }
+  .frete-mont-btn:hover, .frete-mont-btn:focus-visible{ border-color:var(--border) }
+  .frete-mont-valor{ font-variant-numeric:tabular-nums; font-weight:600 }
+  .frete-mont-obs{ font-size:10.5px; font-weight:700; color:var(--text-dim); white-space:nowrap }
+  .frete-mont-combinado .frete-mont-obs{ color:var(--gold-text, var(--gold)) }
+  .frete-mont-definir .frete-mont-obs{ color:#ff9aa2 }
+  :root[data-tema="claro"] .frete-mont-definir .frete-mont-obs{ color:#a3202c }
+}
+
+/* =====================================================================
    RELATÓRIOS, HISTÓRICO E PROGRAMAÇÃO — MENOS CAIXINHA, CAMPO NO TAMANHO
    DO QUE CABE NELE (28/09/2026)
    ---------------------------------------------------------------------
@@ -7867,6 +7911,14 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{
   @media (prefers-reduced-motion: reduce){
     #tab-frete .frete-chip, .modal-box-frete .frete-drop{ transition:none }
   }
+}
+
+/* Editar / Excluir no fim da linha (06/10/2026). O Excluir é o único vermelho
+   da linha: ação que tira a carga da lista não pode parecer com as outras. */
+@media screen {
+  #tab-frete td.frete-acoes .frete-btn-excluir{ margin-left:var(--sp-2) }
+  .modal-box-frete .frete-check-campo .frete-check{ display:flex; align-items:center; gap:var(--sp-2); min-height:40px }
+  .modal-box-frete .frete-prev-excluida, .frete-prev-excluida{ color:var(--warn, #b45309) }
 }
 
 /* =====================================================================
@@ -8734,28 +8786,30 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{
       <div class="form-row">
         <div class="form-group"><label>Peso (kg)</label><input type="text" inputmode="numeric" id="prog-peso" min="0"></div>
       </div>
-      <!-- FRETE (09/09/2026). O DESTINO puxa o KM da tabela; o KM DE
-           DESLOCAMENTO é o que de fato será pago e pode divergir (desvio,
-           retorno, coleta no caminho). Os dois existem porque são duas
-           perguntas — a referência e o efetivo.
-           Sem KM e sem observação a carga não recebe placa: decisão do dono
-           ("1 trava a contratacao", "2 observacao obrigatoria"). -->
+      <!-- FRETE (06/10/2026). Um KM só: o DESTINO puxa o KM da tabela e ele
+           continua editável. O valor não se digita — é KM × tarifa, conta do
+           servidor. Decisão do dono: "somente o KM pode ser editavel" e "KM
+           de deslocamento não é necessário. KM divergente não é necessário".
+           O campo de referência continua no formulário, escondido, porque é
+           ele que guarda o KM da tabela na carga (kmDestino).
+           Ao receber placa, a carga pergunta a observação do frete (TABELA
+           ou COMBINADO com o valor) — app/41_frete_da_carga.js. -->
       <div class="form-row">
         <div class="form-group" style="flex:2">
           <label>Destino do frete <span class="hint">(puxa o KM da tabela)</span></label>
           <input type="text" id="prog-frete-destino" list="lista-destinos-frete"
                  placeholder="Ex: GOIANIA" oninput="destinoFreteMudouUI()">
         </div>
-        <div class="form-group">
+        <div class="form-group" hidden>
           <label>KM destino <span class="hint">referência da tabela</span></label>
           <input type="text" inputmode="numeric" id="prog-km-destino" min="1" step="1" readonly
                  title="Vem da Tabela de Frete. Só de leitura: para mudar, edite o destino em Cadastros.">
         </div>
         <div class="form-group">
-          <label>KM deslocamento <span class="hint">o que será pago</span></label>
+          <label>KM <span class="hint">vem do destino; editável</span></label>
           <input type="text" inputmode="decimal" id="prog-km-deslocamento"
                  oninput="kmDeslocamentoMudouUI()"
-                 title="O KM que multiplica a tarifa. Diferente do KM do destino quando há desvio, retorno ou coleta no caminho.">
+                 title="O KM que multiplica a tarifa. Vem da Tabela de Frete pelo destino; corrija aqui se a viagem for outra.">
         </div>
       </div>
       <div class="form-group" id="prog-frete-aviso" style="margin-bottom:10px"></div>
@@ -10086,6 +10140,8 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{
                   title="Baixa a planilha Excel com exatamente o que está nesta tela (CONTROLE_CARGAS, RESUMO e LEIA-ME)."><svg class="ico ico-btn" aria-hidden="true"><use href="#i-baixar"/></svg>Exportar planilha</button>
           <button class="btn btn-sec" id="frete-btn-pdf" data-documento="pagamento-frete" onclick="freteExportarPdf()"
                   title="Gera o PDF detalhado do que está nesta tela: o filtro escrito no topo, uma linha por carga e as notas pendentes de cada uma, com a tratativa."><svg class="ico ico-btn" aria-hidden="true"><use href="#i-baixar"/></svg>Exportar PDF</button>
+          <button class="btn btn-sec" id="frete-btn-excluidas" onclick="freteExcluidasUI()"
+                  title="As cargas excluídas do controle: quem excluiu, quando e por quê — e o botão para restaurar."><svg class="ico ico-btn" aria-hidden="true"><use href="#i-lixeira"/></svg>Excluídas</button>
           <button class="btn btn-sec" onclick="freteCarregar()" title="Relê do servidor"><svg class="ico ico-btn" aria-hidden="true"><use href="#i-atualizar"/></svg>Atualizar</button>
         </div>
       </div>
@@ -10336,6 +10392,31 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{
   </div>
 </div>
 
+<!-- A OBSERVAÇÃO DO FRETE (06/10/2026). Uma janela só para todos os pontos
+     de contratação (Programação, Montagem, Torre/Fila, chegada da Portaria):
+     pergunta em vez de bloquear, como manda a regra da casa. app/41_frete_da_carga.js -->
+<div class="modal-overlay" id="modal-frete-contratar" role="dialog" aria-modal="true" aria-labelledby="frete-c-titulo">
+  <div class="modal-box">
+    <h2 id="frete-c-titulo">Observação do frete</h2>
+    <div class="card-sub" id="frete-c-contexto"></div>
+    <div class="fat-conf" id="frete-c-resumo"></div>
+    <fieldset class="frete-c-opcoes">
+      <legend class="sr-only">O que vale para o pagamento</legend>
+      <label class="frete-c-op"><input type="radio" name="frete-c-obs" id="frete-c-tabela" value="TABELA" onchange="freteContratarOpcaoUI()">
+        <span><strong>TABELA</strong> — vale o valor calculado pelo KM <span id="frete-c-valor-tabela"></span></span></label>
+      <label class="frete-c-op"><input type="radio" name="frete-c-obs" id="frete-c-combinado" value="COMBINADO" onchange="freteContratarOpcaoUI()">
+        <span><strong>COMBINADO</strong> — foi negociado outro valor</span></label>
+      <label class="frete-c-valor" id="frete-c-valor-wrap" hidden>Valor combinado (R$)
+        <input type="text" inputmode="decimal" id="frete-c-valor" placeholder="ex.: 14.000,00" autocomplete="off"></label>
+    </fieldset>
+    <div class="frete-c-erro" id="frete-c-erro" role="alert" hidden></div>
+    <div class="flex-end">
+      <button class="btn btn-sec" id="frete-c-cancelar" onclick="freteContratarResponder(null)">Cancelar</button>
+      <button class="btn btn-primary" id="frete-c-confirmar" onclick="freteContratarConfirmarUI()">Confirmar frete</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="modal-faturar">
   <div class="modal-box">
     <h2>Confirmar faturamento</h2>
@@ -10389,36 +10470,32 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{
     <div class="form-row">
       <div class="form-group"><label>Peso (kg)</label><input type="text" inputmode="numeric" id="completar-peso" min="0"></div>
     </div>
-    <!-- FRETE, também aqui (09/09/2026). Os mesmos três campos, na mesma
-         ordem — a regra do card acima vale: quem mexe numa tela mexe na
-         outra, e existe teste que reprova se divergirem.
+    <!-- FRETE, também aqui. Os mesmos campos, na mesma ordem do formulário
+         da Programação — quem mexe numa tela mexe na outra, e existe teste
+         que reprova se divergirem.
 
-         AQUI NÃO TRAVA. O caminhão JÁ ESTÁ no pátio: a placa foi digitada
-         pela Portaria na chegada, então este lançamento não é o ato de
-         contratar, e o servidor não exige (a trava é a passagem de "sem
-         placa" para "com placa"). Travar uma carga de caminhão que já
-         encostou seria literalmente caminhão parado no portão.
-
-         O campo existe para o KM ser informado NA HORA em que alguém sabe
-         dele. Se ficar vazio, o relatório de fretes mostra a linha com o
-         motivo escrito ("Sem KM de deslocamento") em vez de uma célula
-         muda — visível para a Administração completar, e não um zero
-         silencioso. -->
+         Até 06/10/2026 esta tela NÃO travava, porque o caminhão já está no
+         pátio. Mudou por decisão do dono ("sempre, sem excessoes o valor do
+         frete combinado precisa ser colocado"): completar a chegada é o
+         momento em que a carga vira contratada, então a observação do frete
+         é perguntada aqui também (salvarCompletarCarga). A pergunta não
+         bloqueia o portão — o caminhão já entrou; ela só não deixa a carga
+         virar carga sem dizer como o frete foi fechado. -->
     <div class="form-row">
       <div class="form-group" style="flex:2">
         <label>Destino do frete <span class="hint">(puxa o KM da tabela)</span></label>
         <input type="text" id="completar-frete-destino" list="lista-destinos-frete"
                placeholder="Ex: GOIANIA" oninput="destinoFreteCompletarUI()">
       </div>
-      <div class="form-group">
+      <div class="form-group" hidden>
         <label>KM destino <span class="hint">referência da tabela</span></label>
         <input type="text" inputmode="numeric" id="completar-km-destino" min="1" step="1" readonly
                title="Vem da Tabela de Frete. Só de leitura: para mudar, edite o destino em Cadastros.">
       </div>
       <div class="form-group">
-        <label>KM deslocamento <span class="hint">o que será pago</span></label>
+        <label>KM <span class="hint">vem do destino; editável</span></label>
         <input type="text" inputmode="decimal" id="completar-km-deslocamento"
-               title="O KM que multiplica a tarifa. Diferente do KM do destino quando há desvio, retorno ou coleta no caminho.">
+               title="O KM que multiplica a tarifa. Vem da Tabela de Frete pelo destino; corrija aqui se a viagem for outra.">
       </div>
     </div>
     <div class="form-row">
@@ -11163,6 +11240,8 @@ const SuincoSharePoint = (function () {
       freteDestino: campos.Frete_Destino || '',
       kmDeslocamento: campos.Km_Deslocamento ?? null,
       freteDocumento: campos.Frete_Documento || '',
+      freteObservacao: campos.Frete_Observacao || '',
+      freteCombinado: campos.Frete_Combinado ?? null,
       // Versão lida pelo terminal — bloqueio otimista (ver data.js, pacote de ida).
       versao: Number.isFinite(Number(campos.Versao)) ? Number(campos.Versao) : undefined,
       status: campos.Status_Atual,
@@ -11230,6 +11309,8 @@ const SuincoSharePoint = (function () {
       Frete_Destino: c.freteDestino || '',
       Km_Deslocamento: c.kmDeslocamento ?? null,
       Frete_Documento: c.freteDocumento || '',
+      Frete_Observacao: c.freteObservacao || '',
+      Frete_Combinado: c.freteCombinado ?? null,
       Km_Destino: c.kmDestino ?? null,
       Frete_Valor: c.freteValor ?? null,
       Frete_Tarifa_Usada: c.freteTarifaUsada ?? null,
@@ -12646,6 +12727,20 @@ const SuincoSharePoint = (function () {
     historico(numero) {
       return chamar('/api/pagamento-frete/cargas/' + encodeURIComponent(numero) + '/historico');
     },
+    /* Excluir sai da lista e fica no histórico (migração 062); restaurar desfaz. */
+    excluir(numero, motivo, confirmar) {
+      return chamar('/api/pagamento-frete/cargas/' + encodeURIComponent(numero) + '/excluir',
+        { metodo: 'POST', corpo: { motivo, confirmar: !!confirmar } });
+    },
+    restaurar(numero) {
+      return chamar('/api/pagamento-frete/cargas/' + encodeURIComponent(numero) + '/restaurar', { metodo: 'POST', corpo: {} });
+    },
+    excluidas() { return chamar('/api/pagamento-frete/excluidas'); },
+    /* Pagar UMA nota pendente (migração 063): soma uma nota no % pago. */
+    pagarNota(numero, nota, corpo) {
+      return chamar('/api/pagamento-frete/cargas/' + encodeURIComponent(numero) + '/pendencias/' + encodeURIComponent(nota) + '/pagar',
+        { metodo: 'POST', corpo });
+    },
     /* O .xlsx não é JSON: vai direto pelo fetch, com o mesmo crachá. */
     async baixarPlanilha(params) {
       const t = lerToken();
@@ -12956,7 +13051,7 @@ const SuincoSharePoint = (function () {
 
 </script>
 <script>window.FROTA_SEED_CSV = "Placa,Transportadora,TipoVeiculo,PrecisaRevisao\nAAK8958,Cooperativa dos Transportadores Unidos Ltda.,Carreta,Nao\nAFZ8792,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nAHG5900,Coopertral,Carreta,Nao\nAJM6032,Logmaster Armazem e Logistica Ltda,Carreta,Nao\nAJY3407,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nAMU5835,Sandra Campanholo Transportes-ME,Carreta,Nao\nANA6563,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nANE3214,Noelia de Sousa Machado,3/4,Nao\nAPA4111,Cooperativa de Transp e Logist de Sao Sebastiao do Oeste Mg,Carreta,Nao\nAPA4B11,Cooperativa de Transp e Logist de Sao Sebastiao do Oeste Mg,Carreta,Nao\nAPN0660,Tais Simoes Me,Carreta,Nao\nAQP1978,R A de Castilho Transportes,Carreta,Nao\nARA0338,Fidelis Transportes Ltda.,Bitruck,Nao\nARF4702,Cisne Branco Transportes Ltda EPP,Carreta,Nao\nARF4H02,Cisne Branco,Carreta,Nao\nARX9505,Friocargo Triangulo Ltda,Carreta,Nao\nASE5007,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nASE5A07,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nASG3E42,Baixotes Transportes,Carreta,Nao\nASQ2913,Washington L S Costa Junior - ME,Truck,Nao\nATD5001,Transportadora Multi Express Ltda,Carreta,Nao\nATF4700,Fidelis Transportes Ltda.,Carreta,Nao\nATK3B08,Transportadora Multi Express Ltda,Carreta,Nao\nATM1380,Coopernova Coop Riobranquense de Transporte,Carreta,Nao\nATM1480,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nATO2450,Fidelis Transportes Ltda.,Bitruck,Nao\nATZ9H26,Omega X Solucoes em Logistica e Armazenagem Ltda,Carreta,Nao\nAUH8324,Transportadora Multi Express Ltda,Carreta,Nao\nAVD4546,Transportadora Multi Express Ltda,Bitruck,Nao\nAVD4F46,Giselda Aparecida Gomes Mundim Araujo,Bitruck,Nao\nAVT3222,Fidelis Transportes Ltda.,Carreta,Nao\nAVV3F98,Jorge Lemes da Silva Junior ME,Carreta,Nao\nAZC5116,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nAZC5B17,Cooperativa dos Transportadores Unidos Ltda.,Carreta,Nao\nAZI4219,Fidelis Transportes Ltda.,Bitruck,Nao\nAZS1H23,Cisne Branco Transportes Ltda EPP,Carreta,Nao\nAZV4440,Trans Thalia Transportes Ltda.,Carreta,Nao\nBAH8650,Renato Pereira Lima,3/4,Nao\nBAW4341,Log SPM Ltda,Bitruck,Nao\nBBL9819,Fidelis Transportes Ltda.,Bitruck,Nao\nBBW1552,PH Fidelis Transportes e Representacoes Ltda,Carreta,Nao\nBCH0685,Gold Star,Container,Nao\nBCN2B65,Fidelis Transportes Ltda.,Bitruck,Nao\nBDB2J69,Fidelis Transportes Ltda.,Truck,Nao\nBDF5110,Candido Ribeiro do Vale Neto Com de Bebidas e Transportes,Carreta,Nao\nBDZ3108,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nBDZ3B08,Miranda Lacerda Transportes Ltda.,Carreta,Nao\nBDZ7E36,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nBRY0423,Transmartyna Ltda ME,Carreta,Nao\nBRY3559,Transmartyna Ltda ME,Carreta,Nao\nBTR0404,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nBTR0D21,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nBTR2914,R A de Castilho Transportes,Carreta,Nao\nBUP9005,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nBWM8222,R A de Castilho Transportes,Carreta,Nao\nBWQ3386,R A de Castilho Transportes,Carreta,Nao\nBWV4948,Gold Star,Container,Nao\nCDM5889,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nCDM5I89,Cooperativa dos Transportadores Unidos Ltda.,Carreta,Nao\nCLH0866,R A de Castilho Transportes,Carreta,Nao\nCLH2450,Cargofrio Logística e Armazenamento Ltda,Carreta,Nao\nCLK5647,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nCNI9559,Gold Star,Container,Nao\nCNP5E57,Coopertral,Carreta,Nao\nCPG7D79,Candido Ribeiro do Vale Neto Com de Bebidas e Transportes,Carreta,Nao\nCPJ2722,Transmartyna Ltda ME,Carreta,Nao\nCPJ3104,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nCPJ5624,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nCUA4984,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nCUA6452,R A de Castilho Transportes,Carreta,Nao\nCUA7761,Transmartyna Ltda ME,Carreta,Nao\nCUB2232,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nCUC4J12,Rodosousa,Truck,Nao\nCUC9963,R A de Castilho Transportes,Carreta,Nao\nCUE2313,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nCUE2750,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nCUH6E50,Cooperativa dos Transportadores Unidos Ltda.,Carreta,Nao\nCVN0C42,Patos Logística Eirelli,Carreta,Nao\nCVN1345,R A de Castilho Transportes,Carreta,Nao\nCYN6310,R A de Castilho Transportes,Carreta,Nao\nCYR8983,Flay Logistica e Armazenagem Ltda,Truck,Nao\nCZX7719,Cisne Branco Transportes Ltda EPP,Carreta,Nao\nDAO0759,Gold Star,Container,Nao\nDAO2512,Trans Frios Transportes e Logistica Ltda ME,Truck,Nao\nDAO2888,Noelia de Sousa Machado,Truck,Nao\nDAO2981,Friocargo Norte Ltda,3/4,Nao\nDAO2H44,Friocargo Norte Ltda,Carreta,Nao\nDAO4959,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nDAO4J59,Transportadora Baixotes Transportes Ltda,Carreta,Nao\nDAO9753,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nDBB8B81,Transmartyna Ltda ME,Carreta,Nao\nDBB8E52,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nDBM4895,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nDBM8771,TAC Transportes Armazenagem e Logistica,Truck,Nao\nDBM9754,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nDBP3272,R A de Castilho Transportes,Carreta,Nao\nDBP3294,R A de Castilho Transportes,Carreta,Nao\nDBP4407,Transportes e Armazenagem Zilli Ltda,Truck,Nao\nDJB9549,Cisne Branco,Carreta,Nao\nDJB9651,Cisne Branco Transportes Ltda EPP,Carreta,Nao\nDJE1454,Cooperativa dos Transportadores Unidos Ltda.,Carreta,Nao\nDJF1B66,Omega X Solucoes em Logistica e Armazenagem Ltda,Carreta,Nao\nDJF7527,Cisne Branco,Carreta,Nao\nDJF8527,Cisne Branco,Carreta,Nao\nDKR6382,Solucao Transportes e Servicos Eireli,Carreta,Nao\nDKT5G89,AJB Transportes,Toco,Nao\nDPB0054,Cisne Branco Transportes Ltda EPP,Carreta,Nao\nDPB1843,Cooperativa dos Transportadores Unidos Ltda.,Carreta,Nao\nDPB1856,Mix Transportes Rodoviarios Ltda - ME,Carreta,Nao\nDPB1862,Cisne Branco,Carreta,Nao\nDPB1863,Cisne Branco Transportes Ltda EPP,Carreta,Nao\nDPB1864,Coopertral,Carreta,Nao\nDPC9846,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nDPE9545,Cisne Branco Transportes Ltda EPP,Carreta,Nao\nDPF3916,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nDPF9524,Maxfrios Distribuidora e Transporte Eireli,Truck,Nao\nDQS1031,Posto Vanete Ltda,Carreta,Nao\nDQS1041,Posto Vanete Ltda,Carreta,Nao\nDQS1048,Omega X Solucoes em Logistica e Armazenagem Ltda,Carreta,Nao\nDQS9035,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nDSG0571,Flay Logistica e Armazenagem Ltda,Truck,Nao\nDTA3156,Cisne Branco,Carreta,Nao\nDTB2717,Cisne Branco Transportes Ltda EPP,Carreta,Nao\nDTD8890,TAC Transportes Armazenagem e Logistica,Toco,Nao\nDTE9880,Giselda Aparecida Gomes Mundim Araujo,Bitruck,Nao\nDTV5836,R A de Castilho Transportes,Carreta,Nao\nDVS2609,Cisne Branco,Carreta,Nao\nDVS2685,Marizileia Transportes,Carreta,Nao\nDVS2708,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nDVS2765,Cisne Branco Transportes Ltda EPP,Carreta,Nao\nDVS2H08,Brasfrios Logistica e Transportes Ltda,Carreta,Nao\nDVS2H66,MMS Armazenagem e Logistica SA,Carreta,Nao\nDVS3653,Cisne Branco,Carreta,Nao\nDVT9G10,Baixotes Transportes,Carreta,Nao\nDXV8593,Transmartyna Ltda ME,Carreta,Nao\nEBQ6E39,Gold Star,Container,Nao\nECU2747,Transmartyna Ltda ME,Carreta,Nao\nEFO7220,Maria Hildete Santana de Matos,Toco,Nao\nEFO7709,Transmartyna Ltda ME,Carreta,Nao\nEFU0217,Isavic Transporte e Armazenamento Ltda,Truck,Nao\nEFW0G14,Tais Simoes Me,Carreta,Nao\nEFW8180,Cooperativa de Transp e Logist de Sao Sebastiao do Oeste Mg,Carreta,Nao\nEGK9135,Lacerda Barros Transportes Ltda.,Carreta,Nao\nEHH8269,Omega X Solucoes em Log e Armazenagem Ltda,Carreta,Nao\nELW5G48,Manoel Araujo Dantas Transportes,3/4,Nao\nEOA5B19,Cisne Branco,Carreta,Nao\nEOE2358,Transportes Zanini Ltda,Carreta,Nao\nEOE5228,Washington L S Costa Junior - ME,Bitruck,Nao\nEPG0A36,Suinco,3/4,Nao\nEPU7319,Transportadora Multi Express Ltda,Carreta,Nao\nEPU7D19,Transportes e Armazenagem Zilli Ltda,Carreta,Nao\nEPU9647,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nESU1150,TAC Transportes Armazenagem e Logistica,Truck,Nao\nESU2194,ASAPH Transportes Ltda.,Carreta,Nao\nESU4I15,Avila Transportes Ltda Me,3/4,Nao\nESU6032,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nESU6206,R A de Castilho Transportes,Carreta,Nao\nESU6906,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nESU6909,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nEVK0647,Matheus Gomes Mundim Araujo - ME,Toco,Nao\nEVK0G47,Marques e Silva,Toco,Nao\nEVO1H32,Gold Star,Container,Nao\nEVO4763,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nEVP6973,R A de Castilho Transportes,Carreta,Nao\nEWJ7D98,Gold Star,Container,Nao\nEWU5609,Transportes e Armazenagem Zilli Ltda,Carreta,Nao\nEYS5406,Transmartyna Ltda ME,Carreta,Nao\nEZL8720,Transportadora Multi Express Ltda,Carreta,Nao\nFCF5910,RN Transporte e Logistica Ltda,3/4,Nao\nFCT9179,Gold Star,Container,Nao\nFCZ2465,Gold Star,Container,Nao\nFDC2122,AC Transportes,Carreta,Nao\nFDC7122,AC Logística,Carreta,Nao\nFEI3101,R A de Castilho Transportes,Carreta,Nao\nFEI3956,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nFEI4913,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nFFI1091,Friocargo Norte Ltda,Toco,Nao\nFFI1G03,MMS Armazenagem e Logistica SA,Carreta,Nao\nFFN9122,Cisne Branco,Carreta,Nao\nFJX0166,Transmartyna Ltda ME,Carreta,Nao\nFKJ7020,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nFKS0886,R A de Castilho Transportes,Carreta,Nao\nFLI6857,Isavic Transporte e Armazenamento Ltda,Bitruck,Nao\nFLI6I57,Marques e Silva,Bitruck,Nao\nFOI8313,Transmartyna Ltda ME,Carreta,Nao\nFPI6789,R A de Castilho Transportes,Carreta,Nao\nFPJ8120,Roosevelt Marques da Silva,Bitruck,Nao\nFPJ8I20,Marques e Silva,Bitruck,Nao\nFQV1237,Transmartyna Ltda ME,Carreta,Nao\nFRS4F21,Marques e Silva,Bitruck,Nao\nFSH2870,Log SPM Ltda,Carreta,Nao\nFST8019,Gold Star,Container,Nao\nFSZ8297,Multi Express,Carreta,Nao\nFTY2826,Rodrigo A Rossi e Cia Ltda Me,Truck,Nao\nFTZ2138,AJB Transportes,Truck,Nao\nFVA0A95,Denia Transportes,Carreta,Nao\nFZZ8821,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nGBR3719,Dorsum Transporte e Logistica Eireli,Carreta,Nao\nGFK8080,Friocargo Norte Ltda,Bitruck,Nao\nGFK8A80,Denia Transportes,Bitruck,Nao\nGHC0660,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nGHC3058,Cooperativa dos Transportadores Unidos Ltda.,Carreta,Nao\nGRA9825,Transportes e Armazenagem Zilli Ltda,Truck,Nao\nGRE3345,TAC Transportes Armazenagem e Logistica,Truck,Nao\nGRE4738,Denia Transportes,Truck,Nao\nGSW0386,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nGSW0509,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nGSW0709,Cooperativa Riobranquense de Transportes Ltda.,Truck,Nao\nGSW7938,Transportes e Armazenagem Zilli Ltda,Truck,Nao\nGVH1A92,Marques e Silva,Toco,Nao\nGVI5286,Flay Logistica e Armazenagem Ltda,Truck,Nao\nGVQ1260,Transportadora Multi Express Ltda,Carreta,Nao\nGVQ6746,Flay Logistica e Armazenagem Ltda,Truck,Nao\nGVQ8934,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nGWI3849,Flay Logistica e Armazenagem Ltda,Truck,Nao\nGWI4688,TAC Transportes Armazenagem e Logistica,Truck,Nao\nGWI4773,Posto Vanete Ltda,Carreta,Nao\nGWI4H60,Cirio Alves de Oliveira Junior - Transportes,3/4,Nao\nGWI8D40,Coopediesel,Carreta,Nao\nGXA0293,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nGXH6D13,Cirio Alves de Oliveira Junior - Transportes,Truck,Nao\nGXM5591,TAC Transportes Armazenagem e Logistica,Truck,Nao\nGXM5C08,Transportadora Multi Express Ltda,Bitruck,Nao\nGXS2438,Matheus Gomes Mundim Araujo - ME,3/4,Nao\nGXS7634,Lagam Transportes & Logistica Ltda,Bitruck,Nao\nGYS6028,Omega X Solucoes em Logistica e Armazenagem Ltda,Truck,Nao\nGYT1208,Trans Frios Transportes e Logistica Ltda ME,Truck,Nao\nGZG1203,Posto Vanete Ltda,Carreta,Nao\nGZG4309,TAC Transportes Armazenagem e Logistica,Bitruck,Nao\nHAX4227,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nHBC1622,Cooperativa de Transportes Montenegro Ltda,Truck,Nao\nHBG6828,Cooperativa Riobranquense de Transportes Ltda.,Toco,Nao\nHBK6688,Cargofrio Logística e Armazenamento Ltda,Truck,Nao\nHBN0986,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nHBN1461,TAC Transportes Armazenagem e Logistica,Truck,Nao\nHBN5086,TAC Transportes Armazenagem e Logistica Ltda,Truck,Nao\nHBN8111,Omega X Solucoes em Log e Armazenagem Ltda,Bitruck,Nao\nHBN8437,Cooperativa de Transportes Montenegro Ltda,Truck,Nao\nHBN9825,Omega X Solucoes em Logistica e Armazenagem Ltda,Truck,Nao\nHBZ0228,Transportes Horizonte Frios Ltda,Truck,Nao\nHCQ6715,Agnaldo Gomes de Souza,Truck,Nao\nHCS8947,Suinco Cooperativa de Suinocultores Ltda,3/4,Nao\nHCW8714,Suinco Cooperativa de Suinocultores Ltda,3/4,Nao\nHDI9336,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nHDI9937,Cooperativa Riobranquense de Transprotes Ltda,3/4,Nao\nHDJ7625,Isavic Transporte e Armazenamento Ltda,Bitruck,Nao\nHEE9J46,Baixotes Transportes,Carreta,Nao\nHEH1386,Douglas Dornelas Figueiredo,Toco,Nao\nHFB9126,Washington L S Costa Junior - ME,Bitruck,Nao\nHFB9139,Cooperativa de Transp e Logist de Sao Sebastiao do Oeste Mg,Bitruck,Nao\nHFD4176,Coopertral,Carreta,Nao\nHFD4I76,Coopertral,Carreta,Nao\nHFF5A12,Denia Transportes,Carreta,Nao\nHFF5F12,Denia Transportes,Carreta,Nao\nHGH1150,Trans Frios Transportes e Logistica Ltda ME,Truck,Nao\nHGJ8864,Matheus Gomes Mundim Araujo - ME,Bitruck,Nao\nHHE9J46,Baixotes Transportes,Carreta,Nao\nHHG1808,Cooperativa Riobranquense de Transprotes Ltda,3/4,Nao\nHHI2962,Coopdiesel Coop de PF e PJ Seg Transportes em Geral,Toco,Nao\nHHI2J62,Marques e Silva,Toco,Nao\nHHK1101,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nHHK1128,Flay Logistica e Armazenagem Ltda,3/4,Nao\nHHK1143,Sidelia de Fatima Costa ME,3/4,Nao\nHHK1682,Transportes e Armazenagem Zilli Ltda,3/4,Nao\nHHW5634,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nHIA4316,Cooperativa Riobranquense de Transportes Ltda,Carreta,Nao\nHIB9619,Trans Frios Transportes e Logistica Ltda ME,Truck,Nao\nHIG4415,TAC Transportes Armazenagem e Logistica,3/4,Nao\nHIG4J37,TAC Transportes Armazenagem e Logistica,3/4,Nao\nHIJ4272,Transportadora Multi Express Ltda,Truck,Nao\nHIM0845,Aparicio Valmir Ferreira,3/4,Nao\nHIV1702,Washington L S Costa Junior - ME,Bitruck,Nao\nHJA3D75,Marques e Silva,Toco,Nao\nHJI9573,Transportes e Armazenagem Zilli Ltda,Toco,Nao\nHJI9585,Comercial TIVI Ltda.,Toco,Nao\nHJM3916,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nHJZ4521,Washington L S Costa Junior - ME,Bitruck,Nao\nHKE0322,Ailton Benedito Transportes Ltda,Bitruck,Nao\nHKE0D22,TAC Transportes Armazenagem e Logistica,Bitruck,Nao\nHKE5008,Isavic Transporte e Armazenamento Ltda,Carreta,Nao\nHKF3605,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nHKH0223,Flay Logistica e Armazenagem Ltda,Truck,Nao\nHLI0380,TAC Transportes Armazenagem e Logistica,Bitruck,Nao\nHLM4H60,Marques e Silva,Bitruck,Nao\nHLM4J60,Marques e Silva,Bitruck,Nao\nHLY7349,Cooperativa Riobranquense de Transportes Ltda.,Toco,Nao\nHLY7350,TAC Transportes Armazenagem e Logistica,Toco,Nao\nHLY7631,Cooperativa Riobranquense de Transportes Ltda.,Toco,Nao\nHLY7632,Suinco Cooperativa de Suinocultores Ltda,Toco,Nao\nHLY7G32,TAC Transportes Armazenagem e Logistica Ltda,Toco,Nao\nHLY8107,Suinco,3/4,Nao\nHLY8150,Suinco Cooperativa de Suinocultores Ltda,Toco,Nao\nHMV4954,Logmaster Armazem e Logistica Ltda,Carreta,Nao\nHMV4D02,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nHMV6367,Avila Transportes Ltda Me,3/4,Nao\nHNX2274,Trans Frios Transportes e Logistica Ltda ME,Bitruck,Nao\nHOF4678,Cooperativa Riobranquense de Transportes Ltda,Toco,Nao\nHPY3441,Mix Transportes Rodoviarios Ltda - ME,Carreta,Nao\nHQR8499,Cooperativa Riobranquense de Transportes Ltda.,Truck,Nao\nHQR8E99,Rodosousa,Truck,Nao\nHRS6838,RA Transportes e Logistica Eireli,Carreta,Nao\nHRS7035,Posto Vanete Ltda,Carreta,Nao\nHRS8397,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nHRS8D97,Coopertral,Carreta,Nao\nHSJ4627,Friocargo Norte Ltda,Carreta,Nao\nIAH4303,Washington L S Costa Junior - ME,3/4,Nao\nIAH8003,Sidelia de Fatima Costa ME,3/4,Nao\nIKB9915,Posto Vanete Ltda,Carreta,Nao\nIKU9328,Isavic Transporte e Armazenamento Ltda,Carreta,Nao\nILI3703,RN Transporte e Logistica Ltda,Carreta,Nao\nILI3H03,Baixotes Transportes,Carreta,Nao\nINT7417,Transportadora Multi Express Ltda,Carreta,Nao\nIOM9374,Cooperativa de Transp e Logist de Sao Sebastiao do Oeste Mg,Carreta,Nao\nISA1925,Transportes Prigol Ltda,Carreta,Nao\nIUL0644,Transportes Prigol Ltda,Carreta,Nao\nIUR2A43,HDX Transportes e Servicos Ltda,Carreta,Nao\nIUR7491,Transportadora Spellmeier Ltda,Bitruck,Nao\nIWH8877,Flay Logistica e Armazenagem Ltda,Bitruck,Nao\nIYD3003,Tais Simoes Me,Carreta,Nao\nIYD4400,Foba Transportes Ltda - ME,Carreta,Nao\nIYX2917,Senio Transportes de cargas Rodoviaria Ltda,Carreta,Nao\nIYY1676,Transportes Prigol Ltda,Carreta,Nao\nJDD0140,Posto Vanete Ltda,Bitruck,Nao\nJGZ0468,Flay Logistica e Armazenagem Ltda,Bitruck,Nao\nJHJ6232,Friocargo Norte Ltda,3/4,Nao\nJHX6373,Transportadora Multi Express Ltda,Bitruck,Nao\nJIB3H29,Cirio Alves de Oliveira Junior - Transportes,3/4,Nao\nJIG4767,Friocargo Triangulo Ltda,3/4,Nao\nJJB8946,Denia Transportes,Truck,Nao\nJOC2635,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nJOK0854,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nJOK0I54,Denia Transportes,Carreta,Nao\nJRC5555,Trans Shirley Transportes Ltda.,Carreta,Nao\nJRR2673,Transportadora Sudoeste Ltda,Toco,Nao\nJXX9H64,Coopertral,Carreta,Nao\nJYJ8844,Transportadora Multi Express Ltda,Carreta,Nao\nJZS5651,Vivan Transportes Ltda,Carreta,Nao\nKAC3J94,Gold Star,Container,Nao\nKAN5655,Wandell Fabiano Jordao,3/4,Nao\nKBY1081,R A de Castilho Transportes,Carreta,Nao\nKDJ7A83,Patos Logística Eirelli,Carreta,Nao\nKEB0368,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nKER9906,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nKER9J06,Tais Simoes Me,Carreta,Nao\nKEY0318,Cooperativa de Transp e Logist de Sao Sebastiao do Oeste Mg,Carreta,Nao\nKJZ5157,MMS Armazenagem e Logistica SA,Truck,Nao\nKLA3D75,Baixotes Transportes,Carreta,Nao\nKLA7375,Transportadora Baixotes Transportes Ltda,Carreta,Nao\nKLA7D75,Baixotes Transportes,Carreta,Nao\nKTC4518,R A de Castilho Transportes,Carreta,Nao\nKWE2956,AC Armazenagem,Carreta,Nao\nKWE2J56,AC Transportes,Carreta,Nao\nKYP8147,Rodosousa Transportes Ltda,3/4,Nao\nKZR8291,Trans Frios Transportes e Logistica Ltda ME,Toco,Nao\nLBJ8963,Cooperativa dos Transportadores Unidos Ltda.,Carreta,Nao\nLMO2E88,AC Transportes,Truck,Nao\nLMO8E88,AC Transportes,Truck,Nao\nLRD9999,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nLUX5135,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nLWS0237,R A de Castilho Transportes,Carreta,Nao\nLXV1767,GTRANS ALVES TRANSPORTES DE CARGAS LTDA,Carreta,Nao\nLXV5629,Posto Vanete Ltda,Carreta,Nao\nLYL4634,Fidelis Transportes Ltda.,Carreta,Nao\nLYU2742,Posto Vanete Ltda,Carreta,Nao\nLZN2849,RA Transportes e Logistica Eireli,Carreta,Nao\nMBA1451,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nMBJ3588,Omega X Solucoes em Logistica e Armazenagem Ltda,Carreta,Nao\nMBK0133,GF Transportes Ltda.,Carreta,Nao\nMBS0127,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nMCA9D22,ASAPH Transportes Ltda.,Carreta,Nao\nMCI0D83,Coopertral,Carreta,Nao\nMCO2936,ASAPH Transportes Ltda.,Carreta,Nao\nMCT6033,Transportes e Armazenagem Zilli Ltda,Carreta,Nao\nMCV0B18,AC Logística,Carreta,Nao\nMCY1282,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nMDG5672,Tais Simoes Me,Carreta,Nao\nMDH7292,Omega X Solucoes em Log e Armazenagem Ltda,Carreta,Nao\nMDL8499,Christine Prodocimo Roesel Marciano ME,Carreta,Nao\nMDM9D65,Isavic Transportes e Armazenagem Ltda,Carreta,Nao\nMDY6143,Omega X Solucoes em Logistica e Armazenagem Ltda,Carreta,Nao\nMEC0238,ASAPH Transportes Ltda.,Carreta,Nao\nMEG4089,Omega X Solucoes em Logistica e Armazenagem Ltda,Carreta,Nao\nMEG4A89,Omega X Solucoes em Logistica e Armazenagem Ltda,Carreta,Nao\nMEJ7716,Coopertral,Carreta,Nao\nMEO7544,Isavic Transporte e Armazenamento Ltda,Carreta,Nao\nMEV8145,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nMEX6H74,Omega X Solucoes em Logistica e Armazenagem Ltda,Carreta,Nao\nMFC2421,Transportadora Baixotes Transportes Ltda,Carreta,Nao\nMFC8804,TAC Transportes Armazenagem e Logistica,Truck,Nao\nMFF8179,Baixotes Transportes,Carreta,Nao\nMFF8879,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nMFF8I79,Baixotes Transportes,Carreta,Nao\nMFI7684,Omega X Solucoes em Logistica e Armazenagem Ltda,Carreta,Nao\nMFJ7671,Transportadora Baixotes Transportes Ltda,Carreta,Nao\nMFJ7G71,Baixotes Transportes,Carreta,Nao\nMFL9816,Carla da Silva Bruneti Trasp. Rodoviarios ME,Carreta,Nao\nMFM4128,Canada Transportes e Comercio Ltda.,Carreta,Nao\nMFM7088,Transportadora Baixotes Transportes Ltda,Carreta,Nao\nMFM7A88,Baixotes Transportes,Carreta,Nao\nMFN4147,Transportadora Multi Express Ltda,Carreta,Nao\nMFR0J29,Coopertral,Carreta,Nao\nMFT1992,Baixotes Transportes,Carreta,Nao\nMFT1J92,Baixotes Transportes,Carreta,Nao\nMFT5258,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nMFV8569,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nMFY8607,Sergio Nava e Cia Ltda,Carreta,Nao\nMGD4806,Isavic Transportes e Armazenagem Ltda,Carreta,Nao\nMGE5276,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nMGF8544,Omega X Solucoes em Logistica e Armazenagem Ltda,Carreta,Nao\nMGF9902,R A de Castilho Transportes,Carreta,Nao\nMGI4566,Canada Transportes e Comercio Ltda.,Carreta,Nao\nMGN4810,G S Puridade Transportes e Servicos Ltda,Carreta,Nao\nMGQ3782,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nMGR4809,Transportadora Multi Express Ltda,Carreta,Nao\nMGS0639,Canada Transportes e Comercio Ltda.,Carreta,Nao\nMGS8048,G S Puridade Transportes e Servicos Ltda,Carreta,Nao\nMGW0189,Cooperativa dos Transportadores Unidos Ltda.,Carreta,Nao\nMGY4450,Coopertral,Carreta,Nao\nMHB1468,TRANSPORTES BASSANI LTDA.,Carreta,Nao\nMHE7188,MMS Armazenagem e Logistica SA,Carreta,Nao\nMHF3C63,Denia Transportes,Truck,Nao\nMHF6C63,Denia Transportes,Carreta,Nao\nMHH8G10,RP Express,Carreta,Nao\nMHJ2202,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nMHJ5726,Transportadora Multi Express Ltda,Carreta,Nao\nMHK7293,Isavic Transportes e Armazenagem Ltda,Carreta,Nao\nMHM6045,Christine Prodocimo Roesel Marciano ME,Carreta,Nao\nMHN3D66,TransOliveira,Carreta,Nao\nMHN3D99,TransOliveira,Carreta,Nao\nMHR4B55,Coopertral,Carreta,Nao\nMHW7I56,Coopertral,Bitruck,Nao\nMHW9911,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nMIM8459,Friocargo Norte Ltda,Carreta,Nao\nMIQ6927,Posto Vanete Ltda,Carreta,Nao\nMIV2712,Kaipper Continental Transportes Ltda,Carreta,Nao\nMIZ0B87,Silva e Reis Transporte de Cargas Eireli Me,Carreta,Nao\nMJE7248,Transportes e Armazenagem Zilli Ltda,Carreta,Nao\nMJE8477,Canada Transportes,Carreta,Nao\nMJG1727,R A de Castilho Transportes,Carreta,Nao\nMJN3680,Christine Prodocimo Roesel Marciano ME,Carreta,Nao\nMJN7006,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nMJW3158,Denia Transportes,Carreta,Nao\nMJW3B58,Denia Transportes,Carreta,Nao\nMJW3C63,Denia Transportes,Carreta,Nao\nMKA7F71,MR Transportes,Carreta,Nao\nMKC1529,Gilmar Scariot Transportes,Carreta,Nao\nMKL9848,Posto Vanete Ltda,Carreta,Nao\nMKP9C15,Coopediesel,Carreta,Nao\nMKZ2997,Coop. de Tra. de Cargas do E. Santa Catarina,Carreta,Nao\nMLC4834,JCRM TRANSPORTES E LOGISTICA LTDA,Carreta,Nao\nMLK4271,Transportes e Armazenagem Zilli Ltda,Carreta,Nao\nMLN5130,Coop. de Tra. de Cargas do E. Santa Catarina,Carreta,Nao\nMLW7G66,Multi Express,Carreta,Nao\nMME8413,Transportes Zanini Ltda,Carreta,Nao\nMMH6129,Transportes Tozzo Ltda.,Carreta,Nao\nMMJ7G71,Baixotes Transportes,Carreta,Nao\nMMJ9E91,TransOliveira,Carreta,Nao\nMMJ9E99,TransOliveira,Carreta,Nao\nMRN5529,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nMRU6E28,G S Puridade Transportes e Servicos Ltda,Carreta,Nao\nMTC4550,Cooperativa Riobranquense de Transportes Ltda,Toco,Nao\nMWA6634,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nMXA2G32,Transportadora Multi Express Ltda,Carreta,Nao\nMXB5208,Bruno Sergio Ferreira,Carreta,Nao\nMXB5C08,AC Armazenagem,Carreta,Nao\nMXD1E41,Coopertral,Carreta,Nao\nNAB8188,Transportadora Multi Express Ltda,Carreta,Nao\nNCH2H15,AC Transportes,Carreta,Nao\nNCX0I40,Coopediesel,Carreta,Nao\nNFC3660,Marcus Eduardo Andrades Peres,Truck,Nao\nNFO1928,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nNGF2954,Cooperativa dos Transportadores Unidos Ltda.,Carreta,Nao\nNJB2858,Galvão & Messias Ltda.,Carreta,Nao\nNKE0329,RN Transporte e Logistica Ltda,Carreta,Nao\nNKK7412,SS LOG Transportes e Logistica Ltda,Carreta,Nao\nNKO0192,Transmartyna Ltda ME,Carreta,Nao\nNLP0479,Lagam Transportes & Logistica Ltda,Bitruck,Nao\nNPJ2578,Transportadora Multi Express Ltda,Carreta,Nao\nNPJ2F58,Multi Express,Carreta,Nao\nNPJ2F78,Multi Express,Carreta,Nao\nNUE1B52,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nNVY0428,Posto Vanete Ltda,Carreta,Nao\nNYE9761,TAC Transportes Armazenagem e Logistica,Truck,Nao\nOBE9693,Baixotes Transportes,Carreta,Nao\nOBE9G93,Baixotes Transportes,Carreta,Nao\nOBL9073,Transportadora Multi Express Ltda,Carreta,Nao\nODA8650,Transportadora Multi Express Ltda,Carreta,Nao\nOFN0964,Baixotes Transportes,Carreta,Nao\nOFS2H37,Cooperativa Riobranquense de Transportes Ltda.,Bitruck,Nao\nOGY2586,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nOKF5239,Rubens Eugenio Fiorentin Transportes Ltda.,Bitruck,Nao\nOKG2369,Sergio Nava e Cia Ltda,Carreta,Nao\nOLI5344,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nOMB0200,Friocargo Triangulo Ltda,Carreta,Nao\nOMB0466,Cooperativa Riobranquense de Transportes Ltda,3/4,Nao\nOMF8787,Omega X Solucoes em Logistica e Armazenagem Ltda,Carreta,Nao\nOMS4B32,Transportadora E Armazenagem Zilli Ltda,Carreta,Nao\nONZ4C37,Cisne Branco Transportes Ltda EPP,Carreta,Nao\nOOF9544,Solucao Transportes e Servicos Eireli,Carreta,Nao\nOOH4498,TAC Transportes Armazenagem e Logistica Ltda,Bitruck,Nao\nOOH4976,Rodocunha Transportes Ltda - ME,Bitruck,Nao\nOOH5001,Rodocunha Transportes Ltda - ME,Bitruck,Nao\nOOV8H47,Marizileia Transportes,Carreta,Nao\nOOW1277,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nOOZ5927,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nOOZ5955,Cooperativa Riobranquense de Transprotes Ltda,3/4,Nao\nOPC4600,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nOPC6065,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nOPF8308,Cooperativa de Transp e Logist de Sao Sebastiao do Oeste Mg,Bitruck,Nao\nOPL2I85,Marques e Silva,Toco,Nao\nOPM7245,Denia Transportes,Carreta,Nao\nOPM7C45,Denia Transportes,Carreta,Nao\nOPM7C55,Denia Transportes,Carreta,Nao\nOPM9245,Denia Transportes,Carreta,Nao\nOPQ0668,TAC Transportes Armazenagem e Logistica,Toco,Nao\nOPQ0672,Transportadora Multi Express Ltda,Toco,Nao\nOPQ3989,Suinco,Toco,Nao\nOPS0605,Transportes e Armazenagem Zilli Ltda,Truck,Nao\nOPT4189,Suinco Cooperativa de Suinocultores Ltda,3/4,Nao\nOQA3631,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nOQB1826,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nOQH3838,Cooperativa Riobranquense de Transportes Ltda.,Toco,Nao\nOQH4050,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nOQN4506,Logmaster Armazem e Logistica Ltda,Carreta,Nao\nOQO4469,Bruno Sergio Ferreira,Carreta,Nao\nOQP8538,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nOQQ2484,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nOQR5074,Cooperativa Riobranquense de Transportes Ltda,Carreta,Nao\nOQS0440,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nOQS5031,Locação e Administração Betel Eireli,Bitruck,Nao\nORB4130,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nORB9881,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nOWI8132,Cooperativa Riobranquense de Transprotes Ltda,Toco,Nao\nOWO0091,Transportadora Multi Express Ltda,Truck,Nao\nOWS5001,RN Transporte e Logistica Ltda,Toco,Nao\nOXB7D48,MR Transportes,Carreta,Nao\nOXC1638,Transportes e Armazenagem Zilli Ltda,Carreta,Nao\nOXC9013,Maxfrios Distribuidora e Transporte Eireli,Bitruck,Nao\nOXE9439,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nOXE9E39,Coopertral,Carreta,Nao\nOXI0440,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nOXI2409,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nPLI2086,TAC Transportes Armazenagem e Logistica Ltda,Bitruck,Nao\nPLI2A56,AJB Transportes,Bitruck,Nao\nPLI2A86,AJB Transportes,Bitruck,Nao\nPQS3A09,Coopertral,Carreta,Nao\nPQT7204,TAC Transportes Armazenagem e Logistica Ltda,Carreta,Nao\nPQT7984,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nPQT8064,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nPQT8074,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nPQT8084,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nPRO2122,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nPRR9846,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nPRS0146,Transportadora E Armazenagem Zilli Ltda,Carreta,Nao\nPUA3I52,Marizileia Transportes,Carreta,Nao\nPUD2035,Friocargo Triangulo Ltda,3/4,Nao\nPUD5076,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nPUI0885,Cooperativa Riobranquense de Transprotes Ltda,3/4,Nao\nPUJ1134,Cirio Alves de Oliveira Junior - Transportes,3/4,Nao\nPUK7035,Coopernova Cooperativa Riobranquense de Transporte Ltda.,Carreta,Nao\nPUL1460,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nPUL1470,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nPUN3820,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nPUO3485,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nPUO3E85,Transportadora Multi Express Ltda,Carreta,Nao\nPUO6C29,Marques e Silva,Carreta,Nao\nPUQ8460,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nPUS8E44,Marques e Silva,Carreta,Nao\nPUT4870,Formoso,Carreta,Nao\nPUW9A61,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nPUX2971,G S Puridade Transportes e Servicos Ltda,Carreta,Nao\nPUZ9960,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nPVA4360,Trans Frios Transportes e Logistica Ltda ME,Bitruck,Nao\nPVC6654,Transportes e Armazenagem Zilli Ltda,Toco,Nao\nPVE6696,Transportadora Multi Express Ltda,Bitruck,Nao\nPVG4686,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nPVG7128,Cooperativa Riobranquense de Transprotes Ltda,3/4,Nao\nPWA3260,Transportadora Multi Express Ltda,Carreta,Nao\nPWC1358,Friocargo Triangulo Ltda,3/4,Nao\nPWE3893,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nPWG1739,Transportes e Armazenagem Zilli Ltda,Bitruck,Nao\nPWG1740,Cooperativa Riobranquense de Transportes Ltda.,Bitruck,Nao\nPWL6615,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nPWL8958,Omega X Solucoes em Log e Armazenagem Ltda,Truck,Nao\nPWP3047,Washington L S Costa Junior - ME,Bitruck,Nao\nPWQ8784,TAC Transportes Armazenagem e Logistica,Truck,Nao\nPXJ0726,M Braga & Sobrinho Ltda.,3/4,Nao\nPYF0280,Cooperativa dos Transportadores Unidos Ltda.,Truck,Nao\nPYP5755,Tais Simoes Me,Carreta,Nao\nPYV7I69,Telma Souza de Oliveira Santos,3/4,Nao\nPYZ1D03,Baixotes Transportes,Bitruck,Nao\nPZR6754,Cooperativa Riobranquense de Transportes Ltda.,Bitruck,Nao\nPZR6H54,Denia Transportes,Bitruck,Nao\nPZS5316,Flay Logistica e Armazenagem Ltda,Bitruck,Nao\nQBC5B40,Multi Express,Carreta,Nao\nQBH5J89,Multi Express,Carreta,Nao\nQCE5G23,Multi Express,Carreta,Nao\nQGJ0H09,Omega X Solucoes em Logistica e Armazenagem Ltda,Carreta,Nao\nQHA1470,R A de Castilho Transportes,Carreta,Nao\nQHF0778,Transportes Zanini Ltda,Carreta,Nao\nQHK7670,Transportes Zanini Ltda,Carreta,Nao\nQHT8275,Transportes Zanini Ltda,Carreta,Nao\nQHT8855,Transportes Zanini Ltda,Carreta,Nao\nQHT8885,Transportes Zanini Ltda,Carreta,Nao\nQHV8C67,Coopertral,Carreta,Nao\nQJI3576,Transportes Zanini Ltda,Carreta,Nao\nQJK1913,Transportes e Comércio Irmãos Albiero Ltda ME,Carreta,Nao\nQJM1037,Transportes Zanini Ltda,Carreta,Nao\nQJU6926,Kaipper Continental Transportes Ltda,Carreta,Nao\nQJZ7E76,Marques e Silva,Carreta,Nao\nQMR2C59,Cooperativa de Transp e Logist de Sao Sebastiao do Oeste Mg,Bitruck,Nao\nQMR2C75,Cooperativa de Transp e Logist de Sao Sebastiao do Oeste Mg,Bitruck,Nao\nQMX6767,AC Transportes,Truck,Nao\nQNA0693,Posto Vanete Ltda,Carreta,Nao\nQNA4729,Isavic Transporte e Armazenamento Ltda,Carreta,Nao\nQNK1999,Cooperativa Riobranquense de Transportes Ltda.,Truck,Nao\nQNK8591,Cooperativa dos Transportadores Unidos Ltda.,Carreta,Nao\nQNN3324,Transportadora Multi Express Ltda,Bitruck,Nao\nQNQ7011,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nQNQ7021,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nQNQ7031,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nQNQ7041,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nQNQ7A11,Transportadora Multi Express Ltda,Carreta,Nao\nQNQ7A31,Bruno Sergio Ferreira,Carreta,Nao\nQNQ7A41,TAC Transportes Armazenagem e Logistica,Carreta,Nao\nQNV2963,Mult Service Montes Claros,Carreta,Nao\nQNV4183,Trans Frios Transportes e Logistica Ltda ME,Bitruck,Nao\nQNW7336,Cooperativa Riobranquense de Transportes Ltda,Toco,Nao\nQNZ7304,Logmaster Armazem e Logistica Ltda,Carreta,Nao\nQNZ7305,Friocargo Triangulo Ltda,Carreta,Nao\nQOC1193,Transportadora Multi Express Ltda,Bitruck,Nao\nQOC3718,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nQOI6463,Matheus Gomes Mundim Araujo - ME,3/4,Nao\nQON7112,Cooperativa Riobranquense de Transportes Ltda,Carreta,Nao\nQOW1672,Cooperativa Riobranquense de Transportes Ltda.,Bitruck,Nao\nQPA2533,AJB Transportes,Bitruck,Nao\nQPX7375,Posto Vanete,Carreta,Nao\nQPX7381,Posto Vanete,Carreta,Nao\nQPX7384,Posto Vanete,Carreta,Nao\nQPZ8I27,TransOliveira,Carreta,Nao\nQQG3946,SS LOG Transportes e Logistica Ltda,Carreta,Nao\nQQI3E51,MR Transportes,Carreta,Nao\nQQO5J16,Multi Express,Carreta,Nao\nQQO8876,Transportes Horizonte Frios Ltda,Carreta,Nao\nQQP6621,Coopertral,Carreta,Nao\nQQT1682,Transportadora Multi Express Ltda,Carreta,Nao\nQQT1G82,Coopertral,Carreta,Nao\nQRD1152,Tais Simoes Me,Carreta,Nao\nQUB9352,Cooperativa Riobranquense de Transprotes Ltda,3/4,Nao\nQUG1307,Transportadora Multi Express Ltda,Carreta,Nao\nQUU0926,Transportes e Armazenagem Zilli Ltda,Carreta,Nao\nQUU0940,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nQWV2926,Transfernata Ltda.,Carreta,Nao\nQXA2439,AC Logística,Carreta,Nao\nQXL7916,Maxfrios Distribuidora e Transporte Eireli,Carreta,Nao\nQXT8D43,MMS Armazenagem e Logistica SA,Carreta,Nao\nQXY1F27,Cooperativa Riobranquense de Transportes Ltda.,Carreta,Nao\nQXY4B02,Rodosousa,Bitruck,Nao\nRAG4A52,Cooperativa dos Transportadores Unidos Ltda.,Carreta,Nao\nRAI1G55,Canada Transportes e Comercio Ltda.,Carreta,Nao\nRAJ9J31,Bruno Sergio Ferreira,Carreta,Nao\nRCM4A73,MR Transportes,Carreta,Nao\nRCP3C74,Marizileia Transportes,Carreta,Nao\nREE0C39,Cooperativa Riobranquense de Transportes Ltda.,3/4,Nao\nRFB3J59,Transportadora Multi Express Ltda,Carreta,Nao\nRFE0H49,Coopertral,Carreta,Nao\nRFZ7C00,Omega X Solucoes em Logistica e Armazenagem Ltda,Carreta,Nao\nRLA5H78,LNF Transporte,Carreta,Nao\nRLG6A98,Marvel,Container,Nao\nRMH8G11,Multi Express,Carreta,Nao\nRMM0C10,Coopertral,Carreta,Nao\nRMM0C17,Marizileia Transportes,Carreta,Nao\nRMS9H45,Multi Express,Carreta,Nao\nRMT0F38,Baixotes Transportes,Carreta,Nao\nRMT0F41,Baixotes Transportes,Carreta,Nao\nRMW1A91,Coopertral,Truck,Nao\nRMX0B03,Multi Express,Carreta,Nao\nRMY8J16,AJB Transportes,Bitruck,Nao\nRNC6F46,Transportadora Multi Express Ltda,Carreta,Nao\nRNC7B23,Marques e Silva,Bitruck,Nao\nRND3D90,MR Transportes,Carreta,Nao\nRNS2J03,Dorense Transportes de Cargas Ltda-ME,Bitruck,Nao\nRNS3G28,Suinco,3/4,Nao\nRNS3G61,Suinco,3/4,Nao\nRNS3J61,Suinco,3/4,Nao\nRNT5I98,Suinco,3/4,Nao\nRNT5J03,Suinco,3/4,Nao\nRNT8C00,Marizileia Transportes,Carreta,Nao\nRNU1H74,MR Transportes,Carreta,Nao\nRNV2A77,Suinco,3/4,Nao\nRNV4H60,Suinco,3/4,Nao\nRNV5G22,Suinco,3/4,Nao\nRNW4H60,Suinco,3/4,Nao\nRNW7J57,Suinco,3/4,Nao\nRNX0C26,Suinco,3/4,Nao\nRNX0C28,Suinco,3/4,Nao\nRNX3C26,Suinco,3/4,Nao\nRNX3C28,Suinco,3/4,Nao\nRNY8J16,AJB Transportes,Bitruck,Nao\nRTD7C55,MR Transportes,Carreta,Nao\nRTF6I71,Cargofrio Logística e Armazenamento Ltda,Bitruck,Nao\nRUG6B37,Max Frios,Bitruck,Nao\nRUM4A51,Coopertral,Carreta,Nao\nRUR5A00,Marizileia Transportes,Carreta,Nao\nRVI5B24,AC Armazenagem,Truck,Nao\nRVN5G22,Suinco,3/4,Nao\nRVO3A10,MR Transportes,Carreta,Nao\nSDB3F38,AJB Transportes,Bitruck,Nao\nSDB4F38,AJB Transportes,Bitruck,Nao\nSDX0G28,PH Fidelis,Bitruck,Nao\nSIW0E00,Marizileia Transportes,Carreta,Nao\nSIY0147,Suinco,3/4,Nao\nSIY0G36,Suinco,3/4,Nao\nSIY0G38,Suinco,3/4,Nao\nSIY0G39,Suinco,3/4,Nao\nSIY0G41,Suinco,3/4,Nao\nSIY0G43,Suinco,3/4,Nao\nSIY0I47,Suinco,3/4,Nao\nSIY7A00,Marizileia Transportes,Carreta,Nao\nSIYOG36,Suinco,3/4,Sim\nSJY7D76,Joyway Food,Container,Nao\nSRZ4E29,MR Transportes,Bitruck,Nao\nSXF8J27,LNF Transporte,Carreta,Nao\nSXT9B03,Marvel,Carreta,Nao\nSYC3C00,Marizileia Transportes,Carreta,Nao\nSYJ5J26,Coopertral,Carreta,Nao\nSYW0B00,Marizileia Transportes,Carreta,Nao\nSYW0E00,Marizileia Transportes,Carreta,Nao\nSYX4I27,MR Transportes,Carreta,Nao\nTCD2B57,Baixotes Transportes,Carreta,Nao\nTCG1A00,Marizileia Transportes,Carreta,Nao\nTCG9H61,MR Transportes,Carreta,Nao\nTCS9I99,Coopertral,Carreta,Nao\nTCY9J14,Pedro Ferreira Transportes,Carreta,Nao\nTDQ7I07,MR Transportes,Carreta,Nao\nTEW0A46,Multi Express,Carreta,Nao\nTEW0A97,Multi Express,Carreta,Nao\nTIX4J94,LNF Transporte,Carreta,Nao\nTIX8F93,LNF Transporte,Carreta,Nao\nTPO5I06,Marvel,Carreta,Nao\nTXE6E82,Coopertral,Truck,Nao\nTXT3J12,MR Transportes,Carreta,Nao\nTXU5G95,MR Transportes,Carreta,Nao\nTXX3C52,Max Frios,Bitruck,Nao\nTXZ6E13,MR Transportes,Carreta,Nao\nTXZ6E82,Coopertral,Truck,Nao\nTYZ4J12,Multi Express,Bitruck,Nao\nTZB6H99,Multi Express,Carreta,Nao\nTZE6E82,Coopertral,Truck,Nao\n";</script>
-<script>window.SUINCO_BUILD = "06/10 16:21 · a185888";window.SUINCO_BUILD_EM = "2026-10-06T16:21:43.660040+00:00";</script>
+<script>window.SUINCO_BUILD = "06/10 18:09 · 8d292fb";window.SUINCO_BUILD_EM = "2026-10-06T18:09:00.295368+00:00";</script>
 <script>
 /* =====================================================================
    PAINEL LOGÍSTICO SUINCO — camada de dados
@@ -14214,6 +14309,10 @@ const SuincoStore = {
       Frete_Destino: carga.freteDestino || '',
       Km_Deslocamento: carga.kmDeslocamento ?? null,
       Frete_Documento: carga.freteDocumento || '',
+      /* A observação do frete (06/10/2026, migração 061). Vazia sobe vazia —
+         o servidor não apaga com vazio (eco), e quem decide é a Logística. */
+      Frete_Observacao: carga.freteObservacao || '',
+      Frete_Combinado: carga.freteCombinado ?? null,
       Status_Atual: carga.status,
       Aguardando_Carga: !!carga.aguardandoCarga,
       Criado_Em: carga.criadoEm,
@@ -14838,6 +14937,8 @@ function cargaDeLinhaRemota(r){
     freteDestino: r.Frete_Destino || '',
     kmDeslocamento: r.Km_Deslocamento ?? null,
     freteDocumento: r.Frete_Documento || '',
+    freteObservacao: r.Frete_Observacao || '',
+    freteCombinado: r.Frete_Combinado ?? null,
     kmDestino: r.Km_Destino ?? null,
     freteValor: r.Frete_Valor ?? null,
     freteTarifaUsada: r.Frete_Tarifa_Usada ?? null,
@@ -15642,7 +15743,51 @@ function programadoEmDoDia(dia){
   return new Date(`${dia}T12:00:00-03:00`).toISOString();
 }
 
-function criarCargaProgramada({placa, transportadora, tipoVeiculo, numeroCarga, cliente, destino, produto, peso, doca, rota, sequencia, observacoes, motorista, praOnde, paletizada, qtdGanchos, qtdEntregas, freteDestino, kmDeslocamento, freteDocumento, operador, dia}){
+/* =====================================================================
+   A OBSERVAÇÃO DO FRETE — obrigatória para contratar (06/10/2026)
+   ---------------------------------------------------------------------
+   Decisão do dono: o valor do frete não é editável (KM × tarifa, conta do
+   servidor); só o KM é. "O que seguir o valor da tabela vai ser colocado na
+   observação como tabela, e o que não seguir a tabela vai ser colocado o
+   valor combinado" — e sem isso não se contrata, "sem exceções".
+
+   A MESMA REGRA DO SERVIDOR (backend/src/dominio/frete.js,
+   conferirFreteParaContratar), aqui para PERGUNTAR ANTES de criar: carga
+   recusada na criação é apagada do painel, e foi isso que derrubou a trava
+   do KM em 09/09. As duas cópias são travadas pelos mesmos casos nos testes
+   de API (bloco 50) e de tela (test_frete_obrigatorio_para_contratar.py). */
+const FRETE_OBSERVACOES = ['TABELA', 'COMBINADO'];
+function freteIsentoLocal(transportadora){
+  const palavras = String(transportadora ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim().split(' ').filter(Boolean);
+  return palavras.includes('SUINCO') || palavras.includes('FOB');
+}
+function valorEmReaisLocal(v){
+  if(v === '' || v === null || v === undefined) return null;
+  if(typeof v === 'number') return Number.isFinite(v) && v > 0 ? Math.round(v * 100) / 100 : null;
+  let t = String(v).trim().replace(/[^\d.,-]/g, '');
+  if(t === '') return null;
+  if(t.includes(',')) t = t.replace(/\./g, '').replace(/,/g, '.');
+  else if(/^\d{1,3}(\.\d{3})+$/.test(t)) t = t.replace(/\./g, '');
+  const n = Number(t);
+  if(!Number.isFinite(n) || n <= 0) return null;
+  return Math.round(n * 100) / 100;
+}
+function freteFaltandoParaContratar({ placa, transportadora, freteObservacao, freteCombinado }){
+  if(!String(placa ?? '').trim()) return null;
+  if(freteIsentoLocal(transportadora)) return null;
+  const obs = FRETE_OBSERVACOES.includes(String(freteObservacao || '').toUpperCase()) ? String(freteObservacao).toUpperCase() : null;
+  if(!obs) return { codigo: 'FRETE_OBRIGATORIO', erro: 'Para contratar a carga, informe a observação do frete: TABELA (vale o valor calculado pelo KM) ou COMBINADO, com o valor negociado.' };
+  if(obs === 'COMBINADO' && valorEmReaisLocal(freteCombinado) === null) return { codigo: 'FRETE_COMBINADO_SEM_VALOR', erro: 'Frete COMBINADO precisa do valor negociado (ex.: 14.000,00).' };
+  return null;
+}
+/* Carga contratada (com placa) que nasceu antes da regra e ainda não tem a
+   observação: segue andando, com o selo "frete a definir" (decisão do dono). */
+function freteADefinir(c){
+  return !!(c && String(c.placa || '').trim() && !freteIsentoLocal(c.transportadora) && !c.freteObservacao);
+}
+
+function criarCargaProgramada({placa, transportadora, tipoVeiculo, numeroCarga, cliente, destino, produto, peso, doca, rota, sequencia, observacoes, motorista, praOnde, paletizada, qtdGanchos, qtdEntregas, freteDestino, kmDeslocamento, freteDocumento, operador, dia, freteObservacao, freteCombinado}){
   const p = normalizarPlaca(placa);
   /* PLACA VAZIA = caminhão ainda não contratado (26/08/2026).
 
@@ -15658,6 +15803,14 @@ function criarCargaProgramada({placa, transportadora, tipoVeiculo, numeroCarga, 
   if(p && !frota){
     throw new Error(`Placa ${p} não está cadastrada na Frota. Cadastre em Cadastros → Frota antes de programar esta carga.`);
   }
+  /* Sem a observação do frete, não contrata — e a recusa é AQUI, antes de a
+     carga existir: criada e recusada pelo servidor, ela sumiria da tela. */
+  const faltaFrete = freteFaltandoParaContratar({ placa: p,
+    transportadora: transportadora || (frota && frota.transportadora) || '', freteObservacao, freteCombinado });
+  if(faltaFrete){
+    const e = new Error(faltaFrete.erro); e.codigo = faltaFrete.codigo; throw e;
+  }
+  const obsFrete = p && freteObservacao ? String(freteObservacao).toUpperCase() : '';
   const carga = {
     id: uid('carga'),
     numeroCarga: normalizarNumeroCarga(numeroCarga),
@@ -15685,6 +15838,8 @@ function criarCargaProgramada({placa, transportadora, tipoVeiculo, numeroCarga, 
     freteDestino: String(freteDestino || '').trim().toUpperCase(),
     kmDeslocamento: kmValidoLocal(kmDeslocamento),
     freteDocumento: String(freteDocumento || '').trim(),
+    freteObservacao: obsFrete,
+    freteCombinado: obsFrete === 'COMBINADO' ? valorEmReaisLocal(freteCombinado) : null,
     kmDestino: kmDoDestino(freteDestino),
     freteValor: null,
     freteTarifaUsada: null,
@@ -15923,10 +16078,19 @@ function registrarChegadaPortaria(placa, operador){
 // Embarque" (o caminhão já está fisicamente no pátio) — então isto é só
 // edição de dados, e por isso NÃO gera linha no log de movimentações
 // (log só registra mudança de STATUS).
-function completarCargaAguardando(cargaId, {numeroCarga, cliente, destino, produto, peso, doca, rota, sequencia, observacoes, transportadora, tipoVeiculo, motorista, praOnde, paletizada, qtdGanchos, qtdEntregas, freteDestino, kmDeslocamento, operador}){
+function completarCargaAguardando(cargaId, {numeroCarga, cliente, destino, produto, peso, doca, rota, sequencia, observacoes, transportadora, tipoVeiculo, motorista, praOnde, paletizada, qtdGanchos, qtdEntregas, freteDestino, kmDeslocamento, operador, freteObservacao, freteCombinado}){
   const c = getCarga(cargaId);
   if(!c) throw new Error('Carga não encontrada');
   if(!c.aguardandoCarga) throw new Error('Esta carga não está aguardando dados (Aguardando Carga).');
+  /* Completar a chegada da Portaria é CONTRATAR: a observação do frete vem
+     antes de mexer em qualquer campo (06/10/2026). */
+  const faltaFrete = freteFaltandoParaContratar({ placa: c.placa, transportadora: transportadora || c.transportadora,
+    freteObservacao, freteCombinado });
+  if(faltaFrete){ const e = new Error(faltaFrete.erro); e.codigo = faltaFrete.codigo; throw e; }
+  if(freteObservacao){
+    c.freteObservacao = String(freteObservacao).toUpperCase();
+    c.freteCombinado = c.freteObservacao === 'COMBINADO' ? valorEmReaisLocal(freteCombinado) : null;
+  }
   c.numeroCarga = normalizarNumeroCarga(numeroCarga); c.cliente = cliente||''; c.destino = destino||''; c.produto = produto||''; c.peso = Number(peso)||0;
   c.doca = doca||''; c.sequencia = sequencia!==undefined && sequencia!=='' ? Number(sequencia) : null;
   c.observacoes = observacoes||'';
@@ -17054,6 +17218,9 @@ function dadosPlanilhaDeFretes(cargas){
       motorista: c.motorista || f.motorista || '',
       freteValor: c.freteValor ?? null,
       freteMotivo: c.freteMotivo || '',
+      freteObservacao: c.freteObservacao || '',
+      freteCombinado: c.freteCombinado ?? null,
+      freteADefinir: freteADefinir(c),
       observacoes: c.observacoes || '',
       // Última coluna, por pedido explícito: é dele, preenchida fora do
       // sistema, e o painel a carrega de volta.
@@ -21692,7 +21859,7 @@ function renderTorre(){
         : `<span class="veic-placa">${esc(c.placa)}</span>`}
         <span class="veic-transp">${esc(c.transportadora)||'—'}</span>${marcaTransportadoraHtml(c)}
         <span class="veic-tipo">${esc(c.tipoVeiculo)||'—'}</span>
-        ${chipNoPatioHtml(c)}${chipLacreHtml(c)}</td>
+        ${chipNoPatioHtml(c)}${chipLacreHtml(c)}${seloFreteHtml(c)}</td>
       <td>${editavel
         ? `<input type="text" class="motorista-input" value="${esc(c.motorista||'')}" onchange="atualizarMotoristaUI('${escJs(c.id)}',this.value)" title="Trocar o motorista desta carga.">`
         : (esc(c.motorista)||'—')}</td>
@@ -21773,7 +21940,7 @@ function linhaFilaHtml(c, lista, arrastavel){
       </td>
       <td class="col-identificacao cel-veiculo" onclick="event.stopPropagation()">
         <input type="text" class="placa-input" value="${esc(c.placa)}" onchange="atualizarPlacaUI('${id}',this.value)" title="Trocar a placa — a transportadora e o tipo de veículo são buscados na Frota automaticamente.">
-        <span class="veic-transp" id="transp-${esc(c.id)}">${esc(c.transportadora)||'—'}</span>${marcaTransportadoraHtml(c)}
+        <span class="veic-transp" id="transp-${esc(c.id)}">${esc(c.transportadora)||'—'}</span>${marcaTransportadoraHtml(c)}${seloFreteHtml(c)}
         <span class="veic-tipo">${esc(c.tipoVeiculo)||'—'}</span>
         ${marcaCargaDaPlaca(c, lista)}${chipNoPatioHtml(c)}${marcaEtapaDevolvidaHtml(c)}${marcaSaiuSemCarregarHtml(c)}</td>
       <td onclick="event.stopPropagation()">
@@ -22020,7 +22187,7 @@ function avisoPlacaJaProgramada(placa){
    aberta sem querer. */
 let _placaMultiCargaAutorizada = null;
 
-function criarCargaProgramadaUI(){
+async function criarCargaProgramadaUI(){
   const placa = document.getElementById('prog-placa').value;
   /* PLACA VAZIA CRIA A CARGA MESMO ASSIM (26/08/2026) — mas nunca em
      silêncio. O aviso diz o que aconteceu e o que falta: sem confirmação
@@ -22070,9 +22237,30 @@ function criarCargaProgramadaUI(){
      de fretes que cobra: a linha aparece com o motivo escrito em vez de uma
      célula vazia. Cobrar onde o dado é usado, e não onde o caminhão passa. */
 
+  /* COM PLACA É CONTRATAR: a observação do frete vem antes (06/10/2026).
+     A pergunta abre aqui; cancelar não cria nada e diz por quê. */
+  let frete = { freteObservacao: '', freteCombinado: null };
+  if(pNorm){
+    const frotaF = buscarFrota(pNorm);
+    frete = await garantirFreteParaContratar({
+      placa: pNorm,
+      transportadora: document.getElementById('prog-transportadora').value || (frotaF && frotaF.transportadora) || '',
+      tipoVeiculo: document.getElementById('prog-tipoveiculo').value || (frotaF && frotaF.tipoVeiculo) || '',
+      numeroCarga: document.getElementById('prog-numero-carga').value,
+      destino: document.getElementById('prog-frete-destino').value,
+      km: kmValidoLocal(document.getElementById('prog-km-deslocamento').value),
+      valorTabela: null,
+    }, 'contratar');
+    if(!frete){
+      notify('Carga NÃO criada: sem a observação do frete (TABELA ou COMBINADO) a carga não é contratada.', 'warn', 8000);
+      return;
+    }
+  }
   try{
     const criada = criarCargaProgramada({
       placa,
+      freteObservacao: frete.freteObservacao,
+      freteCombinado: frete.freteCombinado,
       transportadora: document.getElementById('prog-transportadora').value,
       tipoVeiculo: document.getElementById('prog-tipoveiculo').value,
       motorista: document.getElementById('prog-motorista').value,
@@ -22121,7 +22309,8 @@ function criarCargaProgramadaUI(){
     renderAll();
   }catch(e){ notify(e.message, 'danger'); }
 }
-/* O DESTINO PUXA O KM — e o deslocamento nasce igual, para ser mudado.
+/* O DESTINO PUXA O KM — e o campo KM (id histórico prog-km-deslocamento)
+   nasce igual, para ser mudado.
 
    Pedido do dono: "a tabela de frete deve fazer o calculo segundo a
    kilometragem e destino" e "KM DESLOCAMENTO (precisa ser o valor certinho
@@ -22154,27 +22343,20 @@ function destinoFreteCompletarUI(){
   if(km !== null && !desl.value) desl.value = kmTexto(km);
 }
 
-/* DIVERGÊNCIA É AVISO, NÃO ERRO. Desvio, retorno e coleta no caminho
-   existem e são justamente o motivo de haver dois campos. O que não pode
-   é a diferença passar despercebida: quem paga o frete precisa saber que
-   está pagando 640 km numa rota cuja tabela diz 583. */
+/* UM KM SÓ (06/10/2026). Até aqui havia dois campos — o KM do destino e o
+   de deslocamento — e um aviso quando divergiam. O dono decidiu: "KM de
+   deslocamento não é necessário. KM divergente não é necessário" e
+   "somente o KM pode ser editavel". O que sobra de aviso é o destino que
+   não está na tabela: aí não há KM para puxar e a pessoa precisa saber que
+   o valor sai do KM que ela digitar. */
 function avisarSobreKmUI(){
   const aviso = document.getElementById('prog-frete-aviso');
   if(!aviso) return;
   const destino = document.getElementById('prog-frete-destino').value.trim();
-  const kmRef = kmDoDestino(destino);
-  const kmDesl = kmValidoLocal(document.getElementById('prog-km-deslocamento').value);
-  if(destino && kmRef === null){
+  if(destino && kmDoDestino(destino) === null){
     aviso.innerHTML = `<span class="text-warn">“${esc(destino.toUpperCase())}” não está na Tabela de Frete `
-      + `— sem KM de referência. O valor sai pelo KM de deslocamento que você digitar. `
+      + `— sem KM para puxar. O valor sai pelo KM que você digitar. `
       + `Para cadastrar: Cadastros → Tabela de Frete.</span>`;
-    return;
-  }
-  if(kmRef !== null && kmDesl !== null && kmRef !== kmDesl){
-    const dif = Math.round((kmDesl - kmRef) * 100) / 100;
-    aviso.innerHTML = `<span class="text-warn">KM de deslocamento <strong>${kmTexto(kmDesl)}</strong> difere `
-      + `dos <strong>${kmTexto(kmRef)}</strong> da tabela (${dif > 0 ? '+' : ''}${kmTexto(dif)} km). `
-      + `É o deslocamento que será pago — explique o motivo na Observação.</span>`;
     return;
   }
   aviso.innerHTML = '';
@@ -23168,7 +23350,7 @@ function atualizarPraOndeUI(id, val){
    A transportadora e o tipo de veículo vêm da base, não do que estava na
    carga: trocar a placa e manter a transportadora antiga produziria um
    registro que não bate com a realidade, e ninguém perceberia. */
-function atualizarPlacaUI(id, val){
+async function atualizarPlacaUI(id, val){
   const c = getCarga(id);
   if(!c) return;
   const nova = normalizarPlaca(val);
@@ -23188,6 +23370,25 @@ function atualizarPlacaUI(id, val){
   }
 
   const anterior = c.placa;
+  /* PLACA ENTRANDO É CONTRATAR, E TROCAR DE TRANSPORTADORA PEDE O FRETE DE
+     NOVO (06/10/2026). Mesma transportadora (outro caminhão dela) mantém o
+     frete. A pergunta vem com o anterior marcado, para confirmar ou corrigir. */
+  const norm = (t) => String(t || '').trim().toUpperCase();
+  const contratando = !String(anterior || '').trim();
+  const trocou = !contratando && norm(frota.transportadora) !== norm(c.transportadora) && !freteIsentoLocal(frota.transportadora);
+  if(contratando || trocou){
+    const r = await garantirFreteParaContratar({
+      ...infoFreteDaCarga(c), placa: nova, transportadora: frota.transportadora || '', tipoVeiculo: frota.tipoVeiculo || '',
+      valorTabela: trocou ? null : c.freteValor ?? null,
+    }, trocou ? 'troca' : 'contratar');
+    if(!r){
+      notify(`Placa NÃO alterada: sem a observação do frete${trocou ? ' da nova transportadora' : ''} a carga não é contratada.`, 'warn', 8000);
+      renderAll();
+      return;
+    }
+    c.freteObservacao = r.freteObservacao;
+    c.freteCombinado = r.freteObservacao === 'COMBINADO' ? r.freteCombinado : null;
+  }
   c.placa = nova;
   c.transportadora = frota.transportadora || '';
   c.tipoVeiculo = frota.tipoVeiculo || '';
@@ -23588,10 +23789,25 @@ function abrirCompletar(id){
   document.getElementById('modal-completar').classList.add('open');
 }
 function fecharModalCompletar(){ document.getElementById('modal-completar').classList.remove('open'); }
-function salvarCompletarCarga(){
+async function salvarCompletarCarga(){
   const id = document.getElementById('completar-id').value;
+  const cAg = getCarga(id);
+  /* Completar a chegada é contratar: pergunta o frete antes (06/10/2026). */
+  const frete = cAg ? await garantirFreteParaContratar({
+    ...infoFreteDaCarga(cAg),
+    transportadora: document.getElementById('completar-transportadora').value || cAg.transportadora,
+    numeroCarga: document.getElementById('completar-numero-carga').value,
+    destino: document.getElementById('completar-frete-destino').value,
+    km: kmValidoLocal(document.getElementById('completar-km-deslocamento').value),
+  }, 'contratar') : null;
+  if(cAg && !frete){
+    notify('Carga NÃO completada: sem a observação do frete a carga não é contratada.', 'warn', 8000);
+    return;
+  }
   try{
     completarCargaAguardando(id, {
+      freteObservacao: frete && frete.freteObservacao,
+      freteCombinado: frete && frete.freteCombinado,
       numeroCarga: document.getElementById('completar-numero-carga').value,
       cliente: document.getElementById('completar-cliente').value,
       destino: document.getElementById('completar-destino').value,
@@ -23619,6 +23835,151 @@ function salvarCompletarCarga(){
   }catch(e){ notify(e.message, 'danger'); }
 }
 
+/* =====================================================================
+   A OBSERVAÇÃO DO FRETE NA TELA — a pergunta antes de contratar (06/10/2026)
+   ---------------------------------------------------------------------
+   Decisão do dono: sem a observação do frete (TABELA ou COMBINADO com o
+   valor), não se contrata a carga — "sempre, sem exceções". A regra mora em
+   data.js (freteFaltandoParaContratar, espelho do servidor); aqui mora a
+   PERGUNTA. Ela abre nos quatro pontos em que a placa entra (Programação,
+   Montagem, Torre/Fila e completar a chegada da Portaria) e também no selo
+   "frete a definir" das cargas que nasceram antes da regra.
+
+   PERGUNTAR, NÃO BLOQUEAR: botão desabilitado não ensina o caminho. Quem
+   tem autoridade para contratar decide ali mesmo, e o valor da tabela vem
+   mostrado para conferir quando já é conhecido.
+   ===================================================================== */
+let _freteContratar = null;   // { resolver }
+
+function freteReais(n){
+  return Number(n).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+/* Abre a pergunta e devolve { freteObservacao, freteCombinado } — ou null,
+   se a pessoa cancelar. `info` descreve a carga: placa, transportadora,
+   tipoVeiculo, numeroCarga, destino, km, valorTabela, e o que já existir
+   (freteObservacao/freteCombinado) para vir marcado. `motivo` diz POR QUE a
+   pergunta apareceu ("contratar", "troca de transportadora", "a definir"). */
+function perguntarFreteUI(info, motivo){
+  const el = (id) => document.getElementById(id);
+  if(!el('modal-frete-contratar')) return Promise.resolve(null);
+  if(_freteContratar) _freteContratar.resolver(null);
+  const linha = (rot, val) => `<div class="fat-conf-linha"><span class="fat-conf-rot">${rot}</span><span class="fat-conf-val">${esc(val) || '—'}</span></div>`;
+  el('frete-c-contexto').textContent = motivo === 'troca'
+    ? `A transportadora mudou: informe o frete da nova. O anterior vem marcado para você confirmar ou corrigir.`
+    : motivo === 'definir'
+      ? 'Esta carga já foi contratada sem a observação do frete. Informe agora para a Administração de Fretes entender o valor.'
+      : 'Sem a observação do frete a carga não é contratada. O valor do frete não é editável: ele é o KM × a tarifa da tabela.';
+  el('frete-c-resumo').innerHTML = linha('Carga', info.numeroCarga)
+    + linha('Placa', info.placa) + linha('Transportadora', info.transportadora)
+    + linha('Destino do frete', info.destino) + linha('KM', info.km !== null && info.km !== undefined && info.km !== '' ? kmTexto(info.km) : '');
+  el('frete-c-valor-tabela').textContent = info.valorTabela !== null && info.valorTabela !== undefined
+    ? `(R$ ${freteReais(info.valorTabela)})`
+    : '(o servidor calcula ao gravar: KM × tarifa do tipo de veículo)';
+  const obs = String(info.freteObservacao || '').toUpperCase();
+  el('frete-c-tabela').checked = obs === 'TABELA';
+  el('frete-c-combinado').checked = obs === 'COMBINADO';
+  el('frete-c-valor').value = obs === 'COMBINADO' && info.freteCombinado ? freteReais(info.freteCombinado) : '';
+  el('frete-c-erro').hidden = true;
+  freteContratarOpcaoUI();
+  el('modal-frete-contratar').classList.add('open');
+  setTimeout(() => (obs === 'COMBINADO' ? el('frete-c-valor') : el(obs ? 'frete-c-confirmar' : 'frete-c-tabela')).focus(), 30);
+  return new Promise((resolver) => { _freteContratar = { resolver }; });
+}
+
+function freteContratarOpcaoUI(){
+  const combinado = document.getElementById('frete-c-combinado').checked;
+  document.getElementById('frete-c-valor-wrap').hidden = !combinado;
+  if(combinado) document.getElementById('frete-c-valor').focus();
+}
+
+function freteContratarResponder(resposta){
+  const m = document.getElementById('modal-frete-contratar');
+  if(m) m.classList.remove('open');
+  const atual = _freteContratar;
+  _freteContratar = null;
+  if(atual) atual.resolver(resposta);
+}
+
+function freteContratarConfirmarUI(){
+  const erro = document.getElementById('frete-c-erro');
+  const obs = document.getElementById('frete-c-tabela').checked ? 'TABELA'
+    : document.getElementById('frete-c-combinado').checked ? 'COMBINADO' : '';
+  if(!obs){
+    erro.textContent = 'Escolha TABELA ou COMBINADO.';
+    erro.hidden = false;
+    return;
+  }
+  const valor = obs === 'COMBINADO' ? valorEmReaisLocal(document.getElementById('frete-c-valor').value) : null;
+  if(obs === 'COMBINADO' && valor === null){
+    erro.textContent = 'Digite o valor combinado, maior que zero (ex.: 14.000,00).';
+    erro.hidden = false;
+    document.getElementById('frete-c-valor').focus();
+    return;
+  }
+  freteContratarResponder({ freteObservacao: obs, freteCombinado: valor });
+}
+
+/* Esc fecha como "Cancelar"; Enter no campo de valor confirma. */
+document.addEventListener('keydown', (ev) => {
+  if(!_freteContratar) return;
+  if(ev.key === 'Escape'){ ev.preventDefault(); freteContratarResponder(null); }
+  if(ev.key === 'Enter' && ev.target && ev.target.id === 'frete-c-valor'){ ev.preventDefault(); freteContratarConfirmarUI(); }
+});
+
+/* Garante a observação antes de contratar. Devolve os campos de frete a
+   usar (os que já existiam, se já bastam) ou null se a pessoa cancelou. */
+async function garantirFreteParaContratar(info, motivo){
+  const falta = freteFaltandoParaContratar(info);
+  if(!falta && motivo !== 'troca') return { freteObservacao: info.freteObservacao || '', freteCombinado: info.freteCombinado ?? null };
+  return perguntarFreteUI(info, motivo);
+}
+
+/* O SELO "frete a definir" — carga contratada antes da regra. Só a Logística
+   e a Administração o veem (são quem decide o frete); clicar abre a pergunta. */
+function seloFreteHtml(c){
+  if(!podeVerValorDeFreteLocal()) return '';
+  if(freteADefinir(c)){
+    return `<button type="button" class="selo-frete selo-frete-definir" onclick="event.stopPropagation(); definirFreteDaCargaUI('${escJs(c.id)}')"
+      title="Carga contratada sem a observação do frete. Clique para informar TABELA ou COMBINADO.">frete a definir</button>`;
+  }
+  if(!c.placa || !c.freteObservacao) return '';
+  const txt = c.freteObservacao === 'COMBINADO' && c.freteCombinado ? `combinado R$ ${freteReais(c.freteCombinado)}` : 'tabela';
+  return `<button type="button" class="selo-frete selo-frete-${c.freteObservacao === 'COMBINADO' ? 'combinado' : 'tabela'}"
+    onclick="event.stopPropagation(); definirFreteDaCargaUI('${escJs(c.id)}')" title="Observação do frete. Clique para alterar.">frete: ${esc(txt)}</button>`;
+}
+
+function podeVerValorDeFreteLocal(){
+  const s = DB.operador && DB.operador.setor;
+  return s === 'Logística' || s === 'Administração';
+}
+
+async function definirFreteDaCargaUI(id){
+  const c = getCarga(id);
+  if(!c) return;
+  const r = await perguntarFreteUI(infoFreteDaCarga(c), freteADefinir(c) ? 'definir' : 'contratar');
+  if(!r) return;
+  aplicarFreteNaCarga(c, r);
+}
+
+function infoFreteDaCarga(c){
+  return { placa: c.placa, transportadora: c.transportadora, tipoVeiculo: c.tipoVeiculo, numeroCarga: c.numeroCarga,
+    destino: c.freteDestino || c.destino, km: c.kmDeslocamento ?? c.kmDestino ?? null, valorTabela: c.freteValor ?? null,
+    freteObservacao: c.freteObservacao, freteCombinado: c.freteCombinado };
+}
+
+function aplicarFreteNaCarga(c, r){
+  const antes = c.freteObservacao === 'COMBINADO' ? `COMBINADO R$ ${freteReais(c.freteCombinado || 0)}` : (c.freteObservacao || '—');
+  c.freteObservacao = r.freteObservacao;
+  c.freteCombinado = r.freteObservacao === 'COMBINADO' ? r.freteCombinado : null;
+  c.atualizadoEm = nowISO();
+  const depois = r.freteObservacao === 'COMBINADO' ? `COMBINADO R$ ${freteReais(r.freteCombinado)}` : 'TABELA';
+  registrarAlteracao({ cargaId: c.id, placa: c.placa, campo: 'Observação do frete', de: antes, para: depois,
+    setor: (DB.operador && DB.operador.setor) || 'Logística', operador: (DB.operador && DB.operador.nome) || '(não identificado)' });
+  SuincoStore.save();
+  notifyGravacao(`Frete da carga ${c.numeroCarga || c.placa}: ${depois}.`);
+  renderAll();
+}
 /* ---------- PORTARIA ---------- */
 async function acaoChegadaUI(){
   const input = document.getElementById('portaria-placa');
@@ -27313,7 +27674,27 @@ function freteCelula(l, col, j){
     case 'data': case 'canhotoEm':
       return `<td${k} class="${primeira || chave !== 'data' ? '' : 'frete-mudo'}">${esc(freteData(v))}</td>`;
     case 'dataPagamento': {
-      /* Editável (decisão do dono, 05/10/2026): é a data do último pagamento válido. */
+      /* CADA NOTA COM A SUA DATA (06/10/2026): "pode ser que a primeira eu pague
+         hoje, a outra no próximo pagamento". Na linha de uma nota a célula é
+         DA NOTA — Pagar, ou a data em que ela foi paga. A da carga (o último
+         pagamento da carga) fica na linha fechada, na carga sem pendência e
+         no botão Editar. */
+      if(freteLinhaDeNota(l)){
+        /* Na 1ª linha a carga continua dizendo a data do pagamento DELA, embaixo
+           do botão da nota — senão o "paguei 50% em 09/10" sumia da grade. */
+        const daCarga = primeira && l.cargaDataPagamento
+          ? `<button type="button" class="frete-edit frete-data-carga" onclick="freteEditarDataPagamento('${escJs(l.carga)}')"
+              aria-label="Último pagamento da carga ${esc(l.carga)}: ${esc(freteData(l.cargaDataPagamento))}. Editar">carga: ${esc(freteData(l.cargaDataPagamento))}</button>` : '';
+        if(l.categoria === 'so_b2b') return `<td${k} class="frete-nota-campo"><span class="frete-vazio" title="Nota só no B2B: não é nota da carga no sistema, não entra no % pago.">—</span>${daCarga}</td>`;
+        if(l.notaPaga){
+          return `<td${k} class="frete-nota-campo"><button type="button" class="frete-edit frete-edit-data frete-nota-paga" onclick="freteEditarDataNota('${escJs(l.carga)}','${escJs(l.nota)}')"
+              aria-label="Nota ${esc(l.nota)} paga em ${esc(freteData(l.notaPaga.data) || 'sem data')}. Editar">
+              <span class="frete-selo-pago" aria-hidden="true">paga</span>${esc(freteData(l.notaPaga.data) || 'sem data')}</button>${daCarga}</td>`;
+        }
+        return `<td${k} class="frete-nota-campo"><button type="button" class="btn btn-sm frete-btn-pagar-nota${l.tratativaLibera ? ' frete-pagar-pronta' : ''}"
+            onclick="fretePagarNotaUI('${escJs(l.carga)}','${escJs(l.nota)}')"
+            title="${l.tratativaLibera ? 'Nota liberada: registrar o pagamento dela, com a data' : 'Registrar o pagamento desta nota (ela ainda não está liberada — o painel pergunta)'}">Pagar nota</button>${daCarga}</td>`;
+      }
       if(!primeira) return `<td${k}></td>`;
       const pagoV = l.v[freteIx('pago')];
       const temPago = typeof pagoV === 'number' && pagoV > 0;
@@ -27382,8 +27763,18 @@ function freteCelula(l, col, j){
       return `<td${k} class="frete-sp frete-sp-${cls}">${v ? `<span class="frete-sit frete-selo-${cls}">${esc(v)}</span>` : ''}</td>`;
     }
     case 'transportadora': case 'cte': {
-      if(!primeira) return `<td${k} class="frete-mudo">${chave === 'transportadora' ? esc(v || '') : ''}</td>`;
       const rotulo = chave === 'transportadora' ? 'Transportadora' : 'CT-E';
+      /* POR NOTA (06/10/2026): toda pendência tem os seus — em branco, valem
+         os da carga (em cinza, "da carga"); preenchido, é a exceção daquela
+         nota e aparece em destaque. */
+      if(freteLinhaDeNota(l)){
+        const propria = chave === 'transportadora' ? l.notaTransportadora : l.notaCte;
+        return `<td${k} class="frete-nota-campo"><button type="button" class="frete-edit${propria ? ' frete-proprio' : ' frete-herdado'}"
+            onclick="freteEditarNota('${escJs(l.carga)}','${escJs(l.nota)}','${chave}')"
+            title="${propria ? `${rotulo} desta nota` : `${rotulo} da carga — clique para dar outro a esta nota`}"
+            aria-label="${rotulo} da nota ${esc(l.nota)}: ${esc(v || 'em branco')}${propria ? '' : ' (da carga)'}. Editar">${v ? esc(v) : '<span class="frete-vazio">preencher</span>'}</button></td>`;
+      }
+      if(!primeira) return `<td${k} class="frete-mudo">${chave === 'transportadora' ? esc(v || '') : ''}</td>`;
       return `<td${k}><button type="button" class="frete-edit" onclick="freteEditarCarga('${escJs(l.carga)}','${chave}')"
           aria-label="${rotulo} da carga ${esc(l.carga)}: ${esc(v || 'em branco')}. Editar">${v ? esc(v) : '<span class="frete-vazio">preencher</span>'}</button></td>`;
     }
@@ -27407,6 +27798,11 @@ function freteCelula(l, col, j){
     default:
       return `<td${k}>${esc(freteNum(v))}</td>`;
   }
+}
+
+/* A linha é de UMA NOTA (e não a linha-resumo da carga fechada)? */
+function freteLinhaDeNota(l){
+  return !!l.nota && !(l.primeira && l._dobravel && !l._aberta);
 }
 
 function freteDesenharTabela(){
@@ -27439,8 +27835,10 @@ function freteDesenharTabela(){
   document.getElementById('frete-tbody').innerHTML = visiveis.map((l) => `<tr class="${l.primeira ? 'frete-primeira' : 'frete-seg'}${l._dobravel ? (l._aberta ? ' frete-aberta' : ' frete-fechada') : ''}" data-carga="${esc(l.carga)}">
       ${d.colunas.map((c, j) => freteCelula(l, c, j)).join('')}
       <td class="frete-acoes no-print">${l.primeira ? `
-        <button type="button" class="btn btn-sec btn-sm" onclick="fretePagarUI('${escJs(l.carga)}')" title="Registrar um pagamento desta carga"><svg class="ico ico-btn" aria-hidden="true"><use href="#i-faturamento"/></svg>Pagar</button>
-        <button type="button" class="btn btn-sec btn-sm" onclick="freteHistoricoUI('${escJs(l.carga)}')" title="Pagamentos, tratativas e quem mexeu"><svg class="ico ico-btn" aria-hidden="true"><use href="#i-historico"/></svg>Histórico</button>` : ''}</td>
+        <button type="button" class="btn btn-sec btn-sm" onclick="fretePagarUI('${escJs(l.carga)}')" title="Registrar um pagamento da carga inteira (% das notas)"><svg class="ico ico-btn" aria-hidden="true"><use href="#i-faturamento"/></svg>Pagar carga</button>
+        <button type="button" class="btn btn-sec btn-sm" onclick="freteHistoricoUI('${escJs(l.carga)}')" title="Pagamentos, tratativas e quem mexeu"><svg class="ico ico-btn" aria-hidden="true"><use href="#i-historico"/></svg>Histórico</button>
+        <button type="button" class="btn btn-sec btn-sm frete-btn-editar" onclick="freteEditarUI('${escJs(l.carga)}')" title="Editar transportadora, CT-E, data do pagamento, observação e canhoto"><svg class="ico ico-btn" aria-hidden="true"><use href="#i-lapis"/></svg>Editar</button>
+        <button type="button" class="btn btn-danger btn-sm frete-btn-excluir" onclick="freteExcluirUI('${escJs(l.carga)}')" title="Tirar esta carga do controle (fica em Excluídas, com o motivo)"><svg class="ico ico-btn" aria-hidden="true"><use href="#i-lixeira"/></svg>Excluir</button>` : ''}</td>
     </tr>`).join('');
   const el = document.getElementById('frete-contagem');
   if(el) el.textContent = cargas === total ? `${total} carga(s)` : `Mostrando ${cargas} de ${total} carga(s)`;
@@ -27557,7 +27955,7 @@ function freteEditarCarga(carga, campo){
   if(freteSoDemonstracao(campo === 'transportadora' ? 'a transportadora é escolhida entre as cadastradas' : 'o CT-E é gravado')) return;
   const l = freteLinhaDaCarga(carga);
   if(!l) return;
-  const atual = l.v[freteIx(campo)] || '';
+  const atual = freteDadosDaCarga(carga)[campo] || '';
   const rotulo = campo === 'transportadora' ? 'Transportadora' : 'CT-E';
   const lista = campo === 'transportadora' ? freteTransportadorasConhecidas() : null;
   const campoHtml = lista
@@ -27607,7 +28005,7 @@ function freteEditarDataPagamento(carga){
   if(!l) return;
   const pago = l.v[freteIx('pago')];
   if(!(typeof pago === 'number' && pago > 0)){ fretePagarUI(carga); return; }   // sem pagamento, a data nasce no Pagar
-  const atual = l.v[freteIx('dataPagamento')] || '';
+  const atual = freteDadosDaCarga(carga).dataPagamento || '';
   freteModal(`Data do pagamento — carga ${carga}`,
     `<label class="frete-campo">Data do último pagamento
        <input type="date" id="frete-campo-data" data-foco value="${esc(atual)}"></label>
@@ -27750,11 +28148,14 @@ async function freteHistoricoUI(carga){
         <td>${esc(p.cliente)}</td><td>${esc(freteData(p.vistoEm))}</td>
         <td>${esc(p.tratativa || '—')}${p.tratativaEm ? ` · ${esc(freteData(p.tratativaEm))}` : ''}</td>
         <td>${esc(p.resolvidaEm ? freteData(p.resolvidaEm) : '')}</td></tr>`).join('')}</tbody></table></div>` : '<div class="card-sub">Nenhuma pendência.</div>';
-  const ROTULO = { conferencia: 'Conferência dos relatórios', editou_carga: 'Editou a carga', tratativa: 'Tratativa', pagamento: 'Pagamento', anulou_pagamento: 'Anulou pagamento', exportou: 'Exportou a planilha', canhoto: 'Canhoto original' };
-  const detalhe = (e) => (e.acao === 'canhoto' && e.detalhe ? (e.detalhe.para ? ' · marcou: veio' : ' · desmarcou') : '');
+  const ROTULO = { conferencia: 'Conferência dos relatórios', editou_carga: 'Editou a carga', tratativa: 'Tratativa', pagamento: 'Pagamento', anulou_pagamento: 'Anulou pagamento', exportou: 'Exportou a planilha', canhoto: 'Canhoto original', excluiu: 'Excluiu do controle', restaurou: 'Restaurou' };
+  const detalhe = (e) => (e.acao === 'canhoto' && e.detalhe ? (e.detalhe.para ? ' · marcou: veio' : ' · desmarcou')
+    : e.acao === 'excluiu' && e.detalhe ? ` · ${e.detalhe.motivo || ''}`
+    : e.acao === 'restaurou' && e.detalhe ? (e.detalhe.pela === 'reimportacao' ? ' · pela reimportação do PDF' : ' · pelo botão Restaurar') : '');
   const eventos = h.eventos.length ? `<ul class="frete-eventos">${h.eventos.map((e) => `<li><strong>${esc(ROTULO[e.acao] || e.acao)}</strong>${esc(detalhe(e))}${e.nota ? ` · nota ${esc(e.nota)}` : ''}
       <span>${esc(e.por)} · ${esc(dt(e.em))}</span></li>`).join('')}</ul>` : '<div class="card-sub">Sem eventos.</div>';
-  document.getElementById('frete-modal-corpo').innerHTML =
+  const excl = h.excluida ? `<div class="frete-alerta">Excluída do controle por <strong>${esc(h.excluida.por)}</strong> em ${esc(dt(h.excluida.em))}: ${esc(h.excluida.motivo)}</div>` : '';
+  document.getElementById('frete-modal-corpo').innerHTML = excl +
     `<h3 class="frete-h3">Pagamentos</h3>${pagamentos}<h3 class="frete-h3">Notas (pendências desta carga)</h3>${pend}<h3 class="frete-h3">Quem mexeu</h3>${eventos}`;
 }
 
@@ -27774,6 +28175,258 @@ async function freteConfirmarAnular(carga, id){
     notify('Pagamento anulado.', 'success');
     await freteRecarregarSemPiscar();
     freteHistoricoUI(carga);
+  }catch(e){ notify(freteMensagemDeErro(e), 'danger', 8000); }
+}
+
+/* --------------------------------------------- editar a carga (06/10/2026) */
+/* Pedido do dono: "excluir e editar" no fim da linha. Decisão dele: um
+   formulário só, com o que a pessoa preenche — transportadora, CT-E, data do
+   pagamento, observação e canhoto. Os números de notas vêm dos PDFs e NÃO se
+   editam à mão (o painel deixaria de bater com o relatório). Grava só o que
+   mudou, num pedido só; o servidor decide e registra no histórico. */
+function freteEditarUI(carga){
+  if(freteSoDemonstracao('o formulário grava transportadora, CT-E, data do pagamento, observação e canhoto')) return;
+  const l = freteLinhaDaCarga(carga);
+  if(!l) return;
+  const v = (k) => l.v[freteIx(k)];
+  const dc = freteDadosDaCarga(carga);
+  const transp = dc.transportadora || '';
+  const lista = freteTransportadorasConhecidas();
+  const pago = v('pago');
+  const temPago = typeof pago === 'number' && pago > 0;
+  const canhoto = v('canhoto') === 'SIM';
+  freteModal(`Editar carga ${carga}`, `
+    <div class="frete-form">
+      <label class="frete-campo">Transportadora
+        <select id="frete-ed-transp" data-foco class="frete-sel-transp">
+          <option value="">— em branco —</option>
+          ${transp && !lista.includes(transp) ? `<option value="${esc(transp)}" selected>${esc(transp)} (não está no cadastro)</option>` : ''}
+          ${lista.map((n) => `<option value="${esc(n)}"${n === transp ? ' selected' : ''}>${esc(n)}</option>`).join('')}
+        </select></label>
+      <label class="frete-campo">CT-E <small>(mais de um: separe por vírgula)</small>
+        <input type="text" id="frete-ed-cte" maxlength="40" value="${esc(dc.cte || '')}"></label>
+    </div>
+    <div class="frete-form">
+      <label class="frete-campo">Data do último pagamento da carga
+        ${temPago
+          ? `<input type="date" id="frete-ed-data" value="${esc(dc.dataPagamento || '')}">`
+          : '<span class="card-sub" id="frete-ed-data-nao">Sem pagamento registrado — a data nasce no botão Pagar.</span>'}</label>
+      <label class="frete-campo frete-check-campo"><span>Canhoto original</span>
+        <span class="frete-check"><input type="checkbox" id="frete-ed-canhoto"${canhoto ? ' checked' : ''}> veio</span></label>
+    </div>
+    <label class="frete-campo">Observação da carga
+      <textarea id="frete-ed-obs" rows="2" maxlength="500">${esc(l.obsCarga || '')}</textarea></label>
+    <div class="card-sub">Os números de notas (Sist., B2B, finalizadas…) vêm dos relatórios importados e não se editam aqui.</div>`,
+    [{ rotulo: 'Cancelar', clique: 'freteFecharModal()' },
+     { rotulo: 'Salvar', classe: 'btn-primary', id: 'frete-ed-salvar', icone: 'i-ok', clique: `freteSalvarEdicao('${escJs(carga)}')` }]);
+}
+async function freteSalvarEdicao(carga){
+  const l = freteLinhaDaCarga(carga);
+  if(!l) return;
+  const doc = (id) => document.getElementById(id);
+  const v = (k) => l.v[freteIx(k)];
+  const dc = freteDadosDaCarga(carga);
+  const corpo = {};
+  if(doc('frete-ed-transp').value !== (dc.transportadora || '')) corpo.transportadora = doc('frete-ed-transp').value;
+  if(doc('frete-ed-cte').value.trim() !== (dc.cte || '')) corpo.cte = doc('frete-ed-cte').value;
+  if(doc('frete-ed-obs').value.trim() !== (l.obsCarga || '')) corpo.obs = doc('frete-ed-obs').value;
+  if(doc('frete-ed-canhoto').checked !== (v('canhoto') === 'SIM')) corpo.canhotoOriginal = doc('frete-ed-canhoto').checked;
+  if(doc('frete-ed-data') && (doc('frete-ed-data').value || '') !== (dc.dataPagamento || '')) corpo.dataPagamento = doc('frete-ed-data').value || null;
+  if(!Object.keys(corpo).length){ freteFecharModal(); notify('Nada mudou.', 'info'); return; }
+  const botao = doc('frete-ed-salvar');
+  if(botao) botao.disabled = true;
+  try{
+    await SuincoSharePoint.frete.editarCarga(carga, corpo);
+    freteFecharModal();
+    notify(`Carga ${carga} atualizada.`, 'success');
+    await freteRecarregarSemPiscar();
+  }catch(e){
+    if(botao) botao.disabled = false;
+    notify(freteMensagemDeErro(e), 'danger', 9000);
+  }
+}
+
+/* ---------------------------------- campos e pagamento DA NOTA (06/10/2026) */
+function freteLinhaDaNota(carga, nota){
+  return FRETE.dados.linhas.find((x) => String(x.carga) === String(carga) && x.nota === nota);
+}
+function freteEditarNota(carga, nota, campo){
+  if(freteSoDemonstracao(`${campo === 'transportadora' ? 'a transportadora' : 'o CT-E'} desta nota é gravado`)) return;
+  const l = freteLinhaDaNota(carga, nota);
+  if(!l) return;
+  const propria = campo === 'transportadora' ? l.notaTransportadora : l.notaCte;
+  const daCargaReal = campo === 'transportadora' ? (freteDadosDaCarga(carga).transportadora || '') : (freteDadosDaCarga(carga).cte || '');
+  const rotulo = campo === 'transportadora' ? 'Transportadora' : 'CT-E';
+  const lista = campo === 'transportadora' ? freteTransportadorasConhecidas() : null;
+  const campoHtml = lista
+    ? `<select id="frete-campo-valor" data-foco class="frete-sel-transp">
+         <option value="">— a da carga${daCargaReal ? ` (${esc(daCargaReal)})` : ''} —</option>
+         ${propria && !lista.includes(propria) ? `<option value="${esc(propria)}" selected>${esc(propria)} (não está no cadastro)</option>` : ''}
+         ${lista.map((n) => `<option value="${esc(n)}"${n === propria ? ' selected' : ''}>${esc(n)}</option>`).join('')}
+       </select>`
+    : `<input type="text" id="frete-campo-valor" data-foco maxlength="40" value="${esc(propria || '')}" placeholder="${esc(daCargaReal ? `o da carga: ${daCargaReal}` : 'em branco')}"
+         onkeydown="if(event.key==='Enter'){freteSalvarNota('${escJs(carga)}','${escJs(nota)}','${campo}')}">`;
+  freteModal(`${rotulo} — nota ${nota} (carga ${carga})`,
+    `<label class="frete-campo">${rotulo} desta nota
+       ${campoHtml}</label>
+     <div class="card-sub">Em branco, vale ${campo === 'transportadora' ? 'a transportadora' : 'o CT-E'} da carga. Preencha só quando esta nota tiver outro (reentrega, CT-E complementar).</div>`,
+    [{ rotulo: 'Cancelar', clique: 'freteFecharModal()' },
+     { rotulo: 'Salvar', classe: 'btn-primary', icone: 'i-ok', clique: `freteSalvarNota('${escJs(carga)}','${escJs(nota)}','${campo}')` }]);
+}
+/* O que a CARGA tem (não o que a linha mostra, que pode ser o da nota). */
+function freteDadosDaCarga(carga){
+  const l = freteLinhaDaCarga(carga);
+  return l ? { transportadora: l.cargaTransportadora ?? '', cte: l.cargaCte ?? '', dataPagamento: l.cargaDataPagamento ?? null } : {};
+}
+async function freteSalvarNota(carga, nota, campo){
+  const valor = (document.getElementById('frete-campo-valor') || {}).value || '';
+  try{
+    await SuincoSharePoint.frete.tratar(carga, nota, { [campo]: valor });
+    freteFecharModal();
+    await freteRecarregarSemPiscar();
+  }catch(e){ notify(freteMensagemDeErro(e), 'danger', 8000); }
+}
+
+function fretePagarNotaUI(carga, nota){
+  if(freteSoDemonstracao('o pagamento desta nota é registrado com a data e soma uma nota no % pago')) return;
+  const l = freteLinhaDaNota(carga, nota);
+  if(!l) return;
+  const qtd = Number((freteLinhaDaCarga(carga) || l).v[freteIx('qtdSist')]) || 0;
+  const pct = qtd ? Math.round(10000 / qtd) / 100 : null;
+  const trat = l.v[freteIx('tratativa')] || '';
+  freteModal(`Pagar a nota ${nota} — carga ${carga}`, `
+    <div class="frete-resumo-carga">
+      <span>Nota <strong>${esc(nota)}</strong></span>
+      <span>Status <strong>${esc(trat || 'falta olhar')}</strong></span>
+      ${pct !== null ? `<span>Soma <strong>1 nota</strong> de ${qtd} (${esc(String(pct).replace('.', ','))}%) no % pago</span>` : ''}
+    </div>
+    ${l.tratativaLibera ? '' : '<div class="frete-alerta">Esta nota ainda não está liberada (o status dela não é OK nem DEVOLUÇÃO). Se registrar, o painel pergunta antes.</div>'}
+    <label class="frete-campo">Data do pagamento
+      <input type="date" id="frete-pn-data" data-foco value="${esc(diaLocalISO(new Date()))}"></label>
+    <div id="frete-pergunta" class="frete-alerta" hidden></div>`,
+    [{ rotulo: 'Cancelar', clique: 'freteFecharModal()' },
+     { rotulo: 'Registrar pagamento da nota', classe: 'btn-primary', id: 'frete-btn-pagar-nota', icone: 'i-ok', clique: `fretePagarNota('${escJs(carga)}','${escJs(nota)}', false)` }]);
+}
+async function fretePagarNota(carga, nota, confirmar){
+  const data = (document.getElementById('frete-pn-data') || {}).value || '';
+  if(!data){ notify('Informe a data do pagamento da nota.', 'warn'); return; }
+  const botao = document.getElementById('frete-btn-pagar-nota');
+  if(botao) botao.disabled = true;
+  try{
+    const r = await SuincoSharePoint.frete.pagarNota(carga, nota, { dataPagamento: data, confirmar: !!confirmar });
+    freteFecharModal();
+    notify(`Nota ${nota} paga em ${freteData(data)}. Carga ${carga} com ${String(r.pagoTotal).replace('.', ',')}% pago.`, 'success');
+    await freteRecarregarSemPiscar();
+  }catch(e){
+    if(botao) botao.disabled = false;
+    if(e && e.status === 409 && e.dados && e.dados.podeConfirmar){
+      const p = document.getElementById('frete-pergunta');
+      p.hidden = false;
+      p.innerHTML = `${esc(e.message)}
+        <div class="flex-end gap8" style="margin-top:8px">
+          <button type="button" class="btn btn-sec btn-sm" onclick="document.getElementById('frete-pergunta').hidden=true">Voltar</button>
+          <button type="button" class="btn btn-serio btn-sm" onclick="fretePagarNota('${escJs(carga)}','${escJs(nota)}', true)">Pagar mesmo assim</button>
+        </div>`;
+      return;
+    }
+    notify(freteMensagemDeErro(e), 'danger', 9000);
+  }
+}
+function freteEditarDataNota(carga, nota){
+  if(freteSoDemonstracao('a data do pagamento desta nota é editada')) return;
+  const l = freteLinhaDaNota(carga, nota);
+  if(!l || !l.notaPaga) return;
+  freteModal(`Pagamento da nota ${nota} — carga ${carga}`,
+    `<label class="frete-campo">Data do pagamento desta nota
+       <input type="date" id="frete-campo-data" data-foco value="${esc(l.notaPaga.data || '')}"></label>
+     <div class="card-sub">Para desfazer o pagamento da nota, use <strong>Anular</strong>: ele continua no histórico, marcado como anulado, e a carga volta a ter a nota em aberto.</div>`,
+    [{ rotulo: 'Cancelar', clique: 'freteFecharModal()' },
+     { rotulo: 'Anular pagamento', classe: 'btn-danger', clique: `freteAnularUI('${escJs(carga)}', ${Number(l.notaPaga.id)})` },
+     { rotulo: 'Salvar data', classe: 'btn-primary', icone: 'i-ok', clique: `freteSalvarDataNota('${escJs(carga)}','${escJs(nota)}')` }]);
+}
+async function freteSalvarDataNota(carga, nota){
+  const valor = (document.getElementById('frete-campo-data') || {}).value || '';
+  if(!valor){ notify('Informe a data. Para desfazer o pagamento, use Anular.', 'warn'); return; }
+  try{
+    await SuincoSharePoint.frete.tratar(carga, nota, { dataPagamento: valor });
+    freteFecharModal();
+    await freteRecarregarSemPiscar();
+  }catch(e){ notify(freteMensagemDeErro(e), 'danger', 8000); }
+}
+
+/* --------------------------------------------- excluir a carga (06/10/2026) */
+/* Decisão do dono: SAI DA LISTA E FICA NO HISTÓRICO. Motivo obrigatório; com
+   pagamento registrado, a janela já avisa e o servidor pergunta de novo se a
+   tela estiver desatualizada. Volta pela lista "Excluídas" ou reimportando. */
+function freteExcluirUI(carga){
+  if(freteSoDemonstracao('a carga sai da lista e fica em Excluídas, com o motivo')) return;
+  const l = freteLinhaDaCarga(carga);
+  if(!l) return;
+  const pago = l.v[freteIx('pago')];
+  const temPago = typeof pago === 'number' && pago > 0;
+  freteModal(`Excluir carga ${carga} do controle`, `
+    ${temPago ? `<div class="frete-alerta">Esta carga tem <strong>${esc(fretePct(pago))}</strong> pago registrado. Os pagamentos não são apagados: continuam no histórico dela.</div>` : ''}
+    <label class="frete-campo">Por que esta carga sai do controle?
+      <input type="text" id="frete-excluir-motivo" data-foco maxlength="300" placeholder="Ex.: importada por engano; carga cancelada"
+             onkeydown="if(event.key==='Enter'){freteConfirmarExclusao('${escJs(carga)}', ${temPago})}"></label>
+    <div class="card-sub">Ela sai da lista, da planilha e do PDF. Fica em <strong>Excluídas</strong> com quem excluiu, quando e o motivo — e pode ser restaurada. Importar o PDF dela de novo também a traz de volta.</div>
+    <div id="frete-excluir-pergunta" class="frete-alerta" hidden></div>`,
+    [{ rotulo: 'Cancelar', clique: 'freteFecharModal()' },
+     { rotulo: 'Excluir do controle', classe: 'btn-danger', id: 'frete-excluir-confirmar', icone: 'i-lixeira', clique: `freteConfirmarExclusao('${escJs(carga)}', ${temPago})` }]);
+}
+async function freteConfirmarExclusao(carga, confirmar){
+  const motivo = ((document.getElementById('frete-excluir-motivo') || {}).value || '').trim();
+  if(!motivo){
+    notify('Diga o motivo da exclusão.', 'warn');
+    const m = document.getElementById('frete-excluir-motivo'); if(m) m.focus();
+    return;
+  }
+  const botao = document.getElementById('frete-excluir-confirmar');
+  if(botao) botao.disabled = true;
+  try{
+    await SuincoSharePoint.frete.excluir(carga, motivo, confirmar);
+    freteFecharModal();
+    notify(`Carga ${carga} excluída do controle. Ela está em "Excluídas", com o motivo.`, 'success', 7000);
+    await freteRecarregarSemPiscar();
+  }catch(e){
+    if(botao) botao.disabled = false;
+    if(e && e.status === 409 && e.dados && e.dados.podeConfirmar){
+      const p = document.getElementById('frete-excluir-pergunta');
+      p.hidden = false;
+      p.innerHTML = `${esc(e.message)}
+        <div class="flex-end gap8" style="margin-top:8px">
+          <button type="button" class="btn btn-sec btn-sm" onclick="document.getElementById('frete-excluir-pergunta').hidden=true">Voltar</button>
+          <button type="button" class="btn btn-danger btn-sm" onclick="freteConfirmarExclusao('${escJs(carga)}', true)">Excluir mesmo assim</button>
+        </div>`;
+      return;
+    }
+    notify(freteMensagemDeErro(e), 'danger', 9000);
+  }
+}
+
+async function freteExcluidasUI(){
+  if(freteSoDemonstracao('a lista mostra as cargas excluídas, com o motivo, e permite restaurar')) return;
+  freteModal('Cargas excluídas do controle', '<div class="card-sub">Carregando…</div>', [{ rotulo: 'Fechar', clique: 'freteFecharModal()' }], true);
+  let r;
+  try{ r = await SuincoSharePoint.frete.excluidas(); }
+  catch(e){ document.getElementById('frete-modal-corpo').innerHTML = `<div class="frete-alerta">${esc(freteMensagemDeErro(e))}</div>`; return; }
+  const corpo = document.getElementById('frete-modal-corpo');
+  if(!corpo) return;
+  corpo.innerHTML = r.cargas.length ? `<div class="table-wrap"><table class="frete-mini" id="frete-excluidas"><thead><tr>
+      <th scope="col">Carga</th><th scope="col">Transportadora</th><th scope="col">Excluída em</th><th scope="col">Por</th><th scope="col">Motivo</th><th scope="col">Pago</th><th scope="col"></th></tr></thead><tbody>
+      ${r.cargas.map((c) => `<tr data-carga="${esc(c.carga)}"><td>${esc(c.carga)}</td><td>${esc(c.transportadora || '—')}</td>
+        <td>${esc(fmtDataHora(c.excluidaEm))}</td><td>${esc(c.excluidaPor)}</td><td>${esc(c.motivo)}</td>
+        <td>${c.pctPago ? esc(String(c.pctPago).replace('.', ',')) + '%' : '—'}</td>
+        <td class="frete-acoes"><button type="button" class="btn btn-sec btn-sm" onclick="freteHistoricoUI('${escJs(c.carga)}')">Histórico</button>
+          <button type="button" class="btn btn-primary btn-sm" onclick="freteRestaurar('${escJs(c.carga)}')"><svg class="ico ico-btn" aria-hidden="true"><use href="#i-desfazer"/></svg>Restaurar</button></td></tr>`).join('')}
+      </tbody></table></div>` : '<div class="card-sub">Nenhuma carga excluída.</div>';
+}
+async function freteRestaurar(carga){
+  try{
+    await SuincoSharePoint.frete.restaurar(carga);
+    notify(`Carga ${carga} restaurada: voltou para a lista.`, 'success');
+    await freteRecarregarSemPiscar();
+    freteExcluidasUI();
   }catch(e){ notify(freteMensagemDeErro(e), 'danger', 8000); }
 }
 
@@ -28032,7 +28685,9 @@ function freteHtmlPrevia(previa){
         Mande o PDF que falta (a leitura fica guardada por um dia).${c.aviso ? `<div class="frete-prev-avisos">⚠ ${esc(c.aviso)}</div>` : ''}</td></tr>`;
     }
     const ex = c.existente;
-    const mudanca = ex ? `Já estava no controle (${esc(freteData(ex.dataConsulta))}): <strong>${ex.novas}</strong> nova(s), <strong>${ex.resolvidas}</strong> resolvida(s)${ex.pctPago ? `, ${esc(String(ex.pctPago).replace('.', ','))}% já pago` : ''}` : 'Carga nova';
+    /* Carga EXCLUÍDA: confirmar a traz de volta — a prévia diz antes (06/10/2026). */
+    const voltou = ex && ex.excluida ? `<div class="frete-prev-avisos frete-prev-excluida">⚠ Esta carga foi <strong>excluída</strong> do controle por ${esc(ex.excluida.por)} (${esc(ex.excluida.motivo)}). Gravar a traz de volta para a lista.</div>` : '';
+    const mudanca = voltou + (ex ? `Já estava no controle (${esc(freteData(ex.dataConsulta))}): <strong>${ex.novas}</strong> nova(s), <strong>${ex.resolvidas}</strong> resolvida(s)${ex.pctPago ? `, ${esc(String(ex.pctPago).replace('.', ','))}% já pago` : ''}` : 'Carga nova');
     const cls = c.situacao === 'LIBERADA' ? 'lib' : c.situacao === 'PENDENTE' ? 'pend' : 'verif';
     return `<tr class="frete-prev"><td><input type="checkbox" class="frete-prev-ok" data-carga="${esc(c.numero)}" checked aria-label="Gravar a carga ${esc(c.numero)}"></td>
       <td><strong>${esc(c.numero)}</strong></td><td>${c.qtdSist}</td><td>${c.qtdB2b}</td>
@@ -29865,6 +30520,25 @@ function rodapeSomatorios(lista, colspanAntes, colunas){
    Independente dos demais de propósito: quem usa é a administração, e
    misturar controle de frete com acompanhamento de pátio produziria um
    relatório que não serve bem para nenhum dos dois. */
+/* A OBSERVAÇÃO DO FRETE NO RELATÓRIO (06/10/2026): TABELA, COMBINADO com o
+   valor e a diferença para a tabela, ou "a definir" em destaque — carga
+   contratada antes da regra. Uma função para o PDF e outra linha para o CSV. */
+function obsFreteTexto(d){
+  if(d.freteObservacao === 'COMBINADO' && d.freteCombinado != null){
+    const dif = d.freteValor != null ? Number(d.freteCombinado) - Number(d.freteValor) : null;
+    const br = (n) => Number(n).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2});
+    return `COMBINADO R$ ${br(d.freteCombinado)}` + (dif !== null && dif !== 0 ? ` (${dif > 0 ? '+' : '−'}${br(Math.abs(dif))} vs tabela)` : '');
+  }
+  if(d.freteObservacao === 'TABELA') return 'TABELA';
+  return d.freteADefinir ? 'a definir' : '';
+}
+function obsFreteRelatorioHtml(d){
+  const t = obsFreteTexto(d);
+  if(t === 'a definir') return '<span class="obs-pendente">a definir</span>';
+  if(!t) return '<span class="text-dim">—</span>';
+  return d.freteObservacao === 'COMBINADO' ? `<strong>${esc(t)}</strong>` : esc(t);
+}
+
 async function exportarPdfFretes(){
   await atualizarDadosAntesDoRelatorio();
   /* Container PRÓPRIO, não o do Operacional.
@@ -29890,11 +30564,11 @@ async function exportarPdfFretes(){
       <td class="col-rota">${esc(d.rota)}</td>
       <td class="col-km">${d.kmDeslocamento === null
         ? '<span class="text-dim">—</span>'
-        : esc(kmTexto(d.kmDeslocamento)) + (d.kmDivergente
-          ? `<span class="km-tabela" title="KM da tabela de frete para o destino">tab. ${esc(kmTexto(d.kmDestino))}</span>` : '')}</td>
+        : esc(kmTexto(d.kmDeslocamento))}</td>
       <td class="col-valor">${d.freteValor === null || d.freteValor === undefined
         ? '<span class="text-dim">—</span>'
         : esc(Number(d.freteValor).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2}))}</td>
+      <td class="col-obsfrete">${obsFreteRelatorioHtml(d)}</td>
       <td class="col-obs">${d.observacoes
         ? esc(d.observacoes)
         : '<span class="obs-pendente">a preencher</span>'}</td>
@@ -29905,11 +30579,11 @@ async function exportarPdfFretes(){
      da carga) — o que mudou é só o agrupamento. */
   const grupos = separarPorDia(dados, d => diaDaProgramacao({ programadoEm: d.programada }));
   const linhas = grupos.map(g => (grupos.length > 1
-    ? `<tr class="linha-dia"><th colspan="9" scope="colgroup">${esc(cabecalhoDoDia(g.dia, g.itens.length))}</th></tr>`
+    ? `<tr class="linha-dia"><th colspan="10" scope="colgroup">${esc(cabecalhoDoDia(g.dia, g.itens.length))}</th></tr>`
     : '') + g.itens.map(linhaHtml).join('')).join('');
 
   el.innerHTML = `
-    <div class="print-page doc-amplo">
+    <div class="print-page doc-amplo doc-paisagem">
       ${cabecalhoDocumento({
         titulo: 'Administração de Fretes',
         subtitulo: 'Logística — valor, negociação e instruções por carga',
@@ -29934,14 +30608,20 @@ async function exportarPdfFretes(){
                Programação) e o valor do frete, lado a lado — é a conta que a
                Administração faz. Com desvio, o KM da tabela sai pequeno ao lado. -->
           <th class="col-km">KM</th>
-          <th class="col-valor">Frete (R$)</th>
+          <!-- O VALOR É A TABELA; A OBSERVAÇÃO DIZ O QUE VALE (06/10/2026).
+               Decisão do dono: o valor não é editável (KM × tarifa) e a
+               observação do frete diz TABELA ou COMBINADO com o valor — era
+               a informação que chegava incompleta à Administração. -->
+          <th class="col-valor">Frete tabela (R$)</th>
+          <th class="col-obsfrete">Obs. do frete</th>
           <th class="col-obs">Observações</th>
         </tr></thead>
-        <tbody>${linhas || '<tr><td colspan="9" class="text-center text-dim">Nenhuma carga no período selecionado.</td></tr>'}</tbody>
+        <tbody>${linhas || '<tr><td colspan="10" class="text-center text-dim">Nenhuma carga no período selecionado.</td></tr>'}</tbody>
       </table>
       ${rodapeDocumento(
-        'O <strong>KM</strong> é o de deslocamento da carga, o mesmo da Programação (com desvio, o KM da tabela sai ao lado); ' +
-        '<strong>Frete</strong> é o valor calculado ou combinado. O campo <strong>Observações</strong> é onde a administração registra ' +
+        'O <strong>KM</strong> é o da carga (vem do destino e só ele é editável); <strong>Frete tabela</strong> é o KM × a tarifa do tipo de veículo, ' +
+        'que ninguém digita. <strong>Obs. do frete</strong> diz o que vale: <strong>TABELA</strong> ou <strong>COMBINADO</strong> com o valor negociado e a diferença; ' +
+        '"a definir" é carga contratada antes da regra de 06/10/2026. O campo <strong>Observações</strong> é onde a administração registra ' +
         'negociação e instruções. As linhas marcadas como <strong>a preencher</strong> são as cargas ainda sem registro administrativo.',
         'Uma linha por carga do período, com os campos administrativos '
         + 'registrados até o momento da emissão. Campos em branco significam '
@@ -29952,7 +30632,9 @@ async function exportarPdfFretes(){
           extra: semObs ? `<strong>Sem registro:</strong> ${semObs} de ${dados.length}` : null,
         }))}
     </div>`;
-  await exportarViaServidor(el, 'Administracao-de-Fretes', 'administracao-fretes');
+  /* FOLHA DEITADA (06/10/2026): com a observação do frete são 10 colunas, e
+     em pé as datas e o valor voltavam a transbordar as larguras medidas. */
+  await exportarViaServidor(el, 'Administracao-de-Fretes', 'administracao-fretes', { orientacao: 'paisagem' });
 }
 
 /* QUAIS RELATÓRIOS ESTE SETOR VÊ (09/09/2026).
@@ -30109,18 +30791,17 @@ async function exportarPlanilhaFretes(){
     // planilha antiga trazia.
     d.peso ? num((Number(d.peso)/1000).toFixed(1)) : '',
     d.freteDestino,
-    kmTexto(d.kmDestino),
+    /* UM KM SÓ (06/10/2026): "KM de deslocamento não é necessário, KM
+       divergente não é necessário" — o KM da carga é o que entra na conta. */
     kmTexto(d.kmDeslocamento),
-    /* A divergência vira COLUNA, e não só uma cor. Cor não sobrevive ao
-       CSV, e é exatamente esta linha que alguém precisa justificar quando
-       o frete pago não bate com a tabela. */
-    d.kmDivergente ? 'SIM' : '',
     d.qtdEntregas,
     d.motorista,
     // Valor só para quem pode ver. Para os outros a coluna existe e vem
     // vazia — sumir com ela faria duas versões da mesma planilha andarem
     // pela empresa com colunas em posições diferentes.
     veValor ? num(d.freteValor === null ? '' : Number(d.freteValor).toFixed(2)) : '',
+    veValor ? obsFreteTexto(d) : '',
+    veValor && d.freteObservacao === 'COMBINADO' && d.freteCombinado != null ? num(Number(d.freteCombinado).toFixed(2)) : '',
     veValor ? d.freteMotivo : '',
     d.observacoes,
     d.freteDocumento,
@@ -30142,9 +30823,9 @@ async function exportarPlanilhaFretes(){
   baixarCsvDoDia(`Administracao_de_Fretes_${isoDiaLocal(new Date())}`, [
     'Sequência', 'Nº da Carga', 'Data da Programação', 'Data do Faturamento', 'Rota', 'Tipo de Operação',
     'Placa', 'Transportadora', 'Tipo de Veículo', 'Peso (t)',
-    'Destino do Frete', 'KM Destino', 'KM Deslocamento', 'KM Divergente',
+    'Destino do Frete', 'KM',
     'Entregas', 'Motorista',
-    'Valor do Frete (R$)', 'Observação do Frete', 'Observações',
+    'Frete pela Tabela (R$)', 'Observação do Frete', 'Frete Combinado (R$)', 'Motivo sem Valor', 'Observações',
     'Documento de Frete',
   ], linhas,
   /* AS COLUNAS DE TEXTO. "Data da Programação" e "Data do Faturamento" ficam
@@ -30153,7 +30834,7 @@ async function exportarPlanilhaFretes(){
      Daniela soma. */
   ['Nº da Carga', 'Rota', 'Tipo de Operação', 'Placa', 'Transportadora',
    'Tipo de Veículo', 'Destino do Frete', 'Motorista',
-   'Observação do Frete', 'Observações', 'Documento de Frete'],
+   'Observação do Frete', 'Motivo sem Valor', 'Observações', 'Documento de Frete'],
   dados.length);
 }
 
@@ -31222,88 +31903,64 @@ function reais(n){
   return Number(n).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2});
 }
 
-/* O FRETE AGORA É EDITÁVEL — E O CALCULADO CONTINUA À VISTA (18/09/2026).
-
-   RELATO DO DONO: "o campo frete ainda nao ta editavel". Ele tinha pedido
-   em 17/09 e eu não implementei — a migração ficou escrita e parada.
-
-   A CONTA CONTINUA SENDO DO SERVIDOR. Não há fórmula nenhuma aqui: o campo
-   manda o que a pessoa digitou e o dia volta relido. Repetir `km × tarifa`
-   no painel daria dois lugares para o preço divergir, que é a regra da casa
-   que este projeto mais paga caro quando quebra.
-
-   O QUE A CÉLULA MOSTRA, e por quê:
-
-     · sem combinado  — o valor calculado, como antes, e o campo vazio com
-                        ele de dica: quem não negociou nada não digita nada;
-     · com combinado  — o valor digitado, marcado com ✎, e o calculado
-                        embaixo em cinza. A conferência compara os dois em
-                        vez de perder a tabela;
-     · KM mudou depois — a linha AVISA. É a decisão (a) do dono: o valor
-                        digitado fica, e a linha diz que foi fechado em
-                        outra quilometragem. Sem esse aviso, um combinado de
-                        583 km seguiria calado numa viagem de 640.
-
-   APAGAR O CAMPO DESFAZ: volta a valer o calculado. Sem isso, um valor
-   digitado por engano ficaria para sempre. */
+/* HISTÓRICO DA CÉLULA DE FRETE. De 18/09 a 06/10/2026 o valor era editável
+   aqui (o combinado entrava no lugar do calculado). Em 06/10 o dono decidiu
+   o contrário — "o valor do frete não pode ser alterável, somente o KM" — e o
+   combinado passou a viver na OBSERVAÇÃO DO FRETE (migração 061). */
 function freteMontagemHtml(m, carga){
+  /* O VALOR NÃO É MAIS EDITÁVEL (decisão do dono, 06/10/2026): "o valor do
+     frete não pode ser alterável, somente o KM". A célula mostra a conta do
+     servidor (KM × tarifa) e, embaixo, a OBSERVAÇÃO DO FRETE — tabela,
+     combinado com o valor, ou "definir". O clique abre a mesma pergunta de
+     todos os pontos de contratação. A coluna continua com os 60px medidos
+     por test_montagem_cabe_em_colunas: número na célula, explicação no title. */
   if(carga){
     const v = carga.freteValor;
-    return (v === null || v === undefined || v === '')
+    const valor = (v === null || v === undefined || v === '')
       ? `<span class="text-dim" title="${esc(m.frete_motivo || 'Sem valor de frete.')}">—</span>`
       : `<strong>R$ ${reais(v)}</strong>`;
+    return valor + seloFreteHtml(carga);
   }
   const id = escJs(m.montagem_id);
-  const manual = !!m.frete_e_manual;
-  const calculado = m.frete_valor_calculado;
-  const temCalculado = calculado !== null && calculado !== undefined && calculado !== '';
-  const dica = temCalculado ? `R$ ${reais(calculado)}` : (m.frete_motivo || 'sem valor');
-
-  /* A COLUNA TEM 60px, E ISSO NÃO É DESCUIDO — é medida.
-     A largura de cada coluna desta tabela foi calculada para o dia inteiro
-     caber num monitor de 1280 sem rolagem lateral, e há teste guardando
-     (test_montagem_cabe_em_colunas). Então o que é NÚMERO fica na célula e
-     o que é EXPLICAÇÃO fica no title: mostrar o calculado numa segunda
-     linha cortava o valor no meio — e número de dinheiro cortado é pior que
-     número ausente, porque parece completo. */
-  const explicacao = manual
-    ? `Frete combinado à mão${m.frete_manual_por ? ' por ' + m.frete_manual_por : ''}.`
-      + (temCalculado ? ` Pela tabela seriam R$ ${reais(calculado)}.` : '')
-      + ' Apague o campo para voltar ao calculado.'
-    : `Frete calculado: ${kmTexto(m.km_deslocamento) || '—'} km × tarifa.`
-      + ' Digite aqui para gravar um valor combinado.';
-
-  const campo = `<input type="text" inputmode="decimal" class="frete-input"
-      value="${manual ? reais(m.frete_valor) : ''}"
-      placeholder="${esc(temCalculado ? reais(calculado) : (m.frete_motivo ? 'sem valor' : ''))}"
-      aria-label="Valor do frete"
-      title="${esc(explicacao)}"
-      onchange="definirFreteManualMontagemUI('${id}', this.value)">`;
-
-  if(!manual) return campo;
-
-  /* O ⚠ é o único que ganha espaço próprio, e ganha porque significa
-     dinheiro errado: o valor foi fechado numa quilometragem e a linha está
-     em outra. Decisão (a) do dono — o combinado fica, mas não fica calado. */
-  const aviso = m.frete_km_mudou
+  const calc = m.frete_valor;
+  const temCalc = calc !== null && calc !== undefined && calc !== '';
+  const obs = m.frete_observacao || '';
+  const chip = obs === 'COMBINADO' ? `comb. ${reais(m.frete_combinado ?? m.frete_valor_manual ?? 0)}`
+    : obs === 'TABELA' ? 'tabela' : 'definir';
+  const titulo = (temCalc ? `Pela tabela: R$ ${reais(calc)} (${kmTexto(m.km_deslocamento) || '—'} km × tarifa). `
+      : `${m.frete_motivo || 'Sem valor calculado.'} `)
+    + (obs === 'COMBINADO' ? `Combinado: R$ ${reais(m.frete_combinado ?? m.frete_valor_manual ?? 0)}. `
+      : obs === 'TABELA' ? 'Vale o valor da tabela. ' : 'Falta a observação do frete — sem ela a carga não é contratada. ')
+    + 'Clique para escolher TABELA ou COMBINADO.';
+  /* O ⚠ continua (decisão (a) do dono, 17/09): combinado fechado numa
+     quilometragem e a linha em outra. */
+  const aviso = obs === 'COMBINADO' && m.frete_km_mudou
     ? `<span class="frete-aviso" title="Combinado com ${esc(kmTexto(m.frete_manual_km))} km; `
-      + `a linha está com ${esc(kmTexto(m.km_deslocamento) || '—')} km — o frete não acompanhou.">⚠</span>`
+      + `a linha está com ${esc(kmTexto(m.km_deslocamento) || '—')} km.">⚠</span>`
     : '';
-  return `${campo}<span class="frete-marca" title="${esc(explicacao)}">✎</span>${aviso}`;
+  return `<button type="button" class="frete-mont-btn frete-mont-${obs ? obs.toLowerCase() : 'definir'}"
+      onclick="event.stopPropagation(); definirFreteMontagemUI('${id}')" title="${esc(titulo)}"
+      aria-label="Frete da linha: ${esc(titulo)}">
+      <span class="frete-mont-valor">${temCalc ? reais(calc) : '—'}</span>
+      <span class="frete-mont-obs">${esc(chip)}</span></button>${aviso}`;
 }
-
-/* O valor vai cru para o servidor, que é quem lê vírgula e ponto — uma
-   função, um lugar. Ler aqui também daria duas réguas para o mesmo número. */
-async function definirFreteManualMontagemUI(id, valor){
+async function definirFreteMontagemUI(id){
+  const m = (_montagemDia?.montagens || []).find(x => x.montagem_id === id);
+  if(!m) return;
+  const frota = m.placa ? buscarFrota(m.placa) : null;
+  const r = await perguntarFreteUI({ placa: m.placa, transportadora: m.transportadora || (frota && frota.transportadora) || '',
+    numeroCarga: m.numero_carga, destino: m.frete_destino || m.apelido_rota, km: m.km_deslocamento ?? null,
+    valorTabela: m.frete_valor ?? null, freteObservacao: m.frete_observacao,
+    freteCombinado: m.frete_combinado ?? m.frete_valor_manual ?? null }, 'contratar');
+  if(!r) return;
   try {
-    await SuincoSharePoint.montagem.alterar(id, { freteValorManual: String(valor ?? '') });
-    await carregarMontagemUI();
+    await SuincoSharePoint.montagem.alterar(id, { freteObservacao: r.freteObservacao,
+      freteValorManual: r.freteObservacao === 'COMBINADO' ? String(r.freteCombinado) : '' });
   } catch(e){
-    notify(e && e.message ? e.message : 'Não consegui gravar o valor do frete.', 'erro', 8000);
-    await carregarMontagemUI();
+    notify(e && e.message ? e.message : 'Não consegui gravar a observação do frete.', 'erro', 8000);
   }
+  await carregarMontagemUI();
 }
-
 function linhaMontagemHtml(m){
   /* CANCELADA continua trancada: ela é histórico e não tem carga viva do
      outro lado. EFETIVADA deixa de trancar para quem pode editar — a
@@ -31490,12 +32147,12 @@ function linhaMontagemHtml(m){
                de conferência para a Portaria e a Expedição, não campo. */
             ? (podeCorrigirKmDaCargaUI()
               ? `<input type="text" inputmode="decimal" class="km-input"
-                        value="${kmTexto(cargaViva.kmDeslocamento)}" aria-label="KM de deslocamento"
+                        value="${kmTexto(cargaViva.kmDeslocamento)}" aria-label="KM"
                         placeholder="${kmTexto(cargaViva.kmDestino) || '—'}"
                         title="KM que o frete usa. Corrigir aqui recalcula o valor e fica registrado em Histórico."
                         onwheel="this.blur()"
                         onchange="corrigirKmDaCargaUI('${escJs(cargaViva.id)}',this.value)">`
-              : `<span title="KM de deslocamento">${kmTexto(cargaViva.kmDeslocamento) || '—'}</span>`)
+              : `<span title="KM">${kmTexto(cargaViva.kmDeslocamento) || '—'}</span>`)
             /* `onwheel` tira o foco ANTES de a roda escrever (14/09/2026).
                Esconder a setinha no CSS não resolve isto: num `type=number`
                com foco, a roda do mouse altera o valor. A Montagem é tabela
@@ -31503,7 +32160,7 @@ function linhaMontagemHtml(m){
                mudava a quilometragem sem ninguém digitar, e o frete é KM ×
                tarifa. `inputmode` mantém o teclado numérico no celular. */
             : `<input type="text" inputmode="decimal" class="km-input"
-                      value="${kmTexto(m.km_deslocamento)}" aria-label="KM de deslocamento"
+                      value="${kmTexto(m.km_deslocamento)}" aria-label="KM"
                       placeholder="${kmTexto(m.km_destino) || '—'}"
                       title="KM que o frete usa. Vem do destino e pode ser corrigido — desvio, retorno, coleta no caminho."
                       onwheel="this.blur()"
@@ -32413,12 +33070,39 @@ async function efetivarMontagemUI(id, { silencioso = false } = {}){
     notify(erro.message, 'erro', 5000);
     return;
   }
+  /* A OBSERVAÇÃO DO FRETE ANTES DE CRIAR (06/10/2026). Ela mora na LINHA (a
+     coluna Frete da Montagem) e vai junto para a carga — até aqui o
+     combinado digitado na Montagem morria ao virar carga. Faltando:
+       · na linha, a pergunta abre e a resposta é gravada na linha também;
+       · no lote ("criar todas"), a linha é PULADA e listada no fim — criar e
+         ser recusada apagaria a carga da tela, que é o que derrubou a trava
+         do KM em 09/09. */
+  const frotaM = buscarFrota(m.placa);
+  let freteM = { freteObservacao: m.frete_observacao || '', freteCombinado: m.frete_combinado ?? m.frete_valor_manual ?? null };
+  const infoM = { placa: m.placa, transportadora: m.transportadora || (frotaM && frotaM.transportadora) || '',
+    tipoVeiculo: (frotaM && frotaM.tipoVeiculo) || '', numeroCarga: m.numero_carga, destino: m.frete_destino || m.apelido_rota,
+    km: m.km_deslocamento ?? null, valorTabela: m.frete_valor ?? null, ...freteM };
+  if(freteFaltandoParaContratar(infoM)){
+    if(silencioso) throw new Error('sem a observação do frete (TABELA ou COMBINADO) — preencha na coluna Frete da linha');
+    const r = await perguntarFreteUI(infoM, 'contratar');
+    if(!r){
+      notify('Carga NÃO criada: sem a observação do frete a carga não é contratada.', 'warn', 8000);
+      return;
+    }
+    freteM = r;
+    try {
+      await SuincoSharePoint.montagem.alterar(id, { freteObservacao: r.freteObservacao,
+        freteValorManual: r.freteObservacao === 'COMBINADO' ? String(r.freteCombinado) : '' });
+    } catch(e){ /* a carga leva o frete mesmo assim; a linha relê depois */ }
+  }
   let carga;
   try {
     carga = criarCargaProgramada({
       /* O dia é o da MONTAGEM, não o do clique (#114): montar amanhã hoje
          põe a carga na Fila de amanhã. */
       dia: _montagemDia && _montagemDia.dia,
+      freteObservacao: freteM.freteObservacao,
+      freteCombinado: freteM.freteCombinado,
       placa: m.placa,
       numeroCarga: m.numero_carga,
       rota: m.rota_codigo,

@@ -121,7 +121,14 @@ export function montarGrade(cargas, hoje = diaLocal(new Date().toISOString())) {
       c[IX.carga] = { v: Number(carga.numero), t: 'n' };
       c[IX.resumo] = { v: p ? `${p.nota} (${rotuloDaPendencia(p)})` : SEM_PENDENCIA };
       c[IX.tratativa] = { v: p?.tratativa || null };
-      c[IX.transportadora] = { v: carga.transportadora || null };
+      /* CADA NOTA COM OS SEUS CAMPOS (06/10/2026, migração 063): transportadora
+         e CT-E da nota quando preenchidos, senão os da carga; a data de
+         pagamento da nota é a do pagamento DELA. A primeira linha da carga
+         continua com a data do último pagamento da carga quando a nota dela
+         não tem pagamento próprio. */
+      c[IX.transportadora] = { v: p?.transportadora || carga.transportadora || null };
+      c[IX.cte] = { v: p?.cte || carga.cte || null, t: 's' };
+      c[IX.dataPagamento] = { v: p?.pagamento?.data ?? (primeira ? carga.dataPagamento ?? null : null), t: 'd' };
       c[IX.dataTratativa] = { v: p?.tratativaEm ?? null, t: 'd' };
       c[IX.observacao] = { v: (primeira ? [carga.obs, p?.obs] : [p?.obs]).filter(Boolean).join(' · ') || null };
 
@@ -135,8 +142,6 @@ export function montarGrade(cargas, hoje = diaLocal(new Date().toISOString())) {
         c[IX.outros] = { v: num(carga.outros), t: 'n' };
         c[IX.situacao] = { v: ind.situacao, f: FORMULAS.situacao(x) };
         c[IX.statusPagamento] = { v: ind.statusPagamento, f: FORMULAS.statusPagamento(x) };
-        c[IX.dataPagamento] = { v: carga.dataPagamento ?? null, t: 'd' };
-        c[IX.cte] = { v: carga.cte || null, t: 's' };
         c[IX.entregue] = { v: ind.entregue ?? '', f: FORMULAS.entregue(x), t: 'n' };
         c[IX.liberado] = { v: ind.conferir ? 'conferir' : (ind.liberado ?? ''), f: FORMULAS.liberado(x), t: 'n' };
         c[IX.pago] = { v: ind.pago > 0 ? ind.pago : null, t: 'n' };
@@ -150,6 +155,10 @@ export function montarGrade(cargas, hoje = diaLocal(new Date().toISOString())) {
         carga: Number(carga.numero), primeira, nota: p?.nota ?? null, categoria: p?.categoria ?? null,
         cliente: p?.cliente ?? '', cidade: p?.cidade ?? '',
         obsNota: p?.obs ?? '', obsCarga: primeira ? (carga.obs ?? '') : '', celulas: c,
+        /* Para a tela saber o que é DA NOTA e o que veio da carga. */
+        notaTransportadora: p?.transportadora ?? '', notaCte: p?.cte ?? '', notaPaga: p?.pagamento ?? null,
+        cargaTransportadora: carga.transportadora ?? '', cargaCte: carga.cte ?? '', cargaDataPagamento: carga.dataPagamentoCarga ?? carga.dataPagamento ?? null,
+        tratativaLibera: !!p?.tratativa && TRATATIVAS_QUE_LIBERAM.includes(p.tratativa),
         /* Idade da pendência SEM tratativa: dias desde que entrou no controle
            (rodada 45 — "por onde a Daniela começa na semana"). */
         vistoEm: p?.vistoEm ?? null,

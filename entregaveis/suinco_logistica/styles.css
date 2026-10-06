@@ -3556,6 +3556,10 @@ input,select,textarea{border-radius:5px}
 }
 .tab-fretes .col-rota{ width:11% }
 .tab-fretes .col-obs{ white-space:normal; line-height:1.5 }
+/* A OBSERVAÇÃO DO FRETE (06/10/2026): TABELA / COMBINADO R$ x (dif.) / a
+   definir. Folha deitada a partir daqui — as larguras em % passam a valer
+   sobre 287mm, e sobra para a coluna nova sem apertar as datas. */
+.tab-fretes .col-obsfrete{ width:14%; white-space:normal; line-height:1.35 }
 /* CABEÇALHO DE DIA (05/10/2026): período de vários dias sai um dia depois do
    outro. A faixa fica com o PRIMEIRO registro do dia (não pode ficar sozinha no
    pé da página). */

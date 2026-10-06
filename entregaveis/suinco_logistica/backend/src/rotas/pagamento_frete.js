@@ -37,7 +37,7 @@ import {
 import { montarGrade } from '../dominio/planilha_frete_grade.js';
 import { montarPlanilhaDeFrete } from '../dominio/planilha_frete_export.js';
 import {
-  lerCargas, registrarEvento, gravarConferencia, compararComExistente,
+  lerCargas, registrarEvento, gravarConferencia, compararComExistente, excluidaDe,
 } from '../dominio/pagamento_frete_banco.js';
 
 export const rotasPagamentoFrete = Router();
@@ -78,6 +78,11 @@ function dataValida(v) {
   return a >= 2000 && a <= 2100 && x.getUTCFullYear() === a && x.getUTCMonth() === me - 1 && x.getUTCDate() === d;
 }
 const recusa = (res, status, codigo, erro, extra = {}) => res.status(status).json({ erro, codigo, ...extra });
+/* Carga excluída não recebe edição, tratativa nem pagamento: primeiro se
+   restaura (lista das excluídas) — senão o trabalho iria para uma linha que
+   ninguém vê. */
+const ERRO_EXCLUIDA = (ex) => [409, 'CARGA_EXCLUIDA',
+  `Esta carga foi excluída do controle por ${ex.por || 'alguém'} (${ex.motivo}). Restaure-a em "Excluídas" para mexer nela.`];
 
 /* ---------------------------------------------------------------- a grade */
 rotasPagamentoFrete.get(BASE, ACESSO, rota(async (req, res) => {
@@ -95,6 +100,8 @@ rotasPagamentoFrete.get(BASE, ACESSO, rota(async (req, res) => {
     linhas: grade.linhas.map((l) => ({
       carga: l.carga, primeira: l.primeira, nota: l.nota, categoria: l.categoria, cliente: l.cliente, cidade: l.cidade,
       obsNota: l.obsNota, obsCarga: l.obsCarga, vistoEm: l.vistoEm, idadeDias: l.idadeDias, v: l.celulas.map((c) => c.v),
+      notaTransportadora: l.notaTransportadora, notaCte: l.notaCte, notaPaga: l.notaPaga, tratativaLibera: l.tratativaLibera,
+      cargaTransportadora: l.cargaTransportadora, cargaCte: l.cargaCte, cargaDataPagamento: l.cargaDataPagamento,
     })),
     resumo: grade.resumo,
   });
@@ -300,6 +307,8 @@ rotasPagamentoFrete.patch(`${BASE}/cargas/:numero`, ACESSO, rota(async (req, res
     const { rows } = await cx.query(
       `SELECT transportadora, cte, obs${canhoto === undefined ? '' : ', canhoto_original'} FROM pgfrete_cargas WHERE numero_carga = $1 FOR UPDATE`, [numero]);
     if (!rows[0]) return { erro: [404, 'CARGA_NAO_ENCONTRADA', 'Esta carga não está no controle.'] };
+    const ex = await excluidaDe(cx, numero);
+    if (ex) return { erro: ERRO_EXCLUIDA(ex) };
     /* Transportadora só das cadastradas (decisão do dono, 05/10/2026): o cadastro é a
        Frota (dim_veiculos.transportadora). Nome novo se cadastra em Cadastros primeiro. */
     if (campos.transportadora) {
@@ -333,7 +342,8 @@ rotasPagamentoFrete.patch(`${BASE}/cargas/:numero`, ACESSO, rota(async (req, res
     if (mexeuData) {
       const { rows: ult } = await cx.query(
         `SELECT id, to_char(data_pagamento, 'YYYY-MM-DD') AS data FROM pgfrete_pagamentos
-          WHERE numero_carga = $1 AND anulado_em IS NULL ORDER BY id DESC LIMIT 1 FOR UPDATE`, [numero]);
+          WHERE numero_carga = $1 AND anulado_em IS NULL AND to_jsonb(pgfrete_pagamentos) ->> 'nota' IS NULL
+          ORDER BY id DESC LIMIT 1 FOR UPDATE`, [numero]);
       if (!ult[0]) return { erro: [409, 'SEM_PAGAMENTO', 'Esta carga ainda não tem pagamento registrado — registre o pagamento com a data.'] };
       await cx.query('UPDATE pgfrete_pagamentos SET data_pagamento = $2 WHERE id = $1', [ult[0].id, dataPagamento]);
       await cx.query('UPDATE pgfrete_cargas SET atualizado_em = now(), atualizado_por = $2 WHERE numero_carga = $1', [numero, req.operador.nome]);
@@ -354,7 +364,18 @@ rotasPagamentoFrete.patch(`${BASE}/cargas/:numero/pendencias/:nota`, ACESSO, rot
   if (!numeroValido(numero) || !numeroValido(nota)) return recusa(res, 400, 'ID_INVALIDO', 'Carga ou nota inválida.');
   const mexeuTratativa = req.body?.tratativa !== undefined;
   const mexeuObs = req.body?.obs !== undefined;
-  if (!mexeuTratativa && !mexeuObs && req.body?.tratativaEm === undefined) return recusa(res, 400, 'SEM_CAMPOS', 'Nada a alterar.');
+  /* Campos DA NOTA (migração 063): transportadora e CT-E próprios (em branco
+     = os da carga) e a data do pagamento dela. */
+  const daNota = {};
+  if (req.body?.transportadora !== undefined) daNota.transportadora = texto(req.body.transportadora, 80);
+  if (req.body?.cte !== undefined) daNota.cte = texto(req.body.cte, 40);
+  const mexeuDataPg = req.body?.dataPagamento !== undefined;
+  if (mexeuDataPg && !dataValida(req.body.dataPagamento)) {
+    return recusa(res, 400, 'DATA_INVALIDA', 'Use a data do pagamento no formato AAAA-MM-DD.');
+  }
+  if (!mexeuTratativa && !mexeuObs && req.body?.tratativaEm === undefined && !Object.keys(daNota).length && !mexeuDataPg) {
+    return recusa(res, 400, 'SEM_CAMPOS', 'Nada a alterar.');
+  }
 
   let tratativa = null;
   if (mexeuTratativa) {
@@ -373,7 +394,40 @@ rotasPagamentoFrete.patch(`${BASE}/cargas/:numero/pendencias/:nota`, ACESSO, rot
          FROM pgfrete_pendencias WHERE numero_carga = $1 AND nota = $2 FOR UPDATE`, [numero, nota]);
     const atual = rows[0];
     if (!atual) return { erro: [404, 'PENDENCIA_NAO_ENCONTRADA', 'Esta nota não está nas pendências desta carga.'] };
+    const ex = await excluidaDe(cx, numero);
+    if (ex) return { erro: ERRO_EXCLUIDA(ex) };
     if (atual.resolvida) return { erro: [409, 'PENDENCIA_RESOLVIDA', 'Esta nota já foi finalizada no B2B — não há mais pendência para tratar.'] };
+
+    if (daNota.transportadora) {
+      const { rows: tr } = await cx.query('SELECT 1 FROM dim_veiculos WHERE transportadora = $1 LIMIT 1', [daNota.transportadora]);
+      if (!tr[0]) {
+        return { erro: [400, 'TRANSPORTADORA_DESCONHECIDA', `"${daNota.transportadora}" não está no cadastro da Frota. Cadastre em Cadastros e escolha na lista.`] };
+      }
+    }
+    if (Object.keys(daNota).length) {
+      const { rows: antes } = await cx.query(
+        "SELECT coalesce(to_jsonb(p) ->> 'transportadora', '') AS transportadora, coalesce(to_jsonb(p) ->> 'cte', '') AS cte FROM pgfrete_pendencias p WHERE numero_carga = $1 AND nota = $2",
+        [numero, nota]);
+      const cols = Object.keys(daNota);
+      await cx.query(`UPDATE pgfrete_pendencias SET ${cols.map((c, i) => `${c} = $${i + 3}`).join(', ')} WHERE numero_carga = $1 AND nota = $2`,
+        [numero, nota, ...Object.values(daNota)]);
+      await registrarEvento(cx, {
+        numero, nota, acao: 'editou_nota', operador: req.operador,
+        detalhe: Object.fromEntries(cols.map((c) => [c, { de: antes[0][c], para: daNota[c] }])),
+      });
+    }
+    if (mexeuDataPg) {
+      const { rows: pg } = await cx.query(
+        `SELECT id, to_char(data_pagamento, 'YYYY-MM-DD') AS data FROM pgfrete_pagamentos g
+          WHERE numero_carga = $1 AND to_jsonb(g) ->> 'nota' = $2 AND anulado_em IS NULL FOR UPDATE`, [numero, nota]);
+      if (!pg[0]) return { erro: [409, 'NOTA_SEM_PAGAMENTO', 'Esta nota ainda não foi paga — use Pagar na linha dela.'] };
+      await cx.query('UPDATE pgfrete_pagamentos SET data_pagamento = $2 WHERE id = $1', [pg[0].id, req.body.dataPagamento]);
+      await registrarEvento(cx, {
+        numero, nota, acao: 'editou_nota', operador: req.operador,
+        detalhe: { dataPagamento: { de: pg[0].data, para: req.body.dataPagamento, pagamento: pg[0].id } },
+      });
+    }
+    if (!mexeuTratativa && !mexeuObs && req.body?.tratativaEm === undefined) return { ok: true };
 
     const novaTratativa = mexeuTratativa ? tratativa : atual.tratativa;
     let em = atual.tratativa_em;
@@ -411,6 +465,8 @@ rotasPagamentoFrete.post(`${BASE}/cargas/:numero/pagamentos`, ACESSO, rota(async
   const r = await emTransacao(async (cx) => {
     const { rows } = await cx.query('SELECT 1 FROM pgfrete_cargas WHERE numero_carga = $1 FOR UPDATE', [numero]);
     if (!rows[0]) return { erro: [404, 'CARGA_NAO_ENCONTRADA', 'Esta carga não está no controle.'] };
+    const ex = await excluidaDe(cx, numero);
+    if (ex) return { erro: ERRO_EXCLUIDA(ex) };
     const [carga] = await lerCargas(cx, { numero });
     const ind = indicadoresDaCarga(carga);
     const pagoAtual = arred2(carga.pctPago);
@@ -482,6 +538,140 @@ rotasPagamentoFrete.post(`${BASE}/pagamentos/:id/anular`, ACESSO, rota(async (re
   return res.json({ ok: true });
 }));
 
+/* --------------------------------------- pagar UMA nota (migração 063) */
+/* Decisão do dono (06/10/2026): pagar uma nota pendente SOMA UMA NOTA no %
+   Pago da carga (100 ÷ notas do sistema). É um pagamento como os outros —
+   entra no Fechamento do mês da data e se anula no Histórico — ligado à nota.
+   Nota sem tratativa que libera: PERGUNTA (quem tem autoridade decide).
+   Nota já paga, nota que só existe no B2B e passar de 100%: recusa. */
+rotasPagamentoFrete.post(`${BASE}/cargas/:numero/pendencias/:nota/pagar`, ACESSO, rota(async (req, res) => {
+  const { numero, nota } = req.params;
+  if (!numeroValido(numero) || !numeroValido(nota)) return recusa(res, 400, 'ID_INVALIDO', 'Carga ou nota inválida.');
+  const dataPagamento = req.body?.dataPagamento;
+  if (!dataValida(dataPagamento)) return recusa(res, 400, 'DATA_INVALIDA', 'Informe a data do pagamento da nota (AAAA-MM-DD).');
+  const confirmar = req.body?.confirmar === true;
+  const r = await emTransacao(async (cx) => {
+    const { rows: c } = await cx.query('SELECT qtd_sist FROM pgfrete_cargas WHERE numero_carga = $1 FOR UPDATE', [numero]);
+    if (!c[0]) return { erro: [404, 'CARGA_NAO_ENCONTRADA', 'Esta carga não está no controle.'] };
+    const ex = await excluidaDe(cx, numero);
+    if (ex) return { erro: ERRO_EXCLUIDA(ex) };
+    const { rows: p } = await cx.query(
+      'SELECT categoria, tratativa, resolvida_em IS NOT NULL AS resolvida FROM pgfrete_pendencias WHERE numero_carga = $1 AND nota = $2', [numero, nota]);
+    if (!p[0]) return { erro: [404, 'PENDENCIA_NAO_ENCONTRADA', 'Esta nota não está nas pendências desta carga.'] };
+    if (p[0].categoria === 'so_b2b') {
+      return { erro: [409, 'NOTA_SO_NO_B2B', 'Esta nota só aparece no B2B, não no sistema — ela não é uma das notas da carga, então não entra no % pago.'] };
+    }
+    const { rows: ja } = await cx.query(
+      `SELECT id, to_char(data_pagamento, 'YYYY-MM-DD') AS data FROM pgfrete_pagamentos g
+        WHERE numero_carga = $1 AND to_jsonb(g) ->> 'nota' = $2 AND anulado_em IS NULL`, [numero, nota]);
+    if (ja[0]) return { erro: [409, 'NOTA_JA_PAGA', `A nota ${nota} já foi paga (${ja[0].data ? ja[0].data.split('-').reverse().join('/') : 'sem data'}). Para corrigir a data, edite-a; para desfazer, anule no Histórico.`] };
+    const qtd = Number(c[0].qtd_sist) || 0;
+    if (qtd <= 0) return { erro: [409, 'SEM_QTD_SIST', 'A carga está sem a quantidade de notas do sistema — importe o relatório do Atak dela.'] };
+    const pct = arred2(100 / qtd);
+    const { rows: soma } = await cx.query(
+      'SELECT coalesce(sum(pct), 0) AS pct FROM pgfrete_pagamentos WHERE numero_carga = $1 AND anulado_em IS NULL', [numero]);
+    const pagoAtual = arred2(soma[0].pct);
+    const depois = arred2(pagoAtual + pct);
+    if (depois > 100.005) {
+      return { erro: [409, 'PAGAMENTO_PASSA_DE_100', `A carga já tem ${pagoAtual}% pago; mais esta nota (${pct}%) passaria de 100%.`, { pagoAtual }] };
+    }
+    const libera = TRATATIVAS_QUE_LIBERAM.includes(p[0].tratativa);
+    if (!libera && !confirmar) {
+      return { erro: [409, 'NOTA_NAO_LIBERADA',
+        `A nota ${nota} está ${p[0].tratativa ? `como ${p[0].tratativa}` : 'sem tratativa'} — ainda não está liberada para pagar. Pagar mesmo assim?`,
+        { podeConfirmar: true, pagoAtual }] };
+    }
+    const { rows: novo } = await cx.query(
+      `INSERT INTO pgfrete_pagamentos (numero_carga, nota, pct, data_pagamento, obs, criado_por_id, criado_por_nome)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
+      [numero, nota, pct, dataPagamento, `nota ${nota}`, String(req.operador.id), req.operador.nome]);
+    await registrarEvento(cx, {
+      numero, nota, acao: 'pagamento', operador: req.operador,
+      detalhe: { id: novo[0].id, pct, nota, dataPagamento, pagoDepois: depois, semLiberar: !libera },
+    });
+    return { ok: true, id: novo[0].id, pct, pagoTotal: depois };
+  });
+  if (r.erro) {
+    const [status, codigo, erro, extra] = r.erro;
+    return recusa(res, status, codigo, erro, extra);
+  }
+  return res.status(201).json(r);
+}));
+
+/* ------------------------------------- excluir / restaurar (migração 062) */
+/* Decisão do dono (06/10/2026): a carga SAI DA LISTA E FICA NO HISTÓRICO.
+   Motivo obrigatório. Com pagamento registrado, PERGUNTA antes (409 com
+   podeConfirmar) — não bloqueia quem tem autoridade. Nada é apagado:
+   pagamentos, tratativas e eventos continuam no banco. */
+rotasPagamentoFrete.post(`${BASE}/cargas/:numero/excluir`, ACESSO, rota(async (req, res) => {
+  const { numero } = req.params;
+  if (!numeroValido(numero)) return recusa(res, 400, 'CARGA_INVALIDA', 'Número de carga inválido.');
+  const motivo = texto(req.body?.motivo, 300);
+  if (!motivo) return recusa(res, 400, 'MOTIVO_FALTANDO', 'Diga por que a carga está sendo excluída do controle.');
+  const confirmar = req.body?.confirmar === true;
+  const r = await emTransacao(async (cx) => {
+    const { rows } = await cx.query('SELECT excluida_em FROM pgfrete_cargas WHERE numero_carga = $1 FOR UPDATE', [numero]);
+    if (!rows[0]) return { erro: [404, 'CARGA_NAO_ENCONTRADA', 'Esta carga não está no controle.'] };
+    if (rows[0].excluida_em) return { erro: [409, 'JA_EXCLUIDA', 'Esta carga já foi excluída do controle.'] };
+    const { rows: pg } = await cx.query(
+      'SELECT coalesce(sum(pct), 0) AS pct FROM pgfrete_pagamentos WHERE numero_carga = $1 AND anulado_em IS NULL', [numero]);
+    const pctPago = arred2(pg[0].pct);
+    if (pctPago > 0 && !confirmar) {
+      return { erro: [409, 'TEM_PAGAMENTO',
+        `Esta carga tem ${String(pctPago).replace('.', ',')}% pago registrado. Excluída, ela sai da lista, da planilha e do PDF (os pagamentos continuam no histórico). Excluir mesmo assim?`,
+        { pctPago, podeConfirmar: true }] };
+    }
+    await cx.query(
+      'UPDATE pgfrete_cargas SET excluida_em = now(), excluida_por = $2, excluida_motivo = $3, atualizado_em = now(), atualizado_por = $2 WHERE numero_carga = $1',
+      [numero, req.operador.nome, motivo]);
+    await registrarEvento(cx, { numero, acao: 'excluiu', operador: req.operador, detalhe: { motivo, pctPago } });
+    return { ok: true };
+  });
+  if (r.erro) {
+    const [status, codigo, erro, extra] = r.erro;
+    return recusa(res, status, codigo, erro, extra);
+  }
+  return res.json({ ok: true });
+}));
+
+rotasPagamentoFrete.post(`${BASE}/cargas/:numero/restaurar`, ACESSO, rota(async (req, res) => {
+  const { numero } = req.params;
+  if (!numeroValido(numero)) return recusa(res, 400, 'CARGA_INVALIDA', 'Número de carga inválido.');
+  const r = await emTransacao(async (cx) => {
+    const { rows } = await cx.query(
+      'SELECT excluida_em, excluida_por, excluida_motivo FROM pgfrete_cargas WHERE numero_carga = $1 FOR UPDATE', [numero]);
+    if (!rows[0]) return { erro: [404, 'CARGA_NAO_ENCONTRADA', 'Esta carga não está no controle.'] };
+    if (!rows[0].excluida_em) return { erro: [409, 'NAO_EXCLUIDA', 'Esta carga não está excluída.'] };
+    await cx.query(
+      `UPDATE pgfrete_cargas SET excluida_em = NULL, excluida_por = '', excluida_motivo = '', atualizado_em = now(), atualizado_por = $2
+        WHERE numero_carga = $1`, [numero, req.operador.nome]);
+    await registrarEvento(cx, {
+      numero, acao: 'restaurou', operador: req.operador,
+      detalhe: { pela: 'botao', exclusao: { em: rows[0].excluida_em, por: rows[0].excluida_por, motivo: rows[0].excluida_motivo } },
+    });
+    return { ok: true };
+  });
+  if (r.erro) return recusa(res, ...r.erro);
+  return res.json({ ok: true });
+}));
+
+/* A lista das excluídas: o "fica no histórico" que se consegue achar. */
+rotasPagamentoFrete.get(`${BASE}/excluidas`, ACESSO, rota(async (req, res) => {
+  const { rows } = await consultar(
+    `SELECT c.numero_carga, to_char(c.data_consulta, 'YYYY-MM-DD') AS data_consulta, c.transportadora, c.excluida_em, c.excluida_por,
+            c.excluida_motivo,
+            (SELECT coalesce(sum(p.pct), 0) FROM pgfrete_pagamentos p WHERE p.numero_carga = c.numero_carga AND p.anulado_em IS NULL) AS pct_pago
+       FROM pgfrete_cargas c WHERE c.excluida_em IS NOT NULL ORDER BY c.excluida_em DESC LIMIT 500`);
+  res.set('Cache-Control', 'no-store');
+  res.json({
+    cargas: rows.map((r) => ({
+      carga: r.numero_carga, dataConsulta: r.data_consulta, transportadora: r.transportadora,
+      excluidaEm: new Date(r.excluida_em).toISOString(), excluidaPor: r.excluida_por, motivo: r.excluida_motivo,
+      pctPago: arred2(r.pct_pago),
+    })),
+  });
+}));
+
 /* -------------------------------------------- histórico de uma carga */
 rotasPagamentoFrete.get(`${BASE}/cargas/:numero/historico`, ACESSO, rota(async (req, res) => {
   const { numero } = req.params;
@@ -491,8 +681,8 @@ rotasPagamentoFrete.get(`${BASE}/cargas/:numero/historico`, ACESSO, rota(async (
   const [pagamentos, eventos, pendencias] = await Promise.all([
     consultar(
       `SELECT id, pct, to_char(data_pagamento, 'YYYY-MM-DD') AS data_pagamento, entregue_pct, obs, criado_em, criado_por_nome,
-              anulado_em, anulado_por, anulado_motivo
-         FROM pgfrete_pagamentos WHERE numero_carga = $1 ORDER BY id`, [numero]),
+              anulado_em, anulado_por, anulado_motivo, to_jsonb(g) ->> 'nota' AS nota
+         FROM pgfrete_pagamentos g WHERE numero_carga = $1 ORDER BY id`, [numero]),
     consultar(
       `SELECT acao, nota, detalhe, por_nome, em FROM pgfrete_eventos WHERE numero_carga = $1 ORDER BY id DESC LIMIT 100`, [numero]),
     consultar(
@@ -502,9 +692,10 @@ rotasPagamentoFrete.get(`${BASE}/cargas/:numero/historico`, ACESSO, rota(async (
   ]);
   res.json({
     numero,
+    excluida: await excluidaDe({ query: consultar }, numero),
     pagamentos: pagamentos.rows.map((p) => ({
       id: p.id, pct: p.pct, dataPagamento: p.data_pagamento, entreguePct: p.entregue_pct, obs: p.obs, criadoEm: p.criado_em,
-      por: p.criado_por_nome, anuladoEm: p.anulado_em, anuladoPor: p.anulado_por, anuladoMotivo: p.anulado_motivo,
+      por: p.criado_por_nome, anuladoEm: p.anulado_em, anuladoPor: p.anulado_por, anuladoMotivo: p.anulado_motivo, nota: p.nota || null,
     })),
     pendencias: pendencias.rows.map((p) => ({
       nota: p.nota, categoria: p.categoria, statusB2b: p.status_b2b, cliente: p.cliente, cidade: p.cidade,

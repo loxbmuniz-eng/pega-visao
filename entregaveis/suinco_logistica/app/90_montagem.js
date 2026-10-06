@@ -546,88 +546,64 @@ function reais(n){
   return Number(n).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2});
 }
 
-/* O FRETE AGORA É EDITÁVEL — E O CALCULADO CONTINUA À VISTA (18/09/2026).
-
-   RELATO DO DONO: "o campo frete ainda nao ta editavel". Ele tinha pedido
-   em 17/09 e eu não implementei — a migração ficou escrita e parada.
-
-   A CONTA CONTINUA SENDO DO SERVIDOR. Não há fórmula nenhuma aqui: o campo
-   manda o que a pessoa digitou e o dia volta relido. Repetir `km × tarifa`
-   no painel daria dois lugares para o preço divergir, que é a regra da casa
-   que este projeto mais paga caro quando quebra.
-
-   O QUE A CÉLULA MOSTRA, e por quê:
-
-     · sem combinado  — o valor calculado, como antes, e o campo vazio com
-                        ele de dica: quem não negociou nada não digita nada;
-     · com combinado  — o valor digitado, marcado com ✎, e o calculado
-                        embaixo em cinza. A conferência compara os dois em
-                        vez de perder a tabela;
-     · KM mudou depois — a linha AVISA. É a decisão (a) do dono: o valor
-                        digitado fica, e a linha diz que foi fechado em
-                        outra quilometragem. Sem esse aviso, um combinado de
-                        583 km seguiria calado numa viagem de 640.
-
-   APAGAR O CAMPO DESFAZ: volta a valer o calculado. Sem isso, um valor
-   digitado por engano ficaria para sempre. */
+/* HISTÓRICO DA CÉLULA DE FRETE. De 18/09 a 06/10/2026 o valor era editável
+   aqui (o combinado entrava no lugar do calculado). Em 06/10 o dono decidiu
+   o contrário — "o valor do frete não pode ser alterável, somente o KM" — e o
+   combinado passou a viver na OBSERVAÇÃO DO FRETE (migração 061). */
 function freteMontagemHtml(m, carga){
+  /* O VALOR NÃO É MAIS EDITÁVEL (decisão do dono, 06/10/2026): "o valor do
+     frete não pode ser alterável, somente o KM". A célula mostra a conta do
+     servidor (KM × tarifa) e, embaixo, a OBSERVAÇÃO DO FRETE — tabela,
+     combinado com o valor, ou "definir". O clique abre a mesma pergunta de
+     todos os pontos de contratação. A coluna continua com os 60px medidos
+     por test_montagem_cabe_em_colunas: número na célula, explicação no title. */
   if(carga){
     const v = carga.freteValor;
-    return (v === null || v === undefined || v === '')
+    const valor = (v === null || v === undefined || v === '')
       ? `<span class="text-dim" title="${esc(m.frete_motivo || 'Sem valor de frete.')}">—</span>`
       : `<strong>R$ ${reais(v)}</strong>`;
+    return valor + seloFreteHtml(carga);
   }
   const id = escJs(m.montagem_id);
-  const manual = !!m.frete_e_manual;
-  const calculado = m.frete_valor_calculado;
-  const temCalculado = calculado !== null && calculado !== undefined && calculado !== '';
-  const dica = temCalculado ? `R$ ${reais(calculado)}` : (m.frete_motivo || 'sem valor');
-
-  /* A COLUNA TEM 60px, E ISSO NÃO É DESCUIDO — é medida.
-     A largura de cada coluna desta tabela foi calculada para o dia inteiro
-     caber num monitor de 1280 sem rolagem lateral, e há teste guardando
-     (test_montagem_cabe_em_colunas). Então o que é NÚMERO fica na célula e
-     o que é EXPLICAÇÃO fica no title: mostrar o calculado numa segunda
-     linha cortava o valor no meio — e número de dinheiro cortado é pior que
-     número ausente, porque parece completo. */
-  const explicacao = manual
-    ? `Frete combinado à mão${m.frete_manual_por ? ' por ' + m.frete_manual_por : ''}.`
-      + (temCalculado ? ` Pela tabela seriam R$ ${reais(calculado)}.` : '')
-      + ' Apague o campo para voltar ao calculado.'
-    : `Frete calculado: ${kmTexto(m.km_deslocamento) || '—'} km × tarifa.`
-      + ' Digite aqui para gravar um valor combinado.';
-
-  const campo = `<input type="text" inputmode="decimal" class="frete-input"
-      value="${manual ? reais(m.frete_valor) : ''}"
-      placeholder="${esc(temCalculado ? reais(calculado) : (m.frete_motivo ? 'sem valor' : ''))}"
-      aria-label="Valor do frete"
-      title="${esc(explicacao)}"
-      onchange="definirFreteManualMontagemUI('${id}', this.value)">`;
-
-  if(!manual) return campo;
-
-  /* O ⚠ é o único que ganha espaço próprio, e ganha porque significa
-     dinheiro errado: o valor foi fechado numa quilometragem e a linha está
-     em outra. Decisão (a) do dono — o combinado fica, mas não fica calado. */
-  const aviso = m.frete_km_mudou
+  const calc = m.frete_valor;
+  const temCalc = calc !== null && calc !== undefined && calc !== '';
+  const obs = m.frete_observacao || '';
+  const chip = obs === 'COMBINADO' ? `comb. ${reais(m.frete_combinado ?? m.frete_valor_manual ?? 0)}`
+    : obs === 'TABELA' ? 'tabela' : 'definir';
+  const titulo = (temCalc ? `Pela tabela: R$ ${reais(calc)} (${kmTexto(m.km_deslocamento) || '—'} km × tarifa). `
+      : `${m.frete_motivo || 'Sem valor calculado.'} `)
+    + (obs === 'COMBINADO' ? `Combinado: R$ ${reais(m.frete_combinado ?? m.frete_valor_manual ?? 0)}. `
+      : obs === 'TABELA' ? 'Vale o valor da tabela. ' : 'Falta a observação do frete — sem ela a carga não é contratada. ')
+    + 'Clique para escolher TABELA ou COMBINADO.';
+  /* O ⚠ continua (decisão (a) do dono, 17/09): combinado fechado numa
+     quilometragem e a linha em outra. */
+  const aviso = obs === 'COMBINADO' && m.frete_km_mudou
     ? `<span class="frete-aviso" title="Combinado com ${esc(kmTexto(m.frete_manual_km))} km; `
-      + `a linha está com ${esc(kmTexto(m.km_deslocamento) || '—')} km — o frete não acompanhou.">⚠</span>`
+      + `a linha está com ${esc(kmTexto(m.km_deslocamento) || '—')} km.">⚠</span>`
     : '';
-  return `${campo}<span class="frete-marca" title="${esc(explicacao)}">✎</span>${aviso}`;
+  return `<button type="button" class="frete-mont-btn frete-mont-${obs ? obs.toLowerCase() : 'definir'}"
+      onclick="event.stopPropagation(); definirFreteMontagemUI('${id}')" title="${esc(titulo)}"
+      aria-label="Frete da linha: ${esc(titulo)}">
+      <span class="frete-mont-valor">${temCalc ? reais(calc) : '—'}</span>
+      <span class="frete-mont-obs">${esc(chip)}</span></button>${aviso}`;
 }
-
-/* O valor vai cru para o servidor, que é quem lê vírgula e ponto — uma
-   função, um lugar. Ler aqui também daria duas réguas para o mesmo número. */
-async function definirFreteManualMontagemUI(id, valor){
+async function definirFreteMontagemUI(id){
+  const m = (_montagemDia?.montagens || []).find(x => x.montagem_id === id);
+  if(!m) return;
+  const frota = m.placa ? buscarFrota(m.placa) : null;
+  const r = await perguntarFreteUI({ placa: m.placa, transportadora: m.transportadora || (frota && frota.transportadora) || '',
+    numeroCarga: m.numero_carga, destino: m.frete_destino || m.apelido_rota, km: m.km_deslocamento ?? null,
+    valorTabela: m.frete_valor ?? null, freteObservacao: m.frete_observacao,
+    freteCombinado: m.frete_combinado ?? m.frete_valor_manual ?? null }, 'contratar');
+  if(!r) return;
   try {
-    await SuincoSharePoint.montagem.alterar(id, { freteValorManual: String(valor ?? '') });
-    await carregarMontagemUI();
+    await SuincoSharePoint.montagem.alterar(id, { freteObservacao: r.freteObservacao,
+      freteValorManual: r.freteObservacao === 'COMBINADO' ? String(r.freteCombinado) : '' });
   } catch(e){
-    notify(e && e.message ? e.message : 'Não consegui gravar o valor do frete.', 'erro', 8000);
-    await carregarMontagemUI();
+    notify(e && e.message ? e.message : 'Não consegui gravar a observação do frete.', 'erro', 8000);
   }
+  await carregarMontagemUI();
 }
-
 function linhaMontagemHtml(m){
   /* CANCELADA continua trancada: ela é histórico e não tem carga viva do
      outro lado. EFETIVADA deixa de trancar para quem pode editar — a
@@ -814,12 +790,12 @@ function linhaMontagemHtml(m){
                de conferência para a Portaria e a Expedição, não campo. */
             ? (podeCorrigirKmDaCargaUI()
               ? `<input type="text" inputmode="decimal" class="km-input"
-                        value="${kmTexto(cargaViva.kmDeslocamento)}" aria-label="KM de deslocamento"
+                        value="${kmTexto(cargaViva.kmDeslocamento)}" aria-label="KM"
                         placeholder="${kmTexto(cargaViva.kmDestino) || '—'}"
                         title="KM que o frete usa. Corrigir aqui recalcula o valor e fica registrado em Histórico."
                         onwheel="this.blur()"
                         onchange="corrigirKmDaCargaUI('${escJs(cargaViva.id)}',this.value)">`
-              : `<span title="KM de deslocamento">${kmTexto(cargaViva.kmDeslocamento) || '—'}</span>`)
+              : `<span title="KM">${kmTexto(cargaViva.kmDeslocamento) || '—'}</span>`)
             /* `onwheel` tira o foco ANTES de a roda escrever (14/09/2026).
                Esconder a setinha no CSS não resolve isto: num `type=number`
                com foco, a roda do mouse altera o valor. A Montagem é tabela
@@ -827,7 +803,7 @@ function linhaMontagemHtml(m){
                mudava a quilometragem sem ninguém digitar, e o frete é KM ×
                tarifa. `inputmode` mantém o teclado numérico no celular. */
             : `<input type="text" inputmode="decimal" class="km-input"
-                      value="${kmTexto(m.km_deslocamento)}" aria-label="KM de deslocamento"
+                      value="${kmTexto(m.km_deslocamento)}" aria-label="KM"
                       placeholder="${kmTexto(m.km_destino) || '—'}"
                       title="KM que o frete usa. Vem do destino e pode ser corrigido — desvio, retorno, coleta no caminho."
                       onwheel="this.blur()"
@@ -1737,12 +1713,39 @@ async function efetivarMontagemUI(id, { silencioso = false } = {}){
     notify(erro.message, 'erro', 5000);
     return;
   }
+  /* A OBSERVAÇÃO DO FRETE ANTES DE CRIAR (06/10/2026). Ela mora na LINHA (a
+     coluna Frete da Montagem) e vai junto para a carga — até aqui o
+     combinado digitado na Montagem morria ao virar carga. Faltando:
+       · na linha, a pergunta abre e a resposta é gravada na linha também;
+       · no lote ("criar todas"), a linha é PULADA e listada no fim — criar e
+         ser recusada apagaria a carga da tela, que é o que derrubou a trava
+         do KM em 09/09. */
+  const frotaM = buscarFrota(m.placa);
+  let freteM = { freteObservacao: m.frete_observacao || '', freteCombinado: m.frete_combinado ?? m.frete_valor_manual ?? null };
+  const infoM = { placa: m.placa, transportadora: m.transportadora || (frotaM && frotaM.transportadora) || '',
+    tipoVeiculo: (frotaM && frotaM.tipoVeiculo) || '', numeroCarga: m.numero_carga, destino: m.frete_destino || m.apelido_rota,
+    km: m.km_deslocamento ?? null, valorTabela: m.frete_valor ?? null, ...freteM };
+  if(freteFaltandoParaContratar(infoM)){
+    if(silencioso) throw new Error('sem a observação do frete (TABELA ou COMBINADO) — preencha na coluna Frete da linha');
+    const r = await perguntarFreteUI(infoM, 'contratar');
+    if(!r){
+      notify('Carga NÃO criada: sem a observação do frete a carga não é contratada.', 'warn', 8000);
+      return;
+    }
+    freteM = r;
+    try {
+      await SuincoSharePoint.montagem.alterar(id, { freteObservacao: r.freteObservacao,
+        freteValorManual: r.freteObservacao === 'COMBINADO' ? String(r.freteCombinado) : '' });
+    } catch(e){ /* a carga leva o frete mesmo assim; a linha relê depois */ }
+  }
   let carga;
   try {
     carga = criarCargaProgramada({
       /* O dia é o da MONTAGEM, não o do clique (#114): montar amanhã hoje
          põe a carga na Fila de amanhã. */
       dia: _montagemDia && _montagemDia.dia,
+      freteObservacao: freteM.freteObservacao,
+      freteCombinado: freteM.freteCombinado,
       placa: m.placa,
       numeroCarga: m.numero_carga,
       rota: m.rota_codigo,

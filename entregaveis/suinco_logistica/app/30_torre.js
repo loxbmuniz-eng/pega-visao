@@ -954,7 +954,7 @@ function renderTorre(){
         : `<span class="veic-placa">${esc(c.placa)}</span>`}
         <span class="veic-transp">${esc(c.transportadora)||'—'}</span>${marcaTransportadoraHtml(c)}
         <span class="veic-tipo">${esc(c.tipoVeiculo)||'—'}</span>
-        ${chipNoPatioHtml(c)}${chipLacreHtml(c)}</td>
+        ${chipNoPatioHtml(c)}${chipLacreHtml(c)}${seloFreteHtml(c)}</td>
       <td>${editavel
         ? `<input type="text" class="motorista-input" value="${esc(c.motorista||'')}" onchange="atualizarMotoristaUI('${escJs(c.id)}',this.value)" title="Trocar o motorista desta carga.">`
         : (esc(c.motorista)||'—')}</td>
@@ -1035,7 +1035,7 @@ function linhaFilaHtml(c, lista, arrastavel){
       </td>
       <td class="col-identificacao cel-veiculo" onclick="event.stopPropagation()">
         <input type="text" class="placa-input" value="${esc(c.placa)}" onchange="atualizarPlacaUI('${id}',this.value)" title="Trocar a placa — a transportadora e o tipo de veículo são buscados na Frota automaticamente.">
-        <span class="veic-transp" id="transp-${esc(c.id)}">${esc(c.transportadora)||'—'}</span>${marcaTransportadoraHtml(c)}
+        <span class="veic-transp" id="transp-${esc(c.id)}">${esc(c.transportadora)||'—'}</span>${marcaTransportadoraHtml(c)}${seloFreteHtml(c)}
         <span class="veic-tipo">${esc(c.tipoVeiculo)||'—'}</span>
         ${marcaCargaDaPlaca(c, lista)}${chipNoPatioHtml(c)}${marcaEtapaDevolvidaHtml(c)}${marcaSaiuSemCarregarHtml(c)}</td>
       <td onclick="event.stopPropagation()">

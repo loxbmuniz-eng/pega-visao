@@ -6679,6 +6679,8 @@ describe('49. Pagamento de Frete — a planilha dentro do painel (05/10/2026)', 
         ['PATCH', `${FRETE}/cargas/1`, { cte: '1' }], ['PATCH', `${FRETE}/cargas/1/pendencias/2`, { tratativa: 'OK' }],
         ['POST', `${FRETE}/cargas/1/pagamentos`, { pct: 10 }], ['POST', `${FRETE}/pagamentos/1/anular`, { motivo: 'x' }],
         ['GET', `${FRETE}/cargas/1/historico`],
+        ['POST', `${FRETE}/cargas/1/excluir`, { motivo: 'x' }], ['POST', `${FRETE}/cargas/1/restaurar`, {}],
+        ['GET', `${FRETE}/excluidas`],
       ];
       for (const [metodo, caminho, corpo] of tentativas) {
         const r = await req(caminho, { metodo, token: tokens['Logística'], corpo });
@@ -7599,5 +7601,223 @@ describe('51. Achados da auditoria da API (06/10/2026)', () => {
     };
     varre(raiz);
     assert.deepEqual(achados, [], 'use FUSO de dominio/fuso.js');
+  });
+});
+
+describe('52. Pagamento de Frete: excluir e editar a carga (06/10/2026)', async () => {
+  /* Pedido do dono: "eu preciso conseguir excluir carga do pagamento de
+     fretes (...) excluir e editar". Decisão dele: a carga SAI DA LISTA E FICA
+     NO HISTÓRICO (motivo obrigatório, pergunta se há pagamento, volta pela
+     lista das excluídas ou reimportando o PDF); editar é um formulário só com
+     os campos que a pessoa preenche. */
+  const { readFileSync } = await import('node:fs');
+  const pdf64 = (nome) => readFileSync(new URL(`./fixtures/frete/${nome}`, import.meta.url)).toString('base64');
+  const FRETE = '/api/pagamento-frete';
+  const adm = () => tokens['Administração'];
+  const limpar = async () => {
+    for (const t of ['pgfrete_eventos', 'pgfrete_leituras', 'pgfrete_pagamentos', 'pgfrete_pendencias', 'pgfrete_cargas']) {
+      await pool.query(`DELETE FROM ${t}`);
+    }
+  };
+  const subir = (arquivo, lote) => req(`${FRETE}/leituras`, {
+    metodo: 'POST', token: adm(), corpo: { arquivo: pdf64(arquivo), nome: arquivo, ...(lote ? { lote } : {}) } });
+  const importar = async (n, { soPrevia = false } = {}) => {
+    const a = await subir(`b2b_${n}.pdf`);
+    assert.equal(a.status, 200, a.texto);
+    const b = await subir(`sist_${n}.pdf`, a.json.lote);
+    assert.equal(b.status, 200, b.texto);
+    if (soPrevia) {
+      const p = await req(`${FRETE}/lotes/${a.json.lote}/previa`, { token: adm() });
+      assert.equal(p.status, 200, p.texto);
+      return { lote: a.json.lote, previa: p.json };
+    }
+    const c = await req(`${FRETE}/lotes/${a.json.lote}/confirmar`, { metodo: 'POST', token: adm(), corpo: {} });
+    assert.equal(c.status, 200, c.texto);
+    return c.json;
+  };
+  const naGrade = async (n) => (await req(FRETE, { token: adm() })).json.linhas.some((l) => String(l.carga) === n);
+
+  before(async () => { await limpar(); await importar('900801'); await importar('900802'); await importar('900805'); });
+  after(limpar);
+
+  test('excluir sem motivo: 400 MOTIVO_FALTANDO, e a carga continua na lista', async () => {
+    const r = await req(`${FRETE}/cargas/900801/excluir`, { metodo: 'POST', token: adm(), corpo: { motivo: '  ' } });
+    assert.equal(r.status, 400, r.texto);
+    assert.equal(r.json.codigo, 'MOTIVO_FALTANDO');
+    assert.ok(await naGrade('900801'));
+  });
+
+  test('excluir com motivo: sai da grade e da planilha, fica em Excluídas com quem/quando/motivo, e no histórico', async () => {
+    const r = await req(`${FRETE}/cargas/900801/excluir`, { metodo: 'POST', token: adm(), corpo: { motivo: 'importada por engano' } });
+    assert.equal(r.status, 200, r.texto);
+    assert.equal(await naGrade('900801'), false, 'some da grade');
+    assert.ok(await naGrade('900802'), 'a outra carga fica');
+    const { lerPlanilhaXlsx } = await import('../src/servicos/planilha_xlsx.js');
+    const x = await fetch(`${base}${FRETE}/exportar.xlsx`, { headers: { authorization: `Bearer ${adm()}` } });
+    assert.equal(x.status, 200);
+    const { abas } = lerPlanilhaXlsx(Buffer.from(await x.arrayBuffer()));
+    const noArquivo = new Set(abas[0].linhas.slice(1).map((l) => String(l[1])));
+    assert.equal(noArquivo.has('900801'), false, 'some da planilha');
+    assert.ok(noArquivo.has('900802'));
+    const ex = await req(`${FRETE}/excluidas`, { token: adm() });
+    assert.equal(ex.status, 200, ex.texto);
+    const c = ex.json.cargas.find((k) => k.carga === '900801');
+    assert.ok(c, 'está na lista das excluídas');
+    assert.equal(c.motivo, 'importada por engano');
+    assert.ok(c.excluidaPor && c.excluidaEm);
+    const h = await req(`${FRETE}/cargas/900801/historico`, { token: adm() });
+    assert.equal(h.status, 200, 'o histórico continua acessível');
+    assert.equal(h.json.excluida.motivo, 'importada por engano');
+    assert.ok(h.json.eventos.some((e) => e.acao === 'excluiu' && e.detalhe.motivo === 'importada por engano'));
+    assert.equal((await pool.query("SELECT count(*)::int AS n FROM pgfrete_cargas WHERE numero_carga = '900801'")).rows[0].n, 1);
+  });
+
+  test('carga excluída não recebe edição, tratativa nem pagamento (409 CARGA_EXCLUIDA)', async () => {
+    const e = await req(`${FRETE}/cargas/900801`, { metodo: 'PATCH', token: adm(), corpo: { cte: '123' } });
+    assert.equal(e.status, 409, e.texto);
+    assert.equal(e.json.codigo, 'CARGA_EXCLUIDA');
+    const p = await req(`${FRETE}/cargas/900801/pagamentos`, { metodo: 'POST', token: adm(), corpo: { pct: 10, confirmar: true } });
+    assert.equal(p.status, 409, p.texto);
+    assert.equal(p.json.codigo, 'CARGA_EXCLUIDA');
+    const nota = (await pool.query("SELECT nota FROM pgfrete_pendencias WHERE numero_carga = '900801' LIMIT 1")).rows[0]?.nota;
+    if (nota) {
+      const t = await req(`${FRETE}/cargas/900801/pendencias/${nota}`, { metodo: 'PATCH', token: adm(), corpo: { tratativa: 'OK' } });
+      assert.equal(t.status, 409, t.texto);
+    }
+  });
+
+  test('Restaurar traz de volta, com o evento no histórico; restaurar de novo: 409 NAO_EXCLUIDA', async () => {
+    const r = await req(`${FRETE}/cargas/900801/restaurar`, { metodo: 'POST', token: adm(), corpo: {} });
+    assert.equal(r.status, 200, r.texto);
+    assert.ok(await naGrade('900801'));
+    const h = await req(`${FRETE}/cargas/900801/historico`, { token: adm() });
+    assert.equal(h.json.excluida, null);
+    assert.ok(h.json.eventos.some((e) => e.acao === 'restaurou'));
+    const de = await req(`${FRETE}/cargas/900801/restaurar`, { metodo: 'POST', token: adm(), corpo: {} });
+    assert.equal(de.status, 409);
+    assert.equal(de.json.codigo, 'NAO_EXCLUIDA');
+  });
+
+  test('com pagamento registrado, PERGUNTA antes (409 TEM_PAGAMENTO); confirmar exclui e o pagamento fica no histórico', async () => {
+    const pg = await req(`${FRETE}/cargas/900802/pagamentos`, { metodo: 'POST', token: adm(), corpo: { pct: 30, confirmar: true } });
+    assert.equal(pg.status, 201, pg.texto);
+    const r = await req(`${FRETE}/cargas/900802/excluir`, { metodo: 'POST', token: adm(), corpo: { motivo: 'carga cancelada' } });
+    assert.equal(r.status, 409, r.texto);
+    assert.equal(r.json.codigo, 'TEM_PAGAMENTO');
+    assert.equal(r.json.podeConfirmar, true);
+    assert.match(r.json.erro, /30%/);
+    assert.ok(await naGrade('900802'), 'sem confirmar não exclui');
+    const ok = await req(`${FRETE}/cargas/900802/excluir`, { metodo: 'POST', token: adm(), corpo: { motivo: 'carga cancelada', confirmar: true } });
+    assert.equal(ok.status, 200, ok.texto);
+    assert.equal(await naGrade('900802'), false);
+    const h = await req(`${FRETE}/cargas/900802/historico`, { token: adm() });
+    assert.equal(h.json.pagamentos.length, 1, 'o pagamento não foi apagado');
+    const ex = (await req(`${FRETE}/excluidas`, { token: adm() })).json.cargas.find((k) => k.carga === '900802');
+    assert.equal(ex.pctPago, 30);
+  });
+
+  test('reimportar o PDF de uma carga excluída: a prévia avisa e confirmar a traz de volta', async () => {
+    const { lote, previa } = await importar('900802', { soPrevia: true });
+    const c = previa.cargas.find((k) => k.numero === '900802');
+    assert.ok(c.existente && c.existente.excluida, 'a prévia diz que estava excluída');
+    assert.equal(c.existente.excluida.motivo, 'carga cancelada');
+    const conf = await req(`${FRETE}/lotes/${lote}/confirmar`, { metodo: 'POST', token: adm(), corpo: {} });
+    assert.equal(conf.status, 200, conf.texto);
+    assert.equal(conf.json.gravadas.find((g) => g.numero === '900802').restaurada, true);
+    assert.ok(await naGrade('900802'));
+    const h = await req(`${FRETE}/cargas/900802/historico`, { token: adm() });
+    assert.ok(h.json.eventos.some((e) => e.acao === 'restaurou' && e.detalhe.pela === 'reimportacao'));
+  });
+
+  /* CADA NOTA COM OS SEUS CAMPOS (migração 063) — "tem que ter a data de
+     pagamento para cada uma das pendências" e "ter os campos editáveis pra
+     toda pendência da carga". Decisão: pagar uma nota soma UMA nota no %. */
+  const notaPendente = async (carga) => {
+    const g = (await req(FRETE, { token: adm() })).json;
+    return g.linhas.find((l) => String(l.carga) === carga && l.nota && l.categoria !== 'so_b2b');
+  };
+  test('pagar uma nota: soma 1 nota (100 ÷ notas do sistema) no % pago, e a linha dela mostra a data', async () => {
+    const l = await notaPendente('900805');
+    assert.ok(l, 'a carga 900805 tem uma nota pendente do sistema');
+    const qtd = (await pool.query("SELECT qtd_sist FROM pgfrete_cargas WHERE numero_carga = '900805'")).rows[0].qtd_sist;
+    // sem tratativa que libera: PERGUNTA
+    const pergunta = await req(`${FRETE}/cargas/900805/pendencias/${l.nota}/pagar`, { metodo: 'POST', token: adm(), corpo: { dataPagamento: '2026-10-06' } });
+    assert.equal(pergunta.status, 409, pergunta.texto);
+    assert.equal(pergunta.json.codigo, 'NOTA_NAO_LIBERADA');
+    assert.equal(pergunta.json.podeConfirmar, true);
+    const semData = await req(`${FRETE}/cargas/900805/pendencias/${l.nota}/pagar`, { metodo: 'POST', token: adm(), corpo: { confirmar: true } });
+    assert.equal(semData.status, 400);
+    assert.equal(semData.json.codigo, 'DATA_INVALIDA');
+    // tratativa OK libera → paga direto
+    const t = await req(`${FRETE}/cargas/900805/pendencias/${l.nota}`, { metodo: 'PATCH', token: adm(), corpo: { tratativa: 'OK' } });
+    assert.equal(t.status, 200, t.texto);
+    const pg = await req(`${FRETE}/cargas/900805/pendencias/${l.nota}/pagar`, { metodo: 'POST', token: adm(), corpo: { dataPagamento: '2026-10-06' } });
+    assert.equal(pg.status, 201, pg.texto);
+    assert.equal(pg.json.pct, Math.round(10000 / qtd) / 100);
+    const depois = await notaPendente('900805');
+    const g = (await req(FRETE, { token: adm() })).json;
+    const ixData = g.colunas.findIndex((c) => c.chave === 'dataPagamento');
+    const linha = g.linhas.find((x) => String(x.carga) === '900805' && x.nota === l.nota);
+    assert.equal(linha.v[ixData], '2026-10-06', 'a linha da nota mostra a data do pagamento dela');
+    assert.equal(linha.notaPaga.data, '2026-10-06');
+    void depois;
+    const de2 = await req(`${FRETE}/cargas/900805/pendencias/${l.nota}/pagar`, { metodo: 'POST', token: adm(), corpo: { dataPagamento: '2026-10-07', confirmar: true } });
+    assert.equal(de2.status, 409, 'a mesma nota não se paga duas vezes');
+    assert.equal(de2.json.codigo, 'NOTA_JA_PAGA');
+    const h = await req(`${FRETE}/cargas/900805/historico`, { token: adm() });
+    assert.ok(h.json.pagamentos.some((p) => p.nota === l.nota && p.dataPagamento === '2026-10-06'), 'o pagamento aparece no histórico com a nota');
+  });
+
+  test('a data do pagamento de uma nota se edita na própria nota; anular reabre a nota para pagar de novo', async () => {
+    const l = await notaPendente('900805');
+    const e = await req(`${FRETE}/cargas/900805/pendencias/${l.nota}`, { metodo: 'PATCH', token: adm(), corpo: { dataPagamento: '2026-10-09' } });
+    assert.equal(e.status, 200, e.texto);
+    assert.equal((await notaPendente('900805')).notaPaga.data, '2026-10-09');
+    const an = await req(`${FRETE}/pagamentos/${l.notaPaga.id}/anular`, { metodo: 'POST', token: adm(), corpo: { motivo: 'data errada de nota' } });
+    assert.equal(an.status, 200, an.texto);
+    assert.equal((await notaPendente('900805')).notaPaga, null);
+    const semPg = await req(`${FRETE}/cargas/900805/pendencias/${l.nota}`, { metodo: 'PATCH', token: adm(), corpo: { dataPagamento: '2026-10-09' } });
+    assert.equal(semPg.status, 409);
+    assert.equal(semPg.json.codigo, 'NOTA_SEM_PAGAMENTO');
+  });
+
+  test('transportadora e CT-E por nota: em branco valem os da carga; preenchidos, só aquela nota muda', async () => {
+    const transp = (await pool.query("SELECT transportadora FROM dim_veiculos WHERE transportadora <> '' ORDER BY transportadora DESC LIMIT 1")).rows[0].transportadora;
+    await req(`${FRETE}/cargas/900805`, { metodo: 'PATCH', token: adm(), corpo: { cte: '1000' } });
+    const g0 = (await req(FRETE, { token: adm() })).json;
+    const ixCte = g0.colunas.findIndex((c) => c.chave === 'cte');
+    const ixT = g0.colunas.findIndex((c) => c.chave === 'transportadora');
+    const notas = g0.linhas.filter((x) => String(x.carga) === '900805' && x.nota);
+    assert.ok(notas.every((x) => x.v[ixCte] === '1000'), 'toda nota mostra o CT-E da carga');
+    const alvo = notas[notas.length - 1];
+    const r = await req(`${FRETE}/cargas/900805/pendencias/${alvo.nota}`, { metodo: 'PATCH', token: adm(), corpo: { cte: '2000-C', transportadora: transp } });
+    assert.equal(r.status, 200, r.texto);
+    const desconhecida = await req(`${FRETE}/cargas/900805/pendencias/${alvo.nota}`, { metodo: 'PATCH', token: adm(), corpo: { transportadora: 'NAO EXISTE LTDA' } });
+    assert.equal(desconhecida.status, 400);
+    assert.equal(desconhecida.json.codigo, 'TRANSPORTADORA_DESCONHECIDA');
+    const g = (await req(FRETE, { token: adm() })).json;
+    const l2 = g.linhas.find((x) => String(x.carga) === '900805' && x.nota === alvo.nota);
+    assert.equal(l2.v[ixCte], '2000-C');
+    assert.equal(l2.v[ixT], transp);
+    assert.equal(l2.notaCte, '2000-C');
+    assert.equal(l2.cargaCte, '1000', 'a carga continua com o dela');
+    const outras = g.linhas.filter((x) => String(x.carga) === '900805' && x.nota && x.nota !== alvo.nota);
+    assert.ok(outras.every((x) => x.v[ixCte] === '1000'), 'as outras notas não mudam');
+    const h = await req(`${FRETE}/cargas/900805/historico`, { token: adm() });
+    assert.ok(h.json.eventos.some((e) => e.acao === 'editou_nota' && e.nota === alvo.nota));
+  });
+
+  test('editar: o formulário grava vários campos num pedido só, e cada mudança fica no histórico', async () => {
+    const transp = (await pool.query("SELECT transportadora FROM dim_veiculos WHERE transportadora <> '' LIMIT 1")).rows[0].transportadora;
+    const r = await req(`${FRETE}/cargas/900802`, { metodo: 'PATCH', token: adm(),
+      corpo: { transportadora: transp, cte: '4455, 4456', obs: 'conferido com o financeiro', canhotoOriginal: true, dataPagamento: '2026-10-05' } });
+    assert.equal(r.status, 200, r.texto);
+    const c = (await pool.query("SELECT transportadora, cte, obs, canhoto_original FROM pgfrete_cargas WHERE numero_carga = '900802'")).rows[0];
+    assert.deepEqual(c, { transportadora: transp, cte: '4455, 4456', obs: 'conferido com o financeiro', canhoto_original: true });
+    const d = (await pool.query("SELECT to_char(data_pagamento,'YYYY-MM-DD') AS d FROM pgfrete_pagamentos WHERE numero_carga = '900802' AND anulado_em IS NULL")).rows[0].d;
+    assert.equal(d, '2026-10-05');
+    const h = await req(`${FRETE}/cargas/900802/historico`, { token: adm() });
+    assert.ok(h.json.eventos.filter((e) => e.acao === 'editou_carga').length >= 2);
+    assert.ok(h.json.eventos.some((e) => e.acao === 'canhoto'));
   });
 });
