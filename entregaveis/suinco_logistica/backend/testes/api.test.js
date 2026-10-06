@@ -65,7 +65,30 @@ const ADMINS = [
 ];
 const adm = {};
 
+/* PREPARO DE CENÁRIO COM FRETE (06/10/2026). Desde a migração 061 contratar
+   (pôr placa) exige a observação do frete. Os testes que só PREPARAM uma
+   carga contratada — e são dezenas, de bloco 1 em diante — não estão medindo
+   o frete: aqui a carga contratada nasce com TABELA, como a Logística faria.
+   Quem mede a regra (bloco 50) manda `freteObservacao` explícito — inclusive
+   '' para provar a recusa —, e aí nada é acrescentado. */
+function comFreteDePreparo(caminho, metodo, corpo) {
+  if (!corpo || typeof corpo !== 'object' || corpo.freteObservacao !== undefined) return corpo;
+  if (metodo === 'POST' && caminho === '/api/cargas') {
+    if (corpo.aguardandoCarga === true || !String(corpo.placa ?? '').trim()) return corpo;
+    return { ...corpo, freteObservacao: 'TABELA' };
+  }
+  /* Na edição, contratam: a placa entrando, a chegada da Portaria virando
+     carga (aguardandoCarga:false) e a troca de transportadora. */
+  if (metodo === 'PATCH' && /^\/api\/cargas\/[^/]+$/.test(caminho)) {
+    const contrata = String(corpo.placa ?? '').trim() || corpo.aguardandoCarga === false
+      || corpo.transportadora !== undefined;
+    return contrata ? { ...corpo, freteObservacao: 'TABELA' } : corpo;
+  }
+  return corpo;
+}
+
 async function req(caminho, { metodo = 'GET', token, corpo, cabecalhos = {} } = {}) {
+  corpo = comFreteDePreparo(caminho, metodo, corpo);
   const r = await fetch(base + caminho, {
     method: metodo,
     headers: {
@@ -1446,15 +1469,30 @@ describe('10. Cinco senhas erradas', () => {
     assert.equal(rows[0].falhas_senha, 0);
   });
 
-  test('sem segundo fator, a quinta falha leva a bloqueio curto', async () => {
+  /* A REGRA MUDOU NA AUDITORIA DE 06/10/2026. Até ali a SEXTA tentativa,
+     com a senha CERTA, respondia 429 "bloqueio" — e a errada 401: quem
+     tentava adivinhar sabia quando tinha acertado. Agora a quinta errada põe
+     a conta em espera, e durante a espera TODA resposta é igual. */
+  test('sem segundo fator, a quinta falha põe a conta em espera — e a senha certa não denuncia nada', async () => {
     await zerar();
     for (let i = 0; i < 5; i += 1) {
       await req('/auth/login', { metodo: 'POST', corpo: { email: EMAIL, senha: 'errada' } });
     }
+    const { rows } = await pool.query('SELECT bloqueado_ate FROM operadores WHERE id = $1', [id]);
+    assert.ok(rows[0].bloqueado_ate && new Date(rows[0].bloqueado_ate) > new Date(), 'a quinta errada põe a conta em espera');
+    const certa = await req('/auth/login', { metodo: 'POST', corpo: { email: EMAIL, senha: SENHA } });
+    const errada = await req('/auth/login', { metodo: 'POST', corpo: { email: EMAIL, senha: 'errada-de-novo' } });
+    const ninguem = await req('/auth/login', { metodo: 'POST', corpo: { email: 'ninguem@teste.local', senha: SENHA } });
+    assert.equal(certa.status, 401, 'a senha certa durante a espera não entra');
+    assert.deepEqual([certa.status, certa.json], [errada.status, errada.json], 'certa e errada respondem IGUAL');
+    assert.deepEqual([certa.status, certa.json], [ninguem.status, ninguem.json], 'e igual ao e-mail que não existe');
+    assert.match(certa.json.erro, /15 minutos/, 'a mensagem diz o que fazer');
+  });
+
+  test('passada a espera, a senha certa entra', async () => {
+    await pool.query("UPDATE operadores SET bloqueado_ate = now() - interval '1 minute' WHERE id = $1", [id]);
     const r = await req('/auth/login', { metodo: 'POST', corpo: { email: EMAIL, senha: SENHA } });
-    assert.equal(r.status, 429);
-    assert.equal(r.json.codigo, 'BLOQUEIO_TEMPORARIO');
-    assert.match(r.json.erro, /minuto/, 'a mensagem precisa dizer quanto esperar');
+    assert.equal(r.status, 200, r.texto);
   });
 
   test('a resposta a senha errada continua idêntica à de e-mail inexistente', async () => {
@@ -6022,8 +6060,14 @@ describe('45. Destino preenche o KM, e o frete combinado à mão (18/09/2026)', 
   });
 
   /* ------------------------------------------------------------------ */
+  /* A REGRA MUDOU EM 06/10/2026, por decisão do dono: "o valor do frete não
+     pode ser alterável, somente o KM". Até ali o digitado ENTRAVA no lugar
+     do calculado (`frete_valor`). Agora `frete_valor` é sempre a conta, e o
+     negociado vive à parte, como `frete_combinado` da observação COMBINADO.
+     Estes testes foram reescritos para a regra nova — o que eles guardam
+     continua: o combinado não se perde, não vira zero, e o KM que muda avisa. */
   describe('e o frete combinado à mão', () => {
-    test('digitar um valor manda, e o calculado continua guardado', async () => {
+    test('digitar um valor guarda o combinado, e o frete exibido continua sendo a tabela', async () => {
       const id = await novaLinha();
       await req(`/api/montagem/${id}`, { metodo: 'PATCH', token: tokens['Logística'],
         corpo: { freteDestino: destino } });
@@ -6035,9 +6079,9 @@ describe('45. Destino preenche o KM, e o frete combinado à mão (18/09/2026)', 
       assert.equal(r.status, 200, r.texto);
 
       const m = await ler(id);
-      assert.equal(Number(m.frete_valor), 12500, 'o combinado é o que vale');
-      assert.equal(Number(m.frete_valor_calculado), Number(calculado),
-        'e a tabela não se perde — a conferência compara os dois');
+      assert.equal(Number(m.frete_combinado), 12500, 'o combinado fica guardado');
+      assert.equal(Number(m.frete_valor), Number(calculado),
+        'e o valor do frete não é editável: continua sendo a conta da tabela');
       assert.equal(m.frete_e_manual, true);
       assert.ok(m.frete_manual_por, 'fica registrado quem digitou');
     });
@@ -6064,24 +6108,25 @@ describe('45. Destino preenche o KM, e o frete combinado à mão (18/09/2026)', 
       await req(`/api/montagem/${id}`, { metodo: 'PATCH', token: tokens['Logística'],
         corpo: { kmDeslocamento: String(kmDoDestino + 100) } });
       const depois = await ler(id);
-      assert.equal(Number(depois.frete_valor), 9900, 'o combinado FICA');
+      assert.equal(Number(depois.frete_combinado), 9900, 'o combinado FICA');
       assert.equal(depois.frete_km_mudou, true,
         'mas a linha precisa avisar que foi fechado em outra quilometragem');
     });
 
-    test('apagar o campo desfaz e volta a valer o calculado', async () => {
+    test('apagar o campo desfaz o combinado', async () => {
       const id = await novaLinha();
       await req(`/api/montagem/${id}`, { metodo: 'PATCH', token: tokens['Logística'],
         corpo: { freteDestino: destino } });
       const calculado = (await ler(id)).frete_valor;
       await req(`/api/montagem/${id}`, { metodo: 'PATCH', token: tokens['Logística'],
         corpo: { freteValorManual: '100,00' } });
-      assert.equal(Number((await ler(id)).frete_valor), 100);
+      assert.equal(Number((await ler(id)).frete_combinado), 100);
 
       await req(`/api/montagem/${id}`, { metodo: 'PATCH', token: tokens['Logística'],
         corpo: { freteValorManual: '' } });
       const m = await ler(id);
-      assert.equal(Number(m.frete_valor), Number(calculado), 'volta ao calculado');
+      assert.equal(m.frete_combinado, null, 'sem combinado');
+      assert.equal(Number(m.frete_valor), Number(calculado), 'o frete exibido nunca deixou de ser o calculado');
       assert.equal(m.frete_e_manual, false);
       assert.equal(m.frete_manual_por, null, 'e o carimbo sai junto');
     });
@@ -6565,6 +6610,7 @@ describe('49. Pagamento de Frete — a planilha dentro do painel (05/10/2026)', 
   after(async () => {
     await limpar();
     await pool.query("DELETE FROM operadores WHERE setor = 'Pagamento de Frete' AND email LIKE '%@teste.local'");
+    await pool.query("DELETE FROM dim_veiculos WHERE placa = 'TST9A01'");   // a Frota volta ao que era
   });
 
   describe('quem entra', () => {
@@ -6634,6 +6680,8 @@ describe('49. Pagamento de Frete — a planilha dentro do painel (05/10/2026)', 
         ['PATCH', `${FRETE}/cargas/1`, { cte: '1' }], ['PATCH', `${FRETE}/cargas/1/pendencias/2`, { tratativa: 'OK' }],
         ['POST', `${FRETE}/cargas/1/pagamentos`, { pct: 10 }], ['POST', `${FRETE}/pagamentos/1/anular`, { motivo: 'x' }],
         ['GET', `${FRETE}/cargas/1/historico`],
+        ['POST', `${FRETE}/cargas/1/excluir`, { motivo: 'x' }], ['POST', `${FRETE}/cargas/1/restaurar`, {}],
+        ['GET', `${FRETE}/excluidas`],
       ];
       for (const [metodo, caminho, corpo] of tentativas) {
         const r = await req(caminho, { metodo, token: tokens['Logística'], corpo });
@@ -7256,5 +7304,530 @@ describe('49. Pagamento de Frete — a planilha dentro do painel (05/10/2026)', 
       const { rows } = await pool.query("SELECT pg_get_constraintdef(oid) AS d FROM pg_constraint WHERE conname = 'operadores_setor_check'");
       assert.match(rows[0].d, /Pagamento de Frete/, 'a 058 põe o setor na CHECK');
     });
+  });
+});
+
+describe('50. A observação do frete é obrigatória para contratar (06/10/2026)', () => {
+  /* Decisão do dono: "o valor do frete não pode ser alterável, somente o KM
+     (...) o que seguir o valor da tabela vai ser colocado na observação como
+     tabela, e o que não seguir a tabela vai ser colocado o valor combinado" —
+     e "só consegue contratar carga com frete combinado (...) sem exceções".
+     Contratar é pôr a placa. Todo corpo aqui manda `freteObservacao`
+     EXPLÍCITO — é o que desliga o preparo automático do ajudante req(). */
+  const A = 'OBF0A01', B = 'OBF0B02', S = 'OBF0S03';
+  const LOG = () => tokens['Logística'];
+  const nova = (extra) => req('/api/cargas', { metodo: 'POST', token: LOG(),
+    corpo: { id: `carga_obf_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      numeroCarga: 'OBF-' + Date.now(), rota: '', ...extra } });
+  const ler = async (id) => (await pool.query(
+    'SELECT frete_observacao, frete_valor_manual, frete_valor, placa FROM fact_viagens WHERE carga_id = $1', [id])).rows[0];
+
+  before(async () => {
+    await pool.query(
+      `INSERT INTO dim_veiculos (placa, transportadora, tipo_veiculo, uf, origem)
+       VALUES ($1,'TRANSPORTADORA OBS A','Truck','MG','manual'),
+              ($2,'TRANSPORTADORA OBS B','Truck','MG','manual'),
+              ($3,'SUINCO','Truck','MG','manual')
+       ON CONFLICT (placa) DO UPDATE SET transportadora = EXCLUDED.transportadora,
+         tipo_veiculo = EXCLUDED.tipo_veiculo`, [A, B, S]);
+  });
+  /* Sai como entrou: as placas e as cargas deste bloco não ficam no banco
+     (deixadas, mudam a contagem da Frota que as suítes de tela conferem). */
+  after(async () => {
+    const ids = "SELECT carga_id FROM fact_viagens WHERE placa = ANY($1::text[]) OR numero_carga LIKE 'OBF-%'";
+    await pool.query(`DELETE FROM fact_statusfrota WHERE carga_id IN (${ids})`, [[A, B, S]]);
+    await pool.query(`DELETE FROM log_eventos WHERE carga_id IN (${ids})`, [[A, B, S]]);
+    await pool.query("DELETE FROM fact_viagens WHERE placa = ANY($1::text[]) OR numero_carga LIKE 'OBF-%'", [[A, B, S]]);
+    await pool.query('DELETE FROM dim_veiculos WHERE placa = ANY($1::text[])', [[A, B, S]]);
+  });
+
+  test('com placa e SEM observação: recusado, dizendo o que falta', async () => {
+    const r = await nova({ placa: A, freteObservacao: '' });
+    assert.equal(r.status, 422, r.texto);
+    assert.equal(r.json.codigo, 'FRETE_OBRIGATORIO');
+    assert.match(r.json.erro, /TABELA.*COMBINADO/);
+  });
+
+  test('COMBINADO sem valor também é recusado', async () => {
+    const r = await nova({ placa: A, freteObservacao: 'COMBINADO', freteCombinado: '' });
+    assert.equal(r.status, 422, r.texto);
+    assert.equal(r.json.codigo, 'FRETE_COMBINADO_SEM_VALOR');
+  });
+
+  test('TABELA contrata, e o valor é a conta — ninguém digita o preço', async () => {
+    const r = await nova({ placa: A, freteObservacao: 'TABELA', kmDeslocamento: '100', freteCombinado: '99999' });
+    assert.equal(r.status, 201, r.texto);
+    const g = await ler(r.json.id);
+    assert.equal(g.frete_observacao, 'TABELA');
+    assert.equal(g.frete_valor_manual, null, 'TABELA não guarda valor digitado, nem se vier no pacote');
+    assert.ok(Number(g.frete_valor) > 0, 'o valor é o calculado pelo KM');
+  });
+
+  test('COMBINADO contrata com o valor negociado, e o calculado continua de referência', async () => {
+    const r = await nova({ placa: A, freteObservacao: 'COMBINADO', freteCombinado: '14.000,00', kmDeslocamento: '100' });
+    assert.equal(r.status, 201, r.texto);
+    assert.equal(r.json.freteObservacao, 'COMBINADO');
+    assert.equal(r.json.freteCombinado, 14000);
+    assert.notEqual(Number(r.json.freteValor), 14000, 'o valor do frete continua sendo a conta');
+  });
+
+  test('sem placa ainda não é contratação: nasce sem observação', async () => {
+    const r = await nova({ placa: '', freteObservacao: '' });
+    assert.equal(r.status, 201, r.texto);
+  });
+
+  test('frota própria (SUINCO) não tem frete a pagar: contrata sem observação', async () => {
+    const r = await nova({ placa: S, freteObservacao: '' });
+    assert.equal(r.status, 201, r.texto);
+  });
+
+  test('pôr a placa depois é contratar: sem observação recusa, com observação passa', async () => {
+    const c = await nova({ placa: '', freteObservacao: '' });
+    const sem = await req(`/api/cargas/${c.json.id}`, { metodo: 'PATCH', token: LOG(),
+      corpo: { placa: A, transportadora: 'TRANSPORTADORA OBS A', freteObservacao: '' } });
+    assert.equal(sem.status, 422, sem.texto);
+    assert.equal(sem.json.codigo, 'FRETE_OBRIGATORIO');
+    assert.equal((await ler(c.json.id)).placa, '', 'a placa não entrou');
+    const com = await req(`/api/cargas/${c.json.id}`, { metodo: 'PATCH', token: LOG(),
+      corpo: { placa: A, transportadora: 'TRANSPORTADORA OBS A', freteObservacao: 'TABELA' } });
+    assert.equal(com.status, 200, com.texto);
+    assert.equal((await ler(c.json.id)).frete_observacao, 'TABELA');
+  });
+
+  test('trocar de transportadora pede a observação de NOVO', async () => {
+    const c = await nova({ placa: A, freteObservacao: 'TABELA' });
+    const sem = await req(`/api/cargas/${c.json.id}`, { metodo: 'PATCH', token: LOG(),
+      corpo: { placa: B, transportadora: 'TRANSPORTADORA OBS B', freteObservacao: '' } });
+    assert.equal(sem.status, 422, sem.texto);
+    assert.equal(sem.json.codigo, 'FRETE_DA_NOVA_TRANSPORTADORA');
+    const com = await req(`/api/cargas/${c.json.id}`, { metodo: 'PATCH', token: LOG(),
+      corpo: { placa: B, transportadora: 'TRANSPORTADORA OBS B', freteObservacao: 'COMBINADO', freteCombinado: '9.500' } });
+    assert.equal(com.status, 200, com.texto);
+    const g = await ler(c.json.id);
+    assert.equal(g.frete_observacao, 'COMBINADO');
+    assert.equal(Number(g.frete_valor_manual), 9500);
+  });
+
+  test('eco sem a observação não apaga a decisão; TABELA limpa o combinado', async () => {
+    const c = await nova({ placa: A, freteObservacao: 'COMBINADO', freteCombinado: '8000' });
+    const eco = await req(`/api/cargas/${c.json.id}`, { metodo: 'PATCH', token: LOG(),
+      corpo: { observacoes: 'recado', freteObservacao: '' } });
+    assert.equal(eco.status, 200, eco.texto);
+    let g = await ler(c.json.id);
+    assert.equal(g.frete_observacao, 'COMBINADO', 'vazio não apaga');
+    assert.equal(Number(g.frete_valor_manual), 8000);
+    await req(`/api/cargas/${c.json.id}`, { metodo: 'PATCH', token: LOG(), corpo: { freteObservacao: 'TABELA' } });
+    g = await ler(c.json.id);
+    assert.equal(g.frete_observacao, 'TABELA');
+    assert.equal(g.frete_valor_manual, null, 'TABELA: quem vale é o calculado');
+  });
+
+  test('a chegada da Portaria entra sem frete, e completá-la é contratar', async () => {
+    const id = `carga_obf_port_${Date.now()}`;
+    await pool.query("UPDATE fact_viagens SET status_atual = 'Seguiu Viagem' WHERE placa = $1", [B]);
+    const ch = await req('/api/cargas', { metodo: 'POST', token: tokens['Portaria'],
+      corpo: { id, placa: B, aguardandoCarga: true } });
+    assert.equal(ch.status, 201, ch.texto);
+    const sem = await req(`/api/cargas/${id}`, { metodo: 'PATCH', token: LOG(),
+      corpo: { aguardandoCarga: false, numeroCarga: 'OBF-PORT', freteObservacao: '' } });
+    assert.equal(sem.status, 422, sem.texto);
+    assert.equal(sem.json.codigo, 'FRETE_OBRIGATORIO');
+    const com = await req(`/api/cargas/${id}`, { metodo: 'PATCH', token: LOG(),
+      corpo: { aguardandoCarga: false, numeroCarga: 'OBF-PORT', freteObservacao: 'TABELA' } });
+    assert.equal(com.status, 200, com.texto);
+  });
+
+  test('quem não vê dinheiro não vê o combinado nem a observação', async () => {
+    const c = await nova({ placa: A, freteObservacao: 'COMBINADO', freteCombinado: '7777' });
+    const hash = await bcrypt.hash(SENHA, 4);
+    await pool.query(`INSERT INTO operadores (email, nome, setor, senha_hash) VALUES ('obf.comercial@teste.local','Comercial OBF','Comercial',$1)
+      ON CONFLICT (email) DO UPDATE SET setor = 'Comercial', senha_hash = EXCLUDED.senha_hash, ativo = true`, [hash]);
+    const login = await req('/auth/login', { metodo: 'POST', corpo: { email: 'obf.comercial@teste.local', senha: SENHA } });
+    const e = await req('/api/estado', { token: login.json.token });
+    await pool.query("DELETE FROM operadores WHERE email = 'obf.comercial@teste.local'");
+    const vista = e.json.cargas.find((x) => x.id === c.json.id);
+    assert.ok(vista, 'o Comercial vê a carga');
+    assert.equal(vista.freteCombinado, null);
+    assert.equal(vista.freteObservacao, '');
+  });
+
+  test('só Logística e Administração mudam a observação do frete', async () => {
+    const c = await nova({ placa: A, freteObservacao: 'TABELA' });
+    await req(`/api/cargas/${c.json.id}`, { metodo: 'PATCH', token: tokens['Portaria'],
+      corpo: { freteObservacao: 'COMBINADO', freteCombinado: '1' } });
+    assert.equal((await ler(c.json.id)).frete_observacao, 'TABELA', 'a Portaria não altera');
+    const adm = await req(`/api/cargas/${c.json.id}`, { metodo: 'PATCH', token: tokens['Administração'],
+      corpo: { freteObservacao: 'COMBINADO', freteCombinado: '1500' } });
+    assert.equal(adm.status, 200, adm.texto);
+    assert.equal((await ler(c.json.id)).frete_observacao, 'COMBINADO');
+  });
+
+  test('na Montagem: o frete exibido é a tabela, e a observação fica na linha', async () => {
+    const rota = (await pool.query('SELECT codigo FROM dim_rotas ORDER BY codigo LIMIT 1')).rows[0].codigo;
+    const m = await req('/api/montagem', { metodo: 'POST', token: LOG(), corpo: { rotaCodigo: rota, numeroCarga: 'OBF-M' } });
+    assert.equal(m.status, 201, m.texto);
+    const id = m.json.montagem.montagem_id;
+    const r = await req(`/api/montagem/${id}`, { metodo: 'PATCH', token: LOG(),
+      corpo: { freteObservacao: 'COMBINADO', freteValorManual: '14.000,00' } });
+    assert.equal(r.status, 200, r.texto);
+    assert.equal(r.json.montagem.frete_observacao, 'COMBINADO');
+    const t = await req(`/api/montagem/${id}`, { metodo: 'PATCH', token: LOG(), corpo: { freteObservacao: 'TABELA' } });
+    assert.equal(t.json.montagem.frete_observacao, 'TABELA');
+    assert.equal(t.json.montagem.frete_valor_manual, null, 'TABELA limpa o combinado da linha');
+    await pool.query('DELETE FROM programacao_montagem WHERE montagem_id = $1', [id]);
+  });
+});
+
+describe('51. Achados da auditoria da API (06/10/2026)', () => {
+  /* Pedido do dono: "resolve qualquer problema que pode existir nas coisas
+     que você indicou". Cada teste trava um achado; os que dependem do
+     navegador (a filial e o tempo real) estão em
+     testes/test_filial_nao_recebe_patio_pelo_tempo_real.py. */
+  const fsSync = () => import('node:fs');
+  const criar = async (email, setor) => {
+    const hash = await bcrypt.hash(SENHA, 4);
+    await pool.query(`INSERT INTO operadores (email, nome, setor, senha_hash) VALUES ($1,$2,$3,$4)
+      ON CONFLICT (email) DO UPDATE SET setor = EXCLUDED.setor, senha_hash = EXCLUDED.senha_hash, ativo = true,
+        falhas_senha = 0, falhas_desde = NULL, bloqueado_ate = NULL`, [email, `Auditoria ${setor}`, setor, hash]);
+    return (await req('/auth/login', { metodo: 'POST', corpo: { email, senha: SENHA } })).json.token;
+  };
+  after(async () => {
+    await pool.query("DELETE FROM operadores WHERE email LIKE 'aud51.%@teste.local'");
+  });
+
+  test('3. o limite de PDF é por PESSOA: quem gerou 20 não trava o colega no mesmo endereço', async () => {
+    const a = await criar('aud51.a@teste.local', 'Logística');
+    const b = await criar('aud51.b@teste.local', 'Logística');
+    const ca = [];
+    for (let i = 0; i < 20; i += 1) {
+      ca.push((await req('/api/relatorios/pdf', { metodo: 'POST', token: a, corpo: { tipo: 'relatorio-operacional' } })).status);
+    }
+    assert.deepEqual([...new Set(ca)], [400], 'os 20 da pessoa A param na validação (sem conteúdo)');
+    const rb = await req('/api/relatorios/pdf', { metodo: 'POST', token: b, corpo: { tipo: 'relatorio-operacional' } });
+    assert.notEqual(rb.status, 429, 'a pessoa B não pode pagar pelo limite da A: ' + rb.texto);
+    assert.equal(rb.json.codigo, 'HTML_FALTANDO');
+  });
+
+  test('4. relatório grande passa: 563 KB de estilo + 600 KB de conteúdo não são recusados por tamanho', async () => {
+    const t = await criar('aud51.c@teste.local', 'Logística');
+    const corpo = { tipo: 'tipo-que-nao-existe', html: '<div>' + 'x'.repeat(600 * 1024) + '</div>', css: 'a{}'.repeat(563 * 1024 / 3) };
+    const r = await req('/api/relatorios/pdf', { metodo: 'POST', token: t, corpo });
+    assert.notEqual(r.status, 413, 'o envio de ~1,1 MB não pode morrer no teto de 1 MB');
+    assert.equal(r.json.codigo, 'DOCUMENTO_DESCONHECIDO', 'chegou à rota, que é quem decide');
+  });
+
+  test('5. recusa do banco vira recusa com motivo, não 500 (que o painel trata como "sem rede")', async () => {
+    const { recusaDoBanco } = await import('../src/servidor.js');
+    assert.equal(typeof recusaDoBanco, 'function', 'o servidor precisa traduzir as recusas do banco');
+    for (const [code, status] of [['23505', 409], ['23514', 422], ['23502', 422], ['22P02', 422], ['22001', 422], ['22003', 422], ['22007', 422]]) {
+      const r = recusaDoBanco({ code, constraint: 'x' });
+      assert.ok(r, `código ${code} precisa ser traduzido`);
+      assert.equal(r.status, status, code);
+      assert.ok(r.corpo.erro && r.corpo.codigo, code);
+    }
+    assert.equal(recusaDoBanco({ code: '57P01' }), null, 'falha do servidor de banco continua sendo 500');
+  });
+
+  test('6. a sincronia completa traz as abertas e as concluídas de 30 dias — não o histórico inteiro', async () => {
+    const t = tokens['Logística'];
+    const n = Date.now();
+    const velhaConcluida = `carga_aud51_vc_${n}`, velhaAberta = `carga_aud51_va_${n}`, recenteConcluida = `carga_aud51_rc_${n}`;
+    /* Criadas por INSERT, e não por API + UPDATE: o gatilho de UPDATE
+       (fn_viagem_antes_update) carimba acao_em = agora em toda mudança de
+       status — é o que ele existe para fazer —, então o teste não teria como
+       envelhecer uma carga. INSERT não passa por ele. */
+    const inserir = (id, status, dias) => pool.query(
+      `INSERT INTO fact_viagens (carga_id, numero_carga, placa, status_atual, acao_em, criado_em, programado_em)
+       VALUES ($1, $2, '', $3, now() - ($4 || ' days')::interval, now() - ($4 || ' days')::interval,
+               now() - ($4 || ' days')::interval)`, [id, id.slice(-12), status, String(dias)]);
+    await inserir(velhaConcluida, 'Seguiu Viagem', 40);
+    await inserir(velhaAberta, 'Aguardando Veículo', 40);
+    await inserir(recenteConcluida, 'Seguiu Viagem', 2);
+    const e = await req('/api/estado', { token: t });
+    const ids = new Set(e.json.cargas.map((c) => c.id));
+    assert.ok(!ids.has(velhaConcluida), 'concluída há 40 dias fica no Histórico, não na sincronia');
+    assert.ok(ids.has(velhaAberta), 'carga ABERTA vem sempre, de qualquer idade');
+    assert.ok(ids.has(recenteConcluida), 'concluída recente vem');
+    await pool.query('DELETE FROM log_eventos WHERE carga_id = ANY($1)', [[velhaConcluida, velhaAberta, recenteConcluida]]);
+    await pool.query('DELETE FROM fact_statusfrota WHERE carga_id = ANY($1)', [[velhaConcluida, velhaAberta, recenteConcluida]]);
+    await pool.query('DELETE FROM fact_viagens WHERE carga_id = ANY($1)', [[velhaConcluida, velhaAberta, recenteConcluida]]);
+  });
+
+  test('7 e 8. o Nginx aceita o que o servidor aceita, e o log não grava o token do endereço', async () => {
+    const { readFileSync } = await fsSync();
+    const inst = readFileSync(new URL('../instalar.sh', import.meta.url), 'utf8');
+    const teto = /client_max_body_size\s+(\d+)m;/.exec(inst);
+    assert.ok(teto && Number(teto[1]) >= 10, 'o Nginx precisa deixar passar os 9 MB da importação e os 5 MB do relatório');
+    assert.match(inst, /log_format suinco_sem_consulta [^;]*\\\$uri/, 'o formato do log usa o caminho SEM a consulta');
+    assert.match(inst, /access_log \/var\/log\/nginx\/access\.log suinco_sem_consulta;/);
+    assert.doesNotMatch(inst.split('log_format suinco_sem_consulta')[1].split(';')[0], /\\\$request[^_]|\\\$request_uri|\\\$args/,
+      'o formato não pode gravar o endereço inteiro');
+  });
+
+  test('9. a verificação de saúde não devolve a mensagem crua do banco', async () => {
+    const { readFileSync } = await fsSync();
+    const src = readFileSync(new URL('../src/servidor.js', import.meta.url), 'utf8');
+    const bloco = src.slice(src.indexOf("app.get('/health'"), src.indexOf("app.use('/auth'"));
+    assert.doesNotMatch(bloco, /json\(\{[^}]*erro:\s*e\.message/, 'e.message não pode ir para a resposta pública');
+  });
+
+  test('10. desligar o serviço com o painel conectado é imediato e sem erro', async () => {
+    const { spawn } = await import('node:child_process');
+    const porta = 3900 + Math.floor(Math.random() * 90);
+    const filho = spawn(process.execPath, ['src/servidor.js'], {
+      cwd: new URL('..', import.meta.url).pathname, env: { ...process.env, PORT: String(porta) }, stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    await new Promise((ok, falha) => {
+      const t = setTimeout(() => falha(new Error('o servidor não subiu')), 15000);
+      filho.stdout.on('data', (d) => { if (String(d).includes('porta')) { clearTimeout(t); ok(); } });
+    });
+    const ws = new WebSocket(`ws://127.0.0.1:${porta}/socket.io/?EIO=4&transport=websocket`);
+    await new Promise((ok) => { ws.onopen = ok; setTimeout(ok, 3000); });
+    const inicio = Date.now();
+    filho.kill('SIGTERM');
+    const codigo = await new Promise((ok) => filho.on('exit', (c) => ok(c)));
+    const ms = Date.now() - inicio;
+    try { ws.close(); } catch { /* já caiu */ }
+    assert.equal(codigo, 0, 'sai sem erro');
+    assert.ok(ms < 5000, `desligou em ${ms} ms — antes esperava os 10 s do limite`);
+  });
+
+  test('11. o contato padrão das notificações não é um e-mail pessoal', async () => {
+    const { readFileSync } = await fsSync();
+    const src = readFileSync(new URL('../src/config.js', import.meta.url), 'utf8');
+    assert.doesNotMatch(src, /mailto:[a-z0-9._-]+@gmail\.com/i);
+  });
+
+  test('12. o fuso mora em um lugar só', async () => {
+    const { readdirSync, readFileSync } = await fsSync();
+    const raiz = new URL('../src/', import.meta.url).pathname;
+    const achados = [];
+    const varre = (dir) => {
+      for (const e of readdirSync(dir, { withFileTypes: true })) {
+        const p = path.join(dir, e.name);
+        if (e.isDirectory()) varre(p);
+        else if (p.endsWith('.js') && !p.endsWith('fuso.js') && /'America\/Sao_Paulo'/.test(readFileSync(p, 'utf8'))) achados.push(p);
+      }
+    };
+    varre(raiz);
+    assert.deepEqual(achados, [], 'use FUSO de dominio/fuso.js');
+  });
+});
+
+describe('52. Pagamento de Frete: excluir e editar a carga (06/10/2026)', async () => {
+  /* Pedido do dono: "eu preciso conseguir excluir carga do pagamento de
+     fretes (...) excluir e editar". Decisão dele: a carga SAI DA LISTA E FICA
+     NO HISTÓRICO (motivo obrigatório, pergunta se há pagamento, volta pela
+     lista das excluídas ou reimportando o PDF); editar é um formulário só com
+     os campos que a pessoa preenche. */
+  const { readFileSync } = await import('node:fs');
+  const pdf64 = (nome) => readFileSync(new URL(`./fixtures/frete/${nome}`, import.meta.url)).toString('base64');
+  const FRETE = '/api/pagamento-frete';
+  const adm = () => tokens['Administração'];
+  const limpar = async () => {
+    for (const t of ['pgfrete_eventos', 'pgfrete_leituras', 'pgfrete_pagamentos', 'pgfrete_pendencias', 'pgfrete_cargas']) {
+      await pool.query(`DELETE FROM ${t}`);
+    }
+  };
+  const subir = (arquivo, lote) => req(`${FRETE}/leituras`, {
+    metodo: 'POST', token: adm(), corpo: { arquivo: pdf64(arquivo), nome: arquivo, ...(lote ? { lote } : {}) } });
+  const importar = async (n, { soPrevia = false } = {}) => {
+    const a = await subir(`b2b_${n}.pdf`);
+    assert.equal(a.status, 200, a.texto);
+    const b = await subir(`sist_${n}.pdf`, a.json.lote);
+    assert.equal(b.status, 200, b.texto);
+    if (soPrevia) {
+      const p = await req(`${FRETE}/lotes/${a.json.lote}/previa`, { token: adm() });
+      assert.equal(p.status, 200, p.texto);
+      return { lote: a.json.lote, previa: p.json };
+    }
+    const c = await req(`${FRETE}/lotes/${a.json.lote}/confirmar`, { metodo: 'POST', token: adm(), corpo: {} });
+    assert.equal(c.status, 200, c.texto);
+    return c.json;
+  };
+  const naGrade = async (n) => (await req(FRETE, { token: adm() })).json.linhas.some((l) => String(l.carga) === n);
+
+  before(async () => { await limpar(); await importar('900801'); await importar('900802'); await importar('900805'); });
+  after(limpar);
+
+  test('excluir sem motivo: 400 MOTIVO_FALTANDO, e a carga continua na lista', async () => {
+    const r = await req(`${FRETE}/cargas/900801/excluir`, { metodo: 'POST', token: adm(), corpo: { motivo: '  ' } });
+    assert.equal(r.status, 400, r.texto);
+    assert.equal(r.json.codigo, 'MOTIVO_FALTANDO');
+    assert.ok(await naGrade('900801'));
+  });
+
+  test('excluir com motivo: sai da grade e da planilha, fica em Excluídas com quem/quando/motivo, e no histórico', async () => {
+    const r = await req(`${FRETE}/cargas/900801/excluir`, { metodo: 'POST', token: adm(), corpo: { motivo: 'importada por engano' } });
+    assert.equal(r.status, 200, r.texto);
+    assert.equal(await naGrade('900801'), false, 'some da grade');
+    assert.ok(await naGrade('900802'), 'a outra carga fica');
+    const { lerPlanilhaXlsx } = await import('../src/servicos/planilha_xlsx.js');
+    const x = await fetch(`${base}${FRETE}/exportar.xlsx`, { headers: { authorization: `Bearer ${adm()}` } });
+    assert.equal(x.status, 200);
+    const { abas } = lerPlanilhaXlsx(Buffer.from(await x.arrayBuffer()));
+    const noArquivo = new Set(abas[0].linhas.slice(1).map((l) => String(l[1])));
+    assert.equal(noArquivo.has('900801'), false, 'some da planilha');
+    assert.ok(noArquivo.has('900802'));
+    const ex = await req(`${FRETE}/excluidas`, { token: adm() });
+    assert.equal(ex.status, 200, ex.texto);
+    const c = ex.json.cargas.find((k) => k.carga === '900801');
+    assert.ok(c, 'está na lista das excluídas');
+    assert.equal(c.motivo, 'importada por engano');
+    assert.ok(c.excluidaPor && c.excluidaEm);
+    const h = await req(`${FRETE}/cargas/900801/historico`, { token: adm() });
+    assert.equal(h.status, 200, 'o histórico continua acessível');
+    assert.equal(h.json.excluida.motivo, 'importada por engano');
+    assert.ok(h.json.eventos.some((e) => e.acao === 'excluiu' && e.detalhe.motivo === 'importada por engano'));
+    assert.equal((await pool.query("SELECT count(*)::int AS n FROM pgfrete_cargas WHERE numero_carga = '900801'")).rows[0].n, 1);
+  });
+
+  test('carga excluída não recebe edição, tratativa nem pagamento (409 CARGA_EXCLUIDA)', async () => {
+    const e = await req(`${FRETE}/cargas/900801`, { metodo: 'PATCH', token: adm(), corpo: { cte: '123' } });
+    assert.equal(e.status, 409, e.texto);
+    assert.equal(e.json.codigo, 'CARGA_EXCLUIDA');
+    const p = await req(`${FRETE}/cargas/900801/pagamentos`, { metodo: 'POST', token: adm(), corpo: { pct: 10, confirmar: true } });
+    assert.equal(p.status, 409, p.texto);
+    assert.equal(p.json.codigo, 'CARGA_EXCLUIDA');
+    const nota = (await pool.query("SELECT nota FROM pgfrete_pendencias WHERE numero_carga = '900801' LIMIT 1")).rows[0]?.nota;
+    if (nota) {
+      const t = await req(`${FRETE}/cargas/900801/pendencias/${nota}`, { metodo: 'PATCH', token: adm(), corpo: { tratativa: 'OK' } });
+      assert.equal(t.status, 409, t.texto);
+    }
+  });
+
+  test('Restaurar traz de volta, com o evento no histórico; restaurar de novo: 409 NAO_EXCLUIDA', async () => {
+    const r = await req(`${FRETE}/cargas/900801/restaurar`, { metodo: 'POST', token: adm(), corpo: {} });
+    assert.equal(r.status, 200, r.texto);
+    assert.ok(await naGrade('900801'));
+    const h = await req(`${FRETE}/cargas/900801/historico`, { token: adm() });
+    assert.equal(h.json.excluida, null);
+    assert.ok(h.json.eventos.some((e) => e.acao === 'restaurou'));
+    const de = await req(`${FRETE}/cargas/900801/restaurar`, { metodo: 'POST', token: adm(), corpo: {} });
+    assert.equal(de.status, 409);
+    assert.equal(de.json.codigo, 'NAO_EXCLUIDA');
+  });
+
+  test('com pagamento registrado, PERGUNTA antes (409 TEM_PAGAMENTO); confirmar exclui e o pagamento fica no histórico', async () => {
+    const pg = await req(`${FRETE}/cargas/900802/pagamentos`, { metodo: 'POST', token: adm(), corpo: { pct: 30, confirmar: true } });
+    assert.equal(pg.status, 201, pg.texto);
+    const r = await req(`${FRETE}/cargas/900802/excluir`, { metodo: 'POST', token: adm(), corpo: { motivo: 'carga cancelada' } });
+    assert.equal(r.status, 409, r.texto);
+    assert.equal(r.json.codigo, 'TEM_PAGAMENTO');
+    assert.equal(r.json.podeConfirmar, true);
+    assert.match(r.json.erro, /30%/);
+    assert.ok(await naGrade('900802'), 'sem confirmar não exclui');
+    const ok = await req(`${FRETE}/cargas/900802/excluir`, { metodo: 'POST', token: adm(), corpo: { motivo: 'carga cancelada', confirmar: true } });
+    assert.equal(ok.status, 200, ok.texto);
+    assert.equal(await naGrade('900802'), false);
+    const h = await req(`${FRETE}/cargas/900802/historico`, { token: adm() });
+    assert.equal(h.json.pagamentos.length, 1, 'o pagamento não foi apagado');
+    const ex = (await req(`${FRETE}/excluidas`, { token: adm() })).json.cargas.find((k) => k.carga === '900802');
+    assert.equal(ex.pctPago, 30);
+  });
+
+  test('reimportar o PDF de uma carga excluída: a prévia avisa e confirmar a traz de volta', async () => {
+    const { lote, previa } = await importar('900802', { soPrevia: true });
+    const c = previa.cargas.find((k) => k.numero === '900802');
+    assert.ok(c.existente && c.existente.excluida, 'a prévia diz que estava excluída');
+    assert.equal(c.existente.excluida.motivo, 'carga cancelada');
+    const conf = await req(`${FRETE}/lotes/${lote}/confirmar`, { metodo: 'POST', token: adm(), corpo: {} });
+    assert.equal(conf.status, 200, conf.texto);
+    assert.equal(conf.json.gravadas.find((g) => g.numero === '900802').restaurada, true);
+    assert.ok(await naGrade('900802'));
+    const h = await req(`${FRETE}/cargas/900802/historico`, { token: adm() });
+    assert.ok(h.json.eventos.some((e) => e.acao === 'restaurou' && e.detalhe.pela === 'reimportacao'));
+  });
+
+  /* CADA NOTA COM OS SEUS CAMPOS (migração 063) — "tem que ter a data de
+     pagamento para cada uma das pendências" e "ter os campos editáveis pra
+     toda pendência da carga". Decisão: pagar uma nota soma UMA nota no %. */
+  const notaPendente = async (carga) => {
+    const g = (await req(FRETE, { token: adm() })).json;
+    return g.linhas.find((l) => String(l.carga) === carga && l.nota && l.categoria !== 'so_b2b');
+  };
+  test('pagar uma nota: soma 1 nota (100 ÷ notas do sistema) no % pago, e a linha dela mostra a data', async () => {
+    const l = await notaPendente('900805');
+    assert.ok(l, 'a carga 900805 tem uma nota pendente do sistema');
+    const qtd = (await pool.query("SELECT qtd_sist FROM pgfrete_cargas WHERE numero_carga = '900805'")).rows[0].qtd_sist;
+    // sem tratativa que libera: PERGUNTA
+    const pergunta = await req(`${FRETE}/cargas/900805/pendencias/${l.nota}/pagar`, { metodo: 'POST', token: adm(), corpo: { dataPagamento: '2026-10-06' } });
+    assert.equal(pergunta.status, 409, pergunta.texto);
+    assert.equal(pergunta.json.codigo, 'NOTA_NAO_LIBERADA');
+    assert.equal(pergunta.json.podeConfirmar, true);
+    const semData = await req(`${FRETE}/cargas/900805/pendencias/${l.nota}/pagar`, { metodo: 'POST', token: adm(), corpo: { confirmar: true } });
+    assert.equal(semData.status, 400);
+    assert.equal(semData.json.codigo, 'DATA_INVALIDA');
+    // tratativa OK libera → paga direto
+    const t = await req(`${FRETE}/cargas/900805/pendencias/${l.nota}`, { metodo: 'PATCH', token: adm(), corpo: { tratativa: 'OK' } });
+    assert.equal(t.status, 200, t.texto);
+    const pg = await req(`${FRETE}/cargas/900805/pendencias/${l.nota}/pagar`, { metodo: 'POST', token: adm(), corpo: { dataPagamento: '2026-10-06' } });
+    assert.equal(pg.status, 201, pg.texto);
+    assert.equal(pg.json.pct, Math.round(10000 / qtd) / 100);
+    const depois = await notaPendente('900805');
+    const g = (await req(FRETE, { token: adm() })).json;
+    const ixData = g.colunas.findIndex((c) => c.chave === 'dataPagamento');
+    const linha = g.linhas.find((x) => String(x.carga) === '900805' && x.nota === l.nota);
+    assert.equal(linha.v[ixData], '2026-10-06', 'a linha da nota mostra a data do pagamento dela');
+    assert.equal(linha.notaPaga.data, '2026-10-06');
+    void depois;
+    const de2 = await req(`${FRETE}/cargas/900805/pendencias/${l.nota}/pagar`, { metodo: 'POST', token: adm(), corpo: { dataPagamento: '2026-10-07', confirmar: true } });
+    assert.equal(de2.status, 409, 'a mesma nota não se paga duas vezes');
+    assert.equal(de2.json.codigo, 'NOTA_JA_PAGA');
+    const h = await req(`${FRETE}/cargas/900805/historico`, { token: adm() });
+    assert.ok(h.json.pagamentos.some((p) => p.nota === l.nota && p.dataPagamento === '2026-10-06'), 'o pagamento aparece no histórico com a nota');
+  });
+
+  test('a data do pagamento de uma nota se edita na própria nota; anular reabre a nota para pagar de novo', async () => {
+    const l = await notaPendente('900805');
+    const e = await req(`${FRETE}/cargas/900805/pendencias/${l.nota}`, { metodo: 'PATCH', token: adm(), corpo: { dataPagamento: '2026-10-09' } });
+    assert.equal(e.status, 200, e.texto);
+    assert.equal((await notaPendente('900805')).notaPaga.data, '2026-10-09');
+    const an = await req(`${FRETE}/pagamentos/${l.notaPaga.id}/anular`, { metodo: 'POST', token: adm(), corpo: { motivo: 'data errada de nota' } });
+    assert.equal(an.status, 200, an.texto);
+    assert.equal((await notaPendente('900805')).notaPaga, null);
+    const semPg = await req(`${FRETE}/cargas/900805/pendencias/${l.nota}`, { metodo: 'PATCH', token: adm(), corpo: { dataPagamento: '2026-10-09' } });
+    assert.equal(semPg.status, 409);
+    assert.equal(semPg.json.codigo, 'NOTA_SEM_PAGAMENTO');
+  });
+
+  test('transportadora e CT-E por nota: em branco valem os da carga; preenchidos, só aquela nota muda', async () => {
+    const transp = (await pool.query("SELECT transportadora FROM dim_veiculos WHERE transportadora <> '' ORDER BY transportadora DESC LIMIT 1")).rows[0].transportadora;
+    await req(`${FRETE}/cargas/900805`, { metodo: 'PATCH', token: adm(), corpo: { cte: '1000' } });
+    const g0 = (await req(FRETE, { token: adm() })).json;
+    const ixCte = g0.colunas.findIndex((c) => c.chave === 'cte');
+    const ixT = g0.colunas.findIndex((c) => c.chave === 'transportadora');
+    const notas = g0.linhas.filter((x) => String(x.carga) === '900805' && x.nota);
+    assert.ok(notas.every((x) => x.v[ixCte] === '1000'), 'toda nota mostra o CT-E da carga');
+    const alvo = notas[notas.length - 1];
+    const r = await req(`${FRETE}/cargas/900805/pendencias/${alvo.nota}`, { metodo: 'PATCH', token: adm(), corpo: { cte: '2000-C', transportadora: transp } });
+    assert.equal(r.status, 200, r.texto);
+    const desconhecida = await req(`${FRETE}/cargas/900805/pendencias/${alvo.nota}`, { metodo: 'PATCH', token: adm(), corpo: { transportadora: 'NAO EXISTE LTDA' } });
+    assert.equal(desconhecida.status, 400);
+    assert.equal(desconhecida.json.codigo, 'TRANSPORTADORA_DESCONHECIDA');
+    const g = (await req(FRETE, { token: adm() })).json;
+    const l2 = g.linhas.find((x) => String(x.carga) === '900805' && x.nota === alvo.nota);
+    assert.equal(l2.v[ixCte], '2000-C');
+    assert.equal(l2.v[ixT], transp);
+    assert.equal(l2.notaCte, '2000-C');
+    assert.equal(l2.cargaCte, '1000', 'a carga continua com o dela');
+    const outras = g.linhas.filter((x) => String(x.carga) === '900805' && x.nota && x.nota !== alvo.nota);
+    assert.ok(outras.every((x) => x.v[ixCte] === '1000'), 'as outras notas não mudam');
+    const h = await req(`${FRETE}/cargas/900805/historico`, { token: adm() });
+    assert.ok(h.json.eventos.some((e) => e.acao === 'editou_nota' && e.nota === alvo.nota));
+  });
+
+  test('editar: o formulário grava vários campos num pedido só, e cada mudança fica no histórico', async () => {
+    const transp = (await pool.query("SELECT transportadora FROM dim_veiculos WHERE transportadora <> '' LIMIT 1")).rows[0].transportadora;
+    const r = await req(`${FRETE}/cargas/900802`, { metodo: 'PATCH', token: adm(),
+      corpo: { transportadora: transp, cte: '4455, 4456', obs: 'conferido com o financeiro', canhotoOriginal: true, dataPagamento: '2026-10-05' } });
+    assert.equal(r.status, 200, r.texto);
+    const c = (await pool.query("SELECT transportadora, cte, obs, canhoto_original FROM pgfrete_cargas WHERE numero_carga = '900802'")).rows[0];
+    assert.deepEqual(c, { transportadora: transp, cte: '4455, 4456', obs: 'conferido com o financeiro', canhoto_original: true });
+    const d = (await pool.query("SELECT to_char(data_pagamento,'YYYY-MM-DD') AS d FROM pgfrete_pagamentos WHERE numero_carga = '900802' AND anulado_em IS NULL")).rows[0].d;
+    assert.equal(d, '2026-10-05');
+    const h = await req(`${FRETE}/cargas/900802/historico`, { token: adm() });
+    assert.ok(h.json.eventos.filter((e) => e.acao === 'editou_carga').length >= 2);
+    assert.ok(h.json.eventos.some((e) => e.acao === 'canhoto'));
   });
 });

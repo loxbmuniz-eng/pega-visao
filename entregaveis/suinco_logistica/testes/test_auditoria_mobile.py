@@ -59,7 +59,7 @@ async def preparar(pagina, setor):
         if (!DB.cargas.length) {
             const f = DB.frota;
             [0,1,2].forEach((i, n) => {
-                criarCargaProgramada({
+                criarCargaProgramada({freteObservacao:'TABELA', 
                     placa: f[i].placa, numeroCarga: '9900' + n, peso: 14250, rota:'500',
                     praOnde:'ENTREGA DIRETA', paletizada:'Sim', qtdGanchos:30,
                     qtdEntregas:2, operador:'Auditor'

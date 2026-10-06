@@ -49,8 +49,8 @@ async def main():
         await pg.evaluate("""() => {
             DB.cargas = []; DB.movimentacoes = [];
             const f = DB.frota;
-            window.__c1 = criarCargaProgramada({ placa: f[0].placa, numeroCarga: 'TE1', peso: 9000, rota: '500', operador: 'Ana' });
-            window.__c2 = criarCargaProgramada({ placa: f[1].placa, numeroCarga: 'DJF8527', peso: 9000, rota: '500', operador: 'Ana' });
+            window.__c1 = criarCargaProgramada({freteObservacao:'TABELA',  placa: f[0].placa, numeroCarga: 'TE1', peso: 9000, rota: '500', operador: 'Ana' });
+            window.__c2 = criarCargaProgramada({freteObservacao:'TABELA',  placa: f[1].placa, numeroCarga: 'DJF8527', peso: 9000, rota: '500', operador: 'Ana' });
             ['Aguardando Embarque','Embarque Iniciado','Embarque Finalizado','Faturado','Seguiu Viagem']
                 .forEach(st => avancarStatusCarga(window.__c2.id, st, 'Ana', 'Logística'));
             abrirTab('torre'); renderAll();

@@ -60,7 +60,7 @@ async def main():
         # Uma carga com destino e KM, como sai da Montagem efetivada.
         cid = await pg.evaluate("""() => {
           const pl = DB.frota[0].placa;
-          const c = criarCargaProgramada({placa: pl, numeroCarga:'KM1', peso:12000,
+          const c = criarCargaProgramada({freteObservacao:'TABELA', placa: pl, numeroCarga:'KM1', peso:12000,
             rota:'510', freteDestino:'GOIANIA', kmDeslocamento:583, operador:'Ana'});
           return c.id;
         }""")

@@ -128,7 +128,7 @@ async def main():
         pgs.on('pageerror', lambda e: erros.append(str(e)))
         num = await pgs.evaluate("""async () => {
             const n = 'PODA' + Date.now().toString().slice(-6);
-            criarCargaProgramada({placa: DB.frota[30].placa, numeroCarga:n, peso:9000, rota:'500',
+            criarCargaProgramada({freteObservacao:'TABELA', placa: DB.frota[30].placa, numeroCarga:n, peso:9000, rota:'500',
                                   sequencia:1, qtdGanchos:0, operador:'Ana'});
             SuincoStore.save();
             return n;

@@ -1254,6 +1254,10 @@ const SuincoStore = {
       Frete_Destino: carga.freteDestino || '',
       Km_Deslocamento: carga.kmDeslocamento ?? null,
       Frete_Documento: carga.freteDocumento || '',
+      /* A observação do frete (06/10/2026, migração 061). Vazia sobe vazia —
+         o servidor não apaga com vazio (eco), e quem decide é a Logística. */
+      Frete_Observacao: carga.freteObservacao || '',
+      Frete_Combinado: carga.freteCombinado ?? null,
       Status_Atual: carga.status,
       Aguardando_Carga: !!carga.aguardandoCarga,
       Criado_Em: carga.criadoEm,
@@ -1878,6 +1882,8 @@ function cargaDeLinhaRemota(r){
     freteDestino: r.Frete_Destino || '',
     kmDeslocamento: r.Km_Deslocamento ?? null,
     freteDocumento: r.Frete_Documento || '',
+    freteObservacao: r.Frete_Observacao || '',
+    freteCombinado: r.Frete_Combinado ?? null,
     kmDestino: r.Km_Destino ?? null,
     freteValor: r.Frete_Valor ?? null,
     freteTarifaUsada: r.Frete_Tarifa_Usada ?? null,
@@ -2682,7 +2688,51 @@ function programadoEmDoDia(dia){
   return new Date(`${dia}T12:00:00-03:00`).toISOString();
 }
 
-function criarCargaProgramada({placa, transportadora, tipoVeiculo, numeroCarga, cliente, destino, produto, peso, doca, rota, sequencia, observacoes, motorista, praOnde, paletizada, qtdGanchos, qtdEntregas, freteDestino, kmDeslocamento, freteDocumento, operador, dia}){
+/* =====================================================================
+   A OBSERVAÇÃO DO FRETE — obrigatória para contratar (06/10/2026)
+   ---------------------------------------------------------------------
+   Decisão do dono: o valor do frete não é editável (KM × tarifa, conta do
+   servidor); só o KM é. "O que seguir o valor da tabela vai ser colocado na
+   observação como tabela, e o que não seguir a tabela vai ser colocado o
+   valor combinado" — e sem isso não se contrata, "sem exceções".
+
+   A MESMA REGRA DO SERVIDOR (backend/src/dominio/frete.js,
+   conferirFreteParaContratar), aqui para PERGUNTAR ANTES de criar: carga
+   recusada na criação é apagada do painel, e foi isso que derrubou a trava
+   do KM em 09/09. As duas cópias são travadas pelos mesmos casos nos testes
+   de API (bloco 50) e de tela (test_frete_obrigatorio_para_contratar.py). */
+const FRETE_OBSERVACOES = ['TABELA', 'COMBINADO'];
+function freteIsentoLocal(transportadora){
+  const palavras = String(transportadora ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim().split(' ').filter(Boolean);
+  return palavras.includes('SUINCO') || palavras.includes('FOB');
+}
+function valorEmReaisLocal(v){
+  if(v === '' || v === null || v === undefined) return null;
+  if(typeof v === 'number') return Number.isFinite(v) && v > 0 ? Math.round(v * 100) / 100 : null;
+  let t = String(v).trim().replace(/[^\d.,-]/g, '');
+  if(t === '') return null;
+  if(t.includes(',')) t = t.replace(/\./g, '').replace(/,/g, '.');
+  else if(/^\d{1,3}(\.\d{3})+$/.test(t)) t = t.replace(/\./g, '');
+  const n = Number(t);
+  if(!Number.isFinite(n) || n <= 0) return null;
+  return Math.round(n * 100) / 100;
+}
+function freteFaltandoParaContratar({ placa, transportadora, freteObservacao, freteCombinado }){
+  if(!String(placa ?? '').trim()) return null;
+  if(freteIsentoLocal(transportadora)) return null;
+  const obs = FRETE_OBSERVACOES.includes(String(freteObservacao || '').toUpperCase()) ? String(freteObservacao).toUpperCase() : null;
+  if(!obs) return { codigo: 'FRETE_OBRIGATORIO', erro: 'Para contratar a carga, informe a observação do frete: TABELA (vale o valor calculado pelo KM) ou COMBINADO, com o valor negociado.' };
+  if(obs === 'COMBINADO' && valorEmReaisLocal(freteCombinado) === null) return { codigo: 'FRETE_COMBINADO_SEM_VALOR', erro: 'Frete COMBINADO precisa do valor negociado (ex.: 14.000,00).' };
+  return null;
+}
+/* Carga contratada (com placa) que nasceu antes da regra e ainda não tem a
+   observação: segue andando, com o selo "frete a definir" (decisão do dono). */
+function freteADefinir(c){
+  return !!(c && String(c.placa || '').trim() && !freteIsentoLocal(c.transportadora) && !c.freteObservacao);
+}
+
+function criarCargaProgramada({placa, transportadora, tipoVeiculo, numeroCarga, cliente, destino, produto, peso, doca, rota, sequencia, observacoes, motorista, praOnde, paletizada, qtdGanchos, qtdEntregas, freteDestino, kmDeslocamento, freteDocumento, operador, dia, freteObservacao, freteCombinado}){
   const p = normalizarPlaca(placa);
   /* PLACA VAZIA = caminhão ainda não contratado (26/08/2026).
 
@@ -2698,6 +2748,14 @@ function criarCargaProgramada({placa, transportadora, tipoVeiculo, numeroCarga, 
   if(p && !frota){
     throw new Error(`Placa ${p} não está cadastrada na Frota. Cadastre em Cadastros → Frota antes de programar esta carga.`);
   }
+  /* Sem a observação do frete, não contrata — e a recusa é AQUI, antes de a
+     carga existir: criada e recusada pelo servidor, ela sumiria da tela. */
+  const faltaFrete = freteFaltandoParaContratar({ placa: p,
+    transportadora: transportadora || (frota && frota.transportadora) || '', freteObservacao, freteCombinado });
+  if(faltaFrete){
+    const e = new Error(faltaFrete.erro); e.codigo = faltaFrete.codigo; throw e;
+  }
+  const obsFrete = p && freteObservacao ? String(freteObservacao).toUpperCase() : '';
   const carga = {
     id: uid('carga'),
     numeroCarga: normalizarNumeroCarga(numeroCarga),
@@ -2725,6 +2783,8 @@ function criarCargaProgramada({placa, transportadora, tipoVeiculo, numeroCarga, 
     freteDestino: String(freteDestino || '').trim().toUpperCase(),
     kmDeslocamento: kmValidoLocal(kmDeslocamento),
     freteDocumento: String(freteDocumento || '').trim(),
+    freteObservacao: obsFrete,
+    freteCombinado: obsFrete === 'COMBINADO' ? valorEmReaisLocal(freteCombinado) : null,
     kmDestino: kmDoDestino(freteDestino),
     freteValor: null,
     freteTarifaUsada: null,
@@ -2963,10 +3023,19 @@ function registrarChegadaPortaria(placa, operador){
 // Embarque" (o caminhão já está fisicamente no pátio) — então isto é só
 // edição de dados, e por isso NÃO gera linha no log de movimentações
 // (log só registra mudança de STATUS).
-function completarCargaAguardando(cargaId, {numeroCarga, cliente, destino, produto, peso, doca, rota, sequencia, observacoes, transportadora, tipoVeiculo, motorista, praOnde, paletizada, qtdGanchos, qtdEntregas, freteDestino, kmDeslocamento, operador}){
+function completarCargaAguardando(cargaId, {numeroCarga, cliente, destino, produto, peso, doca, rota, sequencia, observacoes, transportadora, tipoVeiculo, motorista, praOnde, paletizada, qtdGanchos, qtdEntregas, freteDestino, kmDeslocamento, operador, freteObservacao, freteCombinado}){
   const c = getCarga(cargaId);
   if(!c) throw new Error('Carga não encontrada');
   if(!c.aguardandoCarga) throw new Error('Esta carga não está aguardando dados (Aguardando Carga).');
+  /* Completar a chegada da Portaria é CONTRATAR: a observação do frete vem
+     antes de mexer em qualquer campo (06/10/2026). */
+  const faltaFrete = freteFaltandoParaContratar({ placa: c.placa, transportadora: transportadora || c.transportadora,
+    freteObservacao, freteCombinado });
+  if(faltaFrete){ const e = new Error(faltaFrete.erro); e.codigo = faltaFrete.codigo; throw e; }
+  if(freteObservacao){
+    c.freteObservacao = String(freteObservacao).toUpperCase();
+    c.freteCombinado = c.freteObservacao === 'COMBINADO' ? valorEmReaisLocal(freteCombinado) : null;
+  }
   c.numeroCarga = normalizarNumeroCarga(numeroCarga); c.cliente = cliente||''; c.destino = destino||''; c.produto = produto||''; c.peso = Number(peso)||0;
   c.doca = doca||''; c.sequencia = sequencia!==undefined && sequencia!=='' ? Number(sequencia) : null;
   c.observacoes = observacoes||'';
@@ -4094,6 +4163,9 @@ function dadosPlanilhaDeFretes(cargas){
       motorista: c.motorista || f.motorista || '',
       freteValor: c.freteValor ?? null,
       freteMotivo: c.freteMotivo || '',
+      freteObservacao: c.freteObservacao || '',
+      freteCombinado: c.freteCombinado ?? null,
+      freteADefinir: freteADefinir(c),
       observacoes: c.observacoes || '',
       // Última coluna, por pedido explícito: é dele, preenchida fora do
       // sistema, e o painel a carrega de volta.
@@ -4141,6 +4213,12 @@ function dadosAdministracaoFretes(cargas){
       kmDivergente: c.kmDestino != null && c.kmDeslocamento != null
         && Number(c.kmDestino) !== Number(c.kmDeslocamento),
       freteValor: c.freteValor ?? null,
+      /* A OBSERVAÇÃO DO FRETE (06/10/2026): TABELA ou COMBINADO com o valor —
+         a coluna "Obs. do frete" do PDF. A planilha (CSV) já a levava; o PDF
+         lê daqui, e sem estas linhas a coluna saía "—" em toda carga. */
+      freteObservacao: c.freteObservacao || '',
+      freteCombinado: c.freteCombinado ?? null,
+      freteADefinir: freteADefinir(c),
       observacoes: observacaoDeFrete(c)
     }));
 }

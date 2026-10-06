@@ -22,6 +22,7 @@ O que se prova aqui:
 import asyncio
 import sys
 from playwright.async_api import async_playwright
+from _frete_resposta import responder_frete
 
 PAINEL = 'file:///home/user/pega-visao/entregaveis/suinco_logistica/index.html'
 falhas = []
@@ -63,6 +64,7 @@ async def main():
         await pg.fill('#prog-peso', '12000')
         await pg.select_option('#prog-rota', '500')
         await pg.click('button:has-text("Criar Carga")')
+        await responder_frete(pg)   # com placa é contratar (#115)
         await pg.wait_for_timeout(400)
 
         d = await pg.evaluate("""() => ({
@@ -108,6 +110,7 @@ async def main():
         await pg.fill('#prog-numero-carga', '90002')
         await pg.fill('#prog-peso', '9000')
         await pg.click('button:has-text("Criar Carga")')
+        await responder_frete(pg)   # com placa é contratar (#115)
         await pg.wait_for_timeout(400)
 
         d = await pg.evaluate("""() => {

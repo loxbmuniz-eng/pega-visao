@@ -86,7 +86,7 @@ async def main():
         # caminhão que já foi embora sem a Portaria dar baixa.
         carga = await pgL.evaluate(
             """async (placa) => {
-                 const c = criarCargaProgramada({placa, numeroCarga: 'REENT-1',
+                 const c = criarCargaProgramada({freteObservacao:'TABELA', placa, numeroCarga: 'REENT-1',
                    cliente: 'CLIENTE TESTE', destino: 'DESTINO TESTE', peso: 1000,
                    operador: 'Ana'});
                  SuincoStore.save();

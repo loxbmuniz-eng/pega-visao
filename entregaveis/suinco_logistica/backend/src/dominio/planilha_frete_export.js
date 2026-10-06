@@ -38,6 +38,7 @@ import { TRATATIVAS } from './pagamento_frete.js';
 import {
   COLUNAS, COLUNAS_DA_PLANILHA, SEM_PENDENCIA, montarGrade,
 } from './planilha_frete_grade.js';
+import { FUSO } from './fuso.js';
 
 export { COLUNAS_DA_PLANILHA };
 
@@ -77,8 +78,8 @@ const cabecalho = (tipo) => ({
   borda: { base: { estilo: 'medium', cor: tipo === 'manual' ? C.ouroEscuro : C.navyFundo } },
 });
 
-const dataBr = (d, tz = 'America/Sao_Paulo') => new Intl.DateTimeFormat('pt-BR', { timeZone: tz, day: '2-digit', month: '2-digit', year: 'numeric' }).format(d);
-const horaBr = (d, tz = 'America/Sao_Paulo') => new Intl.DateTimeFormat('pt-BR', { timeZone: tz, hour: '2-digit', minute: '2-digit' }).format(d);
+const dataBr = (d, tz = FUSO) => new Intl.DateTimeFormat('pt-BR', { timeZone: tz, day: '2-digit', month: '2-digit', year: 'numeric' }).format(d);
+const horaBr = (d, tz = FUSO) => new Intl.DateTimeFormat('pt-BR', { timeZone: tz, hour: '2-digit', minute: '2-digit' }).format(d);
 
 /* ---------------------------------------------------------- CONTROLE_CARGAS */
 

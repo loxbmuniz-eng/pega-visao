@@ -20,6 +20,10 @@ export const rotasEstado = Router();
    do contrário é dado perdido sem ninguém perceber. */
 const MARGEM_MS = 5000;
 
+/* Mesma janela do painel (data.js, JANELA_LOCAL_DIAS). Mudar uma sem a
+   outra faz o painel pedir ao Histórico o que a sincronia deveria trazer. */
+export const JANELA_SINCRONIA_DIAS = 30;
+
 rotasEstado.get('/estado', exigirLogin, async (req, res, next) => {
   try {
     const desde = req.query.desde ? new Date(String(req.query.desde)) : null;
@@ -59,9 +63,19 @@ rotasEstado.get('/estado', exigirLogin, async (req, res, next) => {
 
        Vale inclusive para quem estava sem rede na hora: ao voltar, a carga
        excluída chega na primeira leitura e sai da tela. */
+    /* A LEITURA COMPLETA TEM JANELA (auditoria de 06/10/2026). O painel só
+       guarda 30 dias de carga concluída (JANELA_LOCAL_DIAS em data.js, #33)
+       e busca o passado por /api/historico — mas esta leitura mandava até
+       5.000 cargas do histórico inteiro a cada recarga, para o painel jogar
+       fora em seguida. Duas regras para a mesma decisão, e a conta crescia
+       com o tempo. Agora vem o que o painel guarda: toda carga ABERTA (de
+       qualquer idade — aberta é trabalho) e as concluídas com a última ação
+       dentro da janela. A incremental não muda: ela é "o que mudou". */
     const filtro = desdeValido
       ? 'WHERE atualizado_em > $1'
-      : 'WHERE excluida_em IS NULL';
+      : `WHERE excluida_em IS NULL
+           AND (status_atual <> 'Seguiu Viagem'
+                OR COALESCE(acao_em, atualizado_em) >= now() - interval '${JANELA_SINCRONIA_DIAS} days')`;
     const filtroEvento = desdeValido ? 'WHERE data_evento > $1' : '';
     /* MOVIMENTAÇÃO APAGADA DA VISTA (migração 051) não sai daqui. */
     const filtroMovs = desdeValido

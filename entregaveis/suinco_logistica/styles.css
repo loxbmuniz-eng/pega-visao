@@ -3556,6 +3556,26 @@ input,select,textarea{border-radius:5px}
 }
 .tab-fretes .col-rota{ width:11% }
 .tab-fretes .col-obs{ white-space:normal; line-height:1.5 }
+/* A OBSERVAÇÃO DO FRETE (06/10/2026): TABELA / COMBINADO R$ x (dif.) / a
+   definir. Folha deitada a partir daqui — as larguras em % passam a valer
+   sobre 287mm, e sobra para a coluna nova sem apertar as datas. */
+.tab-fretes .col-obsfrete{ width:13%; white-space:normal; line-height:1.35 }
+/* AS LARGURAS NA FOLHA DEITADA (06/10/2026). Com a coluna nova, as larguras
+   fixas somavam 100% (12+12+13+9+10+11+8+11+14) e a Observações ficava com
+   ZERO — o texto transbordava (achado do test_relatorios antes de publicar).
+   Em 287mm cada % vale 2,87mm: as larguras abaixo dão a cada coluna pelo
+   menos os milímetros que ela tinha medidos na folha em pé (data 21mm, valor
+   21mm, saída 25mm…) e deixam 19% (≈55mm) para a Observações. */
+.tab-fretes .col-data{ width:9% }
+.tab-fretes .col-fat{ width:9% }
+.tab-fretes .col-saida{ width:10% }
+.tab-fretes .col-carga{ width:8% }
+.tab-fretes .col-placa{ width:8% }
+.tab-fretes .col-rota{ width:9% }
+.tab-fretes .col-km{ width:6% }
+.tab-fretes .col-valor{ width:9% }
+/* O cabeçalho "Frete tabela (R$)" quebra em duas linhas; o valor não. */
+.tab-fretes th.col-valor{ white-space:normal }
 /* CABEÇALHO DE DIA (05/10/2026): período de vários dias sai um dia depois do
    outro. A faixa fica com o PRIMEIRO registro do dia (não pode ficar sozinha no
    pé da página). */

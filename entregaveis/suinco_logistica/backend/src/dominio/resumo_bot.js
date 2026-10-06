@@ -19,8 +19,7 @@
 
 import { consultar } from '../banco.js';
 import { STATUS_FLOW } from './fluxo.js';
-
-const FUSO = 'America/Sao_Paulo';
+import { FUSO } from './fuso.js';
 
 /* O dia local, como texto ISO e como rótulo para humano. */
 export function diaLocal(agora = new Date()) {

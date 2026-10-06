@@ -126,7 +126,7 @@ async def main():
 
         r = await pg.evaluate("""async () => {
               const f = DB.frota.find(x => x.placa && x.transportadora);
-              const c = criarCargaProgramada({placa: f.placa, numeroCarga: 'OFF-1',
+              const c = criarCargaProgramada({freteObservacao:'TABELA', placa: f.placa, numeroCarga: 'OFF-1',
                 cliente: 'C', destino: 'D', peso: 1000, operador: 'Chefe'});
               SuincoStore.save();
               await new Promise(r => setTimeout(r, 2500));

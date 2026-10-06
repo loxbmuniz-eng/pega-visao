@@ -65,7 +65,7 @@ async def main():
         await pg.evaluate("""(planilha) => {
             const embaralhada = planilha.slice().reverse();
             embaralhada.forEach(([seq, num], i) => {
-                const c = criarCargaProgramada({
+                const c = criarCargaProgramada({freteObservacao:'TABELA', 
                     placa: DB.frota[40 + i].placa, numeroCarga: num,
                     peso: 9000 + i*100, rota: '500', sequencia: seq,
                     operador: 'Alysson',
@@ -136,7 +136,7 @@ async def main():
         print('\n=== CARGA SEM SEQUÊNCIA VAI PARA O FIM ===')
         # Não pode empurrar a numeração de quem já está na fila.
         await pg.evaluate("""() => {
-            criarCargaProgramada({placa: DB.frota[60].placa, numeroCarga:'SEM-SEQ',
+            criarCargaProgramada({freteObservacao:'TABELA', placa: DB.frota[60].placa, numeroCarga:'SEM-SEQ',
                 peso:5000, rota:'500', operador:'Alysson'});
             SuincoStore.save();
             exportarPdfOperacional();

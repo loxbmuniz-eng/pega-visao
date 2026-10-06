@@ -69,7 +69,7 @@ async def main():
             """async (p) => {
                  const ids = [];
                  for (const [placa, num] of [[p.propria, 'PAT-PROP'], [p.terceiro, 'PAT-TERC']]) {
-                   const c = criarCargaProgramada({placa, numeroCarga: num, cliente: 'C',
+                   const c = criarCargaProgramada({freteObservacao:'TABELA', placa, numeroCarga: num, cliente: 'C',
                      destino: 'D', peso: 1000, operador: 'Ana'});
                    ids.push(c.id);
                  }

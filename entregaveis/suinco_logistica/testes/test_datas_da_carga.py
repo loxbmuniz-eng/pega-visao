@@ -81,7 +81,7 @@ async def main():
         cargaId = await pgL.evaluate(
             """async (placa) => {
                  await SuincoSharePoint.sincronizarAgora();
-                 const c = criarCargaProgramada({numeroCarga: 'DATAS-1', placa, cliente: 'C',
+                 const c = criarCargaProgramada({freteObservacao:'TABELA', numeroCarga: 'DATAS-1', placa, cliente: 'C',
                    destino: 'D', peso: 1000, rota: '500', operador: 'Ana'});
                  SuincoStore.save();
                  await SuincoSharePoint.sincronizarAgora();
@@ -170,7 +170,7 @@ async def main():
         print('\n=== 4. CARGA SEM CHEGADA DIZ ISSO, EM VEZ DE UMA DATA QUALQUER ===')
         outra = await pgL.evaluate(
             """async (placa) => {
-                 const c = criarCargaProgramada({numeroCarga: 'DATAS-2', placa, cliente: 'C',
+                 const c = criarCargaProgramada({freteObservacao:'TABELA', numeroCarga: 'DATAS-2', placa, cliente: 'C',
                    destino: 'D', peso: 500, rota: '500', operador: 'Ana'});
                  SuincoStore.save();
                  await SuincoSharePoint.sincronizarAgora();

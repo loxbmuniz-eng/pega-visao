@@ -19,6 +19,7 @@ E depois que o veículo sai (Seguiu Viagem), a placa fica livre sozinha.
 import asyncio
 import sys
 from playwright.async_api import async_playwright
+from _frete_resposta import responder_frete
 
 PAINEL = 'file:///home/user/pega-visao/entregaveis/suinco_logistica/index.html'
 falhas = []
@@ -36,7 +37,8 @@ async def preencher_e_criar(pg, placa, numero, rota='500'):
     await pg.fill('#prog-numero-carga', numero)
     await pg.fill('#prog-peso', '9000')
     await pg.select_option('#prog-rota', rota)
-    await pg.evaluate("() => criarCargaProgramadaUI()")
+    await pg.evaluate("() => { criarCargaProgramadaUI(); }")
+    await responder_frete(pg)   # com placa é contratar (#115)
     await pg.wait_for_timeout(500)
 
 
@@ -89,7 +91,8 @@ async def main():
         await pg.fill('#prog-numero-carga', 'DUP-3')
         await pg.fill('#prog-peso', '8000')
         await pg.select_option('#prog-rota', '501')      # rota DIFERENTE
-        await pg.evaluate("() => criarCargaProgramadaUI()")
+        await pg.evaluate("() => { criarCargaProgramadaUI(); }")
+        await responder_frete(pg)   # com placa é contratar (#115)
         await pg.wait_for_timeout(600)
         ck('segunda carga deliberada foi criada', await contar(pg, placa) == 2,
            str(await contar(pg, placa)))

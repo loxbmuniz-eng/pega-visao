@@ -102,7 +102,7 @@ async def main():
         cargaId = await pgL.evaluate(
             """async (placa) => {
                  await SuincoSharePoint.sincronizarAgora();
-                 const c = criarCargaProgramada({numeroCarga: 'QLD-1', placa,
+                 const c = criarCargaProgramada({freteObservacao:'TABELA', numeroCarga: 'QLD-1', placa,
                    cliente: 'Kid Lanches', destino: 'Patos de Minas', peso: 12345,
                    rota: '500', operador: 'Ana', qtdEntregas: 3,
                    observacoes: 'Observacao de auditoria de dados'});

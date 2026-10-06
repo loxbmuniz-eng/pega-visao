@@ -13,7 +13,7 @@ import { Server } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import { config } from './config.js';
 import { sessaoAindaVale } from './middleware/auth.js';
-import { podeVerValorDeFrete } from './dominio/fluxo.js';
+import { podeVerValorDeFrete, ehFilial } from './dominio/fluxo.js';
 import { semValorDeFrete } from './dominio/cargas.js';
 
 let io = null;
@@ -63,6 +63,18 @@ export function iniciarTempoReal(servidorHttp) {
 
   io.on('connection', (socket) => {
     const op = socket.data.operador;
+    /* A FILIAL NÃO ENTRA NA SALA DO PÁTIO (auditoria de 06/10/2026). A
+       ocorrência #28 fechou a leitura HTTP (`/api/estado` devolve o pátio
+       vazio para a filial), mas aqui todo setor logado entrava em `patio` —
+       e a prova mostrou a filial recebendo, ao vivo, a carga criada pela
+       Logística com placa, motorista e cliente. Mesma família: a proteção
+       escrita para um posto só. A regra do dono é "filial só devolução":
+       ela entra numa sala própria, que recebe só os eventos de devolução. */
+    if (ehFilial(op.setor)) {
+      socket.join('filial');
+      socket.emit('conectado', { operador: op, online: io.engine.clientsCount });
+      return;
+    }
     socket.join('patio');
     /* A SALA DO FRETE (09/09/2026). Quem pode ver valor entra também aqui,
        e é para cá que a carga completa é emitida — o `patio` recebe a mesma
@@ -144,9 +156,18 @@ export function emitir(evento, dados) {
   if (!io) return;
   try {
     io.to('patio').emit(evento, dados);
+    // A filial só ouve devolução — ver a sala 'filial' em iniciarTempoReal.
+    if (String(evento).startsWith('devolucao')) io.to('filial').emit(evento, dados);
   } catch (e) {
     console.error('[tempo-real] falha ao emitir', evento, '—', e.message);
   }
+}
+
+/* Fecha todas as conexões de tempo real — chamado no desligamento, antes do
+   servidor HTTP, para o close() não esperar o painel cair sozinho. */
+export function encerrarTempoReal() {
+  if (!io) return;
+  try { io.close(); } catch (e) { console.error('[tempo-real] falha ao fechar', e.message); }
 }
 
 export function conectados() {

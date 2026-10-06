@@ -1,4 +1,22 @@
-1cb3799
+7ed0fcf
+
+# ---------------------------------------------------------------------
+# 06/10/2026 — 1cb3799 → 7ed0fcf. O SERVIDOR ALCANÇOU O PORTÃO 48.
+#
+# Bloco COPIE DAQUI colado pelo dono (atualizar_tudo.sh): commit no servidor
+# 7ed0fcf, serviço active, /health 200, última migração
+# 060_tratativas_rodada2.sql (os portões 46–48 não trouxeram migração),
+# aviso no celular ligado, vigias 5 ok e 1 com problema (frete), node
+# v24.21.0, problemas nesta rodada: nenhum.
+#
+# O QUE PASSOU A VALER NO SERVIDOR:
+#   · portão 46 — PDF detalhado do Pagamento de Frete (documento
+#     'pagamento-frete' liberado ao setor Pagamento de Frete);
+#   · portão 47 — razão social oficial nos documentos;
+#   · portão 48 — #114 (painel; o servidor só acompanha o commit).
+# EM ABERTO: o vigia do frete acusou 1 problema — o detalhe está na caixa
+# dos vigias (Usuários/Administração); a causa ainda não foi vista.
+
 
 # ---------------------------------------------------------------------
 # 05/10/2026 (15h50) — e6e3d7f → 1cb3799. O SERVIDOR ALCANÇOU O PAINEL.

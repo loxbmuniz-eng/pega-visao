@@ -66,7 +66,7 @@ async def main():
         # informação" de uma carga, que foi o que o Wemerson descreveu.
         await pg.evaluate("""() => {
               const f = DB.frota.find(x => x.placa && x.transportadora);
-              criarCargaProgramada({placa: f.placa, numeroCarga: 'FOCO-1',
+              criarCargaProgramada({freteObservacao:'TABELA', placa: f.placa, numeroCarga: 'FOCO-1',
                 cliente: 'C', destino: 'D', peso: 1000, operador: 'Chefe'});
               SuincoStore.save();
               abrirTab('torre');

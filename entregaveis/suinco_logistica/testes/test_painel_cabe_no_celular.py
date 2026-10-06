@@ -53,7 +53,7 @@ SEMENTE = """() => {
   const st=['Aguardando Veículo','Aguardando Embarque','Embarque Iniciado',
             'Embarque Finalizado','Faturado'];
   for(let i=0;i<12 && i<DB.frota.length;i++){
-    const c = criarCargaProgramada({placa:DB.frota[i].placa,
+    const c = criarCargaProgramada({freteObservacao:'TABELA', placa:DB.frota[i].placa,
       transportadora:'Coopertral Transportes Ltda', tipoVeiculo:'Truck',
       numeroCarga:'55'+(100+i), cliente:'Supermercados Reunidos do Cerrado',
       destino:'Belo Horizonte / Contagem', peso:9000+i*450, rota:'500',

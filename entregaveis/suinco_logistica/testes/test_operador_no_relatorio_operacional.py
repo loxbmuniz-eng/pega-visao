@@ -56,9 +56,9 @@ async def main():
 
         await pg.evaluate("""(r) => {
           const pl = DB.frota.slice(0,2).map(f=>f.placa);
-          criarCargaProgramada({placa:pl[0], numeroCarga:'OP1', peso:12000, qtdEntregas:3,
+          criarCargaProgramada({freteObservacao:'TABELA', placa:pl[0], numeroCarga:'OP1', peso:12000, qtdEntregas:3,
                                 rota:r.com, operador:'Ana', sequencia:1});
-          criarCargaProgramada({placa:pl[1], numeroCarga:'OP2', peso:9000,  qtdEntregas:1,
+          criarCargaProgramada({freteObservacao:'TABELA', placa:pl[1], numeroCarga:'OP2', peso:9000,  qtdEntregas:1,
                                 rota:r.sem, operador:'Ana', sequencia:2});
         }""", rotas)
 

@@ -30,6 +30,7 @@ import os
 import subprocess
 import sys
 from playwright.async_api import async_playwright
+from _frete_resposta import responder_frete
 
 API = os.environ.get('SUINCO_API', 'http://127.0.0.1:3010')
 PAINEL_ARQ = '/home/user/pega-visao/entregaveis/suinco_logistica/index.html'
@@ -181,12 +182,13 @@ async def main():
 
         print('\n=== 5. A MONTAGEM VIRA CARGA E VAI PARA A TORRE ===')
         antes = await pg.evaluate("() => DB.cargas.length")
+        # Sem esperar a promessa: a linha não tem frete, então Criar carga
+        # PERGUNTA a observação (#115) — e a pergunta só fecha respondida.
         await pg.evaluate("""async (id) => {
-              const m = (await SuincoSharePoint.montagem.doDia()).montagens
-                          .find(x => x.montagem_id === id);
               _montagemDia = await SuincoSharePoint.montagem.doDia();
-              await efetivarMontagemUI(id);
+              efetivarMontagemUI(id);
             }""", mid)
+        await responder_frete(pg)
         await pg.wait_for_timeout(2500)
         depois = await pg.evaluate(
             "() => DB.cargas.filter(c => c.numeroCarga === 'MT-1').length")

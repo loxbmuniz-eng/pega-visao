@@ -171,7 +171,7 @@ async def main():
             ordem.forEach((alvo, k) => {
                 for(let i = 0; i < 2; i++){
                     const n = DB.cargas.length, f = DB.frota[n];
-                    criarCargaProgramada({ placa:f.placa, numeroCarga:String(10240+n),
+                    criarCargaProgramada({freteObservacao:'TABELA',  placa:f.placa, numeroCarga:String(10240+n),
                         peso:12000+n*500, rota:'50'+(n%5), motorista:'José da Silva',
                         qtdEntregas:1+(n%3), operador:'Ana' });
                     const c = DB.cargas[DB.cargas.length-1];

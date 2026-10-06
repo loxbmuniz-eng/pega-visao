@@ -91,7 +91,7 @@ async def main():
         d = await pg.evaluate("""async () => {
             DB.cargas = []; DB.movimentacoes = []; SuincoStore._ultimoSync.clear();
             const f = DB.frota[0];
-            criarCargaProgramada({ placa:f.placa, numeroCarga:'88001', peso:12000,
+            criarCargaProgramada({freteObservacao:'TABELA',  placa:f.placa, numeroCarga:'88001', peso:12000,
                                    rota:'500', operador:'Ana' });
             const c = DB.cargas[0];
             window.__chamadas = [];                    // ignora a criação
@@ -133,7 +133,7 @@ async def main():
                 const ordem = ['Aguardando Veículo','Aguardando Embarque','Embarque Iniciado',
                                'Embarque Finalizado','Faturado','Seguiu Viagem'];
                 const f = DB.frota[1];
-                criarCargaProgramada({ placa:f.placa, numeroCarga:'88002', peso:9000,
+                criarCargaProgramada({freteObservacao:'TABELA',  placa:f.placa, numeroCarga:'88002', peso:9000,
                                        rota:'500', operador:'Ana' });
                 const c = DB.cargas[0];
                 for(let i = 1; i <= ordem.indexOf(origem); i++){
@@ -163,7 +163,7 @@ async def main():
         rec = await pg.evaluate("""async () => {
             DB.cargas = []; DB.movimentacoes = []; SuincoStore._ultimoSync.clear();
             const f = DB.frota[2];
-            criarCargaProgramada({ placa:f.placa, numeroCarga:'88003', peso:9000,
+            criarCargaProgramada({freteObservacao:'TABELA',  placa:f.placa, numeroCarga:'88003', peso:9000,
                                    rota:'500', operador:'Ana' });
             const c = DB.cargas[0];
 

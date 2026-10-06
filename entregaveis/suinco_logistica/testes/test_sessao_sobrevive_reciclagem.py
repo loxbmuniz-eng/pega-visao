@@ -304,7 +304,7 @@ async def main():
         )
         r = await pg.evaluate(
             """async () => {
-                const c = criarCargaProgramada({ placa: DB.frota[0].placa,
+                const c = criarCargaProgramada({freteObservacao:'TABELA',  placa: DB.frota[0].placa,
                   numeroCarga: 'GUARDA-SESSAO-1', peso: 9000, rota: '500',
                   operador: 'Rene' });
                 const resp = await SuincoSharePoint.upsert('cargas', 'x',

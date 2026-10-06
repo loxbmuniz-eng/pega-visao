@@ -65,7 +65,7 @@ async def main():
             SuincoStore.save();
 
             // Hoje a Logística lança a carga dela.
-            completarCargaAguardando(c.id, {
+            completarCargaAguardando(c.id, {freteObservacao:'TABELA', 
                 numeroCarga:'118191', peso:25600, rota:'500', qtdEntregas:1,
                 paletizada:'Sim', operador:'Alysson',
             });
@@ -98,7 +98,7 @@ async def main():
 
         print('\n=== CARGA PROGRAMADA NORMAL: AS DUAS DATAS COINCIDEM ===')
         r2 = await pg.evaluate("""() => {
-            const c = criarCargaProgramada({placa: DB.frota[4].placa,
+            const c = criarCargaProgramada({freteObservacao:'TABELA', placa: DB.frota[4].placa,
                 numeroCarga:'N1', peso:9000, rota:'500', operador:'Alysson'});
             const hoje = new Date().toISOString().slice(0,10);
             return {mesmoDia: (c.programadoEm||'').slice(0,10) === (c.criadoEm||'').slice(0,10),
@@ -111,7 +111,7 @@ async def main():
         print('\n=== CARGA ANTIGA (sem o campo novo) NÃO PODE SUMIR ===')
         # Regressão: tudo que já existe no banco não tem programadoEm.
         r3 = await pg.evaluate("""() => {
-            const c = criarCargaProgramada({placa: DB.frota[6].placa,
+            const c = criarCargaProgramada({freteObservacao:'TABELA', placa: DB.frota[6].placa,
                 numeroCarga:'V1', peso:9000, rota:'500', operador:'Alysson'});
             delete c.programadoEm;           // como as cargas anteriores
             SuincoStore.save();

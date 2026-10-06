@@ -162,7 +162,7 @@ async def main():
         # O navegador não reclama — só desalinha tudo em silêncio.
         await pagina.evaluate("""() => {
             const placa = (DB.frota[0] || {}).placa || 'AAA0A00';
-            criarCargaProgramada({
+            criarCargaProgramada({freteObservacao:'TABELA', 
                 placa, numeroCarga:'AUD1', peso:12000, rota:'500',
                 praOnde:'ENTREGA DIRETA', paletizada:'Sim', qtdGanchos:30,
                 qtdEntregas:2, operador:'Auditor'
@@ -215,6 +215,12 @@ async def main():
             await pagina.fill('#completar-entregas', '3')
             await pagina.click('#modal-completar .btn-primary')
             await pagina.wait_for_timeout(500)
+            # Completar a chegada é contratar (06/10/2026): a observação do
+            # frete é perguntada, e a pessoa responde TABELA.
+            if await pagina.is_visible('#modal-frete-contratar.open'):
+                await pagina.check('#frete-c-tabela')
+                await pagina.click('#frete-c-confirmar')
+                await pagina.wait_for_timeout(500)
 
             g = await pagina.evaluate("""() => {
                 const c = DB.cargas.find(x => x.numeroCarga === 'AUD2');

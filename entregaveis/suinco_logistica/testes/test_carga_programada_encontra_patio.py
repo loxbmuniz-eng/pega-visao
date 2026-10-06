@@ -95,7 +95,7 @@ async def main():
 
         print('\n=== A LOGÍSTICA PROGRAMA A CARGA DEPOIS ===')
         r = await pg.evaluate("""(ctx) => {
-              criarCargaProgramada({
+              criarCargaProgramada({freteObservacao:'TABELA', 
                 placa: ctx.PLACA, numeroCarga: '999001',
                 cliente: 'Cliente do Teste', destino: 'Patos de Minas',
                 rota: '500', peso: 9000,

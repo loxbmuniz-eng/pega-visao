@@ -119,7 +119,7 @@ function avisoPlacaJaProgramada(placa){
    aberta sem querer. */
 let _placaMultiCargaAutorizada = null;
 
-function criarCargaProgramadaUI(){
+async function criarCargaProgramadaUI(){
   const placa = document.getElementById('prog-placa').value;
   /* PLACA VAZIA CRIA A CARGA MESMO ASSIM (26/08/2026) — mas nunca em
      silêncio. O aviso diz o que aconteceu e o que falta: sem confirmação
@@ -169,9 +169,30 @@ function criarCargaProgramadaUI(){
      de fretes que cobra: a linha aparece com o motivo escrito em vez de uma
      célula vazia. Cobrar onde o dado é usado, e não onde o caminhão passa. */
 
+  /* COM PLACA É CONTRATAR: a observação do frete vem antes (06/10/2026).
+     A pergunta abre aqui; cancelar não cria nada e diz por quê. */
+  let frete = { freteObservacao: '', freteCombinado: null };
+  if(pNorm){
+    const frotaF = buscarFrota(pNorm);
+    frete = await garantirFreteParaContratar({
+      placa: pNorm,
+      transportadora: document.getElementById('prog-transportadora').value || (frotaF && frotaF.transportadora) || '',
+      tipoVeiculo: document.getElementById('prog-tipoveiculo').value || (frotaF && frotaF.tipoVeiculo) || '',
+      numeroCarga: document.getElementById('prog-numero-carga').value,
+      destino: document.getElementById('prog-frete-destino').value,
+      km: kmValidoLocal(document.getElementById('prog-km-deslocamento').value),
+      valorTabela: null,
+    }, 'contratar');
+    if(!frete){
+      notify('Carga NÃO criada: sem a observação do frete (TABELA ou COMBINADO) a carga não é contratada.', 'warn', 8000);
+      return;
+    }
+  }
   try{
     const criada = criarCargaProgramada({
       placa,
+      freteObservacao: frete.freteObservacao,
+      freteCombinado: frete.freteCombinado,
       transportadora: document.getElementById('prog-transportadora').value,
       tipoVeiculo: document.getElementById('prog-tipoveiculo').value,
       motorista: document.getElementById('prog-motorista').value,
@@ -220,7 +241,8 @@ function criarCargaProgramadaUI(){
     renderAll();
   }catch(e){ notify(e.message, 'danger'); }
 }
-/* O DESTINO PUXA O KM — e o deslocamento nasce igual, para ser mudado.
+/* O DESTINO PUXA O KM — e o campo KM (id histórico prog-km-deslocamento)
+   nasce igual, para ser mudado.
 
    Pedido do dono: "a tabela de frete deve fazer o calculo segundo a
    kilometragem e destino" e "KM DESLOCAMENTO (precisa ser o valor certinho
@@ -253,27 +275,20 @@ function destinoFreteCompletarUI(){
   if(km !== null && !desl.value) desl.value = kmTexto(km);
 }
 
-/* DIVERGÊNCIA É AVISO, NÃO ERRO. Desvio, retorno e coleta no caminho
-   existem e são justamente o motivo de haver dois campos. O que não pode
-   é a diferença passar despercebida: quem paga o frete precisa saber que
-   está pagando 640 km numa rota cuja tabela diz 583. */
+/* UM KM SÓ (06/10/2026). Até aqui havia dois campos — o KM do destino e o
+   de deslocamento — e um aviso quando divergiam. O dono decidiu: "KM de
+   deslocamento não é necessário. KM divergente não é necessário" e
+   "somente o KM pode ser editavel". O que sobra de aviso é o destino que
+   não está na tabela: aí não há KM para puxar e a pessoa precisa saber que
+   o valor sai do KM que ela digitar. */
 function avisarSobreKmUI(){
   const aviso = document.getElementById('prog-frete-aviso');
   if(!aviso) return;
   const destino = document.getElementById('prog-frete-destino').value.trim();
-  const kmRef = kmDoDestino(destino);
-  const kmDesl = kmValidoLocal(document.getElementById('prog-km-deslocamento').value);
-  if(destino && kmRef === null){
+  if(destino && kmDoDestino(destino) === null){
     aviso.innerHTML = `<span class="text-warn">“${esc(destino.toUpperCase())}” não está na Tabela de Frete `
-      + `— sem KM de referência. O valor sai pelo KM de deslocamento que você digitar. `
+      + `— sem KM para puxar. O valor sai pelo KM que você digitar. `
       + `Para cadastrar: Cadastros → Tabela de Frete.</span>`;
-    return;
-  }
-  if(kmRef !== null && kmDesl !== null && kmRef !== kmDesl){
-    const dif = Math.round((kmDesl - kmRef) * 100) / 100;
-    aviso.innerHTML = `<span class="text-warn">KM de deslocamento <strong>${kmTexto(kmDesl)}</strong> difere `
-      + `dos <strong>${kmTexto(kmRef)}</strong> da tabela (${dif > 0 ? '+' : ''}${kmTexto(dif)} km). `
-      + `É o deslocamento que será pago — explique o motivo na Observação.</span>`;
     return;
   }
   aviso.innerHTML = '';
@@ -1267,7 +1282,7 @@ function atualizarPraOndeUI(id, val){
    A transportadora e o tipo de veículo vêm da base, não do que estava na
    carga: trocar a placa e manter a transportadora antiga produziria um
    registro que não bate com a realidade, e ninguém perceberia. */
-function atualizarPlacaUI(id, val){
+async function atualizarPlacaUI(id, val){
   const c = getCarga(id);
   if(!c) return;
   const nova = normalizarPlaca(val);
@@ -1287,6 +1302,25 @@ function atualizarPlacaUI(id, val){
   }
 
   const anterior = c.placa;
+  /* PLACA ENTRANDO É CONTRATAR, E TROCAR DE TRANSPORTADORA PEDE O FRETE DE
+     NOVO (06/10/2026). Mesma transportadora (outro caminhão dela) mantém o
+     frete. A pergunta vem com o anterior marcado, para confirmar ou corrigir. */
+  const norm = (t) => String(t || '').trim().toUpperCase();
+  const contratando = !String(anterior || '').trim();
+  const trocou = !contratando && norm(frota.transportadora) !== norm(c.transportadora) && !freteIsentoLocal(frota.transportadora);
+  if(contratando || trocou){
+    const r = await garantirFreteParaContratar({
+      ...infoFreteDaCarga(c), placa: nova, transportadora: frota.transportadora || '', tipoVeiculo: frota.tipoVeiculo || '',
+      valorTabela: trocou ? null : c.freteValor ?? null,
+    }, trocou ? 'troca' : 'contratar');
+    if(!r){
+      notify(`Placa NÃO alterada: sem a observação do frete${trocou ? ' da nova transportadora' : ''} a carga não é contratada.`, 'warn', 8000);
+      renderAll();
+      return;
+    }
+    c.freteObservacao = r.freteObservacao;
+    c.freteCombinado = r.freteObservacao === 'COMBINADO' ? r.freteCombinado : null;
+  }
   c.placa = nova;
   c.transportadora = frota.transportadora || '';
   c.tipoVeiculo = frota.tipoVeiculo || '';
@@ -1687,10 +1721,25 @@ function abrirCompletar(id){
   document.getElementById('modal-completar').classList.add('open');
 }
 function fecharModalCompletar(){ document.getElementById('modal-completar').classList.remove('open'); }
-function salvarCompletarCarga(){
+async function salvarCompletarCarga(){
   const id = document.getElementById('completar-id').value;
+  const cAg = getCarga(id);
+  /* Completar a chegada é contratar: pergunta o frete antes (06/10/2026). */
+  const frete = cAg ? await garantirFreteParaContratar({
+    ...infoFreteDaCarga(cAg),
+    transportadora: document.getElementById('completar-transportadora').value || cAg.transportadora,
+    numeroCarga: document.getElementById('completar-numero-carga').value,
+    destino: document.getElementById('completar-frete-destino').value,
+    km: kmValidoLocal(document.getElementById('completar-km-deslocamento').value),
+  }, 'contratar') : null;
+  if(cAg && !frete){
+    notify('Carga NÃO completada: sem a observação do frete a carga não é contratada.', 'warn', 8000);
+    return;
+  }
   try{
     completarCargaAguardando(id, {
+      freteObservacao: frete && frete.freteObservacao,
+      freteCombinado: frete && frete.freteCombinado,
       numeroCarga: document.getElementById('completar-numero-carga').value,
       cliente: document.getElementById('completar-cliente').value,
       destino: document.getElementById('completar-destino').value,

@@ -96,7 +96,7 @@ async def main():
                  const u = new Set(DB.cargas.map((c) => c.placa));
                  const f = DB.frota.find((x) => x.placa && x.transportadora && !u.has(x.placa));
                  if (!f) return null;
-                 criarCargaProgramada({numeroCarga: 'ROTA-NOVA', placa: f.placa, cliente: 'C',
+                 criarCargaProgramada({freteObservacao:'TABELA', numeroCarga: 'ROTA-NOVA', placa: f.placa, cliente: 'C',
                    destino: 'D', peso: 1000, rota: codigo, operador: 'Chefe'});
                  SuincoStore.save();
                  await SuincoSharePoint.sincronizarAgora();

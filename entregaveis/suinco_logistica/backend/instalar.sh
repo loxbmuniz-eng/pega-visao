@@ -397,15 +397,28 @@ map \$http_upgrade \$connection_upgrade {
     ''      close;
 }
 
+# O LOG DE ACESSO SEM A PARTE "?..." DO ENDEREÇO (auditoria de 06/10/2026).
+# O Power BI e o robô de relatórios podem mandar o token no endereço
+# (?token=...), e o formato padrão do Nginx grava o endereço inteiro — o
+# token ia parar em texto puro no log. \$uri é o caminho sem a consulta.
+log_format suinco_sem_consulta '\$remote_addr - [\$time_local] "\$request_method \$uri \$server_protocol" '
+                               '\$status \$body_bytes_sent "\$http_user_agent"';
+
 server {
     listen 80;
     listen [::]:80;
     server_name $DOMINIO_API;
+    access_log /var/log/nginx/access.log suinco_sem_consulta;
 
     # Não anunciar a versão do nginx: é informação de graça para quem sonda.
     server_tokens off;
 
-    client_max_body_size 2m;
+    # 10m (era 2m, auditoria de 06/10/2026): o servidor aceita 9 MB na
+    # importação dos PDFs do frete e 5 MB no relatório em PDF. Com 2m o
+    # Nginx cortava antes, com uma página de erro dele, sem explicação —
+    # um PDF de ~20 cargas já não passava. O teto de verdade, por rota,
+    # é o do servidor (servidor.js), que responde com o motivo.
+    client_max_body_size 10m;
 
     location / {
         proxy_pass http://127.0.0.1:$PORTA_APP;

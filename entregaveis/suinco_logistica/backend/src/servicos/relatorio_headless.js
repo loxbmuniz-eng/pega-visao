@@ -31,6 +31,7 @@ import jwt from 'jsonwebtoken';
 import { chromium } from 'playwright';
 import { config } from '../config.js';
 import { gerarPdf } from './pdf.js';
+import { FUSO } from '../dominio/fuso.js';
 
 const AQUI = path.dirname(fileURLToPath(import.meta.url));
 
@@ -77,7 +78,7 @@ function tokenDoRobo() {
    sempre pede o dia corrente — quem quiser outro período usa o painel. */
 function hojeLocal() {
   return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit',
+    timeZone: FUSO, year: 'numeric', month: '2-digit', day: '2-digit',
   }).format(new Date());
 }
 

@@ -948,7 +948,9 @@ function renderTorre(){
         : (c.sequencia ?? '—')}</td>
       <td class="col-identificacao">${editavel
         ? `<input type="text" class="numero-carga-input" value="${esc(c.numeroCarga)}" onchange="atualizarNumeroCargaUI('${escJs(c.id)}',this.value)" title="Alterar o número desta carga.">`
-        : (esc(c.numeroCarga)||'—')}</td>
+        : (esc(c.numeroCarga)||'—')}${/* "frete a definir" embaixo do número: a célula tem só um campo e sobra
+           altura, então a linha não cresce (na célula do veículo ele cortava ou
+           deixava a Torre compactada mais alta — portão 49) */''}${seloFreteHtml(c)}</td>
       <td class="col-identificacao cel-veiculo">${editavel
         ? `<input type="text" class="placa-input" value="${esc(c.placa)}" onchange="atualizarPlacaUI('${escJs(c.id)}',this.value)" title="Trocar a placa.">`
         : `<span class="veic-placa">${esc(c.placa)}</span>`}

@@ -23,6 +23,7 @@ import os
 import sys
 import uuid
 from playwright.async_api import async_playwright
+from _frete_resposta import responder_frete
 
 API = os.environ.get('SUINCO_API', 'http://127.0.0.1:3010')
 PAINEL = '/home/user/pega-visao/entregaveis/suinco_logistica/index.html'
@@ -106,6 +107,7 @@ async def main():
         await p_log.fill('#prog-numero-carga', numero)
         await p_log.fill('#prog-peso', '11000')
         await p_log.click("button:has-text('Criar Carga')")
+        await responder_frete(p_log)   # com placa é contratar: a pergunta do frete (#115)
         await p_log.wait_for_timeout(2500)
         ck('carga criada', await p_log.evaluate(
             "n => DB.cargas.some(c=>c.numeroCarga===n)", numero), numero)
@@ -123,7 +125,10 @@ async def main():
         print('\n=== 3. TROCA DE PLACA NA CARGA JÁ PROGRAMADA ===')
         carga_id = await p_log.evaluate(
             "n => (DB.cargas.find(c=>c.numeroCarga===n)||{}).id", numero)
-        await p_log.evaluate("([id,pl]) => atualizarPlacaUI(id, pl)", [carga_id, placa_b])
+        # Sem esperar a promessa: se a transportadora mudar, a pergunta do
+        # frete abre e só fecha respondida (#115).
+        await p_log.evaluate("([id,pl]) => { atualizarPlacaUI(id, pl); }", [carga_id, placa_b])
+        await responder_frete(p_log)
         await p_log.wait_for_timeout(3000)
 
         # A prova que faltava: reler do SERVIDOR, não do navegador que editou.

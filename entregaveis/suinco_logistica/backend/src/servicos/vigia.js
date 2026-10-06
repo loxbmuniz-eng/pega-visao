@@ -34,6 +34,8 @@
    ninguém hoje, e não pode ficar gritando para sempre.
 
    SÓ LEITURA. Nenhuma consulta aqui altera nada. */
+import { FUSO } from '../dominio/fuso.js';
+
 const JANELA = "now() - interval '30 days'";
 
 export const REGRAS_DO_DADO = [
@@ -61,8 +63,8 @@ export const REGRAS_DO_DADO = [
       + 'corrigida à mão no lugar errado — o tempo de pátio dessa carga sai negativo.',
     sql: `
       SELECT v.numero_carga, v.placa,
-             'entrou ' || to_char(c.em AT TIME ZONE 'America/Sao_Paulo', 'DD/MM HH24:MI')
-             || ', saiu ' || to_char(s.em AT TIME ZONE 'America/Sao_Paulo', 'DD/MM HH24:MI') AS detalhe
+             'entrou ' || to_char(c.em AT TIME ZONE '${FUSO}', 'DD/MM HH24:MI')
+             || ', saiu ' || to_char(s.em AT TIME ZONE '${FUSO}', 'DD/MM HH24:MI') AS detalhe
         FROM fact_viagens v
         JOIN LATERAL (SELECT max(data_evento) AS em FROM fact_statusfrota
                        WHERE carga_id = v.carga_id AND apagada_em IS NULL
@@ -83,7 +85,7 @@ export const REGRAS_DO_DADO = [
       + 'contam esse caminhão num momento que não aconteceu.',
     sql: `
       SELECT v.numero_carga, m.placa,
-             m.status_novo || ' em ' || to_char(m.data_evento AT TIME ZONE 'America/Sao_Paulo', 'DD/MM HH24:MI') AS detalhe
+             m.status_novo || ' em ' || to_char(m.data_evento AT TIME ZONE '${FUSO}', 'DD/MM HH24:MI') AS detalhe
         FROM fact_statusfrota m
         JOIN fact_viagens v ON v.carga_id = m.carga_id
        WHERE m.apagada_em IS NULL
@@ -134,7 +136,7 @@ export const REGRAS_DO_FRETE = [
     titulo: 'Leitura de PDF de frete com mais de 1 dia sem confirmar',
     explicacao: 'Alguém importou e não confirmou; a leitura deveria ter sido apagada no dia seguinte.',
     sql: `
-      SELECT numero_carga, '' AS placa, tipo || ' · ' || arquivo || ' · ' || to_char(criado_em AT TIME ZONE 'America/Sao_Paulo', 'DD/MM HH24:MI') AS detalhe
+      SELECT numero_carga, '' AS placa, tipo || ' · ' || arquivo || ' · ' || to_char(criado_em AT TIME ZONE '${FUSO}', 'DD/MM HH24:MI') AS detalhe
         FROM pgfrete_leituras WHERE criado_em < now() - interval '1 day' ORDER BY criado_em`,
   },
 ];

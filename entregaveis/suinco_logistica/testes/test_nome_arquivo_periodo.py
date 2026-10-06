@@ -60,7 +60,7 @@ async def main():
         await pg.wait_for_timeout(500)
         await pg.evaluate("""() => {
             for(let i=0;i<3;i++){
-                criarCargaProgramada({placa:DB.frota[i].placa, numeroCarga:'N'+i,
+                criarCargaProgramada({freteObservacao:'TABELA', placa:DB.frota[i].placa, numeroCarga:'N'+i,
                     peso:9000, rota:'500', operador:'Ana'});
             }
         }""")

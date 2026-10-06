@@ -69,7 +69,7 @@ async def main():
 
         d = await pg.evaluate("""() => {
               const placa = (DB.frota && DB.frota[0] && DB.frota[0].placa) || '';
-              const c = criarCargaProgramada({ placa, numeroCarga: 'FILA-1',
+              const c = criarCargaProgramada({freteObservacao:'TABELA',  placa, numeroCarga: 'FILA-1',
                 cliente: 'Cliente X', destino: 'Destino Y', rota: '500',
                 peso: 12000, sequencia: 4, qtdGanchos: 3, qtdEntregas: 7,
                 observacoes: 'obs original', motorista: 'Zé',

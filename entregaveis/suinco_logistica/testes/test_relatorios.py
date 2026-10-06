@@ -19,7 +19,7 @@ async def main():
         # 3 cargas, uma percorrendo o fluxo inteiro para gerar tempos
         await pg.evaluate("""() => {
           const pl = DB.frota.slice(0,3).map(f=>f.placa);
-          const ids = pl.map((p,i)=>criarCargaProgramada({placa:p, numeroCarga:'R'+i,
+          const ids = pl.map((p,i)=>criarCargaProgramada({freteObservacao:'TABELA', placa:p, numeroCarga:'R'+i,
             peso:9000+i*1000, qtdEntregas:2, rota:'500', observacoes:'Frete '+i, operador:'Ana'}).id);
           ['Aguardando Embarque','Embarque Iniciado','Embarque Finalizado','Faturado','Seguiu Viagem']
             .forEach(st => avancarStatusCarga(ids[0], st, 'Ana', 'Logística'));
@@ -205,8 +205,10 @@ async def main():
         # pela conferência de layout logo abaixo, não pelo olho.
         # Nove desde 05/10/2026 (ocorrência #109): a data de FATURAMENTO ao lado
         # da de programação, e KM e Frete — pedido do dono, a Daniela sentia falta.
-        ck('nove colunas — as datas entraram em 26/08, faturamento, KM e frete em 05/10',
-           f['colunas'] == ['Programação','Faturamento','Saída','Nº Carga','Placa','Rota','KM','Frete (R$)','Observações'],
+        # Dez desde 06/10/2026 (#115): o valor é o da TABELA e a "Obs. do frete"
+        # diz TABELA ou COMBINADO com o valor — a regra mudou de propósito.
+        ck('dez colunas — datas em 26/08, faturamento, KM e frete em 05/10, observação do frete em 06/10',
+           f['colunas'] == ['Programação','Faturamento','Saída','Nº Carga','Placa','Rota','KM','Frete tabela (R$)','Obs. do frete','Observações'],
            str(f['colunas']))
         ck('fonte de leitura na tela', f['fonteTela'] >= 12, f"{f['fonteTela']}px")
 

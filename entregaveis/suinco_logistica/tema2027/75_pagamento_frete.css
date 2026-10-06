@@ -238,3 +238,11 @@
     #tab-frete .frete-chip, .modal-box-frete .frete-drop{ transition:none }
   }
 }
+
+/* Editar / Excluir no fim da linha (06/10/2026). O Excluir é o único vermelho
+   da linha: ação que tira a carga da lista não pode parecer com as outras. */
+@media screen {
+  #tab-frete td.frete-acoes .frete-btn-excluir{ margin-left:var(--sp-2) }
+  .modal-box-frete .frete-check-campo .frete-check{ display:flex; align-items:center; gap:var(--sp-2); min-height:40px }
+  .modal-box-frete .frete-prev-excluida, .frete-prev-excluida{ color:var(--warn, #b45309) }
+}

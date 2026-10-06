@@ -23,6 +23,7 @@ import os
 import subprocess
 import sys
 from playwright.async_api import async_playwright
+from _frete_resposta import responder_frete
 
 API = os.environ.get('SUINCO_API', 'http://127.0.0.1:3010')
 RAIZ = '/home/user/pega-visao/entregaveis/suinco_logistica'
@@ -80,6 +81,7 @@ async def criar_pela_montagem(pg, dia, numero, placa, rota):
     await linha.locator('input.placa-input').dispatch_event('change')
     await pg.wait_for_timeout(1500)
     await pg.locator('#mont-tbody .mont-btn-criar').last.click()
+    await responder_frete(pg)   # linha sem frete: Criar carga pergunta (#115)
     await pg.wait_for_timeout(3000)
 
 

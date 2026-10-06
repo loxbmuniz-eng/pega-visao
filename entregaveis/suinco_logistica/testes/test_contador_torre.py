@@ -64,7 +64,7 @@ async def main():
         d = await pg.evaluate("""() => {
             DB.cargas = []; DB.movimentacoes = [];
             const f = DB.frota[0];
-            criarCargaProgramada({ placa:f.placa, numeroCarga:'1', peso:9000, rota:'500', operador:'Ana' });
+            criarCargaProgramada({freteObservacao:'TABELA',  placa:f.placa, numeroCarga:'1', peso:9000, rota:'500', operador:'Ana' });
             renderTorre();
             const el = document.querySelector('#torre-stats [data-contador="Cargas em aberto"]');
             return { textoImediato: el ? el.textContent.trim() : null };
@@ -78,7 +78,7 @@ async def main():
         # fração), então o teste não provaria nada sobre a animação em si.
         d2 = await pg.evaluate("""async () => {
             for (let i = 1; i < 20; i++) {
-                criarCargaProgramada({ placa:DB.frota[i].placa, numeroCarga:String(i+1), peso:9000, rota:'500', operador:'Ana' });
+                criarCargaProgramada({freteObservacao:'TABELA',  placa:DB.frota[i].placa, numeroCarga:String(i+1), peso:9000, rota:'500', operador:'Ana' });
             }
             renderTorre();
             const el = document.querySelector('#torre-stats [data-contador="Cargas em aberto"]');
@@ -117,9 +117,9 @@ async def main():
         await pg2.wait_for_timeout(400)
         d4 = await pg2.evaluate("""async () => {
             DB.cargas = []; DB.movimentacoes = [];
-            criarCargaProgramada({ placa:DB.frota[0].placa, numeroCarga:'1', peso:9000, rota:'500', operador:'Ana' });
+            criarCargaProgramada({freteObservacao:'TABELA',  placa:DB.frota[0].placa, numeroCarga:'1', peso:9000, rota:'500', operador:'Ana' });
             renderTorre();
-            criarCargaProgramada({ placa:DB.frota[1].placa, numeroCarga:'2', peso:9000, rota:'500', operador:'Ana' });
+            criarCargaProgramada({freteObservacao:'TABELA',  placa:DB.frota[1].placa, numeroCarga:'2', peso:9000, rota:'500', operador:'Ana' });
             renderTorre();
             const el = document.querySelector('#torre-stats [data-contador="Cargas em aberto"]');
             const logo = el.textContent.trim();

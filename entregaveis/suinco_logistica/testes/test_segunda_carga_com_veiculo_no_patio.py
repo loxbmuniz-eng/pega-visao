@@ -99,7 +99,7 @@ async def main():
         primeira = await pgL.evaluate(
             """async (placa) => {
                  await SuincoSharePoint.sincronizarAgora();
-                 const c = criarCargaProgramada({numeroCarga: '118287', placa, cliente: 'CLI',
+                 const c = criarCargaProgramada({freteObservacao:'TABELA', numeroCarga: '118287', placa, cliente: 'CLI',
                    destino: 'SP', peso: 3000, rota: '500', operador: 'Ana'});
                  SuincoStore.save();
                  await SuincoSharePoint.sincronizarAgora();
@@ -121,7 +121,7 @@ async def main():
         segunda = await pgL.evaluate(
             """async (placa) => {
                  await SuincoSharePoint.sincronizarAgora();
-                 const c = criarCargaProgramada({numeroCarga: '118288', placa, cliente: 'CLI',
+                 const c = criarCargaProgramada({freteObservacao:'TABELA', numeroCarga: '118288', placa, cliente: 'CLI',
                    destino: 'RJ', peso: 2000, rota: '517', operador: 'Ana'});
                  SuincoStore.save();
                  await SuincoSharePoint.sincronizarAgora();

@@ -9,7 +9,7 @@
 import {
   STATUS_FLOW, STATUS_INICIAL, camposEditaveisPor, podeVerValorDeFrete,
 } from './fluxo.js';
-import { kmValido, motivoSemValor } from './frete.js';
+import { kmValido, motivoSemValor, observacaoDoFrete, valorEmReaisOuNulo } from './frete.js';
 
 /* 3 categorias, não 4. Pedido do gestor (08/08/2026, migração
    003_tipo_operacao.sql): FROTA PROPRIA saiu (caminhão próprio fazendo
@@ -142,6 +142,12 @@ export function paraPainel(linha) {
     freteTarifaUsada: linha.frete_tarifa_usada === null || linha.frete_tarifa_usada === undefined
       ? null : Number(linha.frete_tarifa_usada),
     freteDocumento: linha.frete_documento || '',
+    /* A OBSERVAÇÃO DO FRETE (06/10/2026, migração 061): TABELA = vale o
+       valor calculado; COMBINADO = vale `freteCombinado`. Vazia em carga
+       com placa = "frete a definir" (as que nasceram antes da regra). */
+    freteObservacao: linha.frete_observacao || '',
+    freteCombinado: linha.frete_valor_manual === null || linha.frete_valor_manual === undefined
+      ? null : Number(linha.frete_valor_manual),
     kmDivergente: linha.km_destino != null && linha.km_deslocamento != null
       && Number(linha.km_destino) !== Number(linha.km_deslocamento),
     freteMotivo: motivoSemValor({
@@ -207,6 +213,11 @@ export function saneiarCriacao(corpo, frota) {
     frete_destino: texto(corpo.freteDestino, 200).toUpperCase() || null,
     km_deslocamento: kmValido(corpo.kmDeslocamento),
     frete_documento: texto(corpo.freteDocumento, 100) || null,
+    /* A observação do frete (migração 061) e, quando COMBINADO, o valor
+       negociado. TABELA não guarda valor: quem vale é o calculado. */
+    frete_observacao: observacaoDoFrete(corpo.freteObservacao),
+    frete_valor_manual: observacaoDoFrete(corpo.freteObservacao) === 'COMBINADO'
+      ? valorEmReaisOuNulo(corpo.freteCombinado) : null,
   };
 }
 
@@ -283,6 +294,8 @@ export function saneiarEdicao(corpo, camposPermitidos) {
        documentos de frete que estou criando. Essa informação é minha e não
        está no sistema"). */
     frete_documento: () => texto(corpo.freteDocumento, 100) || null,
+    frete_observacao: () => observacaoDoFrete(corpo.freteObservacao),
+    frete_valor_manual: () => valorEmReaisOuNulo(corpo.freteCombinado),
   };
   const chaveDoPainel = {
     numero_carga: 'numeroCarga', placa: 'placa', transportadora: 'transportadora',
@@ -295,6 +308,7 @@ export function saneiarEdicao(corpo, camposPermitidos) {
     lacre: 'lacre', lacre_2: 'lacre2', lacre_3: 'lacre3', lacre_retido: 'lacreRetido',
     frete_destino: 'freteDestino', km_deslocamento: 'kmDeslocamento',
     frete_documento: 'freteDocumento',
+    frete_observacao: 'freteObservacao', frete_valor_manual: 'freteCombinado',
   };
 
   const saida = {};
@@ -366,7 +380,10 @@ export function camposDeAviso(antes, depois) {
    parecer um painel de carga sem frete nenhum, o que é outra coisa. */
 export function semValorDeFrete(payload) {
   if (!payload) return payload;
-  return { ...payload, freteValor: null, freteTarifaUsada: null, freteMotivo: '' };
+  /* O combinado também é dinheiro, e a observação diz se houve negociação:
+     os dois saem junto com o valor (06/10/2026). */
+  return { ...payload, freteValor: null, freteTarifaUsada: null, freteMotivo: '',
+    freteCombinado: null, freteObservacao: '' };
 }
 
 /* O TRADUTOR DE QUEM ESTÁ LENDO.
@@ -392,7 +409,7 @@ export const COLUNAS_CARGA = `
   acao_em, acao_por, acao_setor, operador_id, operador_nome,
   operador_setor, versao, excluida_em, excluida_por,
   frete_destino, km_destino, km_deslocamento, frete_valor,
-  frete_tarifa_usada, frete_documento`;
+  frete_tarifa_usada, frete_documento, frete_observacao, frete_valor_manual`;
 
 /* =====================================================================
    A FILA DE CARREGAMENTO — reordenar em cascata (08/09/2026)

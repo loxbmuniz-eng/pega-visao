@@ -48,7 +48,7 @@ async def main():
             let i = 0;
             dias.forEach(d => {
                 for(let k=0;k<3;k++,i++){
-                    const c = criarCargaProgramada({placa: DB.frota[i].placa,
+                    const c = criarCargaProgramada({freteObservacao:'TABELA', placa: DB.frota[i].placa,
                         numeroCarga: `D${d}-${k}`, peso: 9000, rota:'500',
                         operador:'Ana'});
                     const t = new Date(Date.now() - d*86400000).toISOString();

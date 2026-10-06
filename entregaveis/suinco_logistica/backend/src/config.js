@@ -116,7 +116,11 @@ export const config = {
     chavePrivada: (process.env.VAPID_PRIVADA || '').trim(),
     // Exigido pelo padrão: um contato para o serviço de push (Google,
     // Apple) alcançar o dono do servidor se algo estiver errado.
-    contato: (process.env.VAPID_CONTATO || 'mailto:lo.xbmuniz@gmail.com').trim(),
+    /* O padrão era o e-mail pessoal do dono, escrito no código. Com a
+       transferência para o CNPJ da Suinco, o contato padrão é o endereço
+       do próprio painel (o padrão VAPID aceita https: ou mailto:); quem
+       quiser um e-mail da empresa preenche VAPID_CONTATO no .env. */
+    contato: (process.env.VAPID_CONTATO || 'https://embarquesuinco.com.br').trim(),
   },
 
   limites: {

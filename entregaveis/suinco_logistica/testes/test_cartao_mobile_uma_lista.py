@@ -52,7 +52,7 @@ SEMEAR = """async ()=>{
     if(frota.length>=6) break;
   }
   for(const [i,f] of frota.entries())
-    criarCargaProgramada({numeroCarga:'CM'+Date.now().toString().slice(-5)+i, placa:f.placa,
+    criarCargaProgramada({freteObservacao:'TABELA', numeroCarga:'CM'+Date.now().toString().slice(-5)+i, placa:f.placa,
       cliente:'CLIENTE DE NOME BEM LONGO LTDA', destino:'PORTO ALEGRE/RS',
       peso:20000+i*500, rota:'500', operador:'Chefe', qtdEntregas:2});
   SuincoStore.save(); await SuincoSharePoint.sincronizarAgora();

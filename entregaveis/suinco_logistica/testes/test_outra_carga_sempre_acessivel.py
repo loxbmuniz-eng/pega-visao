@@ -27,6 +27,7 @@ O que se prova aqui:
 import asyncio
 import sys
 from playwright.async_api import async_playwright
+from _frete_resposta import responder_frete
 
 PAINEL = 'file:///home/user/pega-visao/entregaveis/suinco_logistica/index.html'
 falhas = []
@@ -67,7 +68,7 @@ async def main():
         # real do relato: a fila do dia não mostra a linha (comportamento
         # correto e mantido), mas a opção de segunda carga não pode ir junto.
         await pg.evaluate("""(placa) => {
-            criarCargaProgramada({placa, numeroCarga:'80001', peso:15000,
+            criarCargaProgramada({freteObservacao:'TABELA', placa, numeroCarga:'80001', peso:15000,
                 rota:'500', motorista:'José da Silva', operador:'Ana'});
             const c = DB.cargas[0];
             const ontem = new Date(Date.now() - 24*3600*1000);
@@ -109,6 +110,7 @@ async def main():
             await pg.fill('#prog-numero-carga', '80002')
             await pg.fill('#prog-peso', '9000')
             await pg.click('button:has-text("Criar Carga")')
+            await responder_frete(pg)   # com placa é contratar (#115)
             await pg.wait_for_timeout(400)
             total = await pg.evaluate("() => DB.cargas.length")
             ck('a segunda carga é criada sem bloqueio de placa duplicada',
@@ -117,7 +119,7 @@ async def main():
         print('\n=== 2. CAMINHÃO JÁ CHEGOU: O CAMINHO PELA TORRE FUNCIONA ===')
         await pg.evaluate("""(placa) => {
             DB.cargas = []; DB.movimentacoes = []; SuincoStore.save();
-            criarCargaProgramada({placa, numeroCarga:'80010', peso:12000,
+            criarCargaProgramada({freteObservacao:'TABELA', placa, numeroCarga:'80010', peso:12000,
                 rota:'500', operador:'Ana'});
             registrarChegadaPortaria(placa, 'Porteiro');
             renderAll();
@@ -135,6 +137,7 @@ async def main():
             await pg.fill('#prog-numero-carga', '80011')
             await pg.fill('#prog-peso', '7000')
             await pg.click('button:has-text("Criar Carga")')
+            await responder_frete(pg)   # com placa é contratar (#115)
             await pg.wait_for_timeout(400)
             total = await pg.evaluate("() => DB.cargas.length")
             ck('a segunda carga nasce mesmo com o caminhão já no pátio',

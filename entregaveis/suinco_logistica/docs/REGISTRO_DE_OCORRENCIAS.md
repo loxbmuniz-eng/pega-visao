@@ -5220,3 +5220,41 @@ hoje.
 pela tela: Montagem de amanhã nasce amanhã, aparece na Fila de amanhã e não
 na de hoje, continua na Torre; Montagem de hoje continua nascendo hoje.
 Datas relativas (lição da #110). Reprovou em 3 pontos antes da correção.
+
+## #115 — O valor combinado do frete não chegava ao relatório da Administração de Fretes (06/10/2026)
+
+**Relato do dono:** "os programadores não estão colocando o valor combinado
+do frete na observação, e essa informação (...) está vindo pro relatório de
+administração de fretes incompleta, então a administração de fretes não
+consegue entender e visualizar o valor que foi combinado".
+
+**O que havia.** Duas portas, nenhuma obrigatória:
+1. a Observação da carga, texto livre — o combinado só chegava ao relatório
+   se alguém lembrasse de escrever (controle que depende da memória);
+2. o "valor manual" da linha da Montagem (`frete_valor_manual`, migração
+   054) — **ficava na linha e não ia para a carga** ao "Criar carga":
+   `efetivarMontagemUI` não o repassava. O combinado digitado ali sumia
+   justamente do papel que a Administração lê.
+
+**Família:** *Controle que depende da memória* + *campo que não viaja* (o
+dado existe numa tabela e não chega à outra).
+
+**Correção (decisão do dono, "segue a sua recomendação").** O valor do frete
+não é editável: é KM × tarifa, conta do servidor; só o KM se edita. Toda
+contratação (placa entrando: Programação, Montagem e o lote, Torre/Fila,
+completar a chegada da Portaria) PERGUNTA a observação do frete: **TABELA**
+ou **COMBINADO com o valor**. Trocar de transportadora pergunta de novo.
+Carga já no pátio sem a observação ganha o selo "frete a definir" (não
+trava). O servidor recusa a contratação sem ela (migração 061,
+`conferirFreteParaContratar`); a Montagem leva a observação da linha para
+a carga. O relatório ganhou a coluna "Obs. do frete" com a diferença para a
+tabela.
+
+**Achado no caminho (antes de publicar):** a coluna nova saía "—" em toda
+carga — a observação tinha sido acrescentada à função da planilha (CSV) e
+não à do PDF (`dadosAdministracaoFretes`). O teste de tela pegou; corrigido.
+
+**A guarda.** `testes/test_frete_obrigatorio_para_contratar.py` (pela tela:
+pergunta, cancelar não cria, troca de transportadora, selo, Montagem com o
+combinado da linha chegando à carga, lote pulando a linha sem frete, e o
+PDF com TABELA/COMBINADO na coluna) e o bloco 50 do `api.test.js` (13).

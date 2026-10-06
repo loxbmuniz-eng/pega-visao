@@ -19,6 +19,7 @@ honesta.
 import asyncio
 import sys
 from playwright.async_api import async_playwright
+from _frete_resposta import responder_frete
 
 PAINEL = 'file:///home/user/pega-visao/entregaveis/suinco_logistica/index.html'
 falhas = []
@@ -49,6 +50,7 @@ async def criar_carga(pg, num, i=0):
         document.getElementById('prog-peso').value = '9000';
         criarCargaProgramadaUI();
     }""", [num, i])
+    await responder_frete(pg, espera=300)   # com placa é contratar (#115)
     await pg.wait_for_timeout(600)
 
 

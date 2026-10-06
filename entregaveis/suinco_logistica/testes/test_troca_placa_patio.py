@@ -17,6 +17,7 @@ import asyncio
 import os
 import sys
 from playwright.async_api import async_playwright
+from _frete_resposta import responder_frete
 
 API = os.environ.get('SUINCO_API', 'http://127.0.0.1:3010')
 PAINEL_ARQ = '/home/user/pega-visao/entregaveis/suinco_logistica/index.html'
@@ -71,7 +72,7 @@ async def main():
         await pgL.evaluate(
             """async ([pA, pB]) => {
                  registrarChegadaPortaria(pB, 'Porteiro');
-                 criarCargaProgramada({numeroCarga: 'TROCA-1', placa: pA, cliente: 'C',
+                 criarCargaProgramada({freteObservacao:'TABELA', numeroCarga: 'TROCA-1', placa: pA, cliente: 'C',
                    destino: 'D', peso: 11000, rota: '500', operador: 'Ana'});
                  SuincoStore.save();
                  await SuincoSharePoint.sincronizarAgora();
@@ -87,6 +88,7 @@ async def main():
                  const c = DB.cargas.find((x) => x.placa === pA && !x.aguardandoCarga);
                  atualizarPlacaUI(c.id, pB);
                }""", [pA, pB])
+        await responder_frete(pgL)   # outra transportadora pede o frete de novo (#115)
         await pgL.wait_for_timeout(1500)
 
         depois = await pgL.evaluate(
@@ -110,7 +112,7 @@ async def main():
         # Carga na placa A, caminhão A chegou, e a carga é movida para C.
         await pgL.evaluate(
             """async ([pA, pC]) => {
-                 const c = criarCargaProgramada({numeroCarga: 'TROCA-2', placa: pA, cliente: 'C',
+                 const c = criarCargaProgramada({freteObservacao:'TABELA', numeroCarga: 'TROCA-2', placa: pA, cliente: 'C',
                    destino: 'D', peso: 9000, rota: '500', operador: 'Ana'});
                  /* A CARGA JÁ NASCE EM "AGUARDANDO EMBARQUE" (27/08/2026).
                     O caminhão da placa A ficou sozinho no pátio no fim da
@@ -127,6 +129,7 @@ async def main():
                  SuincoStore.save();
                  atualizarPlacaUI(c.id, pC);
                }""", [pA, pC])
+        await responder_frete(pgL)
         await pgL.wait_for_timeout(1200)
 
         sobrou = await pgL.evaluate(
@@ -151,9 +154,9 @@ async def main():
         # defeito que era dele mesmo.
         r = await pgL.evaluate(
             """async ([pC]) => {
-                 criarCargaProgramada({numeroCarga: 'REP-1', placa: pC, cliente: 'C',
+                 criarCargaProgramada({freteObservacao:'TABELA', numeroCarga: 'REP-1', placa: pC, cliente: 'C',
                    destino: 'D', peso: 8000, rota: '512', operador: 'Ana'});
-                 criarCargaProgramada({numeroCarga: 'REP-2', placa: pC, cliente: 'C',
+                 criarCargaProgramada({freteObservacao:'TABELA', numeroCarga: 'REP-2', placa: pC, cliente: 'C',
                    destino: 'D', peso: 7000, rota: '513', operador: 'Ana'});
                  SuincoStore.save();
                  const el = await montarRelatorioOperacional();

@@ -70,7 +70,7 @@ async def main():
         print('\n=== DOIS DIAS, CADA UM COM A SUA SEQUÊNCIA ===')
         await pg.evaluate("""(cargas) => {
             cargas.forEach(([dia, h, m, seq, num], i) => {
-                const c = criarCargaProgramada({
+                const c = criarCargaProgramada({freteObservacao:'TABELA', 
                     placa: DB.frota[40 + i].placa, numeroCarga: num, peso: 9000 + i * 100,
                     rota: '500', sequencia: seq === null ? undefined : seq, operador: 'Alysson',
                 });

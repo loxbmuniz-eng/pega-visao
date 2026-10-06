@@ -618,6 +618,8 @@ const SuincoSharePoint = (function () {
       freteDestino: campos.Frete_Destino || '',
       kmDeslocamento: campos.Km_Deslocamento ?? null,
       freteDocumento: campos.Frete_Documento || '',
+      freteObservacao: campos.Frete_Observacao || '',
+      freteCombinado: campos.Frete_Combinado ?? null,
       // Versão lida pelo terminal — bloqueio otimista (ver data.js, pacote de ida).
       versao: Number.isFinite(Number(campos.Versao)) ? Number(campos.Versao) : undefined,
       status: campos.Status_Atual,
@@ -685,6 +687,8 @@ const SuincoSharePoint = (function () {
       Frete_Destino: c.freteDestino || '',
       Km_Deslocamento: c.kmDeslocamento ?? null,
       Frete_Documento: c.freteDocumento || '',
+      Frete_Observacao: c.freteObservacao || '',
+      Frete_Combinado: c.freteCombinado ?? null,
       Km_Destino: c.kmDestino ?? null,
       Frete_Valor: c.freteValor ?? null,
       Frete_Tarifa_Usada: c.freteTarifaUsada ?? null,
@@ -2100,6 +2104,20 @@ const SuincoSharePoint = (function () {
     },
     historico(numero) {
       return chamar('/api/pagamento-frete/cargas/' + encodeURIComponent(numero) + '/historico');
+    },
+    /* Excluir sai da lista e fica no histórico (migração 062); restaurar desfaz. */
+    excluir(numero, motivo, confirmar) {
+      return chamar('/api/pagamento-frete/cargas/' + encodeURIComponent(numero) + '/excluir',
+        { metodo: 'POST', corpo: { motivo, confirmar: !!confirmar } });
+    },
+    restaurar(numero) {
+      return chamar('/api/pagamento-frete/cargas/' + encodeURIComponent(numero) + '/restaurar', { metodo: 'POST', corpo: {} });
+    },
+    excluidas() { return chamar('/api/pagamento-frete/excluidas'); },
+    /* Pagar UMA nota pendente (migração 063): soma uma nota no % pago. */
+    pagarNota(numero, nota, corpo) {
+      return chamar('/api/pagamento-frete/cargas/' + encodeURIComponent(numero) + '/pendencias/' + encodeURIComponent(nota) + '/pagar',
+        { metodo: 'POST', corpo });
     },
     /* O .xlsx não é JSON: vai direto pelo fetch, com o mesmo crachá. */
     async baixarPlanilha(params) {

@@ -44,9 +44,9 @@ async def main():
 
         placa = await pg.evaluate("""() => {
             DB.cargas = []; DB.movimentacoes = []; SuincoStore.save();
-            criarCargaProgramada({placa: DB.frota[0].placa, numeroCarga:'70001',
+            criarCargaProgramada({freteObservacao:'TABELA', placa: DB.frota[0].placa, numeroCarga:'70001',
                 peso:12000, rota:'500', operador:'Ana'});
-            criarCargaProgramada({placa: DB.frota[0].placa, numeroCarga:'70002',
+            criarCargaProgramada({freteObservacao:'TABELA', placa: DB.frota[0].placa, numeroCarga:'70002',
                 peso:8000, rota:'500', operador:'Ana'});
             DB.cargas.forEach(c => { c.status = 'Faturado'; });
             SuincoStore.save(); renderAll();
@@ -119,7 +119,7 @@ async def main():
 
         print('\n=== 4. TORRE EDITA ENTREGAS (CAMPO QUE FALTAVA) ===')
         await pg.evaluate("""() => {
-            criarCargaProgramada({placa: DB.frota[1].placa, numeroCarga:'70003',
+            criarCargaProgramada({freteObservacao:'TABELA', placa: DB.frota[1].placa, numeroCarga:'70003',
                 peso:5000, rota:'500', operador:'Ana'});
             abrirTab('torre');
         }""")

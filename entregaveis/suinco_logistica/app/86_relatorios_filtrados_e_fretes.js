@@ -296,6 +296,25 @@ function rodapeSomatorios(lista, colspanAntes, colunas){
    Independente dos demais de propósito: quem usa é a administração, e
    misturar controle de frete com acompanhamento de pátio produziria um
    relatório que não serve bem para nenhum dos dois. */
+/* A OBSERVAÇÃO DO FRETE NO RELATÓRIO (06/10/2026): TABELA, COMBINADO com o
+   valor e a diferença para a tabela, ou "a definir" em destaque — carga
+   contratada antes da regra. Uma função para o PDF e outra linha para o CSV. */
+function obsFreteTexto(d){
+  if(d.freteObservacao === 'COMBINADO' && d.freteCombinado != null){
+    const dif = d.freteValor != null ? Number(d.freteCombinado) - Number(d.freteValor) : null;
+    const br = (n) => Number(n).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2});
+    return `COMBINADO R$ ${br(d.freteCombinado)}` + (dif !== null && dif !== 0 ? ` (${dif > 0 ? '+' : '−'}${br(Math.abs(dif))} vs tabela)` : '');
+  }
+  if(d.freteObservacao === 'TABELA') return 'TABELA';
+  return d.freteADefinir ? 'a definir' : '';
+}
+function obsFreteRelatorioHtml(d){
+  const t = obsFreteTexto(d);
+  if(t === 'a definir') return '<span class="obs-pendente">a definir</span>';
+  if(!t) return '<span class="text-dim">—</span>';
+  return d.freteObservacao === 'COMBINADO' ? `<strong>${esc(t)}</strong>` : esc(t);
+}
+
 async function exportarPdfFretes(){
   await atualizarDadosAntesDoRelatorio();
   /* Container PRÓPRIO, não o do Operacional.
@@ -321,11 +340,11 @@ async function exportarPdfFretes(){
       <td class="col-rota">${esc(d.rota)}</td>
       <td class="col-km">${d.kmDeslocamento === null
         ? '<span class="text-dim">—</span>'
-        : esc(kmTexto(d.kmDeslocamento)) + (d.kmDivergente
-          ? `<span class="km-tabela" title="KM da tabela de frete para o destino">tab. ${esc(kmTexto(d.kmDestino))}</span>` : '')}</td>
+        : esc(kmTexto(d.kmDeslocamento))}</td>
       <td class="col-valor">${d.freteValor === null || d.freteValor === undefined
         ? '<span class="text-dim">—</span>'
         : esc(Number(d.freteValor).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2}))}</td>
+      <td class="col-obsfrete">${obsFreteRelatorioHtml(d)}</td>
       <td class="col-obs">${d.observacoes
         ? esc(d.observacoes)
         : '<span class="obs-pendente">a preencher</span>'}</td>
@@ -336,11 +355,11 @@ async function exportarPdfFretes(){
      da carga) — o que mudou é só o agrupamento. */
   const grupos = separarPorDia(dados, d => diaDaProgramacao({ programadoEm: d.programada }));
   const linhas = grupos.map(g => (grupos.length > 1
-    ? `<tr class="linha-dia"><th colspan="9" scope="colgroup">${esc(cabecalhoDoDia(g.dia, g.itens.length))}</th></tr>`
+    ? `<tr class="linha-dia"><th colspan="10" scope="colgroup">${esc(cabecalhoDoDia(g.dia, g.itens.length))}</th></tr>`
     : '') + g.itens.map(linhaHtml).join('')).join('');
 
   el.innerHTML = `
-    <div class="print-page doc-amplo">
+    <div class="print-page doc-amplo doc-paisagem">
       ${cabecalhoDocumento({
         titulo: 'Administração de Fretes',
         subtitulo: 'Logística — valor, negociação e instruções por carga',
@@ -365,14 +384,20 @@ async function exportarPdfFretes(){
                Programação) e o valor do frete, lado a lado — é a conta que a
                Administração faz. Com desvio, o KM da tabela sai pequeno ao lado. -->
           <th class="col-km">KM</th>
-          <th class="col-valor">Frete (R$)</th>
+          <!-- O VALOR É A TABELA; A OBSERVAÇÃO DIZ O QUE VALE (06/10/2026).
+               Decisão do dono: o valor não é editável (KM × tarifa) e a
+               observação do frete diz TABELA ou COMBINADO com o valor — era
+               a informação que chegava incompleta à Administração. -->
+          <th class="col-valor">Frete tabela (R$)</th>
+          <th class="col-obsfrete">Obs. do frete</th>
           <th class="col-obs">Observações</th>
         </tr></thead>
-        <tbody>${linhas || '<tr><td colspan="9" class="text-center text-dim">Nenhuma carga no período selecionado.</td></tr>'}</tbody>
+        <tbody>${linhas || '<tr><td colspan="10" class="text-center text-dim">Nenhuma carga no período selecionado.</td></tr>'}</tbody>
       </table>
       ${rodapeDocumento(
-        'O <strong>KM</strong> é o de deslocamento da carga, o mesmo da Programação (com desvio, o KM da tabela sai ao lado); ' +
-        '<strong>Frete</strong> é o valor calculado ou combinado. O campo <strong>Observações</strong> é onde a administração registra ' +
+        'O <strong>KM</strong> é o da carga (vem do destino e só ele é editável); <strong>Frete tabela</strong> é o KM × a tarifa do tipo de veículo, ' +
+        'que ninguém digita. <strong>Obs. do frete</strong> diz o que vale: <strong>TABELA</strong> ou <strong>COMBINADO</strong> com o valor negociado e a diferença; ' +
+        '"a definir" é carga contratada antes da regra de 06/10/2026. O campo <strong>Observações</strong> é onde a administração registra ' +
         'negociação e instruções. As linhas marcadas como <strong>a preencher</strong> são as cargas ainda sem registro administrativo.',
         'Uma linha por carga do período, com os campos administrativos '
         + 'registrados até o momento da emissão. Campos em branco significam '
@@ -383,7 +408,9 @@ async function exportarPdfFretes(){
           extra: semObs ? `<strong>Sem registro:</strong> ${semObs} de ${dados.length}` : null,
         }))}
     </div>`;
-  await exportarViaServidor(el, 'Administracao-de-Fretes', 'administracao-fretes');
+  /* FOLHA DEITADA (06/10/2026): com a observação do frete são 10 colunas, e
+     em pé as datas e o valor voltavam a transbordar as larguras medidas. */
+  await exportarViaServidor(el, 'Administracao-de-Fretes', 'administracao-fretes', { orientacao: 'paisagem' });
 }
 
 /* QUAIS RELATÓRIOS ESTE SETOR VÊ (09/09/2026).
@@ -540,18 +567,17 @@ async function exportarPlanilhaFretes(){
     // planilha antiga trazia.
     d.peso ? num((Number(d.peso)/1000).toFixed(1)) : '',
     d.freteDestino,
-    kmTexto(d.kmDestino),
+    /* UM KM SÓ (06/10/2026): "KM de deslocamento não é necessário, KM
+       divergente não é necessário" — o KM da carga é o que entra na conta. */
     kmTexto(d.kmDeslocamento),
-    /* A divergência vira COLUNA, e não só uma cor. Cor não sobrevive ao
-       CSV, e é exatamente esta linha que alguém precisa justificar quando
-       o frete pago não bate com a tabela. */
-    d.kmDivergente ? 'SIM' : '',
     d.qtdEntregas,
     d.motorista,
     // Valor só para quem pode ver. Para os outros a coluna existe e vem
     // vazia — sumir com ela faria duas versões da mesma planilha andarem
     // pela empresa com colunas em posições diferentes.
     veValor ? num(d.freteValor === null ? '' : Number(d.freteValor).toFixed(2)) : '',
+    veValor ? obsFreteTexto(d) : '',
+    veValor && d.freteObservacao === 'COMBINADO' && d.freteCombinado != null ? num(Number(d.freteCombinado).toFixed(2)) : '',
     veValor ? d.freteMotivo : '',
     d.observacoes,
     d.freteDocumento,
@@ -573,9 +599,9 @@ async function exportarPlanilhaFretes(){
   baixarCsvDoDia(`Administracao_de_Fretes_${isoDiaLocal(new Date())}`, [
     'Sequência', 'Nº da Carga', 'Data da Programação', 'Data do Faturamento', 'Rota', 'Tipo de Operação',
     'Placa', 'Transportadora', 'Tipo de Veículo', 'Peso (t)',
-    'Destino do Frete', 'KM Destino', 'KM Deslocamento', 'KM Divergente',
+    'Destino do Frete', 'KM',
     'Entregas', 'Motorista',
-    'Valor do Frete (R$)', 'Observação do Frete', 'Observações',
+    'Frete pela Tabela (R$)', 'Observação do Frete', 'Frete Combinado (R$)', 'Motivo sem Valor', 'Observações',
     'Documento de Frete',
   ], linhas,
   /* AS COLUNAS DE TEXTO. "Data da Programação" e "Data do Faturamento" ficam
@@ -584,7 +610,7 @@ async function exportarPlanilhaFretes(){
      Daniela soma. */
   ['Nº da Carga', 'Rota', 'Tipo de Operação', 'Placa', 'Transportadora',
    'Tipo de Veículo', 'Destino do Frete', 'Motorista',
-   'Observação do Frete', 'Observações', 'Documento de Frete'],
+   'Observação do Frete', 'Motivo sem Valor', 'Observações', 'Documento de Frete'],
   dados.length);
 }
 

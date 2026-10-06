@@ -30,11 +30,15 @@ export async function lerCargas(cx, { numero = null, desde = null } = {}) {
   const par = [];
   if (numero) { par.push(numero); filtro.push(`numero_carga = $${par.length}`); }
   if (desde) { par.push(desde); filtro.push(`data_consulta >= $${par.length}`); }
-  const onde = filtro.length ? `WHERE ${filtro.join(' AND ')}` : '';
+  /* Carga EXCLUÍDA (migração 062) sai da aba, da planilha e do PDF; continua
+     no banco e no histórico. Sem a 062 não há excluída: a leitura de reserva
+     (abaixo) roda sem este filtro. */
+  const onde = `WHERE ${[...filtro, 'excluida_em IS NULL'].join(' AND ')}`;
+  const ondeSemExcluida = filtro.length ? `WHERE ${filtro.join(' AND ')}` : '';
 
   /* O canhoto original (migração 059) é lido junto; num servidor que já tem a
-     058 e ainda não a 059, a leitura cai para a lista sem ele — a aba não pode
-     parar por uma coluna de acompanhamento. */
+     058 e ainda não a 059 (ou a 062), a leitura cai para a lista sem ele — a
+     aba não pode parar por uma coluna de acompanhamento. */
   let cargas;
   try {
     ({ rows: cargas } = await cx.query(
@@ -46,19 +50,28 @@ export async function lerCargas(cx, { numero = null, desde = null } = {}) {
     ({ rows: cargas } = await cx.query(
       `SELECT numero_carga, ${DATA('data_consulta', 'data_consulta')}, qtd_sist, qtd_b2b, finalizadas, aguardando,
               nao_entregue, outros, transportadora, cte, obs, FALSE AS canhoto_original, NULL AS canhoto_em, '' AS canhoto_por
-         FROM pgfrete_cargas ${onde} ORDER BY data_consulta, numero_carga`, par));
+         FROM pgfrete_cargas ${ondeSemExcluida} ORDER BY data_consulta, numero_carga`, par));
   }
   if (!cargas.length) return [];
   const numeros = cargas.map((c) => c.numero_carga);
 
   const { rows: pend } = await cx.query(
+    /* Transportadora e CT-E da NOTA (migração 063) são lidos pela linha em
+       JSON: num banco sem a 063 eles só vêm vazios (= os da carga). */
     `SELECT numero_carga, nota, categoria, status_b2b, cliente, cidade, tratativa, ${DATA('tratativa_em', 'tratativa_em')},
-            ${DATA('visto_em', 'visto_em')}, obs
-       FROM pgfrete_pendencias WHERE resolvida_em IS NULL AND numero_carga = ANY($1::text[])
+            ${DATA('visto_em', 'visto_em')}, obs,
+            coalesce(to_jsonb(p) ->> 'transportadora', '') AS transportadora, coalesce(to_jsonb(p) ->> 'cte', '') AS cte
+       FROM pgfrete_pendencias p WHERE resolvida_em IS NULL AND numero_carga = ANY($1::text[])
       ORDER BY numero_carga, nota::bigint`, [numeros]);
+  /* O pagamento de cada NOTA (migração 063): o válido, com a data. */
+  const { rows: pagNota } = await cx.query(
+    `SELECT numero_carga, to_jsonb(g) ->> 'nota' AS nota, id, ${DATA('data_pagamento', 'data')}
+       FROM pgfrete_pagamentos g WHERE anulado_em IS NULL AND numero_carga = ANY($1::text[]) AND to_jsonb(g) ->> 'nota' IS NOT NULL`, [numeros]);
+  const pagoDaNota = new Map(pagNota.map((r) => [`${r.numero_carga}|${r.nota}`, { id: Number(r.id), data: r.data }]));
   const { rows: pag } = await cx.query(
-    `SELECT numero_carga, sum(pct) AS pct, ${DATA('max(data_pagamento)', 'ultima')}
-       FROM pgfrete_pagamentos WHERE anulado_em IS NULL AND numero_carga = ANY($1::text[]) GROUP BY numero_carga`, [numeros]);
+    `SELECT numero_carga, sum(pct) AS pct, ${DATA('max(data_pagamento)', 'ultima')},
+            ${DATA("max(data_pagamento) FILTER (WHERE to_jsonb(g) ->> 'nota' IS NULL)", 'ultima_carga')}
+       FROM pgfrete_pagamentos g WHERE anulado_em IS NULL AND numero_carga = ANY($1::text[]) GROUP BY numero_carga`, [numeros]);
 
   const pendDe = new Map();
   for (const p of pend) {
@@ -66,6 +79,7 @@ export async function lerCargas(cx, { numero = null, desde = null } = {}) {
     pendDe.get(p.numero_carga).push({
       nota: p.nota, categoria: p.categoria, statusB2b: p.status_b2b, cliente: p.cliente, cidade: p.cidade,
       tratativa: p.tratativa, tratativaEm: p.tratativa_em, vistoEm: p.visto_em, obs: p.obs,
+      transportadora: p.transportadora, cte: p.cte, pagamento: pagoDaNota.get(`${p.numero_carga}|${p.nota}`) ?? null,
     });
   }
   const pagoDe = new Map(pag.map((p) => [p.numero_carga, p]));
@@ -88,6 +102,9 @@ export async function lerCargas(cx, { numero = null, desde = null } = {}) {
       canhotoOriginal: c.canhoto_original === true, canhotoEm: c.canhoto_em ? new Date(c.canhoto_em).toISOString() : null,
       canhotoPor: c.canhoto_por || '',
       pctPago: pg ? Math.min(100, Number(pg.pct)) : 0, dataPagamento: pg?.ultima ?? null,
+      /* A data do último pagamento DA CARGA (sem os pagamentos de nota) — é a
+         que o campo "Data do pagamento" da carga edita. */
+      dataPagamentoCarga: pg?.ultima_carga ?? null,
       pagamentos: lancDe.get(c.numero_carga) ?? [],
       pendencias: pendDe.get(c.numero_carga) ?? [],
     };
@@ -108,6 +125,7 @@ export function registrarEvento(cx, { numero = null, nota = null, acao, detalhe 
 export async function compararComExistente(cx, numero, pendenciasNovas) {
   const { rows: c } = await cx.query(`SELECT ${DATA('data_consulta', 'data_consulta')} FROM pgfrete_cargas WHERE numero_carga = $1`, [numero]);
   if (!c[0]) return null;
+  const excluida = await excluidaDe(cx, numero);
   const { rows: abertas } = await cx.query(
     'SELECT nota FROM pgfrete_pendencias WHERE numero_carga = $1 AND resolvida_em IS NULL', [numero]);
   const { rows: pg } = await cx.query(
@@ -119,12 +137,34 @@ export async function compararComExistente(cx, numero, pendenciasNovas) {
     novas: [...agora].filter((n) => !antes.has(n)).length,
     resolvidas: [...antes].filter((n) => !agora.has(n)).length,
     pctPago: Number(pg[0].pct),
+    /* A prévia avisa: confirmar traz de volta uma carga que alguém excluiu. */
+    excluida,
   };
+}
+
+/* Se a carga está EXCLUÍDA: { em, por, motivo } — senão null. Lê pela linha
+   inteira em JSON, e não pela coluna, de propósito: roda dentro de transação,
+   e num banco sem a 062 uma coluna ausente abortaria a transação inteira
+   (no Postgres, erro dentro da transação não se "pega" e segue). */
+export async function excluidaDe(cx, numero) {
+  const { rows } = await cx.query('SELECT to_jsonb(c) AS j FROM pgfrete_cargas c WHERE numero_carga = $1', [numero]);
+  const j = rows[0]?.j;
+  if (!j || !j.excluida_em) return null;
+  return { em: new Date(j.excluida_em).toISOString(), por: j.excluida_por || '', motivo: j.excluida_motivo || '' };
 }
 
 /* `conf` é o resultado de `conferirCarga`. Devolve o que mudou. */
 export async function gravarConferencia(cx, { numero, conf, hoje, operador }) {
   const nome = String(operador?.nome ?? '');
+  /* Reimportar uma carga EXCLUÍDA a traz de volta (decisão do dono, 06/10): o
+     PDF novo é a prova de que ela continua sendo assunto. A prévia já avisou;
+     o histórico guarda de quem era a exclusão desfeita. */
+  const excluida = await excluidaDe(cx, numero);
+  if (excluida) {
+    await cx.query(
+      `UPDATE pgfrete_cargas SET excluida_em = NULL, excluida_por = '', excluida_motivo = '' WHERE numero_carga = $1`, [numero]);
+    await registrarEvento(cx, { numero, acao: 'restaurou', operador, detalhe: { pela: 'reimportacao', exclusao: excluida } });
+  }
   const { rows: ja } = await cx.query(
     'SELECT qtd_sist, qtd_b2b, finalizadas, aguardando, nao_entregue, outros FROM pgfrete_cargas WHERE numero_carga = $1 FOR UPDATE', [numero]);
   if (ja[0]) {
@@ -176,7 +216,7 @@ export async function gravarConferencia(cx, { numero, conf, hoje, operador }) {
       antes: ja[0] ? { qtdSist: ja[0].qtd_sist, qtdB2b: ja[0].qtd_b2b, finalizadas: ja[0].finalizadas, aguardando: ja[0].aguardando, naoEntregue: ja[0].nao_entregue, outros: ja[0].outros } : null,
     },
   });
-  return { nova: !ja[0], novas, resolvidas, reabertas };
+  return { nova: !ja[0], novas, resolvidas, reabertas, restaurada: !!excluida };
 }
 
 /* Para a prévia: a lista de pendências em texto da planilha ("173556 (Aguardando)"). */

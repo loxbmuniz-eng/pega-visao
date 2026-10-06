@@ -55,7 +55,7 @@ async def main():
           DB.cargas = []; DB.movimentacoes = [];
           SuincoSharePoint.pararSincronia();
           const f = DB.frota[0];
-          criarCargaProgramada({ placa:f.placa, numeroCarga:'55001', peso:9000, rota:'500', operador:'Ana' });
+          criarCargaProgramada({freteObservacao:'TABELA',  placa:f.placa, numeroCarga:'55001', peso:9000, rota:'500', operador:'Ana' });
           const c = DB.cargas[0];
           const criado = c.criadoEm, t0 = c.atualizadoEm;
           let segurar = false, soltar = null; const enviados = [];

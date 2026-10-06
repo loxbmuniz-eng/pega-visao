@@ -77,7 +77,7 @@ async def main():
         num = await pgA.evaluate("""()=>{
           const n = 'SA' + Date.now().toString().slice(-6);
           const f = DB.frota.find(x=>x.placa && x.transportadora);
-          criarCargaProgramada({numeroCarga:n, placa:f.placa, cliente:'CLIENTE ORIGINAL',
+          criarCargaProgramada({freteObservacao:'TABELA', numeroCarga:n, placa:f.placa, cliente:'CLIENTE ORIGINAL',
             destino:'DESTINO ORIGINAL', peso:21500, rota:'500', operador:'Admin Um',
             qtdEntregas:2});
           SuincoStore.save();

@@ -76,7 +76,7 @@ FINGIR_SERVIDOR = """(cfg) => {
 async def preparar_carga(pg, status='Faturado'):
     return await pg.evaluate("""(status) => {
           const placa = (DB.frota && DB.frota[0] && DB.frota[0].placa) || '';
-          const c = criarCargaProgramada({ placa, numeroCarga: 'SAI-1', cliente: 'C',
+          const c = criarCargaProgramada({freteObservacao:'TABELA',  placa, numeroCarga: 'SAI-1', cliente: 'C',
             destino: 'D', rota: '500', peso: 9000,
             operador: {nome:'Ana', setor:'Logística'} });
           c.status = status;
