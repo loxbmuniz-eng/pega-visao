@@ -1,6 +1,12 @@
 -- =====================================================================
 -- 061 — A OBSERVAÇÃO DO FRETE, obrigatória para contratar (06/10/2026)
 -- ---------------------------------------------------------------------
+-- SEM ESTA MIGRAÇÃO: o painel novo pergunta TABELA/COMBINADO, mas o
+-- servidor antigo não guarda a resposta — ela some ao recarregar, e toda
+-- carga com placa aparece "frete a definir" na Torre. Nada trava e nenhuma
+-- carga se perde; o relatório da Administração de Fretes sai com a coluna
+-- "Obs. do frete" vazia. Some no primeiro atualizar_tudo.sh.
+--
 -- Decisão do dono, com as palavras dele: "o valor do frete não pode ser
 -- alterável, somente o KM pode ser editável e ele faz a conta sozinho pra
 -- trazer como referência para o relatório de adm de fretes; o que seguir
