@@ -136,13 +136,13 @@ async def main():
         ck('a carga 900802 entrou no controle', psql("SELECT count(*) FROM pgfrete_cargas WHERE numero_carga='900802';") == '1')
         await pg.click('#frete-tbody tr.frete-primeira .frete-toggle')
         await pg.wait_for_timeout(500)
-        linhas = pg.locator('#frete-tbody tr[data-carga="900802"]')
-        ck('aberta, a carga tem 4 linhas (uma por nota pendente)', await linhas.count() == 4, str(await linhas.count()))
+        linhas = pg.locator('#frete-tbody tr.frete-nota[data-carga="900802"]')
+        ck('aberta, a carga mostra as 4 notas pendentes', await linhas.count() == 4, str(await linhas.count()))
 
         print('\n=== 2. CADA NOTA COM OS SEUS CAMPOS ===')
-        n_cte = await pg.locator('#frete-tbody tr[data-carga="900802"] td[data-col="cte"] button').count()
-        n_tr = await pg.locator('#frete-tbody tr[data-carga="900802"] td[data-col="transportadora"] button').count()
-        n_pg = await pg.locator('#frete-tbody tr[data-carga="900802"] td[data-col="dataPagamento"] button').count()
+        n_cte = await pg.locator('#frete-tbody tr.frete-nota[data-carga="900802"] td[data-col="cte"] button').count()
+        n_tr = await pg.locator('#frete-tbody tr.frete-nota[data-carga="900802"] td[data-col="transportadora"] button').count()
+        n_pg = await pg.locator('#frete-tbody tr.frete-nota[data-carga="900802"] td[data-col="dataPagamento"] button').count()
         ck('as 4 notas têm CT-E editável (não só a primeira linha)', n_cte == 4, str(n_cte))
         ck('as 4 notas têm transportadora editável', n_tr == 4, str(n_tr))
         ck('e as 4 têm o seu botão de pagamento/data', n_pg == 4, str(n_pg))
@@ -150,7 +150,7 @@ async def main():
         ck('há pelo menos duas notas do sistema pendentes', len(notas) >= 2, str(notas))
 
         def linha_da(nota):
-            return pg.locator('#frete-tbody tr[data-carga="900802"]').filter(has=pg.locator(f'td[data-col="resumo"]:has-text("{nota}")'))
+            return pg.locator(f'#frete-tbody tr.frete-nota[data-carga="900802"][data-nota="{nota}"]')
 
         print('\n=== 3. O CT-E DE UMA NOTA ===')
         await linha_da(notas[1]).locator('td[data-col="cte"] button').click()
@@ -177,7 +177,7 @@ async def main():
         ck('o pagamento da nota foi gravado com a data (12,5% = 1 de 8)', pago == '12.50|2026-10-06', pago)
         cel = await linha_da(notas[0]).locator('td[data-col="dataPagamento"]').inner_text()
         ck('a linha da nota mostra "paga" e 06/10/2026', 'paga' in cel and '06/10/2026' in cel, cel)
-        pago_carga = await pg.locator('#frete-tbody tr.frete-primeira[data-carga="900802"] td[data-col="pago"]').inner_text()
+        pago_carga = await pg.locator('#frete-tbody tr.frete-carga-linha[data-carga="900802"] [data-col="pago"] .frete-and-num').inner_text()
         ck('o % pago da carga subiu uma nota (12,5%)', pago_carga.strip() == '12,5%', pago_carga)
 
         print('\n=== 5. PAGAR NOTA SEM STATUS: PERGUNTA ===')
@@ -194,7 +194,7 @@ async def main():
            psql(f"SELECT to_char(data_pagamento,'YYYY-MM-DD') FROM pgfrete_pagamentos WHERE numero_carga='900802' AND nota='{notas[1]}' AND anulado_em IS NULL") == '2026-10-20')
 
         print('\n=== 6. EDITAR (FIM DA LINHA) ===')
-        await pg.locator('#frete-tbody tr.frete-primeira[data-carga="900802"] .frete-btn-editar').click()
+        await pg.locator('#frete-tbody tr.frete-carga-linha[data-carga="900802"] .frete-btn-editar').click()
         await pg.wait_for_timeout(500)
         ck('Editar abre um formulário com transportadora, CT-E, observação e canhoto',
            all([await pg.is_visible('#frete-ed-transp'), await pg.is_visible('#frete-ed-cte'), await pg.is_visible('#frete-ed-obs'), await pg.is_visible('#frete-ed-canhoto')]))
@@ -209,7 +209,7 @@ async def main():
         ck('a nota com CT-E próprio continua com o dela', '55001' in await linha_da(notas[1]).locator('td[data-col="cte"]').inner_text())
 
         print('\n=== 7. EXCLUIR E RESTAURAR ===')
-        await pg.locator('#frete-tbody tr.frete-primeira[data-carga="900802"] .frete-btn-excluir').click()
+        await pg.locator('#frete-tbody tr.frete-carga-linha[data-carga="900802"] .frete-btn-excluir').click()
         await pg.wait_for_timeout(500)
         ck('Excluir abre a janela que avisa do pagamento registrado', 'pago registrado' in await pg.inner_text('#frete-modal-corpo'))
         await pg.click('#frete-excluir-confirmar')
@@ -218,7 +218,7 @@ async def main():
         await pg.fill('#frete-excluir-motivo', 'importada por engano')
         await pg.click('#frete-excluir-confirmar')
         await pg.wait_for_timeout(2500)
-        ck('com motivo, a carga sai da lista', await pg.locator('#frete-tbody tr[data-carga="900802"]').count() == 0)
+        ck('com motivo, a carga sai da lista', await pg.locator('#frete-tbody tr.frete-carga-linha[data-carga="900802"]').count() == 0)
         ck('no banco ela continua, marcada como excluída, com o motivo',
            psql("SELECT excluida_motivo FROM pgfrete_cargas WHERE numero_carga='900802' AND excluida_em IS NOT NULL") == 'importada por engano')
         ck('os pagamentos não foram apagados', psql("SELECT count(*) FROM pgfrete_pagamentos WHERE numero_carga='900802' AND anulado_em IS NULL") == '2')
@@ -230,7 +230,7 @@ async def main():
         await pg.wait_for_timeout(2500)
         await pg.click('#modal-frete button:has-text("Fechar")')
         await pg.wait_for_timeout(500)
-        ck('Restaurar traz de volta para a lista', await pg.locator('#frete-tbody tr[data-carga="900802"]').count() >= 1)
+        ck('Restaurar traz de volta para a lista', await pg.locator('#frete-tbody tr.frete-carga-linha[data-carga="900802"]').count() == 1)
 
         print('\n=== CONSOLE ===')
         ck('sem erros de página', not erros, str(erros[:3]))
