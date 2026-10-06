@@ -27,6 +27,7 @@ O que se prova aqui:
 import asyncio
 import sys
 from playwright.async_api import async_playwright
+from _frete_resposta import responder_frete
 
 PAINEL = 'file:///home/user/pega-visao/entregaveis/suinco_logistica/index.html'
 falhas = []
@@ -109,6 +110,7 @@ async def main():
             await pg.fill('#prog-numero-carga', '80002')
             await pg.fill('#prog-peso', '9000')
             await pg.click('button:has-text("Criar Carga")')
+            await responder_frete(pg)   # com placa é contratar (#115)
             await pg.wait_for_timeout(400)
             total = await pg.evaluate("() => DB.cargas.length")
             ck('a segunda carga é criada sem bloqueio de placa duplicada',
@@ -135,6 +137,7 @@ async def main():
             await pg.fill('#prog-numero-carga', '80011')
             await pg.fill('#prog-peso', '7000')
             await pg.click('button:has-text("Criar Carga")')
+            await responder_frete(pg)   # com placa é contratar (#115)
             await pg.wait_for_timeout(400)
             total = await pg.evaluate("() => DB.cargas.length")
             ck('a segunda carga nasce mesmo com o caminhão já no pátio',

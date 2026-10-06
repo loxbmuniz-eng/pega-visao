@@ -28,6 +28,9 @@ O caminho é o do usuário, pela tela, com o banco conferido do outro lado:
 """
 import asyncio
 import json
+import time
+import urllib.error
+import urllib.request
 import os
 import subprocess
 import sys
@@ -58,6 +61,24 @@ def limpar():
          f"DELETE FROM fact_statusfrota WHERE carga_id IN (SELECT carga_id FROM fact_viagens WHERE numero_carga IN ({lista}));"
          f"DELETE FROM log_eventos WHERE carga_id IN (SELECT carga_id FROM fact_viagens WHERE numero_carga IN ({lista}));"
          f"DELETE FROM fact_viagens WHERE numero_carga IN ({lista});")
+
+
+def http_json(caminho, metodo='GET', corpo=None, token=None):
+    req = urllib.request.Request(API + caminho, method=metodo)
+    if token:
+        req.add_header('Authorization', f'Bearer {token}')
+    dados = None
+    if corpo is not None:
+        dados = json.dumps(corpo).encode()
+        req.add_header('Content-Type', 'application/json')
+    try:
+        with urllib.request.urlopen(req, dados, timeout=20) as r:
+            return r.status, json.loads(r.read().decode() or 'null')
+    except urllib.error.HTTPError as e:
+        try:
+            return e.code, json.loads(e.read().decode() or 'null')
+        except Exception:
+            return e.code, None
 
 
 def frete_no_banco(numero):
@@ -262,16 +283,16 @@ async def main():
            b is not None and b[0] == P[2] and b[1] == 'COMBINADO' and b[2] and float(b[2]) == 9800.5, str(b))
 
         print('\n=== 5. CARGA ANTIGA: O SELO "FRETE A DEFINIR" ===')
-        await ir(pg, 'programacao')
-        await pg.fill('#prog-placa', P[3])
-        await pg.dispatch_event('#prog-placa', 'input')
-        await pg.fill('#prog-numero-carga', 'FO-ANTIGA')
-        await pg.click('button:has-text("Criar Carga (Aguardando Veículo)")')
-        await pg.wait_for_timeout(800)
-        await responder(pg, 'TABELA')
-        # O estado de antes da regra: contratada, sem observação. Só o banco
-        # consegue produzir isso hoje — é o dado que já existe em produção.
-        psql("UPDATE fact_viagens SET frete_observacao = NULL WHERE numero_carga = 'FO-ANTIGA'")
+        # O estado de antes da regra: contratada, sem observação. Nasce direto
+        # no servidor (como as cargas que já existem em produção), sem passar
+        # por este navegador — se passasse, a cópia dele com TABELA voltaria
+        # ao servidor na sincronia, coisa que carga antiga real não tem.
+        st, tk = http_json('/auth/login', 'POST', {'email': EMAIL, 'senha': SENHA})
+        st, _ = http_json('/api/cargas', 'POST', {'id': 'fo-antiga-' + str(int(time.time())), 'numeroCarga': 'FO-ANTIGA',
+                                                  'aguardandoCarga': False}, (tk or {}).get('token'))
+        psql(f"UPDATE fact_viagens SET placa = '{P[3]}', transportadora = '{T[3]}', frete_observacao = NULL WHERE numero_carga = 'FO-ANTIGA'")
+        ck('a carga antiga está no banco com placa e sem a observação (o estado de antes da regra)',
+           (frete_no_banco('FO-ANTIGA') or ['', 'x', ''])[:2] == [P[3], ''], f'{st} {frete_no_banco("FO-ANTIGA")}')
         await pg.reload()
         await pg.wait_for_timeout(3000)
         await ir(pg, 'torre')

@@ -205,8 +205,10 @@ async def main():
         # pela conferência de layout logo abaixo, não pelo olho.
         # Nove desde 05/10/2026 (ocorrência #109): a data de FATURAMENTO ao lado
         # da de programação, e KM e Frete — pedido do dono, a Daniela sentia falta.
-        ck('nove colunas — as datas entraram em 26/08, faturamento, KM e frete em 05/10',
-           f['colunas'] == ['Programação','Faturamento','Saída','Nº Carga','Placa','Rota','KM','Frete (R$)','Observações'],
+        # Dez desde 06/10/2026 (#115): o valor é o da TABELA e a "Obs. do frete"
+        # diz TABELA ou COMBINADO com o valor — a regra mudou de propósito.
+        ck('dez colunas — datas em 26/08, faturamento, KM e frete em 05/10, observação do frete em 06/10',
+           f['colunas'] == ['Programação','Faturamento','Saída','Nº Carga','Placa','Rota','KM','Frete tabela (R$)','Obs. do frete','Observações'],
            str(f['colunas']))
         ck('fonte de leitura na tela', f['fonteTela'] >= 12, f"{f['fonteTela']}px")
 
