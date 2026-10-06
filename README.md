@@ -1,7 +1,7 @@
 # Programação de Embarque — Suinco
 
 Painel de logística de pátio usado **ao vivo, todo dia**, por oito setores da
-Suinco Cooperativa Agroindustrial: Logística, Portaria, Expedição,
+SUINCO - COOPERATIVA DE SUINOCULTORES LTDA: Logística, Portaria, Expedição,
 Faturamento, Controles Internos, Central de Notas, Administração e Comercial.
 
 Substituiu uma planilha de Excel com VBA. O que ele resolve, em uma frase:

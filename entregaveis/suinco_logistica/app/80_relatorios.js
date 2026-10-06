@@ -801,6 +801,17 @@ function referenciaDocumento(titulo){
    rodapé. Repete o mesmo dado (não substitui a ficha, que também tem
    Referência/Período/Registros), no canto onde o olho já procura em
    qualquer memorando — ao lado do título, junto do selo "Uso interno". */
+/* A EMPRESA NOS DOCUMENTOS (06/10/2026). Pedido do dono: o nome que aparece
+   nos relatórios é "o real nome do cnpj da suinco" — o painel escrevia um
+   nome que não é o de registro. Conferido em cadastros
+   públicos (matriz em Patos de Minas/MG, ativa desde 2004) e igual ao que o
+   DeliveryB2B imprime nos relatórios da operação. UM lugar só: cabeçalho e
+   ficha de todo PDF leem daqui — testes/test_nome_oficial_da_empresa.py trava. */
+const EMPRESA = {
+  razaoSocial: 'SUINCO - COOPERATIVA DE SUINOCULTORES LTDA',
+  cnpj: '06.067.949/0001-95',
+};
+
 function cabecalhoDocumento({ titulo, subtitulo }) {
   const operador = (DB.operador && DB.operador.nome) || '—';
   const setor = (DB.operador && DB.operador.setor) || '';
@@ -808,7 +819,7 @@ function cabecalhoDocumento({ titulo, subtitulo }) {
     <div class="doc-cabecalho">
       <img src="assets/logo_suinco_web.png" alt="Suinco" class="doc-logo">
       <div class="doc-identidade">
-        <div class="doc-empresa">SUINCO — Cooperativa Agroindustrial</div>
+        <div class="doc-empresa">${esc(EMPRESA.razaoSocial)} · CNPJ ${esc(EMPRESA.cnpj)}</div>
         <h1 class="doc-titulo">${esc(titulo)}</h1>
         ${subtitulo ? `<div class="doc-subtitulo">${esc(subtitulo)}</div>` : ''}
       </div>
@@ -842,7 +853,8 @@ function fichaDocumento({ titulo, contagem, extra, recorte }) {
   const setor = (DB.operador && DB.operador.setor) || '';
 
   const campos = [
-    ['Entidade',   'Suinco — Cooperativa Agroindustrial'],
+    ['Entidade',   EMPRESA.razaoSocial],
+    ['CNPJ',       EMPRESA.cnpj],
     ['Referência',  referenciaDocumento(titulo)],
     recorte !== undefined ? ['Filtro', recorte] : ['Período', rotuloPeriodoRelatorio()],
     contagem !== undefined ? ['Registros', String(contagem)] : null,
