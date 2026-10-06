@@ -948,13 +948,15 @@ function renderTorre(){
         : (c.sequencia ?? '—')}</td>
       <td class="col-identificacao">${editavel
         ? `<input type="text" class="numero-carga-input" value="${esc(c.numeroCarga)}" onchange="atualizarNumeroCargaUI('${escJs(c.id)}',this.value)" title="Alterar o número desta carga.">`
-        : (esc(c.numeroCarga)||'—')}</td>
+        : (esc(c.numeroCarga)||'—')}${/* "frete a definir" embaixo do número: a célula tem só um campo e sobra
+           altura, então a linha não cresce (na célula do veículo ele cortava ou
+           deixava a Torre compactada mais alta — portão 49) */''}${seloFreteHtml(c)}</td>
       <td class="col-identificacao cel-veiculo">${editavel
         ? `<input type="text" class="placa-input" value="${esc(c.placa)}" onchange="atualizarPlacaUI('${escJs(c.id)}',this.value)" title="Trocar a placa.">`
         : `<span class="veic-placa">${esc(c.placa)}</span>`}
         <span class="veic-transp">${esc(c.transportadora)||'—'}</span>${marcaTransportadoraHtml(c)}
         <span class="veic-tipo">${esc(c.tipoVeiculo)||'—'}</span>
-        ${chipNoPatioHtml(c)}${chipLacreHtml(c)}${seloFreteHtml(c)}</td>
+        ${chipNoPatioHtml(c)}${chipLacreHtml(c)}</td>
       <td>${editavel
         ? `<input type="text" class="motorista-input" value="${esc(c.motorista||'')}" onchange="atualizarMotoristaUI('${escJs(c.id)}',this.value)" title="Trocar o motorista desta carga.">`
         : (esc(c.motorista)||'—')}</td>
@@ -1035,7 +1037,7 @@ function linhaFilaHtml(c, lista, arrastavel){
       </td>
       <td class="col-identificacao cel-veiculo" onclick="event.stopPropagation()">
         <input type="text" class="placa-input" value="${esc(c.placa)}" onchange="atualizarPlacaUI('${id}',this.value)" title="Trocar a placa — a transportadora e o tipo de veículo são buscados na Frota automaticamente.">
-        <span class="veic-transp" id="transp-${esc(c.id)}">${esc(c.transportadora)||'—'}</span>${marcaTransportadoraHtml(c)}${seloFreteHtml(c)}
+        <span class="veic-transp" id="transp-${esc(c.id)}">${esc(c.transportadora)||'—'}</span>${marcaTransportadoraHtml(c)}
         <span class="veic-tipo">${esc(c.tipoVeiculo)||'—'}</span>
         ${marcaCargaDaPlaca(c, lista)}${chipNoPatioHtml(c)}${marcaEtapaDevolvidaHtml(c)}${marcaSaiuSemCarregarHtml(c)}</td>
       <td onclick="event.stopPropagation()">

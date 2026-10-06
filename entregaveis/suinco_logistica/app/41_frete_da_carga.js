@@ -99,17 +99,21 @@ async function garantirFreteParaContratar(info, motivo){
 }
 
 /* O SELO "frete a definir" — carga contratada antes da regra. Só a Logística
-   e a Administração o veem (são quem decide o frete); clicar abre a pergunta. */
+   e a Administração o veem (são quem decide o frete); clicar abre a pergunta.
+
+   SÓ QUANDO HÁ O QUE FAZER (06/10/2026). Havia também um selo informativo
+   ("frete: tabela", "combinado R$ x") em toda linha. O portão 49 o barrou:
+   letra de 11px (piso é 12), alvo de toque de 18px no celular (mínimo 44)
+   e a Torre 74px mais alta — a compactação dela foi feita de propósito. A
+   informação já está no relatório, na Montagem e na pergunta; na Torre
+   fica só o que pede ação — e só na TORRE, embaixo do número da carga: na
+   Fila de programados a coluna é estreita e o selo quebrava a linha (a Fila
+   do dia recebe carga nova, que já nasce com a observação). */
 function seloFreteHtml(c){
   if(!podeVerValorDeFreteLocal()) return '';
-  if(freteADefinir(c)){
-    return `<button type="button" class="selo-frete selo-frete-definir" onclick="event.stopPropagation(); definirFreteDaCargaUI('${escJs(c.id)}')"
-      title="Carga contratada sem a observação do frete. Clique para informar TABELA ou COMBINADO.">frete a definir</button>`;
-  }
-  if(!c.placa || !c.freteObservacao) return '';
-  const txt = c.freteObservacao === 'COMBINADO' && c.freteCombinado ? `combinado R$ ${freteReais(c.freteCombinado)}` : 'tabela';
-  return `<button type="button" class="selo-frete selo-frete-${c.freteObservacao === 'COMBINADO' ? 'combinado' : 'tabela'}"
-    onclick="event.stopPropagation(); definirFreteDaCargaUI('${escJs(c.id)}')" title="Observação do frete. Clique para alterar.">frete: ${esc(txt)}</button>`;
+  if(!freteADefinir(c)) return '';
+  return `<button type="button" class="selo-frete selo-frete-definir" onclick="event.stopPropagation(); definirFreteDaCargaUI('${escJs(c.id)}')"
+    title="Carga contratada sem a observação do frete. Clique para informar TABELA ou COMBINADO.">frete a definir</button>`;
 }
 
 function podeVerValorDeFreteLocal(){

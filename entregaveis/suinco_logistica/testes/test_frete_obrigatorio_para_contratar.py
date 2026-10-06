@@ -307,7 +307,7 @@ async def main():
         b = frete_no_banco('FO-ANTIGA')
         ck('e a resposta grava no banco', b is not None and b[1] == 'TABELA', str(b))
         linha = pg.locator('#torre-tbody tr').filter(has=pg.locator('input.numero-carga-input[value="FO-ANTIGA"]'))
-        ck('o selo passa a dizer "frete: tabela"', 'frete: tabela' in (await linha.inner_text()).lower())
+        ck('e o selo some (não há mais nada a fazer)', await linha.locator('.selo-frete').count() == 0)
 
         print('\n=== 6. MONTAGEM: O COMBINADO DA LINHA CHEGA À CARGA ===')
         linha = await montagem_linha(pg, hoje, 'FO-MONT-COMB', P[4], rota)

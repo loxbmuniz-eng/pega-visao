@@ -124,7 +124,7 @@ async def main():
         print('\n=== 6. GRAVAÇÃO: TRAVA DE FROTA VALE NO SERVIDOR ===')
         r = await pagina.evaluate(
             "([id]) => SuincoSharePoint.upsert('cargas','Carga_ID',"
-            "{Carga_ID:id, Placa:'ZZZ9999', Numero_Carga:'99001'})", [CARGA_FROTA])
+            "{Carga_ID:id, Placa:'ZZZ9999', Numero_Carga:'99001', Frete_Observacao:'TABELA'})", [CARGA_FROTA])
         ck('placa fora da frota é recusada, e NÃO vai para a fila',
            r.get('recusado') is True and r.get('enfileirado') is False, str(r))
 
@@ -133,7 +133,9 @@ async def main():
             "([p,id]) => SuincoSharePoint.upsert('cargas','Carga_ID',"
             "{Carga_ID:id, Placa:p, Numero_Carga:'99002',"
             " Peso_Kg:8000, Pra_Onde:'RET FRIGO', Paletizada:'Sim', Qtd_Ganchos:30,"
-            " Status_Atual:'Aguardando Veículo'})", [placa, CARGA_FLUXO])
+            " Status_Atual:'Aguardando Veículo', Frete_Observacao:'TABELA'})", [placa, CARGA_FLUXO])
+        # Com placa é contratar: a observação do frete vai junto (#115). Nas
+        # duas gravações acima, para cada uma medir só a regra dela (Frota).
         ck('placa da frota é aceita', r.get('enfileirado') is False and not r.get('recusado'), str(r))
 
         print('\n=== 7. MÁQUINA DE ESTADOS: QUEM PODE MOVER CADA ETAPA ===')

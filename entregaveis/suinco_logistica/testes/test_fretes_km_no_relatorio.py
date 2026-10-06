@@ -94,19 +94,22 @@ async def main():
                                 tab: (tr.querySelector('.km-tabela') || {}).textContent || '' };
             });
             const csv = window.__csv;
-            const ik = csv.cab.indexOf('KM Deslocamento'), it = csv.cab.indexOf('KM Destino'), inum = csv.cab.indexOf('Nº da Carga');
+            // UM KM SÓ (06/10/2026, #115): a planilha tem a coluna "KM".
+            const ik = csv.cab.indexOf('KM'), inum = csv.cab.indexOf('Nº da Carga');
             const planilha = {};
-            csv.linhas.forEach(l => { if(l.length > inum) planilha[l[inum]] = { km: l[ik], tab: l[it] }; });
+            csv.linhas.forEach(l => { if(l.length > inum) planilha[l[inum]] = { km: l[ik] }; });
             return { cab, linhas, planilha };
         }""")
-        ck('o PDF tem as colunas KM e Frete (R$)', 'KM' in r['cab'] and 'Frete (R$)' in r['cab'], str(r['cab']))
+        # A REGRA MUDOU DE PROPÓSITO (06/10/2026, #115): o valor é o da TABELA
+        # ("Frete tabela (R$)") e um KM só — "KM divergente não é necessário".
+        ck('o PDF tem as colunas KM e Frete tabela (R$)', 'KM' in r['cab'] and 'Frete tabela (R$)' in r['cab'], str(r['cab']))
         L = r['linhas']
         ck('carga de duas semanas atrás está no PDF', set(L) >= {'KM-1', 'KM-2', 'KM-3'}, str(list(L)))
         # O "R$" fica no cabeçalho da coluna ("Frete (R$)"): a célula traz só o número.
         ck('KM-1: o KM da Programação (583) e o valor (1.749,00)',
            L.get('KM-1', {}).get('km') == '583' and L['KM-1']['valor'] == '1.749,00', str(L.get('KM-1')))
-        ck('KM-2 com desvio: 640, e a tabela (583) ao lado',
-           L.get('KM-2', {}).get('km', '').startswith('640') and 'tab. 583' in L['KM-2']['tab'], str(L.get('KM-2')))
+        ck('KM-2 com desvio: 640 — o KM da carga, sem a tabela ao lado (um KM só)',
+           L.get('KM-2', {}).get('km', '') == '640' and not L['KM-2']['tab'], str(L.get('KM-2')))
         ck('KM-3 sem KM: sai "—", não zero', L.get('KM-3', {}).get('km') == '—', str(L.get('KM-3')))
         P = r['planilha']
         ck('a planilha lê o MESMO KM do PDF (583 / 640 / vazio)',
@@ -126,7 +129,7 @@ async def main():
             const tr = [...d.querySelectorAll('.tab-fretes tbody tr')].find(t => (t.querySelector('td.col-carga')||{}).textContent?.trim() === 'KM-1');
             return tr ? tr.querySelector('td.col-km').textContent.trim() : null;
         }""")
-        ck('depois da correção, o PDF mostra 601 (com a tabela 583 ao lado)', km and km.startswith('601') and '583' in km, str(km))
+        ck('depois da correção, o PDF mostra 601', km == '601', str(km))
         hist = await pg.evaluate("() => (DB.alteracoes || []).filter(a => a.campo === 'KM de deslocamento').length")
         ck('a correção ficou registrada no histórico', hist >= 1, str(hist))
 
