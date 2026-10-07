@@ -225,11 +225,15 @@ let _raioxExpandida = null;
    cima. Qualquer coluna reordena com um clique. */
 let _raioxOrdem = { campo: 'ultimaEm', asc: false };
 
+/* Uma cor só para as quatro etapas: aqui a cor diz "duração", e o nome da
+   etapa já está escrito ao lado. As cores de STATUS ficam reservadas ao
+   status da carga — usá-las aqui dava dois significados à mesma cor
+   (auditoria dataviz, 07/10/2026, #46). */
 const RAIOX_ETAPAS = [
-  { key:'tempoAguardandoEmbarque', rotulo:'Aguardando embarque', cor:'--st-aguardando-embarque-bg' },
-  { key:'tempoCarregamento',       rotulo:'Carregamento',        cor:'--st-embarque-iniciado-bg' },
-  { key:'tempoFaturamento',        rotulo:'Faturamento',         cor:'--st-embarque-finalizado-bg' },
-  { key:'tempoAguardandoSaida',    rotulo:'Aguardando saída',    cor:'--st-faturado-bg' },
+  { key:'tempoAguardandoEmbarque', rotulo:'Aguardando embarque', cor:'--graf-1' },
+  { key:'tempoCarregamento',       rotulo:'Carregamento',        cor:'--graf-1' },
+  { key:'tempoFaturamento',        rotulo:'Faturamento',         cor:'--graf-1' },
+  { key:'tempoAguardandoSaida',    rotulo:'Aguardando saída',    cor:'--graf-1' },
 ];
 
 function trocarVisaoRaioX(visao){
@@ -460,7 +464,7 @@ function heatmapChegadasSvg(entradas){
   m.forEach((linha, li) => {
     const y = TOPO + li * (ALT + GAP);
     celulas.push(`<text x="${ROTULO - 6}" y="${y + ALT / 2 + 3.5}" text-anchor="end"
-      font-size="10" fill="var(--text-dim)">${PULSO_DIAS_SEMANA[li]}</text>`);
+      font-size="12" fill="var(--text-dim)">${PULSO_DIAS_SEMANA[li]}</text>`);
     linha.forEach((n, hora) => {
       const x = ROTULO + hora * (CEL + GAP);
       const frac = n / max;
@@ -468,10 +472,10 @@ function heatmapChegadasSvg(entradas){
       // legível sem parecer que "0" é um dado dourado fraquinho.
       const caixa = n === 0
         ? `<rect x="${x}" y="${y}" width="${CEL}" height="${ALT}" rx="3" fill="var(--vidro-brilho)" opacity="0.35"/>`
-        : `<rect x="${x}" y="${y}" width="${CEL}" height="${ALT}" rx="3" fill="var(--gold)" opacity="${(0.18 + 0.82 * frac).toFixed(2)}"/>`;
+        : `<rect x="${x}" y="${y}" width="${CEL}" height="${ALT}" rx="3" fill="var(--graf-1)" opacity="${(0.18 + 0.82 * frac).toFixed(2)}"/>`;
       const texto = n === 0 ? '' : `<text x="${x + CEL / 2}" y="${y + ALT / 2 + 3.5}"
-        text-anchor="middle" font-size="10" font-weight="700"
-        fill="${frac >= 0.55 ? '#161d2c' : 'var(--text-dim)'}">${n}</text>`;
+        text-anchor="middle" font-size="12" font-weight="700"
+        fill="${frac >= 0.55 ? 'var(--graf-1-tinta)' : 'var(--text)'}">${n}</text>`;
       celulas.push(`<g>${caixa}${texto}
         <title>${PULSO_DIAS_SEMANA[li]} ${String(hora).padStart(2, '0')}h — ${n} chegada(s)</title></g>`);
     });
@@ -479,7 +483,7 @@ function heatmapChegadasSvg(entradas){
   const horas = [];
   for(let h = 0; h < 24; h += 3){
     horas.push(`<text x="${ROTULO + h * (CEL + GAP) + CEL / 2}" y="11" text-anchor="middle"
-      font-size="10" fill="var(--text-dim)">${h}h</text>`);
+      font-size="12" fill="var(--text-dim)">${h}h</text>`);
   }
   return { max, svg: `<svg class="heatmap-svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"
     role="img" aria-label="Chegadas ao pátio por hora e dia da semana, últimos 30 dias">
@@ -517,10 +521,16 @@ function evolucaoPatioSvg(entradas){
   const maxN = Math.max(1, ...dados.map(d => d.n));
   const maxMedia = Math.max(1, ...dados.map(d => d.media || 0));
   const y2Topo = TOPO + PAINEL + ENTRE;
+  /* Rótulo SELETIVO: número só no maior dia e no dia de hoje de cada
+     painel. Número em toda barra (eram 28) vira ruído e ninguém lê; o
+     valor de qualquer dia continua na dica ao passar o mouse (#46). */
+  const ultimo = dados.length - 1;
+  const iMaiorN = dados.reduce((m, d, i) => d.n > dados[m].n ? i : m, 0);
+  const iMaiorMedia = dados.reduce((m, d, i) => (d.media || 0) > (dados[m].media || 0) ? i : m, 0);
   const partes = [];
-  partes.push(`<text x="${ROTULO}" y="${TOPO - 7}" font-size="10" font-weight="800"
+  partes.push(`<text x="${ROTULO}" y="${TOPO - 7}" font-size="12" font-weight="800"
     fill="var(--text-dim)">ENTRADAS NO PÁTIO</text>`);
-  partes.push(`<text x="${ROTULO}" y="${y2Topo - 7}" font-size="10" font-weight="800"
+  partes.push(`<text x="${ROTULO}" y="${y2Topo - 7}" font-size="12" font-weight="800"
     fill="var(--text-dim)">TEMPO MÉDIO DE PÁTIO</text>`);
   dados.forEach((d, i) => {
     const x = ROTULO + i * (BARRA + GAP);
@@ -529,9 +539,11 @@ function evolucaoPatioSvg(entradas){
     const h1 = Math.round((d.n / maxN) * (PAINEL - 14));
     if(d.n > 0){
       partes.push(`<rect x="${x}" y="${TOPO + (PAINEL - h1)}" width="${BARRA}" height="${h1}"
-        rx="3" fill="var(--gold)"/>`);
-      partes.push(`<text x="${x + BARRA / 2}" y="${TOPO + (PAINEL - h1) - 3}" text-anchor="middle"
-        font-size="10" font-weight="700" fill="var(--text-dim)">${d.n}</text>`);
+        rx="3" fill="var(--graf-1)"/>`);
+      if(i === iMaiorN || i === ultimo){
+        partes.push(`<text class="evo-rotulo" x="${x + BARRA / 2}" y="${TOPO + (PAINEL - h1) - 3}" text-anchor="middle"
+          font-size="12" font-weight="700" fill="var(--text)">${d.n}</text>`);
+      }
     }else{
       partes.push(`<rect x="${x}" y="${TOPO + PAINEL - 2}" width="${BARRA}" height="2"
         rx="1" fill="var(--vidro-brilho)"/>`);
@@ -541,12 +553,14 @@ function evolucaoPatioSvg(entradas){
     if(d.media !== null){
       const h2 = Math.max(3, Math.round((d.media / maxMedia) * (PAINEL - 14)));
       partes.push(`<rect x="${x}" y="${y2Topo + (PAINEL - h2)}" width="${BARRA}" height="${h2}"
-        rx="3" fill="var(--gold)" opacity="0.62"/>`);
-      partes.push(`<text x="${x + BARRA / 2}" y="${y2Topo + (PAINEL - h2) - 3}" text-anchor="middle"
-        font-size="9.5" font-weight="700" fill="var(--text-dim)">${fmtDuracao(d.media)}</text>`);
+        rx="3" fill="var(--graf-1)" opacity="0.62"/>`);
+      if(i === iMaiorMedia || i === ultimo){
+        partes.push(`<text class="evo-rotulo" x="${x + BARRA / 2}" y="${y2Topo + (PAINEL - h2) - 3}" text-anchor="middle"
+          font-size="12" font-weight="700" fill="var(--text)">${fmtDuracao(d.media)}</text>`);
+      }
     }
     partes.push(`<text x="${x + BARRA / 2}" y="${H - 5}" text-anchor="middle"
-      font-size="9.5" fill="var(--text-dim)">${dia}/${mes}</text>`);
+      font-size="12" fill="var(--text-dim)">${dia}/${mes}</text>`);
     partes.push(`<g><rect x="${x}" y="0" width="${BARRA + GAP}" height="${H}" fill="transparent">
       </rect><title>${dia}/${mes}/${ano} — ${d.n} entrada(s)${d.media !== null ? ' · pátio médio ' + fmtDuracao(d.media) : ''}</title></g>`);
   });
@@ -573,7 +587,7 @@ function renderPulsoDoPatio(){
   const leg = document.getElementById('pulso-heatmap-legenda');
   if(leg){
     leg.innerHTML = 'menos '
-      + [0.18, 0.45, 0.7, 1].map(o => `<span class="grau" style="background:var(--gold);opacity:${o}"></span>`).join('')
+      + [0.18, 0.45, 0.7, 1].map(o => `<span class="grau" style="background:var(--graf-1);opacity:${o}"></span>`).join('')
       + ` mais — pico: ${max} chegada(s) num mesmo horário`;
   }
   evoEl.innerHTML = evolucaoPatioSvg(entradas);
@@ -1061,6 +1075,20 @@ function drawBarChart(canvas, itens){
   const larguraBarra = Math.min(90, (w / itens.length) * 0.55);
   const espaco = w / itens.length;
   ctx.font = '13px Segoe UI, sans-serif';
+  /* A dica ao passar o mouse: o canvas não tem <title> por barra, então
+     guarda a faixa de cada barra e o movimento do mouse escolhe a do
+     ponteiro. Ligado uma vez só por canvas — redesenhar não empilha. */
+  canvas._barrasDica = itens.map((it,i)=>({ x0: espaco*i, x1: espaco*(i+1),
+    texto: `${it.label}: ${it.valor===null ? 'sem medição neste filtro' : fmtDuracao(it.valor) + ' em média'}` }));
+  if(!canvas._dicaLigada){
+    canvas._dicaLigada = true;
+    canvas.addEventListener('mousemove', ev=>{
+      const r = canvas.getBoundingClientRect();
+      const x = ev.clientX - r.left;
+      const b = (canvas._barrasDica || []).find(d=> x >= d.x0 && x < d.x1);
+      canvas.title = b ? b.texto : '';
+    });
+  }
   itens.forEach((it,i)=>{
     const cx = espaco*i + espaco/2;
     const valor = it.valor ?? 0;
@@ -1170,7 +1198,7 @@ function renderGraficosIndicadores(){
   // representa status, representa "duração" — evita usar a mesma cor com
   // dois significados diferentes na mesma tela)
   const etapas = temposMediosPorEtapaFiltrado(periodo, filtros);
-  drawBarChart(canvasBarras, etapas.map(e=>({ label:e.label, valor:e.media, cor:'#e9b954' })));
+  drawBarChart(canvasBarras, etapas.map(e=>({ label:e.label, valor:e.media, cor:corTema('--graf-1') })));
 
   // 2) Linha — cargas concluídas por dia
   const dias = cargasConcluidasPorDia(periodo, filtros);

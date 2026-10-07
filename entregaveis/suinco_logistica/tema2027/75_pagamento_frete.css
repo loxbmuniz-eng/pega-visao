@@ -277,10 +277,10 @@
   #tab-frete .frete-and{ display:grid; grid-template-columns:64px 1fr 52px; align-items:center; gap:6px; font-size:12px; line-height:1.2; margin:2px 0 }
   #tab-frete .frete-and-rot{ color:var(--text-dim) }
   #tab-frete .frete-and-trilho{ height:6px; border-radius:3px; background:var(--border-soft); overflow:hidden }
-  #tab-frete .frete-and-trilho > span{ display:block; height:100%; border-radius:3px; background:var(--fr-lib-txt) }
-  #tab-frete .frete-and-liberado .frete-and-trilho > span{ background:var(--gold) }
-  #tab-frete .frete-and-pago .frete-and-trilho > span{ background:#8fb4ff }
-  :root[data-tema="claro"] #tab-frete .frete-and-pago .frete-and-trilho > span{ background:#1f5fbf }
+  /* Uma cor só nas três barras: cada linha já tem o nome escrito
+     (Entregue · Liberado · Pago); três cores faziam o olho procurar um
+     significado que não existe (auditoria dataviz, #46). */
+  #tab-frete .frete-and-trilho > span{ display:block; height:100%; border-radius:3px; background:var(--graf-1) }
   #tab-frete .frete-and-num{ text-align:right; font-variant-numeric:tabular-nums; font-weight:700 }
   #tab-frete tr.frete-aberta > td{ border-bottom-color:transparent }
   /* as notas da carga aberta: uma lista própria, recuada, com as colunas da nota */
