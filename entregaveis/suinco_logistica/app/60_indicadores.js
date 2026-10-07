@@ -869,11 +869,110 @@ function renderIndicadores(){
 
   renderRaioX();
   renderPulsoDoPatio();
+  renderNotaTransportadoras();
   // ---- Bloco 2: Painel do Gestor — comparação por período (novo) ----
   renderComparacaoPeriodos();
   renderRankingPeriodos();
   renderGraficosIndicadores();
 }
+/* A NOTA POR TRANSPORTADORA (07/10/2026, #49) — uma linha por empresa.
+
+   Pedido do dono, com as recomendações aprovadas: só Logística e
+   Administração (é número sensível de fornecedor) e SEM pontualidade —
+   ninguém registra a hora combinada de chegada, e número que não se mede
+   não entra. Quatro números, nenhum campo novo para ninguém preencher:
+     · cargas concluídas no recorte do filtro de cima;
+     · tempo de pátio TÍPICO (mediana: o caminhão esquecido não puxa a conta)
+       — a mesma função do Pátio ao vivo, pvPercentil;
+     · cargas com CT-e ou canhoto pendente — só o servidor sabe
+       (rota /api/indicadores/transportadoras);
+     · % de frete COMBINADO (fora da tabela) entre as cargas com a observação.
+   Nada de nota única nem ranking: uma medida só pune quem pega a rota
+   difícil (skill transportadoras, "o que NÃO fazer").
+
+   DEVOLUÇÃO FICOU DE FORA (07/10/2026), pelo dono: a aba Devoluções só tem
+   as que VOLTARAM à Suinco — "esse dado não é concreto integralmente". Volta
+   quando houver a fonte completa. */
+let _notaTranspServidor = { chave: '', dados: null, erro: '', em: 0 };
+
+function chaveTransportadora(t){ return String(t || '').trim().toUpperCase(); }
+
+function notaPorTransportadora(periodoKey, filtros, doServidor){
+  const linhas = new Map();
+  const linha = (nome) => {
+    const k = chaveTransportadora(nome);
+    if(!linhas.has(k)) linhas.set(k, { nome: String(nome).trim(), cargas: 0, patios: [], comObs: 0, combinado: 0, docPendente: null });
+    return linhas.get(k);
+  };
+  cargasConcluidasNoPeriodoFiltrado(periodoKey, filtros).forEach(c => {
+    if(!String(c.transportadora || '').trim()) return;
+    const l = linha(c.transportadora);
+    l.cargas++;
+    const p = indicadoresDaCarga(c.id).tempoPatioTotal;
+    if(p !== null && p !== undefined) l.patios.push(p);
+    if(c.freteObservacao === 'TABELA' || c.freteObservacao === 'COMBINADO') l.comObs++;
+    if(c.freteObservacao === 'COMBINADO') l.combinado++;
+  });
+  if(doServidor){
+    Object.entries(doServidor).forEach(([nome, v]) => {
+      if(!String(nome).trim()) return;
+      if(filtros && filtros.transportadora && chaveTransportadora(nome) !== chaveTransportadora(filtros.transportadora)) return;
+      linha(nome).docPendente = v.docPendente || 0;
+    });
+  }
+  return [...linhas.values()].map(l => ({
+    nome: l.nome, cargas: l.cargas,
+    patioMediana: l.patios.length ? pvPercentil(l.patios, 0.5) : null,
+    docPendente: doServidor ? (l.docPendente ?? 0) : null,
+    pctCombinado: l.comObs ? Math.round(100 * l.combinado / l.comObs) : null,
+    comObs: l.comObs,
+  })).sort((a, b) => b.cargas - a.cargas || a.nome.localeCompare(b.nome));
+}
+
+async function renderNotaTransportadoras(){
+  const card = document.getElementById('card-nota-transportadoras');
+  const alvo = document.getElementById('nota-transp');
+  if(!card || !alvo) return;
+  const setor = DB.operador && DB.operador.setor;
+  card.hidden = !(setor === 'Logística' || setor === 'Administração');
+  if(card.hidden) return;
+  const periodo = FILTRO_IND.periodo || 'mes';
+  const { inicio, fim } = janelaPeriodo(periodo);
+  const chave = periodo;
+  const conectado = typeof SuincoSharePoint !== 'undefined' && SuincoSharePoint.estaConfigurado();
+  const desenhar = () => {
+    const linhas = notaPorTransportadora(periodo, FILTRO_IND, _notaTranspServidor.chave === chave ? _notaTranspServidor.dados : null);
+    const traco = '<span class="text-dim">—</span>';
+    const aviso = !conectado ? 'Os documentos pendentes vêm do servidor — entre com seu usuário para vê-los.'
+      : _notaTranspServidor.erro ? _notaTranspServidor.erro : '';
+    alvo.innerHTML = (aviso ? `<div class="text-dim nota-transp-aviso">${esc(aviso)}</div>` : '')
+      + (linhas.length ? `<div class="tabela-rola"><table class="nota-transp-tabela">
+        <thead><tr><th scope="col">Transportadora</th><th scope="col">Cargas concluídas</th><th scope="col">Tempo de pátio típico</th>
+          <th scope="col">Cargas com CT-e ou canhoto pendente</th><th scope="col">Frete combinado</th></tr></thead>
+        <tbody>${linhas.map(l => `<tr data-transportadora="${esc(l.nome)}">
+          <th scope="row">${esc(l.nome)}</th>
+          <td data-col="cargas">${l.cargas}</td>
+          <td data-col="patio">${l.patioMediana === null ? traco : esc(fmtDuracao(l.patioMediana))}</td>
+          <td data-col="doc">${l.docPendente === null ? traco : l.docPendente}</td>
+          <td data-col="combinado" title="${l.comObs} carga(s) com a observação do frete">${l.pctCombinado === null ? traco : l.pctCombinado + '%'}</td>
+        </tr>`).join('')}</tbody></table></div>`
+        : '<div class="text-dim">Nenhuma carga concluída com transportadora neste recorte.</div>');
+  };
+  desenhar();
+  if(!conectado) return;
+  const fresco = _notaTranspServidor.chave === chave && Date.now() - _notaTranspServidor.em < 120000;
+  if(fresco) return;
+  try{
+    const r = await SuincoSharePoint.notaTransportadoras(inicio.toISOString(), fim.toISOString());
+    _notaTranspServidor = { chave, dados: r.transportadoras || {}, erro: '', em: Date.now() };
+  }catch(e){
+    _notaTranspServidor = { chave, dados: null, em: Date.now(),
+      erro: e.status === 404 ? 'O servidor ainda não tem esta conta — os documentos pendentes aparecem depois da próxima atualização do servidor.'
+                             : 'Não consegui ler os documentos pendentes: ' + (e.message || 'erro') };
+  }
+  desenhar();
+}
+
 // Tabela indicador × período, todos visíveis ao mesmo tempo — sem clique
 // pra comparar 6h vs 12h vs Hoje vs Semana vs Mês.
 function renderComparacaoPeriodos(){

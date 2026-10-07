@@ -123,6 +123,26 @@ def carimbar_service_worker(carimbo):
         caminho.write_text(novo, encoding='utf-8')
 
 
+def sem_comentarios_de_css_e_html(html):
+    """O ARQUIVO PUBLICADO SEM OS COMENTÁRIOS DE CSS E DE HTML (07/10/2026).
+
+    O portão 60 parou no teto de 760 KB comprimidos (780.026 bytes). Medido:
+    os comentários eram ~330 KB desse peso — a explicação de cada decisão,
+    que mora nos arquivos-fonte e continua lá. Aqui saem SÓ os de CSS (dentro
+    de <style>) e os de HTML (fora de <script> e <style>): 780 → 669 KB.
+
+    Os de JavaScript ficam, de propósito. Tirá-los pede um leitor que entenda
+    strings, crases e expressões regulares — foi ali que o "painel enxuto"
+    (#105) tropeçou. CSS e HTML não têm esse risco: conferido que nenhuma
+    string de CSS do painel contém "/*". Comentário condicional (<!--[) fica."""
+    def css(m):
+        return re.sub(r'/\*.*?\*/', '', m.group(0), flags=re.S)
+    html = re.sub(r'<style[^>]*>.*?</style>', css, html, flags=re.S)
+    partes = re.split(r'(<script[^>]*>.*?</script>|<style[^>]*>.*?</style>)', html, flags=re.S)
+    return ''.join(p if p.startswith(('<script', '<style')) else re.sub(r'<!--(?!\[).*?-->', '', p, flags=re.S)
+                   for p in partes)
+
+
 def main():
     # A fonte é sempre index_suinco.html. Não existe fallback para
     # index.html: esse é o ARQUIVO GERADO, e lê-lo como fonte faria o build
@@ -350,6 +370,7 @@ def main():
     if sobras:
         sys.exit(f'ERRO: ainda há referências a arquivos externos: {sobras}')
 
+    html = sem_comentarios_de_css_e_html(html)
     SAIDA.write_text(html, encoding='utf-8')
     kb = len(html.encode('utf-8')) / 1024
     print(f'OK: {SAIDA.name} gerado ({kb:.0f} KB, {len(csv.splitlines()) - 1} placas embutidas)')

@@ -7948,3 +7948,169 @@ describe('54. Auditoria noturna: placa de carga programada fora da Frota (07/10/
     assert.ok(!cargas.includes('905403'), 'placa da Frota');
   });
 });
+
+/* ------------------------------------------------------------------ */
+describe('55. Caixa "Pontos de atenção" — só a Administração (07/10/2026)', () => {
+  /* Pedido do dono, aprovado com "a caixa de atenção deixa só pra
+     administração": UMA caixa com tudo o que pede olho — por gravidade, o
+     que é, desde quando e onde resolver; some sozinho quando resolvido.
+     GRAVE: vigia do servidor com problema e as regras do dado (estados que o
+     servidor garante que não existem). MÉDIA: integridade do Pagamento de
+     Frete. LEVE: o que pode ser legítimo e por isso NÃO vai para o celular —
+     placa sem transportadora e carga de frete que não existe no painel. */
+  const SEM_TRANSP = '905501';
+  const CERTA = '905502';
+  const FRETE_ORFAO = '905503';
+  const PLACA_SEM = 'TSA5501';
+
+  before(async () => {
+    await pool.query("DELETE FROM dim_veiculos WHERE placa = $1", [PLACA_SEM]);
+    await pool.query("INSERT INTO dim_veiculos (placa, transportadora, tipo_veiculo, origem) VALUES ($1, '', 'Truck', 'teste')", [PLACA_SEM]);
+    await pool.query(
+      `INSERT INTO fact_viagens (carga_id, numero_carga, placa, status_atual, transportadora, criado_em)
+       VALUES ('atencao-1', $1, $2, 'Aguardando Embarque', '', now() - interval '2 days')`, [SEM_TRANSP, PLACA_SEM]);
+    const { rows: [f] } = await pool.query("SELECT placa, transportadora FROM dim_veiculos WHERE transportadora <> '' ORDER BY placa LIMIT 1");
+    await pool.query(
+      `INSERT INTO fact_viagens (carga_id, numero_carga, placa, status_atual, transportadora)
+       VALUES ('atencao-2', $1, $2, 'Aguardando Embarque', $3)`, [CERTA, f.placa, f.transportadora]);
+    await pool.query(
+      `INSERT INTO pgfrete_cargas (numero_carga, data_consulta, primeira_consulta, transportadora, criado_em)
+       VALUES ($1, current_date, current_date, 'Transp. Teste', now() - interval '3 days')`, [FRETE_ORFAO]);
+    await pool.query(
+      `INSERT INTO vigia_registros (verificacao, ok, detalhe, conferido_em, problema_desde)
+       VALUES ('disco', false, 'teste: 95% ocupado', now(), now() - interval '5 hours')
+       ON CONFLICT (verificacao) DO UPDATE SET ok = false, detalhe = EXCLUDED.detalhe, problema_desde = EXCLUDED.problema_desde`);
+  });
+
+  after(async () => {
+    await pool.query("DELETE FROM fact_viagens WHERE carga_id IN ('atencao-1', 'atencao-2')");
+    await pool.query('DELETE FROM pgfrete_cargas WHERE numero_carga = $1', [FRETE_ORFAO]);
+    await pool.query('DELETE FROM dim_veiculos WHERE placa = $1', [PLACA_SEM]);
+    await pool.query("DELETE FROM vigia_registros WHERE verificacao = 'disco'");
+  });
+
+  const ponto = (r, codigo) => r.json.pontos.find((p) => p.codigo === codigo);
+
+  test('só a Administração vê a caixa', async () => {
+    assert.equal((await req('/api/atencao')).status, 401);
+    assert.equal((await req('/api/atencao', { token: tokens['Logística'] })).status, 403);
+    assert.equal((await req('/api/atencao', { token: tokens['Administração'] })).status, 200);
+  });
+
+  test('placa sem transportadora: ponto LEVE, com desde quando e onde resolver', async () => {
+    const r = await req('/api/atencao', { token: tokens['Administração'] });
+    const p = ponto(r, 'placa_sem_transportadora');
+    assert.ok(p, 'o ponto existe');
+    assert.equal(p.gravidade, 'leve');
+    assert.ok(p.exemplos.some((e) => e.carga === SEM_TRANSP));
+    assert.ok(!p.exemplos.some((e) => e.carga === CERTA), 'a carga com transportadora não é acusada');
+    assert.ok(p.desde && Date.now() - Date.parse(p.desde) > 36 * 3600e3, 'desde = quando a carga mais antiga entrou');
+    assert.equal(p.onde.aba, 'cadastros');
+  });
+
+  test('carga do Pagamento de Frete que não existe no painel: ponto LEVE', async () => {
+    const r = await req('/api/atencao', { token: tokens['Administração'] });
+    const p = ponto(r, 'frete_sem_carga_no_painel');
+    assert.ok(p && p.gravidade === 'leve');
+    assert.ok(p.exemplos.some((e) => e.carga === FRETE_ORFAO));
+    assert.equal(p.onde.aba, 'frete');
+  });
+
+  test('vigia do servidor com problema: ponto GRAVE, desde quando começou', async () => {
+    const r = await req('/api/atencao', { token: tokens['Administração'] });
+    const p = ponto(r, 'vigia_disco');
+    assert.ok(p && p.gravidade === 'grave');
+    assert.ok(Math.abs(Date.now() - Date.parse(p.desde) - 5 * 3600e3) < 120e3);
+  });
+
+  test('ordem por gravidade: grave, depois média, depois leve; contador = número de pontos', async () => {
+    const r = await req('/api/atencao', { token: tokens['Administração'] });
+    const ordem = { grave: 0, media: 1, leve: 2 };
+    const g = r.json.pontos.map((p) => ordem[p.gravidade]);
+    assert.deepEqual(g, [...g].sort((a, b) => a - b));
+    assert.equal(r.json.total, r.json.pontos.length);
+    assert.ok(r.json.pontos.every((p) => p.onde && p.onde.rotulo));
+  });
+
+  test('resolvido, o ponto some sozinho', async () => {
+    await pool.query("UPDATE dim_veiculos SET transportadora = 'Transp. Resolvida' WHERE placa = $1", [PLACA_SEM]);
+    await pool.query("UPDATE vigia_registros SET ok = true, problema_desde = NULL WHERE verificacao = 'disco'");
+    const r = await req('/api/atencao', { token: tokens['Administração'] });
+    const p = ponto(r, 'placa_sem_transportadora');
+    assert.ok(!p || !p.exemplos.some((e) => e.carga === SEM_TRANSP));
+    assert.ok(!ponto(r, 'vigia_disco'));
+  });
+});
+
+/* ------------------------------------------------------------------ */
+describe('56. Nota por transportadora: documentos pendentes; devolução fica de fora (07/10/2026)', () => {
+  /* Pedido do dono (#49): um quadro com uma linha por transportadora na aba
+     Indicadores, só Logística e Administração, sem pontualidade (ninguém
+     registra a hora combinada). Dois dos cinco números moram só no servidor:
+     · DEVOLUÇÃO POR CULPA DO TRANSPORTE — a classificação é a da própria
+       Suinco: o motivo do Sisatak começa por "Transporte/". Comercial,
+       Qualidade e Expedição ficam de fora (o dono: "juntar devolução
+       comercial com culpa do transporte" é o que NÃO fazer). A devolução vai
+       para a transportadora que a Portaria registrou; vazia, para a da carga;
+     · CARGAS COM CT-E OU CANHOTO PENDENTE — no Pagamento de Frete. */
+  const T1 = 'TRANSP. QUADRO UM';
+  const T2 = 'TRANSP. QUADRO DOIS';
+  const ids = [];
+
+  async function limpar() {
+    await pool.query("DELETE FROM devolucao_itens WHERE devolucao_id LIKE 'quadro-dev-%'");
+    await pool.query("DELETE FROM devolucoes WHERE devolucao_id LIKE 'quadro-dev-%'");
+    await pool.query("DELETE FROM fact_viagens WHERE carga_id = 'quadro-1'");
+    await pool.query("DELETE FROM pgfrete_cargas WHERE numero_carga IN ('905611', '905612', '905613')");
+  }
+
+  before(async () => {
+    await limpar();   // rodada anterior que caiu no meio não pode contaminar esta
+    const dev = async (transp, carga, motivos, dia = 'current_date') => {
+      const id = `quadro-dev-${ids.length + 1}`;
+      await pool.query(
+        `INSERT INTO devolucoes (devolucao_id, data_dev, transportadora, carga_numero, tipo)
+         VALUES ($1, ${dia}, $2, $3, 'DEVOLUCAO')`, [id, transp, carga]);
+      ids.push(id);
+      for (const m of motivos) {
+        await pool.query('INSERT INTO devolucao_itens (devolucao_id, nota, motivo, cx) VALUES ($1, $2, $3, 1)', [id, String(Math.random()).slice(2, 8), m]);
+      }
+    };
+    await pool.query(
+      `INSERT INTO fact_viagens (carga_id, numero_carga, placa, status_atual, transportadora)
+       VALUES ('quadro-1', '905601', 'TSQ5601', 'Seguiu Viagem', $1)`, [T2]);
+    await dev(T1, '', ['607 — Transporte/Avaria. Mercadoria chegou no cliente avariada, gerando a devolução do produto.',
+                       '606 — Transporte/Temperatura. Devolução do produto por falta de temperatura no ato da entrega.',
+                       '623 — Comercial/Cliente comprou de outro fornecedor.']);
+    await dev('', '905601', ['604 — Transporte/Falta de mercadoria. Ocorreu falta de mercadoria no ato da entrega.']);
+    await dev(T1, '', ['607 — Transporte/Avaria. Mercadoria chegou no cliente avariada, gerando a devolução do produto.'], "current_date - 400");
+    await pool.query(
+      `INSERT INTO pgfrete_cargas (numero_carga, data_consulta, primeira_consulta, transportadora, cte, canhoto_original)
+       VALUES ('905611', current_date, current_date, $1, '', true),
+              ('905612', current_date, current_date, $1, 'CT1', false),
+              ('905613', current_date, current_date, $1, 'CT2', true)`, [T1]);
+  });
+
+  after(limpar);
+
+  const hoje = new Date();
+  const de = new Date(hoje.getTime() - 30 * 86400e3).toISOString();
+  const url = `/api/indicadores/transportadoras?de=${encodeURIComponent(de)}&ate=${encodeURIComponent(hoje.toISOString())}`;
+
+  test('só Logística e Administração veem', async () => {
+    assert.equal((await req(url)).status, 401);
+    assert.equal((await req(url, { token: tokens['Portaria'] })).status, 403);
+    assert.equal((await req(url, { token: tokens['Logística'] })).status, 200);
+    assert.equal((await req(url, { token: tokens['Administração'] })).status, 200);
+  });
+
+  test('devolução NÃO entra: a aba Devoluções só tem as que voltaram à Suinco (decisão do dono)', async () => {
+    const r = await req(url, { token: tokens['Logística'] });
+    for (const v of Object.values(r.json.transportadoras)) assert.equal(v.devTransporte, undefined);
+  });
+
+  test('cargas com CT-e ou canhoto pendente no Pagamento de Frete', async () => {
+    const r = await req(url, { token: tokens['Logística'] });
+    assert.equal(r.json.transportadoras[T1].docPendente, 2, 'uma sem CT-e, outra sem canhoto; a terceira está completa');
+  });
+});

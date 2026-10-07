@@ -110,6 +110,10 @@
          celular e deixa desligado no computador da mesa. Escondido dentro
          de uma aba de setor, quem mais precisa (quem anda pelo pátio)
          nunca acharia. -->
+    <!-- PONTOS DE ATENÇÃO (07/10/2026): só a Administração vê — o resto do
+         painel nem sabe que existe. O número é quantos pontos há agora. -->
+    <button class="btn btn-sec btn-sm" id="btn-atencao" hidden onclick="abrirPontosDeAtencaoUI()"
+            title="Pontos de atenção" aria-label="Pontos de atenção"><svg class="ico ico-btn" aria-hidden="true"><use href="#i-alerta"/></svg><span class="rot-btn">Atenção</span><span class="atencao-contador" id="atencao-contador" hidden></span></button>
     <button class="btn btn-sec btn-sm" id="btn-avisos" onclick="abrirModalAvisos()"
             title="Avisos no celular" aria-label="Avisos no celular"><svg class="ico ico-btn" aria-hidden="true"><use href="#i-sino"/></svg><span class="rot-btn">Avisos</span></button>
     <button class="btn btn-sec btn-sm" onclick="trocarUsuario()" title="Trocar de usuário" aria-label="Trocar usuário"><svg class="ico ico-btn" aria-hidden="true"><use href="#i-usuario"/></svg><span class="rot-btn">Trocar usuário</span></button>
@@ -1178,6 +1182,16 @@
          operação gasta tempo, e com quem — trocados por um controle
          segmentado, com cada linha abrindo em um cartão de detalhe no
          mesmo padrão do Histórico. Respeita os filtros do topo da aba. -->
+    <!-- NOTA POR TRANSPORTADORA (07/10/2026, #49): só Logística e
+         Administração — número sensível de fornecedor. -->
+    <div class="card" id="card-nota-transportadoras" hidden>
+      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-empresa"/></svg> Transportadoras — como cada uma está indo</div>
+      <div class="card-sub">Uma linha por transportadora, no recorte filtrado acima. Quatro números lado a lado, sem nota única:
+        uma medida só pune quem pega a rota difícil. Ficam de fora, por não serem completos: devoluções (a aba Devoluções só
+        tem as que voltaram à Suinco) e pontualidade (ninguém registra a hora combinada de chegada).</div>
+      <div id="nota-transp"></div>
+    </div>
+
     <div class="card">
       <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-bussola"/></svg> Raio-X da Operação</div>
       <div class="card-sub">Cargas <strong>concluídas</strong> do recorte filtrado acima, agrupadas por rota, transportadora ou placa.
@@ -1961,6 +1975,17 @@
      carga porque o erro real é linha trocada numa tabela, não dedo torto.
      O botão que age tem a cor do status "Faturado" (a mesma da badge e da
      linha do tempo), e o foco começa em Cancelar. -->
+<div class="modal-overlay" id="modal-atencao">
+  <div class="modal-box modal-atencao" role="dialog" aria-modal="true" aria-labelledby="atencao-titulo">
+    <h2 id="atencao-titulo">Pontos de atenção</h2>
+    <div class="card-sub">Do mais grave ao mais leve: o que é, desde quando e onde resolver.
+      Some sozinho quando resolvido. Os graves também avisam no celular da Administração.
+      <span id="atencao-quando" class="text-dim"></span></div>
+    <div id="atencao-lista"></div>
+    <div class="flex-end gap8"><button type="button" class="btn btn-sec" onclick="fecharPontosDeAtencaoUI()">Fechar</button></div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="modal-avisos">
   <div class="modal-box">
     <h2>Avisos no celular</h2>
@@ -2236,6 +2261,7 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
 <script src="app/86_relatorios_filtrados_e_fretes.js"></script>
 <script src="app/87_celular_e_usuarios.js"></script>
 <script src="app/88_relatorio_executivo.js"></script>
+<script src="app/89_pontos_de_atencao.js"></script>
 <script src="app/90_montagem.js"></script>
 <script src="app/95_modelo_da_semana.js"></script>
 <script src="app/99_movimento.js"></script>

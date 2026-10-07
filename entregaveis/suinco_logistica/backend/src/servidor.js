@@ -27,6 +27,7 @@ import { rotasBot } from './rotas/bot.js';
 import { rotasProgramacao } from './rotas/programacao.js';
 import { rotasModeloSemana } from './rotas/modelo_semana.js';
 import { rotasVigia } from './rotas/vigia.js';
+import { rotasIndicadores } from './rotas/indicadores.js';
 import { rotasRelatorios } from './rotas/relatorios.js';
 import { rotasDevolucoes } from './rotas/devolucoes.js';
 import { rotasPagamentoFrete } from './rotas/pagamento_frete.js';
@@ -334,6 +335,7 @@ export function criarApp() {
   app.use('/api', rotasDevolucoes);
   app.use('/api', rotasPagamentoFrete);
   app.use('/api', rotasVigia);
+  app.use('/api', rotasIndicadores);
   app.use('/bi', rotasBI);
   // Robô de relatórios (n8n → WhatsApp) — leitura, token próprio.
   app.use('/bot', rotasBot);

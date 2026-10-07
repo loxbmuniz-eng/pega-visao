@@ -6900,3 +6900,45 @@ tr.linha-nova{
 .frete-pdf .fpdf-tab > thead th:nth-child(13){ width:5.5% }
 .frete-pdf .fpdf-tab > thead th:nth-child(14){ width:7% }
 .frete-pdf .fpdf-tab > thead th:nth-child(15){ width:6.5% }
+
+/* =====================================================================
+   PONTOS DE ATENÇÃO (07/10/2026) — a caixa única da Administração.
+   A gravidade é régua de cor + palavra escrita (nunca só a cor).
+   ===================================================================== */
+#btn-atencao{ position:relative }
+.atencao-contador{ display:inline-block; min-width:20px; height:20px; padding:0 6px; margin-left:6px;
+  border-radius:10px; background:var(--gold); color:#161d2c; font-size:12px; font-weight:800; line-height:20px;
+  text-align:center; font-variant-numeric:tabular-nums }
+#btn-atencao.atencao-tem-grave .atencao-contador{ background:var(--wine); color:#fff }
+.modal-atencao{ max-width:720px }
+#atencao-lista{ max-height:min(64vh, 640px); overflow-y:auto; margin:10px 0 12px }
+.atencao-lista{ list-style:none; margin:0; padding:0; display:grid; gap:10px }
+.atencao-ponto{ border:1px solid var(--border-soft); border-left:4px solid var(--text-dim); border-radius:var(--radius-sm);
+  padding:10px 12px; display:grid; gap:4px; background:var(--vidro-bg) }
+.atencao-grave{ border-left-color:var(--st-aguardando-veiculo-txt, var(--wine)) }
+.atencao-media{ border-left-color:var(--warn) }
+.atencao-leve{ border-left-color:var(--text-dim) }
+.atencao-cab{ display:flex; align-items:baseline; gap:8px; flex-wrap:wrap }
+.atencao-grav{ font-size:12px; font-weight:800; letter-spacing:.04em; text-transform:uppercase; color:var(--text-dim) }
+.atencao-grave .atencao-grav{ color:var(--st-aguardando-veiculo-txt, var(--wine)) }
+.atencao-media .atencao-grav{ color:var(--warn) }
+.atencao-titulo{ font-size:14px; color:var(--text) }
+.atencao-qtd{ font-size:12px; font-weight:800; padding:0 7px; border-radius:9px; background:var(--border-soft); color:var(--text);
+  font-variant-numeric:tabular-nums }
+.atencao-texto{ font-size:13px; color:var(--text) }
+.atencao-desde{ font-size:12px; color:var(--text-dim); white-space:nowrap }
+.atencao-exemplos{ margin:2px 0 0; padding-left:18px; font-size:12px; color:var(--text) }
+.atencao-ir{ justify-self:start; margin-top:4px; min-height:36px; white-space:normal; text-align:left }
+.atencao-onde{ font-size:12px; color:var(--text-dim) }
+.atencao-vazio{ font-size:13px; color:var(--text-dim); padding:10px 0 }
+@media (max-width:640px){
+  .atencao-ir{ min-height:44px; width:100% }
+}
+
+/* NOTA POR TRANSPORTADORA (07/10/2026, #49) — no celular a tabela rola dentro dela, a página não */
+.tabela-rola{ overflow-x:auto; max-width:100% }
+.nota-transp-tabela{ width:100%; border-collapse:collapse; font-size:13px; font-variant-numeric:tabular-nums }
+.nota-transp-tabela th, .nota-transp-tabela td{ padding:7px 10px; border-bottom:1px solid var(--border-soft); text-align:right; white-space:nowrap }
+.nota-transp-tabela th[scope="row"], .nota-transp-tabela thead th:first-child{ text-align:left; white-space:normal }
+.nota-transp-tabela thead th{ font-size:12px; color:var(--text-dim); font-weight:700; white-space:normal; vertical-align:bottom }
+.nota-transp-aviso{ font-size:12px; margin:0 0 8px }

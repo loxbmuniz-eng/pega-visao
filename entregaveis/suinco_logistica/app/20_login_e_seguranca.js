@@ -886,6 +886,7 @@ function aplicarPermissoesSetor(){
   // troca de usuário passa a acertar os botões de relatório junto.
   aplicarDonosDeDocumentoUI();
   atualizarAvisoSetorAba();
+  atualizarPontosDeAtencao();   // o ícone só existe para a Administração
 }
 
 // Abas onde o box "o que se faz aqui" aparece — pedido do usuário
