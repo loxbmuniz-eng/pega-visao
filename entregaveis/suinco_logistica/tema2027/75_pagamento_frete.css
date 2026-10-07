@@ -309,16 +309,28 @@
   #tab-frete .frete-filtros-rodape{ justify-content:space-between }
   #tab-frete .frete-filtros-rodape .frete-contagem{ margin-left:0 }
 
-  /* NOTEBOOK (até 1360px): Editar, Histórico e Excluir viram ícone — o nome
-     fica no aria-label e na dica. "Pagar carga" continua escrito: é a ação. */
-  @media (min-width:821px) and (max-width:1360px){
+  /* NOTEBOOK (até 1500px): Editar, Histórico e Excluir viram ícone — o nome
+     fica no aria-label e na dica. "Pagar carga" continua escrito: é a ação.
+     Era até 1360px: em 1366 (o notebook mais comum) e em 1280 a coluna Ações
+     saía da área visível — achado na foto da vitrine em 07/10/2026; guarda
+     test_pagamento_frete_acoes_visiveis (mede o BOTÃO à vista, não só a
+     rolagem). Nesta faixa as colunas largas também cedem um pouco. */
+  @media (min-width:821px) and (max-width:1500px){
+    #tab-frete .frete-tab td[data-col="carga"]{ min-width:190px; width:230px; max-width:250px }
+    #tab-frete .frete-tab td[data-col="transporte"]{ min-width:120px; max-width:180px }
     #tab-frete .frete-tab tr.frete-carga-linha > td.frete-acoes{ width:150px }
     #tab-frete .frete-tab td.frete-acoes{ grid-template-columns:1fr 1fr 1fr }
     #tab-frete .frete-tab td.frete-acoes .btn:first-child{ grid-column:1 / -1 }
     #tab-frete .frete-tab td.frete-acoes .frete-btn-rot{ position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap }
     #tab-frete .frete-tab td.frete-acoes .btn .ico-btn{ margin:0 }
-    #tab-frete .frete-tab td[data-col="andamento"]{ min-width:150px }
+    /* as barras precisam de corpo: espremidas viram ponto e o número fica sem desenho */
+    #tab-frete .frete-tab td[data-col="andamento"]{ min-width:180px }
     #tab-frete .frete-and{ grid-template-columns:56px 1fr 46px }
+  }
+  /* 1280px e menos: um degrau a mais — a carga e as barras cedem 30px cada */
+  @media (min-width:821px) and (max-width:1300px){
+    #tab-frete .frete-tab td[data-col="carga"]{ width:200px; max-width:215px }
+    #tab-frete .frete-tab td[data-col="andamento"]{ min-width:155px }
   }
   /* CELULAR: cada carga é um cartão; as notas, cartões dentro dele */
   @media (max-width:820px){

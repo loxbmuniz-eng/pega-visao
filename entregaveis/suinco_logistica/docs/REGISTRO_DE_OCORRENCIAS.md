@@ -5340,3 +5340,29 @@ pontos no código publicado (`dc374f0`) e passou com a correção.
 o próximo carimbo é o próximo VIVO: a etapa anterior dura até ele.
 
 **Depende do servidor:** vale depois do `atualizar_tudo.sh` que levar a 064.
+
+## #118 — Pagamento de Frete em 1280 e 1366 px: botões de ação fora da área visível (07/10/2026)
+
+**Como foi achado.** O dono perguntou "e o visual? ui ux"; a resposta foi
+tirar a foto da tela como ele vê. Na vitrine em 1366 px (o notebook mais
+comum), "Editar" saía cortado e "Excluir" quase sumia à direita da tabela.
+Estava no ar desde o portão 52 — e o relato daquele portão dizia "cabe em
+1280, 1366 e 1440".
+
+**Causa.** Os botões viravam ícone só até 1360 px; em 1366 continuavam
+escritos e não cabiam. Em 1280 o ícone já valia, mas as colunas largas
+somavam 12 px a mais que a área. O teste media "a tabela não rola para o
+lado" em 1400 px — um atalho que não perguntava se o BOTÃO aparece (a
+mesma lição da #111: prova é tirada como o usuário vê).
+
+**Família:** *Prova pelo atalho, não pela tela.*
+
+**Correção.** Ícones até 1500 px; nessa faixa a coluna da carga tem teto e
+a das barras (Entregue · Liberado · Pago) ganha corpo — a primeira correção
+deixou as barras do tamanho de um ponto, e a foto pegou antes de publicar;
+um degrau a mais até 1300 px.
+
+**A guarda.** `test_pagamento_frete_acoes_visiveis`: em 1280, 1366, 1440,
+1536, 1600 e 1920 px, cada botão de ação inteiro dentro da área visível da
+tabela e da janela, e a tabela sem rolar. Reprovou no publicado em 1280 e
+1366.
