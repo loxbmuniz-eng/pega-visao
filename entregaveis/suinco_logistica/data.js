@@ -1969,9 +1969,13 @@ function dataDeEventoPlausivel(iso){
   if(!Number.isFinite(t)) return false;
   return t <= Date.now() + 5*60000 && t >= Date.parse('2020-01-01T00:00:00Z');
 }
+/* "41 min" com espaço que NÃO quebra (07/10/2026, #119): com espaço comum o
+   navegador partia a duração em duas linhas em qualquer caixa apertada — o
+   rádio do Pátio ao vivo, a faixa dos Indicadores no celular. Uma função
+   formata toda duração do painel; corrigida aqui, vale para todas. */
 function fmtDuracao(min){
   if(min===null || min===undefined || isNaN(min)) return '—';
-  if(min<60) return min+' min';
+  if(min<60) return min+'\u00a0min';
   const h = Math.floor(min/60), m = min%60;
   return h+'h'+String(m).padStart(2,'0')+'min';
 }

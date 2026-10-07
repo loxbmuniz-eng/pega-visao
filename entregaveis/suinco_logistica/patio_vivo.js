@@ -40,7 +40,7 @@ const _pv = { montado:false, cards:new Map(), listas:[], qtds:[], cols:[], relog
 
 function pvDur(min){
   if(min === null || min === undefined || isNaN(min)) return '—';
-  if(min < 60) return Math.round(min) + ' min';
+  if(min < 60) return Math.round(min) + '\u00a0min';   // não parte "34 / min" no rádio (#119)
   const h = Math.floor(min / 60), m = Math.round(min % 60);
   return h + 'h' + String(m).padStart(2, '0');
 }

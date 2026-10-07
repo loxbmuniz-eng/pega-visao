@@ -917,8 +917,10 @@ function detalheHistoricoHtml(m){
      cliente, destino, observação e id não cabem em meia largura sem virar
      três linhas — e aí o remédio fica pior que a doença. Ver .hist-campo-largo
      no styles.css. */
+  /* `hist-campo-vazio` (07/10/2026): campo que só diria "—". No computador
+     continua à mostra (a grade é larga); no celular sai — ver styles.css. */
   const linha = (rot, val, largo)=> val === '' || val === null || val === undefined
-    ? '' : `<div class="hist-campo${largo ? ' hist-campo-largo' : ''}">`
+    ? '' : `<div class="hist-campo${largo ? ' hist-campo-largo' : ''}${val === '—' ? ' hist-campo-vazio' : ''}">`
         + `<dt>${esc(rot)}</dt><dd>${val}</dd></div>`;
 
   const doEvento = [
@@ -974,12 +976,18 @@ function detalheHistoricoHtml(m){
     linha('Observações', esc(c.observacoes) || '—', true),
   ].join('');
 
+  /* NO CELULAR, A CARGA ABERTA CABE NUMA OLHADA (07/10/2026). Relato do
+     dono: "abre um negócio gigante no cartão que utiliza quase duas telas".
+     "Este registro" repete a linha fechada (data, etapa, operador) e o id é
+     técnico: `hist-det-evento` sai no celular. Lacres sem nenhum lacre:
+     `hist-det-vazia`. No computador nada muda. */
+  const semLacre = !l.numeros.length && !l.faltando && !l.retido;
   return `
-    <div class="hist-det-secao">Este registro</div>
-    <div class="hist-det-grid">${doEvento}</div>
+    <div class="hist-det-secao hist-det-evento">Este registro</div>
+    <div class="hist-det-grid hist-det-evento">${doEvento}</div>
     <div class="hist-det-secao">A carga</div>
     <div class="hist-det-grid">${daCarga}</div>
-    ${lacres ? `<div class="hist-det-secao">Lacres</div><div class="hist-det-grid">${lacres}</div>` : ''}
+    ${lacres ? `<div class="hist-det-secao${semLacre ? ' hist-det-vazia' : ''}">Lacres</div><div class="hist-det-grid${semLacre ? ' hist-det-vazia' : ''}">${lacres}</div>` : ''}
     <div class="hist-det-secao">Datas e observações</div>
     <div class="hist-det-grid">${datas}</div>
     <div class="hist-det-acoes no-print">

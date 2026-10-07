@@ -1,4 +1,27 @@
-7ed0fcf
+6408260
+
+# ---------------------------------------------------------------------
+# 07/10/2026 — 7ed0fcf → 6408260. O SERVIDOR ALCANÇOU O PORTÃO 57.
+#
+# Bloco COPIE DAQUI colado pelo dono (atualizar_tudo.sh): commit no servidor
+# 6408260, serviço active, /health 200, última migração
+# 064_bi_obedece_051.sql, aviso no celular ligado, vigias 6 ok e 0 com
+# problema, node v24.21.0, problemas nesta rodada: nenhum.
+#
+# O QUE PASSOU A VALER NO SERVIDOR:
+#   · migração 061 — observação do frete TABELA/COMBINADO guardada na carga
+#     e na linha da Montagem; o servidor recusa contratar sem ela (#115);
+#   · migração 062 — Excluir carga do Pagamento de Frete (fica em Excluídas);
+#   · migração 063 — transportadora, CT-E e pagamento POR NOTA;
+#   · migração 064 — a porta do Power BI obedece à 051 e dim_carga ganha a
+#     coluna Inativa (#117);
+#   · auditoria da API no código do servidor (login, PDF, erros com código,
+#     sala do pátio, sincronia de 30 dias, /health).
+#     NÃO VALE AINDA: a parte do Nginx (corpo de 10 MB, log sem a consulta).
+#     O atualizar_tudo.sh não toca no Nginx — só o instalar.sh o escreve.
+#   · auditoria noturna: placa fora da Frota (portão 55).
+# O vigia do frete, que estava com 1 problema em 06/10, voltou a ok.
+# O portão 58 (ae243f1, só painel) é posterior: não muda o servidor.
 
 # ---------------------------------------------------------------------
 # 06/10/2026 — 1cb3799 → 7ed0fcf. O SERVIDOR ALCANÇOU O PORTÃO 48.
