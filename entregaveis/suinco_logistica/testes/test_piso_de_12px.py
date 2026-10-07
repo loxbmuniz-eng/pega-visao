@@ -45,6 +45,9 @@ def ck(nome, ok, detalhe=''):
 
 
 SEMEAR = """(demo) => {
+  // a base anda para hoje, como na vitrine (vitrine/rejuvenescer.js, decisão 29):
+  // sem isso, toda carga dela fica "inativa" e a Torre sai vazia
+  demo = rejuvenescerDemonstracao(demo);
   ['cargas','movimentacoes','frota','transportadoras','rotasExtras','alteracoes'].forEach(k => {
     if(demo[k] !== undefined) DB[k] = demo[k]; });
   /* Casos que a demonstração não tem e que têm letra própria: a mesma placa
@@ -85,6 +88,7 @@ async def main():
             pg.on('pageerror', lambda e: erros.append(str(e)))
             await pg.goto(PAINEL)
             await pg.wait_for_timeout(800)
+            await pg.add_script_tag(path=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'vitrine', 'rejuvenescer.js'))
             await pg.evaluate(SEMEAR, DEMO)
             await pg.wait_for_timeout(400)
             for aba in ABAS:
