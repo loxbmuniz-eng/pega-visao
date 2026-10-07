@@ -8114,3 +8114,51 @@ describe('56. Nota por transportadora: documentos pendentes; devolução fica de
     assert.equal(r.json.transportadoras[T1].docPendente, 2, 'uma sem CT-e, outra sem canhoto; a terceira está completa');
   });
 });
+
+/* ------------------------------------------------------------------ */
+describe('57. Plano B: o servidor também serve o painel em /painel (07/10/2026)', () => {
+  /* O dono: "hobby, não pode parar o site". No plano grátis da Vercel, uso
+     acima do limite pode PAUSAR o site até o mês virar — e o pátio para. O
+     servidor da Hostinger (que já é pago) passa a entregar o MESMO painel em
+     https://api.embarquesuinco.com.br/painel: sem DNS, sem certificado, sem
+     Nginx — só esta rota, que entra no atualizar_tudo.sh de sempre. */
+  test('GET /painel entrega o painel com os cabeçalhos de segurança da Vercel', async () => {
+    const r = await req('/painel');
+    assert.equal(r.status, 200);
+    assert.match(r.headers.get('content-type') || '', /text\/html/);
+    assert.match(r.texto, /<title>/i);
+    assert.equal(r.headers.get('x-frame-options'), 'DENY');
+    assert.match(r.headers.get('content-security-policy') || '', /frame-ancestors 'none'/);
+    assert.equal(r.headers.get('x-content-type-options'), 'nosniff');
+  });
+
+  test('o painel servido aqui fala com ESTE servidor (mesma origem)', async () => {
+    const r = await req('/painel');
+    assert.ok(r.texto.includes('api: location.origin'), 'a base da API vira a própria origem');
+    assert.ok(!r.texto.includes("api: 'https://api.embarquesuinco.com.br'"));
+  });
+
+  test('chamada da própria origem passa; origem de fora continua barrada', async () => {
+    const propria = new URL(base).origin;
+    const ok = await req('/auth/login', { metodo: 'POST', corpo: { email: 'x@x', senha: 'y' }, cabecalhos: { origin: propria } });
+    assert.notEqual(ok.json && ok.json.codigo, 'ORIGEM_NAO_AUTORIZADA');
+    const fora = await req('/auth/login', { metodo: 'POST', corpo: { email: 'x@x', senha: 'y' }, cabecalhos: { origin: 'https://site-hostil.example' } });
+    assert.equal(fora.status, 403);
+    assert.equal(fora.json.codigo, 'ORIGEM_NAO_AUTORIZADA');
+  });
+
+  test('no servidor o painel vem da cópia que o instalar.sh grava ($APP_DIR/painel), antes do repositório', async () => {
+    const { PAINEL_CANDIDATOS } = await import('../src/servidor.js');
+    assert.ok(PAINEL_CANDIDATOS[0].endsWith(path.join('painel', 'index.html')), PAINEL_CANDIDATOS[0]);
+    assert.ok(!PAINEL_CANDIDATOS[0].includes(path.join('suinco_logistica', 'index.html')));
+    const instalar = await fs.readFile(new URL('../instalar.sh', import.meta.url), 'utf-8');
+    const iRsync = instalar.indexOf('rsync -a --delete');
+    const iCopia = instalar.indexOf('cp "$PAINEL_DIR/index.html" "$APP_DIR/painel/index.html"');
+    const iDono = instalar.indexOf('chown -R "$APP_USER:$APP_USER" "$APP_DIR"');
+    assert.ok(iRsync > 0 && iCopia > iRsync && iDono > iCopia, 'copia depois do rsync --delete e antes de acertar o dono');
+  });
+
+  test('o sw.js NÃO é servido no domínio da API (não pode interceptar a API)', async () => {
+    assert.equal((await req('/sw.js')).status, 404);
+  });
+});
