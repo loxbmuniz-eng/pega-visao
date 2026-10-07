@@ -5387,9 +5387,11 @@ qualquer palavra — inclusive uma data — quando a coluna aperta. (2) O selo
 **A varredura pedida ("nenhum outro ponto")** — todas as 13 abas, com as
 seções recolhidas abertas por clique, em 1280, 1366, 1440, 1920 e 390 px,
 procurando data, hora e duração partida ou escondida, e campo de data mais
-estreito que a data. Os 34 campos de data do painel estavam com a largura
-certa (a sonda foi provada estreitando um de propósito). Achou mais três
-lugares da mesma família:
+estreito que a data. Os campos de data que aparecem nas abas e nas janelas
+Pagar carga, Editar e Pagar nota estavam com a largura certa (a sonda foi
+provada estreitando um de propósito); os das outras janelas (Montagem,
+Devolução, correção de data do Histórico) NÃO foram abertos por esta
+varredura. Achou mais três lugares da mesma família:
 - Pagamento de Frete: "sem olhar há 10 dias" partia o "10 / dias";
 - Torre, coluna de datas (80–109 px): o nowrap cortava "06/10/2026 17:2" em
   1280–1440 px;
