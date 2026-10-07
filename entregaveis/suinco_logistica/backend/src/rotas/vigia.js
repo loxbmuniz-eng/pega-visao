@@ -13,7 +13,7 @@
 import { Router } from 'express';
 import { pool } from '../banco.js';
 import { exigirLogin, exigirSetor } from '../middleware/auth.js';
-import { auditarDado, lerAnotacoes, NOMES } from '../servicos/vigia.js';
+import { auditarDado, lerAnotacoes, NOMES, pontosDeAtencao } from '../servicos/vigia.js';
 
 export const rotasVigia = Router();
 const SO_ADMIN = [exigirLogin, exigirSetor('Administração')];
@@ -42,6 +42,18 @@ rotasVigia.get('/vigia', ...SO_ADMIN, async (req, res, next) => {
       })),
       dado,
     });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/* A caixa "Pontos de atenção" (07/10/2026) — só a Administração. O ícone do
+   topo mostra quantos; abrir mostra cada um com gravidade, desde quando e
+   onde resolver. Conferido na hora: quem acabou de corrigir quer ver sumir. */
+rotasVigia.get('/atencao', ...SO_ADMIN, async (req, res, next) => {
+  try {
+    const pontos = await pontosDeAtencao(pool);
+    res.json({ agora: new Date().toISOString(), total: pontos.length, pontos });
   } catch (e) {
     next(e);
   }

@@ -45,7 +45,7 @@ export const REGRAS_DO_DADO = [
     explicacao: 'O status diz "Seguiu Viagem", mas o histórico não tem a saída. '
       + 'O tempo de pátio e os indicadores dessa carga ficam sem a hora em que ela saiu.',
     sql: `
-      SELECT v.numero_carga, v.placa, ''::text AS detalhe
+      SELECT v.numero_carga, v.placa, ''::text AS detalhe, v.criado_em AS quando
         FROM fact_viagens v
        WHERE v.excluida_em IS NULL
          AND v.status_atual = 'Seguiu Viagem'
@@ -64,7 +64,8 @@ export const REGRAS_DO_DADO = [
     sql: `
       SELECT v.numero_carga, v.placa,
              'entrou ' || to_char(c.em AT TIME ZONE '${FUSO}', 'DD/MM HH24:MI')
-             || ', saiu ' || to_char(s.em AT TIME ZONE '${FUSO}', 'DD/MM HH24:MI') AS detalhe
+             || ', saiu ' || to_char(s.em AT TIME ZONE '${FUSO}', 'DD/MM HH24:MI') AS detalhe,
+             v.criado_em AS quando
         FROM fact_viagens v
         JOIN LATERAL (SELECT max(data_evento) AS em FROM fact_statusfrota
                        WHERE carga_id = v.carga_id AND apagada_em IS NULL
@@ -85,7 +86,8 @@ export const REGRAS_DO_DADO = [
       + 'contam esse caminhão num momento que não aconteceu.',
     sql: `
       SELECT v.numero_carga, m.placa,
-             m.status_novo || ' em ' || to_char(m.data_evento AT TIME ZONE '${FUSO}', 'DD/MM HH24:MI') AS detalhe
+             m.status_novo || ' em ' || to_char(m.data_evento AT TIME ZONE '${FUSO}', 'DD/MM HH24:MI') AS detalhe,
+             v.criado_em AS quando
         FROM fact_statusfrota m
         JOIN fact_viagens v ON v.carga_id = m.carga_id
        WHERE m.apagada_em IS NULL
@@ -108,7 +110,7 @@ export const REGRAS_DO_DADO = [
     explicacao: 'A Programação só aceita placa da Frota. Se a carga está assim, a placa saiu '
       + 'da Frota depois (ou foi mexida fora do painel) — e a carga some do indicador por transportadora.',
     sql: `
-      SELECT v.numero_carga, v.placa, v.status_atual AS detalhe
+      SELECT v.numero_carga, v.placa, v.status_atual AS detalhe, v.criado_em AS quando
         FROM fact_viagens v
        WHERE v.excluida_em IS NULL
          AND NOT v.aguardando_carga
@@ -132,7 +134,7 @@ export const REGRAS_DO_FRETE = [
     titulo: 'Carga de frete com mais de 100% pago',
     explicacao: 'A soma dos pagamentos válidos de uma carga passa de 100% — a rota recusa isso; se aconteceu, alguém mexeu fora do painel.',
     sql: `
-      SELECT numero_carga, '' AS placa, 'pago ' || sum(pct) || '%' AS detalhe
+      SELECT numero_carga, '' AS placa, 'pago ' || sum(pct) || '%' AS detalhe, min(criado_em) AS quando
         FROM pgfrete_pagamentos WHERE anulado_em IS NULL
        GROUP BY numero_carga HAVING sum(pct) > 100.005 ORDER BY numero_carga`,
   },
@@ -142,7 +144,8 @@ export const REGRAS_DO_FRETE = [
     explicacao: 'Finalizadas + aguardando + não entregue + outros é diferente da quantidade do B2B — o relatório mudou de forma ou a leitura perdeu linha.',
     sql: `
       SELECT numero_carga, '' AS placa,
-             finalizadas || '+' || aguardando || '+' || nao_entregue || '+' || outros || ' ≠ ' || qtd_b2b AS detalhe
+             finalizadas || '+' || aguardando || '+' || nao_entregue || '+' || outros || ' ≠ ' || qtd_b2b AS detalhe,
+             criado_em AS quando
         FROM pgfrete_cargas WHERE finalizadas + aguardando + nao_entregue + outros <> qtd_b2b ORDER BY numero_carga`,
   },
   {
@@ -150,7 +153,7 @@ export const REGRAS_DO_FRETE = [
     titulo: 'Carga de frete toda finalizada com pendência aberta',
     explicacao: 'Todas as notas do sistema estão finalizadas no B2B, mas ainda há pendência aberta: a reimportação não resolveu o que devia.',
     sql: `
-      SELECT c.numero_carga, '' AS placa, count(p.nota) || ' pendência(s) aberta(s)' AS detalhe
+      SELECT c.numero_carga, '' AS placa, count(p.nota) || ' pendência(s) aberta(s)' AS detalhe, min(c.criado_em) AS quando
         FROM pgfrete_cargas c JOIN pgfrete_pendencias p ON p.numero_carga = c.numero_carga AND p.resolvida_em IS NULL
        WHERE c.finalizadas >= c.qtd_sist AND c.qtd_b2b = c.qtd_sist
        GROUP BY c.numero_carga ORDER BY c.numero_carga`,
@@ -160,10 +163,113 @@ export const REGRAS_DO_FRETE = [
     titulo: 'Leitura de PDF de frete com mais de 1 dia sem confirmar',
     explicacao: 'Alguém importou e não confirmou; a leitura deveria ter sido apagada no dia seguinte.',
     sql: `
-      SELECT numero_carga, '' AS placa, tipo || ' · ' || arquivo || ' · ' || to_char(criado_em AT TIME ZONE '${FUSO}', 'DD/MM HH24:MI') AS detalhe
+      SELECT numero_carga, '' AS placa, tipo || ' · ' || arquivo || ' · ' || to_char(criado_em AT TIME ZONE '${FUSO}', 'DD/MM HH24:MI') AS detalhe,
+             criado_em AS quando
         FROM pgfrete_leituras WHERE criado_em < now() - interval '1 day' ORDER BY criado_em`,
   },
 ];
+
+/* ---------------------------------------------------------------------
+   OS PONTOS DE ATENÇÃO (07/10/2026) — a caixa única, só da Administração
+   ---------------------------------------------------------------------
+   Pedido do dono: "gostei dessa análise e dados inteligentes (...) isso gera
+   um ecossistema de dados que gera indicadores e pontos de atenção" — e, ao
+   aprovar, "a caixa de atenção deixa só pra administração".
+
+   Estas duas regras NÃO entram na auditoria noturna: podem ser legítimas
+   (frete de antes do painel, placa de terceiro ainda sem cadastro) e
+   virariam alarme falso no celular. Na caixa elas aparecem como LEVES — para
+   quem quer arrumar o cadastro, sem ninguém ser acordado por elas. */
+export const REGRAS_DE_ATENCAO = [
+  {
+    codigo: 'placa_sem_transportadora',
+    titulo: 'Carga com placa sem transportadora',
+    explicacao: 'A placa é da Frota, mas nem a carga nem a Frota dizem de qual transportadora ela é. '
+      + 'A carga fica fora do indicador por transportadora e do relatório de fretes por empresa.',
+    sql: `
+      SELECT v.numero_carga, v.placa, v.status_atual AS detalhe, v.criado_em AS quando
+        FROM fact_viagens v
+        JOIN dim_veiculos f ON f.placa = v.placa
+       WHERE v.excluida_em IS NULL
+         AND NOT v.aguardando_carga
+         AND v.placa <> ''
+         AND v.criado_em > ${JANELA}
+         AND COALESCE(NULLIF(trim(v.transportadora), ''), NULLIF(trim(f.transportadora), '')) IS NULL
+       ORDER BY v.criado_em DESC`,
+  },
+  {
+    codigo: 'frete_sem_carga_no_painel',
+    titulo: 'Carga do Pagamento de Frete que não existe no painel',
+    explicacao: 'O número veio dos PDFs do B2B e do Atak, mas nenhuma carga do painel tem esse número. '
+      + 'Pode ser frete de antes do painel ou de outra filial — ou o número foi digitado diferente na Programação.',
+    sql: `
+      SELECT p.numero_carga, '' AS placa, p.transportadora AS detalhe, p.criado_em AS quando
+        FROM pgfrete_cargas p
+       WHERE p.excluida_em IS NULL
+         AND p.criado_em > ${JANELA}
+         AND NOT EXISTS (SELECT 1 FROM fact_viagens v
+                          WHERE v.numero_carga = p.numero_carga AND v.excluida_em IS NULL)
+       ORDER BY p.criado_em DESC`,
+  },
+];
+
+/* ONDE SE RESOLVE cada ponto — a aba do painel e o nome que a pessoa lê. */
+export const ONDE_RESOLVER = {
+  saida_sem_registro: { aba: 'historico', rotulo: 'Histórico — linha do tempo da carga' },
+  saida_antes_da_chegada: { aba: 'historico', rotulo: 'Histórico — corrigir a hora da etapa' },
+  evento_no_futuro: { aba: 'historico', rotulo: 'Histórico — corrigir a hora da etapa' },
+  placa_fora_da_frota: { aba: 'cadastros', rotulo: 'Cadastros — Frota' },
+  frete_pago_acima_de_100: { aba: 'frete', rotulo: 'Pagamento de Frete — histórico da carga' },
+  frete_contagens_nao_fecham: { aba: 'frete', rotulo: 'Pagamento de Frete — reimportar os PDFs da carga' },
+  frete_pendencia_em_carga_fechada: { aba: 'frete', rotulo: 'Pagamento de Frete — reimportar os PDFs da carga' },
+  frete_leitura_esquecida: { aba: 'frete', rotulo: 'Pagamento de Frete — importar e confirmar' },
+  placa_sem_transportadora: { aba: 'cadastros', rotulo: 'Cadastros — Frota (transportadora da placa)' },
+  frete_sem_carga_no_painel: { aba: 'frete', rotulo: 'Pagamento de Frete — conferir o número da carga' },
+};
+const ONDE_SERVIDOR = { aba: 'usuarios', rotulo: 'Usuários — Vigias do sistema (o servidor)' };
+const ORDEM_GRAVIDADE = { grave: 0, media: 1, leve: 2 };
+
+/* Junta tudo numa lista só, por gravidade. GRAVE: vigia do servidor com
+   problema e as regras do dado; MÉDIA: integridade do frete; LEVE: as de
+   cima. Só leitura. Tabela que o servidor ainda não tem (migração faltando)
+   pula a regra em vez de derrubar a caixa. */
+export async function pontosDeAtencao(runner) {
+  const pontos = [];
+  let anotacoes = [];
+  try {
+    anotacoes = await lerAnotacoes(runner);
+  } catch (e) {
+    if (e.code !== '42P01') throw e;
+  }
+  for (const a of anotacoes) {
+    if (a.ok) continue;
+    pontos.push({
+      gravidade: 'grave', codigo: `vigia_${a.verificacao}`, titulo: NOMES[a.verificacao] || a.verificacao,
+      explicacao: a.detalhe || '', quantidade: 1, desde: a.problema_desde, onde: ONDE_SERVIDOR, exemplos: [],
+    });
+  }
+  for (const [regras, gravidade] of [[REGRAS_DO_DADO, 'grave'], [REGRAS_DO_FRETE, 'media'], [REGRAS_DE_ATENCAO, 'leve']]) {
+    for (const r of regras) {
+      let rows;
+      try {
+        ({ rows } = await runner.query(r.sql));
+      } catch (e) {
+        if (e.code === '42P01' || e.code === '42703') continue; // tabela/coluna de migração que ainda não rodou
+        throw e;
+      }
+      if (!rows.length) continue;
+      const tempos = rows.map((x) => Date.parse(x.quando)).filter((t) => Number.isFinite(t));
+      pontos.push({
+        gravidade, codigo: r.codigo, titulo: r.titulo, explicacao: r.explicacao, quantidade: rows.length,
+        desde: tempos.length ? new Date(Math.min(...tempos)).toISOString() : null,
+        onde: ONDE_RESOLVER[r.codigo] || { aba: '', rotulo: '' },
+        exemplos: rows.slice(0, EXEMPLOS).map((x) => ({ carga: x.numero_carga, placa: x.placa, detalhe: x.detalhe || '' })),
+      });
+    }
+  }
+  pontos.sort((a, b) => ORDEM_GRAVIDADE[a.gravidade] - ORDEM_GRAVIDADE[b.gravidade] || b.quantidade - a.quantidade);
+  return pontos;
+}
 
 export async function auditarDado(runner, regras = REGRAS_DO_DADO) {
   const achados = [];

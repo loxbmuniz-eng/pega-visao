@@ -1165,6 +1165,11 @@ const SuincoSharePoint = (function () {
     return chamar('/api/vigia');
   }
 
+  /* A caixa "Pontos de atenção" (07/10/2026) — só Administração. */
+  async function atencao() {
+    return chamar('/api/atencao');
+  }
+
   async function programacaoDoDia(dia) {
     return chamar('/api/programacao-do-dia?dia=' + encodeURIComponent(dia));
   }
@@ -2396,7 +2401,7 @@ const SuincoSharePoint = (function () {
     encerrarProgramacoesAnteriores, reterLacre,
     recarregarRotas, excluirRota, gravarTarifaFrete, gravarDestinoFrete, tabelaDeFrete,
     corrigirEtapa, corrigirDataProgramacao, desfazerExclusao, listarExcluidas,
-    programacaoDoDia, historico, mfa, vigia,
+    programacaoDoDia, historico, mfa, vigia, atencao,
     modeloSemana, montagem,
     pull, pullTudo, drenarFila, pendentes, descartarFilaAntiga, estaOnline,
     sessaoPerdida,
