@@ -6934,3 +6934,11 @@ tr.linha-nova{
 @media (max-width:640px){
   .atencao-ir{ min-height:44px; width:100% }
 }
+
+/* NOTA POR TRANSPORTADORA (07/10/2026, #49) — no celular a tabela rola dentro dela, a página não */
+.tabela-rola{ overflow-x:auto; max-width:100% }
+.nota-transp-tabela{ width:100%; border-collapse:collapse; font-size:13px; font-variant-numeric:tabular-nums }
+.nota-transp-tabela th, .nota-transp-tabela td{ padding:7px 10px; border-bottom:1px solid var(--border-soft); text-align:right; white-space:nowrap }
+.nota-transp-tabela th[scope="row"], .nota-transp-tabela thead th:first-child{ text-align:left; white-space:normal }
+.nota-transp-tabela thead th{ font-size:12px; color:var(--text-dim); font-weight:700; white-space:normal; vertical-align:bottom }
+.nota-transp-aviso{ font-size:12px; margin:0 0 8px }

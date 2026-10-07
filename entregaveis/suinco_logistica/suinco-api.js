@@ -1165,6 +1165,11 @@ const SuincoSharePoint = (function () {
     return chamar('/api/vigia');
   }
 
+  /* A nota por transportadora (07/10/2026, #49) — Logística e Administração. */
+  async function notaTransportadoras(de, ate) {
+    return chamar('/api/indicadores/transportadoras?de=' + encodeURIComponent(de) + '&ate=' + encodeURIComponent(ate));
+  }
+
   /* A caixa "Pontos de atenção" (07/10/2026) — só Administração. */
   async function atencao() {
     return chamar('/api/atencao');
@@ -2401,7 +2406,7 @@ const SuincoSharePoint = (function () {
     encerrarProgramacoesAnteriores, reterLacre,
     recarregarRotas, excluirRota, gravarTarifaFrete, gravarDestinoFrete, tabelaDeFrete,
     corrigirEtapa, corrigirDataProgramacao, desfazerExclusao, listarExcluidas,
-    programacaoDoDia, historico, mfa, vigia, atencao,
+    programacaoDoDia, historico, mfa, vigia, atencao, notaTransportadoras,
     modeloSemana, montagem,
     pull, pullTudo, drenarFila, pendentes, descartarFilaAntiga, estaOnline,
     sessaoPerdida,

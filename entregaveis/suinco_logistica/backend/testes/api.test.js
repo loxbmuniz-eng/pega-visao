@@ -8041,3 +8041,76 @@ describe('55. Caixa "Pontos de atenção" — só a Administração (07/10/2026)
     assert.ok(!ponto(r, 'vigia_disco'));
   });
 });
+
+/* ------------------------------------------------------------------ */
+describe('56. Nota por transportadora: documentos pendentes; devolução fica de fora (07/10/2026)', () => {
+  /* Pedido do dono (#49): um quadro com uma linha por transportadora na aba
+     Indicadores, só Logística e Administração, sem pontualidade (ninguém
+     registra a hora combinada). Dois dos cinco números moram só no servidor:
+     · DEVOLUÇÃO POR CULPA DO TRANSPORTE — a classificação é a da própria
+       Suinco: o motivo do Sisatak começa por "Transporte/". Comercial,
+       Qualidade e Expedição ficam de fora (o dono: "juntar devolução
+       comercial com culpa do transporte" é o que NÃO fazer). A devolução vai
+       para a transportadora que a Portaria registrou; vazia, para a da carga;
+     · CARGAS COM CT-E OU CANHOTO PENDENTE — no Pagamento de Frete. */
+  const T1 = 'TRANSP. QUADRO UM';
+  const T2 = 'TRANSP. QUADRO DOIS';
+  const ids = [];
+
+  async function limpar() {
+    await pool.query("DELETE FROM devolucao_itens WHERE devolucao_id LIKE 'quadro-dev-%'");
+    await pool.query("DELETE FROM devolucoes WHERE devolucao_id LIKE 'quadro-dev-%'");
+    await pool.query("DELETE FROM fact_viagens WHERE carga_id = 'quadro-1'");
+    await pool.query("DELETE FROM pgfrete_cargas WHERE numero_carga IN ('905611', '905612', '905613')");
+  }
+
+  before(async () => {
+    await limpar();   // rodada anterior que caiu no meio não pode contaminar esta
+    const dev = async (transp, carga, motivos, dia = 'current_date') => {
+      const id = `quadro-dev-${ids.length + 1}`;
+      await pool.query(
+        `INSERT INTO devolucoes (devolucao_id, data_dev, transportadora, carga_numero, tipo)
+         VALUES ($1, ${dia}, $2, $3, 'DEVOLUCAO')`, [id, transp, carga]);
+      ids.push(id);
+      for (const m of motivos) {
+        await pool.query('INSERT INTO devolucao_itens (devolucao_id, nota, motivo, cx) VALUES ($1, $2, $3, 1)', [id, String(Math.random()).slice(2, 8), m]);
+      }
+    };
+    await pool.query(
+      `INSERT INTO fact_viagens (carga_id, numero_carga, placa, status_atual, transportadora)
+       VALUES ('quadro-1', '905601', 'TSQ5601', 'Seguiu Viagem', $1)`, [T2]);
+    await dev(T1, '', ['607 — Transporte/Avaria. Mercadoria chegou no cliente avariada, gerando a devolução do produto.',
+                       '606 — Transporte/Temperatura. Devolução do produto por falta de temperatura no ato da entrega.',
+                       '623 — Comercial/Cliente comprou de outro fornecedor.']);
+    await dev('', '905601', ['604 — Transporte/Falta de mercadoria. Ocorreu falta de mercadoria no ato da entrega.']);
+    await dev(T1, '', ['607 — Transporte/Avaria. Mercadoria chegou no cliente avariada, gerando a devolução do produto.'], "current_date - 400");
+    await pool.query(
+      `INSERT INTO pgfrete_cargas (numero_carga, data_consulta, primeira_consulta, transportadora, cte, canhoto_original)
+       VALUES ('905611', current_date, current_date, $1, '', true),
+              ('905612', current_date, current_date, $1, 'CT1', false),
+              ('905613', current_date, current_date, $1, 'CT2', true)`, [T1]);
+  });
+
+  after(limpar);
+
+  const hoje = new Date();
+  const de = new Date(hoje.getTime() - 30 * 86400e3).toISOString();
+  const url = `/api/indicadores/transportadoras?de=${encodeURIComponent(de)}&ate=${encodeURIComponent(hoje.toISOString())}`;
+
+  test('só Logística e Administração veem', async () => {
+    assert.equal((await req(url)).status, 401);
+    assert.equal((await req(url, { token: tokens['Portaria'] })).status, 403);
+    assert.equal((await req(url, { token: tokens['Logística'] })).status, 200);
+    assert.equal((await req(url, { token: tokens['Administração'] })).status, 200);
+  });
+
+  test('devolução NÃO entra: a aba Devoluções só tem as que voltaram à Suinco (decisão do dono)', async () => {
+    const r = await req(url, { token: tokens['Logística'] });
+    for (const v of Object.values(r.json.transportadoras)) assert.equal(v.devTransporte, undefined);
+  });
+
+  test('cargas com CT-e ou canhoto pendente no Pagamento de Frete', async () => {
+    const r = await req(url, { token: tokens['Logística'] });
+    assert.equal(r.json.transportadoras[T1].docPendente, 2, 'uma sem CT-e, outra sem canhoto; a terceira está completa');
+  });
+});

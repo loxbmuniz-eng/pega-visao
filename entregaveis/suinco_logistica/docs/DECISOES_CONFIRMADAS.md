@@ -1005,3 +1005,21 @@ movimentação"*.
 noturna "nenhuma movimentação há horas em dia útil" — *"isso aqui não
 precisa pois por exemplo hoje temos muitas cargas no carregamento e é
 normal um caminhão passar até no máximo 3 dias no pátio"*.
+
+## 30. Quadro por transportadora: quatro números, sem devolução e sem pontualidade (07/10/2026)
+
+Na aba Indicadores, uma linha por transportadora, só para Logística e
+Administração (número sensível de fornecedor), sem nota única nem ranking:
+cargas concluídas · tempo de pátio típico (mediana) · cargas com CT-e ou
+canhoto pendente · % de frete combinado.
+
+**Devolução ficou de fora**, com as palavras do dono: *"não são todas as
+devoluções que entram no Embarque Suinco, porque existem devoluções que nem
+voltam para a Suinco, então as devoluções da aba Devoluções são somente as
+devoluções que retornaram pra Suinco, então esse dado não é concreto
+integralmente"*. Volta quando houver a fonte completa — por exemplo um
+relatório do Sisatak com todas as devoluções, importado como o WRMVE790.
+
+**Pontualidade ficou de fora:** ninguém registra a hora combinada de chegada.
+Para medir, a Programação precisaria de um campo a mais — decisão adiada até
+os quatro números estarem em uso.

@@ -1182,6 +1182,16 @@
          operação gasta tempo, e com quem — trocados por um controle
          segmentado, com cada linha abrindo em um cartão de detalhe no
          mesmo padrão do Histórico. Respeita os filtros do topo da aba. -->
+    <!-- NOTA POR TRANSPORTADORA (07/10/2026, #49): só Logística e
+         Administração — número sensível de fornecedor. -->
+    <div class="card" id="card-nota-transportadoras" hidden>
+      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-empresa"/></svg> Transportadoras — como cada uma está indo</div>
+      <div class="card-sub">Uma linha por transportadora, no recorte filtrado acima. Quatro números lado a lado, sem nota única:
+        uma medida só pune quem pega a rota difícil. Ficam de fora, por não serem completos: devoluções (a aba Devoluções só
+        tem as que voltaram à Suinco) e pontualidade (ninguém registra a hora combinada de chegada).</div>
+      <div id="nota-transp"></div>
+    </div>
+
     <div class="card">
       <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-bussola"/></svg> Raio-X da Operação</div>
       <div class="card-sub">Cargas <strong>concluídas</strong> do recorte filtrado acima, agrupadas por rota, transportadora ou placa.
