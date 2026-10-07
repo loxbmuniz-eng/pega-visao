@@ -5294,3 +5294,24 @@ em que o portão roda. No teste do Pátio, só a falta do horário reprova;
 
 **A guarda.** As 7 suítes verdes com o relógio fixo; a do Pátio passa
 também perto da meia-noite.
+
+**A segunda metade (portão 51, mesma noite).** Fixar a bateria em Brasília
+consertou um lado e expôs o outro: o portão 51 rodou das 21h30 às 22h20 e
+reprovou 14 suítes. Dezoito arquivos de teste calculavam "hoje" com
+`new Date().toISOString().slice(0,10)` — o dia de LONDRES. Com o navegador
+em UTC (antes), o painel e o teste erravam juntos e concordavam; com o
+navegador em Brasília (agora), o painel acerta e o teste fica um dia na
+frente. O primeiro registro desta ocorrência disse "nenhum defeito do
+painel" olhando só a metade da Montagem — a conclusão continua valendo,
+mas só ficou provada agora, com as 14 verdes DENTRO da janela das 21h às
+24h: o painel usa `diaLocalISO` (o dia de quem olha) em filtro de
+relatório, Torre e Montagem.
+
+**Correção da segunda metade.** Os testes usam a MESMA função do painel
+(`diaLocalISO`, "uma função, dois chamadores") — 28 pontos em 18 arquivos;
+`test_data_de_programacao` compara o dia de cada carimbo, não o pedaço
+cru do ISO. `test_guardioes` já proibia `toISOString().slice(0,10)` no
+painel; a mesma regra agora vale para os testes.
+
+**Lição.** Teste que só roda das 9h às 18h não prova o que acontece no
+turno da noite — e o pátio funciona de noite.
