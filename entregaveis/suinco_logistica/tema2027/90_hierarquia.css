@@ -186,7 +186,11 @@
       border-top:1px solid var(--border-soft); min-height:44px;
       display:flex; flex-direction:row-reverse; justify-content:flex-end; align-items:center; gap:8px;
       padding:6px 8px }
-    .bento.bi-faixa .stat-box .stat-num{ font-size:20px; min-width:1.4em }
+    .bento.bi-faixa .stat-box .stat-num{ font-size:20px; min-width:1.4em; flex:0 0 auto }
+    /* #119: o mini-gráfico de 74 px dividia a linha com o número e o
+       espremia ("41 / min", "2h22mi"). No celular ele fica só nos destaques;
+       a tendência continua na dica do quadro. */
+    .bento.bi-faixa .stat-box:not(.stat-destaque) .stat-spark{ display:none }
     .bento.bi-faixa .stat-box .stat-label{ font-size:var(--hq-meta); margin:0; flex:1 1 auto }
     .bento.bi-faixa .stat-box .stat-delta{ display:none }
     .bento.bi-faixa .stat-destaque{ order:0; grid-column:auto; border-top:0;

@@ -408,7 +408,7 @@ function freteCelula(l, col, j){
         if(l.notaPaga){
           return `<td${k} class="frete-nota-campo"><button type="button" class="frete-edit frete-edit-data frete-nota-paga" onclick="freteEditarDataNota('${escJs(l.carga)}','${escJs(l.nota)}')"
               aria-label="Nota ${esc(l.nota)} paga em ${esc(freteData(l.notaPaga.data) || 'sem data')}. Editar">
-              <span class="frete-selo-pago" aria-hidden="true">paga</span>${esc(freteData(l.notaPaga.data) || 'sem data')}</button>${daCarga}</td>`;
+              <span class="frete-selo-pago" aria-hidden="true">paga</span><span class="frete-data-txt">${esc(freteData(l.notaPaga.data) || 'sem data')}</span></button>${daCarga}</td>`;
         }
         return `<td${k} class="frete-nota-campo"><button type="button" class="btn btn-sm frete-btn-pagar-nota${l.tratativaLibera ? ' frete-pagar-pronta' : ''}"
             onclick="fretePagarNotaUI('${escJs(l.carga)}','${escJs(l.nota)}')"
@@ -454,13 +454,13 @@ function freteCelula(l, col, j){
     case 'resumo': {
       if(primeira && l._dobravel && !l._aberta){
         const semOlhar = l._semOlhar ? ` · ${l._semOlhar} sem olhar` : '';
-        const idade = l._semOlhar && l._maisAntiga != null ? ` · a mais antiga há ${l._maisAntiga} dia${l._maisAntiga === 1 ? '' : 's'}` : '';
+        const idade = l._semOlhar && l._maisAntiga != null ? ` · a mais antiga há ${l._maisAntiga}\u00a0dia${l._maisAntiga === 1 ? '' : 's'}` : '';
         return `<td${k} class="frete-r frete-r-fechada"><button type="button" class="frete-pill-pend${l._maisAntiga > 7 ? ' frete-pill-velha' : ''}" onclick="freteAlternarCarga('${escJs(l.carga)}')"
             aria-label="Abrir as ${l._pend} pendências da carga ${esc(l.carga)}">▸ ${l._pend} pendências${esc(semOlhar)}${esc(idade)}</button></td>`;
       }
       const cls = v === 'SEM PENDÊNCIA' ? 'ok' : (l.categoria || 'outro');
       const dica = l.cliente ? ` title="${esc(l.cliente + (l.cidade ? ' — ' + l.cidade : ''))}"` : '';
-      const idade = l.idadeDias != null ? `<small class="frete-idade${l.idadeDias > 7 ? ' frete-idade-velha' : ''}">sem olhar há ${l.idadeDias} dia${l.idadeDias === 1 ? '' : 's'}</small>` : '';
+      const idade = l.idadeDias != null ? `<small class="frete-idade${l.idadeDias > 7 ? ' frete-idade-velha' : ''}">sem olhar há ${l.idadeDias}\u00a0dia${l.idadeDias === 1 ? '' : 's'}</small>` : '';
       return `<td${k} class="frete-r frete-r-${cls}"${dica}>${esc(v)}${idade}</td>`;
     }
     case 'tratativa': {
@@ -572,7 +572,7 @@ function freteLinhaCargaHtml(l, notas, aberta){
     ? `<button type="button" class="frete-toggle" aria-expanded="${aberta}" onclick="freteAlternarCarga('${k}')"
           title="${aberta ? 'Fechar as notas pendentes' : 'Abrir as notas pendentes'}"><span class="frete-seta" aria-hidden="true">${aberta ? '▾' : '▸'}</span>${esc(l.carga)}</button>
        <button type="button" class="frete-pill-pend${maisAntiga > 7 ? ' frete-pill-velha' : ''}" onclick="freteAlternarCarga('${k}')"
-          aria-label="${aberta ? 'Fechar' : 'Abrir'} as ${notas.length} pendências da carga ${esc(l.carga)}">${notas.length} pendência${notas.length === 1 ? '' : 's'}${semOlhar ? ` · ${semOlhar} sem olhar` : ''}${semOlhar && maisAntiga > 0 ? ` · há ${maisAntiga} dia${maisAntiga === 1 ? '' : 's'}` : ''}</button>`
+          aria-label="${aberta ? 'Fechar' : 'Abrir'} as ${notas.length} pendências da carga ${esc(l.carga)}">${notas.length} pendência${notas.length === 1 ? '' : 's'}${semOlhar ? ` · ${semOlhar} sem olhar` : ''}${semOlhar && maisAntiga > 0 ? ` · há ${maisAntiga}\u00a0dia${maisAntiga === 1 ? '' : 's'}` : ''}</button>`
     : `<span class="frete-num">${esc(l.carga)}</span><span class="frete-sem-pend">sem pendência</span>`;
   const obs = l.obsCarga || '';
   const dc = freteDadosDaCarga(l.carga);
@@ -606,7 +606,7 @@ function freteLinhaNotaHtml(l){
   const n = { ...l, primeira: false, _dobravel: false, _aberta: true };   // a célula é DA NOTA
   const cel = (chave, rot) => freteCelula(n, { chave }, freteIx(chave)).replace(/^<td/, `<td data-rotulo="${esc(rot)}"`);
   const rotulo = String(l.v[freteIx('resumo')] || '').replace(/^\S+\s*\(/, '').replace(/\)$/, '');
-  const idade = l.idadeDias != null ? `<small class="frete-idade${l.idadeDias > 7 ? ' frete-idade-velha' : ''}">sem olhar há ${l.idadeDias} dia${l.idadeDias === 1 ? '' : 's'}</small>` : '';
+  const idade = l.idadeDias != null ? `<small class="frete-idade${l.idadeDias > 7 ? ' frete-idade-velha' : ''}">sem olhar há ${l.idadeDias}\u00a0dia${l.idadeDias === 1 ? '' : 's'}</small>` : '';
   return `<tr class="frete-nota" data-carga="${esc(l.carga)}" data-nota="${esc(l.nota)}">
     <td data-col="resumo" data-rotulo="Nota" class="frete-nota-num">${esc(l.nota)}</td>
     <td data-col="b2b" data-rotulo="Situação no B2B" class="frete-r frete-r-${esc(l.categoria || 'outro')}">${esc(rotulo)}${idade}</td>
