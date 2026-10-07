@@ -25,6 +25,7 @@ Dados inventados e marcados (cargas 900201+, rota TESTE), só no navegador.
     python3 testes/test_patio_vivo_etapa_e_fila.py
 """
 import asyncio
+import json
 import os
 import sys
 from playwright.async_api import async_playwright
@@ -125,6 +126,8 @@ async def main():
         ids = await pg.evaluate(SEMEAR, DURACOES)
         await pg.wait_for_timeout(500)
         r = await pg.evaluate(LER, ids)
+        # o painel escreve "20\u00a0min" (espaço que não quebra, #119): lido como espaço
+        r = json.loads(json.dumps(r).replace('\\u00a0', ' '))
         for k in ('A', 'B', 'C', 'D1', 'D2', 'D5', 'D7'):
             print('  ', k, r[k] and {x: r[k][x] for x in ('nota', 'parado', 'passada')})
 

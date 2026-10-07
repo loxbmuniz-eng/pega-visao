@@ -5413,3 +5413,14 @@ vitrine; (B) no servidor de teste, paga uma nota pela tela e confere a coluna
 Pagamento nas cinco larguras, com o selo separado da data. Reprovou com 9
 falhas antes da correção. `test_pagamento_frete_aba` passou a aceitar o
 espaço que não quebra em "há N dias" (o texto lido é o mesmo).
+
+**Segunda metade (07/10/2026, depois do portão 58).** A mesma guarda reprovou
+horas depois, sem ninguém mexer no Pátio: "34 min" partido no rádio do Pátio
+ao vivo. O texto do rádio muda com o relógio (a vitrine anda com a hora), e
+naquele momento a linha caiu exatamente no espaço entre "34" e "min". Lição:
+consertar lugar por lugar não fecha a família — a duração sai de DUAS funções
+(`fmtDuracao` em data.js, 49 chamadas; `pvDur` no Pátio ao vivo), e as duas
+passaram a escrever "34 min" (espaço que não quebra). Corrigido na
+origem, vale para todo lugar que mostra duração. Três testes do Pátio que
+comparavam o texto com espaço comum passaram a ler o espaço que não quebra
+como espaço (causa 2: o teste media a forma do caractere, não a regra).

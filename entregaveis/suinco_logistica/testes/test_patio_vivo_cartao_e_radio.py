@@ -131,19 +131,19 @@ async def main():
             print('   ·', it)
         for campo in ('TST6000', 'Truck', 'TRANSP TESTE', 'MOTORISTA TESTE', '12.500 kg', '3', 'Doca 4'):
             ck(f'a ficha traz {campo}', campo in g['ficha'], g['ficha'])
-        ck('"agora": a etapa e há quanto tempo', 'Embarque Finalizado' in g['agora'] and 'há 20 min' in g['agora'], g['agora'])
+        ck('"agora": a etapa e há quanto tempo', 'Embarque Finalizado' in g['agora'] and 'há 20 min' in g['agora'].replace('\xa0', ' '), g['agora'])
         ck('"agora": a previsão de saída', 'sai por volta de' in g['agora'], g['agora'])
         ae = next((i for i in g['itens'] if i['texto'].startswith('Aguardando Embarque')), None)
         ei = next((i for i in g['itens'] if i['texto'].startswith('Embarque Iniciado')), None)
         ef = next((i for i in g['itens'] if i['texto'].startswith('Embarque Finalizado')), None)
         fut = [i for i in g['itens'] if i['futura']]
         ck('a entrada: hora, quem carimbou e quanto ficou',
-           ae and '13:00' in ae['texto'] and 'Paulo Teste (Portaria)' in ae['texto'] and 'ficou 30 min' in ae['texto'],
+           ae and '13:00' in ae['texto'] and 'Paulo Teste (Portaria)' in ae['texto'] and 'ficou 30 min' in ae['texto'].replace('\xa0', ' '),
            ae and ae['texto'])
         ck('o embarque que passou do normal fica marcado e diz o normal',
            ei and 'ficou 1h10' in ei['texto'] and ei['alem'] == '1' and 'além do normal: 9 em 10 em até' in ei['texto'],
            ei and str(ei))
-        ck('a etapa atual está "em andamento"', ef and 'em andamento há 20 min' in ef['texto'], ef and ef['texto'])
+        ck('a etapa atual está "em andamento"', ef and 'em andamento há 20 min' in ef['texto'].replace('\xa0', ' '), ef and ef['texto'])
         ck('as etapas que faltam aparecem apagadas (Faturado, Seguiu Viagem)',
            [i['texto'].split(' —')[0].strip() for i in fut] == ['Faturado', 'Seguiu Viagem'], str(fut))
 

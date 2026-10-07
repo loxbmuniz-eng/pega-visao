@@ -192,6 +192,13 @@ const DEV_ORDEM_NA_TELA = ['portaria', 'faturamento', 'pesofinal',
 /* Dia local do pátio — NUNCA toISOString().slice(0,10): às 21h+ de Patos
    de Minas o UTC já virou o dia seguinte (guardião nº 2). */
 function diaLocalDev(d = new Date()) { return diaLocalISO(d); }   // a conta mora em data.js (#100)
+/* A data do checklist como a pessoa lê: dd/mm/aaaa (07/10/2026). Uma função
+   só para a linha fechada, o campo em modo leitura e o papel da conferência —
+   o modo leitura mostrava "2026-10-01", como o banco guarda. */
+function dataDevBr(d) {
+  const iso = String((d && d.dataDev) || '').slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(iso) ? iso.split('-').reverse().join('/') : '';
+}
 
 function devServidorOk() {
   return typeof SuincoSharePoint !== 'undefined'
@@ -699,7 +706,9 @@ function renderListaDevolucoes() {
                 pergunta que vem depois. */''}
           ${ehSetorFilial(d.criadaSetor)
             ? `<span class="dev-chip dev-chip-filial">${esc(d.criadaSetor.toUpperCase())}</span>` : ''}
-          <strong>Checklist Nº ${d.numero}</strong>${ehSetorFilial(d.criadaSetor)
+          <strong>Checklist Nº ${d.numero}</strong>${/* A DATA NA LINHA FECHADA (07/10/2026). Pedido do dono:
+                "só consigo ver ao clicar e expandir o conteúdo de cada linha". */''}${dataDevBr(d)
+            ? ` <span class="dev-card-data" title="Data da devolução">${esc(dataDevBr(d))}</span>` : ''}${ehSetorFilial(d.criadaSetor)
             ? ` <span class="dev-chip dev-chip-filial">${esc(d.criadaSetor.toUpperCase())}</span>` : ''}
           <span class="dev-card-rota">${d.tipo === 'SOBRA'
             ? 'Sobras' + (d.criadaPor ? ' / ' + esc(devIniciais(d.criadaPor)) : '')
@@ -836,7 +845,7 @@ function cabecalhoEditavelDev(d, editavel) {
       ${editavel
         ? `<input type="date" id="dev-cab-${esc(d.id)}-dataDev" value="${esc(dataDev)}"
              onchange="editarDevolucaoCampoUI('${escJs(d.id)}','dataDev',this.value)">`
-        : `<div class="dev-ro">${esc(dataDev) || '—'}</div>`}
+        : `<div class="dev-ro">${esc(dataDevBr(d)) || '—'}</div>`}
     </div>`;
 
   // ---- bloco da LOGÍSTICA: o que elas lançam, e só isso ----
@@ -2836,7 +2845,7 @@ async function relatorioOperadorDevolucoesUI(idChecklist) {
                 devolução e a data" — ESTA linha. A coluna nas linhas ficou;
                 faltava aqui (test_nota_transferencia_no_relatorio_dev). */''}
           ${temNotaTransfDev(d) ? ' · NT ' + esc(String(d.notaTransferencia).trim()) : ''}
-          ${d.dataDev ? ' · ' + esc(String(d.dataDev).slice(0, 10).split('-').reverse().join('/')) : ''}</div>
+          ${dataDevBr(d) ? ' · ' + esc(dataDevBr(d)) : ''}</div>
         <table class="doc-tabela dev-doc-tabela">
           <thead><tr>
             <th>Nota</th><th title="A devolução é parcial ou total">Parcial / Total</th><th title="Número da nota parcial">Nº parcial</th>
