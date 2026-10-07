@@ -991,7 +991,7 @@ considerado inativo, some dos indicadores e para de poluir dados, mesmo
 para cargas"* — e logo depois: *"na verdade 3 dias após última
 movimentação"*.
 
-**O que vale (⬜ a implementar, junto com a correção da porta do Power BI):**
+**O que vale (✅ painel no ar no portão 54, `7a4458a`, 07/10; a coluna "Inativa" da porta do Power BI vale depois da migração 064 no servidor):**
 1. Inativa = carga no pátio (ainda não "Seguiu Viagem") com mais de 3 dias
    desde a ÚLTIMA movimentação. Automático, pelo relógio.
 2. Sai de todo indicador, dos relatórios executivos, da contagem do Pátio

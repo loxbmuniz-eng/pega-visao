@@ -6489,6 +6489,11 @@ describe('48. Vigias do sistema — a conferência do dado (02/10/2026)', () => 
 
   before(async () => {
     await plantar(CERTA, 'Seguiu Viagem', [['Aguardando Embarque', 300], ['Seguiu Viagem', 60]]);
+    /* A carga CERTA anda com placa da Frota (07/10/2026): com a regra
+       placa_fora_da_frota, a placa inventada TST4801 a faria ser acusada —
+       com razão. */
+    const { rows: [f] } = await pool.query('SELECT placa FROM dim_veiculos ORDER BY placa LIMIT 1');
+    await pool.query('UPDATE fact_viagens SET placa = $1 WHERE carga_id = $2', [f.placa, `vigia-${CERTA}`]);
     await plantar(SEM_SAIDA, 'Seguiu Viagem', [['Aguardando Embarque', 300]]);
     await plantar(AO_CONTRARIO, 'Seguiu Viagem', [['Aguardando Embarque', 30], ['Seguiu Viagem', 120]]);
     await plantar(FUTURO, 'Aguardando Embarque', [['Aguardando Embarque', -180]]);
@@ -7902,5 +7907,44 @@ describe('53. A porta do Power BI obedece à migração 051 (07/10/2026)', () =>
       await pool.query("DELETE FROM fact_statusfrota WHERE carga_id = 'bi53_inativa'");
       await pool.query("DELETE FROM fact_viagens WHERE carga_id = 'bi53_inativa'");
     }
+  });
+});
+
+describe('54. Auditoria noturna: placa de carga programada fora da Frota (07/10/2026)', () => {
+  /* Achado da skill auditoria-do-dado: as regras cobriam só valor fora da
+     faixa e frete. A trava de Frota (rotas/cargas.js, PLACA_FORA_DA_FROTA)
+     garante que carga PROGRAMADA nasce com placa da Frota — então carga
+     programada com placa fora dela só existe se alguém tirou a placa da
+     Frota depois, ou mexeu fora do painel. A chegada sem programação
+     (aguardando_carga) pode ter qualquer placa: não é acusada. */
+  const ids = ['vigia54_fora', 'vigia54_chegada', 'vigia54_certa'];
+  let placaDaFrota;
+  before(async () => {
+    placaDaFrota = (await pool.query('SELECT placa FROM dim_veiculos ORDER BY placa LIMIT 1')).rows[0].placa;
+    await pool.query('DELETE FROM fact_viagens WHERE carga_id = ANY($1)', [ids]);
+    await pool.query(`INSERT INTO fact_viagens (carga_id, numero_carga, placa, status_atual, aguardando_carga) VALUES
+      ('vigia54_fora', '905401', 'ZZZ9Z54', 'Aguardando Embarque', false),
+      ('vigia54_chegada', '905402', 'ZZZ9Z55', 'Aguardando Embarque', true),
+      ('vigia54_certa', '905403', $1, 'Aguardando Embarque', false)`, [placaDaFrota]);
+  });
+  after(async () => { await pool.query('DELETE FROM fact_viagens WHERE carga_id = ANY($1)', [ids]); });
+
+  const regra = async () => {
+    const r = await req('/api/vigia', { token: tokens['Administração'] });
+    assert.equal(r.status, 200, r.texto);
+    return r.json.dado.find((a) => a.codigo === 'placa_fora_da_frota');
+  };
+
+  test('acha a carga programada com placa que não está na Frota', async () => {
+    const a = await regra();
+    assert.ok(a, 'a regra placa_fora_da_frota existe');
+    assert.ok(a.exemplos.some((e) => e.carga === '905401' && e.placa === 'ZZZ9Z54'));
+  });
+
+  test('NÃO acusa a chegada sem programação nem a carga com placa da Frota', async () => {
+    const a = await regra();
+    const cargas = (a ? a.exemplos : []).map((e) => e.carga);
+    assert.ok(!cargas.includes('905402'), 'chegada sem programação pode ter qualquer placa');
+    assert.ok(!cargas.includes('905403'), 'placa da Frota');
   });
 });

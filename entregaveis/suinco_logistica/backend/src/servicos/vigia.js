@@ -93,6 +93,30 @@ export const REGRAS_DO_DADO = [
          AND m.data_evento > now() + interval '10 minutes'
        ORDER BY m.data_evento DESC`,
   },
+  {
+    /* 07/10/2026, skill auditoria-do-dado. A trava de Frota
+       (PLACA_FORA_DA_FROTA, rotas/cargas.js) garante que carga PROGRAMADA
+       nasce com placa da Frota; a chegada sem programação (aguardando_carga)
+       pode ter qualquer placa e fica de fora. Se aparecer, alguém tirou a
+       placa da Frota depois — e a carga some do indicador por
+       transportadora — ou mexeu fora do painel. "Placa sem transportadora" e
+       "nota de frete sem carga no painel" NÃO entram aqui: podem ser
+       legítimas (frete anterior ao painel, outra filial) e virariam barulho
+       no celular — vão para a caixa Pontos de atenção. */
+    codigo: 'placa_fora_da_frota',
+    titulo: 'Carga programada com placa que não está na Frota',
+    explicacao: 'A Programação só aceita placa da Frota. Se a carga está assim, a placa saiu '
+      + 'da Frota depois (ou foi mexida fora do painel) — e a carga some do indicador por transportadora.',
+    sql: `
+      SELECT v.numero_carga, v.placa, v.status_atual AS detalhe
+        FROM fact_viagens v
+       WHERE v.excluida_em IS NULL
+         AND NOT v.aguardando_carga
+         AND v.placa <> ''
+         AND v.criado_em > ${JANELA}
+         AND NOT EXISTS (SELECT 1 FROM dim_veiculos f WHERE f.placa = v.placa)
+       ORDER BY v.criado_em DESC`,
+  },
 ];
 
 const EXEMPLOS = 5;
