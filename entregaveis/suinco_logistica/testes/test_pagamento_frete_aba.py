@@ -162,85 +162,87 @@ async def main():
         await pg.wait_for_timeout(2500)
         ck('gravou a carga', psql("SELECT count(*) FROM pgfrete_cargas WHERE numero_carga='900802';") == '1')
 
-        print('\n=== 3. A GRADE É A PLANILHA ===')
+        print('\n=== 3. A TELA EM DOIS NÍVEIS: A CARGA NUMA LINHA, AS NOTAS NUMA LISTA ===')
+        # A REGRA MUDOU DE PROPÓSITO (06/10/2026, auditoria visual aprovada "tudo"):
+        # a tela deixou de ser a planilha de 24 colunas — o que se decide ficava
+        # fora da tela. A PLANILHA EXCEL continua com as 24 colunas (seção 6).
         cab = await pg.evaluate("() => [...document.querySelectorAll('#frete-thead th')].map(t => t.textContent.trim())")
-        ck('as 24 colunas da planilha, na ordem dela (+ Ações)', cab[:16] == [
-            'Data Consulta', 'Carga', 'Qtde SIST', 'Qtde B2B', 'Diferença', 'Finalizadas', 'Aguardando', 'Não Entregue',
-            'Outros Status', 'Situação', 'Resumo Pendências', 'Status Pendência', 'Status p/ pagamento', 'Data Pagamento',
-            'Transportadora', 'CT-E'] and cab[16:22] == ['% Entregue', '% Liberado', '% Pago', 'A pagar agora', 'Data Tratativa', 'Observação']
-            and cab[22:24] == ['Canhoto original', 'Canhoto marcado em'] and cab[-1] == 'Ações', str(cab))
-        ler_linhas = """() => [...document.querySelectorAll('#frete-tbody tr')].map(tr => ({
-            primeira: tr.classList.contains('frete-primeira'),
-            v: Object.fromEntries([...tr.querySelectorAll('td[data-col]')].map(td => [td.dataset.col, td.textContent.trim()])) }))"""
-        linhas = await pg.evaluate(ler_linhas)
-        ck('a carga nasce FECHADA: uma linha só, dizendo quantas pendências tem (pedido do dono, 05/10)',
-           len(linhas) == 1 and '4 pendências' in linhas[0]['v']['resumo'] and '4 sem olhar' in linhas[0]['v']['resumo'], str(linhas[0]['v'].get('resumo') if linhas else linhas))
-        ck('fechada, a linha é da carga: sem lista de tratativa', await pg.evaluate("() => document.querySelectorAll('#frete-tbody select.frete-sel').length") == 0)
-        await pg.click('#frete-tbody tr.frete-primeira .frete-toggle')
+        ck('a linha da carga: Carga, Situação, Para pagamento, Entregue·Liberado·Pago, Transportadora·CT-E, Canhoto, Ações',
+           cab == ['Carga', 'Situação', 'Para pagamento', 'Entregue · Liberado · Pago', 'Transportadora · CT-E', 'Canhoto', 'Ações'], str(cab))
+        cabe = await pg.evaluate("() => { const w = document.querySelector('#tab-frete .frete-wrap'); return w.scrollWidth <= w.clientWidth + 1; }")
+        ck('em 1400px tudo cabe sem rolar para o lado (Ações à vista)', cabe)
+        LER = """() => { const l = document.querySelector('#frete-tbody tr.frete-carga-linha');
+            const v = {}; if (l) l.querySelectorAll('[data-col]').forEach(e => { v[e.dataset.col] = e.textContent.trim().replace(/\\s+/g, ' '); });
+            return { v, notas: [...document.querySelectorAll('#frete-tbody tr.frete-nota')].map(tr => ({ nota: tr.dataset.nota,
+                b2b: tr.querySelector('td[data-col="b2b"]').firstChild.textContent.trim() })) }; }"""
+        r = await pg.evaluate(LER)
+        ck('a carga nasce FECHADA: dizendo quantas pendências tem (pedido do dono, 05/10)',
+           not r['notas'] and '4 pendências' in r['v'].get('carga', '') and '4 sem olhar' in r['v'].get('carga', ''), r['v'].get('carga', ''))
+        ck('as contagens viram uma frase: 8 notas · 4 finalizadas · 1 aguardando · 1 não entregue · 2 outros',
+           '8 notas · 4 finalizadas · 1 aguardando · 1 não entregue · 2 outros' in r['v'].get('carga', ''), r['v'].get('carga', ''))
+        ck('fechada, sem lista de tratativa', await pg.evaluate("() => document.querySelectorAll('#frete-tbody select.frete-sel').length") == 0)
+        await pg.click('#frete-tbody tr.frete-carga-linha .frete-toggle')
         await pg.wait_for_timeout(400)
-        linhas = await pg.evaluate(ler_linhas)
-        ck('um clique no número abre: a carga 900802 ocupa 4 linhas, uma por pendência', len(linhas) == 4, str(len(linhas)))
-        await pg.click('#frete-tbody tr.frete-primeira .frete-toggle')
+        r = await pg.evaluate(LER)
+        ck('um clique no número abre: as 4 notas pendentes numa lista própria', len(r['notas']) == 4, str(len(r['notas'])))
+        await pg.click('#frete-tbody tr.frete-carga-linha .frete-toggle')
         await pg.wait_for_timeout(400)
-        ck('outro clique fecha de novo', await pg.evaluate("() => document.querySelectorAll('#frete-tbody tr').length") == 1)
+        ck('outro clique fecha de novo', await pg.evaluate("() => document.querySelectorAll('#frete-tbody tr.frete-nota').length") == 0)
         await pg.fill('#frete-busca', '810105')
         await pg.wait_for_timeout(500)
-        ck('buscar pela nota abre a carga dela', await pg.evaluate("() => document.querySelectorAll('#frete-tbody tr').length") == 4)
+        ck('buscar pela nota abre a carga dela', await pg.evaluate("() => document.querySelectorAll('#frete-tbody tr.frete-nota').length") == 4)
         await pg.fill('#frete-busca', '')
         await pg.wait_for_timeout(500)
-        linhas = await pg.evaluate(ler_linhas)
-        ck('e ela continua aberta depois (quem abriu, trata)', len(linhas) == 4, str(len(linhas)))
-        if len(linhas) == 4:
-            p1 = linhas[0]['v']
-            ck('a primeira linha traz as contagens 8 · 8 · 0 · 4 · 1 · 1 · 2 e PENDENTE',
-               [p1['qtdSist'], p1['qtdB2b'], p1['diferenca'], p1['finalizadas'], p1['aguardando'], p1['naoEntregue'], p1['outros'], p1['situacao']]
-               == ['8', '8', '0', '4', '1', '1', '2', 'PENDENTE'], str(p1))
-            ck('as seguintes repetem só carga e situação', linhas[1]['v']['qtdSist'] == '' and linhas[1]['v']['situacao'] == 'PENDENTE' and linhas[1]['v']['carga'] == '900802')
-            ck('entregue 50% e liberado 50%', p1['entregue'] == '50,0%' and p1['liberado'] == '50,0%', f"{p1['entregue']} {p1['liberado']}")
-            resumos = sorted(re.sub(r'sem olhar há.*$', '', l['v']['resumo'].split(' ', 1)[1]).strip() for l in linhas)   # a idade ("sem olhar há N dias") é texto da célula, não da nota
-            ck('as pendências com o status do B2B, como na planilha', resumos == ['(A caminho)', '(Aguardando)', '(Cancelado)', '(Não entregue)'], str(resumos))
-        stats = await pg.evaluate("() => Object.fromEntries([...document.querySelectorAll('#frete-stats .stat-box')].map(b => [b.querySelector('.stat-label').textContent.trim(), b.querySelector('.stat-num').textContent.trim()]))")
-        ck('as caixas do topo: 1 carga, 1 pendente, 4 pendências abertas',
-           stats.get('Cargas no controle') == '1' and stats.get('Pendentes') == '1' and stats.get('Pendências abertas') == '4', str(stats))
+        r = await pg.evaluate(LER)
+        ck('e ela continua aberta depois (quem abriu, trata)', len(r['notas']) == 4, str(len(r['notas'])))
+        ck('a carga diz PENDENTE, entregue 50% e liberado 50%',
+           r['v'].get('situacao') == 'PENDENTE' and '50,0%' in r['v'].get('entregue', '') and '50,0%' in r['v'].get('liberado', ''), str(r['v']))
+        ck('as pendências com o status do B2B, como na planilha',
+           sorted(n['b2b'] for n in r['notas']) == ['A caminho', 'Aguardando', 'Cancelado', 'Não entregue'], str(r['notas']))
+        stats = await pg.evaluate("() => Object.fromEntries([...document.querySelectorAll('#frete-stats .frete-pan-item')].map(b => [b.textContent.replace(b.querySelector('b').textContent, '').trim(), b.querySelector('b').textContent.trim()]))")
+        ck('o panorama numa faixa: 1 carga, 1 pendente, 4 pendências abertas',
+           stats.get('carga') == '1' and stats.get('pendentes') == '1' and stats.get('pendências abertas') == '4', str(stats))
 
         print('\n=== 3b. A CAIXINHA DO CANHOTO ORIGINAL ===')
-        can = await pg.evaluate("() => document.querySelector('#frete-tbody tr.frete-primeira td[data-col=\"canhoto\"]').textContent.trim()")
-        ck('a carga nasce com o canhoto NÃO', can == 'NÃO', can)
+        CAN = "() => document.querySelector('#frete-tbody tr.frete-carga-linha td[data-col=\"canhoto\"] .frete-check').textContent.trim()"
+        EM = "() => (document.querySelector('#frete-tbody tr.frete-carga-linha [data-col=\"canhotoEm\"]') || {textContent: ''}).textContent.trim()"
+        LIB = "() => document.querySelector('#frete-tbody tr.frete-carga-linha [data-col=\"liberado\"] .frete-and-num').textContent.trim()"
+        ck('a carga nasce com o canhoto NÃO', await pg.evaluate(CAN) == 'NÃO', await pg.evaluate(CAN))
         ck('só a linha da carga tem a caixinha', await pg.evaluate("() => document.querySelectorAll('#frete-tbody td[data-col=\"canhoto\"] input[type=checkbox]').length") == 1)
-        lib_antes = await pg.evaluate("() => document.querySelector('#frete-tbody tr.frete-primeira td[data-col=\"liberado\"]').textContent.trim()")
-        await pg.click('#frete-tbody tr.frete-primeira td[data-col="canhoto"] input[type=checkbox]')
+        lib_antes = await pg.evaluate(LIB)
+        await pg.click('#frete-tbody tr.frete-carga-linha td[data-col="canhoto"] input[type=checkbox]')
         await pg.wait_for_timeout(1500)
-        can = await pg.evaluate("() => document.querySelector('#frete-tbody tr.frete-primeira td[data-col=\"canhoto\"]').textContent.trim()")
-        em = await pg.evaluate("() => document.querySelector('#frete-tbody tr.frete-primeira td[data-col=\"canhotoEm\"]').textContent.trim()")
-        ck('um clique: SIM, com a data de hoje ao lado', can == 'SIM' and len(em) == 10, f'{can} {em}')
+        can, em = await pg.evaluate(CAN), await pg.evaluate(EM)
+        ck('um clique: SIM, com a data de hoje embaixo', can == 'SIM' and len(em) == 10, f'{can} {em}')
         quem = psql("SELECT canhoto_original::text || '|' || canhoto_por FROM pgfrete_cargas WHERE numero_carga='900802';")
         ck('gravou no servidor, com quem marcou (a pessoa do setor, logada)', quem == 'true|Pagamento de Frete Teste', quem)
-        lib_depois = await pg.evaluate("() => document.querySelector('#frete-tbody tr.frete-primeira td[data-col=\"liberado\"]').textContent.trim()")
-        ck('o canhoto NÃO mexe no liberado (só acompanhamento)', lib_antes == lib_depois, f'{lib_antes} -> {lib_depois}')
-        stats = await pg.evaluate("() => Object.fromEntries([...document.querySelectorAll('#frete-stats .stat-box')].map(b => [b.querySelector('.stat-label').textContent.trim(), b.querySelector('.stat-num').textContent.trim()]))")
-        ck('a caixa do topo diz 1 de 1', stats.get('Canhoto original') == '1 de 1', str(stats.get('Canhoto original')))
+        ck('o canhoto NÃO mexe no liberado (só acompanhamento)', lib_antes == await pg.evaluate(LIB), f'{lib_antes}')
+        stats = await pg.evaluate("() => Object.fromEntries([...document.querySelectorAll('#frete-stats .frete-pan-item')].map(b => [b.textContent.replace(b.querySelector('b').textContent, '').trim(), b.querySelector('b').textContent.trim()]))")
+        ck('o panorama diz 1 de 1 com canhoto original', stats.get('com canhoto original') == '1 de 1', str(stats))
+        await pg.click('#frete-mais > summary')
         await pg.click('.frete-chip:has-text("Sem canhoto original")')
         await pg.wait_for_timeout(400)
-        ck('o filtro "Sem canhoto original" esconde a carga que já veio', await pg.evaluate("() => document.querySelectorAll('#frete-tbody tr').length") == 0)
+        ck('o filtro "Sem canhoto original" (em Mais filtros) esconde a carga que já veio', await pg.evaluate("() => document.querySelectorAll('#frete-tbody tr').length") == 0)
+        ck('e "Mais filtros" fica aberto, dizendo que há 1 filtro ligado', await pg.evaluate("() => document.getElementById('frete-mais').open && /1 ligado/.test(document.querySelector('#frete-mais summary').textContent)"))
         await pg.click('.frete-chip:has-text("Sem canhoto original")')
         await pg.wait_for_timeout(400)
-        await pg.click('#frete-tbody tr.frete-primeira td[data-col="canhoto"] input[type=checkbox]')
+        await pg.click('#frete-tbody tr.frete-carga-linha td[data-col="canhoto"] input[type=checkbox]')
         await pg.wait_for_timeout(1500)
-        can = await pg.evaluate("() => document.querySelector('#frete-tbody tr.frete-primeira td[data-col=\"canhoto\"]').textContent.trim()")
-        em = await pg.evaluate("() => document.querySelector('#frete-tbody tr.frete-primeira td[data-col=\"canhotoEm\"]').textContent.trim()")
+        can, em = await pg.evaluate(CAN), await pg.evaluate(EM)
         ck('desmarcar volta a NÃO e apaga a data', can == 'NÃO' and em == '', f'{can} {em!r}')
 
         print('\n=== 4. TRATATIVA PELA LISTA ===')
-        await pg.select_option('#frete-tbody tr:nth-child(1) select.frete-sel', 'OK')
+        NOTA1 = '#frete-tbody tr.frete-nota:nth-child(1)'
+        await pg.select_option(f'{NOTA1} select.frete-sel', 'OK')
         await pg.wait_for_timeout(1500)
-        lib = await pg.evaluate("() => document.querySelector('#frete-tbody tr.frete-primeira td[data-col=\"liberado\"]').textContent.trim()")
-        trat = await pg.evaluate("() => document.querySelector('#frete-tbody tr:nth-child(1) select.frete-sel').value")
+        lib = await pg.evaluate("() => document.querySelector('#frete-tbody tr.frete-carga-linha [data-col=\"liberado\"] .frete-and-num').textContent.trim()")
+        trat = await pg.evaluate(f"() => document.querySelector('{NOTA1} select.frete-sel').value")
         ck('OK numa nota: liberado sobe para 62,5% (5 de 8) e a lista mostra OK', lib == '62,5%' and trat == 'OK', f'{lib} {trat}')
-        dt = await pg.evaluate("() => document.querySelector('#frete-tbody tr:nth-child(1) td[data-col=\"dataTratativa\"]').textContent.trim()")
+        dt = await pg.evaluate(f"() => document.querySelector('{NOTA1} td[data-col=\"dataTratativa\"]').textContent.trim()")
         ck('a data da tratativa é a de hoje', len(dt) == 10, dt)
 
         print('\n=== 5. PAGAMENTO PELO MODAL ===')
-        await pg.click('#frete-tbody tr.frete-primeira button:has-text("Pagar carga")')
+        await pg.click('#frete-tbody tr.frete-carga-linha button:has-text("Pagar carga")')
         await pg.wait_for_selector('#frete-pg-pct')
         sug = await pg.input_value('#frete-pg-pct')
         ck('o modal sugere o que está a pagar (62,5)', sug == '62.5', sug)
@@ -248,12 +250,11 @@ async def main():
         await pg.fill('#frete-pg-data', '2026-10-09')
         await pg.click('#frete-btn-registrar')
         await pg.wait_for_timeout(1800)
-        p1 = await pg.evaluate("() => Object.fromEntries([...document.querySelectorAll('#frete-tbody tr.frete-primeira td[data-col]')].map(td => [td.dataset.col, td.textContent.trim()]))")
-        # Carga aberta: a célula da data é da NOTA da 1ª linha ("Pagar nota") e,
-        # embaixo, a data do pagamento da carga (06/10/2026, cada nota com a sua).
-        ck('a linha mostra 50% pago, A PAGAR (ainda há 12,5% liberado sem pagar), carga paga em 09/10/2026',
-           p1['pago'] == '50,0%' and p1['statusPagamento'] == 'A PAGAR' and 'carga: 09/10/2026' in p1['dataPagamento'] and p1['aPagar'] == '12,5%', str(p1))
-        await pg.click('#frete-tbody tr.frete-primeira button:has-text("Pagar carga")')
+        v = await pg.evaluate("() => { const v = {}; document.querySelectorAll('#frete-tbody tr.frete-carga-linha [data-col]').forEach(e => { v[e.dataset.col] = e.textContent.trim().replace(/\\s+/g, ' '); }); return v; }")
+        ck('a carga mostra 50% pago, A PAGAR, a pagar 12,5% e "pago em 09/10/2026"',
+           '50,0%' in v.get('pago', '') and v.get('statusPagamento', '').startswith('A PAGAR') and 'a pagar 12,5%' in v.get('statusPagamento', '')
+           and 'pago em 09/10/2026' in v.get('statusPagamento', ''), str(v))
+        await pg.click('#frete-tbody tr.frete-carga-linha button:has-text("Pagar carga")')
         await pg.wait_for_selector('#frete-pg-pct')
         await pg.fill('#frete-pg-pct', '30')
         await pg.click('#frete-btn-registrar')
@@ -264,37 +265,33 @@ async def main():
         await pg.click('#modal-frete button:has-text("Cancelar")')
 
         print('\n=== 5b. CAMPOS EDITÁVEIS: DATA DO PAGAMENTO, DATA DA TRATATIVA, TRANSPORTADORA ===')
-        # A data do pagamento DA CARGA mora embaixo do botão da nota (06/10/2026).
-        await pg.click('#frete-tbody tr.frete-primeira td[data-col="dataPagamento"] button.frete-data-carga')
+        await pg.click('#frete-tbody tr.frete-carga-linha button.frete-data-carga')
         await pg.wait_for_selector('#frete-campo-data')
         await pg.fill('#frete-campo-data', '2026-10-10')
         await pg.click('#modal-frete button:has-text("Salvar")')
         await pg.wait_for_timeout(1500)
-        dp = await pg.evaluate("() => document.querySelector('#frete-tbody tr.frete-primeira td[data-col=\"dataPagamento\"] .frete-data-carga').textContent.trim()")
-        ck('a data do pagamento da carga é editável: 09/10 → 10/10', dp == 'carga: 10/10/2026', dp)
+        dp = await pg.evaluate("() => document.querySelector('#frete-tbody tr.frete-carga-linha .frete-data-carga').textContent.trim()")
+        ck('a data do pagamento da carga é editável: 09/10 → 10/10', dp == 'pago em 10/10/2026', dp)
         ck('e mudou no último pagamento gravado', psql("SELECT to_char(data_pagamento,'YYYY-MM-DD') FROM pgfrete_pagamentos WHERE numero_carga='900802' AND anulado_em IS NULL ORDER BY id DESC LIMIT 1;") == '2026-10-10')
-        await pg.click('#frete-tbody tr:nth-child(1) td[data-col="dataTratativa"] button')
+        await pg.click(f'{NOTA1} td[data-col="dataTratativa"] button')
         await pg.wait_for_selector('#frete-campo-data')
         await pg.fill('#frete-campo-data', '2026-10-01')
         await pg.click('#modal-frete button:has-text("Salvar")')
         await pg.wait_for_timeout(1500)
-        dt2 = await pg.evaluate("() => document.querySelector('#frete-tbody tr:nth-child(1) td[data-col=\"dataTratativa\"]').textContent.trim()")
+        dt2 = await pg.evaluate(f"() => document.querySelector('{NOTA1} td[data-col=\"dataTratativa\"]').textContent.trim()")
         ck('a data da tratativa é editável: hoje → 01/10/2026', dt2 == '01/10/2026', dt2)
-        # A transportadora DA CARGA se escolhe no Editar (fim da linha); na
-        # célula da nota ela é a da nota (06/10/2026).
-        await pg.click('#frete-tbody tr.frete-primeira .frete-btn-editar')
-        await pg.wait_for_selector('#frete-ed-transp')
-        opcoes = await pg.evaluate("() => [...document.querySelectorAll('#frete-ed-transp option')].map(o => o.value)")
-        ck('a transportadora é uma LISTA das cadastradas na Frota (não texto livre)', 'Transp. Teste Tela' in opcoes and await pg.evaluate("() => document.querySelector('#frete-ed-transp').tagName") == 'SELECT', str(opcoes[:6]))
-        await pg.select_option('#frete-ed-transp', 'Transp. Teste Tela')
-        await pg.click('#frete-ed-salvar')
+        await pg.click('#frete-tbody tr.frete-carga-linha .frete-transp')
+        await pg.wait_for_selector('#frete-campo-valor')
+        opcoes = await pg.evaluate("() => [...document.querySelectorAll('#frete-campo-valor option')].map(o => o.value)")
+        ck('a transportadora é uma LISTA das cadastradas na Frota (não texto livre)', 'Transp. Teste Tela' in opcoes and await pg.evaluate("() => document.querySelector('#frete-campo-valor').tagName") == 'SELECT', str(opcoes[:6]))
+        await pg.select_option('#frete-campo-valor', 'Transp. Teste Tela')
+        await pg.click('#modal-frete button:has-text("Salvar")')
         await pg.wait_for_timeout(1500)
-        tr = await pg.evaluate("() => document.querySelector('#frete-tbody tr.frete-primeira td[data-col=\"transportadora\"]').textContent.trim()")
+        tr = await pg.evaluate("() => document.querySelector('#frete-tbody tr.frete-carga-linha .frete-transp').textContent.trim()")
         ck('escolhida da lista, gravou', tr == 'Transp. Teste Tela', tr)
-        sp = await pg.evaluate("() => document.querySelector('#frete-tbody tr.frete-primeira td[data-col=\"statusPagamento\"]').className")
+        ck('e as notas mostram a da carga', await pg.evaluate("() => [...document.querySelectorAll('#frete-tbody tr.frete-nota td[data-col=\"transportadora\"]')].every(td => td.textContent.trim() === 'Transp. Teste Tela')"))
+        sp = await pg.evaluate("() => document.querySelector('#frete-tbody tr.frete-carga-linha td[data-col=\"statusPagamento\"]').className")
         ck('o Status p/ pagamento A PAGAR vem destacado', 'frete-sp-apagar' in sp, sp)
-        seg = await pg.evaluate("() => getComputedStyle(document.querySelector('#frete-tbody tr.frete-seg td[data-col=\"qtdSist\"]'), '::before').content")
-        ck('a 2ª linha da carga diz que é uma nota pendente (não parece vazia)', 'nota pendente' in seg, seg)
 
         print('\n=== 5c. FILA DE TRABALHO: HOJE, PRIORIDADE, IDADE, LOTE, FECHAMENTO ===')
         stats = await pg.evaluate("() => Object.fromEntries([...document.querySelectorAll('#frete-stats .stat-box')].map(b => [b.querySelector('.stat-label').textContent.trim(), b.querySelector('.stat-num').textContent.trim()]))")
@@ -334,7 +331,12 @@ async def main():
         """], capture_output=True, text=True, cwd=str(RAIZ / 'backend'))
         try:
             x = json.loads(comparacao.stdout.strip())
-            ck('o .xlsx tem as 4 abas e o mesmo cabeçalho da tela', x['abas'] == ['CONTROLE_CARGAS', 'RESUMO', 'FECHAMENTO', 'LEIA-ME'] and x['cab'] == cab[:22], str(x['cab'])[:200])
+            # A planilha continua a da Daniela, coluna por coluna (a TELA mudou de
+            # forma em 06/10/2026; o arquivo não).
+            PLANILHA = ['Data Consulta', 'Carga', 'Qtde SIST', 'Qtde B2B', 'Diferença', 'Finalizadas', 'Aguardando', 'Não Entregue',
+                        'Outros Status', 'Situação', 'Resumo Pendências', 'Status Pendência', 'Status p/ pagamento', 'Data Pagamento',
+                        'Transportadora', 'CT-E', '% Entregue', '% Liberado', '% Pago', 'A pagar agora', 'Data Tratativa', 'Observação']
+            ck('o .xlsx tem as 4 abas e as colunas da planilha aprovada', x['abas'] == ['CONTROLE_CARGAS', 'RESUMO', 'FECHAMENTO', 'LEIA-ME'] and x['cab'] == PLANILHA, str(x['cab'])[:200])
             ck('a mesma carga: 4 linhas, PENDENTE, 50% pago', x['qtd'] == 4 and x['sit'] == 'PENDENTE' and abs(float(x['pago']) - 0.5) < 1e-9, str(x))
         except Exception as e:
             ck('o .xlsx abre', False, (comparacao.stderr or str(e))[:300])
@@ -396,7 +398,9 @@ async def main():
                      tabelaRola: document.querySelector('.frete-wrap').scrollWidth > document.querySelector('.frete-wrap').clientWidth };
         }""")
         ck('nenhum texto da aba abaixo de 12px no celular', not medidas['pequenos'], str(medidas['pequenos']))
-        ck('a PÁGINA não rola de lado (a tabela rola dentro do quadro)', medidas['larguraPagina'] <= medidas['janela'] + 1 and medidas['tabelaRola'], str(medidas))
+        # No celular a carga é um CARTÃO (06/10/2026): nada rola de lado — nem a
+        # página, nem a tabela (antes a tabela rolava dentro do quadro).
+        ck('no celular nada rola de lado: a carga é um cartão', medidas['larguraPagina'] <= medidas['janela'] + 1 and not medidas['tabelaRola'], str(medidas))
 
         print('\n=== CONSOLE ===')
         ck('sem erros de página', not erros, str(erros[:3]))

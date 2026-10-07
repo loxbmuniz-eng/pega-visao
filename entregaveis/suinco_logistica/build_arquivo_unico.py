@@ -204,9 +204,13 @@ def main():
     #     pra garantir que o Operacional/Executivo/Fretes saiam com a MESMA
     #     tipografia em computador, Android e iPhone (pedido de 08/08/2026)
     #     — sem ela, cada SO substitui pela própria fonte de sistema.
-    fonte_bytes = (BASE / 'assets' / 'inter-variable-latin.woff2').read_bytes()
+    #     O arquivo embutido é o recorte em português (latin-1 + − e aspas
+    #     tipográficas) do inter-variable-latin.woff2, que fica como mestre:
+    #     48 KB -> 38 KB, mesma letra e mesmo eixo de peso (07/10/2026, para o
+    #     painel voltar a caber nos 760 KB depois da tela nova do frete).
+    fonte_bytes = (BASE / 'assets' / 'inter-variable-pt.woff2').read_bytes()
     fonte_uri = 'data:font/woff2;base64,' + base64.b64encode(fonte_bytes).decode('ascii')
-    css = css.replace('assets/inter-variable-latin.woff2', fonte_uri)
+    css = css.replace('assets/inter-variable-pt.woff2', fonte_uri)
 
     # 1c. A Barlow, letra do painel inteiro (26/09/2026, decisão do dono —
     #     "no painel inteiro"). MESMO tratamento da Inter, e pelo mesmo

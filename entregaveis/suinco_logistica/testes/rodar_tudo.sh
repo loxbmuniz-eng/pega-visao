@@ -53,6 +53,13 @@ case "${PGHOST:-}" in
 esac
 
 export PLAYWRIGHT_CHROMIUM_PATH="${PLAYWRIGHT_CHROMIUM_PATH:-/opt/pw-browsers/chromium}"
+# O RELÓGIO DA BATERIA É O DA OPERAÇÃO (07/10/2026, ocorrência #116).
+#
+# O contêiner roda em UTC. Das 21h à meia-noite de Brasília o UTC já virou
+# o dia: o navegador do teste achava que "hoje" era amanhã, a Montagem do
+# Dia vinha vazia e cinco suítes reprovavam sem defeito nenhum — a mesma
+# bateria passava às 20h59. O painel é usado em Brasília; o teste também.
+export TZ=America/Sao_Paulo
 # O SERVIDOR PRECISA ESTAR INTEIRO ANTES DE COMEÇAR (28/08/2026).
 #
 # Três suítes reprovaram numa bateria de 121 e as três passavam sozinhas.
@@ -126,11 +133,18 @@ esperar_limite_de_requisicoes(){
   sleep "$janela"
 }
 
+# As DEVOLUÇÕES entraram na limpeza em 07/10/2026 (#116): nunca eram
+# apagadas, acumulavam de uma bateria para outra, e as criadas com o dia de
+# Londres (07/10 às 22h de Brasília) ficavam no topo da lista "mais recente
+# primeiro" — o teste criava um checklist e lia o de outra rodada.
 limpar_banco(){
   sudo -u postgres psql -q -d embarque_suinco -c \
     "DELETE FROM log_eventos; DELETE FROM fact_statusfrota;
      DELETE FROM fact_viagens; DELETE FROM acoes_criticas;
-     DELETE FROM programacao_montagem;" >/dev/null || {
+     DELETE FROM programacao_montagem;
+     DELETE FROM devolucao_itens; DELETE FROM devolucao_divergencias;
+     DELETE FROM devolucao_rotas; DELETE FROM devolucao_revisoes;
+     DELETE FROM devolucoes;" >/dev/null || {
     echo "  X  não consegui limpar o banco de teste — as suítes de servidor"
     echo "      rodariam sujas e o resultado não valeria nada."
     exit 1

@@ -112,7 +112,7 @@ async def main():
         print('\n=== 1. A LINHA NASCE E APARECE NA TELA ===')
         mid = await pg.evaluate(
             """async (rota) => {
-                 const hoje = new Date().toISOString().slice(0,10);
+                 const hoje = diaLocalISO();
                  const r = await SuincoSharePoint.montagem.criar({
                    dia: hoje, rotaCodigo: rota, sequencia: 1, qtdEntregas: 1});
                  return r.montagem.montagem_id;

@@ -128,7 +128,7 @@ async def main():
         ck('5 min em Embarque Iniciado: ~15 da etapa + 10 + 15 (~40 min)', ok, t)
         ok, t = perto('F', 10)
         ck('5 min em Faturado: ~10 min', ok, t)
-        ck('arredonda para 5 minutos', all((minutos_do_texto(r[k]['previsao']) or 1) % 5 == 0 for k in ('A', 'B', 'F')),
+        ck('arredonda para 5 minutos', all(minutos_do_texto(r[k]['previsao']) is not None and minutos_do_texto(r[k]['previsao']) % 5 == 0 for k in ('A', 'B', 'F')),
            str([r[k]['previsao'] for k in ('A', 'B', 'F')]))
         ck('quem lê a tela ouve a previsão (aria-label)', 'sai por volta de' in (r['A']['aria'] or ''), r['A']['aria'])
         ck('o gargalo é Embarque Iniciado: 3 caminhões, 2 além do normal',

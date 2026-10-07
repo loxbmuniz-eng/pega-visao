@@ -83,7 +83,7 @@ async def main():
         async def nova(passos, tipo='DEVOLUCAO'):
             """Cria e leva a devolução até onde o teste precisa, pela API."""
             return await pgA.evaluate("""async ([passos, tipo]) => {
-              const hoje = new Date().toISOString().slice(0,10);
+              const hoje = diaLocalISO();
               const d = await SuincoSharePoint.devolucoes.criar({
                 dataDev: hoje, regiao:'DESFAZER', tipo,
                 rotas: tipo === 'SOBRA' ? [] : ['510'],
@@ -136,7 +136,7 @@ async def main():
             ck('a pergunta avisa que o dado digitado CONTINUA',
                'CONTINUA' in perg or 'continua' in perg)
         estado = await pgF.evaluate("""async (id) => {
-          const hoje = new Date().toISOString().slice(0,10);
+          const hoje = diaLocalISO();
           const l = await SuincoSharePoint.devolucoes.listar(hoje, hoje);
           const d = (l.devolucoes||l||[]).find(x=>x.id===id);
           return d && d.status;
@@ -153,7 +153,7 @@ async def main():
         ck('o servidor aceitou o desfazer', erro is None, str(erro))
         await pgF.wait_for_timeout(1800)
         depois = await pgF.evaluate("""async (id) => {
-          const hoje = new Date().toISOString().slice(0,10);
+          const hoje = diaLocalISO();
           const l = await SuincoSharePoint.devolucoes.listar(hoje, hoje);
           const d = (l.devolucoes||l||[]).find(x=>x.id===id) || {};
           return { status: d.status, carimbo: (d.carimbos||{}).faturamento || null,
@@ -178,7 +178,7 @@ async def main():
         idB = await nova([])
         await pgA.wait_for_timeout(1200)
         vazio = await pgA.evaluate("""async (id) => {
-          const hoje = new Date().toISOString().slice(0,10);
+          const hoje = diaLocalISO();
           const l = await SuincoSharePoint.devolucoes.listar(hoje, hoje);
           const d = (l.devolucoes||l||[]).find(x=>x.id===id);
           return d ? blocoDesfazerDev(d) : '(não achei a devolução)';

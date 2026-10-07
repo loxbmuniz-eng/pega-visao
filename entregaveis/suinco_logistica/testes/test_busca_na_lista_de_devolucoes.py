@@ -164,24 +164,34 @@ async def main():
         # nenhum checklist é "sua vez". Trocar o setor na tela é suficiente —
         # o que se mede aqui é a ORDENAÇÃO, não a permissão do servidor.
         topo = await pg.evaluate("""async (o) => {
-            await SuincoSharePoint.devolucoes.etapa(o.b, { para: 'Recebida na Portaria',
-              placa: 'AAK8958' });
-            await SuincoSharePoint.devolucoes.etapa(o.b, { para: 'Conferida no Faturamento',
-              pesoEntrada: 21000 });
+            // a resposta de cada passo volta para o teste: recusa do servidor
+            // nunca pode ser silenciosa — com o banco sujo de outras suítes
+            // este passo podia falhar e a ordem "parecer" certa (#116)
+            const passo1 = await SuincoSharePoint.devolucoes.etapa(o.b, { para: 'Recebida na Portaria',
+              placa: 'AAK8958' }).catch(e => ({ erro: String(e && e.message || e) }));
+            const passo2 = await SuincoSharePoint.devolucoes.etapa(o.b, { para: 'Conferida no Faturamento',
+              pesoEntrada: 21000 }).catch(e => ({ erro: String(e && e.message || e) }));
             await carregarDevolucoes();
-            DB.operador.setor = 'Expedição';   // agora existe fila own
+            // Depois de 'Conferida no Faturamento' a vez continua do FATURAMENTO
+            // (a balança do peso final, desde 27/08/2026). O teste dizia
+            // 'Expedição' e só passava porque sobravam devoluções de outras
+            // suítes no banco (#116).
+            DB.operador.setor = 'Faturamento';
             renderListaDevolucoes();
             const cards = [...document.querySelectorAll('#dev-lista .dev-card')];
             const comChip = cards.map(c => !!c.querySelector('.dev-chip-suavez'));
             const primeiroSemChip = comChip.indexOf(false);
             const ultimoComChip = comChip.lastIndexOf(true);
-            return { cards: cards.length, comChip,
+            return { cards: cards.length, comChip, passo1, passo2,
                      filaAntesDoResto: ultimoComChip === -1 || primeiroSemChip === -1
                        || ultimoComChip < primeiroSemChip };
         }""", {'b': dois['b']['id']})
         ck('a lista desenhou os cartões', topo['cards'] > 0, str(topo))
         ck('existe pelo menos um "SUA VEZ" para conferir a ordem',
-           any(topo['comChip']), str(topo['comChip']))
+           any(topo['comChip']),
+           str({'comChip': topo['comChip'],
+                'passo1': (topo.get('passo1') or {}).get('status') or topo.get('passo1'),
+                'passo2': (topo.get('passo2') or {}).get('status') or topo.get('passo2')}))
         ck('tudo que espera o meu setor vem ANTES do resto',
            topo['filaAntesDoResto'], str(topo['comChip']))
 

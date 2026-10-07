@@ -64,7 +64,7 @@
 
   /* A PLANILHA */
   #tab-frete .frete-wrap{ overflow:auto; max-height:70vh; border:1px solid var(--border-soft); border-radius:var(--radius) }
-  #tab-frete table.frete-tab{ border-collapse:separate; border-spacing:0; min-width:2050px; font-size:13px }
+  #tab-frete table.frete-tab{ border-collapse:separate; border-spacing:0; width:100%; font-size:13px }
   #tab-frete .frete-tab th.frete-h{
     position:sticky; top:0; z-index:2; color:#fff; font-weight:700; text-align:center; white-space:normal;
     line-height:1.2; padding:8px 8px; min-width:92px; border-bottom:2px solid var(--navy-deep);
@@ -229,7 +229,6 @@
 
   @media (max-width:820px){
     #tab-frete .frete-wrap{ max-height:none }
-    #tab-frete table.frete-tab{ min-width:1900px }
     #tab-frete .frete-contagem{ margin-left:0; flex-basis:100% }
     .modal-box-frete .frete-form{ grid-template-columns:1fr }
     .modal-box-frete.larga{ max-width:none }
@@ -245,4 +244,102 @@
   #tab-frete td.frete-acoes .frete-btn-excluir{ margin-left:var(--sp-2) }
   .modal-box-frete .frete-check-campo .frete-check{ display:flex; align-items:center; gap:var(--sp-2); min-height:40px }
   .modal-box-frete .frete-prev-excluida, .frete-prev-excluida{ color:var(--warn, #b45309) }
+}
+
+/* =====================================================================
+   A TELA EM DOIS NÍVEIS (06/10/2026) — carga numa linha, notas numa lista.
+   Auditoria visual aprovada pelo dono ("aprovo tudo"): o que se decide fica
+   à vista sem rolar para o lado; no celular, cada carga é um cartão.
+   ===================================================================== */
+@media screen{
+  #tab-frete .frete-wrap{ max-height:none; overflow-x:auto }
+  #tab-frete .frete-tab th.frete-h{ background:var(--fr-rel); color:#fff; text-align:left }
+  #tab-frete .frete-tab th[data-col="acoes"]{ background:var(--fr-acao) }
+  #tab-frete .frete-tab tr.frete-carga-linha > td{ text-align:left; vertical-align:top; white-space:normal; padding:10px 10px }
+  #tab-frete .frete-tab td[data-col="carga"]{ min-width:215px }
+  #tab-frete .frete-tab td[data-col="andamento"]{ min-width:170px }
+  #tab-frete .frete-tab td[data-col="transporte"]{ min-width:140px; max-width:200px }
+  /* Ações em 2×2: empilhadas, as quatro deixavam cada carga com ~180px de altura. */
+  #tab-frete .frete-tab tr.frete-carga-linha > td.frete-acoes{ white-space:nowrap; width:220px }
+  #tab-frete .frete-tab td.frete-acoes{ display:grid; grid-template-columns:1fr 1fr; gap:6px; align-content:start }
+  #tab-frete .frete-tab td.frete-acoes .btn{ margin:0; justify-content:center; min-width:0 }
+  #tab-frete .frete-carga-topo{ display:flex; flex-wrap:wrap; align-items:center; gap:4px 10px }
+  #tab-frete .frete-num{ font-weight:800; color:var(--gold-text); font-variant-numeric:tabular-nums; font-size:15px }
+  #tab-frete .frete-toggle{ font-size:15px; color:var(--gold-text) }
+  #tab-frete .frete-sem-pend{ color:var(--fr-lib-txt); font-size:12px; font-weight:700 }
+  #tab-frete .frete-frase{ color:var(--text-dim); font-size:12px; margin:2px 0 4px; line-height:1.4 }
+  #tab-frete .frete-dif-ruim-t{ color:var(--fr-pend-txt) }
+  #tab-frete .frete-obs-carga{ display:block; max-width:300px; text-align:left; font-size:12px }
+  #tab-frete .frete-obs-txt{ display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden }
+  #tab-frete .frete-apagar-t{ margin-top:4px; font-weight:800; color:var(--fr-ver-txt); font-size:12px }
+  #tab-frete .frete-data-carga{ display:block; margin-top:4px; font-size:12px }
+  #tab-frete .frete-transp, #tab-frete .frete-cte{ display:block; width:100%; text-align:left; margin-bottom:4px }
+  #tab-frete .frete-and{ display:grid; grid-template-columns:64px 1fr 52px; align-items:center; gap:6px; font-size:12px; line-height:1.2; margin:2px 0 }
+  #tab-frete .frete-and-rot{ color:var(--text-dim) }
+  #tab-frete .frete-and-trilho{ height:6px; border-radius:3px; background:var(--border-soft); overflow:hidden }
+  #tab-frete .frete-and-trilho > span{ display:block; height:100%; border-radius:3px; background:var(--fr-lib-txt) }
+  #tab-frete .frete-and-liberado .frete-and-trilho > span{ background:var(--gold) }
+  #tab-frete .frete-and-pago .frete-and-trilho > span{ background:#8fb4ff }
+  :root[data-tema="claro"] #tab-frete .frete-and-pago .frete-and-trilho > span{ background:#1f5fbf }
+  #tab-frete .frete-and-num{ text-align:right; font-variant-numeric:tabular-nums; font-weight:700 }
+  #tab-frete tr.frete-aberta > td{ border-bottom-color:transparent }
+  /* as notas da carga aberta: uma lista própria, recuada, com as colunas da nota */
+  #tab-frete tr.frete-notas-tr > td{ padding:0 10px 12px 28px; background:var(--fr-faixa); white-space:normal; text-align:left }
+  #tab-frete table.frete-notas{ width:100%; border-collapse:collapse; font-size:13px; border-left:3px solid var(--gold-dim) }
+  #tab-frete table.frete-notas th{ text-align:left; font-size:12px; font-weight:700; color:var(--text-dim); padding:6px 8px; border-bottom:1px solid var(--border-soft); white-space:nowrap }
+  #tab-frete table.frete-notas td{ padding:6px 8px; text-align:left; vertical-align:middle; border-bottom:1px solid var(--border-soft); white-space:normal }
+  #tab-frete table.frete-notas .frete-nota-num{ font-weight:800; font-variant-numeric:tabular-nums }
+  #tab-frete table.frete-notas .frete-cliente small, #tab-frete table.frete-notas .frete-r small{ display:block; color:var(--text-dim) }
+  #tab-frete table.frete-notas .frete-sel{ min-width:128px }
+  #tab-frete table.frete-notas td{ overflow-wrap:anywhere }
+  #tab-frete table.frete-notas .frete-edit-data{ min-width:96px }
+  /* o topo: panorama numa faixa */
+  #tab-frete .frete-pan{ display:flex; flex-wrap:wrap; gap:6px 14px; align-items:center; font-size:13px; color:var(--text-dim) }
+  #tab-frete .frete-pan-item{ font:inherit; color:inherit; background:none; border:0; padding:6px 2px; min-height:32px }
+  #tab-frete .frete-pan-item b{ color:var(--text); font-size:15px; font-variant-numeric:tabular-nums }
+  #tab-frete button.frete-pan-item{ cursor:pointer; border-bottom:2px solid transparent }
+  #tab-frete button.frete-pan-item:hover{ border-bottom-color:var(--gold-dim) }
+  #tab-frete button.frete-pan-item.ativo{ border-bottom-color:var(--gold); color:var(--text) }
+  #tab-frete .frete-pan-item.alerta b{ color:var(--fr-pend-txt) }
+  /* filtros: uma linha + "Mais filtros" */
+  #tab-frete #frete-filtros{ display:block }
+  #tab-frete .frete-mais{ margin:0 0 8px }
+  #tab-frete .frete-mais > summary{ cursor:pointer; font-weight:700; color:var(--gold-text); padding:6px 0; min-height:32px; list-style-position:inside }
+  #tab-frete .frete-mais-n{ display:inline-block; margin-left:6px; padding:1px 8px; border-radius:999px; background:var(--gold); color:var(--fr-man-txt); font-size:12px }
+  #tab-frete .frete-filtros-rodape{ justify-content:space-between }
+  #tab-frete .frete-filtros-rodape .frete-contagem{ margin-left:0 }
+
+  /* NOTEBOOK (até 1360px): Editar, Histórico e Excluir viram ícone — o nome
+     fica no aria-label e na dica. "Pagar carga" continua escrito: é a ação. */
+  @media (min-width:821px) and (max-width:1360px){
+    #tab-frete .frete-tab tr.frete-carga-linha > td.frete-acoes{ width:150px }
+    #tab-frete .frete-tab td.frete-acoes{ grid-template-columns:1fr 1fr 1fr }
+    #tab-frete .frete-tab td.frete-acoes .btn:first-child{ grid-column:1 / -1 }
+    #tab-frete .frete-tab td.frete-acoes .frete-btn-rot{ position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap }
+    #tab-frete .frete-tab td.frete-acoes .btn .ico-btn{ margin:0 }
+    #tab-frete .frete-tab td[data-col="andamento"]{ min-width:150px }
+    #tab-frete .frete-and{ grid-template-columns:56px 1fr 46px }
+  }
+  /* CELULAR: cada carga é um cartão; as notas, cartões dentro dele */
+  @media (max-width:820px){
+    #tab-frete .frete-wrap{ border:0; overflow:visible }
+    #tab-frete table.frete-tab, #tab-frete table.frete-tab > tbody, #tab-frete table.frete-tab > tbody > tr,
+    #tab-frete table.frete-tab > tbody > tr > td{ display:block; width:auto; min-width:0; max-width:none }
+    #tab-frete table.frete-tab > thead{ display:none }
+    #tab-frete tr.frete-carga-linha{ border:1px solid var(--border); border-radius:var(--radius); margin:10px 0 0; background:var(--fr-faixa) }
+    #tab-frete tr.frete-carga-linha > td{ border:0; padding:6px 12px }
+    #tab-frete tr.frete-carga-linha > td[data-rotulo]:not([data-col="carga"])::before{ content:attr(data-rotulo); display:block; font-size:12px; font-weight:700; color:var(--text-dim); margin-bottom:2px }
+    #tab-frete .frete-tab tr.frete-carga-linha > td.frete-acoes{ width:auto; display:flex; flex-wrap:wrap; gap:6px }
+    #tab-frete .frete-tab td.frete-acoes .btn{ min-height:44px; margin:0 }
+    #tab-frete .frete-edit, #tab-frete .frete-toggle, #tab-frete .frete-pill-pend, #tab-frete .frete-pan-item, #tab-frete .frete-mais > summary{ min-height:44px }
+    #tab-frete tr.frete-notas-tr > td{ padding:0 0 8px 8px; background:none }
+    #tab-frete table.frete-notas, #tab-frete table.frete-notas tbody, #tab-frete table.frete-notas tr, #tab-frete table.frete-notas td{ display:block; width:auto }
+    #tab-frete table.frete-notas thead{ display:none }
+    #tab-frete table.frete-notas tr.frete-nota{ border:1px solid var(--border-soft); border-radius:var(--radius-sm); margin:8px 0 0; padding:4px 0 }
+    #tab-frete table.frete-notas td{ border:0; padding:4px 10px }
+    #tab-frete table.frete-notas td[data-rotulo]::before{ content:attr(data-rotulo); display:block; font-size:12px; font-weight:700; color:var(--text-dim) }
+    #tab-frete .frete-and{ grid-template-columns:70px 1fr 56px }
+    #tab-frete .frete-tab td[data-col="transporte"], #tab-frete .frete-tab td[data-col="carga"],
+    #tab-frete .frete-tab td[data-col="andamento"], #tab-frete .frete-obs-carga{ max-width:none; min-width:0 }
+  }
 }

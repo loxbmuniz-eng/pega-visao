@@ -83,7 +83,7 @@ SEMEAR = """(quantas) => {
     DB.cargas.push({ id, numeroCarga: 'MV-' + i,
       placa: (DB.frota[i] && DB.frota[i].placa) || ('AAA0A0' + i),
       transportadora: 'Transportadora ' + i, rota: '500', peso: 12000, sequencia: i + 1,
-      status: FLUXO[4], dataProgramacao: agora.toISOString().slice(0, 10),
+      status: FLUXO[4], dataProgramacao: diaLocalISO(agora),
       criadaEm: h(400), atualizadaEm: h(20) });
     FLUXO.forEach((st, k) => DB.movimentacoes.push(
       { cargaId: id, status: st, quando: h(360 - k * 55), operador: 'Ana' }));
@@ -410,7 +410,7 @@ async def main():
             const agora = new Date();
             const c = { id: 'mv-nova', numeroCarga: 'MV-NOVA', placa: 'ZZZ9Z99',
               transportadora: 'Chegou agora', rota: '500', peso: 9000, sequencia: 99,
-              status: 'Faturado', dataProgramacao: agora.toISOString().slice(0,10),
+              status: 'Faturado', dataProgramacao: diaLocalISO(agora),
               criadaEm: agora.toISOString(), atualizadaEm: agora.toISOString() };
             DB.cargas.push(c);
             DB.movimentacoes.push({cargaId:c.id, status:'Faturado', quando:agora.toISOString(), operador:'Ana'});

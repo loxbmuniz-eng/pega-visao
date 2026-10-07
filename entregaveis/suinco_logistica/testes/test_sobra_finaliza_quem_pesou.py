@@ -151,7 +151,7 @@ async def main():
             rota nenhuma, e a devolução normal precisa de uma que EXISTA.
             """
             return await pgA.evaluate("""async ([passos, tipo]) => {
-              const hoje = new Date().toISOString().slice(0,10);
+              const hoje = diaLocalISO();
               const d = await SuincoSharePoint.devolucoes.criar({
                 dataDev: hoje, tipo,
                 regiao: tipo === 'SOBRA' ? '' : 'SOBRATESTE',

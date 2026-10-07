@@ -254,19 +254,25 @@ function freteDesenharStats(){
   const hoje = caixa(r.aPagarAgora ?? r.comSaldo, 'A PAGAR', { clicavel: true, destaque: true, ativo: FRETE.statusPg === 'A PAGAR', clique: "freteFiltrarStatusPg('A PAGAR')", titulo: 'Cargas com liberado ainda não pago. Clique para filtrar.', nota: r.provisao ? `${esc(String(r.provisao.notas).replace('.', ','))} notas liberadas sem pagar` : 'liberado e não pago' })
     + caixa(r.semOlhar ?? 0, 'Pendências sem olhar', { clicavel: true, alerta: true, ativo: FRETE.pend === 'semOlhar', clique: "freteDefinir('pend', FRETE.pend === 'semOlhar' ? 'todas' : 'semOlhar')", titulo: 'Notas pendentes que ninguém tratou ainda. Clique para filtrar.', nota: r.idade && r.idade.maisDe7 ? `${r.idade.maisDe7} há mais de 7 dias` : 'nenhuma com mais de 7 dias' })
     + caixa(r.verificar, 'Conferir', { clicavel: true, alerta: true, ativo: FRETE.situacao === 'VERIFICAR', clique: "freteFiltrarSituacao('VERIFICAR')", titulo: 'Nota só no B2B, B2B com mais notas que o sistema, ou nada finalizado. Nada é liberado até conferir. Clique para filtrar.', nota: 'nada liberado até olhar' });
-  const panorama = caixa(r.cargas, 'Cargas no controle', { nota: 'cada carga conta uma vez' })
-    + caixa(r.liberadas, 'Liberadas', { clicavel: true, ativo: FRETE.situacao === 'LIBERADA', clique: "freteFiltrarSituacao('LIBERADA')", titulo: 'Tudo que o sistema emitiu está Finalizado no B2B. Clique para filtrar.' })
-    + caixa(r.pendentes, 'Pendentes', { clicavel: true, ativo: FRETE.situacao === 'PENDENTE', clique: "freteFiltrarSituacao('PENDENTE')", titulo: 'Parte está Finalizada, parte não. Clique para filtrar.' })
-    + caixa(r.integral, 'Pagas integralmente')
-    + caixa(r.parcial, 'Pagas em parte')
-    + caixa(r.semPagamento, 'Sem pagamento')
-    + caixa(r.entregue === null ? '—' : fretePct(r.entregue), 'Entregues', { nota: 'finalizadas ÷ emitidas' })
-    + caixa(r.pendAbertas, 'Pendências abertas', { alerta: true, nota: 'notas ainda sem entrega' })
-    + caixa(`${r.comCanhoto ?? 0} de ${r.cargas}`, 'Canhoto original', { clicavel: true, ativo: FRETE.soSemCanhoto, clique: "freteAlternar('soSemCanhoto')", titulo: 'Cargas cujo canhoto em papel já chegou. Só acompanhamento: não mexe no pagamento. Clique para ver as que ainda não vieram.', nota: 'papel que já chegou' });
+  /* O PANORAMA VIRA UMA FAIXA (06/10/2026): eram 9 caixas grandes que empurravam
+     a tabela para baixo da dobra. Os mesmos números, numa linha; os que filtram
+     continuam clicáveis. "O que fazer hoje" fica em caixa — é o que pede ação. */
+  const item = (num, rotulo, o = {}) => o.clique
+    ? `<button type="button" class="frete-pan-item${o.ativo ? ' ativo' : ''}${o.alerta && Number(num) > 0 ? ' alerta' : ''}" onclick="${o.clique}" aria-pressed="${!!o.ativo}" title="${esc(o.titulo || '')}"><b>${esc(num)}</b> ${esc(rotulo)}</button>`
+    : `<span class="frete-pan-item${o.alerta && Number(num) > 0 ? ' alerta' : ''}" title="${esc(o.titulo || '')}"><b>${esc(num)}</b> ${esc(rotulo)}</span>`;
+  const panorama = item(r.cargas, r.cargas === 1 ? 'carga' : 'cargas', { titulo: 'Cargas no controle (cada carga conta uma vez)' })
+    + item(r.liberadas, 'liberadas', { ativo: FRETE.situacao === 'LIBERADA', clique: "freteFiltrarSituacao('LIBERADA')", titulo: 'Tudo que o sistema emitiu está Finalizado no B2B. Clique para filtrar.' })
+    + item(r.pendentes, 'pendentes', { ativo: FRETE.situacao === 'PENDENTE', clique: "freteFiltrarSituacao('PENDENTE')", titulo: 'Parte está Finalizada, parte não. Clique para filtrar.' })
+    + item(r.integral, 'pagas integralmente')
+    + item(r.parcial, 'pagas em parte')
+    + item(r.semPagamento, 'sem pagamento')
+    + item(r.entregue === null ? '—' : fretePct(r.entregue), 'entregues', { titulo: 'Notas finalizadas ÷ emitidas' })
+    + item(r.pendAbertas, 'pendências abertas', { alerta: true, titulo: 'Notas ainda sem entrega' })
+    + item(`${r.comCanhoto ?? 0} de ${r.cargas}`, 'com canhoto original', { ativo: FRETE.soSemCanhoto, clique: "freteAlternar('soSemCanhoto')", titulo: 'Cargas cujo canhoto em papel já chegou (só acompanhamento). Clique para ver as que ainda não vieram.' });
   const el = document.getElementById('frete-stats');
   el.className = 'frete-grupos';
   el.innerHTML = `<section class="frete-grupo frete-grupo-hoje" aria-label="O que fazer hoje"><h3 class="frete-grupo-t">O que fazer hoje</h3><div class="bento bi-faixa">${hoje}</div></section>
-    <section class="frete-grupo" aria-label="Panorama"><h3 class="frete-grupo-t">Panorama</h3><div class="bento bi-faixa">${panorama}</div></section>`;
+    <section class="frete-grupo frete-panorama" aria-label="Panorama"><h3 class="frete-grupo-t">Panorama</h3><div class="frete-pan">${panorama}</div></section>`;
 }
 
 function freteDesenharFiltros(){
@@ -275,43 +281,56 @@ function freteDesenharFiltros(){
   const transps = [...new Set((FRETE.dados.linhas || []).filter((l) => l.primeira).map((l) => String(l.v[iTp] || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
   const opt = (v, t, sel) => `<option value="${esc(v)}"${sel ? ' selected' : ''}>${esc(t)}</option>`;
   const aPagarVisiveis = freteCargasAPagar().length;
+  /* FILTROS NUMA LINHA (06/10/2026): busca e os filtros de todo dia à vista; o
+     resto em "Mais filtros", que abre sozinho quando um deles está ligado (o
+     filtro em uso nunca fica escondido). */
+  const maisLigado = !!(FRETE.soSaldo || FRETE.soSemTratativa || FRETE.soSemCanhoto || FRETE.transportadora || FRETE.pend !== 'todas'
+    || FRETE.pagDe || FRETE.pagAte || FRETE.consDe || FRETE.consAte || FRETE.ordem !== 'prioridade');
+  const nMais = [FRETE.soSaldo, FRETE.soSemTratativa, FRETE.soSemCanhoto, FRETE.transportadora, FRETE.pend !== 'todas',
+    FRETE.pagDe || FRETE.pagAte, FRETE.consDe || FRETE.consAte].filter(Boolean).length;
   document.getElementById('frete-filtros').innerHTML = `
     <div class="frete-filtros-linha">
       <label class="frete-busca"><span class="sr-only">Buscar carga, nota ou transportadora</span>
         <input type="search" id="frete-busca" placeholder="Buscar carga, nota ou transportadora" value="${esc(FRETE.busca)}"
                oninput="freteBuscar(this.value)" autocomplete="off"></label>
-      <div class="frete-chips" role="group" aria-label="Situação da carga">
-        ${chip('Todas', !FRETE.situacao, "freteFiltrarSituacao(FRETE.situacao)")}
-        ${chip('Liberadas', FRETE.situacao === 'LIBERADA', "freteFiltrarSituacao('LIBERADA')")}
+      <div class="frete-chips" role="group" aria-label="Situação e o que fazer">
+        ${chip('Todas', !FRETE.situacao && !FRETE.statusPg, "freteLimparSituacaoEStatus()")}
+        ${chip('A PAGAR', FRETE.statusPg === 'A PAGAR', "freteFiltrarStatusPg('A PAGAR')")}
         ${chip('Pendentes', FRETE.situacao === 'PENDENTE', "freteFiltrarSituacao('PENDENTE')")}
         ${chip('Verificar', FRETE.situacao === 'VERIFICAR', "freteFiltrarSituacao('VERIFICAR')")}
-      </div>
-      <div class="frete-chips" role="group" aria-label="O que fazer">
-        ${chip('A PAGAR', FRETE.statusPg === 'A PAGAR', "freteFiltrarStatusPg('A PAGAR')")}
+        ${chip('Liberadas', FRETE.situacao === 'LIBERADA', "freteFiltrarSituacao('LIBERADA')")}
         ${chip('PARCIAL', FRETE.statusPg === 'PARCIAL', "freteFiltrarStatusPg('PARCIAL')")}
         ${chip('INTEGRAL', FRETE.statusPg === 'INTEGRAL', "freteFiltrarStatusPg('INTEGRAL')")}
-        ${chip('Com saldo a pagar', FRETE.soSaldo, "freteAlternar('soSaldo')")}
-        ${chip('Pendência sem tratativa', FRETE.soSemTratativa, "freteAlternar('soSemTratativa')")}
-        ${chip('Sem canhoto original', FRETE.soSemCanhoto, "freteAlternar('soSemCanhoto')")}
       </div>
-    </div>
-    <div class="frete-filtros-linha frete-filtros-campos">
-      <label class="frete-f">Transportadora
-        <select id="frete-f-transp" onchange="freteDefinir('transportadora', this.value)">${opt('', 'todas', !FRETE.transportadora)}${transps.map((t) => opt(t, t, FRETE.transportadora === t)).join('')}</select></label>
-      <label class="frete-f">Pendências
-        <select id="frete-f-pend" onchange="freteDefinir('pend', this.value)">${opt('todas', 'todas as cargas', FRETE.pend === 'todas')}${opt('semOlhar', 'com pendência sem olhar', FRETE.pend === 'semOlhar')}${opt('com', 'com pendência', FRETE.pend === 'com')}${opt('sem', 'sem pendência', FRETE.pend === 'sem')}</select></label>
-      <label class="frete-f">Pagamento de <input type="date" id="frete-f-pag-de" value="${esc(FRETE.pagDe)}" onchange="freteDefinir('pagDe', this.value)"></label>
-      <label class="frete-f">até <input type="date" id="frete-f-pag-ate" value="${esc(FRETE.pagAte)}" onchange="freteDefinir('pagAte', this.value)"></label>
-      <label class="frete-f">Consulta de <input type="date" id="frete-f-cons-de" value="${esc(FRETE.consDe)}" onchange="freteDefinir('consDe', this.value)"></label>
-      <label class="frete-f">até <input type="date" id="frete-f-cons-ate" value="${esc(FRETE.consAte)}" onchange="freteDefinir('consAte', this.value)"></label>
-      <label class="frete-f">Ordenar por
-        <select id="frete-f-ordem" onchange="freteDefinir('ordem', this.value)">${opt('prioridade', 'prioridade (A PAGAR primeiro)', FRETE.ordem === 'prioridade')}${opt('data', 'data da consulta', FRETE.ordem === 'data')}${opt('carga', 'número da carga', FRETE.ordem === 'carga')}</select></label>
-      ${freteTemFiltro() ? '<button type="button" class="btn btn-sec btn-sm" id="frete-btn-limpar" onclick="freteLimparFiltros()">Limpar filtros</button>' : ''}
       <button type="button" class="btn btn-primary btn-sm no-print" id="frete-btn-lote" onclick="fretePagarLoteUI()" ${aPagarVisiveis ? '' : 'disabled'}
               title="Registra o pagamento do que está liberado em cada carga A PAGAR da lista, com uma data só"><svg class="ico ico-btn" aria-hidden="true"><use href="#i-faturamento"/></svg>Pagar as liberadas (${aPagarVisiveis})</button>
     </div>
-    <div class="frete-contagem" id="frete-contagem" aria-live="polite"></div>`;
+    <details class="frete-mais" id="frete-mais"${maisLigado || FRETE.maisAberto ? ' open' : ''} ontoggle="FRETE.maisAberto = this.open">
+      <summary>Mais filtros${nMais ? ` <span class="frete-mais-n">${nMais} ligado${nMais === 1 ? '' : 's'}</span>` : ''}</summary>
+      <div class="frete-filtros-linha frete-filtros-campos">
+        <div class="frete-chips" role="group" aria-label="Recortes">
+          ${chip('Com saldo a pagar', FRETE.soSaldo, "freteAlternar('soSaldo')")}
+          ${chip('Pendência sem tratativa', FRETE.soSemTratativa, "freteAlternar('soSemTratativa')")}
+          ${chip('Sem canhoto original', FRETE.soSemCanhoto, "freteAlternar('soSemCanhoto')")}
+        </div>
+        <label class="frete-f">Transportadora
+          <select id="frete-f-transp" onchange="freteDefinir('transportadora', this.value)">${opt('', 'todas', !FRETE.transportadora)}${transps.map((t) => opt(t, t, FRETE.transportadora === t)).join('')}</select></label>
+        <label class="frete-f">Pendências
+          <select id="frete-f-pend" onchange="freteDefinir('pend', this.value)">${opt('todas', 'todas as cargas', FRETE.pend === 'todas')}${opt('semOlhar', 'com pendência sem olhar', FRETE.pend === 'semOlhar')}${opt('com', 'com pendência', FRETE.pend === 'com')}${opt('sem', 'sem pendência', FRETE.pend === 'sem')}</select></label>
+        <label class="frete-f">Pagamento de <input type="date" id="frete-f-pag-de" value="${esc(FRETE.pagDe)}" onchange="freteDefinir('pagDe', this.value)"></label>
+        <label class="frete-f">até <input type="date" id="frete-f-pag-ate" value="${esc(FRETE.pagAte)}" onchange="freteDefinir('pagAte', this.value)"></label>
+        <label class="frete-f">Consulta de <input type="date" id="frete-f-cons-de" value="${esc(FRETE.consDe)}" onchange="freteDefinir('consDe', this.value)"></label>
+        <label class="frete-f">até <input type="date" id="frete-f-cons-ate" value="${esc(FRETE.consAte)}" onchange="freteDefinir('consAte', this.value)"></label>
+        <label class="frete-f">Ordenar por
+          <select id="frete-f-ordem" onchange="freteDefinir('ordem', this.value)">${opt('prioridade', 'prioridade (A PAGAR primeiro)', FRETE.ordem === 'prioridade')}${opt('data', 'data da consulta', FRETE.ordem === 'data')}${opt('carga', 'número da carga', FRETE.ordem === 'carga')}</select></label>
+      </div>
+    </details>
+    <div class="frete-filtros-linha frete-filtros-rodape">
+      <div class="frete-contagem" id="frete-contagem" aria-live="polite"></div>
+      ${freteTemFiltro() ? '<button type="button" class="btn btn-sec btn-sm" id="frete-btn-limpar" onclick="freteLimparFiltros()">Limpar filtros</button>' : ''}
+    </div>`;
 }
+function freteLimparSituacaoEStatus(){ FRETE.situacao = null; FRETE.statusPg = null; freteDesenhar(); }
 
 /* As cargas A PAGAR que estão na tela (depois do filtro), com o % a pagar de cada uma. */
 function freteCargasAPagar(){
@@ -505,41 +524,117 @@ function freteLinhaDeNota(l){
   return !!l.nota && !(l.primeira && l._dobravel && !l._aberta);
 }
 
+/* A TELA EM DOIS NÍVEIS (06/10/2026, auditoria visual aprovada "tudo").
+   Antes: a planilha de 24 colunas na tela — o que se decide (status, data,
+   transportadora, CT-E, Pagar, Excluir) ficava fora da tela, atrás de 9
+   colunas de contagem, e no celular apareciam 3 colunas. Agora:
+     · a CARGA é uma linha só com o que se decide, sem rolar para o lado;
+       as 7 contagens viram uma frase ("8 notas · 4 finalizadas · …");
+     · ABRIR a carga mostra as NOTAS numa lista própria, com as colunas da
+       nota (status, datas, Pagar nota, transportadora, CT-E, observação);
+     · no celular, cada carga é um cartão.
+   A planilha Excel (24 colunas, a da Daniela) e o PDF NÃO mudam: os dois saem
+   da grade do servidor, como sempre. */
+const FRETE_CAB = [
+  ['carga', 'Carga'], ['situacao', 'Situação'], ['statusPagamento', 'Para pagamento'], ['andamento', 'Entregue · Liberado · Pago'],
+  ['transporte', 'Transportadora · CT-E'], ['canhoto', 'Canhoto'], ['acoes', 'Ações'],
+];
+function freteFrase(v){
+  const n = (k) => Number(v[freteIx(k)]) || 0;
+  const partes = [`${n('qtdSist')} nota${n('qtdSist') === 1 ? '' : 's'}`, `${n('finalizadas')} finalizada${n('finalizadas') === 1 ? '' : 's'}`];
+  if(n('aguardando')) partes.push(`${n('aguardando')} aguardando`);
+  if(n('naoEntregue')) partes.push(`${n('naoEntregue')} não entregue${n('naoEntregue') === 1 ? '' : 's'}`);
+  if(n('outros')) partes.push(`${n('outros')} outro${n('outros') === 1 ? '' : 's'}`);
+  const dif = Number(v[freteIx('diferenca')]) || 0;
+  return esc(partes.join(' · ')) + (dif ? ` · <b class="frete-dif-ruim-t" title="Qtde no sistema (${n('qtdSist')}) menos Qtde no B2B (${n('qtdB2b')})">dif. ${dif}</b>` : '');
+}
+function freteBarra(rot, chave, v){
+  const conferir = v === 'conferir';
+  const p = typeof v === 'number' ? Math.max(0, Math.min(100, v * 100)) : 0;
+  return `<div class="frete-and frete-and-${chave}" data-col="${chave}" title="${esc(rot)}: ${esc(conferir ? 'conferir' : (fretePct(v) || '—'))}">
+      <span class="frete-and-rot">${esc(rot)}</span><span class="frete-and-trilho"><span style="width:${p.toFixed(1)}%"></span></span>
+      <span class="frete-and-num">${esc(conferir ? 'conferir' : (fretePct(v) || '—'))}</span></div>`;
+}
+function freteLinhaCargaHtml(l, notas, aberta){
+  const v = (k) => l.v[freteIx(k)];
+  const k = escJs(l.carga);
+  const sit = v('situacao');
+  const cls = sit === 'LIBERADA' ? 'lib' : sit === 'PENDENTE' ? 'pend' : 'verif';
+  const sp = v('statusPagamento');
+  const spc = sp === 'A PAGAR' ? 'apagar' : sp === 'INTEGRAL' ? 'integral' : sp === 'PARCIAL' ? 'parcial' : sp === 'conferir' ? 'conferir' : 'vazio';
+  const aPagar = v('aPagar');
+  const pago = v('pago');
+  const temPago = typeof pago === 'number' && pago > 0;
+  const iTr = freteIx('tratativa');
+  const semOlhar = notas.filter((x) => !x.v[iTr]).length;
+  const maisAntiga = notas.reduce((m, x) => (x.idadeDias != null ? Math.max(m, x.idadeDias) : m), -1);
+  const toggle = notas.length
+    ? `<button type="button" class="frete-toggle" aria-expanded="${aberta}" onclick="freteAlternarCarga('${k}')"
+          title="${aberta ? 'Fechar as notas pendentes' : 'Abrir as notas pendentes'}"><span class="frete-seta" aria-hidden="true">${aberta ? '▾' : '▸'}</span>${esc(l.carga)}</button>
+       <button type="button" class="frete-pill-pend${maisAntiga > 7 ? ' frete-pill-velha' : ''}" onclick="freteAlternarCarga('${k}')"
+          aria-label="${aberta ? 'Fechar' : 'Abrir'} as ${notas.length} pendências da carga ${esc(l.carga)}">${notas.length} pendência${notas.length === 1 ? '' : 's'}${semOlhar ? ` · ${semOlhar} sem olhar` : ''}${semOlhar && maisAntiga > 0 ? ` · há ${maisAntiga} dia${maisAntiga === 1 ? '' : 's'}` : ''}</button>`
+    : `<span class="frete-num">${esc(l.carga)}</span><span class="frete-sem-pend">sem pendência</span>`;
+  const obs = l.obsCarga || '';
+  const dc = freteDadosDaCarga(l.carga);
+  return `<tr class="frete-primeira frete-carga-linha${aberta ? ' frete-aberta' : ''}" data-carga="${esc(l.carga)}">
+    <td data-col="carga" data-rotulo="Carga"><div class="frete-carga-topo">${toggle}</div>
+      <div class="frete-frase">consulta ${esc(freteData(v('data')))} · ${freteFrase(l.v)}</div>
+      <button type="button" class="frete-edit frete-obs-carga" onclick="freteEditarObs('${k}','')" aria-label="Observação da carga ${esc(l.carga)}. Editar"
+        >${obs ? `<span class="frete-obs-txt">${esc(obs)}</span>` : '<span class="frete-vazio">+ observação</span>'}</button></td>
+    <td data-col="situacao" data-rotulo="Situação"><span class="frete-sit frete-sit-${cls}">${esc(sit)}</span></td>
+    <td data-col="statusPagamento" data-rotulo="Para pagamento" class="frete-sp frete-sp-${spc}">${sp ? `<span class="frete-sit frete-selo-${spc}">${esc(sp)}</span>` : '<span class="frete-vazio">—</span>'}
+      ${typeof aPagar === 'number' && aPagar > 0 ? `<div class="frete-apagar-t" data-col="aPagar">a pagar ${esc(fretePct(aPagar))}</div>` : ''}
+      ${temPago ? `<button type="button" class="frete-edit frete-data-carga" onclick="freteEditarDataPagamento('${k}')"
+          aria-label="Último pagamento da carga ${esc(l.carga)}: ${esc(freteData(dc.dataPagamento) || 'sem data')}. Editar">pago em ${esc(freteData(dc.dataPagamento) || 'sem data')}</button>` : ''}</td>
+    <td data-col="andamento" data-rotulo="Andamento">${freteBarra('Entregue', 'entregue', v('entregue'))}${freteBarra('Liberado', 'liberado', v('liberado'))}${freteBarra('Pago', 'pago', typeof pago === 'number' ? pago : 0)}</td>
+    <td data-col="transporte" data-rotulo="Transportadora · CT-E">
+      <button type="button" class="frete-edit frete-transp" data-col="transportadora" onclick="freteEditarCarga('${k}','transportadora')"
+        aria-label="Transportadora da carga ${esc(l.carga)}: ${esc(dc.transportadora || 'em branco')}. Editar">${dc.transportadora ? esc(dc.transportadora) : '<span class="frete-vazio">transportadora</span>'}</button>
+      <button type="button" class="frete-edit frete-cte" data-col="cte" onclick="freteEditarCarga('${k}','cte')"
+        aria-label="CT-E da carga ${esc(l.carga)}: ${esc(dc.cte || 'em branco')}. Editar">${dc.cte ? 'CT-E ' + esc(dc.cte) : '<span class="frete-vazio">CT-E</span>'}</button></td>
+    ${freteCelula(l, { chave: 'canhoto' }, freteIx('canhoto')).replace('<td data-col="canhoto"', '<td data-col="canhoto" data-rotulo="Canhoto"')
+        .replace(/<\/td>$/, `${v('canhotoEm') ? `<small class="frete-canhoto-em" data-col="canhotoEm">${esc(freteData(v('canhotoEm')))}</small>` : ''}</td>`)}
+    <td class="frete-acoes no-print" data-rotulo="Ações">
+      <button type="button" class="btn btn-sec btn-sm" onclick="fretePagarUI('${k}')" title="Registrar um pagamento da carga inteira (% das notas)"><svg class="ico ico-btn" aria-hidden="true"><use href="#i-faturamento"/></svg>Pagar carga</button>
+      <button type="button" class="btn btn-sec btn-sm frete-btn-editar" onclick="freteEditarUI('${k}')" aria-label="Editar a carga ${esc(l.carga)}" title="Editar transportadora, CT-E, data do pagamento, observação e canhoto"><svg class="ico ico-btn" aria-hidden="true"><use href="#i-lapis"/></svg><span class="frete-btn-rot">Editar</span></button>
+      <button type="button" class="btn btn-sec btn-sm frete-btn-hist" onclick="freteHistoricoUI('${k}')" aria-label="Histórico da carga ${esc(l.carga)}" title="Pagamentos, tratativas e quem mexeu"><svg class="ico ico-btn" aria-hidden="true"><use href="#i-historico"/></svg><span class="frete-btn-rot">Histórico</span></button>
+      <button type="button" class="btn btn-danger btn-sm frete-btn-excluir" onclick="freteExcluirUI('${k}')" aria-label="Excluir a carga ${esc(l.carga)} do controle" title="Tirar esta carga do controle (fica em Excluídas, com o motivo)"><svg class="ico ico-btn" aria-hidden="true"><use href="#i-lixeira"/></svg><span class="frete-btn-rot">Excluir</span></button></td>
+  </tr>`;
+}
+const FRETE_CAB_NOTA = ['Nota', 'Situação no B2B', 'Cliente', 'Status', 'Data do status', 'Pagamento', 'Transportadora', 'CT-E', 'Observação'];
+function freteLinhaNotaHtml(l){
+  const n = { ...l, primeira: false, _dobravel: false, _aberta: true };   // a célula é DA NOTA
+  const cel = (chave, rot) => freteCelula(n, { chave }, freteIx(chave)).replace(/^<td/, `<td data-rotulo="${esc(rot)}"`);
+  const rotulo = String(l.v[freteIx('resumo')] || '').replace(/^\S+\s*\(/, '').replace(/\)$/, '');
+  const idade = l.idadeDias != null ? `<small class="frete-idade${l.idadeDias > 7 ? ' frete-idade-velha' : ''}">sem olhar há ${l.idadeDias} dia${l.idadeDias === 1 ? '' : 's'}</small>` : '';
+  return `<tr class="frete-nota" data-carga="${esc(l.carga)}" data-nota="${esc(l.nota)}">
+    <td data-col="resumo" data-rotulo="Nota" class="frete-nota-num">${esc(l.nota)}</td>
+    <td data-col="b2b" data-rotulo="Situação no B2B" class="frete-r frete-r-${esc(l.categoria || 'outro')}">${esc(rotulo)}${idade}</td>
+    <td data-col="cliente" data-rotulo="Cliente" class="frete-cliente">${esc(l.cliente || '—')}${l.cidade ? `<small>${esc(l.cidade)}</small>` : ''}</td>
+    ${cel('tratativa', 'Status')}${cel('dataTratativa', 'Data do status')}${cel('dataPagamento', 'Pagamento')}
+    ${cel('transportadora', 'Transportadora')}${cel('cte', 'CT-E')}
+    <td data-col="observacao" data-rotulo="Observação" class="frete-obs"><button type="button" class="frete-edit" onclick="freteEditarObs('${escJs(l.carga)}','${escJs(l.nota)}')"
+      aria-label="Observação da nota ${esc(l.nota)}. Editar">${l.obsNota ? esc(l.obsNota) : '<span class="frete-vazio">anotar</span>'}</button></td>
+  </tr>`;
+}
+
 function freteDesenharTabela(){
   const d = FRETE.dados;
   if(!d) return;
   const { linhas, cargas, total } = freteLinhasVisiveis();
-  const cabecalho = d.colunas.map((c) => `<th scope="col" class="frete-h frete-h-${c.tipo}" data-col="${c.chave}">${esc(c.t)}</th>`).join('')
-    + '<th scope="col" class="frete-h frete-h-acao no-print">Ações</th>';
-  document.getElementById('frete-thead').innerHTML = cabecalho;
-  /* Quantas pendências cada carga tem, e se está aberta — a primeira linha
-     desenha o resumo fechado ("▸ 8 pendências · 6 sem olhar") ou a sua nota. */
-  const iTr = freteIx('tratativa');
-  const porCarga = new Map();
+  document.getElementById('frete-thead').innerHTML = FRETE_CAB.map(([c, t]) =>
+    `<th scope="col" class="frete-h frete-h-${c}${c === 'acoes' ? ' no-print' : ''}" data-col="${c}">${esc(t)}</th>`).join('');
+  const grupos = [];
   for(const l of linhas){
-    const k = String(l.carga);
-    if(!porCarga.has(k)) porCarga.set(k, { n: 0, semOlhar: 0 });
-    if(l.nota){ porCarga.get(k).n += 1; if(!l.v[iTr]) porCarga.get(k).semOlhar += 1; }
+    if(l.primeira) grupos.push({ cab: l, notas: [] });
+    if(l.nota && grupos.length) grupos[grupos.length - 1].notas.push(l);
   }
-  for(const l of linhas){
-    const k = String(l.carga); const c = porCarga.get(k);
-    if(l.idadeDias != null) c.maisAntiga = Math.max(c.maisAntiga ?? 0, l.idadeDias);
-  }
-  for(const l of linhas){
-    const k = String(l.carga); const c = porCarga.get(k);
-    l._pend = c.n; l._semOlhar = c.semOlhar; l._maisAntiga = c.maisAntiga ?? null;
-    l._dobravel = c.n >= 2;                         // com 1 pendência não há o que esconder
-    l._aberta = !l._dobravel || FRETE.abertas.has(k);
-  }
-  const visiveis = linhas.filter((l) => l.primeira || l._aberta);
-  document.getElementById('frete-tbody').innerHTML = visiveis.map((l) => `<tr class="${l.primeira ? 'frete-primeira' : 'frete-seg'}${l._dobravel ? (l._aberta ? ' frete-aberta' : ' frete-fechada') : ''}" data-carga="${esc(l.carga)}">
-      ${d.colunas.map((c, j) => freteCelula(l, c, j)).join('')}
-      <td class="frete-acoes no-print">${l.primeira ? `
-        <button type="button" class="btn btn-sec btn-sm" onclick="fretePagarUI('${escJs(l.carga)}')" title="Registrar um pagamento da carga inteira (% das notas)"><svg class="ico ico-btn" aria-hidden="true"><use href="#i-faturamento"/></svg>Pagar carga</button>
-        <button type="button" class="btn btn-sec btn-sm" onclick="freteHistoricoUI('${escJs(l.carga)}')" title="Pagamentos, tratativas e quem mexeu"><svg class="ico ico-btn" aria-hidden="true"><use href="#i-historico"/></svg>Histórico</button>
-        <button type="button" class="btn btn-sec btn-sm frete-btn-editar" onclick="freteEditarUI('${escJs(l.carga)}')" title="Editar transportadora, CT-E, data do pagamento, observação e canhoto"><svg class="ico ico-btn" aria-hidden="true"><use href="#i-lapis"/></svg>Editar</button>
-        <button type="button" class="btn btn-danger btn-sm frete-btn-excluir" onclick="freteExcluirUI('${escJs(l.carga)}')" title="Tirar esta carga do controle (fica em Excluídas, com o motivo)"><svg class="ico ico-btn" aria-hidden="true"><use href="#i-lixeira"/></svg>Excluir</button>` : ''}</td>
-    </tr>`).join('');
+  document.getElementById('frete-tbody').innerHTML = grupos.map(({ cab, notas }) => {
+    const aberta = notas.length > 0 && (notas.length === 1 || FRETE.abertas.has(String(cab.carga)));
+    return freteLinhaCargaHtml(cab, notas, aberta) + (aberta ? `<tr class="frete-notas-tr" data-carga="${esc(cab.carga)}"><td colspan="${FRETE_CAB.length}">
+        <table class="frete-notas" aria-label="Notas pendentes da carga ${esc(cab.carga)}"><thead><tr>${FRETE_CAB_NOTA.map((t) => `<th scope="col">${esc(t)}</th>`).join('')}</tr></thead>
+        <tbody>${notas.map(freteLinhaNotaHtml).join('')}</tbody></table></td></tr>` : '');
+  }).join('');
   const el = document.getElementById('frete-contagem');
   if(el) el.textContent = cargas === total ? `${total} carga(s)` : `Mostrando ${cargas} de ${total} carga(s)`;
   const vazio = document.getElementById('frete-empty');
