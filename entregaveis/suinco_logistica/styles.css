@@ -1647,7 +1647,7 @@ tbody tr{ transition:background-color var(--t-rapida) ease }
   background:linear-gradient(180deg, rgba(233,185,84,.09), transparent);
 }
 .stat-num{position:relative;font-size:var(--fs-numero);font-weight:800;color:var(--gold-text);
-  font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+  font-variant-numeric:tabular-nums;letter-spacing:-.01em;white-space:nowrap}
 .stat-label{font-size:12px;color:var(--text-dim);margin-top:3px}
 .stat-note{font-size:10.5px;color:var(--text-dim);margin-top:2px;font-style:italic}
 
@@ -2088,6 +2088,11 @@ code{
 .cel-datas{ line-height:1.25; white-space:nowrap }
 .cel-datas .dt-prog{ display:block }
 .cel-datas .dt-atu{ display:block; font-size:10.5px; color:var(--text-dim) }
+/* #119 (07/10/2026): a coluna tem 80–109 px e "06/10/2026 17:27" pede ~100;
+   com nowrap a caixa cortava "17:2". Aqui a linha pode quebrar ENTRE a data
+   e a hora (nunca dentro delas), e o nome de quem mexeu também desce. */
+.cel-datas .dt-atu, .cel-datas .dt-quem{ white-space:normal }
+.cel-datas .dt-quem{ overflow-wrap:anywhere }
 /* Quem mexeu por último. Vem embaixo do horário, menor, porque a pergunta
    é "andou?" antes de "quem?" — mas as duas respostas ficam à vista sem
    passar o mouse em nada (20/08/2026). */

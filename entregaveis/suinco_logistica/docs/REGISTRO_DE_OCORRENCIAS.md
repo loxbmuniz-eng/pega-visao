@@ -5366,3 +5366,50 @@ um degrau a mais até 1300 px.
 1536, 1600 e 1920 px, cada botão de ação inteiro dentro da área visível da
 tabela e da janela, e a tabela sem rolar. Reprovou no publicado em 1280 e
 1366.
+
+## #119 — Data partida ou cortada: coluna Pagamento do frete e mais três lugares (07/10/2026)
+
+**Relato do dono.** "Aumentar o tamanho do campo na coluna Pagamentos da aba
+Pagamento de Frete. Quando ela adiciona a data, ela fica sendo cortada ou
+quebrada (...) isso não pode acontecer em nenhum outro ponto do Embarque
+Suinco."
+
+**Reproduzido pela tela**, no servidor de teste, pagando uma nota como a
+Daniela faz: em 1280 e 1366 px a coluna Pagamento da lista de notas mostrava
+"paga06/10/202" numa linha e "6" na de baixo. Em 1440 em diante cabia — por
+isso a vitrine (sem nota paga) e a tela grande não mostravam.
+
+**Causa.** Duas, na mesma célula. (1) A lista de notas mandava
+`overflow-wrap:anywhere` em TODA célula: com isso o navegador pode partir
+qualquer palavra — inclusive uma data — quando a coluna aperta. (2) O selo
+"paga" não tinha estilo nenhum: colava na data e comia largura.
+
+**A varredura pedida ("nenhum outro ponto")** — todas as 13 abas, com as
+seções recolhidas abertas por clique, em 1280, 1366, 1440, 1920 e 390 px,
+procurando data, hora e duração partida ou escondida, e campo de data mais
+estreito que a data. Os campos de data que aparecem nas abas e nas janelas
+Pagar carga, Editar e Pagar nota estavam com a largura certa (a sonda foi
+provada estreitando um de propósito); os das outras janelas (Montagem,
+Devolução, correção de data do Histórico) NÃO foram abertos por esta
+varredura. Achou mais três lugares da mesma família:
+- Pagamento de Frete: "sem olhar há 10 dias" partia o "10 / dias";
+- Torre, coluna de datas (80–109 px): o nowrap cortava "06/10/2026 17:2" em
+  1280–1440 px;
+- Indicadores no celular: "41 / min" partido e "2h22mi" cortado — o
+  mini-gráfico de 74 px dividia a linha com o número.
+
+**Família:** *Texto apertado na coluna — a regra de quebra vale para tudo,
+inclusive o que não pode quebrar.*
+
+**Correção.** `anywhere` só no texto livre (cliente, observação, situação no
+B2B); célula de data com `nowrap`; selo "paga" com estilo próprio e data em
+`.frete-data-txt`; "N dias" com espaço que não quebra; na Torre a linha pode
+quebrar ENTRE data e hora, nunca dentro (o texto continua o mesmo do
+Histórico, como pede `test_torre_acao_e_encerramento`); `.stat-num` nunca
+quebra; no celular o mini-gráfico fica só nos destaques.
+
+**A guarda.** `test_datas_e_tempos_inteiros`: (A) a varredura acima, na
+vitrine; (B) no servidor de teste, paga uma nota pela tela e confere a coluna
+Pagamento nas cinco larguras, com o selo separado da data. Reprovou com 9
+falhas antes da correção. `test_pagamento_frete_aba` passou a aceitar o
+espaço que não quebra em "há N dias" (o texto lido é o mesmo).

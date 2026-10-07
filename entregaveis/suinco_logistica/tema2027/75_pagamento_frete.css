@@ -291,8 +291,18 @@
   #tab-frete table.frete-notas .frete-nota-num{ font-weight:800; font-variant-numeric:tabular-nums }
   #tab-frete table.frete-notas .frete-cliente small, #tab-frete table.frete-notas .frete-r small{ display:block; color:var(--text-dim) }
   #tab-frete table.frete-notas .frete-sel{ min-width:128px }
-  #tab-frete table.frete-notas td{ overflow-wrap:anywhere }
-  #tab-frete table.frete-notas .frete-edit-data{ min-width:96px }
+  /* #119 (07/10/2026): o `anywhere` valia para TODA célula e deixava o
+     navegador partir até uma data ("06/10/202" + "6"). Só texto livre, que
+     pode trazer palavra comprida, pode quebrar em qualquer ponto; data,
+     hora e "N dias" nunca. */
+  #tab-frete table.frete-notas td.frete-cliente, #tab-frete table.frete-notas td.frete-obs,
+  #tab-frete table.frete-notas td.frete-r{ overflow-wrap:anywhere }
+  #tab-frete table.frete-notas td[data-col="dataPagamento"], #tab-frete table.frete-notas td[data-col="dataTratativa"]{ white-space:nowrap }
+  #tab-frete table.frete-notas .frete-edit-data{ min-width:96px; white-space:nowrap }
+  #tab-frete .frete-data-txt{ white-space:nowrap }
+  /* o selo "paga" era texto solto colado na data ("paga06/10/2026") */
+  #tab-frete .frete-selo-pago{ display:inline-block; margin-right:6px; padding:0 6px; border-radius:var(--radius-sm);
+    background:var(--fr-lib-bg); color:var(--fr-lib-txt); font-size:12px; font-weight:800; line-height:18px }
   /* o topo: panorama numa faixa */
   #tab-frete .frete-pan{ display:flex; flex-wrap:wrap; gap:6px 14px; align-items:center; font-size:13px; color:var(--text-dim) }
   #tab-frete .frete-pan-item{ font:inherit; color:inherit; background:none; border:0; padding:6px 2px; min-height:32px }

@@ -296,7 +296,7 @@ async def main():
         print('\n=== 5c. FILA DE TRABALHO: HOJE, PRIORIDADE, IDADE, LOTE, FECHAMENTO ===')
         stats = await pg.evaluate("() => Object.fromEntries([...document.querySelectorAll('#frete-stats .stat-box')].map(b => [b.querySelector('.stat-label').textContent.trim(), b.querySelector('.stat-num').textContent.trim()]))")
         ck('o topo tem o grupo "O que fazer hoje" com A PAGAR, Pendências sem olhar e Conferir', stats.get('A PAGAR') == '1' and stats.get('Pendências sem olhar') == '3' and stats.get('Conferir') == '0', str(stats))
-        ck('a pendência sem tratativa diz há quantos dias está sem olhar', await pg.evaluate("() => [...document.querySelectorAll('#frete-tbody .frete-idade')].some(e => /sem olhar há \\d+ dia/.test(e.textContent))"))
+        ck('a pendência sem tratativa diz há quantos dias está sem olhar', await pg.evaluate("() => [...document.querySelectorAll('#frete-tbody .frete-idade')].some(e => /sem olhar há \\d+\\s+dia/.test(e.textContent))"))
         await pg.click('.frete-chip:has-text("INTEGRAL")')
         await pg.wait_for_timeout(400)
         ck('o filtro por status p/ pagamento funciona (INTEGRAL: nenhuma)', await pg.evaluate("() => document.querySelectorAll('#frete-tbody tr').length") == 0)
