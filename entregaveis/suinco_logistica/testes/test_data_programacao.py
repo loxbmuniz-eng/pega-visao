@@ -126,7 +126,7 @@ async def main():
 
         datas = await pgL2.evaluate(
             """(id) => { const c = getCarga(id) || {};
-                 const dia = (v) => String(v || '').slice(0, 10);
+                 const dia = (v) => v ? diaLocalISO(new Date(v)) : '';   // o dia de quem olha (#116)
                  return {prog: dia(c.programadoEm), criado: dia(c.criadoEm),
                          hoje: diaLocalISO()}; }""", entrada['id'])
         ck('a data de programação é HOJE', datas['prog'] == datas['hoje'], str(datas))
@@ -135,7 +135,7 @@ async def main():
 
         # E o banco tem que contar a mesma história para todo mundo.
         noBanco = sql(
-            "SELECT to_char(criado_em,'YYYY-MM-DD'), to_char(programado_em,'YYYY-MM-DD') "
+            "SELECT to_char(criado_em AT TIME ZONE 'America/Sao_Paulo','YYYY-MM-DD'), to_char(programado_em AT TIME ZONE 'America/Sao_Paulo','YYYY-MM-DD') "
             f"FROM fact_viagens WHERE carga_id = '{entrada['id']}'")
         ck('no banco: entrada ontem, programação hoje',
            noBanco and noBanco[0] != noBanco[1] and noBanco[1] == datas['hoje'], str(noBanco))
