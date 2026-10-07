@@ -2530,7 +2530,7 @@ function minutosNoPatioAgora(c){
 function paradasAlemDaMeta(cargas){
   const meta = metaTempoPatio();
   let total = 0, semChegada = 0;
-  (cargas || cargasAbertas()).forEach(c => {
+  (cargas || cargasAtivas()).forEach(c => {   // sem as inativas (decisão 29)
     const m = minutosNoPatioAgora(c);
     if(m === null) semChegada++;
     else if(m > meta) total++;
@@ -2654,6 +2654,34 @@ async function buscarHistoricoNoServidor(de, ate){
 function cargasAbertas(){
   return DB.cargas.filter(c => c.status !== 'Seguiu Viagem');
 }
+/* CARGA INATIVA (07/10/2026, decisão 29 do dono): "caminhão no pátio (...)
+   considerado inativo, some dos indicadores e para de poluir dados, mesmo
+   para cargas" — "3 dias após última movimentação".
+
+   A referência é a MAIS NOVA entre a última movimentação e a programação:
+   carga programada para daqui a dias ainda não se mexeu porque o dia dela
+   não chegou, e não é esquecida. Edição de campo não conta — é a
+   movimentação que diz que o caminhão andou ("fidelidade ao momento").
+
+   Só INDICADORES, Pátio ao vivo e a fila da Torre usam `cargasAtivas`. A
+   trava de duplicidade de placa, a Portaria e a Programação continuam em
+   `cargasAbertas`: inativo não é caminhão que sumiu. Nada é apagado — o
+   inativo continua no Histórico e volta a ativo sozinho na próxima
+   movimentação. */
+const DIAS_PARA_INATIVA = 3;
+function referenciaDeAtividade(c){
+  const ult = ultimaMovimentacaoDaCarga(c.id);
+  const ts = [ult && ult.timestamp, c.programadoEm, c.criadoEm]
+    .map(v => Date.parse(v || '')).filter(n => !Number.isNaN(n));
+  return ts.length ? Math.max(...ts) : null;
+}
+function cargaInativa(c, agora = Date.now()){
+  if(!c || c.status === 'Seguiu Viagem') return false;
+  const ref = referenciaDeAtividade(c);
+  return ref !== null && (agora - ref) > DIAS_PARA_INATIVA * 86400000;
+}
+function cargasAtivas(){ return cargasAbertas().filter(c => !cargaInativa(c)); }
+function cargasInativas(){ return cargasAbertas().filter(c => cargaInativa(c)); }
 function cargasAbertasPorPlaca(placa){
   const p = normalizarPlaca(placa);
   /* VAZIO NUNCA CASA (26/08/2026). Com carga sem placa no sistema, '' virou
@@ -3538,7 +3566,7 @@ function cargasConcluidasNoPeriodoFiltrado(periodoKey, filtros){
 // (STATUS_META[status].setor) é aquele setor escolhido.
 function distribuicaoStatusAtual(filtros){
   filtros = filtros || {};
-  const abertas = aplicarFiltrosCargas(cargasAbertas(), filtros);
+  const abertas = aplicarFiltrosCargas(cargasAtivas(), filtros);   // sem as inativas (decisão 29)
   return STATUS_FLOW.filter(s => s !== 'Seguiu Viagem')
     .filter(s => !filtros.setor || STATUS_META[s].setor === filtros.setor)
     .map(s => ({

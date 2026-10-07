@@ -7882,4 +7882,25 @@ describe('53. A porta do Power BI obedece à migração 051 (07/10/2026)', () =>
     assert.equal(Math.round(Number(etapas[0].MinutosNaEtapa)), 180);
     assert.ok(!r.json.some((t) => t.CargaId === 'bi53_excluida'), 'carga excluída fora do tempo por etapa');
   });
+
+  test('dim_carga marca a carga INATIVA (decisão 29: mais de 3 dias sem movimentação) em vez de tirá-la', async () => {
+    await pool.query(`INSERT INTO fact_viagens (carga_id, placa, status_atual, criado_em, programado_em) VALUES
+      ('bi53_inativa', 'BIX5303', 'Aguardando Embarque', now() - interval '5 days', now() - interval '5 days')
+      ON CONFLICT (carga_id) DO NOTHING`);
+    await pool.query(`INSERT INTO fact_statusfrota (movimentacao_id, carga_id, placa, status_novo, data_evento)
+      VALUES ('bi53_m6', 'bi53_inativa', 'BIX5303', 'Aguardando Embarque', now() - interval '4 days')
+      ON CONFLICT (movimentacao_id) DO NOTHING`);
+    try {
+      const r = await BI('dim_carga');
+      assert.equal(r.status, 200, r.texto);
+      const ina = r.json.find((c) => c.Id === 'bi53_inativa');
+      const viva = r.json.find((c) => c.Id === 'bi53_viva');
+      assert.ok(ina, 'a inativa continua na dimensão');
+      assert.equal(ina.Inativa, true);
+      assert.equal(viva.Inativa, false, 'última movimentação viva há 3 horas');
+    } finally {
+      await pool.query("DELETE FROM fact_statusfrota WHERE carga_id = 'bi53_inativa'");
+      await pool.query("DELETE FROM fact_viagens WHERE carga_id = 'bi53_inativa'");
+    }
+  });
 });

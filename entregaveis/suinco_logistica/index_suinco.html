@@ -190,6 +190,11 @@
         </table>
       </div>
       <div class="empty-state" id="torre-empty" data-icone="🗼" hidden>Nenhuma carga em aberto no momento.</div>
+      <!-- INATIVAS (decisão 29, 07/10/2026): mais de 3 dias sem movimentação.
+           Saem da fila e dos indicadores, mas não somem: ficam aqui,
+           recolhidas, até alguém dar saída ou registrar uma movimentação.
+           Preenchido por renderTorreInativas() (app/30_torre.js). -->
+      <details class="torre-inativas" id="torre-inativas" hidden></details>
       <!-- Só Logística/Administração (podeFecharProgramacao(), app.js).
            Pedido do usuário (08/08/2026): fechar a programação atual e
            começar uma nova — só possível com o pátio limpo (nenhuma carga

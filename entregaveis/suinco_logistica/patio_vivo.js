@@ -49,7 +49,8 @@ function pvHoje(){ const d = new Date(); d.setHours(0, 0, 0, 0); return d; }
 /* As cargas do quadro: tudo em aberto, e as que seguiram viagem HOJE. */
 function pvCargasDoQuadro(){
   const hoje = pvHoje();
-  const abertas = DB.cargas.filter(c => c.status !== 'Seguiu Viagem' && !c.aguardandoCarga);
+  // a inativa (mais de 3 dias sem movimentação) não vira cartão — decisão 29
+  const abertas = DB.cargas.filter(c => c.status !== 'Seguiu Viagem' && !c.aguardandoCarga && !cargaInativa(c));
   const saiu = DB.cargas.filter(c => {
     if(c.status !== 'Seguiu Viagem') return false;
     const s = primeiroTimestamp(c.id, 'Seguiu Viagem');
@@ -517,13 +518,13 @@ function pvFatos(){
   const saidas = DB.cargas.filter(c => { const s = primeiroTimestamp(c.id, 'Seguiu Viagem'); return s && new Date(s) >= hoje; });
   const tempos = saidas.map(c => tempoDePatioDe(c)).filter(t => t.minutos !== null && !t.suspeito).map(t => t.minutos);
   const media = tempos.length ? tempos.reduce((s, v) => s + v, 0) / tempos.length : null;
-  const programadas = DB.cargas.filter(c => c.status === 'Aguardando Veículo' && !c.aguardandoCarga).length;
+  const programadas = DB.cargas.filter(c => c.status === 'Aguardando Veículo' && !c.aguardandoCarga && !cargaInativa(c)).length;
   const pon = (id, v) => { const el = document.getElementById(id); if(el) Graf.rolar(el, v); };
   pon('pv-k-patio', String(noPatio.length));
   pon('pv-k-media', media === null ? '—' : pvDur(media));
   pon('pv-k-saiu', String(saidas.length));
   pon('pv-k-prog', String(programadas));
-  const semCarga = DB.cargas.filter(c => c.aguardandoCarga && c.status !== 'Seguiu Viagem').length;
+  const semCarga = DB.cargas.filter(c => c.aguardandoCarga && c.status !== 'Seguiu Viagem' && !cargaInativa(c)).length;
   pvFatoSub('pv-k-sem-carga', semCarga === 0 ? ''
     : (semCarga === 1 ? '+ 1 entrada sem carga, fora da conta' : '+ ' + semCarga + ' entradas sem carga, fora da conta')
       + ' — resolver na Programação', 'atencao');
@@ -559,7 +560,8 @@ function pvFatos(){
    carga aparecem contadas à parte no topo (pvFatos) — fora da conta, não
    escondidas. */
 function pvNoPatioEm(c, instante){
-  if(c.aguardandoCarga) return false;
+  // a inativa sai do topo E do gráfico, pela mesma conta (decisão 29)
+  if(c.aguardandoCarga || cargaInativa(c)) return false;
   const t = instante.getTime();
   const h = historicoDaCarga(c.id);
   let ultima = null;
