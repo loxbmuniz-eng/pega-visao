@@ -2317,7 +2317,7 @@ code{
   font-style:normal;
   font-weight:100 900;   /* variável — cobre os pesos 400/600/700/800 usados abaixo com um arquivo só */
   font-display:block;    /* relatório só é impresso depois de pronto — nunca deve trocar de fonte no meio */
-  src:url('assets/inter-variable-latin.woff2') format('woff2');
+  src:url('assets/inter-variable-pt.woff2') format('woff2');
 }
 .print-only{
   display:none;

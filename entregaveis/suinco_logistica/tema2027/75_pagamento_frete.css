@@ -329,7 +329,7 @@
     #tab-frete tr.frete-carga-linha{ border:1px solid var(--border); border-radius:var(--radius); margin:10px 0 0; background:var(--fr-faixa) }
     #tab-frete tr.frete-carga-linha > td{ border:0; padding:6px 12px }
     #tab-frete tr.frete-carga-linha > td[data-rotulo]:not([data-col="carga"])::before{ content:attr(data-rotulo); display:block; font-size:12px; font-weight:700; color:var(--text-dim); margin-bottom:2px }
-    #tab-frete .frete-tab td.frete-acoes{ width:auto; display:flex !important; flex-wrap:wrap; gap:6px }
+    #tab-frete .frete-tab tr.frete-carga-linha > td.frete-acoes{ width:auto; display:flex; flex-wrap:wrap; gap:6px }
     #tab-frete .frete-tab td.frete-acoes .btn{ min-height:44px; margin:0 }
     #tab-frete .frete-edit, #tab-frete .frete-toggle, #tab-frete .frete-pill-pend, #tab-frete .frete-pan-item, #tab-frete .frete-mais > summary{ min-height:44px }
     #tab-frete tr.frete-notas-tr > td{ padding:0 0 8px 8px; background:none }

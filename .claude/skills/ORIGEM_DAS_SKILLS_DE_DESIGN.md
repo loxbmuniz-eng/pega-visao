@@ -91,3 +91,34 @@ gravando o tráfego do site da ATAK — contrato); `web-pentest` (só com
 autorização formal). As que já tínhamos equivalente (TDD, depuração
 sistemática, revisão de código, subagentes, grilling, wizard, simplify,
 cartographer, docx/xlsx/pdf/pptx) não foram duplicadas.
+
+## Curadoria de logística e análise de dados (07/10/2026)
+
+Pedido do dono: "varra o github também com skills de logística e data
+analytics" — "aplique as 10". Cada arquivo foi LIDO inteiro antes (texto
+puro, sem script, sem instrução escondida) e a licença conferida (MIT nos
+três repositórios). Como na leva do Hermes, entraram ADAPTADAS — português,
+regras do CLAUDE.md, dado e vocabulário da Suinco — não copiadas; o que era
+americano (FMCSA, DAT, valores em dólar) saiu, e os limiares viraram ponto
+de partida a calibrar com dado medido.
+
+| skill da casa | original (autor, licença) | para quê |
+|---|---|---|
+| `transportadoras` | `carrier-relationship-management` (affaan-m/ECC, MIT, (c) 2026 Affaan Mustafa) | nota de desempenho, renegociar, trocar, documentação (RNTRC, seguro, CT-e/MDF-e) |
+| `ocorrencia-de-frete` | `logistics-exception-management` (affaan-m/ECC, MIT, (c) 2026 Affaan Mustafa) | atraso, avaria, temperatura, falta, recusa — prova, gravidade, absorver ou cobrar |
+| `conciliar-indicador` | `metric-reconciliation` (nimrodfisher/data-analytics-skills, MIT, (c) 2026 Nimrod Fisher) | o mesmo número diferente em dois lugares |
+| `causa-de-variacao` | `root-cause-investigation` (idem) | por que o indicador da operação mudou |
+| `auditoria-do-dado` | `data-quality-audit` (idem) | vazio, duplicado, órfão, fora da faixa, velho |
+| `tendencia-e-previsao` | `time-series-analysis` (idem) | tendência, dia da semana, previsão com faixa |
+| `especificar-painel` | `dashboard-specification` (idem) | a especificação que vira o PROMPT de uma aba de indicadores |
+| `checklist-antes-do-numero` | `analysis-qa-checklist` (idem) | a conferência antes de mostrar qualquer número |
+| `analise-multiespecialista` | `data-analysis-skill` (dongzhang84, MIT) | planilha analisada por 3–5 olhares em paralelo, relatório por tema |
+
+**A décima é fonte, não skill:** `kishorkukreja/awesome-supply-chain`
+(catálogo de 133 skills de transporte, roteirização, frota e armazém) entra
+na rotina de varredura contínua — de lá sai candidata para ler, não coisa
+para instalar inteira.
+
+**Recusado:** o plugin FreightUtils (publicado em 05/10/2026, autor
+avulso, servidor próprio recebendo as perguntas, feito para o Reino Unido
+e frete aéreo/marítimo).

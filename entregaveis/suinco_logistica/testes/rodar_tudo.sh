@@ -53,6 +53,13 @@ case "${PGHOST:-}" in
 esac
 
 export PLAYWRIGHT_CHROMIUM_PATH="${PLAYWRIGHT_CHROMIUM_PATH:-/opt/pw-browsers/chromium}"
+# O RELÓGIO DA BATERIA É O DA OPERAÇÃO (07/10/2026, ocorrência #116).
+#
+# O contêiner roda em UTC. Das 21h à meia-noite de Brasília o UTC já virou
+# o dia: o navegador do teste achava que "hoje" era amanhã, a Montagem do
+# Dia vinha vazia e cinco suítes reprovavam sem defeito nenhum — a mesma
+# bateria passava às 20h59. O painel é usado em Brasília; o teste também.
+export TZ=America/Sao_Paulo
 # O SERVIDOR PRECISA ESTAR INTEIRO ANTES DE COMEÇAR (28/08/2026).
 #
 # Três suítes reprovaram numa bateria de 121 e as três passavam sozinhas.

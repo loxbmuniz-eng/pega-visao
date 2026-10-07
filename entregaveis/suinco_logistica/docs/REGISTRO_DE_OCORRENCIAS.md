@@ -5258,3 +5258,39 @@ não à do PDF (`dadosAdministracaoFretes`). O teste de tela pegou; corrigido.
 pergunta, cancelar não cria, troca de transportadora, selo, Montagem com o
 combinado da linha chegando à carga, lote pulando a linha sem frete, e o
 PDF com TABELA/COMBINADO na coluna) e o bloco 50 do `api.test.js` (13).
+
+## #116 — A bateria reprovava depois das 21h de Brasília sem defeito nenhum (07/10/2026)
+
+**O que aconteceu.** O portão 50 rodou a bateria de tela entre 20h50 e
+21h30 de Brasília e cancelou com 7 suítes vermelhas: três da Montagem, uma
+de toque ("nenhuma linha de montagem na tela"), a do dia da carga ("a
+carga de hoje nasce com 07/10/2026 — gravado: 2026-10-06"), a previsão do
+Pátio e duas de outra família (peso do painel e um `!important`).
+
+**Causa, provada.** O contêiner roda em UTC. Às 21h de Brasília o UTC já
+virou o dia: o navegador do teste achava que "hoje" era 07/10, o servidor
+e a operação estavam em 06/10, e a Montagem do Dia vinha vazia. A mesma
+suíte, no mesmo minuto: `TZ=UTC` → 0 verde, 1 falha; `TZ=America/Sao_Paulo`
+→ 1 verde. Nenhum defeito do painel: o usuário está em Brasília.
+
+**Família:** *Datas e fuso* (F6) — desta vez no ambiente do teste, não no
+código. E uma segunda, escondida: `test_patio_vivo_previsao_e_gargalo`
+lia "00h00" como 0 minutos e o `or 1` transformava o zero em reprovação
+(*o zero que some*, F3, dentro do próprio teste).
+
+**Correção.** `testes/rodar_tudo.sh` fixa `TZ=America/Sao_Paulo` — o
+relógio da bateria é o da operação, e o resultado não depende mais da hora
+em que o portão roda. No teste do Pátio, só a falta do horário reprova;
+00h00 é horário válido.
+
+**No mesmo portão, os dois vermelhos de verdade:**
+- o painel compactado passou do limite (781 KB > 760 KB) com a tela nova
+  do frete. Em vez de subir o limite, a letra dos relatórios (Inter) foi
+  recortada para o português — latin-1, travessão, aspas e o sinal de
+  menos que o relatório de fretes usa: 48 KB → 38 KB, mesma letra, mesmo
+  eixo de peso. Painel: 752 KB. O arquivo inteiro fica como mestre;
+- um `!important` solto em `75_pagamento_frete.css` (o tema2027 só aceita
+  dentro de `prefers-reduced-motion`): trocado por seletor mais específico.
+
+**A guarda.** As 7 suítes verdes com o relógio fixo; a do Pátio passa
+também perto da meia-noite.
