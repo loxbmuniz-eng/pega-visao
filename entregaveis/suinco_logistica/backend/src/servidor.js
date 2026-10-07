@@ -184,8 +184,16 @@ export function criarApp() {
      está autorizado", que ele já saberia pelo erro de CORS. Cookie continua
      impossível (sem Allow-Credentials) e o token nunca é enviado sozinho —
      vai no cabeçalho Authorization, que só o painel legítimo monta. */
+  /* PLANO B (07/10/2026): o painel também é servido por ESTE servidor, em
+     /painel (ver servirPainel). Dali ele chama a API na MESMA origem — o que
+     não abre nada a ninguém: mesma origem é o próprio servidor. Origem de
+     fora continua barrada aqui e no CORS. */
+  const mesmaOrigem = (req, origem) => {
+    try { return new URL(origem).host === req.headers.host; } catch { return false; }
+  };
   app.use((req, res, next) => {
     const origem = req.headers.origin;
+    if (origem && origem !== 'null' && mesmaOrigem(req, origem)) { req._mesmaOrigem = true; return next(); }
     if (!origem || config.origens.includes(origem)) return next();
 
     res.setHeader('Access-Control-Allow-Origin', origem);
@@ -214,14 +222,18 @@ export function criarApp() {
 
      Neste ponto, origem desconhecida já foi respondida acima; o que chega
      aqui é origem conhecida ou chamada sem navegador (curl, Power BI). */
-  app.use(cors({
+  const corsDasOrigens = cors({
     origin(origem, cb) {
       if (!origem) return cb(null, true);
       if (config.origens.includes(origem)) return cb(null, true);
       return cb(new Error(`Origem não autorizada: ${origem}`));
     },
     credentials: true,
-  }));
+  });
+  // Mesma origem não precisa de CORS (o navegador não pede).
+  app.use((req, res, next) => (req._mesmaOrigem ? next() : corsDasOrigens(req, res, next)));
+
+  servirPainel(app);
 
   app.use(compression());
   /* O PDF do relatório de frete viaja em base64 dentro do JSON e passa de 1 MB
@@ -410,6 +422,60 @@ export function criarApp() {
   });
 
   return app;
+}
+
+/* ---------------------------------------------------------------------
+   PLANO B — O PAINEL SERVIDO PELO PRÓPRIO SERVIDOR (07/10/2026)
+   ---------------------------------------------------------------------
+   O dono: "hobby, não pode parar o site". O painel mora na Vercel, no plano
+   grátis; uso acima do limite pode PAUSAR o site até o mês virar — e o
+   pátio para. Este servidor (Hostinger, já pago) entrega o MESMO arquivo em
+   https://api.embarquesuinco.com.br/painel: sem DNS, sem certificado novo,
+   sem Nginx. É o index.html que o git pull do atualizar_tudo.sh traz.
+
+   · Cabeçalhos: os mesmos do vercel.json.
+   · A base da API vira a própria origem (`api: location.origin`): o painel
+     servido aqui fala com este servidor.
+   · O sw.js NÃO é servido neste domínio, de propósito: um service worker no
+     domínio da API poderia interceptar a própria API. O painel já registra o
+     sw protegido — sem ele, só não fica disponível sem internet. */
+/* Onde o arquivo está: no servidor, a cópia que o instalar.sh grava em
+   $APP_DIR/painel/ (o que roda não é o repositório, é a cópia da pasta
+   backend); na máquina de desenvolvimento e na bateria, o index.html do
+   repositório, duas pastas acima. O primeiro que existir vale. */
+export const PAINEL_CANDIDATOS = [
+  fileURLToPath(new URL('../painel/index.html', import.meta.url)),
+  fileURLToPath(new URL('../../index.html', import.meta.url)),
+];
+const PAINEL_ARQUIVO_ACHADO = () => PAINEL_CANDIDATOS.find((c) => existsSync(c)) || PAINEL_CANDIDATOS[0];
+const PAINEL_CABECALHOS = {
+  'X-Content-Type-Options': 'nosniff',
+  'X-Frame-Options': 'DENY',
+  'Referrer-Policy': 'strict-origin-when-cross-origin',
+  'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
+  'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=(), usb=()',
+  'Content-Security-Policy': "frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'",
+  'Cache-Control': 'no-cache',
+};
+let _painelCache = { mtime: 0, html: '' };
+
+function servirPainel(app) {
+  app.get(['/painel', '/painel/'], async (req, res, next) => {
+    try {
+      const arquivo = PAINEL_ARQUIVO_ACHADO();
+      const st = await fs.stat(arquivo);
+      if (st.mtimeMs !== _painelCache.mtime) {
+        const bruto = await fs.readFile(arquivo, 'utf-8');
+        _painelCache = { mtime: st.mtimeMs, html: bruto.replace("api: 'https://api.embarquesuinco.com.br'", 'api: location.origin') };
+      }
+      res.set(PAINEL_CABECALHOS).type('html').send(_painelCache.html);
+    } catch (e) {
+      if (e.code === 'ENOENT') {
+        return res.status(404).json({ erro: 'O painel não está neste servidor (index.html não encontrado).', codigo: 'PAINEL_AUSENTE' });
+      }
+      next(e);
+    }
+  });
 }
 
 export function criarServidor() {

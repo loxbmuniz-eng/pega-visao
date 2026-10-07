@@ -177,6 +177,21 @@ else
   aviso "não consegui ler a versão do git em $FONTE — /health vai dizer 'desconhecida'"
 fi
 
+# O PAINEL JUNTO DO SERVIDOR — o PLANO B (07/10/2026).
+#
+# O painel mora na Vercel (plano grátis); uso acima do limite pode pausar o
+# site até o mês virar. O servidor passa a entregar o mesmo painel em
+# https://api.embarquesuinco.com.br/painel (servirPainel, src/servidor.js).
+# O que roda é a cópia em $APP_DIR, que só leva a pasta backend — por isso o
+# index.html vem para cá. Só copia um arquivo público; não mexe em dado.
+# Tem que vir DEPOIS do rsync: ele roda com --delete e apagaria a pasta.
+mkdir -p "$APP_DIR/painel"
+if cp "$PAINEL_DIR/index.html" "$APP_DIR/painel/index.html" 2>/dev/null; then
+  ok "painel reserva em /painel (cópia do index.html publicado)"
+else
+  aviso "não achei $PAINEL_DIR/index.html — o endereço reserva /painel fica fora até a próxima atualização"
+fi
+
 chown -R "$APP_USER:$APP_USER" "$APP_DIR"
 ok "código em $APP_DIR"
 

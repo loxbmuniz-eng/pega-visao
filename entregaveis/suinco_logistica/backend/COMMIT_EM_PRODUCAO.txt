@@ -15,10 +15,13 @@
 #   · migração 063 — transportadora, CT-E e pagamento POR NOTA;
 #   · migração 064 — a porta do Power BI obedece à 051 e dim_carga ganha a
 #     coluna Inativa (#117);
-#   · auditoria da API no código do servidor (login, PDF, erros com código,
-#     sala do pátio, sincronia de 30 dias, /health).
-#     NÃO VALE AINDA: a parte do Nginx (corpo de 10 MB, log sem a consulta).
-#     O atualizar_tudo.sh não toca no Nginx — só o instalar.sh o escreve.
+#   · auditoria da API (login, PDF, erros com código, sala do pátio,
+#     sincronia de 30 dias, /health) E a parte do Nginx (corpo de 10 MB, log
+#     sem a consulta): atualizar_tudo.sh → atualizar.sh → instalar.sh, que
+#     reescreve o Nginx e o recarrega toda vez.
+#     CORREÇÃO (07/10, noite): na primeira versão deste bloco escrevi que o
+#     Nginx NÃO tinha sido atualizado — li o atualizar_tudo.sh e não segui a
+#     chamada até o instalar.sh. Estava errado.
 #   · auditoria noturna: placa fora da Frota (portão 55).
 # O vigia do frete, que estava com 1 problema em 06/10, voltou a ok.
 # O portão 58 (ae243f1, só painel) é posterior: não muda o servidor.
