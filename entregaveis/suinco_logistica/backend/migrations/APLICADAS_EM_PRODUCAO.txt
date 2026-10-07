@@ -1,4 +1,18 @@
-060
+064
+# ---------------------------------------------------------------------
+# 07/10/2026 — 060 → 064. Bloco COPIE DAQUI colado pelo dono
+# (atualizar_tudo.sh): commit no servidor 6408260, serviço active,
+# /health 200, última migração 064_bi_obedece_051.sql, vigias 6 ok.
+#
+# Passaram a valer: 061 (observação do frete TABELA/COMBINADO), 062
+# (Excluir no Pagamento de Frete), 063 (campos por nota), 064 (porta do
+# Power BI obedecendo à 051, coluna Inativa).
+#
+# ESQUECIDO NO MESMO DIA E PEGO PELO PORTÃO 61: o COMMIT_EM_PRODUCAO.txt foi
+# atualizado, este não — e o portão listou 061–064 como pendentes para um
+# servidor que já tinha as quatro. Os dois marcadores andam juntos.
+# Com ela, NÃO HÁ MIGRAÇÃO PENDENTE.
+# ---------------------------------------------------------------------
 # ---------------------------------------------------------------------
 # 05/10/2026 (15h50) — 059 → 060. Bloco COPIE DAQUI colado pelo dono
 # (atualizar_tudo.sh): commit no servidor 1cb3799, serviço active,
