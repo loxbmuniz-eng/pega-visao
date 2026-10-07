@@ -5315,3 +5315,28 @@ painel; a mesma regra agora vale para os testes.
 
 **Lição.** Teste que só roda das 9h às 18h não prova o que acontece no
 turno da noite — e o pátio funciona de noite.
+
+## #117 — A porta do Power BI contava movimentação apagada e carga excluída (07/10/2026)
+
+**Como foi achado.** Não foi relato: a skill `conciliar-indicador`, rodada
+contra o código, comparou cada lugar que calcula tempo de pátio.
+
+**O que havia.** A migração 051 (setembro) decidiu que a movimentação
+apagada pela Administração "sai do Histórico, do estado e dos indicadores"
+e pôs `apagada_em IS NULL` em todo lugar que lê `fact_statusfrota` — menos
+nas duas vistas do BI, que são de antes dela (001 e 002):
+`vw_fact_movimentacoes` mostrava a apagada, e `vw_tempos_por_etapa`
+mostrava a apagada E a carga excluída. O painel estava certo; quem puxasse
+o Power BI veria outro tempo de pátio.
+
+**Família:** *Uma pergunta, duas contas* (F1) — a regra escrita num lugar
+e não no outro.
+
+**Prova.** Bloco 53 do `api.test.js`, pela porta `/bi`: reprovou nos dois
+pontos no código publicado (`dc374f0`) e passou com a correção.
+
+**Correção.** Migração 064 refaz as duas vistas com as MESMAS colunas
+(o modelo do Power BI depende dos nomes) e os filtros. No tempo por etapa,
+o próximo carimbo é o próximo VIVO: a etapa anterior dura até ele.
+
+**Depende do servidor:** vale depois do `atualizar_tudo.sh` que levar a 064.
