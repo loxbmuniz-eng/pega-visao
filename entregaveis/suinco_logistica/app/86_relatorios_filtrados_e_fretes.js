@@ -85,7 +85,7 @@ function renderGargalos(){
   const periodoG = FILTRO_IND.periodo;
   const concluidasG = periodoG ? cargasConcluidasNoPeriodo(periodoG)
                                : DB.cargas.filter(c => c.status === 'Seguiu Viagem');
-  const g = analiseGargalos(filtrarPorFiltroIndicadores(concluidasG.concat(cargasAbertas())));
+  const g = analiseGargalos(filtrarPorFiltroIndicadores(concluidasG.concat(cargasAtivas())));
   const blocos = [];
   /* Três blocos só existem por causa da meta: "atraso" é o que passa de
      3h. Sem ela nos indicadores, eles saem; os que medem tempo e volume

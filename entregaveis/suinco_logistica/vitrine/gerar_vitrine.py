@@ -187,10 +187,16 @@ def main():
     # Logística a aba nova ficava escondida, e o dono abriu a vitrine e não
     # achou o que tinha pedido.
     dados['operador'] = {**dados.get('operador', {}), 'nome': 'Demonstração', 'setor': 'Administração'}
+    # A BASE ANDA PARA HOJE AO ABRIR (07/10/2026, decisão 29): sem isso, com a
+    # regra da carga inativa (3 dias sem movimentação), a vitrine abriria com a
+    # Torre vazia uma semana depois de gerada. rejuvenescer.js é a mesma função
+    # que os testes usam sobre esta base.
+    rejuv = (RAIZ / 'vitrine' / 'rejuvenescer.js').read_text(encoding='utf-8')
     semente = (
         '<script>/* vitrine: a base de demonstração entra antes de o painel ler o disco */\n'
-        'try{ localStorage.setItem(' + json.dumps(CHAVE) + ', '
-        + json.dumps(json.dumps(dados, ensure_ascii=False)) + '); }catch(e){}\n'
+        + rejuv + '\n'
+        'try{ localStorage.setItem(' + json.dumps(CHAVE) + ', JSON.stringify(rejuvenescerDemonstracao('
+        + json.dumps(dados, ensure_ascii=False) + '))); }catch(e){}\n'
         '</script>\n'
     )
     # A ABA PAGAMENTO DE FRETE (05/10/2026) não lê o localStorage: sem servidor

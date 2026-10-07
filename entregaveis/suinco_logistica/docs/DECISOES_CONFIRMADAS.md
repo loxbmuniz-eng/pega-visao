@@ -912,3 +912,96 @@ e rascunho de chamado). Caiu pela fidelidade do dado, não por custo ou prazo.
 - **Data da Programação e Data do Faturamento** nos dois; **KM e Frete** no
   PDF (a planilha já tinha o KM). Só este relatório muda.
 
+
+## 27. Sentry: erros do painel e do servidor num lugar só, sem dado de cliente (07/10/2026)
+
+Pedido do dono ("Use Sentry for this"); registro aprovado em 07/10 ("1 e 2"),
+conteúdo pela recomendação. Conta: organização `suinco` no Sentry, plano
+grátis, sem cartão — nada aqui pode gerar cobrança.
+
+**O que já existe (✅ no ar, fora do código):**
+- projetos `suinco-painel` e `suinco-servidor`;
+- um vigia de disponibilidade ATIVO na API (`/health`, a cada 60 s, alerta
+  depois de 3 falhas seguidas). O vigia do site foi criado e DESLIGADO: o
+  plano grátis cobre um.
+
+**Como entra no código (⬜ proposta, vai pelo fluxo da casa):**
+
+1. **O painel não carrega o SDK do Sentry.** O SDK do navegador custa dezenas
+   de KB, e o painel tem 7 KB de folga no limite de 760 KB
+   (`test_logo_uma_copia_so`); também abriria uma conexão do navegador com um
+   terceiro (CSP do `vercel.json`). O painel manda o erro para a NOSSA API
+   (`POST /api/erros`, ~1 KB de código: `window.onerror` +
+   `unhandledrejection`, com a fila offline que o `suinco-api.js` já tem), e o
+   servidor repassa ao Sentry. Um ponto só de filtro, nenhuma mudança de CSP,
+   o painel continua funcionando sem internet.
+2. **O servidor usa o SDK oficial de Node**, ligado SÓ se existir
+   `SENTRY_DSN` no `backend/.env`. Sem a variável, nada muda — o servidor
+   antigo e o novo se comportam igual (regra "SEM ESTA MIGRAÇÃO"). A chave
+   nunca entra no git; o `backend/.env.exemplo` ganha a linha vazia.
+3. **O que vai:** mensagem e pilha do erro, rota, versão (commit), ambiente,
+   SETOR de quem estava usando.
+4. **O que NUNCA vai** (LGPD — skill `lgpd`): corpo da requisição, parâmetros
+   da URL, cookie, token, nome de pessoa, telefone, CPF, nome de cliente,
+   nota fiscal. `sendDefaultPii` desligado, `beforeSend` apaga
+   `request.data`, `query_string` e `cookies`. Gravação de tela (Replay):
+   desligada — ela filmaria dado de cliente.
+5. **Prova antes de publicar:** teste que provoca um erro e confere que o
+   envio sai SEM os campos proibidos, e que o servidor sem `SENTRY_DSN` sobe
+   igual.
+
+**Depende do servidor:** o Luis acrescenta a linha `SENTRY_DSN=` no `.env`
+do servidor (o valor é passado a ele fora do chat e do git), depois do
+`atualizar_tudo.sh` que levar o código.
+
+## 28. Conector da Hostinger: ler à vontade, mudar só com ordem, comprar e apagar nunca (07/10/2026)
+
+O dono ligou o conector da Hostinger à conta onde roda o servidor
+(VPS KVM 2, 2.25.95.253). Ligar não cobra; mas o MESMO conector consegue
+comprar servidor no cartão cadastrado, reinstalar e apagar. Por isso, três
+faixas — registro aprovado em 07/10 ("1 e 2"):
+
+| Faixa | Operações | Regra |
+|---|---|---|
+| **Ler** | estado do servidor, métricas (CPU, memória, disco, tempo no ar), lista de backups, varredura de vírus (Monarx), DNS | rotina; sem pedir |
+| **Mudar** | tirar foto (snapshot), reiniciar, firewall da Hostinger | só com ordem do dono, dizendo antes, em uma linha, o que muda |
+| **Nunca por iniciativa** | comprar, reinstalar (`recreate`), restaurar backup, apagar foto/backup/DNS | nem sugerido como atalho; se for necessário, é decisão do dono com o passo a passo conferido como comando de servidor |
+
+**Foto antes de cada atualização.** Antes de mandar o `atualizar_tudo.sh`
+para o dono rodar, a foto do servidor é tirada e conferida ("pronta"). Se a
+atualização der errado, o servidor volta inteiro em minutos, sem conserto à
+mão. Cuidados:
+- a Hostinger guarda UMA foto: a nova substitui a anterior;
+- foto não substitui o backup do banco — o passo 2 do `atualizar_tudo.sh`
+  (prova de que o backup restaura) continua;
+- sessão sem o conector: a foto é tirada pelo painel da Hostinger (hPanel),
+  e o roteiro diz isso em vez de pular o passo.
+
+**Achados da primeira leitura (07/10/2026), a investigar:**
+- backups da Hostinger em 29/09, 04/10, 05/10 e 06/10 — nenhum de 30/09 a
+  03/10. Falta saber se é a regra do plano ou falha;
+- nenhum grupo de firewall da Hostinger no servidor. Não quer dizer servidor
+  aberto (pode haver firewall por dentro); conferir pelo diagnóstico antes
+  de propor qualquer mudança.
+
+## 29. Carga sem movimentação há mais de 3 dias é INATIVA (07/10/2026)
+
+Decisão do dono, em duas mensagens: *"caminhão no pátio com mais de 7 dias
+considerado inativo, some dos indicadores e para de poluir dados, mesmo
+para cargas"* — e logo depois: *"na verdade 3 dias após última
+movimentação"*.
+
+**O que vale (⬜ a implementar, junto com a correção da porta do Power BI):**
+1. Inativa = carga no pátio (ainda não "Seguiu Viagem") com mais de 3 dias
+   desde a ÚLTIMA movimentação. Automático, pelo relógio.
+2. Sai de todo indicador, dos relatórios executivos, da contagem do Pátio
+   ao vivo e da porta do Power BI — uma função só para todos.
+3. Volta a ativa sozinha se receber movimentação nova.
+4. Na Torre (recomendação aceita sem objeção): sai da fila principal para
+   um bloco recolhido "Inativos (mais de 3 dias)".
+5. Nada é apagado: continua no Histórico com todas as datas.
+
+**Descartado no mesmo dia, para ninguém reabrir:** a regra da auditoria
+noturna "nenhuma movimentação há horas em dia útil" — *"isso aqui não
+precisa pois por exemplo hoje temos muitas cargas no carregamento e é
+normal um caminhão passar até no máximo 3 dias no pátio"*.

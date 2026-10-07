@@ -16,7 +16,7 @@ function renderDistribuicaoStatus(){
 
      A distribuição vem de distribuicaoPorStatus(), como antes. Só a
      apresentação mudou. */
-  const abertas = filtrarPorFiltroIndicadores(cargasAbertas());
+  const abertas = filtrarPorFiltroIndicadores(cargasAtivas());   // sem as inativas (decisão 29)
   const dist = distribuicaoPorStatus(abertas);
 
   const thead = document.getElementById('ind-status-thead');
@@ -593,7 +593,7 @@ function renderPulsoDoPatio(){
    exatamente o defeito do tempo de pátio, corrigido nesta mesma manhã. */
 function renderPulsoDoDia(){
   if(typeof Graf === 'undefined') return;
-  const abertas = cargasAbertas();
+  const abertas = cargasAtivas();   // sem as inativas (decisão 29)
   const meta = metaTempoPatio();
   const paradas = paradasAlemDaMeta(abertas);
   /* Sem a meta nos indicadores (26/09/2026 — ver metaNosIndicadores em
@@ -715,7 +715,7 @@ function renderPulsoDoDia(){
    barra nunca discordam. */
 function abrirDetalhePulso(campo, chave, origem, soAtualizar){
   const semInfo = '(sem informação)';
-  const abertas = cargasAbertas().filter(c => {
+  const abertas = cargasAtivas().filter(c => {   // sem as inativas (decisão 29)
     const k = (c[campo] || '').trim() || semInfo;
     return k === chave;
   }).map(c => ({ c, min: minutosNoPatioAgora(c) }))

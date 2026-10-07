@@ -254,7 +254,10 @@ async def main():
         ck('PALETIZADA foi excluída, como ele pediu',
            not any('aletizad' in c for c in cab), str([c for c in cab if 'aletizad' in c]))
 
-        dados = linhas[1].split(';') if len(linhas) > 1 else []
+        # a linha DA CARGA, não a linha 1: a carga nasce 5 h atrás, e da meia-noite
+        # às 5h isso é ONTEM — a planilha separa por dia e a linha 1 vira o
+        # cabeçalho "Dia ..." (ocorrência #116, terceira metade).
+        dados = next((l.split(';') for l in linhas[1:] if ';118900;' in ';' + l + ';'), [])
         ck('a linha traz a carga com o KM dela (um KM só)', dados[11:12] == ['640'], str(dados[10:13]))
         ck('o valor da tabela sai com vírgula decimal (o Excel pt-BR soma a coluna)',
            dados[14:15] == ['4960,00'], str(dados[14:15]))

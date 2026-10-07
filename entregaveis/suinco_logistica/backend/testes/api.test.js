@@ -7831,3 +7831,76 @@ describe('52. Pagamento de Frete: excluir e editar a carga (06/10/2026)', async 
     assert.ok(h.json.eventos.some((e) => e.acao === 'canhoto'));
   });
 });
+
+describe('53. A porta do Power BI obedece à migração 051 (07/10/2026)', () => {
+  /* Achado da skill conciliar-indicador: a migração 051 diz que movimentação
+     apagada pela Administração "sai do Histórico, do estado e dos
+     indicadores". O painel cumpre; as duas vistas do Power BI não filtravam
+     `apagada_em`, e `vw_tempos_por_etapa` também contava carga excluída —
+     o mesmo tempo de pátio dava um número no painel e outro no Power BI. */
+  const BI = (v) => req(`/bi/${v}?token=token-de-teste-do-bi`);
+  const t0 = new Date(Date.now() - 6 * 3600e3);
+  const em = (h) => new Date(t0.getTime() + h * 3600e3).toISOString();
+  const limpar = async () => {
+    await pool.query("DELETE FROM fact_statusfrota WHERE carga_id IN ('bi53_viva','bi53_excluida')");
+    await pool.query("DELETE FROM fact_viagens WHERE carga_id IN ('bi53_viva','bi53_excluida')");
+  };
+  before(async () => {
+    await limpar();
+    await pool.query(`INSERT INTO fact_viagens (carga_id, placa, excluida_em) VALUES
+      ('bi53_viva', 'BIX5301', NULL), ('bi53_excluida', 'BIX5302', now())`);
+    const mov = [
+      ['bi53_m1', 'bi53_viva', 'BIX5301', 'Aguardando Embarque', em(0), null],
+      ['bi53_m2', 'bi53_viva', 'BIX5301', 'Embarque Iniciado',   em(1), 'apagada'],
+      ['bi53_m3', 'bi53_viva', 'BIX5301', 'Embarque Finalizado', em(3), null],
+      ['bi53_m4', 'bi53_excluida', 'BIX5302', 'Aguardando Embarque', em(0), null],
+      ['bi53_m5', 'bi53_excluida', 'BIX5302', 'Embarque Iniciado',   em(2), null],
+    ];
+    for (const [id, carga, placa, status, quando, apagada] of mov) {
+      await pool.query(
+        `INSERT INTO fact_statusfrota (movimentacao_id, carga_id, placa, status_novo, data_evento, apagada_em)
+         VALUES ($1, $2, $3, $4, $5, CASE WHEN $6::text IS NULL THEN NULL ELSE now() END)`,
+        [id, carga, placa, status, quando, apagada]);
+    }
+  });
+  after(limpar);
+
+  test('fact_movimentacoes: a movimentação apagada não sai na porta do Power BI', async () => {
+    const r = await BI('fact_movimentacoes');
+    assert.equal(r.status, 200, r.texto);
+    const daViva = r.json.filter((m) => m.CargaId === 'bi53_viva').map((m) => m.StatusNovo);
+    assert.deepEqual(daViva.sort(), ['Aguardando Embarque', 'Embarque Finalizado']);
+    assert.ok(!r.json.some((m) => m.CargaId === 'bi53_excluida'), 'carga excluída continua fora');
+  });
+
+  test('tempos_por_etapa: sem a apagada (a espera vai até o próximo carimbo VIVO) e sem a carga excluída', async () => {
+    const r = await BI('tempos_por_etapa');
+    assert.equal(r.status, 200, r.texto);
+    const etapas = r.json.filter((t) => t.CargaId === 'bi53_viva');
+    assert.deepEqual(etapas.map((t) => t.Etapa), ['Aguardando Embarque'],
+      'a etapa apagada não vira linha, e a última não tem fim');
+    assert.equal(Math.round(Number(etapas[0].MinutosNaEtapa)), 180);
+    assert.ok(!r.json.some((t) => t.CargaId === 'bi53_excluida'), 'carga excluída fora do tempo por etapa');
+  });
+
+  test('dim_carga marca a carga INATIVA (decisão 29: mais de 3 dias sem movimentação) em vez de tirá-la', async () => {
+    await pool.query(`INSERT INTO fact_viagens (carga_id, placa, status_atual, criado_em, programado_em) VALUES
+      ('bi53_inativa', 'BIX5303', 'Aguardando Embarque', now() - interval '5 days', now() - interval '5 days')
+      ON CONFLICT (carga_id) DO NOTHING`);
+    await pool.query(`INSERT INTO fact_statusfrota (movimentacao_id, carga_id, placa, status_novo, data_evento)
+      VALUES ('bi53_m6', 'bi53_inativa', 'BIX5303', 'Aguardando Embarque', now() - interval '4 days')
+      ON CONFLICT (movimentacao_id) DO NOTHING`);
+    try {
+      const r = await BI('dim_carga');
+      assert.equal(r.status, 200, r.texto);
+      const ina = r.json.find((c) => c.Id === 'bi53_inativa');
+      const viva = r.json.find((c) => c.Id === 'bi53_viva');
+      assert.ok(ina, 'a inativa continua na dimensão');
+      assert.equal(ina.Inativa, true);
+      assert.equal(viva.Inativa, false, 'última movimentação viva há 3 horas');
+    } finally {
+      await pool.query("DELETE FROM fact_statusfrota WHERE carga_id = 'bi53_inativa'");
+      await pool.query("DELETE FROM fact_viagens WHERE carga_id = 'bi53_inativa'");
+    }
+  });
+});

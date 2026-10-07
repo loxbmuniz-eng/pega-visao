@@ -313,3 +313,13 @@
   #btn-menu .ico.ico-btn, .badge-conexao .ico.ico-btn{ margin-right:0 }
   #btn-menu .ico.ico-btn{ width:22px; height:22px }
 }
+
+/* INATIVAS NA TORRE (decisão 29, 07/10/2026): o bloco recolhido abaixo da
+   fila. Discreto de propósito — é o que saiu da conta, não a conta. */
+@media screen{
+  #tab-torre .torre-inativas{ margin-top:var(--sp-4); border:1px solid var(--border); border-radius:var(--radius); background:var(--navy); }
+  #tab-torre .torre-inativas > summary{ cursor:pointer; padding:var(--sp-3) var(--sp-4); min-height:44px; font-weight:600; color:var(--text-dim); list-style-position:inside; }
+  #tab-torre .torre-inativas[open] > summary{ color:var(--text); border-bottom:1px solid var(--border); }
+  #tab-torre .torre-inativas-nota{ margin:var(--sp-3) var(--sp-4); color:var(--text-dim); font-size:13px; }
+  #tab-torre .torre-inativas .table-wrap{ margin:0 var(--sp-4) var(--sp-4); }
+}

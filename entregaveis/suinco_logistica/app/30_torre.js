@@ -729,7 +729,10 @@ function renderTorre(){
      aguardando carga" com o botão de criar a carga. A caixa aqui continua
      contando — sumir de vez esconderia caminhão parado no pátio —, mas o
      clique agora leva para lá, que é onde se resolve. */
-  const emAberto = cargasAbertas();
+  /* Sem as INATIVAS (decisão 29): mais de 3 dias sem movimentação saem
+     da fila e dos números da Torre e vão para o bloco recolhido abaixo da
+     tabela (renderTorreInativas) — fora da conta, não escondidas. */
+  const emAberto = cargasAtivas();
   /* Sem placa, fora da Torre — o pedido literal do dono (26/08/2026): "só a
      partir da hora que colocarem a placa ela vai pra torre de controle". A
      Torre é o pátio; carga sem caminhão ainda é planejamento e mora na aba
@@ -1011,6 +1014,32 @@ function renderTorre(){
         + '<span class="empty-acao"><button class="btn btn-sec btn-sm" onclick="filtrarTorrePorStatus(\'__TODAS__\')">Ver todas em aberto</button></span>'
       : 'Nenhuma carga em aberto no momento.';
   }
+  renderTorreInativas();
+}
+/* O BLOCO DAS INATIVAS (decisão 29, 07/10/2026). Nasce recolhido e diz
+   quantas são; aberto, lista cada uma com a última movimentação e há
+   quantos dias está parada. Inclui as sem placa e as entradas sem carga:
+   tudo que saiu da conta aparece em algum lugar. A ação (dar saída ou
+   registrar a movimentação) continua nos lugares de sempre. */
+function renderTorreInativas(){
+  const el = document.getElementById('torre-inativas');
+  if(!el) return;
+  const lista = cargasInativas().slice().sort((a, b) => referenciaDeAtividade(a) - referenciaDeAtividade(b));
+  el.hidden = lista.length === 0;
+  if(!lista.length){ el.innerHTML = ''; return; }
+  const aberto = el.open;
+  const dias = (c) => Math.floor((Date.now() - referenciaDeAtividade(c)) / 86400000);
+  el.innerHTML = `<summary>Inativos (mais de ${DIAS_PARA_INATIVA} dias) — ${lista.length} carga${lista.length === 1 ? '' : 's'} fora da fila e dos indicadores</summary>`
+    + '<p class="torre-inativas-nota">Sem nenhuma movimentação há mais de ' + DIAS_PARA_INATIVA + ' dias. Continuam no Histórico; voltam para a fila sozinhas na próxima movimentação. Para encerrar, dê a saída ou arrume o registro.</p>'
+    + '<div class="table-wrap"><table class="torre-inativas-tab"><thead><tr><th>Nº Carga</th><th>Placa</th><th>Status</th><th>Última movimentação</th><th>Parada há</th></tr></thead><tbody>'
+    + lista.map(c => {
+        const ult = ultimaMovimentacaoDaCarga(c.id);
+        return `<tr><td>${esc(c.numeroCarga || c.id)}</td><td>${esc(c.placa || '—')}</td>`
+          + `<td>${esc(c.aguardandoCarga ? 'Entrada sem carga' : c.status)}</td>`
+          + `<td>${ult ? esc(fmtDataHora(ult.timestamp)) : 'nenhuma'}</td><td>${dias(c)} dias</td></tr>`;
+      }).join('')
+    + '</tbody></table></div>';
+  el.open = aberto;
 }
 /* UMA LINHA DA FILA — usada pela fila do dia e pelo bloco de dias
    anteriores. `arrastavel` decide alça e arrasto: a sequência é do dia de
