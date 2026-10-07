@@ -17,6 +17,12 @@
   --navy-lighter:#374a86;
   --gold:#e9b954;
   --gold-dim:#b9903f;
+  /* --graf-1 é a cor de GRÁFICO (barras, mapa de calor). Uma por tema:
+     o dourado #e9b954 direto no tema claro dava contraste 1,6 com o fundo
+     — barra que quase some (auditoria dataviz, 07/10/2026, #46). Medido:
+     7,65 contra --navy no escuro. --graf-1-tinta é o texto POR CIMA dela. */
+  --graf-1:#e9b954;
+  --graf-1-tinta:#161d2c;
   /* --gold-text é o dourado usado como COR DE TEXTO (títulos, links, números).
      No escuro é o mesmo dourado da marca; no claro precisa escurecer, senão
      dourado claro sobre fundo branco fica ilegível. --gold continua sendo o
@@ -183,6 +189,9 @@
   --navy-lighter:#c2ccdf;
   --gold:#e9b954;
   --gold-dim:#a67f22;
+  /* dourado queimado: 5,06 contra --navy e 3,60 contra --navy-deep */
+  --graf-1:#8a5f0e;
+  --graf-1-tinta:#ffffff;
   /* #7a5c0d dava 4,33:1 nos títulos de coluna (exige 4,5) e 3,98 no título
      de gráfico — 56 reprovações só em Indicadores no tema claro, medido no
      DOM em 09/09/2026. #6b5008 passa nas duas superfícies. O dourado de
