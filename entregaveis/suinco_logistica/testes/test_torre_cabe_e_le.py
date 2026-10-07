@@ -59,7 +59,7 @@ SEMEAR = """() => {
       rota:r[0], rotaNome:r[1], pesoKg:12345+i*137, paletes:28,
       tipoVeiculo:'Carreta', tipoOperacao:op[i%op.length], ganchos:0,
       entregas:3+(i%9), status:F[e], sequencia:i+1,
-      dataProgramacao:ag.toISOString().slice(0,10), criadaEm:h(400), atualizadaEm:h(20)});
+      dataProgramacao:diaLocalISO(ag), criadaEm:h(400), atualizadaEm:h(20)});
     for (let k = 0; k <= e; k++)
       DB.movimentacoes.push({cargaId:id, status:F[k], quando:h(360-k*55), operador:'Ana'});
   }

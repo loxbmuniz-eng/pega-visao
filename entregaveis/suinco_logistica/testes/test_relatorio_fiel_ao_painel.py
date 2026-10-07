@@ -133,7 +133,7 @@ async def main():
         print('\n=== 4. COM FILTRO, O PERÍODO PASSADO CONTINUA CONSULTÁVEL ===')
         # Resquício não pode virar cegueira: quem PEDIR anteontem, vê.
         anteontem = await pg.evaluate(
-            "() => new Date(Date.now()-2*86400000).toISOString().slice(0,10)")
+            "() => diaLocalISO(new Date(Date.now()-2*86400000))")
         await pg.fill('#rel-data-de', anteontem)
         await pg.fill('#rel-data-ate', anteontem)
         txt = await html_do_relatorio(pg, 'exportarPdfOperacional', 'print-operacional')

@@ -116,7 +116,7 @@ async def main():
         ck('sem filtro, as duas movimentações aparecem',
            'AAA1A11' in todos and 'BBB2B22' in todos)
 
-        hoje_iso = await pg.evaluate("() => new Date().toISOString().slice(0,10)")
+        hoje_iso = await pg.evaluate("() => diaLocalISO()")
         await pg.fill('#hist-data-de', hoje_iso)
         await pg.wait_for_timeout(400)
         filtrado = await pg.inner_text('#hist-tbody')

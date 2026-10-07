@@ -101,7 +101,7 @@ async def main():
         await pg.wait_for_timeout(700)
         # põe a rota em uso: uma devolução aponta para ela
         usou = await pg.evaluate("""async () => {
-          const hoje = new Date().toISOString().slice(0,10);
+          const hoje = diaLocalISO();
           try {
             await SuincoSharePoint.devolucoes.criar({
               dataDev: hoje, regiao:'TESTE', rotas:['ZQ2'],

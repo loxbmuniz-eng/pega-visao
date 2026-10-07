@@ -66,7 +66,7 @@ SEMEAR = """()=>{
       transportadora:tr[i%tr.length],motorista:mo[i%mo.length],rota:r[0],rotaNome:r[1],
       pesoKg:2952+i*137,paletes:38,tipoVeiculo:'Suinco 3/4',tipoOperacao:'ENTREGA DIRETA',
       ganchos:40,entregas:38,status:F[e],sequencia:i+1,
-      dataProgramacao:ag.toISOString().slice(0,10),criadaEm:h(400),atualizadaEm:h(20)});
+      dataProgramacao:diaLocalISO(ag),criadaEm:h(400),atualizadaEm:h(20)});
     for(let k=0;k<=e;k++) DB.movimentacoes.push({cargaId:id,status:F[k],quando:h(360-k*55),operador:'Ana'});
   }
   ['renderTorre','renderVisaoPatio','renderIndicadores','renderHistorico'].forEach(f=>{

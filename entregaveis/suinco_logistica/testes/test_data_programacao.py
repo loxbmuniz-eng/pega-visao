@@ -128,7 +128,7 @@ async def main():
             """(id) => { const c = getCarga(id) || {};
                  const dia = (v) => String(v || '').slice(0, 10);
                  return {prog: dia(c.programadoEm), criado: dia(c.criadoEm),
-                         hoje: new Date().toISOString().slice(0, 10)}; }""", entrada['id'])
+                         hoje: diaLocalISO()}; }""", entrada['id'])
         ck('a data de programação é HOJE', datas['prog'] == datas['hoje'], str(datas))
         ck('a data de entrada continua sendo a de ontem (é outro fato)',
            datas['criado'] != datas['hoje'], str(datas))
@@ -150,13 +150,13 @@ async def main():
         ck('caminhão que já estava no pátio segue na Torre', naTorre)
 
         noRelatorio = await pgL2.evaluate(
-            """(id) => { const hoje = new Date().toISOString().slice(0, 10);
+            """(id) => { const hoje = diaLocalISO();
                  return filtrarPorDataProgramacao(DB.cargas, hoje, hoje)
                    .some((c) => c.id === id); }""", entrada['id'])
         ck('entra no filtro do relatório do dia', noRelatorio)
 
         naoNoDeOntem = await pgL2.evaluate(
-            """(id) => { const d = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+            """(id) => { const d = diaLocalISO(new Date(Date.now() - 86400000));
                  return !filtrarPorDataProgramacao(DB.cargas, d, d)
                    .some((c) => c.id === id); }""", entrada['id'])
         ck('NÃO entra no relatório de ontem (era o bug)', naoNoDeOntem)

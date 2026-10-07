@@ -67,9 +67,9 @@ async def main():
         await pg.evaluate("() => irParaTab('relatorios')")
         await pg.wait_for_timeout(500)
 
-        hoje = await pg.evaluate("() => new Date().toISOString().slice(0,10)")
+        hoje = await pg.evaluate("() => diaLocalISO()")
         anteontem = await pg.evaluate(
-            "() => new Date(Date.now()-2*86400000).toISOString().slice(0,10)")
+            "() => diaLocalISO(new Date(Date.now()-2*86400000))")
 
         print('\n=== 1. FILTRADO EM HOJE ===')
         n = await nome_gerado(pg, hoje, hoje)

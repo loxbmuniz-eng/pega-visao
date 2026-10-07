@@ -69,11 +69,15 @@ async def main():
                 numeroCarga:'118191', peso:25600, rota:'500', qtdEntregas:1,
                 paletizada:'Sim', operador:'Alysson',
             });
-            const hoje = new Date().toISOString().slice(0,10);
-            const ontemISO = ontem.slice(0,10);
+            const hoje = diaLocalISO();
+            const ontemISO = diaLocalISO(new Date(ontem));
             return {
                 id: c.id, placa, hoje, ontemISO,
                 criadoEm: c.criadoEm, programadoEm: c.programadoEm,
+                // o DIA de cada carimbo, no fuso de quem olha — o pedaço cru do
+                // ISO é o dia de Londres e erra das 21h à meia-noite (#116)
+                criadoDia: diaLocalISO(new Date(c.criadoEm)),
+                programadoDia: diaLocalISO(new Date(c.programadoEm)),
                 noRelatorioDeHoje: filtrarPorDataProgramacao(DB.cargas, hoje, hoje)
                     .some(x => x.id === c.id),
                 noRelatorioDeOntem: filtrarPorDataProgramacao(DB.cargas, ontemISO, ontemISO)
@@ -90,17 +94,17 @@ async def main():
         # O gestor foi explícito: "a gente não perde o histórico da hora e do
         # dia que o carro realmente chegou".
         ck('criadoEm continua sendo a data da CHEGADA (ontem)',
-           r['criadoEm'][:10] == r['ontemISO'], f"{r['criadoEm']} vs {r['ontemISO']}")
-        ck('programadoEm é hoje', r['programadoEm'][:10] == r['hoje'],
+           r['criadoDia'] == r['ontemISO'], f"{r['criadoEm']} vs {r['ontemISO']}")
+        ck('programadoEm é hoje', r['programadoDia'] == r['hoje'],
            f"{r['programadoEm']} vs {r['hoje']}")
         ck('as duas datas são diferentes (são dois fatos diferentes)',
-           r['criadoEm'][:10] != r['programadoEm'][:10])
+           r['criadoDia'] != r['programadoDia'])
 
         print('\n=== CARGA PROGRAMADA NORMAL: AS DUAS DATAS COINCIDEM ===')
         r2 = await pg.evaluate("""() => {
             const c = criarCargaProgramada({freteObservacao:'TABELA', placa: DB.frota[4].placa,
                 numeroCarga:'N1', peso:9000, rota:'500', operador:'Alysson'});
-            const hoje = new Date().toISOString().slice(0,10);
+            const hoje = diaLocalISO();
             return {mesmoDia: (c.programadoEm||'').slice(0,10) === (c.criadoEm||'').slice(0,10),
                     noRelatorioDeHoje: filtrarPorDataProgramacao(DB.cargas, hoje, hoje)
                         .some(x => x.id === c.id)};
@@ -115,7 +119,7 @@ async def main():
                 numeroCarga:'V1', peso:9000, rota:'500', operador:'Alysson'});
             delete c.programadoEm;           // como as cargas anteriores
             SuincoStore.save();
-            const hoje = new Date().toISOString().slice(0,10);
+            const hoje = diaLocalISO();
             return filtrarPorDataProgramacao(DB.cargas, hoje, hoje).some(x=>x.id===c.id);
         }""")
         ck('carga sem programadoEm ainda entra pelo criadoEm', r3)

@@ -131,7 +131,7 @@ async def main():
             "() => document.querySelectorAll('#expedicao-vp-tbody tr').length")
         ck('carga encerrada sai da visão de agora', sumiu == 0, f'{sumiu} linha(s)')
 
-        hoje = await pagina.evaluate("() => new Date().toISOString().slice(0,10)")
+        hoje = await pagina.evaluate("() => diaLocalISO()")
         await pagina.fill('#expedicao-vp-de', hoje)
         await pagina.fill('#expedicao-vp-ate', hoje)
         await pagina.wait_for_timeout(400)

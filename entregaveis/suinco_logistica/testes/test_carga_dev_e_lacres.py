@@ -71,7 +71,7 @@ async def main():
         ctxL, pgL = await abrir(nav, 'ana@teste.local', 'log')
         dev = await pgL.evaluate(
             """async () => {
-                 const hoje = new Date().toISOString().slice(0, 10);
+                 const hoje = diaLocalISO();
                  const d = await SuincoSharePoint.devolucoes.criar({
                    dataDev: hoje, rotas: ['500'], regiao: 'Patos de Minas',
                    operadorCodigo: '82205', itens: [],

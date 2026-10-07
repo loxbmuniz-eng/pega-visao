@@ -118,7 +118,7 @@ async def main():
             # servidor — é o mesmo caminho que a operação percorre.
             dev = await pg.evaluate(
                 """async ([rota, status]) => {
-                     const hoje = new Date().toISOString().slice(0,10);
+                     const hoje = diaLocalISO();
                      const d = await SuincoSharePoint.devolucoes.criar({
                        dataDev: hoje, rotas: [rota], regiao: 'TESTE-APAGA'});
                      const CAMINHO = ['Lançada','Recebida na Portaria','Conferida no Faturamento',
@@ -170,7 +170,7 @@ async def main():
         # caso é o contrapeso dela.
         dev2 = await pg.evaluate(
             """async (rota) => {
-                 const hoje = new Date().toISOString().slice(0,10);
+                 const hoje = diaLocalISO();
                  const d = await SuincoSharePoint.devolucoes.criar({
                    dataDev: hoje, rotas: [rota], regiao: 'TESTE-APAGA'});
                  await SuincoSharePoint.devolucoes.etapa(d.id, {para: 'Recebida na Portaria'});

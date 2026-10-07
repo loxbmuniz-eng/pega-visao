@@ -68,7 +68,7 @@ async def main():
         await pg.wait_for_timeout(400)
 
         def hoje_iso(offset=0):
-            return f"() => new Date(Date.now() - {offset}*86400000).toISOString().slice(0,10)"
+            return f"() => diaLocalISO(new Date(Date.now() - {offset}*86400000))"
 
         print('\n=== 1. SEM FILTRO: OS TRÊS VEEM O MESMO CONJUNTO ===')
         base = await pg.evaluate("() => cargasDoRelatorio().map(c=>c.numeroCarga).sort()")

@@ -61,7 +61,7 @@ SEMEAR = """() => {
     const id = 'ct' + i;
     DB.cargas.push({id, numeroCarga:d.n, placa:d.p, transportadora:d.t, rota:d.r,
       status:FLUXO[d.ate], sequencia:i+1,
-      dataProgramacao: agora.toISOString().slice(0,10),
+      dataProgramacao: diaLocalISO(agora),
       criadaEm:h(400), atualizadaEm:h(20)});
     for (let k = 0; k <= d.ate; k++)
       DB.movimentacoes.push({cargaId:id, status:FLUXO[k], quando:h(360-k*55), operador:'Ana'});
