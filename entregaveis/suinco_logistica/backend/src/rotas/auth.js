@@ -3,7 +3,8 @@ import bcrypt from 'bcryptjs';
 import rateLimit from 'express-rate-limit';
 import { consultar, emTransacao } from '../banco.js';
 import { config } from '../config.js';
-import { assinarToken, exigirLogin } from '../middleware/auth.js';
+import { assinarToken, exigirLogin, exigirSetor, usuariosTrancadaPara } from '../middleware/auth.js';
+import { situacaoDasTentativas, proximaFalha, TENTATIVAS } from '../dominio/tentativas.js';
 import { documentosDoSetor } from '../dominio/documentos.js';
 
 /* QUEM VOCÊ É, E O QUE O SEU SETOR PODE GERAR — num objeto só (23/09/2026).
@@ -26,10 +27,13 @@ import { documentosDoSetor } from '../dominio/documentos.js';
    lista num campo irmão obrigaria a mexer nos três chamadores do painel e
    abriria a chance de um deles esquecer. Dentro, ela chega sozinha até quem
    desenha o botão. */
-function sessaoDoOperador(op) {
+function sessaoDoOperador(op, { usuariosDestrancado = false } = {}) {
   return {
     id: String(op.id), nome: op.nome, email: op.email, setor: op.setor,
     documentos: documentosDoSetor(op.setor),
+    /* A parte de gerenciar usuários pede a senha da aba neste login?
+       (08/10/2026) Mesma função que a trava das rotas usa. */
+    usuariosTrancada: usuariosTrancadaPara({ usuariosDestrancado }),
   };
 }
 import {
@@ -66,7 +70,7 @@ export const rotasAuth = Router();
    minutos (campos falhas_senha/bloqueado_ate, mais abaixo). O limitador
    por IP fica como rede de proteção contra quem varre e-mails que nem
    existem — caso em que não há conta para bloquear. */
-const limiteLogin = rateLimit({
+const limiteDeSenhaErrada = () => rateLimit({
   windowMs: config.limites.janelaMs,
   limit: config.limites.loginPorJanela,
   standardHeaders: true,
@@ -80,6 +84,7 @@ const limiteLogin = rateLimit({
     codigo: 'LIMITE_LOGIN',
   },
 });
+const limiteLogin = limiteDeSenhaErrada();
 
 rotasAuth.post('/login', limiteLogin, async (req, res, next) => {
   try {
@@ -104,13 +109,13 @@ rotasAuth.post('/login', limiteLogin, async (req, res, next) => {
     const hash = op?.senha_hash || '$2a$10$invalidoinvalidoinvalidoinvalidoinvalidoinvalidoinvalido';
     const confere = await bcrypt.compare(senha, hash);
 
-    /* CONTAGEM DE SENHAS ERRADAS (etapa 4, 24/08/2026).
-       Janela de 30 min: cinco erros espalhados ao longo de meses não são
-       ataque, são digitação. O que interessa é a rajada. */
-    const JANELA_MS = 30 * 60 * 1000;
-    const desde = op?.falhas_desde ? new Date(op.falhas_desde).getTime() : 0;
-    const naJanela = Boolean(desde) && (Date.now() - desde) < JANELA_MS;
-    const falhas = naJanela ? Number(op?.falhas_senha || 0) : 0;
+    /* CONTAGEM DE SENHAS ERRADAS (etapa 4, 24/08/2026). A regra — cinco
+       em 30 minutos, espera de 15 — mora em dominio/tentativas.js desde
+       08/10/2026: a senha da aba Usuários usa a mesma. */
+    const situacao = situacaoDasTentativas({
+      falhas: op?.falhas_senha, desde: op?.falhas_desde, esperaAte: op?.bloqueado_ate,
+    });
+    const { falhas, naJanela } = situacao;
 
     /* O LOGIN NÃO PODE DENUNCIAR A SENHA CERTA (auditoria de 06/10/2026).
        Até aqui o bloqueio era conferido DEPOIS da senha, para não dizer quais
@@ -131,8 +136,8 @@ rotasAuth.post('/login', limiteLogin, async (req, res, next) => {
       erro: 'E-mail ou senha incorretos. Depois de cinco tentativas erradas, a conta espera 15 minutos.',
       codigo: 'CREDENCIAL_INVALIDA',
     };
-    const SUSPEITO = falhas >= 5;
-    const emEspera = Boolean(op?.bloqueado_ate) && new Date(op.bloqueado_ate).getTime() > Date.now();
+    const SUSPEITO = situacao.suspeito;
+    const { emEspera } = situacao;
 
     if (op && op.ativo && op.mfa_ativo && SUSPEITO && !String(req.body?.codigo ?? '').trim()) {
       return res.status(401).json({
@@ -144,15 +149,16 @@ rotasAuth.post('/login', limiteLogin, async (req, res, next) => {
     if (!op || !confere || !op.ativo || (emEspera && !op.mfa_ativo)) {
       if (op && !op.ativo) console.warn('[auth] login de operador inativo:', email);
       if (op && !confere) {
-        const n = falhas + 1;
-        const entraEmEspera = n >= 5 && !op.mfa_ativo && !emEspera;
+        const proxima = proximaFalha(situacao);
+        const n = proxima.n;
+        const entraEmEspera = proxima.entraEmEspera && !op.mfa_ativo && !emEspera;
         await consultar(
           entraEmEspera
-            ? `UPDATE operadores SET bloqueado_ate = now() + interval '15 minutes',
+            ? `UPDATE operadores SET bloqueado_ate = now() + make_interval(mins => $2),
                                      falhas_senha = 0, falhas_desde = NULL WHERE id = $1`
             : `UPDATE operadores SET falhas_senha = $2, falhas_desde = COALESCE($3, now())
                 WHERE id = $1`,
-          entraEmEspera ? [op.id] : [op.id, n, naJanela ? op.falhas_desde : null]
+          entraEmEspera ? [op.id, TENTATIVAS.esperaMinutos] : [op.id, n, naJanela ? op.falhas_desde : null]
         );
       }
       return res.status(401).json(RECUSA);
@@ -241,7 +247,7 @@ rotasAuth.post('/login', limiteLogin, async (req, res, next) => {
 rotasAuth.get('/eu', exigirLogin, (req, res) => {
   /* A mesma lista do login: quem restaura a sessão na abertura precisa dela
      tanto quanto quem acabou de digitar a senha. */
-  res.json({ operador: sessaoDoOperador(req.operador) });
+  res.json({ operador: sessaoDoOperador(req.operador, { usuariosDestrancado: req.operador.usuariosDestrancado }) });
 });
 
 /* Renova a sessão de quem está trabalhando.
@@ -275,9 +281,91 @@ rotasAuth.post('/renovar', exigirLogin, async (req, res, next) => {
         codigo: 'OPERADOR_INATIVO',
       });
     }
+    /* A senha da aba Usuários vale o login inteiro (decisão do dono):
+       renovar carrega a marca adiante, nunca a cria. */
+    const destrancado = req.operador.usuariosDestrancado === true;
     return res.json({
-      token: assinarToken(op),
-      operador: sessaoDoOperador(op),
+      token: assinarToken(op, { usuarios: destrancado }),
+      operador: sessaoDoOperador(op, { usuariosDestrancado: destrancado }),
+    });
+  } catch (e) {
+    return next(e);
+  }
+});
+
+/* =====================================================================
+   A SENHA DA PARTE DE GERENCIAR USUÁRIOS (08/10/2026, pedido do dono)
+   =====================================================================
+   "é pra você colocar a senha … na aba usuários e não mostrar nada dela".
+   No PROMPT o dono decidiu: tranca só o gerenciar (Minha segurança segue
+   livre); pede uma vez por login; quem erra segue a regra do login.
+
+   Quem confere é ESTA rota, contra o hash do .env (config.senhaUsuarios) —
+   a senha nunca entra no código: o painel publicado é público.
+
+   Certa: devolve um token novo com a marca `usr`, que as rotas de
+   gerenciar exigem (exigirUsuariosDestrancado). Errada: 403 sem dizer mais
+   nada — 403 e não 401 de propósito: o painel trata todo 401 fora do login
+   como sessão vencida e põe a pessoa para fora, e errar a senha da aba não
+   pode custar o login. A contagem é a do login (dominio/tentativas.js), em colunas
+   PRÓPRIAS (migração 065): errar a senha da aba não tranca o login da
+   pessoa. Na espera, a certa responde IGUAL à errada — senão a resposta
+   denunciaria quando se acertou (a mesma lição do login, 06/10/2026). */
+const limiteDestrancar = limiteDeSenhaErrada();
+const RECUSA_USUARIOS = {
+  erro: `Senha incorreta. Depois de ${TENTATIVAS.maximo} tentativas erradas, a senha da aba espera ${TENTATIVAS.esperaMinutos} minutos.`,
+  codigo: 'SENHA_USUARIOS_INCORRETA',
+};
+
+rotasAuth.post('/usuarios/destrancar', limiteDestrancar, exigirLogin, exigirSetor('Administração'), async (req, res, next) => {
+  try {
+    const { estado, hash } = config.senhaUsuarios;
+    if (estado === 'invalida') {
+      return res.status(503).json({
+        erro: 'A senha gravada no servidor não é válida. Grave de novo no servidor com scripts/gravar_senha_usuarios.sh.',
+        codigo: 'SENHA_USUARIOS_INVALIDA',
+      });
+    }
+    const { rows } = await consultar(
+      `SELECT id, email, nome, setor, ativo, sessao_versao,
+              usuarios_falhas, usuarios_falhas_desde, usuarios_espera_ate
+         FROM operadores WHERE id = $1`, [req.operador.id]
+    );
+    const op = rows[0];
+    if (!op || !op.ativo) {
+      return res.status(401).json({ erro: 'Seu acesso foi desativado. Fale com a Administração.', codigo: 'OPERADOR_INATIVO' });
+    }
+    if (estado === 'ligada') {
+      const senha = String(req.body?.senha ?? '');
+      const situacao = situacaoDasTentativas({
+        falhas: op.usuarios_falhas, desde: op.usuarios_falhas_desde, esperaAte: op.usuarios_espera_ate,
+      });
+      const confere = Boolean(senha) && await bcrypt.compare(senha, hash);
+      if (!confere || situacao.emEspera) {
+        if (!confere && !situacao.emEspera) {
+          const { n, entraEmEspera } = proximaFalha(situacao);
+          await consultar(
+            entraEmEspera
+              ? `UPDATE operadores SET usuarios_espera_ate = now() + make_interval(mins => $2),
+                                       usuarios_falhas = 0, usuarios_falhas_desde = NULL WHERE id = $1`
+              : `UPDATE operadores SET usuarios_falhas = $2, usuarios_falhas_desde = COALESCE($3, now())
+                  WHERE id = $1`,
+            entraEmEspera ? [op.id, TENTATIVAS.esperaMinutos]
+              : [op.id, n, situacao.naJanela ? op.usuarios_falhas_desde : null]
+          );
+        }
+        console.warn('[seguranca] senha da aba Usuários recusada para', op.email, 'de', req.ip);
+        return res.status(403).json(RECUSA_USUARIOS);
+      }
+      await consultar(
+        `UPDATE operadores SET usuarios_falhas = 0, usuarios_falhas_desde = NULL, usuarios_espera_ate = NULL
+          WHERE id = $1`, [op.id]
+      );
+      console.warn('[seguranca] aba Usuários destrancada por', op.email);
+    }
+    return res.json({
+      token: assinarToken(op, { usuarios: true }),
+      operador: sessaoDoOperador(op, { usuariosDestrancado: true }),
     });
   } catch (e) {
     return next(e);

@@ -8410,3 +8410,159 @@ describe('58. Aviso de erro ao Sentry, sem dado de cliente (08/10/2026, decisão
     assert.equal(outra.status, 202, 'o colega no mesmo IP não é barrado pelo freio de outro');
   });
 });
+
+/* =====================================================================
+   59. SENHA DA PARTE DE GERENCIAR USUÁRIOS (08/10/2026, pedido do dono)
+   ---------------------------------------------------------------------
+   "é pra você colocar a senha … na aba usuários e não mostrar nada dela".
+   Decisões do dono no PROMPT: a senha tranca só o GERENCIAR (Minha
+   segurança segue livre); pede uma vez por login; quem erra segue a regra
+   do login (cinco erros em 30 minutos, espera de 15). Quem confere é o
+   servidor — a senha nunca entra no código: o .env guarda o hash do bcrypt
+   em base64, gravado por scripts/gravar_senha_usuarios.sh.
+   ===================================================================== */
+describe('59. Senha da parte de gerenciar usuários (08/10/2026, pedido do dono)', () => {
+  const SENHA_ABA = 'senha-da-aba-de-teste-9';
+  let antes;
+  let idDeAlguem;
+  const entrar = async (email) => {
+    const r = await req('/auth/login', { metodo: 'POST', corpo: { email, senha: SENHA } });
+    assert.equal(r.status, 200, r.texto);
+    return r.json;
+  };
+  const ligar = async () => {
+    config.senhaUsuarios = { estado: 'ligada', hash: await bcrypt.hash(SENHA_ABA, 4) };
+  };
+  const zerarTentativas = () => pool.query(
+    `UPDATE operadores SET usuarios_falhas = 0, usuarios_falhas_desde = NULL, usuarios_espera_ate = NULL
+      WHERE email LIKE '%@teste.local'`);
+
+  before(async () => {
+    antes = config.senhaUsuarios;
+    await zerarTentativas().catch(() => {});
+    idDeAlguem = (await pool.query("SELECT id FROM operadores WHERE email = 'bruno@teste.local'")).rows[0].id;
+  });
+  after(() => { config.senhaUsuarios = antes; });
+
+  test('desligada (nenhuma senha gravada): tudo como antes, e o /health e a sessão dizem isso', async () => {
+    config.senhaUsuarios = { estado: 'desligada', hash: '' };
+    const s = await entrar('admin1@teste.local');
+    assert.equal(s.operador.usuariosTrancada, false);
+    assert.equal((await req('/api/operadores', { token: s.token })).status, 200);
+    assert.equal((await req('/health')).json.travaUsuarios, 'desligada');
+  });
+
+  test('ligada: sem destrancar, TODA rota de gerenciar recusa com 403 explicado; Minha segurança segue livre', async () => {
+    await ligar();
+    const s = await entrar('admin1@teste.local');
+    assert.equal(s.operador.usuariosTrancada, true, 'o login diz ao painel que a parte de gerenciar está trancada');
+    const recusas = [
+      await req('/api/operadores', { token: s.token }),
+      await req('/api/operadores', { metodo: 'POST', token: s.token, corpo: { email: 'x@teste.local', nome: 'X', setor: 'Portaria', senha: 'senha-longa-1' } }),
+      await req(`/api/operadores/${idDeAlguem}`, { metodo: 'PATCH', token: s.token, corpo: { ativo: false } }),
+      await req(`/api/operadores/${idDeAlguem}`, { metodo: 'DELETE', token: s.token }),
+      await req(`/api/operadores/${idDeAlguem}/mfa/resetar`, { metodo: 'POST', token: s.token, corpo: { motivo: 'teste' } }),
+      await req('/api/vigia', { token: s.token }),
+    ];
+    for (const r of recusas) {
+      assert.equal(r.status, 403, r.texto);
+      assert.equal(r.json.codigo, 'USUARIOS_TRANCADO');
+      assert.match(r.json.erro, /senha/i, 'a recusa diz o caminho');
+    }
+    const ainda = await pool.query("SELECT ativo FROM operadores WHERE email = 'bruno@teste.local'");
+    assert.equal(ainda.rows[0].ativo, true, 'nada foi alterado');
+    assert.equal((await req('/auth/mfa/situacao', { token: s.token })).status, 200, 'Minha segurança não pede a senha');
+    assert.equal((await req('/health')).json.travaUsuarios, 'ligada');
+  });
+
+  test('senha certa destranca ESTE login: a renovação mantém; o token velho e um login novo continuam trancados', async () => {
+    await ligar();
+    await zerarTentativas();
+    const s = await entrar('admin1@teste.local');
+    const r = await req('/auth/usuarios/destrancar', { metodo: 'POST', token: s.token, corpo: { senha: SENHA_ABA } });
+    assert.equal(r.status, 200, r.texto);
+    assert.equal(r.json.operador.usuariosTrancada, false);
+    assert.equal((await req('/api/operadores', { token: r.json.token })).status, 200);
+    assert.equal((await req('/api/operadores', { token: s.token })).status, 403, 'o token de antes não ganha a chave');
+
+    const ren = await req('/auth/renovar', { metodo: 'POST', token: r.json.token });
+    assert.equal(ren.status, 200);
+    assert.equal(ren.json.operador.usuariosTrancada, false);
+    assert.equal((await req('/api/operadores', { token: ren.json.token })).status, 200, 'renovar não tranca de novo');
+    assert.equal((await req('/auth/eu', { token: ren.json.token })).json.operador.usuariosTrancada, false);
+
+    const novo = await entrar('admin1@teste.local');
+    assert.equal(novo.operador.usuariosTrancada, true, 'uma vez por LOGIN: entrar de novo tranca');
+    assert.equal((await req('/api/operadores', { token: novo.token })).status, 403);
+  });
+
+  test('só a Administração destranca', async () => {
+    await ligar();
+    const r = await req('/auth/usuarios/destrancar', { metodo: 'POST', token: tokens['Logística'], corpo: { senha: SENHA_ABA } });
+    assert.equal(r.status, 403);
+  });
+
+  test('senha errada: 403 (nunca 401, que o painel lê como sessão vencida) sem dizer mais nada; a quinta põe em espera de 15 min e, na espera, nem a certa entra; o login da pessoa não é afetado', async () => {
+    await ligar();
+    await zerarTentativas();
+    const s = await entrar('admin2@teste.local');
+    const tenta = (senha) => req('/auth/usuarios/destrancar', { metodo: 'POST', token: s.token, corpo: { senha } });
+    for (let i = 1; i <= 5; i++) {
+      const r = await tenta(`errada-${i}`);
+      assert.equal(r.status, 403, `tentativa ${i}`);
+      assert.equal(r.json.codigo, 'SENHA_USUARIOS_INCORRETA');
+      assert.match(r.json.erro, /15 minutos/, 'a recusa já diz o que acontece depois de cinco');
+    }
+    const certaNaEspera = await tenta(SENHA_ABA);
+    assert.equal(certaNaEspera.status, 403, 'na espera, a certa responde IGUAL à errada — não denuncia a senha');
+    assert.deepEqual(certaNaEspera.json, (await tenta('outra-errada')).json);
+    const { rows } = await pool.query("SELECT usuarios_espera_ate > now() + interval '14 minutes' AS longe FROM operadores WHERE email = 'admin2@teste.local'");
+    assert.equal(rows[0].longe, true);
+    assert.equal((await req('/auth/login', { metodo: 'POST', corpo: { email: 'admin2@teste.local', senha: SENHA } })).status, 200,
+      'errar a senha da aba não tranca o LOGIN da pessoa');
+    await zerarTentativas();
+    assert.equal((await tenta(SENHA_ABA)).status, 200);
+  });
+
+  test('a regra das tentativas é UMA só: o login e a trava chamam a mesma função', async () => {
+    const { TENTATIVAS, situacaoDasTentativas } = await import('../src/dominio/tentativas.js');
+    assert.deepEqual(TENTATIVAS, { maximo: 5, janelaMs: 30 * 60 * 1000, esperaMinutos: 15 });
+    const agora = Date.now();
+    assert.equal(situacaoDasTentativas({ falhas: 4, desde: new Date(agora - 60_000) }, agora).falhas, 4);
+    assert.equal(situacaoDasTentativas({ falhas: 4, desde: new Date(agora - 31 * 60_000) }, agora).falhas, 0, 'fora da janela, zera');
+    assert.equal(situacaoDasTentativas({ falhas: 0, esperaAte: new Date(agora + 60_000) }, agora).emEspera, true);
+    const fonte = await fs.readFile(new URL('../src/rotas/auth.js', import.meta.url), 'utf8');
+    assert.ok((fonte.match(/situacaoDasTentativas\(/g) || []).length >= 2, 'login e trava chamam a função');
+    assert.doesNotMatch(fonte, /falhas >= 5|interval '15 minutes'/, 'nenhum número da regra escrito à mão no auth.js');
+  });
+
+  test('senha gravada inválida: ninguém destranca, a recusa diz como gravar de novo, e o /health diz "invalida"', async () => {
+    config.senhaUsuarios = { estado: 'invalida', hash: '' };
+    const s = await entrar('admin1@teste.local');
+    assert.equal(s.operador.usuariosTrancada, true);
+    const r = await req('/auth/usuarios/destrancar', { metodo: 'POST', token: s.token, corpo: { senha: SENHA_ABA } });
+    assert.equal(r.status, 503);
+    assert.match(r.json.erro, /gravar_senha_usuarios\.sh/);
+    assert.equal((await req('/api/operadores', { token: s.token })).status, 403);
+    assert.equal((await req('/health')).json.travaUsuarios, 'invalida');
+  });
+
+  test('o .env guarda o hash do bcrypt em base64 (o bash do rodar_tudo.sh apagaria o "$"); vazio = desligada; lixo = invalida', async () => {
+    const { lerSenhaUsuarios } = await import('../src/config.js');
+    const hash = await bcrypt.hash(SENHA_ABA, 4);
+    assert.deepEqual(lerSenhaUsuarios(''), { estado: 'desligada', hash: '' });
+    assert.deepEqual(lerSenhaUsuarios(Buffer.from(hash).toString('base64')), { estado: 'ligada', hash });
+    assert.equal(lerSenhaUsuarios(hash).estado, 'invalida', 'o hash cru, sem base64, não vale');
+    assert.equal(lerSenhaUsuarios(Buffer.from('não é hash').toString('base64')).estado, 'invalida');
+  });
+
+  test('Pontos de atenção avisa a Administração enquanto a senha não estiver gravada (o controle não depende de lembrar)', async () => {
+    config.senhaUsuarios = { estado: 'desligada', hash: '' };
+    const sem = await req('/api/atencao', { token: adm.a });
+    assert.equal(sem.status, 200);
+    assert.ok(sem.json.pontos.some((p) => p.codigo === 'senha_usuarios'), JSON.stringify(sem.json.pontos.map((p) => p.codigo)));
+    await ligar();
+    const com = await req('/api/atencao', { token: adm.a });
+    assert.ok(!com.json.pontos.some((p) => p.codigo === 'senha_usuarios'));
+  });
+});

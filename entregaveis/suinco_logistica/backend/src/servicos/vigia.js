@@ -35,6 +35,7 @@
 
    SÓ LEITURA. Nenhuma consulta aqui altera nada. */
 import { FUSO } from '../dominio/fuso.js';
+import { config } from '../config.js';
 
 const JANELA = "now() - interval '30 days'";
 
@@ -240,6 +241,21 @@ export async function pontosDeAtencao(runner) {
     anotacoes = await lerAnotacoes(runner);
   } catch (e) {
     if (e.code !== '42P01') throw e;
+  }
+  /* A senha da parte de gerenciar usuários (08/10/2026): enquanto não
+     estiver gravada (ou estiver corrompida), a Administração vê aqui —
+     o controle não depende de alguém lembrar de rodar o script. */
+  if (config.senhaUsuarios.estado !== 'ligada') {
+    const invalida = config.senhaUsuarios.estado === 'invalida';
+    pontos.push({
+      gravidade: 'media', codigo: 'senha_usuarios',
+      titulo: invalida ? 'A senha da aba Usuários gravada no servidor não é válida'
+        : 'A parte de gerenciar usuários está sem senha',
+      explicacao: invalida
+        ? 'Ninguém consegue abrir a parte de gerenciar usuários. Grave de novo no servidor: scripts/gravar_senha_usuarios.sh.'
+        : 'Qualquer pessoa da Administração abre a lista de usuários sem senha. Grave no servidor: scripts/gravar_senha_usuarios.sh.',
+      quantidade: 1, desde: null, onde: { aba: 'usuarios', rotulo: 'Servidor — scripts/gravar_senha_usuarios.sh' }, exemplos: [],
+    });
   }
   for (const a of anotacoes) {
     if (a.ok) continue;

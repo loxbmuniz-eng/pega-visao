@@ -1821,6 +1821,15 @@
          confere sozinho e a conferência do dado gravado. Pedido do dono:
          uma prevenção para cada "se quebrar" do raio-X. Ver
          renderVigias em app/87_celular_e_usuarios.js. -->
+    <!-- A parte de gerenciar usuários trancada (08/10/2026, pedido do dono):
+         só a Administração vê, enquanto este login não digitou a senha da
+         aba. Quem confere é o servidor; "Minha segurança", acima, é livre. -->
+    <div class="card" id="card-usuarios-trancada" hidden>
+      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-cadeado"/></svg> Gerenciar usuários</div>
+      <div class="card-sub">Trancado. Digite a senha da aba Usuários para ver e mudar os usuários. Ela vale até você sair do painel.</div>
+      <div class="form-row"><button type="button" class="btn btn-primary" id="btn-destrancar-usuarios" onclick="destrancarUsuariosUI()">Digitar a senha</button></div>
+    </div>
+
     <div class="card" id="card-vigias" hidden>
       <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-alerta"/></svg> Vigias do sistema</div>
       <div class="card-sub">O que o servidor confere sozinho: se está respondendo, se o backup de hoje saiu e restaura, o disco, o certificado e o dado gravado. Quando algo fica ruim, quem é da Administração recebe aviso no celular — e outro quando volta ao normal.</div>

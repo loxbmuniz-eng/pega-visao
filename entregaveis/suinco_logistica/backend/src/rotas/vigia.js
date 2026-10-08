@@ -12,13 +12,15 @@
    ela não depende da tabela nova. */
 import { Router } from 'express';
 import { pool } from '../banco.js';
-import { exigirLogin, exigirSetor } from '../middleware/auth.js';
+import { exigirLogin, exigirSetor, exigirUsuariosDestrancado } from '../middleware/auth.js';
 import { auditarDado, lerAnotacoes, NOMES, pontosDeAtencao } from '../servicos/vigia.js';
 
 export const rotasVigia = Router();
 const SO_ADMIN = [exigirLogin, exigirSetor('Administração')];
 
-rotasVigia.get('/vigia', ...SO_ADMIN, async (req, res, next) => {
+// A caixa Vigias do sistema mora na aba Usuários: fica atrás da senha dela
+// (08/10/2026). A caixa Pontos de atenção, no topo, não.
+rotasVigia.get('/vigia', ...SO_ADMIN, exigirUsuariosDestrancado, async (req, res, next) => {
   try {
     let anotacoes = [];
     let semTabela = false;

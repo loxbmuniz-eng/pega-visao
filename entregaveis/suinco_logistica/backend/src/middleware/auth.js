@@ -12,7 +12,11 @@ import { config } from '../config.js';
 import { ehFilial } from '../dominio/fluxo.js';
 import { consultar } from '../banco.js';
 
-export function assinarToken(operador) {
+/* `usuarios`: este login já digitou a senha da parte de gerenciar usuários
+   (08/10/2026). Viaja assinado no token — a tela não tem como inventar — e
+   vale até o login acabar: decisão do dono, "uma vez por login". A
+   renovação carrega a marca adiante; um login novo nasce sem ela. */
+export function assinarToken(operador, { usuarios = false } = {}) {
   return jwt.sign(
     {
       sub: String(operador.id),
@@ -30,6 +34,7 @@ export function assinarToken(operador) {
          conferido contra o banco. Incrementar o contador do operador
          invalida, no mesmo instante, tudo o que ele tem aberto. */
       sv: Number(operador.sessao_versao ?? 1),
+      ...(usuarios ? { usr: 1 } : {}),
     },
     config.jwtSegredo,
     { expiresIn: config.jwtValidade }
@@ -107,6 +112,7 @@ export async function exigirLogin(req, res, next) {
       email: p.email,
       setor: p.setor,
       verificado: true,
+      usuariosDestrancado: p.usr === 1,
     };
     return next();
   } catch (e) {
@@ -164,6 +170,26 @@ export function exigirSetor(...setoresPermitidos) {
     }
     return next();
   };
+}
+
+/* A PARTE DE GERENCIAR USUÁRIOS TRANCADA (08/10/2026, pedido do dono).
+
+   Com a senha gravada no servidor (config.senhaUsuarios), criar, mudar,
+   excluir operador, remover o segundo fator de alguém e ler os vigias só
+   passam com um login que já digitou a senha. Sem senha gravada, passa
+   como antes — e a caixa Pontos de atenção avisa a Administração disso.
+
+   A recusa diz o caminho (regra da casa: botão que só nega não ensina). */
+export function usuariosTrancadaPara(operador) {
+  return config.senhaUsuarios.estado !== 'desligada' && !operador?.usuariosDestrancado;
+}
+
+export function exigirUsuariosDestrancado(req, res, next) {
+  if (!usuariosTrancadaPara(req.operador)) return next();
+  return res.status(403).json({
+    erro: 'A parte de gerenciar usuários está trancada. Digite a senha da aba Usuários para abrir.',
+    codigo: 'USUARIOS_TRANCADO',
+  });
 }
 
 /* O Power BI não é um operador: é leitura de views, com token próprio e sem

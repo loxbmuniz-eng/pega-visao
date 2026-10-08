@@ -29,6 +29,31 @@ function lista(nome, padrao = '') {
     .filter(Boolean);
 }
 
+/* A SENHA DA PARTE DE GERENCIAR USUÁRIOS (08/10/2026, pedido do dono).
+
+   O .env guarda o HASH do bcrypt — nunca a senha — e em BASE64: o hash tem
+   "$" ("$2a$10$..."), e o rodar_tudo.sh lê o .env pelo bash, que trocaria
+   "$2a" por nada. Quem grava é scripts/gravar_senha_usuarios.sh.
+
+   Três estados, todos visíveis no /health em `travaUsuarios` (só a palavra,
+   nunca o hash):
+     desligada — nada gravado: a aba funciona como antes, e a caixa Pontos
+                 de atenção avisa a Administração até alguém gravar;
+     ligada    — o servidor exige a senha para gerenciar usuários;
+     invalida  — há algo gravado que não é um hash: FALHA FECHADA. Ninguém
+                 destranca, e a recusa diz como gravar de novo. */
+export function lerSenhaUsuarios(valor) {
+  const v = String(valor ?? '').trim();
+  if (!v) return { estado: 'desligada', hash: '' };
+  let hash = '';
+  try {
+    if (/^[A-Za-z0-9+/]+={0,2}$/.test(v)) hash = Buffer.from(v, 'base64').toString('utf8');
+  } catch { /* não é base64 */ }
+  if (/^\$2[aby]\$\d\d\$[./A-Za-z0-9]{53}$/.test(hash)) return { estado: 'ligada', hash };
+  console.error('[config] SENHA_USUARIOS_HASH não é o base64 de um hash bcrypt — a parte de gerenciar usuários fica TRANCADA. Grave de novo com scripts/gravar_senha_usuarios.sh.');
+  return { estado: 'invalida', hash: '' };
+}
+
 export const config = {
   ambiente: process.env.NODE_ENV || 'production',
   porta: Number(process.env.PORT || 3000),
@@ -52,6 +77,8 @@ export const config = {
   // que é o ganho principal desta migração — deixa de valer.
   jwtSegredo: obrigatorio('JWT_SECRET', 32),
   jwtValidade: process.env.JWT_VALIDADE || '12h',
+  // Ver lerSenhaUsuarios, logo acima. Lido a cada pedido (os testes trocam).
+  senhaUsuarios: lerSenhaUsuarios(process.env.SENHA_USUARIOS_HASH),
 
   // Turno de pátio é longo; 12h evita o operador ser deslogado no meio.
   // Mais que isso vira risco em terminal compartilhado.

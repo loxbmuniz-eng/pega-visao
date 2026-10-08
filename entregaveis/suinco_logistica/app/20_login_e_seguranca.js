@@ -879,10 +879,15 @@ function aplicarPermissoesSetor(){
       || (el.dataset.tab === 'usuarios' && usuariosLiberada);
     el.hidden = !liberada;
   });
-  // Dentro da aba Usuários: gerenciar gente é só da Administração.
+  // Dentro da aba Usuários: gerenciar gente é só da Administração — e, com a
+  // senha da aba gravada no servidor, só depois de digitá-la neste login
+  // (08/10/2026). Trancada, nada do gerenciar fica à vista: só o cartão que
+  // pede a senha. "Minha segurança" é de todos, sempre.
+  const trancada = admin && usuariosTrancadaUI();
   document.querySelectorAll('#tab-usuarios .card').forEach(card=>{
     if(card.id === 'card-minha-seguranca') return;
-    card.hidden = !admin;
+    if(card.id === 'card-usuarios-trancada'){ card.hidden = !trancada; return; }
+    card.hidden = !admin || trancada;
   });
   if(!doSetor.includes(TAB_ATUAL) && !(TAB_ATUAL === 'usuarios' && usuariosLiberada)) irParaTab(doSetor[0] || 'torre');
   // Mesmo funil das abas: quem já chama isto no login, na restauração e na
