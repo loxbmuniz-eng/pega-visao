@@ -5718,3 +5718,12 @@ visíveis (Administração e Logística), salto por clique e por Enter com o
 título à vista, seção recolhida que abre no celular, 44 px para o dedo,
 página sem rolagem lateral, foco preservado no redesenho, e o aviso das duas
 datas com o botão que alinha. Reprova no publicado.
+
+**O portão 70 cancelou — causa 1 das quatro.** `test_tema2027_etapa4_tabelas`
+guarda que a etapa das tabelas "é compactação, não crescimento" comparando a
+altura de `#main` com o publicado: a Programação cresceu 50 px — a própria
+barra "Ir para". A mudança é de propósito, mas aceitar o número novo faria a
+guarda se auto-atualizar depois da publicação (o próprio teste explica por
+que isso não guarda nada). A barra passou a ser DECLARADA ali, medida e
+descontada dos dois lados; qualquer outro crescimento continua reprovando.
+Lição: a suíte estava na lista das afetadas e não foi rodada antes do portão.
