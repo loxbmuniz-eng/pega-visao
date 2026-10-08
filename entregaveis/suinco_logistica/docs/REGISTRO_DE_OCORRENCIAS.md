@@ -28,7 +28,7 @@ faz achar a próxima em minutos em vez de horas:
 | **Rótulo que mente** | O dado está certo no banco; o nome dado a ele na tela descreve outra coisa. | #04, #12, #123, #125 |
 | **Regra larga demais** | Trava criada para um caso real barra também o caso legítimo mais comum. | #05 |
 | **Trava sem o par na tela** | O servidor passa a exigir algo novo e a tela continua com o botão antigo: quem clica só descobre que não pode, e não tem por onde seguir. | #13, #73 |
-| **A mesma decisão escrita em dois lugares** | A regra é copiada em vez de consultada. As cópias divergem e o comportamento fica errado sem que nenhuma linha esteja errada. | #14, #26, #73, #122 |
+| **A mesma decisão escrita em dois lugares** | A regra é copiada em vez de consultada. As cópias divergem e o comportamento fica errado sem que nenhuma linha esteja errada. | #14, #26, #73, #122, #126 |
 | **Duas escritas em voo, a velha ganha** | O painel manda a carga INTEIRA a cada alteração. Duas alterações seguidas viram duas requisições simultâneas, e a primeira carrega o valor velho do campo que ainda ia mudar. | #16 |
 | **A correção que outro setor desfaz sem saber** | Um setor corrige de propósito o que outro fez. A tela do segundo continua mostrando o estado como se nada tivesse sido decidido, e o gesto normal dele desfaz a correção — em silêncio, dos dois lados. | #21 |
 | **A proteção escrita para um posto só** | A regra certa existe, com comentário e tudo — mas vale para um caminho e não para os irmãos dele. Não é cópia divergente: é a cópia que nunca foi escrita. | #20, #124 |
@@ -5727,3 +5727,51 @@ guarda se auto-atualizar depois da publicação (o próprio teste explica por
 que isso não guarda nada). A barra passou a ser DECLARADA ali, medida e
 descontada dos dois lados; qualquer outro crescimento continua reprovando.
 Lição: a suíte estava na lista das afetadas e não foi rodada antes do portão.
+
+---
+
+## #126 — A mesma etapa com duas cores, a mesma ação com dois nomes (08/10/2026)
+
+**Achado** na auditoria `/impeccable` (Lote 5, *polish*), conferido no código:
+
+- a **pizza dos Indicadores** pintava as etapas com a paleta da planilha do
+  pátio (`statusCarregamentoInfo`): Embarque Finalizado, Faturado e Seguiu
+  Viagem no MESMO verde, e o "Pátio" amarelo. A função irmã logo acima
+  (`distribuicaoPorStatus`, dos Relatórios) já usava a cor da etapa — duas
+  funções para a mesma distribuição, com duas decisões;
+- o **Cadastros** tinha "Remover" (vermelho, 300 vezes) na Frota e nas
+  Transportadoras e "Excluir" (neutro) nas Rotas para a mesma ação — e
+  **excluir uma transportadora era UM clique, sem pergunta**, enquanto a
+  Frota, ao lado, perguntava (provado pela tela: o clique já excluía);
+- os **botões de ação rápida** do topo da Expedição e do Faturamento eram
+  dourados e verde-escuros, quando a regra do botão de avanço ("veste a cor
+  da etapa que produz", `btn-avanco-*`) já valia nos mesmos botões da tabela;
+- **achado no caminho:** o modo offline apagava só `.btn-primary` e
+  `.btn-danger` — o botão de avanço, que também grava, ficava aceso.
+
+**O que NÃO era defeito.** A "data repetida" na coluna "Programação · Última
+etapa" da Torre: a segunda linha é o horário EXATO da última etapa, igual ao
+do Histórico, por pedido do gestor ("as três telas não têm como discordar").
+O botão de tema mostrar o tema atual é decisão registrada no código.
+
+**Família:** *A mesma decisão escrita em dois lugares* (a distribuição por
+etapa) e *A proteção escrita para um posto só* (a regra do botão de avanço e
+a pergunta antes de excluir valiam num lugar e não no irmão).
+
+**Correção:** a pizza usa `corStatusRelatorio(s).fundo` — o preenchimento
+da etapa (`--st-*-bg`), o mesmo do botão de avanço; a paleta da planilha fica
+no PDF Operacional e no Power BI, onde é dela. "Excluir", vermelho, na Frota,
+nas Transportadoras e nas Rotas; a transportadora pergunta antes (a lista é
+só de nomes: as placas que usam o nome não mudam). Topo da Expedição e do
+Faturamento com `btn-avanco` da etapa produzida; `.btn-avanco` apaga offline
+como os outros botões que gravam. Junto (Lote 5c): a frase da Torre deixa de
+dizer "visão de leitura para todos os setores" (a Logística e a
+Administração editam); os Relatórios deixam de mostrar um caminho do
+repositório ao usuário; o título do botão de tema diz também o que o toque faz.
+
+**Trava.** `test_mesma_acao_mesma_cara`: cada fatia com o preenchimento da
+própria etapa e Finalizado ≠ Faturado; nenhum "Remover" no Cadastros e o
+mesmo "Excluir" nos três cartões; a transportadora pergunta e "Cancelar" não
+exclui; topo e tabela com a mesma cor nos três avanços; os três textos.
+Reprova no publicado em 13 pontos.
+

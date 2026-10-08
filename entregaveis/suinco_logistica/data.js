@@ -3576,7 +3576,13 @@ function distribuicaoStatusAtual(filtros){
     .map(s => ({
       status: s,
       quantidade: abertas.filter(c=>c.status===s).length,
-      cor: statusCarregamentoInfo(s).cor
+      /* A cor da ETIQUETA da etapa (08/10/2026, /impeccable Lote 5). A pizza
+         usava a paleta da planilha do pátio (statusCarregamentoInfo), em que
+         Finalizado, Faturado e Seguiu Viagem são o mesmo verde e o "Pátio" é
+         amarelo — o mesmo status com outra cor duas seções abaixo, enquanto
+         distribuicaoPorStatus, logo acima, já usava a da etiqueta. A paleta
+         da planilha continua no PDF Operacional e no Power BI, onde é dela. */
+      cor: corStatusRelatorio(s).fundo
     }));
 }
 // Cargas concluídas por dia dentro da janela do período — usado no

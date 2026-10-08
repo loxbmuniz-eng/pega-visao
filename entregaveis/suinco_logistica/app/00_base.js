@@ -605,6 +605,14 @@ function aplicarTema(tema){
   if(btn) btn.innerHTML = claro
     ? icoSvg('i-sol') + '<span class="rot-btn">Claro</span>'
     : icoSvg('i-lua') + '<span class="rot-btn">Escuro</span>';
+  // O rótulo continua sendo o tema ATUAL (decisão acima); o título e a
+  // leitura de tela dizem também o que o toque faz (/impeccable Lote 5:
+  // "Alternar" sozinho não dizia para qual).
+  if(btn){
+    const dica = claro ? 'Tema claro — tocar troca para o escuro' : 'Tema escuro — tocar troca para o claro';
+    btn.title = dica;
+    btn.setAttribute('aria-label', dica);
+  }
   // Gráficos são desenhados em canvas: pixels já pintados não reagem a CSS,
   // então precisam ser redesenhados na cor nova.
   if(typeof TAB_ATUAL !== 'undefined' && TAB_ATUAL === 'indicadores'){

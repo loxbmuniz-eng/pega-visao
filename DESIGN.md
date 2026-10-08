@@ -307,6 +307,8 @@ desistir se chama **Voltar**. No celular os botões ocupam a largura, 44 px.
 - **Do** dar acesso por teclado a tudo que se clica (botão de verdade, ou `role` e `tabindex`).
 
 ### Don't:
+- Dar dois nomes ou duas cores para a mesma ação ("Remover" e "Excluir"; dourado no topo e a cor da etapa na tabela) — o verbo é "Excluir", vermelho, e o avanço veste a cor da etapa que produz, em todo lugar.
+- Pintar uma etapa num gráfico com outra paleta: a fatia usa o preenchimento da etapa (`--st-*-bg`), o mesmo do botão de avanço.
 - **Don't** usar as seis cores de etapa para outra coisa que não etapa.
 - **Don't** pôr vidro, desfoque ou sombra de volume em superfície.
 - **Don't** usar cor de etapa ou dourado de preenchimento como texto no tema claro.

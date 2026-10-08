@@ -157,7 +157,7 @@
     <div class="funcao-aba" data-tab="torre"></div>
     <div class="card">
       <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-torre"/></svg> Torre de Controle — todas as cargas em aberto</div>
-      <div class="card-sub">Visão de leitura para todos os setores. Atualiza sempre que alguém registra uma movimentação.</div>
+      <div class="card-sub">Todos os setores acompanham aqui; a Logística e a Administração também editam a linha. Atualiza sempre que alguém registra uma movimentação.</div>
       <div class="bento bi-faixa" id="torre-stats"></div>
       <!-- HIERARQUIA (01/10/2026): primeiro os números, depois a ação de
            rotina, depois a lista; o "Fechar Programação" mora no FIM da
@@ -954,8 +954,11 @@
       <div class="card-sub">Se a placa tiver mais de uma carga elegível para a mesma ação, o painel pergunta qual carga está sendo processada.</div>
       <div class="quick-box">
         <div class="form-group"><label>Placa</label><input type="text" id="exp-placa" placeholder="ABC1D23" autocomplete="off"></div>
-        <button class="btn btn-primary btn-sm" onclick="acaoRapidaPlaca('exp-placa','Aguardando Embarque','Embarque Iniciado','Expedição')">Iniciar Embarque</button>
-        <button class="btn btn-success btn-sm" onclick="acaoRapidaPlaca('exp-placa','Embarque Iniciado','Embarque Finalizado','Expedição')">Finalizar Embarque</button>
+        <!-- A cor da etapa que o clique PRODUZ, como os botões da tabela
+             (btn-avanco, 10_interface.js) — o topo tinha ficado dourado e
+             verde-escuro (08/10/2026, /impeccable Lote 5). -->
+        <button class="btn btn-sm btn-avanco btn-avanco-embarque-iniciado" onclick="acaoRapidaPlaca('exp-placa','Aguardando Embarque','Embarque Iniciado','Expedição')">Iniciar Embarque</button>
+        <button class="btn btn-sm btn-avanco btn-avanco-embarque-finalizado" onclick="acaoRapidaPlaca('exp-placa','Embarque Iniciado','Embarque Finalizado','Expedição')">Finalizar Embarque</button>
       </div>
     </div>
     <div class="card">
@@ -1020,7 +1023,7 @@
       <div class="card-sub">Digite a placa e marque como <strong>FATURADO</strong> (<strong>Embarque Finalizado → Faturado</strong>). Só aparece aqui a carga que a Expedição já finalizou. Depois de faturada, a Portaria consegue registrar a saída do caminhão. Se a placa tiver mais de uma carga elegível, o painel pergunta qual está sendo faturada.</div>
       <div class="quick-box">
         <div class="form-group"><label>Placa</label><input type="text" id="fat-placa" placeholder="ABC1D23" autocomplete="off" onkeydown="if(event.key==='Enter')acaoRapidaPlaca('fat-placa','Embarque Finalizado','Faturado','Faturamento')"></div>
-        <button class="btn btn-primary btn-sm" onclick="acaoRapidaPlaca('fat-placa','Embarque Finalizado','Faturado','Faturamento')">FATURADO</button>
+        <button class="btn btn-sm btn-avanco btn-avanco-faturado" onclick="acaoRapidaPlaca('fat-placa','Embarque Finalizado','Faturado','Faturamento')">FATURADO</button>
       </div>
     </div>
     <div class="card">
@@ -1727,7 +1730,6 @@
         <code>Dim_Transportadora</code>, <code>Dim_Frota</code>, <code>Dim_Status</code>.
         <strong>Para uso pontual</strong> — o caminho recomendado é o Power BI conectar direto na API
         (<code>api.embarquesuinco.com.br/bi/…</code>), com os mesmos cabeçalhos e sem exportar nada à mão.
-        Ver <code>docs/POWERBI_EXPORT.md</code>.
       </div>
       <button class="btn btn-primary" onclick="exportarCsvPowerBI()"><svg class="ico ico-btn" aria-hidden="true"><use href="#i-indicadores"/></svg>Exportar Dados (CSV) — Power BI</button>
     </div>
