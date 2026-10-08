@@ -6,3 +6,7 @@ __pycache__/
 entregaveis/suinco_logistica/backend/.env
 entregaveis/suinco_logistica/backend/node_modules/
 entregaveis/suinco_logistica/backend/node_modules
+
+# Erro da última queda do servidor, guardado para o Sentry na próxima subida
+# (backend/src/servicos/erros.js). É do processo que roda, não é fonte.
+entregaveis/suinco_logistica/backend/erro_da_ultima_queda.json

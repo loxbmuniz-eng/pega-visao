@@ -31,6 +31,8 @@ import { rotasIndicadores } from './rotas/indicadores.js';
 import { rotasRelatorios } from './rotas/relatorios.js';
 import { rotasDevolucoes } from './rotas/devolucoes.js';
 import { rotasPagamentoFrete } from './rotas/pagamento_frete.js';
+import { rotasErros } from './rotas/erros.js';
+import { avisarErro, ligarRegistroDeQueda, enviarQuedaPendente, avisoLigado } from './servicos/erros.js';
 
 /* Chave do limite geral: por OPERADOR autenticado, não por IP.
 
@@ -149,6 +151,96 @@ export function recusaDoBanco(err) {
   const r = RECUSAS_DO_BANCO[err?.code];
   if (!r) return null;
   return { status: r[0], corpo: { erro: r[2], codigo: r[1], restricao: err.constraint || null } };
+}
+
+/* A rota como MOLDE (`/api/cargas/:id`), nunca com o número que veio nela:
+   é o que agrupa o mesmo defeito no Sentry, e número de carga é dado da
+   operação. Quando o erro chega aqui, o Express já devolveu o `baseUrl` do
+   roteador (`/api`) — o prefixo sai do caminho de verdade, contando os
+   trechos do molde. Sem molde (erro antes de achar a rota), os trechos com
+   número viram `:n`. */
+export function moldeDaRota(req) {
+  const molde = req.route?.path;
+  if (typeof molde === 'string') {
+    const real = String(req.originalUrl || req.url || '').split('?')[0].split('/').filter(Boolean);
+    const prefixo = real.slice(0, Math.max(0, real.length - molde.split('/').filter(Boolean).length));
+    return (prefixo.length ? '/' + prefixo.join('/') : '') + molde;
+  }
+  return String(req.path || '').replace(/\/[^/]*\d[^/]*/g, '/:n');
+}
+
+/* Handler global. Erros de domínio (fluxo, permissão) já trazem `status` e
+   `codigo` — são repassados. Qualquer outro vira 500 com mensagem genérica:
+   detalhe de erro do PostgreSQL na resposta entrega estrutura de tabela
+   para quem está sondando. O detalhe vai para o log, onde é útil. */
+/* Exportado (08/10/2026): a bateria monta uma rota que quebra de propósito
+   e prova, com ESTE tratamento, o que vai ao Sentry e o que não vai. */
+// eslint-disable-next-line no-unused-vars
+export function tratarErro(err, req, res, _next) {
+  if (err?.status && err?.codigo) {
+    return res.status(err.status).json({ erro: err.message, codigo: err.codigo });
+  }
+  if (err?.message?.startsWith('Origem não autorizada')) {
+    return res.status(403).json({ erro: err.message, codigo: 'ORIGEM_NAO_AUTORIZADA' });
+  }
+  /* Corpo maior que o limite do express.json/express.text. O
+     body-parser lança com `status` mas sem `codigo`, então caía no 500
+     genérico logo abaixo — que diz "erro interno no servidor" para uma
+     requisição que o servidor recusou de propósito, e manda o painel
+     tratar como falha de rede (enfileirando pra tentar de novo uma
+     coisa que nunca vai ser aceita). */
+  if (err?.type === 'entity.too.large') {
+    return res.status(413).json({
+      erro: 'Conteúdo grande demais para o servidor aceitar.',
+      codigo: 'CONTEUDO_GRANDE_DEMAIS',
+    });
+  }
+  /* CADASTRO QUE FALTA NÃO É ERRO DE SERVIDOR (12/09/2026).
+
+     Exatamente a mesma armadilha descrita acima para `entity.too.large`,
+     encontrada em produção: `POST /api/cargas` com código de rota que não
+     existe em `dim_rotas` viola a chave estrangeira e saía como 500. O
+     painel classifica TODO 500 como falha de rede (`eFalhaDeRede` em
+     suinco-api.js), então a carga sumia da tela dizendo "offline" e ia para
+     a fila tentar para sempre — contra uma recusa que nunca vai ser aceita.
+     Treze vezes em 11/09/2026, e o operador lendo "sistema offline" com o
+     servidor no ar.
+
+     Chave estrangeira violada é cadastro que falta, não defeito de
+     servidor: é recusa de cliente, e o operador tem que ler o motivo para
+     saber que refazer não resolve — cadastrar resolve. */
+  if (err?.code === '23503') {
+    const achado = /Key \(([^)]+)\)=\(([^)]*)\)/.exec(err.detail || '');
+    const campo = achado ? achado[1] : '';
+    const valor = achado ? achado[2] : '';
+    const oQue = /rota/.test(campo) ? 'rota'
+      : /placa|veiculo/.test(campo) ? 'placa'
+      : campo.replace(/_(codigo|id)$/, '').replace(/_/g, ' ');
+    console.warn('[recusa] cadastro inexistente em', req.method, req.path,
+      '—', err.constraint || campo);
+    return res.status(422).json({
+      erro: (oQue && valor)
+        ? `A ${oQue} "${valor}" não está cadastrada. Cadastre antes de gravar.`
+        : 'Esta gravação depende de um cadastro que não existe. Confira os dados.',
+      codigo: 'CADASTRO_INEXISTENTE',
+      campo: campo || null,
+      valor: valor || null,
+    });
+  }
+  const recusa = recusaDoBanco(err);
+  if (recusa) {
+    console.warn('[recusa do banco]', req.method, req.path, '—', err.code, err.constraint || '', err.message);
+    return res.status(recusa.status).json(recusa.corpo);
+  }
+  console.error('[erro]', req.method, req.path, '—', err?.stack || err);
+  /* Só o erro INESPERADO vai ao Sentry (decisão 27): recusa de regra,
+     de permissão e do banco, acima, é resposta certa, não defeito. Sem
+     await — a resposta ao painel não espera o Sentry. */
+  avisarErro({
+    origem: 'servidor', tipo: err?.name, mensagem: err?.message || String(err), pilha: err?.stack,
+    onde: `${req.method} ${moldeDaRota(req)}`, setor: req.operador?.setor, versao: VERSAO_SERVIDOR.texto,
+  });
+  return res.status(500).json({ erro: 'Erro interno no servidor.', codigo: 'ERRO_INTERNO' });
 }
 
 export function criarApp() {
@@ -302,6 +394,9 @@ export function criarApp() {
         versao: VERSAO_SERVIDOR.texto,
         versaoEm: VERSAO_SERVIDOR.em,
         conectados: conectados(),
+        /* O aviso de erro ao Sentry está ligado? (08/10/2026) Responde sem
+           SSH se a chave entrou no .env. Não é segredo: só sim ou não. */
+        sentry: { servidor: avisoLigado('servidor'), painel: avisoLigado('painel') },
         /* O RELATÓRIO EM PDF DEPENDE DE UM CHROMIUM, E ISSO PRECISA SER
            VISÍVEL DE FORA (26/08/2026).
 
@@ -348,6 +443,7 @@ export function criarApp() {
   app.use('/api', rotasPagamentoFrete);
   app.use('/api', rotasVigia);
   app.use('/api', rotasIndicadores);
+  app.use('/api', rotasErros);
   app.use('/bi', rotasBI);
   // Robô de relatórios (n8n → WhatsApp) — leitura, token próprio.
   app.use('/bot', rotasBot);
@@ -356,70 +452,7 @@ export function criarApp() {
     res.status(404).json({ erro: `Rota não encontrada: ${req.method} ${req.path}`, codigo: 'ROTA_INEXISTENTE' });
   });
 
-  /* Handler global. Erros de domínio (fluxo, permissão) já trazem `status` e
-     `codigo` — são repassados. Qualquer outro vira 500 com mensagem genérica:
-     detalhe de erro do PostgreSQL na resposta entrega estrutura de tabela
-     para quem está sondando. O detalhe vai para o log, onde é útil. */
-  // eslint-disable-next-line no-unused-vars
-  app.use((err, req, res, _next) => {
-    if (err?.status && err?.codigo) {
-      return res.status(err.status).json({ erro: err.message, codigo: err.codigo });
-    }
-    if (err?.message?.startsWith('Origem não autorizada')) {
-      return res.status(403).json({ erro: err.message, codigo: 'ORIGEM_NAO_AUTORIZADA' });
-    }
-    /* Corpo maior que o limite do express.json/express.text. O
-       body-parser lança com `status` mas sem `codigo`, então caía no 500
-       genérico logo abaixo — que diz "erro interno no servidor" para uma
-       requisição que o servidor recusou de propósito, e manda o painel
-       tratar como falha de rede (enfileirando pra tentar de novo uma
-       coisa que nunca vai ser aceita). */
-    if (err?.type === 'entity.too.large') {
-      return res.status(413).json({
-        erro: 'Conteúdo grande demais para o servidor aceitar.',
-        codigo: 'CONTEUDO_GRANDE_DEMAIS',
-      });
-    }
-    /* CADASTRO QUE FALTA NÃO É ERRO DE SERVIDOR (12/09/2026).
-
-       Exatamente a mesma armadilha descrita acima para `entity.too.large`,
-       encontrada em produção: `POST /api/cargas` com código de rota que não
-       existe em `dim_rotas` viola a chave estrangeira e saía como 500. O
-       painel classifica TODO 500 como falha de rede (`eFalhaDeRede` em
-       suinco-api.js), então a carga sumia da tela dizendo "offline" e ia para
-       a fila tentar para sempre — contra uma recusa que nunca vai ser aceita.
-       Treze vezes em 11/09/2026, e o operador lendo "sistema offline" com o
-       servidor no ar.
-
-       Chave estrangeira violada é cadastro que falta, não defeito de
-       servidor: é recusa de cliente, e o operador tem que ler o motivo para
-       saber que refazer não resolve — cadastrar resolve. */
-    if (err?.code === '23503') {
-      const achado = /Key \(([^)]+)\)=\(([^)]*)\)/.exec(err.detail || '');
-      const campo = achado ? achado[1] : '';
-      const valor = achado ? achado[2] : '';
-      const oQue = /rota/.test(campo) ? 'rota'
-        : /placa|veiculo/.test(campo) ? 'placa'
-        : campo.replace(/_(codigo|id)$/, '').replace(/_/g, ' ');
-      console.warn('[recusa] cadastro inexistente em', req.method, req.path,
-        '—', err.constraint || campo);
-      return res.status(422).json({
-        erro: (oQue && valor)
-          ? `A ${oQue} "${valor}" não está cadastrada. Cadastre antes de gravar.`
-          : 'Esta gravação depende de um cadastro que não existe. Confira os dados.',
-        codigo: 'CADASTRO_INEXISTENTE',
-        campo: campo || null,
-        valor: valor || null,
-      });
-    }
-    const recusa = recusaDoBanco(err);
-    if (recusa) {
-      console.warn('[recusa do banco]', req.method, req.path, '—', err.code, err.constraint || '', err.message);
-      return res.status(recusa.status).json(recusa.corpo);
-    }
-    console.error('[erro]', req.method, req.path, '—', err?.stack || err);
-    return res.status(500).json({ erro: 'Erro interno no servidor.', codigo: 'ERRO_INTERNO' });
-  });
+  app.use(tratarErro);
 
   return app;
 }
@@ -536,6 +569,7 @@ async function exigirBancoNaVersaoDoCodigo() {
 /* Só sobe sozinho quando executado direto. Importado pelos testes, não. */
 const executadoDireto = process.argv[1] && import.meta.url.endsWith(process.argv[1].split('/').pop());
 if (executadoDireto) {
+  ligarRegistroDeQueda(VERSAO_SERVIDOR.texto);
   const servidor = criarServidor();
 
   verificarConexao()
@@ -544,6 +578,9 @@ if (executadoDireto) {
       servidor.listen(config.porta, '127.0.0.1', () => {
         console.log(`Embarque Suinco API · porta ${config.porta} · banco OK (${agora})`);
         console.log(`Origens permitidas: ${config.origens.join(', ')}`);
+        console.log(`Aviso de erro ao Sentry: ${avisoLigado() ? 'ligado' : 'desligado (sem SENTRY_DSN)'}`);
+        // A queda anterior, gravada no disco, sai agora (servicos/erros.js).
+        enviarQuedaPendente().then((r) => { if (r.enviado) console.log('[sentry] queda anterior enviada'); });
       });
     })
     .catch((e) => {

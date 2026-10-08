@@ -8084,11 +8084,15 @@ describe('56. Nota por transportadora: documentos pendentes; devolução fica de
                        '623 — Comercial/Cliente comprou de outro fornecedor.']);
     await dev('', '905601', ['604 — Transporte/Falta de mercadoria. Ocorreu falta de mercadoria no ato da entrega.']);
     await dev(T1, '', ['607 — Transporte/Avaria. Mercadoria chegou no cliente avariada, gerando a devolução do produto.'], "current_date - 400");
+    /* O DIA DE BRASÍLIA, como o sistema grava (hojeISO, na rota do Pagamento
+       de Frete) — não o `current_date` do banco, que é UTC: entre 21h e
+       meia-noite ele já é amanhã, e o quadro, que filtra pelo dia de
+       Brasília, não achava a carga (reprovou às 21h40 de 07/10). */
     await pool.query(
       `INSERT INTO pgfrete_cargas (numero_carga, data_consulta, primeira_consulta, transportadora, cte, canhoto_original)
-       VALUES ('905611', current_date, current_date, $1, '', true),
-              ('905612', current_date, current_date, $1, 'CT1', false),
-              ('905613', current_date, current_date, $1, 'CT2', true)`, [T1]);
+       VALUES ('905611', $2, $2, $1, '', true),
+              ('905612', $2, $2, $1, 'CT1', false),
+              ('905613', $2, $2, $1, 'CT2', true)`, [T1, hojeISO()]);
   });
 
   after(limpar);
@@ -8160,5 +8164,249 @@ describe('57. Plano B: o servidor também serve o painel em /painel (07/10/2026)
 
   test('o sw.js NÃO é servido no domínio da API (não pode interceptar a API)', async () => {
     assert.equal((await req('/sw.js')).status, 404);
+  });
+});
+
+describe('58. Aviso de erro ao Sentry, sem dado de cliente (08/10/2026, decisão 27)', () => {
+  /* Pedido do dono ("Use Sentry for this"). O erro do painel e o erro
+     inesperado do servidor chegam sozinhos ao Sentry — e só o que está na
+     LISTA BRANCA sai: tipo, mensagem limpa, pilha, origem, versão, setor,
+     tela ou rota em molde. Prova contra um Sentry FALSO, local: o que ele
+     recebe é exatamente o que o Sentry de verdade receberia. */
+  let sentry;
+  let recebidos = [];
+  let dsnFalso;
+  const dsnAntes = process.env.SENTRY_DSN;
+  let E;
+
+  before(async () => {
+    E = await import('../src/servicos/erros.js');
+    const http = await import('node:http');
+    sentry = http.createServer((pedido, resposta) => {
+      let corpo = '';
+      pedido.on('data', (c) => { corpo += c; });
+      pedido.on('end', () => {
+        recebidos.push({ url: pedido.url, cabecalhos: pedido.headers, corpo });
+        resposta.writeHead(200, { 'content-type': 'application/json' });
+        resposta.end('{"id":"x"}');
+      });
+    });
+    await new Promise((r) => sentry.listen(0, '127.0.0.1', r));
+    dsnFalso = `http://chave-publica-teste@127.0.0.1:${sentry.address().port}/42`;
+  });
+  after(async () => {
+    if (dsnAntes === undefined) delete process.env.SENTRY_DSN; else process.env.SENTRY_DSN = dsnAntes;
+    await new Promise((r) => sentry.close(r));
+  });
+  const ligar = () => { process.env.SENTRY_DSN = dsnFalso; E._zerarParaTeste(); recebidos = []; };
+  const desligar = () => { delete process.env.SENTRY_DSN; E._zerarParaTeste(); recebidos = []; };
+  async function esperarEnvios(n, ms = 3000) {
+    const ate = Date.now() + ms;
+    while (recebidos.length < n && Date.now() < ate) await new Promise((r) => setTimeout(r, 50));
+    await new Promise((r) => setTimeout(r, 150));   // e nada a mais chega depois
+    return recebidos;
+  }
+  const eventoDe = (envio) => JSON.parse(envio.corpo.trim().split('\n')[2]);
+
+  test('o DSN vira o endereço de entrega; DSN torto ou vazio DESLIGA, sem derrubar nada', () => {
+    assert.deepEqual(E.lerDsn('https://abc123@o9.ingest.us.sentry.io/4507'),
+      { envio: 'https://o9.ingest.us.sentry.io/api/4507/envelope/', chave: 'abc123' });
+    assert.equal(E.lerDsn(''), null);
+    assert.equal(E.lerDsn('isto não é endereço'), null);
+    assert.equal(E.lerDsn('https://o9.ingest.us.sentry.io/4507'), null, 'sem a chave');
+    assert.equal(E.lerDsn('https://abc@o9.ingest.us.sentry.io/projeto'), null, 'projeto tem que ser número');
+  });
+
+  test('a mensagem sai sem e-mail, token, CPF, CNPJ, telefone, número de carga ou nota e sem o valor digitado', () => {
+    const m = E.limparTexto('Falha de joao.silva@suinco.com.br com Bearer abc.def.ghi, token eyJhbGciOi.eyJzdWIiOjF9.assinatura, '
+      + 'CPF 123.456.789-09, CNPJ 12.345.678/0001-90, fone (49) 99876-5432, carga 905801, nota 12345, '
+      + 'invalid input syntax for type integer: "Fulano de Tal"');
+    for (const proibido of ['joao.silva', 'abc.def.ghi', 'eyJ', '123.456.789-09', '12.345.678/0001-90', '99876-5432', '905801', '12345', 'Fulano']) {
+      assert.ok(!m.includes(proibido), `vazou "${proibido}" em: ${m}`);
+    }
+    assert.match(m, /\[e-mail\].*\[cpf\].*\[cnpj\].*\[telefone\].*\[número\]/);
+    // O que é CÓDIGO continua legível: é o que diz onde está o defeito.
+    assert.equal(E.limparTexto("Cannot read properties of undefined (reading 'placa')"),
+      "Cannot read properties of undefined (reading 'placa')");
+    assert.equal(E.limparTexto('column "frete_obs" does not exist'), 'column "frete_obs" does not exist');
+    assert.ok(E.limparTexto('x'.repeat(5000)).length <= 300, 'mensagem cortada em 300');
+  });
+
+  test('o evento leva SÓ os campos da lista branca (nada de request, user, IP, extra)', () => {
+    const ev = E.montarEvento({ origem: 'painel', tipo: 'TypeError', mensagem: 'x is not a function',
+      pilha: 'TypeError: x\n    at abrirCarga (https://embarquesuinco.com.br/?carga=905801#torre:123:45)\n    at HTMLButtonElement.onclick (https://embarquesuinco.com.br/:1:1)',
+      onde: 'torre', setor: 'Portaria', versao: '07/10 20:37 · 9b690af', ambiente: 'production' });
+    assert.deepEqual(Object.keys(ev).sort(),
+      ['environment', 'event_id', 'exception', 'level', 'logger', 'platform', 'release', 'tags', 'timestamp']);
+    assert.equal(ev.release, '9b690af', 'a versão é o commit');
+    assert.deepEqual(ev.tags, { origem: 'painel', setor: 'Portaria', tela: 'torre' });
+    const q = ev.exception.values[0].stacktrace.frames;
+    assert.equal(q.length, 2);
+    assert.equal(q[1].function, 'abrirCarga', 'o mais novo por último, como o Sentry espera');
+    assert.equal(q[1].filename, 'https://embarquesuinco.com.br/', 'sem ?parâmetros nem #âncora');
+    assert.equal(q[1].lineno, 123);
+    assert.ok(!JSON.stringify(ev).includes('905801'));
+  });
+
+  test('SEM SENTRY_DSN: o aviso do painel é aceito (202), fica no journal e NADA sai para fora', async () => {
+    desligar();
+    const r = await req('/api/erros', { metodo: 'POST', token: tokens['Portaria'],
+      corpo: { tipo: 'TypeError', mensagem: 'quebrou sem chave', pilha: '', tela: 'portaria', versao: 'v' } });
+    assert.equal(r.status, 202);
+    assert.deepEqual(r.json, { recebido: true, ligado: false });
+    assert.equal((await esperarEnvios(1, 600)).length, 0);
+  });
+
+  test('COM SENTRY_DSN: o erro da tela chega ao Sentry, com o setor do CRACHÁ e sem nada proibido', async () => {
+    ligar();
+    const r = await req('/api/erros', { metodo: 'POST', token: tokens['Portaria'], corpo: {
+      tipo: 'TypeError',
+      mensagem: 'Cannot read properties of null (reading \'placa\') — carga 905801 de maria@cliente.com.br',
+      pilha: 'TypeError: carga 905801 de maria@cliente.com.br\n    at registrarChegada (https://embarquesuinco.com.br/?token=eyJx.eyJy.zzz:2001:7)',
+      tela: 'portaria',
+      versao: '08/10 09:00 · abc1234',
+      // tudo isto o painel NÃO manda — e se mandasse, não pode passar:
+      setor: 'Administração', corpo: { cliente: 'SUPERMERCADO FULANO' }, cookie: 'sessao=1', url: 'https://x/?cpf=1',
+    } });
+    assert.equal(r.status, 202);
+    assert.equal(r.json.ligado, true);
+    const [envio] = await esperarEnvios(1);
+    assert.ok(envio, 'o Sentry falso recebeu');
+    assert.equal(recebidos.length, 1);
+    assert.equal(envio.url, '/api/42/envelope/');
+    assert.match(envio.cabecalhos['x-sentry-auth'], /sentry_key=chave-publica-teste/);
+    const ev = eventoDe(envio);
+    assert.equal(ev.tags.setor, 'Portaria', 'o setor vem do token, não do corpo');
+    assert.equal(ev.tags.tela, 'portaria');
+    assert.equal(ev.release, 'abc1234');
+    assert.equal(ev.platform, 'javascript');
+    for (const proibido of ['905801', 'maria@', 'SUPERMERCADO', 'sessao=1', 'cpf=', 'eyJx', 'Administração', 'chave-publica-teste']) {
+      assert.ok(!envio.corpo.includes(proibido), `vazou "${proibido}"`);
+    }
+  });
+
+  test('o mesmo erro repetido 10 vezes sai UMA vez (a cota do Sentry não some numa tarde)', async () => {
+    ligar();
+    for (let i = 0; i < 10; i++) {
+      const r = await req('/api/erros', { metodo: 'POST', token: tokens['Logística'], corpo: { tipo: 'Error', mensagem: 'laço de erro', tela: 'torre' } });
+      assert.equal(r.status, 202);
+    }
+    assert.equal((await esperarEnvios(2, 800)).length, 1);
+  });
+
+  test('erros diferentes: no máximo 20 a cada 10 minutos', async () => {
+    ligar();
+    const enviar = async () => ({ ok: true, status: 200 });
+    const motivos = [];
+    for (let i = 0; i < 25; i++) {
+      motivos.push((await E.avisarErro({ origem: 'painel', mensagem: `erro ${String.fromCharCode(97 + i)}` }, { enviar })).motivo);
+    }
+    assert.equal(motivos.filter((m) => m === null).length, 20);
+    assert.equal(motivos.filter((m) => m === 'teto').length, 5);
+  });
+
+  test('erro INESPERADO do servidor vai com a rota em molde; recusa de regra NÃO vai', async () => {
+    ligar();
+    const express = (await import('express')).default;
+    const { tratarErro } = await import('../src/servidor.js');
+    // Montado como no servidor de verdade: um roteador em /api.
+    const app = express();
+    const rotas = express.Router();
+    rotas.get('/cargas/:id/quebra', (pedido) => { pedido.operador = { setor: 'Expedição' }; throw new TypeError(`sem a carga ${pedido.params.id}`); });
+    rotas.get('/cargas/:id/recusa', () => { const e = new Error('Transição não permitida'); e.status = 409; e.codigo = 'TRANSICAO_INVALIDA'; throw e; });
+    app.use('/api', rotas);
+    app.use(tratarErro);
+    const srv = app.listen(0, '127.0.0.1');
+    await new Promise((r) => srv.once('listening', r));
+    const url = `http://127.0.0.1:${srv.address().port}`;
+    try {
+      const recusa = await fetch(`${url}/api/cargas/905801/recusa`);
+      assert.equal(recusa.status, 409);
+      assert.equal((await esperarEnvios(1, 600)).length, 0, 'recusa de regra não é defeito');
+      const quebra = await fetch(`${url}/api/cargas/905801/quebra?cliente=FULANO`);
+      assert.equal(quebra.status, 500);
+      assert.deepEqual(await quebra.json(), { erro: 'Erro interno no servidor.', codigo: 'ERRO_INTERNO' }, 'a resposta continua a mesma');
+      const [envio] = await esperarEnvios(1);
+      assert.ok(envio, 'o erro inesperado chegou ao Sentry');
+      const ev = eventoDe(envio);
+      assert.equal(ev.platform, 'node');
+      assert.equal(ev.tags.origem, 'servidor');
+      assert.equal(ev.tags.rota, 'GET /api/cargas/:id/quebra');
+      assert.equal(ev.tags.setor, 'Expedição');
+      assert.equal(ev.exception.values[0].type, 'TypeError');
+      assert.ok(!envio.corpo.includes('905801') && !envio.corpo.includes('FULANO'));
+    } finally {
+      await new Promise((r) => srv.close(r));
+    }
+  });
+
+  test('QUEDA do servidor: gravada no disco na hora, enviada na próxima subida, e o processo CAI como antes', async () => {
+    ligar();
+    const { spawnSync } = await import('node:child_process');
+    const arquivo = path.join(tmpdir(), `queda-teste-${process.pid}.json`);
+    await fs.rm(arquivo, { force: true });
+    const modulo = new URL('../src/servicos/erros.js', import.meta.url).href;
+    const filho = spawnSync(process.execPath, ['--input-type=module', '-e',
+      `import { ligarRegistroDeQueda } from ${JSON.stringify(modulo)};
+       ligarRegistroDeQueda('08/10 09:00 · def5678', ${JSON.stringify(arquivo)});
+       setTimeout(() => { throw new RangeError('estouro na carga 905801'); }, 10);`],
+      { env: { ...process.env, SENTRY_DSN: dsnFalso }, encoding: 'utf8' });
+    assert.notEqual(filho.status, 0, 'o processo continua caindo (o systemd é quem sobe de novo)');
+    const gravado = JSON.parse(await fs.readFile(arquivo, 'utf8'));
+    assert.equal(gravado.tipo, 'RangeError');
+    assert.ok(!JSON.stringify(gravado).includes('905801'));
+    const r = await E.enviarQuedaPendente({ arquivo });
+    assert.equal(r.enviado, true, JSON.stringify(r));
+    const ev = eventoDe((await esperarEnvios(1))[0]);
+    assert.equal(ev.release, 'def5678');
+    assert.equal(ev.tags.rota, 'queda do processo');
+    await assert.rejects(fs.access(arquivo), 'enviado, o arquivo sai');
+  });
+
+  test('sem SENTRY_DSN a queda não grava nada (o servidor sem a chave se comporta como o antigo)', async () => {
+    desligar();
+    const arquivo = path.join(tmpdir(), `queda-sem-chave-${process.pid}.json`);
+    assert.equal(E.gravarQueda(new Error('x'), 'uncaughtException', { arquivo }), false);
+    await assert.rejects(fs.access(arquivo));
+  });
+
+  test('cada origem no seu projeto: com SENTRY_DSN_PAINEL, o erro da tela vai para o projeto do painel', async () => {
+    ligar();
+    process.env.SENTRY_DSN_PAINEL = dsnFalso.replace(/\/42$/, '/43');
+    try {
+      const enviar = async (url) => { recebidos.push({ url }); return { ok: true, status: 200 }; };
+      await E.avisarErro({ origem: 'painel', mensagem: 'da tela' }, { enviar });
+      await E.avisarErro({ origem: 'servidor', mensagem: 'do servidor' }, { enviar });
+      assert.deepEqual(recebidos.map((r) => new URL(r.url).pathname), ['/api/43/envelope/', '/api/42/envelope/']);
+      const saude = await req('/health');
+      assert.deepEqual(saude.json.sentry, { servidor: true, painel: true }, 'o /health diz sem SSH se a chave entrou');
+    } finally {
+      delete process.env.SENTRY_DSN_PAINEL;
+    }
+    desligar();
+    assert.deepEqual((await req('/health')).json.sentry, { servidor: false, painel: false });
+  });
+
+  test('sem login é recusado (como toda rota de operação: ninguém de fora gasta a cota do Sentry)', async () => {
+    desligar();
+    const r = await req('/api/erros', { metodo: 'POST', corpo: { mensagem: 'de fora' } });
+    assert.equal(r.status, 401);
+  });
+
+  test('aviso sem mensagem é recusado; e o freio: 30 avisos por minuto POR PESSOA', async () => {
+    desligar();
+    const t = tokens['Expedição'];
+    const vazio = await req('/api/erros', { metodo: 'POST', token: t, corpo: { tipo: 'Error' } });
+    assert.equal(vazio.status, 422);
+    let status = [];
+    for (let i = 0; i < 32; i++) {
+      status.push((await req('/api/erros', { metodo: 'POST', token: t, corpo: { mensagem: `freio ${i}` } })).status);
+    }
+    assert.equal(status.filter((s) => s === 202).length, 30 - 1, 'o aviso vazio acima também contou');
+    assert.ok(status.slice(29).every((s) => s === 429), 'passou de 30 no minuto, recusa');
+    const recusa = await req('/api/erros', { metodo: 'POST', token: t, corpo: { mensagem: 'mais um' } });
+    assert.equal(recusa.json.codigo, 'LIMITE_AVISOS_DE_ERRO');
+    const outra = await req('/api/erros', { metodo: 'POST', token: tokens['Faturamento'], corpo: { mensagem: 'outra pessoa' } });
+    assert.equal(outra.status, 202, 'o colega no mesmo IP não é barrado pelo freio de outro');
   });
 });

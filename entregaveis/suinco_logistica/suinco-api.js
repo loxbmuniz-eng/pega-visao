@@ -1179,6 +1179,47 @@ const SuincoSharePoint = (function () {
     return chamar('/api/programacao-do-dia?dia=' + encodeURIComponent(dia));
   }
 
+  /* O ERRO DA TELA VAI AO SERVIDOR (08/10/2026, decisão 27).
+
+     Quem captura é app/00_base.js (window.onerror e promessa sem
+     tratamento); daqui sai só o pedido para POST /api/erros, e o servidor
+     limpa e repassa ao Sentry. Nunca lança e nunca espera: avisar um erro
+     não pode virar um segundo erro na tela, nem segurar quem estava
+     trabalhando.
+
+     FORA DA FILA OFFLINE, de propósito (emenda da decisão 27): a fila é de
+     gravação da operação, o rodapé mostra quantas estão pendentes, e um
+     aviso de erro ali seria contado como "1 pendente" que ninguém lançou.
+     Sem rede, o aviso se perde — e o erro que se repete volta a avisar na
+     próxima vez que acontecer com rede.
+
+     No máximo 10 avisos por página aberta, e o mesmo erro uma vez só: um
+     laço de erro numa tela aberta o turno inteiro não pode martelar o
+     servidor (que ainda tem o próprio freio). Sem login não avisa: a rota
+     exige crachá, como toda rota de operação. */
+  const AVISOS_DE_ERRO_POR_PAGINA = 10;
+  const _avisosDeErro = new Set();
+  function avisarErro(dados) {
+    try {
+      const d = dados || {};
+      const mensagem = String(d.mensagem || '').slice(0, 1000);
+      const pilha = String(d.pilha || '').slice(0, 4000);
+      if (!SP_CONFIG.ativo || !mensagem || !lerToken()) return false;
+      const marca = mensagem + '|' + pilha.split('\n').slice(0, 3).join('|');
+      if (_avisosDeErro.has(marca) || _avisosDeErro.size >= AVISOS_DE_ERRO_POR_PAGINA) return false;
+      _avisosDeErro.add(marca);
+      chamar('/api/erros', {
+        metodo: 'POST',
+        timeoutMs: 5000,
+        corpo: { tipo: String(d.tipo || 'Error').slice(0, 60), mensagem, pilha,
+                 tela: String(d.tela || '').slice(0, 60), versao: String(d.versao || '').slice(0, 60) },
+      }).catch(() => { /* sem rede ou servidor antigo: o aviso se perde */ });
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
   /* ---------------------------------------------------------------
      Fila — drenagem em ordem
      ---------------------------------------------------------------
@@ -2406,7 +2447,7 @@ const SuincoSharePoint = (function () {
     encerrarProgramacoesAnteriores, reterLacre,
     recarregarRotas, excluirRota, gravarTarifaFrete, gravarDestinoFrete, tabelaDeFrete,
     corrigirEtapa, corrigirDataProgramacao, desfazerExclusao, listarExcluidas,
-    programacaoDoDia, historico, mfa, vigia, atencao, notaTransportadoras,
+    programacaoDoDia, historico, mfa, vigia, atencao, notaTransportadoras, avisarErro,
     modeloSemana, montagem,
     pull, pullTudo, drenarFila, pendentes, descartarFilaAntiga, estaOnline,
     sessaoPerdida,

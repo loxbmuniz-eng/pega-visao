@@ -5424,3 +5424,25 @@ passaram a escrever "34 min" (espaço que não quebra). Corrigido na
 origem, vale para todo lugar que mostra duração. Três testes do Pátio que
 comparavam o texto com espaço comum passaram a ler o espaço que não quebra
 como espaço (causa 2: o teste media a forma do caractere, não a regra).
+
+## #120 — Teste do quadro por transportadora reprovava entre 21h e meia-noite (07/10/2026)
+
+**Achado** rodando a bateria da API às 21h40 de 07/10: o bloco 56 ("cargas
+com CT-e ou canhoto pendente") reprovou sem ninguém mexer no quadro — ele
+tinha passado à tarde (663/663).
+
+**Causa (a nº 2 das quatro: o teste media um atalho).** O teste plantava a
+consulta do frete com `current_date` — o dia do relógio do BANCO, que é UTC.
+Às 21h40 em Brasília o banco já está em 08/10. O sistema de verdade grava a
+consulta com o dia de Brasília (`hojeISO()`, na rota do Pagamento de Frete),
+e o quadro filtra pelo dia de Brasília. Então o teste plantava "amanhã", e o
+quadro, certo, não contava. Produção não tem o defeito: quem grava é a rota.
+
+**Família:** *Datas e fuso* (F6) — o mesmo "hoje" contado em dois relógios.
+Irmã da #116 (a bateria que reprovava depois das 21h): lá o "hoje" errado
+era o do navegador e o do Node; aqui, o do Postgres, que o `TZ` da bateria
+não alcança — o banco tem o relógio dele.
+
+**Correção.** O bloco 56 planta `hojeISO()`; `test_nota_por_transportadora`
+planta `(now() AT TIME ZONE 'America/Sao_Paulo')::date` — os dois do jeito
+que o sistema grava. Achado no mesmo lote do #45 (Sentry).

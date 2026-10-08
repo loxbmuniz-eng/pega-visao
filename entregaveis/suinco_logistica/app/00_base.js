@@ -401,6 +401,47 @@ function limparTravamentosUI(){
   try { localStorage.removeItem(TRAVAS_CHAVE); } catch(e){}
 }
 
+/* O ERRO DA TELA CHEGA SOZINHO (08/10/2026, decisão 27).
+   ---------------------------------------------------------------------
+   Até aqui, erro de tela só era conhecido quando alguém mandava foto. Agora
+   todo erro de JavaScript que escapa — e toda promessa recusada sem
+   tratamento — vai ao servidor (SuincoSharePoint.avisarErro), que limpa o
+   texto e repassa ao Sentry. Vai: tipo, mensagem, pilha, a aba aberta e a
+   versão. O setor quem diz é o crachá, lá no servidor.
+
+   Fica de fora o que NÃO é defeito do painel: resposta do servidor (a
+   recusa já aparece na tela, com o motivo), queda de rede, e os dois
+   avisos do navegador que não dizem nada — "Script error." (erro de outro
+   domínio, sem detalhe) e o laço do ResizeObserver (inofensivo).
+
+   Liga aqui, no primeiro arquivo da tela: pega também o erro na carga dos
+   arquivos que vêm depois e na primeira pintura. */
+function _eAvisoSemDefeito(mensagem, erro){
+  if(erro && (erro.status || erro.motivo)) return true;   // resposta do servidor ou rede (suinco-api.js)
+  if(erro && (erro.name === 'AbortError' || erro.name === 'TimeoutError')) return true;   // espera cancelada
+  return /^Script error\.?$|ResizeObserver loop|Failed to fetch|NetworkError|Load failed|n\u00e3o foi poss\u00edvel alcan\u00e7ar o servidor/i.test(String(mensagem || ''));
+}
+
+function avisarErroDaTela(tipo, mensagem, pilha, erro){
+  try {
+    if(_eAvisoSemDefeito(mensagem, erro)) return false;
+    if(typeof SuincoSharePoint === 'undefined' || typeof SuincoSharePoint.avisarErro !== 'function') return false;
+    return SuincoSharePoint.avisarErro({ tipo, mensagem, pilha, tela: TAB_ATUAL, versao: BUILD_ID });
+  } catch(e){ return false; /* avisar nunca pode quebrar a tela que ele avisa */ }
+}
+
+if(typeof window !== 'undefined' && window.addEventListener){
+  window.addEventListener('error', (ev) => {
+    const e = ev && ev.error;
+    avisarErroDaTela((e && e.name) || 'Error', (e && e.message) || (ev && ev.message) || '', (e && e.stack) || '', e);
+  });
+  window.addEventListener('unhandledrejection', (ev) => {
+    const r = ev && ev.reason;
+    if(r instanceof Error) avisarErroDaTela(r.name, r.message, r.stack || '', r);
+    else avisarErroDaTela('PromessaRecusada', typeof r === 'string' ? r : ((r && r.message) || 'Promessa recusada sem motivo de erro'), '', r);
+  });
+}
+
 /* A CONEXÃO VOLTOU: REENVIA O QUE FICOU PARA TRÁS (24/09/2026).
    ---------------------------------------------------------------------
    RISCO R1 DO RAIO-X, medido e fechado. A carga criada enquanto o servidor

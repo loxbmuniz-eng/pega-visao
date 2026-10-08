@@ -35,6 +35,9 @@ PAINEL = RAIZ / 'index.html'
 API = os.environ.get('SUINCO_API', 'http://127.0.0.1:3010')
 SENHA = os.environ.get('SUINCO_SENHA', 'senha-de-teste-123')
 T = 'TRANSP. QUADRO TELA'
+# O dia de Brasília, como o sistema grava a consulta do frete — o current_date
+# do banco é UTC e, entre 21h e meia-noite, já é amanhã.
+HOJE_BR = "(now() AT TIME ZONE 'America/Sao_Paulo')::date"
 
 falhas = []
 
@@ -99,7 +102,7 @@ def plantar():
         ('quadro-tela-dev1', '1', '607 — Transporte/Avaria. Mercadoria chegou no cliente avariada, gerando a devolução do produto.', 1),
         ('quadro-tela-dev1', '2', '623 — Comercial/Cliente comprou de outro fornecedor.', 1);
       INSERT INTO pgfrete_cargas (numero_carga, data_consulta, primeira_consulta, transportadora, cte, canhoto_original)
-        VALUES ('905711', current_date, current_date, '{T}', '', true), ('905712', current_date, current_date, '{T}', 'CT9', true);""")
+        VALUES ('905711', {HOJE_BR}, {HOJE_BR}, '{T}', '', true), ('905712', {HOJE_BR}, {HOJE_BR}, '{T}', 'CT9', true);""")
     psql('\n'.join(sql))
 
 
