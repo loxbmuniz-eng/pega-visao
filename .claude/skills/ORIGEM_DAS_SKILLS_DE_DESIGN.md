@@ -149,3 +149,43 @@ rede, a skill avisa e segue lendo o projeto direto.
 piso de 12 px, contraste AA) já está decidida — o `init` registra, não
 substitui. Mudança de tela continua seguindo o fluxo da casa: PROMPT,
 aprovação, teste que reprova, bateria, portão.
+
+---
+
+## Cinco skills de acabamento e escrita (08/10/2026)
+
+Pedido do dono: *"aplique make-interfaces-feel-better, better icons, anti
+ai-slop writing, no ai slop, superdesign, humanizer e processe todas no meu
+projeto depois"*. Cada repositório foi baixado e lido inteiro antes de entrar
+(scripts, rede, permissões). Licenças em `LICENCA_*.txt`.
+
+| Skill | Origem | Commit | O que entrou |
+|---|---|---|---|
+| `make-interfaces-feel-better` | github.com/jakubkrehel/make-interfaces-feel-better (MIT) | `35545ea` | SKILL.md e os 5 guias (tipografia, superfícies, animação, ícones, desempenho). Só texto. |
+| `humanizer` | github.com/blader/humanizer (MIT) | `225a6f3` | SKILL.md (padrões de texto com cara de IA, do guia da Wikipédia). Só texto. |
+| `stop-slop` | github.com/hardikpandya/stop-slop (MIT) | `8da1f03` | SKILL.md e 3 listas (frases, estruturas, exemplos). Só texto. **No lugar do anti-ai-slop-writing** (jalaalrd), que não tem licença — decisão do dono. |
+| `antislop`, `antislop-ui`, `antislop-copywriting`, `antislop-code`, `antislop-layoutmobile`, `antislop-human` | github.com/miqdadbadjuber/anti-slop (MIT) | `388cbe3` | Só os SKILL.md ("no ai slop": interface, texto e código). |
+| `better-icons` | github.com/better-auth/better-icons (MIT) | `033316e` | Só o SKILL.md. |
+
+**Ficou de fora, de propósito:**
+- **superdesign** — exige conta e login, cobra por crédito de geração, baixa
+  a versão mais nova do programa dela a cada uso e manda o código das telas
+  (com as 749 placas embutidas no `index.html`) para o serviço dela. Decisão
+  do dono: não instalar agora.
+- **anti-ai-slop-writing** (jalaalrd) — sem licença no repositório; trocado
+  pelo `stop-slop`.
+- **anti-slop**: o servidor MCP, o lançador `contrast-mcp-launcher.mjs` e o
+  script `contrast-check.py` da `antislop-human`. O script só lia arquivo,
+  mas a skill pedia permissão para rodar **qualquer** comando Python sem
+  perguntar (`allowed-tools: Bash(python *)`). A permissão saiu do SKILL.md;
+  sem o script, a própria skill faz a conta à mão — e o painel já tem
+  `test_contraste`.
+- **better-icons**: o programa (`npx better-icons`) busca no Iconify, que a
+  rede deste ambiente bloqueia. Instalada, a skill orienta; buscar ícone
+  depende de rede liberada. O painel tem o próprio conjunto de ícones
+  (`<symbol id="i-…">` no `index_suinco.html`).
+
+Duas notas locais, marcadas "Neste repositório": na `antislop-human` (o script foi retirado; usar a fórmula, a tabela ou o `test_contraste`) e na `better-icons` (nada de instalar ou rodar `npx` sem o dono pedir).
+
+Nenhuma das cinco pede permissão de rodar comando. Mudança de tela continua
+seguindo o fluxo da casa: PROMPT, aprovação, teste que reprova, bateria, portão.

@@ -237,6 +237,49 @@ describe('leitura dos PDFs (exemplos inventados)', () => {
     assert.deepEqual(s.cargas.map((c) => [c.numero, c.notas.length]), [['900807', 3], ['900808', 2]]);
   });
 
+  /* WRVDA503 (08/10/2026). A Daniela recebe as cargas de DF, Bahia e Espírito
+     Santo no "Relatório de Carga Por UF/Município" e o painel recusava. Os PDFs
+     sist503_* têm as MESMAS notas dos sist_* (dados inventados), no desenho do
+     503: agrupado por UF e município, número da carga em coluna, subtotal do
+     município, da UF e "Total Geral", sem a chave de acesso. */
+  test('WRVDA503: reconhecido como relatório do sistema, e lê as MESMAS notas do WRVDA501', async () => {
+    for (const n of ['900801', '900805']) {
+      const paginas = await lerPaginasDoPdf(pdf(`sist503_${n}.pdf`));
+      assert.equal(tipoDoRelatorio(paginas), 'SIST503', 'o 503 tem desenho próprio');
+      const r503 = lerRelatorioDeFrete(paginas);
+      const r501 = await lerPdf(`sist_${n}.pdf`);
+      assert.equal(r503.tipo, 'SIST', 'grava como relatório do sistema — a conferência não muda');
+      const chave = (r) => r.cargas.map((c) => [c.numero, c.notas.map((x) => [x.nota, x.clienteCodigo, x.cidade, x.uf].join('|')).sort()]);
+      assert.deepEqual(chave(r503), chave(r501), `carga ${n}: mesmas notas, códigos de cliente, cidades e UFs`);
+      assert.deepEqual(r503.cargas[0].avisos, []);
+    }
+  });
+
+  test('WRVDA503: subtotal do município, da UF e "Total Geral" nunca viram nota', async () => {
+    const s = await lerPdf('sist503_900805.pdf');
+    assert.equal(s.cargas.length, 1);
+    assert.equal(s.cargas[0].notas.length, 40, 'as 40 notas, nenhuma a mais (o subtotal traz números nas mesmas faixas)');
+    assert.ok(s.cargas[0].notas.every((x) => /^\d{6}$/.test(x.nota)), 'toda nota é o número da nota, nunca a contagem do subtotal');
+  });
+
+  test('WRVDA503: várias cargas misturadas por município — cada nota vai para a carga da própria linha', async () => {
+    const s = await lerPdf('sist503_varias.pdf');
+    assert.deepEqual(s.cargas.map((c) => [c.numero, c.notas.length]).sort(), [['900807', 3], ['900808', 2]]);
+  });
+
+  test('WRVDA503: a conferência com o B2B dá o MESMO resultado que com o WRVDA501', async () => {
+    for (const [n, esperado] of [['900801', 'LIBERADA'], ['900805', 'PENDENTE']]) {
+      const b = (await lerPdf(`b2b_${n}.pdf`)).cargas[0];
+      const s501 = (await lerPdf(`sist_${n}.pdf`)).cargas[0];
+      const s503 = (await lerPdf(`sist503_${n}.pdf`)).cargas[0];
+      const r501 = conferirCarga({ sist: s501.notas, b2b: b.linhas });
+      const r503 = conferirCarga({ sist: s503.notas, b2b: b.linhas });
+      assert.equal(r503.situacao, esperado);
+      assert.deepEqual([r503.qtdSist, r503.qtdB2b, r503.finalizadas, r503.semCorrespondencia],
+        [r501.qtdSist, r501.qtdB2b, r501.finalizadas, r501.semCorrespondencia], `carga ${n}`);
+    }
+  });
+
   test('REGRESSÃO #112 — o B2B repete o cabeçalho a cada grupo de entregas: é UMA carga, e CARGA EXTERNA não cola no número', async () => {
     const b = await lerPdf('b2b_900809.pdf');
     assert.deepEqual(b.cargas.map((c) => [c.numero, c.externa, c.linhas.length]), [['900809', '103001', 4]], 'três blocos, uma carga, quatro notas');

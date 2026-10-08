@@ -19,6 +19,13 @@ O QUE CADA CARGA TESTA (a bateria confere estes números):
   900806  3 notas, nenhuma finalizada ......................... VERIFICAR
   900807 + 900808  duas cargas no MESMO PDF, em cada relatório
 
+WRVDA503 (08/10/2026) — "Relatório de Carga Por UF/Município", que a
+Logística usa nas cargas de DF, Bahia e Espírito Santo. As MESMAS notas,
+agrupadas por UF e município, com subtotal e "Total Geral", sem a chave de
+acesso. Só os 503 (os demais PDFs ficam como estão):
+
+    python3 backend/testes/fixtures/gerar_pagamento_frete_exemplo.py --503
+
 Roda com o Chromium que já existe aqui. Os PDFs gerados FICAM no
 repositório (a bateria não regenera):
 
@@ -188,6 +195,60 @@ th:nth-child(6){{width:3%}} th:nth-child(7){{width:30%}} th:nth-child(8){{width:
 <div class="f">TIC - SUINCO &nbsp;&nbsp;&nbsp; Página 1 de 1</div>'''
 
 
+def html_sist503(cargas):
+    """WRVDA503: uma linha por nota, agrupada por UF e município; números à
+    direita; subtotal do município (recuado), da UF (na coluna do município)
+    e Total Geral — as linhas que o leitor NÃO pode tomar por nota."""
+    notas = []
+    for numero in cargas:
+        for (nota, cliente, cidade, uf, st) in CARGAS[numero]['sist']:
+            notas.append((uf, cidade, numero, nota, cliente))
+    notas.sort(key=lambda n: (n[0], n[1], n[3]))   # o Atak agrupa por UF e município
+
+    def br(v):
+        return f'{v:,.2f}'.replace(',', 'X').replace('.', ',').replace('X', '.')
+    linhas, uf_atual, mun_atual = [], None, None
+    cont = {'mun': [0, 0.0, 0.0], 'uf': [0, 0.0, 0.0], 'geral': [0, 0.0, 0.0]}
+
+    def fecha(nivel, rotulo, classe):
+        n, p, v = cont[nivel]
+        linhas.append(f'<tr class="{classe}"><td></td><td colspan="2">{esc(rotulo)}</td><td class="n">{n}</td>'
+                      f'<td class="n">{br(p)}</td><td class="n">{br(v)}</td><td colspan="4"></td></tr>')
+        cont[nivel] = [0, 0.0, 0.0]
+    for (uf, cidade, numero, nota, cliente) in notas:
+        if (uf, cidade) != (uf_atual, mun_atual) and mun_atual is not None:
+            fecha('mun', mun_atual, 'sub')
+        if uf != uf_atual:
+            if uf_atual is not None:
+                fecha('uf', uf_atual, 'subuf')
+            linhas.append(f'<tr><td colspan="10" class="g">{uf}</td></tr>')
+        if (uf, cidade) != (uf_atual, mun_atual):
+            linhas.append(f'<tr><td></td><td colspan="3" class="g">{esc(cidade)}</td><td class="n">Entregas</td><td colspan="5"></td></tr>')
+        uf_atual, mun_atual = uf, cidade
+        peso = 100 + (nota % 29) * 53.7
+        valor = 400 + (nota % 23) * 311.17
+        for k in cont:
+            cont[k][0] += 1; cont[k][1] += peso; cont[k][2] += valor
+        linhas.append(
+            f'<tr><td>{uf}</td><td>{esc(cidade)}</td><td class="n">{numero}</td><td class="n">{br(peso)}</td>'
+            f'<td class="n">{nota}</td><td class="n">{br(valor)}</td><td>{30000 + nota % 977} - {esc(cliente.title())}</td>'
+            f'<td>SUPERVISOR TESTE</td><td>REPRESENTANTE TESTE</td><td>Centro</td></tr>')
+    fecha('mun', mun_atual, 'sub')
+    fecha('uf', uf_atual, 'subuf')
+    fecha('geral', 'Total Geral:', 'sub')
+    return f'''<!doctype html><meta charset="utf-8"><style>
+body{{font-family:Arial,sans-serif;font-size:6.6pt;margin:0}} .t{{text-align:center;font-size:11pt;font-weight:bold;margin:14px 0 4px}}
+.d{{text-align:right;margin-bottom:14px}} table{{border-collapse:collapse;width:100%;table-layout:fixed}}
+th{{text-align:left;text-decoration:underline;font-weight:normal;padding:1px 6px}} td{{padding:2px 6px;white-space:nowrap;overflow:hidden}}
+.n{{text-align:right;padding-right:14px}} .g{{font-weight:bold;padding-top:8px}} .sub td,.subuf td{{font-weight:bold;padding-top:6px}}
+th:nth-child(1){{width:3%}} th:nth-child(2){{width:11%}} th:nth-child(3){{width:8%}} th:nth-child(4){{width:7%}} th:nth-child(5){{width:8%}}
+th:nth-child(6){{width:7%}} th:nth-child(7){{width:22%}} th:nth-child(8){{width:12%}} th:nth-child(9){{width:12%}} th:nth-child(10){{width:10%}}
+</style><div class="t">WRVDA503 - Relatório de Carga Por UF/Município</div><div class="d">08/10/2026 &nbsp; 14:48:15</div>
+<table><thead><tr><th>Uf</th><th>Municipio</th><th class="n">Numero_Carga</th><th class="n">Peso_Bruto</th><th class="n">Numero_Nota</th>
+<th class="n">Valor_NE</th><th>Cliente</th><th>Supervisor</th><th>Representante</th><th>Bairro</th></tr></thead>
+<tbody>{''.join(linhas)}</tbody></table>'''
+
+
 def html_outro():
     return '<!doctype html><meta charset="utf-8"><body style="font-family:sans-serif"><h1>Relatório de Estoque de Embalagens</h1><p>Produto 1 ... 120 un</p><p>Produto 2 ... 80 un</p>'
 
@@ -208,6 +269,13 @@ def main():
     with sync_playwright() as p:
         nav = p.chromium.launch(executable_path=os.environ.get('PLAYWRIGHT_CHROMIUM_PATH') or '/opt/pw-browsers/chromium')
         pg = nav.new_page()
+        if '--503' in sys.argv:
+            # o WRVDA503: as mesmas notas do 501, no desenho por UF/município
+            for numero in ['900801', '900805']:
+                gerar(pg, f'sist503_{numero}.pdf', html_sist503([numero]), cabecalho='08/10/2026 14:48:15')
+            gerar(pg, 'sist503_varias.pdf', html_sist503(['900807', '900808']), cabecalho='08/10/2026 14:48:15')
+            nav.close()
+            return
         so = set(sys.argv[1:])   # gerar só estas cargas (ex.: 900809 900810); sem argumento, tudo
         for numero in ['900801', '900802', '900803', '900805', '900806', '900809', '900810']:
             if so and numero not in so:
