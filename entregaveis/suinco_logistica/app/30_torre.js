@@ -804,7 +804,7 @@ function renderTorre(){
       ? deltaHtml(deltaDe[0], deltaDe[1],
                   {pioraQuandoSobe, sufixo:' vs. ontem', igual:'igual a ontem'}) : '';
     const linha = spark && spark.length > 1
-      ? sparklineSvg(spark, corTema(alerta && num > 0 ? '--st-aguardando-veiculo-fg' : '--gold')) : '';
+      ? sparklineSvg(spark, corTema(alerta && num > 0 ? '--st-aguardando-veiculo-txt' : '--gold-text')) : '';
 
     /* CAIXA EM ZERO PARA DE GRITAR (16/09/2026).
 
@@ -822,7 +822,8 @@ function renderTorre(){
     const zerada = num === 0;
     return `<div class="stat-box${destaque?' stat-destaque':''}${alerta && num>0?' stat-alerta':''}${clicavel?' stat-clicavel':''}${ativo?' stat-ativo':''}${zerada?' stat-zerada':''}"
        ${cor ? `style="--st-cor:var(--st-${cor}-bg)"` : ''}
-       ${clicavel ? `onclick="filtrarTorrePorStatus('${escJs(filtro)}')"` : ''}
+       ${clicavel ? `onclick="filtrarTorrePorStatus('${escJs(filtro)}')" role="button" tabindex="0" aria-pressed="${ativo ? 'true' : 'false'}"
+         onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click();}"` : ''}
        ${titulo ? `title="${esc(titulo)}"` : ''}>
        <div class="stat-num" data-contador="${esc(rotulo)}">${num}</div>
        <div class="stat-label">${esc(rotulo)}</div>

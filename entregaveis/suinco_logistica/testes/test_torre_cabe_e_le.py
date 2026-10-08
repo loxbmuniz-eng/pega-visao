@@ -88,6 +88,7 @@ OLHAR = """() => {
     destaque: b.classList.contains('stat-destaque'),
     zerada: b.classList.contains('stat-zerada'),
     opac: Number(getComputedStyle(b).opacity),
+    corNum: getComputedStyle(b.querySelector('.stat-num')).color,
     visivel: b.getBoundingClientRect().width > 20,
     clicavel: b.classList.contains('stat-clicavel'),
   }));
@@ -160,8 +161,14 @@ async def main():
         ck('as caixas de status em zero estão marcadas',
            len(zeradas) >= 1, f'{len(zeradas)} zeradas de {len(r["caixas"])} caixas')
         if zeradas:
-            ck('elas ficam mais discretas', all(b['opac'] < 1 for b in zeradas),
-               str([b['opac'] for b in zeradas]))
+            # APAGADA, MAS LEGÍVEL (08/10/2026, decisão do dono): a caixa zerada
+            # recua pela COR, não pela opacidade — a opacity .55 levava o texto
+            # a 2,5:1 (a régua de contraste agora mede isso). Mais discreta =
+            # o número dela não tem a cor do número de uma caixa com carga.
+            com_carga = {b['corNum'] for b in r['caixas'] if not b['zerada'] and not b['destaque']}
+            ck('elas ficam mais discretas (o número recua de cor, sem esmaecer o texto)',
+               all(b['corNum'] not in com_carga and b['opac'] >= 1 for b in zeradas),
+               str([(b['corNum'], b['opac']) for b in zeradas]) + ' × com carga ' + str(com_carga))
             # "Pátio não se apaga" vale para o indicador: recolher não é sumir.
             ck('mas CONTINUAM na tela e clicáveis',
                all(b['visivel'] and b['clicavel'] for b in zeradas),

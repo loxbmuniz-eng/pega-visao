@@ -1062,7 +1062,7 @@ function desenharSparklines(raiz){
     const menorMelhor = canvas.dataset.menorMelhor === 'true';
     const melhorou = menorMelhor ? ultimo < primeiro : ultimo > primeiro;
     const cor = ultimo === primeiro ? corTema('--text-dim')
-              : corTema(melhorou ? '--st-faturado-fg' : '--st-aguardando-veiculo-fg');
+              : corTema(melhorou ? '--st-faturado-txt' : '--st-aguardando-veiculo-txt');   // -txt: o -fg sumia no navy (melhorou) e no papel (piorou)
 
     ctx.strokeStyle = cor; ctx.lineWidth = 1.8;
     ctx.lineJoin = 'round'; ctx.lineCap = 'round';

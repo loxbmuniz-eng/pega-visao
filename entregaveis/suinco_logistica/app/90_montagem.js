@@ -720,12 +720,12 @@ function linhaMontagemHtml(m){
 
       <td onclick="event.stopPropagation()">${comoCarga
             ? paletizadaSelectHtml(cargaViva)
-            : `<select class="palet-inline" onchange="alterarMontagemUI('${id}','paletizada',this.value)">
+            : `<select class="palet-inline" aria-label="Paletizada?" onchange="alterarMontagemUI('${id}','paletizada',this.value)">
                  ${['Não','Sim'].map(op=>`<option value="${op}" ${(m.paletizada||'Não')===op?'selected':''}>${op}</option>`).join('')}
                </select>`}</td>
       <td onclick="event.stopPropagation()">${comoCarga
             ? praOndeSelectHtml(cargaViva)
-            : `<select class="praonde-inline" onchange="alterarMontagemUI('${id}','tipoOperacao',this.value)">
+            : `<select class="praonde-inline" aria-label="Tipo de operação" onchange="alterarMontagemUI('${id}','tipoOperacao',this.value)">
                  <option value=""${!m.tipo_operacao ? ' selected' : ''}>—</option>
                  ${PRA_ONDE_OPCOES.map(o=>`<option${m.tipo_operacao===o?' selected':''}>${esc(o)}</option>`).join('')}
                </select>`}</td>

@@ -40,7 +40,8 @@
   --border-soft:rgba(233,185,84,.14);
   --shadow:0 2px 10px rgba(0,0,0,.5);
   --campo-bg:#101625;      /* fundo de input/select */
-  --placeholder:#5b6785;
+  /* 08/10/2026: #5b6785 dava 3,2:1 no campo (auditoria /impeccable). */
+  --placeholder:#8a95b0;
   --logo-chip-bg:#fff;     /* a logo tem fundo branco próprio, nos 2 temas */
   --radius:10px;
   --radius-sm:6px;         /* pílulas, células de etapa, campos pequenos */
@@ -217,7 +218,7 @@
      propósito: é o convite para escrever. Branco puro sobre card cinza é o
      que diz "aqui você digita" sem precisar de contorno grosso. */
   --campo-bg:#fbfcfe;
-  --placeholder:#78839a;
+  --placeholder:#5f6a80;   /* era #78839a: 3,7:1 no campo claro */
   --logo-chip-bg:#fff;
 
   /* O status como cor de TEXTO, versão clara: os mesmos seis, escurecidos
@@ -937,7 +938,7 @@ input,select,textarea{
   width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:var(--radius);
   font-size:14px;background:var(--campo-bg);color:var(--text);transition:border .15s;
 }
-input::placeholder{color:var(--placeholder)}
+input::placeholder,textarea::placeholder{color:var(--placeholder)}
 
 /* CALENDÁRIO VISÍVEL NOS CAMPOS DE DATA — pedido do usuário
    (11/08/2026): "quero que apareca um calendariozinho nas abas de
@@ -1531,7 +1532,8 @@ select option{background:var(--campo-bg);color:var(--text)}
 .st-pct{ display:block;font-size:11px;margin-top:3px }
 /* Etapa vazia continua aparecendo — etapa zerada é informação — mas sem
    competir por atenção com as que têm carga parada. */
-.tabela-status-h .st-zero{ opacity:.4 }
+/* Recua pela cor, não pela opacity (08/10/2026): .4 levava o "0" a 2:1. */
+.tabela-status-h .st-zero, .tabela-status-h .st-zero .st-num, .tabela-status-h .st-zero .st-pct{ color:var(--text-dim) !important }
 .status-h-total{ margin-top:var(--sp-2);font-size:13px }
 
 /* Nota de filtro ativo. Número filtrado sem aviso é a forma mais
@@ -1870,7 +1872,11 @@ code{
 .tabela-patio .vp-carga,.tabela-patio .vp-placa{font-weight:800;letter-spacing:.4px;text-transform:uppercase}
 .tabela-patio .vp-transp{max-width:220px}
 .tabela-patio .vp-tempo{white-space:nowrap;text-align:right;font-variant-numeric:tabular-nums}
-.vp-atrasado{color:var(--st-aguardando-veiculo-fg)}
+/* -txt, não -fg (08/10/2026): o -fg é o texto DENTRO da etiqueta vermelha
+   (#fff). Solto na tabela, saía branco sobre papel no tema claro — 1,11:1, o
+   número que faz alguém levantar da cadeira invisível — e branco sem
+   vermelho no escuro. Achado pela auditoria /impeccable. */
+.vp-atrasado{color:var(--st-aguardando-veiculo-txt)}
 /* CARIMBO SUSPEITO (24/09/2026). Não é alarme — é ressalva: o tempo está à
    vista para o caminhão não sumir da tela, com a marca de que a data dele
    não fecha. Cor de texto secundária de propósito: competir com o vermelho
@@ -2038,7 +2044,9 @@ code{
 }
 
 /* ===== SEQUÊNCIA ===== */
-.seq-input{width:56px;text-align:center;font-weight:800;color:var(--gold)}
+/* --gold-text, não --gold (08/10/2026): o --gold é o dourado de PREENCHIMENTO;
+   como cor do número, no tema claro, dava 1,47:1 sobre papel. */
+.seq-input{width:56px;text-align:center;font-weight:800;color:var(--gold-text)}
 .ganchos-input{width:70px;text-align:center}
 .praonde-inline{min-width:150px}
 /* Campos que viraram editáveis na Fila de Programados (11/08/2026):
@@ -2084,7 +2092,7 @@ code{
   display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;
   overflow:hidden; font-size:11px; color:var(--text-dim);
 }
-.cel-veiculo .veic-tipo{ display:block; font-size:10.5px; color:var(--text-dim); opacity:.9 }
+.cel-veiculo .veic-tipo{ display:block; font-size:10.5px; color:var(--text-dim) }   /* sem opacity: .9 levava "Carreta" a 4,3:1 no claro */
 /* CHIPS DE LACRE NA TORRE (20/08/2026). Ficam na célula do veículo porque o
    lacre é do caminhão. Três estados, três leituras de relance:
      🔒 número      — saiu lacrado, tudo certo
@@ -3335,8 +3343,9 @@ input,select,textarea{border-radius:5px}
 .linha-inativa td{ text-decoration:line-through; text-decoration-thickness:1px }
 .linha-inativa td:last-child{ text-decoration:none }
 
-.sit-ativo{ color:var(--st-faturado-fg, #2f7d4f); font-weight:700 }
-.sit-inativo{ color:var(--st-aguardando-veiculo-fg, #a3271f); font-weight:700 }
+/* -txt, não -fg (08/10/2026): "Ativo" saía quase preto sobre navy e "Bloqueado" branco sobre papel. */
+.sit-ativo{ color:var(--st-faturado-txt, #2f7d4f); font-weight:700 }
+.sit-inativo{ color:var(--st-aguardando-veiculo-txt, #a3271f); font-weight:700 }
 
 .chip-voce{
   background:var(--gold-dim, #e9b954); color:#1a1200;
@@ -6234,7 +6243,8 @@ tr.mont-linha > td, tr.hist-linha > td, td[onclick], th[onclick]{
      controle de formulário nasce com largura intrínseca e ignora a célula. */
   #torre-tabela > tbody > tr > td input,
   #torre-tabela > tbody > tr > td select{
-    width:100%; min-width:0; max-width:100%; box-sizing:border-box }
+    width:100%; min-width:0; max-width:100%; box-sizing:border-box;
+    min-height:24px }   /* alvo mínimo de toque (WCAG 2.5.8): eram 22–23 px no tablet */
   #torre-tabela > tbody > tr > td input[type=number]{
     -moz-appearance:textfield; appearance:textfield; text-align:center }
   #torre-tabela input[type=number]::-webkit-outer-spin-button,
@@ -6263,7 +6273,7 @@ tr.mont-linha > td, tr.hist-linha > td, td[onclick], th[onclick]{
     overflow:hidden; text-overflow:ellipsis }
   /* O seletor de paletizada guarda "Não"/"Sim" mais a seta — 58 px é o que
      ele pede medido; abaixo disso saía "N" e o operador lia a coluna errada. */
-  #torre-tabela > tbody > tr > td:nth-child(7) select{ font-size:11.5px; padding-inline:2px }
+  #torre-tabela > tbody > tr > td:nth-child(7) select{ font-size:12px; padding-inline:2px }   /* piso de 12 px */
   #torre-tabela > thead > tr > th{
     font-size:10px; white-space:normal; line-height:1.15; padding-right:6px }
   #torre-tabela .btn{ padding:4px 6px; min-width:0; font-size:12px }
@@ -6290,11 +6300,15 @@ tr.mont-linha > td, tr.hist-linha > td, td[onclick], th[onclick]{
    caixa de destaque existe para ser lida primeiro, inclusive quando o
    número dela é zero. Recolher só vale para as caixas de status, onde o
    zero significa "não tem nada nessa fila". */
-.bento .stat-box.stat-zerada:not(.stat-destaque){ opacity:.55 }
-.bento .stat-box.stat-zerada:not(.stat-destaque) .stat-num{ color:var(--text-dim) }
+/* APAGADA, MAS LEGÍVEL (08/10/2026, decisão do dono na auditoria /impeccable).
+   A opacity .55 na caixa inteira levava rótulo e nota a 2,5:1 no claro.
+   Agora quem recua é a COR: número e textos em --text-dim (passa no
+   contraste nos dois temas) e o filete da etapa a .3 — a caixa continua
+   mais discreta que as com carga, sem ficar ilegível. */
+.bento .stat-box.stat-zerada:not(.stat-destaque) .stat-num,
+.bento .stat-box.stat-zerada:not(.stat-destaque) .stat-label,
+.bento .stat-box.stat-zerada:not(.stat-destaque) .stat-note{ color:var(--text-dim) }
 .bento .stat-box.stat-zerada:not(.stat-destaque)::before{ opacity:.3 }
-.bento .stat-box.stat-zerada:not(.stat-destaque):hover,
-.bento .stat-box.stat-zerada:not(.stat-destaque):focus-within{ opacity:1 }
 .bento .stat-box.stat-zerada:not(.stat-destaque):hover .stat-num{ color:var(--gold-text) }
 
 /* O PISCA DO TOQUE RECUSADO (16/09/2026).

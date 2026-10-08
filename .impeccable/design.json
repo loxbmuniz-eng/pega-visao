@@ -1,0 +1,276 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-08T15:58:43.513511+00:00",
+  "title": "Design System: Programação de Embarque Suinco",
+  "extensions": {
+    "colorMeta": {
+      "navy-deep": {
+        "role": "neutral",
+        "displayName": "Noite do Pátio"
+      },
+      "navy": {
+        "role": "neutral",
+        "displayName": "Navy Painel"
+      },
+      "navy-light": {
+        "role": "neutral",
+        "displayName": "Navy Cabeçalho"
+      },
+      "navy-lighter": {
+        "role": "neutral",
+        "displayName": "Navy Borda"
+      },
+      "gold": {
+        "role": "primary",
+        "displayName": "Dourado Suinco"
+      },
+      "gold-dim": {
+        "role": "primary",
+        "displayName": "Dourado Apagado"
+      },
+      "gold-text-light": {
+        "role": "primary",
+        "displayName": "Dourado Queimado (texto no tema claro)"
+      },
+      "wine": {
+        "role": "secondary",
+        "displayName": "Vinho"
+      },
+      "wine-light": {
+        "role": "secondary",
+        "displayName": "Vinho Claro"
+      },
+      "text": {
+        "role": "neutral",
+        "displayName": "Giz"
+      },
+      "text-dim": {
+        "role": "neutral",
+        "displayName": "Giz Apagado"
+      },
+      "paper-page": {
+        "role": "neutral",
+        "displayName": "Papel Azulado (página, tema claro)"
+      },
+      "paper": {
+        "role": "neutral",
+        "displayName": "Papel Azulado (painel, tema claro)"
+      },
+      "paper-raised": {
+        "role": "neutral",
+        "displayName": "Papel Azulado (elevado, tema claro)"
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Tinta"
+      },
+      "ink-dim": {
+        "role": "neutral",
+        "displayName": "Tinta Apagada"
+      },
+      "graf-light": {
+        "role": "primary",
+        "displayName": "Âmbar de Gráfico (tema claro)"
+      },
+      "status-aguardando-veiculo": {
+        "role": "status",
+        "displayName": "Vermelho Aguardando Veículo"
+      },
+      "status-aguardando-embarque": {
+        "role": "status",
+        "displayName": "Laranja Aguardando Embarque"
+      },
+      "status-embarque-iniciado": {
+        "role": "status",
+        "displayName": "Amarelo Embarque Iniciado"
+      },
+      "status-embarque-finalizado": {
+        "role": "status",
+        "displayName": "Verde-claro Embarque Finalizado"
+      },
+      "status-faturado": {
+        "role": "status",
+        "displayName": "Verde Faturado"
+      },
+      "status-seguiu-viagem": {
+        "role": "status",
+        "displayName": "Verde-escuro Seguiu Viagem"
+      },
+      "status-ink-dark": {
+        "role": "status",
+        "displayName": "Tinta sobre preenchimento claro"
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Número",
+        "purpose": "Faixa de números da Torre e do Pátio ao vivo."
+      },
+      "headline": {
+        "displayName": "Título de seção",
+        "purpose": "Título dentro da aba."
+      },
+      "title": {
+        "displayName": "Navegação",
+        "purpose": "Itens da navegação lateral."
+      },
+      "body": {
+        "displayName": "Corpo",
+        "purpose": "Texto corrido, células e campos."
+      },
+      "label": {
+        "displayName": "Rótulo",
+        "purpose": "Cabeçalho de tabela, etapas em caixa alta, notas."
+      }
+    },
+    "shadows": [
+      {
+        "name": "fio",
+        "value": "0 1px 2px rgba(4,8,18,.45)",
+        "purpose": "Separação de superfície no escuro; nunca volume."
+      },
+      {
+        "name": "fio-claro",
+        "value": "0 1px 2px rgba(16,22,37,.10)",
+        "purpose": "Separação de superfície no claro."
+      }
+    ],
+    "motion": [
+      {
+        "name": "rapida",
+        "value": ".12s",
+        "purpose": "Hover e pressão."
+      },
+      {
+        "name": "media",
+        "value": ".16s",
+        "purpose": "Troca de estado."
+      },
+      {
+        "name": "lenta",
+        "value": ".18s",
+        "purpose": "Teto de qualquer resposta da tela."
+      },
+      {
+        "name": "curva",
+        "value": "cubic-bezier(.22,.61,.36,1)",
+        "purpose": "Curva padrão."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "gaveta",
+        "value": "820px",
+        "purpose": "Abaixo disso, a navegação vira gaveta."
+      },
+      {
+        "name": "patio-estreito",
+        "value": "720px",
+        "purpose": "Pátio ao vivo em coluna."
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Botão principal",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "A ação principal da aba.",
+      "html": "<button class=\"ds-btn-prim\">Reorganizar sequência de hoje</button>",
+      "css": ".ds-btn-prim{background:var(--gold,#e9b954);color:#1a1200;font:600 13.5px Barlow,system-ui,sans-serif;padding:7px 14px;border:0;border-radius:4px;transition:filter .12s cubic-bezier(.22,.61,.36,1)}.ds-btn-prim:hover{filter:brightness(1.06)}.ds-btn-prim:focus-visible{outline:2px solid var(--gold,#e9b954);outline-offset:2px}"
+    },
+    {
+      "name": "Botão secundário",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Ações de apoio.",
+      "html": "<button class=\"ds-btn-sec\">Papel do manobrista</button>",
+      "css": ".ds-btn-sec{background:transparent;color:var(--text,#f2f4f8);font:600 12.5px Barlow,system-ui,sans-serif;padding:7px 14px;border:1px solid var(--border,rgba(151,168,214,.28));border-radius:4px}.ds-btn-sec:hover{background:var(--acento-hover,rgba(233,185,84,.09))}.ds-btn-sec:focus-visible{outline:2px solid var(--gold,#e9b954);outline-offset:2px}"
+    },
+    {
+      "name": "Botão de perigo",
+      "kind": "button",
+      "refersTo": "button-danger",
+      "description": "Excluir, Cancelar.",
+      "html": "<button class=\"ds-btn-perigo\">Excluir</button>",
+      "css": ".ds-btn-perigo{background:var(--wine,#8f1f26);color:#fff;font:600 12px Barlow,system-ui,sans-serif;padding:5px 10px;border:0;border-radius:4px}.ds-btn-perigo:hover{background:var(--wine-light,#b3363f)}.ds-btn-perigo:focus-visible{outline:2px solid var(--gold,#e9b954);outline-offset:2px}"
+    },
+    {
+      "name": "Aba da navegação",
+      "kind": "nav",
+      "refersTo": "nav-tab-active",
+      "description": "Item ativo da navegação lateral.",
+      "html": "<a class=\"ds-nav ds-nav-ativa\" href=\"#\">Torre de Controle</a>",
+      "css": ".ds-nav{display:flex;align-items:center;height:44px;padding:0 16px;font:600 16.5px 'Barlow Condensed',Barlow,system-ui,sans-serif;color:var(--text-dim,#b7c0d4);text-decoration:none}.ds-nav-ativa{color:var(--gold-text,#e9b954);font-weight:700;background:var(--acento-ativo,rgba(233,185,84,.12));box-shadow:inset 3px 0 0 var(--gold,#e9b954)}.ds-nav:focus-visible{outline:2px solid var(--gold,#e9b954);outline-offset:-2px}"
+    },
+    {
+      "name": "Etapa como texto",
+      "kind": "chip",
+      "refersTo": "status",
+      "description": "Ponto da cor da etapa + nome em caixa alta na cor -txt.",
+      "html": "<span class=\"ds-etapa\"><i></i>AGUARDANDO EMBARQUE</span>",
+      "css": ".ds-etapa{display:inline-flex;align-items:center;gap:6px;font:700 12.5px 'Barlow Condensed',Barlow,system-ui,sans-serif;color:var(--st-aguardando-embarque-txt,#f0a35a)}.ds-etapa i{width:8px;height:8px;border-radius:2px;background:var(--st-aguardando-embarque-bg,#e07b1a)}"
+    },
+    {
+      "name": "Cartão do Pátio ao vivo",
+      "kind": "card",
+      "refersTo": "panel",
+      "description": "Um botão por caminhão, na coluna da etapa.",
+      "html": "<button class=\"ds-pv\"><b>503</b><span>Patrocínio</span><em>26h21 nesta etapa</em></button>",
+      "css": ".ds-pv{display:grid;gap:4px;text-align:left;width:180px;padding:10px 12px;background:var(--navy,#1e2a52);color:var(--text,#f2f4f8);border:1px solid color-mix(in srgb,#c62828 55%,transparent);border-radius:6px;font:400 14px Barlow,system-ui,sans-serif}.ds-pv b{font:700 26px 'Barlow Condensed',Barlow,sans-serif;color:var(--gold-text,#e9b954)}.ds-pv em{font-style:normal;font-weight:700;font-size:12.5px;color:var(--st-aguardando-veiculo-txt,#ff8a80)}.ds-pv:focus-visible{outline:2px solid var(--gold,#e9b954);outline-offset:2px}"
+    }
+  ],
+  "narrative": {
+    "northStar": "A Torre de Controle",
+    "overview": "O painel é a sala de onde se vê o pátio inteiro sem levantar da cadeira. A Torre de Controle e o Pátio ao vivo dão a cara dele: calma, densa, sem enfeite, com o número da operação antes de qualquer explicação. Navy é o chão; dourado aparece onde há significado; as seis cores de etapa só dizem etapa.",
+    "keyCharacteristics": [
+      "Navy e dourado; dourado é significado, não decoração.",
+      "Barlow Condensed para títulos, navegação, números e cabeçalhos; Barlow no corpo.",
+      "Seis cores de etapa fixas, com preenchimento, texto sobre o preenchimento e texto solto.",
+      "Plano, em camadas de tom; canto de 4 a 12 px.",
+      "Dois temas completos.",
+      "Letra nunca abaixo de 12 px; contraste AA nos dois temas."
+    ],
+    "rules": [
+      {
+        "name": "A Regra do Preenchimento",
+        "body": "Token de preenchimento nunca é cor de texto solto: --gold, -bg e -fg são para fundo e para o que vai em cima do fundo; texto solto usa --gold-text e -txt.",
+        "section": "colors"
+      },
+      {
+        "name": "A Regra da Etapa",
+        "body": "As seis cores de etapa só dizem etapa. Gráfico usa --graf-1.",
+        "section": "colors"
+      },
+      {
+        "name": "Dourado é Significado",
+        "body": "Estrutura é azul-acinzentado; o dourado marca o ativo, o número que importa e a ação principal.",
+        "section": "colors"
+      },
+      {
+        "name": "O Piso de 12 px",
+        "body": "Nenhuma letra abaixo de 12 px, nos dois temas.",
+        "section": "typography"
+      },
+      {
+        "name": "A Regra Sem Vidro",
+        "body": "Superfície é opaca; o vidro saiu porque custava processamento no tablet do pátio.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do usar --gold-text e os tokens -txt para texto solto; --gold, -bg e -fg só para preenchimento e para o que vai em cima dele.",
+      "Do conferir toda cor nova nos dois temas, inclusive o valor dentro de campo, que a bateria de contraste não lê sozinha.",
+      "Do manter 12 px como o menor tamanho de letra, também em texto de gráfico (SVG).",
+      "Do manter a resposta em até 180 ms e respeitar prefers-reduced-motion.",
+      "Do dar acesso por teclado a tudo que se clica (botão de verdade, ou role e tabindex)."
+    ],
+    "donts": [
+      "Don't usar as seis cores de etapa para outra coisa que não etapa.",
+      "Don't pôr vidro, desfoque ou sombra de volume em superfície.",
+      "Don't usar cor de etapa ou dourado de preenchimento como texto no tema claro.",
+      "Don't criar pílula (canto redondo total) em botão ou caixa.",
+      "Don't deixar a página rolar de lado em nenhuma largura."
+    ]
+  }
+}

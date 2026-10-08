@@ -64,9 +64,16 @@ SEMEAR = """(demo) => {
 MEDIR = """([aba, piso]) => {
   abrirTab(aba);
   const achados = new Map();
+  /* O QUE A RÉGUA NÃO VIA (08/10/2026, auditoria /impeccable): `offsetParent`
+     não existe em texto de gráfico (SVG) nem em elemento fixo, e o <select>
+     não tem nó de texto próprio (o texto mora nas <option>). Os eixos dos
+     gráficos saíam com 11 px e o seletor de paletizada da Torre com 11,5 px,
+     e ninguém via. Agora "aparece" é ter tamanho na tela e não estar oculto. */
+  const aparece = e => { const r = e.getBoundingClientRect(); if(r.width < 1 || r.height < 1) return false;
+    const g = getComputedStyle(e); return g.display !== 'none' && g.visibility !== 'hidden'; };
   for(const e of document.querySelectorAll('#header *, #nav *, .tab-page.active *')){
-    if(!e.offsetParent) continue;
-    if(![...e.childNodes].some(n => n.nodeType === 3 && n.textContent.trim())) continue;
+    if(!aparece(e)) continue;
+    if(e.tagName !== 'SELECT' && ![...e.childNodes].some(n => n.nodeType === 3 && n.textContent.trim())) continue;
     const fs = parseFloat(getComputedStyle(e).fontSize);
     if(fs < piso){
       const k = e.tagName.toLowerCase() + (e.classList.length ? '.' + [...e.classList].slice(0, 2).join('.') : '')
@@ -98,7 +105,7 @@ async def main():
             achou = await pg.evaluate("""(piso) => {
               const s = document.createElement('span'); s.textContent = 'régua'; s.style.fontSize = '10px';
               document.querySelector('.tab-page.active').appendChild(s);
-              const v = parseFloat(getComputedStyle(s).fontSize) < piso && !!s.offsetParent; s.remove(); return v; }""", PISO)
+              const v = parseFloat(getComputedStyle(s).fontSize) < piso && s.getBoundingClientRect().width > 0; s.remove(); return v; }""", PISO)
             ck(f'{nome}: a régua encontra um texto de 10 px plantado', achou)
             await pg.close()
         ck('nenhum erro de JavaScript', not erros, '; '.join(erros[:3]))

@@ -36,7 +36,7 @@ faz achar a próxima em minutos em vez de horas:
 | **Dois filtros para a mesma tela** | Duas filtragens paralelas sobre os mesmos dados. Uma move os números, a outra move os gráficos, e nada avisa que discordam. | #18 |
 | **O teste que carimba a leitura errada do pedido** | O teste está novo e verde, e mede exatamente o que foi escrito — só que o pedido foi entendido ao contrário. Verde prova que o código faz o que o teste diz, não que a regra está certa. Mudança que REMOVE algo da tela precisa do teste que garante que o trabalho de quem usava aquilo ainda é possível. | #23 |
 | **Dois fatos com prazos diferentes tratados como um só** | Cada dado está certo no seu lugar; o defeito nasce de perguntar a um deles algo que só o outro sabe (`DB.operador` no localStorage vive para sempre; o token no sessionStorage morre com a aba). Reconhece-se assim: o mesmo relato volta com roupa nova depois de cada correção. Corrigir no nível do sintoma nunca fecha. | #25 |
-| **Teste que mede o proxy, não a regra** | O teste confere um sintoma fácil de medir ("a aba aparece?", "quantas linhas?") em vez da garantia real, ou monta um cenário que deixou de corresponder ao sistema. Quando o sintoma muda por um motivo legítimo, ele fica vermelho sem que nada tenha quebrado — e aponta para o lugar errado. | #15, #22 |
+| **Teste que mede o proxy, não a regra** | O teste confere um sintoma fácil de medir ("a aba aparece?", "quantas linhas?") em vez da garantia real, ou monta um cenário que deixou de corresponder ao sistema. Quando o sintoma muda por um motivo legítimo, ele fica vermelho sem que nada tenha quebrado — e aponta para o lugar errado. O avesso também: verde porque o caso que importa nunca foi desenhado (#121). | #15, #22, #121 |
 | **Decisão aplicada no nível errado** | A intenção está certa e o alvo não. Proibir quebra na TABELA quando bastava na linha; gravar por LINHA quando bastava por lote; desligar `animation` quando o que apagava o conteúdo no papel era o estado de repouso. Reconhece-se assim: o sintoma aparece longe da causa, e a correção não é remover a regra — é descê-la um nível. | #71, #72, #74 |
 | **Enfeite no caminho crítico** | A animação espera, e o trabalho espera atrás dela. Nada fica errado: fica mais lento, e o teste reprova numa conferência de DADO ("a rota aparece na tabela?") que aponta para o lugar errado. Movimento anda ao lado do trabalho, nunca na frente. | #74 |
 
@@ -5446,3 +5446,72 @@ não alcança — o banco tem o relógio dele.
 **Correção.** O bloco 56 planta `hojeISO()`; `test_nota_por_transportadora`
 planta `(now() AT TIME ZONE 'America/Sao_Paulo')::date` — os dois do jeito
 que o sistema grava. Achado no mesmo lote do #45 (Sentry).
+
+## #121 — Números que somem: cor de preenchimento usada como texto, e a régua que não via (08/10/2026)
+
+**Achado** na auditoria `/impeccable` da Torre e do Pátio ao vivo (pedido do
+dono, 08/10: *"processe a impeccable inteira aqui no nosso painel"*), medido
+na tela, nos dois temas:
+
+| Onde | O que a pessoa via | Medido |
+|---|---|---|
+| Visão do Pátio (Torre), coluna "No pátio" de caminhão acima de 3 h | tempo BRANCO sobre papel, no tema claro | 1,11:1 |
+| Torre, campo Seq. (posição na fila) | dourado de preenchimento sobre papel, tema claro | 1,47:1 |
+| Pátio ao vivo, selo "3h+" | vermelho de fundo usado como letra, tema escuro | 2,28:1 |
+| Torre, caixa de etapa zerada | a caixa INTEIRA a `opacity:.55` | 2,5:1 |
+| Tendência do Gestor (Indicadores) e a da Torre | linha da tendência em cor de preenchimento | — |
+
+O mínimo é 4,5:1. O número que mais importa na tela — quanto tempo o
+caminhão está parado e qual é a vez dele — era justamente o que sumia.
+
+**Causa.** Os tokens de status têm três papéis: `-bg` (o fundo), `-fg` (a
+letra SOBRE esse fundo) e `-txt` (o status escrito sozinho, sobre a página).
+E o dourado tem dois: `--gold` (preenchimento) e `--gold-text` (letra). Os
+cinco lugares usavam o token de PREENCHIMENTO como cor de letra — que só
+funciona no tema em que foi escolhido. Virou regra do DESIGN.md: **A Regra
+do Preenchimento** — token de fundo nunca é letra sozinha.
+
+**Por que a bateria não viu (o que mais importa).** `test_contraste` existia
+e passava verde. Tinha três buracos, e um defeito real passou por cada um:
+1. **número dentro de campo não é nó de texto** — a régua só lia nó de texto,
+   e a Seq. é um `<input>`;
+2. **opacidade do PAI** — a régua só descontava a opacidade do próprio
+   elemento; a caixa zerada esmaecia a caixa, não o número;
+3. **os dados nasciam todos "agora"** — nenhum caminhão passava de 3 h, então
+   o destaque de atraso nunca era desenhado para ser medido. Além disso o
+   Pátio ao vivo nem estava na lista de abas da régua.
+
+**Família:** *Teste que mede o proxy, não a regra* (#15, #22) — a régua media
+"todo nó de texto que está na tela com estes dados", não "todo texto que a
+pessoa lê". Verde dizia que o que foi desenhado era legível; o que importava
+não tinha sido desenhado.
+
+**Correção.**
+- `.vp-atrasado`, `.sit-inativo` → `--st-aguardando-veiculo-txt`;
+  `.sit-ativo` → `--st-faturado-txt`; `.seq-input` → `--gold-text`;
+  `.pv-selo` → par `-bg`/`-fg`; tendências da Torre e do Gestor → `-txt` e
+  `--gold-text`.
+- Caixa zerada (decisão do dono, 08/10: *"Apagada, mas legível"*): sem
+  opacidade; o NÚMERO e o rótulo recuam para `--text-dim` (que passa 4,5:1).
+  Mesmo tratamento no `.st-zero` da tabela de status.
+- Placeholder com token próprio (`--placeholder`) nos dois temas.
+- Junto, da mesma auditoria: caixa de etapa da Torre vira botão de teclado
+  (`role="button"`, `tabindex`, Enter e Espaço); seletores da linha e filtros
+  da Visão do Pátio com nome para leitor de tela; campos da linha e selo
+  "frete a definir" com 24 px de alvo no tablet; eixo dos gráficos a 12 px.
+
+**Trava.**
+- `test_contraste`: mede valor de campo e placeholder, desconta a opacidade
+  de todos os ancestrais, inclui o Pátio ao vivo, planta UM caminhão 30 h
+  atrasado (com todos os carimbos recuados juntos, para não virar
+  "suspeito") e REPROVA se esse caminhão não estiver acima da meta;
+  desliga animação para medir a tela parada. Reprovou no publicado (3f9a839)
+  e passa com a correção.
+- `test_piso_de_12px`: passa a medir SELECT e a ver por tamanho na tela, não
+  por `offsetParent`.
+- `test_torre_teclado_e_toque` (novo): Tab chega na caixa, Enter e Espaço
+  filtram e a caixa anuncia `aria-pressed`; todo campo da linha tem nome;
+  em 1024×768 todo campo da linha e o selo de frete têm 24 px ou mais.
+- `test_torre_cabe_e_le`: a caixa zerada é "mais discreta" pela COR do
+  número, não mais pela opacidade (causa 1 das quatro: a regra mudou por
+  decisão do dono).

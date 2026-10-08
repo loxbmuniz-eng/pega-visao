@@ -471,14 +471,14 @@ function atualizarDestinoUI(id, val){
    PESO, ROTA, PALETIZADA, ENTREGAS". Mesmo padrão já usado em
    praOndeSelectHtml. */
 function rotaSelectHtml(c){
-  return `<select class="rota-inline" onchange="atualizarRotaUI('${escJs(c.id)}',this.value)">
+  return `<select class="rota-inline" aria-label="Rota da carga ${esc(c.numeroCarga || c.placa || '')}" onchange="atualizarRotaUI('${escJs(c.id)}',this.value)">
     <option value="">—</option>
     ${rotasParaEscolher().map(r=>`<option value="${esc(r.codigo)}" ${c.rota===r.codigo?'selected':''}>${esc(rotaCurta(r.codigo))}</option>`).join('')}
   </select>`;
 }
 function paletizadaSelectHtml(c){
   const atual = paletizadaDaCarga(c);
-  return `<select class="palet-inline" onchange="atualizarPaletizadaUI('${escJs(c.id)}',this.value)">
+  return `<select class="palet-inline" aria-label="Paletizada? Carga ${esc(c.numeroCarga || c.placa || '')}" onchange="atualizarPaletizadaUI('${escJs(c.id)}',this.value)">
     ${['Não','Sim'].map(op=>`<option value="${op}" ${atual===op?'selected':''}>${op}</option>`).join('')}
   </select>`;
 }
@@ -1260,7 +1260,7 @@ function preencherSelectsRota(){
 }
 
 function praOndeSelectHtml(c){
-  return `<select class="praonde-inline" onchange="atualizarPraOndeUI('${c.id}',this.value)">
+  return `<select class="praonde-inline" aria-label="Tipo de operação da carga ${esc(c.numeroCarga || c.placa || '')}" onchange="atualizarPraOndeUI('${c.id}',this.value)">
     ${PRA_ONDE_OPCOES.map(op=>`<option value="${op}" ${c.praOnde===op?'selected':''}>${esc(PRA_ONDE_LABEL[op])}</option>`).join('')}
   </select>`;
 }
