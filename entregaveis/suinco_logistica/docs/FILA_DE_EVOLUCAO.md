@@ -42,6 +42,7 @@ Aprovados pelo dono em 01/10/2026 ("12345"): 4 e 7 feitos; 1 retirado do portão
 | ✅ 2 | **Pátio #4 — próximo a carregar** — na coluna Aguardando Embarque, um cartão ganha a marca "próximo a carregar": o de menor sequência entre os que já chegaram, dia de programação mais antigo primeiro (resposta 1-A). Sem sequência, ninguém marcado | ✅ no ar (portão 34, `7cf0236`) | Trava: `test_patio_vivo_proximo_e_saidas` |
 | ✅ 3 | **Pátio #6 — saídas previstas** — faixa "Saídas previstas — próxima hora: N · de 1 a 2 h: N · de 2 a 3 h: N", pela mesma previsão do cartão; quem não tem previsão é contado à parte (resposta 2-A) | ✅ no ar (portão 34, `7cf0236`) | Trava: `test_patio_vivo_proximo_e_saidas` |
 | ⬜ 6 | Crescimento do repositório | `index.html` gerado entra em todo commit | 182 MB de histórico |
+| ⬜ 8 | **Atualização do servidor baixa ~337 MB toda vez** — a investigar | medido, causa NÃO vista | Tráfego de entrada da Hostinger (leitura de rotina, 08/10): ~337 MB nas duas janelas do `atualizar_tudo.sh` de 07/10 (19h45 e 21h47 de Brasília); fora delas, 1–7 MB a cada meia hora. Suspeita a conferir no servidor, não diagnóstico: o `rsync --delete` do `instalar.sh` não exclui `$APP_DIR/.playwright-browsers`, então o passo 6b baixaria o Chromium de novo (e, entre o rsync e o 6b, o serviço antigo ficaria sem o Chromium do PDF); o `npm ci` também baixa. Conferir com `du -sh` antes e depois de uma atualização |
 
 ## 3b. Redesenho das 12 abas (auditoria de 01/10/2026)
 
