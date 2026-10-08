@@ -109,8 +109,10 @@
   .pv-col.gargalo .pv-col-num{ border-color:var(--pv-atencao); color:var(--pv-atencao) }
   .pv-card[data-parado="1"] .pv-nota, .pv-card[data-passada] .pv-nota{ color:var(--pv-atencao); font-weight:600 }
   .pv-card[data-parado="1"]:not([data-sla="critico"]){ border-color:color-mix(in srgb, var(--pv-atencao) 55%, transparent) }
-  .pv-selo{ display:none; font:600 12.5px/1 var(--pv-cond); letter-spacing:.02em; color:#fff;
-    background:var(--pv-critico); border-radius:4px; padding:3px 5px }
+  /* Etiqueta = preenchimento -bg + texto -fg (08/10/2026). Era #fff sobre
+     --pv-critico, que no escuro é o vermelho CLARO de texto (-txt): 2,28:1. */
+  .pv-selo{ display:none; font:600 12.5px/1 var(--pv-cond); letter-spacing:.02em; color:var(--st-aguardando-veiculo-fg);
+    background:var(--st-aguardando-veiculo-bg); border-radius:4px; padding:3px 5px }
   .pv-anel{ grid-area:anel; width:34px; height:34px; align-self:start }
   .pv-anel .a-fundo{ fill:none; stroke:var(--pv-linha-forte); stroke-width:3.2 }
   .pv-anel .a-prog{ fill:none; stroke:var(--pv-ok); stroke-width:3.2; stroke-linecap:round;

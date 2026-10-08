@@ -27,7 +27,7 @@ from playwright.async_api import async_playwright
 
 PAINEL = 'file:///home/user/pega-visao/entregaveis/suinco_logistica/index.html'
 
-ABAS = ['torre', 'programacao', 'portaria', 'expedicao', 'faturamento',
+ABAS = ['torre', 'patio', 'programacao', 'portaria', 'expedicao', 'faturamento',
         'indicadores', 'cadastros', 'historico', 'relatorios', 'frete', 'usuarios']
 # A aba Pagamento de Frete (05/10/2026) desenha, sem servidor, a demonstração
 # gerada pela mesma função da API — é o que a régua mede.
@@ -49,6 +49,10 @@ MEDIR = """
 () => {
   const val = t => {
     const n = (t.match(/[\\d.]+/g) || []).map(Number);
+    /* color-mix() sai como `color(srgb 0.77 0.81 0.88 / 0.7)` — canais de
+       0 a 1, não de 0 a 255. Lido como rgb(), virava quase preto e a régua
+       acusava 1,4:1 no fundo claro da pista do Pátio ao vivo (08/10/2026). */
+    if(/^color\\(srgb/.test(t)) return { r:(n[0]||0)*255, g:(n[1]||0)*255, b:(n[2]||0)*255, a:n.length>3 ? n[3] : 1 };
     return { r:n[0]||0, g:n[1]||0, b:n[2]||0, a:n.length>3 ? n[3] : 1 };
   };
   const sobre = (f, t) => ({
@@ -75,6 +79,11 @@ MEDIR = """
     if(!img || img === 'none') return null;
     const paradas = img.match(/rgba?\\([^)]*\\)/g);
     if(!paradas || !paradas.length) return null;
+    /* Degradê com parte TRANSPARENTE é desenho, não fundo (08/10/2026): o
+       fio tracejado entre as colunas do Pátio ao vivo é um degradê de 2 px
+       repetido, e a régua o tomava pelo fundo da coluna inteira — acusava
+       1,4:1 em cabeçalho perfeitamente legível. */
+    if(paradas.map(val).some(c => c.a <= .05)) return null;
     const cs = paradas.map(val).filter(c => c.a > .05);
     if(!cs.length) return null;
     return {
@@ -107,6 +116,47 @@ MEDIR = """
   const raiz = document.querySelector('.tab-page.active');
   if(!raiz) return achados;
 
+  /* O QUE ESTA RÉGUA NÃO VIA (08/10/2026, auditoria /impeccable).
+     Três buracos, e um defeito real passou por cada um:
+       · o NÚMERO DENTRO DE CAMPO não é nó de texto — a Seq. da Torre saía
+         dourada sobre papel no tema claro (1,4:1) e a régua nem olhava;
+       · a OPACIDADE DO PAI esmaece o texto do filho — a caixa zerada da
+         Torre (opacity .55 na caixa) caía a 2,5:1 com o texto medido "cheio";
+       · o PLACEHOLDER é texto que a pessoa precisa ler para saber o que
+         digitar. */
+  const opacidadeTotal = el => { let o = 1; for(let e = el; e; e = e.parentElement) o *= +getComputedStyle(e).opacity; return o; };
+  const medir = (el, texto, corCss, tipo) => {
+    const g = getComputedStyle(el);
+    const fundo = fundoReal(el);
+    let cor = val(corCss);
+    const op = opacidadeTotal(el);
+    if(op < 1) cor = sobre({...cor, a: cor.a * op}, fundo);
+    else if(cor.a < 1) cor = sobre(cor, fundo);
+    const px = parseFloat(g.fontSize);
+    const peso = parseInt(g.fontWeight) || 400;
+    const grande = px >= 18 || (px >= 14 && peso >= 700);
+    const minimo = grande ? 3.0 : 4.5;
+    const rz = razao(cor, fundo);
+    if(rz < minimo){
+      achados.push({
+        texto: (tipo ? tipo + ': ' : '') + String(texto).trim().slice(0, 30),
+        classe: (el.className || '').toString().slice(0, 46),
+        tag: el.tagName.toLowerCase(),
+        cor: corCss, fundo: `rgb(${fundo.r|0}, ${fundo.g|0}, ${fundo.b|0})`,
+        razao: Math.round(rz*100)/100, minimo, px
+      });
+    }
+  };
+  raiz.querySelectorAll('input:not([type=checkbox]):not([type=radio]):not([type=hidden]):not([type=color]), select, textarea').forEach(el => {
+    const g = getComputedStyle(el);
+    if(g.visibility === 'hidden' || g.display === 'none') return;
+    const r = el.getBoundingClientRect();
+    if(r.width < 2 || r.height < 2 || opacidadeTotal(el) === 0) return;
+    const valor = el.tagName === 'SELECT' ? ((el.options[el.selectedIndex] || {}).text || '') : el.value;
+    if(String(valor).trim()) medir(el, valor, g.color, 'campo');
+    else if(el.placeholder) medir(el, el.placeholder, getComputedStyle(el, '::placeholder').color, 'exemplo');
+  });
+
   raiz.querySelectorAll('*').forEach(el => {
     // Só elementos que pintam texto PRÓPRIO — nó de texto direto filho.
     const proprio = [...el.childNodes]
@@ -117,12 +167,13 @@ MEDIR = """
     if(g.visibility === 'hidden' || g.display === 'none' || +g.opacity === 0) return;
     const r = el.getBoundingClientRect();
     if(r.width < 2 || r.height < 2) return;
+    if(opacidadeTotal(el) === 0) return;
 
     const fundo = fundoReal(el);
     let cor = val(g.color);
-    // opacity do elemento esmaece o texto CONTRA o fundo: entra na conta,
-    // senão .st-zero (opacity .4) passaria sem ser medido.
-    const op = +g.opacity;
+    // A opacidade de TODOS os ancestrais esmaece o texto contra o fundo:
+    // .st-zero (.4) e a caixa zerada (.55) não passam sem ser medidas.
+    const op = opacidadeTotal(el);
     if(op < 1) cor = sobre({...cor, a: cor.a * op}, fundo);
     else if(cor.a < 1) cor = sobre(cor, fundo);
 
@@ -180,9 +231,32 @@ async def main():
                     }
                 }
             });
+            /* UM CAMINHÃO ATRASADO (08/10/2026). O destaque de "acima da meta"
+               (.vp-atrasado na Visão do Pátio, selo "3h+" e tempo vermelho no
+               Pátio ao vivo) só existe com caminhão parado há mais de 3 h — e
+               estes dados nasciam todos agora. O tempo atrasado saía BRANCO
+               sobre papel no tema claro (1,11:1) e a régua nunca o desenhou.
+               Tudo da carga recua 30 h junto, para o carimbo continuar coerente
+               (programação antes da chegada) e não virar "suspeito". */
+            /* A posição na fila (Seq.) é um NÚMERO DENTRO DE CAMPO: sem
+               sequência nos dados o campo fica vazio e a régua não tem o que
+               medir — e foi exatamente ali que o dourado de preenchimento
+               saiu sobre papel no tema claro (1,4:1). */
+            DB.cargas.forEach((c, i) => { c.sequencia = i + 1; });
+            const atrasada = DB.cargas.find(c => c.status === 'Aguardando Embarque');
+            const recua = iso => iso ? new Date(new Date(iso).getTime() - 30*3600e3).toISOString() : iso;
+            Object.keys(atrasada).filter(k => /Em$/.test(k) && typeof atrasada[k] === 'string').forEach(k => { atrasada[k] = recua(atrasada[k]); });
+            DB.movimentacoes.filter(m => m.cargaId === atrasada.id).forEach(m => { m.timestamp = recua(m.timestamp); });
             SuincoStore.save();
         }""")
         await pg.wait_for_timeout(400)
+        # A régua mede a tela PARADA, que é o que a pessoa lê. Com a animação
+        # de entrada correndo, a opacidade do pai ainda está subindo e a
+        # medida pega o meio do caminho (texto quase preto dava 4,3:1).
+        await pg.add_style_tag(content='*,*::before,*::after{animation:none!important;transition:none!important}')
+        atraso = await pg.evaluate("() => { const c = DB.cargas.find(x => x.status === 'Aguardando Embarque'); const t = tempoDePatioDe(c); return [t.minutos, t.suspeito]; }")
+        ck('há um caminhão acima da meta de 3 h nos dados (o destaque de atraso é desenhado)',
+           atraso[0] is not None and atraso[0] > 180 and not atraso[1], str(atraso))
 
         total = 0
         resumo = {}
@@ -198,7 +272,7 @@ async def main():
                 }""", aba)
                 if not existe:
                     continue
-                await pg.wait_for_timeout(260)
+                await pg.wait_for_timeout(400)
                 achados = await pg.evaluate(MEDIR)
                 total += len(achados)
                 ck(f'{aba}: todo texto legível sobre o próprio fundo', not achados,

@@ -175,7 +175,7 @@ const Graf = (function(){
       st.grade = [0, .5, 1].map(()=>({
         linha: el('line', { stroke:cor('--border-soft','#2a3a6c'), 'stroke-width':1 }, svg),
         /* SÓ O NÚMERO NO EIXO — a unidade é do título da seção. */
-        texto: el('text', { 'text-anchor':'end', fill:cor('--text-dim','#b7c0d4'), 'font-size':11 }, svg),
+        texto: el('text', { 'text-anchor':'end', fill:cor('--text-dim','#b7c0d4'), 'font-size':12 }, svg),
       }));
       st.eixoX = el('g', {}, svg);
       st.metaL = el('line', { stroke:cor('--gold','#e9b954'), 'stroke-width':1.5, 'stroke-dasharray':'4 4', opacity:0 }, svg);
@@ -249,7 +249,7 @@ const Graf = (function(){
     const passo = Math.max(1, Math.ceil(pontos.length / Math.max(2, Math.floor((W-L-R) / 54))));
     pontos.forEach((p,i)=>{
       if(i % passo && i !== pontos.length - 1) return;
-      const t = el('text', { x:st.x(i), y:H-7, 'text-anchor':'middle', fill:cor('--text-dim','#b7c0d4'), 'font-size':11 }, st.eixoX);
+      const t = el('text', { x:st.x(i), y:H-7, 'text-anchor':'middle', fill:cor('--text-dim','#b7c0d4'), 'font-size':12 }, st.eixoX);
       t.textContent = p.rotulo;
     });
     if(meta){ st.metaL.setAttribute('y1', st.y(meta)); st.metaL.setAttribute('y2', st.y(meta)); st.metaL.setAttribute('opacity', .8); }
