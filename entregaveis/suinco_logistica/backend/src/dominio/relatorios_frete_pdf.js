@@ -6,6 +6,10 @@
            por vez (confirmado pelo dono).
      SIST  "WRVDA501 - Relatório de Notas por Carga" (Atak): as notas que
            foram emitidas para a carga. Também uma carga por vez.
+           Ou o "WRVDA503 - Relatório de Carga Por UF/Município" (Atak), que a
+           Logística usa nas cargas de DF, Bahia e Espírito Santo (08/10/2026):
+           as mesmas notas, agrupadas por UF e município, sem a chave de
+           acesso. Sai no MESMO formato do 501 — a conferência não muda.
 
    COMO LÊ. Recebe as páginas com o texto e a posição de cada pedaço
    (servicos/pdf_texto.js) e monta as linhas pela POSIÇÃO DAS COLUNAS, que
@@ -49,6 +53,7 @@ export function tipoDoRelatorio(paginas) {
   const t = semAcento((paginas[0]?.itens ?? []).map((i) => i.s).join(' '));
   if (t.includes('relatorio de status das entregas') || t.includes('deliveryb2b')) return 'B2B';
   if (t.includes('wrvda501') || t.includes('relatorio de notas por carga')) return 'SIST';
+  if (t.includes('wrvda503') || t.includes('relatorio de carga por uf')) return 'SIST503';
   return null;
 }
 
@@ -321,6 +326,82 @@ export function lerSist(paginas) {
   return { tipo: 'SIST', cargas: [...cargas.values()] };
 }
 
+/* ---------------------------------------------------------------------
+   SIST (Atak · WRVDA503 — Relatório de Carga Por UF/Município), 08/10/2026
+   ---------------------------------------------------------------------
+   Pedido do dono: a Daniela recebe as cargas de DF, Bahia e Espírito Santo
+   neste relatório, e o painel recusava ("não é o B2B nem o WRVDA501").
+
+   O QUE ELE TEM. Uma linha por nota, agrupada por UF e município, com
+   subtotal do município, da UF e "Total Geral" no fim. O número da carga é
+   uma COLUNA (não um cabeçalho, como no 501), então um PDF pode trazer
+   várias cargas misturadas — cada nota vai para a carga da própria linha.
+   Tem o que a conferência usa (carga, nota, cliente, cidade, UF). Não tem a
+   data da nota, o CNPJ (que o painel não guarda) nem a chave de acesso — a
+   checagem "o número da nota bate com a chave" não acontece aqui.
+
+   COMO RECONHECE A LINHA DE NOTA. Os números vêm alinhados à DIREITA: o
+   "Valor_NE" começa antes do próprio título, e o subtotal ("Salvador 2
+   24.342,47 …") põe números nas mesmas faixas. Por isso a linha de nota é
+   reconhecida pelo que ela É: a UF na coluna de UF (o subtotal da UF fica
+   recuado, na coluna do município) E um número inteiro na faixa da carga E
+   outro na faixa da nota. Colunas de TEXTO (município, cliente) começam
+   onde o título começa, e são lidas pela faixa do título. */
+function colunasDoSist503(linha) {
+  const inicio = (nome) => {
+    const it = linha.itens.find((i) => semAcento(i.s) === nome);
+    return it ? it.x : null;
+  };
+  const c = {
+    uf: inicio('uf'), municipio: inicio('municipio'), carga: inicio('numero_carga'), peso: inicio('peso_bruto'),
+    nota: inicio('numero_nota'), valor: inicio('valor_ne'), cliente: inicio('cliente'), supervisor: inicio('supervisor'),
+  };
+  const falta = Object.entries({ Uf: c.uf, Municipio: c.municipio, Numero_Carga: c.carga, Peso_Bruto: c.peso,
+    Numero_Nota: c.nota, Valor_NE: c.valor, Cliente: c.cliente, Supervisor: c.supervisor })
+    .filter(([, v]) => v === null).map(([n]) => n);
+  if (falta.length) {
+    throw new ErroDeLeitura('SIST_LAYOUT',
+      `O relatório do sistema (WRVDA503) não tem a coluna ${falta.join(', ')} onde eu esperava — o formato mudou?`);
+  }
+  return c;
+}
+
+export function lerSist503(paginas) {
+  const cargas = new Map();
+  let col = null;
+  const inteiro = (s) => /^\d{3,10}$/.test(String(s).trim());
+  for (const pg of paginas) {
+    for (const linha of agruparEmLinhas(pg.itens)) {
+      if (linha.itens.some((i) => semAcento(i.s) === 'numero_nota')) { col = colunasDoSist503(linha); continue; }
+      if (!col) continue;
+      const [primeiro] = linha.itens;
+      // a UF NA COLUNA DA UF — o subtotal da UF fica recuado, na do município
+      if (!/^[A-Z]{2}$/.test(primeiro.s.trim()) || Math.abs(primeiro.x - col.uf) > (col.municipio - col.uf) / 2) continue;
+      const cargaIt = linha.itens.find((i) => inteiro(i.s) && i.x > col.municipio && i.x < col.peso);
+      const notaIt = linha.itens.find((i) => inteiro(i.s) && i.x >= col.peso && i.x < col.cliente);
+      if (!cargaIt || !notaIt) continue;
+      const nota = chaveDaNota(notaIt.s);
+      const numero = cargaIt.s.trim();
+      if (!cargas.has(numero)) cargas.set(numero, { numero, notas: [], avisos: [] });
+      const cliTxt = juntar(linha.itens.filter((i) => dentro(i.x, [col.cliente - 6, col.supervisor - 6])));
+      const mc = cliTxt.match(/^(\d+)\s*-\s*(.*)$/);
+      cargas.get(numero).notas.push({
+        data: '', nota,
+        clienteCodigo: mc ? mc[1] : '', cliente: mc ? mc[2].trim() : cliTxt,
+        cidade: juntar(linha.itens.filter((i) => i !== primeiro && i.x < cargaIt.x && !inteiro(i.s))),
+        uf: primeiro.s.trim(),
+      });
+    }
+  }
+  if (!col) {
+    throw new ErroDeLeitura('SIST_LAYOUT', 'Não achei o cabeçalho das colunas do relatório do sistema (WRVDA503).');
+  }
+  if (!cargas.size) {
+    throw new ErroDeLeitura('SIST_SEM_NOTAS', 'Não achei nenhuma nota no relatório do sistema (WRVDA503).');
+  }
+  return { tipo: 'SIST', relatorio: 'WRVDA503', cargas: [...cargas.values()] };
+}
+
 /* A porta única: recebe as páginas, descobre de qual relatório se trata
    (pelo CONTEÚDO, não pelo nome do arquivo — "118882 - SIST.pdf" renomeado
    continua sendo o que é) e devolve as cargas lidas. */
@@ -328,6 +409,7 @@ export function lerRelatorioDeFrete(paginas) {
   const tipo = tipoDoRelatorio(paginas);
   if (tipo === 'B2B') return lerB2B(paginas);
   if (tipo === 'SIST') return lerSist(paginas);
+  if (tipo === 'SIST503') return lerSist503(paginas);
   throw new ErroDeLeitura('RELATORIO_DESCONHECIDO',
-    'Este PDF não é o relatório do B2B (Status das Entregas) nem o do sistema (WRVDA501 — Notas por Carga).');
+    'Este PDF não é o relatório do B2B (Status das Entregas) nem o do sistema (WRVDA501 — Notas por Carga, ou WRVDA503 — Carga Por UF/Município).');
 }

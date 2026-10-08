@@ -1398,7 +1398,7 @@ function freteDesenharImportacao(){
   const previa = imp.previa ? freteHtmlPrevia(imp.previa) : '';
   const prontas = imp.previa ? imp.previa.cargas.filter((c) => c.estado === 'pronta').length : 0;
   freteModal('Importar relatórios (PDF)', `
-    <div class="card-sub">Escolha os PDFs do <strong>B2B</strong> (Relatório de Status das Entregas) e do <strong>Atak</strong> (WRVDA501 — Notas por Carga).
+    <div class="card-sub">Escolha os PDFs do <strong>B2B</strong> (Relatório de Status das Entregas) e do <strong>Atak</strong> (WRVDA501 — Notas por Carga, ou WRVDA503 — Carga Por UF/Município).
       Pode ser de uma carga ou de várias, de uma vez. O servidor lê, mostra o que mudaria e <strong>só grava depois que você confirmar</strong>.</div>
     <div class="frete-drop" id="frete-drop" tabindex="0" role="button" aria-label="Escolher os PDFs dos relatórios"
          onclick="document.getElementById('frete-arquivos').click()"
