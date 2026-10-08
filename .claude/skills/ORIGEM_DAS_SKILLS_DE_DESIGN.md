@@ -122,3 +122,30 @@ para instalar inteira.
 **Recusado:** o plugin FreightUtils (publicado em 05/10/2026, autor
 avulso, servidor próprio recebendo as perguntas, feito para o Reino Unido
 e frete aéreo/marítimo).
+
+## pbakaus/impeccable — Apache 2.0, © Paul Bakaus (08/10/2026)
+
+https://github.com/pbakaus/impeccable · commit `778c8a7` · versão 4.5.0 da
+skill. Pedido do dono: "instala a /impeccable aqui". Licença e avisos de
+terceiros em `LICENCA_IMPECCABLE.txt`.
+
+**Entrou:** a skill `impeccable` (`/impeccable <comando> <alvo>`: audit,
+critique, polish, harden, adapt, clarify, layout, typeset…) e os 4 agentes
+que ela chama (`.claude/agents/impeccable-*.md`).
+
+**Ficou de fora, de propósito: os ganchos automáticos** (`hooks.json` do
+plugin). Eles rodam o motor da Impeccable depois de TODA edição de arquivo
+(inclusive no servidor e nos testes) e a cada fim de turno ("design deep
+pass", até 30 s). Num projeto em produção, com portão e bateria, isso é um
+processo de terceiro entrando no meio de todo trabalho, sem pedido. A skill
+funciona sem eles; liga só com decisão do dono.
+
+**Como roda:** o lançador (`scripts/impeccable`) baixa, na primeira vez, um
+binário do próprio projeto para `~/.impeccable/bin/` e confere o hash. Sem
+rede, a skill avisa e segue lendo o projeto direto.
+
+**Antes de usar aqui:** `/impeccable init` escreve `PRODUCT.md` e
+`DESIGN.md` na raiz. A identidade do painel (navy/dourado, dois temas,
+piso de 12 px, contraste AA) já está decidida — o `init` registra, não
+substitui. Mudança de tela continua seguindo o fluxo da casa: PROMPT,
+aprovação, teste que reprova, bateria, portão.
