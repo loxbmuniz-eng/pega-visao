@@ -1,4 +1,21 @@
-6408260
+541d34d
+
+# ---------------------------------------------------------------------
+# 08/10/2026 — 6408260 → 541d34d. O SERVIDOR ALCANÇOU O PORTÃO 62.
+#
+# Bloco COPIE DAQUI colado pelo dono (atualizar_tudo.sh): commit no servidor
+# 541d34d, serviço active, /health 200, última migração
+# 064_bi_obedece_051.sql (nenhuma migração nova desde 06/10), aviso no
+# celular ligado, vigias 6 ok e 0 com problema, node v24.21.0, problemas
+# nesta rodada: nenhum.
+#
+# O QUE PASSOU A VALER NO SERVIDOR (só código, nenhum dado mexido):
+#   · rota /api/atencao — a caixa Pontos de atenção, só Administração (#50);
+#   · rota /api/indicadores/transportadoras — o quadro por transportadora (#49);
+#   · rota /painel — o PLANO B: o painel servido pelo próprio servidor em
+#     https://api.embarquesuinco.com.br/painel, cópia gravada pelo
+#     instalar.sh em /opt/embarque-suinco/painel.
+# O marcador de migrações (APLICADAS_EM_PRODUCAO.txt) continua em 064.
 
 # ---------------------------------------------------------------------
 # 07/10/2026 — 7ed0fcf → 6408260. O SERVIDOR ALCANÇOU O PORTÃO 57.
