@@ -954,6 +954,38 @@ grátis, sem cartão — nada aqui pode gerar cobrança.
 do servidor (o valor é passado a ele fora do chat e do git), depois do
 `atualizar_tudo.sh` que levar o código.
 
+**Emenda de 08/10/2026 — como entrou no código (🟡 commitado; vale depois do
+portão e do `atualizar_tudo.sh`).** Pela recomendação, informada no relato:
+
+1. **Sem o SDK do Sentry também no servidor.** O envio é um POST no formato
+   "envelope" do Sentry, montado campo a campo por LISTA BRANCA
+   (`backend/src/servicos/erros.js`, `montarEvento`). O SDK manda tudo e
+   apaga o proibido depois; aqui só sai o que está escrito. Uma dependência
+   a menos no `npm ci`.
+2. **`POST /api/erros` exige login**, como toda rota de operação (a barreira
+   SEGURANÇA 3 da bateria reprovou a rota aberta — e estava certa). Erro na
+   tela de entrada fica de fora: se a entrada quebra, ninguém entra, e isso
+   ninguém deixa de ver. Com login, ninguém de fora gasta a cota.
+3. **O aviso do painel não entra na fila offline**: a fila é de gravação da
+   operação e o rodapé conta as pendentes. Sem rede, o aviso se perde.
+4. **Cada origem no seu projeto**: `SENTRY_DSN` (suinco-servidor) e
+   `SENTRY_DSN_PAINEL` (suinco-painel, opcional; vazio = vai tudo para o do
+   servidor com a etiqueta `origem`). O `/health` responde `sentry:
+   {servidor, painel}` — ligado ou não, sem SSH.
+5. **Queda do servidor**: o erro é gravado no disco na hora
+   (`erro_da_ultima_queda.json`, só com a chave) e enviado na subida
+   seguinte; o processo continua caindo como antes (`uncaughtExceptionMonitor`
+   observa, não segura).
+6. **Freio**: o mesmo erro uma vez por hora; no máximo 20 envios a cada 10
+   minutos; 30 avisos por minuto por pessoa na rota; 10 por página aberta.
+7. **Limpeza da mensagem**: e-mail, token, CPF, CNPJ, telefone, número de
+   5 dígitos ou mais (carga, nota) e valor citado depois de dois-pontos. A
+   rota vai como molde (`/api/cargas/:id`); a pilha, sem `?parâmetros`.
+
+Prova: bloco 58 do `api.test.js` (13 testes, contra um Sentry falso local) e
+`test_erro_da_tela_vai_ao_servidor` (pela tela). Ambos reprovaram contra o
+código publicado.
+
 ## 28. Conector da Hostinger: ler à vontade, mudar só com ordem, comprar e apagar nunca (07/10/2026)
 
 O dono ligou o conector da Hostinger à conta onde roda o servidor
