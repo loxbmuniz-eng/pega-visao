@@ -249,7 +249,7 @@ function renderRotasCadastro(){
         <td>${esc(r.operador)||'—'}</td>
         ${podeExcluir ? `<td class="no-print">${aposentada
             ? '<span class="text-dim" title="Já está fora de circulação">—</span>'
-            : `<button class="btn btn-sec btn-sm" onclick="excluirRotaUI('${escJs(r.codigo)}')"
+            : `<button class="btn btn-danger btn-sm" onclick="excluirRotaUI('${escJs(r.codigo)}')"
                  title="Apaga se nunca foi usada; aposenta se já rodou">Excluir</button>`}</td>` : ''}
       </tr>`;
     })
@@ -411,7 +411,7 @@ function renderFrotaTabela(){
       <td>${esc(f.uf)||'—'}</td>
       <td>${f.dataUltimaMovimentacao ? new Date(f.dataUltimaMovimentacao+'T00:00:00').toLocaleDateString('pt-BR') : '—'}</td>
       <td>${f.precisaRevisao ? '<span class="badge badge-aguardando-veiculo">SIM</span>' : '<span class="text-dim">Não</span>'}</td>
-      <td class="no-print"><button class="btn btn-danger btn-sm" onclick="removerFrotaUI('${escJs(f.placa)}')">Remover</button></td>
+      <td class="no-print"><button class="btn btn-danger btn-sm" onclick="removerFrotaUI('${escJs(f.placa)}')">Excluir</button></td>
     </tr>`).join('');
   document.getElementById('frota-empty').hidden = todos.length>0;
   const contagemEl = document.getElementById('frota-contagem');
@@ -439,10 +439,13 @@ function addFrotaUI(){
   renderAll();
 }
 async function removerFrotaUI(placa){
-  if(!(await perguntarUI({ titulo: `Remover a placa ${placa} da Frota?`,
-       texto: 'Ela sai da lista de placas que podem ser programadas.', botao: 'Remover', perigo: true }))) return;
+  /* "Excluir", vermelho, como em todo o painel (08/10/2026, /impeccable
+     Lote 5): o Cadastros tinha "Remover" (vermelho) e "Excluir" (neutro)
+     para a mesma ação. */
+  if(!(await perguntarUI({ titulo: `Excluir a placa ${placa} da Frota?`,
+       texto: 'Ela sai da lista de placas que podem ser programadas.', botao: 'Excluir', perigo: true }))) return;
   removerFrota(placa);
-  notify('Placa removida.', 'success');
+  notify('Placa excluída.', 'success');
   renderAll();
 }
 function importarFrotaLoteUI(){
@@ -457,7 +460,7 @@ function renderTranspLista(){
   const lista = listarTransportadoras();
   document.getElementById('cad-transp-lista').innerHTML = lista.length ? lista.map(t=>`
     <div class="modal-list-item"><span>${esc(t.nome)}</span>
-      <button class="btn btn-danger btn-sm no-print" onclick="removerTransportadoraUI('${escJs(t.id)}')">Remover</button></div>
+      <button class="btn btn-danger btn-sm no-print" onclick="removerTransportadoraUI('${escJs(t.id)}')">Excluir</button></div>
   `).join('') : '<div class="empty-state">Nenhuma transportadora cadastrada.</div>';
 }
 function addTransportadoraUI(){
@@ -468,7 +471,20 @@ function addTransportadoraUI(){
     renderAll();
   }catch(e){ notify(e.message, 'danger'); }
 }
-function removerTransportadoraUI(id){ removerTransportadora(id); renderAll(); }
+/* Excluir uma transportadora era UM clique, sem pergunta (achado no
+   /impeccable Lote 5) — a Frota, ao lado, já perguntava. Agora pergunta
+   como toda exclusão do painel. A lista é só de nomes: as placas da Frota
+   que já usam o nome não mudam. */
+async function removerTransportadoraUI(id){
+  const t = DB.transportadoras.find(x => x.id === id);
+  if(!t) return;
+  if(!(await perguntarUI({ titulo: `Excluir a transportadora ${t.nome}?`,
+       texto: 'Ela sai da lista de transportadoras do cadastro. As placas da Frota que já usam esse nome continuam como estão.',
+       botao: 'Excluir', perigo: true }))) return;
+  removerTransportadora(id);
+  notify('Transportadora excluída.', 'success');
+  renderAll();
+}
 function atualizarDatalists(){
   document.getElementById('lista-transportadoras').innerHTML = DB.transportadoras.map(t=>`<option value="${esc(t.nome)}">`).join('');
   /* Placas da Frota para o campo de placa da Montagem. A sugestão mostra a

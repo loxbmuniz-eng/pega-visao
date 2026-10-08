@@ -98,6 +98,17 @@ MEDIR_TH = """(sel)=>{
 
 MEDIR_MAIN_H = """()=>{ const e=document.querySelector('#main'); return e?Math.round(e.getBoundingClientRect().height):null }"""
 
+# ALTURA QUE MUDOU DE PROPÓSITO — declarada, como a GEOMETRIA_DECIDIDA abaixo.
+# 08/10/2026 — /impeccable Lote 4 (#125): a barra "Ir para" entrou no topo da
+# Programação (a Montagem do dia estava a 1.268 px). Ela é medida e DESCONTADA
+# dos dois lados — no publicado de antes ela não existe (0), depois dela vale
+# o mesmo desconto —, então a guarda continua dizendo "as tabelas não fazem a
+# página crescer", sem se auto-atualizar: qualquer outro crescimento reprova.
+MEDIR_IR_PARA_H = """()=>{ const n=document.querySelector('.tab-page.active > .ir-para');
+  if(!n || n.hidden) return 0;
+  const r=n.getBoundingClientRect(); if(!r.height) return 0;
+  return Math.round(r.height + parseFloat(getComputedStyle(n).marginBottom||'0')); }"""
+
 # Conta, por linha da Torre com badge "Aguardando Veículo", quantos <td>
 # têm box-shadow diferente de 'none' — tem de ser exatamente 1 (só a
 # primeira célula acende).
@@ -180,7 +191,9 @@ async def medir_estado(pg, api, largura, arquivo_html):
             sel_th = '#torre-thead th' if aba == 'torre' else '#mont-tabela thead th'
             ths = await pg.evaluate(MEDIR_TH, sel_th)
             main_h = await pg.evaluate(MEDIR_MAIN_H)
-            resultado[tema][aba] = {'ths': ths, 'mainH': main_h}
+            ir_para = await pg.evaluate(MEDIR_IR_PARA_H)
+            resultado[tema][aba] = {'ths': ths, 'mainH': None if main_h is None else main_h - ir_para,
+                                    'irPara': ir_para}
         # barra vermelha só medida na Torre
         await pg.evaluate("(a)=>abrirTab(a)", 'torre')
         await pg.wait_for_timeout(300)
@@ -413,7 +426,7 @@ async def main():
         for aba in ['torre', 'programacao']:
             h_antes = antes[tema][aba]['mainH']
             h_depois = depois[tema][aba]['mainH']
-            ck(f'{tema}/{aba}: #main.height não cresce ({h_antes} -> {h_depois})',
+            ck(f'{tema}/{aba}: #main.height não cresce, descontada a barra "Ir para" ({h_antes} -> {h_depois})',
                h_depois is not None and h_antes is not None and h_depois <= h_antes + 1,
                f'antes={h_antes} depois={h_depois}')
 
