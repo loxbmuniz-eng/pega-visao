@@ -25,6 +25,7 @@ import os
 import subprocess
 import sys
 from playwright.async_api import async_playwright
+from _pergunta import responder_pergunta, com_resposta
 
 API = os.environ.get('SUINCO_API', 'http://127.0.0.1:3010')
 PAINEL_ARQ = '/home/user/pega-visao/entregaveis/suinco_logistica/index.html'
@@ -106,10 +107,17 @@ async def main():
         print('\n=== 1. SEM MOTIVO, NADA ACONTECE ===')
         # O histórico é a única coisa que sobrou no lugar da segunda
         # assinatura. Deixar restaurar sem motivo seria ficar sem as duas.
-        await pgA.evaluate("()=>{ window.prompt = ()=> ''; }")
-        await pgA.evaluate("""async (d)=>{ await restaurarRevisaoUI(d.id, d.rev); }""",
+        # Sem motivo, a pergunta não deixa seguir; desistir não restaura.
+        await pgA.evaluate("(d) => { window.__rest = restaurarRevisaoUI(d.id, d.rev); }",
                            {'id': carga['id'], 'rev': revisao})
-        await pgA.wait_for_timeout(1500)
+        await pgA.wait_for_selector('#modal-pergunta.open', timeout=4000)
+        await pgA.click('#pergunta-ok')
+        await pgA.wait_for_timeout(300)
+        ck('sem motivo, a pergunta pede o motivo e não fecha',
+           await pgA.is_visible('#pergunta-erro') and await pgA.is_visible('#modal-pergunta.open'))
+        await pgA.click('#pergunta-cancelar')
+        await pgA.evaluate("() => window.__rest")
+        await pgA.wait_for_timeout(1200)
         peso = await pgA.evaluate("""(id)=>{
           const c = DB.cargas.find(x=>x.id===id); return c ? c.peso : null;
         }""", carga['id'])
@@ -117,10 +125,9 @@ async def main():
 
         print('\n=== 2. UM ADMINISTRADOR SOZINHO RESTAURA ===')
         motivo = f'Peso lançado errado na carga {num}'
-        await pgA.evaluate("(m)=>{ window.prompt = ()=> m; }", motivo)
-        await pgA.evaluate("""async (d)=>{ await restaurarRevisaoUI(d.id, d.rev); }""",
-                           {'id': carga['id'], 'rev': revisao})
-        await pgA.wait_for_timeout(2500)
+        await com_resposta(pgA, "(d) => restaurarRevisaoUI(d.id, d.rev)",
+                           {'id': carga['id'], 'rev': revisao}, texto=motivo)
+        await pgA.wait_for_timeout(2000)
         peso = await pgA.evaluate("""(id)=>{
           const c = DB.cargas.find(x=>x.id===id); return c ? c.peso : null;
         }""", carga['id'])

@@ -24,6 +24,7 @@ import sys
 import uuid
 from playwright.async_api import async_playwright
 from _frete_resposta import responder_frete
+from _pergunta import responder_pergunta, com_resposta
 
 API = os.environ.get('SUINCO_API', 'http://127.0.0.1:3010')
 PAINEL = '/home/user/pega-visao/entregaveis/suinco_logistica/index.html'
@@ -194,12 +195,7 @@ async def main():
             "id => DB.cargas.some(c=>c.id===id)", carga_id)
         ck('o Faturamento estava enxergando a carga', visivel_antes)
 
-        await p_log.evaluate("""([id]) => {
-            // confirm() bloqueia o navegador de teste; a decisão do operador
-            // já está coberta pelo fluxo real, o que importa aqui é o efeito.
-            window.confirm = () => true;
-            return excluirCargaUI(id);
-        }""", [carga_id])
+        await com_resposta(p_log, "(id) => excluirCargaUI(id)", carga_id)
         await p_log.wait_for_timeout(3000)
 
         sumiu_local = await p_log.evaluate("id => !DB.cargas.some(c=>c.id===id)", carga_id)

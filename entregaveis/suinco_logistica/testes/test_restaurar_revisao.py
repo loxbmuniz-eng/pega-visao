@@ -19,6 +19,7 @@ import asyncio
 import os
 import sys
 from playwright.async_api import async_playwright
+from _pergunta import responder_pergunta, com_resposta
 
 API = os.environ.get('SUINCO_API', 'http://127.0.0.1:3010')
 PAINEL_ARQ = '/home/user/pega-visao/entregaveis/suinco_logistica/index.html'
@@ -119,9 +120,8 @@ async def main():
         # clique só abria um pedido, e restaurar de verdade exigia outro
         # administrador aprovar. Agora um clique com motivo já restaura.
         # O motivo continua obrigatório — é ele que sobra no histórico.
-        await pgA.evaluate("() => { window.prompt = () => 'peso estragado no teste';"
-                           "        window.confirm = () => true; }")
         await clicar_restaurar()
+        await responder_pergunta(pgA, texto='peso estragado no teste')
         await pgA.wait_for_timeout(1500)
         local = await pgA.evaluate("""(n) => {
             const c = DB.cargas.find(x=>x.numeroCarga===n);

@@ -25,6 +25,7 @@ Exige o backend local no ar (migração 053).
 """
 import asyncio, os, sys, json, urllib.request
 from playwright.async_api import async_playwright
+from _pergunta import responder_pergunta, com_resposta
 
 API = os.environ.get('SUINCO_API', 'http://127.0.0.1:3010')
 PAINEL_ARQ = '/home/user/pega-visao/entregaveis/suinco_logistica/index.html'
@@ -70,17 +71,17 @@ async def main():
             }""", [codigo, nome])
 
         async def excluir_pela_tela(codigo):
-            """O botão, com o confirm respondido — é o que a pessoa faz."""
-            return await pg.evaluate("""async (c) => {
+            """O botão, com a pergunta respondida pela tela — é o que a pessoa faz."""
+            avisos, _ = await com_resposta(pg, """async (c) => {
               let avisos = [];
-              const oc = window.confirm, on = window.notifyGravacao, ond = window.notify;
-              window.confirm = () => true;
+              const on = window.notifyGravacao, ond = window.notify;
               window.notifyGravacao = (m) => avisos.push(m);
               window.notify = (m) => avisos.push(m);
               try { await excluirRotaUI(c); }
-              finally { window.confirm = oc; window.notifyGravacao = on; window.notify = ond; }
+              finally { window.notifyGravacao = on; window.notify = ond; }
               return avisos.join(' | ');
             }""", codigo)
+            return avisos
 
         print('\n=== 1. ROTA QUE NUNCA RODOU É APAGADA DE VEZ ===')
         await criar_rota('ZQ1', 'Rota duplicada de teste')

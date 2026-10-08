@@ -22,6 +22,7 @@ import subprocess
 import sys
 import uuid
 from playwright.async_api import async_playwright
+from _pergunta import responder_pergunta, com_resposta
 
 API = os.environ.get('SUINCO_API', 'http://127.0.0.1:3010')
 SENHA = os.environ.get('SUINCO_SENHA', 'senha-de-teste-123')
@@ -77,13 +78,15 @@ async def main():
         pg.on('pageerror', lambda e: erros.append(str(e)))
 
         print('\n=== 1. PÁTIO LIMPO: FECHA SEM PEDIR SENHA ===')
-        await pg.evaluate("() => { window.confirm = () => true; }")
-        pedidos = []
-        pg.on('dialog', lambda d: (pedidos.append(d.message), asyncio.ensure_future(d.accept())))
-        await pg.evaluate("() => fecharProgramacaoUI()")
-        await pg.wait_for_timeout(2000)
+        # Caixa do navegador NENHUMA: a senha digitada nela aparecia à vista
+        # (auditoria /impeccable, 08/10/2026). Toda pergunta é a do painel.
+        nativas = []
+        pg.on('dialog', lambda d: (nativas.append(d.message), asyncio.ensure_future(d.dismiss())))
+        _, mostrou = await com_resposta(pg, "() => fecharProgramacaoUI()")
+        await pg.wait_for_timeout(1500)
+        ck('pergunta antes de fechar, pela janela do painel', bool(mostrou), str(mostrou)[:80])
         ck('não pediu senha com o pátio limpo',
-           not any('senha' in m.lower() for m in pedidos), str(pedidos))
+           not await pg.is_visible('#pergunta-campo'), str(mostrou)[:80])
 
         print('\n=== 2. COM CARGA EM ABERTO: PEDE A SENHA ===')
         placa = await pg.evaluate("() => DB.frota[0].placa")
@@ -93,27 +96,39 @@ async def main():
         }""", [placa, NUM])
         await pg.wait_for_timeout(1500)
 
-        pedidos.clear()
-        # Recusa a senha (dismiss) — o fechamento tem que ser abortado.
-        await pg.evaluate("() => { window.prompt = () => null; }")
-        await pg.evaluate("() => fecharProgramacaoUI()")
-        await pg.wait_for_timeout(1800)
+        # Confirma o fechamento e, na pergunta da senha, DESISTE — o
+        # fechamento tem que ser abortado.
+        await pg.evaluate("() => { window.__fechar = fecharProgramacaoUI(); }")
+        await responder_pergunta(pg)                       # "Fechar a programação…?" → sim
+        await pg.wait_for_selector('#pergunta-campo', timeout=6000)
+        tipo = await pg.evaluate("() => document.getElementById('pergunta-campo').type")
+        ck('a senha de fechamento é pedida num campo ESCONDIDO', tipo == 'password', str(tipo))
+        lista = await pg.inner_text('#modal-pergunta .pergunta-lista')
+        ck('a pergunta lista a carga que fica em aberto', NUM in lista, lista[:120])
+        await responder_pergunta(pg, confirmar=False)      # desiste
+        await pg.evaluate("() => window.__fechar")
+        await pg.wait_for_timeout(1200)
         ainda_aberta = await pg.evaluate(
             "(n) => DB.cargas.some(c=>c.numeroCarga===n && c.status!=='Seguiu Viagem')", NUM)
         ck('carga continua em aberto depois de desistir da senha', ainda_aberta)
 
         print('\n=== 3. SENHA ERRADA NÃO FECHA ===')
-        await pg.evaluate("() => { window.prompt = () => 'senha-errada-mesmo'; }")
-        await pg.evaluate("() => fecharProgramacaoUI()")
-        await pg.wait_for_timeout(2000)
+        await pg.evaluate("() => { window.__fechar = fecharProgramacaoUI(); }")
+        await responder_pergunta(pg)
+        await responder_pergunta(pg, texto='senha-errada-mesmo')
+        await pg.evaluate("() => window.__fechar")
+        await pg.wait_for_timeout(1500)
         avisos = await pg.evaluate(
             "() => Array.from(document.querySelectorAll('.notif-item')).map(n=>n.textContent).join(' | ')")
         ck('avisa que a senha está incorreta', 'incorreta' in avisos.lower(), avisos[:200])
 
         print('\n=== 4. SENHA CERTA FECHA — E A CARGA NÃO SOME ===')
-        await pg.evaluate("(s) => { window.prompt = () => s; }", SENHA_FECHAR)
-        await pg.evaluate("() => fecharProgramacaoUI()")
-        await pg.wait_for_timeout(2500)
+        await pg.evaluate("() => { window.__fechar = fecharProgramacaoUI(); }")
+        await responder_pergunta(pg)
+        await responder_pergunta(pg, texto=SENHA_FECHAR)
+        await pg.evaluate("() => window.__fechar")
+        await pg.wait_for_timeout(2000)
+        ck('nenhuma caixa do navegador em todo o fechamento', not nativas, ' | '.join(m[:50] for m in nativas))
 
         estado = await pg.evaluate("""(n) => {
             const c = DB.cargas.find(x=>x.numeroCarga===n);

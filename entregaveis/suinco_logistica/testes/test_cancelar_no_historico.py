@@ -18,6 +18,7 @@ concluída, cancelamento aqui apagaria histórico real do pátio).
 import asyncio
 import sys
 from playwright.async_api import async_playwright
+from _pergunta import responder_pergunta, com_resposta
 
 PAINEL = 'file:///home/user/pega-visao/entregaveis/suinco_logistica/index.html'
 falhas = []
@@ -92,10 +93,7 @@ async def main():
         await pg.wait_for_timeout(150)
         cargaId = await pg.evaluate(
             "(placa) => DB.cargas.find(c=>c.placa===placa).id", d0['jaAndou'])
-        await pg.evaluate("""(id) => {
-            window.prompt = () => 'motivo de teste';
-            excluirCargaUI(id);
-        }""", cargaId)
+        await com_resposta(pg, "(id) => excluirCargaUI(id)", cargaId, texto='motivo de teste')
         await pg.wait_for_timeout(200)
         r4 = await pg.evaluate("(id) => ({ existe: !!getCarga(id), wrapVazio: !document.getElementById('hist-timeline-wrap').innerHTML.trim() })", cargaId)
         ck('carga foi removida de DB.cargas', not r4['existe'], str(r4))

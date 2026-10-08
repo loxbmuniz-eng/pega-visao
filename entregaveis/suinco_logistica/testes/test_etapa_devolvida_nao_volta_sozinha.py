@@ -45,6 +45,7 @@ import os
 import sys
 
 from playwright.async_api import async_playwright
+from _pergunta import responder_pergunta, com_resposta
 
 API = os.environ.get('SUINCO_API', 'http://127.0.0.1:3010')
 PAINEL_ARQ = '/home/user/pega-visao/entregaveis/suinco_logistica/index.html'
@@ -143,16 +144,14 @@ async def main():
         # mesmo evento brigam pelo diálogo ("already handled").
         modo = {'aceitar': False}
 
-        async def responder(d):
-            perguntas.append(d.message)
-            if modo['aceitar']:
-                await d.accept()
-            else:
-                await d.dismiss()
+        async def chegar():
+            """Clica "Chegou" e responde a pergunta do painel, se ela vier."""
+            _, mostrou = await com_resposta(pgP, "() => acaoChegadaUI()", confirmar=modo['aceitar'], prazo=4000)
+            if mostrou:
+                perguntas.append(mostrou)
 
-        pgP.on('dialog', lambda d: asyncio.ensure_future(responder(d)))
         await pgP.fill('#portaria-placa', carga['placa'])
-        await pgP.evaluate("async () => { await acaoChegadaUI(); }")
+        await chegar()
         await pgP.wait_for_timeout(2500)
         ck('o painel PERGUNTOU antes de registrar a chegada',
            len(perguntas) > 0,
@@ -171,7 +170,7 @@ async def main():
         print('\n=== 4. CONFIRMANDO, A PORTARIA ANDA (a autoridade dela fica) ===')
         modo['aceitar'] = True
         await pgP.fill('#portaria-placa', carga['placa'])
-        await pgP.evaluate("async () => { await acaoChegadaUI(); }")
+        await chegar()
         await pgP.wait_for_timeout(3000)
         andou = await pgP.evaluate("(id) => (getCarga(id) || {}).status", carga['id'])
         ck('confirmando, a carga anda para Aguardando Embarque',

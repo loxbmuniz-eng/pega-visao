@@ -577,19 +577,16 @@ async function encerrarProgramacaoAnteriorUI(){
     notify('Não há pendências de programações anteriores para encerrar.', 'info');
     return;
   }
-  const lista = antigas.slice(0, 8)
-    .map(c=>`· ${c.numeroCarga || 'sem número'} — ${c.placa} (${c.status})`).join('\n');
-  const resumo = `${antigas.length} carga(s) de programações anteriores serão encerradas `
-    + `como "Seguiu Viagem":\n\n${lista}`
-    + (antigas.length > 8 ? `\n· … e mais ${antigas.length - 8}` : '')
-    + '\n\nElas saem da Torre e continuam no Histórico e no relatório do dia delas.'
-    + '\n\nMotivo (obrigatório):';
-  const motivo = prompt(resumo, 'Caminhões já saíram; encerramento da programação anterior');
+  /* O MOTIVO NASCE EM BRANCO (08/10/2026). Vinha escrito ("Caminhões já
+     saíram…"), e um Enter de reflexo carimbava em cada carga um motivo que
+     ninguém escreveu. A lista vem inteira, com rolagem — antes parava em 8. */
+  const motivo = await perguntarUI({
+    titulo: `Encerrar ${antigas.length} carga(s) de programações anteriores?`,
+    texto: 'Elas são encerradas como "Seguiu Viagem": saem da Torre e continuam no Histórico e no relatório do dia delas.',
+    lista: antigas.map(c => `${c.numeroCarga || 'sem número'} — ${c.placa} (${c.status})`),
+    campo: { tipo: 'motivo', dica: 'Fica registrado em cada carga, com o seu nome.' },
+    botao: 'Encerrar' });
   if(motivo === null) return;
-  if(!String(motivo).trim()){
-    notify('Encerramento cancelado: o motivo é obrigatório.', 'warn');
-    return;
-  }
   try{
     const r = await comOverlaySync('Encerrando a programação anterior…',
       () => SuincoSharePoint.encerrarProgramacoesAnteriores(String(motivo).trim()));
@@ -1490,12 +1487,12 @@ async function reorganizarFilaDoDiaUI(dia, ondeEstou){
     notify('Sem servidor agora — quem renumera a fila é o servidor, e isso não pode ser feito offline.', 'warn', 8000);
     return;
   }
-  const ok = confirm(
-    `Reorganizar a sequência de ${fmtData(dia)}?\n\n`
-    + `As cargas que ainda vão carregar passam a ocupar 1, 2, 3... na ordem `
-    + `em que estão na tela, fechando os buracos.\n\n`
-    + `Quem JÁ carregou não muda de número — aqueles números ficam reservados `
-    + `e a fila desvia deles.`);
+  const ok = await perguntarUI({ titulo: `Reorganizar a sequência de ${fmtData(dia)}?`,
+    texto: 'As cargas que ainda vão carregar passam a ocupar 1, 2, 3... na ordem '
+      + 'em que estão na tela, fechando os buracos.\n\n'
+      + 'Quem JÁ carregou não muda de número — aqueles números ficam reservados '
+      + 'e a fila desvia deles.',
+    botao: 'Reorganizar' });
   if(!ok) return;
 
   const r = await SuincoSharePoint.reorganizarFila(dia);
@@ -1564,16 +1561,14 @@ async function excluirCargaUI(id){
   const jaAndou = c.status !== 'Aguardando Veículo';
   let motivo = '';
   if(jaAndou){
-    motivo = (prompt(
-      `A carga da placa ${c.placa} está em "${c.status}" e já tem histórico.\n\n`
-      + 'Descreva o motivo do cancelamento (fica registrado no log):') || '').trim();
+    motivo = await perguntarUI({ titulo: `Cancelar a carga da placa ${c.placa}?`,
+      texto: `Ela está em "${c.status}" e já tem histórico.`,
+      campo: { tipo: 'motivo', rotulo: 'Motivo do cancelamento', dica: 'Fica registrado no log.', minimo: 3 },
+      botao: 'Cancelar a carga', cancelar: 'Voltar', perigo: true });
     if(!motivo) return;                       // desistiu
-    if(motivo.length < 3){
-      notify('Escreva um motivo com pelo menos 3 letras.', 'warn');
-      return;
-    }
   } else if(!movConfirmadoPorGesto()
-            && !confirm(`Excluir a carga programada da placa ${c.placa}? Essa ação não pode ser desfeita.`)){
+            && !(await perguntarUI({ titulo: `Excluir a carga programada da placa ${c.placa}?`,
+                 texto: 'Essa ação não pode ser desfeita.', botao: 'Excluir', perigo: true }))){
     /* Segurar o botão 1,5 s JÁ é a confirmação (ver movConfirmadoPorGesto).
        A janela continua para quem chegou por teclado ou por outra porta —
        uma pergunta, nunca zero. */
@@ -1631,16 +1626,13 @@ async function _efetivarExclusaoCarga(id, c, motivo, jaAndou, forcarSeguiuViagem
    pra apagar histórico de verdade. */
 async function excluirCargaSeguiuViagemUI(id){
   const c = getCarga(id); if(!c) return;
-  const digitado = (prompt(
-    `Esta carga (placa ${c.placa}, nº ${c.numeroCarga || '—'}) já SEGUIU VIAGEM. `
-    + 'Excluir agora apaga o histórico dela dos relatórios e do faturamento — '
-    + 'só faça isso se for dado de teste ou cadastro errado, não uma viagem real.\n\n'
-    + `Para confirmar, digite a placa exatamente: ${c.placa}`) || '').trim();
+  const digitado = await perguntarUI({ titulo: 'Excluir uma carga que já seguiu viagem?',
+    texto: `Esta carga (placa ${c.placa}, nº ${c.numeroCarga || '—'}) já SEGUIU VIAGEM. `
+      + 'Excluir agora apaga o histórico dela dos relatórios e do faturamento — '
+      + 'só faça isso se for dado de teste ou cadastro errado, não uma viagem real.',
+    campo: { tipo: 'digitar', rotulo: `Para confirmar, digite a placa: ${c.placa}`, exigir: c.placa, normalizar: normalizarPlaca },
+    botao: 'Excluir', perigo: true });
   if(!digitado) return;
-  if(normalizarPlaca(digitado) !== c.placa){
-    notify('Placa digitada não confere. Nada foi excluído.', 'warn');
-    return;
-  }
   const motivo = `Exclusão de carga já finalizada (Seguiu Viagem), confirmada digitando a placa — ${(DB.operador && DB.operador.nome) || '(não identificado)'}`;
   await _efetivarExclusaoCarga(id, c, motivo, true, true);
 }

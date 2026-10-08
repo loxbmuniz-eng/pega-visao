@@ -1376,7 +1376,8 @@ async function aplicarModeloDoDiaUI(){
     notify('Todas as rotas do modelo deste dia já estão montadas.', '', 5000);
     return;
   }
-  if(!confirm(`Criar ${novas.length} carga(s) a partir do modelo de ${NOMES_DIA[_montagemDia.diaSemana]}?`)) return;
+  if(!(await perguntarUI({ titulo: `Criar ${novas.length} carga(s) a partir do modelo de ${NOMES_DIA[_montagemDia.diaSemana]}?`,
+       botao: 'Criar' }))) return;
   let criadas = 0, erros = [];
   for(const [i, m] of novas.entries()){
     try {
@@ -1472,11 +1473,11 @@ async function reorganizarMontagemUI(){
     notify('Escolha o dia da montagem primeiro.', 'warn');
     return;
   }
-  const ok = confirm(
-    `Reorganizar a sequência da montagem de ${fmtData(dia)}?\n\n`
-    + `As linhas que ainda não viraram carga passam a ocupar 1, 2, 3... na `
-    + `ordem em que estão na tela, fechando os buracos.\n\n`
-    + `Linha já efetivada não muda de número — ela virou registro.`);
+  const ok = await perguntarUI({ titulo: `Reorganizar a sequência da montagem de ${fmtData(dia)}?`,
+    texto: 'As linhas que ainda não viraram carga passam a ocupar 1, 2, 3... na '
+      + 'ordem em que estão na tela, fechando os buracos.\n\n'
+      + 'Linha já efetivada não muda de número — ela virou registro.',
+    botao: 'Reorganizar' });
   if(!ok) return;
   try {
     const r = await SuincoSharePoint.montagem.reorganizar(dia);
@@ -1541,11 +1542,11 @@ async function corrigirKmDaCargaUI(cargaId, valor){
   }
   if(novo === antigo) return;
   if(antigo !== null && Math.abs(novo - antigo) > antigo / 2){
-    const ok = confirm(
-      `Trocar o KM de ${kmTexto(antigo)} para ${kmTexto(novo)}?\n\n`
-      + `É mais que o dobro de diferença — confira antes, porque o frete é `
-      + `KM × tarifa e o valor vai ser recalculado.\n\n`
-      + `Fica registrado em Histórico quem mudou.`);
+    const ok = await perguntarUI({ titulo: `Trocar o KM de ${kmTexto(antigo)} para ${kmTexto(novo)}?`,
+      texto: 'A diferença passa da metade do KM atual — confira antes, porque o frete é '
+        + 'KM × tarifa e o valor vai ser recalculado.\n\n'
+        + 'Fica registrado em Histórico quem mudou.',
+      botao: 'Trocar o KM' });
     if(!ok){ renderAll(); return; }
   }
   try {
@@ -1628,9 +1629,10 @@ function outrasLinhasComAPlaca(id, placa){
 }
 
 async function cancelarMontagemUI(id){
-  const motivo = prompt('Por que esta rota não sai hoje?');
+  const motivo = await perguntarUI({ titulo: 'Esta rota não sai hoje?',
+    campo: { tipo: 'motivo', rotulo: 'Por que ela não sai?' },
+    botao: 'Marcar que não sai', cancelar: 'Voltar' });
   if(motivo === null) return;
-  if(!motivo.trim()){ notify('Precisa dizer o motivo.', 'erro', 5000); return; }
   try {
     await SuincoSharePoint.montagem.cancelar(id, motivo.trim());
     await carregarMontagemUI();
@@ -1661,9 +1663,10 @@ async function efetivarLoteMontagemUI(){
     notify('Nenhuma linha com placa para enviar.', 'warn', 5000);
     return;
   }
-  const nomes = prontas.map(m => `${m.rota_nome} (${m.placa})`).join('\n');
-  const ok = confirm(`Criar ${prontas.length} carga(s) e mandar para a Torre de Controle?\n\n`
-    + nomes + '\n\nDepois disso elas aparecem para a Portaria e a Expedição.');
+  const ok = await perguntarUI({ titulo: `Criar ${prontas.length} carga(s) e mandar para a Torre de Controle?`,
+    texto: 'Depois disso elas aparecem para a Portaria e a Expedição.',
+    lista: prontas.map(m => `${m.rota_nome} (${m.placa})`),
+    botao: 'Criar e mandar' });
   if(!ok) return;
 
   let criadas = 0;

@@ -21,6 +21,7 @@ import os
 import subprocess
 import sys
 from playwright.async_api import async_playwright
+from _pergunta import responder_pergunta, com_resposta
 
 API = os.environ.get('SUINCO_API', 'http://127.0.0.1:3010')
 PAINEL_ARQ = '/home/user/pega-visao/entregaveis/suinco_logistica/index.html'
@@ -162,10 +163,9 @@ async def main():
             """() => !!document.querySelector("#torre-tbody .torre-sep button")""")
         ck('o botão de encerrar nasce colado na faixa da programação anterior', temBotao)
 
-        pgA.on('dialog', lambda d: asyncio.ensure_future(
-            d.accept('caminhões já saíram; limpando para a programação nova')))
         await pgA.click("#torre-tbody .torre-sep button")
-        await pgA.wait_for_timeout(4000)
+        await responder_pergunta(pgA, texto='caminhões já saíram; limpando para a programação nova')
+        await pgA.wait_for_timeout(3600)
 
         estado = sql("SELECT (SELECT status_atual FROM fact_viagens WHERE carga_id = '"
                      + ids['ontem'] + "'), (SELECT status_atual FROM fact_viagens WHERE carga_id = '"

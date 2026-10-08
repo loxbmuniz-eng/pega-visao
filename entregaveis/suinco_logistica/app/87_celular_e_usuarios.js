@@ -231,7 +231,8 @@ async function criarUsuarioUI(){
 async function alterarSetorUsuarioUI(id, setor){
   const u = _usuarioPorId(id);
   if(!u) return;
-  if(!confirm(`Mudar ${u.nome} para o setor ${setor}?\n\nIsso muda o que essa pessoa vê e o que consegue registrar.`)){
+  if(!(await perguntarUI({ titulo: `Mudar ${u.nome} para o setor ${setor}?`,
+       texto: 'Isso muda o que essa pessoa vê e o que consegue registrar.', botao: 'Mudar o setor' }))){
     renderUsuarios();   // devolve o select ao valor anterior
     return;
   }
@@ -248,10 +249,11 @@ async function bloquearUsuarioUI(id, ativar){
   const u = _usuarioPorId(id);
   if(!u) return;
   const acao = ativar ? 'Reativar' : 'Bloquear';
-  const aviso = ativar
-    ? `Reativar ${u.nome}? A pessoa volta a conseguir entrar.`
-    : `Bloquear ${u.nome}?\n\nEla perde o acesso na hora. O histórico do que ela registrou é preservado.`;
-  if(!confirm(aviso)) return;
+  const ok = await perguntarUI(ativar
+    ? { titulo: `Reativar ${u.nome}?`, texto: 'A pessoa volta a conseguir entrar.', botao: 'Reativar' }
+    : { titulo: `Bloquear ${u.nome}?`, texto: 'Ela perde o acesso na hora. O histórico do que ela registrou é preservado.',
+        botao: 'Bloquear', perigo: true });
+  if(!ok) return;
   try{
     await SuincoSharePoint.atualizarOperador(id, { ativo: ativar });
     notify(`${u.nome} ${ativar ? 'reativado' : 'bloqueado'}.`, 'success');
@@ -275,18 +277,16 @@ async function bloquearUsuarioUI(id, ativar){
 async function excluirUsuarioUI(id){
   const u = _usuarioPorId(id);
   if(!u) return;
-  const resposta = prompt(`EXCLUIR a conta de ${u.nome} (${u.email})?\n\n`
-    + 'A conta some da lista e a pessoa cai na hora. Isto NÃO se desfaz.\n\n'
-    + 'O histórico do que ela registrou (chegadas, saídas, faturamentos) '
-    + 'continua no sistema com o nome dela.\n\n'
-    + 'Se a pessoa só saiu da empresa, BLOQUEAR é melhor: tira o acesso e '
-    + 'mantém a ficha.\n\n'
-    + 'Para confirmar, digite EXCLUIR:');
+  const resposta = await perguntarUI({ titulo: `EXCLUIR a conta de ${u.nome}?`,
+    texto: `${u.email}\n\n`
+      + 'A conta some da lista e a pessoa cai na hora. Isto NÃO se desfaz.\n\n'
+      + 'O histórico do que ela registrou (chegadas, saídas, faturamentos) '
+      + 'continua no sistema com o nome dela.\n\n'
+      + 'Se a pessoa só saiu da empresa, BLOQUEAR é melhor: tira o acesso e '
+      + 'mantém a ficha.',
+    campo: { tipo: 'digitar', rotulo: 'Para confirmar, digite EXCLUIR', exigir: 'EXCLUIR' },
+    botao: 'Excluir a conta', perigo: true });
   if(resposta === null) return;
-  if(resposta.trim().toUpperCase() !== 'EXCLUIR'){
-    notify('Não excluí — a confirmação não conferiu.', 'warn', 5000);
-    return;
-  }
   try{
     await SuincoSharePoint.excluirOperador(id);
     notify(`Conta de ${u.nome} excluída.`, 'success', 6000);
@@ -299,11 +299,14 @@ async function excluirUsuarioUI(id){
 async function redefinirSenhaUsuarioUI(id){
   const u = _usuarioPorId(id);
   if(!u) return;
-  // prompt() em vez de campo na tabela: a senha não fica escrita no DOM
-  // depois, e o navegador não a guarda no autofill de formulário.
-  const senha = prompt(`Nova senha para ${u.nome} (${u.email}).\n\nMínimo 8 caracteres. Anote e entregue pessoalmente — ela não aparece de novo.`);
+  // A pergunta do painel, não um campo na tabela: a senha sai do DOM assim
+  // que a janela fecha. E não é mais o prompt() do navegador, que mostrava
+  // a senha À VISTA enquanto era digitada (08/10/2026).
+  const senha = await perguntarUI({ titulo: `Nova senha para ${u.nome}`,
+    texto: `${u.email}\n\nAnote e entregue pessoalmente — ela não aparece de novo.`,
+    campo: { tipo: 'senha', rotulo: 'Nova senha', dica: 'Mínimo 8 caracteres.', minimo: 8, nova: true },
+    botao: 'Gravar a senha' });
   if(senha === null) return;
-  if(senha.length < 8){ notify('A senha precisa de pelo menos 8 caracteres.', 'warn'); return; }
   try{
     await SuincoSharePoint.atualizarOperador(id, { senha });
     notify(`Senha de ${u.nome} redefinida.`, 'success');

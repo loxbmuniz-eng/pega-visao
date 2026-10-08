@@ -21,6 +21,7 @@ Cobre:
 import asyncio
 import sys
 from playwright.async_api import async_playwright
+from _pergunta import responder_pergunta, com_resposta
 
 PAINEL = 'file:///home/user/pega-visao/entregaveis/suinco_logistica/index.html'
 falhas = []
@@ -109,16 +110,22 @@ async def main():
            temBotao['temBotao'] and temBotao['textoBotao'] == 'Excluir', str(temBotao))
 
         print('\n=== 5. PLACA ERRADA NA CONFIRMAÇÃO NÃO APAGA NADA ===')
-        pg.once('dialog', lambda d: asyncio.ensure_future(d.accept('ZZZ9Z99')))
-        await pg.evaluate("(id) => excluirCargaSeguiuViagemUI(id)", (await pg.evaluate("() => window.__c2.id")))
+        await pg.evaluate("(id) => { window.__exc = excluirCargaSeguiuViagemUI(id); }", (await pg.evaluate("() => window.__c2.id")))
+        await pg.wait_for_selector('#modal-pergunta.open', timeout=4000)
+        await pg.fill('#pergunta-campo', 'ZZZ9Z99')
+        await pg.click('#pergunta-ok')
+        await pg.wait_for_timeout(300)
+        erroPlaca = await pg.evaluate("() => { const e = document.getElementById('pergunta-erro'); return e && !e.hidden ? e.textContent : ''; }")
+        ck('placa errada: a pergunta diz que não confere e não fecha', 'confere' in erroPlaca and await pg.is_visible('#modal-pergunta.open'), erroPlaca)
+        await pg.click('#pergunta-cancelar')
+        await pg.evaluate("() => window.__exc")
         await pg.wait_for_timeout(200)
         aindaExiste1 = await pg.evaluate("(id) => !!getCarga(id)", (await pg.evaluate("() => window.__c2.id")))
         ck('placa errada digitada — carga NÃO foi excluída', aindaExiste1)
 
         print('\n=== 6. PLACA CERTA NA CONFIRMAÇÃO EXCLUI DE VERDADE ===')
         placaCerta = await pg.evaluate("() => getCarga(window.__c2.id).placa")
-        pg.once('dialog', lambda d: asyncio.ensure_future(d.accept(placaCerta)))
-        await pg.evaluate("(id) => excluirCargaSeguiuViagemUI(id)", (await pg.evaluate("() => window.__c2.id")))
+        await com_resposta(pg, "(id) => excluirCargaSeguiuViagemUI(id)", (await pg.evaluate("() => window.__c2.id")), texto=placaCerta)
         await pg.wait_for_timeout(200)
         aindaExiste2 = await pg.evaluate("(id) => !!getCarga(id)", (await pg.evaluate("() => window.__c2.id")))
         ck('placa certa digitada — carga foi excluída', not aindaExiste2)

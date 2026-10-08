@@ -34,6 +34,7 @@ import asyncio
 import sys
 
 from playwright.async_api import async_playwright
+from _pergunta import responder_pergunta, com_resposta
 
 PAINEL = 'file:///home/user/pega-visao/entregaveis/suinco_logistica/index.html'
 falhas = []
@@ -172,12 +173,12 @@ async def main():
             }""")
         ck('"Outra carga" e "Excluir" estão na própria linha', b['naLinha'], str(b['textos']))
 
-        semAbrir = await pg.evaluate("""() => {
-              window.confirm = () => false;   // cancela a exclusão
+        await pg.evaluate("""() => {
               const tr = document.querySelector('#prog-fila-tbody tr.prog-linha');
               tr.querySelector('button.btn-danger').click();
-              return !!document.querySelector('#prog-fila-tbody tr.prog-detalhe');
             }""")
+        await responder_pergunta(pg, confirmar=False)   # cancela a exclusão
+        semAbrir = await pg.evaluate("() => !!document.querySelector('#prog-fila-tbody tr.prog-detalhe')")
         ck('clicar no botão NÃO abre a linha por tabela', semAbrir is False, str(semAbrir))
 
         print('\n=== 6. SEM ERRO DE JAVASCRIPT ===')

@@ -156,9 +156,11 @@ async def main_tela():
           let sincronizou = 0;
           const oSync = SuincoSharePoint.sincronizarAgora;
           SuincoSharePoint.sincronizarAgora = async () => { sincronizou++; };
-          window.prompt = () => 'carga multiplicada (#48)';
-          window.confirm = () => true;
+          // Responde a pergunta do painel como a pessoa: escreve o motivo e confirma.
           document.getElementById('btn-apagar-historico-placa').click();
+          await new Promise(r => setTimeout(r, 120));
+          document.getElementById('pergunta-campo').value = 'carga multiplicada (#48)';
+          document.getElementById('pergunta-ok').click();
           await new Promise(r => setTimeout(r, 150));
           SuincoSharePoint.apagarMovimentacoesDaPlaca = oApagar;
           SuincoSharePoint.sincronizarAgora = oSync;

@@ -44,6 +44,7 @@ import pathlib
 import sys
 
 from playwright.async_api import async_playwright
+from _pergunta import responder_pergunta, com_resposta
 
 # O painel medido é o que está AO LADO deste teste, não um caminho absoluto
 # para outra cópia da árvore. É a ocorrência #47 em miniatura: medir o
@@ -289,10 +290,10 @@ async def main():
         # A SAÍDA QUE NÃO PODE FECHAR: teclado e chamada de programa passam
         # pelo caminho de sempre. Sem isto, o gesto novo trancaria fora quem
         # não usa o dedo.
-        pg.once('dialog', lambda d: asyncio.ensure_future(d.accept('teste de teclado')))
         await pg.evaluate(
             "() => document.querySelector('#torre-tbody tr .btn-danger').click()")
-        await pg.wait_for_timeout(1200)
+        await responder_pergunta(pg, texto='teste de teclado')   # carga que andou: o motivo é registro
+        await pg.wait_for_timeout(800)
         ck('teclado/chamada de programa ainda conseguem cancelar — ninguém fica trancado fora',
            await pg.evaluate("() => DB.cargas.length") == 2,
            str(await pg.evaluate("() => DB.cargas.length")))
@@ -300,12 +301,13 @@ async def main():
         # Agora o gesto INTEIRO: 1,5 s com o dedo no botão.
         botao = await pg.query_selector('#torre-tbody tr .btn-danger')
         caixa = await botao.bounding_box()
-        pg.once('dialog', lambda d: asyncio.ensure_future(d.accept('segurou até o fim')))
         await pg.mouse.move(caixa['x'] + caixa['width'] / 2, caixa['y'] + caixa['height'] / 2)
         await pg.mouse.down()
         await pg.wait_for_timeout(1800)
         await pg.mouse.up()
-        await pg.wait_for_timeout(1200)
+        # O gesto confirma; o motivo do cancelamento continua sendo pedido.
+        await responder_pergunta(pg, texto='segurou até o fim')
+        await pg.wait_for_timeout(800)
         ck('segurando até o fim, a carga é cancelada',
            await pg.evaluate("() => DB.cargas.length") == 1,
            str(await pg.evaluate("() => DB.cargas.length")))
@@ -626,9 +628,9 @@ async def main():
            str(parado))
         # E o painel continua INTEIRO: a ação não pode ficar presa atrás de
         # uma animação que não vai acontecer.
-        pg.once('dialog', lambda d: asyncio.ensure_future(d.accept('sem movimento')))
         await pg.click('#torre-tbody tr .btn-danger')
-        await pg.wait_for_timeout(1200)
+        await responder_pergunta(pg, texto='sem movimento')
+        await pg.wait_for_timeout(800)
         ck('e o cancelar continua funcionando com um clique só',
            await pg.evaluate("() => DB.cargas.length") == 2,
            str(await pg.evaluate("() => DB.cargas.length")))
