@@ -5614,6 +5614,12 @@ acionável") enquanto o põe por último.
   cartão COM TÍTULO, e o recorte e os `<details>` ficam fora dele.
   `test_indicadores_atualizam_no_lugar` pegou (o toque no ranking do Pulso
   batia num cartão fechado).
+- Segundo achado antes de publicar: a regra do celular que devolve o
+  conteúdo dos `<details>` (`overflow:visible`) apagava a rolagem lateral da
+  caixa de tabela — a tabela de status, aberta, empurrava a página para
+  545 px numa tela de 390. É a lição de 08/09/2026 já escrita no
+  `styles.css`; a caixa de tabela volta a ter `overflow-x:auto`.
+  `test_painel_cabe_no_celular` pegou.
 
 **Trava.**
 - `test_indicadores_acao_no_topo` (novo): recorte primeiro e acima da dobra,

@@ -38,6 +38,10 @@
   #tab-indicadores > .card.ind-recorte .filtro-periodo{ display:grid; grid-template-columns:1fr 1fr; gap:8px }
   #tab-indicadores > .card.ind-recorte .filtro-periodo .form-group{ min-width:0 }
   #tab-indicadores > details.ind-recolhe > *:not(.card-title){ max-height:none; overflow:visible; opacity:1 }
+  /* A caixa de tabela é a exceção (a mesma lição de 08/09/2026 no
+     styles.css): sem o overflow-x dela, a tabela de status de 520 px empurra
+     a PÁGINA para 545 px no celular. test_painel_cabe_no_celular pegou. */
+  #tab-indicadores > details.ind-recolhe > .table-wrap{ overflow-x:auto; overflow-y:visible }
   #tab-indicadores > details.ind-recolhe:not([open]){ padding-top:11px; padding-bottom:11px }
   #tab-indicadores > details.ind-recolhe > summary::after{ display:none }
   #tab-indicadores > details.ind-recolhe[open] > summary.card-title::before{ transform:rotate(-135deg); margin-top:-2px }
