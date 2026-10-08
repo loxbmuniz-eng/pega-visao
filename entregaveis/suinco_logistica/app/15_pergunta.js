@@ -22,6 +22,10 @@
      → Promise: null = desistiu · true = confirmou (sem campo) ·
                 o que foi digitado (com campo)
    soAviso: só o botão de entendido — para o aviso que não tem escolha.
+   conferir: async (resposta) → null (vale) ou o texto do erro. Para quem
+            só sabe se a resposta vale perguntando ao SERVIDOR (a senha da
+            aba Usuários, 08/10/2026): o erro aparece aqui dentro e a janela
+            não fecha; enquanto confere, o botão diz "Conferindo…".
    campo: { tipo: 'motivo' | 'senha' | 'digitar', rotulo, dica,
             minimo (letras), nova (senha nova: autocomplete e "Mostrar"),
             exigir (texto que precisa ser digitado), normalizar (fn) }
@@ -115,7 +119,7 @@ function perguntaConfirmarUI(){
     if(!bruto.trim()) return _perguntaErro(campo.erroVazio || 'Digite a senha.');
     if(campo.minimo && bruto.length < campo.minimo)
       return _perguntaErro(`A senha precisa de pelo menos ${campo.minimo} caracteres — esta tem ${bruto.length}.`);
-    return perguntaResponderUI(bruto);
+    return _perguntaEntregar(bruto);
   }
   const valor = bruto.trim();
   if(campo.tipo === 'motivo'){
@@ -129,6 +133,30 @@ function perguntaConfirmarUI(){
   if(norm(valor) !== norm(campo.exigir))
     return _perguntaErro(`Não confere. Digite exatamente: ${campo.exigir}`);
   return perguntaResponderUI(valor);
+}
+
+/* Entrega a resposta — passando antes pelo `conferir`, quando há. A senha
+   recusada some do campo (não fica para o próximo que sentar ali). */
+async function _perguntaEntregar(valor){
+  const atual = _pergunta;
+  if(!atual) return;
+  const conferir = atual.op.conferir;
+  if(!conferir) return perguntaResponderUI(valor);
+  if(atual.conferindo) return;          // Enter de novo enquanto o servidor responde
+  atual.conferindo = true;
+  const ok = document.getElementById('pergunta-ok');
+  const rotulo = ok ? ok.textContent : '';
+  if(ok){ ok.disabled = true; ok.textContent = 'Conferindo…'; }
+  let erro = null;
+  try{ erro = await conferir(valor); }
+  catch(e){ erro = (e && e.message) || 'Não consegui conferir. Tente de novo.'; }
+  if(_pergunta !== atual) return;       // a janela fechou enquanto conferia
+  atual.conferindo = false;
+  if(ok){ ok.disabled = false; ok.textContent = rotulo; }
+  if(!erro) return perguntaResponderUI(valor);
+  const el = document.getElementById('pergunta-campo');
+  if(el && atual.op.campo && atual.op.campo.tipo === 'senha') el.value = '';
+  _perguntaErro(erro);
 }
 
 function perguntaResponderUI(resposta){

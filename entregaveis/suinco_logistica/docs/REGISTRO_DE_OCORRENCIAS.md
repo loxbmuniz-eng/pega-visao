@@ -31,7 +31,7 @@ faz achar a próxima em minutos em vez de horas:
 | **A mesma decisão escrita em dois lugares** | A regra é copiada em vez de consultada. As cópias divergem e o comportamento fica errado sem que nenhuma linha esteja errada. | #14, #26, #73, #122 |
 | **Duas escritas em voo, a velha ganha** | O painel manda a carga INTEIRA a cada alteração. Duas alterações seguidas viram duas requisições simultâneas, e a primeira carrega o valor velho do campo que ainda ia mudar. | #16 |
 | **A correção que outro setor desfaz sem saber** | Um setor corrige de propósito o que outro fez. A tela do segundo continua mostrando o estado como se nada tivesse sido decidido, e o gesto normal dele desfaz a correção — em silêncio, dos dois lados. | #21 |
-| **A proteção escrita para um posto só** | A regra certa existe, com comentário e tudo — mas vale para um caminho e não para os irmãos dele. Não é cópia divergente: é a cópia que nunca foi escrita. | #20 |
+| **A proteção escrita para um posto só** | A regra certa existe, com comentário e tudo — mas vale para um caminho e não para os irmãos dele. Não é cópia divergente: é a cópia que nunca foi escrita. | #20, #124 |
 | **A tela não oferece o que o servidor aceita** | A rota grava o campo, mas a coluna correspondente é texto. Quem precisa registrar o dado escreve no primeiro campo que aceita digitação — e ele vai parar onde ninguém procura. | #19 |
 | **Dois filtros para a mesma tela** | Duas filtragens paralelas sobre os mesmos dados. Uma move os números, a outra move os gráficos, e nada avisa que discordam. | #18 |
 | **O teste que carimba a leitura errada do pedido** | O teste está novo e verde, e mede exatamente o que foi escrito — só que o pedido foi entendido ao contrário. Verde prova que o código faz o que o teste diz, não que a regra está certa. Mudança que REMOVE algo da tela precisa do teste que garante que o trabalho de quem usava aquilo ainda é possível. | #23 |
@@ -5632,3 +5632,48 @@ acionável") enquanto o põe por último.
   e `test_meta_patio_fora_dos_indicadores` leem as cargas paradas no cartão
   novo e abrem o Tempo Médio de Pátio com clique — causa 1 das quatro: a
   regra mudou de propósito.
+
+---
+
+## #124 — A bateria morria quando o contêiner reiniciava, e o religar prendia o terminal (08/10/2026)
+
+**Pedido do dono:** *"deixa um vigia pra não morrer a bateria de novo"*.
+Decisão dele no PROMPT: religa sozinho e anota.
+
+**O que aconteceu.** Este ambiente é um contêiner que reinicia sem avisar, e
+o reinício derruba o Postgres local e a API de teste (3010) — nenhum dos dois
+volta sozinho. Em 08/10, depois do portão 68, uma rodada de prova da senha da
+aba Usuários "reprovou" em tudo: era `ECONNREFUSED 127.0.0.1:5432`, o banco
+fora do ar. A rodada inteira não valeu nada, e parecia vermelho de código.
+
+**A família.** *A proteção escrita para um posto só*: o `publicar.sh` já
+religava o banco e a API — mas só no começo do portão, com código próprio. O
+`rodar_tudo.sh` não religava nada (com a API caída ele parava; com o banco
+caindo no meio, cada suíte seguinte reprovava por conexão recusada).
+
+**Achado no caminho, ao provar o vigia.** O jeito antigo de subir a API em
+segundo plano — `( cd backend && nohup node … > log & )` — deixava um bash
+intermediário vivo, esperando a API, com a saída de QUEM CHAMOU ainda aberta.
+Quem lia essa saída por cano (`bash rodar_tudo.sh | tail`, o `subprocess` de
+um teste) esperava para sempre: a bateria terminava e o terminal não voltava.
+No `publicar.sh` nunca apareceu porque a saída dele vai para arquivo.
+Reproduzido: com cano, 120 s parado; com `exec` e o bloco inteiro
+redirecionado, 1,1 s.
+
+**Correção.** As funções saíram do `publicar.sh` para `testes/_ambiente.sh`
+(`banco_no_ar`, `subir_banco` — que também aplica as migrações —, `api_no_ar`,
+`api_inteira`, `subir_api`, `derrubar_api`, `garantir_ambiente`), chamadas
+pelos dois. O `rodar_tudo.sh` chama o vigia no começo, antes de cada suíte do
+servidor, antes da segunda chance e depois de cada suíte que reprova: se o
+ambiente caiu no meio dela, religa, anota e a roda de novo, uma vez. O resumo
+da bateria diz tudo o que o vigia fez. `derrubar_api` acha o processo pela
+PORTA, e não por `pkill -f` (que já matou a própria sessão, "exit 144", e
+derrubaria a API de outra porta que uma suíte sobe para si).
+
+**Trava.** `test_vigia_da_bateria`: (A) API caída numa porta reserva volta com
+o gerador de PDF e fica anotada; (B) banco parado volta e fica anotado; (C) a
+bateria de verdade, com banco e API derrubados antes, termina verde e diz o
+que o vigia fez; (D) uma suíte que derruba a API no meio roda de novo e passa.
+Sem o vigia, reprova — e a bateria antiga, com a API caída, parava em
+"a API não respondeu".
+

@@ -131,13 +131,19 @@ verde "  ok  build em dia (carimbo à parte)"
 # Dois segundos aqui, em vez de uma hora lá.
 # ---------------------------------------------------------------------
 titulo "3b. Banco de dados local no ar"
-if pg_isready -q -t 3 2>/dev/null; then
+# As funções do vigia (banco_no_ar, subir_banco, api_inteira, subir_api,
+# derrubar_api) moram em testes/_ambiente.sh desde 08/10/2026 — o mesmo
+# código que o rodar_tudo.sh usa antes de cada suíte. Uma função, dois
+# chamadores.
+PORTA_TESTE="$(grep -E '^PORT=' "$AQUI/backend/.env" 2>/dev/null | cut -d= -f2 | tr -d '[:space:]')"
+PORTA_TESTE="${PORTA_TESTE:-3000}"
+# shellcheck source=testes/_ambiente.sh
+. "$AQUI/testes/_ambiente.sh"
+if banco_no_ar; then
   verde "  ok  Postgres respondendo"
 else
-  echo "      Postgres parado — subindo o cluster 16/main"
-  pg_ctlcluster 16 main start >/dev/null 2>&1 || true
-  for _ in $(seq 1 15); do pg_isready -q -t 2 2>/dev/null && break; sleep 1; done
-  pg_isready -q -t 3 2>/dev/null \
+  echo "      Postgres parado — subindo o cluster local e aplicando as migrações"
+  subir_banco \
     || falhou "o Postgres não subiu. Sem banco, os testes do servidor ficam pendurados em vez de reprovar — foi o que travou o portão por 1h21 em 31/08."
   verde "  ok  Postgres subiu"
 fi
@@ -197,8 +203,6 @@ fi
 verde "  ok  nenhum arquivo de segredo na entrega"
 
 titulo "5. Servidor de teste no ar"
-PORTA_TESTE="$(grep -E '^PORT=' "$AQUI/backend/.env" 2>/dev/null | cut -d= -f2 | tr -d '[:space:]')"
-PORTA_TESTE="${PORTA_TESTE:-3000}"
 # "ESTÁ NO AR" NÃO BASTA — TEM QUE ESTAR INTEIRA.
 #
 # Segunda lição do mesmo dia, e mais cara que a primeira. Depois de o portão
@@ -221,20 +225,7 @@ PORTA_TESTE="${PORTA_TESTE:-3000}"
 # cinco minutos para descobrir que o vermelho era ambiente, não regressão.
 # O /health já diz qual commit o servidor carregou (`versao`): a pergunta agora
 # é "responde, gera PDF E é o HEAD?". Se não for, derruba e sobe o certo.
-api_inteira() {
-  local corpo head_curto
-  corpo="$(curl -sf --max-time 3 "http://127.0.0.1:$PORTA_TESTE/health" 2>/dev/null)" || return 1
-  [[ "$corpo" == *'"pronto":true'* ]] || return 1
-  head_curto="$(git -C "$AQUI" rev-parse --short HEAD 2>/dev/null)"
-  [[ -z "$head_curto" || "$corpo" == *"$head_curto"* ]]
-}
-
-subir_api() {
-  ( cd "$AQUI/backend" && PLAYWRIGHT_CHROMIUM_PATH="$PLAYWRIGHT_CHROMIUM_PATH" \
-      nohup node src/servidor.js > /tmp/suinco-api-teste.log 2>&1 & )
-  for _ in $(seq 1 25); do api_inteira && return 0; sleep 1; done
-  return 1
-}
+# (api_inteira, subir_api e derrubar_api: testes/_ambiente.sh.)
 
 if api_inteira; then
   verde "  ok  API no ar na porta $PORTA_TESTE, com Chromium para os PDFs"
@@ -242,17 +233,14 @@ else
   if curl -sf --max-time 3 "http://127.0.0.1:$PORTA_TESTE/health" >/dev/null 2>&1; then
     echo "      API no ar, mas SEM Chromium ou de OUTRO COMMIT — a bateria mediria"
     echo "      um servidor que não é o que está sendo publicado. Derrubando e subindo o certo."
-    # Padrão ANCORADO. Sem as âncoras, `pkill -f` casa com qualquer shell
-    # que tenha esse texto na linha de comando — inclusive o próprio wrapper
-    # que está rodando este script. Já aconteceu nesta bancada: o pkill matou
-    # a sessão que o chamou e o erro saiu como "exit 144", sem explicação.
-    pkill -f '^node src/servidor\.js$' 2>/dev/null || true
-    sleep 2
+    # Derruba quem escuta NESTA porta (derrubar_api) — o pkill por texto já
+    # matou a própria sessão que o chamou ("exit 144").
+    derrubar_api
   else
     echo "      API fora do ar — subindo (log em /tmp/suinco-api-teste.log)"
   fi
-  subir_api || { tail -15 /tmp/suinco-api-teste.log 2>/dev/null | sed 's/^/      /'
-                 falhou "não consegui subir a API de teste inteira na porta $PORTA_TESTE."; }
+  { subir_api && api_inteira; } || { tail -15 "$API_LOG" 2>/dev/null | sed 's/^/      /'
+                 falhou "não consegui subir a API de teste inteira (do HEAD) na porta $PORTA_TESTE."; }
   verde "  ok  API no ar na porta $PORTA_TESTE, com Chromium para os PDFs"
 fi
 

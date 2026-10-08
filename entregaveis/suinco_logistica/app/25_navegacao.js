@@ -30,6 +30,9 @@ function irParaTab(tab){
   TAB_ATUAL = tab;
   atualizarAvisoSetorAba();
   renderTabAtual();
+  // Só quando a pessoa ENTRA na aba — e não a cada redesenho de 15 s, que
+  // reabriria a pergunta em cima de quem desistiu dela.
+  if(tab === 'usuarios' && typeof perguntarSenhaUsuariosAoEntrar === 'function') perguntarSenhaUsuariosAoEntrar();
 }
 function renderTabAtual(){
   atualizarDatalists();

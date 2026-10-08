@@ -11,7 +11,7 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { consultar, emTransacao } from '../banco.js';
-import { exigirLogin, exigirSetor } from '../middleware/auth.js';
+import { exigirLogin, exigirSetor, exigirUsuariosDestrancado } from '../middleware/auth.js';
 import { SETORES } from '../config.js';
 import { emitir, desconectarOperador } from '../tempo-real.js';
 
@@ -28,7 +28,9 @@ const SENHA_MINIMA = 8;
    caía nele e respondia 403 "esta ação é da Administração" em vez de 404.
    Um teste pegou; o efeito prático seria mandar quem digitou errado
    procurar um problema de permissão que não existe. */
-const SO_ADMIN = [exigirLogin, exigirSetor('Administração')];
+/* Toda rota daqui é a parte de gerenciar usuários: além da Administração,
+   pede a senha da aba (08/10/2026) quando ela está gravada no servidor. */
+const SO_ADMIN = [exigirLogin, exigirSetor('Administração'), exigirUsuariosDestrancado];
 
 function saneiarEmail(v) {
   return String(v ?? '').trim().toLowerCase().slice(0, 200);

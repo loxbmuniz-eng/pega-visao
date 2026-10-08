@@ -72,28 +72,32 @@ export TZ=America/Sao_Paulo
 # investigando o teste errado — e, principalmente, não depende de alguém
 # lembrar. O aviso é fatal de propósito: bateria que roda com o servidor
 # pela metade produz um vermelho que não significa nada.
+#
+# O VIGIA (08/10/2026, pedido do dono: "deixa um vigia pra não morrer a
+# bateria de novo"). A checagem acima só reclamava — e com o contêiner
+# reiniciando sem avisar, o banco e a API caíam no meio e cada suíte
+# seguinte reprovava por "conexão recusada". Agora o vigia religa o que
+# caiu (banco, migrações, API com o Chromium) e ANOTA: no começo, antes de
+# cada suíte do servidor e depois de cada uma que reprovar. Decisão do
+# dono: religa sozinho e anota. Ver testes/_ambiente.sh.
 API="${SUINCO_API:-http://127.0.0.1:3010}"
-saude=$(curl -s -m 5 "$API/health" 2>/dev/null || true)
-case "$saude" in
-  '') echo "  X  a API não respondeu em $API/health."
-      echo "      Suba com: cd backend && PLAYWRIGHT_CHROMIUM_PATH=/opt/pw-browsers/chromium node src/servidor.js"
-      exit 1 ;;
-esac
-case "$saude" in
-  *'"pronto":false'*)
-      echo "  X  a API está no ar, mas o gerador de PDF NÃO."
-      echo "      Toda suíte que exporta relatório vai reprovar sem ter defeito."
-      echo "      Reinicie a API com PLAYWRIGHT_CHROMIUM_PATH=/opt/pw-browsers/chromium."
-      exit 1 ;;
-esac
+PORTA_TESTE="${API##*:}"
+AQUI="$(pwd)"
+LOGS=$(mktemp -d)
+export LOGS
+# shellcheck source=testes/_ambiente.sh
+. testes/_ambiente.sh
+garantir_ambiente "antes de começar" || {
+  echo "  X  o vigia não conseguiu pôr o banco e a API de teste de pé."
+  echo "      Bateria com o servidor pela metade produz vermelho que não significa nada."
+  exit 1
+}
 
 FILTRO="${1:-}"
 # Um navegador por processo pesa ~300MB. Teto no número de núcleos para não
 # transformar paralelismo em disputa de CPU — teste lento estoura o timeout
 # e vira vermelho falso, que é pior que teste demorado.
 PARALELO="${PARALELO:-$(nproc 2>/dev/null || echo 2)}"
-LOGS=$(mktemp -d)
-export LOGS
 
 # A LIMPEZA PRECISA ACONTECER — E RECLAMAR SE NÃO ACONTECER (27/08/2026).
 #
@@ -189,8 +193,19 @@ fi
 
 # ---- Fase 2: as que tocam no banco, uma a uma e com limpeza ----
 for f in "${comServidor[@]}"; do
+  nome=$(basename "$f" .py)
+  garantir_ambiente "antes de $nome" || { echo "  X  o vigia não conseguiu religar o ambiente."; exit 1; }
   limpar_banco
   rodar_uma "$f"
+  # Reprovou COM O AMBIENTE CAÍDO? Então o vermelho não diz nada sobre o
+  # código: o vigia religa, anota, e a suíte roda de novo, uma vez.
+  if [ -f "$LOGS/.falhas" ] && [ "$(tail -1 "$LOGS/.falhas")" = "$nome" ] && ! ambiente_de_pe; then
+    garantir_ambiente "durante $nome" || { echo "  X  o vigia não conseguiu religar o ambiente."; exit 1; }
+    sed -i '$d' "$LOGS/.falhas"
+    anotar_vigia "$nome rodou de novo, com o ambiente de pé"
+    limpar_banco
+    rodar_uma "$f"
+  fi
 done
 
 # ---- Fase 3: SEGUNDA CHANCE, sozinha e com banco limpo (28/08/2026) ----
@@ -217,6 +232,7 @@ if [ -f "$LOGS/.falhas" ]; then
         [ "$(basename "$f" .py)" = "$nome" ] && arquivo="$f" && break
       done
       [ -n "$arquivo" ] || { echo "$nome" >> "$LOGS/.falhas"; continue; }
+      garantir_ambiente "antes da segunda chance de $nome" || { echo "  X  o vigia não conseguiu religar o ambiente."; exit 1; }
       limpar_banco
       esperar_limite_de_requisicoes
       if timeout 300 python3 "$arquivo" > "$LOGS/$nome.txt" 2>&1; then
@@ -236,6 +252,10 @@ ok=$(( total - ${#falhas[@]} ))
 
 echo
 echo "==================================================="
+if [ -s "$LOGS/.vigia" ]; then
+  echo "  O vigia anotou $(wc -l < "$LOGS/.vigia") coisa(s):"
+  sed 's/^/    · /' "$LOGS/.vigia"
+fi
 echo "  $ok verde(s), ${#falhas[@]} falha(s)"
 if [ ${#falhas[@]} -gt 0 ]; then
   printf '  %s\n' "${falhas[@]}"

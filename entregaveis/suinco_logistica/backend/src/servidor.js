@@ -397,6 +397,10 @@ export function criarApp() {
         /* O aviso de erro ao Sentry está ligado? (08/10/2026) Responde sem
            SSH se a chave entrou no .env. Não é segredo: só sim ou não. */
         sentry: { servidor: avisoLigado('servidor'), painel: avisoLigado('painel') },
+        /* A trava da parte de gerenciar usuários (08/10/2026): só a palavra —
+           desligada, ligada ou invalida —, nunca o hash. O nome não diz
+           "senha" de propósito: o /health não fala de segredo (bloco 8). */
+        travaUsuarios: config.senhaUsuarios.estado,
         /* O RELATÓRIO EM PDF DEPENDE DE UM CHROMIUM, E ISSO PRECISA SER
            VISÍVEL DE FORA (26/08/2026).
 

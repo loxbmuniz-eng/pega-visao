@@ -1931,6 +1931,17 @@ const SuincoSharePoint = (function () {
     return chamar('/api/operadores');
   }
 
+  /* A SENHA DA PARTE DE GERENCIAR USUÁRIOS (08/10/2026, pedido do dono).
+     Quem confere é o servidor; certa, ele devolve um token novo com a marca
+     "já digitou", e o token passa pelo funil único (guardarToken). A marca
+     vale até o login acabar — a renovação a carrega adiante. Errada, o
+     servidor responde 403 com o motivo, e nada aqui muda. */
+  async function destrancarUsuarios(senha) {
+    const r = await chamar('/auth/usuarios/destrancar', { metodo: 'POST', corpo: { senha } });
+    guardarToken(r.token, r.operador);
+    return r.operador;
+  }
+
   function criarOperador(dados) {
     return chamar('/api/operadores', { metodo: 'POST', corpo: dados });
   }
@@ -2451,7 +2462,7 @@ const SuincoSharePoint = (function () {
     modeloSemana, montagem,
     pull, pullTudo, drenarFila, pendentes, descartarFilaAntiga, estaOnline,
     sessaoPerdida,
-    listarOperadores, criarOperador, atualizarOperador, excluirOperador,
+    listarOperadores, criarOperador, atualizarOperador, excluirOperador, destrancarUsuarios,
     sincronizarAgora, iniciarSincroniaPeriodica, pararSincronia, ultimaSincronia,
     renovarSessao, registrarInteracao, aoPerguntarSeBaseEstaVazia,
     // Exposto para a guarda medir a REGRA (placa cadastrada não faz ninguém

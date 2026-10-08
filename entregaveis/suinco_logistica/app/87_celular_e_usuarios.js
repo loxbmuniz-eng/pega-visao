@@ -81,13 +81,53 @@ function prepararTabelasMobile(raiz){
    com a hora em que viu. Servidor que ainda não tem os vigias responde 404
    — a caixa diz isso em vez de ficar vazia, para ninguém achar que vazio
    é "tudo certo". */
+/* =====================================================================
+   A PARTE DE GERENCIAR USUÁRIOS TRANCADA (08/10/2026, pedido do dono)
+   ---------------------------------------------------------------------
+   "é pra você colocar a senha … na aba usuários e não mostrar nada dela".
+   Decisões do dono: tranca só o gerenciar (Minha segurança é livre); pede
+   uma vez por login; quem erra segue a regra do login.
+
+   A tela só ADIANTA: quem decide é o servidor, que recusa as rotas de
+   gerenciar sem a senha deste login. A senha não mora no painel — o site é
+   público. Quem diz se está trancada é a sessão que o servidor devolve
+   (`usuariosTrancada`); servidor antigo não manda o campo, e a aba fica
+   como sempre foi. */
+function usuariosTrancadaUI(){
+  const conta = (typeof SuincoSharePoint !== 'undefined' && SuincoSharePoint.conta) ? SuincoSharePoint.conta() : null;
+  return !!(conta && conta.usuariosTrancada === true);
+}
+
+async function destrancarUsuariosUI(){
+  const senha = await perguntarUI({
+    titulo: 'Senha da aba Usuários',
+    texto: 'A parte de gerenciar usuários pede a senha. Ela vale até você sair do painel.',
+    campo: { tipo: 'senha', rotulo: 'Senha da aba Usuários', erroVazio: 'Digite a senha da aba Usuários.' },
+    botao: 'Abrir',
+    conferir: async (valor) => {
+      try{ await SuincoSharePoint.destrancarUsuarios(valor); return null; }
+      catch(e){ return (e && e.message) || 'Não consegui conferir a senha. Tente de novo.'; }
+    },
+  });
+  if(senha === null) return false;
+  aplicarPermissoesSetor();
+  renderUsuarios();
+  notify('Aba Usuários aberta até você sair do painel.', 'success');
+  return true;
+}
+
+function perguntarSenhaUsuariosAoEntrar(){
+  const admin = !!(DB.operador && DB.operador.setor === 'Administração');
+  if(admin && usuariosTrancadaUI()) destrancarUsuariosUI();
+}
+
 async function renderVigias(){
   const card = document.getElementById('card-vigias');
   const alvo = document.getElementById('vigias-painel');
   if(!card || !alvo) return;
   const admin = !!(DB.operador && DB.operador.setor === 'Administração');
-  card.hidden = !admin;
-  if(!admin) return;
+  card.hidden = !admin || usuariosTrancadaUI();
+  if(card.hidden){ alvo.innerHTML = ''; return; }
   if(typeof SuincoSharePoint === 'undefined' || !SuincoSharePoint.estaConfigurado()){
     alvo.innerHTML = '<div class="text-dim">Os vigias moram no servidor — entre com seu usuário para ver.</div>';
     return;
@@ -140,6 +180,13 @@ async function renderUsuarios(){
   const vazio = document.getElementById('usr-empty');
   if(!tbody) return;
   renderVigias();
+  // Trancada: nada da lista no DOM — nem escondido.
+  if(usuariosTrancadaUI()){
+    _usuarios = [];
+    tbody.innerHTML = '';
+    if(vazio) vazio.hidden = true;
+    return;
+  }
 
   if(typeof SuincoSharePoint === 'undefined' || !SuincoSharePoint.estaConfigurado()){
     tbody.innerHTML = '';
@@ -153,6 +200,13 @@ async function renderUsuarios(){
   }catch(e){
     tbody.innerHTML = '';
     vazio.hidden = false;
+    // A senha foi gravada no servidor depois que este login começou: a
+    // recusa diz o caminho, e a pergunta abre.
+    if(e.codigo === 'USUARIOS_TRANCADO'){
+      vazio.textContent = e.message;
+      destrancarUsuariosUI();
+      return;
+    }
     vazio.textContent = e.status === 403
       ? 'Só a Administração acessa esta tela.'
       : 'Não consegui carregar os usuários: ' + e.message;
