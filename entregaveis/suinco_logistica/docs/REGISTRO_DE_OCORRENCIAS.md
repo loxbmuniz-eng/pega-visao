@@ -28,7 +28,7 @@ faz achar a próxima em minutos em vez de horas:
 | **Rótulo que mente** | O dado está certo no banco; o nome dado a ele na tela descreve outra coisa. | #04, #12 |
 | **Regra larga demais** | Trava criada para um caso real barra também o caso legítimo mais comum. | #05 |
 | **Trava sem o par na tela** | O servidor passa a exigir algo novo e a tela continua com o botão antigo: quem clica só descobre que não pode, e não tem por onde seguir. | #13, #73 |
-| **A mesma decisão escrita em dois lugares** | A regra é copiada em vez de consultada. As cópias divergem e o comportamento fica errado sem que nenhuma linha esteja errada. | #14, #26, #73 |
+| **A mesma decisão escrita em dois lugares** | A regra é copiada em vez de consultada. As cópias divergem e o comportamento fica errado sem que nenhuma linha esteja errada. | #14, #26, #73, #122 |
 | **Duas escritas em voo, a velha ganha** | O painel manda a carga INTEIRA a cada alteração. Duas alterações seguidas viram duas requisições simultâneas, e a primeira carrega o valor velho do campo que ainda ia mudar. | #16 |
 | **A correção que outro setor desfaz sem saber** | Um setor corrige de propósito o que outro fez. A tela do segundo continua mostrando o estado como se nada tivesse sido decidido, e o gesto normal dele desfaz a correção — em silêncio, dos dois lados. | #21 |
 | **A proteção escrita para um posto só** | A regra certa existe, com comentário e tudo — mas vale para um caminho e não para os irmãos dele. Não é cópia divergente: é a cópia que nunca foi escrita. | #20 |
@@ -5515,3 +5515,57 @@ não tinha sido desenhado.
 - `test_torre_cabe_e_le`: a caixa zerada é "mais discreta" pela COR do
   número, não mais pela opacidade (causa 1 das quatro: a regra mudou por
   decisão do dono).
+
+## #122 — A senha aparecia enquanto era digitada, e o motivo já vinha escrito (08/10/2026)
+
+**Achado** na auditoria `/impeccable` (Lote 2, *harden*), lendo cada ação
+arriscada do painel como a pessoa a vive:
+
+| Onde | O que acontecia |
+|---|---|
+| Torre → Fechar Programação com carga em aberto | a **senha de fechamento** era digitada na caixa do navegador (`prompt`), que mostra as letras — na tela da Torre, que fica à vista |
+| Usuários → Senha | a **nova senha** de um usuário, idem |
+| Usuários → Minha segurança → Desativar segundo fator | a **senha da própria pessoa**, idem |
+| Torre → Encerrar programação anterior | o motivo vinha **escrito** ("Caminhões já saíram; encerramento…"): um Enter de reflexo carimbava em cada carga um motivo que ninguém escreveu; a lista parava em 8 cargas |
+| As outras 29 chamadas | caixa do navegador: sem título, texto longo cortado, e quando a pessoa erra (motivo vazio, palavra errada) ela fecha e manda começar de novo |
+
+**Causa.** Cada ação perguntava do seu jeito: 20 `confirm()`, 12 `prompt()`
+e 1 `alert()` — 33 chamadas espalhadas por 10 arquivos. A caixa do navegador não tem campo de senha nem
+mostra erro sem fechar.
+
+**Família:** *A mesma decisão escrita em dois lugares* (#14, #26, #73) — aqui
+em 33: "como o painel pergunta" estava copiado em cada ação, e cada cópia
+decidia sozinha se o motivo vinha em branco, se a senha aparecia, se o erro
+fechava a janela.
+
+**Correção.** Uma função para todas: `perguntarUI()` (`app/15_pergunta.js`,
+CSS em `tema2027/42_pergunta.css`).
+- senha em campo de senha (com "Mostrar" só para quem quer conferir a nova
+  senha antes de gravar); a senha sai da página quando a janela fecha;
+- motivo SEMPRE em branco e obrigatório; o erro aparece dentro da janela,
+  dizendo o que falta, e ela não fecha;
+- confirmação digitada (EXCLUIR, a placa) confere na própria janela;
+- teclado: o cursor nasce no campo; sem campo e com perigo, nasce no
+  Cancelar (o Enter de reflexo desiste, não apaga); Esc desiste; Tab não
+  sai da janela; ao fechar, o foco volta ao botão que abriu;
+- lista inteira com rolagem; no celular os botões ocupam a largura, 44 px;
+- "Cancelar a carga" ganhou "Voltar" no lugar de "Cancelar" — dois botões
+  "Cancelar" na mesma janela, com sentidos opostos, era a pergunta errada.
+- Junto: o texto do KM dizia "mais que o dobro de diferença", mas a regra
+  pergunta quando a diferença passa da METADE — o texto agora diz o que a
+  regra faz (*rótulo que mente*, #04).
+
+**Trava.**
+- `test_pergunta_do_painel` (novo, sem servidor): nenhum `prompt/confirm/
+  alert` no código do painel (fora a ferramenta de travamentos); Encerrar
+  abre a pergunta do painel e nenhuma caixa do navegador, motivo em branco,
+  10 cargas na lista, erro dentro da janela, Esc devolve o foco; Excluir
+  nasce no Cancelar, Tab não escapa; no celular cabe e tem 44 px.
+- `test_senha_nao_aparece` (novo, com servidor): nova senha em campo
+  escondido, mínimo explicado na janela, a pessoa ENTRA com a senha nova, a
+  senha não fica na página; Excluir conta confere a palavra.
+- `test_fechar_com_senha` e `test_segundo_fator`: a senha de fechamento e a
+  do segundo fator vão em campo escondido, sem caixa do navegador.
+- 23 suítes que trocavam `window.confirm`/`window.prompt` por atalho, ou
+  aceitavam a caixa do navegador, passam a responder pela tela (`testes/_pergunta.py`, uma função para todas) —
+  causa 2 das quatro: o teste media um atalho que mudou de forma.

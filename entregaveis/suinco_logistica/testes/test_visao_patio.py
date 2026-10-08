@@ -17,6 +17,7 @@ Roda sem backend: o painel abre em modo local.
 import asyncio
 import sys
 from playwright.async_api import async_playwright
+from _pergunta import responder_pergunta, com_resposta
 
 PAINEL = 'file:///home/user/pega-visao/entregaveis/suinco_logistica/index.html'
 SETORES = ['portaria', 'expedicao', 'faturamento']
@@ -215,14 +216,19 @@ async def main():
         ck('a Torre oferece a ação na própria linha', tem_botao == 'Cancelar', str(tem_botao))
 
         # Cancelar carga que já andou pede motivo — e desistir não apaga nada.
-        await pagina.evaluate("() => { window.prompt = () => ''; }")
-        await pagina.evaluate("id => excluirCargaUI(id)", travada['id'])
-        await pagina.wait_for_timeout(400)
+        await pagina.evaluate("id => { window.__canc = excluirCargaUI(id); }", travada['id'])
+        await pagina.wait_for_selector('#modal-pergunta.open', timeout=4000)
+        await pagina.click('#pergunta-ok')                 # sem motivo
+        await pagina.wait_for_timeout(300)
+        ck('sem motivo, a pergunta pede o motivo e não fecha',
+           await pagina.is_visible('#pergunta-erro') and await pagina.is_visible('#modal-pergunta.open'))
+        await pagina.click('#pergunta-cancelar')
+        await pagina.evaluate("() => window.__canc")
         ck('sem motivo, a carga continua lá',
            await pagina.evaluate("id => !!getCarga(id)", travada['id']))
 
-        await pagina.evaluate("() => { window.prompt = () => 'Caminhão foi embora sem carregar'; }")
-        await pagina.evaluate("id => excluirCargaUI(id)", travada['id'])
+        await com_resposta(pagina, "id => excluirCargaUI(id)", travada['id'],
+                           texto='Caminhão foi embora sem carregar')
         await pagina.wait_for_timeout(500)
         ck('com motivo, a carga sai do pátio',
            await pagina.evaluate("id => !getCarga(id)", travada['id']))

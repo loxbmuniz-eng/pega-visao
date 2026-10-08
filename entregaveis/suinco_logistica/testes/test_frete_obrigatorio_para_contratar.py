@@ -35,6 +35,7 @@ import os
 import subprocess
 import sys
 from playwright.async_api import async_playwright
+from _pergunta import responder_pergunta, com_resposta
 
 API = os.environ.get('SUINCO_API', 'http://127.0.0.1:3010')
 RAIZ = '/home/user/pega-visao/entregaveis/suinco_logistica'
@@ -342,8 +343,9 @@ async def main():
         await montagem_linha(pg, hoje, 'FO-LOTE-SEM', P[7], rota)
         avisos_antes = await pg.evaluate("() => document.body.innerText.length")
         await pg.click('#mont-btn-lote')
-        await pg.wait_for_timeout(5000)
-        ck('o lote pergunta uma vez antes de mandar', any('Criar' in d for d in dialogos), str(dialogos[-1:]))
+        perg_lote = await responder_pergunta(pg)
+        await pg.wait_for_timeout(4600)
+        ck('o lote pergunta uma vez antes de mandar', bool(perg_lote) and 'Criar' in perg_lote, str(perg_lote)[:90])
         ck('a linha com frete virou carga', (frete_no_banco('FO-LOTE-OK') or [''] * 3)[1] == 'TABELA')
         ck('a linha sem frete NÃO virou carga', frete_no_banco('FO-LOTE-SEM') is None)
         corpo = await pg.inner_text('body')

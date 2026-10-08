@@ -38,12 +38,11 @@ async function acaoChegadaUI(){
     const { carga, d } = devolvidas[0];
     const quando = d.quando ? fmtDataHora(d.quando) : 'horário não registrado';
     const qual = carga.numeroCarga ? `a carga ${carga.numeroCarga}` : 'esta carga';
-    const ok = confirm(
-      `${normalizarPlaca(placa)}: a etapa foi DEVOLVIDA de propósito.\n\n`
-      + `${d.setor} (${d.quem}) devolveu ${qual} de "${d.de}" para "${d.para}" em ${quando}.\n`
-      + `O motivo está no Histórico da carga.\n\n`
-      + `Registrar a chegada agora desfaz essa correção.\n`
-      + `O caminhão chegou de novo?`);
+    const ok = await perguntarUI({ titulo: `${normalizarPlaca(placa)}: a etapa foi DEVOLVIDA de propósito`,
+      texto: `${d.setor} (${d.quem}) devolveu ${qual} de "${d.de}" para "${d.para}" em ${quando}.\n`
+        + 'O motivo está no Histórico da carga.\n\n'
+        + 'Registrar a chegada agora desfaz essa correção. O caminhão chegou de novo?',
+      botao: 'Chegou de novo', cancelar: 'Não registrar' });
     if(!ok){
       notify(`Chegada NÃO registrada — ${normalizarPlaca(placa)} continua em "${d.para}", `
         + `como ${d.setor} deixou. Se o caminhão chegou mesmo, clique "Chegou" e confirme.`,
@@ -378,13 +377,12 @@ function portariaSaiuCarga(placa){
 async function portariaSaiuSoDevolucaoUI(cargaId){
   const c = DB.cargas.find(x=>x.id === cargaId);
   if(!c) return;
-  const ok = confirm(
-    `SAÍDA SEM CARREGAR — placa ${c.placa}\n\n`
-    + 'Este caminhão ainda não carregou. Confirmando, fica registrado que ele '
-    + 'entrou, entregou a devolução e foi embora sem carregar.\n\n'
-    + 'Se ele vai FICAR no pátio para carregar, cancele: o fluxo normal segue '
-    + 'pela Expedição.'
-  );
+  const ok = await perguntarUI({ titulo: `Saída sem carregar — placa ${c.placa}`,
+    texto: 'Este caminhão ainda não carregou. Confirmando, fica registrado que ele '
+      + 'entrou, entregou a devolução e foi embora sem carregar.\n\n'
+      + 'Se ele vai FICAR no pátio para carregar, volte: o fluxo normal segue '
+      + 'pela Expedição.',
+    botao: 'Registrar a saída', cancelar: 'Voltar' });
   if(!ok) return;
   const r = await SuincoSharePoint.mudarStatus(cargaId, 'Seguiu Viagem', { soDevolucao: true });
   /* `mudarStatus` DEVOLVE a recusa em vez de lançar — quem chama precisa

@@ -39,6 +39,7 @@ import os
 import subprocess
 import sys
 from playwright.async_api import async_playwright
+from _pergunta import responder_pergunta, com_resposta
 from _frete_resposta import responder_frete
 
 API = os.environ.get('SUINCO_API', 'http://127.0.0.1:3010')
@@ -88,12 +89,11 @@ async def abrir(nav, largura=1360, altura=950, movel=False):
 
 async def montar_dia(pg):
     """Puxa o modelo da segunda para o dia de teste e devolve a 1ª linha."""
-    await pg.evaluate(f"""async () => {{
+    await com_resposta(pg, f"""async () => {{
           document.getElementById('mont-data').value = '{DIA}';
           await carregarMontagemUI();
-          window.confirm = () => true;
           await aplicarModeloDoDiaUI();
-        }}""")
+        }}""", prazo=6000)
     await pg.wait_for_timeout(800)
     return await pg.evaluate(
         "() => _montagemDia.montagens.filter(m => !m.cancelada_em)[0]")
@@ -435,16 +435,14 @@ async def main():
         # tabela — que é justamente o que o stopPropagation impede.
         # (Antes este trecho clicava num "Criar carga" desabilitado; esse
         #  botão não existe mais desde 25/08 — ver bloco 5.)
-        await pg.evaluate("() => { window.__promptReal = window.prompt; window.prompt = () => null; }")
         await pg.evaluate("""() => {
               const tr = [...document.querySelectorAll(
                 '#mont-tbody tr.mont-linha:not(.linha-fraca):not(.mont-linha-carga)')][0];
               tr.querySelector('.mont-btn-excluir').click();
             }""")
-        await pg.wait_for_timeout(400)
+        await responder_pergunta(pg, confirmar=False)   # desiste
         depois = await pg.evaluate(
             "() => !!document.querySelector('#mont-tbody tr.mont-detalhe')")
-        await pg.evaluate("() => { window.prompt = window.__promptReal; }")
         ck('clicar no botão não abre a linha por tabela',
            antes == depois, f'antes {antes} · depois {depois}')
 
@@ -593,9 +591,8 @@ async def main():
         ck('a linha traz o botao de excluir sem precisar abrir', d['temBotao'], str(d))
         antes = await pg.evaluate(
             "() => _montagemDia.montagens.filter(m => !m.cancelada_em).length")
-        await pg.evaluate("() => { window.prompt = () => 'nao vai rodar hoje'; }")
-        await pg.evaluate("(id) => cancelarMontagemUI(id)", alvo)
-        await pg.wait_for_timeout(1500)
+        await com_resposta(pg, "(id) => cancelarMontagemUI(id)", alvo, texto='nao vai rodar hoje')
+        await pg.wait_for_timeout(1100)
         depois = await pg.evaluate(
             "() => _montagemDia.montagens.filter(m => !m.cancelada_em).length")
         ck('excluir tira a linha do dia', depois == antes - 1, f'{antes} -> {depois}')
@@ -638,9 +635,8 @@ async def main():
         # Unai sao todos o codigo 504. Contando por codigo, o painel sabia
         # que "faltam 2 de 504" e nao sabia QUAIS 2 — puxava duas quaisquer.
         # Agora casa pela LINHA do modelo.
-        d = await pg.evaluate(
+        d, _ = await com_resposta(pg,
             """async () => {
-                 window.confirm = () => true;
                  const antes = _montagemDia.montagens.filter(m => !m.cancelada_em).length;
                  // Linha do modelo que foi CANCELADA volta a ser oferecida, e
                  // isso e certo: quem cancelou por engano puxa de novo e ela
@@ -657,7 +653,7 @@ async def main():
                  return { antes, depois, canceladasDoModelo,
                           linhasDoModelo: doModelo.length,
                           distintas: new Set(doModelo).size };
-               }""")
+               }""", prazo=3000)
         ck('puxar de novo so recria o que foi cancelado',
            d['depois'] - d['antes'] == d['canceladasDoModelo'],
            f"{d['antes']} -> {d['depois']}, {d['canceladasDoModelo']} cancelada(s)")
@@ -677,8 +673,7 @@ async def main():
         # Este teste tira o modelo_id das montagens ANTES de puxar de novo,
         # que e exatamente o que o painel recebe de um servidor atrasado.
         # Sem o plano B (rota + apelido), ele reprova criando tudo outra vez.
-        d = await pg.evaluate("""async () => {
-                 window.confirm = () => true;
+        d, _ = await com_resposta(pg, """async () => {
                  // Simula o servidor antigo: o campo simplesmente nao existe.
                  _montagemDia.montagens.forEach(m => { delete m.modelo_id; });
                  const vivasAntes = _montagemDia.montagens
@@ -691,7 +686,7 @@ async def main():
                    canceladas,
                    depois: _montagemDia.montagens.filter(m => !m.cancelada_em).length,
                  };
-               }""")
+               }""", prazo=3000)
         # Recriar o que foi cancelado continua certo (bloco 15). O que nao
         # pode e recriar o que esta la, vivo, na tela.
         ck('sem modelo_id, puxar de novo nao recria o que ja esta montado',
@@ -704,15 +699,14 @@ async def main():
         # FALSO por construcao — o modelo preve duas saidas para Patos de
         # Minas no mesmo dia. Medir unicidade de destino reprovaria o
         # comportamento correto.
-        d2 = await pg.evaluate("""async () => {
-                 window.confirm = () => true;
+        d2, _ = await com_resposta(pg, """async () => {
                  _montagemDia.montagens.forEach(m => { delete m.modelo_id; });
                  const antes = _montagemDia.montagens.filter(m => !m.cancelada_em).length;
                  await aplicarModeloDoDiaUI();
                  _montagemDia.montagens.forEach(m => { delete m.modelo_id; });
                  const depois = _montagemDia.montagens.filter(m => !m.cancelada_em).length;
                  return { antes, depois };
-               }""")
+               }""", prazo=3000)
         ck('puxar mais uma vez nao move o numero de linhas',
            d2['depois'] == d2['antes'], f"{d2['antes']} -> {d2['depois']}")
 
@@ -721,9 +715,8 @@ async def main():
         # cancelada ali e ruido entre as que ainda pedem trabalho.
         alvo2 = await pg.evaluate(
             "() => _montagemDia.montagens.find(m => !m.efetivada_em && !m.cancelada_em).montagem_id")
-        await pg.evaluate("() => { window.prompt = () => 'rota nao sai hoje'; }")
-        await pg.evaluate("(id) => cancelarMontagemUI(id)", alvo2)
-        await pg.wait_for_timeout(1500)
+        await com_resposta(pg, "(id) => cancelarMontagemUI(id)", alvo2, texto='rota nao sai hoje')
+        await pg.wait_for_timeout(1100)
         d = await pg.evaluate(
             """(id) => {
                  const linhas = [...document.querySelectorAll('#mont-tbody tr.mont-linha')];

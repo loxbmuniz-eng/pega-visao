@@ -1,0 +1,41 @@
+/* =====================================================================
+   A PERGUNTA DO PAINEL (08/10/2026, auditoria /impeccable, Lote 2)
+   ---------------------------------------------------------------------
+   A janela que substitui as caixas do navegador (app/15_pergunta.js).
+   Mesma casca dos outros modais; aqui só o que é dela. Só tela.
+   ===================================================================== */
+@media screen{
+  /* Por cima de QUALQUER janela: "Restaurar esta versão" pergunta de dentro
+     da janela de alterações, e a pergunta do frete é 3700. */
+  #modal-pergunta.modal-overlay{ z-index:3800 }
+  .pergunta-box{ max-width:520px }
+  .pergunta-box h2{ margin-bottom:10px }
+  .pergunta-texto p{ margin:0 0 10px; line-height:1.5; color:var(--text) }
+  .pergunta-lista{ max-height:180px; overflow:auto; margin:0 0 12px; padding:8px 12px 8px 28px;
+    border:1px solid var(--border-soft, var(--border)); border-radius:var(--radius-sm, 6px);
+    background:var(--navy-deep); color:var(--text); font-variant-numeric:tabular-nums; line-height:1.5 }
+  .pergunta-campo{ display:flex; flex-direction:column; gap:6px; margin:6px 0 2px }
+  .pergunta-campo label{ font-weight:700; font-size:13px; color:var(--text) }
+  .pergunta-dica{ font-size:12px; color:var(--text-dim) }
+  /* 16 px: no iPhone, campo com letra menor dá zoom na página ao tocar. */
+  .pergunta-campo input, .pergunta-campo textarea{ font-size:16px; min-height:44px }
+  .pergunta-campo textarea{ min-height:64px; resize:vertical }
+  .pergunta-senha{ display:flex; gap:8px; align-items:stretch }
+  .pergunta-senha input{ flex:1; min-width:0 }
+  .pergunta-senha .btn{ flex:none; min-height:44px }
+  .pergunta-erro{ margin:10px 0 0; padding:8px 10px; border-radius:6px; background:#5a1f22; color:#ffd6d9;
+    font-weight:600; font-size:13px; line-height:1.4 }
+  :root[data-tema="claro"] .pergunta-erro{ background:#fde2e4; color:#8b1a24 }
+  .pergunta-erro[hidden]{ display:none }
+  .pergunta-botoes{ display:flex; justify-content:flex-end; gap:10px; margin-top:16px; flex-wrap:wrap }
+  .pergunta-botoes .btn{ min-height:44px; padding:0 18px }
+  /* Sem servidor os botões de ação ficam esmaecidos de propósito (Modo
+     Local). Aqui não: a pessoa já escolheu agir, e a pergunta diz a verdade
+     sobre o que vai acontecer. Botão meio apagado numa pergunta parece
+     "não pode" e não é. */
+  body.esta-offline #modal-pergunta .btn{ opacity:1 }
+  @media (max-width: 820px){
+    .pergunta-botoes{ flex-direction:column-reverse }
+    .pergunta-botoes .btn{ width:100% }
+  }
+}

@@ -78,10 +78,8 @@ async def main():
           return criarCargaProgramada({freteObservacao:'TABELA', placa: pl, numeroCarga:'KMDEC', peso:12000, rota:'510',
             freteDestino:'GOIANIA', kmDeslocamento:3087, operador:'Ana'}).id;
         }""")
-        await pg.evaluate("""async (id) => {
-          const orig = window.confirm; window.confirm = () => true;
-          try { await corrigirKmDaCargaUI(id, '3087,48'); } finally { window.confirm = orig; }
-        }""", cid)
+        # 3087 → 3087,48 é ajuste pequeno: não pergunta nada.
+        await pg.evaluate("async (id) => { await corrigirKmDaCargaUI(id, '3087,48'); }", cid)
         km = await pg.evaluate("(id) => getCarga(id).kmDeslocamento", cid)
         ck('"3087,48" gravou 3087,48 — e não 308.748', km == 3087.48, str(km))
         alt = await pg.evaluate("""(id) => (DB.alteracoes||[]).filter(a => a.cargaId === id && /KM/i.test(a.campo))

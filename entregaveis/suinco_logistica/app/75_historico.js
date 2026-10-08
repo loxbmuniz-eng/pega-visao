@@ -179,8 +179,10 @@ async function corrigirEtapaCargaUI(id){
   if(status === c.status){ notify('A carga já está nessa etapa.','warn'); return; }
   if(!motivo){ notify('Escreva o motivo da correção de etapa.','warn'); return; }
   const voltando = STATUS_FLOW.indexOf(status) < STATUS_FLOW.indexOf(c.status);
-  if(!confirm(`${voltando ? 'VOLTAR' : 'Avançar'} a carga ${c.numeroCarga || c.placa} de "${c.status}" para "${status}"?\n\n`
-    + 'Isso muda o andamento para todos os setores e fica registrado no histórico.')) return;
+  if(!(await perguntarUI({ titulo: `${voltando ? 'VOLTAR' : 'Avançar'} a carga ${c.numeroCarga || c.placa}?`,
+       texto: `De "${c.status}" para "${status}".\n\n`
+         + 'Isso muda o andamento para todos os setores e fica registrado no histórico.',
+       botao: voltando ? 'Voltar a etapa' : 'Avançar', perigo: voltando }))) return;
   try{
     await SuincoSharePoint.corrigirEtapa(id, status, motivo);
     await SuincoSharePoint.sincronizarAgora();
@@ -505,8 +507,9 @@ async function carregarCargasExcluidasUI(){
 }
 
 async function devolverCargaExcluidaUI(id){
-  const motivo = (prompt('Por que esta carga está voltando?\n\n'
-    + 'O motivo fica registrado no histórico com o seu nome.')||'').trim();
+  const motivo = await perguntarUI({ titulo: 'Devolver esta carga ao painel?',
+    campo: { tipo: 'motivo', rotulo: 'Por que ela está voltando?', dica: 'Fica registrado no histórico com o seu nome.' },
+    botao: 'Devolver' });
   if(!motivo) return;
   try{
     await SuincoSharePoint.desfazerExclusao(id, motivo);
@@ -595,10 +598,14 @@ function podeApagarHistoricoUI(){
 async function apagarHistoricoDaPlacaUI(){
   const placa = normalizarPlaca(document.getElementById('hist-filtro-placa')?.value || '');
   if(!placa){ notify('Filtre por uma placa antes de apagar.', 'erro', 5000); return; }
-  const motivo = prompt(`Apagar da vista TODOS os lançamentos de ${placa}?\n\nA linha some do Histórico e dos indicadores, mas fica guardada — pátio não se apaga. Diga o motivo:`);
+  /* UMA pergunta com o motivo, em vez de duas caixas seguidas: a segunda
+     ("Confirma?") virava clique de reflexo depois da primeira. */
+  const motivo = await perguntarUI({ titulo: `Apagar da vista TODOS os lançamentos de ${placa}?`,
+    texto: `${placa} some do Histórico e dos indicadores em todos os terminais, `
+      + 'mas fica guardada — pátio não se apaga.',
+    campo: { tipo: 'motivo', dica: 'Fica registrado com o seu nome.' },
+    botao: 'Apagar da vista', perigo: true });
   if(motivo === null) return;
-  if(!motivo.trim()){ notify('Precisa de um motivo para apagar.', 'erro', 5000); return; }
-  if(!confirm(`Confirma? ${placa} vai sumir do Histórico de todos os terminais.`)) return;
   try {
     const r = await SuincoSharePoint.apagarMovimentacoesDaPlaca(placa, motivo.trim());
     notify(`${r.apagadas} lançamento(s) de ${placa} apagado(s) da vista.`, 'ok', 6000);

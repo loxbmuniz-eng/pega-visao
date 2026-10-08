@@ -30,6 +30,7 @@ import os
 import subprocess
 import sys
 from playwright.async_api import async_playwright
+from _pergunta import responder_pergunta, com_resposta
 from _frete_resposta import responder_frete
 
 API = os.environ.get('SUINCO_API', 'http://127.0.0.1:3010')
@@ -417,17 +418,16 @@ async def main():
 
         # E o ciclo completo: puxar o modelo de uma terça monta as cargas.
         sql("DELETE FROM programacao_montagem WHERE data_prog = '2026-09-01'")
-        montou = await pg.evaluate("""async () => {
+        montou, _ = await com_resposta(pg, """async () => {
               document.getElementById('mont-data').value = '2026-09-01';  // terça, e NÃO hoje:
               // montar 26 cargas no dia de hoje no meio da bateria contamina
               // quem lê 'a programação de hoje'. Terça que vem prova o mesmo.
               await carregarMontagemUI();
               const antes = _montagemDia.montagens.length;
-              window.confirm = () => true;
               await aplicarModeloDoDiaUI();
               return {antes, depois: _montagemDia.montagens.length,
                       rotas: _montagemDia.modelo.length};
-            }""")
+            }""", prazo=6000)
         ck('puxar o modelo de terça monta as cargas do dia',
            montou['depois'] > montou['antes'], str(montou))
         nomes = sql("SELECT count(*) FROM programacao_montagem "

@@ -124,7 +124,9 @@ async function fecharProgramacaoUI(senhaJaInformada){
     return;
   }
   if(senhaJaInformada === undefined
-     && !confirm('Fechar a programação atual e começar uma nova?\n\nNada é apagado: as cargas ficam arquivadas na programação atual e continuam no Histórico.')) return;
+     && !(await perguntarUI({ titulo: 'Fechar a programação atual e começar uma nova?',
+          texto: 'Nada é apagado: as cargas ficam arquivadas na programação atual e continuam no Histórico.',
+          botao: 'Fechar e começar nova' }))) return;
   try{
     const r = await SuincoSharePoint.fecharPrograma(senhaJaInformada);
     notify(r.forcado
@@ -140,15 +142,17 @@ async function fecharProgramacaoUI(senhaJaInformada){
        mostra QUAIS cargas ficarão em aberto: quem vai digitar a senha
        precisa saber o que está assumindo, senão a senha vira carimbo. */
     if(cod === 'SENHA_NECESSARIA'){
+      /* A SENHA NÃO APARECE (08/10/2026). Na caixa do navegador ela era
+         digitada à vista, letra por letra, na tela da Torre. */
       const cargas = (e.dados && e.dados.cargas) || [];
-      const lista = cargas.map(c => `• ${c.placa} — ${c.numeroCarga || 'sem nº'} (${c.status})`).join('\n');
-      const senha = prompt(
-        `${cargas.length} carga(s) ainda em andamento:\n\n${lista}\n\n`
-        + 'Elas NÃO serão apagadas: continuam aparecendo na Torre de Controle, '
-        + 'com a data em que foram programadas, e ficam arquivadas nesta programação.\n\n'
-        + 'Digite a senha de fechamento para encerrar mesmo assim:');
+      const senha = await perguntarUI({
+        titulo: `${cargas.length} carga(s) ainda em andamento`,
+        texto: 'Elas NÃO serão apagadas: continuam aparecendo na Torre de Controle, '
+          + 'com a data em que foram programadas, e ficam arquivadas nesta programação.',
+        lista: cargas.map(c => `${c.placa} — ${c.numeroCarga || 'sem nº'} (${c.status})`),
+        campo: { tipo: 'senha', rotulo: 'Senha de fechamento', dica: 'Para fechar mesmo assim.' },
+        botao: 'Fechar mesmo assim' });
       if(senha === null) return;                   // desistiu
-      if(!senha.trim()){ notify('Fechamento cancelado — senha não informada.', 'warn'); return; }
       return fecharProgramacaoUI(senha);
     }
     if(cod === 'SENHA_INCORRETA'){
@@ -156,8 +160,10 @@ async function fecharProgramacaoUI(senhaJaInformada){
       return;
     }
     if(cod === 'SENHA_NAO_CONFIGURADA'){
-      alert('Há carga em andamento e a senha de fechamento ainda não foi configurada no servidor.\n\n'
-            + 'Peça à TI para preencher SENHA_FECHAMENTO no .env do servidor.');
+      await perguntarUI({ titulo: 'A senha de fechamento não está configurada',
+        texto: 'Há carga em andamento e a senha de fechamento ainda não foi configurada no servidor.\n\n'
+          + 'Peça à TI para preencher SENHA_FECHAMENTO no .env do servidor.',
+        botao: 'Entendi', soAviso: true });
       return;
     }
     if(e && e.status === 403){
@@ -235,9 +241,10 @@ async function restaurarRevisaoUI(id, revisaoId){
      backend/src/rotas/cargas.js para o que a trava protegia e o que ficou
      no lugar dela. O motivo continua obrigatório porque é ele que
      responde "por que esta carga voltou" no histórico. */
-  const motivo = (prompt('Restaurar a carga para esta versão?\n\n'
-    + 'A carga volta EXATAMENTE ao estado mostrado, em todos os aparelhos.\n\n'
-    + 'Por que ela precisa voltar? (fica no histórico com o seu nome)')||'').trim();
+  const motivo = await perguntarUI({ titulo: 'Restaurar a carga para esta versão?',
+    texto: 'A carga volta EXATAMENTE ao estado mostrado, em todos os aparelhos.',
+    campo: { tipo: 'motivo', rotulo: 'Por que ela precisa voltar?', dica: 'Fica no histórico com o seu nome.' },
+    botao: 'Restaurar' });
   if(!motivo) return;
   try{
     const restaurada = await SuincoSharePoint.restaurarRevisao(id, revisaoId, motivo);

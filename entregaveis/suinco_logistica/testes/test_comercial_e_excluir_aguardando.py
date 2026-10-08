@@ -23,6 +23,7 @@ isso que precisa ser garantido.
 import asyncio
 import sys
 from playwright.async_api import async_playwright
+from _pergunta import responder_pergunta, com_resposta
 
 PAINEL = 'file:///home/user/pega-visao/entregaveis/suinco_logistica/index.html'
 falhas = []
@@ -158,13 +159,10 @@ async def main():
            await pg2.is_visible('#prog-aguardando-tbody .btn-danger'))
 
         # A carga registrada pela Portaria já está em "Aguardando Embarque"
-        # — ou seja, JÁ ANDOU — e o painel exige motivo por prompt() antes
-        # de cancelar. Aceitar em branco equivale a desistir, então o
-        # diálogo precisa vir preenchido.
-        pg2.on('dialog', lambda d: asyncio.ensure_future(
-            d.accept('lançada por engano — teste')))
+        # — ou seja, JÁ ANDOU — e o painel exige o motivo antes de cancelar.
         await pg2.click('#prog-aguardando-tbody .btn-danger')
-        await pg2.wait_for_timeout(1200)
+        await responder_pergunta(pg2, texto='lançada por engano — teste')
+        await pg2.wait_for_timeout(800)
         depois = await pg2.evaluate("() => DB.cargas.filter(c=>c.aguardandoCarga).length")
         ck('a carga saiu da lista depois de excluir', depois == antes - 1, f'{antes} -> {depois}')
 

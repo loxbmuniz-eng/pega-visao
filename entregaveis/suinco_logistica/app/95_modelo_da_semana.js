@@ -115,7 +115,7 @@ async function adicionarAoModeloUI(){
 }
 
 async function removerDoModeloUI(id){
-  if(!confirm('Tirar esta rota do modelo deste dia?')) return;
+  if(!(await perguntarUI({ titulo: 'Tirar esta rota do modelo deste dia?', botao: 'Tirar do modelo' }))) return;
   try {
     await SuincoSharePoint.modeloSemana.remover(id);
     await carregarModeloSemanaUI();

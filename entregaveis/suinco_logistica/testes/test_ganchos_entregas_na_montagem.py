@@ -34,6 +34,7 @@ import subprocess
 import sys
 
 from playwright.async_api import async_playwright
+from _pergunta import responder_pergunta, com_resposta
 
 API = os.environ.get('SUINCO_API', 'http://127.0.0.1:3010')
 PAINEL_ARQ = '/home/user/pega-visao/entregaveis/suinco_logistica/index.html'
@@ -82,14 +83,15 @@ async def main():
 
         await pg.evaluate("() => abrirTab('programacao')")
         await pg.wait_for_timeout(1200)
-        criou = await pg.evaluate("""async (dia) => {
+        await pg.evaluate("""async (dia) => {
               document.getElementById('mont-data').value = dia;
               await carregarMontagemUI();
-              window.confirm = () => true;
+            }""", DIA)
+        criou, _ = await com_resposta(pg, """async () => {
               await aplicarModeloDoDiaUI();
               await carregarMontagemUI();
               return { linhas: (_montagemDia.montagens || []).length };
-            }""", DIA)
+            }""")
         ck('a montagem do dia tem linhas para testar', criou['linhas'] > 0, str(criou))
         if not criou['linhas']:
             await nav.close()

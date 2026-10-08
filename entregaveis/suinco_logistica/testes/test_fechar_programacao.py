@@ -18,6 +18,7 @@ import subprocess
 import sys
 import uuid
 from playwright.async_api import async_playwright
+from _pergunta import responder_pergunta, com_resposta
 
 API = os.environ.get('SUINCO_API', 'http://127.0.0.1:3010')
 
@@ -103,11 +104,14 @@ async def main():
         await pg_log.wait_for_timeout(600)  # sobe pro servidor
 
         avisos = []
-        pg_log.on('dialog', lambda d: (avisos.append(d.message), asyncio.ensure_future(d.accept())))
-        await pg_log.evaluate("""() => {
-            window.confirm = () => true;   // pula a confirmação, testa só o bloqueio real
-        }""")
         await pg_log.click('#btn-fechar-programacao-wrap button')
+        await responder_pergunta(pg_log)            # "Fechar a programação…?" → sim
+        try:
+            await pg_log.wait_for_selector('#pergunta-campo', timeout=6000)
+            avisos.append(await pg_log.inner_text('#modal-pergunta .pergunta-box'))
+            await responder_pergunta(pg_log, confirmar=False)   # não digita a senha
+        except Exception:
+            pass
         await pg_log.wait_for_timeout(800)
         ck('avisa quais cargas travam o fechamento',
            any('FECH-1' in a or placa in a for a in avisos), str(avisos))

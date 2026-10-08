@@ -33,6 +33,7 @@ Exige o backend local no ar e os operadores de teste.
 """
 import asyncio, os, sys
 from playwright.async_api import async_playwright
+from _pergunta import responder_pergunta, com_resposta
 
 API = os.environ.get('SUINCO_API', 'http://127.0.0.1:3010')
 PAINEL_ARQ = '/home/user/pega-visao/entregaveis/suinco_logistica/index.html'
@@ -121,13 +122,8 @@ async def main():
         await ctxN.close()
 
         print('\n=== 3. A PERGUNTA EXPLICA ANTES DE APAGAR ===')
-        perg = await pgF.evaluate("""(id) => {
-          let texto = null;
-          const orig = window.confirm;
-          window.confirm = (t) => { texto = t; return false; };   // recusa: nada é apagado
-          try { desfazerEtapaDevolucaoUI(id); } finally { window.confirm = orig; }
-          return texto;
-        }""", idA)
+        _, perg = await com_resposta(pgF, "(id) => desfazerEtapaDevolucaoUI(id)", idA,
+                                     confirmar=False)   # recusa: nada é apagado
         ck('houve pergunta antes de desfazer', bool(perg), repr(perg)[:80])
         if perg:
             ck('a pergunta diz QUAL etapa sai', 'Conferida no Faturamento' in perg)
@@ -145,10 +141,8 @@ async def main():
 
         print('\n=== 4. DESFEITA, A DEVOLUÇÃO VOLTA UMA CASA ===')
         erro = await pgF.evaluate("""async (id) => {
-          const orig = window.confirm; window.confirm = () => true;
           try { await SuincoSharePoint.devolucoes.desfazerEtapa(id); return null; }
           catch(e){ return (e && e.message) || String(e); }
-          finally { window.confirm = orig; }
         }""", idA)
         ck('o servidor aceitou o desfazer', erro is None, str(erro))
         await pgF.wait_for_timeout(1800)

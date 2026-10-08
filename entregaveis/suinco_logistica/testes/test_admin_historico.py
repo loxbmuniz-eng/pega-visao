@@ -21,6 +21,7 @@ import asyncio
 import os
 import sys
 from playwright.async_api import async_playwright
+from _pergunta import responder_pergunta, com_resposta
 
 API = os.environ.get('SUINCO_API', 'http://127.0.0.1:3010')
 PAINEL_ARQ = '/home/user/pega-visao/entregaveis/suinco_logistica/index.html'
@@ -118,7 +119,6 @@ async def main():
         await pgA.evaluate(
             "() => document.querySelectorAll('.notif-item').forEach((e) => e.remove())")
         await pgA.select_option(f"#adm-etapa-{carga['id']}", 'Faturado')
-        pgA.on('dialog', lambda d: asyncio.ensure_future(d.accept('motivo informado no teste')))
         await pgA.click(f"button[onclick*=\"corrigirEtapaCargaUI('{carga['id']}')\"]")
         await pgA.wait_for_timeout(1200)
         avisos = await pgA.evaluate(
@@ -138,9 +138,10 @@ async def main():
         # do CAMPO #adm-etapa-motivo, não de um prompt, e o campo acabara de
         # ser preenchido na linha acima. Testava o nada.
         await pgA.fill(f"#adm-etapa-motivo-{carga['id']}", 'saída registrada por engano')
-        await pgA.evaluate("()=>{ window.confirm = ()=>true; }")
         await pgA.click(f"button[onclick*=\"corrigirEtapaCargaUI('{carga['id']}')\"]")
-        await pgA.wait_for_timeout(3000)
+        perg = await responder_pergunta(pgA)
+        ck('a pergunta do painel confirma antes de mexer na etapa', bool(perg) and 'Faturado' in perg, str(perg)[:90])
+        await pgA.wait_for_timeout(2600)
         voltou = await pgA.evaluate("(id) => (getCarga(id) || {}).status", carga['id'])
         ck('com o motivo, a carga volta para Faturado sozinha', voltou == 'Faturado',
            str(voltou))
@@ -192,15 +193,22 @@ async def main():
 
         # Mesma regra do corrigir-etapa: sem motivo não volta; com motivo,
         # um administrador sozinho devolve a carga (25/08/2026).
-        await pgA.evaluate("()=>{ window.prompt = ()=> ''; }")
+        # Sem motivo, a pergunta diz o que falta e não fecha; desistir não
+        # devolve nada.
         await pgA.click(f"button[onclick*=\"devolverCargaExcluidaUI('{outra['id']}')\"]")
-        await pgA.wait_for_timeout(2000)
+        await pgA.wait_for_selector('#modal-pergunta.open', timeout=4000)
+        await pgA.click('#pergunta-ok')
+        await pgA.wait_for_timeout(300)
+        ck('sem motivo, a pergunta pede o motivo e não fecha',
+           await pgA.is_visible('#pergunta-erro') and await pgA.is_visible('#modal-pergunta.open'))
+        await pgA.click('#pergunta-cancelar')
+        await pgA.wait_for_timeout(1500)
         ck('sem motivo, a carga excluída continua fora',
            await pgA.evaluate("(id) => !getCarga(id)", outra['id']))
 
-        await pgA.evaluate("()=>{ window.prompt = ()=> 'excluída por engano'; }")
         await pgA.click(f"button[onclick*=\"devolverCargaExcluidaUI('{outra['id']}')\"]")
-        await pgA.wait_for_timeout(3000)
+        await responder_pergunta(pgA, texto='excluída por engano')
+        await pgA.wait_for_timeout(2600)
         voltouCarga = await pgA.evaluate("(id) => !!getCarga(id)", outra['id'])
         ck('com o motivo, a carga volta para o painel sozinha', voltouCarga)
 

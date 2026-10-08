@@ -272,6 +272,20 @@ Fundo de campo um tom abaixo do painel, fio do tema, canto de 4 px; na tabela
 da Torre o campo se veste de texto (só a linha de baixo) e vira campo no foco.
 Foco sempre visível (anel do tema).
 
+### Pergunta do painel (`perguntarUI`)
+Toda ação que pede certeza, senha ou motivo abre a mesma janela — nunca a
+caixa do navegador. Título que diz a ação ("Excluir a carga programada da
+placa…?"), explicação curta, lista com rolagem quando há várias cargas, e o
+campo quando há o que digitar:
+- **senha:** campo escondido; "Mostrar" só para conferir uma senha nova;
+- **motivo:** nasce em branco, sempre; obrigatório;
+- **digitar:** a palavra ou a placa que confirma o irreversível.
+O erro aparece dentro da janela, dizendo o que falta, e ela não fecha. O
+cursor nasce no campo; sem campo e com perigo, no **Cancelar**, para o Enter
+de reflexo desistir em vez de apagar. Botão da ação em vinho quando é
+perigo, dourado nos demais. Quando a ação se chama "Cancelar…", o botão de
+desistir se chama **Voltar**. No celular os botões ocupam a largura, 44 px.
+
 ## Do's and Don'ts
 
 ### Do:
@@ -287,3 +301,4 @@ Foco sempre visível (anel do tema).
 - **Don't** usar cor de etapa ou dourado de preenchimento como texto no tema claro.
 - **Don't** criar pílula (canto redondo total) em botão ou caixa.
 - **Don't** deixar a página rolar de lado em nenhuma largura.
+- **Don't** usar a caixa do navegador (`prompt`, `confirm`, `alert`): senha aparece, motivo não se valida, erro fecha a janela. Toda pergunta é a do painel (`perguntarUI`).

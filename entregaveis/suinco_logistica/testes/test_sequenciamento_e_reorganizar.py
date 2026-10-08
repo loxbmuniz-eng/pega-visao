@@ -66,9 +66,6 @@ ESPIAO = """() => {
     window.__avisos.push({ msg: String(msg), tipo: String(tipo || '') });
     return original ? original.apply(this, arguments) : undefined;
   };
-  /* confirm() automatico: a pergunta de confirmacao e' decisao de projeto
-     (a acao mexe na fila inteira) e nao e' o assunto medido aqui. */
-  window.confirm = () => true;
   return true;
 }"""
 

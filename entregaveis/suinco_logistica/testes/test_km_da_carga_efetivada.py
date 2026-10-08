@@ -33,6 +33,7 @@ Roda sem servidor (modo local): o que se mede aqui é a tela e o registro.
 """
 import asyncio, sys
 from playwright.async_api import async_playwright
+from _pergunta import responder_pergunta, com_resposta
 
 PAINEL = 'file:///home/user/pega-visao/entregaveis/suinco_logistica/index.html'
 falhas = []
@@ -70,10 +71,8 @@ async def main():
         ck('a Logística pode corrigir o KM da carga', pode is True, str(pode))
 
         print('\n=== 2. CORRIGIR GRAVA O NÚMERO NOVO ===')
-        await pg.evaluate("""async (id) => {
-          const orig = window.confirm; window.confirm = () => true;
-          try { await corrigirKmDaCargaUI(id, '640'); } finally { window.confirm = orig; }
-        }""", cid)
+        # 583 → 640 é ajuste pequeno: grava sem perguntar.
+        await pg.evaluate("async (id) => { await corrigirKmDaCargaUI(id, '640'); }", cid)
         await pg.wait_for_timeout(400)
         km = await pg.evaluate("(id) => getCarga(id).kmDeslocamento", cid)
         ck('583 virou 640', km == 640, str(km))
@@ -103,13 +102,11 @@ async def main():
                str(r['aviso'])[:70])
 
         print('\n=== 5. MUDANÇA GRANDE PERGUNTA ANTES ===')
-        perg = await pg.evaluate("""async (id) => {
-          let texto = null;
-          const orig = window.confirm;
-          window.confirm = (t) => { texto = t; return false; };   // recusa
-          try { await corrigirKmDaCargaUI(id, '58'); } finally { window.confirm = orig; }
-          return { texto, km: getCarga(id).kmDeslocamento };
-        }""", cid)
+        km_depois, texto = await com_resposta(pg, """async (id) => {
+          await corrigirKmDaCargaUI(id, '58');
+          return getCarga(id).kmDeslocamento;
+        }""", cid, confirmar=False)   # recusa
+        perg = {'texto': texto, 'km': km_depois}
         ck('640 → 58 pergunta antes', bool(perg['texto']), str(perg['texto'])[:80])
         if perg['texto']:
             ck('a pergunta mostra os dois números',
@@ -118,13 +115,11 @@ async def main():
 
         print('\n=== 6. AJUSTE PEQUENO NÃO ATRAPALHA ===')
         # "como 450 km ou 44" — variação normal não pode pedir confirmação.
-        sem_perg = await pg.evaluate("""async (id) => {
-          let perguntou = false;
-          const orig = window.confirm;
-          window.confirm = () => { perguntou = true; return true; };
-          try { await corrigirKmDaCargaUI(id, '660'); } finally { window.confirm = orig; }
-          return { perguntou, km: getCarga(id).kmDeslocamento };
-        }""", cid)
+        km660, perguntou = await com_resposta(pg, """async (id) => {
+          await corrigirKmDaCargaUI(id, '660');
+          return getCarga(id).kmDeslocamento;
+        }""", cid, prazo=800)
+        sem_perg = {'perguntou': perguntou is not None, 'km': km660}
         ck('640 → 660 grava direto, sem pergunta',
            sem_perg['perguntou'] is False and sem_perg['km'] == 660, str(sem_perg))
 

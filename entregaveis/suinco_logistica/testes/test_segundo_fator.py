@@ -250,6 +250,25 @@ async def main():
         ck('um código de recuperação entra sem o celular',
            rec['dentro'], rec['erro'][:90] or 'sem mensagem na tela')
 
+        print('\n=== 4b. DESATIVAR PEDE A SENHA ESCONDIDA ===')
+        # Era a caixa do navegador (prompt), que mostra a senha enquanto se
+        # digita. Agora é a pergunta do painel, com campo de senha
+        # (auditoria /impeccable, 08/10/2026, ocorrência #122).
+        nativas = []
+        pg3.on('dialog', lambda d: (nativas.append(d.message), asyncio.ensure_future(d.dismiss())))
+        await pg3.click(".nav-tab[data-tab='usuarios']")
+        await pg3.wait_for_timeout(1500)
+        await pg3.click("#mfa-painel button:has-text('Desativar segundo fator')")
+        await pg3.wait_for_selector('#modal-pergunta.open', timeout=5000)
+        tipo = await pg3.evaluate("() => (document.getElementById('pergunta-campo') || {}).type")
+        ck('a senha para desativar vai num campo ESCONDIDO', tipo == 'password', str(tipo))
+        await pg3.fill('#pergunta-campo', SENHA)
+        await pg3.click('#pergunta-ok')
+        await pg3.wait_for_timeout(1800)
+        card = await pg3.evaluate("() => (document.getElementById('mfa-painel')||{}).textContent || ''")
+        ck('com a senha certa, o segundo fator é desativado', 'Ativar segundo fator' in card, card[:80])
+        ck('nenhuma caixa do navegador pediu a senha', not nativas, ' | '.join(m[:60] for m in nativas))
+
         print('\n=== 5. CONSOLE LIMPO + CAPTURA ===')
         ck('sem erros de página', not erros, str(erros[:2]))
         await pg.screenshot(path='/tmp/claude-0/-home-user-pega-visao/'

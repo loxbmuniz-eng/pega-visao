@@ -274,12 +274,12 @@ function podeExcluirRotaUI(){
 async function excluirRotaUI(codigo){
   const r = rotaInfo(codigo);
   const nome = r ? `${codigo} — ${r.nome}` : codigo;
-  const ok = confirm(
-    `Excluir a rota ${nome}?\n\n`
-    + `Se ela nunca foi usada em carga, devolução ou programação, é apagada de vez.\n`
-    + `Se já rodou, é APOSENTADA: sai dos seletores e ninguém mais a escolhe, `
-    + `mas continua nomeando as cargas antigas — senão elas viram um código sem praça.\n\n`
-    + `Quem decide qual dos dois é o servidor, contando o uso agora.`);
+  const ok = await perguntarUI({ titulo: `Excluir a rota ${nome}?`,
+    texto: 'Se ela nunca foi usada em carga, devolução ou programação, é apagada de vez.\n\n'
+      + 'Se já rodou, é APOSENTADA: sai dos seletores e ninguém mais a escolhe, '
+      + 'mas continua nomeando as cargas antigas — senão elas viram um código sem praça.\n\n'
+      + 'Quem decide qual dos dois é o servidor, contando o uso agora.',
+    botao: 'Excluir', perigo: true });
   if(!ok) return;
   try {
     const resposta = await SuincoSharePoint.excluirRota(codigo);
@@ -438,8 +438,9 @@ function addFrotaUI(){
   notify('Placa cadastrada na Frota.', 'success');
   renderAll();
 }
-function removerFrotaUI(placa){
-  if(!confirm(`Remover a placa ${placa} da Frota?`)) return;
+async function removerFrotaUI(placa){
+  if(!(await perguntarUI({ titulo: `Remover a placa ${placa} da Frota?`,
+       texto: 'Ela sai da lista de placas que podem ser programadas.', botao: 'Remover', perigo: true }))) return;
   removerFrota(placa);
   notify('Placa removida.', 'success');
   renderAll();

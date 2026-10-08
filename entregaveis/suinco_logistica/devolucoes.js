@@ -1734,10 +1734,12 @@ function editarDevolucaoCampoUI(id, campo, valor) {
   acaoDev(SuincoSharePoint.devolucoes.editar(id, corpo));
 }
 
-function excluirDevolucaoUI(id) {
+async function excluirDevolucaoUI(id) {
   const d = getDevolucao(id);
   if (!d) return;
-  if (!confirm(`Excluir o checklist Nº ${d.numero} (${devRotulo(d)})? Ele some do painel e dos relatórios; o registro fica no histórico.`)) return;
+  if (!(await perguntarUI({ titulo: `Excluir o checklist Nº ${d.numero}?`,
+    texto: `${devRotulo(d)}\n\nEle some do painel e dos relatórios; o registro fica no histórico.`,
+    botao: 'Excluir', perigo: true }))) return;
   acaoDev(SuincoSharePoint.devolucoes.excluir(id), 'Checklist excluído.');
 }
 
@@ -1748,25 +1750,21 @@ function excluirDevolucaoUI(id) {
    que quem clicou precisa saber antes de confirmar: qual carimbo sai, de
    quem era, e para onde a devolução volta. E diz o que NÃO sai — o peso e
    o recado ficam, senão quem errou uma vírgula redigita tudo. */
-function desfazerEtapaDevolucaoUI(id) {
+async function desfazerEtapaDevolucaoUI(id) {
   const d = getDevolucao(id);
   if (!d) return;
   const etapa = etapaDesfeitaDev(d);
   if (!etapa) return;
   const c = (d.carimbos || {})[etapa.pede] || {};
   const quando = c.em ? new Date(c.em).toLocaleString('pt-BR') : 'sem data registrada';
-  const linhas = [
-    `Desfazer a etapa "${d.status}"?`,
-    '',
-    `Carimbada por ${c.por || 'alguém'} em ${quando}.`,
-    `A devolução volta para "${etapa.status}" e este carimbo é apagado.`,
-    '',
-    'O que foi digitado nesta etapa (peso, observações) CONTINUA gravado —',
-    'é só corrigir e carimbar de novo.',
-    '',
-    'Fica registrado quem desfez.',
-  ];
-  if (!confirm(linhas.join('\n'))) return;
+  const ok = await perguntarUI({ titulo: `Desfazer a etapa "${d.status}"?`,
+    texto: `Carimbada por ${c.por || 'alguém'} em ${quando}.\n`
+      + `A devolução volta para "${etapa.status}" e este carimbo é apagado.\n\n`
+      + 'O que foi digitado nesta etapa (peso, observações) CONTINUA gravado — '
+      + 'é só corrigir e carimbar de novo.\n\n'
+      + 'Fica registrado quem desfez.',
+    botao: 'Desfazer a etapa' });
+  if (!ok) return;
   acaoDev(SuincoSharePoint.devolucoes.desfazerEtapa(id),
     `Etapa desfeita — a devolução voltou para "${etapa.status}".`);
 }
@@ -2166,8 +2164,8 @@ function mostrarParcialDevUI(id) {
   if (!ehParcial) campo.value = '';
 }
 
-function excluirItemDevolucaoUI(id, itemId) {
-  if (!confirm('Remover esta linha do checklist?')) return;
+async function excluirItemDevolucaoUI(id, itemId) {
+  if (!(await perguntarUI({ titulo: 'Remover esta linha do checklist?', botao: 'Remover', perigo: true }))) return;
   acaoDev(SuincoSharePoint.devolucoes.excluirItem(id, itemId));
 }
 
@@ -2227,7 +2225,8 @@ async function abrirRevisoesDevolucaoUI(id) {
 }
 
 async function restaurarRevisaoDevolucaoUI(id, revisaoId) {
-  if (!confirm('Restaurar o checklist para este estado anterior? A mudança vale para todos e fica no log.')) return;
+  if (!(await perguntarUI({ titulo: 'Restaurar o checklist para este estado anterior?',
+    texto: 'A mudança vale para todos e fica no log.', botao: 'Restaurar' }))) return;
   try {
     await SuincoSharePoint.devolucoes.restaurar(id, revisaoId);
     notify('Checklist restaurado.', 'success');

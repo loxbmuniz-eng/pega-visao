@@ -736,7 +736,9 @@ async function confirmarMfaUI(){
 }
 
 async function desativarMfaUI(){
-  const senha = prompt('Confirme sua senha para desativar o segundo fator:');
+  const senha = await perguntarUI({ titulo: 'Desativar o segundo fator?',
+    campo: { tipo: 'senha', rotulo: 'Sua senha', dica: 'Para confirmar que é você.' },
+    botao: 'Desativar', perigo: true });
   if(!senha) return;
   try{
     await SuincoSharePoint.mfa.desativar(senha);
@@ -748,9 +750,10 @@ async function desativarMfaUI(){
 }
 
 async function resetarMfaDeUI(id, nome){
-  const motivo = prompt(`Por que está removendo o segundo fator de ${nome}?\n`
-    + '(fica registrado e avisa os outros administradores)');
-  if(!motivo || !motivo.trim()) return;
+  const motivo = await perguntarUI({ titulo: `Remover o segundo fator de ${nome}?`,
+    campo: { tipo: 'motivo', rotulo: 'Por quê?', dica: 'Fica registrado e avisa os outros administradores.' },
+    botao: 'Remover', perigo: true });
+  if(!motivo) return;
   try{
     const r = await SuincoSharePoint.mfa.resetarDe(id, motivo.trim());
     notify(r.aviso || 'Segundo fator removido.', 'success', 8000);
