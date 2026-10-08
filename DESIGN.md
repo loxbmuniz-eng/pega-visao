@@ -216,6 +216,11 @@ tela de 1440 × 900 com seis cargas à vista; no celular, a faixa de números vi
 pares e as tabelas viram cartões. A página nunca rola de lado; tabela larga rola
 dentro dela.
 
+**A Regra do Topo.** Numa aba de leitura (Indicadores), o recorte vem primeiro,
+numa linha, e o que pede ação vem logo depois do que acontece agora — nunca
+no fim. O que repete outro número ou só explica nasce recolhido (`<details>`,
+lembrado por pessoa), e nada é apagado para encurtar a página.
+
 ## Elevation & Depth
 
 Plano, em camadas de tom. A página é a camada mais funda (Noite do Pátio ou

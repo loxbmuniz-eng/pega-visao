@@ -167,7 +167,7 @@ function aplicarFiltroIndicadores(){
     nota.hidden = partes.length === 0;
     nota.innerHTML = partes.length
       ? `<strong>Filtro ativo:</strong> ${esc(partes.join(' · '))}`
-        + ' — os números abaixo consideram só este recorte.'
+        + ' — os números abaixo consideram só este recorte, menos o Pulso do dia, que é o pátio inteiro agora.'
       : '';
   }
   renderIndicadores();
@@ -762,7 +762,29 @@ function abrirDetalhePulso(campo, chave, origem, soAtualizar){
   });
 }
 
+/* OS CARTÕES RECOLHIDOS (08/10/2026, /impeccable Lote 3). Abrir ou fechar
+   fica lembrado NESTE navegador, por pessoa — é conveniência, não dado:
+   sem armazenamento (aba anônima, bloqueio), tudo funciona e nasce fechado. */
+const IND_RECOLHE_CHAVE = 'suinco.indicadores.abertos';
+function indRecolhidosAbertos(){
+  try{ return JSON.parse(localStorage.getItem(IND_RECOLHE_CHAVE) || '[]') || []; }catch(_){ return []; }
+}
+function indRecolhidosRestaurar(){
+  const abertos = indRecolhidosAbertos();
+  document.querySelectorAll('#tab-indicadores details.ind-recolhe').forEach(d => {
+    if(d._recolheLigado) return;
+    d._recolheLigado = true;
+    d.open = abertos.includes(d.dataset.recolhe);
+    d.addEventListener('toggle', () => {
+      const lista = indRecolhidosAbertos().filter(k => k !== d.dataset.recolhe);
+      if(d.open) lista.push(d.dataset.recolhe);
+      try{ localStorage.setItem(IND_RECOLHE_CHAVE, JSON.stringify(lista)); }catch(_){}
+    });
+  });
+}
+
 function renderIndicadores(){
+  indRecolhidosRestaurar();
   /* Texto fixo que cita a meta obedece à mesma chave (metaNosIndicadores,
      data.js): basta marcar o trecho com data-meta-patio. */
   document.querySelectorAll('[data-meta-patio]').forEach(el => { el.hidden = !metaNosIndicadores(); });
@@ -780,7 +802,7 @@ function renderIndicadores(){
     tempoCarregamento:'Tempo de Carregamento',
     tempoFaturamento:'Tempo de Faturamento',
     tempoAguardandoSaida:'Tempo Aguardando Saída',
-    tempoPatioTotal:'Tempo em Pátio (total)'
+    tempoPatioTotal:'Tempo de pátio (chegada → saída)'
   };
   const somas = {}, contagens = {};
   campos.forEach(f=>{ somas[f]=0; contagens[f]=0; });
@@ -982,7 +1004,7 @@ function renderComparacaoPeriodos(){
     { key:'tempoCarregamento',        label:'Tempo de Carregamento' },
     { key:'tempoFaturamento',         label:'Tempo de Faturamento' },
     { key:'tempoAguardandoSaida',     label:'Tempo Aguardando Saída' },
-    { key:'tempoPatioTotal',          label:'Tempo em Pátio (total)' },
+    { key:'tempoPatioTotal',          label:'Tempo de pátio (chegada → saída)' },
     { key:'leadTimeTotal',            label:'Lead Time Total' }
   ];
   // Passa o filtro do topo: a nota "só este recorte" precisa valer aqui também.

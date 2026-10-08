@@ -1073,6 +1073,55 @@
   <div class="tab-page" id="tab-indicadores">
     <div class="funcao-aba" data-tab="indicadores"></div>
 
+    <!-- O RECORTE NO TOPO (08/10/2026, /impeccable Lote 3).
+
+         Mesma ideia do painel de despesas: um estado central, vários
+         recortes, e TUDO abaixo recalcula junto — indicadores, tabelas,
+         status e gráficos. Sem isso o gestor filtra num lugar e compara
+         com número de outro recorte sem perceber. A nota de filtro ativo
+         existe pelo mesmo motivo.
+
+         POR QUE SUBIU. O filtro morava DENTRO do segundo cartão, a 987 px
+         do topo, abaixo da dobra — e o texto dos Gráficos mandava a pessoa
+         usar "o filtro no topo da aba", que não estava no topo. A exceção
+         é dita na nota: o Pulso do dia é o pátio inteiro, agora. -->
+    <div class="card ind-recorte" id="card-recorte-ind">
+      <div class="filtro-periodo" id="ind-filtros">
+        <div class="form-group">
+          <label for="ind-f-transp">Transportadora</label>
+          <select id="ind-f-transp" onchange="aplicarFiltroIndicadores()"><option value="">Todas</option></select>
+        </div>
+        <div class="form-group">
+          <label for="ind-f-rota">Rota</label>
+          <select id="ind-f-rota" onchange="aplicarFiltroIndicadores()"><option value="">Todas</option></select>
+        </div>
+        <div class="form-group">
+          <label for="ind-f-operacao">Tipo de operação</label>
+          <select id="ind-f-operacao" onchange="aplicarFiltroIndicadores()"><option value="">Todos</option></select>
+        </div>
+        <div class="form-group">
+          <label for="ind-f-periodo">Período</label>
+          <select id="ind-f-periodo" onchange="aplicarFiltroIndicadores()">
+            <option value="6h">Últimas 6h</option>
+            <option value="12h">Últimas 12h</option>
+            <option value="hoje">Hoje</option>
+            <option value="semana">Semana (7d)</option>
+            <option value="mes">Mês</option>
+            <option value="" selected>Todo o histórico</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="ind-f-busca">Placa ou Nº de carga</label>
+          <input type="text" id="ind-f-busca" placeholder="Ex: ABC1D23" oninput="aplicarFiltroIndicadores()">
+        </div>
+        <div class="form-group filtro-acoes">
+          <button class="btn btn-sec btn-sm" onclick="limparFiltroIndicadores()">Limpar filtros</button>
+        </div>
+      </div>
+      <div class="filtro-nota" id="ind-filtro-nota" hidden></div>
+      <div class="aviso-inline no-print" id="ind-aviso-periodo" hidden></div>
+    </div>
+
     <!-- ===== PULSO DO DIA (24/09/2026) =========================
          Pedido do dono: "eu quero um painel de indicadores muito mais
          sofisticado, com qualidade, animacoes, interacoes, facilidade,
@@ -1123,52 +1172,18 @@
       </div>
     </div>
 
+    <!-- O QUE PEDE AÇÃO AGORA (08/10/2026, /impeccable Lote 3). Este bloco
+         era o ÚLTIMO da aba (y = 4.406 px), embora a própria tela o chame de
+         "o bloco mais acionável". Sobe para logo depois do Pulso. É a mesma
+         leitura de gargalos (analiseGargalos), só que mora aqui. -->
+    <div class="card" id="card-paradas">
+      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-alerta"/></svg> Cargas paradas há mais tempo</div>
+      <div class="card-sub">Cada linha é um caminhão esperando alguém destravar. Obedece ao recorte do topo.</div>
+      <div id="ind-paradas"></div>
+    </div>
+
     <div class="card">
       <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-indicadores"/></svg> Tempos Médios — Histórico Completo (cargas concluídas — Seguiu Viagem)</div>
-      <!-- FILTROS DOS INDICADORES
-
-           Mesma ideia do painel de despesas: um estado central, vários
-           recortes, e TUDO abaixo recalcula junto — indicadores, tabelas,
-           status e gráficos. Sem isso o gestor filtra num lugar e compara
-           com número de outro recorte sem perceber.
-
-           A nota de filtro ativo existe pelo mesmo motivo: número filtrado
-           sem aviso é a forma mais silenciosa de tirar conclusão errada. -->
-      <div class="filtro-periodo" id="ind-filtros">
-        <div class="form-group">
-          <label>Transportadora</label>
-          <select id="ind-f-transp" onchange="aplicarFiltroIndicadores()"><option value="">Todas</option></select>
-        </div>
-        <div class="form-group">
-          <label>Rota</label>
-          <select id="ind-f-rota" onchange="aplicarFiltroIndicadores()"><option value="">Todas</option></select>
-        </div>
-        <div class="form-group">
-          <label>Tipo de operação</label>
-          <select id="ind-f-operacao" onchange="aplicarFiltroIndicadores()"><option value="">Todos</option></select>
-        </div>
-        <div class="form-group">
-          <label>Período</label>
-          <select id="ind-f-periodo" onchange="aplicarFiltroIndicadores()">
-            <option value="6h">Últimas 6h</option>
-            <option value="12h">Últimas 12h</option>
-            <option value="hoje">Hoje</option>
-            <option value="semana">Semana (7d)</option>
-            <option value="mes">Mês</option>
-            <option value="" selected>Todo o histórico</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>Placa ou Nº de carga</label>
-          <input type="text" id="ind-f-busca" placeholder="Ex: ABC1D23" oninput="aplicarFiltroIndicadores()">
-        </div>
-        <div class="form-group filtro-acoes">
-          <button class="btn btn-sec btn-sm" onclick="limparFiltroIndicadores()">Limpar filtros</button>
-        </div>
-      </div>
-      <div class="filtro-nota" id="ind-filtro-nota" hidden></div>
-      <div class="aviso-inline no-print" id="ind-aviso-periodo" hidden></div>
-
       <!-- Mesma grade compacta da Torre de Controle (.bento) — pedido do
            usuário (08/08/2026): "que crie icones abaixo do cabecalho como
            na torre de controle". Antes era .grid4, que no celular empilhava
@@ -1284,17 +1299,23 @@
       </div>
     </div>
 
-    <div class="card">
-      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-alerta"/></svg> Sobre o OTIF</div>
+    <!-- RECOLHIDOS, NÃO APAGADOS (08/10/2026, /impeccable Lote 3). Os três
+         cartões abaixo repetem o que já está mais acima (o status em aberto
+         é o "Onde estão os caminhões agora" do Pulso; o tempo médio de pátio
+         histórico é o "Tempo de pátio" dos Tempos Médios) ou só explicam
+         (OTIF). Ficam na aba, fechados; abrem com um toque e o painel lembra
+         o que cada pessoa deixou aberto (indRecolhidos, 60_indicadores.js). -->
+    <details class="card ind-recolhe" data-recolhe="otif">
+      <summary class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-alerta"/></svg> Sobre o OTIF</summary>
       <div class="card-sub" style="margin-bottom:0">
         O OTIF (entregue no prazo) ainda não é calculado aqui de propósito: ele depende de uma data/hora prometida de referência
         (ex: horário programado de carregamento, prazo combinado com o cliente, SLA por transportadora) que ainda não foi
         confirmada como campo do modelo de dados. Assim que definirmos qual é essa referência, este indicador entra.
       </div>
-    </div>
+    </details>
 
-    <div class="card">
-      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-semaforo"/></svg> Cargas em aberto por status</div>
+    <details class="card ind-recolhe" data-recolhe="status">
+      <summary class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-semaforo"/></svg> Cargas em aberto por status</summary>
       <div class="card-sub">Uma coluna por etapa, o número embaixo. Os 6 status aparecem sempre — inclusive os zerados, porque etapa vazia também é informação. As cores são as mesmas do relatório executivo.</div>
       <div class="table-wrap">
         <!-- Cabeçalho e corpo montados por renderStatusAberto(): a leitura
@@ -1305,16 +1326,16 @@
         </table>
       </div>
       <div class="status-h-total" id="ind-status-total-linha"></div>
-    </div>
+    </details>
 
     <!-- Tempo MÉDIO no lugar dos extremos. O caso extremo é anedota; a
          média move decisão, e o percentual acima da meta diz se o problema
          é pontual ou estrutural. -->
-    <div class="card">
-      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-historico"/></svg> Tempo Médio de Pátio</div>
+    <details class="card ind-recolhe" data-recolhe="patio-medio">
+      <summary class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-historico"/></svg> Tempo Médio de Pátio</summary>
       <div class="card-sub">Da chegada física até a saída — o tempo que a operação e o motorista sentem.<span data-meta-patio> Comparado com a meta de 3 horas.</span></div>
       <div id="ind-patio-medio"></div>
-    </div>
+    </details>
 
     <!-- Ranking por ATRASO, não por volume. Quem move mais carga não é
          necessariamente quem precisa de atenção. -->

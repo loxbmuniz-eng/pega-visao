@@ -197,7 +197,9 @@ async def main():
         print('\n=== 3. O RESTO DA ABA CONCORDA COM OS GRÁFICOS ===')
         # Gargalos e tempo de pátio liam DB.cargas cru: mostravam o pátio
         # inteiro ao lado de gráficos já recortados.
-        gargalos = await texto(pg, '#ind-gargalos')
+        # As cargas paradas subiram para cartão próprio (#ind-paradas, Lote 3
+        # do /impeccable, 08/10/2026) — mesma leitura, mesmo recorte.
+        gargalos = await texto(pg, '#ind-gargalos') + ' ' + await texto(pg, '#ind-paradas')
         ck('os gargalos não citam a transportadora que foi filtrada fora',
            'TRANSPORTES ALFA' not in gargalos,
            'ALFA ainda aparece nos gargalos')
