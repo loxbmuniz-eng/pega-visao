@@ -81,6 +81,9 @@ async function carregarMontagemUI(){
   const campoData = document.getElementById('mont-data');
   if(campoData && !campoData.value) campoData.value = diaLocalISO();
   const dia = campoData ? campoData.value : '';
+  // As duas datas da aba (Lote 4): o aviso depende só delas — vem antes de
+  // qualquer chamada ao servidor, e vale também sem ele.
+  if(typeof avisoDatasProgramacaoUI === 'function') avisoDatasProgramacaoUI();
 
   if(!SuincoSharePoint.estaConfigurado()){
     document.getElementById('mont-tbody').innerHTML = '';

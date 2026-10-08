@@ -287,7 +287,11 @@
 
   <div class="tab-page" id="tab-programacao">
     <div class="funcao-aba" data-tab="programacao"></div>
-    <div class="card">
+    <!-- "Ir para" (08/10/2026, /impeccable Lote 4): a Montagem do dia morava
+         a 1.268 px do topo. A barra é montada por app/27_ir_para.js com as
+         seções que a pessoa VÊ. -->
+    <nav class="ir-para no-print" data-ir-para="programacao" aria-label="Ir para uma parte da Programação" hidden></nav>
+    <div class="card" id="card-fila-programados">
       <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-fila"/></svg> Fila de Programados</div>
       <div class="card-sub">As cargas programadas para o dia escolhido. As de dias anteriores que ainda não têm veículo ficam listadas logo abaixo, até serem contratadas.</div>
       <!-- O PAPEL DO MANOBRISTA (09/09/2026). Pedido do dono: "poder gerar na
@@ -340,7 +344,7 @@
       </div>
     </div>
 
-    <div class="card">
+    <div class="card" id="card-nova-carga">
       <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-programacao"/></svg> Nova Carga Programada</div>
       <div class="card-sub">Digite a placa — Transportadora e Tipo de Veículo são preenchidos automaticamente se a placa estiver cadastrada em Cadastros → Frota. <strong>Ainda não contratou o caminhão? Deixe a placa em branco</strong> — a carga fica aqui na Programação e entra na Torre sozinha quando a placa for preenchida. Placa digitada precisa estar cadastrada na Frota.</div>
       <div class="form-row">
@@ -487,6 +491,10 @@
           </button>
         </div>
       </div>
+      <!-- A Fila e a Montagem têm cada uma a sua data (de propósito: dá para
+           montar amanhã olhando a fila de hoje). Quando diferem, a tela diz —
+           e oferece alinhar (08/10/2026, /impeccable Lote 4). -->
+      <div id="mont-aviso-datas" class="aviso-inline no-print" role="status" hidden></div>
       <div class="bento bi-faixa" id="mont-stats" style="margin-bottom:12px"></div>
       <!-- CARGA FORA DO MODELO. O modelo cobre a semana típica; frete extra,
            cliente novo e reforço de última hora não são exceção rara, são
@@ -589,7 +597,7 @@
          irreversível e de uma vez por dia, não merece disputar espaço com a
          fila no alto da tela. -->
 
-    <div class="card">
+    <div class="card" id="card-aguardando-carga">
       <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-espera"/></svg> Aguardando Carga <span id="prog-aguardando-count" class="pill-count" hidden>0</span></div>
       <div class="card-sub">Veículos que a Portaria registrou no pátio sem programação prévia. Use <strong>Criar carga</strong> na linha do veículo para lançar a carga dele — o caminhão já está aqui, então o status não volta atrás.</div>
       <div class="table-wrap">
@@ -1364,7 +1372,10 @@
   <!-- ===== CADASTROS ===== -->
   <div class="tab-page" id="tab-cadastros">
     <div class="funcao-aba" data-tab="cadastros"></div>
-    <div class="card">
+    <!-- "Ir para" (08/10/2026, /impeccable Lote 4): as 300 linhas da Frota
+         vinham antes de tudo, e "Cadastrar Rota" ficava a 14.822 px. -->
+    <nav class="ir-para no-print" data-ir-para="cadastros" aria-label="Ir para uma parte dos Cadastros" hidden></nav>
+    <div class="card" id="card-frota">
       <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-expedicao"/></svg> Frota (Placa → Transportadora → Tipo de Veículo)</div>
       <div class="card-sub">A Programação só cria carga pra placa cadastrada aqui — cadastre antes de programar.</div>
       <div class="form-row">
@@ -1407,7 +1418,7 @@
     </div>
 
     <div class="grid2">
-      <div class="card">
+      <div class="card" id="card-transportadoras">
         <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-empresa"/></svg> Transportadoras
           <button class="btn btn-sec btn-sm" style="float:right" onclick="exportarTransportadorasCsv()"
             title="Baixa as transportadoras da Frota (com a contagem de placas de cada uma) em CSV.">⬇ CSV</button></div>
@@ -2279,6 +2290,7 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
 <script src="app/15_pergunta.js"></script>
 <script src="app/20_login_e_seguranca.js"></script>
 <script src="app/25_navegacao.js"></script>
+<script src="app/27_ir_para.js"></script>
 <script src="app/30_torre.js"></script>
 <script src="app/40_programacao.js"></script>
 <script src="app/41_frete_da_carga.js"></script>

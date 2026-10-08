@@ -25,7 +25,7 @@ faz achar a próxima em minutos em vez de horas:
 |---|---|---|
 | **Campo esquecido em um dos três pontos** | Carga tem três lugares onde um campo precisa existir: ida (`data.js`), volta (`suinco-api.js`) e conversão (`cargaDeLinhaRemota`). Faltando em um, o dado some sem erro em tela. | #02, #09 |
 | **Eco de sincronização** | Todo painel reenvia o que tem em memória. Cópia velha sobrescreve dado novo — inclusive com campo vazio. | #01, #03, #08, #10 |
-| **Rótulo que mente** | O dado está certo no banco; o nome dado a ele na tela descreve outra coisa. | #04, #12, #123 |
+| **Rótulo que mente** | O dado está certo no banco; o nome dado a ele na tela descreve outra coisa. | #04, #12, #123, #125 |
 | **Regra larga demais** | Trava criada para um caso real barra também o caso legítimo mais comum. | #05 |
 | **Trava sem o par na tela** | O servidor passa a exigir algo novo e a tela continua com o botão antigo: quem clica só descobre que não pode, e não tem por onde seguir. | #13, #73 |
 | **A mesma decisão escrita em dois lugares** | A regra é copiada em vez de consultada. As cópias divergem e o comportamento fica errado sem que nenhuma linha esteja errada. | #14, #26, #73, #122 |
@@ -5677,3 +5677,44 @@ que o vigia fez; (D) uma suíte que derruba a API no meio roda de novo e passa.
 Sem o vigia, reprova — e a bateria antiga, com a API caída, parava em
 "a API não respondeu".
 
+---
+
+## #125 — Programação e Cadastros sem mapa, e duas datas que não se avisavam (08/10/2026)
+
+**Achado** na auditoria `/impeccable` (Lote 4, *layout*), medido a 1440×900 na
+vitrine:
+
+- a **Programação** tem 6 seções; a Montagem do dia — onde a Logística monta o
+  dia — começava a **1.268 px** do topo, depois de um formulário inteiro;
+- o **Cadastros** tem **17.534 px**: as 300 linhas da Frota vêm antes de tudo,
+  "Cadastrar Rota" ficava a **14.822 px** e a "Tabela de Frete" a 16.733 px,
+  sem âncora nem aba interna;
+- a **Fila de Programados** e a **Montagem do dia** têm cada uma a sua data.
+  Isso é de propósito (dá para montar amanhã olhando a fila de hoje) — o
+  defeito era a tela não dizer: a pessoa mudava a data da Fila e a Montagem
+  continuava na outra, sem aviso.
+
+**O que NÃO era defeito.** A crítica contou "três datas independentes". A
+terceira (`#progdia-data`, "Programação do dia — como ela foi feita") é o
+registro de um dia, outro assunto, e segue à parte.
+
+**Família:** parente de *Rótulo que mente* — a tela que mostra duas coisas
+diferentes com a mesma cara ("Dia da programação" nos dois lugares) sem dizer
+quando discordam.
+
+**Correção** (nada movido de lugar, nada apagado):
+- barra **"Ir para"** no topo das duas abas (`app/27_ir_para.js`, uma função
+  para as duas): lista só as seções que a pessoa VÊ, na ordem da tela; o salto
+  é imediato e deixa o título abaixo do cabeçalho, com o foco nele; no
+  celular, ir para uma seção recolhida do Cadastros a abre pelo mesmo toque
+  no título (que guarda a escolha); a barra só é refeita quando a lista muda —
+  o redesenho de 15 s não tira o foco de quem está nela;
+- **aviso das duas datas** na Montagem (`#mont-aviso-datas`): quando diferem,
+  diz as duas (com o dia da semana, `rotuloDoDia`) e o botão "Pôr a Fila no
+  mesmo dia" chama `mudarDiaFilaUI`; iguais, some.
+
+**Trava.** `test_ir_para_e_datas`: barra no topo das duas abas com as seções
+visíveis (Administração e Logística), salto por clique e por Enter com o
+título à vista, seção recolhida que abre no celular, 44 px para o dedo,
+página sem rolagem lateral, foco preservado no redesenho, e o aviso das duas
+datas com o botão que alinha. Reprova no publicado.

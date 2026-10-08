@@ -1,0 +1,17 @@
+/* =====================================================================
+   "IR PARA" NA PROGRAMAÇÃO E NO CADASTROS (08/10/2026, /impeccable Lote 4)
+   ---------------------------------------------------------------------
+   Dona de: .ir-para e o scroll-margin dos cartões das duas abas. Os botões
+   são os .btn-sec .btn-sm de sempre — o índice não inventa estilo novo.
+   ===================================================================== */
+@media screen{
+  .ir-para{ display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin:0 0 14px }
+  .ir-para[hidden]{ display:none }
+  .ir-para-rot{ font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:var(--text-dim); margin-right:2px }
+  /* O salto pára com o título À VISTA, abaixo do cabeçalho e do menu fixos. */
+  #tab-programacao .card, #tab-cadastros .card{ scroll-margin-top:calc(var(--header-h) + var(--nav-h) + 12px) }
+}
+@media screen and (max-width:820px){
+  /* No celular o dedo precisa de 44 px (DESIGN.md). */
+  .ir-para .ir-para-item{ min-height:44px }
+}

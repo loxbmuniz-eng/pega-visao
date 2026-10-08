@@ -221,6 +221,12 @@ numa linha, e o que pede ação vem logo depois do que acontece agora — nunca
 no fim. O que repete outro número ou só explica nasce recolhido (`<details>`,
 lembrado por pessoa), e nada é apagado para encurtar a página.
 
+**A Regra do Índice.** Aba com mais de três seções e mais de duas telas de
+altura (Programação, Cadastros) abre com a barra "Ir para": as seções que a
+pessoa vê, na ordem da tela, com salto imediato e o foco no título. Duas
+datas que podem discordar na mesma aba dizem quando discordam, e oferecem
+alinhar — nunca alinham sozinhas.
+
 ## Elevation & Depth
 
 Plano, em camadas de tom. A página é a camada mais funda (Noite do Pátio ou

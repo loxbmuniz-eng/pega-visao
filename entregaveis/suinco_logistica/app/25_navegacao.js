@@ -90,6 +90,9 @@ function renderTabAtual(){
   // Depois de pintar, e não antes: os rótulos são derivados das células
   // que acabaram de ser criadas.
   prepararTabelasMobile();
+  // O "Ir para" lê quais seções a pessoa vê — depois das permissões e do
+  // desenho (app/27_ir_para.js).
+  if(typeof montarIrParaUI === 'function') montarIrParaUI(TAB_ATUAL);
 }
 
 /* =====================================================================

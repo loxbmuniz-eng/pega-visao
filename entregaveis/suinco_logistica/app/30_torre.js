@@ -1109,6 +1109,7 @@ function mudarDiaFilaUI(v){
     _progFilaDia = String(v) === isoDiaLocal(new Date()) ? null : String(v);
   }
   renderAll();
+  if(typeof avisoDatasProgramacaoUI === 'function') avisoDatasProgramacaoUI();
 }
 function ordenarPorSequenciaEAtualizacao(a,b){
   const sa = (a.sequencia===null||a.sequencia===undefined) ? Infinity : a.sequencia;
