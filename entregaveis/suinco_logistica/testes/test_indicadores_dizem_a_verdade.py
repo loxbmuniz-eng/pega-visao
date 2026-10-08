@@ -158,6 +158,10 @@ async def main():
         ck('a carga descartada é listada, não escondida',
            inconsistentes == ['FUTURO'], str(inconsistentes))
         stats = await texto(pg, '#ind-stats')
+        # O Tempo Médio de Pátio nasce recolhido (Lote 3): abre como a pessoa abre.
+        if not await pg.evaluate("() => document.querySelector('details[data-recolhe=\"patio-medio\"]').open"):
+            await pg.click('details[data-recolhe="patio-medio"] > summary')
+            await pg.wait_for_timeout(200)
         patio = await texto(pg, '#ind-patio-medio')
         ck('a tela diz quantas cargas ficaram fora da conta',
            'fora da conta' in (stats + patio), 'nota de descarte não aparece')
@@ -182,12 +186,16 @@ async def main():
         await pg.wait_for_timeout(400)
         await pg.select_option('#ind-f-periodo', 'semana')
         await pg.wait_for_timeout(600)
+        # As cargas paradas subiram para cartão próprio (#ind-paradas, Lote 3
+        # do /impeccable) — continuam obedecendo ao mesmo período.
         semana = await texto(pg, '#ind-gargalos')
+        paradas_semana = await texto(pg, '#ind-paradas')
         ck('com "Semana", a transportadora de 10 dias atrás NÃO aparece nos gargalos',
            'VELHA LTDA' not in semana, 'VELHA LTDA aparece em Semana')
         await pg.select_option('#ind-f-periodo', '')
         await pg.wait_for_timeout(600)
         tudo = await texto(pg, '#ind-gargalos')
+        paradas_tudo = await texto(pg, '#ind-paradas')
         # Até 26/09/2026 a VELHA LTDA aparecia pelo bloco "Transportadoras
         # com concentração de atraso". Esse bloco é a meta de 3h, e a meta
         # saiu dos indicadores a pedido do dono (chave metaNosIndicadores,
@@ -201,7 +209,7 @@ async def main():
             ck('com "todo o histórico", os gargalos mudam (a carga antiga entra na conta)',
                semana != tudo, 'gargalos idênticos em Semana e em todo o histórico')
         ck('a carga parada continua listada nos dois casos',
-           'PARADA' in semana and 'PARADA' in tudo)
+           'PARADA' in paradas_semana and 'PARADA' in paradas_tudo)
 
         print('\n=== 5. AS ABAS EXISTEM PARA O TECLADO ===')
         abas = await pg.evaluate("""() => [...document.querySelectorAll('.nav-tab')].map(t => ({

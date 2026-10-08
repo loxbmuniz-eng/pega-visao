@@ -25,7 +25,7 @@ faz achar a próxima em minutos em vez de horas:
 |---|---|---|
 | **Campo esquecido em um dos três pontos** | Carga tem três lugares onde um campo precisa existir: ida (`data.js`), volta (`suinco-api.js`) e conversão (`cargaDeLinhaRemota`). Faltando em um, o dado some sem erro em tela. | #02, #09 |
 | **Eco de sincronização** | Todo painel reenvia o que tem em memória. Cópia velha sobrescreve dado novo — inclusive com campo vazio. | #01, #03, #08, #10 |
-| **Rótulo que mente** | O dado está certo no banco; o nome dado a ele na tela descreve outra coisa. | #04, #12 |
+| **Rótulo que mente** | O dado está certo no banco; o nome dado a ele na tela descreve outra coisa. | #04, #12, #123 |
 | **Regra larga demais** | Trava criada para um caso real barra também o caso legítimo mais comum. | #05 |
 | **Trava sem o par na tela** | O servidor passa a exigir algo novo e a tela continua com o botão antigo: quem clica só descobre que não pode, e não tem por onde seguir. | #13, #73 |
 | **A mesma decisão escrita em dois lugares** | A regra é copiada em vez de consultada. As cópias divergem e o comportamento fica errado sem que nenhuma linha esteja errada. | #14, #26, #73, #122 |
@@ -5569,3 +5569,66 @@ CSS em `tema2027/42_pergunta.css`).
 - 23 suítes que trocavam `window.confirm`/`window.prompt` por atalho, ou
   aceitavam a caixa do navegador, passam a responder pela tela (`testes/_pergunta.py`, uma função para todas) —
   causa 2 das quatro: o teste media um atalho que mudou de forma.
+
+## #123 — Indicadores: o bloco mais acionável era o último, e o filtro "do topo" não estava no topo (08/10/2026)
+
+**Achado** na auditoria `/impeccable` (Lote 3, *distill* + *layout*), medido a
+1440×900 na vitrine:
+
+- a aba tinha 4.746 px e 12 seções; "Cargas paradas há mais tempo" — que a
+  própria tela chama de "o bloco mais acionável: cada linha é um caminhão
+  esperando alguém destravar" — era o ÚLTIMO bloco, a 4.406 px do topo;
+- o filtro do recorte morava DENTRO do segundo cartão, a 987 px, abaixo da
+  dobra — e o texto dos Gráficos mandava a pessoa usar "o filtro no topo da
+  aba"; os cinco campos do filtro não tinham rótulo ligado;
+- o mesmo número aparecia em mais de um lugar: "Cargas em aberto por
+  status" repete o "Onde estão os caminhões agora" do Pulso; o "Tempo Médio
+  de Pátio — histórico" repete o tempo de pátio dos Tempos Médios.
+
+**O que NÃO era defeito.** A crítica contou "cinco definições" de tempo de
+pátio. Conferido no código: são duas contas, e cada uma é uma função só —
+`minutosNoPatioAgora` (quem está no pátio, até agora) e `indicadoresDaCarga`
+→ `tempoPatioTotal` (da chegada até a saída, de quem já saiu). O problema
+era o rótulo e a repetição, não a conta.
+
+**Família:** *Rótulo que mente* (#04, #12) — "filtro no topo da aba" num
+filtro que não estava no topo; e a tela que se descreve ("o bloco mais
+acionável") enquanto o põe por último.
+
+**Correção** (nada apagado):
+- o recorte é o primeiro cartão da aba, numa linha, com rótulo ligado em
+  cada campo; a nota de recorte ativo diz a exceção: "menos o Pulso do dia,
+  que é o pátio inteiro agora";
+- "Cargas paradas há mais tempo" vira cartão próprio logo depois do Pulso
+  (`#ind-paradas`), com a MESMA leitura (`analiseGargalos` →
+  `pendentesAntigas`) — saiu de dentro de Gargalos, não foi copiada;
+- "Cargas em aberto por status", "Tempo Médio de Pátio" e "Sobre o OTIF"
+  viram `<details>`: nascem fechados, abrem com um toque (e pelo teclado),
+  e o painel lembra neste navegador o que cada pessoa deixou aberto;
+- "Tempo em Pátio (total)" vira "Tempo de pátio (chegada → saída)", nos
+  Tempos Médios e no Painel do Gestor.
+- Achado no caminho, **antes de publicar**: no celular, o recolher antigo da
+  aba (`.sec-aberta`) abria o PRIMEIRO cartão na primeira visita — com o
+  recorte no topo, o Pulso do dia nasceria fechado e o próprio recorte
+  sumiria (o mecanismo esconde tudo que não é título). Agora abre o primeiro
+  cartão COM TÍTULO, e o recorte e os `<details>` ficam fora dele.
+  `test_indicadores_atualizam_no_lugar` pegou (o toque no ranking do Pulso
+  batia num cartão fechado).
+- Segundo achado antes de publicar: a regra do celular que devolve o
+  conteúdo dos `<details>` (`overflow:visible`) apagava a rolagem lateral da
+  caixa de tabela — a tabela de status, aberta, empurrava a página para
+  545 px numa tela de 390. É a lição de 08/09/2026 já escrita no
+  `styles.css`; a caixa de tabela volta a ter `overflow-x:auto`.
+  `test_painel_cabe_no_celular` pegou.
+
+**Trava.**
+- `test_indicadores_acao_no_topo` (novo): recorte primeiro e acima da dobra,
+  rótulos ligados; cargas paradas logo depois do Pulso, antes de 1.300 px,
+  mostrando a carga parada e sem repetir em Gargalos; os três recolhidos
+  nascem fechados, abrem por clique e por teclado, 44 px de alvo, e voltam
+  como ficaram depois de recarregar; a nota do recorte cita o Pulso.
+  Reprovou no publicado em 10 pontos.
+- `test_indicadores_dizem_a_verdade`, `test_filtro_indicadores_move_graficos`
+  e `test_meta_patio_fora_dos_indicadores` leem as cargas paradas no cartão
+  novo e abrem o Tempo Médio de Pátio com clique — causa 1 das quatro: a
+  regra mudou de propósito.

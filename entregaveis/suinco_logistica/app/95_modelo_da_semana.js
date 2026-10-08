@@ -249,7 +249,10 @@ function _secoesGravar(aba, lista){
 /* Os cartões de uma aba, na ordem da tela. Em Cadastros parte deles mora
    dentro de .grid2 — por isso não dá para usar só filho direto. */
 function _secoesCards(abaEl){
-  return [...abaEl.querySelectorAll(':scope > .card, :scope > .grid2 > .card')];
+  /* O cartão que já é <details> recolhe sozinho, no computador e no celular
+     (Indicadores, /impeccable Lote 3) — este mecanismo não mexe nele. */
+  return [...abaEl.querySelectorAll(':scope > .card, :scope > .grid2 > .card')]
+    .filter(c => c.tagName !== 'DETAILS');
 }
 function _secaoId(card){
   const t = card.querySelector(':scope > .card-title');
@@ -267,14 +270,18 @@ function restaurarSecoesDaAba(nomeAba){
   const guardado = _secoesEstado(nomeAba);
   const abertas = new Set(guardado || []);
   const primeiraVisita = guardado === null;
-  cards.forEach((card, i) => {
+  /* Abre o primeiro cartão COM TÍTULO. O recorte dos Indicadores subiu para
+     o topo e não tem título (08/10/2026): contar pela posição deixaria o
+     Pulso do dia — o que a pessoa abre a aba para ver — fechado. */
+  const primeiroComTitulo = cards.find(c => c.querySelector(':scope > .card-title'));
+  cards.forEach((card) => {
     const t = card.querySelector(':scope > .card-title');
     if (!t) return;
     if (!t.hasAttribute('tabindex')){
       t.setAttribute('tabindex', '0');
       t.setAttribute('role', 'button');
     }
-    const aberta = primeiraVisita ? (i === 0) : abertas.has(_secaoId(card));
+    const aberta = primeiraVisita ? (card === primeiroComTitulo) : abertas.has(_secaoId(card));
     card.classList.toggle('sec-aberta', aberta);
     t.setAttribute('aria-expanded', aberta ? 'true' : 'false');
   });
@@ -284,6 +291,7 @@ document.addEventListener('click', (ev) => {
   if (window.innerWidth > 820) return;
   const titulo = ev.target.closest(SECOES_SELETOR);
   if (!titulo) return;
+  if (titulo.parentElement && titulo.parentElement.tagName === 'DETAILS') return;   // recolhe sozinho
   if (ev.target.closest('button, a, input, select, label')) return;
 
   const card = titulo.parentElement;

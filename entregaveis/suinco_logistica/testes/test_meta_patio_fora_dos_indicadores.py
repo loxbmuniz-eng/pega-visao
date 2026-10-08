@@ -94,6 +94,7 @@ LER_INDICADORES = """() => {
     texto: aba.innerText,
     rankingVisivel: !!(cartaoRanking && cartaoRanking.offsetParent !== null),
     gargalos: (document.getElementById('ind-gargalos') || {}).innerText || '',
+    paradas: (document.getElementById('card-paradas') || {}).innerText || '',
     patioMedio: (document.getElementById('ind-patio-medio') || {}).innerText || '',
     pulso: (document.getElementById('pulso-numeros') || {}).innerText || '',
   };
@@ -111,6 +112,17 @@ PROIBIDOS_NA_ABA = ['acima da meta', 'meta de 3', 'dentro da meta', 'Maior Atras
                     'atraso recorrente', 'concentração de atraso', 'incidência de atraso']
 PROIBIDOS_NO_PDF = ['Meta', 'acima da meta', 'Maior Atraso', 'atraso recorrente',
                     'incidência de atraso', '⚠']
+
+
+async def ler_indicadores(pg):
+    """Abre a aba e os cartões recolhidos COM CLIQUE no título, como a
+    pessoa faz (o Tempo Médio de Pátio nasce recolhido desde o Lote 3 do
+    /impeccable), e só então lê o que a aba mostra."""
+    await pg.evaluate("() => { abrirTab('indicadores'); renderIndicadores(); }")
+    for s in await pg.query_selector_all('#tab-indicadores details.ind-recolhe:not([open]) > summary'):
+        await s.click()
+    await pg.wait_for_timeout(200)
+    return await pg.evaluate(LER_INDICADORES)
 
 
 async def main():
@@ -132,7 +144,7 @@ async def main():
         ck('a chave existe e está desligada', chave is False, repr(chave))
 
         print('\n=== 1. A ABA INDICADORES NÃO MOSTRA MAIS A META ===')
-        ind = await pg.evaluate(LER_INDICADORES)
+        ind = await ler_indicadores(pg)
         for palavra in PROIBIDOS_NA_ABA:
             ck(f'a aba não diz "{palavra}"', palavra.lower() not in ind['texto'].lower())
         ck('o cartão do Ranking de Veículos com Maior Atraso está escondido', not ind['rankingVisivel'])
@@ -149,8 +161,8 @@ async def main():
            'média no pátio' in ind['pulso'].lower() and 'o mais parado' in ind['pulso'].lower(), ind['pulso'][:160])
         ck('os horários de congestionamento continuam em Gargalos',
            'congestionamento' in ind['gargalos'].lower(), ind['gargalos'][:160])
-        ck('as cargas paradas há mais tempo continuam em Gargalos',
-           'paradas há mais tempo' in ind['gargalos'].lower())
+        ck('as cargas paradas há mais tempo continuam na aba (cartão próprio, logo depois do Pulso)',
+           'paradas há mais tempo' in ind['paradas'].lower())
 
         print('\n=== 3. O RELATÓRIO EXECUTIVO SEGUE A MESMA CHAVE ===')
         pdf = await pg.evaluate(LER_EXECUTIVO)
@@ -169,7 +181,7 @@ async def main():
 
         print('\n=== 5. A CHAVE FUNCIONA NOS DOIS SENTIDOS ===')
         await pg.evaluate("() => { window.metaNosIndicadores = () => true; }")
-        ind2 = await pg.evaluate(LER_INDICADORES)
+        ind2 = await ler_indicadores(pg)
         ck('ligada de novo, a meta volta ao Tempo Médio', 'acima da meta' in ind2['patioMedio'].lower(),
            ind2['patioMedio'][:160])
         ck('ligada de novo, o Ranking de Atraso volta', ind2['rankingVisivel'])

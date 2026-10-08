@@ -1,0 +1,48 @@
+/* =====================================================================
+   INDICADORES: O RECORTE NO TOPO E OS CARTÕES RECOLHIDOS
+   (08/10/2026, /impeccable Lote 3)
+   ---------------------------------------------------------------------
+   Dona de: .ind-recorte e details.ind-recolhe dentro de #tab-indicadores.
+   A ordem da aba mora no index_suinco.html; aqui só o desenho. Só tela —
+   no papel quem fala é o relatório.
+   ===================================================================== */
+@media screen{
+  /* O recorte é uma linha de campos, sem título: o rótulo de cada campo
+     já diz o que ele filtra. */
+  #tab-indicadores .ind-recorte{ padding-top:12px; padding-bottom:10px }
+  #tab-indicadores .ind-recorte .filtro-periodo{ margin:0 }
+
+  /* Cartão recolhido: o título É o botão. Alvo de 44 px, seta que gira,
+     foco visível — e nada de triângulo do navegador por cima do traço
+     dourado do título. */
+  #tab-indicadores details.ind-recolhe > summary{ cursor:pointer; list-style:none; min-height:44px; margin-bottom:0 }
+  #tab-indicadores details.ind-recolhe > summary::-webkit-details-marker{ display:none }
+  #tab-indicadores details.ind-recolhe > summary::after{ content:''; margin-left:auto; margin-right:6px; width:9px; height:9px;
+    border-right:2px solid currentColor; border-bottom:2px solid currentColor; transform:rotate(45deg);
+    transition:transform 160ms cubic-bezier(.22,.61,.36,1) }
+  #tab-indicadores details.ind-recolhe[open] > summary{ margin-bottom:10px }
+  #tab-indicadores details.ind-recolhe[open] > summary::after{ transform:rotate(-135deg) }
+  #tab-indicadores details.ind-recolhe > summary:focus-visible{ outline:2px solid var(--gold); outline-offset:2px; border-radius:4px }
+  @media (prefers-reduced-motion: reduce){
+    #tab-indicadores details.ind-recolhe > summary::after{ transition:none }
+  }
+}
+
+/* NO CELULAR (≤ 820 px) os cartões dos Indicadores já recolhem por outro
+   mecanismo (.sec-aberta, 95_modelo_da_semana.js), que esconde tudo o que
+   não é título. Dois cartões ficam fora dele: o recorte (não tem título — os
+   campos aparecem sempre) e os <details> (recolhem sozinhos; a seta do
+   celular acompanha o [open]). */
+@media screen and (max-width:820px){
+  #tab-indicadores > .card.ind-recorte > *:not(.card-title){ max-height:none; overflow:visible; opacity:1 }
+  #tab-indicadores > .card.ind-recorte .filtro-periodo{ display:grid; grid-template-columns:1fr 1fr; gap:8px }
+  #tab-indicadores > .card.ind-recorte .filtro-periodo .form-group{ min-width:0 }
+  #tab-indicadores > details.ind-recolhe > *:not(.card-title){ max-height:none; overflow:visible; opacity:1 }
+  /* A caixa de tabela é a exceção (a mesma lição de 08/09/2026 no
+     styles.css): sem o overflow-x dela, a tabela de status de 520 px empurra
+     a PÁGINA para 545 px no celular. test_painel_cabe_no_celular pegou. */
+  #tab-indicadores > details.ind-recolhe > .table-wrap{ overflow-x:auto; overflow-y:visible }
+  #tab-indicadores > details.ind-recolhe:not([open]){ padding-top:11px; padding-bottom:11px }
+  #tab-indicadores > details.ind-recolhe > summary::after{ display:none }
+  #tab-indicadores > details.ind-recolhe[open] > summary.card-title::before{ transform:rotate(-135deg); margin-top:-2px }
+}

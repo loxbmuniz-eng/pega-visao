@@ -155,16 +155,22 @@ function renderGargalos(){
       <td class="cel-num">${fmtDuracao(r.atrasoMedio)}</td></tr>`)
   )));
 
-  blocos.push(tabela(
-    '⚠️ Cargas paradas há mais tempo',
-    'O bloco mais acionável: cada linha é um caminhão esperando alguém destravar.',
-    ['Nº Carga','Placa','Transportadora','Status','Parada há'],
-    g.pendentesAntigas.map(c=>`<tr>
-      <td>${esc(c.numeroCarga)}</td><td><strong>${esc(c.placa)}</strong></td>
-      <td>${esc(c.transportadora)}</td>
-      <td>${badgeHtml(c.status)}</td>
-      <td class="cel-num">${c.paradaHaMin === null ? '<span class="text-dim">sem registro de chegada</span>' : fmtDuracao(c.paradaHaMin)}</td></tr>`)
-  ));
+  /* AS CARGAS PARADAS SOBEM (08/10/2026, /impeccable Lote 3). Era o último
+     bloco desta seção — e o último da aba, a 4.406 px do topo. Mesma leitura
+     (g.pendentesAntigas), cartão próprio logo depois do Pulso (#ind-paradas). */
+  const paradas = document.getElementById('ind-paradas');
+  if(paradas){
+    paradas.innerHTML = g.pendentesAntigas.length
+      ? `<div class="table-wrap"><table>
+          <thead><tr>${['Nº Carga','Placa','Transportadora','Status','Parada há'].map(h=>`<th>${esc(h)}</th>`).join('')}</tr></thead>
+          <tbody>${g.pendentesAntigas.map(c=>`<tr>
+            <td>${esc(c.numeroCarga)}</td><td><strong>${esc(c.placa)}</strong></td>
+            <td>${esc(c.transportadora)}</td>
+            <td>${badgeHtml(c.status)}</td>
+            <td class="cel-num">${c.paradaHaMin === null ? '<span class="text-dim">sem registro de chegada</span>' : fmtDuracao(c.paradaHaMin)}</td></tr>`).join('')}</tbody>
+        </table></div>`
+      : '<div class="empty-state">Nenhuma carga parada no recorte.</div>';
+  }
 
   const conteudo = blocos.filter(Boolean).join('');
   wrap.innerHTML = conteudo || (comMeta
