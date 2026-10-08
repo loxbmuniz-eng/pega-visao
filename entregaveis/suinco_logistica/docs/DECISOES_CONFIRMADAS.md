@@ -986,6 +986,13 @@ Prova: bloco 58 do `api.test.js` (13 testes, contra um Sentry falso local) e
 `test_erro_da_tela_vai_ao_servidor` (pela tela). Ambos reprovaram contra o
 código publicado.
 
+8. **A chave entra por script, não por editor** (`backend/scripts/ligar_sentry.sh`):
+   o `.env` guarda a senha do banco e a chave do login, e uma linha perdida
+   num editor derruba o servidor. O script confere o formato do DSN, guarda
+   cópia, troca só as linhas `SENTRY_DSN*`, reinicia e confere o `/health`;
+   se o servidor não voltar, devolve o `.env` de antes. Prova:
+   `testes/ligar_sentry.test.js` (6).
+
 ## 28. Conector da Hostinger: ler à vontade, mudar só com ordem, comprar e apagar nunca (07/10/2026)
 
 O dono ligou o conector da Hostinger à conta onde roda o servidor
