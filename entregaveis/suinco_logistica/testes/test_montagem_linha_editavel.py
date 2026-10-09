@@ -106,8 +106,17 @@ async def main():
         pg.on('pageerror', lambda e: erros.append(str(e)))
 
 
-        rota = sql("SELECT codigo FROM dim_rotas ORDER BY codigo LIMIT 1")
-        rota2 = sql("SELECT codigo FROM dim_rotas ORDER BY codigo DESC LIMIT 1")
+        # SÓ ROTA QUE A TELA OFERECE (09/10/2026, ocorrência #132): ativa —
+        # a aposentada sai dos seletores (rotasParaEscolher) — e da faixa
+        # numérica da operação. "A de maior código", sem filtro, era a ZQ2
+        # que o test_excluir_rota_do_cadastro deixa APOSENTADA: num banco sem
+        # outra rota de teste acima dela, o select_option esperava 30 s por
+        # uma opção que não existe. Passava só porque um ZT esquecido por
+        # outra suíte ficava no topo.
+        rota = sql("SELECT codigo FROM dim_rotas WHERE ativa AND codigo ~ '^[0-9]+$' "
+                   "ORDER BY codigo LIMIT 1")
+        rota2 = sql("SELECT codigo FROM dim_rotas WHERE ativa AND codigo ~ '^[0-9]+$' "
+                    "ORDER BY codigo DESC LIMIT 1")
 
         print('\n=== 1. A LINHA NASCE E APARECE NA TELA ===')
         mid = await pg.evaluate(

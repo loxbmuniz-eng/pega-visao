@@ -89,9 +89,26 @@ subir_api() {
 # por `pkill -f`: o padrão por texto já casou com o shell que o chamou e
 # matou a própria sessão ("exit 144"), e derrubaria também a API de outra
 # porta que uma suíte subiu para si (test_usuarios_com_senha, na 3019).
+#
+# QUEM ESCUTA, COM `ss` OU COM `lsof` (09/10/2026, ocorrência #132). Um
+# contêiner novo veio sem o `ss` (pacote iproute2): o laço não achava
+# ninguém, a API velha ficava de pé, a nova não subia (porta ocupada) e o
+# portão cancelou no passo 5; o test_vigia_da_bateria reprovou pelo mesmo
+# motivo. Sem nenhum dos dois, ANOTA (na saída de erro: a de cima é a lista
+# de PIDs) — não achar ninguém em silêncio é que era o defeito.
+quem_escuta_na_porta() {
+  if command -v ss >/dev/null 2>&1; then
+    ss -lptnH "sport = :$PORTA_TESTE" 2>/dev/null | grep -o 'pid=[0-9]*' | cut -d= -f2 | sort -u
+  elif command -v lsof >/dev/null 2>&1; then
+    lsof -t -iTCP:"$PORTA_TESTE" -sTCP:LISTEN 2>/dev/null | sort -u
+  else
+    anotar_vigia "sem ss nem lsof nesta máquina: não sei quem escuta na porta $PORTA_TESTE (apt-get install iproute2)" >&2
+  fi
+}
+
 derrubar_api() {
   local pid
-  for pid in $(ss -lptnH "sport = :$PORTA_TESTE" 2>/dev/null | grep -o 'pid=[0-9]*' | cut -d= -f2 | sort -u); do
+  for pid in $(quem_escuta_na_porta); do
     kill "$pid" 2>/dev/null || true
   done
   sleep 2

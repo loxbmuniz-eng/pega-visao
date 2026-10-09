@@ -6047,3 +6047,56 @@ nenhuma termina numa carga sem as notas; toda folha com nota diz de que carga
 passa a existir depois que uma das duas suítes `test_vitrine_*` roda. Num clone
 novo, rodadas antes delas, reprovam com `ERR_FILE_NOT_FOUND`; com a vitrine
 gerada (`python3 vitrine/gerar_vitrine.py`), passam.
+
+## #132 — Quatro tropeços da bateria num contêiner novo (09/10/2026)
+
+**O que aconteceu.** O portão 77 (o da #131) rodou num contêiner recém-criado:
+banco novo, vitrine não gerada, sem o `ss`. Nenhum dos vermelhos era defeito do
+painel — eram quatro coisas que passavam no ambiente antigo pelo que ele tinha
+acumulado, não pelo que o código garante.
+
+1. **O portão cancelou no passo 5.** O `derrubar_api` achava a API de teste
+   velha pelo `ss` (pacote iproute2), que o contêiner novo não tinha: não achou
+   ninguém, a API velha — de outro commit — ficou de pé, e a nova não subiu
+   (porta ocupada). O `test_vigia_da_bateria` reprovou pelo mesmo motivo.
+   **Correção:** `quem_escuta_na_porta` (`testes/_ambiente.sh`) usa o `ss` e,
+   sem ele, o `lsof`; sem nenhum dos dois, anota. O vigia e a suíte de mentira
+   do teste chamam a mesma função. Provado com o `ss` escondido:
+   `test_vigia_da_bateria` verde.
+
+2. **`test_montagem_linha_editavel` escolhia uma rota que a tela não
+   oferece.** Pegava "a rota de maior código", sem filtro — num banco novo, a
+   `ZQ2` que o `test_excluir_rota_do_cadastro` deixa APOSENTADA (rota usada não
+   se apaga). A aposentada sai dos seletores, e o `select_option` esperava 30 s
+   por uma opção que não existe. A versão publicada reprova duas vezes
+   seguidas nesse banco. **Correção:** só rota ativa e da faixa numérica da
+   operação.
+
+3. **No ambiente antigo ela passava porque uma rota `ZT…` esquecida ficava
+   acima da `ZQ2` — e quem esquecia era o `test_rota_cadastrada_aparece`.** O
+   comentário dele promete apagar o que cria, mas a carga programada na rota
+   prende a rota pela chave estrangeira: o DELETE era recusado, com a saída
+   descartada. Sobrava uma `ZT` por bateria. **Correção:** apaga a carga (o
+   histórico vai junto, ON DELETE CASCADE), a linha da Montagem e a rota, num
+   `finally`, e reprova se sobrar rota. Provado: nenhuma `ZT` depois.
+
+4. **Cinco suítes abrem a `vitrine/vitrine.html` sem gerá-la**
+   (`test_datas_e_tempos_inteiros`, `test_graficos_dataviz`,
+   `test_historico_cartao_celular`, `test_numero_da_carga_no_historico`,
+   `test_pagamento_frete_acoes_visiveis`). Ela está no `.gitignore`, e só as
+   duas `test_vitrine_*` a geram — depois das cinco, na ordem alfabética. Num
+   clone novo, `ERR_FILE_NOT_FOUND`; no ambiente antigo, mediam a vitrine da
+   bateria ANTERIOR, de outro commit. **Correção:** o `rodar_tudo.sh` gera a
+   vitrine antes de qualquer suíte, quando alguma das escolhidas a abre (menos
+   de 1 s). Provado apagando a vitrine: `test_pagamento_frete_acoes_visiveis`
+   verde.
+
+**Família:** a da #130 — *o teste que mede outra coisa* e *contaminação entre
+suítes*.
+
+**E o bloco de pendências do portão 77 saiu errado:** listou a 066 e cinco
+arquivos do servidor, porque `COMMIT_EM_PRODUCAO.txt` e
+`APLICADAS_EM_PRODUCAO.txt` ainda dizem `dbecc3e`/065 — os COPIE DAQUI dos
+portões 75 e 76 (`2e2b0bf` e `07b412e`, migração 066), registrados no raio-X,
+não foram gravados nas marcas. A regra do arquivo é que a marca só muda com o
+bloco na mão: fica para o próximo COPIE DAQUI. A #131 não tocou em `backend/`.

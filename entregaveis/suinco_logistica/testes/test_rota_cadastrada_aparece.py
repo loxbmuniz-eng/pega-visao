@@ -68,66 +68,82 @@ async def main():
     codigo = 'ZT' + str(int(asyncio.get_event_loop().time() * 1000) % 100000)
     nome = 'Force Meat-RJ'
 
-    async with async_playwright() as p:
-        nav = await p.chromium.launch(executable_path='/opt/pw-browsers/chromium',
-                                      headless=True)
+    try:
+        async with async_playwright() as p:
+            nav = await p.chromium.launch(executable_path='/opt/pw-browsers/chromium',
+                                          headless=True)
 
-        # O painel do pátio: aberto ANTES de a rota existir, e fica aberto.
-        ctxP, pgP = await abrir(nav, 'bruno@teste.local', 'patio')
-        antes = await pgP.evaluate("(c) => rotaCurta(c)", codigo)
-        ck('antes de cadastrar, o painel só tem o número', antes == codigo, repr(antes))
+            # O painel do pátio: aberto ANTES de a rota existir, e fica aberto.
+            ctxP, pgP = await abrir(nav, 'bruno@teste.local', 'patio')
+            antes = await pgP.evaluate("(c) => rotaCurta(c)", codigo)
+            ck('antes de cadastrar, o painel só tem o número', antes == codigo, repr(antes))
 
-        # Outra pessoa cadastra a rota, em outro terminal.
-        ctxA, pgA = await abrir(nav, 'chefe@teste.local', 'adm')
-        await pgA.evaluate(
-            """async ({codigo, nome}) => {
-                 upsertRota(codigo, nome, '', 'Operador Teste');
-                 SuincoStore.save();
-                 await SuincoSharePoint.sincronizarAgora();
-               }""", {'codigo': codigo, 'nome': nome})
-        await pgA.wait_for_timeout(2000)
-        noAdm = await pgA.evaluate("(c) => rotaCurta(c)", codigo)
-        ck('quem cadastrou vê o nome na hora', nome in noAdm, repr(noAdm))
+            # Outra pessoa cadastra a rota, em outro terminal.
+            ctxA, pgA = await abrir(nav, 'chefe@teste.local', 'adm')
+            await pgA.evaluate(
+                """async ({codigo, nome}) => {
+                     upsertRota(codigo, nome, '', 'Operador Teste');
+                     SuincoStore.save();
+                     await SuincoSharePoint.sincronizarAgora();
+                   }""", {'codigo': codigo, 'nome': nome})
+            await pgA.wait_for_timeout(2000)
+            noAdm = await pgA.evaluate("(c) => rotaCurta(c)", codigo)
+            ck('quem cadastrou vê o nome na hora', nome in noAdm, repr(noAdm))
 
-        # E programa uma carga NESSA rota — é assim que ela chega no painel
-        # do pátio, que é o caso real do relato.
-        placa = await pgA.evaluate(
-            """async (codigo) => {
-                 const u = new Set(DB.cargas.map((c) => c.placa));
-                 const f = DB.frota.find((x) => x.placa && x.transportadora && !u.has(x.placa));
-                 if (!f) return null;
-                 criarCargaProgramada({freteObservacao:'TABELA', numeroCarga: 'ROTA-NOVA', placa: f.placa, cliente: 'C',
-                   destino: 'D', peso: 1000, rota: codigo, operador: 'Chefe'});
-                 SuincoStore.save();
-                 await SuincoSharePoint.sincronizarAgora();
-                 return f.placa;
-               }""", codigo)
-        ck('carga programada na rota nova', bool(placa), str(placa))
+            # E programa uma carga NESSA rota — é assim que ela chega no painel
+            # do pátio, que é o caso real do relato.
+            placa = await pgA.evaluate(
+                """async (codigo) => {
+                     const u = new Set(DB.cargas.map((c) => c.placa));
+                     const f = DB.frota.find((x) => x.placa && x.transportadora && !u.has(x.placa));
+                     if (!f) return null;
+                     criarCargaProgramada({freteObservacao:'TABELA', numeroCarga: 'ROTA-NOVA', placa: f.placa, cliente: 'C',
+                       destino: 'D', peso: 1000, rota: codigo, operador: 'Chefe'});
+                     SuincoStore.save();
+                     await SuincoSharePoint.sincronizarAgora();
+                     return f.placa;
+                   }""", codigo)
+            ck('carga programada na rota nova', bool(placa), str(placa))
 
-        # O painel que estava aberto: sem recarregar a página. A carga chega
-        # com uma rota que ele não conhece — e é isso que dispara a rebusca.
-        atualizou = await pgP.evaluate(
-            """async (codigo) => {
-                 await SuincoSharePoint.sincronizarAgora();
-                 for (let i = 0; i < 20; i++) {
-                   await new Promise((r) => setTimeout(r, 500));
-                   if (rotaInfo(codigo)) break;
-                 }
-                 return rotaCurta(codigo);
-               }""", codigo)
-        ck('o painel JÁ ABERTO passa a mostrar o nome, sem recarregar a página',
-           nome in atualizou, repr(atualizou))
+            # O painel que estava aberto: sem recarregar a página. A carga chega
+            # com uma rota que ele não conhece — e é isso que dispara a rebusca.
+            atualizou = await pgP.evaluate(
+                """async (codigo) => {
+                     await SuincoSharePoint.sincronizarAgora();
+                     for (let i = 0; i < 20; i++) {
+                       await new Promise((r) => setTimeout(r, 500));
+                       if (rotaInfo(codigo)) break;
+                     }
+                     return rotaCurta(codigo);
+                   }""", codigo)
+            ck('o painel JÁ ABERTO passa a mostrar o nome, sem recarregar a página',
+               nome in atualizou, repr(atualizou))
 
-        await nav.close()
+            await nav.close()
 
-    # Não deixa rastro no cadastro — a lição dos onze Force Meat-RJ.
-
-    subprocess.run(['sudo', '-u', 'postgres', 'psql', '-q', '-d', 'embarque_suinco',
-
-                    '-c', f"DELETE FROM dim_rotas WHERE codigo = '{codigo}'"],
-
-                   capture_output=True)
-
+    finally:
+        # Não deixa rastro no cadastro — a lição dos onze Force Meat-RJ.
+        #
+        # A CARGA PRIMEIRO (09/10/2026, ocorrência #132). A carga programada
+        # na rota prende a rota pela chave estrangeira: o DELETE da rota,
+        # sozinho, era RECUSADO — e recusado em silêncio (saída descartada).
+        # Sobrava um ZT por bateria, ativo, no topo da lista de rotas; e foi
+        # um ZT que sobrou que escondia o defeito do
+        # test_montagem_linha_editavel. Agora apaga a carga (o histórico dela
+        # vai junto, ON DELETE CASCADE), a linha da Montagem se houver, e a
+        # rota — e CONFERE: sobrou rota, a suíte reprova. Num `finally`, para
+        # limpar mesmo se cair no meio (regra da #130).
+        r = subprocess.run(['sudo', '-u', 'postgres', 'psql', '-q', '-v', 'ON_ERROR_STOP=1',
+                            '-d', 'embarque_suinco',
+                            '-c', f"DELETE FROM fact_viagens WHERE rota_codigo = '{codigo}'",
+                            '-c', f"DELETE FROM programacao_montagem WHERE rota_codigo = '{codigo}'",
+                            '-c', f"DELETE FROM dim_rotas WHERE codigo = '{codigo}'"],
+                           capture_output=True, text=True)
+        sobrou = subprocess.run(['sudo', '-u', 'postgres', 'psql', '-tA', '-d', 'embarque_suinco',
+                                 '-c', f"SELECT count(*) FROM dim_rotas WHERE codigo = '{codigo}'"],
+                                capture_output=True, text=True).stdout.strip()
+        ck('a suíte não deixa a rota de teste no cadastro', sobrou == '0',
+           f"{codigo}: {sobrou!r} {r.stderr.strip()[:140]}")
 
     print('\n=== RESULTADO ===')
     print('  FALHAS:', ', '.join(falhas) if falhas else 'NENHUMA')

@@ -116,7 +116,8 @@ def main():
         f'm = Path({str(marca)!r})\n'
         'if m.exists():\n    print("  [OK ] segunda vez, ambiente de pé"); sys.exit(0)\n'
         'm.write_text("1")\n'
-        'p = subprocess.run(["bash", "-c", "ss -lptnH \\"sport = :3010\\" | grep -o pid=[0-9]* | cut -d= -f2"],'
+        # quem escuta na 3010, pela MESMA função do vigia (ss ou lsof, #132)
+        'p = subprocess.run(["bash", "-c", ". testes/_ambiente.sh; PORTA_TESTE=3010 quem_escuta_na_porta"],'
         ' capture_output=True, text=True).stdout.split()\n'
         'for pid in p: subprocess.run(["kill", pid])\n'
         'print("  [FALHA] a API caiu no meio da suíte"); sys.exit(1)\n', encoding='utf-8')
