@@ -14,8 +14,9 @@ web
 Um painel de arquivo único (`entregaveis/suinco_logistica/index.html`,
 gerado por `build_arquivo_unico.py`), servido pela Vercel em
 embarquesuinco.com.br e, como reserva, pelo próprio servidor em
-`https://api.embarquesuinco.com.br/painel`. Funciona no computador, no
-tablet e no celular, com dois temas (escuro e claro).
+`https://api.embarquesuinco.com.br/painel`. Funciona no computador e no
+celular, com dois temas (escuro e claro). Ninguém usa tablet (dono,
+09/10/2026 — decisão 31).
 
 ## Users
 
@@ -27,8 +28,10 @@ Administração e Logística** (confirmado pelo dono em 08/10/2026).
 - **Administração** — gestão, usuários, vigias, pontos de atenção,
   relatórios executivos, decisões de exceção.
 - **Portaria, Expedição, Faturamento** — cada um carimba a sua etapa do
-  caminhão. Na Portaria o aparelho de trabalho é **tablet ou PC fixo**; o
-  celular é exceção (confirmado pelo dono em 08/10/2026).
+  caminhão. **Quem usa o painel no celular: Logística, Expedição,
+  Administração e Comercial. A Portaria não usa celular, e ninguém usa
+  tablet** (dono, 09/10/2026 — decisão 31; substitui o "tablet ou PC fixo"
+  de 08/10).
 - **Pagamento de Frete** — confere notas e paga o frete por carga.
 - **Controles Internos, Central de Notas** — passos do ciclo de devolução.
 - **Comercial e Qualidade** — só acompanham (leitura).
@@ -125,7 +128,8 @@ YMS, TOTVS YMS) nem os de uma planilha.
 
 - Contraste WCAG AA nos dois temas e nenhuma letra abaixo de 12 px —
   travados pela bateria (`test_piso_de_12px` e os testes de contraste).
-- Aparelho principal da Portaria: tablet ou PC fixo; o celular continua
-  suportado em todas as telas de operação (paridade conferida por
+- Celular: Logística, Expedição, Administração e Comercial. A Portaria
+  trabalha no computador; ninguém usa tablet (decisão 31). O celular
+  continua suportado em todas as telas (paridade conferida por
   `suinco-paridade-mobile`).
 - Foco visível no teclado e respeito a `prefers-reduced-motion`.

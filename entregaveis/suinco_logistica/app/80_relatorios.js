@@ -267,16 +267,10 @@ function exportarRotasCsv(){
 
 function exportarTransportadorasCsv(){
   // Derivada da Frota (fonte viva): cada transportadora com quantas placas
-  // tem hoje — mais útil que a lista solta de nomes.
-  const porNome = new Map();
-  DB.frota.forEach((f) => {
-    const nome = (f.transportadora || '').trim();
-    if (!nome) return;
-    porNome.set(nome, (porNome.get(nome) || 0) + 1);
-  });
+  // tem hoje — a mesma lista do quadro e do Pagamento de Frete (#128).
   baixarCsvCadastro('Transportadoras',
     ['Transportadora','Placas cadastradas'],
-    [...porNome.entries()].sort((a, b) => a[0].localeCompare(b[0])));
+    transportadorasDaFrota().map(t => [t.nome, t.placas]));
 }
 
 /* `opcoes` (06/10/2026): o PDF do Pagamento de Frete sai em folha DEITADA e

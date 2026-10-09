@@ -71,3 +71,22 @@
     #tab-programacao .form-group:has(> #prog-sequencia){ flex:1 1 100%; max-width:none }
   }
 }
+
+/* O QUADRO "TRANSPORTADORAS" (09/10/2026, #128): as 134 transportadoras da
+   Frota numa caixa que rola por dentro — sem ela o Cadastros cresceria
+   ~6.000 px. A contagem de placas fica à direita, em letra de texto
+   secundário. Os nomes que só existem neste navegador vêm separados, com
+   a borda de atenção. */
+@media screen{
+  .transp-conta{ font-size:12.5px; color:var(--text-dim); margin-bottom:6px }
+  .transp-lista{ max-height:420px; overflow:auto }
+  /* No celular a seção aberta do Cadastros solta a altura de tudo que tem
+     dentro (styles.css, "#tab-cadastros > .grid2 > .card.sec-aberta > *"):
+     sem esta linha a lista ia a 8.000 px. Aberta, ela continua rolando por
+     dentro; fechada, a regra da seção recolhida segue valendo. */
+  #tab-cadastros > .grid2 > #card-transportadoras.sec-aberta > .transp-lista{ max-height:420px; overflow:auto }
+  .transp-item{ justify-content:space-between; gap:12px }
+  .transp-placas{ font-size:12.5px; color:var(--text-dim); white-space:nowrap; font-variant-numeric:tabular-nums }
+  .transp-so-aqui{ margin-top:14px; padding-top:12px; border-top:1px solid var(--border) }
+  .transp-so-aqui-tit{ font-weight:700; color:var(--gold-text); font-size:13px }
+}

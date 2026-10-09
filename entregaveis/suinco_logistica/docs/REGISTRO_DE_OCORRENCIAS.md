@@ -5784,9 +5784,11 @@ mexer:
 - **cabeçalho**: em 1024×768 o relógio ficava 10 px ACIMA da tela. O meio do
   cabeçalho tinha 210 px para o relógio (178) e o crachá (142); eles quebravam
   em duas linhas e o cabeçalho, de altura fixa, cortava a de cima. **Achado
-  no caminho, pior que o da auditoria:** em 600 e 768 px — o tablet da
-  Portaria em pé — o meio ficava com 0 e 23 px, e relógio e crachá SUMIAM por
-  inteiro, atrás do corte (`overflow:hidden`). No celular o crachá tinha de
+  no caminho, pior que o da auditoria:** em 600 e 768 px o meio ficava com 0
+  e 23 px, e relógio e crachá SUMIAM por inteiro, atrás do corte
+  (`overflow:hidden`). (A auditoria chamava essas larguras de "tablet da
+  Portaria"; o dono corrigiu em 09/10: ninguém usa tablet e a Portaria não
+  usa celular — decisão 31. A correção fica: vale para janela estreita.) No celular o crachá tinha de
   36 a 66 px: "An…" — a pessoa não via com que setor tinha entrado;
 - **Faturamento**: a carga já FATURADO continuava em "Cargas Aguardando
   Faturamento", com a ação "—". Ficar na fila é REGRA (12/08, "nada some da
@@ -5843,3 +5845,61 @@ passo. A vitrine entrava, sim, como Administração (`DB.operador.setor` e o
 `textContent` do crachá conferidos). O teste passou a ler o crachá e o setor
 do painel. A outra reprovada da primeira passada,
 `test_fusao_nao_e_quadratica`, passou sozinha (carga da bateria).
+
+## #128 — O painel oferecia transportadora que o servidor recusa (09/10/2026)
+
+**Relato do dono**, com print da Daniela (Pagamento de Frete): na carga
+119072 ela escolheu "AG Sestini Transporte e Logistica Ltda" na lista, e o
+servidor recusou — *"não está no cadastro da Frota. Cadastre em Cadastros e
+escolha na lista"* — com a AG Sestini **já na Frota**. No mesmo dia o dono
+abriu o Cadastros, viu no quadro "Transportadoras" um nome só e perguntou se
+os dados tinham sido apagados. **Nada foi apagado.**
+
+**Causa, no código (reproduzida pelo teste, com servidor e banco):**
+- a lista de transportadora da carga e da nota (`freteTransportadorasConhecidas`)
+  juntava DUAS fontes: as transportadoras das placas da Frota e
+  `DB.transportadoras` — a lista do quadro "Transportadoras" do Cadastros,
+  que mora **só no navegador** (localStorage) e nunca chega ao servidor;
+- o servidor aceita só nome de placa da Frota, letra por letra
+  (`dim_veiculos.transportadora = $1`, `rotas/pagamento_frete.js`);
+- a recusa mandava "cadastrar em Cadastros" — e o quadro "Transportadoras"
+  aceitava o nome, gravava no navegador e o oferecia de novo na lista. Um
+  nome escrito diferente da placa ("Transporte"/"Transportes",
+  "Logistica"/"Logística") virava opção que o servidor nunca aceita;
+- as sugestões ao digitar transportadora (Frota, Programação, Montagem)
+  vinham dessa mesma lista do navegador — e espalhavam a grafia errada.
+
+O quadro "Transportadoras" mostrava, num computador, o que tinha sido
+digitado NAQUELE computador: por isso o dono via um nome só.
+
+**Família:** *A mesma decisão escrita em dois lugares* (a lista do painel e
+a do servidor) e *Rótulo que mente* (o quadro se chamava "Transportadoras" e
+era uma lista solta do navegador). O comentário da função dizia "o servidor
+confere o mesmo" — e não conferia.
+
+**Correção** (só painel; o servidor já estava certo):
+- `transportadorasDaFrota()` (`data.js`): uma função, quatro chamadores — a
+  lista da carga e da nota, o quadro, as sugestões ao digitar e o CSV. O
+  nome sai como está na placa, sem aparar, porque é com ele que o servidor
+  compara;
+- o quadro "Transportadoras" mostra as da Frota, com quantas placas cada uma
+  tem e busca sem acento; não cadastra mais nome solto — "Cadastrar placa na
+  Frota" leva até a Frota. Os nomes antigos que nenhuma placa usa aparecem
+  SEPARADOS ("Só neste computador — o servidor não conhece"), com Excluir
+  que pergunta; nada some sem a pessoa ver;
+- a recusa `TRANSPORTADORA_DESCONHECIDA` diz o caminho certo (a placa na
+  Frota) e aparece DENTRO da janela, junto do campo — o aviso do canto
+  esperava na fila quando já havia três na tela;
+- no celular a lista rola por dentro (a seção aberta do Cadastros soltava a
+  altura e o quadro ia a 8.000 px).
+
+**Trava.** `test_transportadora_que_o_servidor_aceita` (com servidor): o
+navegador com o nome antigo; toda opção da lista é transportadora de uma
+placa no banco; o caminho certo grava; a recusa dentro da janela, com a
+placa; o quadro com as da Frota, a contagem e a busca; o nome antigo
+separado; as sugestões da Frota; o quadro no celular abaixo de 1.200 px.
+Reprova no publicado em 9 pontos. `test_mesma_acao_mesma_cara` passou a
+semear o nome antigo no navegador (causa 1: o quadro não cadastra mais).
+
+**Para quem tem o nome antigo no navegador** (a Daniela): o nome aparece em
+"Só neste computador"; na carga, escolher o nome igual ao da placa.

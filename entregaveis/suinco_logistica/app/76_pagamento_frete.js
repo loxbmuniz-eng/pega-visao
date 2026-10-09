@@ -54,6 +54,13 @@ const freteNum = (v) => (v === null || v === undefined || v === '' ? '' : String
 const freteData = (iso) => (iso ? fmtData(iso) : '');
 function freteMensagemDeErro(e){
   if(e && e.codigo === 'FRETE_SEM_MIGRACAO') return e.message;
+  /* O servidor manda "cadastre em Cadastros" — e lá havia um quadro que aceitava
+     o nome sem que o servidor soubesse (#128). O caminho certo é a PLACA. */
+  if(e && e.codigo === 'TRANSPORTADORA_DESCONHECIDA'){
+    const nome = ((e.message || '').match(/"([^"]+)"/) || [])[1];
+    return `${nome ? `"${nome}"` : 'Essa transportadora'} não está em nenhuma placa da Frota — o servidor só aceita o nome escrito igual ao da placa. `
+      + 'Em Cadastros → Frota, busque a placa e escolha aqui o mesmo nome. Transportadora nova: cadastre primeiro uma placa dela na Frota.';
+  }
   if(e && e.codigo === 'SETOR_SEM_PERMISSAO') return 'Esta aba é do setor Pagamento de Frete (e da Administração).';
   return (e && e.message) || 'Não consegui falar com o servidor.';
 }
@@ -733,17 +740,13 @@ function freteLinhaDaCarga(carga){
   return FRETE.dados.linhas.find((l) => String(l.carga) === String(carga) && l.primeira);
 }
 
-/* As transportadoras CADASTRADAS: as da Frota (Cadastros), mais a lista legada.
-   Decisão do dono (05/10/2026): "deixar a seleção apenas para as cadastradas;
-   se surgir uma nova, basta cadastrá-la e selecioná-la". O servidor confere
-   o mesmo (dim_veiculos). */
+/* As transportadoras CADASTRADAS são as da Frota, e só elas. Decisão do dono
+   (05/10/2026): "deixar a seleção apenas para as cadastradas; se surgir uma
+   nova, basta cadastrá-la e selecioná-la". O servidor confere em
+   dim_veiculos, letra por letra. Até 09/10 esta lista somava a lista antiga
+   do navegador — e oferecia nome que o servidor recusa (#128). */
 function freteTransportadorasConhecidas(){
-  const nomes = new Set();
-  const frota = (typeof DB !== 'undefined' && Array.isArray(DB.frota)) ? DB.frota : [];
-  frota.forEach((f) => { const n = String(f.transportadora || '').trim(); if(n) nomes.add(n); });
-  const legado = (typeof DB !== 'undefined' && Array.isArray(DB.transportadoras)) ? DB.transportadoras : [];
-  legado.forEach((t) => { const n = String(t.nome || '').trim(); if(n) nomes.add(n); });
-  return [...nomes].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  return transportadorasDaFrota().map(t => t.nome);
 }
 
 function freteEditarCarga(carga, campo){
@@ -790,7 +793,23 @@ async function freteSalvarCarga(carga, campo){
     await SuincoSharePoint.frete.editarCarga(carga, { [campo]: valor });
     freteFecharModal();
     await freteRecarregarSemPiscar();
-  }catch(e){ notify(freteMensagemDeErro(e), 'danger', 8000); }
+  }catch(e){ freteRecusaNaJanela(e); notify(freteMensagemDeErro(e), 'danger', 8000); }
+}
+/* A RECUSA DENTRO DA JANELA, junto do campo (09/10/2026, #128). O aviso no
+   canto não basta: com três avisos na tela o quarto espera na fila, e a
+   janela continua aberta esperando a pessoa decidir o que fazer. */
+function freteRecusaNaJanela(e){
+  const corpo = document.getElementById('frete-modal-corpo');
+  if(!corpo) return;
+  let caixa = document.getElementById('frete-modal-erro');
+  if(!caixa){
+    caixa = document.createElement('div');
+    caixa.id = 'frete-modal-erro';
+    caixa.className = 'frete-alerta';
+    caixa.setAttribute('role', 'alert');
+    corpo.appendChild(caixa);
+  }
+  caixa.textContent = freteMensagemDeErro(e);
 }
 
 /* Data do pagamento e data da tratativa, editáveis (decisão do dono, 05/10/2026). */
@@ -1037,6 +1056,7 @@ async function freteSalvarEdicao(carga){
     await freteRecarregarSemPiscar();
   }catch(e){
     if(botao) botao.disabled = false;
+    freteRecusaNaJanela(e);
     notify(freteMensagemDeErro(e), 'danger', 9000);
   }
 }
@@ -1079,7 +1099,7 @@ async function freteSalvarNota(carga, nota, campo){
     await SuincoSharePoint.frete.tratar(carga, nota, { [campo]: valor });
     freteFecharModal();
     await freteRecarregarSemPiscar();
-  }catch(e){ notify(freteMensagemDeErro(e), 'danger', 8000); }
+  }catch(e){ freteRecusaNaJanela(e); notify(freteMensagemDeErro(e), 'danger', 8000); }
 }
 
 function fretePagarNotaUI(carga, nota){

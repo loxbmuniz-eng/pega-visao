@@ -456,20 +456,44 @@ function importarFrotaLoteUI(){
   document.getElementById('frota-lote').value = '';
   renderAll();
 }
-function renderTranspLista(){
-  const lista = listarTransportadoras();
-  document.getElementById('cad-transp-lista').innerHTML = lista.length ? lista.map(t=>`
-    <div class="modal-list-item"><span>${esc(t.nome)}</span>
-      <button class="btn btn-danger btn-sm no-print" onclick="removerTransportadoraUI('${escJs(t.id)}')">Excluir</button></div>
-  `).join('') : '<div class="empty-state">Nenhuma transportadora cadastrada.</div>';
+/* O QUADRO "TRANSPORTADORAS" MOSTRA AS DA FROTA (09/10/2026, #128; o dono
+   escolheu "mostrar as da Frota"). Antes ele era uma lista solta de nomes,
+   gravada só neste navegador: aceitava o nome, o Pagamento de Frete o
+   oferecia, e o servidor — que só conhece a Frota — recusava. Transportadora
+   nova entra cadastrando uma placa dela na Frota; o botão leva até lá. A
+   busca não liga para acento nem maiúscula. */
+function semAcentoMinusculo(s){
+  return String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 }
-function addTransportadoraUI(){
-  try{
-    addTransportadora(document.getElementById('cad-transp-nome').value);
-    document.getElementById('cad-transp-nome').value = '';
-    notify('Transportadora adicionada.', 'success');
-    renderAll();
-  }catch(e){ notify(e.message, 'danger'); }
+function renderTranspLista(){
+  const lista = transportadorasDaFrota();
+  const busca = semAcentoMinusculo((document.getElementById('cad-transp-busca') || {}).value || '').trim();
+  const vistas = busca ? lista.filter(t => semAcentoMinusculo(t.nome).includes(busca)) : lista;
+  const conta = document.getElementById('cad-transp-conta');
+  if(conta) conta.textContent = busca
+    ? `${vistas.length} de ${lista.length} transportadoras da Frota`
+    : `${lista.length} transportadora${lista.length === 1 ? '' : 's'} na Frota`;
+  document.getElementById('cad-transp-lista').innerHTML = vistas.length ? vistas.map(t => `
+    <div class="modal-list-item transp-item"><span>${esc(t.nome)}</span>
+      <span class="transp-placas">${t.placas} placa${t.placas === 1 ? '' : 's'}</span></div>
+  `).join('') : `<div class="empty-state">${busca
+      ? 'Nenhuma placa da Frota é dessa transportadora. Se ela é nova, cadastre uma placa dela na Frota.'
+      : 'Nenhuma placa cadastrada na Frota ainda.'}</div>`;
+  const soAqui = transportadorasSoNesteNavegador();
+  const caixa = document.getElementById('cad-transp-so-aqui');
+  if(caixa){
+    caixa.hidden = !soAqui.length;
+    caixa.innerHTML = soAqui.length ? `
+      <div class="transp-so-aqui-tit">Só neste computador — o servidor não conhece</div>
+      <div class="card-sub">Nomes digitados no quadro antigo. Nenhuma placa da Frota usa estes nomes, e o Pagamento de Frete não os aceita. Confira na Frota como a transportadora está escrita e exclua o nome daqui.</div>
+      ${soAqui.map(t => `<div class="modal-list-item"><span>${esc(t.nome)}</span>
+        <button class="btn btn-danger btn-sm no-print" onclick="removerTransportadoraUI('${escJs(t.id)}')">Excluir</button></div>`).join('')}` : '';
+  }
+}
+function irParaCadastroDePlacaUI(){
+  irParaSecaoUI('card-frota');
+  const campo = document.getElementById('frota-placa');
+  if(campo) setTimeout(() => { try { campo.focus({ preventScroll: true }); } catch(e){} }, 60);
 }
 /* Excluir uma transportadora era UM clique, sem pergunta (achado no
    /impeccable Lote 5) — a Frota, ao lado, já perguntava. Agora pergunta
@@ -479,14 +503,17 @@ async function removerTransportadoraUI(id){
   const t = DB.transportadoras.find(x => x.id === id);
   if(!t) return;
   if(!(await perguntarUI({ titulo: `Excluir a transportadora ${t.nome}?`,
-       texto: 'Ela sai da lista de transportadoras do cadastro. As placas da Frota que já usam esse nome continuam como estão.',
+       texto: 'O nome sai deste computador. Nenhuma placa da Frota usa esse nome — a Frota não muda.',
        botao: 'Excluir', perigo: true }))) return;
   removerTransportadora(id);
   notify('Transportadora excluída.', 'success');
   renderAll();
 }
 function atualizarDatalists(){
-  document.getElementById('lista-transportadoras').innerHTML = DB.transportadoras.map(t=>`<option value="${esc(t.nome)}">`).join('');
+  /* As sugestões ao digitar transportadora (Frota, Programação, Montagem,
+     completar a chegada) vêm da Frota — antes vinham da lista antiga do
+     navegador e espalhavam a grafia que o servidor recusa (#128). */
+  document.getElementById('lista-transportadoras').innerHTML = transportadorasDaFrota().map(t=>`<option value="${esc(t.nome)}">`).join('');
   /* Placas da Frota para o campo de placa da Montagem. A sugestão mostra a
      transportadora junto: quem monta o dia reconhece o caminhão pela
      empresa, não pelas sete letras. */
