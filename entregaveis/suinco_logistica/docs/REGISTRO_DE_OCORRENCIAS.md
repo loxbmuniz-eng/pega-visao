@@ -5981,7 +5981,127 @@ algo sobre o painel; os dois podiam cancelar um portão.
 **Regra que fica:** suíte que põe dado de teste no banco limpa num `finally`.
 Limpeza no fim do `main()` não é limpeza — é limpeza só quando dá tudo certo.
 
-## #131 — As cargas novas do dia nasciam 16627, 16628… na Sequência (09/10/2026)
+## #131 — PDF do Pagamento de Frete com folha de uma linha só (09/10/2026)
+
+**Relato do dono**, com o PDF exportado de manhã (32 cargas, 270 notas
+pendentes, 20 folhas): *"o relatorio ta saindo com algumas partes tipo uma
+linha pra uma pagina inteira"*. E, quando a primeira resposta foi arrumar o
+PDF à mão: *"eu quero que voce arrume o relatorio do painel pra sair certo"*.
+
+Conferido no PDF dele: as folhas 3, 6, 13 e 17 tinham UMA linha — a carga — e
+o resto em branco; as notas dela começavam na folha seguinte. As quatro são as
+cargas de lista longa (30, 50, 44 e 36 notas).
+
+**Causa 1 (a #72 de novo — decisão aplicada no nível errado):**
+
+    .frete-pdf tbody.fpdf-grupo{ break-inside:avoid; page-break-inside:avoid }
+
+O `avoid` envolvia a carga E a lista inteira das notas. Grupo que não cabia no
+resto da folha pulava inteiro para a seguinte (o vão no pé). Grupo maior que
+uma folha não tinha como cumprir o `avoid`: o navegador partia na única
+fronteira que sobrava — entre a carga e as notas. Carga sozinha numa folha,
+notas sem a carga na outra: exatamente o que a regra existia para impedir
+("nota pendente numa folha e a carga dela na outra é o tipo de papel que faz
+pagar a transportadora errada").
+
+**Causa 2, achada ao medir a primeira correção:** a célula que segura a lista
+(`tr.fpdf-det > td`) tinha 8px de `padding` embaixo. Com eles o Chromium não
+começa a lista no pé da folha — empurra carga e lista para a seguinte (folha 1
+com 39% usada, 17 folhas). Sem eles, a lista começa onde a carga está. O
+respiro antes da próxima carga continua pela margem de 6px que toda tabela tem
+no papel (`.print-page table`): a margem não atrapalha a quebra, o padding
+atrapalha. Medido variante por variante, não suposto.
+
+**Correção** (só painel: `app/76_pagamento_frete.js` e `styles.css`; o servidor
+imprime o HTML e o CSS que o painel manda — nada depende do `atualizar.sh`):
+- a lista de notas pode continuar na folha seguinte; cada NOTA segue
+  indivisível (`.print-page tr`);
+- a linha da carga não fica no pé da folha sem o começo das notas
+  (`break-after:avoid`);
+- o título da lista saiu do `<div>` e virou a primeira linha do `<thead>` das
+  notas, que o navegador REPETE em toda folha de continuação: "N nota(s)
+  pendente(s) da carga X · transportadora". Nenhuma folha tem nota sem dizer de
+  que carga ela é — e a transportadora entrou no título;
+- `<colgroup>` segura as larguras das sete colunas (com o título na primeira
+  linha ocupando as sete, o `table-layout:fixed` mandaria pela linha errada);
+- a célula da lista sem padding embaixo.
+
+**Medido** com a mesma distribuição de notas por carga do PDF do dono, impresso
+como o servidor imprime — no Chromium 141 (o da bateria) e no 149 (o do
+servidor, Playwright 1.61), resultado idêntico nos dois:
+
+    publicado (07b412e) .... 22 folhas · 4 com uma linha só · pior folha  7% usada
+    só a lista partindo ..... 17 folhas · 0 sozinhas         · pior folha 39% usada
+    correção inteira ........ 16 folhas · 0 sozinhas         · fora a última, nenhuma abaixo de 84%
+
+**Trava:** `testes/test_pagamento_frete_pdf_aproveita_a_folha.py`. Gera o PDF
+como o servidor (mesmo HTML de `freteMontarPdf()`, mesmo CSS de
+`coletarCssDoPainel()`, mesmo `@page` de `servicos/pdf.js`) e lê cada folha:
+nenhuma termina numa carga sem as notas; toda folha com nota diz de que carga
+é; as 270 notas saem uma vez cada; nenhuma folha, fora a última, com mais de
+25% em branco no pé. Reprova no publicado em 3 dos 4 pontos.
+
+**Visto na bateria, sem defeito no painel (causa 3, ambiente):**
+`test_pagamento_frete_acoes_visiveis` e mais quatro suítes abrem
+`vitrine/vitrine.html` sem gerá-la. Ela é gerada (está no `.gitignore`) e só
+passa a existir depois que uma das duas suítes `test_vitrine_*` roda. Num clone
+novo, rodadas antes delas, reprovam com `ERR_FILE_NOT_FOUND`; com a vitrine
+gerada (`python3 vitrine/gerar_vitrine.py`), passam.
+
+## #132 — Quatro tropeços da bateria num contêiner novo (09/10/2026)
+
+**O que aconteceu.** O portão 77 (o da #131) rodou num contêiner recém-criado:
+banco novo, vitrine não gerada, sem o `ss`. Nenhum dos vermelhos era defeito do
+painel — eram quatro coisas que passavam no ambiente antigo pelo que ele tinha
+acumulado, não pelo que o código garante.
+
+1. **O portão cancelou no passo 5.** O `derrubar_api` achava a API de teste
+   velha pelo `ss` (pacote iproute2), que o contêiner novo não tinha: não achou
+   ninguém, a API velha — de outro commit — ficou de pé, e a nova não subiu
+   (porta ocupada). O `test_vigia_da_bateria` reprovou pelo mesmo motivo.
+   **Correção:** `quem_escuta_na_porta` (`testes/_ambiente.sh`) usa o `ss` e,
+   sem ele, o `lsof`; sem nenhum dos dois, anota. O vigia e a suíte de mentira
+   do teste chamam a mesma função. Provado com o `ss` escondido:
+   `test_vigia_da_bateria` verde.
+
+2. **`test_montagem_linha_editavel` escolhia uma rota que a tela não
+   oferece.** Pegava "a rota de maior código", sem filtro — num banco novo, a
+   `ZQ2` que o `test_excluir_rota_do_cadastro` deixa APOSENTADA (rota usada não
+   se apaga). A aposentada sai dos seletores, e o `select_option` esperava 30 s
+   por uma opção que não existe. A versão publicada reprova duas vezes
+   seguidas nesse banco. **Correção:** só rota ativa e da faixa numérica da
+   operação.
+
+3. **No ambiente antigo ela passava porque uma rota `ZT…` esquecida ficava
+   acima da `ZQ2` — e quem esquecia era o `test_rota_cadastrada_aparece`.** O
+   comentário dele promete apagar o que cria, mas a carga programada na rota
+   prende a rota pela chave estrangeira: o DELETE era recusado, com a saída
+   descartada. Sobrava uma `ZT` por bateria. **Correção:** apaga a carga (o
+   histórico vai junto, ON DELETE CASCADE), a linha da Montagem e a rota, num
+   `finally`, e reprova se sobrar rota. Provado: nenhuma `ZT` depois.
+
+4. **Cinco suítes abrem a `vitrine/vitrine.html` sem gerá-la**
+   (`test_datas_e_tempos_inteiros`, `test_graficos_dataviz`,
+   `test_historico_cartao_celular`, `test_numero_da_carga_no_historico`,
+   `test_pagamento_frete_acoes_visiveis`). Ela está no `.gitignore`, e só as
+   duas `test_vitrine_*` a geram — depois das cinco, na ordem alfabética. Num
+   clone novo, `ERR_FILE_NOT_FOUND`; no ambiente antigo, mediam a vitrine da
+   bateria ANTERIOR, de outro commit. **Correção:** o `rodar_tudo.sh` gera a
+   vitrine antes de qualquer suíte, quando alguma das escolhidas a abre (menos
+   de 1 s). Provado apagando a vitrine: `test_pagamento_frete_acoes_visiveis`
+   verde.
+
+**Família:** a da #130 — *o teste que mede outra coisa* e *contaminação entre
+suítes*.
+
+**E o bloco de pendências do portão 77 saiu errado:** listou a 066 e cinco
+arquivos do servidor, porque `COMMIT_EM_PRODUCAO.txt` e
+`APLICADAS_EM_PRODUCAO.txt` ainda dizem `dbecc3e`/065 — os COPIE DAQUI dos
+portões 75 e 76 (`2e2b0bf` e `07b412e`, migração 066), registrados no raio-X,
+não foram gravados nas marcas. A regra do arquivo é que a marca só muda com o
+bloco na mão: fica para o próximo COPIE DAQUI. A #131 não tocou em `backend/`.
+
+## #133 — As cargas novas do dia nasciam 16627, 16628… na Sequência (09/10/2026)
 
 **Relato do dono, com o print da Montagem de 09/10:** *"cargas que foram
 criadas agora estão saindo com um número nada a ver na coluna sequência,

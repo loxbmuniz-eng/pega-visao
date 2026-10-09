@@ -1508,7 +1508,7 @@ async function definirSequenciaMontagemUI(id, val){
   /* Apagar o campo APAGA o número: campo vazio não é ordem de reordenar,
      é "esta linha ainda não tem lugar na fila". */
   if(val === '') return alterarMontagemUI(id, 'sequencia', '');
-  /* NÚMERO QUE PULA PARA DEPOIS DA MAIOR DO DIA PERGUNTA (#131) — inclusive
+  /* NÚMERO QUE PULA PARA DEPOIS DA MAIOR DO DIA PERGUNTA (#133) — inclusive
      na linha que já virou carga ou foi cancelada: o número dela também
      conta para a casa livre de quem for criado depois. */
   const doDia = (_montagemDia?.montagens || []).map(x => x.sequencia);

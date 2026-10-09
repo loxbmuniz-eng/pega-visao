@@ -137,7 +137,7 @@ async def main():
         seq = pg.locator(f'#torre-tbody tr[data-carga="{alvo}"] .seq-input')
         await seq.fill('5000')
         await seq.dispatch_event('change')
-        # A REGRA MUDOU DE PROPÓSITO (09/10/2026, #131): 5000 pula para depois
+        # A REGRA MUDOU DE PROPÓSITO (09/10/2026, #133): 5000 pula para depois
         # da maior sequência do dia, e o painel PERGUNTA antes de gravar. A
         # pessoa confirma; o que este bloco trava continua igual — a linha vai
         # na hora e o cursor volta para o campo dela.

@@ -1120,7 +1120,7 @@ async function definirPosicaoNaFilaUI(id, val){
 }
 
 /* SEQUÊNCIA QUE DEIXA BURACO DEPOIS DA MAIOR DO DIA: O PAINEL PERGUNTA
-   (09/10/2026, ocorrência #131).
+   (09/10/2026, ocorrência #133).
 
    RELATO DO DONO, com o print da Montagem: as cargas criadas no dia nasciam
    16627, 16628… depois do 25 e do 26. Uma linha tinha recebido 16626 — o

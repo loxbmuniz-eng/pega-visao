@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Sequência que deixa buraco depois da maior do dia: o painel PERGUNTA (#131).
+"""Sequência que deixa buraco depois da maior do dia: o painel PERGUNTA (#133).
 
 RELATO DO DONO, 09/10/2026, com o print da Montagem do dia: "cargas que foram
 criadas agora estão saindo com um número nada a ver na coluna sequência" —

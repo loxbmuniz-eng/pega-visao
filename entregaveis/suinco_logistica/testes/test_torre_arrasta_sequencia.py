@@ -131,7 +131,7 @@ async def main():
 
         print('\n=== 3. O NÚMERO DE QUEM JÁ CARREGOU CONTINUA SENDO GUARDADO ===')
         # É exatamente o defeito de 14/08 (#27): o valor tem que ficar.
-        # A REGRA MUDOU DE PROPÓSITO (09/10/2026, #131): número que pula para
+        # A REGRA MUDOU DE PROPÓSITO (09/10/2026, #133): número que pula para
         # depois da maior sequência do dia PERGUNTA antes de gravar — um peso
         # digitado no campo errado arrastou as cargas novas do dia para 16627.
         # O que este bloco trava continua igual: confirmado, o 9 FICA.
