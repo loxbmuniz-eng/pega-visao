@@ -206,7 +206,8 @@ temas (`testes/test_piso_de_12px.py`).
 
 ## Layout
 
-Cabeçalho fixo de 72 px (logo, nome, relógio, perfil, tema, avisos) e
+Cabeçalho fixo de 72 px (logo, nome, relógio, perfil, tema, avisos) — 84 px
+em duas linhas até 820 px de largura, com relógio e crachá na segunda — e
 navegação lateral fixa de 208 px a partir de 821 px de largura; abaixo disso a
 navegação vira gaveta aberta pelo botão de menu. O conteúdo de cada aba é um
 painel largo com faixa de números no topo, ações logo abaixo e a tabela ou o
@@ -226,6 +227,13 @@ altura (Programação, Cadastros) abre com a barra "Ir para": as seções que a
 pessoa vê, na ordem da tela, com salto imediato e o foco no título. Duas
 datas que podem discordar na mesma aba dizem quando discordam, e oferecem
 alinhar — nunca alinham sozinhas.
+
+**A Regra do Crachá.** O cabeçalho nunca esconde o relógio nem o setor de
+quem entrou. Quando falta largura, sai primeiro a data, depois os rótulos dos
+botões (o `aria-label` fica), e o nome do crachá cede com reticências; o setor
+sai sempre inteiro. Até 820 px, relógio e crachá ganham a segunda linha. Nada
+no cabeçalho quebra linha dentro da altura fixa
+(`testes/test_le_inteiro_e_verdadeiro.py`, 12 larguras).
 
 ## Elevation & Depth
 
@@ -302,7 +310,9 @@ desistir se chama **Voltar**. No celular os botões ocupam a largura, 44 px.
 ### Do:
 - **Do** usar `--gold-text` e os tokens `-txt` para texto solto; `--gold`, `-bg` e `-fg` só para preenchimento e para o que vai em cima dele.
 - **Do** conferir toda cor nova nos dois temas, inclusive o valor dentro de campo, que a bateria de contraste não lê sozinha.
-- **Do** manter 12 px como o menor tamanho de letra, também em texto de gráfico (SVG).
+- **Do** manter 12 px como o menor tamanho de letra, também em texto de gráfico (SVG e canvas), e escrever o canvas na letra do painel (`fonteDoGrafico`).
+- **Do** dizer quem age quando a próxima etapa é de outro setor ("Saída na Portaria"), em vez de "—".
+- **Do** dar ao texto cortado com reticências o texto inteiro no `title`, e pôr nome vindo do cadastro como texto (`textContent`), nunca como HTML.
 - **Do** manter a resposta em até 180 ms e respeitar `prefers-reduced-motion`.
 - **Do** dar acesso por teclado a tudo que se clica (botão de verdade, ou `role` e `tabindex`).
 
@@ -314,4 +324,5 @@ desistir se chama **Voltar**. No celular os botões ocupam a largura, 44 px.
 - **Don't** usar cor de etapa ou dourado de preenchimento como texto no tema claro.
 - **Don't** criar pílula (canto redondo total) em botão ou caixa.
 - **Don't** deixar a página rolar de lado em nenhuma largura.
+- **Don't** escrever "com este filtro" num vazio de seção que não tem filtro: o vazio diz o que falta acontecer.
 - **Don't** usar a caixa do navegador (`prompt`, `confirm`, `alert`): senha aparece, motivo não se valida, erro fecha a janela. Toda pergunta é a do painel (`perguntarUI`).

@@ -608,7 +608,8 @@ function pvRanking(){
   });
   const itens = [...m.values()].map(a => ({ rotulo:a.rotulo, valor:a.soma / a.n, n:a.n }))
     .sort((a, b) => b.valor - a.valor);
-  Graf.ranking(alvo, { itens, formato: pvDur, rotulo:'tempo médio de pátio por rota, hoje' });
+  Graf.ranking(alvo, { itens, formato: pvDur, rotulo:'tempo médio de pátio por rota, hoje',
+    semItens: 'Nenhuma carga saiu do pátio hoje ainda. O tempo médio aparece na primeira saída.' });
 }
 
 /* =====================================================================

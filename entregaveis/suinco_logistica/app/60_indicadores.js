@@ -1053,6 +1053,18 @@ function renderComparacaoPeriodos(){
    caiu para nada", que é o oposto de "não houve carga para medir" — e é
    assim que um gráfico mente sem ninguém perceber. A linha simplesmente se
    interrompe ali. */
+/* A LETRA DO GRÁFICO É A DO PAINEL (09/10/2026, #127). Os canvas escreviam
+   em "Segoe UI" — que não existe fora do Windows e, nele, não é a Barlow do
+   resto da tela — e a sparkline vazia em 10 px, abaixo do piso de 12. */
+function fonteDoGrafico(px){
+  return `${Math.max(12, px)}px ${getComputedStyle(document.body).fontFamily}`;
+}
+/* Rótulo centrado que não sai pela borda: o último dia do gráfico de linha
+   ("09/10") ficava com 1 px fora do canvas, cortado. */
+function textoDentro(ctx, txt, x, y, largura){
+  const meia = ctx.measureText(txt).width / 2;
+  ctx.fillText(txt, Math.min(Math.max(x, meia), largura - meia), y);
+}
 function desenharSparklines(raiz){
   raiz.querySelectorAll('canvas.spark').forEach(canvas=>{
     let serie;
@@ -1066,9 +1078,9 @@ function desenharSparklines(raiz){
 
     if(validos.length < 2){
       ctx.fillStyle = corTema('--text-dim');
-      ctx.font = '10px system-ui, sans-serif';
+      ctx.font = fonteDoGrafico(12);
       ctx.textAlign = 'center';
-      ctx.fillText('sem série', L/2, A/2 + 3);
+      textoDentro(ctx, 'sem série', L/2, A/2 + 4, L);
       return;
     }
 
@@ -1180,9 +1192,9 @@ function prepararCanvas(canvas){
 function limparCanvasMsg(canvas, msg){
   const { ctx, w, h } = prepararCanvas(canvas);
   ctx.fillStyle = corTema('--text-dim');
-  ctx.font = '14px Segoe UI, sans-serif';
+  ctx.font = fonteDoGrafico(14);
   ctx.textAlign = 'center';
-  ctx.fillText(msg, w/2, h/2);
+  textoDentro(ctx, msg, w/2, h/2, w);
 }
 function drawBarChart(canvas, itens){
   // itens: [{label, valor, cor}], valor em minutos (ou null = sem dado)
@@ -1195,7 +1207,7 @@ function drawBarChart(canvas, itens){
   const areaH = h - padBottom - padTop;
   const larguraBarra = Math.min(90, (w / itens.length) * 0.55);
   const espaco = w / itens.length;
-  ctx.font = '13px Segoe UI, sans-serif';
+  ctx.font = fonteDoGrafico(13);
   /* A dica ao passar o mouse: o canvas não tem <title> por barra, então
      guarda a faixa de cada barra e o movimento do mouse escolhe a do
      ponteiro. Ligado uma vez só por canvas — redesenhar não empilha. */
@@ -1259,16 +1271,16 @@ function drawLineChart(canvas, pontos){
   });
   ctx.stroke();
   // pontos + valor em texto (nunca só a posição do ponto carrega a info)
-  ctx.font = '12px Segoe UI, sans-serif'; ctx.textAlign = 'center';
+  ctx.font = fonteDoGrafico(12); ctx.textAlign = 'center';
   pontos.forEach((p,i)=>{
     const x = padL + passoX*i, y = coordY(p.quantidade);
     ctx.fillStyle = corTema('--gold-dim');
     ctx.beginPath(); ctx.arc(x,y,4,0,Math.PI*2); ctx.fill();
     ctx.fillStyle = corTema('--text');
-    ctx.fillText(String(p.quantidade), x, y-10 < 10 ? 10 : y-10);
+    textoDentro(ctx, String(p.quantidade), x, y-10 < 10 ? 10 : y-10, w);
     if(pontos.length <= 14 || i%Math.ceil(pontos.length/14)===0){
       ctx.fillStyle = corTema('--text-dim');
-      ctx.fillText(p.dia.slice(0,5), x, padTop+areaH+16);
+      textoDentro(ctx, p.dia.slice(0,5), x, padTop+areaH+16, w);
     }
   });
 }

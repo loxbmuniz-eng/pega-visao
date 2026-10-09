@@ -35,7 +35,10 @@ function badgeHtml(status){
    ajustar uma cor de status repinta o botão junto, sem lista paralela. */
 function botaoAvancoHtml(carga){
   const acao = NEXT_ACAO[carga.status];
-  if(!acao) return '—';
+  if(!acao){
+    const quem = PROXIMO_DE_OUTRO_SETOR[carga.status];
+    return quem ? `<span class="acao-outro-setor">${esc(quem)}</span>` : '—';
+  }
   const slug = statusSlug(acao.destino);
   return `<button class="btn btn-sm btn-avanco btn-avanco-${slug}"
       onclick="avancarStatusUI('${escJs(carga.id)}')"

@@ -73,6 +73,13 @@ const NEXT_ACAO = {
   // aprendendo o painel não precisa traduzir "faturar" para "Faturado".
   'Embarque Finalizado':  { label:'FATURADO',           destino:'Faturado' }
 };
+/* QUANDO A PRÓXIMA ETAPA É DE OUTRO SETOR (09/10/2026, #127), a linha diz
+   quem age. A carga faturada fica na fila do Faturamento até sair (regra de
+   12/08: nada some da fila, quem não é da vez fica embaixo) — e ali a
+   coluna Ação mostrava "—", que nega sem ensinar o caminho. */
+const PROXIMO_DE_OUTRO_SETOR = {
+  'Faturado': 'Saída na Portaria'
+};
 
 /* ---------- CONEXÃO COM O SERVIDOR (estado real, sem fingir) ----------
    O rodapé e o badge do cabeçalho mostram o estado VERDADEIRO da conexão.

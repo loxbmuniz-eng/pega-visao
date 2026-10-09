@@ -5775,3 +5775,61 @@ mesmo "Excluir" nos três cartões; a transportadora pergunta e "Cancelar" não
 exclui; topo e tabela com a mesma cor nos três avanços; os três textos.
 Reprova no publicado em 13 pontos.
 
+
+## #127 — O que se lia pela metade: relógio, crachá, gráfico e "—" (09/10/2026)
+
+**Achado** na auditoria `/impeccable` (Lote 5b), medido no navegador antes de
+mexer:
+
+- **cabeçalho**: em 1024×768 o relógio ficava 10 px ACIMA da tela. O meio do
+  cabeçalho tinha 210 px para o relógio (178) e o crachá (142); eles quebravam
+  em duas linhas e o cabeçalho, de altura fixa, cortava a de cima. **Achado
+  no caminho, pior que o da auditoria:** em 600 e 768 px — o tablet da
+  Portaria em pé — o meio ficava com 0 e 23 px, e relógio e crachá SUMIAM por
+  inteiro, atrás do corte (`overflow:hidden`). No celular o crachá tinha de
+  36 a 66 px: "An…" — a pessoa não via com que setor tinha entrado;
+- **Faturamento**: a carga já FATURADO continuava em "Cargas Aguardando
+  Faturamento", com a ação "—". Ficar na fila é REGRA (12/08, "nada some da
+  fila; quem não é da vez fica embaixo" — `test_fila_por_acao_do_setor`); o
+  defeito era o título dizer outra coisa e o "—" não dizer quem age;
+- **gráficos em canvas** (Indicadores): letra "Segoe UI" (o painel é Barlow;
+  fora do Windows ela nem existe), a sparkline vazia em 10 px, e o último dia
+  do gráfico de linha ("09/10") 1 px fora da borda;
+- **ranking dos Indicadores**: o nome comprido saía cortado e não se lia em
+  lugar nenhum. **Achado no caminho:** o nome entrava por `innerHTML` — um
+  "<" no nome de uma transportadora cadastrada virava marcação na tela de
+  todo mundo que abrisse os Indicadores;
+- **Pátio ao vivo**: "Nenhuma linha com este filtro." numa seção sem filtro;
+- **títulos**: "Rádio do pátio" (h2) seguido de "Onde estão os caminhões
+  agora" (h4), e nenhum cartão era título para o leitor de tela.
+
+**Família:** *Rótulo que mente* (o título do Faturamento, o vazio que fala de
+filtro) e *Botão desabilitado não ensina o caminho* (o "—"). O cabeçalho é
+da família *A conta feita numa largura só*: cada regra de largura foi escrita
+para o aparelho de quem pediu, e nenhuma mediu a soma.
+
+**Correção:**
+- `tema2027/92_cabecalho.css` (último da pasta, dono do que cabe no
+  cabeçalho): o meio nunca quebra linha; o crachá vira três peças
+  (`atualizarHeaderOperador`) — o nome cede com reticências, o setor sai
+  sempre inteiro; degraus: até 1366 sai a data, até 1280 os botões ficam só
+  com o ícone (o `aria-label` fica); até 820 relógio e crachá ganham a
+  SEGUNDA LINHA (cabeçalho de 84 px, em `--header-h`);
+- `PROXIMO_DE_OUTRO_SETOR` (`app/00_base.js`): a faturada diz "Saída na
+  Portaria" (texto, não botão); o cartão vira "Fila do Faturamento" e diz
+  que as faturadas ficam embaixo até a saída;
+- `fonteDoGrafico` e `textoDentro` (`app/60_indicadores.js`): letra do
+  painel, 12 px no mínimo, rótulo dentro da borda;
+- `graficos2027.js` → `ranking`: nome por `textContent`, com o nome inteiro
+  no `title`; `semItens` deixa quem chama dizer por que está vazio — o Pátio
+  diz "Nenhuma carga saiu do pátio hoje ainda";
+- todo `div.card-title` é título de nível 2 (`role="heading"`); o Pulso
+  desce de h4 para h3. O `<summary>` dos cartões que abrem e fecham continua
+  botão.
+
+**Trava.** `test_le_inteiro_e_verdadeiro`: o setor inteiro, o começo do nome,
+o relógio inteiro e nada fora da tela em 12 larguras (360 a 1920), três
+crachás, inclusive a Administração com o "Atenção"; a fila do Faturamento;
+letra, tamanho e borda de todo texto de canvas; `title` e texto puro no
+ranking; o vazio do Pátio; títulos sem pulo em todas as abas. Reprova no
+publicado em 61 pontos; passa com a correção.

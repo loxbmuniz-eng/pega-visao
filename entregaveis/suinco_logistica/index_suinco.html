@@ -156,7 +156,7 @@
   <div class="tab-page active" id="tab-torre">
     <div class="funcao-aba" data-tab="torre"></div>
     <div class="card">
-      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-torre"/></svg> Torre de Controle — todas as cargas em aberto</div>
+      <div class="card-title" role="heading" aria-level="2"><svg class="ico ico-card" aria-hidden="true"><use href="#i-torre"/></svg> Torre de Controle — todas as cargas em aberto</div>
       <div class="card-sub">Todos os setores acompanham aqui; a Logística e a Administração também editam a linha. Atualiza sempre que alguém registra uma movimentação.</div>
       <div class="bento bi-faixa" id="torre-stats"></div>
       <!-- HIERARQUIA (01/10/2026): primeiro os números, depois a ação de
@@ -219,7 +219,7 @@
          os outros setores já enxergavam nas próprias abas, não aparecia
          aqui — mesmo a Torre sendo a tela liberada para todo mundo. -->
     <div class="card">
-      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-torre"/></svg> Visão do Pátio — linha do tempo</div>
+      <div class="card-title" role="heading" aria-level="2"><svg class="ico ico-card" aria-hidden="true"><use href="#i-torre"/></svg> Visão do Pátio — linha do tempo</div>
       <div class="card-sub">Onde cada carga está agora, na linha do tempo das seis etapas. Use o período para revisitar uma carga ou um caminhão de outro dia.</div>
       <div class="filtro-periodo">
         <div class="form-group">
@@ -292,7 +292,7 @@
          seções que a pessoa VÊ. -->
     <nav class="ir-para no-print" data-ir-para="programacao" aria-label="Ir para uma parte da Programação" hidden></nav>
     <div class="card" id="card-fila-programados">
-      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-fila"/></svg> Fila de Programados</div>
+      <div class="card-title" role="heading" aria-level="2"><svg class="ico ico-card" aria-hidden="true"><use href="#i-fila"/></svg> Fila de Programados</div>
       <div class="card-sub">As cargas programadas para o dia escolhido. As de dias anteriores que ainda não têm veículo ficam listadas logo abaixo, até serem contratadas.</div>
       <!-- O PAPEL DO MANOBRISTA (09/09/2026). Pedido do dono: "poder gerar na
            programacao OU na torre de controle". Os dois, porque quem monta a
@@ -345,7 +345,7 @@
     </div>
 
     <div class="card" id="card-nova-carga">
-      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-programacao"/></svg> Nova Carga Programada</div>
+      <div class="card-title" role="heading" aria-level="2"><svg class="ico ico-card" aria-hidden="true"><use href="#i-programacao"/></svg> Nova Carga Programada</div>
       <div class="card-sub">Digite a placa — Transportadora e Tipo de Veículo são preenchidos automaticamente se a placa estiver cadastrada em Cadastros → Frota. <strong>Ainda não contratou o caminhão? Deixe a placa em branco</strong> — a carga fica aqui na Programação e entra na Torre sozinha quando a placa for preenchida. Placa digitada precisa estar cadastrada na Frota.</div>
       <div class="form-row">
         <div class="form-group">
@@ -448,7 +448,7 @@
          montada aqui NÃO aparece na Torre — ela só vira carga de verdade
          quando ganha placa (ver migração 031). -->
     <div class="card" id="card-montagem">
-      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-programacao"/></svg>
+      <div class="card-title" role="heading" aria-level="2"><svg class="ico ico-card" aria-hidden="true"><use href="#i-programacao"/></svg>
         Montagem do dia <span id="mont-dia-nome" class="pill-count"></span></div>
       <div class="card-sub">As rotas deste dia da semana já vêm do modelo. <strong>Clique na linha</strong>
         para abrir os campos e preencher a carga; a placa entra quando o transporte for contratado — e pode
@@ -557,7 +557,7 @@
          Sem esta tela o botão "Puxar rotas do modelo" não tinha o que
          puxar. Faltou na primeira entrega. -->
     <div class="card" id="card-modelo-semana">
-      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-rotas"/></svg>
+      <div class="card-title" role="heading" aria-level="2"><svg class="ico ico-card" aria-hidden="true"><use href="#i-rotas"/></svg>
         Rotas por dia da semana</div>
       <div class="card-sub">Quais rotas costumam rodar em cada dia. É daqui que a Montagem do dia
         puxa a lista pronta toda manhã. <strong>Mudar aqui vale para as próximas semanas</strong> —
@@ -598,7 +598,7 @@
          fila no alto da tela. -->
 
     <div class="card" id="card-aguardando-carga">
-      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-espera"/></svg> Aguardando Carga <span id="prog-aguardando-count" class="pill-count" hidden>0</span></div>
+      <div class="card-title" role="heading" aria-level="2"><svg class="ico ico-card" aria-hidden="true"><use href="#i-espera"/></svg> Aguardando Carga <span id="prog-aguardando-count" class="pill-count" hidden>0</span></div>
       <div class="card-sub">Veículos que a Portaria registrou no pátio sem programação prévia. Use <strong>Criar carga</strong> na linha do veículo para lançar a carga dele — o caminhão já está aqui, então o status não volta atrás.</div>
       <div class="table-wrap">
         <table>
@@ -632,7 +632,7 @@
       </button>
     </div>
     <div class="card" id="card-programacao-dia" hidden>
-      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-programacao"/></svg> Programação do dia — como ela foi feita</div>
+      <div class="card-title" role="heading" aria-level="2"><svg class="ico ico-card" aria-hidden="true"><use href="#i-programacao"/></svg> Programação do dia — como ela foi feita</div>
       <div class="card-sub">Escolha o dia e veja <strong>tudo</strong> que foi programado para ele — inclusive as cargas
         canceladas depois, que somem das outras telas de propósito. Cada linha diz quem programou, quando, e o
         desfecho; clique na linha para o log de alterações. O resumo é a <strong>aderência à programação</strong>:
@@ -664,7 +664,7 @@
     <!-- Sem conexão não há checklist: a fonte é o servidor, e fingir que
          gravou foi exatamente o erro que quase custou 62 t nas cargas. -->
     <div class="card" id="dev-offline" hidden>
-      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-devolucoes"/></svg> Devoluções</div>
+      <div class="card-title" role="heading" aria-level="2"><svg class="ico ico-card" aria-hidden="true"><use href="#i-devolucoes"/></svg> Devoluções</div>
       <div class="card-sub">As devoluções moram no servidor — sem conexão não há o que listar
         nem onde gravar. Entre com seu e-mail e senha (login com servidor) e tente de novo.</div>
     </div>
@@ -674,7 +674,7 @@
            filtro. Clique filtra a lista — mesma pegada das caixas da
            Torre. É o que deixa TODOS os setores na mesma página. -->
       <div class="card">
-        <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-esteira"/></svg> Esteira de Devoluções</div>
+        <div class="card-title" role="heading" aria-level="2"><svg class="ico ico-card" aria-hidden="true"><use href="#i-esteira"/></svg> Esteira de Devoluções</div>
         <div class="card-sub">Cada caixa é uma etapa do ciclo. O checklist anda sozinho:
           terminou uma etapa, ele entra na fila do próximo setor — em tempo real, em todas as telas.</div>
         <div class="bento" id="dev-pipeline"></div>
@@ -682,7 +682,7 @@
       </div>
 
       <div class="card" id="dev-card-novo">
-        <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-devolucoes"/></svg> Novo checklist de devolução</div>
+        <div class="card-title" role="heading" aria-level="2"><svg class="ico ico-card" aria-hidden="true"><use href="#i-devolucoes"/></svg> Novo checklist de devolução</div>
         <div class="card-sub">O número do checklist é gerado sozinho. A <strong>região vem da rota</strong>
           escolhida (é o nome dela no cadastro) e identifica o checklist na conferência — um checklist
           pode juntar VÁRIAS rotas da mesma região. Os itens entram na lista logo abaixo, linha a
@@ -744,7 +744,7 @@
            motivo (652 — Sobras). Ciclo: Portaria OK → Faturamento OK →
            Expedição OK, acabou. -->
       <div class="card" id="dev-card-sobra">
-        <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-entrada"/></svg> Lançar SOBRA</div>
+        <div class="card-title" role="heading" aria-level="2"><svg class="ico ico-card" aria-hidden="true"><use href="#i-entrada"/></svg> Lançar SOBRA</div>
         <div class="card-sub">O que o monitoramento passar: só caixa, peso, produto e motivo —
           sem carga e sem rota. A sobra entra, a Portaria dá o OK, o Faturamento dá o OK e a
           Expedição dá o OK. Fim.</div>
@@ -757,7 +757,7 @@
       </div>
 
       <div class="card">
-        <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-programacao"/></svg> Checklists de devolução</div>
+        <div class="card-title" role="heading" aria-level="2"><svg class="ico ico-card" aria-hidden="true"><use href="#i-programacao"/></svg> Checklists de devolução</div>
         <div class="card-sub">Cada checklist mostra quem o criou e as etapas já carimbadas.
           A conferência aponta a falta sozinha: checklist diz 5 caixas, chegou 3, o sistema marca 2.</div>
         <div class="form-grid">
@@ -813,7 +813,7 @@
   <div class="tab-page" id="tab-portaria">
     <div class="funcao-aba" data-tab="portaria"></div>
     <div class="card">
-      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-placas"/></svg> Registrar Movimento de Placa</div>
+      <div class="card-title" role="heading" aria-level="2"><svg class="ico ico-card" aria-hidden="true"><use href="#i-placas"/></svg> Registrar Movimento de Placa</div>
       <div class="card-sub">Só 2 botões: <strong>Chegou</strong> (Aguardando Veículo → Aguardando Embarque) e <strong>Saiu</strong> (Faturado → Seguiu Viagem, aplicado a todas as cargas em aberto dessa placa ao mesmo tempo — é o mesmo caminhão, uma única vez). Se a placa não tiver programação, "Chegou" cria automaticamente uma entrada "Aguardando Carga".</div>
       <div class="quick-box">
         <div class="form-group"><label>Placa</label><input type="text" id="portaria-placa" placeholder="ABC1D23" autocomplete="off" onkeydown="if(event.key==='Enter')acaoChegadaUI()"></div>
@@ -857,7 +857,7 @@
          inspeção com um lacre, a carga estava incorreta (ou outro motivo)
          e o lacre foi recolhido — registra-se o número retido e o novo. -->
     <div class="card" id="card-lacre-retido">
-      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-lacre"/></svg> Lacre Retido</div>
+      <div class="card-title" role="heading" aria-level="2"><svg class="ico ico-card" aria-hidden="true"><use href="#i-lacre"/></svg> Lacre Retido</div>
       <div class="card-sub">Quando a inspeção retém o lacre, registre aqui: o número retido fica
         guardado na carga, o novo lacre (se houver) vira o vigente, e o motivo entra nas observações.</div>
       <div class="form-row">
@@ -881,7 +881,7 @@
          sobre função interna, à vista do porteiro. Removida. -->
 
     <div class="card">
-      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-patio"/></svg> Veículos no Pátio Agora</div>
+      <div class="card-title" role="heading" aria-level="2"><svg class="ico ico-card" aria-hidden="true"><use href="#i-patio"/></svg> Veículos no Pátio Agora</div>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Placa</th><th>Transportadora</th><th>Cargas em aberto</th><th>Status das cargas</th><th>No pátio desde</th></tr></thead>
@@ -892,7 +892,7 @@
     </div>
 
     <div class="card">
-      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-programacao"/></svg> Cargas Programadas — ação em um clique</div>
+      <div class="card-title" role="heading" aria-level="2"><svg class="ico ico-card" aria-hidden="true"><use href="#i-programacao"/></svg> Cargas Programadas — ação em um clique</div>
       <div class="card-sub">Sem digitar placa: o botão aparece só quando a ação é válida para o status atual da carga.</div>
       <div class="table-wrap">
         <table>
@@ -915,7 +915,7 @@
            alimentando as três abas. Duas cópias divergiriam na primeira
            correção feita com pressa. -->
       <div class="card">
-        <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-torre"/></svg> Visão do Pátio</div>
+        <div class="card-title" role="heading" aria-level="2"><svg class="ico ico-card" aria-hidden="true"><use href="#i-torre"/></svg> Visão do Pátio</div>
         <div class="card-sub">Onde cada carga está agora, na linha do tempo das seis etapas. Use o período para revisitar uma carga ou um caminhão de outro dia.</div>
         <div class="filtro-periodo">
           <div class="form-group">
@@ -950,7 +950,7 @@
   <div class="tab-page" id="tab-expedicao">
     <div class="funcao-aba" data-tab="expedicao"></div>
     <div class="card">
-      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-expedicao"/></svg> Ação Rápida por Placa</div>
+      <div class="card-title" role="heading" aria-level="2"><svg class="ico ico-card" aria-hidden="true"><use href="#i-expedicao"/></svg> Ação Rápida por Placa</div>
       <div class="card-sub">Se a placa tiver mais de uma carga elegível para a mesma ação, o painel pergunta qual carga está sendo processada.</div>
       <div class="quick-box">
         <div class="form-group"><label>Placa</label><input type="text" id="exp-placa" placeholder="ABC1D23" autocomplete="off"></div>
@@ -962,7 +962,7 @@
       </div>
     </div>
     <div class="card">
-      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-devolucoes"/></svg> Cargas em Andamento na Expedição</div>
+      <div class="card-title" role="heading" aria-level="2"><svg class="ico ico-card" aria-hidden="true"><use href="#i-devolucoes"/></svg> Cargas em Andamento na Expedição</div>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Seq.</th><th>Nº Carga</th><th>Placa</th><th>Transportadora</th><th>Destino</th><th>Status</th><th class="no-print">Ação</th></tr></thead>
@@ -984,7 +984,7 @@
            alimentando as três abas. Duas cópias divergiriam na primeira
            correção feita com pressa. -->
       <div class="card">
-        <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-torre"/></svg> Visão do Pátio</div>
+        <div class="card-title" role="heading" aria-level="2"><svg class="ico ico-card" aria-hidden="true"><use href="#i-torre"/></svg> Visão do Pátio</div>
         <div class="card-sub">Onde cada carga está agora, na linha do tempo das seis etapas. Use o período para revisitar uma carga ou um caminhão de outro dia.</div>
         <div class="filtro-periodo">
           <div class="form-group">
@@ -1019,7 +1019,7 @@
   <div class="tab-page" id="tab-faturamento">
     <div class="funcao-aba" data-tab="faturamento"></div>
     <div class="card">
-      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-faturamento"/></svg> Ação Rápida por Placa</div>
+      <div class="card-title" role="heading" aria-level="2"><svg class="ico ico-card" aria-hidden="true"><use href="#i-faturamento"/></svg> Ação Rápida por Placa</div>
       <div class="card-sub">Digite a placa e marque como <strong>FATURADO</strong> (<strong>Embarque Finalizado → Faturado</strong>). Só aparece aqui a carga que a Expedição já finalizou. Depois de faturada, a Portaria consegue registrar a saída do caminhão. Se a placa tiver mais de uma carga elegível, o painel pergunta qual está sendo faturada.</div>
       <div class="quick-box">
         <div class="form-group"><label>Placa</label><input type="text" id="fat-placa" placeholder="ABC1D23" autocomplete="off" onkeydown="if(event.key==='Enter')acaoRapidaPlaca('fat-placa','Embarque Finalizado','Faturado','Faturamento')"></div>
@@ -1027,7 +1027,8 @@
       </div>
     </div>
     <div class="card">
-      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-faturamento"/></svg> Cargas Aguardando Faturamento</div>
+      <div class="card-title" role="heading" aria-level="2"><svg class="ico ico-card" aria-hidden="true"><use href="#i-faturamento"/></svg> Fila do Faturamento</div>
+      <div class="card-sub">Em cima, as cargas com o embarque finalizado: é nelas que vai o <strong>FATURADO</strong>. Embaixo ficam as já faturadas, até a Portaria registrar a saída.</div>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Nº Carga</th><th>Placa</th><th>Transportadora</th><th>Destino</th><th>Peso (kg)</th><th>Status</th><th class="no-print">Ação</th></tr></thead>
@@ -1049,7 +1050,7 @@
            alimentando as três abas. Duas cópias divergiriam na primeira
            correção feita com pressa. -->
       <div class="card">
-        <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-torre"/></svg> Visão do Pátio</div>
+        <div class="card-title" role="heading" aria-level="2"><svg class="ico ico-card" aria-hidden="true"><use href="#i-torre"/></svg> Visão do Pátio</div>
         <div class="card-sub">Onde cada carga está agora, na linha do tempo das seis etapas. Use o período para revisitar uma carga ou um caminhão de outro dia.</div>
         <div class="filtro-periodo">
           <div class="form-group">
@@ -1149,7 +1150,7 @@
          no gosto: seis etapas são uma sequência, e sequência vizinha não
          se separa por cor. Aqui a etapa é lida por POSIÇÃO e RÓTULO. -->
     <div class="card" id="card-pulso-dia">
-      <div class="card-title">
+      <div class="card-title" role="heading" aria-level="2">
         <svg class="ico ico-card" aria-hidden="true"><use href="#i-indicadores"/></svg>
         Pulso do dia
         <span class="pulso-quando" id="pulso-quando"></span>
@@ -1158,7 +1159,7 @@
       <div class="pulso-numeros" id="pulso-numeros"></div>
 
       <div class="pulso-secao">
-        <h4 class="pulso-rot">Onde estão os caminhões agora</h4>
+        <h3 class="pulso-rot">Onde estão os caminhões agora</h3>
         <div id="pulso-fila"></div>
       </div>
 
@@ -1167,17 +1168,17 @@
              e a linha nunca foi desenhada: este gráfico conta caminhões por
              hora, não minutos. Saiu em 26/09/2026 — legenda que descreve o
              que não está na tela ensina a desconfiar da tela. -->
-        <h4 class="pulso-rot">Entradas no pátio, por hora</h4>
+        <h3 class="pulso-rot">Entradas no pátio, por hora</h3>
         <div id="pulso-hora" class="pulso-grafico"></div>
       </div>
 
       <div class="pulso-duplo">
         <div class="pulso-secao">
-          <h4 class="pulso-rot">Mais tempo parado — por rota</h4>
+          <h3 class="pulso-rot">Mais tempo parado — por rota</h3>
           <div id="pulso-rank-rota"></div>
         </div>
         <div class="pulso-secao">
-          <h4 class="pulso-rot">Mais tempo parado — por transportadora</h4>
+          <h3 class="pulso-rot">Mais tempo parado — por transportadora</h3>
           <div id="pulso-rank-transp"></div>
         </div>
       </div>
@@ -1188,13 +1189,13 @@
          "o bloco mais acionável". Sobe para logo depois do Pulso. É a mesma
          leitura de gargalos (analiseGargalos), só que mora aqui. -->
     <div class="card" id="card-paradas">
-      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-alerta"/></svg> Cargas paradas há mais tempo</div>
+      <div class="card-title" role="heading" aria-level="2"><svg class="ico ico-card" aria-hidden="true"><use href="#i-alerta"/></svg> Cargas paradas há mais tempo</div>
       <div class="card-sub">Cada linha é um caminhão esperando alguém destravar. Obedece ao recorte do topo.</div>
       <div id="ind-paradas"></div>
     </div>
 
     <div class="card">
-      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-indicadores"/></svg> Tempos Médios — Histórico Completo (cargas concluídas — Seguiu Viagem)</div>
+      <div class="card-title" role="heading" aria-level="2"><svg class="ico ico-card" aria-hidden="true"><use href="#i-indicadores"/></svg> Tempos Médios — Histórico Completo (cargas concluídas — Seguiu Viagem)</div>
       <!-- Mesma grade compacta da Torre de Controle (.bento) — pedido do
            usuário (08/08/2026): "que crie icones abaixo do cabecalho como
            na torre de controle". Antes era .grid4, que no celular empilhava
@@ -1211,7 +1212,7 @@
     <!-- NOTA POR TRANSPORTADORA (07/10/2026, #49): só Logística e
          Administração — número sensível de fornecedor. -->
     <div class="card" id="card-nota-transportadoras" hidden>
-      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-empresa"/></svg> Transportadoras — como cada uma está indo</div>
+      <div class="card-title" role="heading" aria-level="2"><svg class="ico ico-card" aria-hidden="true"><use href="#i-empresa"/></svg> Transportadoras — como cada uma está indo</div>
       <div class="card-sub">Uma linha por transportadora, no recorte filtrado acima. Quatro números lado a lado, sem nota única:
         uma medida só pune quem pega a rota difícil. Ficam de fora, por não serem completos: devoluções (a aba Devoluções só
         tem as que voltaram à Suinco) e pontualidade (ninguém registra a hora combinada de chegada).</div>
@@ -1219,7 +1220,7 @@
     </div>
 
     <div class="card">
-      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-bussola"/></svg> Raio-X da Operação</div>
+      <div class="card-title" role="heading" aria-level="2"><svg class="ico ico-card" aria-hidden="true"><use href="#i-bussola"/></svg> Raio-X da Operação</div>
       <div class="card-sub">Cargas <strong>concluídas</strong> do recorte filtrado acima, agrupadas por rota, transportadora ou placa.
         Clique numa linha para abrir o detalhe: onde o tempo é gasto etapa por etapa, comparado com a média geral, e as cargas
         individuais — cada uma com linha do tempo e relatório próprio. Clique no título de uma coluna para reordenar.</div>
@@ -1238,7 +1239,7 @@
     </div>
 
     <div class="card">
-      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-patio"/></svg> Pulso do Pátio</div>
+      <div class="card-title" role="heading" aria-level="2"><svg class="ico ico-card" aria-hidden="true"><use href="#i-patio"/></svg> Pulso do Pátio</div>
       <div class="card-sub">Quando o pátio congestiona e como ele evoluiu dia a dia. Este card olha os
         <strong>últimos 30 dias inteiros</strong>, de propósito fora do filtro de período acima — padrão de
         congestionamento se enxerga no acumulado, não no recorte de um dia.</div>
@@ -1257,7 +1258,7 @@
     </div>
 
     <div class="card">
-      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-lupa"/></svg> Painel do Gestor — comparação por período</div>
+      <div class="card-title" role="heading" aria-level="2"><svg class="ico ico-card" aria-hidden="true"><use href="#i-lupa"/></svg> Painel do Gestor — comparação por período</div>
       <div class="card-sub">
         Pente fino: cada indicador quebrado nas mesmas 5 janelas de tempo, lado a lado, sem precisar clicar pra comparar.
         <strong>Semana</strong> = últimos 7 dias corridos. <strong>Mês</strong> = mês calendário atual. Quando não houver
@@ -1272,7 +1273,7 @@
     </div>
 
     <div class="card">
-      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-indicadores"/></svg> Gráficos</div>
+      <div class="card-title" role="heading" aria-level="2"><svg class="ico ico-card" aria-hidden="true"><use href="#i-indicadores"/></svg> Gráficos</div>
       <div class="card-sub">
         <!-- UM FILTRO SÓ PARA A ABA INTEIRA (28/08/2026).
 
@@ -1351,7 +1352,7 @@
     <!-- Ranking por ATRASO, não por volume. Quem move mais carga não é
          necessariamente quem precisa de atenção. -->
     <div class="card">
-      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-alerta"/></svg> Ranking de Veículos com Maior Atraso</div>
+      <div class="card-title" role="heading" aria-level="2"><svg class="ico ico-card" aria-hidden="true"><use href="#i-alerta"/></svg> Ranking de Veículos com Maior Atraso</div>
       <div class="card-sub">Do maior para o menor atraso médio. <strong>Atraso</strong> = tempo em pátio acima da meta de 3 h. Veículo sem atraso não aparece — a lista existe para mostrar onde agir.</div>
       <div class="gap8" id="ind-ranking-periodos" style="margin-bottom:14px"></div>
       <div class="table-wrap">
@@ -1366,7 +1367,7 @@
     <!-- Seção automática: o sistema aponta onde olhar, em vez de deixar o
          gestor procurar. -->
     <div class="card">
-      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-lupa"/></svg> Gargalos e Pontos Críticos de Atenção</div>
+      <div class="card-title" role="heading" aria-level="2"><svg class="ico ico-card" aria-hidden="true"><use href="#i-lupa"/></svg> Gargalos e Pontos Críticos de Atenção</div>
       <div class="card-sub">Leitura automática do período selecionado acima. Cada bloco responde uma pergunta que a operação faz de manhã.</div>
       <div id="ind-gargalos"></div>
     </div>
@@ -1379,7 +1380,7 @@
          vinham antes de tudo, e "Cadastrar Rota" ficava a 14.822 px. -->
     <nav class="ir-para no-print" data-ir-para="cadastros" aria-label="Ir para uma parte dos Cadastros" hidden></nav>
     <div class="card" id="card-frota">
-      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-expedicao"/></svg> Frota (Placa → Transportadora → Tipo de Veículo)</div>
+      <div class="card-title" role="heading" aria-level="2"><svg class="ico ico-card" aria-hidden="true"><use href="#i-expedicao"/></svg> Frota (Placa → Transportadora → Tipo de Veículo)</div>
       <div class="card-sub">A Programação só cria carga pra placa cadastrada aqui — cadastre antes de programar.</div>
       <div class="form-row">
         <div class="form-group"><label>Placa</label><input type="text" id="frota-placa"></div>
@@ -1422,7 +1423,7 @@
 
     <div class="grid2">
       <div class="card" id="card-transportadoras">
-        <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-empresa"/></svg> Transportadoras
+        <div class="card-title" role="heading" aria-level="2"><svg class="ico ico-card" aria-hidden="true"><use href="#i-empresa"/></svg> Transportadoras
           <button class="btn btn-sec btn-sm" style="float:right" onclick="exportarTransportadorasCsv()"
             title="Baixa as transportadoras da Frota (com a contagem de placas de cada uma) em CSV.">⬇ CSV</button></div>
         <div class="form-row">
@@ -1438,7 +1439,7 @@
            sempre libera Administração), mas o pedido foi explícito:
            cadastro de rota é ação só do administrador. -->
       <div class="card" id="card-cadastrar-rota" hidden>
-        <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-rotas"/></svg> Cadastrar Rota</div>
+        <div class="card-title" role="heading" aria-level="2"><svg class="ico ico-card" aria-hidden="true"><use href="#i-rotas"/></svg> Cadastrar Rota</div>
         <div class="card-sub">Só Administração. A rota cadastrada aqui entra na hora no seletor de Rota da Programação — sem esperar versão nova do painel.</div>
         <div class="form-row">
           <div class="form-group"><label>Código</label><input type="text" id="rota-codigo" placeholder="Ex: 542"></div>
@@ -1470,7 +1471,7 @@
            leitura para os outros setores (exigirSetor em /api/frete/*).
            Quanto se paga por quilômetro não é informação de pátio. -->
       <div class="card" id="card-tabela-frete" hidden>
-        <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-rotas"/></svg> Tabela de Frete</div>
+        <div class="card-title" role="heading" aria-level="2"><svg class="ico ico-card" aria-hidden="true"><use href="#i-rotas"/></svg> Tabela de Frete</div>
         <div class="card-sub">O valor do frete é <strong>KM de deslocamento × tarifa do tipo de veículo</strong>.
           Cadastre a tarifa por modalidade e o KM de cada destino — o painel preenche o KM sozinho
           quando o destino está aqui. Transportadora <strong>SUINCO</strong> (frota própria) e
@@ -1527,7 +1528,7 @@
            escolher em vez de digitar (pedido da reunião). Servidor-first,
            como toda a aba Devoluções. -->
       <div class="card" id="card-cad-devolucoes">
-        <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-devolucoes"/></svg> Cadastros de Devoluções</div>
+        <div class="card-title" role="heading" aria-level="2"><svg class="ico ico-card" aria-hidden="true"><use href="#i-devolucoes"/></svg> Cadastros de Devoluções</div>
         <div class="card-sub">Supervisores, produtos (código + nome, ex.: 30110-LINGUIÇA) e motivos.
           Viram sugestões automáticas nos campos do checklist de devolução.</div>
         <div class="form-row">
@@ -1600,7 +1601,7 @@
   <div class="tab-page" id="tab-historico">
     <div class="funcao-aba" data-tab="historico"></div>
     <div class="card">
-      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-historico"/></svg> Linha do Tempo de uma Carga</div>
+      <div class="card-title" role="heading" aria-level="2"><svg class="ico ico-card" aria-hidden="true"><use href="#i-historico"/></svg> Linha do Tempo de uma Carga</div>
       <div class="card-sub">Digite a placa ou o número de carga — a jornada completa aparece como uma linha do tempo, fácil de ler rápido.</div>
       <div class="form-group" style="max-width:420px;margin-bottom:6px">
         <label>Placa ou Nº de Carga</label>
@@ -1611,7 +1612,7 @@
     </div>
 
     <div class="card" id="card-cargas-excluidas">
-      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-lixeira"/></svg> Cargas excluídas <span class="hint">(Administração)</span></div>
+      <div class="card-title" role="heading" aria-level="2"><svg class="ico ico-card" aria-hidden="true"><use href="#i-lixeira"/></svg> Cargas excluídas <span class="hint">(Administração)</span></div>
       <div class="card-sub">Carga excluída some do pátio, mas não do banco. Aqui a Administração vê as
         últimas exclusões e pode DEVOLVER uma carga que saiu por engano — com motivo, e com registro.</div>
       <div class="form-row" style="align-items:flex-end">
@@ -1625,7 +1626,7 @@
     </div>
 
     <div class="card" id="card-log-movimentacoes">
-      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-relatorios"/></svg> Log Completo de Movimentações</div>
+      <div class="card-title" role="heading" aria-level="2"><svg class="ico ico-card" aria-hidden="true"><use href="#i-relatorios"/></svg> Log Completo de Movimentações</div>
       <div class="card-sub">Registro bruto, para auditoria — todas as mudanças de status de todas as cargas. Mais recente primeiro.</div>
       <div class="form-row">
         <div class="form-group"><label>Filtrar por placa</label><input type="text" id="hist-filtro-placa" oninput="renderHistorico()"></div>
@@ -1670,7 +1671,7 @@
          setores que têm a aba Relatórios exportam o checklist do dia com
          o STATUS ATUAL — a lista é re-buscada do servidor no clique. -->
     <div class="card" data-relatorio="checklist">
-      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-devolucoes"/></svg> Relatório de Devoluções</div>
+      <div class="card-title" role="heading" aria-level="2"><svg class="ico ico-card" aria-hidden="true"><use href="#i-devolucoes"/></svg> Relatório de Devoluções</div>
       <div class="card-sub">O checklist de devoluções do dia, com carimbos de cada etapa, faltas,
         divergentes, destinações e sobras — sempre com o status ATUAL (busca no servidor na hora
         de gerar).</div>
@@ -1692,7 +1693,7 @@
          do botão faz o gestor gerar o relatório errado e só descobrir
          depois de mandar no grupo. -->
     <div class="card" data-relatorio="patio">
-      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-programacao"/></svg> Período — Data da Programação</div>
+      <div class="card-title" role="heading" aria-level="2"><svg class="ico ico-card" aria-hidden="true"><use href="#i-programacao"/></svg> Período — Data da Programação</div>
       <div class="card-sub">Recorta os relatórios pela data em que a carga foi <strong>inserida no sistema</strong>, não pela chegada do caminhão. Em branco = todas as cargas.</div>
       <div class="form-grid">
         <div class="form-group"><label>De</label><input type="date" id="rel-data-de"
@@ -1714,17 +1715,17 @@
     </div>
 
     <div class="card" data-relatorio="patio">
-      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-relatorios"/></svg> PDF Operacional</div>
+      <div class="card-title" role="heading" aria-level="2"><svg class="ico ico-card" aria-hidden="true"><use href="#i-relatorios"/></svg> PDF Operacional</div>
       <div class="card-sub">Sequenciamento de carregamento do dia — mesmo layout da planilha usada hoje: Nº, Carga, Rota, Tipo de Operação, Faturado, Status de Carregamento (célula colorida), Placa, Transportadora, Tipo de Veículo, Peso(ton), Paletizada, Entregas, Ganchos.</div>
       <button class="btn btn-primary" onclick="exportarPdfOperacional()"><svg class="ico ico-btn" aria-hidden="true"><use href="#i-impressora"/></svg>Gerar PDF Operacional</button>
     </div>
     <div class="card" data-relatorio="patio">
-      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-relatorios"/></svg> PDF Executivo</div>
+      <div class="card-title" role="heading" aria-level="2"><svg class="ico ico-card" aria-hidden="true"><use href="#i-relatorios"/></svg> PDF Executivo</div>
       <div class="card-sub">Uma página, KPIs e visão de diretoria.</div>
       <button class="btn btn-primary" onclick="exportarPdfExecutivo()"><svg class="ico ico-btn" aria-hidden="true"><use href="#i-impressora"/></svg>Gerar PDF Executivo</button>
     </div>
     <div class="card" data-relatorio="patio">
-      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-indicadores"/></svg> Exportar Dados (CSV) — Power BI</div>
+      <div class="card-title" role="heading" aria-level="2"><svg class="ico ico-card" aria-hidden="true"><use href="#i-indicadores"/></svg> Exportar Dados (CSV) — Power BI</div>
       <div class="card-sub">
         Gera 5 arquivos CSV (formato fato/dimensão): <code>Fact_Movimentacoes</code>, <code>Dim_Carga</code>,
         <code>Dim_Transportadora</code>, <code>Dim_Frota</code>, <code>Dim_Status</code>.
@@ -1737,7 +1738,7 @@
     <!-- Relatório independente, para o setor administrativo. Três colunas
          só: é controle de frete, não acompanhamento de pátio. -->
     <div class="card" data-relatorio="frete">
-      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-fretes"/></svg> Administração de Fretes</div>
+      <div class="card-title" role="heading" aria-level="2"><svg class="ico ico-card" aria-hidden="true"><use href="#i-fretes"/></svg> Administração de Fretes</div>
       <div class="card-sub">Sequência, Nº da carga, data do faturamento, rota, placa, transportadora,
         caminhão, peso, quilometragem, entregas, motorista, valor do frete e o número do
         documento de frete. É no campo Observações que a administração registra o valor
@@ -1771,7 +1772,7 @@
     <div class="card">
       <div class="frete-topo">
         <div>
-          <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-fretes"/></svg> Pagamento de Frete — controle por carga</div>
+          <div class="card-title" role="heading" aria-level="2"><svg class="ico ico-card" aria-hidden="true"><use href="#i-fretes"/></svg> Pagamento de Frete — controle por carga</div>
           <div class="card-sub">Importe o relatório do <strong>B2B</strong> e o do <strong>Atak</strong> de cada carga; o painel cruza nota a nota e monta a planilha. <span id="frete-atualizado" class="text-dim"></span></div>
         </div>
         <div class="frete-acoes-topo no-print">
@@ -1798,15 +1799,15 @@
       <div class="empty-state" id="frete-empty" data-icone="📄" hidden></div>
       <div class="frete-detalhes" id="frete-detalhes" hidden>
         <div>
-          <div class="card-title">Pendências por tratativa</div>
+          <div class="card-title" role="heading" aria-level="2">Pendências por tratativa</div>
           <div class="table-wrap"><table class="frete-mini" id="frete-res-tratativas"></table></div>
         </div>
         <div>
-          <div class="card-title">Por transportadora</div>
+          <div class="card-title" role="heading" aria-level="2">Por transportadora</div>
           <div class="table-wrap"><table class="frete-mini" id="frete-res-transportadoras"></table></div>
         </div>
         <div class="frete-fechamento">
-          <div class="card-title">Fechamento <small class="text-dim">contagem de notas, sem R$</small></div>
+          <div class="card-title" role="heading" aria-level="2">Fechamento <small class="text-dim">contagem de notas, sem R$</small></div>
           <div class="table-wrap"><table class="frete-mini" id="frete-res-fechamento"></table></div>
         </div>
       </div>
@@ -1826,7 +1827,7 @@
          Vale para TODOS os setores: qualquer pessoa pode proteger a própria
          conta, mesmo quem não administra ninguém. -->
     <div class="card" id="card-minha-seguranca">
-      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-lacre"/></svg> Minha segurança</div>
+      <div class="card-title" role="heading" aria-level="2"><svg class="ico ico-card" aria-hidden="true"><use href="#i-lacre"/></svg> Minha segurança</div>
       <div id="mfa-painel"></div>
     </div>
 
@@ -1838,19 +1839,19 @@
          só a Administração vê, enquanto este login não digitou a senha da
          aba. Quem confere é o servidor; "Minha segurança", acima, é livre. -->
     <div class="card" id="card-usuarios-trancada" hidden>
-      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-cadeado"/></svg> Gerenciar usuários</div>
+      <div class="card-title" role="heading" aria-level="2"><svg class="ico ico-card" aria-hidden="true"><use href="#i-cadeado"/></svg> Gerenciar usuários</div>
       <div class="card-sub">Trancado. Digite a senha da aba Usuários para ver e mudar os usuários. Ela vale até você sair do painel.</div>
       <div class="form-row"><button type="button" class="btn btn-primary" id="btn-destrancar-usuarios" onclick="destrancarUsuariosUI()">Digitar a senha</button></div>
     </div>
 
     <div class="card" id="card-vigias" hidden>
-      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-alerta"/></svg> Vigias do sistema</div>
+      <div class="card-title" role="heading" aria-level="2"><svg class="ico ico-card" aria-hidden="true"><use href="#i-alerta"/></svg> Vigias do sistema</div>
       <div class="card-sub">O que o servidor confere sozinho: se está respondendo, se o backup de hoje saiu e restaura, o disco, o certificado e o dado gravado. Quando algo fica ruim, quem é da Administração recebe aviso no celular — e outro quando volta ao normal.</div>
       <div id="vigias-painel"></div>
     </div>
 
     <div class="card">
-      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-usuarios"/></svg> Novo Usuário</div>
+      <div class="card-title" role="heading" aria-level="2"><svg class="ico ico-card" aria-hidden="true"><use href="#i-usuarios"/></svg> Novo Usuário</div>
       <div class="card-sub">O setor define o que a pessoa vê e o que consegue registrar. Isso é validado no servidor — não dá para contornar pela tela.</div>
       <div class="form-row">
         <div class="form-group">
@@ -1876,7 +1877,7 @@
     </div>
 
     <div class="card">
-      <div class="card-title"><svg class="ico ico-card" aria-hidden="true"><use href="#i-usuarios"/></svg> Usuários Cadastrados</div>
+      <div class="card-title" role="heading" aria-level="2"><svg class="ico ico-card" aria-hidden="true"><use href="#i-usuarios"/></svg> Usuários Cadastrados</div>
       <div class="card-sub">Último acesso mostra quem está usando de verdade. Usuário que nunca acessou costuma ser cadastro esquecido — e cadastro esquecido é porta aberta.</div>
       <div class="table-wrap">
         <table>
