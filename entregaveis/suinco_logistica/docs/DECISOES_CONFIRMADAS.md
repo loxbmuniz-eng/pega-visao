@@ -1086,3 +1086,13 @@ tratava 1024×768 e 768×1024 como "o tablet da Portaria".
   estreita e para o celular;
 - a paridade de celular (`suinco-paridade-mobile`) mira quem usa o
   telefone: Logística, Expedição, Administração e Comercial.
+
+**Lote 6 do /impeccable descartado (09/10/2026, mesmo dia).** As skills novas
+(make-interfaces-feel-better, humanizer, stop-slop, antislop, better-icons)
+foram passadas no painel como lente e viraram proposta: emoji das listas
+vazias trocados pelos ícones do painel, toque de 44 px em dois títulos dos
+Indicadores no celular, botão que afunda ao apertar, títulos equilibrados e
+três textos reescritos. O dono aprovou e, antes de qualquer mudança, voltou
+atrás: *"na verdade ta bom como esta nao precisa fazer isso"*. Nada foi
+alterado. As skills continuam instaladas em `.claude/skills/` para uso
+futuro; o levantamento não vira fila.
