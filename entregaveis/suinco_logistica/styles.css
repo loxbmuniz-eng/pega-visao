@@ -6836,9 +6836,23 @@ tr.linha-nova{
    287mm úteis. 15 colunas por carga e, embaixo de cada uma, a tabela das
    notas pendentes. Papel tem cor fixa — não segue o tema da tela.
 
-   A carga e as suas notas NÃO se separam de página (break-inside: avoid no
-   <tbody> do grupo): nota pendente numa folha e a carga dela na outra é o
-   tipo de papel que faz pagar a transportadora errada.
+   Nota pendente numa folha e a carga dela na outra é o tipo de papel que faz
+   pagar a transportadora errada. A garantia disso mudou de nível em
+   09/10/2026 (ocorrência #131, a mesma família da #72):
+
+   ANTES: `break-inside:avoid` no <tbody> do grupo — carga + lista inteira
+   indivisíveis. Grupo que não cabia no resto da folha pulava inteiro para a
+   seguinte (vão no pé da folha); grupo maior que uma folha não tinha como
+   cumprir o `avoid`, e o navegador partia na única fronteira que sobrava —
+   entre a carga e as notas. Resultado medido no PDF do dono (32 cargas, 270
+   notas): 20 folhas, quatro delas com UMA linha só, a carga, e as notas dela
+   na folha seguinte. A regra produzia exatamente o que existia para impedir.
+
+   AGORA: a lista de notas pode continuar na folha seguinte; cada NOTA segue
+   indivisível (`.print-page tr`); a linha da carga não fica no pé da folha
+   sem o começo das notas; e o título da lista — número da carga e
+   transportadora — está no <thead> das notas, que o navegador REPETE em toda
+   folha de continuação. Prova: testes/test_pagamento_frete_pdf_aproveita_a_folha.py.
    ===================================================================== */
 @media print{
   .print-page.doc-paisagem{ width:287mm !important; max-width:287mm !important }
@@ -6859,7 +6873,12 @@ tr.linha-nova{
   text-align:center; vertical-align:bottom; white-space:normal;
 }
 .frete-pdf .fpdf-tab > thead{ display:table-header-group }   /* repete o cabeçalho em cada folha */
-.frete-pdf tbody.fpdf-grupo{ break-inside:avoid; page-break-inside:avoid }
+/* A lista de notas pode partir entre folhas (a linha que a contém também:
+   `.print-page tr` a proíbe com !important, daí o !important aqui, com
+   seletor mais específico). A carga fica presa ao começo da sua lista. */
+.frete-pdf tr.fpdf-det{ break-inside:auto !important; page-break-inside:auto !important }
+.frete-pdf tr.fpdf-carga{ break-after:avoid !important; page-break-after:avoid !important }
+.frete-pdf .fpdf-notas > thead{ display:table-header-group }   /* repete título + colunas na continuação */
 .frete-pdf tr.fpdf-carga td{
   padding:5px 3px; border-top:1.5px solid #1f2b4d; background:#eef1f6;
   text-align:center; vertical-align:middle; font-weight:600;
@@ -6879,15 +6898,38 @@ tr.linha-nova{
 .frete-pdf .fpdf-sp-a-pagar{ border-color:#b9903f }
 .frete-pdf .fpdf-sp-conferir{ font-style:italic }
 .frete-pdf .fpdf-sp-parcial{ background:#dde7f8; color:#1f4f9f }
-.frete-pdf tr.fpdf-det > td{ padding:3px 3px 8px 22px; border-bottom:1px solid #c9d4e8 }
-.frete-pdf .fpdf-det-tit{ font-size:8.5px; font-weight:700; color:#3d4a5c; margin:2px 0 3px; text-transform:uppercase; letter-spacing:.03em }
-.frete-pdf tr.fpdf-det-vazio > td{ color:#3d4a5c; font-style:italic; font-size:9px }
+/* SEM padding embaixo da célula da lista — medido (ocorrência #131): com os
+   8px que havia aqui, o Chromium não começa a lista no pé da folha; empurra a
+   carga e a lista para a folha seguinte e deixa o vão (17 folhas no teste).
+   Sem eles, a lista começa onde a carga está (16). O respiro antes da próxima
+   carga continua: é a margem de 6px que toda tabela tem no papel
+   (`.print-page table`), e essa não atrapalha a quebra. */
+.frete-pdf tr.fpdf-det > td{ padding:3px 3px 0 22px; border-bottom:1px solid #c9d4e8 }
+/* O título da lista é a primeira linha do <thead> das notas: mesma cara que
+   tinha como <div> (sem régua, sobre a listra creme da linha da lista —
+   `tbody tr:nth-child(even)`; dentro da tabela das notas, que no papel é
+   branca, a listra precisa ser pintada aqui), agora repetido em cada folha. */
+.frete-pdf .fpdf-notas tr.fpdf-notas-tit{ border-bottom:none !important }
+.frete-pdf .fpdf-notas tr.fpdf-notas-tit th{
+  width:auto !important; background:rgba(233,185,84,.045) !important; color:#3d4a5c !important;
+  font-size:8.5px !important; font-weight:700 !important; text-transform:uppercase; letter-spacing:.03em;
+  text-align:left !important; padding:2px 0 3px; border-bottom:none !important;
+}
+.frete-pdf tr.fpdf-det-vazio > td{ color:#3d4a5c; font-style:italic; font-size:9px; padding-bottom:6px }   /* sem tabela, sem a margem dela */
 .frete-pdf table.fpdf-notas{ width:100%; border-collapse:collapse; table-layout:fixed }
 .frete-pdf .fpdf-notas th{
   background:#f4f6fa !important; color:#2a3446 !important; font-size:8px; font-weight:700; text-align:left;
   padding:3px 5px; border-bottom:1px solid #c9d4e8; text-transform:none; letter-spacing:0;
 }
 .frete-pdf .fpdf-notas td{ font-size:9px; padding:3px 5px; border-bottom:1px solid #e3e8f0; vertical-align:top; overflow-wrap:anywhere }
+/* As larguras vêm do <colgroup>: com table-layout:fixed a primeira linha é
+   o título (colspan=7), e sem <col> ela é que decidiria as colunas. */
+.frete-pdf .fpdf-notas col:nth-child(1){ width:9% }
+.frete-pdf .fpdf-notas col:nth-child(2){ width:12% }
+.frete-pdf .fpdf-notas col:nth-child(3){ width:26% }
+.frete-pdf .fpdf-notas col:nth-child(4){ width:12% }
+.frete-pdf .fpdf-notas col:nth-child(5){ width:10% }
+.frete-pdf .fpdf-notas col:nth-child(7){ width:9% }
 .frete-pdf .fpdf-notas th:nth-child(1), .frete-pdf .fpdf-notas td:nth-child(1){ width:9% }
 .frete-pdf .fpdf-notas th:nth-child(2), .frete-pdf .fpdf-notas td:nth-child(2){ width:12% }
 .frete-pdf .fpdf-notas th:nth-child(3), .frete-pdf .fpdf-notas td:nth-child(3){ width:26% }
