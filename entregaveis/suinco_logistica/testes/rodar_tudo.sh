@@ -173,6 +173,21 @@ echo "  $total suíte(s): ${#isoladas[@]} isolada(s) em até $PARALELO em parale
 echo "  ${#comServidor[@]} com servidor, uma a uma."
 echo
 
+# A VITRINE DA BATERIA É A DESTE BUILD (09/10/2026, ocorrência #132).
+#
+# Cinco suítes abrem a vitrine/vitrine.html sem gerá-la; quem gera são as
+# duas test_vitrine_*, que na ordem alfabética rodam depois delas. Num clone
+# novo (a vitrine está no .gitignore) as cinco reprovavam com
+# ERR_FILE_NOT_FOUND; num ambiente antigo, mediam a vitrine que sobrou da
+# bateria ANTERIOR — o painel de outro commit. Gera aqui, antes de qualquer
+# suíte, quando alguma das escolhidas abre a vitrine. Leva menos de 1 s.
+if [ "$total" -gt 0 ] && grep -lq "vitrine.html" "${isoladas[@]}" "${comServidor[@]}" 2>/dev/null; then
+  if ! python3 vitrine/gerar_vitrine.py > "$LOGS/.vitrine" 2>&1; then
+    echo "  !  não consegui gerar a vitrine — as suítes que a abrem vão reprovar:"
+    tail -3 "$LOGS/.vitrine" | sed 's/^/      /'
+  fi
+fi
+
 # Roda uma suíte e imprime o resultado numa linha. Usada nas duas fases.
 rodar_uma(){
   f="$1"; nome=$(basename "$f" .py)
