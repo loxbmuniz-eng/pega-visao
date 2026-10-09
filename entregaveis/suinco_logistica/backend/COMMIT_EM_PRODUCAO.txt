@@ -1,4 +1,29 @@
-541d34d
+dbecc3e
+
+# ---------------------------------------------------------------------
+# 09/10/2026 — 541d34d → dbecc3e. O SERVIDOR ALCANÇOU O PORTÃO 71.
+#
+# Dois blocos COPIE DAQUI colados pelo dono:
+#   (1) atualizar_tudo.sh: commit no servidor dbecc3e, serviço active,
+#       /health 200, última migração 065_senha_aba_usuarios.sql, aviso no
+#       celular ligado, vigias 6 ok e 0 com problema, node v24.21.0,
+#       problemas nesta rodada: nenhum;
+#   (2) gravar_senha_usuarios.sh: cópia do .env guardada em
+#       /opt/embarque-suinco/.env.antes-da-senha-usuarios, só o hash gravado,
+#       servidor de pé, "trava da aba Usuários: ligada".
+#
+# O QUE PASSOU A VALER NO SERVIDOR (git diff 541d34d dbecc3e -- backend):
+#   · migração 065 — três colunas de tentativas da senha da aba Usuários em
+#     operadores (só acrescenta; nenhum dado mexido);
+#   · a senha da aba Usuários: rota /api/auth/usuarios/destrancar, a trava
+#     nas rotas de operadores e dos vigias, travaUsuarios no /health — e
+#     LIGADA pelo gravar_senha_usuarios.sh;
+#   · WRVDA503 (Carga por UF/Município) lido no Pagamento de Frete
+#     (relatorios_frete_pdf.js → lerSist503) — o servidor deixa de recusar;
+#   · #45 Sentry: rota /api/erros e o repasse do servidor — o CÓDIGO está
+#     lá, mas DESLIGADO até o ligar_sentry.sh gravar os dois DSN (sem a
+#     chave no .env, nada sai).
+# Servidor e painel no mesmo commit.
 
 # ---------------------------------------------------------------------
 # 08/10/2026 — 6408260 → 541d34d. O SERVIDOR ALCANÇOU O PORTÃO 62.

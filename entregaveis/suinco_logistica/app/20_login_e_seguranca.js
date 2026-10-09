@@ -803,9 +803,18 @@ function revelarPainel(){
   setTimeout(()=>document.body.classList.remove('painel-entrando'), 600);
 }
 
+/* O CRACHÁ EM TRÊS PEÇAS (09/10/2026, #127). Quando falta largura, quem
+   cede é o NOME (reticências); o SETOR sai sempre inteiro — no celular ele
+   virava "An…" e a pessoa não via com que setor tinha entrado. O texto
+   continua "Nome · Setor" para quem lê o elemento inteiro, e o title traz
+   os dois por extenso para quando o nome for cortado. A largura é decidida
+   em tema2027/92_cabecalho.css. */
 function atualizarHeaderOperador(){
   const el = document.getElementById('operator-name');
-  el.textContent = DB.operador ? `${DB.operador.nome} · ${DB.operador.setor}` : '—';
+  if(!DB.operador){ el.textContent = '—'; el.removeAttribute('title'); return; }
+  el.innerHTML = `<span class="op-nome">${esc(DB.operador.nome)}</span>`
+    + `<span class="op-sep"> · </span><span class="op-setor">${esc(DB.operador.setor)}</span>`;
+  el.title = `${DB.operador.nome} · ${DB.operador.setor}`;
 }
 // Cada setor vê apenas as próprias abas (SETOR_PERMISSOES em data.js).
 // Decisão confirmada pelo usuário: manter a ocultação, não liberar tudo.

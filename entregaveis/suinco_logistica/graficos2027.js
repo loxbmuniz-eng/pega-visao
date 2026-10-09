@@ -281,8 +281,10 @@ const Graf = (function(){
      Linhas guardadas pelo rótulo: quando a ordem muda, a linha DESLIZA
      até o lugar novo (FLIP), em vez de a lista inteira piscar.
      --------------------------------------------------------------- */
-  function ranking(alvo, { itens, formato, rotulo, alerta, aoTocar }){
-    if(!itens || !itens.length){ alvo._rank = null; return vazio(alvo, 'Nenhuma linha com este filtro.'); }
+  /* `semItens`: o que dizer quando não há linha. O padrão fala do filtro
+     (Indicadores); onde não há filtro à vista, quem chama diz o motivo. */
+  function ranking(alvo, { itens, formato, rotulo, alerta, aoTocar, semItens }){
+    if(!itens || !itens.length){ alvo._rank = null; return vazio(alvo, semItens || 'Nenhuma linha com este filtro.'); }
     let st = alvo._rank;
     const nasce = !st || !alvo.contains(st.cx);
     if(nasce){
@@ -317,7 +319,18 @@ const Graf = (function(){
       /* ALERTA É ÍCONE E PALAVRA, NUNCA SÓ COR. */
       const grave = !!(alerta && alerta(it));
       li.classList.toggle('grave', grave);
-      li.querySelector('.graf-rank-nome').innerHTML = (grave ? '<b aria-hidden="true">▲</b> ' : '') + it.rotulo;
+      /* O NOME É TEXTO, NUNCA HTML (09/10/2026, #127): ele vem do cadastro
+         (rota, transportadora) e entrava por innerHTML — um "<" no nome
+         virava marcação na tela de todo mundo. E o nome cortado com
+         reticências não se lia em lugar nenhum: o title traz ele inteiro. */
+      const nomeEl = li.querySelector('.graf-rank-nome');
+      nomeEl.textContent = '';
+      if(grave){
+        const b = document.createElement('b'); b.setAttribute('aria-hidden', 'true'); b.textContent = '▲';
+        nomeEl.append(b, ' ');
+      }
+      nomeEl.append(String(it.rotulo));
+      nomeEl.title = String(it.rotulo);
       const valorTxt = formato ? formato(it.valor) : String(it.valor);
       rolar(li.querySelector('.graf-rank-num'), valorTxt);
       let tag = li.querySelector('.graf-rank-tag');

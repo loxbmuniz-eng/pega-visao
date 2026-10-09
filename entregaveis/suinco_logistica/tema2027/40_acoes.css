@@ -53,3 +53,10 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{
 @media screen and (prefers-reduced-motion: reduce){
   .btn{ transition:none !important } .btn:hover,.btn:active{ transform:none !important }
 }
+/* A AÇÃO QUE É DE OUTRO SETOR (09/10/2026, #127): na fila do Faturamento,
+   a carga já faturada diz "Saída na Portaria" no lugar do botão. É texto,
+   não botão — não se aperta, informa quem age agora. Letra de texto
+   secundário, a mesma do resto da linha que não é ação. */
+@media screen{
+  .acao-outro-setor{ font-size:13px; color:var(--text-dim); white-space:nowrap }
+}
