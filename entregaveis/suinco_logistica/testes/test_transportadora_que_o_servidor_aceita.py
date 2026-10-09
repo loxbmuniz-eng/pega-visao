@@ -329,4 +329,13 @@ async def main():
 
 
 if __name__ == '__main__':
-    sys.exit(asyncio.run(main()))
+    # A LIMPEZA RODA MESMO SE A SUÍTE CAIR NO MEIO (#130). Rodada contra o
+    # painel publicado (prova do vermelho), ela parava num botão que ainda não
+    # existia e deixava as placas TST9B01/TST9B02 na Frota de teste — e o
+    # test_adaptador_api, que conta 749 placas, reprovou no portão 75 sem
+    # defeito nenhum.
+    try:
+        sys.exit(asyncio.run(main()))
+    finally:
+        limpar()
+        psql("DELETE FROM operadores WHERE email IN ('transp.adm@teste.local', 'daniela.transp@teste.local');")

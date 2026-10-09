@@ -6619,25 +6619,31 @@ describe('49. Pagamento de Frete — a planilha dentro do painel (05/10/2026)', 
   });
 
   describe('quem entra', () => {
-    test('sem login: 401; outro setor: 403 SETOR_SEM_PERMISSAO; o setor Pagamento de Frete e a Administração entram', async () => {
+    test('sem login: 401; outro setor: 403 SETOR_SEM_PERMISSAO; o setor Pagamento de Frete, a Logística e a Administração entram', async () => {
+      /* A REGRA MUDOU DE PROPÓSITO (09/10/2026, decisão 32): a Logística entra
+         na aba — "deixa o acesso liberado pra logistica" (o dono). Ela saiu da
+         lista dos recusados e passou para a dos que entram. */
       assert.equal((await req(FRETE)).status, 401);
-      for (const setor of ['Portaria', 'Logística', 'Expedição', 'Faturamento']) {
+      for (const setor of ['Portaria', 'Expedição', 'Faturamento']) {
         const r = await req(FRETE, { token: tokens[setor] });
         assert.equal(r.status, 403, setor);
         assert.equal(r.json.codigo, 'SETOR_SEM_PERMISSAO');
         assert.match(r.json.erro, /Pagamento de Frete/);
       }
       assert.equal((await req(FRETE, { token: tk['daniela@teste.local'] })).status, 200);
+      assert.equal((await req(FRETE, { token: tokens['Logística'] })).status, 200);
       assert.equal((await req(FRETE, { token: tokens['Administração'] })).status, 200);
     });
 
-    test('o PDF detalhado do Pagamento de Frete: só o setor dele e a Administração geram (06/10/2026)', async () => {
+    test('o PDF detalhado do Pagamento de Frete: quem trabalha na aba gera (06/10/2026; Logística desde 09/10)', async () => {
       /* Pedido do dono: "preciso que seja detalhado" — o PDF da aba, com o
-         filtro da tela. Ele carrega pagamento por carga, então o dono é o
-         setor que paga; a Logística e a Portaria não levam esse papel. */
+         filtro da tela. Ele carrega pagamento por carga, então o dono é quem
+         paga: o setor Pagamento de Frete e, desde 09/10/2026 (decisão 32), a
+         Logística, que passou a trabalhar na aba. A Portaria não leva esse papel. */
       assert.equal(podeGerar('Pagamento de Frete', 'pagamento-frete'), true);
+      assert.equal(podeGerar('Logística', 'pagamento-frete'), true);
       assert.equal(podeGerar('Administração', 'pagamento-frete'), true);
-      for (const setor of ['Portaria', 'Logística', 'Expedição', 'Faturamento']) {
+      for (const setor of ['Portaria', 'Expedição', 'Faturamento']) {
         assert.equal(podeGerar(setor, 'pagamento-frete'), false, `${setor} NÃO gera o PDF do frete`);
       }
       assert.ok(documentosDoSetor('Pagamento de Frete').includes('pagamento-frete'), 'o painel mostra o botão a quem paga');
@@ -6688,8 +6694,11 @@ describe('49. Pagamento de Frete — a planilha dentro do painel (05/10/2026)', 
         ['POST', `${FRETE}/cargas/1/excluir`, { motivo: 'x' }], ['POST', `${FRETE}/cargas/1/restaurar`, {}],
         ['GET', `${FRETE}/excluidas`],
       ];
+      /* Quem bate é a Portaria: a Logística entra na aba desde 09/10/2026
+         (decisão 32). A barreira é a mesma em toda rota — o que se confere é
+         que nenhuma escapa dela. */
       for (const [metodo, caminho, corpo] of tentativas) {
-        const r = await req(caminho, { metodo, token: tokens['Logística'], corpo });
+        const r = await req(caminho, { metodo, token: tokens['Portaria'], corpo });
         assert.equal(r.status, 403, `${metodo} ${caminho}`);
         assert.equal(r.json.codigo, 'SETOR_SEM_PERMISSAO');
       }
@@ -8700,6 +8709,79 @@ describe('60. Transportadora sem placa (09/10/2026, #129, migração 066)', asyn
       assert.equal(nao.status, 400, nao.texto);
     } finally {
       await pool.query('ALTER TABLE transportadoras_066_fora RENAME TO transportadoras');
+    }
+  });
+});
+
+describe('61. A Logística trabalha no Pagamento de Frete (09/10/2026, decisão 32)', async () => {
+  const { readFileSync } = await import('node:fs');
+  /* "Vamo liberar o pagamento de frete pra logistica pois as meninas precisam
+     ter acesso pra poder fazer alteracao, deixa o acesso liberado pra
+     logistica" (o dono). Por SETOR, como toda permissão (decisão de 05/10):
+     o setor Logística inteiro, com tudo o que o setor Pagamento de Frete faz. */
+  const FRETE = '/api/pagamento-frete';
+  const log = () => tokens['Logística'];
+  const pdf64 = (nome) => readFileSync(new URL(`./fixtures/frete/${nome}`, import.meta.url)).toString('base64');
+  let comercial;
+  const limpar = async () => {
+    for (const t of ['pgfrete_eventos', 'pgfrete_leituras', 'pgfrete_pagamentos', 'pgfrete_pendencias', 'pgfrete_cargas']) {
+      await pool.query(`DELETE FROM ${t}`);
+    }
+    await pool.query("DELETE FROM dim_veiculos WHERE placa = 'TST1300'");
+  };
+
+  before(async () => {
+    await limpar();
+    await pool.query("INSERT INTO dim_veiculos (placa, transportadora, tipo_veiculo, origem) VALUES ('TST1300', 'Rodovia Teste 130 Transportes Ltda.', 'Truck', 'teste')");
+    const hash = await bcrypt.hash(SENHA, 4);
+    await pool.query("DELETE FROM operadores WHERE email = 'comercial130@teste.local'");
+    await pool.query("INSERT INTO operadores (email, nome, setor, senha_hash) VALUES ('comercial130@teste.local', 'Comercial Teste', 'Comercial', $1)", [hash]);
+    const r = await req('/auth/login', { metodo: 'POST', corpo: { email: 'comercial130@teste.local', senha: SENHA } });
+    assert.equal(r.status, 200, r.texto);
+    comercial = r.json.token;
+  });
+  after(async () => {
+    await limpar();
+    await pool.query("DELETE FROM operadores WHERE email = 'comercial130@teste.local'");
+  });
+
+  test('a Logística importa, edita e paga — o caminho inteiro da aba', async () => {
+    assert.equal((await req(FRETE, { token: log() })).status, 200, 'a grade');
+    const a = await req(`${FRETE}/leituras`, { metodo: 'POST', token: log(), corpo: { arquivo: pdf64('b2b_900802.pdf'), nome: 'b2b_900802.pdf' } });
+    assert.equal(a.status, 200, a.texto);
+    const b = await req(`${FRETE}/leituras`, { metodo: 'POST', token: log(), corpo: { arquivo: pdf64('sist_900802.pdf'), nome: 'sist_900802.pdf', lote: a.json.lote } });
+    assert.equal(b.status, 200, b.texto);
+    const c = await req(`${FRETE}/lotes/${a.json.lote}/confirmar`, { metodo: 'POST', token: log(), corpo: {} });
+    assert.equal(c.status, 200, c.texto);
+    const e = await req(`${FRETE}/cargas/900802`, { metodo: 'PATCH', token: log(), corpo: { transportadora: 'Rodovia Teste 130 Transportes Ltda.', cte: '130' } });
+    assert.equal(e.status, 200, e.texto);
+    const p = await req(`${FRETE}/cargas/900802/pagamentos`, { metodo: 'POST', token: log(), corpo: { pct: 10, dataPagamento: '2026-10-09' } });
+    assert.equal(p.status, 201, p.texto);
+    const { rows } = await pool.query("SELECT criado_por_nome FROM pgfrete_pagamentos WHERE numero_carga = '900802' AND anulado_em IS NULL");
+    assert.equal(rows.length, 1);
+    assert.ok(rows[0].criado_por_nome, 'o pagamento guarda quem pagou');
+    assert.equal((await req(`${FRETE}/exportar.xlsx`, { token: log() })).status, 200, 'a planilha');
+    assert.equal((await req(`${FRETE}/cargas/900802/historico`, { token: log() })).status, 200, 'o histórico da carga');
+  });
+
+  test('o PDF detalhado da aba: a Logística também gera', async () => {
+    assert.equal(podeGerar('Logística', 'pagamento-frete'), true);
+    assert.ok(documentosDoSetor('Logística').includes('pagamento-frete'), 'o painel mostra o botão à Logística');
+    assert.equal(podeGerar('Pagamento de Frete', 'pagamento-frete'), true);
+    assert.equal(podeGerar('Administração', 'pagamento-frete'), true);
+    // pela porta de verdade: a Logística passa da barreira e para no 400 HTML_FALTANDO
+    const passa = await req('/api/relatorios/pdf', { metodo: 'POST', token: log(), corpo: { tipo: 'pagamento-frete' } });
+    assert.equal(passa.status, 400, passa.texto);
+    assert.equal(passa.json.codigo, 'HTML_FALTANDO');
+  });
+
+  test('os outros setores continuam fora da aba', async () => {
+    for (const [setor, tk] of [['Portaria', tokens['Portaria']], ['Expedição', tokens['Expedição']],
+      ['Faturamento', tokens['Faturamento']], ['Comercial', comercial]]) {
+      const r = await req(FRETE, { token: tk });
+      assert.equal(r.status, 403, setor);
+      assert.equal(r.json.codigo, 'SETOR_SEM_PERMISSAO', setor);
+      assert.equal(podeGerar(setor, 'pagamento-frete'), false, `${setor} NÃO gera o PDF do frete`);
     }
   });
 });
