@@ -1433,10 +1433,18 @@ function freteMontarPdf(){
           <td class="fpdf-n">${idade ? `<strong>${esc(idade)}</strong>` : traco}</td>
         </tr>`;
     }).join('');
+    /* O título da lista mora no <thead> das notas (09/10/2026, ocorrência
+       #131): quando a lista continua na folha seguinte, o navegador repete o
+       cabeçalho — e com ele o número da carga e a transportadora. Nenhuma
+       folha tem nota sem dizer de que carga ela é. O <colgroup> segura as
+       larguras: com table-layout:fixed, sem ele quem mandaria nas colunas
+       seria a linha do título, que ocupa as sete. */
+    const transpTit = p[I.transportadora] ? ` · ${esc(p[I.transportadora])}` : '';
     const detalhe = notas.length
       ? `<tr class="fpdf-det"><td colspan="15">
-          <div class="fpdf-det-tit">${notas.length} nota(s) pendente(s) da carga ${esc(String(g.carga))}</div>
-          <table class="fpdf-notas"><thead><tr>
+          <table class="fpdf-notas"><colgroup><col><col><col><col><col><col><col></colgroup><thead>
+          <tr class="fpdf-notas-tit"><th colspan="7">${notas.length} nota(s) pendente(s) da carga ${esc(String(g.carga))}${transpTit}</th></tr>
+          <tr>
             <th>Nota</th><th>Status no B2B</th><th>Cliente — cidade</th><th>Tratativa</th><th>Data da tratativa</th><th>Observação</th><th>Sem olhar há</th>
           </tr></thead><tbody>${linhasNotas}</tbody></table></td></tr>`
       : `<tr class="fpdf-det fpdf-det-vazio"><td colspan="15">Nenhuma nota pendente: todas as notas do sistema estão finalizadas no B2B.</td></tr>`;
