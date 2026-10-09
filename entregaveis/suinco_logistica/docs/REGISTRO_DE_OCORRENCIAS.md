@@ -6168,6 +6168,20 @@ a API de verdade: o formulário (16626), o campo da linha (50000) e a Torre
 no publicado em 9 pontos. A regra mudou de propósito em dois testes antigos
 (causa 1): `test_torre_arrasta_sequencia` (9 numa carga que já carregou) e
 `test_torre_desliza_sem_mudar_colunas` (5000) agora respondem à pergunta e
-conferem que ela foi feita — o que eles travavam continua igual.
+conferem que ela foi feita — o que eles travavam continua igual. O primeiro
+portão com a bateria inteira achou mais dois na mesma situação, e eles
+também passaram a responder: `test_numero_digitado_com_ponto` (12 numa
+carga de registro — mede o leitor do número) e `test_edicao_marca_alterada`
+(o 7 numa lista de 1 da #27, que continua valendo depois de "Gravar").
+
+**Dois portões parados no meio, de propósito.** O primeiro porque outra
+sessão publicou os portões 77 e 78 enquanto este rodava — publicar por cima
+juntaria na entrega um código que a bateria não viu; o trabalho das duas foi
+juntado sem reescrever nada e esta ocorrência, nascida como #131, virou #133.
+O segundo porque os dois testes acima reprovariam de novo na segunda chance
+(regra que mudou de propósito, causa 1) — esperar o cancelamento era meia
+hora a mais. No contêiner novo faltava também o `pdftotext`, que o
+`test_pagamento_frete_pdf_aproveita_a_folha` (da #131) usa para ler o PDF:
+instalado (`poppler-utils`).
 
 Só painel: não depende do servidor.

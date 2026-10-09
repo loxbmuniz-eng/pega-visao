@@ -108,9 +108,20 @@ async def main():
 
         print('\n=== 2. TERMINAL A ARRUMA A SEQUÊNCIA E OS GANCHOS ===')
         # Pelo mesmo caminho da tela: é a função que o onchange chama.
+        # Desde 09/10/2026 (#133) o 7 numa lista de 1 pula para depois da maior
+        # sequência do dia, e o painel PERGUNTA antes de gravar. "7 vale 7,
+        # mesmo numa lista de 2" (#27) continua: a pessoa confirma, e o que
+        # este teste trava — a mudança subir e ficar — não muda.
         await pgA.evaluate("""(n) => {
             const c = DB.cargas.find(x=>x.numeroCarga===n);
             atualizarSequenciaUI(c.id, '7');
+        }""", num)
+        await pgA.wait_for_timeout(400)
+        if await pgA.locator('#pergunta-ok').count():
+            await pgA.click('#pergunta-ok')
+            await pgA.wait_for_timeout(300)
+        await pgA.evaluate("""(n) => {
+            const c = DB.cargas.find(x=>x.numeroCarga===n);
             atualizarGanchosUI(c.id, '33');
         }""", num)
         await pgA.wait_for_timeout(6000)

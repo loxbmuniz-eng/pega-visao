@@ -129,13 +129,21 @@ async def main():
         print('\n=== 4. A SEQUÊNCIA LÊ PELO MESMO CAMINHO ===')
         # O campo de sequencia usa o mesmo leitor: sem isso, "12" digitado num
         # teclado que insere separador viraria outra coisa na fila.
+        # Desde 09/10/2026 (#133) um número que pula para depois da maior
+        # sequência do dia PERGUNTA antes de gravar; aqui o dia tem poucas
+        # cargas e o 12 pula. O que este bloco mede é o LEITOR do número, então
+        # a pessoa confirma e o que se confere continua sendo "12 é 12".
         try:
-            r5 = await pg.evaluate("""() => {
+            await pg.evaluate("""() => {
               const c = DB.cargas.find(x => x.id === 'n1');
               c.status = 'Seguiu Viagem';           // registro: guarda o numero digitado
               atualizarSequenciaUI('n1', '12');
-              return c.sequencia;
             }""")
+            await pg.wait_for_timeout(400)
+            if await pg.locator('#pergunta-ok').count():
+                await pg.click('#pergunta-ok')
+                await pg.wait_for_timeout(300)
+            r5 = await pg.evaluate("() => DB.cargas.find(x => x.id === 'n1').sequencia")
         except Exception as e:
             r5 = f'ERRO: {str(e).splitlines()[0][:80]}'
         ck('12 digitado na sequência é 12', r5 == 12, f'guardou {r5!r}')
