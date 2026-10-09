@@ -1137,7 +1137,8 @@ function formMontagemHtml(m){
           <input type="text" inputmode="numeric" min="0" value="${m.peso ?? ''}" ${alt('peso')}></div>
         <div class="form-group">
           <label>Sequência <span class="hint">(prioridade de montagem do dia)</span></label>
-          <input type="text" inputmode="numeric" min="1" value="${m.sequencia ?? ''}" ${alt('sequencia')}></div>
+          <input type="text" inputmode="numeric" min="1" value="${m.sequencia ?? ''}"
+                 onchange="definirSequenciaMontagemUI('${id}',this.value)"></div>
         <div class="form-group"><label>Paletizada?</label>
           <select ${alt('paletizada')}>
             <option${m.paletizada === 'Não' ? ' selected' : ''}>Não</option>
@@ -1500,14 +1501,19 @@ async function reorganizarMontagemUI(){
 /* Digitar o número: mesma cascata do arrasto, uma conta só. Linha já
    efetivada não reordena ninguém — o número dela é registro, e para essas
    o campo continua gravando direto na montagem. */
-function definirSequenciaMontagemUI(id, val){
+async function definirSequenciaMontagemUI(id, val){
   const n = Number(val);
   const m = (_montagemDia?.montagens || []).find(x => x.montagem_id === id);
   if(!m) return;
-  if(m.efetivada_em || m.cancelada_em) return alterarMontagemUI(id, 'sequencia', val);
   /* Apagar o campo APAGA o número: campo vazio não é ordem de reordenar,
      é "esta linha ainda não tem lugar na fila". */
   if(val === '') return alterarMontagemUI(id, 'sequencia', '');
+  /* NÚMERO QUE PULA PARA DEPOIS DA MAIOR DO DIA PERGUNTA (#131) — inclusive
+     na linha que já virou carga ou foi cancelada: o número dela também
+     conta para a casa livre de quem for criado depois. */
+  const doDia = (_montagemDia?.montagens || []).map(x => x.sequencia);
+  if(!(await sequenciaConfirmadaUI(Math.trunc(n), doDia, m.sequencia))) return carregarMontagemUI();
+  if(m.efetivada_em || m.cancelada_em) return alterarMontagemUI(id, 'sequencia', val);
   /* QUALQUER OUTRA COISA QUE NÃO SEJA CASA DA FILA NÃO SOBE (11/09/2026).
      Isto ia para o servidor como `sequencia` crua e 2,7 chegava lá para ser
      arredondado — podendo cair justo no número de outra linha. Número

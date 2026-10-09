@@ -1106,7 +1106,7 @@ function devServidorOk_paraFila(){
    digitada — o defeito de 14/08/2026 de volta, "alterei três vezes e ela
    não se mantém". Juntar decisões diferentes quebra tanto quanto copiar
    a mesma decisão em dois lugares. */
-function definirPosicaoNaFilaUI(id, val){
+async function definirPosicaoNaFilaUI(id, val){
   const n = quantidadeDigitada(val);
   if(val === '' || !Number.isInteger(n) || n < 1){
     /* Campo vazio não é ordem de apagar a ordem: só redesenha e devolve
@@ -1114,7 +1114,83 @@ function definirPosicaoNaFilaUI(id, val){
     renderAll();
     return;
   }
+  const c = getCarga(id); if(!c) return;
+  if(!(await sequenciaConfirmadaUI(n, numerosDoDiaDaCarga(c), c.sequencia))){ renderAll(); return; }
   moverNaFilaUI(id, n);
+}
+
+/* SEQUÊNCIA QUE DEIXA BURACO DEPOIS DA MAIOR DO DIA: O PAINEL PERGUNTA
+   (09/10/2026, ocorrência #131).
+
+   RELATO DO DONO, com o print da Montagem: as cargas criadas no dia nasciam
+   16627, 16628… depois do 25 e do 26. Uma linha tinha recebido 16626 — o
+   formulário da linha tem "Sequência" colado em "Peso (kg)", e um peso de
+   16.626 kg cabe nele —, e a carga nova nasce na casa livre ACIMA DA MAIOR
+   (#43, no servidor). Um número digitado no campo errado arrastou o dia.
+
+   NÃO É RECUSA. A decisão de 17/09 é do dono — "independentemente do número,
+   você vai resolver": o número digitado é o que a carga fica, mesmo acima da
+   fila, e há dia legítimo com 1, 2, 14, 20. Então o painel só PERGUNTA, e
+   diz o que vai acontecer, quando o número pula para depois da maior
+   sequência do dia + 1 — que é o único lugar onde um número deixa buraco no
+   fim e passa a puxar as cargas novas. Dentro do dia, ou a próxima casa,
+   segue sem pergunta nenhuma.
+
+   UMA FUNÇÃO, TODOS OS CAMPOS: a linha e o formulário da Montagem
+   (definirSequenciaMontagemUI), a Fila e a Torre (definirPosicaoNaFilaUI),
+   e o número que é registro (atualizarSequenciaUI). Devolve true para
+   seguir, false para a tela voltar ao que o servidor tem. */
+let _seqPerguntando = false;   // há uma pergunta de sequência aberta agora
+async function sequenciaConfirmadaUI(n, numerosDoDia, atual){
+  if(!Number.isInteger(n) || n < 1) return true;
+  if(Number(atual) === n) return true;
+  const maior = (numerosDoDia || []).map(Number)
+    .filter(x => Number.isInteger(x) && x >= 1)
+    .reduce((m, x) => (x > m ? x : m), 0);
+  if(n <= maior + 1) return true;
+  /* O CURSOR VOLTA PARA A LINHA DE QUEM DIGITOU. Enquanto a janela está
+     aberta a tabela pode ser redesenhada (o foco saiu do campo, e a proteção
+     de digitação só segura o campo focado); aí o campo de antes deixa de
+     existir e a janela não tem para onde devolver o foco. Sem isto a pessoa
+     confirma e perde de vista a linha que acabou de mover. */
+  const origem = document.activeElement;
+  const tr = origem && origem.closest ? origem.closest('tr') : null;
+  const seletor = tr && origem.classList && origem.classList.contains('seq-input')
+    ? (tr.dataset.carga ? `tr[data-carga="${CSS.escape(tr.dataset.carga)}"] .seq-input`
+      : tr.dataset.id ? `tr[data-id="${CSS.escape(tr.dataset.id)}"] .seq-input` : '')
+    : '';
+  /* UMA PERGUNTA DE CADA VEZ. Quando a janela abre, o campo perde o foco e
+     o navegador pode disparar o "change" dele de novo — e, nessa hora, quem
+     está com o foco já é a janela, então nem dá para saber de que campo veio.
+     Sem esta trava a segunda chamada abria outra janela por cima, que
+     fechava a primeira como "Corrigir". A janela é modal: enquanto ela está
+     aberta, outra mudança de sequência só devolve a tela ao que ela tem. */
+  if(_seqPerguntando) return false;
+  _seqPerguntando = true;
+  let ok = false;
+  try {
+    ok = !!(await perguntarUI({
+      titulo: `Gravar a sequência ${n}?`,
+      texto: `Hoje a maior sequência do dia é ${maior}. Com ${n}, esta carga vai para o fim da lista `
+        + `e as cargas criadas depois neste dia nascem a partir de ${n + 1}.\n\n`
+        + 'Se foi o peso ou o número da carga digitado no campo errado, corrija.',
+      botao: `Gravar ${n}`,
+      cancelar: 'Corrigir',
+    }));
+  } finally { _seqPerguntando = false; }
+  if(seletor){
+    const campo = document.querySelector(seletor);
+    if(campo && document.activeElement !== campo){ try{ campo.focus(); }catch(_){} }
+  }
+  return ok;
+}
+
+/* Os números de sequência das cargas do MESMO DIA de programação — a fila é
+   por dia (diaDaProgramacao, data.js). */
+function numerosDoDiaDaCarga(c){
+  const dia = diaDaProgramacao(c);
+  return (DB.cargas || []).filter(x => x && !x.excluida && diaDaProgramacao(x) === dia)
+    .map(x => x.sequencia);
 }
 
 /* ARRASTAR E DIGITAR NA TORRE (09/09/2026).
@@ -1149,9 +1225,11 @@ function definirSequenciaTorreUI(id, val){
   return atualizarSequenciaUI(id, val);
 }
 
-function atualizarSequenciaUI(id, val){
+async function atualizarSequenciaUI(id, val){
   const c = getCarga(id); if(!c) return;
-  c.sequencia = quantidadeDigitada(val);
+  const n = quantidadeDigitada(val);
+  if(!(await sequenciaConfirmadaUI(n, numerosDoDiaDaCarga(c), c.sequencia))){ renderAll(); return; }
+  c.sequencia = n;
   /* Sem este carimbo a alteração NÃO SOBE ao servidor.
 
      `sincronizarCargasAlteradas` decide o que enviar comparando

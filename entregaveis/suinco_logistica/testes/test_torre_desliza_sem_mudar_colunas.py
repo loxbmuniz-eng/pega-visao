@@ -137,7 +137,15 @@ async def main():
         seq = pg.locator(f'#torre-tbody tr[data-carga="{alvo}"] .seq-input')
         await seq.fill('5000')
         await seq.dispatch_event('change')
-        await pg.wait_for_timeout(100)
+        # A REGRA MUDOU DE PROPÓSITO (09/10/2026, #131): 5000 pula para depois
+        # da maior sequência do dia, e o painel PERGUNTA antes de gravar. A
+        # pessoa confirma; o que este bloco trava continua igual — a linha vai
+        # na hora e o cursor volta para o campo dela.
+        await pg.wait_for_selector('#pergunta-ok', timeout=3000)
+        ck('5000 depois da maior do dia: o painel pergunta antes',
+           '5000' in (await pg.inner_text('#pergunta-titulo')))
+        await pg.click('#pergunta-ok')
+        await pg.wait_for_timeout(150)
         agora = await pg.evaluate(ORDEM)
         ck('ela digitou a posição: a linha vai na hora, com o cursor ainda no campo',
            agora[-1] == alvo, str(agora))
