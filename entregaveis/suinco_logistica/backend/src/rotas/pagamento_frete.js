@@ -25,6 +25,7 @@
 import { Router } from 'express';
 import { randomUUID } from 'node:crypto';
 import { consultar, emTransacao } from '../banco.js';
+import { transportadoraConhecida } from '../dominio/transportadoras.js';
 import { exigirLogin, exigirSetor } from '../middleware/auth.js';
 import { SETOR_PAGAMENTO_FRETE } from '../dominio/fluxo.js';
 import { hojeISO } from './modelo_semana.js';
@@ -81,6 +82,9 @@ const recusa = (res, status, codigo, erro, extra = {}) => res.status(status).jso
 /* Carga excluída não recebe edição, tratativa nem pagamento: primeiro se
    restaura (lista das excluídas) — senão o trabalho iria para uma linha que
    ninguém vê. */
+/* A recusa diz o caminho (09/10/2026, #128/#129): a transportadora entra pela
+   placa na Frota ou, sem placa, pelo cadastro de transportadoras. */
+const ERRO_TRANSPORTADORA = (nome) => `"${nome}" não está cadastrada — nem numa placa da Frota, nem na lista de transportadoras sem placa. Escolha na lista o nome igual ao do cadastro, ou cadastre a transportadora antes.`;
 const ERRO_EXCLUIDA = (ex) => [409, 'CARGA_EXCLUIDA',
   `Esta carga foi excluída do controle por ${ex.por || 'alguém'} (${ex.motivo}). Restaure-a em "Excluídas" para mexer nela.`];
 
@@ -309,13 +313,10 @@ rotasPagamentoFrete.patch(`${BASE}/cargas/:numero`, ACESSO, rota(async (req, res
     if (!rows[0]) return { erro: [404, 'CARGA_NAO_ENCONTRADA', 'Esta carga não está no controle.'] };
     const ex = await excluidaDe(cx, numero);
     if (ex) return { erro: ERRO_EXCLUIDA(ex) };
-    /* Transportadora só das cadastradas (decisão do dono, 05/10/2026): o cadastro é a
-       Frota (dim_veiculos.transportadora). Nome novo se cadastra em Cadastros primeiro. */
-    if (campos.transportadora) {
-      const { rows: tr } = await cx.query('SELECT 1 FROM dim_veiculos WHERE transportadora = $1 LIMIT 1', [campos.transportadora]);
-      if (!tr[0]) {
-        return { erro: [400, 'TRANSPORTADORA_DESCONHECIDA', `"${campos.transportadora}" não está no cadastro da Frota. Cadastre em Cadastros e escolha na lista.`] };
-      }
+    /* Transportadora só das cadastradas (decisão do dono, 05/10/2026): as da Frota
+       (dim_veiculos) e, desde 09/10 (#129), as sem placa (migração 066). */
+    if (campos.transportadora && !(await transportadoraConhecida(cx, campos.transportadora))) {
+      return { erro: [400, 'TRANSPORTADORA_DESCONHECIDA', ERRO_TRANSPORTADORA(campos.transportadora)] };
     }
     if (cols.length) {
       await cx.query(
@@ -398,11 +399,8 @@ rotasPagamentoFrete.patch(`${BASE}/cargas/:numero/pendencias/:nota`, ACESSO, rot
     if (ex) return { erro: ERRO_EXCLUIDA(ex) };
     if (atual.resolvida) return { erro: [409, 'PENDENCIA_RESOLVIDA', 'Esta nota já foi finalizada no B2B — não há mais pendência para tratar.'] };
 
-    if (daNota.transportadora) {
-      const { rows: tr } = await cx.query('SELECT 1 FROM dim_veiculos WHERE transportadora = $1 LIMIT 1', [daNota.transportadora]);
-      if (!tr[0]) {
-        return { erro: [400, 'TRANSPORTADORA_DESCONHECIDA', `"${daNota.transportadora}" não está no cadastro da Frota. Cadastre em Cadastros e escolha na lista.`] };
-      }
+    if (daNota.transportadora && !(await transportadoraConhecida(cx, daNota.transportadora))) {
+      return { erro: [400, 'TRANSPORTADORA_DESCONHECIDA', ERRO_TRANSPORTADORA(daNota.transportadora)] };
     }
     if (Object.keys(daNota).length) {
       const { rows: antes } = await cx.query(

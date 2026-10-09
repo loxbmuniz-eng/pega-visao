@@ -797,7 +797,8 @@ let DB = {
   // isto, uma rota cadastrada offline sumiria no primeiro reload antes de a
   // sincronização terminar. Reaplicadas em ROTAS no load() (ver upsertRota).
   rotasExtras: [],
-  transportadoras: [],  // {id, nome}
+  transportadoras: [],  // {id, nome} — a lista ANTIGA, só deste navegador (#128)
+  transportadorasSemPlaca: [],  // {id, nome} — do servidor (migração 066, #129)
   cargas: [],            // ver criarCargaProgramada/registrarChegadaPortaria
   movimentacoes: [],      // log — nunca editado, só append
   /* Alterações de dado que NÃO são mudança de status (troca de placa, por
@@ -2237,12 +2238,22 @@ function transportadorasDaFrota(){
   return [...porNome.entries()].map(([nome, placas]) => ({ nome, placas }))
     .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
 }
-/* Os nomes do quadro antigo que nenhuma placa da Frota usa: existem só neste
-   navegador. Ficam à vista, ditos como tais, até a pessoa excluir — nada
-   some sem ela ver. */
+/* AS QUE O SERVIDOR ACEITA (09/10/2026, #129): as da Frota MAIS as
+   cadastradas sem placa — "nem toda transportadora tem placa vinculada" (o
+   dono; a AG Sestini e a Versatto operam rota sem placa na Frota). A lista
+   sem placa vem do servidor (DB.transportadorasSemPlaca); é a mesma regra de
+   dominio/transportadoras.js, do lado de lá. */
+function transportadorasAceitas(){
+  const nomes = new Set(transportadorasDaFrota().map(t => t.nome));
+  (DB.transportadorasSemPlaca || []).forEach(t => { if(t && t.nome) nomes.add(t.nome); });
+  return [...nomes].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+}
+/* Os nomes do quadro antigo que o servidor não conhece: existem só neste
+   navegador. Ficam à vista, ditos como tais, até a pessoa cadastrar no
+   servidor ou excluir — nada some sem ela ver. */
 function transportadorasSoNesteNavegador(){
-  const daFrota = new Set(transportadorasDaFrota().map(t => t.nome));
-  return listarTransportadoras().filter(t => !daFrota.has(t.nome));
+  const aceitas = new Set(transportadorasAceitas());
+  return listarTransportadoras().filter(t => !aceitas.has(t.nome));
 }
 function removerTransportadora(id){
   DB.transportadoras = DB.transportadoras.filter(t=>t.id!==id);

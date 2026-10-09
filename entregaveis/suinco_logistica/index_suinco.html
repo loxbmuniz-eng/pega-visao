@@ -1426,11 +1426,13 @@
         <div class="card-title" role="heading" aria-level="2"><svg class="ico ico-card" aria-hidden="true"><use href="#i-empresa"/></svg> Transportadoras
           <button class="btn btn-sec btn-sm" style="float:right" onclick="exportarTransportadorasCsv()"
             title="Baixa as transportadoras da Frota (com a contagem de placas de cada uma) em CSV.">⬇ CSV</button></div>
-        <div class="card-sub">As transportadoras das placas da Frota. É desta lista que o Pagamento de Frete e a Programação escolhem, igual em todo computador. Transportadora nova entra cadastrando uma placa dela na Frota.</div>
+        <div class="card-sub">As transportadoras das placas da Frota e as cadastradas sem placa (operadoras de rota, como a AG Sestini). É desta lista que o Pagamento de Frete escolhe, igual em todo computador.</div>
         <div class="form-row">
-          <div class="form-group"><label for="cad-transp-busca">Buscar</label><input type="search" id="cad-transp-busca" placeholder="Nome da transportadora" autocomplete="off" oninput="renderTranspLista()"></div>
+          <div class="form-group"><label for="cad-transp-busca">Buscar ou cadastrar</label><input type="search" id="cad-transp-busca" placeholder="Nome da transportadora" autocomplete="off" oninput="renderTranspLista()"></div>
         </div>
-        <div class="flex-end" style="margin-top:0"><button class="btn btn-sec btn-sm" onclick="irParaCadastroDePlacaUI()"><svg class="ico ico-btn" aria-hidden="true"><use href="#i-mais"/></svg>Cadastrar placa na Frota</button></div>
+        <div class="flex-end gap8" style="margin-top:0">
+          <button class="btn btn-primary btn-sm" id="cad-transp-cadastrar" hidden onclick="cadastrarTransportadoraUI()"><svg class="ico ico-btn" aria-hidden="true"><use href="#i-mais"/></svg>Cadastrar sem placa</button>
+          <button class="btn btn-sec btn-sm" onclick="irParaCadastroDePlacaUI()"><svg class="ico ico-btn" aria-hidden="true"><use href="#i-mais"/></svg>Cadastrar placa na Frota</button></div>
         <div class="sep"></div>
         <div class="transp-conta" id="cad-transp-conta"></div>
         <div class="transp-lista" id="cad-transp-lista"></div>

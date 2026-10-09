@@ -2486,5 +2486,11 @@ const SuincoSharePoint = (function () {
     devolucoes: devolucoesApi, aoAtualizarDevolucao,
     avisos: avisosApi,
     frete: freteApi,
+    /* Transportadora sem placa (09/10/2026, #129, migração 066). */
+    transportadoras: {
+      listar() { return chamar('/api/transportadoras'); },
+      cadastrar(nome) { return chamar('/api/transportadoras', { metodo: 'POST', corpo: { nome } }); },
+      excluir(id) { return chamar('/api/transportadoras/' + encodeURIComponent(id), { metodo: 'DELETE' }); },
+    },
   };
 })();

@@ -466,28 +466,104 @@ function semAcentoMinusculo(s){
   return String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 }
 function renderTranspLista(){
-  const lista = transportadorasDaFrota();
+  atualizarTransportadorasSemPlaca(false);
+  const pode = podeCadastrarTransportadora();
+  const lista = transportadorasDaFrota().map(t => ({ ...t, semPlaca: false }))
+    .concat((DB.transportadorasSemPlaca || []).map(t => ({ nome: t.nome, id: t.id, semPlaca: true })))
+    .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
   const busca = semAcentoMinusculo((document.getElementById('cad-transp-busca') || {}).value || '').trim();
   const vistas = busca ? lista.filter(t => semAcentoMinusculo(t.nome).includes(busca)) : lista;
   const conta = document.getElementById('cad-transp-conta');
   if(conta) conta.textContent = busca
-    ? `${vistas.length} de ${lista.length} transportadoras da Frota`
-    : `${lista.length} transportadora${lista.length === 1 ? '' : 's'} na Frota`;
+    ? `${vistas.length} de ${lista.length} transportadoras cadastradas`
+    : `${lista.length} transportadora${lista.length === 1 ? '' : 's'} cadastrada${lista.length === 1 ? '' : 's'}`;
+  const btnCad = document.getElementById('cad-transp-cadastrar');
+  if(btnCad){
+    const exato = lista.some(t => semAcentoMinusculo(t.nome) === busca);
+    btnCad.hidden = !pode || busca.length < 2 || exato;
+  }
   document.getElementById('cad-transp-lista').innerHTML = vistas.length ? vistas.map(t => `
     <div class="modal-list-item transp-item"><span>${esc(t.nome)}</span>
-      <span class="transp-placas">${t.placas} placa${t.placas === 1 ? '' : 's'}</span></div>
+      ${t.semPlaca
+        ? `<span class="transp-acoes"><span class="transp-placas transp-sem-placa">sem placa</span>${pode
+            ? `<button class="btn btn-danger btn-sm no-print" onclick="excluirTransportadoraSemPlacaUI('${escJs(String(t.id))}')">Excluir</button>` : ''}</span>`
+        : `<span class="transp-placas">${t.placas} placa${t.placas === 1 ? '' : 's'}</span>`}</div>
   `).join('') : `<div class="empty-state">${busca
-      ? 'Nenhuma placa da Frota é dessa transportadora. Se ela é nova, cadastre uma placa dela na Frota.'
-      : 'Nenhuma placa cadastrada na Frota ainda.'}</div>`;
+      ? (pode ? 'Nenhuma transportadora com esse nome. Sem placa? Use "Cadastrar sem placa". Com placa? Cadastre a placa na Frota.'
+              : 'Nenhuma transportadora com esse nome.')
+      : 'Nenhuma transportadora cadastrada ainda.'}</div>`;
   const soAqui = transportadorasSoNesteNavegador();
   const caixa = document.getElementById('cad-transp-so-aqui');
   if(caixa){
     caixa.hidden = !soAqui.length;
     caixa.innerHTML = soAqui.length ? `
       <div class="transp-so-aqui-tit">Só neste computador — o servidor não conhece</div>
-      <div class="card-sub">Nomes digitados no quadro antigo. Nenhuma placa da Frota usa estes nomes, e o Pagamento de Frete não os aceita. Confira na Frota como a transportadora está escrita e exclua o nome daqui.</div>
+      <div class="card-sub">Nomes digitados no quadro antigo, que ficaram só neste navegador — o Pagamento de Frete não os aceita. Se a transportadora não tem placa, cadastre no servidor; se já existe com outra grafia, exclua daqui.</div>
       ${soAqui.map(t => `<div class="modal-list-item"><span>${esc(t.nome)}</span>
-        <button class="btn btn-danger btn-sm no-print" onclick="removerTransportadoraUI('${escJs(t.id)}')">Excluir</button></div>`).join('')}` : '';
+        <span class="transp-acoes">${pode ? `<button class="btn btn-sec btn-sm no-print" onclick="enviarTransportadoraAoServidorUI('${escJs(t.id)}')">Cadastrar no servidor</button>` : ''}
+        <button class="btn btn-danger btn-sm no-print" onclick="removerTransportadoraUI('${escJs(t.id)}')">Excluir</button></span></div>`).join('')}` : '';
+  }
+}
+/* A LISTA SEM PLACA VEM DO SERVIDOR (09/10/2026, #129). Busca ao abrir o
+   Cadastros ou o Pagamento de Frete e depois de cadastrar/excluir — no máximo
+   uma vez por minuto sem pedido explícito, porque o redesenho de 15 s chama o
+   quadro o tempo todo. Sem servidor (vitrine, modo local), fica o que havia. */
+let _transpSemPlacaEm = 0;
+let _transpSemPlacaPedido = null;
+function atualizarTransportadorasSemPlaca(forcar){
+  if(typeof SuincoSharePoint === 'undefined' || !SuincoSharePoint.transportadoras || !SuincoSharePoint.estaConfigurado()) return Promise.resolve();
+  if(!forcar && (_transpSemPlacaPedido || Date.now() - _transpSemPlacaEm < 60000)) return _transpSemPlacaPedido || Promise.resolve();
+  _transpSemPlacaPedido = SuincoSharePoint.transportadoras.listar().then((r) => {
+    DB.transportadorasSemPlaca = (r && Array.isArray(r.semPlaca) ? r.semPlaca : []).map(t => ({ id: t.id, nome: t.nome, criadoPor: t.criadoPor }));
+    _transpSemPlacaEm = Date.now();
+    SuincoStore.save();
+    if(document.getElementById('cad-transp-lista')) renderTranspLista();
+    atualizarDatalists();
+  }).catch((e) => { console.warn('[Suinco] transportadoras sem placa:', e && e.message); })
+    .finally(() => { _transpSemPlacaPedido = null; });
+  return _transpSemPlacaPedido;
+}
+function podeCadastrarTransportadora(){
+  const s = DB.operador && DB.operador.setor;
+  return ['Logística', 'Pagamento de Frete', 'Administração'].includes(s)
+    && typeof SuincoSharePoint !== 'undefined' && SuincoSharePoint.estaConfigurado();
+}
+async function cadastrarTransportadoraUI(nomeDado){
+  const campo = document.getElementById('cad-transp-busca');
+  const nome = String(nomeDado ?? (campo ? campo.value : '')).replace(/\s+/g, ' ').trim();
+  if(nome.length < 2){ notify('Escreva o nome da transportadora no campo.', 'warn'); return false; }
+  try{
+    await SuincoSharePoint.transportadoras.cadastrar(nome);
+    await atualizarTransportadorasSemPlaca(true);
+    notify(`Transportadora "${nome}" cadastrada sem placa.`, 'success');
+    if(campo && nomeDado === undefined){ campo.value = nome; renderTranspLista(); }
+    return true;
+  }catch(e){
+    notify((e && e.message) || 'Não consegui cadastrar.', e && e.status === 409 ? 'warn' : 'danger', 9000);
+    return false;
+  }
+}
+async function excluirTransportadoraSemPlacaUI(id){
+  const t = (DB.transportadorasSemPlaca || []).find(x => String(x.id) === String(id));
+  if(!t) return;
+  if(!(await perguntarUI({ titulo: `Excluir a transportadora ${t.nome}?`,
+       texto: 'Ela sai da lista do Pagamento de Frete. As cargas que já estão com esse nome continuam com ele.',
+       botao: 'Excluir', perigo: true }))) return;
+  try{
+    await SuincoSharePoint.transportadoras.excluir(t.id);
+    await atualizarTransportadorasSemPlaca(true);
+    notify('Transportadora excluída da lista.', 'success');
+  }catch(e){ notify((e && e.message) || 'Não consegui excluir.', 'danger', 9000); }
+}
+/* O nome antigo, só deste navegador, vai ao servidor com um toque. Se o
+   servidor disser que já existe parecido, o nome antigo fica para a pessoa
+   excluir — ela vê qual é o certo na mensagem. */
+async function enviarTransportadoraAoServidorUI(id){
+  const t = DB.transportadoras.find(x => x.id === id);
+  if(!t) return;
+  if(await cadastrarTransportadoraUI(t.nome)){
+    removerTransportadora(id);
+    renderTranspLista();
   }
 }
 function irParaCadastroDePlacaUI(){
@@ -513,7 +589,7 @@ function atualizarDatalists(){
   /* As sugestões ao digitar transportadora (Frota, Programação, Montagem,
      completar a chegada) vêm da Frota — antes vinham da lista antiga do
      navegador e espalhavam a grafia que o servidor recusa (#128). */
-  document.getElementById('lista-transportadoras').innerHTML = transportadorasDaFrota().map(t=>`<option value="${esc(t.nome)}">`).join('');
+  document.getElementById('lista-transportadoras').innerHTML = transportadorasAceitas().map(n=>`<option value="${esc(n)}">`).join('');
   /* Placas da Frota para o campo de placa da Montagem. A sugestão mostra a
      transportadora junto: quem monta o dia reconhece o caminhão pela
      empresa, não pelas sete letras. */
