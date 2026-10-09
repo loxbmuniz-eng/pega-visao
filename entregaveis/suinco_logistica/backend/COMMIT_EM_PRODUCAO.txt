@@ -1,4 +1,31 @@
-dbecc3e
+07b412e
+
+# ---------------------------------------------------------------------
+# 09/10/2026 — 2e2b0bf → 07b412e. O SERVIDOR ALCANÇOU O PORTÃO 76.
+#
+# Bloco COPIE DAQUI colado pelo dono (atualizar_tudo.sh): commit no
+# servidor 07b412e, serviço active, /health 200, última migração
+# 066_transportadoras_sem_placa.sql (sem migração nova), aviso no celular
+# ligado, vigias 6 ok e 0 com problema, node v24.21.0, problemas nesta
+# rodada: nenhum.
+#
+# Passou a valer: a decisão 32 — a Logística entra em toda rota da aba
+# Pagamento de Frete e gera o PDF detalhado (SETORES_DA_ABA_FRETE).
+# Servidor e painel no mesmo commit; nenhuma migração pendente.
+
+# ---------------------------------------------------------------------
+# 09/10/2026 — dbecc3e → 2e2b0bf. O SERVIDOR ALCANÇOU O PORTÃO 75.
+#
+# Bloco COPIE DAQUI colado pelo dono (atualizar_tudo.sh): commit no
+# servidor 2e2b0bf, serviço active, /health 200, última migração
+# 066_transportadoras_sem_placa.sql, aviso no celular ligado, vigias 6 ok
+# e 0 com problema, node v24.21.0, problemas nesta rodada: nenhum.
+#
+# Passou a valer: a #129 — tabela transportadoras (066), rotas
+# /api/transportadoras e o Pagamento de Frete aceitando Frota OU sem
+# placa. O portão 76 (07b412e, decisão 32: a Logística na aba) só muda
+# código de servidor (fluxo.js, documentos.js, rotas/pagamento_frete.js),
+# sem migração: vale depois do próximo atualizar_tudo.sh.
 
 # ---------------------------------------------------------------------
 # 09/10/2026 — 541d34d → dbecc3e. O SERVIDOR ALCANÇOU O PORTÃO 71.

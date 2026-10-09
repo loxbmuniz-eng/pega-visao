@@ -1,4 +1,8 @@
-065
+066
+# ---------------------------------------------------------------------
+# 09/10/2026 — 065 → 066. Bloco COPIE DAQUI colado pelo dono
+# (atualizar_tudo.sh): commit no servidor 2e2b0bf, serviço active,
+# /health 200, última migração 066_transportadoras_sem_placa.sql, vigias 6 ok.
 # ---------------------------------------------------------------------
 # 09/10/2026 — 064 → 065. Bloco COPIE DAQUI colado pelo dono
 # (atualizar_tudo.sh): commit no servidor dbecc3e, serviço active,

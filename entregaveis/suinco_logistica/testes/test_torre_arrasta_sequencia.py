@@ -131,8 +131,18 @@ async def main():
 
         print('\n=== 3. O NÚMERO DE QUEM JÁ CARREGOU CONTINUA SENDO GUARDADO ===')
         # É exatamente o defeito de 14/08 (#27): o valor tem que ficar.
+        # A REGRA MUDOU DE PROPÓSITO (09/10/2026, #133): número que pula para
+        # depois da maior sequência do dia PERGUNTA antes de gravar — um peso
+        # digitado no campo errado arrastou as cargas novas do dia para 16627.
+        # O que este bloco trava continua igual: confirmado, o 9 FICA.
+        await pg.evaluate("() => { definirSequenciaTorreUI('c_carregando', '9'); }")
+        await pg.wait_for_timeout(400)
+        perg = await pg.evaluate("() => (document.getElementById('pergunta-titulo') || {}).textContent || ''")
+        ck('9 depois da maior do dia: o painel pergunta antes', '9' in perg, perg or 'nenhuma pergunta abriu')
+        if perg:
+            await pg.click('#pergunta-ok')
+            await pg.wait_for_timeout(400)
         guardou = await pg.evaluate("""() => {
-            definirSequenciaTorreUI('c_carregando', '9');
             const c = DB.cargas.find(x=>x.id==='c_carregando');
             return { seq: c.sequencia, carimbo: !!c.atualizadoEm };
         }""")

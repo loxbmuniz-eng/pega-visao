@@ -6100,3 +6100,88 @@ arquivos do servidor, porque `COMMIT_EM_PRODUCAO.txt` e
 portões 75 e 76 (`2e2b0bf` e `07b412e`, migração 066), registrados no raio-X,
 não foram gravados nas marcas. A regra do arquivo é que a marca só muda com o
 bloco na mão: fica para o próximo COPIE DAQUI. A #131 não tocou em `backend/`.
+
+## #133 — As cargas novas do dia nasciam 16627, 16628… na Sequência (09/10/2026)
+
+**Relato do dono, com o print da Montagem de 09/10:** *"cargas que foram
+criadas agora estão saindo com um número nada a ver na coluna sequência,
+precisa resolver isso agora e entender onde está acontecendo"* — e, depois:
+*"resolve e audita, não quero mais acontecendo esse problema"*. Na tela: 25,
+26 e, em seguida, 16627, 16628… 16636.
+
+**Reproduzido no banco de teste, pela API e pela tela:** com o dia em 1, 2 e
+3, digitar 16626 em "Sequência" no formulário aberto da linha → o servidor
+grava; a carga criada depois nasce **16627**. Digitar 50000 no campo da
+linha → grava; a seguinte nasce **50001**. Na Torre, 99999 → grava.
+
+**A causa.** Dois fatos que, sozinhos, são decisões certas:
+1. a criação dá à linha nova a casa livre **acima da maior** do dia (#43) —
+   ninguém que já estava numerado muda de lugar;
+2. o número digitado é o que a carga fica, **qualquer que seja** (decisão do
+   dono de 17/09: *"independentemente do número, você vai resolver"*).
+Juntos, um número digitado no campo errado — o formulário da linha tem
+"Sequência" colado em "Peso (kg)", e um peso de 16.626 kg cabe nele — puxa
+TODAS as cargas criadas depois. Nenhum campo de sequência dizia nada.
+
+**O dado de hoje.** A lista da Montagem vem do servidor ordenada pela
+sequência, com todas as linhas (as que já viraram carga e as canceladas
+também). No print não há linha em 16626 entre o 26 e o 16627: a linha que
+recebeu o número já tinha sido corrigida ou excluída, e as dez 16627… estão
+abertas ("Criar carga"). O botão **Reorganizar por Sequência** da Montagem
+as leva para 27…36 sem mudar a ordem.
+
+**Família:** *O campo que aceita o dado errado em silêncio* (como as placas
+do dia digitadas no campo de Motorista em 28/08, contado em `app/90_montagem.js`)
+somada a *Uma regra certa, o efeito que ninguém olhou*.
+
+**A correção — perguntar, não recusar** (a decisão de 17/09 continua): uma
+função só, `sequenciaConfirmadaUI` (`app/40_programacao.js`). Quando o
+número pula para depois da **maior sequência do dia + 1**, o painel pergunta
+antes de gravar: *"Hoje a maior sequência do dia é 26. Com 16626, esta carga
+vai para o fim da lista e as cargas criadas depois neste dia nascem a partir
+de 16627. Se foi o peso ou o número da carga digitado no campo errado,
+corrija."* — "Gravar 16626" ou "Corrigir". Dentro do dia, ou a próxima
+casa, nada muda e nada pergunta.
+
+**A auditoria — todo caminho por onde número de sequência entra:**
+
+| Caminho | Antes | Agora |
+|---|---|---|
+| Campo da linha na Montagem (`definirSequenciaMontagemUI`) | cascata, qualquer número | pergunta |
+| Campo "Sequência" do formulário aberto da linha | gravava CRU (`PATCH`), sem a cascata | mesma função do campo da linha: cascata + pergunta |
+| Linha da Montagem que já virou carga / cancelada | gravava cru | pergunta (o número dela também conta para a casa livre) |
+| Fila de programados e Torre — carga que ainda vai carregar (`definirPosicaoNaFilaUI`) | cascata, qualquer número | pergunta |
+| Torre e formulário da carga na Montagem — número de registro (`atualizarSequenciaUI`) | gravava | pergunta |
+| Arrastar (Montagem e Torre) | solta sobre um número que já existe | sem mudança — não cria número novo |
+| Criação de linha (servidor, casa acima da maior) e carga criada a partir da linha (herda o número) | — | sem mudança: com a porta fechada, não herdam mais número digitado por engano |
+| Restaurar revisão de carga | devolve o valor antigo | sem mudança — é registro |
+
+Junto, dois cuidados de quem usa: uma pergunta de cada vez (o campo perde o
+foco quando a janela abre e o navegador pode disparar o "change" de novo — a
+segunda chamada abria outra janela por cima e fechava a primeira como
+"Corrigir"); e o cursor volta para o campo da linha depois de responder.
+
+**Teste que trava.** `test_sequencia_fora_do_dia_pergunta` — pela tela, com
+a API de verdade: o formulário (16626), o campo da linha (50000) e a Torre
+(99999) perguntam; "Corrigir" não grava nada; a carga seguinte nasce 4, não
+16627; número dentro do dia não pergunta; confirmar grava (17/09). Reprovou
+no publicado em 9 pontos. A regra mudou de propósito em dois testes antigos
+(causa 1): `test_torre_arrasta_sequencia` (9 numa carga que já carregou) e
+`test_torre_desliza_sem_mudar_colunas` (5000) agora respondem à pergunta e
+conferem que ela foi feita — o que eles travavam continua igual. O primeiro
+portão com a bateria inteira achou mais dois na mesma situação, e eles
+também passaram a responder: `test_numero_digitado_com_ponto` (12 numa
+carga de registro — mede o leitor do número) e `test_edicao_marca_alterada`
+(o 7 numa lista de 1 da #27, que continua valendo depois de "Gravar").
+
+**Dois portões parados no meio, de propósito.** O primeiro porque outra
+sessão publicou os portões 77 e 78 enquanto este rodava — publicar por cima
+juntaria na entrega um código que a bateria não viu; o trabalho das duas foi
+juntado sem reescrever nada e esta ocorrência, nascida como #131, virou #133.
+O segundo porque os dois testes acima reprovariam de novo na segunda chance
+(regra que mudou de propósito, causa 1) — esperar o cancelamento era meia
+hora a mais. No contêiner novo faltava também o `pdftotext`, que o
+`test_pagamento_frete_pdf_aproveita_a_folha` (da #131) usa para ler o PDF:
+instalado (`poppler-utils`).
+
+Só painel: não depende do servidor.
