@@ -1062,3 +1062,27 @@ relatório do Sisatak com todas as devoluções, importado como o WRMVE790.
 **Pontualidade ficou de fora:** ninguém registra a hora combinada de chegada.
 Para medir, a Programação precisaria de um campo a mais — decisão adiada até
 os quatro números estarem em uso.
+
+## 31. Quem usa o painel em qual aparelho (09/10/2026)
+
+Com as palavras do dono: *"na verdade quem usa no celular é expedicao e
+administracao, portaria nao usa no celular, comercial usa no celular"*,
+*"logistica usa no celular"*, *"ninguem usa no tablet"*.
+
+- **Celular:** Logística, Expedição, Administração e Comercial.
+- **Portaria:** computador. Não usa celular.
+- **Tablet:** ninguém.
+
+**Substitui** o que estava no `PRODUCT.md` desde 08/10 ("na Portaria o
+aparelho de trabalho é tablet ou PC fixo") e a auditoria `/impeccable`, que
+tratava 1024×768 e 768×1024 como "o tablet da Portaria".
+
+**O que muda por causa disso:**
+- saem da fila as duas propostas pensadas para tablet: a "ação em um
+  clique" da Portaria a duas telas no tablet em pé, e a Torre truncando
+  placa e peso no tablet deitado;
+- o Lote 5b (#127, portão 73) **fica como está** — *"mas tudo bem deixa do
+  jeito que ta"*: o cabeçalho em duas linhas até 820 px vale para janela
+  estreita e para o celular;
+- a paridade de celular (`suinco-paridade-mobile`) mira quem usa o
+  telefone: Logística, Expedição, Administração e Comercial.

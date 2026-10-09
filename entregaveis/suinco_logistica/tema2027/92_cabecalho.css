@@ -11,8 +11,8 @@
      · 1024×768 — o relógio a 10 px ACIMA da tela. O meio do cabeçalho
        tinha 210 px para o relógio (178) e o crachá (142): eles quebravam
        em duas linhas, e o cabeçalho, de altura fixa, cortava a de cima;
-     · 600 e 768 px — o tablet da Portaria em pé — o meio ficava com 0 e
-       23 px: relógio e crachá sumiam por inteiro, atrás do corte;
+     · 600 e 768 px (janela estreita; ninguém usa tablet — decisão 31) — o
+       meio ficava com 0 e 23 px: relógio e crachá sumiam por inteiro;
      · celular — o crachá com 36 a 66 px: "An…". A pessoa não via com que
        setor tinha entrado.
 
@@ -42,7 +42,7 @@
   #header-actions .rot-btn{ display:none }
 }
 
-/* Tablet em pé e celular (até 820 px): relógio e crachá ganham a SEGUNDA
+/* Janela estreita e celular (até 820 px): relógio e crachá ganham a SEGUNDA
    LINHA do cabeçalho. Numa linha só não há conta que feche: em 390 px
    menu, logo e quatro botões já somam 334 px, e 384 com o "Atenção" da
    Administração; em 768 o meio do cabeçalho tinha 23 px. O crachá é a

@@ -5784,9 +5784,11 @@ mexer:
 - **cabeçalho**: em 1024×768 o relógio ficava 10 px ACIMA da tela. O meio do
   cabeçalho tinha 210 px para o relógio (178) e o crachá (142); eles quebravam
   em duas linhas e o cabeçalho, de altura fixa, cortava a de cima. **Achado
-  no caminho, pior que o da auditoria:** em 600 e 768 px — o tablet da
-  Portaria em pé — o meio ficava com 0 e 23 px, e relógio e crachá SUMIAM por
-  inteiro, atrás do corte (`overflow:hidden`). No celular o crachá tinha de
+  no caminho, pior que o da auditoria:** em 600 e 768 px o meio ficava com 0
+  e 23 px, e relógio e crachá SUMIAM por inteiro, atrás do corte
+  (`overflow:hidden`). (A auditoria chamava essas larguras de "tablet da
+  Portaria"; o dono corrigiu em 09/10: ninguém usa tablet e a Portaria não
+  usa celular — decisão 31. A correção fica: vale para janela estreita.) No celular o crachá tinha de
   36 a 66 px: "An…" — a pessoa não via com que setor tinha entrado;
 - **Faturamento**: a carga já FATURADO continuava em "Cargas Aguardando
   Faturamento", com a ação "—". Ficar na fila é REGRA (12/08, "nada some da
