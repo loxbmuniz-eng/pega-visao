@@ -1,4 +1,8 @@
-064
+065
+# ---------------------------------------------------------------------
+# 09/10/2026 — 064 → 065. Bloco COPIE DAQUI colado pelo dono
+# (atualizar_tudo.sh): commit no servidor dbecc3e, serviço active,
+# /health 200, última migração 065_senha_aba_usuarios.sql, vigias 6 ok.
 # ---------------------------------------------------------------------
 # 07/10/2026 — 060 → 064. Bloco COPIE DAQUI colado pelo dono
 # (atualizar_tudo.sh): commit no servidor 6408260, serviço active,
