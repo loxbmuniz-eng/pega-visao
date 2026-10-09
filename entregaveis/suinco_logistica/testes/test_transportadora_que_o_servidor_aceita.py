@@ -26,9 +26,16 @@ O QUE ESTE TESTE TRAVA, pela tela, com o servidor e o banco de teste:
   4. o nome que só existe neste navegador aparece SEPARADO, dito como tal;
   5. as sugestões ao digitar transportadora (Frota, Programação) vêm da Frota;
   6. se o servidor recusar mesmo assim (a placa mudou de transportadora
-     depois que a tela carregou), a mensagem diz o caminho: a PLACA na Frota,
-     dentro da janela;
-  7. no celular, o quadro aberto não estica a página (a lista rola por dentro).
+     depois que a tela carregou), a mensagem diz o caminho, dentro da janela;
+  7. no celular, o quadro aberto não estica a página (a lista rola por dentro);
+  8. TRANSPORTADORA SEM PLACA (#129, migração 066 — "nem toda transportadora
+     tem placa vinculada"; a AG Sestini e a Versatto operam rota sem placa):
+     a Daniela, do setor Pagamento de Frete, cadastra na própria janela da
+     carga, a lista já a escolhe, e o servidor grava; um nome parecido com
+     um existente é recusado e a lista escolhe o existente;
+  9. no Cadastros, a sem placa aparece com o selo e o Excluir que pergunta; o
+     nome antigo do navegador tenta ir ao servidor e, parecido com um
+     existente, fica para excluir.
 
     bash testes/rodar_tudo.sh test_transportadora_que_o_servidor_aceita
 """
@@ -93,10 +100,14 @@ def operador(email, setor):
     return (r or {}).get('token')
 
 
+SEM_PLACA = 'AG Sestini Sem Placa Teste Transportes Ltda.'
+
+
 def limpar():
     for t in ['pgfrete_eventos', 'pgfrete_leituras', 'pgfrete_pagamentos', 'pgfrete_pendencias', 'pgfrete_cargas']:
         psql(f'DELETE FROM {t};')
     psql("DELETE FROM dim_veiculos WHERE placa IN ('TST9B01','TST9B02');")
+    psql("DELETE FROM transportadoras WHERE nome LIKE '%Teste%';")
 
 
 async def abrir_painel(ctx, viewport=None):
@@ -164,9 +175,10 @@ async def main():
         ops = await opcoes_do_select(pg, '#frete-campo-valor')
         ck('a lista oferece a transportadora da Frota', DA_FROTA in ops, str(len(ops)))
         ck('a lista NÃO oferece o nome que só existe neste navegador', DO_NAVEGADOR not in ops)
-        frota = set(psql("SELECT DISTINCT transportadora FROM dim_veiculos WHERE transportadora IS NOT NULL").split('\n'))
+        frota = set(psql("SELECT DISTINCT transportadora FROM dim_veiculos WHERE transportadora IS NOT NULL "
+                         "UNION SELECT nome FROM transportadoras WHERE excluida_em IS NULL").split('\n'))
         fora = [o for o in ops if o not in frota]
-        ck('toda opção da lista é transportadora de alguma placa no banco', not fora, str(fora[:5]))
+        ck('toda opção da lista é transportadora cadastrada no banco (placa da Frota ou sem placa)', not fora, str(fora[:5]))
 
         print('\n=== 2. O CAMINHO CERTO GRAVA ===')
         await pg.select_option('#frete-campo-valor', DA_FROTA)
@@ -236,6 +248,76 @@ async def main():
         alto = await pc.evaluate("() => Math.round(document.getElementById('card-transportadoras').getBoundingClientRect().height)")
         ck('aberto no celular, o quadro não estica a página com as 134 transportadoras', alto < 1200, f'{alto} px')
         await cel.close()
+
+        print('\n=== 8. A DANIELA CADASTRA A TRANSPORTADORA SEM PLACA NA JANELA DA CARGA ===')
+        tok_d = operador('daniela.transp@teste.local', 'Pagamento de Frete')
+        ck('(operadora do setor Pagamento de Frete criada)', bool(tok_d))
+        cd = await nav.new_context()
+        pd = await abrir_painel(cd)
+        pd.on('pageerror', lambda e: erros.append(str(e)))
+        await pd.fill('#login-email', 'daniela.transp@teste.local')
+        await pd.fill('#login-senha', SENHA)
+        await pd.click('#btn-entrar')
+        await pd.wait_for_timeout(2500)
+        await pd.click('.nav-tab[data-tab="frete"]')
+        await pd.wait_for_timeout(1200)
+        await pd.locator('#frete-tbody tr.frete-carga-linha[data-carga="900802"] button.frete-transp').first.click()
+        await pd.wait_for_timeout(500)
+        ck('a janela da carga oferece "Cadastrar transportadora sem placa"',
+           await pd.locator('#modal-frete .frete-cad-rapido button.btn-link').count() == 1)
+        if await pd.locator('#modal-frete .frete-cad-rapido button.btn-link').count():
+            await pd.click('#modal-frete .frete-cad-rapido button.btn-link')
+            await pd.fill('#modal-frete .frete-cad-rapido-nome', SEM_PLACA)
+            await pd.click('#modal-frete .frete-cad-rapido-ok')
+            await pd.wait_for_timeout(1500)
+            ck('o servidor guardou a transportadora sem placa, com quem cadastrou',
+               psql(f"SELECT criado_por FROM transportadoras WHERE nome = '{SEM_PLACA}' AND excluida_em IS NULL") == 'Pagamento de Frete Teste')
+            ck('a lista da janela já a escolheu', await pd.input_value('#frete-campo-valor') == SEM_PLACA)
+            await pd.click('#modal-frete button:has-text("Salvar")')
+            await pd.wait_for_timeout(2000)
+            ck('e o servidor aceitou na carga', psql("SELECT transportadora FROM pgfrete_cargas WHERE numero_carga='900802'") == SEM_PLACA)
+            # nome parecido com um existente: recusa e escolhe o existente
+            await pd.locator('#frete-tbody tr.frete-carga-linha[data-carga="900802"] button.frete-transp').first.click()
+            await pd.wait_for_timeout(500)
+            await pd.click('#modal-frete .frete-cad-rapido button.btn-link')
+            await pd.fill('#modal-frete .frete-cad-rapido-nome', 'ag sestini sem placa teste transporte ltda')
+            await pd.click('#modal-frete .frete-cad-rapido-ok')
+            await pd.wait_for_timeout(1500)
+            msg = await pd.inner_text('#modal-frete .frete-cad-rapido-msg')
+            ck('nome parecido com um existente: a janela diz qual existe', 'Já existe' in msg and SEM_PLACA in msg, msg[:200])
+            ck('e a lista escolhe o existente', await pd.input_value('#frete-campo-valor') == SEM_PLACA)
+            ck('sem cadastrar o parecido', psql("SELECT count(*) FROM transportadoras WHERE nome ILIKE 'ag sestini sem placa teste transporte ltda'") == '0')
+            await pd.click('#modal-frete button:has-text("Cancelar")')
+        await cd.close()
+
+        print('\n=== 9. NO CADASTROS: O SELO, O EXCLUIR, E O NOME ANTIGO ===')
+        await pg.reload()
+        await pg.wait_for_timeout(2500)
+        await pg.click('.nav-tab[data-tab="cadastros"]')
+        await pg.wait_for_timeout(1500)
+        await pg.fill('#cad-transp-busca', 'sem placa teste')
+        await pg.wait_for_timeout(500)
+        item = pg.locator('#cad-transp-lista .transp-item', has_text=SEM_PLACA)
+        ck('a sem placa aparece no quadro, com o selo "sem placa"', await item.count() == 1 and 'sem placa' in (await item.inner_text()).lower())
+        so_aqui = pg.locator('#cad-transp-so-aqui .modal-list-item', has_text=DO_NAVEGADOR)
+        if await so_aqui.count():
+            await so_aqui.locator('button:has-text("Cadastrar no servidor")').click()
+            await pg.wait_for_timeout(1500)
+            aviso = await pg.evaluate("() => [...document.querySelectorAll('#notif *')].map(e => e.innerText).join(' | ')")
+            ck('o nome antigo, parecido com o da Frota, NÃO vai ao servidor — e o aviso diz qual existe',
+               psql(f"SELECT count(*) FROM transportadoras WHERE nome = '{DO_NAVEGADOR}'") == '0' and DA_FROTA in aviso, aviso[:200])
+        else:
+            ck('(o nome antigo aparece em "Só neste computador")', False)
+        if await item.count():
+            await item.locator('button:has-text("Excluir")').click()
+            await pg.wait_for_timeout(400)
+            ck('excluir a sem placa pergunta antes', 'Excluir a transportadora' in await pg.evaluate("() => (document.getElementById('pergunta-titulo')||{}).textContent || ''"))
+            await pg.click('#pergunta-ok')
+            await pg.wait_for_timeout(1500)
+            ck('confirmado, sai da lista do servidor (a linha fica marcada)',
+               psql(f"SELECT count(*) FROM transportadoras WHERE nome = '{SEM_PLACA}' AND excluida_em IS NOT NULL") == '1'
+               and await pg.locator('#cad-transp-lista .transp-item', has_text=SEM_PLACA).count() == 0)
+        psql("DELETE FROM operadores WHERE email = 'daniela.transp@teste.local';")
 
         ck('sem erro de JavaScript', not erros, ' | '.join(erros[:3]))
         await nav.close()

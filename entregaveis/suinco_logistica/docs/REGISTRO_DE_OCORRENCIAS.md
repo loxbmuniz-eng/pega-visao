@@ -5903,3 +5903,42 @@ semear o nome antigo no navegador (causa 1: o quadro não cadastra mais).
 
 **Para quem tem o nome antigo no navegador** (a Daniela): o nome aparece em
 "Só neste computador"; na carga, escolher o nome igual ao da placa.
+
+## #129 — Transportadora sem placa não tinha como entrar no Pagamento de Frete (09/10/2026)
+
+**Do dono, no mesmo dia da #128:** *"nem toda transportadora tem placa
+vinculada"*, *"AG Sestini é operadora transportadora mas não tem vínculo com
+placa"*, *"Versatto também"*. Conferido: a AG Sestini é a operadora das rotas
+520 e 536, a Versatto Logística da rota 519 — e nenhuma das duas tem placa na
+Frota. Desde 05/10 o Pagamento de Frete só aceita transportadora CADASTRADA, e
+o único cadastro que o servidor conhecia era a placa: a Daniela não tinha como
+lançar essas cargas de jeito nenhum.
+
+**Família:** *A regra escrita para um caso só* — "cadastrada = tem placa"
+valia para quem tem caminhão próprio na Frota, não para a operadora de rota.
+
+**Correção** (aprovada pelo dono; quem cadastra: Logística, Pagamento de
+Frete e Administração):
+- migração **066**: tabela `transportadoras` (nome; excluir marca quando e
+  quem, a linha fica; um nome ativo por vez);
+- `dominio/transportadoras.js`: `transportadoraConhecida` — Frota OU lista
+  sem placa — chamada pela carga e pela nota (a mesma regra, um lugar só);
+  `nomeParecido` recusa "AG Sestini Transporte" ao lado de "AG Sestini
+  Transportes" e diz qual existe;
+- rotas `GET/POST /api/transportadoras` e `DELETE /api/transportadoras/:id`;
+  sem a 066, cadastrar responde 503 explicado e o pagamento segue com a
+  Frota (nunca 500);
+- painel: a lista do Pagamento de Frete é Frota + sem placa
+  (`transportadorasAceitas`); a janela da carga, da nota e o Editar têm
+  "Não está na lista? Cadastrar transportadora sem placa" — a Daniela
+  cadastra ali (o setor dela não vê o Cadastros) e a lista já escolhe; o
+  quadro "Transportadoras" mostra as duas, com o selo "sem placa" e o Excluir
+  que pergunta; o nome antigo do navegador ganha "Cadastrar no servidor".
+
+**Trava.** Bloco 60 do `api.test.js` (setores, nome parecido, Frota e sem
+placa aceitas na carga e na nota, excluir marcado, sem a 066) e
+`test_transportadora_que_o_servidor_aceita` seções 8 e 9 (pela tela, como a
+Daniela).
+
+**Depende do servidor:** `atualizar_tudo.sh` (migração 066 + rotas). Até lá a
+janela oferece o cadastro e o servidor responde que falta a atualização.

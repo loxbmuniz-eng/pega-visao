@@ -5,6 +5,7 @@ import { emitir, emitirCarga } from '../tempo-real.js';
 import { normalizarPlaca, COLUNAS_CARGA, paraPainel } from '../dominio/cargas.js';
 import { gravarNota } from './cargas.js';
 import { kmValido } from '../dominio/frete.js';
+import { todasAsTransportadoras, nomeParecido, nomeLimpo, existeCadastroSemPlaca } from '../dominio/transportadoras.js';
 
 export const rotasCadastros = Router();
 
@@ -30,6 +31,74 @@ rotasCadastros.get('/frota', exigirLogin, async (req, res, next) => {
       precisaRevisao: v.precisa_revisao,
       atualizadoEm: v.atualizado_em,
     })));
+  } catch (e) { next(e); }
+});
+
+/* TRANSPORTADORA SEM PLACA (09/10/2026, #129, migração 066).
+
+   "Nem toda transportadora tem placa vinculada" (o dono). A lista mora no
+   servidor — igual em todo computador — e o Pagamento de Frete aceita as da
+   Frota mais as daqui (dominio/transportadoras.js). Cadastra e exclui: a
+   Logística, o Pagamento de Frete e a Administração (a Daniela cadastra
+   sozinha quando aparece uma nova).
+
+   Nome PARECIDO com um existente é recusado com o nome existente na
+   resposta: foi um "Transporte"/"Transportes" que travou a Daniela. Excluir
+   marca quando e quem; a linha fica. */
+const SETORES_TRANSPORTADORA = ['Logística', 'Pagamento de Frete'];
+const SEM_MIGRACAO_066 = { erro: 'O servidor ainda não tem o cadastro de transportadoras sem placa — falta a atualização do servidor.', codigo: 'TRANSPORTADORAS_SEM_MIGRACAO' };
+
+rotasCadastros.get('/transportadoras', exigirLogin, async (req, res, next) => {
+  try {
+    const { frota } = await todasAsTransportadoras({ query: consultar });
+    let semPlaca = [];
+    if (await existeCadastroSemPlaca({ query: consultar })) {
+      const { rows } = await consultar(
+        `SELECT id, nome, criado_em, criado_por FROM transportadoras WHERE excluida_em IS NULL ORDER BY nome`);
+      semPlaca = rows.map((r) => ({ id: Number(r.id), nome: r.nome, criadoEm: r.criado_em, criadoPor: r.criado_por }));
+    }
+    res.json({ frota, semPlaca });
+  } catch (e) { next(e); }
+});
+
+rotasCadastros.post('/transportadoras', exigirLogin, exigirSetor(...SETORES_TRANSPORTADORA), async (req, res, next) => {
+  try {
+    const nome = nomeLimpo(req.body?.nome);
+    if (nome.length < 2 || nome.length > 120) {
+      return res.status(400).json({ erro: 'Escreva o nome da transportadora (de 2 a 120 letras).', codigo: 'NOME_INVALIDO' });
+    }
+    const r = await emTransacao(async (cx) => {
+      if (!(await existeCadastroSemPlaca(cx))) return { semMigracao: true };
+      const { rows: naFrota } = await cx.query('SELECT 1 FROM dim_veiculos WHERE transportadora = $1 LIMIT 1', [nome]);
+      if (naFrota[0]) return { erro: [409, 'JA_NA_FROTA', `"${nome}" já está na Frota — é só escolher na lista.`, { existente: nome }] };
+      const parecido = await nomeParecido(cx, nome);
+      if (parecido) {
+        return { erro: [409, 'NOME_PARECIDO', `Já existe "${parecido}" — é a mesma transportadora? Escolha esse nome na lista.`, { existente: parecido }] };
+      }
+      const { rows } = await cx.query(
+        'INSERT INTO transportadoras (nome, criado_por) VALUES ($1, $2) RETURNING id, nome, criado_em',
+        [nome, req.operador.nome]);
+      return { ok: rows[0] };
+    });
+    if (r.semMigracao) return res.status(503).json(SEM_MIGRACAO_066);
+    if (r.erro) {
+      const [st, codigo, erro, extra] = r.erro;
+      return res.status(st).json({ erro, codigo, ...(extra || {}) });
+    }
+    res.status(201).json({ id: Number(r.ok.id), nome: r.ok.nome, criadoEm: r.ok.criado_em });
+  } catch (e) { next(e); }
+});
+
+rotasCadastros.delete('/transportadoras/:id', exigirLogin, exigirSetor(...SETORES_TRANSPORTADORA), async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ erro: 'Transportadora inválida.', codigo: 'ID_INVALIDO' });
+    if (!(await existeCadastroSemPlaca({ query: consultar }))) return res.status(503).json(SEM_MIGRACAO_066);
+    const { rows } = await consultar(
+      `UPDATE transportadoras SET excluida_em = now(), excluida_por = $2
+        WHERE id = $1 AND excluida_em IS NULL RETURNING nome`, [id, req.operador.nome]);
+    if (!rows[0]) return res.status(404).json({ erro: 'Esta transportadora não está na lista (já foi excluída?).', codigo: 'TRANSPORTADORA_NAO_ENCONTRADA' });
+    res.json({ ok: true, nome: rows[0].nome });
   } catch (e) { next(e); }
 });
 

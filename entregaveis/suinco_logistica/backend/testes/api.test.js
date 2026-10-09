@@ -8566,3 +8566,140 @@ describe('59. Senha da parte de gerenciar usuários (08/10/2026, pedido do dono)
     assert.ok(!com.json.pontos.some((p) => p.codigo === 'senha_usuarios'));
   });
 });
+
+describe('60. Transportadora sem placa (09/10/2026, #129, migração 066)', async () => {
+  const { readFileSync } = await import('node:fs');
+  /* "Nem toda transportadora tem placa vinculada" (o dono). A Daniela não
+     conseguia lançar a AG Sestini na carga 119072: o Pagamento de Frete só
+     aceitava transportadora de placa da Frota. */
+  const FRETE = '/api/pagamento-frete';
+  const T = '/api/transportadoras';
+  const adm = () => tokens['Administração'];
+  const pdf64 = (nome) => readFileSync(new URL(`./fixtures/frete/${nome}`, import.meta.url)).toString('base64');
+  let daniela;
+  const limpar = async () => {
+    for (const t of ['pgfrete_eventos', 'pgfrete_leituras', 'pgfrete_pagamentos', 'pgfrete_pendencias', 'pgfrete_cargas']) {
+      await pool.query(`DELETE FROM ${t}`);
+    }
+    await pool.query("DELETE FROM transportadoras WHERE nome LIKE '%Teste 129%'");
+    await pool.query("DELETE FROM dim_veiculos WHERE placa = 'TST1290'");
+  };
+  const importar = async (n) => {
+    const a = await req(`${FRETE}/leituras`, { metodo: 'POST', token: adm(), corpo: { arquivo: pdf64(`b2b_${n}.pdf`), nome: `b2b_${n}.pdf` } });
+    assert.equal(a.status, 200, a.texto);
+    const b = await req(`${FRETE}/leituras`, { metodo: 'POST', token: adm(), corpo: { arquivo: pdf64(`sist_${n}.pdf`), nome: `sist_${n}.pdf`, lote: a.json.lote } });
+    assert.equal(b.status, 200, b.texto);
+    const c = await req(`${FRETE}/lotes/${a.json.lote}/confirmar`, { metodo: 'POST', token: adm(), corpo: {} });
+    assert.equal(c.status, 200, c.texto);
+  };
+
+  before(async () => {
+    await limpar();
+    await pool.query("INSERT INTO dim_veiculos (placa, transportadora, tipo_veiculo, origem) VALUES ('TST1290', 'Rodovia Teste 129 Transportes Ltda.', 'Truck', 'teste')");
+    const hash = await bcrypt.hash(SENHA, 4);
+    await pool.query("DELETE FROM operadores WHERE email = 'daniela129@teste.local'");
+    await pool.query("INSERT INTO operadores (email, nome, setor, senha_hash) VALUES ('daniela129@teste.local', 'Daniela Teste', 'Pagamento de Frete', $1)", [hash]);
+    const r = await req('/auth/login', { metodo: 'POST', corpo: { email: 'daniela129@teste.local', senha: SENHA } });
+    assert.equal(r.status, 200, r.texto);
+    daniela = r.json.token;
+    await importar('900802');
+  });
+  after(async () => {
+    await limpar();
+    await pool.query("DELETE FROM operadores WHERE email = 'daniela129@teste.local'");
+  });
+
+  test('sem cadastro, o servidor recusa a transportadora sem placa — e a recusa diz os dois caminhos', async () => {
+    const r = await req(`${FRETE}/cargas/900802`, { metodo: 'PATCH', token: daniela, corpo: { transportadora: 'AG Sestini Teste 129 Transportes e Logística Ltda.' } });
+    assert.equal(r.status, 400, r.texto);
+    assert.equal(r.json.codigo, 'TRANSPORTADORA_DESCONHECIDA');
+    assert.match(r.json.erro, /placa da Frota/);
+    assert.match(r.json.erro, /sem placa/);
+  });
+
+  test('quem cadastra: Pagamento de Frete, Logística e Administração; a Portaria leva 403; sem login, 401', async () => {
+    assert.equal((await req(T, { metodo: 'POST', corpo: { nome: 'X Teste 129' } })).status, 401);
+    const p = await req(T, { metodo: 'POST', token: tokens['Portaria'], corpo: { nome: 'Portaria Teste 129' } });
+    assert.equal(p.status, 403, p.texto);
+    assert.equal(p.json.codigo, 'SETOR_SEM_PERMISSAO');
+    for (const tk of [daniela, tokens['Logística'], adm()]) {
+      const nome = `Quem Pode ${tk === daniela ? 'Frete' : tk === adm() ? 'Adm' : 'Log'} Teste 129`;
+      const r = await req(T, { metodo: 'POST', token: tk, corpo: { nome } });
+      assert.equal(r.status, 201, r.texto);
+    }
+  });
+
+  test('a Daniela cadastra a AG Sestini, e a carga aceita o nome — letra por letra', async () => {
+    const nome = 'AG Sestini Teste 129 Transportes e Logística Ltda.';
+    const c = await req(T, { metodo: 'POST', token: daniela, corpo: { nome: `  ${nome}  ` } });
+    assert.equal(c.status, 201, c.texto);
+    assert.equal(c.json.nome, nome, 'o nome é gravado sem os espaços das pontas');
+    const r = await req(`${FRETE}/cargas/900802`, { metodo: 'PATCH', token: daniela, corpo: { transportadora: nome } });
+    assert.equal(r.status, 200, r.texto);
+    assert.equal((await pool.query("SELECT transportadora FROM pgfrete_cargas WHERE numero_carga = '900802'")).rows[0].transportadora, nome);
+    const nota = (await pool.query("SELECT nota FROM pgfrete_pendencias WHERE numero_carga = '900802' AND resolvida_em IS NULL LIMIT 1")).rows[0].nota;
+    const t = await req(`${FRETE}/cargas/900802/pendencias/${nota}`, { metodo: 'PATCH', token: daniela, corpo: { transportadora: nome } });
+    assert.equal(t.status, 200, 'a nota também aceita (a mesma regra, um lugar só)');
+  });
+
+  test('nome PARECIDO com um existente é recusado, dizendo qual existe — da lista e da Frota', async () => {
+    const a = await req(T, { metodo: 'POST', token: daniela, corpo: { nome: 'ag sestini teste 129 transporte e logistica ltda' } });
+    assert.equal(a.status, 409, a.texto);
+    assert.equal(a.json.codigo, 'NOME_PARECIDO');
+    assert.equal(a.json.existente, 'AG Sestini Teste 129 Transportes e Logística Ltda.');
+    const f = await req(T, { metodo: 'POST', token: daniela, corpo: { nome: 'RODOVIA TESTE 129 TRANSPORTE LTDA' } });
+    assert.equal(f.status, 409, f.texto);
+    assert.equal(f.json.existente, 'Rodovia Teste 129 Transportes Ltda.', 'a da Frota também conta');
+    const igual = await req(T, { metodo: 'POST', token: daniela, corpo: { nome: 'Rodovia Teste 129 Transportes Ltda.' } });
+    assert.equal(igual.status, 409, igual.texto);
+    assert.equal(igual.json.codigo, 'JA_NA_FROTA');
+    const curto = await req(T, { metodo: 'POST', token: daniela, corpo: { nome: ' x ' } });
+    assert.equal(curto.status, 400, curto.texto);
+  });
+
+  test('a lista devolve as da Frota (com placas) e as sem placa, para qualquer setor com login', async () => {
+    const l = await req(T, { token: tokens['Portaria'] });
+    assert.equal(l.status, 200, l.texto);
+    assert.ok(l.json.frota.some((f) => f.nome === 'Rodovia Teste 129 Transportes Ltda.' && f.placas === 1));
+    const s = l.json.semPlaca.find((t) => t.nome === 'AG Sestini Teste 129 Transportes e Logística Ltda.');
+    assert.ok(s && s.id && s.criadoPor === 'Daniela Teste', JSON.stringify(s));
+  });
+
+  test('excluir marca quando e quem (a linha fica); a carga que já usa o nome continua; o nome pode voltar', async () => {
+    const l = (await req(T, { token: daniela })).json;
+    const s = l.semPlaca.find((t) => t.nome === 'AG Sestini Teste 129 Transportes e Logística Ltda.');
+    const p = await req(`${T}/${s.id}`, { metodo: 'DELETE', token: tokens['Portaria'] });
+    assert.equal(p.status, 403, p.texto);
+    const d = await req(`${T}/${s.id}`, { metodo: 'DELETE', token: daniela });
+    assert.equal(d.status, 200, d.texto);
+    const linha = (await pool.query('SELECT excluida_em, excluida_por FROM transportadoras WHERE id = $1', [s.id])).rows[0];
+    assert.ok(linha.excluida_em && linha.excluida_por === 'Daniela Teste', 'a linha fica, marcada');
+    assert.ok(!(await req(T, { token: daniela })).json.semPlaca.some((t) => t.id === s.id), 'sai da lista');
+    assert.equal((await pool.query("SELECT transportadora FROM pgfrete_cargas WHERE numero_carga = '900802'")).rows[0].transportadora,
+      'AG Sestini Teste 129 Transportes e Logística Ltda.', 'a carga não muda');
+    const outra = await req(`${FRETE}/cargas/900802`, { metodo: 'PATCH', token: daniela, corpo: { transportadora: 'AG Sestini Teste 129 Transportes e Logística Ltda.', cte: '777' } });
+    assert.equal(outra.status, 400, 'excluída, a lista não aceita o nome de novo numa gravação');
+    const de2 = await req(`${T}/${s.id}`, { metodo: 'DELETE', token: daniela });
+    assert.equal(de2.status, 404, de2.texto);
+    const volta = await req(T, { metodo: 'POST', token: daniela, corpo: { nome: 'AG Sestini Teste 129 Transportes e Logística Ltda.' } });
+    assert.equal(volta.status, 201, 'o mesmo nome pode ser cadastrado de novo');
+  });
+
+  test('servidor sem a migração 066: cadastrar responde 503 explicado; o pagamento segue com a Frota (sem 500)', async () => {
+    await pool.query('ALTER TABLE transportadoras RENAME TO transportadoras_066_fora');
+    try {
+      const c = await req(T, { metodo: 'POST', token: daniela, corpo: { nome: 'Sem Tabela Teste 129' } });
+      assert.equal(c.status, 503, c.texto);
+      assert.equal(c.json.codigo, 'TRANSPORTADORAS_SEM_MIGRACAO');
+      const l = await req(T, { token: daniela });
+      assert.equal(l.status, 200, l.texto);
+      assert.deepEqual(l.json.semPlaca, []);
+      const ok = await req(`${FRETE}/cargas/900802`, { metodo: 'PATCH', token: daniela, corpo: { transportadora: 'Rodovia Teste 129 Transportes Ltda.' } });
+      assert.equal(ok.status, 200, ok.texto);
+      const nao = await req(`${FRETE}/cargas/900802`, { metodo: 'PATCH', token: daniela, corpo: { transportadora: 'Sem Tabela Teste 129' } });
+      assert.equal(nao.status, 400, nao.texto);
+    } finally {
+      await pool.query('ALTER TABLE transportadoras_066_fora RENAME TO transportadoras');
+    }
+  });
+});

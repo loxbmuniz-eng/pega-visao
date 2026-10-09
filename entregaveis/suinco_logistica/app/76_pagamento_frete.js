@@ -85,6 +85,7 @@ function renderFrete(){
     freteAviso('Esta aba precisa de conexão com o servidor. Faça login para usá-la.');
     return;
   }
+  atualizarTransportadorasSemPlaca(false);   // as sem placa (#129), no máximo 1×/min
   if(!FRETE.dados){ freteCarregar(); return; }
   freteDesenhar();
   if(Date.now() - FRETE.carregadoEm > FRETE_VALIDADE_MS) freteCarregar();
@@ -746,7 +747,64 @@ function freteLinhaDaCarga(carga){
    dim_veiculos, letra por letra. Até 09/10 esta lista somava a lista antiga
    do navegador — e oferecia nome que o servidor recusa (#128). */
 function freteTransportadorasConhecidas(){
-  return transportadorasDaFrota().map(t => t.nome);
+  return transportadorasAceitas();
+}
+/* CADASTRAR SEM SAIR DA JANELA (09/10/2026, #129). A Daniela não vê o
+   Cadastros (o setor dela tem só esta aba), e a transportadora que falta é
+   justamente a que não tem placa. Embaixo da lista: "Não está na lista?
+   Cadastrar transportadora sem placa" — grava no servidor, volta para a
+   lista já escolhida. Nome parecido com um existente: o servidor recusa e
+   diz qual existe, e a lista escolhe esse. */
+function freteCadastroRapidoHtml(idSelect){
+  if(!freteServidorOk()) return '';
+  return `<div class="frete-cad-rapido" data-para="${esc(idSelect)}">
+      <button type="button" class="btn-link" onclick="freteAbrirCadastroRapido(this)">Não está na lista? Cadastrar transportadora sem placa</button>
+      <div class="frete-cad-rapido-form" hidden>
+        <label class="frete-campo">Nome da transportadora
+          <input type="text" class="frete-cad-rapido-nome" maxlength="120" autocomplete="off"
+            onkeydown="if(event.key==='Enter'){event.preventDefault();freteCadastrarRapido(this)}"></label>
+        <div class="flex-end gap8"><button type="button" class="btn btn-sec btn-sm frete-cad-rapido-ok" onclick="freteCadastrarRapido(this)">Cadastrar</button></div>
+        <div class="frete-cad-rapido-msg" role="status"></div>
+      </div>
+    </div>`;
+}
+function freteAbrirCadastroRapido(botao){
+  const caixa = botao.closest('.frete-cad-rapido');
+  const form = caixa.querySelector('.frete-cad-rapido-form');
+  form.hidden = false;
+  botao.hidden = true;
+  const campo = form.querySelector('.frete-cad-rapido-nome');
+  if(campo) campo.focus();
+}
+async function freteCadastrarRapido(el){
+  const caixa = el.closest('.frete-cad-rapido');
+  const sel = document.getElementById(caixa.dataset.para);
+  const campo = caixa.querySelector('.frete-cad-rapido-nome');
+  const msg = caixa.querySelector('.frete-cad-rapido-msg');
+  const nome = (campo.value || '').replace(/\s+/g, ' ').trim();
+  if(nome.length < 2){ msg.textContent = 'Escreva o nome da transportadora.'; campo.focus(); return; }
+  const escolher = (n) => {
+    if(!sel) return;
+    if(![...sel.options].some(o => o.value === n)){
+      const o = document.createElement('option'); o.value = n; o.textContent = n; sel.appendChild(o);
+    }
+    sel.value = n;
+  };
+  try{
+    await SuincoSharePoint.transportadoras.cadastrar(nome);
+    await atualizarTransportadorasSemPlaca(true);
+    escolher(nome);
+    msg.textContent = `"${nome}" cadastrada e escolhida. Confira e salve.`;
+    notify(`Transportadora "${nome}" cadastrada.`, 'success');
+  }catch(e){
+    const existente = e && e.dados && e.dados.existente;
+    if(existente && (e.codigo === 'NOME_PARECIDO' || e.codigo === 'JA_NA_FROTA')){
+      escolher(existente);
+      msg.textContent = `${e.message} Já escolhi "${existente}" na lista.`;
+      return;
+    }
+    msg.textContent = (e && e.message) || 'Não consegui cadastrar.';
+  }
 }
 
 function freteEditarCarga(carga, campo){
@@ -765,12 +823,13 @@ function freteEditarCarga(carga, campo){
     : `<input type="text" id="frete-campo-valor" data-foco maxlength="40" value="${esc(atual)}"
          onkeydown="if(event.key==='Enter'){freteSalvarCarga('${escJs(carga)}','${campo}')}">`;
   const ajuda = lista
-    ? (lista.length ? 'Só transportadoras cadastradas (Cadastros → Frota). Nova transportadora? Cadastre lá primeiro e escolha aqui.' : 'Nenhuma transportadora cadastrada na Frota ainda — cadastre em Cadastros → Frota e volte aqui.')
+    ? 'Só transportadoras cadastradas: as das placas da Frota e as cadastradas sem placa.'
     : 'Mais de um CT-E? Separe por vírgula.';
   freteModal(`${rotulo} da carga ${carga}`,
     `<label class="frete-campo">${rotulo}
        ${campoHtml}</label>
-     <div class="card-sub">${ajuda}</div>`,
+     <div class="card-sub">${ajuda}</div>
+     ${lista ? freteCadastroRapidoHtml('frete-campo-valor') : ''}`,
     [{ rotulo: 'Cancelar', clique: 'freteFecharModal()' },
      { rotulo: 'Salvar', classe: 'btn-primary', icone: 'i-ok', clique: `freteSalvarCarga('${escJs(carga)}','${campo}')` }]);
 }
@@ -1017,6 +1076,7 @@ function freteEditarUI(carga){
           ${transp && !lista.includes(transp) ? `<option value="${esc(transp)}" selected>${esc(transp)} (não está no cadastro)</option>` : ''}
           ${lista.map((n) => `<option value="${esc(n)}"${n === transp ? ' selected' : ''}>${esc(n)}</option>`).join('')}
         </select></label>
+      ${freteCadastroRapidoHtml('frete-ed-transp')}
       <label class="frete-campo">CT-E <small>(mais de um: separe por vírgula)</small>
         <input type="text" id="frete-ed-cte" maxlength="40" value="${esc(dc.cte || '')}"></label>
     </div>
@@ -1084,7 +1144,8 @@ function freteEditarNota(carga, nota, campo){
   freteModal(`${rotulo} — nota ${nota} (carga ${carga})`,
     `<label class="frete-campo">${rotulo} desta nota
        ${campoHtml}</label>
-     <div class="card-sub">Em branco, vale ${campo === 'transportadora' ? 'a transportadora' : 'o CT-E'} da carga. Preencha só quando esta nota tiver outro (reentrega, CT-E complementar).</div>`,
+     <div class="card-sub">Em branco, vale ${campo === 'transportadora' ? 'a transportadora' : 'o CT-E'} da carga. Preencha só quando esta nota tiver outro (reentrega, CT-E complementar).</div>
+     ${lista ? freteCadastroRapidoHtml('frete-campo-valor') : ''}`,
     [{ rotulo: 'Cancelar', clique: 'freteFecharModal()' },
      { rotulo: 'Salvar', classe: 'btn-primary', icone: 'i-ok', clique: `freteSalvarNota('${escJs(carga)}','${escJs(nota)}','${campo}')` }]);
 }
