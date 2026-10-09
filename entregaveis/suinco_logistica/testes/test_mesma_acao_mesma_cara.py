@@ -76,6 +76,13 @@ async def main():
         nav = await p.chromium.launch(executable_path='/opt/pw-browsers/chromium')
         ctx = await nav.new_context(viewport={'width': 1440, 'height': 900})
         pg = await ctx.new_page()
+        # O quadro "Transportadoras" mostra as da Frota desde 09/10 (#128) e não
+        # cadastra mais nome solto; o "Excluir" com pergunta ficou para os nomes
+        # antigos que só existem no navegador. Este navegador tem um, como o
+        # quadro antigo gravava (chave suinco_painel_v1).
+        await pg.add_init_script(
+            "try{ if(!localStorage.getItem('suinco_painel_v1')) localStorage.setItem('suinco_painel_v1', "
+            "JSON.stringify({transportadoras:[{id:'transp-legado-1', nome:'Transportadora do Teste'}]})); }catch(e){}")
         erros = []
         pg.on('pageerror', lambda e: erros.append(str(e)))
         await entrar(pg)
@@ -105,11 +112,7 @@ async def main():
         remover = await pg.evaluate("""() => [...document.querySelectorAll('#tab-cadastros button')]
             .filter(b => b.textContent.trim() === 'Remover').length""")
         ck('2. o Cadastros não tem "Remover"', remover == 0, f'{remover} botão(ões)')
-        # cadastra uma transportadora pela tela (o modo sem servidor nasce sem nenhuma)
-        nome = 'Transportadora do Teste'
-        await pg.fill('#cad-transp-nome', nome)
-        await pg.click('#card-transportadoras button:has-text("Adicionar")')
-        await pg.wait_for_timeout(400)
+        nome = 'Transportadora do Teste'   # o nome antigo, só deste navegador
         # a Frota abre sem lista (a busca é a porta): procura uma placa
         placa = await pg.evaluate("() => DB.frota[0].placa")
         await pg.fill('#frota-busca', placa)

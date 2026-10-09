@@ -2213,10 +2213,36 @@ async function carregarFrotaSeedSeVazia(){
    no modelo de dados e no export do Power BI para não invalidar registros
    já gravados. */
 function listarTransportadoras(){ return DB.transportadoras.slice().sort((a,b)=>a.nome.localeCompare(b.nome)); }
-function addTransportadora(nome){
-  if(!nome || !nome.trim()) throw new Error('Nome vazio');
-  DB.transportadoras.push({id:uid('transp'), nome:nome.trim()});
-  SuincoStore.save();
+/* AS TRANSPORTADORAS QUE O SERVIDOR ACEITA (09/10/2026, ocorrência #128).
+
+   O servidor só aceita, no Pagamento de Frete, a transportadora de alguma
+   placa da Frota, escrita LETRA POR LETRA igual (dim_veiculos.transportadora
+   = $1). A lista da carga juntava a Frota com DB.transportadoras — a lista
+   antiga do quadro "Transportadoras", que mora só neste navegador e nunca
+   chega ao servidor. A Daniela escolheu ali "AG Sestini Transporte e
+   Logistica Ltda", a placa dizia "Transportes"/"Logística", e o servidor
+   recusou com a AG Sestini na Frota.
+
+   Uma função, quatro chamadores: a lista da carga e da nota (Pagamento de
+   Frete), o quadro "Transportadoras" e as sugestões ao digitar (Frota,
+   Programação, Montagem), e o CSV. O nome sai como está gravado na placa —
+   sem aparar —, porque é com ele que o servidor compara. */
+function transportadorasDaFrota(){
+  const porNome = new Map();
+  (DB.frota || []).forEach(f => {
+    const nome = f.transportadora == null ? '' : String(f.transportadora);
+    if(!nome.trim()) return;
+    porNome.set(nome, (porNome.get(nome) || 0) + 1);
+  });
+  return [...porNome.entries()].map(([nome, placas]) => ({ nome, placas }))
+    .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+}
+/* Os nomes do quadro antigo que nenhuma placa da Frota usa: existem só neste
+   navegador. Ficam à vista, ditos como tais, até a pessoa excluir — nada
+   some sem ela ver. */
+function transportadorasSoNesteNavegador(){
+  const daFrota = new Set(transportadorasDaFrota().map(t => t.nome));
+  return listarTransportadoras().filter(t => !daFrota.has(t.nome));
 }
 function removerTransportadora(id){
   DB.transportadoras = DB.transportadoras.filter(t=>t.id!==id);
