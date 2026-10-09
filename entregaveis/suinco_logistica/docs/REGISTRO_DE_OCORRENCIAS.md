@@ -5942,3 +5942,41 @@ Daniela).
 
 **Depende do servidor:** `atualizar_tudo.sh` (migração 066 + rotas). Até lá a
 janela oferece o cadastro e o servidor responde que falta a atualização.
+
+## #130 — Dois testes que reprovavam sem defeito nenhum (09/10/2026)
+
+**O que aconteceu.** No portão 75, o `test_adaptador_api` reprovou: *"a frota
+veio (749 placas) — 751 placas"*. E no mesmo dia, rodando a bateria do
+servidor, o `ligar_sentry.test.js` reprovou com `write EPIPE` — e tinha
+passado no portão minutos antes.
+
+**Causa 1 — suíte que cai deixa resíduo (contaminação, causa 3).** A prova do
+vermelho da #129 roda o `test_transportadora_que_o_servidor_aceita` contra o
+painel PUBLICADO: ele para num botão que ainda não existia — é para isso que
+se roda. Mas a limpeza estava no fim do `main()`, e a suíte que para no meio
+não chega ao fim: as placas `TST9B01` e `TST9B02` ficaram na Frota de teste.
+O `limpar_banco` da bateria não mexe na Frota (749 placas são o cadastro de
+referência), e a primeira suíte a contar as placas reprovou. A segunda chance
+da bateria passou porque, no meio do caminho, a própria suíte da
+transportadora rodou de novo e apagou o que tinha deixado.
+
+**Causa 2 — o teste escrevia num cano já fechado (corrida, causa 2).** O caso
+"sem permissão de gravar o .env, não faz nada" roda o `ligar_sentry.sh` com um
+.env que não existe; o script sai na hora, ANTES de ler a entrada, e a escrita
+do teste na entrada fechada estoura como erro não tratado. Passa ou reprova
+conforme quem chega primeiro.
+
+**Família:** *O teste que mede outra coisa* — nenhum dos dois vermelhos dizia
+algo sobre o painel; os dois podiam cancelar um portão.
+
+**Correção:**
+- `test_transportadora_que_o_servidor_aceita` e o novo
+  `test_logistica_no_pagamento_de_frete`: a limpeza roda num `finally`, mesmo
+  se a suíte cair. Provado: rodada contra o painel de antes da #129 (cai com
+  `TimeoutError`), sobram **0** placas `TST9B*`;
+- `ligar_sentry.test.js`: a escrita na entrada ignora o cano fechado
+  (`stdin.on('error')`) — o que se confere continua sendo o código de saída
+  e o texto do script.
+
+**Regra que fica:** suíte que põe dado de teste no banco limpa num `finally`.
+Limpeza no fim do `main()` não é limpeza — é limpeza só quando dá tudo certo.

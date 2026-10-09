@@ -1096,3 +1096,34 @@ três textos reescritos. O dono aprovou e, antes de qualquer mudança, voltou
 atrás: *"na verdade ta bom como esta nao precisa fazer isso"*. Nada foi
 alterado. As skills continuam instaladas em `.claude/skills/` para uso
 futuro; o levantamento não vira fila.
+
+## 32. A Logística trabalha na aba Pagamento de Frete (09/10/2026)
+
+**Do dono:** *"vamo liberar o pagamento de frete pra logistica pois as meninas
+precisam ter acesso pra poder fazer alteracao, deixa o acesso liberado pra
+logistica"*.
+
+A pergunta que faltava — a permissão é por SETOR (decisão de 05/10: "os
+usuários permanecem na aba de usuários, e as permissões são definidas lá"),
+então vale para todo o setor Logística, não só para "as meninas"; e se era o
+acesso completo ou só editar — foi feita e dispensada pelo dono. Ficou o
+recomendado, que é o que a frase dele diz: **acesso completo, para o setor
+Logística inteiro.**
+
+- **A Logística faz na aba tudo o que o setor Pagamento de Frete faz:**
+  importar os PDFs, editar CT-e, transportadora e datas, pagar e anular
+  pagamento, excluir e restaurar carga, exportar a planilha e o PDF
+  detalhado, cadastrar transportadora sem placa (esse já tinha, #129).
+- **Não muda:** o setor Pagamento de Frete continua só com a aba dele;
+  Portaria, Expedição, Faturamento, Comercial, Qualidade e filiais
+  continuam sem a aba; nada no pátio muda.
+- **Onde mora:** `SETORES_DA_ABA_FRETE` em `backend/src/dominio/fluxo.js` —
+  as rotas da aba e o PDF detalhado leem dali; no painel, a aba `frete` na
+  linha da Logística em `SETOR_PERMISSOES` (`data.js`).
+- **Enquanto o servidor não for atualizado** a Logística vê a aba e lê
+  *"O servidor ainda não liberou a Logística nesta aba — passa a valer quando
+  o servidor for atualizado"* — e não "esta aba é de outro setor", que a
+  mandaria pedir à Administração um acesso que ela já tem.
+
+Travado por `test_logistica_no_pagamento_de_frete` (pela tela, com a API de
+verdade; reprovou no publicado) e pelo bloco 61 do `api.test.js`.

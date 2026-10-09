@@ -14,9 +14,9 @@
    colunas da planilha, uma linha por pendência, e o resumo. Nada é calculado
    na tela — o servidor manda.
 
-   TODA ROTA exige login E o setor Pagamento de Frete (ou Administração).
-   Escrever é de quem entra; não há "só leitura" porque a aba inteira é do
-   setor.
+   TODA ROTA exige login E o setor Pagamento de Frete ou a Logística (ou a
+   Administração) — SETORES_DA_ABA_FRETE, em dominio/fluxo.js. Escrever é de
+   quem entra; não há "só leitura" porque a aba inteira é desses setores.
 
    SE O SERVIDOR AINDA NÃO TEM A MIGRAÇÃO 058 (painel novo no ar antes do
    `atualizar`), toda rota responde 503 FRETE_SEM_MIGRACAO com a explicação —
@@ -27,7 +27,7 @@ import { randomUUID } from 'node:crypto';
 import { consultar, emTransacao } from '../banco.js';
 import { transportadoraConhecida } from '../dominio/transportadoras.js';
 import { exigirLogin, exigirSetor } from '../middleware/auth.js';
-import { SETOR_PAGAMENTO_FRETE } from '../dominio/fluxo.js';
+import { SETORES_DA_ABA_FRETE } from '../dominio/fluxo.js';
 import { hojeISO } from './modelo_semana.js';
 import { lerPaginasDoPdf, ErroDeLeitura } from '../servicos/pdf_texto.js';
 import { lerRelatorioDeFrete } from '../dominio/relatorios_frete_pdf.js';
@@ -44,9 +44,10 @@ import {
 export const rotasPagamentoFrete = Router();
 
 /* O MESMO MECANISMO DE TODOS OS SETORES: quem entra é o setor Pagamento de
-   Frete — e a Administração, que `exigirSetor` deixa passar sempre. As pessoas
-   são colocadas no setor na tela de Usuários que já existe. */
-const ACESSO = [exigirLogin, exigirSetor(SETOR_PAGAMENTO_FRETE)];
+   Frete e, desde 09/10/2026, a Logística (decisão 32) — e a Administração, que
+   `exigirSetor` deixa passar sempre. As pessoas são colocadas no setor na tela
+   de Usuários que já existe. */
+const ACESSO = [exigirLogin, exigirSetor(...SETORES_DA_ABA_FRETE)];
 const BASE = '/pagamento-frete';
 
 /* Migração ausente → 503 explicado. Qualquer outro erro segue para o handler global. */

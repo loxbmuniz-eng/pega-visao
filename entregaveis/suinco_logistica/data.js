@@ -636,7 +636,11 @@ const ABAS_OPERACIONAIS = ['torre','patio','programacao','devolucoes','portaria'
    Logística e Administração mantêm a Torre separada, porque para elas ela
    é a visão de comando sobre todos os postos, não um apoio ao próprio. */
 const SETOR_PERMISSOES = {
-  'Logística':    ABAS_OPERACIONAIS.slice(),
+  /* A Logística ganhou a aba Pagamento de Frete em 09/10/2026 (decisão 32):
+     "as meninas precisam ter acesso pra poder fazer alteracao, deixa o acesso
+     liberado pra logistica". Gêmea de SETORES_DA_ABA_FRETE (dominio/fluxo.js),
+     que abre as rotas da aba no servidor. */
+  'Logística':    ABAS_OPERACIONAIS.concat(['frete']),
   /* 'devolucoes' nos setores do ciclo — fase 2 LIBERADA pelo usuário
      (18/08/2026): "preciso que haja um relacionamento entre todos os
      setores... todos na mesma página... workflow fácil como o das filas".

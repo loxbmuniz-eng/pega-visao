@@ -59,6 +59,11 @@ function rodar(envFile, entrada, extra = {}) {
     filho.stdout.on('data', (d) => { saida += d; });
     filho.stderr.on('data', (d) => { saida += d; });
     filho.on('close', (codigo) => resolve({ codigo, saida }));
+    /* O script pode sair ANTES de ler a entrada (caso "não achei o .env"): a
+       escrita encontra o cano fechado (EPIPE). Isso não é defeito do script —
+       o que se confere é o código de saída e o texto. Sem esta linha a suíte
+       reprovava ao acaso (09/10/2026, #130). */
+    filho.stdin.on('error', () => {});
     filho.stdin.end(entrada);
   });
 }

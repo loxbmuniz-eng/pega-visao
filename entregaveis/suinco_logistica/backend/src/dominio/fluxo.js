@@ -125,6 +125,16 @@ export const SETORES = [
    data.js; as rotas da aba usam esta constante para não repetir o texto. */
 export const SETOR_PAGAMENTO_FRETE = 'Pagamento de Frete';
 
+/* QUEM TRABALHA NA ABA PAGAMENTO DE FRETE (09/10/2026, decisão 32): o setor
+   dela e a LOGÍSTICA. Pedido do dono: "vamo liberar o pagamento de frete pra
+   logistica pois as meninas precisam ter acesso pra poder fazer alteracao,
+   deixa o acesso liberado pra logistica". Por setor, como toda permissão
+   (decisão de 05/10) — vale para todo o setor Logística, com tudo o que o
+   setor Pagamento de Frete faz. A Administração entra sempre (exigirSetor).
+   As rotas da aba e o PDF detalhado leem DAQUI: a mesma lista, um lugar só.
+   No painel, a gêmea é a aba 'frete' em SETOR_PERMISSOES (data.js). */
+export const SETORES_DA_ABA_FRETE = [SETOR_PAGAMENTO_FRETE, 'Logística'];
+
 /* As filiais, num lugar só. Quem precisa saber "este operador é de
    filial?" pergunta aqui — a alternativa é repetir a lista em cinco
    arquivos e descobrir a sexta cópia no dia em que uma filial nova

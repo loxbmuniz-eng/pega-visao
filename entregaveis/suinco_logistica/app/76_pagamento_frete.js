@@ -14,8 +14,8 @@
    AS CORES SEGUEM A PLANILHA: título azul-marinho = vem dos relatórios, azul-aço
    = calculado, dourado = preenchimento manual; situação verde/vermelho/amarelo.
 
-   QUEM VÊ A ABA: o setor "Pagamento de Frete" e a Administração — pelo
-   mesmo SETOR_PERMISSOES de todas as abas (decisão do dono: as permissões
+   QUEM VÊ A ABA: o setor "Pagamento de Frete", a Logística (desde 09/10/2026,
+   decisão 32) e a Administração — pelo mesmo SETOR_PERMISSOES de todas as abas (decisão do dono: as permissões
    são definidas na aba de Usuários que já existe, pelo setor). O controle
    de verdade é o servidor, que confere o setor a cada chamada.
 
@@ -39,7 +39,7 @@ const FRETE = {
 const FRETE_VALIDADE_MS = 30000;   // reabrir a aba depois disto relê, sem esconder a tela
 
 /* QUEM VÊ A ABA é decidido por SETOR_PERMISSOES (data.js), como toda aba:
-   o setor "Pagamento de Frete" e a Administração. Aqui não há regra de
+   o setor "Pagamento de Frete", a Logística e a Administração. Aqui não há regra de
    acesso — o servidor confere o setor em toda chamada. */
 function freteServidorOk(){
   return typeof SuincoSharePoint !== 'undefined' && SuincoSharePoint.estaConfigurado() && !!SuincoSharePoint.frete;
@@ -56,12 +56,24 @@ function freteMensagemDeErro(e){
   if(e && e.codigo === 'FRETE_SEM_MIGRACAO') return e.message;
   /* O servidor manda "cadastre em Cadastros" — e lá havia um quadro que aceitava
      o nome sem que o servidor soubesse (#128). O caminho certo é a PLACA. */
+  /* Desde a #129 o servidor aceita também a transportadora cadastrada SEM
+     PLACA (operadora de rota, como a AG Sestini) — a recusa diz os dois
+     caminhos, e o "sem placa" está na própria janela. */
   if(e && e.codigo === 'TRANSPORTADORA_DESCONHECIDA'){
     const nome = ((e.message || '').match(/"([^"]+)"/) || [])[1];
-    return `${nome ? `"${nome}"` : 'Essa transportadora'} não está em nenhuma placa da Frota — o servidor só aceita o nome escrito igual ao da placa. `
-      + 'Em Cadastros → Frota, busque a placa e escolha aqui o mesmo nome. Transportadora nova: cadastre primeiro uma placa dela na Frota.';
+    return `${nome ? `"${nome}"` : 'Essa transportadora'} não está cadastrada — nem numa placa da Frota, nem na lista sem placa. Escolha na lista o nome escrito igual ao do cadastro. `
+      + 'Transportadora sem placa (operadora de rota): use "Cadastrar transportadora sem placa", aqui na janela. Com caminhão próprio: cadastre a placa dela em Cadastros → Frota.';
   }
-  if(e && e.codigo === 'SETOR_SEM_PERMISSAO') return 'Esta aba é do setor Pagamento de Frete (e da Administração).';
+  if(e && e.codigo === 'SETOR_SEM_PERMISSAO'){
+    /* A Logística vê a aba desde 09/10/2026 (decisão 32), e o painel chega
+       pela Vercel antes do servidor: até o atualizar_tudo.sh a recusa é do
+       SERVIDOR ANTIGO, não do setor. Dizer "esta aba é de outro setor"
+       mandaria a pessoa pedir à Administração um acesso que ela já tem. */
+    if(setorOperadorAtual() === 'Logística'){
+      return 'O servidor ainda não liberou a Logística nesta aba — passa a valer quando o servidor for atualizado. Até lá, quem grava aqui é o setor Pagamento de Frete e a Administração.';
+    }
+    return 'Esta aba é do setor Pagamento de Frete, da Logística e da Administração.';
+  }
   return (e && e.message) || 'Não consegui falar com o servidor.';
 }
 
@@ -1334,8 +1346,9 @@ async function freteExportar(){
    NADA É CALCULADO AQUI. Situação, percentuais e status vêm prontos do
    servidor (a mesma grade do .xlsx); o PDF só conta quantas cargas e quantas
    notas estão na folha. Quem gera é o servidor, como todo PDF do painel, e
-   quem pode gerar é o setor Pagamento de Frete e a Administração
-   (`pagamento-frete` em backend/src/dominio/documentos.js). */
+   quem pode gerar é quem trabalha na aba — o setor Pagamento de Frete, a
+   Logística e a Administração (`pagamento-frete` em
+   backend/src/dominio/documentos.js). */
 async function freteExportarPdf(){
   if(freteSoDemonstracao('o PDF detalhado, com o filtro e as notas de cada carga, é gerado pelo servidor')) return;
   const el = document.getElementById('print-pagamento-frete');
