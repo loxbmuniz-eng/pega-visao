@@ -5833,3 +5833,13 @@ crachás, inclusive a Administração com o "Atenção"; a fila do Faturamento;
 letra, tamanho e borda de todo texto de canvas; `title` e texto puro no
 ranking; o vazio do Pátio; títulos sem pulo em todas as abas. Reprova no
 publicado em 61 pontos; passa com a correção.
+
+**O portão 72 cancelou** (causa 2, o teste mede um atalho que mudou de
+forma): `test_vitrine_mostra_todas_as_abas` procurava "Demonstração · …" no
+`innerText` da página inteira. Com o crachá em três peças, o `innerText`
+dele quebra linha entre elas (item de flex é bloco), e a busca passou a
+achar "Demonstração · Logística" nas linhas da Torre que dizem quem fez cada
+passo. A vitrine entrava, sim, como Administração (`DB.operador.setor` e o
+`textContent` do crachá conferidos). O teste passou a ler o crachá e o setor
+do painel. A outra reprovada da primeira passada,
+`test_fusao_nao_e_quadratica`, passou sozinha (carga da bateria).

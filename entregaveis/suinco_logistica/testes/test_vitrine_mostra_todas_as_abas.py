@@ -59,7 +59,15 @@ async def main():
         await pg.goto(VITRINE.as_uri())
         await pg.wait_for_timeout(1500)
 
-        quem = await pg.evaluate("() => (document.body.innerText.match(/Demonstração · [^\\n]+/) || [''])[0].trim()")
+        # Lê o CRACHÁ, não o texto da página inteira. Até 09/10 isto era uma
+        # busca por "Demonstração · …" em document.body.innerText; com o crachá
+        # em três peças (nome · setor, #127) o innerText dele quebra linha
+        # entre elas, e a busca passou a achar "Demonstração · Logística" nas
+        # linhas da Torre que dizem QUEM FEZ cada passo — reprovando uma
+        # vitrine que entrava, sim, como Administração (portão 72, causa 2).
+        quem = await pg.evaluate("() => document.getElementById('operator-name').textContent.trim()")
+        setor = await pg.evaluate("() => DB.operador && DB.operador.setor")
+        ck('o painel da vitrine está com o setor Administração', setor == 'Administração', str(setor))
         ck('quem abre a vitrine é a Administração (vê todas as abas)', quem == 'Demonstração · Administração', quem)
 
         abas = await pg.evaluate("() => [...document.querySelectorAll('.nav-tab[data-tab]')].map(t => t.dataset.tab)")
