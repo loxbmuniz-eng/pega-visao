@@ -247,6 +247,16 @@ async def main():
             const recua = iso => iso ? new Date(new Date(iso).getTime() - 30*3600e3).toISOString() : iso;
             Object.keys(atrasada).filter(k => /Em$/.test(k) && typeof atrasada[k] === 'string').forEach(k => { atrasada[k] = recua(atrasada[k]); });
             DB.movimentacoes.filter(m => m.cargaId === atrasada.id).forEach(m => { m.timestamp = recua(m.timestamp); });
+            /* UMA CARGA PROGRAMADA HÁ MAIS DE 2 DIAS (11/10/2026, #136). A
+               etiqueta "09/10 (há 2 dias)" da Torre (.prog-atrasada) usava o
+               âmbar de PREENCHIMENTO como letra — 3,72:1 no claro — e a régua
+               só a desenhava entre 0h e 6h, quando os 30 h da carga atrasada
+               acima caem dois dias para trás. O portão 80, rodado à 0h40,
+               foi o primeiro a vê-la. 50 h para trás dá "há 2 dias" ou mais
+               a qualquer hora; só a programação recua, então a carga não
+               fica inativa (a referência é a mais nova das datas). */
+            const esquecida = DB.cargas.find(c => c.status === 'Aguardando Veículo');
+            esquecida.programadoEm = new Date(Date.now() - 50*3600e3).toISOString();
             SuincoStore.save();
         }""")
         await pg.wait_for_timeout(400)
@@ -257,6 +267,11 @@ async def main():
         atraso = await pg.evaluate("() => { const c = DB.cargas.find(x => x.status === 'Aguardando Embarque'); const t = tempoDePatioDe(c); return [t.minutos, t.suspeito]; }")
         ck('há um caminhão acima da meta de 3 h nos dados (o destaque de atraso é desenhado)',
            atraso[0] is not None and atraso[0] > 180 and not atraso[1], str(atraso))
+        await pg.evaluate("() => abrirTab('torre')")
+        await pg.wait_for_timeout(400)
+        esquecida = await pg.evaluate("() => [...document.querySelectorAll('.prog-atrasada')].filter(e => e.offsetParent !== null).length")
+        ck('há uma carga programada há 2 dias ou mais na Torre (a etiqueta de atraso é desenhada, a qualquer hora)',
+           esquecida > 0, str(esquecida))
 
         total = 0
         resumo = {}

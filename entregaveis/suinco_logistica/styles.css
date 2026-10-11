@@ -34,6 +34,10 @@
   --ok:#3fa66a;
   --warn:#d99a2b;
   --warn-fg:#1a1200;   /* âmbar claro no escuro: texto escuro por cima */
+  /* O âmbar ESCRITO sozinho, sobre a página (#136, 11/10/2026): o mesmo
+     papel do `-txt` dos status. O #d99a2b dava 4,34 numa linha destacada da
+     Torre (#28355d); #e8ad45 dá 5,97 ali. */
+  --warn-txt:#e8ad45;
   --text:#f2f4f8;
   --text-dim:#b7c0d4;
   --border:rgba(233,185,84,.28);
@@ -205,6 +209,9 @@
   /* No claro o âmbar precisa ser escuro para não sumir no branco — e aí
      quem tem de clarear é o TEXTO. Com #1a1200 por cima dava 3,93. */
   --warn-fg:#ffffff;
+  /* Como LETRA sobre a página, o #9a6a08 dava 3,72 na Torre ("há 2 dias").
+     #7a5306 é o mesmo âmbar, mais escuro: 6,1 sobre o fundo dos cartões. */
+  --warn-txt:#7a5306;
   --text:#161a22;
   /* #5a6474 servia quando a página era quase branca. Com o fundo em
      #c6cfe0 ele caiu para 3,82 — e rótulo de campo, estado vazio e
@@ -1144,7 +1151,7 @@ select option{background:var(--campo-bg);color:var(--text)}
 .sit-placa strong{ color:var(--text); font-weight:700 }
 .sit-no-patio strong{ color:#7fd6a4 }
 .sit-placa .sit-outras{ display:block; opacity:.85 }
-.sit-acao{ color:var(--warn); font-weight:700 }
+.sit-acao{ color:var(--warn-txt); font-weight:700 }
 /* Na lista do pátio, a carga da mesma placa que ainda não teve entrada. */
 .badge-espera{
   display:inline-block;
@@ -2185,7 +2192,9 @@ code{
 .lacres-trio input:first-child{flex:1.4}
 .lacres-trio input:not(:first-child){flex:1}
 @media (max-width:560px){ .lacres-trio{flex-wrap:wrap} .lacres-trio input{flex:1 1 100%} }
-.prog-atrasada{color:var(--warn);font-weight:700}
+/* --warn-txt, não --warn: o âmbar de preenchimento como letra dava 3,72 no
+   claro (#136; A Regra do Preenchimento, #121). */
+.prog-atrasada{color:var(--warn-txt);font-weight:700}
 .prog-atrasada small{font-weight:400}
 /* A FAIXA QUE SEPARA A PROGRAMAÇÃO DE HOJE DAS SOBRAS DE OUTROS DIAS.
    Pedido do gestor (19/08/2026): a Torre guarda o que ficou pendente da
@@ -4129,7 +4138,7 @@ tbody tr:hover{ background-color: rgba(233,185,84,.05); }
 .dev-linha-nova td{ background:rgba(233,185,84,.04); }
 
 .dev-divergencias{ margin-top:12px; border-top:1px solid var(--border-soft); padding-top:10px; }
-.dev-divergencias-tit{ font-weight:700; margin-bottom:6px; color:var(--warn); }
+.dev-divergencias-tit{ font-weight:700; margin-bottom:6px; color:var(--warn-txt); }
 .dev-divergencias ul{ margin:0 0 8px 18px; padding:0; }
 .dev-divergencias li{ margin-bottom:4px; }
 .dev-diverg-form{ display:flex; gap:8px; flex-wrap:wrap; }
@@ -6985,7 +6994,7 @@ tr.linha-nova{
 .atencao-cab{ display:flex; align-items:baseline; gap:8px; flex-wrap:wrap }
 .atencao-grav{ font-size:12px; font-weight:800; letter-spacing:.04em; text-transform:uppercase; color:var(--text-dim) }
 .atencao-grave .atencao-grav{ color:var(--st-aguardando-veiculo-txt, var(--wine)) }
-.atencao-media .atencao-grav{ color:var(--warn) }
+.atencao-media .atencao-grav{ color:var(--warn-txt) }
 .atencao-titulo{ font-size:14px; color:var(--text) }
 .atencao-qtd{ font-size:12px; font-weight:800; padding:0 7px; border-radius:9px; background:var(--border-soft); color:var(--text);
   font-variant-numeric:tabular-nums }

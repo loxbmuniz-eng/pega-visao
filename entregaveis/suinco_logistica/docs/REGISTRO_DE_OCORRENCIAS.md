@@ -6258,3 +6258,37 @@ antes de o arquivo chegar; quando ele chega, a conexão de tempo real abre
 sozinha, sem recarregar. Reprovou no publicado: login aos 20,6 s.
 
 Só painel: não depende do servidor.
+
+## #136 — "há 2 dias" na Torre em âmbar de preenchimento: ilegível no claro (11/10/2026)
+
+**Achado pelo portão 80**, rodado à 0h40 de Brasília: `test_contraste`
+reprovou na Torre, tema claro — a etiqueta da data de programação de uma
+carga esquecida, *"09/10 (há 2 dias)"* (`.prog-atrasada`), com razão de
+**3,72** (o mínimo é 4,5). Não era da marcha: a regra está assim desde que
+a etiqueta existe, e vale para toda carga programada há 2 dias ou mais.
+
+**A causa.** A etiqueta pintava a LETRA com `--warn`, o âmbar de
+PREENCHIMENTO — a família da #121 (*A Regra do Preenchimento*: token de
+fundo nunca é letra sozinha). Mais três lugares faziam o mesmo:
+`.sit-acao` (a ação da placa na lista do pátio), `.dev-divergencias-tit`
+(divergências da devolução) e a gravidade média da caixa Pontos de atenção.
+
+**Por que só agora** — a família *o relógio decide o que o teste vê* (#116,
+#120): a régua recua uma carga 30 h para desenhar o "acima de 3 h". Entre
+0h e 6h esses 30 h caem DOIS dias para trás e a etiqueta aparece; em
+qualquer outro horário cai "ontem" e ela nem é desenhada. Todos os portões
+anteriores rodaram de dia.
+
+**A correção.** Token de letra próprio, `--warn-txt` — o papel do `-txt`
+dos status: #7a5306 no claro (o mesmo âmbar, mais escuro) e #e8ad45 no
+escuro (o #d99a2b dava 4,34 numa linha destacada da Torre). Os quatro
+lugares passam a usá-lo; a borda da caixa de atenção continua `--warn`
+(preenchimento).
+
+**Teste que trava.** `test_contraste` ganhou uma carga programada há 50 h
+(só a programação recua — a carga não fica inativa) e confere que a
+etiqueta é desenhada; assim ela é medida a qualquer hora. Reprovou antes
+da correção (4 elementos abaixo do mínimo), passou depois, duas vezes
+seguidas, com `test_tema2027_etapa6_contraste`.
+
+Só painel: não depende do servidor.
