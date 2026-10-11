@@ -6185,3 +6185,76 @@ hora a mais. No contêiner novo faltava também o `pdftotext`, que o
 instalado (`poppler-utils`).
 
 Só painel: não depende do servidor.
+
+## #134 — Destino do frete, KM e os filtros do Frete faziam o iPhone dar zoom (11/10/2026)
+
+**Achado da marcha de 11/10** (pedido do dono: *"marcha em tudo que for
+melhorar"*), medido num iPhone emulado — 390 px, toque, o que faz o
+`(pointer:coarse)` valer. Na Montagem, "Destino do frete" e "KM" de cada
+linha estavam com fonte de **13 px**; na aba Pagamento de Frete, os seis
+campos de "Mais filtros" (transportadora, pendências e as quatro datas)
+também. Abaixo de 16 px o iOS dá zoom ao tocar no campo e a tela inteira
+sai do lugar — a cada linha montada pelo celular.
+
+**A causa.** A regra de 16 px do toque (`styles.css`, `@media
+(pointer:coarse)`) perde para as regras próprias das tabelas, mais
+específicas; por isso existe uma lista de campos com `!important`. Os dois
+da Montagem nasceram depois da lista (a coluna de frete, decisão de 07/10)
+e ficaram de fora. Os filtros do Frete tinham `font-size:13px` com o
+seletor `#tab-frete .frete-f select`, que ganha da regra do toque.
+
+**Por que a auditoria de celular não pegou** — a família *a varredura que
+não vê*: o `test_auditoria_mobile.py` roda sem servidor e injeta o estado.
+A Montagem só desenha linha com o dia carregado do servidor, e a aba
+Pagamento de Frete (e o setor dela) nem estavam na lista de abas da
+varredura. Campo que a varredura não vê, a varredura não mede.
+
+**A correção.** `.destino-inline` e `.km-input` entram na lista de 16 px
+do toque; os filtros do Frete ganham a regra de toque no próprio arquivo
+(`tema2027/75_pagamento_frete.css`). Conferido em print, nas duas
+versões: o cartão da Montagem e "Mais filtros" aberto cabem nos 390 px,
+sem rolagem de lado.
+
+**Teste que trava.** `test_campo_sem_zoom_no_celular` — com login de
+verdade, como Logística e como Pagamento de Frete, num iPhone emulado:
+Montagem com três linhas, o formulário aberto da linha, a prévia da
+importação, a aba com uma carga, "Mais filtros" aberto pelo toque, a
+janela de trocar a transportadora e toda aba de cada setor. Mede só o que
+a pessoa vê (`checkVisibility` — o conteúdo de um `<details>` fechado tem
+caixa no Chromium). Reprovou no publicado (17e48ca) em 3 pontos: as
+linhas da Montagem, a varredura da aba Programação e "Mais filtros".
+
+Só painel: não depende do servidor.
+
+## #135 — Com o servidor lento, o painel só abria quando o tempo real chegava (11/10/2026)
+
+**Achado em 08/10**, no vigia do portão 67, e guardado na FILA como
+proposta; feito na marcha de 11/10. Com o servidor demorando 20 s para
+entregar o arquivo do tempo real (`socket.io.js`), a tela de login só
+aparecia aos **21 s**. Fora do ar o painel abria na hora (o arquivo falha
+logo); era a LENTIDÃO que segurava.
+
+**A causa.** O arquivo vinha com `defer`, e o comentário dizia por quê:
+sem ele, uma API pendurada travava a leitura do HTML. Certo — mas o
+navegador também SEGURA o `DOMContentLoaded` até baixar todo script
+`defer`, e é no `DOMContentLoaded` que o painel começa (`init`,
+`app/85_inicio.js`). O `defer` tirou a trava de um lugar e a deixou em
+outro.
+
+**Família:** *a correção que mudou o problema de lugar* — e *uma premissa
+escrita no comentário que ninguém mediu* ("`io` está pronto quando o
+app.js inicia" era verdade, e era justamente o defeito).
+
+**A correção.** `async` em vez de `defer` (`index_suinco.html`): o
+arquivo carrega sem segurar nada. Quando chega, o `onload` chama
+`window.__socketIoChegou` (`suinco-api.js`), que liga o tempo real se há
+sessão e ninguém ligou ainda. Se chegar antes de a sessão existir, o
+login liga como sempre; se não chegar, a consulta periódica continua.
+
+**Teste que trava.** `test_painel_abre_com_servidor_lento` — com a API de
+verdade e o `socket.io.js` real pendurado 20 s: a tela de login aparece em
+menos de 5 s (medido: 0,7 s), a pessoa entra e o painel abre (0,3 s), tudo
+antes de o arquivo chegar; quando ele chega, a conexão de tempo real abre
+sozinha, sem recarregar. Reprovou no publicado: login aos 20,6 s.
+
+Só painel: não depende do servidor.

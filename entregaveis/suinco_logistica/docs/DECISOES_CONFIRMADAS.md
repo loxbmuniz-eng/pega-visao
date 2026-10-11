@@ -1150,3 +1150,30 @@ e, sobre as de design: *"pode meter marcha nessas de design"*.
 
 Vale a partir da próxima conversa: a lista de skills é lida quando a sessão
 começa.
+
+## 34. Carga que passa de 3 h no pátio avisa no celular da Administração (11/10/2026)
+
+**Do dono:** *"marcha em tudo que for melhorar"*, sobre a proposta *"aviso
+de carga passando de 3h no pátio, pelo vigia que já existe, sem instalar
+nada"*.
+
+- **Quem recebe:** o celular de quem é da Administração, como os outros
+  vigias (`SETORES_DO_AVISO_DE_PATIO`, `servicos/vigia.js`). Para a
+  Logística receber também, é trocar essa lista — pergunta em aberto.
+- **Quando:** uma vez por carga, quando ela cruza as 3 h. A que já foi
+  avisada não toca de novo; a que sai da lista sai da memória. Várias de
+  uma vez (a primeira conferência depois de o servidor subir, uma manhã
+  travada) viram UM aviso com a lista.
+- **A régua é a do painel** — a mesma que pinta o cartão de vermelho na
+  Visão do Pátio: primeira chegada, carimbo plausível, sem as que saíram,
+  as excluídas e as inativas (decisão 29). A meta (180 min) é conferida
+  contra a do `data.js` pelo teste.
+- **Não é indicador.** A meta de 3 h continua fora dos Indicadores (26/09).
+  E o aviso NÃO entra na caixa "Vigias do sistema" nem no resumo do
+  `atualizar_tudo.sh`: carga atrasada é operação, não defeito do servidor.
+- **Sem instalar nada:** roda dentro do vigia de travamento, que já roda a
+  cada minuto; confere a cada 5 min, com o servidor saudável. O agendamento
+  do servidor não muda.
+
+Vale depois do `atualizar_tudo.sh` (sem migração). Travas:
+`aviso_patio.test.js` (16) e o bloco "Vigia 1b" de `vigia_servidor.test.js` (7).
