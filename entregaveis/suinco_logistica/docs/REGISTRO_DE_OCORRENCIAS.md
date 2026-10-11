@@ -6292,3 +6292,27 @@ da correção (4 elementos abaixo do mínimo), passou depois, duas vezes
 seguidas, com `test_tema2027_etapa6_contraste`.
 
 Só painel: não depende do servidor.
+
+## #137 — Suíte do Pátio ao vivo que reprovava entre 1h e 3h da manhã (11/10/2026)
+
+**Achado pelo portão 81**, rodado às 2h de Brasília: `test_patio_vivo_etapa_e_fila`
+reprovou em 3 pontos ("4 da fila já entraram na frente" onde o certo é 3;
+o topo contando 2 passadas em vez de 1). Tinha passado no portão 80, à
+0h50, com o mesmo código.
+
+**A causa — do teste, não do painel** (causa 2): as cargas "de hoje"
+nasciam em `min(hoje 01:00, agora − 3 h)` e a seq 6 "de ontem" em
+`agora − 25 h`. Entre 1h e 3h da manhã as duas caem no MESMO dia (ontem),
+e a seq 6 passa a contar como do dia — o painel conta certo; o dado do
+teste é que mentia. Família: *o relógio decide o que o teste vê* (#116,
+#120, #136).
+
+**A correção.** O navegador da suíte roda com o relógio parado às 15h de
+hoje (`page.clock.set_fixed_time`), como a `test_patio_vivo_cartao_e_radio`
+já fazia. Nenhuma outra suíte usa esse molde de data sem relógio parado
+(varridas pelo `hoje0.getTime() + 60 * min` e `agora - 180 * min`).
+
+**Prova.** A versão antiga reprova às 2h19 (dentro da janela); a nova
+passa duas vezes seguidas na mesma janela.
+
+Só teste: não muda o painel nem o servidor.
