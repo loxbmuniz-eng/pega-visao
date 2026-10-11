@@ -355,3 +355,103 @@ export const NOMES = {
   dado: 'Conferência do dado',
   frete: 'Pagamento de Frete: integridade',
 };
+
+/* ---------------------------------------------------------------------
+   CARGA PASSANDO DE 3 HORAS NO PÁTIO (11/10/2026)
+   ---------------------------------------------------------------------
+   Pedido do dono: "marcha em tudo que for melhorar", sobre avisar quando
+   uma carga passa de 3 h no pátio, pelo vigia que já existe, sem instalar
+   nada. Até aqui o "acima de 3 h" era só a cor na Visão do Pátio — quem não
+   estava olhando a tela não sabia.
+
+   NÃO É INDICADOR. A meta de 3 h saiu dos Indicadores em 26/09 ("só ta ai
+   sujando nossos indicadores"), e a Visão do Pátio manteve o destaque por
+   escolha dele: ali o vermelho é alerta para agir agora. Este aviso é o
+   mesmo alerta chegando no bolso — por isso também NÃO entra na caixa
+   "Vigias do sistema" nem no resumo do atualizar_tudo: carga atrasada é
+   operação, não defeito do servidor, e o "nenhum problema" do COPIE DAQUI
+   não pode ficar vermelho toda tarde.
+
+   A RÉGUA É A DO PAINEL, regra por regra (data.js):
+     · entrada = PRIMEIRA "Aguardando Embarque" viva da trilha; sem ela, só
+       a chegada sem programação da Portaria conta, pela hora em que a linha
+       nasceu (entradaNoPatioDe);
+     · carimbo no futuro (5 min de folga) ou antes de 2020 não conta
+       (dataDeEventoPlausivel);
+     · minutos arredondados, e só ACIMA da meta (minutosEntre,
+       paradasAlemDaMeta);
+     · fora: a que saiu, a excluída e a inativa — 3 dias sem se mexer,
+       contados da mais nova entre a última movimentação, a programação e a
+       criação (cargaInativa, decisão 29).
+   O painel não roda aqui; o testes/aviso_patio.test.js tem um caso para
+   cada regra e confere a meta contra a do data.js. */
+export const META_PATIO_MIN = 180;   // gêmea de META_TEMPO_PATIO_MIN (data.js)
+export const SETORES_DO_AVISO_DE_PATIO = ['Administração'];
+
+export async function cargasAcimaDaMetaNoPatio(runner, metaMin = META_PATIO_MIN) {
+  const { rows } = await runner.query(`
+    SELECT carga_id, numero_carga, placa, status_atual, entrada,
+           round(extract(epoch FROM now() - entrada) / 60)::int AS minutos
+      FROM (
+        SELECT v.carga_id, v.numero_carga, v.placa, v.status_atual,
+               COALESCE(t.chegada, CASE WHEN v.aguardando_carga THEN v.criado_em END) AS entrada,
+               greatest(t.ultima, v.programado_em, v.criado_em) AS referencia
+          FROM fact_viagens v
+          LEFT JOIN LATERAL (
+                SELECT min(data_evento) FILTER (WHERE status_novo = 'Aguardando Embarque') AS chegada,
+                       max(data_evento) AS ultima
+                  FROM fact_statusfrota
+                 WHERE carga_id = v.carga_id AND apagada_em IS NULL) t ON true
+         WHERE v.excluida_em IS NULL
+           AND v.status_atual <> 'Seguiu Viagem') c
+     WHERE entrada IS NOT NULL
+       AND entrada <= now() + interval '5 minutes'
+       AND entrada >= timestamptz '2020-01-01 00:00:00+00'
+       AND now() - referencia <= interval '3 days'
+       AND round(extract(epoch FROM now() - entrada) / 60) > $1
+     ORDER BY entrada`, [metaMin]);
+  return rows;
+}
+
+/* QUEM TOCA O CELULAR: só a carga que CRUZOU desde a última conferência. A
+   já avisada não toca de novo enquanto continuar acima — aviso repetido é
+   o que ensina a ignorar todos. A que saiu da lista sai da memória. */
+export function decidirAvisoDoPatio(acima, jaAvisadas = []) {
+  const ja = new Set(jaAvisadas || []);
+  return {
+    novas: acima.filter((c) => !ja.has(c.carga_id)),
+    avisadas: acima.map((c) => c.carga_id),
+  };
+}
+
+/* "3h05min", o formato do painel (fmtDuracao). */
+function duracao(min) {
+  const m = Math.max(0, Math.round(Number(min) || 0));
+  return m < 60 ? `${m} min` : `${Math.floor(m / 60)}h${String(m % 60).padStart(2, '0')}min`;
+}
+
+export function mensagemDoPatio(novas, metaMin = META_PATIO_MIN) {
+  if (!novas || !novas.length) return null;
+  const nome = (c) => [c.numero_carga && `Carga ${c.numero_carga}`, c.placa].filter(Boolean).join(' · ')
+    || 'Carga sem número';
+  if (novas.length === 1) {
+    const c = novas[0];
+    const hora = new Date(c.entrada).toLocaleTimeString('pt-BR', { timeZone: FUSO, hour: '2-digit', minute: '2-digit' });
+    return {
+      titulo: `⏱ ${nome(c)}: ${duracao(c.minutos)} no pátio`,
+      corpo: `${c.status_atual} · entrou às ${hora}. A meta é ${duracao(metaMin)}.`,
+      tag: `patio:${c.carga_id}`,
+      url: '/',
+    };
+  }
+  /* Várias de uma vez — a primeira conferência depois de o servidor subir,
+     ou uma manhã travada: UM aviso com a lista, não dez seguidos. */
+  const MOSTRA = 5;
+  const lista = novas.slice(0, MOSTRA).map((c) => `${nome(c)} (${duracao(c.minutos)}, ${c.status_atual})`).join('; ');
+  return {
+    titulo: `⏱ ${novas.length} cargas passaram de ${duracao(metaMin)} no pátio`,
+    corpo: lista + (novas.length > MOSTRA ? `; e mais ${novas.length - MOSTRA}` : ''),
+    tag: 'patio:varias',
+    url: '/',
+  };
+}
