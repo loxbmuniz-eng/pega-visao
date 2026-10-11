@@ -30,9 +30,25 @@ explicitamente o que é **tela** (sobe sozinho no Vercel) e o que é **servidor*
 conferência de quantidade continua existindo, que o histórico não se perde, que
 os outros setores seguem iguais.
 
-**5. Como vou provar que funcionou.** Qual teste, medindo o quê.
+**5. Critério de aceite — como ELE confere, e como EU provo.** De duas a
+quatro frases no formato *"quando [situação], [quem] vê [resultado]"*, que ele
+consegue conferir na tela sem saber de código. Ex.: *"quando a Logística digita
+50000 na sequência, o painel pergunta antes de gravar e diz a maior do dia"*.
+Cada frase vira uma verificação do teste que reprova — critério que não vira
+teste não é critério, é intenção. (Marcha de 11/10/2026.)
 
 **6. A pergunta que falta — se houver.**
+
+## Pedido grande vira lotes — sem crescer o escopo
+
+Quando o pedido toca mais de uma frente (tela E servidor, ou mais de uma aba)
+ou não cabe num portão só, o PROMPT traz os **lotes**: cada um publicável
+sozinho, com o seu critério de aceite, e dizendo o que fica no ar ao fim de
+cada um. Ordem: primeiro o que não depende do servidor e não mexe em dado;
+por último o que precisa do `atualizar_tudo.sh` ou altera dado gravado.
+
+Lote é o pedido DELE cortado em pedaços, não pedido novo. Se um lote não sai
+de uma frase dele, ele não entra. (Marcha de 11/10/2026.)
 
 ## Quando perguntar, e quando decidir sozinho
 

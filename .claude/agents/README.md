@@ -67,8 +67,19 @@ chat só, esse conhecimento se dilui e volta a ser cometido. Separado, cada agen
 começa sabendo o que não pode repetir.
 
 As skills continuam valendo para todos: `suinco-entrega-sem-ponto-solto`,
-`suinco-yard-flow`, `superpowers:systematic-debugging`,
-`superpowers:test-driven-development`, `superpowers:verification-before-completion`.
+`suinco-yard-flow`, `systematic-debugging`, `test-driven-development`,
+`verification-before-completion` (o mapa das 46 está em `.claude/skills/README.md`).
+
+## Agentes em paralelo: só para LER (11/10/2026)
+
+Vários agentes ao mesmo tempo, sim — para auditoria, varredura, investigação,
+revisão: trabalho que lê e devolve achado. Escrevendo, NUNCA dois ao mesmo
+tempo: todos dividem a mesma branch de trabalho, o mesmo `index.html` gerado e
+o mesmo Postgres da bateria. Dois escrevendo é commit cruzado, build
+sobrescrito e vermelho de contaminação — foi o que aconteceu em 09/10: uma
+sessão publicou os portões 77 e 78 enquanto o portão 77 de outra rodava, e
+duas ocorrências nasceram com o mesmo número (a segunda virou a #133). Quem escreve é um só; os outros
+leem e entregam o achado para ele.
 
 ## O caminho do novo objetivo — o maior case da Suinco (09/09/2026)
 
