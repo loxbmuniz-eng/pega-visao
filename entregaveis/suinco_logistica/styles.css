@@ -3076,9 +3076,15 @@ input,select,textarea{border-radius:5px}
      Os campos DENTRO das tabelas tinham regra própria de fonte menor e
      escapavam desta — sequência, ganchos e placa na fila da Programação.
      O !important existe porque a regra específica vem depois no arquivo, e
-     inverter a ordem quebraria a largura calibrada de cada um. */
+     inverter a ordem quebraria a largura calibrada de cada um.
+
+     "Destino do frete" e "KM", da Montagem, ficaram de fora desta lista e
+     estavam em 13px no iPhone (11/10/2026): a varredura antiga roda sem
+     servidor e não via linha de Montagem. test_campo_sem_zoom_no_celular
+     mede com login e dia carregado. */
   .seq-input,.ganchos-input,.placa-input,.numero-carga-input,.praonde-inline,
-  .peso-input,.entregas-input,.rota-inline,.palet-inline,.motorista-input{ font-size:16px !important }
+  .peso-input,.entregas-input,.rota-inline,.palet-inline,.motorista-input,
+  .destino-inline,.km-input{ font-size:16px !important }
 }
 
 /* Continuação do bloco "NAV NO DESKTOP: BARRA LATERAL FIXA" (mais acima,

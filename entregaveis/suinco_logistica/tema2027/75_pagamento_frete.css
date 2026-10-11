@@ -161,6 +161,8 @@
   #tab-frete .frete-filtros-linha{ display:flex; flex-wrap:wrap; gap:8px 12px; align-items:center; margin-bottom:8px }
   #tab-frete .frete-f{ display:inline-flex; align-items:center; gap:6px; font-size:13px; color:var(--text-dim) }
   #tab-frete .frete-f select, #tab-frete .frete-f input{ font:inherit; font-size:13px; min-height:36px; padding:4px 8px }
+  /* No toque, 16px: abaixo disso o iPhone dá zoom ao tocar no filtro (11/10/2026). */
+  @media (pointer:coarse){ #tab-frete .frete-f select, #tab-frete .frete-f input{ font-size:16px; min-height:44px } }
   #tab-frete .frete-idade{ display:block; font-size:12px; color:var(--fr-mudo); font-style:italic }
   #tab-frete .frete-idade-velha{ color:var(--fr-pend-txt); font-weight:700; font-style:normal }
   #tab-frete .frete-pill-velha{ border-color:var(--fr-pend-txt) }
