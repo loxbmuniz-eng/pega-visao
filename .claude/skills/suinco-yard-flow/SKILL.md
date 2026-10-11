@@ -55,7 +55,7 @@ mostra; consulte `fact_viagens.status_atual`.
 **Estado atual: é métrica exibida, não SLO.** Hoje `indicadoresDaCarga()`
 (`data.js`) calcula no navegador; ninguém é alertado quando estoura.
 
-Ao trabalhar no SLA, o alvo é (ver `MIGRATION-GAPS.md` G5, skill `beacon`):
+Ao trabalhar no SLA, o alvo é (ver `MIGRATION-GAPS.md` G5; para alerta e medição, a skill `observability-and-instrumentation` — a `beacon` foi arquivada em 11/10/2026, ver `.claude/skills-arquivadas/README.md`):
 
 - **SLI**: p95 do tempo entre `Aguardando Embarque` (entrada) e `Seguiu Viagem`
   (saída), por tenant e por unidade;

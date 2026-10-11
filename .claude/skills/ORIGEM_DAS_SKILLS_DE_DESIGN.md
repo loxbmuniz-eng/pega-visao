@@ -1,5 +1,9 @@
 # De onde vieram as skills de design e animação
 
+> **Curadoria de 11/10/2026:** das skills abaixo, só `mobile-native` e `impeccable` continuam
+> em `.claude/skills/`. As outras foram para `.claude/skills-arquivadas/` (nada foi apagado;
+> o motivo de cada uma e como trazer de volta estão no `README.md` de lá).
+
 Trazidas a pedido do dono em 16/09/2026.
 
 ## emilkowalski/skills — MIT, © 2026 Emil Kowalski

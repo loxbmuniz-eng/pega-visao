@@ -1127,3 +1127,26 @@ Logística inteiro.**
 
 Travado por `test_logistica_no_pagamento_de_frete` (pela tela, com a API de
 verdade; reprovou no publicado) e pelo bloco 61 do `api.test.js`.
+
+## 33. Curadoria das skills: ficam as que servem a este painel (11/10/2026)
+
+**Do dono:** *"marcha, faz uma curadoria profunda ai nas skills que temos"*;
+e, sobre as de design: *"pode meter marcha nessas de design"*.
+
+- **Eram 94; ficam 46** em `.claude/skills/`, com o mapa de quando usar cada
+  uma em `.claude/skills/README.md`.
+- **48 foram para `.claude/skills-arquivadas/`** — nada apagado; o motivo de
+  cada uma e o comando para trazer de volta estão no `README.md` de lá.
+  Saíram: as de design e animação (o design foi fechado pelo dono em 09/10),
+  as de infraestrutura feita para sistemas muito maiores (Prometheus,
+  OpenTelemetry, custo de nuvem, tradução), as normas de outros contextos
+  (ISO 27001, SOC 2, GDPR) e as de processo que impõem outro fluxo que não o
+  do `CLAUDE.md`.
+- **Seis ficaram porque outra skill ou agente depende delas:** `antislop`,
+  `grilling`, `weave`, `ui-ux-pro-max`, `suinco-edi-gs1`,
+  `suinco-sanitary-traceability`.
+- **Regra para entrar skill nova:** resolve um problema que o painel tem hoje
+  e que nenhuma das 46 já resolve.
+
+Vale a partir da próxima conversa: a lista de skills é lida quando a sessão
+começa.
