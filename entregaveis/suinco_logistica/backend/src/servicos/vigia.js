@@ -424,9 +424,12 @@ export function decidirAvisoDoPatio(acima, jaAvisadas = []) {
   };
 }
 
-/* "3h05min", o formato do painel (fmtDuracao). */
+/* "3h05min", o formato do painel (fmtDuracao). Sem número, traço — nunca
+   "0 min" (null não é zero). */
 function duracao(min) {
-  const m = Math.max(0, Math.round(Number(min) || 0));
+  const n = Number(min);
+  if (min === null || min === undefined || !Number.isFinite(n)) return '—';
+  const m = Math.max(0, Math.round(n));
   return m < 60 ? `${m} min` : `${Math.floor(m / 60)}h${String(m % 60).padStart(2, '0')}min`;
 }
 
