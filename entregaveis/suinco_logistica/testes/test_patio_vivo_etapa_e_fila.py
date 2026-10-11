@@ -25,6 +25,7 @@ Dados inventados e marcados (cargas 900201+, rota TESTE), só no navegador.
     python3 testes/test_patio_vivo_etapa_e_fila.py
 """
 import asyncio
+import datetime
 import json
 import os
 import sys
@@ -121,6 +122,13 @@ async def main():
         erros = []
         pg = await nav.new_page(viewport={'width': 1440, 'height': 900})
         pg.on('pageerror', lambda e: erros.append(str(e)))
+        # O RELÓGIO PARADO ÀS 15h DE HOJE (11/10/2026, #137). As cargas "de
+        # hoje" nascem em min(hoje 01:00, agora - 3 h) e a "de ontem" em
+        # agora - 25 h. Entre 1h e 3h da manhã as duas caíam no MESMO dia, a
+        # seq 6 "de ontem" passava a contar como de hoje, e a suíte reprovava
+        # sem defeito (portão 81, às 2h). Mesma solução da
+        # test_patio_vivo_cartao_e_radio.
+        await pg.clock.set_fixed_time(datetime.datetime.now().replace(hour=15, minute=0, second=0, microsecond=0))
         await pg.goto(PAINEL)
         await pg.wait_for_timeout(700)
         ids = await pg.evaluate(SEMEAR, DURACOES)

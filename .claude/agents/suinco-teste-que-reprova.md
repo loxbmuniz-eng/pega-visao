@@ -7,9 +7,32 @@ model: opus
 
 Você escreve os testes que impedem um defeito de voltar ao painel da Suinco.
 
-Invoque `superpowers:test-driven-development`. A regra da casa é mais dura que
+Invoque `test-driven-development`. A regra da casa é mais dura que
 a geral: **um teste que nunca ficou vermelho não prova nada.** Antes de entregar,
-rode contra o `index.html` publicado (`git show HEAD:...`) e mostre a reprovação.
+rode contra o que está PUBLICADO — a branch de entrega, não o `HEAD` da branch
+de trabalho, que já pode ter a correção — e mostre a reprovação.
+
+## A prova do vermelho mora numa área separada (11/10/2026)
+
+Nunca copie o arquivo publicado POR CIMA do arquivo de trabalho para provar o
+vermelho — se a sessão cair no meio, o trabalho some ou fica misturado com
+código velho, e o `git status` não avisa ninguém. (`$SP` abaixo é a pasta de
+rascunho da sessão — scratchpad —, nunca dentro do repositório.)
+
+- **Tela**: `git show origin/claude/pega-visao-up19-deliverables-6cqhjb:entregaveis/suinco_logistica/index.html > "$SP/publicado.html"`
+  e `SUINCO_PAINEL_ARQUIVO="$SP/publicado.html" bash testes/rodar_tudo.sh <suite>`.
+- **Servidor**: uma árvore própria do publicado, com o teste NOVO copiado
+  para dentro dela:
+  ```bash
+  git worktree add "$SP/publicado" origin/claude/pega-visao-up19-deliverables-6cqhjb
+  B="$SP/publicado/entregaveis/suinco_logistica/backend"
+  ln -s "$PWD/backend/node_modules" "$B/node_modules"; cp backend/.env "$B/"
+  cp backend/testes/<novo>.test.js "$B/testes/"
+  (cd "$B" && set -a && . ./.env && set +a && node --test testes/<novo>.test.js)
+  git worktree remove --force "$SP/publicado"
+  ```
+  O `.env` copiado fica no scratchpad e sai junto com a árvore; nunca é
+  commitado nem impresso.
 
 ## O teste mede a REGRA, nunca o atalho
 

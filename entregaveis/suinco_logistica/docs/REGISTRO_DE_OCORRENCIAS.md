@@ -6185,3 +6185,134 @@ hora a mais. No contêiner novo faltava também o `pdftotext`, que o
 instalado (`poppler-utils`).
 
 Só painel: não depende do servidor.
+
+## #134 — Destino do frete, KM e os filtros do Frete faziam o iPhone dar zoom (11/10/2026)
+
+**Achado da marcha de 11/10** (pedido do dono: *"marcha em tudo que for
+melhorar"*), medido num iPhone emulado — 390 px, toque, o que faz o
+`(pointer:coarse)` valer. Na Montagem, "Destino do frete" e "KM" de cada
+linha estavam com fonte de **13 px**; na aba Pagamento de Frete, os seis
+campos de "Mais filtros" (transportadora, pendências e as quatro datas)
+também. Abaixo de 16 px o iOS dá zoom ao tocar no campo e a tela inteira
+sai do lugar — a cada linha montada pelo celular.
+
+**A causa.** A regra de 16 px do toque (`styles.css`, `@media
+(pointer:coarse)`) perde para as regras próprias das tabelas, mais
+específicas; por isso existe uma lista de campos com `!important`. Os dois
+da Montagem nasceram depois da lista (a coluna de frete, decisão de 07/10)
+e ficaram de fora. Os filtros do Frete tinham `font-size:13px` com o
+seletor `#tab-frete .frete-f select`, que ganha da regra do toque.
+
+**Por que a auditoria de celular não pegou** — a família *a varredura que
+não vê*: o `test_auditoria_mobile.py` roda sem servidor e injeta o estado.
+A Montagem só desenha linha com o dia carregado do servidor, e a aba
+Pagamento de Frete (e o setor dela) nem estavam na lista de abas da
+varredura. Campo que a varredura não vê, a varredura não mede.
+
+**A correção.** `.destino-inline` e `.km-input` entram na lista de 16 px
+do toque; os filtros do Frete ganham a regra de toque no próprio arquivo
+(`tema2027/75_pagamento_frete.css`). Conferido em print, nas duas
+versões: o cartão da Montagem e "Mais filtros" aberto cabem nos 390 px,
+sem rolagem de lado.
+
+**Teste que trava.** `test_campo_sem_zoom_no_celular` — com login de
+verdade, como Logística e como Pagamento de Frete, num iPhone emulado:
+Montagem com três linhas, o formulário aberto da linha, a prévia da
+importação, a aba com uma carga, "Mais filtros" aberto pelo toque, a
+janela de trocar a transportadora e toda aba de cada setor. Mede só o que
+a pessoa vê (`checkVisibility` — o conteúdo de um `<details>` fechado tem
+caixa no Chromium). Reprovou no publicado (17e48ca) em 3 pontos: as
+linhas da Montagem, a varredura da aba Programação e "Mais filtros".
+
+Só painel: não depende do servidor.
+
+## #135 — Com o servidor lento, o painel só abria quando o tempo real chegava (11/10/2026)
+
+**Achado em 08/10**, no vigia do portão 67, e guardado na FILA como
+proposta; feito na marcha de 11/10. Com o servidor demorando 20 s para
+entregar o arquivo do tempo real (`socket.io.js`), a tela de login só
+aparecia aos **21 s**. Fora do ar o painel abria na hora (o arquivo falha
+logo); era a LENTIDÃO que segurava.
+
+**A causa.** O arquivo vinha com `defer`, e o comentário dizia por quê:
+sem ele, uma API pendurada travava a leitura do HTML. Certo — mas o
+navegador também SEGURA o `DOMContentLoaded` até baixar todo script
+`defer`, e é no `DOMContentLoaded` que o painel começa (`init`,
+`app/85_inicio.js`). O `defer` tirou a trava de um lugar e a deixou em
+outro.
+
+**Família:** *a correção que mudou o problema de lugar* — e *uma premissa
+escrita no comentário que ninguém mediu* ("`io` está pronto quando o
+app.js inicia" era verdade, e era justamente o defeito).
+
+**A correção.** `async` em vez de `defer` (`index_suinco.html`): o
+arquivo carrega sem segurar nada. Quando chega, o `onload` chama
+`window.__socketIoChegou` (`suinco-api.js`), que liga o tempo real se há
+sessão e ninguém ligou ainda. Se chegar antes de a sessão existir, o
+login liga como sempre; se não chegar, a consulta periódica continua.
+
+**Teste que trava.** `test_painel_abre_com_servidor_lento` — com a API de
+verdade e o `socket.io.js` real pendurado 20 s: a tela de login aparece em
+menos de 5 s (medido: 0,7 s), a pessoa entra e o painel abre (0,3 s), tudo
+antes de o arquivo chegar; quando ele chega, a conexão de tempo real abre
+sozinha, sem recarregar. Reprovou no publicado: login aos 20,6 s.
+
+Só painel: não depende do servidor.
+
+## #136 — "há 2 dias" na Torre em âmbar de preenchimento: ilegível no claro (11/10/2026)
+
+**Achado pelo portão 80**, rodado à 0h40 de Brasília: `test_contraste`
+reprovou na Torre, tema claro — a etiqueta da data de programação de uma
+carga esquecida, *"09/10 (há 2 dias)"* (`.prog-atrasada`), com razão de
+**3,72** (o mínimo é 4,5). Não era da marcha: a regra está assim desde que
+a etiqueta existe, e vale para toda carga programada há 2 dias ou mais.
+
+**A causa.** A etiqueta pintava a LETRA com `--warn`, o âmbar de
+PREENCHIMENTO — a família da #121 (*A Regra do Preenchimento*: token de
+fundo nunca é letra sozinha). Mais três lugares faziam o mesmo:
+`.sit-acao` (a ação da placa na lista do pátio), `.dev-divergencias-tit`
+(divergências da devolução) e a gravidade média da caixa Pontos de atenção.
+
+**Por que só agora** — a família *o relógio decide o que o teste vê* (#116,
+#120): a régua recua uma carga 30 h para desenhar o "acima de 3 h". Entre
+0h e 6h esses 30 h caem DOIS dias para trás e a etiqueta aparece; em
+qualquer outro horário cai "ontem" e ela nem é desenhada. Todos os portões
+anteriores rodaram de dia.
+
+**A correção.** Token de letra próprio, `--warn-txt` — o papel do `-txt`
+dos status: #7a5306 no claro (o mesmo âmbar, mais escuro) e #e8ad45 no
+escuro (o #d99a2b dava 4,34 numa linha destacada da Torre). Os quatro
+lugares passam a usá-lo; a borda da caixa de atenção continua `--warn`
+(preenchimento).
+
+**Teste que trava.** `test_contraste` ganhou uma carga programada há 50 h
+(só a programação recua — a carga não fica inativa) e confere que a
+etiqueta é desenhada; assim ela é medida a qualquer hora. Reprovou antes
+da correção (4 elementos abaixo do mínimo), passou depois, duas vezes
+seguidas, com `test_tema2027_etapa6_contraste`.
+
+Só painel: não depende do servidor.
+
+## #137 — Suíte do Pátio ao vivo que reprovava entre 1h e 3h da manhã (11/10/2026)
+
+**Achado pelo portão 81**, rodado às 2h de Brasília: `test_patio_vivo_etapa_e_fila`
+reprovou em 3 pontos ("4 da fila já entraram na frente" onde o certo é 3;
+o topo contando 2 passadas em vez de 1). Tinha passado no portão 80, à
+0h50, com o mesmo código.
+
+**A causa — do teste, não do painel** (causa 2): as cargas "de hoje"
+nasciam em `min(hoje 01:00, agora − 3 h)` e a seq 6 "de ontem" em
+`agora − 25 h`. Entre 1h e 3h da manhã as duas caem no MESMO dia (ontem),
+e a seq 6 passa a contar como do dia — o painel conta certo; o dado do
+teste é que mentia. Família: *o relógio decide o que o teste vê* (#116,
+#120, #136).
+
+**A correção.** O navegador da suíte roda com o relógio parado às 15h de
+hoje (`page.clock.set_fixed_time`), como a `test_patio_vivo_cartao_e_radio`
+já fazia. Nenhuma outra suíte usa esse molde de data sem relógio parado
+(varridas pelo `hoje0.getTime() + 60 * min` e `agora - 180 * min`).
+
+**Prova.** A versão antiga reprova às 2h19 (dentro da janela); a nova
+passa duas vezes seguidas na mesma janela.
+
+Só teste: não muda o painel nem o servidor.

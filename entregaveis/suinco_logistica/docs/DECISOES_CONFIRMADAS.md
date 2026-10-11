@@ -1127,3 +1127,53 @@ Logística inteiro.**
 
 Travado por `test_logistica_no_pagamento_de_frete` (pela tela, com a API de
 verdade; reprovou no publicado) e pelo bloco 61 do `api.test.js`.
+
+## 33. Curadoria das skills: ficam as que servem a este painel (11/10/2026)
+
+**Do dono:** *"marcha, faz uma curadoria profunda ai nas skills que temos"*;
+e, sobre as de design: *"pode meter marcha nessas de design"*.
+
+- **Eram 94; ficam 46** em `.claude/skills/`, com o mapa de quando usar cada
+  uma em `.claude/skills/README.md`.
+- **48 foram para `.claude/skills-arquivadas/`** — nada apagado; o motivo de
+  cada uma e o comando para trazer de volta estão no `README.md` de lá.
+  Saíram: as de design e animação (o design foi fechado pelo dono em 09/10),
+  as de infraestrutura feita para sistemas muito maiores (Prometheus,
+  OpenTelemetry, custo de nuvem, tradução), as normas de outros contextos
+  (ISO 27001, SOC 2, GDPR) e as de processo que impõem outro fluxo que não o
+  do `CLAUDE.md`.
+- **Seis ficaram porque outra skill ou agente depende delas:** `antislop`,
+  `grilling`, `weave`, `ui-ux-pro-max`, `suinco-edi-gs1`,
+  `suinco-sanitary-traceability`.
+- **Regra para entrar skill nova:** resolve um problema que o painel tem hoje
+  e que nenhuma das 46 já resolve.
+
+Vale a partir da próxima conversa: a lista de skills é lida quando a sessão
+começa.
+
+## 34. Carga que passa de 3 h no pátio avisa no celular da Administração (11/10/2026)
+
+**Do dono:** *"marcha em tudo que for melhorar"*, sobre a proposta *"aviso
+de carga passando de 3h no pátio, pelo vigia que já existe, sem instalar
+nada"*.
+
+- **Quem recebe:** o celular de quem é da Administração, como os outros
+  vigias (`SETORES_DO_AVISO_DE_PATIO`, `servicos/vigia.js`). Para a
+  Logística receber também, é trocar essa lista — pergunta em aberto.
+- **Quando:** uma vez por carga, quando ela cruza as 3 h. A que já foi
+  avisada não toca de novo; a que sai da lista sai da memória. Várias de
+  uma vez (a primeira conferência depois de o servidor subir, uma manhã
+  travada) viram UM aviso com a lista.
+- **A régua é a do painel** — a mesma que pinta o cartão de vermelho na
+  Visão do Pátio: primeira chegada, carimbo plausível, sem as que saíram,
+  as excluídas e as inativas (decisão 29). A meta (180 min) é conferida
+  contra a do `data.js` pelo teste.
+- **Não é indicador.** A meta de 3 h continua fora dos Indicadores (26/09).
+  E o aviso NÃO entra na caixa "Vigias do sistema" nem no resumo do
+  `atualizar_tudo.sh`: carga atrasada é operação, não defeito do servidor.
+- **Sem instalar nada:** roda dentro do vigia de travamento, que já roda a
+  cada minuto; confere a cada 5 min, com o servidor saudável. O agendamento
+  do servidor não muda.
+
+Vale depois do `atualizar_tudo.sh` (sem migração). Travas:
+`aviso_patio.test.js` (16) e o bloco "Vigia 1b" de `vigia_servidor.test.js` (7).

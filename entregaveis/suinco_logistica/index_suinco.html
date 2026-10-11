@@ -2283,10 +2283,16 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
      conforto; abrir é obrigação. Se este arquivo não vier, o adaptador cai
      na consulta periódica e nada quebra.
 
-     Com `defer` o script executa depois da análise e antes do
-     DOMContentLoaded, então `io` está pronto quando o app.js inicia. -->
+     `async`, NÃO `defer` (11/10/2026). O `defer` não travava a leitura
+     do HTML, mas o navegador SEGURA o DOMContentLoaded até baixar todo
+     script `defer` — e é no DOMContentLoaded que o painel começa (init).
+     Medido: com o servidor levando 20 s para entregar este arquivo, a tela
+     de login aparecia aos 21 s. Com `async` o painel abre na hora; quando
+     o arquivo chegar, o `onload` liga o tempo real (suinco-api.js,
+     conectarTempoReal). test_painel_abre_com_servidor_lento. -->
 <script src="https://api.embarquesuinco.com.br/socket.io/socket.io.js"
-        defer crossorigin="anonymous" onerror="window.__socketIoFalhou=true"></script>
+        async crossorigin="anonymous" onerror="window.__socketIoFalhou=true"
+        onload="window.__socketIoChegou && window.__socketIoChegou()"></script>
 <script src="suinco-api.js"></script>
 <script src="data.js"></script>
 <script src="qr.js"></script>

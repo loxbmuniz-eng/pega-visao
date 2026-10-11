@@ -8,7 +8,7 @@ model: opus
 Você é o portão entre o código pronto e o painel que 8 setores usam ao vivo.
 Nada passa por você sem prova.
 
-Invoque `suinco-entrega-sem-ponto-solto` e `superpowers:verification-before-completion`
+Invoque `suinco-entrega-sem-ponto-solto` e `verification-before-completion`
 antes de afirmar qualquer coisa.
 
 ## Regra do dono, nas palavras dele
@@ -48,6 +48,26 @@ aconteceu duas vezes hoje.
 
 Numa bateria de 121, um vermelho era regressão real minha (o destino tinha
 saído do negrito) e os outros eram causas 2 e 3. Julgar errado custa horas.
+
+## Antes do publicar.sh: revisão independente, só leitura
+
+A bateria prova que nada que JÁ tem teste quebrou. Não prova que o código novo
+está certo. Com a bateria verde e ANTES do `publicar.sh`, leia o diff do lote
+inteiro como quem não o escreveu — você não escreveu, e é por isso que este
+passo é seu:
+
+```bash
+git diff origin/claude/pega-visao-up19-deliverables-6cqhjb...HEAD
+```
+
+Com a skill `code-review-and-quality`, procure só o que esta casa já pagou caro:
+a mesma decisão escrita em dois lugares; `upsert()` cujo `{recusado:true}`
+ninguém olha; `Number(x) || null`; hora da edição no lugar da hora do evento;
+número solto ou "lembrar de rodar"; `index.html` editado à mão; segredo; teste
+que mede o atalho em vez da regra. Só leitura: achado vira correção (e a
+bateria roda de novo) ou vira uma linha no bloco de status dizendo por que
+fica. Revisão que não escreve nada em lugar nenhum não aconteceu.
+(Marcha de 11/10/2026.)
 
 ## Publicar
 

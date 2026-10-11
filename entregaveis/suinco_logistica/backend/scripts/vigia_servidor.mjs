@@ -13,6 +13,8 @@
                  Três minutos seguidos sem /health → reinicia e avisa.
                  Teto de 3 reinícios por hora: se nem assim volta, reiniciar
                  de novo só esconde o problema — avisa e deixa para gente.
+                 De carona, a cada 5 min com o servidor saudável: carga que
+                 passou de 3 h no pátio (11/10/2026) — ver patio() abaixo.
      diario      (1×/dia, de manhã) — F4, F5, F3. O backup de hoje existe e
                  tem tamanho de backup; o disco tem folga; o certificado não
                  vence nos próximos 20 dias; a conferência do dado (só
@@ -52,6 +54,7 @@ const CMD_RESTAURA = E.VIGIA_CMD_RESTAURA
 const CMD_AUDIT = E.VIGIA_CMD_AUDIT || 'npm audit --omit=dev --json';
 
 const FALHAS_PARA_REINICIAR = 3;
+const PATIO_A_CADA_MS = 5 * 60 * 1000;
 const REINICIOS_POR_HORA = 3;
 const DISCO_LIMITE = 85;           // %
 const CERT_DIAS_MINIMO = 20;       // o certbot renova com 30 de folga
@@ -135,6 +138,7 @@ async function travamento() {
       est.ultimoAnotado = 'ok';
       est.anotadoEm = Date.now();
     }
+    if (!est.patioEm || Date.now() - est.patioEm >= PATIO_A_CADA_MS) await patio(est);
     gravarEstado(est);
     return;
   }
@@ -169,6 +173,34 @@ async function travamento() {
   await registrar('travamento', false, r.status === 0
     ? `ficou ${FALHAS_PARA_REINICIAR} min sem responder e foi reiniciado sozinho às ${hora()}`
     : `ficou ${FALHAS_PARA_REINICIAR} min sem responder e o reinício FALHOU: ${(r.stderr || '').trim().slice(0, 200)}`);
+}
+
+/* ---------------------------------------------------- pátio (11/10/2026)
+   Carga que passou de 3 h no pátio → aviso no celular, uma vez por carga.
+   A régua e a decisão moram em servicos/vigia.js; aqui só a cadência e a
+   memória de quem já foi avisado (no mesmo arquivo de estado do vigia).
+
+   NÃO DERRUBA O VIGIA DE TRAVAMENTO: qualquer erro daqui fica no registro
+   e a conferência de saúde segue. E roda a cada 5 min, não a cada minuto:
+   o aviso chega entre 3h00 e 3h05, e o servidor saudável não abre conexão
+   com o banco a cada minuto por causa disto. */
+async function patio(est) {
+  est.patioEm = Date.now();
+  try {
+    const { pool, vigia, avisos } = await ctx();
+    const meta = vigia.META_PATIO_MIN;
+    const acima = await vigia.cargasAcimaDaMetaNoPatio(pool, meta);
+    const { novas, avisadas } = vigia.decidirAvisoDoPatio(acima, est.patioAvisadas);
+    est.patioAvisadas = avisadas;
+    log(`pátio: ${acima.length} carga(s) acima de ${meta} min${novas.length ? `, ${novas.length} acabou(aram) de passar` : ''}`);
+    const msg = vigia.mensagemDoPatio(novas, meta);
+    if (!msg) return;
+    console.log(`AVISO pátio: ${msg.titulo} — ${msg.corpo}`);
+    const r = await avisos.enviarParaSetores(vigia.SETORES_DO_AVISO_DE_PATIO, msg);
+    log(`pátio: aviso entregue em ${r.enviados} de ${r.alvos} aparelho(s)${r.alvos ? '' : ' — ninguém da Administração com o aviso ligado, ou o aviso está desligado no servidor'}`);
+  } catch (e) {
+    log(`pátio: não consegui conferir — ${e.message}`);
+  }
 }
 
 /* ------------------------------------------------------------- diário */

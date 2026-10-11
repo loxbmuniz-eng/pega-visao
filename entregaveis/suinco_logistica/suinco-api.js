@@ -73,6 +73,12 @@ const SuincoSharePoint = (function () {
   let operadorLogado = null;
   let token = null;
   let socket = null;
+  /* O socket.io.js chegou depois de o painel abrir: liga o tempo real se há
+     sessão e ninguém ligou ainda. Fora de sessão não faz nada — a entrada
+     (login) chama conectarTempoReal do jeito de sempre. */
+  window.__socketIoChegou = function () {
+    if (!socket && typeof io !== 'undefined' && estaConfigurado()) conectarTempoReal();
+  };
   let timerSincronia = null;
   let ultimaMarca = null;
   let ouvintesEstado = [];
@@ -1744,7 +1750,12 @@ const SuincoSharePoint = (function () {
      como erro do painel. */
   function conectarTempoReal() {
     if (typeof io === 'undefined') {
-      console.info('[Suinco] socket.io ausente — usando consulta periódica.');
+      /* O arquivo do tempo real carrega SEM segurar o painel (async, ver o
+         index_suinco.html). Se ainda não chegou, quem liga é o `onload`
+         dele, pelo __socketIoChegou abaixo; a consulta periódica cobre o
+         intervalo. */
+      console.info('[Suinco] socket.io ' + (window.__socketIoFalhou ? 'ausente' : 'ainda carregando')
+        + ' — usando consulta periódica.');
       return;
     }
     if (socket) { try { socket.disconnect(); } catch (e) { /* ignora */ } }

@@ -31,6 +31,15 @@ let urlOk;
 let url503;
 let urlMorta;
 
+/* O PÁTIO ISOLADO (11/10/2026). O vigia de travamento confere, de carona,
+   as cargas acima de 3 h no pátio. Para isso não depender das cargas que o
+   api.test.js cria em paralelo, o script roda com o search_path apontando
+   primeiro para um esquema só deste arquivo, com fact_viagens e
+   fact_statusfrota vazias da mesma forma das reais. O resto (vigia_registros,
+   push_inscricoes) continua sendo o de verdade. */
+const ESQUEMA_PATIO = 'vigia_patio_teste';
+const PATIO_ISOLADO = `-c search_path=${ESQUEMA_PATIO},public`;
+
 /* ASSÍNCRONO de propósito: os /health de mentira moram NESTE processo. Com
    spawnSync o teste congelava esperando o filho, o servidor de mentira não
    respondia, e todo caso virava "sem resposta" — o teste mentia, não o
@@ -65,6 +74,10 @@ function servirHealth(status, corpo) {
 before(async () => {
   tmp = mkdtempSync(path.join(tmpdir(), 'vigia-'));
   await pool.query('DELETE FROM vigia_registros');
+  await pool.query(`DROP SCHEMA IF EXISTS ${ESQUEMA_PATIO} CASCADE`);
+  await pool.query(`CREATE SCHEMA ${ESQUEMA_PATIO}`);
+  await pool.query(`CREATE TABLE ${ESQUEMA_PATIO}.fact_viagens (LIKE public.fact_viagens INCLUDING DEFAULTS)`);
+  await pool.query(`CREATE TABLE ${ESQUEMA_PATIO}.fact_statusfrota (LIKE public.fact_statusfrota INCLUDING DEFAULTS)`);
   saudavel = await servirHealth(200, { ok: true, banco: 'conectado' });
   semBanco = await servirHealth(503, { ok: false, banco: 'inacessível' });
   urlOk = `http://127.0.0.1:${saudavel.address().port}/health`;
@@ -78,13 +91,14 @@ after(async () => {
   saudavel.close();
   semBanco.close();
   await pool.query('DELETE FROM vigia_registros');
+  await pool.query(`DROP SCHEMA IF EXISTS ${ESQUEMA_PATIO} CASCADE`);
   await pool.end();
   rmSync(tmp, { recursive: true, force: true });
 });
 
 describe('Vigia 1 — travamento (F2): reinicia o que TRAVOU, e só isso', () => {
   const marca = () => path.join(tmp, 'reiniciou');
-  const base = () => ({ VIGIA_CMD_ATIVO: 'echo active', VIGIA_CMD_REINICIAR: `touch ${marca()}` });
+  const base = () => ({ VIGIA_CMD_ATIVO: 'echo active', VIGIA_CMD_REINICIAR: `touch ${marca()}`, PGOPTIONS: PATIO_ISOLADO });
 
   test('serviço parado de propósito (atualizar.sh) não é travamento: não reinicia, não anota', async () => {
     rmSync(path.join(tmp, 'estado.json'), { force: true });
@@ -140,6 +154,82 @@ describe('Vigia 1 — travamento (F2): reinicia o que TRAVOU, e só isso', () =>
     assert.equal(existsSync(marca()), false, 'reiniciou pela 4ª vez na mesma hora');
     assert.match(r.saida, /AVISO piorou/);
     assert.match((await anotacao('travamento')).detalhe, /precisa de gente/);
+  });
+});
+
+describe('Vigia 1b — carga passando de 3 h no pátio: aviso uma vez por carga (11/10/2026)', () => {
+  const env = () => ({ VIGIA_CMD_ATIVO: 'echo active', VIGIA_CMD_REINICIAR: 'true',
+    VIGIA_HEALTH_URL: urlOk, PGOPTIONS: PATIO_ISOLADO });
+  const estado = () => JSON.parse(readFileSync(path.join(tmp, 'estado.json'), 'utf8'));
+  /* "Passaram 5 minutos": a cadência é guardada no estado; voltar o relógio
+     dela é o mesmo que esperar. */
+  const passar5min = () => {
+    const e = estado(); e.patioEm = Date.now() - 6 * 60 * 1000;
+    writeFileSync(path.join(tmp, 'estado.json'), JSON.stringify(e));
+  };
+  async function carga(id, minutosNoPatio) {
+    await pool.query(
+      `INSERT INTO ${ESQUEMA_PATIO}.fact_viagens (carga_id, numero_carga, placa, status_atual, criado_em)
+            VALUES ($1, $2, $3, 'Embarque Iniciado', now() - make_interval(mins => $4))`,
+      [id, `77${id.slice(-2)}`, `TSP${id.slice(-4)}`, minutosNoPatio + 30]);
+    await pool.query(
+      `INSERT INTO ${ESQUEMA_PATIO}.fact_statusfrota (movimentacao_id, carga_id, placa, status_novo, data_evento)
+            VALUES ($1, $2, '', 'Aguardando Embarque', now() - make_interval(mins => $3))`,
+      [`m-${id}`, id, minutosNoPatio]);
+  }
+
+  test('pátio sem atraso: confere, não avisa', async () => {
+    rmSync(path.join(tmp, 'estado.json'), { force: true });
+    const r = await rodar('travamento', env());
+    assert.match(r.saida, /pátio: 0 carga\(s\) acima de 180 min/, r.saida);
+    assert.doesNotMatch(r.saida, /AVISO pátio/);
+  });
+
+  test('uma carga passa de 3 h: avisa, com o número, a placa e o tempo', async () => {
+    await carga('pv01', 190);
+    await carga('pv02', 100);
+    passar5min();
+    const r = await rodar('travamento', env());
+    assert.match(r.saida, /AVISO pátio: ⏱ Carga 7701 · TSPpv01: 3h10min no pátio/, r.saida);
+    assert.doesNotMatch(r.saida, /TSPpv02/, 'avisou uma carga que está dentro da meta');
+    assert.deepEqual(estado().patioAvisadas, ['pv01']);
+  });
+
+  test('no minuto seguinte não confere de novo (a cada 5 min)', async () => {
+    const r = await rodar('travamento', env());
+    assert.doesNotMatch(r.saida, /pátio:/, r.saida);
+  });
+
+  test('5 min depois, a mesma carga continua acima: NÃO toca de novo', async () => {
+    passar5min();
+    const r = await rodar('travamento', env());
+    assert.match(r.saida, /pátio: 1 carga\(s\) acima/);
+    assert.doesNotMatch(r.saida, /AVISO pátio/, 'avisou de novo a mesma carga');
+  });
+
+  test('uma segunda carga cruza: avisa SÓ a segunda', async () => {
+    await pool.query(
+      `UPDATE ${ESQUEMA_PATIO}.fact_statusfrota SET data_evento = now() - interval '185 minutes' WHERE carga_id = 'pv02'`);
+    passar5min();
+    const r = await rodar('travamento', env());
+    assert.match(r.saida, /AVISO pátio: ⏱ Carga 7702 · TSPpv02: 3h05min no pátio/, r.saida);
+    assert.doesNotMatch(r.saida, /AVISO pátio: .*TSPpv01/);
+    assert.deepEqual(estado().patioAvisadas.sort(), ['pv01', 'pv02']);
+  });
+
+  test('a carga que saiu deixa a memória — e o pátio não entra nos Vigias do sistema', async () => {
+    await pool.query(`UPDATE ${ESQUEMA_PATIO}.fact_viagens SET status_atual = 'Seguiu Viagem' WHERE carga_id = 'pv01'`);
+    passar5min();
+    await rodar('travamento', env());
+    assert.deepEqual(estado().patioAvisadas, ['pv02']);
+    const { rows } = await pool.query("SELECT 1 FROM vigia_registros WHERE verificacao ILIKE '%patio%'");
+    assert.equal(rows.length, 0, 'carga atrasada é operação, não defeito do servidor');
+  });
+
+  test('servidor travado: não confere o pátio (só a saúde importa ali)', async () => {
+    passar5min();
+    const r = await rodar('travamento', { ...env(), VIGIA_HEALTH_URL: urlMorta });
+    assert.doesNotMatch(r.saida, /pátio:/);
   });
 });
 

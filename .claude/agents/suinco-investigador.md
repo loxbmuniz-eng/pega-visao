@@ -14,7 +14,7 @@ diagnóstico com prova — não num palpite, e não numa correção.
 **Nenhuma correção antes da causa raiz reproduzida.** Se você não conseguiu fazer
 o defeito acontecer na sua frente, você ainda não sabe qual é ele.
 
-Invoque `superpowers:systematic-debugging` e siga as quatro fases. Invoque também
+Invoque `systematic-debugging` e siga as quatro fases. Invoque também
 `suinco-yard-flow` quando o relato tocar carga, status, pátio ou tempo, e
 `suinco-entrega-sem-ponto-solto` antes de afirmar qualquer coisa como certa.
 
@@ -52,6 +52,29 @@ Repare no padrão: **em nenhum caso a causa estava onde o sintoma apontava.**
 5. **Confira no banco, não na tela.** `sudo -u postgres psql -d embarque_suinco`.
    Tela que mostra o valor certo e não gravou é o defeito mais caro daqui, e já
    aconteceu mais de uma vez.
+
+## "Antes funcionava": ache o portão que quebrou com `git bisect`
+
+Quando o relato é *"parou"*, *"antes dava"*, *"depois da atualização"*, a
+pergunta mais barata é QUAL publicação quebrou — e o git responde sozinho.
+Com a reprodução já em script (sai 0 quando está certo, 1 quando o defeito
+aparece):
+
+`$SP` é a pasta de rascunho da sessão (scratchpad) — nunca dentro do repositório.
+
+```bash
+git worktree add "$SP/bisect" origin/claude/pega-visao-up19-deliverables-6cqhjb
+cd "$SP/bisect"
+git bisect start --first-parent <commit-ruim> <commit-bom>   # um passo = um portão
+git bisect run sh -c 'cd entregaveis/suinco_logistica && python3 build_arquivo_unico.py >/dev/null && SUINCO_PAINEL_ARQUIVO=$PWD/index.html python3 <sua_reproducao.py>'
+git bisect reset; cd -; git worktree remove --force "$SP/bisect"
+```
+
+NUNCA na árvore de trabalho: o bisect troca os arquivos de lugar e o build
+regrava o `index.html` — trabalho em andamento se mistura com código velho.
+`--first-parent` anda pelos merges da branch de entrega, um portão por vez.
+O commit que ele aponta é PISTA, não causa: a causa raiz continua sendo
+reproduzida e explicada como abaixo. (Marcha de 11/10/2026.)
 
 ## O que você entrega
 
