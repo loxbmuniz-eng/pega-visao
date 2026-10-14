@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import random
 import sys
 import urllib.error
 import urllib.request
@@ -141,9 +142,10 @@ class Resultado:
 # simulacao
 # --------------------------------------------------------------------------- #
 
-def _perna(s: Serie, i: int, direcao: int, p: Params) -> tuple[float, str]:
+def _perna(s: Serie, i: int, direcao: int, p: Params) -> tuple[float, str, int]:
     """
     Simula UMA posicao aberta no fechamento do candle i.
+    Devolve (pnl ja com taxa, desfecho, indice do candle em que a posicao fechou).
 
     Regra conservadora: se stop e alvo cabem no mesmo candle, conta STOP.
     OHLC nao revela a ordem dentro da barra; supor o alvo inflaria o resultado.
@@ -173,17 +175,17 @@ def _perna(s: Serie, i: int, direcao: int, p: Params) -> tuple[float, str]:
         bateu_alvo = (s.maxima[j] >= px_alvo) if direcao > 0 else (s.minima[j] <= px_alvo)
 
         if liq_antes_do_stop and bateu_liq:
-            return -p.margem, "liquidado"
+            return -p.margem, "liquidado", j
         if bateu_stop:
-            return -(p.notional * d_stop) - taxa_total, "stop"
+            return -(p.notional * d_stop) - taxa_total, "stop", j
         if bateu_alvo:
-            return (p.notional * d_alvo) - taxa_total, "alvo"
+            return (p.notional * d_alvo) - taxa_total, "alvo", j
         if bateu_liq:
-            return -p.margem, "liquidado"
+            return -p.margem, "liquidado", j
 
-    saida = s.fechamento[min(i + p.max_barras, len(s) - 1)]
-    var = (saida - entrada) / entrada * direcao
-    return (p.notional * var) - taxa_total, "expirou"
+    j_fim = min(i + p.max_barras, len(s) - 1)
+    var = (s.fechamento[j_fim] - entrada) / entrada * direcao
+    return (p.notional * var) - taxa_total, "expirou", j_fim
 
 
 def simular(s: Serie, sinais: list[int], p: Params) -> Resultado:
@@ -209,7 +211,7 @@ def simular(s: Serie, sinais: list[int], p: Params) -> Resultado:
             break
 
         direcao = 1 if sinais[i] > 0 else -1
-        pnl, desfecho = _perna(s, i, direcao, p)
+        pnl, desfecho, j_saida = _perna(s, i, direcao, p)
 
         equity += pnl
         r.pnl += pnl
@@ -233,8 +235,10 @@ def simular(s: Serie, sinais: list[int], p: Params) -> Resultado:
             r.quebrou = True
             break
 
-        # avanca para depois do desfecho; sem posicao sobreposta
-        i += p.max_barras if desfecho == "expirou" else 1
+        # proxima entrada so DEPOIS do candle em que esta fechou.
+        # (versao anterior andava 1 candle a partir da ENTRADA e abria posicao
+        # nova com a anterior ainda aberta — empilhava risco sem aviso.)
+        i = max(j_saida, i) + 1
 
     r.equity_final = max(0.0, equity)
     return r
@@ -299,6 +303,73 @@ def medir_ruido(par: str, dias: int, periodos: list[str], p: Params) -> None:
     print("\n  Use o ruido mediano no campo 'ruido tipico' da Banda de Liquidacao.")
 
 
+# --------------------------------------------------------------------------- #
+# robustez — separa vantagem de sorte
+# --------------------------------------------------------------------------- #
+
+def fatiar(s: Serie, ini: int, fim: int) -> Serie:
+    return Serie(s.abertura[ini:fim], s.maxima[ini:fim], s.minima[ini:fim],
+                 s.fechamento[ini:fim], s.volume[ini:fim])
+
+
+def robustez(s: Serie, nome: str, p: Params, janelas: int = 6,
+             sementes: int = 30) -> None:
+    """
+    Corta a serie em janelas e, em cada uma, compara a estrategia com
+    `sementes` moedas sorteadas que entram nos MESMOS candles que ela.
+
+    A pergunta deixa de ser "ganhou?" e passa a ser "ganhou de quantas moedas?".
+    Estrategia com vantagem real bate a maioria das moedas na maioria das
+    janelas. Estrategia com sorte bate em uma janela e perde nas outras.
+
+    Os sinais sao gerados UMA vez, na serie inteira, e depois fatiados junto com
+    os candles — assim indicador longo (EMA 200) nao perde aquecimento em cada
+    janela. Isso so e legitimo porque o teste de vazamento prova que o sinal em
+    i usa apenas dados ate i.
+    """
+    sinais = estrategias.gerar(nome, s)
+    tam = len(s) // janelas
+    if tam < 30:
+        print(f"  serie curta demais para {janelas} janelas ({len(s)} candles)")
+        return
+
+    print(f"  {'janela':>6} | trades | retorno | moeda mediana | bate X% das moedas")
+    print("  " + "-" * 66)
+    batidas = []
+    positivas = 0
+    for w in range(janelas):
+        ini, fim = w * tam, (w + 1) * tam
+        sub = fatiar(s, ini, fim)
+        r = simular(sub, sinais[ini:fim], p)
+        ret = (r.equity_final - p.banca) / p.banca * 100
+        moedas = []
+        for k in range(sementes):
+            sorteio = random.Random(1000 + k)
+            # controle justo: entra NOS MESMOS candles da estrategia e so sorteia
+            # o lado. Assim a comparacao mede a direcao, nao a frequencia —
+            # estrategia que opera pouco "ganharia" da moeda so por pagar menos taxa.
+            cega = [sorteio.choice((1, -1)) if x else 0 for x in sinais[ini:fim]]
+            rm = simular(sub, cega, p)
+            moedas.append((rm.equity_final - p.banca) / p.banca * 100)
+        moedas.sort()
+        mediana = moedas[len(moedas) // 2]
+        bate = sum(1 for m in moedas if ret > m) / len(moedas) * 100
+        batidas.append(bate)
+        positivas += 1 if ret > 0 else 0
+        print(f"  {w + 1:>6} | {r.operacoes:6d} | {ret:+6.1f}% | {mediana:+12.1f}% | {bate:5.0f}%")
+
+    media = sum(batidas) / len(batidas)
+    print()
+    print(f"  janelas no positivo: {positivas} de {janelas}")
+    print(f"  em media, bateu {media:.0f}% das moedas")
+    if media >= 75 and positivas >= janelas * 2 / 3:
+        print("  -> SINAL DE VANTAGEM. Confirme em outro ativo e outra epoca antes de crer.")
+    elif media >= 55:
+        print("  -> INCONCLUSIVO. Pouco melhor que sorte; nao justifica dinheiro real.")
+    else:
+        print("  -> SEM VANTAGEM. Nao se distingue de jogar moeda.")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -318,6 +389,9 @@ def main() -> None:
     ap.add_argument("--ruido", action="store_true",
                     help="mede o ruido real do ativo e sai")
     ap.add_argument("--listar", action="store_true")
+    ap.add_argument("--robustez", action="store_true",
+                    help="testa a estrategia em varias janelas contra 30 moedas")
+    ap.add_argument("--janelas", type=int, default=6)
     args = ap.parse_args()
 
     if args.listar:
@@ -334,6 +408,17 @@ def main() -> None:
         return
 
     cabecalho(p, args.par, args.dias)
+
+    if args.robustez:
+        for tf in periodos:
+            if tf not in PERIODOS:
+                continue
+            n = max(60, int(args.dias * 24 * 60 / PERIODOS[tf]))
+            s = buscar(args.par, tf, n)
+            print(f"  >>> {tf}  estrategia '{args.estrategia}'  ({len(s)} candles)")
+            robustez(s, args.estrategia, p, args.janelas)
+            print()
+        return
 
     if args.comparar:
         for tf in periodos:

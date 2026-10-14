@@ -12,7 +12,7 @@ Não toca no painel de logística Suinco. É projeto separado, na mesma árvore.
 | Arquivo | O que faz |
 |---|---|
 | `backtest.py` | Puxa candles públicos e simula com taxa, stop, margem de manutenção e liquidação |
-| `estrategias.py` | Os sinais de entrada — 7 estratégias + 2 controles cegos |
+| `estrategias.py` | Os sinais de entrada: 7 estratégias, a confluência e 2 controles cegos |
 | `indicadores.py` | EMA, SMA, RSI, ATR, VWAP, desvio, ruído mediano |
 
 Mais a calculadora de risco interativa (página separada): **Banda de Liquidação**.
@@ -28,6 +28,7 @@ Precisa de internet aberta (endpoint público de candles) — rode na sua máqui
 python3 backtest.py --listar          # ver as estratégias
 python3 backtest.py --ruido           # medir o ruído real do ativo
 python3 backtest.py --comparar        # TODAS as estratégias contra o controle
+python3 backtest.py --robustez --estrategia confl4 --alav 24   # vantagem ou sorte?
 python3 backtest.py --estrategia ema --alav 24 --stop 0.5
 python3 backtest.py --par ETHUSDT --dias 60 --comparar
 ```
@@ -42,90 +43,129 @@ típico" da Banda de Liquidação. Sem ele você está chutando.
 
 | Nome | O que é |
 |---|---|
-| `moeda` | **CONTROLE** — direção sorteada, valor preditivo zero |
-| `comprado` | **CONTROLE** — comprado sempre, mede só a tendência da janela |
+| `moeda` | **CONTROLE**: direção sorteada, valor preditivo zero |
+| `comprado` | **CONTROLE**: comprado sempre, mede só a tendência da janela |
 | `ema` | cruzamento de EMA 9/21 |
 | `canal` | rompimento de canal de 20 barras (Donchian) |
 | `momento` | continuação de momento filtrada por ATR |
 | `rsi` | reversão por RSI 14 (30/70) |
 | `bollinger` | reversão na banda de Bollinger 20/2 |
 | `vwap` | reversão à VWAP de 20 barras |
+| `confl3` / `confl4` / `confl5` | **confluência**: 3, 4 ou 5 de 5 confirmações |
 
-Os dois controles são o ponto do exercício. **Estratégia que não bate a `moeda`
-por margem folgada não tem vantagem — tem sorte na amostra.**
+A confluência é o checklist do scalper disciplinado, com o porquê de cada item
+no código (`estrategias.py`):
+
+1. **Tendência**: EMA 50 acima da 200 só compra; abaixo, só vende.
+2. **Gatilho**: fechamento rompe a máxima/mínima das últimas 20 barras.
+3. **Não esticado**: RSI ainda longe do extremo do movimento.
+4. **Volatilidade**: ATR acima de um piso. Mercado parado não paga a taxa.
+5. **Volume**: candle com volume acima da própria média.
 
 ---
 
-## Duas garantias do motor, ambas testadas
+## Três garantias do motor, todas testadas
 
 **1. Nenhuma estratégia olha o futuro.** O sinal do candle `i` só usa dados até
-`i`. Verificado por truncamento: gerando sinais na série inteira e em cortes de
-400, 650 e 800 candles, os sinais anteriores ao corte têm de ser idênticos. As
-sete passaram sem uma única divergência. Vazamento de futuro é a causa número um
-de backtest bonito que perde dinheiro no ar.
+`i`. Verificado por truncamento: sinais gerados na série inteira e em cortes
+têm de ser idênticos antes do corte. As dez estratégias passaram.
 
-**2. O erro de modelagem cai contra a estratégia.** Quando stop e alvo cabem no
-mesmo candle, conta **stop**. OHLC não revela a ordem dentro da barra; supor o
-alvo inflaria o resultado. Também: uma posição de cada vez, nunca sobreposta —
-duas posições abertas arriscam o dobro do que o sizing previu.
+**2. Uma posição de cada vez.** A próxima entrada só acontece depois do candle
+em que a anterior fechou. Verificado com uma guarda que registra entrada e saída
+de cada posição: zero entradas antes da saída anterior.
+
+**3. O erro de modelagem cai contra a estratégia.** Stop e alvo no mesmo candle
+contam como **stop**. OHLC não revela a ordem dentro da barra.
+
+> **Correção registrada (garantia 2).** A primeira versão do simulador avançava
+> um candle a partir da *entrada*, não da *saída*, e abria posição nova com a
+> anterior ainda aberta. Isso empilhava risco na mesma direção sem aviso. Foi
+> pego quando a confluência perdeu 77% a 88% numa série em que a moeda ficava
+> perto do zero, uma distorção grande demais para ser da estratégia. Os números
+> abaixo já são do motor corrigido.
 
 ---
 
 ## Resultado da verificação
 
-Série sintética de 900 candles, *random walk sem tendência* (0,08% de desvio por
-candle), semente fixa. Nessa série **não existe vantagem para encontrar** — é
-ruído puro. Então o esperado era todas empatarem menos a taxa.
+Série sintética de 900 candles, *random walk sem tendência*, semente fixa.
+Nessa série **não existe vantagem para encontrar**: é ruído puro.
 
-### A 100x (liquidação em 0,50%, stop em 0,50%)
+### A 100x (liquidação em 0,50%, exatamente onde está o stop de 0,50%)
 
 | Estratégia | Trades | Liquidações | Taxa paga | Banca: 110 → |
 |---|---|---|---|---|
-| `moeda` | 30 | 16 | 45,00 | **quebrou** |
-| `comprado` | 35 | 20 | 52,50 | **quebrou** |
-| `ema` | 18 | 6 | 27,00 | 61,88 |
-| `canal` | 27 | 8 | 40,50 | 76,04 |
-| `momento` | 20 | 4 | 30,00 | 73,65 |
-| `rsi` | 13 | 5 | 19,50 | 56,29 |
-| `bollinger` | 8 | 7 | 12,00 | **quebrou** |
-| `vwap` | 13 | 7 | 19,50 | **quebrou** |
+| `moeda` | 24 | 8 | 36,00 | 44,57 |
+| `comprado` | 23 | 8 | 34,50 | 32,98 |
+| `ema` | 14 | 4 | 21,00 | 99,93 |
+| `canal` | 18 | 5 | 27,00 | 63,03 |
+| `momento` | 18 | 4 | 27,00 | 55,80 |
+| `rsi` | 11 | 4 | 16,50 | 67,77 |
+| `bollinger` | 17 | 5 | 25,50 | 20,60 |
+| `vwap` | 14 | 5 | 21,00 | 48,74 |
+| `confl3` | 11 | 5 | 16,50 | **quebrou** |
+| `confl4` | 12 | 7 | 18,00 | **quebrou** |
+| `confl5` | 3 | 1 | 4,50 | 108,16 |
 
-**Nenhuma das oito terminou no positivo. Quatro quebraram a conta.** O melhor
-caso perdeu 30,9%. A liquidação cai exatamente onde está o stop, então o stop
-nunca executa: de 4 a 20 operações por estratégia morreram liquidadas.
+**Nenhuma das onze terminou no positivo. Duas quebraram a conta.** O stop
+nunca executa, porque a liquidação chega no mesmo ponto: de 1 a 8 operações por
+estratégia morreram liquidadas.
 
 ### A 24x (liquidação em 3,67%, folga de 3,17% depois do stop)
 
 | Estratégia | Trades | Liquidações | Taxa paga | Banca: 110 → |
 |---|---|---|---|---|
-| `moeda` | 92 | **0** | 33,12 | **120,27** |
-| `comprado` | 85 | 0 | 30,60 | quebrou |
-| `ema` | 18 | 0 | 6,48 | 107,09 |
-| `canal` | 27 | 0 | 9,72 | 113,37 |
-| `momento` | 20 | 0 | 7,20 | 107,04 |
-| `rsi` | 13 | 0 | 4,68 | 104,31 |
-| `bollinger` | 32 | 0 | 11,52 | 69,32 |
-| `vwap` | 32 | 0 | 11,52 | 59,50 |
+| `moeda` | 24 | **0** | 8,64 | 105,82 |
+| `comprado` | 23 | 0 | 8,28 | 103,04 |
+| `ema` | 14 | 0 | 5,04 | 113,34 |
+| `canal` | 18 | 0 | 6,48 | 105,93 |
+| `momento` | 18 | 0 | 6,48 | 102,75 |
+| `rsi` | 11 | 0 | 3,96 | 105,62 |
+| `bollinger` | 17 | 0 | 6,12 | 95,74 |
+| `vwap` | 14 | 0 | 5,04 | 102,50 |
+| `confl3` | 18 | 0 | 6,48 | 85,79 |
+| `confl4` | 18 | 0 | 6,48 | 91,10 |
+| `confl5` | 3 | 0 | 1,08 | 111,00 |
 
-**As liquidações viraram zero em todas.** Mesmas entradas, mesma série, mesmo
-stop — a única mudança foi a alavancagem. A 100x o ruído normal do mercado
-alcança a liquidação; a 24x não alcança.
+**As liquidações foram a zero em todas.** Mesmas entradas, mesma série, mesmo
+stop. Só a alavancagem mudou.
 
-### A lição desconfortável
+A `ema` terminou em +3%. **Isso é sorte, não vantagem**: a série é aleatória por
+construção e não há nada para prever. Uma rodada só não prova nada. Por isso
+existe o teste de robustez.
 
-**A `moeda` ganhou de todas as sete a 24x.** +9,3%, melhor que qualquer
-estratégia "de verdade".
+---
 
-Isso não quer dizer que jogar moeda funciona. Quer dizer o contrário: **numa
-amostra só, o resultado é ruído.** A série é aleatória por construção, não há
-vantagem para achar, e a moeda deu sorte. Se você rodar uma estratégia uma vez,
-ver +9% e concluir que ela funciona, foi exatamente isso que aconteceu com você.
+## Robustez: vantagem ou sorte?
 
-Por isso o `--comparar` sempre mostra os dois controles, e por isso o teste
-precisa rodar em **várias janelas e vários ativos** antes de qualquer conclusão.
+```bash
+python3 backtest.py --robustez --estrategia confl4 --alav 24
+```
 
-> Esses números são de série sintética com semente fixa. Validam o **motor**,
-> não o mercado. Para o número real, rode `backtest.py` com rede aberta.
+Corta a série em 6 janelas e, em cada uma, compara a estratégia com **30 moedas
+sorteadas que entram nos mesmos candles que ela** e só sorteiam o lado. A
+pergunta deixa de ser "ganhou?" e passa a ser "ganhou de quantas moedas?".
+
+O pareamento importa. Comparada com moedas que operam em todo candle, a `confl5`
+parecia ganhar de 73% delas, mas só porque opera pouco e paga menos taxa. Com a
+moeda pareada caiu para 47%. Era taxa economizada, não acerto de direção.
+
+O teste foi validado nos dois sentidos:
+
+| Série | Estratégia | Janelas positivas | Bateu, em média | Veredito |
+|---|---|---|---|---|
+| ruído puro (sem vantagem possível) | `confl4` | 1 de 6 | 41% das moedas | sem vantagem |
+| ruído puro | `confl5` | 0 de 6 | 47% | sem vantagem |
+| **com tendência persistente embutida** | `confl4` | **4 de 6** | 64% (77–100% em 4 janelas) | inconclusivo |
+
+A última linha é o **controle positivo**: quando existe vantagem real, o teste
+enxerga. Nas quatro janelas boas a confluência ganhou de 77% a 100% das moedas.
+O veredito ainda é "inconclusivo" por causa de duas janelas ruins. O critério
+para "sinal de vantagem" é bater 75% das moedas em média com 2/3 das janelas
+no positivo, e ele é exigente de propósito.
+
+> Tudo isso é série sintética com semente fixa. Valida o **motor**, não o
+> mercado. Para o número real, rode com rede aberta.
 
 ---
 
@@ -154,8 +194,8 @@ alav_máx = 100 / (2·s + mm)
 ## Ordem de trabalho
 
 1. **Medir o ruído** do ativo e do período (`--ruido`). Define o stop mínimo.
-2. **Backtest** com dado real, contra os controles, em várias janelas. Se não
-   bate a `moeda`, para aqui — custo zero.
+2. **Backtest** com dado real e `--robustez` em vários ativos e épocas. Se não
+   sai "sinal de vantagem", para aqui. Custo zero.
 3. **Paper trading**, só se o passo 2 passar. Dinheiro fictício, execução real,
    slippage e funding aparecendo.
 4. **Dinheiro real mínimo**, só se os dois acima passarem, com sizing dentro do

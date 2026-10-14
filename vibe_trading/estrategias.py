@@ -137,6 +137,99 @@ def vwap_reversao(c, n: int = 20, desvio_pct: float = 0.3) -> list[int]:
 
 
 # --------------------------------------------------------------------------- #
+# confluencia — o checklist do scalper disciplinado
+# --------------------------------------------------------------------------- #
+
+def confluencia(c, minimo: int = 4, n_tend: int = 50, n_tend_longa: int = 200,
+                n_canal: int = 20, n_rsi: int = 14, n_atr: int = 14,
+                n_vol: int = 20, atr_piso_pct: float = 0.05) -> list[int]:
+    """
+    Exige varias confirmacoes na MESMA direcao antes de entrar.
+
+    As cinco checagens, e por que cada uma existe:
+
+    1. TENDENCIA   EMA 50 acima da EMA 200 -> so compra; abaixo -> so vende.
+                   Operar contra a tendencia maior e o erro mais caro do
+                   scalping: voce acerta a direcao do minuto e perde na hora.
+
+    2. GATILHO     fechamento rompe a maxima (ou minima) das ultimas n_canal
+                   barras. E o evento que justifica entrar AGORA e nao antes.
+
+    3. NAO ESTICADO  RSI ainda nao esta no extremo oposto do movimento.
+                   Comprar o que ja subiu 70 de RSI e pagar o topo.
+
+    4. VOLATILIDADE  ATR em % do preco acima de um piso. Em mercado parado o
+                   movimento nao cobre a taxa — a melhor operacao e nenhuma.
+                   Este filtro e o que mais protege banca pequena.
+
+    5. VOLUME      volume do candle acima da sua propria media. Rompimento sem
+                   volume costuma ser armadilha.
+
+    `minimo` e quantas das cinco precisam concordar (1 a 5). Isso e de proposito
+    ajustavel: mais filtro significa menos operacao, menos taxa paga e amostra
+    menor. Qual nivel presta e pergunta empirica, nao de opiniao — rode
+    --robustez com confl3, confl4 e confl5 e compare.
+    """
+    n = len(c.fechamento)
+    s = [0] * n
+
+    e_curta = ind.ema(c.fechamento, n_tend)
+    e_longa = ind.ema(c.fechamento, n_tend_longa)
+    r = ind.rsi(c.fechamento, n_rsi)
+    a = ind.atr(c.maxima, c.minima, c.fechamento, n_atr)
+    vol_media = ind.sma(c.volume, n_vol)
+
+    for i in range(n):
+        if i < max(n_canal, n_atr, n_rsi) + 1:
+            continue
+
+        # ---- 1. tendencia maior define o lado permitido ----
+        lado = 0
+        if e_curta[i] is not None and e_longa[i] is not None:
+            lado = 1 if e_curta[i] > e_longa[i] else -1
+        if lado == 0:
+            continue
+
+        votos = 1  # a tendencia e o primeiro voto
+
+        # ---- 2. gatilho de rompimento, no lado da tendencia ----
+        topo = max(c.maxima[i - n_canal : i])
+        fundo = min(c.minima[i - n_canal : i])
+        if lado > 0 and c.fechamento[i] > topo:
+            votos += 1
+        elif lado < 0 and c.fechamento[i] < fundo:
+            votos += 1
+
+        # ---- 3. nao entrar esticado ----
+        if r[i] is not None:
+            if (lado > 0 and r[i] < 70.0) or (lado < 0 and r[i] > 30.0):
+                votos += 1
+
+        # ---- 4. volatilidade paga a taxa? ----
+        if a[i] is not None and c.fechamento[i] > 0:
+            if (a[i] / c.fechamento[i] * 100.0) >= atr_piso_pct:
+                votos += 1
+
+        # ---- 5. volume confirma ----
+        if vol_media[i] is not None and vol_media[i] > 0:
+            if c.volume[i] > vol_media[i]:
+                votos += 1
+
+        if votos >= minimo:
+            s[i] = lado
+
+    return s
+
+
+def confluencia_3(c) -> list[int]:
+    return confluencia(c, minimo=3)
+
+
+def confluencia_5(c) -> list[int]:
+    return confluencia(c, minimo=5)
+
+
+# --------------------------------------------------------------------------- #
 # registro
 # --------------------------------------------------------------------------- #
 
@@ -149,6 +242,9 @@ REGISTRO: dict[str, tuple[Callable, str]] = {
     "rsi":        (rsi_reversao,        "reversao por RSI 14 (30/70)"),
     "bollinger":  (bollinger_reversao,  "reversao na banda de Bollinger 20/2"),
     "vwap":       (vwap_reversao,       "reversao a VWAP de 20 barras"),
+    "confl3":     (confluencia_3,       "confluencia — 3 das 5 confirmacoes"),
+    "confl4":     (confluencia,         "confluencia — 4 das 5 (recomendado)"),
+    "confl5":     (confluencia_5,       "confluencia — 5 das 5, so o livro-texto"),
 }
 
 
