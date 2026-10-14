@@ -45,6 +45,9 @@ afirma. Correcao sem guarda e correcao que volta.
 20. smart money         — estrutura (BOS, CHoCH), vao de valor justo, bloco de
                           ordens, desconto e premio, em candles feitos a mao
 21. scalping            — acerto minimo para empatar bate com o simulador; 5 min
+22. fase 2 honesta      — julga uma vez em pontos fixos, sem candles do vigia
+                          desligado, com prova contra sorte; parametro mudou,
+                          placar recomeca; alerta com projecao em USDT
 """
 
 from __future__ import annotations
@@ -90,6 +93,29 @@ def serie_sintetica(n: int, semente: int, tendencia: bool = False, t0: int = 0) 
         fracao = 0.5 + (0.15 if f > o else -0.15) + rnd2.gauss(0, 0.12)
         s.agressora.append(v * min(0.95, max(0.05, fracao)))
     return s
+
+
+class RelogioFalso:
+    """Relogio de mentira: dormir avanca o relogio sem esperar de verdade. anotando()
+    embrulha um pedidor e guarda o momento de cada pedido."""
+
+    def __init__(self):
+        self.t, self.momentos = 1000.0, []
+
+    def agora(self) -> float:
+        return self.t
+
+    def dormir(self, x: float) -> None:
+        self.t += max(0.0, x)
+
+    def anotando(self, pedir):
+        def embrulho(*a, **k):
+            self.momentos.append(self.t)
+            return pedir(*a, **k)
+        return embrulho
+
+    def menor_intervalo(self) -> float:
+        return min((b - a for a, b in zip(self.momentos, self.momentos[1:])), default=float("inf"))
 
 
 FALHAS: list[str] = []
@@ -223,12 +249,17 @@ def teste_comando_ponta_a_ponta() -> None:
     import io
     original, argv = bt._pedir, sys.argv
     bt._pedir = BinanceFalsa(total=3500)
-    sys.argv = ["backtest.py", "--robustez", "--estrategia", "confl3", "--alav", "24"]
+    tmp = tempfile.mkdtemp()
+    caderno = os.path.join(tmp, "caderno.jsonl")
+    sys.argv = ["backtest.py", "--robustez", "--estrategia", "confl3", "--alav", "24", "--caderno", caderno]
     saida = io.StringIO()
     try:
         with contextlib.redirect_stdout(saida):
             bt.main()
         texto = saida.getvalue()
+        registros = [json.loads(l) for l in open(caderno, encoding="utf-8")]
+        checar(len(registros) == 5 and all("|90d_6janelas|" in r["hipotese"] and "taxa" in r["hipotese"] for r in registros),
+               "o --robustez tambem registra cada tentativa no caderno, com todos os parametros na identidade")
         checar(texto.count(">>> ") == 5, "rodou os 5 periodos")
         checar(texto.count("bateu") == 5, "veredito de robustez em todos os 5")
         checar(texto.count("resultado por operacao") == 5, "placar com resultado por operacao nos 5 periodos")
@@ -238,6 +269,7 @@ def teste_comando_ponta_a_ponta() -> None:
         checar(False, f"comando saiu com erro {e.code}")
     finally:
         bt._pedir, sys.argv = original, argv
+        shutil.rmtree(tmp, ignore_errors=True)
 
 
 def teste_padroes_e_alinhamento() -> None:
@@ -495,7 +527,8 @@ def teste_paridade() -> None:
             "for(const mi of [3,4,5])o[k]['c'+mi]=M.confluencia(c,{minimo:mi});}"
             "process.stdout.write(JSON.stringify(o));"
         )
-        saida = subprocess.run([node, "-e", script, motor, dados], capture_output=True, text=True, timeout=60)
+        # 300 s: no servidor a atualizacao roda com prioridade minima e teto de processador
+        saida = subprocess.run([node, "-e", script, motor, dados], capture_output=True, text=True, timeout=300)
         if saida.returncode != 0:
             checar(False, "node falhou: " + saida.stderr.strip()[:300])
             return
@@ -920,10 +953,11 @@ def teste_pionex_telegram() -> None:
     s = serie_sintetica(1300, 21, True, t0=inicio_formando - 1300 * ms)
     formando = {"time": inicio_formando, "open": "1", "close": "1", "high": "1", "low": "1", "volume": "1"}
     falsa = PionexFalsa(s, ms, formando)
-    original, pausa, dormir = bt._pedir, bt.PIONEX_PAUSA, bt.time.sleep
-    pausas = []
-    bt._pedir = falsa
-    bt.time.sleep = lambda x: pausas.append(x)
+    original, pausa, dormir, relogio_real = bt._pedir, bt.PIONEX_PAUSA, bt.time.sleep, bt.time.monotonic
+    relogio = RelogioFalso()
+    bt._pionex_ultimo[0] = None
+    bt._pedir = relogio.anotando(falsa)
+    bt.time.sleep, bt.time.monotonic = relogio.dormir, relogio.agora
     try:
         r = bt.buscar_pionex_ou_erro("BTCUSDT", "15m", 1200)
         checar(all(q["symbol"] == "BTC_USDT_PERP" and q["interval"] == "15M" and q["limit"] == "500"
@@ -933,8 +967,8 @@ def teste_pionex_telegram() -> None:
                and r.volume == s.volume[-1200:],
                "1200 candles fechados, na ordem, sem buraco nem repetido, precos lidos do texto")
         checar(inicio_formando not in r.t, "o candle em formacao fica de fora")
-        checar(pausas and all(x == bt.PIONEX_PAUSA for x in pausas) and len(pausas) == len(falsa.pedidos) - 1,
-               f"pausa de {bt.PIONEX_PAUSA}s entre paginas (teto de pedidos da Pionex)")
+        checar(len(relogio.momentos) == len(falsa.pedidos) > 1 and relogio.menor_intervalo() >= bt.PIONEX_PAUSA - 1e-9,
+               f"no minimo {bt.PIONEX_PAUSA}s entre dois pedidos a Pionex (teto de 10 por segundo, peso 5)")
         bt._pedir = PionexFalsa(s, ms, formando, recusar="simbolo invalido")
         try:
             bt.buscar_pionex_ou_erro("BTCUSDT", "15m", 100)
@@ -942,7 +976,8 @@ def teste_pionex_telegram() -> None:
         except bt.ErroBusca as e:
             checar("simbolo invalido" in e.erros[0], f"resposta recusada vira erro explicado: {e.erros[0]}")
     finally:
-        bt._pedir, bt.PIONEX_PAUSA, bt.time.sleep = original, pausa, dormir
+        bt._pedir, bt.PIONEX_PAUSA, bt.time.sleep, bt.time.monotonic = original, pausa, dormir, relogio_real
+        bt._pionex_ultimo[0] = None  # o relogio falso nao pode atrasar o proximo pedido de verdade
     checar(bt.simbolo_pionex("ETHUSDT") == "ETH_USDT_PERP" and set(bt.PIONEX_INTERVALO) == set(bt.PERIODOS),
            "todos os periodos do projeto tem nome na Pionex")
 
@@ -1039,7 +1074,7 @@ def teste_pionex_telegram() -> None:
     cfg_100x = json.loads(json.dumps(cfg_r))
     cfg_100x["params"]["alav"] = 100
     checar(n == 3 and abs(valor - 3 * (360 * 0.005 + 360 * 0.001)) < 1e-9 and "ACIMA" not in texto3
-           and "ACIMA DO TETO" in texto4 and abs(vigia.risco_aberto(est_r, cfg_100x)[1] - 4 * 15) < 1e-9,
+           and "ACIMA DO TETO" in texto4 and abs(vigia.risco_aberto(est_r, cfg_100x)[1] - 4 * (15 + 1500 * 0.0005)) < 1e-9,
            "risco aberto: 3 posicoes a 24x = 6,48 USDT (5,9%, dentro do teto de 6%); 4 passam do teto; a 100x cada uma perde a margem")
 
     # token errado ou sem internet: explica, nao despeja erro tecnico
@@ -1129,8 +1164,8 @@ def teste_regra_de_saida() -> None:
     p100 = bt.Params(banca=100, margem=10, alav=100, taxa=0.05, mm=0.5, stop=0.5, rr=2)
     c100 = bt.abrir(100.0, 1, p100)
     r = bt.checar_barra(c100, 100.1, 99.4, p100)
-    checar(c100.liq_antes_do_stop and r == (-10, "liquidado"),
-           "a 100x com stop de 0,5% a liquidacao chega antes: perde a margem inteira (10), nao o stop")
+    checar(c100.liq_antes_do_stop and r == (-10.5, "liquidado"),
+           "a 100x com stop de 0,5% a liquidacao chega antes: perde a margem (10) e a taxa de entrada (0,50)")
     s = bt.Serie(abertura=[100] * 5, maxima=[100.2] * 5, minima=[99.8] * 5,
                  fechamento=[100.0, 100.1, 100.2, 100.3, 100.4], volume=[1] * 5, t=list(range(5)))
     pnl, desfecho, j = bt._perna(s, 0, 1, p)
@@ -1301,6 +1336,11 @@ def teste_prova_contra_sorte() -> None:
            f"mesmo resultado, mais tentativas, menos prova: 1 tentativa {d1:.4f}, 10 {d10:.4f}, 1.000 {d1000:.4f}")
     checar(st.sharpe_deflacionado([1.0, -1.0], 5)["dsr"] == 0.0 and st.sharpe_deflacionado([], 5)["dsr"] == 0.0,
            "com menos de 3 operacoes nao ha prova nenhuma")
+    import bateria as bat_mod
+    forte, fraco = [2, -1] * 50, [1.05, -1] * 50
+    pior = bat_mod.prova_por_ativo([forte, fraco], 10, None)
+    checar(abs(pior["dsr"] - st.sharpe_deflacionado(fraco, 10)["dsr"]) < 1e-12 and pior["dsr"] < st.sharpe_deflacionado(forte, 10)["dsr"],
+           f"ativos correlacionados nao somam prova: vale a pior nota ({pior['dsr']:.3f}), nao a das operacoes juntas")
 
     import contextlib
     import io
@@ -1382,12 +1422,75 @@ def teste_scalping() -> None:
            "5 minutos: 288 candles por dia, nome na Pionex (5M), periodos acima 15 min e 1 h")
 
 
+def teste_fase2_honesta() -> None:
+    print("\n[22] fase 2 honesta: julga uma vez em pontos fixos, sem o vigia desligado, com prova contra sorte")
+    import vigia
+    boa = [3.24] * 60 + [-2.16] * 40
+    j = vigia.julgar(boa, [0.0] * 20, tentativas=5)
+    fraca = [3.24] * 42 + [-2.16] * 58
+    jf = vigia.julgar(fraca, [-50.0] * 20, tentativas=5)
+    perde = vigia.julgar([-1.0] * 100, [-200.0] * 20, tentativas=1)
+    checar(j["nivel"] == "aprovada" and jf["nivel"] in ("reprovada", "promissora") and jf["nao_sorte"] < 0.95
+           and perde["nivel"] == "reprovada",
+           f"60% de acerto em 100 operacoes: aprovada ({j['nao_sorte']:.3f}); 42%: nao aprova ({jf['nao_sorte']:.3f}); perdendo: reprovada")
+    checar(vigia.julgar(boa, [1000.0] * 20, 5)["nivel"] == "reprovada",
+           "positiva mas perdendo para as moedas: reprovada")
+
+    s = serie_sintetica(3000, 5, True)
+    cfg = json.loads(json.dumps(vigia.CONFIG_PADRAO))
+    cfg["historico_inicial_dias"] = 7
+    cfg["julgar_em"] = [10, 20]
+    with tempfile.TemporaryDirectory() as tmp:
+        estado, diario = _replay(s, cfg, tmp, 600, pausa=(1500, 1530))
+    tr = estado["trilhas"]["confl3|ambos|livre|BTCUSDT|15m"]
+    rec = {tid: sum(1 for r in diario if r["trilha"] == tid and r["recuperado"]) for tid in estado["trilhas"]}
+    checar(sum(rec.values()) > 0 and all(len(x.get("ao_vivo", [])) == len(x["resultados"]) - rec[tid]
+                                         for tid, x in estado["trilhas"].items()),
+           f"operacoes fechadas com o vigia desligado ({sum(rec.values())}) ficam fora do julgamento, em todas as trilhas")
+    js = tr["julgamentos"]
+    checar(set(js) == {"10", "20"} and js["10"]["operacoes"] == 10 and js["20"]["operacoes"] == 20
+           and tr["julgamento"] == js["20"] and js["10"]["tentativas"] == len(estado["trilhas"]),
+           "julga uma vez em cada ponto (10 e 20), vale o mais recente, e conta as trilhas como tentativas")
+    with tempfile.TemporaryDirectory() as tmp:
+        estado_b, _ = _replay(s, cfg, tmp, 600, pausa=(1500, 1530))
+    checar(estado_b["trilhas"]["confl3|ambos|livre|BTCUSDT|15m"]["julgamentos"]["10"] == js["10"],
+           "o julgamento fica congelado: rodar de novo da exatamente o mesmo")
+    txt = "\n".join(l["fase2"] for l in vigia.placar(estado))
+    checar(("APROVADA" in txt or "REPROVADA" in txt or "PROMISSORA" in txt) and "julgada com 20 operacoes" in txt,
+           "o placar mostra o nivel e com quantas operacoes ao vivo foi julgada")
+
+    p = bt.Params(**cfg["params"])
+    pos = {"direcao": 1, "entrada": 100.0, "px_stop": 99.5, "px_alvo": 101.0, "px_liq": 96.3,
+           "liq_antes_do_stop": False, "barras": 0}
+    em_teste = vigia.texto_entrada("confl3", "BTCUSDT", "15m", pos, p)
+    aprovada = vigia.texto_entrada("confl3", "BTCUSDT", "15m", pos, p, nivel="aprovada")
+    promissora = vigia.texto_entrada("confl3", "BTCUSDT", "15m", pos, p, nivel="promissora")
+    checar("EM TESTE" in em_teste and "EM TESTE" not in aprovada and "risco reduzido" in promissora
+           and "lucro +3.24 USDT" in em_teste and "perda -2.16 USDT" in em_teste and "1.50" in em_teste,
+           "todo alerta traz lucro (+3,24) e perda (-2,16) em USDT com taxa, e diz se a estrategia esta em teste")
+
+    est_p = {"trilhas": {"x": {"resultados": [1.0]}}}
+    msgs = []
+    primeira = vigia.conferir_params(est_p, cfg, msgs.append)
+    igual = vigia.conferir_params(est_p, cfg, msgs.append)
+    mudou = json.loads(json.dumps(cfg))
+    mudou["params"]["stop"] = 0.8
+    recomecou = vigia.conferir_params(est_p, mudou, msgs.append)
+    checar(not primeira and not igual and recomecou and est_p["trilhas"] == {} and len(est_p["arquivadas"]) == 1
+           and list(est_p["arquivadas"].values())[0]["trilhas"]["x"]["resultados"] == [1.0] and len(msgs) == 1,
+           "mudou o stop no vigia.json: o placar recomeca e o antigo fica guardado, sem se misturar")
+
+
 def _pegada_real() -> dict:
-    """Tamanho de cada arquivo da pasta real do vigia (dados de quem roda de verdade)."""
+    """Tamanho de cada arquivo de dado real (vigia e caderno de quem roda de verdade)."""
+    pegada = {}
     pasta = os.path.join(RAIZ, "dados_vigia")
-    if not os.path.isdir(pasta):
-        return {}
-    return {f: os.path.getsize(os.path.join(pasta, f)) for f in os.listdir(pasta)}
+    if os.path.isdir(pasta):
+        pegada.update({f: os.path.getsize(os.path.join(pasta, f)) for f in os.listdir(pasta)})
+    for f in ("caderno.jsonl", "vigia.json", "segredos.json"):
+        arq = os.path.join(RAIZ, f)
+        pegada[f] = os.path.getsize(arq) if os.path.exists(arq) else None
+    return pegada
 
 
 if __name__ == "__main__":
@@ -1413,8 +1516,9 @@ if __name__ == "__main__":
     teste_prova_contra_sorte()
     teste_smc()
     teste_scalping()
+    teste_fase2_honesta()
     print("\n[13] a bateria nao toca nos dados reais do vigia")
-    checar(_pegada_real() == pegada, "dados_vigia/ (diario, log, estado) igual antes e depois da bateria")
+    checar(_pegada_real() == pegada, "dados_vigia/, caderno, vigia.json e segredos.json iguais antes e depois da bateria")
     print()
     if FALHAS:
         print(f"REPROVADO: {len(FALHAS)} falha(s)")

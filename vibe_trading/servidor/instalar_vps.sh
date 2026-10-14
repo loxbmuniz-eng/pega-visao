@@ -18,9 +18,11 @@
 #   sudo vibe-instalar --atualizar           busca versão nova; só aplica com a bateria verde
 #   sudo vibe-instalar --desinstalar         remove os serviços (pergunta antes de apagar dados)
 #
-# A atualização roda sozinha todo dia de madrugada. Ela testa a versão nova
-# numa pasta à parte e só troca se a bateria inteira passar. Se reprovar, o
-# vigia continua na versão de antes e o Telegram avisa.
+# A atualização roda sozinha todo dia de madrugada, COMO O USUÁRIO vibe (nunca
+# como administrador): testa a versão nova numa pasta à parte e só troca se a
+# bateria inteira passar. Se reprovar, o vigia continua na versão de antes e o
+# Telegram avisa. Nada que vem do repositório roda como administrador; esta
+# cópia do instalador só muda quando você mesmo roda o instalador de novo.
 # =====================================================================
 
 set -Eeuo pipefail
@@ -80,8 +82,8 @@ avisar() {
 
 # A bateria inteira, numa pasta, com prioridade baixa. Saída em ultima_bateria.log.
 bateria() {
-  como_vibe env VIBE_SERVIDOR=1 nice -n 15 "$VENV/bin/python" "$1/testes/test_motor.py" \
-    > "$VIBE_DIR/ultima_bateria.log" 2>&1
+  como_vibe sh -c 'VIBE_SERVIDOR=1 nice -n 15 "$1/bin/python" "$2/testes/test_motor.py" > "$3" 2>&1' \
+    _ "$VENV" "$1" "$VIBE_DIR/ultima_bateria.log"
 }
 
 # --------------------------------------------------------------------- #
@@ -92,9 +94,9 @@ status() {
   printf '   serviço: %s\n' "$(systemctl is-active vibe-vigia 2>/dev/null || true)"
   printf '   atualização diária: %s\n' "$(systemctl is-active vibe-atualizar.timer 2>/dev/null || true)"
   [[ -d "$APP/.git" ]] && printf '   versão: %s\n' "$(como_vibe git -C "$APP" log -1 --format='%h %s' 2>/dev/null || true)"
-  [[ -f "$VIBE_DIR/ultima_bateria.log" ]] && printf '   última bateria: %s\n' "$(tail -1 "$VIBE_DIR/ultima_bateria.log")"
+  printf '   última bateria: %s\n' "$(como_vibe tail -1 "$VIBE_DIR/ultima_bateria.log" 2>/dev/null || echo '-')"
   azul "Últimas linhas do log"
-  tail -n 12 "$APP/dados_vigia/vigia.log" 2>/dev/null | sed 's/^/   /' || true
+  como_vibe tail -n 12 "$APP/dados_vigia/vigia.log" 2>/dev/null | sed 's/^/   /' || true
   azul "Placar"
   como_vibe "$VENV/bin/python" "$APP/vigia.py" --placar 2>/dev/null | sed 's/^/ /' || true
   azul "Embarque Suinco (só leitura)"
@@ -107,30 +109,8 @@ status() {
 # --------------------------------------------------------------------- #
 atualizar() {
   [[ -d "$APP/.git" ]] || erro "o vigia não está instalado em $APP"
-  como_vibe git -C "$APP" fetch -q origin "$RAMO"
-  local atual novo prova
-  atual="$(como_vibe git -C "$APP" rev-parse HEAD)"
-  novo="$(como_vibe git -C "$APP" rev-parse "origin/$RAMO")"
-  if [[ "$atual" == "$novo" ]]; then
-    ok "sem versão nova (${atual:0:7})"
-    exit 0
-  fi
-  prova="$VIBE_DIR/prova"
-  rm -rf "$prova"
-  install -d -o "$VIBE_USER" -g "$VIBE_USER" -m 750 "$prova"
-  como_vibe sh -c 'git -C "$1" archive "$2" | tar -x -C "$3"' _ "$APP" "origin/$RAMO" "$prova"
-  como_vibe "$VENV/bin/pip" install -q --disable-pip-version-check -r "$prova/servidor/requisitos.txt"
-  if bateria "$prova"; then
-    como_vibe git -C "$APP" merge -q --ff-only "origin/$RAMO"
-    install -m 755 "$APP/servidor/instalar_vps.sh" "$BIN/vibe-instalar"
-    systemctl restart vibe-vigia
-    ok "atualizado de ${atual:0:7} para ${novo:0:7}: bateria verde"
-    avisar "Vigia atualizado (${novo:0:7}): bateria verde no servidor. $(como_vibe git -C "$APP" log -1 --format=%s)"
-  else
-    aviso "versão ${novo:0:7} RECUSADA: a bateria reprovou (veja $VIBE_DIR/ultima_bateria.log)"
-    avisar "Atualização ${novo:0:7} RECUSADA: a bateria reprovou no servidor. O vigia segue na versão ${atual:0:7}."
-  fi
-  rm -rf "$prova"
+  # mesmo chamado pelo administrador, a atualização roda como vibe
+  como_vibe env VIBE_DIR="$VIBE_DIR" RAMO="$RAMO" bash "$APP/servidor/atualizar_vibe.sh"
   exit 0
 }
 
@@ -234,7 +214,7 @@ azul "3. Acesso de leitura ao repositório"
 if repo_local; then
   ok "repositório local: $REPO"
 else
-  install -d -o "$VIBE_USER" -g "$VIBE_USER" -m 700 "$VIBE_DIR/.ssh"
+  como_vibe mkdir -p -m 700 "$VIBE_DIR/.ssh"
   if [[ ! -f "$VIBE_DIR/.ssh/id_ed25519" ]]; then
     como_vibe ssh-keygen -q -t ed25519 -N "" -C "vps-vibe-somente-leitura" -f "$VIBE_DIR/.ssh/id_ed25519"
     ok "chave de leitura criada"
@@ -244,7 +224,8 @@ else
   DIGITAL="$(ssh-keygen -lf "$TMP_KH" 2>/dev/null | awk '{print $2}' | head -1)"
   [[ "$DIGITAL" == "$GITHUB_ED25519" ]] \
     || { rm -f "$TMP_KH"; erro "a chave do github.com não confere com a publicada pelo GitHub ($DIGITAL). Não continuo."; }
-  install -o "$VIBE_USER" -g "$VIBE_USER" -m 644 "$TMP_KH" "$VIBE_DIR/.ssh/known_hosts"
+  # quem escreve na pasta do vibe e o proprio vibe (o administrador nunca segue atalho la dentro)
+  como_vibe sh -c 'cat > "$1"' _ "$VIBE_DIR/.ssh/known_hosts" < "$TMP_KH"
   rm -f "$TMP_KH"
   ok "github.com conferido pela impressão digital publicada"
   while ! como_vibe git ls-remote "$REPO" >/dev/null 2>&1; do
@@ -286,17 +267,17 @@ fi
 azul "5. Python do vigia (dentro de $VIBE_DIR)"
 [[ -x "$VENV/bin/python" ]] || como_vibe python3 -m venv "$VENV"
 como_vibe "$VENV/bin/pip" install -q --disable-pip-version-check -r "$APP/servidor/requisitos.txt"
-ok "$("$VENV/bin/python" -V 2>&1), pacotes de servidor/requisitos.txt"
+ok "$(como_vibe "$VENV/bin/python" -V 2>&1), pacotes de servidor/requisitos.txt"
 
 azul "6. Bateria de testes (uns 3 a 5 minutos, prioridade baixa)"
 if bateria "$APP"; then
-  ok "$(tail -1 "$VIBE_DIR/ultima_bateria.log")"
+  ok "$(como_vibe tail -1 "$VIBE_DIR/ultima_bateria.log")"
 else
   if [[ -n "$ANTERIOR" ]]; then
     como_vibe git -C "$APP" reset -q --hard "$ANTERIOR"
     aviso "voltei o código para ${ANTERIOR:0:7}"
   fi
-  tail -n 25 "$VIBE_DIR/ultima_bateria.log" | sed 's/^/   /'
+  como_vibe tail -n 25 "$VIBE_DIR/ultima_bateria.log" | sed 's/^/   /'
   religar_se_estava
   erro "a bateria reprovou: não liguei o vigia com esta versão. Me mande as linhas acima."
 fi
@@ -394,10 +375,20 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
-ExecStart=$BIN/vibe-instalar --atualizar
+# roda como vibe: o codigo do repositorio nunca ganha poder de administrador
+User=$VIBE_USER
+Group=$VIBE_USER
+Environment=VIBE_DIR=$VIBE_DIR
+Environment=RAMO=$RAMO
+ExecStart=/bin/bash $APP/servidor/atualizar_vibe.sh
 Nice=15
 CPUQuota=50%
 IOSchedulingClass=idle
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=$VIBE_DIR
+ProtectHome=yes
+PrivateTmp=yes
 EOF
 cat > "$UNIDADES/vibe-atualizar.timer" <<EOF
 [Unit]
@@ -411,7 +402,9 @@ Persistent=true
 [Install]
 WantedBy=timers.target
 EOF
-install -m 755 "$APP/servidor/instalar_vps.sh" "$BIN/vibe-instalar"
+# a copia de administrador e o arquivo que VOCE rodou agora, nunca o que veio do repositorio
+ESTE="$(readlink -f "${BASH_SOURCE[0]}")"
+[[ "$ESTE" == "$(readlink -f "$BIN/vibe-instalar" 2>/dev/null || true)" ]] || install -m 755 "$ESTE" "$BIN/vibe-instalar"
 systemctl daemon-reload
 systemctl enable vibe-vigia.service vibe-atualizar.timer >/dev/null 2>&1
 systemctl restart vibe-vigia.service

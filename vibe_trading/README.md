@@ -305,6 +305,12 @@ A coluna `nao-sorte` mostra essa chance.
 2 dos 3 ativos **e** 95% ou mais de chance de não ser sorte. Cada estratégia
 nova testada torna a prova das outras mais difícil; é de propósito.
 
+BTC, ETH e SOL andam juntos: as operações dos três não são somadas como se
+fossem independentes. Cada ativo é provado com as próprias operações, e vale a
+**pior** nota. Uma tentativa é tudo que muda o resultado (estratégia, período,
+lado, filtro, alavancagem, stop, alvo, taxa, margem, prazo, janela de dados e
+fonte), e o `--robustez` do backtest também registra no caderno.
+
 ## Robustez: vantagem ou sorte?
 
 ```bash
@@ -312,8 +318,16 @@ python3 backtest.py --robustez --estrategia confl4 --alav 24
 ```
 
 Corta a série em 6 janelas e, em cada uma, compara a estratégia com **30 moedas
-sorteadas que entram nos mesmos candles que ela** e só sorteiam o lado. A
-pergunta deixa de ser "ganhou?" e passa a ser "ganhou de quantas moedas?".
+que entram nos mesmos candles que ela, com a mesma mistura de compras e vendas,
+embaralhada entre esses candles**. A pergunta deixa de ser "ganhou?" e passa a
+ser "ganhou de quantas moedas?". Empate vale meio.
+
+> **Correção registrada (moeda e tendência).** A moeda sorteava meio a meio,
+> mesmo quando a estratégia quase só comprava. Num mercado de alta, comprar
+> quase sempre ganhava da moeda sem acertar nada. Agora a moeda usa a mesma
+> mistura de lados: numa caminhada aleatória com alta forte, a estratégia "só
+> compra" empata com a moeda (50%) e não ganha "vantagem" em nenhuma de 12
+> rodadas.
 
 O pareamento importa. Comparada com moedas que operam em todo candle, a `confl5`
 parecia ganhar de 73% delas, mas só porque opera pouco e paga menos taxa. Com a
@@ -365,11 +379,28 @@ Ele não envia ordem e não pede chave de corretora.
 - **Primeira execução:** carrega um mês de histórico só para aquecer os
   indicadores, sem operar nele. As operações começam no candle seguinte.
 - **Congelar:** durante a fase 2, não mexa no `vigia.json`. Mudou a estratégia,
-  é outra hipótese, e o placar recomeça do zero para ela.
+  é outra hipótese e ganha trilha nova. Mudou stop, alvo, alavancagem, margem,
+  taxa, fonte ou moedas: o placar inteiro recomeça do zero, e o anterior fica
+  guardado em `arquivadas`, sem se misturar.
 - **O placar** mostra, por estratégia: operações, acerto, ganho médio, perda
   média, resultado por operação, lucro, pior queda, de quantas moedas ganhou e
-  a situação da fase 2 (passa com 30 ou mais operações, resultado positivo
-  depois da taxa e vitória sobre 75% das moedas).
+  a situação da fase 2.
+- **O julgamento da fase 2** acontece **uma vez em cada ponto fixado antes**:
+  100, 200 e 300 operações **ao vivo** (as fechadas com o vigia desligado não
+  contam). Precisa de resultado positivo depois da taxa, vitória sobre 75% das
+  moedas e a chance de não ser sorte, contando como tentativas todas as trilhas
+  do vigia: **95% ou mais = APROVADA; 80% ou mais = PROMISSORA** (dinheiro real
+  só com risco reduzido); abaixo disso, REPROVADA. Vale o julgamento mais
+  recente. Todo alerta de entrada diz se a estratégia está EM TESTE,
+  PROMISSORA ou REPROVADA, e traz o lucro no alvo e a perda no stop em USDT.
+
+> **Correção registrada (julgamento da fase 2).** A primeira regra olhava o
+> placar a cada operação, a partir de 30, e aprovava quando ficava positivo e
+> acima de 75% das moedas. Medido em 150 estratégias de lado sorteado, sem
+> vantagem nenhuma: **aprovava 15%**. Com a regra nova, aprovou **nenhuma**
+> (nem como promissora), e uma estratégia com vantagem real modesta (50% de
+> acerto onde 40% empata) é reconhecida em 49% das vezes com 100 operações, 80%
+> com 200 e 93% com 300.
 - **De onde vem o candle** (`"fonte"` no `vigia.json`): instalação nova usa o
   perpétuo da **Pionex** (`BTC_USDT_PERP`), o preço que dispara stop e
   liquidação na corretora onde se opera. Dado público, sem chave. Um
@@ -439,6 +470,23 @@ curl -fsSL https://raw.githubusercontent.com/loxbmuniz-eng/pega-visao/claude/vib
 Rodar o instalador de novo é seguro: ele para o vigia, refaz o que mudou e
 religa. Dois vigias juntos estragariam o placar, por isso ele nunca deixa os
 dois rodando ao mesmo tempo.
+
+O instalador tem teste próprio, `testes/instalador_em_container.sh`: instala,
+reinstala, atualiza com versão boa e com versão sabotada, mostra o status e
+remove, num servidor simulado, conferindo que a Suinco fica igual. Ele cria e
+apaga o usuário `vibe`, então **só roda em máquina descartável** e se recusa a
+rodar no VPS (systemd como processo 1, `/opt/vibe` existente ou usuário `vibe`
+existente).
+
+> **Correção registrada (atualização calada).** Quando cada versão passou a
+> guardar o próprio registro da bateria, a limpeza dos registros antigos usava
+> `ls`, que devolve erro quando ainda não há nenhum; com `pipefail`, a primeira
+> atualização morria sem mensagem, antes da bateria, e o vigia nunca recebia
+> versão nova. O teste do instalador pegou ("versão boa aplicada só depois da
+> bateria verde" reprovou). Agora a limpeza usa `find`, e qualquer parada no
+> meio diz a linha, avisa no Telegram e limpa a pasta de prova. Guardas: o
+> teste do instalador confere que a primeira atualização termina sem parada e
+> que a versão recusada e a aprovada guardam cada uma o próprio registro.
 
 ### Livro de ofertas: gravando para medir
 

@@ -26,6 +26,7 @@ import argparse
 import json
 import random
 import sys
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -177,7 +178,23 @@ def buscar_ou_erro(par: str, tf: str, n: int) -> Serie:
 PIONEX_URL = "https://api.pionex.com/api/v1/market/klines?symbol={simbolo}&interval={intervalo}&limit={n}"
 PIONEX_INTERVALO = {"5m": "5M", "15m": "15M", "1h": "60M", "4h": "4H", "12h": "12H", "1d": "1D"}
 PIONEX_LIMITE = 500
-PIONEX_PAUSA = 0.6  # segundos entre paginas
+PIONEX_PAUSA = 0.6  # segundos entre dois pedidos quaisquer a Pionex
+_PIONEX_TRAVA = threading.Lock()
+_pionex_ultimo: list = [None]
+
+
+def ritmo_pionex() -> None:
+    """Todo pedido a Pionex, de qualquer parte do programa (candles, livro, ficha),
+    passa por aqui antes: no minimo PIONEX_PAUSA segundos entre dois pedidos, mesmo
+    com o vigia e o /analisar do Telegram pedindo ao mesmo tempo."""
+    with _PIONEX_TRAVA:
+        agora = time.monotonic()
+        if _pionex_ultimo[0] is not None:
+            falta = _pionex_ultimo[0] + PIONEX_PAUSA - agora
+            if falta > 0:
+                time.sleep(falta)
+                agora += falta
+        _pionex_ultimo[0] = agora
 
 
 def simbolo_pionex(par: str) -> str:
@@ -196,8 +213,7 @@ def buscar_pionex_ou_erro(par: str, tf: str, n: int) -> Serie:
     fim_ms = None
     try:
         while len(juntos) < n + 1:
-            if fim_ms is not None:
-                time.sleep(PIONEX_PAUSA)
+            ritmo_pionex()
             bruto = _pedir(base + (f"&endTime={fim_ms}" if fim_ms is not None else ""))
             if not isinstance(bruto, dict) or bruto.get("result") is not True:
                 motivo = (bruto.get("message") or bruto.get("code")) if isinstance(bruto, dict) else "formato"
@@ -260,7 +276,7 @@ def periodo_txt(s: Serie) -> str:
 class Params:
     banca: float = 110.0
     margem: float = 15.0
-    alav: float = 100.0
+    alav: float = 24.0      # 100x com stop de 0,5% liquida antes do stop
     taxa: float = 0.05      # % por lado (taker)
     mm: float = 0.5         # margem de manutencao, %
     stop: float = 0.5       # % do preco
@@ -366,18 +382,21 @@ def checar_barra(pos: Posicao, maxima: float, minima: float, p: Params) -> tuple
     O erro de modelagem tem que cair contra a estrategia, nunca a favor.
     """
     taxa_total = p.notional * (p.taxa / 100.0) * 2.0
+    # liquidado perde a margem inteira E a taxa ja paga na entrada (a corretora
+    # ainda pode cobrar taxa de liquidacao, que varia e nao entra aqui)
+    perda_liquidacao = -p.margem - p.notional * (p.taxa / 100.0)
     if pos.direcao > 0:
         bateu_liq, bateu_stop, bateu_alvo = minima <= pos.px_liq, minima <= pos.px_stop, maxima >= pos.px_alvo
     else:
         bateu_liq, bateu_stop, bateu_alvo = maxima >= pos.px_liq, maxima >= pos.px_stop, minima <= pos.px_alvo
     if pos.liq_antes_do_stop and bateu_liq:
-        return -p.margem, "liquidado"
+        return perda_liquidacao, "liquidado"
     if bateu_stop:
         return -(p.notional * (p.stop / 100.0)) - taxa_total, "stop"
     if bateu_alvo:
         return (p.notional * ((p.stop * p.rr) / 100.0)) - taxa_total, "alvo"
     if bateu_liq:
-        return -p.margem, "liquidado"
+        return perda_liquidacao, "liquidado"
     return None
 
 
@@ -431,7 +450,7 @@ def simular(s: Serie, sinais: list[int], p: Params) -> Resultado:
         r.pnl += pnl
         r.resultados.append(pnl)
         r.operacoes += 1
-        r.taxa_paga += p.notional * (p.taxa / 100.0) * 2.0
+        r.taxa_paga += p.notional * (p.taxa / 100.0) * (1.0 if desfecho == "liquidado" else 2.0)
 
         if desfecho == "alvo":
             r.ganhos += 1
@@ -546,6 +565,26 @@ def cortes_por_ano(s: Serie, minimo: int = 60) -> list[tuple[int, int, str]]:
     return cortes
 
 
+def fracao_batida(valor: float, moedas: list[float]) -> float:
+    """De quantas moedas (%) o resultado ganhou. Empate vale meio: uma estrategia que
+    so compra empata com a moeda pareada que tambem so compra — nao ganhou nem perdeu."""
+    if not moedas:
+        return 0.0
+    return sum(1.0 if valor > m else 0.5 if valor == m else 0.0 for m in moedas) / len(moedas) * 100
+
+
+def moeda_pareada(sinais: list[int], sorteio: random.Random) -> list[int]:
+    """O controle justo: entra NOS MESMOS candles da estrategia e com a MESMA mistura
+    de compras e vendas, so que embaralhada entre esses candles. Assim a comparacao
+    mede se a estrategia acerta o lado em cada candle — nao a frequencia (quem opera
+    pouco pagaria menos taxa) nem a tendencia do periodo (quem so compra num ano de
+    alta ganharia de uma moeda meio a meio sem acertar nada)."""
+    direcoes = [x for x in sinais if x]
+    sorteio.shuffle(direcoes)
+    proxima = iter(direcoes)
+    return [next(proxima) if x else 0 for x in sinais]
+
+
 def avaliar_robustez(s: Serie, nome: str, p: Params, janelas: int = 6,
                      sementes: int = 30, lado: str = "ambos", alinhar: bool = False,
                      cortes: list[tuple[int, int, str]] | None = None) -> dict | None:
@@ -585,11 +624,7 @@ def avaliar_robustez(s: Serie, nome: str, p: Params, janelas: int = 6,
         ret = (r.equity_final - p.banca) / p.banca * 100
         moedas = []
         for k in range(sementes):
-            sorteio = random.Random(1000 + k)
-            # controle justo: entra NOS MESMOS candles da estrategia e so sorteia
-            # o lado. Assim a comparacao mede a direcao, nao a frequencia —
-            # estrategia que opera pouco "ganharia" da moeda so por pagar menos taxa.
-            cega = [sorteio.choice((1, -1)) if x else 0 for x in sinais[ini:fim]]
+            cega = moeda_pareada(sinais[ini:fim], random.Random(1000 + k))
             rm = simular(sub, cega, p)
             moedas.append((rm.equity_final - p.banca) / p.banca * 100)
         moedas.sort()
@@ -597,7 +632,7 @@ def avaliar_robustez(s: Serie, nome: str, p: Params, janelas: int = 6,
             "janela": rotulo, "operacoes": r.operacoes, "acerto": r.acerto,
             "por_operacao": r.por_operacao, "retorno": ret,
             "moeda_mediana": moedas[len(moedas) // 2],
-            "bate": sum(1 for m in moedas if ret > m) / len(moedas) * 100,
+            "bate": fracao_batida(ret, moedas),
         })
 
     media = sum(l["bate"] for l in linhas) / len(linhas)
@@ -621,13 +656,20 @@ VEREDITOS = {
 
 def robustez(s: Serie, nome: str, p: Params, janelas: int = 6,
              sementes: int = 30, lado: str = "ambos", alinhar: bool = False,
-             por_ano: bool = False) -> None:
-    """Imprime a avaliacao de robustez (ver avaliar_robustez)."""
+             por_ano: bool = False, registro: dict | None = None) -> None:
+    """Imprime a avaliacao de robustez (ver avaliar_robustez). Com `registro`
+    ({"caderno", "ativo", "tf", "dias"}), a tentativa entra no caderno: olhar o
+    resultado ja e tentar, e conta na prova contra sorte."""
     a = avaliar_robustez(s, nome, p, janelas, sementes, lado, alinhar,
                          cortes_por_ano(s) if por_ano else None)
     if a is None:
         print(f"  serie curta demais para {janelas} janelas ({len(s)} candles)")
         return
+    if registro:
+        import caderno as cad
+        modo = "historico_por_ano" if por_ano else f"{registro['dias']}d_{janelas}janelas"
+        cad.registrar_avaliacao(registro["caderno"], a, nome, registro["tf"], registro["ativo"], lado, alinhar,
+                                p, modo, "binance", len(s))
     print(f"  {'janela':>6} | trades | acerto |  por op | retorno | moeda mediana | bate X% das moedas")
     print("  " + "-" * 84)
     for l in a["linhas"]:
@@ -649,7 +691,8 @@ def main() -> None:
     ap.add_argument("--par", default="BTCUSDT")
     ap.add_argument("--banca", type=float, default=110.0)
     ap.add_argument("--margem", type=float, default=15.0)
-    ap.add_argument("--alav", type=float, default=100.0)
+    ap.add_argument("--alav", type=float, default=24.0)
+    ap.add_argument("--caderno", default=None, help="caderno de experimentos (padrao: caderno.jsonl ao lado)")
     ap.add_argument("--taxa", type=float, default=0.05, help="%% por lado")
     ap.add_argument("--mm", type=float, default=0.5, help="margem de manutencao %%")
     ap.add_argument("--stop", type=float, default=0.5, help="stop em %% do preco")
@@ -701,8 +744,10 @@ def main() -> None:
             n = candles_para(tf, args.dias, args.alinhar)
             s = buscar(args.par, tf, n)
             print(f"  >>> {tf}  estrategia '{args.estrategia}'  ({periodo_txt(s)})")
+            import caderno as cad
             robustez(s, args.estrategia, p, args.janelas, lado=args.lado, alinhar=args.alinhar,
-                     por_ano=args.por_ano)
+                     por_ano=args.por_ano, registro={"caderno": args.caderno or cad.CADERNO, "ativo": args.par,
+                                                     "tf": tf, "dias": args.dias})
             print()
         return
 

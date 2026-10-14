@@ -59,6 +59,7 @@ def _pares(lista) -> list[tuple[float, float]]:
 
 
 def livro_pionex(par: str, pedir=None) -> tuple[list, list]:
+    bt.ritmo_pionex()
     bruto = (pedir or bt._pedir)(URL_PIONEX.format(simbolo=bt.simbolo_pionex(par)))
     if not isinstance(bruto, dict) or bruto.get("result") is not True:
         raise ValueError("pionex recusou o pedido do livro")

@@ -47,6 +47,7 @@ from dataclasses import asdict
 
 import arena
 import backtest as bt
+import estatistica
 import estrategias
 import livro
 
@@ -81,6 +82,10 @@ CONFIG_PADRAO = {
     "params": {"banca": 110, "margem": 15, "alav": 24, "taxa": 0.05, "mm": 0.5,
                "stop": 0.5, "rr": 2, "max_barras": 48},
     "moedas": 20,
+    # A fase 2 julga UMA vez em cada ponto fixado antes, contando so operacoes ao vivo
+    # (as fechadas com o vigia desligado nao contam). Julgar a cada operacao ate "dar
+    # certo" aprovava 15% das estrategias sem vantagem; com estes pontos, nenhuma de 150.
+    "julgar_em": [100, 200, 300],
     "historico_inicial_dias": 30,
     "resumo_diario_hora": 21,
     # A arena so liga com "ligada": true E pelo menos uma chave de IA no segredos.json.
@@ -222,11 +227,13 @@ def trilha_nova(n_moedas: int) -> dict:
             "moedas": [{"posicao": None, "n": 0, "soma": 0.0} for _ in range(n_moedas)]}
 
 
-def lado_da_moeda(semente: int, t: int) -> int:
+def lado_da_moeda(semente: int, t: int, frac_compra: float = 0.5) -> int:
     """Sorteio deterministico: a mesma moeda no mesmo candle tira sempre o mesmo lado,
-    entao desligar e religar o vigia nao muda o resultado das moedas."""
+    entao desligar e religar o vigia nao muda o resultado das moedas. Compra com a
+    probabilidade `frac_compra` — a mesma mistura de compras e vendas da estrategia,
+    para a tendencia do periodo nao contar como vantagem dela."""
     h = hashlib.sha256(f"{semente}:{t}".encode()).digest()
-    return 1 if h[0] % 2 == 0 else -1
+    return 1 if int.from_bytes(h[:8], "big") / 2 ** 64 < frac_compra else -1
 
 
 def _pos_de(d):
@@ -292,14 +299,37 @@ def atualizar_cache(c: dict, s: bt.Serie) -> int:
 # o ciclo
 # --------------------------------------------------------------------------- #
 
+NIVEIS = (("aprovada", 0.95), ("promissora", 0.80))
+
+
+def julgar(ao_vivo: list[float], moedas_vivo: list[float], tentativas: int) -> dict:
+    """Um julgamento da fase 2, feito UMA vez em cada ponto de corte fixado antes.
+    Precisa ser positiva depois da taxa e ganhar de 75% das moedas pareadas; a chance
+    de nao ser sorte (contando como tentativas todas as trilhas do vigia) decide o
+    nivel: 95% ou mais = aprovada; 80% ou mais = promissora (dinheiro real so com
+    risco reduzido); abaixo disso, reprovada."""
+    r = bt.Resultado(resultados=list(ao_vivo))
+    bate = bt.fracao_batida(sum(ao_vivo), moedas_vivo)
+    prova = estatistica.sharpe_deflacionado(ao_vivo, max(1, tentativas))
+    nivel = "reprovada"
+    if r.por_operacao > 0 and bate >= 75:
+        nivel = next((nome for nome, minimo in NIVEIS if prova["dsr"] >= minimo), "reprovada")
+    return {"operacoes": len(ao_vivo), "por_operacao": round(r.por_operacao, 4), "bate": round(bate, 1),
+            "nao_sorte": round(prova["dsr"], 4), "tentativas": tentativas, "nivel": nivel,
+            "passa": nivel == "aprovada"}
+
+
 def processar_barra(tr: dict, tid: str, nome: str, ativo: str, tf: str, sinal: int, i: int, c: dict,
-                    p: bt.Params, recuperado: bool, pasta: str, avisar, motivo: str = "") -> None:
+                    p: bt.Params, recuperado: bool, pasta: str, avisar, motivo: str = "",
+                    julgar_em=(100, 200, 300), tentativas: int = 1) -> None:
     """Um candle numa trilha (estrategia ou IA): a posicao, o diario, o aviso e as
     moedas pareadas. Estrategia e IA passam pela MESMA funcao."""
     tr["posicao"], fechou, abriu = passo(tr["posicao"], sinal, i, c, p)
     if fechou is not None:
         pnl, desfecho, pos = fechou
         tr["resultados"].append(pnl)
+        if not recuperado:
+            tr.setdefault("ao_vivo", []).append(pnl)
         saldo = sum(tr["resultados"])
         tr["pico"] = max(tr["pico"], saldo)
         tr["queda_max"] = max(tr["queda_max"], tr["pico"] - saldo)
@@ -316,13 +346,28 @@ def processar_barra(tr: dict, tid: str, nome: str, ativo: str, tf: str, sinal: i
         if motivo:
             tr["motivo_entrada"] = motivo
         if avisar and not recuperado:
-            avisar(texto_entrada(nome, ativo, tf, tr["posicao"], p, motivo))
+            avisar(texto_entrada(nome, ativo, tf, tr["posicao"], p, motivo,
+                                 nivel=(tr.get("julgamento") or {}).get("nivel", "em teste")))
+    # a moeda compra na mesma proporcao em que a estrategia mandou comprar ate aqui
+    frac = (tr.get("sinais_compra", 0) + 1) / (tr.get("sinais", 0) + 2)
     for k, m in enumerate(tr["moedas"]):
-        lado = lado_da_moeda(k, c["t"][i]) if sinal != 0 else 0
+        lado = lado_da_moeda(k, c["t"][i], frac) if sinal != 0 else 0
         m["posicao"], fm, _ = passo(m["posicao"], lado, i, c, p)
         if fm is not None:
             m["n"] += 1
             m["soma"] += fm[0]
+            if not recuperado:
+                m["soma_vivo"] = m.get("soma_vivo", 0.0) + fm[0]
+    feitos = tr.setdefault("julgamentos", {})
+    for ponto in julgar_em:
+        if str(ponto) not in feitos and len(tr.get("ao_vivo", [])) >= ponto:
+            feitos[str(ponto)] = julgar(tr["ao_vivo"][:ponto], [m.get("soma_vivo", 0.0) for m in tr["moedas"]],
+                                        tentativas)
+            feitos[str(ponto)]["t"] = c["t"][i]
+            tr["julgamento"] = feitos[str(ponto)]  # vale o julgamento mais recente
+    if sinal != 0:
+        tr["sinais"] = tr.get("sinais", 0) + 1
+        tr["sinais_compra"] = tr.get("sinais_compra", 0) + (1 if sinal > 0 else 0)
     tr["ultimo_t"] = c["t"][i]
 
 
@@ -338,6 +383,7 @@ def ciclo(estado: dict, cfg: dict, ativo: str, tf: str, buscador, agora_ms: int,
     """
     p = params_de(cfg)
     ms = MS[tf]
+    estado["julgar_em"] = list(cfg.get("julgar_em", (100, 200, 300)))
     arq_cache = arquivo_cache(pasta, ativo, tf, fonte)
     c = ler_json(arq_cache, None)
     alinhar = any(e.get("alinhar") for e in cfg["estrategias"])
@@ -377,17 +423,18 @@ def ciclo(estado: dict, cfg: dict, ativo: str, tf: str, buscador, agora_ms: int,
         sinais = estrategias.sinais(e["nome"], serie, e.get("lado", "ambos"), e.get("alinhar", False))
         for i in pendentes:
             recuperado = agora_ms - (c["t"][i] + ms) > 2 * ms  # fechou enquanto o vigia estava fora
-            processar_barra(tr, tid, e["nome"], rot, tf, sinais[i], i, c, p, recuperado, pasta, avisar)
+            processar_barra(tr, tid, e["nome"], rot, tf, sinais[i], i, c, p, recuperado, pasta, avisar,
+                            julgar_em=cfg.get("julgar_em", (100, 200, 300)), tentativas=len(estado["trilhas"]))
         processados = max(processados, len(pendentes))
 
     if ias:
         processados = max(processados, ciclo_arena(estado, juiz, dict(ias), rot, tf, c, serie, p,
-                                                   agora_ms, pasta, avisar))
+                                                   agora_ms, pasta, avisar, cfg.get("julgar_em", (100, 200, 300))))
     return processados
 
 
 def ciclo_arena(estado: dict, juiz, tids: dict, ativo: str, tf: str, c: dict, serie: bt.Serie,
-                p: bt.Params, agora_ms: int, pasta: str, avisar) -> int:
+                p: bt.Params, agora_ms: int, pasta: str, avisar, julgar_em=(100, 200, 300)) -> int:
     """
     As IAs como trilhas. A IA so e consultada num candle que:
       - acabou de fechar (candle recuperado depois de uma pausa nao e consultado:
@@ -429,7 +476,7 @@ def ciclo_arena(estado: dict, juiz, tids: dict, ativo: str, tf: str, c: dict, se
         for n in aqui:
             lado, motivo = decisoes.get(n, (0, ""))
             processar_barra(estado["trilhas"][tids[n]], tids[n], n, ativo, tf, lado, i, c, p,
-                            recuperado, pasta, avisar, motivo)
+                            recuperado, pasta, avisar, motivo, julgar_em, len(estado["trilhas"]))
     return len(pend)
 
 
@@ -464,15 +511,20 @@ def placar(estado: dict) -> list[dict]:
         n = len(r.resultados)
         lucro = sum(r.resultados)
         moedas = [m["soma"] for m in tr["moedas"]]
-        bate = (sum(1 for x in moedas if lucro > x) / len(moedas) * 100) if moedas and n else 0.0
-        if n < 30:
-            fase2 = f"faltam {30 - n} operacoes para julgar"
-        elif r.por_operacao > 0 and bate >= 75:
-            fase2 = "PASSA: positiva depois da taxa e bate 75%+ das moedas"
-        elif r.por_operacao > 0:
-            fase2 = "positiva, mas nao bate a moeda com folga: inconclusivo"
+        bate = bt.fracao_batida(lucro, moedas) if n else 0.0
+        j = tr.get("julgamento")
+        vivas = len(tr.get("ao_vivo", []))
+        pontos = estado.get("julgar_em", [100, 200, 300])
+        proximo = next((x for x in pontos if x > vivas), None)
+        falta = f"; proximo julgamento com {proximo}" if proximo else ""
+        if j is None:
+            fase2 = (f"EM TESTE: {vivas} operacoes ao vivo{falta} (as feitas com o vigia desligado nao contam). "
+                     f"Nao use dinheiro real nela ainda.")
         else:
-            fase2 = "NAO PASSA: perde dinheiro depois da taxa"
+            rotulo = {"aprovada": "APROVADA", "promissora": "PROMISSORA (dinheiro real so com risco reduzido)",
+                      "reprovada": "REPROVADA"}[j["nivel"]]
+            fase2 = (f"{rotulo}, julgada com {j['operacoes']} operacoes ao vivo: {j['por_operacao']:+.2f} por op, "
+                     f"bate {j['bate']:.0f}% das moedas, {j['nao_sorte'] * 100:.1f}% de chance de nao ser sorte{falta}")
         linhas.append({"trilha": tid, "operacoes": n, "acerto": r.acerto, "ganho_medio": r.ganho_medio,
                        "perda_media": r.perda_media, "por_operacao": r.por_operacao, "lucro": lucro,
                        "queda_max": tr["queda_max"], "bate": bate,
@@ -528,13 +580,38 @@ def fmt(v: float) -> str:
     return f"{v:,.{casas}f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
-def texto_entrada(nome: str, ativo: str, tf: str, pos: dict, p: bt.Params, motivo: str = "") -> str:
+def projecao(p: bt.Params, liq_antes_do_stop: bool = False) -> tuple[float, float]:
+    """(lucro no alvo, perda no stop) em USDT, ja com a taxa nas duas pontas. Se a
+    liquidacao chega antes do stop, a perda e a margem mais a taxa de entrada."""
+    taxa = p.notional * (p.taxa / 100) * 2
+    ganho = p.notional * (p.stop * p.rr / 100) - taxa
+    perda = (p.margem + p.notional * (p.taxa / 100)) if liq_antes_do_stop else p.notional * (p.stop / 100) + taxa
+    return ganho, perda
+
+
+AVISO_NIVEL = {
+    "em teste": "EM TESTE: estrategia ainda NAO aprovada para dinheiro real",
+    "reprovada": "REPROVADA na fase 2: NAO use dinheiro real nesta estrategia",
+    "promissora": "PROMISSORA: dinheiro real so com risco reduzido",
+}
+
+
+def texto_entrada(nome: str, ativo: str, tf: str, pos: dict, p: bt.Params, motivo: str = "",
+                  nivel: str = "em teste") -> str:
     lado = "COMPRA" if pos["direcao"] > 0 else "VENDA"
-    return (f"{lado} · {nome} · {ativo} {tf} (papel)\n"
-            f"entrada {fmt(pos['entrada'])}\nstop {fmt(pos['px_stop'])}\nalvo {fmt(pos['px_alvo'])}\n"
-            f"liquidacao a {p.alav:g}x: {fmt(pos['px_liq'])}\n"
-            + (f"motivo da IA: {motivo}\n" if motivo else "")
-            + "Sinal e ponto de atencao, nao ordem. Confira as regras antes de operar.")
+    ganho, perda = projecao(p, pos.get("liq_antes_do_stop", False))
+    linhas = [f"{lado} · {nome} · {ativo} {tf} (papel)"]
+    if nivel in AVISO_NIVEL:
+        linhas.append(AVISO_NIVEL[nivel])
+    linhas += [f"entrada {fmt(pos['entrada'])}",
+               f"alvo {fmt(pos['px_alvo'])}  ->  lucro {ganho:+.2f} USDT",
+               f"stop {fmt(pos['px_stop'])}  ->  perda {-perda:.2f} USDT",
+               f"relacao lucro/perda {ganho / perda:.2f}  (com taxa nas duas pontas)",
+               f"liquidacao a {p.alav:g}x: {fmt(pos['px_liq'])}"]
+    if motivo:
+        linhas.append(f"motivo da IA: {motivo}")
+    linhas.append("Sinal e ponto de atencao, nao ordem. Confira as regras antes de operar.")
+    return "\n".join(linhas)
 
 
 def texto_saida(reg: dict, tr: dict) -> str:
@@ -575,7 +652,8 @@ def risco_aberto(estado: dict, cfg: dict) -> tuple[int, float]:
     mercado inteiro anda contra. Liquidacao antes do stop conta a margem inteira."""
     p = params_de(cfg)
     pos = bt.abrir(100.0, 1, p)
-    por_posicao = p.margem if pos.liq_antes_do_stop else p.notional * (p.stop / 100) + p.notional * (p.taxa / 100) * 2
+    por_posicao = (p.margem + p.notional * (p.taxa / 100) if pos.liq_antes_do_stop
+                   else p.notional * (p.stop / 100) + p.notional * (p.taxa / 100) * 2)
     n = sum(1 for tr in estado.get("trilhas", {}).values() if tr.get("posicao"))
     return n, n * por_posicao
 
@@ -752,6 +830,32 @@ def log(msg: str) -> None:
         pass
 
 
+def assinatura_params(cfg: dict) -> str:
+    """O que, se mudar, faz o placar valer para outra hipotese."""
+    base = {"params": cfg["params"], "fonte": cfg.get("fonte", "binance"), "moedas": cfg["moedas"]}
+    return hashlib.sha256(json.dumps(base, sort_keys=True).encode()).hexdigest()[:12]
+
+
+def conferir_params(estado: dict, cfg: dict, registrar=None) -> bool:
+    """Mudou stop, alvo, alavancagem, margem, taxa, fonte ou moedas no vigia.json: o
+    placar recomeca do zero (o antigo fica guardado em 'arquivadas', sem se misturar).
+    Devolve True se recomecou."""
+    nova = assinatura_params(cfg)
+    antiga = estado.get("params_assinatura")
+    if antiga is None:
+        estado["params_assinatura"] = nova
+        return False
+    if antiga == nova:
+        return False
+    estado.setdefault("arquivadas", {})[antiga] = {"trilhas": estado.get("trilhas", {}),
+                                                   "ate": time.strftime("%Y-%m-%d %H:%M")}
+    estado["trilhas"] = {}
+    estado["params_assinatura"] = nova
+    (registrar or log)("os parametros do vigia.json mudaram: o placar recomeca do zero "
+                       "(o anterior fica guardado em 'arquivadas', sem se misturar)")
+    return True
+
+
 def montar_juiz(cfg: dict, segredos: dict, registrar=None, conferir=arena.conferir_modelo,
                 criar=arena.criar_claude):
     """A arena, se ligada e com pelo menos uma IA disponivel; senao None (e diz por que)."""
@@ -798,6 +902,10 @@ def rodar(cfg: dict, segredos: dict, uma_vez: bool) -> None:
     arq_estado = os.path.join(PASTA, "estado.json")
     estado = ler_json(arq_estado, {"versao": 1, "trilhas": {}, "ultimo_resumo": None})
     avisar = (lambda t: telegram(segredos, t)) if segredos.get("telegram_token") else None
+    if conferir_params(estado, cfg):
+        gravar_json(arq_estado, estado)
+        if avisar:
+            avisar("Os parametros do vigia mudaram: o placar recomecou do zero (o anterior ficou guardado).")
     fonte, outra_fonte = cfg["fonte"], cfg.get("conferir_com") or ""
     if outra_fonte == fonte:
         outra_fonte = ""

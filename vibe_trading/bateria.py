@@ -33,57 +33,32 @@ import sys
 import time
 
 import backtest as bt
+import caderno as cad
 import estatistica
 import estrategias
 
+chave_hipotese = cad.chave_hipotese
+tentativas_no_caderno = cad.tentativas_no_caderno
+sharpes_no_caderno = cad.sharpes_no_caderno
+
 PADRAO_ESTRATEGIAS = ("confl3,confl4,engolfo,divergencia,canal,ema,momento,rsi,confl3_fluxo,canal_fluxo,"
                       "cacada,reteste,compressao,sessao,vwap_dia,bos,choch,fvg,ob,smc")
-CADERNO = os.path.join(os.path.dirname(os.path.abspath(__file__)), "caderno.jsonl")
+CADERNO = cad.CADERNO
 
 CURTO = {"vantagem": "VANTAGEM", "inconclusivo": "inconcl.", "sem_vantagem": "sem"}
 
 
-def chave_hipotese(nome: str, tf: str, lado: str, alinhar: bool, p: bt.Params) -> str:
-    """Identidade de uma tentativa: mudar qualquer peca e outra hipotese."""
-    return f"{nome}|{tf}|{lado}|{'alinhado' if alinhar else 'livre'}|alav{p.alav:g}|stop{p.stop:g}|rr{p.rr:g}"
-
-
-def registrar(caderno: str, registro: dict) -> None:
-    with open(caderno, "a", encoding="utf-8") as f:
-        f.write(json.dumps(registro, ensure_ascii=False) + "\n")
-
-
-def tentativas_no_caderno(caderno: str) -> int:
-    if not os.path.exists(caderno):
-        return 0
-    vistas = set()
-    with open(caderno, encoding="utf-8") as f:
-        for linha in f:
-            try:
-                vistas.add(json.loads(linha)["hipotese"])
-            except (ValueError, KeyError):
-                continue
-    return len(vistas)
-
-
-def sharpes_no_caderno(caderno: str, maximo: int = 2000) -> list[float]:
-    """O Sharpe por operacao de cada registro do caderno (ate os `maximo` mais
-    recentes): a dispersao deles e a dispersao que a sorte produz nas tentativas."""
-    if not os.path.exists(caderno):
-        return []
-    valores = []
-    with open(caderno, encoding="utf-8") as f:
-        for linha in f:
-            try:
-                v = json.loads(linha).get("sharpe_op")
-            except ValueError:
-                continue
-            if isinstance(v, (int, float)):
-                valores.append(float(v))
-    return valores[-maximo:]
-
-
 DSR_MINIMO = 0.95
+
+
+def prova_por_ativo(resultados_por_ativo: list[list[float]], tentativas: int, var_sorte) -> dict:
+    """BTC, ETH e SOL andam juntos: somar as operacoes dos tres como se fossem
+    independentes infla a prova. Cada ativo e provado com as proprias operacoes e
+    vale a pior nota (ativo com menos de 3 operacoes nao prova nada: nota zero)."""
+    provas = [estatistica.sharpe_deflacionado(r, tentativas, var_sorte) for r in resultados_por_ativo]
+    if not provas:
+        return {"dsr": 0.0}
+    return min(provas, key=lambda x: x["dsr"])
 
 
 def main() -> None:
@@ -152,17 +127,9 @@ def main() -> None:
                 a = bt.avaliar_robustez(serie, nome, p, args.janelas, 30, args.lado, args.alinhar, cortes)
                 resultados.setdefault((tf, nome), {})[ativo] = a
                 if a is not None:
-                    t = a["placar"]
-                    registrar(args.caderno, {
-                        "quando": quando, "hipotese": chave_hipotese(nome, tf, args.lado, args.alinhar, p),
-                        "estrategia": nome, "periodo": tf, "ativo": ativo, "candles": len(serie),
-                        "veredito": a["veredito"], "bate_moedas": round(a["media_bate"], 1),
-                        "janelas_positivas": a["positivas"], "janelas": a["janelas"],
-                        "modo": "historico_por_ano" if args.historico else f"{args.dias}d",
-                        "operacoes": len(t.resultados),
-                        "acerto": round(t.acerto, 1), "por_operacao": round(t.por_operacao, 4),
-                        "sharpe_op": round(estatistica.sharpe(t.resultados), 5),
-                    })
+                    modo = "historico_por_ano" if args.historico else f"{args.dias}d_{args.janelas}janelas"
+                    cad.registrar_avaliacao(args.caderno, a, nome, tf, ativo, args.lado, args.alinhar, p,
+                                            modo, "binance", len(serie), quando)
     print()
 
     tentativas = tentativas_no_caderno(args.caderno)
@@ -188,7 +155,8 @@ def main() -> None:
                 juntos.resultados.extend(a["placar"].resultados)
                 vantagens += 1 if a["veredito"] == "vantagem" else 0
                 linha += f" | {a['media_bate']:3.0f}% {CURTO[a['veredito']]:<10}"
-            prova = estatistica.sharpe_deflacionado(juntos.resultados, tentativas, var_sorte)
+            prova = prova_por_ativo([a["placar"].resultados for a in resultados[(tf, nome)].values() if a],
+                                    tentativas, var_sorte)
             passa = vantagens >= minimo_ativos and prova["dsr"] >= DSR_MINIMO
             if passa:
                 passaram.append((tf, nome, vantagens))
