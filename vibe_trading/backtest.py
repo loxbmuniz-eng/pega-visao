@@ -282,6 +282,9 @@ class Params:
     stop: float = 0.5       # % do preco
     rr: float = 2.0         # alvo = stop * rr
     max_barras: int = 48    # espera maxima antes de encerrar a mercado
+    # "alvo": sai inteira no alvo. "surfe": metade sai no alvo, o stop do resto vai
+    # para a entrada e passa a seguir o preco a mesma distancia do stop original.
+    saida: str = "alvo"
 
     @property
     def notional(self) -> float:
@@ -357,6 +360,11 @@ class Posicao:
     px_liq: float
     liq_antes_do_stop: bool
     barras: int = 0  # candles fechados desde a entrada
+    # saida "surfe": o que a metade ja realizou no alvo, se ela ja saiu, e o melhor
+    # preco a favor desde entao (de onde o stop do resto e puxado)
+    realizado: float = 0.0
+    metade: bool = False
+    pico: float = 0.0
 
 
 def abrir(entrada: float, direcao: int, p: Params) -> Posicao:
@@ -389,19 +397,58 @@ def checar_barra(pos: Posicao, maxima: float, minima: float, p: Params) -> tuple
         bateu_liq, bateu_stop, bateu_alvo = minima <= pos.px_liq, minima <= pos.px_stop, maxima >= pos.px_alvo
     else:
         bateu_liq, bateu_stop, bateu_alvo = maxima >= pos.px_liq, maxima >= pos.px_stop, minima <= pos.px_alvo
+    if pos.metade:
+        return _surfar(pos, maxima, minima, p)
     if pos.liq_antes_do_stop and bateu_liq:
         return perda_liquidacao, "liquidado"
     if bateu_stop:
         return -(p.notional * (p.stop / 100.0)) - taxa_total, "stop"
     if bateu_alvo:
-        return (p.notional * ((p.stop * p.rr) / 100.0)) - taxa_total, "alvo"
+        if p.saida != "surfe":
+            return (p.notional * ((p.stop * p.rr) / 100.0)) - taxa_total, "alvo"
+        # metade sai no alvo, com metade da taxa; o resto segue com o stop na entrada
+        pos.realizado = (p.notional / 2) * ((p.stop * p.rr) / 100.0) - taxa_total / 2
+        pos.metade, pos.px_stop = True, pos.entrada
+        pos.pico = maxima if pos.direcao > 0 else minima
+        # se o mesmo candle tambem voltou a entrada, o resto sai no zero: a ordem
+        # dentro do candle nao se sabe, e a suposicao cai contra a estrategia
+        if (pos.direcao > 0 and minima <= pos.entrada) or (pos.direcao < 0 and maxima >= pos.entrada):
+            return pos.realizado - taxa_total / 2, "alvo+zero"
+        return None
     if bateu_liq:
         return perda_liquidacao, "liquidado"
     return None
 
 
+def _surfar(pos: Posicao, maxima: float, minima: float, p: Params) -> tuple[float, str] | None:
+    """O resto da posicao depois do alvo: o stop fica na entrada ou a uma distancia
+    de stop original do melhor preco ate o candle anterior, o que estiver mais a
+    favor. O stop e conferido ANTES de o candle mover o pico (conservador)."""
+    dist = pos.entrada * p.stop / 100.0
+    if pos.direcao > 0:
+        trilho = max(pos.entrada, pos.pico - dist)
+        if minima <= trilho:
+            return pos.realizado + _meia(pos, trilho, p), "surfe"
+        pos.pico = max(pos.pico, maxima)
+    else:
+        trilho = min(pos.entrada, pos.pico + dist)
+        if maxima >= trilho:
+            return pos.realizado + _meia(pos, trilho, p), "surfe"
+        pos.pico = min(pos.pico, minima)
+    pos.px_stop = trilho
+    return None
+
+
+def _meia(pos: Posicao, preco: float, p: Params) -> float:
+    """Resultado da metade que ficou, saindo em `preco`, com a taxa dela."""
+    var = (preco - pos.entrada) / pos.entrada * pos.direcao
+    return (p.notional / 2) * var - p.notional * (p.taxa / 100.0)
+
+
 def encerrar_no_preco(pos: Posicao, preco: float, p: Params) -> float:
     """Fecha a mercado (posicao que expirou sem bater stop nem alvo)."""
+    if pos.metade:
+        return pos.realizado + _meia(pos, preco, p)
     taxa_total = p.notional * (p.taxa / 100.0) * 2.0
     var = (preco - pos.entrada) / pos.entrada * pos.direcao
     return (p.notional * var) - taxa_total
@@ -697,6 +744,8 @@ def main() -> None:
     ap.add_argument("--mm", type=float, default=0.5, help="margem de manutencao %%")
     ap.add_argument("--stop", type=float, default=0.5, help="stop em %% do preco")
     ap.add_argument("--rr", type=float, default=2.0, help="alvo = stop * rr")
+    ap.add_argument("--saida", choices=("alvo", "surfe"), default="alvo",
+                    help="alvo: sai inteira no alvo; surfe: metade no alvo e o resto segue o preco")
     ap.add_argument("--dias", type=int, default=90)
     ap.add_argument("--periodos", default="15m,1h,4h,12h,1d")
     ap.add_argument("--estrategia", default="moeda")
@@ -722,7 +771,7 @@ def main() -> None:
         return
 
     p = Params(banca=args.banca, margem=args.margem, alav=args.alav, taxa=args.taxa,
-               mm=args.mm, stop=args.stop, rr=args.rr)
+               mm=args.mm, stop=args.stop, rr=args.rr, saida=args.saida)
     periodos = [t.strip() for t in args.periodos.split(",") if t.strip()]
 
     if args.ruido:

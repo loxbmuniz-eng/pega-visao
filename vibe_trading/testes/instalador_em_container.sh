@@ -73,6 +73,7 @@ checa 'grep -q "igual a antes" $T/saida1.txt' "Embarque Suinco igual antes e dep
 checa 'grep -q "APROVADO" $VIBE_DIR/ultima_bateria.log' "bateria inteira rodou e aprovou no servidor"
 checa 'grep -q "^User=vibe" $T/units/vibe-vigia.service && grep -q "CPUQuota=30%" $T/units/vibe-vigia.service && grep -q "MemoryMax=400M" $T/units/vibe-vigia.service && grep -q "ProtectSystem=strict" $T/units/vibe-vigia.service' "servico com usuario proprio, teto de CPU e memoria, sistema so leitura"
 checa '! grep -q -i "listen\|ExecStart=.*nginx\|ufw\|postgres" $T/units/vibe-vigia.service' "servico nao abre porta nem chama nada da Suinco"
+checa 'grep -q "^Environment=TZ=America/Sao_Paulo" $T/units/vibe-vigia.service' "vigia na hora de Brasilia (resumo das 21 h), sem mexer no relogio do servidor"
 checa '[[ -x $T/sbin/vibe-instalar ]]' "vibe-instalar instalado"
 checa 'grep -q "enable vibe-vigia.service vibe-atualizar.timer" $T/systemctl.log' "servico e atualizacao diaria habilitados"
 checa '! grep -qE "(restart|stop|reload|disable).*(embarque-suinco|nginx|postgresql)" $T/systemctl.log' "nenhum comando contra embarque-suinco, nginx ou postgresql"

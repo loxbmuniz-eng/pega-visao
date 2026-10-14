@@ -346,6 +346,8 @@ Group=$VIBE_USER
 WorkingDirectory=$APP
 ExecStart=$VENV/bin/python -u $APP/vigia.py
 Environment=PYTHONUNBUFFERED=1
+# hora de Brasilia no vigia (resumo das 21 h, log, dia do disjuntor), sem mexer no relogio do servidor
+Environment=TZ=America/Sao_Paulo
 Restart=always
 RestartSec=30
 # nunca disputa fôlego com o Embarque Suinco
@@ -379,6 +381,7 @@ Type=oneshot
 User=$VIBE_USER
 Group=$VIBE_USER
 Environment=VIBE_DIR=$VIBE_DIR
+Environment=TZ=America/Sao_Paulo
 Environment=RAMO=$RAMO
 ExecStart=/bin/bash $APP/servidor/atualizar_vibe.sh
 Nice=15

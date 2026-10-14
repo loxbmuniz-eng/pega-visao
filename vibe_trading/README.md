@@ -17,6 +17,7 @@ Não toca no painel de logística Suinco. É projeto separado, na mesma árvore.
 | `servidor/instalar_vps.sh` | Põe o vigia 24 horas num VPS, ao lado de outro sistema, sem encostar nele; atualização diária só com a bateria verde |
 | `backtest.py` | Puxa candles públicos e simula com taxa, stop, margem de manutenção e liquidação |
 | `vigia.py` | Fase 2: opera no papel, ao vivo, 24 horas, com a mesma regra do backtest; placar contra 20 moedas; diário; alerta no Telegram |
+| `alertas.py` | Alertas de mercado do vigia: movimento brusco, topo e fundo da semana passada, mudança de faixa (só avisam) |
 | `livro.py` | Lê o livro de ofertas de Pionex, Binance e Hyperliquid e grava o desequilíbrio perto do preço, a cada candle (só gravação, para medir) |
 | `arena.py` | A Qwen e o Claude como competidores dentro do vigia, no papel, com as mesmas regras de saída e as mesmas moedas (desligada até você ligar) |
 | `bateria.py` | Fase 1: todas as estratégias em vários ativos e períodos contra a moeda; `--historico` faz o histórico inteiro ano a ano; registra tudo no caderno de experimentos (`caderno.jsonl`) |
@@ -66,6 +67,7 @@ python3 backtest.py --robustez --estrategia confl4 --alav 24   # vantagem ou sor
 python3 backtest.py --robustez --estrategia confl3 --por-ano --dias 3000 --periodos 4h
 python3 backtest.py --robustez --estrategia engolfo --lado compra   # só long
 python3 backtest.py --robustez --estrategia confl3 --alinhar       # só a favor dos períodos acima
+python3 bateria.py --saida surfe      # a mesma bateria, saindo metade no alvo e surfando o resto
 python3 testes/test_motor.py          # guardas do motor
 node testes/test_monitor_navegador.js # monitor num navegador real, Binance simulada
 python3 backtest.py --estrategia ema --alav 24 --stop 0.5
@@ -134,7 +136,9 @@ O que a ficha faz, nesta ordem:
    (metade no 1º alvo, stop no zero, o resto no 2º), acerto mínimo para
    empatar, funding no prazo do horizonte.
 8. **Contexto, que mostra e não decide.** Funding, posições abertas e lotação
-   na Binance, livro de ofertas, medo e ganância, DVOL, agenda.
+   na Binance, livro de ofertas, medo e ganância, DVOL, Ichimoku do contexto,
+   agenda e o regime macro do FRED (juros de 10 anos, dólar amplo e VIX, cada
+   um com a data do dado: o FRED publica com atraso).
 9. **Agenda.** CPI, payroll ou decisão do Fed nos próximos 30 minutos (ou nos
    últimos 15): ESPERAR no scalp e no intraday; no swing, só aviso.
 
@@ -182,6 +186,11 @@ mostra o que veio: rode na sua máquina antes de confiar na ficha.
 | `compressao` | **mesa**: compressão e expansão: a Bollinger fica a mais estreita de 100 candles e abaixo de 60% da mediana; o rompimento seguinte dá a direção |
 | `sessao` | **mesa**: a `confl3` só com Londres e Nova York abertas juntas (12h–17h UTC, segunda a sexta) |
 | `vwap_dia` | **mesa**: preço médio do dia (desde 00:00 UTC): toca a VWAP e fecha do lado de quem já estava ganhando o dia |
+| `bos` / `choch` | **SMC**: quebra de estrutura a favor da tendência / primeira quebra contra (mudança de caráter) |
+| `fvg` / `ob` | **SMC**: volta ao vão de valor justo / ao bloco de ordens e segura |
+| `smc` | **SMC**: bloco de ordens a favor da estrutura, só no desconto (compra) ou no prêmio (venda) |
+| `ichimoku` | **Ichimoku**: tenkan cruza o kijun, com o fechamento fora da nuvem e acima (ou abaixo) do fechamento de 26 barras atrás; a nuvem do candle é a calculada 26 barras antes, sem olhar o futuro |
+| `spring` | **Wyckoff**: numa faixa lateral de 40 candles, a mínima fura o fundo e o candle fecha de volta dentro, de alta (o espelho é o upthrust). Raro por natureza: poucas operações por trimestre |
 
 A confluência é o checklist do scalper disciplinado, com o porquê de cada item
 no código (`estrategias.py`). Os dois primeiros são **obrigatórios**: a
@@ -354,6 +363,25 @@ existe o teste de robustez.
 
 ---
 
+## Saída: alvo inteiro ou alvo + surfe
+
+`--saida alvo` (o padrão) sai inteira no alvo. `--saida surfe` sai **metade no
+alvo**; o stop do resto vai para a entrada e passa a seguir o preço à mesma
+distância do stop original, puxado pelo melhor preço até o candle anterior. O
+resto sai quando o preço volta até ele, ou a mercado no fim do prazo.
+
+As suposições caem contra a estratégia, como no resto do motor:
+
+- alvo e stop original no mesmo candle: conta **stop** (a posição inteira);
+- alvo e volta à entrada no mesmo candle: a metade que ficou sai **no zero**;
+- o stop puxado é conferido **antes** de o candle mover o pico.
+
+É a mesma `checar_barra` no backtest e no vigia (guarda [30]: as mesmas
+operações nos dois, inclusive com o vigia desligado e religado no meio de um
+surfe). No caderno, surfe é **outra hipótese** e entra na conta da prova contra
+sorte. No vigia, vale com `"saida": "surfe"` em `"params"`; trocar recomeça o
+placar (o anterior fica guardado).
+
 ## O placar: acerto não basta
 
 Toda saída mostra o **acerto** junto com o que decide se há lucro: **ganho
@@ -518,8 +546,28 @@ fica sem resposta):
 | `/fichas` | o placar das fichas: A FAVOR contra ESPERAR, em múltiplos do risco |
 | `/ajuda` | a lista de comandos |
 
+| `/resultado -2,1` | anota o resultado em USDT de uma operação **real** já fechada (negativo = perda) |
+| `/hoje` | o dia anotado e o estado do disjuntor |
+
 O `segredos.json` fica só para o dono ler e nunca vai para o GitHub (está no
 `.gitignore`). O resumo das 21 h traz também o placar das fichas, conferido na hora.
+
+**Alertas de mercado** (no menor período do vigia, só avisam):
+
+| Alerta | Quando |
+|---|---|
+| MOVIMENTO BRUSCO | a amplitude do candle passa de 3 vezes o normal (mediana dos 100 anteriores); no máximo 1 por hora |
+| ROMPEU O TOPO / PERDEU O FUNDO DA SEMANA PASSADA | o fechamento atravessa o topo ou o fundo da semana anterior (segunda a domingo, UTC); uma vez por semana |
+| MUDOU DE FAIXA | o fechamento atravessa um número redondo (1.000 no BTC); o mesmo nível no mesmo sentido, no máximo a cada 4 h |
+
+Vigia voltando de uma pausa não manda alerta atrasado. Tudo ajustável em
+`"alertas"` no `vigia.json`.
+
+**Disjuntor do dia** (para a conta real). O sistema não vê a sua conta: você
+anota cada operação fechada com `/resultado`. Com **3 perdas seguidas** no dia,
+ou o dia em **−6% da banca**, o disjuntor arma: toda ficha até a meia-noite de
+Brasília mostra a leitura inteira, mas sai **NÃO OPERAR**. É a regra que impede
+a operação de vingança depois de uma sequência ruim. Ajuste em `"disjuntor"`.
 
 ### No VPS, 24 horas, ao lado do Embarque Suinco
 

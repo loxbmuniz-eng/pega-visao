@@ -45,6 +45,7 @@ import urllib.parse
 import urllib.request
 from dataclasses import asdict
 
+import alertas
 import arena
 import backtest as bt
 import estatistica
@@ -101,6 +102,13 @@ CONFIG_PADRAO = {
     "ficha": dict(ficha.FICHA_PADRAO),
     # /radar: os perpetuos da Pionex que mais oscilaram em 24 h, so os com volume.
     "radar": {"volume_min_usdt": 5_000_000, "quantos": 10},
+    # Alertas de mercado no menor periodo: movimento brusco, topo e fundo da semana
+    # passada, mudanca de faixa (numero redondo). So avisam. Veja alertas.py.
+    "alertas": dict(alertas.ALERTAS_PADRAO),
+    # Disjuntor do dia, para a conta REAL: voce anota cada resultado no Telegram
+    # (/resultado -2,1). Com 3 perdas seguidas no dia, ou o dia em -6% da banca, toda
+    # ficha ate a meia-noite (Brasilia) sai NAO OPERAR.
+    "disjuntor": {"ligado": True, "perdas_seguidas": 3, "perda_dia_pct": 6.0},
 }
 
 SEGREDOS_MODELO = {
@@ -158,7 +166,7 @@ def carregar_config(caminho: str = CONFIG) -> dict:
     novos = [k for k in CONFIG_PADRAO if k not in cfg]
     for k in novos:
         cfg[k] = json.loads(json.dumps(PADRAO_PARA_CONFIG_ANTIGA.get(k, CONFIG_PADRAO[k])))
-    for grupo in ("arena", "ficha", "radar"):
+    for grupo in ("arena", "ficha", "radar", "alertas", "disjuntor"):
         novos += [f"{grupo}.{k}" for k in CONFIG_PADRAO[grupo] if k not in cfg[grupo]]
         for k in CONFIG_PADRAO[grupo]:
             cfg[grupo].setdefault(k, CONFIG_PADRAO[grupo][k])
@@ -354,8 +362,10 @@ def processar_barra(tr: dict, tid: str, nome: str, ativo: str, tf: str, sinal: i
         if motivo:
             tr["motivo_entrada"] = motivo
         if avisar and not recuperado:
+            dj = disjuntor(ler_resultados(pasta), int(time.time() * 1000), p.banca)
             avisar(texto_entrada(nome, ativo, tf, tr["posicao"], p, motivo,
-                                 nivel=(tr.get("julgamento") or {}).get("nivel", "em teste")))
+                                 nivel=(tr.get("julgamento") or {}).get("nivel", "em teste"),
+                                 disjuntor_armado=dj["armado"]))
     # a moeda compra na mesma proporcao em que a estrategia mandou comprar ate aqui
     frac = (tr.get("sinais_compra", 0) + 1) / (tr.get("sinais", 0) + 2)
     for k, m in enumerate(tr["moedas"]):
@@ -604,20 +614,31 @@ AVISO_NIVEL = {
 }
 
 
+def texto_da_ia(motivo: str, maximo: int = 300) -> str:
+    """O motivo escrito pela IA vai ao Telegram como texto de terceiro: so caracteres
+    imprimiveis, numa linha, com tamanho maximo."""
+    limpo = " ".join("".join(ch if ch.isprintable() else " " for ch in str(motivo)).split())
+    return limpo[:maximo] + ("..." if len(limpo) > maximo else "")
+
+
 def texto_entrada(nome: str, ativo: str, tf: str, pos: dict, p: bt.Params, motivo: str = "",
-                  nivel: str = "em teste") -> str:
+                  nivel: str = "em teste", disjuntor_armado: bool = False) -> str:
     lado = "COMPRA" if pos["direcao"] > 0 else "VENDA"
     ganho, perda = projecao(p, pos.get("liq_antes_do_stop", False))
     linhas = [f"{lado} · {nome} · {ativo} {tf} (papel)"]
+    if disjuntor_armado:
+        linhas.append("DISJUNTOR DO DIA ARMADO: na conta real, NAO ABRA (veja /hoje)")
     if nivel in AVISO_NIVEL:
         linhas.append(AVISO_NIVEL[nivel])
     linhas += [f"entrada {fmt(pos['entrada'])}",
-               f"alvo {fmt(pos['px_alvo'])}  ->  lucro {ganho:+.2f} USDT",
+               f"alvo {fmt(pos['px_alvo'])}  ->  lucro {ganho:+.2f} USDT"
+               + ("  (saida surfe: metade sai aqui, o stop do resto vai para a entrada e segue o preco)"
+                  if p.saida == "surfe" else ""),
                f"stop {fmt(pos['px_stop'])}  ->  perda {-perda:.2f} USDT",
                f"relacao lucro/perda {ganho / perda:.2f}  (com taxa nas duas pontas)",
                f"liquidacao a {p.alav:g}x: {fmt(pos['px_liq'])}"]
     if motivo:
-        linhas.append(f"motivo da IA: {motivo}")
+        linhas.append(f"motivo da IA (texto dela, nao verificado): {texto_da_ia(motivo)}")
     linhas.append("Sinal e ponto de atencao, nao ordem. Confira as regras antes de operar.")
     return "\n".join(linhas)
 
@@ -710,6 +731,8 @@ AJUDA_TELEGRAM = ("Comandos do vigia (papel, nenhuma ordem real):\n"
                   "(ex.: /analisar BTC 2 swing; sem risco, usa 2%)\n"
                   "/radar - as moedas que mais oscilam agora na Pionex (com volume)\n"
                   "/fichas - o placar das fichas: o veredito acerta?\n"
+                  "/resultado -2,1 - anota o resultado (USDT) de uma operacao REAL fechada; arma o disjuntor do dia\n"
+                  "/hoje - o dia anotado e o disjuntor\n"
                   "/placar - o placar de cada estrategia e IA\n"
                   "/status - se o vigia esta vivo, ultimo candle, posicoes abertas\n"
                   "/ajuda - esta lista")
@@ -717,17 +740,111 @@ AJUDA_TELEGRAM = ("Comandos do vigia (papel, nenhuma ordem real):\n"
 
 def fazer_ficha(argumentos: list[str], cfg: dict, estado: dict, agora_ms: int, pasta: str = PASTA,
                 coletar=ficha.coletar) -> str:
-    """/analisar: busca, analisa, registra para o placar das fichas e devolve o texto."""
+    """/analisar: busca, analisa, registra para o placar das fichas e devolve o texto.
+    Com o disjuntor do dia armado, a leitura sai inteira mas o veredito e NAO OPERAR."""
     try:
         pedido = ficha.interpretar_pedido(argumentos, cfg.get("ficha"))
     except ValueError as e:
         return f"Nao deu para analisar: {e}"
     p = cfg["params"]
+    resultados = ler_resultados(pasta)
+    dj = disjuntor(resultados, agora_ms, p["banca"], cfg.get("disjuntor"))
+    # o risco e sobre a banca de hoje: a configurada mais tudo o que foi anotado
+    banca = p["banca"] + sum(r["valor"] for r in resultados)
+    if banca <= 0:
+        return f"A banca anotada chegou a {fmt_br(banca)} USDT: confira 'banca' no vigia.json e os /resultado."
     dados = coletar(pedido["par"], agora_ms)
-    f = ficha.analisar(dados, pedido["horizonte"], pedido["risco_pct"], banca=p["banca"], cfg=cfg.get("ficha"),
+    f = ficha.analisar(dados, pedido["horizonte"], pedido["risco_pct"], banca=banca, cfg=cfg.get("ficha"),
                        taxa=p["taxa"], mm_padrao=p["mm"], estado=estado,
-                       divergencia_max=cfg.get("divergencia_max_pct", 0.3))
+                       divergencia_max=cfg.get("divergencia_max_pct", 0.3),
+                       bloqueios_externos=[dj["motivo"]] if dj["armado"] else None)
+    if resultados:
+        f["contexto"].insert(0, f"banca de hoje: {_br2(banca)} USDT ({p['banca']:g} configurada, "
+                                f"{fmt_br(banca - p['banca'])} nos resultados anotados)")
     return ficha.texto(f, ficha.registrar(pasta, f))
+
+
+def _br2(v: float) -> str:
+    return ficha.fmt_usdt(v).lstrip("+")
+
+
+# --------------------------------------------------------------------------- #
+# disjuntor do dia (conta real, anotada a mao)
+# --------------------------------------------------------------------------- #
+
+def dia_brasilia(ms: int) -> int:
+    """O dia de quem opera: Brasilia, UTC-3 o ano todo."""
+    return (ms - 3 * 3_600_000) // 86_400_000
+
+
+def ler_resultados(pasta: str = PASTA) -> list[dict]:
+    caminho = os.path.join(pasta, "resultados.jsonl")
+    if not os.path.exists(caminho):
+        return []
+    saida = []
+    with open(caminho, encoding="utf-8") as f:
+        for linha in f:
+            try:
+                r = json.loads(linha)
+                saida.append({"quando_ms": int(r["quando_ms"]), "valor": float(r["valor"])})
+            except (ValueError, KeyError, TypeError):
+                continue
+    return saida
+
+
+def disjuntor(resultados: list[dict], agora_ms: int, banca: float, cfg: dict | None = None) -> dict:
+    """O dia de hoje (Brasilia): quantas operacoes, a soma, as perdas seguidas no fim
+    e se o disjuntor armou (perdas seguidas no limite, ou o dia abaixo do limite)."""
+    cfg = {"ligado": True, "perdas_seguidas": 3, "perda_dia_pct": 6.0, **(cfg or {})}
+    hoje = [r["valor"] for r in sorted(resultados, key=lambda r: r["quando_ms"])
+            if dia_brasilia(r["quando_ms"]) == dia_brasilia(agora_ms)]
+    soma = sum(hoje)
+    seguidas = 0
+    for v in reversed(hoje):
+        if v >= 0:
+            break
+        seguidas += 1
+    limite = -banca * cfg["perda_dia_pct"] / 100
+    motivo = ""
+    if cfg["ligado"] and seguidas >= cfg["perdas_seguidas"]:
+        motivo = f"disjuntor do dia: {seguidas} perdas seguidas hoje ({fmt_br(soma)} USDT). Pare ate amanha"
+    elif cfg["ligado"] and soma <= limite:
+        motivo = (f"disjuntor do dia: hoje em {fmt_br(soma)} USDT, alem do limite de {cfg['perda_dia_pct']:g}% "
+                  f"da banca ({fmt_br(limite)}). Pare ate amanha")
+    return {"armado": bool(motivo), "motivo": motivo, "n": len(hoje), "soma": soma, "seguidas": seguidas}
+
+
+def fmt_br(v: float) -> str:
+    return ficha.fmt_usdt(v)
+
+
+def anotar_resultado(argumentos: list[str], cfg: dict, agora_ms: int, pasta: str = PASTA) -> str:
+    """/resultado -2,1: anota o resultado (USDT) de uma operacao REAL ja fechada."""
+    banca = cfg["params"]["banca"]
+    try:
+        valor = float((argumentos or [""])[0].replace(",", "."))
+    except ValueError:
+        return "Use: /resultado -2,1  (o resultado em USDT, ja com as taxas; negativo = perda)"
+    if not abs(valor) <= banca:
+        return f"{valor:g} USDT passa da banca inteira ({banca:g}): confira o valor e mande de novo."
+    antes = disjuntor(ler_resultados(pasta), agora_ms, banca, cfg.get("disjuntor"))
+    os.makedirs(pasta, exist_ok=True)
+    anexar_json(os.path.join(pasta, "resultados.jsonl"), {"quando_ms": agora_ms, "valor": valor})
+    dj = disjuntor(ler_resultados(pasta), agora_ms, banca, cfg.get("disjuntor"))
+    texto = (f"Anotado: {fmt_br(valor)} USDT. Hoje: {dj['n']} operacao(oes), {fmt_br(dj['soma'])} USDT, "
+             f"{dj['seguidas']} perda(s) seguida(s).")
+    if dj["armado"] and not antes["armado"]:
+        texto += f"\nDISJUNTOR ARMADO. {dj['motivo']}. Toda ficha ate meia-noite sai NAO OPERAR."
+    elif dj["armado"]:
+        texto += "\nO disjuntor continua armado: pare por hoje."
+    return texto
+
+
+def texto_hoje(cfg: dict, agora_ms: int, pasta: str = PASTA) -> str:
+    dj = disjuntor(ler_resultados(pasta), agora_ms, cfg["params"]["banca"], cfg.get("disjuntor"))
+    texto = (f"Hoje (Brasilia): {dj['n']} operacao(oes) anotada(s), {fmt_br(dj['soma'])} USDT, "
+             f"{dj['seguidas']} perda(s) seguida(s).")
+    return texto + (f"\nDISJUNTOR ARMADO: {dj['motivo']}." if dj["armado"] else "\nDisjuntor desarmado.")
 
 
 def texto_fichas(pasta: str, agora_ms: int, buscar=None) -> str:
@@ -742,6 +859,8 @@ def texto_radar(cfg: dict, giro=fatores.giro_24h) -> str:
 
 SERVICOS = {
     "analisar": lambda args, cfg, estado, agora: fazer_ficha(args, cfg, estado, agora),
+    "resultado": lambda args, cfg, agora: anotar_resultado(args, cfg, agora),
+    "hoje": lambda cfg, agora: texto_hoje(cfg, agora),
     "fichas": lambda agora: texto_fichas(PASTA, agora),
     "radar": lambda cfg: texto_radar(cfg),
 }
@@ -768,6 +887,10 @@ def responder_comando(texto: str, estado: dict, cfg: dict, agora_ms: int, servic
             return servicos["fichas"](agora_ms)
         if palavra == "/radar":
             return servicos["radar"](cfg)
+        if palavra == "/resultado":
+            return servicos["resultado"](argumentos, cfg, agora_ms)
+        if palavra == "/hoje":
+            return servicos["hoje"](cfg, agora_ms)
     except Exception as e:
         return f"Nao consegui responder {palavra}: {type(e).__name__}: {str(e)[:150]}"
     return None
@@ -889,6 +1012,20 @@ def log(msg: str) -> None:
         pass
 
 
+def avisar_mercado(estado: dict, cfg: dict, ativo: str, tf: str, agora_ms: int, fonte: str, avisar=None,
+                   pasta: str = PASTA, registrar=None) -> list[str]:
+    """Alertas de mercado do ultimo candle fechado (alertas.py), com a memoria no estado."""
+    registrar = registrar or log
+    serie = serie_do_cache(ler_json(arquivo_cache(pasta, ativo, tf, fonte), cache_vazio()))
+    memoria = estado.setdefault("alertas", {}).setdefault(ativo, {})
+    textos = alertas.avaliar(ativo, tf, serie, agora_ms, memoria, cfg.get("alertas"))
+    for t in textos:
+        registrar(t)
+        if avisar:
+            avisar(t)
+    return textos
+
+
 def assinatura_params(cfg: dict) -> str:
     """O que, se mudar, faz o placar valer para outra hipotese."""
     base = {"params": cfg["params"], "fonte": cfg.get("fonte", "binance"), "moedas": cfg["moedas"]}
@@ -957,7 +1094,27 @@ def montar_juiz(cfg: dict, segredos: dict, registrar=None, conferir=arena.confer
     return juiz
 
 
+_TRAVA: list = []
+
+
+def travar(pasta: str = PASTA):
+    """Um vigia por pasta: dois juntos gravariam o mesmo estado e estragariam o placar.
+    A trava some sozinha quando o processo acaba (inclusive se ele cair)."""
+    import fcntl
+    os.makedirs(pasta, exist_ok=True)
+    arq = open(os.path.join(pasta, "vigia.trava"), "a")
+    try:
+        fcntl.flock(arq, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        arq.close()
+        sys.exit("Ja existe um vigia rodando nesta pasta. Feche o outro (Ctrl+C na outra janela) "
+                 "ou, no VPS, use 'sudo vibe-instalar --status'.")
+    _TRAVA.append(arq)
+    return arq
+
+
 def rodar(cfg: dict, segredos: dict, uma_vez: bool) -> None:
+    travar(PASTA)
     arq_estado = os.path.join(PASTA, "estado.json")
     estado = ler_json(arq_estado, {"versao": 1, "trilhas": {}, "ultimo_resumo": None})
     avisar = (lambda t: telegram(segredos, t)) if segredos.get("telegram_token") else None
@@ -976,7 +1133,8 @@ def rodar(cfg: dict, segredos: dict, uma_vez: bool) -> None:
     if avisar and segredos.get("telegram_chat_id") and not uma_vez:
         threading.Thread(target=escutar_telegram, args=(segredos, cfg, arq_estado, threading.Event()),
                          daemon=True, name="telegram").start()
-        log("telegram: respondendo /analisar, /radar, /fichas, /placar, /status e /ajuda (so ao seu chat)")
+        log("telegram: respondendo /analisar, /radar, /fichas, /resultado, /hoje, /placar, /status e /ajuda "
+            "(so ao seu chat)")
     if avisar and not uma_vez:
         avisar("Vigia ligado (papel). Estrategias: " + ", ".join(e["nome"] for e in cfg["estrategias"])
                + (f". Arena: {', '.join(juiz.competidores())}" if juiz else ""))
@@ -998,6 +1156,9 @@ def rodar(cfg: dict, segredos: dict, uma_vez: bool) -> None:
                                    if tr["posicao"] and f"|{rotulo(ativo, fonte)}|{tf}" in tid]
                         log(f"{ativo} {tf}: {n} candle(s) processado(s); posicao aberta em: "
                             f"{', '.join(abertas) if abertas else 'nenhuma'}")
+                        if tf == cfg["periodos"][0]:
+                            avisar_mercado(estado, cfg, ativo, tf, agora, fonte, avisar)
+                            gravar_json(arq_estado, estado)
                         if cfg.get("gravar_livro") and tf == cfg["periodos"][0]:
                             ultimo = (ler_json(arquivo_cache(PASTA, ativo, tf, fonte), cache_vazio())["t"] or [None])[-1]
                             livro.gravar(PASTA, ativo, ultimo, agora, registrar=log)
@@ -1013,6 +1174,12 @@ def rodar(cfg: dict, segredos: dict, uma_vez: bool) -> None:
                 except bt.ErroBusca as e:
                     falhas += 1
                     log(f"{ativo} {tf}: sem dados ({e.erros[0] if e.erros else 'erro'}); tento de novo")
+                except Exception as e:  # nada derruba o vigia: registra, espera e tenta de novo
+                    falhas += 1
+                    log(f"{ativo} {tf}: erro inesperado ({type(e).__name__}: {str(e)[:200]}); tento de novo")
+                    if falhas == 5 and avisar:
+                        avisar(f"Vigia com erro repetido em {ativo} {tf}: {type(e).__name__}. Ele segue tentando; "
+                               f"veja o log (vibe-instalar --status).")
         hoje = time.strftime("%Y-%m-%d")
         if (avisar and int(time.strftime("%H")) >= cfg.get("resumo_diario_hora", 21)
                 and estado.get("ultimo_resumo") != hoje):

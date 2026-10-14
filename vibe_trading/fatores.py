@@ -216,6 +216,49 @@ def dvol(par: str, agora_ms: int, pedir=None) -> dict:
 
 
 # --------------------------------------------------------------------------- #
+# regime macro (FRED): so contexto, com a data de cada dado
+# --------------------------------------------------------------------------- #
+
+URL_FRED = "https://fred.stlouisfed.org/graph/fredgraph.csv?id={serie}"
+# o que entra na ficha: juros de 10 anos dos EUA, dolar amplo (semanal no FRED) e VIX
+SERIES_FRED = {"DGS10": "juros 10 anos EUA", "DTWEXBGS": "dolar amplo", "VIXCLS": "VIX"}
+
+
+def ler_csv_fred(texto: str) -> list[tuple[str, float]]:
+    """CSV do FRED (data, valor) -> [(data, valor)] em ordem. Dia sem dado ('.') fica
+    de fora. Cabecalho de qualquer nome na primeira linha."""
+    linhas = [l.strip() for l in texto.strip().splitlines() if l.strip()]
+    pontos = []
+    for l in linhas[1:]:
+        partes = l.split(",")
+        if len(partes) != 2:
+            continue
+        try:
+            pontos.append((partes[0], float(partes[1])))
+        except ValueError:
+            continue
+    return pontos
+
+
+def macro_fred(pedir_texto=None, series=None) -> dict:
+    """Ultimo valor de cada serie, a data dele e a variacao em 5 observacoes. Serie que
+    falha fica de fora com o motivo em 'erros' (as outras seguem)."""
+    out: dict = {"series": {}, "erros": {}}
+    for serie, nome in (series or SERIES_FRED).items():
+        try:
+            pontos = ler_csv_fred((pedir_texto or _pedir_texto)(URL_FRED.format(serie=serie)))
+            if len(pontos) < 6:
+                raise LookupError("historico curto")
+            data, valor = pontos[-1]
+            out["series"][serie] = {"nome": nome, "data": data, "valor": valor, "var_5": valor - pontos[-6][1]}
+        except Exception as e:
+            out["erros"][serie] = f"{type(e).__name__}: {str(e)[:100]}"
+    if not out["series"]:
+        raise LookupError("FRED sem nenhuma serie: " + "; ".join(out["erros"].values()))
+    return out
+
+
+# --------------------------------------------------------------------------- #
 # agenda: FOMC (tabela) e BLS (iCal)
 # --------------------------------------------------------------------------- #
 
@@ -336,6 +379,7 @@ def conferir_fontes(par: str = "BTCUSDT", agora_ms: int | None = None, pedir=Non
         ("alternative.me: medo e ganancia", lambda: medo_ganancia(pedir)),
         ("deribit: DVOL", lambda: dvol(par, agora_ms, pedir)),
         ("bls: agenda", lambda: proximos_eventos(agenda_bls(pedir_texto), agora_ms, 0, 24 * 45)[:3]),
+        ("fred: juros, dolar e VIX", lambda: macro_fred(pedir_texto)),
     ]
     saida = []
     for nome, chamar in testes:

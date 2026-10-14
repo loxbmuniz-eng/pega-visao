@@ -216,3 +216,33 @@ def perfil_volume(maximas: list[float], minimas: list[float], volumes: list[floa
             baixo -= 1
             dentro += abaixo
     return {"poc": lo + (poc + 0.5) * passo, "val": lo + baixo * passo, "vah": lo + (alto + 1) * passo}
+
+
+def _meio(maximas: list[float], minimas: list[float], n: int) -> list[float | None]:
+    """(maior maxima + menor minima) / 2 das ultimas n barras, a barra atual inclusa."""
+    saida: list[float | None] = [None] * len(maximas)
+    for i in range(n - 1, len(maximas)):
+        saida[i] = (max(maximas[i - n + 1:i + 1]) + min(minimas[i - n + 1:i + 1])) / 2.0
+    return saida
+
+
+def ichimoku(maximas: list[float], minimas: list[float], conversao: int = 9, base: int = 26,
+             lenta: int = 52, deslocamento: int = 26) -> dict:
+    """Ichimoku Kinko Hyo, alinhado ao candle i SEM olhar o futuro:
+      tenkan[i]  meio das ultimas 9 barras;  kijun[i]  meio das ultimas 26;
+      nuvem_a[i], nuvem_b[i]  a nuvem que o grafico desenha NO candle i, que foi
+      calculada 26 barras antes ((tenkan+kijun)/2 e o meio das ultimas 52, la em i-26).
+    O chikou (fechamento desenhado 26 barras para tras) e so a comparacao do
+    fechamento de i com o de i-26, feita por quem usa."""
+    t = _meio(maximas, minimas, conversao)
+    k = _meio(maximas, minimas, base)
+    l = _meio(maximas, minimas, lenta)
+    n = len(maximas)
+    a: list[float | None] = [None] * n
+    b: list[float | None] = [None] * n
+    for i in range(deslocamento, n):
+        j = i - deslocamento
+        if t[j] is not None and k[j] is not None:
+            a[i] = (t[j] + k[j]) / 2.0
+        b[i] = l[j]
+    return {"tenkan": t, "kijun": k, "nuvem_a": a, "nuvem_b": b}

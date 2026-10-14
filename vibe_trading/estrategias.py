@@ -711,6 +711,44 @@ def smc_completo(c) -> list[int]:
     return bloco_de_ordens(c, so_smc=True)
 
 
+def ichimoku_cruzamento(c) -> list[int]:
+    """Ichimoku classico: o tenkan cruza o kijun para cima, com o fechamento acima
+    da nuvem e acima do fechamento de 26 barras atras (o chikou livre). O espelho
+    para venda."""
+    ich = ind.ichimoku(c.maxima, c.minima)
+    t, k, na, nb = ich["tenkan"], ich["kijun"], ich["nuvem_a"], ich["nuvem_b"]
+    s = [0] * len(c.fechamento)
+    for i in range(1, len(c.fechamento)):
+        if None in (t[i], k[i], t[i - 1], k[i - 1], na[i], nb[i]) or i < 26:
+            continue
+        f = c.fechamento[i]
+        if t[i] > k[i] and t[i - 1] <= k[i - 1] and f > max(na[i], nb[i]) and f > c.fechamento[i - 26]:
+            s[i] = 1
+        elif t[i] < k[i] and t[i - 1] >= k[i - 1] and f < min(na[i], nb[i]) and f < c.fechamento[i - 26]:
+            s[i] = -1
+    return s
+
+
+def spring_wyckoff(c, n: int = 40, lateral: float = 0.25) -> list[int]:
+    """Spring de Wyckoff: numa faixa LATERAL (nas n barras anteriores o preco andou
+    no maximo 25% da altura da faixa, de ponta a ponta), a minima fura o fundo da
+    faixa e o candle fecha de volta dentro, de alta: quem vendeu no rompimento
+    ficou preso. O espelho (upthrust) para venda. Diferente da caca de stops, so
+    vale com o mercado de lado."""
+    s = [0] * len(c.fechamento)
+    for i in range(n, len(c.fechamento)):
+        topo = max(c.maxima[i - n:i])
+        fundo = min(c.minima[i - n:i])
+        altura = topo - fundo
+        if altura <= 0 or abs(c.fechamento[i - 1] - c.fechamento[i - n]) > lateral * altura:
+            continue
+        if c.minima[i] < fundo < c.fechamento[i] and c.fechamento[i] > c.abertura[i]:
+            s[i] = 1
+        elif c.maxima[i] > topo > c.fechamento[i] and c.fechamento[i] < c.abertura[i]:
+            s[i] = -1
+    return s
+
+
 def com_fluxo(c, sinais: list[int], n: int = 3) -> list[int]:
     """Mantem so o sinal em que a agressao dos ultimos n candles (o do sinal incluido,
     ja fechado) vai a favor: compra com mais compra agressora, venda com mais venda.
@@ -765,6 +803,8 @@ REGISTRO: dict[str, tuple[Callable, str]] = {
     "fvg":        (vao_valor_justo,     "SMC: volta ao vao de valor justo e segura"),
     "ob":         (bloco_de_ordens,     "SMC: volta ao bloco de ordens e segura"),
     "smc":        (smc_completo,        "SMC: bloco de ordens a favor da estrutura, no desconto/premio"),
+    "ichimoku":   (ichimoku_cruzamento, "Ichimoku: tenkan cruza kijun, fora da nuvem, chikou livre"),
+    "spring":     (spring_wyckoff,      "Wyckoff: spring/upthrust numa faixa lateral"),
 }
 
 

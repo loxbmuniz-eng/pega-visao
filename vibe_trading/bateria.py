@@ -42,7 +42,7 @@ tentativas_no_caderno = cad.tentativas_no_caderno
 sharpes_no_caderno = cad.sharpes_no_caderno
 
 PADRAO_ESTRATEGIAS = ("confl3,confl4,engolfo,divergencia,canal,ema,momento,rsi,confl3_fluxo,canal_fluxo,"
-                      "cacada,reteste,compressao,sessao,vwap_dia,bos,choch,fvg,ob,smc")
+                      "cacada,reteste,compressao,sessao,vwap_dia,bos,choch,fvg,ob,smc,ichimoku,spring")
 CADERNO = cad.CADERNO
 
 CURTO = {"vantagem": "VANTAGEM", "inconclusivo": "inconcl.", "sem_vantagem": "sem"}
@@ -74,6 +74,8 @@ def main() -> None:
     ap.add_argument("--mm", type=float, default=0.5)
     ap.add_argument("--stop", type=float, default=0.5)
     ap.add_argument("--rr", type=float, default=2.0)
+    ap.add_argument("--saida", choices=("alvo", "surfe"), default="alvo",
+                    help="alvo: sai inteira no alvo; surfe: metade no alvo e o resto segue o preco")
     ap.add_argument("--lado", choices=("ambos", "compra", "venda"), default="ambos")
     ap.add_argument("--alinhar", action="store_true")
     ap.add_argument("--janelas", type=int, default=6)
@@ -97,7 +99,7 @@ def main() -> None:
             sys.exit(f"periodo '{tf}' nao existe. Use: {', '.join(bt.PERIODOS)}")
 
     p = bt.Params(banca=args.banca, margem=args.margem, alav=args.alav, taxa=args.taxa,
-                  mm=args.mm, stop=args.stop, rr=args.rr)
+                  mm=args.mm, stop=args.stop, rr=args.rr, saida=args.saida)
     minimo_ativos = 2 if len(ativos) >= 3 else len(ativos)
 
     print("=" * 96)

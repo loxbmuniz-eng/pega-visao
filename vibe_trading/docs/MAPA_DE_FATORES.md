@@ -42,6 +42,7 @@ Só ao vivo = gravamos daqui em diante e medimos depois.
 | DVOL (BTC e ETH) | Deribit | [doc] |
 | Agenda: FOMC | tabela no código, com a fonte (Chicago Fed para 2026, MNI para 2027, conferidas em 14/10/2026) | [doc] secundária; o federalreserve.gov não abriu daqui |
 | Agenda: CPI, payroll, PPI | BLS `schedule/news_release/bls.ics` | [doc]; hora sem fuso conhecido fica de fora |
+| Regime macro: juros de 10 anos, dólar amplo, VIX (só contexto, com a data de cada dado) | FRED `graph/fredgraph.csv?id=` DGS10, DTWEXBGS, VIXCLS | [código]; VIXCLS ainda NÃO CONFIRMADO: o `vibe.py fontes` confere |
 
 Peso dos pedidos à Pionex: 5 cada, num teto de 10 por segundo por endereço;
 passar dá 60 s de bloqueio. Todo pedido do programa passa por um ritmo único

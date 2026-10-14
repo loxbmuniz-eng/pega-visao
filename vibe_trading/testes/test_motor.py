@@ -52,6 +52,7 @@ afirma. Correcao sem guarda e correcao que volta.
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import os
 import random
@@ -1841,7 +1842,19 @@ def teste_ficha_fontes() -> None:
            "radar: so perpetuos em USDT com volume, ordenados pela oscilacao de 24 h")
     falha = fatores.conferir_fontes("BTCUSDT", AGORA_FICHA, lambda url: (_ for _ in ()).throw(OSError("sem rede")),
                                     lambda url: (_ for _ in ()).throw(OSError("sem rede")))
-    checar(len(falha) == 11 and not any(ok for _, ok, _ in falha), "vibe.py fontes: fonte fora do ar vira FALHA, sem quebrar")
+    checar(len(falha) == 12 and not any(ok for _, ok, _ in falha), "vibe.py fontes: fonte fora do ar vira FALHA, sem quebrar")
+    csv = ("observation_date,DGS10\n2026-10-05,4.01\n2026-10-06,4.03\n2026-10-07,.\n2026-10-08,4.05\n"
+           "2026-10-09,4.10\n2026-10-12,4.08\n2026-10-13,4.12\n")
+    def fred(url):
+        if "VIXCLS" in url:
+            raise OSError("fora")
+        return csv
+    mac = fatores.macro_fred(fred, {"DGS10": "juros 10 anos EUA", "VIXCLS": "VIX"})
+    x = mac["series"]["DGS10"]
+    checar(x["data"] == "2026-10-13" and x["valor"] == 4.12 and abs(x["var_5"] - 0.11) < 1e-9
+           and "VIXCLS" in mac["erros"] and "VIXCLS" not in mac["series"],
+           "FRED: ultimo valor com a data dele, variacao em 5 dados, dia sem dado ('.') fora, serie que falha nao "
+           "derruba as outras")
 
     # a ficha inteira pela rede simulada: ritmo da Pionex e conferencia
     agora = int(tempo.time() * 1000)
@@ -1880,6 +1893,34 @@ def teste_ficha_fontes() -> None:
     f = ficha.analisar(d, "intraday", 2.0)
     checar(f["veredito"] in ficha.VEREDITOS and "FORA DO AR" in ficha.texto(f),
            f"a ficha sai inteira mesmo com fontes fora do ar (veredito {f['veredito']})")
+    import threading
+    import time as relogio
+    trava, ativas, pico = threading.Lock(), [0], [0]
+    def devagar():
+        with trava:
+            ativas[0] += 1
+            pico[0] = max(pico[0], ativas[0])
+        relogio.sleep(0.3)  # fonte lenta (ou travando ate o limite)
+        with trava:
+            ativas[0] -= 1
+    def lenta(url):
+        if "api.pionex.com" not in url:
+            devagar()
+        return rede(url)
+    def texto_lento(url):
+        devagar()
+        raise OSError("lenta")
+    pausa = bt.PIONEX_PAUSA
+    bt.PIONEX_PAUSA, bt._pedir = 0.0, lenta
+    try:
+        ficha._CACHE_LENTO.clear()
+        ficha.coletar("BTCUSDT", agora, conferir=lambda par, tf, n: devagar() or series["15m"],
+                      pedir=lenta, pedir_texto=texto_lento)
+    finally:
+        bt.PIONEX_PAUSA, bt._pedir = pausa, original
+        bt._pionex_ultimo[0] = None
+    checar(pico[0] >= 5, f"as fontes de fora da Pionex vao em paralelo ({pico[0]} lentas ao mesmo tempo): "
+                         f"uma que trava nao segura as outras")
 
 
 def teste_ficha_comandos() -> None:
@@ -1963,6 +2004,296 @@ def teste_ficha_comandos() -> None:
         shutil.rmtree(pasta, ignore_errors=True)
 
 
+def teste_alertas() -> None:
+    print("\n[27] alertas de mercado: movimento brusco, topo e fundo da semana, mudanca de faixa")
+    import alertas
+    import vigia
+    M15 = 900_000
+    t0 = 20731 * DIA_MS                                    # segunda 05/10/2026
+    def serie(fim_ms, preco=100.0, meia=0.5, semana_passada=None):
+        x = _serie_plana(t0, M15, (fim_ms - t0) // M15, preco, meia)
+        if semana_passada:  # (topo, fundo) da semana de 05/10 a 11/10
+            x.maxima[x.t.index(20733 * DIA_MS)], x.minima[x.t.index(20734 * DIA_MS)] = semana_passada
+        return x
+    def ultimo(s, abertura, maxima, minima, fechamento):
+        s.abertura[-1], s.maxima[-1], s.minima[-1], s.fechamento[-1] = abertura, maxima, minima, fechamento
+    agora = AGORA_FICHA
+    s = serie(agora)
+    ultimo(s, 100.0, 102.0, 98.0, 100.0)                  # amplitude 4% com ruido normal de 1%
+    mem = {}
+    a1 = alertas.avaliar("BTCUSDT", "15m", s, agora, mem)
+    a2 = alertas.avaliar("BTCUSDT", "15m", s, agora, mem)
+    checar(len(a1) == 1 and "MOVIMENTO BRUSCO" in a1[0] and "4,00x o normal" in a1[0] and a2 == [],
+           "candle de 4x o ruido: um alerta de movimento brusco, e o mesmo candle nao repete")
+    s2 = serie(agora + M15); ultimo(s2, 100.0, 102.0, 98.0, 100.0)
+    s3 = serie(agora + 5 * M15); ultimo(s3, 100.0, 102.0, 98.0, 100.0)
+    checar(alertas.avaliar("BTCUSDT", "15m", s2, agora + M15, mem) == []
+           and len(alertas.avaliar("BTCUSDT", "15m", s3, agora + 5 * M15, mem)) == 1,
+           "outro brusco 15 min depois fica calado; passada 1 hora, avisa de novo")
+    checar(alertas.avaliar("BTCUSDT", "15m", s, agora + 3 * HORA_MS, {}) == [],
+           "candle velho (vigia voltando de pausa): nenhum alerta atrasado")
+
+    s = serie(agora)
+    s.maxima[s.t.index(20733 * DIA_MS + 10 * HORA_MS)] = 101.0   # topo da semana passada: 101
+    s.fechamento[-2] = 100.6
+    ultimo(s, 100.6, 101.4, 100.5, 101.2)
+    mem = {}
+    a = alertas.avaliar("BTCUSDT", "15m", s, agora, mem)
+    checar(any("ROMPEU O TOPO DA SEMANA PASSADA" in x and "101,00" in x for x in a)
+           and any("MUDOU DE FAIXA" in x and "subiu acima de 101" in x for x in a) and not any("BRUSCO" in x for x in a),
+           "fechou acima do topo da semana passada (101): avisa o rompimento e a nova faixa")
+    s2 = serie(agora + M15); s2.maxima[s2.t.index(20733 * DIA_MS + 10 * HORA_MS)] = 101.0
+    s2.fechamento[-2] = 100.8
+    ultimo(s2, 100.8, 101.3, 100.7, 101.1)
+    checar(not any("TOPO DA SEMANA" in x for x in alertas.avaliar("BTCUSDT", "15m", s2, agora + M15, mem)),
+           "o mesmo rompimento na mesma semana nao repete")
+
+    larga = (62_000.0, 59_000.0)   # semana passada larga: so a faixa muda
+    s = serie(agora, 60_900.0, 30.0, larga)
+    s.fechamento[-2] = 60_900.0
+    ultimo(s, 60_900.0, 61_060.0, 60_890.0, 61_050.0)
+    mem = {}
+    a = alertas.avaliar("BTCUSDT", "15m", s, agora, mem)
+    checar(a == ["MUDOU DE FAIXA BTCUSDT: subiu acima de 61.000,00 (fechou 61.050,00)."],
+           "BTC atravessou 61.000 para cima: mudou de faixa (sem brusco: 2,8x o ruido)")
+    s2 = serie(agora + M15, 60_900.0, 30.0, larga); s2.fechamento[-2] = 61_050.0
+    ultimo(s2, 61_050.0, 61_060.0, 60_940.0, 60_950.0)
+    s3 = serie(agora + 2 * M15, 60_900.0, 30.0, larga); s3.fechamento[-2] = 60_950.0
+    ultimo(s3, 60_950.0, 61_060.0, 60_940.0, 61_020.0)
+    b = alertas.avaliar("BTCUSDT", "15m", s2, agora + M15, mem)
+    c = alertas.avaliar("BTCUSDT", "15m", s3, agora + 2 * M15, mem)
+    checar(b == ["MUDOU DE FAIXA BTCUSDT: caiu abaixo de 61.000,00 (fechou 60.950,00)."] and c == [],
+           "a volta para baixo avisa; subir de novo em menos de 4 h fica calado")
+    checar(alertas.avaliar("BTCUSDT", "15m", s, agora, {}, {"ligados": False}) == [], "desligados: nenhum alerta")
+
+    pasta = tempfile.mkdtemp(prefix="alertas_")
+    try:
+        s = serie(agora); ultimo(s, 100.0, 102.0, 98.0, 100.0)
+        cache = {"t": s.t, "abertura": s.abertura, "maxima": s.maxima, "minima": s.minima,
+                 "fechamento": s.fechamento, "volume": s.volume}
+        vigia.gravar_json(vigia.arquivo_cache(pasta, "BTCUSDT", "15m", "pionex"), cache)
+        estado, enviados = {"trilhas": {}}, []
+        cfg = json.loads(json.dumps(vigia.CONFIG_PADRAO))
+        registro = []  # nunca o vigia.log de verdade
+        vigia.avisar_mercado(estado, cfg, "BTCUSDT", "15m", agora, "pionex", enviados.append, pasta, registro.append)
+        vigia.avisar_mercado(estado, cfg, "BTCUSDT", "15m", agora, "pionex", enviados.append, pasta, registro.append)
+        checar(len(enviados) == 1 and "BRUSCO" in enviados[0] and registro == enviados
+               and estado["alertas"]["BTCUSDT"]["ultimo_t"] == s.t[-1],
+               "no vigia: le o cache da fonte, avisa no Telegram, registra e guarda a memoria no estado")
+    finally:
+        shutil.rmtree(pasta, ignore_errors=True)
+
+
+def teste_ichimoku_spring() -> None:
+    print("\n[28] Ichimoku e spring de Wyckoff: conta a mao e cada um so no desenho dele")
+    n = 120
+    mx, mn = [i + 1.0 for i in range(n)], [float(i) for i in range(n)]
+    ich = ind.ichimoku(mx, mn)
+    checar(ich["tenkan"][100] == 96.5 and ich["kijun"][100] == 88.0 and ich["nuvem_a"][100] == 66.25
+           and ich["nuvem_b"][100] == 49.0 and ich["nuvem_b"][76] is None and ich["nuvem_b"][77] == 26.0,
+           "Ichimoku conferido a mao: tenkan 96,5, kijun 88, nuvem 66,25 e 49 (calculada 26 barras antes)")
+    curto = ind.ichimoku(mx[:90], mn[:90])
+    checar(all(curto[k] == ich[k][:90] for k in curto), "Ichimoku nao muda ao cortar a serie: nada do futuro")
+    sobe = bt.Serie(abertura=[float(i) for i in range(n)], maxima=[i + 1.2 for i in range(n)],
+                    minima=[i - 0.2 for i in range(n)], fechamento=[i + 1.0 for i in range(n)],
+                    volume=[1.0] * n, t=list(range(n)))
+    desce = bt.Serie(abertura=[float(n - i) for i in range(n)], maxima=[n - i + 0.2 for i in range(n)],
+                     minima=[n - i - 1.2 for i in range(n)], fechamento=[n - i - 1.0 for i in range(n)],
+                     volume=[1.0] * n, t=list(range(n)))
+    checar(-1 not in est.gerar("ichimoku", sobe) and 1 not in est.gerar("ichimoku", desce),
+           "Ichimoku: nunca vende em alta continua nem compra em queda continua")
+
+    def lateral(antes_de: float = 100.0):
+        f = [antes_de] + [100.0] * 40
+        return bt.Serie(abertura=list(f), maxima=[x + 0.5 for x in f], minima=[x - 0.5 for x in f],
+                        fechamento=list(f), volume=[1.0] * 41, t=list(range(41)))
+    s = lateral()
+    s.abertura.append(99.8); s.minima.append(99.0); s.maxima.append(100.4); s.fechamento.append(100.2)
+    s.volume.append(1.0); s.t.append(41)
+    checar(est.gerar("spring", s)[-1] == 1, "spring: fura o fundo da faixa lateral e fecha dentro, de alta: compra")
+    u = lateral()
+    u.abertura.append(100.2); u.maxima.append(101.0); u.minima.append(99.6); u.fechamento.append(99.8)
+    u.volume.append(1.0); u.t.append(41)
+    checar(est.gerar("spring", u)[-1] == -1, "upthrust: fura o topo e fecha dentro, de baixa: venda")
+    t = lateral(90.0)
+    for k in range(1, 41):
+        t.fechamento[k] = 90.0 + k * 0.25
+        t.abertura[k], t.maxima[k], t.minima[k] = t.fechamento[k], t.fechamento[k] + 0.5, t.fechamento[k] - 0.5
+    t.abertura.append(t.fechamento[-1] - 0.2); t.minima.append(t.minima[1] - 1.0)
+    t.maxima.append(t.fechamento[-1] + 0.4); t.fechamento.append(t.fechamento[-1] + 0.2)
+    t.volume.append(1.0); t.t.append(41)
+    checar(est.gerar("spring", t)[-1] == 0, "em tendencia (faixa nao lateral) o mesmo desenho nao e spring")
+
+
+def teste_disjuntor() -> None:
+    print("\n[29] disjuntor do dia: resultados reais anotados, 3 perdas seguidas ou o dia no limite")
+    import ficha
+    import vigia
+    cfg = json.loads(json.dumps(vigia.CONFIG_PADRAO))
+    cfg["params"]["banca"] = 100.0
+    meio_dia = QUARTA + 15 * HORA_MS                     # 12:00 em Brasilia
+    checar(vigia.dia_brasilia(QUARTA + 2 * HORA_MS) == vigia.dia_brasilia(QUARTA - 10 * HORA_MS)
+           and vigia.dia_brasilia(QUARTA + 3 * HORA_MS) == vigia.dia_brasilia(meio_dia),
+           "o dia e o de Brasilia: 02:00 UTC ainda e ontem; 03:00 UTC ja e hoje")
+    r = lambda *vs: [{"quando_ms": meio_dia + k * 60_000, "valor": v} for k, v in enumerate(vs)]
+    d1 = vigia.disjuntor(r(-1.0, -1.0, 0.5, -1.0, -1.0, -1.0), meio_dia + HORA_MS, 100.0)
+    d2 = vigia.disjuntor(r(-1.0, 0.5, -1.0, 0.2, -1.0), meio_dia + HORA_MS, 100.0)
+    d3 = vigia.disjuntor(r(-6.0), meio_dia + HORA_MS, 100.0)
+    d4 = vigia.disjuntor(r(-1.0, -1.0, -1.0), meio_dia + DIA_MS, 100.0)
+    checar(d1["armado"] and d1["seguidas"] == 3 and "3 perdas seguidas" in d1["motivo"],
+           "3 perdas seguidas no fim do dia: arma")
+    checar(not d2["armado"] and d2["seguidas"] == 1, "perdas intercaladas com ganho: nao arma")
+    checar(d3["armado"] and "6% da banca" in d3["motivo"], "o dia em -6% da banca numa operacao so: arma")
+    checar(not d4["armado"] and d4["n"] == 0, "no dia seguinte o disjuntor desarma")
+    checar(not vigia.disjuntor(r(-1.0, -1.0, -1.0), meio_dia + HORA_MS, 100.0, {"ligado": False})["armado"],
+           "desligado no vigia.json: nunca arma")
+
+    pasta = tempfile.mkdtemp(prefix="disjuntor_")
+    try:
+        respostas = [vigia.anotar_resultado([v], cfg, meio_dia + k * 60_000, pasta)
+                     for k, v in enumerate(("-1,5", "-2", "-1"))]
+        checar("DISJUNTOR ARMADO" not in respostas[1] and "DISJUNTOR ARMADO" in respostas[2]
+               and "-4,50" in respostas[2], "a 3a perda seguida avisa que o disjuntor armou (dia em -4,50)")
+        quarta = vigia.anotar_resultado(["-1"], cfg, meio_dia + 5 * 60_000, pasta)
+        checar("continua armado" in quarta and "DISJUNTOR ARMADO" not in quarta, "depois de armado, so lembra")
+        ruins = [vigia.anotar_resultado([x], cfg, meio_dia, pasta) for x in ("abc", "500", "nan", "inf")]
+        checar(ruins[0].startswith("Use:") and all("passa da banca" in x for x in ruins[1:])
+               and len(vigia.ler_resultados(pasta)) == 4, "valor invalido ou maior que a banca nao e anotado")
+        d = _dados_controlados(AGORA_FICHA)
+        alta = {"4h": {"tendencia": 1, "topo": 112.0, "fundo": 88.0}, "1h": {"tendencia": 1, "topo": 110.0, "fundo": 90.0},
+                "15m": {"tendencia": 1, "topo": 99.0, "fundo": 94.0}}
+        txt = _com_leituras(alta, (90.0, 110.0), [], lambda: vigia.fazer_ficha(
+            ["btc"], cfg, {}, meio_dia + 10 * 60_000, pasta, lambda par, agora: d))
+        checar("VEREDITO: NAO OPERAR" in txt and "disjuntor do dia" in txt and "PLANO" in txt
+               and not ficha.ler_fichas(pasta),
+               "disjuntor armado: a ficha mostra a leitura inteira, mas o veredito e NAO OPERAR (e nao entra no placar)")
+        hoje = vigia.responder_comando("/hoje", {}, cfg, meio_dia + 11 * 60_000,
+                                       {"hoje": lambda c, a: vigia.texto_hoje(c, a, pasta)})
+        checar("4 operacao" in hoje and "DISJUNTOR ARMADO" in hoje, "/hoje mostra o dia e o disjuntor")
+        amanha = vigia.texto_hoje(cfg, meio_dia + DIA_MS, pasta)
+        checar("0 operacao" in amanha and "desarmado" in amanha, "a meia-noite de Brasilia zera o dia")
+    finally:
+        shutil.rmtree(pasta, ignore_errors=True)
+
+
+def teste_surfe() -> None:
+    print("\n[30] saida alvo + surfe: metade no alvo, o resto segue o preco (conta a mao e paridade com o vigia)")
+    import vigia
+    p = bt.Params(margem=10.0, alav=10.0, taxa=0.05, stop=1.0, rr=2.0, saida="surfe")  # tamanho 100 USDT
+    def rodar(direcao, candles, fim=None):
+        pos = bt.abrir(100.0, direcao, p)
+        for mx, mn in candles:
+            r = bt.checar_barra(pos, mx, mn, p)
+            if r is not None:
+                return round(r[0], 9), r[1]
+        return (round(bt.encerrar_no_preco(pos, fim, p), 9), "expirou") if fim is not None else None
+    checar(rodar(1, [(102.5, 100.2), (104.0, 101.8), (104.5, 102.9)]) == (2.4, "surfe"),
+           "compra: metade no alvo (+0,95), o resto puxado ate 103 e sai la (+1,45): +2,40")
+    checar(rodar(-1, [(99.8, 97.5), (98.2, 96.0), (97.1, 96.5)]) == (2.4, "surfe"),
+           "venda: o espelho exato, +2,40")
+    checar(rodar(1, [(102.5, 100.2), (104.0, 101.8), (106.0, 104.2), (106.5, 104.9)]) == (3.4, "surfe"),
+           "o stop puxado usa o melhor preco ate o candle ANTERIOR: o candle que sobe a 104 e desce a 101,8 nao "
+           "tira o resto; ele sai em 105 (+3,40), nao em 103")
+    checar(rodar(1, [(102.5, 99.5)]) == (0.9, "alvo+zero"),
+           "alvo e volta a entrada no mesmo candle: o resto sai no zero (+0,90), contra a estrategia")
+    checar(rodar(1, [(102.5, 98.9)]) == (-1.1, "stop"), "alvo e stop original no mesmo candle: conta stop (-1,10)")
+    checar(rodar(1, [(102.5, 100.2), (103.0, 102.6)], fim=103.5) == (2.65, "expirou"),
+           "prazo vencido depois do alvo: metade +0,95 e o resto fecha a mercado em 103,5 (+1,70)")
+    alvo = bt.Params(margem=10.0, alav=10.0, taxa=0.05, stop=1.0, rr=2.0)
+    checar(round(bt.checar_barra(bt.abrir(100.0, 1, alvo), 102.5, 100.2, alvo)[0], 9) == 1.9,
+           "saida 'alvo' (a de sempre) continua igual: +1,90 inteira no alvo")
+    import caderno
+    checar(caderno.chave_hipotese("x", "15m", "ambos", False, alvo).endswith("|binance")
+           and caderno.chave_hipotese("x", "15m", "ambos", False, p).endswith("|saida_surfe"),
+           "no caderno, surfe e outra hipotese; as chaves antigas continuam as mesmas")
+
+    s = serie_sintetica(3000, 5, True)
+    cfg = json.loads(json.dumps(vigia.CONFIG_PADRAO))
+    cfg["historico_inicial_dias"] = 7
+    cfg["params"]["saida"] = "surfe"
+    ps = bt.Params(**cfg["params"])
+    inicio = 600
+    with tempfile.TemporaryDirectory() as tmp:
+        estado, diario = _replay(s, cfg, tmp, inicio)
+    with tempfile.TemporaryDirectory() as tmp:
+        _, diario2 = _replay(s, cfg, tmp, inicio, pausa=(1500, 1530))
+    for nome in ("confl3", "engolfo"):
+        sinais = [x if i >= inicio else 0 for i, x in enumerate(est.sinais(nome, s))]
+        esperado = _esperado_backtest(s, sinais, ps)
+        obtido = [(round(r["entrada"], 6), r["saida_t"], r["desfecho"], r["pnl"]) for r in diario if r["estrategia"] == nome]
+        checar(len(esperado) > 5 and obtido == esperado and any(d == "surfe" for _, _, d, _ in obtido),
+               f"{nome} com surfe: vigia e backtest fecham as mesmas {len(obtido)} operacoes, com saidas 'surfe'")
+    sem = [(r["trilha"], r["saida_t"], r["desfecho"], r["pnl"]) for r in diario]
+    com = [(r["trilha"], r["saida_t"], r["desfecho"], r["pnl"]) for r in diario2]
+    checar(sem == com, "desligado e religado no meio de um surfe: o resto da posicao continua igual (estado salvo)")
+
+
+def teste_endurecimento() -> None:
+    print("\n[31] vigia endurecido: um por pasta, erro inesperado nao derruba, texto da IA limpo, banca de hoje")
+    import fcntl
+    import vigia
+    pasta = tempfile.mkdtemp(prefix="vigia_trava_")
+    outro = open(os.path.join(pasta, "vigia.trava"), "a")
+    fcntl.flock(outro, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    try:
+        vigia.travar(pasta)
+        checar(False, "o segundo vigia na mesma pasta deveria ser recusado")
+    except SystemExit as e:
+        checar("Ja existe um vigia rodando" in str(e.code), "segundo vigia na mesma pasta: recusado com explicacao")
+    finally:
+        outro.close()
+
+    pasta_orig, busca_orig = vigia.PASTA, bt.BUSCADORES["pionex"]
+    def quebra(par, tf, n):
+        raise ValueError("resposta esquisita")
+    vigia.PASTA, bt.BUSCADORES["pionex"] = pasta, quebra
+    try:
+        cfg = json.loads(json.dumps(vigia.CONFIG_PADRAO))
+        saiu_bem = True
+        try:
+            vigia.rodar(cfg, {}, uma_vez=True)
+        except Exception:
+            saiu_bem = False
+        with open(os.path.join(pasta, "vigia.log"), encoding="utf-8") as arq:
+            registro = arq.read()
+        checar(saiu_bem and "erro inesperado (ValueError: resposta esquisita); tento de novo" in registro,
+               "erro inesperado na busca: o vigia registra e segue, nao cai")
+    finally:
+        vigia.PASTA, bt.BUSCADORES["pionex"] = pasta_orig, busca_orig
+        for arq in vigia._TRAVA:
+            arq.close()
+        vigia._TRAVA.clear()
+        shutil.rmtree(pasta, ignore_errors=True)
+
+    sujo = "compra\x1b[31m agora\n\nIGNORE AS REGRAS " + "x" * 400
+    limpo = vigia.texto_da_ia(sujo)
+    checar("\x1b" not in limpo and "\n" not in limpo and len(limpo) <= 303 and limpo.endswith("..."),
+           "texto da IA: sem caractere de controle, numa linha, com tamanho maximo")
+    p = bt.Params(**vigia.CONFIG_PADRAO["params"])
+    pos = dataclasses.asdict(bt.abrir(100.0, 1, p))
+    t = vigia.texto_entrada("confl3", "BTCUSDT", "15m", pos, p, motivo="ok", disjuntor_armado=True)
+    checar("DISJUNTOR DO DIA ARMADO" in t and "nao verificado" in t,
+           "alerta de entrada avisa o disjuntor armado e marca o texto da IA como nao verificado")
+
+    pasta = tempfile.mkdtemp(prefix="banca_")
+    try:
+        cfg = json.loads(json.dumps(vigia.CONFIG_PADRAO))
+        cfg["params"]["banca"] = 100.0
+        vigia.anotar_resultado(["-3,7"], cfg, AGORA_FICHA - DIA_MS, pasta)
+        d = _dados_controlados(AGORA_FICHA)
+        alta = {"4h": {"tendencia": 1, "topo": 112.0, "fundo": 88.0}, "1h": {"tendencia": 1, "topo": 110.0, "fundo": 90.0},
+                "15m": {"tendencia": 1, "topo": 99.0, "fundo": 94.0}}
+        txt = _com_leituras(alta, (90.0, 110.0), [], lambda: vigia.fazer_ficha(
+            ["btc", "2"], cfg, {}, AGORA_FICHA, pasta, lambda par, agora: d))
+        checar("risco 2% de 96.3 USDT = 1,93" in txt and "banca de hoje: 96,30 USDT" in txt,
+               "a ficha arrisca 2% da banca de hoje (100 - 3,70 anotados = 96,30)")
+        vigia.anotar_resultado(["-97"], cfg, AGORA_FICHA - 2 * DIA_MS, pasta)
+        checar("chegou a" in vigia.fazer_ficha(["btc"], cfg, {}, AGORA_FICHA, pasta, lambda par, agora: d),
+               "banca anotada zerada: a ficha pede para conferir, nao calcula tamanho com banca negativa")
+    finally:
+        shutil.rmtree(pasta, ignore_errors=True)
+
+
 def _pegada_real() -> dict:
     """Tamanho de cada arquivo de dado real (vigia e caderno de quem roda de verdade)."""
     pegada = {}
@@ -2003,6 +2334,11 @@ if __name__ == "__main__":
     teste_ficha_veredito()
     teste_ficha_fontes()
     teste_ficha_comandos()
+    teste_alertas()
+    teste_ichimoku_spring()
+    teste_disjuntor()
+    teste_surfe()
+    teste_endurecimento()
     print("\n[13] a bateria nao toca nos dados reais do vigia")
     checar(_pegada_real() == pegada, "dados_vigia/, caderno, vigia.json e segredos.json iguais antes e depois da bateria")
     print()

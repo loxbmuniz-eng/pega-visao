@@ -5,7 +5,7 @@ tentativas entra na prova contra sorte (estatistica.sharpe_deflacionado).
 
 Uma tentativa e TUDO que muda o resultado: estrategia, periodo, lado, filtro,
 alavancagem, stop, alvo, taxa, margem de manutencao, margem, prazo maximo,
-janela de dados e fonte. Mudar qualquer um deles e outra hipotese. A bateria e
+janela de dados, fonte e a regra de saida (alvo ou surfe). Mudar qualquer um deles e outra hipotese. A bateria e
 o --robustez do backtest registram pela mesma funcao.
 """
 
@@ -22,8 +22,11 @@ CADERNO = os.path.join(os.path.dirname(os.path.abspath(__file__)), "caderno.json
 
 def chave_hipotese(nome: str, tf: str, lado: str, alinhar: bool, p, modo: str = "90d", fonte: str = "binance") -> str:
     """Identidade de uma tentativa: mudar qualquer peca e outra hipotese."""
+    # a saida so entra na chave quando nao e a de sempre: as hipoteses antigas continuam as mesmas
+    saida = getattr(p, "saida", "alvo")
     return (f"{nome}|{tf}|{lado}|{'alinhado' if alinhar else 'livre'}|alav{p.alav:g}|stop{p.stop:g}|rr{p.rr:g}"
-            f"|taxa{p.taxa:g}|mm{p.mm:g}|margem{p.margem:g}|prazo{p.max_barras}|{modo}|{fonte}")
+            f"|taxa{p.taxa:g}|mm{p.mm:g}|margem{p.margem:g}|prazo{p.max_barras}|{modo}|{fonte}"
+            + (f"|saida_{saida}" if saida != "alvo" else ""))
 
 
 def registrar(caderno: str, registro: dict) -> None:

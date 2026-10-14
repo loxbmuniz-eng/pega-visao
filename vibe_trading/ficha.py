@@ -39,6 +39,7 @@ import math
 import os
 import re
 import tempfile
+from concurrent.futures import ThreadPoolExecutor
 
 import backtest as bt
 import estrategias as est
@@ -125,16 +126,20 @@ def par_de(texto: str) -> str:
     return t if t.endswith("USDT") and len(t) > 4 else t + "USDT"
 
 
-_CACHE_BLS: dict = {}
+_CACHE_LENTO: dict = {}
+
+
+def _lento(nome: str, buscar, agora_ms: int, renovar: bool = False):
+    """Dado que muda devagar (agenda da BLS, FRED): uma busca a cada 6 horas basta."""
+    quando, valor = _CACHE_LENTO.get(nome, (None, None))
+    if quando is None or agora_ms - quando > 6 * HORA or renovar:
+        valor = buscar()
+        _CACHE_LENTO[nome] = (agora_ms, valor)
+    return valor
 
 
 def _agenda_bls(agora_ms: int, pedir_texto=None) -> list[dict]:
-    """A agenda da BLS muda pouco: uma busca a cada 6 horas basta."""
-    quando, eventos = _CACHE_BLS.get("bls", (None, None))
-    if quando is None or agora_ms - quando > 6 * HORA or pedir_texto is not None:
-        eventos = fatores.agenda_bls(pedir_texto)
-        _CACHE_BLS["bls"] = (agora_ms, eventos)
-    return eventos
+    return _lento("bls", lambda: fatores.agenda_bls(pedir_texto), agora_ms, pedir_texto is not None)
 
 
 def coletar(par: str, agora_ms: int, buscar=None, pedir=None, pedir_texto=None, conferir="padrao") -> dict:
@@ -153,23 +158,30 @@ def coletar(par: str, agora_ms: int, buscar=None, pedir=None, pedir_texto=None, 
     tentar("moeda", lambda: fatores.moeda_pionex(par, pedir))
     if "nao existe" in d["erros"].get("moeda", ""):
         return d  # moeda que a Pionex nao tem: nao busca mais nada
-    for tf in PERIODOS_FICHA:
-        try:
-            d["series"][tf] = buscar(par, tf, CANDLES)
-        except Exception as e:
-            d["erros"][f"candles {tf}"] = f"{type(e).__name__}: {str(e)[:150]}"
-    tentar("risco", lambda: fatores.risco_pionex(par, pedir))
-    tentar("indice", lambda: fatores.indice_pionex(par, pedir))
-    tentar("fundings", lambda: fatores.fundings_pionex(par, 30, pedir))
-    tentar("livro", lambda: livro.resumo(*livro.livro_pionex(par, pedir)))
+    # as fontes fora da Pionex vao em paralelo (uma que trava nao segura as outras);
+    # os pedidos a Pionex seguem em fila, no ritmo do teto dela
+    fora = [("posicoes", lambda: fatores.posicoes_binance(par, pedir)),
+            ("lotacao", lambda: fatores.lotacao_binance(par, pedir)),
+            ("medo", lambda: fatores.medo_ganancia(pedir)),
+            ("agenda_bls", lambda: _agenda_bls(agora_ms, pedir_texto)),
+            ("macro", lambda: _lento("fred", lambda: fatores.macro_fred(pedir_texto), agora_ms,
+                                     pedir_texto is not None))]
     if conferir:
-        tentar("binance", lambda: conferir(par, "15m", 100))
-    tentar("posicoes", lambda: fatores.posicoes_binance(par, pedir))
-    tentar("lotacao", lambda: fatores.lotacao_binance(par, pedir))
-    tentar("medo", lambda: fatores.medo_ganancia(pedir))
+        fora.append(("binance", lambda: conferir(par, "15m", 100)))
     if par in ("BTCUSDT", "ETHUSDT"):
-        tentar("dvol", lambda: fatores.dvol(par, agora_ms, pedir))
-    tentar("agenda_bls", lambda: _agenda_bls(agora_ms, pedir_texto))
+        fora.append(("dvol", lambda: fatores.dvol(par, agora_ms, pedir)))
+    with ThreadPoolExecutor(max_workers=len(fora)) as grupo:
+        for nome, chamar in fora:
+            grupo.submit(tentar, nome, chamar)
+        for tf in PERIODOS_FICHA:
+            try:
+                d["series"][tf] = buscar(par, tf, CANDLES)
+            except Exception as e:
+                d["erros"][f"candles {tf}"] = f"{type(e).__name__}: {str(e)[:150]}"
+        tentar("risco", lambda: fatores.risco_pionex(par, pedir))
+        tentar("indice", lambda: fatores.indice_pionex(par, pedir))
+        tentar("fundings", lambda: fatores.fundings_pionex(par, 30, pedir))
+        tentar("livro", lambda: livro.resumo(*livro.livro_pionex(par, pedir)))
     return d
 
 
@@ -214,6 +226,34 @@ def passo_redondo(preco: float) -> float:
     return 10 ** math.floor(math.log10(preco / 20))
 
 
+def extremos_dia_semana(s: bt.Serie, agora_ms: int) -> dict:
+    """Topo e fundo de ontem e da semana passada (segunda a domingo, UTC) e a
+    abertura de hoje, de candles de qualquer periodo ate 1 dia. A ficha e os
+    alertas do vigia usam esta mesma funcao."""
+    hoje = agora_ms // DIA
+    por_dia: dict[int, list[int]] = {}
+    for i, t in enumerate(s.t):
+        por_dia.setdefault(t // DIA, []).append(i)
+    out = {}
+    ontem = por_dia.get(hoje - 1)
+    if ontem:
+        out["topo de ontem"] = max(s.maxima[i] for i in ontem)
+        out["fundo de ontem"] = min(s.minima[i] for i in ontem)
+    semana = semana_de(hoje)
+    passada = [i for dia, idx in por_dia.items() if semana_de(dia) == semana - 1 for i in idx]
+    if passada:
+        out["topo da semana passada"] = max(s.maxima[i] for i in passada)
+        out["fundo da semana passada"] = min(s.minima[i] for i in passada)
+    if hoje in por_dia:
+        out["abertura do dia"] = s.abertura[por_dia[hoje][0]]
+    return out
+
+
+def semana_de(dia: int) -> int:
+    """Numero da semana de segunda a domingo, em UTC (01/01/1970 foi quinta)."""
+    return (dia + 3) // 7
+
+
 def niveis(series: dict, agora_ms: int, preco: float) -> list[dict]:
     """Os niveis de preco que contam, cada um com o nome do que ele e."""
     out: list[dict] = []
@@ -225,21 +265,8 @@ def niveis(series: dict, agora_ms: int, preco: float) -> list[dict]:
     hoje = agora_ms // DIA
     h = series.get("1h")
     if h is not None and len(h):
-        por_dia: dict[int, list[int]] = {}
-        for i, t in enumerate(h.t):
-            por_dia.setdefault(t // DIA, []).append(i)
-        ontem = por_dia.get(hoje - 1)
-        if ontem:
-            add(max(h.maxima[i] for i in ontem), "topo de ontem")
-            add(min(h.minima[i] for i in ontem), "fundo de ontem")
-        # semana de segunda a domingo, em UTC (01/01/1970 foi quinta)
-        semana = (hoje + 3) // 7
-        passada = [i for dia, idx in por_dia.items() if (dia + 3) // 7 == semana - 1 for i in idx]
-        if passada:
-            add(max(h.maxima[i] for i in passada), "topo da semana passada")
-            add(min(h.minima[i] for i in passada), "fundo da semana passada")
-        if hoje in por_dia:
-            add(h.abertura[por_dia[hoje][0]], "abertura do dia")
+        for nome, preco_ in extremos_dia_semana(h, agora_ms).items():
+            add(preco_, nome)
         pv = ind.perfil_volume(h.maxima[-168:], h.minima[-168:], h.volume[-168:])
         if pv:
             add(pv["poc"], "POC de 7 dias")
@@ -413,8 +440,10 @@ def _seta(t: int) -> str:
 
 def analisar(dados: dict, horizonte: str = "intraday", risco_pct: float | None = None, banca: float = 100.0,
              cfg: dict | None = None, taxa: float = 0.05, mm_padrao: float = 0.5, estado: dict | None = None,
-             divergencia_max: float = 0.3) -> dict:
-    """A ficha, so com calculo (nenhum acesso a rede): recebe o que `coletar` trouxe."""
+             divergencia_max: float = 0.3, bloqueios_externos: list[str] | None = None) -> dict:
+    """A ficha, so com calculo (nenhum acesso a rede): recebe o que `coletar` trouxe.
+    `bloqueios_externos` (o disjuntor do dia, por exemplo) forcam NAO OPERAR, mas a
+    leitura sai inteira."""
     cfg = {**FICHA_PADRAO, **(cfg or {})}
     risco_pct = cfg["risco_pct"] if risco_pct is None else float(risco_pct)
     H = HORIZONTES[horizonte]
@@ -427,6 +456,8 @@ def analisar(dados: dict, horizonte: str = "intraday", risco_pct: float | None =
     def fim(veredito: str) -> dict:
         f["veredito"] = veredito
         return f
+
+    f["bloqueios"] += list(bloqueios_externos or [])
 
     if "nao existe" in f["erros"].get("moeda", ""):
         f["bloqueios"].append(f"{par} nao existe como perpetuo na Pionex")
@@ -476,6 +507,15 @@ def analisar(dados: dict, horizonte: str = "intraday", risco_pct: float | None =
             lista.append({"preco": l["fundo"], "nome": f"fundo do {tf_n}"})
     grupos = agrupar(lista, 0.25 * ent["atr"], fortes_do_horizonte(horizonte))
     f["niveis"] = grupos
+
+    # Ichimoku do contexto: so mostra (a estrategia "ichimoku" e que vai a prova na bateria)
+    s_ctx = series[H["contexto"]]
+    ich = ind.ichimoku(s_ctx.maxima, s_ctx.minima)
+    na, nb = ich["nuvem_a"][-1], ich["nuvem_b"][-1]
+    if na is not None and nb is not None:
+        baixo, alto = min(na, nb), max(na, nb)
+        onde = "acima da" if preco > alto else "abaixo da" if preco < baixo else "dentro da"
+        f["contexto"].append(f"Ichimoku do {H['contexto']}: preco {onde} nuvem ({fmt_preco(baixo)} a {fmt_preco(alto)})")
 
     # agenda
     eventos = fatores.agenda_fomc() + list(dados.get("agenda_bls") or [])
@@ -605,6 +645,13 @@ def _contexto(f: dict, dados: dict) -> None:
                  f"cerca de {pct(dv['dia_pct'], 1)} ao dia")
     for e in (f.get("agenda") or [])[:3]:
         c.append(f"agenda: {e['nome']} em {hora_brasilia(e['t_ms'])} (Brasilia)")
+    mac = (dados.get("macro") or {}).get("series") or {}
+    if mac:
+        partes = []
+        for x in mac.values():
+            sinal = "+" if x["var_5"] > 0 else ""
+            partes.append(f"{x['nome']} {_br(x['valor'], 2)} ({sinal}{_br(x['var_5'], 2)} em 5 dados, ate {x['data']})")
+        c.append("macro (FRED): " + " · ".join(partes))
 
 
 # --------------------------------------------------------------------------- #
@@ -614,7 +661,7 @@ def _contexto(f: dict, dados: dict) -> None:
 FONTES_NOMES = {"moeda": "regras da moeda", "risco": "tabela de risco", "indice": "marca e funding",
                 "fundings": "historico de funding", "livro": "livro de ofertas", "binance": "conferencia Binance",
                 "posicoes": "posicoes abertas", "lotacao": "lotacao", "medo": "medo e ganancia",
-                "dvol": "DVOL", "agenda_bls": "agenda CPI/payroll"}
+                "dvol": "DVOL", "agenda_bls": "agenda CPI/payroll", "macro": "macro FRED"}
 
 
 def texto(f: dict, registro: str | None = None) -> str:
