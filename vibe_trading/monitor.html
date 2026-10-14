@@ -1,0 +1,608 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Monitor de Confluência</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+/* Painel de instrumento: matriz de confirmações por período no topo, gráfico e registro de sinais abaixo */
+:root {
+  --bg: #eef1f4; --panel: #ffffff; --sunk: #e4e9ee;
+  --ink: #182430; --soft: #5a6b7b; --faint: #8798a7; --rule: #ccd6de;
+  --accent: #b4690e; --accent-soft: #fdf1df;
+  --buy: #1c6b52; --buy-soft: #e2f1ea; --sell: #a8232b; --sell-soft: #fae7e7;
+  --candle-up: #1c6b52; --candle-down: #a8232b; --ema-fast: #b4690e; --ema-slow: #4a6b8a;
+  --sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #11181f; --panel: #19222b; --sunk: #121a22;
+    --ink: #e6edf3; --soft: #9fb0bf; --faint: #6c7f8e; --rule: #2c3945;
+    --accent: #e8a33d; --accent-soft: #2e2415;
+    --buy: #5cc9a0; --buy-soft: #132a23; --sell: #f0787f; --sell-soft: #331a1c;
+    --candle-up: #5cc9a0; --candle-down: #f0787f; --ema-fast: #e8a33d; --ema-slow: #7fa6c8;
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 14.5px; line-height: 1.5; }
+.wrap { max-width: 1180px; margin-inline: auto; padding-inline: 18px; padding-block: 22px 48px; }
+
+header { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 14px; border-bottom: 2px solid var(--ink); padding-bottom: 12px; }
+.eyebrow { font-family: var(--mono); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--accent); margin: 0 0 4px; }
+h1 { margin: 0; font-size: clamp(1.5rem, 4.5vw, 2.1rem); letter-spacing: -.02em; font-weight: 600; }
+.live { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.preco { font-family: var(--mono); font-size: 1.6rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.chip { font-family: var(--mono); font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; padding: 4px 9px; border-radius: 2px; border: 1px solid var(--rule); color: var(--soft); background: var(--sunk); }
+.chip.ok { color: var(--buy); background: var(--buy-soft); border-color: transparent; }
+.chip.bad { color: var(--sell); background: var(--sell-soft); border-color: transparent; }
+
+.aviso { margin: 14px 0 0; font-size: 12.5px; color: var(--soft); }
+.aviso strong { color: var(--ink); }
+
+.controles { display: flex; flex-wrap: wrap; gap: 10px 16px; margin-top: 16px; align-items: flex-end; }
+.campo { display: grid; gap: 3px; }
+.campo label { font-family: var(--mono); font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); }
+.campo input, .campo select { font-family: var(--mono); font-size: 14px; padding: 6px 8px; width: 7.5rem; background: var(--panel); color: var(--ink); border: 1px solid var(--rule); border-radius: 2px; }
+.campo input:focus, .campo select:focus, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+button { font-family: var(--mono); font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; padding: 7px 12px; border: 1px solid var(--rule); background: var(--panel); color: var(--ink); border-radius: 2px; cursor: pointer; }
+button:hover { border-color: var(--accent); }
+.risco { font-size: 12.5px; color: var(--soft); flex-basis: 100%; }
+.risco.bad { color: var(--sell); font-weight: 500; }
+
+section { background: var(--panel); border: 1px solid var(--rule); border-radius: 3px; padding: 16px; margin-top: 18px; min-width: 0; }
+section h2 { font-family: var(--mono); font-size: 11px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--faint); margin: 0 0 12px; padding-bottom: 8px; border-bottom: 1px solid var(--rule); display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+
+.tscroll { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13.5px; min-width: 760px; }
+th, td { padding: 9px 8px; border-bottom: 1px solid var(--rule); text-align: center; }
+th { font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); font-weight: 600; }
+th:first-child, td:first-child { text-align: left; }
+td.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+tr:last-child td { border-bottom: 0; }
+.ck { font-family: var(--mono); font-weight: 600; }
+.ck.sim { color: var(--buy); }
+.ck.nao { color: var(--faint); }
+.sinal { font-family: var(--mono); font-weight: 600; font-size: 12px; letter-spacing: .06em; padding: 3px 8px; border-radius: 2px; display: inline-block; }
+.sinal.compra { color: var(--buy); background: var(--buy-soft); }
+.sinal.venda { color: var(--sell); background: var(--sell-soft); }
+.sinal.nada { color: var(--faint); }
+.lado { font-size: 11.5px; color: var(--soft); display: block; }
+
+.grafwrap { position: relative; width: 100%; height: 340px; }
+canvas { display: block; width: 100%; height: 100%; }
+.legenda { display: flex; gap: 14px; flex-wrap: wrap; font-family: var(--mono); font-size: 11px; color: var(--soft); margin-top: 8px; }
+.legenda i { display: inline-block; width: 14px; height: 3px; vertical-align: middle; margin-right: 5px; }
+
+.log { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.log li { border: 1px solid var(--rule); border-left: 3px solid var(--faint); border-radius: 2px; padding: 10px 12px; font-size: 13px; background: var(--sunk); }
+.log li.compra { border-left-color: var(--buy); }
+.log li.venda { border-left-color: var(--sell); }
+.log .topo { font-family: var(--mono); font-weight: 600; display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.log .niveis { font-family: var(--mono); font-size: 12px; color: var(--soft); margin-top: 4px; font-variant-numeric: tabular-nums; }
+.log .alerta { color: var(--sell); font-size: 12px; margin-top: 4px; }
+.vazio { color: var(--faint); font-size: 13px; }
+footer { margin-top: 26px; font-size: 12px; color: var(--faint); max-width: 80ch; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <p class="eyebrow">Somente leitura · Binance pública</p>
+      <h1>Monitor de Confluência</h1>
+    </div>
+    <div class="live">
+      <span class="preco" id="preco">—</span>
+      <span class="chip" id="conexao">conectando</span>
+    </div>
+  </header>
+
+  <p class="aviso"><strong>Nenhuma chave, nenhuma conta, nenhuma ordem sai daqui.</strong> O preço vem da Binance. Na Pionex ele é muito próximo, mas não idêntico. O sinal é calculado só em candle fechado, igual ao backtest.</p>
+
+  <div class="controles">
+    <div class="campo"><label for="par">Par</label><input id="par" value="BTCUSDT" maxlength="20" autocomplete="off"></div>
+    <div class="campo"><label for="minimo">Confirmações</label>
+      <select id="minimo"><option value="3">3 de 5</option><option value="4" selected>4 de 5</option><option value="5">5 de 5</option></select></div>
+    <div class="campo"><label for="stop">Stop %</label><input id="stop" type="number" step="0.05" min="0.05" value="0.5"></div>
+    <div class="campo"><label for="rr">Alvo : stop</label><input id="rr" type="number" step="0.1" min="0.5" value="2"></div>
+    <div class="campo"><label for="alav">Alavancagem</label><input id="alav" type="number" step="1" min="1" max="125" value="24"></div>
+    <div class="campo"><label for="mm">Manutenção %</label><input id="mm" type="number" step="0.1" min="0" value="0.5"></div>
+    <button id="btn-som" type="button">Ativar som</button>
+    <p class="risco" id="risco">—</p>
+  </div>
+
+  <section>
+    <h2><span>Confirmações por período · último candle fechado · * obrigatórias</span><span id="atualizado"></span></h2>
+    <div class="tscroll">
+      <table>
+        <thead><tr>
+          <th>Período</th><th>Tendência*</th><th>Gatilho*</th><th>Não esticado</th><th>Volatilidade</th><th>Volume</th>
+          <th>Votos</th><th>Sinal</th><th>Ruído mediano</th><th>Stop executável?</th>
+        </tr></thead>
+        <tbody id="matriz"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2><span>Gráfico</span>
+      <select id="tf-grafico" aria-label="Período do gráfico" style="font-family:var(--mono);font-size:12px;background:var(--panel);color:var(--ink);border:1px solid var(--rule);padding:3px 6px">
+        <option value="15m">15 min</option><option value="1h">1 hora</option><option value="4h">4 horas</option><option value="12h">12 horas</option><option value="1d">24 horas</option>
+      </select>
+    </h2>
+    <div class="grafwrap"><canvas id="grafico" aria-label="Candles com médias e sinais"></canvas></div>
+    <div class="legenda">
+      <span><i style="background:var(--ema-fast)"></i>EMA 50</span>
+      <span><i style="background:var(--ema-slow)"></i>EMA 200</span>
+      <span>▲ compra · ▼ venda (pelas confirmações escolhidas)</span>
+    </div>
+  </section>
+
+  <section>
+    <h2><span>Sinais ao vivo</span><span id="contagem">0</span></h2>
+    <ul class="log" id="log"><li class="vazio" style="border:0;background:none;padding:0">Nenhum sinal desde que a página abriu. Os sinais aparecem aqui no fechamento do candle.</li></ul>
+  </section>
+
+  <footer>
+    A confluência ainda não provou vantagem. No backtest em série sem tendência ela empatou com a moeda sorteada. Antes de confiar num sinal daqui, rode <code>python3 backtest.py --robustez --estrategia confl4</code> com dado real, em mais de um ativo e mais de uma época. Sinal é ponto de atenção, não ordem.
+  </footer>
+</div>
+
+<!-- MOTOR: mesma decisão de estrategias.confluencia (Python). A paridade é
+     verificada por testes/test_motor.py, candle a candle. Mudou aqui, muda lá. -->
+<script id="motor-confluencia">
+(function (raiz) {
+  function vazio(n) { var a = new Array(n); for (var i = 0; i < n; i++) a[i] = null; return a; }
+
+  function sma(v, n) {
+    var out = vazio(v.length);
+    if (n <= 0) return out;
+    var soma = 0;
+    for (var i = 0; i < v.length; i++) {
+      soma += v[i];
+      if (i >= n) soma -= v[i - n];
+      if (i >= n - 1) out[i] = soma / n;
+    }
+    return out;
+  }
+
+  function ema(v, n) {
+    var out = vazio(v.length);
+    if (n <= 0 || v.length < n) return out;
+    var k = 2 / (n + 1);
+    var atual = 0;
+    for (var i = 0; i < n; i++) atual += v[i];
+    atual = atual / n;
+    out[n - 1] = atual;
+    for (var j = n; j < v.length; j++) { atual = v[j] * k + atual * (1 - k); out[j] = atual; }
+    return out;
+  }
+
+  function rsi(f, n) {
+    var out = vazio(f.length);
+    if (f.length <= n) return out;
+    var g = 0, p = 0, d;
+    for (var i = 1; i <= n; i++) { d = f[i] - f[i - 1]; g += Math.max(d, 0); p += Math.max(-d, 0); }
+    var mg = g / n, mp = p / n;
+    out[n] = mp === 0 ? 100 : 100 - (100 / (1 + mg / mp));
+    for (var j = n + 1; j < f.length; j++) {
+      d = f[j] - f[j - 1];
+      mg = (mg * (n - 1) + Math.max(d, 0)) / n;
+      mp = (mp * (n - 1) + Math.max(-d, 0)) / n;
+      out[j] = mp === 0 ? 100 : 100 - (100 / (1 + mg / mp));
+    }
+    return out;
+  }
+
+  function atr(h, l, c, n) {
+    var len = h.length, tr = vazio(len), out = vazio(len);
+    for (var i = 1; i < len; i++) {
+      tr[i] = Math.max(h[i] - l[i], Math.abs(h[i] - c[i - 1]), Math.abs(l[i] - c[i - 1]));
+    }
+    if ((len > 0 ? len - 1 : 0) < n) return out;
+    var atual = 0;
+    for (var k = 1; k <= n; k++) atual += tr[k];
+    atual = atual / n;
+    out[n] = atual;
+    for (var j = n + 1; j < len; j++) { atual = (atual * (n - 1) + tr[j]) / n; out[j] = atual; }
+    return out;
+  }
+
+  function ruidoTipico(h, l, c) {
+    var a = [];
+    for (var i = 0; i < c.length; i++) if (c[i] > 0) a.push((h[i] - l[i]) / c[i] * 100);
+    if (!a.length) return 0;
+    a.sort(function (x, y) { return x - y; });
+    var m = Math.floor(a.length / 2);
+    return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2;
+  }
+
+  var PADRAO = { minimo: 4, nTend: 50, nTendLonga: 200, nCanal: 20, nRsi: 14, nAtr: 14, nVol: 20, atrPisoPct: 0.05 };
+
+  function opcoes(o) {
+    var r = {};
+    for (var k in PADRAO) r[k] = (o && o[k] !== undefined) ? o[k] : PADRAO[k];
+    return r;
+  }
+
+  function preparar(c, o) {
+    o = opcoes(o);
+    return {
+      eC: ema(c.fechamento, o.nTend), eL: ema(c.fechamento, o.nTendLonga),
+      r: rsi(c.fechamento, o.nRsi), a: atr(c.maxima, c.minima, c.fechamento, o.nAtr),
+      vm: sma(c.volume, o.nVol)
+    };
+  }
+
+  // As cinco checagens no candle i. Só usa dados até i.
+  function checarEm(c, i, o, ind) {
+    o = opcoes(o);
+    var res = { pronto: false, lado: 0, votos: 0, tendencia: false, gatilho: false, naoEsticado: false, volatilidade: false, volume: false };
+    if (i < Math.max(o.nCanal, o.nAtr, o.nRsi) + 1) return res;
+    if (ind.eC[i] === null || ind.eL[i] === null) return res;
+    var lado = ind.eC[i] > ind.eL[i] ? 1 : -1;
+    res.pronto = true; res.lado = lado; res.tendencia = true; res.votos = 1;
+
+    var topo = -Infinity, fundo = Infinity;
+    for (var j = i - o.nCanal; j < i; j++) {
+      if (c.maxima[j] > topo) topo = c.maxima[j];
+      if (c.minima[j] < fundo) fundo = c.minima[j];
+    }
+    if ((lado > 0 && c.fechamento[i] > topo) || (lado < 0 && c.fechamento[i] < fundo)) { res.gatilho = true; res.votos++; }
+
+    var r = ind.r[i];
+    if (r !== null && ((lado > 0 && r < 70) || (lado < 0 && r > 30))) { res.naoEsticado = true; res.votos++; }
+
+    var a = ind.a[i];
+    if (a !== null && c.fechamento[i] > 0 && (a / c.fechamento[i] * 100) >= o.atrPisoPct) { res.volatilidade = true; res.votos++; }
+
+    var vm = ind.vm[i];
+    if (vm !== null && vm > 0 && c.volume[i] > vm) { res.volume = true; res.votos++; }
+    return res;
+  }
+
+  // A decisão de entrar. Tendência e gatilho obrigatórios; os outros três são filtros.
+  // Mesma regra que estrategias.dispara (Python). Todo chamador passa por aqui.
+  function dispara(k, minimo) { return k.pronto && k.gatilho && k.votos >= minimo; }
+
+  function confluencia(c, o) {
+    o = opcoes(o);
+    var ind = preparar(c, o), n = c.fechamento.length, s = new Array(n);
+    for (var i = 0; i < n; i++) {
+      var k = checarEm(c, i, o, ind);
+      s[i] = dispara(k, o.minimo) ? k.lado : 0;
+    }
+    return s;
+  }
+
+  var api = { sma: sma, ema: ema, rsi: rsi, atr: atr, ruidoTipico: ruidoTipico, PADRAO: PADRAO,
+              preparar: preparar, checarEm: checarEm, dispara: dispara, confluencia: confluencia };
+  if (typeof module !== "undefined" && module.exports) module.exports = api;
+  else raiz.Motor = api;
+})(this);
+</script>
+
+<script>
+(function () {
+  var M = window.Motor;
+  var PERIODOS = ["15m", "1h", "4h", "12h", "1d"];
+  var ROTULO = { "15m": "15 min", "1h": "1 hora", "4h": "4 horas", "12h": "12 horas", "1d": "24 horas" };
+  var REST = ["https://data-api.binance.vision/api/v3/klines", "https://api.binance.com/api/v3/klines"];
+  var WS = ["wss://data-stream.binance.vision/stream?streams=", "wss://stream.binance.com:9443/stream?streams="];
+  var MAX_CANDLES = 1000;
+
+  var est = { par: "BTCUSDT", series: {}, vivo: {}, alertados: {}, ws: null, wsIdx: 0, falhas: 0, geracao: 0, som: null, sinais: 0 };
+  function $(id) { return document.getElementById(id); }
+
+  // ---------- preferências (só conveniência local) ----------
+  var CAMPOS = ["par", "minimo", "stop", "rr", "alav", "mm"];
+  function lerPrefs() {
+    try {
+      var p = JSON.parse(localStorage.getItem("monitor-confluencia") || "{}");
+      CAMPOS.forEach(function (k) { if (p[k] !== undefined) $(k).value = p[k]; });
+    } catch (e) { /* sem armazenamento: segue com o padrão */ }
+  }
+  function salvarPrefs() {
+    try {
+      var p = {}; CAMPOS.forEach(function (k) { p[k] = $(k).value; });
+      localStorage.setItem("monitor-confluencia", JSON.stringify(p));
+    } catch (e) { /* idem */ }
+  }
+
+  function num(id, padrao) { var v = parseFloat($(id).value); return isFinite(v) && v > 0 ? v : padrao; }
+  function params() {
+    var mm = parseFloat($("mm").value);
+    return { minimo: parseInt($("minimo").value, 10) || 4, stop: num("stop", 0.5), rr: num("rr", 2),
+             alav: num("alav", 24), mm: isFinite(mm) && mm >= 0 ? mm : 0.5 };
+  }
+  function liqPct(p) { return Math.max(0, 100 / p.alav - p.mm); }
+  function fmt(v) {
+    if (v === null || v === undefined || !isFinite(v)) return "—";
+    var casas = v >= 1000 ? 2 : v >= 1 ? 4 : 6;
+    return v.toLocaleString("pt-BR", { minimumFractionDigits: casas, maximumFractionDigits: casas });
+  }
+
+  // ---------- dados ----------
+  function novaSerie() { return { t: [], abertura: [], maxima: [], minima: [], fechamento: [], volume: [] }; }
+
+  function carregar(par, tf, idx) {
+    idx = idx || 0;
+    var url = REST[idx] + "?symbol=" + encodeURIComponent(par) + "&interval=" + tf + "&limit=" + MAX_CANDLES;
+    return fetch(url).then(function (r) {
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return r.json();
+    }).then(function (bruto) {
+      if (!Array.isArray(bruto)) throw new Error("resposta inesperada");
+      var s = novaSerie(), agora = Date.now();
+      bruto.forEach(function (k) {
+        if (k[6] > agora) return; // candle ainda em formação: sinal só em candle fechado
+        s.t.push(k[0]); s.abertura.push(+k[1]); s.maxima.push(+k[2]); s.minima.push(+k[3]);
+        s.fechamento.push(+k[4]); s.volume.push(+k[5]);
+      });
+      return s;
+    }).catch(function (e) {
+      if (idx + 1 < REST.length) return carregar(par, tf, idx + 1);
+      throw e;
+    });
+  }
+
+  function recarregarTudo() {
+    var geracao = ++est.geracao, par = est.par;
+    estadoConexao("carregando histórico", "");
+    return Promise.all(PERIODOS.map(function (tf) {
+      return carregar(par, tf).then(function (s) { if (geracao === est.geracao) est.series[tf] = s; });
+    })).then(function () {
+      if (geracao !== est.geracao) return;
+      // o que já estava fechado ao carregar não vira alerta: alerta é só fechamento ao vivo
+      PERIODOS.forEach(function (tf) {
+        var s = est.series[tf];
+        if (s && s.t.length) est.alertados[tf + ":" + s.t[s.t.length - 1]] = true;
+      });
+      renderTudo();
+    });
+  }
+
+  // ---------- tempo real ----------
+  function conectar() {
+    if (est.ws) { est.ws.onclose = null; try { est.ws.close(); } catch (e) {} }
+    var nomes = PERIODOS.map(function (tf) { return est.par.toLowerCase() + "@kline_" + tf; }).join("/");
+    var ws;
+    try { ws = new WebSocket(WS[est.wsIdx % WS.length] + nomes); }
+    catch (e) { agendarReconexao(); return; }
+    est.ws = ws;
+    ws.onopen = function () {
+      est.falhas = 0;
+      // reconectou: recarrega o histórico para não perder candle que fechou enquanto estava fora
+      recarregarTudo().then(function () { estadoConexao("ao vivo", "ok"); })
+        .catch(function () { estadoConexao("sem histórico", "bad"); });
+    };
+    ws.onmessage = function (ev) {
+      var msg; try { msg = JSON.parse(ev.data); } catch (e) { return; }
+      var k = msg && msg.data && msg.data.k; if (!k) return;
+      receberCandle(k);
+    };
+    ws.onerror = function () { /* onclose cuida da reconexão */ };
+    ws.onclose = function () { estadoConexao("caiu, reconectando", "bad"); agendarReconexao(); };
+  }
+
+  function agendarReconexao() {
+    est.falhas++;
+    if (est.falhas % 2 === 0) est.wsIdx++; // alterna o endpoint a cada duas falhas
+    var espera = Math.min(30000, 1000 * Math.pow(2, Math.min(est.falhas, 5)));
+    setTimeout(conectar, espera);
+  }
+
+  function estadoConexao(texto, classe) {
+    var c = $("conexao"); c.textContent = texto; c.className = "chip" + (classe ? " " + classe : "");
+  }
+
+  function receberCandle(k) {
+    var tf = k.i, s = est.series[tf];
+    est.vivo[tf] = { t: k.t, o: +k.o, h: +k.h, l: +k.l, c: +k.c };
+    if (tf === "15m") { $("preco").textContent = fmt(+k.c); document.title = fmt(+k.c) + " · Monitor de Confluência"; }
+    if (!s) return;
+    if (k.x) {
+      var ultimo = s.t.length ? s.t[s.t.length - 1] : -1;
+      if (k.t > ultimo) {
+        s.t.push(k.t); s.abertura.push(+k.o); s.maxima.push(+k.h); s.minima.push(+k.l);
+        s.fechamento.push(+k.c); s.volume.push(+k.v);
+        if (s.t.length > MAX_CANDLES) ["t", "abertura", "maxima", "minima", "fechamento", "volume"].forEach(function (c) { s[c].shift(); });
+        verificarSinal(tf);
+      }
+      renderMatriz();
+    }
+    if (tf === $("tf-grafico").value) desenhar();
+  }
+
+  function verificarSinal(tf) {
+    var s = est.series[tf], i = s.t.length - 1, p = params();
+    var chave = tf + ":" + s.t[i];
+    if (est.alertados[chave]) return;
+    var ind = M.preparar(s, { minimo: p.minimo });
+    var k = M.checarEm(s, i, { minimo: p.minimo }, ind);
+    if (!M.dispara(k, p.minimo)) return;
+    est.alertados[chave] = true;
+    registrar(tf, k, s.fechamento[i], s.t[i]);
+  }
+
+  // ---------- alertas ----------
+  function registrar(tf, k, preco, t, semSom) {
+    var p = params(), compra = k.lado > 0, liq = liqPct(p);
+    var stopPx = preco * (1 - (compra ? 1 : -1) * p.stop / 100);
+    var alvoPx = preco * (1 + (compra ? 1 : -1) * p.stop * p.rr / 100);
+    var liqPx = preco * (1 - (compra ? 1 : -1) * liq / 100);
+    var li = document.createElement("li");
+    li.className = compra ? "compra" : "venda";
+    var topo = document.createElement("div"); topo.className = "topo";
+    var a = document.createElement("span"); a.textContent = (compra ? "COMPRA" : "VENDA") + " · " + ROTULO[tf] + " · " + est.par;
+    var b = document.createElement("span"); b.textContent = k.votos + "/5 · " + new Date(t).toLocaleString("pt-BR");
+    topo.appendChild(a); topo.appendChild(b); li.appendChild(topo);
+    var niv = document.createElement("div"); niv.className = "niveis";
+    niv.textContent = "entrada " + fmt(preco) + " · stop " + fmt(stopPx) + " · alvo " + fmt(alvoPx) + " · liquidação a " + p.alav + "x: " + fmt(liqPx);
+    li.appendChild(niv);
+    if (liq <= p.stop) {
+      var al = document.createElement("div"); al.className = "alerta";
+      al.textContent = "A " + p.alav + "x a liquidação chega antes do stop. Este stop não executa.";
+      li.appendChild(al);
+    }
+    var lista = $("log");
+    var vazio = lista.querySelector(".vazio"); if (vazio) vazio.remove();
+    lista.insertBefore(li, lista.firstChild);
+    est.sinais++; $("contagem").textContent = String(est.sinais);
+    if (!semSom) bipe(compra);
+  }
+
+  function bipe(compra) {
+    if (!est.som) return;
+    try {
+      var o = est.som.createOscillator(), g = est.som.createGain();
+      o.frequency.value = compra ? 880 : 440; g.gain.value = 0.08;
+      o.connect(g); g.connect(est.som.destination); o.start(); o.stop(est.som.currentTime + 0.25);
+    } catch (e) {}
+  }
+
+  // ---------- painel ----------
+  function marca(v) { return '<span class="ck ' + (v ? "sim" : "nao") + '">' + (v ? "sim" : "não") + "</span>"; }
+
+  function renderMatriz() {
+    var p = params(), linhas = "";
+    PERIODOS.forEach(function (tf) {
+      var s = est.series[tf];
+      if (!s || s.t.length < 2) {
+        linhas += "<tr><td>" + ROTULO[tf] + '</td><td colspan="9" class="vazio">sem dados</td></tr>';
+        return;
+      }
+      var i = s.t.length - 1, ind = M.preparar(s, { minimo: p.minimo }), k = M.checarEm(s, i, { minimo: p.minimo }, ind);
+      var ruido = M.ruidoTipico(s.maxima, s.minima, s.fechamento);
+      var sinal = !k.pronto ? '<span class="sinal nada">aquecendo</span>'
+        : M.dispara(k, p.minimo) ? (k.lado > 0 ? '<span class="sinal compra">COMPRA</span>' : '<span class="sinal venda">VENDA</span>')
+        : '<span class="sinal nada">nada</span>';
+      var lado = k.pronto ? '<span class="lado">' + (k.lado > 0 ? "alta (só compra)" : "baixa (só venda)") + "</span>" : "";
+      var exec = p.stop > ruido ? '<span class="ck sim">sim</span>' : '<span class="ck" style="color:var(--sell)">não, dentro do ruído</span>';
+      linhas += "<tr><td><strong>" + ROTULO[tf] + "</strong></td>" +
+        "<td>" + marca(k.tendencia) + lado + "</td><td>" + marca(k.gatilho) + "</td><td>" + marca(k.naoEsticado) +
+        "</td><td>" + marca(k.volatilidade) + "</td><td>" + marca(k.volume) + "</td>" +
+        '<td class="num">' + (k.pronto ? k.votos + "/5" : "—") + "</td><td>" + sinal + "</td>" +
+        '<td class="num">' + ruido.toFixed(3) + "%</td><td>" + exec + "</td></tr>";
+    });
+    $("matriz").innerHTML = linhas;
+    $("atualizado").textContent = "atualizado " + new Date().toLocaleTimeString("pt-BR");
+  }
+
+  function renderRisco() {
+    var p = params(), liq = liqPct(p), maxFolga = 100 / (2 * p.stop + p.mm), r = $("risco");
+    if (liq <= p.stop) {
+      r.className = "risco bad";
+      r.textContent = "A " + p.alav + "x a liquidação fica em " + liq.toFixed(2) + "%, antes do stop de " + p.stop.toFixed(2) + "%. O stop não executa. Com esse stop, a alavancagem máxima com folga é " + maxFolga.toFixed(1) + "x.";
+    } else {
+      r.className = "risco";
+      r.textContent = "A " + p.alav + "x a liquidação fica em " + liq.toFixed(2) + "%, com folga de " + (liq - p.stop).toFixed(2) + "% depois do stop. Alavancagem máxima com folga para esse stop: " + maxFolga.toFixed(1) + "x.";
+    }
+  }
+
+  // ---------- gráfico ----------
+  function cor(nome) { return getComputedStyle(document.documentElement).getPropertyValue(nome).trim(); }
+
+  function desenhar() {
+    var cv = $("grafico"), tf = $("tf-grafico").value, s = est.series[tf];
+    var dpr = window.devicePixelRatio || 1, w = cv.clientWidth, h = cv.clientHeight;
+    if (!w || !h) return;
+    cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+    var g = cv.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h);
+    if (!s || s.t.length < 2) { g.fillStyle = cor("--faint"); g.font = "13px sans-serif"; g.fillText("sem dados", 12, 24); return; }
+
+    var p = params(), ind = M.preparar(s, { minimo: p.minimo }), sinais = M.confluencia(s, { minimo: p.minimo });
+    var visiveis = Math.max(30, Math.min(120, Math.floor(w / 7)));
+    var ini = Math.max(0, s.t.length - visiveis), idx = [];
+    for (var i = ini; i < s.t.length; i++) idx.push(i);
+    var v = est.vivo[tf], temVivo = v && v.t > s.t[s.t.length - 1];
+
+    var lo = Infinity, hi = -Infinity;
+    idx.forEach(function (i) {
+      lo = Math.min(lo, s.minima[i]); hi = Math.max(hi, s.maxima[i]);
+      [ind.eC[i], ind.eL[i]].forEach(function (e) { if (e !== null) { lo = Math.min(lo, e); hi = Math.max(hi, e); } });
+    });
+    if (temVivo) { lo = Math.min(lo, v.l); hi = Math.max(hi, v.h); }
+    var pad = (hi - lo) * 0.06 || hi * 0.001; lo -= pad; hi += pad;
+
+    var eixo = 64, larg = w - eixo - 8, alt = h - 24;
+    var n = idx.length + (temVivo ? 1 : 0), passo = larg / n, corpo = Math.max(1, passo * 0.6);
+    function Y(px) { return 8 + (hi - px) / (hi - lo) * (alt - 8); }
+    function X(k) { return k * passo + passo / 2; }
+
+    g.strokeStyle = cor("--rule"); g.fillStyle = cor("--faint"); g.lineWidth = 1; g.font = "11px " + cor("--mono");
+    for (var q = 0; q <= 4; q++) {
+      var val = lo + (hi - lo) * q / 4, y = Y(val);
+      g.beginPath(); g.moveTo(0, y); g.lineTo(larg, y); g.stroke();
+      g.fillText(fmt(val), larg + 6, y + 4);
+    }
+
+    function vela(k, o, hh, ll, c, viva) {
+      var sobe = c >= o; g.strokeStyle = g.fillStyle = sobe ? cor("--candle-up") : cor("--candle-down");
+      g.globalAlpha = viva ? 0.5 : 1;
+      g.beginPath(); g.moveTo(X(k), Y(hh)); g.lineTo(X(k), Y(ll)); g.stroke();
+      var y1 = Y(Math.max(o, c)), y2 = Y(Math.min(o, c));
+      g.fillRect(X(k) - corpo / 2, y1, corpo, Math.max(1, y2 - y1));
+      g.globalAlpha = 1;
+    }
+    idx.forEach(function (i, k) { vela(k, s.abertura[i], s.maxima[i], s.minima[i], s.fechamento[i], false); });
+    if (temVivo) vela(idx.length, v.o, v.h, v.l, v.c, true);
+
+    [["eC", "--ema-fast"], ["eL", "--ema-slow"]].forEach(function (par) {
+      g.strokeStyle = cor(par[1]); g.lineWidth = 1.6; g.beginPath(); var ok = false;
+      idx.forEach(function (i, k) {
+        var e = ind[par[0]][i]; if (e === null) { ok = false; return; }
+        if (!ok) { g.moveTo(X(k), Y(e)); ok = true; } else g.lineTo(X(k), Y(e));
+      });
+      g.stroke();
+    });
+
+    idx.forEach(function (i, k) {
+      if (!sinais[i]) return;
+      var compra = sinais[i] > 0, x = X(k), y = compra ? Y(s.minima[i]) + 10 : Y(s.maxima[i]) - 10;
+      g.fillStyle = compra ? cor("--buy") : cor("--sell");
+      g.beginPath();
+      if (compra) { g.moveTo(x, y - 6); g.lineTo(x - 5, y + 3); g.lineTo(x + 5, y + 3); }
+      else { g.moveTo(x, y + 6); g.lineTo(x - 5, y - 3); g.lineTo(x + 5, y - 3); }
+      g.closePath(); g.fill();
+    });
+
+    g.fillStyle = cor("--faint");
+    g.fillText(new Date(s.t[idx[0]]).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }), 2, h - 6);
+  }
+
+  function renderTudo() { renderRisco(); renderMatriz(); desenhar(); }
+
+  // ---------- eventos ----------
+  ["minimo", "stop", "rr", "alav", "mm"].forEach(function (id) {
+    $(id).addEventListener("input", function () { salvarPrefs(); renderTudo(); });
+  });
+  $("par").addEventListener("change", function () {
+    var v = $("par").value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+    if (!v) { $("par").value = est.par; return; }
+    $("par").value = v; est.par = v; est.series = {}; est.vivo = {}; est.alertados = {};
+    $("preco").textContent = "—"; salvarPrefs(); renderTudo(); conectar();
+  });
+  $("tf-grafico").addEventListener("change", desenhar);
+  $("btn-som").addEventListener("click", function () {
+    try {
+      est.som = est.som || new (window.AudioContext || window.webkitAudioContext)();
+      est.som.resume(); $("btn-som").textContent = "Som ativo"; bipe(true);
+    } catch (e) { $("btn-som").textContent = "Som indisponível"; }
+  });
+  window.addEventListener("resize", desenhar);
+  try { window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", desenhar); } catch (e) {}
+
+  // ---------- partida ----------
+  lerPrefs();
+  est.par = ($("par").value || "BTCUSDT").toUpperCase().replace(/[^A-Z0-9]/g, "") || "BTCUSDT";
+  renderTudo();
+  conectar();
+})();
+</script>
+</body>
+</html>

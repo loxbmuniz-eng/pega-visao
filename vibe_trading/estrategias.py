@@ -165,10 +165,18 @@ def confluencia(c, minimo: int = 4, n_tend: int = 50, n_tend_longa: int = 200,
     5. VOLUME      volume do candle acima da sua propria media. Rompimento sem
                    volume costuma ser armadilha.
 
-    `minimo` e quantas das cinco precisam concordar (1 a 5). Isso e de proposito
-    ajustavel: mais filtro significa menos operacao, menos taxa paga e amostra
-    menor. Qual nivel presta e pergunta empirica, nao de opiniao — rode
-    --robustez com confl3, confl4 e confl5 e compare.
+    TENDENCIA e GATILHO sao obrigatorios: a tendencia escolhe o lado, o gatilho
+    e o momento. Os outros tres sao filtros. `minimo` conta os votos incluindo
+    os dois obrigatorios, entao:
+        confl3 = tendencia + gatilho + 1 filtro
+        confl4 = tendencia + gatilho + 2 filtros
+        confl5 = tudo
+    (Versao anterior nao exigia o gatilho: tendencia + RSI + ATR + volume, que
+    sao verdade quase sempre ao mesmo tempo, bastavam para 4/5 e o "sinal"
+    ficava ligado em ~44% dos candles — um estado, nao um evento.)
+
+    Qual nivel presta e pergunta empirica, nao de opiniao — rode --robustez
+    com confl3, confl4 e confl5 e compare.
     """
     n = len(c.fechamento)
     s = [0] * n
@@ -192,12 +200,11 @@ def confluencia(c, minimo: int = 4, n_tend: int = 50, n_tend_longa: int = 200,
 
         votos = 1  # a tendencia e o primeiro voto
 
-        # ---- 2. gatilho de rompimento, no lado da tendencia ----
+        # ---- 2. gatilho de rompimento, no lado da tendencia (OBRIGATORIO) ----
         topo = max(c.maxima[i - n_canal : i])
         fundo = min(c.minima[i - n_canal : i])
-        if lado > 0 and c.fechamento[i] > topo:
-            votos += 1
-        elif lado < 0 and c.fechamento[i] < fundo:
+        gatilho = (lado > 0 and c.fechamento[i] > topo) or (lado < 0 and c.fechamento[i] < fundo)
+        if gatilho:
             votos += 1
 
         # ---- 3. nao entrar esticado ----
@@ -215,10 +222,15 @@ def confluencia(c, minimo: int = 4, n_tend: int = 50, n_tend_longa: int = 200,
             if c.volume[i] > vol_media[i]:
                 votos += 1
 
-        if votos >= minimo:
+        if dispara(gatilho, votos, minimo):
             s[i] = lado
 
     return s
+
+
+def dispara(gatilho: bool, votos: int, minimo: int) -> bool:
+    """A decisao de entrar. Mesma regra que Motor.dispara no monitor.html."""
+    return gatilho and votos >= minimo
 
 
 def confluencia_3(c) -> list[int]:

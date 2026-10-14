@@ -14,6 +14,9 @@ Não toca no painel de logística Suinco. É projeto separado, na mesma árvore.
 | `backtest.py` | Puxa candles públicos e simula com taxa, stop, margem de manutenção e liquidação |
 | `estrategias.py` | Os sinais de entrada: 7 estratégias, a confluência e 2 controles cegos |
 | `indicadores.py` | EMA, SMA, RSI, ATR, VWAP, desvio, ruído mediano |
+| `monitor.html` | **Monitor em tempo real.** Abre no navegador, lê a Binance pública, mostra as 5 confirmações nos 5 períodos e alerta no fechamento do candle |
+| `testes/test_motor.py` | Guardas: vazamento de futuro, posição sobreposta, paridade Python × monitor, gatilho obrigatório |
+| `testes/test_monitor_navegador.js` | Abre o monitor num Chromium com a Binance simulada e prova que carrega, calcula e alerta |
 
 Mais a calculadora de risco interativa (página separada): **Banda de Liquidação**.
 
@@ -29,6 +32,8 @@ python3 backtest.py --listar          # ver as estratégias
 python3 backtest.py --ruido           # medir o ruído real do ativo
 python3 backtest.py --comparar        # TODAS as estratégias contra o controle
 python3 backtest.py --robustez --estrategia confl4 --alav 24   # vantagem ou sorte?
+python3 testes/test_motor.py          # guardas do motor
+node testes/test_monitor_navegador.js # monitor num navegador real, Binance simulada
 python3 backtest.py --estrategia ema --alav 24 --stop 0.5
 python3 backtest.py --par ETHUSDT --dias 60 --comparar
 ```
@@ -54,13 +59,16 @@ típico" da Banda de Liquidação. Sem ele você está chutando.
 | `confl3` / `confl4` / `confl5` | **confluência**: 3, 4 ou 5 de 5 confirmações |
 
 A confluência é o checklist do scalper disciplinado, com o porquê de cada item
-no código (`estrategias.py`):
+no código (`estrategias.py`). Os dois primeiros são **obrigatórios**: a
+tendência escolhe o lado, o gatilho é o momento. Os outros três são filtros.
 
-1. **Tendência**: EMA 50 acima da 200 só compra; abaixo, só vende.
-2. **Gatilho**: fechamento rompe a máxima/mínima das últimas 20 barras.
+1. **Tendência** (obrigatória): EMA 50 acima da 200 só compra; abaixo, só vende.
+2. **Gatilho** (obrigatório): fechamento rompe a máxima/mínima das últimas 20 barras.
 3. **Não esticado**: RSI ainda longe do extremo do movimento.
 4. **Volatilidade**: ATR acima de um piso. Mercado parado não paga a taxa.
 5. **Volume**: candle com volume acima da própria média.
+
+`confl3` = tendência + gatilho + 1 filtro · `confl4` = + 2 filtros · `confl5` = tudo.
 
 ---
 
@@ -69,6 +77,11 @@ no código (`estrategias.py`):
 **1. Nenhuma estratégia olha o futuro.** O sinal do candle `i` só usa dados até
 `i`. Verificado por truncamento: sinais gerados na série inteira e em cortes
 têm de ser idênticos antes do corte. As dez estratégias passaram.
+
+**1b. O monitor decide igual ao backtest.** A confluência existe em Python e em
+JavaScript. O teste de paridade compara as duas candle a candle, e os
+indicadores bit a bit, em série com e sem tendência: zero divergências. Mudar o
+limite do RSI de 70 para 71 só no monitor faz o teste reprovar.
 
 **2. Uma posição de cada vez.** A próxima entrada só acontece depois do candle
 em que a anterior fechou. Verificado com uma guarda que registra entrada e saída
@@ -83,6 +96,13 @@ contam como **stop**. OHLC não revela a ordem dentro da barra.
 > pego quando a confluência perdeu 77% a 88% numa série em que a moeda ficava
 > perto do zero, uma distorção grande demais para ser da estratégia. Os números
 > abaixo já são do motor corrigido.
+
+> **Correção registrada (confluência).** A primeira versão não exigia o gatilho.
+> Tendência, RSI, ATR e volume são verdade quase sempre ao mesmo tempo, então
+> bastavam para 4/5 e o sinal ficava ligado em ~44% dos candles: 832 dos 920
+> sinais da `confl4` não tinham rompimento nenhum. Apareceu no gráfico do
+> monitor, com uma fileira de compras durante uma queda inteira. Agora o gatilho
+> é obrigatório e uma guarda garante que nenhum sinal sai sem rompimento.
 
 ---
 
@@ -103,12 +123,12 @@ Nessa série **não existe vantagem para encontrar**: é ruído puro.
 | `rsi` | 11 | 4 | 16,50 | 67,77 |
 | `bollinger` | 17 | 5 | 25,50 | 20,60 |
 | `vwap` | 14 | 5 | 21,00 | 48,74 |
-| `confl3` | 11 | 5 | 16,50 | **quebrou** |
-| `confl4` | 12 | 7 | 18,00 | **quebrou** |
+| `confl3` | 9 | 4 | 13,50 | 53,82 |
+| `confl4` | 9 | 4 | 13,50 | 53,67 |
 | `confl5` | 3 | 1 | 4,50 | 108,16 |
 
-**Nenhuma das onze terminou no positivo. Duas quebraram a conta.** O stop
-nunca executa, porque a liquidação chega no mesmo ponto: de 1 a 8 operações por
+**Nenhuma das onze terminou no positivo.** A pior perdeu 81%. O stop nunca
+executa, porque a liquidação chega no mesmo ponto: de 1 a 8 operações por
 estratégia morreram liquidadas.
 
 ### A 24x (liquidação em 3,67%, folga de 3,17% depois do stop)
@@ -123,8 +143,8 @@ estratégia morreram liquidadas.
 | `rsi` | 11 | 0 | 3,96 | 105,62 |
 | `bollinger` | 17 | 0 | 6,12 | 95,74 |
 | `vwap` | 14 | 0 | 5,04 | 102,50 |
-| `confl3` | 18 | 0 | 6,48 | 85,79 |
-| `confl4` | 18 | 0 | 6,48 | 91,10 |
+| `confl3` | 9 | 0 | 3,24 | 102,28 |
+| `confl4` | 9 | 0 | 3,24 | 102,24 |
 | `confl5` | 3 | 0 | 1,08 | 111,00 |
 
 **As liquidações foram a zero em todas.** Mesmas entradas, mesma série, mesmo
@@ -150,22 +170,56 @@ O pareamento importa. Comparada com moedas que operam em todo candle, a `confl5`
 parecia ganhar de 73% delas, mas só porque opera pouco e paga menos taxa. Com a
 moeda pareada caiu para 47%. Era taxa economizada, não acerto de direção.
 
-O teste foi validado nos dois sentidos:
+O teste foi validado nos dois sentidos, com a confluência corrigida:
 
 | Série | Estratégia | Janelas positivas | Bateu, em média | Veredito |
 |---|---|---|---|---|
-| ruído puro (sem vantagem possível) | `confl4` | 1 de 6 | 41% das moedas | sem vantagem |
+| ruído puro (sem vantagem possível) | `confl3` | 0 de 6 | 48% das moedas | sem vantagem |
+| ruído puro | `confl4` | 0 de 6 | 51% | sem vantagem |
 | ruído puro | `confl5` | 0 de 6 | 47% | sem vantagem |
-| **com tendência persistente embutida** | `confl4` | **4 de 6** | 64% (77–100% em 4 janelas) | inconclusivo |
+| **com tendência persistente embutida** | `confl3` | **6 de 6** | **91%** | **sinal de vantagem** |
+| com tendência persistente | `confl4` | 5 de 6 | 79% | sinal de vantagem |
+| com tendência persistente | `confl5` | 4 de 6 | 61% | inconclusivo (opera pouco demais) |
 
-A última linha é o **controle positivo**: quando existe vantagem real, o teste
-enxerga. Nas quatro janelas boas a confluência ganhou de 77% a 100% das moedas.
-O veredito ainda é "inconclusivo" por causa de duas janelas ruins. O critério
-para "sinal de vantagem" é bater 75% das moedas em média com 2/3 das janelas
-no positivo, e ele é exigente de propósito.
+Em ruído puro a confluência empata com a moeda: ela não inventa vantagem onde
+não existe. Na série com tendência persistente ela captura a tendência e o teste
+diz isso. As duas metades juntas são o que dá confiança no teste.
+
+**A pergunta que sobra só o dado real responde:** o ativo, no período que você
+opera, tem tendência persistente o bastante para isso aparecer? Rode o
+`--robustez` com dado real antes de qualquer conclusão.
 
 > Tudo isso é série sintética com semente fixa. Valida o **motor**, não o
 > mercado. Para o número real, rode com rede aberta.
+
+---
+
+## Monitor em tempo real
+
+`monitor.html` roda no seu navegador e lê a Binance pública **direto, sem chave
+e sem conta**. Ele não envia ordem nenhuma.
+
+**Como abrir:** baixe o arquivo e dê dois cliques. Abre no Chrome. Se o
+navegador reclamar de arquivo local, rode `python3 -m http.server` nesta pasta e
+abra `http://localhost:8000/monitor.html`.
+
+O que ele mostra:
+
+- as 5 confirmações da confluência nos 5 períodos (15 min, 1 h, 4 h, 12 h, 24 h),
+  sempre no **último candle fechado**, igual ao backtest;
+- o ruído mediano de cada período e se o seu stop fica fora dele;
+- onde fica a liquidação na alavancagem escolhida, com aviso quando ela chega
+  antes do stop;
+- gráfico com EMA 50/200 e os sinais marcados;
+- um alerta (com som, se ativado) quando um candle fecha com confluência, com
+  entrada, stop, alvo e preço de liquidação.
+
+Se a conexão cair, ele reconecta sozinho e recarrega o histórico, para não
+perder candle que fechou enquanto estava fora. O preço é o da Binance; o da
+Pionex é muito próximo, mas não idêntico.
+
+**Sinal no monitor é ponto de atenção, não ordem.** A confluência ainda não foi
+testada com dado real.
 
 ---
 
