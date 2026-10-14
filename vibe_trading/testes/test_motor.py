@@ -195,6 +195,7 @@ def teste_comando_ponta_a_ponta() -> None:
         texto = saida.getvalue()
         checar(texto.count(">>> ") == 5, "rodou os 5 periodos")
         checar(texto.count("bateu") == 5, "veredito de robustez em todos os 5")
+        checar(texto.count("resultado por operacao") == 5, "placar com resultado por operacao nos 5 periodos")
         checar("candles, de " in texto, "mostra quantos candles e de que data a que data")
         print("        trecho:", next(l for l in texto.splitlines() if ">>> 4h" in l).strip())
     except SystemExit as e:
@@ -267,6 +268,24 @@ def teste_padroes_e_alinhamento() -> None:
            "so compra: fica exatamente com os sinais de compra")
     checar(all(x <= 0 for x in so_venda) and sum(1 for x in so_venda if x) == sum(1 for x in base if x < 0),
            "so venda: fica exatamente com os sinais de venda")
+
+
+def teste_placar() -> None:
+    print("\n[8] placar: acerto, ganho medio, perda media e resultado por operacao")
+    s = serie_sintetica(3000, 5, True)
+    for nome in ("confl3", "moeda", "engolfo"):
+        r = bt.simular(s, est.gerar(nome, s), bt.Params(alav=24, stop=0.5))
+        a = r.acerto / 100
+        identidade = a * r.ganho_medio - (1 - a) * r.perda_media
+        checar(r.operacoes > 0 and abs(identidade - r.por_operacao) < 1e-9,
+               f"{nome}: acerto x ganho - erro x perda = resultado por operacao ({r.por_operacao:+.4f})")
+        checar(abs(r.por_operacao * r.operacoes - r.pnl) < 1e-6 and len(r.resultados) == r.operacoes,
+               f"{nome}: resultado por operacao x {r.operacoes} operacoes = pnl total")
+    # o exemplo da pagina: 80% de acerto pode perder, 35% pode ganhar
+    alto = bt.Resultado(resultados=[1.0] * 8 + [-5.0] * 2)
+    baixo = bt.Resultado(resultados=[3.0] * 7 + [-1.0] * 13)
+    checar(alto.acerto == 80 and alto.por_operacao < 0, f"80% de acerto, ganho 1 e perda 5: {alto.por_operacao:+.2f} por operacao")
+    checar(baixo.acerto == 35 and baixo.por_operacao > 0, f"35% de acerto, ganho 3 e perda 1: {baixo.por_operacao:+.2f} por operacao")
 
 
 def teste_paridade() -> None:
@@ -345,6 +364,7 @@ if __name__ == "__main__":
     teste_busca()
     teste_comando_ponta_a_ponta()
     teste_padroes_e_alinhamento()
+    teste_placar()
     print()
     if FALHAS:
         print(f"REPROVADO: {len(FALHAS)} falha(s)")

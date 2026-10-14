@@ -190,10 +190,33 @@ class Resultado:
     equity_final: float = 0.0
     quebrou: bool = False
     sinais_vistos: int = 0
+    resultados: list[float] = field(default_factory=list)  # pnl de cada operacao, ja com taxa
 
+    # O placar. Acerto sozinho engana: 80% de acerto com perda grande quebra a
+    # conta. Por isso ele sempre aparece com ganho medio, perda media e o
+    # resultado por operacao, que e o que diz se ha lucro. Identidade:
+    #   por_operacao = acerto * ganho_medio - (1 - acerto) * perda_media
     @property
     def acerto(self) -> float:
-        return (self.ganhos / self.operacoes * 100.0) if self.operacoes else 0.0
+        """% de operacoes que terminaram no lucro, depois da taxa."""
+        if not self.resultados:
+            return 0.0
+        return sum(1 for x in self.resultados if x > 0) / len(self.resultados) * 100.0
+
+    @property
+    def ganho_medio(self) -> float:
+        g = [x for x in self.resultados if x > 0]
+        return sum(g) / len(g) if g else 0.0
+
+    @property
+    def perda_media(self) -> float:
+        """Media das perdas, como numero positivo."""
+        l = [-x for x in self.resultados if x <= 0]
+        return sum(l) / len(l) if l else 0.0
+
+    @property
+    def por_operacao(self) -> float:
+        return sum(self.resultados) / len(self.resultados) if self.resultados else 0.0
 
 
 # --------------------------------------------------------------------------- #
@@ -273,6 +296,7 @@ def simular(s: Serie, sinais: list[int], p: Params) -> Resultado:
 
         equity += pnl
         r.pnl += pnl
+        r.resultados.append(pnl)
         r.operacoes += 1
         r.taxa_paga += p.notional * (p.taxa / 100.0) * 2.0
 
@@ -325,9 +349,9 @@ def cabecalho(p: Params, par: str, dias: int) -> None:
 
 
 def tabela_abre(col1: str) -> None:
-    print(f"  {col1:<12} | sinais | trades | acerto | liq | "
+    print(f"  {col1:<12} | sinais | trades | acerto |  por op | liq | "
           f" taxa pg |      pnl  |   banca  | retorno |  pior dd")
-    print("  " + "-" * 94)
+    print("  " + "-" * 104)
 
 
 def tabela_linha(rotulo: str, r: Resultado, p: Params) -> None:
@@ -335,7 +359,7 @@ def tabela_linha(rotulo: str, r: Resultado, p: Params) -> None:
     dd = (r.equity_min - p.banca) / p.banca * 100 if p.banca else 0.0
     estado = "QUEBROU" if r.quebrou or r.equity_final <= 0 else f"{r.equity_final:8.2f}"
     print(f"  {rotulo:<12} | {r.sinais_vistos:6d} | {r.operacoes:6d} | "
-          f"{r.acerto:5.1f}% | {r.liquidacoes:3d} | {r.taxa_paga:8.2f} | "
+          f"{r.acerto:5.1f}% | {r.por_operacao:+7.2f} | {r.liquidacoes:3d} | {r.taxa_paga:8.2f} | "
           f"{r.pnl:+9.2f} | {estado:>8} | {ret:+6.1f}% | {dd:+7.1f}%")
 
 
@@ -391,14 +415,16 @@ def robustez(s: Serie, nome: str, p: Params, janelas: int = 6,
         print(f"  serie curta demais para {janelas} janelas ({len(s)} candles)")
         return
 
-    print(f"  {'janela':>6} | trades | retorno | moeda mediana | bate X% das moedas")
-    print("  " + "-" * 66)
+    print(f"  {'janela':>6} | trades | acerto |  por op | retorno | moeda mediana | bate X% das moedas")
+    print("  " + "-" * 84)
     batidas = []
     positivas = 0
+    todas = Resultado()
     for w in range(janelas):
         ini, fim = w * tam, (w + 1) * tam
         sub = fatiar(s, ini, fim)
         r = simular(sub, sinais[ini:fim], p)
+        todas.resultados.extend(r.resultados)
         ret = (r.equity_final - p.banca) / p.banca * 100
         moedas = []
         for k in range(sementes):
@@ -414,10 +440,14 @@ def robustez(s: Serie, nome: str, p: Params, janelas: int = 6,
         bate = sum(1 for m in moedas if ret > m) / len(moedas) * 100
         batidas.append(bate)
         positivas += 1 if ret > 0 else 0
-        print(f"  {w + 1:>6} | {r.operacoes:6d} | {ret:+6.1f}% | {mediana:+12.1f}% | {bate:5.0f}%")
+        print(f"  {w + 1:>6} | {r.operacoes:6d} | {r.acerto:5.1f}% | {r.por_operacao:+7.2f} | "
+              f"{ret:+6.1f}% | {mediana:+12.1f}% | {bate:5.0f}%")
 
     media = sum(batidas) / len(batidas)
     print()
+    print(f"  placar das {len(todas.resultados)} operacoes: acerto {todas.acerto:.1f}%  |  "
+          f"ganho medio +{todas.ganho_medio:.2f}  |  perda media -{todas.perda_media:.2f}  |  "
+          f"resultado por operacao {todas.por_operacao:+.2f} USDT")
     print(f"  janelas no positivo: {positivas} de {janelas}")
     print(f"  em media, bateu {media:.0f}% das moedas")
     if media >= 75 and positivas >= janelas * 2 / 3:
