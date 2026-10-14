@@ -125,3 +125,59 @@ function verNaTorreUI(id){
   tr.classList.add('linha-apontada');
   setTimeout(() => tr.classList.remove('linha-apontada'), 2400);
 }
+
+/* ---------- A CARGA INTEIRA NUM LUGAR SÓ (14/10/2026, aprovado: "marcha fio") ----------
+
+   "conexões, relacionamentos entre os cards e informações": ao abrir a carga
+   (painel do lado do Pátio ao vivo, linha do tempo do Histórico), além do
+   pátio aparece o que os OUTROS setores sabem dela — SÓ quando existe, e sem
+   contagem: o dono recusou "informações e contagens que não fazem sentido".
+   Hoje é o frete; o sinistro entra quando a aba da Lara existir.
+
+   O que o frete diz vem da MESMA grade da aba Pagamento de Frete (FRETE.dados,
+   a resposta de /api/pagamento-frete): uma conta, duas telas — se a aba disser
+   PARCIAL, a ficha diz PARCIAL. Quem não tem a aba do Frete não vê a linha.
+
+   A ficha nasce vazia e é preenchida depois (`preencherFichaDosSetores`):
+   abrir a carga não espera o servidor. */
+function fichaDosSetoresHtml(c){
+  if(!c || !c.numeroCarga || !setorVeAba('frete')) return '';
+  return `<div class="ficha-setores" data-numero="${esc(c.numeroCarga)}" hidden></div>`;
+}
+
+async function gradeDoFreteParaFicha(){
+  if(typeof FRETE === 'undefined') return null;
+  if(FRETE.dados && (FRETE.demonstracao || Date.now() - FRETE.carregadoEm <= FRETE_VALIDADE_MS)) return FRETE.dados;
+  if(!freteServidorOk()) return (window.FRETE_DEMONSTRACAO && window.FRETE_DEMONSTRACAO.linhas) ? window.FRETE_DEMONSTRACAO : FRETE.dados;
+  if(FRETE.carregando) return FRETE.dados;
+  try{
+    FRETE.dados = await SuincoSharePoint.frete.grade();
+    FRETE.demonstracao = false;
+    FRETE.erro = null;
+    FRETE.carregadoEm = Date.now();
+  }catch(e){ /* sem a grade agora: a ficha só não mostra o frete — o resto segue */ }
+  return FRETE.dados;
+}
+
+function linhasDaFichaHtml(numero, dados){
+  const l = dados && dados.linhas && dados.linhas.find(x => String(x.carga) === String(numero) && x.primeira);
+  if(!l) return '';
+  const v = (chave) => { const i = dados.colunas.findIndex(c => c.chave === chave); return i < 0 ? null : l.v[i]; };
+  const partes = [];
+  const sp = v('statusPagamento');
+  const sit = v('situacao');
+  if(sp) partes.push(`Para pagamento: <b>${esc(sp)}</b>`);
+  if(sit) partes.push(`Situação: <b>${esc(sit)}</b>`);
+  if(!partes.length) return '';
+  return `<div class="ficha-setor"><span class="ficha-setor-rot">Frete</span> <span>${partes.join(' · ')}</span></div>`;
+}
+
+async function preencherFichaDosSetores(){
+  const alvos = [...document.querySelectorAll('.ficha-setores[data-numero]')];
+  if(!alvos.length) return;
+  const dados = await gradeDoFreteParaFicha();
+  alvos.forEach(el => {
+    el.innerHTML = linhasDaFichaHtml(el.dataset.numero, dados);
+    el.hidden = !el.innerHTML;
+  });
+}
