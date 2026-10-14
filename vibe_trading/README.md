@@ -115,9 +115,13 @@ O que a ficha faz, nesta ordem:
 1. **Direção.** O contexto e o período maior precisam concordar pela estrutura
    (topos e fundos). Se discordam, ESPERAR, e a ficha diz o que faria comprar
    ("o 4h fechar acima de X") e o que faria vender.
-2. **Onde está o preço.** Na perna atual do contexto (do último fundo confirmado
-   até a máxima desde ele): compra só no desconto, venda só no prêmio. Fora
-   disso, ESPERAR, com a **zona ótima** (62% a 79% da perna) para ordem limitada.
+2. **Onde está o preço.** Na perna do último impulso do contexto: na compra, do
+   ponto mais baixo entre os dois últimos topos confirmados até o último topo (na
+   venda, o espelho). Ela só muda quando a estrutura faz um extremo novo; um fundo
+   mais alto no meio do recuo não a encolhe. Compra só no desconto (0 a 50% da
+   perna), venda só no prêmio (50 a 100%). Fora disso, ESPERAR, com a **zona
+   ótima** (62% a 79% da perna) para ordem limitada. Preço além da origem do
+   impulso não é desconto: é estrutura em dúvida, ESPERAR.
 3. **Níveis.** Topo e fundo de ontem e da semana passada (segunda a domingo, UTC),
    abertura do dia, VWAP do dia, perfil de volume (POC e área de valor de 7 dias,
    POC de ontem), vãos e blocos de ordens ainda não tocados, topo e fundo da
@@ -168,6 +172,32 @@ mostra o que veio: rode na sua máquina antes de confiar na ficha.
 > candle conta stop). O `/fichas` separa **A FAVOR** de **ESPERAR (se tivesse
 > entrado)**: se o veredito vale alguma coisa, A FAVOR ganha. Antes de 100
 > fichas A FAVOR conferidas, é hipótese.
+
+### Bateria da ficha: a regra dela no histórico
+
+`python3 vibe.py bateria-ficha` chama a própria ficha em cada candle fechado do
+histórico (BTC, ETH e SOL, 90 dias, scalp, intraday e swing), só com o que
+existia naquele instante. Mede três modelos contra 30 moedas sorteadas (mesmos
+candles, mesmas distâncias de stop e alvo, lado sorteado):
+
+| Modelo | Entra quando | Alvo |
+|---|---|---|
+| A FAVOR | o veredito da ficha é A FAVOR | o nível forte mais próximo |
+| ALVO NA PERNA | a mesma entrada (maior, contexto e entrada alinhados, lado certo da perna) | o extremo da perna: a liquidez do topo ou fundo anterior |
+| GATILHO | o mesmo, só no candle em que o período de entrada quebra a estrutura a favor | o extremo da perna |
+
+Cada modelo é uma hipótese no caderno (conta na prova contra sorte). Passa com
+vantagem em 2 dos 3 ativos e 95% de chance de não ser sorte. Também mostra
+"ESPERAR (se tivesse entrado)" e por que a ficha mandou esperar.
+
+> **Correção registrada (perna que encolhia).** Ao medir a ficha no histórico,
+> o "lado certo da perna" aparecia em só 9% das leituras, e quando o período de
+> entrada virava a favor o preço estava quase sempre no topo da perna. A perna
+> ia do último fundo confirmado até a máxima desde ele: um fundo mais alto
+> confirmado no recuo recomeçava a perna, e o preço sempre parecia no topo. Agora
+> ela é o impulso inteiro, e preço além da origem do impulso é estrutura em
+> dúvida. Guardas: o recuo com fundo mais alto (perna 99,7–120,3, preço a 40%)
+> e o preço abaixo da origem (ESPERAR, não desconto).
 
 > **Correção registrada (gap do CME).** O "gap do CME" estava aprovado, mas a
 > CME passou a negociar cripto 24 horas por dia, 7 dias por semana, em

@@ -33,6 +33,7 @@ Nada aqui envia ordem.
 
 from __future__ import annotations
 
+import bisect
 import hashlib
 import json
 import math
@@ -447,7 +448,8 @@ def _seta(t: int) -> str:
 
 def analisar(dados: dict, horizonte: str = "intraday", risco_pct: float | None = None, banca: float = 100.0,
              cfg: dict | None = None, taxa: float = 0.05, mm_padrao: float = 0.5, estado: dict | None = None,
-             divergencia_max: float = 0.3, bloqueios_externos: list[str] | None = None) -> dict:
+             divergencia_max: float = 0.3, bloqueios_externos: list[str] | None = None,
+             com_gatilhos: bool = True) -> dict:
     """A ficha, so com calculo (nenhum acesso a rede): recebe o que `coletar` trouxe.
     `bloqueios_externos` (o disjuntor do dia, por exemplo) forcam NAO OPERAR, mas a
     leitura sai inteira."""
@@ -566,8 +568,14 @@ def analisar(dados: dict, horizonte: str = "intraday", risco_pct: float | None =
             ote = ((topo - 0.79 * faixa, topo - 0.62 * faixa) if direcao > 0
                    else (fundo + 0.62 * faixa, fundo + 0.79 * faixa))
             f["faixa"] = {"fundo": fundo, "topo": topo, "pos": pos, "ote": ote, "tf": H["contexto"]}
-            no_lado_certo = pos <= 0.5 if direcao > 0 else pos >= 0.5
-            if no_lado_certo:
+            no_lado_certo = 0 <= pos <= 0.5 if direcao > 0 else 0.5 <= pos <= 1
+            furou = pos < 0 if direcao > 0 else pos > 1
+            if furou:
+                # passou da origem do impulso: e mudanca de carater a caminho, nao desconto
+                f["esperar"].append(f"o preco passou da origem do impulso do {H['contexto']} "
+                                    f"({fmt_preco(fundo if direcao > 0 else topo)}): a estrutura esta em duvida, "
+                                    f"esperar ela se definir")
+            elif no_lado_certo:
                 f["a_favor"].append(f"preco no {'desconto' if direcao > 0 else 'premio'} da perna do "
                                     f"{H['contexto']} ({pos * 100:.0f}%)")
             else:
@@ -610,7 +618,8 @@ def analisar(dados: dict, horizonte: str = "intraday", risco_pct: float | None =
             else:
                 f["esperar"].append(texto)
 
-    f["gatilhos"] = gatilhos(s_ent, H["entrada"], par, estado)
+    # as estrategias que disparam so mostram (nao mudam o veredito); a bateria da ficha pula
+    f["gatilhos"] = gatilhos(s_ent, H["entrada"], par, estado) if com_gatilhos else []
     if not any(g["nivel"] in ("aprovada", "promissora") for g in f["gatilhos"]
                if g["direcao"] == direcao):
         f["avisos"].append("nenhuma estrategia aprovada na fase 2 dispara a favor agora: "
@@ -757,18 +766,27 @@ def texto(f: dict, registro: str | None = None) -> str:
 # registro e placar das fichas
 # --------------------------------------------------------------------------- #
 
-def registrar(pasta: str, f: dict) -> str | None:
-    """Uma linha em fichas.jsonl por ficha com plano. Devolve o codigo da ficha."""
+def registro_de(f: dict) -> dict | None:
+    """O que o placar das fichas confere de uma ficha (None: sem plano ou NAO OPERAR).
+    O placar ao vivo e a bateria da ficha usam este mesmo registro."""
     p = f.get("plano")
     if not p or f["veredito"] == "NAO OPERAR":
         return None
     codigo = hashlib.sha256(f"{f['par']}|{f['agora_ms']}|{f['horizonte']}".encode()).hexdigest()[:8]
-    reg = {"id": codigo, "quando_ms": f["agora_ms"], "par": f["par"], "horizonte": f["horizonte"],
-           "tf": f["tf_entrada"], "veredito": f["veredito"], "direcao": p["direcao"],
-           "entrada": p["entrada"], "stop": p["stop"], "alvo": p["alvos"][0]["preco"],
-           "rr": round(p["rr1"], 4), "tamanho": round(p["tamanho"], 4), "perda": round(p["perda"], 6),
-           "max_barras": int(HORIZONTES[f["horizonte"]]["horas"] * 60 // bt.PERIODOS[f["tf_entrada"]]),
-           "risco_pct": f["risco_pct"], "motivos": f["esperar"][:3]}
+    return {"id": codigo, "quando_ms": f["agora_ms"], "par": f["par"], "horizonte": f["horizonte"],
+            "tf": f["tf_entrada"], "veredito": f["veredito"], "direcao": p["direcao"],
+            "entrada": p["entrada"], "stop": p["stop"], "alvo": p["alvos"][0]["preco"],
+            "rr": round(p["rr1"], 4), "tamanho": round(p["tamanho"], 4), "perda": round(p["perda"], 6),
+            "max_barras": int(HORIZONTES[f["horizonte"]]["horas"] * 60 // bt.PERIODOS[f["tf_entrada"]]),
+            "risco_pct": f["risco_pct"], "motivos": f["esperar"][:3]}
+
+
+def registrar(pasta: str, f: dict) -> str | None:
+    """Uma linha em fichas.jsonl por ficha com plano. Devolve o codigo da ficha."""
+    reg = registro_de(f)
+    if reg is None:
+        return None
+    codigo = reg["id"]
     os.makedirs(pasta, exist_ok=True)
     with open(os.path.join(pasta, "fichas.jsonl"), "a", encoding="utf-8") as arq:
         arq.write(json.dumps(reg, ensure_ascii=False) + "\n")
@@ -782,7 +800,8 @@ def desfecho(reg: dict, s: bt.Serie, taxa: float = 0.05) -> dict | None:
     None: ainda aberta."""
     d = reg["direcao"]
     pos = bt.Posicao(d, reg["entrada"], reg["stop"], reg["alvo"], 0.0 if d > 0 else float("inf"), False)
-    depois = [i for i, t in enumerate(s.t) if t >= reg["quando_ms"]][:reg["max_barras"]]
+    primeiro = bisect.bisect_left(s.t, reg["quando_ms"])  # s.t em ordem: o 1o candle que abriu depois
+    depois = list(range(primeiro, min(len(s.t), primeiro + reg["max_barras"])))
     for i in depois:
         r = bt.checar_barra(pos, s.maxima[i], s.minima[i], bt.Params())
         if r is not None:

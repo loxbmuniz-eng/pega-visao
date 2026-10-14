@@ -52,7 +52,9 @@ afirma. Correcao sem guarda e correcao que volta.
 
 from __future__ import annotations
 
+import contextlib
 import dataclasses
+import io
 import json
 import os
 import random
@@ -1128,7 +1130,8 @@ def teste_comando_unico() -> None:
     try:
         casos = {"bateria": ("bateria", []), "historico": ("bateria", ["--historico"]),
                  "vigia": ("vigia", []), "placar": ("vigia", ["--placar"]),
-                 "backtest --listar": ("backtest", ["--listar"]), "arena ligar": ("vigia", ["--arena", "ligar"])}
+                 "backtest --listar": ("backtest", ["--listar"]), "arena ligar": ("vigia", ["--arena", "ligar"]),
+                 "bateria-ficha --dias 30": ("bateria_ficha", ["--dias", "30"])}
         certos = 0
         for linha, esperado in casos.items():
             chamadas.clear()
@@ -1622,8 +1625,17 @@ def teste_ficha_calculo() -> None:
     fech = [10, 9, 8, 7, 8, 9, 10, 11, 12, 13, 12, 11, 10]
     pz = bt.Serie(abertura=list(map(float, fech)), maxima=[x + 0.1 for x in fech], minima=[x - 0.1 for x in fech],
                   fechamento=list(map(float, fech)), volume=[1.0] * 13, t=list(range(13)))
-    checar(est.perna_atual(pz, 1) == (6.9, 13.1) and est.perna_atual(pz, -1) == (9.9, 13.1),
-           "perna da compra: fundo 6,9 ate 13,1; perna da venda: topo 13,1 ate 9,9")
+    checar(est.perna_atual(pz, 1) == (6.9, 13.1) and est.perna_atual(pz, -1) == (6.9, 10.1),
+           "perna da compra: o impulso de 6,9 ate o topo 13,1; da venda: a queda de 10,1 ate o fundo 6,9")
+    # o defeito visto ao medir a ficha no historico: um fundo mais alto confirmado no recuo
+    # encolhia a perna, e o preco nunca aparecia no desconto
+    fr = [104, 102, 100, 103, 106, 110, 114, 118, 120, 118, 116, 113, 111, 110, 112, 113, 111, 108]
+    rc = bt.Serie(abertura=list(map(float, fr)), maxima=[x + 0.3 for x in fr], minima=[x - 0.3 for x in fr],
+                  fechamento=list(map(float, fr)), volume=[1.0] * len(fr), t=list(range(len(fr))))
+    pr = est.perna_atual(rc, 1)
+    checar(pr == (99.7, 120.3) and abs((108 - pr[0]) / (pr[1] - pr[0]) - 0.403) < 0.001,
+           f"recuo com fundo mais alto confirmado: a perna continua o impulso 99,7-120,3 e o preco 108 esta a 40% "
+           f"(desconto); antes ela encolhia para 109,7-113,3 ({pr})")
 
     # plano conferido a mao: entrada 100, ATR 1, fundo do periodo de entrada em 97
     cfg = dict(ficha.FICHA_PADRAO)
@@ -1723,6 +1735,10 @@ def teste_ficha_veredito() -> None:
     f = rodar(preco=108.0)
     checar(f["veredito"] == "ESPERAR" and any("premio" in m and "94,20" in m and "97,60" in m for m in f["esperar"]),
            "comprando no premio (90% da perna): ESPERAR, com a zona otima 94,20 a 97,60")
+    f = rodar(preco=86.0)
+    checar(f["veredito"] == "ESPERAR" and any("origem do impulso" in m and "duvida" in m for m in f["esperar"])
+           and not any("desconto" in m for m in f["a_favor"]),
+           "preco abaixo da origem do impulso (perna 90-110, preco 86): estrutura em duvida, nao e desconto")
     f = rodar(leituras={**alta, "4h": {"tendencia": -1, "topo": 112.0, "fundo": 88.0}})
     checar(f["veredito"] == "ESPERAR" and f["plano"] is None
            and any("compra so se o 4h fechar acima de 112" in m for m in f["esperar"])
@@ -2420,6 +2436,88 @@ def teste_nota_e_corrente() -> None:
         shutil.rmtree(pasta, ignore_errors=True)
 
 
+def _agregar(s, fator):
+    o = bt.Serie()
+    for k in range(0, len(s) - fator + 1, fator):
+        o.t.append(s.t[k]); o.abertura.append(s.abertura[k]); o.fechamento.append(s.fechamento[k + fator - 1])
+        o.maxima.append(max(s.maxima[k:k + fator])); o.minima.append(min(s.minima[k:k + fator]))
+        o.volume.append(sum(s.volume[k:k + fator]))
+    return o
+
+
+def teste_bateria_ficha() -> None:
+    print("\n[33] bateria da ficha: a propria ficha no historico, sem ver o futuro, contra moedas")
+    import bateria_ficha as bf
+    import ficha
+    janela = bf.JANELA
+    bf.JANELA = 150
+    try:
+        base = serie_sintetica(150 * 16 + 600, 10, True, t0=1_790_000_000_000 // 14_400_000 * 14_400_000)
+        series = {"15m": base, "1h": _agregar(base, 4), "4h": _agregar(base, 16)}
+        inicio = base.t[-600]
+        ms = {tf: bt.PERIODOS[tf] * 60_000 for tf in series}
+        original = ficha.analisar
+        vistos, futuro = [], []
+        def espia(dados, *a, **k):
+            for tf, sj in dados["series"].items():
+                if sj.t and sj.t[-1] + ms[tf] > dados["agora_ms"]:
+                    futuro.append((tf, dados["agora_ms"]))
+            f = original(dados, *a, **k)
+            vistos.append((dados["agora_ms"], f["veredito"], (f["plano"] or {}).get("stop")))
+            return f
+        ficha.analisar = espia
+        try:
+            todas = list(bf.fichas_no_historico(series, "BTCUSDT", "intraday", inicio))
+            corte = base.t[-300]
+            curtas = {tf: bt.fatiar(sr, 0, sum(1 for t in sr.t if t < corte)) for tf, sr in series.items()}
+            vistos_cheio = list(vistos)
+            vistos.clear()
+            list(bf.fichas_no_historico(curtas, "BTCUSDT", "intraday", inicio))
+        finally:
+            ficha.analisar = original
+        esperadas = sum(1 for t in base.t if t + ms["15m"] >= inicio)
+        checar(len(todas) == esperadas and not futuro,
+               f"{len(todas)} fichas, uma por candle fechado; nenhuma viu candle que ainda nao tinha fechado")
+        antes_do_corte = [v for v in vistos_cheio if v[0] <= corte]
+        checar(antes_do_corte and vistos == antes_do_corte,
+               f"cortar o historico nao muda nenhuma das {len(antes_do_corte)} fichas de antes do corte (nada do futuro)")
+        reg = {"direcao": 1, "entrada": 100.0, "stop": 98.0, "alvo": 104.0, "rr": 1.5}
+        checar(bf.espelho(reg, -1)["stop"] == 102.0 and bf.espelho(reg, -1)["alvo"] == 96.0 and bf.espelho(reg, 1) is reg,
+               "moeda do outro lado: as mesmas distancias de stop (2) e alvo (4), espelhadas")
+        a = bf.avaliar(series, "BTCUSDT", "intraday", inicio)
+        sem_sobrepor = all(all(o2["quando_ms"] > o1["fim_ms"] for o1, o2 in zip(ops, ops[1:])) for ops in a["ops"].values())
+        checar(sem_sobrepor and set(a["ops"]) == {"A FAVOR", "ALVO NA PERNA", "GATILHO", "ESPERAR"}
+               and all(len(v) == bf.MOEDAS for v in a["moedas"].values()),
+               "uma posicao por vez em cada modelo; 30 moedas para cada modelo")
+        f = next(f for _, f in todas if f.get("faixa") and f.get("plano"))
+        reg_p = bf.modelo_perna(f, False)
+        checar(reg_p is None or (reg_p["veredito"] == "ALVO NA PERNA" and reg_p["rr"] >= 1.5
+                                 and abs(reg_p["stop"] - f["plano"]["stop"]) < 1e-9),
+               "ALVO NA PERNA usa o stop da propria ficha e so entra com 1,5x o risco ou mais")
+    finally:
+        bf.JANELA = janela
+
+    pasta = tempfile.mkdtemp(prefix="bateria_ficha_")
+    original, argv, janela = bt._pedir, sys.argv, bf.JANELA
+    bt._pedir, bf.JANELA = BinanceFalsa(total=1500), 150
+    saida = io.StringIO()
+    try:
+        sys.argv = ["bateria_ficha.py", "--ativos", "BTCUSDT", "--horizontes", "intraday", "--dias", "5",
+                    "--caderno", os.path.join(pasta, "caderno.jsonl")]
+        with contextlib.redirect_stdout(saida):
+            bf.main()
+        regs = [json.loads(l) for l in open(os.path.join(pasta, "caderno.jsonl"), encoding="utf-8")]
+    finally:
+        bt._pedir, sys.argv, bf.JANELA = original, argv, janela
+        shutil.rmtree(pasta, ignore_errors=True)
+    texto = saida.getvalue()
+    checar("BATERIA DA FICHA" in texto and "ALVO NA PERNA" in texto and "GATILHO" in texto and "nao-sorte" in texto
+           and ("PASSARAM" in texto or "NENHUM MODELO DA FICHA PASSOU" in texto),
+           "a bateria da ficha imprime os 3 modelos, a prova contra sorte e o veredito final")
+    checar(len(regs) == 3 and len({r["hipotese"] for r in regs}) == 3 and all("sharpe_op" in r for r in regs),
+           "cada modelo entra no caderno como hipotese propria (conta na prova contra sorte)")
+
+
 def _pegada_real() -> dict:
     """Tamanho de cada arquivo de dado real (vigia e caderno de quem roda de verdade)."""
     pegada = {}
@@ -2466,6 +2564,7 @@ if __name__ == "__main__":
     teste_surfe()
     teste_endurecimento()
     teste_nota_e_corrente()
+    teste_bateria_ficha()
     print("\n[13] a bateria nao toca nos dados reais do vigia")
     checar(_pegada_real() == pegada, "dados_vigia/, caderno, vigia.json e segredos.json iguais antes e depois da bateria")
     print()

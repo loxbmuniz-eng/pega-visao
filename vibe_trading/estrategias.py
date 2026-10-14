@@ -612,16 +612,28 @@ def e_fundo(c, j: int, k: int = 3) -> bool:
 
 
 def perna_atual(c, direcao: int, k: int = 3):
-    """A perna que importa para entrar, ate o ultimo candle: na compra, do ultimo
-    fundo confirmado ate a maior maxima desde ele (fundo, topo); na venda, do ultimo
-    topo confirmado ate a menor minima desde ele. Desconto, premio e zona otima se
-    medem nela. None se nao ha pivo confirmado."""
-    for j in range(len(c.fechamento) - 1 - k, k - 1, -1):
-        if direcao > 0 and e_fundo(c, j, k):
-            return c.minima[j], max(c.maxima[j:])
-        if direcao < 0 and e_topo(c, j, k):
-            return min(c.minima[j:]), c.maxima[j]
-    return None
+    """A faixa do ultimo impulso, onde desconto, premio e zona otima se medem. Ela so
+    muda quando a estrutura faz um extremo novo:
+      compra: do ponto mais baixo entre o penultimo e o ultimo topo confirmados ate o
+              ultimo topo -> (fundo, topo);
+      venda:  do ultimo fundo confirmado ate o ponto mais alto entre o penultimo e o
+              ultimo fundo -> (fundo, topo).
+    Um fundo mais alto confirmado no meio do recuo NAO encolhe a faixa (encolher fazia o
+    preco parecer sempre no topo de uma perna nova, e o desconto nunca aparecia).
+    None se nao ha pivo confirmado."""
+    n = len(c.fechamento)
+    valido = range(k, n - k)
+    if direcao > 0:
+        topos = [j for j in valido if e_topo(c, j, k)]
+        if not topos:
+            return None
+        j, ini = topos[-1], (topos[-2] if len(topos) > 1 else 0)
+        return min(c.minima[ini:j + 1]), c.maxima[j]
+    fundos = [j for j in valido if e_fundo(c, j, k)]
+    if not fundos:
+        return None
+    j, ini = fundos[-1], (fundos[-2] if len(fundos) > 1 else 0)
+    return c.minima[j], max(c.maxima[ini:j + 1])
 
 
 def quebra_estrutura(c, k: int = 3) -> list[int]:

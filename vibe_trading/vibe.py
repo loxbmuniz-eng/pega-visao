@@ -10,6 +10,7 @@ Vibe trading — um comando so para tudo. Nada aqui envia ordem ou pede chave de
     python3 vibe.py fontes              testa, uma a uma, cada fonte de dado da ficha
     python3 vibe.py banca 100           a banca da conta de futuros (USDT): a ficha arrisca sobre ela
     python3 vibe.py bateria             fase 1: todas as estrategias, ultimos 90 dias
+    python3 vibe.py bateria-ficha       a regra da propria ficha no historico, contra moedas sorteadas
     python3 vibe.py historico           fase 1: o historico inteiro de cada par, ano a ano
     python3 vibe.py vigia               fase 2: papel ao vivo, 24 horas (Ctrl+C para parar)
     python3 vibe.py placar              o placar do vigia
@@ -110,6 +111,8 @@ def main() -> None:
         conferir_fontes(resto[0] if resto else "BTC")
     elif cmd == "bateria":
         _rodar_main("bateria", resto)
+    elif cmd == "bateria-ficha":
+        _rodar_main("bateria_ficha", resto)
     elif cmd == "historico":
         _rodar_main("bateria", ["--historico"] + resto)
     elif cmd == "vigia":
