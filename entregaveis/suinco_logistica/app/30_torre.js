@@ -428,7 +428,7 @@ function renderVisaoPatio(prefixo){
        tinham a etiqueta; a Visão do Pátio é justamente onde o caminhão é
        visto, e estava sem. */
     return `<tr class="linha-status-${esc((STATUS_META[c.status]||{}).cor || '')}" data-carga="${esc(c.id)}">
-      <td class="vp-carga">${esc(c.numeroCarga)||'—'}</td>
+      <td class="vp-carga">${esc(c.numeroCarga)||'—'}${acoesDaCargaHtml(c, { so: ['linha'], compacto: true })}</td>
       <td class="vp-placa">${esc(c.placa)}${marcaCargaDaPlaca(c, lista)}${marcaEtapaDevolvidaHtml(c)}${marcaSaiuSemCarregarHtml(c)}</td>
       <td class="vp-transp">${esc(c.transportadora)||'—'}</td>
       <td class="vp-rota">${esc(rotaCurta(c.rota))}</td>
@@ -1007,7 +1007,7 @@ function renderTorre(){
       <td class="cel-datas">
         <span class="dt-prog">${dataProgramacaoHtml(c)}</span>
         ${ultimaAcaoHtml(c)}</td>
-      ${editavel ? `<td class="no-print">${botaoOutraCargaHtml(c)}${botaoRevisoesHtml(c)}${botaoCancelarHtml(c)}</td>` : ''}
+      ${editavel ? `<td class="no-print">${botaoOutraCargaHtml(c)}<div class="torre-icones">${acoesDaCargaHtml(c, { so: ['linha'], compacto: true })}${botaoRevisoesHtml(c)}</div>${botaoCancelarHtml(c)}</td>` : ''}
     </tr>`).join('');
   movLinhasNovas(tbody);
   movFlipDepois(tbody, _posAntes, lista);

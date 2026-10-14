@@ -1177,3 +1177,28 @@ nada"*.
 
 Vale depois do `atualizar_tudo.sh` (sem migração). Travas:
 `aviso_patio.test.js` (16) e o bloco "Vigia 1b" de `vigia_servidor.test.js` (7).
+
+## 35. Toda carga é um link — o caminho até onde se age (14/10/2026)
+
+**Do dono:** *"to no pátio ao vivo e sou da administração, clico na carga,
+aparece as infos do lado, tem que ter um botão que eu clique e vá direto pra
+onde pode alterar status da carga, tipo pro histórico daquela carga"*.
+Respostas à proposta: **"1 A, 2 pode, 3 deixe como está"**.
+
+- **1-A — o "Corrigir etapa" LEVA às Correções da Administração do
+  Histórico**, já com a etapa aberta (em foco). Não corrige no painel do
+  lado: um lugar só para corrigir, o mesmo registro com motivo e nome.
+- **2 — a ordem dos lotes:** Lote 1 (a barra nos lugares sem saída) →
+  Lote 2 (link próprio da carga, voltar do celular, aviso do celular
+  abrindo na carga) → Lote 3 (busca única).
+- **3 — o papel do manobrista fica como está:** traz toda carga que ainda
+  vai carregar, de qualquer dia de programação (#138).
+- **O botão só aparece onde a pessoa pode ir:** destino de aba que o setor
+  não tem não vira botão; "Corrigir etapa" é da Administração.
+- **Na Torre, só a linha do tempo**, ao lado do ícone de Revisões: a coluna
+  de ações não cresce (o primeiro desenho empilhava seis botões).
+- **Recusado:** a previsão "vai passar de 3 h às…" — *"esquece… informações
+  e contagens que não fazem sentido"*. Não volta.
+
+Uma função, todos os chamadores: `acoesDaCargaHtml` e `irParaCargaUI`
+(`app/28_acoes_da_carga.js`). Trava: `test_toda_carga_e_um_link`.
