@@ -15,7 +15,7 @@ Não toca no painel de logística Suinco. É projeto separado, na mesma árvore.
 | `estrategias.py` | Os sinais de entrada: 7 estratégias, a confluência e 2 controles cegos |
 | `indicadores.py` | EMA, SMA, RSI, ATR, VWAP, desvio, ruído mediano |
 | `monitor.html` | **Monitor em tempo real.** Abre no navegador, lê a Binance pública, mostra as 5 confirmações nos 5 períodos e alerta no fechamento do candle |
-| `testes/test_motor.py` | Guardas: vazamento de futuro, posição sobreposta, paridade Python × monitor, gatilho obrigatório, busca de candles, padrões e alinhamento |
+| `testes/test_motor.py` | Guardas: vazamento de futuro, posição sobreposta, paridade Python × monitor, gatilho obrigatório, busca de candles, padrões e alinhamento, placar |
 | `testes/test_monitor_navegador.js` | Abre o monitor num Chromium com a Binance simulada e prova que carrega, calcula e alerta |
 
 Mais a calculadora de risco interativa (página separada): **Banda de Liquidação**.
@@ -228,6 +228,25 @@ stop. Só a alavancagem mudou.
 A `ema` terminou em +3%. **Isso é sorte, não vantagem**: a série é aleatória por
 construção e não há nada para prever. Uma rodada só não prova nada. Por isso
 existe o teste de robustez.
+
+---
+
+## O placar: acerto não basta
+
+Toda saída mostra o **acerto** junto com o que decide se há lucro: **ganho
+médio**, **perda média** e **resultado por operação**, todos depois da taxa das
+duas pontas. A conta que liga os quatro:
+
+```
+resultado por operação = acerto × ganho médio − erro × perda média
+```
+
+Acerto alto com perda grande perde dinheiro: 80% de acerto, ganhando 1 e
+perdendo 5, dá −0,20 por operação. Acerto baixo com ganho grande pode ganhar:
+35%, ganhando 3 e perdendo 1, dá +0,40. Melhorar a assertividade, aqui, quer
+dizer subir o resultado por operação e a vitória sobre a moeda, não só o acerto.
+O `--robustez` mostra o acerto e o resultado por operação de cada janela e, no
+fim, o placar de todas as operações.
 
 ---
 
