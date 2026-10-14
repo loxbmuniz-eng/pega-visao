@@ -1020,6 +1020,21 @@ def teste_pionex_telegram() -> None:
     checar(not any("999" in str(e) for e in enviados) and len(enviados) == 3,
            "mensagem de outra pessoa nao recebe resposta nenhuma")
 
+    # risco somado das posicoes abertas (varias ordens ao mesmo tempo)
+    cfg_r = json.loads(json.dumps(vigia.CONFIG_PADRAO))   # banca 110, margem 15, 24x, stop 0,5%
+    pos = {"direcao": 1, "entrada": 100.0, "px_stop": 99.5, "px_alvo": 101.0, "px_liq": 96.3,
+           "liq_antes_do_stop": False, "barras": 1}
+    est_r = {"trilhas": {f"t{k}": {"posicao": pos if k < 3 else None} for k in range(5)}}
+    n, valor = vigia.risco_aberto(est_r, cfg_r)
+    texto3 = vigia.texto_risco_aberto(est_r, cfg_r)
+    est_r["trilhas"]["t3"]["posicao"] = pos
+    texto4 = vigia.texto_risco_aberto(est_r, cfg_r)
+    cfg_100x = json.loads(json.dumps(cfg_r))
+    cfg_100x["params"]["alav"] = 100
+    checar(n == 3 and abs(valor - 3 * (360 * 0.005 + 360 * 0.001)) < 1e-9 and "ACIMA" not in texto3
+           and "ACIMA DO TETO" in texto4 and abs(vigia.risco_aberto(est_r, cfg_100x)[1] - 4 * 15) < 1e-9,
+           "risco aberto: 3 posicoes a 24x = 6,48 USDT (5,9%, dentro do teto de 6%); 4 passam do teto; a 100x cada uma perde a margem")
+
     # token errado ou sem internet: explica, nao despeja erro tecnico
     import contextlib
     import io

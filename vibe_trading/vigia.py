@@ -71,6 +71,9 @@ CONFIG_PADRAO = {
     # Grava o livro de ofertas (Pionex, Binance, Hyperliquid) a cada candle do menor
     # periodo, em dados_vigia/livro.jsonl. So gravacao: nenhuma estrategia usa.
     "gravar_livro": True,
+    # Teto do risco somado de todas as posicoes abertas (se todas batessem no stop
+    # juntas), em % da banca. O /status e o resumo mostram quando passa.
+    "risco_total_max_pct": 6,
     "estrategias": [
         {"nome": "confl3", "lado": "ambos", "alinhar": False},
         {"nome": "engolfo", "lado": "ambos", "alinhar": False},
@@ -566,6 +569,28 @@ def telegram(segredos: dict, texto: str) -> bool:
         return False
 
 
+def risco_aberto(estado: dict, cfg: dict) -> tuple[int, float]:
+    """Quantas posicoes de papel estao abertas (estrategias e IAs, sem as moedas) e
+    quanto se perderia se TODAS batessem no stop juntas — o que acontece quando o
+    mercado inteiro anda contra. Liquidacao antes do stop conta a margem inteira."""
+    p = params_de(cfg)
+    pos = bt.abrir(100.0, 1, p)
+    por_posicao = p.margem if pos.liq_antes_do_stop else p.notional * (p.stop / 100) + p.notional * (p.taxa / 100) * 2
+    n = sum(1 for tr in estado.get("trilhas", {}).values() if tr.get("posicao"))
+    return n, n * por_posicao
+
+
+def texto_risco_aberto(estado: dict, cfg: dict) -> str:
+    n, valor = risco_aberto(estado, cfg)
+    banca, teto = cfg["params"]["banca"], cfg.get("risco_total_max_pct", 6)
+    pct = valor / banca * 100 if banca else 0.0
+    texto = (f"risco aberto: {n} posicao(oes) de papel; se todas batessem no stop juntas, "
+             f"{valor:.2f} USDT ({pct:.1f}% da banca de {banca:g}; teto {teto:g}%)")
+    if pct > teto:
+        texto += ". ACIMA DO TETO: na conta real, nao abriria todas"
+    return texto
+
+
 def texto_status(estado: dict, cfg: dict, agora_ms: int) -> str:
     """Se o vigia esta vivo: ultimo candle processado, posicoes abertas, conferencia, arena."""
     partes = [f"Vigia (papel) · fonte {cfg.get('fonte', 'binance')}"
@@ -587,6 +612,7 @@ def texto_status(estado: dict, cfg: dict, agora_ms: int) -> str:
             if conf:
                 partes.append(f"  conferencia com {conf['com']}: diferenca de {conf['pct']:.3f}% "
                               f"nos ultimos {conf['comparados']} candles")
+    partes.append(texto_risco_aberto(estado, cfg))
     hoje = ((estado.get("arena") or {}).get("chamadas") or {}).get(time.strftime("%Y-%m-%d"))
     if hoje:
         partes.append("arena hoje: " + ", ".join(f"{k} {v} chamadas" for k, v in sorted(hoje.items())))

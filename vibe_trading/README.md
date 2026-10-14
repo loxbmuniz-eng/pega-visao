@@ -382,7 +382,7 @@ fica sem resposta):
 | Comando | Resposta |
 |---|---|
 | `/placar` | o placar de cada estratégia e IA, agora |
-| `/status` | último candle processado, posições abertas, conferência entre fontes |
+| `/status` | último candle processado, posições abertas, conferência entre fontes e o **risco aberto somado** (se todas as posições batessem no stop juntas), contra o teto `"risco_total_max_pct"` (padrão 6% da banca) |
 | `/ajuda` | a lista de comandos | O
 `segredos.json` fica só para o dono ler e nunca vai para o GitHub (está no
 `.gitignore`).
