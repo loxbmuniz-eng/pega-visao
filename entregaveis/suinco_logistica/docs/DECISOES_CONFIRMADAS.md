@@ -1205,3 +1205,11 @@ Respostas à proposta: **"1 A, 2 pode, 3 deixe como está"**.
 
 Uma função, todos os chamadores: `acoesDaCargaHtml` e `irParaCargaUI`
 (`app/28_acoes_da_carga.js`). Trava: `test_toda_carga_e_um_link`.
+
+**Continuação (14/10, "marcha fio"): a carga inteira num lugar só.** Ao abrir
+a carga (painel do lado do Pátio ao vivo, linha do tempo do Histórico),
+aparece o que os outros setores sabem dela — só quando existe e sem
+contagem. Hoje: uma linha do Frete com as palavras da aba Pagamento de Frete
+(a mesma grade, `FRETE.dados`), só para quem tem a aba do Frete. O sinistro
+entra quando a aba da Lara existir. A ligação devolução→frete foi descartada
+("tratado de outro jeito"). Trava: `test_carga_inteira_num_lugar`.

@@ -756,8 +756,10 @@ function pvAbrirCarga(id, origem){
        todo lugar onde a carga aparece (app/28_acoes_da_carga.js). */
     html: (ficha ? `<dl class="pv-gv-ficha">${ficha}</dl>` : '')
       + (typeof acoesDaCargaHtml === 'function' ? acoesDaCargaHtml(c) : '')
+      + (typeof fichaDosSetoresHtml === 'function' ? fichaDosSetoresHtml(c) : '')
       + (agora ? `<div class="pv-gv-agora">${agora}</div>` : '')
       + `<ol class="gv-lista">${itens.join('')}</ol>`, origem });
+  if(typeof preencherFichaDosSetores === 'function') preencherFichaDosSetores();
 }
 
 function renderPatioVivo(){

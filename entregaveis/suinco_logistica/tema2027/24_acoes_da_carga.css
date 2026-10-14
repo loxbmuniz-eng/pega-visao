@@ -37,6 +37,14 @@
   .carga-link:hover{ color:var(--gold-text); text-decoration-style:solid }
   .carga-link:focus-visible{ outline:2px solid var(--gold); outline-offset:2px; border-radius:2px }
 
+  /* O que os outros setores sabem da carga (a ficha única): uma linha por
+     setor, só quando existe — rótulo pequeno, o estado em negrito. */
+  .ficha-setores{ display:grid; gap:4px; margin:8px 0 10px; padding:8px 10px;
+    border:1px solid var(--border); border-radius:var(--radius); background:var(--acento-hover) }
+  .ficha-setores[hidden]{ display:none }
+  .ficha-setor{ font-size:13px; line-height:1.4 }
+  .ficha-setor-rot{ font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:var(--text-dim); margin-right:6px }
+
   /* A linha que a barra mostrou na Torre: contorno dourado por 2,4 s e o
      fundo de acento — some sozinha, não fica marca na tabela. */
   #torre-tbody tr.linha-apontada > td{

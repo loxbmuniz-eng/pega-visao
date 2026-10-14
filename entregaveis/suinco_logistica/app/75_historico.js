@@ -110,6 +110,7 @@ function renderTimelineCarga(id){
       <div class="timeline-info-grid">
         ${infoLinhas.map(([k,v])=>`<div class="timeline-info-item"><span class="k">${esc(k)}</span><span class="v">${esc(v)}</span></div>`).join('')}
       </div>
+      ${fichaDosSetoresHtml(c)}
       <div class="timeline">
         ${passos.map((p,i)=>{
           const meta = STATUS_META[p.status] || {};
@@ -130,6 +131,7 @@ function renderTimelineCarga(id){
       ${painelAdminDaCargaHtml(c)}
     </div>
   `;
+  preencherFichaDosSetores();   // o que os outros setores sabem dela (28_acoes_da_carga.js)
 }
 
 /* Painel de correção da Administração, dentro da ficha da carga.
