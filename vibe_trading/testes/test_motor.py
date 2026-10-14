@@ -30,6 +30,10 @@ afirma. Correcao sem guarda e correcao que volta.
                           buraco, sem o candle em formacao; fontes nunca se
                           misturam; conferencia avisa divergencia; o robo do
                           Telegram so responde ao dono
+13. dados reais         — a bateria nao toca em dados_vigia/ de quem roda
+14. comando unico       — vibe.py chama a ferramenta certa em cada subcomando
+15. regra de saida      — stop, alvo, empate, liquidacao e prazo contra a conta
+                          feita a mao (a paridade nao pega erro dentro da regra)
 """
 
 from __future__ import annotations
@@ -989,6 +993,80 @@ def teste_pionex_telegram() -> None:
            "mensagem de outra pessoa nao recebe resposta nenhuma")
 
 
+def teste_comando_unico() -> None:
+    print("\n[14] vibe.py: um comando so, cada subcomando chama a ferramenta certa")
+    import vibe
+    chamadas = []
+    original = vibe._rodar_main
+    vibe._rodar_main = lambda modulo, args: chamadas.append((modulo, args))
+    argv = sys.argv
+    try:
+        casos = {"bateria": ("bateria", []), "historico": ("bateria", ["--historico"]),
+                 "vigia": ("vigia", []), "placar": ("vigia", ["--placar"]),
+                 "backtest --listar": ("backtest", ["--listar"]), "arena ligar": ("vigia", ["--arena", "ligar"])}
+        certos = 0
+        for linha, esperado in casos.items():
+            chamadas.clear()
+            sys.argv = ["vibe.py"] + linha.split()
+            vibe.main()
+            certos += chamadas == [esperado]
+        checar(certos == len(casos), f"{certos} de {len(casos)} subcomandos chamam a ferramenta certa")
+        for linha in ("comando-que-nao-existe", "arena"):
+            sys.argv = ["vibe.py"] + linha.split()
+            try:
+                vibe.main()
+                checar(False, f"'{linha}' deveria ser recusado")
+            except SystemExit as e:
+                checar(e.code not in (0, None), f"'{linha}' e recusado com explicacao")
+    finally:
+        vibe._rodar_main, sys.argv = original, argv
+    saida = subprocess.run([sys.executable, os.path.join(RAIZ, "vibe.py")], capture_output=True, text=True, timeout=30)
+    checar(saida.returncode == 0 and "python3 vibe.py vigia" in saida.stdout, "sem argumento, mostra o menu")
+
+
+def teste_regra_de_saida() -> None:
+    """Backtest e vigia usam a mesma checar_barra, entao a paridade entre eles nao
+    pega um erro DENTRO dela (inverter compra e venda passava em todas as guardas
+    de paridade). Aqui a regra e conferida contra a conta feita a mao."""
+    print("\n[15] regra de saida conferida contra a conta feita a mao")
+    p = bt.Params(banca=100, margem=10, alav=20, taxa=0.05, mm=0.5, stop=0.5, rr=2, max_barras=3)
+    taxa = 200 * 0.0005 * 2  # notional 200, duas pontas
+    perda_stop, ganho_alvo = -(200 * 0.005) - taxa, 200 * 0.01 - taxa
+    c = bt.abrir(100.0, 1, p)
+    v = bt.abrir(100.0, -1, p)
+    checar(abs(c.px_stop - 99.5) < 1e-9 and abs(c.px_alvo - 101.0) < 1e-9 and abs(c.px_liq - 95.5) < 1e-9
+           and abs(v.px_stop - 100.5) < 1e-9 and abs(v.px_alvo - 99.0) < 1e-9 and abs(v.px_liq - 104.5) < 1e-9,
+           "compra: stop 99,5 alvo 101 liquidacao 95,5; venda: stop 100,5 alvo 99 liquidacao 104,5 (20x, mm 0,5%)")
+    casos = [
+        ("compra, preco cai ao stop", c, 100.2, 99.4, (perda_stop, "stop")),
+        ("compra, preco sobe ao alvo", c, 101.1, 99.9, (ganho_alvo, "alvo")),
+        ("compra, stop e alvo no mesmo candle conta stop", c, 101.5, 99.0, (perda_stop, "stop")),
+        ("compra, candle dentro da faixa segue aberta", c, 100.9, 99.6, None),
+        ("venda, preco sobe ao stop", v, 100.6, 99.8, (perda_stop, "stop")),
+        ("venda, preco cai ao alvo", v, 100.1, 98.9, (ganho_alvo, "alvo")),
+        ("venda, stop e alvo no mesmo candle conta stop", v, 101.0, 98.5, (perda_stop, "stop")),
+    ]
+    certos = []
+    for nome, pos, maxima, minima, esperado in casos:
+        r = bt.checar_barra(pos, maxima, minima, p)
+        bate = (r is None and esperado is None) or (r is not None and esperado is not None
+                                                     and r[1] == esperado[1] and abs(r[0] - esperado[0]) < 1e-9)
+        certos.append(bate)
+        if not bate:
+            print(f"        {nome}: veio {r}, esperado {esperado}")
+    checar(all(certos), f"{sum(certos)} de {len(casos)} casos: stop, alvo, empate conta stop, compra e venda espelhadas")
+    p100 = bt.Params(banca=100, margem=10, alav=100, taxa=0.05, mm=0.5, stop=0.5, rr=2)
+    c100 = bt.abrir(100.0, 1, p100)
+    r = bt.checar_barra(c100, 100.1, 99.4, p100)
+    checar(c100.liq_antes_do_stop and r == (-10, "liquidado"),
+           "a 100x com stop de 0,5% a liquidacao chega antes: perde a margem inteira (10), nao o stop")
+    s = bt.Serie(abertura=[100] * 5, maxima=[100.2] * 5, minima=[99.8] * 5,
+                 fechamento=[100.0, 100.1, 100.2, 100.3, 100.4], volume=[1] * 5, t=list(range(5)))
+    pnl, desfecho, j = bt._perna(s, 0, 1, p)
+    checar(desfecho == "expirou" and j == 3 and abs(pnl - (200 * 0.003 - taxa)) < 1e-9,
+           "sem stop nem alvo em 3 candles: fecha a mercado no 3o candle, com a taxa")
+
+
 def _pegada_real() -> dict:
     """Tamanho de cada arquivo da pasta real do vigia (dados de quem roda de verdade)."""
     pasta = os.path.join(RAIZ, "dados_vigia")
@@ -1012,6 +1090,8 @@ if __name__ == "__main__":
     teste_arena()
     teste_sdk_anthropic()
     teste_pionex_telegram()
+    teste_comando_unico()
+    teste_regra_de_saida()
     print("\n[13] a bateria nao toca nos dados reais do vigia")
     checar(_pegada_real() == pegada, "dados_vigia/ (diario, log, estado) igual antes e depois da bateria")
     print()

@@ -11,6 +11,8 @@ Não toca no painel de logística Suinco. É projeto separado, na mesma árvore.
 
 | Arquivo | O que faz |
 |---|---|
+| `vibe.py` | **Um comando só para tudo**: `python3 vibe.py` mostra o menu (bateria, histórico, vigia, placar, Telegram, arena, monitor, testes) |
+| `servidor/instalar_vps.sh` | Põe o vigia 24 horas num VPS, ao lado de outro sistema, sem encostar nele; atualização diária só com a bateria verde |
 | `backtest.py` | Puxa candles públicos e simula com taxa, stop, margem de manutenção e liquidação |
 | `vigia.py` | Fase 2: opera no papel, ao vivo, 24 horas, com a mesma regra do backtest; placar contra 20 moedas; diário; alerta no Telegram |
 | `arena.py` | A Qwen e o Claude como competidores dentro do vigia, no papel, com as mesmas regras de saída e as mesmas moedas (desligada até você ligar) |
@@ -66,6 +68,10 @@ node testes/test_monitor_navegador.js # monitor num navegador real, Binance simu
 python3 backtest.py --estrategia ema --alav 24 --stop 0.5
 python3 backtest.py --par ETHUSDT --dias 60 --comparar
 ```
+
+Tudo isso também sai de um comando só: `python3 vibe.py` mostra o menu
+(`bateria`, `historico`, `vigia`, `placar`, `telegram`, `arena`, `monitor`,
+`backtest`, `testes`).
 
 **Comece pelo `--ruido`.** Ele mede a oscilação normal do ativo no seu período.
 Esse número decide se o seu stop é executável, e vai direto no campo "ruído
@@ -171,7 +177,18 @@ em que a anterior fechou. Verificado com uma guarda que registra entrada e saíd
 de cada posição: zero entradas antes da saída anterior.
 
 **3. O erro de modelagem cai contra a estratégia.** Stop e alvo no mesmo candle
-contam como **stop**. OHLC não revela a ordem dentro da barra.
+contam como **stop**. OHLC não revela a ordem dentro da barra. A regra de saída
+(stop, alvo, empate, liquidação, prazo, taxa nas duas pontas) é conferida
+contra a conta feita à mão, em compra e em venda.
+
+> **Correção registrada (guarda da regra de saída).** Backtest e vigia usam a
+> mesma função de saída, então a guarda de paridade entre os dois não enxerga
+> um erro *dentro* dela. Uma sabotagem de propósito, invertendo compra e venda
+> no stop, passou por todas as guardas de paridade; só caiu por acaso numa
+> outra checagem. Agora uma guarda própria confere a regra contra valores
+> calculados à mão, e cinco sabotagens diferentes (lado invertido, empate
+> contando alvo, taxa numa ponta só, liquidação ignorada, alvo errado)
+> reprovam.
 
 > **Correção registrada (garantia 2).** A primeira versão do simulador avançava
 > um candle a partir da *entrada*, não da *saída*, e abria posição nova com a
@@ -357,6 +374,41 @@ fica sem resposta):
 | `/ajuda` | a lista de comandos | O
 `segredos.json` fica só para o dono ler e nunca vai para o GitHub (está no
 `.gitignore`).
+
+### No VPS, 24 horas, ao lado do Embarque Suinco
+
+O VPS é o mesmo do Embarque Suinco. **Só o servidor é compartilhado**: o vigia
+tem usuário próprio (`vibe`), pasta própria (`/opt/vibe`), Python próprio e
+serviço próprio (`vibe-vigia`), com teto de 30% de processador e 400 MB de
+memória e prioridade baixa. Não abre porta e não mexe em Nginx, PostgreSQL,
+firewall, certificados nem no serviço `embarque-suinco`.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/loxbmuniz-eng/pega-visao/claude/vibe-trading-project-psmj6o/vibe_trading/servidor/instalar_vps.sh -o /tmp/instalar_vibe.sh && sudo bash /tmp/instalar_vibe.sh
+```
+
+- **Antes de mexer**, o instalador tira um retrato do servidor (serviços da
+  Suinco, portas abertas, firewall, configuração do Nginx). **No fim**, confere
+  de novo e diz "igual a antes", ou mostra em vermelho o que mudou.
+- O código vem do repositório privado `vibe-trading` por uma **chave só de
+  leitura** que o instalador cria. A impressão digital do github.com é
+  conferida contra a publicada pelo GitHub antes de confiar.
+- Roda a **bateria inteira** antes de ligar. Reprovou, não liga.
+- Pede o token do Telegram e descobre o seu chat sozinho. As chaves de IA são
+  opcionais.
+- **Atualização diária** às 04:10: testa a versão nova numa pasta à parte e só
+  troca se a bateria passar. Se reprovar, o vigia segue na versão anterior e o
+  Telegram avisa.
+
+| No VPS | O que faz |
+|---|---|
+| `sudo vibe-instalar --status` | serviço, versão, última bateria, log, placar e o retrato da Suinco |
+| `sudo vibe-instalar --atualizar` | o que a madrugada faz sozinha |
+| `sudo vibe-instalar --desinstalar` | tira os serviços; só apaga os dados se você digitar APAGAR |
+
+Rodar o instalador de novo é seguro: ele para o vigia, refaz o que mudou e
+religa. Dois vigias juntos estragariam o placar, por isso ele nunca deixa os
+dois rodando ao mesmo tempo.
 
 ### Arena: Qwen × Claude (opcional, no papel)
 
