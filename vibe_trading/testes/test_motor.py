@@ -1481,6 +1481,488 @@ def teste_fase2_honesta() -> None:
            "mudou o stop no vigia.json: o placar recomeca e o antigo fica guardado, sem se misturar")
 
 
+# --------------------------------------------------------------------------- #
+# ficha de cada operacao
+# --------------------------------------------------------------------------- #
+
+DIA_MS, HORA_MS = 86_400_000, 3_600_000
+QUARTA = 20740 * DIA_MS            # 14/10/2026, quarta-feira, 00:00 UTC
+AGORA_FICHA = QUARTA + 12 * HORA_MS  # 12:00 UTC
+
+
+def _serie_plana(t0: int, ms: int, n: int, preco: float = 100.0, meia: float = 0.5, vol: float = 10.0) -> bt.Serie:
+    s = bt.Serie()
+    for k in range(n):
+        s.t.append(t0 + k * ms)
+        s.abertura.append(preco)
+        s.fechamento.append(preco)
+        s.maxima.append(preco + meia)
+        s.minima.append(preco - meia)
+        s.volume.append(vol)
+    return s
+
+
+def teste_ficha_calculo() -> None:
+    print("\n[23] ficha: perfil de volume, niveis, perna, plano e alvos conferidos a mao")
+    import ficha
+
+    # perfil de volume: 10 candles pesados em 100,1-100,9 e 2 leves em 105-110
+    pv = ind.perfil_volume([100.9] * 10 + [110.0] * 2, [100.1] * 10 + [105.0] * 2, [10.0] * 10 + [1.0] * 2)
+    checar(pv is not None and 100.0 <= pv["poc"] <= 101.0 and 100.0 <= pv["val"] < pv["vah"] <= 101.0,
+           f"perfil de volume: POC {pv and round(pv['poc'], 2)} e area de valor {pv and round(pv['val'], 2)}"
+           f"-{pv and round(pv['vah'], 2)} onde o volume esta, nao nos candles leves")
+    pv2 = ind.perfil_volume([101, 106, 101], [99, 105, 99], [1, 500, 1])
+    degrau = (106 - 99) / 50
+    checar(pv2 is not None and 105 - degrau <= pv2["poc"] <= 106,
+           f"um candle de volume enorme (105-106) puxa o POC para ele ({pv2 and round(pv2['poc'], 2)}; "
+           f"precisao de um degrau, {degrau:g})")
+    checar(ind.perfil_volume([1, 1], [1, 1], [5, 5]) is None and ind.perfil_volume([2], [1], [0]) is None,
+           "sem amplitude ou sem volume: sem perfil (nada inventado)")
+
+    # niveis: dia e semana em UTC, semana de segunda a domingo
+    t0 = QUARTA - 16 * DIA_MS
+    h = _serie_plana(t0, HORA_MS, (AGORA_FICHA - t0) // HORA_MS)
+    def marca(dia, hora, maxima=None, minima=None):
+        i = h.t.index(dia * DIA_MS + hora * HORA_MS)
+        if maxima is not None:
+            h.maxima[i] = maxima
+        if minima is not None:
+            h.minima[i] = minima
+    marca(20730, 9, maxima=120.0)      # domingo 04/10: semana retrasada (isca)
+    marca(20733, 5, maxima=107.0)      # quarta 07/10: semana passada
+    marca(20736, 14, minima=94.0)      # sabado 10/10: semana passada
+    marca(20738, 10, maxima=109.0)     # segunda 12/10: esta semana (isca para "semana passada")
+    marca(20739, 3, maxima=104.0)      # ontem
+    marca(20739, 20, minima=97.0)      # ontem
+    h.abertura[h.t.index(QUARTA)] = 100.2
+    m = bt.Serie()
+    for k in range(96):                # ontem em 15 min: o volume pesado perto de 98
+        t = QUARTA - DIA_MS + k * 900_000
+        pesado = k < 80
+        m.t.append(t); m.abertura.append(98.0 if pesado else 103.0); m.fechamento.append(98.0 if pesado else 103.0)
+        m.maxima.append(98.4 if pesado else 103.4); m.minima.append(97.6 if pesado else 102.6)
+        m.volume.append(100.0 if pesado else 1.0)
+    for k in range(48):                # hoje ate 11:45: preco tipico 100,2
+        m.t.append(QUARTA + k * 900_000); m.abertura.append(100.0); m.fechamento.append(100.6)
+        m.maxima.append(101.0); m.minima.append(99.0); m.volume.append(5.0 + k)
+    nv = {}
+    for n in ficha.niveis({"1h": h, "15m": m}, AGORA_FICHA, 100.0):
+        nv.setdefault(n["nome"], []).append(n["preco"])
+    checar(nv.get("topo de ontem") == [104.0] and nv.get("fundo de ontem") == [97.0],
+           f"topo e fundo de ontem: {nv.get('topo de ontem')} e {nv.get('fundo de ontem')}")
+    checar(nv.get("topo da semana passada") == [107.0] and nv.get("fundo da semana passada") == [94.0],
+           f"semana passada de segunda a domingo: topo {nv.get('topo da semana passada')} (nem o 120 de antes "
+           f"nem o 109 desta semana), fundo {nv.get('fundo da semana passada')}")
+    checar(nv.get("abertura do dia") == [100.2], "abertura do dia: o primeiro candle de hoje em UTC")
+    domingo = QUARTA + 4 * DIA_MS + 12 * HORA_MS    # domingo 18/10, ultimo dia da semana de 12/10
+    h2 = _serie_plana(t0, HORA_MS, (domingo - t0) // HORA_MS)
+    for i, t in enumerate(h.t):
+        h2.maxima[i], h2.minima[i] = h.maxima[i], h.minima[i]
+    nv2 = {}
+    for n in ficha.niveis({"1h": h2}, domingo, 100.0):
+        nv2.setdefault(n["nome"], []).append(n["preco"])
+    checar(nv2.get("topo da semana passada") == [107.0],
+           f"no domingo, a semana passada ainda e a de 05/10 a 11/10 (topo {nv2.get('topo da semana passada')}; "
+           f"o 109 de segunda 12/10 e desta semana)")
+    checar(nv.get("VWAP do dia") and abs(nv["VWAP do dia"][0] - 100.2) < 1e-9,
+           "VWAP do dia so com os candles de hoje (preco tipico 100,2)")
+    checar(nv.get("POC de ontem") and 97.6 <= nv["POC de ontem"][0] <= 98.4,
+           f"POC de ontem onde o volume pesado esteve ({nv.get('POC de ontem')})")
+    checar(sorted(nv.get("numero redondo", [])) == [100.0, 101.0] and ficha.passo_redondo(62000) == 1000
+           and ficha.passo_redondo(3500) == 100 and ficha.passo_redondo(0.2) == 0.01,
+           "numero redondo: 1.000 no BTC a 62 mil, 100 no ETH a 3.500, 0,01 numa moeda de 0,20")
+
+    # vaos abertos: so o que o preco ainda nao tocou
+    z = _serie_plana(0, HORA_MS, 12, 100.0, 0.1)
+    z.minima[10] = 101.0; z.maxima[10] = 101.6; z.abertura[10] = 101.1; z.fechamento[10] = 101.5
+    z.minima[11] = 101.2; z.maxima[11] = 101.7; z.abertura[11] = 101.5; z.fechamento[11] = 101.6
+    vaos = [x for x in ficha.zonas_abertas(z) if x[0] == "vao"]
+    checar(any(d == 1 and abs(b - 100.1) < 1e-9 and abs(a - 101.0) < 1e-9 for _, d, b, a, _ in vaos),
+           "vao de alta 100,1-101,0 ainda nao tocado aparece como nivel")
+    z.minima[11] = 100.9
+    checar(not [x for x in ficha.zonas_abertas(z) if x[0] == "vao" and x[1] == 1 and abs(x[3] - 101.0) < 1e-9],
+           "depois que o preco toca o vao, ele sai da lista")
+
+    # perna atual: do ultimo fundo confirmado ate a maior maxima desde ele
+    fech = [10, 9, 8, 7, 8, 9, 10, 11, 12, 13, 12, 11, 10]
+    pz = bt.Serie(abertura=list(map(float, fech)), maxima=[x + 0.1 for x in fech], minima=[x - 0.1 for x in fech],
+                  fechamento=list(map(float, fech)), volume=[1.0] * 13, t=list(range(13)))
+    checar(est.perna_atual(pz, 1) == (6.9, 13.1) and est.perna_atual(pz, -1) == (9.9, 13.1),
+           "perna da compra: fundo 6,9 ate 13,1; perna da venda: topo 13,1 ate 9,9")
+
+    # plano conferido a mao: entrada 100, ATR 1, fundo do periodo de entrada em 97
+    cfg = dict(ficha.FICHA_PADRAO)
+    grupos = [{"preco": 100.3, "nomes": ["numero redondo"], "forte": True},      # a menos de meio ATR
+              {"preco": 101.0, "nomes": ["vao de baixa aberto (1h)"], "forte": False},
+              {"preco": 108.0, "nomes": ["topo de ontem"], "forte": True},
+              {"preco": 112.0, "nomes": ["topo da semana passada"], "forte": True}]
+    le = {"atr": 1.0, "fundo": 97.0, "topo": 103.0}
+    p = ficha.plano(1, 100.0, le, grupos, "15m", cfg, 0.05, 100.0, 2.0, None, None, 0.5,
+                    {"taxa": 0.0001, "intervalo_h": 8.0}, 24)
+    checar(abs(p["stop"] - 96.75) < 1e-9 and abs(p["dist_pct"] - 3.25) < 1e-9,
+           "stop 1/4 de ATR alem do fundo: 96,75 (3,25%)")
+    checar(abs(p["alvos"][0]["preco"] - 107.9) < 1e-9 and abs(p["alvos"][1]["preco"] - 111.9) < 1e-9,
+           "alvos so em nivel forte, a mais de meio ATR, 1/10 de ATR antes do nivel: 107,9 e 111,9")
+    checar([c["preco"] for c in p["caminho"]] == [101.0] and abs(p["caminho"][0]["r"] - 1 / 3.25) < 1e-9,
+           "o nivel fraco antes do alvo aparece 'no caminho', a 0,31x o risco")
+    checar(abs(p["perda"] - 2.0) < 1e-9 and abs(p["tamanho"] - 2.0 / 0.0337) < 1e-9,
+           "risco 2% de 100: perde exatamente 2,00 USDT no stop, com taxa nas duas pontas e deslize")
+    checar(p["alav"] == 14 and p["liq_vezes"] >= 2.0,
+           f"alavancagem {p['alav']}x: liquidacao a {p['liq_vezes']:.2f}x a distancia do stop (pelo menos 2x)")
+    checar(abs(p["ganho1"] - p["tamanho"] * 0.078) < 1e-9 and abs(p["rr1"] - p["ganho1"] / 2.0) < 1e-12
+           and abs(p["acerto_min"] - 200 / (2 + p["ganho1"])) < 1e-9,
+           f"lucro no alvo 1 {p['ganho1']:.3f} USDT ({p['rr1']:.2f}x o risco); acerto minimo {p['acerto_min']:.1f}%")
+    checar(abs(p["custo_funding"] - (-p["tamanho"] * 0.0001 * 3)) < 1e-12,
+           "funding de 0,01% a cada 8 h, 24 h comprado: paga 3 cobrancas")
+    faixas = [{"ate_usdt": 50.0, "alav_max": 100.0, "mm": 0.004}, {"ate_usdt": 1000.0, "alav_max": 20.0, "mm": 0.01}]
+    moeda = {"passo_qtd": 0.1, "minimo_usdt": 5.0, "minimo_qtd": 0.1}
+    p2 = ficha.plano(1, 100.0, le, grupos, "15m", cfg, 0.05, 100.0, 2.0, moeda, faixas, 0.5, None, 24)
+    checar(p2["mm_pct"] == 1.0 and p2["alav"] == 13 and abs(p2["tamanho"] - 50.0) < 1e-9 and p2["perda"] <= 2.0,
+           "faixa de risco da Pionex pelo tamanho (manutencao 1%, ate 20x); quantidade no passo, para baixo: "
+           "nunca arrisca mais do que o pedido")
+    p3 = ficha.plano(1, 100.0, le, grupos, "15m", cfg, 0.05, 100.0, 2.0, {"minimo_usdt": 60.0}, None, 0.5, None, 24)
+    checar(p3["abaixo_do_minimo"] and abs(p3["risco_minimo_pct"] - 60 * 0.0337) < 1e-9,
+           "abaixo do pedido minimo: diz o menor risco possivel (2,02%)")
+    p4 = ficha.plano(-1, 100.0, le, grupos, "15m", cfg, 0.05, 100.0, 2.0, None, None, 0.5, None, 24)
+    checar(abs(p4["stop"] - 103.25) < 1e-9 and p4["alvos"][0]["nivel"] is None
+           and abs(p4["alvos"][0]["preco"] - (100 - 2 * 3.25)) < 1e-9,
+           "venda: stop alem do topo (103,25); sem nivel forte abaixo, alvo de 2 vezes o risco")
+    p5 = ficha.plano(1, 100.0, {"atr": 1.0, "fundo": 99.6, "topo": None}, grupos, "15m", cfg, 0.05, 100.0, 2.0,
+                     None, None, 0.5, None, 24)
+    checar(abs(p5["stop"] - 99.0) < 1e-9 and "1 ATR" in p5["stop_origem"],
+           "fundo perto demais: o stop vai para 1 ATR, fora do ruido do candle")
+
+
+def _dados_controlados(agora: int, preco: float = 96.0, **extra) -> dict:
+    series = {}
+    for tf in ("5m", "15m", "1h", "4h", "1d"):
+        ms = bt.PERIODOS[tf] * 60_000
+        fim = (agora // ms) * ms - ms   # ultimo candle fechado
+        series[tf] = _serie_plana(fim - 79 * ms, ms, 80, preco)
+    d = {"par": "BTCUSDT", "agora_ms": agora, "series": series, "erros": {},
+         "moeda": {"negociando": True, "minimo_usdt": 5.0, "minimo_qtd": None, "passo_qtd": None},
+         "indice": {"marca": preco, "funding": 0.0001}, "fundings": {"intervalo_h": 8.0, "media": 0.0001},
+         "agenda_bls": []}
+    d.update(extra)
+    return d
+
+
+def _com_leituras(leituras: dict, perna, niveis_falsos: list, chamar):
+    """Roda `chamar` com a leitura de cada periodo, a perna e os niveis controlados."""
+    import ficha
+    originais = (ficha.leitura, ficha.niveis, est.perna_atual, ficha.gatilhos)
+    def leitura_falsa(s, k=3):
+        tf = next(tf for tf, ms in bt.PERIODOS.items() if len(s.t) > 1 and s.t[1] - s.t[0] == ms * 60_000)
+        base = {"tendencia": 0, "evento": 0, "evento_ha": None, "fundo": None, "topo": None, "atr": 0.5,
+                "ema200": None, "fechamento": s.fechamento[-1], "t": s.t[-1]}
+        return {**base, **leituras.get(tf, {})}
+    ficha.leitura, ficha.niveis = leitura_falsa, lambda series, agora, preco: list(niveis_falsos)
+    est.perna_atual = lambda c, d, k=3: perna
+    ficha.gatilhos = lambda s, tf, par, estado: []
+    try:
+        return chamar()
+    finally:
+        ficha.leitura, ficha.niveis, est.perna_atual, ficha.gatilhos = originais
+
+
+def teste_ficha_veredito() -> None:
+    print("\n[24] ficha: o veredito segue as regras escritas, motivo por motivo")
+    import ficha
+    alta = {"4h": {"tendencia": 1, "topo": 112.0, "fundo": 88.0}, "1h": {"tendencia": 1, "topo": 110.0, "fundo": 90.0},
+            "15m": {"tendencia": 1, "topo": 99.0, "fundo": 94.0}}
+    fracos = [{"preco": 100.0, "nome": "vao de baixa aberto (1h)"}]
+    def rodar(leituras=alta, perna=(90.0, 110.0), niveis_=fracos, preco=96.0, horizonte="intraday", risco=2.0, **extra):
+        d = _dados_controlados(AGORA_FICHA, preco, **extra)
+        return _com_leituras(leituras, perna, niveis_, lambda: ficha.analisar(d, horizonte, risco, banca=100.0))
+
+    f = rodar()
+    p = f["plano"] or {}
+    checar(f["veredito"] == "A FAVOR" and p.get("direcao") == 1 and abs(p["alvos"][0]["preco"] - 109.95) < 1e-9
+           and [c["preco"] for c in p["caminho"]] == [99.0, 100.0],
+           f"tudo alinhado, no desconto (30%), alvo no topo do 1h: A FAVOR ({f['veredito']}); "
+           f"o topo do 15m e o vao ficam 'no caminho'")
+    f = rodar(preco=108.0)
+    checar(f["veredito"] == "ESPERAR" and any("premio" in m and "94,20" in m and "97,60" in m for m in f["esperar"]),
+           "comprando no premio (90% da perna): ESPERAR, com a zona otima 94,20 a 97,60")
+    f = rodar(leituras={**alta, "4h": {"tendencia": -1, "topo": 112.0, "fundo": 88.0}})
+    checar(f["veredito"] == "ESPERAR" and f["plano"] is None
+           and any("compra so se o 4h fechar acima de 112" in m for m in f["esperar"])
+           and any("venda so se o 1h fechar abaixo de 90" in m for m in f["esperar"]),
+           "4h e 1h discordam: ESPERAR sem plano, dizendo o que faria comprar e o que faria vender")
+    f = rodar(leituras={**alta, "15m": {"tendencia": -1, "topo": 99.0, "fundo": 94.0}})
+    checar(f["veredito"] == "ESPERAR" and any("15m ainda esta em baixa" in m and "acima de 99" in m for m in f["esperar"]),
+           "periodo de entrada contra: ESPERAR ele virar (fechar acima do topo dele)")
+    f = rodar(niveis_=fracos + [{"preco": 97.0, "nome": "numero redondo"}])
+    checar(f["veredito"] == "ESPERAR" and any("espaco curto" in m for m in f["esperar"]),
+           "nivel forte logo adiante (97): espaco curto, ESPERAR")
+    f = rodar(risco=30.0)
+    checar(f["veredito"] == "NAO OPERAR" and any("fora do aceito" in m for m in f["bloqueios"]),
+           "risco de 30%: NAO OPERAR (erro de digitacao?)")
+    f = rodar(moeda={"negociando": True, "minimo_usdt": 1000.0})
+    checar(f["veredito"] == "NAO OPERAR" and any("abaixo do minimo" in m and "risco minimo possivel" in m
+                                                   for m in f["bloqueios"]),
+           "pedido abaixo do minimo da Pionex: NAO OPERAR, dizendo o risco minimo possivel")
+    f = rodar(erros={"moeda": "LookupError: XYZ_USDT_PERP nao existe na Pionex"})
+    checar(f["veredito"] == "NAO OPERAR" and "nao existe" in f["bloqueios"][0], "moeda que a Pionex nao tem: NAO OPERAR")
+    d = _dados_controlados(AGORA_FICHA)
+    d["agora_ms"] = AGORA_FICHA + 3 * 15 * 60_000
+    f = _com_leituras(alta, (90.0, 110.0), fracos, lambda: ficha.analisar(d, "intraday", 2.0))
+    checar(f["veredito"] == "NAO OPERAR" and any("atrasados" in m for m in f["bloqueios"]),
+           "candles atrasados (45 min no 15m): NAO OPERAR com dado velho")
+    cpi = [{"t_ms": AGORA_FICHA + 10 * 60_000, "nome": "CPI (inflacao ao consumidor, EUA)", "fonte": "teste"}]
+    f = rodar(agenda_bls=cpi)
+    checar(f["veredito"] == "ESPERAR" and any("CPI" in m for m in f["esperar"]),
+           "CPI em 10 minutos: ESPERAR no intraday")
+    f = rodar(agenda_bls=cpi, horizonte="swing",
+              leituras={"1d": alta["4h"], "4h": alta["1h"], "1h": alta["15m"]})
+    checar(f["veredito"] == "A FAVOR" and any("CPI" in a for a in f["avisos"]),
+           "no swing, o CPI vira aviso e nao muda o veredito")
+    f = rodar(indice={"marca": 96.0, "funding": 0.002})
+    checar(any("funding extremo" in a and "comprado" in a for a in f["avisos"]),
+           "funding de 0,2% por cobranca: aviso de lado comprado lotado")
+    f = rodar(erros={"agenda_bls": "URLError: fora"})
+    checar(any("agenda de CPI e payroll fora do ar" in a for a in f["avisos"]) and "agenda CPI/payroll" in ficha.texto(f),
+           "agenda fora do ar: aviso e FORA DO AR no texto, nunca silencio")
+    t = ficha.texto(rodar())
+    checar(len(t) <= 4000 and "VEREDITO: A FAVOR" in t and "Nada aqui e ordem" in t and "no stop -2,00" in t,
+           "o texto cabe numa mensagem do Telegram e mostra veredito, perda no stop e o aviso de que nao e ordem")
+
+
+class RedeFalsa:
+    """As fontes publicas como as especificacoes descrevem, para a ficha inteira."""
+
+    def __init__(self, series: dict, formando_t: dict):
+        self.series, self.formando_t = series, formando_t
+        self.urls = []
+
+    def __call__(self, url):
+        import urllib.parse as up
+        self.urls.append(url)
+        u = up.urlparse(url)
+        q = dict(up.parse_qsl(u.query))
+        if u.path == "/api/v1/market/klines":
+            tf = next(k for k, v in bt.PIONEX_INTERVALO.items() if v == q["interval"])
+            s = self.series[tf]
+            formando = {"time": self.formando_t[tf], "open": "1", "close": "1", "high": "1", "low": "1", "volume": "1"}
+            return PionexFalsa(s, bt.PERIODOS[tf] * 60_000, formando)(url)
+        if u.path == "/api/v1/common/symbols":
+            return {"result": True, "data": {"symbols": [{"symbol": q["symbols"], "status": "TRADING",
+                    "minNotional": "5", "minSizeMarket": "0.0001", "baseStep": "0.0001", "quoteStep": "0.1",
+                    "liquidationFeeRate": "0.005"}]}}
+        if u.path == "/api/v1/common/riskTable":
+            return {"result": True, "data": {"symbols": [{"symbol": q["symbol"], "rows": [
+                {"rowNum": 2, "notionalLimit": "1000000", "maxLeverage": "50", "maintMarginRatio": "0.01"},
+                {"rowNum": 1, "notionalLimit": "200000", "maxLeverage": "100", "maintMarginRatio": "0.005"}]}]}}
+        if u.path == "/api/v1/market/indexes":
+            return {"result": True, "data": {"indexes": [{"symbol": q["symbol"], "indexPrice": "60000",
+                    "markPrice": str(self.series["5m"].fechamento[-1]) if "5m" in self.series else "60000",
+                    "nextFundingRate": "0.0001",
+                    "nextFundingTime": 1}]}}
+        if u.path == "/api/v1/market/fundingRates":
+            return {"result": True, "data": {"symbol": q["symbol"], "rates": [
+                {"fundingRate": "0.0001", "fundingTime": 1_000_000_000_000 - k * 8 * HORA_MS} for k in range(10)]}}
+        if u.path == "/api/v1/market/depth":
+            p = self.series["5m"].fechamento[-1] if "5m" in self.series else 60000.0
+            return {"result": True, "data": {"bids": [[str(p * 0.9999), "2"]], "asks": [[str(p * 1.0001), "1"]]}}
+        if u.path == "/api/v1/market/tickers":
+            return {"result": True, "data": {"tickers": [
+                {"symbol": "BTC_USDT_PERP", "open": "100", "close": "103", "high": "105", "low": "99", "amount": "9e8"},
+                {"symbol": "PEPE_USDT_PERP", "open": "1", "close": "1.2", "high": "1.4", "low": "0.9", "amount": "8e6"},
+                {"symbol": "XYZ_USDT_PERP", "open": "1", "close": "2", "high": "3", "low": "1", "amount": "1000"},
+                {"symbol": "BTC_USDT", "open": "1", "close": "9", "high": "9", "low": "1", "amount": "9e9"}]}}
+        raise OSError(f"fora do ar no teste: {u.netloc}")
+
+
+def teste_ficha_fontes() -> None:
+    print("\n[25] fontes da ficha: formato de cada uma, ritmo da Pionex, agenda em UTC e radar")
+    import fatores
+    import ficha
+    import time as tempo
+
+    # agenda: horario de Nova York -> UTC, com horario de verao dos EUA
+    checar(fatores.nova_york_para_utc_ms(2026, 10, 28, 14) == 1_793_210_400_000
+           and fatores.nova_york_para_utc_ms(2026, 12, 9, 14) == 1_796_842_800_000,
+           "FOMC 28/10 as 14h de NY = 18h UTC (verao); 09/12 = 19h UTC (inverno)")
+    checar(fatores.nova_york_para_utc_ms(2026, 3, 8, 3) - fatores.nova_york_para_utc_ms(2026, 3, 8, 1) == HORA_MS
+           and fatores.nova_york_para_utc_ms(2026, 11, 1, 3) - fatores.nova_york_para_utc_ms(2026, 11, 1, 1) == 3 * HORA_MS,
+           "virada do horario de verao: 08/03 e 01/11 de 2026")
+    ics = ("BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nSUMMARY:Consumer Price Index for October 20\r\n 26\r\n"
+           "DTSTART;TZID=US-Eastern:20261112T083000\r\nEND:VEVENT\r\nBEGIN:VEVENT\r\n"
+           "SUMMARY:Employment Situation for June 2026\r\nDTSTART:20260702T123000Z\r\nEND:VEVENT\r\n"
+           "BEGIN:VEVENT\r\nSUMMARY:Producer Price Index\r\nDTSTART;VALUE=DATE:20261113\r\nEND:VEVENT\r\n"
+           "BEGIN:VEVENT\r\nSUMMARY:Productivity and Costs\r\nDTSTART;TZID=US-Eastern:20261105T083000\r\nEND:VEVENT\r\n"
+           "BEGIN:VEVENT\r\nSUMMARY:Consumer Price Index (sem fuso)\r\nDTSTART:20261210T083000\r\nEND:VEVENT\r\n"
+           "BEGIN:VEVENT\r\nSUMMARY:Consumer Price Index (Londres)\r\nDTSTART;TZID=Europe/London:20261211T083000\r\nEND:VEVENT\r\n"
+           "END:VCALENDAR\r\n")
+    ev = fatores.ler_ics_bls(ics)
+    checar([(e["nome"][:7], e["t_ms"]) for e in ev] == [("Payroll", 1_782_995_400_000), ("CPI (in", 1_794_490_200_000)],
+           "BLS em iCal: CPI 12/11 08:30 NY = 13:30 UTC, payroll em UTC; dia sem hora, hora sem fuso ou de outro "
+           "fuso e evento irrelevante ficam de fora (nao se chuta horario)")
+    proximos = fatores.proximos_eventos(fatores.agenda_fomc(), AGORA_FICHA, 1, 24 * 15)
+    checar([e["t_ms"] for e in proximos] == [1_793_210_400_000], "proximo FOMC a partir de 14/10/2026: 28/10")
+
+    # cada fonte no formato da especificacao
+    rede = RedeFalsa({}, {})
+    m = fatores.moeda_pionex("BTCUSDT", rede)
+    checar(m["negociando"] and m["minimo_usdt"] == 5.0 and m["passo_qtd"] == 0.0001, "regras da moeda lidas do texto")
+    r = fatores.risco_pionex("BTCUSDT", rede)
+    checar([x["ate_usdt"] for x in r] == [200000.0, 1000000.0] and r[0]["mm"] == 0.005 and r[1]["alav_max"] == 50.0,
+           "tabela de risco em ordem de tamanho")
+    errada = lambda url: {"result": True, "data": {"symbols": [{"symbol": "BTC_USDT_PERP", "rows": [
+        {"notionalLimit": "1000", "maxLeverage": "100", "maintMarginRatio": "0.5"}]}]}}
+    try:
+        fatores.risco_pionex("BTCUSDT", errada)
+        checar(False, "margem de manutencao em % (0,5) deveria ser recusada")
+    except ValueError:
+        checar(True, "margem de manutencao fora da faixa possivel (0,5 com 100x) e recusada, nao chutada")
+    i = fatores.indice_pionex("BTCUSDT", rede)
+    checar(i["funding"] == 0.0001, "funding como fracao, como no exemplo da especificacao ('0.0001')")
+    fp = fatores.fundings_pionex("BTCUSDT", 10, rede)
+    checar(fp["intervalo_h"] == 8.0 and abs(fp["media"] - 0.0001) < 1e-12, "intervalo do funding medido nas datas: 8 h")
+    nao_tem = lambda url: {"result": True, "data": {"symbols": []}}
+    try:
+        fatores.moeda_pionex("XYZUSDT", nao_tem)
+        checar(False, "moeda inexistente deveria virar erro")
+    except LookupError as e:
+        checar("nao existe" in str(e), "moeda que a Pionex nao lista: erro dizendo que nao existe")
+    pos = fatores.posicoes_binance("BTCUSDT", lambda url: [
+        {"timestamp": 3, "sumOpenInterestValue": "110"}, {"timestamp": 1, "sumOpenInterestValue": "100"}])
+    checar(abs(pos["var_24h_pct"] - 10.0) < 1e-9, "posicoes abertas: variacao do mais antigo ao mais novo, em qualquer ordem")
+    md = fatores.medo_ganancia(lambda url: {"data": [{"value": "71", "value_classification": "Greed"}, {"value": "65"}]})
+    checar(md["valor"] == 71 and md["ontem"] == 65 and md["fonte"] == "alternative.me", "medo e ganancia com a fonte")
+    try:
+        fatores.dvol("SOLUSDT", AGORA_FICHA, rede)
+        checar(False, "DVOL de SOL deveria ser recusado")
+    except LookupError:
+        checar(True, "DVOL so de BTC e ETH (a Deribit nao tem das outras)")
+    giro = fatores.giro_24h(rede)
+    top = ficha.radar(giro, 5_000_000, 10)
+    checar([g["par"] for g in top] == ["PEPEUSDT", "BTCUSDT"] and abs(top[0]["amplitude_pct"] - 50.0) < 1e-9,
+           "radar: so perpetuos em USDT com volume, ordenados pela oscilacao de 24 h")
+    falha = fatores.conferir_fontes("BTCUSDT", AGORA_FICHA, lambda url: (_ for _ in ()).throw(OSError("sem rede")),
+                                    lambda url: (_ for _ in ()).throw(OSError("sem rede")))
+    checar(len(falha) == 11 and not any(ok for _, ok, _ in falha), "vibe.py fontes: fonte fora do ar vira FALHA, sem quebrar")
+
+    # a ficha inteira pela rede simulada: ritmo da Pionex e conferencia
+    agora = int(tempo.time() * 1000)
+    series, formando = {}, {}
+    for k, tf in enumerate(ficha.PERIODOS_FICHA):
+        ms = bt.PERIODOS[tf] * 60_000
+        formando[tf] = agora // ms * ms
+        series[tf] = serie_sintetica(520, 40 + k, True, t0=formando[tf] - 520 * ms)
+        series[tf].t = [formando[tf] - (520 - j) * ms for j in range(520)]
+    rede = RedeFalsa(series, formando)
+    original, dormir, relogio_real = bt._pedir, bt.time.sleep, bt.time.monotonic
+    relogio = RelogioFalso()
+    momentos = []  # so os pedidos a Pionex: o teto de pedidos e dela
+    def anotada(url):
+        if "api.pionex.com" in url:
+            momentos.append(relogio.t)
+        return rede(url)
+    bt._pionex_ultimo[0] = None
+    bt._pedir = anotada
+    bt.time.sleep, bt.time.monotonic = relogio.dormir, relogio.agora
+    try:
+        d = ficha.coletar("BTCUSDT", agora, conferir=None, pedir=bt._pedir,
+                          pedir_texto=lambda url: (_ for _ in ()).throw(OSError("sem rede")))
+    finally:
+        bt._pedir, bt.time.sleep, bt.time.monotonic = original, dormir, relogio_real
+        bt._pionex_ultimo[0] = None
+    pionex = [u for u in rede.urls if "api.pionex.com" in u]
+    menor = min((b - a for a, b in zip(momentos, momentos[1:])), default=0.0)
+    checar(len(pionex) >= 10 and len(momentos) == len(pionex) and menor >= bt.PIONEX_PAUSA - 1e-9,
+           f"{len(pionex)} pedidos a Pionex numa ficha, nenhum par a menos de {bt.PIONEX_PAUSA}s (bloqueio de 60 s)")
+    checar(set(d["series"]) == set(ficha.PERIODOS_FICHA) and all(len(d["series"][tf]) == 500 for tf in d["series"])
+           and all(formando[tf] not in d["series"][tf].t for tf in d["series"]),
+           "os 5 periodos com 500 candles fechados cada (o em formacao fica de fora)")
+    checar("agenda_bls" in d["erros"] and "posicoes" in d["erros"] and "moeda" not in d["erros"],
+           "o que nao respondeu entra em erros com o motivo; o resto segue")
+    f = ficha.analisar(d, "intraday", 2.0)
+    checar(f["veredito"] in ficha.VEREDITOS and "FORA DO AR" in ficha.texto(f),
+           f"a ficha sai inteira mesmo com fontes fora do ar (veredito {f['veredito']})")
+
+
+def teste_ficha_comandos() -> None:
+    print("\n[26] /analisar, /fichas e /radar: pedido, registro e placar das fichas pela regra do backtest")
+    import ficha
+    import vigia
+    checar(ficha.par_de("btc") == "BTCUSDT" and ficha.par_de("SOLUSDT") == "SOLUSDT", "BTC e SOLUSDT viram o par certo")
+    recusados = 0
+    for ruim in ("BTC/../x", "BTC USDT", "btc&symbol=ETH", "", "A" * 16):
+        try:
+            ficha.par_de(ruim)
+        except ValueError:
+            recusados += 1
+    checar(recusados == 5, "moeda com caractere fora de letra e numero e recusada (o nome vai dentro de um endereco)")
+    p = ficha.interpretar_pedido(["sol", "10%", "Scalp"])
+    checar(p == {"par": "SOLUSDT", "risco_pct": 10.0, "horizonte": "scalp"}, "/analisar sol 10% scalp")
+    p = ficha.interpretar_pedido(["eth"])
+    checar(p["risco_pct"] == 2.0 and p["horizonte"] == "intraday", "sem risco: 2% e intraday")
+
+    vistos = []
+    servicos = {"analisar": lambda a, c, e, t: vistos.append(a) or "FICHA", "fichas": lambda t: "PLACAR",
+                "radar": lambda c: (_ for _ in ()).throw(OSError("sem rede"))}
+    cfg = json.loads(json.dumps(vigia.CONFIG_PADRAO))
+    r1 = vigia.responder_comando("/analisar@robo BTC 2 swing", {}, cfg, 0, servicos)
+    r2 = vigia.responder_comando("/radar", {}, cfg, 0, servicos)
+    checar(r1 == "FICHA" and vistos == [["BTC", "2", "swing"]], "/analisar chega com os argumentos")
+    checar(r2.startswith("Nao consegui responder /radar") and "sem rede" in r2,
+           "falha de rede vira mensagem, nunca derruba quem escuta o Telegram")
+    checar("/analisar" in vigia.responder_comando("/ajuda", {}, cfg, 0, servicos), "/ajuda mostra o /analisar")
+
+    pasta = tempfile.mkdtemp(prefix="fichas_")
+    try:
+        d = _dados_controlados(AGORA_FICHA)
+        alta = {"4h": {"tendencia": 1, "topo": 112.0, "fundo": 88.0}, "1h": {"tendencia": 1, "topo": 110.0, "fundo": 90.0},
+                "15m": {"tendencia": 1, "topo": 99.0, "fundo": 94.0}}
+        txt = _com_leituras(alta, (90.0, 110.0), [], lambda: vigia.fazer_ficha(["btc"], cfg, {}, AGORA_FICHA, pasta,
+                                                                                 lambda par, agora: d))
+        regs = ficha.ler_fichas(pasta)
+        checar(len(regs) == 1 and regs[0]["veredito"] == "A FAVOR" and f"Ficha {regs[0]['id']} registrada" in txt,
+               "a ficha com plano fica registrada para o placar")
+        txt = vigia.fazer_ficha(["btc", "50"], cfg, {}, AGORA_FICHA, pasta, lambda par, agora: d)
+        d_min = _dados_controlados(AGORA_FICHA, moeda={"negociando": True, "minimo_usdt": 1000.0})
+        txt2 = _com_leituras(alta, (90.0, 110.0), [], lambda: vigia.fazer_ficha(
+            ["btc"], cfg, {}, AGORA_FICHA, pasta, lambda par, agora: d_min))
+        checar(len(ficha.ler_fichas(pasta)) == 1 and "NAO OPERAR" in txt and "NAO OPERAR" in txt2
+               and "PLANO" in txt2, "NAO OPERAR nao entra no placar, nem quando ha plano (pedido abaixo do minimo)")
+
+        # placar: alvo, stop, stop e alvo no mesmo candle (conta stop) e expirada
+        base = {"par": "BTCUSDT", "tf": "15m", "horizonte": "intraday", "direcao": 1, "entrada": 100.0, "stop": 98.0,
+                "alvo": 104.0, "rr": 1.8, "tamanho": 100.0, "perda": 2.2, "max_barras": 4, "risco_pct": 2}
+        t0 = AGORA_FICHA - 10 * 900_000
+        regs = [dict(base, id="alvo", quando_ms=t0, veredito="A FAVOR"),
+                dict(base, id="stop", quando_ms=t0 + 900_000, veredito="A FAVOR"),
+                dict(base, id="mesmo", quando_ms=t0 + 2 * 900_000, veredito="ESPERAR"),
+                dict(base, id="expira", quando_ms=t0 + 5 * 900_000, veredito="ESPERAR")]
+        with open(os.path.join(pasta, "fichas.jsonl"), "w") as arq:
+            arq.write("\n".join(json.dumps(r) for r in regs) + "\n")
+        s = _serie_plana(t0 - 900_000, 900_000, 11, 100.0, 0.5)
+        s.maxima[1] = 104.5                            # 1o candle depois da 1a ficha: alvo
+        s.minima[2] = 97.5                             # 1o depois da 2a: stop
+        s.maxima[3], s.minima[3] = 104.5, 97.5         # 1o depois da 3a: os dois, conta stop
+        s.fechamento[9] = 101.0                        # 4o candle depois da 4a: fecha a 101
+        chamadas = []
+        buscar = lambda par, tf, n: chamadas.append(n) or s
+        feitas = ficha.conferir_fichas(pasta, AGORA_FICHA, buscar)
+        checar(feitas["alvo"]["desfecho"] == "alvo" and feitas["alvo"]["r"] == 1.8
+               and feitas["stop"]["desfecho"] == "stop" and feitas["stop"]["r"] == -1.0,
+               "ficha conferida candle a candle: alvo = o R prometido, stop = -1 R")
+        checar(feitas["mesmo"]["desfecho"] == "stop", "stop e alvo no mesmo candle: conta stop (como no backtest)")
+        checar(feitas["expira"]["desfecho"] == "expirou" and abs(feitas["expira"]["r"] - (100 * (1.0 - 0.1) / 100) / 2.2) < 1e-3,
+               "sem stop nem alvo no prazo: fecha no ultimo candle, com taxa")
+        linhas = ficha.placar_fichas(pasta, feitas)
+        a = next(l for l in linhas if l["veredito"] == "A FAVOR")
+        e = next(l for l in linhas if l["veredito"] == "ESPERAR")
+        checar(a["conferidas"] == 2 and a["acerto"] == 50.0 and abs(a["soma_r"] - 0.8) < 1e-9 and e["conferidas"] == 2,
+               "placar separado por veredito: A FAVOR contra ESPERAR")
+        ficha.conferir_fichas(pasta, AGORA_FICHA, buscar)
+        checar(len(chamadas) == 1, "ficha ja conferida nao e buscada de novo")
+        checar("meta e 100" in ficha.texto_placar_fichas(linhas), "o placar diz que ainda nao ha prova (meta de 100)")
+    finally:
+        shutil.rmtree(pasta, ignore_errors=True)
+
+
 def _pegada_real() -> dict:
     """Tamanho de cada arquivo de dado real (vigia e caderno de quem roda de verdade)."""
     pegada = {}
@@ -1517,6 +1999,10 @@ if __name__ == "__main__":
     teste_smc()
     teste_scalping()
     teste_fase2_honesta()
+    teste_ficha_calculo()
+    teste_ficha_veredito()
+    teste_ficha_fontes()
+    teste_ficha_comandos()
     print("\n[13] a bateria nao toca nos dados reais do vigia")
     checar(_pegada_real() == pegada, "dados_vigia/, caderno, vigia.json e segredos.json iguais antes e depois da bateria")
     print()

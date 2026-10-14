@@ -3,6 +3,11 @@
 Vibe trading — um comando so para tudo. Nada aqui envia ordem ou pede chave de corretora.
 
     python3 vibe.py                     este menu
+    python3 vibe.py analisar BTC        a ficha completa de uma operacao, agora (risco 2%, intraday)
+    python3 vibe.py analisar SOL 10 scalp    ... com risco de 10% da banca, no scalp
+    python3 vibe.py radar               as moedas que mais oscilam agora na Pionex
+    python3 vibe.py fichas              o placar das fichas: o veredito acerta?
+    python3 vibe.py fontes              testa, uma a uma, cada fonte de dado da ficha
     python3 vibe.py bateria             fase 1: todas as estrategias, ultimos 90 dias
     python3 vibe.py historico           fase 1: o historico inteiro de cada par, ano a ano
     python3 vibe.py vigia               fase 2: papel ao vivo, 24 horas (Ctrl+C para parar)
@@ -62,13 +67,42 @@ def configurar_telegram() -> None:
           "4. Nao consegui mandar a mensagem de teste. Confira a internet e rode de novo.")
 
 
+def conferir_fontes(par: str = "BTCUSDT") -> None:
+    import fatores
+    import ficha
+    print(f"\nTESTE DAS FONTES ({par}) - cada uma chamada uma vez, de verdade\n")
+    falhas = 0
+    for nome, ok, resumo in fatores.conferir_fontes(ficha.par_de(par)):
+        falhas += not ok
+        print(f"  {'ok   ' if ok else 'FALHA'} {nome}\n        {resumo}")
+    print(f"\n{'Todas responderam.' if not falhas else f'{falhas} fonte(s) fora do ar: a ficha mostra FORA DO AR nelas.'}")
+
+
 def main() -> None:
     args = sys.argv[1:]
     if not args or args[0] in ("-h", "--help", "ajuda"):
         print(__doc__)
         return
     cmd, resto = args[0], args[1:]
-    if cmd == "bateria":
+    if cmd in ("analisar", "radar", "fichas"):
+        import time
+        import vigia
+        cfg = vigia.carregar_config()
+        agora = int(time.time() * 1000)
+        try:
+            if cmd == "analisar":
+                estado = vigia.ler_json(os.path.join(vigia.PASTA, "estado.json"), {"trilhas": {}})
+                print(vigia.fazer_ficha(resto, cfg, estado, agora))
+            elif cmd == "radar":
+                print(vigia.texto_radar(cfg))
+            else:
+                print(vigia.texto_fichas(vigia.PASTA, agora))
+        except Exception as e:
+            sys.exit(f"Nao consegui ({type(e).__name__}: {str(e)[:150]}). Confira a internet e rode "
+                     f"'python3 vibe.py fontes' para ver qual fonte esta fora do ar.")
+    elif cmd == "fontes":
+        conferir_fontes(resto[0] if resto else "BTC")
+    elif cmd == "bateria":
         _rodar_main("bateria", resto)
     elif cmd == "historico":
         _rodar_main("bateria", ["--historico"] + resto)

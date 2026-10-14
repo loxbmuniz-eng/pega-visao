@@ -47,7 +47,9 @@ REGISTRO="$VIBE_DIR/bateria_${novo:0:7}.log"
 # (find, e nao ls: sem registro nenhum ainda, ls devolve erro e, com pipefail, o
 # script morria calado antes da bateria)
 find "$VIBE_DIR" -maxdepth 1 -name 'bateria_*.log' -printf '%T@ %p\n' | sort -rn | tail -n +10 | cut -d' ' -f2- | xargs -r rm -f
-if VIBE_SERVIDOR=1 nice -n 15 "$VENV/bin/python" "$PROVA/testes/test_motor.py" > "$REGISTRO" 2>&1; then
+# teto de 2 horas: uma versao que trava (laco infinito) e recusada, nao prende a
+# atualizacao para sempre (no servidor a bateria leva uns 10 minutos)
+if VIBE_SERVIDOR=1 timeout 2h nice -n 15 "$VENV/bin/python" "$PROVA/testes/test_motor.py" > "$REGISTRO" 2>&1; then
   cp "$REGISTRO" "$VIBE_DIR/ultima_bateria.log"
   git -C "$APP" merge -q --ff-only "origin/$RAMO"
   # o systemd religa o vigia (Restart=always) ja na versao nova
@@ -55,8 +57,11 @@ if VIBE_SERVIDOR=1 nice -n 15 "$VENV/bin/python" "$PROVA/testes/test_motor.py" >
   echo "atualizado de ${atual:0:7} para ${novo:0:7}: bateria verde"
   avisar "Vigia atualizado (${novo:0:7}): bateria verde no servidor. $(git -C "$APP" log -1 --format=%s)"
 else
+  codigo=$?
+  motivo="a bateria reprovou"
+  [[ $codigo -eq 124 ]] && motivo="a bateria passou de 2 horas (travou)"
   cp "$REGISTRO" "$VIBE_DIR/ultima_bateria.log"
-  echo "versão ${novo:0:7} RECUSADA: a bateria reprovou (veja $REGISTRO)"
-  avisar "Atualização ${novo:0:7} RECUSADA: a bateria reprovou no servidor. O vigia segue na versão ${atual:0:7}."
+  echo "versão ${novo:0:7} RECUSADA: $motivo (veja $REGISTRO)"
+  avisar "Atualização ${novo:0:7} RECUSADA: $motivo no servidor. O vigia segue na versão ${atual:0:7}."
 fi
 rm -rf "$PROVA"

@@ -11,15 +11,17 @@ Não toca no painel de logística Suinco. É projeto separado, na mesma árvore.
 
 | Arquivo | O que faz |
 |---|---|
-| `vibe.py` | **Um comando só para tudo**: `python3 vibe.py` mostra o menu (bateria, histórico, vigia, placar, Telegram, arena, monitor, testes) |
+| `vibe.py` | **Um comando só para tudo**: `python3 vibe.py` mostra o menu (analisar, radar, fichas, fontes, bateria, histórico, vigia, placar, Telegram, arena, monitor, testes) |
+| `ficha.py` | **A ficha de cada operação** (`/analisar` no Telegram): estrutura em 3 períodos, níveis, stop, alvos, tamanho pelo risco, liquidação, funding, agenda e o veredito com cada motivo; placar das fichas |
+| `fatores.py` | As fontes públicas da ficha: regras da moeda, tabela de risco, marca e funding da Pionex; posições abertas e lotação da Binance; medo e ganância; DVOL; agenda do Fed e da BLS |
 | `servidor/instalar_vps.sh` | Põe o vigia 24 horas num VPS, ao lado de outro sistema, sem encostar nele; atualização diária só com a bateria verde |
 | `backtest.py` | Puxa candles públicos e simula com taxa, stop, margem de manutenção e liquidação |
 | `vigia.py` | Fase 2: opera no papel, ao vivo, 24 horas, com a mesma regra do backtest; placar contra 20 moedas; diário; alerta no Telegram |
 | `livro.py` | Lê o livro de ofertas de Pionex, Binance e Hyperliquid e grava o desequilíbrio perto do preço, a cada candle (só gravação, para medir) |
 | `arena.py` | A Qwen e o Claude como competidores dentro do vigia, no papel, com as mesmas regras de saída e as mesmas moedas (desligada até você ligar) |
 | `bateria.py` | Fase 1: todas as estratégias em vários ativos e períodos contra a moeda; `--historico` faz o histórico inteiro ano a ano; registra tudo no caderno de experimentos (`caderno.jsonl`) |
-| `estrategias.py` | Os sinais de entrada: 7 estratégias, a confluência e 2 controles cegos |
-| `indicadores.py` | EMA, SMA, RSI, ATR, VWAP, desvio, ruído mediano |
+| `estrategias.py` | Os sinais de entrada: montagens de mesa, SMC, confluência e 2 controles cegos |
+| `indicadores.py` | EMA, SMA, RSI, ATR, VWAP, desvio, ruído mediano, perfil de volume |
 | `monitor.html` | **Monitor em tempo real.** Abre no navegador, lê a Binance pública, mostra as 5 confirmações nos 5 períodos e alerta no fechamento do candle |
 | `testes/test_motor.py` | Guardas: vazamento de futuro, posição sobreposta, paridade Python × monitor, gatilho obrigatório, busca de candles, padrões e alinhamento, placar, bateria, replay do vigia, arena com IAs simuladas |
 | `testes/test_monitor_navegador.js` | Abre o monitor num Chromium com a Binance simulada e prova que carrega, calcula e alerta |
@@ -79,6 +81,85 @@ Esse número decide se o seu stop é executável, e vai direto no campo "ruído
 típico" da Banda de Liquidação. Sem ele você está chutando.
 
 ---
+
+## Ficha de cada operação: `/analisar`
+
+A leitura completa de **uma moeda, agora, antes do clique**. No Telegram:
+
+```
+/analisar BTC              risco 2% da banca, intraday (até 1 dia)
+/analisar SOL 10 scalp     risco 10%, scalp (minutos a 3 horas)
+/analisar ETH 3 swing      risco 3%, swing (1 dia a 1 semana)
+/radar                     as moedas que mais oscilam agora na Pionex (com volume)
+/fichas                    o placar das fichas
+```
+
+No computador: `python3 vibe.py analisar BTC 2 swing`, `python3 vibe.py radar`,
+`python3 vibe.py fichas`.
+
+| Horizonte | Entrada | Contexto | Maior | Prazo |
+|---|---|---|---|---|
+| scalp | 5m | 15m | 1h | até 3 horas |
+| intraday | 15m | 1h | 4h | até 1 dia |
+| swing | 1h | 4h | 1d | até 1 semana |
+
+O que a ficha faz, nesta ordem:
+
+1. **Direção.** O contexto e o período maior precisam concordar pela estrutura
+   (topos e fundos). Se discordam, ESPERAR, e a ficha diz o que faria comprar
+   ("o 4h fechar acima de X") e o que faria vender.
+2. **Onde está o preço.** Na perna atual do contexto (do último fundo confirmado
+   até a máxima desde ele): compra só no desconto, venda só no prêmio. Fora
+   disso, ESPERAR, com a **zona ótima** (62% a 79% da perna) para ordem limitada.
+3. **Níveis.** Topo e fundo de ontem e da semana passada (segunda a domingo, UTC),
+   abertura do dia, VWAP do dia, perfil de volume (POC e área de valor de 7 dias,
+   POC de ontem), vãos e blocos de ordens ainda não tocados, topo e fundo da
+   estrutura, número redondo. Níveis a menos de 1/4 de ATR um do outro viram
+   uma confluência só.
+4. **Stop.** Um quarto de ATR além do último fundo (ou topo) do período de
+   entrada, e nunca a menos de 1 ATR (mais perto, o ruído normal bate nele).
+5. **Alvos.** Só em nível **forte** para o horizonte, a mais de meio ATR, um
+   décimo de ATR **antes** do nível (quem espera sair no nível enche a fila
+   nele). Os níveis fracos no meio do caminho aparecem com a distância em
+   múltiplos do risco. Se o 1º alvo paga menos de 1,5 vez o risco, já com as
+   taxas: **espaço curto**, ESPERAR.
+6. **Tamanho pelo risco que você escolheu.** Perder no stop exatamente o risco
+   pedido (taxa nas duas pontas e deslizamento incluídos). A alavancagem é a
+   maior que deixa a **liquidação a pelo menos 2 vezes a distância do stop**,
+   com a margem de manutenção da **tabela de risco da Pionex** para aquele
+   tamanho. A quantidade respeita o passo da corretora, sempre para baixo:
+   nunca arrisca mais que o pedido. Abaixo do pedido mínimo, NÃO OPERAR, e a
+   ficha diz qual o menor risco possível.
+7. **Projeção em USDT.** Perda no stop, lucro no alvo 1, "alvo + surfe"
+   (metade no 1º alvo, stop no zero, o resto no 2º), acerto mínimo para
+   empatar, funding no prazo do horizonte.
+8. **Contexto, que mostra e não decide.** Funding, posições abertas e lotação
+   na Binance, livro de ofertas, medo e ganância, DVOL, agenda.
+9. **Agenda.** CPI, payroll ou decisão do Fed nos próximos 30 minutos (ou nos
+   últimos 15): ESPERAR no scalp e no intraday; no swing, só aviso.
+
+| Veredito | Quando |
+|---|---|
+| **A FAVOR** | direção, lado da perna, espaço e agenda certos |
+| **ESPERAR** | qualquer um deles falta; a ficha diz o que esperar |
+| **NÃO OPERAR** | moeda inexistente ou parada, dado velho, risco fora de 0–25%, pedido abaixo do mínimo |
+
+Cada fonte que não responde aparece em **FORA DO AR**, nunca em silêncio e
+nunca com valor inventado. `python3 vibe.py fontes` chama cada fonte uma vez e
+mostra o que veio: rode na sua máquina antes de confiar na ficha.
+
+> **As regras da ficha ainda não têm prova.** São leitura de mesa escrita como
+> regra exata. Por isso toda ficha com plano fica registrada e é conferida
+> depois, candle a candle, pela mesma regra do backtest (stop e alvo no mesmo
+> candle conta stop). O `/fichas` separa **A FAVOR** de **ESPERAR (se tivesse
+> entrado)**: se o veredito vale alguma coisa, A FAVOR ganha. Antes de 100
+> fichas A FAVOR conferidas, é hipótese.
+
+> **Correção registrada (gap do CME).** O "gap do CME" estava aprovado, mas a
+> CME passou a negociar cripto 24 horas por dia, 7 dias por semana, em
+> 29/05/2026: gap novo de fim de semana não se forma mais. Os gaps antigos
+> pedem o preço do futuro da CME, que não é grátis, e os números que circulam
+> em notícia não batem entre si. Não entrou; nada foi inventado no lugar.
 
 ## As estratégias
 
@@ -432,9 +513,13 @@ fica sem resposta):
 |---|---|
 | `/placar` | o placar de cada estratégia e IA, agora |
 | `/status` | último candle processado, posições abertas, conferência entre fontes e o **risco aberto somado** (se todas as posições batessem no stop juntas), contra o teto `"risco_total_max_pct"` (padrão 6% da banca) |
-| `/ajuda` | a lista de comandos | O
-`segredos.json` fica só para o dono ler e nunca vai para o GitHub (está no
-`.gitignore`).
+| `/analisar MOEDA [risco%] [scalp\|intraday\|swing]` | a ficha completa da operação (veja "Ficha de cada operação") |
+| `/radar` | os perpétuos da Pionex que mais oscilaram em 24 h, só os com volume acima de 5 mi USDT |
+| `/fichas` | o placar das fichas: A FAVOR contra ESPERAR, em múltiplos do risco |
+| `/ajuda` | a lista de comandos |
+
+O `segredos.json` fica só para o dono ler e nunca vai para o GitHub (está no
+`.gitignore`). O resumo das 21 h traz também o placar das fichas, conferido na hora.
 
 ### No VPS, 24 horas, ao lado do Embarque Suinco
 

@@ -178,3 +178,41 @@ def vwap_diaria(maximas: list[float], minimas: list[float], fechamentos: list[fl
         saida[k] = pv / vol if vol else None
     return saida
 
+
+
+def perfil_volume(maximas: list[float], minimas: list[float], volumes: list[float],
+                  degraus: int = 50, area: float = 0.70) -> dict | None:
+    """Perfil de volume da janela inteira: o volume de cada candle e espalhado por
+    igual entre a minima e a maxima dele, em `degraus` faixas de preco. Devolve
+      poc  o preco com mais volume negociado (o "preco justo" da janela);
+      val, vah  a base e o topo da area de valor: as faixas em volta do POC que
+                somam `area` (70%) do volume, crescendo para o lado de maior volume.
+    Candle nao informa onde o volume aconteceu dentro dele; espalhar por igual e a
+    aproximacao padrao. Sem amplitude ou sem volume: None."""
+    if not maximas or len(maximas) != len(minimas) or len(maximas) != len(volumes):
+        return None
+    lo, hi = min(minimas), max(maximas)
+    if hi <= lo or sum(volumes) <= 0:
+        return None
+    passo = (hi - lo) / degraus
+    vol = [0.0] * degraus
+    for h, l, v in zip(maximas, minimas, volumes):
+        if v <= 0:
+            continue
+        a = min(degraus - 1, int((l - lo) / passo))
+        b = min(degraus - 1, int((h - lo) / passo))
+        parte = v / (b - a + 1)
+        for k in range(a, b + 1):
+            vol[k] += parte
+    poc = max(range(degraus), key=lambda k: vol[k])  # empate: a faixa mais baixa
+    total, dentro, baixo, alto = sum(vol), vol[poc], poc, poc
+    while dentro < area * total and (baixo > 0 or alto < degraus - 1):
+        acima = vol[alto + 1] if alto + 1 < degraus else -1.0
+        abaixo = vol[baixo - 1] if baixo > 0 else -1.0
+        if acima >= abaixo:
+            alto += 1
+            dentro += acima
+        else:
+            baixo -= 1
+            dentro += abaixo
+    return {"poc": lo + (poc + 0.5) * passo, "val": lo + baixo * passo, "vah": lo + (alto + 1) * passo}

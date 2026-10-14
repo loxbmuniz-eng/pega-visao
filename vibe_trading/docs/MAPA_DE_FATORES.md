@@ -26,6 +26,27 @@ Só ao vivo = gravamos daqui em diante e medimos depois.
 | Compra e venda agressora | Binance (campo 9 do candle) | sim |
 | Livro de ofertas | Pionex, Binance, Hyperliquid | só ao vivo (gravando) |
 | Estrutura, SMC, montagens | calculado do candle | sim |
+| Níveis: ontem, semana passada, abertura, VWAP do dia, perfil de volume, vãos e blocos abertos, número redondo | calculado do candle (`ficha.niveis`) | sim |
+
+## Na ficha (`/analisar`), desde 14/10/2026
+
+| Fator | Fonte | Verificação |
+|---|---|---|
+| Pedido mínimo, passo de quantidade e de preço, moeda negociando | Pionex `GET /api/v1/common/symbols?symbols=` | [doc] especificação oficial |
+| Alavancagem máxima e margem de manutenção por faixa de tamanho | Pionex `GET /api/v1/common/riskTable?symbol=` | [doc]; margem conferida contra 1/alavancagem antes de usar |
+| Marca, índice, próximo funding | Pionex `GET /api/v1/market/indexes?symbol=` | [doc]; o exemplo oficial mostra funding como fração (`"0.0001"`) |
+| Histórico de funding e intervalo entre cobranças | Pionex `GET /api/v1/market/fundingRates?symbol=&limit=` | [doc]; o intervalo é medido nas datas |
+| Giro de 24 h de todos os perpétuos (`/radar`) | Pionex `GET /api/v1/market/tickers?type=PERP` | [doc] |
+| Posições abertas, lotação | Binance `futures/data/openInterestHist`, `globalLongShortAccountRatio` | [código] |
+| Medo e ganância | alternative.me | [doc] |
+| DVOL (BTC e ETH) | Deribit | [doc] |
+| Agenda: FOMC | tabela no código, com a fonte (Chicago Fed para 2026, MNI para 2027, conferidas em 14/10/2026) | [doc] secundária; o federalreserve.gov não abriu daqui |
+| Agenda: CPI, payroll, PPI | BLS `schedule/news_release/bls.ics` | [doc]; hora sem fuso conhecido fica de fora |
+
+Peso dos pedidos à Pionex: 5 cada, num teto de 10 por segundo por endereço;
+passar dá 60 s de bloqueio. Todo pedido do programa passa por um ritmo único
+(`backtest.ritmo_pionex`): no mínimo 0,6 s entre dois, mesmo com o vigia e o
+`/analisar` pedindo juntos. Uma ficha faz 15 pedidos à Pionex (cerca de 9 s).
 
 ## Entra primeiro (grátis, sem chave)
 
@@ -55,6 +76,7 @@ Só ao vivo = gravamos daqui em diante e medimos depois.
 | CoinGecko sem chave | a própria documentação diz que não é para consulta programada |
 | Farside (fluxo dos ETFs) | só página HTML atrás de proteção anti-robô; fica para quando houver fonte própria |
 | Ondas de Elliott, padrões harmônicos | não viram regra exata, então não dá para testar |
+| Gap do CME | a CME negocia cripto 24/7 desde 29/05/2026: gap novo não se forma; os antigos pedem o preço do futuro da CME, que não é grátis |
 
 ## Como cada fator entra na ficha
 

@@ -49,6 +49,8 @@ import arena
 import backtest as bt
 import estatistica
 import estrategias
+import fatores
+import ficha
 import livro
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
@@ -94,6 +96,11 @@ CONFIG_PADRAO = {
               "qwen_modelo": "qwen/qwen3-max", "deepseek_modelo": "deepseek/deepseek-v3.2",
               "claude_modelo": "claude-opus-5-5",
               "claude_esforco": "low", "max_chamadas_dia": 30},
+    # A ficha de cada operacao (/analisar no Telegram, vibe.py analisar): risco padrao,
+    # tetos e tolerancias. Veja ficha.FICHA_PADRAO para o que cada um faz.
+    "ficha": dict(ficha.FICHA_PADRAO),
+    # /radar: os perpetuos da Pionex que mais oscilaram em 24 h, so os com volume.
+    "radar": {"volume_min_usdt": 5_000_000, "quantos": 10},
 }
 
 SEGREDOS_MODELO = {
@@ -151,9 +158,10 @@ def carregar_config(caminho: str = CONFIG) -> dict:
     novos = [k for k in CONFIG_PADRAO if k not in cfg]
     for k in novos:
         cfg[k] = json.loads(json.dumps(PADRAO_PARA_CONFIG_ANTIGA.get(k, CONFIG_PADRAO[k])))
-    novos += [f"arena.{k}" for k in CONFIG_PADRAO["arena"] if k not in cfg["arena"]]
-    for k in CONFIG_PADRAO["arena"]:
-        cfg["arena"].setdefault(k, CONFIG_PADRAO["arena"][k])
+    for grupo in ("arena", "ficha", "radar"):
+        novos += [f"{grupo}.{k}" for k in CONFIG_PADRAO[grupo] if k not in cfg[grupo]]
+        for k in CONFIG_PADRAO[grupo]:
+            cfg[grupo].setdefault(k, CONFIG_PADRAO[grupo][k])
     if novos:
         gravar_json(caminho, cfg, indent=2)
         print(f"  acrescentei ao {os.path.basename(caminho)}: {', '.join(novos)} (valores padrao)")
@@ -698,19 +706,70 @@ def texto_status(estado: dict, cfg: dict, agora_ms: int) -> str:
 
 
 AJUDA_TELEGRAM = ("Comandos do vigia (papel, nenhuma ordem real):\n"
+                  "/analisar MOEDA [risco%] [scalp|intraday|swing] - a ficha completa da operacao "
+                  "(ex.: /analisar BTC 2 swing; sem risco, usa 2%)\n"
+                  "/radar - as moedas que mais oscilam agora na Pionex (com volume)\n"
+                  "/fichas - o placar das fichas: o veredito acerta?\n"
                   "/placar - o placar de cada estrategia e IA\n"
                   "/status - se o vigia esta vivo, ultimo candle, posicoes abertas\n"
                   "/ajuda - esta lista")
 
 
-def responder_comando(texto: str, estado: dict, cfg: dict, agora_ms: int) -> str | None:
-    palavra = (texto or "").strip().split(" ")[0].split("@")[0].lower()
+def fazer_ficha(argumentos: list[str], cfg: dict, estado: dict, agora_ms: int, pasta: str = PASTA,
+                coletar=ficha.coletar) -> str:
+    """/analisar: busca, analisa, registra para o placar das fichas e devolve o texto."""
+    try:
+        pedido = ficha.interpretar_pedido(argumentos, cfg.get("ficha"))
+    except ValueError as e:
+        return f"Nao deu para analisar: {e}"
+    p = cfg["params"]
+    dados = coletar(pedido["par"], agora_ms)
+    f = ficha.analisar(dados, pedido["horizonte"], pedido["risco_pct"], banca=p["banca"], cfg=cfg.get("ficha"),
+                       taxa=p["taxa"], mm_padrao=p["mm"], estado=estado,
+                       divergencia_max=cfg.get("divergencia_max_pct", 0.3))
+    return ficha.texto(f, ficha.registrar(pasta, f))
+
+
+def texto_fichas(pasta: str, agora_ms: int, buscar=None) -> str:
+    feitas = ficha.conferir_fichas(pasta, agora_ms, buscar)
+    return ficha.texto_placar_fichas(ficha.placar_fichas(pasta, feitas))
+
+
+def texto_radar(cfg: dict, giro=fatores.giro_24h) -> str:
+    r = cfg.get("radar") or CONFIG_PADRAO["radar"]
+    return ficha.texto_radar(ficha.radar(giro(), r["volume_min_usdt"], r["quantos"]), r["volume_min_usdt"])
+
+
+SERVICOS = {
+    "analisar": lambda args, cfg, estado, agora: fazer_ficha(args, cfg, estado, agora),
+    "fichas": lambda agora: texto_fichas(PASTA, agora),
+    "radar": lambda cfg: texto_radar(cfg),
+}
+
+
+def responder_comando(texto: str, estado: dict, cfg: dict, agora_ms: int, servicos: dict | None = None) -> str | None:
+    """A resposta a um comando do Telegram. Os que buscam dado na rede nunca derrubam
+    quem escuta: falha vira mensagem."""
+    partes = (texto or "").strip().split()
+    if not partes:
+        return None
+    palavra, argumentos = partes[0].split("@")[0].lower(), partes[1:]
+    servicos = servicos or SERVICOS
     if palavra == "/placar":
         return texto_resumo(estado).replace("Resumo do dia (papel)", "Placar agora (papel)")
     if palavra == "/status":
         return texto_status(estado, cfg, agora_ms)
     if palavra in ("/ajuda", "/start", "/help"):
         return AJUDA_TELEGRAM
+    try:
+        if palavra == "/analisar":
+            return servicos["analisar"](argumentos, cfg, estado, agora_ms)
+        if palavra == "/fichas":
+            return servicos["fichas"](agora_ms)
+        if palavra == "/radar":
+            return servicos["radar"](cfg)
+    except Exception as e:
+        return f"Nao consegui responder {palavra}: {type(e).__name__}: {str(e)[:150]}"
     return None
 
 
@@ -917,7 +976,7 @@ def rodar(cfg: dict, segredos: dict, uma_vez: bool) -> None:
     if avisar and segredos.get("telegram_chat_id") and not uma_vez:
         threading.Thread(target=escutar_telegram, args=(segredos, cfg, arq_estado, threading.Event()),
                          daemon=True, name="telegram").start()
-        log("telegram: respondendo /placar, /status e /ajuda (so ao seu chat)")
+        log("telegram: respondendo /analisar, /radar, /fichas, /placar, /status e /ajuda (so ao seu chat)")
     if avisar and not uma_vez:
         avisar("Vigia ligado (papel). Estrategias: " + ", ".join(e["nome"] for e in cfg["estrategias"])
                + (f". Arena: {', '.join(juiz.competidores())}" if juiz else ""))
@@ -957,7 +1016,13 @@ def rodar(cfg: dict, segredos: dict, uma_vez: bool) -> None:
         hoje = time.strftime("%Y-%m-%d")
         if (avisar and int(time.strftime("%H")) >= cfg.get("resumo_diario_hora", 21)
                 and estado.get("ultimo_resumo") != hoje):
-            if avisar(texto_resumo(estado)):
+            resumo = texto_resumo(estado)
+            if ficha.ler_fichas(PASTA):
+                try:
+                    resumo += "\n\n" + texto_fichas(PASTA, int(time.time() * 1000))
+                except Exception as e:
+                    resumo += f"\n\nplacar das fichas sem conferencia hoje ({type(e).__name__})"
+            if avisar(resumo):
                 estado["ultimo_resumo"] = hoje
                 gravar_json(arq_estado, estado)
         if uma_vez:

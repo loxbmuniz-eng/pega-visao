@@ -589,9 +589,9 @@ def estrutura_mercado(c, k: int = 3):
     for i in range(n):
         j = i - k
         if j - k >= 0:
-            if c.maxima[j] > max(c.maxima[j - k:j]) and c.maxima[j] > max(c.maxima[j + 1:i + 1]):
+            if e_topo(c, j, k):
                 topo, topo_rompido = c.maxima[j], False
-            if c.minima[j] < min(c.minima[j - k:j]) and c.minima[j] < min(c.minima[j + 1:i + 1]):
+            if e_fundo(c, j, k):
                 fundo, fundo_rompido = c.minima[j], False
         if topo is not None and not topo_rompido and c.fechamento[i] > topo:
             eventos[i], tend, topo_rompido = (2 if tend == -1 else 1), 1, True
@@ -599,6 +599,29 @@ def estrutura_mercado(c, k: int = 3):
             eventos[i], tend, fundo_rompido = (-2 if tend == 1 else -1), -1, True
         faixas[i], tendencias[i] = (fundo, topo), tend
     return eventos, faixas, tendencias
+
+
+def e_topo(c, j: int, k: int = 3) -> bool:
+    """Topo confirmado em j: maxima maior que a dos k candles de cada lado."""
+    return c.maxima[j] > max(c.maxima[j - k:j]) and c.maxima[j] > max(c.maxima[j + 1:j + k + 1])
+
+
+def e_fundo(c, j: int, k: int = 3) -> bool:
+    """Fundo confirmado em j: minima menor que a dos k candles de cada lado."""
+    return c.minima[j] < min(c.minima[j - k:j]) and c.minima[j] < min(c.minima[j + 1:j + k + 1])
+
+
+def perna_atual(c, direcao: int, k: int = 3):
+    """A perna que importa para entrar, ate o ultimo candle: na compra, do ultimo
+    fundo confirmado ate a maior maxima desde ele (fundo, topo); na venda, do ultimo
+    topo confirmado ate a menor minima desde ele. Desconto, premio e zona otima se
+    medem nela. None se nao ha pivo confirmado."""
+    for j in range(len(c.fechamento) - 1 - k, k - 1, -1):
+        if direcao > 0 and e_fundo(c, j, k):
+            return c.minima[j], max(c.maxima[j:])
+        if direcao < 0 and e_topo(c, j, k):
+            return min(c.minima[j:]), c.maxima[j]
+    return None
 
 
 def quebra_estrutura(c, k: int = 3) -> list[int]:
@@ -624,11 +647,22 @@ def vao_valor_justo(c, espera: int = 10, minimo_pct: float = 0.05) -> list[int]:
             s[i], ativo = _testar_zona(c, i, ativo)
             if s[i]:
                 continue
-        if c.maxima[i - 2] < c.minima[i] and (c.minima[i] - c.maxima[i - 2]) / c.fechamento[i] * 100 >= minimo_pct:
-            ativo = (1, c.maxima[i - 2], c.minima[i], i + espera)
-        elif c.minima[i - 2] > c.maxima[i] and (c.minima[i - 2] - c.maxima[i]) / c.fechamento[i] * 100 >= minimo_pct:
-            ativo = (-1, c.maxima[i], c.minima[i - 2], i + espera)
+        vao = fvg_em(c, i, minimo_pct)
+        if vao is not None:
+            ativo = (*vao, i + espera)
     return s
+
+
+def fvg_em(c, i: int, minimo_pct: float = 0.05):
+    """O vao de valor justo que o candle i fecha, ou None: (direcao, baixo, alto).
+    A estrategia fvg e a ficha usam esta mesma funcao."""
+    if i < 2:
+        return None
+    if c.maxima[i - 2] < c.minima[i] and (c.minima[i] - c.maxima[i - 2]) / c.fechamento[i] * 100 >= minimo_pct:
+        return 1, c.maxima[i - 2], c.minima[i]
+    if c.minima[i - 2] > c.maxima[i] and (c.minima[i - 2] - c.maxima[i]) / c.fechamento[i] * 100 >= minimo_pct:
+        return -1, c.maxima[i], c.minima[i - 2]
+    return None
 
 
 def bloco_de_ordens(c, k: int = 3, busca: int = 10, espera: int = 20, so_smc: bool = False) -> list[int]:
@@ -652,15 +686,24 @@ def bloco_de_ordens(c, k: int = 3, busca: int = 10, espera: int = 20, so_smc: bo
             s[i] = sinal
             if sinal:
                 continue
-        if ev[i] > 0:
-            ob = next((j for j in range(i - 1, max(-1, i - busca - 1), -1) if c.fechamento[j] < c.abertura[j]), None)
-            if ob is not None:
-                ativo = (1, c.minima[ob], c.maxima[ob], i + espera)
-        elif ev[i] < 0:
-            ob = next((j for j in range(i - 1, max(-1, i - busca - 1), -1) if c.fechamento[j] > c.abertura[j]), None)
-            if ob is not None:
-                ativo = (-1, c.minima[ob], c.maxima[ob], i + espera)
+        zona = ob_do_evento(c, i, ev[i], busca)
+        if zona is not None:
+            ativo = (*zona, i + espera)
     return s
+
+
+def ob_do_evento(c, i: int, evento: int, busca: int = 10):
+    """O bloco de ordens de uma quebra de estrutura no candle i, ou None:
+    (direcao, baixo, alto). Quebra para cima: o ultimo candle de baixa nos `busca`
+    candles anteriores; o espelho para baixo. A estrategia ob e a ficha usam esta
+    mesma funcao."""
+    if evento > 0:
+        ob = next((j for j in range(i - 1, max(-1, i - busca - 1), -1) if c.fechamento[j] < c.abertura[j]), None)
+        return None if ob is None else (1, c.minima[ob], c.maxima[ob])
+    if evento < 0:
+        ob = next((j for j in range(i - 1, max(-1, i - busca - 1), -1) if c.fechamento[j] > c.abertura[j]), None)
+        return None if ob is None else (-1, c.minima[ob], c.maxima[ob])
+    return None
 
 
 def smc_completo(c) -> list[int]:
