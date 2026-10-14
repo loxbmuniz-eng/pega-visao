@@ -2133,6 +2133,14 @@ def teste_ichimoku_spring() -> None:
     u.abertura.append(100.2); u.maxima.append(101.0); u.minima.append(99.6); u.fechamento.append(99.8)
     u.volume.append(1.0); u.t.append(41)
     checar(est.gerar("spring", u)[-1] == -1, "upthrust: fura o topo e fecha dentro, de baixa: venda")
+    fora = lateral()
+    fora.abertura.append(98.6); fora.minima.append(98.5); fora.maxima.append(99.2); fora.fechamento.append(99.0)
+    fora.volume.append(1.0); fora.t.append(41)
+    acima = lateral()
+    acima.abertura.append(101.4); acima.maxima.append(101.5); acima.minima.append(100.8); acima.fechamento.append(101.0)
+    acima.volume.append(1.0); acima.t.append(41)
+    checar(est.gerar("spring", fora)[-1] == 0 and est.gerar("spring", acima)[-1] == 0,
+           "furou e fechou FORA da faixa (mesmo com candle da cor certa): e rompimento, nao spring nem upthrust")
     t = lateral(90.0)
     for k in range(1, 41):
         t.fechamento[k] = 90.0 + k * 0.25
