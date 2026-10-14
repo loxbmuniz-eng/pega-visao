@@ -320,10 +320,11 @@ def divergencia_rsi(c, k: int = 3, n_rsi: int = 14,
 # alinhamento entre periodos
 # --------------------------------------------------------------------------- #
 
-MIN15, H1, H4, H12, D1 = 900_000, 3_600_000, 14_400_000, 43_200_000, 86_400_000
+MIN5, MIN15, H1, H4, H12, D1 = 300_000, 900_000, 3_600_000, 14_400_000, 43_200_000, 86_400_000
 
 # os dois periodos acima de cada um; 24 h nao tem periodo acima
 ACIMA: dict[int, tuple[int, ...]] = {
+    MIN5: (MIN15, H1),
     MIN15: (H1, H4),
     H1: (H4, H12),
     H4: (H12, D1),
@@ -446,6 +447,227 @@ def sinais(nome: str, c, lado: str = "ambos", alinhar: bool = False) -> list[int
 # registro
 # --------------------------------------------------------------------------- #
 
+# --------------------------------------------------------------------------- #
+# montagens de mesa (analise grafica classica do BTC), cada uma testavel contra a moeda
+# --------------------------------------------------------------------------- #
+
+def cacada_stops(c, n: int = 20) -> list[int]:
+    """Caca de stops: o pavio passa da maxima (ou minima) das ultimas n barras, onde
+    ficam os stops de quem esta do outro lado, e o candle fecha de volta para dentro,
+    na cor contraria. Entra contra o falso rompimento."""
+    s = [0] * len(c.fechamento)
+    for i in range(n, len(c.fechamento)):
+        topo = max(c.maxima[i - n:i])
+        fundo = min(c.minima[i - n:i])
+        if c.maxima[i] > topo and c.fechamento[i] < topo and c.fechamento[i] < c.abertura[i]:
+            s[i] = -1
+        elif c.minima[i] < fundo and c.fechamento[i] > fundo and c.fechamento[i] > c.abertura[i]:
+            s[i] = 1
+    return s
+
+
+def _testar_zona(c, i: int, ativo):
+    """A MESMA regra para reteste, vao de valor justo e bloco de ordens.
+    ativo = (direcao, baixo, alto, ultimo indice da espera). Compra: a minima entra
+    na zona (<= alto) e o candle fecha acima do baixo. Venda: o espelho. Fechar do
+    lado errado da zona, ou passar do prazo, cancela. Devolve (sinal, ativo)."""
+    d, baixo, alto, ate = ativo
+    if i > ate:
+        return 0, None
+    if d > 0 and c.minima[i] <= alto and c.fechamento[i] > baixo:
+        return 1, None
+    if d < 0 and c.maxima[i] >= baixo and c.fechamento[i] < alto:
+        return -1, None
+    if (d > 0 and c.fechamento[i] < baixo) or (d < 0 and c.fechamento[i] > alto):
+        return 0, None
+    return 0, ativo
+
+
+def rompimento_reteste(c, n: int = 20, espera: int = 10) -> list[int]:
+    """Rompimento com reteste: depois de romper o canal de n barras, o preco volta ao
+    nivel rompido em ate `espera` candles, toca e fecha do lado do rompimento. Entra
+    no reteste, um por rompimento. Fechar do lado errado cancela a espera. Enquanto
+    espera, maximas novas no mesmo sentido nao trocam o nivel: o reteste e do nivel
+    que foi rompido primeiro."""
+    s = [0] * len(c.fechamento)
+    ativo = None  # o nivel rompido e uma zona de altura zero
+    for i in range(n, len(c.fechamento)):
+        if ativo is not None:
+            s[i], ativo = _testar_zona(c, i, ativo)
+            if s[i]:
+                continue
+        topo = max(c.maxima[i - n:i])
+        fundo = min(c.minima[i - n:i])
+        if c.fechamento[i] > topo and (ativo is None or ativo[0] != 1):
+            ativo = (1, topo, topo, i + espera)
+        elif c.fechamento[i] < fundo and (ativo is None or ativo[0] != -1):
+            ativo = (-1, fundo, fundo, i + espera)
+    return s
+
+
+def compressao_expansao(c, n: int = 20, k: float = 2.0, janela: int = 100, recente: int = 5) -> list[int]:
+    """Compressao e expansao: a largura da Bollinger chega ao menor valor das ultimas
+    `janela` barras E fica abaixo de 60% da largura mediana dessa janela (o mercado
+    comprimiu de verdade; volatilidade constante nao conta), e o primeiro rompimento
+    do canal de n barras nos `recente` candles seguintes da a direcao."""
+    m = ind.sma(c.fechamento, n)
+    d = ind.desvio(c.fechamento, n)
+    largura = [None if m[i] is None or d[i] is None or not m[i] else 2 * k * d[i] / m[i]
+               for i in range(len(c.fechamento))]
+    aperto = [False] * len(c.fechamento)
+    for i in range(len(c.fechamento)):
+        janela_ok = [x for x in largura[max(0, i - janela + 1):i + 1] if x is not None]
+        if largura[i] is None or len(janela_ok) < janela:
+            continue
+        ordenada = sorted(janela_ok)
+        mediana = ordenada[len(ordenada) // 2]
+        # tolerancia relativa: larguras iguais saem diferentes na 15a casa decimal
+        if largura[i] <= ordenada[0] * (1 + 1e-9) and largura[i] < 0.6 * mediana:
+            aperto[i] = True
+    s = [0] * len(c.fechamento)
+    for i in range(n, len(c.fechamento)):
+        if not any(aperto[max(0, i - recente):i]):
+            continue
+        topo = max(c.maxima[i - n:i])
+        fundo = min(c.minima[i - n:i])
+        if c.fechamento[i] > topo:
+            s[i] = 1
+        elif c.fechamento[i] < fundo:
+            s[i] = -1
+    return s
+
+
+def sessao_ativa(t_ms: int) -> bool:
+    """Londres e Nova York abertas juntas, aproximado em UTC: 12h as 17h, segunda a
+    sexta. Horario de verao desloca a sobreposicao em 1 hora; a janela cobre os dois."""
+    hora = (t_ms // 3_600_000) % 24
+    dia_semana = ((t_ms // 86_400_000) + 3) % 7  # 01/01/1970 foi quinta; segunda = 0
+    return dia_semana < 5 and 12 <= hora < 17
+
+
+def confl3_sessao(c) -> list[int]:
+    """A confl3 so no horario de maior liquidez."""
+    return [x if x and sessao_ativa(c.t[i]) else 0 for i, x in enumerate(confluencia_3(c))]
+
+
+def vwap_do_dia(c, minimo_no_dia: int = 4) -> list[int]:
+    """Preco medio do dia (VWAP desde 00:00 UTC): quem fecha acima dele esta do lado
+    comprador. Entra no toque: a minima toca a VWAP e o candle fecha acima, com o
+    candle anterior ja acima (compra); o espelho para venda. So depois de alguns
+    candles no dia, para a VWAP ter peso."""
+    v = ind.vwap_diaria(c.maxima, c.minima, c.fechamento, c.volume, c.t)
+    s = [0] * len(c.fechamento)
+    no_dia = 0
+    for i in range(len(c.fechamento)):
+        no_dia = 1 if i == 0 or c.t[i] // 86_400_000 != c.t[i - 1] // 86_400_000 else no_dia + 1
+        if i == 0 or no_dia <= minimo_no_dia or v[i] is None or v[i - 1] is None:
+            continue
+        if c.minima[i] <= v[i] < c.fechamento[i] and c.fechamento[i - 1] > v[i - 1]:
+            s[i] = 1
+        elif c.maxima[i] >= v[i] > c.fechamento[i] and c.fechamento[i - 1] < v[i - 1]:
+            s[i] = -1
+    return s
+
+
+# --------------------------------------------------------------------------- #
+# Smart Money Concepts, escritos como regra exata
+# --------------------------------------------------------------------------- #
+
+def estrutura_mercado(c, k: int = 3):
+    """Topos e fundos confirmados (pivo: maior que os k candles de cada lado, so
+    conhecido k candles depois) e as quebras de estrutura. Para cada candle i:
+      eventos[i]  +1 quebra de estrutura de alta (BOS), +2 mudanca de carater para alta
+                  (CHoCH: rompeu o topo vindo de tendencia de baixa); -1 e -2 o espelho;
+      faixas[i]   (ultimo fundo, ultimo topo) confirmados ate i;
+      tendencias[i] +1, -1 ou 0 (antes da primeira quebra).
+    Cada topo ou fundo so e quebrado uma vez."""
+    n = len(c.fechamento)
+    eventos, faixas, tendencias = [0] * n, [(None, None)] * n, [0] * n
+    topo = fundo = None
+    topo_rompido = fundo_rompido = False
+    tend = 0
+    for i in range(n):
+        j = i - k
+        if j - k >= 0:
+            if c.maxima[j] > max(c.maxima[j - k:j]) and c.maxima[j] > max(c.maxima[j + 1:i + 1]):
+                topo, topo_rompido = c.maxima[j], False
+            if c.minima[j] < min(c.minima[j - k:j]) and c.minima[j] < min(c.minima[j + 1:i + 1]):
+                fundo, fundo_rompido = c.minima[j], False
+        if topo is not None and not topo_rompido and c.fechamento[i] > topo:
+            eventos[i], tend, topo_rompido = (2 if tend == -1 else 1), 1, True
+        elif fundo is not None and not fundo_rompido and c.fechamento[i] < fundo:
+            eventos[i], tend, fundo_rompido = (-2 if tend == 1 else -1), -1, True
+        faixas[i], tendencias[i] = (fundo, topo), tend
+    return eventos, faixas, tendencias
+
+
+def quebra_estrutura(c, k: int = 3) -> list[int]:
+    """BOS: entra a favor na quebra que continua a tendencia."""
+    ev, _, _ = estrutura_mercado(c, k)
+    return [1 if x == 1 else -1 if x == -1 else 0 for x in ev]
+
+
+def mudanca_carater(c, k: int = 3) -> list[int]:
+    """CHoCH: entra na primeira quebra contra a tendencia (reversao)."""
+    ev, _, _ = estrutura_mercado(c, k)
+    return [1 if x == 2 else -1 if x == -2 else 0 for x in ev]
+
+
+def vao_valor_justo(c, espera: int = 10, minimo_pct: float = 0.05) -> list[int]:
+    """FVG: em tres candles, a maxima do 1o fica abaixo da minima do 3o (vao de alta;
+    o espelho e o de baixa), com pelo menos `minimo_pct`% do preco. Entra quando o
+    preco volta ao vao e segura (mesma regra de zona do reteste)."""
+    s = [0] * len(c.fechamento)
+    ativo = None
+    for i in range(2, len(c.fechamento)):
+        if ativo is not None:
+            s[i], ativo = _testar_zona(c, i, ativo)
+            if s[i]:
+                continue
+        if c.maxima[i - 2] < c.minima[i] and (c.minima[i] - c.maxima[i - 2]) / c.fechamento[i] * 100 >= minimo_pct:
+            ativo = (1, c.maxima[i - 2], c.minima[i], i + espera)
+        elif c.minima[i - 2] > c.maxima[i] and (c.minima[i - 2] - c.maxima[i]) / c.fechamento[i] * 100 >= minimo_pct:
+            ativo = (-1, c.maxima[i], c.minima[i - 2], i + espera)
+    return s
+
+
+def bloco_de_ordens(c, k: int = 3, busca: int = 10, espera: int = 20, so_smc: bool = False) -> list[int]:
+    """Order block: quando a estrutura quebra para cima, a zona e o ultimo candle de
+    baixa antes do impulso (nos `busca` candles anteriores); entra quando o preco volta
+    a zona e segura. O espelho para baixo. Com so_smc=True, so entra a favor da
+    tendencia da estrutura e no lado certo da faixa: compra abaixo do meio entre o
+    ultimo fundo e o ultimo topo (desconto), vende acima (premio)."""
+    ev, faixas, tend = estrutura_mercado(c, k)
+    s = [0] * len(c.fechamento)
+    ativo = None
+    for i in range(len(c.fechamento)):
+        if ativo is not None:
+            sinal, ativo = _testar_zona(c, i, ativo)
+            if sinal and so_smc:
+                fundo, topo = faixas[i]
+                meio = (fundo + topo) / 2 if fundo is not None and topo is not None else None
+                if meio is None or sinal != tend[i] or (sinal > 0 and c.fechamento[i] >= meio) \
+                        or (sinal < 0 and c.fechamento[i] <= meio):
+                    sinal = 0
+            s[i] = sinal
+            if sinal:
+                continue
+        if ev[i] > 0:
+            ob = next((j for j in range(i - 1, max(-1, i - busca - 1), -1) if c.fechamento[j] < c.abertura[j]), None)
+            if ob is not None:
+                ativo = (1, c.minima[ob], c.maxima[ob], i + espera)
+        elif ev[i] < 0:
+            ob = next((j for j in range(i - 1, max(-1, i - busca - 1), -1) if c.fechamento[j] > c.abertura[j]), None)
+            if ob is not None:
+                ativo = (-1, c.minima[ob], c.maxima[ob], i + espera)
+    return s
+
+
+def smc_completo(c) -> list[int]:
+    """A montagem SMC inteira: bloco de ordens a favor da estrutura, no desconto ou no premio."""
+    return bloco_de_ordens(c, so_smc=True)
+
+
 def com_fluxo(c, sinais: list[int], n: int = 3) -> list[int]:
     """Mantem so o sinal em que a agressao dos ultimos n candles (o do sinal incluido,
     ja fechado) vai a favor: compra com mais compra agressora, venda com mais venda.
@@ -490,6 +712,16 @@ REGISTRO: dict[str, tuple[Callable, str]] = {
     "divergencia": (divergencia_rsi,    "padrao: divergencia entre preco e RSI 14"),
     "confl3_fluxo": (confl3_fluxo,      "confluencia 3/5 so com a agressao a favor (Binance)"),
     "canal_fluxo": (canal_fluxo,        "rompimento do canal so com a agressao a favor (Binance)"),
+    "cacada":     (cacada_stops,        "mesa: caca de stops (pavio fora do canal, fecha dentro)"),
+    "reteste":    (rompimento_reteste,  "mesa: rompimento com reteste do nivel rompido"),
+    "compressao": (compressao_expansao, "mesa: compressao da Bollinger e rompimento depois"),
+    "sessao":     (confl3_sessao,       "mesa: confl3 so com Londres e Nova York abertas"),
+    "vwap_dia":   (vwap_do_dia,         "mesa: toque e defesa do preco medio do dia"),
+    "bos":        (quebra_estrutura,    "SMC: quebra de estrutura a favor da tendencia"),
+    "choch":      (mudanca_carater,     "SMC: mudanca de carater (primeira quebra contra)"),
+    "fvg":        (vao_valor_justo,     "SMC: volta ao vao de valor justo e segura"),
+    "ob":         (bloco_de_ordens,     "SMC: volta ao bloco de ordens e segura"),
+    "smc":        (smc_completo,        "SMC: bloco de ordens a favor da estrutura, no desconto/premio"),
 }
 
 

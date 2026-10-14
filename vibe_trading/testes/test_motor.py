@@ -38,6 +38,13 @@ afirma. Correcao sem guarda e correcao que volta.
                           desequilibrio contado a mao; so gravacao
 17. fluxo agressor      — compra agressora da Binance, saldo contado a mao,
                           filtro so a favor, sem a coluna nao ha sinal
+18. montagens de mesa   — caca de stops, reteste, compressao, sessao e VWAP do
+                          dia disparam so no desenho delas (candles feitos a mao)
+19. prova contra sorte  — Sharpe deflacionado contra os valores do artigo; o
+                          veredito da bateria exige 95% de chance de nao ser sorte
+20. smart money         — estrutura (BOS, CHoCH), vao de valor justo, bloco de
+                          ordens, desconto e premio, em candles feitos a mao
+21. scalping            — acerto minimo para empatar bate com o simulador; 5 min
 """
 
 from __future__ import annotations
@@ -152,7 +159,7 @@ def teste_gatilho_obrigatorio() -> None:
 class BinanceFalsa:
     """Responde como /api/v3/klines: no maximo `limit` candles, respeitando endTime."""
 
-    MS = {"15m": 900_000, "1h": 3_600_000, "4h": 14_400_000, "12h": 43_200_000, "1d": 86_400_000}
+    MS = {"5m": 300_000, "15m": 900_000, "1h": 3_600_000, "4h": 14_400_000, "12h": 43_200_000, "1d": 86_400_000}
 
     def __init__(self, total: int = 3500, falhar_primeira_fonte: bool = False):
         import time as _t
@@ -345,12 +352,12 @@ def teste_bateria() -> None:
             with contextlib.redirect_stdout(saida):
                 bateria.main()
             texto = saida.getvalue()
-            checar(all(f">>> {tf}" in texto for tf in ("15m", "1h", "4h")), "modo normal: os 3 periodos")
+            checar(all(f">>> {tf}" in texto for tf in ("5m", "15m", "1h", "4h")), "modo normal: os 4 periodos (5 min entrou no padrao)")
             checar("PASSARAM NA FASE 1" in texto or "NENHUMA ESTRATEGIA PASSOU" in texto, "modo normal: veredito da fase 1")
             linhas = open(caderno, encoding="utf-8").read().splitlines()
-            checar(len(linhas) == 12, f"caderno: 2 estrategias x 2 ativos x 3 periodos = {len(linhas)} registros")
-            checar("Tentativas registradas no caderno: 6" in texto,
-                   "caderno conta 6 hipoteses (o ativo nao muda a hipotese)")
+            checar(len(linhas) == 16, f"caderno: 2 estrategias x 2 ativos x 4 periodos = {len(linhas)} registros")
+            checar("Tentativas registradas no caderno: 8" in texto,
+                   "caderno conta 8 hipoteses (o ativo nao muda a hipotese)")
 
             bt._pedir = BinanceFalsa(total=3500)
             sys.argv = ["bateria.py", "--historico", "--ativos", "BTCUSDT", "--estrategias", "confl3,engolfo",
@@ -1224,6 +1231,157 @@ def teste_fluxo() -> None:
             checar("compra agressora" in str(e.code), "o vigia recusa estrategia de fluxo com explicacao (ainda nao guarda a coluna)")
 
 
+def _serie_mao(candles, t0=0, passo=None):
+    """candles = [(abertura, maxima, minima, fechamento), ...], volume 1, 15 min."""
+    passo = passo or est.MIN15
+    s = bt.Serie()
+    for k, (o, h, l, f) in enumerate(candles):
+        s.abertura.append(o); s.maxima.append(h); s.minima.append(l); s.fechamento.append(f)
+        s.volume.append(1.0); s.t.append(t0 + k * passo)
+    return s
+
+
+def teste_montagens() -> None:
+    print("\n[18] montagens de mesa: cada uma dispara so no desenho dela")
+    base = [(100.0, 100.5, 99.5, 100.0)] * 25
+    falso_alta = base + [(100.3, 101.0, 100.1, 100.2)]   # pavio acima de 100,5, fecha dentro, candle de baixa
+    falso_baixa = base + [(99.6, 99.9, 99.0, 99.8)]      # pavio abaixo de 99,5, fecha dentro, candle de alta
+    rompeu = base + [(100.2, 101.0, 100.1, 100.8)]       # rompimento de verdade: fecha fora
+    c1, c2, c3 = (est.cacada_stops(_serie_mao(x)) for x in (falso_alta, falso_baixa, rompeu))
+    checar(c1[25] == -1 and c2[25] == 1 and c3[25] == 0 and sum(map(abs, c1 + c2 + c3)) == 2,
+           "caca de stops: vende o falso rompimento de alta, compra o de baixa, ignora rompimento de verdade")
+
+    ret = base + [(100.2, 101.0, 100.1, 101.0),   # 25: rompe 100,5
+                  (101.0, 101.2, 100.9, 101.1),   # 26: segue acima, sem tocar
+                  (101.0, 101.1, 100.4, 100.8),   # 27: toca 100,5 e fecha acima -> compra
+                  (100.8, 100.9, 100.4, 100.7)]   # 28: toca de novo: nao repete
+    r = est.rompimento_reteste(_serie_mao(ret))
+    falhou = base + [(100.2, 101.0, 100.1, 101.0), (100.9, 101.0, 100.2, 100.3), (100.3, 100.6, 100.2, 100.55)]
+    r2 = est.rompimento_reteste(_serie_mao(falhou))
+    checar(r[27] == 1 and sum(map(abs, r)) == 1 and sum(map(abs, r2)) == 0,
+           "reteste: compra no toque que segura; um sinal por rompimento; fechar abaixo do nivel cancela")
+
+    largo = [(100.0, 101.0, 99.0, 100.0 + (1.0 if k % 2 else -1.0)) for k in range(130)]
+    apertado = [(100.0, 100.02, 99.98, 100.0 + (0.01 if k % 2 else -0.01)) for k in range(30)]
+    saida = [(100.0, 100.6, 99.99, 100.5)]
+    comp = est.compressao_expansao(_serie_mao(largo + apertado + saida))
+    sem_aperto = est.compressao_expansao(_serie_mao(largo + [(100.0, 101.6, 99.9, 101.5)]))
+    checar(comp[-1] == 1 and sum(map(abs, comp)) == 1 and sem_aperto[-1] == 0,
+           "compressao: rompimento logo depois do aperto entra; o mesmo rompimento com volatilidade constante, nao")
+
+    s5 = serie_sintetica(3000, 5, True)
+    ses, c3s = est.confl3_sessao(s5), est.confluencia_3(s5)
+    horas = {(s5.t[i] // 3_600_000) % 24 for i, x in enumerate(ses) if x}
+    dias = {((s5.t[i] // 86_400_000) + 3) % 7 for i, x in enumerate(ses) if x}
+    checar(any(ses) and horas <= set(range(12, 17)) and dias <= set(range(5))
+           and all(x == 0 or x == c3s[i] for i, x in enumerate(ses)) and est.sessao_ativa(0) is False,
+           f"sessao: so 12h-17h UTC de segunda a sexta ({sum(1 for x in ses if x)} de {sum(1 for x in c3s if x)} sinais da confl3)")
+
+    dia = est.MIN15 * 96
+    v = ind.vwap_diaria([10, 20, 30], [10, 20, 30], [10, 20, 30], [1, 1, 2], [0, est.MIN15, dia])
+    checar(v == [10.0, 15.0, 30.0], "VWAP do dia: media ponderada pelo volume, recomecando a 00:00 UTC")
+    d = [(100.0, 100.4, 99.9, 100.3)] * 4 + [(100.3, 100.5, 100.3, 100.4), (100.4, 100.45, 100.0, 100.4)]
+    vd = est.vwap_do_dia(_serie_mao(d))
+    vwap5 = ind.vwap_diaria(*[_serie_mao(d).__getattribute__(k) for k in ("maxima", "minima", "fechamento", "volume", "t")])[5]
+    checar(vd[5] == 1 and sum(map(abs, vd)) == 1 and 100.0 <= vwap5 < 100.4,
+           f"VWAP do dia: compra quando a minima toca a VWAP ({vwap5:.3f}) e fecha acima, ja do lado comprador")
+
+
+def teste_prova_contra_sorte() -> None:
+    print("\n[19] prova contra sorte: Sharpe deflacionado pelo numero de tentativas")
+    import estatistica as st
+    checar(abs(st.sharpe([2, -1, 2, -1]) - 0.5 / 3 ** 0.5) < 1e-12 and st.momentos([2, -1, 2, -1]) == (0.0, 1.0),
+           "Sharpe por operacao e momentos contados a mao (media 0,5, desvio raiz de 3; assimetria 0, curtose 1)")
+    checar(abs(st.sharpe_maximo_esperado(1000, 1.0) - 3.2551) < 1e-3 and abs(st.sharpe_maximo_esperado(100, 1.0) - 2.5306) < 1e-3
+           and st.sharpe_maximo_esperado(1, 1.0) == 0.0,
+           "melhor Sharpe da sorte: 1.000 tentativas dao 3,26 desvios (o valor do artigo), 100 dao 2,53, 1 da zero")
+    r = [2, -1] * 50
+    d1, d10, d1000 = (st.sharpe_deflacionado(r, n)["dsr"] for n in (1, 10, 1000))
+    checar(abs(d1 - 0.99952) < 1e-4 and abs(d1000 - 0.5179) < 1e-3 and d1 > d10 > d1000,
+           f"mesmo resultado, mais tentativas, menos prova: 1 tentativa {d1:.4f}, 10 {d10:.4f}, 1.000 {d1000:.4f}")
+    checar(st.sharpe_deflacionado([1.0, -1.0], 5)["dsr"] == 0.0 and st.sharpe_deflacionado([], 5)["dsr"] == 0.0,
+           "com menos de 3 operacoes nao ha prova nenhuma")
+
+    import contextlib
+    import io
+    import bateria
+    original, argv = bt._pedir, sys.argv
+    with tempfile.TemporaryDirectory() as tmp:
+        caderno = os.path.join(tmp, "caderno.jsonl")
+        try:
+            bt._pedir = BinanceFalsa(total=3500)
+            sys.argv = ["bateria.py", "--ativos", "BTCUSDT,ETHUSDT", "--periodos", "1h", "--estrategias", "confl3,cacada",
+                        "--caderno", caderno]
+            saida = io.StringIO()
+            with contextlib.redirect_stdout(saida):
+                bateria.main()
+        finally:
+            bt._pedir, sys.argv = original, argv
+        registros = [json.loads(l) for l in open(caderno, encoding="utf-8")]
+    texto = saida.getvalue()
+    checar(all("sharpe_op" in x for x in registros) and "nao-sorte" in texto and "Sharpe deflacionado" in texto,
+           "a bateria grava o Sharpe de cada tentativa e mostra a chance de nao ser sorte")
+    linhas = [l for l in texto.splitlines() if l.strip().startswith(("confl3", "cacada")) and "%" in l]
+    ok_regra = True
+    for l in linhas:
+        dsr = float(l.split("|")[-2].strip().rstrip("%"))
+        if l.rstrip().split("|")[-1].strip().startswith("SIM") and dsr < 95:
+            ok_regra = False
+    checar(linhas and ok_regra, "nenhuma estrategia passa com menos de 95% de chance de nao ser sorte")
+
+
+def teste_smc() -> None:
+    print("\n[20] Smart Money Concepts: estrutura, vao de valor justo, bloco de ordens, desconto e premio")
+    # (abertura, maxima, minima, fechamento); pivo com k=1
+    seq = [(9.5, 10, 9, 9.5),       # 0
+           (11.5, 12, 11, 11.5),    # 1  topo 12 (confirmado no 2)
+           (10.5, 11, 10, 10.5),    # 2
+           (10.0, 10, 8, 9.0),      # 3  fundo 8 (confirmado no 4); candle de BAIXA: o bloco de ordens
+           (9.5, 11, 9, 10.0),      # 4
+           (12.0, 13, 11, 12.5),    # 5  fecha acima de 12: quebra de estrutura de alta (BOS)
+           (11.5, 12, 10, 10.2),    # 6  volta ao bloco (minima 10 <= 10) e fecha acima de 8; abaixo do meio 10,5
+           (10.25, 11, 9.5, 10.25), # 7  fundo 9,5 (confirmado no 8)
+           (11.0, 12, 10, 11.0),    # 8  topo 12 (confirmado no 9)
+           (9.5, 10, 8.8, 9.0)]     # 9  fecha abaixo de 9,5 vindo de alta: mudanca de carater (CHoCH)
+    s = _serie_mao(seq)
+    ev, faixas, tend = est.estrutura_mercado(s, k=1)
+    checar(ev == [0, 0, 0, 0, 0, 1, 0, 0, 0, -2] and tend[5] == 1 and tend[9] == -1 and faixas[6] == (8, 13),
+           "estrutura: quebra de alta no candle 5 (BOS), mudanca de carater para baixa no 9 (CHoCH), faixa 8 a 13")
+    checar(est.quebra_estrutura(s, k=1)[5] == 1 and sum(map(abs, est.quebra_estrutura(s, k=1))) == 1
+           and est.mudanca_carater(s, k=1)[9] == -1 and sum(map(abs, est.mudanca_carater(s, k=1))) == 1,
+           "BOS so entra na continuacao; CHoCH so na reversao")
+    ob = est.bloco_de_ordens(s, k=1)
+    smc = est.bloco_de_ordens(s, k=1, so_smc=True)
+    premio = _serie_mao(seq[:6] + [(11.5, 12, 10, 11.0)] + seq[7:])  # mesmo toque, fechando acima do meio
+    checar(ob[6] == 1 and smc[6] == 1 and est.bloco_de_ordens(premio, k=1, so_smc=True)[6] == 0
+           and est.bloco_de_ordens(premio, k=1)[6] == 1,
+           "bloco de ordens: compra na volta ao ultimo candle de baixa antes do impulso; a montagem SMC so aceita no desconto")
+
+    fvg = [(99.5, 100, 99, 99.8), (100, 101.5, 100, 101.4), (101.4, 102, 100.5, 101.8),  # vao de 100 a 100,5
+           (101.8, 102.5, 101, 102.2),                                                    # nao toca
+           (102.0, 102.1, 100.3, 101.0)]                                                  # entra no vao e segura
+    f = est.vao_valor_justo(_serie_mao(fvg))
+    sem = est.vao_valor_justo(_serie_mao(fvg[:4] + [(102.0, 102.1, 99.5, 99.8)]))  # atravessa e fecha abaixo
+    checar(f[4] == 1 and sum(map(abs, f)) == 1 and sum(map(abs, sem)) == 0,
+           "vao de valor justo: compra quando volta ao vao e segura; atravessar e fechar abaixo cancela")
+
+
+def teste_scalping() -> None:
+    print("\n[21] scalping: acerto minimo para empatar e o periodo de 5 minutos")
+    p = bt.Params(stop=0.5, rr=2, taxa=0.05)
+    checar(abs(bt.acerto_minimo(p) - 40.0) < 1e-9 and abs(bt.acerto_minimo(bt.Params(stop=0.5, rr=1, taxa=0.05)) - 60.0) < 1e-9,
+           "empate: stop 0,5% e alvo 1% pedem 40% de acerto; alvo 0,5% pede 60% (taxa 0,05% por lado)")
+    pa = bt.Params(stop=0.5, rr=2, taxa=0.05, alav=24, margem=15)
+    pos = bt.abrir(100.0, 1, pa)
+    ganho, _ = bt.checar_barra(pos, 101.5, 100.0, pa)
+    perda, _ = bt.checar_barra(pos, 100.0, 99.0, pa)
+    checar(abs(100 * -perda / (-perda + ganho) - bt.acerto_minimo(pa)) < 1e-9,
+           f"o acerto minimo bate com o ganho ({ganho:+.2f}) e a perda ({perda:+.2f}) que o simulador produz")
+    checar("5m" in bt.PERIODOS and bt.PIONEX_INTERVALO["5m"] == "5M" and est.ACIMA[est.MIN5] == (est.MIN15, est.H1)
+           and bt.candles_para("5m", 90) == 90 * 288,
+           "5 minutos: 288 candles por dia, nome na Pionex (5M), periodos acima 15 min e 1 h")
+
+
 def _pegada_real() -> dict:
     """Tamanho de cada arquivo da pasta real do vigia (dados de quem roda de verdade)."""
     pasta = os.path.join(RAIZ, "dados_vigia")
@@ -1251,6 +1409,10 @@ if __name__ == "__main__":
     teste_regra_de_saida()
     teste_livro()
     teste_fluxo()
+    teste_montagens()
+    teste_prova_contra_sorte()
+    teste_smc()
+    teste_scalping()
     print("\n[13] a bateria nao toca nos dados reais do vigia")
     checar(_pegada_real() == pegada, "dados_vigia/ (diario, log, estado) igual antes e depois da bateria")
     print()

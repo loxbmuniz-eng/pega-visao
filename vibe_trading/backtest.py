@@ -59,7 +59,7 @@ def candles_para(tf: str, dias: int, alinhar: bool = False) -> int:
             n = max(n, 260 * (max(acima) // (PERIODOS[tf] * 60_000)))
     return n
 
-PERIODOS = {"15m": 15, "1h": 60, "4h": 240, "12h": 720, "1d": 1440}
+PERIODOS = {"5m": 5, "15m": 15, "1h": 60, "4h": 240, "12h": 720, "1d": 1440}
 
 
 # --------------------------------------------------------------------------- #
@@ -175,7 +175,7 @@ def buscar_ou_erro(par: str, tf: str, n: int) -> Serie:
 # formacao vem junto. Peso 5 por pedido num teto de 10 por segundo por IP:
 # passar do teto da 60 s de bloqueio, por isso a pausa entre paginas.
 PIONEX_URL = "https://api.pionex.com/api/v1/market/klines?symbol={simbolo}&interval={intervalo}&limit={n}"
-PIONEX_INTERVALO = {"15m": "15M", "1h": "60M", "4h": "4H", "12h": "12H", "1d": "1D"}
+PIONEX_INTERVALO = {"5m": "5M", "15m": "15M", "1h": "60M", "4h": "4H", "12h": "12H", "1d": "1D"}
 PIONEX_LIMITE = 500
 PIONEX_PAUSA = 0.6  # segundos entre paginas
 
@@ -274,6 +274,15 @@ class Params:
     @property
     def liq_pct(self) -> float:
         return max(0.0, (100.0 / self.alav) - self.mm)
+
+
+def acerto_minimo(p: Params) -> float:
+    """Acerto (%) que so empata, com a taxa nas duas pontas: perda no stop sobre a
+    soma de perda e ganho. Stop 0,5% e alvo 1% com 0,05% por lado: 0,6 / 1,5 = 40%.
+    Nao conta expiracao nem liquidacao."""
+    taxa = p.taxa * 2
+    perda, ganho = p.stop + taxa, p.stop * p.rr - taxa
+    return 100.0 * perda / (perda + ganho) if perda + ganho > 0 else 100.0
 
 
 @dataclass

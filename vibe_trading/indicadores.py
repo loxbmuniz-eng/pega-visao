@@ -160,3 +160,21 @@ def delta_agressao(volume: list[float], agressora: list[float]) -> list[float | 
     if len(agressora) != len(volume):
         return [None] * len(volume)
     return [None if not v else (2 * a - v) / v for a, v in zip(agressora, volume)]
+
+
+def vwap_diaria(maximas: list[float], minimas: list[float], fechamentos: list[float],
+                volumes: list[float], t: list[int]) -> list[float | None]:
+    """Preco medio do dia ponderado por volume, recomecando a 00:00 UTC. O valor do
+    candle i inclui o proprio candle i (ja fechado) e nada depois dele."""
+    saida: list[float | None] = [None] * len(fechamentos)
+    dia_atual, pv, vol = None, 0.0, 0.0
+    for k in range(len(fechamentos)):
+        dia = t[k] // 86_400_000
+        if dia != dia_atual:
+            dia_atual, pv, vol = dia, 0.0, 0.0
+        tipico = (maximas[k] + minimas[k] + fechamentos[k]) / 3.0
+        pv += tipico * volumes[k]
+        vol += volumes[k]
+        saida[k] = pv / vol if vol else None
+    return saida
+

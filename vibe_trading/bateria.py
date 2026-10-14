@@ -33,9 +33,11 @@ import sys
 import time
 
 import backtest as bt
+import estatistica
 import estrategias
 
-PADRAO_ESTRATEGIAS = "confl3,confl4,engolfo,divergencia,canal,ema,momento,rsi,confl3_fluxo,canal_fluxo"
+PADRAO_ESTRATEGIAS = ("confl3,confl4,engolfo,divergencia,canal,ema,momento,rsi,confl3_fluxo,canal_fluxo,"
+                      "cacada,reteste,compressao,sessao,vwap_dia,bos,choch,fvg,ob,smc")
 CADERNO = os.path.join(os.path.dirname(os.path.abspath(__file__)), "caderno.jsonl")
 
 CURTO = {"vantagem": "VANTAGEM", "inconclusivo": "inconcl.", "sem_vantagem": "sem"}
@@ -64,10 +66,30 @@ def tentativas_no_caderno(caderno: str) -> int:
     return len(vistas)
 
 
+def sharpes_no_caderno(caderno: str, maximo: int = 2000) -> list[float]:
+    """O Sharpe por operacao de cada registro do caderno (ate os `maximo` mais
+    recentes): a dispersao deles e a dispersao que a sorte produz nas tentativas."""
+    if not os.path.exists(caderno):
+        return []
+    valores = []
+    with open(caderno, encoding="utf-8") as f:
+        for linha in f:
+            try:
+                v = json.loads(linha).get("sharpe_op")
+            except ValueError:
+                continue
+            if isinstance(v, (int, float)):
+                valores.append(float(v))
+    return valores[-maximo:]
+
+
+DSR_MINIMO = 0.95
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--ativos", default="BTCUSDT,ETHUSDT,SOLUSDT")
-    ap.add_argument("--periodos", default="15m,1h,4h")
+    ap.add_argument("--periodos", default="5m,15m,1h,4h")
     ap.add_argument("--estrategias", default=PADRAO_ESTRATEGIAS)
     ap.add_argument("--dias", type=int, default=90)
     ap.add_argument("--banca", type=float, default=110.0)
@@ -110,6 +132,7 @@ def main() -> None:
     print(f"  banca {p.banca:.0f}  margem {p.margem:.0f}  {p.alav:g}x  stop {p.stop:g}%  alvo {p.stop * p.rr:g}%"
           f"  lado={args.lado}{'  alinhado' if args.alinhar else ''}  ~{args.dias} dias")
     print(f"  passa no periodo: SINAL DE VANTAGEM em pelo menos {minimo_ativos} dos {len(ativos)} ativos")
+    print(f"  acerto minimo para empatar com estes parametros (taxa nas duas pontas): {bt.acerto_minimo(p):.1f}%")
     if args.historico:
         print("  modo HISTORICO: todo o historico de cada par, uma janela por ano-calendario")
     print()
@@ -138,16 +161,19 @@ def main() -> None:
                         "modo": "historico_por_ano" if args.historico else f"{args.dias}d",
                         "operacoes": len(t.resultados),
                         "acerto": round(t.acerto, 1), "por_operacao": round(t.por_operacao, 4),
+                        "sharpe_op": round(estatistica.sharpe(t.resultados), 5),
                     })
     print()
 
+    tentativas = tentativas_no_caderno(args.caderno)
+    var_sorte = estatistica.variancia(sharpes_no_caderno(args.caderno))
     passaram = []
     for tf in periodos:
         print(f"  >>> {tf}")
         cab = f"  {'estrategia':<12}"
         for ativo in ativos:
             cab += f" | {ativo:<15}"
-        cab += " |   ops | acerto |  por op | passa?"
+        cab += " |   ops | acerto | vs min |  por op | nao-sorte | passa?"
         print(cab)
         print("  " + "-" * (len(cab) - 2))
         for nome in nomes:
@@ -162,11 +188,13 @@ def main() -> None:
                 juntos.resultados.extend(a["placar"].resultados)
                 vantagens += 1 if a["veredito"] == "vantagem" else 0
                 linha += f" | {a['media_bate']:3.0f}% {CURTO[a['veredito']]:<10}"
-            passa = vantagens >= minimo_ativos
+            prova = estatistica.sharpe_deflacionado(juntos.resultados, tentativas, var_sorte)
+            passa = vantagens >= minimo_ativos and prova["dsr"] >= DSR_MINIMO
             if passa:
                 passaram.append((tf, nome, vantagens))
-            linha += (f" | {len(juntos.resultados):5d} | {juntos.acerto:5.1f}% | {juntos.por_operacao:+7.2f}"
-                      f" | {'SIM' if passa else 'nao'} ({vantagens}/{len(ativos)})")
+            linha += (f" | {len(juntos.resultados):5d} | {juntos.acerto:5.1f}% | {juntos.acerto - bt.acerto_minimo(p):+6.1f}"
+                      f" | {juntos.por_operacao:+7.2f}"
+                      f" | {prova['dsr'] * 100:8.1f}% | {'SIM' if passa else 'nao'} ({vantagens}/{len(ativos)})")
             print(linha)
         print()
 
@@ -194,6 +222,9 @@ def main() -> None:
                     print(linha)
                 print()
 
+    print(f"  'nao-sorte' = Sharpe deflacionado: a chance de o resultado nao ser so sorte, dado que ja")
+    print(f"  foram {tentativas} tentativas no caderno. Passa so com vantagem na moeda E {DSR_MINIMO * 100:.0f}% ou mais.")
+    print()
     print("  " + "=" * 60)
     if passaram:
         print("  PASSARAM NA FASE 1 (candidatas para a fase 2, o vigia ao vivo):")
@@ -201,9 +232,10 @@ def main() -> None:
             print(f"    - {nome} no {tf}  ({v} de {len(ativos)} ativos com sinal de vantagem)")
     else:
         print("  NENHUMA ESTRATEGIA PASSOU.")
-        print("  Com estes dados, nenhuma bate a moeda de forma consistente em mais de um ativo.")
+        print("  Com estes dados, nenhuma bate a moeda de forma consistente em mais de um ativo")
+        print(f"  com chance de {DSR_MINIMO * 100:.0f}% ou mais de nao ser sorte.")
     print()
-    print(f"  Tentativas registradas no caderno: {tentativas_no_caderno(args.caderno)}"
+    print(f"  Tentativas registradas no caderno: {tentativas}"
           f"  ({os.path.basename(args.caderno)})")
     print("  Quanto mais tentativas, mais provavel que a melhor seja sorte. Uma candidata so")
     print("  vira estrategia de verdade se repetir AO VIVO, no vigia, em candles que ela nunca viu.")

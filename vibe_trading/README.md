@@ -96,6 +96,11 @@ típico" da Banda de Liquidação. Sem ele você está chutando.
 | `engolfo` | **padrão**: engolfo de alta e de baixa |
 | `divergencia` | **padrão**: divergência entre preço e RSI 14 |
 | `confl3_fluxo` / `canal_fluxo` | **fluxo**: a `confl3` ou o `canal`, só quando a agressão dos últimos 3 candles vai a favor |
+| `cacada` | **mesa**: caça de stops: o pavio passa da máxima/mínima de 20 candles e fecha de volta para dentro, na cor contrária; entra contra o falso rompimento |
+| `reteste` | **mesa**: rompimento com reteste: rompe o canal, volta ao nível rompido em até 10 candles, toca e segura; um sinal por rompimento |
+| `compressao` | **mesa**: compressão e expansão: a Bollinger fica a mais estreita de 100 candles e abaixo de 60% da mediana; o rompimento seguinte dá a direção |
+| `sessao` | **mesa**: a `confl3` só com Londres e Nova York abertas juntas (12h–17h UTC, segunda a sexta) |
+| `vwap_dia` | **mesa**: preço médio do dia (desde 00:00 UTC): toca a VWAP e fecha do lado de quem já estava ganhando o dia |
 
 A confluência é o checklist do scalper disciplinado, com o porquê de cada item
 no código (`estrategias.py`). Os dois primeiros são **obrigatórios**: a
@@ -286,6 +291,19 @@ O `--robustez` mostra o acerto e o resultado por operação de cada janela e, no
 fim, o placar de todas as operações.
 
 ---
+
+## Prova contra sorte: o Sharpe deflacionado
+
+Quanto mais estratégias se testa, maior o melhor resultado que aparece **só por
+sorte**. Com 1.000 tentativas sem vantagem nenhuma, o melhor Sharpe esperado já
+é de 3,26 desvios (Bailey e López de Prado, 2014). A bateria grava o Sharpe por
+operação de cada tentativa no caderno e calcula, para cada estratégia, a
+**chance de o resultado não ser sorte** dado o número de tentativas já feitas.
+A coluna `nao-sorte` mostra essa chance.
+
+**Passa na fase 1** só com as duas coisas: sinal de vantagem contra a moeda em
+2 dos 3 ativos **e** 95% ou mais de chance de não ser sorte. Cada estratégia
+nova testada torna a prova das outras mais difícil; é de propósito.
 
 ## Robustez: vantagem ou sorte?
 
