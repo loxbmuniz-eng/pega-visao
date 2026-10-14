@@ -481,7 +481,14 @@ function renderEscopoDosRelatorios(){
 async function exportarPdfManobrista(){
   await atualizarDadosAntesDoRelatorio();
   const el = document.getElementById('print-manobrista');
-  const dados = dadosManobrista(cargasDoRelatorio());
+  /* A FILA DE AGORA, NUNCA O PERÍODO DOS RELATÓRIOS (14/10/2026, #138).
+     Aqui era `cargasDoRelatorio()`, que obedece ao De/Até da aba Relatórios.
+     Bastava alguém clicar em "Hoje" lá para a carga programada ONTEM, que
+     chegou hoje e espera a doca, sumir do papel — e quem tira o papel está
+     na Torre ou na Programação, sem filtro nenhum à vista. "Não saía de
+     jeito nenhum." O manobrista recebe o que ainda vai carregar no momento
+     da emissão, venha a programação de que dia vier. */
+  const dados = dadosManobrista(cargasAbertas());
 
   if(!dados.length){
     notify('Nenhuma carga esperando para carregar — não há o que passar ao manobrista.',

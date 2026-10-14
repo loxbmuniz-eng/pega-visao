@@ -1,4 +1,21 @@
-07b412e
+c38dcf0
+
+# ---------------------------------------------------------------------
+# 11/10/2026 — 07b412e → c38dcf0. O SERVIDOR ALCANÇOU O PORTÃO 82.
+#
+# Bloco COPIE DAQUI colado pelo dono (atualizar_tudo.sh): commit no
+# servidor c38dcf0, serviço active, /health 200, última migração
+# 066_transportadoras_sem_placa.sql (sem migração nova), aviso no celular
+# ligado, vigias 7 ok e 1 com problema (frete), node v24.21.0, problemas
+# nesta rodada: nenhum.
+#
+# Passou a valer: a decisão 34 — carga que passa de 3 h no pátio avisa no
+# celular da Administração (vigia de travamento, a cada 5 min).
+# O vigia "frete" com problema NÃO vem desta atualização: as regras dele
+# (REGRAS_DO_FRETE, servicos/vigia.js) são as mesmas em 07b412e e c38dcf0 —
+# o arquivo só ganhou linhas. É o dado do Pagamento de Frete; qual das
+# quatro regras acendeu está na caixa Vigias do sistema. Causa não vista.
+# Servidor e painel no mesmo commit; nenhuma migração pendente.
 
 # ---------------------------------------------------------------------
 # 09/10/2026 — 2e2b0bf → 07b412e. O SERVIDOR ALCANÇOU O PORTÃO 76.
