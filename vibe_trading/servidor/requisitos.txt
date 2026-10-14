@@ -1,0 +1,3 @@
+# Pacotes do servidor (versao fixa, a mesma testada na bateria).
+# So o Claude da arena usa; o resto do projeto e biblioteca padrao.
+anthropic==1.14.0

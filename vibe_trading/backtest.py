@@ -161,6 +161,81 @@ def buscar_ou_erro(par: str, tf: str, n: int) -> Serie:
     raise ErroBusca(erros)
 
 
+# Pionex: dados publicos de mercado, sem chave (especificacao oficial em
+# github.com/pionex-official/pionex-open-api, openapi_futures.yaml).
+# Ate 500 candles por pedido, do mais novo para o mais antigo, e o candle em
+# formacao vem junto. Peso 5 por pedido num teto de 10 por segundo por IP:
+# passar do teto da 60 s de bloqueio, por isso a pausa entre paginas.
+PIONEX_URL = "https://api.pionex.com/api/v1/market/klines?symbol={simbolo}&interval={intervalo}&limit={n}"
+PIONEX_INTERVALO = {"15m": "15M", "1h": "60M", "4h": "4H", "12h": "12H", "1d": "1D"}
+PIONEX_LIMITE = 500
+PIONEX_PAUSA = 0.6  # segundos entre paginas
+
+
+def simbolo_pionex(par: str) -> str:
+    """BTCUSDT -> BTC_USDT_PERP (o perpetuo, que e o que se opera alavancado)."""
+    if not par.endswith("USDT") or len(par) <= 4:
+        raise ValueError(f"par '{par}' nao segue o formato XXXUSDT")
+    return f"{par[:-4]}_USDT_PERP"
+
+
+def buscar_pionex_ou_erro(par: str, tf: str, n: int) -> Serie:
+    """Os ultimos `n` candles FECHADOS do perpetuo na Pionex, paginando para tras."""
+    simbolo, intervalo = simbolo_pionex(par), PIONEX_INTERVALO[tf]
+    base = PIONEX_URL.format(simbolo=simbolo, intervalo=intervalo, n=PIONEX_LIMITE)
+    ms = PERIODOS[tf] * 60_000
+    juntos: dict[int, dict] = {}
+    fim_ms = None
+    try:
+        while len(juntos) < n + 1:
+            if fim_ms is not None:
+                time.sleep(PIONEX_PAUSA)
+            bruto = _pedir(base + (f"&endTime={fim_ms}" if fim_ms is not None else ""))
+            if not isinstance(bruto, dict) or bruto.get("result") is not True:
+                motivo = (bruto.get("message") or bruto.get("code")) if isinstance(bruto, dict) else "formato"
+                raise ValueError(f"resposta recusada: {motivo}")
+            klines = (bruto.get("data") or {}).get("klines") or []
+            if not klines:
+                break
+            for k in klines:
+                juntos[int(k["time"])] = k
+            mais_antigo = min(int(k["time"]) for k in klines)
+            if len(klines) < PIONEX_LIMITE or (fim_ms is not None and mais_antigo >= fim_ms):
+                break  # acabou o historico que a Pionex entrega
+            fim_ms = mais_antigo - 1
+    except Exception as e:
+        if not juntos:
+            raise ErroBusca([f"pionex: {type(e).__name__}: {e}"]) from e
+        print(f"  aviso: pionex parou no meio ({type(e).__name__}); usando {len(juntos)} candles", file=sys.stderr)
+    if not juntos:
+        raise ErroBusca(["pionex: nenhum candle devolvido"])
+
+    agora_ms = int(time.time() * 1000)
+    s = Serie()
+    for t in [t for t in sorted(juntos) if t + ms <= agora_ms][-n:]:  # descarta o candle em formacao
+        k = juntos[t]
+        s.t.append(t)
+        s.abertura.append(float(k["open"]))
+        s.maxima.append(float(k["high"]))
+        s.minima.append(float(k["low"]))
+        s.fechamento.append(float(k["close"]))
+        s.volume.append(float(k["volume"]))
+    return s
+
+
+BUSCADORES = {"binance": buscar_ou_erro, "pionex": buscar_pionex_ou_erro}
+
+
+def divergencia(a: Serie, b: Serie, ultimos: int = 5) -> tuple[float, int]:
+    """Maior diferenca de fechamento, em %, entre duas fontes nos ultimos candles que
+    as duas tem em comum. Devolve (diferenca_pct, quantos_candles_comparados)."""
+    pos_b = {t: i for i, t in enumerate(b.t)}
+    comuns = [(i, pos_b[t]) for i, t in enumerate(a.t) if t in pos_b][-ultimos:]
+    if not comuns:
+        return 0.0, 0
+    return max(abs(a.fechamento[i] / b.fechamento[j] - 1) * 100 for i, j in comuns), len(comuns)
+
+
 def periodo_txt(s: Serie) -> str:
     if not s.t:
         return f"{len(s)} candles"

@@ -38,6 +38,7 @@ import json
 import os
 import stat
 import sys
+import threading
 import time
 import urllib.parse
 import urllib.request
@@ -58,6 +59,13 @@ MAX_CACHE = 6000  # candles guardados por ativo/periodo (alinhamento no 15 min p
 CONFIG_PADRAO = {
     "ativos": ["BTCUSDT"],
     "periodos": ["15m"],
+    # De onde vem o candle que move as operacoes de papel. "pionex" = o perpetuo da
+    # corretora onde se opera (o preco que dispara stop e liquidacao de verdade).
+    "fonte": "pionex",
+    # Segunda fonte, so para conferencia: se os fechamentos divergirem mais que
+    # divergencia_max_pct, o vigia avisa. "" desliga.
+    "conferir_com": "binance",
+    "divergencia_max_pct": 0.3,
     "estrategias": [
         {"nome": "confl3", "lado": "ambos", "alinhar": False},
         {"nome": "engolfo", "lado": "ambos", "alinhar": False},
@@ -115,6 +123,11 @@ def anexar_json(caminho: str, registro: dict) -> None:
         f.write(json.dumps(registro, ensure_ascii=False) + "\n")
 
 
+# Campo novo num vigia.json que ja existia: o valor que reproduz o comportamento
+# antigo, nao o padrao novo. Trocar a fonte no meio da fase 2 seria outra hipotese.
+PADRAO_PARA_CONFIG_ANTIGA = {"fonte": "binance", "conferir_com": ""}
+
+
 def carregar_config(caminho: str = CONFIG) -> dict:
     if not os.path.exists(caminho):
         gravar_json(caminho, CONFIG_PADRAO, indent=2)
@@ -123,13 +136,17 @@ def carregar_config(caminho: str = CONFIG) -> dict:
     # vigia.json de uma versao anterior: acrescenta so o que falta, sem mexer no que existe
     novos = [k for k in CONFIG_PADRAO if k not in cfg]
     for k in novos:
-        cfg[k] = json.loads(json.dumps(CONFIG_PADRAO[k]))
+        cfg[k] = json.loads(json.dumps(PADRAO_PARA_CONFIG_ANTIGA.get(k, CONFIG_PADRAO[k])))
     novos += [f"arena.{k}" for k in CONFIG_PADRAO["arena"] if k not in cfg["arena"]]
     for k in CONFIG_PADRAO["arena"]:
         cfg["arena"].setdefault(k, CONFIG_PADRAO["arena"][k])
     if novos:
         gravar_json(caminho, cfg, indent=2)
         print(f"  acrescentei ao {os.path.basename(caminho)}: {', '.join(novos)} (valores padrao)")
+    if cfg["fonte"] not in bt.BUSCADORES:
+        sys.exit(f"vigia.json: fonte '{cfg['fonte']}' nao existe. Use: {', '.join(bt.BUSCADORES)}")
+    if cfg["conferir_com"] and cfg["conferir_com"] not in bt.BUSCADORES:
+        sys.exit(f"vigia.json: conferir_com '{cfg['conferir_com']}' nao existe. Use: {', '.join(bt.BUSCADORES)} ou \"\"")
     a = cfg["arena"]
     if a["ligada"]:
         if a["ativo"] not in cfg["ativos"] or a["periodo"] not in cfg["periodos"]:
@@ -173,6 +190,16 @@ def params_de(cfg: dict) -> bt.Params:
 # --------------------------------------------------------------------------- #
 # trilhas: uma estrategia num ativo e periodo, com as suas moedas
 # --------------------------------------------------------------------------- #
+
+def rotulo(ativo: str, fonte: str) -> str:
+    """BTCUSDT na Binance (como sempre foi) ou BTCUSDT@pionex: fonte diferente e
+    trilha diferente, e cache diferente — candles de duas fontes nunca se misturam."""
+    return ativo if fonte == "binance" else f"{ativo}@{fonte}"
+
+
+def arquivo_cache(pasta: str, ativo: str, tf: str, fonte: str) -> str:
+    return os.path.join(pasta, f"candles_{rotulo(ativo, fonte)}_{tf}.json")
+
 
 def id_trilha(e: dict, ativo: str, tf: str) -> str:
     return f"{e['nome']}|{e.get('lado', 'ambos')}|{'alinhado' if e.get('alinhar') else 'livre'}|{ativo}|{tf}"
@@ -288,22 +315,24 @@ def processar_barra(tr: dict, tid: str, nome: str, ativo: str, tf: str, sinal: i
 
 
 def ciclo(estado: dict, cfg: dict, ativo: str, tf: str, buscador, agora_ms: int,
-          pasta: str = PASTA, avisar=None, juiz=None) -> int:
+          pasta: str = PASTA, avisar=None, juiz=None, fonte: str = "binance") -> int:
     """
     Busca os candles novos de um ativo/periodo e processa cada um, na ordem, em
     todas as trilhas. Devolve quantos candles foram processados (o maior numero
     entre as trilhas, nao a soma).
     `buscador(par, tf, n)` e `agora_ms` sao injetaveis para o teste de replay;
     `juiz` (arena.Juiz) liga as trilhas das IAs, se a arena for neste ativo/periodo.
+    `fonte` so rotula trilhas e cache; quem busca e o `buscador`.
     """
     p = params_de(cfg)
     ms = MS[tf]
-    arq_cache = os.path.join(pasta, f"candles_{ativo}_{tf}.json")
+    arq_cache = arquivo_cache(pasta, ativo, tf, fonte)
     c = ler_json(arq_cache, None)
     alinhar = any(e.get("alinhar") for e in cfg["estrategias"])
-    trilhas_aqui = [(e, id_trilha(e, ativo, tf)) for e in cfg["estrategias"]]
+    rot = rotulo(ativo, fonte)
+    trilhas_aqui = [(e, id_trilha(e, rot, tf)) for e in cfg["estrategias"]]
     a = cfg.get("arena") or {}
-    ias = ([(n, id_trilha({"nome": n}, ativo, tf)) for n in juiz.competidores()]
+    ias = ([(n, id_trilha({"nome": n}, rot, tf)) for n in juiz.competidores()]
            if juiz is not None and a.get("ativo") == ativo and a.get("periodo") == tf else [])
     todas = [tid for _, tid in trilhas_aqui] + [tid for _, tid in ias]
 
@@ -336,11 +365,11 @@ def ciclo(estado: dict, cfg: dict, ativo: str, tf: str, buscador, agora_ms: int,
         sinais = estrategias.sinais(e["nome"], serie, e.get("lado", "ambos"), e.get("alinhar", False))
         for i in pendentes:
             recuperado = agora_ms - (c["t"][i] + ms) > 2 * ms  # fechou enquanto o vigia estava fora
-            processar_barra(tr, tid, e["nome"], ativo, tf, sinais[i], i, c, p, recuperado, pasta, avisar)
+            processar_barra(tr, tid, e["nome"], rot, tf, sinais[i], i, c, p, recuperado, pasta, avisar)
         processados = max(processados, len(pendentes))
 
     if ias:
-        processados = max(processados, ciclo_arena(estado, juiz, dict(ias), ativo, tf, c, serie, p,
+        processados = max(processados, ciclo_arena(estado, juiz, dict(ias), rot, tf, c, serie, p,
                                                    agora_ms, pasta, avisar))
     return processados
 
@@ -390,6 +419,26 @@ def ciclo_arena(estado: dict, juiz, tids: dict, ativo: str, tf: str, c: dict, se
             processar_barra(estado["trilhas"][tids[n]], tids[n], n, ativo, tf, lado, i, c, p,
                             recuperado, pasta, avisar, motivo)
     return len(pend)
+
+
+def conferir(estado: dict, cfg: dict, ativo: str, tf: str, principal: bt.Serie, outra: bt.Serie,
+             agora_ms: int, avisar=None, registrar=None) -> float:
+    """Confere a fonte principal contra a segunda nos ultimos candles que as duas tem.
+    Divergencia acima do limite: avisa no maximo uma vez por hora por ativo/periodo."""
+    d, n = bt.divergencia(principal, outra)
+    limite = cfg.get("divergencia_max_pct", 0.3)
+    reg = estado.setdefault("conferencia", {}).setdefault(f"{ativo}|{tf}", {"alertas": 0, "ultimo_alerta": 0})
+    reg.update({"pct": round(d, 4), "comparados": n, "quando": agora_ms, "com": cfg["conferir_com"]})
+    if n and d > limite:
+        reg["alertas"] += 1
+        if agora_ms - reg["ultimo_alerta"] >= 3_600_000:
+            reg["ultimo_alerta"] = agora_ms
+            msg = (f"ATENCAO: {ativo} {tf}: {cfg['fonte']} e {cfg['conferir_com']} divergem {d:.2f}% no "
+                   f"fechamento (limite {limite:g}%). Confira o grafico antes de agir em qualquer sinal.")
+            (registrar or log)(msg)
+            if avisar:
+                avisar(msg)
+    return d
 
 
 # --------------------------------------------------------------------------- #
@@ -508,7 +557,94 @@ def telegram(segredos: dict, texto: str) -> bool:
         return False
 
 
-def telegram_descobrir(segredos: dict) -> None:
+def texto_status(estado: dict, cfg: dict, agora_ms: int) -> str:
+    """Se o vigia esta vivo: ultimo candle processado, posicoes abertas, conferencia, arena."""
+    partes = [f"Vigia (papel) · fonte {cfg.get('fonte', 'binance')}"
+              + (f", conferida com {cfg['conferir_com']}" if cfg.get("conferir_com") else "")]
+    for ativo in cfg["ativos"]:
+        for tf in cfg["periodos"]:
+            rot = rotulo(ativo, cfg.get("fonte", "binance"))
+            trs = {tid: tr for tid, tr in estado.get("trilhas", {}).items() if tid.endswith(f"|{rot}|{tf}")}
+            if not trs:
+                partes.append(f"{ativo} {tf}: ainda sem trilha (aquecendo)")
+                continue
+            ultimo = max((tr["ultimo_t"] or 0) for tr in trs.values())
+            atraso = (agora_ms - (ultimo + MS[tf])) / 60_000 if ultimo else None
+            abertas = [tid.split("|")[0] for tid, tr in trs.items() if tr["posicao"]]
+            partes.append(f"{ativo} {tf}: ultimo candle fechado processado ha "
+                          f"{f'{atraso:.0f} min' if atraso is not None else '?'}; posicao aberta: "
+                          f"{', '.join(abertas) if abertas else 'nenhuma'}")
+            conf = (estado.get("conferencia") or {}).get(f"{ativo}|{tf}")
+            if conf:
+                partes.append(f"  conferencia com {conf['com']}: diferenca de {conf['pct']:.3f}% "
+                              f"nos ultimos {conf['comparados']} candles")
+    hoje = ((estado.get("arena") or {}).get("chamadas") or {}).get(time.strftime("%Y-%m-%d"))
+    if hoje:
+        partes.append("arena hoje: " + ", ".join(f"{k} {v} chamadas" for k, v in sorted(hoje.items())))
+    return "\n".join(partes)
+
+
+AJUDA_TELEGRAM = ("Comandos do vigia (papel, nenhuma ordem real):\n"
+                  "/placar - o placar de cada estrategia e IA\n"
+                  "/status - se o vigia esta vivo, ultimo candle, posicoes abertas\n"
+                  "/ajuda - esta lista")
+
+
+def responder_comando(texto: str, estado: dict, cfg: dict, agora_ms: int) -> str | None:
+    palavra = (texto or "").strip().split(" ")[0].split("@")[0].lower()
+    if palavra == "/placar":
+        return texto_resumo(estado).replace("Resumo do dia (papel)", "Placar agora (papel)")
+    if palavra == "/status":
+        return texto_status(estado, cfg, agora_ms)
+    if palavra in ("/ajuda", "/start", "/help"):
+        return AJUDA_TELEGRAM
+    return None
+
+
+def _telegram_atualizacoes(tok: str, offset, espera: int) -> list:
+    q = {"timeout": espera}
+    if offset is not None:
+        q["offset"] = offset
+    url = f"https://api.telegram.org/bot{tok}/getUpdates?" + urllib.parse.urlencode(q)
+    with urllib.request.urlopen(url, timeout=espera + 15) as r:
+        return json.loads(r.read().decode()).get("result", [])
+
+
+def escutar_telegram(segredos: dict, cfg: dict, arq_estado: str, parar: threading.Event,
+                     pedir=_telegram_atualizacoes, enviar=None, espera: int = 50) -> None:
+    """Responde comandos SO do chat configurado. Le o estado do disco (o laco principal
+    grava de forma atomica), entao nunca disputa memoria com o vigia."""
+    tok, chat = segredos.get("telegram_token"), str(segredos.get("telegram_chat_id") or "")
+    if not tok or not chat:
+        return
+    enviar = enviar or (lambda t: telegram(segredos, t))
+    offset = None
+    try:  # o que chegou com o vigia desligado fica sem resposta (seria velho)
+        antigas = pedir(tok, -1, 0)
+        if antigas:
+            offset = antigas[-1]["update_id"] + 1
+    except Exception:
+        pass
+    while not parar.is_set():
+        try:
+            novas = pedir(tok, offset, espera)
+        except Exception:
+            parar.wait(15)
+            continue
+        for u in novas:
+            offset = u["update_id"] + 1
+            msg = u.get("message") or {}
+            if str((msg.get("chat") or {}).get("id")) != chat:
+                continue  # outra pessoa achou o robo: nao responde nada
+            resposta = responder_comando(msg.get("text", ""), ler_json(arq_estado, {"trilhas": {}}), cfg,
+                                         int(time.time() * 1000))
+            if resposta:
+                enviar(resposta)
+
+
+def telegram_descobrir(segredos: dict, gravar: bool = False, caminho: str = SEGREDOS) -> bool:
+    """Acha o chat de quem mandou mensagem ao robo. Com gravar=True e um chat so,
+    grava no segredos.json. Devolve True se gravou."""
     tok = segredos.get("telegram_token")
     if not tok:
         sys.exit("Coloque o telegram_token em segredos.json primeiro (veja o README).")
@@ -522,20 +658,52 @@ def telegram_descobrir(segredos: dict) -> None:
             chats[ch["id"]] = ch.get("first_name") or ch.get("title") or ""
     if not chats:
         print("Nenhuma conversa encontrada. Mande qualquer mensagem para o seu robo no Telegram e rode de novo.")
+        return False
+    if gravar and len(chats) == 1:
+        cid, nome = next(iter(chats.items()))
+        guardar_segredo("telegram_chat_id", str(cid), caminho)
+        print(f"chat de {nome or cid} gravado no {os.path.basename(caminho)}")
+        return True
     for cid, nome in chats.items():
         print(f"chat id: {cid}   ({nome})   -> coloque em telegram_chat_id no segredos.json")
+    if gravar:
+        print("Mais de uma conversa encontrada: nao gravei nenhuma, para nao avisar a pessoa errada.")
+    return False
+
+
+def guardar_segredo(nome: str, valor: str, caminho: str = SEGREDOS) -> None:
+    """Grava um campo do segredos.json (chmod 600) sem apagar os outros."""
+    if nome not in SEGREDOS_MODELO:
+        sys.exit(f"campo '{nome}' nao existe no segredos.json. Campos: {', '.join(SEGREDOS_MODELO)}")
+    seg = carregar_segredos(caminho)
+    seg[nome] = valor.strip()
+    gravar_json(caminho, seg, indent=2, privado=True)
+
+
+def ligar_arena(ligar: bool, caminho: str = CONFIG) -> None:
+    cfg = carregar_config(caminho)
+    cfg["arena"]["ligada"] = ligar
+    gravar_json(caminho, cfg, indent=2)
+    print(f"arena {'ligada' if ligar else 'desligada'} no {os.path.basename(caminho)}"
+          + (" (so funciona com pelo menos uma chave de IA no segredos.json)" if ligar else ""))
 
 
 # --------------------------------------------------------------------------- #
 # laco
 # --------------------------------------------------------------------------- #
 
+LOG_MAX = 5_000_000  # bytes; passou disso, o log atual vira vigia.log.1 e comeca outro
+
+
 def log(msg: str) -> None:
     linha = time.strftime("[%d/%m %H:%M:%S] ") + msg
     print(linha, flush=True)
     try:
         os.makedirs(PASTA, exist_ok=True)
-        with open(os.path.join(PASTA, "vigia.log"), "a", encoding="utf-8") as f:
+        arq = os.path.join(PASTA, "vigia.log")
+        if os.path.exists(arq) and os.path.getsize(arq) > LOG_MAX:
+            os.replace(arq, arq + ".1")
+        with open(arq, "a", encoding="utf-8") as f:
             f.write(linha + "\n")
     except OSError:
         pass
@@ -581,10 +749,18 @@ def rodar(cfg: dict, segredos: dict, uma_vez: bool) -> None:
     arq_estado = os.path.join(PASTA, "estado.json")
     estado = ler_json(arq_estado, {"versao": 1, "trilhas": {}, "ultimo_resumo": None})
     avisar = (lambda t: telegram(segredos, t)) if segredos.get("telegram_token") else None
-    log(f"vigia ligado: {', '.join(cfg['ativos'])} em {', '.join(cfg['periodos'])}; "
+    fonte, outra_fonte = cfg["fonte"], cfg.get("conferir_com") or ""
+    if outra_fonte == fonte:
+        outra_fonte = ""
+    log(f"vigia ligado: {', '.join(cfg['ativos'])} em {', '.join(cfg['periodos'])}; fonte {fonte}"
+        f"{f' (conferida com {outra_fonte})' if outra_fonte else ''}; "
         f"estrategias {', '.join(e['nome'] for e in cfg['estrategias'])}; "
         f"telegram {'ligado' if avisar else 'desligado'}")
     juiz = montar_juiz(cfg, segredos)
+    if avisar and segredos.get("telegram_chat_id") and not uma_vez:
+        threading.Thread(target=escutar_telegram, args=(segredos, cfg, arq_estado, threading.Event()),
+                         daemon=True, name="telegram").start()
+        log("telegram: respondendo /placar, /status e /ajuda (so ao seu chat)")
     if avisar and not uma_vez:
         avisar("Vigia ligado (papel). Estrategias: " + ", ".join(e["nome"] for e in cfg["estrategias"])
                + (f". Arena: {', '.join(juiz.competidores())}" if juiz else ""))
@@ -594,8 +770,8 @@ def rodar(cfg: dict, segredos: dict, uma_vez: bool) -> None:
         for ativo in cfg["ativos"]:
             for tf in cfg["periodos"]:
                 try:
-                    aquecer = not os.path.exists(os.path.join(PASTA, f"candles_{ativo}_{tf}.json"))
-                    n = ciclo(estado, cfg, ativo, tf, bt.buscar_ou_erro, agora, PASTA, avisar, juiz)
+                    aquecer = not os.path.exists(arquivo_cache(PASTA, ativo, tf, fonte))
+                    n = ciclo(estado, cfg, ativo, tf, bt.BUSCADORES[fonte], agora, PASTA, avisar, juiz, fonte)
                     if aquecer:
                         log(f"{ativo} {tf}: historico carregado para aquecer os indicadores (sem operar nele). "
                             f"A partir do proximo candle fechado, o vigia opera no papel.")
@@ -603,9 +779,18 @@ def rodar(cfg: dict, segredos: dict, uma_vez: bool) -> None:
                     falhas = 0
                     if n:
                         abertas = [tid.split("|")[0] for tid, tr in estado["trilhas"].items()
-                                   if tr["posicao"] and f"|{ativo}|{tf}" in tid]
+                                   if tr["posicao"] and f"|{rotulo(ativo, fonte)}|{tf}" in tid]
                         log(f"{ativo} {tf}: {n} candle(s) processado(s); posicao aberta em: "
                             f"{', '.join(abertas) if abertas else 'nenhuma'}")
+                        if outra_fonte:
+                            try:
+                                principal = serie_do_cache(ler_json(arquivo_cache(PASTA, ativo, tf, fonte), cache_vazio()))
+                                conferir(estado, cfg, ativo, tf, principal,
+                                         bt.BUSCADORES[outra_fonte](ativo, tf, 6), agora, avisar)
+                                gravar_json(arq_estado, estado)
+                            except bt.ErroBusca as e:
+                                log(f"{ativo} {tf}: conferencia com {outra_fonte} sem dados "
+                                    f"({e.erros[0] if e.erros else 'erro'}); sigo so com {fonte}")
                 except bt.ErroBusca as e:
                     falhas += 1
                     log(f"{ativo} {tf}: sem dados ({e.erros[0] if e.erros else 'erro'}); tento de novo")
@@ -629,13 +814,27 @@ def main() -> None:
     ap.add_argument("--placar", action="store_true", help="mostra o placar e sai")
     ap.add_argument("--uma-vez", action="store_true", help="processa os candles pendentes e sai")
     ap.add_argument("--telegram-descobrir", action="store_true")
+    ap.add_argument("--gravar", action="store_true", help="com --telegram-descobrir: grava o chat se houver um so")
     ap.add_argument("--telegram-teste", action="store_true")
+    ap.add_argument("--guardar-segredo", metavar="CAMPO",
+                    help="le o valor da entrada padrao e grava no segredos.json (o valor nao aparece na tela)")
+    ap.add_argument("--arena", choices=("ligar", "desligar"), help="liga ou desliga a arena no vigia.json")
     args = ap.parse_args()
+
+    if args.guardar_segredo:
+        guardar_segredo(args.guardar_segredo, sys.stdin.read())
+        print(f"{args.guardar_segredo} gravado no segredos.json")
+        return
+    if args.arena:
+        ligar_arena(args.arena == "ligar")
+        return
 
     segredos = carregar_segredos()
 
     if args.telegram_descobrir:
-        telegram_descobrir(segredos)
+        ok = telegram_descobrir(segredos, gravar=args.gravar)
+        if args.gravar and not ok:
+            sys.exit(1)
         return
     if args.telegram_teste:
         ok = telegram(segredos, "Teste do vigia: se esta mensagem chegou, os alertas funcionam.")

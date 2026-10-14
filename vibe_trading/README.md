@@ -323,6 +323,15 @@ Ele não envia ordem e não pede chave de corretora.
   média, resultado por operação, lucro, pior queda, de quantas moedas ganhou e
   a situação da fase 2 (passa com 30 ou mais operações, resultado positivo
   depois da taxa e vitória sobre 75% das moedas).
+- **De onde vem o candle** (`"fonte"` no `vigia.json`): instalação nova usa o
+  perpétuo da **Pionex** (`BTC_USDT_PERP`), o preço que dispara stop e
+  liquidação na corretora onde se opera. Dado público, sem chave. Um
+  `vigia.json` antigo continua na Binance: trocar a fonte no meio da fase 2
+  seria outra hipótese. Cada fonte tem trilha e cache próprios
+  (`BTCUSDT@pionex`), então candles de duas corretoras nunca se misturam.
+- **Conferência** (`"conferir_com"`): a cada candle novo, o vigia compara o
+  fechamento com a segunda fonte (padrão: Binance). Diferença acima de
+  `"divergencia_max_pct"` (padrão 0,3%) vira aviso, no máximo um por hora.
 
 ### Alertas no Telegram (opcional)
 
@@ -336,7 +345,16 @@ Ele não envia ordem e não pede chave de corretora.
 5. Rode `python3 vigia.py --telegram-teste`. Se a mensagem chegar, está pronto.
 
 O vigia avisa cada entrada (com stop, alvo e liquidação), cada saída e manda um
-resumo por dia às 21 h. **Se o resumo não chegar, o vigia parou.** O
+resumo por dia às 21 h. **Se o resumo não chegar, o vigia parou.**
+
+O robô também responde, **só ao seu chat** (mensagem de qualquer outra pessoa
+fica sem resposta):
+
+| Comando | Resposta |
+|---|---|
+| `/placar` | o placar de cada estratégia e IA, agora |
+| `/status` | último candle processado, posições abertas, conferência entre fontes |
+| `/ajuda` | a lista de comandos | O
 `segredos.json` fica só para o dono ler e nunca vai para o GitHub (está no
 `.gitignore`).
 

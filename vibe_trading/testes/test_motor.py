@@ -26,6 +26,10 @@ afirma. Correcao sem guarda e correcao que volta.
                           sem ver o futuro; resposta ruim, recusa, erro ou teto
                           viram NADA; decisao guardada nunca e repetida; a IA
                           opera pela mesma regra do backtest; o custo e medido
+12. pionex e telegram   — candles da Pionex no formato oficial, paginados sem
+                          buraco, sem o candle em formacao; fontes nunca se
+                          misturam; conferencia avisa divergencia; o robo do
+                          Telegram so responde ao dono
 """
 
 from __future__ import annotations
@@ -433,6 +437,11 @@ def teste_paridade() -> None:
     print("\n[3] paridade Python x monitor.html")
     node = shutil.which("node")
     if not node:
+        if os.environ.get("VIBE_SERVIDOR") == "1":
+            # no VPS o monitor nao roda (ele abre no navegador); a paridade ja foi
+            # verificada antes do envio. Fica declarado, nao escondido.
+            print("  aviso node nao encontrado no servidor: paridade Python x monitor NAO verificada aqui")
+            return
         checar(False, "node nao encontrado: paridade nao verificada")
         return
 
@@ -833,7 +842,163 @@ def teste_sdk_anthropic() -> None:
             os.environ["NO_PROXY"] = antigo
 
 
+# --------------------------------------------------------------------------- #
+# [12] Pionex e Telegram
+# --------------------------------------------------------------------------- #
+
+class PionexFalsa:
+    """A API publica de klines da Pionex como a especificacao oficial descreve:
+    ate 500 por pedido, do mais novo para o mais antigo, endTime inclusivo,
+    o candle em formacao incluido, precos como texto."""
+
+    def __init__(self, s, ms, formando: dict, recusar: str = ""):
+        self.s, self.ms, self.formando, self.recusar = s, ms, formando, recusar
+        self.pedidos = []
+
+    def __call__(self, url):
+        import urllib.parse as up
+        q = dict(up.parse_qsl(up.urlparse(url).query))
+        self.pedidos.append(q)
+        if self.recusar:
+            return {"result": False, "code": "TRADE_INVALID_SYMBOL", "message": self.recusar, "timestamp": 1}
+        assert url.startswith("https://api.pionex.com/api/v1/market/klines?")
+        lim = int(q.get("limit", 100))
+        fim = int(q["endTime"]) if "endTime" in q else 10 ** 15
+        linhas = [{"time": t, "open": f"{o}", "close": f"{c}", "high": f"{h}", "low": f"{l}", "volume": f"{v}"}
+                  for t, o, h, l, c, v in zip(self.s.t, self.s.abertura, self.s.maxima, self.s.minima,
+                                               self.s.fechamento, self.s.volume)] + [self.formando]
+        linhas = [k for k in linhas if k["time"] <= fim]
+        return {"result": True, "data": {"klines": list(reversed(linhas[-lim:]))}, "timestamp": 1}
+
+
+def teste_pionex_telegram() -> None:
+    print("\n[12] Pionex como fonte, conferencia entre fontes e comandos do Telegram")
+    import time as tempo
+    import vigia
+    ms = est.MIN15
+    agora = int(tempo.time() * 1000)
+    inicio_formando = agora // ms * ms
+    s = serie_sintetica(1300, 21, True, t0=inicio_formando - 1300 * ms)
+    formando = {"time": inicio_formando, "open": "1", "close": "1", "high": "1", "low": "1", "volume": "1"}
+    falsa = PionexFalsa(s, ms, formando)
+    original, pausa, dormir = bt._pedir, bt.PIONEX_PAUSA, bt.time.sleep
+    pausas = []
+    bt._pedir = falsa
+    bt.time.sleep = lambda x: pausas.append(x)
+    try:
+        r = bt.buscar_pionex_ou_erro("BTCUSDT", "15m", 1200)
+        checar(all(q["symbol"] == "BTC_USDT_PERP" and q["interval"] == "15M" and q["limit"] == "500"
+                   for q in falsa.pedidos),
+               f"pede o perpetuo BTC_USDT_PERP em 15M, de 500 em 500 ({len(falsa.pedidos)} paginas)")
+        checar(len(r) == 1200 and r.t == s.t[-1200:] and r.fechamento == s.fechamento[-1200:]
+               and r.volume == s.volume[-1200:],
+               "1200 candles fechados, na ordem, sem buraco nem repetido, precos lidos do texto")
+        checar(inicio_formando not in r.t, "o candle em formacao fica de fora")
+        checar(pausas and all(x == bt.PIONEX_PAUSA for x in pausas) and len(pausas) == len(falsa.pedidos) - 1,
+               f"pausa de {bt.PIONEX_PAUSA}s entre paginas (teto de pedidos da Pionex)")
+        bt._pedir = PionexFalsa(s, ms, formando, recusar="simbolo invalido")
+        try:
+            bt.buscar_pionex_ou_erro("BTCUSDT", "15m", 100)
+            checar(False, "resposta recusada deveria virar ErroBusca")
+        except bt.ErroBusca as e:
+            checar("simbolo invalido" in e.erros[0], f"resposta recusada vira erro explicado: {e.erros[0]}")
+    finally:
+        bt._pedir, bt.PIONEX_PAUSA, bt.time.sleep = original, pausa, dormir
+    checar(bt.simbolo_pionex("ETHUSDT") == "ETH_USDT_PERP" and set(bt.PIONEX_INTERVALO) == set(bt.PERIODOS),
+           "todos os periodos do projeto tem nome na Pionex")
+
+    # fontes nunca se misturam: trilha e cache rotulados pela fonte
+    cfg = json.loads(json.dumps(vigia.CONFIG_PADRAO))
+    cfg["historico_inicial_dias"] = 7
+    with tempfile.TemporaryDirectory() as tmp:
+        ponteiro = {"fim": 700}
+        busca = lambda par, tf, n: bt.fatiar(s, max(0, ponteiro["fim"] - n), ponteiro["fim"])  # noqa: E731
+        estado = {"versao": 1, "trilhas": {}, "ultimo_resumo": None}
+        vigia.ciclo(estado, cfg, "BTCUSDT", "15m", busca, s.t[699] + ms + 1000, tmp, None, None, "pionex")
+        ponteiro["fim"] = 701
+        vigia.ciclo(estado, cfg, "BTCUSDT", "15m", busca, s.t[700] + ms + 1000, tmp, None, None, "pionex")
+        vigia.ciclo(estado, cfg, "BTCUSDT", "15m", busca, s.t[700] + ms + 1000, tmp, None, None, "binance")
+        arquivos = sorted(os.listdir(tmp))
+    checar(sorted(estado["trilhas"]) == ["confl3|ambos|livre|BTCUSDT@pionex|15m", "confl3|ambos|livre|BTCUSDT|15m",
+                                         "engolfo|ambos|livre|BTCUSDT@pionex|15m", "engolfo|ambos|livre|BTCUSDT|15m"]
+           and "candles_BTCUSDT@pionex_15m.json" in arquivos and "candles_BTCUSDT_15m.json" in arquivos,
+           "Pionex e Binance em trilhas e caches separados: candles de duas fontes nunca se misturam")
+
+    # conferencia
+    b = bt.fatiar(s, 0, 100)
+    outra = bt.fatiar(s, 0, 100)
+    outra.fechamento = list(outra.fechamento)
+    outra.fechamento[-2] *= 1.004
+    checar(abs(bt.divergencia(b, outra)[0] - 100 * (1 / 1.004 - 1) * -1) < 1e-9 and bt.divergencia(b, outra)[1] == 5,
+           "divergencia: maior diferenca de fechamento nos ultimos 5 candles em comum")
+    msgs, registro = [], []
+    est_c = {}
+    cfg_c = dict(cfg, conferir_com="binance", divergencia_max_pct=0.3)
+    t0 = 10 ** 12
+    vigia.conferir(est_c, cfg_c, "BTCUSDT", "15m", b, outra, t0, msgs.append, registro.append)
+    vigia.conferir(est_c, cfg_c, "BTCUSDT", "15m", b, outra, t0 + 15 * 60_000, msgs.append, registro.append)
+    vigia.conferir(est_c, cfg_c, "BTCUSDT", "15m", b, outra, t0 + 61 * 60_000, msgs.append, registro.append)
+    vigia.conferir(est_c, cfg_c, "BTCUSDT", "15m", b, b, t0 + 200 * 60_000, msgs.append, registro.append)
+    reg = est_c["conferencia"]["BTCUSDT|15m"]
+    checar(len(msgs) == 2 and msgs == registro and "divergem 0.40%" in msgs[0] and reg["alertas"] == 3 and reg["pct"] == 0,
+           "divergencia acima do limite avisa no maximo 1 vez por hora; fontes iguais nao avisam")
+
+    # vigia.json antigo: a fonte continua a de antes
+    with tempfile.TemporaryDirectory() as tmp:
+        arq = os.path.join(tmp, "vigia.json")
+        velho = json.loads(json.dumps(vigia.CONFIG_PADRAO))
+        for k in ("fonte", "conferir_com", "divergencia_max_pct"):
+            del velho[k]
+        json.dump(velho, open(arq, "w"))
+        c_velho = vigia.carregar_config(arq)
+        c_novo = vigia.carregar_config(os.path.join(tmp, "novo.json"))
+    checar(c_velho["fonte"] == "binance" and c_velho["conferir_com"] == "" and c_novo["fonte"] == "pionex"
+           and c_novo["conferir_com"] == "binance",
+           "vigia.json antigo continua na Binance (trocar no meio seria outra hipotese); instalacao nova ja nasce na Pionex")
+
+    # telegram: so o dono e respondido, mensagens velhas nao
+    import threading
+    parar = threading.Event()
+    offsets, enviados = [], []
+    lotes = [
+        [{"update_id": 10, "message": {"chat": {"id": 555}, "text": "/placar"}}],  # chegou com o vigia desligado
+        [{"update_id": 11, "message": {"chat": {"id": 999}, "text": "/placar"}},  # um estranho
+         {"update_id": 12, "message": {"chat": {"id": 555}, "text": "/placar"}},
+         {"update_id": 13, "message": {"chat": {"id": 555}, "text": "/status"}},
+         {"update_id": 14, "message": {"chat": {"id": 555}, "text": "oi"}},
+         {"update_id": 15, "message": {"chat": {"id": 555}, "text": "/ajuda@MeuRoboBot"}}],
+    ]
+
+    def pedir(tok, offset, espera):
+        offsets.append(offset)
+        if not lotes:
+            parar.set()
+            return []
+        return lotes.pop(0)
+
+    with tempfile.TemporaryDirectory() as tmp:
+        arq_estado = os.path.join(tmp, "estado.json")
+        json.dump(estado, open(arq_estado, "w"))
+        vigia.escutar_telegram({"telegram_token": "t", "telegram_chat_id": "555"}, dict(cfg, fonte="pionex"),
+                               arq_estado, parar, pedir=pedir, enviar=enviados.append, espera=0)
+    checar(offsets[:3] == [-1, 11, 16], f"pula o que chegou com o vigia desligado e avanca o offset ({offsets[:3]})")
+    checar(len(enviados) == 3 and "Placar agora" in enviados[0] and "fonte pionex" in enviados[1]
+           and "BTCUSDT 15m" in enviados[1] and "/placar" in enviados[2],
+           "responde /placar, /status e /ajuda ao dono; ignora texto solto")
+    checar(not any("999" in str(e) for e in enviados) and len(enviados) == 3,
+           "mensagem de outra pessoa nao recebe resposta nenhuma")
+
+
+def _pegada_real() -> dict:
+    """Tamanho de cada arquivo da pasta real do vigia (dados de quem roda de verdade)."""
+    pasta = os.path.join(RAIZ, "dados_vigia")
+    if not os.path.isdir(pasta):
+        return {}
+    return {f: os.path.getsize(os.path.join(pasta, f)) for f in os.listdir(pasta)}
+
+
 if __name__ == "__main__":
+    pegada = _pegada_real()
     teste_vazamento()
     teste_sobreposicao()
     teste_paridade()
@@ -846,6 +1011,9 @@ if __name__ == "__main__":
     teste_vigia()
     teste_arena()
     teste_sdk_anthropic()
+    teste_pionex_telegram()
+    print("\n[13] a bateria nao toca nos dados reais do vigia")
+    checar(_pegada_real() == pegada, "dados_vigia/ (diario, log, estado) igual antes e depois da bateria")
     print()
     if FALHAS:
         print(f"REPROVADO: {len(FALHAS)} falha(s)")
