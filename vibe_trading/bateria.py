@@ -120,8 +120,9 @@ def main() -> None:
     for tf in periodos:
         for ativo in ativos:
             n = bt.candles_para(tf, args.dias, args.alinhar)
+            inicio = time.time()
             serie = bt.buscar(ativo, tf, n)
-            print(f"  {ativo} {tf}: {bt.periodo_txt(serie)} — testando {len(nomes)} estrategias...", flush=True)
+            print(f"  {ativo} {tf}: {bt.periodo_txt(serie)} — testando {len(nomes)} estrategias...", end="", flush=True)
             cortes = bt.cortes_por_ano(serie) if args.historico else None
             if cortes is not None:
                 anos[(tf, ativo)] = [c[2] for c in cortes]
@@ -132,6 +133,7 @@ def main() -> None:
                     modo = "historico_por_ano" if args.historico else f"{args.dias}d_{args.janelas}janelas"
                     cad.registrar_avaliacao(args.caderno, a, nome, tf, ativo, args.lado, args.alinhar, p,
                                             modo, "binance", len(serie), quando)
+            print(f" ok ({time.time() - inicio:.0f} s)", flush=True)
     print()
 
     tentativas = tentativas_no_caderno(args.caderno)
@@ -216,4 +218,9 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        sys.exit("\n\nBateria interrompida antes do fim (Ctrl+C ou o Terminal foi fechado). Nada foi perdido: "
+                 "rode 'python3 vibe.py bateria' de novo e espere a linha 'PASSARAM NA FASE 1' ou "
+                 "'NENHUMA ESTRATEGIA PASSOU'.")

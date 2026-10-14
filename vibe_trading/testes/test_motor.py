@@ -1640,6 +1640,10 @@ def teste_ficha_calculo() -> None:
            "alvos so em nivel forte, a mais de meio ATR, 1/10 de ATR antes do nivel: 107,9 e 111,9")
     checar([c["preco"] for c in p["caminho"]] == [101.0] and abs(p["caminho"][0]["r"] - 1 / 3.25) < 1e-9,
            "o nivel fraco antes do alvo aparece 'no caminho', a 0,31x o risco")
+    colado = grupos + [{"preco": 100.05, "nomes": ["fundo do 15m"], "forte": False}]
+    pc = ficha.plano(1, 100.0, le, colado, "15m", cfg, 0.05, 100.0, 2.0, None, None, 0.5, None, 24)
+    checar([c["preco"] for c in pc["caminho"]] == [101.0],
+           "nivel a menos de 1/10 de ATR da entrada esta no preco, nao 'no caminho' (visto ao vivo: '0,00x o risco')")
     checar(abs(p["perda"] - 2.0) < 1e-9 and abs(p["tamanho"] - 2.0 / 0.0337) < 1e-9,
            "risco 2% de 100: perde exatamente 2,00 USDT no stop, com taxa nas duas pontas e deslize")
     checar(p["alav"] == 14 and p["liq_vezes"] >= 2.0,

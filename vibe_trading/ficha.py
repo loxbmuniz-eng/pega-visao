@@ -368,8 +368,9 @@ def plano(direcao: int, entrada: float, le_entrada: dict, grupos: list[dict], tf
                   "nomes": ["sem nivel forte adiante: 2 vezes o risco"]}]
     limite = abs(alvos[0]["preco"] - entrada)
     risco_px = abs(entrada - stop)
+    # nivel a menos de 1/10 de ATR da entrada esta no preco, nao no caminho
     caminho = [{"preco": g["preco"], "nomes": g["nomes"], "r": abs(g["preco"] - entrada) / risco_px}
-               for g in grupos if not g["forte"] and 0 < (g["preco"] - entrada) * direcao < limite]
+               for g in grupos if not g["forte"] and 0.1 * atr < (g["preco"] - entrada) * direcao < limite]
 
     custo_pct = dist_pct + 2 * taxa + cfg["deslize_pct"]
     risco_usdt = banca * risco_pct / 100
