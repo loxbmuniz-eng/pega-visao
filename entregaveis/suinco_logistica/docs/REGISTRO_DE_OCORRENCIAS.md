@@ -6366,3 +6366,36 @@ pergunta é se o papel deve trazer só o que é de hoje (e o atrasado que
 ainda espera) ou separar por dia.
 
 Só painel: não depende do servidor.
+
+## #139 — O teste do movimento media a velocidade da máquina junto com a regra (14/10/2026)
+
+**Achado pelo portão 83**: `test_movimento_do_painel` reprovou duas vezes
+com **301 ms** onde o teto é 300 ("o movimento inteiro cabe em 300 ms" — o
+caminhão saindo da Torre). A mudança do portão era só o papel do manobrista
+(#138), que não toca em movimento.
+
+**Não era o painel** (causa 2 — o teste mede um atalho): o build publicado,
+que passou no portão 82, mediu 276–320 ms na mesma máquina, em seis
+rodadas. Filmado quadro a quadro: do clique até a linha começar a andar o
+painel gasta 70–110 ms registrando a saída no servidor (fingido no teste);
+o movimento em si leva 160–225 ms. O teste contava os 300 ms **do clique**,
+então a espera do servidor — que depende da velocidade de quem roda, e em
+produção é a ida e volta da rede — entrava na conta do movimento. Numa
+máquina mais lenta, o mesmo painel reprovava. Família: *o relógio decide o
+que o teste vê* (#116, #120, #136, #137) — aqui, o relógio da máquina.
+
+Junto, um segundo tropeço da mesma origem (1 em 10 rodadas): o redesenho
+da tabela segura o navegador por ~77 ms no fim, o quadro de 0 px não é
+pintado — o último visto foi o de 8 px — e "a linha fechou o espaço"
+reprovava sem a pessoa ver diferença nenhuma.
+
+**A correção, só no teste.** Os 300 ms contam do último quadro PARADO até a
+linha sumir — o movimento que a pessoa vê. O total do clique até a linha
+sair da tela continua travado em 450 ms ("nenhum fantasma"). A linha que sai
+da tela já apagada e com no máximo 10% da altura conta como fechada.
+
+**Prova.** Dez rodadas seguidas verdes (movimento de 162 a 223 ms). E o
+teste continua pegando o defeito de verdade: numa cópia do painel com a
+saída esticada para 300 ms + 90 ms, reprova com 342 e 349 ms.
+
+Só teste: não muda o painel nem o servidor.
