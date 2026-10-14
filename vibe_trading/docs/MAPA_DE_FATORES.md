@@ -34,15 +34,19 @@ Só ao vivo = gravamos daqui em diante e medimos depois.
 |---|---|---|
 | Pedido mínimo, passo de quantidade e de preço, moeda negociando | Pionex `GET /api/v1/common/symbols?symbols=` | [doc] especificação oficial |
 | Alavancagem máxima e margem de manutenção por faixa de tamanho | Pionex `GET /api/v1/common/riskTable?symbol=` | [doc]; margem conferida contra 1/alavancagem antes de usar |
-| Marca, índice, próximo funding | Pionex `GET /api/v1/market/indexes?symbol=` | [doc]; o exemplo oficial mostra funding como fração (`"0.0001"`) |
+| Marca, índice, próximo funding | Pionex `GET /api/v1/market/indexes?symbol=` | [doc]; fração, como no exemplo oficial; **conferido ao vivo** em 14/10/2026: −0,0042% na Pionex contra −0,0036% na Binance |
 | Histórico de funding e intervalo entre cobranças | Pionex `GET /api/v1/market/fundingRates?symbol=&limit=` | [doc]; o intervalo é medido nas datas |
 | Giro de 24 h de todos os perpétuos (`/radar`) | Pionex `GET /api/v1/market/tickers?type=PERP` | [doc] |
 | Posições abertas, lotação | Binance `futures/data/openInterestHist`, `globalLongShortAccountRatio` | [código] |
 | Medo e ganância | alternative.me | [doc] |
 | DVOL (BTC e ETH) | Deribit | [doc] |
 | Agenda: FOMC | tabela no código, com a fonte (Chicago Fed para 2026, MNI para 2027, conferidas em 14/10/2026) | [doc] secundária; o federalreserve.gov não abriu daqui |
-| Agenda: CPI, payroll, PPI | BLS `schedule/news_release/bls.ics` | [doc]; hora sem fuso conhecido fica de fora |
+| Agenda: CPI, payroll, PPI | BLS `schedule/news_release/bls.ics`; se recusar, `fatores.BLS_TABELA` | [doc]; o iCal deu **403** no primeiro teste real (Mac, 14/10/2026); a tabela tem as datas conferidas nas páginas da BLS até 15/12/2026 e a ficha avisa quando vence |
 | Regime macro: juros de 10 anos, dólar amplo, VIX (só contexto, com a data de cada dado) | FRED `graph/fredgraph.csv?id=` DGS10, DTWEXBGS, VIXCLS | [código]; VIXCLS ainda NÃO CONFIRMADO: o `vibe.py fontes` confere |
+
+Primeiro teste real (`vibe.py fontes` no Mac, 14/10/2026): 11 de 12 fontes
+responderam; só o iCal da BLS recusou (403). Tabela de risco do BTC: até 2 mi
+USDT, 100x e manutenção de 0,5%; pedido mínimo de 1 USDT.
 
 Peso dos pedidos à Pionex: 5 cada, num teto de 10 por segundo por endereço;
 passar dá 60 s de bloqueio. Todo pedido do programa passa por um ritmo único

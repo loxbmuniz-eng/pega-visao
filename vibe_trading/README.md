@@ -99,6 +99,11 @@ A leitura completa de **uma moeda, agora, antes do clique**. No Telegram:
 No computador: `python3 vibe.py analisar BTC 2 swing`, `python3 vibe.py radar`,
 `python3 vibe.py fichas`.
 
+**A banca.** A ficha calcula o risco sobre a banca do `vigia.json` (o padrão é
+110) mais os resultados anotados com `/resultado`. Ponha o saldo real da conta
+de futuros: `python3 vibe.py banca 100`. Mudar a banca não zera o placar do
+vigia (ela não muda nenhuma operação de papel).
+
 | Horizonte | Entrada | Contexto | Maior | Prazo |
 |---|---|---|---|---|
 | scalp | 5m | 15m | 1h | até 3 horas |
@@ -141,6 +146,11 @@ O que a ficha faz, nesta ordem:
    um com a data do dado: o FRED publica com atraso).
 9. **Agenda.** CPI, payroll ou decisão do Fed nos próximos 30 minutos (ou nos
    últimos 15): ESPERAR no scalp e no intraday; no swing, só aviso.
+   O Fed vem de uma tabela com a fonte. A BLS (CPI, payroll, PPI) recusa
+   leitura automática do calendário dela (403, visto no primeiro teste real):
+   a ficha tenta o calendário e, se for recusada, usa a tabela de datas
+   conferidas nas páginas da própria BLS até 15/12/2026. Depois dessa data a
+   ficha avisa que a tabela venceu.
 
 | Veredito | Quando |
 |---|---|

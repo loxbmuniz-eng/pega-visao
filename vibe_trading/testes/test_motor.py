@@ -1498,6 +1498,22 @@ def teste_fase2_honesta() -> None:
     checar(not primeira and not igual and recomecou and est_p["trilhas"] == {} and len(est_p["arquivadas"]) == 1
            and list(est_p["arquivadas"].values())[0]["trilhas"]["x"]["resultados"] == [1.0] and len(msgs) == 1,
            "mudou o stop no vigia.json: o placar recomeca e o antigo fica guardado, sem se misturar")
+    est_b = {"trilhas": {"x": {"resultados": [1.0]}}}
+    vigia.conferir_params(est_b, cfg, msgs.append)
+    deposito = json.loads(json.dumps(cfg))
+    deposito["params"]["banca"] = cfg["params"]["banca"] + 50
+    antigo = {"trilhas": {"x": {"resultados": [1.0]}}, "params_assinatura": vigia.assinatura_params(cfg, com_banca=True)}
+    checar(not vigia.conferir_params(est_b, deposito, msgs.append) and est_b["trilhas"]["x"]["resultados"] == [1.0]
+           and not vigia.conferir_params(antigo, cfg, msgs.append) and antigo["trilhas"]["x"]["resultados"] == [1.0]
+           and antigo["params_assinatura"] == vigia.assinatura_params(cfg),
+           "mudar a banca nao zera a fase 2; o estado de quem ja rodava (assinatura antiga) segue igual")
+    cfg_tmp = os.path.join(tempfile.mkdtemp(prefix="banca_cfg_"), "vigia.json")
+    vigia.gravar_json(cfg_tmp, cfg, indent=2)
+    r_ok = vigia.definir_banca("100", cfg_tmp)
+    r_ruim = vigia.definir_banca("cem", cfg_tmp) + vigia.definir_banca("-5", cfg_tmp)
+    checar(vigia.ler_json(cfg_tmp, {})["params"]["banca"] == 100.0 and "-> 100" in r_ok and "nao e um numero" in r_ruim
+           and "nao faz sentido" in r_ruim, "vibe.py banca 100 grava a banca; texto ou negativo e recusado")
+    shutil.rmtree(os.path.dirname(cfg_tmp), ignore_errors=True)
 
 
 # --------------------------------------------------------------------------- #
@@ -1906,8 +1922,22 @@ def teste_ficha_fontes() -> None:
     checar(set(d["series"]) == set(ficha.PERIODOS_FICHA) and all(len(d["series"][tf]) == 500 for tf in d["series"])
            and all(formando[tf] not in d["series"][tf].t for tf in d["series"]),
            "os 5 periodos com 500 candles fechados cada (o em formacao fica de fora)")
-    checar("agenda_bls" in d["erros"] and "posicoes" in d["erros"] and "moeda" not in d["erros"],
-           "o que nao respondeu entra em erros com o motivo; o resto segue")
+    checar("posicoes" in d["erros"] and "moeda" not in d["erros"], "o que nao respondeu entra em erros com o motivo; o resto segue")
+    checar("agenda_bls" not in d["erros"] and d["agenda_bls"]
+           and all(e["fonte"] == fatores.FONTE_TABELA_BLS for e in d["agenda_bls"]),
+           "a BLS recusou o iCal (como no Mac, 403): a ficha usa a tabela de datas conferidas")
+    tab = {e["t_ms"]: e["nome"] for e in fatores.agenda_bls_tabela()}
+    checar(tab.get(1_792_067_400_000, "").startswith("PPI") and tab.get(1_794_317_400_000, "").startswith("CPI")
+           and tab.get(1_793_971_800_000, "").startswith("Payroll"),
+           "tabela da BLS em UTC: PPI 15/10 12:30 (verao de NY), payroll 06/11 e CPI 10/11 13:30 (ja no inverno)")
+    vencida = _dados_controlados(fatores.BLS_TABELA_ATE_MS + DIA_MS, agenda_bls=fatores.agenda_bls_tabela())
+    em_dia = _dados_controlados(AGORA_FICHA, agenda_bls=fatores.agenda_bls_tabela())
+    alta = {"4h": {"tendencia": 1, "topo": 112.0, "fundo": 88.0}, "1h": {"tendencia": 1, "topo": 110.0, "fundo": 90.0},
+            "15m": {"tendencia": 1, "topo": 99.0, "fundo": 94.0}}
+    fv = _com_leituras(alta, (90.0, 110.0), [], lambda: ficha.analisar(vencida, "intraday", 2.0))
+    fe = _com_leituras(alta, (90.0, 110.0), [], lambda: ficha.analisar(em_dia, "intraday", 2.0))
+    checar(any("acabou em 15/12/2026" in a for a in fv["avisos"]) and not any("acabou" in a for a in fe["avisos"]),
+           "depois da ultima data da tabela, a ficha avisa que ela venceu (ninguem precisa lembrar)")
     f = ficha.analisar(d, "intraday", 2.0)
     checar(f["veredito"] in ficha.VEREDITOS and "FORA DO AR" in ficha.texto(f),
            f"a ficha sai inteira mesmo com fontes fora do ar (veredito {f['veredito']})")

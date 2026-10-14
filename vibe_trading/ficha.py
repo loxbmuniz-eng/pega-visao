@@ -139,7 +139,13 @@ def _lento(nome: str, buscar, agora_ms: int, renovar: bool = False):
 
 
 def _agenda_bls(agora_ms: int, pedir_texto=None) -> list[dict]:
-    return _lento("bls", lambda: fatores.agenda_bls(pedir_texto), agora_ms, pedir_texto is not None)
+    """O iCal oficial; se a BLS recusar, a tabela de datas conferidas (fatores.BLS_TABELA)."""
+    def buscar():
+        try:
+            return fatores.agenda_bls(pedir_texto)
+        except Exception:
+            return fatores.agenda_bls_tabela()
+    return _lento("bls", buscar, agora_ms, pedir_texto is not None)
 
 
 def coletar(par: str, agora_ms: int, buscar=None, pedir=None, pedir_texto=None, conferir="padrao") -> dict:
@@ -524,6 +530,10 @@ def analisar(dados: dict, horizonte: str = "intraday", risco_pct: float | None =
              if -cfg["agenda_depois_min"] * 60_000 <= e["t_ms"] - agora <= cfg["agenda_antes_min"] * 60_000]
     if "agenda_bls" in f["erros"]:
         f["avisos"].append("agenda de CPI e payroll fora do ar: confira o calendario antes de entrar")
+    bls = list(dados.get("agenda_bls") or [])
+    if bls and all(e.get("fonte") == fatores.FONTE_TABELA_BLS for e in bls) and agora > fatores.BLS_TABELA_ATE_MS:
+        f["avisos"].append("a tabela da agenda da BLS (CPI, payroll) acabou em 15/12/2026: peca a atualizacao e "
+                           "confira o calendario antes de entrar")
 
     # direcao: o contexto e o periodo maior precisam concordar
     direcao = 0
@@ -632,7 +642,7 @@ def _contexto(f: dict, dados: dict) -> None:
         d = lv.get("deseq_0.5")
         if d is not None:
             c.append(f"livro Pionex (+-0,5%): {(1 + d) / 2 * 100:.0f}% compra x {(1 - d) / 2 * 100:.0f}% venda, "
-                     f"spread {pct(lv['spread_pct'], 3)}")
+                     f"spread {pct(lv['spread_pct'], 4)}")
         if lv.get("spread_pct", 0) > 0.05:
             f["avisos"].append(f"spread largo ({pct(lv['spread_pct'], 3)}): entrada a mercado sai cara")
     medo = dados.get("medo")

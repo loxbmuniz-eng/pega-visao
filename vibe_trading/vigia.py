@@ -1061,6 +1061,22 @@ def guardar_segredo(nome: str, valor: str, caminho: str = SEGREDOS) -> None:
     gravar_json(caminho, seg, indent=2, privado=True)
 
 
+def definir_banca(valor: str, caminho: str = CONFIG) -> str:
+    """vibe.py banca 100: a banca da conta (USDT) no vigia.json. Nao zera o placar."""
+    try:
+        banca = float(str(valor).replace(",", "."))
+    except ValueError:
+        return f"'{valor}' nao e um numero. Use: python3 vibe.py banca 100"
+    if not 0 < banca < 10_000_000:
+        return f"banca de {banca:g} USDT nao faz sentido. Use o saldo da conta de futuros, ex.: 100"
+    cfg = carregar_config(caminho)
+    antes = cfg["params"]["banca"]
+    cfg["params"]["banca"] = banca
+    gravar_json(caminho, cfg, indent=2)
+    return (f"banca: {antes:g} -> {banca:g} USDT. A ficha calcula o risco sobre ela (mais os /resultado "
+            f"anotados). O placar do vigia continua.")
+
+
 def ligar_arena(ligar: bool, caminho: str = CONFIG) -> None:
     cfg = carregar_config(caminho)
     cfg["arena"]["ligada"] = ligar
@@ -1104,9 +1120,15 @@ def avisar_mercado(estado: dict, cfg: dict, ativo: str, tf: str, agora_ms: int, 
     return textos
 
 
-def assinatura_params(cfg: dict) -> str:
-    """O que, se mudar, faz o placar valer para outra hipotese."""
-    base = {"params": cfg["params"], "fonte": cfg.get("fonte", "binance"), "moedas": cfg["moedas"]}
+def assinatura_params(cfg: dict, com_banca: bool = False) -> str:
+    """O que, se mudar, faz o placar valer para outra hipotese. A banca fica de fora:
+    ela nao muda nenhuma operacao de papel (so o % do risco aberto e o disjuntor), e
+    atualizar a banca depois de um deposito nao pode zerar a fase 2. com_banca=True e o
+    formato antigo, so para reconhecer o estado de quem ja rodava."""
+    params = dict(cfg["params"])
+    if not com_banca:
+        params.pop("banca", None)
+    base = {"params": params, "fonte": cfg.get("fonte", "binance"), "moedas": cfg["moedas"]}
     return hashlib.sha256(json.dumps(base, sort_keys=True).encode()).hexdigest()[:12]
 
 
@@ -1120,6 +1142,9 @@ def conferir_params(estado: dict, cfg: dict, registrar=None) -> bool:
         estado["params_assinatura"] = nova
         return False
     if antiga == nova:
+        return False
+    if antiga == assinatura_params(cfg, com_banca=True):  # mesmo placar, assinatura do formato antigo
+        estado["params_assinatura"] = nova
         return False
     estado.setdefault("arquivadas", {})[antiga] = {"trilhas": estado.get("trilhas", {}),
                                                    "ate": time.strftime("%Y-%m-%d %H:%M")}

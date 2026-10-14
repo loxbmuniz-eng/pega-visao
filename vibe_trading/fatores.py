@@ -352,6 +352,35 @@ def agenda_bls(pedir_texto=None) -> list[dict]:
     return ler_ics_bls((pedir_texto or _pedir_texto)(URL_BLS))
 
 
+# Plano B: o iCal da BLS recusa leitura automatica (403 no Mac, 14/10/2026). Datas
+# oficiais, todas as 08:30 de Nova York, conferidas em 14/10/2026 nas paginas da
+# propria BLS (schedule/news_release/cpi.htm, empsit.htm, ppi.htm e
+# schedule/2026/11_sched_list.htm, 12_sched_list.htm). Depois da ultima data, a ficha
+# avisa que a tabela venceu: ninguem precisa lembrar de atualizar.
+BLS_TABELA = [
+    ("2026-10-15", "Producer Price Index"),
+    ("2026-11-06", "Employment Situation"),
+    ("2026-11-10", "Consumer Price Index"),
+    ("2026-11-13", "Producer Price Index"),
+    ("2026-12-04", "Employment Situation"),
+    ("2026-12-10", "Consumer Price Index"),
+    ("2026-12-15", "Producer Price Index"),
+]
+FONTE_TABELA_BLS = "tabela BLS conferida em 14/10/2026"
+
+
+def agenda_bls_tabela() -> list[dict]:
+    eventos = []
+    for data, chave in BLS_TABELA:
+        ano, mes, dia = (int(x) for x in data.split("-"))
+        eventos.append({"t_ms": nova_york_para_utc_ms(ano, mes, dia, 8, 30), "nome": EVENTOS_BLS[chave],
+                        "fonte": FONTE_TABELA_BLS})
+    return eventos
+
+
+BLS_TABELA_ATE_MS = max(e["t_ms"] for e in agenda_bls_tabela())
+
+
 def proximos_eventos(eventos: list[dict], agora_ms: int, antes_h: float = 1.0, depois_h: float = 48.0) -> list[dict]:
     """Eventos de `antes_h` horas atras ate `depois_h` horas a frente, em ordem."""
     return sorted((e for e in eventos if agora_ms - antes_h * 3_600_000 <= e["t_ms"] <= agora_ms + depois_h * 3_600_000),
@@ -378,7 +407,8 @@ def conferir_fontes(par: str = "BTCUSDT", agora_ms: int | None = None, pedir=Non
         ("binance futuros: lotacao", lambda: lotacao_binance(par, pedir)),
         ("alternative.me: medo e ganancia", lambda: medo_ganancia(pedir)),
         ("deribit: DVOL", lambda: dvol(par, agora_ms, pedir)),
-        ("bls: agenda", lambda: proximos_eventos(agenda_bls(pedir_texto), agora_ms, 0, 24 * 45)[:3]),
+        ("bls: agenda (iCal; se recusar, a ficha usa a tabela conferida ate 15/12/2026)",
+         lambda: proximos_eventos(agenda_bls(pedir_texto), agora_ms, 0, 24 * 45)[:3]),
         ("fred: juros, dolar e VIX", lambda: macro_fred(pedir_texto)),
     ]
     saida = []
