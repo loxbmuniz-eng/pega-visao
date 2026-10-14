@@ -621,6 +621,14 @@ existente).
 > teste do instalador confere que a primeira atualização termina sem parada e
 > que a versão recusada e a aprovada guardam cada uma o próprio registro.
 
+### Diário com corrente de assinaturas
+
+Cada operação fechada vai para `dados_vigia/diario.jsonl` com a assinatura dela
+**e a da anterior** (SHA-256). Editar um resultado, apagar ou inserir uma linha
+depois quebra a corrente dali em diante, e o `/status` mostra a linha exata. O
+placar não pode ser melhorado à mão sem que apareça, nem por quem escreve o
+código. Linhas antigas, de antes da corrente, continuam aceitas no começo.
+
 ### Livro de ofertas: gravando para medir
 
 A cada candle do menor período, o vigia lê o livro de ofertas de três fontes
@@ -662,6 +670,15 @@ posição. Um candle que fechou com o vigia desligado não é consultado: a IA n
 decide o passado. A decisão de cada candle fica gravada e nunca é pedida de
 novo, nem depois de religar. Cada decisão, com o motivo, vai para
 `dados_vigia/arena.jsonl`.
+
+**Nota de acerto.** Cada IA diz também a **confiança** (de 0 a 1) de que a
+operação bate o alvo antes do stop. Quando a operação fecha, entra na nota
+(Brier): (confiança − acertou)². **0 é perfeito; 0,25 é o que dá dizer sempre
+50%.** Confiança alta que erra pesa muito (90% num stop vale 0,81). O placar
+mostra a nota média de cada IA: ganhar dinheiro com confiança mal calibrada é
+sorte, e a nota mostra. Confiança fora do formato não entra na nota (a decisão
+continua valendo). O texto que a IA escreve vai ao Telegram limpo e marcado
+como "não verificado".
 
 **Por que só ao vivo, e não no backtest:** a IA foi treinada com textos que
 incluem o histórico de preços, e pode "lembrar" o que aconteceu. Candles de

@@ -152,6 +152,67 @@ def anexar_json(caminho: str, registro: dict) -> None:
         f.write(json.dumps(registro, ensure_ascii=False) + "\n")
 
 
+# --------------------------------------------------------------------------- #
+# diario encadeado: cada operacao carrega a assinatura da anterior
+# --------------------------------------------------------------------------- #
+
+def _assinar(anterior: str, registro: dict) -> str:
+    corpo = json.dumps({k: v for k, v in registro.items() if k not in ("hash", "hash_anterior")},
+                       sort_keys=True, ensure_ascii=False)
+    return hashlib.sha256((anterior + corpo).encode()).hexdigest()
+
+
+def _ultimo_hash(caminho: str) -> str:
+    if not os.path.exists(caminho):
+        return ""
+    with open(caminho, "rb") as f:
+        f.seek(max(0, os.path.getsize(caminho) - 16384))
+        for linha in reversed(f.read().decode("utf-8", errors="replace").splitlines()):
+            try:
+                return json.loads(linha).get("hash", "")
+            except ValueError:
+                continue
+    return ""
+
+
+def anexar_encadeado(caminho: str, registro: dict) -> None:
+    """Grava a operacao com a assinatura dela e a da anterior: mudar, apagar ou
+    inserir uma linha depois quebra a corrente dali em diante, e o /status mostra."""
+    anterior = _ultimo_hash(caminho)
+    anexar_json(caminho, {**registro, "hash_anterior": anterior, "hash": _assinar(anterior, registro)})
+
+
+def conferir_diario(caminho: str) -> dict:
+    """{'n': linhas, 'encadeadas': quantas com assinatura, 'quebra': 1a linha alterada ou None}.
+    Linhas antigas, sem assinatura, so sao aceitas ANTES da primeira assinada."""
+    n = encadeadas = 0
+    anterior, quebra = "", None
+    if os.path.exists(caminho):
+        with open(caminho, encoding="utf-8") as f:
+            for n, linha in enumerate(f, 1):
+                try:
+                    r = json.loads(linha)
+                except ValueError:
+                    quebra = quebra or n
+                    continue
+                if "hash" not in r:
+                    if encadeadas and quebra is None:
+                        quebra = n
+                    continue
+                encadeadas += 1
+                if quebra is None and (r.get("hash_anterior") != anterior or r["hash"] != _assinar(anterior, r)):
+                    quebra = n
+                anterior = r["hash"]
+    return {"n": n, "encadeadas": encadeadas, "quebra": quebra}
+
+
+def texto_diario(pasta: str = PASTA) -> str:
+    c = conferir_diario(os.path.join(pasta, "diario.jsonl"))
+    if c["quebra"]:
+        return f"ATENCAO: o diario foi alterado na linha {c['quebra']} (de {c['n']}): o placar dali em diante nao e confiavel"
+    return f"diario: {c['n']} operacoes, corrente de assinaturas integra"
+
+
 # Campo novo num vigia.json que ja existia: o valor que reproduz o comportamento
 # antigo, nao o padrao novo. Trocar a fonte no meio da fase 2 seria outra hipotese.
 PADRAO_PARA_CONFIG_ANTIGA = {"fonte": "binance", "conferir_com": ""}
@@ -337,7 +398,7 @@ def julgar(ao_vivo: list[float], moedas_vivo: list[float], tentativas: int) -> d
 
 def processar_barra(tr: dict, tid: str, nome: str, ativo: str, tf: str, sinal: int, i: int, c: dict,
                     p: bt.Params, recuperado: bool, pasta: str, avisar, motivo: str = "",
-                    julgar_em=(100, 200, 300), tentativas: int = 1) -> None:
+                    julgar_em=(100, 200, 300), tentativas: int = 1, confianca: float | None = None) -> None:
     """Um candle numa trilha (estrategia ou IA): a posicao, o diario, o aviso e as
     moedas pareadas. Estrategia e IA passam pela MESMA funcao."""
     tr["posicao"], fechou, abriu = passo(tr["posicao"], sinal, i, c, p)
@@ -355,12 +416,19 @@ def processar_barra(tr: dict, tid: str, nome: str, ativo: str, tf: str, sinal: i
                     "candles": pos.barras, "recuperado": recuperado}
         if "motivo_entrada" in tr:
             registro["motivo_entrada"] = tr.pop("motivo_entrada")
-        anexar_json(os.path.join(pasta, "diario.jsonl"), registro)
+        conf = tr.pop("confianca_entrada", None)
+        if conf is not None:
+            # nota de acerto (Brier): (confianca - acertou)^2. 0 = perfeito; 0,25 = sempre dizer 50%
+            registro["confianca"] = conf
+            tr.setdefault("brier", []).append(round((conf - (1.0 if pnl > 0 else 0.0)) ** 2, 6))
+        anexar_encadeado(os.path.join(pasta, "diario.jsonl"), registro)
         if avisar and not recuperado:
             avisar(texto_saida(registro, tr))
     if abriu:
         if motivo:
             tr["motivo_entrada"] = motivo
+        if confianca is not None:
+            tr["confianca_entrada"] = confianca
         if avisar and not recuperado:
             dj = disjuntor(ler_resultados(pasta), int(time.time() * 1000), p.banca)
             avisar(texto_entrada(nome, ativo, tf, tr["posicao"], p, motivo,
@@ -487,14 +555,19 @@ def ciclo_arena(estado: dict, juiz, tids: dict, ativo: str, tf: str, c: dict, se
             except Exception as e:  # a arena nunca derruba o vigia: falhou, e NADA
                 juiz.log(f"arena: falha ao decidir o candle {chave} ({type(e).__name__}): nada")
                 decisoes = {}
+            confs = (memoria.get("confiancas") or {}).get(chave, {}) if decisoes else {}
             if nova and decisoes:
                 anexar_json(os.path.join(pasta, "arena.jsonl"), {
                     "t": t, "ativo": ativo, "periodo": tf, "fechamento": c["fechamento"][i],
-                    "decisoes": {k: {"lado": v[0], "motivo": v[1]} for k, v in decisoes.items()}})
+                    "decisoes": {k: {"lado": v[0], "motivo": v[1], "confianca": confs.get(k)}
+                                 for k, v in decisoes.items()}})
+        else:
+            confs = {}
         for n in aqui:
             lado, motivo = decisoes.get(n, (0, ""))
             processar_barra(estado["trilhas"][tids[n]], tids[n], n, ativo, tf, lado, i, c, p,
-                            recuperado, pasta, avisar, motivo, julgar_em, len(estado["trilhas"]))
+                            recuperado, pasta, avisar, motivo, julgar_em, len(estado["trilhas"]),
+                            confianca=confs.get(n) if lado else None)
     return len(pend)
 
 
@@ -543,10 +616,12 @@ def placar(estado: dict) -> list[dict]:
                       "reprovada": "REPROVADA"}[j["nivel"]]
             fase2 = (f"{rotulo}, julgada com {j['operacoes']} operacoes ao vivo: {j['por_operacao']:+.2f} por op, "
                      f"bate {j['bate']:.0f}% das moedas, {j['nao_sorte'] * 100:.1f}% de chance de nao ser sorte{falta}")
+        notas = tr.get("brier") or []
         linhas.append({"trilha": tid, "operacoes": n, "acerto": r.acerto, "ganho_medio": r.ganho_medio,
                        "perda_media": r.perda_media, "por_operacao": r.por_operacao, "lucro": lucro,
                        "queda_max": tr["queda_max"], "bate": bate,
-                       "aberta": tr["posicao"] is not None, "fase2": fase2})
+                       "aberta": tr["posicao"] is not None, "fase2": fase2,
+                       "nota": (sum(notas) / len(notas)) if notas else None, "n_nota": len(notas)})
     return linhas
 
 
@@ -654,7 +729,9 @@ def texto_resumo(estado: dict) -> str:
     partes = ["Resumo do dia (papel)"]
     for l in placar(estado):
         partes.append(f"{l['trilha'].replace('|', ' ')}: {l['operacoes']} ops, acerto {l['acerto']:.0f}%, "
-                      f"por op {l['por_operacao']:+.2f}, lucro {l['lucro']:+.2f}, bate {l['bate']:.0f}% das moedas")
+                      f"por op {l['por_operacao']:+.2f}, lucro {l['lucro']:+.2f}, bate {l['bate']:.0f}% das moedas"
+                      + (f", nota de acerto {l['nota']:.2f} em {l['n_nota']} (0 perfeito; 0,25 chute)"
+                         if l.get("nota") is not None else ""))
     custo = texto_custo_arena(estado)
     if custo:
         partes.append(custo)
@@ -698,7 +775,7 @@ def texto_risco_aberto(estado: dict, cfg: dict) -> str:
     return texto
 
 
-def texto_status(estado: dict, cfg: dict, agora_ms: int) -> str:
+def texto_status(estado: dict, cfg: dict, agora_ms: int, pasta: str = PASTA) -> str:
     """Se o vigia esta vivo: ultimo candle processado, posicoes abertas, conferencia, arena."""
     partes = [f"Vigia (papel) · fonte {cfg.get('fonte', 'binance')}"
               + (f", conferida com {cfg['conferir_com']}" if cfg.get("conferir_com") else "")]
@@ -720,6 +797,7 @@ def texto_status(estado: dict, cfg: dict, agora_ms: int) -> str:
                 partes.append(f"  conferencia com {conf['com']}: diferenca de {conf['pct']:.3f}% "
                               f"nos ultimos {conf['comparados']} candles")
     partes.append(texto_risco_aberto(estado, cfg))
+    partes.append(texto_diario(pasta))
     hoje = ((estado.get("arena") or {}).get("chamadas") or {}).get(time.strftime("%Y-%m-%d"))
     if hoje:
         partes.append("arena hoje: " + ", ".join(f"{k} {v} chamadas" for k, v in sorted(hoje.items())))

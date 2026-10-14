@@ -39,8 +39,9 @@ ESQUEMA_DECISAO = {
     "properties": {
         "lado": {"type": "string", "enum": ["compra", "venda", "nada"]},
         "motivo": {"type": "string"},
+        "confianca": {"type": "number"},
     },
-    "required": ["lado", "motivo"],
+    "required": ["lado", "motivo", "confianca"],
     "additionalProperties": False,
 }
 
@@ -61,7 +62,8 @@ INSTRUCAO = (
     "as escolhe: {regras}. Ficar de fora e uma decisao valida e frequente. Voce sera comparado "
     "com moedas sorteadas que entram nos mesmos candles: so vale entrar quando os dados derem "
     "razao concreta para um lado. Responda apenas no formato pedido, com um motivo curto "
-    "(ate 200 caracteres)."
+    "(ate 200 caracteres) e a confianca: um numero de 0 a 1, a chance que voce da de a operacao "
+    "bater o alvo antes do stop. Ela vira a sua nota de acerto: confianca alta que erra pesa contra."
 )
 
 
@@ -146,6 +148,19 @@ def ler_decisao(texto: str) -> tuple[int, str]:
         return lado, str(d.get("motivo", ""))[:200]
     except Exception:
         return 0, "resposta fora do formato: tratada como nada"
+
+
+def ler_confianca(texto: str) -> float | None:
+    """A confianca (0 a 1) que a IA deu. Fora do formato, fora da faixa ou ausente: None
+    (a decisao vale, so nao entra na nota de acerto)."""
+    try:
+        m = re.search(r"\{.*\}", texto or "", re.S)
+        v = json.loads(m.group(0) if m else texto).get("confianca")
+    except Exception:
+        return None
+    if isinstance(v, bool) or not isinstance(v, (int, float)) or not 0 <= v <= 1:
+        return None
+    return float(v)
 
 
 def ler_veto(texto: str) -> tuple[bool, str]:
@@ -348,22 +363,27 @@ class Juiz:
         usuario = "Dados do candle que acabou de fechar:\n" + montar_dados(serie, i, p)
         out: dict = {}
 
-        pedido_json = usuario + '\nResponda SO com JSON: {"lado": "compra"|"venda"|"nada", "motivo": "..."}'
+        pedido_json = usuario + ('\nResponda SO com JSON: {"lado": "compra"|"venda"|"nada", "motivo": "...", '
+                                 '"confianca": numero de 0 a 1}')
+        conf: dict = {}
         lado_q, mot_q = 0, "nao consultada"
         if self.qwen:
             texto, falha = self._chamar(estado, "qwen", self.qwen, lambda: self.qwen.perguntar(sistema, pedido_json))
             lado_q, mot_q = (0, falha + ": nada") if falha else ler_decisao(texto)
             out["ia:qwen"] = (lado_q, mot_q)
+            conf["ia:qwen"] = None if falha else ler_confianca(texto)
 
         if self.deepseek:
             texto, falha = self._chamar(estado, "deepseek", self.deepseek,
                                         lambda: self.deepseek.perguntar(sistema, pedido_json))
             out["ia:deepseek"] = (0, falha + ": nada") if falha else ler_decisao(texto)
+            conf["ia:deepseek"] = None if falha else ler_confianca(texto)
 
         if self.claude:
             texto, falha = self._chamar(estado, "claude", self.claude,
                                         lambda: self.claude.perguntar_formatado(sistema, usuario, ESQUEMA_DECISAO))
             out["ia:claude"] = (0, falha + ": nada") if falha else ler_decisao(texto)
+            conf["ia:claude"] = None if falha else ler_confianca(texto)
 
         if self.qwen and self.claude:
             if lado_q == 0:
@@ -377,9 +397,13 @@ class Juiz:
                     ESQUEMA_VETO))
                 ok, mot = (False, falha) if falha else ler_veto(texto)
                 out["ia:qwen+claude"] = (lado_q if ok else 0, ("aprovou: " if ok else "vetou: ") + mot)
+                conf["ia:qwen+claude"] = conf.get("ia:qwen") if ok else None
 
         guardadas[chave_candle] = {k: list(v) for k, v in out.items()}
+        confiancas = estado.setdefault("confiancas", {})
+        confiancas[chave_candle] = {k: v for k, v in conf.items() if v is not None}
         if len(guardadas) > 2000:  # nao cresce sem fim
             for k in sorted(guardadas)[:500]:
                 del guardadas[k]
+                confiancas.pop(k, None)
         return out

@@ -722,8 +722,10 @@ def teste_arena() -> None:
         juiz = arena.Juiz(q, c, 10_000, logs.append, deepseek=dsk)
         estado, diario = _replay(s, cfg, tmp, inicio, juiz=juiz)
         registros = [json.loads(l) for l in open(os.path.join(tmp, "arena.jsonl"), encoding="utf-8")]
-    estrategias_sem = [r for r in diario_sem]
-    estrategias_com = [r for r in diario if not r["estrategia"].startswith("ia:")]
+    # a operacao em si (a assinatura da corrente depende de quem gravou antes, IAs incluidas)
+    sem_corrente = lambda r: {k: v for k, v in r.items() if k not in ("hash", "hash_anterior")}
+    estrategias_sem = [sem_corrente(r) for r in diario_sem]
+    estrategias_com = [sem_corrente(r) for r in diario if not r["estrategia"].startswith("ia:")]
     checar(estrategias_sem == estrategias_com, "ligar a arena nao muda nenhuma operacao das estrategias")
     ids = sorted(t for t in estado["trilhas"] if t.startswith("ia:"))
     checar(ids == ["ia:claude|ambos|livre|BTCUSDT|15m", "ia:deepseek|ambos|livre|BTCUSDT|15m",
@@ -1060,8 +1062,24 @@ def teste_pionex_telegram() -> None:
     checar(len(enviados) == 3 and "Placar agora" in enviados[0] and "fonte pionex" in enviados[1]
            and "BTCUSDT 15m" in enviados[1] and "/placar" in enviados[2],
            "responde /placar, /status e /ajuda ao dono; ignora texto solto")
-    checar(not any("999" in str(e) for e in enviados) and len(enviados) == 3,
-           "mensagem de outra pessoa nao recebe resposta nenhuma")
+    # so o estranho manda mensagem: nenhuma resposta pode sair (medir o texto das respostas
+    # nao serve: "999" aparece por acaso em "ha 8999 min")
+    so_estranho = [[], [{"update_id": 20, "message": {"chat": {"id": 999}, "text": "/status"}},
+                        {"update_id": 21, "message": {"chat": {"id": 999}, "text": "/analisar BTC"}},
+                        {"update_id": 22, "message": {"chat": {"id": 999}, "text": "/resultado -1"}}]]
+    parar2, enviados2 = threading.Event(), []
+    def pedir2(tok, offset, espera):
+        if not so_estranho:
+            parar2.set()
+            return []
+        return so_estranho.pop(0)
+    with tempfile.TemporaryDirectory() as tmp:
+        arq_estado = os.path.join(tmp, "estado.json")
+        json.dump(estado, open(arq_estado, "w"))
+        vigia.escutar_telegram({"telegram_token": "t", "telegram_chat_id": "555"}, dict(cfg, fonte="pionex"),
+                               arq_estado, parar2, pedir=pedir2, enviar=enviados2.append, espera=0)
+    checar(enviados2 == [] and len(enviados) == 3,
+           "mensagem de outra pessoa nao recebe resposta nenhuma (nem /status, /analisar ou /resultado)")
 
     # risco somado das posicoes abertas (varias ordens ao mesmo tempo)
     cfg_r = json.loads(json.dumps(vigia.CONFIG_PADRAO))   # banca 110, margem 15, 24x, stop 0,5%
@@ -2294,6 +2312,72 @@ def teste_endurecimento() -> None:
         shutil.rmtree(pasta, ignore_errors=True)
 
 
+def teste_nota_e_corrente() -> None:
+    print("\n[32] nota de acerto das IAs (confianca) e corrente de assinaturas do diario")
+    import arena
+    import vigia
+    checar(arena.ler_confianca('{"lado": "compra", "motivo": "x", "confianca": 0.7}') == 0.7
+           and arena.ler_confianca('{"confianca": 70}') is None and arena.ler_confianca('{"confianca": "0.7"}') is None
+           and arena.ler_confianca('{"confianca": true}') is None and arena.ler_confianca("lixo") is None,
+           "confianca so como numero de 0 a 1; o resto fica fora da nota (a decisao continua valendo)")
+    checar("confianca" in arena.ESQUEMA_DECISAO["required"], "o Claude e obrigado pelo formato a dar a confianca")
+
+    class ComConfianca(QwenFalsa):
+        def perguntar(self, sistema, usuario):
+            r = json.loads(super().perguntar(sistema, usuario).strip("`").replace("json\n", "", 1))
+            return json.dumps({**r, "confianca": 0.8})
+    s = serie_sintetica(600, 5, True)
+    marca = arena.candles_de_interesse(s)
+    i0 = next(i for i in range(300, len(s)) if marca[i])
+    j = arena.Juiz(ComConfianca(sempre="compra"), None, 10, lambda m: None)
+    mem = {}
+    j.decidir(mem, "k", s, i0, bt.Params())
+    checar(mem["confiancas"]["k"] == {"ia:qwen": 0.8}, "a confianca de cada IA fica guardada com a decisao do candle")
+
+    p = bt.Params(margem=10.0, alav=10.0, stop=1.0, rr=2.0)
+    pasta = tempfile.mkdtemp(prefix="nota_")
+    try:
+        tr = vigia.trilha_nova(2)
+        c = {"t": [0, 1, 2, 3, 4], "abertura": [100.0] * 5, "fechamento": [100.0] * 5,
+             "maxima": [100.5, 102.5, 100.5, 100.5, 100.5], "minima": [99.5, 99.6, 99.5, 98.0, 99.5]}
+        ok = lambda i, sinal, conf: vigia.processar_barra(tr, "ia:qwen|x", "ia:qwen", "BTCUSDT", "15m", sinal, i, c, p,
+                                                          False, pasta, None, "m", (100,), 1, confianca=conf)
+        ok(0, 1, 0.8)   # entra com 80% de confianca
+        ok(1, 0, None)  # bate o alvo: acertou -> (0,8 - 1)^2 = 0,04
+        ok(2, 1, 0.9)   # entra com 90%
+        ok(3, 0, None)  # bate o stop: errou -> (0,9 - 0)^2 = 0,81
+        checar(tr["brier"] == [0.04, 0.81], f"nota de acerto conferida a mao: {tr['brier']} (0,04 no acerto, 0,81 no erro)")
+        linha = next(l for l in vigia.placar({"trilhas": {"ia:qwen|x": tr}}) if l["trilha"] == "ia:qwen|x")
+        checar(abs(linha["nota"] - 0.425) < 1e-9
+               and f"nota de acerto {linha['nota']:.2f} em 2" in vigia.texto_resumo({"trilhas": {"ia:qwen|x": tr}}),
+               "o placar mostra a nota media (0,425): confianca alta que erra pesa contra")
+        diario = os.path.join(pasta, "diario.jsonl")
+        checar(vigia.conferir_diario(diario) == {"n": 2, "encadeadas": 2, "quebra": None},
+               "diario das 2 operacoes com a corrente integra")
+        for k in range(3):
+            vigia.anexar_encadeado(diario, {"trilha": "x", "pnl": float(k)})
+        with open(diario, encoding="utf-8") as f:
+            linhas = f.readlines()
+        def com(novas):
+            with open(diario, "w", encoding="utf-8") as f:
+                f.writelines(novas)
+            return vigia.conferir_diario(diario)["quebra"]
+        mexida = linhas[:]
+        r = json.loads(mexida[2]); r["pnl"] = 99.0; mexida[2] = json.dumps(r) + "\n"
+        checar(com(mexida) == 3, "resultado editado na linha 3: a corrente quebra exatamente ali")
+        checar(com(linhas[:1] + linhas[2:]) == 2, "linha apagada: a corrente quebra na seguinte")
+        checar(com(linhas[:3] + ['{"trilha": "x", "pnl": 5.0}\n'] + linhas[3:]) == 4,
+               "linha sem assinatura inserida depois do inicio da corrente: quebra")
+        checar(com(['{"trilha": "antiga", "pnl": 1.0}\n'] + linhas) is None,
+               "linhas antigas, de antes da corrente, continuam aceitas no comeco")
+        com(linhas)
+        checar("corrente de assinaturas integra" in vigia.texto_diario(pasta) and
+               "alterado na linha 3" in (com(mexida) and vigia.texto_diario(pasta)),
+               "/status diz se o diario esta integro ou onde foi alterado")
+    finally:
+        shutil.rmtree(pasta, ignore_errors=True)
+
+
 def _pegada_real() -> dict:
     """Tamanho de cada arquivo de dado real (vigia e caderno de quem roda de verdade)."""
     pegada = {}
@@ -2339,6 +2423,7 @@ if __name__ == "__main__":
     teste_disjuntor()
     teste_surfe()
     teste_endurecimento()
+    teste_nota_e_corrente()
     print("\n[13] a bateria nao toca nos dados reais do vigia")
     checar(_pegada_real() == pegada, "dados_vigia/, caderno, vigia.json e segredos.json iguais antes e depois da bateria")
     print()
