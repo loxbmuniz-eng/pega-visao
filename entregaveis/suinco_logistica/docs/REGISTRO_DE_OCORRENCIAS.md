@@ -39,6 +39,7 @@ faz achar a próxima em minutos em vez de horas:
 | **Teste que mede o proxy, não a regra** | O teste confere um sintoma fácil de medir ("a aba aparece?", "quantas linhas?") em vez da garantia real, ou monta um cenário que deixou de corresponder ao sistema. Quando o sintoma muda por um motivo legítimo, ele fica vermelho sem que nada tenha quebrado — e aponta para o lugar errado. O avesso também: verde porque o caso que importa nunca foi desenhado (#121). | #15, #22, #121 |
 | **Decisão aplicada no nível errado** | A intenção está certa e o alvo não. Proibir quebra na TABELA quando bastava na linha; gravar por LINHA quando bastava por lote; desligar `animation` quando o que apagava o conteúdo no papel era o estado de repouso. Reconhece-se assim: o sintoma aparece longe da causa, e a correção não é remover a regra — é descê-la um nível. | #71, #72, #74 |
 | **Enfeite no caminho crítico** | A animação espera, e o trabalho espera atrás dela. Nada fica errado: fica mais lento, e o teste reprova numa conferência de DADO ("a rota aparece na tabela?") que aponta para o lugar errado. Movimento anda ao lado do trabalho, nunca na frente. | #74 |
+| **Um filtro, duas telas** | O filtro de uma aba vale, em silêncio, para um botão de outra. Quem clica não vê filtro nenhum à frente, e o que falta no resultado parece sumiço de dado. É o avesso da #18: lá eram dois filtros para uma tela; aqui é um filtro para duas. | #138 |
 
 ---
 
@@ -6316,3 +6317,52 @@ já fazia. Nenhuma outra suíte usa esse molde de data sem relógio parado
 passa duas vezes seguidas na mesma janela.
 
 Só teste: não muda o painel nem o servidor.
+
+## #138 — A placa na fila não saía no papel do manobrista (14/10/2026)
+
+**Relato do dono:** *"ontem aconteceu uma coisa a placa programada e na fila
+já com placa contratada e não saía de jeito nenhum no papel dos
+manobristas"*. Perguntado, respondeu: a LINHA não aparecia (não era a placa
+em branco), e a carga estava em **Aguardando Embarque**.
+
+**Descartado antes de achar, cada um reproduzido com a API de verdade:**
+carga da Montagem de hoje e de amanhã; linha da Montagem ainda não virada
+carga; Portaria antes da Montagem (a entrada órfã é absorvida e sai);
+carga programada antes da chegada (hoje e amanhã); entrada sem carga
+completada pelo "Criar carga" da Programação; fila de 30, 60 e 90 cargas
+(todas as placas no papel, em 2, 3 e 4 folhas). Em todos, a placa saía.
+
+**A causa.** O botão do manobrista (Torre e Programação) montava a lista
+com `cargasDoRelatorio()` — a lista dos RELATÓRIOS, que obedece ao período
+De/Até da **aba Relatórios**, filtrando pela data de programação. Bastava
+alguém ter clicado em **"Hoje"** lá (o relatório do dia, de todo dia): dali
+em diante, toda carga programada num dia anterior sumia do papel — a de
+ontem que chegou hoje e espera a doca é exatamente o caso dele. Se for a
+única da fila, o papel nem sai ("não há o que passar ao manobrista"). Quem
+tira o papel está na Torre ou na Programação, e não vê filtro nenhum.
+Família nova: **um filtro, duas telas**.
+
+Reproduzido: sem filtro, papel com a placa; depois do "Hoje" na aba
+Relatórios, nenhum papel.
+
+**A correção.** O papel do manobrista lê a fila de agora —
+`dadosManobrista(cargasAbertas())`: o que ainda vai carregar no momento da
+emissão, de qualquer dia de programação. Os relatórios da aba Relatórios
+continuam obedecendo ao filtro de lá (é o único botão que usava aquela
+lista fora da aba dela — conferido em todos os `onclick` do painel).
+
+**Teste que trava.** `testes/test_manobrista_nao_herda_filtro_dos_relatorios.py`,
+pela tela e com a API de verdade: Montagem de ontem → Portaria "Chegou"
+hoje → clique em "Hoje" na aba Relatórios → papel pela Torre e pela
+Programação com a placa; e o período continua valendo na aba Relatórios.
+Contra o publicado reprova em 4 pontos (o papel não sai, nas duas telas);
+depois da correção passa, com `test_relatorio_manobrista` e as 18 suítes de
+relatório verdes.
+
+**Fica com o dono (proposta, não defeito):** o papel mistura os dias. Uma
+carga já programada para AMANHÃ, esperando o veículo, entra na mesma lista
+e na ordem da sequência — a seq 1 de amanhã ao lado da seq 1 de hoje. A
+pergunta é se o papel deve trazer só o que é de hoje (e o atrasado que
+ainda espera) ou separar por dia.
+
+Só painel: não depende do servidor.
