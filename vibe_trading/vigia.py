@@ -40,6 +40,7 @@ import stat
 import sys
 import threading
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import asdict
@@ -47,6 +48,7 @@ from dataclasses import asdict
 import arena
 import backtest as bt
 import estrategias
+import livro
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
 PASTA = os.path.join(AQUI, "dados_vigia")
@@ -66,6 +68,9 @@ CONFIG_PADRAO = {
     # divergencia_max_pct, o vigia avisa. "" desliga.
     "conferir_com": "binance",
     "divergencia_max_pct": 0.3,
+    # Grava o livro de ofertas (Pionex, Binance, Hyperliquid) a cada candle do menor
+    # periodo, em dados_vigia/livro.jsonl. So gravacao: nenhuma estrategia usa.
+    "gravar_livro": True,
     "estrategias": [
         {"nome": "confl3", "lado": "ambos", "alinhar": False},
         {"nome": "engolfo", "lado": "ambos", "alinhar": False},
@@ -78,7 +83,8 @@ CONFIG_PADRAO = {
     # A arena so liga com "ligada": true E pelo menos uma chave de IA no segredos.json.
     # O teto vale por IA por dia; a decisao de um candle e guardada e nunca repetida.
     "arena": {"ligada": False, "ativo": "BTCUSDT", "periodo": "15m",
-              "qwen_modelo": "qwen/qwen3-max", "claude_modelo": "claude-opus-5-5",
+              "qwen_modelo": "qwen/qwen3-max", "deepseek_modelo": "deepseek/deepseek-v3.2",
+              "claude_modelo": "claude-opus-5-5",
               "claude_esforco": "low", "max_chamadas_dia": 30},
 }
 
@@ -155,6 +161,9 @@ def carregar_config(caminho: str = CONFIG) -> dict:
         if a["claude_esforco"] not in ESFORCOS:
             sys.exit(f"vigia.json: claude_esforco '{a['claude_esforco']}' nao existe. Use: {', '.join(ESFORCOS)}")
     for e in cfg["estrategias"]:
+        if e["nome"] in estrategias.PRECISA_AGRESSORA:
+            sys.exit(f"vigia.json: '{e['nome']}' usa a compra agressora, que o vigia ainda nao guarda. "
+                     f"Ela roda na bateria (dado da Binance); se passar la, o vigia ganha essa coluna.")
         if e["nome"] not in estrategias.REGISTRO:
             sys.exit(f"vigia.json: estrategia '{e['nome']}' nao existe. Disponiveis: {', '.join(estrategias.REGISTRO)}")
     for tf in cfg["periodos"]:
@@ -648,8 +657,16 @@ def telegram_descobrir(segredos: dict, gravar: bool = False, caminho: str = SEGR
     tok = segredos.get("telegram_token")
     if not tok:
         sys.exit("Coloque o telegram_token em segredos.json primeiro (veja o README).")
-    with urllib.request.urlopen(f"https://api.telegram.org/bot{tok}/getUpdates", timeout=15) as r:
-        dados = json.loads(r.read().decode())
+    try:
+        with urllib.request.urlopen(f"https://api.telegram.org/bot{tok}/getUpdates", timeout=15) as r:
+            dados = json.loads(r.read().decode())
+    except urllib.error.HTTPError as e:
+        motivo = "token errado: confira o que o @BotFather mandou" if e.code in (401, 404) else f"HTTP {e.code}"
+        print(f"O Telegram recusou ({motivo}).")
+        return False
+    except (urllib.error.URLError, OSError, ValueError) as e:
+        print(f"Nao consegui falar com o Telegram ({type(e).__name__}): confira a internet e tente de novo.")
+        return False
     chats = {}
     for u in dados.get("result", []):
         msg = u.get("message") or u.get("channel_post") or {}
@@ -709,37 +726,43 @@ def log(msg: str) -> None:
         pass
 
 
-def montar_juiz(cfg: dict, segredos: dict, registrar=None, conferir=arena.conferir_qwen,
+def montar_juiz(cfg: dict, segredos: dict, registrar=None, conferir=arena.conferir_modelo,
                 criar=arena.criar_claude):
     """A arena, se ligada e com pelo menos uma IA disponivel; senao None (e diz por que)."""
     registrar = registrar or log
     a = cfg.get("arena") or {}
     if not a.get("ligada"):
         return None
-    qwen = claude = None
-    if segredos.get("openrouter_key"):
-        situacao, preco, qwens = conferir(a["qwen_modelo"])
+    claude = None
+    pela_openrouter = {}
+    for nome, campo in (("Qwen", "qwen_modelo"), ("DeepSeek", "deepseek_modelo")):
+        modelo = a.get(campo) or ""
+        if not modelo:
+            continue  # nome vazio no vigia.json: este competidor fica de fora de proposito
+        if not segredos.get("openrouter_key"):
+            registrar(f"arena: openrouter_key vazia no segredos.json; {nome} fica de fora")
+            continue
+        situacao, preco, parecidos = conferir(modelo)
         if situacao == "nao_existe":
-            registrar(f"arena: o modelo '{a['qwen_modelo']}' nao existe na OpenRouter; a Qwen fica de fora. "
-                      f"Modelos Qwen que existem hoje: {', '.join(qwens) or 'nenhum'}. "
-                      f"Troque qwen_modelo no vigia.json.")
-        else:
-            qwen = arena.Qwen(segredos["openrouter_key"], a["qwen_modelo"], preco)
-            if situacao == "sem_lista":
-                registrar("arena: nao consegui ler a lista de modelos da OpenRouter agora; sigo com "
-                          f"'{a['qwen_modelo']}' (se o nome estiver errado, cada resposta vira NADA e aparece no log)")
-    else:
-        registrar("arena: openrouter_key vazia no segredos.json; a Qwen fica de fora")
+            registrar(f"arena: o modelo '{modelo}' nao existe na OpenRouter; {nome} fica de fora. "
+                      f"Modelos dessa familia que existem hoje: {', '.join(parecidos) or 'nenhum'}. "
+                      f"Troque {campo} no vigia.json.")
+            continue
+        pela_openrouter[nome] = arena.ModeloOpenRouter(segredos["openrouter_key"], modelo, preco)
+        if situacao == "sem_lista":
+            registrar("arena: nao consegui ler a lista de modelos da OpenRouter agora; sigo com "
+                      f"'{modelo}' (se o nome estiver errado, cada resposta vira NADA e aparece no log)")
+    qwen, deepseek = pela_openrouter.get("Qwen"), pela_openrouter.get("DeepSeek")
     if segredos.get("anthropic_api_key") or os.environ.get("ANTHROPIC_API_KEY"):
         claude, motivo = criar(segredos, a["claude_modelo"], a["claude_esforco"])
         if claude is None:
             registrar("arena: o Claude fica de fora: " + motivo)
     else:
         registrar("arena: anthropic_api_key vazia no segredos.json; o Claude fica de fora")
-    if not qwen and not claude:
+    if not qwen and not deepseek and not claude:
         registrar("arena ligada no vigia.json, mas sem nenhuma IA disponivel: o vigia segue sem arena")
         return None
-    juiz = arena.Juiz(qwen, claude, int(a["max_chamadas_dia"]), registrar)
+    juiz = arena.Juiz(qwen, claude, int(a["max_chamadas_dia"]), registrar, deepseek=deepseek)
     registrar(f"arena ligada em {a['ativo']} {a['periodo']}: {', '.join(juiz.competidores())}; "
               f"teto de {a['max_chamadas_dia']} chamadas por IA por dia")
     return juiz
@@ -782,6 +805,9 @@ def rodar(cfg: dict, segredos: dict, uma_vez: bool) -> None:
                                    if tr["posicao"] and f"|{rotulo(ativo, fonte)}|{tf}" in tid]
                         log(f"{ativo} {tf}: {n} candle(s) processado(s); posicao aberta em: "
                             f"{', '.join(abertas) if abertas else 'nenhuma'}")
+                        if cfg.get("gravar_livro") and tf == cfg["periodos"][0]:
+                            ultimo = (ler_json(arquivo_cache(PASTA, ativo, tf, fonte), cache_vazio())["t"] or [None])[-1]
+                            livro.gravar(PASTA, ativo, ultimo, agora, registrar=log)
                         if outra_fonte:
                             try:
                                 principal = serie_do_cache(ler_json(arquivo_cache(PASTA, ativo, tf, fonte), cache_vazio()))

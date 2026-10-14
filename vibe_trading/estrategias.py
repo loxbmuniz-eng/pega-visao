@@ -446,6 +446,34 @@ def sinais(nome: str, c, lado: str = "ambos", alinhar: bool = False) -> list[int
 # registro
 # --------------------------------------------------------------------------- #
 
+def com_fluxo(c, sinais: list[int], n: int = 3) -> list[int]:
+    """Mantem so o sinal em que a agressao dos ultimos n candles (o do sinal incluido,
+    ja fechado) vai a favor: compra com mais compra agressora, venda com mais venda.
+    Sem a coluna de agressao, nenhum sinal: a estrategia nao roda sem o dado."""
+    d = ind.delta_agressao(c.volume, c.agressora)
+    out = []
+    for i, s in enumerate(sinais):
+        janela = d[max(0, i - n + 1):i + 1]
+        if s == 0 or len(janela) < n or any(x is None for x in janela):
+            out.append(0)
+            continue
+        media = sum(janela) / n
+        out.append(s if (s > 0 and media > 0) or (s < 0 and media < 0) else 0)
+    return out
+
+
+def confl3_fluxo(c) -> list[int]:
+    return com_fluxo(c, confluencia_3(c))
+
+
+def canal_fluxo(c) -> list[int]:
+    return com_fluxo(c, rompimento_canal(c))
+
+
+# Estrategias que precisam da coluna de compra agressora (so a Binance informa).
+PRECISA_AGRESSORA = {"confl3_fluxo", "canal_fluxo"}
+
+
 REGISTRO: dict[str, tuple[Callable, str]] = {
     "moeda":      (moeda,               "CONTROLE — direcao sorteada, sem vantagem"),
     "comprado":   (sempre_compra,       "CONTROLE — comprado sempre, mede a tendencia"),
@@ -460,6 +488,8 @@ REGISTRO: dict[str, tuple[Callable, str]] = {
     "confl5":     (confluencia_5,       "confluencia — 5 das 5, so o livro-texto"),
     "engolfo":    (engolfo,             "padrao: engolfo de alta e de baixa"),
     "divergencia": (divergencia_rsi,    "padrao: divergencia entre preco e RSI 14"),
+    "confl3_fluxo": (confl3_fluxo,      "confluencia 3/5 so com a agressao a favor (Binance)"),
+    "canal_fluxo": (canal_fluxo,        "rompimento do canal so com a agressao a favor (Binance)"),
 }
 
 

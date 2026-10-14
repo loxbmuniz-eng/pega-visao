@@ -2,8 +2,9 @@
 """
 Arena: IAs de linguagem como competidoras no vigia, no PAPEL e ao vivo.
 
-Tres competidores, todos com as MESMAS regras do resto do projeto:
+Ate quatro competidores, todos com as MESMAS regras do resto do projeto:
   ia:qwen         a Qwen decide sozinha (via OpenRouter)
+  ia:deepseek     o DeepSeek decide sozinho (via OpenRouter, mesma chave da Qwen)
   ia:claude       o Claude decide sozinho (SDK oficial da Anthropic)
   ia:qwen+claude  a Qwen propoe e o Claude aprova ou veta
 
@@ -162,8 +163,8 @@ def ler_veto(texto: str) -> tuple[bool, str]:
 # provedores
 # --------------------------------------------------------------------------- #
 
-class Qwen:
-    """Qwen pela OpenRouter (HTTP direto, sem dependencia).
+class ModeloOpenRouter:
+    """Um modelo pela OpenRouter (HTTP direto, sem dependencia): a Qwen e o DeepSeek.
     `preco` = (USD por milhao de tokens de entrada, de saida), lido da lista publica
     da OpenRouter na partida; None se nao deu para ler."""
 
@@ -186,30 +187,38 @@ class Qwen:
         return resp["choices"][0]["message"]["content"]
 
 
+Qwen = ModeloOpenRouter  # nome antigo, mantido
+
+
 def modelos_openrouter() -> dict:
     """Lista publica de modelos da OpenRouter: {id: dados do modelo}."""
     with urllib.request.urlopen("https://openrouter.ai/api/v1/models", timeout=30) as r:
         return {m["id"]: m for m in json.loads(r.read().decode()).get("data", []) if "id" in m}
 
 
-def conferir_qwen(modelo: str, listar=modelos_openrouter) -> tuple[str, tuple[float, float] | None, list[str]]:
+def conferir_modelo(modelo: str, listar=modelos_openrouter) -> tuple[str, tuple[float, float] | None, list[str]]:
     """Confere o nome do modelo ANTES de gastar chamada.
-    Devolve (situacao, preco, modelos_qwen): situacao e 'ok', 'nao_existe' ou 'sem_lista'
-    (sem rede para a lista: segue com o nome do vigia.json e o erro, se houver, vira NADA)."""
+    Devolve (situacao, preco, parecidos): situacao e 'ok', 'nao_existe' ou 'sem_lista'
+    (sem rede para a lista: segue com o nome do vigia.json e o erro, se houver, vira NADA).
+    `parecidos` sao os modelos da mesma familia (mesmo prefixo, ex. 'qwen/')."""
     try:
         lista = listar()
     except Exception:
         return "sem_lista", None, []
-    qwens = sorted(k for k in lista if k.startswith("qwen/"))
+    familia = modelo.split("/")[0] + "/"
+    parecidos = sorted(k for k in lista if k.startswith(familia))
     if modelo not in lista:
-        return "nao_existe", None, qwens
+        return "nao_existe", None, parecidos
     preco = None
     try:
         pr = lista[modelo].get("pricing") or {}
         preco = (float(pr["prompt"]) * 1e6, float(pr["completion"]) * 1e6)  # a lista da por token
     except (KeyError, TypeError, ValueError):
         pass
-    return "ok", preco, qwens
+    return "ok", preco, parecidos
+
+
+conferir_qwen = conferir_modelo  # nome antigo, mantido
 
 
 class Recusou(Exception):
@@ -270,19 +279,23 @@ def criar_claude(segredos: dict, modelo: str, esforco: str):
 # o juiz: consulta os competidores uma vez por candle e guarda as decisoes
 # --------------------------------------------------------------------------- #
 
-COMPETIDORES = ("ia:qwen", "ia:claude", "ia:qwen+claude")
+COMPETIDORES = ("ia:qwen", "ia:deepseek", "ia:claude", "ia:qwen+claude")
 
 TETO = "teto diario de chamadas atingido"
 
 
 class Juiz:
-    def __init__(self, qwen: Qwen | None, claude: Claude | None, max_chamadas_dia: int, log=print):
+    def __init__(self, qwen: ModeloOpenRouter | None, claude: Claude | None, max_chamadas_dia: int, log=print,
+                 deepseek: ModeloOpenRouter | None = None):
         self.qwen, self.claude, self.max_dia, self.log = qwen, claude, max_chamadas_dia, log
+        self.deepseek = deepseek
 
     def competidores(self) -> list[str]:
         ativos = []
         if self.qwen:
             ativos.append("ia:qwen")
+        if self.deepseek:
+            ativos.append("ia:deepseek")
         if self.claude:
             ativos.append("ia:claude")
         if self.qwen and self.claude:
@@ -335,12 +348,17 @@ class Juiz:
         usuario = "Dados do candle que acabou de fechar:\n" + montar_dados(serie, i, p)
         out: dict = {}
 
+        pedido_json = usuario + '\nResponda SO com JSON: {"lado": "compra"|"venda"|"nada", "motivo": "..."}'
         lado_q, mot_q = 0, "nao consultada"
         if self.qwen:
-            texto, falha = self._chamar(estado, "qwen", self.qwen, lambda: self.qwen.perguntar(
-                sistema, usuario + '\nResponda SO com JSON: {"lado": "compra"|"venda"|"nada", "motivo": "..."}'))
+            texto, falha = self._chamar(estado, "qwen", self.qwen, lambda: self.qwen.perguntar(sistema, pedido_json))
             lado_q, mot_q = (0, falha + ": nada") if falha else ler_decisao(texto)
             out["ia:qwen"] = (lado_q, mot_q)
+
+        if self.deepseek:
+            texto, falha = self._chamar(estado, "deepseek", self.deepseek,
+                                        lambda: self.deepseek.perguntar(sistema, pedido_json))
+            out["ia:deepseek"] = (0, falha + ": nada") if falha else ler_decisao(texto)
 
         if self.claude:
             texto, falha = self._chamar(estado, "claude", self.claude,

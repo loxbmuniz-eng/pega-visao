@@ -75,6 +75,10 @@ class Serie:
     fechamento: list[float] = field(default_factory=list)
     volume: list[float] = field(default_factory=list)
     t: list[int] = field(default_factory=list)  # abertura do candle, ms
+    # Volume de compra AGRESSORA (quem comprou batendo na oferta de venda), quando a
+    # fonte informa: a Binance manda no campo 9 de cada kline. Vazio = a fonte nao
+    # informa (a Pionex nao informa). Venda agressora = volume - compra agressora.
+    agressora: list[float] = field(default_factory=list)
 
     def __len__(self) -> int:
         return len(self.fechamento)
@@ -156,6 +160,10 @@ def buscar_ou_erro(par: str, tf: str, n: int) -> Serie:
             s.minima.append(float(k[3]))
             s.fechamento.append(float(k[4]))
             s.volume.append(float(k[5]))
+            if len(k) > 9:
+                s.agressora.append(float(k[9]))
+        if len(s.agressora) != len(s):
+            s.agressora = []  # nunca meia coluna: ou todos os candles tem, ou nenhum
         return s
 
     raise ErroBusca(erros)
@@ -507,7 +515,7 @@ def medir_ruido(par: str, dias: int, periodos: list[str], p: Params) -> None:
 
 def fatiar(s: Serie, ini: int, fim: int) -> Serie:
     return Serie(s.abertura[ini:fim], s.maxima[ini:fim], s.minima[ini:fim],
-                 s.fechamento[ini:fim], s.volume[ini:fim], s.t[ini:fim])
+                 s.fechamento[ini:fim], s.volume[ini:fim], s.t[ini:fim], s.agressora[ini:fim])
 
 
 def cortes_por_ano(s: Serie, minimo: int = 60) -> list[tuple[int, int, str]]:

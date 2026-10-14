@@ -50,7 +50,9 @@ erro()  { printf '\n\033[0;31mERRO:\033[0m %s\n\n' "$*" >&2; exit 1; }
 religar_se_estava() {
   [[ "$VIGIA_ANTES" == "active" ]] && systemctl start vibe-vigia >/dev/null 2>&1 || true
 }
-trap 'religar_se_estava; erro "falhou na linha $LINENO. Nada do Embarque Suinco foi tocado. Copie a mensagem acima e me mande."' ERR
+# Erro dentro de um calculo intermediario $(...) so encerra aquele calculo; quem
+# decide parar (e religar o vigia) e o script principal.
+trap 'if [[ $BASHPID -eq $$ ]]; then religar_se_estava; erro "falhou na linha $LINENO. Nada do Embarque Suinco foi tocado. Copie a mensagem acima e me mande."; else exit 1; fi' ERR
 
 # Comando como o usuário vibe, com a casa dele (git e ssh leem a configuração de lá).
 como_vibe() { runuser -u "$VIBE_USER" -- env HOME="$VIBE_DIR" "$@"; }
@@ -66,7 +68,7 @@ retrato() {
   done
   printf '%-16s %s\n' "portas" "$( (ss -ltnH 2>/dev/null || true) | awk '{print $4}' | sort -u | tr '\n' ' ')"
   printf '%-16s %s\n' "firewall" "$( (ufw status 2>/dev/null || true) | sha256sum | cut -c1-16)"
-  printf '%-16s %s\n' "nginx (config)" "$(cat /etc/nginx/sites-enabled/* 2>/dev/null | sha256sum | cut -c1-16)"
+  printf '%-16s %s\n' "nginx (config)" "$( (cat /etc/nginx/sites-enabled/* 2>/dev/null || true) | sha256sum | cut -c1-16)"
 }
 
 # Telegram pelo próprio vigia (o token fica no segredos.json, nunca na linha de comando).

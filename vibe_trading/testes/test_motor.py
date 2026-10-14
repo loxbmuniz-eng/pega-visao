@@ -34,6 +34,10 @@ afirma. Correcao sem guarda e correcao que volta.
 14. comando unico       — vibe.py chama a ferramenta certa em cada subcomando
 15. regra de saida      — stop, alvo, empate, liquidacao e prazo contra a conta
                           feita a mao (a paridade nao pega erro dentro da regra)
+16. livro de ofertas    — Pionex, Binance e Hyperliquid no formato oficial;
+                          desequilibrio contado a mao; so gravacao
+17. fluxo agressor      — compra agressora da Binance, saldo contado a mao,
+                          filtro so a favor, sem a coluna nao ha sinal
 """
 
 from __future__ import annotations
@@ -72,6 +76,12 @@ def serie_sintetica(n: int, semente: int, tendencia: bool = False, t0: int = 0) 
         s.volume.append(abs(rnd.gauss(100, 30)) + 1)
         s.t.append(t0 + len(s.t) * est.MIN15)
         px = nxt
+    # compra agressora com outro sorteio (nao muda os precos dos testes antigos):
+    # candle de alta tende a ter mais compra agressora, como no mercado
+    rnd2 = random.Random(semente + 99_991)
+    for o, f, v in zip(s.abertura, s.fechamento, s.volume):
+        fracao = 0.5 + (0.15 if f > o else -0.15) + rnd2.gauss(0, 0.12)
+        s.agressora.append(v * min(0.95, max(0.05, fracao)))
     return s
 
 
@@ -169,7 +179,8 @@ class BinanceFalsa:
             if fim is not None and t > fim:
                 break
             linhas.append([t, str(self.serie.abertura[i]), str(self.serie.maxima[i]), str(self.serie.minima[i]),
-                           str(self.serie.fechamento[i]), str(self.serie.volume[i]), t + ms - 1])
+                           str(self.serie.fechamento[i]), str(self.serie.volume[i]), t + ms - 1,
+                           "0", 0, str(self.serie.agressora[i]), "0", "0"])  # 12 campos, como a Binance
         return linhas[-limite:]
 
 
@@ -522,10 +533,12 @@ def _dados_da_pergunta(usuario: str) -> dict:
 
 
 class QwenFalsa:
-    """Segue o rompimento do canal. Responde com cerca de codigo, como modelos costumam fazer."""
+    """Segue o rompimento do canal (ou vai contra ele, com contra=True: e o DeepSeek
+    simulado). Responde com cerca de codigo, como modelos costumam fazer."""
 
-    def __init__(self, sempre=None, erro=False):
+    def __init__(self, sempre=None, erro=False, contra=False):
         self.chamadas, self.uso, self.preco, self.sempre, self.erro = 0, None, (1.0, 4.0), sempre, erro
+        self.contra = contra
 
     def perguntar(self, sistema, usuario):
         self.chamadas += 1
@@ -533,7 +546,8 @@ class QwenFalsa:
         if self.erro:
             raise TimeoutError("rede caiu")
         ev = _dados_da_pergunta(usuario)["eventos_no_ultimo_candle"]
-        lado = self.sempre or ("compra" if ev["rompeu_maxima_20"] else "venda" if ev["rompeu_minima_20"] else "nada")
+        alta, baixa = ("venda", "compra") if self.contra else ("compra", "venda")
+        lado = self.sempre or (alta if ev["rompeu_maxima_20"] else baixa if ev["rompeu_minima_20"] else "nada")
         return '```json\n{"lado": "%s", "motivo": "canal"}\n```' % lado
 
 
@@ -662,25 +676,29 @@ def teste_arena() -> None:
     pv = bt.Params(**cfg["params"])
     with tempfile.TemporaryDirectory() as tmp:
         _, diario_sem = _replay(s, cfg, tmp, inicio)
-    q, c = QwenFalsa(), ClaudeFalso()
+    q, c, dsk = QwenFalsa(), ClaudeFalso(), QwenFalsa(contra=True)
     with tempfile.TemporaryDirectory() as tmp:
-        juiz = arena.Juiz(q, c, 10_000, logs.append)
+        juiz = arena.Juiz(q, c, 10_000, logs.append, deepseek=dsk)
         estado, diario = _replay(s, cfg, tmp, inicio, juiz=juiz)
         registros = [json.loads(l) for l in open(os.path.join(tmp, "arena.jsonl"), encoding="utf-8")]
     estrategias_sem = [r for r in diario_sem]
     estrategias_com = [r for r in diario if not r["estrategia"].startswith("ia:")]
     checar(estrategias_sem == estrategias_com, "ligar a arena nao muda nenhuma operacao das estrategias")
     ids = sorted(t for t in estado["trilhas"] if t.startswith("ia:"))
-    checar(ids == ["ia:claude|ambos|livre|BTCUSDT|15m", "ia:qwen+claude|ambos|livre|BTCUSDT|15m",
-                   "ia:qwen|ambos|livre|BTCUSDT|15m"], "tres trilhas de IA, com o mesmo formato das estrategias")
+    checar(ids == ["ia:claude|ambos|livre|BTCUSDT|15m", "ia:deepseek|ambos|livre|BTCUSDT|15m",
+                   "ia:qwen+claude|ambos|livre|BTCUSDT|15m", "ia:qwen|ambos|livre|BTCUSDT|15m"],
+           "quatro trilhas de IA (Qwen, DeepSeek, Claude, Qwen com veto), no formato das estrategias")
     decisoes = estado["arena"]["decisoes"]
     pos_t = {t: i for i, t in enumerate(s.t)}
     idx = sorted(pos_t[int(k.split("|")[2])] for k in decisoes)
     checar(idx and all(marca[i] for i in idx) and min(idx) >= inicio,
            f"a IA so foi consultada em candle de interesse ({len(idx)} de {sum(marca[inicio:])} candles de interesse)")
-    checar(q.chamadas == len(decisoes) == len(registros),
+    checar(q.chamadas == dsk.chamadas == len(decisoes) == len(registros),
            f"uma chamada por candle consultado, nunca repetida ({q.chamadas} chamadas), e cada uma gravada no arena.jsonl")
-    for nome in ("ia:qwen", "ia:claude", "ia:qwen+claude"):
+    opostos = sum(1 for v in decisoes.values() if v["ia:qwen"][0] != 0 and v["ia:deepseek"][0] == -v["ia:qwen"][0])
+    checar(opostos > 0 and opostos == sum(1 for v in decisoes.values() if v["ia:qwen"][0] != 0),
+           f"o DeepSeek simulado decide o oposto da Qwen nos {opostos} candles em que ela entra: cada trilha segue a sua IA")
+    for nome in ("ia:qwen", "ia:deepseek", "ia:claude", "ia:qwen+claude"):
         sinais = [0] * len(s)
         for k, v in decisoes.items():
             sinais[pos_t[int(k.split("|")[2])]] = v[nome][0]
@@ -746,8 +764,18 @@ def teste_arena() -> None:
            "nome de modelo Qwen errado: nao gasta chamada e lista os que existem")
     j = vigia.montar_juiz(cfg, {"openrouter_key": "x"}, msgs.append,
                           conferir=lambda m: ("ok", (0.5, 2.0), []))
-    checar(j is not None and j.competidores() == ["ia:qwen"] and j.qwen.preco == (0.5, 2.0),
-           "so com a chave da OpenRouter: so a Qwen, com o preco lido da lista")
+    checar(j is not None and j.competidores() == ["ia:qwen", "ia:deepseek"] and j.qwen.preco == (0.5, 2.0)
+           and j.deepseek.modelo == cfg["arena"]["deepseek_modelo"],
+           "so com a chave da OpenRouter: Qwen e DeepSeek, com o preco lido da lista")
+    sem_dsk = json.loads(json.dumps(cfg))
+    sem_dsk["arena"]["deepseek_modelo"] = ""
+    j = vigia.montar_juiz(sem_dsk, {"openrouter_key": "x"}, msgs.append, conferir=lambda m: ("ok", None, []))
+    checar(j is not None and j.competidores() == ["ia:qwen"], "deepseek_modelo vazio no vigia.json: DeepSeek fica de fora")
+    so_dsk = json.loads(json.dumps(cfg))
+    so_dsk["arena"]["qwen_modelo"] = ""
+    j = vigia.montar_juiz(so_dsk, {"openrouter_key": "x"}, msgs.append, conferir=lambda m: ("ok", None, []))
+    checar(j is not None and j.competidores() == ["ia:deepseek"] and "ia:qwen+claude" not in j.competidores(),
+           "so o DeepSeek: sem Qwen nao existe a dupla Qwen com veto")
     msgs = []
     j = vigia.montar_juiz(cfg, {"anthropic_api_key": "x"}, msgs.append,
                           criar=lambda seg, mod, esf: (None, "pacote 'anthropic' nao instalado"))
@@ -992,6 +1020,27 @@ def teste_pionex_telegram() -> None:
     checar(not any("999" in str(e) for e in enviados) and len(enviados) == 3,
            "mensagem de outra pessoa nao recebe resposta nenhuma")
 
+    # token errado ou sem internet: explica, nao despeja erro tecnico
+    import contextlib
+    import io
+    import urllib.error
+    original = vigia.urllib.request.urlopen
+    respostas = []
+    try:
+        for erro in (urllib.error.HTTPError("u", 401, "Unauthorized", {}, None), urllib.error.URLError("sem rede")):
+            def falso(*a, _e=erro, **k):
+                raise _e
+            vigia.urllib.request.urlopen = falso
+            saida = io.StringIO()
+            with contextlib.redirect_stdout(saida):
+                r = vigia.telegram_descobrir({"telegram_token": "x"}, gravar=True, caminho=os.devnull)
+            respostas.append((r, saida.getvalue()))
+    finally:
+        vigia.urllib.request.urlopen = original
+    checar(respostas[0][0] is False and "token errado" in respostas[0][1]
+           and respostas[1][0] is False and "internet" in respostas[1][1],
+           "token errado ou sem internet: mensagem clara, sem erro tecnico na tela")
+
 
 def teste_comando_unico() -> None:
     print("\n[14] vibe.py: um comando so, cada subcomando chama a ferramenta certa")
@@ -1067,6 +1116,99 @@ def teste_regra_de_saida() -> None:
            "sem stop nem alvo em 3 candles: fecha a mercado no 3o candle, com a taxa")
 
 
+def teste_livro() -> None:
+    print("\n[16] livro de ofertas: leitura de 3 fontes e desequilibrio perto do preco (so gravacao)")
+    import livro
+    compras = [(99.95, 2), (99.9, 1), (99.6, 4), (99.0, 5)]
+    vendas = [(100.05, 1), (100.1, 1), (101.0, 5)]
+    r = livro.resumo(compras, vendas)
+    checar(r["medio"] == 100.0 and r["deseq_0.1"] == 0.2 and r["deseq_0.5"] == round(5 / 9, 4)
+           and r["usdt_0.1"] == 500.0 and r["alcance_pct"] == 1.0 and abs(r["spread_pct"] - 0.1) < 1e-9,
+           "desequilibrio = (compra - venda) / (compra + venda) dentro de 0,1% e 0,5% do preco medio, contado a mao")
+    try:
+        livro.resumo([(100.2, 1)], [(100.1, 1)])
+        checar(False, "livro cruzado deveria ser recusado")
+    except ValueError:
+        checar(True, "livro cruzado (compra acima da venda) e recusado, nao vira numero")
+
+    pionex = {"result": True, "data": {"bids": [["99.95", "2"], ["99.9", "1"]], "asks": [["100.05", "1"]],
+                                       "updateTime": 1}, "timestamp": 1}
+    urls = []
+    c, v = livro.livro_pionex("BTCUSDT", pedir=lambda u: (urls.append(u), pionex)[1])
+    checar("symbol=BTC_USDT_PERP" in urls[0] and c == [(99.95, 2.0), (99.9, 1.0)] and v == [(100.05, 1.0)],
+           "Pionex: perpetuo BTC_USDT_PERP, precos como texto lidos certo")
+    c, v = livro.livro_binance("BTCUSDT", pedir=lambda u: {"lastUpdateId": 1, "bids": [["99.9", "3"]], "asks": [["100.1", "2"]]})
+    checar(c == [(99.9, 3.0)] and v == [(100.1, 2.0)], "Binance: formato oficial de profundidade")
+    lados = [[{"px": "100.1", "sz": "2", "n": 1}], [{"px": "99.9", "sz": "3", "n": 2}]]  # venda primeiro, de proposito
+    corpos = []
+    c, v = livro.livro_hyperliquid("BTCUSDT", postar=lambda u, corpo: (corpos.append(corpo), {"coin": "BTC", "levels": lados})[1])
+    checar(corpos[0] == {"type": "l2Book", "coin": "BTC"} and c == [(99.9, 3.0)] and v == [(100.1, 2.0)],
+           "Hyperliquid: pede l2Book do BTC e separa compra de venda pelo preco, nao pela ordem")
+
+    def quebrada(par):
+        raise TimeoutError("sem resposta")
+    avisos = []
+    with tempfile.TemporaryDirectory() as tmp:
+        linha = livro.gravar(tmp, "BTCUSDT", 123, 456, registrar=avisos.append, fontes={
+            "pionex": lambda par: (compras, vendas), "binance": quebrada})
+        gravadas = open(os.path.join(tmp, "livro.jsonl"), encoding="utf-8").read().splitlines()
+    checar(len(gravadas) == 1 and linha["pionex"]["deseq_0.1"] == 0.2 and "erro" in linha["binance"]
+           and linha["t"] == 123 and avisos and "binance" in avisos[0],
+           "uma linha por candle; fonte que falha entra com o erro, sem derrubar as outras")
+    import vigia
+    checar(vigia.CONFIG_PADRAO["gravar_livro"] is True and "livro" not in "".join(est.REGISTRO),
+           "gravacao ligada por padrao, e nenhuma estrategia usa o livro para operar")
+
+
+def teste_fluxo() -> None:
+    print("\n[17] fluxo agressor: compra e venda que bateram no livro, do dado da Binance")
+    d = ind.delta_agressao([10, 10, 0, 8], [7, 0, 0, 4])
+    checar(d == [0.4, -1.0, None, 0.0] and ind.delta_agressao([10, 10], []) == [None, None],
+           "saldo da agressao: 7 de 10 comprados agredindo = +0,4; sem volume ou sem coluna = sem valor")
+    falsa = BinanceFalsa(total=1200)
+    original = bt._pedir
+    bt._pedir = falsa
+    try:
+        s = bt.buscar_ou_erro("BTCUSDT", "15m", 1100)
+    finally:
+        bt._pedir = original
+    fatia = bt.fatiar(s, 100, 200)
+    checar(len(s.agressora) == len(s) == 1100 and fatia.agressora == s.agressora[100:200]
+           and s.agressora[-1] == float(f"{falsa.serie.agressora[-2]}"),
+           "a busca na Binance traz a compra agressora (campo 9 do candle) e o corte a preserva")
+
+    c = serie_sintetica(400, 3)
+    sinais = [0] * 400
+    sinais[100], sinais[200], sinais[300] = 1, -1, 1
+    for i in range(98, 101):
+        c.agressora[i] = c.volume[i] * 0.8   # compra agressora forte: compra mantida
+    for i in range(198, 201):
+        c.agressora[i] = c.volume[i] * 0.8   # compra agressora forte: venda cortada
+    for i in range(298, 301):
+        c.agressora[i] = c.volume[i] * 0.2   # venda agressora forte: compra cortada
+    f = est.com_fluxo(c, sinais)
+    checar(f[100] == 1 and f[200] == 0 and f[300] == 0 and sum(1 for x in f if x) == 1,
+           "filtro: mantem a compra com compra agressora; corta venda contra compra agressora e compra contra venda")
+    s5 = serie_sintetica(3000, 5, True)
+    base, fl = est.confluencia_3(s5), est.confl3_fluxo(s5)
+    checar(sum(1 for x in fl if x) > 0 and all(x == 0 or x == base[i] for i, x in enumerate(fl)),
+           f"confl3_fluxo e um subconjunto da confl3 ({sum(1 for x in fl if x)} de {sum(1 for x in base if x)} sinais)")
+    sem = bt.Serie(s5.abertura, s5.maxima, s5.minima, s5.fechamento, s5.volume, s5.t)
+    checar(not any(est.confl3_fluxo(sem)) and not any(est.canal_fluxo(sem)),
+           "sem a coluna de agressao (Pionex), nenhum sinal: nao inventa o dado")
+    import vigia
+    with tempfile.TemporaryDirectory() as tmp:
+        arq = os.path.join(tmp, "vigia.json")
+        cfg = json.loads(json.dumps(vigia.CONFIG_PADRAO))
+        cfg["estrategias"].append({"nome": "confl3_fluxo", "lado": "ambos", "alinhar": False})
+        json.dump(cfg, open(arq, "w"))
+        try:
+            vigia.carregar_config(arq)
+            checar(False, "vigia deveria recusar estrategia de fluxo")
+        except SystemExit as e:
+            checar("compra agressora" in str(e.code), "o vigia recusa estrategia de fluxo com explicacao (ainda nao guarda a coluna)")
+
+
 def _pegada_real() -> dict:
     """Tamanho de cada arquivo da pasta real do vigia (dados de quem roda de verdade)."""
     pasta = os.path.join(RAIZ, "dados_vigia")
@@ -1092,6 +1234,8 @@ if __name__ == "__main__":
     teste_pionex_telegram()
     teste_comando_unico()
     teste_regra_de_saida()
+    teste_livro()
+    teste_fluxo()
     print("\n[13] a bateria nao toca nos dados reais do vigia")
     checar(_pegada_real() == pegada, "dados_vigia/ (diario, log, estado) igual antes e depois da bateria")
     print()

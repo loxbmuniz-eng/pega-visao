@@ -151,3 +151,12 @@ def ruido_tipico(maximas: list[float], minimas: list[float],
     if len(amostras) % 2:
         return amostras[meio]
     return (amostras[meio - 1] + amostras[meio]) / 2.0
+
+
+def delta_agressao(volume: list[float], agressora: list[float]) -> list[float | None]:
+    """Saldo da agressao em cada candle, de -1 (so venda agressora) a +1 (so compra
+    agressora): (compra - venda) / volume = (2 x compra agressora - volume) / volume.
+    Sem a coluna de agressao (fonte que nao informa), tudo None."""
+    if len(agressora) != len(volume):
+        return [None] * len(volume)
+    return [None if not v else (2 * a - v) / v for a, v in zip(agressora, volume)]

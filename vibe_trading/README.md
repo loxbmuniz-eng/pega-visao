@@ -15,6 +15,7 @@ Não toca no painel de logística Suinco. É projeto separado, na mesma árvore.
 | `servidor/instalar_vps.sh` | Põe o vigia 24 horas num VPS, ao lado de outro sistema, sem encostar nele; atualização diária só com a bateria verde |
 | `backtest.py` | Puxa candles públicos e simula com taxa, stop, margem de manutenção e liquidação |
 | `vigia.py` | Fase 2: opera no papel, ao vivo, 24 horas, com a mesma regra do backtest; placar contra 20 moedas; diário; alerta no Telegram |
+| `livro.py` | Lê o livro de ofertas de Pionex, Binance e Hyperliquid e grava o desequilíbrio perto do preço, a cada candle (só gravação, para medir) |
 | `arena.py` | A Qwen e o Claude como competidores dentro do vigia, no papel, com as mesmas regras de saída e as mesmas moedas (desligada até você ligar) |
 | `bateria.py` | Fase 1: todas as estratégias em vários ativos e períodos contra a moeda; `--historico` faz o histórico inteiro ano a ano; registra tudo no caderno de experimentos (`caderno.jsonl`) |
 | `estrategias.py` | Os sinais de entrada: 7 estratégias, a confluência e 2 controles cegos |
@@ -94,6 +95,7 @@ típico" da Banda de Liquidação. Sem ele você está chutando.
 | `confl3` / `confl4` / `confl5` | **confluência**: 3, 4 ou 5 de 5 confirmações |
 | `engolfo` | **padrão**: engolfo de alta e de baixa |
 | `divergencia` | **padrão**: divergência entre preço e RSI 14 |
+| `confl3_fluxo` / `canal_fluxo` | **fluxo**: a `confl3` ou o `canal`, só quando a agressão dos últimos 3 candles vai a favor |
 
 A confluência é o checklist do scalper disciplinado, com o porquê de cada item
 no código (`estrategias.py`). Os dois primeiros são **obrigatórios**: a
@@ -106,6 +108,16 @@ tendência escolhe o lado, o gatilho é o momento. Os outros três são filtros.
 5. **Volume**: candle com volume acima da própria média.
 
 `confl3` = tendência + gatilho + 1 filtro · `confl4` = + 2 filtros · `confl5` = tudo.
+
+**Fluxo agressor.** Cada candle da Binance diz quanto do volume foi compra
+**agressora**: quem comprou batendo na oferta de venda, sem esperar. O resto é
+venda agressora. O saldo, de −1 (só venda agressora) a +1 (só compra), é a
+leitura de fluxo que plataformas como o Bookmap mostram, e aqui ela existe no
+**histórico inteiro**, então dá para testar contra a moeda como qualquer outra
+estratégia. As duas de fluxo só entram quando a média do saldo nos últimos 3
+candles vai a favor do lado. A Pionex não informa essa coluna: sem ela, essas
+estratégias não dão sinal nenhum (não se inventa o dado), e o vigia ainda não
+as aceita. Se passarem na bateria, o vigia ganha a coluna.
 
 ---
 
@@ -410,14 +422,30 @@ Rodar o instalador de novo é seguro: ele para o vigia, refaz o que mudou e
 religa. Dois vigias juntos estragariam o placar, por isso ele nunca deixa os
 dois rodando ao mesmo tempo.
 
+### Livro de ofertas: gravando para medir
+
+A cada candle do menor período, o vigia lê o livro de ofertas de três fontes
+públicas, sem chave: **Pionex** (o perpétuo onde se opera), **Binance** e
+**Hyperliquid**. Grava uma linha em `dados_vigia/livro.jsonl` com o preço médio,
+o spread e o **desequilíbrio** perto do preço: (compra − venda) ÷ (compra +
+venda), em quantidade, dentro de 0,1% e de 0,5% do preço, e quanto isso vale em
+USDT.
+
+**É só gravação.** O livro não tem histórico gratuito, então não dá para testar
+no passado se ele antecipa o preço. Primeiro junta-se o dado ao vivo; depois
+mede-se; só se medir que ajuda, vira filtro. Fonte que falhar entra na linha
+com o erro, sem derrubar as outras nem o vigia. Para desligar:
+`"gravar_livro": false` no `vigia.json`.
+
 ### Arena: Qwen × Claude (opcional, no papel)
 
 A arena põe IAs de linguagem para competir **dentro do vigia**, como mais
-três trilhas no placar:
+trilhas no placar:
 
 | Trilha | Quem decide |
 |---|---|
 | `ia:qwen` | a Qwen sozinha (pela OpenRouter) |
+| `ia:deepseek` | o DeepSeek sozinho (pela OpenRouter, mesma chave da Qwen) |
 | `ia:claude` | o Claude sozinho (pela API oficial da Anthropic) |
 | `ia:qwen+claude` | a Qwen propõe e o Claude aprova ou veta |
 
@@ -471,10 +499,11 @@ São **duas chaves de IA**, nenhuma de corretora:
    ```
 
 Pode ligar só uma das duas: sem a chave da OpenRouter, roda só o Claude; sem a
-da Anthropic, só a Qwen. A trilha combinada precisa das duas. Na partida, o
-vigia confere na lista pública da OpenRouter se o nome do modelo Qwen
-(`"qwen_modelo"`) existe; se não existir, ele não gasta chamada e mostra os
-nomes Qwen que existem.
+da Anthropic, Qwen e DeepSeek. A trilha combinada precisa da Qwen e do Claude.
+Na partida, o vigia confere na lista pública da OpenRouter se os nomes dos
+modelos (`"qwen_modelo"`, `"deepseek_modelo"`) existem; se um não existir, ele
+não gasta chamada com esse e mostra os nomes da mesma família que existem.
+Nome vazio (`""`) deixa aquele competidor de fora de propósito.
 
 #### Custo
 
@@ -487,8 +516,8 @@ preço de tabela. O `--placar` e o resumo diário mostram chamadas e dólares po
   saída (o raciocínio interno conta como saída). Cada consulta manda cerca de
   1.000 a 1.500 tokens; com esforço `"low"` (o padrão aqui), a estimativa é de alguns
   centavos de dólar por chamada. O número real aparece no placar.
-- A Qwen tem o preço que a OpenRouter publica para o modelo escolhido; o vigia
-  lê esse preço na partida.
+- Qwen e DeepSeek têm o preço que a OpenRouter publica para o modelo
+  escolhido; o vigia lê esse preço na partida. Cada um tem o seu teto diário.
 - `"claude_esforco"` aceita `low`, `medium`, `high`, `xhigh` e `max`. Mais
   esforço é mais raciocínio por consulta, e mais custo. Só vale subir se o
   placar mostrar ganho.

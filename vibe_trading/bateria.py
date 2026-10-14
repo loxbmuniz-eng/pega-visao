@@ -35,7 +35,7 @@ import time
 import backtest as bt
 import estrategias
 
-PADRAO_ESTRATEGIAS = "confl3,confl4,engolfo,divergencia,canal,ema,momento,rsi"
+PADRAO_ESTRATEGIAS = "confl3,confl4,engolfo,divergencia,canal,ema,momento,rsi,confl3_fluxo,canal_fluxo"
 CADERNO = os.path.join(os.path.dirname(os.path.abspath(__file__)), "caderno.jsonl")
 
 CURTO = {"vantagem": "VANTAGEM", "inconclusivo": "inconcl.", "sem_vantagem": "sem"}
