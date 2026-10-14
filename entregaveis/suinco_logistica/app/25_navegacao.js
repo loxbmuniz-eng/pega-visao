@@ -66,6 +66,8 @@ function renderTabAtual(){
       break;
     case 'historico':
       renderHistorico(); renderBuscaTimeline();
+      // Os pedidos de correção vêm do servidor (não ficam na cópia local).
+      if(typeof carregarPedidosDeCorrecao === 'function') carregarPedidosDeCorrecao();
       // Se a carga aberta na timeline acabou de ser cancelada por aqui
       // mesmo, isto garante que a tela reflita o sumiço dela mesmo se a
       // busca ainda estiver vazia (sem isso o painel podia deixar a

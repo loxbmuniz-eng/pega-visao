@@ -1213,3 +1213,29 @@ contagem. Hoje: uma linha do Frete com as palavras da aba Pagamento de Frete
 (a mesma grade, `FRETE.dados`), só para quem tem a aba do Frete. O sinistro
 entra quando a aba da Lara existir. A ligação devolução→frete foi descartada
 ("tratado de outro jeito"). Trava: `test_carga_inteira_num_lugar`.
+
+## 36. Correção sem telefonema — o setor pede, a Administração decide (14/10/2026)
+
+**Do dono:** aprovado com *"marcha fio"* (item 3 das melhorias de lógica).
+Quem avançou a etapa por engano não liga mais para a Administração: pede pelo
+painel, com motivo.
+
+- **Quem pede:** o setor dono do passo que está sendo desfeito (Portaria,
+  Expedição, Faturamento) ou a Logística, que cobre todos os postos. A
+  Administração não pede — corrige direto, como sempre. O servidor confere;
+  a recusa diz quem pode.
+- **Para onde volta:** a etapa em que a carga estava antes de entrar na
+  atual, lida da última movimentação. A saída só de devolução volta para
+  "Aguardando Embarque", nunca para "Faturado".
+- **Pedir não muda a carga.** Um pedido aberto por carga.
+- **A Administração decide** no Histórico (caixa "Pedidos de correção" no
+  topo da aba, ou na linha do tempo da carga) e recebe o pedido no celular.
+  Quem pediu recebe a decisão no celular e na tela.
+- **Aprovar é a mesma correção de sempre** — uma função, dois chamadores
+  (`aplicarCorrecaoDeEtapa`, `backend/src/rotas/cargas.js`), com quem pediu,
+  o motivo e quem aprovou na trilha. Se a carga andou desde o pedido, aprovar
+  é recusado e nada muda.
+- **Migração 067** (`pedidos_correcao`). Sem ela o pedido responde 503
+  explicado e a correção segue como antes. Vale depois do `atualizar_tudo.sh`.
+
+Travas: bloco 62 da API (14 testes) e `test_correcao_sem_telefonema`.

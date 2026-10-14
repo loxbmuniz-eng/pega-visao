@@ -1606,6 +1606,12 @@
   <!-- ===== HISTÓRICO ===== -->
   <div class="tab-page" id="tab-historico">
     <div class="funcao-aba" data-tab="historico"></div>
+    <div class="card no-print" id="card-pedidos-correcao" hidden>
+      <div class="card-title" role="heading" aria-level="2"><svg class="ico ico-card" aria-hidden="true"><use href="#i-desfazer"/></svg> Pedidos de correção <span id="pedidos-correcao-qtd"></span></div>
+      <div class="card-sub">Quem avançou a etapa por engano pede aqui, com o motivo. Aprovar volta a etapa — a mesma correção
+        de sempre, com o nome de quem pediu e o seu no histórico da carga.</div>
+      <div id="pedidos-correcao-lista"></div>
+    </div>
     <div class="card">
       <div class="card-title" role="heading" aria-level="2"><svg class="ico ico-card" aria-hidden="true"><use href="#i-historico"/></svg> Linha do Tempo de uma Carga</div>
       <div class="card-sub">Digite a placa ou o número de carga — a jornada completa aparece como uma linha do tempo, fácil de ler rápido.</div>
@@ -2307,6 +2313,7 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
 <script src="app/25_navegacao.js"></script>
 <script src="app/27_ir_para.js"></script>
 <script src="app/28_acoes_da_carga.js"></script>
+<script src="app/29_pedido_de_correcao.js"></script>
 <script src="app/30_torre.js"></script>
 <script src="app/40_programacao.js"></script>
 <script src="app/41_frete_da_carga.js"></script>

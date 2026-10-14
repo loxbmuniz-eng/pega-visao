@@ -128,6 +128,7 @@ function renderTimelineCarga(id){
           </div>`;
         }).join('')}
       </div>
+      ${correcaoDaCargaHtml(c)}
       ${painelAdminDaCargaHtml(c)}
     </div>
   `;

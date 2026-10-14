@@ -2120,62 +2120,82 @@ rotasCargas.post('/cargas/:id/corrigir-etapa', exigirLogin, exigirSetor(), async
     }
     const op = req.operador;
 
-    const resultado = await emTransacao(async (cli) => {
-      const { rows } = await cli.query(
-        `SELECT ${COLUNAS_CARGA} FROM fact_viagens
-          WHERE carga_id = $1 AND excluida_em IS NULL FOR UPDATE`,
-        [id]
-      );
-      const carga = rows[0];
-      if (!carga) return { naoEncontrada: true };
-      if (carga.status_atual === statusNovo) return { semMudanca: true, linha: carga };
-
-      const upd = await cli.query(
-        `UPDATE fact_viagens
-            SET status_atual = $1, atualizado_em = now(),
-                operador_id = $2, operador_nome = $3, operador_setor = $4,
-                versao = versao + 1
-          WHERE carga_id = $5
-          RETURNING ${COLUNAS_CARGA}`,
-        [statusNovo, op.id, op.nome, op.setor, id]
-      );
-
-      const voltou = STATUS_FLOW.indexOf(statusNovo) < STATUS_FLOW.indexOf(carga.status_atual);
-      const movId = await gravarEvento(cli, {
-        cargaId: id,
-        placa: carga.placa,
-        de: carga.status_atual,
-        para: statusNovo,
-        operador: op,
-        acao: `Etapa ${voltou ? 'REVERTIDA' : 'corrigida'} pela Administração: `
-          + `${carga.status_atual} → ${statusNovo}. Motivo: ${motivo}`,
-      });
-
-      return { linha: upd.rows[0], movId, de: carga.status_atual };
-    });
+    const resultado = await emTransacao((cli) => aplicarCorrecaoDeEtapa(cli, {
+      id, statusNovo, op, complemento: `Motivo: ${motivo}`,
+    }));
 
     if (resultado.naoEncontrada) {
       return res.status(404).json({ erro: 'Carga não encontrada.', codigo: 'CARGA_NAO_ENCONTRADA' });
     }
-    const payload = paraPainel(resultado.linha);
-    if (!resultado.semMudanca) {
-      emitirCarga('carga:atualizada', payload);
-      emitir('movimentacao:nova', {
-        id: resultado.movId,
-        cargaId: payload.id,
-        placa: payload.placa,
-        statusAnterior: resultado.de,
-        statusNovo: payload.status,
-        setor: op.setor,
-        operador: op.nome,
-        data: payload.atualizadoEm,
-      });
-    }
-    return res.json(payload);
+    return res.json(avisarCorrecaoAplicada(resultado, op));
   } catch (e) {
     return next(e);
   }
 });
+
+/* A CORREÇÃO DE ETAPA EM SI — uma função, dois chamadores (14/10/2026).
+   A rota acima (a Administração corrige direto) e a aprovação de um pedido
+   de correção (rotas/pedidos_correcao.js) aplicam exatamente isto: se a
+   regra de como se volta uma etapa mudar, muda para os dois juntos.
+   Roda DENTRO da transação de quem chama. `exigirStatus` é a guarda da
+   aprovação: o pedido foi feito com a carga numa etapa, e se ela andou
+   desde então, aprovar corrigiria a coisa errada — devolve `mudou` e não
+   toca em nada. */
+export async function aplicarCorrecaoDeEtapa(cli, { id, statusNovo, op, complemento, exigirStatus }) {
+  const { rows } = await cli.query(
+    `SELECT ${COLUNAS_CARGA} FROM fact_viagens
+      WHERE carga_id = $1 AND excluida_em IS NULL FOR UPDATE`,
+    [id]
+  );
+  const carga = rows[0];
+  if (!carga) return { naoEncontrada: true };
+  if (exigirStatus && carga.status_atual !== exigirStatus) return { mudou: true, linha: carga };
+  if (carga.status_atual === statusNovo) return { semMudanca: true, linha: carga };
+
+  const upd = await cli.query(
+    `UPDATE fact_viagens
+        SET status_atual = $1, atualizado_em = now(),
+            operador_id = $2, operador_nome = $3, operador_setor = $4,
+            versao = versao + 1
+      WHERE carga_id = $5
+      RETURNING ${COLUNAS_CARGA}`,
+    [statusNovo, op.id, op.nome, op.setor, id]
+  );
+
+  const voltou = STATUS_FLOW.indexOf(statusNovo) < STATUS_FLOW.indexOf(carga.status_atual);
+  const movId = await gravarEvento(cli, {
+    cargaId: id,
+    placa: carga.placa,
+    de: carga.status_atual,
+    para: statusNovo,
+    operador: op,
+    acao: `Etapa ${voltou ? 'REVERTIDA' : 'corrigida'} pela Administração: `
+      + `${carga.status_atual} → ${statusNovo}. ${complemento}`,
+  });
+
+  return { linha: upd.rows[0], movId, de: carga.status_atual };
+}
+
+/* Depois do COMMIT: avisa as telas abertas da correção aplicada e devolve a
+   carga no formato do painel. Fora da transação de propósito — tela avisada
+   de uma mudança que depois desfez o ROLLBACK é tela mentindo. */
+export function avisarCorrecaoAplicada(resultado, op) {
+  const payload = paraPainel(resultado.linha);
+  if (!resultado.semMudanca && !resultado.mudou) {
+    emitirCarga('carga:atualizada', payload);
+    emitir('movimentacao:nova', {
+      id: resultado.movId,
+      cargaId: payload.id,
+      placa: payload.placa,
+      statusAnterior: resultado.de,
+      statusNovo: payload.status,
+      setor: op.setor,
+      operador: op.nome,
+      data: payload.atualizadoEm,
+    });
+  }
+  return payload;
+}
 
 /* ---------------------------------------------------------------------
    POST /api/cargas/encerrar-anteriores — limpa a Torre para o dia novo
