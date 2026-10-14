@@ -51,6 +51,12 @@ h1 { margin: 0; font-size: clamp(1.5rem, 4.5vw, 2.1rem); letter-spacing: -.02em;
 button { font-family: var(--mono); font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; padding: 7px 12px; border: 1px solid var(--rule); background: var(--panel); color: var(--ink); border-radius: 2px; cursor: pointer; }
 button:hover { border-color: var(--accent); }
 .risco { font-size: 12.5px; color: var(--soft); flex-basis: 100%; }
+.opcao { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--ink); cursor: pointer; padding-bottom: 6px; }
+.opcao input { width: 16px; height: 16px; accent-color: var(--accent); }
+table.pad { min-width: 520px; }
+.nota { font-size: 12.5px; color: var(--soft); margin: 10px 0 0; }
+.filtrado { font-family: var(--mono); font-size: 11.5px; color: var(--faint); }
+.log .tipo { font-family: var(--mono); font-size: 11px; color: var(--soft); margin-top: 4px; }
 .risco.bad { color: var(--sell); font-weight: 500; }
 
 section { background: var(--panel); border: 1px solid var(--rule); border-radius: 3px; padding: 16px; margin-top: 18px; min-width: 0; }
@@ -107,10 +113,13 @@ footer { margin-top: 26px; font-size: 12px; color: var(--faint); max-width: 80ch
     <div class="campo"><label for="par">Par</label><input id="par" value="BTCUSDT" maxlength="20" autocomplete="off"></div>
     <div class="campo"><label for="minimo">Confirmações</label>
       <select id="minimo"><option value="3">3 de 5</option><option value="4" selected>4 de 5</option><option value="5">5 de 5</option></select></div>
+    <div class="campo"><label for="lado">Procurar</label>
+      <select id="lado"><option value="ambos" selected>compra e venda</option><option value="compra">só compra (long)</option><option value="venda">só venda (short)</option></select></div>
     <div class="campo"><label for="stop">Stop %</label><input id="stop" type="number" step="0.05" min="0.05" value="0.5"></div>
     <div class="campo"><label for="rr">Alvo : stop</label><input id="rr" type="number" step="0.1" min="0.5" value="2"></div>
     <div class="campo"><label for="alav">Alavancagem</label><input id="alav" type="number" step="1" min="1" max="125" value="24"></div>
     <div class="campo"><label for="mm">Manutenção %</label><input id="mm" type="number" step="0.1" min="0" value="0.5"></div>
+    <label class="opcao" for="alinhar"><input type="checkbox" id="alinhar"> Só na direção dos 2 períodos acima</label>
     <button id="btn-som" type="button">Ativar som</button>
     <p class="risco" id="risco">—</p>
   </div>
@@ -126,6 +135,17 @@ footer { margin-top: 26px; font-size: 12px; color: var(--faint); max-width: 80ch
         <tbody id="matriz"></tbody>
       </table>
     </div>
+  </section>
+
+  <section>
+    <h2><span>Padrões · último candle fechado</span></h2>
+    <div class="tscroll">
+      <table class="pad">
+        <thead><tr><th>Período</th><th>Engolfo</th><th>Divergência RSI</th><th>Períodos acima</th></tr></thead>
+        <tbody id="padroes"></tbody>
+      </table>
+    </div>
+    <p class="nota">Engolfo e divergência ainda não foram testados com dado real. Antes de confiar, rode <code>python3 backtest.py --robustez --estrategia engolfo</code> e o mesmo com <code>divergencia</code>. A divergência só aparece 3 candles depois do fundo ou topo, que é quando ele se confirma.</p>
   </section>
 
   <section>
@@ -279,7 +299,56 @@ footer { margin-top: 26px; font-size: 12px; color: var(--faint); max-width: 80ch
     return s;
   }
 
+  // ----- padrões: mesma regra que estrategias.engolfo / divergencia_rsi -----
+  function engolfo(c) {
+    var n = c.fechamento.length, s = new Array(n);
+    for (var x = 0; x < n; x++) s[x] = 0;
+    for (var i = 1; i < n; i++) {
+      var o0 = c.abertura[i - 1], f0 = c.fechamento[i - 1], o1 = c.abertura[i], f1 = c.fechamento[i];
+      if (Math.abs(f1 - o1) <= Math.abs(f0 - o0)) continue;
+      if (f0 < o0 && f1 > o1 && o1 <= f0 && f1 >= o0) s[i] = 1;
+      else if (f0 > o0 && f1 < o1 && o1 >= f0 && f1 <= o0) s[i] = -1;
+    }
+    return s;
+  }
+
+  function minFaixa(v, a, b) { var m = Infinity; for (var i = a; i < b; i++) if (v[i] < m) m = v[i]; return m; }
+  function maxFaixa(v, a, b) { var m = -Infinity; for (var i = a; i < b; i++) if (v[i] > m) m = v[i]; return m; }
+
+  // O pivô em j só se confirma em i = j + k: é em i que o sinal sai.
+  function divergenciaRsi(c, k, nRsi, distMin, distMax) {
+    k = k || 3; nRsi = nRsi || 14; distMin = distMin || 5; distMax = distMax || 60;
+    var r = rsi(c.fechamento, nRsi), n = c.fechamento.length, s = new Array(n), uf = null, ut = null;
+    for (var x = 0; x < n; x++) s[x] = 0;
+    for (var i = 2 * k; i < n; i++) {
+      var j = i - k;
+      if (r[j] === null) continue;
+      var alta = false, baixa = false;
+      if (c.minima[j] < minFaixa(c.minima, j - k, j) && c.minima[j] <= minFaixa(c.minima, j + 1, i + 1)) {
+        if (uf !== null && j - uf >= distMin && j - uf <= distMax && c.minima[j] < c.minima[uf] && r[j] > r[uf]) alta = true;
+        uf = j;
+      }
+      if (c.maxima[j] > maxFaixa(c.maxima, j - k, j) && c.maxima[j] >= maxFaixa(c.maxima, j + 1, i + 1)) {
+        if (ut !== null && j - ut >= distMin && j - ut <= distMax && c.maxima[j] > c.maxima[ut] && r[j] < r[ut]) baixa = true;
+        ut = j;
+      }
+      if (alta && !baixa) s[i] = 1; else if (baixa && !alta) s[i] = -1;
+    }
+    return s;
+  }
+
+  // Tendência do último candle do período maior que FECHOU até tLimite (abertura do candle menor).
+  // Mesma regra que estrategias.tendencia_em.
+  function tendenciaEm(tHtf, eC, eL, msHtf, tLimite, desde) {
+    var k = desde || 0;
+    while (k + 1 < tHtf.length && tHtf[k + 1] + msHtf <= tLimite) k++;
+    if (!tHtf.length || tHtf[k] + msHtf > tLimite) return { tendencia: 0, k: k };
+    if (eC[k] === null || eL[k] === null) return { tendencia: 0, k: k };
+    return { tendencia: eC[k] > eL[k] ? 1 : -1, k: k };
+  }
+
   var api = { sma: sma, ema: ema, rsi: rsi, atr: atr, ruidoTipico: ruidoTipico, PADRAO: PADRAO,
+              engolfo: engolfo, divergenciaRsi: divergenciaRsi, tendenciaEm: tendenciaEm,
               preparar: preparar, checarEm: checarEm, dispara: dispara, confluencia: confluencia };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else raiz.Motor = api;
@@ -299,16 +368,17 @@ footer { margin-top: 26px; font-size: 12px; color: var(--faint); max-width: 80ch
   function $(id) { return document.getElementById(id); }
 
   // ---------- preferências (só conveniência local) ----------
-  var CAMPOS = ["par", "minimo", "stop", "rr", "alav", "mm"];
+  var CAMPOS = ["par", "minimo", "lado", "stop", "rr", "alav", "mm"];
   function lerPrefs() {
     try {
       var p = JSON.parse(localStorage.getItem("monitor-confluencia") || "{}");
       CAMPOS.forEach(function (k) { if (p[k] !== undefined) $(k).value = p[k]; });
+      $("alinhar").checked = p.alinhar === true;
     } catch (e) { /* sem armazenamento: segue com o padrão */ }
   }
   function salvarPrefs() {
     try {
-      var p = {}; CAMPOS.forEach(function (k) { p[k] = $(k).value; });
+      var p = {}; CAMPOS.forEach(function (k) { p[k] = $(k).value; }); p.alinhar = $("alinhar").checked;
       localStorage.setItem("monitor-confluencia", JSON.stringify(p));
     } catch (e) { /* idem */ }
   }
@@ -418,15 +488,54 @@ footer { margin-top: 26px; font-size: 12px; color: var(--faint); max-width: 80ch
     if (tf === $("tf-grafico").value) desenhar();
   }
 
+  // ---------- alinhamento e filtros ----------
+  var ACIMA = { "15m": ["1h", "4h"], "1h": ["4h", "12h"], "4h": ["12h", "1d"], "12h": ["1d"], "1d": [] };
+  var MS = { "15m": 9e5, "1h": 36e5, "4h": 144e5, "12h": 432e5, "1d": 864e5 };
+  var cacheEma = {};
+  function emasDe(tf) {
+    var s = est.series[tf]; if (!s) return null;
+    var chave = tf + ":" + s.t.length + ":" + (s.t[s.t.length - 1] || 0);
+    if (!cacheEma[tf] || cacheEma[tf].chave !== chave) {
+      cacheEma[tf] = { chave: chave, eC: M.ema(s.fechamento, 50), eL: M.ema(s.fechamento, 200) };
+    }
+    return cacheEma[tf];
+  }
+  // +1 todos os períodos acima em alta, -1 todos em baixa, 0 misto/sem dado, null se não há período acima
+  function alinhamentoEm(tf, tLimite) {
+    var acima = ACIMA[tf];
+    if (!acima.length) return null;
+    var vals = acima.map(function (h) {
+      var s = est.series[h], e = emasDe(h);
+      return (s && e) ? M.tendenciaEm(s.t, e.eC, e.eL, MS[h], tLimite, 0).tendencia : 0;
+    });
+    if (vals.every(function (v) { return v === 1; })) return 1;
+    if (vals.every(function (v) { return v === -1; })) return -1;
+    return 0;
+  }
+  // A única decisão de filtro: o alerta, a tabela e o gráfico passam por aqui.
+  function passa(tf, tLimite, lado) {
+    if (!lado) return false;
+    var l = $("lado").value;
+    if ((l === "compra" && lado < 0) || (l === "venda" && lado > 0)) return false;
+    if ($("alinhar").checked && alinhamentoEm(tf, tLimite) !== lado) return false;
+    return true;
+  }
+
+  // Avalia o candle que acabou de fechar: confluência, engolfo e divergência.
   function verificarSinal(tf) {
     var s = est.series[tf], i = s.t.length - 1, p = params();
     var chave = tf + ":" + s.t[i];
     if (est.alertados[chave]) return;
-    var ind = M.preparar(s, { minimo: p.minimo });
-    var k = M.checarEm(s, i, { minimo: p.minimo }, ind);
-    if (!M.dispara(k, p.minimo)) return;
     est.alertados[chave] = true;
-    registrar(tf, k, s.fechamento[i], s.t[i]);
+    var k = M.checarEm(s, i, { minimo: p.minimo }, M.preparar(s, { minimo: p.minimo }));
+    var achados = [
+      { tipo: "confluência", lado: M.dispara(k, p.minimo) ? k.lado : 0, detalhe: k.votos + "/5", testado: true },
+      { tipo: "engolfo", lado: M.engolfo(s)[i], detalhe: "padrão", testado: false },
+      { tipo: "divergência RSI", lado: M.divergenciaRsi(s)[i], detalhe: "padrão", testado: false }
+    ];
+    achados.forEach(function (a) {
+      if (passa(tf, s.t[i], a.lado)) registrar(tf, a, s.fechamento[i], s.t[i]);
+    });
   }
 
   // ---------- alertas ----------
@@ -438,12 +547,20 @@ footer { margin-top: 26px; font-size: 12px; color: var(--faint); max-width: 80ch
     var li = document.createElement("li");
     li.className = compra ? "compra" : "venda";
     var topo = document.createElement("div"); topo.className = "topo";
-    var a = document.createElement("span"); a.textContent = (compra ? "COMPRA" : "VENDA") + " · " + ROTULO[tf] + " · " + est.par;
-    var b = document.createElement("span"); b.textContent = k.votos + "/5 · " + new Date(t).toLocaleString("pt-BR");
+    var a = document.createElement("span"); a.textContent = (compra ? "COMPRA" : "VENDA") + " · " + k.tipo + " · " + ROTULO[tf] + " · " + est.par;
+    var b = document.createElement("span"); b.textContent = k.detalhe + " · " + new Date(t).toLocaleString("pt-BR");
     topo.appendChild(a); topo.appendChild(b); li.appendChild(topo);
     var niv = document.createElement("div"); niv.className = "niveis";
     niv.textContent = "entrada " + fmt(preco) + " · stop " + fmt(stopPx) + " · alvo " + fmt(alvoPx) + " · liquidação a " + p.alav + "x: " + fmt(liqPx);
     li.appendChild(niv);
+    var filtros = [];
+    if ($("lado").value !== "ambos") filtros.push("só " + ($("lado").value === "compra" ? "compra" : "venda"));
+    if ($("alinhar").checked) filtros.push("alinhado aos períodos acima");
+    if (!k.testado || filtros.length) {
+      var tp = document.createElement("div"); tp.className = "tipo";
+      tp.textContent = [!k.testado ? "padrão ainda não testado com dado real" : ""].concat(filtros).filter(Boolean).join(" · ");
+      li.appendChild(tp);
+    }
     if (liq <= p.stop) {
       var al = document.createElement("div"); al.className = "alerta";
       al.textContent = "A " + p.alav + "x a liquidação chega antes do stop. Este stop não executa.";
@@ -479,8 +596,9 @@ footer { margin-top: 26px; font-size: 12px; color: var(--faint); max-width: 80ch
       var i = s.t.length - 1, ind = M.preparar(s, { minimo: p.minimo }), k = M.checarEm(s, i, { minimo: p.minimo }, ind);
       var ruido = M.ruidoTipico(s.maxima, s.minima, s.fechamento);
       var sinal = !k.pronto ? '<span class="sinal nada">aquecendo</span>'
-        : M.dispara(k, p.minimo) ? (k.lado > 0 ? '<span class="sinal compra">COMPRA</span>' : '<span class="sinal venda">VENDA</span>')
-        : '<span class="sinal nada">nada</span>';
+        : !M.dispara(k, p.minimo) ? '<span class="sinal nada">nada</span>'
+        : !passa(tf, s.t[i], k.lado) ? '<span class="filtrado">' + (k.lado > 0 ? "compra" : "venda") + " filtrada</span>"
+        : (k.lado > 0 ? '<span class="sinal compra">COMPRA</span>' : '<span class="sinal venda">VENDA</span>');
       var lado = k.pronto ? '<span class="lado">' + (k.lado > 0 ? "alta (só compra)" : "baixa (só venda)") + "</span>" : "";
       var exec = p.stop > ruido ? '<span class="ck sim">sim</span>' : '<span class="ck" style="color:var(--sell)">não, dentro do ruído</span>';
       linhas += "<tr><td><strong>" + ROTULO[tf] + "</strong></td>" +
@@ -491,6 +609,30 @@ footer { margin-top: 26px; font-size: 12px; color: var(--faint); max-width: 80ch
     });
     $("matriz").innerHTML = linhas;
     $("atualizado").textContent = "atualizado " + new Date().toLocaleTimeString("pt-BR");
+    renderPadroes();
+  }
+
+  function celulaPadrao(tf, s, i, lado) {
+    if (!lado) return '<span class="sinal nada">—</span>';
+    var nome = lado > 0 ? "de alta" : "de baixa";
+    if (!passa(tf, s.t[i], lado)) return '<span class="filtrado">' + nome + ", filtrado</span>";
+    return '<span class="sinal ' + (lado > 0 ? "compra" : "venda") + '">' + nome.toUpperCase() + "</span>";
+  }
+
+  function renderPadroes() {
+    var linhas = "";
+    PERIODOS.forEach(function (tf) {
+      var s = est.series[tf];
+      if (!s || s.t.length < 2) { linhas += "<tr><td>" + ROTULO[tf] + '</td><td colspan="3" class="vazio">sem dados</td></tr>'; return; }
+      var i = s.t.length - 1, al = alinhamentoEm(tf, s.t[i]);
+      var txtAl = al === null ? '<span class="filtrado">não há período acima</span>'
+        : al === 1 ? '<span class="ck sim">todos em alta</span>'
+        : al === -1 ? '<span class="ck" style="color:var(--sell)">todos em baixa</span>'
+        : '<span class="filtrado">misto ou sem dado</span>';
+      linhas += "<tr><td><strong>" + ROTULO[tf] + "</strong></td><td>" + celulaPadrao(tf, s, i, M.engolfo(s)[i]) +
+        "</td><td>" + celulaPadrao(tf, s, i, M.divergenciaRsi(s)[i]) + "</td><td>" + txtAl + "</td></tr>";
+    });
+    $("padroes").innerHTML = linhas;
   }
 
   function renderRisco() {
@@ -562,7 +704,7 @@ footer { margin-top: 26px; font-size: 12px; color: var(--faint); max-width: 80ch
     });
 
     idx.forEach(function (i, k) {
-      if (!sinais[i]) return;
+      if (!passa(tf, s.t[i], sinais[i])) return;
       var compra = sinais[i] > 0, x = X(k), y = compra ? Y(s.minima[i]) + 10 : Y(s.maxima[i]) - 10;
       g.fillStyle = compra ? cor("--buy") : cor("--sell");
       g.beginPath();
@@ -578,9 +720,10 @@ footer { margin-top: 26px; font-size: 12px; color: var(--faint); max-width: 80ch
   function renderTudo() { renderRisco(); renderMatriz(); desenhar(); }
 
   // ---------- eventos ----------
-  ["minimo", "stop", "rr", "alav", "mm"].forEach(function (id) {
+  ["minimo", "lado", "stop", "rr", "alav", "mm"].forEach(function (id) {
     $(id).addEventListener("input", function () { salvarPrefs(); renderTudo(); });
   });
+  $("alinhar").addEventListener("change", function () { salvarPrefs(); renderTudo(); });
   $("par").addEventListener("change", function () {
     var v = $("par").value.toUpperCase().replace(/[^A-Z0-9]/g, "");
     if (!v) { $("par").value = est.par; return; }

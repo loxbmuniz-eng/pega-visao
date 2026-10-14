@@ -242,6 +242,207 @@ def confluencia_5(c) -> list[int]:
 
 
 # --------------------------------------------------------------------------- #
+# padroes
+# --------------------------------------------------------------------------- #
+
+def engolfo(c) -> list[int]:
+    """
+    Engolfo: o corpo do candle i engole o corpo do anterior, de cor oposta.
+
+    Alta: anterior de baixa, atual de alta, abre ate o fechamento anterior,
+    fecha acima da abertura anterior e tem corpo maior. Baixa: o espelho.
+    Decide no fechamento de i usando so i e i-1.
+    """
+    n = len(c.fechamento)
+    s = [0] * n
+    for i in range(1, n):
+        o0, f0 = c.abertura[i - 1], c.fechamento[i - 1]
+        o1, f1 = c.abertura[i], c.fechamento[i]
+        if abs(f1 - o1) <= abs(f0 - o0):
+            continue
+        if f0 < o0 and f1 > o1 and o1 <= f0 and f1 >= o0:
+            s[i] = 1
+        elif f0 > o0 and f1 < o1 and o1 >= f0 and f1 <= o0:
+            s[i] = -1
+    return s
+
+
+def divergencia_rsi(c, k: int = 3, n_rsi: int = 14,
+                    dist_min: int = 5, dist_max: int = 60) -> list[int]:
+    """
+    Divergencia entre preco e RSI.
+
+    Alta: o preco faz um fundo MAIS BAIXO que o fundo anterior, mas o RSI faz um
+    fundo MAIS ALTO. A queda perdeu forca. Baixa: topo mais alto no preco, topo
+    mais baixo no RSI.
+
+    O ponto que mais engana em backtest: um fundo so e fundo depois que o preco
+    sobe nos k candles seguintes. Entao o pivo em j so e CONFIRMADO no candle
+    i = j + k, e e em i que o sinal sai e a entrada acontece. Marcar o sinal em
+    j seria comprar no fundo exato sabendo o futuro.
+
+    Pivo de fundo em j: minima[j] menor que as k anteriores e menor ou igual as
+    k seguintes. Os dois pivos comparados precisam estar entre dist_min e
+    dist_max candles um do outro. Se fundo e topo divergirem no mesmo candle,
+    nao opera.
+    """
+    r = ind.rsi(c.fechamento, n_rsi)
+    n = len(c.fechamento)
+    s = [0] * n
+    ult_fundo = None
+    ult_topo = None
+    for i in range(2 * k, n):
+        j = i - k
+        if r[j] is None:
+            continue
+        alta = baixa = False
+
+        if c.minima[j] < min(c.minima[j - k:j]) and c.minima[j] <= min(c.minima[j + 1:i + 1]):
+            if (ult_fundo is not None and dist_min <= j - ult_fundo <= dist_max
+                    and c.minima[j] < c.minima[ult_fundo] and r[j] > r[ult_fundo]):
+                alta = True
+            ult_fundo = j
+
+        if c.maxima[j] > max(c.maxima[j - k:j]) and c.maxima[j] >= max(c.maxima[j + 1:i + 1]):
+            if (ult_topo is not None and dist_min <= j - ult_topo <= dist_max
+                    and c.maxima[j] > c.maxima[ult_topo] and r[j] < r[ult_topo]):
+                baixa = True
+            ult_topo = j
+
+        if alta and not baixa:
+            s[i] = 1
+        elif baixa and not alta:
+            s[i] = -1
+    return s
+
+
+# --------------------------------------------------------------------------- #
+# alinhamento entre periodos
+# --------------------------------------------------------------------------- #
+
+MIN15, H1, H4, H12, D1 = 900_000, 3_600_000, 14_400_000, 43_200_000, 86_400_000
+
+# os dois periodos acima de cada um; 24 h nao tem periodo acima
+ACIMA: dict[int, tuple[int, ...]] = {
+    MIN15: (H1, H4),
+    H1: (H4, H12),
+    H4: (H12, D1),
+    H12: (D1,),
+}
+
+
+def ms_base(c) -> int | None:
+    """Duracao do candle da serie, pela mediana do intervalo entre aberturas."""
+    t = getattr(c, "t", None) or []
+    if len(t) < 2:
+        return None
+    difs = sorted(t[i] - t[i - 1] for i in range(1, min(len(t), 400)))
+    return difs[len(difs) // 2]
+
+
+def reamostrar(c, ms_alvo: int, base: int) -> tuple[list[int], list[float]]:
+    """
+    Monta candles de um periodo maior a partir dos menores: (aberturas, fechamentos).
+
+    Agrupa pela fronteira de relogio em UTC (abertura // ms_alvo), igual a
+    Binance. Grupo incompleto — comeco da serie no meio de uma hora, ou candle
+    faltando — e descartado: um candle de 1 h montado com 3 de 4 pedacos e um
+    candle que nao existiu.
+    """
+    por_grupo = ms_alvo // base
+    aberturas: list[int] = []
+    fechamentos: list[float] = []
+    grupo, conta, ultimo = None, 0, 0.0
+    for i, t in enumerate(c.t):
+        g = t // ms_alvo
+        if g != grupo:
+            if grupo is not None and conta == por_grupo:
+                aberturas.append(grupo * ms_alvo)
+                fechamentos.append(ultimo)
+            grupo, conta = g, 0
+        conta += 1
+        ultimo = c.fechamento[i]
+    if grupo is not None and conta == por_grupo:
+        aberturas.append(grupo * ms_alvo)
+        fechamentos.append(ultimo)
+    return aberturas, fechamentos
+
+
+def tendencia_em(t_htf: list[int], e_curta: list, e_longa: list, ms_htf: int,
+                 t_limite: int, desde: int = 0) -> tuple[int, int]:
+    """
+    Tendencia (+1 alta, -1 baixa, 0 sem dado) do ultimo candle do periodo maior
+    que FECHOU ate t_limite. Devolve (tendencia, indice) para o chamador
+    continuar a busca de onde parou.
+
+    Regra conservadora: o candle maior so vale se fechou ate a ABERTURA do candle
+    menor (t_limite). As 10:00 o candle de 15 min das 9:45 usa o de 1 h das 8:00,
+    nao o das 9:00, que fecha junto com ele. Assim o monitor nunca depende de
+    qual mensagem chegou primeiro da Binance, e o backtest decide igual.
+    """
+    k = desde
+    while k + 1 < len(t_htf) and t_htf[k + 1] + ms_htf <= t_limite:
+        k += 1
+    if not t_htf or t_htf[k] + ms_htf > t_limite:
+        return 0, k
+    if e_curta[k] is None or e_longa[k] is None:
+        return 0, k
+    return (1 if e_curta[k] > e_longa[k] else -1), k
+
+
+def alinhamento(c, n_curta: int = 50, n_longa: int = 200) -> list[int]:
+    """
+    Para cada candle: +1 se TODOS os periodos acima estao em alta, -1 se todos
+    em baixa, 0 se misto, sem dado ou sem periodo acima (24 h).
+    """
+    n = len(c.fechamento)
+    base = ms_base(c)
+    if base not in ACIMA:
+        return [0] * n
+    por_htf = []
+    for ms_htf in ACIMA[base]:
+        t_htf, f_htf = reamostrar(c, ms_htf, base)
+        ec, el = ind.ema(f_htf, n_curta), ind.ema(f_htf, n_longa)
+        tend, k = [0] * n, 0
+        for i in range(n):
+            tend[i], k = tendencia_em(t_htf, ec, el, ms_htf, c.t[i], k)
+        por_htf.append(tend)
+    saida = [0] * n
+    for i in range(n):
+        vals = {t[i] for t in por_htf}
+        if vals == {1}:
+            saida[i] = 1
+        elif vals == {-1}:
+            saida[i] = -1
+    return saida
+
+
+def filtrar(c, sinais: list[int], lado: str = "ambos", alinhar: bool = False) -> list[int]:
+    """
+    Os dois filtros que o usuario liga sob demanda.
+      lado: "compra" so deixa long, "venda" so short, "ambos" deixa tudo.
+      alinhar: so deixa o sinal que vai na mesma direcao dos periodos acima.
+    """
+    if lado not in ("ambos", "compra", "venda"):
+        raise ValueError(f"lado invalido: {lado}")
+    al = alinhamento(c) if alinhar else None
+    saida = []
+    for i, x in enumerate(sinais):
+        if x == 0 or (lado == "compra" and x < 0) or (lado == "venda" and x > 0):
+            saida.append(0)
+        elif al is not None and al[i] != x:
+            saida.append(0)
+        else:
+            saida.append(x)
+    return saida
+
+
+def sinais(nome: str, c, lado: str = "ambos", alinhar: bool = False) -> list[int]:
+    """Sinais da estrategia ja com os filtros. E por aqui que o backtest pede."""
+    return filtrar(c, gerar(nome, c), lado, alinhar)
+
+
+# --------------------------------------------------------------------------- #
 # registro
 # --------------------------------------------------------------------------- #
 
@@ -257,6 +458,8 @@ REGISTRO: dict[str, tuple[Callable, str]] = {
     "confl3":     (confluencia_3,       "confluencia — 3 das 5 confirmacoes"),
     "confl4":     (confluencia,         "confluencia — 4 das 5 (recomendado)"),
     "confl5":     (confluencia_5,       "confluencia — 5 das 5, so o livro-texto"),
+    "engolfo":    (engolfo,             "padrao: engolfo de alta e de baixa"),
+    "divergencia": (divergencia_rsi,    "padrao: divergencia entre preco e RSI 14"),
 }
 
 

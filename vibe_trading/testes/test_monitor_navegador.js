@@ -4,8 +4,9 @@
  * WebSocket falsos, nenhum acesso à rede) e prova, de ponta a ponta:
  *   - o histórico carrega e a matriz mostra os 5 períodos;
  *   - a conexão fica "ao vivo";
- *   - um candle que fecha ao vivo com confluência dispara UM alerta, no lado certo;
+ *   - um candle que fecha ao vivo com confluência dispara UM alerta de confluência, no lado certo;
  *   - o mesmo candle repetido não duplica o alerta;
+ *   - com "só compra" (ou "só venda") ligado, o lado oposto não alerta e aparece filtrado;
  *   - nenhum erro de JavaScript na página.
  *
  * Rodar:  node testes/test_monitor_navegador.js
@@ -103,21 +104,37 @@ function velaAoVivo(tf) {
   checar(linhas.length === 5 && linhas.every((t) => /\/5/.test(t)), "matriz mostra votos nos 5 períodos");
   checar((await page.textContent("#contagem")) === "0", "histórico não gera alerta (alerta é só fechamento ao vivo)");
 
+  const textos = () => page.$$eval("#log li", (lis) => lis.map((l) => l.textContent));
   wsRota.send(velaAoVivo("15m"));
-  await page.waitForFunction(() => document.getElementById("contagem").textContent === "1", null, { timeout: 5000 }).catch(() => {});
-  const alerta = await page.textContent("#log li:first-child").catch(() => "");
-  checar((await page.textContent("#contagem")) === "1", "candle fechado com confluência gera 1 alerta");
-  checar(alerta.startsWith(ladoEsperado), `alerta no lado certo: esperado ${ladoEsperado}, veio "${alerta.slice(0, 40)}"`);
+  await page.waitForFunction(() => document.querySelectorAll("#log li:not(.vazio)").length > 0, null, { timeout: 5000 }).catch(() => {});
+  const alertas = (await textos()).filter((t) => t.includes("confluência"));
+  checar(alertas.length === 1, `candle fechado com confluência gera 1 alerta de confluência (${alertas.length})`);
+  const alerta = alertas[0] || "";
+  checar(alerta.startsWith(ladoEsperado), `alerta no lado certo: esperado ${ladoEsperado}, veio "${alerta.slice(0, 50)}"`);
   checar(/stop .* alvo .* liquidação/.test(alerta), "alerta traz stop, alvo e liquidação");
   checar((await page.textContent("#preco")) !== "—", "preço ao vivo atualiza pelo stream de 15 min");
+  const total = await page.textContent("#contagem");
 
   wsRota.send(velaAoVivo("15m"));
   await page.waitForTimeout(400);
-  checar((await page.textContent("#contagem")) === "1", "o mesmo candle repetido não duplica o alerta");
+  checar((await page.textContent("#contagem")) === total, "o mesmo candle repetido não duplica nenhum alerta");
+  const padroes = await page.$$eval("#padroes tr", (trs) => trs.length);
+  checar(padroes === 5, "tabela de padrões mostra os 5 períodos");
 
   await page.fill("#alav", "100");
   await page.dispatchEvent("#alav", "input");
   checar((await page.textContent("#risco")).includes("O stop não executa"), "a 100x o painel avisa que o stop não executa");
+
+  // filtro de lado: recarrega com o lado oposto ligado e fecha o mesmo candle de novo
+  const oposto = ladoEsperado === "VENDA" ? "compra" : "venda";
+  await page.selectOption("#lado", oposto);
+  await page.reload();
+  await page.waitForFunction(() => document.getElementById("conexao").textContent === "ao vivo", null, { timeout: 15000 }).catch(() => {});
+  checar((await page.inputValue("#lado")) === oposto, `preferência 'só ${oposto}' sobrevive ao recarregar`);
+  wsRota.send(velaAoVivo("15m"));
+  await page.waitForTimeout(800);
+  checar(!(await textos()).some((t) => t.includes("confluência")), `com 'só ${oposto}', a ${ladoEsperado} da confluência não alerta`);
+  checar((await page.textContent("#matriz tr:first-child")).includes("filtrada"), "a matriz mostra a confluência como filtrada");
 
   checar(erros.length === 0, "nenhum erro de JavaScript" + (erros.length ? ": " + erros.join(" | ").slice(0, 300) : ""));
   if (SAIDA) await page.screenshot({ path: SAIDA, fullPage: true });

@@ -45,9 +45,19 @@ LIMITE_POR_PEDIDO = 1000   # maximo que a Binance devolve por pedido
 MIN_CANDLES = 500          # EMA 200 precisa aquecer e ainda sobrar candle para operar
 
 
-def candles_para(tf: str, dias: int) -> int:
-    """Quantos candles pedir: os dias pedidos, mas nunca menos que MIN_CANDLES."""
-    return max(MIN_CANDLES, int(dias * 24 * 60 / PERIODOS[tf]))
+def candles_para(tf: str, dias: int, alinhar: bool = False) -> int:
+    """
+    Quantos candles pedir: os dias pedidos, nunca menos que MIN_CANDLES.
+
+    Com alinhamento, o periodo mais alto acima precisa de ~260 candles proprios
+    para a EMA 200 aquecer: no 4 h isso e 260 dias de candles de 4 h.
+    """
+    n = max(MIN_CANDLES, int(dias * 24 * 60 / PERIODOS[tf]))
+    if alinhar:
+        acima = estrategias.ACIMA.get(PERIODOS[tf] * 60_000)
+        if acima:
+            n = max(n, 260 * (max(acima) // (PERIODOS[tf] * 60_000)))
+    return n
 
 PERIODOS = {"15m": 15, "1h": 60, "4h": 240, "12h": 720, "1d": 1440}
 
@@ -361,7 +371,7 @@ def fatiar(s: Serie, ini: int, fim: int) -> Serie:
 
 
 def robustez(s: Serie, nome: str, p: Params, janelas: int = 6,
-             sementes: int = 30) -> None:
+             sementes: int = 30, lado: str = "ambos", alinhar: bool = False) -> None:
     """
     Corta a serie em janelas e, em cada uma, compara a estrategia com
     `sementes` moedas sorteadas que entram nos MESMOS candles que ela.
@@ -375,7 +385,7 @@ def robustez(s: Serie, nome: str, p: Params, janelas: int = 6,
     janela. Isso so e legitimo porque o teste de vazamento prova que o sinal em
     i usa apenas dados ate i.
     """
-    sinais = estrategias.gerar(nome, s)
+    sinais = estrategias.sinais(nome, s, lado, alinhar)
     tam = len(s) // janelas
     if tam < 30:
         print(f"  serie curta demais para {janelas} janelas ({len(s)} candles)")
@@ -440,6 +450,10 @@ def main() -> None:
     ap.add_argument("--robustez", action="store_true",
                     help="testa a estrategia em varias janelas contra 30 moedas")
     ap.add_argument("--janelas", type=int, default=6)
+    ap.add_argument("--lado", choices=("ambos", "compra", "venda"), default="ambos",
+                    help="so long (compra), so short (venda) ou os dois")
+    ap.add_argument("--alinhar", action="store_true",
+                    help="so entra na direcao dos dois periodos acima")
     args = ap.parse_args()
 
     if args.listar:
@@ -456,15 +470,21 @@ def main() -> None:
         return
 
     cabecalho(p, args.par, args.dias)
+    if args.lado != "ambos" or args.alinhar:
+        print(f"  filtros: lado={args.lado}" + ("  +  alinhado aos 2 periodos acima" if args.alinhar else ""))
+        print()
 
     if args.robustez:
         for tf in periodos:
             if tf not in PERIODOS:
                 continue
-            n = candles_para(tf, args.dias)
+            if args.alinhar and tf == "1d":
+                print("  >>> 1d  alinhamento nao se aplica: nao ha periodo acima de 24 h. Pulado.\n")
+                continue
+            n = candles_para(tf, args.dias, args.alinhar)
             s = buscar(args.par, tf, n)
             print(f"  >>> {tf}  estrategia '{args.estrategia}'  ({periodo_txt(s)})")
-            robustez(s, args.estrategia, p, args.janelas)
+            robustez(s, args.estrategia, p, args.janelas, lado=args.lado, alinhar=args.alinhar)
             print()
         return
 
@@ -473,7 +493,7 @@ def main() -> None:
             if tf not in PERIODOS:
                 print(f"  periodo desconhecido: {tf}")
                 continue
-            n = candles_para(tf, args.dias)
+            n = candles_para(tf, args.dias, args.alinhar)
             s = buscar(args.par, tf, n)
             ruido = ind.ruido_tipico(s.maxima, s.minima, s.fechamento)
             print(f"  >>> {tf}  ({periodo_txt(s)}, ruido mediano {ruido:.3f}%)")
@@ -483,7 +503,7 @@ def main() -> None:
             tabela_abre("estrategia")
             linhas = []
             for nome in estrategias.REGISTRO:
-                r = simular(s, estrategias.gerar(nome, s), p)
+                r = simular(s, estrategias.sinais(nome, s, args.lado, args.alinhar), p)
                 linhas.append((nome, r))
                 tabela_linha(nome, r, p)
 
@@ -501,9 +521,9 @@ def main() -> None:
             if tf not in PERIODOS:
                 print(f"  {tf:<12} | periodo desconhecido")
                 continue
-            n = candles_para(tf, args.dias)
+            n = candles_para(tf, args.dias, args.alinhar)
             s = buscar(args.par, tf, n)
-            r = simular(s, estrategias.gerar(args.estrategia, s), p)
+            r = simular(s, estrategias.sinais(args.estrategia, s, args.lado, args.alinhar), p)
             tabela_linha(tf, r, p)
         print(f"\n  estrategia: {args.estrategia} — "
               f"{estrategias.REGISTRO[args.estrategia][1]}")

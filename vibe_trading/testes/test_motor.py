@@ -13,6 +13,9 @@ afirma. Correcao sem guarda e correcao que volta.
                           descarta o candle aberto, cai para a fonte reserva
 6. comando de ponta a ponta — o --robustez que o usuario roda, contra uma
                           Binance simulada, nos 5 periodos
+7. padroes e alinhamento — engolfo pela definicao, divergencia so no candle
+                          que confirma o pivo, reamostragem sem candle
+                          inventado, alinhamento so com candle maior ja fechado
 """
 
 from __future__ import annotations
@@ -35,7 +38,8 @@ import estrategias as est  # noqa: E402
 import indicadores as ind  # noqa: E402
 
 
-def serie_sintetica(n: int, semente: int, tendencia: bool = False) -> bt.Serie:
+def serie_sintetica(n: int, semente: int, tendencia: bool = False, t0: int = 0) -> bt.Serie:
+    """Serie de 15 min. t0=0 comeca numa fronteira de 4 h em UTC."""
     rnd = random.Random(semente)
     px, drift = 60000.0, 0.0
     s = bt.Serie()
@@ -48,6 +52,7 @@ def serie_sintetica(n: int, semente: int, tendencia: bool = False) -> bt.Serie:
         s.minima.append(min(px, nxt) * (1 - abs(rnd.gauss(0, 0.0004))))
         s.fechamento.append(nxt)
         s.volume.append(abs(rnd.gauss(100, 30)) + 1)
+        s.t.append(t0 + len(s.t) * est.MIN15)
         px = nxt
     return s
 
@@ -62,14 +67,23 @@ def checar(cond: bool, msg: str) -> None:
 
 
 def teste_vazamento() -> None:
+    """
+    Dois cortes. Os fixos pegam vazamento espalhado. O corte logo DEPOIS de cada
+    sinal e a definicao exata: o sinal do candle i tem de existir com a serie
+    terminando em i. Sem ele, um padrao raro que marca o sinal 3 candles antes da
+    hora passa batido, porque quase nunca ha sinal colado num corte fixo.
+    """
     print("\n[1] vazamento de futuro")
     s = serie_sintetica(3000, 11)
     for nome in est.REGISTRO:
         if nome == "moeda":
             continue  # sorteio depende do tamanho da serie; e controle, nao sinal
         cheio = est.gerar(nome, s)
-        limpo = all(est.gerar(nome, bt.fatiar(s, 0, c)) == cheio[:c] for c in (400, 1700, 2500))
-        checar(limpo, f"{nome}: sinais antes do corte nao mudam ao truncar a serie")
+        fixos = all(est.gerar(nome, bt.fatiar(s, 0, c)) == cheio[:c] for c in (400, 1700, 2500))
+        com_sinal = [i for i, x in enumerate(cheio) if x][:: max(1, sum(1 for x in cheio if x) // 25)][:25]
+        no_fim = all(est.gerar(nome, bt.fatiar(s, 0, i + 1))[i] == cheio[i] for i in com_sinal)
+        checar(fixos and no_fim,
+               f"{nome}: nada muda ao truncar, e {len(com_sinal)} sinais existem com a serie terminando neles")
 
 
 def teste_sobreposicao() -> None:
@@ -189,6 +203,72 @@ def teste_comando_ponta_a_ponta() -> None:
         bt._pedir, sys.argv = original, argv
 
 
+def teste_padroes_e_alinhamento() -> None:
+    print("\n[7] padroes e alinhamento")
+    # engolfo pela definicao, em casos montados a mao
+    def dois(o0, f0, o1, f1):
+        return bt.Serie([o0, o1], [max(o0, f0), max(o1, f1)], [min(o0, f0), min(o1, f1)], [f0, f1], [1, 1])
+    checar(est.engolfo(dois(10, 9, 9, 11))[1] == 1, "engolfo de alta: candle de baixa engolido por um de alta maior")
+    checar(est.engolfo(dois(9, 10, 10, 8))[1] == -1, "engolfo de baixa: o espelho")
+    checar(est.engolfo(dois(10, 8, 8, 9))[1] == 0, "corpo menor nao e engolfo")
+    checar(est.engolfo(dois(9, 10, 10, 12))[1] == 0, "duas altas seguidas nao e engolfo")
+
+    # divergencia: todo sinal sai no candle que CONFIRMA o pivo (3 depois dele)
+    s = serie_sintetica(3000, 11)
+    div = est.divergencia_rsi(s)
+    erradas = 0
+    for i, x in enumerate(div):
+        if not x:
+            continue
+        j = i - 3
+        v = s.minima if x > 0 else s.maxima
+        janela = v[j - 3:i + 1]
+        ok = v[j] == (min(janela) if x > 0 else max(janela))
+        erradas += 0 if ok else 1
+    checar(sum(1 for x in div if x) > 0 and erradas == 0,
+           f"divergencia: {sum(1 for x in div if x)} sinais, todos no candle de confirmacao do pivo ({erradas} fora)")
+
+    # vazamento de futuro com os filtros ligados (5000 candles: o 4 h precisa aquecer a EMA 200)
+    longa = serie_sintetica(5000, 11)
+    for nome in ("confl3", "engolfo", "divergencia"):
+        cheio = est.sinais(nome, longa, "ambos", True)
+        limpo = all(est.sinais(nome, bt.fatiar(longa, 0, c), "ambos", True) == cheio[:c] for c in (3800, 4500))
+        checar(limpo and any(cheio), f"{nome} alinhado: {sum(1 for x in cheio if x)} sinais, nada muda ao truncar")
+
+    # reamostragem
+    t1h, f1h = est.reamostrar(s, est.H1, est.MIN15)
+    checar(f1h[0] == s.fechamento[3] and f1h[5] == s.fechamento[23], "1 h fecha no fechamento do 4o candle de 15 min")
+    torta = serie_sintetica(400, 3, t0=2 * est.MIN15)  # comeca 30 min depois da hora cheia
+    t_t, _ = est.reamostrar(torta, est.H1, est.MIN15)
+    checar(t_t[0] == est.H1, "comeco no meio da hora: o grupo incompleto e descartado")
+    buraco = bt.fatiar(s, 0, 40)
+    for col in ("abertura", "maxima", "minima", "fechamento", "volume", "t"):
+        del getattr(buraco, col)[9]  # some um candle dentro da 3a hora
+    t_b, _ = est.reamostrar(buraco, est.H1, est.MIN15)
+    checar(2 * est.H1 not in t_b and len(t_b) == 9, "candle faltando: aquela hora nao vira candle de 1 h")
+
+    # alinhamento so usa candle maior que ja fechou ate a abertura do candle menor
+    t4, f4 = est.reamostrar(longa, est.H4, est.MIN15)
+    ec, el = ind.ema(f4, 50), ind.ema(f4, 200)
+    violou, usados, k = 0, 0, 0
+    for i in range(len(longa)):
+        tend, k = est.tendencia_em(t4, ec, el, est.H4, longa.t[i], k)
+        if tend:
+            usados += 1
+            violou += 1 if t4[k] + est.H4 > longa.t[i] else 0
+    checar(usados > 0 and violou == 0,
+           f"tendencia do 4 h em {usados} candles, nunca com candle que fecha depois da abertura do 15 min")
+
+    # filtro de lado
+    base = est.gerar("confl3", s)
+    so_compra = est.filtrar(s, base, "compra")
+    so_venda = est.filtrar(s, base, "venda")
+    checar(all(x >= 0 for x in so_compra) and sum(1 for x in so_compra if x) == sum(1 for x in base if x > 0),
+           "so compra: fica exatamente com os sinais de compra")
+    checar(all(x <= 0 for x in so_venda) and sum(1 for x in so_venda if x) == sum(1 for x in base if x < 0),
+           "so venda: fica exatamente com os sinais de venda")
+
+
 def teste_paridade() -> None:
     print("\n[3] paridade Python x monitor.html")
     node = shutil.which("node")
@@ -202,19 +282,26 @@ def teste_paridade() -> None:
         checar(False, "bloco <script id=\"motor-confluencia\"> nao encontrado no monitor")
         return
 
-    casos = {"sem_tendencia": serie_sintetica(1500, 11), "com_tendencia": serie_sintetica(1500, 5, True)}
+    # 5000 candles de 15 min = 312 de 4 h: a EMA 200 do 4 h precisa de 200 para existir
+    casos = {"sem_tendencia": serie_sintetica(5000, 11), "com_tendencia": serie_sintetica(5000, 5, True)}
     with tempfile.TemporaryDirectory() as tmp:
         motor = os.path.join(tmp, "motor.js")
         open(motor, "w", encoding="utf-8").write(m.group(1))
         dados = os.path.join(tmp, "dados.json")
+        htf = {}
+        for k, v in casos.items():
+            t4, f4 = est.reamostrar(v, est.H4, est.MIN15)
+            htf[k] = {"t": t4, "eC": ind.ema(f4, 50), "eL": ind.ema(f4, 200)}
         json.dump({k: {"abertura": v.abertura, "maxima": v.maxima, "minima": v.minima,
-                       "fechamento": v.fechamento, "volume": v.volume} for k, v in casos.items()},
-                  open(dados, "w"))
+                       "fechamento": v.fechamento, "volume": v.volume, "t": v.t, "htf": htf[k]}
+                   for k, v in casos.items()}, open(dados, "w"))
         script = (
             "const M=require(process.argv[1]);const d=require(process.argv[2]);const o={};"
             "for(const k in d){const c=d[k];o[k]={ruido:M.ruidoTipico(c.maxima,c.minima,c.fechamento),"
             "ema50:M.ema(c.fechamento,50),rsi:M.rsi(c.fechamento,14),atr:M.atr(c.maxima,c.minima,c.fechamento,14),"
-            "volm:M.sma(c.volume,20)};for(const mi of [3,4,5])o[k]['c'+mi]=M.confluencia(c,{minimo:mi});}"
+            "volm:M.sma(c.volume,20),eng:M.engolfo(c),div:M.divergenciaRsi(c),"
+            "tend:c.t.map(tl=>M.tendenciaEm(c.htf.t,c.htf.eC,c.htf.eL,14400000,tl,0).tendencia)};"
+            "for(const mi of [3,4,5])o[k]['c'+mi]=M.confluencia(c,{minimo:mi});}"
             "process.stdout.write(JSON.stringify(o));"
         )
         saida = subprocess.run([node, "-e", script, motor, dados], capture_output=True, text=True, timeout=60)
@@ -236,6 +323,18 @@ def teste_paridade() -> None:
             iguais = all((x is None and y is None) or (x is not None and y is not None and x == y) for x, y in zip(a, b))
             checar(iguais and len(a) == len(b), f"{nome} {rotulo}: identico bit a bit")
         checar(ind.ruido_tipico(s.maxima, s.minima, s.fechamento) == j["ruido"], f"{nome} ruido mediano identico")
+        for rotulo, py in (("engolfo", est.engolfo(s)), ("divergencia", est.divergencia_rsi(s))):
+            chave = "eng" if rotulo == "engolfo" else "div"
+            difs = sum(1 for a, b in zip(py, j[chave]) if a != b)
+            checar(len(py) == len(j[chave]) and difs == 0, f"{nome} {rotulo}: {sum(1 for x in py if x)} sinais, {difs} divergencias")
+        t4, f4 = est.reamostrar(s, est.H4, est.MIN15)
+        ec, el = ind.ema(f4, 50), ind.ema(f4, 200)
+        tend_py, k = [], 0
+        for tl in s.t:
+            x, k = est.tendencia_em(t4, ec, el, est.H4, tl, k)
+            tend_py.append(x)
+        difs = sum(1 for a, b in zip(tend_py, j["tend"]) if a != b)
+        checar(difs == 0 and any(tend_py), f"{nome} tendencia do 4 h candle a candle: {difs} divergencias")
 
 
 if __name__ == "__main__":
@@ -245,6 +344,7 @@ if __name__ == "__main__":
     teste_gatilho_obrigatorio()
     teste_busca()
     teste_comando_ponta_a_ponta()
+    teste_padroes_e_alinhamento()
     print()
     if FALHAS:
         print(f"REPROVADO: {len(FALHAS)} falha(s)")

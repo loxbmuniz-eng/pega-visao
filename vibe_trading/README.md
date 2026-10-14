@@ -15,7 +15,7 @@ Não toca no painel de logística Suinco. É projeto separado, na mesma árvore.
 | `estrategias.py` | Os sinais de entrada: 7 estratégias, a confluência e 2 controles cegos |
 | `indicadores.py` | EMA, SMA, RSI, ATR, VWAP, desvio, ruído mediano |
 | `monitor.html` | **Monitor em tempo real.** Abre no navegador, lê a Binance pública, mostra as 5 confirmações nos 5 períodos e alerta no fechamento do candle |
-| `testes/test_motor.py` | Guardas: vazamento de futuro, posição sobreposta, paridade Python × monitor, gatilho obrigatório |
+| `testes/test_motor.py` | Guardas: vazamento de futuro, posição sobreposta, paridade Python × monitor, gatilho obrigatório, busca de candles, padrões e alinhamento |
 | `testes/test_monitor_navegador.js` | Abre o monitor num Chromium com a Binance simulada e prova que carrega, calcula e alerta |
 
 Mais a calculadora de risco interativa (página separada): **Banda de Liquidação**.
@@ -51,6 +51,8 @@ python3 backtest.py --listar          # ver as estratégias
 python3 backtest.py --ruido           # medir o ruído real do ativo
 python3 backtest.py --comparar        # TODAS as estratégias contra o controle
 python3 backtest.py --robustez --estrategia confl4 --alav 24   # vantagem ou sorte?
+python3 backtest.py --robustez --estrategia engolfo --lado compra   # só long
+python3 backtest.py --robustez --estrategia confl3 --alinhar       # só a favor dos períodos acima
 python3 testes/test_motor.py          # guardas do motor
 node testes/test_monitor_navegador.js # monitor num navegador real, Binance simulada
 python3 backtest.py --estrategia ema --alav 24 --stop 0.5
@@ -76,6 +78,8 @@ típico" da Banda de Liquidação. Sem ele você está chutando.
 | `bollinger` | reversão na banda de Bollinger 20/2 |
 | `vwap` | reversão à VWAP de 20 barras |
 | `confl3` / `confl4` / `confl5` | **confluência**: 3, 4 ou 5 de 5 confirmações |
+| `engolfo` | **padrão**: engolfo de alta e de baixa |
+| `divergencia` | **padrão**: divergência entre preço e RSI 14 |
 
 A confluência é o checklist do scalper disciplinado, com o porquê de cada item
 no código (`estrategias.py`). Os dois primeiros são **obrigatórios**: a
@@ -91,11 +95,63 @@ tendência escolhe o lado, o gatilho é o momento. Os outros três são filtros.
 
 ---
 
+## Padrões e filtros sob demanda
+
+**Engolfo.** O corpo do candle engole o corpo do anterior, de cor oposta.
+Decide no fechamento, usando só os dois candles.
+
+**Divergência de RSI.** O preço faz fundo mais baixo e o RSI faz fundo mais alto
+(alta), ou o contrário no topo (baixa). Um fundo só é fundo depois que o preço
+sobe nos 3 candles seguintes. Então o sinal sai **3 candles depois do fundo**, no
+candle que confirma. Marcar o sinal no próprio fundo é o vazamento de futuro mais
+comum em backtest de padrão: daria para "comprar no fundo exato".
+
+**Filtro de lado** (`--lado compra|venda|ambos`, e "Procurar" no monitor). Deixa
+só long, só short, ou os dois. Vale para qualquer estratégia.
+
+**Alinhamento** (`--alinhar`, e a caixa "Só na direção dos 2 períodos acima" no
+monitor). Só deixa o sinal se os dois períodos acima estiverem na mesma direção
+(EMA 50 contra EMA 200): 15 min olha 1 h e 4 h, 1 h olha 4 h e 12 h, 4 h olha 12 h e
+24 h, 12 h olha 24 h. No 24 h não há período acima e o alinhamento não se aplica.
+
+Regra conservadora: o candle maior só vale se **fechou até a abertura** do candle
+menor. O 15 min das 9:45 usa o 1 h das 8:00, e não o das 9:00, que fecha junto com
+ele. Assim o monitor não depende de qual mensagem chegou primeiro da Binance, e
+o backtest decide igual. No backtest, os períodos acima são montados a partir dos
+candles menores pela fronteira de relógio em UTC, como a Binance faz. Hora
+incompleta, seja no começo da série ou por candle faltando, é descartada.
+
+### Resultado em série sintética (24x, 30 moedas pareadas, 6 janelas)
+
+| Série | Estratégia | Janelas positivas | Bateu, em média | Veredito |
+|---|---|---|---|---|
+| ruído puro | `engolfo` | 0 de 6 | 54% | sem vantagem |
+| ruído puro | `divergencia` | 0 de 6 | 48% | sem vantagem |
+| com tendência | `engolfo` | **5 de 6** | **77%** | sinal de vantagem |
+| com tendência | `divergencia` | 3 de 6 | 42% | sem vantagem |
+| com tendência | `confl3` sem alinhamento | 6 de 6 | 91% | sinal de vantagem |
+| com tendência | `confl3` **com** alinhamento | 3 de 6 | 47% | sem vantagem |
+
+A divergência perde na série com tendência porque é padrão de reversão: aposta
+contra o movimento. **O alinhamento piorou a confluência** nesta série: a
+tendência simulada dura horas, e a EMA do 4 h só enxerga dias, então o filtro
+cortou as entradas boas. No dado real pode ser diferente. O que a tabela mostra é
+que filtro a mais não é automaticamente melhor. Por isso o alinhamento vem
+desligado no monitor, e só deve ser ligado se o `--robustez` com dado real
+mostrar que ajuda.
+
+---
+
 ## Três garantias do motor, todas testadas
 
 **1. Nenhuma estratégia olha o futuro.** O sinal do candle `i` só usa dados até
-`i`. Verificado por truncamento: sinais gerados na série inteira e em cortes
-têm de ser idênticos antes do corte. As dez estratégias passaram.
+`i`. Verificado de dois jeitos. Primeiro, cortes fixos: sinais gerados na série
+inteira e na série cortada têm de ser idênticos antes do corte. Segundo, o corte
+logo **depois de cada sinal**: o sinal do candle `i` tem de existir com a série
+terminando em `i`. O segundo jeito entrou porque o primeiro deixou passar uma
+mutação de propósito (divergência marcando o sinal no fundo em vez da
+confirmação). Com sinal raro, quase nunca há sinal colado num corte fixo. As
+doze estratégias passam nos dois, também com os filtros ligados.
 
 **1b. O monitor decide igual ao backtest.** A confluência existe em Python e em
 JavaScript. O teste de paridade compara as duas candle a candle, e os
@@ -226,6 +282,10 @@ O que ele mostra:
 
 - as 5 confirmações da confluência nos 5 períodos (15 min, 1 h, 4 h, 12 h, 24 h),
   sempre no **último candle fechado**, igual ao backtest;
+- engolfo e divergência de RSI em cada período, e se os períodos acima estão
+  todos em alta, todos em baixa ou mistos;
+- "Procurar": compra e venda, só compra (long) ou só venda (short), e a opção de
+  só alertar a favor dos 2 períodos acima. Sinal barrado aparece como "filtrado";
 - o ruído mediano de cada período e se o seu stop fica fora dele;
 - onde fica a liquidação na alavancagem escolhida, com aviso quando ela chega
   antes do stop;
