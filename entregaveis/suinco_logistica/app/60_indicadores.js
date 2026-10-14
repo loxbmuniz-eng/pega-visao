@@ -742,6 +742,7 @@ function abrirDetalhePulso(campo, chave, origem, soAtualizar){
       <div class="gv-carga-sub">${badgeHtml(c.status)}
         <span>Carga ${esc(c.numeroCarga || '—')}</span>
         ${campo === 'rota' ? `<span>${esc(c.transportadora || '—')}</span>` : `<span>${esc(rotaCurta(c.rota) || '—')}</span>`}</div>
+      ${acoesDaCargaHtml(c, { compacto: true })}
     </li>`).join('');
   const html = abertas.length
     ? `<ol class="gv-lista">${linhas}</ol>`

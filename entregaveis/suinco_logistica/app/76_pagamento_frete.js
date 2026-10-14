@@ -597,7 +597,7 @@ function freteLinhaCargaHtml(l, notas, aberta){
   const obs = l.obsCarga || '';
   const dc = freteDadosDaCarga(l.carga);
   return `<tr class="frete-primeira frete-carga-linha${aberta ? ' frete-aberta' : ''}" data-carga="${esc(l.carga)}">
-    <td data-col="carga" data-rotulo="Carga"><div class="frete-carga-topo">${toggle}</div>
+    <td data-col="carga" data-rotulo="Carga"><div class="frete-carga-topo">${toggle}${acoesDaCargaHtml(cargaDoLink('', l.carga), { numero: String(l.carga), so: ['linha'], compacto: true })}</div>
       <div class="frete-frase">consulta ${esc(freteData(v('data')))} · ${freteFrase(l.v)}</div>
       <button type="button" class="frete-edit frete-obs-carga" onclick="freteEditarObs('${k}','')" aria-label="Observação da carga ${esc(l.carga)}. Editar"
         >${obs ? `<span class="frete-obs-txt">${esc(obs)}</span>` : '<span class="frete-vazio">+ observação</span>'}</button></td>

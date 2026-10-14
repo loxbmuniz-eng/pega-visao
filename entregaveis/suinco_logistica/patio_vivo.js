@@ -751,7 +751,11 @@ function pvAbrirCarga(id, origem){
   Graf.abrirGaveta({ chave:'patio|' + id, olho:'Carga ' + (c.numeroCarga || '—'),
     titulo: (c.rota || '—') + ' ' + pvPraca(c),
     sub: e.min === null ? (c.status === 'Aguardando Veículo' ? 'programada' : '') : pvDur(e.min) + ' de pátio',
+    /* PARA ONDE IR (14/10/2026): o dono, da Administração, clica na carga
+       e precisa chegar onde se muda a etapa — a barra da casa, a mesma de
+       todo lugar onde a carga aparece (app/28_acoes_da_carga.js). */
     html: (ficha ? `<dl class="pv-gv-ficha">${ficha}</dl>` : '')
+      + (typeof acoesDaCargaHtml === 'function' ? acoesDaCargaHtml(c) : '')
       + (agora ? `<div class="pv-gv-agora">${agora}</div>` : '')
       + `<ol class="gv-lista">${itens.join('')}</ol>`, origem });
 }

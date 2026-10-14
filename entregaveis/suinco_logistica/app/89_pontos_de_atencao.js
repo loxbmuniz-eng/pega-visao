@@ -74,8 +74,13 @@ function desenharPontosDeAtencao(){
     return;
   }
   alvo.innerHTML = '<ol class="atencao-lista">' + _atencao.pontos.map(p => {
+    /* A carga de exemplo leva a ela (14/10/2026, "toda carga é um link"):
+       ao Frete quando o ponto se resolve lá, senão à linha do tempo. */
+    const destinoDoExemplo = p.onde && p.onde.aba === 'frete' ? 'frete' : 'linha';
     const exemplos = (p.exemplos || []).map(x =>
-      `<li>${x.carga ? 'Carga <strong>' + esc(x.carga) + '</strong>' : ''}${x.placa ? ' · ' + esc(x.placa) : ''}${x.detalhe ? ' — ' + esc(x.detalhe) : ''}</li>`).join('')
+      `<li>${x.carga ? 'Carga <strong>' + esc(x.carga) + '</strong>' : ''}${x.placa ? ' · ' + esc(x.placa) : ''}${x.detalhe ? ' — ' + esc(x.detalhe) : ''}`
+      + (x.carga ? acoesDaCargaHtml(cargaDoLink('', x.carga), { numero: String(x.carga), so: [destinoDoExemplo], compacto: true }) : '')
+      + '</li>').join('')
       + (p.quantidade > (p.exemplos || []).length && (p.exemplos || []).length ? `<li class="text-dim">e mais ${p.quantidade - p.exemplos.length}</li>` : '');
     const onde = p.onde && p.onde.rotulo
       ? (p.onde.aba ? `<button type="button" class="btn btn-sec btn-sm atencao-ir" onclick="irParaPontoDeAtencaoUI('${escJs(p.onde.aba)}')">Resolver em: ${esc(p.onde.rotulo)}</button>`
