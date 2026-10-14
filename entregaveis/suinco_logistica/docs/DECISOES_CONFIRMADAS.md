@@ -1195,8 +1195,11 @@ Respostas à proposta: **"1 A, 2 pode, 3 deixe como está"**.
   vai carregar, de qualquer dia de programação (#138).
 - **O botão só aparece onde a pessoa pode ir:** destino de aba que o setor
   não tem não vira botão; "Corrigir etapa" é da Administração.
-- **Na Torre, só a linha do tempo**, ao lado do ícone de Revisões: a coluna
-  de ações não cresce (o primeiro desenho empilhava seis botões).
+- **Na Torre e na Visão do Pátio nada novo entra na linha:** o que já
+  estava lá vira o link — a data da última etapa (Torre) e o número da
+  carga (Visão do Pátio). O primeiro desenho empilhava seis botões; o
+  segundo, um ícone, ainda fazia a linha da Logística crescer (portão 87).
+  Altura das linhas medida igual à do publicado.
 - **Recusado:** a previsão "vai passar de 3 h às…" — *"esquece… informações
   e contagens que não fazem sentido"*. Não volta.
 

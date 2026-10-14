@@ -59,6 +59,29 @@ function acoesDaCargaHtml(c, opcoes = {}){
   return `<div class="acoes-carga no-print${opcoes.compacto ? ' acoes-carga-compacta' : ''}" role="group" aria-label="Ir para">${partes.join('')}</div>`;
 }
 
+/* O PRÓPRIO NÚMERO COMO LINK, para tabela que não pode crescer (a Visão do
+   Pátio): um botão a mais por linha somou 413 px à Torre no portão 87
+   (test_tema2027_etapa4_tabelas). Sem permissão de Histórico, fica texto. */
+function numeroDaCargaComoLinkHtml(c){
+  const n = (c && c.numeroCarga) || '';
+  if(!n) return '—';
+  if(!setorVeAba('historico')) return esc(n);
+  return `<button type="button" class="carga-link acao-carga" data-destino="linha"
+     onclick="event.stopPropagation();irParaCargaUI('linha','${escJs(c.id)}','${escJs(n)}')"
+     title="Abrir a linha do tempo desta carga no Histórico." aria-label="Linha do tempo da carga ${esc(n)}">${esc(n)}</button>`;
+}
+
+/* O mesmo, em volta de um trecho que já existe na linha (na Torre, a data
+   da última etapa — que É a linha do tempo resumida). A coluna de ações
+   não ganha nada: com um ícone a mais, a linha da Logística crescia uma
+   linha inteira (portão 87). */
+function linhaDoTempoEmVoltaHtml(c, html){
+  if(!c || !setorVeAba('historico')) return html;
+  return `<button type="button" class="carga-link acao-carga" data-destino="linha"
+     onclick="event.stopPropagation();irParaCargaUI('linha','${escJs(c.id)}','${escJs(c.numeroCarga || '')}')"
+     title="Abrir a linha do tempo desta carga no Histórico.">${html}</button>`;
+}
+
 function irParaCargaUI(destino, id, numero){
   const c = cargaDoLink(id, numero);
   if(typeof Graf !== 'undefined' && Graf.gavetaAberta && Graf.gavetaAberta()) Graf.fecharGaveta();

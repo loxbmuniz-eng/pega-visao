@@ -24,12 +24,18 @@
   .acoes-carga-compacta .acao-carga .ico-btn{ margin:0 }
   .gv-carga .acoes-carga-compacta{ margin:6px 0 0; display:flex }
 
-  /* Na Torre a linha do tempo divide a linha com o ícone de Revisões: a
-     coluna de ações não cresce para baixo (14/10, o print mostrou seis
-     botões empilhados e linhas três vezes mais altas). */
-  .torre-icones{ display:flex; gap:4px; align-items:stretch }
-  .torre-icones > .acoes-carga-compacta{ margin:0; flex:1 1 0; display:flex }
-  .torre-icones .btn{ flex:1 1 0; margin:0 }
+  /* O que já estava na linha e virou link (o número na Visão do Pátio, a
+     data da última etapa na Torre): parece o de sempre, com o sublinhado
+     que diz "clique" — não engorda a linha. A coluna de ações da Torre não
+     ganhou nada (com um ícone a mais, a linha da Logística crescia). */
+  .carga-link{ background:none; border:0; padding:0; margin:0; font:inherit; color:inherit; text-align:inherit;
+    cursor:pointer; text-decoration:underline; text-decoration-style:dotted;
+    text-underline-offset:3px }
+  /* Na Torre o link tem a largura da célula, como o texto tinha: encolhido
+     ao conteúdo, "sem registro de etapa" quebrava em duas linhas. */
+  .cel-datas > .carga-link{ display:block; width:100% }
+  .carga-link:hover{ color:var(--gold-text); text-decoration-style:solid }
+  .carga-link:focus-visible{ outline:2px solid var(--gold); outline-offset:2px; border-radius:2px }
 
   /* A linha que a barra mostrou na Torre: contorno dourado por 2,4 s e o
      fundo de acento — some sozinha, não fica marca na tabela. */
@@ -42,11 +48,8 @@
 @media screen and (max-width:820px){
   /* No celular o dedo precisa de 44 px (DESIGN.md). */
   .acoes-carga .acao-carga{ min-height:44px; min-width:44px }
-  /* No cartão da Torre os ícones seguem na mesma linha dos outros botões:
-     como bloco, abriam uma linha só para eles e o cartão passava do teto de
-     220 px (test_painel_cabe_no_celular). */
-  .torre-icones{ display:inline-flex; vertical-align:middle }
-  .torre-icones > .acoes-carga-compacta{ display:inline-flex }
+  .carga-link{ min-height:44px; min-width:44px; display:inline-flex; align-items:center }
+  .cel-datas > .carga-link{ display:flex }
 }
 @media screen and (prefers-reduced-motion: reduce){
   #torre-tbody tr.linha-apontada > td{ transition:none }

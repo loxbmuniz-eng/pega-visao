@@ -174,10 +174,12 @@ async def main():
         await pg.wait_for_timeout(700)
         linha = pg.locator('#torre-tbody tr[data-carga="lk2"]')
         dest = await linha.locator('.acao-carga').evaluate_all('els => els.map(e => e.dataset.destino)')
-        # Na Torre só a linha do tempo: a coluna de ações não pode crescer para
-        # baixo (o print de 14/10 mostrou seis botões empilhados). Da linha do
-        # tempo, as Correções estão logo abaixo.
-        ck('a linha da Torre tem a Linha do tempo (só ela — a coluna não cresce)', dest == ['linha'], str(dest))
+        # Na Torre a data da última etapa É o link da linha do tempo: a coluna
+        # de ações não ganha nada (um ícone a mais fazia a linha da Logística
+        # crescer — portão 87). Da linha do tempo, as Correções estão logo abaixo.
+        ck('a linha da Torre leva à Linha do tempo pela data da última etapa', dest == ['linha'], str(dest))
+        na_data = await linha.locator('td.cel-datas .acao-carga[data-destino="linha"]').count()
+        ck('e o link é a própria data (nenhum botão novo na coluna de ações)', na_data == 1, f'{na_data}')
         altura = await linha.evaluate('tr => Math.round(tr.getBoundingClientRect().height)')
         ck('e a linha da Torre não ficou mais alta por isso (até 110 px)', altura <= 110, f'{altura} px')
         await clicar(pg, linha.locator('.acao-carga[data-destino="linha"]'), 'o botão Linha do tempo da Torre existe')
