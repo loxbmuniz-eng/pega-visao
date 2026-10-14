@@ -1,0 +1,6 @@
+# dados pessoais do vigia e da bateria: ficam so na maquina de quem roda
+dados_vigia/
+segredos.json
+vigia.json
+caderno.jsonl
+__pycache__/

@@ -12,11 +12,12 @@ Não toca no painel de logística Suinco. É projeto separado, na mesma árvore.
 | Arquivo | O que faz |
 |---|---|
 | `backtest.py` | Puxa candles públicos e simula com taxa, stop, margem de manutenção e liquidação |
+| `vigia.py` | Fase 2: opera no papel, ao vivo, 24 horas, com a mesma regra do backtest; placar contra 20 moedas; diário; alerta no Telegram |
 | `bateria.py` | Fase 1: todas as estratégias em vários ativos e períodos contra a moeda; `--historico` faz o histórico inteiro ano a ano; registra tudo no caderno de experimentos (`caderno.jsonl`) |
 | `estrategias.py` | Os sinais de entrada: 7 estratégias, a confluência e 2 controles cegos |
 | `indicadores.py` | EMA, SMA, RSI, ATR, VWAP, desvio, ruído mediano |
 | `monitor.html` | **Monitor em tempo real.** Abre no navegador, lê a Binance pública, mostra as 5 confirmações nos 5 períodos e alerta no fechamento do candle |
-| `testes/test_motor.py` | Guardas: vazamento de futuro, posição sobreposta, paridade Python × monitor, gatilho obrigatório, busca de candles, padrões e alinhamento, placar |
+| `testes/test_motor.py` | Guardas: vazamento de futuro, posição sobreposta, paridade Python × monitor, gatilho obrigatório, busca de candles, padrões e alinhamento, placar, bateria, replay do vigia |
 | `testes/test_monitor_navegador.js` | Abre o monitor num Chromium com a Binance simulada e prova que carrega, calcula e alerta |
 
 Mais a calculadora de risco interativa (página separada): **Banda de Liquidação**.
@@ -289,6 +290,52 @@ opera, tem tendência persistente o bastante para isso aparecer? Rode o
 
 > Tudo isso é série sintética com semente fixa. Valida o **motor**, não o
 > mercado. Para o número real, rode com rede aberta.
+
+---
+
+## Vigia (fase 2): papel ao vivo, 24 horas
+
+```bash
+cd ~/pega-visao/vibe_trading
+caffeinate -i python3 vigia.py      # roda sem parar; caffeinate impede o Mac de dormir
+python3 vigia.py --placar           # em outra janela do Terminal, a qualquer hora
+```
+
+A cada candle fechado, o vigia roda as estratégias do `vigia.json` (padrão:
+`confl3` e `engolfo`, BTCUSDT, 15 min) e abre e fecha operações **de papel**. Ao
+lado de cada estratégia rodam 20 moedas pareadas, que entram nos mesmos candles
+com o lado sorteado. Toda operação fechada vai para `dados_vigia/diario.jsonl`.
+Ele não envia ordem e não pede chave de corretora.
+
+- **Mesma regra do backtest.** O teste de replay passa uma série candle a candle
+  pelo vigia e exige que ele feche exatamente as mesmas operações que o backtest
+  fecha. Se as regras divergissem, o placar ao vivo não provaria nada.
+- **Desligou e religou?** Ele busca os candles que fecharam enquanto estava fora
+  e processa na ordem. O teste confere: 30 candles de pausa, mesmo placar.
+- **Primeira execução:** carrega um mês de histórico só para aquecer os
+  indicadores, sem operar nele. As operações começam no candle seguinte.
+- **Congelar:** durante a fase 2, não mexa no `vigia.json`. Mudou a estratégia,
+  é outra hipótese, e o placar recomeça do zero para ela.
+- **O placar** mostra, por estratégia: operações, acerto, ganho médio, perda
+  média, resultado por operação, lucro, pior queda, de quantas moedas ganhou e
+  a situação da fase 2 (passa com 30 ou mais operações, resultado positivo
+  depois da taxa e vitória sobre 75% das moedas).
+
+### Alertas no Telegram (opcional)
+
+1. No Telegram, procure **@BotFather**, mande `/newbot` e escolha um nome. Ele
+   responde com um **token**.
+2. Abra o arquivo `segredos.json` (criado na primeira execução) e cole o token
+   em `"telegram_token"`.
+3. Mande qualquer mensagem para o seu robô no Telegram.
+4. Rode `python3 vigia.py --telegram-descobrir`. Copie o número que aparecer para
+   `"telegram_chat_id"` no `segredos.json`.
+5. Rode `python3 vigia.py --telegram-teste`. Se a mensagem chegar, está pronto.
+
+O vigia avisa cada entrada (com stop, alvo e liquidação), cada saída e manda um
+resumo por dia às 21 h. **Se o resumo não chegar, o vigia parou.** O
+`segredos.json` fica só para o dono ler e nunca vai para o GitHub (está no
+`.gitignore`).
 
 ---
 

@@ -86,7 +86,31 @@ def _pedir(url: str):
         return json.loads(resp.read().decode())
 
 
+class ErroBusca(Exception):
+    """Nenhuma fonte devolveu candles. `erros` diz o que cada uma respondeu."""
+
+    def __init__(self, erros: list[str]):
+        super().__init__("; ".join(erros))
+        self.erros = erros
+
+
 def buscar(par: str, tf: str, n: int) -> Serie:
+    """Como buscar_ou_erro, mas encerra o programa com explicacao se a rede falhar."""
+    try:
+        return buscar_ou_erro(par, tf, n)
+    except ErroBusca as e:
+        print("Nao foi possivel buscar candles. Tentativas:", file=sys.stderr)
+        for linha in e.erros:
+            print(f"  - {linha}", file=sys.stderr)
+        print(
+            "\nEste script nao precisa de chave de API, mas precisa de internet aberta.\n"
+            "Rode na sua maquina local, nao em container ou rede restrita.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+
+def buscar_ou_erro(par: str, tf: str, n: int) -> Serie:
     """
     Busca os ultimos `n` candles FECHADOS, paginando para tras de 1000 em 1000.
 
@@ -134,15 +158,7 @@ def buscar(par: str, tf: str, n: int) -> Serie:
             s.volume.append(float(k[5]))
         return s
 
-    print("Nao foi possivel buscar candles. Tentativas:", file=sys.stderr)
-    for e in erros:
-        print(f"  - {e}", file=sys.stderr)
-    print(
-        "\nEste script nao precisa de chave de API, mas precisa de internet aberta.\n"
-        "Rode na sua maquina local, nao em container ou rede restrita.",
-        file=sys.stderr,
-    )
-    sys.exit(1)
+    raise ErroBusca(erros)
 
 
 def periodo_txt(s: Serie) -> str:
@@ -223,50 +239,75 @@ class Resultado:
 # simulacao
 # --------------------------------------------------------------------------- #
 
-def _perna(s: Serie, i: int, direcao: int, p: Params) -> tuple[float, str, int]:
+@dataclass
+class Posicao:
+    """Uma posicao aberta: o lado, o preco de entrada e os tres precos que a encerram."""
+    direcao: int
+    entrada: float
+    px_stop: float
+    px_alvo: float
+    px_liq: float
+    liq_antes_do_stop: bool
+    barras: int = 0  # candles fechados desde a entrada
+
+
+def abrir(entrada: float, direcao: int, p: Params) -> Posicao:
+    """Abre no preco de fechamento do candle do sinal."""
+    d_stop = p.stop / 100.0
+    d_alvo = (p.stop * p.rr) / 100.0
+    d_liq = p.liq_pct / 100.0
+    if direcao > 0:
+        return Posicao(direcao, entrada, entrada * (1 - d_stop), entrada * (1 + d_alvo),
+                       entrada * (1 - d_liq), d_liq <= d_stop)
+    return Posicao(direcao, entrada, entrada * (1 + d_stop), entrada * (1 - d_alvo),
+                   entrada * (1 + d_liq), d_liq <= d_stop)
+
+
+def checar_barra(pos: Posicao, maxima: float, minima: float, p: Params) -> tuple[float, str] | None:
     """
-    Simula UMA posicao aberta no fechamento do candle i.
-    Devolve (pnl ja com taxa, desfecho, indice do candle em que a posicao fechou).
+    O que um candle faz com a posicao aberta: (pnl ja com taxa, desfecho), ou
+    None se ela segue aberta. E a MESMA regra no backtest e no vigia ao vivo —
+    se as duas divergissem, o placar ao vivo nao provaria nada sobre o testado.
 
     Regra conservadora: se stop e alvo cabem no mesmo candle, conta STOP.
     OHLC nao revela a ordem dentro da barra; supor o alvo inflaria o resultado.
     O erro de modelagem tem que cair contra a estrategia, nunca a favor.
     """
-    entrada = s.fechamento[i]
     taxa_total = p.notional * (p.taxa / 100.0) * 2.0
-
-    d_stop = p.stop / 100.0
-    d_alvo = (p.stop * p.rr) / 100.0
-    d_liq = p.liq_pct / 100.0
-
-    if direcao > 0:
-        px_stop, px_alvo, px_liq = (entrada * (1 - d_stop),
-                                    entrada * (1 + d_alvo),
-                                    entrada * (1 - d_liq))
+    if pos.direcao > 0:
+        bateu_liq, bateu_stop, bateu_alvo = minima <= pos.px_liq, minima <= pos.px_stop, maxima >= pos.px_alvo
     else:
-        px_stop, px_alvo, px_liq = (entrada * (1 + d_stop),
-                                    entrada * (1 - d_alvo),
-                                    entrada * (1 + d_liq))
+        bateu_liq, bateu_stop, bateu_alvo = maxima >= pos.px_liq, maxima >= pos.px_stop, minima <= pos.px_alvo
+    if pos.liq_antes_do_stop and bateu_liq:
+        return -p.margem, "liquidado"
+    if bateu_stop:
+        return -(p.notional * (p.stop / 100.0)) - taxa_total, "stop"
+    if bateu_alvo:
+        return (p.notional * ((p.stop * p.rr) / 100.0)) - taxa_total, "alvo"
+    if bateu_liq:
+        return -p.margem, "liquidado"
+    return None
 
-    liq_antes_do_stop = d_liq <= d_stop
 
+def encerrar_no_preco(pos: Posicao, preco: float, p: Params) -> float:
+    """Fecha a mercado (posicao que expirou sem bater stop nem alvo)."""
+    taxa_total = p.notional * (p.taxa / 100.0) * 2.0
+    var = (preco - pos.entrada) / pos.entrada * pos.direcao
+    return (p.notional * var) - taxa_total
+
+
+def _perna(s: Serie, i: int, direcao: int, p: Params) -> tuple[float, str, int]:
+    """
+    Simula UMA posicao aberta no fechamento do candle i, candle a candle.
+    Devolve (pnl ja com taxa, desfecho, indice do candle em que a posicao fechou).
+    """
+    pos = abrir(s.fechamento[i], direcao, p)
     for j in range(i + 1, min(i + 1 + p.max_barras, len(s))):
-        bateu_liq = (s.minima[j] <= px_liq) if direcao > 0 else (s.maxima[j] >= px_liq)
-        bateu_stop = (s.minima[j] <= px_stop) if direcao > 0 else (s.maxima[j] >= px_stop)
-        bateu_alvo = (s.maxima[j] >= px_alvo) if direcao > 0 else (s.minima[j] <= px_alvo)
-
-        if liq_antes_do_stop and bateu_liq:
-            return -p.margem, "liquidado", j
-        if bateu_stop:
-            return -(p.notional * d_stop) - taxa_total, "stop", j
-        if bateu_alvo:
-            return (p.notional * d_alvo) - taxa_total, "alvo", j
-        if bateu_liq:
-            return -p.margem, "liquidado", j
-
+        r = checar_barra(pos, s.maxima[j], s.minima[j], p)
+        if r is not None:
+            return r[0], r[1], j
     j_fim = min(i + p.max_barras, len(s) - 1)
-    var = (s.fechamento[j_fim] - entrada) / entrada * direcao
-    return (p.notional * var) - taxa_total, "expirou", j_fim
+    return encerrar_no_preco(pos, s.fechamento[j_fim], p), "expirou", j_fim
 
 
 def simular(s: Serie, sinais: list[int], p: Params) -> Resultado:

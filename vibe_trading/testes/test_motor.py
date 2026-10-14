@@ -19,6 +19,9 @@ afirma. Correcao sem guarda e correcao que volta.
 8. placar               — acerto x ganho - erro x perda = resultado por operacao
 9. bateria              — varios ativos e periodos de uma vez, caderno de
                           experimentos, historico inteiro cortado por ano
+10. vigia               — ao vivo, candle a candle, fecha EXATAMENTE as mesmas
+                          operacoes que o backtest; desligar e religar nao
+                          muda o placar
 """
 
 from __future__ import annotations
@@ -344,6 +347,78 @@ def teste_bateria() -> None:
             bt._pedir, sys.argv = original, argv
 
 
+def _replay(s, cfg, pasta, inicio, pausa=None):
+    """Passa a serie pelo vigia candle a candle. `pausa=(de, ate)` simula o vigia
+    desligado: os candles de `de` a `ate` chegam todos de uma vez, ao religar."""
+    import vigia
+    ms = est.MIN15
+    ponteiro = {"fim": inicio}
+
+    def buscador(par, tf, n):
+        f = ponteiro["fim"]
+        return bt.fatiar(s, max(0, f - n), f)
+
+    estado = {"versao": 1, "trilhas": {}, "ultimo_resumo": None}
+    vigia.ciclo(estado, cfg, "BTCUSDT", "15m", buscador, s.t[inicio - 1] + ms + 1000, pasta)
+    k = inicio
+    while k < len(s):
+        if pausa and k == pausa[0]:
+            estado = json.loads(json.dumps(estado))  # religar: o estado volta do disco
+            k = pausa[1]
+        ponteiro["fim"] = k + 1
+        vigia.ciclo(estado, cfg, "BTCUSDT", "15m", buscador, s.t[k] + ms + 1000, pasta)
+        k += 1
+    diario = [json.loads(l) for l in open(os.path.join(pasta, "diario.jsonl"), encoding="utf-8")]
+    return estado, diario
+
+
+def teste_vigia() -> None:
+    print("\n[10] vigia: replay candle a candle contra o backtest")
+    import vigia
+    s = serie_sintetica(3000, 5, True)
+    cfg = json.loads(json.dumps(vigia.CONFIG_PADRAO))
+    cfg["historico_inicial_dias"] = 7  # 672 candles: o cache comeca no candle 0, como o backtest
+    inicio = 600
+    p = bt.Params(**cfg["params"])
+
+    with tempfile.TemporaryDirectory() as tmp:
+        estado, diario = _replay(s, cfg, tmp, inicio)
+
+    for nome in ("confl3", "engolfo"):
+        sinais = [x if i >= inicio else 0 for i, x in enumerate(est.sinais(nome, s))]
+        esperado, i = [], 0
+        while i < len(s) - 1:
+            if sinais[i] == 0:
+                i += 1
+                continue
+            pnl, desfecho, j = bt._perna(s, i, 1 if sinais[i] > 0 else -1, p)
+            cortado = desfecho == "expirou" and i + p.max_barras > len(s) - 1  # o fim da serie fechou, nao a regra
+            if not cortado:
+                esperado.append((round(s.fechamento[i], 6), s.t[j], desfecho, round(pnl, 6)))
+            i = max(j, i) + 1
+        obtido = [(round(r["entrada"], 6), r["saida_t"], r["desfecho"], r["pnl"]) for r in diario if r["estrategia"] == nome]
+        checar(len(esperado) > 5 and obtido == esperado,
+               f"{nome}: vigia ao vivo fechou {len(obtido)} operacoes, backtest {len(esperado)}; identicas: {obtido == esperado}")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        estado2, diario2 = _replay(s, cfg, tmp, inicio, pausa=(1500, 1530))
+    sem = [(r["trilha"], r["entrada"], r["saida_t"], r["desfecho"], r["pnl"]) for r in diario]
+    com = [(r["trilha"], r["entrada"], r["saida_t"], r["desfecho"], r["pnl"]) for r in diario2]
+    checar(sem == com, f"desligado 30 candles e religado: mesmas {len(com)} operacoes")
+    moedas1 = {tid: [round(m["soma"], 6) for m in tr["moedas"]] for tid, tr in estado["trilhas"].items()}
+    moedas2 = {tid: [round(m["soma"], 6) for m in tr["moedas"]] for tid, tr in estado2["trilhas"].items()}
+    checar(moedas1 == moedas2 and len(moedas1) == 2, "as 20 moedas de cada trilha tambem saem iguais depois da pausa")
+    checar(any(r["recuperado"] for r in diario2), "operacoes fechadas durante a pausa ficam marcadas como recuperadas")
+
+    pl = vigia.placar(estado)
+    checar(len(pl) == 2 and all(l["operacoes"] == sum(1 for r in diario if r["trilha"] == l["trilha"]) for l in pl),
+           "placar conta as mesmas operacoes do diario")
+    l = pl[0]
+    r = bt.Resultado(resultados=[x["pnl"] for x in diario if x["trilha"] == l["trilha"]])
+    checar(abs(l["por_operacao"] - r.por_operacao) < 1e-5 and abs(l["acerto"] - r.acerto) < 1e-9,
+           f"placar do vigia bate com a conta do backtest ({l['trilha'].split('|')[0]}: por op {l['por_operacao']:+.4f})")
+
+
 def teste_paridade() -> None:
     print("\n[3] paridade Python x monitor.html")
     node = shutil.which("node")
@@ -422,6 +497,7 @@ if __name__ == "__main__":
     teste_padroes_e_alinhamento()
     teste_placar()
     teste_bateria()
+    teste_vigia()
     print()
     if FALHAS:
         print(f"REPROVADO: {len(FALHAS)} falha(s)")
