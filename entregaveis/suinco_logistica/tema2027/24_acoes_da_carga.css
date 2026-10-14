@@ -9,6 +9,9 @@
    Pátio, Frete, lista do Pulso) o texto sai da vista e fica para o leitor de
    tela e para o title; no painel do lado do Pátio ao vivo ela vem com texto,
    porque ali há espaço e é a primeira vez que a pessoa encontra o caminho.
+
+   NO PAPEL a barra some pela classe .no-print de sempre — este arquivo só
+   fala com a tela (test_tema2027_so_tela).
    ===================================================================== */
 @media screen{
   .acoes-carga{ display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin:10px 0 }
@@ -47,7 +50,4 @@
 }
 @media screen and (prefers-reduced-motion: reduce){
   #torre-tbody tr.linha-apontada > td{ transition:none }
-}
-@media print{
-  .acoes-carga{ display:none !important }
 }
