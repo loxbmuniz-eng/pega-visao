@@ -9,6 +9,10 @@ afirma. Correcao sem guarda e correcao que volta.
 2. posicao sobreposta   — proxima entrada so depois da saida anterior
 3. paridade Python x JS — monitor.html decide igual a estrategias.confluencia
 4. gatilho obrigatorio  — confluencia nunca entra sem rompimento do canal
+5. busca de candles     — pagina alem de 1000, sem buraco nem duplicata,
+                          descarta o candle aberto, cai para a fonte reserva
+6. comando de ponta a ponta — o --robustez que o usuario roda, contra uma
+                          Binance simulada, nos 5 periodos
 """
 
 from __future__ import annotations
@@ -103,6 +107,88 @@ def teste_gatilho_obrigatorio() -> None:
             checar(not sem, f"semente {semente} {nome}: {sum(1 for x in sinais if x)} sinais, {len(sem)} sem rompimento")
 
 
+class BinanceFalsa:
+    """Responde como /api/v3/klines: no maximo `limit` candles, respeitando endTime."""
+
+    MS = {"15m": 900_000, "1h": 3_600_000, "4h": 14_400_000, "12h": 43_200_000, "1d": 86_400_000}
+
+    def __init__(self, total: int = 3500, falhar_primeira_fonte: bool = False):
+        import time as _t
+        self.agora = int(_t.time() * 1000)
+        self.total = total
+        self.falhar = falhar_primeira_fonte
+        self.pedidos = 0
+        self.serie = serie_sintetica(total, 5, True)
+
+    def __call__(self, url: str):
+        from urllib.parse import urlparse, parse_qs
+        self.pedidos += 1
+        if self.falhar and "api.binance.com" in url:
+            raise OSError("fonte principal fora do ar (simulado)")
+        q = parse_qs(urlparse(url).query)
+        tf, limite = q["interval"][0], int(q["limit"][0])
+        ms = self.MS[tf]
+        # o ultimo candle ainda esta aberto: comecou ha meio periodo
+        t0 = self.agora - ms // 2 - (self.total - 1) * ms
+        fim = int(q["endTime"][0]) if "endTime" in q else None
+        linhas = []
+        for i in range(self.total):
+            t = t0 + i * ms
+            if fim is not None and t > fim:
+                break
+            linhas.append([t, str(self.serie.abertura[i]), str(self.serie.maxima[i]), str(self.serie.minima[i]),
+                           str(self.serie.fechamento[i]), str(self.serie.volume[i]), t + ms - 1])
+        return linhas[-limite:]
+
+
+def teste_busca() -> None:
+    print("\n[5] busca de candles")
+    original = bt._pedir
+    try:
+        falsa = BinanceFalsa()
+        bt._pedir = falsa
+        s = bt.buscar("BTCUSDT", "15m", 2500)
+        passos = {s.t[i] - s.t[i - 1] for i in range(1, len(s.t))}
+        checar(len(s) == 2500, f"pediu 2500, veio {len(s)} ({falsa.pedidos} pedidos de no maximo 1000)")
+        checar(passos == {900_000}, "candles contiguos, sem buraco nem duplicata")
+        checar(s.t[-1] + 900_000 - 1 <= falsa.agora, "candle ainda aberto foi descartado")
+        checar(s.fechamento[-1] == falsa.serie.fechamento[falsa.total - 2], "ultimo candle e o mais recente FECHADO")
+
+        falsa = BinanceFalsa(falhar_primeira_fonte=True)
+        bt._pedir = falsa
+        s = bt.buscar("BTCUSDT", "1h", 1200)
+        checar(len(s) == 1200, "fonte principal fora do ar: usou a reserva")
+
+        falsa = BinanceFalsa(total=300)
+        bt._pedir = falsa
+        s = bt.buscar("BTCUSDT", "1d", 500)
+        checar(len(s) == 299, f"historico curto: devolve o que existe ({len(s)}), sem travar em laco")
+    finally:
+        bt._pedir = original
+
+
+def teste_comando_ponta_a_ponta() -> None:
+    print("\n[6] comando --robustez de ponta a ponta, Binance simulada")
+    import contextlib
+    import io
+    original, argv = bt._pedir, sys.argv
+    bt._pedir = BinanceFalsa(total=3500)
+    sys.argv = ["backtest.py", "--robustez", "--estrategia", "confl3", "--alav", "24"]
+    saida = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(saida):
+            bt.main()
+        texto = saida.getvalue()
+        checar(texto.count(">>> ") == 5, "rodou os 5 periodos")
+        checar(texto.count("bateu") == 5, "veredito de robustez em todos os 5")
+        checar("candles, de " in texto, "mostra quantos candles e de que data a que data")
+        print("        trecho:", next(l for l in texto.splitlines() if ">>> 4h" in l).strip())
+    except SystemExit as e:
+        checar(False, f"comando saiu com erro {e.code}")
+    finally:
+        bt._pedir, sys.argv = original, argv
+
+
 def teste_paridade() -> None:
     print("\n[3] paridade Python x monitor.html")
     node = shutil.which("node")
@@ -157,6 +243,8 @@ if __name__ == "__main__":
     teste_sobreposicao()
     teste_paridade()
     teste_gatilho_obrigatorio()
+    teste_busca()
+    teste_comando_ponta_a_ponta()
     print()
     if FALHAS:
         print(f"REPROVADO: {len(FALHAS)} falha(s)")

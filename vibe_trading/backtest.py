@@ -26,6 +26,7 @@ import argparse
 import json
 import random
 import sys
+import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
@@ -36,8 +37,17 @@ import indicadores as ind
 # Candles publicos. Nenhum destes endpoints exige chave nem conta.
 FONTES = [
     ("binance", "https://api.binance.com/api/v3/klines?symbol={par}&interval={tf}&limit={n}"),
+    ("binance-dados", "https://data-api.binance.vision/api/v3/klines?symbol={par}&interval={tf}&limit={n}"),
     ("binance-us", "https://api.binance.us/api/v3/klines?symbol={par}&interval={tf}&limit={n}"),
 ]
+
+LIMITE_POR_PEDIDO = 1000   # maximo que a Binance devolve por pedido
+MIN_CANDLES = 500          # EMA 200 precisa aquecer e ainda sobrar candle para operar
+
+
+def candles_para(tf: str, dias: int) -> int:
+    """Quantos candles pedir: os dias pedidos, mas nunca menos que MIN_CANDLES."""
+    return max(MIN_CANDLES, int(dias * 24 * 60 / PERIODOS[tf]))
 
 PERIODOS = {"15m": 15, "1h": 60, "4h": 240, "12h": 720, "1d": 1440}
 
@@ -54,29 +64,59 @@ class Serie:
     minima: list[float] = field(default_factory=list)
     fechamento: list[float] = field(default_factory=list)
     volume: list[float] = field(default_factory=list)
+    t: list[int] = field(default_factory=list)  # abertura do candle, ms
 
     def __len__(self) -> int:
         return len(self.fechamento)
 
 
+def _pedir(url: str):
+    req = urllib.request.Request(url, headers={"User-Agent": "backtest/1.0"})
+    with urllib.request.urlopen(req, timeout=25) as resp:
+        return json.loads(resp.read().decode())
+
+
 def buscar(par: str, tf: str, n: int) -> Serie:
+    """
+    Busca os ultimos `n` candles FECHADOS, paginando para tras de 1000 em 1000.
+
+    Descarta o candle ainda em formacao: decidir em cima dele e usar um preco
+    que ainda vai mudar. O monitor faz o mesmo, para backtest e tela decidirem
+    sobre o mesmo dado.
+    """
     erros = []
     for nome, molde in FONTES:
-        url = molde.format(par=par, tf=tf, n=min(n, 1000))
+        base = molde.format(par=par, tf=tf, n=LIMITE_POR_PEDIDO)
+        juntos: dict[int, list] = {}
+        fim_ms = None
         try:
-            req = urllib.request.Request(url, headers={"User-Agent": "backtest/1.0"})
-            with urllib.request.urlopen(req, timeout=25) as resp:
-                bruto = json.loads(resp.read().decode())
+            while len(juntos) < n + 1:
+                url = base + (f"&endTime={fim_ms}" if fim_ms is not None else "")
+                bruto = _pedir(url)
+                if not isinstance(bruto, list) or not bruto:
+                    break
+                for k in bruto:
+                    juntos[int(k[0])] = k
+                mais_antigo = min(int(k[0]) for k in bruto)
+                if len(bruto) < LIMITE_POR_PEDIDO or (fim_ms is not None and mais_antigo >= fim_ms):
+                    break  # acabou o historico
+                fim_ms = mais_antigo - 1
         except Exception as e:  # rede, http, json — o motivo vai no relatorio
-            erros.append(f"{nome}: {type(e).__name__}: {e}")
-            continue
+            if not juntos:
+                erros.append(f"{nome}: {type(e).__name__}: {e}")
+                continue
+            print(f"  aviso: {nome} parou no meio ({type(e).__name__}); usando {len(juntos)} candles",
+                  file=sys.stderr)
 
-        if not isinstance(bruto, list) or not bruto:
+        if not juntos:
             erros.append(f"{nome}: nenhum candle devolvido")
             continue
 
+        agora_ms = int(time.time() * 1000)
+        ordem = [juntos[t] for t in sorted(juntos) if int(juntos[t][6]) <= agora_ms][-n:]
         s = Serie()
-        for k in bruto:
+        for k in ordem:
+            s.t.append(int(k[0]))
             s.abertura.append(float(k[1]))
             s.maxima.append(float(k[2]))
             s.minima.append(float(k[3]))
@@ -93,6 +133,14 @@ def buscar(par: str, tf: str, n: int) -> Serie:
         file=sys.stderr,
     )
     sys.exit(1)
+
+
+def periodo_txt(s: Serie) -> str:
+    if not s.t:
+        return f"{len(s)} candles"
+    fmt = "%d/%m/%Y"
+    return (f"{len(s)} candles, de {time.strftime(fmt, time.localtime(s.t[0] / 1000))}"
+            f" a {time.strftime(fmt, time.localtime(s.t[-1] / 1000))}")
 
 
 # --------------------------------------------------------------------------- #
@@ -292,7 +340,7 @@ def medir_ruido(par: str, dias: int, periodos: list[str], p: Params) -> None:
     for tf in periodos:
         if tf not in PERIODOS:
             continue
-        n = max(60, int(dias * 24 * 60 / PERIODOS[tf]))
+        n = candles_para(tf, dias)
         s = buscar(par, tf, n)
         ruido = ind.ruido_tipico(s.maxima, s.minima, s.fechamento)
         a = ind.atr(s.maxima, s.minima, s.fechamento, 14)
@@ -309,7 +357,7 @@ def medir_ruido(par: str, dias: int, periodos: list[str], p: Params) -> None:
 
 def fatiar(s: Serie, ini: int, fim: int) -> Serie:
     return Serie(s.abertura[ini:fim], s.maxima[ini:fim], s.minima[ini:fim],
-                 s.fechamento[ini:fim], s.volume[ini:fim])
+                 s.fechamento[ini:fim], s.volume[ini:fim], s.t[ini:fim])
 
 
 def robustez(s: Serie, nome: str, p: Params, janelas: int = 6,
@@ -381,7 +429,7 @@ def main() -> None:
     ap.add_argument("--mm", type=float, default=0.5, help="margem de manutencao %%")
     ap.add_argument("--stop", type=float, default=0.5, help="stop em %% do preco")
     ap.add_argument("--rr", type=float, default=2.0, help="alvo = stop * rr")
-    ap.add_argument("--dias", type=int, default=30)
+    ap.add_argument("--dias", type=int, default=90)
     ap.add_argument("--periodos", default="15m,1h,4h,12h,1d")
     ap.add_argument("--estrategia", default="moeda")
     ap.add_argument("--comparar", action="store_true",
@@ -413,9 +461,9 @@ def main() -> None:
         for tf in periodos:
             if tf not in PERIODOS:
                 continue
-            n = max(60, int(args.dias * 24 * 60 / PERIODOS[tf]))
+            n = candles_para(tf, args.dias)
             s = buscar(args.par, tf, n)
-            print(f"  >>> {tf}  estrategia '{args.estrategia}'  ({len(s)} candles)")
+            print(f"  >>> {tf}  estrategia '{args.estrategia}'  ({periodo_txt(s)})")
             robustez(s, args.estrategia, p, args.janelas)
             print()
         return
@@ -425,10 +473,10 @@ def main() -> None:
             if tf not in PERIODOS:
                 print(f"  periodo desconhecido: {tf}")
                 continue
-            n = max(60, int(args.dias * 24 * 60 / PERIODOS[tf]))
+            n = candles_para(tf, args.dias)
             s = buscar(args.par, tf, n)
             ruido = ind.ruido_tipico(s.maxima, s.minima, s.fechamento)
-            print(f"  >>> {tf}  ({len(s)} candles, ruido mediano {ruido:.3f}%)")
+            print(f"  >>> {tf}  ({periodo_txt(s)}, ruido mediano {ruido:.3f}%)")
             if p.stop <= ruido:
                 print(f"      ATENCAO: stop de {p.stop:.2f}% esta DENTRO do ruido "
                       f"de {ruido:.3f}% — tudo abaixo e stop por oscilacao normal.")
@@ -453,7 +501,7 @@ def main() -> None:
             if tf not in PERIODOS:
                 print(f"  {tf:<12} | periodo desconhecido")
                 continue
-            n = max(60, int(args.dias * 24 * 60 / PERIODOS[tf]))
+            n = candles_para(tf, args.dias)
             s = buscar(args.par, tf, n)
             r = simular(s, estrategias.gerar(args.estrategia, s), p)
             tabela_linha(tf, r, p)

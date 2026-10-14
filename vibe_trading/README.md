@@ -25,7 +25,26 @@ Mais a calculadora de risco interativa (página separada): **Banda de Liquidaç�
 ## Rodando
 
 Só biblioteca padrão do Python 3. Nenhuma dependência para instalar.
-Precisa de internet aberta (endpoint público de candles) — rode na sua máquina.
+Precisa de internet aberta (endpoint público de candles): rode na sua máquina.
+
+**Primeira vez** (baixa o projeto para a pasta pessoal):
+
+```bash
+cd ~
+git clone --depth 1 -b claude/vibe-trading-project-psmj6o https://github.com/loxbmuniz-eng/pega-visao.git
+cd ~/pega-visao/vibe_trading
+```
+
+**Das próximas vezes** (atualiza o que já foi baixado):
+
+```bash
+cd ~/pega-visao && git pull && cd vibe_trading
+```
+
+O script pede **90 dias** por padrão e nunca menos de 500 candles por período
+(a EMA 200 precisa aquecer). Ele pagina de 1.000 em 1.000, que é o máximo que a
+Binance entrega por pedido, e descarta o candle que ainda está aberto. Cada
+período mostra quantos candles usou e de que data a que data.
 
 ```bash
 python3 backtest.py --listar          # ver as estratégias
