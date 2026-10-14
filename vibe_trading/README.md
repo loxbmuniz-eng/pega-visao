@@ -12,6 +12,7 @@ Não toca no painel de logística Suinco. É projeto separado, na mesma árvore.
 | Arquivo | O que faz |
 |---|---|
 | `backtest.py` | Puxa candles públicos e simula com taxa, stop, margem de manutenção e liquidação |
+| `bateria.py` | Fase 1: todas as estratégias em vários ativos e períodos contra a moeda; `--historico` faz o histórico inteiro ano a ano; registra tudo no caderno de experimentos (`caderno.jsonl`) |
 | `estrategias.py` | Os sinais de entrada: 7 estratégias, a confluência e 2 controles cegos |
 | `indicadores.py` | EMA, SMA, RSI, ATR, VWAP, desvio, ruído mediano |
 | `monitor.html` | **Monitor em tempo real.** Abre no navegador, lê a Binance pública, mostra as 5 confirmações nos 5 períodos e alerta no fechamento do candle |
@@ -50,7 +51,10 @@ período mostra quantos candles usou e de que data a que data.
 python3 backtest.py --listar          # ver as estratégias
 python3 backtest.py --ruido           # medir o ruído real do ativo
 python3 backtest.py --comparar        # TODAS as estratégias contra o controle
+python3 bateria.py                    # FASE 1: tudo de uma vez (BTC, ETH, SOL x 15m, 1h, 4h)
+python3 bateria.py --historico        # todo o historico de cada par, ano a ano (4h e 24h)
 python3 backtest.py --robustez --estrategia confl4 --alav 24   # vantagem ou sorte?
+python3 backtest.py --robustez --estrategia confl3 --por-ano --dias 3000 --periodos 4h
 python3 backtest.py --robustez --estrategia engolfo --lado compra   # só long
 python3 backtest.py --robustez --estrategia confl3 --alinhar       # só a favor dos períodos acima
 python3 testes/test_motor.py          # guardas do motor

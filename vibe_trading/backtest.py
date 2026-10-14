@@ -394,8 +394,28 @@ def fatiar(s: Serie, ini: int, fim: int) -> Serie:
                  s.fechamento[ini:fim], s.volume[ini:fim], s.t[ini:fim])
 
 
-def robustez(s: Serie, nome: str, p: Params, janelas: int = 6,
-             sementes: int = 30, lado: str = "ambos", alinhar: bool = False) -> None:
+def cortes_por_ano(s: Serie, minimo: int = 60) -> list[tuple[int, int, str]]:
+    """
+    Fatias da serie por ano-calendario (UTC): [(inicio, fim, "2021"), ...].
+
+    Cada ano do BTC foi um mercado diferente (a queda de 2018, a alta de 2021, a
+    queda de 2022). Janela por ano responde a pergunta certa: a estrategia ganha
+    em todo tipo de mercado, ou so num ano de sorte? Ano com menos de `minimo`
+    candles (o comeco ou o fim da serie) fica de fora: amostra pequena demais.
+    """
+    cortes = []
+    ini = 0
+    for i in range(1, len(s.t) + 1):
+        if i == len(s.t) or time.gmtime(s.t[i] / 1000).tm_year != time.gmtime(s.t[ini] / 1000).tm_year:
+            if i - ini >= minimo:
+                cortes.append((ini, i, str(time.gmtime(s.t[ini] / 1000).tm_year)))
+            ini = i
+    return cortes
+
+
+def avaliar_robustez(s: Serie, nome: str, p: Params, janelas: int = 6,
+                     sementes: int = 30, lado: str = "ambos", alinhar: bool = False,
+                     cortes: list[tuple[int, int, str]] | None = None) -> dict | None:
     """
     Corta a serie em janelas e, em cada uma, compara a estrategia com
     `sementes` moedas sorteadas que entram nos MESMOS candles que ela.
@@ -408,20 +428,24 @@ def robustez(s: Serie, nome: str, p: Params, janelas: int = 6,
     os candles — assim indicador longo (EMA 200) nao perde aquecimento em cada
     janela. Isso so e legitimo porque o teste de vazamento prova que o sinal em
     i usa apenas dados ate i.
+
+    Devolve o resultado em dados (None se a serie for curta demais). A
+    impressao fica em `robustez`; a bateria usa os dados direto. Uma conta,
+    dois chamadores.
     """
     sinais = estrategias.sinais(nome, s, lado, alinhar)
-    tam = len(s) // janelas
-    if tam < 30:
-        print(f"  serie curta demais para {janelas} janelas ({len(s)} candles)")
-        return
+    if cortes is None:
+        tam = len(s) // janelas
+        if tam < 30:
+            return None
+        cortes = [(w * tam, (w + 1) * tam, str(w + 1)) for w in range(janelas)]
+    if not cortes:
+        return None
+    janelas = len(cortes)
 
-    print(f"  {'janela':>6} | trades | acerto |  por op | retorno | moeda mediana | bate X% das moedas")
-    print("  " + "-" * 84)
-    batidas = []
-    positivas = 0
+    linhas = []
     todas = Resultado()
-    for w in range(janelas):
-        ini, fim = w * tam, (w + 1) * tam
+    for ini, fim, rotulo in cortes:
         sub = fatiar(s, ini, fim)
         r = simular(sub, sinais[ini:fim], p)
         todas.resultados.extend(r.resultados)
@@ -436,26 +460,54 @@ def robustez(s: Serie, nome: str, p: Params, janelas: int = 6,
             rm = simular(sub, cega, p)
             moedas.append((rm.equity_final - p.banca) / p.banca * 100)
         moedas.sort()
-        mediana = moedas[len(moedas) // 2]
-        bate = sum(1 for m in moedas if ret > m) / len(moedas) * 100
-        batidas.append(bate)
-        positivas += 1 if ret > 0 else 0
-        print(f"  {w + 1:>6} | {r.operacoes:6d} | {r.acerto:5.1f}% | {r.por_operacao:+7.2f} | "
-              f"{ret:+6.1f}% | {mediana:+12.1f}% | {bate:5.0f}%")
+        linhas.append({
+            "janela": rotulo, "operacoes": r.operacoes, "acerto": r.acerto,
+            "por_operacao": r.por_operacao, "retorno": ret,
+            "moeda_mediana": moedas[len(moedas) // 2],
+            "bate": sum(1 for m in moedas if ret > m) / len(moedas) * 100,
+        })
 
-    media = sum(batidas) / len(batidas)
-    print()
-    print(f"  placar das {len(todas.resultados)} operacoes: acerto {todas.acerto:.1f}%  |  "
-          f"ganho medio +{todas.ganho_medio:.2f}  |  perda media -{todas.perda_media:.2f}  |  "
-          f"resultado por operacao {todas.por_operacao:+.2f} USDT")
-    print(f"  janelas no positivo: {positivas} de {janelas}")
-    print(f"  em media, bateu {media:.0f}% das moedas")
+    media = sum(l["bate"] for l in linhas) / len(linhas)
+    positivas = sum(1 for l in linhas if l["retorno"] > 0)
     if media >= 75 and positivas >= janelas * 2 / 3:
-        print("  -> SINAL DE VANTAGEM. Confirme em outro ativo e outra epoca antes de crer.")
+        veredito = "vantagem"
     elif media >= 55:
-        print("  -> INCONCLUSIVO. Pouco melhor que sorte; nao justifica dinheiro real.")
+        veredito = "inconclusivo"
     else:
-        print("  -> SEM VANTAGEM. Nao se distingue de jogar moeda.")
+        veredito = "sem_vantagem"
+    return {"linhas": linhas, "placar": todas, "media_bate": media,
+            "positivas": positivas, "janelas": janelas, "veredito": veredito}
+
+
+VEREDITOS = {
+    "vantagem": "SINAL DE VANTAGEM. Confirme em outro ativo e outra epoca antes de crer.",
+    "inconclusivo": "INCONCLUSIVO. Pouco melhor que sorte; nao justifica dinheiro real.",
+    "sem_vantagem": "SEM VANTAGEM. Nao se distingue de jogar moeda.",
+}
+
+
+def robustez(s: Serie, nome: str, p: Params, janelas: int = 6,
+             sementes: int = 30, lado: str = "ambos", alinhar: bool = False,
+             por_ano: bool = False) -> None:
+    """Imprime a avaliacao de robustez (ver avaliar_robustez)."""
+    a = avaliar_robustez(s, nome, p, janelas, sementes, lado, alinhar,
+                         cortes_por_ano(s) if por_ano else None)
+    if a is None:
+        print(f"  serie curta demais para {janelas} janelas ({len(s)} candles)")
+        return
+    print(f"  {'janela':>6} | trades | acerto |  por op | retorno | moeda mediana | bate X% das moedas")
+    print("  " + "-" * 84)
+    for l in a["linhas"]:
+        print(f"  {l['janela']:>6} | {l['operacoes']:6d} | {l['acerto']:5.1f}% | {l['por_operacao']:+7.2f} | "
+              f"{l['retorno']:+6.1f}% | {l['moeda_mediana']:+12.1f}% | {l['bate']:5.0f}%")
+    t = a["placar"]
+    print()
+    print(f"  placar das {len(t.resultados)} operacoes: acerto {t.acerto:.1f}%  |  "
+          f"ganho medio +{t.ganho_medio:.2f}  |  perda media -{t.perda_media:.2f}  |  "
+          f"resultado por operacao {t.por_operacao:+.2f} USDT")
+    print(f"  janelas no positivo: {a['positivas']} de {a['janelas']}")
+    print(f"  em media, bateu {a['media_bate']:.0f}% das moedas")
+    print("  -> " + VEREDITOS[a["veredito"]])
 
 
 def main() -> None:
@@ -480,6 +532,8 @@ def main() -> None:
     ap.add_argument("--robustez", action="store_true",
                     help="testa a estrategia em varias janelas contra 30 moedas")
     ap.add_argument("--janelas", type=int, default=6)
+    ap.add_argument("--por-ano", action="store_true",
+                    help="no --robustez, uma janela por ano-calendario em vez de janelas iguais")
     ap.add_argument("--lado", choices=("ambos", "compra", "venda"), default="ambos",
                     help="so long (compra), so short (venda) ou os dois")
     ap.add_argument("--alinhar", action="store_true",
@@ -514,7 +568,8 @@ def main() -> None:
             n = candles_para(tf, args.dias, args.alinhar)
             s = buscar(args.par, tf, n)
             print(f"  >>> {tf}  estrategia '{args.estrategia}'  ({periodo_txt(s)})")
-            robustez(s, args.estrategia, p, args.janelas, lado=args.lado, alinhar=args.alinhar)
+            robustez(s, args.estrategia, p, args.janelas, lado=args.lado, alinhar=args.alinhar,
+                     por_ano=args.por_ano)
             print()
         return
 

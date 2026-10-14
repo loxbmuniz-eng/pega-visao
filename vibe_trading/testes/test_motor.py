@@ -16,6 +16,9 @@ afirma. Correcao sem guarda e correcao que volta.
 7. padroes e alinhamento — engolfo pela definicao, divergencia so no candle
                           que confirma o pivo, reamostragem sem candle
                           inventado, alinhamento so com candle maior ja fechado
+8. placar               — acerto x ganho - erro x perda = resultado por operacao
+9. bateria              — varios ativos e periodos de uma vez, caderno de
+                          experimentos, historico inteiro cortado por ano
 """
 
 from __future__ import annotations
@@ -288,6 +291,59 @@ def teste_placar() -> None:
     checar(baixo.acerto == 35 and baixo.por_operacao > 0, f"35% de acerto, ganho 3 e perda 1: {baixo.por_operacao:+.2f} por operacao")
 
 
+def teste_bateria() -> None:
+    print("\n[9] bateria: varios ativos, caderno de experimentos e historico por ano")
+    import contextlib
+    import io
+    import bateria
+
+    # corte por ano: cobre a serie sem buraco, anos em ordem
+    s = serie_sintetica(3000, 5, True)
+    s.t = [i * est.H4 for i in range(len(s))]  # 4 h por candle: ~500 dias, 2 anos
+    cortes = bt.cortes_por_ano(s)
+    contiguo = all(cortes[k][1] == cortes[k + 1][0] for k in range(len(cortes) - 1))
+    checar(len(cortes) == 2 and cortes[0][2] == "1970" and cortes[1][2] == "1971" and contiguo,
+           f"corte por ano: {[c[2] for c in cortes]}, sem buraco entre os anos")
+    a = bt.avaliar_robustez(s, "confl3", bt.Params(alav=24, stop=0.5), cortes=cortes)
+    checar(a is not None and a["janelas"] == 2 and [l["janela"] for l in a["linhas"]] == ["1970", "1971"],
+           "robustez por ano: uma janela por ano, rotulada com o ano")
+
+    original, argv = bt._pedir, sys.argv
+    with tempfile.TemporaryDirectory() as tmp:
+        caderno = os.path.join(tmp, "caderno.jsonl")
+        try:
+            bt._pedir = BinanceFalsa(total=3500)
+            sys.argv = ["bateria.py", "--ativos", "BTCUSDT,ETHUSDT", "--estrategias", "confl3,engolfo",
+                        "--caderno", caderno]
+            saida = io.StringIO()
+            with contextlib.redirect_stdout(saida):
+                bateria.main()
+            texto = saida.getvalue()
+            checar(all(f">>> {tf}" in texto for tf in ("15m", "1h", "4h")), "modo normal: os 3 periodos")
+            checar("PASSARAM NA FASE 1" in texto or "NENHUMA ESTRATEGIA PASSOU" in texto, "modo normal: veredito da fase 1")
+            linhas = open(caderno, encoding="utf-8").read().splitlines()
+            checar(len(linhas) == 12, f"caderno: 2 estrategias x 2 ativos x 3 periodos = {len(linhas)} registros")
+            checar("Tentativas registradas no caderno: 6" in texto,
+                   "caderno conta 6 hipoteses (o ativo nao muda a hipotese)")
+
+            bt._pedir = BinanceFalsa(total=3500)
+            sys.argv = ["bateria.py", "--historico", "--ativos", "BTCUSDT", "--estrategias", "confl3,engolfo",
+                        "--caderno", caderno]
+            saida = io.StringIO()
+            with contextlib.redirect_stdout(saida):
+                bateria.main()
+            texto = saida.getvalue()
+            checar("ANO A ANO" in texto and ">>> 4h" in texto and ">>> 1d" in texto and ">>> 15m" not in texto,
+                   "modo historico: 4 h e 24 h, tabela ano a ano")
+            ultimo = json.loads(open(caderno, encoding="utf-8").read().splitlines()[-1])
+            checar(ultimo["modo"] == "historico_por_ano" and ultimo["janelas"] >= 2,
+                   f"caderno registra o modo historico ({ultimo['janelas']} anos no ultimo registro)")
+        except SystemExit as e:
+            checar(False, f"bateria saiu com erro {e.code}")
+        finally:
+            bt._pedir, sys.argv = original, argv
+
+
 def teste_paridade() -> None:
     print("\n[3] paridade Python x monitor.html")
     node = shutil.which("node")
@@ -365,6 +421,7 @@ if __name__ == "__main__":
     teste_comando_ponta_a_ponta()
     teste_padroes_e_alinhamento()
     teste_placar()
+    teste_bateria()
     print()
     if FALHAS:
         print(f"REPROVADO: {len(FALHAS)} falha(s)")
