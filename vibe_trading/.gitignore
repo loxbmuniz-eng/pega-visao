@@ -4,3 +4,4 @@ segredos.json
 vigia.json
 caderno.jsonl
 __pycache__/
+.venv/

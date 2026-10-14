@@ -11,7 +11,10 @@ O que ele faz a cada candle fechado:
   - roda cada estrategia congelada do vigia.json e abre/fecha operacoes de papel;
   - roda 20 moedas pareadas ao lado (entram nos mesmos candles, lado sorteado);
   - grava cada operacao fechada no diario (dados_vigia/diario.jsonl);
-  - avisa no Telegram, se configurado: entrada, saida e resumo do dia.
+  - avisa no Telegram, se configurado: entrada, saida e resumo do dia;
+  - se a arena estiver ligada (vigia.json -> "arena"), consulta a Qwen e o
+    Claude nos candles de interesse e poe cada IA como mais uma trilha, com as
+    mesmas regras de saida e as mesmas moedas pareadas (veja arena.py).
 
 O que ele NAO faz: enviar ordem, pedir chave de corretora, mudar parametro.
 
@@ -40,6 +43,7 @@ import urllib.parse
 import urllib.request
 from dataclasses import asdict
 
+import arena
 import backtest as bt
 import estrategias
 
@@ -63,13 +67,21 @@ CONFIG_PADRAO = {
     "moedas": 20,
     "historico_inicial_dias": 30,
     "resumo_diario_hora": 21,
+    # A arena so liga com "ligada": true E pelo menos uma chave de IA no segredos.json.
+    # O teto vale por IA por dia; a decisao de um candle e guardada e nunca repetida.
+    "arena": {"ligada": False, "ativo": "BTCUSDT", "periodo": "15m",
+              "qwen_modelo": "qwen/qwen3-max", "claude_modelo": "claude-opus-5-5",
+              "claude_esforco": "low", "max_chamadas_dia": 30},
 }
 
 SEGREDOS_MODELO = {
     "telegram_token": "",
     "telegram_chat_id": "",
     "openrouter_key": "",
+    "anthropic_api_key": "",
 }
+
+ESFORCOS = ("low", "medium", "high", "xhigh", "max")
 
 
 # --------------------------------------------------------------------------- #
@@ -84,12 +96,16 @@ def ler_json(caminho: str, padrao):
         return padrao
 
 
-def gravar_json(caminho: str, dado) -> None:
-    """Grava de forma atomica: um desligamento no meio nao corrompe o arquivo."""
+def gravar_json(caminho: str, dado, indent=None, privado: bool = False) -> None:
+    """Grava de forma atomica: um desligamento no meio nao corrompe o arquivo.
+    privado=True: o arquivo nasce so com leitura do dono (chmod 600), sem janela aberta."""
     os.makedirs(os.path.dirname(caminho), exist_ok=True)
     tmp = caminho + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(dado, f, ensure_ascii=False)
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600 if privado else 0o644)
+    if privado:
+        os.chmod(tmp, 0o600)  # se o .tmp ja existia com outra permissao
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        json.dump(dado, f, ensure_ascii=False, indent=indent)
     os.replace(tmp, caminho)
 
 
@@ -101,9 +117,26 @@ def anexar_json(caminho: str, registro: dict) -> None:
 
 def carregar_config(caminho: str = CONFIG) -> dict:
     if not os.path.exists(caminho):
-        gravar_json(caminho, CONFIG_PADRAO)
+        gravar_json(caminho, CONFIG_PADRAO, indent=2)
         print(f"  criei {os.path.basename(caminho)} com a configuracao padrao (confl3 e engolfo, BTCUSDT 15m)")
     cfg = ler_json(caminho, CONFIG_PADRAO)
+    # vigia.json de uma versao anterior: acrescenta so o que falta, sem mexer no que existe
+    novos = [k for k in CONFIG_PADRAO if k not in cfg]
+    for k in novos:
+        cfg[k] = json.loads(json.dumps(CONFIG_PADRAO[k]))
+    novos += [f"arena.{k}" for k in CONFIG_PADRAO["arena"] if k not in cfg["arena"]]
+    for k in CONFIG_PADRAO["arena"]:
+        cfg["arena"].setdefault(k, CONFIG_PADRAO["arena"][k])
+    if novos:
+        gravar_json(caminho, cfg, indent=2)
+        print(f"  acrescentei ao {os.path.basename(caminho)}: {', '.join(novos)} (valores padrao)")
+    a = cfg["arena"]
+    if a["ligada"]:
+        if a["ativo"] not in cfg["ativos"] or a["periodo"] not in cfg["periodos"]:
+            sys.exit(f"vigia.json: a arena esta em {a['ativo']} {a['periodo']}, mas o vigia so acompanha "
+                     f"{', '.join(cfg['ativos'])} em {', '.join(cfg['periodos'])}. Ajuste 'arena' ou 'ativos'/'periodos'.")
+        if a["claude_esforco"] not in ESFORCOS:
+            sys.exit(f"vigia.json: claude_esforco '{a['claude_esforco']}' nao existe. Use: {', '.join(ESFORCOS)}")
     for e in cfg["estrategias"]:
         if e["nome"] not in estrategias.REGISTRO:
             sys.exit(f"vigia.json: estrategia '{e['nome']}' nao existe. Disponiveis: {', '.join(estrategias.REGISTRO)}")
@@ -114,13 +147,23 @@ def carregar_config(caminho: str = CONFIG) -> dict:
 
 
 def carregar_segredos(caminho: str = SEGREDOS) -> dict:
+    """Le o segredos.json; cria o modelo vazio (chmod 600) se nao existir e acrescenta
+    os campos novos, vazios, sem tocar nos que ja estao preenchidos."""
     if not os.path.exists(caminho):
-        return {}
+        gravar_json(caminho, SEGREDOS_MODELO, indent=2, privado=True)
+        return dict(SEGREDOS_MODELO)
     modo = os.stat(caminho).st_mode
     if modo & (stat.S_IRWXG | stat.S_IRWXO):
         print(f"  AVISO: {os.path.basename(caminho)} pode ser lido por outros usuarios. "
               f"Rode: chmod 600 {caminho}")
-    return ler_json(caminho, {})
+    seg = ler_json(caminho, {})
+    novos = [k for k in SEGREDOS_MODELO if k not in seg]
+    if novos:
+        for k in novos:
+            seg[k] = ""
+        gravar_json(caminho, seg, indent=2, privado=True)
+        print(f"  acrescentei ao {os.path.basename(caminho)} o campo vazio: {', '.join(novos)}")
+    return seg
 
 
 def params_de(cfg: dict) -> bt.Params:
@@ -210,13 +253,48 @@ def atualizar_cache(c: dict, s: bt.Serie) -> int:
 # o ciclo
 # --------------------------------------------------------------------------- #
 
+def processar_barra(tr: dict, tid: str, nome: str, ativo: str, tf: str, sinal: int, i: int, c: dict,
+                    p: bt.Params, recuperado: bool, pasta: str, avisar, motivo: str = "") -> None:
+    """Um candle numa trilha (estrategia ou IA): a posicao, o diario, o aviso e as
+    moedas pareadas. Estrategia e IA passam pela MESMA funcao."""
+    tr["posicao"], fechou, abriu = passo(tr["posicao"], sinal, i, c, p)
+    if fechou is not None:
+        pnl, desfecho, pos = fechou
+        tr["resultados"].append(pnl)
+        saldo = sum(tr["resultados"])
+        tr["pico"] = max(tr["pico"], saldo)
+        tr["queda_max"] = max(tr["queda_max"], tr["pico"] - saldo)
+        registro = {"trilha": tid, "estrategia": nome, "ativo": ativo, "periodo": tf,
+                    "lado": "compra" if pos.direcao > 0 else "venda", "entrada": pos.entrada,
+                    "saida_t": c["t"][i], "desfecho": desfecho, "pnl": round(pnl, 6),
+                    "candles": pos.barras, "recuperado": recuperado}
+        if "motivo_entrada" in tr:
+            registro["motivo_entrada"] = tr.pop("motivo_entrada")
+        anexar_json(os.path.join(pasta, "diario.jsonl"), registro)
+        if avisar and not recuperado:
+            avisar(texto_saida(registro, tr))
+    if abriu:
+        if motivo:
+            tr["motivo_entrada"] = motivo
+        if avisar and not recuperado:
+            avisar(texto_entrada(nome, ativo, tf, tr["posicao"], p, motivo))
+    for k, m in enumerate(tr["moedas"]):
+        lado = lado_da_moeda(k, c["t"][i]) if sinal != 0 else 0
+        m["posicao"], fm, _ = passo(m["posicao"], lado, i, c, p)
+        if fm is not None:
+            m["n"] += 1
+            m["soma"] += fm[0]
+    tr["ultimo_t"] = c["t"][i]
+
+
 def ciclo(estado: dict, cfg: dict, ativo: str, tf: str, buscador, agora_ms: int,
-          pasta: str = PASTA, avisar=None) -> int:
+          pasta: str = PASTA, avisar=None, juiz=None) -> int:
     """
     Busca os candles novos de um ativo/periodo e processa cada um, na ordem, em
     todas as trilhas. Devolve quantos candles foram processados (o maior numero
     entre as trilhas, nao a soma).
-    `buscador(par, tf, n)` e `agora_ms` sao injetaveis para o teste de replay.
+    `buscador(par, tf, n)` e `agora_ms` sao injetaveis para o teste de replay;
+    `juiz` (arena.Juiz) liga as trilhas das IAs, se a arena for neste ativo/periodo.
     """
     p = params_de(cfg)
     ms = MS[tf]
@@ -224,18 +302,22 @@ def ciclo(estado: dict, cfg: dict, ativo: str, tf: str, buscador, agora_ms: int,
     c = ler_json(arq_cache, None)
     alinhar = any(e.get("alinhar") for e in cfg["estrategias"])
     trilhas_aqui = [(e, id_trilha(e, ativo, tf)) for e in cfg["estrategias"]]
+    a = cfg.get("arena") or {}
+    ias = ([(n, id_trilha({"nome": n}, ativo, tf)) for n in juiz.competidores()]
+           if juiz is not None and a.get("ativo") == ativo and a.get("periodo") == tf else [])
+    todas = [tid for _, tid in trilhas_aqui] + [tid for _, tid in ias]
 
     if c is None:  # primeira vez: historico para aquecer os indicadores, sem operar nele
         n = bt.candles_para(tf, cfg.get("historico_inicial_dias", 30), alinhar)
         c = cache_vazio()
         atualizar_cache(c, buscador(ativo, tf, n))
         gravar_json(arq_cache, c)
-        for e, tid in trilhas_aqui:
+        for tid in todas:
             tr = estado["trilhas"].setdefault(tid, trilha_nova(cfg["moedas"]))
             tr["ultimo_t"] = c["t"][-1] if c["t"] else None
         return 0
 
-    for e, tid in trilhas_aqui:  # estrategia nova no vigia.json comeca daqui, sem operar o passado
+    for tid in todas:  # trilha nova (estrategia ou IA) comeca daqui, sem operar o passado
         if tid not in estado["trilhas"]:
             tr = estado["trilhas"][tid] = trilha_nova(cfg["moedas"])
             tr["ultimo_t"] = c["t"][-1] if c["t"] else None
@@ -254,31 +336,60 @@ def ciclo(estado: dict, cfg: dict, ativo: str, tf: str, buscador, agora_ms: int,
         sinais = estrategias.sinais(e["nome"], serie, e.get("lado", "ambos"), e.get("alinhar", False))
         for i in pendentes:
             recuperado = agora_ms - (c["t"][i] + ms) > 2 * ms  # fechou enquanto o vigia estava fora
-            tr["posicao"], fechou, abriu = passo(tr["posicao"], sinais[i], i, c, p)
-            if fechou is not None:
-                pnl, desfecho, pos = fechou
-                tr["resultados"].append(pnl)
-                saldo = sum(tr["resultados"])
-                tr["pico"] = max(tr["pico"], saldo)
-                tr["queda_max"] = max(tr["queda_max"], tr["pico"] - saldo)
-                registro = {"trilha": tid, "estrategia": e["nome"], "ativo": ativo, "periodo": tf,
-                            "lado": "compra" if pos.direcao > 0 else "venda", "entrada": pos.entrada,
-                            "saida_t": c["t"][i], "desfecho": desfecho, "pnl": round(pnl, 6),
-                            "candles": pos.barras, "recuperado": recuperado}
-                anexar_json(os.path.join(pasta, "diario.jsonl"), registro)
-                if avisar and not recuperado:
-                    avisar(texto_saida(registro, tr))
-            if abriu and avisar and not recuperado:
-                avisar(texto_entrada(e["nome"], ativo, tf, tr["posicao"], p))
-            for k, m in enumerate(tr["moedas"]):
-                lado = lado_da_moeda(k, c["t"][i]) if sinais[i] != 0 else 0
-                m["posicao"], fm, _ = passo(m["posicao"], lado, i, c, p)
-                if fm is not None:
-                    m["n"] += 1
-                    m["soma"] += fm[0]
-            tr["ultimo_t"] = c["t"][i]
+            processar_barra(tr, tid, e["nome"], ativo, tf, sinais[i], i, c, p, recuperado, pasta, avisar)
         processados = max(processados, len(pendentes))
+
+    if ias:
+        processados = max(processados, ciclo_arena(estado, juiz, dict(ias), ativo, tf, c, serie, p,
+                                                   agora_ms, pasta, avisar))
     return processados
+
+
+def ciclo_arena(estado: dict, juiz, tids: dict, ativo: str, tf: str, c: dict, serie: bt.Serie,
+                p: bt.Params, agora_ms: int, pasta: str, avisar) -> int:
+    """
+    As IAs como trilhas. A IA so e consultada num candle que:
+      - acabou de fechar (candle recuperado depois de uma pausa nao e consultado:
+        a decisao tem que ser tomada no momento, sem saber o que veio depois);
+      - e de interesse (rompimento do canal de 20 ou divergencia de RSI);
+      - encontra pelo menos uma IA sem posicao (com posicao aberta, o sinal nao abriria nada).
+    Nos outros candles o sinal da IA e NADA. As moedas pareadas entram nos candles em
+    que a IA entrou, como nas estrategias.
+    """
+    ms = MS[tf]
+
+    def pendente(nome: str, t: int) -> bool:
+        ultimo = estado["trilhas"][tids[nome]]["ultimo_t"]
+        return ultimo is None or t > ultimo
+
+    pend = [i for i, t in enumerate(c["t"]) if any(pendente(n, t) for n in tids)]
+    if not pend:
+        return 0
+    marca = arena.candles_de_interesse(serie)
+    memoria = estado.setdefault("arena", {})
+    for i in pend:
+        t = c["t"][i]
+        recuperado = agora_ms - (t + ms) > 2 * ms
+        aqui = [n for n in tids if pendente(n, t)]
+        decisoes: dict = {}
+        if (marca[i] and not recuperado
+                and any(estado["trilhas"][tids[n]]["posicao"] is None for n in aqui)):
+            chave = f"{ativo}|{tf}|{t}"
+            nova = chave not in memoria.get("decisoes", {})
+            try:
+                decisoes = juiz.decidir(memoria, chave, serie, i, p)
+            except Exception as e:  # a arena nunca derruba o vigia: falhou, e NADA
+                juiz.log(f"arena: falha ao decidir o candle {chave} ({type(e).__name__}): nada")
+                decisoes = {}
+            if nova and decisoes:
+                anexar_json(os.path.join(pasta, "arena.jsonl"), {
+                    "t": t, "ativo": ativo, "periodo": tf, "fechamento": c["fechamento"][i],
+                    "decisoes": {k: {"lado": v[0], "motivo": v[1]} for k, v in decisoes.items()}})
+        for n in aqui:
+            lado, motivo = decisoes.get(n, (0, ""))
+            processar_barra(estado["trilhas"][tids[n]], tids[n], n, ativo, tf, lado, i, c, p,
+                            recuperado, pasta, avisar, motivo)
+    return len(pend)
 
 
 # --------------------------------------------------------------------------- #
@@ -323,6 +434,28 @@ def imprimir_placar(estado: dict) -> None:
     print()
     print("  Valores em USDT de papel, ja com a taxa. 'por op' e o que decide se ha lucro;")
     print("  'bate moedas' e de quantas moedas pareadas a estrategia ganhou nos mesmos candles.")
+    custo = texto_custo_arena(estado)
+    if custo:
+        print()
+        print("  " + custo.replace("\n", "\n  "))
+
+
+def texto_custo_arena(estado: dict) -> str:
+    """Chamadas e custo das IAs, medidos pelos tokens de cada resposta (nao estimados de antemao)."""
+    a = estado.get("arena") or {}
+    if not a.get("custo"):
+        return ""
+    linhas = ["ARENA: chamadas e custo desde o inicio (tokens medidos x preco de tabela)"]
+    total = 0.0
+    for prov, c in sorted(a["custo"].items()):
+        total += c["usd"]
+        sem = f" (+{c['sem_preco']} chamada(s) sem preco conhecido)" if c["sem_preco"] else ""
+        linhas.append(f"  {prov}: {c['chamadas']} chamadas, {c['entrada']} tokens de entrada, "
+                      f"{c['saida']} de saida, US$ {c['usd']:.2f}{sem}")
+    hoje = (a.get("chamadas") or {}).get(time.strftime("%Y-%m-%d"), {})
+    linhas.append(f"  total US$ {total:.2f}" + (f"; hoje: {', '.join(f'{k} {v}' for k, v in sorted(hoje.items()))}"
+                                                 if hoje else ""))
+    return "\n".join(linhas)
 
 
 # --------------------------------------------------------------------------- #
@@ -334,12 +467,13 @@ def fmt(v: float) -> str:
     return f"{v:,.{casas}f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
-def texto_entrada(nome: str, ativo: str, tf: str, pos: dict, p: bt.Params) -> str:
+def texto_entrada(nome: str, ativo: str, tf: str, pos: dict, p: bt.Params, motivo: str = "") -> str:
     lado = "COMPRA" if pos["direcao"] > 0 else "VENDA"
     return (f"{lado} · {nome} · {ativo} {tf} (papel)\n"
             f"entrada {fmt(pos['entrada'])}\nstop {fmt(pos['px_stop'])}\nalvo {fmt(pos['px_alvo'])}\n"
             f"liquidacao a {p.alav:g}x: {fmt(pos['px_liq'])}\n"
-            f"Sinal e ponto de atencao, nao ordem. Confira as regras antes de operar.")
+            + (f"motivo da IA: {motivo}\n" if motivo else "")
+            + "Sinal e ponto de atencao, nao ordem. Confira as regras antes de operar.")
 
 
 def texto_saida(reg: dict, tr: dict) -> str:
@@ -354,6 +488,9 @@ def texto_resumo(estado: dict) -> str:
     for l in placar(estado):
         partes.append(f"{l['trilha'].replace('|', ' ')}: {l['operacoes']} ops, acerto {l['acerto']:.0f}%, "
                       f"por op {l['por_operacao']:+.2f}, lucro {l['lucro']:+.2f}, bate {l['bate']:.0f}% das moedas")
+    custo = texto_custo_arena(estado)
+    if custo:
+        partes.append(custo)
     partes.append("Se este resumo nao chegar amanha, o vigia parou.")
     return "\n".join(partes)
 
@@ -404,6 +541,42 @@ def log(msg: str) -> None:
         pass
 
 
+def montar_juiz(cfg: dict, segredos: dict, registrar=None, conferir=arena.conferir_qwen,
+                criar=arena.criar_claude):
+    """A arena, se ligada e com pelo menos uma IA disponivel; senao None (e diz por que)."""
+    registrar = registrar or log
+    a = cfg.get("arena") or {}
+    if not a.get("ligada"):
+        return None
+    qwen = claude = None
+    if segredos.get("openrouter_key"):
+        situacao, preco, qwens = conferir(a["qwen_modelo"])
+        if situacao == "nao_existe":
+            registrar(f"arena: o modelo '{a['qwen_modelo']}' nao existe na OpenRouter; a Qwen fica de fora. "
+                      f"Modelos Qwen que existem hoje: {', '.join(qwens) or 'nenhum'}. "
+                      f"Troque qwen_modelo no vigia.json.")
+        else:
+            qwen = arena.Qwen(segredos["openrouter_key"], a["qwen_modelo"], preco)
+            if situacao == "sem_lista":
+                registrar("arena: nao consegui ler a lista de modelos da OpenRouter agora; sigo com "
+                          f"'{a['qwen_modelo']}' (se o nome estiver errado, cada resposta vira NADA e aparece no log)")
+    else:
+        registrar("arena: openrouter_key vazia no segredos.json; a Qwen fica de fora")
+    if segredos.get("anthropic_api_key") or os.environ.get("ANTHROPIC_API_KEY"):
+        claude, motivo = criar(segredos, a["claude_modelo"], a["claude_esforco"])
+        if claude is None:
+            registrar("arena: o Claude fica de fora: " + motivo)
+    else:
+        registrar("arena: anthropic_api_key vazia no segredos.json; o Claude fica de fora")
+    if not qwen and not claude:
+        registrar("arena ligada no vigia.json, mas sem nenhuma IA disponivel: o vigia segue sem arena")
+        return None
+    juiz = arena.Juiz(qwen, claude, int(a["max_chamadas_dia"]), registrar)
+    registrar(f"arena ligada em {a['ativo']} {a['periodo']}: {', '.join(juiz.competidores())}; "
+              f"teto de {a['max_chamadas_dia']} chamadas por IA por dia")
+    return juiz
+
+
 def rodar(cfg: dict, segredos: dict, uma_vez: bool) -> None:
     arq_estado = os.path.join(PASTA, "estado.json")
     estado = ler_json(arq_estado, {"versao": 1, "trilhas": {}, "ultimo_resumo": None})
@@ -411,8 +584,10 @@ def rodar(cfg: dict, segredos: dict, uma_vez: bool) -> None:
     log(f"vigia ligado: {', '.join(cfg['ativos'])} em {', '.join(cfg['periodos'])}; "
         f"estrategias {', '.join(e['nome'] for e in cfg['estrategias'])}; "
         f"telegram {'ligado' if avisar else 'desligado'}")
+    juiz = montar_juiz(cfg, segredos)
     if avisar and not uma_vez:
-        avisar("Vigia ligado (papel). Estrategias: " + ", ".join(e["nome"] for e in cfg["estrategias"]))
+        avisar("Vigia ligado (papel). Estrategias: " + ", ".join(e["nome"] for e in cfg["estrategias"])
+               + (f". Arena: {', '.join(juiz.competidores())}" if juiz else ""))
     falhas = 0
     while True:
         agora = int(time.time() * 1000)
@@ -420,7 +595,7 @@ def rodar(cfg: dict, segredos: dict, uma_vez: bool) -> None:
             for tf in cfg["periodos"]:
                 try:
                     aquecer = not os.path.exists(os.path.join(PASTA, f"candles_{ativo}_{tf}.json"))
-                    n = ciclo(estado, cfg, ativo, tf, bt.buscar_ou_erro, agora, PASTA, avisar)
+                    n = ciclo(estado, cfg, ativo, tf, bt.buscar_ou_erro, agora, PASTA, avisar, juiz)
                     if aquecer:
                         log(f"{ativo} {tf}: historico carregado para aquecer os indicadores (sem operar nele). "
                             f"A partir do proximo candle fechado, o vigia opera no papel.")
@@ -457,9 +632,6 @@ def main() -> None:
     ap.add_argument("--telegram-teste", action="store_true")
     args = ap.parse_args()
 
-    if not os.path.exists(SEGREDOS):
-        gravar_json(SEGREDOS, SEGREDOS_MODELO)
-        os.chmod(SEGREDOS, 0o600)
     segredos = carregar_segredos()
 
     if args.telegram_descobrir:

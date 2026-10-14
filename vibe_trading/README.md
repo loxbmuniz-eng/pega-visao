@@ -13,11 +13,12 @@ Não toca no painel de logística Suinco. É projeto separado, na mesma árvore.
 |---|---|
 | `backtest.py` | Puxa candles públicos e simula com taxa, stop, margem de manutenção e liquidação |
 | `vigia.py` | Fase 2: opera no papel, ao vivo, 24 horas, com a mesma regra do backtest; placar contra 20 moedas; diário; alerta no Telegram |
+| `arena.py` | A Qwen e o Claude como competidores dentro do vigia, no papel, com as mesmas regras de saída e as mesmas moedas (desligada até você ligar) |
 | `bateria.py` | Fase 1: todas as estratégias em vários ativos e períodos contra a moeda; `--historico` faz o histórico inteiro ano a ano; registra tudo no caderno de experimentos (`caderno.jsonl`) |
 | `estrategias.py` | Os sinais de entrada: 7 estratégias, a confluência e 2 controles cegos |
 | `indicadores.py` | EMA, SMA, RSI, ATR, VWAP, desvio, ruído mediano |
 | `monitor.html` | **Monitor em tempo real.** Abre no navegador, lê a Binance pública, mostra as 5 confirmações nos 5 períodos e alerta no fechamento do candle |
-| `testes/test_motor.py` | Guardas: vazamento de futuro, posição sobreposta, paridade Python × monitor, gatilho obrigatório, busca de candles, padrões e alinhamento, placar, bateria, replay do vigia |
+| `testes/test_motor.py` | Guardas: vazamento de futuro, posição sobreposta, paridade Python × monitor, gatilho obrigatório, busca de candles, padrões e alinhamento, placar, bateria, replay do vigia, arena com IAs simuladas |
 | `testes/test_monitor_navegador.js` | Abre o monitor num Chromium com a Binance simulada e prova que carrega, calcula e alerta |
 
 Mais a calculadora de risco interativa (página separada): **Banda de Liquidação**.
@@ -27,6 +28,8 @@ Mais a calculadora de risco interativa (página separada): **Banda de Liquidaç�
 ## Rodando
 
 Só biblioteca padrão do Python 3. Nenhuma dependência para instalar.
+(A única exceção é opcional: o Claude na arena usa o pacote oficial da
+Anthropic, instalado numa pasta separada; veja "Arena".)
 Precisa de internet aberta (endpoint público de candles): rode na sua máquina.
 
 **Primeira vez** (baixa o projeto para a pasta pessoal):
@@ -336,6 +339,93 @@ O vigia avisa cada entrada (com stop, alvo e liquidação), cada saída e manda 
 resumo por dia às 21 h. **Se o resumo não chegar, o vigia parou.** O
 `segredos.json` fica só para o dono ler e nunca vai para o GitHub (está no
 `.gitignore`).
+
+### Arena: Qwen × Claude (opcional, no papel)
+
+A arena põe IAs de linguagem para competir **dentro do vigia**, como mais
+três trilhas no placar:
+
+| Trilha | Quem decide |
+|---|---|
+| `ia:qwen` | a Qwen sozinha (pela OpenRouter) |
+| `ia:claude` | o Claude sozinho (pela API oficial da Anthropic) |
+| `ia:qwen+claude` | a Qwen propõe e o Claude aprova ou veta |
+
+**O que a IA pode fazer:** dizer COMPRA, VENDA ou NADA num candle que acabou de
+fechar. **O que ela não pode:** escolher tamanho, alavancagem, stop ou alvo (vêm
+do `vigia.json`, iguais aos das estratégias), ler notícia ou texto de fora
+(recebe só números gerados aqui, relativos ao preço atual), nem mexer em
+dinheiro (não existe ferramenta nem chave de corretora). Resposta fora do
+formato, recusa, erro de rede ou teto diário atingido viram **NADA**. O erro
+sempre cai para o lado de não operar.
+
+**Quando a IA é consultada:** só num candle de interesse (rompimento do canal
+de 20 candles ou divergência de RSI), só ao vivo, e só se alguma IA estiver sem
+posição. Um candle que fechou com o vigia desligado não é consultado: a IA não
+decide o passado. A decisão de cada candle fica gravada e nunca é pedida de
+novo, nem depois de religar. Cada decisão, com o motivo, vai para
+`dados_vigia/arena.jsonl`.
+
+**Por que só ao vivo, e não no backtest:** a IA foi treinada com textos que
+incluem o histórico de preços, e pode "lembrar" o que aconteceu. Candles de
+agora em diante não têm esse problema.
+
+**O critério é o mesmo de tudo:** 30 operações, resultado positivo depois da
+taxa e vitória sobre 75% das moedas pareadas. Não há prova de que IA de
+linguagem tenha vantagem aqui; a arena existe para medir, não para supor.
+
+#### Ligando
+
+São **duas chaves de IA**, nenhuma de corretora:
+
+1. **Anthropic** (para o Claude): no console de desenvolvedor da Anthropic
+   (platform.claude.com), crie uma chave de API e **defina um limite de gasto
+   mensal**. Cole a chave em `"anthropic_api_key"` no `segredos.json`.
+2. **OpenRouter** (para a Qwen): em openrouter.ai, crie uma chave, ponha
+   crédito e, se quiser, um limite na própria chave. Cole em `"openrouter_key"`.
+3. O Claude precisa do pacote oficial da Anthropic. Instale numa pasta
+   separada, sem mexer no Python do Mac:
+
+   ```bash
+   cd ~/pega-visao/vibe_trading
+   python3 -m venv .venv
+   .venv/bin/pip install anthropic
+   ```
+
+4. No `vigia.json`, na seção `"arena"`, troque `"ligada": false` por
+   `"ligada": true`.
+5. Rode o vigia com o Python dessa pasta:
+
+   ```bash
+   caffeinate -i .venv/bin/python vigia.py
+   ```
+
+Pode ligar só uma das duas: sem a chave da OpenRouter, roda só o Claude; sem a
+da Anthropic, só a Qwen. A trilha combinada precisa das duas. Na partida, o
+vigia confere na lista pública da OpenRouter se o nome do modelo Qwen
+(`"qwen_modelo"`) existe; se não existir, ele não gasta chamada e mostra os
+nomes Qwen que existem.
+
+#### Custo
+
+O vigia **mede** o custo: guarda os tokens de cada resposta e multiplica pelo
+preço de tabela. O `--placar` e o resumo diário mostram chamadas e dólares por IA.
+
+- Teto padrão: **30 chamadas por IA por dia** (`"max_chamadas_dia"`). Atingiu,
+  a IA fica de fora até o dia seguinte.
+- Claude Opus 5.5: US$ 4 por milhão de tokens de entrada e US$ 20 por milhão de
+  saída (o raciocínio interno conta como saída). Cada consulta manda cerca de
+  1.000 a 1.500 tokens; com esforço `"low"` (o padrão aqui), a estimativa é de alguns
+  centavos de dólar por chamada. O número real aparece no placar.
+- A Qwen tem o preço que a OpenRouter publica para o modelo escolhido; o vigia
+  lê esse preço na partida.
+- `"claude_esforco"` aceita `low`, `medium`, `high`, `xhigh` e `max`. Mais
+  esforço é mais raciocínio por consulta, e mais custo. Só vale subir se o
+  placar mostrar ganho.
+
+A chamada ao Claude usa o **fallback do servidor** da Anthropic: se o modelo
+recusar uma consulta por política, a própria API refaz com o modelo indicado
+para aquele caso, na mesma chamada. Se mesmo assim recusar, vira NADA.
 
 ---
 

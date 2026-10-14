@@ -22,6 +22,10 @@ afirma. Correcao sem guarda e correcao que volta.
 10. vigia               — ao vivo, candle a candle, fecha EXATAMENTE as mesmas
                           operacoes que o backtest; desligar e religar nao
                           muda o placar
+11. arena               — IA consultada so em candle de interesse, ao vivo e
+                          sem ver o futuro; resposta ruim, recusa, erro ou teto
+                          viram NADA; decisao guardada nunca e repetida; a IA
+                          opera pela mesma regra do backtest; o custo e medido
 """
 
 from __future__ import annotations
@@ -347,7 +351,7 @@ def teste_bateria() -> None:
             bt._pedir, sys.argv = original, argv
 
 
-def _replay(s, cfg, pasta, inicio, pausa=None):
+def _replay(s, cfg, pasta, inicio, pausa=None, juiz=None):
     """Passa a serie pelo vigia candle a candle. `pausa=(de, ate)` simula o vigia
     desligado: os candles de `de` a `ate` chegam todos de uma vez, ao religar."""
     import vigia
@@ -359,17 +363,32 @@ def _replay(s, cfg, pasta, inicio, pausa=None):
         return bt.fatiar(s, max(0, f - n), f)
 
     estado = {"versao": 1, "trilhas": {}, "ultimo_resumo": None}
-    vigia.ciclo(estado, cfg, "BTCUSDT", "15m", buscador, s.t[inicio - 1] + ms + 1000, pasta)
+    vigia.ciclo(estado, cfg, "BTCUSDT", "15m", buscador, s.t[inicio - 1] + ms + 1000, pasta, None, juiz)
     k = inicio
     while k < len(s):
         if pausa and k == pausa[0]:
             estado = json.loads(json.dumps(estado))  # religar: o estado volta do disco
             k = pausa[1]
         ponteiro["fim"] = k + 1
-        vigia.ciclo(estado, cfg, "BTCUSDT", "15m", buscador, s.t[k] + ms + 1000, pasta)
+        vigia.ciclo(estado, cfg, "BTCUSDT", "15m", buscador, s.t[k] + ms + 1000, pasta, None, juiz)
         k += 1
     diario = [json.loads(l) for l in open(os.path.join(pasta, "diario.jsonl"), encoding="utf-8")]
     return estado, diario
+
+
+def _esperado_backtest(s, sinais, p):
+    """As operacoes que o backtest fecha com estes sinais, no formato do diario do vigia."""
+    esperado, i = [], 0
+    while i < len(s) - 1:
+        if sinais[i] == 0:
+            i += 1
+            continue
+        pnl, desfecho, j = bt._perna(s, i, 1 if sinais[i] > 0 else -1, p)
+        cortado = desfecho == "expirou" and i + p.max_barras > len(s) - 1  # o fim da serie fechou, nao a regra
+        if not cortado:
+            esperado.append((round(s.fechamento[i], 6), s.t[j], desfecho, round(pnl, 6)))
+        i = max(j, i) + 1
+    return esperado
 
 
 def teste_vigia() -> None:
@@ -386,16 +405,7 @@ def teste_vigia() -> None:
 
     for nome in ("confl3", "engolfo"):
         sinais = [x if i >= inicio else 0 for i, x in enumerate(est.sinais(nome, s))]
-        esperado, i = [], 0
-        while i < len(s) - 1:
-            if sinais[i] == 0:
-                i += 1
-                continue
-            pnl, desfecho, j = bt._perna(s, i, 1 if sinais[i] > 0 else -1, p)
-            cortado = desfecho == "expirou" and i + p.max_barras > len(s) - 1  # o fim da serie fechou, nao a regra
-            if not cortado:
-                esperado.append((round(s.fechamento[i], 6), s.t[j], desfecho, round(pnl, 6)))
-            i = max(j, i) + 1
+        esperado = _esperado_backtest(s, sinais, p)
         obtido = [(round(r["entrada"], 6), r["saida_t"], r["desfecho"], r["pnl"]) for r in diario if r["estrategia"] == nome]
         checar(len(esperado) > 5 and obtido == esperado,
                f"{nome}: vigia ao vivo fechou {len(obtido)} operacoes, backtest {len(esperado)}; identicas: {obtido == esperado}")
@@ -487,6 +497,342 @@ def teste_paridade() -> None:
         checar(difs == 0 and any(tend_py), f"{nome} tendencia do 4 h candle a candle: {difs} divergencias")
 
 
+# --------------------------------------------------------------------------- #
+# [11] arena: IAs falsas, deterministicas, sem rede e sem gastar chamada
+# --------------------------------------------------------------------------- #
+
+def _dados_da_pergunta(usuario: str) -> dict:
+    corpo = usuario.split("\n", 1)[1]
+    for corte in ("\nResponda", "\nProposta"):
+        corpo = corpo.split(corte)[0]
+    return json.loads(corpo)
+
+
+class QwenFalsa:
+    """Segue o rompimento do canal. Responde com cerca de codigo, como modelos costumam fazer."""
+
+    def __init__(self, sempre=None, erro=False):
+        self.chamadas, self.uso, self.preco, self.sempre, self.erro = 0, None, (1.0, 4.0), sempre, erro
+
+    def perguntar(self, sistema, usuario):
+        self.chamadas += 1
+        self.uso = (1000, 50)
+        if self.erro:
+            raise TimeoutError("rede caiu")
+        ev = _dados_da_pergunta(usuario)["eventos_no_ultimo_candle"]
+        lado = self.sempre or ("compra" if ev["rompeu_maxima_20"] else "venda" if ev["rompeu_minima_20"] else "nada")
+        return '```json\n{"lado": "%s", "motivo": "canal"}\n```' % lado
+
+
+class ClaudeFalso:
+    """So entra a favor da EMA 50; no veto, aprova so a proposta a favor da EMA 50."""
+
+    def __init__(self, recusar=False):
+        self.chamadas, self.vetos, self.uso, self.preco, self.recusar = 0, 0, None, (4.0, 20.0), recusar
+
+    def perguntar_formatado(self, sistema, usuario, esquema):
+        import arena
+        self.chamadas += 1
+        self.uso = (1200, 300)
+        if self.recusar:
+            raise arena.Recusou("recusou")
+        d = _dados_da_pergunta(usuario)
+        acima = (d["indicadores_no_ultimo_candle"]["ema50_vs_preco_%"] or 0) < 0
+        ev = d["eventos_no_ultimo_candle"]
+        if esquema is arena.ESQUEMA_VETO:
+            self.vetos += 1
+            compra = "Proposta da outra IA: compra" in usuario
+            return json.dumps({"veredito": "aprova" if compra == acima else "veta", "motivo": "ema50"})
+        lado = ("compra" if ev["rompeu_maxima_20"] and acima else
+                "venda" if ev["rompeu_minima_20"] and not acima else "nada")
+        return json.dumps({"lado": lado, "motivo": "ema50 e canal"})
+
+
+class _ClienteSDKFalso:
+    """Imita client.beta.messages.create do SDK da Anthropic e guarda o que foi pedido."""
+
+    def __init__(self, texto, stop_reason="end_turn"):
+        import types
+        self.pedidos = []
+        bloco = types.SimpleNamespace(type="text", text=texto)
+        self.resp = types.SimpleNamespace(stop_reason=stop_reason, content=[bloco] if texto else [],
+                                          usage=types.SimpleNamespace(input_tokens=900, output_tokens=120))
+        self.beta = types.SimpleNamespace(messages=types.SimpleNamespace(create=self._create))
+
+    def _create(self, **kw):
+        self.pedidos.append(kw)
+        return self.resp
+
+
+def teste_arena() -> None:
+    print("\n[11] arena: Qwen e Claude como competidores, com IAs simuladas")
+    import arena
+    import vigia
+
+    # leitura das respostas: so o formato exato vale; o resto vira NADA / VETO
+    casos = [('{"lado": "compra", "motivo": "x"}', 1), ('texto antes {"lado": "venda", "motivo": "y"} depois', -1),
+             ('{"lado": "nada", "motivo": "z"}', 0), ('{"lado": "COMPRA"}', 0), ("compra!", 0), ("", 0),
+             ('{"motivo": "sem lado"}', 0)]
+    checar(all(arena.ler_decisao(t)[0] == v for t, v in casos),
+           "resposta fora do formato (texto solto, caixa alta, sem lado, vazia) vira NADA")
+    checar(arena.ler_veto('{"veredito": "aprova", "motivo": "ok"}')[0] is True
+           and arena.ler_veto('{"veredito": "talvez"}')[0] is False and arena.ler_veto("")[0] is False,
+           "no veto, so 'aprova' exato aprova; o resto veta")
+
+    # a chamada ao Claude: formato fixo, fallback do servidor, sem parametro proibido no Opus 5.5
+    cli = _ClienteSDKFalso('{"lado": "venda", "motivo": "teste"}')
+    cl = arena.Claude(cli, "claude-opus-5-5", "low")
+    texto = cl.perguntar_formatado("sis", "usr", arena.ESQUEMA_DECISAO)
+    kw = cli.pedidos[0]
+    checar(kw["model"] == "claude-opus-5-5" and kw["fallbacks"] == "default"
+           and kw["betas"] == ["server-side-fallback-2026-07-01"]
+           and kw["output_config"] == {"effort": "low", "format": {"type": "json_schema", "schema": arena.ESQUEMA_DECISAO}}
+           and not {"thinking", "temperature", "top_p", "tool_choice"} & set(kw),
+           "Claude: SDK oficial, resposta em formato fixo, fallback do servidor, sem thinking/temperature")
+    checar(arena.ler_decisao(texto)[0] == -1 and cl.uso == (900, 120) and cl.preco == (4.0, 20.0),
+           "Claude: le a resposta e guarda os tokens gastos")
+    recusa = arena.Claude(_ClienteSDKFalso("", "refusal"), "claude-opus-5-5", "low")
+    try:
+        recusa.perguntar_formatado("sis", "usr", arena.ESQUEMA_DECISAO)
+        checar(False, "recusa do Claude deveria virar erro tratado")
+    except arena.Recusou:
+        checar(True, "recusa do Claude (stop_reason refusal) nao passa como resposta")
+
+    # sem ver o futuro: os dados do candle i sao os mesmos com ou sem os candles depois dele
+    s = serie_sintetica(1800, 5, True)
+    p = bt.Params(alav=24)
+    marca = arena.candles_de_interesse(s)
+    pontos = [i for i in range(300, 1790, 61)]
+    iguais = all(arena.montar_dados(s, i, p) == arena.montar_dados(bt.fatiar(s, 0, i + 1), i, p) for i in pontos)
+    marca_iguais = all(arena.candles_de_interesse(bt.fatiar(s, 0, i + 1))[i] == marca[i] for i in pontos)
+    checar(iguais and marca_iguais, f"dados e candles de interesse nao veem o futuro ({len(pontos)} cortes)")
+    dados = json.loads(arena.montar_dados(s, 1000, p))
+    linhas = dados["candles_ate_agora_mais_antigo_primeiro"]["linhas"]
+    precos = [v for l in linhas for v in l[:4]] + [v for k, v in dados["indicadores_no_ultimo_candle"].items()
+                                                   if k.endswith("_%") and v is not None]
+    checar(len(linhas) == 48 and max(abs(v) for v in precos) < 50 and linhas[-1][3] == 0.0,
+           f"a IA recebe so numeros relativos ao preco atual ({len(linhas)} candles), nao o nivel do preco")
+
+    # o juiz: erro, recusa e teto viram NADA; a decisao guardada nao e repetida
+    i0 = next(i for i in range(300, len(s)) if marca[i])
+    logs = []
+    j = arena.Juiz(QwenFalsa(erro=True), ClaudeFalso(recusar=True), 5, logs.append)
+    mem = {}
+    d = j.decidir(mem, "k1", s, i0, p)
+    checar(d == {"ia:qwen": (0, d["ia:qwen"][1]), "ia:claude": (0, d["ia:claude"][1]),
+                 "ia:qwen+claude": (0, "a Qwen ficou de fora")} and len(logs) == 2,
+           f"erro de rede na Qwen e recusa do Claude: as tres viram NADA e ficam no log ({len(logs)} linhas)")
+    q, c = QwenFalsa(sempre="compra"), ClaudeFalso()
+    j = arena.Juiz(q, c, 3, logs.append)
+    mem = {}
+    for k in range(5):
+        j.decidir(mem, f"c{k}", s, i0 + k, p)
+    hoje = list(mem["chamadas"].values())[0]
+    checar(q.chamadas == 3 and c.chamadas == 3 and hoje == {"qwen": 3, "claude": 3},
+           f"teto de 3 por dia: a Qwen foi chamada {q.chamadas} vezes e o Claude {c.chamadas} em 5 candles")
+    checar(mem["decisoes"]["c4"]["ia:qwen"][0] == 0 and "teto" in mem["decisoes"]["c4"]["ia:qwen"][1],
+           "depois do teto, NADA sem chamar ninguem")
+    antes = (q.chamadas, c.chamadas)
+    de_novo = j.decidir(json.loads(json.dumps(mem)), "c0", s, i0, p)
+    checar((q.chamadas, c.chamadas) == antes and de_novo == {k: tuple(v) for k, v in mem["decisoes"]["c0"].items()},
+           "candle ja decidido (mesmo depois de gravar e ler do disco): devolve a mesma decisao, sem chamar")
+    custo = mem["custo"]
+    checar(custo["qwen"]["chamadas"] == 3 and abs(custo["qwen"]["usd"] - 3 * (1000 * 1.0 + 50 * 4.0) / 1e6) < 1e-12
+           and custo["claude"]["entrada"] == 1200 * c.chamadas,
+           f"custo medido pelos tokens de cada resposta (Qwen US$ {custo['qwen']['usd']:.4f})")
+
+    # no vigia, candle a candle
+    cfg = json.loads(json.dumps(vigia.CONFIG_PADRAO))
+    cfg["historico_inicial_dias"] = 7
+    cfg["arena"]["ligada"] = True
+    inicio = 600
+    pv = bt.Params(**cfg["params"])
+    with tempfile.TemporaryDirectory() as tmp:
+        _, diario_sem = _replay(s, cfg, tmp, inicio)
+    q, c = QwenFalsa(), ClaudeFalso()
+    with tempfile.TemporaryDirectory() as tmp:
+        juiz = arena.Juiz(q, c, 10_000, logs.append)
+        estado, diario = _replay(s, cfg, tmp, inicio, juiz=juiz)
+        registros = [json.loads(l) for l in open(os.path.join(tmp, "arena.jsonl"), encoding="utf-8")]
+    estrategias_sem = [r for r in diario_sem]
+    estrategias_com = [r for r in diario if not r["estrategia"].startswith("ia:")]
+    checar(estrategias_sem == estrategias_com, "ligar a arena nao muda nenhuma operacao das estrategias")
+    ids = sorted(t for t in estado["trilhas"] if t.startswith("ia:"))
+    checar(ids == ["ia:claude|ambos|livre|BTCUSDT|15m", "ia:qwen+claude|ambos|livre|BTCUSDT|15m",
+                   "ia:qwen|ambos|livre|BTCUSDT|15m"], "tres trilhas de IA, com o mesmo formato das estrategias")
+    decisoes = estado["arena"]["decisoes"]
+    pos_t = {t: i for i, t in enumerate(s.t)}
+    idx = sorted(pos_t[int(k.split("|")[2])] for k in decisoes)
+    checar(idx and all(marca[i] for i in idx) and min(idx) >= inicio,
+           f"a IA so foi consultada em candle de interesse ({len(idx)} de {sum(marca[inicio:])} candles de interesse)")
+    checar(q.chamadas == len(decisoes) == len(registros),
+           f"uma chamada por candle consultado, nunca repetida ({q.chamadas} chamadas), e cada uma gravada no arena.jsonl")
+    for nome in ("ia:qwen", "ia:claude", "ia:qwen+claude"):
+        sinais = [0] * len(s)
+        for k, v in decisoes.items():
+            sinais[pos_t[int(k.split("|")[2])]] = v[nome][0]
+        esperado = _esperado_backtest(s, sinais, pv)
+        obtido = [(round(r["entrada"], 6), r["saida_t"], r["desfecho"], r["pnl"]) for r in diario if r["estrategia"] == nome]
+        checar(len(esperado) > 5 and obtido == esperado,
+               f"{nome}: {len(obtido)} operacoes, identicas ao backtest com as decisoes dela: {obtido == esperado}")
+    vetadas = sum(1 for v in decisoes.values() if v["ia:qwen"][0] != 0 and v["ia:qwen+claude"][0] == 0)
+    checar(c.vetos > 0 and vetadas > 0 and all(v["ia:qwen+claude"][0] in (0, v["ia:qwen"][0]) for v in decisoes.values()),
+           f"Qwen + veto do Claude: so entra no lado da Qwen, e o Claude vetou {vetadas} de {c.vetos} propostas")
+    checar(all("motivo_entrada" in r for r in diario if r["estrategia"].startswith("ia:")),
+           "cada operacao de IA guarda no diario o motivo que a IA deu na entrada")
+    tr = estado["trilhas"]["ia:qwen|ambos|livre|BTCUSDT|15m"]
+    checar(sum(m["n"] for m in tr["moedas"]) > 0, "as moedas pareadas da IA entram nos candles em que a IA entrou")
+
+    # desligado e religado: candle que fechou com o vigia fora nao e consultado
+    q2, c2 = QwenFalsa(), ClaudeFalso()
+    with tempfile.TemporaryDirectory() as tmp:
+        estado2, diario2 = _replay(s, cfg, tmp, inicio, pausa=(1200, 1230), juiz=arena.Juiz(q2, c2, 10_000, logs.append))
+        n_antes = q2.chamadas
+        buscar_igual = lambda par, tf, n: bt.fatiar(s, max(0, len(s) - n), len(s))  # noqa: E731
+        vigia.ciclo(json.loads(json.dumps(estado2)), cfg, "BTCUSDT", "15m", buscar_igual,
+                    s.t[-1] + est.MIN15 + 1000, tmp, None, arena.Juiz(q2, c2, 10_000, logs.append))
+    t_dec = {int(k.split("|")[2]) for k in estado2["arena"]["decisoes"]}
+    na_pausa = [t for t in t_dec if s.t[1200] <= t <= s.t[1228]]
+    pausa_tinha = sum(1 for i in range(1200, 1229) if marca[i])
+    checar(not na_pausa and pausa_tinha > 0 and any(t > s.t[1228] for t in t_dec),
+           f"{pausa_tinha} candles de interesse fecharam com o vigia desligado: nenhum consultado "
+           "(a IA nao decide o passado); depois de religar, volta a consultar")
+    checar(q2.chamadas == n_antes, "religar sem candle novo: nenhuma chamada a mais")
+
+    # IA que sempre fica de fora: nenhuma operacao, nenhuma moeda
+    cfg_q = json.loads(json.dumps(cfg))
+    with tempfile.TemporaryDirectory() as tmp:
+        e3, _ = _replay(serie_sintetica(900, 9, True), cfg_q, tmp, 700,
+                        juiz=arena.Juiz(QwenFalsa(sempre="nada"), None, 10_000, logs.append))
+    tq = e3["trilhas"]["ia:qwen|ambos|livre|BTCUSDT|15m"]
+    checar(not tq["resultados"] and all(m["n"] == 0 for m in tq["moedas"])
+           and "ia:claude|ambos|livre|BTCUSDT|15m" not in e3["trilhas"],
+           "IA que so diz NADA: zero operacoes e zero moedas; sem Claude, sem trilha do Claude")
+
+    # placar e resumo mostram o custo medido
+    import contextlib
+    import io
+    saida = io.StringIO()
+    with contextlib.redirect_stdout(saida):
+        vigia.imprimir_placar(estado)
+    checar("ARENA" in saida.getvalue() and "qwen:" in saida.getvalue() and "ARENA" in vigia.texto_resumo(estado),
+           "placar e resumo do Telegram mostram chamadas e custo da arena")
+
+    # montar o juiz a partir do vigia.json e do segredos.json
+    msgs = []
+    sem = vigia.montar_juiz(cfg, {}, msgs.append)
+    checar(sem is None and any("openrouter_key vazia" in m for m in msgs) and any("anthropic_api_key vazia" in m for m in msgs),
+           "arena ligada sem chave: segue sem arena e diz o que falta")
+    desligada = json.loads(json.dumps(cfg))
+    desligada["arena"]["ligada"] = False
+    checar(vigia.montar_juiz(desligada, {"openrouter_key": "x"}, msgs.append) is None, "arena desligada: nenhuma IA")
+    msgs = []
+    j = vigia.montar_juiz(cfg, {"openrouter_key": "x"}, msgs.append,
+                          conferir=lambda m: ("nao_existe", None, ["qwen/qwen-a", "qwen/qwen-b"]))
+    checar(j is None and any("qwen/qwen-a" in m and "nao existe" in m for m in msgs),
+           "nome de modelo Qwen errado: nao gasta chamada e lista os que existem")
+    j = vigia.montar_juiz(cfg, {"openrouter_key": "x"}, msgs.append,
+                          conferir=lambda m: ("ok", (0.5, 2.0), []))
+    checar(j is not None and j.competidores() == ["ia:qwen"] and j.qwen.preco == (0.5, 2.0),
+           "so com a chave da OpenRouter: so a Qwen, com o preco lido da lista")
+    msgs = []
+    j = vigia.montar_juiz(cfg, {"anthropic_api_key": "x"}, msgs.append,
+                          criar=lambda seg, mod, esf: (None, "pacote 'anthropic' nao instalado"))
+    checar(j is None and any("anthropic" in m for m in msgs), "sem o pacote anthropic: diz como instalar")
+
+    # vigia.json e segredos.json de versao anterior
+    with tempfile.TemporaryDirectory() as tmp:
+        arq = os.path.join(tmp, "vigia.json")
+        velho = json.loads(json.dumps(vigia.CONFIG_PADRAO))
+        del velho["arena"]
+        velho["moedas"] = 7
+        json.dump(velho, open(arq, "w"))
+        cfg2 = vigia.carregar_config(arq)
+        relido = json.load(open(arq))
+        checar(cfg2["arena"]["ligada"] is False and relido["moedas"] == 7 and "arena" in relido,
+               "vigia.json antigo: ganha a secao arena (desligada) sem perder o que ja estava")
+        relido["arena"]["ligada"], relido["arena"]["periodo"] = True, "4h"
+        json.dump(relido, open(arq, "w"))
+        try:
+            vigia.carregar_config(arq)
+            checar(False, "arena num periodo que o vigia nao acompanha deveria parar com explicacao")
+        except SystemExit as e:
+            checar("arena" in str(e.code), "arena num periodo que o vigia nao acompanha: para e explica")
+        seg = os.path.join(tmp, "segredos.json")
+        vigia.carregar_segredos(seg)
+        modo1 = os.stat(seg).st_mode & 0o777
+        json.dump({"telegram_token": "abc", "openrouter_key": "def"}, open(seg, "w"))
+        os.chmod(seg, 0o600)
+        s2 = vigia.carregar_segredos(seg)
+        modo2 = os.stat(seg).st_mode & 0o777
+        checar(modo1 == 0o600 and modo2 == 0o600 and s2["telegram_token"] == "abc" and s2["openrouter_key"] == "def"
+               and s2["anthropic_api_key"] == "",
+               "segredos.json nasce com chmod 600 e ganha o campo novo sem perder chave nem permissao")
+
+
+def teste_sdk_anthropic() -> None:
+    """O pedido que o SDK oficial monta de verdade, contra um servidor local (sem chave real)."""
+    print("\n[11b] arena: o SDK oficial da Anthropic, ponta a ponta contra um servidor local")
+    try:
+        import anthropic
+    except ImportError:
+        print("  aviso pacote 'anthropic' nao instalado neste python: verificacao do SDK NAO executada")
+        return
+    import http.server
+    import threading
+    import arena
+    recebidos = []
+    respostas = [
+        {"id": "msg_1", "type": "message", "role": "assistant", "model": "claude-opus-5-5",
+         "content": [{"type": "text", "text": '{"lado": "compra", "motivo": "teste"}'}],
+         "stop_reason": "end_turn", "stop_sequence": None, "usage": {"input_tokens": 1500, "output_tokens": 210}},
+        {"id": "msg_2", "type": "message", "role": "assistant", "model": "claude-opus-5-5", "content": [],
+         "stop_reason": "refusal", "stop_sequence": None, "usage": {"input_tokens": 1500, "output_tokens": 0}},
+    ]
+
+    class Servidor(http.server.BaseHTTPRequestHandler):
+        def do_POST(self):
+            corpo = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+            recebidos.append((self.path, dict(self.headers), corpo))
+            dado = json.dumps(respostas[min(len(recebidos), len(respostas)) - 1]).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(dado)))
+            self.end_headers()
+            self.wfile.write(dado)
+
+        def log_message(self, *a):
+            pass
+
+    srv = http.server.HTTPServer(("127.0.0.1", 0), Servidor)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    antigo = os.environ.get("NO_PROXY")
+    os.environ["NO_PROXY"] = "127.0.0.1,localhost"
+    try:
+        cliente = anthropic.Anthropic(api_key="chave-de-teste", base_url=f"http://127.0.0.1:{srv.server_port}",
+                                      max_retries=0)
+        cl = arena.Claude(cliente, "claude-opus-5-5", "low")
+        texto = cl.perguntar_formatado("sis", "usr", arena.ESQUEMA_DECISAO)
+        caminho, cab, corpo = recebidos[0]
+        cab = {k.lower(): v for k, v in cab.items()}
+        checar(caminho.startswith("/v1/messages") and "server-side-fallback-2026-07-01" in cab.get("anthropic-beta", "")
+               and corpo["fallbacks"] == "default" and corpo["model"] == "claude-opus-5-5"
+               and corpo["output_config"]["format"]["type"] == "json_schema" and "thinking" not in corpo,
+               f"SDK {anthropic.__version__}: pedido com fallback do servidor e formato fixo, sem thinking")
+        checar(arena.ler_decisao(texto)[0] == 1 and cl.uso == (1500, 210), "SDK: resposta lida e tokens guardados")
+        try:
+            cl.perguntar_formatado("sis", "usr", arena.ESQUEMA_DECISAO)
+            checar(False, "SDK: recusa deveria virar erro tratado")
+        except arena.Recusou:
+            checar(True, "SDK: recusa (stop_reason refusal) vira erro tratado, e o juiz poe NADA")
+    finally:
+        srv.shutdown()
+        if antigo is None:
+            os.environ.pop("NO_PROXY", None)
+        else:
+            os.environ["NO_PROXY"] = antigo
+
+
 if __name__ == "__main__":
     teste_vazamento()
     teste_sobreposicao()
@@ -498,6 +844,8 @@ if __name__ == "__main__":
     teste_placar()
     teste_bateria()
     teste_vigia()
+    teste_arena()
+    teste_sdk_anthropic()
     print()
     if FALHAS:
         print(f"REPROVADO: {len(FALHAS)} falha(s)")
