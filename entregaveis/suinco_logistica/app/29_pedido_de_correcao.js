@@ -105,19 +105,19 @@ function correcaoDaCargaHtml(c){
     </div>`;
   }
   if(p){
-    return `<div class="admin-carga no-print pedido-correcao-caixa">
-      <div class="admin-carga-tit">Pedido de correção enviado</div>
-      <div class="admin-carga-sub">${esc(p.deStatus)} → ${esc(p.paraStatus)} · ${esc(p.pedidoPor)}, ${esc(fmtDataHora(p.pedidoEm))}.
+    return `<div class="correcao-carga no-print pedido-correcao-caixa">
+      <div class="correcao-carga-tit">Pedido de correção enviado</div>
+      <div class="correcao-carga-sub">${esc(p.deStatus)} → ${esc(p.paraStatus)} · ${esc(p.pedidoPor)}, ${esc(fmtDataHora(p.pedidoEm))}.
         Esperando a Administração — a resposta chega aqui e no celular de quem pediu.</div>
     </div>`;
   }
   if(!podePedirCorrecao(c)) return '';
   const para = etapaParaOndeVolta(c);
-  return `<details class="admin-carga no-print pedir-correcao" id="pedir-correcao-${esc(c.id)}">
+  return `<details class="correcao-carga no-print pedir-correcao" id="pedir-correcao-${esc(c.id)}">
     <summary>Errou a etapa? Pedir correção à Administração</summary>
-    <div class="admin-carga-sub">Se a Administração aprovar, a carga volta de “${esc(c.status)}” para “${esc(para)}”.
+    <div class="correcao-carga-sub">Se a Administração aprovar, a carga volta de “${esc(c.status)}” para “${esc(para)}”.
       Ela recebe o pedido no celular; nada muda até ela decidir.</div>
-    <div class="admin-carga-linha">
+    <div class="correcao-carga-linha">
       <input type="text" id="corr-motivo-${esc(c.id)}" maxlength="500" placeholder="O que aconteceu? A Administração lê isto para decidir" aria-label="Motivo do pedido de correção">
       <button type="button" class="btn btn-sec btn-sm" onclick="pedirCorrecaoUI('${escJs(c.id)}')"><svg class="ico ico-btn" aria-hidden="true"><use href="#i-desfazer"/></svg>Enviar pedido</button>
     </div>
