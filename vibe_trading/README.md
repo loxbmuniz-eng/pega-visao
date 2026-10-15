@@ -90,7 +90,7 @@ A leitura completa de **uma moeda, agora, antes do clique**. No Telegram:
 
 ```
 /analisar BTC              risco 2% da banca, intraday (até 1 dia)
-/analisar SOL 10 scalp     risco 10%, scalp (minutos a 3 horas)
+/analisar SOL 1 scalp      risco 1%, scalp (minutos a 3 horas)
 /analisar ETH 3 swing      risco 3%, swing (1 dia a 1 semana)
 /radar                     as moedas que mais oscilam agora na Pionex (com volume)
 /fichas                    o placar das fichas

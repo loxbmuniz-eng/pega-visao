@@ -3,7 +3,7 @@
 Ficha de cada operacao: a leitura completa de UMA moeda, agora, antes de clicar.
 
     python3 vibe.py analisar BTC               # risco 2% da banca, intraday
-    python3 vibe.py analisar SOL 10 scalp      # risco 10% da banca, scalp
+    python3 vibe.py analisar SOL 1 scalp       # risco 1% da banca, scalp
     no Telegram: /analisar BTC 2 swing
 
 O que ela junta (cada numero com a fonte; o que nao veio aparece "fora do ar"):

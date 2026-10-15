@@ -4,7 +4,7 @@ Vibe trading — um comando so para tudo. Nada aqui envia ordem ou pede chave de
 
     python3 vibe.py                     este menu
     python3 vibe.py analisar BTC        a ficha completa de uma operacao, agora (risco 2%, intraday)
-    python3 vibe.py analisar SOL 10 scalp    ... com risco de 10% da banca, no scalp
+    python3 vibe.py analisar SOL 1 scalp     ... com risco de 1% da banca, no scalp
     python3 vibe.py radar               as moedas que mais oscilam agora na Pionex
     python3 vibe.py fichas              o placar das fichas: o veredito acerta?
     python3 vibe.py fontes              testa, uma a uma, cada fonte de dado da ficha
