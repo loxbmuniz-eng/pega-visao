@@ -487,7 +487,7 @@ function freteCelula(l, col, j){
       if(!l.nota || (primeira && l._dobravel && !l._aberta)) return `<td${k}></td>`;   // fechada: a linha é da CARGA, não da 1ª nota
       const vocab = freteTratativas();
       const lib = (FRETE.dados.vocabulario.liberam || []).includes(v);
-      const cls = !v ? 'falta' : lib ? 'ok' : v === 'SUMIU DO B2B' ? 'sumiu' : v === 'SEM TRATATIVA' ? 'sem' : 'dev';
+      const cls = !v ? 'falta' : lib ? 'ok' : v === 'SEM TRATATIVA' ? 'sem' : 'dev';
       const selo = `<span class="frete-selo-t frete-selo-t-${cls}" aria-hidden="true">${v ? esc(v) : 'falta olhar'}</span>`;
       return `<td${k} class="frete-t frete-t-${cls}">${selo}<select class="frete-sel" aria-label="Status da pendência da nota ${esc(l.nota)}"
           onchange="freteTratar('${escJs(l.carga)}','${escJs(l.nota)}',this.value)">
@@ -1034,7 +1034,13 @@ async function freteHistoricoUI(carga){
         <td>${esc(p.tratativa || '—')}${p.tratativaEm ? ` · ${esc(freteData(p.tratativaEm))}` : ''}</td>
         <td>${esc(p.resolvidaEm ? freteData(p.resolvidaEm) : '')}</td></tr>`).join('')}</tbody></table></div>` : '<div class="card-sub">Nenhuma pendência.</div>';
   const ROTULO = { conferencia: 'Conferência dos relatórios', editou_carga: 'Editou a carga', tratativa: 'Tratativa', pagamento: 'Pagamento', anulou_pagamento: 'Anulou pagamento', exportou: 'Exportou a planilha', canhoto: 'Canhoto original', excluiu: 'Excluiu do controle', restaurou: 'Restaurou' };
+  /* A tratativa mostra de onde para onde — inclusive a volta de SUMIU DO B2B a
+     "falta olhar" feita pela atualização do servidor (068, 15/10/2026). */
+  const trat = (t) => t || 'falta olhar';
   const detalhe = (e) => (e.acao === 'canhoto' && e.detalhe ? (e.detalhe.para ? ' · marcou: veio' : ' · desmarcou')
+    : e.acao === 'tratativa' && e.detalhe && e.detalhe.tratativa
+      ? (e.detalhe.tratativa.de === e.detalhe.tratativa.para ? ` · ${trat(e.detalhe.tratativa.para)}`
+        : ` · ${trat(e.detalhe.tratativa.de)} → ${trat(e.detalhe.tratativa.para)}`)
     : e.acao === 'excluiu' && e.detalhe ? ` · ${e.detalhe.motivo || ''}`
     : e.acao === 'restaurou' && e.detalhe ? (e.detalhe.pela === 'reimportacao' ? ' · pela reimportação do PDF' : ' · pelo botão Restaurar') : '');
   const eventos = h.eventos.length ? `<ul class="frete-eventos">${h.eventos.map((e) => `<li><strong>${esc(ROTULO[e.acao] || e.acao)}</strong>${esc(detalhe(e))}${e.nota ? ` · nota ${esc(e.nota)}` : ''}

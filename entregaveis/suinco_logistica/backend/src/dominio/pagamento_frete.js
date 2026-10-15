@@ -29,8 +29,11 @@
    enxugado pelo dono em 05/10/2026 (rodada 2): "tira o OK B2B e DEV NO
    SISTEMA e substitui a DEV por DEVOLUÇÃO". '' é "ninguém olhou ainda";
    'SEM TRATATIVA' é "olhei e não há o que fazer por enquanto" — a diferença
-   é o que mostra o que falta olhar. */
-export const TRATATIVAS = ['SEM TRATATIVA', 'DEVOLUÇÃO', 'OK', 'SUMIU DO B2B'];
+   é o que mostra o que falta olhar.
+   15/10/2026 (pedido trazido pelo dono, migração 068): "incluir também OK
+   (AVULSO) e excluir esse SUMIU DO B2B" — e entra a CANCELADA. As notas que
+   estavam SUMIU DO B2B voltaram a '' (falta olhar), resposta A do dono. */
+export const TRATATIVAS = ['SEM TRATATIVA', 'DEVOLUÇÃO', 'OK', 'OK (AVULSO)', 'CANCELADA'];
 
 /* As palavras da planilha antiga (e do vocabulário de manhã) continuam
    entendidas — "para o painel entender a linguagem" — e viram as atuais. */
@@ -41,8 +44,10 @@ export const TRATATIVAS_ANTIGAS = { DEV: 'DEVOLUÇÃO', 'DEV NO SISTEMA': 'DEVOL
    finalizo a carga como 100% integral" — e "quando for dado OK, ou mudado
    pra DEVOLUÇÃO, o status precisa mudar pra A PAGAR". Então OK (consultei,
    está certo) e DEVOLUÇÃO (a nota voltou: a transportadora fez a parte
-   dela) liberam. SUMIU DO B2B e SEM TRATATIVA não. */
-export const TRATATIVAS_QUE_LIBERAM = ['OK', 'DEVOLUÇÃO'];
+   dela) liberam. 15/10/2026: "Colocar como regra, CANCELADA, OK, DEVOLUÇÃO,
+   E OK (AVULSO) liberada para pagamento. Não considerar como pagamento,
+   somente SEM TRATATIVA" — e a nota em branco (ninguém olhou) também não. */
+export const TRATATIVAS_QUE_LIBERAM = ['OK', 'DEVOLUÇÃO', 'OK (AVULSO)', 'CANCELADA'];
 
 /* PAREAR PELO NÚMERO DO SISTEMA (ocorrência #112). Entra a lista das leituras
    de um lote — { numero, temB2b, temSist, externa } — e sai quem pareia com

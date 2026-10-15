@@ -7,11 +7,14 @@
    "SEM TRATATIVA",
    "DEVOLUÇÃO",
    "OK",
-   "SUMIU DO B2B"
+   "OK (AVULSO)",
+   "CANCELADA"
   ],
   "liberam": [
    "OK",
-   "DEVOLUÇÃO"
+   "DEVOLUÇÃO",
+   "OK (AVULSO)",
+   "CANCELADA"
   ]
  },
  "colunas": [
@@ -806,7 +809,7 @@
     0,
     "PENDENTE",
     "810909 (Não localizada no B2B)",
-    "SUMIU DO B2B",
+    "SEM TRATATIVA",
     "A PAGAR",
     null,
     "Transp. Exemplo B",
@@ -984,8 +987,8 @@
    {
     "nome": "SEM TRATATIVA",
     "chave": "SEM TRATATIVA",
-    "qtd": 2,
-    "pct": 0.1111111111111111,
+    "qtd": 3,
+    "pct": 0.16666666666666666,
     "libera": false
    },
    {
@@ -1003,11 +1006,18 @@
     "libera": true
    },
    {
-    "nome": "SUMIU DO B2B",
-    "chave": "SUMIU DO B2B",
-    "qtd": 1,
-    "pct": 0.05555555555555555,
-    "libera": false
+    "nome": "OK (AVULSO)",
+    "chave": "OK (AVULSO)",
+    "qtd": 0,
+    "pct": 0.0,
+    "libera": true
+   },
+   {
+    "nome": "CANCELADA",
+    "chave": "CANCELADA",
+    "qtd": 0,
+    "pct": 0.0,
+    "libera": true
    }
   ],
   "transportadoras": [

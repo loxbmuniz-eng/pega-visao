@@ -92,8 +92,8 @@ describe('regras da conferência', () => {
     assert.equal(i.pago, 0.5);
     assert.equal(i.aPagar, 0.25);
     assert.equal(i.statusPagamento, 'A PAGAR', 'há liberado ainda não pago');
-    assert.deepEqual(TRATATIVAS, ['SEM TRATATIVA', 'DEVOLUÇÃO', 'OK', 'SUMIU DO B2B'], 'vocabulário da rodada 2');
-    assert.deepEqual(TRATATIVAS_QUE_LIBERAM, ['OK', 'DEVOLUÇÃO']);
+    assert.deepEqual(TRATATIVAS, ['SEM TRATATIVA', 'DEVOLUÇÃO', 'OK', 'OK (AVULSO)', 'CANCELADA'], 'vocabulário de 15/10 (068)');
+    assert.deepEqual(TRATATIVAS_QUE_LIBERAM, ['OK', 'DEVOLUÇÃO', 'OK (AVULSO)', 'CANCELADA']);
   });
 
   test('fechamento e idade (rodada 45): provisão em notas, pagamentos por mês, dias sem olhar', () => {

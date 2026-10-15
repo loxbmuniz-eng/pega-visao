@@ -34,7 +34,7 @@
    teste reprova.
    ===================================================================== */
 import { escreverXlsx } from '../servicos/planilha_xlsx_escrita.js';
-import { TRATATIVAS } from './pagamento_frete.js';
+import { TRATATIVAS, TRATATIVAS_QUE_LIBERAM } from './pagamento_frete.js';
 import {
   COLUNAS, COLUNAS_DA_PLANILHA, SEM_PENDENCIA, montarGrade,
 } from './planilha_frete_grade.js';
@@ -131,7 +131,7 @@ function abaControle(grade) {
     validacoes: [
       {
         intervalo: `L2:L${ate}`, tipo: 'list', lista: TRATATIVAS, estilo: 'warning',
-        dicaTitulo: 'Status da pendência', dica: 'Escolha na lista. OK (conferi, está certo) e DEVOLUÇÃO (a nota voltou) liberam o pagamento da nota; SUMIU DO B2B e SEM TRATATIVA não.',
+        dicaTitulo: 'Status da pendência', dica: 'Escolha na lista. OK, DEVOLUÇÃO, OK (AVULSO) e CANCELADA liberam o pagamento da nota; SEM TRATATIVA não.',
         erroTitulo: 'Fora da lista', erro: `Use uma destas: ${lista}. Para outro assunto, escreva na coluna Observação.`,
       },
       {
@@ -168,8 +168,7 @@ function abaControle(grade) {
       {
         intervalo: `L2:L${ate}`,
         regras: [
-          { formula: 'OR($L2="OK",$L2="DEVOLUÇÃO")', estilo: { fonte: { cor: '1E7A3C', neg: true } } },
-          { formula: '$L2="SUMIU DO B2B"', estilo: { fonte: { cor: 'B42318', neg: true } } },
+          { formula: `OR(${TRATATIVAS_QUE_LIBERAM.map((t) => `$L2="${t}"`).join(',')})`, estilo: { fonte: { cor: '1E7A3C', neg: true } } },
           { formula: '$L2="SEM TRATATIVA"', estilo: { fonte: { cor: C.muda, it: true } } },
           { formula: `AND($L2="",$K2<>"",$K2<>"${SEM_PENDENCIA}")`, estilo: { fundo: 'FFF4D6' } },
         ],
@@ -338,7 +337,8 @@ function abaResumo(r, { geradoEm, exemplo, recorte = '' }) {
     'SEM TRATATIVA': 'Olhei e não há o que fazer por enquanto.',
     DEVOLUÇÃO: 'A nota voltou: a transportadora fez a parte dela — libera o pagamento da nota.',
     OK: 'Consultado no sistema, está certo — libera o pagamento da nota.',
-    'SUMIU DO B2B': 'A nota sumiu do B2B — não libera até aparecer.',
+    'OK (AVULSO)': 'Libera o pagamento da nota, como o OK.',
+    CANCELADA: 'A nota foi cancelada — libera o pagamento da nota.',
   };
   const SENTIDOS = r.tratativas;
   const eCorpo = { fonte: { nome: FONTE, tam: 11, cor: C.tinta }, alin: { h: 'center', v: 'center' }, borda: { base: { estilo: 'thin', cor: C.linha } } };
@@ -472,7 +472,8 @@ function abaLeiaMe({ exemplo }) {
   item('SEM TRATATIVA', 'Olhei e não há o que fazer por enquanto. Não libera.');
   item('DEVOLUÇÃO', 'A nota foi devolvida — a transportadora fez a parte dela. Libera o pagamento da nota.');
   item('OK', 'Consultei no sistema e está tudo certo (o canhoto existe; o status do B2B é que estava errado). Libera o pagamento da nota.');
-  item('SUMIU DO B2B', 'A nota não aparece mais no B2B. Não libera até aparecer.');
+  item('OK (AVULSO)', 'Libera o pagamento da nota, como o OK.');
+  item('CANCELADA', 'A nota foi cancelada. Libera o pagamento da nota.');
   espaco();
   secao('PAGAMENTO — PELA QUANTIDADE DE NOTAS, SEM VALOR EM R$');
   item('% Entregue', 'Notas Finalizadas no B2B ÷ notas emitidas no sistema. É o que o B2B comprova.');

@@ -22,7 +22,7 @@ Marcação: ✅ no ar · 🟡 commitado, não publicado (ou esperando o servidor
 
 ## 2. Esperando o servidor
 
-Nada. Em 01/10/2026 o servidor chegou a `7cf0236` (bloco COPIE DAQUI colado
+**Migrações 067 (correção sem telefonema, portão 91) e 068 (CANCELADA e OK (AVULSO) no Pagamento de Frete; SUMIU DO B2B volta a "falta olhar") — as duas entram no mesmo `atualizar_tudo.sh`.** Antes disso: em 01/10/2026 o servidor chegou a `7cf0236` (bloco COPIE DAQUI colado
 pelo dono): ✅ Node 24.21.0 · ✅ #97 · ✅ #98 · ✅ #103. Nenhum alterou dado
 da operação.
 
@@ -61,7 +61,7 @@ Pedido do dono: *"conexões, relacionamentos entre os cards e informações… c
 | ⬜ Toda carga é um link — Lote 2 | link próprio da carga (abre direto nela), voltar do celular volta para a aba anterior (hoje sai do painel), o aviso do celular abre na carga (hoje abre o painel; o servidor manda só "/") | aprovado, depois do Lote 1; o aviso depende do `atualizar_tudo.sh` |
 | ⬜ Toda carga é um link — Lote 3 | busca única no topo — placa ou número, de qualquer aba (hoje são 12 caixas, cada uma presa na sua aba) | aprovado, depois do Lote 2 |
 | ✅ no ar — portão 89 (2caf8c6, entrega d0b286f READY, 14/10; bateria 281 verdes, API 738; só painel) — A carga inteira num lugar só | aprovado em 14/10 ("marcha fio"). No painel do lado do Pátio ao vivo e na linha do tempo do Histórico, uma linha "Frete — Para pagamento: … · Situação: …", com as palavras da própria aba Pagamento de Frete (a mesma grade), só quando a carga está no controle do frete e só para quem tem a aba do Frete. O sinistro entra quando a aba existir | `test_carga_inteira_num_lugar` (reprova no publicado em 3 pontos) |
-| ⬜ **APROVADO** (14/10, "marcha fio") — Correção sem telefonema | quem avançou a etapa (Portaria, Expedição, Faturamento) ou a Logística pede voltar para a etapa anterior, com motivo; a Administração recebe no celular e aprova ou recusa no painel; aprovar é a mesma correção de hoje, com o nome de quem pediu e de quem aprovou. Migração nova — vale depois do `atualizar_tudo.sh` | depois da anterior |
+| ✅ painel no ar no portão 91 (eece585, entrega e9702f6 READY, 15/10) · 🟡 servidor depois do `atualizar_tudo.sh` (migração 067) — Correção sem telefonema (decisão 36) | quem avançou a etapa (Portaria, Expedição, Faturamento) ou a Logística pede voltar para a etapa anterior, com motivo; a Administração recebe no celular e aprova ou recusa no painel; aprovar é a mesma correção de hoje, com o nome de quem pediu e de quem aprovou. Migração nova — vale depois do `atualizar_tudo.sh` | depois da anterior |
 | ⬜ Montagem vinda do Atak | importar a programação do dia de um relatório do Atak, como o WRVDA501 no Frete; a Logística completa placa e transportadora | esperando o dono: existe o relatório com as cargas do dia, de manhã? Um exemplo |
 | ✖ Devolução por avaria avisando o Frete | — | **DESCARTADO** pelo dono (14/10): o frete de entrega com avaria é "tratado de outro jeito" |
 | ⬜ 1. "Agora" | uma lista só do que pede ação, por setor, com o botão que leva até onde resolve (hoje: Pontos de atenção, aviso de 3 h, "Hoje" do Frete, Vigias do sistema, Cargas paradas) | esperando o dono |
