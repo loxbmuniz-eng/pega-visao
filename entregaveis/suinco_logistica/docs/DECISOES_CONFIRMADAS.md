@@ -1262,3 +1262,38 @@ TRATATIVA"*. Resposta à pergunta que faltava: **A**.
   com a lista de hoje.
 
 Travas: bloco 63 da API (5 testes) e `test_frete_cancelada_ok_avulso`.
+
+## 38. Aguardando Carga fiel ao pátio — nada sai por prazo (15/10/2026)
+
+**Pedido do dono:** tirar o "Criar carga" do Aguardando Carga (*"estão
+preenchendo as cargas pela montagem do dia e programação, e isso tá inútil"*),
+e *"pôr esse aguardando carga pra funcionar de forma fiel ao que realmente
+está acontecendo"*. A ressalva dele decidiu a forma: *"tem placas que às
+vezes ficam 3 dias no pátio, por exemplo exportação; isso não pode
+conflitar"*.
+
+- **A linha sai da lista por FATO, nunca por prazo:**
+  - a carga dele foi criada com a placa (Montagem do Dia, Programação, ou a
+    placa posta depois) → a entrada se junta à carga sozinha e ela vai para
+    a Torre, com a hora em que o caminhão chegou;
+  - ele foi embora sem carregar → **Saiu sem carregar** (na lista e na
+    Portaria) → Seguiu Viagem marcado como sem carregamento; continua no
+    Histórico;
+  - foi lançado por engano → **Excluir**, como antes.
+- **"Criar carga" saiu** da lista. A Programação aceita a placa que está no
+  Aguardando Carga (antes recusava — ocorrência #140) e avisa o que vai
+  acontecer.
+- **Tempo de espera em cada linha** ("há 5 h", "há 4 dias"); passou de 3
+  dias, a linha vem destacada para alguém conferir — e continua à vista.
+- **A hora da chegada é a da chegada.** Quem junta a entrada à carga é o
+  servidor: o painel manda a carga nova como foi criada, e o servidor sobe
+  o status com a hora em que o caminhão chegou — vale para a Montagem do
+  Dia e para a Programação (ocorrência #140).
+- **"Pra onde" da Programação abre no padrão** (ENTREGA DIRETA), o mesmo a
+  que o formulário volta depois de cada carga e que o "Criar carga"
+  pré-marcava.
+- **Não mudou:** a Visão do Pátio, a regra das inativas da Torre (decisão
+  29) e a recusa de registrar a chegada de placa com carga aberta.
+
+Travas: `test_aguardando_carga_fiel`, blocos 7c e 10 da API.
+

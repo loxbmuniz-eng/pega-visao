@@ -221,31 +221,30 @@ async def main():
         b = frete_no_banco('FO-SEMPLACA')
         ck('e a carga nasce aguardando veículo, sem frete', b is not None and b[0] == '' and b[1] == '', str(b))
 
-        print('\n=== 2b. CHEGADA DA PORTARIA: COMPLETAR PERGUNTA, POR CIMA DA JANELA ===')
-        # Achado da bateria antes de publicar: a pergunta abria ATRÁS da janela
-        # de completar (mesmo z-index, e o Completar vem depois no HTML) — sem
-        # clique possível. A prova é o que está por cima no ponto do botão.
+        print('\n=== 2b. CHEGADA DA PORTARIA: A CARGA DELA NA PROGRAMAÇÃO PERGUNTA O FRETE ===')
+        # Até 15/10/2026 era o "Criar carga" do Aguardando Carga (saiu a
+        # pedido do dono). Agora a carga do caminhão que já está no pátio se
+        # cria na Programação com a MESMA placa — e isso é contratar.
         await pg.evaluate(f"() => {{ registrarChegadaPortaria('{P[8]}', 'Portaria Teste'); renderAll(); }}")
         await pg.wait_for_timeout(2500)
         await ir(pg, 'programacao')
         linha = pg.locator('#prog-aguardando-tbody tr').filter(has_text=P[8])
-        ck('a chegada sem programação aparece para completar', await linha.count() >= 1)
-        if await linha.count():
-            await linha.first.locator('button:has-text("Criar carga")').click()
-            await pg.wait_for_timeout(500)
-            await pg.fill('#completar-numero-carga', 'FO-CHEGADA')
-            await pg.click('#modal-completar .btn-primary')
-            await pg.wait_for_timeout(800)
-            ck('completar a chegada pergunta o frete', await pergunta_aberta(pg))
-            por_cima = await pg.evaluate("""() => {
-                const b = document.getElementById('frete-c-confirmar').getBoundingClientRect();
-                const el = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2);
-                return !!el && !!el.closest('#modal-frete-contratar');
-            }""")
-            ck('e a pergunta está POR CIMA da janela de completar (dá para clicar)', por_cima)
-            await responder(pg, 'TABELA')
-            b = frete_no_banco('FO-CHEGADA')
-            ck('TABELA: a chegada vira carga com o frete gravado', b is not None and b[0] == P[8] and b[1] == 'TABELA', str(b))
+        ck('a chegada sem programação aparece no Aguardando Carga', await linha.count() >= 1)
+        await pg.fill('#prog-placa', P[8])
+        await pg.dispatch_event('#prog-placa', 'input')
+        await pg.fill('#prog-numero-carga', 'FO-CHEGADA')
+        await pg.click('button:has-text("Criar Carga (Aguardando Veículo)")')
+        await pg.wait_for_timeout(800)
+        ck('criar a carga da placa que está no pátio pergunta o frete', await pergunta_aberta(pg))
+        por_cima = await pg.evaluate("""() => {
+            const b = document.getElementById('frete-c-confirmar').getBoundingClientRect();
+            const el = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2);
+            return !!el && !!el.closest('#modal-frete-contratar');
+        }""")
+        ck('e a pergunta está por cima de tudo (dá para clicar)', por_cima)
+        await responder(pg, 'TABELA')
+        b = frete_no_banco('FO-CHEGADA')
+        ck('TABELA: a chegada vira carga com o frete gravado', b is not None and b[0] == P[8] and b[1] == 'TABELA', str(b))
 
         print('\n=== 3. FILA DE PROGRAMADOS: A PLACA ENTRANDO PERGUNTA ===')
         await pg.fill('#prog-fila-dia', hoje)

@@ -275,18 +275,10 @@ async def main():
         ck('sem chegada registrada, entradaNoPatioDe devolve nada',
            d['entrada'] is None, str(d['entrada']))
 
-        # E nenhuma tela troca esse "nada" pela data de criação.
-        textos = await pgA.evaluate("""(id) => {
-              const c = getCarga(id);
-              abrirCompletar(id);
-              const completar = document.getElementById('completar-placa-info').textContent;
-              fecharModalCompletar();
-              return { completar };
-            }""", d['id'])
-        ck('a tela de completar não anuncia a véspera como "no pátio desde"',
-           '/' not in textos['completar'].split('desde')[-1]
-           or 'não registrada' in textos['completar'].lower(),
-           textos['completar'][:100])
+        # A tela que anunciava "no pátio desde" para uma carga programada era
+        # o modal "Criar carga" do Aguardando Carga — saiu em 15/10/2026. A
+        # lista do Aguardando Carga lê a mesma entradaNoPatioDe, sem trocar o
+        # "nada" pela data de criação (test_aguardando_carga_fiel).
 
         print('\n=== 5. SEM ERRO DE JAVASCRIPT ===')
         ck('console limpo', not erros, '; '.join(erros[:3]))

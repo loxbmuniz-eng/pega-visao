@@ -336,7 +336,16 @@ function renderPortariaProgramadas(){
          só se sabe na hora de sair. Quem vai carregar continua vendo o
          fluxo normal — este botão não substitui nada, ele acrescenta a
          única saída que faltava. */
-      acao = `<button class="btn btn-sm btn-saida-devolucao"
+      /* Entrada SEM carga (15/10/2026): o caminhão que chegou sem programação
+         e foi embora sem carregar não "entregou devolução" — a saída dele diz
+         o que aconteceu. Sem ela, a placa ficava no Aguardando Carga para
+         sempre (havia placa lá há mais de 240 horas). Mesma transição no
+         servidor; só a palavra muda. */
+      acao = c.aguardandoCarga
+        ? `<button class="btn btn-sm btn-saida-devolucao"
+        title="O caminhão chegou sem carga programada e foi embora sem carregar."
+        onclick="portariaSaiuSoDevolucaoUI('${escJs(c.id)}')"><svg class="ico ico-btn" aria-hidden="true"><use href="#i-desfazer"/></svg>Saiu sem carregar</button>`
+        : `<button class="btn btn-sm btn-saida-devolucao"
         title="O caminhão entregou devolução e vai embora sem carregar."
         onclick="portariaSaiuSoDevolucaoUI('${escJs(c.id)}')"><svg class="ico ico-btn" aria-hidden="true"><use href="#i-desfazer"/></svg>Só devolução — saiu</button>`;
     }
@@ -378,10 +387,15 @@ async function portariaSaiuSoDevolucaoUI(cargaId){
   const c = DB.cargas.find(x=>x.id === cargaId);
   if(!c) return;
   const ok = await perguntarUI({ titulo: `Saída sem carregar — placa ${c.placa}`,
-    texto: 'Este caminhão ainda não carregou. Confirmando, fica registrado que ele '
-      + 'entrou, entregou a devolução e foi embora sem carregar.\n\n'
-      + 'Se ele vai FICAR no pátio para carregar, volte: o fluxo normal segue '
-      + 'pela Expedição.',
+    texto: c.aguardandoCarga
+      ? 'Este caminhão chegou sem carga programada e não carregou. Confirmando, fica '
+        + 'registrado que ele foi embora sem carregar — a entrada continua no Histórico.\n\n'
+        + 'Se ele vai FICAR no pátio para carregar, volte: crie a carga dele na Montagem '
+        + 'do Dia ou na Programação, com esta placa, e ele sai daqui sozinho.'
+      : 'Este caminhão ainda não carregou. Confirmando, fica registrado que ele '
+        + 'entrou, entregou a devolução e foi embora sem carregar.\n\n'
+        + 'Se ele vai FICAR no pátio para carregar, volte: o fluxo normal segue '
+        + 'pela Expedição.',
     botao: 'Registrar a saída', cancelar: 'Voltar' });
   if(!ok) return;
   const r = await SuincoSharePoint.mudarStatus(cargaId, 'Seguiu Viagem', { soDevolucao: true });
@@ -400,7 +414,9 @@ async function portariaSaiuSoDevolucaoUI(cargaId){
      depois foi exatamente como a placa PUX2971 saiu na tela do porteiro
      sem o servidor saber (28/08). */
   await SuincoSharePoint.sincronizarAgora();
-  notifyGravacao(`Placa ${c.placa} saiu — só devolução, sem carregamento.`);
+  notifyGravacao(c.aguardandoCarga
+    ? `Placa ${c.placa} saiu sem carregar — a entrada fica no Histórico.`
+    : `Placa ${c.placa} saiu — só devolução, sem carregamento.`);
   tocarBeepConfirmacao();
   await despedirCargas([cargaId]);
   renderAll();

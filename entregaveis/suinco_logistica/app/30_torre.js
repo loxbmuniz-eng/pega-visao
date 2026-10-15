@@ -732,10 +732,12 @@ function renderTorre(){
      apareçam na torre de controle, pois isso gera confusão... só devem ser
      exibidos após a carga ser lançada".
 
-     O lugar dele é a aba Programação, onde já existe a tabela "Entradas
-     aguardando carga" com o botão de criar a carga. A caixa aqui continua
-     contando — sumir de vez esconderia caminhão parado no pátio —, mas o
-     clique agora leva para lá, que é onde se resolve. */
+     O lugar dele é a aba Programação, na tabela "Entradas aguardando
+     carga". Desde 15/10/2026 ela não cria carga: a carga dele se cria na
+     Montagem do Dia ou na Programação com a mesma placa, e a entrada se
+     junta a ela sozinha; lá ficam só "Saiu sem carregar" e "Excluir". A
+     caixa aqui continua contando — sumir de vez esconderia caminhão parado
+     no pátio —, e o clique leva para lá, que é onde se resolve. */
   /* Sem as INATIVAS (decisão 29): mais de 3 dias sem movimentação saem
      da fila e dos números da Torre e vão para o bloco recolhido abaixo da
      tabela (renderTorreInativas) — fora da conta, não escondidas. */

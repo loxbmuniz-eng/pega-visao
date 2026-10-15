@@ -511,6 +511,26 @@ rotasCargas.post('/cargas', exigirLogin, async (req, res, next) => {
     // no corpo (painel antigo mandava a data da CHEGADA aqui).
     if (chegadaSemProgramacao) dados.programado_em = null;
 
+    /* QUEM JUNTA A ENTRADA É O SERVIDOR (15/10/2026, ocorrência #140).
+       A Montagem do Dia e a Programação juntam a carga nova à entrada que
+       está no pátio NA TELA, para responder na hora — e o painel manda a
+       carga já em "Aguardando Embarque". Gravada assim, a entrada no pátio
+       ganhava a hora de AGORA e a hora real da chegada se perdia (o tempo de
+       pátio ficava menor do que foi). Se há caminhão esperando no pátio com
+       esta placa, a carga nova nasce em Aguardando Veículo e a absorção,
+       logo abaixo, sobe o status com a hora em que ele chegou — o mesmo
+       caminho de quem cria pela API. Sem entrada no pátio, nada muda. */
+    if (!jaExistia && !chegadaSemProgramacao && placa && dados.status_atual === 'Aguardando Embarque') {
+      const esperando = await consultar(
+        `SELECT 1 FROM fact_viagens
+          WHERE placa = $1 AND carga_id <> $2 AND aguardando_carga = TRUE
+            AND status_atual <> 'Seguiu Viagem' AND excluida_em IS NULL
+          LIMIT 1`,
+        [placa, dados.carga_id]
+      );
+      if (esperando.rows[0]) dados.status_atual = STATUS_INICIAL;
+    }
+
     /* Toda carga nasce dentro do ciclo de programação ABERTO. É o que faz
        o histórico de programações existir sem mover nem copiar carga: ela
        continua uma só, e o ciclo é só mais um recorte sobre ela. */
@@ -1411,8 +1431,11 @@ rotasCargas.post('/cargas/:id/status', exigirLogin, async (req, res, next) => {
         de: carga.status_atual,
         para: statusNovo,
         operador: op,
+        /* A entrada SEM carga que vai embora não trouxe devolução
+           (15/10/2026): o Histórico diz o que aconteceu. */
         acao: semCarregar
-          ? `Status: ${carga.status_atual} → ${statusNovo} (só devolução — saiu sem carregar)`
+          ? `Status: ${carga.status_atual} → ${statusNovo} (${carga.aguardando_carga
+            ? 'entrada sem carga' : 'só devolução'} — saiu sem carregar)`
           : `Status: ${carga.status_atual} → ${statusNovo}`,
       });
 

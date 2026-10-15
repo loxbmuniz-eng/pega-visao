@@ -242,18 +242,20 @@ async def main():
         ck('todos dentro da tela', all(c['dentro'] for c in f), str(f))
 
         print('\n=== C. MODAL CABE NA TELA ===')
+        # Até 15/10/2026 a medida era no modal "Criar carga" do Aguardando
+        # Carga, que saiu (o vínculo com a placa é automático no servidor).
+        # A régua passou para o modal da Programação que sobrou com mais
+        # conteúdo: a observação do frete, que abre ao contratar.
         await preparar(pagina, 'Logística')
         await pagina.evaluate("""() => {
             abrirTab('programacao');
-            const placa = DB.frota[9].placa;
-            registrarChegadaPortaria(placa, 'Porteiro');
-            renderAll();
-            const c = DB.cargas.find(x => x.aguardandoCarga);
-            if (c) abrirCompletar(c.id);
+            perguntarFreteUI({ numeroCarga: '500100', placa: DB.frota[9].placa,
+                               transportadora: 'TRANSPORTADORA', destino: 'GOIÂNIA',
+                               km: 920, valorTabela: null }, 'contratar');
         }""")
         await pagina.wait_for_timeout(400)
         m = await pagina.evaluate("""() => {
-            const cx = document.querySelector('#modal-completar .modal-box');
+            const cx = document.querySelector('#modal-frete-contratar .modal-box');
             const r = cx.getBoundingClientRect();
             return { larg: Math.round(r.width), tela: window.innerWidth,
                      dentro: r.left >= -1 && r.right <= window.innerWidth + 1,
@@ -263,7 +265,7 @@ async def main():
         ck('modal cabe na largura', m['dentro'], str(m))
         ck('modal alto demais consegue rolar',
            m['rolavel'] in ('auto', 'scroll', 'não precisa'), str(m))
-        await pagina.evaluate("() => fecharModalCompletar()")
+        await pagina.evaluate("() => freteContratarResponder(null)")
 
         print('\n=== D. NAVEGAÇÃO ALCANÇÁVEL ===')
         n = await pagina.evaluate("""() => {

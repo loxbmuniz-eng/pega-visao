@@ -15,6 +15,11 @@ O que se prova aqui, no navegador de verdade:
   3. A carga entra na Fila de Programados de hoje e no filtro do relatório
      do dia.
 
+DESDE 15/10/2026 a carga é lançada na Programação com a MESMA placa (o
+"Criar carga" do Aguardando Carga saiu a pedido do dono): o servidor junta a
+entrada a ela e a hora em que o caminhão chegou vira a entrada no pátio
+dela. Este teste segue o caminho novo.
+
     python3 testes/test_data_programacao.py
 """
 import asyncio
@@ -40,9 +45,15 @@ def sql(consulta):
 
 
 def envelhecer(carga_id):
-    """Faz a ENTRADA ter acontecido ontem, como no relato do gestor."""
+    """Faz a ENTRADA ter acontecido ontem, como no relato do gestor.
+
+    A entrada INTEIRA: a linha e o carimbo da chegada (a movimentação para
+    Aguardando Embarque). Envelhecer só a linha (até 15/10/2026) montava um
+    caminhão que chegou hoje numa linha de ontem — caso que não existe."""
     sql("UPDATE fact_viagens SET criado_em = now() - interval '1 day', "
         f"atualizado_em = now() WHERE carga_id = '{carga_id}'")
+    sql("UPDATE fact_statusfrota SET data_evento = data_evento - interval '1 day' "
+        f"WHERE carga_id = '{carga_id}'")
 
 
 
@@ -115,30 +126,37 @@ async def main():
         await pgL2.evaluate("async () => { await SuincoSharePoint.sincronizarAgora(); }")
         await pgL2.wait_for_timeout(1500)
 
-        await pgL2.evaluate(
-            """async (id) => {
-                 completarCargaAguardando(id, {freteObservacao:'TABELA', numeroCarga: 'DATA-1', cliente: 'CLIENTE',
-                   destino: 'DESTINO', peso: 1000, rota: '500', operador: 'Ana'});
+        real_id = await pgL2.evaluate(
+            """async (placa) => {
+                 const c = criarCargaProgramada({freteObservacao:'TABELA', placa, numeroCarga: 'DATA-1',
+                   peso: 1000, rota: '500', operador: 'Ana'});
                  SuincoStore.save();
                  await SuincoSharePoint.sincronizarAgora();
-               }""", entrada['id'])
+                 return c.id;
+               }""", placa)
         await pgL2.wait_for_timeout(2500)
+        await pgL2.evaluate("async () => { await SuincoSharePoint.sincronizarAgora(); }")
+        await pgL2.wait_for_timeout(1500)
 
         datas = await pgL2.evaluate(
             """(id) => { const c = getCarga(id) || {};
                  const dia = (v) => v ? diaLocalISO(new Date(v)) : '';   // o dia de quem olha (#116)
-                 return {prog: dia(c.programadoEm), criado: dia(c.criadoEm),
-                         hoje: diaLocalISO()}; }""", entrada['id'])
+                 return {prog: dia(c.programadoEm || c.criadoEm), chegada: dia(entradaNoPatioDe(c)),
+                         hoje: diaLocalISO()}; }""", real_id)
         ck('a data de programação é HOJE', datas['prog'] == datas['hoje'], str(datas))
-        ck('a data de entrada continua sendo a de ontem (é outro fato)',
-           datas['criado'] != datas['hoje'], str(datas))
+        ck('a entrada no pátio continua sendo a de ontem (é outro fato)',
+           datas['chegada'] and datas['chegada'] != datas['hoje'], str(datas))
 
         # E o banco tem que contar a mesma história para todo mundo.
         noBanco = sql(
-            "SELECT to_char(criado_em AT TIME ZONE 'America/Sao_Paulo','YYYY-MM-DD'), to_char(programado_em AT TIME ZONE 'America/Sao_Paulo','YYYY-MM-DD') "
-            f"FROM fact_viagens WHERE carga_id = '{entrada['id']}'")
+            "SELECT (SELECT to_char(min(data_evento) AT TIME ZONE 'America/Sao_Paulo','YYYY-MM-DD') FROM fact_statusfrota "
+            f"  WHERE carga_id = '{real_id}' AND status_novo = 'Aguardando Embarque'), "
+            "to_char(coalesce(programado_em, criado_em) AT TIME ZONE 'America/Sao_Paulo','YYYY-MM-DD') "
+            f"FROM fact_viagens WHERE carga_id = '{real_id}'")
         ck('no banco: entrada ontem, programação hoje',
-           noBanco and noBanco[0] != noBanco[1] and noBanco[1] == datas['hoje'], str(noBanco))
+           noBanco and noBanco[0] and noBanco[0] != noBanco[1] and noBanco[1] == datas['hoje'], str(noBanco))
+        orfa = sql(f"SELECT excluida_em IS NOT NULL FROM fact_viagens WHERE carga_id = '{entrada['id']}'")
+        ck('a entrada sem carga saiu da operação (juntou-se à carga)', orfa == ['t'], str(orfa))
 
         print('\n=== 3. A CARGA APARECE NO DIA DE HOJE ===')
         # Esta carga NÃO vai para a Fila de Programados — o caminhão já está
@@ -146,19 +164,19 @@ async def main():
         naTorre = await pgL2.evaluate(
             """(id) => { const c = getCarga(id) || {};
                  return c.status === 'Aguardando Embarque' && !c.aguardandoCarga; }""",
-            entrada['id'])
+            real_id)
         ck('caminhão que já estava no pátio segue na Torre', naTorre)
 
         noRelatorio = await pgL2.evaluate(
             """(id) => { const hoje = diaLocalISO();
                  return filtrarPorDataProgramacao(DB.cargas, hoje, hoje)
-                   .some((c) => c.id === id); }""", entrada['id'])
+                   .some((c) => c.id === id); }""", real_id)
         ck('entra no filtro do relatório do dia', noRelatorio)
 
         naoNoDeOntem = await pgL2.evaluate(
             """(id) => { const d = diaLocalISO(new Date(Date.now() - 86400000));
                  return !filtrarPorDataProgramacao(DB.cargas, d, d)
-                   .some((c) => c.id === id); }""", entrada['id'])
+                   .some((c) => c.id === id); }""", real_id)
         ck('NÃO entra no relatório de ontem (era o bug)', naoNoDeOntem)
 
         pgL = pgL2
@@ -166,7 +184,7 @@ async def main():
         # A mesma carga, agora com a PROGRAMAÇÃO envelhecida: é a sobra do
         # dia anterior que "não passou por todas as etapas".
         sql("UPDATE fact_viagens SET programado_em = now() - interval '1 day', "
-            f"atualizado_em = now() WHERE carga_id = '{entrada['id']}'")
+            f"atualizado_em = now() WHERE carga_id = '{real_id}'")
 
         ctxT, pgT = await abrir(nav, 'chefe@teste.local', 'torre')
         await pgT.evaluate("async () => { await SuincoSharePoint.sincronizarAgora(); }")
@@ -187,7 +205,7 @@ async def main():
                    linhaMarcada: !!corpo.querySelector('tr.linha-prog-antiga'),
                    naTabela: corpo.innerHTML.includes('DATA-1'),
                  };
-               }""", entrada['id'])
+               }""", real_id)
         ck('caixa "Programação anterior" existe', torre['temCaixa'])
         ck('a sobra de ontem é contada', torre['contagem'] >= 1, str(torre['contagem']))
         ck('a carga de ontem continua na Torre', torre['naTabela'])
@@ -207,7 +225,7 @@ async def main():
 
         await pgL.evaluate(
             """async (id) => { try { await SuincoSharePoint.excluir(id, 'limpeza de teste'); }
-                 catch (e) {} }""", entrada['id'])
+                 catch (e) {} }""", real_id)
         await nav.close()
 
     print('\n=== RESULTADO ===')

@@ -6,6 +6,13 @@ continuaram no modal que a Portaria abre quando um caminhão chega sem carga
 programada. Duas telas para o mesmo trabalho, com campos diferentes — a
 pessoa preenche em uma e não encontra na outra, ou digita no campo trocado.
 
+Em 15/10/2026 a segunda tela saiu de vez: o "Criar carga" do Aguardando
+Carga foi retirado a pedido do dono (a carga se cria na Montagem do Dia ou
+na Programação, com a mesma placa, e o servidor junta a entrada sozinho).
+Sobrou UMA tela para o trabalho — e este teste cobra que a segunda não
+volte e que a lista do Aguardando Carga só ofereça Saiu sem carregar e
+Excluir.
+
 Este teste existe para essa divergência não voltar. Ele não confere
 aparência: confere que os campos, a ordem e as colunas são os mesmos, e que
 nada que foi retirado voltou por descuido em outra tela.
@@ -33,8 +40,9 @@ def ck(nome, ok, detalhe=''):
 # destruiria dado. O que não pode é voltar a aparecer para digitação.
 RETIRADOS = ['cliente', 'destino']
 
-# A ordem em que a Programação pede os dados. O modal de completar tem que
-# pedir na mesma ordem: é a mesma pessoa, preenchendo a mesma carga.
+# A ordem em que a Programação pede os dados. Até 15/10/2026 o modal de
+# completar do Aguardando Carga tinha que pedir na mesma ordem; ele saiu, e
+# a Programação é a tela única (com a Montagem do Dia).
 # A LISTA MUDOU DE PROPÓSITO EM 09/09/2026 — causa nº 1 das quatro do
 # vermelho, não regressão. Entraram os três campos de frete (destino, KM de
 # referência e KM de deslocamento) nas DUAS telas, entre Peso e Sequência.
@@ -71,15 +79,17 @@ async def main():
 
         print('\n=== 1. CAMPOS RETIRADOS NÃO APARECEM PARA DIGITAÇÃO ===')
         for campo in RETIRADOS:
-            for tela, prefixo in [('Programação', 'prog'), ('Completar carga', 'completar')]:
+            for tela, prefixo in [('Programação', 'prog')]:
                 tipo = await pagina.evaluate(
                     "id => { const e = document.getElementById(id); return e ? e.type : 'ausente'; }",
                     f'{prefixo}-{campo}')
                 ck(f'{tela}: {campo} não é campo visível', tipo in ('hidden', 'ausente'),
                    f'type={tipo}')
 
-        print('\n=== 2. O MODAL PEDE OS MESMOS DADOS, NA MESMA ORDEM ===')
-        # Compara a sequência dos campos realmente digitáveis nas duas telas.
+        print('\n=== 2. UMA TELA SÓ PARA CRIAR A CARGA, COM OS DADOS NA ORDEM ===')
+        # Era a comparação entre a Programação e o modal "Criar carga" do
+        # Aguardando Carga. O modal saiu em 15/10/2026: agora a régua é que
+        # ele NÃO volte, e que a Programação peça os campos esperados.
         # O CARD É ACHADO PELO QUE ELE TEM, NÃO POR SER O PRIMEIRO
         # (28/08/2026). A raiz era '#tab-programacao .card', ou seja, o
         # primeiro card da aba. No dia em que o dono pediu a Fila de
@@ -103,17 +113,14 @@ async def main():
             }""", [prefixo, raiz])
 
         prog = await ordem_visivel('prog', '#tab-programacao .card:has(#prog-placa)')
-        comp = await ordem_visivel('completar', '#modal-completar')
+        segunda_tela = await pagina.evaluate(
+            "() => !!document.getElementById('modal-completar') || typeof window.abrirCompletar === 'function'")
+        ck('o modal "Criar carga" do Aguardando Carga não voltou', not segunda_tela)
 
-        # A Programação tem a placa; o modal não, porque a carga já existe e a
-        # placa foi digitada pela Portaria na chegada. É a única diferença
-        # legítima entre as duas telas.
         prog_sem_placa = [c for c in prog if c not in ('placa', 'frota-hint')]
 
         ck('Programação pede os campos esperados', prog_sem_placa == ORDEM,
            f'obtido: {prog_sem_placa}')
-        ck('modal de completar pede exatamente os mesmos, na mesma ordem',
-           comp == ORDEM, f'programação={prog_sem_placa} · modal={comp}')
 
         print('\n=== 3. A FILA MOSTRA O QUE O FORMULÁRIO PREENCHE ===')
         # Coluna que nunca é preenchida vira uma fileira de traços — é a
@@ -190,53 +197,26 @@ async def main():
             ck(f'{nome}: {r["th"]} colunas no cabeçalho e {r["td"]} nas linhas',
                r['th'] == r['td'], str(r))
 
-        print('\n=== 6. O MODAL SALVA O QUE MOSTRA ===')
-        # Campo na tela que a função de salvar ignora é pior que campo
-        # ausente: a pessoa digita, salva, e o dado some sem aviso.
+        print('\n=== 6. AGUARDANDO CARGA SÓ OFERECE O QUE É FATO ===')
+        # Pedido do dono (15/10/2026): a entrada sem carga sai da lista
+        # quando a carga é criada com a placa (sozinha), quando o caminhão
+        # vai embora sem carregar, ou quando foi lançada por engano. Não há
+        # mais "Criar carga" aqui.
         await pagina.evaluate("""() => {
+            abrirTab('programacao');
             const placa = (DB.frota[1] || {}).placa || 'AAA0A00';
             registrarChegadaPortaria(placa, 'Portaria Teste');
             renderAll();
-            const c = DB.cargas.find(x => x.aguardandoCarga);
-            if (c) abrirCompletar(c.id);
         }""")
         await pagina.wait_for_timeout(300)
-        aberto = await pagina.evaluate(
-            "() => document.getElementById('modal-completar').classList.contains('open')")
-        ck('modal abre a partir de carga sem programação', aberto)
-
-        if aberto:
-            await pagina.fill('#completar-numero-carga', 'AUD2')
-            await pagina.fill('#completar-peso', '9000')
-            await pagina.fill('#completar-motorista', 'Motorista Auditoria')
-            await pagina.select_option('#completar-rota', '500')
-            await pagina.select_option('#completar-paletizada', 'Sim')
-            await pagina.fill('#completar-ganchos', '18')
-            await pagina.fill('#completar-entregas', '3')
-            await pagina.click('#modal-completar .btn-primary')
-            await pagina.wait_for_timeout(500)
-            # Completar a chegada é contratar (06/10/2026): a observação do
-            # frete é perguntada, e a pessoa responde TABELA.
-            if await pagina.is_visible('#modal-frete-contratar.open'):
-                await pagina.check('#frete-c-tabela')
-                await pagina.click('#frete-c-confirmar')
-                await pagina.wait_for_timeout(500)
-
-            g = await pagina.evaluate("""() => {
-                const c = DB.cargas.find(x => x.numeroCarga === 'AUD2');
-                return c ? {peso:c.peso, motorista:c.motorista, rota:c.rota,
-                            palet:c.paletizada, ganchos:c.qtdGanchos,
-                            entregas:c.qtdEntregas, aguardando:c.aguardandoCarga} : null;
-            }""")
-            ck('salvou a carga', g is not None, str(g))
-            if g:
-                ck('peso gravado',      g['peso'] == 9000, str(g))
-                ck('motorista gravado', g['motorista'] == 'Motorista Auditoria', str(g))
-                ck('rota gravada',      g['rota'] == '500', str(g))
-                ck('paletizada gravada', g['palet'] == 'Sim', str(g))
-                ck('ganchos gravados',  g['ganchos'] == 18, str(g))
-                ck('entregas gravadas', g['entregas'] == 3, str(g))
-                ck('saiu de "Aguardando Carga"', g['aguardando'] is False, str(g))
+        b = await pagina.evaluate("""() => [...document.querySelectorAll('#prog-aguardando-tbody tr')]
+            .map(tr => [...tr.querySelectorAll('button')].map(x => x.textContent.trim()))
+            .filter(l => l.length)""")
+        ck('a entrada aparece na lista', len(b) >= 1, str(b))
+        ck('nenhuma linha oferece "Criar carga"',
+           all(not any('Criar carga' in t for t in l) for l in b), str(b))
+        ck('toda linha tem "Saiu sem carregar" e "Excluir"',
+           all(any('Saiu sem carregar' in t for t in l) and any('Excluir' in t for t in l) for l in b), str(b))
 
         print('\n=== 7. CONSOLE ===')
         ck('sem erros de página', not erros, str(erros))

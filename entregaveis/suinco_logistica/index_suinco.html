@@ -372,9 +372,13 @@
         </div>
         <div class="form-group">
           <label>Tipo de Operação</label>
+          <!-- Abre no PADRÃO (PRA_ONDE_PADRAO), o mesmo valor a que o formulário
+               volta depois de criar cada carga — antes abria na primeira opção.
+               Desde 15/10/2026 é aqui que nasce a carga do caminhão que já está
+               no pátio, e o "Criar carga" que saiu pré-marcava ENTREGA DIRETA. -->
           <select id="prog-praonde">
             <option value="CROSS-DOCKING">CROSS-DOCKING</option>
-            <option value="ENTREGA DIRETA">ENTREGA DIRETA</option>
+            <option value="ENTREGA DIRETA" selected>ENTREGA DIRETA</option>
             <option value="RET FRIGO">RET FRIGO</option>
           </select>
         </div>
@@ -600,7 +604,7 @@
 
     <div class="card" id="card-aguardando-carga">
       <div class="card-title" role="heading" aria-level="2"><svg class="ico ico-card" aria-hidden="true"><use href="#i-espera"/></svg> Aguardando Carga <span id="prog-aguardando-count" class="pill-count" hidden>0</span></div>
-      <div class="card-sub">Veículos que a Portaria registrou no pátio sem programação prévia. Use <strong>Criar carga</strong> na linha do veículo para lançar a carga dele — o caminhão já está aqui, então o status não volta atrás.</div>
+      <div class="card-sub">Caminhões que entraram no pátio sem carga programada. Criar a carga dele na <strong>Montagem do Dia</strong> ou na <strong>Programação</strong>, com a mesma placa, tira daqui sozinho e leva para a Torre. Se foi embora sem carregar, use <strong>Saiu sem carregar</strong>; lançado por engano, <strong>Excluir</strong>.</div>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Placa</th><th>Transportadora</th><th>Tipo Veículo</th><th>Chegou em</th><th class="no-print">Ação</th></tr></thead>
@@ -2103,103 +2107,6 @@
     </div>
   </div>
 </div>
-
-<div class="modal-overlay" id="modal-completar">
-  <div class="modal-box">
-    <h2>Criar carga do veículo que já está no pátio</h2>
-    <input type="hidden" id="completar-id">
-    <div class="card-sub" id="completar-placa-info"></div>
-    <!-- ORDEM E CAMPOS IDÊNTICOS À ABA PROGRAMAÇÃO.
-
-         Não é preferência estética: é a mesma pessoa preenchendo a mesma
-         carga, e duas telas com ordem diferente para o mesmo trabalho geram
-         erro de digitação em campo trocado. Cliente e Destino saíram da
-         Programação a pedido do gestor e por isso saem daqui também —
-         continuam como campos ocultos, para não apagar o que já foi gravado.
-
-         Quem mexer numa das duas telas mexe na outra. Existe teste que
-         reprova se elas divergirem. -->
-    <div class="form-row">
-      <div class="form-group"><label>Transportadora</label><input type="text" id="completar-transportadora" list="lista-transportadoras" placeholder="Preenchido automaticamente…"></div>
-      <div class="form-group"><label>Tipo de Veículo</label><input type="text" id="completar-tipoveiculo" placeholder="Preenchido automaticamente…"></div>
-    </div>
-    <div class="form-row">
-      <div class="form-group"><label>Número de Carga</label><input type="text" id="completar-numero-carga" placeholder="Ex: 10245"></div>
-      <div class="form-group"><label>Motorista</label><input type="text" id="completar-motorista" placeholder="Nome do motorista"></div>
-      <div class="form-group">
-        <label>Rota <span class="hint">(código oficial)</span></label>
-        <select id="completar-rota"></select>
-      </div>
-      <div class="form-group">
-        <label>Tipo de Operação</label>
-        <select id="completar-praonde">
-          <option value="CROSS-DOCKING">CROSS-DOCKING</option>
-          <option value="ENTREGA DIRETA">ENTREGA DIRETA</option>
-          <option value="RET FRIGO">RET FRIGO</option>
-        </select>
-      </div>
-      <input type="hidden" id="completar-cliente" value="">
-      <input type="hidden" id="completar-destino" value="">
-    </div>
-    <div class="form-row">
-      <div class="form-group"><label>Peso (kg)</label><input type="text" inputmode="numeric" id="completar-peso" min="0"></div>
-    </div>
-    <!-- FRETE, também aqui. Os mesmos campos, na mesma ordem do formulário
-         da Programação — quem mexe numa tela mexe na outra, e existe teste
-         que reprova se divergirem.
-
-         Até 06/10/2026 esta tela NÃO travava, porque o caminhão já está no
-         pátio. Mudou por decisão do dono ("sempre, sem excessoes o valor do
-         frete combinado precisa ser colocado"): completar a chegada é o
-         momento em que a carga vira contratada, então a observação do frete
-         é perguntada aqui também (salvarCompletarCarga). A pergunta não
-         bloqueia o portão — o caminhão já entrou; ela só não deixa a carga
-         virar carga sem dizer como o frete foi fechado. -->
-    <div class="form-row">
-      <div class="form-group" style="flex:2">
-        <label>Destino do frete <span class="hint">(puxa o KM da tabela)</span></label>
-        <input type="text" id="completar-frete-destino" list="lista-destinos-frete"
-               placeholder="Ex: GOIANIA" oninput="destinoFreteCompletarUI()">
-      </div>
-      <div class="form-group" hidden>
-        <label>KM destino <span class="hint">referência da tabela</span></label>
-        <input type="text" inputmode="numeric" id="completar-km-destino" min="1" step="1" readonly
-               title="Vem da Tabela de Frete. Só de leitura: para mudar, edite o destino em Cadastros.">
-      </div>
-      <div class="form-group">
-        <label>KM <span class="hint">vem do destino; editável</span></label>
-        <input type="text" inputmode="decimal" id="completar-km-deslocamento"
-               title="O KM que multiplica a tarifa. Vem da Tabela de Frete pelo destino; corrija aqui se a viagem for outra.">
-      </div>
-    </div>
-    <div class="form-row">
-      <div class="form-group">
-        <label>Sequência <span class="hint">(prioridade de montagem do dia)</span></label>
-        <input type="text" inputmode="numeric" id="completar-sequencia" min="1">
-      </div>
-    </div>
-    <div class="form-row">
-      <div class="form-group">
-        <label>Paletizada?</label>
-        <select id="completar-paletizada"><option>Não</option><option>Sim</option></select>
-      </div>
-      <div class="form-group">
-        <label>Qtd. Ganchos (Gancheira) <span class="hint">0 = Liso</span></label>
-        <input type="text" inputmode="numeric" id="completar-ganchos" min="0" step="1" value="0">
-      </div>
-      <div class="form-group">
-        <label>Qtd. Entregas</label>
-        <input type="text" inputmode="numeric" id="completar-entregas" min="1" step="1" value="1">
-      </div>
-    </div>
-    <div class="form-group" style="margin-bottom:10px"><label>Observações</label><textarea id="completar-obs"></textarea></div>
-    <div class="flex-end">
-      <button class="btn btn-sec" onclick="fecharModalCompletar()">Cancelar</button>
-      <button class="btn btn-primary" onclick="salvarCompletarCarga()">Salvar dados</button>
-    </div>
-  </div>
-</div>
-
 
 <div id="notif"></div>
 

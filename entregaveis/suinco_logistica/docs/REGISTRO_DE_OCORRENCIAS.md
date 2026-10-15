@@ -26,7 +26,7 @@ faz achar a próxima em minutos em vez de horas:
 | **Campo esquecido em um dos três pontos** | Carga tem três lugares onde um campo precisa existir: ida (`data.js`), volta (`suinco-api.js`) e conversão (`cargaDeLinhaRemota`). Faltando em um, o dado some sem erro em tela. | #02, #09 |
 | **Eco de sincronização** | Todo painel reenvia o que tem em memória. Cópia velha sobrescreve dado novo — inclusive com campo vazio. | #01, #03, #08, #10 |
 | **Rótulo que mente** | O dado está certo no banco; o nome dado a ele na tela descreve outra coisa. | #04, #12, #123, #125 |
-| **Regra larga demais** | Trava criada para um caso real barra também o caso legítimo mais comum. | #05 |
+| **Regra larga demais** | Trava criada para um caso real barra também o caso legítimo mais comum. | #05, #140 |
 | **Trava sem o par na tela** | O servidor passa a exigir algo novo e a tela continua com o botão antigo: quem clica só descobre que não pode, e não tem por onde seguir. | #13, #73 |
 | **A mesma decisão escrita em dois lugares** | A regra é copiada em vez de consultada. As cópias divergem e o comportamento fica errado sem que nenhuma linha esteja errada. | #14, #26, #73, #122, #126 |
 | **Duas escritas em voo, a velha ganha** | O painel manda a carga INTEIRA a cada alteração. Duas alterações seguidas viram duas requisições simultâneas, e a primeira carrega o valor velho do campo que ainda ia mudar. | #16 |
@@ -6399,3 +6399,88 @@ teste continua pegando o defeito de verdade: numa cópia do painel com a
 saída esticada para 300 ms + 90 ms, reprova com 342 e 349 ms.
 
 Só teste: não muda o painel nem o servidor.
+
+## #140 — Placas há mais de 240 horas no Aguardando Carga (15/10/2026)
+
+**Relato do dono:** *"quando um caminhão entra sem ter carga programada ele
+fica lá como criar carga, porém quando criarem carga por outro lugar, seja
+por montagem do dia ou por programação, ele tem que sair da aguardando carga
+e ir pra torre (...) tinha placas a mais de 240 horas como aguardando
+carga"*. E, sobre o que fazer: *"põe esse aguardando carga pra funcionar de
+forma fiel ao que realmente está acontecendo"* — com a ressalva *"tem placas
+que às vezes ficam 3 dias no pátio, por exemplo exportação; isso não pode
+conflitar"*.
+
+**O vínculo funcionava no servidor** — reproduzido com a API de verdade:
+chegada → carga criada com a placa (Montagem ou POST) → a entrada é
+absorvida, a carga sobe para Aguardando Embarque com a hora da chegada;
+carga sem placa que ganha a placa depois → absorvida; programada antes da
+chegada → a chegada é recusada (409). Em nenhum caso a entrada ficava.
+
+**As duas causas, reproduzidas pela tela:**
+
+1. **A Programação recusava a placa que estava no Aguardando Carga.** A
+   trava de duplicidade de 11/08 (`criarCargaProgramadaUI`) contava a linha
+   da entrada como outra carga: *"FDC2122 já está nesta programação (sem
+   número ainda) e ainda não seguiu viagem. Para lançar outra carga no mesmo
+   caminhão, use ➕ Outra carga"* — e a linha da entrada nem tem esse
+   botão. A absorção na criação (27/08) existia logo abaixo e nunca era
+   alcançada por essa tela. Só a Montagem do Dia (que não tem a trava) e o
+   "Criar carga" da própria lista levavam o caminhão à Torre. Família:
+   **regra larga demais** — a trava contra o acidente barrava o caso mais
+   comum. O teste da absorção (`test_carga_programada_encontra_patio`)
+   chamava `criarCargaProgramada()` direto, passando por cima da trava da
+   tela: verde com a porta fechada para quem usa (a #111 de novo: prova por
+   atalho que a pessoa não tem).
+2. **O caminhão que foi embora sem carregar não tinha saída que dissesse
+   isso.** "Só devolução — saiu" conta outra história; sem saída
+   verdadeira, a linha ficava para sempre.
+
+3. **Achado no caminho, e já em produção pela Montagem do Dia: a hora da
+   chegada se perdia no banco.** A Montagem e a Programação juntam a carga
+   à entrada NA TELA (resposta imediata, desde 27/08) e mandam a carga nova
+   já em "Aguardando Embarque". O servidor só sobe o status com a hora da
+   chegada quando a carga chega em "Aguardando Veículo" — então gravava a
+   entrada no pátio com a hora de AGORA. Reproduzido: caminhão que chegou
+   ontem, carga criada hoje → a tela mostrava ontem, o banco gravava hoje,
+   e na sincronia seguinte a tela passava a mostrar hoje também. O tempo de
+   pátio ficava menor do que foi: o indicador mentindo a favor da operação.
+   Família: **a mesma decisão escrita em dois lugares** — a absorção mora no
+   painel e no servidor, e o painel decidia antes de perguntar.
+
+**A correção (decisão 38).** A trava de placa ignora a entrada sem carga
+(ela existe para ser absorvida) e o aviso embaixo da placa diz *"está no
+pátio sem carga (chegou …). Criando a carga aqui, ele sai do Aguardando
+Carga e vai para a Torre"*. A lista perdeu o "Criar carga" (pedido do dono)
+e ganhou **Saiu sem carregar** ao lado do **Excluir**; a Portaria oferece
+"Saiu sem carregar" para a entrada sem carga. Cada linha diz há quanto tempo
+o caminhão espera, e passa de 3 dias destacada — **nada sai por prazo**. O
+Histórico do servidor diz "entrada sem carga — saiu sem carregar".
+Para a hora da chegada, os dois lados: o **painel** manda a carga nova como
+foi criada (Aguardando Veículo) e quem junta a entrada é o servidor — vale
+já com o servidor de hoje; o **servidor**, se um painel antigo em cache
+mandar "Aguardando Embarque" com caminhão esperando no pátio, faz a carga
+nascer em Aguardando Veículo e a absorção usa a hora da chegada.
+
+**Testes que travam.** `testes/test_aguardando_carga_fiel.py` (tela + API
++ banco, 23 conferências): contra o publicado reprova em 19 — inclusive a
+recusa da Programação. Bloco 7c da API: o Histórico diz "entrada sem carga"
+(reprova no servidor publicado); bloco 10: a hora da chegada continua a da
+chegada e a da programação é a de agora (a regra do gestor de 14/08, que o
+modal "Criar carga" guardava), e o painel que manda "Aguardando Embarque"
+não apaga a hora da chegada (reprova no servidor publicado: gravava hoje).
+`test_data_programacao` pela tela, com a chegada de ontem INTEIRA (a linha
+e o carimbo — antes o teste envelhecia só a linha, um caso que não
+existe): "no banco: entrada ontem, programação hoje" reprovava com o painel
+sem a correção e passa com ela, mesmo contra o servidor de hoje.
+
+**Depende do servidor** a palavra do Histórico ("entrada sem carga" em vez
+de "só devolução") e a defesa contra painel antigo em cache: valem depois do
+`atualizar_tudo.sh` (sem migração). A saída sem carregar, a correção da
+Programação e a hora da chegada certa valem assim que o painel for
+publicado. As cargas que já foram criadas com a hora errada NÃO são
+corrigidas por esta entrega. A hora certa de cada uma continua guardada na
+linha da entrada absorvida e no Histórico ("estava no pátio desde …");
+corrigir o passado é um script que altera dado — só com prova contra o
+modelo da semana e com o sim do dono (proposta na FILA).
+

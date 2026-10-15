@@ -87,17 +87,19 @@ async def main():
         }""")
         ck('carga criada vem como ENTREGA DIRETA', d['praOnde'] == 'ENTREGA DIRETA', str(d))
 
-        print('\n=== 4. FORMULÁRIO "COMPLETAR DADOS" TAMBÉM SÓ OFERECE AS 3 ===')
+        print('\n=== 4. A PROGRAMAÇÃO TAMBÉM SÓ OFERECE AS 3 ===')
+        # Era o formulário "Completar dados" do Aguardando Carga, que saiu
+        # em 15/10/2026: a carga do caminhão que já está no pátio se cria na
+        # Programação (ou na Montagem do Dia) com a mesma placa.
         d3 = await pg.evaluate("""() => {
-            const c = DB.cargas[0];
-            abrirCompletar(c.id);
+            abrirTab('programacao');
             return {
-                valorAtual: document.getElementById('completar-praonde').value,
-                opcoes: [...document.getElementById('completar-praonde').options].map(o => o.value),
+                valorAtual: document.getElementById('prog-praonde').value,
+                opcoes: [...document.getElementById('prog-praonde').options].map(o => o.value),
             };
         }""")
         ck('sugestão pré-marcada é ENTREGA DIRETA', d3['valorAtual'] == 'ENTREGA DIRETA', d3)
-        ck('<select> de completar dados só tem as 3 categorias',
+        ck('<select> da Programação só tem as 3 categorias',
            set(d3['opcoes']) == {'CROSS-DOCKING', 'ENTREGA DIRETA', 'RET FRIGO'}, d3)
 
         print('\n=== 5. DADO ANTIGO (localStorage com valor extinto) É AUTOCORRIGIDO NO LOAD ===')
