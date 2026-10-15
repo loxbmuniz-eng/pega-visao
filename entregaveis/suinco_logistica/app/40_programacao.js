@@ -103,6 +103,17 @@ function fraseDePlacaRepetida(placa, ondeJaEsta, realce){
 function avisoPlacaJaProgramada(placa){
   const p = normalizarPlaca(placa);
   if(!p) return '';
+  /* O caminhão que está no pátio SEM carga não é "outra carga": é ele
+     esperando justamente esta (15/10/2026). O aviso diz o que vai
+     acontecer, em vez de sugerir duplicidade. */
+  const noPatio = cargasAbertasPorPlaca(p).find(c => c.aguardandoCarga);
+  if(noPatio){
+    const desde = entradaNoPatioDe(noPatio);
+    return `<div class="aviso-placa-no-patio"><strong>${esc(p)} está no pátio sem carga</strong>`
+      + (desde ? ` (chegou ${esc(fmtDataHora(desde))})` : '')
+      + '. Criando a carga aqui, ele sai do Aguardando Carga e vai para a Torre, '
+      + 'com a hora em que chegou.</div>';
+  }
   const abertas = cargasAbertasPorPlaca(p);
   if(!abertas.length) return '';
 
@@ -140,7 +151,14 @@ async function criarCargaProgramadaUI(){
      do veículo. Depois que o caminhão sai (Seguiu Viagem), a placa fica
      livre de novo sem precisar de nada. */
   const pNorm = normalizarPlaca(placa);
-  const abertas = cargasAbertasPorPlaca(pNorm);
+  /* A ENTRADA SEM CARGA NÃO É DUPLICIDADE (15/10/2026). Esta trava contava
+     a linha do Aguardando Carga como "já está nesta programação" e recusava
+     — e era a ÚNICA tela que fazia isso: a Montagem do Dia cria a carga e
+     o servidor junta a entrada (absorverEntradaDoPatio). Com o "Criar
+     carga" fora da lista, a recusa deixaria a Programação sem caminho para
+     o caminhão que já está no pátio. A entrada sem carga existe para ser
+     absorvida pela carga dele; quem trava é carga de verdade. */
+  const abertas = cargasAbertasPorPlaca(pNorm).filter(c => !c.aguardandoCarga);
   if(abertas.length && _placaMultiCargaAutorizada !== pNorm){
     const numeros = abertas
       .map(c => c.aguardandoCarga ? 'sem número ainda' : (c.numeroCarga || 'sem número'))
@@ -264,16 +282,6 @@ function destinoFreteMudouUI(){
 }
 
 function kmDeslocamentoMudouUI(){ avisarSobreKmUI(); }
-
-/* O mesmo gesto no modal de Completar. Dois pares de campos e uma conta só
-   (kmDoDestino) — o que NÃO se duplica é a decisão de quanto vale o km,
-   que é do servidor. */
-function destinoFreteCompletarUI(){
-  const km = kmDoDestino(document.getElementById('completar-frete-destino').value);
-  document.getElementById('completar-km-destino').value = kmTexto(km);
-  const desl = document.getElementById('completar-km-deslocamento');
-  if(km !== null && !desl.value) desl.value = kmTexto(km);
-}
 
 /* UM KM SÓ (06/10/2026). Até aqui havia dois campos — o KM do destino e o
    de deslocamento — e um aviso quando divergiam. O dono decidiu: "KM de
@@ -724,6 +732,11 @@ function marcaEtapaDevolvidaHtml(carga){
    registrou a saída. */
 function marcaSaiuSemCarregarHtml(carga){
   if(!carga || carga.saidaSemCarregar !== true) return '';
+  /* Entrada sem carga que foi embora (15/10/2026) não trouxe devolução. */
+  if(carga.aguardandoCarga){
+    return '<span class="chip-sem-carregar" title="Este caminhão chegou sem carga programada '
+      + 'e foi embora SEM carregar. A saída foi registrada.">↩ saiu sem carregar</span>';
+  }
   return '<span class="chip-sem-carregar" title="Este caminhão entrou, entregou a '
     + 'devolução e foi embora SEM carregar. A saída foi registrada pela Portaria.">'
     + '↩ só devolução</span>';
@@ -1325,7 +1338,7 @@ function preencherSelectsRota(){
   // Cadastros → Cadastrar Rota precisa aparecer aqui na hora, sem esperar
   // reload. Preserva o valor selecionado — chamar isto não pode limpar uma
   // rota que o Programador já tinha escolhido no formulário.
-  ['prog-rota','completar-rota'].forEach(id=>{
+  ['prog-rota'].forEach(id=>{
     const el = document.getElementById(id);
     if(!el) return;
     const valorAtual = el.value;
@@ -1716,124 +1729,57 @@ async function excluirCargaSeguiuViagemUI(id){
 }
 function renderProgAguardando(){
   /* `cargasAbertas()`, não `DB.cargas` — relato de 14/08/2026: "não consigo
-     excluir essas duas cargas que ficaram como resíduo".
+     excluir essas duas cargas que ficaram como resíduo". Caminhão que já
+     saiu (Seguiu Viagem) não está "aguardando carga": continua no Histórico
+     e nos relatórios, onde deve estar.
 
-     O caminho que gera o resíduo: um caminhão chega sem programação (nasce
-     um registro `aguardandoCarga`), a carga dele nunca é lançada, e depois
-     ele vai embora — a Portaria registra a saída e o registro vira "Seguiu
-     Viagem", mas continua com a marca `aguardandoCarga`.
+     FIEL AO PÁTIO (15/10/2026, pedido do dono: "põe esse aguardando carga pra
+     funcionar de forma fiel ao que realmente está acontecendo"). Havia placa
+     aqui há mais de 240 horas. Provado com a API: o vínculo funciona — criar
+     a carga com a placa (Montagem do Dia, Programação, ou pôr a placa depois)
+     tira a entrada daqui sozinha (absorverEntradaDoPatio, no servidor). O
+     que prendia a placa era o caminhão que foi EMBORA SEM CARREGAR: não havia
+     uma saída que dissesse isso ("Só devolução — saiu" diz outra coisa).
 
-     Esta lista usava a lista CRUA, sem tirar quem já saiu, então o registro
-     ficava aqui para sempre: não dá para lançar carga de um caminhão que já
-     foi embora, e o botão Excluir se recusa — com razão — a apagar quem já
-     viajou. O contador ao lado desta mesma tabela já usava `cargasAbertas()`
-     (linha do `aguardandoCargaCount`), então os dois discordavam na tela.
-
-     A correção não é liberar a exclusão: histórico do pátio não se apaga
-     mesmo. É parar de chamar de "aguardando carga" um caminhão que já saiu.
-     Ele continua no Histórico e nos relatórios, onde deve estar. */
+     Então a linha sai daqui por FATO, nunca por prazo — caminhão de
+     exportação fica dias no pátio de verdade (o dono: "isso não pode
+     conflitar"):
+       · a carga dele foi criada → sai sozinha (vira carga na Torre);
+       · ele foi embora sem carregar → "Saiu sem carregar" (fica no Histórico);
+       · foi lançado por engano → Excluir.
+     O tempo de espera aparece em cada linha, e passa de 3 dias destacado —
+     é o que mostra quem conferir, sem esconder ninguém.
+     O "Criar carga" saiu (pedido do dono): a carga se cria na Montagem do
+     Dia ou na Programação, e o vínculo é automático. */
   const lista = cargasAbertas().filter(c=>c.aguardandoCarga);
   const pill = document.getElementById('prog-aguardando-count');
   pill.hidden = lista.length===0; pill.textContent = lista.length;
-  document.getElementById('prog-aguardando-tbody').innerHTML = lista.map(c=>`
-    <tr>
+  const agora = Date.now();
+  document.getElementById('prog-aguardando-tbody').innerHTML = lista.map(c=>{
+    /* A hora da chegada vem da fonte única (entradaNoPatioDe), sem
+       `|| c.criadoEm` — test_hora_entrada_fonte_unica. Para a entrada sem
+       carga ela é a hora em que a Portaria registrou a chegada. */
+    const entrada = entradaNoPatioDe(c);
+    const horas = entrada ? Math.max(0, Math.floor((agora - Date.parse(entrada)) / 3600000)) : null;
+    const espera = horas === null ? '' : horas < 48 ? `há ${horas} h` : `há ${Math.floor(horas / 24)} dias`;
+    const antiga = horas !== null && horas > DIAS_PARA_INATIVA * 24;
+    return `
+    <tr class="${antiga ? 'aguardando-antiga' : ''}">
       <td>${esc(c.placa)}</td><td>${esc(c.transportadora)||'—'}</td><td>${esc(c.tipoVeiculo)||'—'}</td>
-      <td>${fmtDataHora(c.criadoEm)}</td>
+      <td>${entrada ? fmtDataHora(entrada) : 'chegada não registrada'}${espera ? ` <span class="aguardando-espera${antiga ? ' aguardando-espera-antiga' : ''}"${antiga ? ' title="Esperando há mais de 3 dias: confira se o caminhão ainda está no pátio."' : ''}>${espera}</span>` : ''}</td>
       <td class="no-print gap8">
-        <!-- "Criar carga", não "Completar dados" — pedido do programador
-             de cargas (12/08/2026), e a palavra dele descreve melhor o que
-             acontece: o caminhão chegou sem programação, então ele está
-             CRIANDO a carga daquele veículo, não preenchendo lacunas de
-             algo que já existia. O botão é o mesmo, o fluxo é o mesmo; o
-             nome é que estava contando outra história. -->
-        <button class="btn btn-primary btn-sm" onclick="abrirCompletar('${escJs(c.id)}')"><svg class="ico ico-btn" aria-hidden="true"><use href="#i-mais"/></svg>Criar carga</button>
+        <button class="btn btn-sec btn-sm" onclick="portariaSaiuSoDevolucaoUI('${escJs(c.id)}')"
+                title="O caminhão foi embora sem carregar. Fica registrado no Histórico."><svg class="ico ico-btn" aria-hidden="true"><use href="#i-desfazer"/></svg>Saiu sem carregar</button>
         <!-- Excluir aqui — pedido do usuário (11/08/2026): "ADICIONAR UM
-             BOTAO DE EXCLUIR NO AGUARDANDO CARGA". Caminhão que a Portaria
-             registrou por engano (placa errada, veículo que só passou)
-             ficava preso nesta lista para sempre: sem número de carga não
-             dá pra completar, e não havia como tirar. Usa a MESMA função
+             BOTAO DE EXCLUIR NO AGUARDANDO CARGA". Para a chegada lançada por
+             engano (placa errada, veículo que só passou). Usa a MESMA função
              de exclusão do resto do painel, com as mesmas travas de
              permissão e o mesmo registro no Histórico. -->
         <button class="btn btn-danger btn-sm" onclick="excluirCargaUI('${escJs(c.id)}')"
                 title="Remover este registro — use quando a chegada foi lançada por engano.">Excluir</button>
       </td>
-    </tr>`).join('');
+    </tr>`;
+  }).join('');
   document.getElementById('prog-aguardando-empty').hidden = lista.length>0;
-}
-function abrirCompletar(id){
-  const c = getCarga(id); if(!c) return;
-  document.getElementById('completar-id').value = id;
-  /* "No pátio desde" só quando a chegada foi REGISTRADA. O `|| c.criadoEm`
-     que estava aqui trocava a resposta honesta pela data em que a LINHA
-     nasceu — que numa carga programada é a véspera. Foi assim que uma
-     placa que chegou de manhã apareceu "no pátio desde 20:42 de ontem". */
-  const entradaCompletar = entradaNoPatioDe(c);
-  document.getElementById('completar-placa-info').textContent = entradaCompletar
-    ? `Placa ${c.placa} — no pátio desde ${fmtDataHora(entradaCompletar)}`
-    : `Placa ${c.placa} — chegada ainda não registrada pela Portaria`;
-  document.getElementById('completar-numero-carga').value = '';
-  document.getElementById('completar-cliente').value = '';
-  document.getElementById('completar-destino').value = '';
-  document.getElementById('completar-peso').value = '';
-  document.getElementById('completar-sequencia').value = '';
-  document.getElementById('completar-transportadora').value = c.transportadora || '';
-  document.getElementById('completar-tipoveiculo').value = c.tipoVeiculo || '';
-  document.getElementById('completar-motorista').value = '';
-  document.getElementById('completar-obs').value = '';
-  document.getElementById('completar-praonde').value = praOndeSugerido(c.transportadora);
-  document.getElementById('completar-rota').value = '';
-  document.getElementById('completar-paletizada').value = 'Não';
-  document.getElementById('completar-ganchos').value = '0';
-  document.getElementById('completar-entregas').value = '1';
-  document.getElementById('completar-frete-destino').value = c.freteDestino || '';
-  document.getElementById('completar-km-destino').value = kmTexto(c.kmDestino);
-  document.getElementById('completar-km-deslocamento').value = kmTexto(c.kmDeslocamento);
-  document.getElementById('modal-completar').classList.add('open');
-}
-function fecharModalCompletar(){ document.getElementById('modal-completar').classList.remove('open'); }
-async function salvarCompletarCarga(){
-  const id = document.getElementById('completar-id').value;
-  const cAg = getCarga(id);
-  /* Completar a chegada é contratar: pergunta o frete antes (06/10/2026). */
-  const frete = cAg ? await garantirFreteParaContratar({
-    ...infoFreteDaCarga(cAg),
-    transportadora: document.getElementById('completar-transportadora').value || cAg.transportadora,
-    numeroCarga: document.getElementById('completar-numero-carga').value,
-    destino: document.getElementById('completar-frete-destino').value,
-    km: kmValidoLocal(document.getElementById('completar-km-deslocamento').value),
-  }, 'contratar') : null;
-  if(cAg && !frete){
-    notify('Carga NÃO completada: sem a observação do frete a carga não é contratada.', 'warn', 8000);
-    return;
-  }
-  try{
-    completarCargaAguardando(id, {
-      freteObservacao: frete && frete.freteObservacao,
-      freteCombinado: frete && frete.freteCombinado,
-      numeroCarga: document.getElementById('completar-numero-carga').value,
-      cliente: document.getElementById('completar-cliente').value,
-      destino: document.getElementById('completar-destino').value,
-      peso: document.getElementById('completar-peso').value,
-      sequencia: document.getElementById('completar-sequencia').value,
-      transportadora: document.getElementById('completar-transportadora').value,
-      tipoVeiculo: document.getElementById('completar-tipoveiculo').value,
-      motorista: document.getElementById('completar-motorista').value,
-      observacoes: document.getElementById('completar-obs').value,
-      praOnde: document.getElementById('completar-praonde').value,
-      rota: document.getElementById('completar-rota').value,
-      paletizada: document.getElementById('completar-paletizada').value,
-      qtdGanchos: document.getElementById('completar-ganchos').value,
-      qtdEntregas: document.getElementById('completar-entregas').value,
-      freteDestino: destinoFreteNormalizado(document.getElementById('completar-frete-destino').value),
-      kmDeslocamento: document.getElementById('completar-km-deslocamento').value,
-      operador: nomeOperadorAtual()
-    });
-    fecharModalCompletar();
-    // Sem beep aqui de propósito: o status NÃO muda nesta ação (a carga já
-    // nasceu em "Aguardando Embarque" quando a Portaria registrou a
-    // chegada) — o som é só pra mudanças de status, não pra edição de dados.
-    notifyGravacao('Dados completados com sucesso.');
-    renderAll();
-  }catch(e){ notify(e.message, 'danger'); }
 }
 

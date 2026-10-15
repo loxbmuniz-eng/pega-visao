@@ -95,7 +95,7 @@ async def main():
         ck('e o nome da cidade da linha continua preenchido',
            (m['enviado'] or {}).get('apelidoRota') == 'DESTINO NOVO TESTE', str(m['enviado']))
 
-        print('\n=== 2. PROGRAMAÇÃO E COMPLETAR — O DESTINO VAI EM MAIÚSCULA ===')
+        print('\n=== 2. PROGRAMAÇÃO — O DESTINO VAI EM MAIÚSCULA ===')
         prog = await pg.evaluate("""() => {
           let corpo = null;
           const orig = window.criarCargaProgramada;
@@ -108,17 +108,8 @@ async def main():
           return corpo && corpo.freteDestino;
         }""")
         ck('Programação: "  destino novo teste " vai como "DESTINO NOVO TESTE"', prog == 'DESTINO NOVO TESTE', repr(prog))
-        comp = await pg.evaluate("""() => {
-          let corpo = null;
-          const orig = window.completarCargaAguardando;
-          window.completarCargaAguardando = (id, c) => { corpo = c; };
-          document.getElementById('completar-id').value = 'x';
-          document.getElementById('completar-frete-destino').value = 'goiania';
-          try { salvarCompletarCarga(); } catch(e) {}
-          window.completarCargaAguardando = orig;
-          return corpo && corpo.freteDestino;
-        }""")
-        ck('Completar: "goiania" vai como "GOIANIA"', comp == 'GOIANIA', repr(comp))
+        # O "Completar" (Criar carga do Aguardando Carga) saiu em 15/10/2026:
+        # a Programação é o único formulário que cria carga com destino.
 
         print('\n=== 3. TABELA DE FRETE — A MENSAGEM DIZ O KM QUE O SERVIDOR GRAVOU ===')
         msg = await pg.evaluate("""async () => {

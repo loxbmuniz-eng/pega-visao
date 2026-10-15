@@ -4721,6 +4721,109 @@ describe('10. A carga programada encontra o caminhão que já está no pátio', 
       ['carga_orfa_1050']);
     assert.ok(log.rows.length >= 1, 'a absorção precisa estar no Histórico');
   });
+
+  test('a hora da CHEGADA continua sendo a hora da chegada; a da programação é a de agora', async () => {
+    /* Regra do gestor de 14/08/2026, que até 15/10 era guardada pelo modal
+       "Criar carga" do Aguardando Carga (saiu a pedido do dono): "o
+       relatório tem que considerar sempre a data de programação. E aí a
+       gente não perde o histórico da hora e do dia que o carro realmente
+       chegou". Agora o único caminho é a carga criada com a placa — e este
+       teste cobra as duas datas nele. */
+    const P2 = 'TST1051';
+    await pool.query(
+      `INSERT INTO dim_veiculos (placa, transportadora, tipo_veiculo)
+       VALUES ($1, 'Transportadora Teste', 'Truck') ON CONFLICT (placa) DO NOTHING`, [P2]);
+    try {
+      const chegada = await req('/api/cargas', {
+        metodo: 'POST', token: tokens['Portaria'],
+        corpo: { id: 'carga_orfa_1051', placa: P2, aguardandoCarga: true,
+                 numeroCarga: 'Aguardando Carga', status: 'Aguardando Embarque' },
+      });
+      assert.equal(chegada.status, 201);
+      // O caminhão chegou ONTEM (o banco é o relógio do servidor).
+      await pool.query(
+        `UPDATE fact_viagens SET criado_em = now() - interval '1 day' WHERE carga_id = 'carga_orfa_1051'`);
+      const { rows: [ent] } = await pool.query(
+        `SELECT criado_em FROM fact_viagens WHERE carga_id = 'carga_orfa_1051'`);
+
+      const prog = await req('/api/cargas', {
+        metodo: 'POST', token: tokens['Logística'],
+        corpo: { id: 'carga_real_1051', placa: P2, numeroCarga: '991051', rota: '500', peso: 9000 },
+      });
+      assert.equal(prog.status, 201);
+
+      const { rows: [real] } = await pool.query(
+        `SELECT programado_em, criado_em FROM fact_viagens WHERE carga_id = 'carga_real_1051'`);
+      const programadaHaMin = (Date.now() - new Date(real.programado_em || real.criado_em)) / 60000;
+      assert.ok(programadaHaMin < 10,
+        `a data de programação é a de agora, não a da chegada: ${real.programado_em || real.criado_em}`);
+
+      const { rows: ev } = await pool.query(
+        `SELECT data_evento FROM fact_statusfrota
+          WHERE carga_id = 'carga_real_1051' AND status_novo = 'Aguardando Embarque'`);
+      assert.equal(ev.length, 1, 'a subida para Aguardando Embarque precisa estar registrada');
+      assert.equal(new Date(ev[0].data_evento).toISOString(), new Date(ent.criado_em).toISOString(),
+        'a entrada no pátio é a hora em que o caminhão CHEGOU, não a hora em que a carga foi criada');
+    } finally {
+      await pool.query('DELETE FROM fact_statusfrota WHERE placa = $1', [P2]);
+      await pool.query('DELETE FROM log_eventos WHERE placa = $1', [P2]);
+      await pool.query('DELETE FROM fact_viagens WHERE placa = $1', [P2]);
+      await pool.query('DELETE FROM dim_veiculos WHERE placa = $1', [P2]);
+    }
+  });
+
+  test('o painel que já juntou a entrada na tela manda "Aguardando Embarque": a hora continua a da CHEGADA', async () => {
+    /* Ocorrência #140 (15/10/2026). A Montagem do Dia e a Programação criam
+       a carga e já a juntam à entrada NA TELA (resposta imediata), então o
+       painel manda a carga nova em "Aguardando Embarque". O servidor gravava
+       a entrada com a hora de AGORA e a hora real da chegada se perdia: o
+       tempo de pátio ficava menor do que foi — o indicador mentindo a favor
+       da operação. Quem decide a entrada é o servidor: a carga nasce em
+       Aguardando Veículo e a absorção sobe o status com a hora da chegada. */
+    const P3 = 'TST1053';
+    await pool.query(
+      `INSERT INTO dim_veiculos (placa, transportadora, tipo_veiculo)
+       VALUES ($1, 'Transportadora Teste', 'Truck') ON CONFLICT (placa) DO NOTHING`, [P3]);
+    try {
+      const chegada = await req('/api/cargas', {
+        metodo: 'POST', token: tokens['Portaria'],
+        corpo: { id: 'carga_orfa_1053', placa: P3, aguardandoCarga: true,
+                 numeroCarga: 'Aguardando Carga', status: 'Aguardando Embarque' },
+      });
+      assert.equal(chegada.status, 201);
+      await pool.query(
+        `UPDATE fact_viagens SET criado_em = now() - interval '1 day' WHERE carga_id = 'carga_orfa_1053'`);
+      await pool.query(
+        `UPDATE fact_statusfrota SET data_evento = data_evento - interval '1 day' WHERE carga_id = 'carga_orfa_1053'`);
+      // A entrada é o instante em que a linha da Portaria nasceu — a mesma
+      // definição de absorverEntradaDoPatio (o carimbo da movimentação é o
+      // mesmo instante, a milissegundos de distância).
+      const { rows: [ent] } = await pool.query(
+        `SELECT criado_em AS t FROM fact_viagens WHERE carga_id = 'carga_orfa_1053'`);
+
+      const prog = await req('/api/cargas', {
+        metodo: 'POST', token: tokens['Logística'],
+        corpo: { id: 'carga_real_1053', placa: P3, numeroCarga: '991053', rota: '500', peso: 9000,
+                 status: 'Aguardando Embarque' },
+      });
+      assert.equal(prog.status, 201, prog.texto);
+      assert.equal(prog.json.status, 'Aguardando Embarque');
+
+      const { rows: ev } = await pool.query(
+        `SELECT min(data_evento) AS t FROM fact_statusfrota
+          WHERE carga_id = 'carga_real_1053' AND status_novo = 'Aguardando Embarque'`);
+      assert.equal(new Date(ev[0].t).toISOString(), new Date(ent.t).toISOString(),
+        'a entrada no pátio da carga é a hora em que o caminhão CHEGOU (ontem), não a da criação');
+      const { rows: orfa } = await pool.query(
+        `SELECT excluida_em FROM fact_viagens WHERE carga_id = 'carga_orfa_1053'`);
+      assert.ok(orfa[0].excluida_em, 'a entrada sem carga juntou-se à carga');
+    } finally {
+      await pool.query('DELETE FROM fact_statusfrota WHERE placa = $1', [P3]);
+      await pool.query('DELETE FROM log_eventos WHERE placa = $1', [P3]);
+      await pool.query('DELETE FROM fact_viagens WHERE placa = $1', [P3]);
+      await pool.query('DELETE FROM dim_veiculos WHERE placa = $1', [P3]);
+    }
+  });
 });
 
 
@@ -4811,6 +4914,55 @@ describe('7c. O caminhão que só trouxe devolução sai pela Portaria (08/09/20
       corpo: { status: 'Seguiu Viagem', soDevolucao: true },
     });
     assert.equal(r.status, 403, r.texto);
+  });
+
+  test('a ENTRADA SEM CARGA que vai embora: o Histórico diz "entrada sem carga", não "só devolução"', async () => {
+    /* 15/10/2026, pedido do dono: o Aguardando Carga fiel ao pátio. Havia
+       placa lá há mais de 240 horas: o caminhão que chegou sem programação
+       e foi embora sem carregar não tinha uma saída que dissesse isso. A
+       transição é a mesma (Aguardando Embarque → Seguiu Viagem, confirmada);
+       a palavra no Histórico é que precisa contar o que aconteceu. */
+    const P = 'TST1052';
+    await pool.query(
+      `INSERT INTO dim_veiculos (placa, transportadora, tipo_veiculo)
+       VALUES ($1, 'Transportadora Teste', 'Truck') ON CONFLICT (placa) DO NOTHING`, [P]);
+    try {
+      const ch = await req('/api/cargas', {
+        metodo: 'POST', token: tokens['Portaria'],
+        corpo: { id: 'carga_entrada_1052', placa: P, aguardandoCarga: true,
+                 numeroCarga: 'Aguardando Carga', status: 'Aguardando Embarque' },
+      });
+      assert.equal(ch.status, 201, ch.texto);
+      const r = await req('/api/cargas/carga_entrada_1052/status', {
+        metodo: 'POST', token: tokens['Logística'],
+        corpo: { status: 'Seguiu Viagem', soDevolucao: true },
+      });
+      assert.equal(r.status, 200, r.texto);
+      assert.equal(r.json.saidaSemCarregar, true);
+      const { rows } = await pool.query(
+        `SELECT acao FROM log_eventos WHERE carga_id = 'carga_entrada_1052' AND acao LIKE 'Status:%'`);
+      assert.ok(rows.some((x) => x.acao.includes('(entrada sem carga — saiu sem carregar)')),
+        `o Histórico precisa dizer que a entrada sem carga saiu sem carregar: ${JSON.stringify(rows)}`);
+      assert.ok(!rows.some((x) => x.acao.includes('só devolução')),
+        'não trouxe devolução: o Histórico não pode dizer que trouxe');
+    } finally {
+      await pool.query('DELETE FROM fact_statusfrota WHERE placa = $1', [P]);
+      await pool.query('DELETE FROM log_eventos WHERE placa = $1', [P]);
+      await pool.query('DELETE FROM fact_viagens WHERE placa = $1', [P]);
+      await pool.query('DELETE FROM dim_veiculos WHERE placa = $1', [P]);
+    }
+  });
+
+  test('a carga com devolução continua dizendo "só devolução"', async () => {
+    const id = await cargaNoPatio();
+    const r = await req(`/api/cargas/${id}/status`, {
+      metodo: 'POST', token: tokens['Portaria'],
+      corpo: { status: 'Seguiu Viagem', soDevolucao: true },
+    });
+    assert.equal(r.status, 200, r.texto);
+    const { rows } = await pool.query(
+      `SELECT acao FROM log_eventos WHERE carga_id = $1 AND acao LIKE 'Status:%'`, [id]);
+    assert.ok(rows.some((x) => x.acao.includes('(só devolução — saiu sem carregar)')), JSON.stringify(rows));
   });
 });
 

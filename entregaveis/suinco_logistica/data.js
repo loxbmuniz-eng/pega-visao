@@ -171,10 +171,11 @@ function rotaLabel(codigo){
 // a linha inteira do relatório para caber numa única célula.
 /* AS ROTAS QUE AINDA SE OFERECEM.
 
-   Uma função, seis chamadores: os seis seletores de rota do painel
-   (Programação, Completar, carga extra do modelo, montagem, modelo da
-   semana e devoluções). Escrever o filtro em cada um deles é como a rota
-   aposentada reaparece em UM seletor esquecido meses depois.
+   Uma função, cinco chamadores: os cinco seletores de rota do painel
+   (Programação, carga extra do modelo, montagem, modelo da semana e
+   devoluções — o do Completar saiu com ele em 15/10/2026). Escrever o
+   filtro em cada um deles é como a rota aposentada reaparece em UM
+   seletor esquecido meses depois.
 
    A LISTA DO CADASTRO NÃO USA ESTA FUNÇÃO, de propósito: lá a aposentada
    precisa aparecer, marcada, senão ninguém descobre que ela existe nem
@@ -1263,7 +1264,9 @@ const SuincoStore = {
          o servidor não apaga com vazio (eco), e quem decide é a Logística. */
       Frete_Observacao: carga.freteObservacao || '',
       Frete_Combinado: carga.freteCombinado ?? null,
-      Status_Atual: carga.status,
+      // Carga nova que a tela juntou à entrada do pátio sobe como foi criada
+      // — quem junta, com a hora da chegada, é o servidor (#140).
+      Status_Atual: (carga._nuncaConfirmada && carga._statusAoCriar) || carga.status,
       Aguardando_Carga: !!carga.aguardandoCarga,
       Criado_Em: carga.criadoEm,
       /* Data em que a CARGA foi lançada (≠ chegada do caminhão). O
@@ -1364,6 +1367,7 @@ const SuincoStore = {
       if(_aoRecusarCarga) _aoRecusarCarga(carga, r.erro, removida, !!r.offline, !!r.incerta, carga._tentativasIncerta || 0);
     } else if(r && r.enfileirado === false){
       delete carga._nuncaConfirmada;
+      delete carga._statusAoCriar;
       delete carga._tentativasIncerta;
       delete carga._proximaTentativaEm;
       // A versão nova volta na resposta do PATCH. Sem guardá-la, a PRÓXIMA
@@ -2866,9 +2870,9 @@ function criarCargaProgramada({placa, transportadora, tipoVeiculo, numeroCarga, 
     aguardandoCarga: false,
     criadoEm: nowISO(), criadoPor: operador||'(não identificado)',
     // Programada agora: aqui as duas datas coincidem. Elas só se separam
-    // quando o caminhão chegou ANTES de a carga existir — ver
-    // completarCargaAguardando. Criada para OUTRO dia (Montagem), vale o
-    // dia dela — ver programadoEmDoDia (#114).
+    // quando o caminhão chegou ANTES de a carga existir (o servidor junta a
+    // entrada à carga e o status sobe com a hora da chegada). Criada para
+    // OUTRO dia (Montagem), vale o dia dela — ver programadoEmDoDia (#114).
     programadoEm: programadoEmDoDia(dia),
     atualizadoEm: nowISO(),
     // Marca a carga como "ainda não existe no servidor" — permite que uma
@@ -2944,6 +2948,12 @@ function absorverEntradaDoPatio(carga, operador){
     const antes = carga.status;
     carga.status = 'Aguardando Embarque';
     carga.atualizadoEm = nowISO();
+    /* A TELA ADIANTA, O SERVIDOR JUNTA (15/10/2026, ocorrência #140). A carga
+       que ainda não existe no servidor sobe como foi criada — Aguardando
+       Veículo — e é ele quem junta a entrada e sobe o status com a hora da
+       CHEGADA. Subindo já em Aguardando Embarque, o servidor gravava a
+       entrada com a hora de agora e a hora real se perdia. */
+    if(carga._nuncaConfirmada) carga._statusAoCriar = antes;
     registrarMovimentacao({
       cargaId: carga.id, placa: carga.placa,
       statusAnterior: antes, statusNovo: 'Aguardando Embarque',
@@ -3090,65 +3100,10 @@ function registrarChegadaPortaria(placa, operador){
   return {criadas:[], atualizadas:paraAtualizar, jaNoPatio};
 }
 
-// Logística completa os dados de uma carga que nasceu "Aguardando Carga"
-// (identificada pela flag `aguardandoCarga`, não mais por um status
-// específico). O status NÃO muda aqui — ela já nasceu em "Aguardando
-// Embarque" (o caminhão já está fisicamente no pátio) — então isto é só
-// edição de dados, e por isso NÃO gera linha no log de movimentações
-// (log só registra mudança de STATUS).
-function completarCargaAguardando(cargaId, {numeroCarga, cliente, destino, produto, peso, doca, rota, sequencia, observacoes, transportadora, tipoVeiculo, motorista, praOnde, paletizada, qtdGanchos, qtdEntregas, freteDestino, kmDeslocamento, operador, freteObservacao, freteCombinado}){
-  const c = getCarga(cargaId);
-  if(!c) throw new Error('Carga não encontrada');
-  if(!c.aguardandoCarga) throw new Error('Esta carga não está aguardando dados (Aguardando Carga).');
-  /* Completar a chegada da Portaria é CONTRATAR: a observação do frete vem
-     antes de mexer em qualquer campo (06/10/2026). */
-  const faltaFrete = freteFaltandoParaContratar({ placa: c.placa, transportadora: transportadora || c.transportadora,
-    freteObservacao, freteCombinado });
-  if(faltaFrete){ const e = new Error(faltaFrete.erro); e.codigo = faltaFrete.codigo; throw e; }
-  if(freteObservacao){
-    c.freteObservacao = String(freteObservacao).toUpperCase();
-    c.freteCombinado = c.freteObservacao === 'COMBINADO' ? valorEmReaisLocal(freteCombinado) : null;
-  }
-  c.numeroCarga = normalizarNumeroCarga(numeroCarga); c.cliente = cliente||''; c.destino = destino||''; c.produto = produto||''; c.peso = Number(peso)||0;
-  c.doca = doca||''; c.sequencia = sequencia!==undefined && sequencia!=='' ? Number(sequencia) : null;
-  c.observacoes = observacoes||'';
-  c.motorista = motorista||'';
-  /* FRETE no lançamento do caminhão que já está no pátio (09/09/2026).
-
-     `!== undefined` e não `|| ''`: o modal pode não mandar o campo (painel
-     em versão antiga), e nesse caso o que já está gravado tem que ficar.
-     Campo vazio não é ordem de apagar. */
-  if(freteDestino !== undefined) c.freteDestino = String(freteDestino||'').trim().toUpperCase();
-  if(kmDeslocamento !== undefined) c.kmDeslocamento = kmValidoLocal(kmDeslocamento);
-  if(c.freteDestino) c.kmDestino = kmDoDestino(c.freteDestino);
-  c.praOnde = PRA_ONDE_OPCOES.includes(praOnde) ? praOnde : PRA_ONDE_PADRAO;
-  c.rota = rotaInfo(rota) ? String(rota).trim() : '';
-  c.paletizada = paletizada === 'Sim' || paletizada === true ? 'Sim' : 'Não';
-  c.qtdGanchos = qtdGanchos!==undefined && qtdGanchos!=='' ? Math.max(0, Number(qtdGanchos)||0) : 0;
-  c.qtdEntregas = qtdEntregas!==undefined && qtdEntregas!=='' ? Math.max(1, Number(qtdEntregas)||1) : 1;
-  if(transportadora) c.transportadora = transportadora;
-  if(tipoVeiculo) c.tipoVeiculo = tipoVeiculo;
-  c.aguardandoCarga = false;
-  /* A CARGA FOI PROGRAMADA AGORA — e é esta a data que o relatório usa.
-
-     Pedido do gestor (14/08/2026): "se a portaria dá entrada no veículo
-     ontem e a gente lança a carga dela hoje, o relatório considera a data
-     de entrada e não a data que ela foi programada. O relatório tem que
-     considerar sempre a data de programação".
-
-     Antes só existia `criadoEm`, que para um caminhão que chegou sem
-     programação é a hora em que ele ENTROU no pátio. Filtrando o relatório
-     por hoje, a carga lançada hoje num caminhão de ontem ficava de fora.
-
-     `criadoEm` continua intocado de propósito: é o histórico de quando o
-     carro chegou de verdade, e o gestor foi explícito em não perdê-lo
-     ("a gente não perde o histórico da hora e do dia que o carro realmente
-     chegou"). São duas datas diferentes porque são dois fatos diferentes. */
-  c.programadoEm = nowISO();
-  c.atualizadoEm = nowISO();
-  SuincoStore.save();
-  return c;
-}
+/* O "Criar carga" da entrada sem programação saiu em 15/10/2026 (pedido do
+   dono). A carga do caminhão que já está no pátio se cria na Montagem do Dia
+   ou na Programação, com a mesma placa; o servidor junta a entrada à carga
+   (absorverEntradaDoPatio, rotas/cargas.js) e a hora da chegada é a dela. */
 
 /* CORRIGIR O KM DE UMA CARGA QUE JÁ EXISTE (14/09/2026).
 

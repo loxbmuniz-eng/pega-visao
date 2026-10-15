@@ -17,10 +17,17 @@ relatório de hoje — e aparecia no de ontem, onde ninguém a procurava.
 
 CORREÇÃO
 Passa a existir `programadoEm`, gravado quando a carga é de fato lançada
-(criarCargaProgramada e completarCargaAguardando). O filtro usa
-`programadoEm`, com `criadoEm` de reserva para as cargas anteriores a esta
-mudança. `criadoEm` NÃO é tocado: continua sendo o histórico da chegada,
-como o gestor pediu explicitamente.
+(criarCargaProgramada). O filtro usa `programadoEm`, com `criadoEm` de
+reserva para as cargas anteriores a esta mudança. A hora da chegada NÃO se
+perde: continua sendo o histórico do caminhão, como o gestor pediu.
+
+DESDE 15/10/2026 o "Criar carga" do Aguardando Carga saiu (pedido do dono).
+A carga do caminhão que já está no pátio é criada na Programação ou na
+Montagem do Dia com a mesma placa, e o SERVIDOR junta a entrada a ela,
+subindo o status com a hora da chegada — isso é provado no banco em
+backend/testes/api.test.js, bloco 10 ("a hora da CHEGADA continua sendo a
+hora da chegada"). Aqui fica o lado da tela: a carga lançada hoje entra no
+relatório de hoje, e a entrada de ontem guarda o dia em que chegou.
 
     python3 testes/test_data_de_programacao.py
 """
@@ -64,24 +71,25 @@ async def main():
             c.criadoEm = ontem;
             SuincoStore.save();
 
-            // Hoje a Logística lança a carga dela.
-            completarCargaAguardando(c.id, {freteObservacao:'TABELA', 
+            // Hoje a Logística lança a carga dela, na Programação, com a
+            // MESMA placa (o servidor junta a entrada a ela).
+            const nova = criarCargaProgramada({freteObservacao:'TABELA', placa,
                 numeroCarga:'118191', peso:25600, rota:'500', qtdEntregas:1,
                 paletizada:'Sim', operador:'Alysson',
             });
             const hoje = diaLocalISO();
             const ontemISO = diaLocalISO(new Date(ontem));
             return {
-                id: c.id, placa, hoje, ontemISO,
-                criadoEm: c.criadoEm, programadoEm: c.programadoEm,
+                id: nova.id, placa, hoje, ontemISO,
+                criadoEm: c.criadoEm, programadoEm: nova.programadoEm,
                 // o DIA de cada carimbo, no fuso de quem olha — o pedaço cru do
                 // ISO é o dia de Londres e erra das 21h à meia-noite (#116)
                 criadoDia: diaLocalISO(new Date(c.criadoEm)),
-                programadoDia: diaLocalISO(new Date(c.programadoEm)),
+                programadoDia: diaLocalISO(new Date(nova.programadoEm)),
                 noRelatorioDeHoje: filtrarPorDataProgramacao(DB.cargas, hoje, hoje)
-                    .some(x => x.id === c.id),
+                    .some(x => x.id === nova.id),
                 noRelatorioDeOntem: filtrarPorDataProgramacao(DB.cargas, ontemISO, ontemISO)
-                    .some(x => x.id === c.id),
+                    .some(x => x.id === nova.id),
             };
         }""")
 
@@ -93,7 +101,7 @@ async def main():
         print('\n=== O HISTÓRICO DA CHEGADA NÃO PODE SE PERDER ===')
         # O gestor foi explícito: "a gente não perde o histórico da hora e do
         # dia que o carro realmente chegou".
-        ck('criadoEm continua sendo a data da CHEGADA (ontem)',
+        ck('a entrada guarda a data da CHEGADA (ontem)',
            r['criadoDia'] == r['ontemISO'], f"{r['criadoEm']} vs {r['ontemISO']}")
         ck('programadoEm é hoje', r['programadoDia'] == r['hoje'],
            f"{r['programadoEm']} vs {r['hoje']}")

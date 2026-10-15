@@ -7,10 +7,10 @@
    1,33). Só tela — no papel quem fala é o relatório.
    ===================================================================== */
 @media screen{
-  /* A pergunta abre POR CIMA da janela que a chamou (Completar a chegada é
-     um modal também). Com o mesmo z-index, ganhava o que vem depois no HTML
-     — o Completar — e a pergunta ficava atrás, sem clique (achado da
-     bateria, 06/10/2026, antes de publicar). */
+  /* A pergunta abre POR CIMA da janela que a chamou. Com o mesmo z-index,
+     ganhava o modal que vem depois no HTML — foi o Completar a chegada,
+     que saiu em 15/10/2026 — e a pergunta ficava atrás, sem clique (achado
+     da bateria, 06/10/2026, antes de publicar). Fica para qualquer modal. */
   #modal-frete-contratar.modal-overlay{ z-index:3700 }   /* .modal-overlay é 3600 (styles.css) */
   #modal-frete-contratar .frete-c-opcoes{ border:0; padding:0; margin:12px 0 4px; display:flex; flex-direction:column; gap:8px }
   #modal-frete-contratar .frete-c-op{ display:flex; gap:10px; align-items:flex-start; padding:10px 12px; border:1px solid var(--border);

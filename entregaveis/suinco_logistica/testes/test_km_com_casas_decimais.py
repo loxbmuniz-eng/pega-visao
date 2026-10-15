@@ -106,9 +106,11 @@ async def main():
         ck('"11,66" vai ao servidor como 11,66', enviado == 11.66, str(enviado))
 
         print('\n=== 5. O CELULAR MOSTRA A VÍRGULA NOS CAMPOS DE KM ===')
-        modos = await pg.evaluate("""() => ['prog-km-deslocamento','completar-km-deslocamento','frete-destino-km']
+        # Eram três: o do modal "Criar carga" do Aguardando Carga saiu com ele
+        # em 15/10/2026 (a carga do caminhão no pátio se cria na Programação).
+        modos = await pg.evaluate("""() => ['prog-km-deslocamento','frete-destino-km']
             .map(id => (document.getElementById(id) || {}).inputMode)""")
-        ck('os três campos de KM usam teclado decimal', modos == ['decimal'] * 3, str(modos))
+        ck('os dois campos de KM usam teclado decimal', modos == ['decimal'] * 2, str(modos))
 
         ck('nenhum erro de JavaScript', not erros, '; '.join(erros[:3]))
         await nav.close()
