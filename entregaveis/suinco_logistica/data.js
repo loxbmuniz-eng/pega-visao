@@ -171,10 +171,11 @@ function rotaLabel(codigo){
 // a linha inteira do relatório para caber numa única célula.
 /* AS ROTAS QUE AINDA SE OFERECEM.
 
-   Uma função, seis chamadores: os seis seletores de rota do painel
-   (Programação, Completar, carga extra do modelo, montagem, modelo da
-   semana e devoluções). Escrever o filtro em cada um deles é como a rota
-   aposentada reaparece em UM seletor esquecido meses depois.
+   Uma função, cinco chamadores: os cinco seletores de rota do painel
+   (Programação, carga extra do modelo, montagem, modelo da semana e
+   devoluções — o do Completar saiu com ele em 15/10/2026). Escrever o
+   filtro em cada um deles é como a rota aposentada reaparece em UM
+   seletor esquecido meses depois.
 
    A LISTA DO CADASTRO NÃO USA ESTA FUNÇÃO, de propósito: lá a aposentada
    precisa aparecer, marcada, senão ninguém descobre que ela existe nem

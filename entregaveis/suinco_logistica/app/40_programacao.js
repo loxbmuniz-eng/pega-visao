@@ -283,16 +283,6 @@ function destinoFreteMudouUI(){
 
 function kmDeslocamentoMudouUI(){ avisarSobreKmUI(); }
 
-/* O mesmo gesto no modal de Completar. Dois pares de campos e uma conta só
-   (kmDoDestino) — o que NÃO se duplica é a decisão de quanto vale o km,
-   que é do servidor. */
-function destinoFreteCompletarUI(){
-  const km = kmDoDestino(document.getElementById('completar-frete-destino').value);
-  document.getElementById('completar-km-destino').value = kmTexto(km);
-  const desl = document.getElementById('completar-km-deslocamento');
-  if(km !== null && !desl.value) desl.value = kmTexto(km);
-}
-
 /* UM KM SÓ (06/10/2026). Até aqui havia dois campos — o KM do destino e o
    de deslocamento — e um aviso quando divergiam. O dono decidiu: "KM de
    deslocamento não é necessário. KM divergente não é necessário" e
@@ -1348,7 +1338,7 @@ function preencherSelectsRota(){
   // Cadastros → Cadastrar Rota precisa aparecer aqui na hora, sem esperar
   // reload. Preserva o valor selecionado — chamar isto não pode limpar uma
   // rota que o Programador já tinha escolhido no formulário.
-  ['prog-rota','completar-rota'].forEach(id=>{
+  ['prog-rota'].forEach(id=>{
     const el = document.getElementById(id);
     if(!el) return;
     const valorAtual = el.value;
