@@ -104,7 +104,6 @@
   #tab-frete td.frete-t-ok .frete-sel{ color:var(--fr-lib-txt) }
   #tab-frete td.frete-t-dev .frete-sel{ color:#8fb4ff }
   :root[data-tema="claro"] #tab-frete td.frete-t-dev .frete-sel{ color:#1f5fbf }
-  #tab-frete td.frete-t-sumiu .frete-sel{ color:var(--fr-pend-txt) }
   #tab-frete td.frete-t-sem .frete-sel{ color:var(--fr-mudo); font-style:italic; font-weight:600 }
   /* percentuais com barra ao fundo */
   #tab-frete td.frete-barra{ background:linear-gradient(90deg, var(--fr-lib-bg) var(--p), transparent var(--p)); font-variant-numeric:tabular-nums }
@@ -134,7 +133,6 @@
   /* selo da tratativa, acima da lista: a cor diz o estado antes de ler */
   #tab-frete .frete-selo-t{ display:block; font-size:12px; font-weight:800; letter-spacing:.02em; padding:2px 8px; border-radius:999px; margin:0 0 4px; width:max-content; max-width:100% }
   #tab-frete .frete-selo-t-ok{ background:var(--fr-lib-bg); color:var(--fr-lib-txt) }
-  #tab-frete .frete-selo-t-sumiu{ background:var(--fr-pend-bg); color:var(--fr-pend-txt) }
   #tab-frete .frete-selo-t-sem{ background:var(--surface-2, rgba(255,255,255,.08)); color:var(--fr-mudo) }
   #tab-frete .frete-selo-t-falta{ background:var(--fr-ver-bg); color:var(--fr-ver-txt) }
   #tab-frete .frete-selo-t-dev{ background:rgba(63,110,200,.22); color:#8fb4ff }

@@ -6955,7 +6955,7 @@ tr.linha-nova{
 .frete-pdf .fpdf-trat{ font-weight:700 }
 .frete-pdf .fpdf-trat-ok{ color:#0b5d2a }
 .frete-pdf .fpdf-trat-devolucao{ color:#1f4f9f }
-.frete-pdf .fpdf-trat-sumiu-do-b2b{ color:#8b1a24 }
+.frete-pdf .fpdf-trat-ok-avulso-, .frete-pdf .fpdf-trat-cancelada{ color:#0b5d2a }
 .frete-pdf .fpdf-trat-vazio em{ color:#8b1a24; font-weight:700 }
 /* Larguras das 15 colunas da carga (somam 100%). */
 .frete-pdf .fpdf-tab > thead th:nth-child(1){ width:6.5% }

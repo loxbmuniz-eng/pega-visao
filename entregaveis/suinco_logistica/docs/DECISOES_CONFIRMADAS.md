@@ -1239,3 +1239,26 @@ painel, com motivo.
   explicado e a correção segue como antes. Vale depois do `atualizar_tudo.sh`.
 
 Travas: bloco 62 da API (14 testes) e `test_correcao_sem_telefonema`.
+
+## 37. Pagamento de Frete: CANCELADA e OK (AVULSO) liberam; SUMIU DO B2B sai (15/10/2026)
+
+**Pedido trazido pelo dono:** *"favor incluir também OK (AVULSO) e excluir esse
+SUMIU DO B2B. Colocar como regra, CANCELADA, OK, DEVOLUÇÃO, E OK (AVULSO)
+liberada para pagamento. Não considerar como pagamento, somente SEM
+TRATATIVA"*. Resposta à pergunta que faltava: **A**.
+
+- **A lista do Status da pendência:** SEM TRATATIVA · DEVOLUÇÃO · OK ·
+  OK (AVULSO) · CANCELADA. Mora no servidor (`TRATATIVAS`,
+  `dominio/pagamento_frete.js`); a tela recebe a lista dele.
+- **Liberam o pagamento da nota:** OK, DEVOLUÇÃO, OK (AVULSO) e CANCELADA
+  (`TRATATIVAS_QUE_LIBERAM`). **Não libera:** SEM TRATATIVA — nem a nota em
+  branco ("falta olhar").
+- **SUMIU DO B2B saiu (resposta A):** as notas que estavam com ela voltam a
+  "falta olhar" — sem status, data e nome — para alguém olhar de novo com a
+  lista nova. O histórico da nota registra "SUMIU DO B2B → falta olhar",
+  pela Atualização do servidor (068); quem marcou antes continua lá. Nenhuma
+  carga muda de "A PAGAR" por isso: SUMIU DO B2B também não liberava.
+- **Migração 068.** Vale depois do `atualizar_tudo.sh`; até lá a tela segue
+  com a lista de hoje.
+
+Travas: bloco 63 da API (5 testes) e `test_frete_cancelada_ok_avulso`.

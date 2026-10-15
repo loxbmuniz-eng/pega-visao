@@ -22,7 +22,7 @@ Marcação: ✅ no ar · 🟡 commitado, não publicado (ou esperando o servidor
 
 ## 2. Esperando o servidor
 
-Nada. Em 01/10/2026 o servidor chegou a `7cf0236` (bloco COPIE DAQUI colado
+**Migrações 067 (correção sem telefonema, portão 91) e 068 (CANCELADA e OK (AVULSO) no Pagamento de Frete; SUMIU DO B2B volta a "falta olhar") — as duas entram no mesmo `atualizar_tudo.sh`.** Antes disso: em 01/10/2026 o servidor chegou a `7cf0236` (bloco COPIE DAQUI colado
 pelo dono): ✅ Node 24.21.0 · ✅ #97 · ✅ #98 · ✅ #103. Nenhum alterou dado
 da operação.
 

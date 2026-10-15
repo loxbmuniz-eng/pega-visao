@@ -40,7 +40,7 @@ export const CARGAS_DE_EXEMPLO = [
     pendencias: [p(810801, 'aguardando')] },
   { numero: 900809, dataConsulta: '2026-10-02', qtdSist: 12, qtdB2b: 11, finalizadas: 11, aguardando: 0, naoEntregue: 0, outros: 0,
     transportadora: 'Transp. Exemplo B', cte: '18509', pctPago: 0, dataPagamento: null,
-    pendencias: [p(810909, 'nao_localizada', { tratativa: 'SUMIU DO B2B', tratativaEm: '2026-10-02', obs: 'Perguntei à Portaria' })] },
+    pendencias: [p(810909, 'nao_localizada', { tratativa: 'SEM TRATATIVA', tratativaEm: '2026-10-02', obs: 'Perguntei à Portaria' })] },
   { numero: 900810, dataConsulta: '2026-10-05', qtdSist: 20, qtdB2b: 20, finalizadas: 18, aguardando: 2, naoEntregue: 0, outros: 0,
     transportadora: '', cte: '', pctPago: 0, dataPagamento: null,
     pendencias: [p(811001, 'aguardando'), p(811004, 'aguardando')] },

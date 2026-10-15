@@ -6878,7 +6878,7 @@ describe('49. Pagamento de Frete — a planilha dentro do painel (05/10/2026)', 
       assert.equal(valor(g, linhasDa(g, 900802).find((l) => l.nota === dev.nota), 'tratativa'), 'DEVOLUÇÃO', 'DEV NO SISTEMA vira DEVOLUÇÃO');
       assert.equal(valor(g, linhasDa(g, 900802)[0], 'liberado'), 0.75, 'e também libera');
       const { rows: chk } = await pool.query("SELECT DISTINCT tratativa FROM pgfrete_pendencias WHERE numero_carga = '900802' AND tratativa <> ''");
-      assert.ok(chk.every((r) => ['SEM TRATATIVA', 'DEVOLUÇÃO', 'OK', 'SUMIU DO B2B'].includes(r.tratativa)), 'só o vocabulário atual chega ao banco (CHECK da 060)');
+      assert.ok(chk.every((r) => ['SEM TRATATIVA', 'DEVOLUÇÃO', 'OK', 'OK (AVULSO)', 'CANCELADA'].includes(r.tratativa)), 'só o vocabulário atual chega ao banco (CHECK da 068)');
 
       // a data da tratativa é editável sozinha
       const r4 = await req(`${FRETE}/cargas/900802/pendencias/${dev.nota}`, { metodo: 'PATCH', token: tokens['Administração'], corpo: { tratativaEm: '2026-10-01' } });
@@ -9004,6 +9004,124 @@ describe('62. Correção sem telefonema: o setor pede, a Administração decide 
       assert.deepEqual(l.json, []);
     } finally {
       await pool.query('ALTER TABLE pedidos_correcao_067_fora RENAME TO pedidos_correcao');
+    }
+  });
+});
+
+/* ------------------------------------------------------------------ */
+describe('63. Pagamento de Frete: CANCELADA e OK (AVULSO) liberam; sai SUMIU DO B2B (15/10/2026, migração 068)', async () => {
+  const { readFileSync } = await import('node:fs');
+  /* Pedido trazido pelo dono: "favor incluir também OK (AVULSO) e excluir esse
+     SUMIU DO B2B. Colocar como regra, CANCELADA, OK, DEVOLUÇÃO, E OK (AVULSO)
+     liberada para pagamento. Não considerar como pagamento, somente SEM
+     TRATATIVA". As notas que já estavam SUMIU DO B2B voltam a "falta olhar"
+     (resposta A do dono), com o registro no histórico da nota. */
+  const FRETE = '/api/pagamento-frete';
+  const adm = () => tokens['Administração'];
+  const pdf64 = (nome) => readFileSync(new URL(`./fixtures/frete/${nome}`, import.meta.url)).toString('base64');
+  const limpar = async () => {
+    for (const t of ['pgfrete_eventos', 'pgfrete_leituras', 'pgfrete_pagamentos', 'pgfrete_pendencias', 'pgfrete_cargas']) {
+      await pool.query(`DELETE FROM ${t}`);
+    }
+  };
+  const grade = async () => {
+    const r = await req(FRETE, { token: adm() });
+    assert.equal(r.status, 200, r.texto);
+    return r.json;
+  };
+  const col = (g, chave) => g.colunas.findIndex((c) => c.chave === chave);
+  const linhasDa = (g, carga) => g.linhas.filter((l) => l.carga === carga);
+  const valor = (g, linha, chave) => linha.v[col(g, chave)];
+  const tratar = (nota, tratativa) => req(`${FRETE}/cargas/900802/pendencias/${nota}`, {
+    metodo: 'PATCH', token: adm(), corpo: { tratativa },
+  });
+  let aguardando;
+  let naoEntregue;
+
+  before(async () => {
+    await limpar();
+    const a = await req(`${FRETE}/leituras`, { metodo: 'POST', token: adm(), corpo: { arquivo: pdf64('b2b_900802.pdf'), nome: 'b2b_900802.pdf' } });
+    assert.equal(a.status, 200, a.texto);
+    const b = await req(`${FRETE}/leituras`, { metodo: 'POST', token: adm(), corpo: { arquivo: pdf64('sist_900802.pdf'), nome: 'sist_900802.pdf', lote: a.json.lote } });
+    assert.equal(b.status, 200, b.texto);
+    const c = await req(`${FRETE}/lotes/${a.json.lote}/confirmar`, { metodo: 'POST', token: adm(), corpo: {} });
+    assert.equal(c.status, 200, c.texto);
+    const g = await grade();
+    const ls = linhasDa(g, 900802);
+    aguardando = ls.find((l) => valor(g, l, 'resumo').endsWith('(Aguardando)')).nota;
+    naoEntregue = ls.find((l) => valor(g, l, 'resumo').endsWith('(Não entregue)')).nota;
+  });
+  after(limpar);
+
+  test('a lista que a tela recebe: SEM TRATATIVA, DEVOLUÇÃO, OK, OK (AVULSO), CANCELADA — sem SUMIU DO B2B', async () => {
+    const g = await grade();
+    assert.deepEqual(g.vocabulario.tratativas, ['SEM TRATATIVA', 'DEVOLUÇÃO', 'OK', 'OK (AVULSO)', 'CANCELADA']);
+    assert.deepEqual(g.vocabulario.liberam, ['OK', 'DEVOLUÇÃO', 'OK (AVULSO)', 'CANCELADA']);
+  });
+
+  test('CANCELADA e OK (AVULSO) liberam o pagamento da nota, como o OK', async () => {
+    assert.equal((await tratar(aguardando, 'CANCELADA')).status, 200);
+    let g = await grade();
+    assert.equal(valor(g, linhasDa(g, 900802).find((l) => l.nota === aguardando), 'tratativa'), 'CANCELADA');
+    assert.equal(valor(g, linhasDa(g, 900802)[0], 'liberado'), 0.625, 'CANCELADA libera: (4 finalizadas + 1) de 8');
+    assert.equal((await tratar(naoEntregue, 'OK (AVULSO)')).status, 200);
+    g = await grade();
+    assert.equal(valor(g, linhasDa(g, 900802).find((l) => l.nota === naoEntregue), 'tratativa'), 'OK (AVULSO)');
+    assert.equal(valor(g, linhasDa(g, 900802)[0], 'liberado'), 0.75, 'OK (AVULSO) libera: (4 + 2) de 8');
+  });
+
+  test('SEM TRATATIVA não libera', async () => {
+    assert.equal((await tratar(naoEntregue, 'SEM TRATATIVA')).status, 200);
+    const g = await grade();
+    assert.equal(valor(g, linhasDa(g, 900802)[0], 'liberado'), 0.625, 'só a CANCELADA continua liberando');
+  });
+
+  test('SUMIU DO B2B saiu da lista: o servidor recusa e diz quais valem', async () => {
+    const r = await tratar(aguardando, 'SUMIU DO B2B');
+    assert.equal(r.status, 400, r.texto);
+    assert.equal(r.json.codigo, 'TRATATIVA_INVALIDA');
+    assert.match(r.json.erro, /CANCELADA/);
+    assert.match(r.json.erro, /OK \(AVULSO\)/);
+  });
+
+  test('a migração 068: a nota que estava SUMIU DO B2B volta a "falta olhar", com o registro no histórico', async () => {
+    const sql = readFileSync(new URL('../migrations/068_tratativas_cancelada_avulso.sql', import.meta.url), 'utf8');
+    const cli = await pool.connect();
+    try {
+      await cli.query('BEGIN');
+      // o banco como está no servidor hoje: a trava da 060 e uma nota SUMIU DO B2B
+      await cli.query('ALTER TABLE pgfrete_pendencias DROP CONSTRAINT IF EXISTS pgfrete_pendencias_tratativa_check');
+      // (os testes de cima deixaram CANCELADA e OK (AVULSO), que a trava antiga não conhece)
+      await cli.query("UPDATE pgfrete_pendencias SET tratativa = '' WHERE tratativa IN ('CANCELADA', 'OK (AVULSO)')");
+      await cli.query(`ALTER TABLE pgfrete_pendencias ADD CONSTRAINT pgfrete_pendencias_tratativa_check
+        CHECK (tratativa IN ('', 'SEM TRATATIVA', 'DEVOLUÇÃO', 'OK', 'SUMIU DO B2B'))`);
+      await cli.query(`UPDATE pgfrete_pendencias SET tratativa = 'SUMIU DO B2B', tratativa_em = '2026-10-02', tratativa_por = 'Daniela'
+        WHERE numero_carga = '900802' AND nota = $1`, [aguardando]);
+      await cli.query(`UPDATE pgfrete_pendencias SET tratativa = 'OK', tratativa_em = '2026-10-03', tratativa_por = 'Daniela'
+        WHERE numero_carga = '900802' AND nota = $1`, [naoEntregue]);
+      await cli.query(sql);
+      const { rows } = await cli.query(
+        `SELECT nota, tratativa, tratativa_em, tratativa_por FROM pgfrete_pendencias
+          WHERE numero_carga = '900802' AND nota = ANY($1) ORDER BY nota`, [[aguardando, naoEntregue]]);
+      const sumiu = rows.find((x) => x.nota === aguardando);
+      const ok = rows.find((x) => x.nota === naoEntregue);
+      assert.equal(sumiu.tratativa, '', 'SUMIU DO B2B volta a falta olhar');
+      assert.equal(sumiu.tratativa_em, null, 'sem data do status: ninguém olhou com a lista nova');
+      assert.equal(sumiu.tratativa_por, '');
+      assert.equal(ok.tratativa, 'OK', 'as outras notas não mudam');
+      assert.equal(ok.tratativa_por, 'Daniela');
+      const { rows: ev } = await cli.query(
+        `SELECT acao, detalhe, por_nome FROM pgfrete_eventos WHERE numero_carga = '900802' AND nota = $1 AND acao = 'tratativa'
+          ORDER BY id DESC LIMIT 1`, [aguardando]);
+      assert.ok(ev[0], 'a volta a falta olhar fica no histórico da nota');
+      assert.deepEqual(ev[0].detalhe.tratativa, { de: 'SUMIU DO B2B', para: '' });
+      assert.match(ev[0].por_nome, /068/);
+      await assert.rejects(
+        cli.query("UPDATE pgfrete_pendencias SET tratativa = 'SUMIU DO B2B' WHERE numero_carga = '900802' AND nota = $1", [aguardando]),
+        /check constraint/, 'a trava nova não aceita mais SUMIU DO B2B');
+    } finally {
+      await cli.query('ROLLBACK');
+      cli.release();
     }
   });
 });
