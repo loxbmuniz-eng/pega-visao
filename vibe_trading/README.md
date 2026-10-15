@@ -199,6 +199,34 @@ vantagem em 2 dos 3 ativos e 95% de chance de não ser sorte. Também mostra
 > dúvida. Guardas: o recuo com fundo mais alto (perna 99,7–120,3, preço a 40%)
 > e o preço abaixo da origem (ESPERAR, não desconto).
 
+### Tendência diária: a estratégia com a melhor prova publicada
+
+`python3 vibe.py tendencia` replica Zarattini, Pagani e Barbon (2025), *Catching
+Crypto Trends* (SSRN 5209907), que relatam Sharpe acima de 1,5 depois das taxas.
+A regra segue a descrição dos resumos publicados (o PDF não abriu daqui):
+
+- 9 canais de Donchian nos fechamentos (5, 10, 20, 30, 60, 90, 150, 250 e 360
+  dias). Cada canal compra quando o fechamento passa do maior fechamento dos N
+  dias anteriores e sai quando cai abaixo do stop, que começa no meio do canal
+  e só sobe. Exposição = média dos 9 canais. Só comprado.
+- Tamanho pela volatilidade: 25% ao ano sobre a volatilidade realizada de 90
+  dias, teto de 2 vezes a banca. Rebalanceia todo dia no fechamento.
+- Aqui, além do artigo: taxa e deslize sobre o que muda, funding real da
+  Binance sobre o que fica aberto (sem ele, 0,03% ao dia contra o comprado).
+
+O controle é a **mesma exposição deslocada no tempo** (200 deslocamentos de pelo
+menos 60 dias): mesma exposição média, mesmo giro, hora sorteada. Passa num
+ativo quem bate 75% dos deslocamentos **e** tem 95% de chance de não ser sorte.
+Passa a estratégia com 2 ativos. O relatório mostra também o período depois de
+maio de 2025, fora da amostra do artigo, e a exposição de hoje em USDT.
+
+Limite declarado: a cesta escolhida hoje só tem moedas que sobreviveram. O
+resultado de várias moedas é otimista até rodar com as moedas que morreram
+(arquivo histórico da Binance). BTC sozinho não tem esse problema.
+
+Guarda [36], com 15 defeitos plantados e pegos. A cópia sem defeito precisa
+passar antes, para um erro da própria guarda não se passar por defeito pego.
+
 > **Correção registrada (gap do CME).** O "gap do CME" estava aprovado, mas a
 > CME passou a negociar cripto 24 horas por dia, 7 dias por semana, em
 > 29/05/2026: gap novo de fim de semana não se forma mais. Os gaps antigos
@@ -483,6 +511,27 @@ fossem independentes. Cada ativo é provado com as próprias operações, e vale
 **pior** nota. Uma tentativa é tudo que muda o resultado (estratégia, período,
 lado, filtro, alavancagem, stop, alvo, taxa, margem, prazo, janela de dados e
 fonte), e o `--robustez` do backtest também registra no caderno.
+
+### A chance de a melhor ser sorte de seleção (PBO)
+
+O Sharpe deflacionado julga cada estratégia. O PBO (Bailey, Borwein, López de
+Prado e Zhu) julga **a escolha**: pegar a melhor do teste prevê a melhor fora
+dele? A bateria monta, para cada período, uma tabela com um dia por linha e uma
+estratégia por coluna (o que cada uma fechou no dia, somando os ativos). Corta
+os dias em 10 blocos seguidos e testa as 252 maneiras de usar metade dos blocos
+para escolher a campeã e a outra metade para ver em que posto ela fica. PBO é a
+fração das divisões em que a campeã cai na metade de baixo, ou no meio, fora da
+escolha.
+
+- Perto de **50%**: escolher a melhor não prevê nada (o que 20 estratégias de
+  puro ruído dão, na guarda [37]).
+- Perto de **0%**: a escolha se sustenta (uma estratégia com vantagem real no
+  meio de ruído dá 0%).
+
+**Portão:** com o PBO do período acima de 50%, nenhuma estratégia daquele
+período passa, mesmo com vantagem contra a moeda e prova contra sorte. A
+bateria mostra o PBO de cada período e o da bateria inteira. Guarda [37], com
+12 defeitos plantados e pegos.
 
 ## Robustez: vantagem ou sorte?
 

@@ -2792,6 +2792,252 @@ def teste_custos() -> None:
     checar(ficha.FICHA_PADRAO["deslize_pct"] == bt.DESLIZE_PADRAO, "a ficha usa o mesmo deslize do backtest")
 
 
+def teste_tendencia() -> None:
+    print("\n[36] tendencia diaria: canais, stop que so sobe, tamanho pela volatilidade, custos e o controle")
+    import math
+    import estatistica
+    import tendencia as td
+    import vibe
+    f = [10.0, 11.0, 12.0, 13.0, 12.5, 11.9, 12.0]
+    checar(td.exposicao_por_canal(f, 3) == [0, 0, 0, 1, 1, 0, 0],
+           "canal de 3: compra no 13 (passou do maior, 12), stop no meio 11 que sobe para 12 e depois 12,5; "
+           "sai no 11,9")
+    checar(td.exposicao(f, (3, 5)) == [(a + b) / 2 for a, b in zip(td.exposicao_por_canal(f, 3),
+                                                                     td.exposicao_por_canal(f, 5))],
+           "a exposicao e a media dos canais")
+    alt = [100.0]
+    for k in range(120):
+        alt.append(alt[-1] * math.exp(0.01 if k % 2 == 0 else -0.01))
+    janela = [math.log(alt[k] / alt[k - 1]) for k in range(120 - 89, 121)]
+    m = sum(janela) / 90
+    esperado = math.sqrt(sum((x - m) ** 2 for x in janela) / 89 * 365)
+    checar(abs(td.vol_anual(alt, 120) - esperado) < 1e-12 and td.vol_anual(alt, 50) is None,
+           f"volatilidade de 90 dias anualizada pela conta a mao ({esperado * 100:.1f}%); sem 90 dias, nenhuma".replace(".", ","))
+    w = td.pesos(alt, canais=(3, 5), janela=90)
+    exp = td.exposicao(alt, (3, 5))
+    checar(all(x is None for x in w[:90]) and abs(w[120] - exp[120] * min(0.25 / esperado, 2.0)) < 1e-12,
+           "peso = exposicao x 25% / volatilidade, teto 2x; nada antes de canais e volatilidade aquecerem")
+    calmo = [100.0 * 1.001 ** k * (1 + 0.0001 * (k % 2)) for k in range(200)]   # sobe sempre, quase sem oscilar
+    wc = td.pesos(calmo, canais=(3,), janela=90)
+    checar(td.exposicao(calmo, (3,))[150] == 1 and all(x == 2.0 for x in wc[90:]),
+           "comprado com volatilidade quase zero (25% / 0,2% = 130x): o peso para no teto de 2x a banca")
+    longo = td.pesos(alt, canais=(3, 120), janela=90)
+    checar(all(x is None for x in longo[:120]) and longo[120] is not None,
+           "nada antes do canal mais longo aquecer (120 dias aqui; 360 no padrao), mesmo com a volatilidade pronta")
+    futuro = alt[:100] + [x * 3 for x in alt[100:]]
+    checar(td.pesos(futuro, canais=(3, 5))[:100] == w[:100], "o peso de cada dia nao muda com o que vem depois")
+
+    DIA = td.DIA_MS
+    t0 = QUARTA - 10 * DIA
+    s = bt.Serie(abertura=[100.0, 110.0, 99.0], maxima=[110.0] * 3, minima=[99.0] * 3,
+                 fechamento=[100.0, 110.0, 99.0], volume=[1.0] * 3, t=[t0, t0 + DIA, t0 + 2 * DIA])
+    sim = td.simular(s, [0.5, 1.0, None], taxa=0.05, deslize=0.02)
+    custo, fdia = 0.0007, 0.0003
+    r0 = 0.5 * 0.1 - 0.5 * custo - 0.5 * fdia
+    atual = 0.5 * 1.1 / (1 + r0)
+    r1 = 1.0 * (99 / 110 - 1) - (1.0 - atual) * custo - 1.0 * fdia
+    checar(len(sim["retornos"]) == 2 and abs(sim["retornos"][0] - r0) < 1e-12 and abs(sim["retornos"][1] - r1) < 1e-12,
+           "2 dias a mao: rende peso x retorno, paga 0,07% sobre o que mudou e 0,03% ao dia de funding sobre o aberto; "
+           "o preco carrega o peso de um dia para o outro")
+    fim0 = t0 + DIA
+    taxas = [(fim0, 0.5), (fim0 + 8 * HORA_MS, 0.0001), (fim0 + 16 * HORA_MS, -0.0002), (fim0 + DIA, 0.0003)]
+    checar(abs(td.funding_entre(taxas, fim0, fim0 + DIA) - 0.0002) < 1e-15
+           and td.funding_entre([], fim0, fim0 + DIA) == 0.0,
+           "funding real do dia: as cobrancas depois do fechamento ate o proximo, inclusive (0,01 - 0,02 + 0,03)")
+    mt = td.metricas([0.1, -0.5, 1.0])
+    checar(abs(mt["final"] - 1.1) < 1e-12 and abs(mt["pior_queda"] - 0.5) < 1e-12,
+           "banca 1 -> 1,10 -> 0,55 -> 1,10: pior queda 50%")
+    serie_w = [None] * 5 + [float(k) for k in range(300)]
+    ds = td.deslocamentos(serie_w, n=20, minimo=60, semente=3)
+    checar(len(ds) == 20 and all(d[:5] == [None] * 5 and sorted(d[5:]) == serie_w[5:] and d[5:] != serie_w[5:]
+                                 for d in ds)
+           and td.deslocamentos(serie_w, n=20, minimo=60, semente=3) == ds
+           and all(60 <= int(d[5]) <= 300 - 60 for d in ds),
+           "o controle gira a mesma exposicao no tempo: mesmos valores, outra hora, pelo menos 60 dias, sorteio fixo")
+
+    def sintetica(n, semente, tendencia):
+        r = random.Random(semente)
+        px, drift, sx = 100.0, 0.0, bt.Serie()
+        for k in range(n):
+            if tendencia:
+                drift = 0.995 * drift + r.gauss(0, 0.0009)
+            nxt = px * math.exp(drift + r.gauss(0, 0.03))
+            sx.abertura.append(px); sx.maxima.append(max(px, nxt)); sx.minima.append(min(px, nxt))
+            sx.fechamento.append(nxt); sx.volume.append(1.0); sx.t.append(t0 - (n - k) * DIA)
+            px = nxt
+        return sx
+    com = td.avaliar(sintetica(3000, 2, True), n_controle=200)
+    sem = [td.avaliar(sintetica(3000, k, False), n_controle=200) for k in (1, 2, 3)]
+    dsr_com = estatistica.sharpe_deflacionado(com["retornos"], 500)["dsr"]
+    dsr_sem = [estatistica.sharpe_deflacionado(a["retornos"], 500)["dsr"] for a in sem]
+    checar(com["bate"] >= td.BATER_MIN and dsr_com >= 0.95 and all(d < 0.95 for d in dsr_sem)
+           and sum(a["bate"] < td.BATER_MIN for a in sem) >= 2,
+           f"serie com tendencia passa (bate {com['bate'] * 100:.0f}%); passeio aleatorio nao passa em 3 sorteios "
+           f"(nao-sorte {', '.join(f'{d * 100:.0f}%' for d in dsr_sem)}; bate "
+           f"{', '.join(f'{b * 100:.0f}%' for b in [a['bate'] for a in sem])} dos deslocamentos)")
+    paginas = []
+    def pedir(url):
+        paginas.append(url)
+        ini = int(url.split("startTime=")[1].split("&")[0])
+        n = 1000 if len(paginas) == 1 else 3
+        return [{"fundingTime": ini + k * 8 * HORA_MS, "fundingRate": "0.0001"} for k in range(n)]
+    h = td.historico_funding_binance("BTCUSDT", QUARTA - 400 * DIA, pedir, agora_ms=QUARTA)
+    checar(len(h) == 1003 and h == sorted(h) and len(paginas) == 2 and "startTime=" in paginas[1]
+           and int(paginas[1].split("startTime=")[1].split("&")[0]) == h[999][0] + 1,
+           "funding da Binance paginado para a frente, de 1000 em 1000, sem repetir nem pular")
+    try:
+        td.historico_funding_binance("BTCUSDT", QUARTA - DIA, lambda u: [{"fundingTime": QUARTA, "fundingRate": "1.5"}],
+                                     agora_ms=QUARTA)
+        checar(False, "funding absurdo deveria ser recusado")
+    except ValueError:
+        checar(True, "funding em formato absurdo (150%) e recusado, nao vira custo")
+    # de ponta a ponta, com a Binance simulada: busca, funding real, caderno e relatorio
+    pasta = tempfile.mkdtemp(prefix="tendencia_")
+    orig_busca, orig_fund, argv = bt.buscar, td.historico_funding_binance, sys.argv
+    series = {"BTCUSDT": sintetica(3000, 2, True), "ETHUSDT": sintetica(3000, 5, True)}
+    pedidos = []
+    bt.buscar = lambda par, tf, n: pedidos.append((par, tf, n)) or series[par]
+    def funding_falso(par, desde_ms, pedir=None, agora_ms=None):
+        if par == "ETHUSDT":
+            raise ValueError("fora do ar")
+        return [(t + DIA + 8 * HORA_MS * k, 0.0001) for t in series[par].t for k in range(3)]
+    td.historico_funding_binance = funding_falso
+    caderno_tmp = os.path.join(pasta, "caderno.jsonl")
+    saida = io.StringIO()
+    try:
+        sys.argv = ["tendencia.py", "--ativos", "BTCUSDT,ETHUSDT", "--caderno", caderno_tmp]
+        with contextlib.redirect_stdout(saida):
+            td.main()
+    finally:
+        bt.buscar, td.historico_funding_binance, sys.argv = orig_busca, orig_fund, argv
+    txt = saida.getvalue()
+    linhas = [json.loads(l) for l in open(caderno_tmp, encoding="utf-8")]
+    shutil.rmtree(pasta, ignore_errors=True)
+    checar(pedidos == [("BTCUSDT", "1d", 4000), ("ETHUSDT", "1d", 4000)]
+           and "ETHUSDT: funding real fora do ar" in txt and "BTCUSDT: 3000 dias" in txt
+           and "fora da amostra do artigo" in txt and "hoje:" in txt and "PASSOU" in txt
+           and len(linhas) == 2 and linhas[0]["hipotese"].endswith("funding_real|historico|binance")
+           and linhas[1]["hipotese"].endswith("funding_fixo|historico|binance") and "sharpe_op" not in linhas[0],
+           "comando de ponta a ponta (Binance simulada): busca o diario inteiro, usa o funding real ou avisa e "
+           "cai no fixo, registra no caderno sem misturar a escala do Sharpe, e da o veredito")
+    chamadas, original, argv = [], vibe._rodar_main, sys.argv
+    vibe._rodar_main = lambda modulo, args: chamadas.append((modulo, args))
+    try:
+        sys.argv = ["vibe.py", "tendencia", "--ativos", "BTCUSDT"]
+        vibe.main()
+    finally:
+        vibe._rodar_main, sys.argv = original, argv
+    checar(chamadas == [("tendencia", ["--ativos", "BTCUSDT"])]
+           and td.chave(0.05, 0.02, True) != td.chave(0.05, 0.0, True) != td.chave(0.05, 0.02, False),
+           "vibe.py tendencia chama a ferramenta; custo e funding mudam a tentativa no caderno")
+
+
+def teste_pbo() -> None:
+    print("\n[37] chance de a melhor ser sorte de selecao (PBO): conta a mao, ruido, vantagem e o portao da bateria")
+    import statistics
+    import bateria
+    import estatistica
+    checar(estatistica._postos([3.0, 1.0, 3.0, 2.0]) == [3.5, 1.0, 3.5, 2.0], "postos com empate dividem a media")
+    vira = [[1.0, 0.0], [2.0, 0.1], [1.0, 0.0], [2.0, 0.1],
+            [-1.0, 1.0], [-0.9, 2.0], [-1.0, 1.0], [-0.9, 2.0]]
+    firme = [[1.0, 0.0], [2.0, 0.1], [1.0, 0.0], [2.0, 0.1],
+             [1.0, -1.0], [2.0, -0.9], [1.0, -1.0], [2.0, -0.9]]
+    rv, rf = estatistica.pbo(vira, 2), estatistica.pbo(firme, 2)
+    checar(rv["pbo"] == 1.0 and rv["combinacoes"] == 2 and rf["pbo"] == 0.0,
+           "2 metades a mao: a campea de cada metade e a pior na outra -> PBO 100%; a mesma campea nas duas -> 0%")
+    # a campea de cada metade fica exatamente no meio da outra (posto 2 de 3): conta como sorte
+    def bloco(a, b, c):
+        return [[a, b, c], [a + 1, b + 1, c + 1], [a, b, c], [a + 1, b + 1, c + 1]]
+    meio = bloco(3.0, 1.0, 2.0) + bloco(2.0, 1.0, 3.0)
+    checar(estatistica.pbo(meio, 2)["pbo"] == 1.0,
+           "campea que cai no meio da outra metade conta como escolha que nao se sustenta (logito 0)")
+    checar(estatistica.pbo([[0.0] * 3] * 15, 10)["pbo"] is None and estatistica.pbo(vira, 10)["pbo"] is None,
+           "dias de menos para os blocos: nao mede (nada de numero inventado)")
+    try:
+        estatistica.pbo(vira, 3)
+        checar(False, "numero impar de blocos deveria ser recusado")
+    except ValueError:
+        checar(True, "numero impar de blocos e recusado")
+    ruidos, vantagens = [], []
+    for sem in range(30):
+        r = random.Random(sem)
+        m = [[r.gauss(0, 1) for _ in range(20)] for _ in range(200)]
+        ruidos.append(estatistica.pbo(m, 10)["pbo"])
+        for linha in m:
+            linha[0] += 0.5
+        vantagens.append(estatistica.pbo(m, 10)["pbo"])
+    checar(0.4 < statistics.fmean(ruidos) < 0.7 and statistics.fmean(vantagens) < 0.05
+           and estatistica.pbo(m, 10)["combinacoes"] == 252,
+           f"20 estrategias de puro ruido: PBO medio {statistics.fmean(ruidos) * 100:.0f}% (perto de 50%); com uma "
+           f"de vantagem real, {statistics.fmean(vantagens) * 100:.0f}%; 252 divisoes com 10 blocos")
+    D = bateria.DIA_MS
+    md = bateria.matriz_diaria([[(QUARTA + 10 * HORA_MS, 1.0), (QUARTA + 20 * HORA_MS, -0.5), (QUARTA + 2 * D, 2.0)],
+                                [(QUARTA + 2 * D + HORA_MS, 3.0)]], QUARTA, QUARTA + 2 * D)
+    checar(md == [[0.5, 0.0], [0.0, 0.0], [2.0, 3.0]],
+           "matriz por dia a mao: soma o que cada estrategia fechou no dia, zero no dia sem operacao")
+    serie = serie_sintetica(3000, 5, True)
+    res = bt.simular(serie, est.sinais("confl3", serie), bt.Params())
+    checar(len(res.saidas_ms) == len(res.resultados) > 5 and res.saidas_ms == sorted(res.saidas_ms)
+           and all(t in serie.t for t in res.saidas_ms),
+           "o placar guarda o candle de saida de cada operacao (e o que o PBO precisa)")
+    n48, ms15 = 48, 15 * 60_000
+    plana = bt.Serie(abertura=[100.0] * n48, maxima=[100.2] * n48, minima=[99.8] * n48, fechamento=[100.0] * n48,
+                     volume=[1.0] * n48, t=[QUARTA + k * ms15 for k in range(n48)])
+    plana.minima[40] = 99.4
+    um = bt.simular(plana, [1] + [0] * (n48 - 1), bt.Params(stop=0.5, max_barras=100))
+    checar(um.saidas_ms == [plana.t[40]], "a hora guardada e a do candle de SAIDA (o 41o), nao a da entrada")
+    rob = bt.avaliar_robustez(serie, "confl3", bt.Params())
+    m_rob = bateria.matriz_diaria([list(zip(rob["placar"].saidas_ms, rob["placar"].resultados))],
+                                  serie.t[0], serie.t[-1])
+    checar(len(rob["placar"].saidas_ms) == len(rob["placar"].resultados) > 5
+           and abs(sum(l[0] for l in m_rob) - sum(rob["placar"].resultados)) < 1e-9,
+           "o placar juntado das janelas leva os horarios de saida: a matriz do PBO soma o mesmo resultado")
+    alto = {"pbo": 0.7, "combinacoes": 252, "dias": 90, "estrategias": 2}
+    checar("ACIMA DE 50%" in bateria.texto_pbo("do 15m", alto)
+           and "ACIMA" not in bateria.texto_pbo("do 15m", {**alto, "pbo": 0.3})
+           and "sem dias suficientes" in bateria.texto_pbo("do 15m", {"pbo": None}),
+           "o relatorio avisa quando a melhor do periodo nao se sustenta fora do teste")
+    original, argv, pbo_orig = bt._pedir, sys.argv, estatistica.pbo
+    with tempfile.TemporaryDirectory() as tmp:
+        try:
+            bt._pedir = BinanceFalsa(total=3500)
+            sys.argv = ["bateria.py", "--ativos", "BTCUSDT,ETHUSDT", "--estrategias", "confl3,engolfo",
+                        "--periodos", "15m", "--caderno", os.path.join(tmp, "c.jsonl")]
+            saida = io.StringIO()
+            with contextlib.redirect_stdout(saida):
+                bateria.main()
+            texto = saida.getvalue()
+            # o portao: com PBO alto e tudo o mais aprovado, nada passa
+            estatistica.pbo = lambda m, b=10: {"pbo": 0.9, "combinacoes": 252, "dias": len(m), "estrategias": len(m[0])}
+            bateria.prova_por_ativo, prova_orig = (lambda *a, **k: {"dsr": 1.0}), bateria.prova_por_ativo
+            avaliar_orig = bt.avaliar_robustez
+            def sempre_vantagem(*a, **k):
+                r = avaliar_orig(*a, **k)
+                return {**r, "veredito": "vantagem", "media_bate": 99.0} if r else r
+            bt.avaliar_robustez = sempre_vantagem
+            bt._pedir = BinanceFalsa(total=3500)
+            sys.argv[-1] = os.path.join(tmp, "c2.jsonl")
+            saida2 = io.StringIO()
+            with contextlib.redirect_stdout(saida2):
+                bateria.main()
+            texto2 = saida2.getvalue()
+            estatistica.pbo = lambda m, b=10: {"pbo": 0.2, "combinacoes": 252, "dias": len(m), "estrategias": len(m[0])}
+            bt._pedir = BinanceFalsa(total=3500)
+            sys.argv[-1] = os.path.join(tmp, "c3.jsonl")
+            saida3 = io.StringIO()
+            with contextlib.redirect_stdout(saida3):
+                bateria.main()
+            texto3 = saida3.getvalue()
+        finally:
+            bt._pedir, sys.argv, estatistica.pbo = original, argv, pbo_orig
+            bateria.prova_por_ativo = prova_orig
+            bt.avaliar_robustez = avaliar_orig
+    checar("sorte de selecao (PBO)" in texto and "da bateria inteira" in texto,
+           "a bateria mostra o PBO de cada periodo e o da bateria inteira")
+    checar("NENHUMA ESTRATEGIA PASSOU" in texto2 and "PASSARAM NA FASE 1" in texto3,
+           "portao: com vantagem e prova contra sorte aprovadas, PBO de 90% barra; PBO de 20% deixa passar")
+
+
 def _pegada_real() -> dict:
     """Tamanho de cada arquivo de dado real (vigia e caderno de quem roda de verdade)."""
     pegada = {}
@@ -2841,6 +3087,8 @@ if __name__ == "__main__":
     teste_bateria_ficha()
     teste_gestao_de_risco()
     teste_custos()
+    teste_tendencia()
+    teste_pbo()
     print("\n[13] a bateria nao toca nos dados reais do vigia")
     checar(_pegada_real() == pegada, "dados_vigia/, caderno, vigia.json e segredos.json iguais antes e depois da bateria")
     print()

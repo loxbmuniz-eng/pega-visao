@@ -14,6 +14,7 @@ e o numero de observacoes e o numero de operacoes. So biblioteca padrao.
 
 from __future__ import annotations
 
+import itertools
 import math
 from statistics import NormalDist, fmean
 
@@ -81,3 +82,68 @@ def variancia(valores: list[float]) -> float | None:
         return None
     m = fmean(valores)
     return sum((x - m) ** 2 for x in valores) / (len(valores) - 1)
+
+
+# --------------------------------------------------------------------------- #
+# chance de a melhor ser sorte de selecao (Bailey, Borwein, Lopez de Prado e Zhu)
+# --------------------------------------------------------------------------- #
+
+def _postos(valores: list[float]) -> list[float]:
+    """Posto de cada valor (1 = menor); empates dividem o posto medio."""
+    ordem = sorted(range(len(valores)), key=lambda k: valores[k])
+    postos = [0.0] * len(valores)
+    i = 0
+    while i < len(ordem):
+        j = i
+        while j + 1 < len(ordem) and valores[ordem[j + 1]] == valores[ordem[i]]:
+            j += 1
+        for k in range(i, j + 1):
+            postos[ordem[k]] = (i + j) / 2 + 1
+        i = j + 1
+    return postos
+
+
+def pbo(matriz: list[list[float]], blocos: int = 10) -> dict:
+    """
+    PBO por validacao cruzada combinatoria simetrica (CSCV). `matriz` tem uma linha
+    por dia e uma coluna por estrategia testada (o resultado de cada uma naquele
+    dia). Corta os dias em `blocos` pedacos seguidos; para cada metade dos pedacos
+    usada como teste, escolhe a estrategia de melhor Sharpe nela e ve em que posto
+    essa campea fica na OUTRA metade. PBO = fracao das divisoes em que a campea
+    fica na metade de baixo fora da amostra. Perto de 50%: escolher a melhor do
+    teste nao preve nada; perto de 0: a escolha se sustenta.
+    """
+    if blocos < 2 or blocos % 2:
+        raise ValueError("o numero de blocos precisa ser par e pelo menos 2")
+    t = len(matriz)
+    n = len(matriz[0]) if matriz else 0
+    if n < 2 or t < 2 * blocos:
+        return {"pbo": None, "combinacoes": 0, "estrategias": n, "dias": t}
+    tam = t // blocos
+    # soma, soma dos quadrados e contagem de cada estrategia em cada bloco
+    est = []
+    for b in range(blocos):
+        linhas = matriz[b * tam:(b + 1) * tam] if b < blocos - 1 else matriz[b * tam:]
+        est.append([(sum(l[j] for l in linhas), sum(l[j] ** 2 for l in linhas), len(linhas)) for j in range(n)])
+
+    def sharpes(grupo):
+        saida = []
+        for j in range(n):
+            s1 = sum(est[b][j][0] for b in grupo)
+            s2 = sum(est[b][j][1] for b in grupo)
+            c = sum(est[b][j][2] for b in grupo)
+            m = s1 / c
+            var = (s2 - c * m * m) / (c - 1) if c > 1 else 0.0
+            saida.append(m / math.sqrt(var) if var > 1e-18 else 0.0)
+        return saida
+
+    logits = []
+    todos = range(blocos)
+    for dentro in itertools.combinations(todos, blocos // 2):
+        fora = [b for b in todos if b not in dentro]
+        r_dentro, r_fora = sharpes(dentro), sharpes(fora)
+        campea = max(range(n), key=lambda j: r_dentro[j])
+        w = _postos(r_fora)[campea] / (n + 1)
+        logits.append(math.log(w / (1 - w)))
+    return {"pbo": sum(1 for x in logits if x <= 0) / len(logits), "combinacoes": len(logits),
+            "estrategias": n, "dias": t, "logits": logits}

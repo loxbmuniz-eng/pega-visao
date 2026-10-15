@@ -335,6 +335,7 @@ class Resultado:
     quebrou: bool = False
     sinais_vistos: int = 0
     resultados: list[float] = field(default_factory=list)  # pnl de cada operacao, ja com taxa
+    saidas_ms: list[int] = field(default_factory=list)     # abertura do candle em que cada uma fechou
 
     # O placar. Acerto sozinho engana: 80% de acerto com perda grande quebra a
     # conta. Por isso ele sempre aparece com ganho medio, perda media e o
@@ -563,6 +564,7 @@ def simular(s: Serie, sinais: list[int], p: Params, taxas: dict[int, float] | No
         equity += pnl
         r.pnl += pnl
         r.resultados.append(pnl)
+        r.saidas_ms.append(s.t[j_saida] if s.t else j_saida)
         r.operacoes += 1
         r.taxa_paga += p.notional * (p.taxa / 100.0) * (1.0 if desfecho == "liquidado" else 2.0)
 
@@ -737,6 +739,7 @@ def avaliar_robustez(s: Serie, nome: str, p: Params, janelas: int = 6,
         sub = fatiar(s, ini, fim)
         r = simular(sub, sinais[ini:fim], p)
         todas.resultados.extend(r.resultados)
+        todas.saidas_ms.extend(r.saidas_ms)
         ret = (r.equity_final - p.banca) / p.banca * 100
         moedas = []
         for k in range(sementes):

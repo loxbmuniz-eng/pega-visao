@@ -82,6 +82,9 @@ passar dá 60 s de bloqueio. Todo pedido do programa passa por um ritmo único
 | Farside (fluxo dos ETFs) | só página HTML atrás de proteção anti-robô; fica para quando houver fonte própria |
 | Ondas de Elliott, padrões harmônicos | não viram regra exata, então não dá para testar |
 | Gap do CME | a CME negocia cripto 24/7 desde 29/05/2026: gap novo não se forma; os antigos pedem o preço do futuro da CME, que não é grátis |
+| Efeito do quarto de hora (Kim e Hansen, arXiv 2607.09426, jul/2026) | avaliado em 15/10/2026. O padrão é real (rajada de robôs nos primeiros 10 segundos de :00, :15, :30 e :45, e o saldo agressor desses 10 segundos prevê de 4 a 12 h), mas a cobertura do estudo diz que o ganho médio fica bem abaixo das taxas da Binance. Também exige operação por operação (10 segundos), que o candle de 1 minuto não separa. Não entra como estratégia. Volta só se aparecer a conta de custo do próprio artigo mostrando ganho acima de 0,14% por ida e volta |
+| Ganhar com o funding (ficar do lado que recebe) | o Sharpe dessa carteira foi de 6,45 (2020–2025) para negativo em 2025 (arXiv 2510.14435) |
+| IA como sinal de entrada | Alpha Arena: 7 de 8 modelos perderam na temporada 1.5; FINSABER (20 anos): a vantagem some no longo prazo. A arena fica no papel |
 
 ## Como cada fator entra na ficha
 

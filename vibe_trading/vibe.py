@@ -13,6 +13,7 @@ Vibe trading — um comando so para tudo. Nada aqui envia ordem ou pede chave de
     python3 vibe.py risco [acerto] [rr] quanto cada risco por operacao derruba a banca numa sequencia ruim
     python3 vibe.py bateria             fase 1: todas as estrategias, ultimos 90 dias
     python3 vibe.py bateria-ficha       a regra da propria ficha no historico, contra moedas sorteadas
+    python3 vibe.py tendencia           a tendencia diaria (9 canais, tamanho pela volatilidade) no historico inteiro
     python3 vibe.py historico           fase 1: o historico inteiro de cada par, ano a ano
     python3 vibe.py vigia               fase 2: papel ao vivo, 24 horas (Ctrl+C para parar)
     python3 vibe.py placar              o placar do vigia
@@ -132,6 +133,8 @@ def main() -> None:
         _rodar_main("bateria", resto)
     elif cmd == "bateria-ficha":
         _rodar_main("bateria_ficha", resto)
+    elif cmd == "tendencia":
+        _rodar_main("tendencia", resto)
     elif cmd == "historico":
         _rodar_main("bateria", ["--historico"] + resto)
     elif cmd == "vigia":
