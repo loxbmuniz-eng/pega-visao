@@ -156,8 +156,8 @@ def teste_sobreposicao() -> None:
     original = bt._perna
     registro: list[tuple[int, int]] = []
 
-    def espia(serie, i, d, p):
-        r = original(serie, i, d, p)
+    def espia(serie, i, d, p, taxas=None):
+        r = original(serie, i, d, p, taxas)
         registro.append((i, r[2]))
         return r
 
@@ -444,7 +444,7 @@ def _esperado_backtest(s, sinais, p):
         if sinais[i] == 0:
             i += 1
             continue
-        pnl, desfecho, j = bt._perna(s, i, 1 if sinais[i] > 0 else -1, p)
+        pnl, desfecho, j, _ = bt._perna(s, i, 1 if sinais[i] > 0 else -1, p)
         cortado = desfecho == "expirou" and i + p.max_barras > len(s) - 1  # o fim da serie fechou, nao a regra
         if not cortado:
             esperado.append((round(s.fechamento[i], 6), s.t[j], desfecho, round(pnl, 6)))
@@ -1190,9 +1190,10 @@ def teste_regra_de_saida() -> None:
            "a 100x com stop de 0,5% a liquidacao chega antes: perde a margem (10) e a taxa de entrada (0,50)")
     s = bt.Serie(abertura=[100] * 5, maxima=[100.2] * 5, minima=[99.8] * 5,
                  fechamento=[100.0, 100.1, 100.2, 100.3, 100.4], volume=[1] * 5, t=list(range(5)))
-    pnl, desfecho, j = bt._perna(s, 0, 1, p)
-    checar(desfecho == "expirou" and j == 3 and abs(pnl - (200 * 0.003 - taxa)) < 1e-9,
-           "sem stop nem alvo em 3 candles: fecha a mercado no 3o candle, com a taxa")
+    pnl, desfecho, j, _ = bt._perna(s, 0, 1, p)
+    deslize = 200 * 0.0002 * 2  # entrada e saida a mercado, 0,02% cada
+    checar(desfecho == "expirou" and j == 3 and abs(pnl - (200 * 0.003 - taxa - deslize)) < 1e-9,
+           "sem stop nem alvo em 3 candles: fecha a mercado no 3o candle, com a taxa e o deslize das duas pontas")
 
 
 def teste_livro() -> None:
@@ -1430,15 +1431,19 @@ def teste_smc() -> None:
 
 def teste_scalping() -> None:
     print("\n[21] scalping: acerto minimo para empatar e o periodo de 5 minutos")
-    p = bt.Params(stop=0.5, rr=2, taxa=0.05)
-    checar(abs(bt.acerto_minimo(p) - 40.0) < 1e-9 and abs(bt.acerto_minimo(bt.Params(stop=0.5, rr=1, taxa=0.05)) - 60.0) < 1e-9,
-           "empate: stop 0,5% e alvo 1% pedem 40% de acerto; alvo 0,5% pede 60% (taxa 0,05% por lado)")
+    p = bt.Params(stop=0.5, rr=2, taxa=0.05, deslize=0.0)
+    checar(abs(bt.acerto_minimo(p) - 40.0) < 1e-9
+           and abs(bt.acerto_minimo(bt.Params(stop=0.5, rr=1, taxa=0.05, deslize=0.0)) - 60.0) < 1e-9
+           and abs(bt.acerto_minimo(bt.Params(stop=0.5, rr=2, taxa=0.05)) - 0.64 / 1.52 * 100) < 1e-9,
+           "empate: stop 0,5% e alvo 1% pedem 40% de acerto; alvo 0,5% pede 60% (taxa 0,05% por lado, sem "
+           "deslize); com o deslize de 0,02% por execucao a mercado, 42,1%")
     pa = bt.Params(stop=0.5, rr=2, taxa=0.05, alav=24, margem=15)
     pos = bt.abrir(100.0, 1, pa)
-    ganho, _ = bt.checar_barra(pos, 101.5, 100.0, pa)
-    perda, _ = bt.checar_barra(pos, 100.0, 99.0, pa)
+    ganho = bt.checar_barra(pos, 101.5, 100.0, pa)[0] + bt.custos(pos, "alvo", 0, pa)
+    perda = bt.checar_barra(pos, 100.0, 99.0, pa)[0] + bt.custos(pos, "stop", 0, pa)
     checar(abs(100 * -perda / (-perda + ganho) - bt.acerto_minimo(pa)) < 1e-9,
-           f"o acerto minimo bate com o ganho ({ganho:+.2f}) e a perda ({perda:+.2f}) que o simulador produz")
+           f"o acerto minimo bate com o ganho ({ganho:+.2f}) e a perda ({perda:+.2f}) que o simulador produz, "
+           f"com taxa e deslize")
     checar("5m" in bt.PERIODOS and bt.PIONEX_INTERVALO["5m"] == "5M" and est.ACIMA[est.MIN5] == (est.MIN15, est.H1)
            and bt.candles_para("5m", 90) == 90 * 288,
            "5 minutos: 288 candles por dia, nome na Pionex (5M), periodos acima 15 min e 1 h")
@@ -1656,11 +1661,12 @@ def teste_ficha_calculo() -> None:
     pc = ficha.plano(1, 100.0, le, colado, "15m", cfg, 0.05, 100.0, 2.0, None, None, 0.5, None, 24)
     checar([c["preco"] for c in pc["caminho"]] == [101.0],
            "nivel a menos de 1/10 de ATR da entrada esta no preco, nao 'no caminho' (visto ao vivo: '0,00x o risco')")
-    checar(abs(p["perda"] - 2.0) < 1e-9 and abs(p["tamanho"] - 2.0 / 0.0337) < 1e-9,
-           "risco 2% de 100: perde exatamente 2,00 USDT no stop, com taxa nas duas pontas e deslize")
+    checar(abs(p["perda"] - 2.0) < 1e-9 and abs(p["tamanho"] - 2.0 / 0.0339) < 1e-9,
+           "risco 2% de 100: perde exatamente 2,00 USDT no stop (3,25% + taxa 0,10% + deslize na entrada e na "
+           "saida 0,04%)")
     checar(p["alav"] == 14 and p["liq_vezes"] >= 2.0,
            f"alavancagem {p['alav']}x: liquidacao a {p['liq_vezes']:.2f}x a distancia do stop (pelo menos 2x)")
-    checar(abs(p["ganho1"] - p["tamanho"] * 0.078) < 1e-9 and abs(p["rr1"] - p["ganho1"] / 2.0) < 1e-12
+    checar(abs(p["ganho1"] - p["tamanho"] * 0.0778) < 1e-9 and abs(p["rr1"] - p["ganho1"] / 2.0) < 1e-12
            and abs(p["acerto_min"] - 200 / (2 + p["ganho1"])) < 1e-9,
            f"lucro no alvo 1 {p['ganho1']:.3f} USDT ({p['rr1']:.2f}x o risco); acerto minimo {p['acerto_min']:.1f}%")
     checar(abs(p["custo_funding"] - (-p["tamanho"] * 0.0001 * 3)) < 1e-12,
@@ -1672,8 +1678,8 @@ def teste_ficha_calculo() -> None:
            "faixa de risco da Pionex pelo tamanho (manutencao 1%, ate 20x); quantidade no passo, para baixo: "
            "nunca arrisca mais do que o pedido")
     p3 = ficha.plano(1, 100.0, le, grupos, "15m", cfg, 0.05, 100.0, 2.0, {"minimo_usdt": 60.0}, None, 0.5, None, 24)
-    checar(p3["abaixo_do_minimo"] and abs(p3["risco_minimo_pct"] - 60 * 0.0337) < 1e-9,
-           "abaixo do pedido minimo: diz o menor risco possivel (2,02%)")
+    checar(p3["abaixo_do_minimo"] and abs(p3["risco_minimo_pct"] - 60 * 0.0339) < 1e-9,
+           "abaixo do pedido minimo: diz o menor risco possivel (2,03%)")
     p4 = ficha.plano(-1, 100.0, le, grupos, "15m", cfg, 0.05, 100.0, 2.0, None, None, 0.5, None, 24)
     checar(abs(p4["stop"] - 103.25) < 1e-9 and p4["alvos"][0]["nivel"] is None
            and abs(p4["alvos"][0]["preco"] - (100 - 2 * 3.25)) < 1e-9,
@@ -2058,8 +2064,8 @@ def teste_ficha_comandos() -> None:
                and feitas["stop"]["desfecho"] == "stop" and feitas["stop"]["r"] == -1.0,
                "ficha conferida candle a candle: alvo = o R prometido, stop = -1 R")
         checar(feitas["mesmo"]["desfecho"] == "stop", "stop e alvo no mesmo candle: conta stop (como no backtest)")
-        checar(feitas["expira"]["desfecho"] == "expirou" and abs(feitas["expira"]["r"] - (100 * (1.0 - 0.1) / 100) / 2.2) < 1e-3,
-               "sem stop nem alvo no prazo: fecha no ultimo candle, com taxa")
+        checar(feitas["expira"]["desfecho"] == "expirou" and abs(feitas["expira"]["r"] - (100 * (1.0 - 0.14) / 100) / 2.2) < 1e-3,
+               "sem stop nem alvo no prazo: fecha no ultimo candle, com taxa e o deslize das duas pontas")
         linhas = ficha.placar_fichas(pasta, feitas)
         a = next(l for l in linhas if l["veredito"] == "A FAVOR")
         e = next(l for l in linhas if l["veredito"] == "ESPERAR")
@@ -2279,9 +2285,11 @@ def teste_surfe() -> None:
     checar(round(bt.checar_barra(bt.abrir(100.0, 1, alvo), 102.5, 100.2, alvo)[0], 9) == 1.9,
            "saida 'alvo' (a de sempre) continua igual: +1,90 inteira no alvo")
     import caderno
-    checar(caderno.chave_hipotese("x", "15m", "ambos", False, alvo).endswith("|binance")
-           and caderno.chave_hipotese("x", "15m", "ambos", False, p).endswith("|saida_surfe"),
-           "no caderno, surfe e outra hipotese; as chaves antigas continuam as mesmas")
+    sem_custo = lambda q: dataclasses.replace(q, deslize=0.0, funding=0.0)
+    checar(caderno.chave_hipotese("x", "15m", "ambos", False, sem_custo(alvo)).endswith("|binance")
+           and caderno.chave_hipotese("x", "15m", "ambos", False, sem_custo(p)).endswith("|saida_surfe")
+           and caderno.chave_hipotese("x", "15m", "ambos", False, p).endswith("|saida_surfe|deslize0.02|funding0.01"),
+           "no caderno, surfe e outra hipotese; as chaves antigas (sem custo) continuam as mesmas")
 
     s = serie_sintetica(3000, 5, True)
     cfg = json.loads(json.dumps(vigia.CONFIG_PADRAO))
@@ -2678,6 +2686,112 @@ def teste_gestao_de_risco() -> None:
         sys.argv = argv
 
 
+def teste_custos() -> None:
+    print("\n[35] deslize e funding: conta feita a mao, a mesma regra no backtest, no vigia e na ficha")
+    import caderno as cad
+    import ficha
+    import vigia
+    c = bt.custo_pct_ida_volta
+    checar((round(c(0.05, 0.02, 1.0), 9), round(c(0.05, 0.02, 0.0), 9), round(c(0.05, 0.02, 0.5), 9))
+           == (0.14, 0.12, 0.13),
+           "ida e volta: stop 0,14% (taxa 0,10 + deslize na entrada e na saida), alvo 0,12% (so a entrada desliza)")
+    sem = bt.Params(stop=0.5, rr=2, taxa=0.05, deslize=0.0)
+    com = bt.Params(stop=0.5, rr=2, taxa=0.05, deslize=0.02)
+    checar(abs(bt.acerto_minimo(sem) - 40.0) < 1e-9 and abs(bt.acerto_minimo(com) - 0.64 / 1.52 * 100) < 1e-9,
+           f"acerto minimo: 40% sem deslize, {0.64 / 1.52 * 100:.2f}% com (perda 0,64 / (0,64 + ganho 0,88))".replace(".", ","))
+    H = HORA_MS
+    dia = QUARTA
+    checar(bt.cobrancas_de_funding(dia + 7 * H, dia + 17 * H) == [dia + 8 * H, dia + 16 * H]
+           and bt.cobrancas_de_funding(dia + 8 * H, dia + 16 * H) == [dia + 16 * H]
+           and bt.cobrancas_de_funding(0, dia) == [] and bt.cobrancas_de_funding(dia + H, dia + 2 * H) == [],
+           "cobrancas as 00h, 08h e 16h UTC: aberta as 07h e fechada as 17h paga 08h e 16h; aberta na hora "
+           "exata nao paga aquela; sem hora de abertura, nenhuma")
+    p = bt.Params(margem=10, alav=20, taxa=0.05, deslize=0.02, funding=0.01)   # tamanho 200
+    compra = bt.abrir(100.0, 1, p, aberta_ms=dia + 7 * H)
+    venda = bt.abrir(100.0, -1, p, aberta_ms=dia + 7 * H)
+    fixo_c = bt.custos(compra, "stop", dia + 17 * H, p)
+    fixo_v = bt.custos(venda, "stop", dia + 17 * H, p)
+    checar(abs(fixo_c - (-0.08 - 0.04)) < 1e-12 and abs(fixo_v - fixo_c) < 1e-12,
+           "sem a serie real: deslize 200 x 0,02% x 2 = 0,08 e funding 2 x 200 x 0,01% = 0,04, dos DOIS lados")
+    taxas = {dia + 8 * H: 0.0001, dia + 16 * H: -0.0003}
+    real_c = bt.custos(compra, "alvo", dia + 17 * H, p, taxas)
+    real_v = bt.custos(venda, "alvo", dia + 17 * H, p, taxas)
+    checar(abs(real_c - (-0.04 + 0.04)) < 1e-12 and abs(real_v - (-0.04 - 0.04)) < 1e-12,
+           "com a serie real: o comprado paga 0,02 e recebe 0,06 (saldo +0,04); o vendido o contrario; "
+           "o alvo so paga o deslize da entrada (0,04)")
+    falta = bt.custos(compra, "alvo", dia + 17 * H, p, {dia + 8 * H: 0.0001})
+    checar(abs(falta - (-0.04 - 0.02 - 0.02)) < 1e-12,
+           "cobranca que falta na serie real paga a taxa fixa contra a posicao (nao vira zero)")
+    antiga = bt.Posicao(1, 100.0, 99.5, 101.0, 95.5, False)
+    checar(abs(bt.custos(antiga, "stop", dia, p) - (-0.08)) < 1e-12,
+           "posicao gravada antes desta versao (sem hora de abertura): so o deslize, nunca funding desde 1970")
+    checar(abs(bt.custos(compra, "liquidado", dia + 9 * H, p) - (-0.04 - 0.02)) < 1e-12
+           and abs(bt.custos(compra, "surfe", dia + 9 * H, p) - (-0.04 - 0.02 - 0.02)) < 1e-12,
+           "liquidado: deslize so da entrada; surfe: a metade que sai a mercado desliza")
+
+    # o backtest cobra, candle a candle, com o horario de verdade
+    ms = 15 * 60_000
+    inicio = dia + 7 * H + 30 * 60_000          # 07:30 UTC: o candle das 07:30 fecha as 07:45
+    n = 12 * 4
+    serie = bt.Serie(abertura=[100.0] * n, maxima=[100.2] * n, minima=[99.8] * n, fechamento=[100.0] * n,
+                     volume=[1.0] * n, t=[inicio + k * ms for k in range(n)])
+    serie.minima[40] = 99.4                      # 07:30 + 40 x 15 min = 17:30: bate o stop
+    pq = bt.Params(margem=10, alav=20, taxa=0.05, deslize=0.02, funding=0.01, stop=0.5, rr=2, max_barras=100)
+    pnl, desfecho, j, custo = bt._perna(serie, 0, 1, pq)
+    checar(desfecho == "stop" and j == 40 and abs(pnl - (-(200 * 0.005) - 0.2 - 0.08 - 0.04)) < 1e-9
+           and abs(custo + 0.12) < 1e-12,
+           "operacao das 07:45 as 17:45 que bate o stop: -1,00 do stop, -0,20 de taxa, -0,08 de deslize, "
+           "-0,04 de funding (08h e 16h)")
+    r = bt.simular(serie, [1] + [0] * (n - 1), pq)
+    checar(r.operacoes == 1 and abs(r.custos_pagos - 0.12) < 1e-12 and abs(r.pnl - pnl) < 1e-12,
+           "o placar soma o deslize e o funding pagos (0,12) e o resultado ja os desconta")
+    longa = serie_sintetica(3000, 5, True)
+    pp = bt.Params(**vigia.CONFIG_PADRAO["params"])
+    sinais = est.sinais("confl3", longa)
+    r_com = bt.simular(longa, sinais, pp)
+    r_sem = bt.simular(longa, sinais, dataclasses.replace(pp, deslize=0.0, funding=0.0))
+    so_deslize = bt.simular(longa, sinais, dataclasses.replace(pp, funding=0.0))
+    checar(r_com.operacoes == r_sem.operacoes > 5 and r_com.pnl < so_deslize.pnl < r_sem.pnl,
+           f"{r_com.operacoes} operacoes: com custo rende menos que so com deslize, que rende menos que sem custo")
+
+    # vigia: o mesmo candle a candle (a paridade do [10] roda com estes custos)
+    cc = {"t": serie.t, "abertura": serie.abertura, "maxima": serie.maxima, "minima": serie.minima,
+          "fechamento": serie.fechamento}
+    pos, fechou, _ = vigia.passo(None, 1, 0, cc, pq, ms)
+    for k in range(1, 41):
+        pos, fechou, _ = vigia.passo(pos, 0, k, cc, pq, ms)
+        if fechou:
+            break
+    checar(fechou is not None and fechou[1] == "stop" and abs(fechou[0] - pnl) < 1e-12,
+           "o vigia ao vivo fecha a mesma operacao com o mesmo resultado, custos inclusos")
+
+    # vigia.json antigo ganha os custos por escrito, e o placar sem custo nao se mistura
+    pasta = tempfile.mkdtemp(prefix="custos_")
+    try:
+        caminho = os.path.join(pasta, "vigia.json")
+        velho = json.loads(json.dumps(vigia.CONFIG_PADRAO))
+        for k in ("deslize", "funding"):
+            velho["params"].pop(k)
+        estado = {"trilhas": {"x": {}}}
+        vigia.conferir_params(estado, velho)
+        with open(caminho, "w", encoding="utf-8") as f:
+            json.dump(velho, f)
+        with contextlib.redirect_stdout(io.StringIO()):
+            novo_cfg = vigia.carregar_config(caminho)
+        recomecou = vigia.conferir_params(estado, novo_cfg, registrar=lambda m: None)
+        checar(novo_cfg["params"]["deslize"] == bt.DESLIZE_PADRAO and novo_cfg["params"]["funding"] == bt.FUNDING_PADRAO
+               and json.load(open(caminho, encoding="utf-8"))["params"]["funding"] == bt.FUNDING_PADRAO
+               and recomecou and estado["trilhas"] == {} and len(estado["arquivadas"]) == 1,
+               "vigia.json antigo: os custos entram no arquivo, e o placar sem custo vai para 'arquivadas'")
+    finally:
+        shutil.rmtree(pasta, ignore_errors=True)
+    k_com = cad.chave_hipotese("confl3", "15m", "ambos", False, pp)
+    k_sem = cad.chave_hipotese("confl3", "15m", "ambos", False, dataclasses.replace(pp, deslize=0.0))
+    checar(k_com != k_sem and "deslize0.02" in k_com and "funding0.01" in k_com,
+           "o caderno conta o mesmo teste com outro custo como outra tentativa")
+    checar(ficha.FICHA_PADRAO["deslize_pct"] == bt.DESLIZE_PADRAO, "a ficha usa o mesmo deslize do backtest")
+
+
 def _pegada_real() -> dict:
     """Tamanho de cada arquivo de dado real (vigia e caderno de quem roda de verdade)."""
     pegada = {}
@@ -2726,6 +2840,7 @@ if __name__ == "__main__":
     teste_nota_e_corrente()
     teste_bateria_ficha()
     teste_gestao_de_risco()
+    teste_custos()
     print("\n[13] a bateria nao toca nos dados reais do vigia")
     checar(_pegada_real() == pegada, "dados_vigia/, caderno, vigia.json e segredos.json iguais antes e depois da bateria")
     print()

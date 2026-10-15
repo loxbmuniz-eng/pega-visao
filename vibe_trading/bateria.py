@@ -76,6 +76,8 @@ def main() -> None:
     ap.add_argument("--rr", type=float, default=2.0)
     ap.add_argument("--saida", choices=("alvo", "surfe"), default="alvo",
                     help="alvo: sai inteira no alvo; surfe: metade no alvo e o resto segue o preco")
+    ap.add_argument("--deslize", type=float, default=bt.DESLIZE_PADRAO, help="%% por execucao a mercado")
+    ap.add_argument("--funding", type=float, default=bt.FUNDING_PADRAO, help="%% a cada 8 h, contra a posicao")
     ap.add_argument("--lado", choices=("ambos", "compra", "venda"), default="ambos")
     ap.add_argument("--alinhar", action="store_true")
     ap.add_argument("--janelas", type=int, default=6)
@@ -99,7 +101,8 @@ def main() -> None:
             sys.exit(f"periodo '{tf}' nao existe. Use: {', '.join(bt.PERIODOS)}")
 
     p = bt.Params(banca=args.banca, margem=args.margem, alav=args.alav, taxa=args.taxa,
-                  mm=args.mm, stop=args.stop, rr=args.rr, saida=args.saida)
+                  mm=args.mm, stop=args.stop, rr=args.rr, saida=args.saida,
+                  deslize=args.deslize, funding=args.funding)
     minimo_ativos = 2 if len(ativos) >= 3 else len(ativos)
 
     print("=" * 96)
@@ -107,6 +110,7 @@ def main() -> None:
           f"   (dado publico; nenhuma ordem real)")
     print("=" * 96)
     print(f"  banca {p.banca:.0f}  margem {p.margem:.0f}  {p.alav:g}x  stop {p.stop:g}%  alvo {p.stop * p.rr:g}%"
+          f"  deslize {p.deslize:g}%  funding {p.funding:g}%/8h"
           f"  lado={args.lado}{'  alinhado' if args.alinhar else ''}  ~{args.dias} dias")
     print(f"  passa no periodo: SINAL DE VANTAGEM em pelo menos {minimo_ativos} dos {len(ativos)} ativos")
     print(f"  acerto minimo para empatar com estes parametros (taxa nas duas pontas): {bt.acerto_minimo(p):.1f}%")

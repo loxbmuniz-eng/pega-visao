@@ -422,6 +422,30 @@ surfe). No caderno, surfe é **outra hipótese** e entra na conta da prova contr
 sorte. No vigia, vale com `"saida": "surfe"` em `"params"`; trocar recomeça o
 placar (o anterior fica guardado).
 
+## Custos: taxa, deslize e funding
+
+Toda operação paga três custos, pela mesma regra no backtest, no vigia e na
+ficha (`backtest.custos` e `backtest.custo_pct_ida_volta`):
+
+| Custo | Como entra | Padrão |
+|---|---|---|
+| Taxa | nas duas pontas | 0,05% por lado (`--taxa`) |
+| Deslize | em cada execução **a mercado**: a entrada, o stop, o prazo, o resto do surfe. O alvo é ordem limitada e não desliza | 0,02% (`--deslize`) |
+| Funding | a cada cobrança (00h, 08h e 16h UTC) com a posição aberta, contada até o **fim** do candle de saída. Com a série real, o comprado paga a taxa positiva e o vendido recebe; sem a série, cobra 0,01% **dos dois lados** | 0,01% (`--funding`) |
+
+Com deslize, o empate de stop 0,5% e alvo 1% sobe de 40% para **42,1%** de
+acerto. Os custos entram no caderno: o mesmo teste com outro custo é outra
+tentativa (rodar de novo com custo menor até passar conta contra a prova).
+Testes sem custo mantêm a chave antiga. No vigia, um `vigia.json` antigo ganha
+`"deslize"` e `"funding"` por escrito, e o placar sem custo vai para
+`arquivadas` (guarda [35]).
+
+> **Correção registrada (deslize da entrada).** A ficha cobrava o deslize só
+> na saída pelo stop, mas o plano é "se entrar a mercado agora": a entrada
+> também desliza. Agora o stop paga as duas pontas (custo 0,14% em vez de
+> 0,12%) e o alvo paga a da entrada. O backtest não cobrava deslize nem
+> funding nenhum. Guarda [35], com 15 defeitos plantados e pegos.
+
 ## O placar: acerto não basta
 
 Toda saída mostra o **acerto** junto com o que decide se há lucro: **ganho

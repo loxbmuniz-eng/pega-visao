@@ -83,8 +83,11 @@ CONFIG_PADRAO = {
         {"nome": "confl3", "lado": "ambos", "alinhar": False},
         {"nome": "engolfo", "lado": "ambos", "alinhar": False},
     ],
+    # deslize: % por execucao a mercado; funding: % a cada 8 h contra a posicao (o
+    # vigia nao tem a serie real). Os mesmos custos do backtest (backtest.custos).
     "params": {"banca": 110, "margem": 15, "alav": 24, "taxa": 0.05, "mm": 0.5,
-               "stop": 0.5, "rr": 2, "max_barras": 48},
+               "stop": 0.5, "rr": 2, "max_barras": 48,
+               "deslize": bt.DESLIZE_PADRAO, "funding": bt.FUNDING_PADRAO},
     "moedas": 20,
     # A fase 2 julga UMA vez em cada ponto fixado antes, contando so operacoes ao vivo
     # (as fechadas com o vigia desligado nao contam). Julgar a cada operacao ate "dar
@@ -232,7 +235,7 @@ def carregar_config(caminho: str = CONFIG) -> dict:
     novos = [k for k in CONFIG_PADRAO if k not in cfg]
     for k in novos:
         cfg[k] = json.loads(json.dumps(PADRAO_PARA_CONFIG_ANTIGA.get(k, CONFIG_PADRAO[k])))
-    for grupo in ("arena", "ficha", "radar", "alertas", "disjuntor", "risco"):
+    for grupo in ("params", "arena", "ficha", "radar", "alertas", "disjuntor", "risco"):
         novos += [f"{grupo}.{k}" for k in CONFIG_PADRAO[grupo] if k not in cfg[grupo]]
         for k in CONFIG_PADRAO[grupo]:
             cfg[grupo].setdefault(k, CONFIG_PADRAO[grupo][k])
@@ -322,27 +325,31 @@ def _pos_de(d):
     return bt.Posicao(**d) if d else None
 
 
-def passo(pos_dict, sinal: int, i: int, c: dict, p: bt.Params):
+def passo(pos_dict, sinal: int, i: int, c: dict, p: bt.Params, ms: int = 0):
     """
     Um candle para uma posicao (da estrategia ou de uma moeda). Mesma ordem do
     backtest.simular: primeiro o candle atua sobre a posicao aberta; uma posicao
     que fechou neste candle nao reabre nele; sem posicao, o sinal abre no
-    fechamento. Devolve (posicao_nova, fechamento | None, abriu).
+    fechamento. O resultado leva o deslize e o funding de backtest.custos, ate o
+    fim deste candle (ms = periodo do candle). Devolve (posicao_nova,
+    fechamento | None, abriu).
     """
     pos = _pos_de(pos_dict)
     fechou = None
+    fim = c["t"][i] + ms if ms else 0
     if pos is not None:
         pos.barras += 1
         r = bt.checar_barra(pos, c["maxima"][i], c["minima"][i], p)
         if r is not None:
-            fechou = (r[0], r[1], pos)
+            fechou = (r[0] + bt.custos(pos, r[1], fim, p), r[1], pos)
         elif pos.barras >= p.max_barras:
-            fechou = (bt.encerrar_no_preco(pos, c["fechamento"][i], p), "expirou", pos)
+            fechou = (bt.encerrar_no_preco(pos, c["fechamento"][i], p) + bt.custos(pos, "expirou", fim, p),
+                      "expirou", pos)
         if fechou is not None:
             pos = None
     abriu = False
     if pos is None and fechou is None and sinal != 0:
-        pos = bt.abrir(c["fechamento"][i], 1 if sinal > 0 else -1, p)
+        pos = bt.abrir(c["fechamento"][i], 1 if sinal > 0 else -1, p, aberta_ms=fim)
         abriu = True
     return (asdict(pos) if pos else None), fechou, abriu
 
@@ -408,7 +415,7 @@ def processar_barra(tr: dict, tid: str, nome: str, ativo: str, tf: str, sinal: i
     """Um candle numa trilha (estrategia ou IA): a posicao, o diario, o aviso e as
     moedas pareadas. Estrategia e IA passam pela MESMA funcao. `cfg` e so para o aviso
     de entrada dizer se algum disjuntor da conta real esta armado (gestao)."""
-    tr["posicao"], fechou, abriu = passo(tr["posicao"], sinal, i, c, p)
+    tr["posicao"], fechou, abriu = passo(tr["posicao"], sinal, i, c, p, MS.get(tf, 0))
     if fechou is not None:
         pnl, desfecho, pos = fechou
         tr["resultados"].append(pnl)
@@ -445,7 +452,7 @@ def processar_barra(tr: dict, tid: str, nome: str, ativo: str, tf: str, sinal: i
     frac = (tr.get("sinais_compra", 0) + 1) / (tr.get("sinais", 0) + 2)
     for k, m in enumerate(tr["moedas"]):
         lado = lado_da_moeda(k, c["t"][i], frac) if sinal != 0 else 0
-        m["posicao"], fm, _ = passo(m["posicao"], lado, i, c, p)
+        m["posicao"], fm, _ = passo(m["posicao"], lado, i, c, p, MS.get(tf, 0))
         if fm is not None:
             m["n"] += 1
             m["soma"] += fm[0]

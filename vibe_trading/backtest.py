@@ -42,6 +42,12 @@ FONTES = [
     ("binance-us", "https://api.binance.us/api/v3/klines?symbol={par}&interval={tf}&limit={n}"),
 ]
 
+# Custos alem da taxa, os mesmos no backtest, no vigia e na ficha (custos e
+# custo_pct_ida_volta abaixo). Valores de partida, conservadores:
+DESLIZE_PADRAO = 0.02   # % do tamanho em cada execucao A MERCADO (entrada, stop, prazo)
+FUNDING_PADRAO = 0.01   # % do tamanho a cada 8 h aberta, quando nao ha a serie real
+FUNDING_MS = 8 * 3_600_000  # cobrancas as 00h, 08h e 16h UTC (Binance e Pionex)
+
 LIMITE_POR_PEDIDO = 1000   # maximo que a Binance devolve por pedido
 MIN_CANDLES = 500          # EMA 200 precisa aquecer e ainda sobrar candle para operar
 
@@ -285,6 +291,8 @@ class Params:
     # "alvo": sai inteira no alvo. "surfe": metade sai no alvo, o stop do resto vai
     # para a entrada e passa a seguir o preco a mesma distancia do stop original.
     saida: str = "alvo"
+    deslize: float = DESLIZE_PADRAO   # % por execucao a mercado (veja custos)
+    funding: float = FUNDING_PADRAO   # % a cada 8 h, dos dois lados, sem a serie real
 
     @property
     def notional(self) -> float:
@@ -295,12 +303,20 @@ class Params:
         return max(0.0, (100.0 / self.alav) - self.mm)
 
 
+def custo_pct_ida_volta(taxa: float, deslize: float, saida_a_mercado: float) -> float:
+    """O custo (% do tamanho) de abrir e fechar: a taxa nas duas pontas, o deslize da
+    entrada (a mercado) e o da saida na fracao que sai a mercado (1 = stop ou prazo,
+    0 = alvo, que e ordem limitada, 0,5 = metade no alvo e metade a mercado). A ficha,
+    a bateria da ficha e o backtest chamam esta: o custo e um so."""
+    return 2 * taxa + deslize * (1 + saida_a_mercado)
+
+
 def acerto_minimo(p: Params) -> float:
-    """Acerto (%) que so empata, com a taxa nas duas pontas: perda no stop sobre a
-    soma de perda e ganho. Stop 0,5% e alvo 1% com 0,05% por lado: 0,6 / 1,5 = 40%.
-    Nao conta expiracao nem liquidacao."""
-    taxa = p.taxa * 2
-    perda, ganho = p.stop + taxa, p.stop * p.rr - taxa
+    """Acerto (%) que so empata: perda no stop sobre a soma de perda e ganho, com a
+    taxa nas duas pontas e o deslize. Stop 0,5% e alvo 1% com 0,05% por lado e sem
+    deslize: 0,6 / 1,5 = 40%. Nao conta funding, expiracao nem liquidacao."""
+    perda = p.stop + custo_pct_ida_volta(p.taxa, p.deslize, 1.0)
+    ganho = p.stop * p.rr - custo_pct_ida_volta(p.taxa, p.deslize, 0.0)
     return 100.0 * perda / (perda + ganho) if perda + ganho > 0 else 100.0
 
 
@@ -312,6 +328,7 @@ class Resultado:
     liquidacoes: int = 0
     expiradas: int = 0
     taxa_paga: float = 0.0
+    custos_pagos: float = 0.0  # deslize + funding (positivo = pagou)
     pnl: float = 0.0
     equity_min: float = 0.0
     equity_final: float = 0.0
@@ -365,18 +382,61 @@ class Posicao:
     realizado: float = 0.0
     metade: bool = False
     pico: float = 0.0
+    # fim do candle de entrada (ms): de onde o funding comeca a contar. 0 = nao se
+    # sabe (posicao gravada antes desta versao): nao cobra funding, em vez de cobrar
+    # desde 1970.
+    aberta_ms: int = 0
 
 
-def abrir(entrada: float, direcao: int, p: Params) -> Posicao:
+def abrir(entrada: float, direcao: int, p: Params, aberta_ms: int = 0) -> Posicao:
     """Abre no preco de fechamento do candle do sinal."""
     d_stop = p.stop / 100.0
     d_alvo = (p.stop * p.rr) / 100.0
     d_liq = p.liq_pct / 100.0
     if direcao > 0:
         return Posicao(direcao, entrada, entrada * (1 - d_stop), entrada * (1 + d_alvo),
-                       entrada * (1 - d_liq), d_liq <= d_stop)
+                       entrada * (1 - d_liq), d_liq <= d_stop, aberta_ms=aberta_ms)
     return Posicao(direcao, entrada, entrada * (1 + d_stop), entrada * (1 - d_alvo),
-                   entrada * (1 + d_liq), d_liq <= d_stop)
+                   entrada * (1 + d_liq), d_liq <= d_stop, aberta_ms=aberta_ms)
+
+
+# Quanto de cada desfecho sai a mercado (paga deslize na saida). O alvo e ordem
+# limitada; a liquidacao leva a margem, e nao ha saida a cobrar.
+SAIDA_A_MERCADO = {"alvo": 0.0, "stop": 1.0, "expirou": 1.0, "surfe": 0.5, "alvo+zero": 0.5, "liquidado": 0.0}
+
+
+def cobrancas_de_funding(de_ms: int, ate_ms: int) -> list[int]:
+    """As cobrancas de funding (00h, 08h, 16h UTC) em (de_ms, ate_ms]."""
+    if de_ms <= 0 or ate_ms <= de_ms:
+        return []
+    primeira = (de_ms // FUNDING_MS + 1) * FUNDING_MS
+    return list(range(primeira, ate_ms + 1, FUNDING_MS))
+
+
+def custos(pos: Posicao, desfecho: str, fim_ms: int, p: Params,
+           taxas: dict[int, float] | None = None) -> float:
+    """Deslize e funding de uma operacao que fechou no candle que termina em fim_ms,
+    em USDT (negativo = custo). checar_barra devolve o resultado so com a taxa; o
+    backtest e o vigia somam isto, pela MESMA funcao.
+
+    Deslize: a entrada (a mercado) e a fracao que sai a mercado pagam p.deslize.
+    Funding: com a serie real (taxas = {hora_ms: taxa em fracao}), o comprado paga a
+    taxa positiva e o vendido recebe; cobranca sem taxa na serie, ou sem serie, usa
+    p.funding contra a posicao, dos dois lados (conservador). Conta ate o FIM do
+    candle de saida, porque a hora da saida dentro do candle nao se sabe."""
+    deslize = p.notional * p.deslize / 100 * (1 + SAIDA_A_MERCADO.get(desfecho, 1.0))
+    funding = 0.0
+    for t in cobrancas_de_funding(pos.aberta_ms, fim_ms):
+        taxa = (taxas or {}).get(t)
+        funding += (-pos.direcao * taxa * p.notional) if taxa is not None else -p.notional * p.funding / 100
+    return funding - deslize
+
+
+def intervalo_ms(s: "Serie") -> int:
+    """O periodo do candle da serie, pelo menor passo entre os primeiros candles (um
+    buraco no comeco nao engana). 0 se a serie nao tem horario."""
+    passos = [b - a for a, b in zip(s.t[:12], s.t[1:13]) if b > a]
+    return min(passos) if passos else 0
 
 
 def checar_barra(pos: Posicao, maxima: float, minima: float, p: Params) -> tuple[float, str] | None:
@@ -454,21 +514,27 @@ def encerrar_no_preco(pos: Posicao, preco: float, p: Params) -> float:
     return (p.notional * var) - taxa_total
 
 
-def _perna(s: Serie, i: int, direcao: int, p: Params) -> tuple[float, str, int]:
+def _perna(s: Serie, i: int, direcao: int, p: Params,
+           taxas: dict[int, float] | None = None) -> tuple[float, str, int, float]:
     """
     Simula UMA posicao aberta no fechamento do candle i, candle a candle.
-    Devolve (pnl ja com taxa, desfecho, indice do candle em que a posicao fechou).
+    Devolve (pnl com taxa, deslize e funding, desfecho, indice do candle em que a
+    posicao fechou, deslize + funding).
     """
-    pos = abrir(s.fechamento[i], direcao, p)
+    ms = intervalo_ms(s)
+    fim = (lambda k: s.t[k] + ms) if s.t and ms else (lambda k: 0)
+    pos = abrir(s.fechamento[i], direcao, p, aberta_ms=fim(i))
     for j in range(i + 1, min(i + 1 + p.max_barras, len(s))):
         r = checar_barra(pos, s.maxima[j], s.minima[j], p)
         if r is not None:
-            return r[0], r[1], j
+            c = custos(pos, r[1], fim(j), p, taxas)
+            return r[0] + c, r[1], j, c
     j_fim = min(i + p.max_barras, len(s) - 1)
-    return encerrar_no_preco(pos, s.fechamento[j_fim], p), "expirou", j_fim
+    c = custos(pos, "expirou", fim(j_fim), p, taxas)
+    return encerrar_no_preco(pos, s.fechamento[j_fim], p) + c, "expirou", j_fim, c
 
 
-def simular(s: Serie, sinais: list[int], p: Params) -> Resultado:
+def simular(s: Serie, sinais: list[int], p: Params, taxas: dict[int, float] | None = None) -> Resultado:
     """
     Percorre a serie abrindo uma operacao quando o sinal nao e zero.
 
@@ -491,7 +557,8 @@ def simular(s: Serie, sinais: list[int], p: Params) -> Resultado:
             break
 
         direcao = 1 if sinais[i] > 0 else -1
-        pnl, desfecho, j_saida = _perna(s, i, direcao, p)
+        pnl, desfecho, j_saida, custo = _perna(s, i, direcao, p, taxas)
+        r.custos_pagos -= custo
 
         equity += pnl
         r.pnl += pnl
@@ -538,6 +605,8 @@ def cabecalho(p: Params, par: str, dias: int) -> None:
     taxa_rt = p.notional * p.taxa / 100 * 2
     print(f"  taxa {p.taxa:.3f}%/lado -> {taxa_rt:.2f} USDT ida e volta "
           f"({taxa_rt / p.margem * 100:.1f}% da margem)")
+    print(f"  deslize {p.deslize:.3f}% por execucao a mercado · funding {p.funding:.3f}% a cada 8 h "
+          f"(contra a posicao, sem a serie real)")
     print(f"  stop {p.stop:.2f}%   alvo {p.stop * p.rr:.2f}% ({p.rr:.1f}:1)", end="")
     print(f"   liquidacao {p.liq_pct:.2f}%", end="")
     if p.liq_pct <= p.stop:
@@ -746,6 +815,8 @@ def main() -> None:
     ap.add_argument("--rr", type=float, default=2.0, help="alvo = stop * rr")
     ap.add_argument("--saida", choices=("alvo", "surfe"), default="alvo",
                     help="alvo: sai inteira no alvo; surfe: metade no alvo e o resto segue o preco")
+    ap.add_argument("--deslize", type=float, default=DESLIZE_PADRAO, help="%% por execucao a mercado")
+    ap.add_argument("--funding", type=float, default=FUNDING_PADRAO, help="%% a cada 8 h, contra a posicao")
     ap.add_argument("--dias", type=int, default=90)
     ap.add_argument("--periodos", default="15m,1h,4h,12h,1d")
     ap.add_argument("--estrategia", default="moeda")
@@ -771,7 +842,8 @@ def main() -> None:
         return
 
     p = Params(banca=args.banca, margem=args.margem, alav=args.alav, taxa=args.taxa,
-               mm=args.mm, stop=args.stop, rr=args.rr, saida=args.saida)
+               mm=args.mm, stop=args.stop, rr=args.rr, saida=args.saida,
+               deslize=args.deslize, funding=args.funding)
     periodos = [t.strip() for t in args.periodos.split(",") if t.strip()]
 
     if args.ruido:
@@ -843,6 +915,7 @@ def main() -> None:
     print()
     print("  'liq' = operacoes mortas por liquidacao, nao por stop.")
     print("  'taxa pg' = custo acumulado so de abrir e fechar. Compare com o pnl.")
+    print("  O pnl ja desconta tambem o deslize e o funding (veja o cabecalho).")
     print("  Regra conservadora: stop e alvo no mesmo candle contam como STOP.")
     print()
     print("  Uma estrategia que nao bate 'moeda' por margem folgada nao tem")

@@ -54,7 +54,7 @@ FICHA_PADRAO = {
     "alav_max": 50,             # teto proprio, abaixo do da corretora
     "liq_vezes_stop": 2.0,      # a liquidacao fica a pelo menos 2x a distancia do stop
     "margem_max_pct": 30,       # margem acima disso (% da banca): aviso de concentracao
-    "deslize_pct": 0.02,        # deslizamento estimado na saida a mercado (% do tamanho)
+    "deslize_pct": bt.DESLIZE_PADRAO,  # deslize de cada execucao a mercado (% do tamanho)
     "rr_min": 1.5,              # o 1o alvo tem que pagar 1,5x o risco, ja com as taxas
     "funding_extremo": 0.001,   # 0,1% por cobranca: um lado lotado
     "agenda_antes_min": 30,     # nao entrar 30 min antes de anuncio forte...
@@ -373,7 +373,9 @@ def plano(direcao: int, entrada: float, le_entrada: dict, grupos: list[dict], tf
     caminho = [{"preco": g["preco"], "nomes": g["nomes"], "r": abs(g["preco"] - entrada) / risco_px}
                for g in grupos if not g["forte"] and 0.1 * atr < (g["preco"] - entrada) * direcao < limite]
 
-    custo_pct = dist_pct + 2 * taxa + cfg["deslize_pct"]
+    # entrada a mercado e stop a mercado; o alvo e ordem limitada (backtest.custo_pct_ida_volta)
+    custo_pct = dist_pct + bt.custo_pct_ida_volta(taxa, cfg["deslize_pct"], 1.0)
+    custo_alvo = bt.custo_pct_ida_volta(taxa, cfg["deslize_pct"], 0.0)
     risco_usdt = banca * risco_pct / 100
     tamanho = risco_usdt / (custo_pct / 100)
     faixa = fatores.faixa_do_tamanho(faixas_risco, tamanho) if faixas_risco else None
@@ -389,7 +391,7 @@ def plano(direcao: int, entrada: float, le_entrada: dict, grupos: list[dict], tf
     perda = tamanho * custo_pct / 100
 
     def ganho(px):
-        return tamanho * (abs(px - entrada) / entrada * 100 - 2 * taxa) / 100
+        return tamanho * (abs(px - entrada) / entrada * 100 - custo_alvo) / 100
 
     g1 = ganho(alvos[0]["preco"])
     g2 = ganho(alvos[1]["preco"]) if len(alvos) > 1 else None
@@ -407,7 +409,7 @@ def plano(direcao: int, entrada: float, le_entrada: dict, grupos: list[dict], tf
         "mm_fonte": "tabela de risco da Pionex" if faixa else "padrao do vigia (tabela fora do ar)",
         "perda": perda, "ganho1": g1, "ganho2": g2, "rr1": g1 / perda if perda else 0.0,
         "surfe_melhor": (0.5 * g1 + 0.5 * g2) if g2 is not None else None,
-        "surfe_pior": 0.5 * g1 - 0.5 * tamanho * (2 * taxa + cfg["deslize_pct"]) / 100,
+        "surfe_pior": 0.5 * g1 - 0.5 * tamanho * bt.custo_pct_ida_volta(taxa, cfg["deslize_pct"], 1.0) / 100,
         "acerto_min": 100 * perda / (perda + g1) if g1 > 0 else 100.0,
         "abaixo_do_minimo": qtd <= 0 or (min_usdt is not None and tamanho < min_usdt)
                             or (min_qtd is not None and qtd < min_qtd),
@@ -800,7 +802,7 @@ def registrar(pasta: str, f: dict) -> str | None:
     return codigo
 
 
-def desfecho(reg: dict, s: bt.Serie, taxa: float = 0.05) -> dict | None:
+def desfecho(reg: dict, s: bt.Serie, taxa: float = 0.05, deslize: float = bt.DESLIZE_PADRAO) -> dict | None:
     """O que aconteceu com a ficha, candle a candle desde o primeiro candle que ABRIU
     depois dela, pela regra do backtest (stop e alvo no mesmo candle conta stop).
     Resultado em multiplos do risco (R): alvo = o que o plano prometia, stop = -1.
@@ -816,7 +818,7 @@ def desfecho(reg: dict, s: bt.Serie, taxa: float = 0.05) -> dict | None:
     if len(depois) >= reg["max_barras"]:
         i = depois[-1]
         var = (s.fechamento[i] - reg["entrada"]) / reg["entrada"] * 100 * d
-        pnl = reg["tamanho"] * (var - 2 * taxa) / 100
+        pnl = reg["tamanho"] * (var - bt.custo_pct_ida_volta(taxa, deslize, 1.0)) / 100
         return {"desfecho": "expirou", "r": round(pnl / reg["perda"], 4) if reg["perda"] else 0.0, "fim_ms": s.t[i]}
     return None
 

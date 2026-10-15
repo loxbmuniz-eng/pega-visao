@@ -108,8 +108,8 @@ def modelo_perna(f: dict, exige_virada: bool, cfg: dict | None = None, taxa: flo
     entrada = p["entrada"]
     if (alvo - entrada) * d <= 0:
         return None
-    perda_pct = p["dist_pct"] + 2 * taxa + cfg["deslize_pct"]
-    rr = (abs(alvo - entrada) / entrada * 100 - 2 * taxa) / perda_pct
+    perda_pct = p["dist_pct"] + bt.custo_pct_ida_volta(taxa, cfg["deslize_pct"], 1.0)
+    rr = (abs(alvo - entrada) / entrada * 100 - bt.custo_pct_ida_volta(taxa, cfg["deslize_pct"], 0.0)) / perda_pct
     if rr < cfg["rr_min"]:
         return None
     nome = "GATILHO" if exige_virada else "ALVO NA PERNA"
