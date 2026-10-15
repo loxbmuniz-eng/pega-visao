@@ -2348,7 +2348,7 @@ def teste_endurecimento() -> None:
     p = bt.Params(**vigia.CONFIG_PADRAO["params"])
     pos = dataclasses.asdict(bt.abrir(100.0, 1, p))
     t = vigia.texto_entrada("confl3", "BTCUSDT", "15m", pos, p, motivo="ok", disjuntor_armado=True)
-    checar("DISJUNTOR DO DIA ARMADO" in t and "nao verificado" in t,
+    checar("DISJUNTOR ARMADO (do dia ou da semana)" in t and "nao verificado" in t,
            "alerta de entrada avisa o disjuntor armado e marca o texto da IA como nao verificado")
 
     pasta = tempfile.mkdtemp(prefix="banca_")
@@ -2361,7 +2361,7 @@ def teste_endurecimento() -> None:
                 "15m": {"tendencia": 1, "topo": 99.0, "fundo": 94.0}}
         txt = _com_leituras(alta, (90.0, 110.0), [], lambda: vigia.fazer_ficha(
             ["btc", "2"], cfg, {}, AGORA_FICHA, pasta, lambda par, agora: d))
-        checar("risco 2% de 96.3 USDT = 1,93" in txt and "banca de hoje: 96,30 USDT" in txt,
+        checar("risco 2% de 96,30 USDT = 1,93" in txt and "banca de hoje: 96,30 USDT" in txt,
                "a ficha arrisca 2% da banca de hoje (100 - 3,70 anotados = 96,30)")
         vigia.anotar_resultado(["-97"], cfg, AGORA_FICHA - 2 * DIA_MS, pasta)
         checar("chegou a" in vigia.fazer_ficha(["btc"], cfg, {}, AGORA_FICHA, pasta, lambda par, agora: d),
@@ -2518,6 +2518,166 @@ def teste_bateria_ficha() -> None:
            "cada modelo entra no caderno como hipotese propria (conta na prova contra sorte)")
 
 
+def teste_gestao_de_risco() -> None:
+    print("\n[34] gestao de risco: ruina sorteada, risco que cai com a banca, semana e desempenho real")
+    import math
+    import time
+    import ficha
+    import risco
+    import vibe
+    import vigia
+    # ruina: os extremos que se conferem a mao
+    tudo = risco.simular(100, 2, 1, operacoes=100, caminhos=50)
+    nada = risco.simular(0, 2, 10, operacoes=100, caminhos=50)
+    checar(abs(tudo["mediana_final"] - 1.02 ** 100) < 1e-9 and tudo["queda_20"] == 0 and tudo["lucro"] == 100,
+           f"acerta sempre com risco 1% e alvo 2x: banca x 1,02^100 = {ficha._br(1.02 ** 100, 2)}, nenhuma queda")
+    checar(abs(nada["mediana_final"] - 0.9 ** 100) < 1e-12 and nada["queda_50"] == 100 and nada["lucro"] == 0,
+           "erra sempre com risco 10%: banca x 0,9^100, cai mais de 50% em todos os caminhos")
+    checar(abs(risco.simular(40, 2, 2, caminhos=10)["expectativa_r"] - 0.2) < 1e-12
+           and risco.simular(33.3, 2, 5, caminhos=300) == risco.simular(33.3, 2, 5, caminhos=300),
+           "expectativa de 40% com alvo 2x = 0,2R; mesma semente, mesmo sorteio")
+    sem = {r: risco.simular(100 / 3, 2, r, caminhos=1000) for r in (1, 2, 5, 10)}
+    com10 = risco.simular(100 / 3, 2, 10, caminhos=1000, ajustar=True)
+    checar(sem[1]["queda_50"] <= sem[2]["queda_50"] <= sem[5]["queda_50"] <= sem[10]["queda_50"]
+           and sem[10]["queda_50"] > 90 and com10["queda_50"] < sem[10]["queda_50"] / 2,
+           f"sem vantagem: quanto maior o risco, mais caminhos perdem metade (10%: {sem[10]['queda_50']:.0f}%); "
+           f"o ajuste pela queda corta isso a {com10['queda_50']:.0f}%")
+    checar(risco.perdas_seguidas_provaveis(40, 100) == round(math.log(100) / -math.log(0.6)) == 9,
+           "com 40% de acerto, 9 perdas seguidas em 100 operacoes e o esperado")
+
+    # o risco cai com a queda desde o pico
+    m = risco.multiplicador
+    checar((m(9.99), m(10), m(19.99), m(20), m(35), m(35, {"ligado": False})) == (1, 0.5, 0.5, 0.25, 0.25, 1),
+           "multiplicador: inteiro abaixo de 10%, metade de 10% a 20%, um quarto a partir de 20%; desligado = inteiro")
+    r = lambda *vs, t0=0: [{"quando_ms": t0 + k, "valor": v} for k, v in enumerate(vs)]
+    aj = risco.ajuste(100, r(10, -12))
+    checar(aj["pico"] == 110 and aj["atual"] == 98 and abs(aj["queda_pct"] - 12 / 110 * 100) < 1e-9
+           and aj["multiplicador"] == 0.5 and "metade" in aj["motivo"] and "110,00" in aj["motivo"],
+           "subiu a 110, caiu a 98: 10,9% abaixo do pico, risco pela metade")
+    checar(risco.ajuste(100, r(10, -12, 3))["multiplicador"] == 1 and risco.ajuste(100, r(-25))["multiplicador"] == 0.25,
+           "voltou a 101 (8,2% do pico): risco inteiro; caiu 25%: um quarto")
+
+    # a semana e a de Brasilia, de segunda a domingo
+    seg = QUARTA - 2 * DIA_MS                                  # 12/10/2026, segunda, 00:00 UTC
+    sb = risco.semana_brasilia
+    checar(sb(seg + 3 * HORA_MS) == sb(QUARTA) == sb(seg + 7 * DIA_MS + 3 * HORA_MS - 1)
+           and sb(seg + 3 * HORA_MS - 1) == sb(QUARTA) - 1 and sb(seg + 7 * DIA_MS + 3 * HORA_MS) == sb(QUARTA) + 1,
+           "a semana vira na segunda 00:00 de Brasilia (03:00 UTC); domingo 23:59 ainda e a mesma semana")
+    dia = lambda d, v, h=15: {"quando_ms": seg + d * DIA_MS + h * HORA_MS, "valor": v}
+    semana_ruim = [dia(-1, -9.0, h=2), dia(0, -4.0), dia(1, -3.0), dia(2, -3.5)]   # domingo 23h de Brasilia nao conta
+    ds = risco.disjuntor_semana(semana_ruim, QUARTA + 20 * HORA_MS, 100)
+    checar(ds["armado"] and ds["soma"] == -10.5 and "Pare ate segunda" in ds["motivo"],
+           "segunda -4, terca -3, quarta -3,5: semana em -10,5 (o domingo anterior fica fora), disjuntor arma")
+    checar(risco.disjuntor_semana([dia(0, -10.0)], QUARTA, 100)["armado"]
+           and not risco.disjuntor_semana([dia(0, -9.99)], QUARTA, 100)["armado"]
+           and not risco.disjuntor_semana(semana_ruim, QUARTA + 20 * HORA_MS, 100, {"ligado": False})["armado"]
+           and not risco.disjuntor_semana(semana_ruim, seg + 7 * DIA_MS + 3 * HORA_MS, 100)["armado"],
+           "exatamente -10% arma, -9,99 nao; desligado nunca arma; na segunda seguinte desarma")
+
+    # desempenho conferido a mao
+    vs = r(-2, -2, 4, -2, 0, -2, -2, -2, 4)
+    d = risco.desempenho(100, vs)
+    checar((d["n"], d["empates"], round(d["acerto"], 6), d["ganho_medio"], d["perda_media"], d["total"])
+           == (9, 1, round(200 / 9, 6), 4.0, 2.0, -4.0)
+           and abs(d["fator_lucro"] - 8 / 12) < 1e-12 and abs(d["pior_queda_pct"] - 8.0) < 1e-9
+           and d["maior_sequencia_perdas"] == 3 and d["banca"] == 96,
+           "9 anotados: acerto 2/9, fator 8/12, pior queda 100 -> 92 = 8%, 3 perdas seguidas (o zero quebra a sequencia)")
+    checar(abs(risco.desempenho(100, r(10, -11))["pior_queda_pct"] - 10.0) < 1e-9,
+           "pior queda e contada do pico: 100 -> 110 -> 99 e 10%, nao 1%")
+    txt = risco.texto_desempenho(d, risco.ajuste(100, vs))
+    checar("acerto 22%" in txt and "fator de lucro 0,67" in txt and "a partir de 30" in txt
+           and "Nenhum resultado" in risco.texto_desempenho(risco.desempenho(100, []), risco.ajuste(100, [])),
+           "o texto do desempenho mostra a conta e avisa que menos de 30 e sorte; sem anotacao, diz isso")
+
+    # na ficha, no /resultado, no /hoje e no /desempenho
+    cfg = json.loads(json.dumps(vigia.CONFIG_PADRAO))
+    cfg["params"]["banca"] = 100.0
+    d_ficha = _dados_controlados(AGORA_FICHA)
+    alta = {"4h": {"tendencia": 1, "topo": 112.0, "fundo": 88.0}, "1h": {"tendencia": 1, "topo": 110.0, "fundo": 90.0},
+            "15m": {"tendencia": 1, "topo": 99.0, "fundo": 94.0}}
+    fazer = lambda args, quando, pasta, c=cfg: _com_leituras(alta, (90.0, 110.0), [], lambda: vigia.fazer_ficha(
+        args, c, {}, quando, pasta, lambda par, agora: d_ficha))
+    pasta = tempfile.mkdtemp(prefix="gestao_")
+    try:
+        semana_passada = AGORA_FICHA - 7 * DIA_MS
+        a1 = vigia.anotar_resultado(["+10"], cfg, semana_passada, pasta)
+        a2 = vigia.anotar_resultado(["-12"], cfg, semana_passada + DIA_MS, pasta)
+        checar("RISCO" not in a1 and "RISCO REDUZIDO" in a2 and "metade" in a2,
+               "/resultado que leva a banca a 10% abaixo do pico avisa: risco reduzido a metade")
+        txt = fazer(["btc", "2"], AGORA_FICHA, pasta)
+        checar("risco reduzido: pediu 2%, a ficha usa 1%" in txt and "risco 1% de 98,00 USDT = 0,98 USDT" in txt
+               and "pico 110,00" in txt,
+               "a ficha arrisca 1% de 98 (metade dos 2% pedidos) e diz por que")
+        teto = ficha.FICHA_PADRAO["risco_max_pct"]
+        checar("fora do aceito" in fazer(["btc", f"{teto + 5:g}"], AGORA_FICHA, pasta) and teto / 2 + 2.5 <= teto,
+               f"pedido acima do teto ({teto + 5:g}%) e recusado mesmo que a metade caiba: confere o pedido antes de reduzir")
+        sem_ajuste = json.loads(json.dumps(cfg)); sem_ajuste["risco"]["ligado"] = False
+        checar("risco 2% de 98,00 USDT" in fazer(["btc", "2"], AGORA_FICHA, pasta, sem_ajuste),
+               "com a gestao desligada no vigia.json, a ficha usa o risco pedido")
+        hoje = vigia.texto_hoje(cfg, AGORA_FICHA, pasta)
+        checar("RISCO REDUZIDO" in hoje and "Semana" in hoje and "pico 110,00" in hoje, "/hoje mostra a semana e o risco reduzido")
+        a3 = vigia.anotar_resultado(["+3"], cfg, semana_passada + 2 * DIA_MS, pasta)
+        checar("RISCO DE VOLTA AO NORMAL" in a3, "a banca volta a menos de 10% do pico: o /resultado avisa que o risco voltou")
+        semana = seg + 3 * HORA_MS
+        for k, v in enumerate(("-4", "-3")):
+            vigia.anotar_resultado([v], cfg, semana + k * DIA_MS + HORA_MS, pasta)
+        a4 = vigia.anotar_resultado(["-3,5"], cfg, semana + 2 * DIA_MS + HORA_MS, pasta)
+        checar("DISJUNTOR DA SEMANA ARMADO" in a4 and "DISJUNTOR ARMADO." not in a4,
+               "a perda que leva a semana a -10,5 arma o disjuntor da semana (o do dia nao: uma perda so hoje)")
+        txt = fazer(["btc", "2"], semana + 2 * DIA_MS + 2 * HORA_MS, pasta)
+        checar("VEREDITO: NAO OPERAR" in txt and "disjuntor da semana" in txt and "PLANO" in txt,
+               "semana no limite: a ficha mostra a leitura, mas o veredito e NAO OPERAR")
+        desemp = vigia.responder_comando("/desempenho", {}, cfg, AGORA_FICHA,
+                                         {"desempenho": lambda c: vigia.texto_desempenho(c, pasta)})
+        checar("Desempenho real (6 operacoes" in desemp and "/desempenho" in vigia.AJUDA_TELEGRAM,
+               "/desempenho responde no Telegram com as 6 operacoes anotadas e esta na ajuda")
+
+        # o aviso de entrada do papel le a gestao com a configuracao de quem roda
+        agora_real = int(time.time() * 1000)
+        pasta2 = tempfile.mkdtemp(prefix="gestao_aviso_", dir=pasta)
+        for k in range(3):
+            vigia.anexar_json(os.path.join(pasta2, "resultados.jsonl"), {"quando_ms": agora_real - 3000 + k, "valor": -1.0})
+        def aviso(c):
+            msgs = []
+            tr = vigia.trilha_nova(0)
+            vela = {"t": [0], "abertura": [100.0], "fechamento": [100.0], "maxima": [100.5], "minima": [99.5]}
+            vigia.processar_barra(tr, "confl3|x", "confl3", "BTCUSDT", "15m", 1, 0, vela,
+                                  bt.Params(margem=10.0, alav=10.0, stop=1.0, rr=2.0), False, pasta2,
+                                  msgs.append, cfg=c)
+            return msgs[0] if msgs else ""
+        desligado = json.loads(json.dumps(cfg)); desligado["disjuntor"]["ligado"] = False
+        checar("DISJUNTOR ARMADO" in aviso(cfg) and "COMPRA" in aviso(desligado)
+               and "DISJUNTOR ARMADO" not in aviso(desligado),
+               "aviso de entrada: 3 perdas hoje armam o disjuntor; desligado no vigia.json, o aviso respeita")
+    finally:
+        shutil.rmtree(pasta, ignore_errors=True)
+
+    # vibe.py desempenho e vibe.py risco
+    chamadas, argv = [], sys.argv
+    orig = (vigia.carregar_config, vigia.texto_desempenho, risco.texto_ruina)
+    vigia.carregar_config = lambda *a: cfg
+    vigia.texto_desempenho = lambda c: chamadas.append(("desempenho", c is cfg)) or "ok"
+    risco.texto_ruina = lambda acerto, rr: chamadas.append(("ruina", round(acerto, 2), rr)) or "ok"
+    try:
+        with contextlib.redirect_stdout(io.StringIO()):
+            for linha in ("desempenho", "risco", "risco 45 1,5"):
+                sys.argv = ["vibe.py"] + linha.split()
+                vibe.main()
+            recusado = 0
+            for linha in ("risco abc", "risco 120"):
+                sys.argv = ["vibe.py"] + linha.split()
+                try:
+                    vibe.main()
+                except SystemExit as e:
+                    recusado += e.code not in (0, None)
+        checar(chamadas == [("desempenho", True), ("ruina", 33.33, 2.0), ("ruina", 40.0, 2.0),
+                            ("ruina", 40.0, 1.5), ("ruina", 45.0, 1.5)] and recusado == 2,
+               "vibe.py desempenho e risco chamam a conta certa (sem vantagem primeiro); valor ruim e recusado")
+    finally:
+        vigia.carregar_config, vigia.texto_desempenho, risco.texto_ruina = orig
+        sys.argv = argv
+
+
 def _pegada_real() -> dict:
     """Tamanho de cada arquivo de dado real (vigia e caderno de quem roda de verdade)."""
     pegada = {}
@@ -2565,6 +2725,7 @@ if __name__ == "__main__":
     teste_endurecimento()
     teste_nota_e_corrente()
     teste_bateria_ficha()
+    teste_gestao_de_risco()
     print("\n[13] a bateria nao toca nos dados reais do vigia")
     checar(_pegada_real() == pegada, "dados_vigia/, caderno, vigia.json e segredos.json iguais antes e depois da bateria")
     print()

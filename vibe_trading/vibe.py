@@ -9,6 +9,8 @@ Vibe trading — um comando so para tudo. Nada aqui envia ordem ou pede chave de
     python3 vibe.py fichas              o placar das fichas: o veredito acerta?
     python3 vibe.py fontes              testa, uma a uma, cada fonte de dado da ficha
     python3 vibe.py banca 100           a banca da conta de futuros (USDT): a ficha arrisca sobre ela
+    python3 vibe.py desempenho          o retrato das operacoes REAIS anotadas (/resultado)
+    python3 vibe.py risco [acerto] [rr] quanto cada risco por operacao derruba a banca numa sequencia ruim
     python3 vibe.py bateria             fase 1: todas as estrategias, ultimos 90 dias
     python3 vibe.py bateria-ficha       a regra da propria ficha no historico, contra moedas sorteadas
     python3 vibe.py historico           fase 1: o historico inteiro de cada par, ano a ano
@@ -107,6 +109,23 @@ def main() -> None:
         if not resto:
             sys.exit("use: python3 vibe.py banca 100   (o saldo da conta de futuros, em USDT)")
         print(vigia.definir_banca(resto[0]))
+    elif cmd == "desempenho":
+        import vigia
+        print(vigia.texto_desempenho(vigia.carregar_config()))
+    elif cmd == "risco":
+        import risco
+        try:
+            acerto = float(resto[0].replace(",", ".").rstrip("%")) if resto else 40.0
+            rr = float(resto[1].replace(",", ".")) if len(resto) > 1 else 2.0
+        except ValueError:
+            sys.exit("use: python3 vibe.py risco 40 2   (acerto em %, alvo em vezes o risco)")
+        if not (0 < acerto < 100 and 0 < rr <= 20):
+            sys.exit("acerto entre 0 e 100 (%), alvo entre 0 e 20 vezes o risco")
+        print("\nSEM VANTAGEM (o acerto que so empata com este alvo):")
+        print(risco.texto_ruina(100 / (1 + rr), rr))
+        print(f"\nCOM O ACERTO PEDIDO ({acerto:g}%):")
+        print(risco.texto_ruina(acerto, rr))
+        print("\nO ajuste (metade do risco a 10% abaixo do pico, um quarto a 20%) ja vem ligado na ficha.")
     elif cmd == "fontes":
         conferir_fontes(resto[0] if resto else "BTC")
     elif cmd == "bateria":

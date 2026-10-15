@@ -449,10 +449,11 @@ def _seta(t: int) -> str:
 def analisar(dados: dict, horizonte: str = "intraday", risco_pct: float | None = None, banca: float = 100.0,
              cfg: dict | None = None, taxa: float = 0.05, mm_padrao: float = 0.5, estado: dict | None = None,
              divergencia_max: float = 0.3, bloqueios_externos: list[str] | None = None,
-             com_gatilhos: bool = True) -> dict:
+             com_gatilhos: bool = True, risco_fator: float = 1.0, risco_motivo: str = "") -> dict:
     """A ficha, so com calculo (nenhum acesso a rede): recebe o que `coletar` trouxe.
     `bloqueios_externos` (o disjuntor do dia, por exemplo) forcam NAO OPERAR, mas a
-    leitura sai inteira."""
+    leitura sai inteira. `risco_fator` < 1 (a banca abaixo do pico) reduz o risco pedido
+    depois de conferir que o pedido esta dentro do aceito."""
     cfg = {**FICHA_PADRAO, **(cfg or {})}
     risco_pct = cfg["risco_pct"] if risco_pct is None else float(risco_pct)
     H = HORIZONTES[horizonte]
@@ -474,6 +475,11 @@ def analisar(dados: dict, horizonte: str = "intraday", risco_pct: float | None =
     if not 0 < risco_pct <= cfg["risco_max_pct"]:
         f["bloqueios"].append(f"risco de {risco_pct:g}% fora do aceito (de 0 a {cfg['risco_max_pct']:g}% da banca)")
         return fim("NAO OPERAR")
+    if 0 < risco_fator < 1:
+        f["risco_pedido"], risco_pct = risco_pct, round(risco_pct * risco_fator, 4)
+        f["risco_pct"] = risco_pct
+        f["avisos"].insert(0, f"risco reduzido: pediu {f['risco_pedido']:g}%, a ficha usa {risco_pct:g}%"
+                              + (f" ({risco_motivo})" if risco_motivo else ""))
     series = dados.get("series") or {}
     faltam = [tf for tf in (H["entrada"], H["contexto"], H["maior"])
               if series.get(tf) is None or len(series[tf]) < MIN_CANDLES]
@@ -732,7 +738,8 @@ def texto(f: dict, registro: str | None = None) -> str:
         if p["caminho"]:
             L.append("no caminho ate o alvo 1: " + "; ".join(
                 f"{fmt_preco(c['preco'])} {' + '.join(c['nomes'])} a {vezes(c['r'])} o risco" for c in p["caminho"][:3]))
-        L.append(f"risco {f['risco_pct']:g}% de {f['banca']:g} USDT = {_br(p['risco_usdt'], 2)} USDT")
+        L.append(f"risco {_br(f['risco_pct'], 2).rstrip('0').rstrip(',')}% de {_br(f['banca'], 2)} USDT = "
+                 f"{_br(p['risco_usdt'], 2)} USDT")
         L.append(f"tamanho {_br(p['tamanho'], 2)} USDT a {p['alav']}x · margem {_br(p['margem'], 2)} USDT · "
                  f"liquida em {fmt_preco(p['px_liq'])} ({vezes(p['liq_vezes'])} a distancia do stop; "
                  f"manutencao {pct(p['mm_pct'])}, {p['mm_fonte']})")

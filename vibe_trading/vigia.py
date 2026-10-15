@@ -53,6 +53,7 @@ import estrategias
 import fatores
 import ficha
 import livro
+import risco
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
 PASTA = os.path.join(AQUI, "dados_vigia")
@@ -109,6 +110,10 @@ CONFIG_PADRAO = {
     # (/resultado -2,1). Com 3 perdas seguidas no dia, ou o dia em -6% da banca, toda
     # ficha ate a meia-noite (Brasilia) sai NAO OPERAR.
     "disjuntor": {"ligado": True, "perdas_seguidas": 3, "perda_dia_pct": 6.0},
+    # Gestao de risco da conta REAL, tambem pelos /resultado: com a banca 10% abaixo do
+    # pico a ficha usa metade do risco pedido, 20% abaixo um quarto; a semana (segunda
+    # a domingo, Brasilia) em -10% da banca e toda ficha ate segunda sai NAO OPERAR.
+    "risco": dict(risco.RISCO_PADRAO),
 }
 
 SEGREDOS_MODELO = {
@@ -227,7 +232,7 @@ def carregar_config(caminho: str = CONFIG) -> dict:
     novos = [k for k in CONFIG_PADRAO if k not in cfg]
     for k in novos:
         cfg[k] = json.loads(json.dumps(PADRAO_PARA_CONFIG_ANTIGA.get(k, CONFIG_PADRAO[k])))
-    for grupo in ("arena", "ficha", "radar", "alertas", "disjuntor"):
+    for grupo in ("arena", "ficha", "radar", "alertas", "disjuntor", "risco"):
         novos += [f"{grupo}.{k}" for k in CONFIG_PADRAO[grupo] if k not in cfg[grupo]]
         for k in CONFIG_PADRAO[grupo]:
             cfg[grupo].setdefault(k, CONFIG_PADRAO[grupo][k])
@@ -398,9 +403,11 @@ def julgar(ao_vivo: list[float], moedas_vivo: list[float], tentativas: int) -> d
 
 def processar_barra(tr: dict, tid: str, nome: str, ativo: str, tf: str, sinal: int, i: int, c: dict,
                     p: bt.Params, recuperado: bool, pasta: str, avisar, motivo: str = "",
-                    julgar_em=(100, 200, 300), tentativas: int = 1, confianca: float | None = None) -> None:
+                    julgar_em=(100, 200, 300), tentativas: int = 1, confianca: float | None = None,
+                    cfg: dict | None = None) -> None:
     """Um candle numa trilha (estrategia ou IA): a posicao, o diario, o aviso e as
-    moedas pareadas. Estrategia e IA passam pela MESMA funcao."""
+    moedas pareadas. Estrategia e IA passam pela MESMA funcao. `cfg` e so para o aviso
+    de entrada dizer se algum disjuntor da conta real esta armado (gestao)."""
     tr["posicao"], fechou, abriu = passo(tr["posicao"], sinal, i, c, p)
     if fechou is not None:
         pnl, desfecho, pos = fechou
@@ -430,10 +437,10 @@ def processar_barra(tr: dict, tid: str, nome: str, ativo: str, tf: str, sinal: i
         if confianca is not None:
             tr["confianca_entrada"] = confianca
         if avisar and not recuperado:
-            dj = disjuntor(ler_resultados(pasta), int(time.time() * 1000), p.banca)
+            g = gestao(ler_resultados(pasta), int(time.time() * 1000), cfg or {"params": {"banca": p.banca}})
             avisar(texto_entrada(nome, ativo, tf, tr["posicao"], p, motivo,
                                  nivel=(tr.get("julgamento") or {}).get("nivel", "em teste"),
-                                 disjuntor_armado=dj["armado"]))
+                                 disjuntor_armado=bool(g["bloqueios"])))
     # a moeda compra na mesma proporcao em que a estrategia mandou comprar ate aqui
     frac = (tr.get("sinais_compra", 0) + 1) / (tr.get("sinais", 0) + 2)
     for k, m in enumerate(tr["moedas"]):
@@ -510,17 +517,20 @@ def ciclo(estado: dict, cfg: dict, ativo: str, tf: str, buscador, agora_ms: int,
         for i in pendentes:
             recuperado = agora_ms - (c["t"][i] + ms) > 2 * ms  # fechou enquanto o vigia estava fora
             processar_barra(tr, tid, e["nome"], rot, tf, sinais[i], i, c, p, recuperado, pasta, avisar,
-                            julgar_em=cfg.get("julgar_em", (100, 200, 300)), tentativas=len(estado["trilhas"]))
+                            julgar_em=cfg.get("julgar_em", (100, 200, 300)), tentativas=len(estado["trilhas"]),
+                            cfg=cfg)
         processados = max(processados, len(pendentes))
 
     if ias:
         processados = max(processados, ciclo_arena(estado, juiz, dict(ias), rot, tf, c, serie, p,
-                                                   agora_ms, pasta, avisar, cfg.get("julgar_em", (100, 200, 300))))
+                                                   agora_ms, pasta, avisar, cfg.get("julgar_em", (100, 200, 300)),
+                                                   cfg=cfg))
     return processados
 
 
 def ciclo_arena(estado: dict, juiz, tids: dict, ativo: str, tf: str, c: dict, serie: bt.Serie,
-                p: bt.Params, agora_ms: int, pasta: str, avisar, julgar_em=(100, 200, 300)) -> int:
+                p: bt.Params, agora_ms: int, pasta: str, avisar, julgar_em=(100, 200, 300),
+                cfg: dict | None = None) -> int:
     """
     As IAs como trilhas. A IA so e consultada num candle que:
       - acabou de fechar (candle recuperado depois de uma pausa nao e consultado:
@@ -567,7 +577,7 @@ def ciclo_arena(estado: dict, juiz, tids: dict, ativo: str, tf: str, c: dict, se
             lado, motivo = decisoes.get(n, (0, ""))
             processar_barra(estado["trilhas"][tids[n]], tids[n], n, ativo, tf, lado, i, c, p,
                             recuperado, pasta, avisar, motivo, julgar_em, len(estado["trilhas"]),
-                            confianca=confs.get(n) if lado else None)
+                            confianca=confs.get(n) if lado else None, cfg=cfg)
     return len(pend)
 
 
@@ -702,7 +712,7 @@ def texto_entrada(nome: str, ativo: str, tf: str, pos: dict, p: bt.Params, motiv
     ganho, perda = projecao(p, pos.get("liq_antes_do_stop", False))
     linhas = [f"{lado} · {nome} · {ativo} {tf} (papel)"]
     if disjuntor_armado:
-        linhas.append("DISJUNTOR DO DIA ARMADO: na conta real, NAO ABRA (veja /hoje)")
+        linhas.append("DISJUNTOR ARMADO (do dia ou da semana): na conta real, NAO ABRA (veja /hoje)")
     if nivel in AVISO_NIVEL:
         linhas.append(AVISO_NIVEL[nivel])
     linhas += [f"entrada {fmt(pos['entrada'])}",
@@ -809,8 +819,10 @@ AJUDA_TELEGRAM = ("Comandos do vigia (papel, nenhuma ordem real):\n"
                   "(ex.: /analisar BTC 2 swing; sem risco, usa 2%)\n"
                   "/radar - as moedas que mais oscilam agora na Pionex (com volume)\n"
                   "/fichas - o placar das fichas: o veredito acerta?\n"
-                  "/resultado -2,1 - anota o resultado (USDT) de uma operacao REAL fechada; arma o disjuntor do dia\n"
-                  "/hoje - o dia anotado e o disjuntor\n"
+                  "/resultado -2,1 - anota o resultado (USDT) de uma operacao REAL fechada; arma os disjuntores "
+                  "e reduz o risco quando a banca cai do pico\n"
+                  "/hoje - o dia e a semana anotados, os disjuntores e o risco em uso\n"
+                  "/desempenho - acerto, ganho e perda media, fator de lucro e pior queda das operacoes REAIS\n"
                   "/placar - o placar de cada estrategia e IA\n"
                   "/status - se o vigia esta vivo, ultimo candle, posicoes abertas\n"
                   "/ajuda - esta lista")
@@ -819,27 +831,44 @@ AJUDA_TELEGRAM = ("Comandos do vigia (papel, nenhuma ordem real):\n"
 def fazer_ficha(argumentos: list[str], cfg: dict, estado: dict, agora_ms: int, pasta: str = PASTA,
                 coletar=ficha.coletar) -> str:
     """/analisar: busca, analisa, registra para o placar das fichas e devolve o texto.
-    Com o disjuntor do dia armado, a leitura sai inteira mas o veredito e NAO OPERAR."""
+    Com o disjuntor do dia ou da semana armado, a leitura sai inteira mas o veredito e
+    NAO OPERAR; com a banca abaixo do pico, o risco pedido cai (risco.ajuste)."""
     try:
         pedido = ficha.interpretar_pedido(argumentos, cfg.get("ficha"))
     except ValueError as e:
         return f"Nao deu para analisar: {e}"
     p = cfg["params"]
     resultados = ler_resultados(pasta)
-    dj = disjuntor(resultados, agora_ms, p["banca"], cfg.get("disjuntor"))
+    g = gestao(resultados, agora_ms, cfg)
     # o risco e sobre a banca de hoje: a configurada mais tudo o que foi anotado
-    banca = p["banca"] + sum(r["valor"] for r in resultados)
+    banca = g["ajuste"]["atual"]
     if banca <= 0:
         return f"A banca anotada chegou a {fmt_br(banca)} USDT: confira 'banca' no vigia.json e os /resultado."
     dados = coletar(pedido["par"], agora_ms)
     f = ficha.analisar(dados, pedido["horizonte"], pedido["risco_pct"], banca=banca, cfg=cfg.get("ficha"),
                        taxa=p["taxa"], mm_padrao=p["mm"], estado=estado,
                        divergencia_max=cfg.get("divergencia_max_pct", 0.3),
-                       bloqueios_externos=[dj["motivo"]] if dj["armado"] else None)
+                       bloqueios_externos=g["bloqueios"] or None,
+                       risco_fator=g["ajuste"]["multiplicador"], risco_motivo=g["ajuste"]["motivo"])
     if resultados:
-        f["contexto"].insert(0, f"banca de hoje: {_br2(banca)} USDT ({p['banca']:g} configurada, "
-                                f"{fmt_br(banca - p['banca'])} nos resultados anotados)")
+        aj = g["ajuste"]
+        f["contexto"].insert(0, f"banca de hoje: {_br2(banca)} USDT ({_br2(p['banca'])} configurada, "
+                                f"{fmt_br(banca - p['banca'])} nos resultados anotados)"
+                                + (f" · pico {_br2(aj['pico'])}, {ficha.pct(aj['queda_pct'], 1)} abaixo"
+                                   if aj["queda_pct"] > 0 else "")
+                                + f" · semana {fmt_br(g['semana']['soma'])} USDT")
     return ficha.texto(f, ficha.registrar(pasta, f))
+
+
+def gestao(resultados: list[dict], agora_ms: int, cfg: dict) -> dict:
+    """Tudo o que os /resultado decidem, num lugar so (a ficha, o /resultado e o /hoje
+    chamam esta): o disjuntor do dia, o da semana e o risco pela queda desde o pico."""
+    banca = cfg["params"]["banca"]
+    dia = disjuntor(resultados, agora_ms, banca, cfg.get("disjuntor"))
+    semana = risco.disjuntor_semana(resultados, agora_ms, banca, cfg.get("risco"))
+    aj = risco.ajuste(banca, resultados, cfg.get("risco"))
+    return {"dia": dia, "semana": semana, "ajuste": aj,
+            "bloqueios": [m["motivo"] for m in (dia, semana) if m["armado"]]}
 
 
 def _br2(v: float) -> str:
@@ -905,24 +934,51 @@ def anotar_resultado(argumentos: list[str], cfg: dict, agora_ms: int, pasta: str
         return "Use: /resultado -2,1  (o resultado em USDT, ja com as taxas; negativo = perda)"
     if not abs(valor) <= banca:
         return f"{valor:g} USDT passa da banca inteira ({banca:g}): confira o valor e mande de novo."
-    antes = disjuntor(ler_resultados(pasta), agora_ms, banca, cfg.get("disjuntor"))
+    antes = gestao(ler_resultados(pasta), agora_ms, cfg)
     os.makedirs(pasta, exist_ok=True)
     anexar_json(os.path.join(pasta, "resultados.jsonl"), {"quando_ms": agora_ms, "valor": valor})
-    dj = disjuntor(ler_resultados(pasta), agora_ms, banca, cfg.get("disjuntor"))
+    g = gestao(ler_resultados(pasta), agora_ms, cfg)
+    dj, ds, aj = g["dia"], g["semana"], g["ajuste"]
     texto = (f"Anotado: {fmt_br(valor)} USDT. Hoje: {dj['n']} operacao(oes), {fmt_br(dj['soma'])} USDT, "
-             f"{dj['seguidas']} perda(s) seguida(s).")
-    if dj["armado"] and not antes["armado"]:
+             f"{dj['seguidas']} perda(s) seguida(s). Semana: {fmt_br(ds['soma'])} USDT. "
+             f"Banca: {_br2(aj['atual'])} USDT.")
+    if dj["armado"] and not antes["dia"]["armado"]:
         texto += f"\nDISJUNTOR ARMADO. {dj['motivo']}. Toda ficha ate meia-noite sai NAO OPERAR."
     elif dj["armado"]:
         texto += "\nO disjuntor continua armado: pare por hoje."
+    if ds["armado"] and not antes["semana"]["armado"]:
+        texto += f"\nDISJUNTOR DA SEMANA ARMADO. {ds['motivo']}. Toda ficha ate segunda sai NAO OPERAR."
+    m0, m1 = antes["ajuste"]["multiplicador"], aj["multiplicador"]
+    if m1 < m0:
+        texto += f"\nRISCO REDUZIDO: {aj['motivo']}. A proxima ficha ja calcula assim."
+    elif m1 > m0:
+        texto += ("\nRISCO DE VOLTA AO NORMAL: a banca voltou a menos de "
+                  if m1 == 1 else "\nRISCO SUBIU PARA METADE: a banca voltou a menos de ")
+        cr = {**risco.RISCO_PADRAO, **(cfg.get("risco") or {})}
+        texto += (f"{(cr['queda_metade_pct'] if m1 == 1 else cr['queda_quarto_pct']):g}% do pico "
+                  f"({_br2(aj['pico'])} USDT).")
     return texto
 
 
 def texto_hoje(cfg: dict, agora_ms: int, pasta: str = PASTA) -> str:
-    dj = disjuntor(ler_resultados(pasta), agora_ms, cfg["params"]["banca"], cfg.get("disjuntor"))
-    texto = (f"Hoje (Brasilia): {dj['n']} operacao(oes) anotada(s), {fmt_br(dj['soma'])} USDT, "
-             f"{dj['seguidas']} perda(s) seguida(s).")
-    return texto + (f"\nDISJUNTOR ARMADO: {dj['motivo']}." if dj["armado"] else "\nDisjuntor desarmado.")
+    g = gestao(ler_resultados(pasta), agora_ms, cfg)
+    dj, ds, aj = g["dia"], g["semana"], g["ajuste"]
+    L = [f"Hoje (Brasilia): {dj['n']} operacao(oes) anotada(s), {fmt_br(dj['soma'])} USDT, "
+         f"{dj['seguidas']} perda(s) seguida(s).",
+         f"DISJUNTOR ARMADO: {dj['motivo']}." if dj["armado"] else "Disjuntor do dia desarmado.",
+         f"Semana (segunda a domingo): {fmt_br(ds['soma'])} USDT; o limite e {fmt_br(ds['limite'])}.",
+         f"DISJUNTOR DA SEMANA ARMADO: {ds['motivo']}." if ds["armado"] else "Disjuntor da semana desarmado.",
+         f"Banca {_br2(aj['atual'])} USDT, pico {_br2(aj['pico'])}"
+         + (f", {ficha.pct(aj['queda_pct'], 1)} abaixo." if aj["queda_pct"] > 0 else ".")]
+    L.append(f"RISCO REDUZIDO: {aj['motivo']}." if aj["multiplicador"] < 1 else "Risco normal: a ficha usa o pedido.")
+    return "\n".join(L)
+
+
+def texto_desempenho(cfg: dict, pasta: str = PASTA) -> str:
+    resultados = ler_resultados(pasta)
+    banca = cfg["params"]["banca"]
+    return risco.texto_desempenho(risco.desempenho(banca, resultados),
+                                  risco.ajuste(banca, resultados, cfg.get("risco")))
 
 
 def texto_fichas(pasta: str, agora_ms: int, buscar=None) -> str:
@@ -939,6 +995,7 @@ SERVICOS = {
     "analisar": lambda args, cfg, estado, agora: fazer_ficha(args, cfg, estado, agora),
     "resultado": lambda args, cfg, agora: anotar_resultado(args, cfg, agora),
     "hoje": lambda cfg, agora: texto_hoje(cfg, agora),
+    "desempenho": lambda cfg: texto_desempenho(cfg),
     "fichas": lambda agora: texto_fichas(PASTA, agora),
     "radar": lambda cfg: texto_radar(cfg),
 }
@@ -969,6 +1026,8 @@ def responder_comando(texto: str, estado: dict, cfg: dict, agora_ms: int, servic
             return servicos["resultado"](argumentos, cfg, agora_ms)
         if palavra == "/hoje":
             return servicos["hoje"](cfg, agora_ms)
+        if palavra == "/desempenho":
+            return servicos["desempenho"](cfg)
     except Exception as e:
         return f"Nao consegui responder {palavra}: {type(e).__name__}: {str(e)[:150]}"
     return None
@@ -1236,7 +1295,8 @@ def rodar(cfg: dict, segredos: dict, uma_vez: bool) -> None:
     if avisar and segredos.get("telegram_chat_id") and not uma_vez:
         threading.Thread(target=escutar_telegram, args=(segredos, cfg, arq_estado, threading.Event()),
                          daemon=True, name="telegram").start()
-        log("telegram: respondendo /analisar, /radar, /fichas, /resultado, /hoje, /placar, /status e /ajuda "
+        log("telegram: respondendo /analisar, /radar, /fichas, /resultado, /hoje, /desempenho, /placar, "
+            "/status e /ajuda "
             "(so ao seu chat)")
     if avisar and not uma_vez:
         avisar("Vigia ligado (papel). Estrategias: " + ", ".join(e["nome"] for e in cfg["estrategias"])

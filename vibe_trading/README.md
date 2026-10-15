@@ -584,10 +584,10 @@ fica sem resposta):
 | `/analisar MOEDA [risco%] [scalp\|intraday\|swing]` | a ficha completa da operação (veja "Ficha de cada operação") |
 | `/radar` | os perpétuos da Pionex que mais oscilaram em 24 h, só os com volume acima de 5 mi USDT |
 | `/fichas` | o placar das fichas: A FAVOR contra ESPERAR, em múltiplos do risco |
+| `/resultado -2,1` | anota o resultado em USDT de uma operação **real** já fechada (negativo = perda); avisa quando um disjuntor arma ou quando o risco muda |
+| `/hoje` | o dia e a semana anotados, os dois disjuntores e o risco em uso |
+| `/desempenho` | acerto, ganho e perda média, resultado por operação, fator de lucro, pior queda e maior sequência de perdas das operações **reais** |
 | `/ajuda` | a lista de comandos |
-
-| `/resultado -2,1` | anota o resultado em USDT de uma operação **real** já fechada (negativo = perda) |
-| `/hoje` | o dia anotado e o estado do disjuntor |
 
 O `segredos.json` fica só para o dono ler e nunca vai para o GitHub (está no
 `.gitignore`). O resumo das 21 h traz também o placar das fichas, conferido na hora.
@@ -608,6 +608,36 @@ anota cada operação fechada com `/resultado`. Com **3 perdas seguidas** no dia
 ou o dia em **−6% da banca**, o disjuntor arma: toda ficha até a meia-noite de
 Brasília mostra a leitura inteira, mas sai **NÃO OPERAR**. É a regra que impede
 a operação de vingança depois de uma sequência ruim. Ajuste em `"disjuntor"`.
+
+**Gestão de risco da conta real** (também pelos `/resultado`, grupo `"risco"`
+no `vigia.json`):
+
+- **O risco cai sozinho quando a banca cai do pico.** Com a banca 10% abaixo
+  do maior valor que ela já teve, a ficha usa **metade** do risco pedido; 20%
+  abaixo, **um quarto**. Volta ao normal quando a banca volta a menos de 10%
+  do pico. A ficha diz: "risco reduzido: pediu 2%, a ficha usa 1%". O pedido
+  é conferido contra o teto **antes** de reduzir (pedir 30% continua recusado).
+- **Disjuntor da semana.** A semana (segunda a domingo, Brasília) em **−10% da
+  banca** e toda ficha até segunda sai NÃO OPERAR.
+- O aviso de entrada do vigia (papel) diz quando algum disjuntor da conta real
+  está armado, com a mesma regra da ficha (`vigia.gestao`, um lugar só).
+
+Por que isso importa: `python3 vibe.py risco` sorteia 5.000 sequências de 100
+operações e mostra o que cada risco por operação faz com a banca. Com alvo de
+2x o risco (resultado de hoje, semente fixa):
+
+| risco | sem vantagem (33% de acerto): chance de perder metade | banca final (mediana) | com vantagem (40%): chance de perder metade | banca final (mediana) |
+|---|---|---|---|---|
+| 1% | 0% | 98% | 0% | 121% |
+| 2% | 2% | 94% | 0% | 143% |
+| 5% | 65% (0% com o ajuste) | 75% | 24% (0% com o ajuste) | 209% (145% com o ajuste) |
+| 10% | 99% (31% com o ajuste) | 35% | 91% (5% com o ajuste) | 264% (159% com o ajuste) |
+
+Com 40% de acerto, **9 perdas seguidas** em 100 operações é o normal, não azar.
+Risco profissional é 1–2% por operação; o ajuste custa um pouco do lucro quando
+há vantagem e salva a banca quando não há. `python3 vibe.py risco 45 1,5` refaz
+a tabela para outro acerto e outro alvo; `python3 vibe.py desempenho` mostra o
+retrato das operações reais anotadas (vale a partir de 30).
 
 ### No VPS, 24 horas, ao lado do Embarque Suinco
 
